@@ -16,8 +16,7 @@
 #include <linux/pci.h>
 #include <linux/errno.h>
 #include <linux/ioport.h>
-
-#include <asm/cache.h>
+#include <linux/cache.h>
 
 
 #define DEBUG_CONFIG 0
@@ -271,7 +270,7 @@ pci_set_bus_ranges(void)
 		pbus_set_ranges(bus, NULL);
 }
 
-static void
+static void __init
 pdev_fixup_irq(struct pci_dev *dev,
 	       u8 (*swizzle)(struct pci_dev *, u8 *),
 	       int (*map_irq)(struct pci_dev *, u8, u8))

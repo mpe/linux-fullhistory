@@ -303,7 +303,6 @@ int shrink_mmap(int priority, int gfp_mask)
 
 		/* is it a page-cache page? */
 		if (page->mapping) {
-			dispose = &old;
 			if (!pgcache_under_min())
 			{
 				remove_page_from_inode_queue(page);

@@ -40,7 +40,7 @@
 #include <linux/timex.h>
 
 #include "proto.h"
-#include "irq_impl.h"
+#include <asm/hw_irq.h>
 
 extern rwlock_t xtime_lock;
 extern volatile unsigned long lost_ticks;	/* kernel/sched.c */

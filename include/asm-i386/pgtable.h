@@ -37,6 +37,13 @@ do { unsigned long tmpreg; __asm__ __volatile__("movl %%cr3,%0\n\tmovl %0,%%cr3"
 __asm__ __volatile__("invlpg %0": :"m" (*(char *) addr))
 #endif
 
+/*
+ * ZERO_PAGE is a global shared page that is always zero: used
+ * for zero-mapped memory areas etc..
+ */
+extern unsigned long empty_zero_page[1024];
+#define ZERO_PAGE(vaddr) (mem_map + MAP_NR(empty_zero_page))
+
 #endif /* !__ASSEMBLY__ */
 
 /*
@@ -143,13 +150,6 @@ __asm__ __volatile__("invlpg %0": :"m" (*(char *) addr))
 
 /* page table for 0-4MB for everybody */
 extern unsigned long pg0[1024];
-
-/*
- * ZERO_PAGE is a global shared page that is always zero: used
- * for zero-mapped memory areas etc..
- */
-extern unsigned long empty_zero_page[1024];
-#define ZERO_PAGE(vaddr) (mem_map + MAP_NR(empty_zero_page))
 
 /*
  * Handling allocation failures during page table setup.

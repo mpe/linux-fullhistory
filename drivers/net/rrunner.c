@@ -32,10 +32,10 @@
 #include <linux/init.h>
 #include <linux/delay.h>
 #include <linux/mm.h>
+#include <linux/cache.h>
 #include <net/sock.h>
 
 #include <asm/system.h>
-#include <asm/cache.h>
 #include <asm/byteorder.h>
 #include <asm/io.h>
 #include <asm/irq.h>

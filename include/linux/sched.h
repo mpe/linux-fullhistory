@@ -513,6 +513,7 @@ extern void FASTCALL(wake_up_process(struct task_struct * tsk));
 #define wake_up_interruptible_sync(x)	__wake_up_sync((x),TASK_INTERRUPTIBLE)
 
 extern int in_group_p(gid_t);
+extern int in_egroup_p(gid_t);
 
 extern void flush_signals(struct task_struct *);
 extern void flush_signal_handlers(struct task_struct *);

@@ -55,16 +55,23 @@ This send_actor is for use with do_generic_file_read (ie sendfile())
 It sends the data to the socket indicated by desc->buf.
 
 */
-static int sock_send_actor(read_descriptor_t * desc, const char *area, unsigned long size)
+static int sock_send_actor(read_descriptor_t * desc, struct page *page, unsigned long offset, unsigned long size)
 {
 	int written;
+	unsigned long kaddr;
 	unsigned long count = desc->count;
 	struct socket *sock = (struct socket *) desc->buf;
+	mm_segment_t old_fs;
 
 	if (size > count)
 		size = count;
-	written = SendBuffer_async(sock,(char *)area,size);
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
 
+	kaddr = kmap(page);
+	written = SendBuffer_async(sock,(char *)kaddr + offset,size);
+	kunmap(page);
+	set_fs(old_fs);
 	if (written < 0) {
 		desc->error = written;
 		written = 0;

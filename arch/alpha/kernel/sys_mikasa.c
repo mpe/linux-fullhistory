@@ -28,7 +28,7 @@
 #include <asm/core_cia.h>
 
 #include "proto.h"
-#include "irq_impl.h"
+#include <asm/hw_irq.h>
 #include "pci_impl.h"
 #include "machvec_impl.h"
 
@@ -223,7 +223,6 @@ struct alpha_machine_vector mikasa_primo_mv __initmv = {
 	init_irq:		mikasa_init_irq,
 	init_pit:		common_init_pit,
 	init_pci:		common_init_pci,
-	kill_arch:		common_kill_arch,
 	pci_map_irq:		mikasa_map_irq,
 	pci_swizzle:		common_swizzle,
 };

@@ -31,7 +31,7 @@
 #include <asm/core_pyxis.h>
 
 #include "proto.h"
-#include "irq_impl.h"
+#include <asm/hw_irq.h>
 #include "pci_impl.h"
 #include "machvec_impl.h"
 
@@ -298,7 +298,6 @@ struct alpha_machine_vector eb164_mv __initmv = {
 	init_irq:		cabriolet_init_irq,
 	init_pit:		common_init_pit,
 	init_pci:		cabriolet_init_pci,
-	kill_arch:		common_kill_arch,
 	pci_map_irq:		cabriolet_map_irq,
 	pci_swizzle:		common_swizzle,
 };
@@ -327,7 +326,6 @@ struct alpha_machine_vector eb66p_mv __initmv = {
 	init_irq:		cabriolet_init_irq,
 	init_pit:		common_init_pit,
 	init_pci:		cabriolet_init_pci,
-	kill_arch:		common_kill_arch,
 	pci_map_irq:		eb66p_map_irq,
 	pci_swizzle:		common_swizzle,
 };
@@ -356,7 +354,6 @@ struct alpha_machine_vector lx164_mv __initmv = {
 	init_irq:		cabriolet_init_irq,
 	init_pit:		common_init_pit,
 	init_pci:		alphapc164_init_pci,
-	kill_arch:		common_kill_arch,
 	pci_map_irq:		alphapc164_map_irq,
 	pci_swizzle:		common_swizzle,
 };
@@ -385,7 +382,6 @@ struct alpha_machine_vector pc164_mv __initmv = {
 	init_irq:		cabriolet_init_irq,
 	init_pit:		common_init_pit,
 	init_pci:		alphapc164_init_pci,
-	kill_arch:		common_kill_arch,
 	pci_map_irq:		alphapc164_map_irq,
 	pci_swizzle:		common_swizzle,
 };

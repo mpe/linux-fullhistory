@@ -14,6 +14,7 @@
 #include <linux/init.h>
 #include <linux/delay.h>
 #include <linux/spinlock.h>
+#include <linux/irq.h>
 
 #include <asm/hwrpb.h>
 #include <asm/ptrace.h>
@@ -32,7 +33,6 @@
 #include <asm/unistd.h>
 
 #include "proto.h"
-#include "irq_impl.h"
 
 
 #define DEBUG_SMP 0
@@ -47,8 +47,8 @@ struct cpuinfo_alpha cpu_data[NR_CPUS];
 
 /* A collection of single bit ipi messages.  */
 static struct {
-	unsigned long bits __cacheline_aligned;
-} ipi_data[NR_CPUS];
+	unsigned long bits ____cacheline_aligned;
+} ipi_data[NR_CPUS] __cacheline_aligned;
 
 enum ipi_message_type {
         IPI_RESCHEDULE,
@@ -56,7 +56,7 @@ enum ipi_message_type {
         IPI_CPU_STOP,
 };
 
-spinlock_t kernel_flag __cacheline_aligned = SPIN_LOCK_UNLOCKED;
+spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
 
 /* Set to a secondary's cpuid when it comes online.  */
 static unsigned long smp_secondary_alive;

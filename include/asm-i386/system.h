@@ -145,7 +145,7 @@ extern inline void __set_64bit (unsigned long long * ptr,
 __asm__ __volatile__ (
 	"1:	movl (%0), %%eax;
 		movl 4(%0), %%edx;
-		lock; cmpxchg8b (%0);
+		cmpxchg8b (%0);
 		jnz 1b"
 	::		"D"(ptr),
 			"b"(low),

@@ -57,11 +57,32 @@ quirk_isa_bridge(struct pci_dev *dev)
 	dev->class = PCI_CLASS_BRIDGE_ISA;
 }
 
+static void __init
+quirk_vga_enable_rom(struct pci_dev *dev)
+{
+	/* If it's a VGA, enable its BIOS ROM at C0000.
+	   But if its a Cirrus 543x/544x DISABLE it, since
+	   enabling ROM disables the memory... */
+	if ((dev->class >> 8) == PCI_CLASS_DISPLAY_VGA &&
+	    /* But if its a Cirrus 543x/544x DISABLE it */
+	    (dev->vendor != PCI_VENDOR_ID_CIRRUS ||
+	     (dev->device < 0x00a0) || (dev->device > 0x00ac)))
+	{
+		u32 reg;
+
+		pci_read_config_dword(dev, dev->rom_base_reg, &reg);
+		reg |= PCI_ROM_ADDRESS_ENABLE;
+		pci_write_config_dword(dev, dev->rom_base_reg, reg);
+		dev->resource[PCI_ROM_RESOURCE].flags |= PCI_ROM_ADDRESS_ENABLE;
+	}
+}
+
 struct pci_fixup pcibios_fixups[] __initdata = {
 	{ PCI_FIXUP_HEADER, PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82375,
 	  quirk_eisa_bridge },
 	{ PCI_FIXUP_HEADER, PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82378,
 	  quirk_isa_bridge },
+	{ PCI_FIXUP_FINAL, PCI_ANY_ID, PCI_ANY_ID, quirk_vga_enable_rom },
 	{ 0 }
 };
 
@@ -71,7 +92,7 @@ struct pci_fixup pcibios_fixups[] __initdata = {
 #define MB			(1024*KB)
 #define GB			(1024*MB)
 
-void __init
+void
 pcibios_align_resource(void *data, struct resource *res, unsigned long size)
 {
 	struct pci_dev * dev = data;
@@ -145,13 +166,13 @@ pcibios_align_resource(void *data, struct resource *res, unsigned long size)
 static void __init
 pcibios_assign_special(struct pci_dev * dev)
 {
+	int i;
+
 	/* The first three resources of an IDE controler are often magic, 
 	   so leave them unchanged.  This is true, for instance, of the
 	   Contaq 82C693 as seen on SX164 and DP264.  */
 
 	if (dev->class >> 8 == PCI_CLASS_STORAGE_IDE) {
-		int i;
-
 		/* Resource 1 of IDE controller is the address of HD_CMD
 		   register which actually occupies a single byte (0x3f6
 		   for ide0) in reported 0x3f4-3f7 range. We have to fix
@@ -163,6 +184,16 @@ pcibios_assign_special(struct pci_dev * dev)
 			if (dev->resource[i].flags && dev->resource[i].start)
 				pci_claim_resource(dev, i);
 	}
+	/*
+	 * We don't have code that will init the CYPRESS bridge correctly
+	 * so we do the next best thing, and depend on the previous
+	 * console code to do the right thing, and ignore it here... :-\
+	 */
+	else if (dev->vendor == PCI_VENDOR_ID_CONTAQ &&
+		 dev->device == PCI_DEVICE_ID_CONTAQ_82C693)
+		for (i = 0; i < PCI_NUM_RESOURCES; i++)
+			if (dev->resource[i].flags && dev->resource[i].start)
+				pci_claim_resource(dev, i);
 }
 
 

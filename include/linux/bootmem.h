@@ -6,7 +6,7 @@
 
 #include <asm/pgtable.h>
 #include <asm/dma.h>
-#include <asm/cache.h>
+#include <linux/cache.h>
 #include <linux/init.h>
 
 /*

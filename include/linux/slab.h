@@ -12,7 +12,7 @@
 typedef struct kmem_cache_s kmem_cache_t;
 
 #include	<linux/mm.h>
-#include	<asm/cache.h>
+#include	<linux/cache.h>
 
 /* flags for kmem_cache_alloc() */
 #define	SLAB_BUFFER		GFP_BUFFER

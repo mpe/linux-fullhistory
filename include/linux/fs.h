@@ -18,10 +18,10 @@
 #include <linux/list.h>
 #include <linux/dcache.h>
 #include <linux/stat.h>
+#include <linux/cache.h>
 
 #include <asm/atomic.h>
 #include <asm/bitops.h>
-#include <asm/cache.h>
 
 struct poll_table_struct;
 
@@ -674,11 +674,11 @@ struct super_operations {
 struct dquot_operations {
 	void (*initialize) (struct inode *, short);
 	void (*drop) (struct inode *);
-	int (*alloc_block) (const struct inode *, unsigned long, uid_t, char);
-	int (*alloc_inode) (const struct inode *, unsigned long, uid_t);
+	int (*alloc_block) (const struct inode *, unsigned long, char);
+	int (*alloc_inode) (const struct inode *, unsigned long);
 	void (*free_block) (const struct inode *, unsigned long);
 	void (*free_inode) (const struct inode *, unsigned long);
-	int (*transfer) (struct dentry *, struct iattr *, uid_t);
+	int (*transfer) (struct dentry *, struct iattr *);
 };
 
 struct file_system_type {

@@ -42,7 +42,7 @@ typedef struct {
 					   independent code */
 	struct irqaction *action;		/* IRQ action list */
 	unsigned int depth;			/* Disable depth for nested irq disables */
-} irq_desc_t;
+} ____cacheline_aligned irq_desc_t;
 
 #include <asm/hw_irq.h> /* the arch dependent stuff */
 
@@ -51,27 +51,6 @@ extern irq_desc_t irq_desc[NR_IRQS];
 extern int handle_IRQ_event(unsigned int, struct pt_regs *, struct irqaction *);
 extern spinlock_t irq_controller_lock;
 extern int setup_irq(unsigned int , struct irqaction * );
-
-#ifdef __SMP__
-
-#include <asm/atomic.h>
-
-static inline void irq_enter(int cpu, unsigned int irq)
-{
-	hardirq_enter(cpu);
-	while (test_bit(0,&global_irq_lock)) {
-		/* nothing */;
-	}
-}
-
-static inline void irq_exit(int cpu, unsigned int irq)
-{
-	hardirq_exit(cpu);
-}
-#else
-#define irq_enter(cpu, irq)	(++local_irq_count[cpu])
-#define irq_exit(cpu, irq)	(--local_irq_count[cpu])
-#endif
 
 extern hw_irq_controller no_irq_type;  /* needed in every arch ? */
 

@@ -40,7 +40,8 @@
  * the 4 pgd entries internally, so there is no extra memory
  * load on TLB miss, despite one more level of indirection.
  */
-#define pgd_none(x)	(pgd_val(x) == 1ULL)
+#define EMPTY_PGD (__pa(empty_zero_page) + 1)
+#define pgd_none(x)	(pgd_val(x) == EMPTY_PGD)
 extern inline int pgd_bad(pgd_t pgd)		{ return 0; }
 extern inline int pgd_present(pgd_t pgd)	{ return !pgd_none(pgd); }
 
@@ -59,7 +60,7 @@ extern inline int pgd_present(pgd_t pgd)	{ return !pgd_none(pgd); }
  */
 extern inline void __pgd_clear (pgd_t * pgd)
 {
-	set_pgd(pgd, __pgd(1ULL));
+	set_pgd(pgd, __pgd(EMPTY_PGD));
 }
 
 extern inline void pgd_clear (pgd_t * pgd)

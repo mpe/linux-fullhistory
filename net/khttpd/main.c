@@ -50,6 +50,10 @@ Userspace
  *
  ****************************************************************/
 
+
+static int errno;
+#define __KERNEL_SYSCALLS__
+
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -175,9 +179,6 @@ static int MainDaemon(void *cpu_pointer)
 }
 
 static int CountBuf[CONFIG_KHTTPD_NUMCPU];
-
-static int errno;
-inline _syscall3(pid_t,waitpid,pid_t,pid,int *,wait_stat,int,options);
 
 
 

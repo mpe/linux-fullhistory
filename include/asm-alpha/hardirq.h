@@ -28,8 +28,8 @@ extern int __local_irq_count;
 #define hardirq_trylock(cpu)	(local_irq_count(cpu) == 0)
 #define hardirq_endlock(cpu)	((void) 0)
 
-#define hardirq_enter(cpu, irq)	(local_irq_count(cpu)++)
-#define hardirq_exit(cpu, irq)	(local_irq_count(cpu)--)
+#define irq_enter(cpu, irq)	(local_irq_count(cpu)++)
+#define irq_exit(cpu, irq)	(local_irq_count(cpu)--)
 
 #define synchronize_irq()	barrier()
 
@@ -52,13 +52,16 @@ static inline void release_irqlock(int cpu)
         }
 }
 
-static inline void hardirq_enter(int cpu, int irq)
+static inline void irq_enter(int cpu, int irq)
 {
 	++local_irq_count(cpu);
         atomic_inc(&global_irq_count);
+
+	while (spin_is_locked(&global_irq_lock))
+		barrier();
 }
 
-static inline void hardirq_exit(int cpu, int irq)
+static inline void irq_exit(int cpu, int irq)
 {
 	atomic_dec(&global_irq_count);
         --local_irq_count(cpu);
@@ -66,11 +69,10 @@ static inline void hardirq_exit(int cpu, int irq)
 
 static inline int hardirq_trylock(int cpu)
 {
-	return (!atomic_read(&global_irq_count)
-		&& !spin_is_locked(&global_irq_lock));
+	return !local_irq_count(cpu) && !spin_is_locked(&global_irq_lock);
 }
 
-#define hardirq_endlock(cpu)  ((void)0)
+#define hardirq_endlock(cpu)	do { } while (0)
 
 extern void synchronize_irq(void);
 

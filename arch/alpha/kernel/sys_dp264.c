@@ -27,7 +27,7 @@
 #include <asm/hwrpb.h>
 
 #include "proto.h"
-#include "irq_impl.h"
+#include <asm/hw_irq.h>
 #include "pci_impl.h"
 #include "machvec_impl.h"
 
@@ -39,28 +39,30 @@
 static void
 dp264_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
 {
-	if (irq >= 16) {
-		volatile unsigned long *csr;
+	volatile unsigned long *csr;
 
-		if (TSUNAMI_bootcpu < 2)
-			if (!TSUNAMI_bootcpu)
-				csr = &TSUNAMI_cchip->dim0.csr;
-			else
-				csr = &TSUNAMI_cchip->dim1.csr;
+	if (TSUNAMI_bootcpu < 2) {
+		if (!TSUNAMI_bootcpu)
+			csr = &TSUNAMI_cchip->dim0.csr;
 		else
-			if (TSUNAMI_bootcpu == 2)
-				csr = &TSUNAMI_cchip->dim2.csr;
-			else
-				csr = &TSUNAMI_cchip->dim3.csr;
-		
-		*csr = ~mask;
-		mb();
-		*csr;
+			csr = &TSUNAMI_cchip->dim1.csr;
+	} else {
+		if (TSUNAMI_bootcpu == 2)
+			csr = &TSUNAMI_cchip->dim2.csr;
+		else
+			csr = &TSUNAMI_cchip->dim3.csr;
 	}
-	else if (irq >= 8)
-		outb(mask >> 8, 0xA1);	/* ISA PIC2 */
-	else
-		outb(mask, 0x21);	/* ISA PIC1 */
+
+	*csr = ~mask;
+	mb();
+	*csr;
+
+	if (irq < 16) {
+		if (irq >= 8)
+			outb(mask >> 8, 0xA1);	/* ISA PIC2 */
+		else
+			outb(mask, 0x21);	/* ISA PIC1 */
+	}
 }
 
 static void
@@ -274,8 +276,19 @@ dp264_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 	struct pci_controler *hose = dev->sysdata;
 	int irq = COMMON_TABLE_LOOKUP;
 
-	if (irq > 0)
+	if (irq > 0) {
 		irq += 16 * hose->index;
+	} else {
+		/* ??? The Contaq IDE controler on the ISA bridge uses
+		   "legacy" interrupts 14 and 15.  I don't know if anything
+		   can wind up at the same slot+pin on hose1, so we'll
+		   just have to trust whatever value the console might
+		   have assigned.  */
+
+		u8 irq8;
+		pci_read_config_byte(dev, PCI_INTERRUPT_LINE, &irq8);
+		irq = irq8;
+	}
 
 	return irq;
 }

@@ -786,110 +786,113 @@ static inline void dquot_decr_blocks(struct dquot *dquot, unsigned long number)
 	dquot->dq_flags |= DQ_MOD;
 }
 
-static inline char need_print_warning(short type, uid_t initiator, struct dquot *dquot)
+static inline int need_print_warning(struct dquot *dquot, int flag)
 {
-	switch (type) {
+	switch (dquot->dq_type) {
 		case USRQUOTA:
-			return(initiator == dquot->dq_id);
+			return current->fsuid == dquot->dq_id && !(dquot->dq_flags & flag);
 		case GRPQUOTA:
-			return(initiator == dquot->dq_id);
+			return in_group_p(dquot->dq_id) && !(dquot->dq_flags & flag);
 	}
-	return(0);
+	return 0;
 }
 
-static inline char ignore_hardlimit(struct dquot *dquot, uid_t initiator)
+static void print_warning(struct dquot *dquot, int flag, char *fmtstr, ...)
 {
-	return(initiator == 0 && dquot->dq_mnt->mnt_dquot.rsquash[dquot->dq_type] == 0);
+	va_list args;
+
+	if (!need_print_warning(dquot, flag))
+		return;
+	va_start(args, fmtstr);
+	vsprintf(quotamessage, fmtstr, args);
+	va_end(args);
+	tty_write_message(current->tty, quotamessage);
+	dquot->dq_flags |= flag;
 }
 
-static int check_idq(struct dquot *dquot, short type, u_long inodes, uid_t initiator, 
-			struct tty_struct *tty)
+static inline char ignore_hardlimit(struct dquot *dquot)
 {
+	return capable(CAP_SYS_RESOURCE) && !dquot->dq_mnt->mnt_dquot.rsquash[dquot->dq_type];
+}
+
+static int check_idq(struct dquot *dquot, u_long inodes)
+{
+	short type = dquot->dq_type;
+
 	if (inodes <= 0 || dquot->dq_flags & DQ_FAKE)
-		return(QUOTA_OK);
+		return QUOTA_OK;
 
 	if (dquot->dq_ihardlimit &&
 	   (dquot->dq_curinodes + inodes) > dquot->dq_ihardlimit &&
-            !ignore_hardlimit(dquot, initiator)) {
-		if ((dquot->dq_flags & DQ_INODES) == 0 &&
-                     need_print_warning(type, initiator, dquot)) {
-			sprintf(quotamessage, "%s: write failed, %s file limit reached\n",
-			        dquot->dq_mnt->mnt_dirname, quotatypes[type]);
-			tty_write_message(tty, quotamessage);
-			dquot->dq_flags |= DQ_INODES;
-		}
-		return(NO_QUOTA);
+            !ignore_hardlimit(dquot)) {
+		print_warning(dquot, DQ_INODES, "%s: write failed, %s file limit reached\n",
+			      dquot->dq_mnt->mnt_dirname, quotatypes[type]);
+		return NO_QUOTA;
 	}
 
 	if (dquot->dq_isoftlimit &&
 	   (dquot->dq_curinodes + inodes) > dquot->dq_isoftlimit &&
 	    dquot->dq_itime && CURRENT_TIME >= dquot->dq_itime &&
-            !ignore_hardlimit(dquot, initiator)) {
-                if (need_print_warning(type, initiator, dquot)) {
-			sprintf(quotamessage, "%s: warning, %s file quota exceeded too long.\n",
-		        	dquot->dq_mnt->mnt_dirname, quotatypes[type]);
-			tty_write_message(tty, quotamessage);
-		}
-		return(NO_QUOTA);
+            !ignore_hardlimit(dquot)) {
+		print_warning(dquot, DQ_INODES, "%s: warning, %s file quota exceeded too long.\n",
+				dquot->dq_mnt->mnt_dirname, quotatypes[type]);
+		return NO_QUOTA;
 	}
 
 	if (dquot->dq_isoftlimit &&
 	   (dquot->dq_curinodes + inodes) > dquot->dq_isoftlimit &&
 	    dquot->dq_itime == 0) {
-                if (need_print_warning(type, initiator, dquot)) {
-			sprintf(quotamessage, "%s: warning, %s file quota exceeded\n",
-		        	dquot->dq_mnt->mnt_dirname, quotatypes[type]);
-			tty_write_message(tty, quotamessage);
-		}
+		print_warning(dquot, 0, "%s: warning, %s file quota exceeded\n",
+				dquot->dq_mnt->mnt_dirname, quotatypes[type]);
 		dquot->dq_itime = CURRENT_TIME + dquot->dq_mnt->mnt_dquot.inode_expire[type];
 	}
 
-	return(QUOTA_OK);
+	return QUOTA_OK;
 }
 
-static int check_bdq(struct dquot *dquot, short type, u_long blocks, uid_t initiator, 
-			struct tty_struct *tty, char warn)
+static int check_bdq(struct dquot *dquot, u_long blocks, char prealloc)
 {
+	short type = dquot->dq_type;
+
 	if (blocks <= 0 || dquot->dq_flags & DQ_FAKE)
-		return(QUOTA_OK);
+		return QUOTA_OK;
 
 	if (dquot->dq_bhardlimit &&
 	   (dquot->dq_curblocks + blocks) > dquot->dq_bhardlimit &&
-            !ignore_hardlimit(dquot, initiator)) {
-		if (warn && (dquot->dq_flags & DQ_BLKS) == 0 &&
-                     need_print_warning(type, initiator, dquot)) {
-			sprintf(quotamessage, "%s: write failed, %s disk limit reached.\n",
-			        dquot->dq_mnt->mnt_dirname, quotatypes[type]);
-			tty_write_message(tty, quotamessage);
-			dquot->dq_flags |= DQ_BLKS;
-		}
-		return(NO_QUOTA);
+            !ignore_hardlimit(dquot)) {
+		if (!prealloc)
+			print_warning(dquot, DQ_BLKS, "%s: write failed, %s disk limit reached.\n",
+					dquot->dq_mnt->mnt_dirname, quotatypes[type]);
+		return NO_QUOTA;
 	}
 
 	if (dquot->dq_bsoftlimit &&
 	   (dquot->dq_curblocks + blocks) > dquot->dq_bsoftlimit &&
 	    dquot->dq_btime && CURRENT_TIME >= dquot->dq_btime &&
-            !ignore_hardlimit(dquot, initiator)) {
-                if (warn && need_print_warning(type, initiator, dquot)) {
-			sprintf(quotamessage, "%s: write failed, %s disk quota exceeded too long.\n",
-		        	dquot->dq_mnt->mnt_dirname, quotatypes[type]);
-			tty_write_message(tty, quotamessage);
-		}
-		return(NO_QUOTA);
+            !ignore_hardlimit(dquot)) {
+		if (!prealloc)
+			print_warning(dquot, DQ_BLKS, "%s: write failed, %s disk quota exceeded too long.\n",
+					dquot->dq_mnt->mnt_dirname, quotatypes[type]);
+		return NO_QUOTA;
 	}
 
 	if (dquot->dq_bsoftlimit &&
 	   (dquot->dq_curblocks + blocks) > dquot->dq_bsoftlimit &&
 	    dquot->dq_btime == 0) {
-                if (warn && need_print_warning(type, initiator, dquot)) {
-			sprintf(quotamessage, "%s: warning, %s disk quota exceeded\n",
-		        	dquot->dq_mnt->mnt_dirname, quotatypes[type]);
-			tty_write_message(tty, quotamessage);
+		if (!prealloc) {
+			print_warning(dquot, 0, "%s: warning, %s disk quota exceeded\n",
+					dquot->dq_mnt->mnt_dirname, quotatypes[type]);
+			dquot->dq_btime = CURRENT_TIME + dquot->dq_mnt->mnt_dquot.block_expire[type];
 		}
-		dquot->dq_btime = CURRENT_TIME + dquot->dq_mnt->mnt_dquot.block_expire[type];
+		else
+			/*
+			 * We don't allow preallocation to exceed softlimit so exceeding will
+			 * be always printed
+			 */
+			return NO_QUOTA;
 	}
 
-	return(QUOTA_OK);
+	return QUOTA_OK;
 }
 
 /*
@@ -1102,11 +1105,9 @@ void dquot_drop(struct inode *inode)
 /*
  * Note: this is a blocking operation.
  */
-int dquot_alloc_block(const struct inode *inode, unsigned long number, uid_t initiator, 
-			char warn)
+int dquot_alloc_block(const struct inode *inode, unsigned long number, char warn)
 {
 	int cnt;
-	struct tty_struct *tty = current->tty;
 	struct dquot *dquot[MAXQUOTAS];
 
 	for (cnt = 0; cnt < MAXQUOTAS; cnt++) {
@@ -1114,7 +1115,7 @@ int dquot_alloc_block(const struct inode *inode, unsigned long number, uid_t ini
 		if (dquot[cnt] == NODQUOT)
 			continue;
 		lock_dquot(dquot[cnt]);
-		if (check_bdq(dquot[cnt], cnt, number, initiator, tty, warn))
+		if (check_bdq(dquot[cnt], number, warn))
 			goto put_all;
 	}
 
@@ -1140,10 +1141,9 @@ put_all:
 /*
  * Note: this is a blocking operation.
  */
-int dquot_alloc_inode(const struct inode *inode, unsigned long number, uid_t initiator)
+int dquot_alloc_inode(const struct inode *inode, unsigned long number)
 {
 	int cnt;
-	struct tty_struct *tty = current->tty;
 	struct dquot *dquot[MAXQUOTAS];
 
 	for (cnt = 0; cnt < MAXQUOTAS; cnt++) {
@@ -1151,7 +1151,7 @@ int dquot_alloc_inode(const struct inode *inode, unsigned long number, uid_t ini
 		if (dquot[cnt] == NODQUOT)
 			continue;
 		lock_dquot(dquot[cnt]);
-		if (check_idq(dquot[cnt], cnt, number, initiator, tty))
+		if (check_idq(dquot[cnt], number))
 			goto put_all;
 	}
 
@@ -1213,13 +1213,12 @@ void dquot_free_inode(const struct inode *inode, unsigned long number)
  *
  * Note: this is a blocking operation.
  */
-int dquot_transfer(struct dentry *dentry, struct iattr *iattr, uid_t initiator)
+int dquot_transfer(struct dentry *dentry, struct iattr *iattr)
 {
 	struct inode *inode = dentry -> d_inode;
 	unsigned long blocks;
 	struct dquot *transfer_from[MAXQUOTAS];
 	struct dquot *transfer_to[MAXQUOTAS];
-	struct tty_struct *tty = current->tty;
 	short cnt, disc;
 	int error = -EDQUOT;
 
@@ -1293,8 +1292,8 @@ int dquot_transfer(struct dentry *dentry, struct iattr *iattr, uid_t initiator)
 		 * invalidated or locked...
 		 */
 		if (!transfer_to[cnt]->dq_mnt || !transfer_from[cnt]->dq_mnt ||
-		    check_idq(transfer_to[cnt], cnt, 1, initiator, tty) == NO_QUOTA ||
-		    check_bdq(transfer_to[cnt], cnt, blocks, initiator, tty, 0) == NO_QUOTA) {
+		    check_idq(transfer_to[cnt], 1) == NO_QUOTA ||
+		    check_bdq(transfer_to[cnt], blocks, 0) == NO_QUOTA) {
 			cnt++;
 			goto put_all;
 		}
@@ -1458,9 +1457,9 @@ out:
 static inline int check_quotafile_size(loff_t size)
 {
 	ulong blocks = size >> BLOCK_SIZE_BITS;
-	size_t off = size & ~(BLOCK_SIZE - 1);
+	size_t off = size & (BLOCK_SIZE - 1);
 
-	return !((blocks % sizeof(struct dqblk) + off % sizeof(struct dqblk)) % sizeof(struct dqblk));
+	return !(((blocks % sizeof(struct dqblk)) * BLOCK_SIZE + off % sizeof(struct dqblk)) % sizeof(struct dqblk));
 }
 
 int quota_on(kdev_t dev, short type, char *path)
@@ -1555,7 +1554,7 @@ asmlinkage long sys_quotactl(int cmd, const char *special, int id, caddr_t addr)
 			break;
 		case Q_GETQUOTA:
 			if (((type == USRQUOTA && current->euid != id) ||
-			     (type == GRPQUOTA && in_group_p(id))) &&
+			     (type == GRPQUOTA && in_egroup_p(id))) &&
 			    !capable(CAP_SYS_RESOURCE))
 				goto out;
 			break;

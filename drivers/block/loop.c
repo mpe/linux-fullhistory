@@ -425,7 +425,7 @@ static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 		lo->lo_flags |= LO_FLAGS_READ_ONLY;
 		set_device_ro(dev, 1);
 	} else {
-		invalidate_inode_pages (inode);
+		vmtruncate (inode, 0);
 		set_device_ro(dev, 0);
 	}
 

@@ -26,7 +26,7 @@
 #include <asm/core_t2.h>
 
 #include "proto.h"
-#include "irq_impl.h"
+#include <asm/hw_irq.h>
 #include "pci_impl.h"
 #include "machvec_impl.h"
 
@@ -283,7 +283,6 @@ struct alpha_machine_vector sable_gamma_mv __initmv = {
 	init_irq:		sable_init_irq,
 	init_pit:		common_init_pit,
 	init_pci:		common_init_pci,
-	kill_arch:		common_kill_arch,
 	pci_map_irq:		sable_map_irq,
 	pci_swizzle:		common_swizzle,
 

@@ -54,7 +54,7 @@
 # Change a lot of places to call set_x_info uniformly.
 # Take out message about preparing version (old sound driver cruft).
 #
-# 13 Dec 1998, Riley H Williams (rhw@bigfoot.com)
+# 13 Dec 1998, Riley H Williams <rhw@memalpha.cx>
 # When an error occurs, actually display the error message as well as
 # our comments thereon.
 #

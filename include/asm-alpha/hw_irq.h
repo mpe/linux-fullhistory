@@ -1,3 +1,5 @@
+#ifndef _ALPHA_HW_IRQ_H
+#define _ALPHA_HW_IRQ_H
 /*
  *	linux/arch/alpha/kernel/irq.h
  *
@@ -85,3 +87,5 @@ static inline void alpha_do_profile (unsigned long pc)
 		atomic_inc((atomic_t *)&prof_buffer[pc]);
 	}
 }
+
+#endif

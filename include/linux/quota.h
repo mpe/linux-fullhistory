@@ -44,8 +44,8 @@
 /*
  * Convert diskblocks to blocks and the other way around.
  */
-#define dbtob(num) (num << 10)
-#define btodb(num) (num >> 10)
+#define dbtob(num) (num << BLOCK_SIZE_BITS)
+#define btodb(num) (num >> BLOCK_SIZE_BITS)
 
 /*
  * Convert count of filesystem blocks to diskquota blocks, meant

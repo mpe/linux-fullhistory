@@ -22,15 +22,15 @@
 #include <linux/random.h>
 #include <linux/init.h>
 #include <linux/delay.h>
+#include <linux/irq.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
-#include <asm/irq.h>
 #include <asm/bitops.h>
 #include <asm/machvec.h>
+#include <asm/spinlock.h>
 
 #include "proto.h"
-#include "irq_impl.h"
 
 #define vulp	volatile unsigned long *
 #define vuip	volatile unsigned int *
@@ -182,7 +182,8 @@ srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
  */
 
 static struct irqaction timer_irq = { NULL, 0, 0, NULL, NULL, NULL};
-static struct irqaction *irq_action[NR_IRQS];
+spinlock_t irq_controller_lock = SPIN_LOCK_UNLOCKED;
+irq_desc_t irq_desc[NR_IRQS] __cacheline_aligned = { [0 ... NR_IRQS-1] = {0,} };
 
 
 static inline void
@@ -230,12 +231,7 @@ enable_irq(unsigned int irq_nr)
 int
 check_irq(unsigned int irq)
 {
-	struct irqaction **p;
-
-	p = irq_action + irq;
-	if (*p == NULL)
-		return 0;
-	return -EBUSY;
+	return irq_desc[irq].action ? -EBUSY : 0;
 }
 
 int
@@ -253,7 +249,7 @@ request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
 	if (!handler)
 		return -EINVAL;
 
-	p = irq_action + irq;
+	p = &irq_desc[irq].action;
 	action = *p;
 	if (action) {
 		/* Can't share interrupts unless both agree to */
@@ -314,14 +310,14 @@ free_irq(unsigned int irq, void *dev_id)
 		printk("Trying to free reserved IRQ %d\n", irq);
 		return;
 	}
-	for (p = irq + irq_action; (action = *p) != NULL; p = &action->next) {
+	for (p = &irq_desc[irq].action; (action = *p) != NULL; p = &action->next) {
 		if (action->dev_id != dev_id)
 			continue;
 
 		/* Found it - now free it */
 		save_and_cli(flags);
 		*p = action->next;
-		if (!irq[irq_action])
+		if (!irq_desc[irq].action)
 			mask_irq(irq);
 		restore_flags(flags);
 		kfree(action);
@@ -344,7 +340,7 @@ int get_irq_list(char *buf)
 #endif
 
 	for (i = 0; i < NR_IRQS; i++) {
-		action = irq_action[i];
+		action = irq_desc[i].action;
 		if (!action) 
 			continue;
 		p += sprintf(p, "%3d: ",i);
@@ -541,63 +537,6 @@ __global_restore_flags(unsigned long flags)
         }
 }
 
-#undef INIT_STUCK
-#define INIT_STUCK (1<<26)
-
-#undef STUCK
-#define STUCK							\
-  if (!--stuck) {						\
-    printk("irq_enter stuck (irq=%d, cpu=%d, global=%d)\n",	\
-	   irq, cpu, global_irq_holder);			\
-    stuck = INIT_STUCK;						\
-  }
-
-#undef VERBOSE_IRQLOCK_DEBUGGING
-
-void
-irq_enter(int cpu, int irq)
-{
-#ifdef VERBOSE_IRQLOCK_DEBUGGING
-	extern void smp_show_backtrace_all_cpus(void);
-#endif
-	int stuck = INIT_STUCK;
-
-	hardirq_enter(cpu, irq);
-	barrier();
-	while (spin_is_locked(&global_irq_lock)) {
-		if (cpu == global_irq_holder) {
-			int globl_locked = spin_is_locked(&global_irq_lock);
-			int globl_icount = atomic_read(&global_irq_count);
-			int local_count = local_irq_count(cpu);
-
-			/* It is very important that we load the state
-			   variables before we do the first call to
-			   printk() as printk() could end up changing
-			   them...  */
-
-			printk("CPU[%d]: where [%p] glocked[%d] gicnt[%d]"
-			       " licnt[%d]\n",
-			       cpu, previous_irqholder, globl_locked,
-			       globl_icount, local_count);
-#ifdef VERBOSE_IRQLOCK_DEBUGGING
-			printk("Performing backtrace on all CPUs,"
-			       " write this down!\n");
-			smp_show_backtrace_all_cpus();
-#endif
-			break;
-		}
-		STUCK;
-		barrier();
-	}
-}
-
-void
-irq_exit(int cpu, int irq)
-{
-	hardirq_exit(cpu, irq);
-	release_irqlock(cpu);
-}
-
 static void
 show(char * str, void *where)
 {
@@ -698,12 +637,6 @@ synchronize_irq(void)
 	}
 #endif
 }
-
-#else /* !__SMP__ */
-
-#define irq_enter(cpu, irq)	(++local_irq_count(cpu))
-#define irq_exit(cpu, irq)	(--local_irq_count(cpu))
-
 #endif /* __SMP__ */
 
 static void
@@ -720,7 +653,7 @@ unexpected_irq(int irq, struct pt_regs * regs)
 	printk("PC = %016lx PS=%04lx\n", regs->pc, regs->ps);
 	printk("Expecting: ");
 	for (i = 0; i < ACTUAL_NR_IRQS; i++)
-		if ((action = irq_action[i]))
+		if ((action = irq_desc[i].action))
 			while (action->handler) {
 				printk("[%s:%d] ", action->name, i);
 				action = action->next;
@@ -774,7 +707,7 @@ handle_irq(int irq, int ack, struct pt_regs * regs)
 
 	irq_enter(cpu, irq);
 	kstat.irqs[cpu][irq] += 1;
-	action = irq_action[irq];
+	action = irq_desc[irq].action;
 
 	/*
 	 * For normal interrupts, we mask it out, and then ACK it.
@@ -823,7 +756,7 @@ probe_irq_on(void)
 		if (!(PROBE_MASK & (1UL << i))) {
 			continue;
 		}
-		action = irq_action[i];
+		action = irq_desc[i].action;
 		if (!action) {
 			enable_irq(i);
 			irqs |= (1UL << i);

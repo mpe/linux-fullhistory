@@ -28,7 +28,7 @@
 #include <asm/pgtable.h>
 
 #include "proto.h"
-#include "irq_impl.h"
+#include <asm/hw_irq.h>
 #include "machvec_impl.h"
 
 
