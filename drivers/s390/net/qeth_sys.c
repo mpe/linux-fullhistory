@@ -742,6 +742,61 @@ static DEVICE_ATTR(layer2, 0644, qeth_dev_layer2_show,
 		   qeth_dev_layer2_store);
 
 static ssize_t
+qeth_dev_large_send_show(struct device *dev, char *buf)
+{
+	struct qeth_card *card = dev->driver_data;
+
+	if (!card)
+		return -EINVAL;
+
+	switch (card->options.large_send) {
+	case QETH_LARGE_SEND_NO:
+		return sprintf(buf, "%s\n", "no");
+	case QETH_LARGE_SEND_EDDP:
+		return sprintf(buf, "%s\n", "EDDP");
+	case QETH_LARGE_SEND_TSO:
+		return sprintf(buf, "%s\n", "TSO");
+	default:
+		return sprintf(buf, "%s\n", "N/A");
+	}
+}
+
+static ssize_t
+qeth_dev_large_send_store(struct device *dev, const char *buf, size_t count)
+{
+	struct qeth_card *card = dev->driver_data;
+	enum qeth_large_send_types type;
+	int rc = 0;
+	char *tmp;
+
+	if (!card)
+		return -EINVAL;
+
+	tmp = strsep((char **) &buf, "\n");
+
+	if (!strcmp(tmp, "no")){
+		type = QETH_LARGE_SEND_NO;
+	} else if (!strcmp(tmp, "EDDP")) {
+		type = QETH_LARGE_SEND_EDDP;
+	} else if (!strcmp(tmp, "TSO")) {
+		type = QETH_LARGE_SEND_TSO;
+	} else {
+		PRINT_WARN("large_send: invalid mode %s!\n", tmp);
+		return -EINVAL;
+	}
+	if (card->options.large_send == type)
+		return count;
+	card->options.large_send = type;
+	if ((rc = qeth_set_large_send(card)))
+		return rc;
+
+	return count;
+}
+
+static DEVICE_ATTR(large_send, 0644, qeth_dev_large_send_show,
+		   qeth_dev_large_send_store);
+
+static ssize_t
 qeth_dev_blkt_show(char *buf, struct qeth_card *card, int value )
 {
 
@@ -875,6 +930,7 @@ static struct device_attribute * qeth_device_attrs[] = {
 	&dev_attr_broadcast_mode,
 	&dev_attr_canonical_macaddr,
 	&dev_attr_layer2,
+	&dev_attr_large_send,
 	NULL,
 };
 
