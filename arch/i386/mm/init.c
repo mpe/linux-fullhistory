@@ -27,8 +27,10 @@
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/dma.h>
+#include <asm/fixmap.h>
 
 extern void show_net_buffers(void);
+extern unsigned long init_smp_mappings(unsigned long);
 
 void __bad_pte_kernel(pmd_t *pmd)
 {
@@ -191,6 +193,50 @@ static inline void set_in_cr4(unsigned long mask)
 }
 
 /*
+ * allocate page table(s) for compile-time fixed mappings
+ */
+static unsigned long fixmap_init (unsigned long start_mem)
+{
+	pgd_t * pg_dir;
+	unsigned int idx;
+	unsigned long address;
+
+	start_mem &= PAGE_MASK;
+
+	for (idx=1; idx < __end_of_fixed_addresses; idx += PTRS_PER_PTE)
+	{
+		address = fix_to_virt(__end_of_fixed_addresses-idx);
+		pg_dir = swapper_pg_dir + (address >> PGDIR_SHIFT);
+		memset((void *)start_mem, 0, PAGE_SIZE);
+		pgd_val(*pg_dir) = _PAGE_TABLE | __pa(start_mem);
+		start_mem += PAGE_SIZE;
+	}
+
+	return start_mem;
+}
+
+static void set_pte_phys (unsigned long vaddr, unsigned long phys)
+{
+	pgprot_t prot;
+	pte_t * pte;
+
+	pte = pte_offset(pmd_offset(pgd_offset_k(vaddr), vaddr), vaddr);
+	prot = PAGE_KERNEL;
+	if (boot_cpu_data.x86_capability & X86_FEATURE_PGE)
+		pgprot_val(prot) |= _PAGE_GLOBAL;
+	set_pte(pte, mk_pte_phys(phys, prot));
+
+	local_flush_tlb();
+}
+
+void set_fixmap (enum fixed_addresses idx, unsigned long phys)
+{
+	unsigned long address = fix_to_virt(idx);
+
+	set_pte_phys (address,phys);
+}
+
+/*
  * paging_init() sets up the page tables - note that the first 4MB are
  * already mapped by head.S.
  *
@@ -293,60 +339,9 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
 			address += PAGE_SIZE;
 		}
 	}
+	start_mem = fixmap_init(start_mem);
 #ifdef __SMP__
-{
-	extern unsigned long mp_lapic_addr;
-	extern unsigned long mp_ioapic_addr;
-	pte_t pte;
-	unsigned long apic_area = (unsigned long)APIC_BASE;
-
-	pg_dir = swapper_pg_dir + ((apic_area) >> PGDIR_SHIFT);
-	memset((void *)start_mem, 0, PAGE_SIZE);
-	pgd_val(*pg_dir) = _PAGE_TABLE | __pa(start_mem);
-	start_mem += PAGE_SIZE;
-
-	if (smp_found_config) {
-		/*
-		 * Map the local APIC to FEE00000. (it's only the default
-		 * value, thanks to Steve Hsieh for finding this out. We
-		 * now save the real local-APIC physical address in smp_scan(),
-		 * and use it here)
-		 */
-		pg_table = pte_offset((pmd_t *)pg_dir, apic_area);
-		pte = mk_pte_phys(mp_lapic_addr, PAGE_KERNEL);
-		set_pte(pg_table, pte);
-
-		/*
-		 * Map the IO-APIC to FEC00000.
-		 */
-		apic_area = 0xFEC00000; /*(unsigned long)IO_APIC_BASE;*/
-		pg_table = pte_offset((pmd_t *)pg_dir, apic_area);
-		pte = mk_pte_phys(mp_ioapic_addr, PAGE_KERNEL);
-		set_pte(pg_table, pte);
-	} else {
-		/*
-		 * No local APIC but we are compiled SMP ... set up a
-		 * fake all zeroes page to simulate the local APIC.
-		 */
-		pg_table = pte_offset((pmd_t *)pg_dir, apic_area);
-		pte = mk_pte(start_mem, PAGE_KERNEL);
-		memset((void *)start_mem, 0, PAGE_SIZE);
-		start_mem += PAGE_SIZE;
-		set_pte(pg_table, pte);
-
-		/*
-		 * Do the same for the IO-APIC
-		 */
-		apic_area = 0xFEC00000;
-		pg_table = pte_offset((pmd_t *)pg_dir, apic_area);
-		pte = mk_pte(start_mem, PAGE_KERNEL);
-		memset((void *)start_mem, 0, PAGE_SIZE);
-		start_mem += PAGE_SIZE;
-		set_pte(pg_table, pte);		
-	}
-
-	local_flush_tlb();
-}
+	start_mem = init_smp_mappings(start_mem);
 #endif
 	local_flush_tlb();
 

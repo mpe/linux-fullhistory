@@ -186,6 +186,8 @@ extern __inline__ unsigned long ffz(unsigned long word)
 	return result;
 }
 
+#ifdef __KERNEL__
+
 /*
  * ffs: find first bit set. This is defined the same way as
  * the libc and compiler builtin ffs routines, therefore
@@ -232,6 +234,7 @@ extern __inline__ unsigned int hweight8(unsigned int w)
 #define hweight8(x) generic_hweight8(x)
 
 #endif
+#endif /* __KERNEL__ */
 
 /* find_next_zero_bit() finds the first zero bit in a bit string of length
  * 'size' bits, starting the search at bit 'offset'. This is largely based

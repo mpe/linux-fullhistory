@@ -77,7 +77,7 @@ void enable_hlt(void)
 
 static void hard_idle(void)
 {
-	while (!need_resched) {
+	while (!current->need_resched) {
 		if (boot_cpu_data.hlt_works_ok && !hlt_counter) {
 #ifdef CONFIG_APM
 				/* If the APM BIOS is not enabled, or there
@@ -86,14 +86,14 @@ static void hard_idle(void)
 				 need_resched again because an interrupt
 				 may have occurred in apm_do_idle(). */
 			start_bh_atomic();
-			if (!apm_do_idle() && !need_resched)
+			if (!apm_do_idle() && !current->need_resched)
 				__asm__("hlt");
 			end_bh_atomic();
 #else
 			__asm__("hlt");
 #endif
 	        }
- 		if (need_resched) 
+ 		if (current->need_resched) 
  			break;
 		schedule();
 	}
@@ -130,11 +130,11 @@ asmlinkage int sys_idle(void)
 		if (jiffies - start_idle > HARD_IDLE_TIMEOUT) 
 			hard_idle();
 		else  {
-			if (boot_cpu_data.hlt_works_ok && !hlt_counter && !need_resched)
+			if (boot_cpu_data.hlt_works_ok && !hlt_counter && !current->need_resched)
 		        	__asm__("hlt");
 		}
 		run_task_queue(&tq_scheduler);
-		if (need_resched) 
+		if (current->need_resched) 
 			start_idle = 0;
 		schedule();
 	}
@@ -156,7 +156,7 @@ int cpu_idle(void *unused)
 	while(1)
 	{
 		if(current_cpu_data.hlt_works_ok &&
-		 		!hlt_counter && !need_resched)
+		 		!hlt_counter && !current->need_resched)
 			__asm("hlt");
 		check_pgt_cache();
 		/*
@@ -410,6 +410,8 @@ void machine_power_off(void)
 
 void show_regs(struct pt_regs * regs)
 {
+	long cr0 = 0L, cr2 = 0L, cr3 = 0L;
+
 	printk("\n");
 	printk("EIP: %04x:[<%08lx>]",0xffff & regs->xcs,regs->eip);
 	if (regs->xcs & 3)
@@ -421,6 +423,10 @@ void show_regs(struct pt_regs * regs)
 		regs->esi, regs->edi, regs->ebp);
 	printk(" DS: %04x ES: %04x\n",
 		0xffff & regs->xds,0xffff & regs->xes);
+	__asm__("movl %%cr0, %0": "=r" (cr0));
+	__asm__("movl %%cr2, %0": "=r" (cr2));
+	__asm__("movl %%cr3, %0": "=r" (cr3));
+	printk("CR0: %08lx CR2: %08lx CR3: %08lx\n", cr0, cr2, cr3);
 }
 
 /*
@@ -506,7 +512,7 @@ void flush_thread(void)
 	int i;
 
 	for (i=0 ; i<8 ; i++)
-		current->debugreg[i] = 0;
+		current->tss.debugreg[i] = 0;
 
 	/*
 	 * Forget coprocessor state..
@@ -655,7 +661,7 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 	dump->u_dsize -= dump->u_tsize;
 	dump->u_ssize = 0;
 	for (i = 0; i < 8; i++)
-		dump->u_debugreg[i] = current->debugreg[i];  
+		dump->u_debugreg[i] = current->tss.debugreg[i];  
 
 	if (dump->start_stack < TASK_SIZE)
 		dump->u_ssize = ((unsigned long) (TASK_SIZE - dump->start_stack)) >> PAGE_SHIFT;
@@ -687,7 +693,7 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 #define loaddebug(tsk,register) \
 		__asm__("movl %0,%%db" #register  \
 			: /* no output */ \
-			:"r" (tsk->debugreg[register]))
+			:"r" (tsk->tss.debugreg[register]))
 
 
 /*
@@ -755,7 +761,7 @@ void __switch_to(struct task_struct *prev, struct task_struct *next)
 	/*
 	 * Now maybe reload the debug registers
 	 */
-	if (next->debugreg[7]){
+	if (next->tss.debugreg[7]){
 		loaddebug(next,0);
 		loaddebug(next,1);
 		loaddebug(next,2);

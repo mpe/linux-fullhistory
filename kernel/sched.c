@@ -81,7 +81,6 @@ long time_reftime = 0;		/* time at last adjustment (s) */
 long time_adjust = 0;
 long time_adjust_step = 0;
 
-int need_resched = 0;
 unsigned long event = 0;
 
 extern int do_setitimer(int, struct itimerval *, struct itimerval *);
@@ -104,11 +103,41 @@ struct kernel_stat kstat = { 0 };
 
 void scheduling_functions_start_here(void) { }
 
+static inline void reschedule_idle(struct task_struct * p)
+{
+	/*
+	 * For SMP, we try to find another CPU to put the
+	 * new task on, and fall back on the local CPU only
+	 * if no other CPU is idle.
+	 *
+	 * FIXME: try to select the idle CPU to be the old
+	 * CPU of the task 'p' if possible.
+	 */
+#ifdef __SMP__
+	struct task_struct **idle = task;
+	int current_cpu = smp_processor_id();
+	int i = smp_num_cpus;
+
+	do {
+		struct task_struct *tsk = *idle;
+		idle++;
+		/* Something like this.. */
+		if (tsk->has_cpu && !tsk->need_resched && tsk->processor != current_cpu) {
+			tsk->need_resched = 1;
+			smp_send_reschedule(tsk->processor);
+			return;
+		}
+	} while (--i > 0);
+#endif
+	if (p->policy != SCHED_OTHER || p->counter > current->counter + 3)
+		current->need_resched = 1;	
+}
+
+	
 static inline void add_to_runqueue(struct task_struct * p)
 {
-	if (p->policy != SCHED_OTHER || p->counter > current->counter + 3)
-		need_resched = 1;
 	nr_running++;
+	reschedule_idle(p);
 	(p->prev_run = init_task.prev_run)->next_run = p;
 	p->next_run = &init_task;
 	init_task.prev_run = p;
@@ -410,7 +439,6 @@ asmlinkage void schedule(void)
 	unsigned long timeout;
 	int this_cpu;
 
-	need_resched = 0;
 	prev = current;
 	this_cpu = smp_processor_id();
 	if (in_interrupt())
@@ -512,8 +540,15 @@ asmlinkage void schedule(void)
 		if (timeout)
 			del_timer(&timer);
 	}
+
 	spin_unlock(&scheduler_lock);
 
+	/*
+	 * At this point "prev" is "current", as we just
+	 * switched into it (from an even more "previous"
+	 * prev)
+	 */
+	prev->need_resched = 0;
 	reacquire_kernel_lock(prev, smp_processor_id(), lock_depth);
 	return;
 
@@ -1058,7 +1093,7 @@ static void update_process_times(unsigned long ticks, unsigned long system)
 		p->counter -= ticks;
 		if (p->counter < 0) {
 			p->counter = 0;
-			need_resched = 1;
+			p->need_resched = 1;
 		}
 		if (p->priority < DEF_PRIORITY)
 			kstat.cpu_nice += user;
@@ -1347,7 +1382,7 @@ static int setscheduler(pid_t pid, int policy,
 	if (p->next_run)
 		move_first_runqueue(p);
 
-	need_resched = 1;
+	current->need_resched = 1;
 
 out_unlock:
 	read_unlock(&tasklist_lock);
@@ -1430,10 +1465,10 @@ asmlinkage int sys_sched_yield(void)
 	spin_lock(&scheduler_lock);
 	spin_lock_irq(&runqueue_lock);
 	current->policy |= SCHED_YIELD;
+	current->need_resched = 1;
 	move_last_runqueue(current);
 	spin_unlock_irq(&runqueue_lock);
 	spin_unlock(&scheduler_lock);
-	need_resched = 1;
 	return 0;
 }
 

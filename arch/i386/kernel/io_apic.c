@@ -32,7 +32,7 @@
  * volatile is justified in this case, it might change
  * spontaneously, GCC should not cache it
  */
-#define IO_APIC_BASE ((volatile int *)0xfec00000)
+#define IO_APIC_BASE ((volatile int *)fix_to_virt(FIX_IO_APIC_BASE))
 
 enum mp_irq_source_types {
     mp_INT = 0,

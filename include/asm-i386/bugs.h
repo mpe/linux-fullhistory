@@ -333,10 +333,7 @@ __initfunc(static void check_bugs(void))
 	check_amd_k6();
 	check_pentium_f00f();
 	system_utsname.machine[1] = '0' + boot_cpu_data.x86;
-#if !defined(__SMP__) && defined(CONFIG_MTRR)
-	/*  Must be done after other processors booted: at this point we are
-	    called before SMP initialisation, so this is for the non-SMP case
-	    only. The SMP case is handled in arch/i386/kernel/smp.c  */
+#if defined(CONFIG_MTRR)
 	mtrr_init ();
 #endif
 }

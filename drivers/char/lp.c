@@ -156,7 +156,7 @@ static __inline__ void lp_yield (int minor)
 {
 	if (!parport_yield_blocking (lp_table[minor].dev))
 	{
-		if (need_resched)
+		if (current->need_resched)
 			schedule ();
 	} else
 		lp_table[minor].irq_missed = 1;
@@ -499,7 +499,7 @@ static ssize_t lp_read(struct file * file, char * buf,
 			status = (r_str(minor) & 0x40);
 			udelay(50);
 			counter++;
-			if (need_resched)
+			if (current->need_resched)
 				schedule ();
 		} while ((status == 0x40) && (counter < 20));
 		if (counter == 20) { 
@@ -519,7 +519,7 @@ static ssize_t lp_read(struct file * file, char * buf,
 			status=(r_str(minor) & 0x40);
 			udelay(20);
 			counter++;
-			if (need_resched)
+			if (current->need_resched)
 				schedule ();
 		} while ( (status == 0) && (counter < 20) );
 		if (counter == 20) { /* Timeout */

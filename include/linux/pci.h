@@ -1042,6 +1042,7 @@
 #ifdef __KERNEL__
 
 #include <linux/types.h>
+#include <linux/config.h>
 
 /*
  * There is one pci_dev structure for each slot-number/function-number

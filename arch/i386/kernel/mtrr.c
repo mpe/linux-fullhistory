@@ -114,6 +114,9 @@
 	       Only manipulate interrupt enable flag on local CPU.
 	       Allow enclosed uncachable regions.
   v1.21
+    19980611   Richard Gooch <rgooch@atnf.csiro.au>
+	       Always define <main_lock>.
+  v1.22
 */
 #include <linux/types.h>
 #include <linux/errno.h>
@@ -147,7 +150,7 @@
 #include <asm/atomic.h>
 #include <linux/smp.h>
 
-#define MTRR_VERSION            "1.21 (19980521)"
+#define MTRR_VERSION            "1.22 (19980611)"
 
 #define TRUE  1
 #define FALSE 0
@@ -199,9 +202,7 @@ static char *ascii_buffer = NULL;
 static unsigned int ascii_buf_bytes = 0;
 #endif
 static unsigned int *usage_table = NULL;
-#ifdef __SMP__
 static spinlock_t main_lock = SPIN_LOCK_UNLOCKED;
-#endif
 
 /*  Private functions  */
 #ifdef CONFIG_PROC_FS

@@ -64,7 +64,7 @@ EXPORT_SYMBOL(_writew);
 EXPORT_SYMBOL(_writel);
 EXPORT_SYMBOL(_memcpy_fromio);
 EXPORT_SYMBOL(_memcpy_toio);
-EXPORT_SYMBOL(_memset_io);
+EXPORT_SYMBOL(_memset_c_io);
 EXPORT_SYMBOL(insb);
 EXPORT_SYMBOL(insw);
 EXPORT_SYMBOL(insl);
@@ -87,6 +87,7 @@ EXPORT_SYMBOL(memcmp);
 EXPORT_SYMBOL(memmove);
 EXPORT_SYMBOL(__memcpy);
 EXPORT_SYMBOL(__memset);
+EXPORT_SYMBOL(__memsetw);
 EXPORT_SYMBOL(__constant_c_memset);
 
 EXPORT_SYMBOL(dump_thread);

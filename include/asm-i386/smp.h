@@ -6,6 +6,7 @@
 
 #include <asm/i82489.h>
 #include <asm/bitops.h>
+#include <asm/fixmap.h>
 #include <linux/tasks.h>
 #include <linux/ptrace.h>
 
@@ -196,7 +197,7 @@ extern volatile int smp_process_available;
  *	"Back to Back Assertions of HOLD May Cause Lost APIC Write Cycle"
  */
 
-#define APIC_BASE ((char *)0xFEE00000)
+#define APIC_BASE (fix_to_virt(FIX_APIC_BASE))
 
 extern __inline void apic_write(unsigned long reg, unsigned long v)
 {

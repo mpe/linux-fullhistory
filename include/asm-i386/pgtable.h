@@ -14,6 +14,7 @@
  */
 #ifndef __ASSEMBLY__
 #include <asm/processor.h>
+#include <asm/fixmap.h>
 #include <linux/tasks.h>
 
 /* Caches aren't brain-dead on the intel. */
@@ -206,6 +207,7 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 #define VMALLOC_OFFSET	(8*1024*1024)
 #define VMALLOC_START	(((unsigned long) high_memory + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1))
 #define VMALLOC_VMADDR(x) ((unsigned long)(x))
+#define VMALLOC_END	(FIXADDR_START)
 
 /*
  * The 4MB page is guessing..  Detailed in the infamous "Chapter H"

@@ -1109,12 +1109,12 @@ __initfunc(asmlinkage void start_kernel(void))
 #if defined(CONFIG_QUOTA)
 	dquot_init_hash();
 #endif
-	check_bugs();
-
-	printk("POSIX conformance testing by UNIFIX\n");
 #ifdef __SMP__
 	smp_init();
 #endif
+	printk("POSIX conformance testing by UNIFIX\n");
+	check_bugs();
+
 	sock_init();
 #ifdef CONFIG_SYSCTL
 	sysctl_init();

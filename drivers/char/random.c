@@ -1268,7 +1268,7 @@ static ssize_t extract_entropy(struct random_bucket *r, char * buf,
 		nbytes -= i;
 		buf += i;
 		add_timer_randomness(r, &extract_timer_state, nbytes);
-		if (to_user && need_resched)
+		if (to_user && current->need_resched)
 			schedule();
 	}
 

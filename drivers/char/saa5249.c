@@ -128,7 +128,7 @@ struct saa5249_device
 
 #define RESCHED \
         do { \
-          if (need_resched) \
+          if (current->need_resched) \
             schedule(); \
         } while (0)
 

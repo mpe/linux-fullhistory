@@ -491,6 +491,7 @@ int eepro100_init(struct device *dev)
 
 	if (pci_present()) {
 		static int pci_index = 0;
+
 		for (; pci_index < 8; pci_index++) {
 			unsigned char pci_bus, pci_device_fn, pci_latency;
 #if (LINUX_VERSION_CODE >= VERSION(2,1,85))
@@ -507,9 +508,9 @@ int eepro100_init(struct device *dev)
 			unsigned short pci_command;
 
 			if (pcibios_find_device(PCI_VENDOR_ID_INTEL,
-									PCI_DEVICE_ID_INTEL_82557,
-									pci_index, &pci_bus,
-									&pci_device_fn))
+						PCI_DEVICE_ID_INTEL_82557,
+						pci_index, &pci_bus,
+						&pci_device_fn))
 			  break;
 #if (LINUX_VERSION_CODE >= VERSION(2,1,85))
 			pdev = pci_find_slot(pci_bus, pci_device_fn);

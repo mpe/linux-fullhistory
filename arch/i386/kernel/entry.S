@@ -75,6 +75,7 @@ flags		=  4
 sigpending	=  8
 addr_limit	= 12
 exec_domain	= 16
+need_resched	= 20
 
 ENOSYS = 38
 
@@ -178,7 +179,7 @@ ret_from_sys_call:
 	andl SYMBOL_NAME(bh_active),%eax
 	jne handle_bottom_half
 ret_with_reschedule:
-	cmpl $0,SYMBOL_NAME(need_resched)
+	cmpl $0,need_resched(%ebx)
 	jne reschedule
 	cmpl $0,sigpending(%ebx)
 	jne signal_return

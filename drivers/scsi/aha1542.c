@@ -28,6 +28,7 @@
 #include <linux/delay.h>
 #include <linux/sched.h>
 #include <linux/proc_fs.h>
+#include <linux/init.h>
 #include <asm/dma.h>
 #include <asm/system.h>
 #include <asm/spinlock.h>
@@ -882,7 +883,7 @@ static int aha1542_query(int base_io, int * transl)
 }
 
 /* called from init/main.c */
-void aha1542_setup( char *str, int *ints)
+__initfunc(void aha1542_setup( char *str, int *ints))
 {
     const char *ahausage = "aha1542: usage: aha1542=<PORTBASE>[,<BUSON>,<BUSOFF>[,<DMASPEED>]]\n";
     static int setup_idx = 0;

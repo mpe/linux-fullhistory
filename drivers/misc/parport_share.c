@@ -156,16 +156,16 @@ void parport_unregister_port(struct parport *port)
 			     "%s not found in port list!\n", port->name);
 	}
 	spin_unlock_irqrestore (&parportlist_lock, flags);
-	if (p->probe_info.class_name)
-		kfree (p->probe_info.class_name);
-	if (p->probe_info.mfr)
-		kfree (p->probe_info.mfr);
-	if (p->probe_info.model)
-		kfree (p->probe_info.model);
-	if (p->probe_info.cmdset)
-		kfree (p->probe_info.cmdset);
-	if (p->probe_info.description)
-		kfree (p->probe_info.description);
+	if (port->probe_info.class_name)
+		kfree (port->probe_info.class_name);
+	if (port->probe_info.mfr)
+		kfree (port->probe_info.mfr);
+	if (port->probe_info.model)
+		kfree (port->probe_info.model);
+	if (port->probe_info.cmdset)
+		kfree (port->probe_info.cmdset);
+	if (port->probe_info.description)
+		kfree (port->probe_info.description);
 	kfree(port->name);
 	kfree(port);
 }

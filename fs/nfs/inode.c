@@ -43,6 +43,7 @@ static void nfs_put_inode(struct inode *);
 static void nfs_delete_inode(struct inode *);
 static int  nfs_notify_change(struct dentry *, struct iattr *);
 static void nfs_put_super(struct super_block *);
+static void nfs_umount_begin(struct super_block *);
 static int  nfs_statfs(struct super_block *, struct statfs *, int);
 
 static struct super_operations nfs_sops = { 
@@ -54,7 +55,9 @@ static struct super_operations nfs_sops = {
 	nfs_put_super,		/* put superblock */
 	NULL,			/* write superblock */
 	nfs_statfs,		/* stat filesystem */
-	NULL
+	NULL,			/* no remount */
+	NULL,			/* no clear inode */
+	nfs_umount_begin	/* umount attempt begin */
 };
 
 struct rpc_stat			nfs_rpcstat = { &nfs_program };
@@ -140,6 +143,17 @@ nfs_put_super(struct super_block *sb)
 	kfree(server->hostname);
 
 	MOD_DEC_USE_COUNT;
+}
+
+void
+nfs_umount_begin(struct super_block *sb)
+{
+	struct nfs_server *server = &sb->u.nfs_sb.s_server;
+	struct rpc_clnt	*rpc;
+
+	/* -EIO all pending I/O */
+	if ((rpc = server->client) != NULL)
+		rpc_killall_tasks(rpc);
 }
 
 /*

@@ -234,6 +234,8 @@ struct thread_struct {
 	unsigned long	tr;
 	unsigned long	cr2, trap_no, error_code;
 	mm_segment_t	segment;
+/* debug registers */
+	long debugreg[8];  /* Hardware debugging registers */
 /* floating point info */
 	union i387_union i387;
 /* virtual 86 mode info */
@@ -260,6 +262,7 @@ struct thread_struct {
 	0, 0x8000, /* tace, bitmap */				\
 	{~0, }, /* ioperm */					\
 	_TSS(0), 0, 0, 0, (mm_segment_t) { 0 }, /* obsolete */	\
+	{ 0, },							\
 	{ { 0, }, },  /* 387 state */				\
 	NULL, 0, 0, 0, 0, 0, /* vm86_info */			\
 }

@@ -40,6 +40,7 @@ EXPORT_SYMBOL(rpciod_up);
 EXPORT_SYMBOL(rpc_create_client);
 EXPORT_SYMBOL(rpc_destroy_client);
 EXPORT_SYMBOL(rpc_shutdown_client);
+EXPORT_SYMBOL(rpc_killall_tasks);
 EXPORT_SYMBOL(rpc_do_call);
 EXPORT_SYMBOL(rpc_call_setup);
 EXPORT_SYMBOL(rpc_delay);

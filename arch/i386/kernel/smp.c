@@ -649,6 +649,35 @@ __initfunc(void enable_local_APIC(void))
 	udelay(100);
 }
 
+__initfunc(unsigned long init_smp_mappings(unsigned long memory_start))
+{
+	unsigned long apic_phys, ioapic_phys;
+
+	if (smp_found_config) {
+		apic_phys = mp_lapic_addr;
+		ioapic_phys = mp_ioapic_addr;
+	} else {
+		/*
+		 * set up a fake all zeroes page to simulate the
+		 * local APIC and another one for the IO-APIC. We
+		 * could use the real zero-page, but it's safer
+		 * this way if some buggy code writes to this page ...
+		 */
+		apic_phys = __pa(memory_start);
+		ioapic_phys = __pa(memory_start+PAGE_SIZE);
+		memset((void *)memory_start, 0, 2*PAGE_SIZE);
+		memory_start += 2*PAGE_SIZE;
+	}
+
+	set_fixmap(FIX_APIC_BASE,apic_phys);
+	set_fixmap(FIX_IO_APIC_BASE,ioapic_phys);
+
+	printk("mapped APIC to %08lx (%08lx)\n", APIC_BASE, apic_phys);
+	printk("mapped IOAPIC to %08lx (%08lx)\n", fix_to_virt(FIX_IO_APIC_BASE), ioapic_phys);
+
+	return memory_start;
+}
+
 __initfunc(void smp_callin(void))
 {
 	extern void calibrate_delay(void);
@@ -684,7 +713,7 @@ __initfunc(void smp_callin(void))
 	set_bit(cpuid, (unsigned long *)&cpu_callin_map[0]);
 }
 
-static int cpucount = 0;
+int cpucount = 0;
 
 extern int cpu_idle(void * unused);
 
@@ -1125,10 +1154,6 @@ __initfunc(void smp_boot_cpus(void))
 	setup_IO_APIC();
 
 smp_done:
-#ifdef CONFIG_MTRR
-	/*  Must be done after other processors booted  */
-	mtrr_init ();
-#endif
 }
 
 
@@ -1173,6 +1198,18 @@ void send_IPI (int dest, int vector)
  * (to avoid the old IDE disk problems), and other messages sent with IRQs
  * enabled in a civilised fashion. That will also boost performance.
  */
+
+unsigned int TIME64 (void)
+{
+        unsigned int dummy,low;
+
+        __asm__("rdtsc"
+                :"=a" (low),
+                 "=d" (dummy));
+        return low;
+}
+
+int ipi_timestamp;
 
 void smp_message_pass(int target, int msg, unsigned long data, int wait)
 {
@@ -1277,7 +1314,11 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 		cpu_callin_map[0]=0;
 	}
 	else
-		panic("huh?");
+	{
+		dest=0;
+		target_map=(1<<target);
+		cpu_callin_map[0]=0;
+	}
 
 	/*
 	 * Program the APIC to deliver the IPI
@@ -1376,6 +1417,17 @@ void smp_flush_tlb(void)
 /*	printk("SMID\n");*/
 }
 
+
+void smp_send_reschedule(int cpu)
+{
+	unsigned long flags;
+
+	__save_flags(flags);
+	__cli();
+	smp_message_pass(MSG_ALL_BUT_SELF, MSG_RESCHEDULE, 0L, 2);
+	__restore_flags(flags);
+}
+
 /*
  * Local timer interrupt handler. It does both profiling and
  * process statistics/rescheduling.
@@ -1422,7 +1474,7 @@ void smp_local_timer_interrupt(struct pt_regs * regs)
 			p->counter -= 1;
 			if (p->counter < 0) {
 				p->counter = 0;
-				need_resched = 1;
+				p->need_resched = 1;
 			}
 			if (p->priority < DEF_PRIORITY) {
 				kstat.cpu_nice += user;
@@ -1476,21 +1528,11 @@ void smp_apic_timer_interrupt(struct pt_regs * regs)
 }
 
 /*
- * Reschedule call back (not used currently)
+ * Reschedule call back
  */
-
 asmlinkage void smp_reschedule_interrupt(void)
 {
-	int cpu = smp_processor_id();
-
 	ack_APIC_irq();
-	/*
-	 * This looks silly, but we actually do need to wait
-	 * for the global interrupt lock.
-	 */
-	irq_enter(cpu, 0);
-	need_resched = 1;
-	irq_exit(cpu, 0);
 }
 
 /*

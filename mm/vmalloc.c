@@ -152,19 +152,21 @@ int vmalloc_area_pages(unsigned long address, unsigned long size)
 
 struct vm_struct * get_vm_area(unsigned long size)
 {
-	void *addr;
+	unsigned long addr;
 	struct vm_struct **p, *tmp, *area;
 
 	area = (struct vm_struct *) kmalloc(sizeof(*area), GFP_KERNEL);
 	if (!area)
 		return NULL;
-	addr = (void *) VMALLOC_START;
+	addr = VMALLOC_START;
 	for (p = &vmlist; (tmp = *p) ; p = &tmp->next) {
-		if (size + (unsigned long) addr < (unsigned long) tmp->addr)
+		if (size + addr < (unsigned long) tmp->addr)
 			break;
-		addr = (void *) (tmp->size + (unsigned long) tmp->addr);
+		if (addr > VMALLOC_END-size)
+			return NULL;
+		addr = tmp->size + (unsigned long) tmp->addr;
 	}
-	area->addr = addr;
+	area->addr = (void *)addr;
 	area->size = size + PAGE_SIZE;
 	area->next = *p;
 	*p = area;

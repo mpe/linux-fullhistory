@@ -263,14 +263,16 @@ static ssize_t write_null(struct file * file, const char * buf,
  */
 static inline size_t read_zero_pagealigned(char * buf, size_t size)
 {
+	struct mm_struct *mm;
 	struct vm_area_struct * vma;
 	unsigned long addr=(unsigned long)buf;
 
+	mm = current->mm;
 	/* Oops, this was forgotten before. -ben */
-	down(&current->mm->mmap_sem);
+	down(&mm->mmap_sem);
 
 	/* For private mappings, just map in zero pages. */
-	for (vma = find_vma(current->mm, addr); vma; vma = vma->vm_next) {
+	for (vma = find_vma(mm, addr); vma; vma = vma->vm_next) {
 		unsigned long count;
 
 		if (vma->vm_start > addr || (vma->vm_flags & VM_WRITE) == 0)
@@ -281,10 +283,10 @@ static inline size_t read_zero_pagealigned(char * buf, size_t size)
 		if (count > size)
 			count = size;
 
-		flush_cache_range(current->mm, addr, addr + count);
-		zap_page_range(vma, addr, count);
-        	zeromap_page_range(vma, addr, count, PAGE_COPY);
-        	flush_tlb_range(current->mm, addr, addr + count);
+		flush_cache_range(mm, addr, addr + count);
+		zap_page_range(mm, addr, count);
+        	zeromap_page_range(addr, count, PAGE_COPY);
+        	flush_tlb_range(mm, addr, addr + count);
 
 		size -= count;
 		buf += count;
@@ -293,14 +295,14 @@ static inline size_t read_zero_pagealigned(char * buf, size_t size)
 			goto out_up;
 	}
 
-	up(&current->mm->mmap_sem);
+	up(&mm->mmap_sem);
 	
 	/* The shared case is hard. Let's do the conventional zeroing. */ 
 	do {
 		unsigned long unwritten = clear_user(buf, PAGE_SIZE);
 		if (unwritten)
 			return size + unwritten - PAGE_SIZE;
-		if (need_resched)
+		if (current->need_resched)
 			schedule();
 		buf += PAGE_SIZE;
 		size -= PAGE_SIZE;
@@ -308,7 +310,7 @@ static inline size_t read_zero_pagealigned(char * buf, size_t size)
 
 	return size;
 out_up:
-	up(&current->mm->mmap_sem);
+	up(&mm->mmap_sem);
 	return size;
 }
 

@@ -787,6 +787,13 @@ S: Alleenstrasse 27
 S: D-71679 Asperg
 S: Germany
 
+N: Kenn Humborg
+E: kenn@wombat.ie
+D: Mods to loop device to support sparse backing files
+S: Ballinagard
+S: Roscommon
+S: Ireland
+
 N: Miguel de Icaza Amozurrutia
 E: miguel@nuclecu.unam.mx
 D: Linux/SPARC team, Midnight Commander maintainer

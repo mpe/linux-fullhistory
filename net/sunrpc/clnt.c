@@ -203,6 +203,10 @@ rpc_do_call(struct rpc_clnt *clnt, u32 proc, void *argp, void *resp,
 	unsigned long	irqflags;
 	int		async, status;
 
+	/* If this client is slain all further I/O fails */
+	if (clnt->cl_dead) 
+		return -EIO;
+		
 	/* Turn off various signals */
 	if (clnt->cl_intr) {
 		struct k_sigaction *action = current->sig->action;
@@ -637,7 +641,8 @@ call_decode(struct rpc_task *task)
 	 * The following is an NFS-specific hack to cater for setuid
 	 * processes whose uid is mapped to nobody on the server.
 	 */
-	if (task->tk_client->cl_prog == 100003 && ntohl(*p) == NFSERR_PERM) {
+	if (task->tk_client->cl_prog == 100003 && 
+            (ntohl(*p) == NFSERR_ACCES || ntohl(*p) == NFSERR_PERM)) {
 		if (RPC_IS_SETUID(task) && (task->tk_suid_retry)--) {
 			dprintk("RPC: %4d retry squashed uid\n", task->tk_pid);
 			task->tk_flags ^= RPC_CALL_REALUID;

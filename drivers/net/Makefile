@@ -22,6 +22,8 @@ CONFIG_PPPDEF_BUILTIN :=
 CONFIG_PPPDEF_MODULE  :=
 CONFIG_7990_BUILTIN :=
 CONFIG_7990_MODULE :=
+CONFIG_82596_BUILTIN :=
+CONFIG_82596_MODULE :=
 
 ifeq ($(CONFIG_ISDN),y)
   ifeq ($(CONFIG_ISDN_PPP),y)
@@ -573,10 +575,26 @@ else
 endif
 
 ifeq ($(CONFIG_APRICOT),y)
-L_OBJS += apricot.o
+CONFIG_82596_BUILTIN = y
 else
   ifeq ($(CONFIG_APRICOT),m)
-  M_OBJS += apricot.o
+  CONFIG_82596_MODULE = y
+  endif
+endif
+
+ifeq ($(CONFIG_MVME16x_NET),y)
+CONFIG_82596_BUILTIN = y
+else
+  ifeq ($(CONFIG_MVME16x_NET),m)
+  CONFIG_82596_MODULE = y
+  endif
+endif
+
+ifeq ($(CONFIG_BVME6000_NET),y)
+CONFIG_82596_BUILTIN = y
+else
+  ifeq ($(CONFIG_BVME6000_NET),m)
+  CONFIG_82596_MODULE = y
   endif
 endif
 
@@ -700,6 +718,16 @@ L_OBJS += 7990.o
 else
   ifdef CONFIG_7990_MODULE
   M_OBJS += 7990.o
+  endif
+endif
+
+# If anything built-in uses the 82596, then build it into the kernel also.
+# If not, but a module uses it, build as a module.
+ifdef CONFIG_82596_BUILTIN
+L_OBJS += 82596.o
+else
+  ifdef CONFIG_82596_MODULE
+  M_OBJS += 82596.o
   endif
 endif
 

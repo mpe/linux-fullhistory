@@ -30,7 +30,7 @@ int parport_wait_peripheral(struct parport *port, unsigned char mask,
 		if ((status & mask) == result)
 			return 0;
 		udelay(25);
-		if (need_resched)
+		if (current->need_resched)
 			schedule();
 	}
 	current->state = TASK_INTERRUPTIBLE;

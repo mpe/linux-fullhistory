@@ -202,7 +202,7 @@ out:
 	return result;
 
 out_swapfile:
-	printk("NFS: attempt to write to active swap file!\n");
+	printk(KERN_ERR "NFS: attempt to write to active swap file!\n");
 	goto out;
 }
 

@@ -633,6 +633,7 @@ struct super_operations {
 	int (*statfs) (struct super_block *, struct statfs *, int);
 	int (*remount_fs) (struct super_block *, int *, char *);
 	void (*clear_inode) (struct inode *);
+	void (*umount_begin) (struct super_block *);
 };
 
 struct dquot_operations {

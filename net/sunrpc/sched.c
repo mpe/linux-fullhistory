@@ -466,10 +466,12 @@ __rpc_schedule(void)
 	struct rpc_task	*task;
 	int		count = 0;
 	unsigned long	oldflags;
+	int need_resched = current->need_resched;
 
 	dprintk("RPC:      rpc_schedule enter\n");
+	save_flags(oldflags);
 	while (1) {
-		save_flags(oldflags); cli();
+		cli();
 		if (!(task = schedq.task))
 			break;
 		rpc_del_timer(task);

@@ -21,6 +21,9 @@
  *
  *	References:
  *		Inside AppleTalk (2nd Ed).
+ *	Fixes:
+ *		Jaume Grau	-	flush caches on AARP_PROBE
+ *
  */
 
 #include <linux/config.h>
@@ -773,6 +776,21 @@ static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 			sa.s_node=ea->pa_dst_node;
 			sa.s_net=ea->pa_dst_net;
 			
+			if(ea->function==AARP_PROBE)
+			{
+				/* A probe implies someone trying to get an
+				   address. So as a precaution flush any
+				   entries we have for this address */
+				struct aarp_entry *a=aarp_find_entry(
+						resolved[sa.s_node%(AARP_HASH_SIZE-1)],
+						skb->dev,
+						&sa);
+				/* Make it expire next tick - that avoids us
+				   getting into a probe/flush/learn/probe/flush/learn
+				   cycle during probing of a slow to respond host addr */
+				if(a!=NULL)
+					a->expires_at=jiffies-1;
+			}
 			if(sa.s_node!=ma->s_node)
 				break;
 			if(sa.s_net && ma->s_net && sa.s_net!=ma->s_net)

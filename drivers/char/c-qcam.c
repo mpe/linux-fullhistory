@@ -356,7 +356,7 @@ static long qc_capture(struct qcam_device *q, char *buf, unsigned long len)
 		wantlen -= t;
 		if (t < s) 
 			break;
-		if (need_resched)
+		if (current->need_resched)
 			schedule();
 	}
 
@@ -377,7 +377,7 @@ static long qc_capture(struct qcam_device *q, char *buf, unsigned long len)
 		int l;
 		do {
 			l = qcam_read_bytes(q, tmpbuf, 3);
-			if (need_resched)
+			if (current->need_resched)
 				schedule();
 		} while (l && (tmpbuf[0] == 0x7e || tmpbuf[1] == 0x7e || tmpbuf[2] == 0x7e));
 		if (tmpbuf[0] != 0xe || tmpbuf[1] != 0x0 || tmpbuf[2] != 0xf)
@@ -407,7 +407,7 @@ static long qc_capture(struct qcam_device *q, char *buf, unsigned long len)
 		int l;
 		do {
 			l = qcam_read_bytes(q, tmpbuf, 1);
-			if (need_resched)
+			if (current->need_resched)
 				schedule();
 		} while (l && tmpbuf[0] == 0x7e);
 		l = qcam_read_bytes(q, tmpbuf+1, 2);

@@ -443,7 +443,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			   addr <= (long) &dummy->u_debugreg[7]){
 				addr -= (long) &dummy->u_debugreg[0];
 				addr = addr >> 2;
-				tmp = child->debugreg[addr];
+				tmp = child->tss.debugreg[addr];
 			};
 			ret = put_user(tmp,(unsigned long *) data);
 			goto out;
@@ -489,7 +489,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 
 			  addr -= (long) &dummy->u_debugreg;
 			  addr = addr >> 2;
-			  child->debugreg[addr] = data;
+			  child->tss.debugreg[addr] = data;
 			  ret = 0;
 			  goto out;
 		  };

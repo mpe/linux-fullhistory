@@ -51,6 +51,8 @@ extern __inline__ int test_bit(int nr, int * addr)
 	return ((mask & *addr) != 0);
 }
 
+#ifdef __KERNEL__
+
 /*
  * ffs: find first bit set. This is defined the same way as
  * the libc and compiler builtin ffs routines, therefore
@@ -67,5 +69,7 @@ extern __inline__ int test_bit(int nr, int * addr)
 #define hweight32(x) generic_hweight32(x)
 #define hweight16(x) generic_hweight16(x)
 #define hweight8(x) generic_hweight8(x)
+
+#endif /* __KERNEL__ */
 
 #endif /* _ASM_GENERIC_BITOPS_H */

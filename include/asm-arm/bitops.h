@@ -53,6 +53,8 @@ extern __inline__ unsigned long ffz(unsigned long word)
         return k;
 }
 
+#ifdef __KERNEL__
+
 /*
  * ffs: find first bit set. This is defined the same way as
  * the libc and compiler builtin ffs routines, therefore
@@ -70,6 +72,7 @@ extern __inline__ unsigned long ffz(unsigned long word)
 #define hweight16(x) generic_hweight16(x)
 #define hweight8(x) generic_hweight8(x)
 
+#endif /* __KERNEL__ */
 
 #ifdef __KERNEL__
 

@@ -1254,6 +1254,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 	struct atalk_iface *atif;
 	struct sockaddr_at tosat;
         int origlen;
+        struct ddpebits ddphv;
 
 	/* Size check */
 	if(skb->len < sizeof(*ddp))
@@ -1272,7 +1273,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 	 *	run until we put it back)
 	 */
 
-	*((__u16 *)ddp) = ntohs(*((__u16 *)ddp));
+	*((__u16 *)&ddphv) = ntohs(*((__u16 *)ddp));
 
 	/*
 	 * Trim buffer in case of stray trailing data
@@ -1280,7 +1281,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 
 	origlen = skb->len;
 
-	skb_trim(skb, min(skb->len, ddp->deh_len));
+	skb_trim(skb, min(skb->len, ddphv.deh_len));
 
 	/*
 	 * Size check to see if ddp->deh_len was crap
@@ -1297,7 +1298,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 	 * Any checksums. Note we don't do htons() on this == is assumed to be
 	 * valid for net byte orders all over the networking code...
 	 */
-	if(ddp->deh_sum && atalk_checksum(ddp, ddp->deh_len) != ddp->deh_sum)
+	if(ddp->deh_sum && atalk_checksum(ddp, ddphv.deh_len) != ddp->deh_sum)
 	{
 		/* Not a valid AppleTalk frame - dustbin time */
 		kfree_skb(skb);
@@ -1349,12 +1350,12 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 
 		/* Route the packet */
 		rt = atrtr_find(&ta);
-		if(rt == NULL || ddp->deh_hops == DDP_MAXHOPS)
+		if(rt == NULL || ddphv.deh_hops == DDP_MAXHOPS)
 		{
 			kfree_skb(skb);
 			return (0);
 		}
-		ddp->deh_hops++;
+		ddphv.deh_hops++;
 
 		/*
 		 * Route goes through another gateway, so
@@ -1368,10 +1369,10 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 
                 /* Fix up skb->len field */
                 skb_trim(skb, min(origlen, rt->dev->hard_header_len +
-			ddp_dl->header_length + ddp->deh_len));
+			ddp_dl->header_length + ddphv.deh_len));
 
 		/* Mend the byte order */
-		*((__u16 *)ddp) = ntohs(*((__u16 *)ddp));
+		*((__u16 *)ddp) = ntohs(*((__u16 *)&ddphv));
 
 		/*
 		 * Send the buffer onwards
@@ -1711,18 +1712,22 @@ static int atalk_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 	struct sock *sk=sock->sk;
 	struct sockaddr_at *sat=(struct sockaddr_at *)msg->msg_name;
 	struct ddpehdr	*ddp = NULL;
+        struct ddpebits ddphv;
 	int copied = 0;
 	struct sk_buff *skb;
 	int err = 0;
+
 
 	skb = skb_recv_datagram(sk,flags&~MSG_DONTWAIT,flags&MSG_DONTWAIT,&err);
 	if(skb == NULL)
 		return (err);
 
 	ddp = (struct ddpehdr *)(skb->h.raw);
+	*((__u16 *)&ddphv) = ntohs(*((__u16 *)ddp));
+
 	if(sk->type == SOCK_RAW)
 	{
-		copied = ddp->deh_len;
+		copied = ddphv.deh_len;
 		if(copied > size)
 		{
 			copied = size;
@@ -1733,7 +1738,7 @@ static int atalk_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 	}
 	else
 	{
-		copied = ddp->deh_len - sizeof(*ddp);
+		copied = ddphv.deh_len - sizeof(*ddp);
 		if(copied > size)
 		{
 			copied = size;

@@ -208,9 +208,9 @@ struct task_struct {
 						0-0xFFFFFFFF for kernel-thread
 					 */
 	struct exec_domain *exec_domain;
+	long need_resched;
 
 /* various fields */
-	long debugreg[8];  /* Hardware debugging registers */
 	long counter;
 	long priority;
 	struct linux_binfmt *binfmt;
@@ -337,8 +337,7 @@ struct task_struct {
  * your own risk!. Base=0, limit=0x1fffff (=2MB)
  */
 #define INIT_TASK \
-/* state etc */	{ 0,0,0,KERNEL_DS,&default_exec_domain, \
-/* debugregs */ { 0, },            \
+/* state etc */	{ 0,0,0,KERNEL_DS,&default_exec_domain,0, \
 /* counter */	DEF_PRIORITY,DEF_PRIORITY, \
 /* binfmt */	NULL, \
 /* schedlink */	&init_task,&init_task, &init_task, &init_task, \
@@ -448,7 +447,6 @@ extern unsigned long volatile jiffies;
 extern unsigned long itimer_ticks;
 extern unsigned long itimer_next;
 extern struct timeval xtime;
-extern int need_resched;
 extern void do_timer(struct pt_regs *);
 
 extern unsigned int * prof_buffer;

@@ -316,7 +316,6 @@ EXPORT_SYMBOL(jiffies);
 EXPORT_SYMBOL(xtime);
 EXPORT_SYMBOL(do_gettimeofday);
 EXPORT_SYMBOL(loops_per_sec);
-EXPORT_SYMBOL(need_resched);
 EXPORT_SYMBOL(kstat);
 
 /* misc */

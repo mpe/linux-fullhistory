@@ -656,6 +656,19 @@ static int do_umount(kdev_t dev, int unmount_root)
 #endif
 
 	/*
+	 * If we may have to abort operations to get out of this
+	 * mount, and they will themselves hold resources we must
+	 * allow the fs to do things. In the Unix tradition of
+	 * 'Gee thats tricky lets do it in userspace' the umount_begin
+	 * might fail to complete on the first run through as other tasks
+	 * must return, and the like. Thats for the mount program to worry
+	 * about for the moment.
+	 */
+	 
+	if(sb->s_op->umount_begin)
+		sb->s_op->umount_begin(sb);
+
+	/*
 	 * Shrink dcache, then fsync. This guarantees that if the
 	 * filesystem is quiescent at this point, then (a) only the
 	 * root entry should be in use and (b) that root entry is
@@ -747,6 +760,8 @@ out:
  * we give them the info they need without using a real inode.
  * If any other fields are ever needed by any block device release
  * functions, they should be faked here.  -- jrs
+ *
+ * For 2.3.x we want a new sys_umount syscall with flags (ie 'force')
  */
 
 asmlinkage int sys_umount(char * name)

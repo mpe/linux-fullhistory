@@ -36,6 +36,7 @@ struct loop_device {
         idea_key        lo_idea_en_key;
         idea_key        lo_idea_de_key;
 #endif
+	struct file *	lo_backing_file;
 };
 
 typedef	int (* transfer_proc_t)(struct loop_device *, int cmd,

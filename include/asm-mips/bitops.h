@@ -372,6 +372,8 @@ extern __inline__ unsigned long ffz(unsigned long word)
 	return __res;
 }
 
+#ifdef __KERNEL__
+
 /*
  * ffs: find first bit set. This is defined the same way as
  * the libc and compiler builtin ffs routines, therefore
@@ -388,6 +390,8 @@ extern __inline__ unsigned long ffz(unsigned long word)
 #define hweight32(x) generic_hweight32(x)
 #define hweight16(x) generic_hweight16(x)
 #define hweight8(x) generic_hweight8(x)
+
+#endif /* __KERNEL__ */
 
 #ifdef __MIPSEB__
 /* For now I steal the Sparc C versions, no need for speed, just need to

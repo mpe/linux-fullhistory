@@ -14,6 +14,8 @@
  * Adapted for 1.3.59 kernel - Andries Brouwer, 1 Feb 1996
  *
  * Fixed do_loop_request() re-entrancy - <Vincent.Renardias@waw.com> Mar 20, 1997
+ *
+ * Handle sparse backing files correctly - Kenn Humborg, Jun 28, 1998
  */
 
 #include <linux/module.h>
@@ -54,6 +56,14 @@
 static struct loop_device loop_dev[MAX_LOOP];
 static int loop_sizes[MAX_LOOP];
 static int loop_blksizes[MAX_LOOP];
+
+#define FALSE 0
+#define TRUE (!FALSE)
+
+/* Forward declaration of function to create missing blocks in the 
+   backing file (can happen if the backing file is sparse) */
+static int create_missing_block(struct loop_device *lo, int block, int blksize);
+
 
 /*
  * Transfer functions
@@ -187,6 +197,7 @@ static void do_lo_request(void)
 	struct loop_device *lo;
 	struct buffer_head *bh;
 	struct request *current_request;
+	int	block_present;
 
 repeat:
 	INIT_REQUEST;
@@ -226,50 +237,70 @@ repeat:
 		if (lo->lo_flags & LO_FLAGS_READ_ONLY)
 			goto error_out;
 	} else if (current_request->cmd != READ) {
-		printk("unknown loop device command (%d)?!?", current_request->cmd);
+		printk(KERN_ERR "unknown loop device command (%d)?!?", current_request->cmd);
 		goto error_out;
 	}
 	spin_unlock_irq(&io_request_lock);
 	while (len > 0) {
-		real_block = block;
-		if (lo->lo_flags & LO_FLAGS_DO_BMAP) {
-			real_block = bmap(lo->lo_dentry->d_inode, block);
-			if (!real_block) {
-				printk("loop: block %d not present\n", block);
-				goto error_out_lock;
-			}
-		}
-		bh = getblk(lo->lo_device, real_block, blksize);
-		if (!bh) {
-			printk("loop: device %s: getblk(-, %d, %d) returned NULL",
-			       kdevname(lo->lo_device),
-			       block, blksize);
-			goto error_out_lock;
-		}
-		if (!buffer_uptodate(bh) && ((current_request->cmd == READ) ||
-					(offset || (len < blksize)))) {
-			ll_rw_block(READ, 1, &bh);
-			wait_on_buffer(bh);
-			if (!buffer_uptodate(bh)) {
-				brelse(bh);
-				goto error_out_lock;
-			}
-		}
+
 		size = blksize - offset;
 		if (size > len)
 			size = len;
-			   
-		if ((lo->transfer)(lo, current_request->cmd, bh->b_data + offset,
-				   dest_addr, size)) {
-			printk("loop: transfer error block %d\n", block);
+
+		real_block = block;
+		block_present = TRUE;
+
+		if (lo->lo_flags & LO_FLAGS_DO_BMAP) {
+			real_block = bmap(lo->lo_dentry->d_inode, block);
+			if (!real_block) {
+
+				/* The backing file is a sparse file and this block
+				   doesn't exist.  If reading, return zeros.  If
+				   writing, force the underlying FS to create
+				   the block */
+				if (current_request->cmd == READ) {
+					memset(dest_addr, 0, size);
+					block_present = FALSE;
+				} else {
+					if (!create_missing_block(lo, block, blksize)) {
+						goto error_out_lock;
+					}
+				}
+
+			}
+		}
+
+		if (block_present) {
+			bh = getblk(lo->lo_device, real_block, blksize);
+			if (!bh) {
+				printk(KERN_ERR "loop: device %s: getblk(-, %d, %d) returned NULL",
+					kdevname(lo->lo_device),
+					block, blksize);
+				goto error_out_lock;
+			}
+			if (!buffer_uptodate(bh) && ((current_request->cmd == READ) ||
+						(offset || (len < blksize)))) {
+				ll_rw_block(READ, 1, &bh);
+				wait_on_buffer(bh);
+				if (!buffer_uptodate(bh)) {
+					brelse(bh);
+					goto error_out_lock;
+				}
+			}
+
+			if ((lo->transfer)(lo, current_request->cmd, bh->b_data + offset,
+					dest_addr, size)) {
+				printk(KERN_ERR "loop: transfer error block %d\n", block);
+				brelse(bh);
+				goto error_out_lock;
+			}
+
+			if (current_request->cmd == WRITE) {
+				mark_buffer_uptodate(bh, 1);
+				mark_buffer_dirty(bh, 1);
+			}
 			brelse(bh);
-			goto error_out_lock;
 		}
-		if (current_request->cmd == WRITE) {
-			mark_buffer_uptodate(bh, 1);
-			mark_buffer_dirty(bh, 1);
-		}
-		brelse(bh);
 		dest_addr += size;
 		len -= size;
 		offset = 0;
@@ -287,6 +318,57 @@ error_out:
 	CURRENT=current_request;
 	end_request(0);
 	goto repeat;
+}
+
+static int create_missing_block(struct loop_device *lo, int block, int blksize)
+{
+	struct file     *file;
+	loff_t          new_offset;
+	char            zero_buf[1] = { 0 };
+	ssize_t         retval;
+	mm_segment_t	old_fs;
+
+	file = lo->lo_backing_file;
+	if (file == NULL) {
+		printk(KERN_WARNING "loop: cannot create block - no backing file\n");
+		return FALSE;
+	}
+
+	if (file->f_op == NULL) {
+		printk(KERN_WARNING "loop: cannot create block - no file ops\n");
+		return FALSE;
+	}
+
+	new_offset = block * blksize;
+
+	if (file->f_op->llseek != NULL) {
+		file->f_op->llseek(file, new_offset, 0);
+	} else {
+		/* Do what the default llseek() code would have done */
+		file->f_pos = new_offset;
+		file->f_reada = 0;
+		file->f_version = ++event;
+	}
+
+	if (file->f_op->write == NULL) {
+		printk(KERN_WARNING "loop: cannot create block - no write file op\n");
+		return FALSE;
+	}
+
+	old_fs = get_fs();
+	set_fs(get_ds());
+
+	retval = file->f_op->write(file, zero_buf, 1, &file->f_pos);
+
+	set_fs(old_fs);
+
+	if (retval < 0) {
+		printk(KERN_WARNING "loop: cannot create block - FS write failed: code %d\n", 
+									retval);
+		return FALSE;
+	} else {
+		return TRUE;
+	}
 }
 
 static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
@@ -309,7 +391,7 @@ static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 	error = -EINVAL;
 	inode = file->f_dentry->d_inode;
 	if (!inode) {
-		printk("loop_set_fd: NULL inode?!?\n");
+		printk(KERN_ERR "loop_set_fd: NULL inode?!?\n");
 		goto out_putf;
 	}
 
@@ -317,10 +399,36 @@ static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 		error = blkdev_open(inode, file);
 		lo->lo_device = inode->i_rdev;
 		lo->lo_flags = 0;
+
+		/* Backed by a block device - don't need to hold onto
+		   a file structure */
+		lo->lo_backing_file = NULL;
 	} else if (S_ISREG(inode->i_mode)) {
+
+		/* Backed by a regular file - we need to hold onto
+		   a file structure for this file.  We'll use it to
+		   write to blocks that are not already present in 
+		   a sparse file.  We create a new file structure
+		   based on the one passed to us via 'arg'.  This is
+		   to avoid changing the file structure that the
+		   caller is using */
+
 		lo->lo_device = inode->i_dev;
 		lo->lo_flags = LO_FLAGS_DO_BMAP;
-		error = 0;
+
+		error = -ENFILE;
+		lo->lo_backing_file = get_empty_filp();
+		if (lo->lo_backing_file) {
+			lo->lo_backing_file->f_mode = file->f_mode;
+			lo->lo_backing_file->f_pos = file->f_pos;
+			lo->lo_backing_file->f_flags = file->f_flags;
+			lo->lo_backing_file->f_owner = file->f_owner;
+			lo->lo_backing_file->f_dentry = file->f_dentry;
+			lo->lo_backing_file->f_op = file->f_op;
+			lo->lo_backing_file->private_data = file->private_data;
+
+			error = 0;
+		}
 	}
 	if (error)
 		goto out_putf;
@@ -358,7 +466,14 @@ static int loop_clr_fd(struct loop_device *lo, kdev_t dev)
 	if (S_ISBLK(dentry->d_inode->i_mode))
 		blkdev_release (dentry->d_inode);
 	lo->lo_dentry = NULL;
-	dput(dentry);
+
+	if (lo->lo_backing_file != NULL) {
+		fput(lo->lo_backing_file);
+		lo->lo_backing_file = NULL;
+	} else {
+		dput(dentry);
+	}
+
 	lo->lo_device = 0;
 	lo->lo_encrypt_type = 0;
 	lo->lo_offset = 0;
@@ -470,7 +585,7 @@ static int lo_ioctl(struct inode * inode, struct file * file,
 	if (!inode)
 		return -EINVAL;
 	if (MAJOR(inode->i_rdev) != MAJOR_NR) {
-		printk("lo_ioctl: pseudo-major != %d\n", MAJOR_NR);
+		printk(KERN_WARNING "lo_ioctl: pseudo-major != %d\n", MAJOR_NR);
 		return -ENODEV;
 	}
 	dev = MINOR(inode->i_rdev);
@@ -506,7 +621,7 @@ static int lo_open(struct inode *inode, struct file *file)
 	if (!inode)
 		return -EINVAL;
 	if (MAJOR(inode->i_rdev) != MAJOR_NR) {
-		printk("lo_open: pseudo-major != %d\n", MAJOR_NR);
+		printk(KERN_WARNING "lo_open: pseudo-major != %d\n", MAJOR_NR);
 		return -ENODEV;
 	}
 	dev = MINOR(inode->i_rdev);
@@ -526,7 +641,7 @@ static int lo_release(struct inode *inode, struct file *file)
 	if (!inode)
 		return 0;
 	if (MAJOR(inode->i_rdev) != MAJOR_NR) {
-		printk("lo_release: pseudo-major != %d\n", MAJOR_NR);
+		printk(KERN_WARNING "lo_release: pseudo-major != %d\n", MAJOR_NR);
 		return 0;
 	}
 	dev = MINOR(inode->i_rdev);
@@ -535,7 +650,7 @@ static int lo_release(struct inode *inode, struct file *file)
 	fsync_dev(inode->i_rdev);
 	lo = &loop_dev[dev];
 	if (lo->lo_refcnt <= 0)
-		printk("lo_release: refcount(%d) <= 0\n", lo->lo_refcnt);
+		printk(KERN_ERR "lo_release: refcount(%d) <= 0\n", lo->lo_refcnt);
 	else  {
 		lo->lo_refcnt--;
 		MOD_DEC_USE_COUNT;
@@ -567,17 +682,17 @@ loop_init( void )) {
 	int	i;
 
 	if (register_blkdev(MAJOR_NR, "loop", &lo_fops)) {
-		printk("Unable to get major number %d for loop device\n",
+		printk(KERN_WARNING "Unable to get major number %d for loop device\n",
 		       MAJOR_NR);
 		return -EIO;
 	}
 #ifndef MODULE
-	printk("loop: registered device at major %d\n", MAJOR_NR);
+	printk(KERN_INFO "loop: registered device at major %d\n", MAJOR_NR);
 #ifdef DES_AVAILABLE
-	printk("loop: DES encryption available\n");
+	printk(KERN_INFO "loop: DES encryption available\n");
 #endif
 #ifdef IDEA_AVAILABLE
-	printk("loop: IDEA encryption available\n");
+	printk(KERN_INFO "loop: IDEA encryption available\n");
 #endif
 #endif
 
@@ -598,6 +713,6 @@ loop_init( void )) {
 void
 cleanup_module( void ) {
   if (unregister_blkdev(MAJOR_NR, "loop") != 0)
-    printk("loop: cleanup_module failed\n");
+    printk(KERN_WARNING "loop: cleanup_module failed\n");
 }
 #endif

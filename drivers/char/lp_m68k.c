@@ -102,7 +102,7 @@ static int lp_char_polled(char lpchar, int dev)
 
 	do {
 		count ++;
-		if(need_resched)
+		if (current->need_resched)
 			schedule();
 	} while (lp_table[dev]->lp_is_busy(dev) && count < lp_table[dev]->chars);
 
