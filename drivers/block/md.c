@@ -493,7 +493,7 @@ static int do_md_stop (int minor, struct inode *inode)
 		/*
 		 * ioctl : one open channel
 		 */
-		printk ("STOP_MD md%x failed : i_count=%d, busy=%d\n",
+		printk ("STOP_MD md%x failed : i_count=%ld, busy=%d\n",
 				minor, inode->i_count, md_dev[minor].busy);
 		return -EBUSY;
 	}

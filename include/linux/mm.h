@@ -237,15 +237,15 @@ extern mem_map_t * mem_map;
  * goes to clearing the page. If you want a page without the clearing
  * overhead, just use __get_free_page() directly..
  */
-#define __get_free_page(priority) __get_free_pages((priority),0,0)
-#define __get_dma_pages(priority, order) __get_free_pages((priority),(order),1)
-extern unsigned long FASTCALL(__get_free_pages(int priority, unsigned long gfporder, int dma));
+#define __get_free_page(gfp_mask) __get_free_pages((gfp_mask),0)
+#define __get_dma_pages(gfp_mask, order) __get_free_pages((gfp_mask) | GFP_DMA,(order))
+extern unsigned long FASTCALL(__get_free_pages(int gfp_mask, unsigned long gfp_order));
 
-extern inline unsigned long get_free_page(int priority)
+extern inline unsigned long get_free_page(int gfp_mask)
 {
 	unsigned long page;
 
-	page = __get_free_page(priority);
+	page = __get_free_page(gfp_mask);
 	if (page)
 		clear_page(page);
 	return page;
@@ -297,19 +297,27 @@ extern void truncate_inode_pages(struct inode *, unsigned long);
 extern unsigned long get_cached_page(struct inode *, unsigned long, int);
 extern void put_cached_page(unsigned long);
 
-#define GFP_BUFFER	0x00
-#define GFP_ATOMIC	0x01
-#define GFP_USER	0x02
-#define GFP_KERNEL	0x03
-#define GFP_NOBUFFER	0x04
-#define GFP_NFS		0x05
+/*
+ * GFP bitmasks..
+ */
+#define __GFP_WAIT	0x01
+#define __GFP_IO	0x02
+#define __GFP_LOW	0x00
+#define __GFP_MED	0x04
+#define __GFP_HIGH	0x08
+
+#define __GFP_DMA	0x80
+
+#define GFP_BUFFER	(__GFP_LOW | __GFP_WAIT)
+#define GFP_ATOMIC	(__GFP_HIGH)
+#define GFP_USER	(__GFP_LOW | __GFP_WAIT | __GFP_IO)
+#define GFP_KERNEL	(__GFP_LOW | __GFP_WAIT | __GFP_IO)
+#define GFP_NFS		(__GFP_MED | __GFP_WAIT | __GFP_IO)
 
 /* Flag - indicates that the buffer will be suitable for DMA.  Ignored on some
    platforms, used as appropriate on others */
 
-#define GFP_DMA		0x80
-
-#define GFP_LEVEL_MASK 0xf
+#define GFP_DMA		__GFP_DMA
 
 /* vma is the first one with  address < vma->vm_end,
  * and even  address < vma->vm_start. Have to extend vma. */

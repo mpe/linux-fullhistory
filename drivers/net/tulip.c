@@ -1100,11 +1100,7 @@ tulip_open(struct device *dev)
 	outl(0x00200000 | 0x4800, ioaddr + CSR0);
 #else
 #ifndef ORIGINAL_TEXT
-#ifndef __SMP__
-#define x86 ((struct cpuinfo_x86*)cpu_data)->x86
-#else
-#error What should we make here?
-#endif
+#define x86 (boot_cpu_data.x86)
 #endif
 	outl(0x00200000 | (x86 <= 4 ? 0x4800 : 0x8000), ioaddr + CSR0);
 	if (x86 <= 4)
@@ -1753,7 +1749,15 @@ tulip_start_xmit(struct sk_buff *skb, struct device *dev)
 
 #ifdef CONFIG_NET_FASTROUTE
 	cli();
-	dev->tx_semaphore = 0;
+	if (xchg(&dev->tx_semaphore,0) == 0) {
+		sti();
+		/* With new queueing algorithm returning 1 when dev->tbusy == 0
+		   should not result in lockups, but I am still not sure. --ANK
+		 */
+		if (net_ratelimit())
+				printk(KERN_CRIT "Please check: are you still alive?\n");
+		return 1;
+	}
 #endif
 	/* Block a timer-based transmit from overlapping.  This could better be
 	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
@@ -1764,7 +1768,7 @@ tulip_start_xmit(struct sk_buff *skb, struct device *dev)
 		if (jiffies - dev->trans_start >= TX_TIMEOUT)
 				tulip_tx_timeout(dev);
 #ifdef CONFIG_NET_FASTROUTE
-		dev->tx_semaphore = 0;
+		dev->tx_semaphore = 1;
 #endif
 		return 1;
 	}
@@ -1803,7 +1807,7 @@ tulip_start_xmit(struct sk_buff *skb, struct device *dev)
 
 	dev->trans_start = jiffies;
 #ifdef CONFIG_NET_FASTROUTE
-	dev->tx_semaphore = 0;
+	dev->tx_semaphore = 1;
 	sti();
 #endif
 

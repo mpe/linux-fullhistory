@@ -1910,7 +1910,7 @@ int scsi_free(void *obj, unsigned int len)
 
 int scsi_loadable_module_flag; /* Set after we scan builtin drivers */
 
-void * scsi_init_malloc(unsigned int size, int priority)
+void * scsi_init_malloc(unsigned int size, int gfp_mask)
 {
     void * retval;
 
@@ -1923,10 +1923,9 @@ void * scsi_init_malloc(unsigned int size, int priority)
 	for (order = 0, a_size = PAGE_SIZE;
              a_size < size; order++, a_size <<= 1)
             ;
-        retval = (void *) __get_dma_pages(priority & GFP_LEVEL_MASK,
-	                                            order);
+        retval = (void *) __get_free_pages(gfp_mask | GFP_DMA, order);
     } else
-        retval = kmalloc(size, priority);
+        retval = kmalloc(size, gfp_mask);
 
     if (retval)
 	memset(retval, 0, size);

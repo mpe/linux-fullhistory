@@ -61,7 +61,7 @@ static void init_swap_timer(void);
  * have died while we slept).
  */
 static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struct* vma,
-	unsigned long address, pte_t * page_table, int dma, int wait)
+	unsigned long address, pte_t * page_table, int gfp_mask)
 {
 	pte_t pte;
 	unsigned long entry;
@@ -78,7 +78,7 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 	page_map = mem_map + MAP_NR(page);
 	if (PageReserved(page_map)
 	    || PageLocked(page_map)
-	    || (dma && !PageDMA(page_map)))
+	    || ((gfp_mask & __GFP_DMA) && !PageDMA(page_map)))
 		return 0;
 	/* Deal with page aging.  Pages age from being unused; they
 	 * rejuvenate on being accessed.  Only swap old pages (age==0
@@ -112,7 +112,7 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 			set_pte(page_table, __pte(entry));
 			flush_tlb_page(vma, address);
 			tsk->nswap++;
-			rw_swap_page(WRITE, entry, (char *) page, wait);
+			rw_swap_page(WRITE, entry, (char *) page, (gfp_mask & __GFP_WAIT));
 		}
 		/* 
 		 * For now, this is safe, because the test above makes
@@ -166,7 +166,7 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
  */
 
 static inline int swap_out_pmd(struct task_struct * tsk, struct vm_area_struct * vma,
-	pmd_t *dir, unsigned long address, unsigned long end, int dma, int wait)
+	pmd_t *dir, unsigned long address, unsigned long end, int gfp_mask)
 {
 	pte_t * pte;
 	unsigned long pmd_end;
@@ -188,7 +188,7 @@ static inline int swap_out_pmd(struct task_struct * tsk, struct vm_area_struct *
 	do {
 		int result;
 		tsk->swap_address = address + PAGE_SIZE;
-		result = try_to_swap_out(tsk, vma, address, pte, dma, wait);
+		result = try_to_swap_out(tsk, vma, address, pte, gfp_mask);
 		if (result)
 			return result;
 		address += PAGE_SIZE;
@@ -198,7 +198,7 @@ static inline int swap_out_pmd(struct task_struct * tsk, struct vm_area_struct *
 }
 
 static inline int swap_out_pgd(struct task_struct * tsk, struct vm_area_struct * vma,
-	pgd_t *dir, unsigned long address, unsigned long end, int dma, int wait)
+	pgd_t *dir, unsigned long address, unsigned long end, int gfp_mask)
 {
 	pmd_t * pmd;
 	unsigned long pgd_end;
@@ -218,7 +218,7 @@ static inline int swap_out_pgd(struct task_struct * tsk, struct vm_area_struct *
 		end = pgd_end;
 	
 	do {
-		int result = swap_out_pmd(tsk, vma, pmd, address, end, dma, wait);
+		int result = swap_out_pmd(tsk, vma, pmd, address, end, gfp_mask);
 		if (result)
 			return result;
 		address = (address + PMD_SIZE) & PMD_MASK;
@@ -228,7 +228,7 @@ static inline int swap_out_pgd(struct task_struct * tsk, struct vm_area_struct *
 }
 
 static int swap_out_vma(struct task_struct * tsk, struct vm_area_struct * vma,
-	pgd_t *pgdir, unsigned long start, int dma, int wait)
+	pgd_t *pgdir, unsigned long start, int gfp_mask)
 {
 	unsigned long end;
 
@@ -239,7 +239,7 @@ static int swap_out_vma(struct task_struct * tsk, struct vm_area_struct * vma,
 
 	end = vma->vm_end;
 	while (start < end) {
-		int result = swap_out_pgd(tsk, vma, pgdir, start, end, dma, wait);
+		int result = swap_out_pgd(tsk, vma, pgdir, start, end, gfp_mask);
 		if (result)
 			return result;
 		start = (start + PGDIR_SIZE) & PGDIR_MASK;
@@ -248,7 +248,7 @@ static int swap_out_vma(struct task_struct * tsk, struct vm_area_struct * vma,
 	return 0;
 }
 
-static int swap_out_process(struct task_struct * p, int dma, int wait)
+static int swap_out_process(struct task_struct * p, int gfp_mask)
 {
 	unsigned long address;
 	struct vm_area_struct* vma;
@@ -269,7 +269,7 @@ static int swap_out_process(struct task_struct * p, int dma, int wait)
 		address = vma->vm_start;
 
 	for (;;) {
-		int result = swap_out_vma(p, vma, pgd_offset(p->mm, address), address, dma, wait);
+		int result = swap_out_vma(p, vma, pgd_offset(p->mm, address), address, gfp_mask);
 		if (result)
 			return result;
 		vma = vma->vm_next;
@@ -286,7 +286,7 @@ static int swap_out_process(struct task_struct * p, int dma, int wait)
  * N.B. This function returns only 0 or 1.  Return values != 1 from
  * the lower level routines result in continued processing.
  */
-static int swap_out(unsigned int priority, int dma, int wait)
+static int swap_out(unsigned int priority, int gfp_mask)
 {
 	struct task_struct * p, * pbest;
 	int counter, assign, max_cnt;
@@ -337,7 +337,7 @@ static int swap_out(unsigned int priority, int dma, int wait)
 		}
 		pbest->swap_cnt--;
 
-		switch (swap_out_process(pbest, dma, wait)) {
+		switch (swap_out_process(pbest, gfp_mask)) {
 		case 0:
 			/*
 			 * Clear swap_cnt so we don't look at this task
@@ -361,7 +361,7 @@ out:
  * to be.  This works out OK, because we now do proper aging on page
  * contents. 
  */
-static inline int do_try_to_free_page(int priority, int dma, int wait)
+static inline int do_try_to_free_page(int gfp_mask)
 {
 	static int state = 0;
 	int i=6;
@@ -369,25 +369,27 @@ static inline int do_try_to_free_page(int priority, int dma, int wait)
 
 	/* Let the dcache know we're looking for memory ... */
 	shrink_dcache_memory();
-	/* Always trim SLAB caches when memory gets low. */
-	(void) kmem_cache_reap(0, dma, wait);
 
-	/* we don't try as hard if we're not waiting.. */
+	/* Always trim SLAB caches when memory gets low. */
+	kmem_cache_reap(gfp_mask);
+
+	/* We try harder if we are waiting .. */
 	stop = 3;
-	if (wait)
+	if (gfp_mask & __GFP_WAIT)
 		stop = 0;
+
 	switch (state) {
 		do {
 		case 0:
-			if (shrink_mmap(i, dma))
+			if (shrink_mmap(i, gfp_mask))
 				return 1;
 			state = 1;
 		case 1:
-			if (shm_swap(i, dma))
+			if ((gfp_mask & __GFP_IO) && shm_swap(i, gfp_mask))
 				return 1;
 			state = 2;
 		default:
-			if (swap_out(i, dma, wait))
+			if (swap_out(i, gfp_mask))
 				return 1;
 			state = 0;
 		i--;
@@ -403,12 +405,12 @@ static inline int do_try_to_free_page(int priority, int dma, int wait)
  * now we need this so that we can do page allocations
  * without holding the kernel lock etc.
  */
-int try_to_free_page(int priority, int dma, int wait)
+int try_to_free_page(int gfp_mask)
 {
 	int retval;
 
 	lock_kernel();
-	retval = do_try_to_free_page(priority,dma,wait);
+	retval = do_try_to_free_page(gfp_mask);
 	unlock_kernel();
 	return retval;
 }
@@ -476,15 +478,17 @@ int kswapd(void *unused)
 		 * go back to sleep to let other tasks run.
 		 */
 		for (fail = 0; fail++ < MAX_SWAP_FAIL;) {
-			int pages, wait;
+			int pages, gfp_mask;
 
 			pages = nr_free_pages;
 			if (nr_free_pages >= min_free_pages)
 				pages += atomic_read(&nr_async_pages);
 			if (pages >= free_pages_high)
 				break;
-			wait = (pages < free_pages_low);
-			if (try_to_free_page(GFP_KERNEL, 0, wait))
+			gfp_mask = __GFP_IO;
+			if (pages < free_pages_low)
+				gfp_mask |= __GFP_WAIT;
+			if (try_to_free_page(gfp_mask))
 				fail = 0;
 		}
 		/*

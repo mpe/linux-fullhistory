@@ -306,7 +306,7 @@ void ide_setup_dma (ide_hwif_t *hwif, unsigned long dma_base, unsigned int num_p
 		 * safely use __get_free_page() here instead
 		 * of __get_dma_pages() -- no ISA limitations.
 		 */
-		dmatable = __get_free_pages(GFP_KERNEL,1,0);
+		dmatable = __get_free_pages(GFP_KERNEL,1);
 		leftover = dmatable ? PAGE_SIZE : 0;
 	}
 	if (!dmatable) {

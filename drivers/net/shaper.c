@@ -254,7 +254,6 @@ static void shaper_queue_xmit(struct shaper *shaper, struct sk_buff *skb)
 	if(newskb)
 	{
 		newskb->dev=shaper->dev;
-		newskb->arp=1;
 		newskb->priority=2;
 		if(sh_debug)
 			printk("Kick new frame to %s, %d\n",
@@ -448,17 +447,17 @@ static int shaper_rebuild_header(struct sk_buff *skb)
 	return v;
 }
 
-static int shaper_cache(struct dst_entry *dst, struct neighbour *neigh, struct hh_cache *hh)
+static int shaper_cache(struct neighbour *neigh, struct hh_cache *hh)
 {
-	struct shaper *sh=dst->dev->priv;
+	struct shaper *sh=neigh->dev->priv;
 	struct device *tmp;
 	int ret;
 	if(sh_debug)
 		printk("Shaper header cache bind\n");
-	tmp=dst->dev;
-	dst->dev=sh->dev;
-	ret=sh->hard_header_cache(dst,neigh,hh);
-	dst->dev=tmp;
+	tmp=neigh->dev;
+	neigh->dev=sh->dev;
+	ret=sh->hard_header_cache(neigh,hh);
+	neigh->dev=tmp;
 	return ret;
 }
 

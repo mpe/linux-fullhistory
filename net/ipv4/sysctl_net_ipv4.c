@@ -104,9 +104,11 @@ static
 int ipv4_sysctl_rtcache_flush(ctl_table *ctl, int write, struct file * filp,
 			      void *buffer, size_t *lenp)
 {
-	if (write)
+	if (write) {
 		rt_cache_flush(0);
-	return 0;
+		return 0;
+	} else
+		return -EINVAL;
 }
 
 ctl_table ipv4_table[] = {

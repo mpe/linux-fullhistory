@@ -49,7 +49,7 @@ struct sysinfo;
 extern int shm_swap (int, int);
 
 /* linux/mm/vmscan.c */
-extern int try_to_free_page(int, int, int);
+extern int try_to_free_page(int);
 
 /* linux/mm/page_io.c */
 extern void rw_swap_page(int, unsigned long, char *, int);

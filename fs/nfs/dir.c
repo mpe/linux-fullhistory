@@ -494,49 +494,29 @@ struct dentry_operations nfs_dentry_operations = {
 	NULL,			/* d_hash */
 	NULL,			/* d_compare */
 	nfs_dentry_delete,	/* d_delete(struct dentry *) */
-	nfs_dentry_iput,	/* d_iput(struct dentry *, struct inode *) */
-	nfs_dentry_release	/* d_release(struct dentry *) */
+	nfs_dentry_release,	/* d_release(struct dentry *) */
+	nfs_dentry_iput		/* d_iput(struct dentry *, struct inode *) */
 };
 
 #ifdef NFS_PARANOIA
 /*
  * Display all dentries holding the specified inode.
  */
-static void show_dentry(struct inode * inode)
+static void show_dentry(struct list_head * dlist)
 {
-	struct dentry *parent = inode->i_sb->s_root;
-	struct dentry *this_parent = parent;
-	struct list_head *next;
+	struct list_head *tmp = dlist;
 
-repeat:
-	next = this_parent->d_subdirs.next;
-resume:
-	while (next != &this_parent->d_subdirs) {
-		struct list_head *tmp = next;
-		struct dentry *dentry = list_entry(tmp, struct dentry, d_child);
-		next = tmp->next;
-		if (dentry->d_inode == inode) {
-			int unhashed = list_empty(&dentry->d_hash);
-			printk("show_dentry: %s/%s, d_count=%d%s\n",
-				dentry->d_parent->d_name.name,
-				dentry->d_name.name, dentry->d_count,
-				unhashed ? "(unhashed)" : "");
-		}
-		/*
-		 * Descend a level if the d_subdirs list is non-empty.
-		 */
-		if (!list_empty(&dentry->d_subdirs)) {
-			this_parent = dentry;
-			goto repeat;
-		}
-	}
-	/*
-	 * All done at this level ... ascend and resume the search.
-	 */
-	if (this_parent != parent) {
-		next = this_parent->d_child.next; 
-		this_parent = this_parent->d_parent;
-		goto resume;
+	while ((tmp = tmp->next) != dlist) {
+		struct dentry * dentry = list_entry(tmp, struct dentry, d_alias);
+		const char * unhashed = "";
+
+		if (list_empty(&dentry->d_hash))
+			unhashed = "(unhashed)";
+
+		printk("show_dentry: %s/%s, d_count=%d%s\n",
+			dentry->d_parent->d_name.name,
+			dentry->d_name.name, dentry->d_count,
+			unhashed);
 	}
 }
 #endif
@@ -602,7 +582,7 @@ if (inode->i_count > (S_ISDIR(inode->i_mode) ? 1 : inode->i_nlink)) {
 printk("nfs_lookup: %s/%s ino=%ld in use, count=%d, nlink=%d\n",
 dentry->d_parent->d_name.name, dentry->d_name.name,
 inode->i_ino, inode->i_count, inode->i_nlink);
-show_dentry(inode);
+show_dentry(&inode->i_dentry);
 }
 #endif
 	    no_entry:
@@ -637,7 +617,7 @@ if (inode->i_count > (S_ISDIR(inode->i_mode) ? 1 : inode->i_nlink)) {
 printk("nfs_instantiate: %s/%s ino=%ld in use, count=%d, nlink=%d\n",
 dentry->d_parent->d_name.name, dentry->d_name.name,
 inode->i_ino, inode->i_count, inode->i_nlink);
-show_dentry(inode);
+show_dentry(&inode->i_dentry);
 }
 #endif
 		d_instantiate(dentry, inode);

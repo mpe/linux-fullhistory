@@ -724,7 +724,7 @@ void netif_rx(struct sk_buff *skb)
 }
 
 #ifdef CONFIG_BRIDGE
-static inline void handle_bridge(struct skbuff *skb, unsigned short type)
+static inline void handle_bridge(struct sk_buff *skb, unsigned short type)
 {
 	if (br_stats.flags & BR_UP && br_protocol_ok(ntohs(type)))
 	{
@@ -739,7 +739,7 @@ static inline void handle_bridge(struct skbuff *skb, unsigned short type)
 		if(br_receive_frame(skb))
 		{
 			sti();
-			continue;
+			return;
 		}
 		/*
 		 *	Pull the MAC header off for the copy going to

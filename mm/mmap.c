@@ -502,6 +502,13 @@ int do_munmap(unsigned long addr, size_t len)
 		mpnt = next;
 	}
 
+	if (free && (free->vm_start < addr) && (free->vm_end > addr+len)) {
+		if (mm->map_count > MAX_MAP_COUNT) {
+			kmem_cache_free(vm_area_cachep, extra);
+			return -ENOMEM;
+		}
+	}
+
 	/* Ok - we have the memory areas we should free on the 'free' list,
 	 * so release them, and unmap the page range..
 	 * If the one of the segments is only being partially unmapped,

@@ -204,7 +204,7 @@ do { unsigned long size = 1 << high; \
 	map->age = PAGE_INITIAL_AGE; \
 } while (0)
 
-unsigned long __get_free_pages(int priority, unsigned long order, int dma)
+unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 {
 	unsigned long flags, maxorder;
 
@@ -216,28 +216,25 @@ unsigned long __get_free_pages(int priority, unsigned long order, int dma)
 	 * to empty in order to find a free page..
 	 */
 	maxorder = order + NR_MEM_LISTS/3;
-	switch (priority) {
-	case GFP_ATOMIC:
-		maxorder = NR_MEM_LISTS;
-		/* fallthrough - no need to jump around */
-	case GFP_NFS:
+	if (gfp_mask & __GFP_MED)
 		maxorder += NR_MEM_LISTS/3;
-	}
+	if ((gfp_mask & __GFP_HIGH) || maxorder > NR_MEM_LISTS)
+		maxorder = NR_MEM_LISTS;
 
-	if (in_interrupt() && priority != GFP_ATOMIC) {
+	if (in_interrupt() && (gfp_mask & __GFP_WAIT)) {
 		static int count = 0;
 		if (++count < 5) {
 			printk("gfp called nonatomically from interrupt %p\n",
 				__builtin_return_address(0));
-			priority = GFP_ATOMIC;
+			gfp_mask &= ~__GFP_WAIT;
 		}
 	}
 
 repeat:
 	spin_lock_irqsave(&page_alloc_lock, flags);
-	RMQUEUE(order, maxorder, dma);
+	RMQUEUE(order, maxorder, (gfp_mask & GFP_DMA));
 	spin_unlock_irqrestore(&page_alloc_lock, flags);
-	if (priority != GFP_BUFFER && priority != GFP_ATOMIC && try_to_free_page(priority, dma, 1))
+	if ((gfp_mask & __GFP_WAIT) && try_to_free_page(gfp_mask))
 		goto repeat;
 nopage:
 	return 0;

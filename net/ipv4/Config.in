@@ -27,6 +27,9 @@ if [ "$CONFIG_FIREWALL" = "y" ]; then
   if [ "$CONFIG_IP_FIREWALL" = "y" ]; then
     if [ "$CONFIG_NETLINK" = "y" ]; then
 	bool 'IP: firewall packet netlink device' CONFIG_IP_FIREWALL_NETLINK
+	if [ "$CONFIG_IP_FIREWALL_NETLINK" = "y" ]; then
+	    define_bool CONFIG_NETLINK_DEV y
+	fi
     fi
     bool 'IP: firewall packet logging' CONFIG_IP_FIREWALL_VERBOSE
     bool 'IP: transparent proxy support' CONFIG_IP_TRANSPARENT_PROXY

@@ -725,6 +725,29 @@ CONFIG_NET
   see http://www.inka.de/sites/lina/linux/NetTools/index_en.html for
   details. 
 
+Fast switching (read help!)
+CONFIG_NET_FASTROUTE
+  Enable direct NIC-to-NIC data transfers.
+  *** This option is NOT COMPATIBLE with several important ***
+  *** networking options: especially CONFIG*FIREWALL.      ***
+  However, it will work with all options in CONFIG_IP_ADVANCED_ROUTER
+  section (except for CONFIG_IP_ROUTE_TOS). At the moment few of devices
+  supports it (tulip is one of them, modified 8390 can be found at
+  ftp://ftp.inr.ac.ru/ip-routing/fastroute-8390.tar.gz).
+  Remember, short cuts make long delays :-), say N.
+
+Forwarding between high speed interfaces
+CONFIG_NET_HW_FLOWCONTROL
+  This option enables NIC hardware throttling during periods of
+  extremal congestion. At the moment only couple of device drivers
+  support it (really, one --- tulip, modified 8390 can be found
+  at ftp://ftp.inr.ac.ru/ip-routing/fastroute-8390.tar.gz).
+  Really, this option is applicable to any machine attached
+  to enough fast network, and even 10Mb NIC
+  is able to kill not very slow box, sort of 120MHz Pentium.
+  However, do not enable this option, if you did not experienced
+  any serious problems.
+
 Network aliasing
 CONFIG_NET_ALIAS
   This will allow you to set multiple network addresses on the same

@@ -1000,16 +1000,16 @@ static int hold_timer_expired(int port_no)
 
 static int send_config_bpdu(int port_no, Config_bpdu *config_bpdu)
 {
-struct sk_buff *skb;
-struct device *dev = port_info[port_no].dev;
-int size;
-unsigned long flags;
-struct ethhdr *eth;
+	struct sk_buff *skb;
+	struct device *dev = port_info[port_no].dev;
+	int size;
+	struct ethhdr *eth;
 	
 	if (port_info[port_no].state == Disabled) {
 		printk(KERN_DEBUG "send_config_bpdu: port %i not valid\n",port_no);
 		return(-1);
-		}
+	}
+	
 	if (br_stats.flags & BR_DEBUG)
 		printk("send_config_bpdu: ");
 	/*
@@ -1017,10 +1017,11 @@ struct ethhdr *eth;
 	 */
 	size = dev->hard_header_len + sizeof(Config_bpdu);
 	skb = alloc_skb(size, GFP_ATOMIC);
-	if (skb == NULL) {
+	if (skb == NULL) 
+	{
 		printk(KERN_DEBUG "send_config_bpdu: no skb available\n");
 		return(-1);
-		}
+	}
 	skb->dev = dev;
 	skb->mac.raw = skb->h.raw = skb_put(skb, size);
 	eth = skb->mac.ethernet;
@@ -1049,21 +1050,17 @@ struct ethhdr *eth;
 
 	/* won't get bridged again... */
 	skb->pkt_bridged = IS_BRIDGED;
-	skb->arp = 1;	/* do not resolve... */
-	save_flags(flags);
-	cli();
-	skb_queue_tail(dev->buffs, skb);
-	restore_flags(flags);
+	skb->dev=dev;
+	dev_queue_xmit(skb);
 	return(0);
 }
 
 static int send_tcn_bpdu(int port_no, Tcn_bpdu *bpdu)
 {
-struct sk_buff *skb;
-struct device *dev = port_info[port_no].dev;
-int size;
-unsigned long flags;
-struct ethhdr *eth;
+	struct sk_buff *skb;
+	struct device *dev = port_info[port_no].dev;
+	int size;
+	struct ethhdr *eth;
 	
 	if (port_info[port_no].state == Disabled) {
 		printk(KERN_DEBUG "send_tcn_bpdu: port %i not valid\n",port_no);
@@ -1105,11 +1102,8 @@ struct ethhdr *eth;
 
 	/* mark that we've been here... */
 	skb->pkt_bridged = IS_BRIDGED;
-	skb->arp = 1;	/* do not resolve... */
-	save_flags(flags);
-	cli();
-	skb_queue_tail(dev->buffs, skb);
-	restore_flags(flags);
+	skb->dev=dev;
+	dev_queue_xmit(skb);
 	return(0);
 }
 
@@ -1199,7 +1193,6 @@ int br_receive_frame(struct sk_buff *skb)	/* 3.5 */
 
 	port = find_port(skb->dev);
 	
-	skb->arp = 1;		/* Received frame so it is resolved */
 	skb->h.raw = skb->mac.raw;
 	eth = skb->mac.ethernet;
 	if (br_stats.flags & BR_DEBUG)
@@ -1519,7 +1512,6 @@ static int br_flood(struct sk_buff *skb, int port)
 			nskb->dev= port_info[i].dev;
 			/* To get here we must have done ARP already,
 			   or have a received valid MAC header */
-			nskb->arp = 1;
 			
 /*			printk("Flood to port %d\n",i);*/
 			nskb->h.raw = nskb->data + ETH_HLEN;

@@ -183,7 +183,7 @@ if [ "$CONFIG_WAN_ROUTER" != "n" ]; then
   bool 'WAN drivers' CONFIG_WAN_DRIVERS
   if [ "$CONFIG_WAN_DRIVERS" = "y" ]; then
     dep_tristate 'Sangoma WANPIPE(tm) multiprotocol cards' CONFIG_VENDOR_SANGOMA $CONFIG_WAN_DRIVERS
-    if [ "$CONFIG_VENDOR_SANGOMA" = "y" ]; then
+    if [ "$CONFIG_VENDOR_SANGOMA" != "n" ]; then
       int  '  Maximum number of cards' CONFIG_WANPIPE_CARDS 1
       bool '  WANPIPE X.25 support' CONFIG_WANPIPE_X25
       bool '  WANPIPE Frame Relay support' CONFIG_WANPIPE_FR

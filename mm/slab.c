@@ -502,8 +502,7 @@ kmem_getpages(kmem_cache_t *cachep, unsigned long flags, unsigned int *dma)
 	void	*addr;
 
 	*dma = flags & SLAB_DMA;
-	addr = (void*) __get_free_pages(flags & SLAB_LEVEL_MASK,
-					cachep->c_gfporder, *dma); 
+	addr = (void*) __get_free_pages(flags, cachep->c_gfporder);
 	/* Assume that now we have the pages no one else can legally
 	 * messes with the 'struct page's.
 	 * However vm_scan() might try to test the structure to see if
@@ -1716,19 +1715,18 @@ kmem_find_general_cachep(size_t size)
  * This function _cannot_ be called within a int, but it
  * can be interrupted.
  */
-int
-kmem_cache_reap(int pri, int dma, int wait)
+void
+kmem_cache_reap(int gfp_mask)
 {
 	kmem_slab_t	*slabp;
 	kmem_cache_t	*searchp;
 	kmem_cache_t	*best_cachep;
 	unsigned int	 scan;
 	unsigned int	 reap_level;
-	static unsigned long	call_count = 0;
 
 	if (in_interrupt()) {
 		printk("kmem_cache_reap() called within int!\n");
-		return 0;
+		return;
 	}
 
 	/* We really need a test semphore op so we can avoid sleeping when
@@ -1736,28 +1734,8 @@ kmem_cache_reap(int pri, int dma, int wait)
 	 */
 	down(&cache_chain_sem);
 
-	scan = 10-pri;
-	if (pri == 6 && !dma) {
-		if (++call_count == 199) {
-			/* Hack Alert!
-			 * Occassionally we try hard to reap a slab.
-			 */
-			call_count = 0UL;
-			reap_level = 0;
-			scan += 2;
-		} else
-			reap_level = 3;
-	} else {
-		if (pri >= 5) {
-			/* We also come here for dma==1 at pri==6, just
-			 * to try that bit harder (assumes that there are
-			 * less DMAable pages in a system - not always true,
-			 * but this doesn't hurt).
-			 */
-			reap_level = 2;
-		} else
-			reap_level = 0;
-	}
+	scan = 10;
+	reap_level = 0;
 
 	best_cachep = NULL;
 	searchp = clock_searchp;
@@ -1796,7 +1774,7 @@ kmem_cache_reap(int pri, int dma, int wait)
 		}
 		spin_unlock_irq(&searchp->c_spinlock);
 
-		if (dma && !dma_flag)
+		if ((gfp_mask & GFP_DMA) && !dma_flag)
 			goto next;
 
 		if (full_free) {
@@ -1809,10 +1787,6 @@ kmem_cache_reap(int pri, int dma, int wait)
 			 * more than one page per slab (as it can be difficult
 			 * to get high orders from gfp()).
 			 */
-			if (pri == 6) {	/* magic '6' from try_to_free_page() */
-				if (searchp->c_gfporder || searchp->c_ctor)
-					full_free--;
-			}
 			if (full_free >= reap_level) {
 				reap_level = full_free;
 				best_cachep = searchp;
@@ -1830,12 +1804,12 @@ next:
 
 	if (!best_cachep) {
 		/* couldn't find anthying to reap */
-		return 0;
+		return;
 	}
 
 	spin_lock_irq(&best_cachep->c_spinlock);
 	if (!best_cachep->c_growing && !(slabp = best_cachep->c_lastp)->s_inuse && slabp != kmem_slab_end(best_cachep)) {
-		if (dma) {
+		if (gfp_mask & GFP_DMA) {
 			do {
 				if (slabp->s_dma)
 					goto good_dma;
@@ -1858,11 +1832,11 @@ good_dma:
 		 */
 		spin_unlock_irq(&best_cachep->c_spinlock);
 		kmem_slab_destroy(best_cachep, slabp);
-		return 1;
+		return;
 	}
 dma_fail:
 	spin_unlock_irq(&best_cachep->c_spinlock);
-	return 0;
+	return;
 }
 
 #if	SLAB_SELFTEST

@@ -572,9 +572,8 @@ static int if_init (struct device* dev)
         dev->tx_queue_len = 10;
 
 	/* Initialize socket buffers */
-	for (i = 0; i < DEV_NUMBUFFS; ++i)
-		skb_queue_head_init(&dev->buffs[i])
-	;
+	dev_init_buffers(dev);
+	
 	set_chan_state(dev, WAN_DISCONNECTED);
 	return 0;
 }

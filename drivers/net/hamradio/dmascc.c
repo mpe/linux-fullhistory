@@ -41,7 +41,6 @@
 #include <asm/irq.h>
 #include <asm/segment.h>
 #include <net/ax25.h>
-#include <stdio.h>
 #include "z8530.h"
 
 

@@ -432,7 +432,7 @@ static void neigh_periodic_timer(unsigned long arg)
 			if (state&(NUD_PERMANENT|NUD_IN_TIMER))
 				goto next_elt;
 
-			if (n->used - n->confirmed < 0)
+			if ((long)(n->used - n->confirmed) < 0)
 				n->used = n->confirmed;
 
 			if (atomic_read(&n->refcnt) == 0 &&
@@ -795,17 +795,17 @@ static void neigh_proxy_process(unsigned long arg)
 
 	while (skb != (struct sk_buff*)&tbl->proxy_queue) {
 		struct sk_buff *back = skb;
+		long tdif = back->stamp.tv_usec - now;
+
 		skb = skb->next;
-		if (back->stamp.tv_usec - now <= 0) {
+		if (tdif <= 0) {
 			__skb_unlink(back, &tbl->proxy_queue);
 			if (tbl->proxy_redo)
 				tbl->proxy_redo(back);
 			else
 				kfree_skb(back, FREE_WRITE);
-		} else {
-			if (!sched_next || back->stamp.tv_usec - now < sched_next)
-				sched_next = back->stamp.tv_usec - now;
-		}
+		} else if (!sched_next || tdif < sched_next)
+			sched_next = tdif;
 	}
 	del_timer(&tbl->proxy_timer);
 	if (sched_next) {

@@ -178,7 +178,8 @@ int ip_forward(struct sk_buff *skb)
 			{
 #endif
 				maddr = inet_select_addr(dev2, rt->rt_gateway, RT_SCOPE_UNIVERSE);
-			        if (fw_res = ip_fw_masq_icmp(&skb, maddr) < 0) {
+				fw_res = ip_fw_masq_icmp(&skb, maddr);
+			        if (fw_res < 0) {
 					kfree_skb(skb, FREE_READ);
 					return -1;
 				}

@@ -190,6 +190,8 @@ static void rarp_init_pkt (void)
 	rarp_pkt_inited=1;
 }
 
+#ifdef MODULE
+
 static void rarp_end_pkt(void)
 {
 	if(!rarp_pkt_inited)
@@ -199,6 +201,7 @@ static void rarp_end_pkt(void)
 	rarp_pkt_inited=0;
 }
 
+#endif
 
 /*
  *	Receive an arp request by the device layer.  Maybe it should be 

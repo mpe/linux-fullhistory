@@ -15,14 +15,14 @@ typedef struct kmem_cache_s kmem_cache_t;
 #include	<asm/cache.h>
 
 /* flags for kmem_cache_alloc() */
-#define	SLAB_BUFFER		GFP_BUFFER	/* 0x00 */
-#define	SLAB_ATOMIC		GFP_ATOMIC	/* 0x01 */
-#define	SLAB_USER		GFP_USER	/* 0x02 */
-#define	SLAB_KERNEL		GFP_KERNEL	/* 0x03 */
-#define	SLAB_NOBUFFER		GFP_NOBUFFER	/* 0x04 */
-#define	SLAB_NFS		GFP_NFS		/* 0x05 */
-#define	SLAB_DMA		GFP_DMA		/* 0x08 */
-#define	SLAB_LEVEL_MASK		GFP_LEVEL_MASK	/* 0x0f */
+#define	SLAB_BUFFER		GFP_BUFFER
+#define	SLAB_ATOMIC		GFP_ATOMIC
+#define	SLAB_USER		GFP_USER
+#define	SLAB_KERNEL		GFP_KERNEL
+#define	SLAB_NFS		GFP_NFS
+#define	SLAB_DMA		GFP_DMA
+
+#define SLAB_LEVEL_MASK		0x0000007fUL
 #define	SLAB_NO_GROW		0x00001000UL	/* don't grow a cache */
 
 /* flags to pass to kmem_cache_create().
@@ -59,7 +59,7 @@ extern void *kmalloc(size_t, int);
 extern void kfree(const void *);
 extern void kfree_s(const void *, size_t);
 
-extern int kmem_cache_reap(int, int, int);
+extern void kmem_cache_reap(int);
 extern int get_slabinfo(char *);
 
 /* System wide caches */

@@ -287,13 +287,11 @@ EXPORT_SYMBOL(ipv4_specific);
 EXPORT_SYMBOL(tcp_simple_retransmit);
 
 EXPORT_SYMBOL(xrlim_allow);
-EXPORT_SYMBOL(dev_mc_delete);
 #endif
 
 #ifdef CONFIG_PACKET_MODULE
 EXPORT_SYMBOL(dev_set_allmulti);
 EXPORT_SYMBOL(dev_set_promiscuity);
-EXPORT_SYMBOL(dev_mc_delete);
 EXPORT_SYMBOL(sklist_remove_socket);
 EXPORT_SYMBOL(rtnl_wait);
 EXPORT_SYMBOL(rtnl_rlockct);
@@ -383,6 +381,7 @@ EXPORT_SYMBOL(tty_register_ldisc);
 EXPORT_SYMBOL(kill_fasync);
 EXPORT_SYMBOL(ip_rcv);
 EXPORT_SYMBOL(arp_rcv);
+EXPORT_SYMBOL(dev_mc_delete);
 
 EXPORT_SYMBOL(rtnl_lock);
 EXPORT_SYMBOL(rtnl_unlock);

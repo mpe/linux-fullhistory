@@ -93,7 +93,7 @@ extern void release_thread(struct task_struct *);
 
 /* NOTE: The task struct and the stack go together!  */
 #define alloc_task_struct() \
-        ((struct task_struct *) __get_free_pages(GFP_KERNEL,1,0))
+        ((struct task_struct *) __get_free_pages(GFP_KERNEL,1))
 #define free_task_struct(p)     free_pages((unsigned long)(p),1)
 
 #define init_task	(init_task_union.task)

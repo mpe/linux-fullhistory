@@ -115,7 +115,7 @@ struct simp * simp_create(char * name, long size,
 
 	if(!global) {
 #ifdef __SMP__
-		global = (struct global_data*)__get_free_pages(GFP_KERNEL, ORDER, 0);
+		global = (struct global_data*)__get_free_pages(GFP_KERNEL, ORDER);
 		memset(global, 0, CHUNK_SIZE);
 #else
 		global = (struct global_data*)get_free_page(GFP_KERNEL);
@@ -167,7 +167,7 @@ static void alloc_header(struct simp * simp)
 
 	spin_unlock(&simp->lock);
 	for(;;) {
-		hdr = (struct header*)__get_free_pages(GFP_KERNEL, ORDER, 0);
+		hdr = (struct header*)__get_free_pages(GFP_KERNEL, ORDER);
 		if(hdr)
 			break;
 		if(!simp_garbage())

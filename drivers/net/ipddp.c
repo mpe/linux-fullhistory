@@ -256,7 +256,6 @@ static int ipddp_rebuild_header(struct sk_buff *skb)
         memcpy(skb->data,(void *)&at,sizeof(at));
 
 	skb->dev = rt->dev;	/* set skb->dev to appropriate device */
-        skb->arp = 1;   	/* so the actual device doesn't try to arp it... */
         skb->protocol = htons(ETH_P_ATALK);     /* Protocol has changed */
 
         return 0;

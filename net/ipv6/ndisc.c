@@ -1199,7 +1199,9 @@ __initfunc(void ndisc_init(struct net_proto_family *ops))
 void ndisc_cleanup(void)
 {
 #ifdef CONFIG_PROC_FS
+#ifndef CONFIG_RTNETLINK
         proc_net_unregister(ndisc_proc_entry.low_ino);
+#endif
 #endif
 	neigh_table_clear(&nd_tbl);
 }

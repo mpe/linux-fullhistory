@@ -29,7 +29,9 @@
 
 
 #ifdef MODVERSIONS
+#ifndef MODULE
 #define MODULE
+#endif
 #endif
 
 /* -----------------------------------------------------------------------

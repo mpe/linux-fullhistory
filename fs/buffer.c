@@ -1706,7 +1706,7 @@ void show_buffers(void)
 void buffer_init(void)
 {
 	hash_table = (struct buffer_head **)
-		__get_free_pages(GFP_ATOMIC, HASH_PAGES_ORDER, 0);
+		__get_free_pages(GFP_ATOMIC, HASH_PAGES_ORDER);
 	if (!hash_table)
 		panic("Failed to allocate buffer hash table\n");
 	memset(hash_table,0,NR_HASH*sizeof(struct buffer_head *));

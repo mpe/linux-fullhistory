@@ -1,4 +1,4 @@
-/*****************************************************************************
+
 * sdla_fr.c	WANPIPE(tm) Multiprotocol WAN Link Driver. Frame relay module.
 *
 * Author(s):	Gene Kozin	
@@ -673,9 +673,8 @@ static int if_init(struct device *dev)
 	/* Set transmit buffer queue length */
 	dev->tx_queue_len = 30;
 
-	/* Initialize socket buffers */
-	for (i = 0; i < DEV_NUMBUFFS; ++i)
-		skb_queue_head_init(&dev->buffs[i]);
+	dev_init_buffers(dev);
+	
 	set_chan_state(dev, WAN_DISCONNECTED);
 	return 0;
 }

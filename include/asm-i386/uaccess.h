@@ -132,15 +132,15 @@ extern void __put_user_bad(void);
 		:"0" (ptr),"d" (x)					\
 		:"cx")
 
-#define put_user(x,ptr)							\
-({	int __ret_pu;							\
-	switch(sizeof (*(ptr))) {					\
-	case 1:  __put_user_x(1,__ret_pu,(char)(x),ptr); break;		\
-	case 2:  __put_user_x(2,__ret_pu,(short)(x),ptr); break;	\
-	case 4:  __put_user_x(4,__ret_pu,(int)(x),ptr); break;		\
-	default: __put_user_x(X,__ret_pu,x,ptr); break;			\
-	}								\
-	__ret_pu;							\
+#define put_user(x,ptr)									\
+({	int __ret_pu;									\
+	switch(sizeof (*(ptr))) {							\
+	case 1:  __put_user_x(1,__ret_pu,(__typeof__(*(ptr)))(x),ptr); break;		\
+	case 2:  __put_user_x(2,__ret_pu,(__typeof__(*(ptr)))(x),ptr); break;		\
+	case 4:  __put_user_x(4,__ret_pu,(__typeof__(*(ptr)))(x),ptr); break;		\
+	default: __put_user_x(X,__ret_pu,x,ptr); break;					\
+	}										\
+	__ret_pu;									\
 })
 
 #define __get_user(x,ptr) \

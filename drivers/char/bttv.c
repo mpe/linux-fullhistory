@@ -1478,7 +1478,20 @@ static void handle_chipset(void)
 		unsigned char bus, devfn;
 		unsigned char b, bo;
     
-		/* nothing wrong with this one, just checking buffer control config */
+		/* Beware the SiS 85C496 my friend - rev 49 don't work with a bttv */
+		
+		if (!pcibios_find_device(PCI_VENDOR_ID_SI, PCI_DEVICE_ID_SI_496, index, &bus, &devfn))
+		{
+			printk(KERN_WARNING "BT848 and SIS 85C496 chipset don't always work together.\n");
+		}			
+
+		if (!pcibios_find_device(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82441,
+			    index, &bus, &devfn)) 
+		{
+			pcibios_read_config_byte(bus, devfn, 0x53, &b);
+			DEBUG(printk(KERN_INFO "bttv: Host bridge: 82441FX Natoma, "));
+			DEBUG(printk("bufcon=0x%02x\n",b));
+		}
 
 		if (!pcibios_find_device(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82441,
 			    index, &bus, &devfn)) 

@@ -115,7 +115,7 @@ repeat:
 	}
 }
 
-int shrink_mmap(int priority, int dma)
+int shrink_mmap(int priority, int gfp_mask)
 {
 	static unsigned long clock = 0;
 	struct page * page;
@@ -134,7 +134,7 @@ int shrink_mmap(int priority, int dma)
 
 		if (PageLocked(page))
 			goto next;
-		if (dma && !PageDMA(page))
+		if ((gfp_mask & __GFP_DMA) && !PageDMA(page))
 			goto next;
 		/* First of all, regenerate the page's referenced bit
                    from any buffers in the page */
@@ -173,7 +173,7 @@ int shrink_mmap(int priority, int dma)
 				}
 
 				/* is it a buffer cache page? */
-				if (bh && try_to_free_buffer(bh, &bh, 6))
+				if ((gfp_mask & __GFP_IO) && bh && try_to_free_buffer(bh, &bh, 6))
 					return 1;
 				break;
 
