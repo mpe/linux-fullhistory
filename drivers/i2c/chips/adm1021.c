@@ -368,7 +368,7 @@ static struct adm1021_data *adm1021_update_device(struct device *dev)
 		data->remote_temp_input = adm1021_read_value(client, ADM1021_REG_REMOTE_TEMP);
 		data->remote_temp_max = adm1021_read_value(client, ADM1021_REG_REMOTE_TOS_R);
 		data->remote_temp_hyst = adm1021_read_value(client, ADM1021_REG_REMOTE_THYST_R);
-		data->alarms = adm1021_read_value(client, ADM1021_REG_STATUS) & 0xec;
+		data->alarms = adm1021_read_value(client, ADM1021_REG_STATUS) & 0x7c;
 		if (data->type == adm1021)
 			data->die_code = adm1021_read_value(client, ADM1021_REG_DIE_CODE);
 		if (data->type == adm1023) {
