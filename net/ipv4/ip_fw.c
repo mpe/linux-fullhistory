@@ -905,7 +905,7 @@ void ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
  		}
  		else ms->timer.expires = jiffies+MASQUERADE_EXPIRE_TCP;
  
-		skb->csum = csum_partial(th + 1, size - sizeof(*th), 0);
+		skb->csum = csum_partial((void *)(th + 1), size - sizeof(*th), 0);
  		tcp_send_check(th,iph->saddr,iph->daddr,size,skb);
  	}
  	add_timer(&ms->timer);
@@ -1011,7 +1011,7 @@ int ip_fw_demasquerade(struct sk_buff *skb)
 #endif
 					}
 				}
-				skb->csum = csum_partial(portptr + sizeof(struct tcphdr),
+				skb->csum = csum_partial((void *)(((struct tcphdr *)portptr) + 1),
 					size - sizeof(struct tcphdr), 0);
  				tcp_send_check((struct tcphdr *)portptr,iph->saddr,iph->daddr,size,skb);
  			}

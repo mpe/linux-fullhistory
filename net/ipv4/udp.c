@@ -573,15 +573,14 @@ int udp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 }
 
 
-static void udp_close(struct sock *sk, int timeout)
+static void udp_close(struct sock *sk, unsigned long timeout)
 {
 	lock_sock(sk);
 	sk->state = TCP_CLOSE;
 	if(uh_cache_sk==sk)
 		udp_cache_zap();
 	release_sock(sk);
-	if (sk->dead) 
-		destroy_sock(sk);
+	destroy_sock(sk);
 }
 
 

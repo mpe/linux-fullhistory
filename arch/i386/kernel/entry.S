@@ -684,4 +684,5 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_sched_get_priority_max)
 	.long SYMBOL_NAME(sys_sched_get_priority_min)  /* 160 */
 	.long SYMBOL_NAME(sys_sched_rr_get_interval)
-	.space (NR_syscalls-162)*4
+	.long SYMBOL_NAME(sys_nanosleep)
+	.space (NR_syscalls-163)*4

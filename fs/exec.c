@@ -167,7 +167,7 @@ asmlinkage int sys_uselib(const char * library)
 		for (fmt = formats ; fmt ; fmt = fmt->next) {
 			int (*fn)(int) = fmt->load_shlib;
 			if (!fn)
-				break;
+				continue;
 			retval = fn(fd);
 			if (retval != -ENOEXEC)
 				break;
@@ -658,7 +658,7 @@ restart_interp:
 		for (fmt = formats ; fmt ; fmt = fmt->next) {
 			int (*fn)(struct linux_binprm *, struct pt_regs *) = fmt->load_binary;
 			if (!fn)
-				break;
+				continue;
 			retval = fn(&bprm, regs);
 			if (retval >= 0) {
 				iput(bprm.inode);

@@ -165,17 +165,31 @@ unsigned long page_unuse(unsigned long page)
  */
 void update_vm_cache(struct inode * inode, unsigned long pos, const char * buf, int count)
 {
-	struct page * page;
+	unsigned long offset, len;
 
-	page = find_page(inode, pos & PAGE_MASK);
-	if (page) {
-		unsigned long addr;
+	offset = (pos & ~PAGE_MASK);
+	pos = pos & PAGE_MASK;
+	len = PAGE_SIZE - offset;
+	do {
+		struct page * page;
 
-		wait_on_page(page);
-		addr = page_address(page);
-		memcpy((void *) ((pos & ~PAGE_MASK) + addr), buf, count);
-		free_page(addr);
-	}
+		if (len > count)
+			len = count;
+		page = find_page(inode, pos);
+		if (page) {
+			unsigned long addr;
+
+			wait_on_page(page);
+			addr = page_address(page);
+			memcpy((void *) (offset + addr), buf, len);
+			free_page(addr);
+		}
+		count -= len;
+		buf += len;
+		len = PAGE_SIZE;
+		offset = 0;
+		pos += PAGE_SIZE;
+	} while (count);
 }
 
 /*
@@ -695,7 +709,7 @@ static struct vm_operations_struct file_private_mmap = {
 };
 
 /* This is used for a general mmap of a disk file */
-int generic_mmap(struct inode * inode, struct file * file, struct vm_area_struct * vma)
+int generic_file_mmap(struct inode * inode, struct file * file, struct vm_area_struct * vma)
 {
 	struct vm_operations_struct * ops;
 

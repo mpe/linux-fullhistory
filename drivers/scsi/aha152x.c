@@ -2958,8 +2958,13 @@ int aha152x_proc_info(
     scd = scd->next;
   }
   
-  *start=buffer;
-  return (pos-buffer < length ? pos-buffer : length);     
+  *start=buffer+offset;
+  if (pos - buffer < offset)
+    return 0;
+  else if (pos - buffer - offset < length)
+    return pos - buffer - offset;
+  else
+    return length;
 }
 
 #ifdef MODULE

@@ -14,6 +14,8 @@
  *	Dmitry Gorodchanin	:	Added CSLIP statistics.
  *	Stanislav Voronyi	:	Make line checking as created by
  *					Igor Chechik, RELCOM Corp.
+ *	Craig Schlenter		:	Fixed #define bug that caused
+ *					CSLIP telnets to hang in 1.3.61-6
  *
  * Author:	Fred N. van Kempen, <waltje@uwalt.nl.mugnet.org>
  */
@@ -89,8 +91,8 @@ struct slip {
 #define SLF_INUSE	0		/* Channel in use               */
 #define SLF_ESCAPE	1               /* ESC received                 */
 #define SLF_ERROR	2               /* Parity, etc. error           */
-#define SLF_KEEPTEST	4		/* Keepalive test flag		*/
-#define SLF_OUTWAIT	8		/* is outpacket was flag	*/
+#define SLF_KEEPTEST	3		/* Keepalive test flag		*/
+#define SLF_OUTWAIT	4		/* is outpacket was flag	*/
 
   unsigned char		mode;		/* SLIP mode			*/
 #define SL_MODE_SLIP	0

@@ -564,7 +564,7 @@ int scan_scsis_single (int channel, int dev, int lun, int *max_dev_lun,
         ((SCpnt->sense_buffer[0] & 0x70) >> 4) == 7) {
       if (((SCpnt->sense_buffer[2] & 0xf) != NOT_READY) &&
           ((SCpnt->sense_buffer[2] & 0xf) != UNIT_ATTENTION) &&
-          ((SCpnt->sense_buffer[2] & 0xf) != ILLEGAL_REQUEST))
+          ((SCpnt->sense_buffer[2] & 0xf) != ILLEGAL_REQUEST || lun > 0))
         return 1;
     }
     else

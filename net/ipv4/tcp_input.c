@@ -1930,15 +1930,6 @@ rfc_step6:		/* I'll clean this up later */
 		kfree_skb(skb, FREE_READ);
 
 	/*
-	 * Finally, if we've moved to TCP_CLOSE, check if we should
-	 * get rid of the socket
-	 */
-	if (sk->dead && sk->state == TCP_CLOSE) {
-		/* Should be about 2 rtt's */
-   		reset_timer(sk, TIME_DONE, min(sk->rtt * 2, TCP_DONE_TIME));
-	}
-
-	/*
 	 *	And done
 	 */	
 	

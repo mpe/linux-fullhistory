@@ -743,22 +743,6 @@ static int inet_dup(struct socket *newsock, struct socket *oldsock)
 }
 
 /*
- *	Return 1 if we still have things to send in our buffers.
- */
- 
-static inline int closing(struct sock * sk)
-{
-	switch (sk->state) {
-		case TCP_FIN_WAIT1:
-		case TCP_CLOSING:
-		case TCP_LAST_ACK:
-			return 1;
-	}
-	return 0;
-}
-
-
-/*
  *	The peer socket should always be NULL (or else). When we call this
  *	function we are destroying the object and from then on nobody
  *	should refer to it.
@@ -766,7 +750,9 @@ static inline int closing(struct sock * sk)
  
 static int inet_release(struct socket *sock, struct socket *peer)
 {
+	unsigned long timeout;
 	struct sock *sk = (struct sock *) sock->data;
+
 	if (sk == NULL) 
 		return(0);
 
@@ -786,48 +772,19 @@ static int inet_release(struct socket *sock, struct socket *peer)
 	 * If the close is due to the process exiting, we never
 	 * linger..
 	 */
-
-	if (sk->linger == 0 || (current->flags & PF_EXITING))
-	{
-		sk->prot->close(sk,0);
-		sk->dead = 1;
-	} 
-	else 
-	{
-		sk->prot->close(sk, 0);
-		cli();
-		if (sk->lingertime)
-			current->timeout = jiffies + HZ*sk->lingertime;
-		while(closing(sk) && current->timeout>0) 
-		{
-			interruptible_sleep_on(sk->sleep);
-			if (current->signal & ~current->blocked) 
-			{
-				break;
-#if 0
-				/* not working now - closes can't be restarted */
-				sti();
-				current->timeout=0;
-				return(-ERESTARTSYS);
-#endif
-			}
-		}
-		current->timeout=0;
-		sti();
-		sk->dead = 1;
+	timeout = 0;
+	if (sk->linger) {
+		timeout = ~0UL;
+		if (!sk->lingertime)
+			timeout = jiffies + HZ*sk->lingertime;
 	}
-	lock_sock(sk);
+	if (current->flags & PF_EXITING)
+		timeout = 0;
 
-	/* This will destroy it. */
 	sock->data = NULL;
-	/* 
-	 *	Nasty here. release_sock can cause more frames
-	 *	to be played through the socket. That can
-	 *	reinitialise the tcp cache after tcp_close();
-	 */
-	release_sock(sk);
-	tcp_cache_zap();	/* Kill the cache again. */
 	sk->socket = NULL;
+
+	sk->prot->close(sk, timeout);
 	return(0);
 }
 

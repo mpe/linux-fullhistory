@@ -42,14 +42,14 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@storm.net$>$}
-\date{Last revised: February 3, 1996}
+\date{Last revised: February 17, 1996}
 \maketitle
 %
 \noindent
 This list is the successor to Rick Miller's Linux Device List, which
-he stopped maintaining when he lost network access in 1993.  It is a
-registry of allocated major device numbers, as well as the recommended
-{\file /dev} directory nodes for these devices.
+he stopped maintaining when he got busy with other things in 1993.  It
+is a registry of allocated major device numbers, as well as the
+recommended {\file /dev} directory nodes for these devices.
 
 The latest version of this list is included with the Linux kernel
 sources in \LaTeX\ and ASCII form.  In case of discrepancy, the
@@ -145,6 +145,7 @@ an unreasonable effort.
 \major{36}{}{char }{Netlink support}
 \major{  }{}{block}{MCA ESDI hard disk}
 \major{37}{}{char }{IDE tape}
+\major{  }{}{block}{Zorro II ramdisk}
 \major{38}{}{char }{Myricom PCI Myrinet board}
 \major{39}{--40}{}{Unallocated}
 \major{41}{}{char}{Yet Another Micro Monitor}
@@ -183,8 +184,13 @@ an unreasonable effort.
 	\minor{9}{/dev/urandom}{Less secure, but faster random number generator}
 \\
 \major{}{}{block}{RAM disk}
-	\minor{1}{/dev/ramdisk}{RAM disk}
+	\minor{0}{/dev/ram0}{First RAM disk}
+	\minordots
+	\minor{7}{/dev/ram7}{Eighth RAM disk}
 \end{devicelist}
+
+\noindent
+Earlier kernels had /dev/ramdisk (1, 1) here.
 
 \begin{devicelist}
 \major{2}{}{char}{Pseudo-TTY masters}
@@ -307,7 +313,7 @@ partitioning schemes appropriate to their respective architectures.
 \noindent
 For compatibility with previous versions of Linux, the first 64 PTYs
 are replicated under this device number.  This use will be obsolescent
-with the release of Linux 1.4 and may be removed in a future version
+with the release of Linux 2.0 and may be removed in a future version
 of Linux.
 
 \begin{devicelist}
@@ -815,11 +821,12 @@ major number 3).
 	\minor{131}{/dev/smpte3}{Fourth MIDI port, SMPTE timed}
 \\
 \major{  }{}{block}{Modular RAM disk}
-	\minor{0}{/dev/ram0}{First modular RAM disk}
-	\minor{1}{/dev/ram1}{Second modular RAM disk}
-	\minordots
-	\minor{255}{/dev/ram255}{256th modular RAM disk}
 \end{devicelist}
+
+\noindent
+This device number is provided for older kernels which did not have
+the modular RAM disk in the standard distribution.  See major number
+1.  This assignment will be removed when the 2.0 kernel is released.
 
 \begin{devicelist}
 \major{36}{}{char }{Netlink support}
@@ -844,6 +851,11 @@ Partitions are handled the same way as for IDE disks (see major number
 
 \noindent
 Currently, only one IDE tape drive is supported.
+
+\begin{devicelist}
+\major{  }{}{block}{Zorro II ramdisk}
+	\minor{0}{/dev/z2ram}{Zorro II ramdisk}
+\end{devicelist}
 
 \begin{devicelist}
 \major{38}{}{char }{Myricom PCI Myrinet board}
@@ -961,16 +973,20 @@ These links should exist on all systems:
 \link{/dev/stdin}{fd/0}{symbolic}{Standard input file descriptor}
 \link{/dev/stdout}{fd/1}{symbolic}{Standard output file descriptor}
 \link{/dev/stderr}{fd/2}{symbolic}{Standard error file descriptor}
+\link{/dev/nfsd}{socksys}{symbolic}{Required by iBCS-2}
+\link{/dev/X0R}{null}{symbolic}{Required by iBCS-2}
 \end{nodelist}
+
+\noindent
+Note: The last device is: letter {\tt X}-digit {\tt 0}-letter {\tt R}.
 
 \subsection{Recommended links}
 
 It is recommended that these links exist on all systems:
 
 \begin{nodelist}
-\link{/dev/X0R}{null}{symbolic}{Used by iBCS-2}
-\link{/dev/nfsd}{socksys}{symbolic}{Used by iBCS-2}
 \link{/dev/core}{/proc/kcore}{symbolic}{Backward compatibility}
+\link{/dev/ramdisk}{ram1}{symbolic}{Backward compatibility}
 \link{/dev/scd?}{sr?}{hard}{Alternate name for CD-ROMs}
 %\link{/dev/fd?H*}{fd?D*}{hard}{Compatible floppy formats}
 %\link{/dev/fd?E*}{fd?D*}{hard}{Compatible floppy formats}

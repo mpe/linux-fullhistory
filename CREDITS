@@ -324,6 +324,11 @@ S: Australia
 N: Ralf Flaxa
 E: rfflaxa@immd4.informatik.uni-erlangen.de
 D: The Linux Support Team Erlangen
+D: Creator of LST distribution
+D: Author of installation tool LISA
+S: Pfitznerweg 6
+S: 74523 Schwaebisch Hall
+S: Germany
 
 N: Lawrence Foard
 E: entropy@world.std.com
@@ -407,6 +412,14 @@ D: Linux Internationalization Project
 D: DOSemu
 S: Muehlenweg 19
 S: 34266 Niestetal
+S: Germany
+
+N: Sebastian Hetze
+E: she@lunetix.de
+D: German Linux Documentation,
+D: Organization of German Linux Conferences
+S: Danckelmannstr. 48
+S: 14059 Berlin
 S: Germany
 
 N: Michael Hipp

@@ -305,7 +305,8 @@ main(int argc, char** argv)
 		cout << endl;
 	    }
 	    cout << endl;
-	} else if (strequ(buffer, "ode:") || strequ(buffer, "Code:")) {
+	}
+	if (strequ(buffer, "ode:") || strequ(buffer, "Code:")) {
 	    // The 'C' might have been consumed as a hex number
 	    unsigned char code[code_size];
 	    unsigned char* cp = code;

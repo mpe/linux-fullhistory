@@ -358,6 +358,15 @@ int fat_bmap(struct inode *inode,int block)
 	return (cluster-2)*sb->cluster_size+sb->data_start+offset;
 }
 
+static int is_exec(char *extension)
+{
+	char *exe_extensions = "EXECOMBAT", *walk;
+
+	for (walk = exe_extensions; *walk; walk += 3)
+		if (!strncmp(extension, walk, 3))
+			return 1;
+	return 0;
+}
 
 void fat_read_inode(struct inode *inode, struct inode_operations *fs_dir_inode_ops)
 {
@@ -424,7 +433,8 @@ void fat_read_inode(struct inode *inode, struct inode_operations *fs_dir_inode_o
 			}
 	} else { /* not a directory */
 		inode->i_mode = MSDOS_MKMODE(raw_entry->attr,
-		    (IS_NOEXEC(inode) ? S_IRUGO|S_IWUGO : S_IRWXUGO)
+		    ((IS_NOEXEC(inode) || !is_exec(raw_entry->ext))
+		    	? S_IRUGO|S_IWUGO : S_IRWXUGO)
 		    & ~MSDOS_SB(inode->i_sb)->fs_umask) | S_IFREG;
 		inode->i_op = (sb->s_blocksize == 1024)
 			? &fat_file_inode_operations_1024

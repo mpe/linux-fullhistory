@@ -32,10 +32,11 @@ extern int close_fp(struct file *filp);
 static int nfs_notify_change(struct inode *, struct iattr *);
 static void nfs_put_inode(struct inode *);
 static void nfs_put_super(struct super_block *);
+static void nfs_read_inode(struct inode *);
 static void nfs_statfs(struct super_block *, struct statfs *, int bufsiz);
 
 static struct super_operations nfs_sops = { 
-	NULL,			/* read inode */
+	nfs_read_inode,		/* read inode */
 	nfs_notify_change,	/* notify change */
 	NULL,			/* write inode */
 	nfs_put_inode,		/* put inode */
@@ -45,9 +46,22 @@ static struct super_operations nfs_sops = {
 	NULL
 };
 
+/*
+ * The "read_inode" function doesn't actually do anything:
+ * the real data is filled in later in nfs_fhget. Here we
+ * just mark the cache times invalid.
+ */
+static void nfs_read_inode(struct inode * inode)
+{
+	NFS_READTIME(inode) = jiffies - 1000000;
+	NFS_OLDMTIME(inode) = 0;
+}
+
 static void nfs_put_inode(struct inode * inode)
 {
+#if 0
 	clear_inode(inode);
+#endif
 }
 
 void nfs_put_super(struct super_block *sb)

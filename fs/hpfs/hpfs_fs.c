@@ -155,7 +155,7 @@ static const struct file_operations hpfs_file_ops =
 	NULL,				/* readdir - bad */
 	NULL,				/* select - default */
 	NULL,				/* ioctl - default */
-	generic_mmap,			/* mmap */
+	generic_file_mmap,		/* mmap */
 	NULL,				/* no special open is needed */
 	NULL,				/* release */
 	file_fsync,			/* fsync */

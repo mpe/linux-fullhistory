@@ -2,12 +2,12 @@
 
 	     Maintained by H. Peter Anvin <hpa@storm.net>
 
-		    Last revised: February 3, 1996
+		   Last revised: February 17, 1996
 
 This list is the successor to Rick Miller's Linux Device List, which
-he stopped maintaining when he lost network access in 1993.  It is a
-registry of allocated major device numbers, as well as the recommended
-/dev directory nodes for these devices.
+he stopped maintaining when he got busy with other things in 1993.  It
+is a registry of allocated major device numbers, as well as the
+recommended /dev directory nodes for these devices.
 
 The lastest version of this list is included with the Linux kernel
 sources in LaTeX and ASCII form.  In case of discrepancy, the LaTeX
@@ -45,7 +45,11 @@ an unreasonable effort.
 		  8 = /dev/random	Nondeterministic random number gen.
 		  9 = /dev/urandom	Faster, less secure random number gen.
     block	RAM disk
-		  1 = /dev/ramdisk	RAM disk
+		  0 = /dev/ram0		First RAM disk
+		    ...
+		  7 = /dev/ram7		Eighth RAM disk
+
+		Older kernels had /dev/ramdisk (1, 1) here.
 		    
   2 char	Pseudo-TTY masters
 		  0 = /dev/ptyp0	First PTY master
@@ -550,10 +554,11 @@ an unreasonable effort.
 		130 = /dev/smpte2	Third MIDI port, SMPTE timed
 		131 = /dev/smpte3	Fourth MIDI port, SMPTE timed
     block	Modular RAM disk device
-		  0 = /dev/ram0		First modular RAM disk
-		  1 = /dev/ram1		Second modular RAM disk
-		      ...
-		255 = /dev/ram255	256th modular RAM disk
+
+		This device number is provided for older kernels which
+		did not have the modular RAM disk in the standard
+		distribution.  See major number 1.  This assignment
+		will be removed when the 2.0 kernel is released.
 
  36 char	Netlink support
 		  0 = /dev/route	Routing, device updates, kernel to user
@@ -571,6 +576,9 @@ an unreasonable effort.
 		128 = /dev/nht0		First IDE tape, no rewind-on-close
 
 		Currently, only one IDE tape drive is supported.
+
+    block	Zorro II ramdisk
+		  0 = /dev/z2ram	Zorro II ramdisk
 
  38 char	Myricom PCI Myrinet board
 		  0 = /dev/mlanai0	First Myrinet board
@@ -657,16 +665,18 @@ These links should exist on all systems:
 /dev/stdin	fd/0		symbolic	stdin file descriptor
 /dev/stdout	fd/1		symbolic	stdout file descriptor
 /dev/stderr	fd/2		symbolic	stderr file descriptor
+/dev/nfsd	socksys		symbolic	Required by iBCS-2
+/dev/X0R	null		symbolic	Required by iBCS-2
 
+Note: the last device is letter X-digit 0-letter R.
 
 	Recommended links
 
 It is recommended that these links exist on all systems:
 
-/dev/X0R	null		symbolic	Used by iBCS-2
-/dev/nfsd	socksys		symbolic	Used by iBCS-2
 /dev/core	/proc/kcore	symbolic	Backward compatibility
-/dev/scd?	/dev/sr?	hard		Alternate SCSI CD-ROM name
+/dev/ramdisk	ram1		symbolic	Backward compatibility
+/dev/scd?	sr?		hard		Alternate SCSI CD-ROM name
 
 
 	Locally defined links

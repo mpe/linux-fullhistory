@@ -174,18 +174,21 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		kfree(vma);
 		return error;
 	}
+	flags = vma->vm_flags;
 	insert_vm_struct(current, vma);
 	merge_segments(current, vma->vm_start, vma->vm_end);
+
+	/* merge_segments might have merged our vma, so we can't use it any more */
 	current->mm->total_vm += len >> PAGE_SHIFT;
-	if (vma->vm_flags & VM_LOCKED) {
-		unsigned long start = vma->vm_start;
-		unsigned long end = vma->vm_end;
+	if (flags & VM_LOCKED) {
+		unsigned long start = addr;
 		current->mm->locked_vm += len >> PAGE_SHIFT;
-		while (start < end) {
+		do {
 			char c = get_user((char *) start);
-			__asm__ __volatile__("": :"r" (c));
+			len -= PAGE_SIZE;
 			start += PAGE_SIZE;
-		}
+			__asm__ __volatile__("": :"r" (c));
+		} while (len > 0);
 	}
 	return addr;
 }

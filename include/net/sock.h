@@ -277,7 +277,7 @@ struct sock
  
 struct proto 
 {
-	void			(*close)(struct sock *sk, int timeout);
+	void			(*close)(struct sock *sk, unsigned long timeout);
 	int			(*build_header)(struct sk_buff *skb,
 					__u32 saddr,
 					__u32 daddr,

@@ -42,6 +42,8 @@
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/in.h>
+#include <linux/pagemap.h>
+
 #include <asm/segment.h>
 
 #ifdef NFS_PROC_DEBUG
@@ -150,16 +152,12 @@ static inline int *xdr_encode_data(int *p, const char *data, int len)
 	return p + quadlen;
 }
 
-static inline int *xdr_decode_data(int *p, char *data, int *lenp, int maxlen,
-			int fs)
+static inline int *xdr_decode_data(int *p, char *data, int *lenp, int maxlen)
 {
 	unsigned len = *lenp = ntohl(*p++);
 	if (len > maxlen)
 		return NULL;
-	if (fs)
-		memcpy_tofs(data, p, len);
-	else
-		memcpy(data, p, len);
+	memcpy(data, p, len);
 	return p + QUADLEN(len);
 }
 
@@ -373,7 +371,7 @@ retry:
 }
 
 int nfs_proc_read(struct nfs_server *server, struct nfs_fh *fhandle,
-	  int offset, int count, char *data, struct nfs_fattr *fattr, int fs)
+	  int offset, int count, char *data, struct nfs_fattr *fattr)
 {
 	int *p, *p0;
 	int status;
@@ -397,7 +395,7 @@ retry:
 		status = -errno_NFSERR_IO;
 	else if ((status = ntohl(*p++)) == NFS_OK) {
 		p = xdr_decode_fattr(p, fattr);
-		if (!(p = xdr_decode_data(p, data, &len, count, fs))) {
+		if (!(p = xdr_decode_data(p, data, &len, count))) {
 			printk("nfs_proc_read: giant data size\n"); 
 			status = -errno_NFSERR_IO;
 		}
@@ -418,12 +416,15 @@ retry:
 	return status;
 }
 
-int nfs_proc_write(struct nfs_server *server, struct nfs_fh *fhandle,
-		   int offset, int count, const char *data, struct nfs_fattr *fattr)
+int nfs_proc_write(struct inode * inode, int offset,
+		   int count, const char *data, struct nfs_fattr *fattr)
 {
 	int *p, *p0;
 	int status;
 	int ruid = 0;
+	void * kdata;	/* address of kernel copy */
+	struct nfs_server * server = NFS_SERVER(inode);
+	struct nfs_fh *fhandle = NFS_FH(inode);
 
 	PRINTK("NFS call  write %d @ %d\n", count, offset);
 	if (!(p0 = nfs_rpc_alloc(server->wsize)))
@@ -434,6 +435,7 @@ retry:
 	*p++ = htonl(offset); /* traditional, could be any value */
 	*p++ = htonl(offset);
 	*p++ = htonl(count); /* traditional, could be any value */
+	kdata = (void *) (p+1);	/* start of data in RPC buffer */
 	p = xdr_encode_data(p, data, count);
 	if ((status = nfs_rpc_call(server, p0, p, server->wsize)) < 0) {
 		nfs_rpc_free(p0);
@@ -442,6 +444,7 @@ retry:
 	if (!(p = nfs_rpc_verify(p0)))
 		status = -errno_NFSERR_IO;
 	else if ((status = ntohl(*p++)) == NFS_OK) {
+		update_vm_cache(inode, offset, kdata, count);
 		p = xdr_decode_fattr(p, fattr);
 		PRINTK("NFS reply write\n");
 		/* status = 0; */

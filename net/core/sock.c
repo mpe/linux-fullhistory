@@ -570,10 +570,5 @@ void __release_sock(struct sock *sk)
 		sk->users = 0;
 		barrier();
 	}
-
-	if (sk->dead && sk->state == TCP_CLOSE) {
-		/* Should be about 2 rtt's */
-   		reset_timer(sk, TIME_DONE, min(sk->rtt * 2, TCP_DONE_TIME));
-	}
 #endif  
 }

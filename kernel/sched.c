@@ -337,11 +337,11 @@ asmlinkage void schedule(void)
 	 
 #endif	 
 #ifdef __SMP_PROF__ 
-        /* mark processor running an idle thread */
-        if (0==next->pid)
-                set_bit(this_cpu,&smp_idle_map);
-        else
-                clear_bit(this_cpu,&smp_idle_map);
+	/* mark processor running an idle thread */
+	if (0==next->pid)
+		set_bit(this_cpu,&smp_idle_map);
+	else
+		clear_bit(this_cpu,&smp_idle_map);
 #endif
 	if (current != next) {
 		struct timer_list timer;
@@ -763,7 +763,7 @@ void do_timer(struct pt_regs * regs)
 	struct timer_struct *tp;
 	long ltemp, psecs;
 #ifdef  __SMP_PROF__
-        int cpu,i;
+	int cpu,i;
 #endif
 
 	/* Advance the phase, once it gets to one microsecond, then
@@ -814,10 +814,10 @@ void do_timer(struct pt_regs * regs)
 	jiffies++;
 	calc_load();
 #ifdef  __SMP_PROF__
-        smp_idle_count[NR_CPUS]++;    /* count timer ticks */
-        cpu = smp_processor_id();
-        for (i=0;i<(0==smp_num_cpus?1:smp_num_cpus);i++) 
-        	if (test_bit(i,&smp_idle_map)) smp_idle_count[i]++;
+	smp_idle_count[NR_CPUS]++;    /* count timer ticks */
+	cpu = smp_processor_id();
+	for (i=0;i<(0==smp_num_cpus?1:smp_num_cpus);i++) 
+		if (test_bit(i,&smp_idle_map)) smp_idle_count[i]++;
 #endif
 	if (user_mode(regs)) {
 		current->utime++;
@@ -859,7 +859,7 @@ void do_timer(struct pt_regs * regs)
 			send_sig(SIGXCPU, current, 1);
 		/* and every five seconds thereafter. */
 		else if ((psecs > current->rlim[RLIMIT_CPU].rlim_cur) &&
-		        ((psecs - current->rlim[RLIMIT_CPU].rlim_cur) % 5) == 0)
+			((psecs - current->rlim[RLIMIT_CPU].rlim_cur) % 5) == 0)
 			send_sig(SIGXCPU, current, 1);
 	}
 
@@ -1017,7 +1017,7 @@ static int setscheduler(pid_t pid, int policy,
 	error = verify_area(VERIFY_READ, param, sizeof(struct sched_param));
 	if (error)
 		return error;
-        memcpy_fromfs(&lp, param, sizeof(struct sched_param));
+	memcpy_fromfs(&lp, param, sizeof(struct sched_param));
 
 	p = find_process_by_pid(pid);
 	if (!p)
@@ -1031,7 +1031,7 @@ static int setscheduler(pid_t pid, int policy,
 	
 	/*
 	 * Valid priorities for SCHED_FIFO and SCHED_RR are 1..99, valid
-         * priority for SCHED_OTHER is 0.
+	 * priority for SCHED_OTHER is 0.
 	 */
 	if (lp.sched_priority < 0 || lp.sched_priority > 99)
 		return -EINVAL;
@@ -1046,6 +1046,8 @@ static int setscheduler(pid_t pid, int policy,
 
 	p->policy = policy;
 	p->rt_priority = lp.sched_priority;
+	if (p->next_run)
+		move_last_runqueue(p);
 	schedule();
 
 	return 0;
@@ -1101,8 +1103,9 @@ asmlinkage int sys_sched_getparam(pid_t pid, struct sched_param *param)
 
 asmlinkage int sys_sched_yield(void)
 {
-	/* ... not yet implemented ... */
-	return -ENOSYS;
+	move_last_runqueue(current);
+
+	return 0;
 }
 
 asmlinkage int sys_sched_get_priority_max(int policy)
@@ -1144,6 +1147,76 @@ asmlinkage int sys_sched_rr_get_interval(pid_t pid, struct timespec *interval)
 	t.tv_nsec = 0;   /* <-- Linus, please fill correct value in here */
 	return -ENOSYS;  /* and then delete this line. Thanks!           */
 	memcpy_tofs(interval, &t, sizeof(struct timespec));
+
+	return 0;
+}
+
+/*
+ * change timeval to jiffies, trying to avoid the 
+ * most obvious overflows..
+ */
+static unsigned long timespectojiffies(struct timespec *value)
+{
+	unsigned long sec = (unsigned) value->tv_sec;
+	long nsec = value->tv_nsec;
+
+	if (sec > (LONG_MAX / HZ))
+		return LONG_MAX;
+	nsec += 1000000000L / HZ - 1;
+	nsec /= 1000000000L / HZ;
+	return HZ * sec + nsec;
+}
+
+static void jiffiestotimespec(unsigned long jiffies, struct timespec *value)
+{
+	value->tv_nsec = (jiffies % HZ) * (1000000000L / HZ);
+	value->tv_sec = jiffies / HZ;
+	return;
+}
+
+asmlinkage int sys_nanosleep(struct timespec *rqtp, struct timespec *rmtp)
+{
+	int error;
+	struct timespec t;
+	unsigned long expire;
+
+	error = verify_area(VERIFY_READ, rqtp, sizeof(struct timespec));
+	if (error)
+		return error;
+	memcpy_fromfs(&t, rqtp, sizeof(struct timespec));
+	if (rmtp) {
+		error = verify_area(VERIFY_WRITE, rmtp,
+				    sizeof(struct timespec));
+		if (error)
+			return error;
+	}
+
+	if (t.tv_nsec >= 1000000000L || t.tv_nsec < 0 || t.tv_sec < 0)
+		return -EINVAL;
+
+	if (t.tv_sec == 0 && t.tv_nsec <= 2000000L &&
+	    current->policy != SCHED_OTHER) {
+		/*
+		 * Short delay requests up to 2 ms will be handled with
+		 * high precision by a busy wait for all real-time processes.
+		 */
+		udelay((t.tv_nsec + 999) / 1000);
+		return 0;
+	}
+
+	expire = timespectojiffies(&t) + (t.tv_sec || t.tv_nsec) + jiffies;
+	current->timeout = expire;
+	current->state = TASK_INTERRUPTIBLE;
+	schedule();
+
+	if (expire > jiffies) {
+		if (rmtp) {
+			jiffiestotimespec(expire - jiffies -
+					  (expire > jiffies + 1), &t);
+			memcpy_tofs(rmtp, &t, sizeof(struct timespec));
+		}
+		return -EINTR;
+	}
 
 	return 0;
 }

@@ -204,7 +204,7 @@ static int packet_sendmsg(struct sock *sk, struct msghdr *msg, int len,
  *	file side of the object.
  */
 
-static void packet_close(struct sock *sk, int timeout)
+static void packet_close(struct sock *sk, unsigned long timeout)
 {
 	/*
 	 *	Stop more data and kill the socket off.
@@ -236,6 +236,7 @@ static void packet_close(struct sock *sk, int timeout)
 	}
 	
 	release_sock(sk);
+	destroy_sock(sk);
 }
 
 /*

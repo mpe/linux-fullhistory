@@ -254,8 +254,10 @@ static void pipe_write_release(struct inode * inode, struct file * filp)
 
 static void pipe_rdwr_release(struct inode * inode, struct file * filp)
 {
-	PIPE_READERS(*inode)--;
-	PIPE_WRITERS(*inode)--;
+	if (filp->f_mode & FMODE_READ)
+		PIPE_READERS(*inode)--;
+	if (filp->f_mode & FMODE_WRITE)
+		PIPE_WRITERS(*inode)--;
 	wake_up_interruptible(&PIPE_WAIT(*inode));
 }
 
@@ -273,8 +275,10 @@ static int pipe_write_open(struct inode * inode, struct file * filp)
 
 static int pipe_rdwr_open(struct inode * inode, struct file * filp)
 {
-	PIPE_READERS(*inode)++;
-	PIPE_WRITERS(*inode)++;
+	if (filp->f_mode & FMODE_READ)
+		PIPE_READERS(*inode)++;
+	if (filp->f_mode & FMODE_WRITE)
+		PIPE_WRITERS(*inode)++;
 	return 0;
 }
 

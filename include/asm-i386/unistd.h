@@ -155,7 +155,6 @@
 #define __NR_getsid		147
 #define __NR_fdatasync		148
 #define __NR__sysctl		149
-
 #define __NR_mlock		150
 #define __NR_munlock		151
 #define __NR_mlockall		152
@@ -168,6 +167,7 @@
 #define __NR_sched_get_priority_max	159
 #define __NR_sched_get_priority_min	160
 #define __NR_sched_rr_get_interval	161
+#define __NR_nanosleep		162
 
 /* XXX - _foo needs to be __foo, while __NR_bar could be _NR_bar. */
 #define _syscall0(type,name) \

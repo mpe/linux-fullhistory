@@ -33,7 +33,7 @@ static struct file_operations fat_file_operations = {
 	NULL,			/* readdir - bad */
 	NULL,			/* select - default */
 	NULL,			/* ioctl - default */
-	generic_mmap,		/* mmap */
+	generic_file_mmap,	/* mmap */
 	NULL,			/* no special open is needed */
 	NULL,			/* release */
 	file_fsync		/* fsync */
@@ -61,8 +61,8 @@ struct inode_operations fat_file_inode_operations = {
 };
 /* #Specification: msdos / special devices / mmap	
 	Mmapping does work because a special mmap is provide in that case.
-	Note that it is much less efficient than the generic_mmap normally
-	used since it allocate extra buffer. generic_mmap is used for
+	Note that it is much less efficient than the generic_file_mmap normally
+	used since it allocate extra buffer. generic_file_mmap is used for
 	normal device (512 bytes hardware sectors).
 */
 static struct file_operations fat_file_operations_1024 = {

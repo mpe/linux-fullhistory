@@ -43,6 +43,8 @@
 
 #define NFS_SERVER(inode)		(&(inode)->i_sb->u.nfs_sb.s_server)
 #define NFS_FH(inode)			(&(inode)->u.nfs_i.fhandle)
+#define NFS_READTIME(inode)		((inode)->u.nfs_i.read_cache_jiffies)
+#define NFS_OLDMTIME(inode)		((inode)->u.nfs_i.read_cache_mtime)
 
 #ifdef __KERNEL__
 
@@ -60,10 +62,9 @@ extern int nfs_proc_readlink(struct nfs_server *server, struct nfs_fh *fhandle,
 			unsigned int maxlen);
 extern int nfs_proc_read(struct nfs_server *server, struct nfs_fh *fhandle,
 			 int offset, int count, char *data,
-			 struct nfs_fattr *fattr, int fs);
-extern int nfs_proc_write(struct nfs_server *server, struct nfs_fh *fhandle,
-			  int offset, int count, const char *data,
-			  struct nfs_fattr *fattr);
+			 struct nfs_fattr *fattr);
+extern int nfs_proc_write(struct inode * inode, int offset,
+			  int count, const char *data, struct nfs_fattr *fattr);
 extern int nfs_proc_create(struct nfs_server *server, struct nfs_fh *dir,
 			   const char *name, struct nfs_sattr *sattr,
 			   struct nfs_fh *fhandle, struct nfs_fattr *fattr);

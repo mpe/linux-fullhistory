@@ -94,8 +94,10 @@ extern void		_outw (unsigned short w,unsigned long port);
 extern void		_outl (unsigned int l,unsigned long port);
 extern unsigned long	_readb(unsigned long addr);
 extern unsigned long	_readw(unsigned long addr);
+extern unsigned long	_readl(unsigned long addr);
 extern void		_writeb(unsigned char b, unsigned long addr);
 extern void		_writew(unsigned short b, unsigned long addr);
+extern void		_writel(unsigned int b, unsigned long addr);
 
 /*
  * The platform header files may define some of these macros to use

@@ -184,7 +184,6 @@ struct symbol_table symbol_table = {
 	X(permission),
 	X(inode_setattr),
 	X(inode_change_ok),
-	X(generic_mmap),
 	X(set_blocksize),
 	X(getblk),
 	X(bread),
@@ -199,6 +198,7 @@ struct symbol_table symbol_table = {
 	X(dcache_add),
 	X(add_blkdev_randomness),
 	X(generic_file_read),
+	X(generic_file_mmap),
 	X(generic_readpage),
 
 	/* device registration */

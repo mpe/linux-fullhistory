@@ -114,9 +114,15 @@ void net_timer (unsigned long data)
 	switch (why) 
 	{
 		case TIME_DONE:
-			if (! sk->dead || sk->state != TCP_CLOSE) 
+			/* If the socket hasn't been closed off, re-try a bit later */
+			if (!sk->dead) {
+				reset_timer(sk, TIME_DONE, TCP_DONE_TIME);
+				break;
+			}
+
+			if (sk->state != TCP_CLOSE) 
 			{
-				printk ("non dead socket in time_done\n");
+				printk ("non CLOSE socket in time_done\n");
 				break;
 			}
 			destroy_sock (sk);
@@ -127,6 +133,7 @@ void net_timer (unsigned long data)
 		 *	We've waited for a while for all the memory associated with
 		 *	the socket to be freed.
 		 */
+
 			if(sk->wmem_alloc!=0 || sk->rmem_alloc!=0)
 			{
 				sk->wmem_alloc++;	/* So it DOESN'T go away */

@@ -56,6 +56,7 @@ static struct buffer_head * lru_list[NR_LIST] = {NULL, };
    buffers to discard when more memory is needed */
 static struct buffer_head * next_to_age[NR_LIST] = {NULL, };
 static struct buffer_head * free_list[NR_SIZES] = {NULL, };
+
 static struct buffer_head * unused_list = NULL;
 struct buffer_head * reuse_list = NULL;
 static struct wait_queue * buffer_wait = NULL;
@@ -846,8 +847,7 @@ void __brelse(struct buffer_head * buf)
 	refile_buffer(buf);
 
 	if (buf->b_count) {
-		if (!--buf->b_count)
-			wake_up(&buffer_wait);
+		buf->b_count--;
 		return;
 	}
 	printk("VFS: brelse: Trying to free free buffer\n");
@@ -867,7 +867,6 @@ void __bforget(struct buffer_head * buf)
 	remove_from_hash_queue(buf);
 	buf->b_dev = NODEV;
 	refile_buffer(buf);
-	wake_up(&buffer_wait);
 }
 
 /*
@@ -966,6 +965,7 @@ static void put_unused_buffer_head(struct buffer_head * bh)
 	((volatile struct buffer_head *) bh)->b_wait = wait;
 	bh->b_next_free = unused_list;
 	unused_list = bh;
+	wake_up(&buffer_wait);
 }
 
 static void get_more_buffer_heads(void)
@@ -973,11 +973,26 @@ static void get_more_buffer_heads(void)
 	int i;
 	struct buffer_head * bh;
 
-	if (unused_list)
-		return;
+	for (;;) {
+		if (unused_list)
+			return;
 
-	if (!(bh = (struct buffer_head*) get_free_page(GFP_KERNEL)))
-		return;
+		/*
+		 * This is critical.  We can't swap out pages to get
+		 * more buffer heads, because the swap-out may need
+		 * more buffer-heads itself.  Thus GFP_ATOMIC.
+		 */
+		bh = (struct buffer_head *) get_free_page(GFP_ATOMIC);
+		if (bh)
+			break;
+
+		/*
+		 * Uhhuh. We're _really_ low on memory. Now we just
+		 * wait for old buffer heads to become free due to
+		 * finishing IO..
+		 */
+		sleep_on(&buffer_wait);
+	}
 
 	for (nr_buffer_heads+=i=PAGE_SIZE/sizeof*bh ; i>0; i--) {
 		bh->b_next_free = unused_list;	/* only make link */
@@ -1217,6 +1232,7 @@ void unlock_buffer(struct buffer_head * bh)
 		page->free_after = 0;
 		free_page(page_address(page));
 	}
+	wake_up(&buffer_wait);
 }
 
 /*
@@ -1307,7 +1323,6 @@ static int grow_buffers(int pri, int size)
 	free_list[isize] = bh;
 	buffer_pages[MAP_NR(page)] = bh;
 	tmp->b_this_page = bh;
-	wake_up(&buffer_wait);
 	buffermem += PAGE_SIZE;
 	return 1;
 }

@@ -54,14 +54,14 @@
 				  * close the socket, about 60 seconds	*/
 #define TCP_FIN_TIMEOUT (3*60*HZ) /* BSD style FIN_WAIT2 deadlock breaker */				  
 #define TCP_ACK_TIME	(3*HZ)	/* time to delay before sending an ACK	*/
-#define TCP_DONE_TIME	250	/* maximum time to wait before actually
+#define TCP_DONE_TIME	(5*HZ/2)/* maximum time to wait before actually
 				 * destroying a socket			*/
-#define TCP_WRITE_TIME	3000	/* initial time to wait for an ACK,
+#define TCP_WRITE_TIME	(30*HZ)	/* initial time to wait for an ACK,
 			         * after last transmit			*/
 #define TCP_TIMEOUT_INIT (3*HZ)	/* RFC 1122 initial timeout value	*/
 #define TCP_SYN_RETRIES	 10	/* number of times to retry opening a
 				 * connection 	(TCP_RETR2-....)	*/
-#define TCP_PROBEWAIT_LEN 100	/* time to wait between probes when
+#define TCP_PROBEWAIT_LEN (1*HZ)/* time to wait between probes when
 				 * I've got something to write and
 				 * there is no window			*/
 
@@ -317,6 +317,8 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
 
 	case TCP_CLOSE:
 		tcp_cache_zap();
+		/* Should be about 2 rtt's */
+   		reset_timer(sk, TIME_DONE, min(sk->rtt * 2, TCP_DONE_TIME));
 		/* fall through */
 	default:
 		if (oldstate==TCP_ESTABLISHED)

@@ -422,7 +422,7 @@
 unsigned long seq_offset;
 struct tcp_mib	tcp_statistics;
 
-static void tcp_close(struct sock *sk, int timeout);
+static void tcp_close(struct sock *sk, unsigned long timeout);
 
 /*
  *	The less said about this the better, but it works and will do for 1.2  (and 1.4 ;))
@@ -1782,8 +1782,27 @@ void tcp_shutdown(struct sock *sk, int how)
 	release_sock(sk);
 }
 
-static void tcp_close(struct sock *sk, int timeout)
+
+/*
+ *	Return 1 if we still have things to send in our buffers.
+ */
+ 
+static inline int closing(struct sock * sk)
 {
+	switch (sk->state) {
+		case TCP_FIN_WAIT1:
+		case TCP_CLOSING:
+		case TCP_LAST_ACK:
+			return 1;
+	}
+	return 0;
+}
+
+
+static void tcp_close(struct sock *sk, unsigned long timeout)
+{
+	struct sk_buff *skb;
+
 	/*
 	 * We need to grab some memory, and put together a FIN,	
 	 * and then put it into the queue to be sent.
@@ -1807,43 +1826,55 @@ static void tcp_close(struct sock *sk, int timeout)
 	if (!sk->dead) 
 	  	sk->state_change(sk);
 
-	if (timeout == 0) 
-	{
-		struct sk_buff *skb;
-		
-		/*
-		 *  We need to flush the recv. buffs.  We do this only on the
-		 *  descriptor close, not protocol-sourced closes, because the
-		 *  reader process may not have drained the data yet!
-		 */
+	/*
+	 *  We need to flush the recv. buffs.  We do this only on the
+	 *  descriptor close, not protocol-sourced closes, because the
+	 *  reader process may not have drained the data yet!
+	 */
 		 
-		while((skb=skb_dequeue(&sk->receive_queue))!=NULL)
-			kfree_skb(skb, FREE_READ);
-		/*
-		 *	Get rid off any half-completed packets. 
-		 */
+	while((skb=skb_dequeue(&sk->receive_queue))!=NULL)
+		kfree_skb(skb, FREE_READ);
 
-		if (sk->partial) 
-			tcp_send_partial(sk);
-	}
+	/*
+	 *	Get rid off any half-completed packets. 
+	 */
 
+	if (sk->partial) 
+		tcp_send_partial(sk);
 		
 	/*
 	 *	Timeout is not the same thing - however the code likes
 	 *	to send both the same way (sigh).
 	 */
 	 
-	if(timeout)
+	if (tcp_close_state(sk,1)==1)
 	{
-		tcp_set_state(sk, TCP_CLOSE);	/* Dead */
+		tcp_send_fin(sk);
 	}
-	else
-	{
-		if(tcp_close_state(sk,1)==1)
+
+	if (timeout) {
+		cli();
+		release_sock(sk);
+		current->timeout = timeout;
+		while(closing(sk) && current->timeout)
 		{
-			tcp_send_fin(sk);
+			interruptible_sleep_on(sk->sleep);
+			if (current->signal & ~current->blocked) 
+			{
+				break;
+			}
 		}
+		current->timeout=0;
+		lock_sock(sk);
+		sti();
 	}
+
+	/*
+	 * This will destroy it. The timers will take care of actually
+	 * free'ing up the memory.
+	 */
+	sk->dead = 1;
+	tcp_cache_zap();	/* Kill the cache again. */
 	release_sock(sk);
 }
 

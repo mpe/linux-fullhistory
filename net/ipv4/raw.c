@@ -285,7 +285,7 @@ static int raw_sendmsg(struct sock *sk, struct msghdr *msg, int len, int noblock
 	}
 }
 
-static void raw_close(struct sock *sk, int timeout)
+static void raw_close(struct sock *sk, unsigned long timeout)
 {
 	sk->state = TCP_CLOSE;
 #ifdef CONFIG_IP_MROUTE	
@@ -295,6 +295,7 @@ static void raw_close(struct sock *sk, int timeout)
 		mroute_socket=NULL;
 	}
 #endif	
+	destroy_sock(sk);
 }
 
 

@@ -943,13 +943,16 @@ depca_rx(struct device *dev)
 	    }
 	  }
 	  if (buf[0] & 0x01) {              /* Multicast/Broadcast */
-	    if ((*(s16 *)&buf[0] == -1) && (*(s32 *)&buf[2] == -1)) {
+	    if ((*(s16 *)&buf[0] == -1) &&
+		(*(s16 *)&buf[2] == -1) &&
+		(*(s16 *)&buf[4] == -1)) {
 	      lp->pktStats.broadcast++;
 	    } else {
 	      lp->pktStats.multicast++;
 	    }
 	  } else if ((*(s16 *)&buf[0] == *(s16 *)&dev->dev_addr[0]) &&
-		     (*(s32 *)&buf[2] == *(s32 *)&dev->dev_addr[2])) {
+		     (*(s16 *)&buf[2] == *(s16 *)&dev->dev_addr[2]) &&
+		     (*(s16 *)&buf[4] == *(s16 *)&dev->dev_addr[4])) {
 	    lp->pktStats.unicast++;
 	  }
 	  
