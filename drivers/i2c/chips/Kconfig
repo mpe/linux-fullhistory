@@ -233,6 +233,9 @@ config SENSORS_LM90
 	  LM86, LM89 and LM99, Analog Devices ADM1032 and Maxim MAX6657 and
 	  MAX6658 sensor chips.
 
+	  The Analog Devices ADT7461 sensor chip is also supported, but only
+	  if found in ADM1032 compatibility mode.
+
 	  This driver can also be built as a module.  If so, the module
 	  will be called lm90.
 
