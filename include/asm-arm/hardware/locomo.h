@@ -181,7 +181,7 @@ struct locomo_driver {
 	unsigned int		devid;
 	int (*probe)(struct locomo_dev *);
 	int (*remove)(struct locomo_dev *);
-	int (*suspend)(struct locomo_dev *, u32);
+	int (*suspend)(struct locomo_dev *, pm_message_t);
 	int (*resume)(struct locomo_dev *);
 };
 
