@@ -868,6 +868,19 @@ out:
 		    !tg3_readphy(tp, MII_TG3_AUX_CTRL, &phy_reg))
 			tg3_writephy(tp, MII_TG3_AUX_CTRL, phy_reg | 0x4000);
 	}
+
+	/* Set phy register 0x10 bit 0 to high fifo elasticity to support
+	 * jumbo frames transmission.
+	 */
+	if (GET_ASIC_REV(tp->pci_chip_rev_id) != ASIC_REV_5705 &&
+	    GET_ASIC_REV(tp->pci_chip_rev_id) != ASIC_REV_5750) {
+		u32 phy_reg;
+
+		if (!tg3_readphy(tp, MII_TG3_EXT_CTRL, &phy_reg))
+		    tg3_writephy(tp, MII_TG3_EXT_CTRL,
+				 phy_reg | MII_TG3_EXT_CTRL_FIFO_ELASTIC);
+	}
+
 	tg3_phy_set_wirespeed(tp);
 	return 0;
 }

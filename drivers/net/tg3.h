@@ -1516,6 +1516,7 @@
 #define  MII_TG3_CTRL_ENABLE_AS_MASTER	0x1000
 
 #define MII_TG3_EXT_CTRL		0x10 /* Extended control register */
+#define  MII_TG3_EXT_CTRL_FIFO_ELASTIC	0x0001
 #define  MII_TG3_EXT_CTRL_LNK3_LED_MODE	0x0002
 #define  MII_TG3_EXT_CTRL_TBI		0x8000
 
