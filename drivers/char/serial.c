@@ -3457,11 +3457,13 @@ static void autoconfig(struct serial_state * state)
 	}
 	if (state->type == PORT_16550A) {
 		/* Check for Oxford Semiconductor 16C950 */
+		unsigned char scratch4;
+
 		scratch = serial_icr_read(info, UART_ID1);
-		scratch2 = serial_icr_read(info, UART_ID2);
+		scratch4 = serial_icr_read(info, UART_ID2);
 		scratch3 = serial_icr_read(info, UART_ID3);
 		
-		if (scratch == 0x16 && scratch2 == 0xC9 &&
+		if (scratch == 0x16 && scratch4 == 0xC9 &&
 		    (scratch3 == 0x50 || scratch3 == 0x52 ||
 		     scratch3 == 0x54)) {
 			state->type = PORT_16C950;

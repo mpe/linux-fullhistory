@@ -149,19 +149,19 @@ AltiVecUnavailable(struct pt_regs *regs)
 		show_regs(regs);
 		panic("Kernel Used Altivec with MSR_VEC off!\n");
 	}
-#ifdef __SMP__
-	printk("User Mode altivec trap should not happen in SMP!\n");
-#else
+
 	if ( last_task_used_altivec != current )
 	{
 		if ( last_task_used_altivec )
 			giveup_altivec(current);
 		load_up_altivec(current);
+		/* on SMP we always save/restore on switch */
+#ifndef __SMP__		
 		last_task_used_altivec = current;
+#endif		
 	}
 	/* enable altivec for the task on return */
 	regs->msr |= MSR_VEC;
-#endif		
 }
 
 void

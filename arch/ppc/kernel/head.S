@@ -817,6 +817,15 @@ giveup_altivec:
 	srwi	r4,r4,16
 	cmpi	0,r4,12
 	bnelr
+	
+	/* enable altivec so we can save */
+	mfmsr	r4
+	oris	r4,r4,MSR_VEC@h
+	mtmsr	r4
+
+	/* make sure our tsk pointer is valid */
+	cmpi	0,r3,0
+	beqlr
 
 	/* save altivec regs */
 	addi	r4,r3,THREAD+THREAD_VRSAVE
@@ -830,6 +839,11 @@ giveup_altivec:
 	lis	r6,MSR_VEC@h
 	andi.	r5,r5,r6
 	stw	r5,_MSR(r4)
+
+	/* we've given up the altivec - clear the pointer */
+	li	r3,0
+	lis	r4,last_task_used_altivec@h
+	stw	r3,last_task_used_altivec@l(r4)
 #endif /* CONFIG_ALTIVEC */
 	blr
 	

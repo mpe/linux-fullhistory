@@ -802,3 +802,35 @@ out:
 	unlock_kernel();
 	return error;
 }
+
+/*
+ * These bracket the sleeping functions..
+ */
+extern void scheduling_functions_start_here(void);
+extern void scheduling_functions_end_here(void);
+#define first_sched	((unsigned long) scheduling_functions_start_here)
+#define last_sched	((unsigned long) scheduling_functions_end_here)
+
+unsigned long get_wchan(struct task_struct *p)
+{
+	unsigned long pc, fp, bias = 0;
+	unsigned long task_base = (unsigned long) p;
+	struct reg_window *rw;
+	int count = 0;
+	if (!p || p == current || p->state == TASK_RUNNING)
+		return 0;
+	bias = STACK_BIAS;
+	fp = p->thread.ksp + bias;
+	do {
+		/* Bogus frame pointer? */
+		if (fp < (task_base + sizeof(struct task_struct)) ||
+		    fp >= (task_base + (2 * PAGE_SIZE)))
+			break;
+		rw = (struct reg_window *) fp;
+		pc = rw->ins[7];
+		if (pc < first_sched || pc >= last_sched)
+			return pc;
+		fp = rw->ins[6] + bias;
+	} while (++count < 16);
+	return 0;
+}

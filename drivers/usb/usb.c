@@ -720,7 +720,7 @@ static int usb_parse_configuration(struct usb_device *dev, struct usb_config_des
 	}
 
 	memset(config->interface, 0,
-	       config->bNumInterfaces*sizeof(struct usb_interface_descriptor));
+	       config->bNumInterfaces * sizeof(struct usb_interface));
 
 	buffer += config->bLength;
 	size -= config->bLength;

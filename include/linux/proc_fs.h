@@ -9,38 +9,17 @@
  */
 
 /*
+ * Offset of the first process in the /proc root directory..
+ */
+#define FIRST_PROCESS_ENTRY 256
+
+
+/*
  * We always define these enumerators
  */
 
 enum {
 	PROC_ROOT_INO = 1,
-};
-
-enum pid_directory_inos {
-	PROC_PID_INO = 2,
-	PROC_PID_STATUS,
-	PROC_PID_MEM,
-	PROC_PID_CWD,
-	PROC_PID_ROOT,
-	PROC_PID_EXE,
-	PROC_PID_FD,
-	PROC_PID_ENVIRON,
-	PROC_PID_CMDLINE,
-	PROC_PID_STAT,
-	PROC_PID_STATM,
-	PROC_PID_MAPS,
-#if CONFIG_AP1000
-	PROC_PID_RINGBUF,
-#endif
-	PROC_PID_CPU,
-};
-
-enum pid_subdirectory_inos {
-	PROC_PID_FD_DIR = 0x8000,	/* 0x8000-0xffff */
-};
-
-enum net_directory_inos {
-	PROC_NET_LAST
 };
 
 enum scsi_directory_inos {
@@ -203,8 +182,11 @@ extern struct proc_dir_entry proc_root_kcore;
 extern struct inode_operations proc_scsi_inode_operations;
 
 extern void proc_root_init(void);
-extern void proc_base_init(void);
 extern void proc_misc_init(void);
+
+struct dentry *proc_pid_lookup(struct inode *dir, struct dentry * dentry);
+void proc_pid_delete_inode(struct inode *inode);
+int proc_pid_readdir(struct file * filp, void * dirent, filldir_t filldir);
 
 extern int proc_register(struct proc_dir_entry *, struct proc_dir_entry *);
 extern int proc_unregister(struct proc_dir_entry *, int);
@@ -335,8 +317,6 @@ extern struct inode_operations proc_netdir_inode_operations;
 extern struct inode_operations proc_openprom_inode_operations;
 extern struct inode_operations proc_mem_inode_operations;
 extern struct inode_operations proc_sys_inode_operations;
-extern struct inode_operations proc_array_inode_operations;
-extern struct inode_operations proc_arraylong_inode_operations;
 extern struct inode_operations proc_kcore_inode_operations;
 extern struct inode_operations proc_profile_inode_operations;
 extern struct inode_operations proc_kmsg_inode_operations;

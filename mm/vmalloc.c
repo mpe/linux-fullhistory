@@ -204,7 +204,7 @@ void * vmalloc(unsigned long size)
 	struct vm_struct *area;
 
 	size = PAGE_ALIGN(size);
-	if (!size || size > (max_mapnr << PAGE_SHIFT)) {
+	if (!size || (size >> PAGE_SHIFT) > max_mapnr)) {
 		BUG();
 		return NULL;
 	}

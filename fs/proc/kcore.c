@@ -23,7 +23,7 @@
 ssize_t read_kcore(struct file * file, char * buf,
 			 size_t count, loff_t *ppos)
 {
-	unsigned long p = *ppos, memsize;
+	unsigned long long p = *ppos, memsize;
 	ssize_t read;
 	ssize_t count1;
 	char * pnt;

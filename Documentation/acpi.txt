@@ -1,0 +1,125 @@
+ACPI Driver Interface
+---------------------
+
+Overview:
+1) Register each instance of a device with "acpi_register"
+2) Call "acpi_access" before accessing the hardware.
+   (this will ensure that the hardware is awake and ready)
+3) "acpi_transition" callback is called before entering D1-D3
+   or after entering D0
+4) Call "acpi_dev_idle" when the device is not being used
+   (not required by will improve idle detection)
+5) When unloaded, unregister the device with "acpi_unregister"
+
+/*
+ * Description: Register a device with the ACPI subsystem
+ *
+ * Parameters:
+ *   type - device type
+ *   adr - bus number and address or unique id
+ *   hid - PnP identifier (or 0 if unknown)
+ *   trans - device state transition callback
+ *
+ * Returns: Registered ACPI device or NULL on error
+ *
+ * Details: The device type, bus number, and bus address should be
+ *          enough information to reconstruct the device tree and
+ *          identify device dependencies
+ *
+ * Examples:
+ *   dev = acpi_register(ACPI_SYS_DEV, 0, ACPI_VGA_HID, vga_trans);
+ *
+ *   struct pci_dev *pci_dev = pci_find_dev(...);
+ *   dev = acpi_register(ACPI_PCI_DEV, ACPI_PCI_ADR(pci_dev), 0, trans);
+ */
+struct acpi_dev *acpi_register(acpi_dev_t type,
+                               unsigned long adr,
+                               acpi_hid_t hid,
+                               acpi_transition trans);
+
+/*
+ * Description: Unregister a device with ACPI
+ *
+ * Parameters:
+ *   dev - ACPI device previously returned from acpi_register
+ */
+void acpi_unregister(struct acpi_dev *dev);
+
+/*
+ * Device idle/use detection
+ *
+ * In general, drivers for all devices should call "acpi_access"
+ * before accessing the hardware (ie. before reading or modifying
+ * a hardware register).  Request or packet-driven drivers should
+ * additionally call "acpi_idle" when a device is not being used.
+ *
+ * Examples:
+ * 1) A keyboard driver would call acpi_access whenever a key is pressed
+ * 2) A network driver would call acpi_access before submitting
+ *    a packet for transmit or receive and acpi_idle when its
+ *    transfer and receive queues are empty.
+ * 3) A VGA driver would call acpi_access before it accesses any
+ *    of the video controller registers
+ *
+ * Ultimately, the ACPI policy manager uses the access and idle
+ * information to decide when to transition devices between
+ * device states.
+ */
+
+/*
+ * Description: Update device access time and wake up device, if necessary
+ *
+ * Parameters:
+ *   dev - ACPI device previously returned from acpi_register
+ *
+ * Details: If called from an interrupt handler acpi_access updates
+ *          access time but should never need to wake up the device
+ *          (if device is generating interrupts, it should be awake
+ *          already)  This is important as we can not wake up
+ *          devices (run AML, etc.) from an interrupt handler.
+ */
+void acpi_access(struct acpi_dev *dev);
+
+/*
+ * Description: Identify device as currently being idle
+ *
+ * Parameters:
+ *   dev - ACPI device previously returned from acpi_register
+ *
+ * Details: A call to acpi_idle might signal to the policy manager
+ *          to put a device to sleep.  If a new device request arrives
+ *          between the call to acpi_idle and the acpi_transition
+ *          callback, the driver should fail the acpi_transition request.
+ */
+void acpi_dev_idle(struct acpi_dev *dev);
+
+/*
+ * Transition function
+ *
+ * Parameters:
+ *   dev - ACPI device previously returned from acpi_register
+ *   state - the device state being entered
+ *
+ * Returns: 0 if the state transition is possible and context saved
+ *          EINVAL if the requested device state is not supported
+ *          EBUSY if the device is now busy and can not transition
+ *          ENOMEM if the device was unable to save context (out of memory)
+ *          
+ * Details: The device state transition function will be called
+ *          before the device is transitioned into the D1-D3 states
+ *          or after the device is transitioned into the D0 state.
+ *          The device driver should save (D1-D3) or restore (D0)
+ *          device context when the transition function is called.
+ *
+ *          For system devices, the ACPI subsystem will perform
+ *          the actual hardware state transition itself.  For bus
+ *          devices, after the driver's acpi_transition function
+ *          is called, the bus driver's acpi_transition function
+ *          is called to perform the actual hardware state transition.
+ *
+ *          Once a driver returns 0 (success) from a transition
+ *          to D1-3 request, it should not process any further
+ *          requests or access the device hardware until a
+ *          call to "acpi_access" is made.
+ */
+typedef int (*acpi_transition)(struct acpi_dev *dev, acpi_dstate_t state);

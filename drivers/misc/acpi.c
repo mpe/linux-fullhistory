@@ -54,6 +54,7 @@
 #define DECLARE_WAIT_QUEUE_HEAD(x) struct wait_queue * x = NULL
 #endif
 
+static int acpi_idle_thread(void *context);
 static int acpi_do_ulong(ctl_table *ctl,
 			 int write,
 			 struct file *file,
@@ -70,6 +71,8 @@ static int acpi_do_event(ctl_table *ctl,
 			 void *buffer,
 			 size_t *len);
 
+DECLARE_WAIT_QUEUE_HEAD(acpi_idle_wait);
+
 static struct ctl_table_header *acpi_sysctl = NULL;
 
 static struct acpi_facp *acpi_facp = NULL;
@@ -83,6 +86,9 @@ static volatile u32 acpi_pm1_status = 0;
 static volatile u32 acpi_gpe_status = 0;
 static volatile u32 acpi_gpe_level = 0;
 static DECLARE_WAIT_QUEUE_HEAD(acpi_event_wait);
+
+static spinlock_t acpi_devs_lock = SPIN_LOCK_UNLOCKED;
+static LIST_HEAD(acpi_devs);
 
 /* Make it impossible to enter L2/L3 until after we've initialized */
 static unsigned long acpi_p_lvl2_lat = ~0UL;
@@ -907,6 +913,8 @@ static int acpi_do_event(ctl_table *ctl,
  */
 static int __init acpi_init(void)
 {
+	int pid;
+
 	if (acpi_find_tables() && acpi_find_piix4()) {
 		// no ACPI tables and not PIIX4
 		return -ENODEV;
@@ -926,6 +934,10 @@ static int __init acpi_init(void)
 
 	acpi_claim_ioports(acpi_facp);
 	acpi_sysctl = register_sysctl_table(acpi_dir_table, 1);
+
+	pid = kernel_thread(acpi_idle_thread,
+			    NULL,
+			    CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 
 	/*
 	 * Set up the ACPI idle function. Note that we can't really
@@ -961,13 +973,81 @@ static void __exit acpi_exit(void)
 	acpi_destroy_tables();
 }
 
-#ifdef MODULE
+/*
+ * Register a device with the ACPI subsystem
+ */
+struct acpi_dev* acpi_register(acpi_dev_t type,
+			       unsigned long adr,
+			       acpi_hid_t hid,
+			       acpi_transition trans)
+{
+	struct acpi_dev *dev = kmalloc(sizeof(struct acpi_dev), GFP_KERNEL);
+	if (dev) {
+		unsigned long flags;
 
-module_init(acpi_init)
-module_exit(acpi_exit)
+		memset(dev, 0, sizeof(*dev));
+		dev->type = type;
+		dev->adr = adr;
+		dev->hid = hid;
+		dev->transition = trans;
 
-#else
+		spin_lock_irqsave(&acpi_devs_lock, flags);
+		list_add(&dev->entry, &acpi_devs);
+		spin_unlock_irqrestore(&acpi_devs_lock, flags);
+	}
+	return dev;
+}
+
+/*
+ * Unregister a device with ACPI
+ */
+void acpi_unregister(struct acpi_dev *dev)
+{
+	if (dev) {
+		unsigned long flags;
+
+		spin_lock_irqsave(&acpi_devs_lock, flags);
+		list_del(&dev->entry);
+		spin_unlock_irqrestore(&acpi_devs_lock, flags);
+
+		kfree(dev);
+	}
+}
+
+/*
+ * Wake up a device
+ */
+void acpi_wakeup(struct acpi_dev *dev)
+{
+	// run _PS0 or tell parent bus to wake device up
+}
+
+/*
+ * Manage idle devices
+ */
+static int acpi_idle_thread(void *context)
+{
+	exit_mm(current);
+	exit_files(current);
+	strcpy(current->comm, "acpi");
+	
+	for(;;) {
+		interruptible_sleep_on(&acpi_idle_wait);
+		if (signal_pending(current))
+			break;
+
+		// find all idle devices and set idle timer based on policy
+	}
+
+	return 0;
+}
 
 __initcall(acpi_init);
 
-#endif
+/*
+ * Module visible symbols
+ */
+EXPORT_SYMBOL(acpi_idle_wait);
+EXPORT_SYMBOL(acpi_register);
+EXPORT_SYMBOL(acpi_unregister);
+EXPORT_SYMBOL(acpi_wakeup);

@@ -24,6 +24,147 @@
 #include <linux/types.h>
 #include <linux/ioctl.h>
 
+#ifdef __KERNEL__
+
+#include <linux/sched.h>
+#include <linux/wait.h>
+
+/*
+ * Device types
+ */
+enum
+{
+	ACPI_SYS_DEV,   /* system device (fan, KB controller, ...) */
+	ACPI_PCI_DEV,   /* generic PCI device */
+	ACPI_PCI_BUS,   /* PCI bus */
+	ACPI_ISA_DEV,   /* generic ISA device */
+	ACPI_ISA_BUS,   /* ISA bus */
+	ACPI_USB_DEV,   /* generic USB device */
+	ACPI_USB_HUB,   /* USB hub device */
+	ACPI_USB_CTRL,  /* USB controller */
+	ACPI_SCSI_DEV,  /* generic SCSI device */
+	ACPI_SCSI_CTRL, /* SCSI controller */
+};
+
+typedef int acpi_dev_t;
+
+/*
+ * Device addresses
+ */
+#define ACPI_PCI_ADR(dev) ((dev)->bus->number << 16 | (dev)->devfn)
+
+/*
+ * HID (PnP) values
+ */
+enum
+{
+	ACPI_UNKNOWN_HID =  0x00000000, /* generic */
+	ACPI_KBC_HID =      0x41d00303, /* keyboard controller */
+	ACPI_COM_HID =      0x41d00500, /* serial port */
+	ACPI_FDC_HID =      0x41d00700, /* floppy controller */
+	ACPI_VGA_HID =      0x41d00900, /* VGA controller */
+	ACPI_ISA_HID =      0x41d00a00, /* ISA bus */
+	ACPI_EISA_HID =     0x41d00a01, /* EISA bus */
+	ACPI_PCI_HID =      0x41d00a03, /* PCI bus */
+};
+
+typedef int acpi_hid_t;
+
+/*
+ * Device states
+ */
+enum
+{
+	ACPI_D0, /* fully-on */
+	ACPI_D1, /* partial-on */
+	ACPI_D2, /* partial-on */
+	ACPI_D3, /* fully-off */
+};
+
+typedef int acpi_dstate_t;
+
+struct acpi_dev;
+
+/*
+ * Device state transition function
+ */
+typedef int (*acpi_transition)(struct acpi_dev *dev, acpi_dstate_t state);
+
+/*
+ * ACPI device information
+ */
+struct acpi_dev
+{
+	acpi_dev_t       type;       /* device type */
+	unsigned long    adr;        /* bus address or unique id */
+	acpi_hid_t       hid;        /* P&P identifier */
+	acpi_transition  transition; /* state transition callback */
+	acpi_dstate_t    state;      /* current D-state */
+	unsigned long    accessed;   /* last access time */
+	unsigned long    idle;       /* last idle time */
+	struct list_head entry;      /* linked list entry */
+};
+
+#ifdef CONFIG_ACPI
+
+extern wait_queue_head_t acpi_idle_wait;
+
+/*
+ * Register a device with the ACPI subsystem
+ */
+struct acpi_dev *acpi_register(acpi_dev_t type,
+			       unsigned long adr,
+			       acpi_hid_t hid,
+			       acpi_transition trans);
+
+/*
+ * Unregister a device with ACPI
+ */
+void acpi_unregister(struct acpi_dev *dev);
+
+/*
+ * Update device access time and wake up device, if necessary
+ */
+extern inline void acpi_access(struct acpi_dev *dev)
+{
+	extern void acpi_wakeup(struct acpi_dev *dev);
+	if (dev->state != ACPI_D0)
+		acpi_wakeup(dev);
+	dev->accessed = jiffies;
+}
+
+/*
+ * Identify device as currently being idle
+ */
+extern inline void acpi_dev_idle(struct acpi_dev *dev)
+{
+	dev->idle = jiffies;
+	if (waitqueue_active(&acpi_idle_wait))
+		wake_up(&acpi_idle_wait);
+}
+
+#else /* CONFIG_ACPI */
+
+extern inline struct acpi_dev*
+acpi_register(acpi_dev_t type,
+	      unsigned long adr,
+	      acpi_hid_t hid,
+	      acpi_transition trans)
+{
+	return 0;
+}
+
+extern inline void acpi_unregister(struct acpi_dev *dev) {}
+extern inline void acpi_access(struct acpi_dev *dev) {}
+extern inline void acpi_dev_idle(struct acpi_dev *dev) {}
+
+#endif /* CONFIG_ACPI */
+
+extern void (*acpi_idle)(void);
+extern void (*acpi_power_off)(void);
+
+#endif /* __KERNEL__ */
+
 /* RSDP location */
 #define ACPI_BIOS_ROM_BASE (0x0e0000)
 #define ACPI_BIOS_ROM_END  (0x100000)
@@ -181,7 +322,8 @@ enum
 	ACPI_P_LVL3,
 	ACPI_P_LVL2_LAT,
 	ACPI_P_LVL3_LAT,
-	ACPI_S5_SLP_TYP
+	ACPI_S5_SLP_TYP,
+	ACPI_KBD,
 };
 
 #define ACPI_P_LVL_DISABLED	0x80
@@ -223,12 +365,5 @@ enum
 
 #define ACPI_PIIX4_PMREGMISC	0x80
 #define	  ACPI_PIIX4_PMIOSE	0x01
-
-#ifdef __KERNEL__
-
-extern void (*acpi_idle)(void);
-extern void (*acpi_power_off)(void);
-
-#endif
 
 #endif /* _LINUX_ACPI_H */

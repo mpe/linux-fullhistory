@@ -210,6 +210,11 @@ _switch_to(struct task_struct *prev, struct task_struct *new,
 	prev->last_processor = prev->processor;
 	current_set[smp_processor_id()] = new;
 #endif /* __SMP__ */
+	/* Avoid the trap.  On smp this this never happens since
+	 * we don't set last_task_used_altivec -- Cort
+	 */
+	if ( last_task_used_altivec == new )
+		new->thread.regs->msr |= MSR_VEC;
 	new_thread = &new->thread;
 	old_thread = &current->thread;
 	*last = _switch(old_thread, new_thread);
@@ -574,3 +579,32 @@ void __init ll_puts(const char *s)
 	orig_y = y;
 }
 #endif
+
+/*
+ * These bracket the sleeping functions..
+ */
+extern void scheduling_functions_start_here(void);
+extern void scheduling_functions_end_here(void);
+#define first_sched	((unsigned long) scheduling_functions_start_here)
+#define last_sched	((unsigned long) scheduling_functions_end_here)
+
+unsigned long get_wchan(struct task_struct *p)
+{
+	unsigned long ip, sp;
+	unsigned long stack_page = (unsigned long) p;
+	int count = 0;
+	if (!p || p == current || p->state == TASK_RUNNING)
+		return 0;
+	sp = p->thread.ksp;
+	do {
+		sp = *(unsigned long *)sp;
+		if (sp < stack_page || sp >= stack_page + 8188)
+			return 0;
+		if (count > 0) {
+			ip = *(unsigned long *)(sp + 4);
+			if (ip < first_sched || ip >= last_sched)
+				return ip;
+		}
+	} while (count++ < 16);
+	return 0;
+}

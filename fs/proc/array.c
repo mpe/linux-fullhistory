@@ -46,6 +46,10 @@
  *
  * Gerhard Wichert   :  added BIGMEM support
  * Siemens AG           <Gerhard.Wichert@pdb.siemens.de>
+ *
+ * Al Viro & Jeff Garzik :  moved most of the thing into base.c and
+ *			 :  proc_misc.c. The rest may eventually go into
+ *			 :  base.c too.
  */
 
 #include <linux/types.h>

@@ -22,11 +22,6 @@
 #include <linux/zorro.h>
 #endif
 
-/*
- * Offset of the first process in the /proc root directory..
- */
-#define FIRST_PROCESS_ENTRY 256
-
 static int proc_root_readdir(struct file *, void *, filldir_t);
 static struct dentry *proc_root_lookup(struct inode *,struct dentry *);
 static int proc_unlink(struct inode *, struct dentry *);
@@ -46,13 +41,6 @@ static struct file_operations proc_dir_operations = {
 	NULL,			/* read - bad */
 	NULL,			/* write - bad */
 	proc_readdir,		/* readdir */
-	NULL,			/* poll - default */
-	NULL,			/* ioctl - default */
-	NULL,			/* mmap */
-	NULL,			/* no special open code */
-	NULL,			/* flush */
-	NULL,			/* no special release code */
-	NULL			/* can't fsync */
 };
 
 /*
@@ -62,23 +50,6 @@ struct inode_operations proc_dir_inode_operations = {
 	&proc_dir_operations,	/* default net directory file-ops */
 	NULL,			/* create */
 	proc_lookup,		/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* flushpage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL,			/* smap */
-	NULL			/* revalidate */
 };
 
 /*
@@ -90,21 +61,6 @@ struct inode_operations proc_dyna_dir_inode_operations = {
 	proc_lookup,		/* lookup */
 	NULL,			/* link	*/
 	proc_unlink,		/* unlink(struct inode *, struct dentry *) */
-	NULL,			/* symlink	*/
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* flushpage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL,			/* smap */
-	NULL			/* revalidate */
 };
 
 /*
@@ -117,13 +73,6 @@ static struct file_operations proc_root_operations = {
 	NULL,			/* read - bad */
 	NULL,			/* write - bad */
 	proc_root_readdir,	/* readdir */
-	NULL,			/* poll - default */
-	NULL,			/* ioctl - default */
-	NULL,			/* mmap */
-	NULL,			/* no special open code */
-	NULL,			/* flush */
-	NULL,			/* no special release code */
-	NULL			/* no fsync */
 };
 
 /*
@@ -133,23 +82,6 @@ static struct inode_operations proc_root_inode_operations = {
 	&proc_root_operations,	/* default base directory file-ops */
 	NULL,			/* create */
 	proc_root_lookup,	/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* flushpage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL,			/* smap */
-	NULL			/* revalidate */
 };
 
 /*
@@ -268,36 +200,12 @@ static struct file_operations proc_openprom_operations = {
 	NULL,			/* read - bad */
 	NULL,			/* write - bad */
 	OPENPROM_DEFREADDIR,	/* readdir */
-	NULL,			/* poll - default */
-	NULL,			/* ioctl - default */
-	NULL,			/* mmap */
-	NULL,			/* no special open code */
-	NULL,			/* flush */
-	NULL,			/* no special release code */
-	NULL			/* can't fsync */
 };
 
 struct inode_operations proc_openprom_inode_operations = {
 	&proc_openprom_operations,/* default net directory file-ops */
 	NULL,			/* create */
 	OPENPROM_DEFLOOKUP,	/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* flushpage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL,			/* smap */
-	NULL			/* revalidate */
 };
 
 struct proc_dir_entry proc_openprom = {
@@ -612,7 +520,7 @@ struct dentry *proc_lookup(struct inode * dir, struct dentry *dentry)
 			if (de->namelen != dentry->d_name.len)
 				continue;
 			if (!memcmp(dentry->d_name.name, de->name, de->namelen)) {
-				int ino = de->low_ino | (dir->i_ino & ~(0xffff));
+				int ino = de->low_ino;
 				error = -EINVAL;
 				inode = proc_get_inode(dir->i_sb, ino, de);
 				break;
@@ -700,7 +608,6 @@ int proc_readdir(struct file * filp,
 			filp->f_pos++;
 			/* fall through */
 		default:
-			ino &= ~0xffff;
 			de = de->subdir;
 			i -= 2;
 			for (;;) {
@@ -713,7 +620,7 @@ int proc_readdir(struct file * filp,
 			}
 
 			do {
-				if (filldir(dirent, de->name, de->namelen, filp->f_pos, ino | de->low_ino) < 0)
+				if (filldir(dirent, de->name, de->namelen, filp->f_pos, de->low_ino) < 0)
 					return 0;
 				filp->f_pos++;
 				de = de->next;
@@ -722,69 +629,19 @@ int proc_readdir(struct file * filp,
 	return 1;
 }
 
-#define PROC_NUMBUF 10
-#define PROC_MAXPIDS 20
-
-/*
- * Get a few pid's to return for filldir - we need to hold the
- * tasklist lock while doing this, and we must release it before
- * we actually do the filldir itself, so we use a temp buffer..
- */
-static int get_pid_list(int index, unsigned int *pids)
-{
-	struct task_struct *p;
-	int nr_pids = 0;
-
-	index -= FIRST_PROCESS_ENTRY;
-	read_lock(&tasklist_lock);
-	for_each_task(p) {
-		int pid = p->pid;
-		if (!pid)
-			continue;
-		if (--index >= 0)
-			continue;
-		pids[nr_pids] = pid;
-		nr_pids++;
-		if (nr_pids >= PROC_MAXPIDS)
-			break;
-	}
-	read_unlock(&tasklist_lock);
-	return nr_pids;
-}
-
 static int proc_root_readdir(struct file * filp,
 	void * dirent, filldir_t filldir)
 {
-	unsigned int pid_array[PROC_MAXPIDS];
-	char buf[PROC_NUMBUF];
 	unsigned int nr = filp->f_pos;
-	unsigned int nr_pids, i;
 
 	if (nr < FIRST_PROCESS_ENTRY) {
 		int error = proc_readdir(filp, dirent, filldir);
 		if (error <= 0)
 			return error;
-		filp->f_pos = nr = FIRST_PROCESS_ENTRY;
+		filp->f_pos = FIRST_PROCESS_ENTRY;
 	}
 
-	nr_pids = get_pid_list(nr, pid_array);
-
-	for (i = 0; i < nr_pids; i++) {
-		int pid = pid_array[i];
-		ino_t ino = (pid << 16) + PROC_PID_INO;
-		unsigned long j = PROC_NUMBUF;
-
-		do {
-			j--;
-			buf[j] = '0' + (pid % 10);
-			pid /= 10;
-		} while (pid);
-
-		if (filldir(dirent, buf+j, PROC_NUMBUF-j, filp->f_pos, ino) < 0)
-			break;
-		filp->f_pos++;
-	}
-	return 0;
+	return proc_pid_readdir(filp, dirent, filldir);
 }
 
 static int proc_unlink(struct inode *dir, struct dentry *dentry)

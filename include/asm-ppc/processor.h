@@ -316,36 +316,7 @@ static inline unsigned long thread_saved_pc(struct thread_struct *t)
 #define release_segments(mm)		do { } while (0)
 #define forget_segments()		do { } while (0)
 
-/*
- * These bracket the sleeping functions..
- */
-extern void scheduling_functions_start_here(void);
-extern void scheduling_functions_end_here(void);
-#define first_sched	((unsigned long) scheduling_functions_start_here)
-#define last_sched	((unsigned long) scheduling_functions_end_here)
-
-static inline unsigned long get_wchan(struct task_struct *p)
-{
-	unsigned long ip, sp;
-	unsigned long stack_page = (unsigned long) p;
-	int count = 0;
-	if (!p || p == current || p->state == TASK_RUNNING)
-		return 0;
-	sp = p->thread.ksp;
-	do {
-		sp = *(unsigned long *)sp;
-		if (sp < stack_page || sp >= stack_page + 8188)
-			return 0;
-		if (count > 0) {
-			ip = *(unsigned long *)(sp + 4);
-			if (ip < first_sched || ip >= last_sched)
-				return ip;
-		}
-	} while (count++ < 16);
-	return 0;
-}
-#undef last_sched
-#undef first_sched
+unsigned long get_wchan(struct task_struct *p);
 
 #define KSTK_EIP(tsk)	((tsk)->thread.regs->nip)
 #define KSTK_ESP(tsk)	((tsk)->thread.regs->gpr[1])

@@ -4,6 +4,6 @@
 mainmenu_option next_comment
 comment 'Misc devices'
 
-tristate 'Generic ACPI support' CONFIG_ACPI
+bool 'ACPI support' CONFIG_ACPI
 
 endmenu

@@ -122,3 +122,4 @@ EXPORT_SYMBOL(unregister_fpe);
 EXPORT_SYMBOL(screen_info);
 #endif
 
+EXPORT_SYMBOL(get_wchan);

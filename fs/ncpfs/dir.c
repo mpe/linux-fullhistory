@@ -405,14 +405,13 @@ ncp_d_validate(struct dentry *dentry)
 {
 	unsigned long dent_addr = (unsigned long) dentry;
 	unsigned long min_addr = PAGE_OFFSET;
-	unsigned long max_addr = min_addr + (max_mapnr << PAGE_SHIFT);
 	unsigned long align_mask = 0x0F;
 	unsigned int len;
 	int valid = 0;
 
 	if (dent_addr < min_addr)
 		goto bad_addr;
-	if (dent_addr > max_addr - sizeof(struct dentry))
+	if (dent_addr > (unsigned long)high_memory - sizeof(struct dentry))
 		goto bad_addr;
 	if ((dent_addr & ~align_mask) != dent_addr)
 		goto bad_align;

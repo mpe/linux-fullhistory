@@ -7919,7 +7919,7 @@ CONFIG_USB_PROC
   Note that you must say Y to "/proc filesystem support" below for
   this to work.
 
-Generic ACPI support
+ACPI support
 CONFIG_ACPI
   Advanced Configuration and Power Interface (ACPI) is an interface
   specification to support power management of peripherals. If your
@@ -7929,13 +7929,6 @@ CONFIG_ACPI
   inserted in and removed from the running kernel whenever you want).
   The module will be called acpi.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
-  
-PIIX4 ACPI support
-CONFIG_PIIX4_ACPI
-  If you have a PIIX4 based motherboard (PCI ISA IDE Xcelerator
-  (PIIX4) is a multi-function PCI device) and you want support for
-  Advanced Configuration and Power Interface (ACPI) to support power
-  management of peripherals, say Y here.
 
 Minix fs support
 CONFIG_MINIX_FS

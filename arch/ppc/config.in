@@ -44,7 +44,7 @@ else
 fi
 
 bool 'Symmetric multi-processing support' CONFIG_SMP
-if [ "$CONFIG_6xx" != "y" ];then
+if [ "$CONFIG_6xx" = "y" ];then
   bool 'AltiVec Support' CONFIG_ALTIVEC
 fi
 
@@ -90,7 +90,7 @@ bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
 
 # only elf supported, a.out is not -- Cort
 if [ "$CONFIG_PROC_FS" = "y" ]; then
-   define_bool CONFIG_KCORE_ELF y
+   define_bool CONFIG_KCORE_ELF
 fi
 define_bool CONFIG_BINFMT_ELF y
 define_bool CONFIG_KERNEL_ELF y

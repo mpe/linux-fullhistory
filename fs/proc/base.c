@@ -4,6 +4,13 @@
  *  Copyright (C) 1991, 1992 Linus Torvalds
  *
  *  proc base directory handling functions
+ *
+ *  1999, Al Viro. Rewritten. Now it covers the whole per-process part.
+ *  Instead of using magical inumbers to determine the kind of object
+ *  we allocate and fill in-core inodes upon lookup. They don't even
+ *  go into icache. We cache the reference to task_struct upon lookup too.
+ *  Eventually it should become a filesystem in its own. We don't use the
+ *  rest of procfs anymore.
  */
 
 #include <asm/uaccess.h>
@@ -15,6 +22,14 @@
 #include <linux/stat.h>
 #include <linux/init.h>
 #include <linux/file.h>
+
+/*
+ * For hysterical raisins we keep the same inumbers as in the old procfs.
+ * Feel free to change the macro below - just keep the range distinct from
+ * inumbers of the rest of procfs (currently those are in 0x0000--0xffff).
+ * As soon as we'll get a separate superblock we will be able to forget
+ * about magical ranges too.
+ */
 
 #define fake_ino(pid,ino) (((pid)<<16)|(ino))
 
@@ -241,7 +256,7 @@ static struct file_operations proc_info_file_operations = {
     proc_info_read,		/* read	   */
 };
 
-struct inode_operations proc_info_inode_operations = {
+static struct inode_operations proc_info_inode_operations = {
 	&proc_info_file_operations,  /* default proc file-ops */
 };
 
@@ -466,6 +481,26 @@ struct pid_entry {
 	mode_t mode;
 };
 
+enum pid_directory_inos {
+	PROC_PID_INO = 2,
+	PROC_PID_STATUS,
+	PROC_PID_MEM,
+	PROC_PID_CWD,
+	PROC_PID_ROOT,
+	PROC_PID_EXE,
+	PROC_PID_FD,
+	PROC_PID_ENVIRON,
+	PROC_PID_CMDLINE,
+	PROC_PID_STAT,
+	PROC_PID_STATM,
+	PROC_PID_MAPS,
+#if CONFIG_AP1000
+	PROC_PID_RINGBUF,
+#endif
+	PROC_PID_CPU,
+	PROC_PID_FD_DIR = 0x8000,	/* 0x8000-0xffff */
+};
+
 #define E(type,name,mode) {(type),sizeof(name)-1,(name),(mode)}
 static struct pid_entry base_stuff[] = {
   E(PROC_PID_FD,	"fd",		S_IFDIR|S_IRUSR|S_IXUSR),
@@ -582,7 +617,7 @@ static int proc_base_readdir(struct file * filp,
 
 /* building an inode */
 
-static struct inode *proc_pid_get_inode(struct super_block * sb, struct task_struct *task, int ino)
+static struct inode *proc_pid_make_inode(struct super_block * sb, struct task_struct *task, int ino)
 {
 	struct inode * inode;
 
@@ -694,7 +729,7 @@ static struct dentry *proc_lookupfd(struct inode * dir, struct dentry * dentry)
 			goto out;
 	}
 
-	inode = proc_pid_get_inode(dir->i_sb, task, PROC_PID_FD_DIR+fd);
+	inode = proc_pid_make_inode(dir->i_sb, task, PROC_PID_FD_DIR+fd);
 	if (!inode)
 		goto out;
 	/* FIXME */
@@ -778,7 +813,7 @@ static struct dentry *proc_base_lookup(struct inode *dir, struct dentry *dentry)
 		goto out;
 
 	error = -EINVAL;
-	inode = proc_pid_get_inode(dir->i_sb, task, p->type);
+	inode = proc_pid_make_inode(dir->i_sb, task, p->type);
 	if (!inode)
 		goto out;
 
@@ -899,7 +934,7 @@ struct dentry *proc_pid_lookup(struct inode *dir, struct dentry * dentry)
 	if (!task)
 		goto out;
 
-	inode = proc_pid_get_inode(dir->i_sb, task, PROC_PID_INO);
+	inode = proc_pid_make_inode(dir->i_sb, task, PROC_PID_INO);
 
 	free_task_struct(task);
 
@@ -922,4 +957,61 @@ void proc_pid_delete_inode(struct inode *inode)
 	if (inode->u.proc_i.file)
 		fput(inode->u.proc_i.file);
 	free_task_struct(inode->u.proc_i.task);
+}
+
+#define PROC_NUMBUF 10
+#define PROC_MAXPIDS 20
+
+/*
+ * Get a few pid's to return for filldir - we need to hold the
+ * tasklist lock while doing this, and we must release it before
+ * we actually do the filldir itself, so we use a temp buffer..
+ */
+static int get_pid_list(int index, unsigned int *pids)
+{
+	struct task_struct *p;
+	int nr_pids = 0;
+
+	index -= FIRST_PROCESS_ENTRY;
+	read_lock(&tasklist_lock);
+	for_each_task(p) {
+		int pid = p->pid;
+		if (!pid)
+			continue;
+		if (--index >= 0)
+			continue;
+		pids[nr_pids] = pid;
+		nr_pids++;
+		if (nr_pids >= PROC_MAXPIDS)
+			break;
+	}
+	read_unlock(&tasklist_lock);
+	return nr_pids;
+}
+
+int proc_pid_readdir(struct file * filp, void * dirent, filldir_t filldir)
+{
+	unsigned int pid_array[PROC_MAXPIDS];
+	char buf[PROC_NUMBUF];
+	unsigned int nr = filp->f_pos;
+	unsigned int nr_pids, i;
+
+	nr_pids = get_pid_list(nr, pid_array);
+
+	for (i = 0; i < nr_pids; i++) {
+		int pid = pid_array[i];
+		ino_t ino = fake_ino(pid,PROC_PID_INO);
+		unsigned long j = PROC_NUMBUF;
+
+		do {
+			j--;
+			buf[j] = '0' + (pid % 10);
+			pid /= 10;
+		} while (pid);
+
+		if (filldir(dirent, buf+j, PROC_NUMBUF-j, filp->f_pos, ino) < 0)
+			break;
+		filp->f_pos++;
+	}
+	return 0;
 }

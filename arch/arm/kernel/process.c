@@ -337,3 +337,31 @@ pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 	return __ret;
 }
 
+/*
+ * These bracket the sleeping functions..
+ */
+extern void scheduling_functions_start_here(void);
+extern void scheduling_functions_end_here(void);
+#define first_sched	((unsigned long) scheduling_functions_start_here)
+#define last_sched	((unsigned long) scheduling_functions_end_here)
+
+unsigned long get_wchan(struct task_struct *p)
+{
+	unsigned long fp, lr;
+	unsigned long stack_page;
+	int count = 0;
+	if (!p || p == current || p->state == TASK_RUNNING)
+		return 0;
+
+	stack_page = 4096 + (unsigned long)p;
+	fp = get_css_fp(&p->thread);
+	do {
+		if (fp < stack_page || fp > 4092+stack_page)
+			return 0;
+		lr = pc_pointer (((unsigned long *)fp)[-1]);
+		if (lr < first_sched || lr > last_sched)
+			return lr;
+		fp = *(unsigned long *) (fp - 12);
+	} while (count ++ < 16);
+	return 0;
+}

@@ -156,7 +156,7 @@ static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned 
 			if (rval)
 				*rval += actlength;
 
-			if (explength != actlength) {
+			if (explength != actlength && tmp->pipetype == PIPE_BULK) {
 				/* If the packet is short, none of the */
 				/*  packets after this were processed, so */
 				/*  fix the DT accordingly */

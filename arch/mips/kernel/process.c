@@ -182,3 +182,28 @@ int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
 
 	return retval;
 }
+
+/*
+ * These bracket the sleeping functions..
+ */
+extern void scheduling_functions_start_here(void);
+extern void scheduling_functions_end_here(void);
+#define first_sched	((unsigned long) scheduling_functions_start_here)
+#define last_sched	((unsigned long) scheduling_functions_end_here)
+
+unsigned long get_wchan(struct task_struct *p)
+{
+	unsigned long schedule_frame;
+	unsigned long pc;
+	if (!p || p == current || p->state == TASK_RUNNING)
+		return 0;
+	/*
+	 * The same comment as on the Alpha applies here, too ...
+	 */
+	pc = thread_saved_pc(&p->tss);
+	if (pc >= (unsigned long) interruptible_sleep_on && pc < (unsigned long) add_timer) {
+		schedule_frame = ((unsigned long *)(long)p->tss.reg30)[16];
+		return (unsigned long)((unsigned long *)schedule_frame)[11];
+	}
+	return pc;
+}
