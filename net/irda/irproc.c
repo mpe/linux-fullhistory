@@ -84,12 +84,12 @@ static irda_entry dir[] = {
  */
 void irda_proc_register(void) {
 	int i;
-	proc_irda = proc_create_entry("net/irda", S_IFDIR, NULL);
+	proc_irda = create_proc_entry("net/irda", S_IFDIR, NULL);
 #ifdef MODULE
 	proc_irda->fill_inode = &irda_proc_modcount;
 #endif /* MODULE */
 	for (i=0;i<IRDA_ENTRIES_NUM;i++)
-		proc_create_entry(dir[i].name,0,proc_irda)->get_info=dir[i].fn;
+		create_proc_entry(dir[i].name,0,proc_irda)->get_info=dir[i].fn;
 }
 
 /*
@@ -101,6 +101,6 @@ void irda_proc_register(void) {
 void irda_proc_unregister(void) {
 	int i;
 	for (i=0;i<IRDA_ENTRIES_NUM;i++)
-		proc_remove_entry(dir[i].name, proc_irda);
-	proc_remove_entry("net/irda", NULL);
+		remove_proc_entry(dir[i].name, proc_irda);
+	remove_proc_entry("net/irda", NULL);
 }

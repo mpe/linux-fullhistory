@@ -147,13 +147,7 @@ static char *ircommevent[] = {
 };
 
 #ifdef CONFIG_PROC_FS
-extern struct proc_dir_entry proc_irda;
-struct proc_dir_entry proc_ircomm = {
-	0, 6, "ircomm",
-        S_IFREG | S_IRUGO, 1, 0, 0,
-        0, NULL,
-        &ircomm_proc_read,
-};
+extern struct proc_dir_entry *proc_irda;
 #endif
 
 static void (*state[])( struct ircomm_cb *self, IRCOMM_EVENT event,
@@ -229,7 +223,7 @@ __initfunc(int ircomm_init(void))
 	 */
 
 #ifdef CONFIG_PROC_FS
-	proc_register( &proc_irda, &proc_ircomm);
+	create_proc_entry("ircomm", 0, proc_irda)->get_info = ircomm_proc_read;
 #endif /* CONFIG_PROC_FS */
 
 
@@ -267,7 +261,7 @@ void ircomm_cleanup(void)
 	}
 
 #ifdef CONFIG_PROC_FS
-	proc_unregister( &proc_irda, proc_ircomm.low_ino);
+	remove_proc_entry("ircomm", proc_irda);
 #endif /* CONFIG_PROC_FS */
 }
 #endif /* MODULE */

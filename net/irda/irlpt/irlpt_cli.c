@@ -157,14 +157,7 @@ static int irlpt_client_proc_read( char *buf, char **start, off_t offset,
 	return len;
 }
 
-struct proc_dir_entry proc_irlpt_client = {
-	0, 12, "irlpt_client",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, NULL /* ops -- default to array */,
-	&irlpt_client_proc_read /* get_info */,
-};
-
-extern struct proc_dir_entry proc_irda;
+extern struct proc_dir_entry *proc_irda;
 
 #endif /* CONFIG_PROC_FS */
 
@@ -193,7 +186,8 @@ __initfunc(int irlpt_client_init(void))
 				     NULL);
 
 #ifdef CONFIG_PROC_FS
-	proc_register( &proc_irda, &proc_irlpt_client);
+	create_proc_entry("irlpt_client", 0, proc_irda)->get_info
+			= irlpt_client_proc_read;
 #endif /* CONFIG_PROC_FS */
 
 	DEBUG( irlpt_client_debug, __FUNCTION__ " -->\n");
@@ -219,7 +213,7 @@ static void irlpt_client_cleanup(void)
 	hashbin_delete( irlpt_clients, (FREE_FUNC) irlpt_client_close);
 
 #ifdef CONFIG_PROC_FS
-	proc_unregister( &proc_irda, proc_irlpt_client.low_ino);
+	remove_proc_entry("irlpt_client", proc_irda);
 #endif
 
 	DEBUG( irlpt_client_debug, __FUNCTION__ " -->\n");

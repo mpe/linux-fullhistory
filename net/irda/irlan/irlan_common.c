@@ -99,15 +99,8 @@ static void irlan_close_tsaps(struct irlan_cb *self);
 static int irlan_proc_read(char *buf, char **start, off_t offset, int len, 
 			   int unused);
 
-extern struct proc_dir_entry proc_irda;
-
-struct proc_dir_entry proc_irlan = {
-	0, 5, "irlan",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, NULL,
-	&irlan_proc_read,
-};
-#endif /* CONFIG_PROC_FS */
+extern struct proc_dir_entry *proc_irda;
+#endif
 
 void irlan_watchdog_timer_expired(unsigned long data)
 {
@@ -188,7 +181,7 @@ __initfunc(int irlan_init(void))
 		return -ENOMEM;
 	}
 #ifdef CONFIG_PROC_FS
-	proc_register(&proc_irda, &proc_irlan);
+	create_proc_entry("irlan", 0, proc_irda)->get_info = irlan_proc_read;
 #endif /* CONFIG_PROC_FS */
 
 	DEBUG(4, __FUNCTION__ "()\n");
@@ -224,7 +217,7 @@ void irlan_cleanup(void)
 	irlmp_unregister_service(skey);
 
 #ifdef CONFIG_PROC_FS
-	proc_unregister(&proc_irda, proc_irlan.low_ino);
+	remove_proc_entry("irlan", proc_irda);
 #endif /* CONFIG_PROC_FS */
 	/*
 	 *  Delete hashbin and close all irlan client instances in it
