@@ -11,12 +11,13 @@
 #include <linux/malloc.h>
 #include <linux/binfmts.h>
 #include <linux/init.h>
+#include <linux/file.h>
 #include <linux/smp_lock.h>
 
 static int load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 {
 	char *cp, *i_name, *i_arg;
-	struct dentry * dentry;
+	struct file *file;
 	char interp[128];
 	int retval;
 
@@ -28,10 +29,8 @@ static int load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 	 */
 
 	bprm->sh_bang++;
-	lock_kernel();
-	dput(bprm->dentry);
-	unlock_kernel();
-	bprm->dentry = NULL;
+	fput(bprm->file);
+	bprm->file = NULL;
 
 	bprm->buf[127] = '\0';
 	if ((cp = strchr(bprm->buf, '\n')) == NULL)
@@ -81,13 +80,11 @@ static int load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 	/*
 	 * OK, now restart the process with the interpreter's dentry.
 	 */
-	lock_kernel();
-	dentry = open_namei(interp);
-	unlock_kernel();
-	if (IS_ERR(dentry))
-		return PTR_ERR(dentry);
+	file = open_exec(interp);
+	if (IS_ERR(file))
+		return PTR_ERR(file);
 
-	bprm->dentry = dentry;
+	bprm->file = file;
 	retval = prepare_binprm(bprm);
 	if (retval < 0)
 		return retval;

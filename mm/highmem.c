@@ -234,11 +234,20 @@ static inline void copy_from_high_bh (struct buffer_head *to,
 {
 	struct page *p_from;
 	unsigned long vfrom;
+	unsigned long flags;
 
 	p_from = from->b_page;
+
+	/*
+	 * Since this can be executed from IRQ context, reentrance
+	 * on the same CPU must be avoided:
+	 */
+	__save_flags(flags);
+	__cli();
 	vfrom = kmap_atomic(p_from, KM_BOUNCE_WRITE);
 	memcpy(to->b_data, (char *)vfrom + bh_offset(from), to->b_size);
 	kunmap_atomic(vfrom, KM_BOUNCE_WRITE);
+	__restore_flags(flags);
 }
 
 static inline void copy_to_high_bh_irq (struct buffer_head *to,
@@ -246,11 +255,15 @@ static inline void copy_to_high_bh_irq (struct buffer_head *to,
 {
 	struct page *p_to;
 	unsigned long vto;
+	unsigned long flags;
 
 	p_to = to->b_page;
+	__save_flags(flags);
+	__cli();
 	vto = kmap_atomic(p_to, KM_BOUNCE_READ);
 	memcpy((char *)vto + bh_offset(to), from->b_data, to->b_size);
 	kunmap_atomic(vto, KM_BOUNCE_READ);
+	__restore_flags(flags);
 }
 
 static inline void bounce_end_io (struct buffer_head *bh, int uptodate)

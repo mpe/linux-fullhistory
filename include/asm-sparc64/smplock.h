@@ -9,6 +9,8 @@
 
 extern spinlock_t kernel_flag;
 
+#define kernel_locked()		spin_is_locked(&kernel_flag)
+
 /*
  * Release global kernel lock and global interrupt lock
  */

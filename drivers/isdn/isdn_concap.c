@@ -1,10 +1,13 @@
-/* $Id: isdn_concap.c,v 1.6 1999/08/22 20:26:01 calle Exp $
+/* $Id: isdn_concap.c,v 1.7 2000/03/21 23:53:22 kai Exp $
  
  * Stuff to support the concap_proto by isdn4linux. isdn4linux - specific
  * stuff goes here. Stuff that depends only on the concap protocol goes to
  * another -- protocol specific -- source file.
  *
  * $Log: isdn_concap.c,v $
+ * Revision 1.7  2000/03/21 23:53:22  kai
+ * fix backwards compatibility
+ *
  * Revision 1.6  1999/08/22 20:26:01  calle
  * backported changes from kernel 2.3.14:
  * - several #include "config.h" gone, others come.
@@ -58,15 +61,20 @@
 
 int isdn_concap_dl_data_req(struct concap_proto *concap, struct sk_buff *skb)
 {
-	int tmp;
 	struct net_device *ndev = concap -> net_dev;
-	isdn_net_local *lp = (isdn_net_local *) ndev->priv;
+	isdn_net_dev *nd = ((isdn_net_local *) ndev->priv)->netdev;
+	isdn_net_local *lp = isdn_net_get_locked_lp(nd);
 
 	IX25DEBUG( "isdn_concap_dl_data_req: %s \n", concap->net_dev->name);
+	if (!lp) {
+		IX25DEBUG( "isdn_concap_dl_data_req: %s : isdn_net_send_skb returned %d\n", concap -> net_dev -> name, 1);
+		return 1;
+	}
 	lp->huptimer = 0;
-	tmp=isdn_net_send_skb(ndev, lp, skb);
-	IX25DEBUG( "isdn_concap_dl_data_req: %s : isdn_net_send_skb returned %d\n", concap -> net_dev -> name, tmp);
-	return tmp;
+	isdn_net_writebuf_skb(lp, skb);
+	spin_unlock_bh(&lp->xmit_lock);
+	IX25DEBUG( "isdn_concap_dl_data_req: %s : isdn_net_send_skb returned %d\n", concap -> net_dev -> name, 0);
+	return 0;
 }
 
 

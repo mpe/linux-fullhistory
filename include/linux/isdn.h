@@ -1,4 +1,4 @@
-/* $Id: isdn.h,v 1.94 2000/02/26 00:29:40 keil Exp $
+/* $Id: isdn.h,v 1.101 2000/03/20 22:37:47 detabc Exp $
  *
  * Main header for the Linux ISDN subsystem (linklevel).
  *
@@ -21,6 +21,35 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn.h,v $
+ * Revision 1.101  2000/03/20 22:37:47  detabc
+ * modify abc-extension to work together with the new LL.
+ * remove abc frame-counter (is obsolete now).
+ * use the new lp->super_tx_queue for internal queueing (bsd-rawip-compress).
+ * modify isdn_net_xmit() and isdn_net_write_super().
+ * -- Kai, please have a look to this two function's. Thank's.
+ *
+ * Revision 1.100  2000/03/19 15:27:53  kai
+ * no known bugs left...
+ *
+ * Revision 1.99  2000/03/18 16:20:26  kai
+ * cosmetics / renaming
+ *
+ * Revision 1.98  2000/03/17 18:20:47  kai
+ * moved to frame_cnt based flow control
+ * some races still need to be fixed
+ *
+ * Revision 1.97  2000/03/17 16:22:55  kai
+ * we keep track of outstanding packets (given to HL, but not confirmed yet)
+ * now, but we don't use it for flow control yet.
+ *
+ * Revision 1.96  2000/03/17 12:49:42  kai
+ * calling statcallb with ISDN_STAT_BSENT in hard-IRQ context is now
+ * officially allowed. writebuf_skb() will never be called in hard-IRQ context
+ * anymore.
+ *
+ * Revision 1.95  2000/03/04 16:20:42  detabc
+ * copy frames before rewriting frame's saddr
+ *
  * Revision 1.94  2000/02/26 00:29:40  keil
  * more softnet changes
  *
@@ -395,7 +424,6 @@
 #undef CONFIG_ISDN_WITH_ABC_CH_EXTINUSE
 #undef CONFIG_ISDN_WITH_ABC_CONN_ERROR
 #undef CONFIG_ISDN_WITH_ABC_RAWIPCOMPRESS
-#undef CONFIG_ISDN_WITH_ABC_FRAME_LIMIT
 #undef CONFIG_ISDN_WITH_ABC_IPV4_RW_SOCKADDR 
 #undef CONFIG_ISDN_WITH_ABC_IPV4_RWUDP_SOCKADDR 
 
@@ -701,7 +729,6 @@ typedef struct isdn_net_local_s {
   ulong                  sqfull_stamp; /* Start-Time of overload           */
   ulong                  slavedelay;   /* Dynamic bundling delaytime       */
   int                    triggercps;   /* BogoCPS needed for trigger slave */
-  struct net_device      *srobin;      /* Ptr to Master device for slaves  */
   isdn_net_phone         *phone[2];    /* List of remote-phonenumbers      */
 				       /* phone[0] = Incoming Numbers      */
 				       /* phone[1] = Outgoing Numbers      */
@@ -711,9 +738,15 @@ typedef struct isdn_net_local_s {
   struct isdn_net_local_s *next;       /* Ptr to next link in bundle       */
   struct isdn_net_local_s *last;       /* Ptr to last link in bundle       */
   struct isdn_net_dev_s  *netdev;      /* Ptr to netdev                    */
-  struct sk_buff         *first_skb;   /* Ptr to skb that triggers dialing */
-  struct sk_buff *volatile sav_skb;    /* Ptr to skb, rejected by LL-driver*/
+  struct sk_buff_head    super_tx_queue; /* List of supervisory frames to  */
+	                               /* be transmitted asap              */
+  atomic_t frame_cnt;                  /* number of frames currently       */
+                        	       /* queued in HL driver              */    
                                        /* Ptr to orig. hard_header_cache   */
+  spinlock_t             xmit_lock;    /* used to protect the xmit path of */
+                                       /* a particular channel (including  */
+                                       /* the frame_cnt                    */
+
   int                    (*org_hhc)(
 				    struct neighbour *neigh,
 				    struct hh_cache *hh);
@@ -733,13 +766,17 @@ typedef struct isdn_net_local_s {
   int  cisco_loop;                     /* Loop counter for Cisco-SLARP     */
   ulong cisco_myseq;                   /* Local keepalive seq. for Cisco   */
   ulong cisco_yourseq;                 /* Remote keepalive seq. for Cisco  */
+  struct tq_struct tqueue;
 } isdn_net_local;
 
 /* the interface itself */
 typedef struct isdn_net_dev_s {
   isdn_net_local *local;
-  isdn_net_local *queue;
-  void           *next;                /* Pointer to next isdn-interface   */
+  isdn_net_local *queue;               /* circular list of all bundled
+					  channels, which are currently
+					  online                           */
+  spinlock_t queue_lock;               /* lock to protect queue            */
+  void *next;                          /* Pointer to next isdn-interface   */
   struct net_device dev;               /* interface to upper levels        */
 #ifdef CONFIG_ISDN_PPP
   struct mpqueue *mp_last; 

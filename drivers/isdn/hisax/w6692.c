@@ -1,4 +1,4 @@
-/* $Id: w6692.c,v 1.2 2000/02/26 00:35:13 keil Exp $
+/* $Id: w6692.c,v 1.4 2000/03/16 23:24:11 werner Exp $
 
  * w6692.c   Winbond W6692 specific routines
  *
@@ -8,6 +8,14 @@
  *              This file is (c) under GNU PUBLIC LICENSE
  *
  * $Log: w6692.c,v $
+ * Revision 1.4  2000/03/16 23:24:11  werner
+ *
+ * Fixed an additional location
+ *
+ * Revision 1.3  2000/03/16 22:41:36  werner
+ *
+ * Tried to fix second B-channel problem (still not tested)
+ *
  * Revision 1.2  2000/02/26 00:35:13  keil
  * Fix skb freeing in interrupt context
  *
@@ -50,7 +58,7 @@ static const PCI_ENTRY id_list[] =
 
 extern const char *CardType[];
 
-const char *w6692_revision = "$Revision: 1.2 $";
+const char *w6692_revision = "$Revision: 1.4 $";
 
 #define DBUSY_TIMER_VALUE 80
 
@@ -317,9 +325,12 @@ W6692B_interrupt(struct IsdnCardState *cs, u_char bchan)
 {
 	u_char val;
 	u_char r;
-	struct BCState *bcs = cs->bcs + bchan;
+	struct BCState *bcs = cs->bcs;
 	struct sk_buff *skb;
 	int count;
+
+	if (bcs->channel != bchan)
+	  bcs++; /* hardware bchan must match ! */
 
 	val = cs->BC_Read_Reg(cs, bchan, W_B_EXIR);
 	debugl1(cs, "W6692B chan %d B_EXIR 0x%02X", bchan, val);
@@ -724,7 +735,9 @@ static void
 W6692Bmode(struct BCState *bcs, int mode, int bc)
 {
 	struct IsdnCardState *cs = bcs->cs;
-	int bchan = bcs->hw.w6692.bchan;
+	int bchan = bc;
+
+	bcs->hw.w6692.bchan = bc;
 
 	if (cs->debug & L1_DEB_HSCX)
 		debugl1(cs, "w6692 %c mode %d ichan %d",

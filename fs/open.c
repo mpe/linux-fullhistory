@@ -298,7 +298,6 @@ asmlinkage long sys_access(const char * filename, int mode)
 	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
 		return -EINVAL;
 
-	lock_kernel();
 	old_fsuid = current->fsuid;
 	old_fsgid = current->fsgid;
 	old_cap = current->cap_effective;
@@ -311,7 +310,8 @@ asmlinkage long sys_access(const char * filename, int mode)
 		cap_clear(current->cap_effective);
 	else
 		current->cap_effective = current->cap_permitted;
-		
+
+	lock_kernel();		
 	dentry = namei(filename);
 	res = PTR_ERR(dentry);
 	if (!IS_ERR(dentry)) {
@@ -321,12 +321,12 @@ asmlinkage long sys_access(const char * filename, int mode)
 			res = -EROFS;
 		dput(dentry);
 	}
+	unlock_kernel();
 
 	current->fsuid = old_fsuid;
 	current->fsgid = old_fsgid;
 	current->cap_effective = old_cap;
 
-	unlock_kernel();
 	return res;
 }
 
@@ -646,25 +646,35 @@ out:
  */
 struct file *filp_open(const char * filename, int flags, int mode, struct dentry * base)
 {
-	struct inode * inode;
 	struct dentry * dentry;
-	struct file * f;
 	int flag,error;
+
+	flag = flags;
+	if ((flag+1) & O_ACCMODE)
+		flag++;
+	if (flag & O_TRUNC)
+		flag |= 2;
+
+	dentry = __open_namei(filename, flag, mode, base);
+	error = PTR_ERR(dentry);
+	if (!IS_ERR(dentry))
+		return dentry_open(dentry, flags);
+
+	return ERR_PTR(error);
+}
+
+struct file *dentry_open(struct dentry *dentry, int flags)
+{
+	struct file * f;
+	struct inode *inode;
+	int error;
 
 	error = -ENFILE;
 	f = get_empty_filp();
 	if (!f)
-		goto out;
-	f->f_flags = flag = flags;
-	f->f_mode = (flag+1) & O_ACCMODE;
-	if (f->f_mode)
-		flag++;
-	if (flag & O_TRUNC)
-		flag |= 2;
-	dentry = __open_namei(filename, flag, mode, base);
-	error = PTR_ERR(dentry);
-	if (IS_ERR(dentry))
-		goto cleanup_file;
+		goto cleanup_dentry;
+	f->f_flags = flags;
+	f->f_mode = (flags+1) & O_ACCMODE;
 	inode = dentry->d_inode;
 	if (f->f_mode & FMODE_WRITE) {
 		error = get_write_access(inode);
@@ -692,12 +702,10 @@ struct file *filp_open(const char * filename, int flags, int mode, struct dentry
 cleanup_all:
 	if (f->f_mode & FMODE_WRITE)
 		put_write_access(inode);
-cleanup_dentry:
 	f->f_dentry = NULL;
+cleanup_dentry:
 	dput(dentry);
-cleanup_file:
 	put_filp(f);
-out:
 	return ERR_PTR(error);
 }
 

@@ -1147,6 +1147,7 @@ E: nkbj@image.dk
 W: http://www.image.dk/~nkbj
 D: 4.4BSD and NeXTstep filesystem support in the old ufs.
 D: Openstep filesystem and NeXTstep CDROM support in the new ufs.
+D: Replace CPU==[3-6]86 and __i386__ submodel flags by configuration options.
 D: Danish HOWTO, Linux+FreeBSD mini-HOWTO.
 S: Dr. Holsts Vej 34, lejl. 164
 S: DK-8230 Åbyhøj
@@ -2487,6 +2488,7 @@ D: Amiga Zorro maintainer
 D: Amiga Buddha and Catweasel chipset IDE
 D: Atari Falcon chipset IDE
 D: Amiga Gayle chipset IDE
+D: mipsel NEC DDB Vrc-5074
 S: C. Huysmansstraat 12
 S: B-3128 Baal
 S: Belgium

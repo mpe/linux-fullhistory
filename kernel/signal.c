@@ -89,7 +89,7 @@ flush_signal_handlers(struct task_struct *t)
  * Dequeue a signal and return the element to the caller, which is 
  * expected to free it.
  *
- * All callers of must be holding current->sigmask_lock.
+ * All callers must be holding current->sigmask_lock.
  */
 
 int
@@ -148,19 +148,19 @@ printk("SIG dequeue (%s:%d): %d ", current->comm, current->pid,
 			kmem_cache_free(signal_queue_cachep,q);
 			atomic_dec(&nr_queued_signals);
 
-			/* then see if this signal is still pending. */
-			q = *pp;
-			while (q) {
-				if (q->info.si_signo == sig) {
-					reset = 0;
-					break;
-				}
-				q = q->next;
-			}
+			/* Then see if this signal is still pending.
+			   (Non rt signals may not be queued twice.)
+			 */
+			if (sig >= SIGRTMIN)
+				for (q = *pp; q; q = q->next)
+					if (q->info.si_signo == sig) {
+						reset = 0;
+						break;
+					}
+					
 		} else {
-			/* Ok, it wasn't in the queue.  It must have
-			   been sent either by a non-rt mechanism and
-			   we ran out of queue space.  So zero out the
+			/* Ok, it wasn't in the queue.  We must have
+			   been out of queue space.  So zero out the
 			   info.  */
 			info->si_signo = sig;
 			info->si_errno = 0;
@@ -169,9 +169,10 @@ printk("SIG dequeue (%s:%d): %d ", current->comm, current->pid,
 			info->si_uid = 0;
 		}
 
-		if (reset)
+		if (reset) {
 			sigdelset(&current->signal, sig);
-		recalc_sigpending(current);
+			recalc_sigpending(current);
+		}
 
 		/* XXX: Once POSIX.1b timers are in, if si_code == SI_TIMER,
 		   we need to xchg out the timer overrun values.  */
@@ -192,6 +193,43 @@ printk(" %d -> %d\n", signal_pending(current), sig);
 #endif
 
 	return sig;
+}
+
+/*
+ * Remove signal sig from queue and from t->signal.
+ * Returns 1 if sig was found in t->signal.
+ *
+ * All callers must be holding t->sigmask_lock.
+ */
+static int rm_sig_from_queue(int sig, struct task_struct *t)
+{
+	struct signal_queue *q, **pp;
+
+	if (sig >= SIGRTMIN) {
+		printk(KERN_CRIT "SIG: rm_sig_from_queue() doesn't support rt signals\n");
+		return 0;
+	}
+
+	if (!sigismember(&t->signal, sig))
+		return 0;
+
+	sigdelset(&t->signal, sig);
+
+	pp = &t->sigqueue;
+	q = t->sigqueue;
+
+	/* Find the one we're interested in ...
+	   It may appear only once. */
+	for ( ; q ; pp = &q->next, q = q->next)
+		if (q->info.si_signo == sig)
+			break;
+	if (q) {
+		if ((*pp = q->next) == NULL)
+			t->sigqueue_tail = pp;
+		kmem_cache_free(signal_queue_cachep,q);
+		atomic_dec(&nr_queued_signals);
+	}
+	return 1;
 }
 
 /*
@@ -272,18 +310,16 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 		if (t->state == TASK_STOPPED)
 			wake_up_process(t);
 		t->exit_code = 0;
-		sigdelsetmask(&t->signal, (sigmask(SIGSTOP)|sigmask(SIGTSTP)|
-					   sigmask(SIGTTOU)|sigmask(SIGTTIN)));
-		/* Inflict this corner case with recalculations, not mainline */
-		recalc_sigpending(t);
+		if (rm_sig_from_queue(SIGSTOP, t) || rm_sig_from_queue(SIGTSTP, t) ||
+		    rm_sig_from_queue(SIGTTOU, t) || rm_sig_from_queue(SIGTTIN, t))
+			recalc_sigpending(t);
 		break;
 
 	case SIGSTOP: case SIGTSTP:
 	case SIGTTIN: case SIGTTOU:
 		/* If we're stopping again, cancel SIGCONT */
-		sigdelset(&t->signal, SIGCONT);
-		/* Inflict this corner case with recalculations, not mainline */
-		recalc_sigpending(t);
+		if (rm_sig_from_queue(SIGCONT, t))
+			recalc_sigpending(t);
 		break;
 	}
 
@@ -337,8 +373,12 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 				q->info = *info;
 				break;
 		}
-	} else {
-		/* Queue overflow, we have to abort. */
+	} else if (sig >= SIGRTMIN && info && (unsigned long)info != 1
+		   && info->si_code < 0) {
+		/*
+		 * Queue overflow, abort.  We may abort if the signal was rt
+		 * and sent by user using something other than kill().
+		 */
 		ret = -EAGAIN;
 		goto out;
 	}
@@ -405,7 +445,7 @@ force_sig_info(int sig, struct siginfo *info, struct task_struct *t)
 }
 
 /*
- * kill_pg() sends a signal to a process group: this is what the tty
+ * kill_pg_info() sends a signal to a process group: this is what the tty
  * control characters do (^C, ^Z etc)
  */
 
@@ -436,7 +476,7 @@ kill_pg_info(int sig, struct siginfo *info, pid_t pgrp)
 }
 
 /*
- * kill_sl() sends a signal to the session leader: this is used
+ * kill_sl_info() sends a signal to the session leader: this is used
  * to send SIGHUP to the controlling process of a terminal when
  * the connection is lost.
  */
@@ -483,7 +523,7 @@ kill_proc_info(int sig, struct siginfo *info, pid_t pid)
 }
 
 /*
- * kill_something() interprets pid in interesting ways just like kill(2).
+ * kill_something_info() interprets pid in interesting ways just like kill(2).
  *
  * POSIX specifies that kill(-1,sig) is unspecified, but what we have
  * is probably wrong.  Should make it like BSD or SYSV.

@@ -865,61 +865,6 @@ static int nfs_rmdir(struct inode *dir, struct dentry *dentry)
 	return error;
 }
 
-
-/*  Note: we copy the code from lookup_dentry() here, only: we have to
- *  omit the directory lock. We are already the owner of the lock when
- *  we reach here. And "down(&dir->i_sem)" would make us sleep forever
- *  ('cause WE have the lock)
- * 
- *  VERY IMPORTANT: calculate the hash for this dentry!!!!!!!!
- *  Otherwise the cached lookup DEFINITELY WILL fail. And a new dentry
- *  is created. Without the DCACHE_NFSFS_RENAMED flag. And with d_count
- *  == 1. And trouble.
- *
- *  Concerning my choice of the temp name: it is just nice to have
- *  i_ino part of the temp name, as this offers another check whether
- *  somebody attempts to remove the "silly renamed" dentry itself.
- *  Which is something that I consider evil. Your opinion may vary.
- *  BUT:
- *  Now that I compute the hash value right, it should be possible to simply
- *  check for the DCACHE_NFSFS_RENAMED flag in dentry->d_flag instead of
- *  doing the string compare.
- *  WHICH MEANS:
- *  This offers the opportunity to shorten the temp name. Currently, I use
- *  the hex representation of i_ino + an event counter. This sums up to
- *  as much as 36 characters for a 64 bit machine, and needs 20 chars on 
- *  a 32 bit machine.
- *  QUINTESSENCE
- *  The use of i_ino is simply cosmetic. All we need is a unique temp
- *  file name for the .nfs files. The event counter seemed to be adequate.
- *  And as we retry in case such a file already exists, we are guaranteed
- *  to succeed.
- */
-
-static
-struct dentry *nfs_silly_lookup(struct dentry *parent, char *silly, int slen)
-{
-	struct qstr    sqstr;
-	struct dentry *sdentry;
-	struct dentry *res;
-
-	sqstr.name = silly;
-	sqstr.len  = slen;
-	sqstr.hash = full_name_hash(silly, slen);
-	sdentry = d_lookup(parent, &sqstr);
-	if (!sdentry) {
-		sdentry = d_alloc(parent, &sqstr);
-		if (sdentry == NULL)
-			return ERR_PTR(-ENOMEM);
-		res = nfs_lookup(parent->d_inode, sdentry);
-		if (res) {
-			dput(sdentry);
-			return res;
-		}
-	}
-	return sdentry;
-}
-
 static int nfs_sillyrename(struct inode *dir, struct dentry *dentry)
 {
 	static unsigned int sillycounter = 0;
@@ -969,7 +914,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 		dfprintk(VFS, "trying to rename %s to %s\n",
 			 dentry->d_name.name, silly);
 		
-		sdentry = nfs_silly_lookup(dentry->d_parent, silly, slen);
+		sdentry = lookup_one(silly, dentry->d_parent);
 		/*
 		 * N.B. Better to return EBUSY here ... it could be
 		 * dangerous to delete the file while it's in use.

@@ -200,11 +200,11 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr, unsigned lon
 	if (file != NULL) {
 		switch (flags & MAP_TYPE) {
 		case MAP_SHARED:
-			if ((prot & PROT_WRITE) && !(file->f_mode & 2))
+			if ((prot & PROT_WRITE) && !(file->f_mode & FMODE_WRITE))
 				return -EACCES;
 
 			/* Make sure we don't allow writing to an append-only file.. */
-			if (IS_APPEND(file->f_dentry->d_inode) && (file->f_mode & 2))
+			if (IS_APPEND(file->f_dentry->d_inode) && (file->f_mode & FMODE_WRITE))
 				return -EACCES;
 
 			/* make sure there are no mandatory locks on the file. */
@@ -213,7 +213,7 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr, unsigned lon
 
 			/* fall through */
 		case MAP_PRIVATE:
-			if (!(file->f_mode & 1))
+			if (!(file->f_mode & FMODE_READ))
 				return -EACCES;
 			break;
 
@@ -252,7 +252,7 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr, unsigned lon
 		VM_ClearReadHint(vma);
 		vma->vm_raend = 0;
 
-		if (file->f_mode & 1)
+		if (file->f_mode & FMODE_READ)
 			vma->vm_flags |= VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
 		if (flags & MAP_SHARED) {
 			vma->vm_flags |= VM_SHARED | VM_MAYSHARE;
@@ -266,7 +266,7 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr, unsigned lon
 			 * We leave the VM_MAYSHARE bit on, just to get correct output
 			 * from /proc/xxx/maps..
 			 */
-			if (!(file->f_mode & 2))
+			if (!(file->f_mode & FMODE_WRITE))
 				vma->vm_flags &= ~(VM_MAYWRITE | VM_SHARED);
 		}
 	} else

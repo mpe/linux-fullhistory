@@ -292,12 +292,12 @@ handle_real_irq:
 	if (irq & 8) {
 		inb(0xA1);		/* DUMMY - (do we need this?) */
 		outb(cached_A1,0xA1);
+		outb(0x60+(irq&7),0xA0);/* 'Specific EOI' to slave */
 		outb(0x62,0x20);	/* 'Specific EOI' to master-IRQ2 */
-		outb(0x20,0xA0);	/* 'generic EOI' to slave */
 	} else {
 		inb(0x21);		/* DUMMY - (do we need this?) */
 		outb(cached_21,0x21);
-		outb(0x20,0x20);	/* 'generic EOI' to master */
+		outb(0x60+irq,0x20);	/* 'Specific EOI' to master */
 	}
 	spin_unlock_irqrestore(&i8259A_lock, flags);
 	return;

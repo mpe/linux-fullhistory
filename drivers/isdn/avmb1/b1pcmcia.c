@@ -1,11 +1,16 @@
 /*
- * $Id: b1pcmcia.c,v 1.7 2000/02/02 18:36:03 calle Exp $
+ * $Id: b1pcmcia.c,v 1.8 2000/03/06 18:00:23 calle Exp $
  * 
  * Module for AVM B1/M1/M2 PCMCIA-card.
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1pcmcia.c,v $
+ * Revision 1.8  2000/03/06 18:00:23  calle
+ * - Middleware extention now working with 2.3.49 (capifs).
+ * - Fixed typos in debug section of capi.c
+ * - Bugfix: Makefile corrected for b1pcmcia.c
+ *
  * Revision 1.7  2000/02/02 18:36:03  calle
  * - Modules are now locked while init_module is running
  * - fixed problem with memory mapping if address is not aligned
@@ -55,6 +60,7 @@
  *
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/skbuff.h>
@@ -70,7 +76,7 @@
 #include "capilli.h"
 #include "avmcard.h"
 
-static char *revision = "$Revision: 1.7 $";
+static char *revision = "$Revision: 1.8 $";
 
 /* ------------------------------------------------------------- */
 

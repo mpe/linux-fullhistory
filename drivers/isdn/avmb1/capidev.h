@@ -1,11 +1,22 @@
 /*
- * $Id: capidev.h,v 1.4 1999/07/01 15:26:32 calle Exp $
+ * $Id: capidev.h,v 1.5 2000/03/03 15:50:42 calle Exp $
  *
  * CAPI 2.0 Interface for Linux
  *
  * (c) Copyright 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capidev.h,v $
+ * Revision 1.5  2000/03/03 15:50:42  calle
+ * - kernel CAPI:
+ *   - Changed parameter "param" in capi_signal from __u32 to void *.
+ *   - rewrote notifier handling in kcapi.c
+ *   - new notifier NCCI_UP and NCCI_DOWN
+ * - User CAPI:
+ *   - /dev/capi20 is now a cloning device.
+ *   - middleware extentions prepared.
+ * - capidrv.c
+ *   - locking of list operations and module count updates.
+ *
  * Revision 1.4  1999/07/01 15:26:32  calle
  * complete new version (I love it):
  * + new hardware independed "capi_driver" interface that will make it easy to:
@@ -40,18 +51,18 @@
  */
 
 struct capidev {
-	int is_open;
-	int is_registered;
-	__u16 applid;
+	struct capidev *next;
+	struct file    *file;
+	__u16		applid;
+	__u16		errcode;
+	unsigned int    minor;
+
 	struct sk_buff_head recv_queue;
 	wait_queue_head_t recv_wait;
-	__u16 errcode;
-	/* Statistic */
-	unsigned long nopen;
-	unsigned long nrecvctlpkt;
-	unsigned long nrecvdatapkt;
-	unsigned long nsentctlpkt;
-	unsigned long nsentdatapkt;
-};
 
-#define CAPI_MAXMINOR	CAPI_MAXAPPL
+	/* Statistic */
+	unsigned long	nrecvctlpkt;
+	unsigned long	nrecvdatapkt;
+	unsigned long	nsentctlpkt;
+	unsigned long	nsentdatapkt;
+};

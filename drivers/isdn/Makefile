@@ -97,12 +97,12 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_ISDN_DRV_AVMB1),y)
+ifeq ($(CONFIG_ISDN_CAPI),y)
   L_OBJS += avmb1/avmb1.o
   SUB_DIRS += avmb1
   MOD_SUB_DIRS += avmb1
 else
-  ifeq ($(CONFIG_ISDN_DRV_AVMB1),m)
+  ifeq ($(CONFIG_ISDN_CAPI),m)
     MOD_SUB_DIRS += avmb1
   endif
 endif

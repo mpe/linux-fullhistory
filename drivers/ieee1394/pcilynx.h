@@ -1,3 +1,4 @@
+#include <linux/config.h>
 
 #define PCILYNX_DRIVER_NAME      "pcilynx"
 #define PCILYNX_MAJOR            177

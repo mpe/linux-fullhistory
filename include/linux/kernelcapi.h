@@ -1,11 +1,22 @@
 /*
- * $Id: kernelcapi.h,v 1.5 2000/01/28 16:45:40 calle Exp $
+ * $Id: kernelcapi.h,v 1.6 2000/03/03 15:50:42 calle Exp $
  * 
  * Kernel CAPI 2.0 Interface for Linux
  * 
  * (c) Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: kernelcapi.h,v $
+ * Revision 1.6  2000/03/03 15:50:42  calle
+ * - kernel CAPI:
+ *   - Changed parameter "param" in capi_signal from __u32 to void *.
+ *   - rewrote notifier handling in kcapi.c
+ *   - new notifier NCCI_UP and NCCI_DOWN
+ * - User CAPI:
+ *   - /dev/capi20 is now a cloning device.
+ *   - middleware extentions prepared.
+ * - capidrv.c
+ *   - locking of list operations and module count updates.
+ *
  * Revision 1.5  2000/01/28 16:45:40  calle
  * new manufacturer command KCAPI_CMD_ADDCARD (generic addcard),
  * will search named driver and call the add_card function if one exist.
@@ -94,8 +105,8 @@ struct capi_interface {
 	__u16 (*capi_put_message) (__u16 applid, struct sk_buff * msg);
 	__u16 (*capi_get_message) (__u16 applid, struct sk_buff ** msgp);
 	__u16 (*capi_set_signal) (__u16 applid,
-			      void (*signal) (__u16 applid, __u32 param),
-				  __u32 param);
+			      void (*signal) (__u16 applid, void *param),
+				  void *param);
 	__u16 (*capi_get_manufacturer) (__u32 contr, __u8 buf[CAPI_MANUFACTURER_LEN]);
 	__u16 (*capi_get_version) (__u32 contr, struct capi_version * verp);
 	 __u16(*capi_get_serial) (__u32 contr, __u8 serial[CAPI_SERIAL_LEN]);
@@ -108,8 +119,15 @@ struct capi_interface {
 
 };
 
-#define	KCI_CONTRUP	0
-#define	KCI_CONTRDOWN	1
+struct capi_ncciinfo {
+	__u16 applid;
+	__u32 ncci;
+};
+
+#define	KCI_CONTRUP	0	/* struct capi_profile */
+#define	KCI_CONTRDOWN	1	/* NULL */
+#define	KCI_NCCIUP	2	/* struct capi_ncciinfo */
+#define	KCI_NCCIDOWN	3	/* struct capi_ncciinfo */
 
 struct capi_interface_user {
 	char name[20];
@@ -147,6 +165,7 @@ int detach_capi_interface(struct capi_interface_user *);
 #define CAPI_MSGNOTINSTALLED 	          0x1109
 #define CAPI_MSGCTRLERNOTSUPPORTEXTEQUIP  0x110a
 #define CAPI_MSGCTRLERONLYSUPPORTEXTEQUIP 0x110b
+
 
 #endif				/* __KERNEL__ */
 

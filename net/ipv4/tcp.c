@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.164 2000/03/08 19:36:40 davem Exp $
+ * Version:	$Id: tcp.c,v 1.165 2000/03/23 05:30:32 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1337,19 +1337,20 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 				break;
 			}
 
-			if (sk->done) {
-				copied = -ENOTCONN;
-				break;
-			}
-
-			if (sk->state == TCP_CLOSE) {
+			if (sk->shutdown & RCV_SHUTDOWN) {
 				if (!(flags&MSG_PEEK))
 					sk->done = 1;
 				break;
 			}
 
-			if (sk->shutdown & RCV_SHUTDOWN)
+			if (sk->state == TCP_CLOSE) {
+				if (sk->done) {
+					copied = -ENOTCONN;
+					break;
+				} else if (!(flags&MSG_PEEK))
+					sk->done = 1;
 				break;
+			}
 
 			if (!timeo) {
 				copied = -EAGAIN;

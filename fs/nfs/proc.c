@@ -114,7 +114,8 @@ nfs_proc_write(struct nfs_server *server, struct nfs_fh *fhandle, int swap,
 	struct nfs_writeargs	arg = { fhandle, offset, count, 1, 1,
 					{{(void *) buffer, count}, {0,0}, {0,0}, {0,0},
 					{0,0}, {0,0}, {0,0}, {0,0}}};
-	struct nfs_writeres	res = {fattr, 0, count};
+	struct nfs_writeverf	verf;
+	struct nfs_writeres	res = {fattr, &verf, count};
 	int			status;
 
 	dprintk("NFS call  write %d @ %ld\n", count, offset);

@@ -1,4 +1,4 @@
-/* $Id: isdn_net.h,v 1.10 1999/08/22 20:26:06 calle Exp $
+/* $Id: isdn_net.h,v 1.16 2000/03/21 23:53:22 kai Exp $
 
  * header for Linux ISDN subsystem, network related functions (linklevel).
  *
@@ -21,6 +21,26 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_net.h,v $
+ * Revision 1.16  2000/03/21 23:53:22  kai
+ * fix backwards compatibility
+ *
+ * Revision 1.15  2000/03/19 15:27:53  kai
+ * no known bugs left...
+ *
+ * Revision 1.14  2000/03/18 16:20:25  kai
+ * cosmetics / renaming
+ *
+ * Revision 1.13  2000/03/17 18:20:46  kai
+ * moved to frame_cnt based flow control
+ * some races still need to be fixed
+ *
+ * Revision 1.12  2000/03/17 17:01:00  kai
+ * cleanup
+ *
+ * Revision 1.11  2000/03/17 16:22:55  kai
+ * we keep track of outstanding packets (given to HL, but not confirmed yet)
+ * now, but we don't use it for flow control yet.
+ *
  * Revision 1.10  1999/08/22 20:26:06  calle
  * backported changes from kernel 2.3.14:
  * - several #include "config.h" gone, others come.
@@ -124,8 +144,88 @@ extern void isdn_net_autohup(void);
 extern int isdn_net_force_hangup(char *);
 extern int isdn_net_force_dial(char *);
 extern isdn_net_dev *isdn_net_findif(char *);
-extern int isdn_net_send_skb(struct net_device *, isdn_net_local *,
-			     struct sk_buff *);
 extern int isdn_net_rcv_skb(int, struct sk_buff *);
 extern void isdn_net_slarp_out(void);
 extern int isdn_net_dial_req(isdn_net_local *);
+extern void isdn_net_writebuf_skb(isdn_net_local *lp, struct sk_buff *skb);
+extern void isdn_net_write_super(isdn_net_local *lp, struct sk_buff *skb);
+
+#define ISDN_NET_MAX_QUEUE_LENGTH 2
+
+/*
+ * is this particular channel busy?
+ */
+static __inline__ int isdn_net_lp_busy(isdn_net_local *lp)
+{
+	if (atomic_read(&lp->frame_cnt) < ISDN_NET_MAX_QUEUE_LENGTH)
+		return 0;
+	else 
+		return 1;
+}
+
+/*
+ * For the given net device, this will get a non-busy channel out of the
+ * corresponding bundle. The returned channel is locked.
+ */
+static __inline__ isdn_net_local * isdn_net_get_locked_lp(isdn_net_dev *nd)
+{
+	unsigned long flags;
+	isdn_net_local *lp;
+
+	spin_lock_irqsave(&nd->queue_lock, flags);
+	lp = nd->queue;         /* get lp on top of queue */
+	spin_lock_bh(&nd->queue->xmit_lock);
+	while (isdn_net_lp_busy(nd->queue)) {
+		spin_unlock_bh(&nd->queue->xmit_lock);
+		nd->queue = nd->queue->next;
+		if (nd->queue == lp) /* not found -- should never happen */
+			return 0;
+		spin_lock_bh(&nd->queue->xmit_lock);
+	}
+	lp = nd->queue;
+
+	nd->queue = nd->queue->next;
+	spin_unlock_irqrestore(&nd->queue_lock, flags);
+	return lp;
+}
+
+/*
+ * add a channel to a bundle
+ */
+static __inline__ void isdn_net_add_to_bundle(isdn_net_dev *nd, isdn_net_local *nlp)
+{
+	isdn_net_local *lp;
+	unsigned long flags;
+
+	spin_lock_irqsave(&nd->queue_lock, flags);
+
+	lp = nd->queue;
+	nlp->last = lp->last;
+	lp->last->next = nlp;
+	lp->last = nlp;
+	nlp->next = lp;
+	nd->queue = nlp;
+
+	spin_unlock_irqrestore(&nd->queue_lock, flags);
+}
+/*
+ * remove a channel from the bundle it belongs to
+ */
+static __inline__ void isdn_net_rm_from_bundle(isdn_net_local *lp)
+{
+	isdn_net_local *master_lp = lp;
+	unsigned long flags;
+
+	if (lp->master)
+		master_lp = (isdn_net_local *) lp->master->priv;
+
+	spin_lock_irqsave(&master_lp->netdev->queue_lock, flags);
+	lp->last->next = lp->next;
+	lp->next->last = lp->last;
+	if (master_lp->netdev->queue == lp)
+		master_lp->netdev->queue = lp->next;
+	lp->next = lp->last = lp;	/* (re)set own pointers */
+	spin_unlock_irqrestore(&master_lp->netdev->queue_lock, flags);
+}
+
+

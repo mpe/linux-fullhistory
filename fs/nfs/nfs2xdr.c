@@ -9,6 +9,7 @@
 
 #define NFS_NEED_XDR_TYPES
 
+#include <linux/config.h>
 #include <linux/param.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -607,9 +608,7 @@ nfs_xdr_readlinkres(struct rpc_rqst *req, u32 *p, void *dummy)
 static int
 nfs_xdr_writeres(struct rpc_rqst *req, u32 *p, struct nfs_writeres *res)
 {
-#ifdef CONFIG_NFS_V3
 	res->verf->committed = NFS_FILE_SYNC;
-#endif
 	return nfs_xdr_attrstat(req, p, res->fattr);
 }
 

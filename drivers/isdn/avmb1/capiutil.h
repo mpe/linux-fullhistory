@@ -1,5 +1,5 @@
 /*
- * $Id: capiutil.h,v 1.4 1999/09/15 08:16:03 calle Exp $
+ * $Id: capiutil.h,v 1.5 2000/03/03 15:50:42 calle Exp $
  * 
  * CAPI 2.0 defines & types
  * 
@@ -7,6 +7,17 @@
  * Rewritten for Linux 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: capiutil.h,v $
+ * Revision 1.5  2000/03/03 15:50:42  calle
+ * - kernel CAPI:
+ *   - Changed parameter "param" in capi_signal from __u32 to void *.
+ *   - rewrote notifier handling in kcapi.c
+ *   - new notifier NCCI_UP and NCCI_DOWN
+ * - User CAPI:
+ *   - /dev/capi20 is now a cloning device.
+ *   - middleware extentions prepared.
+ * - capidrv.c
+ *   - locking of list operations and module count updates.
+ *
  * Revision 1.4  1999/09/15 08:16:03  calle
  * Implementation of 64Bit extention complete.
  *
@@ -36,28 +47,47 @@
 
 #include <asm/types.h>
 
-#define	CAPIMSG_LEN(m)		(m[0] | (m[1] << 8))
-#define	CAPIMSG_APPID(m)	(m[2] | (m[3] << 8))
-#define	CAPIMSG_COMMAND(m)	(m[4])
-#define	CAPIMSG_SUBCOMMAND(m)	(m[5])
-#define	CAPIMSG_MSGID(m)	(m[6] | (m[7] << 8))
+#define CAPIMSG_BASELEN		8
+#define CAPIMSG_U8(m, off)	(m[off])
+#define CAPIMSG_U16(m, off)	(m[off]|(m[(off)+1]<<8))
+#define CAPIMSG_U32(m, off)	(m[off]|(m[(off)+1]<<8)|(m[(off)+2]<<16)|(m[(off)+3]<<24))
+#define	CAPIMSG_LEN(m)		CAPIMSG_U16(m,0)
+#define	CAPIMSG_APPID(m)	CAPIMSG_U16(m,2)
+#define	CAPIMSG_COMMAND(m)	CAPIMSG_U8(m,4)
+#define	CAPIMSG_SUBCOMMAND(m)	CAPIMSG_U8(m,5)
+#define CAPIMSG_CMD(m)		(((m[4])<<8)|(m[5]))
+#define	CAPIMSG_MSGID(m)	CAPIMSG_U16(m,6)
 #define CAPIMSG_CONTROLLER(m)	(m[8] & 0x7f)
-#define CAPIMSG_CONTROL(m)	(m[8]|(m[9]<<8)|(m[10]<<16)|(m[11]<<24))
+#define CAPIMSG_CONTROL(m)	CAPIMSG_U32(m, 8)
 #define CAPIMSG_NCCI(m)		CAPIMSG_CONTROL(m)
-#define CAPIMSG_DATA(m)		(m[12]|(m[13]<<8)|(m[14]<<16)|(m[15]<<24))
-#define CAPIMSG_DATALEN(m)	(m[16] | (m[17]<<8))
+#define CAPIMSG_DATALEN(m)	CAPIMSG_U16(m,16) /* DATA_B3_REQ */
 
-#define	CAPIMSG_SETAPPID(m, applid) \
-	do { \
-		((__u8 *)m)[2] = (__u16)(applid) & 0xff; \
-		((__u8 *)m)[3] = ((__u16)(applid) >> 8) & 0xff; \
-	} while (0)
+static inline void capimsg_setu8(void *m, int off, __u8 val)
+{
+	((__u8 *)m)[off] = val;
+}
 
-#define	CAPIMSG_SETLEN(m, len) \
-	do { \
-		((__u8 *)m)[0] = (__u16)(len) & 0xff; \
-		((__u8 *)m)[1] = ((__u16)(len) >> 8) & 0xff; \
-	} while (0)
+static inline void capimsg_setu16(void *m, int off, __u16 val)
+{
+	((__u8 *)m)[off] = val & 0xff;
+	((__u8 *)m)[off+1] = (val >> 8) & 0xff;
+}
+
+static inline void capimsg_setu32(void *m, int off, __u32 val)
+{
+	((__u8 *)m)[off] = val & 0xff;
+	((__u8 *)m)[off+1] = (val >> 8) & 0xff;
+	((__u8 *)m)[off+2] = (val >> 16) & 0xff;
+	((__u8 *)m)[off+3] = (val >> 24) & 0xff;
+}
+
+#define	CAPIMSG_SETLEN(m, len)		capimsg_setu16(m, 0, len)
+#define	CAPIMSG_SETAPPID(m, applid)	capimsg_setu16(m, 2, applid)
+#define	CAPIMSG_SETCOMMAND(m,cmd)	capimsg_setu8(m, 4, cmd)
+#define	CAPIMSG_SETSUBCOMMAND(m, cmd)	capimsg_setu8(m, 5, cmd)
+#define	CAPIMSG_SETMSGID(m, msgid)	capimsg_setu16(m, 6, msgid)
+#define	CAPIMSG_SETCONTROL(m, contr)	capimsg_setu32(m, 8, contr)
+#define	CAPIMSG_SETDATALEN(m, len)	capimsg_setu16(m, 16, len)
 
 /*----- basic-type definitions -----*/
 

@@ -93,56 +93,6 @@ static inline void put_binfmt(struct linux_binfmt * fmt)
 		__MOD_DEC_USE_COUNT(fmt->module);
 }
 
-/* N.B. Error returns must be < 0 */
-int open_dentry(struct dentry * dentry, int mode)
-{
-	struct inode * inode = dentry->d_inode;
-	struct file * f;
-	struct list_head * l = NULL;
-	int fd, error;
-
-	lock_kernel();
-	if (inode->i_sb)
-		l = &inode->i_sb->s_files;
-
-	error = -EINVAL;
-	if (!inode->i_fop)
-		goto out;
-	fd = get_unused_fd();
-	if (fd >= 0) {
-		error = -ENFILE;
-		f = get_empty_filp();
-		if (!f)
-			goto out_fd;
-		f->f_flags = mode;
-		f->f_mode = (mode+1) & O_ACCMODE;
-		f->f_dentry = dentry;
-		f->f_pos = 0;
-		f->f_reada = 0;
-		f->f_op = inode->i_fop;
-		if (f->f_op->open) {
-			error = f->f_op->open(inode,f);
-			if (error)
-				goto out_filp;
-		}
-		file_move(f, l);
-		fd_install(fd, f);
-		dget(dentry);
-	}
-	unlock_kernel();
-	return fd;
-
-out_filp:
-	if (error > 0)
-		error = -EIO;
-	put_filp(f);
-out_fd:
-	put_unused_fd(fd);
-out:
-	unlock_kernel();
-	return error;
-}
-
 /*
  * Note that a shared library must be both readable and executable due to
  * security reasons.
@@ -365,44 +315,41 @@ int setup_arg_pages(struct linux_binprm *bprm)
 	return 0;
 }
 
-/*
- * Read in the complete executable. This is used for "-N" files
- * that aren't on a block boundary, and for files on filesystems
- * without get_block support.
- */
-int read_exec(struct dentry *dentry, unsigned long offset,
-	char * addr, unsigned long count, int to_kmem)
+struct file *open_exec(const char *name)
 {
-	struct file file;
-	struct inode * inode = dentry->d_inode;
-	int result = -ENOEXEC;
+	struct dentry *dentry;
+	struct file *file;
 
-	if (!inode->i_fop)
-		goto end_readexec;
-	if (init_private_file(&file, dentry, 1))
-		goto end_readexec;
-	if (!file.f_op->read)
-		goto close_readexec;
-	if (file.f_op->llseek) {
-		if (file.f_op->llseek(&file,offset,0) != offset)
- 			goto close_readexec;
-	} else
-		file.f_pos = offset;
-	if (to_kmem) {
-		mm_segment_t old_fs = get_fs();
-		set_fs(get_ds());
-		result = file.f_op->read(&file, addr, count, &file.f_pos);
-		set_fs(old_fs);
-	} else {
-		result = verify_area(VERIFY_WRITE, addr, count);
-		if (result)
-			goto close_readexec;
-		result = file.f_op->read(&file, addr, count, &file.f_pos);
+	lock_kernel();
+	dentry = lookup_dentry(name, NULL, LOOKUP_FOLLOW);
+	file = (struct file*) dentry;
+	if (!IS_ERR(dentry)) {
+		file = ERR_PTR(-EACCES);
+		if (dentry->d_inode && S_ISREG(dentry->d_inode->i_mode)) {
+			int err = permission(dentry->d_inode, MAY_EXEC);
+			file = ERR_PTR(err);
+			if (!err)
+				file = dentry_open(dentry, O_RDONLY);
+		}
 	}
-close_readexec:
-	if (file.f_op->release)
-		file.f_op->release(inode,&file);
-end_readexec:
+	unlock_kernel();
+	return file;
+}
+
+int kernel_read(struct file *file, unsigned long offset,
+	char * addr, unsigned long count)
+{
+	mm_segment_t old_fs;
+	loff_t pos = offset;
+	int result = -ENOSYS;
+
+	if (!file->f_op->read)
+		goto fail;
+	old_fs = get_fs();
+	set_fs(get_ds());
+	result = file->f_op->read(file, addr, count, &pos);
+	set_fs(old_fs);
+fail:
 	return result;
 }
 
@@ -540,7 +487,7 @@ int flush_old_exec(struct linux_binprm * bprm)
 	flush_thread();
 
 	if (bprm->e_uid != current->euid || bprm->e_gid != current->egid || 
-	    permission(bprm->dentry->d_inode,MAY_READ))
+	    permission(bprm->file->f_dentry->d_inode,MAY_READ))
 		current->dumpable = 0;
 
 	/* An exec changes our domain. We are no longer part of the thread
@@ -580,7 +527,7 @@ int prepare_binprm(struct linux_binprm *bprm)
 {
 	int mode;
 	int retval,id_change,cap_raised;
-	struct inode * inode = bprm->dentry->d_inode;
+	struct inode * inode = bprm->file->f_dentry->d_inode;
 
 	mode = inode->i_mode;
 	if (!S_ISREG(mode))			/* must be regular file */
@@ -677,7 +624,7 @@ int prepare_binprm(struct linux_binprm *bprm)
 	}
 
 	memset(bprm->buf,0,sizeof(bprm->buf));
-	return read_exec(bprm->dentry,0,bprm->buf,128,1);
+	return kernel_read(bprm->file,0,bprm->buf,128);
 }
 
 /*
@@ -763,24 +710,20 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 	    {
 		int i;
 		char * dynloader[] = { "/sbin/loader" };
-		struct dentry * dentry;
+		struct file * file;
 
-		lock_kernel();
-		dput(bprm->dentry);
-		unlock_kernel();
-		bprm->dentry = NULL;
+		fput(bprm->file);
+		bprm->file = NULL;
 
 	        bprm_loader.p = PAGE_SIZE*MAX_ARG_PAGES-sizeof(void *);
 	        for (i = 0 ; i < MAX_ARG_PAGES ; i++)	/* clear page-table */
                     bprm_loader.page[i] = NULL;
 
-		lock_kernel();
-		dentry = open_namei(dynloader[0]);
-		unlock_kernel();
-		retval = PTR_ERR(dentry);
-		if (IS_ERR(dentry))
+		file = open_exec(dynloader[0]);
+		retval = PTR_ERR(file);
+		if (IS_ERR(file))
 			return retval;
-		bprm->dentry = dentry;
+		bprm->file = file;
 		bprm->loader = bprm_loader.p;
 		retval = prepare_binprm(bprm);
 		if (retval<0)
@@ -802,12 +745,9 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 			retval = fn(bprm, regs);
 			if (retval >= 0) {
 				put_binfmt(fmt);
-				if (bprm->dentry) {
-					lock_kernel();
-					dput(bprm->dentry);
-					unlock_kernel();
-				}
-				bprm->dentry = NULL;
+				if (bprm->file)
+					fput(bprm->file);
+				bprm->file = NULL;
 				current->did_exec = 1;
 				return retval;
 			}
@@ -815,7 +755,7 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 			put_binfmt(fmt);
 			if (retval != -ENOEXEC)
 				break;
-			if (!bprm->dentry) {
+			if (!bprm->file) {
 				spin_unlock(&binfmt_lock);
 				return retval;
 			}
@@ -847,37 +787,31 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs)
 {
 	struct linux_binprm bprm;
-	struct dentry * dentry;
+	struct file *file;
 	int retval;
 	int i;
 
 	bprm.p = PAGE_SIZE*MAX_ARG_PAGES-sizeof(void *);
 	memset(bprm.page, 0, MAX_ARG_PAGES*sizeof(bprm.page[0])); 
 
-	lock_kernel();
-	dentry = open_namei(filename);
-	unlock_kernel();
+	file = open_exec(filename);
 
-	retval = PTR_ERR(dentry);
-	if (IS_ERR(dentry))
+	retval = PTR_ERR(file);
+	if (IS_ERR(file))
 		return retval;
 
-	bprm.dentry = dentry;
+	bprm.file = file;
 	bprm.filename = filename;
 	bprm.sh_bang = 0;
 	bprm.loader = 0;
 	bprm.exec = 0;
 	if ((bprm.argc = count(argv, bprm.p / sizeof(void *))) < 0) {
-		lock_kernel();
-		dput(dentry);
-		unlock_kernel();
+		fput(file);
 		return bprm.argc;
 	}
 
 	if ((bprm.envc = count(envp, bprm.p / sizeof(void *))) < 0) {
-		lock_kernel();
-		dput(dentry);
-		unlock_kernel();
+		fput(file);
 		return bprm.envc;
 	}
 
@@ -905,11 +839,8 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 
 out:
 	/* Something went wrong, return the inode and free the argument pages*/
-	if (bprm.dentry) {
-		lock_kernel();
-		dput(bprm.dentry);
-		unlock_kernel();
-	}
+	if (bprm.file)
+		fput(bprm.file);
 
 	/* Assumes that free_page() can take a NULL argument. */ 
 	/* I hope this is ok for all architectures */ 

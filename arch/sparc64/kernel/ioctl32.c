@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.84 2000/03/21 21:19:18 davem Exp $
+/* $Id: ioctl32.c,v 1.85 2000/03/23 05:25:41 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997-2000  Jakub Jelinek  (jakub@redhat.com)
@@ -1594,7 +1594,7 @@ static int loop_status(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	mm_segment_t old_fs = get_fs();
 	struct loop_info l;
-	int err = 0;
+	int err = -EINVAL;
 
 	switch(cmd) {
 	case LOOP_SET_STATUS:
@@ -1604,11 +1604,13 @@ static int loop_status(unsigned int fd, unsigned int cmd, unsigned long arg)
 		err |= __get_user(l.lo_rdevice, &((struct loop_info32 *)arg)->lo_rdevice);
 		err |= __copy_from_user((char *)&l.lo_offset, (char *)&((struct loop_info32 *)arg)->lo_offset,
 					   8 + (unsigned long)l.lo_init - (unsigned long)&l.lo_offset);
-		if (err)
-			return -EFAULT;
-		set_fs (KERNEL_DS);
-		err = sys_ioctl (fd, cmd, (unsigned long)&l);
-		set_fs (old_fs);
+		if (err) {
+			err = -EFAULT;
+		} else {
+			set_fs (KERNEL_DS);
+			err = sys_ioctl (fd, cmd, (unsigned long)&l);
+			set_fs (old_fs);
+		}
 		break;
 	case LOOP_GET_STATUS:
 		set_fs (KERNEL_DS);
@@ -1621,10 +1623,19 @@ static int loop_status(unsigned int fd, unsigned int cmd, unsigned long arg)
 			err |= __put_user(l.lo_rdevice, &((struct loop_info32 *)arg)->lo_rdevice);
 			err |= __copy_to_user((char *)&((struct loop_info32 *)arg)->lo_offset,
 					   (char *)&l.lo_offset, (unsigned long)l.lo_init - (unsigned long)&l.lo_offset);
+			if (err)
+				err = -EFAULT;
 		}
 		break;
+	default: {
+		static int count = 0;
+		if (++count <= 20)
+			printk("%s: Unknown loop ioctl cmd, fd(%d) "
+			       "cmd(%08x) arg(%08lx)\n",
+			       __FUNCTION__, fd, cmd, arg);
 	}
-	return err ? -EFAULT : 0;
+	}
+	return err;
 }
 
 extern int tty_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigned long arg);

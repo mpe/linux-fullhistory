@@ -2527,6 +2527,15 @@ void __init
  *
  * Is this the real thing?
  *
+ *	No, it's bollocks. md.c tries to do a bit different thing that might
+ * _somewhat_ work eons ago. Neither does any good these days. mount() couldn't
+ * care less for icache (it cares only for ->s_root->d_count and if we want
+ * loopback mounts even that will stop). BTW, with the form used here mount()
+ * would have to scan the _whole_ icache to detect the attempt - how on the
+ * Earth could it guess the i_ino of your dummy inode? Official line on the
+ * exclusion between mount()/swapon()/open()/etc. is Just Don't Do It(tm).
+ * If you can convince Linus that it's worth changing - fine, then you'll need
+ * to do blkdev_get()/blkdev_put(). Until then...
  */
 struct inode *lvm_get_inode(int dev)
 {

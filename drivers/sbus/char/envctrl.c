@@ -1,4 +1,4 @@
-/* $Id: envctrl.c,v 1.15 2000/02/09 22:33:23 davem Exp $
+/* $Id: envctrl.c,v 1.16 2000/03/22 21:29:23 ecd Exp $
  * envctrl.c: Temperature and Fan monitoring on Machines providing it.
  *
  * Copyright (C) 1998  Eddie C. Dost  (ecd@skynet.be)
@@ -1002,7 +1002,6 @@ rasctrl_setup(int node)
 	return 0;
 
 out:
-	envctrl_stop();
 	return -ENODEV;
 }
 
@@ -1381,7 +1380,7 @@ envctrl_setup(int node)
 	} else {
 		err = prom_getproperty(node, "cpu-temp-factors",
 				       envctrl.cpu_temp_table, 256);
-		if (err) {
+		if (err < 0) {
 			printk("envctrl: can't read `cpu-temp-factors'\n");
 			goto out;
 		}
@@ -1398,7 +1397,7 @@ envctrl_setup(int node)
 	} else {
 		err = prom_getproperty(node, "cpu-fan-speeds",
 				       envctrl.cpu_fan_speeds, 112);
-		if (err) {
+		if (err < 0) {
 			printk("envctrl: can't read `cpu-fan-speeds'\n");
 			goto out;
 		}
@@ -1415,7 +1414,7 @@ envctrl_setup(int node)
 	} else {
 		err = prom_getproperty(node, "ps-temp-factors",
 				       envctrl.ps_temp_table, 256);
-		if (err) {
+		if (err < 0) {
 			printk("envctrl: can't read `ps-temp-factors'\n");
 			goto out;
 		}
@@ -1432,7 +1431,7 @@ envctrl_setup(int node)
 	} else {
 		err = prom_getproperty(node, "ps-fan-speeds",
 				       envctrl.ps_fan_speeds, 112);
-		if (err) {
+		if (err < 0) {
 			printk("envctrl: can't read `ps-fan-speeds'\n");
 			goto out;
 		}
@@ -1449,8 +1448,6 @@ envctrl_setup(int node)
 out:
 	if (tmp)
 		kfree(tmp);
-
-	envctrl_stop();
 	return err;
 }
 #endif /* U450_SUPPORT */

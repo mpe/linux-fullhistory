@@ -27,6 +27,7 @@
 #include <linux/proc_fs.h>
 #include <linux/string.h>
 #include <linux/ctype.h>
+#include <linux/file.h>
 #include <linux/spinlock.h>
 #include <asm/uaccess.h>
 
@@ -180,7 +181,7 @@ static struct binfmt_entry *check_file(struct linux_binprm *bprm)
 static int load_misc_binary(struct linux_binprm *bprm, struct pt_regs *regs)
 {
 	struct binfmt_entry *fmt;
-	struct dentry * dentry;
+	struct file * file;
 	char iname[128];
 	char *iname_addr = iname;
 	int retval;
@@ -200,8 +201,8 @@ static int load_misc_binary(struct linux_binprm *bprm, struct pt_regs *regs)
 	if (!fmt)
 		goto _ret;
 
-	dput(bprm->dentry);
-	bprm->dentry = NULL;
+	fput(bprm->file);
+	bprm->file = NULL;
 
 	/* Build args for interpreter */
 	remove_arg_zero(bprm);
@@ -213,11 +214,11 @@ static int load_misc_binary(struct linux_binprm *bprm, struct pt_regs *regs)
 	bprm->argc++;
 	bprm->filename = iname;	/* for binfmt_script */
 
-	dentry = open_namei(iname);
-	retval = PTR_ERR(dentry);
-	if (IS_ERR(dentry))
+	file = open_exec(iname);
+	retval = PTR_ERR(file);
+	if (IS_ERR(file))
 		goto _ret;
-	bprm->dentry = dentry;
+	bprm->file = file;
 
 	retval = prepare_binprm(bprm);
 	if (retval >= 0)

@@ -21,7 +21,7 @@ struct linux_binprm{
 	struct page *page[MAX_ARG_PAGES];
 	unsigned long p; /* current top of mem */
 	int sh_bang;
-	struct dentry * dentry;
+	struct file * file;
 	int e_uid, e_gid;
 	kernel_cap_t cap_inheritable, cap_permitted, cap_effective;
 	int argc, envc;
@@ -44,11 +44,6 @@ struct linux_binfmt {
 
 extern int register_binfmt(struct linux_binfmt *);
 extern int unregister_binfmt(struct linux_binfmt *);
-
-extern int read_exec(struct dentry *, unsigned long offset,
-	char * addr, unsigned long count, int to_kmem);
-
-extern int open_dentry(struct dentry *, int mode);
 
 extern int prepare_binprm(struct linux_binprm *);
 extern void remove_arg_zero(struct linux_binprm *);

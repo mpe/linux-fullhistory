@@ -597,10 +597,6 @@ handle_signal(unsigned long sig, struct k_sigaction *ka,
  * Note that 'init' is a special process: it doesn't get signals it doesn't
  * want to handle. Thus you cannot kill init even with a SIGKILL even by
  * mistake.
- *
- * Note that we go through the signals twice: once to check the signals that
- * the kernel can handle, and then we build all the user-level signal handling
- * stack-frames in one go after that.
  */
 int do_signal(struct pt_regs *regs, sigset_t *oldset)
 {

@@ -1,11 +1,22 @@
 /*
- * $Id: kcapi.c,v 1.12 2000/01/28 16:45:39 calle Exp $
+ * $Id: kcapi.c,v 1.13 2000/03/03 15:50:42 calle Exp $
  * 
  * Kernel CAPI 2.0 Module
  * 
  * (c) Copyright 1999 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: kcapi.c,v $
+ * Revision 1.13  2000/03/03 15:50:42  calle
+ * - kernel CAPI:
+ *   - Changed parameter "param" in capi_signal from __u32 to void *.
+ *   - rewrote notifier handling in kcapi.c
+ *   - new notifier NCCI_UP and NCCI_DOWN
+ * - User CAPI:
+ *   - /dev/capi20 is now a cloning device.
+ *   - middleware extentions prepared.
+ * - capidrv.c
+ *   - locking of list operations and module count updates.
+ *
  * Revision 1.12  2000/01/28 16:45:39  calle
  * new manufacturer command KCAPI_CMD_ADDCARD (generic addcard),
  * will search named driver and call the add_card function if one exist.
@@ -78,6 +89,7 @@
 #include <linux/tqueue.h>
 #include <linux/capi.h>
 #include <linux/kernelcapi.h>
+#include <linux/locks.h>
 #include <asm/uaccess.h>
 #include "capicmd.h"
 #include "capiutil.h"
@@ -86,7 +98,7 @@
 #include <linux/b1lli.h>
 #endif
 
-static char *revision = "$Revision: 1.12 $";
+static char *revision = "$Revision: 1.13 $";
 
 /* ------------------------------------------------------------- */
 
@@ -125,8 +137,8 @@ struct capi_appl {
 	__u16 applid;
 	capi_register_params rparam;
 	int releasing;
-	__u32 param;
-	void (*signal) (__u16 applid, __u32 param);
+	void *param;
+	void (*signal) (__u16 applid, void *param);
 	struct sk_buff_head recv_queue;
 	int nncci;
 	struct capi_ncci *nccilist;
@@ -135,6 +147,14 @@ struct capi_appl {
 	unsigned long nrecvdatapkt;
 	unsigned long nsentctlpkt;
 	unsigned long nsentdatapkt;
+};
+
+struct capi_notifier {
+	struct capi_notifier *next;
+	unsigned int cmd;
+	__u32 controller;
+	__u16 applid;
+	__u32 ncci;
 };
 
 /* ------------------------------------------------------------- */
@@ -160,9 +180,9 @@ static struct capi_ctr cards[CAPI_MAXCONTR];
 static int ncards = 0;
 static struct sk_buff_head recv_queue;
 static struct capi_interface_user *capi_users = 0;
+static spinlock_t capi_users_lock = SPIN_LOCK_UNLOCKED;
 static struct capi_driver *drivers;
-static long notify_up_set = 0;
-static long notify_down_set = 0;
+static spinlock_t drivers_lock = SPIN_LOCK_UNLOCKED;
 
 static struct tq_struct tq_state_notify;
 static struct tq_struct tq_recv_notify;
@@ -304,6 +324,7 @@ static int proc_driver_read_proc(char *page, char **start, off_t off,
 	int len = 0;
 	off_t begin = 0;
 
+	spin_lock(&drivers_lock);
 	for (driver = drivers; driver; driver = driver->next) {
 		len += sprintf(page+len, "%-32s %d %s\n",
 					driver->name,
@@ -317,6 +338,7 @@ static int proc_driver_read_proc(char *page, char **start, off_t off,
 		}
 	}
 endloop:
+	spin_unlock(&drivers_lock);
 	if (!driver)
 		*eof = 1;
 	if (off >= len+begin)
@@ -336,6 +358,7 @@ static int proc_users_read_proc(char *page, char **start, off_t off,
 	int len = 0;
 	off_t begin = 0;
 
+	spin_lock(&capi_users_lock);
         for (cp = capi_users; cp ; cp = cp->next) {
 		len += sprintf(page+len, "%s\n", cp->name);
 		if (len+begin > off+count)
@@ -346,6 +369,7 @@ static int proc_users_read_proc(char *page, char **start, off_t off,
 		}
 	}
 endloop:
+	spin_unlock(&capi_users_lock);
 	if (cp == 0)
 		*eof = 1;
 	if (off >= len+begin)
@@ -510,6 +534,161 @@ static void proc_capi_exit(void)
     }
 }
 
+/* -------- Notifier handling --------------------------------- */
+
+static struct capi_notifier_list{
+	struct capi_notifier *head;
+	struct capi_notifier *tail;
+} notifier_list;
+
+static inline void notify_enqueue(struct capi_notifier *np)
+{
+	struct capi_notifier_list *q = &notifier_list;
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+	if (q->tail) {
+		q->tail->next = np;
+		q->tail = np;
+	} else {
+		q->head = q->tail = np;
+	}
+	restore_flags(flags);
+}
+
+static inline struct capi_notifier *notify_dequeue(void)
+{
+	struct capi_notifier_list *q = &notifier_list;
+	struct capi_notifier *np = 0;
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+	if (q->head) {
+		np = q->head;
+		if ((q->head = np->next) == 0)
+ 			q->tail = 0;
+		np->next = 0;
+	}
+	restore_flags(flags);
+	return np;
+}
+
+static int notify_push(unsigned int cmd, __u32 controller,
+				__u16 applid, __u32 ncci)
+{
+	struct capi_notifier *np;
+
+	np = (struct capi_notifier *)kmalloc(sizeof(struct capi_notifier), GFP_ATOMIC);
+	if (!np)
+		return -1;
+	memset(np, 0, sizeof(struct capi_notifier));
+	np->cmd = cmd;
+	np->controller = controller;
+	np->applid = applid;
+	np->ncci = ncci;
+	notify_enqueue(np);
+	MOD_INC_USE_COUNT;
+	queue_task(&tq_state_notify, &tq_immediate);
+	mark_bh(IMMEDIATE_BH);
+	return 0;
+}
+
+/* -------- KCI_CONTRUP --------------------------------------- */
+
+static void notify_up(__u32 contr)
+{
+	struct capi_interface_user *p;
+
+        printk(KERN_NOTICE "kcapi: notify up contr %d\n", contr);
+	spin_lock(&capi_users_lock);
+	for (p = capi_users; p; p = p->next) {
+		if (!p->callback) continue;
+		(*p->callback) (KCI_CONTRUP, contr, &CARD(contr)->profile);
+	}
+	spin_unlock(&capi_users_lock);
+}
+
+/* -------- KCI_CONTRDOWN ------------------------------------- */
+
+static void notify_down(__u32 contr)
+{
+	struct capi_interface_user *p;
+        printk(KERN_NOTICE "kcapi: notify down contr %d\n", contr);
+	spin_lock(&capi_users_lock);
+	for (p = capi_users; p; p = p->next) {
+		if (!p->callback) continue;
+		(*p->callback) (KCI_CONTRDOWN, contr, 0);
+	}
+	spin_unlock(&capi_users_lock);
+}
+
+/* -------- KCI_NCCIUP ---------------------------------------- */
+
+static void notify_ncciup(__u32 contr, __u16 applid, __u32 ncci)
+{
+	struct capi_interface_user *p;
+	struct capi_ncciinfo n;
+	n.applid = applid;
+	n.ncci = ncci;
+        /*printk(KERN_NOTICE "kcapi: notify up contr %d\n", contr);*/
+	spin_lock(&capi_users_lock);
+	for (p = capi_users; p; p = p->next) {
+		if (!p->callback) continue;
+		(*p->callback) (KCI_NCCIUP, contr, &n);
+	}
+	spin_unlock(&capi_users_lock);
+};
+
+/* -------- KCI_NCCIDOWN -------------------------------------- */
+
+static void notify_nccidown(__u32 contr, __u16 applid, __u32 ncci)
+{
+	struct capi_interface_user *p;
+	struct capi_ncciinfo n;
+	n.applid = applid;
+	n.ncci = ncci;
+        /*printk(KERN_NOTICE "kcapi: notify down contr %d\n", contr);*/
+	spin_lock(&capi_users_lock);
+	for (p = capi_users; p; p = p->next) {
+		if (!p->callback) continue;
+		(*p->callback) (KCI_NCCIDOWN, contr, &n);
+	}
+	spin_unlock(&capi_users_lock);
+};
+
+/* ------------------------------------------------------------ */
+
+static void inline notify_doit(struct capi_notifier *np)
+{
+	switch (np->cmd) {
+		case KCI_CONTRUP:
+			notify_up(np->controller);
+			break;
+		case KCI_CONTRDOWN:
+			notify_down(np->controller);
+			break;
+		case KCI_NCCIUP:
+			notify_ncciup(np->controller, np->applid, np->ncci);
+			break;
+		case KCI_NCCIDOWN:
+			notify_nccidown(np->controller, np->applid, np->ncci);
+			break;
+	}
+}
+
+static void notify_handler(void *dummy)
+{
+	struct capi_notifier *np;
+
+	while ((np = notify_dequeue()) != 0) {
+		notify_doit(np);
+		kfree(np);
+		MOD_DEC_USE_COUNT;
+	}
+}
+	
 /* -------- NCCI Handling ------------------------------------- */
 
 static inline void mq_init(struct capi_ncci * np)
@@ -617,6 +796,7 @@ static void controllercb_new_ncci(struct capi_ctr * card,
 	APPL(appl)->nncci++;
 	printk(KERN_INFO "kcapi: appl %d ncci 0x%x up\n", appl, ncci);
 
+	notify_push(KCI_NCCIUP, CARDNR(card), appl, ncci);
 }
 
 static void controllercb_free_ncci(struct capi_ctr * card,
@@ -634,6 +814,7 @@ static void controllercb_free_ncci(struct capi_ctr * card,
 			kfree(np);
 			APPL(appl)->nncci--;
 			printk(KERN_INFO "kcapi: appl %d ncci 0x%x down\n", appl, ncci);
+			notify_push(KCI_NCCIDOWN, CARDNR(card), appl, ncci);
 			return;
 		}
 	}
@@ -734,42 +915,6 @@ error:
 	kfree_skb(skb);
 }
 
-/* -------- Notifier ------------------------------------------ */
-
-static void notify_up(__u32 contr)
-{
-	struct capi_interface_user *p;
-
-        printk(KERN_NOTICE "kcapi: notify up contr %d\n", contr);
-	for (p = capi_users; p; p = p->next) {
-		if (!p->callback) continue;
-		(*p->callback) (KCI_CONTRUP, contr, &CARD(contr)->profile);
-	}
-}
-
-static void notify_down(__u32 contr)
-{
-	struct capi_interface_user *p;
-        printk(KERN_NOTICE "kcapi: notify down contr %d\n", contr);
-	for (p = capi_users; p; p = p->next) {
-		if (!p->callback) continue;
-		(*p->callback) (KCI_CONTRDOWN, contr, 0);
-	}
-}
-
-static void notify_handler(void *dummy)
-{
-	__u32 contr;
-
-	for (contr=1; VALID_CARD(contr); contr++)
-		 if (test_and_clear_bit(contr, &notify_up_set))
-			 notify_up(contr);
-	for (contr=1; VALID_CARD(contr); contr++)
-		 if (test_and_clear_bit(contr, &notify_down_set))
-			 notify_down(contr);
-}
-
-
 static void controllercb_ready(struct capi_ctr * card)
 {
 	__u16 appl;
@@ -782,11 +927,10 @@ static void controllercb_ready(struct capi_ctr * card)
 		card->driver->register_appl(card, appl, &APPL(appl)->rparam);
 	}
 
-        set_bit(CARDNR(card), &notify_up_set);
-        queue_task(&tq_state_notify, &tq_scheduler);
-
         printk(KERN_NOTICE "kcapi: card %d \"%s\" ready.\n",
 		CARDNR(card), card->name);
+
+	notify_push(KCI_CONTRUP, CARDNR(card), 0, 0);
 }
 
 static void controllercb_reseted(struct capi_ctr * card)
@@ -812,6 +956,7 @@ static void controllercb_reseted(struct capi_ctr * card)
 				struct capi_ncci *np = *pp;
 				*pp = np->next;
 				printk(KERN_INFO "kcapi: appl %d ncci 0x%x forced down!\n", appl, np->ncci);
+				notify_push(KCI_NCCIDOWN, CARDNR(card), appl, np->ncci);
 				kfree(np);
 				nextpp = pp;
 			} else {
@@ -819,9 +964,10 @@ static void controllercb_reseted(struct capi_ctr * card)
 			}
 		}
 	}
-	set_bit(CARDNR(card), &notify_down_set);
-	queue_task(&tq_state_notify, &tq_scheduler);
+
 	printk(KERN_NOTICE "kcapi: card %d down.\n", CARDNR(card));
+
+	notify_push(KCI_CONTRDOWN, CARDNR(card), 0, 0);
 }
 
 static void controllercb_suspend_output(struct capi_ctr *card)
@@ -952,9 +1098,12 @@ struct capi_driver_interface *attach_capi_driver(struct capi_driver *driver)
 {
 	struct capi_driver **pp;
 
+	MOD_INC_USE_COUNT;
+	spin_lock(&drivers_lock);
 	for (pp = &drivers; *pp; pp = &(*pp)->next) ;
 	driver->next = 0;
 	*pp = driver;
+	spin_unlock(&drivers_lock);
 	printk(KERN_NOTICE "kcapi: driver %s attached\n", driver->name);
 	sprintf(driver->procfn, "capi/drivers/%s", driver->name);
 	driver->procent = create_proc_entry(driver->procfn, 0, 0);
@@ -974,6 +1123,7 @@ struct capi_driver_interface *attach_capi_driver(struct capi_driver *driver)
 void detach_capi_driver(struct capi_driver *driver)
 {
 	struct capi_driver **pp;
+	spin_lock(&drivers_lock);
 	for (pp = &drivers; *pp && *pp != driver; pp = &(*pp)->next) ;
 	if (*pp) {
 		*pp = (*pp)->next;
@@ -981,10 +1131,12 @@ void detach_capi_driver(struct capi_driver *driver)
 	} else {
 		printk(KERN_ERR "kcapi: driver %s double detach ?\n", driver->name);
 	}
+	spin_unlock(&drivers_lock);
 	if (driver->procent) {
 	   remove_proc_entry(driver->procfn, 0);
 	   driver->procent = 0;
 	}
+	MOD_DEC_USE_COUNT;
 }
 
 /* ------------------------------------------------------------- */
@@ -1041,6 +1193,7 @@ static __u16 capi_release(__u16 applid)
 
 	if (!VALID_APPLID(applid) || APPL(applid)->releasing)
 		return CAPI_ILLAPPNR;
+	APPL(applid)->releasing++;
 	while ((skb = skb_dequeue(&APPL(applid)->recv_queue)) != 0)
 		kfree_skb(skb);
 	for (i = 0; i < CAPI_MAXCONTR; i++) {
@@ -1049,6 +1202,7 @@ static __u16 capi_release(__u16 applid)
 		APPL(applid)->releasing++;
 		cards[i].driver->release_appl(&cards[i], applid);
 	}
+	APPL(applid)->releasing--;
 	if (APPL(applid)->releasing <= 0) {
 	        APPL(applid)->signal = 0;
 		APPL_MARK_FREE(applid);
@@ -1128,8 +1282,8 @@ static __u16 capi_get_message(__u16 applid, struct sk_buff **msgp)
 }
 
 static __u16 capi_set_signal(__u16 applid,
-			     void (*signal) (__u16 applid, __u32 param),
-			     __u32 param)
+			     void (*signal) (__u16 applid, void *param),
+			     void *param)
 {
 	if (!VALID_APPLID(applid))
 		return CAPI_ILLAPPNR;
@@ -1194,10 +1348,12 @@ static __u16 capi_get_profile(__u32 contr, struct capi_profile *profp)
 static struct capi_driver *find_driver(char *name)
 {
 	struct capi_driver *dp;
+	spin_lock(&drivers_lock);
 	for (dp = drivers; dp; dp = dp->next)
 		if (strcmp(dp->name, name) == 0)
-			return dp;
-	return 0;
+			break;
+	spin_unlock(&drivers_lock);
+	return dp;
 }
 
 #ifdef CONFIG_AVMB1_COMPAT
@@ -1272,6 +1428,10 @@ static int old_capi_manufacturer(unsigned int cmd, void *data)
 		card = CARD(ldef.contr);
 		if (card->cardstate == CARD_FREE)
 			return -ESRCH;
+		if (card->driver->load_firmware == 0) {
+			printk(KERN_DEBUG "kcapi: load: driver \%s\" has no load function\n", card->driver->name);
+			return -ESRCH;
+		}
 
 		if (ldef.t4file.len <= 0) {
 			printk(KERN_DEBUG "kcapi: load: invalid parameter: length of t4file is %d ?\n", ldef.t4file.len);
@@ -1490,16 +1650,20 @@ struct capi_interface *attach_capi_interface(struct capi_interface_user *userp)
 {
 	struct capi_interface_user *p;
 
+	MOD_INC_USE_COUNT;
+	spin_lock(&capi_users_lock);
 	for (p = capi_users; p; p = p->next) {
 		if (p == userp) {
+			spin_unlock(&capi_users_lock);
 			printk(KERN_ERR "kcapi: double attach from %s\n",
 			       userp->name);
+			MOD_DEC_USE_COUNT;
 			return 0;
 		}
 	}
 	userp->next = capi_users;
 	capi_users = userp;
-	MOD_INC_USE_COUNT;
+	spin_unlock(&capi_users_lock);
 	printk(KERN_NOTICE "kcapi: %s attached\n", userp->name);
 
 	return &avmb1_interface;
@@ -1509,15 +1673,18 @@ int detach_capi_interface(struct capi_interface_user *userp)
 {
 	struct capi_interface_user **pp;
 
+	spin_lock(&capi_users_lock);
 	for (pp = &capi_users; *pp; pp = &(*pp)->next) {
 		if (*pp == userp) {
 			*pp = userp->next;
+			spin_unlock(&capi_users_lock);
 			userp->next = 0;
-			MOD_DEC_USE_COUNT;
 			printk(KERN_NOTICE "kcapi: %s detached\n", userp->name);
+			MOD_DEC_USE_COUNT;
 			return 0;
 		}
 	}
+	spin_unlock(&capi_users_lock);
 	printk(KERN_ERR "kcapi: double detach from %s\n", userp->name);
 	return -1;
 }
@@ -1623,7 +1790,6 @@ void cleanup_module(void)
 		strcpy(rev, "1.0");
 	}
 
-	schedule(); /* execute queued tasks .... */
         proc_capi_exit();
 	printk(KERN_NOTICE "CAPI-driver Rev%s: unloaded\n", rev);
 }

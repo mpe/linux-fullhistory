@@ -1,11 +1,22 @@
 /*
- * $Id: capidrv.c,v 1.29 1999/12/06 17:13:06 calle Exp $
+ * $Id: capidrv.c,v 1.30 2000/03/03 15:50:42 calle Exp $
  *
  * ISDN4Linux Driver, using capi20 interface (kernelcapi)
  *
  * Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capidrv.c,v $
+ * Revision 1.30  2000/03/03 15:50:42  calle
+ * - kernel CAPI:
+ *   - Changed parameter "param" in capi_signal from __u32 to void *.
+ *   - rewrote notifier handling in kcapi.c
+ *   - new notifier NCCI_UP and NCCI_DOWN
+ * - User CAPI:
+ *   - /dev/capi20 is now a cloning device.
+ *   - middleware extentions prepared.
+ * - capidrv.c
+ *   - locking of list operations and module count updates.
+ *
  * Revision 1.29  1999/12/06 17:13:06  calle
  * Added controller watchdog.
  *
@@ -171,7 +182,7 @@
 #include "capicmd.h"
 #include "capidrv.h"
 
-static char *revision = "$Revision: 1.29 $";
+static char *revision = "$Revision: 1.30 $";
 int debugmode = 0;
 
 MODULE_AUTHOR("Carsten Paeth <calle@calle.in-berlin.de>");
@@ -440,25 +451,33 @@ static inline __u8 cip2si2(__u16 cipval)
 static inline capidrv_contr *findcontrbydriverid(int driverid)
 {
 	capidrv_contr *p = global.contr_list;
+    	long flags;
 
+        save_flags(flags);
+        cli();
 	while (p) {
 		if (p->myid == driverid)
-			return p;
+			break;
 		p = p->next;
 	}
-	return (capidrv_contr *) 0;
+	restore_flags(flags);
+	return p;
 }
 
 static capidrv_contr *findcontrbynumber(__u32 contr)
 {
 	capidrv_contr *p = global.contr_list;
+	long flags;
 
+	save_flags(flags);
+	cli();
 	while (p) {
 		if (p->contrnr == contr)
-			return p;
+			break;
 		p = p->next;
 	}
-	return (capidrv_contr *) 0;
+	restore_flags(flags);
+	return p;
 }
 
 
@@ -1501,7 +1520,7 @@ static void handle_data(_cmsg * cmsg, struct sk_buff *skb)
 
 static _cmsg s_cmsg;
 
-static void capidrv_signal(__u16 applid, __u32 dummy)
+static void capidrv_signal(__u16 applid, void *dummy)
 {
 	struct sk_buff *skb = 0;
 
@@ -2218,14 +2237,18 @@ static void listentimerfunc(unsigned long x)
 static int capidrv_addcontr(__u16 contr, struct capi_profile *profp)
 {
 	capidrv_contr *card;
+	long flags;
 	isdn_ctrl cmd;
 	char id[20];
 	int i;
+
+	MOD_INC_USE_COUNT;
 
 	sprintf(id, "capidrv-%d", contr);
 	if (!(card = (capidrv_contr *) kmalloc(sizeof(capidrv_contr), GFP_ATOMIC))) {
 		printk(KERN_WARNING
 		 "capidrv: (%s) Could not allocate contr-struct.\n", id);
+		MOD_DEC_USE_COUNT;
 		return -1;
 	}
 	memset(card, 0, sizeof(capidrv_contr));
@@ -2238,6 +2261,7 @@ static int capidrv_addcontr(__u16 contr, struct capi_profile *profp)
 		printk(KERN_WARNING
 		"capidrv: (%s) Could not allocate bchan-structs.\n", id);
 		kfree(card);
+		MOD_DEC_USE_COUNT;
 		return -1;
 	}
 	card->interface.channels = profp->nbchannel;
@@ -2258,29 +2282,35 @@ static int capidrv_addcontr(__u16 contr, struct capi_profile *profp)
 	    ISDN_FEATURE_P_UNKNOWN;
 	card->interface.hl_hdrlen = 22; /* len of DATA_B3_REQ */
 	strncpy(card->interface.id, id, sizeof(card->interface.id) - 1);
-	card->next = global.contr_list;
-	global.contr_list = card;
-	global.ncontr++;
+
+
 	card->q931_read = card->q931_buf;
 	card->q931_write = card->q931_buf;
 	card->q931_end = card->q931_buf + sizeof(card->q931_buf) - 1;
 
 	if (!register_isdn(&card->interface)) {
-		global.contr_list = global.contr_list->next;
 		printk(KERN_ERR "capidrv: Unable to register contr %s\n", id);
 		kfree(card->bchans);
 		kfree(card);
+		MOD_DEC_USE_COUNT;
 		return -1;
 	}
 	card->myid = card->interface.channels;
+
+	save_flags(flags);
+	cli();
+	card->next = global.contr_list;
+	global.contr_list = card;
+	global.ncontr++;
+	restore_flags(flags);
 
 	memset(card->bchans, 0, sizeof(capidrv_bchan) * card->nbchan);
 	for (i = 0; i < card->nbchan; i++) {
 		card->bchans[i].contr = card;
 	}
 
-	cmd.driver = card->myid;
 	cmd.command = ISDN_STAT_RUN;
+	cmd.driver = card->myid;
 	card->interface.statcallb(&cmd);
 
 	card->cipmask = 0x1FFF03FF;	/* any */
@@ -2304,30 +2334,41 @@ static int capidrv_delcontr(__u16 contr)
 {
 	capidrv_contr **pp, *card;
 	isdn_ctrl cmd;
+	long flags;
 	int i;
 
+	save_flags(flags);
+	cli();
 	for (pp = &global.contr_list; *pp; pp = &(*pp)->next) {
 		if ((*pp)->contrnr == contr)
 			break;
 	}
 	if (!*pp) {
+		restore_flags(flags);
 		printk(KERN_ERR "capidrv: delcontr: no contr %u\n", contr);
 		return -1;
 	}
 	card = *pp;
+	*pp = (*pp)->next;
+	global.ncontr--;
+	restore_flags(flags);
 
 	if (debugmode)
 		printk(KERN_DEBUG "capidrv-%d: id=%d unloading\n",
 					card->contrnr, card->myid);
 
-	cmd.command = ISDN_STAT_UNLOAD;
+	cmd.command = ISDN_STAT_STOP;
 	cmd.driver = card->myid;
 	card->interface.statcallb(&cmd);
 
-	*pp = (*pp)->next;
-	global.ncontr--;
-
 	for (i = 0; i < card->nbchan; i++) {
+
+		cmd.command = ISDN_STAT_DISCH;
+		cmd.driver = card->myid;
+		cmd.arg = i;
+	        cmd.parm.num[0] = 0;
+		card->interface.statcallb(&cmd);
+
 		if (card->bchans[i].nccip)
 			free_ncci(card, card->bchans[i].nccip);
 		if (card->bchans[i].plcip)
@@ -2338,9 +2379,15 @@ static int capidrv_delcontr(__u16 contr)
 	kfree(card->bchans);
 	del_timer(&card->listentimer);
 
-	printk(KERN_INFO "%s: now down.\n", card->name);
+	cmd.command = ISDN_STAT_UNLOAD;
+	cmd.driver = card->myid;
+	card->interface.statcallb(&cmd);
 
 	kfree(card);
+
+	printk(KERN_INFO "%s: now down.\n", card->name);
+
+	MOD_DEC_USE_COUNT;
 
 	return 0;
 }
@@ -2438,10 +2485,14 @@ int capidrv_init(void)
 	__u32 ncontr, contr;
 	__u16 errcode;
 
+	MOD_INC_USE_COUNT;
+
 	capifuncs = attach_capi_interface(&cuser);
 
-	if (!capifuncs)
+	if (!capifuncs) {
+		MOD_DEC_USE_COUNT;
 		return -EIO;
+	}
 
 	if ((p = strchr(revision, ':'))) {
 		strcpy(rev, p + 1);
@@ -2456,6 +2507,7 @@ int capidrv_init(void)
 	errcode = (*capifuncs->capi_register) (&rparam, &global.appid);
 	if (errcode) {
 		detach_capi_interface(&cuser);
+		MOD_DEC_USE_COUNT;
 		return -EIO;
 	}
 
@@ -2463,6 +2515,7 @@ int capidrv_init(void)
 	if (errcode != CAPI_NOERROR) {
 		(void) (*capifuncs->capi_release) (global.appid);
 		detach_capi_interface(&cuser);
+		MOD_DEC_USE_COUNT;
 		return -EIO;
 	}
 
@@ -2477,6 +2530,9 @@ int capidrv_init(void)
 	}
 	proc_init();
 
+	printk(KERN_NOTICE "capidrv: Rev%s: loaded\n", rev);
+	MOD_DEC_USE_COUNT;
+
 	return 0;
 }
 
@@ -2484,6 +2540,7 @@ int capidrv_init(void)
 void cleanup_module(void)
 {
 	capidrv_contr *card, *next;
+	long flags;
 	char rev[10];
 	char *p;
 
@@ -2498,8 +2555,15 @@ void cleanup_module(void)
 	for (card = global.contr_list; card; card = next) {
 		next = card->next;
 		disable_dchannel_trace(card);
+	}
+
+    	save_flags(flags);
+    	cli();
+	for (card = global.contr_list; card; card = next) {
+		next = card->next;
 		capidrv_delcontr(card->contrnr);
 	}
+	restore_flags(flags);
 
 	(void) (*capifuncs->capi_release) (global.appid);
 	detach_capi_interface(&cuser);

@@ -30,24 +30,36 @@ choice 'Processor family' \
 if [ "$CONFIG_M386" != "y" ]; then
    define_bool CONFIG_X86_WP_WORKS_OK y
    define_bool CONFIG_X86_INVLPG y
+   define_bool CONFIG_X86_CMPXCHG y
    define_bool CONFIG_X86_BSWAP y
    define_bool CONFIG_X86_POPAD_OK y
 fi
-if [ "$CONFIG_M686" = "y" -o "$CONFIG_M586TSC" = "y" ]; then
+if [ "$CONFIG_M386" = "y" -o "$CONFIG_M486" = "y" ]; then
+   define_int CONFIG_X86_L1_CACHE_BYTES 16
+else
+   define_int CONFIG_X86_L1_CACHE_BYTES 32
+fi
+if [ "$CONFIG_M486" = "y" -o "$CONFIG_M586" = "y" ]; then
+   define_bool CONFIG_X86_USE_STRING_486 y
+   define_bool CONFIG_X86_ALIGNMENT_16 y
+fi
+if [ "$CONFIG_M586TSC" = "y" -o "$CONFIG_MK6" = "y" ]; then
+   define_bool CONFIG_X86_USE_STRING_486 y
+   define_bool CONFIG_X86_ALIGNMENT_16 y
    define_bool CONFIG_X86_TSC y
 fi
 if [ "$CONFIG_M686" = "y" ]; then
+   define_bool CONFIG_X86_TSC y
    define_bool CONFIG_X86_GOOD_APIC y
    define_bool CONFIG_X86_PGE y
-fi
-if [ "$CONFIG_MK6" = "y" ]; then
-   define_bool CONFIG_X86_TSC y
+   define_bool CONFIG_X86_USE_PPRO_CHECKSUM y
 fi
 if [ "$CONFIG_MK7" = "y" ]; then
    define_bool CONFIG_X86_TSC y
    define_bool CONFIG_X86_GOOD_APIC y
    define_bool CONFIG_X86_USE_3DNOW y
    define_bool CONFIG_X86_PGE y
+   define_bool CONFIG_X86_USE_PPRO_CHECKSUM y
 fi
 
 tristate '/dev/cpu/microcode - Intel P6 CPU microcode support' CONFIG_MICROCODE

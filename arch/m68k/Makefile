@@ -19,10 +19,6 @@ COMPILE_ARCH = $(shell uname -m)
 # override top level makefile
 AS += -m68020
 LD += -m m68kelf
-ifneq ($(COMPILE_ARCH),$(ARCH))
-	# prefix for cross-compiling binaries
-	CROSS_COMPILE = m68k-linux-
-endif
 
 ifndef CONFIG_SUN3
 LINKFLAGS = -T $(TOPDIR)/arch/m68k/vmlinux.lds

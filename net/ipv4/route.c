@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.82 2000/03/17 14:41:52 davem Exp $
+ * Version:	$Id: route.c,v 1.83 2000/03/23 05:34:13 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -205,9 +205,6 @@ static __inline__ unsigned rt_hash_code(u32 daddr, u32 saddr, u8 tos)
 	return (hash^(hash>>8)) & rt_hash_mask;
 }
 
-#ifndef CONFIG_PROC_FS
-static int rt_cache_get_info(char *buffer, char **start, off_t offset, int length) { return 0; }
-#else
 static int rt_cache_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	int len=0;
@@ -267,7 +264,6 @@ done:
   		len = length;
   	return len;
 }
-#endif
   
 static __inline__ void rt_free(struct rtable *rt)
 {
@@ -2204,7 +2200,6 @@ ctl_table ipv4_route_table[] = {
 #ifdef CONFIG_NET_CLS_ROUTE
 struct ip_rt_acct *ip_rt_acct;
 
-#ifdef CONFIG_PROC_FS
 static int ip_rt_acct_read(char *buffer, char **start, off_t offset,
 			   int length, int *eof, void *data)
 {
@@ -2242,7 +2237,6 @@ static int ip_rt_acct_read(char *buffer, char **start, off_t offset,
 	}
 	return 0;
 }
-#endif
 #endif
 
 void __init ip_rt_init(void)

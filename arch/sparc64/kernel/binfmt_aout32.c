@@ -198,7 +198,6 @@ static u32 *create_aout32_tables(char * p, struct linux_binprm * bprm)
 static int load_aout32_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 {
 	struct exec ex;
-	struct file * file;
 	int fd;
 	unsigned long error;
 	unsigned long fd_offset;
@@ -209,7 +208,7 @@ static int load_aout32_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != OMAGIC &&
 	     N_MAGIC(ex) != QMAGIC && N_MAGIC(ex) != NMAGIC) ||
 	    N_TRSIZE(ex) || N_DRSIZE(ex) ||
-	    bprm->dentry->d_inode->i_size < ex.a_text+ex.a_data+N_SYMSIZE(ex)+N_TXTOFF(ex)) {
+	    bprm->file->f_dentry->d_inode->i_size < ex.a_text+ex.a_data+N_SYMSIZE(ex)+N_TXTOFF(ex)) {
 		return -ENOEXEC;
 	}
 
@@ -245,21 +244,23 @@ static int load_aout32_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	compute_creds(bprm);
  	current->flags &= ~PF_FORKNOEXEC;
 	if (N_MAGIC(ex) == NMAGIC) {
+		loff_t pos = fd_offset;
 		/* Fuck me plenty... */
 		error = do_brk(N_TXTADDR(ex), ex.a_text);
-		read_exec(bprm->dentry, fd_offset, (char *) N_TXTADDR(ex),
-			  ex.a_text, 0);
+		bprm->file->f_op->read(bprm->file, (char *) N_TXTADDR(ex),
+			  ex.a_text, &pos);
 		error = do_brk(N_DATADDR(ex), ex.a_data);
-		read_exec(bprm->dentry, fd_offset + ex.a_text, (char *) N_DATADDR(ex),
-			  ex.a_data, 0);
+		bprm->file->f_op->read(bprm->file, (char *) N_DATADDR(ex),
+			  ex.a_data, &pos);
 		goto beyond_if;
 	}
 
 	if (N_MAGIC(ex) == OMAGIC) {
+		loff_t pos = fd_offset;
 		do_brk(N_TXTADDR(ex) & PAGE_MASK,
 			ex.a_text+ex.a_data + PAGE_SIZE - 1);
-		read_exec(bprm->dentry, fd_offset, (char *) N_TXTADDR(ex),
-			  ex.a_text+ex.a_data, 0);
+		bprm->file->f_op->read(bprm->file, (char *) N_TXTADDR(ex),
+			  ex.a_text+ex.a_data, &pos);
 	} else {
 		static unsigned long error_time;
 		if ((ex.a_text & 0xfff || ex.a_data & 0xfff) &&
@@ -269,37 +270,36 @@ static int load_aout32_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			error_time = jiffies;
 		}
 
-		fd = open_dentry(bprm->dentry, O_RDONLY);
+		fd = get_unused_fd();
 		if (fd < 0)
 			return fd;
-		file = fget(fd);
+		get_file(bprm->file);
+		fd_install(fd, bprm->file);
 
-		if (!file->f_op || !file->f_op->mmap) {
-			fput(file);
+		if (!bprm->file->f_op->mmap) {
+			loff_t pos = fd_offset;
 			sys_close(fd);
 			do_brk(0, ex.a_text+ex.a_data);
-			read_exec(bprm->dentry, fd_offset,
-				  (char *) N_TXTADDR(ex), ex.a_text+ex.a_data, 0);
+			bprm->file->f_op->read(bprm->file,(char *)N_TXTADDR(ex),
+				  ex.a_text+ex.a_data, &pos);
 			goto beyond_if;
 		}
 
-		error = do_mmap(file, N_TXTADDR(ex), ex.a_text,
+		error = do_mmap(bprm->file, N_TXTADDR(ex), ex.a_text,
 			PROT_READ | PROT_EXEC,
 			MAP_FIXED | MAP_PRIVATE | MAP_DENYWRITE | MAP_EXECUTABLE,
 			fd_offset);
 
 		if (error != N_TXTADDR(ex)) {
-			fput(file);
 			sys_close(fd);
 			send_sig(SIGKILL, current, 0);
 			return error;
 		}
 
- 		error = do_mmap(file, N_DATADDR(ex), ex.a_data,
+ 		error = do_mmap(bprm->file, N_DATADDR(ex), ex.a_data,
 				PROT_READ | PROT_WRITE | PROT_EXEC,
 				MAP_FIXED | MAP_PRIVATE | MAP_DENYWRITE | MAP_EXECUTABLE,
 				fd_offset + ex.a_text);
-		fput(file);
 		sys_close(fd);
 		if (error != N_DATADDR(ex)) {
 			send_sig(SIGKILL, current, 0);
@@ -349,16 +349,12 @@ static int load_aout32_library(struct file *file)
 	unsigned long bss, start_addr, len;
 	unsigned long error;
 	int retval;
-	loff_t offset = 0;
 	struct exec ex;
 
 	inode = file->f_dentry->d_inode;
 
 	retval = -ENOEXEC;
-	/* N.B. Save current fs? */
-	set_fs(KERNEL_DS);
-	error = file->f_op->read(file, (char *) &ex, sizeof(ex), &offset);
-	set_fs(USER_DS);
+	error = kernel_read(file, 0, (char *) &ex, sizeof(ex));
 	if (error != sizeof(ex))
 		goto out;
 

@@ -16,7 +16,8 @@ M_OBJS   :=
 # All of the (potential) objects that export symbols.
 # This list comes from 'grep -l EXPORT_SYMBOL *.[hc]'.
 
-export-objs    := fbmem.o fbcmap.o fbcon.o fbmon.o fbcon-afb.o fbcon-ilbm.o \
+export-objs    := fbmem.o fbcmap.o fbcon.o fbmon.o modedb.o \
+		  fbcon-afb.o fbcon-ilbm.o \
 		  fbcon-vga.o fbcon-iplan2p2.o fbcon-iplan2p4.o \
 		  fbcon-iplan2p8.o fbcon-vga-planes.o fbcon-cfb16.o \
 		  fbcon-cfb2.o fbcon-cfb24.o fbcon-cfb32.o fbcon-cfb4.o \
@@ -46,6 +47,7 @@ obj-$(CONFIG_FONT_PEARL_8x8)      += font_pearl_8x8.o
 obj-$(CONFIG_FONT_ACORN_8x8)      += font_acorn_8x8.o
 
 obj-$(CONFIG_FB)                  += fbmem.o fbcmap.o modedb.o fbcon.o fonts.o fbmon.o 
+obj-$(CONFIG_FB_COMPAT_XPMAC)     += macmodes.o
 
 obj-$(CONFIG_FB_ACORN)            += acornfb.o
 obj-$(CONFIG_FB_AMIGA)            += amifb.o
@@ -64,9 +66,9 @@ obj-$(CONFIG_FB_CYBER)            += cyberfb.o
 obj-$(CONFIG_FB_CYBER2000)        += cyber2000fb.o
 obj-$(CONFIG_FB_SGIVW)            += sgivwfb.o
 obj-$(CONFIG_FB_3DFX)             += tdfxfb.o
-obj-$(CONFIG_FB_MAC)              += macfb.o macmodes.o
+obj-$(CONFIG_FB_MAC)              += macfb.o
 obj-$(CONFIG_FB_HP300)            += hpfb.o
-obj-$(CONFIG_FB_OF)               += offb.o macmodes.o
+obj-$(CONFIG_FB_OF)               += offb.o
 obj-$(CONFIG_FB_IMSTT)            += imsttfb.o
 obj-$(CONFIG_FB_RETINAZ3)         += retz3fb.o
 obj-$(CONFIG_FB_CLGEN)            += clgenfb.o fbgen.o

@@ -1,4 +1,4 @@
-/* $Id: callc.c,v 2.40 1999/12/19 12:59:56 keil Exp $
+/* $Id: callc.c,v 2.41 2000/03/17 07:07:42 kai Exp $
 
  * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
@@ -11,6 +11,9 @@
  *              Fritz Elfert
  *
  * $Log: callc.c,v $
+ * Revision 2.41  2000/03/17 07:07:42  kai
+ * fixed oops when dialing out without l3 protocol selected
+ *
  * Revision 2.40  1999/12/19 12:59:56  keil
  * fix leased line handling
  * and cosmetics
@@ -167,7 +170,7 @@
 #define MOD_USE_COUNT ( GET_USE_COUNT (&__this_module))
 #endif	/* MODULE */
 
-const char *lli_revision = "$Revision: 2.40 $";
+const char *lli_revision = "$Revision: 2.41 $";
 
 extern struct IsdnCard cards[];
 extern int nrcards;
@@ -349,6 +352,8 @@ lli_deliver_cause(struct Channel *chanp)
 {
 	isdn_ctrl ic;
 
+	if (!chanp->proc)
+		return;
 	if (chanp->proc->para.cause == NO_CAUSE)
 		return;
 	ic.driver = chanp->cs->myid;
@@ -641,7 +646,8 @@ lli_disconnect_req(struct FsmInst *fi, int event, void *arg)
 		lli_leased_hup(fi, chanp);
 	} else {
 		FsmChangeState(fi, ST_WAIT_DRELEASE);
-		chanp->proc->para.cause = 0x10;	/* Normal Call Clearing */
+		if (chanp->proc)
+			chanp->proc->para.cause = 0x10;	/* Normal Call Clearing */
 		chanp->d_st->lli.l4l3(chanp->d_st, CC_DISCONNECT | REQUEST,
 			chanp->proc);
 	}
@@ -656,7 +662,8 @@ lli_disconnect_reject(struct FsmInst *fi, int event, void *arg)
 		lli_leased_hup(fi, chanp);
 	} else {
 		FsmChangeState(fi, ST_WAIT_DRELEASE);
-		chanp->proc->para.cause = 0x15;	/* Call Rejected */
+		if (chanp->proc)
+			chanp->proc->para.cause = 0x15;	/* Call Rejected */
 		chanp->d_st->lli.l4l3(chanp->d_st, CC_DISCONNECT | REQUEST,
 			chanp->proc);
 	}
@@ -688,7 +695,8 @@ lli_reject_req(struct FsmInst *fi, int event, void *arg)
 		return;
 	}
 #ifndef ALERT_REJECT
-	chanp->proc->para.cause = 0x15;	/* Call Rejected */
+	if (chanp->proc)
+		chanp->proc->para.cause = 0x15;	/* Call Rejected */
 	chanp->d_st->lli.l4l3(chanp->d_st, CC_REJECT | REQUEST, chanp->proc);
 	lli_dhup_close(fi, event, arg);
 #else

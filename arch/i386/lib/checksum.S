@@ -25,6 +25,7 @@
  *		2 of the License, or (at your option) any later version.
  */
 
+#include <linux/config.h>
 #include <asm/errno.h>
 				
 /*
@@ -39,7 +40,7 @@ unsigned int csum_partial(const unsigned char * buff, int len, unsigned int sum)
 .align 4
 .globl csum_partial								
 		
-#if CPU!=686
+#ifndef CONFIG_X86_USE_PPRO_CHECKSUM
 
 	  /*		
 	   * Experiments with Ethernet and SLIP connections show that buff
@@ -114,7 +115,9 @@ csum_partial:
 	popl %esi
 	ret
 
-#else /* CPU==686 */
+#else
+
+/* Version for PentiumII/PPro */
 
 csum_partial:
 	pushl %esi
@@ -210,7 +213,7 @@ csum_partial:
 	popl %esi
 	ret
 				
-#endif /* CPU==686 */ 
+#endif
 
 /*
 unsigned int csum_partial_copy_generic (const char *src, char *dst,
@@ -243,7 +246,7 @@ unsigned int csum_partial_copy_generic (const char *src, char *dst,
 .align 4
 .globl csum_partial_copy_generic
 				
-#if CPU!=686
+#ifndef CONFIG_X86_USE_PPRO_CHECKSUM
 
 #define ARGBASE 16		
 #define FP		12
@@ -448,4 +451,4 @@ DST(	movb %dl, (%edi)         )
 #undef ROUND
 #undef ROUND1		
 		
-#endif	/* CPU==i686 */ 
+#endif

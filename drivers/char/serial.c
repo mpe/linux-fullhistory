@@ -137,7 +137,7 @@ static char *serial_revdate = "2000-03-20";
 #define RS_STROBE_TIME (10*HZ)
 #define RS_ISR_PASS_LIMIT 256
 
-#if (defined(__i386__) && (CPU==386 || CPU==486))
+#if defined(__i386__) && (defined(CONFIG_M386) || defined(CONFIG_M486))
 #define SERIAL_INLINE
 #endif
   
@@ -5024,6 +5024,6 @@ void __init serial_console_init(void)
 
 /*
   Local variables:
-  compile-command: "gcc -D__KERNEL__ -I../../include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -fno-strict-aliasing -D__SMP__ -pipe -fno-strength-reduce  -DCPU=686 -march=i686 -DMODULE -DMODVERSIONS -include ../../include/linux/modversions.h   -DEXPORT_SYMTAB -c serial.c"
+  compile-command: "gcc -D__KERNEL__ -I../../include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -fno-strict-aliasing -D__SMP__ -pipe -fno-strength-reduce  -march=i686 -DMODULE -DMODVERSIONS -include ../../include/linux/modversions.h   -DEXPORT_SYMTAB -c serial.c"
   End:
 */

@@ -3051,7 +3051,7 @@ static inline int
 do_execve32(char * filename, u32 * argv, u32 * envp, struct pt_regs * regs)
 {
 	struct linux_binprm bprm;
-	struct dentry * dentry;
+	struct file * file;
 	int retval;
 	int i;
 
@@ -3059,28 +3059,24 @@ do_execve32(char * filename, u32 * argv, u32 * envp, struct pt_regs * regs)
 	memset(bprm.page, 0, MAX_ARG_PAGES * sizeof(bprm.page[0]));
 
 	lock_kernel();
-	dentry = open_namei(filename);
+	file = open_exec(filename);
 	unlock_kernel();
 
-	retval = PTR_ERR(dentry);
-	if (IS_ERR(dentry))
+	retval = PTR_ERR(file);
+	if (IS_ERR(file))
 		return retval;
 
-	bprm.dentry = dentry;
+	bprm.file = file;
 	bprm.filename = filename;
 	bprm.sh_bang = 0;
 	bprm.loader = 0;
 	bprm.exec = 0;
 	if ((bprm.argc = count32(argv)) < 0) {
-		lock_kernel();
-		dput(dentry);
-		unlock_kernel();
+		fput(file);
 		return bprm.argc;
 	}
 	if ((bprm.envc = count32(envp)) < 0) {
-		lock_kernel();
-		dput(dentry);
-		unlock_kernel();
+		fput(file);
 		return bprm.envc;
 	}
 
@@ -3108,11 +3104,8 @@ do_execve32(char * filename, u32 * argv, u32 * envp, struct pt_regs * regs)
 
 out:
 	/* Something went wrong, return the inode and free the argument pages*/
-	if (bprm.dentry) {
-		lock_kernel();
-		dput(bprm.dentry);
-		unlock_kernel();
-	}
+	if (bprm.file)
+		fput(bprm.file);
 
 	for (i=0 ; i<MAX_ARG_PAGES ; i++)
 		if (bprm.page[i])
@@ -4151,7 +4144,7 @@ asmlinkage long sparc32_open(const char * filename, int flags, int mode)
 		if (fd >= 0) {
 			struct file * f;
 			lock_kernel();
-			f = filp_open(tmp, flags, mode, NULL);
+			f = filp_open(tmp, flags, mode);
 			unlock_kernel();
 			error = PTR_ERR(f);
 			if (IS_ERR(f))

@@ -161,14 +161,6 @@ outnobh:
 	return s;
 }
 
-/* Nothing to do.. */
-
-static void
-romfs_put_super(struct super_block *sb)
-{
-	return;
-}
-
 /* That's simple too. */
 
 static int
@@ -526,7 +518,6 @@ romfs_read_inode(struct inode *i)
 
 static struct super_operations romfs_ops = {
 	read_inode:	romfs_read_inode,
-	put_super:	romfs_put_super,
 	statfs:		romfs_statfs,
 };
 

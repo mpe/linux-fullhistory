@@ -1,5 +1,5 @@
 #
-# $Id: Makefile,v 1.8 2000/01/25 14:33:38 calle Exp $
+# $Id: Makefile,v 1.16 2000/03/17 12:15:44 calle Exp $
 #
 # Makefile for the CAPI and AVM-B1 device drivers.
 #
@@ -11,6 +11,49 @@
 # parent makes..
 #
 # $Log: Makefile,v $
+# Revision 1.16  2000/03/17 12:15:44  calle
+# ALL_SUB_DIRS were wrong.
+#
+# Revision 1.15  2000/03/16 15:21:03  calle
+# Bugfix in c4_remove: loop 5 times instead of 4 :-(
+#
+# Revision 1.14  2000/03/13 17:50:55  calle
+# Added avm_cs.c for 2.3.x PCMCIA support.
+#
+# Revision 1.13  2000/03/08 17:06:33  calle
+# - changes for devfs and 2.3.49
+# - capifs now configurable (no need with devfs)
+# - New Middleware ioctl CAPI_NCCI_GETUNIT
+# - Middleware again tested with 2.2.14 and 2.3.49 (with and without devfs)
+#
+# Revision 1.12  2000/03/06 18:00:23  calle
+# - Middleware extention now working with 2.3.49 (capifs).
+# - Fixed typos in debug section of capi.c
+# - Bugfix: Makefile corrected for b1pcmcia.c
+#
+# Revision 1.11  2000/03/06 09:17:07  calle
+# - capifs: fileoperations now in inode (change for 2.3.49)
+# - Config.in: Middleware extention not a tristate, uups.
+#
+# Revision 1.10  2000/03/03 16:48:38  calle
+# - Added CAPI2.0 Middleware support (CONFIG_ISDN_CAPI)
+#   It is now possible to create a connection with a CAPI2.0 applikation
+#   and than to handle the data connection from /dev/capi/ (capifs) and also
+#   using async or sync PPP on this connection.
+#   The two major device number 190 and 191 are not confirmed yet,
+#   but I want to save the code in cvs, before I go on.
+#
+# Revision 1.9  2000/03/03 15:50:42  calle
+# - kernel CAPI:
+#   - Changed parameter "param" in capi_signal from __u32 to void *.
+#   - rewrote notifier handling in kcapi.c
+#   - new notifier NCCI_UP and NCCI_DOWN
+# - User CAPI:
+#   - /dev/capi20 is now a cloning device.
+#   - middleware extentions prepared.
+# - capidrv.c
+#   - locking of list operations and module count updates.
+#
 # Revision 1.8  2000/01/25 14:33:38  calle
 # - Added Support AVM B1 PCI V4.0 (tested with prototype)
 #   - splitted up t1pci.c into b1dma.c for common function with b1pciv4
@@ -64,6 +107,9 @@
 #
 #
 
+SUB_DIRS     :=
+MOD_SUB_DIRS :=
+ALL_SUB_DIRS := # fcpci fcclassic
 #
 # Objects that don't export a symtab
 #
@@ -82,53 +128,78 @@ MX_OBJS := # used as module
 O_TARGET := # used for .o targets (from O and OX objects)
 L_TARGET := # used for .a targets (from L and LX objects)
 
-ifeq ($(CONFIG_ISDN_DRV_AVMB1),y)
+ifeq ($(CONFIG_ISDN_CAPI),y)
   O_TARGET += avmb1.o
   OX_OBJS  += kcapi.o
   O_OBJS   += capi.o
+  ifdef CONFIG_ISDN_CAPIFS
+  	OX_OBJS   += capifs.o
+  endif
   ifdef CONFIG_ISDN_DRV_AVMB1_B1ISA
-  O_OBJS   += b1isa.o
+  	O_OBJS   += b1isa.o
   endif
   ifdef CONFIG_ISDN_DRV_AVMB1_B1PCI
-  O_OBJS  += b1pci.o
+  	O_OBJS  += b1pci.o
   endif
   ifdef CONFIG_ISDN_DRV_AVMB1_T1ISA
-  O_OBJS   += t1isa.o
+  	O_OBJS   += t1isa.o
   endif
   ifdef CONFIG_ISDN_DRV_AVMB1_B1PCMCIA
-  OX_OBJS   += b1pcmcia.o
+  	OX_OBJS   += b1pcmcia.o
   endif
   ifdef CONFIG_ISDN_DRV_AVMB1_T1PCI
-  O_OBJS   += t1pci.o
+  	O_OBJS   += t1pci.o
   endif
   ifdef CONFIG_ISDN_DRV_AVMB1_C4
-  O_OBJS   += c4.o
+  	O_OBJS   += c4.o
+  endif
+  ifdef CONFIG_ISDN_DRV_AVMB1_FCPCI
+	SUB_DIRS += fcpci
+	MOD_SUB_DIRS += fcpci
+  endif
+  ifdef CONFIG_ISDN_DRV_AVMB1_FCCLASSIC
+	SUB_DIRS += fcclassic
+	MOD_SUB_DIRS += fcclassic
   endif
   OX_OBJS  += capiutil.o capidrv.o b1.o b1dma.o
 else
-  ifeq ($(CONFIG_ISDN_DRV_AVMB1),m)
-  O_TARGET += kernelcapi.o
-  OX_OBJS  += kcapi.o
-  M_OBJS   += capi.o kernelcapi.o
-  ifdef CONFIG_ISDN_DRV_AVMB1_B1ISA
-  M_OBJS   += b1isa.o
-  endif
-  ifdef CONFIG_ISDN_DRV_AVMB1_B1PCI
-  M_OBJS  += b1pci.o
-  endif
-  ifdef CONFIG_ISDN_DRV_AVMB1_T1ISA
-  M_OBJS   += t1isa.o
-  endif
-  ifdef CONFIG_ISDN_DRV_AVMB1_B1PCMCIA
-  MX_OBJS  += b1pcmcia.o
-  endif
-  ifdef CONFIG_ISDN_DRV_AVMB1_T1PCI
-  M_OBJS   += t1pci.o
-  endif
-  ifdef CONFIG_ISDN_DRV_AVMB1_C4
-  M_OBJS   += c4.o
-  endif
-  MX_OBJS  += capiutil.o capidrv.o b1.o b1dma.o
+  ifeq ($(CONFIG_ISDN_CAPI),m)
+  	O_TARGET += kernelcapi.o
+  	OX_OBJS  += kcapi.o
+  	M_OBJS   += capi.o kernelcapi.o
+  	ifdef CONFIG_ISDN_CAPIFS
+  		MX_OBJS   += capifs.o
+  	endif
+  	ifdef CONFIG_ISDN_DRV_AVMB1_B1ISA
+  		M_OBJS   += b1isa.o
+  	endif
+  	ifdef CONFIG_ISDN_DRV_AVMB1_B1PCI
+  		M_OBJS  += b1pci.o
+  	endif
+  	ifdef CONFIG_ISDN_DRV_AVMB1_T1ISA
+  		M_OBJS   += t1isa.o
+  	endif
+  	ifdef CONFIG_ISDN_DRV_AVMB1_B1PCMCIA
+  		MX_OBJS  += b1pcmcia.o
+		ifeq ($(CONFIG_HOTPLUG),y)
+			ifneq ($(CONFIG_PCMCIA),n)
+  				M_OBJS   += avm_cs.o
+			endif
+		endif
+  	endif
+  	ifdef CONFIG_ISDN_DRV_AVMB1_T1PCI
+  		M_OBJS   += t1pci.o
+  	endif
+  	ifdef CONFIG_ISDN_DRV_AVMB1_C4
+  		M_OBJS   += c4.o
+  	endif
+  	ifdef CONFIG_ISDN_DRV_AVMB1_FCPCI
+    		MOD_SUB_DIRS += fcpci
+	endif
+  	ifdef CONFIG_ISDN_DRV_AVMB1_FCCLASSIC
+    		MOD_SUB_DIRS += fcclassic
+	endif
+  	MX_OBJS  += capiutil.o capidrv.o b1.o b1dma.o
   endif
 endif
 

@@ -1,4 +1,4 @@
-/* $Id: isdn_common.c,v 1.99 2000/02/26 01:00:52 keil Exp $
+/* $Id: isdn_common.c,v 1.100 2000/03/03 16:37:11 kai Exp $
 
  * Linux ISDN subsystem, common used functions (linklevel).
  *
@@ -21,6 +21,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_common.c,v $
+ * Revision 1.100  2000/03/03 16:37:11  kai
+ * incorporated some cosmetic changes from the official kernel tree back
+ * into CVS
+ *
  * Revision 1.99  2000/02/26 01:00:52  keil
  * changes from 2.3.47
  *
@@ -449,7 +453,7 @@
 
 isdn_dev *dev = (isdn_dev *) 0;
 
-static char *isdn_revision = "$Revision: 1.99 $";
+static char *isdn_revision = "$Revision: 1.100 $";
 
 extern char *isdn_net_revision;
 extern char *isdn_tty_revision;

@@ -1,4 +1,4 @@
-/* $Id: l3dss1.c,v 2.23 2000/02/26 01:38:14 keil Exp $
+/* $Id: l3dss1.c,v 2.24 2000/03/19 15:26:35 kai Exp $
 
  * EURO/DSS1 D-channel protocol
  *
@@ -13,6 +13,9 @@
  *              Fritz Elfert
  *
  * $Log: l3dss1.c,v $
+ * Revision 2.24  2000/03/19 15:26:35  kai
+ * changed keypad to use specified bearer, instead of always a-law
+ *
  * Revision 2.23  2000/02/26 01:38:14  keil
  * Fixes for V.110 encoding LLC from Jens Jakobsen
  *
@@ -107,7 +110,7 @@
 #include <linux/config.h>
 
 extern char *HiSax_getrev(const char *revision);
-const char *dss1_revision = "$Revision: 2.23 $";
+const char *dss1_revision = "$Revision: 2.24 $";
 
 #define EXT_BEARER_CAPS 1
 
@@ -1313,39 +1316,31 @@ l3dss1_setup_req(struct l3_process *pc, u_char pr,
 	/*
 	 * Set Bearer Capability, Map info from 1TR6-convention to EDSS1
 	 */
-        if (!send_keypad)
-	  switch (pc->para.setup.si1) {
-		case 1:	/* Telephony                               */
-			*p++ = 0x4;	/* BC-IE-code                              */
-			*p++ = 0x3;	/* Length                                  */
-			*p++ = 0x90;	/* Coding Std. CCITT, 3.1 kHz audio     */
-			*p++ = 0x90;	/* Circuit-Mode 64kbps                     */
-			*p++ = 0xa3;	/* A-Law Audio                             */
-			break;
-		case 5:	/* Datatransmission 64k, BTX               */
-		case 7:	/* Datatransmission 64k                    */
-		default:
-			*p++ = 0x4;	/* BC-IE-code                              */
-			*p++ = 0x2;	/* Length                                  */
-			*p++ = 0x88;	/* Coding Std. CCITT, unrestr. dig. Inform. */
-			*p++ = 0x90;	/* Circuit-Mode 64kbps                      */
-			break;
-	  }
-	else {  *p++ = 0x4; /* assumptions for bearer services with keypad  */
-		*p++ = 0x3;
-		*p++ = 0x80;
-                *p++ = 0x90;
-                *p++ = 0xa3;
-		*p++ = 0x18; /* no specific channel */
-                *p++ = 0x01;
-                *p++ = 0x83;
-		*p++ = 0x2C; /* IE keypad */
+	switch (pc->para.setup.si1) {
+	case 1:	                  /* Telephony                                */
+		*p++ = IE_BEARER;
+		*p++ = 0x3;	  /* Length                                   */
+		*p++ = 0x90;	  /* Coding Std. CCITT, 3.1 kHz audio         */
+		*p++ = 0x90;	  /* Circuit-Mode 64kbps                      */
+		*p++ = 0xa3;	  /* A-Law Audio                              */
+		break;
+	case 5:	                  /* Datatransmission 64k, BTX                */
+	case 7:	                  /* Datatransmission 64k                     */
+	default:
+		*p++ = IE_BEARER;
+		*p++ = 0x2;	  /* Length                                   */
+		*p++ = 0x88;	  /* Coding Std. CCITT, unrestr. dig. Inform. */
+		*p++ = 0x90;	  /* Circuit-Mode 64kbps                      */
+		break;
+	}
+
+	if (send_keypad) {
+		*p++ = IE_KEYPAD;
 		*p++ = strlen(teln);
 		while (*teln)
-		  *p++ = (*teln++) & 0x7F;
-	  }
+			*p++ = (*teln++) & 0x7F;
+	}
 	  
-       
 	/*
 	 * What about info2? Mapping to High-Layer-Compatibility?
 	 */
@@ -1394,7 +1389,7 @@ l3dss1_setup_req(struct l3_process *pc, u_char pr,
 			sp++;
 	}
 	if (*msn) {
-		*p++ = 0x6c;
+		*p++ = IE_CALLING_PN;
 		*p++ = strlen(msn) + (screen ? 2 : 1);
 		/* Classify as AnyPref. */
 		if (screen) {
@@ -1407,7 +1402,7 @@ l3dss1_setup_req(struct l3_process *pc, u_char pr,
 	}
 	if (sub) {
 		*sub++ = '.';
-		*p++ = 0x6d;	/* Calling party subaddress */
+		*p++ = IE_CALLING_SUB;
 		*p++ = strlen(sub) + 2;
 		*p++ = 0x80;	/* NSAP coded */
 		*p++ = 0x50;	/* local IDI format */
@@ -1425,33 +1420,27 @@ l3dss1_setup_req(struct l3_process *pc, u_char pr,
 	}
 	
         if (!send_keypad) {      
-	  *p++ = 0x70;
-	  *p++ = strlen(teln) + 1;
-	  /* Classify as AnyPref. */
-	  *p++ = 0x81;		/* Ext = '1'B, Type = '000'B, Plan = '0001'B. */
-	  while (*teln)
-		  *p++ = *teln++ & 0x7f;
-
-	  if (sub) {
-		  *sub++ = '.';
-		  *p++ = 0x71;	/* Called party subaddress */
-		  *p++ = strlen(sub) + 2;
-		  *p++ = 0x80;	/* NSAP coded */
-		  *p++ = 0x50;	/* local IDI format */
-		  while (*sub)
-			  *p++ = *sub++ & 0x7f;
-	  }
+		*p++ = IE_CALLED_PN;
+		*p++ = strlen(teln) + 1;
+		/* Classify as AnyPref. */
+		*p++ = 0x81;		/* Ext = '1'B, Type = '000'B, Plan = '0001'B. */
+		while (*teln)
+			*p++ = *teln++ & 0x7f;
+		
+		if (sub) {
+			*sub++ = '.';
+			*p++ = IE_CALLED_SUB;
+			*p++ = strlen(sub) + 2;
+			*p++ = 0x80;	/* NSAP coded */
+			*p++ = 0x50;	/* local IDI format */
+			while (*sub)
+				*p++ = *sub++ & 0x7f;
+		}
         }
 #if EXT_BEARER_CAPS
-        if (send_keypad) { /* special handling independant of si2 */
-                *p++ = 0x7c;
-                *p++ = 0x03;
-                *p++ = 0x80;
-                *p++ = 0x90;
-                *p++ = 0xa3;
-	} else if ((pc->para.setup.si2 >= 160) && (pc->para.setup.si2 <= 175)) {	// sync. Bitratenadaption, V.110/X.30
+	if ((pc->para.setup.si2 >= 160) && (pc->para.setup.si2 <= 175)) {	// sync. Bitratenadaption, V.110/X.30
 
-		*p++ = 0x7c;
+		*p++ = IE_LLC;
 		*p++ = 0x04;
 		*p++ = 0x88;
 		*p++ = 0x90;
@@ -1459,7 +1448,7 @@ l3dss1_setup_req(struct l3_process *pc, u_char pr,
 		*p++ = EncodeSyncParams(pc->para.setup.si2 - 160, 0x80);
 	} else if ((pc->para.setup.si2 >= 176) && (pc->para.setup.si2 <= 191)) {	// sync. Bitratenadaption, V.120
 
-		*p++ = 0x7c;
+		*p++ = IE_LLC;
 		*p++ = 0x05;
 		*p++ = 0x88;
 		*p++ = 0x90;
@@ -1468,7 +1457,7 @@ l3dss1_setup_req(struct l3_process *pc, u_char pr,
 		*p++ = 0x82;
 	} else if (pc->para.setup.si2 >= 192) {		// async. Bitratenadaption, V.110/X.30
 
-		*p++ = 0x7c;
+		*p++ = IE_LLC;
 		*p++ = 0x06;
 		*p++ = 0x88;
 		*p++ = 0x90;
@@ -1477,18 +1466,18 @@ l3dss1_setup_req(struct l3_process *pc, u_char pr,
 #ifndef CONFIG_HISAX_NO_LLC
 	} else {
 	  switch (pc->para.setup.si1) {
-		case 1:	/* Telephony                               */
-			*p++ = 0x7c;	/* BC-IE-code                              */
-			*p++ = 0x3;	/* Length                                  */
-			*p++ = 0x90;	/* Coding Std. CCITT, 3.1 kHz audio     */
-			*p++ = 0x90;	/* Circuit-Mode 64kbps                     */
-			*p++ = 0xa3;	/* A-Law Audio                             */
+		case 1:	                /* Telephony                                */
+			*p++ = IE_LLC;
+			*p++ = 0x3;	/* Length                                   */
+			*p++ = 0x90;	/* Coding Std. CCITT, 3.1 kHz audio         */
+			*p++ = 0x90;	/* Circuit-Mode 64kbps                      */
+			*p++ = 0xa3;	/* A-Law Audio                              */
 			break;
-		case 5:	/* Datatransmission 64k, BTX               */
-		case 7:	/* Datatransmission 64k                    */
+		case 5:	                /* Datatransmission 64k, BTX                */
+		case 7:	                /* Datatransmission 64k                     */
 		default:
-			*p++ = 0x7c;	/* BC-IE-code                              */
-			*p++ = 0x2;	/* Length                                  */
+			*p++ = IE_LLC;
+			*p++ = 0x2;	/* Length                                   */
 			*p++ = 0x88;	/* Coding Std. CCITT, unrestr. dig. Inform. */
 			*p++ = 0x90;	/* Circuit-Mode 64kbps                      */
 			break;

@@ -200,12 +200,6 @@ out:
 	return retval;
 }
 
-/* Nothing to do.. */
-static void cramfs_put_super(struct super_block *sb)
-{
-	return;
-}
-
 static int cramfs_statfs(struct super_block *sb, struct statfs *buf)
 {
 	buf->f_type = CRAMFS_MAGIC;
@@ -361,7 +355,6 @@ static struct inode_operations cramfs_dir_inode_operations = {
 };
 
 static struct super_operations cramfs_ops = {
-	put_super:	cramfs_put_super,
 	statfs:		cramfs_statfs,
 };
 

@@ -2,6 +2,7 @@
 #define _I386_STRING_H_
 
 #ifdef __KERNEL__
+#include <linux/config.h>
 /*
  * On a 486 or Pentium, we are better off not using the
  * byte string operations. But on a 386 or a PPro the
@@ -11,7 +12,7 @@
  * Also, the byte strings actually work correctly. Forget
  * the i486 routines for now as they may be broken..
  */
-#if FIXED_486_STRING && (CPU == 486 || CPU == 586)
+#if FIXED_486_STRING && defined(CONFIG_X86_USE_STRING_486)
 #include <asm/string-486.h>
 #else
 
@@ -284,8 +285,6 @@ __asm__ __volatile__( \
 
 #define __HAVE_ARCH_MEMCPY
 
-#include <linux/config.h>
-
 #ifdef CONFIG_X86_USE_3DNOW
 
 /* All this just for in_interrupt() ... */
@@ -529,7 +528,7 @@ extern inline void * memscan(void * addr, int c, size_t size)
 	return addr;
 }
 
+#endif /* CONFIG_X86_USE_STRING_486 */
 #endif /* __KERNEL__ */
 
-#endif
 #endif

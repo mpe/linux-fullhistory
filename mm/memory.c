@@ -428,6 +428,7 @@ int map_user_kiobuf(int rw, struct kiobuf *iobuf, unsigned long va, size_t len)
 	struct vm_area_struct *	vma = 0;
 	struct page *		map;
 	int			i;
+	int			datain = (rw == READ);
 	
 	/* Make sure the iobuf is not already mapped somewhere. */
 	if (iobuf->nr_pages)
@@ -459,8 +460,19 @@ int map_user_kiobuf(int rw, struct kiobuf *iobuf, unsigned long va, size_t len)
 			vma = find_vma(current->mm, ptr);
 			if (!vma) 
 				goto out_unlock;
+			if (vma->vm_start > ptr) {
+				if (!(vma->vm_flags & VM_GROWSDOWN))
+					goto out_unlock;
+				if (expand_stack(vma, ptr))
+					goto out_unlock;
+			}
+			if (((datain) && (!(vma->vm_flags & VM_WRITE))) ||
+					(!(vma->vm_flags & VM_READ))) {
+				err = -EACCES;
+				goto out_unlock;
+			}
 		}
-		if (handle_mm_fault(current, vma, ptr, (rw==READ)) <= 0) 
+		if (handle_mm_fault(current, vma, ptr, datain) <= 0) 
 			goto out_unlock;
 		spin_lock(&mm->page_table_lock);
 		map = follow_page(ptr);
@@ -774,6 +786,15 @@ static inline void establish_pte(struct vm_area_struct * vma, unsigned long addr
 	update_mmu_cache(vma, address, entry);
 }
 
+static inline void break_cow(struct vm_area_struct * vma, struct page *	old_page, struct page * new_page, unsigned long address, 
+		pte_t *page_table)
+{
+	copy_cow_page(old_page,new_page,address);
+	flush_page_to_ram(new_page);
+	flush_cache_page(vma, address);
+	establish_pte(vma, address, page_table, pte_mkwrite(pte_mkdirty(mk_pte(new_page, vma->vm_page_prot))));
+}
+
 /*
  * This routine handles present pages, when users try to write
  * to a shared page. It is done by copying the page to a new address
@@ -852,10 +873,7 @@ static int do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	if (pte_val(*page_table) == pte_val(pte)) {
 		if (PageReserved(old_page))
 			++vma->vm_mm->rss;
-		copy_cow_page(old_page, new_page, address);
-		flush_page_to_ram(new_page);
-		flush_cache_page(vma, address);
-		establish_pte(vma, address, page_table, pte_mkwrite(pte_mkdirty(mk_pte(new_page, vma->vm_page_prot))));
+		break_cow(vma, old_page, new_page, address, page_table);
 
 		/* Free the old page.. */
 		new_page = old_page;

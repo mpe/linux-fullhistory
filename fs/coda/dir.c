@@ -685,7 +685,7 @@ static int coda_venus_readdir(struct file *filp, void *getdent,
         }
 
         /* we use this routine to read the file into our buffer */
-        bufsize = read_exec(filp->f_dentry, filp->f_pos, buff, DIR_BUFSIZE, 1);
+        bufsize = kernel_read(filp, filp->f_pos, buff, DIR_BUFSIZE);
         if ( bufsize < 0) {
                 printk("coda_venus_readdir: cannot read directory %d.\n",
 		       bufsize);

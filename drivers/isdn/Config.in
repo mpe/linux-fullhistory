@@ -85,8 +85,14 @@ dep_tristate 'Eicon active card support' CONFIG_ISDN_DRV_EICON $CONFIG_ISDN
 if [ "$CONFIG_ISDN_DRV_EICON" != "n" ]; then
    bool '  Eicon S,SX,SCOM,Quadro,S2M support' CONFIG_ISDN_DRV_EICON_ISA
 fi
-dep_tristate 'AVM CAPI2.0 support' CONFIG_ISDN_DRV_AVMB1 $CONFIG_ISDN
-if [ "$CONFIG_ISDN_DRV_AVMB1" != "n" ]; then
+dep_tristate 'CAPI2.0 support' CONFIG_ISDN_CAPI $CONFIG_ISDN
+if [ "$CONFIG_EXPERIMENTAL" != "n" ]; then
+   bool 'CAPI2.0 Middleware support' CONFIG_ISDN_CAPI_MIDDLEWARE
+   if [ "$CONFIG_ISDN_CAPI_MIDDLEWARE" != "n" ]; then
+   	bool 'CAPI2.0 filesystem support' CONFIG_ISDN_CAPIFS
+   fi
+fi
+if [ "$CONFIG_ISDN_CAPI" != "n" ]; then
    bool '  AVM B1 ISA support' CONFIG_ISDN_DRV_AVMB1_B1ISA
    bool '  AVM B1 PCI support' CONFIG_ISDN_DRV_AVMB1_B1PCI
    if [ "$CONFIG_ISDN_DRV_AVMB1_B1PCI" != "n" ]; then

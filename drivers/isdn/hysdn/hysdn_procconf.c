@@ -1,4 +1,4 @@
-/* $Id: hysdn_procconf.c,v 1.2 2000/02/14 19:23:03 werner Exp $
+/* $Id: hysdn_procconf.c,v 1.4 2000/03/03 16:37:12 kai Exp $
 
  * Linux driver for HYSDN cards, /proc/net filesystem dir and conf functions.
  * written by Werner Cornelius (werner@titro.de) for Hypercope GmbH
@@ -20,6 +20,14 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: hysdn_procconf.c,v $
+ * Revision 1.4  2000/03/03 16:37:12  kai
+ * incorporated some cosmetic changes from the official kernel tree back
+ * into CVS
+ *
+ * Revision 1.3  2000/03/02 00:11:07  werner
+ *
+ * Changes related to procfs for 2.3.48
+ *
  * Revision 1.2  2000/02/14 19:23:03  werner
  *
  * Changed handling of proc filesystem tables to a more portable version
@@ -40,7 +48,7 @@
 
 #include "hysdn_defs.h"
 
-static char *hysdn_procconf_revision = "$Revision: 1.2 $";
+static char *hysdn_procconf_revision = "$Revision: 1.4 $";
 
 #define INFO_OUT_LEN 80		/* length of info line including lf */
 
@@ -403,11 +411,11 @@ hysdn_conf_close(struct inode *ino, struct file *filep)
 /******************************************************/
 static struct file_operations conf_fops =
 {
-	llseek:		hysdn_dummy_lseek,
-	read:		hysdn_conf_read,
-	write:		hysdn_conf_write,
-	open:		hysdn_conf_open,
-	release:	hysdn_conf_close,
+	llseek:         hysdn_dummy_lseek,
+	read:           hysdn_conf_read,
+	write:          hysdn_conf_write,
+	open:           hysdn_conf_open,
+	release:        hysdn_conf_close,                                       
 };
 
 /*****************************/
@@ -438,7 +446,6 @@ hysdn_procconf_init(void)
 		if ((card->procconf = (void *) create_proc_entry(conf_name,
 					     S_IFREG | S_IRUGO | S_IWUSR,
 					    hysdn_proc_entry)) != NULL) {
-
 			((struct proc_dir_entry *) card->procconf)->proc_fops = &conf_fops;
 			hysdn_proclog_init(card);	/* init the log file entry */
 		}

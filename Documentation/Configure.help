@@ -13047,22 +13047,12 @@ CONFIG_ISDN_TTY_FAX
   an ISDN-fax-machine. This must be supported by the lowlevel driver
   also. See Documentation/isdn/README.fax for more information.
 
-AVM CAPI2.0 support
-CONFIG_ISDN_DRV_AVMB1
-  This enables support for the AVM B1/T1 ISDN networking cards.In
-  addition, a CAPI (Common ISDN Application Programming Interface, a
+CAPI2.0 support
+CONFIG_ISDN_CAPI
+  This provides the CAPI (Common ISDN Application Programming Interface, a
   standard making it easy for programs to access ISDN hardware, see
-  http://www.capi.org/; to browse the WWW, you need to have access to
-  a machine on the Internet that has a program like lynx or netscape)
-  interface for this card is provided. In order to use this card,
-  additional firmware is necessary, which has to be downloaded into
-  the card using a utility which is distributed separately. Please
-  read the file Documentation/isdn/README.avmb1. 
-  
-  This code is also available as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want).
-  The module will be called avmb1.o. If you want to compile it as a
-  module, say M here and read Documentation/modules.txt.
+  http://www.capi.org/. This is needed for AVM's set of active ISDN
+  controllers like B1, T1, M1.
 
 AVM B1 ISA support
 CONFIG_ISDN_DRV_AVMB1_B1ISA
@@ -13071,6 +13061,10 @@ CONFIG_ISDN_DRV_AVMB1_B1ISA
 AVM B1 PCI support
 CONFIG_ISDN_DRV_AVMB1_B1PCI
   Enable support for the PCI version of the AVM B1 card.
+
+AVM B1 PCI V4 support
+CONFIG_ISDN_DRV_AVMB1_B1PCIV4
+  Enable support for the V4 version of AVM B1 PCI card.
 
 AVM T1/T1-B ISA support
 CONFIG_ISDN_DRV_AVMB1_T1ISA
@@ -13085,6 +13079,11 @@ AVM T1/T1-B PCI support
 CONFIG_ISDN_DRV_AVMB1_T1PCI
   Enable support for the AVM T1 T1B card.
   Note: This is a PRI card and handle 30 B-channels.
+
+AVM C4 support
+CONFIG_ISDN_DRV_AVMB1_C4
+  Enable support for the AVM C4 PCI card.
+  This card handle 4 BRI ISDN lines (8 channels).
 
 Verbose reason code reporting (kernel size +=7K)
 CONFIG_ISDN_DRV_AVMB1_VERBOSE_REASON

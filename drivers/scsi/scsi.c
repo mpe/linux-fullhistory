@@ -1377,12 +1377,12 @@ int scsi_loadable_module_flag;	/* Set after we scan builtin drivers */
  */
 void scsi_release_commandblocks(Scsi_Device * SDpnt)
 {
-	Scsi_Cmnd *SCpnt;
+	Scsi_Cmnd *SCpnt, *SCnext;
 	unsigned long flags;
 
-	spin_lock_irqsave(&device_request_lock, flags);
-	for (SCpnt = SDpnt->device_queue; SCpnt; SCpnt = SCpnt->next) {
-		SDpnt->device_queue = SCpnt->next;
+ 	spin_lock_irqsave(&device_request_lock, flags);
+	for (SCpnt = SDpnt->device_queue; SCpnt; SCpnt = SCnext) {
+		SDpnt->device_queue = SCnext = SCpnt->next;
 		kfree((char *) SCpnt);
 	}
 	SDpnt->has_cmdblocks = 0;

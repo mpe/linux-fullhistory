@@ -1,6 +1,7 @@
 #ifndef __ASM_SYSTEM_H
 #define __ASM_SYSTEM_H
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <asm/segment.h>
 #include <linux/bitops.h> /* for LOCK_PREFIX */
@@ -215,7 +216,7 @@ static inline unsigned long __xchg(unsigned long x, volatile void * ptr, int siz
  * indicated by comparing RETURN with OLD.
  */
 
-#if CPU != 386
+#ifdef CONFIG_X86_CMPXCHG
 #define __HAVE_ARCH_CMPXCHG 1
 
 static inline unsigned long __cmpxchg(volatile void *ptr, unsigned long old,

@@ -751,8 +751,7 @@ static inline int vfs_statfs(struct super_block *sb, struct statfs *buf)
 		return -ENODEV;
 	if (!sb->s_op || !sb->s_op->statfs)
 		return -ENOSYS;
-	memset(buf, 0xff, sizeof(struct statfs));
-	buf->f_blocks = 0;	/* Darn GNU df... */
+	memset(buf, 0, sizeof(struct statfs));
 	return sb->s_op->statfs(sb, buf);
 }
 
@@ -814,6 +813,7 @@ extern int get_unused_fd(void);
 extern void put_unused_fd(unsigned int);
 
 extern struct file *filp_open(const char *, int, int, struct dentry *);
+extern struct file *dentry_open(struct dentry *, int);
 extern int filp_close(struct file *, fl_owner_t id);
 
 extern char * getname(const char *);
@@ -938,6 +938,9 @@ static inline struct dentry * open_namei(const char *pathname)
 	return __open_namei(pathname, 0, 0, NULL);
 }
 
+extern int kernel_read(struct file *, unsigned long, char *, unsigned long);
+extern struct file * open_exec(const char *);
+ 
 /* fs/dcache.c -- generic fs support functions */
 extern int is_subdir(struct dentry *, struct dentry *);
 extern ino_t find_inode_number(struct dentry *, struct qstr *);

@@ -442,8 +442,8 @@ EXPORT_SYMBOL(setup_arg_pages);
 EXPORT_SYMBOL(copy_strings_kernel);
 EXPORT_SYMBOL(do_execve);
 EXPORT_SYMBOL(flush_old_exec);
-EXPORT_SYMBOL(open_dentry);
-EXPORT_SYMBOL(read_exec);
+EXPORT_SYMBOL(kernel_read);
+EXPORT_SYMBOL(open_exec);
 
 /* Miscellaneous access points */
 EXPORT_SYMBOL(si_meminfo);

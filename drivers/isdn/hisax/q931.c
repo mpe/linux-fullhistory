@@ -1,4 +1,4 @@
-/* $Id: q931.c,v 1.7 1998/11/15 23:55:17 keil Exp $
+/* $Id: q931.c,v 1.8 2000/03/21 23:53:22 kai Exp $
 
  * q931.c       code to decode ITU Q.931 call control messages
  *
@@ -14,6 +14,9 @@
  *
  *
  * $Log: q931.c,v $
+ * Revision 1.8  2000/03/21 23:53:22  kai
+ * fix backwards compatibility
+ *
  * Revision 1.7  1998/11/15 23:55:17  keil
  * changes from 2.0
  *
@@ -201,29 +204,6 @@ struct MessageType mt_n1[] =
 
 #define MT_N1_LEN (sizeof(mt_n1) / sizeof(struct MessageType))
 
-static struct MessageType fac_1tr6[] =
-{
-	{FAC_Sperre, "Sperre"},
-	{FAC_Forward1, "Forward 1"},
-	{FAC_Forward2, "Forward 2"},
-	{FAC_Konferenz, "Konferenz"},
-	{FAC_GrabBchan, "Grab Bchannel"},
-	{FAC_Reactivate, "Reactivate"},
-	{FAC_Konferenz3, "Dreier Konferenz"},
-	{FAC_Dienstwechsel1, "Einseitiger Dienstwechsel"},
-	{FAC_Dienstwechsel2, "Zweiseitiger Dienstwechsel"},
-	{FAC_NummernIdent, "Rufnummer-Identifizierung"},
-	{FAC_GBG, "GBG"},
-	{FAC_DisplayUebergeben, "Display Uebergeben"},
-	{FAC_DisplayUmgeleitet, "Display Umgeleitet"},
-	{FAC_Unterdruecke, "Unterdruecke Rufnummer"},
-	{FAC_Deactivate, "Deactivate"},
-	{FAC_Activate, "Activate"},
-	{FAC_SPV, "SPV"},
-	{FAC_Rueckwechsel, "Rueckwechsel"},
-	{FAC_Umleitung, "Umleitung"}
-};
-#define FAC_1TR6_LEN (sizeof(fac_1tr6) / sizeof(struct MessageType))
 
 static int
 prbits(char *dest, u_char b, int start, int len)

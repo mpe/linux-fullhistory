@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.202 2000/03/17 14:41:53 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.203 2000/03/22 17:55:03 davem Exp $
  *
  *		IPv4 specific functions
  *

@@ -1,5 +1,5 @@
 /*
- * $Id: divert_procfs.c,v 1.6 2000/02/14 19:23:03 werner Exp $
+ * $Id: divert_procfs.c,v 1.8 2000/03/03 16:37:11 kai Exp $
  *
  * Filesystem handling for the diversion supplementary services.
  *
@@ -20,6 +20,14 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: divert_procfs.c,v $
+ * Revision 1.8  2000/03/03 16:37:11  kai
+ * incorporated some cosmetic changes from the official kernel tree back
+ * into CVS
+ *
+ * Revision 1.7  2000/03/02 00:11:06  werner
+ *
+ * Changes related to procfs for 2.3.48
+ *
  * Revision 1.6  2000/02/14 19:23:03  werner
  *
  * Changed handling of proc filesystem tables to a more portable version
@@ -302,13 +310,13 @@ isdn_divert_lseek(struct file *file, loff_t offset, int orig)
 
 static struct file_operations isdn_fops =
 {
-	llseek:		isdn_divert_lseek,
-	read:		isdn_divert_read,
-	write:		isdn_divert_write,
-	poll:		isdn_divert_poll,
-	ioctl:		isdn_divert_ioctl,
-	open:		isdn_divert_open,
-	release:	isdn_divert_close,
+	llseek:         isdn_divert_lseek,
+	read:           isdn_divert_read,
+	write:          isdn_divert_write,
+	poll:           isdn_divert_poll,
+	ioctl:          isdn_divert_ioctl,
+	open:           isdn_divert_open,
+	release:        isdn_divert_close,                                      
 };
 
 /****************************/
@@ -336,7 +344,7 @@ divert_dev_init(void)
 		remove_proc_entry("isdn", proc_net);
 		return (-1);
 	}
-	isdn_divert_entry->proc_fops = &isdn_fops;
+	isdn_divert_entry->proc_fops = &isdn_fops; 
 #endif	/* CONFIG_PROC_FS */
 
 	return (0);

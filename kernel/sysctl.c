@@ -14,6 +14,8 @@
  * Added proc_doulongvec_minmax, 09/08/99, Carlos H. Bauer.
  * Changed linked lists to use list.h instead of lists.h, 02/24/00, Bill
  *  Wendling.
+ * The list_for_each() macro wasn't appropriate for the sysctl loop.
+ *  Removed it and replaced it with older style, 03/23/00, Bill Wendling
  */
 
 #include <linux/config.h>
@@ -84,9 +86,9 @@ static int parse_table(int *, int, void *, size_t *, void *, size_t,
 static int proc_doutsstring(ctl_table *table, int write, struct file *filp,
 		  void *buffer, size_t *lenp);
 
-
 static ctl_table root_table[];
-static LIST_HEAD(root_table_header);
+static struct ctl_table_header root_table_header =
+	{ root_table, LIST_HEAD_INIT(root_table_header.ctl_entry) };
 
 static ctl_table kern_table[];
 static ctl_table vm_table[];
@@ -99,7 +101,6 @@ static ctl_table debug_table[];
 static ctl_table dev_table[];
 extern ctl_table random_table[];
 
-
 /* /proc declarations: */
 
 #ifdef CONFIG_PROC_FS
@@ -108,14 +109,12 @@ static ssize_t proc_readsys(struct file *, char *, size_t, loff_t *);
 static ssize_t proc_writesys(struct file *, const char *, size_t, loff_t *);
 static int proc_sys_permission(struct inode *, int);
 
-struct file_operations proc_sys_file_operations =
-{
+struct file_operations proc_sys_file_operations = {
 	read:		proc_readsys,
 	write:		proc_writesys,
 };
 
-static struct inode_operations proc_sys_inode_operations =
-{
+static struct inode_operations proc_sys_inode_operations = {
 	permission:	proc_sys_permission,
 };
 
@@ -124,6 +123,7 @@ extern struct proc_dir_entry *proc_sys_root;
 static void register_proc_table(ctl_table *, struct proc_dir_entry *);
 static void unregister_proc_table(ctl_table *, struct proc_dir_entry *);
 #endif
+
 extern int inodes_stat[];
 extern int dentry_stat[];
 
@@ -294,39 +294,33 @@ void __init sysctl_init(void)
 	register_proc_table(root_table, proc_sys_root);
 	init_irq_proc();
 #endif
-
 }
 
-int do_sysctl (int *name, int nlen,
-	       void *oldval, size_t *oldlenp,
+int do_sysctl(int *name, int nlen, void *oldval, size_t *oldlenp,
 	       void *newval, size_t newlen)
 {
-	int error;
 	struct list_head *tmp;
-	void *context;
-	
+
 	if (nlen == 0 || nlen >= CTL_MAXNAME)
 		return -ENOTDIR;
-	
-	if (oldval) 
-	{
+	if (oldval) {
 		int old_len;
-		if (!oldlenp)
-			return -EFAULT;
-		if(get_user(old_len, oldlenp))
+		if (!oldlenp || get_user(old_len, oldlenp))
 			return -EFAULT;
 	}
-	list_for_each(tmp, &root_table_header) {
+	tmp = &root_table_header.ctl_entry;
+	do {
 		struct ctl_table_header *head =
 			list_entry(tmp, struct ctl_table_header, ctl_entry);
-		context = NULL;
-		error = parse_table(name, nlen, oldval, oldlenp, 
-				    newval, newlen, head->ctl_table, &context);
+		void *context = NULL;
+		int error = parse_table(name, nlen, oldval, oldlenp, 
+					newval, newlen, head->ctl_table,
+					&context);
 		if (context)
 			kfree(context);
 		if (error != -ENOTDIR)
 			return error;
-	}
+	} while (tmp != &root_table_header.ctl_entry);
 	return -ENOTDIR;
 }
 
@@ -335,7 +329,7 @@ extern asmlinkage long sys_sysctl(struct __sysctl_args *args)
 	struct __sysctl_args tmp;
 	int error;
 
-	if(copy_from_user(&tmp, args, sizeof(tmp)))
+	if (copy_from_user(&tmp, args, sizeof(tmp)))
 		return -EFAULT;
 		
 	lock_kernel();
@@ -345,9 +339,10 @@ extern asmlinkage long sys_sysctl(struct __sysctl_args *args)
 	return error;
 }
 
-
-/* ctl_perm does NOT grant the superuser all rights automatically, because
-   some sysctl variables are readonly even to root. */
+/*
+ * ctl_perm does NOT grant the superuser all rights automatically, because
+ * some sysctl variables are readonly even to root.
+ */
 
 static int test_perm(int mode, int op)
 {
@@ -370,17 +365,16 @@ static int parse_table(int *name, int nlen,
 		       void *newval, size_t newlen,
 		       ctl_table *table, void **context)
 {
-	int error;
 repeat:
 	if (!nlen)
 		return -ENOTDIR;
 
 	for ( ; table->ctl_name; table++) {
 		int n;
-		if(get_user(n,name))
+		if (get_user(n, name))
 			return -EFAULT;
-		if (n == table->ctl_name ||
-		    table->ctl_name == CTL_ANY) {
+		if (n == table->ctl_name || table->ctl_name == CTL_ANY) {
+			int error;
 			if (table->child) {
 				if (ctl_perm(table, 001))
 					return -EPERM;
@@ -389,8 +383,8 @@ repeat:
 						table, name, nlen,
 						oldval, oldlenp,
 						newval, newlen, context);
-				if (error)
-					return error;
+					if (error)
+						return error;
 				}
 				name++;
 				nlen--;
@@ -465,9 +459,9 @@ struct ctl_table_header *register_sysctl_table(ctl_table * table,
 	tmp->ctl_table = table;
 	INIT_LIST_HEAD(&tmp->ctl_entry);
 	if (insert_at_head)
-		list_add(&tmp->ctl_entry, &root_table_header);
+		list_add(&tmp->ctl_entry, &root_table_header.ctl_entry);
 	else
-		list_add_tail(&tmp->ctl_entry, &root_table_header);
+		list_add_tail(&tmp->ctl_entry, &root_table_header.ctl_entry);
 #ifdef CONFIG_PROC_FS
 	register_proc_table(table, proc_sys_root);
 #endif
@@ -694,6 +688,7 @@ static int proc_doutsstring(ctl_table *table, int write, struct file *filp,
 #define OP_OR	2
 #define OP_MAX	3
 #define OP_MIN	4
+
 static int do_proc_dointvec(ctl_table *table, int write, struct file *filp,
 		  void *buffer, size_t *lenp, int conv, int op)
 {
@@ -812,7 +807,6 @@ int proc_dointvec_bset(ctl_table *table, int write, struct file *filp,
 		(current->pid == 1) ? OP_SET : OP_AND);
 }
 
-
 int proc_dointvec_minmax(ctl_table *table, int write, struct file *filp,
 		  void *buffer, size_t *lenp)
 {
@@ -910,7 +904,6 @@ int proc_dointvec_minmax(ctl_table *table, int write, struct file *filp,
 	filp->f_pos += *lenp;
 	return 0;
 }
-
 
 /*
  * an unsigned long function version

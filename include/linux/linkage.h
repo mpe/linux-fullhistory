@@ -1,6 +1,8 @@
 #ifndef _LINUX_LINKAGE_H
 #define _LINUX_LINKAGE_H
 
+#include <linux/config.h>
+
 #ifdef __cplusplus
 #define CPP_ASMLINKAGE extern "C"
 #else
@@ -35,13 +37,13 @@
 #define __ALIGN .balign 4
 #define __ALIGN_STR ".balign 4"
 #else
-#if !defined(__i486__) && !defined(__i586__) && !defined(__pentium__)
-#define __ALIGN .align 4,0x90
-#define __ALIGN_STR ".align 4,0x90"
-#else  /* __i486__/__i586__/__pentium__ */
+#if defined(__i386__) && defined(CONFIG_X86_ALIGNMENT_16)
 #define __ALIGN .align 16,0x90
 #define __ALIGN_STR ".align 16,0x90"
-#endif /* __i486__/__i586__/__pentium__ */
+#else
+#define __ALIGN .align 4,0x90
+#define __ALIGN_STR ".align 4,0x90"
+#endif
 #endif /* __sh__ */
 #endif /* __mc68000__ */
 #endif /* __arm__ */

@@ -1098,7 +1098,7 @@ static int md_import_device (kdev_t newdev, int on_disk)
 	}
 	memset(rdev, 0, sizeof(*rdev));
 
-	if (!fs_may_mount(newdev)) {
+	if (get_super(newdev)) {
 		printk("md: can not import %s, has active inodes!\n",
 			partition_name(newdev));
 		err = -EBUSY;
@@ -1722,7 +1722,7 @@ static int do_md_stop (mddev_t * mddev, int ro)
 	int err = 0, resync_interrupted = 0;
 	kdev_t dev = mddev_to_kdev(mddev);
  
-	if (!ro && !fs_may_mount (dev)) {
+	if (!ro && get_super(dev)) {
 		printk (STILL_MOUNTED, mdidx(mddev));
 		OUT(-EBUSY);
 	}

@@ -205,17 +205,15 @@ create_elf_tables(char *p, int argc, int envc,
    an ELF header */
 
 static unsigned long load_elf_interp(struct elfhdr * interp_elf_ex,
-				     struct dentry * interpreter_dentry,
+				     struct file * interpreter,
 				     unsigned long *interp_load_addr)
 {
-	struct file * file;
 	struct elf_phdr *elf_phdata;
 	struct elf_phdr *eppnt;
 	unsigned long load_addr = 0;
 	int load_addr_set = 0;
 	unsigned long last_bss = 0, elf_bss = 0;
 	unsigned long error = ~0UL;
-	int elf_exec_fileno;
 	int retval, i, size;
 
 	/* First of all, some simple consistency checks */
@@ -224,8 +222,7 @@ static unsigned long load_elf_interp(struct elfhdr * interp_elf_ex,
 		goto out;
 	if (!elf_check_arch(interp_elf_ex->e_machine))
 		goto out;
-	if (!interpreter_dentry->d_inode->i_fop ||
-	    !interpreter_dentry->d_inode->i_fop->mmap)
+	if (!interpreter->f_op->mmap)
 		goto out;
 
 	/*
@@ -244,17 +241,10 @@ static unsigned long load_elf_interp(struct elfhdr * interp_elf_ex,
 	if (!elf_phdata)
 		goto out;
 
-	retval = read_exec(interpreter_dentry, interp_elf_ex->e_phoff,
-			   (char *) elf_phdata, size, 1);
+	retval = kernel_read(interpreter,interp_elf_ex->e_phoff,(char *)elf_phdata,size);
 	error = retval;
 	if (retval < 0)
-		goto out_free;
-
-	error = ~0UL;
-	elf_exec_fileno = open_dentry(interpreter_dentry, O_RDONLY);
-	if (elf_exec_fileno < 0)
-		goto out_free;
-	file = fget(elf_exec_fileno);
+		goto out_close;
 
 	eppnt = elf_phdata;
 	for (i=0; i<interp_elf_ex->e_phnum; i++, eppnt++) {
@@ -271,7 +261,7 @@ static unsigned long load_elf_interp(struct elfhdr * interp_elf_ex,
 	    if (interp_elf_ex->e_type == ET_EXEC || load_addr_set)
 	    	elf_type |= MAP_FIXED;
 
-	    map_addr = do_mmap(file,
+	    map_addr = do_mmap(interpreter,
 			    load_addr + ELF_PAGESTART(vaddr),
 			    eppnt->p_filesz + ELF_PAGEOFFSET(eppnt->p_vaddr),
 			    elf_prot,
@@ -322,19 +312,17 @@ static unsigned long load_elf_interp(struct elfhdr * interp_elf_ex,
 	error = ((unsigned long) interp_elf_ex->e_entry) + load_addr;
 
 out_close:
-	fput(file);
-	sys_close(elf_exec_fileno);
-out_free:
 	kfree(elf_phdata);
 out:
 	return error;
 }
 
 static unsigned long load_aout_interp(struct exec * interp_ex,
-			     struct dentry * interpreter_dentry)
+			     struct file * interpreter)
 {
-	unsigned long text_data, offset, elf_entry = ~0UL;
+	unsigned long text_data, elf_entry = ~0UL;
 	char * addr;
+	loff_t offset;
 	int retval;
 
 	current->mm->end_code = interp_ex->a_text;
@@ -357,7 +345,10 @@ static unsigned long load_aout_interp(struct exec * interp_ex,
 	}
 
 	do_brk(0, text_data);
-	retval = read_exec(interpreter_dentry, offset, addr, text_data, 0);
+	retval = -ENOEXEC;
+	if (!interpreter->f_op->read)
+		goto out;
+	retval = interpreter->f_op->read(interpreter, addr, text_data, &offset);
 	if (retval < 0)
 		goto out;
 	flush_icache_range((unsigned long)addr,
@@ -383,8 +374,7 @@ out:
 
 static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 {
-	struct file * file;
-	struct dentry *interpreter_dentry = NULL; /* to shut gcc up */
+	struct file *interpreter = NULL; /* to shut gcc up */
  	unsigned long load_addr = 0, load_bias;
 	int load_addr_set = 0;
 	char * elf_interpreter = NULL;
@@ -422,7 +412,7 @@ static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		goto out;
 	}
 #endif
-	if (!bprm->dentry->d_inode->i_fop||!bprm->dentry->d_inode->i_fop->mmap)
+	if (!bprm->file->f_op||!bprm->file->f_op->mmap)
 		goto out;
 
 	/* Now read in all of the header information */
@@ -435,16 +425,15 @@ static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	if (!elf_phdata)
 		goto out;
 
-	retval = read_exec(bprm->dentry, elf_ex.e_phoff,
-				(char *) elf_phdata, size, 1);
+	retval = kernel_read(bprm->file, elf_ex.e_phoff, (char *) elf_phdata, size);
 	if (retval < 0)
 		goto out_free_ph;
 
-	retval = open_dentry(bprm->dentry, O_RDONLY);
+	retval = get_unused_fd();
 	if (retval < 0)
 		goto out_free_ph;
-	elf_exec_fileno = retval;
-	file = fget(elf_exec_fileno);
+	get_file(bprm->file);
+	fd_install(elf_exec_fileno = retval, bprm->file);
 
 	elf_ppnt = elf_phdata;
 	elf_bss = 0;
@@ -472,9 +461,9 @@ static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			if (!elf_interpreter)
 				goto out_free_file;
 
-			retval = read_exec(bprm->dentry, elf_ppnt->p_offset,
+			retval = kernel_read(bprm->file, elf_ppnt->p_offset,
 					   elf_interpreter,
-					   elf_ppnt->p_filesz, 1);
+					   elf_ppnt->p_filesz);
 			if (retval < 0)
 				goto out_free_interp;
 			/* If the program interpreter is one of these two,
@@ -487,32 +476,22 @@ static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 #if 0
 			printk("Using ELF interpreter %s\n", elf_interpreter);
 #endif
-			old_fs = get_fs(); /* This could probably be optimized */
-			set_fs(get_ds());
 #ifdef __sparc__
 			if (ibcs2_interpreter) {
 				unsigned long old_pers = current->personality;
 					
 				current->personality = PER_SVR4;
-				lock_kernel();
-				interpreter_dentry = open_namei(elf_interpreter);
-				unlock_kernel();
+				interpreter = open_exec(elf_interpreter);
 				current->personality = old_pers;
 			} else
 #endif
 			{
-				lock_kernel();
-				interpreter_dentry = open_namei(elf_interpreter);
-				unlock_kernel();
+				interpreter = open_exec(elf_interpreter);
 			}
-			set_fs(old_fs);
-			retval = PTR_ERR(interpreter_dentry);
-			if (IS_ERR(interpreter_dentry))
+			retval = PTR_ERR(interpreter);
+			if (IS_ERR(interpreter))
 				goto out_free_interp;
-			retval = permission(interpreter_dentry->d_inode, MAY_EXEC);
-			if (retval < 0)
-				goto out_free_dentry;
-			retval = read_exec(interpreter_dentry, 0, bprm->buf, 128, 1);
+			retval = kernel_read(interpreter, 0, bprm->buf, 128);
 			if (retval < 0)
 				goto out_free_dentry;
 
@@ -621,7 +600,7 @@ static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			elf_flags |= MAP_FIXED;
 		}
 
-		error = do_mmap(file, ELF_PAGESTART(load_bias + vaddr),
+		error = do_mmap(bprm->file, ELF_PAGESTART(load_bias + vaddr),
 		                (elf_ppnt->p_filesz +
 		                ELF_PAGEOFFSET(elf_ppnt->p_vaddr)),
 		                elf_prot, elf_flags, (elf_ppnt->p_offset -
@@ -653,7 +632,6 @@ static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			elf_brk = k;
 	}
 	set_fs(old_fs);
-	fput(file); /* all done with the file */
 
 	elf_entry += load_bias;
 	elf_bss += load_bias;
@@ -666,14 +644,14 @@ static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	if (elf_interpreter) {
 		if (interpreter_type == INTERPRETER_AOUT)
 			elf_entry = load_aout_interp(&interp_ex,
-						     interpreter_dentry);
+						     interpreter);
 		else
 			elf_entry = load_elf_interp(&interp_elf_ex,
-						    interpreter_dentry,
+						    interpreter,
 						    &interp_load_addr);
 
 		lock_kernel();
-		dput(interpreter_dentry);
+		fput(interpreter);
 		unlock_kernel();
 		kfree(elf_interpreter);
 
@@ -700,7 +678,7 @@ static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 
 #ifndef VM_STACK_FLAGS
 	lock_kernel();
-	current->executable = dget(bprm->dentry);
+	current->executable = dget(bprm->file->f_dentry);
 	unlock_kernel();
 #endif
 	compute_creds(bprm);
@@ -771,13 +749,12 @@ out:
 	/* error cleanup */
 out_free_dentry:
 	lock_kernel();
-	dput(interpreter_dentry);
+	fput(interpreter);
 	unlock_kernel();
 out_free_interp:
 	if (elf_interpreter)
 		kfree(elf_interpreter);
 out_free_file:
-	fput(file);
 	sys_close(elf_exec_fileno);
 out_free_ph:
 	kfree(elf_phdata);
@@ -789,25 +766,13 @@ out_free_ph:
 
 static int load_elf_library(struct file *file)
 {
-	struct dentry * dentry;
-	struct inode * inode;
 	struct elf_phdr *elf_phdata;
 	unsigned long elf_bss = 0, bss, len, k;
 	int retval, error, i, j;
 	struct elfhdr elf_ex;
-	loff_t offset = 0;
 
-	error = -EACCES;
-	dentry = file->f_dentry;
-	inode = dentry->d_inode;
-
-	/* seek to the beginning of the file */
 	error = -ENOEXEC;
-
-	/* N.B. save current DS?? */
-	set_fs(KERNEL_DS);
-	retval = file->f_op->read(file, (char *) &elf_ex, sizeof(elf_ex), &offset);
-	set_fs(USER_DS);
+	retval = kernel_read(file, 0, (char *) &elf_ex, sizeof(elf_ex));
 	if (retval != sizeof(elf_ex))
 		goto out;
 
@@ -816,8 +781,7 @@ static int load_elf_library(struct file *file)
 
 	/* First of all, some simple consistency checks */
 	if (elf_ex.e_type != ET_EXEC || elf_ex.e_phnum > 2 ||
-	   !elf_check_arch(elf_ex.e_machine) ||
-	   (!inode->i_fop || !inode->i_fop->mmap))
+	   !elf_check_arch(elf_ex.e_machine) || !file->f_op->mmap)
 		goto out;
 
 	/* Now read in all of the header information */
@@ -832,8 +796,8 @@ static int load_elf_library(struct file *file)
 		goto out;
 
 	/* N.B. check for error return?? */
-	retval = read_exec(dentry, elf_ex.e_phoff, (char *) elf_phdata,
-			   sizeof(struct elf_phdr) * elf_ex.e_phnum, 1);
+	retval = kernel_read(file, elf_ex.e_phoff, (char *) elf_phdata,
+			   sizeof(struct elf_phdr) * elf_ex.e_phnum);
 
 	error = -ENOEXEC;
 	for (j = 0, i = 0; i<elf_ex.e_phnum; i++)

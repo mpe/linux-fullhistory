@@ -1,4 +1,4 @@
-/* $Id: hysdn_proclog.c,v 1.2 2000/02/14 19:23:03 werner Exp $
+/* $Id: hysdn_proclog.c,v 1.4 2000/03/03 16:37:12 kai Exp $
 
  * Linux driver for HYSDN cards, /proc/net filesystem log functions.
  * written by Werner Cornelius (werner@titro.de) for Hypercope GmbH
@@ -20,6 +20,14 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: hysdn_proclog.c,v $
+ * Revision 1.4  2000/03/03 16:37:12  kai
+ * incorporated some cosmetic changes from the official kernel tree back
+ * into CVS
+ *
+ * Revision 1.3  2000/03/02 00:11:07  werner
+ *
+ * Changes related to procfs for 2.3.48
+ *
  * Revision 1.2  2000/02/14 19:23:03  werner
  *
  * Changed handling of proc filesystem tables to a more portable version
@@ -40,7 +48,7 @@
 
 #include "hysdn_defs.h"
 
-static char *hysdn_proclog_revision = "$Revision: 1.2 $";
+static char *hysdn_proclog_revision = "$Revision: 1.4 $";
 
 /* the proc subdir for the interface is defined in the procconf module */
 extern struct proc_dir_entry *hysdn_proc_entry;
@@ -420,13 +428,14 @@ hysdn_log_poll(struct file *file, poll_table * wait)
 /**************************************************/
 static struct file_operations log_fops =
 {
-	llseek:		hysdn_dummy_lseek,
-	read:		hysdn_log_read,
-	write:		hysdn_log_write,
-	poll:		hysdn_log_poll,
-	open:		hysdn_log_open,
-	release:	hysdn_log_close,
+	llseek:         hysdn_dummy_lseek,
+	read:           hysdn_log_read,
+	write:          hysdn_log_write,
+	poll:           hysdn_log_poll,
+	open:           hysdn_log_open,
+	release:        hysdn_log_close,                                        
 };
+
 
 /***********************************************************************************/
 /* hysdn_proclog_init is called when the module is loaded after creating the cards */
@@ -441,10 +450,9 @@ hysdn_proclog_init(hysdn_card * card)
 
 	if ((pd = (struct procdata *) kmalloc(sizeof(struct procdata), GFP_KERNEL)) != NULL) {
 		memset(pd, 0, sizeof(struct procdata));
-
 		sprintf(pd->log_name, "%s%d", PROC_LOG_BASENAME, card->myid);
 		if ((pd->log = create_proc_entry(pd->log_name, S_IFREG | S_IRUGO | S_IWUSR, hysdn_proc_entry)) != NULL)
-			pd->log->proc_fops = &log_fops;	/* set new operations table */
+		        pd->log->proc_fops = &log_fops; 
 
 		init_waitqueue_head(&(pd->rd_queue));
 

@@ -435,12 +435,41 @@ struct fb_videomode {
     u32 vmode;
 };
 
+#ifdef MODULE
+static inline int fb_find_mode(struct fb_var_screeninfo *var,
+			       struct fb_info *info, const char *mode_option,
+			       const struct fb_videomode *db,
+			       unsigned int dbsize,
+			       const struct fb_videomode *default_mode,
+			       unsigned int default_bpp)
+{
+    extern int __fb_try_mode(struct fb_var_screeninfo *var,
+	    		     struct fb_info *info,
+			     const struct fb_videomode *mode,
+			     unsigned int bpp);
+    /*
+     *  FIXME: How to make the compiler optimize vga640x400 away if
+     *         default_mode is non-NULL?
+     */
+    static const struct fb_videomode vga640x400 = {
+	/* 640x400 @ 70 Hz, 31.5 kHz hsync */
+	NULL, 70, 640, 400, 39721, 40, 24, 39, 9, 96, 2,
+	0, FB_VMODE_NONINTERLACED
+    };
+    if (!default_mode)
+	default_mode = &vga640x400;
+    if (!default_bpp)
+	default_bpp = 8;
+    return __fb_try_mode(var, info, default_mode, default_bpp);
+}
+#else
 extern int __init fb_find_mode(struct fb_var_screeninfo *var,
 			       struct fb_info *info, const char *mode_option,
 			       const struct fb_videomode *db,
 			       unsigned int dbsize,
 			       const struct fb_videomode *default_mode,
 			       unsigned int default_bpp);
+#endif
 
 #endif /* __KERNEL__ */
 

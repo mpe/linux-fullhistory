@@ -1,4 +1,4 @@
-/* $Id: isdn_v110.h,v 1.2 1999/10/30 09:49:28 keil Exp $
+/* $Id: isdn_v110.h,v 1.3 2000/03/16 16:34:12 kai Exp $
 
  * Linux ISDN subsystem, V.110 related functions (linklevel).
  *
@@ -19,6 +19,11 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_v110.h,v $
+ * Revision 1.3  2000/03/16 16:34:12  kai
+ * some translation work
+ *
+ * there shouldn't be any German comments lurking around anymore ;-)
+ *
  * Revision 1.2  1999/10/30 09:49:28  keil
  * Reinit of v110 structs
  *
@@ -29,17 +34,14 @@
 #ifndef _isdn_v110_h_
 #define _isdn_v110_h_
 
-/* isdn_v110_encode erhält len Nettodaten in buf, kodiert diese und liefert
-   das Ergebnis wieder in buf. Wieviele Bytes kodiert wurden wird als
-   return zurück gegeben. Diese Daten können dann 1:1 auf die Leitung
-   gegeben werden.
-*/
+/* 
+ * isdn_v110_encode will take raw data and encode it using V.110 
+ */
 extern struct sk_buff *isdn_v110_encode(isdn_v110_stream *, struct sk_buff *);
 
-/* isdn_v110_decode erhält vom input stream V110 kodierte Daten, die zu den
-   V110 frames zusammengepackt werden müssen. Die Daten können an diese
-   Schnittstelle so übergeben werden, wie sie von der Leitung kommen, ohne
-   darauf achten zu müssen, das frames usw. eingehalten werden.
+/* 
+ * isdn_v110_decode receives V.110 coded data from the stream and rebuilds
+ * frames from them. The source stream doesn't need to be framed.
  */
 extern struct sk_buff *isdn_v110_decode(isdn_v110_stream *, struct sk_buff *);
 

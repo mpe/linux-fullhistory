@@ -8,6 +8,7 @@
  *  more details.
  */
 
+#include <linux/module.h>
 #include <linux/tty.h>
 #include <linux/fb.h>
 #include <linux/console_struct.h>
@@ -253,7 +254,7 @@ static int __init my_atoi(const char *name)
     }
 }
 
-static int __init PROC_CONSOLE(const struct fb_info *info)
+static int PROC_CONSOLE(const struct fb_info *info)
 {
 	int fgc;
 	
@@ -275,8 +276,8 @@ static int __init PROC_CONSOLE(const struct fb_info *info)
 	return MINOR(current->tty->device) - 1;
 }
 
-static int __init try_mode(struct fb_var_screeninfo *var, struct fb_info *info,
-			   const struct fb_videomode *mode, unsigned int bpp)
+int __fb_try_mode(struct fb_var_screeninfo *var, struct fb_info *info,
+		  const struct fb_videomode *mode, unsigned int bpp)
 {
     int err;
 
@@ -391,20 +392,22 @@ done:
 		if ((name_matches(db[j], name, namelen) ||
 		     (res_specified && res_matches(db[j], xres, yres))) &&
 		    (!i || db[j].refresh == refresh) &&
-		    try_mode(var, info, &db[j], bpp))
+		    __fb_try_mode(var, info, &db[j], bpp))
 		    return 2-i;
 	}
     }
 
     DPRINTK("Trying default video mode\n");
-    if (try_mode(var, info, default_mode, default_bpp))
+    if (__fb_try_mode(var, info, default_mode, default_bpp))
 	return 3;
 
     DPRINTK("Trying all modes\n");
     for (i = 0; i < dbsize; i++)
-	if (try_mode(var, info, &db[i], default_bpp))
+	if (__fb_try_mode(var, info, &db[i], default_bpp))
 	    return 4;
 
     DPRINTK("No valid mode found\n");
     return 0;
 }
+
+EXPORT_SYMBOL(__fb_try_mode);

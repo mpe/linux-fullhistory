@@ -1765,37 +1765,11 @@ default_chipset:
 	fb_info.flags = FBINFO_FLAG_DEFAULT;
 	memset(&var, 0, sizeof(var));
 
-#ifdef MODULE
-	var.xres = ami_modedb[defmode].xres;
-	var.yres = ami_modedb[defmode].yres;
-	var.xres_virtual = ami_modedb[defmode].xres;
-	var.yres_virtual = ami_modedb[defmode].yres;
-	var.xoffset = 0;
-	var.yoffset = 0;
-	var.bits_per_pixel = 4;
-	var.activate |= FB_ACTIVATE_TEST;
-	var.pixclock = ami_modedb[defmode].pixclock;
-	var.left_margin = ami_modedb[defmode].left_margin;
-	var.right_margin = ami_modedb[defmode].right_margin;
-	var.upper_margin = ami_modedb[defmode].upper_margin;
-	var.lower_margin = ami_modedb[defmode].lower_margin;
-	var.hsync_len = ami_modedb[defmode].hsync_len;
-	var.vsync_len = ami_modedb[defmode].vsync_len;
-	var.sync = ami_modedb[defmode].sync;
-	var.vmode = ami_modedb[defmode].vmode;
-	err = fb_info.fbops->fb_set_var(&var, -1, &fb_info);
-	var.activate &= ~FB_ACTIVATE_TEST;
-	if (err) {
-		err = -EINVAL;
-		goto amifb_error;
-	}
-#else
 	if (!fb_find_mode(&var, &fb_info, mode_option, ami_modedb,
 			  NUM_TOTAL_MODES, &ami_modedb[defmode], 4)) {
 		err = -EINVAL;
 		goto amifb_error;
 	}
-#endif
 
 	round_down_bpp = 0;
 	chipptr = chipalloc(videomemorysize+

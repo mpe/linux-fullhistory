@@ -174,9 +174,7 @@ ENTRY(lcall27)
 	jmp ret_from_sys_call
 
 
-	ALIGN
-	.globl	ret_from_fork
-ret_from_fork:
+ENTRY(ret_from_fork)
 	pushl %ebx
 	call SYMBOL_NAME(schedule_tail)
 	addl $4, %esp
@@ -202,10 +200,7 @@ ENTRY(system_call)
 	jne tracesys
 	call *SYMBOL_NAME(sys_call_table)(,%eax,4)
 	movl %eax,EAX(%esp)		# save the return value
-	ALIGN
-	.globl ret_from_sys_call
-	.globl ret_from_intr
-ret_from_sys_call:
+ENTRY(ret_from_sys_call)
 #ifdef __SMP__
 	movl processor(%ebx),%eax
 	shll $5,%eax
@@ -273,8 +268,7 @@ ret_from_exception:
 #endif
 	jne   handle_softirq
 
-	ALIGN
-ret_from_intr:
+ENTRY(ret_from_intr)
 	GET_CURRENT(%ebx)
 	movl EFLAGS(%esp),%eax		# mix EFLAGS and CS
 	movb CS(%esp),%al

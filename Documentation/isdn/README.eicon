@@ -1,4 +1,4 @@
-$Id: README.eicon,v 1.6 2000/01/27 09:54:44 armin Exp $
+$Id: README.eicon,v 1.7 2000/03/06 16:38:43 armin Exp $
 
 (c) 1999,2000 Armin Schindler (mac@melware.de)
 (c) 1999,2000 Cytronics & Melware (info@melware.de)
@@ -77,6 +77,10 @@ dsp-code by using the eiconctrl utility of isdn4k-utils.
 Example for loading and starting a BRI card with E-DSS1 Protocol.
 
 	eiconctrl [-d DriverId] load etsi
+
+Example for a BRI card with E-DSS1 Protocol with PtP configuration.
+
+	eiconctrl [-d DriverId] load etsi -n -t0 -s1
 
 
 Example for loading and starting a PRI card with E-DSS1 Protocol.

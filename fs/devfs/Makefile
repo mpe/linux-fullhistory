@@ -36,4 +36,4 @@ doc:	base.c util.c
 test:
 	gcc -o /tmp/base.o -D__KERNEL__ -I../../include -Wall \
 	-Wstrict-prototypes -O2 -fomit-frame-pointer -pipe \
-	-fno-strength-reduce -DCPU=686   -DEXPORT_SYMTAB -c base.c
+	-fno-strength-reduce   -DEXPORT_SYMTAB -c base.c
