@@ -1,4 +1,3 @@
-#include <linux/config.h>
 
 #define PCILYNX_DRIVER_NAME      "pcilynx"
 #define PCILYNX_MAJOR            177
@@ -462,71 +461,75 @@ inline static void run_pcl(const struct ti_lynx *lynx, pcl_t pclid, int dmachan)
 #define PCL_BIGENDIAN          (1<<16)
 
 
+#define _(x) (__constant_cpu_to_be32(x))
+
 quadlet_t lynx_csr_rom[] = {
         /* bus info block */
-        0x04040000, /* info/CRC length, CRC */
-        0x31333934, /* 1394 magic number */
-        0xf064a000, /* misc. settings */
-        0x08002850, /* vendor ID, chip ID high */
-        0x0000ffff, /* chip ID low */
+        _(0x04040000), /* info/CRC length, CRC */
+        _(0x31333934), /* 1394 magic number */
+        _(0xf064a000), /* misc. settings */
+        _(0x08002850), /* vendor ID, chip ID high */
+        _(0x0000ffff), /* chip ID low */
         /* root directory */
-        0x00090000, /* CRC length, CRC */
-        0x03080028, /* vendor ID (Texas Instr.) */
-        0x81000009, /* offset to textual ID */
-        0x0c000200, /* node capabilities */
-        0x8d00000e, /* offset to unique ID */
-        0xc7000010, /* offset to module independent info */
-        0x04000000, /* module hardware version */
-        0x81000026, /* offset to textual ID */
-        0x09000000, /* node hardware version */
-        0x81000026, /* offset to textual ID */
+        _(0x00090000), /* CRC length, CRC */
+        _(0x03080028), /* vendor ID (Texas Instr.) */
+        _(0x81000009), /* offset to textual ID */
+        _(0x0c000200), /* node capabilities */
+        _(0x8d00000e), /* offset to unique ID */
+        _(0xc7000010), /* offset to module independent info */
+        _(0x04000000), /* module hardware version */
+        _(0x81000026), /* offset to textual ID */
+        _(0x09000000), /* node hardware version */
+        _(0x81000026), /* offset to textual ID */
         /* module vendor ID textual */
-        0x00080000, /* CRC length, CRC */
-        0x00000000,
-        0x00000000,
-        0x54455841, /* "Texas Instruments" */
-        0x5320494e,
-        0x53545255,
-        0x4d454e54,
-        0x53000000,
+        _(0x00080000), /* CRC length, CRC */
+        _(0x00000000),
+        _(0x00000000),
+        _(0x54455841), /* "Texas Instruments" */
+        _(0x5320494e),
+        _(0x53545255),
+        _(0x4d454e54),
+        _(0x53000000),
         /* node unique ID leaf */
-        0x00020000, /* CRC length, CRC */
-        0x08002850, /* vendor ID, chip ID high */
-        0x0000ffff, /* chip ID low */
+        _(0x00020000), /* CRC length, CRC */
+        _(0x08002850), /* vendor ID, chip ID high */
+        _(0x0000ffff), /* chip ID low */
         /* module dependent info */
-        0x00060000, /* CRC length, CRC */
-        0xb8000006, /* offset to module textual ID */
-        0x81000004, /* ??? textual descriptor */
-        0x39010000, /* SRAM size */
-        0x3a010000, /* AUXRAM size */
-        0x3b000000, /* AUX device */
+        _(0x00060000), /* CRC length, CRC */
+        _(0xb8000006), /* offset to module textual ID */
+        _(0x81000004), /* ??? textual descriptor */
+        _(0x39010000), /* SRAM size */
+        _(0x3a010000), /* AUXRAM size */
+        _(0x3b000000), /* AUX device */
         /* module textual ID */
-        0x00050000, /* CRC length, CRC */
-        0x00000000,
-        0x00000000,
-        0x54534231, /* "TSB12LV21" */
-        0x324c5632,
-        0x31000000,
+        _(0x00050000), /* CRC length, CRC */
+        _(0x00000000),
+        _(0x00000000),
+        _(0x54534231), /* "TSB12LV21" */
+        _(0x324c5632),
+        _(0x31000000),
         /* part number */
-        0x00060000, /* CRC length, CRC */
-        0x00000000,
-        0x00000000,
-        0x39383036, /* "9806000-0001" */
-        0x3030342d,
-        0x30303431,
-        0x20000001,
+        _(0x00060000), /* CRC length, CRC */
+        _(0x00000000),
+        _(0x00000000),
+        _(0x39383036), /* "9806000-0001" */
+        _(0x3030342d),
+        _(0x30303431),
+        _(0x20000001),
         /* module hardware version textual */
-        0x00050000, /* CRC length, CRC */
-        0x00000000,
-        0x00000000,
-        0x5453424b, /* "TSBKPCITST" */
-        0x50434954,
-        0x53540000,
+        _(0x00050000), /* CRC length, CRC */
+        _(0x00000000),
+        _(0x00000000),
+        _(0x5453424b), /* "TSBKPCITST" */
+        _(0x50434954),
+        _(0x53540000),
         /* node hardware version textual */
-        0x00050000, /* CRC length, CRC */
-        0x00000000,
-        0x00000000,
-        0x54534232, /* "TSB21LV03" */
-        0x313c5630,
-        0x33000000
+        _(0x00050000), /* CRC length, CRC */
+        _(0x00000000),
+        _(0x00000000),
+        _(0x54534232), /* "TSB21LV03" */
+        _(0x313c5630),
+        _(0x33000000)
 };
+
+#undef _

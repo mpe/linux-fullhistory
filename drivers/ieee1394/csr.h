@@ -46,7 +46,6 @@ struct csr_control {
 
         quadlet_t topology_map[256];
         quadlet_t speed_map[1024];
-        quadlet_t fcp_data[1024];
 };
 
 

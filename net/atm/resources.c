@@ -1,6 +1,6 @@
 /* net/atm/resources.c - Staticly allocated resources */
 
-/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-2000 by Werner Almesberger, EPFL LRC/ICA */
 
 
 #include <linux/config.h>
@@ -9,6 +9,7 @@
 #include <linux/atmdev.h>
 #include <linux/kernel.h> /* for barrier */
 #include <linux/module.h>
+#include <linux/bitops.h>
 #include <net/sock.h>	 /* for struct sock */
 #include <asm/segment.h> /* for get_fs_long and put_fs_long */
 
@@ -66,7 +67,7 @@ struct atm_dev *atm_find_dev(int number)
 
 
 struct atm_dev *atm_dev_register(const char *type,const struct atmdev_ops *ops,
-    int number,unsigned long flags)
+    int number,atm_dev_flags_t *flags)
 {
 	struct atm_dev *dev;
 
@@ -91,8 +92,9 @@ struct atm_dev *atm_dev_register(const char *type,const struct atmdev_ops *ops,
 	dev->dev_data = NULL;
 	barrier();
 	dev->ops = ops;
-	dev->flags = flags;
-	memset((void *) &dev->stats,0,sizeof(struct atm_dev_stats));
+	if (flags) dev->flags = *flags;
+	else memset(&dev->flags,0,sizeof(dev->flags));
+	memset((void *) &dev->stats,0,sizeof(dev->stats));
 #ifdef CONFIG_PROC_FS
 	if (ops->proc_read)
 		if (atm_proc_dev_register(dev) < 0) {
@@ -118,7 +120,7 @@ void atm_dev_deregister(struct atm_dev *dev)
 void shutdown_atm_dev(struct atm_dev *dev)
 {
 	if (dev->vccs) {
-		dev->flags |= ATM_DF_CLOSE;
+		set_bit(ATM_DF_CLOSE,&dev->flags);
 		return;
 	}
 	if (dev->ops->dev_close) dev->ops->dev_close(dev);
@@ -165,7 +167,7 @@ static void unlink_vcc(struct atm_vcc *vcc,struct atm_dev *hold_dev)
 	if (vcc->next) vcc->next->prev = vcc->prev;
 	else if (vcc->dev) vcc->dev->last = vcc->prev;
 	if (vcc->dev && vcc->dev != hold_dev && !vcc->dev->vccs &&
-	    (vcc->dev->flags & ATM_DF_CLOSE))
+	    test_bit(ATM_DF_CLOSE,&vcc->dev->flags))
 		shutdown_atm_dev(vcc->dev);
 }
 

@@ -6,6 +6,7 @@
 
 #include <linux/config.h>
 #include <linux/kernel.h>
+#include <linux/bitops.h>
 
 /* We are ethernet device */
 #include <linux/if_ether.h>
@@ -29,9 +30,11 @@
 #include <linux/atmdev.h>
 #include <linux/atmlec.h>
 
-/* Bridge */
-#ifdef CONFIG_BRIDGE
-#include <net/br.h>
+/* Proxy LEC knows about bridging */
+#if defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE)
+#include <linux/if_bridge.h>
+#include "../bridge/br_private.h"
+unsigned char bridge_ula[] = {0x01, 0x80, 0xc2, 0x00, 0x00};
 #endif
 
 /* Modular too */
@@ -88,23 +91,19 @@ struct net_device **get_dev_lec (void) {
         return &dev_lec[0];
 }
 
-#ifdef CONFIG_BRIDGE
+#if defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE)
 static void handle_bridge(struct sk_buff *skb, struct net_device *dev)
 {
         struct ethhdr *eth;
         char *buff;
         struct lec_priv *priv;
-        unsigned char bridge_ula[ETH_ALEN] = { 0x01, 0x80, 0xc2, 0x00, 0x00, 0x00 };
 
         /* Check if this is a BPDU. If so, ask zeppelin to send
-         * LE_TOPOLOGY_REQUEST with the value of Topology Change bit
-         * in the Config BPDU*/
+         * LE_TOPOLOGY_REQUEST with the same value of Topology Change bit
+         * as the Config BPDU has */
         eth = (struct ethhdr *)skb->data;
         buff = skb->data + skb->dev->hard_header_len;
-        if ((memcmp(eth->h_dest, bridge_ula, ETH_ALEN) == 0) &&
-            *buff++ == BRIDGE_LLC1_DSAP &&
-            *buff++ == BRIDGE_LLC1_SSAP &&
-            *buff++ == BRIDGE_LLC1_CTRL) {
+        if (*buff++ == 0x42 && *buff++ == 0x42 && *buff++ == 0x03) {
                 struct sk_buff *skb2;
                 struct atmlec_msg *mesg;
 
@@ -113,7 +112,8 @@ static void handle_bridge(struct sk_buff *skb, struct net_device *dev)
                 skb2->len = sizeof(struct atmlec_msg);
                 mesg = (struct atmlec_msg *)skb2->data;
                 mesg->type = l_topology_change;
-                mesg->content.normal.flag = *(skb->nh.raw + BRIDGE_BPDU_8021_CONFIG_FLAG_OFFSET) & TOPOLOGY_CHANGE;
+                buff += 4;
+                mesg->content.normal.flag = *buff & 0x01; /* 0x01 is topology change */
 
                 priv = (struct lec_priv *)dev->priv;
                 atm_force_charge(priv->lecd, skb2->truesize);
@@ -123,7 +123,7 @@ static void handle_bridge(struct sk_buff *skb, struct net_device *dev)
 
         return;
 }
-#endif /* CONFIG_BRIDGE */
+#endif /* defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE) */
 
 /*
  * Modelled after tr_type_trans
@@ -219,10 +219,10 @@ lec_send_packet(struct sk_buff *skb, struct net_device *dev)
         DPRINTK("skbuff head:%lx data:%lx tail:%lx end:%lx\n",
                 (long)skb->head, (long)skb->data, (long)skb->tail,
                 (long)skb->end);
-#ifdef CONFIG_BRIDGE
-        if (skb->pkt_bridged == IS_BRIDGED)
+#if defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE)
+        if (memcmp(skb->data, bridge_ula, sizeof(bridge_ula)) == 0)
                 handle_bridge(skb, dev);
-#endif /* CONFIG_BRIDGE */
+#endif
 
         /* Make sure we have room for lec_id */
         if (skb_headroom(skb) < 2) {
@@ -303,7 +303,7 @@ lec_send_packet(struct sk_buff *skb, struct net_device *dev)
         send_vcc = lec_arp_resolve(priv, dst, is_rdesc, &entry);
         DPRINTK("%s:send_vcc:%p vcc_flags:%x, entry:%p\n", dev->name,
                 send_vcc, send_vcc?send_vcc->flags:0, entry);
-        if (!send_vcc || !(send_vcc->flags & ATM_VF_READY)) {    
+        if (!send_vcc || !test_bit(ATM_VF_READY,&send_vcc->flags)) {    
                 if (entry && (entry->tx_wait.qlen < LEC_UNRES_QUE_LEN)) {
                         DPRINTK("%s:lec_send_packet: queuing packet, ", dev->name);
                         DPRINTK("MAC address 0x%02x:%02x:%02x:%02x:%02x:%02x\n",
@@ -339,7 +339,7 @@ lec_send_packet(struct sk_buff *skb, struct net_device *dev)
                         send_vcc->vpi, send_vcc->vci);       
                 priv->stats.tx_packets++;
                 priv->stats.tx_bytes += skb2->len;
-                send_vcc->dev->ops->send(send_vcc, skb2);
+                send_vcc->send(send_vcc, skb2);
         }
 
         ATM_SKB(skb)->vcc = send_vcc;
@@ -348,7 +348,7 @@ lec_send_packet(struct sk_buff *skb, struct net_device *dev)
         ATM_SKB(skb)->atm_options = send_vcc->atm_options;
         priv->stats.tx_packets++;
         priv->stats.tx_bytes += skb->len;
-        send_vcc->dev->ops->send(send_vcc, skb);
+        send_vcc->send(send_vcc, skb);
 
 #if 0
         /* Should we wait for card's device driver to notify us? */
@@ -463,32 +463,44 @@ lec_atm_send(struct atm_vcc *vcc, struct sk_buff *skb)
                 priv->lecid=(unsigned short)(0xffff&mesg->content.normal.flag);
                 break;
         case l_should_bridge: {
-#ifdef CONFIG_BRIDGE
-                struct fdb *f;
-                extern Port_data port_info[];
+#if defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE)
+                struct net_bridge_fdb_entry *f;
 
                 DPRINTK("%s: bridge zeppelin asks about 0x%02x:%02x:%02x:%02x:%02x:%02x\n",
                         dev->name,
                         mesg->content.proxy.mac_addr[0], mesg->content.proxy.mac_addr[1],
                         mesg->content.proxy.mac_addr[2], mesg->content.proxy.mac_addr[3],
                         mesg->content.proxy.mac_addr[4], mesg->content.proxy.mac_addr[5]);
-                f = br_avl_find_addr(mesg->content.proxy.mac_addr); /* bridge/br.c */
+
+                read_lock(&lane_bridge_hook_lock);
+                if (br_fdb_get_hook == NULL || dev->br_port == NULL) {
+                        read_unlock(&lane_bridge_hook_lock);
+                        break;
+                }
+
+                f = br_fdb_get_hook(dev->br_port->br, mesg->content.proxy.mac_addr);
                 if (f != NULL &&
-                    port_info[f->port].dev != dev &&
-                    port_info[f->port].state == Forwarding) {
+                    f->dst->dev != dev &&
+                    f->dst->state == BR_STATE_FORWARDING) {
                                 /* hit from bridge table, send LE_ARP_RESPONSE */
                         struct sk_buff *skb2;
 
                         DPRINTK("%s: entry found, responding to zeppelin\n", dev->name);
                         skb2 = alloc_skb(sizeof(struct atmlec_msg), GFP_ATOMIC);
-                        if (skb2 == NULL) break;
+                        if (skb2 == NULL) {
+                                br_fdb_put_hook(f);
+                                read_unlock(&lane_bridge_hook_lock);
+                                break;
+                        }
                         skb2->len = sizeof(struct atmlec_msg);
                         memcpy(skb2->data, mesg, sizeof(struct atmlec_msg));
                         atm_force_charge(priv->lecd, skb2->truesize);
                         skb_queue_tail(&priv->lecd->recvq, skb2);
                         wake_up(&priv->lecd->sleep);
                 }
-#endif /* CONFIG_BRIDGE */
+                if (f != NULL) br_fdb_put_hook(f);
+                read_unlock(&lane_bridge_hook_lock);
+#endif /* defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE) */
                 }
                 break;
         default:
@@ -537,7 +549,7 @@ static struct atm_dev lecatm_dev = {
         999,	    /*dummy device number*/
         NULL,NULL,  /*no VCCs*/
         NULL,NULL,  /*no data*/
-        0,	    /*no flags*/
+        { 0 },	    /*no flags*/
         NULL,	    /* no local address*/
         { 0 }	    /*no ESI or rest of the atm_dev struct things*/
 };
@@ -684,6 +696,7 @@ lec_push(struct atm_vcc *vcc, struct sk_buff *skb)
                         lec_arp_check_empties(priv, vcc, skb);
                 }
                 skb->dev = dev;
+		skb->rx_dev = NULL;
                 skb->data += 2; /* skip lec_id */
 #ifdef CONFIG_TR
                 if (priv->is_trdev) skb->protocol = tr_type_trans(skb, dev);
@@ -777,7 +790,8 @@ lecd_attach(struct atm_vcc *vcc, int arg)
         bind_vcc(vcc, &lecatm_dev);
         
         vcc->proto_data = dev_lec[i];
-        vcc->flags |= ATM_VF_READY | ATM_VF_META;
+	set_bit(ATM_VF_META,&vcc->flags);
+	set_bit(ATM_VF_READY,&vcc->flags);
 
         /* Set default values to these variables */
         priv->maximum_unknown_frame_count = 1;
@@ -1055,8 +1069,8 @@ lec_arp_clear_vccs(struct lec_arp_table *entry)
         if (entry->vcc) {
                 entry->vcc->push = entry->old_push;
 #if 0 /* August 6, 1998 */
-                entry->vcc->flags |= ATM_VF_RELEASED;
-                entry->vcc->flags &= ~ATM_VF_READY;
+                set_bit(ATM_VF_RELEASED,&entry->vcc->flags);
+		clear_bit(ATM_VF_READY,&entry->vcc->flags);
                 entry->vcc->push(entry->vcc, NULL);
 #endif
 		atm_async_release_vcc(entry->vcc, -EPIPE);
@@ -1065,8 +1079,8 @@ lec_arp_clear_vccs(struct lec_arp_table *entry)
         if (entry->recv_vcc) {
                 entry->recv_vcc->push = entry->old_recv_push;
 #if 0
-                entry->recv_vcc->flags |= ATM_VF_RELEASED;
-                entry->recv_vcc->flags &= ~ATM_VF_READY;
+                set_bit(ATM_VF_RELEASED,&entry->vcc->flags);
+		clear_bit(ATM_VF_READY,&entry->vcc->flags);
                 entry->recv_vcc->push(entry->recv_vcc, NULL);
 #endif
 		atm_async_release_vcc(entry->recv_vcc, -EPIPE);

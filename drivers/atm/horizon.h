@@ -31,9 +31,7 @@
 #define DRIVER_ATM_HORIZON_H
 
 #include <linux/config.h>
-
 #include <linux/version.h>
-
 
 #ifdef CONFIG_ATM_HORIZON_DEBUG
 #define DEBUG_HORIZON

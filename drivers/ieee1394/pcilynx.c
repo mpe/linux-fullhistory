@@ -59,6 +59,13 @@
 /* print card specific information */
 #define PRINT(level, card, fmt, args...) printk(level "pcilynx%d: " fmt "\n" , card , ## args)
 
+#ifdef CONFIG_IEEE1394_VERBOSEDEBUG
+#define PRINT_GD(level, fmt, args...) printk(level "pcilynx: " fmt "\n" , ## args)
+#define PRINTD(level, card, fmt, args...) printk(level "pcilynx%d: " fmt "\n" , card , ## args)
+#else
+#define PRINT_GD(level, fmt, args...)
+#define PRINTD(level, card, fmt, args...)
+#endif
 
 static struct ti_lynx cards[MAX_PCILYNX_CARDS];
 static int num_of_cards = 0;
@@ -313,7 +320,8 @@ static quadlet_t generate_own_selfid(struct ti_lynx *lynx,
                 }
         }
 
-        printk("-%d- generated own selfid 0x%x\n", lynx->id, lsid);
+        cpu_to_be32s(&lsid);
+        PRINT(KERN_DEBUG, lynx->id, "generated own selfid 0x%x", lsid);
         return lsid;
 }
 
@@ -322,7 +330,14 @@ static void handle_selfid(struct ti_lynx *lynx, struct hpsb_host *host, size_t s
         quadlet_t *q = lynx->rcv_page;
         int phyid, isroot;
         quadlet_t lsid = 0;
+        int i;
 
+        i = (size > 16 ? 16 : size) / 4 - 1;
+        while (i >= 0) {
+                cpu_to_be32s(&q[i]);
+                i--;
+        }
+        
         if (!lynx->phyic.reg_1394a) {
                 lsid = generate_own_selfid(lynx, host);
         }
@@ -339,17 +354,20 @@ static void handle_selfid(struct ti_lynx *lynx, struct hpsb_host *host, size_t s
         }
 
         while (size > 0) {
-                if (!lynx->phyic.reg_1394a 
-                    && (q[0] & 0x3f800000) == ((phyid + 1) << 24)) {
+                struct selfid *sid = (struct selfid *)q;
+
+                if (!lynx->phyic.reg_1394a && !sid->extended 
+                    && (sid->phy_id == (phyid + 1))) {
                         hpsb_selfid_received(host, lsid);
                 }
 
                 if (q[0] == ~q[1]) {
-                        printk("-%d- selfid packet 0x%x rcvd\n", lynx->id, q[0]);
+                        PRINT(KERN_DEBUG, lynx->id, "selfid packet 0x%x rcvd",
+                              q[0]);
                         hpsb_selfid_received(host, q[0]);
                 } else {
-                        printk("-%d- inconsistent selfid 0x%x/0x%x\n", lynx->id,
-                               q[0], q[1]);
+                        PRINT(KERN_INFO, lynx->id,
+                              "inconsistent selfid 0x%x/0x%x", q[0], q[1]);
                 }
                 q += 2;
                 size -= 8;
@@ -429,14 +447,14 @@ static int lynx_initialize(struct hpsb_host *host)
         pcl.next = PCL_NEXT_INVALID;
         pcl.async_error_next = PCL_NEXT_INVALID;
 #ifdef __BIG_ENDIAN
-        pcl.buffer[0].control = PCL_CMD_RCV | 2048;
-        pcl.buffer[1].control = PCL_LAST_BUFF | 2048;
+        pcl.buffer[0].control = PCL_CMD_RCV | 16;
+        pcl.buffer[1].control = PCL_LAST_BUFF | 4080;
 #else
-        pcl.buffer[0].control = PCL_CMD_RCV | PCL_BIGENDIAN | 2048;
-        pcl.buffer[1].control = PCL_LAST_BUFF | PCL_BIGENDIAN | 2048;
+        pcl.buffer[0].control = PCL_CMD_RCV | PCL_BIGENDIAN | 16;
+        pcl.buffer[1].control = PCL_LAST_BUFF | 4080;
 #endif
         pcl.buffer[0].pointer = virt_to_bus(lynx->rcv_page);
-        pcl.buffer[1].pointer = virt_to_bus(lynx->rcv_page) + 2048;
+        pcl.buffer[1].pointer = virt_to_bus(lynx->rcv_page) + 16;
         put_pcl(lynx, lynx->rcv_pcl, &pcl);
         
         pcl.next = pcl_bus(lynx, lynx->async_pcl);
@@ -445,10 +463,11 @@ static int lynx_initialize(struct hpsb_host *host)
 
         pcl.next = PCL_NEXT_INVALID;
         pcl.async_error_next = PCL_NEXT_INVALID;
-        pcl.buffer[0].control = PCL_CMD_RCV | PCL_LAST_BUFF | 2048;
+        pcl.buffer[0].control = PCL_CMD_RCV | 4;
 #ifndef __BIG_ENDIAN
         pcl.buffer[0].control |= PCL_BIGENDIAN;
 #endif
+        pcl.buffer[1].control = PCL_LAST_BUFF | 2044;
 
         for (i = 0; i < NUM_ISORCV_PCL; i++) {
                 int page = i / ISORCV_PER_PAGE;
@@ -456,6 +475,7 @@ static int lynx_initialize(struct hpsb_host *host)
 
                 pcl.buffer[0].pointer = virt_to_bus(lynx->iso_rcv.page[page])
                         + sec * MAX_ISORCV_SIZE;
+                pcl.buffer[1].pointer = pcl.buffer[0].pointer + 4;
                 put_pcl(lynx, lynx->iso_rcv.pcl[i], &pcl);
         }
 
@@ -539,6 +559,10 @@ static int lynx_transmit(struct hpsb_host *host, struct hpsb_packet *packet)
         }
 
         packet->xnext = NULL;
+        if (packet->tcode == TCODE_WRITEQ
+            || packet->tcode == TCODE_READQ_RESPONSE) {
+                cpu_to_be32s(&packet->header[3]);
+        }
 
         spin_lock_irqsave(&lynx->async_queue_lock, flags);
 
@@ -1054,8 +1078,8 @@ static void lynx_irq_handler(int irq, void *dev_id,
                 }
                 if (linkint & LINK_INT_PHY_REG_RCVD) {
                         if (!host->in_bus_reset) {
-                                printk("-%d- phy reg received without reset\n",
-                                       lynx->id);
+                                PRINT(KERN_INFO, lynx->id,
+                                      "phy reg received without reset");
                         }
                 }
                 if (linkint & LINK_INT_ISO_STUCK) {
@@ -1082,7 +1106,7 @@ static void lynx_irq_handler(int irq, void *dev_id,
         }
 
         if (intmask & PCI_INT_DMA_HLT(CHANNEL_ISO_RCV)) {
-                PRINT(KERN_INFO, lynx->id, "iso receive");
+                PRINTD(KERN_DEBUG, lynx->id, "iso receive");
 
                 spin_lock(&lynx->iso_rcv.lock);
 
@@ -1094,7 +1118,7 @@ static void lynx_irq_handler(int irq, void *dev_id,
 
                 if ((lynx->iso_rcv.next == lynx->iso_rcv.last)
                     || !lynx->iso_rcv.chan_count) {
-                        printk("stopped\n");
+                        PRINTD(KERN_DEBUG, lynx->id, "stopped");
                         reg_write(lynx, DMA_WORD1_CMP_ENABLE(CHANNEL_ISO_RCV), 0);
                 }
 
@@ -1125,9 +1149,9 @@ static void lynx_irq_handler(int irq, void *dev_id,
                 spin_unlock(&lynx->async_queue_lock);
 
                 if (ack & DMA_CHAN_STAT_SPECIALACK) {
-                        printk("-%d- special ack %d\n", lynx->id,
-                               (ack >> 15) & 0xf);
-                        ack = ACKX_SEND_ERROR;
+                        ack = (ack >> 15) & 0xf;
+                        PRINTD(KERN_INFO, lynx->id, "special ack %d", ack);
+                        ack = (ack == 1 ? ACKX_TIMEOUT : ACKX_SEND_ERROR);
                 } else {
                         ack = (ack >> 15) & 0xf;
                 }
@@ -1139,7 +1163,7 @@ static void lynx_irq_handler(int irq, void *dev_id,
                 /* general receive DMA completed */
                 int stat = reg_read(lynx, DMA1_CHAN_STAT);
 
-                printk("-%d- received packet size %d\n", lynx->id, 
+                PRINTD(KERN_DEBUG, lynx->id, "received packet size %d",
                        stat & 0x1fff); 
 
                 if (stat & DMA_CHAN_STAT_SELFID) {
@@ -1149,8 +1173,12 @@ static void lynx_irq_handler(int irq, void *dev_id,
                                      | LINK_CONTROL_TX_ASYNC_EN
                                      | LINK_CONTROL_RX_ASYNC_EN);
                 } else {
-                        hpsb_packet_received(host, lynx->rcv_page,
-                                             stat & 0x1fff);
+                        quadlet_t *q_data = lynx->rcv_page;
+                        if ((*q_data >> 4 & 0xf) == TCODE_READQ_RESPONSE
+                            || (*q_data >> 4 & 0xf) == TCODE_WRITEQ) {
+                                cpu_to_be32s(q_data + 3);
+                        }
+                        hpsb_packet_received(host, q_data, stat & 0x1fff);
                 }
 
                 run_pcl(lynx, lynx->rcv_pcl_start, 1);
@@ -1411,7 +1439,7 @@ static int init_driver()
         }
 
         if (register_chrdev(PCILYNX_MAJOR, PCILYNX_DRIVER_NAME, &aux_ops)) {
-                PRINT_G(KERN_ERR, "allocation of char major number %d failed\n",
+                PRINT_G(KERN_ERR, "allocation of char major number %d failed",
                         PCILYNX_MAJOR);
                 return -EBUSY;
         }
@@ -1453,13 +1481,13 @@ MODULE_SUPPORTED_DEVICE("pcilynx");
 void cleanup_module(void)
 {
         hpsb_unregister_lowlevel(get_lynx_template());
-        PRINT_G(KERN_INFO, "removed " PCILYNX_DRIVER_NAME " module\n");
+        PRINT_G(KERN_INFO, "removed " PCILYNX_DRIVER_NAME " module");
 }
 
 int init_module(void)
 {
         if (hpsb_register_lowlevel(get_lynx_template())) {
-                PRINT_G(KERN_ERR, "registering failed\n");
+                PRINT_G(KERN_ERR, "registering failed");
                 return -ENXIO;
         } else {
                 return 0;

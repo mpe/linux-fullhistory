@@ -39,7 +39,7 @@ int __init atmdev_init(void)
 
 	devs = 0;
 #ifdef CONFIG_ATM_ENI
-	devs += eni_detect();
+//	devs += eni_detect();
 #endif
 #ifdef CONFIG_ATM_ZATM
 	devs += zatm_detect();

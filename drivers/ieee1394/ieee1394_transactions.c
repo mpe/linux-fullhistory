@@ -68,7 +68,7 @@ void fill_async_readblock_resp(struct hpsb_packet *packet, int rcode,
         PREP_ASYNC_HEAD_RCODE(TCODE_READB_RESPONSE);
         packet->header[3] = length << 16;
         packet->header_size = 16;
-        packet->data_size = length;
+        packet->data_size = length + (length % 4 ? 4 - (length % 4) : 0);
 }
 
 void fill_async_writequad(struct hpsb_packet *packet, u64 addr, quadlet_t data)
@@ -85,8 +85,8 @@ void fill_async_writeblock(struct hpsb_packet *packet, u64 addr, int length)
         PREP_ASYNC_HEAD_ADDRESS(TCODE_WRITEB);
         packet->header[3] = length << 16;
         packet->header_size = 16;
-        packet->data_size = length;
         packet->expect_response = 1;
+        packet->data_size = length + (length % 4 ? 4 - (length % 4) : 0);
 }
 
 void fill_async_write_resp(struct hpsb_packet *packet, int rcode)
@@ -260,7 +260,7 @@ int hpsb_read_trylocal(struct hpsb_host *host, nodeid_t node, u64 addr,
                        quadlet_t *buffer, size_t length)
 {
         if (host->node_id != node) return -1;
-        return highlevel_read(host, buffer, addr, length);
+        return highlevel_read(host, node, buffer, addr, length);
 }
 
 struct hpsb_packet *hpsb_make_readqpacket(struct hpsb_host *host, nodeid_t node,
@@ -284,7 +284,7 @@ struct hpsb_packet *hpsb_make_readbpacket(struct hpsb_host *host, nodeid_t node,
 {
         struct hpsb_packet *p;
 
-        p = alloc_hpsb_packet(length);
+        p = alloc_hpsb_packet(length + (length % 4 ? 4 - (length % 4) : 0));
         if (!p) return NULL;
 
         p->host = host;
@@ -318,8 +318,12 @@ struct hpsb_packet *hpsb_make_writebpacket(struct hpsb_host *host,
 {
         struct hpsb_packet *p;
 
-        p = alloc_hpsb_packet(length);
+        p = alloc_hpsb_packet(length + (length % 4 ? 4 - (length % 4) : 0));
         if (!p) return NULL;
+
+        if (length % 4) {
+                p->data[length / 4] = 0;
+        }
 
         p->host = host;
         p->tlabel = get_tlabel(host, node, 1);
@@ -370,7 +374,7 @@ int hpsb_read(struct hpsb_host *host, nodeid_t node, u64 addr,
         }
 
         if (host->node_id == node) {
-                switch(highlevel_read(host, buffer, addr, length)) {
+                switch(highlevel_read(host, node, buffer, addr, length)) {
                 case RCODE_COMPLETE:
                         return 0;
                 case RCODE_TYPE_ERROR:
@@ -379,16 +383,6 @@ int hpsb_read(struct hpsb_host *host, nodeid_t node, u64 addr,
                 default:
                         return -EINVAL;
                 }
-        }
-
-        if (length & 0x3) {
-                /* FIXME: Lengths not multiple of 4 are not implemented.  Mainly
-                 * there is the problem with little endian machines because we
-                 * always swap to little endian on receive.  If we read 5 bytes
-                 * 12345 we receive them as 12345000 and swap them to 43210005.
-                 * How should we copy that to the caller?  Require *buffer to be
-                 * a full quadlet multiple in length? */
-                return -EACCES;
         }
 
         if (length == 4) {
@@ -432,7 +426,7 @@ int hpsb_write(struct hpsb_host *host, nodeid_t node, u64 addr,
         }
 
         if (host->node_id == node) {
-                switch(highlevel_write(host, buffer, addr, length)) {
+                switch(highlevel_write(host, node, buffer, addr, length)) {
                 case RCODE_COMPLETE:
                         return 0;
                 case RCODE_TYPE_ERROR:
@@ -441,12 +435,6 @@ int hpsb_write(struct hpsb_host *host, nodeid_t node, u64 addr,
                 default:
                         return -EINVAL;
                 }
-        }
-
-        if (length & 0x3) {
-                /* FIXME: Lengths not multiple of 4 are not implemented.  See function
-                 * hpsb_read for explanation, same reason, different direction. */
-                return -EACCES;
         }
 
         if (length == 4) {
@@ -483,7 +471,8 @@ int hpsb_lock(struct hpsb_host *host, nodeid_t node, u64 addr, int extcode,
         int retval = 0, length;
         
         if (host->node_id == node) {
-                switch(highlevel_lock(host, data, addr, *data, arg, extcode)) {
+                switch(highlevel_lock(host, node, data, addr, *data, arg,
+                                      extcode)) {
                 case RCODE_COMPLETE:
                         return 0;
                 case RCODE_TYPE_ERROR:

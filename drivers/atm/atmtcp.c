@@ -7,7 +7,9 @@
 #include <linux/wait.h>
 #include <linux/atmdev.h>
 #include <linux/atm_tcp.h>
+#include <linux/bitops.h>
 #include <asm/uaccess.h>
+#include <asm/atomic.h>
 
 
 extern int atm_init_aal5(struct atm_vcc *vcc); /* "raw" AAL5 transport */
@@ -36,12 +38,14 @@ struct atmtcp_dev_data {
 
 
 static int atmtcp_send_control(struct atm_vcc *vcc,int type,
-    const struct atmtcp_control *msg,unsigned short flag)
+    const struct atmtcp_control *msg,int flag)
 {
+	DECLARE_WAITQUEUE(wait,current);
 	struct atm_vcc *out_vcc;
 	struct sk_buff *skb;
 	struct atmtcp_control *new_msg;
-	unsigned short old_flags;
+	int old_test;
+	int error = 0;
 
 	out_vcc = PRIV(vcc->dev) ? PRIV(vcc->dev)->vcc : NULL;
 	if (!out_vcc) return -EUNATCH;
@@ -60,16 +64,21 @@ static int atmtcp_send_control(struct atm_vcc *vcc,int type,
 	new_msg->type = type;
 	memset(&new_msg->vcc,0,sizeof(atm_kptr_t));
 	*(struct atm_vcc **) &new_msg->vcc = vcc;
-	old_flags = vcc->flags;
+	old_test = test_bit(flag,&vcc->flags);
 	out_vcc->push(out_vcc,skb);
-	while (!((vcc->flags ^ old_flags) & flag)) {
+	add_wait_queue(&vcc->sleep,&wait);
+	while (test_bit(flag,&vcc->flags) == old_test) {
 		mb();
 		out_vcc = PRIV(vcc->dev) ? PRIV(vcc->dev)->vcc : NULL;
-		if (!out_vcc) return -EUNATCH;
-		sleep_on(&vcc->sleep);
-		
+		if (!out_vcc) {
+			error = -EUNATCH;
+			break;
+		}
+		set_current_state(TASK_UNINTERRUPTIBLE);
+		schedule();
 	}
-	return 0;
+	remove_wait_queue(&vcc->sleep,&wait);
+	return error;
 }
 
 
@@ -83,10 +92,10 @@ static int atmtcp_recv_control(const struct atmtcp_control *msg)
 	vcc->reply = msg->result;
 	switch (msg->type) {
 	    case ATMTCP_CTRL_OPEN:
-		vcc->flags ^= ATM_VF_READY;
+		change_bit(ATM_VF_READY,&vcc->flags);
 		break;
 	    case ATMTCP_CTRL_CLOSE:
-		vcc->flags ^= ATM_VF_ADDR;
+		change_bit(ATM_VF_ADDR,&vcc->flags);
 		break;
 	    default:
 		printk(KERN_ERR "atmtcp_recv_control: unknown type %d\n",
@@ -120,8 +129,8 @@ static int atmtcp_v_open(struct atm_vcc *vcc,short vpi,int vci)
 	if (vpi == ATM_VPI_UNSPEC || vci == ATM_VCI_UNSPEC) return 0;
 	msg.type = ATMTCP_CTRL_OPEN;
 	msg.qos = vcc->qos;
-	vcc->flags |= ATM_VF_ADDR;
-	vcc->flags &= ~ATM_VF_READY; /* just in case ... */
+	set_bit(ATM_VF_ADDR,&vcc->flags);
+	clear_bit(ATM_VF_READY,&vcc->flags); /* just in case ... */
 	error = atmtcp_send_control(vcc,ATMTCP_CTRL_OPEN,&msg,ATM_VF_READY);
 	if (error) return error;
 	return vcc->reply;
@@ -136,7 +145,7 @@ static void atmtcp_v_close(struct atm_vcc *vcc)
 	msg.addr.sap_family = AF_ATMPVC;
 	msg.addr.sap_addr.vpi = vcc->vpi;
 	msg.addr.sap_addr.vci = vcc->vci;
-	vcc->flags &= ~ATM_VF_READY;
+	clear_bit(ATM_VF_READY,&vcc->flags);
 	(void) atmtcp_send_control(vcc,ATMTCP_CTRL_CLOSE,&msg,ATM_VF_ADDR);
 }
 
@@ -168,13 +177,18 @@ static int atmtcp_v_send(struct atm_vcc *vcc,struct sk_buff *skb)
 	struct atmtcp_hdr *hdr;
 	int size;
 
+	if (vcc->qos.txtp.traffic_class == ATM_NONE) {
+		if (vcc->pop) vcc->pop(vcc,skb);
+		else dev_kfree_skb(skb);
+		return -EINVAL;
+	}
 	dev_data = PRIV(vcc->dev);
 	if (dev_data) out_vcc = dev_data->vcc;
 	if (!dev_data || !out_vcc) {
 		if (vcc->pop) vcc->pop(vcc,skb);
 		else dev_kfree_skb(skb);
 		if (dev_data) return 0;
-		vcc->stats->tx_err++;
+		atomic_inc(&vcc->stats->tx_err);
 		return -ENOLINK;
 	}
 	size = skb->len+sizeof(struct atmtcp_hdr);
@@ -182,7 +196,7 @@ static int atmtcp_v_send(struct atm_vcc *vcc,struct sk_buff *skb)
 	if (!new_skb) {
 		if (vcc->pop) vcc->pop(vcc,skb);
 		else dev_kfree_skb(skb);
-		vcc->stats->tx_err++;
+		atomic_inc(&vcc->stats->tx_err);
 		return -ENOBUFS;
 	}
 	hdr = (void *) skb_put(new_skb,sizeof(struct atmtcp_hdr));
@@ -193,8 +207,8 @@ static int atmtcp_v_send(struct atm_vcc *vcc,struct sk_buff *skb)
 	if (vcc->pop) vcc->pop(vcc,skb);
 	else dev_kfree_skb(skb);
 	out_vcc->push(out_vcc,new_skb);
-	vcc->stats->tx++;
-	out_vcc->stats->rx++;
+	atomic_inc(&vcc->stats->tx);
+	atomic_inc(&out_vcc->stats->rx);
 	return 0;
 }
 
@@ -251,7 +265,7 @@ static int atmtcp_c_send(struct atm_vcc *vcc,struct sk_buff *skb)
 		    out_vcc->qos.rxtp.traffic_class != ATM_NONE)
 			break;
 	if (!out_vcc) {
-		vcc->stats->tx_err++;
+		atomic_inc(&vcc->stats->tx_err);
 		goto done;
 	}
 	skb_pull(skb,sizeof(struct atmtcp_hdr));
@@ -263,8 +277,8 @@ static int atmtcp_c_send(struct atm_vcc *vcc,struct sk_buff *skb)
 	new_skb->stamp = xtime;
 	memcpy(skb_put(new_skb,skb->len),skb->data,skb->len);
 	out_vcc->push(out_vcc,new_skb);
-	vcc->stats->tx++;
-	out_vcc->stats->rx++;
+	atomic_inc(&vcc->stats->tx);
+	atomic_inc(&out_vcc->stats->rx);
 done:
 	if (vcc->pop) vcc->pop(vcc,skb);
 	else dev_kfree_skb(skb);
@@ -305,7 +319,7 @@ static struct atm_dev atmtcp_control_dev = {
 	999,		/* dummy device number */
 	NULL,NULL,	/* pretend not to have any VCCs */
 	NULL,NULL,	/* no data */
-	0,		/* no flags */
+	{ 0 },		/* no flags */
 	NULL,		/* no local address */
 	{ 0 }		/* no ESI, no statistics */
 };
@@ -318,7 +332,7 @@ static int atmtcp_create(int itf,int persist,struct atm_dev **result)
 
 	dev_data = kmalloc(sizeof(*dev_data),GFP_KERNEL);
 	if (!dev_data) return -ENOMEM;
-	dev = atm_dev_register(DEV_LABEL,&atmtcp_v_dev_ops,itf,0);
+	dev = atm_dev_register(DEV_LABEL,&atmtcp_v_dev_ops,itf,NULL);
 	if (!dev) {
 		kfree(dev_data);
 		return itf == -1 ? -ENOMEM : -EBUSY;
@@ -352,7 +366,8 @@ int atmtcp_attach(struct atm_vcc *vcc,int itf)
 	}
 	PRIV(dev)->vcc = vcc;
 	bind_vcc(vcc,&atmtcp_control_dev);
-	vcc->flags |= ATM_VF_READY | ATM_VF_META;
+	set_bit(ATM_VF_META,&vcc->flags);
+	set_bit(ATM_VF_READY,&vcc->flags);
 	vcc->dev_data = dev;
 	(void) atm_init_aal5(vcc); /* @@@ losing AAL in transit ... */
 	vcc->stats = &atmtcp_control_dev.stats.aal5;

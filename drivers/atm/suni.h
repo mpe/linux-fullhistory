@@ -1,6 +1,6 @@
-/* drivers/atm/suni.h - PMC SUNI (PHY) declarations */
+/* drivers/atm/suni.h - PMC PM5346 SUNI (PHY) declarations */
  
-/* Written 1995,1998 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-2000 by Werner Almesberger, EPFL LRC/ICA */
  
 
 #ifndef DRIVER_ATM_SUNI_H

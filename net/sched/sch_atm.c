@@ -276,7 +276,7 @@ static int atm_tc_change(struct Qdisc *sch, u32 classid, u32 parent,
                 goto err_out;
 	}
 	/* @@@ should check if the socket is really operational or we'll crash
-	   on vcc->dev->ops->send */
+	   on vcc->send */
 	if (classid) {
 		if (TC_H_MAJ(classid ^ sch->handle)) {
 			DPRINTK("atm_tc_change: classid mismatch\n");
@@ -449,8 +449,21 @@ static int atm_tc_enqueue(struct sk_buff *skb,struct Qdisc *sch)
 	sch->stats.packets++;
 	flow->stats.bytes += skb->len;
 	flow->stats.packets++;
-	sch->q.qlen++;
-	return 0;
+	/*
+	 * Okay, this may seem weird. We pretend we've dropped the packet if
+	 * it goes via ATM. The reason for this is that the outer qdisc
+	 * expects to be able to q->dequeue the packet later on if we return
+	 * success at this place. Also, sch->q.qdisc needs to reflect whether
+	 * there is a packet egligible for dequeuing or not. Note that the
+	 * statistics of the outer qdisc are necessarily wrong because of all
+	 * this. There's currently no correct solution for this.
+	 */
+	if (flow == &p->link) {
+		sch->q.qlen++;
+		return 0;
+	}
+	tasklet_schedule(&p->task);
+	return NET_XMIT_BYPASS;
 }
 
 
@@ -477,11 +490,9 @@ static void sch_atm_dequeue(unsigned long data)
 		 */
 		while ((skb = flow->q->dequeue(flow->q))) {
 			if (!atm_may_send(flow->vcc,skb->truesize)) {
-				if (flow->q->ops->requeue(skb,flow->q))
-					sch->q.qlen--;
+				(void) flow->q->ops->requeue(skb,flow->q);
 				break;
 			}
-			sch->q.qlen--;
 			D2PRINTK("atm_tc_deqeueue: sending on class %p\n",flow);
 			/* remove any LL header somebody else has attached */
 			skb_pull(skb,(char *) skb->nh.iph-(char *) skb->data);
@@ -501,7 +512,7 @@ static void sch_atm_dequeue(unsigned long data)
 			atomic_add(skb->truesize,&flow->vcc->tx_inuse);
 			ATM_SKB(skb)->iovcnt = 0;
 			/* atm.atm_options are already set by atm_tc_enqueue */
-			(void) flow->vcc->dev->ops->send(flow->vcc,skb);
+			(void) flow->vcc->send(flow->vcc,skb);
 		}
 }
 

@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.83 2000/03/14 07:31:25 jj Exp $
+/* $Id: ioctl32.c,v 1.84 2000/03/21 21:19:18 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997-2000  Jakub Jelinek  (jakub@redhat.com)
@@ -1803,6 +1803,8 @@ struct atm_iobuf32 {
 #define ATM_SETESIF32     _IOW('a', ATMIOC_ITF+13, struct atmif_sioc32)
 #define ATM_GETSTAT32     _IOW('a', ATMIOC_SARCOM+0, struct atmif_sioc32)
 #define ATM_GETSTATZ32    _IOW('a', ATMIOC_SARCOM+1, struct atmif_sioc32)
+#define ATM_GETLOOP32	  _IOW('a', ATMIOC_SARCOM+2, struct atmif_sioc32)
+#define ATM_SETLOOP32	  _IOW('a', ATMIOC_SARCOM+3, struct atmif_sioc32)
 
 static struct {
         unsigned int cmd32;
@@ -1821,7 +1823,9 @@ static struct {
 	{ ATM_SETESI32,      ATM_SETESI },
 	{ ATM_SETESIF32,     ATM_SETESIF },
 	{ ATM_GETSTAT32,     ATM_GETSTAT },
-	{ ATM_GETSTATZ32,    ATM_GETSTATZ }
+	{ ATM_GETSTATZ32,    ATM_GETSTATZ },
+	{ ATM_GETLOOP32,     ATM_GETLOOP },
+	{ ATM_SETLOOP32,     ATM_SETLOOP }
 };
 
 #define NR_ATM_IOCTL (sizeof(atm_ioctl_map)/sizeof(atm_ioctl_map[0]))
@@ -1941,8 +1945,6 @@ static int do_atm_ioctl(unsigned int fd, unsigned int cmd32, unsigned long arg)
         unsigned int cmd = 0;
         
 	switch (cmd32) {
-	case SUNI_GETLOOP:
-	case SUNI_SETLOOP:
 	case SONET_GETSTAT:
 	case SONET_GETSTATZ:
 	case SONET_GETDIAG:
@@ -1954,7 +1956,6 @@ static int do_atm_ioctl(unsigned int fd, unsigned int cmd32, unsigned long arg)
 		return do_atmif_sioc(fd, cmd32, arg);
 	}
 
-	if (cmd == 0) {
 		for (i = 0; i < NR_ATM_IOCTL; i++) {
 			if (cmd32 == atm_ioctl_map[i].cmd32) {
 				cmd = atm_ioctl_map[i].cmd;
@@ -1964,7 +1965,6 @@ static int do_atm_ioctl(unsigned int fd, unsigned int cmd32, unsigned long arg)
 	        if (i == NR_ATM_IOCTL) {
 	        return -EINVAL;
 	        }
-	}
         
         switch (cmd) {
 	case ATM_GETNAMES:
@@ -1983,6 +1983,8 @@ static int do_atm_ioctl(unsigned int fd, unsigned int cmd32, unsigned long arg)
 	case ATM_SETESIF:
 	case ATM_GETSTAT:
 	case ATM_GETSTATZ:
+	case ATM_GETLOOP:
+	case ATM_SETLOOP:
                 return do_atmif_sioc(fd, cmd, arg);
         }
 
@@ -3076,8 +3078,8 @@ HANDLE_IOCTL(ATM_SETESI32, do_atm_ioctl)
 HANDLE_IOCTL(ATM_SETESIF32, do_atm_ioctl)
 HANDLE_IOCTL(ATM_GETSTAT32, do_atm_ioctl)
 HANDLE_IOCTL(ATM_GETSTATZ32, do_atm_ioctl)
-HANDLE_IOCTL(SUNI_GETLOOP, do_atm_ioctl)
-HANDLE_IOCTL(SUNI_SETLOOP, do_atm_ioctl)
+HANDLE_IOCTL(ATM_GETLOOP32, do_atm_ioctl)
+HANDLE_IOCTL(ATM_SETLOOP32, do_atm_ioctl)
 HANDLE_IOCTL(SONET_GETSTAT, do_atm_ioctl)
 HANDLE_IOCTL(SONET_GETSTATZ, do_atm_ioctl)
 HANDLE_IOCTL(SONET_GETDIAG, do_atm_ioctl)

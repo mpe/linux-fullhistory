@@ -13297,7 +13297,7 @@ CONFIG_IEEE1394_OHCI1394
   say M here and read Documentation/modules.txt. The module will be
   called ohci1394.o.
 
-RAW IEEE 1394 I/O support
+Raw IEEE 1394 I/O support
 CONFIG_IEEE1394_RAWIO
   Say Y here if you want support for the raw device. This is generally
   a good idea, so you should say Y here. The raw device enables
@@ -13307,6 +13307,17 @@ CONFIG_IEEE1394_RAWIO
   inserted in and removed from the running kernel whenever you want),
   say M here and read Documentation/modules.txt. The module will be
   called raw1394.o.
+
+Excessive debugging output
+CONFIG_IEEE1394_VERBOSEDEBUG
+  If you say Y here, you will get very verbose debugging logs from the
+  subsystem which includes a dump of the header of every sent and
+  received packet.  This can amount to a high amount of data collected
+  in a very short time which is usually also saved to disk by the
+  system logging daemons.
+
+  Say Y if you really want or need the debugging output, everyone else
+  says N.
 
 #
 # m68k-specific kernel options

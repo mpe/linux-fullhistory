@@ -224,9 +224,6 @@ EXPORT_SYMBOL(misc_deregister);
 int __init misc_init(void)
 {
 	create_proc_read_entry("misc", 0, 0, misc_read_proc, NULL);
-#ifdef CONFIG_BUSMOUSE
-	bus_mouse_init();
-#endif
 #if defined CONFIG_82C710_MOUSE
 	qpmouse_init();
 #endif

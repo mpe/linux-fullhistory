@@ -14,11 +14,12 @@ if [ "$CONFIG_PCI" = "y" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
 	fi
 
 	dep_tristate 'Adaptec AIC-5800 (AHA-89xx) support' CONFIG_IEEE1394_AIC5800 $CONFIG_IEEE1394
-	
+
 	dep_tristate 'OHCI (Open Host Controller Interface) support' CONFIG_IEEE1394_OHCI1394 $CONFIG_IEEE1394
 
 	dep_tristate 'Raw IEEE1394 I/O support' CONFIG_IEEE1394_RAWIO $CONFIG_IEEE1394
 
+	bool 'Excessive debugging output' CONFIG_IEEE1394_VERBOSEDEBUG
     fi
     endmenu
 fi

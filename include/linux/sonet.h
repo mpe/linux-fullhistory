@@ -1,22 +1,28 @@
 /* sonet.h - SONET/SHD physical layer control */
  
-/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-2000 by Werner Almesberger, EPFL LRC/ICA */
  
 
 #ifndef LINUX_SONET_H
 #define LINUX_SONET_H
 
+#define __SONET_ITEMS \
+    __HANDLE_ITEM(section_bip); 	/* section parity errors (B1) */ \
+    __HANDLE_ITEM(line_bip);		/* line parity errors (B2) */ \
+    __HANDLE_ITEM(path_bip);		/* path parity errors (B3) */ \
+    __HANDLE_ITEM(line_febe);		/* line parity errors at remote */ \
+    __HANDLE_ITEM(path_febe);		/* path parity errors at remote */ \
+    __HANDLE_ITEM(corr_hcs);		/* correctable header errors */ \
+    __HANDLE_ITEM(uncorr_hcs);		/* uncorrectable header errors */ \
+    __HANDLE_ITEM(tx_cells);		/* cells sent */ \
+    __HANDLE_ITEM(rx_cells);		/* cells received */
+
 struct sonet_stats {
-	int section_bip;		/* section parity errors (B1) */
-	int line_bip;			/* line parity errors (B2) */
-	int path_bip;			/* path parity errors (B3) */
-	int line_febe;			/* line parity errors at remote */
-	int path_febe;			/* path parity errors at remote */
-	int corr_hcs;			/* correctable header errors */
-	int uncorr_hcs;			/* uncorrectable header errors */
-	int tx_cells;			/* cells sent */
-	int rx_cells;			/* cells received */
+#define __HANDLE_ITEM(i) int i
+	__SONET_ITEMS
+#undef __HANDLE_ITEM
 } __attribute__ ((packed));
+
 
 #define SONET_GETSTAT	_IOR('a',ATMIOC_PHYTYP,struct sonet_stats)
 					/* get statistics */
@@ -48,5 +54,24 @@ struct sonet_stats {
 #define SONET_FRAME_SDH   1		/* SDH STM-1 framing */
 
 #define SONET_FRSENSE_SIZE 6		/* C1[3],H1[3] (0xff for unknown) */
+
+
+#ifndef __KERNEL__
+#undef __SONET_ITEMS
+#else
+
+#include <asm/atomic.h>
+
+struct k_sonet_stats {
+#define __HANDLE_ITEM(i) atomic_t i
+	__SONET_ITEMS
+#undef __HANDLE_ITEM
+};
+
+extern void sonet_copy_stats(struct k_sonet_stats *from,struct sonet_stats *to);
+extern void sonet_subtract_stats(struct k_sonet_stats *from,
+    struct sonet_stats *to);
+
+#endif
 
 #endif

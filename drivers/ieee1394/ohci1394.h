@@ -4,16 +4,18 @@
 
 #include "ieee1394_types.h"
 
-#define OHCI1394_DEBUG 1
-
 #define OHCI1394_DRIVER_NAME      "ohci1394"
 
-#ifndef PCI_DEVICE_ID_TI_OHCI1394
-#define PCI_DEVICE_ID_TI_OHCI1394 0x8009
-#endif 
+#ifndef PCI_DEVICE_ID_TI_OHCI1394_LV22
+#define PCI_DEVICE_ID_TI_OHCI1394_LV22 0x8009
+#endif
 
-#ifndef PCI_DEVICE_ID_TI_OHCI1394_2
-#define PCI_DEVICE_ID_TI_OHCI1394_2 0x8019
+#ifndef PCI_DEVICE_ID_TI_OHCI1394_LV23
+#define PCI_DEVICE_ID_TI_OHCI1394_LV23 0x8019
+#endif
+
+#ifndef PCI_DEVICE_ID_TI_OHCI1394_LV26
+#define PCI_DEVICE_ID_TI_OHCI1394_LV26 0x8020
 #endif
 
 #ifndef PCI_DEVICE_ID_VIA_OHCI1394
@@ -26,6 +28,22 @@
 
 #ifndef PCI_DEVICE_ID_SONY_CXD3222
 #define PCI_DEVICE_ID_SONY_CXD3222 0x8039
+#endif
+
+#ifndef PCI_DEVICE_ID_NEC_1394
+#define PCI_DEVICE_ID_NEC_1394 0x00cd
+#endif
+
+#ifndef PCI_DEVICE_ID_NEC_UPD72862
+#define PCI_DEVICE_ID_NEC_UPD72862      0x0063
+#endif
+
+#ifndef PCI_DEVICE_ID_NEC_UPD72870
+#define PCI_DEVICE_ID_NEC_UPD72870      0x00cd
+#endif
+
+#ifndef PCI_DEVICE_ID_NEC_UPD72871
+#define PCI_DEVICE_ID_NEC_UPD72871      0x00ce
 #endif
 
 #define MAX_OHCI1394_CARDS        4
@@ -113,6 +131,8 @@ struct ti_ohci {
         quadlet_t *self_id_buffer; /* dma buffer for self-id packets */
         quadlet_t *csr_config_rom; /* buffer for csr config rom */
 
+	unsigned int max_packet_size;
+
         /* async receive */
 	struct dma_rcv_ctx *ar_resp_context;
 	struct dma_rcv_ctx *ar_req_context;
@@ -125,6 +145,7 @@ struct ti_ohci {
 	struct dma_rcv_ctx *ir_context;
         u64 IR_channel_usage;
         spinlock_t IR_channel_lock;
+	int nb_iso_ctx;
 
         /* IEEE-1394 part follows */
         struct hpsb_host *host;

@@ -14,6 +14,7 @@
 #include "highlevel.h"
 
 
+/* FIXME: this one won't work on little endian with big endian data */
 static u16 csr_crc16(unsigned *data, int length)
 {
         int check=0, i;
@@ -47,14 +48,18 @@ static void host_reset(struct hpsb_host *host)
                 host->csr.state &= ~0x100;
         }
 
-        host->csr.topology_map[1]++;
-        host->csr.topology_map[2] = host->node_count << 16 | host->selfid_count;
-        host->csr.topology_map[0] = (host->selfid_count + 2) << 16
-                | csr_crc16(host->csr.topology_map + 1, host->selfid_count + 2);
+        host->csr.topology_map[1] = 
+                cpu_to_be32(be32_to_cpu(host->csr.topology_map[1]) + 1);
+        host->csr.topology_map[2] = cpu_to_be32(host->node_count << 16 
+                                                | host->selfid_count);
+        host->csr.topology_map[0] = 
+                cpu_to_be32((host->selfid_count + 2) << 16
+                            | csr_crc16(host->csr.topology_map + 1,
+                                        host->selfid_count + 2));
 
-        /* FIXME - generate speed map */
-        host->csr.speed_map[0] = 0x3f1 << 16 | csr_crc16(host->csr.speed_map+1,
-                                                         0x3f1);
+        host->csr.speed_map[0] = cpu_to_be32(0x3f1 << 16 
+                                             | csr_crc16(host->csr.speed_map+1,
+                                                         0x3f1));
 }
 
 
@@ -78,8 +83,8 @@ static void add_host(struct hpsb_host *host)
 
 
 /* Read topology / speed maps and configuration ROM */
-static int read_maps(struct hpsb_host *host, quadlet_t *buffer, u64 addr,
-                     unsigned int length)
+static int read_maps(struct hpsb_host *host, int nodeid, quadlet_t *buffer,
+                     u64 addr, unsigned int length)
 {
         int csraddr = addr - CSR_REGISTER_BASE;
         const char *src;
@@ -100,43 +105,11 @@ static int read_maps(struct hpsb_host *host, quadlet_t *buffer, u64 addr,
         return RCODE_COMPLETE;
 }
 
-/* Read FCP register space */
-static int read_fcp(struct hpsb_host *host, quadlet_t *buffer, u64 addr,
-                    unsigned int length)
-{
-        int csraddr = addr - CSR_REGISTER_BASE;
-        const char *src;
-
-        if (csraddr + length > CSR_FCP_END) {
-                return RCODE_ADDRESS_ERROR;
-        }
-        src = ((char *)host->csr.fcp_data) + csraddr - CSR_FCP_COMMAND;
-        
-        memcpy(buffer, src, length);
-        return RCODE_COMPLETE;
-}
-
-/* Write FCP register space */
-static int write_fcp(struct hpsb_host *host, quadlet_t *data, u64 addr,
-                     unsigned int length)
-{
-        int csraddr = addr - CSR_REGISTER_BASE;
-        char *dest;
-
-        if (csraddr + length > CSR_FCP_END) {
-                return RCODE_ADDRESS_ERROR;
-        }
-        dest = ((char *)host->csr.fcp_data) + csraddr - CSR_FCP_COMMAND;
-        
-        memcpy(dest, data, length);
-        return RCODE_COMPLETE;
-}
-
 
 #define out if (--length == 0) break
 
-static int read_regs(struct hpsb_host *host, quadlet_t *buf, u64 addr,
-                     unsigned int length)
+static int read_regs(struct hpsb_host *host, int nodeid, quadlet_t *buf,
+                     u64 addr, unsigned int length)
 {
         int csraddr = addr - CSR_REGISTER_BASE;
         int oldcycle;
@@ -149,13 +122,13 @@ static int read_regs(struct hpsb_host *host, quadlet_t *buf, u64 addr,
 
         switch (csraddr) {
         case CSR_STATE_CLEAR:
-                *(buf++) = host->csr.state;
+                *(buf++) = cpu_to_be32(host->csr.state);
                 out;
         case CSR_STATE_SET:
-                *(buf++) = host->csr.state;
+                *(buf++) = cpu_to_be32(host->csr.state);
                 out;
         case CSR_NODE_IDS:
-                *(buf++) = host->csr.node_ids;
+                *(buf++) = cpu_to_be32(host->csr.node_ids);
                 out;
 
         case CSR_RESET_START:
@@ -164,10 +137,10 @@ static int read_regs(struct hpsb_host *host, quadlet_t *buf, u64 addr,
                 /* address gap - handled by default below */
 
         case CSR_SPLIT_TIMEOUT_HI:
-                *(buf++) = host->csr.split_timeout_hi;
+                *(buf++) = cpu_to_be32(host->csr.split_timeout_hi);
                 out;
         case CSR_SPLIT_TIMEOUT_LO:
-                *(buf++) = host->csr.split_timeout_lo;
+                *(buf++) = cpu_to_be32(host->csr.split_timeout_lo);
                 out;
 
                 /* address gap */
@@ -182,7 +155,7 @@ static int read_regs(struct hpsb_host *host, quadlet_t *buf, u64 addr,
                         /* cycle time wrapped around */
                         host->csr.bus_time += 1 << 7;
                 }
-                *(buf++) = host->csr.cycle_time;
+                *(buf++) = cpu_to_be32(host->csr.cycle_time);
                 out;
         case CSR_BUS_TIME:
                 oldcycle = host->csr.cycle_time;
@@ -193,7 +166,8 @@ static int read_regs(struct hpsb_host *host, quadlet_t *buf, u64 addr,
                         /* cycle time wrapped around */
                         host->csr.bus_time += (1 << 7);
                 }
-                *(buf++) = host->csr.bus_time | (host->csr.cycle_time >> 25);
+                *(buf++) = cpu_to_be32(host->csr.bus_time 
+                                       | (host->csr.cycle_time >> 25));
                 out;
 
                 /* address gap */
@@ -204,16 +178,16 @@ static int read_regs(struct hpsb_host *host, quadlet_t *buf, u64 addr,
                 return RCODE_ADDRESS_ERROR;
 
         case CSR_BUS_MANAGER_ID:
-                *(buf++) = host->csr.bus_manager_id;
+                *(buf++) = cpu_to_be32(host->csr.bus_manager_id);
                 out;
         case CSR_BANDWIDTH_AVAILABLE:
-                *(buf++) = host->csr.bandwidth_available;
+                *(buf++) = cpu_to_be32(host->csr.bandwidth_available);
                 out;
         case CSR_CHANNELS_AVAILABLE_HI:
-                *(buf++) = host->csr.channels_available_hi;
+                *(buf++) = cpu_to_be32(host->csr.channels_available_hi);
                 out;
         case CSR_CHANNELS_AVAILABLE_LO:
-                *(buf++) = host->csr.channels_available_lo;
+                *(buf++) = cpu_to_be32(host->csr.channels_available_lo);
                 out;
 
                 /* address gap to end - fall through to default */
@@ -224,8 +198,8 @@ static int read_regs(struct hpsb_host *host, quadlet_t *buf, u64 addr,
         return RCODE_COMPLETE;
 }
 
-static int write_regs(struct hpsb_host *host, quadlet_t *data, u64 addr,
-                      unsigned int length)
+static int write_regs(struct hpsb_host *host, int nodeid, quadlet_t *data,
+                      u64 addr, unsigned int length)
 {
         int csraddr = addr - CSR_REGISTER_BASE;
         
@@ -246,7 +220,7 @@ static int write_regs(struct hpsb_host *host, quadlet_t *data, u64 addr,
 
         case CSR_NODE_IDS:
                 host->csr.node_ids &= NODE_MASK << 16;
-                host->csr.node_ids |= *(data++) & (BUS_MASK << 16);
+                host->csr.node_ids |= be32_to_cpu(*(data++)) & (BUS_MASK << 16);
                 host->node_id = host->csr.node_ids >> 16;
                 host->template->devctl(host, SET_BUS_ID, host->node_id >> 6);
                 out;
@@ -259,10 +233,12 @@ static int write_regs(struct hpsb_host *host, quadlet_t *data, u64 addr,
                 return RCODE_ADDRESS_ERROR;
 
         case CSR_SPLIT_TIMEOUT_HI:
-                host->csr.split_timeout_hi = *(data++) & 0x00000007;
+                host->csr.split_timeout_hi = 
+                        be32_to_cpu(*(data++)) & 0x00000007;
                 out;
         case CSR_SPLIT_TIMEOUT_LO:
-                host->csr.split_timeout_lo = *(data++) & 0xfff80000;
+                host->csr.split_timeout_lo = 
+                        be32_to_cpu(*(data++)) & 0xfff80000;
                 out;
 
                 /* address gap */
@@ -270,11 +246,12 @@ static int write_regs(struct hpsb_host *host, quadlet_t *data, u64 addr,
 
         case CSR_CYCLE_TIME:
                 /* should only be set by cycle start packet, automatically */
-                host->csr.cycle_time = *data;
-                host->template->devctl(host, SET_CYCLE_COUNTER, *(data++));
+                host->csr.cycle_time = be32_to_cpu(*data);
+                host->template->devctl(host, SET_CYCLE_COUNTER,
+                                       be32_to_cpu(*(data++)));
                 out;
         case CSR_BUS_TIME:
-                host->csr.bus_time = *(data++) & 0xffffff80;
+                host->csr.bus_time = be32_to_cpu(*(data++)) & 0xffffff80;
                 out;
 
                 /* address gap */
@@ -305,13 +282,13 @@ static int write_regs(struct hpsb_host *host, quadlet_t *data, u64 addr,
 /* helper function for lock_regs */
 inline static void compare_swap(quadlet_t *old, quadlet_t data, quadlet_t arg)
 {
-        if (*old == arg) {
-                *old = data;
+        if (*old == be32_to_cpu(arg)) {
+                *old = be32_to_cpu(data);
         }
 }
 
-static int lock_regs(struct hpsb_host *host, quadlet_t *store, u64 addr, 
-                     quadlet_t data, quadlet_t arg, int extcode)
+static int lock_regs(struct hpsb_host *host, int nodeid, quadlet_t *store,
+                     u64 addr, quadlet_t data, quadlet_t arg, int extcode)
 {
         int csraddr = addr - CSR_REGISTER_BASE;
         unsigned long flags;
@@ -327,25 +304,28 @@ static int lock_regs(struct hpsb_host *host, quadlet_t *store, u64 addr,
 
                         switch (csraddr) {
                         case CSR_BUS_MANAGER_ID:
-                                *store = host->csr.bus_manager_id;
+                                *store = cpu_to_be32(host->csr.bus_manager_id);
                                 compare_swap(&host->csr.bus_manager_id,
                                              data, arg);
                                 break;
 
                         case CSR_BANDWIDTH_AVAILABLE:
-                                *store = host->csr.bandwidth_available;
+                                *store = cpu_to_be32(host->
+                                                     csr.bandwidth_available);
                                 compare_swap(&host->csr.bandwidth_available,
                                              data, arg);
                                 break;
 
                         case CSR_CHANNELS_AVAILABLE_HI:
-                                *store = host->csr.channels_available_hi;
+                                *store = cpu_to_be32(host->
+                                                     csr.channels_available_hi);
                                 compare_swap(&host->csr.channels_available_hi,
                                              data, arg);
                                 break;
 
                         case CSR_CHANNELS_AVAILABLE_LO:
-                                *store = host->csr.channels_available_lo;
+                                *store = cpu_to_be32(host->
+                                                     csr.channels_available_lo);
                                 compare_swap(&host->csr.channels_available_lo,
                                              data, arg);
                                 break;
@@ -377,34 +357,48 @@ static int lock_regs(struct hpsb_host *host, quadlet_t *store, u64 addr,
         }
 }
 
+static int write_fcp(struct hpsb_host *host, int nodeid, quadlet_t *data,
+                     u64 addr, unsigned int length)
+{
+        int csraddr = addr - CSR_REGISTER_BASE;
+
+        if (length > 512) {
+                return RCODE_TYPE_ERROR;
+        }
+
+        switch (csraddr) {
+        case CSR_FCP_COMMAND:
+                highlevel_fcp_request(host, nodeid, 0, (u8 *)data, length);
+                break;
+        case CSR_FCP_RESPONSE:
+                highlevel_fcp_request(host, nodeid, 1, (u8 *)data, length);
+                break;
+        default:
+                return RCODE_TYPE_ERROR;
+        }
+
+        return RCODE_COMPLETE;
+}
+
 
 struct hpsb_highlevel_ops csr_ops = {
-        add_host,
-        NULL,
-        host_reset,
-        NULL
+        add_host: add_host,
+        host_reset: host_reset,
 };
 
 
 struct hpsb_address_ops map_ops = {
-        read_maps,
-        NULL,
-        NULL,
-        NULL
+        read: read_maps,
 };
 
 struct hpsb_address_ops fcp_ops = {
-        read_fcp,
-        write_fcp,
-        NULL,
-        NULL
+        write: write_fcp,
 };
 
 struct hpsb_address_ops reg_ops = {
-        read_regs,
-        write_regs,
-        lock_regs,
-        NULL
+        read: read_regs,
+        write: write_regs,
+        lock: lock_regs,
 };
 
 

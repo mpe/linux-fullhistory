@@ -157,36 +157,54 @@ static int fetch_stats(struct atm_dev *dev,struct idt77105_stats *arg,int zero)
 }
 
 
+static int set_loopback(struct atm_dev *dev,int mode)
+{
+	int diag;
+
+	diag = GET(DIAG) & ~IDT77105_DIAG_LCMASK;
+	switch (mode) {
+		case ATM_LM_NONE:
+			break;
+		case ATM_LM_LOC_ATM:
+			diag |= IDT77105_DIAG_LC_PHY_LOOPBACK;
+			break;
+		case ATM_LM_RMT_ATM:
+			diag |= IDT77105_DIAG_LC_LINE_LOOPBACK;
+			break;
+		default:
+			return -EINVAL;
+	}
+	PUT(diag,DIAG);
+	printk(KERN_NOTICE "%s(%d) Loopback mode is: %s\n", dev->type,
+	    dev->number,
+	    (mode == ATM_LM_NONE ? "NONE" : 
+	      (mode == ATM_LM_LOC_ATM ? "DIAG (local)" :
+		(mode == IDT77105_DIAG_LC_LINE_LOOPBACK ? "LOOP (remote)" :
+		  "unknown")))
+		    );
+	PRIV(dev)->loop_mode = mode;
+	return 0;
+}
+
 
 static int idt77105_ioctl(struct atm_dev *dev,unsigned int cmd,void *arg)
 {
         printk(KERN_NOTICE "%s(%d) idt77105_ioctl() called\n",dev->type,dev->number);
 	switch (cmd) {
 		case IDT77105_GETSTATZ:
+			if (!capable(CAP_NET_ADMIN)) return -EPERM;
+			/* fall through */
 		case IDT77105_GETSTAT:
 			return fetch_stats(dev,(struct idt77105_stats *) arg,
 			    cmd == IDT77105_GETSTATZ);
-		case IDT77105_SETLOOP:
-			if (!capable(CAP_NET_ADMIN)) return -EPERM;
-			if ((int) arg < 0 || (int) arg > IDT77105_LM_LOOP)
-				return -EINVAL;
-			PUT((GET(DIAG) & ~IDT77105_DIAG_LCMASK) |
-			    ((int) arg == IDT77105_LM_NONE ? IDT77105_DIAG_LC_NORMAL : 0) |
-			    ((int) arg == IDT77105_LM_DIAG ? IDT77105_DIAG_LC_PHY_LOOPBACK : 0) |
-			    ((int) arg == IDT77105_LM_LOOP ? IDT77105_DIAG_LC_LINE_LOOPBACK : 0),
-                            DIAG);
-                        printk(KERN_NOTICE "%s(%d) Loopback mode is: %s\n",
-                            dev->type, dev->number,
-                            ((int) arg == IDT77105_LM_NONE ? "NONE" : 
-                                ((int) arg == IDT77105_LM_DIAG ? "DIAG (local)" :
-			            ((int) arg == IDT77105_LM_LOOP ? "LOOP (remote)" :
-                                        "unknown")))
-                            );
-			PRIV(dev)->loop_mode = (int) arg;
-			return 0;
-		case IDT77105_GETLOOP:
+		case ATM_SETLOOP:
+			return set_loopback(dev,(int) (long) arg);
+		case ATM_GETLOOP:
 			return put_user(PRIV(dev)->loop_mode,(int *) arg) ?
-			    -EFAULT : sizeof(int);
+			    -EFAULT : 0;
+		case ATM_QUERYLOOP:
+			return put_user(ATM_LM_LOC_ATM | ATM_LM_RMT_ATM,
+			    (int *) arg) ? -EFAULT : 0;
 		default:
 			return -ENOIOCTLCMD;
 	}
@@ -266,13 +284,13 @@ static int idt77105_start(struct atm_dev *dev)
         /* initialise loop mode from hardware */
         switch ( GET(DIAG) & IDT77105_DIAG_LCMASK ) {
         case IDT77105_DIAG_LC_NORMAL:
-            PRIV(dev)->loop_mode = IDT77105_LM_NONE;
+            PRIV(dev)->loop_mode = ATM_LM_NONE;
             break;
         case IDT77105_DIAG_LC_PHY_LOOPBACK:
-            PRIV(dev)->loop_mode = IDT77105_LM_DIAG;
+            PRIV(dev)->loop_mode = ATM_LM_LOC_ATM;
             break;
         case IDT77105_DIAG_LC_LINE_LOOPBACK:
-            PRIV(dev)->loop_mode = IDT77105_LM_LOOP;
+            PRIV(dev)->loop_mode = ATM_LM_RMT_ATM;
             break;
         }
         

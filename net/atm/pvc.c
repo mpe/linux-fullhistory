@@ -1,6 +1,6 @@
 /* net/atm/pvc.c - ATM PVC sockets */
 
-/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-2000 by Werner Almesberger, EPFL LRC/ICA */
 
 
 #include <linux/config.h>
@@ -13,6 +13,7 @@
 #include <linux/kernel.h>	/* printk */
 #include <linux/init.h>
 #include <linux/skbuff.h>
+#include <linux/bitops.h>
 #include <net/sock.h>		/* for sock_no_* */
 #ifdef CONFIG_ATM_CLIP
 #include <net/atmclip.h>
@@ -42,8 +43,8 @@ static int pvc_bind(struct socket *sock,struct sockaddr *sockaddr,
 	addr = (struct sockaddr_atmpvc *) sockaddr;
 	if (addr->sap_family != AF_ATMPVC) return -EAFNOSUPPORT;
 	vcc = ATM_SD(sock);
-	if (!(vcc->flags & ATM_VF_HASQOS)) return -EBADFD;
-	if (vcc->flags & ATM_VF_PARTIAL) {
+	if (!test_bit(ATM_VF_HASQOS,&vcc->flags)) return -EBADFD;
+	if (test_bit(ATM_VF_PARTIAL,&vcc->flags)) {
 		if (vcc->vpi != ATM_VPI_UNSPEC) addr->sap_addr.vpi = vcc->vpi;
 		if (vcc->vci != ATM_VCI_UNSPEC) addr->sap_addr.vci = vcc->vci;
 	}
@@ -65,7 +66,7 @@ static int pvc_getname(struct socket *sock,struct sockaddr *sockaddr,
 	struct sockaddr_atmpvc *addr;
 	struct atm_vcc *vcc = ATM_SD(sock);
 
-	if (!vcc->dev || !(vcc->flags & ATM_VF_ADDR)) return -ENOTCONN;
+	if (!vcc->dev || !test_bit(ATM_VF_ADDR,&vcc->flags)) return -ENOTCONN;
         *sockaddr_len = sizeof(struct sockaddr_atmpvc);
 	addr = (struct sockaddr_atmpvc *) sockaddr;
 	addr->sap_family = AF_ATMPVC;

@@ -651,7 +651,7 @@ int dev_queue_xmit(struct sk_buff *skb)
 		qdisc_run(dev);
 
 		spin_unlock_bh(&dev->queue_lock);
-		return ret;
+		return ret == NET_XMIT_BYPASS ? NET_XMIT_SUCCESS : ret;
 	}
 
 	/* The device has no queue. Common case for software devices:

@@ -21,10 +21,12 @@
 #include <linux/init.h>
 #include <linux/atm_zatm.h>
 #include <linux/capability.h>
+#include <linux/bitops.h>
 #include <asm/byteorder.h>
 #include <asm/system.h>
 #include <asm/string.h>
 #include <asm/io.h>
+#include <asm/atomic.h>
 #include <asm/uaccess.h>
 
 #include "uPD98401.h"
@@ -637,7 +639,7 @@ printk("dummy: 0x%08lx, 0x%08lx\n",dummy[0],dummy[1]);
 		}
 		if (!size) {
 			dev_kfree_skb_irq(skb);
-			if (vcc) vcc->stats->rx_err++;
+			if (vcc) atomic_inc(&vcc->stats->rx_err);
 			continue;
 		}
 		if (!atm_charge(vcc,skb->truesize)) {
@@ -647,7 +649,7 @@ printk("dummy: 0x%08lx, 0x%08lx\n",dummy[0],dummy[1]);
 		skb->len = size;
 		ATM_SKB(skb)->vcc = vcc;
 		vcc->push(vcc,skb);
-		vcc->stats->rx++;
+		atomic_inc(&vcc->stats->rx);
 	}
 	zout(pos & 0xffff,MTA(mbx));
 #if 0 /* probably a stupid idea */
@@ -914,7 +916,7 @@ if (*ZATM_PRV_DSC(skb) != (uPD98401_TXPD_V | uPD98401_TXPD_DP |
 			skb_queue_head(&zatm_vcc->backlog,skb);
 			break;
 		}
-	vcc->stats->tx++;
+	atomic_inc(&vcc->stats->tx);
 	wake_up(&zatm_vcc->tx_wait);
 }
 
@@ -1537,7 +1539,7 @@ static void zatm_close(struct atm_vcc *vcc)
 {
         DPRINTK(">zatm_close\n");
         if (!ZATM_VCC(vcc)) return;
-	vcc->flags &= ~ATM_VF_READY;
+	clear_bit(ATM_VF_READY,&vcc->flags);
         close_rx(vcc);
 	EVENT("close_tx\n",0,0);
         close_tx(vcc);
@@ -1545,7 +1547,7 @@ static void zatm_close(struct atm_vcc *vcc)
         /* deallocate memory */
         kfree(ZATM_VCC(vcc));
         ZATM_VCC(vcc) = NULL;
-	vcc->flags &= ~ATM_VF_ADDR;
+	clear_bit(ATM_VF_ADDR,&vcc->flags);
 }
 
 
@@ -1557,20 +1559,20 @@ static int zatm_open(struct atm_vcc *vcc,short vpi,int vci)
 
 	DPRINTK(">zatm_open\n");
 	zatm_dev = ZATM_DEV(vcc->dev);
-	if (!(vcc->flags & ATM_VF_PARTIAL)) ZATM_VCC(vcc) = NULL;
+	if (!test_bit(ATM_VF_PARTIAL,&vcc->flags)) ZATM_VCC(vcc) = NULL;
 	error = atm_find_ci(vcc,&vpi,&vci);
 	if (error) return error;
 	vcc->vpi = vpi;
 	vcc->vci = vci;
 	if (vci != ATM_VPI_UNSPEC && vpi != ATM_VCI_UNSPEC)
-		vcc->flags |= ATM_VF_ADDR;
+		set_bit(ATM_VF_ADDR,&vcc->flags);
 	if (vcc->qos.aal != ATM_AAL5) return -EINVAL; /* @@@ AAL0 */
 	DPRINTK(DEV_LABEL "(itf %d): open %d.%d\n",vcc->dev->number,vcc->vpi,
 	    vcc->vci);
-	if (!(vcc->flags & ATM_VF_PARTIAL)) {
+	if (!test_bit(ATM_VF_PARTIAL,&vcc->flags)) {
 		zatm_vcc = kmalloc(sizeof(struct zatm_vcc),GFP_KERNEL);
 		if (!zatm_vcc) {
-			vcc->flags &= ~ATM_VF_ADDR;
+			clear_bit(ATM_VF_ADDR,&vcc->flags);
 			return -ENOMEM;
 		}
 		ZATM_VCC(vcc) = zatm_vcc;
@@ -1593,7 +1595,7 @@ static int zatm_open(struct atm_vcc *vcc,short vpi,int vci)
 		zatm_close(vcc);
 		return error;
         }
-	vcc->flags |= ATM_VF_READY;
+	set_bit(ATM_VF_READY,&vcc->flags);
         return 0;
 }
 
@@ -1733,7 +1735,7 @@ static int zatm_send(struct atm_vcc *vcc,struct sk_buff *skb)
 	int error;
 
 	EVENT(">zatm_send 0x%lx\n",(unsigned long) skb,0);
-	if (!ZATM_VCC(vcc)->tx_chan || !(vcc->flags & ATM_VF_READY)) {
+	if (!ZATM_VCC(vcc)->tx_chan || !test_bit(ATM_VF_READY,&vcc->flags)) {
 		if (vcc->pop) vcc->pop(vcc,skb);
 		else dev_kfree_skb(skb);
 		return -EINVAL;
@@ -1809,7 +1811,7 @@ int __init zatm_detect(void)
 		while ((pci_dev = pci_find_device(PCI_VENDOR_ID_ZEITNET,type ?
 		    PCI_DEVICE_ID_ZEITNET_1225 : PCI_DEVICE_ID_ZEITNET_1221,
 		    pci_dev))) {
-			dev = atm_dev_register(DEV_LABEL,&ops,-1,0);
+			dev = atm_dev_register(DEV_LABEL,&ops,-1,NULL);
 			if (!dev) break;
 			zatm_dev->pci_dev = pci_dev;
 			ZATM_DEV(dev) = zatm_dev;

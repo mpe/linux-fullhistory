@@ -1,4 +1,4 @@
-/* $Id: cgthreefb.c,v 1.8 1999/11/19 09:57:08 davem Exp $
+/* $Id: cgthreefb.c,v 1.9 2000/03/19 04:20:44 anton Exp $
  * cgthreefb.c: CGthree frame buffer driver
  *
  * Copyright (C) 1996,1998 Jakub Jelinek (jj@ultra.linux.cz)
@@ -114,9 +114,9 @@ static void cg3_blank (struct fb_info_sbusfb *fb)
 	u8 tmp;
 
 	spin_lock_irqsave(&fb->lock, flags);
-	tmp = sbus_readl(&fb->s.cg3.regs->control);
+	tmp = sbus_readb(&fb->s.cg3.regs->control);
 	tmp &= ~CG3_CR_ENABLE_VIDEO;
-	sbus_writel(tmp, &fb->s.cg3.regs->control);
+	sbus_writeb(tmp, &fb->s.cg3.regs->control);
 	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
@@ -126,9 +126,9 @@ static void cg3_unblank (struct fb_info_sbusfb *fb)
 	u8 tmp;
 
 	spin_lock_irqsave(&fb->lock, flags);
-	tmp = sbus_readl(&fb->s.cg3.regs->control);
+	tmp = sbus_readb(&fb->s.cg3.regs->control);
 	tmp |= CG3_CR_ENABLE_VIDEO;
-	sbus_writel(tmp, &fb->s.cg3.regs->control);
+	sbus_writeb(tmp, &fb->s.cg3.regs->control);
 	spin_unlock_irqrestore(&fb->lock, flags);
 }
 

@@ -192,22 +192,34 @@ void highlevel_iso_receive(struct hpsb_host *host, quadlet_t *data,
         read_unlock(&hl_drivers_lock);
 }
 
+void highlevel_fcp_request(struct hpsb_host *host, int nodeid, int direction,
+                           u8 *data, unsigned int length)
+{
+        struct list_head *entry;
+        struct hpsb_highlevel *hl;
+        int cts = data[0];
 
-int highlevel_read(struct hpsb_host *host, quadlet_t *buffer, u64 addr,
-                   unsigned int length)
+        read_lock(&hl_drivers_lock);
+        entry = hl_drivers.next;
+
+        while (entry != &hl_drivers) {
+                hl = list_entry(entry, struct hpsb_highlevel, hl_list);
+                if (hl->op->fcp_request) {
+                        hl->op->fcp_request(host, nodeid, direction, cts, data,
+                                            length);
+                }
+                entry = entry->next;
+        }
+        read_unlock(&hl_drivers_lock);
+}
+
+int highlevel_read(struct hpsb_host *host, int nodeid, quadlet_t *buffer,
+                   u64 addr, unsigned int length)
 {
         struct hpsb_address_serve *as;
         struct list_head *entry;
         unsigned int partlength;
         int rcode = RCODE_ADDRESS_ERROR;
-
-        if ((addr | length) & 0x3) {
-                /* Addresses or lengths not a multiple of a quadlet pose a big
-                 * problem on little endian machines because we always do this
-                 * in arch endian and swapping would mess it all up.  So we 
-                 * simply don't allow this at all. */
-                return RCODE_TYPE_ERROR;
-        }
 
         read_lock(&addr_space_lock);
 
@@ -220,7 +232,7 @@ int highlevel_read(struct hpsb_host *host, quadlet_t *buffer, u64 addr,
                                          length);
 
                         if (as->op->read != NULL) {
-                                rcode = as->op->read(host, buffer, addr,
+                                rcode = as->op->read(host, nodeid, buffer, addr,
                                                      partlength);
                         } else {
                                 rcode = RCODE_TYPE_ERROR;
@@ -247,17 +259,13 @@ int highlevel_read(struct hpsb_host *host, quadlet_t *buffer, u64 addr,
         return rcode;
 }
 
-int highlevel_write(struct hpsb_host *host, quadlet_t *data, u64 addr,
-                    unsigned int length)
+int highlevel_write(struct hpsb_host *host, int nodeid, quadlet_t *data,
+                    u64 addr, unsigned int length)
 {
         struct hpsb_address_serve *as;
         struct list_head *entry;
         unsigned int partlength;
         int rcode = RCODE_ADDRESS_ERROR;
-
-        if ((addr | length) & 0x3) {
-                return RCODE_TYPE_ERROR;
-        }
 
         read_lock(&addr_space_lock);
 
@@ -270,7 +278,7 @@ int highlevel_write(struct hpsb_host *host, quadlet_t *data, u64 addr,
                                          length);
 
                         if (as->op->write != NULL) {
-                                rcode = as->op->write(host, data, addr,
+                                rcode = as->op->write(host, nodeid, data, addr,
                                                       partlength);
                         } else {
                                 rcode = RCODE_TYPE_ERROR;
@@ -298,8 +306,8 @@ int highlevel_write(struct hpsb_host *host, quadlet_t *data, u64 addr,
 }
 
 
-int highlevel_lock(struct hpsb_host *host, quadlet_t *store, u64 addr,
-                   quadlet_t data, quadlet_t arg, int ext_tcode)
+int highlevel_lock(struct hpsb_host *host, int nodeid, quadlet_t *store,
+                   u64 addr, quadlet_t data, quadlet_t arg, int ext_tcode)
 {
         struct hpsb_address_serve *as;
         struct list_head *entry;
@@ -313,8 +321,8 @@ int highlevel_lock(struct hpsb_host *host, quadlet_t *store, u64 addr,
         while (as->start <= addr) {
                 if (as->end > addr) {
                         if (as->op->lock != NULL) {
-                                rcode = as->op->lock(host, store, addr, data, 
-                                                     arg, ext_tcode);
+                                rcode = as->op->lock(host, nodeid, store, addr,
+                                                     data, arg, ext_tcode);
                         } else {
                                 rcode = RCODE_TYPE_ERROR;
                         }
@@ -331,8 +339,8 @@ int highlevel_lock(struct hpsb_host *host, quadlet_t *store, u64 addr,
         return rcode;
 }
 
-int highlevel_lock64(struct hpsb_host *host, octlet_t *store, u64 addr,
-                     octlet_t data, octlet_t arg, int ext_tcode)
+int highlevel_lock64(struct hpsb_host *host, int nodeid, octlet_t *store,
+                     u64 addr, octlet_t data, octlet_t arg, int ext_tcode)
 {
         struct hpsb_address_serve *as;
         struct list_head *entry;
@@ -346,8 +354,9 @@ int highlevel_lock64(struct hpsb_host *host, octlet_t *store, u64 addr,
         while (as->start <= addr) {
                 if (as->end > addr) {
                         if (as->op->lock64 != NULL) {
-                                rcode = as->op->lock64(host, store, addr, data, 
-                                                       arg, ext_tcode);
+                                rcode = as->op->lock64(host, nodeid, store,
+                                                       addr, data, arg,
+                                                       ext_tcode);
                         } else {
                                 rcode = RCODE_TYPE_ERROR;
                         }

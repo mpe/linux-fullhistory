@@ -21,6 +21,5 @@ void sigd_enq(struct atm_vcc *vcc,enum atmsvc_msg_type type,
     struct atm_vcc *listen_vcc,const struct sockaddr_atmpvc *pvc,
     const struct sockaddr_atmsvc *svc);
 int sigd_attach(struct atm_vcc *vcc);
-void signaling_init(void);
 
 #endif

@@ -117,7 +117,7 @@ static int __init atixl_busmouse_init(void)
 	 *	may race another module load of the same I/O
 	 */
 
-	if (request_region(ATIXL_MSE_DATA_PORT, 3, "atixlmouse"))
+	if (!request_region(ATIXL_MSE_DATA_PORT, 3, "atixlmouse"))
 		return -EIO;
 
 	a = inb( ATIXL_MSE_SIGNATURE_PORT );	/* Get signature */

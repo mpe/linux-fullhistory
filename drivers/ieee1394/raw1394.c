@@ -59,7 +59,7 @@ static void free_pending_request(struct pending_request *req)
 {
         if (req->ibs) {
                 if (atomic_dec_and_test(&req->ibs->refcount)) {
-                        atomic_sub((req->data[0] >> 16) + 4, &iso_buffer_size);
+                        atomic_sub(req->ibs->data_size, &iso_buffer_size);
                         kfree(req->ibs);
                 }
         } else if (req->free_data) {
@@ -109,6 +109,7 @@ static void queue_complete_cb(struct pending_request *req)
         }
 
         free_tlabel(packet->host, packet->node_id, packet->tlabel);
+
         queue_complete_req(req);
 }
 
@@ -215,6 +216,7 @@ static void iso_receive(struct hpsb_host *host, int channel, quadlet_t *data,
         LIST_HEAD(reqs);
 
         if ((atomic_read(&iso_buffer_size) + length) > iso_buffer_max) {
+                HPSB_INFO("dropped iso packet");
                 return;
         }
 
@@ -230,20 +232,21 @@ static void iso_receive(struct hpsb_host *host, int channel, quadlet_t *data,
                                 continue;
                         }
 
+                        req = __alloc_pending_request(SLAB_ATOMIC);
+                        if (!req) break;
+
                         if (!ibs) {
                                 ibs = kmalloc(sizeof(struct iso_block_store)
                                               + length, SLAB_ATOMIC);
-                                if (!ibs) break;
+                                if (!ibs) {
+                                        kfree(req);
+                                        break;
+                                }
 
                                 atomic_add(length, &iso_buffer_size);
                                 atomic_set(&ibs->refcount, 0);
+                                ibs->data_size = length;
                                 memcpy(ibs->data, data, length);
-                        }
-
-                        req = __alloc_pending_request(SLAB_ATOMIC);
-                        if (!req) {
-                                kfree(ibs);
-                                break;
                         }
 
                         atomic_inc(&ibs->refcount);
@@ -256,6 +259,75 @@ static void iso_receive(struct hpsb_host *host, int channel, quadlet_t *data,
                         req->req.misc = 0;
                         req->req.recvb = fi->iso_buffer;
                         req->req.length = MIN(length, fi->iso_buffer_length);
+                        
+                        list_add_tail(&req->list, &reqs);
+                }
+        }
+        spin_unlock_irqrestore(&host_info_lock, flags);
+
+        lh = reqs.next;
+        while (lh != &reqs) {
+                req = list_entry(lh, struct pending_request, list);
+                lh = lh->next;
+                queue_complete_req(req);
+        }
+}
+
+static void fcp_request(struct hpsb_host *host, int nodeid, int direction,
+                        int cts, u8 *data, unsigned int length)
+{
+        unsigned long flags;
+        struct list_head *lh;
+        struct host_info *hi;
+        struct file_info *fi;
+        struct pending_request *req;
+        struct iso_block_store *ibs = NULL;
+        LIST_HEAD(reqs);
+
+        if ((atomic_read(&iso_buffer_size) + length) > iso_buffer_max) {
+                HPSB_INFO("dropped fcp request");
+                return;
+        }
+
+        spin_lock_irqsave(&host_info_lock, flags);
+        hi = find_host_info(host);
+
+        if (hi != NULL) {
+                for (lh = hi->file_info_list.next; lh != &hi->file_info_list;
+                     lh = lh->next) {
+                        fi = list_entry(lh, struct file_info, list);
+
+                        if (!fi->fcp_buffer) {
+                                continue;
+                        }
+
+                        req = __alloc_pending_request(SLAB_ATOMIC);
+                        if (!req) break;
+
+                        if (!ibs) {
+                                ibs = kmalloc(sizeof(struct iso_block_store)
+                                              + length, SLAB_ATOMIC);
+                                if (!ibs) {
+                                        kfree(req);
+                                        break;
+                                }
+
+                                atomic_add(length, &iso_buffer_size);
+                                atomic_set(&ibs->refcount, 0);
+                                ibs->data_size = length;
+                                memcpy(ibs->data, data, length);
+                        }
+
+                        atomic_inc(&ibs->refcount);
+
+                        req->file_info = fi;
+                        req->ibs = ibs;
+                        req->data = ibs->data;
+                        req->req.type = RAW1394_REQ_FCP_REQUEST;
+                        req->req.generation = get_hpsb_generation();
+                        req->req.misc = nodeid | (direction << 16);
+                        req->req.recvb = (quadlet_t *)fi->fcp_buffer;
+                        req->req.length = length;
                         
                         list_add_tail(&req->list, &reqs);
                 }
@@ -455,8 +527,28 @@ static void handle_iso_listen(struct file_info *fi, struct pending_request *req)
         spin_unlock(&host_info_lock);
 }
 
+static void handle_fcp_listen(struct file_info *fi, struct pending_request *req)
+{
+        if (req->req.misc) {
+                if (fi->fcp_buffer) {
+                        req->req.error = RAW1394_ERROR_ALREADY;
+                } else {
+                        fi->fcp_buffer = (u8 *)req->req.recvb;
+                }
+        } else {
+                if (!fi->fcp_buffer) {
+                        req->req.error = RAW1394_ERROR_ALREADY;
+                } else {
+                        fi->fcp_buffer = NULL;
+                }
+        }
+
+        req->req.length = 0;
+        queue_complete_req(req);
+}
+
 static int handle_local_request(struct file_info *fi,
-                                struct pending_request *req)
+                                struct pending_request *req, int node)
 {
         u64 addr = req->req.address & 0xffffffffffffULL;
 
@@ -466,7 +558,7 @@ static int handle_local_request(struct file_info *fi,
 
         switch (req->req.type) {
         case RAW1394_REQ_ASYNC_READ:
-                req->req.error = highlevel_read(fi->host, req->data, addr,
+                req->req.error = highlevel_read(fi->host, node, req->data, addr,
                                                 req->req.length);
                 break;
 
@@ -477,8 +569,8 @@ static int handle_local_request(struct file_info *fi,
                         break;
                 }
 
-                req->req.error = highlevel_write(fi->host, req->data, addr,
-                                                 req->req.length);
+                req->req.error = highlevel_write(fi->host, node, req->data,
+                                                 addr, req->req.length);
                 req->req.length = 0;
                 break;
 
@@ -503,14 +595,16 @@ static int handle_local_request(struct file_info *fi,
                 }
 
                 if (req->req.length == 8) {
-                        req->req.error = highlevel_lock(fi->host, req->data,
-                                                        addr, req->data[1],
+                        req->req.error = highlevel_lock(fi->host, node,
+                                                        req->data, addr,
+                                                        req->data[1],
                                                         req->data[0],
                                                         req->req.misc);
                         req->req.length = 4;
                 } else {
-                        req->req.error = highlevel_lock(fi->host, req->data,
-                                                        addr, req->data[0], 0,
+                        req->req.error = highlevel_lock(fi->host, node,
+                                                        req->data, addr,
+                                                        req->data[0], 0,
                                                         req->req.misc);
                 }
                 break;
@@ -539,28 +633,27 @@ static int handle_remote_request(struct file_info *fi,
                         if (!packet) return -ENOMEM;
 
                         req->data = &packet->header[3];
-                } else if ((req->req.length % 4) == 0) {
+                } else {
                         packet = hpsb_make_readbpacket(fi->host, node, addr,
                                                        req->req.length);
                         if (!packet) return -ENOMEM;
 
                         req->data = packet->data;
-                } else {
-                        req->req.error = RAW1394_ERROR_UNTIDY_LEN;
                 }
                 break;
 
         case RAW1394_REQ_ASYNC_WRITE:
                 if (req->req.length == 4) {
-                        packet = hpsb_make_writeqpacket(fi->host, node, addr,
-                                                        0);
-                        if (!packet) return -ENOMEM;
+                        quadlet_t x;
 
-                        if (copy_from_user(&packet->header[3], req->req.sendb,
-                                           4)) {
+                        if (copy_from_user(&x, req->req.sendb, 4)) {
                                 req->req.error = RAW1394_ERROR_MEMFAULT;
                         }
-                } else if ((req->req.length % 4) == 0) {
+
+                        packet = hpsb_make_writeqpacket(fi->host, node, addr,
+                                                        x);
+                        if (!packet) return -ENOMEM;
+                } else {
                         packet = hpsb_make_writebpacket(fi->host, node, addr,
                                                         req->req.length);
                         if (!packet) return -ENOMEM;
@@ -569,8 +662,6 @@ static int handle_remote_request(struct file_info *fi,
                                            req->req.length)) {
                                 req->req.error = RAW1394_ERROR_MEMFAULT;
                         }
-                } else {
-                        req->req.error = RAW1394_ERROR_UNTIDY_LEN;
                 }
                 req->req.length = 0;
                 break;
@@ -649,6 +740,11 @@ static int state_connected(struct file_info *fi, struct pending_request *req)
                 return sizeof(struct raw1394_request);
         }
 
+        if (req->req.type == RAW1394_REQ_FCP_LISTEN) {
+                handle_fcp_listen(fi, req);
+                return sizeof(struct raw1394_request);
+        }
+
         if (req->req.length == 0) {
                 req->req.error = RAW1394_ERROR_INVALID_ARG;
                 queue_complete_req(req);
@@ -656,7 +752,7 @@ static int state_connected(struct file_info *fi, struct pending_request *req)
         }
 
         if (fi->host->node_id == node) {
-                return handle_local_request(fi, req);
+                return handle_local_request(fi, req, node);
         }
 
         return handle_remote_request(fi, req, node);
@@ -806,10 +902,11 @@ static int dev_release(struct inode *inode, struct file *file)
 }
 
 static struct hpsb_highlevel_ops hl_ops = {
-        add_host,
-        remove_host,
-        host_reset,
-        iso_receive
+        add_host:     add_host,
+        remove_host:  remove_host,
+        host_reset:   host_reset,
+        iso_receive:  iso_receive,
+        fcp_request:  fcp_request,
 };
 
 static struct file_operations file_ops = {

@@ -491,7 +491,7 @@ netlink_send_peer(ipq_queue_element_t *e)
 	skb = netlink_build_message(e, &status);
 	if (skb == NULL)
 		return status;
-	return netlink_unicast(nfnl, skb, nlq->peer.pid, 0);
+	return netlink_unicast(nfnl, skb, nlq->peer.pid, MSG_DONTWAIT);
 }
 
 static struct sk_buff *

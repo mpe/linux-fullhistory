@@ -1961,6 +1961,16 @@ S: Lazarettstrasse 8
 S: 91054 Erlangen
 S: Germany
 
+N: Giuliano Procida
+E: myxie@debian.org,gprocida@madge.com
+D: Madge Ambassador driver (Collage 155 Server ATM adapter)
+D: Madge Horizon driver (Collage 25 and 155 Client ATM adapters)
+P: 1024/93898735 D3 9E F4 F7 6D 8D 2F 3A  38 BA 06 7C 2B 33 43 7D
+S: Madge Networks
+S: Framewood Road
+S: Wexham SL3 6PJ
+S: United Kingdom
+
 N: Daniel Quinlan
 E: quinlan@pathname.com
 W: http://www.pathname.com/~quinlan/

@@ -37,6 +37,18 @@ void atm_mpoa_init(void)
 #endif
 
 #if defined(CONFIG_ATM_LANE) || defined(CONFIG_ATM_LANE_MODULE)
+#if defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE)
+rwlock_t lane_bridge_hook_lock = RW_LOCK_UNLOCKED;
+struct net_bridge_fdb_entry *(*br_fdb_get_hook)(struct net_bridge *br,
+						unsigned char *addr) = NULL;
+void (*br_fdb_put_hook)(struct net_bridge_fdb_entry *ent) = NULL;
+#if defined(CONFIG_ATM_LANE_MODULE) || defined(CONFIG_BRIDGE_MODULE)
+EXPORT_SYMBOL(lane_bridge_hook_lock);
+EXPORT_SYMBOL(br_fdb_get_hook);
+EXPORT_SYMBOL(br_fdb_put_hook);
+#endif /* defined(CONFIG_ATM_LANE_MODULE) || defined(CONFIG_BRIDGE_MODULE) */
+#endif /* defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE) */
+
 void atm_lane_init(void)
 {
 #ifndef CONFIG_ATM_LANE_MODULE /* not module */

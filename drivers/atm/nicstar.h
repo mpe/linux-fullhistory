@@ -100,8 +100,6 @@
 
 #define NS_IOREMAP_SIZE 4096
 
-#define IDT_25_PCR ((25600000 / 8 - 8000) / 54)
-
 #define BUF_SM 0x00000000	/* These two are used for push_rxbufs() */
 #define BUF_LG 0x00000001       /* CMD, Write_FreeBufQ, LBUF bit */
 

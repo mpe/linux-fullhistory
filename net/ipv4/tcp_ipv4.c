@@ -2015,7 +2015,7 @@ static void get_tcp_sock(struct sock *sp, char *tmpbuf, int i)
 		timer_expires = jiffies;
 
 	sprintf(tmpbuf, "%4d: %08X:%04X %08X:%04X"
-		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %ld %d %p %u %u %u %u",
+		" %02X %08X:%08X %02X:%08lX %08X %5d %8d %lu %d %p %u %u %u %u",
 		i, src, srcp, dest, destp, sp->state, 
 		tp->write_seq-tp->snd_una, tp->rcv_nxt-tp->copied_seq,
 		timer_active, timer_expires-jiffies,

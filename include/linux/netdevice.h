@@ -42,6 +42,9 @@
 #define NET_XMIT_DROP		1	/* skb dropped			*/
 #define NET_XMIT_CN		2	/* congestion notification	*/
 #define NET_XMIT_POLICED	3	/* skb is shot by police	*/
+#define NET_XMIT_BYPASS		4	/* packet does not leave via dequeue;
+					   (TC use only - dev_queue_xmit
+					   returns this as NET_XMIT_SUCCESS) */
 
 #define net_xmit_errno(e)	((e) != NET_XMIT_CN ? -ENOBUFS : 0)
 

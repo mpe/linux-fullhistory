@@ -21,6 +21,7 @@
 #include <linux/in.h> /* for struct sockaddr_in */
 #include <linux/if.h> /* for IFF_UP */
 #include <linux/inetdevice.h>
+#include <linux/bitops.h>
 #include <net/route.h> /* for struct rtable and routing */
 #include <net/icmp.h> /* icmp_send */
 #include <asm/param.h> /* for HZ */
@@ -196,6 +197,7 @@ void clip_push(struct atm_vcc *vcc,struct sk_buff *skb)
 	atm_return(vcc,skb->truesize);
 	skb->dev = clip_vcc->entry ? clip_vcc->entry->neigh->dev : clip_devs;
 		/* clip_vcc->entry == NULL if we don't have an IP address yet */
+	skb->rx_dev = NULL;
 	if (!skb->dev) {
 		kfree_skb(skb);
 		return;
@@ -431,7 +433,7 @@ return 0;
 	}
 	clip_priv->stats.tx_packets++;
 	clip_priv->stats.tx_bytes += skb->len;
-	(void) vcc->dev->ops->send(vcc,skb);
+	(void) vcc->send(vcc,skb);
 	if (atm_may_send(vcc,0)) {
 		entry->vccs->xoff = 0;
 		return 0;
@@ -462,7 +464,6 @@ int clip_mkip(struct atm_vcc *vcc,int timeout)
 	struct clip_vcc *clip_vcc;
 	struct sk_buff_head copy;
 	struct sk_buff *skb;
-	unsigned long flags;
 
 	if (!vcc->push) return -EBADFD;
 	clip_vcc = kmalloc(sizeof(struct clip_vcc),GFP_KERNEL);
@@ -477,12 +478,9 @@ int clip_mkip(struct atm_vcc *vcc,int timeout)
 	clip_vcc->idle_timeout = timeout*HZ;
 	clip_vcc->old_push = vcc->push;
 	clip_vcc->old_pop = vcc->pop;
-	save_flags(flags);
-	cli();
 	vcc->push = clip_push;
 	vcc->pop = clip_pop;
 	skb_migrate(&vcc->recvq,&copy);
-	restore_flags(flags);
 	/* re-process everything received between connection setup and MKIP */
 	while ((skb = skb_dequeue(&copy)))
 		if (!clip_devs) {
@@ -710,7 +708,7 @@ static struct atm_dev atmarpd_dev = {
 	999,		/* dummy device number */
 	NULL,NULL,	/* pretend not to have any VCCs */
 	NULL,NULL,	/* no data */
-	0,		/* no flags */
+	{ 0 },		/* no flags */
 	NULL,		/* no local address */
 	{ 0 }		/* no ESI, no statistics */
 };
@@ -729,7 +727,8 @@ int atm_init_atmarp(struct atm_vcc *vcc)
 		add_timer(&idle_timer);
 	}
 	atmarpd = vcc;
-	vcc->flags |= ATM_VF_READY | ATM_VF_META;
+	set_bit(ATM_VF_META,&vcc->flags);
+	set_bit(ATM_VF_READY,&vcc->flags);
 	    /* allow replies and avoid getting closed if signaling dies */
 	bind_vcc(vcc,&atmarpd_dev);
 	vcc->push = NULL;

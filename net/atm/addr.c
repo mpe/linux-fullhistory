@@ -1,11 +1,11 @@
 /* net/atm/addr.c - Local ATM address registry */
 
-/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-2000 by Werner Almesberger, EPFL LRC/ICA */
 
 
 #include <linux/atm.h>
 #include <linux/atmdev.h>
-#include <linux/wait.h>
+#include <linux/sched.h>
 #include <asm/uaccess.h>
 
 #include "signaling.h"
@@ -41,23 +41,7 @@ static int identical(struct sockaddr_atmsvc *a,struct sockaddr_atmsvc *b)
  * (which may involve page faults and therefore rescheduling)
  */
 
-
-static volatile int local_lock = 0;
-static wait_queue_head_t local_wait;
-
-
-static void lock_local(void)
-{
-	while (local_lock) sleep_on(&local_wait);
-	local_lock = 1;
-}
-
-
-static void unlock_local(void)
-{
-	local_lock = 0;
-	wake_up(&local_wait);
-}
+static DECLARE_MUTEX(local_lock);
 
 
 static void notify_sigd(struct atm_dev *dev)
@@ -73,13 +57,13 @@ void reset_addr(struct atm_dev *dev)
 {
 	struct atm_dev_addr *this;
 
-	lock_local();
+	down(&local_lock);
 	while (dev->local) {
 		this = dev->local;
 		dev->local = this->next;
 		kfree(this);
 	}
-	unlock_local();
+	up(&local_lock);
 	notify_sigd(dev);
 }
 
@@ -91,20 +75,20 @@ int add_addr(struct atm_dev *dev,struct sockaddr_atmsvc *addr)
 
 	error = check_addr(addr);
 	if (error) return error;
-	lock_local();
+	down(&local_lock);
 	for (walk = &dev->local; *walk; walk = &(*walk)->next)
 		if (identical(&(*walk)->addr,addr)) {
-			unlock_local();
+			up(&local_lock);
 			return -EEXIST;
 		}
 	*walk = kmalloc(sizeof(struct atm_dev_addr),GFP_KERNEL);
 	if (!*walk) {
-		unlock_local();
+		up(&local_lock);
 		return -ENOMEM;
 	}
 	(*walk)->addr = *addr;
 	(*walk)->next = NULL;
-	unlock_local();
+	up(&local_lock);
 	notify_sigd(dev);
 	return 0;
 }
@@ -117,17 +101,17 @@ int del_addr(struct atm_dev *dev,struct sockaddr_atmsvc *addr)
 
 	error = check_addr(addr);
 	if (error) return error;
-	lock_local();
+	down(&local_lock);
 	for (walk = &dev->local; *walk; walk = &(*walk)->next)
 		if (identical(&(*walk)->addr,addr)) break;
 	if (!*walk) {
-		unlock_local();
+		up(&local_lock);
 		return -ENOENT;
 	}
 	this = *walk;
 	*walk = this->next;
 	kfree(this);
-	unlock_local();
+	up(&local_lock);
 	notify_sigd(dev);
 	return 0;
 }
@@ -138,27 +122,21 @@ int get_addr(struct atm_dev *dev,struct sockaddr_atmsvc *u_buf,int size)
 	struct atm_dev_addr *walk;
 	int total;
 
-	lock_local();
+	down(&local_lock);
 	total = 0;
 	for (walk = dev->local; walk; walk = walk->next) {
 		total += sizeof(struct sockaddr_atmsvc);
 		if (total > size) {
-			unlock_local();
+			up(&local_lock);
 			return -E2BIG;
 		}
 		if (copy_to_user(u_buf,&walk->addr,
 		    sizeof(struct sockaddr_atmsvc))) {
-			unlock_local();
+			up(&local_lock);
 			return -EFAULT;
 		}
 		u_buf++;
 	}
-	unlock_local();
+	up(&local_lock);
 	return total;
-}
-
-
-void init_addr(void)
-{
-	init_waitqueue_head(&local_wait);
 }

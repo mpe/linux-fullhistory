@@ -1,4 +1,4 @@
-/* $Id: sunserial.c,v 1.74 1999/12/15 22:30:23 davem Exp $
+/* $Id: sunserial.c,v 1.75 2000/03/22 02:45:36 davem Exp $
  * serial.c: Serial port driver infrastructure for the Sparc.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -66,6 +66,8 @@ int rs_init(void)
 	}
 	return err;
 }
+
+__initcall(rs_init);
 
 void __init rs_kgdb_hook(int channel)
 {

@@ -33,6 +33,7 @@
 #include <linux/if_arp.h>
 #include <linux/init.h> /* for __init */
 #include <asm/uaccess.h>
+#include <asm/atomic.h>
 #include <asm/param.h> /* for HZ */
 #include "resources.h"
 #include "common.h" /* atm_proc_init prototype */
@@ -64,10 +65,12 @@ static struct file_operations proc_spec_atm_operations = {
 };
 
 static void add_stats(char *buf,const char *aal,
-  const struct atm_aal_stats *stats)
+  const struct k_atm_aal_stats *stats)
 {
-	sprintf(strchr(buf,0),"%s ( %d %d %d %d %d )",aal,stats->tx,
-	    stats->tx_err,stats->rx,stats->rx_err,stats->rx_drop);
+	sprintf(strchr(buf,0),"%s ( %d %d %d %d %d )",aal,
+	    atomic_read(&stats->tx),atomic_read(&stats->tx_err),
+	    atomic_read(&stats->rx),atomic_read(&stats->rx_err),
+	    atomic_read(&stats->rx_drop));
 }
 
 
@@ -217,7 +220,7 @@ static void vc_info(struct atm_vcc *vcc,char *buf)
 		default:
 			here += sprintf(here,"%3d",vcc->family);
 	}
-	here += sprintf(here," %04x  %5d %7d/%7d %7d/%7d\n",vcc->flags,
+	here += sprintf(here," %04x  %5d %7d/%7d %7d/%7d\n",vcc->flags.bits,
 	    vcc->reply,
 	    atomic_read(&vcc->tx_inuse),vcc->sk->sndbuf,
 	    atomic_read(&vcc->rx_inuse),vcc->sk->rcvbuf);
@@ -583,7 +586,7 @@ int __init atm_proc_init(void)
 	struct proc_dir_entry *devices = NULL,*pvc = NULL,*svc = NULL;
 	struct proc_dir_entry *arp = NULL,*lec = NULL,*vc = NULL;
 
-	atm_proc_root = proc_mkdir("atm", &proc_root);
+	atm_proc_root = proc_mkdir("net/atm",NULL);
 	if (!atm_proc_root)
 		return -ENOMEM;
 	CREATE_ENTRY(devices);
@@ -605,6 +608,6 @@ cleanup:
 	if (arp) remove_proc_entry("arp",atm_proc_root);
 	if (lec) remove_proc_entry("lec",atm_proc_root);
 	if (vc) remove_proc_entry("vc",atm_proc_root);
-	remove_proc_entry("atm",&proc_root);
+	remove_proc_entry("net/atm",NULL);
 	return -ENOMEM;
 }

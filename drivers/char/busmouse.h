@@ -23,6 +23,4 @@ extern void busmouse_add_buttons(int mousedev, int clear, int eor);
 extern int register_busmouse(struct busmouse *ops);
 extern int unregister_busmouse(int mousedev);
 
-extern int bus_mouse_init(void);
-
 #endif

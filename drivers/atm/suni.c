@@ -1,4 +1,4 @@
-/* drivers/atm/suni.c - PMC SUNI (PHY) driver */
+/* drivers/atm/suni.c - PMC PM5346 SUNI (PHY) driver */
  
 /* Written 1995-2000 by Werner Almesberger, EPFL LRC/ICA */
 
@@ -18,6 +18,7 @@
 #include <asm/system.h>
 #include <asm/param.h>
 #include <asm/uaccess.h>
+#include <asm/atomic.h>
 
 #include "suni.h"
 
@@ -30,8 +31,8 @@
 
 
 struct suni_priv {
-	struct sonet_stats sonet_stats; /* link diagnostics */
-	unsigned char loop_mode;        /* loopback mode */
+	struct k_sonet_stats sonet_stats; /* link diagnostics */
+	int loop_mode;			/* loopback mode */
 	struct atm_dev *dev;		/* device back-pointer */
 	struct suni_priv *next;		/* next SUNI */
 };
@@ -46,69 +47,62 @@ struct suni_priv {
 
 
 static struct timer_list poll_timer;
-static int start_timer = 1;
 static struct suni_priv *sunis = NULL;
+static spinlock_t sunis_lock = SPIN_LOCK_UNLOCKED;
 
 
-static void suni_hz(unsigned long dummy)
+#define ADD_LIMITED(s,v) \
+    atomic_add((v),&stats->s); \
+    if (atomic_read(&stats->s) < 0) atomic_set(&stats->s,INT_MAX);
+
+
+static void suni_hz(unsigned long from_timer)
 {
 	struct suni_priv *walk;
 	struct atm_dev *dev;
-	struct sonet_stats *stats;
+	struct k_sonet_stats *stats;
 
 	for (walk = sunis; walk; walk = walk->next) {
 		dev = walk->dev;
 		stats = &walk->sonet_stats;
 		PUT(0,MRI); /* latch counters */
 		udelay(1);
-		stats->section_bip += (GET(RSOP_SBL) & 0xff) |
-		    ((GET(RSOP_SBM) & 0xff) << 8);
-		if (stats->section_bip < 0) stats->section_bip = LONG_MAX;
-		stats->line_bip += (GET(RLOP_LBL) & 0xff) |
+		ADD_LIMITED(section_bip,(GET(RSOP_SBL) & 0xff) |
+		    ((GET(RSOP_SBM) & 0xff) << 8));
+		ADD_LIMITED(line_bip,(GET(RLOP_LBL) & 0xff) |
 		    ((GET(RLOP_LB) & 0xff) << 8) |
-		    ((GET(RLOP_LBM) & 0xf) << 16);
-		if (stats->line_bip < 0) stats->line_bip = LONG_MAX;
-		stats->path_bip += (GET(RPOP_PBL) & 0xff) |
-		    ((GET(RPOP_PBM) & 0xff) << 8);
-		if (stats->path_bip < 0) stats->path_bip = LONG_MAX;
-		stats->line_febe += (GET(RLOP_LFL) & 0xff) |
+		    ((GET(RLOP_LBM) & 0xf) << 16));
+		ADD_LIMITED(path_bip,(GET(RPOP_PBL) & 0xff) |
+		    ((GET(RPOP_PBM) & 0xff) << 8));
+		ADD_LIMITED(line_febe,(GET(RLOP_LFL) & 0xff) |
 		    ((GET(RLOP_LF) & 0xff) << 8) |
-		    ((GET(RLOP_LFM) & 0xf) << 16);
-		if (stats->line_febe < 0) stats->line_febe = LONG_MAX;
-		stats->path_febe += (GET(RPOP_PFL) & 0xff) |
-		    ((GET(RPOP_PFM) & 0xff) << 8);
-		if (stats->path_febe < 0) stats->path_febe = LONG_MAX;
-		stats->corr_hcs += GET(RACP_CHEC) & 0xff;
-		if (stats->corr_hcs < 0) stats->corr_hcs = LONG_MAX;
-		stats->uncorr_hcs += GET(RACP_UHEC) & 0xff;
-		if (stats->uncorr_hcs < 0) stats->uncorr_hcs = LONG_MAX;
-		stats->rx_cells += (GET(RACP_RCCL) & 0xff) |
+		    ((GET(RLOP_LFM) & 0xf) << 16));
+		ADD_LIMITED(path_febe,(GET(RPOP_PFL) & 0xff) |
+		    ((GET(RPOP_PFM) & 0xff) << 8));
+		ADD_LIMITED(corr_hcs,GET(RACP_CHEC) & 0xff);
+		ADD_LIMITED(uncorr_hcs,GET(RACP_UHEC) & 0xff);
+		ADD_LIMITED(rx_cells,(GET(RACP_RCCL) & 0xff) |
 		    ((GET(RACP_RCC) & 0xff) << 8) |
-		    ((GET(RACP_RCCM) & 7) << 16);
-		if (stats->rx_cells < 0) stats->rx_cells = LONG_MAX;
-		stats->tx_cells += (GET(TACP_TCCL) & 0xff) |
+		    ((GET(RACP_RCCM) & 7) << 16));
+		ADD_LIMITED(tx_cells,(GET(TACP_TCCL) & 0xff) |
 		    ((GET(TACP_TCC) & 0xff) << 8) |
-		    ((GET(TACP_TCCM) & 7) << 16);
-		if (stats->tx_cells < 0) stats->tx_cells = LONG_MAX;
+		    ((GET(TACP_TCCM) & 7) << 16));
 	}
-	if (!start_timer) mod_timer(&poll_timer,jiffies+HZ);
+	if (from_timer) mod_timer(&poll_timer,jiffies+HZ);
 }
+
+
+#undef ADD_LIMITED
 
 
 static int fetch_stats(struct atm_dev *dev,struct sonet_stats *arg,int zero)
 {
-	unsigned long flags;
-	int error;
+	struct sonet_stats tmp;
+	int error = 0;
 
-	error = 0;
-	save_flags(flags);
-	cli();
-	if (arg)
-		error = copy_to_user(arg,&PRIV(dev)->sonet_stats,
-		    sizeof(struct sonet_stats));
-	if (zero && !error)
-		memset(&PRIV(dev)->sonet_stats,0,sizeof(struct sonet_stats));
-	restore_flags(flags);
+	sonet_copy_stats(&PRIV(dev)->sonet_stats,&tmp);
+	if (arg) error = copy_to_user(arg,&tmp,sizeof(tmp));
+	if (zero && !error) sonet_subtract_stats(&PRIV(dev)->sonet_stats,&tmp);
 	return error ? -EFAULT : 0;
 }
 
@@ -158,6 +152,29 @@ static int get_diag(struct atm_dev *dev,void *arg)
 }
 
 
+static int set_loopback(struct atm_dev *dev,int mode)
+{
+	unsigned char control;
+
+	control = GET(MCT) & ~(SUNI_MCT_DLE | SUNI_MCT_LLE);
+	switch (mode) {
+		case ATM_LM_NONE:
+			break;
+		case ATM_LM_LOC_PHY:
+			control |= SUNI_MCT_DLE;
+			break;
+		case ATM_LM_RMT_PHY:
+			control |= SUNI_MCT_LLE;
+			break;
+		default:
+			return -EINVAL;
+	}
+	PUT(control,MCT);
+	PRIV(dev)->loop_mode = mode;
+	return 0;
+}
+
+
 static int suni_ioctl(struct atm_dev *dev,unsigned int cmd,void *arg)
 {
 	switch (cmd) {
@@ -172,7 +189,6 @@ static int suni_ioctl(struct atm_dev *dev,unsigned int cmd,void *arg)
 		case SONET_GETDIAG:
 			return get_diag(dev,arg);
 		case SONET_SETFRAMING:
-			if (!capable(CAP_NET_ADMIN)) return -EPERM;
 			if (arg != SONET_FRAME_SONET) return -EINVAL;
 			return 0;
 		case SONET_GETFRAMING:
@@ -180,23 +196,14 @@ static int suni_ioctl(struct atm_dev *dev,unsigned int cmd,void *arg)
 			    -EFAULT : 0;
 		case SONET_GETFRSENSE:
 			return -EINVAL;
-		case SUNI_SETLOOP:
-			{
-				int int_arg = (int) (long) arg;
-
-				if (!capable(CAP_NET_ADMIN)) return -EPERM;
-				if (int_arg < 0 || int_arg > SUNI_LM_LOOP)
-					return -EINVAL;
-				PUT((GET(MCT) & ~(SUNI_MCT_DLE | SUNI_MCT_LLE))
-				    | (int_arg == SUNI_LM_DIAG ? SUNI_MCT_DLE :
-				    0) | (int_arg == SUNI_LM_LOOP ?
-				    SUNI_MCT_LLE : 0),MCT);
-				PRIV(dev)->loop_mode = int_arg;
-				return 0;
-			}
-		case SUNI_GETLOOP:
+		case ATM_SETLOOP:
+			return set_loopback(dev,(int) (long) arg);
+		case ATM_GETLOOP:
 			return put_user(PRIV(dev)->loop_mode,(int *) arg) ?
 			    -EFAULT : 0;
+		case ATM_QUERYLOOP:
+			return put_user(ATM_LM_LOC_PHY | ATM_LM_RMT_PHY,
+			    (int *) arg) ? -EFAULT : 0;
 		default:
 			return -ENOIOCTLCMD;
 	}
@@ -221,33 +228,31 @@ static void suni_int(struct atm_dev *dev)
 static int suni_start(struct atm_dev *dev)
 {
 	unsigned long flags;
+	int first;
 
 	if (!(PRIV(dev) = kmalloc(sizeof(struct suni_priv),GFP_KERNEL)))
 		return -ENOMEM;
 	PRIV(dev)->dev = dev;
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&sunis_lock,flags);
+	first = !sunis;
 	PRIV(dev)->next = sunis;
 	sunis = PRIV(dev);
-	restore_flags(flags);
-	memset(&PRIV(dev)->sonet_stats,0,sizeof(struct sonet_stats));
+	spin_unlock_irqrestore(&sunis_lock,flags);
+	memset(&PRIV(dev)->sonet_stats,0,sizeof(struct k_sonet_stats));
 	PUT(GET(RSOP_CIE) | SUNI_RSOP_CIE_LOSE,RSOP_CIE);
 		/* interrupt on loss of signal */
 	poll_los(dev); /* ... and clear SUNI interrupts */
 	if (dev->signal == ATM_PHY_SIG_LOST)
 		printk(KERN_WARNING "%s(itf %d): no signal\n",dev->type,
 		    dev->number);
-	PRIV(dev)->loop_mode = SUNI_LM_NONE;
+	PRIV(dev)->loop_mode = ATM_LM_NONE;
 	suni_hz(0); /* clear SUNI counters */
 	(void) fetch_stats(dev,NULL,1); /* clear kernel counters */
-	cli();
-	if (!start_timer) restore_flags(flags);
-	else {
-		start_timer = 0;
-		restore_flags(flags);
+	if (first) {
 		init_timer(&poll_timer);
 		poll_timer.expires = jiffies+HZ;
 		poll_timer.function = suni_hz;
+		poll_timer.data = 1;
 #if 0
 printk(KERN_DEBUG "[u] p=0x%lx,n=0x%lx\n",(unsigned long) poll_timer.prev,
     (unsigned long) poll_timer.next);
@@ -258,10 +263,28 @@ printk(KERN_DEBUG "[u] p=0x%lx,n=0x%lx\n",(unsigned long) poll_timer.prev,
 }
 
 
+static int suni_stop(struct atm_dev *dev)
+{
+	struct suni_priv **walk;
+	unsigned long flags;
+
+	/* let SAR driver worry about stopping interrupts */
+	spin_lock_irqsave(&sunis_lock,flags);
+	for (walk = &sunis; *walk != PRIV(dev);
+	    walk = &PRIV((*walk)->dev)->next);
+	*walk = PRIV((*walk)->dev)->next;
+	if (!sunis) del_timer_sync(&poll_timer);
+	spin_unlock_irqrestore(&sunis_lock,flags);
+	kfree(PRIV(dev));
+	return 0;
+}
+
+
 static const struct atmphy_ops suni_ops = {
-	suni_start,
-	suni_ioctl,
-	suni_int
+	start:		suni_start,
+	ioctl:		suni_ioctl,
+	interrupt:	suni_int,
+	stop:		suni_stop,
 };
 
 

@@ -12,6 +12,7 @@
 #include <linux/skbuff.h>
 #include <linux/time.h>
 #include <linux/pci.h>
+#include <linux/spinlock.h>
 
 #include "midway.h"
 
@@ -65,6 +66,8 @@ struct eni_vcc {
 };
 
 struct eni_dev {
+	/*-------------------------------- spinlock */
+	spinlock_t lock;		/* sync with interrupt */
 	/*-------------------------------- base pointers into Midway address
 					   space */
 	unsigned long phy;		/* PHY interface chip registers */

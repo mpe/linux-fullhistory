@@ -19,8 +19,10 @@
 #include <linux/uio.h>
 #include <linux/init.h>
 #include <linux/atm_eni.h>
+#include <linux/bitops.h>
 #include <asm/system.h>
 #include <asm/io.h>
+#include <asm/atomic.h>
 #include <asm/uaccess.h>
 #include <asm/string.h>
 #include <asm/byteorder.h>
@@ -526,7 +528,7 @@ static int rx_aal0(struct atm_vcc *vcc)
 		DPRINTK(DEV_LABEL "(itf %d): trashing empty cell\n",
 		    vcc->dev->number);
 		length = 0;
-		vcc->stats->rx_err++;
+		atomic_inc(&vcc->stats->rx_err);
 	}
 	else {
 		length = ATM_CELL_SIZE-1; /* no HEC */
@@ -581,7 +583,7 @@ static int rx_aal5(struct atm_vcc *vcc)
 			    size);
 		}
 		eff = length = 0;
-		vcc->stats->rx_err++;
+		atomic_inc(&vcc->stats->rx_err);
 	}
 	else {
 		size = (descr & MID_RED_COUNT)*(ATM_CELL_PAYLOAD >> 2);
@@ -598,7 +600,7 @@ static int rx_aal5(struct atm_vcc *vcc)
 			    "(VCI=%d,length=%ld,size=%ld (descr 0x%lx))\n",
 			    vcc->dev->number,vcc->vci,length,size << 2,descr);
 			length = eff = 0;
-			vcc->stats->rx_err++;
+			atomic_inc(&vcc->stats->rx_err);
 		}
 	}
 	skb = eff ? atm_alloc_charge(vcc,eff << 2,GFP_ATOMIC) : NULL;
@@ -663,6 +665,7 @@ static void poll_rx(struct atm_dev *dev)
 		if (rx_vcc(curr)) return;
 		eni_dev->fast = ENI_VCC(curr)->next;
 		ENI_VCC(curr)->next = ENI_VCC_NOS;
+		barrier();
 		ENI_VCC(curr)->servicing--;
 	}
 	while ((curr = eni_dev->slow)) {
@@ -670,6 +673,7 @@ static void poll_rx(struct atm_dev *dev)
 		if (rx_vcc(curr)) return;
 		eni_dev->slow = ENI_VCC(curr)->next;
 		ENI_VCC(curr)->next = ENI_VCC_NOS;
+		barrier();
 		ENI_VCC(curr)->servicing--;
 	}
 }
@@ -768,7 +772,7 @@ rx_dequeued++;
 			vcc->push(vcc,skb);
 			pushed++;
 		}
-		vcc->stats->rx++;
+		atomic_inc(&vcc->stats->rx);
 	}
 	wake_up(&eni_dev->rx_wait);
 }
@@ -836,10 +840,10 @@ static int open_rx_second(struct atm_vcc *vcc)
 
 static void close_rx(struct atm_vcc *vcc)
 {
-	unsigned long here,flags;
+	DECLARE_WAITQUEUE(wait,current);
+	unsigned long here;
 	struct eni_dev *eni_dev;
 	struct eni_vcc *eni_vcc;
-	u32 tmp;
 
 	eni_vcc = ENI_VCC(vcc);
 	if (!eni_vcc->rx) return;
@@ -858,25 +862,41 @@ static void close_rx(struct atm_vcc *vcc)
 		/* wait for RX queue to drain */
 		DPRINTK("eni_close: waiting for RX ...\n");
 		EVENT("RX closing\n",0,0);
-		save_flags(flags);
-		cli();
-		while (eni_vcc->rxing || eni_vcc->servicing) {
+		add_wait_queue(&eni_dev->rx_wait,&wait);
+		set_current_state(TASK_UNINTERRUPTIBLE);
+		barrier();
+		for (;;) {
+			/* transition service->rx: rxing++, servicing-- */
+			if (!eni_vcc->servicing) {
+				barrier();
+				if (!eni_vcc->rxing) break;
+			}
 			EVENT("drain PDUs (rx %ld, serv %ld)\n",eni_vcc->rxing,
 			    eni_vcc->servicing);
 			printk(KERN_INFO "%d+%d RX left\n",eni_vcc->servicing,
 			    eni_vcc->rxing);
-			sleep_on(&eni_dev->rx_wait);
+			schedule();
+			set_current_state(TASK_UNINTERRUPTIBLE);
 		}
-		while (eni_vcc->rx_pos != (tmp =
-		     readl(eni_dev->vci+vcc->vci*16+4) & MID_VCI_READ)>>
-		     MID_VCI_READ_SHIFT) {
+		for (;;) {
+			unsigned long flags;
+			int at_end;
+			u32 tmp;
+
+			spin_lock_irqsave(&eni_dev->lock,flags);
+			tmp = readl(eni_dev->vci+vcc->vci*16+4) & MID_VCI_READ;
+			at_end = eni_vcc->rx_pos == tmp >> MID_VCI_READ_SHIFT;
+			spin_unlock_irqrestore(&eni_dev->lock,flags);
+			if (at_end) break;
 			EVENT("drain discard (host 0x%lx, nic 0x%lx)\n",
 			    eni_vcc->rx_pos,tmp);
 			printk(KERN_INFO "draining RX: host 0x%lx, nic 0x%x\n",
 			    eni_vcc->rx_pos,tmp);
-			sleep_on(&eni_dev->rx_wait);
+			schedule();
+			set_current_state(TASK_UNINTERRUPTIBLE);
 		}
-		restore_flags(flags);
+		set_current_state(TASK_RUNNING);
+		remove_wait_queue(&eni_dev->rx_wait,&wait);
 	}
 	eni_free_mem(eni_dev,eni_vcc->recv,eni_vcc->words << 2);
 	eni_vcc->rx = NULL;
@@ -1054,8 +1074,9 @@ static enum enq_res do_tx(struct sk_buff *skb)
 	 * 1 DMA xfer & 2 DMA'ed bytes (protocol layering is for wimps :-)
 	 */
 
+	aal5 = vcc->qos.aal == ATM_AAL5;
 	/* check space in buffer */
-	if (!(aal5 = vcc->qos.aal == ATM_AAL5))
+	if (!aal5)
 		size = (ATM_CELL_PAYLOAD >> 2)+TX_DESCR_SIZE;
 			/* cell without HEC plus segmentation header (includes
 			   four-byte cell header) */
@@ -1207,7 +1228,7 @@ static void dequeue_tx(struct atm_dev *dev)
 		    PCI_DMA_TODEVICE);
 		if (vcc->pop) vcc->pop(vcc,skb);
 		else dev_kfree_skb_irq(skb);
-		vcc->stats->tx++;
+		atomic_inc(&vcc->stats->tx);
 		wake_up(&eni_dev->tx_wait);
 dma_complete++;
 	}
@@ -1366,34 +1387,40 @@ static int open_tx_second(struct atm_vcc *vcc)
 
 static void close_tx(struct atm_vcc *vcc)
 {
+	DECLARE_WAITQUEUE(wait,current);
 	struct eni_dev *eni_dev;
 	struct eni_vcc *eni_vcc;
-	unsigned long flags;
 
 	eni_vcc = ENI_VCC(vcc);
 	if (!eni_vcc->tx) return;
 	eni_dev = ENI_DEV(vcc->dev);
 	/* wait for TX queue to drain */
 	DPRINTK("eni_close: waiting for TX ...\n");
-	save_flags(flags);
-	cli();
-	while (skb_peek(&eni_vcc->tx->backlog) || eni_vcc->txing) {
+	add_wait_queue(&eni_dev->tx_wait,&wait);
+	set_current_state(TASK_UNINTERRUPTIBLE);
+	for (;;) {
+		unsigned long flags;
+		int txing;
+
+		spin_lock_irqsave(&eni_dev->lock,flags);
+		txing = skb_peek(&eni_vcc->tx->backlog) || eni_vcc->txing;
+		spin_unlock_irqrestore(&eni_dev->lock,flags);
+		if (!txing) break;
 		DPRINTK("%d TX left\n",eni_vcc->txing);
-		sleep_on(&eni_dev->tx_wait);
-	}
-	/*
-	 * Looping a few times in here is probably far cheaper than keeping
-	 * track of TX completions all the time, so let's poll a bit ...
-	 */
-	while (eni_in(MID_TX_RDPTR(eni_vcc->tx->index)) !=
-	    eni_in(MID_TX_DESCRSTART(eni_vcc->tx->index)))
 		schedule();
-	restore_flags(flags);
-#if 0
-	if (skb_peek(&eni_vcc->tx->backlog))
-		printk(KERN_CRIT DEV_LABEL "SKBs in BACKLOG !!!\n");
-#endif
+		set_current_state(TASK_UNINTERRUPTIBLE);
+	}
+	set_current_state(TASK_RUNNING);
+	remove_wait_queue(&eni_dev->tx_wait,&wait);
 	if (eni_vcc->tx != eni_dev->ubr) {
+		/*
+		 * Looping a few times in here is probably far cheaper than
+		 * keeping track of TX completions all the time, so let's poll
+		 * a bit ...
+		 */
+		while (eni_in(MID_TX_RDPTR(eni_vcc->tx->index)) !=
+		    eni_in(MID_TX_DESCRSTART(eni_vcc->tx->index)))
+			schedule();
 		eni_free_mem(eni_dev,eni_vcc->tx->send,eni_vcc->tx->words << 2);
 		eni_vcc->tx->send = 0;
 		eni_dev->tx_bw += eni_vcc->tx->reserved;
@@ -1496,28 +1523,36 @@ static void eni_int(int irq,void *dev_id,struct pt_regs *regs)
 		if (reason & MID_RX_DMA_COMPLETE) {
 			EVENT("INT: RX DMA complete, starting dequeue_rx\n",
 			    0,0);
+			spin_lock(&eni_dev->lock);
 			dequeue_rx(dev);
 			EVENT("dequeue_rx done, starting poll_rx\n",0,0);
 			poll_rx(dev);
+			spin_unlock(&eni_dev->lock);
 			EVENT("poll_rx done\n",0,0);
 			/* poll_tx ? */
 		}
 		if (reason & MID_SERVICE) {
 			EVENT("INT: service, starting get_service\n",0,0);
+			spin_lock(&eni_dev->lock);
 			get_service(dev);
 			EVENT("get_service done, starting poll_rx\n",0,0);
 			poll_rx(dev);
+			spin_unlock(&eni_dev->lock);
 			EVENT("poll_rx done\n",0,0);
 		}
  		if (reason & MID_TX_DMA_COMPLETE) {
 			EVENT("INT: TX DMA COMPLETE\n",0,0);
+			spin_lock(&eni_dev->lock);
 			dequeue_tx(dev);
+			spin_unlock(&eni_dev->lock);
 		}
 		if (reason & MID_TX_COMPLETE) {
 			EVENT("INT: TX COMPLETE\n",0,0);
 tx_complete++;
-			wake_up(&eni_dev->tx_wait);
+			spin_lock(&eni_dev->lock);
 			poll_tx(dev);
+			spin_unlock(&eni_dev->lock);
+			wake_up(&eni_dev->tx_wait);
 			/* poll_rx ? */
 		}
 		if (reason & (MID_STAT_OVFL | MID_SUNI_INT | MID_DMA_ERR_ACK |
@@ -1532,7 +1567,7 @@ tx_complete++;
 /*--------------------------------- entries ---------------------------------*/
 
 
-static const char *media_name[] __initdata = {
+static const char *media_name[] __devinitdata = {
     "MMF", "SMF", "MMF", "03?", /*  0- 3 */
     "UTP", "05?", "06?", "07?", /*  4- 7 */
     "TAXI","09?", "10?", "11?", /*  8-11 */
@@ -1556,7 +1591,7 @@ static const char *media_name[] __initdata = {
   } })
 
 
-static int __init get_esi_asic(struct atm_dev *dev)
+static int __devinit get_esi_asic(struct atm_dev *dev)
 {
 	struct eni_dev *eni_dev;
 	unsigned char tonga;
@@ -1648,7 +1683,7 @@ static int __init get_esi_asic(struct atm_dev *dev)
 #undef GET_SEPROM
 
 
-static int __init get_esi_fpga(struct atm_dev *dev,unsigned long base)
+static int __devinit get_esi_fpga(struct atm_dev *dev,unsigned long base)
 {
 	unsigned long mac_base;
 	int i;
@@ -1659,7 +1694,7 @@ static int __init get_esi_fpga(struct atm_dev *dev,unsigned long base)
 }
 
 
-static int __init eni_init(struct atm_dev *dev)
+static int __devinit eni_do_init(struct atm_dev *dev)
 {
 	struct midway_eprom *eprom;
 	struct eni_dev *eni_dev;
@@ -1748,7 +1783,7 @@ static int __init eni_init(struct atm_dev *dev)
 }
 
 
-static int __init eni_start(struct atm_dev *dev)
+static int __devinit eni_start(struct atm_dev *dev)
 {
 	struct eni_dev *eni_dev;
 	unsigned long buf,buffer_mem;
@@ -1788,6 +1823,7 @@ static int __init eni_start(struct atm_dev *dev)
 	DPRINTK("vci 0x%lx,rx 0x%lx, tx 0x%lx,srv 0x%lx,buf 0x%lx\n",
 	     eni_dev->vci,eni_dev->rx_dma,eni_dev->tx_dma,
 	     eni_dev->service,buf);
+	spin_lock_init(&eni_dev->lock);
 	/* initialize memory management */
 	buffer_mem = eni_dev->mem-(buf-eni_dev->ram);
 	eni_dev->free_list_size = buffer_mem/MID_MIN_BUF_SIZE/2;
@@ -1830,14 +1866,14 @@ static void eni_close(struct atm_vcc *vcc)
 {
 	DPRINTK(">eni_close\n");
 	if (!ENI_VCC(vcc)) return;
-	vcc->flags &= ~ATM_VF_READY;
+	clear_bit(ATM_VF_READY,&vcc->flags);
 	close_rx(vcc);
 	close_tx(vcc);
 	DPRINTK("eni_close: done waiting\n");
 	/* deallocate memory */
 	kfree(ENI_VCC(vcc));
 	ENI_VCC(vcc) = NULL;
-	vcc->flags &= ~ATM_VF_ADDR;
+	clear_bit(ATM_VF_ADDR,&vcc->flags);
 	/*foo();*/
 }
 
@@ -1855,8 +1891,8 @@ static int get_ci(struct atm_vcc *vcc,short *vpi,int *vci)
 			if (vcc->qos.txtp.traffic_class != ATM_NONE) {
 				for (walk = vcc->dev->vccs; walk;
 				    walk = walk->next)
-					if ((walk->flags & ATM_VF_ADDR) &&
-					    walk->vci == *vci &&
+					if (test_bit(ATM_VF_ADDR,&walk->flags)
+					    && walk->vci == *vci &&
 					    walk->qos.txtp.traffic_class !=
 					    ATM_NONE)
 						break;
@@ -1872,7 +1908,7 @@ static int get_ci(struct atm_vcc *vcc,short *vpi,int *vci)
 		return -EADDRINUSE;
 	if (vcc->qos.txtp.traffic_class == ATM_NONE) return 0;
 	for (walk = vcc->dev->vccs; walk; walk = walk->next)
-		if ((walk->flags & ATM_VF_ADDR) && walk->vci == *vci &&
+		if (test_bit(ATM_VF_ADDR,&walk->flags) && walk->vci == *vci &&
 		    walk->qos.txtp.traffic_class != ATM_NONE)
 			return -EADDRINUSE;
 	return 0;
@@ -1887,19 +1923,19 @@ static int eni_open(struct atm_vcc *vcc,short vpi,int vci)
 
 	DPRINTK(">eni_open\n");
 	EVENT("eni_open\n",0,0);
-	if (!(vcc->flags & ATM_VF_PARTIAL)) ENI_VCC(vcc) = NULL;
+	if (!test_bit(ATM_VF_PARTIAL,&vcc->flags)) ENI_VCC(vcc) = NULL;
 	eni_dev = ENI_DEV(vcc->dev);
 	error = get_ci(vcc,&vpi,&vci);
 	if (error) return error;
 	vcc->vpi = vpi;
 	vcc->vci = vci;
 	if (vci != ATM_VPI_UNSPEC && vpi != ATM_VCI_UNSPEC)
-		vcc->flags |= ATM_VF_ADDR;
+		set_bit(ATM_VF_ADDR,&vcc->flags);
 	if (vcc->qos.aal != ATM_AAL0 && vcc->qos.aal != ATM_AAL5)
 		return -EINVAL;
 	DPRINTK(DEV_LABEL "(itf %d): open %d.%d\n",vcc->dev->number,vcc->vpi,
 	    vcc->vci);
-	if (!(vcc->flags & ATM_VF_PARTIAL)) {
+	if (!test_bit(ATM_VF_PARTIAL,&vcc->flags)) {
 		eni_vcc = kmalloc(sizeof(struct eni_vcc),GFP_KERNEL);
 		if (!eni_vcc) return -ENOMEM;
 		ENI_VCC(vcc) = eni_vcc;
@@ -1922,7 +1958,7 @@ static int eni_open(struct atm_vcc *vcc,short vpi,int vci)
 		eni_close(vcc);
 		return error;
 	}
-	vcc->flags |= ATM_VF_READY;
+	set_bit(ATM_VF_READY,&vcc->flags);
 	/* should power down SUNI while !ref_count @@@ */
 	return 0;
 }
@@ -1953,8 +1989,7 @@ static int eni_change_qos(struct atm_vcc *vcc,struct atm_qos *qos,int flgs)
 	 * Walk through the send buffer and patch the rate information in all
 	 * segmentation buffer descriptors of this VCC.
 	 */
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&eni_dev->lock,flags);
 	for (skb = eni_dev->tx_queue.next; skb !=
 	    (struct sk_buff *) &eni_dev->tx_queue; skb = skb->next) {
 		unsigned long dsc;
@@ -1965,7 +2000,7 @@ static int eni_change_qos(struct atm_vcc *vcc,struct atm_qos *qos,int flgs)
 		    (tx->prescaler << MID_SEG_PR_SHIFT) |
 		    (tx->resolution << MID_SEG_RATE_SHIFT), dsc);
 	}
-	restore_flags(flags);
+	spin_unlock_irqrestore(&eni_dev->lock,flags);
 	return 0;
 }
 
@@ -2049,14 +2084,13 @@ static int eni_send(struct atm_vcc *vcc,struct sk_buff *skb)
 	}
 submitted++;
 	ATM_SKB(skb)->vcc = vcc;
-	save_flags(flags);
-	cli(); /* brute force */
+	spin_lock_irqsave(&ENI_DEV(vcc->dev)->lock,flags); /* brute force */
 	if (skb_peek(&ENI_VCC(vcc)->tx->backlog) || do_tx(skb)) {
 		skb_queue_tail(&ENI_VCC(vcc)->tx->backlog,skb);
 		ENI_VCC(vcc)->tx->backlog_len++;
 backlogged++;
 	}
-	restore_flags(flags);
+	spin_unlock_irqrestore(&ENI_DEV(vcc->dev)->lock,flags);
 	return 0;
 }
 
@@ -2206,79 +2240,86 @@ static const struct atmdev_ops ops = {
 };
 
 
-int __init eni_detect(void)
+static int __devinit eni_init_one(struct pci_dev *pci_dev,
+    const struct pci_device_id *ent)
 {
 	struct atm_dev *dev;
 	struct eni_dev *eni_dev;
-	int devs,type;
-	struct sk_buff *skb;
+	int error = -ENOMEM;
 
-	DPRINTK("eni_detect\n");
+	DPRINTK("eni_init_one\n");
+	eni_dev = (struct eni_dev *) kmalloc(sizeof(struct eni_dev),GFP_KERNEL);
+	if (!eni_dev) return -ENOMEM;
+	if (!cpu_zeroes) {
+		cpu_zeroes = pci_alloc_consistent(pci_dev,ENI_ZEROES_SIZE,
+		    &zeroes);
+		if (!cpu_zeroes) goto out1;
+	}
+	dev = atm_dev_register(DEV_LABEL,&ops,-1,NULL);
+	if (!dev) goto out2;
+	pci_dev->driver_data = dev;
+	eni_dev->pci_dev = pci_dev;
+	ENI_DEV(dev) = eni_dev;
+	eni_dev->asic = ent->driver_data;
+	error = eni_do_init(dev);
+	if (error) goto out3;
+	error = eni_start(dev);
+	if (error) goto out3;
+	eni_dev->more = eni_boards;
+	eni_boards = dev;
+	MOD_INC_USE_COUNT; /* @@@ we don't support unloading yet */
+	return 0;
+out3:
+	atm_dev_deregister(dev);
+out2:
+	pci_free_consistent(eni_dev->pci_dev,ENI_ZEROES_SIZE,cpu_zeroes,zeroes);
+	cpu_zeroes = NULL;
+out1:
+	kfree(eni_dev);
+	return error;
+}
+
+
+static struct pci_device_id eni_pci_tbl[] __devinitdata = {
+	{ PCI_VENDOR_ID_EF, PCI_DEVICE_ID_EF_ATM_FPGA, PCI_ANY_ID, PCI_ANY_ID,
+	  0, 0, 0 /* FPGA */ },
+	{ PCI_VENDOR_ID_EF, PCI_DEVICE_ID_EF_ATM_ASIC, PCI_ANY_ID, PCI_ANY_ID,
+	  0, 0, 1 /* ASIC */ },
+	{ 0 }
+};
+MODULE_DEVICE_TABLE(pci,eni_pci_tbl);
+
+
+static void __devexit eni_remove_one(struct pci_dev *pci_dev)
+{
+	/* grrr */
+}
+
+
+static struct pci_driver eni_driver = {
+	name:		DEV_LABEL,
+	id_table:	eni_pci_tbl,
+	probe:		eni_init_one,
+	remove:		eni_remove_one,
+};
+
+
+static int __init eni_init(void)
+{
+	struct sk_buff *skb; /* dummy for sizeof */
+
 	if (sizeof(skb->cb) < sizeof(struct eni_skb_prv)) {
 		printk(KERN_ERR "eni_detect: skb->cb is too small (%d < %d)\n",
 		    sizeof(skb->cb),sizeof(struct eni_skb_prv));
-		return 0;
+		return -EIO;
 	}
-	eni_dev = (struct eni_dev *) kmalloc(sizeof(struct eni_dev),
-	    GFP_KERNEL);
-	if (!eni_dev) return -ENOMEM;
-	devs = 0;
-	for (type = 0; type < 2; type++) {
-		struct pci_dev *pci_dev;
-
-		pci_dev = NULL;
-		while ((pci_dev = pci_find_device(PCI_VENDOR_ID_EF,type ?
-		    PCI_DEVICE_ID_EF_ATM_ASIC : PCI_DEVICE_ID_EF_ATM_FPGA,
-		    pci_dev))) {
-			if (!devs) {
-				cpu_zeroes = pci_alloc_consistent(pci_dev,
-				    ENI_ZEROES_SIZE,&zeroes);
-				if (!cpu_zeroes) {
-					kfree(eni_dev);
-					return -ENOMEM;
-				}
-			}
-			dev = atm_dev_register(DEV_LABEL,&ops,-1,0);
-			if (!dev) break;
-			eni_dev->pci_dev = pci_dev;
-			ENI_DEV(dev) = eni_dev;
-			eni_dev->asic = type;
-			if (eni_init(dev) || eni_start(dev)) {
-				atm_dev_deregister(dev);
-				break;
-			}
-			eni_dev->more = eni_boards;
-			eni_boards = dev;
-			devs++;
-			eni_dev = (struct eni_dev *) kmalloc(sizeof(struct
-			    eni_dev),GFP_KERNEL);
-			if (!eni_dev) break;
-		}
-	}
-	if (!devs && cpu_zeroes) {
-		pci_free_consistent(eni_dev->pci_dev,ENI_ZEROES_SIZE,
-		    cpu_zeroes,zeroes);
-		cpu_zeroes = NULL;
-	}
-	kfree(eni_dev);
-	return devs;
+	if (pci_register_driver(&eni_driver) > 0) return 0;
+	pci_unregister_driver (&eni_driver);
+	return -ENODEV;
 }
 
 
-#ifdef MODULE
-
-int init_module(void)
-{
-	if (!eni_detect()) {
-		printk(KERN_ERR DEV_LABEL ": no adapter found\n");
-		return -ENXIO;
-	}
-	MOD_INC_USE_COUNT;
-	return 0;
-}
-
-
-void cleanup_module(void)
+static void __exit eni_cleanup(void)
 {
 	/*
 	 * Well, there's no way to get rid of the driver yet, so we don't
@@ -2286,4 +2327,6 @@ void cleanup_module(void)
 	 */
 }
 
-#endif
+
+module_init(eni_init);
+module_exit(eni_cleanup);

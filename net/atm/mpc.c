@@ -2,6 +2,7 @@
 #include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/init.h>
+#include <linux/bitops.h>
 
 /* We are an ethernet device */
 #include <linux/if_ether.h>
@@ -522,7 +523,7 @@ static int send_via_shortcut(struct sk_buff *skb, struct mpoa_client *mpc)
         atomic_add(skb->truesize, &entry->shortcut->tx_inuse);
 	ATM_SKB(skb)->iovcnt = 0; /* just to be safe ... */
 	ATM_SKB(skb)->atm_options = entry->shortcut->atm_options;
-        entry->shortcut->dev->ops->send(entry->shortcut, skb);
+        entry->shortcut->send(entry->shortcut, skb);
 	entry->packets_fwded++;
 
         return 0;
@@ -739,7 +740,7 @@ static struct atm_dev mpc_dev = {
         NULL,           /* last VCC             */
         NULL,           /* per-device data      */
         NULL,           /* private PHY data     */
-        0,              /* device flags         */
+        { 0 },          /* device flags         */
         NULL,           /* local ATM address    */
         { 0 }           /* no ESI               */
         /* rest of the members will be 0 */
@@ -780,7 +781,8 @@ int atm_mpoa_mpoad_attach (struct atm_vcc *vcc, int arg)
 
         mpc->mpoad_vcc = vcc;
         bind_vcc(vcc, &mpc_dev);
-        vcc->flags |= ATM_VF_READY | ATM_VF_META;
+	set_bit(ATM_VF_META,&vcc->flags);
+	set_bit(ATM_VF_READY,&vcc->flags);
 
         if (mpc->dev) {
                 char empty[ATM_ESA_LEN];

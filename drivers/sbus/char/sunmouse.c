@@ -69,7 +69,6 @@ struct sun_mouse {
 	unsigned char prev_state;      /* Previous button state */
 	int delta_x;                   /* Current delta-x */
 	int delta_y;                   /* Current delta-y */
-	int present;                   
 	int ready;		       /* set if there if data is available */
 	int active;		       /* set if device is open */
         int vuid_mode;	               /* VUID_NATIVE or VUID_FIRM_EVENT */
@@ -382,8 +381,6 @@ sun_mouse_open(struct inode * inode, struct file * file)
 {
 	if(sunmouse.active++)
 		return 0;
-	if(!sunmouse.present)
-		return -EINVAL;
 	sunmouse.ready = sunmouse.delta_x = sunmouse.delta_y = 0;
 	sunmouse.button_state = 0x80;
 	sunmouse.vuid_mode = VUID_NATIVE;
@@ -555,11 +552,8 @@ static struct miscdevice sun_mouse_mouse = {
 	SUN_MOUSE_MINOR, "sunmouse", &sun_mouse_fops
 };
 
-int __init sun_mouse_init(void)
+void sun_mouse_zsinit(void)
 {
-	if (!sunmouse.present)
-		return -ENODEV;
-
 	printk("Sun Mouse-Systems mouse driver version 1.00\n");
 
 	sunmouse.ready = sunmouse.active = 0;
@@ -568,11 +562,4 @@ int __init sun_mouse_init(void)
 	sunmouse.button_state = 0x80;
 	init_waitqueue_head(&sunmouse.proc_list);
 	sunmouse.byte = 69;
-	return 0;
-}
-
-void
-sun_mouse_zsinit(void)
-{
-	sunmouse.present = 1;
 }

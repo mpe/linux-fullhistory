@@ -1,6 +1,6 @@
 /* net/atm/ipcommon.c - Common items for all ways of doing IP over ATM */
 
-/* Written 1996,1997 by Werner Almesberger, EPFL LRC */
+/* Written 1996-2000 by Werner Almesberger, EPFL LRC/ICA */
 
 
 #include <linux/string.h>
@@ -32,20 +32,26 @@ const unsigned char llc_oui[] = {
 
 /*
  * skb_migrate moves the list at FROM to TO, emptying FROM in the process.
- * This function should live in skbuff.c or skbuff.h. Note that skb_migrate
- * is not atomic, so turn off interrupts when using it.
+ * This function should live in skbuff.c or skbuff.h.
  */
 
 
 void skb_migrate(struct sk_buff_head *from,struct sk_buff_head *to)
 {
-	struct sk_buff *skb,*prev;
+	struct sk_buff *skb;
+	unsigned long flags;
 
-	for (skb = ((struct sk_buff *) from)->next;
-	    skb != (struct sk_buff *) from; skb = skb->next) skb->list = to;
-	prev = from->prev;
-	from->next->prev = (struct sk_buff *) to;
-	prev->next = (struct sk_buff *) to;
+	spin_lock_irqsave(&from->lock,flags);
 	*to = *from;
-	skb_queue_head_init(from);
+	from->prev = (struct sk_buff *) from;
+	from->next = (struct sk_buff *) from;
+	from->qlen = 0;
+	spin_unlock_irqrestore(&from->lock,flags);
+	spin_lock_init(&to->lock);
+	for (skb = ((struct sk_buff *) to)->next;
+	    skb != (struct sk_buff *) from; skb = skb->next) skb->list = to;
+	if (to->next == (struct sk_buff *) from)
+		to->next = (struct sk_buff *) to;
+	to->next->prev = (struct sk_buff *) to;
+	to->prev->next = (struct sk_buff *) to;
 }

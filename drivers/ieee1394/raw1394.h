@@ -5,7 +5,7 @@
 #define RAW1394_DEVICE_MAJOR      171
 #define RAW1394_DEVICE_NAME       "raw1394"
 
-#define RAW1394_KERNELAPI_VERSION 1
+#define RAW1394_KERNELAPI_VERSION 2
 
 /* state: opened */
 #define RAW1394_REQ_INITIALIZE    1
@@ -21,10 +21,12 @@
 #define RAW1394_REQ_LOCK64        103
 
 #define RAW1394_REQ_ISO_LISTEN    200
+#define RAW1394_REQ_FCP_LISTEN    201
 
 /* kernel to user */
 #define RAW1394_REQ_BUS_RESET     10000
 #define RAW1394_REQ_ISO_RECEIVE   10001
+#define RAW1394_REQ_FCP_REQUEST   10002
 
 /* error codes */
 #define RAW1394_ERROR_NONE        0
@@ -67,6 +69,7 @@ struct raw1394_khost_list {
 
 struct iso_block_store {
         atomic_t refcount;
+        size_t data_size;
         quadlet_t data[0];
 };
 
@@ -82,6 +85,8 @@ struct file_info {
         struct semaphore complete_sem;
         spinlock_t reqlists_lock;
         wait_queue_head_t poll_wait_complete;
+
+        u8 *fcp_buffer;
 
         u64 listen_channels;
         quadlet_t *iso_buffer;

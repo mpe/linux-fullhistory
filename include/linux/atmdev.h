@@ -1,6 +1,6 @@
 /* atmdev.h - ATM device driver declarations and various related items */
  
-/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-2000 by Werner Almesberger, EPFL LRC/ICA */
  
 
 #ifndef LINUX_ATMDEV_H
@@ -20,6 +20,8 @@
 			   SONET overhead: /270*260 (9 section, 1 path)
 			   bits per cell:  /8/53
 			   max cell rate:  353207.547 cells/sec */
+#define ATM_25_PCR	((25600000/8-8000)/54)
+			/* 25 Mbps ATM cell rate (59111) */
 
 #define ATM_PDU_OVHD	0	/* number of bytes to charge against buffer
 				   quota per PDU */
@@ -27,10 +29,17 @@
 #define ATM_SD(s)	((s)->sk->protinfo.af_atm)
 
 
+#define __AAL_STAT_ITEMS \
+    __HANDLE_ITEM(tx);			/* TX okay */ \
+    __HANDLE_ITEM(tx_err);		/* TX errors */ \
+    __HANDLE_ITEM(rx);			/* RX okay */ \
+    __HANDLE_ITEM(rx_err);		/* RX errors */ \
+    __HANDLE_ITEM(rx_drop);		/* RX out of memory */
+
 struct atm_aal_stats {
-	int		tx,tx_err;	/* TX okay and errors */
-	int		rx,rx_err;	/* RX okay and errors */
-	int		rx_drop;	/* RX out of memory */
+#define __HANDLE_ITEM(i) int i
+	__AAL_STAT_ITEMS
+#undef __HANDLE_ITEM
 };
 
 
@@ -69,12 +78,53 @@ struct atm_dev_stats {
 					/* get AAL layer statistics */
 #define ATM_GETSTATZ	_IOW('a',ATMIOC_SARCOM+1,struct atmif_sioc)
 					/* get AAL layer statistics and zero */
+#define ATM_GETLOOP	_IOW('a',ATMIOC_SARCOM+2,struct atmif_sioc)
+					/* get loopback mode */
+#define ATM_SETLOOP	_IOW('a',ATMIOC_SARCOM+3,struct atmif_sioc)
+					/* set loopback mode */
+#define ATM_QUERYLOOP	_IOW('a',ATMIOC_SARCOM+4,struct atmif_sioc)
+					/* query supported loopback modes */
 #define ATM_SETSC	_IOW('a',ATMIOC_SPECIAL+1,int)
 					/* enable or disable single-copy */
 
 /* for ATM_GETTYPE */
 #define ATM_ITFTYP_LEN	8	/* maximum length of interface type name */
 
+/*
+ * Loopback modes for ATM_{PHY,SAR}_{GET,SET}LOOP
+ */
+
+/* Point of loopback				CPU-->SAR-->PHY-->line--> ... */
+#define __ATM_LM_NONE	0	/* no loop back     ^     ^     ^      ^      */
+#define __ATM_LM_AAL	1	/* loop back PDUs --'     |     |      |      */
+#define __ATM_LM_ATM	2	/* loop back ATM cells ---'     |      |      */
+/* RESERVED		4	loop back on PHY side  ---'		      */
+#define __ATM_LM_PHY	8	/* loop back bits (digital) ----'      |      */
+#define __ATM_LM_ANALOG 16	/* loop back the analog signal --------'      */
+
+/* Direction of loopback */
+#define __ATM_LM_MKLOC(n)	((n))	    /* Local (i.e. loop TX to RX) */
+#define __ATM_LM_MKRMT(n)	((n) << 8)  /* Remote (i.e. loop RX to TX) */
+
+#define __ATM_LM_XTLOC(n)	((n) & 0xff)
+#define __ATM_LM_XTRMT(n)	(((n) >> 8) & 0xff)
+
+#define ATM_LM_NONE	0	/* no loopback */
+
+#define ATM_LM_LOC_AAL	__ATM_LM_MKLOC(__ATM_LM_AAL)
+#define ATM_LM_LOC_ATM	__ATM_LM_MKLOC(__ATM_LM_ATM)
+#define ATM_LM_LOC_PHY	__ATM_LM_MKLOC(__ATM_LM_PHY)
+#define ATM_LM_LOC_ANALOG __ATM_LM_MKLOC(__ATM_LM_ANALOG)
+
+#define ATM_LM_RMT_AAL	__ATM_LM_MKRMT(__ATM_LM_AAL)
+#define ATM_LM_RMT_ATM	__ATM_LM_MKRMT(__ATM_LM_ATM)
+#define ATM_LM_RMT_PHY	__ATM_LM_MKRMT(__ATM_LM_PHY)
+#define ATM_LM_RMT_ANALOG __ATM_LM_MKRMT(__ATM_LM_ANALOG)
+
+/*
+ * Note: ATM_LM_LOC_* and ATM_LM_RMT_* can be combined, provided that
+ * __ATM_LM_XTLOC(x) <= __ATM_LM_XTRMT(x)
+ */
 
 
 struct atm_iobuf {
@@ -132,7 +182,9 @@ struct atm_cirange {
     "SESSION",	"HASSAP",	"BOUND",	"CLOSE"
 
 
-#ifdef __KERNEL__
+#ifndef __KERNEL__
+#undef __AAL_STAT_ITEMS
+#else
 
 #include <linux/sched.h> /* wait_queue_head_t */
 #include <linux/time.h> /* struct timeval */
@@ -147,39 +199,56 @@ struct atm_cirange {
 #endif
 
 
-#define ATM_VF_ADDR	1	/* Address is in use. Set by anybody, cleared
+struct k_atm_aal_stats {
+#define __HANDLE_ITEM(i) atomic_t i
+	__AAL_STAT_ITEMS
+#undef __HANDLE_ITEM
+};
+
+
+struct k_atm_dev_stats {
+	struct k_atm_aal_stats aal0;
+	struct k_atm_aal_stats aal34;
+	struct k_atm_aal_stats aal5;
+};
+
+
+enum {
+	ATM_VF_ADDR,		/* Address is in use. Set by anybody, cleared
 				   by device driver. */
-#define ATM_VF_READY	2	/* VC is ready to transfer data. Set by device
+	ATM_VF_READY,		/* VC is ready to transfer data. Set by device
 				   driver, cleared by anybody. */
-#define ATM_VF_PARTIAL	4	/* resources are bound to PVC (partial PVC
+	ATM_VF_PARTIAL,		/* resources are bound to PVC (partial PVC
 				   setup), controlled by socket layer */
-#define ATM_VF_BOUND	16384	/* local SAP is set, controlled by SVC socket
-				   layer */
-#define ATM_VF_REGIS	8	/* registered with demon, controlled by SVC
+	ATM_VF_REGIS,		/* registered with demon, controlled by SVC
 				   socket layer */
-#define ATM_VF_RELEASED 16	/* demon has indicated/requested release,
+	ATM_VF_BOUND,		/* local SAP is set, controlled by SVC socket
+				   layer */
+	ATM_VF_RELEASED,	/* demon has indicated/requested release,
 				   controlled by SVC socket layer */
-#define ATM_VF_HASQOS	32	/* QOS parameters have been set */
-#define ATM_VF_LISTEN	64	/* socket is used for listening */
-#define ATM_VF_META	128	/* SVC socket isn't used for normal data
+	ATM_VF_HASQOS,		/* QOS parameters have been set */
+	ATM_VF_LISTEN,		/* socket is used for listening */
+	ATM_VF_META,		/* SVC socket isn't used for normal data
 				   traffic and doesn't depend on signaling
 				   to be available */
-				/*  256; unused */
-				/*  512; unused */
-				/* 1024; unused */
-				/* 2048; unused */
-#define ATM_VF_SESSION	4096	/* VCC is p2mp session control descriptor */
-#define ATM_VF_HASSAP	8192	/* SAP has been set */
-#define ATM_VF_CLOSE	32768	/* asynchronous close - treat like VF_RELEASED*/
+	ATM_VF_SESSION,		/* VCC is p2mp session control descriptor */
+	ATM_VF_HASSAP,		/* SAP has been set */
+	ATM_VF_CLOSE,		/* asynchronous close - treat like VF_RELEASED*/
+};
+
 
 #define ATM_VF2VS(flags) \
-    ((flags) & ATM_VF_READY ? ATM_VS_CONNECTED : \
-     (flags) & ATM_VF_RELEASED ? ATM_VS_CLOSING : \
-     (flags) & ATM_VF_LISTEN ? ATM_VS_LISTEN : \
-     (flags) & ATM_VF_REGIS ? ATM_VS_INUSE : \
-     (flags) & ATM_VF_BOUND ? ATM_VS_BOUND : ATM_VS_IDLE)
+    (test_bit(ATM_VF_READY,&(flags)) ? ATM_VS_CONNECTED : \
+     test_bit(ATM_VF_RELEASED,&(flags)) ? ATM_VS_CLOSING : \
+     test_bit(ATM_VF_LISTEN,&(flags)) ? ATM_VS_LISTEN : \
+     test_bit(ATM_VF_REGIS,&(flags)) ? ATM_VS_INUSE : \
+     test_bit(ATM_VF_BOUND,&(flags)) ? ATM_VS_BOUND : ATM_VS_IDLE)
 
-#define ATM_DF_CLOSE	1	/* close device when last VCC is closed */
+
+enum {
+	ATM_DF_CLOSE,		/* close device when last VCC is closed */
+};
+
 
 #define ATM_PHY_SIG_LOST    0	/* no carrier/light */
 #define ATM_PHY_SIG_UNKNOWN 1	/* carrier/light status is unknown */
@@ -188,8 +257,11 @@ struct atm_cirange {
 #define ATM_ATMOPT_CLP	1	/* set CLP bit */
 
 
+typedef struct { unsigned short bits; } atm_vcc_flags_t;
+
+
 struct atm_vcc {
-	unsigned short	flags;		/* VCC flags (ATM_VF_*) */
+	atm_vcc_flags_t flags;		/* VCC flags (ATM_VF_*) */
 	unsigned char	family;		/* address family; 0 if unused */
 	short		vpi;		/* VPI and VCI (types must be equal */
 					/* with sockaddr) */
@@ -207,11 +279,12 @@ struct atm_vcc {
 					/* modified by protocol or by driver.*/
 					/* NOTE: this interface will change */
 	int (*push_oam)(struct atm_vcc *vcc,void *cell);
+	int (*send)(struct atm_vcc *vcc,struct sk_buff *skb);
 	void		*dev_data;	/* per-device data */
 	void		*proto_data;	/* per-protocol data */
 	struct timeval	timestamp;	/* AAL timestamps */
 	struct sk_buff_head recvq;	/* receive queue */
-	struct atm_aal_stats *stats;	/* pointer to AAL stats group */
+	struct k_atm_aal_stats *stats;	/* pointer to AAL stats group */
 	wait_queue_head_t sleep;	/* if socket is busy */
 	wait_queue_head_t wsleep;	/* if waiting for write buffer space */
 	struct sock	*sk;		/* socket backpointer */
@@ -240,6 +313,9 @@ struct atm_dev_addr {
 };
 
 
+typedef struct { unsigned int bits; } atm_dev_flags_t;
+
+
 struct atm_dev {
 	const struct atmdev_ops *ops;	/* device operations; NULL if unused */
 	const struct atmphy_ops *phy;	/* PHY operations, may be undefined */
@@ -250,11 +326,11 @@ struct atm_dev {
 	struct atm_vcc	*last;		/* last VCC (or undefined) */
 	void		*dev_data;	/* per-device data */
 	void		*phy_data;	/* private PHY date */
-	unsigned long	flags;		/* device flags (ATM_DF_*) */
+	atm_dev_flags_t flags;		/* device flags (ATM_DF_*) */
 	struct atm_dev_addr *local;	/* local ATM addresses */
 	unsigned char	esi[ESI_LEN];	/* ESI ("MAC" addr) */
 	struct atm_cirange ci_range;	/* VPI/VCI range */
-	struct atm_dev_stats stats;	/* statistics */
+	struct k_atm_dev_stats stats;	/* statistics */
 	char		signal;		/* signal status (ATM_PHY_SIG_*) */
 	int		link_rate;	/* link rate (default: OC3) */
 #ifdef CONFIG_PROC_FS
@@ -307,6 +383,7 @@ struct atmphy_ops {
 	int (*start)(struct atm_dev *dev);
 	int (*ioctl)(struct atm_dev *dev,unsigned int cmd,void *arg);
 	void (*interrupt)(struct atm_dev *dev);
+	int (*stop)(struct atm_dev *dev);
 };
 
 struct atm_skb_data {
@@ -318,7 +395,7 @@ struct atm_skb_data {
 #define ATM_SKB(skb) (((struct atm_skb_data *) (skb)->cb))
 
 struct atm_dev *atm_dev_register(const char *type,const struct atmdev_ops *ops,
-    int number,unsigned long flags); /* number == -1: pick first available */
+    int number,atm_dev_flags_t *flags); /* number == -1: pick first available */
 struct atm_dev *atm_find_dev(int number);
 void atm_dev_deregister(struct atm_dev *dev);
 void shutdown_atm_dev(struct atm_dev *dev);

@@ -1,4 +1,4 @@
-/* $Id: page.h,v 1.32 2000/03/15 07:19:28 davem Exp $ */
+/* $Id: page.h,v 1.33 2000/03/22 02:48:04 davem Exp $ */
 
 #ifndef _SPARC64_PAGE_H
 #define _SPARC64_PAGE_H
@@ -96,8 +96,7 @@ typedef unsigned long iopgprot_t;
 
 #ifndef __ASSEMBLY__
 /* Do prdele, look what happens to be in %g4... */
-register unsigned long page_offset asm("g4");
-#define PAGE_OFFSET		page_offset
+register unsigned long PAGE_OFFSET asm("g4");
 #else
 #define PAGE_OFFSET		0xFFFFF80000000000
 #endif

@@ -6,6 +6,7 @@
 #include <linux/types.h>
 #include <linux/version.h>
 #include <linux/list.h>
+#include <asm/byteorder.h>
 
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0)
@@ -23,6 +24,8 @@ static __inline__ void list_add_tail(struct list_head *new, struct list_head *he
 {
         __list_add(new, head->prev, head);
 }
+
+#define __constant_cpu_to_be32(x) __constant_htonl((x))
 
 #endif
 

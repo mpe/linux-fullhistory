@@ -5,7 +5,7 @@
  *	Authors:
  *	Lennert Buytenhek		<buytenh@gnu.org>
  *
- *	$Id: br.c,v 1.39 2000/02/18 16:47:11 davem Exp $
+ *	$Id: br.c,v 1.40 2000/03/21 21:08:47 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -23,6 +23,10 @@
 #include <asm/uaccess.h>
 #include "br_private.h"
 
+#if defined(CONFIG_ATM_LANE) || defined(CONFIG_ATM_LANE_MODULE)
+#include "../atm/lec.h"
+#endif
+
 void br_dec_use_count()
 {
 	MOD_DEC_USE_COUNT;
@@ -39,6 +43,12 @@ static int __init br_init(void)
 
 	br_handle_frame_hook = br_handle_frame;
 	br_ioctl_hook = br_ioctl_deviceless_stub;
+#if defined(CONFIG_ATM_LANE) || defined(CONFIG_ATM_LANE_MODULE)
+	write_lock(&lane_bridge_hook_lock);
+	br_fdb_get_hook = br_fdb_get;
+	br_fdb_put_hook = br_fdb_put;
+	write_unlock(&lane_bridge_hook_lock);
+#endif
 	register_netdevice_notifier(&br_device_notifier);
 
 	return 0;
@@ -59,6 +69,12 @@ static void __exit br_deinit(void)
 	unregister_netdevice_notifier(&br_device_notifier);
 	br_call_ioctl_atomic(__br_clear_ioctl_hook);
 	net_call_rx_atomic(__br_clear_frame_hook);
+#if defined(CONFIG_ATM_LANE) || defined(CONFIG_ATM_LANE_MODULE)
+	write_lock(&lane_bridge_hook_lock);
+	br_fdb_get_hook = NULL;
+	br_fdb_put_hook = NULL;
+	write_unlock(&lane_bridge_hook_lock);
+#endif
 }
 
 EXPORT_NO_SYMBOLS;

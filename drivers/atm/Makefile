@@ -3,15 +3,15 @@
 # Makefile for the Linux network (ATM) device drivers.
 #
 
-L_TARGET := atm.a
-L_OBJS	 := atmdev_init.o
+O_TARGET := atm.o
+O_OBJS	 := atmdev_init.o
 M_OBJS	 :=
 MOD_LIST_NAME := ATM_MODULES
 
 include ../../.config
 
 ifeq ($(CONFIG_ATM_ENI),y)
-L_OBJS += eni.o
+O_OBJS += eni.o
 NEED_SUNI_LX = suni.o
 else
   ifeq ($(CONFIG_ATM_ENI),m)
@@ -21,8 +21,8 @@ else
 endif
 
 ifeq ($(CONFIG_ATM_ZATM),y)
-L_OBJS += zatm.o
-LX_OBJS += uPD98402.o
+O_OBJS += zatm.o
+OX_OBJS += uPD98402.o
 else
   ifeq ($(CONFIG_ATM_ZATM),m)
   M_OBJS += zatm.o
@@ -31,11 +31,11 @@ else
 endif
 
 ifeq ($(CONFIG_ATM_TNETA1570),y)
-L_OBJS += tneta1570.o suni.o
+O_OBJS += tneta1570.o suni.o
 endif
 
 ifeq ($(CONFIG_ATM_NICSTAR),y)
-L_OBJS += nicstar.o
+O_OBJS += nicstar.o
   ifeq ($(CONFIG_ATM_NICSTAR_USE_SUNI),y)
   NEED_SUNI_LX = suni.o
   endif
@@ -55,7 +55,7 @@ else
 endif
 
 ifeq ($(CONFIG_ATM_HORIZON),y)
-L_OBJS += horizon.o
+O_OBJS += horizon.o
 else
   ifeq ($(CONFIG_ATM_HORIZON),m)
   M_OBJS += horizon.o
@@ -63,7 +63,7 @@ else
 endif
 
 ifeq ($(CONFIG_ATM_AMBASSADOR),y)
-L_OBJS += ambassador.o
+O_OBJS += ambassador.o
 else
   ifeq ($(CONFIG_ATM_AMBASSADOR),m)
   M_OBJS += ambassador.o
@@ -71,7 +71,7 @@ else
 endif
 
 ifeq ($(CONFIG_ATM_TCP),y)
-L_OBJS += atmtcp.o
+O_OBJS += atmtcp.o
 else
   ifeq ($(CONFIG_ATM_TCP),m)
   M_OBJS += atmtcp.o
@@ -79,7 +79,7 @@ else
 endif
 
 ifeq ($(CONFIG_ATM_IA),y)
-L_OBJS += iphase.o
+O_OBJS += iphase.o
 NEED_SUNI_LX = suni.o
 else
 ifeq ($(CONFIG_ATM_IA),m)
@@ -91,13 +91,13 @@ endif
 ifeq ($(NEED_SUNI_LX),)
   MX_OBJS += $(NEED_SUNI_MX)
 else
-  LX_OBJS += $(NEED_SUNI_LX)
+  OX_OBJS += $(NEED_SUNI_LX)
 endif
 
 ifeq ($(NEED_IDT77105_LX),)
   MX_OBJS += $(NEED_IDT77105_MX)
 else
-  LX_OBJS += $(NEED_IDT77105_LX)
+  OX_OBJS += $(NEED_IDT77105_LX)
 endif
 
 ifeq ($(CONFIG_ATM_FORE200E_PCA),y)
@@ -114,7 +114,7 @@ FORE200E_FW_OBJS += fore200e_sba_fw.o
   endif
 endif
 ifeq ($(CONFIG_ATM_FORE200E),y)
-L_OBJS += fore200e.o $(FORE200E_FW_OBJS)
+O_OBJS += fore200e.o $(FORE200E_FW_OBJS)
 else
   ifeq ($(CONFIG_ATM_FORE200E),m)
   M_OBJS += fore_200e.o

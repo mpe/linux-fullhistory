@@ -1,12 +1,14 @@
 /* net/atm/atm_misc.c - Various functions for use by ATM drivers */
 
-/* Written 1995-1999 by Werner Almesberger, EPFL ICA */
+/* Written 1995-2000 by Werner Almesberger, EPFL ICA */
 
 
 #include <linux/module.h>
 #include <linux/atm.h>
 #include <linux/atmdev.h>
 #include <linux/skbuff.h>
+#include <linux/sonet.h>
+#include <linux/bitops.h>
 #include <asm/atomic.h>
 #include <asm/errno.h>
 
@@ -16,7 +18,7 @@ int atm_charge(struct atm_vcc *vcc,int truesize)
 	atm_force_charge(vcc,truesize);
 	if (atomic_read(&vcc->rx_inuse) <= vcc->sk->rcvbuf) return 1;
 	atm_return(vcc,truesize);
-	vcc->stats->rx_drop++;
+	atomic_inc(&vcc->stats->rx_drop);
 	return 0;
 }
 
@@ -36,7 +38,7 @@ struct sk_buff *atm_alloc_charge(struct atm_vcc *vcc,int pdu_size,
 		}
 	}
 	atm_return(vcc,guess);
-	vcc->stats->rx_drop++;
+	atomic_inc(&vcc->stats->rx_drop);
 	return NULL;
 }
 
@@ -46,7 +48,7 @@ static int check_ci(struct atm_vcc *vcc,short vpi,int vci)
 	struct atm_vcc *walk;
 
 	for (walk = vcc->dev->vccs; walk; walk = walk->next)
-		if ((walk->flags & ATM_VF_ADDR) && walk->vpi == vpi &&
+		if (test_bit(ATM_VF_ADDR,&walk->flags) && walk->vpi == vpi &&
 		    walk->vci == vci && ((walk->qos.txtp.traffic_class !=
 		    ATM_NONE && vcc->qos.txtp.traffic_class != ATM_NONE) ||
 		    (walk->qos.rxtp.traffic_class != ATM_NONE &&
@@ -135,7 +137,25 @@ int atm_pcr_goal(struct atm_trafprm *tp)
 }
 
 
+void sonet_copy_stats(struct k_sonet_stats *from,struct sonet_stats *to)
+{
+#define __HANDLE_ITEM(i) to->i = atomic_read(&from->i)
+	__SONET_ITEMS
+#undef __HANDLE_ITEM
+}
+
+
+void sonet_subtract_stats(struct k_sonet_stats *from,struct sonet_stats *to)
+{
+#define __HANDLE_ITEM(i) atomic_sub(to->i,&from->i)
+	__SONET_ITEMS
+#undef __HANDLE_ITEM
+}
+
+
 EXPORT_SYMBOL(atm_charge);
 EXPORT_SYMBOL(atm_alloc_charge);
 EXPORT_SYMBOL(atm_find_ci);
 EXPORT_SYMBOL(atm_pcr_goal);
+EXPORT_SYMBOL(sonet_copy_stats);
+EXPORT_SYMBOL(sonet_subtract_stats);

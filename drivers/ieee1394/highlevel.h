@@ -55,6 +55,13 @@ struct hpsb_highlevel_ops {
          * for channel/host combinations you did not request. */
         void (*iso_receive) (struct hpsb_host *host, int channel,
                              quadlet_t *data, unsigned int length);
+
+        /* A write request was received on either the FCP_COMMAND (direction =
+         * 0) or the FCP_RESPONSE (direction = 1) register.  The cts arg
+         * contains the cts field (first byte of data).
+         */
+        void (*fcp_request) (struct hpsb_host *host, int nodeid, int direction,
+                             int cts, u8 *data, unsigned int length);
 };
 
 struct hpsb_address_ops {
@@ -67,17 +74,17 @@ struct hpsb_address_ops {
          */
 
         /* These functions have to implement block reads for themselves. */
-        int (*read) (struct hpsb_host *host, quadlet_t *buffer, u64 addr,
-                     unsigned int length);
-        int (*write) (struct hpsb_host *host, quadlet_t *data, u64 addr,
-                      unsigned int length);
+        int (*read) (struct hpsb_host *host, int nodeid, quadlet_t *buffer,
+                     u64 addr, unsigned int length);
+        int (*write) (struct hpsb_host *host, int nodeid, quadlet_t *data,
+                      u64 addr, unsigned int length);
 
         /* Lock transactions: write results of ext_tcode operation into
          * *store. */
-        int (*lock) (struct hpsb_host *host, quadlet_t *store, u64 addr,
-                     quadlet_t data, quadlet_t arg, int ext_tcode);
-        int (*lock64) (struct hpsb_host *host, octlet_t *store, u64 addr,
-                       octlet_t data, octlet_t arg, int ext_tcode);
+        int (*lock) (struct hpsb_host *host, int nodeid, quadlet_t *store,
+                     u64 addr, quadlet_t data, quadlet_t arg, int ext_tcode);
+        int (*lock64) (struct hpsb_host *host, int nodeid, octlet_t *store,
+                       u64 addr, octlet_t data, octlet_t arg, int ext_tcode);
 };
 
 
@@ -87,17 +94,19 @@ void highlevel_add_host(struct hpsb_host *host);
 void highlevel_remove_host(struct hpsb_host *host);
 void highlevel_host_reset(struct hpsb_host *host);
 
-int highlevel_read(struct hpsb_host *host, quadlet_t *buffer, u64 addr,
-                   unsigned int length);
-int highlevel_write(struct hpsb_host *host, quadlet_t *data, u64 addr,
-                    unsigned int length);
-int highlevel_lock(struct hpsb_host *host, quadlet_t *store, u64 addr,
-                   quadlet_t data, quadlet_t arg, int ext_tcode);
-int highlevel_lock64(struct hpsb_host *host, octlet_t *store, u64 addr,
-                     octlet_t data, octlet_t arg, int ext_tcode);
+int highlevel_read(struct hpsb_host *host, int nodeid, quadlet_t *buffer,
+                   u64 addr, unsigned int length);
+int highlevel_write(struct hpsb_host *host, int nodeid, quadlet_t *data,
+                    u64 addr, unsigned int length);
+int highlevel_lock(struct hpsb_host *host, int nodeid, quadlet_t *store,
+                   u64 addr, quadlet_t data, quadlet_t arg, int ext_tcode);
+int highlevel_lock64(struct hpsb_host *host, int nodeid, octlet_t *store,
+                     u64 addr, octlet_t data, octlet_t arg, int ext_tcode);
 
 void highlevel_iso_receive(struct hpsb_host *host, quadlet_t *data,
                            unsigned int length);
+void highlevel_fcp_request(struct hpsb_host *host, int nodeid, int direction,
+                           u8 *data, unsigned int length);
 
 
 /*

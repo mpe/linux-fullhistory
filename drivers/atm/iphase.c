@@ -59,6 +59,7 @@
 #include <linux/init.h>  
 #include <asm/system.h>  
 #include <asm/io.h>  
+#include <asm/atomic.h>  
 #include <asm/uaccess.h>  
 #include <asm/string.h>  
 #include <asm/byteorder.h>  
@@ -68,7 +69,7 @@
 #include "suni.h"		  
 #define swap(x) (((x & 0xff) << 8) | ((x & 0xff00) >> 8))  
 struct suni_priv {
-        struct sonet_stats sonet_stats; /* link diagnostics */
+        struct k_sonet_stats sonet_stats; /* link diagnostics */
         unsigned char loop_mode;        /* loopback mode */
         struct atm_dev *dev;            /* device back-pointer */
         struct suni_priv *next;         /* next SUNI */
@@ -625,12 +626,12 @@ static int ia_que_tx (IADEV *iadev) {
    num_desc = ia_avail_descs(iadev);
    while (num_desc && (skb = skb_dequeue(&iadev->tx_backlog))) {
       if (!(vcc = ATM_SKB(skb)->vcc)) {
-         dev_kfree_skb(skb);
+         dev_kfree_skb_any(skb);
          printk("ia_que_tx: Null vcc\n");
          break;
       }
-      if ((vcc->flags & ATM_VF_READY) == 0 ) {
-         dev_kfree_skb(skb);
+      if (!test_bit(ATM_VF_READY,&vcc->flags)) {
+         dev_kfree_skb_any(skb);
          printk("Free the SKB on closed vci %d \n", vcc->vci);
          break;
       }
@@ -658,14 +659,14 @@ void ia_tx_poll (IADEV *iadev) {
        vcc = ATM_SKB(skb)->vcc;
        if (!vcc) {
            printk("ia_tx_poll: vcc is null\n");
-           dev_kfree_skb(skb);
+           dev_kfree_skb_any(skb);
            return;
        }
 
        iavcc = INPH_IA_VCC(vcc);
        if (!iavcc) {
            printk("ia_tx_poll: iavcc is null\n");
-           dev_kfree_skb(skb);
+           dev_kfree_skb_any(skb);
            return;
        }
 
@@ -682,7 +683,7 @@ void ia_tx_poll (IADEV *iadev) {
                                                           (long)skb1);)
           }
           else 
-             dev_kfree_skb(skb1);
+             dev_kfree_skb_any(skb1);
           skb1 = skb_dequeue(&iavcc->txing_skb);
        }                                                        
        if (!skb1) {
@@ -696,7 +697,7 @@ void ia_tx_poll (IADEV *iadev) {
           IF_EVENT(printk("Tx Done - skb 0x%lx return\n",(long)skb);)
        }
        else 
-          dev_kfree_skb(skb);
+          dev_kfree_skb_any(skb);
        kfree(rtne);
     }
     ia_que_tx(iadev);
@@ -1128,7 +1129,7 @@ static int rx_pkt(struct atm_dev *dev)
 	status = (u_short) (buf_desc_ptr->desc_mode);  
 	if (status & (RX_CER | RX_PTE | RX_OFL))  
 	{  
-                vcc->stats->rx_err++;
+                atomic_inc(&vcc->stats->rx_err);
 		IF_ERR(printk("IA: bad packet, dropping it");)  
                 if (status & RX_CER) { 
                     IF_ERR(printk(" cause: packet CRC error\n");)
@@ -1152,7 +1153,7 @@ static int rx_pkt(struct atm_dev *dev)
 	len = dma_addr - buf_addr;  
         if (len > iadev->rx_buf_sz) {
            printk("Over %d bytes sdu received, dropped!!!\n", iadev->rx_buf_sz);
-           vcc->stats->rx_err++;
+           atomic_inc(&vcc->stats->rx_err);
            free_desc(dev, desc); 
            return 0;
         }
@@ -1166,7 +1167,7 @@ static int rx_pkt(struct atm_dev *dev)
 	   if (!skb)  
 	   {  
               IF_ERR(printk("can't allocate memory for recv, drop pkt!\n");)  
-              vcc->stats->rx_drop++;
+              atomic_inc(&vcc->stats->rx_drop);
               atm_return(vcc, atm_pdu2truesize(len));
               free_desc(dev, desc); 
 	      return 0;  
@@ -1297,7 +1298,7 @@ static void rx_dle_intr(struct atm_dev *dev)
       if (!skb->len)  
       {  
           printk("rx_dle_intr: skb len 0\n");  
-	  dev_kfree_skb(skb);  
+	  dev_kfree_skb_any(skb);  
       }  
       else  
       {  
@@ -1308,15 +1309,15 @@ static void rx_dle_intr(struct atm_dev *dev)
           vcc = ATM_SKB(skb)->vcc;
 	  if (!vcc) {
 	      printk("IA: null vcc\n");  
-              vcc->stats->rx_err++;
-              dev_kfree_skb(skb);
+              atomic_inc(&vcc->stats->rx_err);
+              dev_kfree_skb_any(skb);
               goto INCR_DLE;
           }
           ia_vcc = INPH_IA_VCC(vcc);
           if (ia_vcc == NULL)
           {
-             vcc->stats->rx_err++;
-             dev_kfree_skb(skb);
+             atomic_inc(&vcc->stats->rx_err);
+             dev_kfree_skb_any(skb);
 #if LINUX_VERSION_CODE >= 0x20312
              atm_return(vcc, atm_guess_pdu2truesize(skb->len));
 #else
@@ -1331,8 +1332,8 @@ static void rx_dle_intr(struct atm_dev *dev)
           if ((length > iadev->rx_buf_sz) || (length > 
                               (skb->len - sizeof(struct cpcs_trailer))))
           {
-             vcc->stats->rx_err++;
-             dev_kfree_skb(skb);
+             atomic_inc(&vcc->stats->rx_err);
+             dev_kfree_skb_any(skb);
              IF_ERR(printk("rx_dle_intr: Bad  AAL5 trailer %d (skb len %d)", 
                                                             length, skb->len);)
 #if LINUX_VERSION_CODE >= 0x20312
@@ -1351,7 +1352,7 @@ static void rx_dle_intr(struct atm_dev *dev)
 
 	  IF_RX(printk("rx_dle_intr: skb push");)  
 	  vcc->push(vcc,skb);  
-	  vcc->stats->rx++;   
+	  atomic_inc(&vcc->stats->rx);
           iadev->rx_pkt_cnt++;
       }  
 INCR_DLE:
@@ -1710,13 +1711,13 @@ static void tx_dle_intr(struct atm_dev *dev)
             vcc = ATM_SKB(skb)->vcc;
             if (!vcc) {
                   printk("tx_dle_intr: vcc is null\n");
-                  dev_kfree_skb(skb);
+                  dev_kfree_skb_any(skb);
                   return;
             }
             iavcc = INPH_IA_VCC(vcc);
             if (!iavcc) {
                   printk("tx_dle_intr: iavcc is null\n");
-                  dev_kfree_skb(skb);
+                  dev_kfree_skb_any(skb);
                   return;
             }
             if (vcc->qos.txtp.pcr >= iadev->rate_limit) {
@@ -1725,7 +1726,7 @@ static void tx_dle_intr(struct atm_dev *dev)
                  vcc->pop(vcc, skb);
                } 
                else {
-                 dev_kfree_skb(skb);
+                 dev_kfree_skb_any(skb);
                }
             }
             else { /* Hold the rate-limited skb for flow control */
@@ -2601,7 +2602,7 @@ static void ia_close(struct atm_vcc *vcc)
 
         IF_EVENT(printk("ia_close: ia_vcc->vc_desc_cnt = %d  vci = %d\n", 
                                               ia_vcc->vc_desc_cnt,vcc->vci);)
-	vcc->flags &= ~ATM_VF_READY;  
+	clear_bit(ATM_VF_READY,&vcc->flags);
         skb_queue_head_init (&tmp_tx_backlog);
         skb_queue_head_init (&tmp_vcc_backlog); 
         if (vcc->qos.txtp.traffic_class != ATM_NONE) {
@@ -2611,7 +2612,7 @@ static void ia_close(struct atm_vcc *vcc)
            while((skb = skb_dequeue(&iadev->tx_backlog))) {
               if (ATM_SKB(skb)->vcc == vcc){ 
                  if (vcc->pop) vcc->pop(vcc, skb);
-                 else dev_kfree_skb(skb);
+                 else dev_kfree_skb_any(skb);
               }
               else 
                  skb_queue_tail(&tmp_tx_backlog, skb);
@@ -2669,7 +2670,7 @@ static void ia_close(struct atm_vcc *vcc)
 	kfree(INPH_IA_VCC(vcc));  
         ia_vcc = NULL;
         INPH_IA_VCC(vcc) = NULL;  
-        vcc->flags &= ~ATM_VF_ADDR;  
+        clear_bit(ATM_VF_ADDR,&vcc->flags);
         return;        
 }  
   
@@ -2678,7 +2679,7 @@ static int ia_open(struct atm_vcc *vcc, short vpi, int vci)
 	IADEV *iadev;  
 	struct ia_vcc *ia_vcc;  
 	int error;  
-	if (!(vcc->flags & ATM_VF_PARTIAL))  
+	if (!test_bit(ATM_VF_PARTIAL,&vcc->flags))  
 	{  
 		IF_EVENT(printk("ia: not partially allocated resources\n");)  
 		INPH_IA_VCC(vcc) = NULL;  
@@ -2695,7 +2696,7 @@ static int ia_open(struct atm_vcc *vcc, short vpi, int vci)
 	if (vci != ATM_VPI_UNSPEC && vpi != ATM_VCI_UNSPEC)  
 	{  
 		IF_EVENT(printk("iphase open: unspec part\n");)  
-		vcc->flags |= ATM_VF_ADDR;  
+		set_bit(ATM_VF_ADDR,&vcc->flags);
 	}  
 	if (vcc->qos.aal != ATM_AAL5)  
 		return -EINVAL;  
@@ -2721,7 +2722,7 @@ static int ia_open(struct atm_vcc *vcc, short vpi, int vci)
 		return error;  
 	}  
   
-	vcc->flags |= ATM_VF_READY;  
+	set_bit(ATM_VF_READY,&vcc->flags);
 
 #ifndef MODULE
         {
@@ -2749,7 +2750,7 @@ static int ia_change_qos(struct atm_vcc *vcc, struct atm_qos *qos, int flags)
   
 static int ia_ioctl(struct atm_dev *dev, unsigned int cmd, void *arg)  
 {  
-   PIA_CMDBUF ia_cmds;
+   IA_CMDBUF ia_cmds;
    IADEV *iadev;
    int i, board;
    u16 *tmps;
@@ -2757,34 +2758,37 @@ static int ia_ioctl(struct atm_dev *dev, unsigned int cmd, void *arg)
    if (cmd != IA_CMD) {
       if (!dev->phy->ioctl) return -EINVAL;
       return dev->phy->ioctl(dev,cmd,arg);
-   } 
-   ia_cmds	= (PIA_CMDBUF)arg;
-   board = ia_cmds->status;
+   }
+   if (copy_from_user(&ia_cmds, arg, sizeof ia_cmds)) return -EFAULT; 
+   board = ia_cmds.status;
    if ((board < 0) || (board > iadev_count))
          board = 0;    
    iadev = ia_dev[board];
-   switch (ia_cmds->cmd) {
+   switch (ia_cmds.cmd) {
    case MEMDUMP:
    {
-	switch (ia_cmds->sub_cmd) {
+	switch (ia_cmds.sub_cmd) {
        	  case MEMDUMP_DEV:     
-             memcpy((char*)ia_cmds->buf, (char*)iadev,
-                          			sizeof(IADEV));
-             ia_cmds->status = 0;
+	     if (!capable(CAP_NET_ADMIN)) return -EPERM;
+	     if (copy_to_user(ia_cmds.buf, iadev, sizeof(IADEV)))
+                return -EFAULT;
+             ia_cmds.status = 0;
              break;
           case MEMDUMP_SEGREG:
-             tmps = (u16 *)ia_cmds->buf;
+	     if (!capable(CAP_NET_ADMIN)) return -EPERM;
+             tmps = (u16 *)ia_cmds.buf;
              for(i=0; i<0x80; i+=2, tmps++)
-                *tmps = *(u16*)(iadev->seg_reg+i);
-             ia_cmds->status = 0;
-             ia_cmds->len = 0x80;
+                if(put_user(*(u16*)(iadev->seg_reg+i), tmps)) return -EFAULT;
+             ia_cmds.status = 0;
+             ia_cmds.len = 0x80;
              break;
           case MEMDUMP_REASSREG:
-             tmps = (u16 *)ia_cmds->buf;
+	     if (!capable(CAP_NET_ADMIN)) return -EPERM;
+             tmps = (u16 *)ia_cmds.buf;
              for(i=0; i<0x80; i+=2, tmps++)
-                *tmps = *(u16*)(iadev->reass_reg+i);
-             ia_cmds->status = 0;
-             ia_cmds->len = 0x80;
+                if(put_user(*(u16*)(iadev->reass_reg+i), tmps)) return -EFAULT;
+             ia_cmds.status = 0;
+             ia_cmds.len = 0x80;
              break;
           case MEMDUMP_FFL:
           {  
@@ -2792,6 +2796,7 @@ static int ia_ioctl(struct atm_dev *dev, unsigned int cmd, void *arg)
              ffredn_t        *ffL = &regs_local.ffredn;
              rfredn_t        *rfL = &regs_local.rfredn;
                      
+	     if (!capable(CAP_NET_ADMIN)) return -EPERM;
              /* Copy real rfred registers into the local copy */
  	     for (i=0; i<(sizeof (rfredn_t))/4; i++)
                 ((u_int *)rfL)[i] = ((u_int *)iadev->reass_reg)[i] & 0xffff;
@@ -2799,63 +2804,67 @@ static int ia_ioctl(struct atm_dev *dev, unsigned int cmd, void *arg)
 	     for (i=0; i<(sizeof (ffredn_t))/4; i++)
                 ((u_int *)ffL)[i] = ((u_int *)iadev->seg_reg)[i] & 0xffff;
 
-             memcpy((char*)ia_cmds->buf,(char*)&regs_local,sizeof(ia_regs_t));
+             if (copy_to_user(ia_cmds.buf, &regs_local,sizeof(ia_regs_t)))
+                return -EFAULT;
              printk("Board %d registers dumped\n", board);
-             ia_cmds->status = 0;                  
+             ia_cmds.status = 0;                  
 	 }	
     	     break;        
          case READ_REG:
          {  
+	     if (!capable(CAP_NET_ADMIN)) return -EPERM;
              desc_dbg(iadev); 
-             ia_cmds->status = 0; 
+             ia_cmds.status = 0; 
          }
              break;
          case 0x6:
          {  
-             ia_cmds->status = 0; 
+             ia_cmds.status = 0; 
              printk("skb = 0x%lx\n", (long)skb_peek(&iadev->tx_backlog));
              printk("rtn_q: 0x%lx\n",(long)ia_deque_rtn_q(&iadev->tx_return_q));
          }
              break;
          case 0x8:
          {
-             struct sonet_stats *stats;
+             struct k_sonet_stats *stats;
              stats = &PRIV(_ia_dev[board])->sonet_stats;
-             printk("section_bip: %d\n", stats->section_bip);
-             printk("line_bip   : %d\n", stats->line_bip);
-             printk("path_bip   : %d\n", stats->path_bip);
-             printk("line_febe  : %d\n", stats->line_febe);
-             printk("path_febe  : %d\n", stats->path_febe);
-             printk("corr_hcs   : %d\n", stats->corr_hcs);
-             printk("uncorr_hcs : %d\n", stats->uncorr_hcs);
-             printk("tx_cells   : %d\n", stats->tx_cells);
-             printk("rx_cells   : %d\n", stats->rx_cells);
+             printk("section_bip: %d\n", atomic_read(&stats->section_bip));
+             printk("line_bip   : %d\n", atomic_read(&stats->line_bip));
+             printk("path_bip   : %d\n", atomic_read(&stats->path_bip));
+             printk("line_febe  : %d\n", atomic_read(&stats->line_febe));
+             printk("path_febe  : %d\n", atomic_read(&stats->path_febe));
+             printk("corr_hcs   : %d\n", atomic_read(&stats->corr_hcs));
+             printk("uncorr_hcs : %d\n", atomic_read(&stats->uncorr_hcs));
+             printk("tx_cells   : %d\n", atomic_read(&stats->tx_cells));
+             printk("rx_cells   : %d\n", atomic_read(&stats->rx_cells));
          }
-            ia_cmds->status = 0;
+            ia_cmds.status = 0;
             break;
          case 0x9:
+	    if (!capable(CAP_NET_ADMIN)) return -EPERM;
             for (i = 1; i <= iadev->num_rx_desc; i++)
                free_desc(_ia_dev[board], i);
             writew( ~(RX_FREEQ_EMPT | RX_EXCP_RCVD), 
                                             iadev->reass_reg+REASS_MASK_REG);
             iadev->rxing = 1;
             
-            ia_cmds->status = 0;
+            ia_cmds.status = 0;
             break;
 
          case 0xb:
+	    if (!capable(CAP_NET_ADMIN)) return -EPERM;
             IaFrontEndIntr(iadev);
             break;
          case 0xa:
+	    if (!capable(CAP_NET_ADMIN)) return -EPERM;
          {  
-             ia_cmds->status = 0; 
-             IADebugFlag = ia_cmds->maddr;
+             ia_cmds.status = 0; 
+             IADebugFlag = ia_cmds.maddr;
              printk("New debug option loaded\n");
          }
              break;
          default:
-             memcpy((char*)ia_cmds->buf, (char*)ia_cmds->maddr, ia_cmds->len);
-             ia_cmds->status = 0;
+             ia_cmds.status = 0;
              break;
       }	
    }
@@ -2896,7 +2905,7 @@ static int ia_pkt_tx (struct atm_vcc *vcc, struct sk_buff *skb) {
         if (!iavcc->txing) {
            printk("discard packet on closed VC\n");
            if (vcc->pop) vcc->pop(vcc, skb);
-           else dev_kfree_skb(skb);
+           else dev_kfree_skb_any(skb);
         }
 
         if (skb->len > iadev->tx_buf_sz - 8) {
@@ -2904,7 +2913,7 @@ static int ia_pkt_tx (struct atm_vcc *vcc, struct sk_buff *skb) {
            if (vcc->pop)
                  vcc->pop(vcc, skb);
            else
-                 dev_kfree_skb(skb);
+                 dev_kfree_skb_any(skb);
           return 0;
         }
         if ((u32)skb->data & 3) {
@@ -2912,7 +2921,7 @@ static int ia_pkt_tx (struct atm_vcc *vcc, struct sk_buff *skb) {
            if (vcc->pop)
                  vcc->pop(vcc, skb);
            else
-                 dev_kfree_skb(skb);
+                 dev_kfree_skb_any(skb);
            return 0;
         }       
 	/* Get a descriptor number from our free descriptor queue  
@@ -2929,11 +2938,11 @@ static int ia_pkt_tx (struct atm_vcc *vcc, struct sk_buff *skb) {
 	if ((desc == 0) || (desc > iadev->num_tx_desc))  
 	{  
 		IF_ERR(printk(DEV_LABEL "invalid desc for send: %d\n", desc);) 
-                vcc->stats->tx++;
+                atomic_inc(&vcc->stats->tx);
 		if (vcc->pop)   
 		    vcc->pop(vcc, skb);   
 		else  
-		    dev_kfree_skb(skb);
+		    dev_kfree_skb_any(skb);
 		return 0;   /* return SUCCESS */
 	}  
   
@@ -3038,14 +3047,14 @@ static int ia_pkt_tx (struct atm_vcc *vcc, struct sk_buff *skb) {
         ATM_DESC(skb) = vcc->vci;
         skb_queue_tail(&iadev->tx_dma_q, skb);
 
-        vcc->stats->tx++;
+        atomic_inc(&vcc->stats->tx);
         iadev->tx_pkt_cnt++;
 	/* Increment transaction counter */  
 	writel(2, iadev->dma+IPHASE5575_TX_COUNTER);  
         
 #if 0        
         /* add flow control logic */ 
-        if (vcc->stats->tx % 20 == 0) {
+        if (atomic_read(&vcc->stats->tx) % 20 == 0) {
           if (iavcc->vc_desc_cnt > 10) {
              vcc->tx_quota =  vcc->tx_quota * 3 / 4;
             printk("Tx1:  vcc->tx_quota = %d \n", (u32)vcc->tx_quota );
@@ -3074,12 +3083,12 @@ static int ia_send(struct atm_vcc *vcc, struct sk_buff *skb)
         {
             if (!skb)
                 printk(KERN_CRIT "null skb in ia_send\n");
-            else dev_kfree_skb(skb);
+            else dev_kfree_skb_any(skb);
             return -EINVAL;
         }                         
         spin_lock_irqsave(&iadev->tx_lock, flags); 
-        if ((vcc->flags & ATM_VF_READY) == 0){ 
-            dev_kfree_skb(skb);
+        if (!test_bit(ATM_VF_READY,&vcc->flags)){ 
+            dev_kfree_skb_any(skb);
             spin_unlock_irqrestore(&iadev->tx_lock, flags);
             return -EINVAL; 
         }
@@ -3197,7 +3206,7 @@ __initfunc(int ia_detect(void))
 		IF_INIT(printk("ia detected at bus:%d dev: %d function:%d\n",
                      iadev->pci->bus->number, PCI_SLOT(iadev->pci->devfn), 
                                                  PCI_FUNC(iadev->pci->devfn));)  
-		dev = atm_dev_register(DEV_LABEL, &ops, -1, 0);   
+		dev = atm_dev_register(DEV_LABEL, &ops, -1, NULL);
 		if (!dev) break;  
 		IF_INIT(printk(DEV_LABEL "registered at (itf :%d)\n", 
                                                              dev->number);)  

@@ -48,8 +48,6 @@
  */
 /*#define BROKEN_MOUSE*/
 
-extern int sun_mouse_init(void);
-
 struct busmouse_data {
 	struct miscdevice	miscdev;
 	struct busmouse		*ops;
@@ -446,27 +444,8 @@ fail:
 	return err;
 }
 
-int __init bus_mouse_init(void)
-{
-#ifdef CONFIG_SUN_MOUSE
-	sun_mouse_init();
-#endif
-	return 0;
-}
-
 EXPORT_SYMBOL(busmouse_add_movementbuttons);
 EXPORT_SYMBOL(busmouse_add_movement);
 EXPORT_SYMBOL(busmouse_add_buttons);
 EXPORT_SYMBOL(register_busmouse);
 EXPORT_SYMBOL(unregister_busmouse);
-
-#ifdef MODULE
-int init_module(void)
-{
-	return bus_mouse_init();
-}
-
-void cleanup_module(void)
-{
-}
-#endif

@@ -2,11 +2,12 @@
  * IEEE 1394 for Linux
  *
  * Core support: hpsb_packet management, packet handling and forwarding to
- *               csr or lowlevel code
+ *               highlevel or lowlevel code
  *
  * Copyright (C) 1999, 2000 Andreas E. Bombe
  */
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/string.h>
@@ -62,7 +63,7 @@ struct hpsb_packet *alloc_hpsb_packet(size_t data_size)
         packet->header = header;
 
         if (data_size) {
-                data = kmalloc(data_size + 4, kmflags);
+                data = kmalloc(data_size + 8, kmflags);
                 if (data == NULL) {
                         kfree(header);
                         kfree(packet);
@@ -70,18 +71,14 @@ struct hpsb_packet *alloc_hpsb_packet(size_t data_size)
                 }
 
                 packet->data = data;
-                packet->data_size = data_size - 4;
+                packet->data_size = data_size;
         }
 
         INIT_LIST_HEAD(&packet->list);
         sema_init(&packet->state_change, 0);
         packet->state = unused;
         packet->generation = get_hpsb_generation();
-
-#ifdef __BIG_ENDIAN
-        /* set default */
         packet->data_be = 1;
-#endif
 
         return packet;
 }
@@ -133,59 +130,55 @@ static int check_selfids(struct hpsb_host *host, unsigned int num_of_selfids)
 {
         int nodeid = -1;
         int rest_of_selfids = num_of_selfids;
-        quadlet_t *sidp = host->topology_map;
-        quadlet_t sid = *sidp;
+        struct selfid *sid = (struct selfid *)host->topology_map;
+        struct ext_selfid *esid;
         int esid_seq = 23;
-        int i;
 
         while (rest_of_selfids--) {
-                sid = *(sidp++);
-
-                if (!(sid & 0x00800000) /* !extended */) {
+                if (!sid->extended) {
                         nodeid++;
                         esid_seq = 0;
-
-                        if (((sid >> 24) & NODE_MASK) != nodeid) {
+                        
+                        if (sid->phy_id != nodeid) {
                                 HPSB_INFO("SelfIDs failed monotony check with "
-                                          "%d", (sid >> 24) & NODE_MASK);
+                                          "%d", sid->phy_id);
                                 return 0;
                         }
-
-                        /* "if is contender and link active" */
-                        if ((sid & (1<<11)) && (sid & (1<<22))) {
-                                host->irm_id = LOCAL_BUS | ((sid >> 24) 
-                                                            & NODE_MASK);
+                        
+                        if (sid->contender && sid->link_active) {
+                                host->irm_id = LOCAL_BUS | sid->phy_id;
                         }
                 } else {
-                        if ((((sid >> 24) & NODE_MASK) != nodeid)
-                            || (((sid >> 20) & 0x7) != esid_seq)) {
+                        esid = (struct ext_selfid *)sid;
+
+                        if ((esid->phy_id != nodeid) 
+                            || (esid->seq_nr != esid_seq)) {
                                 HPSB_INFO("SelfIDs failed monotony check with "
-                                          "%d/%d", (sid >> 24) & NODE_MASK,
-                                          (sid >> 20) & 0x7);
+                                          "%d/%d", esid->phy_id, esid->seq_nr);
                                 return 0;
                         }
                         esid_seq++;
                 }
+                sid++;
         }
-
-        sidp--;
-        while (sid & 0x00800000 /* extended */) {
-                /* check that no ports go to a parent */
-                for (i = 2; i < 18; i += 2) {
-                        if ((sid & (0x3 << i)) == (0x2 << i)) {
+        
+        esid = (struct ext_selfid *)(sid - 1);
+        while (esid->extended) {
+                if ((esid->porta == 0x2) || (esid->portb == 0x2)
+                    || (esid->portc == 0x2) || (esid->portd == 0x2)
+                    || (esid->porte == 0x2) || (esid->portf == 0x2)
+                    || (esid->portg == 0x2) || (esid->porth == 0x2)) {
                                 HPSB_INFO("SelfIDs failed root check on "
                                           "extended SelfID");
                                 return 0;
-                        }
                 }
-                sid = *(sidp--);
+                esid--;
         }
 
-        for (i = 2; i < 8; i += 2) {
-                if ((sid & (0x3 << i)) == (0x2 << i)) {
+        sid = (struct selfid *)esid;
+        if ((sid->port0 == 0x2) || (sid->port1 == 0x2) || (sid->port2 == 0x2)) {
                         HPSB_INFO("SelfIDs failed root check");
                         return 0;
-                }
         }
 
         return nodeid + 1;
@@ -196,7 +189,8 @@ static void build_speed_map(struct hpsb_host *host, int nodecount)
         char speedcap[nodecount];
         char cldcnt[nodecount];
         u8 *map = host->speed_map;
-        quadlet_t *sidp;
+        struct selfid *sid;
+        struct ext_selfid *esid;
         int i, j, n;
 
         for (i = 0; i < (nodecount * 64); i += 64) {
@@ -210,22 +204,26 @@ static void build_speed_map(struct hpsb_host *host, int nodecount)
         }
 
         /* find direct children count and speed */
-        for (sidp = &host->topology_map[host->selfid_count-1],
+        for (sid = (struct selfid *)&host->topology_map[host->selfid_count-1],
                      n = nodecount - 1;
-             sidp >= host->topology_map; sidp--) {
-                if (*sidp & 0x00800000 /* extended */) {
-                        for (i = 2; i < 18; i += 2) {
-                                if ((*sidp & (0x3 << i)) == (0x3 << i)) {
-                                        cldcnt[n]++;
-                                }
-                        }
+             (void *)sid >= (void *)host->topology_map; sid--) {
+                if (sid->extended) {
+                        esid = (struct ext_selfid *)sid;
+
+                        if (esid->porta == 0x3) cldcnt[n]++;
+                        if (esid->portb == 0x3) cldcnt[n]++;
+                        if (esid->portc == 0x3) cldcnt[n]++;
+                        if (esid->portd == 0x3) cldcnt[n]++;
+                        if (esid->porte == 0x3) cldcnt[n]++;
+                        if (esid->portf == 0x3) cldcnt[n]++;
+                        if (esid->portg == 0x3) cldcnt[n]++;
+                        if (esid->porth == 0x3) cldcnt[n]++;
                 } else {
-                        for (i = 2; i < 8; i += 2) {
-                                if ((*sidp & (0x3 << i)) == (0x3 << i)) {
-                                        cldcnt[n]++;
-                                }
-                        }
-                        speedcap[n] = (*sidp >> 14) & 0x3;
+                        if (sid->port0 == 0x3) cldcnt[n]++;
+                        if (sid->port1 == 0x3) cldcnt[n]++;
+                        if (sid->port2 == 0x3) cldcnt[n]++;
+
+                        speedcap[n] = sid->speed;
                         n--;
                 }
         }
@@ -262,7 +260,7 @@ static void build_speed_map(struct hpsb_host *host, int nodecount)
 void hpsb_selfid_received(struct hpsb_host *host, quadlet_t sid)
 {
         if (host->in_bus_reset) {
-                printk("including selfid 0x%x\n", sid);
+                HPSB_DEBUG("including selfid 0x%x", sid);
                 host->topology_map[host->selfid_count++] = sid;
         } else {
                 /* FIXME - info on which host */
@@ -293,7 +291,12 @@ void hpsb_selfid_complete(struct hpsb_host *host, int phyid, int isroot)
         }
 
         /* irm_id is kept up to date by check_selfids() */
-        host->is_irm = (host->irm_id == host->node_id);
+        if (host->irm_id == host->node_id) {
+                host->is_irm = 1;
+                host->is_busmgr = 1;
+                host->busmgr_id = host->node_id;
+                host->csr.bus_manager_id = host->node_id;
+        }
 
         host->reset_retries = 0;
         inc_hpsb_generation();
@@ -346,6 +349,7 @@ int hpsb_send_packet(struct hpsb_packet *packet)
         packet->speed_code = host->speed_map[(host->node_id & NODE_MASK) * 64
                                             + (packet->node_id & NODE_MASK)];
 
+#ifdef CONFIG_IEEE1394_VERBOSEDEBUG
         switch (packet->speed_code) {
         case 2:
                 dump_packet("send packet 400:", packet->header,
@@ -359,6 +363,7 @@ int hpsb_send_packet(struct hpsb_packet *packet)
                 dump_packet("send packet 100:", packet->header,
                             packet->header_size);
         }
+#endif
 
         return host->template->transmit_packet(host, packet);
 }
@@ -459,18 +464,24 @@ struct hpsb_packet *create_reply_packet(struct hpsb_host *host, quadlet_t *data,
 {
         struct hpsb_packet *p;
 
+        dsize += (dsize % 4 ? 4 - (dsize % 4) : 0);
+
         p = alloc_hpsb_packet(dsize);
         if (p == NULL) {
                 /* FIXME - send data_error response */
                 return NULL;
         }
-                
+
         p->type = async;
         p->state = unused;
         p->host = host;
         p->node_id = data[1] >> 16;
         p->tlabel = (data[0] >> 10) & 0x3f;
         p->no_waiter = 1;
+
+        if (dsize % 4) {
+                p->data[dsize / 4] = 0;
+        }
 
         return p;
 }
@@ -479,21 +490,12 @@ struct hpsb_packet *create_reply_packet(struct hpsb_host *host, quadlet_t *data,
                 packet = create_reply_packet(host, data, length); \
                 if (packet == NULL) break
 
-inline void swap_quadlets_on_le(quadlet_t *q)
-{
-#ifdef __LITTLE_ENDIAN
-        quadlet_t saved = q[0];
-        q[0] = q[1];
-        q[1] = saved;
-#endif
-}
-
-
 void handle_incoming_packet(struct hpsb_host *host, int tcode, quadlet_t *data,
                             size_t size)
 {
         struct hpsb_packet *packet;
         int length, rcode, extcode;
+        int source = data[1] >> 16;
         u64 addr;
 
         /* big FIXME - no error checking is done for an out of bounds length */
@@ -501,7 +503,7 @@ void handle_incoming_packet(struct hpsb_host *host, int tcode, quadlet_t *data,
         switch (tcode) {
         case TCODE_WRITEQ:
                 addr = (((u64)(data[1] & 0xffff)) << 32) | data[2];
-                rcode = highlevel_write(host, data+3, addr, 4);
+                rcode = highlevel_write(host, source, data+3, addr, 4);
 
                 if (((data[0] >> 16) & NODE_MASK) != NODE_MASK) {
                         /* not a broadcast write, reply */
@@ -513,7 +515,8 @@ void handle_incoming_packet(struct hpsb_host *host, int tcode, quadlet_t *data,
 
         case TCODE_WRITEB:
                 addr = (((u64)(data[1] & 0xffff)) << 32) | data[2];
-                rcode = highlevel_write(host, data+4, addr, data[3]>>16);
+                rcode = highlevel_write(host, source, data+4, addr,
+                                        data[3]>>16);
 
                 if (((data[0] >> 16) & NODE_MASK) != NODE_MASK) {
                         /* not a broadcast write, reply */
@@ -527,7 +530,7 @@ void handle_incoming_packet(struct hpsb_host *host, int tcode, quadlet_t *data,
                 PREP_REPLY_PACKET(0);
 
                 addr = (((u64)(data[1] & 0xffff)) << 32) | data[2];
-                rcode = highlevel_read(host, data, addr, 4);
+                rcode = highlevel_read(host, source, data, addr, 4);
                 fill_async_readquad_resp(packet, rcode, *data);
                 send_packet_nocare(packet);
                 break;
@@ -537,7 +540,8 @@ void handle_incoming_packet(struct hpsb_host *host, int tcode, quadlet_t *data,
                 PREP_REPLY_PACKET(length);
 
                 addr = (((u64)(data[1] & 0xffff)) << 32) | data[2];
-                rcode = highlevel_read(host, packet->data, addr, length);
+                rcode = highlevel_read(host, source, packet->data, addr,
+                                       length);
                 fill_async_readblock_resp(packet, rcode, length);
                 send_packet_nocare(packet);
                 break;
@@ -556,35 +560,32 @@ void handle_incoming_packet(struct hpsb_host *host, int tcode, quadlet_t *data,
 
                 switch (length) {
                 case 4:
-                        rcode = highlevel_lock(host, packet->data, addr, 
+                        rcode = highlevel_lock(host, source, packet->data, addr,
                                                data[4], 0, extcode);
                         fill_async_lock_resp(packet, rcode, extcode, 4);
                         break;
                 case 8:
                         if ((extcode != EXTCODE_FETCH_ADD) 
                             && (extcode != EXTCODE_LITTLE_ADD)) {
-                                rcode = highlevel_lock(host, packet->data, addr,
+                                rcode = highlevel_lock(host, source,
+                                                       packet->data, addr,
                                                        data[5], data[4], 
                                                        extcode);
                                 fill_async_lock_resp(packet, rcode, extcode, 4);
                         } else {
-                                swap_quadlets_on_le(data + 4);
-                                rcode = highlevel_lock64(host,
+                                rcode = highlevel_lock64(host, source,
                                              (octlet_t *)packet->data, addr,
                                              *(octlet_t *)(data + 4), 0ULL,
                                              extcode);
-                                swap_quadlets_on_le(packet->data);
                                 fill_async_lock_resp(packet, rcode, extcode, 8);
                         }
                         break;
                 case 16:
-                        swap_quadlets_on_le(data + 4);
-                        swap_quadlets_on_le(data + 6);
-                        rcode = highlevel_lock64(host, (octlet_t *)packet->data,
-                                                 addr, *(octlet_t *)(data + 6),
+                        rcode = highlevel_lock64(host, source,
+                                                 (octlet_t *)packet->data, addr,
+                                                 *(octlet_t *)(data + 6),
                                                  *(octlet_t *)(data + 4), 
                                                  extcode);
-                        swap_quadlets_on_le(packet->data);
                         fill_async_lock_resp(packet, rcode, extcode, 8);
                         break;
                 default:
@@ -609,7 +610,9 @@ void hpsb_packet_received(struct hpsb_host *host, quadlet_t *data, size_t size)
                 return;
         }
 
+#ifdef CONFIG_IEEE1394_VERBOSEDEBUG
         dump_packet("received packet:", data, size);
+#endif
 
         tcode = (data[0] >> 4) & 0xf;
 

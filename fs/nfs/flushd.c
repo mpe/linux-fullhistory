@@ -22,6 +22,7 @@
  * Copyright (C) 1999, 2000, Trond Myklebust <trond.myklebust@fys.uio.no>
  */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/malloc.h>
 #include <linux/pagemap.h>

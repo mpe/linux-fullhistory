@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.139 2000/03/16 20:37:57 davem Exp $
+/* $Id: sys_sparc32.c,v 1.140 2000/03/22 02:44:35 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -3634,7 +3634,7 @@ struct nfsctl_arg32 {
 
 union nfsctl_res32 {
 	__u8			cr32_getfh[NFS_FHSIZE];
-	u32			cr32_debug;
+	struct knfsd_fh		cr32_getfs;
 };
 
 static int nfs_svc32_trans(struct nfsctl_arg *karg, struct nfsctl_arg32 *arg32)
@@ -3760,15 +3760,12 @@ static int nfs_getfh32_trans(struct nfsctl_arg *karg, struct nfsctl_arg32 *arg32
 	return err;
 }
 
+/* This really doesn't need translations, we are only passing
+ * back a union which contains opaque nfs file handle data.
+ */
 static int nfs_getfh32_res_trans(union nfsctl_res *kres, union nfsctl_res32 *res32)
 {
-	int err;
-	
-	err = copy_to_user(&res32->cr32_getfh,
-			&kres->cr_getfh,
-			sizeof(res32->cr32_getfh));
-	err |= __put_user(kres->cr_debug, &res32->cr32_debug);
-	return err;
+	return copy_to_user(res32, kres, sizeof(*res32));
 }
 
 extern asmlinkage int sys_nfsservctl(int cmd, void *arg, void *resp);

@@ -63,4 +63,103 @@
 #define SELFID_PORT_NCONN        0x1
 #define SELFID_PORT_NONE         0x0   
 
+
+#include <asm/byteorder.h>
+
+#ifdef __BIG_ENDIAN_BITFIELD
+
+struct selfid {
+        u32 packet_identifier:2; /* always binary 10 */
+        u32 phy_id:6;
+        /* byte */
+        u32 extended:1; /* if true is struct ext_selfid */
+        u32 link_active:1;
+        u32 gap_count:6;
+        /* byte */
+        u32 speed:2;
+        u32 phy_delay:2;
+        u32 contender:1;
+        u32 power_class:3;
+        /* byte */
+        u32 port0:2;
+        u32 port1:2;
+        u32 port2:2;
+        u32 initiated_reset:1;
+        u32 more_packets:1;
+} __attribute__((packed));
+
+struct ext_selfid {
+        u32 packet_identifier:2; /* always binary 10 */
+        u32 phy_id:6;
+        /* byte */
+        u32 extended:1; /* if false is struct selfid */
+        u32 seq_nr:3;
+        u32 reserved:2;
+        u32 porta:2;
+        /* byte */
+        u32 portb:2;
+        u32 portc:2;
+        u32 portd:2;
+        u32 porte:2;
+        /* byte */
+        u32 portf:2;
+        u32 portg:2;
+        u32 porth:2;
+        u32 reserved2:1;
+        u32 more_packets:1;
+} __attribute__((packed));
+
+#elif defined __LITTLE_ENDIAN_BITFIELD /* __BIG_ENDIAN_BITFIELD */
+
+/*
+ * Note: these mean to be bit fields of a big endian SelfID as seen on a little
+ * endian machine.
+ */
+
+struct selfid {
+        u32 phy_id:6;
+        u32 packet_identifier:2; /* always binary 10 */
+        /* byte */
+        u32 gap_count:6;
+        u32 link_active:1;
+        u32 extended:1; /* if true is struct ext_selfid */
+        /* byte */
+        u32 power_class:3;
+        u32 contender:1;
+        u32 phy_delay:2;
+        u32 speed:2;
+        /* byte */
+        u32 more_packets:1;
+        u32 initiated_reset:1;
+        u32 port2:2;
+        u32 port1:2;
+        u32 port0:2;
+} __attribute__((packed));
+
+struct ext_selfid {
+        u32 phy_id:6;
+        u32 packet_identifier:2; /* always binary 10 */
+        /* byte */
+        u32 porta:2;
+        u32 reserved:2;
+        u32 seq_nr:3;
+        u32 extended:1; /* if false is struct selfid */
+        /* byte */
+        u32 porte:2;
+        u32 portd:2;
+        u32 portc:2;
+        u32 portb:2;
+        /* byte */
+        u32 more_packets:1;
+        u32 reserved2:1;
+        u32 porth:2;
+        u32 portg:2;
+        u32 portf:2;
+} __attribute__((packed));
+
+#else
+#error What? PDP endian?
+#endif /* __BIG_ENDIAN_BITFIELD */
+
+
 #endif /* _IEEE1394_IEEE1394_H */

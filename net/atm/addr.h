@@ -1,6 +1,6 @@
 /* net/atm/addr.h - Local ATM address registry */
 
-/* Written 1995-1999 by Werner Almesberger, EPFL LRC/ICA */
+/* Written 1995-2000 by Werner Almesberger, EPFL LRC/ICA */
 
 
 #ifndef NET_ATM_ADDR_H
@@ -14,6 +14,5 @@ void reset_addr(struct atm_dev *dev);
 int add_addr(struct atm_dev *dev,struct sockaddr_atmsvc *addr);
 int del_addr(struct atm_dev *dev,struct sockaddr_atmsvc *addr);
 int get_addr(struct atm_dev *dev,struct sockaddr_atmsvc *u_buf,int size);
-void init_addr(void);
 
 #endif

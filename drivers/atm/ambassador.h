@@ -237,8 +237,6 @@
 #define FP_155_RATE	0x24b1
 #define FP_25_RATE	0x1f9d
 
-#define AMB_RESET       0x40
-
 /* #define VERSION_NUMBER 0x01000000 // initial release */
 /* #define VERSION_NUMBER 0x01010000 // fixed startup probs PLX MB0 not cleared */
 /* #define VERSION_NUMBER 0x01020000 // changed SUNI reset timings; allowed r/w onchip */
@@ -333,9 +331,10 @@ typedef struct {
   u32 reset_control;
 } amb_mem;
 
-/* IRQ (card to host) and doorbell (host to card) enable bits */
-#define AMB_INTERRUPT_BITS 0x00030000
-#define AMB_DOORBELL_BITS  0x00000300
+/* RESET bit, IRQ (card to host) and doorbell (host to card) enable bits */
+#define AMB_RESET_BITS	   0x40000000
+#define AMB_INTERRUPT_BITS 0x00000300
+#define AMB_DOORBELL_BITS  0x00030000
 
 /* loader commands */
 
@@ -543,14 +542,19 @@ typedef enum {
   ( (current)+1 < (limit) ? (current)+1 : (start) ) 
 
 typedef struct {
-  spinlock_t lock;
-  unsigned int pending;
-  unsigned int high;
-  unsigned int maximum; // size - 1 (q implementation)
   command * start;
   command * in;
   command * out;
   command * limit;
+} amb_cq_ptrs;
+
+typedef struct {
+  spinlock_t lock;
+  unsigned int pending;
+  unsigned int high;
+  unsigned int filled;
+  unsigned int maximum; // size - 1 (q implementation)
+  amb_cq_ptrs ptrs;
 } amb_cq;
 
 typedef struct {

@@ -16,10 +16,6 @@ ifeq ($(CONFIG_ATM),y)
 O_OBJS	= addr.o pvc.o signaling.o svc.o
 OX_OBJS = common.o atm_misc.o raw.o resources.o
 
-ifeq ($(CONFIG_MMU_HACKS),y)
-O_OBJS += mmuio.o
-endif
-
 ifeq ($(CONFIG_ATM_CLIP),y)
 O_OBJS += clip.o
 NEED_IPCOM = ipcommon.o
@@ -36,10 +32,11 @@ OX_OBJS += proc.o
 endif
 
 ifeq ($(CONFIG_ATM_LANE),y)
-O_OBJS += lec.o lane_mpoa_init.o
+O_OBJS += lec.o
+OX_OBJS += lane_mpoa_init.o
 else
   ifeq ($(CONFIG_ATM_LANE),m)
-  O_OBJS += lane_mpoa_init.o
+  OX_OBJS += lane_mpoa_init.o
   M_OBJS += lec.o
   endif
 endif

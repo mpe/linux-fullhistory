@@ -40,29 +40,26 @@ struct hpsb_packet {
         unsigned no_waiter:1;
 
         /* Data big endianness flag - may vary from request to request.  The
-         * header is always in machine byte order.  */
+         * header is always in machine byte order.
+         * Not really used currently.  */
         unsigned data_be:1;
 
         /* Speed to transmit with: 0 = 100Mbps, 1 = 200Mbps, 2 = 400Mbps */
         unsigned speed_code:2;
 
-        /* --- 16 bytes (one cacheline) --- */
-
-        /* *header and *data are guaranteed to be 32-bit DMAable and may be
+        /*
+         * *header and *data are guaranteed to be 32-bit DMAable and may be
          * overwritten to allow in-place byte swapping.  Neither of these is
          * CRCed (the sizes also don't include CRC), but contain space for at
          * least one additional quadlet to allow in-place CRCing.  The memory is
          * also guaranteed to have physical mapping (virt_to_bus() is meaningful
          * on these pointers).
-         * NOTE: The 32-bit DMA guarantee is currently not enforced.
-         *       That's a Linux 2.3 issue.  
          */
         quadlet_t *header;
         quadlet_t *data;
         size_t header_size;
         size_t data_size;
 
-        /* --- 32 bytes --- */
 
         struct hpsb_host *host;
         unsigned int generation;
@@ -139,12 +136,14 @@ void hpsb_selfid_complete(struct hpsb_host *host, int phyid, int isroot);
  * for other cases (internal errors that don't justify a panic).  Safe to call
  * from within a transmit packet routine.
  */
-void hpsb_packet_sent(struct hpsb_host *host, struct hpsb_packet *packet, int ackcode);
+void hpsb_packet_sent(struct hpsb_host *host, struct hpsb_packet *packet,
+                      int ackcode);
 
 /*
  * Hand over received packet to the core.  The contents of data are expected to
  * be the full packet but with the CRCs left out (data block follows header
- * immediately) and in machine byte order.  *data can be safely overwritten
+ * immediately), with the header (i.e. the first four quadlets) in machine byte
+ * order and the data block in big endian.  *data can be safely overwritten
  * after this call.
  */
 void hpsb_packet_received(struct hpsb_host *host, quadlet_t *data, size_t size);
