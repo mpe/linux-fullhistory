@@ -10,6 +10,7 @@
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Corey Minyard <wf-rch!minyard@relay.EU.net>
+ *		Florian La Roche <flla@stud.uni-sb.de>
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -19,6 +20,7 @@
 #ifndef _SOCK_H
 #define _SOCK_H
 
+#include <linux/timer.h>
 
 #define SOCK_ARRAY_SIZE	64
 
@@ -53,7 +55,6 @@ struct sock {
 				keepopen,
 				linger,
 				delay_acks,
-				timeout,
 				destroy,
 				ack_timed,
 				no_check,
@@ -93,7 +94,10 @@ struct sock {
   unsigned char			max_ack_backlog;
   unsigned char			priority;
   struct tcphdr			dummy_th;
-  struct timer			time_wait;
+
+  /* This part is used for the timeout functions (timer.c). */
+  int				timeout;	/* What are we waiting for? */
+  struct timer_list		timer;
 };
 
 struct proto {
@@ -186,5 +190,14 @@ extern void			sock_rfree(struct sock *sk, void *mem,
 					   unsigned long size);
 extern unsigned long		sock_rspace(struct sock *sk);
 extern unsigned long		sock_wspace(struct sock *sk);
+
+
+/* declarations from timer.c */
+extern struct sock *timer_base;
+
+void delete_timer (struct sock *);
+void reset_timer (struct sock *, int, unsigned long);
+void net_timer (unsigned long);
+
 
 #endif	/* _SOCK_H */

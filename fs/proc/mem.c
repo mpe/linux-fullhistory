@@ -24,7 +24,7 @@ static int mem_read(struct inode * inode, struct file * file,char * buf, int cou
 {
 	unsigned long addr, pid, cr3;
 	char *tmp;
-	unsigned long pde, pte, page;
+	unsigned long pte, page;
 	int i;
 
 	if (count < 0)
@@ -44,18 +44,17 @@ static int mem_read(struct inode * inode, struct file * file,char * buf, int cou
 	while (count > 0) {
 		if (current->signal & ~current->blocked)
 			break;
-		pde = cr3 + (addr >> 20 & 0xffc);
-		pte = *(unsigned long *) pde;
+		pte = *PAGE_DIR_OFFSET(cr3,addr);
 		if (!(pte & PAGE_PRESENT))
 			break;
-		pte &= 0xfffff000;
-		pte += (addr >> 10) & 0xffc;
+		pte &= PAGE_MASK;
+		pte += PAGE_PTR(addr);
 		page = *(unsigned long *) pte;
 		if (!(page & 1))
 			break;
-		page &= 0xfffff000;
-		page += addr & 0xfff;
-		i = 4096-(addr & 0xfff);
+		page &= PAGE_MASK;
+		page += addr & ~PAGE_MASK;
+		i = PAGE_SIZE-(addr & ~PAGE_MASK);
 		if (i > count)
 			i = count;
 		memcpy_tofs(tmp,(void *) page,i);
@@ -73,7 +72,7 @@ static int mem_write(struct inode * inode, struct file * file,char * buf, int co
 {
 	unsigned long addr, pid, cr3;
 	char *tmp;
-	unsigned long pde, pte, page;
+	unsigned long pte, page;
 	int i;
 
 	if (count < 0)
@@ -93,12 +92,11 @@ static int mem_write(struct inode * inode, struct file * file,char * buf, int co
 	while (count > 0) {
 		if (current->signal & ~current->blocked)
 			break;
-		pde = cr3 + (addr >> 20 & 0xffc);
-		pte = *(unsigned long *) pde;
+		pte = *PAGE_DIR_OFFSET(cr3,addr);
 		if (!(pte & PAGE_PRESENT))
 			break;
-		pte &= 0xfffff000;
-		pte += (addr >> 10) & 0xffc;
+		pte &= PAGE_MASK;
+		pte += PAGE_PTR(addr);
 		page = *(unsigned long *) pte;
 		if (!(page & PAGE_PRESENT))
 			break;
@@ -106,9 +104,9 @@ static int mem_write(struct inode * inode, struct file * file,char * buf, int co
 			do_wp_page(0,addr,current,0);
 			continue;
 		}
-		page &= 0xfffff000;
-		page += addr & 0xfff;
-		i = 4096-(addr & 0xfff);
+		page &= PAGE_MASK;
+		page += addr & ~PAGE_MASK;
+		i = PAGE_SIZE-(addr & ~PAGE_MASK);
 		if (i > count)
 			i = count;
 		memcpy_fromfs((void *) page,tmp,i);

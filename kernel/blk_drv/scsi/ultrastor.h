@@ -33,7 +33,7 @@ int ultrastor_biosparam(int, int, int *);
     { "UltraStor 14F", ultrastor_detect, ultrastor_info, 0, \
       ultrastor_queuecommand, ultrastor_abort, ultrastor_reset, \
       0, ultrastor_biosparam, ULTRASTOR_14F_MAX_CMDS, 0, \
-      ULTRASTOR_14F_MAX_SG, ULTRASTOR_14F_MAX_CMDS_PER_LUN, 0, 0 }
+      ULTRASTOR_14F_MAX_SG, ULTRASTOR_14F_MAX_CMDS_PER_LUN, 0, 1 }
 
 #ifdef ULTRASTOR_PRIVATE
 

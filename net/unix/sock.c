@@ -282,7 +282,7 @@ unix_proto_create(struct socket *sock, int protocol)
 	printk("UNIX: create: can't allocate buffer\n");
 	return(-ENOMEM);
   }
-  if (!(upd->buf =(char *)get_free_page(GFP_USER))) {
+  if (!(upd->buf = (char*) get_free_page(GFP_USER))) {
 	printk("UNIX: create: can't get page!\n");
 	unix_data_deref(upd);
 	return(-ENOMEM);
@@ -369,7 +369,7 @@ unix_proto_bind(struct socket *sock, struct sockaddr *umyaddr,
   fname[sockaddr_len-UN_PATH_OFFSET] = '\0';
   old_fs = get_fs();
   set_fs(get_ds());
-  i = do_mknod(fname, S_IFSOCK | 0777, 0);
+  i = do_mknod(fname, S_IFSOCK | S_IRWXUGO, 0);
   if (i == 0) i = open_namei(fname, 0, S_IFSOCK, &upd->inode, NULL);
   set_fs(old_fs);
   if (i < 0) {

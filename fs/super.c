@@ -176,7 +176,7 @@ static dev_t get_unnamed_dev(void)
 		memset(unnamed_dev_in_use, 0, sizeof(unnamed_dev_in_use));
 		unnamed_dev_in_use[0] = 1; /* minor 0 (nodev) is special */
 	}
-	for (i = 0; i < 256; i++) {
+	for (i = 0; i < sizeof unnamed_dev_in_use/sizeof unnamed_dev_in_use[0]; i++) {
 		if (!unnamed_dev_in_use[i]) {
 			unnamed_dev_in_use[i] = 1;
 			return (UNNAMED_MAJOR << 8) | i;
@@ -254,15 +254,18 @@ extern "C" int sys_umount(char * name)
 	if (!suser())
 		return -EPERM;
 	retval = namei(name,&inode);
-	if (retval)
-		return retval;
+	if (retval) {
+		retval = lnamei(name,&inode);
+		if (retval)
+			return retval;
+	}
 	if (S_ISBLK(inode->i_mode)) {
 		dev = inode->i_rdev;
 		if (IS_NODEV(inode)) {
 			iput(inode);
 			return -EACCES;
 		}
-	} else if (S_ISDIR(inode->i_mode)) {
+	} else {
 		if (!inode || !inode->i_sb || inode != inode->i_sb->s_mounted) {
 			iput(inode);
 			return -EINVAL;
@@ -272,9 +275,6 @@ extern "C" int sys_umount(char * name)
 		memset(&dummy_inode, 0, sizeof(dummy_inode));
 		dummy_inode.i_rdev = dev;
 		inode = &dummy_inode;
-	} else {
-		iput(inode);
-		return -EINVAL;
 	}
 	if (MAJOR(dev) >= MAX_BLKDEV) {
 		iput(inode);
@@ -382,7 +382,7 @@ static int do_remount(const char *dir,int flags)
  * Flags is a 16-bit value that allows up to 16 non-fs dependent flags to
  * be given to the mount() call (ie: read-only, no-dev, no-suid etc).
  *
- * data is a (void *) that can point to any structure up to 4095 bytes, which
+ * data is a (void *) that can point to any structure up to PAGE_SIZE-1 bytes, which
  * can contain arbitrary fs-dependent information (or be NULL).
  *
  * NOTE! As old versions of mount() didn't use this setup, the flags has to have
@@ -458,10 +458,13 @@ extern "C" int sys_mount(char * dev_name, char * dir_name, char * type,
 				iput(inode);
 				return -EFAULT;
 			}
-			page = get_free_page(GFP_KERNEL);
+			if (!(page = __get_free_page(GFP_KERNEL))) {
+				iput(inode);
+				return -ENOMEM;
+			}
 			i = TASK_SIZE - (unsigned long) data;
-			if (i < 0 || i > 4095)
-				i = 4095;
+			if ((unsigned long) i >= PAGE_SIZE)
+				i = PAGE_SIZE-1;
 			memcpy_fromfs((void *) page,data,i);
 		}
 	}

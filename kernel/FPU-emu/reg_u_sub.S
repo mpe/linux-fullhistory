@@ -61,13 +61,11 @@ xOp1_not_denorm:
 xOp2_not_denorm:
 #endif DENORM_OPERAND
 
-//	xorl	%ecx,%ecx
 	movl	EXP(%esi),%ecx
 	subl	EXP(%edi),%ecx	/* exp1 - exp2 */
 
 #ifdef PARANOID
 	/* source 2 is always smaller than source 1 */
-//	jc	L_bugged
 	js	L_bugged_1
 
 	testl	$0x80000000,SIGH(%edi)	/* The args are assumed to be be normalized */
@@ -87,8 +85,8 @@ xOp2_not_denorm:
 	movl	PARAM3,%edi	/* destination */
 	movl	EXP(%esi),%edx
 	movl	%edx,EXP(%edi)	/* Copy exponent to destination */
-	movb	SIGN(%esi),%dl
-	movb	%dl,SIGN(%edi)	/* Copy the sign from the first arg */
+//	movb	SIGN(%esi),%dl
+//	movb	%dl,SIGN(%edi)	/* Copy the sign from the first arg */
 
 	xorl	%edx,%edx	// register extension
 
@@ -213,8 +211,8 @@ L_subtr:
 
 	/* Shift left 64 bits */
 	subl	$64,EXP(%edi)
-	movl	%edx,%eax
-	jmp	L_store
+	xchg	%edx,%eax
+	jmp	FPU_round
 
 L_must_be_zero:
 #ifdef PARANOID
@@ -227,7 +225,7 @@ L_must_be_zero:
 	movl	$0,EXP(%edi)		/* exponent */
 	movl	$0,SIGL(%edi)
 	movl	$0,SIGH(%edi)
-	jmp	L_exit		// Does not underflow
+	jmp	L_exit		// %eax contains zero
 
 L_shift_32:
 	movl	%ebx,%eax
@@ -254,57 +252,39 @@ L_bugged_1:
 	pushl	EX_INTERNAL|0x206
 	call	EXCEPTION
 	pop	%ebx
-	jmp	L_exit
+	jmp	L_error_exit
 
 L_bugged_2:
 	pushl	EX_INTERNAL|0x209
 	call	EXCEPTION
 	pop	%ebx
-	jmp	L_exit
+	jmp	L_error_exit
 
 L_bugged_3:
 	pushl	EX_INTERNAL|0x210
 	call	EXCEPTION
 	pop	%ebx
-	jmp	L_exit
+	jmp	L_error_exit
 
 L_bugged_4:
 	pushl	EX_INTERNAL|0x211
 	call	EXCEPTION
 	pop	%ebx
-	jmp	L_exit
+	jmp	L_error_exit
 
 L_bugged:
 	pushl	EX_INTERNAL|0x212
 	call	EXCEPTION
 	pop	%ebx
-	jmp	L_exit
+	jmp	L_error_exit
 #endif PARANOID
 
 
-L_store:
-/*------------------------------+
- |	Store the result	|
- +------------------------------*/
-	movl	%eax,SIGH(%edi)
-	movl	%ebx,SIGL(%edi)
-
-	movb	TW_Valid,TAG(%edi)		/* Set the tags to TW_Valid */
-
-	cmpl	EXP_UNDER,EXP(%edi)
-	jle	L_underflow
-
+L_error_exit:
+	movl	$1,%eax
 L_exit:
 	popl	%ebx
 	popl	%edi
 	popl	%esi
 	leave
 	ret
-
-
-L_underflow:
-	push	%edi
-	call	_arith_underflow
-	pop	%ebx
-	jmp	L_exit
-

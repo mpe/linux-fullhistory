@@ -1,9 +1,9 @@
 /* $Id: tpqic02.c,v 0.2.1.21 1993/06/18 19:04:33 root Exp root $
  *
- * Driver for tape drive support for Linux-i386 0.99.8.
+ * Driver for tape drive support for Linux-i386 0.99.12.
  *
- * Copyright (c) 1992 by H. H. Bergman. All rights reserved.
- * Current e-mail address: s0356514@let.rug.nl
+ * Copyright (c) 1993 by H. H. Bergman. All rights reserved.
+ * Current e-mail address: csg279@wing.rug.nl
  * [If you are unable to reach me directly, try the TAPE mailing list
  * channel on linux-activists@niksula.hut.fi using "X-Mn-Key: TAPE" as
  * the first line in your message.]

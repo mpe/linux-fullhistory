@@ -76,13 +76,13 @@ __asm__ __volatile__ ("movw %%dx,%%ax\n\t" \
 	_set_gate(a,12,3,addr)
 
 #define _set_seg_desc(gate_addr,type,dpl,base,limit) {\
-	*(gate_addr) = ((base) & 0xff000000) | \
+	*((gate_addr)+1) = ((base) & 0xff000000) | \
 		(((base) & 0x00ff0000)>>16) | \
 		((limit) & 0xf0000) | \
 		((dpl)<<13) | \
 		(0x00408000) | \
 		((type)<<8); \
-	*((gate_addr)+1) = (((base) & 0x0000ffff)<<16) | \
+	*(gate_addr) = (((base) & 0x0000ffff)<<16) | \
 		((limit) & 0x0ffff); }
 
 #define _set_tssldt_desc(n,addr,limit,type) \
@@ -100,6 +100,8 @@ __asm__ __volatile__ ("movw $" #limit ",%1\n\t" \
 	)
 
 #define set_tss_desc(n,addr) _set_tssldt_desc(((char *) (n)),((int)(addr)),235,"0x89")
-#define set_ldt_desc(n,addr) _set_tssldt_desc(((char *) (n)),((int)(addr)),23,"0x82")
+#define set_ldt_desc(n,addr,size) \
+	_set_tssldt_desc(((char *) (n)),((int)(addr)),((size << 3) - 1),"0x82")
+
 
 #endif

@@ -26,7 +26,17 @@
 #	the shared memory (WD_SHMEM=xxxx).  All other supported cards
 #	behave like they should, you can leave the values to 0. -FvK
 #
-CARDS		= -DSLIP -DPLIP -DWD80x3 -DNE2000 -DHPLAN -DEL2 -DD_LINK
+
+# Comment out the lines you don't want..
+
+#CARDS	:= $(CARDS) -DSLIP
+#CARDS	:= $(CARDS) -DPLIP
+CARDS	:= $(CARDS) -DWD80x3
+CARDS	:= $(CARDS) -DNE2000
+CARDS	:= $(CARDS) -DHPLAN
+CARDS	:= $(CARDS) -DEL2
+CARDS	:= $(CARDS) -DD_LINK
+CARDS	:= $(CARDS) -DCONFIG_AT1500
 
 # For WD and SMC cards:
 #OPTS		= -DEI8390=0x280 -DEI8390_IRQ=15
@@ -38,9 +48,10 @@ WD_OPTS		= -DWD_SHMEM=0
 #OPTS		= -DEI8390=0 -DEI8390_IRQ=0
 #WD_OPTS	= -DUD_SHMEM=0xCC000 -UFORCE_8BIT
 
-EL_OPTS		= -UEL2_AUI
+EL2_OPTS	= #-UEL2_AUI
 NE_OPTS		=
 HP_OPTS		=
 PLIP_OPTS	=
 SLIP_OPTS	= -DSL_DUMP -DSL_COMPRESSED
 DL_OPTS		= -DD_LINK_IO=0x378 -DD_LINK_IRQ=7 -UD_LINK_DEBUG
+AT_OPTS		= # -DLANCE_DMA=5

@@ -106,6 +106,8 @@ Scsi_Host scsi_hosts[] =
 #endif
 	};
 
+#define MAX_SCSI_HOSTS (sizeof(scsi_hosts) / sizeof(Scsi_Host))
+
 /*
  *	Our semaphores and timeout counters, where size depends on MAX_SCSI_HOSTS here. 
  */

@@ -27,10 +27,6 @@
 /* #define NO_TRUNCATE */
 	
 /*
- * ok, we cannot use strncmp, as the name is not in our data space.
- * Thus we'll have to use ext2_match. No big problem. ext2_match also makes
- * some sanity tests.
- *
  * NOTE! unlike strncmp, ext2_match returns 1 for success, 0 for failure.
  */
 static int ext2_match (int len, const char * const name,
@@ -261,6 +257,7 @@ static struct buffer_head * ext2_add_entry (struct inode * dir,
 			for (i = 0; i < namelen ; i++)
 				de->name[i] = name [i];
 			dir->i_mtime = dir->i_ctime = CURRENT_TIME;
+			dir->i_dirt = 1;
 			bh->b_dirt = 1;
 			*res_dir = de;
 			*err = 0;
@@ -325,7 +322,7 @@ int ext2_create (struct inode * dir,const char * name, int len, int mode,
 	inode->i_dirt = 1;
 	bh = ext2_add_entry (dir, name, len, &de, &err);
 	if (!bh) {
-		inode->i_nlink --;
+		inode->i_nlink--;
 		inode->i_dirt = 1;
 		iput (inode);
 		iput (dir);
@@ -388,7 +385,7 @@ int ext2_mknod (struct inode * dir, const char * name, int len, int mode,
 	inode->i_dirt = 1;
 	bh = ext2_add_entry (dir, name, len, &de, &err);
 	if (!bh) {
-		inode->i_nlink --;
+		inode->i_nlink--;
 		inode->i_dirt = 1;
 		iput (inode);
 		iput (dir);
@@ -436,7 +433,7 @@ int ext2_mkdir (struct inode * dir, const char * name, int len, int mode)
 	dir_block = ext2_bread (inode, 0, 1, &err);
 	if (!dir_block) {
 		iput (dir);
-		inode->i_nlink --;
+		inode->i_nlink--;
 		inode->i_dirt = 1;
 		iput (inode);
 		return err;
@@ -455,7 +452,7 @@ int ext2_mkdir (struct inode * dir, const char * name, int len, int mode)
 	inode->i_nlink = 2;
 	dir_block->b_dirt = 1;
 	brelse (dir_block);
-	inode->i_mode = S_IFDIR | (mode & 0777 & ~current->umask);
+	inode->i_mode = S_IFDIR | (mode & S_IRWXUGO & ~current->umask);
 	if (dir->i_mode & S_ISGID)
 		inode->i_mode |= S_ISGID;
 	inode->i_dirt = 1;
@@ -472,7 +469,7 @@ int ext2_mkdir (struct inode * dir, const char * name, int len, int mode)
 			 de->inode);
 #endif
 	bh->b_dirt = 1;
-	dir->i_nlink ++;
+	dir->i_nlink++;
 	dir->i_dirt = 1;
 	iput (dir);
 	iput (inode);
@@ -596,7 +593,7 @@ repeat:
 	bh->b_dirt = 1;
 	inode->i_nlink = 0;
 	inode->i_dirt = 1;
-	dir->i_nlink --;
+	dir->i_nlink--;
 	dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	dir->i_dirt = 1;
 end_rmdir:
@@ -651,7 +648,7 @@ repeat:
 	bh->b_dirt = 1;
 	dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	dir->i_dirt = 1;
-	inode->i_nlink --;
+	inode->i_nlink--;
 	inode->i_dirt = 1;
 	inode->i_ctime = CURRENT_TIME;
 	retval = 0;
@@ -677,7 +674,7 @@ int ext2_symlink (struct inode * dir, const char * name, int len,
 		iput (dir);
 		return -ENOSPC;
 	}
-	inode->i_mode = S_IFLNK | 0777;
+	inode->i_mode = S_IFLNK | S_IRWXUGO;
 	inode->i_op = &ext2_symlink_inode_operations;
 	for (l = 0; l < inode->i_sb->s_blocksize - 1 &&
 	     symname [l]; l++)
@@ -689,7 +686,7 @@ int ext2_symlink (struct inode * dir, const char * name, int len,
 		name_block = ext2_bread (inode, 0, 1, &err);
 		if (!name_block) {
 			iput (dir);
-			inode->i_nlink --;
+			inode->i_nlink--;
 			inode->i_dirt = 1;
 			iput (inode);
 			return err;
@@ -702,7 +699,7 @@ int ext2_symlink (struct inode * dir, const char * name, int len,
 #endif
 	}
 	i = 0;
-	while (i < inode->i_sb->s_blocksize - 1 && (c = *(symname ++)))
+	while (i < inode->i_sb->s_blocksize - 1 && (c = *(symname++)))
 		link[i++] = c;
 	link[i] = 0;
 	if (name_block) {
@@ -713,7 +710,7 @@ int ext2_symlink (struct inode * dir, const char * name, int len,
 	inode->i_dirt = 1;
 	bh = ext2_find_entry (dir, name, len, &de);
 	if (bh) {
-		inode->i_nlink --;
+		inode->i_nlink--;
 		inode->i_dirt = 1;
 		iput (inode);
 		brelse (bh);
@@ -722,7 +719,7 @@ int ext2_symlink (struct inode * dir, const char * name, int len,
 	}
 	bh = ext2_add_entry (dir, name, len, &de, &err);
 	if (!bh) {
-		inode->i_nlink --;
+		inode->i_nlink--;
 		inode->i_dirt = 1;
 		iput (inode);
 		iput (dir);
@@ -778,7 +775,7 @@ int ext2_link (struct inode * oldinode, struct inode * dir,
 	bh->b_dirt = 1;
 	brelse (bh);
 	iput (dir);
-	oldinode->i_nlink ++;
+	oldinode->i_nlink++;
 	oldinode->i_ctime = CURRENT_TIME;
 	oldinode->i_dirt = 1;
 	iput (oldinode);
@@ -790,7 +787,7 @@ static int subdir (struct inode * new_inode, struct inode * old_inode)
 	int ino;
 	int result;
 
-	new_inode->i_count ++;
+	new_inode->i_count++;
 	result = 0;
 	for (;;) {
 		if (new_inode == old_inode) {
@@ -937,7 +934,7 @@ start_up:
 	if (retval)
 		goto end_rename;
 	if (new_inode) {
-		new_inode->i_nlink --;
+		new_inode->i_nlink--;
 		new_inode->i_dirt = 1;
 	}
 	old_bh->b_dirt = 1;
@@ -945,8 +942,8 @@ start_up:
 	if (dir_bh) {
 		PARENT_INO(dir_bh->b_data) = new_dir->i_ino;
 		dir_bh->b_dirt = 1;
-		old_dir->i_nlink --;
-		new_dir->i_nlink ++;
+		old_dir->i_nlink--;
+		new_dir->i_nlink++;
 		old_dir->i_dirt = 1;
 		new_dir->i_dirt = 1;
 	}

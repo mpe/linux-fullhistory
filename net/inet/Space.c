@@ -13,7 +13,7 @@
  *		field of the 'device' structure to store the unit number...
  *		-FvK
  *
- * Version:	@(#)Space.c	1.0.7	05/28/93
+ * Version:	@(#)Space.c	1.0.7	08/12/93
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -28,14 +28,12 @@
 #include <linux/ddi.h>
 #include "dev.h"
 
-
 #define LOOPBACK			/* always present, right?	*/
-
 
 #define	NEXT_DEV	NULL
 
 
-#ifdef D_LINK
+#if defined(D_LINK) || defined(CONFIG_DE600)
     extern int d_link_init(struct device *);
     static struct device d_link_dev = {
 	"dl0",
@@ -53,30 +51,79 @@
 #   define NEXT_DEV	(&d_link_dev)
 #endif
 
-
-#ifdef EL1
+#ifdef CONFIG_EL1
+#error 
 #   ifndef EL1_IRQ
 #	define EL1_IRQ 9
 #   endif
+#   ifndef EL1
+#	define EL1 0
+#   endif
     extern int el1_init(struct device *);
     static struct device el1_dev = {
-        "el0",
-	0,
-	0,
-	0,
-	0,
-        EL1,
-	EL1_IRQ,
-        0, 0, 0,
-	NEXT_DEV,
-	el1_init
+        "el0", 0, 0, 0, 0, EL1,	EL1_IRQ, 0, 0, 0, NEXT_DEV, el1_init
     };
 #   undef NEXT_DEV
 #   define NEXT_DEV	(&el1_dev)
 #endif  /* EL1 */
 
-#if defined(EI8390) || defined(EL2) || defined(NE2000) \
-    || defined(WD80x3) || defined(HPLAN)
+#ifdef CONFIG_DEPCA
+    extern int depca_probe(struct device *);
+    static struct device depca_dev = {
+        "depca0", 0,0,0,0, 0, 0, 0, 0, 0, NEXT_DEV, depca_probe,
+    };
+#   undef NEXT_DEV
+#   define NEXT_DEV	(&depca_dev)
+#endif  /* CONFIG_DEPCA */
+
+
+#ifdef CONFIG_ATP		/* AT-LAN-TEC (RealTek) pocket adaptor. */
+    extern int atp_probe(struct device *);
+    static struct device atp_dev = {
+        "atp0", 0,0,0,0, 0, 0, 0, 0, 0, NEXT_DEV, atp_probe,
+    };
+#   undef NEXT_DEV
+#   define NEXT_DEV	(&atp_dev)
+#endif  /* CONFIG_ATP */
+
+#ifdef CONFIG_EL3
+    extern int el3_probe(struct device *);
+    static struct device eliii0_dev = {
+        "eliii0", 0,0,0,0, 0, 0, 0, 0, 0, NEXT_DEV, el3_probe,
+    };
+#   undef NEXT_DEV
+#   define NEXT_DEV	(&eliii0_dev)
+#endif  /* CONFIG_3C509 aka EL3 */
+
+#ifdef CONFIG_ZNET
+    extern int znet_probe(struct device *);
+    static struct device znet_dev = {
+	"znet", 0,0,0,0, 0, 0, 0, 0, 0, NEXT_DEV, znet_probe, };
+#   undef NEXT_DEV
+#   define NEXT_DEV	(&znet_dev)
+#endif  /* CONFIG_ZNET */
+
+#ifdef CONFIG_EEXPRESS
+    extern int express_probe(struct device *);
+    static struct device express0_dev = {
+	"exp0", 0,0,0,0, 0, 0, 0, 0, 0, NEXT_DEV, express_probe, };
+#   undef NEXT_DEV
+#   define NEXT_DEV	(&express0_dev)
+#endif  /* CONFIG_EEPRESS */
+
+#ifdef CONFIG_AT1500
+    extern int at1500_probe(struct device *);
+    static struct device lance_dev = {
+        "le0",
+	0,0,0,0, 0 /* I/O Base */, 0 /* pre-set IRQ */,
+        0, 0, 0, NEXT_DEV, at1500_probe,
+    };
+#   undef NEXT_DEV
+#   define NEXT_DEV	(&lance_dev)
+#endif  /* AT1500BT */
+
+#if defined(EI8390) || defined(CONFIG_EL2) || defined(CONFIG_NE2000) \
+    || defined(CONFIG_WD80x3) || defined(CONFIG_HPLAN)
 #   ifndef EI8390
 #	define EI8390 0
 #   endif
@@ -100,50 +147,19 @@
 #   define NEXT_DEV	(&ei8390_dev)
 #endif  /* The EI8390 drivers. */
 
-#ifdef	PLIP
+#if defined(PLIP) || defined(CONFIG_PLIP)
     extern int plip_init(struct device *);
     static struct device plip2_dev = {
-	"plip2",
-	0,
-	0,
-	0,
-	0,
-	0x278,
-	2,
-	0, 0, 0,
-	NEXT_DEV,
-	plip_init
-    };
+	"plip2", 0, 0, 0, 0, 0x278, 2, 0, 0, 0, NEXT_DEV, plip_init, };
     static struct device plip1_dev = {
-	"plip1",
-	0,
-	0,
-	0,
-	0,
-	0x378,
-	7,
-	0, 0, 0,
-	&plip2_dev,
-	plip_init
-    };
+	"plip1", 0, 0, 0, 0, 0x378, 7, 0, 0, 0, &plip2_dev, plip_init, };
     static struct device plip0_dev = {
-	"plip0",
-	0,
-	0,
-	0,
-	0,
-	0x3BC,
-	5,
-	0, 0, 0,
-	&plip1_dev,
-	plip_init
-    };
+	"plip0", 0, 0, 0, 0, 0x3BC, 5, 0, 0, 0, &plip1_dev, plip_init, };
 #   undef NEXT_DEV
 #   define NEXT_DEV	(&plip0_dev)
 #endif  /* PLIP */
 
-
-#ifdef	SLIP
+#if defined(SLIP) || defined(CONFIG_SLIP)
     extern int slip_init(struct device *);
     static struct device slip3_dev = {
 	"sl3",			/* Internal SLIP driver, channel 3	*/

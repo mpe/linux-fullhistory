@@ -12,7 +12,7 @@
 #endif
 
 #ifndef NOGROUP
-#define NOGROUP		-1
+#define NOGROUP		(-1)
 #endif
 
 #define MAXHOSTNAMELEN	64	/* max length of hostname */

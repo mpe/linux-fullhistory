@@ -104,8 +104,7 @@ int do_select(int n, fd_set *in, fd_set *out, fd_set *ex,
 	}
 end_check:
 	n = max + 1;
-	entry = (struct select_table_entry *) __get_free_page(GFP_KERNEL);
-	if (!entry)
+	if(!(entry = (struct select_table_entry*) __get_free_page(GFP_KERNEL)))
 		return -ENOMEM;
 	FD_ZERO(res_in);
 	FD_ZERO(res_out);
@@ -219,7 +218,7 @@ extern "C" int sys_select( unsigned long *buffer )
 	if ((i = get_fd_set(n, inp, &in)) ||
 	    (i = get_fd_set(n, outp, &out)) ||
 	    (i = get_fd_set(n, exp, &ex))) return i;
-	timeout = 0xffffffff;
+	timeout = ~0UL;
 	if (tvp) {
 		i = verify_area(VERIFY_WRITE, tvp, sizeof(*tvp));
 		if (i)

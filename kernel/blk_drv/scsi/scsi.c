@@ -23,10 +23,14 @@
 #include "../blk.h"
 #include "scsi.h"
 #include "hosts.h"
+#include "constants.h"
 
 /*
 static const char RCSid[] = "$Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/scsi.c,v 1.1 1992/07/24 06:27:38 root Exp root $";
 */
+
+/* Command groups 3 and 4 are reserved and should never be used.  */
+const unsigned char scsi_command_size[8] = { 6, 10, 10, 12, 12, 12, 10, 10 };
 
 #define INTERNAL_ERROR (printk ("Internal error in file %s, line %d.\n", __FILE__, __LINE__), panic(""))
 
@@ -91,7 +95,7 @@ extern int last_reset[];
 	#define SENSE_TIMEOUT 50
 	#define RESET_TIMEOUT 50
 	#define ABORT_TIMEOUT 50
-	#define MIN_RESET_DELAY 25
+	#define MIN_RESET_DELAY 100
 #endif
 
 /* The following devices are known not to tolerate a lun != 0 scan for
@@ -109,6 +113,9 @@ static struct blist blacklist[] =
    {"SEAGATE","ST296","921"},   /* Responds to all lun */
    {"SONY","CD-ROM CDU-541","4.3d"},
    {"DENON","DRD-25X","V"},   /* A cdrom that locks up when probed at lun != 0 */
+   {"TEXEL","CD-ROM","1.06"},   /* causes failed REQUEST SENSE on lun 1 for seagate
+				* controller, which causes SCSI code to reset bus.*/
+   {"MAXTOR","XT-4380S","B3C"},  /* Locks-up when LUN>0 polled. */
    {NULL, NULL, NULL}};	
 
 static int blacklisted(unsigned char * response_data){
@@ -174,13 +181,26 @@ static void scan_scsis (void)
 					time out */
 	for (dev = 0; dev < 8; ++dev)
 	  if (scsi_hosts[host_nr].this_id != dev)
+/*
+ * We need the for so our continue, etc. work fine.
+ */
+
+#ifdef NO_MULTI_LUN
+	    for (lun = 0; lun < 1; ++lun)
+#else
 	    for (lun = 0; lun < 8; ++lun)
+#endif
 	      {
 		scsi_devices[NR_SCSI_DEVICES].host_no = host_nr;
 		scsi_devices[NR_SCSI_DEVICES].id = dev;
 		scsi_devices[NR_SCSI_DEVICES].lun = lun;
 		scsi_devices[NR_SCSI_DEVICES].index = NR_SCSI_DEVICES;
 		scsi_devices[NR_SCSI_DEVICES].device_wait = NULL;
+/*
+ * Assume that the device will have handshaking problems, and then 
+ * fix this field later if it turns out it doesn't.
+ */
+		scsi_devices[NR_SCSI_DEVICES].borken = 1;
 		
 		scsi_cmd[0] = TEST_UNIT_READY;
 		scsi_cmd[1] = lun << 5;
@@ -196,13 +216,19 @@ static void scan_scsis (void)
 		SCmd.old_use_sg  = 0;
 		SCmd.transfersize = 0;
 		SCmd.underflow = 0;
+		SCmd.index = NR_SCSI_DEVICES;
 
 		scsi_do_cmd (&SCmd,
 			     (void *)  scsi_cmd, (void *) 
 			     scsi_result, 256,  scan_scsis_done, 
-			     SCSI_TIMEOUT + 400, 3);
+			     SCSI_TIMEOUT + 400, 5);
 		
 		while (SCmd.request.dev != 0xfffe);
+#if defined(DEBUG) || defined(DEBUG_INIT)
+		printk("scsi: scan SCSIS id %d lun %d\n", dev, lun);
+		printk("scsi: return code %08x\n", SCmd.result);
+#endif
+
 
 		if(SCmd.result) {
 		  if ((driver_byte(SCmd.result)  & DRIVER_SENSE) &&
@@ -216,6 +242,10 @@ static void scan_scsis (void)
 		  else
 		    break;
 		};
+
+#if defined (DEBUG) || defined(DEBUG_INIT)
+		printk("scsi: performing INQUIRY\n");
+#endif
 
 		/*
 		 * Build an INQUIRY command block.  
@@ -239,7 +269,15 @@ static void scan_scsis (void)
 		
 		the_result = SCmd.result;
 		
+#if defined(DEBUG) || defined(DEBUG_INIT)
+		if (!the_result)
+			printk("scsi: INQUIRY successful\n");
+		else
+			printk("scsi: INQUIRY failed with code %08x\n");
+#endif
+
 		if(the_result) break; 
+
 		/* skip other luns on this device */
 		
 		if (!the_result)
@@ -273,6 +311,12 @@ static void scan_scsis (void)
 			scsi_devices[NR_SCSI_DEVICES].writeable = 0;
 			break;
 			default :
+#if 0
+#ifdef DEBUG
+			printk("scsi: unknown type %d\n", type);
+			print_inquiry(scsi_result);
+#endif
+#endif
 			  type = -1;
 		      }
 
@@ -310,6 +354,29 @@ static void scan_scsis (void)
 			    (scsi_devices[NR_SCSI_DEVICES].scsi_level == 1 &&
 			     (scsi_result[3] & 0x0f) == 1))
 			  scsi_devices[NR_SCSI_DEVICES].scsi_level++;
+
+/*
+ * Some revisions of the Texel CD ROM drives have handshaking
+ * problems when used with the Seagate controllers.  Before we
+ * know what type of device we're talking to, we assume it's 
+ * borken and then change it here if it turns out that it isn't
+ * a TEXEL drive.
+ */
+
+			if(memcmp("TEXEL", &scsi_result[8], 5) != 0 ||
+			  memcmp("CD-ROM", &scsi_result[16], 6) != 0 
+/* 
+ * XXX 1.06 has problems, some one should figure out the others too so
+ * ALL TEXEL drives don't suffer in performance, especially when I finish
+ * integrating my seagate patches which do multiple I_T_L nexuses.
+ */
+
+#ifdef notyet
+			   || (strncmp("1.06", &scsi_result[[, 4) != 0)
+#endif
+			   )
+			   scsi_devices[NR_SCSI_DEVICES].borken = 0;
+
 
 			/* These devices need this "key" to unlock the device
 			   so we can use it */
@@ -693,6 +760,9 @@ void scsi_do_cmd (Scsi_Cmnd * SCpnt, const void *cmnd ,
 	SCpnt->timeout_per_command = timeout;
 				
 	memcpy ((void *) SCpnt->cmnd , (void *) cmnd, 10);
+	/* Zero the sense buffer.  Some host adapters automatically request
+	   sense on error.  0 is not a valid sense code.  */
+	memset ((void *) SCpnt->sense_buffer, 0, sizeof SCpnt->sense_buffer);
 	SCpnt->request_buffer = buffer;
 	SCpnt->request_bufflen = bufflen;
 	SCpnt->old_use_sg = SCpnt->use_sg;
@@ -718,7 +788,7 @@ void scsi_do_cmd (Scsi_Cmnd * SCpnt, const void *cmnd ,
 static void reset (Scsi_Cmnd * SCpnt)
 	{
 	#ifdef DEBUG
-		printk("reset(%d)\n", SCpnt->host);
+		printk("scsi: reset(%d)\n", SCpnt->host);
 	#endif
 
 	SCpnt->flags |= (WAS_RESET | IS_RESETTING);
@@ -735,9 +805,18 @@ static void reset (Scsi_Cmnd * SCpnt)
 
 static int check_sense (Scsi_Cmnd * SCpnt)
 	{
-	if (((SCpnt->sense_buffer[0] & 0x70) >> 4) == 7) {
+  /* If there is no sense information, request it.  */
+  if (((SCpnt->sense_buffer[0] & 0x70) >> 4) != 7)
+    return SUGGEST_SENSE;
+
+#ifdef DEBUG_INIT
+	printk("scsi%d : ", SCpnt->host);
+	print_sense("", SCpnt);
+	printk("\n");
+#endif
 	        if (SCpnt->sense_buffer[2] &0xe0)
 		  return SUGGEST_ABORT;
+
 		switch (SCpnt->sense_buffer[2] & 0xf)
 		{
 		case NO_SENSE:
@@ -765,9 +844,6 @@ static int check_sense (Scsi_Cmnd * SCpnt)
 			return SUGGEST_ABORT;
 		}
 	      }
-	else
-		return SUGGEST_RETRY;	
-	}	
 
 /* This function is the mid-level interrupt routine, which decides how
  *  to handle error conditions.  Each invocation of this function must
@@ -824,14 +900,16 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 			break;
 			}
 
-		if (status_byte(result) && (SCpnt->flags & 
-		    WAS_SENSE))	/* Failed to obtain sense information */
+		if (status_byte(result) && (SCpnt->flags & WAS_SENSE))
+			/* Failed to obtain sense information */
 			{
 			SCpnt->flags &= ~WAS_SENSE;
 			SCpnt->internal_timeout &= ~SENSE_TIMEOUT;
 
 			if (!(SCpnt->flags & WAS_RESET))
 				{
+				printk("scsi%d : target %d lun %d request sense failed, performing reset.\n", 
+					SCpnt->host, SCpnt->target, SCpnt->lun);
 				reset(SCpnt);
 				return;
 				}
@@ -858,6 +936,7 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 	
 					switch (checked = check_sense(SCpnt))
 					{
+					case SUGGEST_SENSE:
 					case 0: 
 #ifdef DEBUG
 	printk("NO SENSE.  status = REDO\n");
@@ -900,32 +979,41 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 				break;	
 
 			case CHECK_CONDITION:
-
-#ifdef DEBUG
-	printk("CHECK CONDITION message returned, performing request sense.\n");
-#endif
-
+				switch (check_sense(SCpnt))
+				  {
+				  case 0: 
+				    update_timeout(SCpnt, oldto);
+				    status = REDO;
+				    break;
+				  case SUGGEST_REMAP:			
+				  case SUGGEST_RETRY:
+				    status = MAYREDO;
+				    exit = DRIVER_SENSE | SUGGEST_RETRY;
+				    break;
+				  case SUGGEST_ABORT:
+				    status = FINISHED;
+				    exit =  DRIVER_SENSE | SUGGEST_ABORT;
+				    break;
+				  case SUGGEST_SENSE:
 				scsi_request_sense (SCpnt);
 				status = PENDING;
+				break;       	
+				  }
 				break;       	
 			
 			case CONDITION_GOOD:
 			case INTERMEDIATE_GOOD:
 			case INTERMEDIATE_C_GOOD:
-#ifdef DEBUG
-	printk("CONDITION GOOD, INTERMEDIATE GOOD, or INTERMEDIATE CONDITION GOOD recieved and ignored. \n");
-#endif
 				break;
 				
 			case BUSY:
-#ifdef DEBUG
-	printk("BUSY message returned, performing REDO");
-#endif
 				update_timeout(SCpnt, oldto);
 				status = REDO;
 				break;
 
 			case RESERVATION_CONFLICT:
+				printk("scsi%d : RESERVATION CONFLICT performing reset.\n", 
+					SCpnt->host);
 				reset(SCpnt);
 				return;
 #if 0
@@ -987,12 +1075,29 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
         case DID_RESET:
                 if(msg_byte(result) == GOOD &&
                       status_byte(result) == CHECK_CONDITION) {
+			switch (check_sense(SCpnt)) {
+			case 0: 
+			    update_timeout(SCpnt, oldto);
+			    status = REDO;
+			    break;
+			case SUGGEST_REMAP:			
+			case SUGGEST_RETRY:
+			    status = MAYREDO;
+			    exit = DRIVER_SENSE | SUGGEST_RETRY;
+			    break;
+			case SUGGEST_ABORT:
+			    status = FINISHED;
+			    exit =  DRIVER_SENSE | SUGGEST_ABORT;
+			    break;
+			case SUGGEST_SENSE:
                               scsi_request_sense (SCpnt);
                               status = PENDING;
                               break;
-                              };
+			}
+		} else {
                 status=REDO;
                 exit = SUGGEST_RETRY;
+		}
                 break;
 	default : 		
 		exit = (DRIVER_ERROR | SUGGEST_DIE);
@@ -1015,6 +1120,8 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 			if ((SCpnt->retries >= (SCpnt->allowed >> 1))
 			    && !(SCpnt->flags & WAS_RESET))
 			        {
+					printk("scsi%d : reseting for second half of retries.\n",
+						SCpnt->host);
 					reset(SCpnt);
 					break;
 			        }

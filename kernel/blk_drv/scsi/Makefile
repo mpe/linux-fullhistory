@@ -6,12 +6,11 @@
 # unless its something special (ie not a .c file).
 #
 
-SCSI_HOSTS := 0
 SCSI_OBJS :=
 
 ifdef CONFIG_SCSI
 
-SCSI_OBJS := hosts.o scsi.o scsi_ioctl.o
+SCSI_OBJS := hosts.o scsi.o scsi_ioctl.o constants.o
 
 ifdef CONFIG_BLK_DEV_ST
 SCSI_OBJS := $(SCSI_OBJS) st.o
@@ -27,42 +26,34 @@ endif
 
 ifdef CONFIG_SCSI_AHA1542
 SCSI_OBJS := $(SCSI_OBJS) aha1542.o
-SCSI_HOSTS := 1+$(SCSI_HOSTS)
 endif
 
 ifdef CONFIG_SCSI_AHA1740
 SCSI_OBJS := $(SCSI_OBJS) aha1740.o
-SCSI_HOSTS := 1+$(SCSI_HOSTS)
 endif
 
 ifdef CONFIG_SCSI_FUTURE_DOMAIN
 SCSI_OBJS := $(SCSI_OBJS) fdomain.o
-SCSI_HOSTS := 1+$(SCSI_HOSTS)
 endif
 
 ifdef CONFIG_SCSI_ULTRASTOR
 SCSI_OBJS := $(SCSI_OBJS) ultrastor.o
-SCSI_HOSTS := 1+$(SCSI_HOSTS)
 endif
 
 ifdef CONFIG_SCSI_7000FASST
 SCSI_OBJS := $(SCSI_OBJS) wd7000.o
-SCSI_HOSTS := 1+$(SCSI_HOSTS)
 endif
 
 ifdef CONFIG_SCSI_SEAGATE
 SCSI_OBJS := $(SCSI_OBJS) seagate.o
-SCSI_HOSTS := 1+$(SCSI_HOSTS)
 else
 ifdef CONFIG_SCSI_FD_88x
 SCSI_OBJS := $(SCSI_OBJS) seagate.o
-SCSI_HOSTS := 1+$(SCSI_HOSTS)
 endif
 endif
 
 ifdef CONFIG_SCSI_DEBUG
 SCSI_OBJS := $(SCSI_OBJS) scsi_debug.o
-SCSI_HOSTS := 1+$(SCSI_HOSTS)
 endif
 
 scsi.a: $(SCSI_OBJS)
@@ -79,10 +70,11 @@ scsi.a:
 
 endif
 
-CFLAGS := $(CFLAGS) "-DMAX_SCSI_HOSTS=($(SCSI_HOSTS))"
-
 seagate.o: seagate.c
-	$(CC) -Wall -I$(KERNELHDRS) -x c++ -c seagate.c 
+	$(CC) $(CFLAGS) -DARBITRATE -DSLOW_HANDSHAKE -DFAST32 -c seagate.c 
+
+constants.o: constants.c
+	$(CC) $(CFLAGS) -c constants.c
 
 clean:
 	rm -f core *.o *.a *.s

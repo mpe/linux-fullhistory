@@ -10,6 +10,7 @@
 #include <linux/sem.h>
 #include <linux/msg.h>
 #include <linux/shm.h>
+#include <linux/stat.h>
 
 void ipc_init (void);
 extern "C" int sys_ipc (uint call, int first, int second, int third, void *ptr); 
@@ -45,16 +46,19 @@ void ipc_init (void)
  */
 int ipcperms (struct ipc_perm *ipcp, short flag)
 {
-	int i, perm = 0007, euid = current->euid, egid;
+	int i; mode_t perm; uid_t euid; int egid;
 	
 	if (suser())
 		return 0;
+
+	perm = S_IRWXO; euid = current->euid;
+
 	if (euid == ipcp->cuid || euid == ipcp->uid) 
-		perm = 0700;
+		perm = S_IRWXU;
 	else {
 		for (i = 0; (egid = current->groups[i]) != NOGROUP; i++)
 			if ((egid == ipcp->cgid) || (egid == ipcp->gid)) { 
-				perm = 0070; 
+				perm = S_IRWXG; 
 				break;
 			}
 	}

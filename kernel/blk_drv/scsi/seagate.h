@@ -12,7 +12,6 @@
 	$Header
 */
 #ifndef ASM
-int seagate_st0x_biosparam(int, int, int*);
 int seagate_st0x_detect(int);
 int seagate_st0x_command(Scsi_Cmnd *);
 int seagate_st0x_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
@@ -26,18 +25,16 @@ int seagate_st0x_reset(void);
 #endif
 
 #ifdef CONFIG_BLK_DEV_SD
+int seagate_st0x_biosparam(int, int, int*);
+#else
+#define seagate_st0x_biosparam NULL
+#endif
+
 #define SEAGATE_ST0X  {"Seagate ST-01/ST-02", seagate_st0x_detect, 	\
 			 seagate_st0x_info, seagate_st0x_command,  	\
 			 seagate_st0x_queue_command, seagate_st0x_abort, \
 			 seagate_st0x_reset, NULL, seagate_st0x_biosparam, \
 			 1, 7, SG_ALL, 1, 0, 0}
-#else
-#define SEAGATE_ST0X  {"Seagate ST-01/ST-02", seagate_st0x_detect, 	\
-			 seagate_st0x_info, seagate_st0x_command,  	\
-			 seagate_st0x_queue_command, seagate_st0x_abort, \
-			 seagate_st0x_reset, NULL, NULL, \
-			 1, 7, SG_ALL, 1, 0, 0}
-#endif /* CONFIG_BLK_DEV_SD */
 #endif
 
 
@@ -46,13 +43,6 @@ int seagate_st0x_reset(void);
 */
 
 #define PARITY
-
-/*
-	defining ARBITRATE causes the arbitration sequence to be used.  And speed to drop by a 
-	factor of ten.
-*/
-
-#undef ARBITRATE
 
 
 /*
@@ -127,13 +117,15 @@ extern volatile int seagate_st0x_timeout;
 #define DEBUG_FAST 0x1000
 #define DEBUG_SG   0x2000
 #define DEBUG_LINKED	0x4000
+#define DEBUG_BORKEN	0x8000
 
 /* 
  *	Control options - these are timeouts specified in .01 seconds.
  */
 
+/* 30, 20 work */
 #define ST0X_BUS_FREE_DELAY 25
-#define ST0X_SELECTION_DELAY 15
+#define ST0X_SELECTION_DELAY 25
 
 #define eoi() __asm__("push %%eax\nmovb $0x20, %%al\noutb %%al, $0x20\npop %%eax"::)
 	

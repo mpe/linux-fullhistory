@@ -13,11 +13,16 @@
 #include "fpu_system.h"
 #include "fpu_emu.h"
 #include "control_w.h"
+#include "status_w.h"
 
 
 void fadd__()
 {
   /* fadd st,st(i) */
+#ifdef PECULIAR_486
+  /* Default, this conveys no information, but an 80486 does it. */
+  clear_C1();
+#endif PECULIAR_486
   reg_add(FPU_st0_ptr, &st(FPU_rm), FPU_st0_ptr, control_word);
 }
 
@@ -25,6 +30,10 @@ void fadd__()
 void fmul__()
 {
   /* fmul st,st(i) */
+#ifdef PECULIAR_486
+  /* Default, this conveys no information, but an 80486 does it. */
+  clear_C1();
+#endif PECULIAR_486
   reg_mul(FPU_st0_ptr, &st(FPU_rm), FPU_st0_ptr, control_word);
 }
 
@@ -33,6 +42,10 @@ void fmul__()
 void fsub__()
 {
   /* fsub st,st(i) */
+#ifdef PECULIAR_486
+  /* Default, this conveys no information, but an 80486 does it. */
+  clear_C1();
+#endif PECULIAR_486
   reg_sub(FPU_st0_ptr, &st(FPU_rm), FPU_st0_ptr, control_word);
 }
 
@@ -40,6 +53,10 @@ void fsub__()
 void fsubr_()
 {
   /* fsubr st,st(i) */
+#ifdef PECULIAR_486
+  /* Default, this conveys no information, but an 80486 does it. */
+  clear_C1();
+#endif PECULIAR_486
   reg_sub(&st(FPU_rm), FPU_st0_ptr, FPU_st0_ptr, control_word);
 }
 
@@ -47,6 +64,10 @@ void fsubr_()
 void fdiv__()
 {
   /* fdiv st,st(i) */
+#ifdef PECULIAR_486
+  /* Default, this conveys no information, but an 80486 does it. */
+  clear_C1();
+#endif PECULIAR_486
   reg_div(FPU_st0_ptr, &st(FPU_rm), FPU_st0_ptr, control_word);
 }
 
@@ -54,6 +75,10 @@ void fdiv__()
 void fdivr_()
 {
   /* fdivr st,st(i) */
+#ifdef PECULIAR_486
+  /* Default, this conveys no information, but an 80486 does it. */
+  clear_C1();
+#endif PECULIAR_486
   reg_div(&st(FPU_rm), FPU_st0_ptr, FPU_st0_ptr, control_word);
 }
 
@@ -62,6 +87,10 @@ void fdivr_()
 void fadd_i()
 {
   /* fadd st(i),st */
+#ifdef PECULIAR_486
+  /* Default, this conveys no information, but an 80486 does it. */
+  clear_C1();
+#endif PECULIAR_486
   reg_add(FPU_st0_ptr, &st(FPU_rm), &st(FPU_rm), control_word);
 }
 
@@ -69,7 +98,11 @@ void fadd_i()
 void fmul_i()
 {
   /* fmul st(i),st */
-  reg_mul(&st(FPU_rm), FPU_st0_ptr, &st(FPU_rm), control_word);
+#ifdef PECULIAR_486
+  /* Default, this conveys no information, but an 80486 does it. */
+  clear_C1();
+#endif PECULIAR_486
+  reg_mul(FPU_st0_ptr, &st(FPU_rm), &st(FPU_rm), control_word);
 }
 
 
@@ -78,6 +111,10 @@ void fsubri()
   /* fsubr st(i),st */
   /* This is the sense of the 80486 manual
      reg_sub(&st(FPU_rm), FPU_st0_ptr, &st(FPU_rm), control_word); */
+#ifdef PECULIAR_486
+  /* Default, this conveys no information, but an 80486 does it. */
+  clear_C1();
+#endif PECULIAR_486
   reg_sub(FPU_st0_ptr, &st(FPU_rm), &st(FPU_rm), control_word);
 }
 
@@ -87,6 +124,10 @@ void fsub_i()
   /* fsub st(i),st */
   /* This is the sense of the 80486 manual
      reg_sub(FPU_st0_ptr, &st(FPU_rm), &st(FPU_rm), control_word); */
+#ifdef PECULIAR_486
+  /* Default, this conveys no information, but an 80486 does it. */
+  clear_C1();
+#endif PECULIAR_486
   reg_sub(&st(FPU_rm), FPU_st0_ptr, &st(FPU_rm), control_word);
 }
 
@@ -94,6 +135,10 @@ void fsub_i()
 void fdivri()
 {
   /* fdivr st(i),st */
+#ifdef PECULIAR_486
+  /* Default, this conveys no information, but an 80486 does it. */
+  clear_C1();
+#endif PECULIAR_486
   reg_div(FPU_st0_ptr, &st(FPU_rm), &st(FPU_rm), control_word);
 }
 
@@ -101,6 +146,10 @@ void fdivri()
 void fdiv_i()
 {
   /* fdiv st(i),st */
+#ifdef PECULIAR_486
+  /* Default, this conveys no information, but an 80486 does it. */
+  clear_C1();
+#endif PECULIAR_486
   reg_div(&st(FPU_rm), FPU_st0_ptr, &st(FPU_rm), control_word);
 }
 
@@ -109,16 +158,24 @@ void fdiv_i()
 void faddp_()
 {
   /* faddp st(i),st */
-  reg_add(FPU_st0_ptr, &st(FPU_rm), &st(FPU_rm), control_word);
-  pop();
+#ifdef PECULIAR_486
+  /* Default, this conveys no information, but an 80486 does it. */
+  clear_C1();
+#endif PECULIAR_486
+  if ( !reg_add(FPU_st0_ptr, &st(FPU_rm), &st(FPU_rm), control_word) )
+    pop();
 }
 
 
 void fmulp_()
 {
   /* fmulp st(i),st */
-  reg_mul(&st(FPU_rm), FPU_st0_ptr, &st(FPU_rm), control_word);
-  pop();
+#ifdef PECULIAR_486
+  /* Default, this conveys no information, but an 80486 does it. */
+  clear_C1();
+#endif PECULIAR_486
+  if ( !reg_mul(FPU_st0_ptr, &st(FPU_rm), &st(FPU_rm), control_word) )
+    pop();
 }
 
 
@@ -128,8 +185,12 @@ void fsubrp()
   /* fsubrp st(i),st */
   /* This is the sense of the 80486 manual
      reg_sub(&st(FPU_rm), FPU_st0_ptr, &st(FPU_rm), control_word); */
-  reg_sub(FPU_st0_ptr, &st(FPU_rm), &st(FPU_rm), control_word);
-  pop();
+#ifdef PECULIAR_486
+  /* Default, this conveys no information, but an 80486 does it. */
+  clear_C1();
+#endif PECULIAR_486
+  if ( !reg_sub(FPU_st0_ptr, &st(FPU_rm), &st(FPU_rm), control_word) )
+    pop();
 }
 
 
@@ -138,23 +199,35 @@ void fsubp_()
   /* fsubp st(i),st */
   /* This is the sense of the 80486 manual
      reg_sub(FPU_st0_ptr, &st(FPU_rm), &st(FPU_rm), control_word); */
-  reg_sub(&st(FPU_rm), FPU_st0_ptr, &st(FPU_rm), control_word);
-  pop();
+#ifdef PECULIAR_486
+  /* Default, this conveys no information, but an 80486 does it. */
+  clear_C1();
+#endif PECULIAR_486
+  if ( !reg_sub(&st(FPU_rm), FPU_st0_ptr, &st(FPU_rm), control_word) )
+    pop();
 }
 
 
 void fdivrp()
 {
   /* fdivrp st(i),st */
-  reg_div(FPU_st0_ptr, &st(FPU_rm), &st(FPU_rm), control_word);
-  pop();
+#ifdef PECULIAR_486
+  /* Default, this conveys no information, but an 80486 does it. */
+  clear_C1();
+#endif PECULIAR_486
+  if ( !reg_div(FPU_st0_ptr, &st(FPU_rm), &st(FPU_rm), control_word) )
+    pop();
 }
 
 
 void fdivp_()
 {
   /* fdivp st(i),st */
-  reg_div(&st(FPU_rm), FPU_st0_ptr, &st(FPU_rm), control_word);
-  pop();
+#ifdef PECULIAR_486
+  /* Default, this conveys no information, but an 80486 does it. */
+  clear_C1();
+#endif PECULIAR_486
+  if ( !reg_div(&st(FPU_rm), FPU_st0_ptr, &st(FPU_rm), control_word) )
+    pop();
 }
 

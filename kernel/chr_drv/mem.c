@@ -63,14 +63,14 @@ static int read_core(struct inode * inode, struct file * file,char * buf, int co
 		read += count1;
 	}
 
-	while (p < (4096 + 4096) && count > 0) {
+	while (p < 2*PAGE_SIZE && count > 0) {
 		put_fs_byte(0,buf);
 		buf++;
 		p++;
 		count--;
 		read++;
 	}
-	memcpy_tofs(buf,(void *) (p - 4096),count);
+	memcpy_tofs(buf,(void *) (p - PAGE_SIZE),count);
 	read += count;
 	file->f_pos += read;
 	return read;
@@ -88,7 +88,7 @@ static int read_mem(struct inode * inode, struct file * file,char * buf, int cou
 	if (count > high_memory - p)
 		count = high_memory - p;
 	read = 0;
-	while (p < 4096 && count > 0) {
+	while (p < PAGE_SIZE && count > 0) {
 		put_fs_byte(0,buf);
 		buf++;
 		p++;
@@ -113,7 +113,7 @@ static int write_mem(struct inode * inode, struct file * file,char * buf, int co
 	if (count > high_memory - p)
 		count = high_memory - p;
 	written = 0;
-	while (p < 4096 && count > 0) {
+	while (p < PAGE_SIZE && count > 0) {
 		/* Hmm. Do something? */
 		buf++;
 		p++;

@@ -134,7 +134,7 @@ enum machine_type {
 #endif
 
 #ifdef linux
-#define PAGE_SIZE	4096
+#include <linux/page.h>
 #define SEGMENT_SIZE	1024
 #endif
 

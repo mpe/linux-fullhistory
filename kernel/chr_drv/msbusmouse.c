@@ -44,7 +44,8 @@ static struct mouse_status mouse;
 
 static void ms_mouse_interrupt(int unused)
 {
-	char dx, dy, buttons;
+        char dx, dy;
+	unsigned char buttons;
 
 	outb(MS_MSE_COMMAND_MODE, MS_MSE_CONTROL_PORT);
 	outb((inb(MS_MSE_DATA_PORT) | 0x20), MS_MSE_DATA_PORT);
@@ -103,18 +104,22 @@ static int write_mouse(struct inode * inode, struct file * file, char * buffer, 
 
 static int read_mouse(struct inode * inode, struct file * file, char * buffer, int count)
 {
-	int i;
+	int i, dx, dy;
 
 	if (count < 3)
 		return -EINVAL;
 	if (!mouse.ready)
 		return -EAGAIN;
 	put_fs_byte(mouse.buttons | 0x80, buffer);
-	put_fs_byte((char)(mouse.dx<-127 ? -127 : mouse.dx>127 ? 127 : mouse.dx), buffer + 1);
-	put_fs_byte((char)(mouse.dy<-127 ? 127 : mouse.dy>127 ? -127 : -mouse.dy), buffer + 2);
+	dx = mouse.dx < -127 ? -127 : mouse.dx > 127 ?  127 :  mouse.dx;
+	dy = mouse.dy < -127 ?  127 : mouse.dy > 127 ? -127 : -mouse.dy;
+	put_fs_byte((char)dx, buffer + 1);
+	put_fs_byte((char)dy, buffer + 2);
 	for (i = 3; i < count; i++)
 		put_fs_byte(0x00, buffer + i);
-	mouse.dx = mouse.dy = mouse.ready = 0;
+	mouse.dx -= dx;
+	mouse.dy += dy;
+	mouse.ready = 0;
 	return i;	
 }
 

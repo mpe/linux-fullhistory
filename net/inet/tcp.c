@@ -11,6 +11,7 @@
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Mark Evans, <evansmp@uhura.aston.ac.uk>
  *		Corey Minyard <wf-rch!minyard@relay.EU.net>
+ *		Florian La Roche, <flla@stud.uni-sb.de>
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -27,7 +28,6 @@
 #include <linux/in.h>
 #include <linux/fcntl.h>
 #include "inet.h"
-#include "timer.h"
 #include "dev.h"
 #include "ip.h"
 #include "protocol.h"
@@ -42,12 +42,10 @@
 #include <asm/segment.h>
 #include <linux/mm.h>
 
+#define SEQ_TICK 3
+unsigned long seq_offset;
 
-#define tmax(a,b)(before((a),(b)) ?(b) :(a))
-#define swap(a,b) {unsigned long c; c=a; a=b; b=c;}
-
-
-static int 
+static __inline__ int 
 min(unsigned int a, unsigned int b)
 {
   if (a < b) return(a);
@@ -115,10 +113,9 @@ tcp_time_wait(struct sock *sk)
 {
   sk->state = TCP_TIME_WAIT;
   sk->shutdown = SHUTDOWN_MASK;
-  if (!sk->dead) wake_up(sk->sleep);
-  sk->time_wait.len = TCP_TIMEWAIT_LEN;
-  sk->timeout = TIME_CLOSE;
-  reset_timer((struct timer *)&sk->time_wait);
+  if (!sk->dead)
+	wake_up(sk->sleep);
+  reset_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
 }
 
 
@@ -503,9 +500,7 @@ tcp_send_ack(unsigned long sequence, unsigned long ack,
 	/* Force it to send an ack. */
 	sk->ack_backlog++;
 	if (sk->timeout != TIME_WRITE && tcp_connected(sk->state)) {
-		sk->timeout = TIME_WRITE;
-		sk->time_wait.len = 10;		/* got to do it quickly */
-		reset_timer((struct timer *)&sk->time_wait);
+		reset_timer(sk, TIME_WRITE, 10);
 	}
 if (inet_debug == DBG_SLIP) printk("\rtcp_ack: malloc failed\n");
 	return;
@@ -551,8 +546,7 @@ if (inet_debug == DBG_SLIP) printk("\rtcp_ack: build_header failed\n");
 	sk->bytes_rcv = 0;
 	sk->ack_timed = 0;
 	if (sk->send_head == NULL && sk->wfront == NULL) {
-		delete_timer((struct timer *)&sk->time_wait);
-		sk->timeout = 0;
+		delete_timer(sk);
 	}
   }
   t1->ack_seq = ntohl(ack);
@@ -894,9 +888,7 @@ tcp_read_wakeup(struct sock *sk)
   buff = (struct sk_buff *) sk->prot->wmalloc(sk,MAX_ACK_SIZE,1, GFP_ATOMIC);
   if (buff == NULL) {
 	/* Try again real soon. */
-	sk->timeout = TIME_WRITE;
-	sk->time_wait.len = 10;
-	reset_timer((struct timer *) &sk->time_wait);
+	reset_timer(sk, TIME_WRITE, 10);
 	return;
   }
 
@@ -996,11 +988,11 @@ cleanup_rbuf(struct sock *sk)
 		tcp_read_wakeup(sk);
 	} else {
 		/* Force it to send an ack soon. */
-		if (jiffies + TCP_ACK_TIME < sk->time_wait.when) {
-			sk->time_wait.len = TCP_ACK_TIME;
-			sk->timeout = TIME_WRITE;
-			reset_timer((struct timer *) &sk->time_wait);
-		}
+		int was_active = del_timer(&sk->timer);
+		if (!was_active || TCP_ACK_TIME < sk->timer.expires) {
+			reset_timer(sk, TIME_WRITE, TCP_ACK_TIME);
+		} else
+			add_timer(&sk->timer);
 	}
   }
 } 
@@ -1542,13 +1534,13 @@ tcp_conn_request(struct sock *sk, struct sk_buff *skb,
   newsk->copied_seq = skb->h.th->seq;
   newsk->state = TCP_SYN_RECV;
   newsk->timeout = 0;
-  newsk->send_seq = timer_seq * SEQ_TICK - seq_offset;
+  newsk->send_seq = jiffies * SEQ_TICK - seq_offset;
   newsk->rcv_ack_seq = newsk->send_seq;
   newsk->urg =0;
   newsk->retransmits = 0;
   newsk->destroy = 0;
-  newsk->time_wait.sk = newsk;
-  newsk->time_wait.next = NULL;
+  newsk->timer.data = (unsigned long)newsk;
+  newsk->timer.function = &net_timer;
   newsk->dummy_th.source = skb->h.th->dest;
   newsk->dummy_th.dest = skb->h.th->source;
 
@@ -1644,9 +1636,7 @@ tcp_conn_request(struct sock *sk, struct sk_buff *skb,
   tcp_send_check(t1, daddr, saddr, sizeof(*t1)+4, newsk);
   newsk->prot->queue_xmit(newsk, dev, buff, 0);
 
-  newsk->time_wait.len = TCP_CONNECT_TIME;
-  DPRINTF((DBG_TCP, "newsk->time_wait.sk = %X\n", newsk->time_wait.sk));
-  reset_timer((struct timer *)&newsk->time_wait);
+  reset_timer(newsk, TIME_WRITE /* -1 ? FIXME ??? */, TCP_CONNECT_TIME);
   skb->sk = newsk;
 
   /* Charge the sock_buff to newsk. */
@@ -1717,9 +1707,7 @@ tcp_close(struct sock *sk, int timeout)
 	case TCP_FIN_WAIT2:
 	case TCP_LAST_ACK:
 		/* start a timer. */
-		sk->time_wait.len = 4*sk->rtt;;
-		sk->timeout = TIME_CLOSE;
-		reset_timer((struct timer *)&sk->time_wait);
+		reset_timer(sk, TIME_CLOSE, 4 * sk->rtt);
 		if (timeout) tcp_time_wait(sk);
 		release_sock(sk);
 		break;
@@ -1747,9 +1735,7 @@ tcp_close(struct sock *sk, int timeout)
 			/* This will force it to try again later. */
 			if (sk->state != TCP_CLOSE_WAIT)
 					sk->state = TCP_ESTABLISHED;
-			sk->timeout = TIME_CLOSE;
-			sk->time_wait.len = 100; /* wait a second. */
-			reset_timer((struct timer *)&sk->time_wait);
+			reset_timer(sk, TIME_CLOSE, 100);
 			return;
 		}
 		buff->lock = 0;
@@ -1791,10 +1777,8 @@ tcp_close(struct sock *sk, int timeout)
 		if (sk->wfront == NULL) {
 			prot->queue_xmit(sk, dev, buff, 0);
 		} else {
-			sk->time_wait.len = backoff(sk->backoff) *
-			  (2 * sk->mdev + sk->rtt);
-			sk->timeout = TIME_WRITE;
-			reset_timer((struct timer *)&sk->time_wait);
+			reset_timer(sk, TIME_WRITE,
+			  backoff(sk->backoff) * (2 * sk->mdev + sk->rtt));
 			buff->next = NULL;
 			if (sk->wback == NULL) {
 				sk->wfront=buff;
@@ -1904,9 +1888,7 @@ tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
 		return(0);
 	}
 	if (sk->keepopen) {
-		sk->time_wait.len = TCP_TIMEOUT_LEN;
-		sk->timeout = TIME_KEEPOPEN;
-		reset_timer((struct timer *)&sk->time_wait);
+		reset_timer(sk, TIME_KEEPOPEN, TCP_TIMEOUT_LEN);
 	}
 	return(1);
   }
@@ -2106,19 +2088,14 @@ tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
 		DPRINTF((DBG_TCP, "Nothing to do, going to sleep.\n")); 
 		if (!sk->dead) wake_up(sk->sleep);
 
-		delete_timer((struct timer *)&sk->time_wait);
-		sk->timeout = 0;
+		delete_timer(sk);
 	} else {
 		if (sk->state != (unsigned char) sk->keepopen) {
-			sk->timeout = TIME_WRITE;
-			sk->time_wait.len = backoff(sk->backoff) *
-			  (2 * sk->mdev + sk->rtt);
-			reset_timer((struct timer *)&sk->time_wait);
+			reset_timer(sk, TIME_WRITE,
+			  backoff(sk->backoff) * (2 * sk->mdev + sk->rtt));
 		}
 		if (sk->state == TCP_TIME_WAIT) {
-			sk->time_wait.len = TCP_TIMEWAIT_LEN;
-			reset_timer((struct timer *)&sk->time_wait);
-			sk->timeout = TIME_CLOSE;
+			reset_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
 		}
 	}
   }
@@ -2305,9 +2282,7 @@ tcp_data(struct sk_buff *skb, struct sock *sk,
 /*			tcp_send_ack(sk->send_seq, sk->acked_seq,sk,th, saddr); */
 		} else {
 			sk->ack_backlog++;
-			sk->time_wait.len = TCP_ACK_TIME;
-			sk->timeout = TIME_WRITE;
-			reset_timer((struct timer *)&sk->time_wait);
+			reset_timer(sk, TIME_WRITE, TCP_ACK_TIME);
 		}
 	}
   }
@@ -2344,9 +2319,7 @@ tcp_data(struct sk_buff *skb, struct sock *sk,
 	}
 	tcp_send_ack(sk->send_seq, sk->acked_seq, sk, th, saddr);
 	sk->ack_backlog++;
-	sk->time_wait.len = TCP_ACK_TIME;
-	sk->timeout = TIME_WRITE;
-	reset_timer((struct timer *)&sk->time_wait);
+	reset_timer(sk, TIME_WRITE, TCP_ACK_TIME);
   } else {
 	/* We missed a packet.  Send an ack to try to resync things. */
 	tcp_send_ack(sk->send_seq, sk->acked_seq, sk, th, saddr);
@@ -2439,9 +2412,7 @@ tcp_fin(struct sock *sk, struct tcphdr *th,
 		sk->state = TCP_LAST_ACK;
 
 		/* Start the timers. */
-		sk->time_wait.len = TCP_TIMEWAIT_LEN;
-		sk->timeout = TIME_CLOSE;
-		reset_timer((struct timer *)&sk->time_wait);
+		reset_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
 		return(0);
   }
   sk->ack_backlog++;
@@ -2529,7 +2500,7 @@ tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
   }
   sk->inuse = 1;
   sk->daddr = sin.sin_addr.s_addr;
-  sk->send_seq = timer_seq*SEQ_TICK-seq_offset;
+  sk->send_seq = jiffies * SEQ_TICK - seq_offset;
   sk->rcv_ack_seq = sk->send_seq -1;
   sk->err = 0;
   sk->dummy_th.dest = sin.sin_port;
@@ -2588,9 +2559,8 @@ tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 
   sk->prot->queue_xmit(sk, dev, buff, 0);
   
-  sk->time_wait.len = TCP_CONNECT_TIME;
   sk->rtt = TCP_CONNECT_TIME;
-  reset_timer((struct timer *)&sk->time_wait);
+  reset_timer(sk, TIME_WRITE /* -1 FIXME ??? */, TCP_CONNECT_TIME);
   sk->retransmits = TCP_RETR2 - TCP_SYN_RETRIES;
   release_sock(sk);
   return(0);

@@ -161,7 +161,7 @@ static int trunc_dindirect (struct inode * inode, int offset,
 		return 0;
 	}
 repeat:
-	for (i = dindirect_block ; i < addr_per_block ; i ++) {
+	for (i = dindirect_block ; i < addr_per_block ; i++) {
 		if (i < 0)
 			i = 0;
 		if (i < dindirect_block)
@@ -218,7 +218,7 @@ static int trunc_tindirect (struct inode * inode)
 		return 0;
 	}
 repeat:
-	for (i = tindirect_block ; i < addr_per_block ; i ++) {
+	for (i = tindirect_block ; i < addr_per_block ; i++) {
 		if (i < 0)
 			i = 0;
 		if (i < tindirect_block)

@@ -16,6 +16,9 @@
  | From C, call as:                                                          |
  | void round_reg(FPU_REG *arg, unsigned int extent, unsigned int control_w) |
  |                                                                           |
+ | For correct "up" and "down" rounding, the argument must have the correct  |
+ | sign.                                                                     |
+ |                                                                           |
  +---------------------------------------------------------------------------*/
 
 /*---------------------------------------------------------------------------+
@@ -70,8 +73,11 @@
 #include "exception.h"
 #include "control_w.h"
 
+/* Flags for FPU_bits_lost */
 #define	LOST_DOWN	$1
 #define	LOST_UP		$2
+
+/* Flags for FPU_denormal */
 #define	DENORMAL	$1
 #define	UNMASKED_UNDERFLOW $2
 
@@ -345,9 +351,9 @@ LDo_64_round_up:
 	adcl	$0,%eax
 
 LCheck_Round_Overflow:
-	jnc	LRe_normalise		/* Rounding done, no overflow */
+	jnc	LRe_normalise
 
-	/* Overflow, adjust the result (to 1.0) */
+	/* Overflow, adjust the result (significand to 1.0) */
 	rcrl	$1,%eax
 	rcrl	$1,%ebx
 	incl	EXP(%edi)
@@ -372,15 +378,17 @@ xL_Normalised:
 	je	xL_precision_lost_down
 
 xL_no_precision_loss:
-	cmpl	EXP_OVER,EXP(%edi)
-	jge	L_overflow
-
 	/* store the result */
 	movb	TW_Valid,TAG(%edi)
 
 xL_Store_significand:
 	movl	%eax,SIGH(%edi)
 	movl	%ebx,SIGL(%edi)
+
+	xorl	%eax,%eax	// No errors detected.
+
+	cmpl	EXP_OVER,EXP(%edi)
+	jge	L_overflow
 
 FPU_Arith_exit:
 	popl	%ebx
@@ -419,9 +427,8 @@ xMake_denorm:
 	movb	DENORMAL,FPU_denormal
 
 	pushl	%ecx		// Save
-	movl	EXP(%edi),%ecx
-	subl	EXP_UNDER+1,%ecx
-	negl	%ecx
+	movl	EXP_UNDER+1,%ecx
+	subl	EXP(%edi),%ecx
 
 	cmpl	$64,%ecx	/* shrd only works for 0..31 bits */
 	jnc	xDenorm_shift_more_than_63
@@ -434,7 +441,7 @@ xMake_denorm:
 // Shift by [1..31] bits
 	addl	%ecx,EXP(%edi)
 	orl	%edx,%edx	// extension
-	setne	%ch
+	setne	%ch		// Save whether %edx is non-zero
 	xorl	%edx,%edx
 	shrd	%cl,%ebx,%edx
 	shrd	%cl,%eax,%ebx
@@ -495,8 +502,6 @@ xDenorm_shift_more_than_64:
 
 
 xUnmasked_underflow:
-	// Increase the exponent by the magic number
-	addl	$(3*(1<<13)),EXP(%edi)
 	movb	UNMASKED_UNDERFLOW,FPU_denormal
 	jmp	xDenorm_done
 
@@ -513,7 +518,20 @@ xNormalise_result:
 	jne	L_norm_bugged
 #endif PARANOID
 
-	orl	%eax,%eax	// ms bits
+#ifdef PECULIAR_486
+	// This implements a special feature of 80486 behaviour.
+	// Underflow will be signalled even if the number is
+	// not a denormal after rounding.
+	// This difference occurs only for masked underflow, and not
+	// in the unmasked case.
+	// Actual 80486 behaviour differs from this in some circumstances.
+	orl	%eax,%eax		// ms bits
+	js	LNormalise_shift_done	// Will be masked underflow
+#endif PECULIAR_486
+
+	orl	%eax,%eax		// ms bits
+	js	xL_Normalised		// No longer a denormal
+
 	jnz	LNormalise_shift_up_to_31	// Shift left 0 - 31 bits
 
 	orl	%ebx,%ebx
@@ -558,6 +576,8 @@ L_underflow_to_zero:
 	popl	%eax
 	popl	%eax
 
+// Reduce the exponent to EXP_UNDER
+	movl	EXP_UNDER,EXP(%edi)
 	movb	TW_Zero,TAG(%edi)
 	jmp	xL_Store_significand
 
@@ -571,6 +591,16 @@ L_overflow:
 
 
 xSignal_underflow:
+	// The number may have been changed to a non-denormal
+	// by the rounding operations.
+	cmpl	EXP_UNDER,EXP(%edi)
+	jle	xDo_unmasked_underflow
+
+	jmp	xL_Normalised
+
+xDo_unmasked_underflow:
+	// Increase the exponent by the magic number
+	addl	$(3*(1<<13)),EXP(%edi)
 	push	%eax
 	pushl	EX_Underflow
 	call	EXCEPTION
@@ -585,17 +615,19 @@ L_bugged:
 	pushl	EX_INTERNAL|0x201
 	call	EXCEPTION
 	popl	%ebx
-	jmp	FPU_Arith_exit
+	jmp	L_exception_exit
 
 L_norm_bugged:
 	pushl	EX_INTERNAL|0x216
 	call	EXCEPTION
 	popl	%ebx
-	jmp	FPU_Arith_exit
+	jmp	L_exception_exit
 
 L_entry_bugged:
 	pushl	EX_INTERNAL|0x217
 	call	EXCEPTION
 	popl	%ebx
+L_exception_exit:
+	mov	$1,%eax
 	jmp	FPU_Arith_exit
 #endif PARANOID

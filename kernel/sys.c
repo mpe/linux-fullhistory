@@ -16,6 +16,7 @@
 #include <linux/signal.h>
 #include <linux/string.h>
 #include <linux/ptrace.h>
+#include <linux/stat.h>
 
 #include <asm/segment.h>
 #include <asm/io.h>
@@ -156,7 +157,7 @@ static void mark_screen_rdonly(struct task_struct * tsk)
 	if ((tmp = tsk->tss.cr3) != 0) {
 		tmp = *(unsigned long *) tmp;
 		if (tmp & PAGE_PRESENT) {
-			tmp &= 0xfffff000;
+			tmp &= PAGE_MASK;
 			pg_table = (0xA0000 >> PAGE_SHIFT) + (unsigned long *) tmp;
 			tmp = 32;
 			while (tmp--) {
@@ -189,7 +190,7 @@ extern "C" int sys_vm86(struct vm86_struct * v86)
  * inherited from protected mode.
  */
 	info.regs.eflags &= 0x00000dd5;
-	info.regs.eflags |= 0xfffff22a & pt_regs->eflags;
+	info.regs.eflags |= ~0x00000dd5 & pt_regs->eflags;
 	info.regs.eflags |= VM_MASK;
 	current->saved_kernel_stack = current->tss.esp0;
 	current->tss.esp0 = (unsigned long) pt_regs;
@@ -433,8 +434,8 @@ extern "C" int sys_brk(unsigned long brk)
 
 	if (brk < current->end_code)
 		return current->brk;
-	newbrk = (brk + 0x00000fff) & 0xfffff000;
-	oldbrk = (current->brk + 0x00000fff) & 0xfffff000;
+	newbrk = PAGE_ALIGN(brk);
+	oldbrk = PAGE_ALIGN(current->brk);
 	/*
 	 * Always allow shrinking brk
 	 */
@@ -448,7 +449,7 @@ extern "C" int sys_brk(unsigned long brk)
 	 */
 	rlim = current->rlim[RLIMIT_DATA].rlim_cur;
 	if (rlim >= RLIM_INFINITY)
-		rlim = 0xffffffff;
+		rlim = ~0;
 	if (brk - current->end_code > rlim || brk >= current->start_stack - 16384)
 		return current->brk;
 	/*
@@ -891,7 +892,7 @@ extern "C" int sys_umask(int mask)
 {
 	int old = current->umask;
 
-	current->umask = mask & 0777;
+	current->umask = mask & S_IRWXUGO;
 	return (old);
 }
 

@@ -13,9 +13,7 @@
 #define UTS_NODENAME "(none)"	/* set by sethostname() */
 #endif
 
-#ifdef CONFIG_M486
-#define UTS_MACHINE "i486"	/* hardware type */
-#else
+#ifndef UTS_MACHINE
 #define UTS_MACHINE "i386"	/* hardware type */
 #endif
 

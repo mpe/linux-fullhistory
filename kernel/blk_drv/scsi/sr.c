@@ -27,6 +27,7 @@
 #include "hosts.h"
 #include "sr.h"
 #include "scsi_ioctl.h"   /* For the door lock/unlock commands */
+#include "constants.h"
 
 #define MAX_RETRIES 1
 #define SR_TIMEOUT 500
@@ -247,15 +248,12 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
 		 scsi_CDs[DEVICE_NR(SCpnt->request.dev)].device->lun,
 		 result);
 	    
-	if (status_byte(result) == CHECK_CONDITION)
-	    printk("\tSense class %x, sense error %x, extended sense %x\n",
-		 sense_class(SCpnt->sense_buffer[0]), 
-		 sense_error(SCpnt->sense_buffer[0]),
-		 SCpnt->sense_buffer[2] & 0xf);
-	
-	end_scsi_request(SCpnt, 0, SCpnt->request.current_nr_sectors);
-	requeue_sr_request(SCpnt);
-	}
+	  if (status_byte(result) == CHECK_CONDITION)
+		  print_sense("sr", SCpnt);
+	  
+	  end_scsi_request(SCpnt, 0, SCpnt->request.current_nr_sectors);
+	  requeue_sr_request(SCpnt);
+  }
 }
 
 static int sr_open(struct inode * inode, struct file * filp)

@@ -23,7 +23,6 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 
-extern "C" void lcall7(void);
 extern "C" void ret_from_sys_call(void) __asm__("ret_from_sys_call");
 
 #define MAX_TASKS_PER_USER (NR_TASKS/2)
@@ -122,8 +121,7 @@ extern "C" int sys_fork(struct pt_regs regs)
 	struct file *f;
 	unsigned long clone_flags = COPYVM | SIGCHLD;
 
-	p = (struct task_struct *) __get_free_page(GFP_KERNEL);
-	if (!p)
+	if(!(p = (struct task_struct*)__get_free_page(GFP_KERNEL)))
 		goto bad_fork;
 	nr = find_empty_process();
 	if (nr < 0)
@@ -150,8 +148,7 @@ extern "C" int sys_fork(struct pt_regs regs)
 /*
  * set up new TSS and kernel stack
  */
-	p->kernel_stack_page = __get_free_page(GFP_KERNEL);
-	if (!p->kernel_stack_page)
+	if (!(p->kernel_stack_page = __get_free_page(GFP_KERNEL)))
 		goto bad_fork_cleanup;
 	p->tss.es = KERNEL_DS;
 	p->tss.cs = KERNEL_CS;
@@ -178,8 +175,11 @@ extern "C" int sys_fork(struct pt_regs regs)
 	}
 	p->exit_signal = clone_flags & CSIGNAL;
 	p->tss.ldt = _LDT(nr);
+	if (p->ldt) {
+		if (p->ldt = (struct desc_struct*) __get_free_page(GFP_KERNEL))
+			memcpy(p->ldt, current->ldt, PAGE_SIZE);
+	}
 	p->tss.bitmap = offsetof(struct tss_struct,io_bitmap);
-	set_call_gate(p->ldt+0,lcall7);
 	for (i = 0; i < IO_BITMAP_SIZE+1 ; i++) /* IO bitmap is actually SIZE+1 */
 		p->tss.io_bitmap[i] = ~0;
 	if (last_task_used_math == current)
@@ -204,7 +204,11 @@ extern "C" int sys_fork(struct pt_regs regs)
 		current->executable->i_count++;
 	dup_mmap(p);
 	set_tss_desc(gdt+(nr<<1)+FIRST_TSS_ENTRY,&(p->tss));
-	set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY,&(p->ldt));
+	if (p->ldt)
+		set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY,p->ldt, 512);
+	else
+		set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY,&default_ldt, 1);
+
 	p->counter = current->counter >> 1;
 	p->state = TASK_RUNNING;	/* do this last, just in case */
 	return p->pid;

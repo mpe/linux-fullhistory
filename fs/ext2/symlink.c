@@ -38,7 +38,7 @@ struct inode_operations ext2_symlink_inode_operations = {
 	NULL,			/* rmdir */
 	NULL,			/* mknod */
 	NULL,			/* rename */
-	ext2_readlink,	/* readlink */
+	ext2_readlink,		/* readlink */
 	ext2_follow_link,	/* follow_link */
 	NULL,			/* bmap */
 	NULL,			/* truncate */
@@ -55,7 +55,7 @@ static int ext2_follow_link(struct inode * dir, struct inode * inode,
 	*res_inode = NULL;
 	if (!dir) {
 		dir = current->root;
-		dir->i_count ++;
+		dir->i_count++;
 	}
 	if (!inode) {
 		iput (dir);
@@ -80,9 +80,9 @@ static int ext2_follow_link(struct inode * dir, struct inode * inode,
 		link = bh->b_data;
 	} else
 		link = (char *) inode->u.ext2_i.i_data;
-	current->link_count ++;
+	current->link_count++;
 	error = open_namei (link, flag, mode, res_inode, dir);
-	current->link_count --;
+	current->link_count--;
 	iput (inode);
 	if (bh)
 		brelse (bh);
@@ -114,7 +114,7 @@ static int ext2_readlink (struct inode * inode, char * buffer, int buflen)
 		link = (char *) inode->u.ext2_i.i_data;
 	i = 0;
 	while (i < buflen && (c = link[i])) {
-		i ++;
+		i++;
 		put_fs_byte (c, buffer++);
 	}
 	iput (inode);

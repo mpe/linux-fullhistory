@@ -9,6 +9,7 @@
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
+ *		Florian La Roche, <flla@stud.uni-sb.de>
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -27,7 +28,6 @@
 #include <linux/sockios.h>
 #include <linux/net.h>
 #include "inet.h"
-#include "timer.h"
 #include "dev.h"
 #include "ip.h"
 #include "protocol.h"
@@ -50,8 +50,6 @@ int inet_debug = DBG_OFF;		/* INET module debug flag	*/
 
 
 #define min(a,b)	((a)<(b)?(a):(b))
-#define swap(a,b)	{unsigned long c; c=a; a=b; b=c;}
-
 
 extern struct proto packet_prot;
 
@@ -318,7 +316,7 @@ destroy_sock(struct sock *sk)
   remove_sock(sk);
 
   /* Now we can no longer get new packets. */
-  delete_timer((struct timer *)&sk->time_wait);
+  delete_timer(sk);
 
   if (sk->send_tmp != NULL) kfree_skb(sk->send_tmp, FREE_WRITE);
 
@@ -478,9 +476,7 @@ destroy_sock(struct sock *sk)
 	sk->destroy = 1;
 	sk->ack_backlog = 0;
 	sk->inuse = 0;
-	sk->time_wait.len = SOCK_DESTROY_TIME;
-	sk->timeout = TIME_DESTROY;
-	reset_timer((struct timer *)&sk->time_wait);
+	reset_timer(sk, TIME_DESTROY, SOCK_DESTROY_TIME);
   }
   DPRINTF((DBG_INET, "leaving destroy_sock\n"));
 }
@@ -805,11 +801,9 @@ inet_create(struct socket *sock, int protocol)
   sk->pair = NULL;
   sk->send_tail = NULL;
   sk->send_head = NULL;
-  sk->time_wait.len = TCP_CONNECT_TIME;
-  sk->time_wait.when = 0;
-  sk->time_wait.sk = sk;
-  sk->time_wait.next = NULL;
   sk->timeout = 0;
+  sk->timer.data = (unsigned long)sk;
+  sk->timer.function = &net_timer;
   sk->back_log = NULL;
   sk->blog = 0;
   sock->data =(void *) sk;
@@ -1506,7 +1500,7 @@ sock_wfree(struct sock *sk, void *mem, unsigned long size)
 	if (sk->destroy && sk->wmem_alloc == 0 && sk->rmem_alloc == 0) {
 		DPRINTF((DBG_INET,
 			"recovered lost memory, destroying sock = %X\n", sk));
-		delete_timer((struct timer *)&sk->time_wait);
+		delete_timer(sk);
 		kfree_s((void *)sk, sizeof(*sk));
 	}
 	return;
@@ -1523,7 +1517,7 @@ sock_rfree(struct sock *sk, void *mem, unsigned long size)
   if (sk) {
 	sk->rmem_alloc -= size;
 	if (sk->destroy && sk->wmem_alloc == 0 && sk->rmem_alloc == 0) {
-		delete_timer((struct timer *)&sk->time_wait);
+		delete_timer(sk);
 		kfree_s((void *)sk, sizeof(*sk));
 	}
   }
@@ -1614,9 +1608,7 @@ void release_sock(struct sock *sk)
   sti();
   if (sk->dead && sk->state == TCP_CLOSE) {
 	/* Should be about 2 rtt's */
-	sk->time_wait.len = min(sk->rtt * 2, TCP_DONE_TIME);
-	sk->timeout = TIME_DONE;
-	reset_timer((struct timer *)&sk->time_wait);
+	reset_timer(sk, TIME_DONE, min(sk->rtt * 2, TCP_DONE_TIME));
   }
 }
 
@@ -1695,7 +1687,9 @@ static struct proto_ops inet_proto_ops = {
   inet_fcntl,
 };
 
+extern unsigned long seq_offset;
 
+/* Called by ddi.c on kernel startup.  */
 void inet_proto_init(struct ddi_proto *pro)
 {
   struct inet_protocol *p;
@@ -1703,7 +1697,7 @@ void inet_proto_init(struct ddi_proto *pro)
 
   /* Set up our UNIX VFS major device. */
   if (register_chrdev(AF_INET_MAJOR, "af_inet", &inet_fops) < 0) {
-	printk("5s: cannot register major device %d!\n",
+	printk("%s: cannot register major device %d!\n",
 					pro->name, AF_INET_MAJOR);
 	return;
   }
@@ -1732,5 +1726,4 @@ void inet_proto_init(struct ddi_proto *pro)
 
   /* Initialize the "Buffer Head" pointers. */
   bh_base[INET_BH].routine = inet_bh;
-  timer_table[NET_TIMER].fn = net_timer;
 }

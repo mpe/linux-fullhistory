@@ -153,24 +153,24 @@ extern "C" int sys_utime(char * filename, struct utimbuf * times)
 
 /*
  * XXX we should use the real ids for checking _all_ components of the
- * path.  Now we only use them for the final compenent of the path.
+ * path.  Now we only use them for the final component of the path.
  */
 extern "C" int sys_access(const char * filename,int mode)
 {
 	struct inode * inode;
 	int res, i_mode;
 
-	if (mode != (mode & 0007))	/* where's F_OK, X_OK, W_OK, R_OK? */
+	if (mode != (mode & S_IRWXO))	/* where's F_OK, X_OK, W_OK, R_OK? */
 		return -EINVAL;
 	res = namei(filename,&inode);
 	if (res)
 		return res;
 	i_mode = inode->i_mode;
-	res = i_mode & 0777;
+	res = i_mode & S_IRWXUGO;
 	if (current->uid == inode->i_uid)
-		res >>= 6;
+		res >>= 6;		/* needs cleaning? */
 	else if (in_group_p(inode->i_gid))
-		res >>= 3;
+		res >>= 3;		/* needs cleaning? */
 	iput(inode);
 	if ((res & mode) == mode)
 		return 0;
@@ -184,7 +184,7 @@ extern "C" int sys_access(const char * filename,int mode)
 	 * decomposing the path would be racy.
 	 */
 	if ((!current->uid) &&
-	    (S_ISDIR(i_mode) || !(mode & 1) || (i_mode & 0111)))
+	    (S_ISDIR(i_mode) || !(mode & S_IXOTH) || (i_mode & S_IXUGO)))
 		return 0;
 	return -EACCES;
 }
@@ -244,7 +244,7 @@ extern "C" int sys_fchmod(unsigned int fd, mode_t mode)
 		return -EPERM;
 	if (IS_RDONLY(inode))
 		return -EROFS;
-	inode->i_mode = (mode & 07777) | (inode->i_mode & ~07777);
+	inode->i_mode = (mode & S_IALLUGO) | (inode->i_mode & ~S_IALLUGO);
 	if (!suser() && !in_group_p(inode->i_gid))
 		inode->i_mode &= ~S_ISGID;
 	inode->i_ctime = CURRENT_TIME;
@@ -268,7 +268,7 @@ extern "C" int sys_chmod(const char * filename, mode_t mode)
 		iput(inode);
 		return -EROFS;
 	}
-	inode->i_mode = (mode & 07777) | (inode->i_mode & ~07777);
+	inode->i_mode = (mode & S_IALLUGO) | (inode->i_mode & ~S_IALLUGO);
 	if (!suser() && !in_group_p(inode->i_gid))
 		inode->i_mode &= ~S_ISGID;
 	inode->i_ctime = CURRENT_TIME;
@@ -350,11 +350,10 @@ extern "C" int sys_chown(const char * filename, uid_t user, gid_t group)
  * for the internal routines (ie open_namei()/follow_link() etc). 00 is
  * used by symlinks.
  */
-extern "C" int sys_open(const char * filename,int flags,int mode)
+int do_open(const char * filename,int flags,int mode)
 {
 	struct inode * inode;
 	struct file * f;
-	char * tmp;
 	int flag,error,fd;
 
 	for(fd=0 ; fd<NR_OPEN ; fd++)
@@ -373,11 +372,7 @@ extern "C" int sys_open(const char * filename,int flags,int mode)
 		flag++;
 	if (flag & (O_TRUNC | O_CREAT))
 		flag |= 2;
-	error = getname(filename,&tmp);
-	if (!error) {
-		error = open_namei(tmp,flag,mode,&inode,NULL);
-		putname(tmp);
-	}
+	error = open_namei(filename,flag,mode,&inode,NULL);
 	if (error) {
 		current->filp[fd]=NULL;
 		f->f_count--;
@@ -412,6 +407,19 @@ extern "C" int sys_open(const char * filename,int flags,int mode)
 	}
 	f->f_flags &= ~(O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC);
 	return (fd);
+}
+
+extern "C" int sys_open(const char * filename,int flags,int mode)
+{
+	char * tmp;
+	int error;
+
+	error = getname(filename, &tmp);
+	if (error)
+		return error;
+	error = do_open(tmp,flags,mode);
+	putname(tmp);
+	return error;
 }
 
 extern "C" int sys_creat(const char * pathname, int mode)

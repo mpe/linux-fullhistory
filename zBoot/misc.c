@@ -4,7 +4,8 @@
  * This is a collection of several routines from gzip-1.0.3 
  * adapted for Linux.
  *
- * malloc and puts by Hannu Savolainen 1993
+ * malloc by Hannu Savolainen 1993
+ * puts by Nick Holloway 1993
  */
 
 #include "gzip.h"
@@ -75,7 +76,6 @@ void makecrc(void);
 local int get_method(int);
 
 char *vidmem = (char *)0xb8000;
-int vidp = 0;
 int lines, cols;
 
 void *malloc(int size)
@@ -101,20 +101,44 @@ void free(void *where)
 {	/* Don't care */
 }
 
+static void scroll()
+{
+	int i;
+
+	memcpy ( vidmem, vidmem + cols * 2, ( lines - 1 ) * cols * 2 );
+	for ( i = ( lines - 1 ) * cols * 2; i < lines * cols * 2; i += 2 )
+		vidmem[i] = ' ';
+}
+
 static void puts(char *s)
 {
-	int i,n;
-	for (n = 0; s [n] != '\0'; n++);
-	if (!n) n = 10;
+	int x,y;
+	char c;
 
-	for (i=0;i<n;i++)
-	if (s[i] == '\n')
-	{
-		 vidp = ((vidp / (cols*2)) + 1) * cols * 2;
-	} else {
-		vidmem[vidp] = s[i]; 
-		vidp = vidp + 2;
+	x = SCREEN_INFO.orig_x;
+	y = SCREEN_INFO.orig_y;
+
+	while ( ( c = *s++ ) != '\0' ) {
+		if ( c == '\n' ) {
+			x = 0;
+			if ( ++y >= lines ) {
+				scroll();
+				y--;
+			}
+		} else {
+			vidmem [ ( x + cols * y ) * 2 ] = c; 
+			if ( ++x >= cols ) {
+				x = 0;
+				if ( ++y >= lines ) {
+					scroll();
+					y--;
+				}
+			}
+		}
 	}
+
+	SCREEN_INFO.orig_x = x;
+	SCREEN_INFO.orig_y = y;
 }
 
 __ptr_t memset(__ptr_t s, int c, size_t n)
@@ -279,8 +303,6 @@ void decompress_kernel()
 		vidmem = (char *) 0xb0000;
 	else
 		vidmem = (char *) 0xb8000;
-	vidp = 0;
-	vidmem[0] = '0';
 
 	lines = SCREEN_INFO.orig_video_lines;
 	cols = SCREEN_INFO.orig_video_cols;
@@ -304,7 +326,7 @@ void decompress_kernel()
 
 	work(0, 0);
 
-	puts("done.\n\n");
+	puts("done.\n");
 
 	puts("Now booting the kernel\n");
 }

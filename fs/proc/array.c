@@ -89,18 +89,16 @@ static unsigned long get_phys_addr(struct task_struct ** p, unsigned long ptr)
 
 	if (!p || !*p || ptr >= TASK_SIZE)
 		return 0;
-	page = (*p)->tss.cr3;
-	page += (ptr >> 20) & 0xffc;
+	page = *PAGE_DIR_OFFSET((*p)->tss.cr3,ptr);
+	if (!(page & 1))
+		return 0;
+	page &= PAGE_MASK;
+	page += PAGE_PTR(ptr);
 	page = *(unsigned long *) page;
 	if (!(page & 1))
 		return 0;
-	page &= 0xfffff000;
-	page += (ptr >> 10) & 0xffc;
-	page = *(unsigned long *) page;
-	if (!(page & 1))
-		return 0;
-	page &= 0xfffff000;
-	page += ptr & 0xfff;
+	page &= PAGE_MASK;
+	page += ptr & ~PAGE_MASK;
 	return page;
 }
 
@@ -128,7 +126,7 @@ static int get_array(struct task_struct ** p, unsigned long start, unsigned long
 			start++;
 			if (start >= end)
 				return result;
-		} while (!(addr & 0xfff));
+		} while (!(addr & ~PAGE_MASK));
 	}
 }
 
@@ -196,7 +194,7 @@ static int get_stat(int pid, char * buffer)
 	if (vsize) {
 		eip = KSTK_EIP(vsize);
 		esp = KSTK_ESP(vsize);
-		vsize = (*p)->brk + 4095;
+		vsize = (*p)->brk + PAGE_SIZE-1;
 		if (esp)
 			vsize += TASK_SIZE - esp;
 	}
@@ -266,14 +264,14 @@ static int get_statm(int pid, char * buffer)
 		return 0;
 	tpag = (*p)->end_code / PAGE_SIZE;
 	if ((*p)->state != TASK_ZOMBIE) {
-	  pagedir = (unsigned long *)((*p)->tss.cr3 + ((*p)->start_code >> 20));
+	  pagedir = PAGE_DIR_OFFSET((*p)->tss.cr3,(*p)->start_code);
 	  for (i = 0; i < 0x300; ++i) {
 	    if ((ptbl = pagedir[i]) == 0) {
-	      tpag -= 1024;
+	      tpag -= PTRS_PER_PAGE;
 	      continue;
 	    }
-	    buf = (unsigned long *)(ptbl & 0xfffff000);
-	    for (pte = buf; pte < (buf + 1024); ++pte) {
+	    buf = (unsigned long *)(ptbl & PAGE_MASK);
+	    for (pte = buf; pte < (buf + PTRS_PER_PAGE); ++pte) {
 	      if (*pte != 0) {
 		++size;
 		if (*pte & 1) {
@@ -290,7 +288,7 @@ static int get_statm(int pid, char * buffer)
 		      --drs;
 		  }
 		  map_nr = MAP_NR(*pte);
-		  if (map_nr < (high_memory / 4096) && mem_map[map_nr] > 1)
+		  if (map_nr < (high_memory / PAGE_SIZE) && mem_map[map_nr] > 1)
 		    ++share;
 		}
 	      }
@@ -311,8 +309,7 @@ static int array_read(struct inode * inode, struct file * file,char * buf, int c
 
 	if (count < 0)
 		return -EINVAL;
-	page = (char *) get_free_page(GFP_KERNEL);
-	if (!page)
+	if (!(page = (char*) __get_free_page(GFP_KERNEL)))
 		return -ENOMEM;
 	type = inode->i_ino;
 	pid = type >> 16;

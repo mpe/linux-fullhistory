@@ -25,15 +25,15 @@ struct dir_cache_entry {
 	unsigned long ino;
 	char name[EXT2_NAME_LEN];
 	int len;
-	struct dir_cache_entry *queue_prev;
-	struct dir_cache_entry *queue_next;
-	struct dir_cache_entry *prev;
-	struct dir_cache_entry *next;
+	struct dir_cache_entry * queue_prev;
+	struct dir_cache_entry * queue_next;
+	struct dir_cache_entry * prev;
+	struct dir_cache_entry * next;
 };
 
-static struct dir_cache_entry *first = NULL;
-static struct dir_cache_entry *last = NULL;
-static struct dir_cache_entry *first_free = NULL;
+static struct dir_cache_entry * first = NULL;
+static struct dir_cache_entry * last = NULL;
+static struct dir_cache_entry * first_free = NULL;
 static int cache_initialized = 0;
 #ifdef EXT2FS_DEBUG_CACHE
 static int hits = 0;
@@ -46,8 +46,8 @@ static struct dir_cache_entry dcache[CACHE_SIZE];
 
 #define HASH_QUEUES 16
 
-static struct dir_cache_entry *queue_head[HASH_QUEUES];
-static struct dir_cache_entry *queue_tail[HASH_QUEUES];
+static struct dir_cache_entry * queue_head[HASH_QUEUES];
+static struct dir_cache_entry * queue_tail[HASH_QUEUES];
 
 #define hash(dev,dir)	((dev ^ dir) % HASH_QUEUES)
 
@@ -78,14 +78,15 @@ static void init_cache (void)
 /*
  * Find a name in the cache
  */
-static struct dir_cache_entry *find_name (int queue, unsigned short dev,
-					  unsigned long dir, const char *name,
-					  int len)
+static struct dir_cache_entry * find_name (int queue, unsigned short dev,
+					   unsigned long dir,
+					   const char * name, int len)
 {
-	struct dir_cache_entry *p;
+	struct dir_cache_entry * p;
 
-	for (p = queue_head[queue]; p!= NULL && (p->dev != dev ||
-	     p->dir != dir || p->len != len || strncmp (name, p->name, p->len));
+	for (p = queue_head[queue]; p != NULL && (p->dev != dev ||
+	     p->dir != dir || p->len != len ||
+	     strncmp (name, p->name, p->len) != 0);
 	     p = p->queue_next)
 		;
 	return p;
@@ -95,9 +96,9 @@ static struct dir_cache_entry *find_name (int queue, unsigned short dev,
 /*
  * List the cache entries for debugging
  */
-static void show_cache (const char *func_name)
+static void show_cache (const char * func_name)
 {
-	struct dir_cache_entry *p;
+	struct dir_cache_entry * p;
 
 	printk ("%s: cache status\n", func_name);
 	for (p = first; p != NULL; p = p->next)
@@ -109,7 +110,7 @@ static void show_cache (const char *func_name)
 /*
  * Add an entry at the beginning of the cache
  */
-static void add_to_cache (struct dir_cache_entry *p)
+static void add_to_cache (struct dir_cache_entry * p)
 {
 	p->prev = NULL;
 	p->next = first;
@@ -123,7 +124,7 @@ static void add_to_cache (struct dir_cache_entry *p)
 /*
  * Add an entry at the beginning of a queue
  */
-static void add_to_queue (int queue, struct dir_cache_entry *p)
+static void add_to_queue (int queue, struct dir_cache_entry * p)
 {
 	p->queue_prev = NULL;
 	p->queue_next = queue_head[queue];
@@ -137,7 +138,7 @@ static void add_to_queue (int queue, struct dir_cache_entry *p)
 /*
  * Remove an entry from the cache
  */
-static void remove_from_cache (struct dir_cache_entry *p)
+static void remove_from_cache (struct dir_cache_entry * p)
 {
 	if (p->prev)
 		p->prev->next = p->next;
@@ -152,7 +153,7 @@ static void remove_from_cache (struct dir_cache_entry *p)
 /*
  * Remove an entry from a queue
  */
-static void remove_from_queue (int queue, struct dir_cache_entry *p)
+static void remove_from_queue (int queue, struct dir_cache_entry * p)
 {
 	if (p->queue_prev)
 		p->queue_prev->queue_next = p->queue_next;
@@ -170,8 +171,8 @@ static void remove_from_queue (int queue, struct dir_cache_entry *p)
  */
 void ext2_dcache_invalidate (unsigned short dev)
 {
-	struct dir_cache_entry *p;
-	struct dir_cache_entry *p2;
+	struct dir_cache_entry * p;
+	struct dir_cache_entry * p2;
 
 	if (!cache_initialized)
 		init_cache ();
@@ -193,11 +194,11 @@ void ext2_dcache_invalidate (unsigned short dev)
  * Lookup a directory entry in the cache
  */
 unsigned long ext2_dcache_lookup (unsigned short dev, unsigned long dir,
-				  const char *name, int len)
+				  const char * name, int len)
 {
 	char our_name[EXT2_NAME_LEN];
 	int queue;
-	struct dir_cache_entry *p;
+	struct dir_cache_entry * p;
 
 	if (!cache_initialized)
 		init_cache ();
@@ -208,7 +209,7 @@ unsigned long ext2_dcache_lookup (unsigned short dev, unsigned long dir,
 #ifdef EXT2FS_DEBUG_CACHE
 	printk ("dcache_lookup (%04x, %d, %s, %d)\n", dev, dir, our_name, len);
 #endif
-	queue = hash(dev, dir);
+	queue = hash (dev, dir);
 	if ((p = find_name (queue, dev, dir, our_name, len))) {
 		if (p != first) {
 			remove_from_cache (p);
@@ -219,7 +220,7 @@ unsigned long ext2_dcache_lookup (unsigned short dev, unsigned long dir,
 			add_to_queue (queue, p);
 		}
 #ifdef EXT2FS_DEBUG_CACHE
-		hits ++;
+		hits++;
 		printk ("dcache_lookup: %s,hit,inode=%d,hits=%d,misses=%d\n",
 			our_name, p->ino, hits, misses);
 		show_cache ("dcache_lookup");
@@ -227,7 +228,7 @@ unsigned long ext2_dcache_lookup (unsigned short dev, unsigned long dir,
 		return p->ino;
 	} else {
 #ifdef EXT2FS_DEBUG_CACHE
-		misses ++;
+		misses++;
 		printk ("dcache_lookup: %s,miss,hits=%d,misses=%d\n",
 			our_name, hits, misses);
 		show_cache ("dcache_lookup");
@@ -242,10 +243,10 @@ unsigned long ext2_dcache_lookup (unsigned short dev, unsigned long dir,
  * This function is called by ext2_lookup(), ext2_readdir()
  * and the functions which create directory entries
  */
-void ext2_dcache_add (unsigned short dev, unsigned long dir, const char *name,
+void ext2_dcache_add (unsigned short dev, unsigned long dir, const char * name,
 		      int len, int ino)
 {
-	struct dir_cache_entry *p;
+	struct dir_cache_entry * p;
 	int queue;
 
 	if (!cache_initialized)
@@ -256,7 +257,7 @@ void ext2_dcache_add (unsigned short dev, unsigned long dir, const char *name,
 #endif
 	if (len > EXT2_NAME_LEN)
 		len = EXT2_NAME_LEN;
-	queue = hash(dev, dir);
+	queue = hash (dev, dir);
 	if ((p = find_name (queue, dev, dir, name, len))) {
 		p->dir = dir;
 		p->ino = ino;
@@ -303,9 +304,9 @@ void ext2_dcache_add (unsigned short dev, unsigned long dir, const char *name,
  * This function is called by the functions which remove directory entries
  */
 void ext2_dcache_remove (unsigned short dev, unsigned long dir,
-			 const char *name, int len)
+			 const char * name, int len)
 {
-	struct dir_cache_entry *p;
+	struct dir_cache_entry * p;
 	int queue;
 
 	if (!cache_initialized)
@@ -315,7 +316,7 @@ void ext2_dcache_remove (unsigned short dev, unsigned long dir,
 #endif
 	if (len > EXT2_NAME_LEN)
 		len = EXT2_NAME_LEN;
-	queue = hash(dev, dir);
+	queue = hash (dev, dir);
 	if ((p = find_name (queue, dev, dir, name, len))) {
 		remove_from_cache (p);
 		remove_from_queue (queue, p);

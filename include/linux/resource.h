@@ -13,8 +13,8 @@
  * structure will lose.  This reduces the chances of that happening.
  */
 #define	RUSAGE_SELF	0
-#define	RUSAGE_CHILDREN	-1
-#define RUSAGE_BOTH	-2		/* sys_wait4() uses this */
+#define	RUSAGE_CHILDREN	(-1)
+#define RUSAGE_BOTH	(-2)		/* sys_wait4() uses this */
 
 struct	rusage {
 	struct timeval ru_utime;	/* user time used */
@@ -54,14 +54,14 @@ struct	rusage {
 
 #define RLIM_NLIMITS	6
 
-#define RLIM_INFINITY	0x7fffffff
+#define RLIM_INFINITY	LONG_MAX
 
 struct rlimit {
 	int	rlim_cur;
 	int	rlim_max;
 };
 
-#define	PRIO_MIN	-99
+#define	PRIO_MIN	(-99)
 #define	PRIO_MAX	14
 
 #define	PRIO_PROCESS	0

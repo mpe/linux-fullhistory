@@ -42,7 +42,8 @@ void bmouse_setup(char *str, int *ints)
 
 static void mouse_interrupt(int unused)
 {
-	char dx, dy, buttons;
+	char dx, dy;
+	unsigned char buttons;
 
 	MSE_INT_OFF();
 	outb(MSE_READ_X_LOW, MSE_CONTROL_PORT);

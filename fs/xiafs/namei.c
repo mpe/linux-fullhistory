@@ -373,7 +373,7 @@ int xiafs_mkdir(struct inode * dir, const char * name, int len, int mode)
     inode->i_nlink = 2;
     dir_block->b_dirt = 1;
     brelse(dir_block);
-    inode->i_mode = S_IFDIR | (mode & 0777 & ~current->umask);
+    inode->i_mode = S_IFDIR | (mode & S_IRWXUGO & ~current->umask);
     if (dir->i_mode & S_ISGID)
         inode->i_mode |= S_ISGID;
     inode->i_dirt = 1;
@@ -594,7 +594,7 @@ int xiafs_symlink(struct inode * dir, const char * name,
         iput(dir);
 	return -ENOSPC;
     }
-    inode->i_mode = S_IFLNK | 0777;
+    inode->i_mode = S_IFLNK | S_IRWXUGO;
     inode->i_op = &xiafs_symlink_inode_operations;
     name_block = xiafs_bread(inode,0,1);
     if (!name_block) {

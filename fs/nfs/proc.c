@@ -33,6 +33,11 @@ static int proc_debug = 0;
 #define PRINTK if (0) printk
 #endif
 
+#define PREP_PAGE_RPC(code)	\
+  if (!(p0 = (int*)__get_free_page(GFP_KERNEL)))\
+	return NFSERR_IO;\
+  p=nfs_rpc_header(p0,code)
+
 static int *nfs_rpc_header(int *p, int procedure);
 static int *nfs_rpc_verify(int *p);
 static int nfs_stat_to_errno(int stat);
@@ -168,8 +173,7 @@ int nfs_proc_getattr(struct nfs_server *server, struct nfs_fh *fhandle,
 	int status;
 
 	PRINTK("NFS call  getattr\n");
-	p = p0 = (int *) get_free_page(GFP_KERNEL);
-	p = nfs_rpc_header(p, NFSPROC_GETATTR);
+	PREP_PAGE_RPC(NFSPROC_GETATTR);
 	p = xdr_encode_fhandle(p, fhandle);
 	if ((status = nfs_rpc_call(server, p0, p)) < 0) {
 		free_page((long) p0);
@@ -194,8 +198,7 @@ int nfs_proc_setattr(struct nfs_server *server, struct nfs_fh *fhandle,
 	int status;
 
 	PRINTK("NFS call  setattr\n");
-	p = p0 = (int *) get_free_page(GFP_KERNEL);
-	p = nfs_rpc_header(p, NFSPROC_SETATTR);
+	PREP_PAGE_RPC(NFSPROC_SETATTR);
 	p = xdr_encode_fhandle(p, fhandle);
 	p = xdr_encode_sattr(p, sattr);
 	if ((status = nfs_rpc_call(server, p0, p)) < 0) {
@@ -225,8 +228,7 @@ int nfs_proc_lookup(struct nfs_server *server, struct nfs_fh *dir, const char *n
 	if (!strcmp(name, "xyzzy"))
 		proc_debug = 1 - proc_debug;
 #endif
-	p = p0 = (int *) get_free_page(GFP_KERNEL);
-	p = nfs_rpc_header(p, NFSPROC_LOOKUP);
+	PREP_PAGE_RPC(NFSPROC_LOOKUP);
 	p = xdr_encode_fhandle(p, dir);
 	p = xdr_encode_string(p, name);
 	if ((status = nfs_rpc_call(server, p0, p)) < 0) {
@@ -253,8 +255,7 @@ int nfs_proc_readlink(struct nfs_server *server, struct nfs_fh *fhandle,
 	int status;
 
 	PRINTK("NFS call  readlink\n");
-	p = p0 = (int *) get_free_page(GFP_KERNEL);
-	p = nfs_rpc_header(p, NFSPROC_READLINK);
+	PREP_PAGE_RPC(NFSPROC_READLINK);
 	p = xdr_encode_fhandle(p, fhandle);
 	if ((status = nfs_rpc_call(server, p0, p)) < 0) {
 		free_page((long) p0);
@@ -284,8 +285,7 @@ int nfs_proc_read(struct nfs_server *server, struct nfs_fh *fhandle,
 	int len = 0; /* = 0 is for gcc */
 
 	PRINTK("NFS call  read %d @ %d\n", count, offset);
-	p = p0 = (int *) get_free_page(GFP_KERNEL);
-	p = nfs_rpc_header(p, NFSPROC_READ);
+	PREP_PAGE_RPC(NFSPROC_READ);
 	p = xdr_encode_fhandle(p, fhandle);
 	*p++ = htonl(offset);
 	*p++ = htonl(count);
@@ -318,8 +318,7 @@ int nfs_proc_write(struct nfs_server *server, struct nfs_fh *fhandle,
 	int status;
 
 	PRINTK("NFS call  write %d @ %d\n", count, offset);
-	p = p0 = (int *) get_free_page(GFP_KERNEL);
-	p = nfs_rpc_header(p, NFSPROC_WRITE);
+	PREP_PAGE_RPC(NFSPROC_WRITE);
 	p = xdr_encode_fhandle(p, fhandle);
 	*p++ = htonl(offset); /* traditional, could be any value */
 	*p++ = htonl(offset);
@@ -349,8 +348,7 @@ int nfs_proc_create(struct nfs_server *server, struct nfs_fh *dir,
 	int status;
 
 	PRINTK("NFS call  create %s\n", name);
-	p = p0 = (int *) get_free_page(GFP_KERNEL);
-	p = nfs_rpc_header(p, NFSPROC_CREATE);
+	PREP_PAGE_RPC(NFSPROC_CREATE);
 	p = xdr_encode_fhandle(p, dir);
 	p = xdr_encode_string(p, name);
 	p = xdr_encode_sattr(p, sattr);
@@ -377,8 +375,7 @@ int nfs_proc_remove(struct nfs_server *server, struct nfs_fh *dir, const char *n
 	int status;
 
 	PRINTK("NFS call  remove %s\n", name);
-	p = p0 = (int *) get_free_page(GFP_KERNEL);
-	p = nfs_rpc_header(p, NFSPROC_REMOVE);
+	PREP_PAGE_RPC(NFSPROC_REMOVE);
 	p = xdr_encode_fhandle(p, dir);
 	p = xdr_encode_string(p, name);
 	if ((status = nfs_rpc_call(server, p0, p)) < 0) {
@@ -404,8 +401,7 @@ int nfs_proc_rename(struct nfs_server *server,
 	int status;
 
 	PRINTK("NFS call  rename %s -> %s\n", old_name, new_name);
-	p = p0 = (int *) get_free_page(GFP_KERNEL);
-	p = nfs_rpc_header(p, NFSPROC_RENAME);
+	PREP_PAGE_RPC(NFSPROC_RENAME);
 	p = xdr_encode_fhandle(p, old_dir);
 	p = xdr_encode_string(p, old_name);
 	p = xdr_encode_fhandle(p, new_dir);
@@ -432,8 +428,7 @@ int nfs_proc_link(struct nfs_server *server, struct nfs_fh *fhandle,
 	int status;
 
 	PRINTK("NFS call  link %s\n", name);
-	p = p0 = (int *) get_free_page(GFP_KERNEL);
-	p = nfs_rpc_header(p, NFSPROC_LINK);
+	PREP_PAGE_RPC(NFSPROC_LINK);
 	p = xdr_encode_fhandle(p, fhandle);
 	p = xdr_encode_fhandle(p, dir);
 	p = xdr_encode_string(p, name);
@@ -459,8 +454,7 @@ int nfs_proc_symlink(struct nfs_server *server, struct nfs_fh *dir,
 	int status;
 
 	PRINTK("NFS call  symlink %s -> %s\n", name, path);
-	p = p0 = (int *) get_free_page(GFP_KERNEL);
-	p = nfs_rpc_header(p, NFSPROC_SYMLINK);
+	PREP_PAGE_RPC(NFSPROC_SYMLINK);
 	p = xdr_encode_fhandle(p, dir);
 	p = xdr_encode_string(p, name);
 	p = xdr_encode_string(p, path);
@@ -488,8 +482,7 @@ int nfs_proc_mkdir(struct nfs_server *server, struct nfs_fh *dir,
 	int status;
 
 	PRINTK("NFS call  mkdir %s\n", name);
-	p = p0 = (int *) get_free_page(GFP_KERNEL);
-	p = nfs_rpc_header(p, NFSPROC_MKDIR);
+	PREP_PAGE_RPC(NFSPROC_MKDIR);
 	p = xdr_encode_fhandle(p, dir);
 	p = xdr_encode_string(p, name);
 	p = xdr_encode_sattr(p, sattr);
@@ -516,8 +509,7 @@ int nfs_proc_rmdir(struct nfs_server *server, struct nfs_fh *dir, const char *na
 	int status;
 
 	PRINTK("NFS call  rmdir %s\n", name);
-	p = p0 = (int *) get_free_page(GFP_KERNEL);
-	p = nfs_rpc_header(p, NFSPROC_RMDIR);
+	PREP_PAGE_RPC(NFSPROC_RMDIR);
 	p = xdr_encode_fhandle(p, dir);
 	p = xdr_encode_string(p, name);
 	if ((status = nfs_rpc_call(server, p0, p)) < 0) {
@@ -546,8 +538,7 @@ int nfs_proc_readdir(struct nfs_server *server, struct nfs_fh *fhandle,
 
 	PRINTK("NFS call  readdir %d @ %d\n", count, cookie);
 	size = server->rsize;
-	p = p0 = (int *) get_free_page(GFP_KERNEL);
-	p = nfs_rpc_header(p, NFSPROC_READDIR);
+	PREP_PAGE_RPC(NFSPROC_READDIR);
 	p = xdr_encode_fhandle(p, fhandle);
 	*p++ = htonl(cookie);
 	*p++ = htonl(size);
@@ -588,8 +579,7 @@ int nfs_proc_statfs(struct nfs_server *server, struct nfs_fh *fhandle,
 	int status;
 
 	PRINTK("NFS call  statfs\n");
-	p = p0 = (int *) get_free_page(GFP_KERNEL);
-	p = nfs_rpc_header(p, NFSPROC_STATFS);
+	PREP_PAGE_RPC(NFSPROC_STATFS);
 	p = xdr_encode_fhandle(p, fhandle);
 	if ((status = nfs_rpc_call(server, p0, p)) < 0) {
 		free_page((long) p0);

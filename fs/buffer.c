@@ -6,7 +6,7 @@
 
 /*
  *  'buffer.c' implements the buffer-cache functions. Race-conditions have
- * been avoided by NEVER letting a interrupt change a buffer (except for the
+ * been avoided by NEVER letting an interrupt change a buffer (except for the
  * data, of course), but instead letting the caller do it.
  */
 
@@ -37,6 +37,12 @@ extern int check_cdrom_media_change(int, int);
 extern int check_scsidisk_media_change(int, int);
 extern int revalidate_scsidisk(int, int);
 #endif
+#endif
+#ifdef CONFIG_CDU31A
+extern int check_cdu31a_media_change(int, int);
+#endif
+#ifdef CONFIG_MCD
+extern int check_mcd_media_change(int, int);
 #endif
 
 static struct buffer_head * hash_table[NR_HASH];
@@ -233,6 +239,18 @@ void check_disk_change(dev_t dev)
 		break;
 #endif
 
+#if defined(CONFIG_CDU31A)
+         case 15: /* Sony CDROM */
+		i = check_cdu31a_media_change(dev, 0);
+		break;
+#endif
+
+#if defined(CONFIG_MCD)
+         case 23: /* Sony CDROM */
+		i = check_mcd_media_change(dev, 0);
+		break;
+#endif
+
          default:
 		return;
 	};
@@ -379,13 +397,15 @@ void set_blocksize(dev_t dev, int size)
 	if (!blksize_size[MAJOR(dev)])
 		return;
 
-	if (size != 512 && size != 1024 && size != 2048 &&  size != 4096) 
-		panic("Invalid blocksize passed to set_blocksize");
+	switch(size) {
+		default: panic("Invalid blocksize passed to set_blocksize");
+		case 512: case 1024: case 2048: case 4096:;
+	}
 
 	if (blksize_size[MAJOR(dev)][MINOR(dev)] == 0 && size == BLOCK_SIZE) {
 		blksize_size[MAJOR(dev)][MINOR(dev)] = size;
 		return;
-	};
+	}
 	if (blksize_size[MAJOR(dev)][MINOR(dev)] == size)
 		return;
 	sync_buffers(dev, 2);
@@ -437,7 +457,7 @@ repeat:
 	grow_size -= size;
 	if (nr_free_pages > min_free_pages && grow_size <= 0) {
 		grow_buffers(size);
-		grow_size = 4096;
+		grow_size = PAGE_SIZE;
 	}
 	buffers = nr_buffers;
 	bh = NULL;
@@ -588,19 +608,18 @@ static void put_unused_buffer_head(struct buffer_head * bh)
 
 static void get_more_buffer_heads(void)
 {
-	unsigned long page;
+	int i;
 	struct buffer_head * bh;
 
 	if (unused_list)
 		return;
-	page = get_free_page(GFP_BUFFER);
-	if (!page)
+
+	if(! (bh = (struct buffer_head*) get_free_page(GFP_BUFFER)))
 		return;
-	bh = (struct buffer_head *) page;
-	while ((unsigned long) (bh+1) <= page+4096) {
-		put_unused_buffer_head(bh);
-		bh++;
-		nr_buffer_heads++;
+
+	for (nr_buffer_heads+=i=PAGE_SIZE/sizeof*bh ; i>0; i--) {
+		bh->b_next_free = unused_list;	/* only make link */
+		unused_list = bh++;
 	}
 }
 
@@ -632,8 +651,8 @@ static struct buffer_head * create_buffers(unsigned long page, unsigned long siz
 	unsigned long offset;
 
 	head = NULL;
-	offset = 4096;
-	while ((offset -= size) < 4096) {
+	offset = PAGE_SIZE;
+	while ((offset -= size) < PAGE_SIZE) {
 		bh = get_unused_buffer_head();
 		if (!bh)
 			goto no_grow;
@@ -685,14 +704,14 @@ static unsigned long check_aligned(struct buffer_head * first, unsigned long add
 	int nrbuf;
 
 	page = (unsigned long) first->b_data;
-	if (page & 0xfff) {
+	if (page & ~PAGE_MASK) {
 		brelse(first);
 		return 0;
 	}
 	mem_map[MAP_NR(page)]++;
 	bh[0] = first;
 	nrbuf = 1;
-	for (offset = size ; offset < 4096 ; offset += size) {
+	for (offset = size ; offset < PAGE_SIZE ; offset += size) {
 		block = *++b;
 		if (!block)
 			goto no_go;
@@ -728,7 +747,7 @@ static unsigned long try_to_load_aligned(unsigned long address,
 	if (!bh)
 		return 0;
 	p = b;
-	for (offset = 0 ; offset < 4096 ; offset += size) {
+	for (offset = 0 ; offset < PAGE_SIZE ; offset += size) {
 		block = *(p++);
 		if (!block)
 			goto not_aligned;
@@ -755,7 +774,7 @@ static unsigned long try_to_load_aligned(unsigned long address,
 		else
 			break;
 	}
-	buffermem += 4096;
+	buffermem += PAGE_SIZE;
 	bh->b_this_page = tmp;
 	mem_map[MAP_NR(address)]++;
 	read_buffers(arr,block);
@@ -847,12 +866,11 @@ void grow_buffers(int size)
 	unsigned long page;
 	struct buffer_head *bh, *tmp;
 
-	if ((size & 511) || (size > 4096)) {
+	if ((size & 511) || (size > PAGE_SIZE)) {
 		printk("VFS: grow_buffers: size = %d\n",size);
 		return;
 	}
-	page = get_free_page(GFP_BUFFER);
-	if (!page)
+	if(!(page = __get_free_page(GFP_BUFFER)))
 		return;
 	bh = create_buffers(page, size);
 	if (!bh) {
@@ -878,7 +896,7 @@ void grow_buffers(int size)
 			break;
 	}
 	tmp->b_this_page = bh;
-	buffermem += 4096;
+	buffermem += PAGE_SIZE;
 	return;
 }
 
@@ -893,7 +911,7 @@ static int try_to_free(struct buffer_head * bh, struct buffer_head ** bhp)
 
 	*bhp = bh;
 	page = (unsigned long) bh->b_data;
-	page &= 0xfffff000;
+	page &= PAGE_MASK;
 	tmp = bh;
 	do {
 		if (!tmp)
@@ -912,7 +930,7 @@ static int try_to_free(struct buffer_head * bh, struct buffer_head ** bhp)
 		remove_from_queues(p);
 		put_unused_buffer_head(p);
 	} while (tmp != bh);
-	buffermem -= 4096;
+	buffermem -= PAGE_SIZE;
 	free_page(page);
 	return !mem_map[MAP_NR(page)];
 }

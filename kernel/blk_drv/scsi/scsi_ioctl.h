@@ -8,12 +8,12 @@
    the cdrom */
 #define SCSI_IOCTL_DOORLOCK 0x5380		/* lock the eject mechanism */
 #define SCSI_IOCTL_DOORUNLOCK 0x5381		/* unlock the mechanism	  */
-#define SCSI_IOCTL_GET_IDLUN 0x5382
 
 #define	SCSI_REMOVAL_PREVENT	1
 #define	SCSI_REMOVAL_ALLOW	0
 
 extern int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
+extern int kernel_scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
 
 #endif
 

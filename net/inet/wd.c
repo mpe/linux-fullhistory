@@ -15,7 +15,7 @@
 */
 
 static char *version =
-    "wd.c:v0.99-10 5/28/93 Donald Becker (becker@super.org)\n";
+    "wd.c:v0.99-12 8/12/93 Donald Becker (becker@super.org)\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -27,14 +27,10 @@ static char *version =
 #include "dev.h"
 #include "8390.h"
 
-
-extern void NS8390_init(struct device *dev, int startp);
-extern int ei_debug;
-extern struct sigaction ei_sigaction;
-
 int wdprobe(int ioaddr, struct device *dev);
 int wdprobe1(int ioaddr, struct device *dev);
 
+static int wd_open(struct device *dev);
 static void wd_reset_8390(struct device *dev);
 static int wd_block_input(struct device *dev, int count,
 			  char *buf, int ring_offset);
@@ -84,128 +80,88 @@ int wdprobe1(int ioaddr, struct device *dev)
   unsigned char *station_addr = dev->dev_addr;
   int checksum = 0;
   int ancient = 0;		/* An old card without config registers. */
+  int word16 = 0;		/* 0 = 8 bit, 1 = 16 bit */
+  char *model_name;
 
-#if defined(EI_DEBUG) && EI_DEBUG > 2
-  printk("WD80x3 ethercard at %#3x:", ioaddr);
-  for (i = 0; i < 16; i++) {
-      printk(" %2.2X", inb(ioaddr+i));
-  }  
-  printk("\n");
-  printk("WD80x3 ethercard at %#3x:", ioaddr+i);
-  for (;i < 33; i++) {
-      printk(" %2.2X", inb(ioaddr+i));
-  }  
-  printk("\n");
-#endif
-  printk("WD80x3 ethercard probe at %#3x:", ioaddr);
-  for (i = 0; i < 8; i++) {
-      int inval = inb(ioaddr + 8 + i);
-      checksum += inval;
-      if (i < 6)
-	  printk(" %2.2X", (station_addr[i] = inval));
-  }
-  
-  if ((checksum & 0xff) != 0xFF) {
-      printk(" not found (%#2.2x).\n", checksum);
+  for (i = 0; i < 8; i++)
+      checksum += inb(ioaddr + 8 + i);
+  if ((checksum & 0xff) != 0xFF)
       return 0;
-  }
-
-  ei_status.name = "WD8003";
-  ei_status.word16 = 0;
+  
+  printk("%s: WD80x3 at %#3x, ", dev->name, ioaddr);
+  for (i = 0; i < 6; i++)
+      printk(" %2.2X", station_addr[i] = inb(ioaddr + 8 + i));
 
   /* The following PureData probe code was contributed by
-     Mike Jagdis <jaggy@purplet.demon.co.uk>. */
-  /* Puredata seem to do software configuration differently from
-   * others so we have to check for them.
-   */
+     Mike Jagdis <jaggy@purplet.demon.co.uk>. Puredata seem to do software
+     configuration differently from others so we have to check for them.
+     This detects an 8 bit, 16 bit or dumb (Toshiba, jumpered) card.
+     */
   if (inb(ioaddr+0) == 'P' && inb(ioaddr+1) == 'D') {
-      ei_status.name = "PDI8023";
+      unsigned char reg5 = inb(ioaddr+5);
 
-      /* We can also check whether it is an 8 bit (-8), 16 bit (-16)
-       * or dumb (Toshiba) card. The Toshiba version doesn't support
-       * anything except jumper configuration.
-       */
       switch (inb(ioaddr+2)) {
-          case 0x03:
-              ei_status.word16 = 0;
-              ei_status.name = "PDI8023-8";
-              break;
-
-          case 0x05:
-              /* Not sure really... */
-              ei_status.word16 = 0;
-              ei_status.name = "PDUC8023";
-              break;
-
-          case 0x0a:
-              ei_status.word16 = 1;
-              ei_status.name = "PDI8023-16";
-              break;
-
-          default:
-              /* Either 0x01 (dumb) or they've released a new version. */
-              ei_status.word16 = 0;
-              ei_status.name = "PDI8023";
-              break;
+      case 0x03: word16 = 0; model_name = "PDI8023-8";  break;
+      case 0x05: word16 = 0; model_name = "PDUC8023";   break;
+      case 0x0a: word16 = 1; model_name = "PDI8023-16"; break;
+	  /* Either 0x01 (dumb) or they've released a new version. */
+      default:   word16 = 0; model_name = "PDI8023";    break;
       }
-      dev->mem_start = ((inb(ioaddr+5) & 0x1c) + 0xc0) << 12;
-      dev->irq = (inb(ioaddr+5) >> 5) & 0x07;
-      if (dev->irq == 7)
-          dev->irq = 10;
-      else
-          dev->irq++;
-  }				/* End of PureData probe */
-
-  /* This method of checking for a 16-bit board is borrowed from the
-     we.c driver.  A simpler method is just to look in ASIC reg. 0x03.
-     I'm comparing the two method in alpha test to make certain they
-     return the same result. */
-#ifndef FORCE_8BIT		/* Same define as we.c. */
-  /* Check for 16 bit board - it doesn't have register 0/8 aliasing.
-     Do NOT check i>=6 here -- it hangs some old 8003 boards! */
-  for (i = 0; i < 6; i++)
-      if (inb(ioaddr+i) != inb(ioaddr+8+i))
-	  break;
-  if (i >= 6) {
-      ancient = 1;
-      ei_status.name = "WD8003-old";
-  } else {
-      int tmp = inb(ioaddr+1); /* fiddle with 16bit bit */
-      outb( tmp ^ 0x01, ioaddr+1 ); /* attempt to clear 16bit bit */
-      if (((inb( ioaddr+1) & 0x01) == 0x01) /* A 16 bit card */
-	  && (tmp & 0x01) == 0x01   ) {		/* In a 16 slot. */
-	  int asic_reg5 = inb(ioaddr+WD_CMDREG5);
-	  /* Magic to set ASIC to word-wide mode. */
-	  outb( ISA16 | NIC16 | (asic_reg5&0x1f), ioaddr+WD_CMDREG5);
-	  outb(tmp, ioaddr+1);
-	  ei_status.name = "WD8013";
-	  ei_status.word16 = 1; 	/* We have a 16bit board here! */
+      dev->mem_start = ((reg5 & 0x1c) + 0xc0) << 12;
+      dev->irq = (reg5 & 0xe0) == 0xe0 ? 10 : (reg5 >> 5) + 1;
+  } else {				/* End of PureData probe */
+      /* This method of checking for a 16-bit board is borrowed from the
+	 we.c driver.  A simpler method is just to look in ASIC reg. 0x03.
+	 I'm comparing the two method in alpha test to make certain they
+	 return the same result. */
+      /* Check for the old 8 bit board - it has register 0/8 aliasing.
+	 Do NOT check i>=6 here -- it hangs the old 8003 boards! */
+      for (i = 0; i < 6; i++)
+	  if (inb(ioaddr+i) != inb(ioaddr+8+i))
+	      break;
+      if (i >= 6) {
+	  ancient = 1;
+	  model_name = "WD8003-old";
+	  word16 = 0;
+      } else {
+	  int tmp = inb(ioaddr+1); /* fiddle with 16bit bit */
+	  outb( tmp ^ 0x01, ioaddr+1 ); /* attempt to clear 16bit bit */
+	  if (((inb( ioaddr+1) & 0x01) == 0x01) /* A 16 bit card */
+	      && (tmp & 0x01) == 0x01   ) {		/* In a 16 slot. */
+	      int asic_reg5 = inb(ioaddr+WD_CMDREG5);
+	      /* Magic to set ASIC to word-wide mode. */
+	      outb( NIC16 | (asic_reg5&0x1f), ioaddr+WD_CMDREG5);
+	      outb(tmp, ioaddr+1);
+	      model_name = "WD8013";
+	      word16 = 1; 	/* We have a 16bit board here! */
+	  } else {
+	      model_name = "WD8003";
+	      word16 = 0;
+	  }
+	  outb(tmp, ioaddr+1);		/* Restore original reg1 value. */
       }
-      outb(tmp, ioaddr+1);		/* Restore original reg1 value. */
-  }
-#endif /* not FORCE_8BIT */
-
 #ifndef final_version
-  if ( !ancient && (inb(ioaddr+1) & 0x01) != (ei_status.word16 & 0x01))
-      printk("\nWD80?3: Bus width conflict, %d (probe) != %d (reg report).",
-	     ei_status.word16 ? 16:8, (inb(ioaddr+1) & 0x01) ? 16 : 8);
+      if ( !ancient && (inb(ioaddr+1) & 0x01) != (word16 & 0x01))
+	  printk("\nWD80?3: Bus width conflict, %d (probe) != %d (reg report).",
+		 word16 ? 16 : 8, (inb(ioaddr+1) & 0x01) ? 16 : 8);
 #endif
+  }
 
 #if defined(WD_SHMEM) && WD_SHMEM > 0x80000
-  /* Allow an override.  */
+  /* Allow a compile-time override.  */
   dev->mem_start = WD_SHMEM;
 #else
   if (dev->mem_start == 0) {
       /* Sanity and old 8003 check */
       int reg0 = inb(ioaddr);
-      if (reg0 == 0xff) {
+      if (reg0 == 0xff || reg0 == 0) {
 	  /* Future plan: this could check a few likely locations first. */
 	  dev->mem_start = 0xd0000;
 	  printk(" assigning address %#x", dev->mem_start);
       } else {
 	  int high_addr_bits = inb(ioaddr+WD_CMDREG5) & 0x1f;
 	  /* Some boards don't have the register 5 -- it returns 0xff. */
-	  if (high_addr_bits == 0x1f || ei_status.word16 == 0)
+	  if (high_addr_bits == 0x1f || word16 == 0)
 	      high_addr_bits = 0x01;
 	  dev->mem_start = ((reg0&0x3f) << 13) + (high_addr_bits << 19);
       }
@@ -215,26 +171,15 @@ int wdprobe1(int ioaddr, struct device *dev)
   /* The 8390 isn't at the base address -- the ASIC regs are there! */
   dev->base_addr = ioaddr+WD_NIC_OFFSET;
 
-  ei_status.tx_start_page = WD_START_PG;
-  ei_status.rx_start_page = WD_START_PG + TX_PAGES;
-  ei_status.stop_page = ei_status.word16 ? WD13_STOP_PG : WD03_STOP_PG;
-
-  dev->rmem_start = dev->mem_start + TX_PAGES*256;
-  dev->mem_end = dev->rmem_end
-      = dev->mem_start + (ei_status.stop_page - WD_START_PG)*256;
-
   if (dev->irq < 2) {
       int irqmap[] = {9,3,5,7,10,11,15,4};
       int reg1 = inb(ioaddr+1);
       int reg4 = inb(ioaddr+4);
-      if (reg1 == 0xff){	/* Ack!! No way to read the IRQ! */
-	  dev->irq = ei_status.word16 ? 10 : 5;
-      } else
-	  dev->irq = irqmap[((reg4 >> 5) & 0x03)
-			    + (reg1 & 0x04)];
-  } else if (dev->irq == 2)
-      /* Fixup for users that don't know that IRQ 2 is really IRQ 9,
-	 or don't know which one to set. */
+      if (reg1 == 0xff)		/* Ack!! No way to read the IRQ! */
+	  dev->irq = word16 ? 10 : 5;
+      else
+	  dev->irq = irqmap[((reg4 >> 5) & 0x03) + (reg1 & 0x04)];
+  } else if (dev->irq == 2)	/* Fixup bogosity: IRQ2 is really IRQ9 */
       dev->irq = 9;
 
   /* Snarf the interrupt now.  There's no point in waiting since we cannot
@@ -246,31 +191,49 @@ int wdprobe1(int ioaddr, struct device *dev)
     }
   }
 
-  printk("\n%s: %s using IRQ %d with shared memory at %#x-%#x.\n",
-	 dev->name, ei_status.name, dev->irq, dev->mem_start, dev->mem_end-1);
-  if (ei_debug > 1)
+  /* OK, were are certain this is going to work.  Setup the device. */
+  ethdev_init(dev);
+
+  ei_status.name = model_name;
+  ei_status.word16 = word16;
+  ei_status.tx_start_page = WD_START_PG;
+  ei_status.rx_start_page = WD_START_PG + TX_PAGES;
+  ei_status.stop_page = word16 ? WD13_STOP_PG : WD03_STOP_PG;
+
+  /* Don't map in the shared memory until the board is actually opened. */
+  dev->rmem_start = dev->mem_start + TX_PAGES*256;
+  dev->mem_end = dev->rmem_end
+      = dev->mem_start + (ei_status.stop_page - WD_START_PG)*256;
+
+  printk(" %s, IRQ %d, shared memory at %#x-%#x.\n",
+	 model_name, dev->irq, dev->mem_start, dev->mem_end-1);
+  if (ei_debug > 0)
       printk(version);
-
-#if defined(EI_DEBUG) && EI_DEBUG > 2
-  printk("%s: Address read from register is %#x, setting address %#x\n",
-	 ei_status.name,
-	 ((inb(ioaddr+WD_CMDREG5)&0x1f)<<19) + ((inb(ioaddr)&0x3f) << 13),
-	 dev->mem_start);
-#endif
-
-  /* Map in the shared memory. Always set register 0 last to remain
-     compatible with very old boards. */
-  if (ei_status.word16)
-      outb( ISA16 | NIC16 | ((dev->mem_start>>19) & 0x1f), ioaddr+WD_CMDREG5);
-  outb((((dev->mem_start>>13) & 0x3f)|WD_MEMENB), ioaddr); /* WD_CMDREG */
 
   ei_status.reset_8390 = &wd_reset_8390;
   ei_status.block_input = &wd_block_input;
   ei_status.block_output = &wd_block_output;
+  dev->open = &wd_open;
   dev->stop = &wd_close_card;
   NS8390_init(dev, 0);
 
   return dev->base_addr;
+}
+
+static int
+wd_open(struct device *dev)
+{
+  int ioaddr = dev->base_addr - WD_NIC_OFFSET; /* WD_CMDREG */
+
+  /* Map in the shared memory. Always set register 0 last to remain
+     compatible with very old boards. */
+  ei_status.reg0 = ((dev->mem_start>>13) & 0x3f) | WD_MEMENB;
+  ei_status.reg5 = ((dev->mem_start>>19) & 0x1f) | NIC16;
+
+  if (ei_status.word16)
+      outb(ISA16 | ei_status.reg5, ioaddr+WD_CMDREG5);
+  outb(ei_status.reg0, ioaddr); /* WD_CMDREG */
+  return ei_open(dev);
 }
 
 static void
@@ -306,20 +269,7 @@ wd_reset_8390(struct device *dev)
 	    printk("%s: wd_reset_8390() did not complete.\n", dev->name);
 	    break;
 	}
-#if defined(EI_DEBUG) && EI_DEBUG > 2
-    {
-	int i;
-	printk("\nWD80x3 ethercard at %#3x:", wd_cmd_port);
-	for (i = 0; i < 16; i++) {
-	    printk(" %2.2X", inb(wd_cmd_port+i));
-	}  
-	printk("\nWD80x3 ethercard at %#3x:", wd_cmd_port+i);
-	for (;i < 33; i++) {
-	    printk(" %2.2X", inb(wd_cmd_port+i));
-	}  
-	printk("\n");
-    }
-#endif
+    return;
 }
 
 /* Block input and output are easy on shared memory ethercards, and trivial
@@ -328,16 +278,18 @@ wd_reset_8390(struct device *dev)
 static int
 wd_block_input(struct device *dev, int count, char *buf, int ring_offset)
 {
-    void *xfer_start = (void *)(dev->mem_start + ring_offset - (WD_START_PG<<8));
+    void *xfer_start = (void *)(dev->mem_start + ring_offset
+				- (WD_START_PG<<8));
+
+    /* This mapout won't be necessary when wd_close_card is called. */
 #if !defined(WD_no_mapout)
     int wd_cmdreg = dev->base_addr - WD_NIC_OFFSET; /* WD_CMDREG */
-    int reg5_val = ((dev->mem_start>>19) & 0x1f) | NIC16;
 
-    /* Map in the shared memory. */
     if (ei_status.word16)
-	outb(ISA16 | reg5_val, wd_cmdreg + WD_CMDREG5 );
-    outb((((dev->mem_start>>13) & 0x3f) | WD_MEMENB), wd_cmdreg);
+	outb(ISA16 | ei_status.reg5, wd_cmdreg+WD_CMDREG5);
+    outb(ei_status.reg0, wd_cmdreg); /* WD_CMDREG */
 #endif
+
     if (xfer_start + count > (void*) dev->rmem_end) {
 	/* We must wrap the input move. */
 	int semi_count = (void*)dev->rmem_end - xfer_start;
@@ -353,10 +305,11 @@ wd_block_input(struct device *dev, int count, char *buf, int ring_offset)
 	       dev->name, count, ring_offset, xfer_start,
 	       board[-1], board[0], board[1]);
     }
+
 #if !defined(WD_no_mapout)
     /* Turn off 16 bit access so that reboot works. */
     if (ei_status.word16)
-	outb(reg5_val, wd_cmdreg + WD_CMDREG5 );
+	outb(ei_status.reg5, wd_cmdreg+WD_CMDREG5);
 #endif
     return ring_offset + count;
 }
@@ -369,23 +322,24 @@ wd_block_output(struct device *dev, int count, const unsigned char *buf,
 {
     unsigned char *shmem
 	= (unsigned char *)dev->mem_start + ((start_page - WD_START_PG)<<8);
+
 #if !defined(WD_no_mapout)
     int wd_cmdreg = dev->base_addr - WD_NIC_OFFSET; /* WD_CMDREG */
-    int reg5_val = ((dev->mem_start>>19) & 0x1f) | NIC16;
 
-    /* Map in the shared memory. */
     if (ei_status.word16)
-	outb(ISA16 | reg5_val, wd_cmdreg + WD_CMDREG5 );
-    outb((((dev->mem_start>>13) & 0x3f)|WD_MEMENB), wd_cmdreg);
+	outb(ISA16 | ei_status.reg5, wd_cmdreg+WD_CMDREG5);
+    outb(ei_status.reg0, wd_cmdreg); /* WD_CMDREG */
 #endif
+
     memcpy(shmem, buf, count);
     if (ei_debug > 4)
 	printk("%s: wd80*3 block_output(addr=%#x cnt=%d) -> %2x=%2x %2x=%2x %d...\n",
 	       shmem, count, shmem[23], buf[23], shmem[24], buf[24], memcmp(shmem,buf,count));
+
 #if !defined(WD_no_mapout)
     /* Turn off 16 bit access so that reboot works. */
     if (ei_status.word16)
-	outb(reg5_val, wd_cmdreg + WD_CMDREG5 );
+	outb(ei_status.reg5, wd_cmdreg+WD_CMDREG5);
 #endif
 }
 
@@ -399,14 +353,16 @@ wd_close_card(struct device *dev)
 	printk("%s: Shutting down ethercard.\n", dev->name);
     NS8390_init(dev, 0);
 
-    /* Turn off 16-bit shared memory so reboot works. */
-    outb(((dev->mem_start>>19) & 0x1f) | NIC16, wd_cmdreg + WD_CMDREG5 );
-    outb((((dev->mem_start>>13) & 0x3f)), wd_cmdreg);
+    /* Change from 16-bit to 8-bit shared memory so reboot works. */
+    outb(ei_status.reg5, wd_cmdreg + WD_CMDREG5 );
+
+    /* And disable the shared memory. */
+    outb(ei_status.reg0 & ~WD_MEMENB, wd_cmdreg);
 
     return 0;
 }
-
 
+
 /*
  * Local variables:
  *  compile-command: "gcc -DKERNEL -Wall -O6 -fomit-frame-pointer -I/usr/src/linux/net/tcp -c wd.c"

@@ -35,6 +35,20 @@ startup_32:
 	mov %ax,%fs
 	mov %ax,%gs
 	lss _stack_start,%esp
+/*
+ * Clear BSS first so that there are no surprises...
+ */
+	xorl %eax,%eax
+	movl $__edata,%edi
+	movl $__end,%ecx
+	subl %edi,%ecx
+	cld
+	rep
+	stosb
+/*
+ * start system 32-bit setup. We need to re-do some of the things done
+ * in 16-bit mode for the "real" operations.
+ */
 	call setup_idt
 	xorl %eax,%eax
 1:	incl %eax		# check that A20 really IS enabled
@@ -72,16 +86,6 @@ startup_32:
 	rep
 	movsb
 1:
-/*
- * Clear BSS
- */
-	xorl %eax,%eax
-	movl $__edata,%edi
-	movl $__end,%ecx
-	subl %edi,%ecx
-	cld
-	rep
-	stosb
 /* check if it is 486 or 386. */
 /*
  * XXX - this does a lot of unnecessary setup.  Alignment checks don't
@@ -90,6 +94,7 @@ startup_32:
  */
 	movl %esp,%edi		# save stack pointer
 	andl $0xfffffffc,%esp	# align stack to avoid AC fault
+	movl $3,_x86
 	pushfl			# push EFLAGS
 	popl %eax		# get EFLAGS
 	movl %eax,%ecx		# save original EFLAGS
@@ -100,28 +105,31 @@ startup_32:
 	popl %eax		# put it in eax
 	xorl %ecx,%eax		# change in flags
 	andl $0x40000,%eax	# check if AC bit changed
-	jnz 1f			# 486
-	pushl %ecx		# restore original EFLAGS
-	popfl
-	movl %edi,%esp		# restore esp
-	movl %cr0,%eax		# 386
-	andl $0x80000011,%eax	# Save PG,PE,ET
-	orl $2,%eax		# set MP
-	jmp 2f	
-/*
- * NOTE! 486 should set bit 16, to check for write-protect in supervisor
- * mode. Then it would be unnecessary with the "verify_area()"-calls.
- * 486 users probably want to set the NE (#5) bit also, so as to use
- * int 16 for math errors.
- * XXX - the above is out of date.  We set all the bits, but don't take
- * advantage of WP (26 Dec 92).
- */
-1:	pushl %ecx		# restore original EFLAGS
+	je is386
+	movl $4,_x86
+	movl %ecx,%eax
+	xorl $0x200000,%eax	# check ID flag
+	pushl %eax
+	popfl			# if we are on a 486,
+	pushfl			# we can't change it
+	popl %eax
+	xorl %ecx,%eax
+	andl $0x200000,%eax
+	je is486
+	movl $5,_x86		# 586 setup same as 486 at least for now
+is486:	pushl %ecx		# restore original EFLAGS
 	popfl
 	movl %edi,%esp		# restore esp
 	movl %cr0,%eax		# 486
 	andl $0x80000011,%eax	# Save PG,PE,ET
 	orl $0x50022,%eax	# set AM, WP, NE and MP
+	jmp 2f
+is386:	pushl %ecx		# restore original EFLAGS
+	popfl
+	movl %edi,%esp		# restore esp
+	movl %cr0,%eax		# 386
+	andl $0x80000011,%eax	# Save PG,PE,ET
+	orl $2,%eax		# set MP
 2:	movl %eax,%cr0
 	call check_x87
 	call setup_paging
@@ -134,9 +142,11 @@ startup_32:
 	mov %ax,%fs
 	mov %ax,%gs
 	lss _stack_start,%esp
-	pushl $0		# These are the parameters to main :-)
-	pushl $0
-	pushl $0
+	xorl %eax,%eax
+	lldt %ax
+	pushl %eax		# These are the parameters to main :-)
+	pushl %eax
+	pushl %eax
 	cld			# gcc2 wants the direction flag cleared at all times
 	call _start_kernel
 L6:
@@ -148,6 +158,7 @@ L6:
  */
 check_x87:
 	movl $0,_hard_math
+	clts
 	fninit
 	fstsw %ax
 	cmpb $0,%al

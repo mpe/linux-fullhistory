@@ -120,7 +120,7 @@ static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end)
 			remove_wait_queue(entry.wait_address, &entry.wait);
 		current->state = TASK_RUNNING;
 		addrlen = 0;
-		result = sock->ops->recvfrom(sock, (void *) start, 4096, 1, 0,
+		result = sock->ops->recvfrom(sock, (void *) start, PAGE_SIZE, 1, 0,
 			NULL, &addrlen);
 		if (result < 0) {
 			if (result == -EAGAIN) {

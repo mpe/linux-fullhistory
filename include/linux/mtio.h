@@ -48,6 +48,8 @@ struct	mtop {
 #define MTSETDENSITY 21	/* set tape density (SCSI) */
 #define MTSEEK	22	/* seek to block (Tandberg, etc.) */
 #define MTTELL	23	/* tell block (Tandber, etc.) */
+#define MTSETDRVBUFFER 24 /* set the drive buffering according to SCSI-2 */
+			/* ordinary buffered operation with code 1 */
 
 
 /* structure for MTIOCGET - mag tape get status command */

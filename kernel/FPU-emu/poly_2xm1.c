@@ -3,7 +3,8 @@
  |                                                                           |
  | Function to compute 2^x-1 by a polynomial approximation.                  |
  |                                                                           |
- | Copyright (C) 1992    W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
+ | Copyright (C) 1992,1993                                                   |
+ |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail apm233m@vaxc.cc.monash.edu.au    |
  |                                                                           |
  |                                                                           |
@@ -35,52 +36,38 @@ static unsigned short	lterms[HIPOWER][4] =
 
 
 /*--- poly_2xm1() -----------------------------------------------------------+
- |                                                                           |
+ | Requires a positive argument which is TW_Valid and < 1.                   |
  +---------------------------------------------------------------------------*/
 int	poly_2xm1(FPU_REG *arg, FPU_REG *result)
 {
   short		exponent;
   long long     Xll;
-  FPU_REG           accum;
+  FPU_REG       accum;
 
 
   exponent = arg->exp - EXP_BIAS;
 
-  if ( arg->tag == TW_Zero )
+#ifdef PARANOID
+  if ( (arg->sign != SIGN_POS)	/* Can't hack a number < 0.0 */
+      || (exponent >= 0)    	/* or a |number| >= 1.0 */
+      || (arg->tag != TW_Valid) )
     {
-      /* Return 0.0 */
-      reg_move(&CONST_Z, result);
-      return 0;
-    }
-
-  if ( exponent >= 0 )	/* Can't hack a number >= 1.0 */
-    {
-      arith_invalid(result);  /* Number too large */
+      /* Number negative, too large, or not Valid. */
+      EXCEPTION(EX_INTERNAL|0x127);
       return 1;
     }
-
-  if ( arg->sign != SIGN_POS )	/* Can't hack a number < 0.0 */
-    {
-      arith_invalid(result);  /* Number negative */
-      return 1;
-    }
-  
-  if ( exponent < -64 )
-    {
-      reg_move(&CONST_LN2, result);
-      return 0;
-    }
+#endif PARANOID
 
   *(unsigned *)&Xll = arg->sigl;
   *(((unsigned *)&Xll)+1) = arg->sigh;
   if ( exponent < -1 )
     {
-      /* shift the argument right by the required places */
+      /* Shift the argument right by the required places. */
       if ( shrx(&Xll, -1-exponent) >= 0x80000000U )
 	Xll++;	/* round up */
     }
 
-  *(short *)&(accum.sign) = 0; /* will be a valid positive nr with expon = 0 */
+  *(short *)&(accum.sign) = 0; /* Will be a valid positive nr with expon = 0 */
   accum.exp = 0;
 
   /* Do the basic fixed point polynomial evaluation */

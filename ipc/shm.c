@@ -2,7 +2,7 @@
  * linux/ipc/shm.c
  * Copyright (C) 1992, 1993 Krishna Balasubramanian 
  *         Many improvements/fixes by Bruno Haible.
- * assume user segments start at 0x00
+ * assume user segments start at 0x0
  */
 
 #include <linux/errno.h>
@@ -10,6 +10,7 @@
 #include <linux/sched.h>
 #include <linux/ipc.h> 
 #include <linux/shm.h>
+#include <linux/stat.h>
 
 extern int ipcperms (struct ipc_perm *ipcp, short semflg);
 extern unsigned int get_swap_page(void);
@@ -99,7 +100,7 @@ found:
 	for (i=0; i< numpages; shp->shm_pages[i++] = 0);
 	shm_tot += numpages;
 	shp->shm_perm.key = key;
-	shp->shm_perm.mode = (shmflg & 0777);
+	shp->shm_perm.mode = (shmflg & S_IRWXUGO);
 	shp->shm_perm.cuid = shp->shm_perm.uid = current->euid;
 	shp->shm_perm.cgid = shp->shm_perm.gid = current->egid;
 	shp->shm_perm.seq = shm_seq;
@@ -177,7 +178,7 @@ static void killseg (int id)
 		if (!(page = shp->shm_pages[i]))
 			continue;
 		if (page & 1) {
-			free_page (page & ~0xfff);
+			free_page (page & PAGE_MASK);
 			shm_rss--;
 		} else {
 			swap_free (page);
@@ -252,7 +253,7 @@ int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		shp = shm_segs[shmid];
 		if (shp == IPC_UNUSED || shp == IPC_NOID)
 			return -EINVAL;
-		if (ipcperms (&shp->shm_perm, 0444))
+		if (ipcperms (&shp->shm_perm, S_IRUGO))
 			return -EACCES;
 		id = shmid + shp->shm_perm.seq * SHMMNI; 
 		memcpy_tofs (buf, shp, sizeof(*shp));
@@ -285,7 +286,7 @@ int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		ipcp->mode |= SHM_LOCKED;
 		break;
 	case IPC_STAT:
-		if (ipcperms (ipcp, 0444))
+		if (ipcperms (ipcp, S_IRUGO))
 			return -EACCES;
 		if (!buf)
 			return -EFAULT;
@@ -299,8 +300,8 @@ int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		    current->euid == shp->shm_perm.cuid) {
 			ipcp->uid = tbuf.shm_perm.uid;
 			ipcp->gid = tbuf.shm_perm.gid;
-			ipcp->mode = (ipcp->mode & ~0777)
-				| (tbuf.shm_perm.mode & 0777);
+			ipcp->mode = (ipcp->mode & ~S_IRWXUGO)
+				| (tbuf.shm_perm.mode & S_IRWXUGO);
 			shp->shm_ctime = CURRENT_TIME;
 			break;
 		}
@@ -334,16 +335,16 @@ static int shm_map (struct shm_desc *shmd, int remap)
 	
 	/* check that the range is unmapped and has page_tables */
 	for (tmp = shmd->start; tmp < shmd->end; tmp += PAGE_SIZE) { 
-		page_table = (ulong *) (page_dir + ((tmp >> 20) & 0xffc));
+		page_table = PAGE_DIR_OFFSET(page_dir,tmp);
 		if (*page_table & PAGE_PRESENT) {
-			page_table = (ulong *) (0xfffff000 & *page_table);
-			page_table += ((tmp >> PAGE_SHIFT) & 0x3ff);
+			page_table = (ulong *) (PAGE_MASK & *page_table);
+			page_table += ((tmp >> PAGE_SHIFT) & PTRS_PER_PAGE-1);
 			if (*page_table) {
 				if (!remap)
 					return -EINVAL;
 				if (*page_table & PAGE_PRESENT) {
 					--current->rss;
-					free_page (*page_table & ~0xfff);
+					free_page (*page_table & PAGE_MASK);
 				}
 				else
 					swap_free (*page_table);
@@ -352,11 +353,11 @@ static int shm_map (struct shm_desc *shmd, int remap)
 			continue;
 		}  
 	      {
-		unsigned long new_pt = get_free_page(GFP_KERNEL);
-		if (!new_pt)
+		unsigned long new_pt;
+		if(!(new_pt = get_free_page(GFP_KERNEL)))	/* clearing needed?  SRB. */
 			return -ENOMEM;
 		*page_table = new_pt | PAGE_TABLE;
-		tmp = ((tmp + (PAGE_SIZE << 10) - 1) & 0xff400000) -PAGE_SIZE;
+		tmp |= ((PAGE_SIZE << 10) - PAGE_SIZE);
 	}}
 	if (invalid)
 		invalidate();
@@ -365,9 +366,9 @@ static int shm_map (struct shm_desc *shmd, int remap)
 	shm_sgn = shmd->shm_sgn;
 	for (tmp = shmd->start; tmp < shmd->end; tmp += PAGE_SIZE, 
 	     shm_sgn += (1 << SHM_IDX_SHIFT)) { 
-		page_table = (ulong *) (page_dir + ((tmp >> 20) & 0xffc));
-		page_table = (ulong *) (0xfffff000 & *page_table);
-		page_table += (tmp >> PAGE_SHIFT) & 0x3ff;
+		page_table = PAGE_DIR_OFFSET(page_dir,tmp);
+		page_table = (ulong *) (PAGE_MASK & *page_table);
+		page_table += (tmp >> PAGE_SHIFT) & PTRS_PER_PAGE-1;
 		*page_table = shm_sgn;
 	}
 	return 0;
@@ -393,9 +394,6 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	if (shp == IPC_UNUSED || shp == IPC_NOID)
 		return -EINVAL;
 
-#define SHM_RANGE_END 0x60000000
-#define SHM_RANGE_START 0x40000000
-
 	if (!(addr = (ulong) shmaddr)) {
 		if (shmflg & SHM_REMAP)
 			return -EINVAL;
@@ -407,7 +405,7 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 			if (addr >= shmd->start)
 				addr = shmd->start;
 		}
-		addr = (addr - shp->shm_segsz) & ~0xfff;
+		addr = (addr - shp->shm_segsz) & PAGE_MASK;
 	} else if (addr & (SHMLBA-1)) {
 		if (shmflg & SHM_RND) 
 			addr &= ~(SHMLBA-1);       /* round down */
@@ -425,7 +423,7 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 				return -EINVAL;
 		}
 
-	if (ipcperms(&shp->shm_perm, shmflg & SHM_RDONLY ? 0444 : 0666))
+	if (ipcperms(&shp->shm_perm, shmflg & SHM_RDONLY ? S_IRUGO : S_IRUGO|S_IWUGO))
 		return -EACCES;
 	if (shp->shm_perm.seq != shmid / SHMMNI) 
 		return -EIDRM;
@@ -556,7 +554,7 @@ int shm_fork (struct task_struct *p1, struct task_struct *p2)
 	}
 	p2->shm = new_desc;
 	for (shmd = new_desc; shmd; shmd = shmd->task_next) {
-		id = (shmd->shm_sgn >> SHM_ID_SHIFT) & 0xfff;
+		id = (shmd->shm_sgn >> SHM_ID_SHIFT) & SHM_ID_MASK;
 		shp = shm_segs[id];
 		if (shp == IPC_UNUSED) {
 			printk("shm_fork: unused id=%d PANIC\n", id);
@@ -598,8 +596,7 @@ void shm_no_page (unsigned long *ptent)
 	}
 
 	if (!(shp->shm_pages[idx] & PAGE_PRESENT)) {
-		page = get_free_page(GFP_KERNEL);
-		if (!page) {
+		if(!(page = __get_free_page(GFP_KERNEL))) {
 			oom(current);
 			*ptent = BAD_PAGE | PAGE_ACCESSED | 7;
 			return;
@@ -692,15 +689,15 @@ int shm_swap (int prio)
 			printk ("shm_swap: too large idx=%d id=%d PANIC\n",idx, id);
 			continue;
 		}
-		pte = (ulong *) (shmd->task->tss.cr3 + ((tmp>>20) & 0xffc));
+		pte = PAGE_DIR_OFFSET(shmd->task->tss.cr3,tmp);
 		if (!(*pte & 1)) { 
 			printk("shm_swap: bad pgtbl! id=%d start=%x idx=%d\n", 
 					id, shmd->start, idx);
 			*pte = 0;
 			continue;
 		} 
-		pte = (ulong *) (0xfffff000 & *pte);
-		pte += ((tmp >> PAGE_SHIFT) & 0x3ff);
+		pte = (ulong *) (PAGE_MASK & *pte);
+		pte += ((tmp >> PAGE_SHIFT) & PTRS_PER_PAGE-1);
 		tmp = *pte;
 		if (!(tmp & PAGE_PRESENT))
 			continue;
@@ -717,7 +714,7 @@ int shm_swap (int prio)
 
 	if (mem_map[MAP_NR(page)] != 1) 
 		goto check_table;
-	page &= ~0xfff;
+	page &= PAGE_MASK;
 	shp->shm_pages[idx] = swap_nr;
 	if (invalid)
 		invalidate();

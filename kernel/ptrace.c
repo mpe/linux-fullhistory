@@ -19,7 +19,7 @@
 
 /* determines which flags the user has access to. */
 /* 1 = access 0 = no access */
-#define FLAG_MASK 0x00000dd9
+#define FLAG_MASK 0x00044dd5
 
 /* set's the trap flag. */
 #define TRAP_FLAG 0x100
@@ -89,19 +89,18 @@ static unsigned long get_long(struct task_struct * tsk,
 	unsigned long page;
 
 repeat:
-	page = tsk->tss.cr3 + ((addr >> 20) & 0xffc);
-	page = *(unsigned long *) page;
+	page = *PAGE_DIR_OFFSET(tsk->tss.cr3,addr);
 	if (page & PAGE_PRESENT) {
-		page &= 0xfffff000;
-		page += (addr >> 10) & 0xffc;
+		page &= PAGE_MASK;
+		page += PAGE_PTR(addr);
 		page = *((unsigned long *) page);
 	}
 	if (!(page & PAGE_PRESENT)) {
 		do_no_page(0,addr,tsk,0);
 		goto repeat;
 	}
-	page &= 0xfffff000;
-	page += addr & 0xfff;
+	page &= PAGE_MASK;
+	page += addr & ~PAGE_MASK;
 	return *(unsigned long *) page;
 }
 
@@ -117,11 +116,10 @@ static void put_long(struct task_struct * tsk, unsigned long addr,
 	unsigned long page, pte;
 
 repeat:
-	page = tsk->tss.cr3 + ((addr >> 20) & 0xffc);
-	page = *(unsigned long *) page;
+	page = *PAGE_DIR_OFFSET(tsk->tss.cr3,addr);
 	if (page & PAGE_PRESENT) {
-		page &= 0xfffff000;
-		page += (addr >> 10) & 0xffc;
+		page &= PAGE_MASK;
+		page += PAGE_PTR(addr);
 		pte = page;
 		page = *((unsigned long *) page);
 	}
@@ -135,8 +133,8 @@ repeat:
 	}
 /* we're bypassing pagetables, so we have to set the dirty bit ourselves */
 	*(unsigned long *) pte |= (PAGE_DIRTY|PAGE_COW);
-	page &= 0xfffff000;
-	page += addr & 0xfff;
+	page &= PAGE_MASK;
+	page += addr & ~PAGE_MASK;
 	*(unsigned long *) page = data;
 }
 
@@ -149,12 +147,12 @@ static int read_long(struct task_struct * tsk, unsigned long addr,
 {
 	unsigned long low,high;
 
-	if (addr > TASK_SIZE-4)
+	if (addr > TASK_SIZE-sizeof(long))
 		return -EIO;
-	if ((addr & 0xfff) > PAGE_SIZE-4) {
-		low = get_long(tsk,addr & 0xfffffffc);
-		high = get_long(tsk,(addr+4) & 0xfffffffc);
-		switch (addr & 3) {
+	if ((addr & ~PAGE_MASK) > PAGE_SIZE-sizeof(long)) {
+		low = get_long(tsk,addr & ~(sizeof(long)-1));
+		high = get_long(tsk,(addr+sizeof(long)) & ~(sizeof(long)-1));
+		switch (addr & sizeof(long)-1) {
 			case 1:
 				low >>= 8;
 				low |= high << 24;
@@ -183,36 +181,36 @@ static int write_long(struct task_struct * tsk, unsigned long addr,
 {
 	unsigned long low,high;
 
-	if (addr > TASK_SIZE-4)
+	if (addr > TASK_SIZE-sizeof(long))
 		return -EIO;
-	if ((addr & 0xfff) > PAGE_SIZE-4) {
-		low = get_long(tsk,addr & 0xfffffffc);
-		high = get_long(tsk,(addr+4) & 0xfffffffc);
-		switch (addr & 3) {
+	if ((addr & ~PAGE_MASK) > PAGE_SIZE-sizeof(long)) {
+		low = get_long(tsk,addr & ~(sizeof(long)-1));
+		high = get_long(tsk,(addr+sizeof(long)) & ~(sizeof(long)-1));
+		switch (addr & sizeof(long)-1) {
 			case 0: /* shouldn't happen, but safety first */
 				low = data;
 				break;
 			case 1:
 				low &= 0x000000ff;
 				low |= data << 8;
-				high &= 0xffffff00;
+				high &= ~0xff;
 				high |= data >> 24;
 				break;
 			case 2:
 				low &= 0x0000ffff;
 				low |= data << 16;
-				high &= 0xffff0000;
+				high &= ~0xffff;
 				high |= data >> 16;
 				break;
 			case 3:
 				low &= 0x00ffffff;
 				low |= data << 24;
-				high &= 0xff000000;
+				high &= ~0xffffff;
 				high |= data >> 8;
 				break;
 		}
-		put_long(tsk,addr & 0xfffffffc,low);
-		put_long(tsk,(addr+4) & 0xfffffffc,high);
+		put_long(tsk,addr & ~(sizeof(long)-1),low);
+		put_long(tsk,(addr+sizeof(long)) & ~(sizeof(long)-1),high);
 	} else
 		put_long(tsk,addr,data);
 	return 0;
@@ -269,7 +267,7 @@ extern "C" int sys_ptrace(long request, long pid, long addr, long data)
 			res = read_long(child, addr, &tmp);
 			if (res < 0)
 				return res;
-			res = verify_area(VERIFY_WRITE, (void *) data, 4);
+			res = verify_area(VERIFY_WRITE, (void *) data, sizeof(long));
 			if (!res)
 				put_fs_long(tmp,(unsigned long *) data);
 			return res;
@@ -283,10 +281,10 @@ extern "C" int sys_ptrace(long request, long pid, long addr, long data)
 			addr = addr >> 2; /* temporary hack. */
 			if (addr < 0 || addr >= 17)
 				return -EIO;
-			res = verify_area(VERIFY_WRITE, (void *) data, 4);
+			res = verify_area(VERIFY_WRITE, (void *) data, sizeof(long));
 			if (res)
 				return res;
-			tmp = get_stack_long(child, 4*addr - MAGICNUMBER);
+			tmp = get_stack_long(child, sizeof(long)*addr - MAGICNUMBER);
 			put_fs_long(tmp,(unsigned long *) data);
 			return 0;
 		}
@@ -302,11 +300,15 @@ extern "C" int sys_ptrace(long request, long pid, long addr, long data)
 				return -EIO;
 			if (addr == ORIG_EAX)
 				return -EIO;
+			if (addr == DS || addr == ES ||
+			    addr == FS || addr == GS ||
+			    addr == CS || addr == SS)
+				return -EIO;
 			if (addr == EFL) {   /* flags. */
 				data &= FLAG_MASK;
-				data |= get_stack_long(child, EFL*4-MAGICNUMBER)  & ~FLAG_MASK;
+				data |= get_stack_long(child, EFL*sizeof(long)-MAGICNUMBER)  & ~FLAG_MASK;
 			}
-			if (put_stack_long(child, 4*addr-MAGICNUMBER, data))
+			if (put_stack_long(child, sizeof(long)*addr-MAGICNUMBER, data))
 				return -EIO;
 			return 0;
 
@@ -323,8 +325,8 @@ extern "C" int sys_ptrace(long request, long pid, long addr, long data)
 			child->exit_code = data;
 			child->state = TASK_RUNNING;
 	/* make sure the single step bit is not set. */
-			tmp = get_stack_long(child, 4*EFL-MAGICNUMBER) & ~TRAP_FLAG;
-			put_stack_long(child, 4*EFL-MAGICNUMBER,tmp);
+			tmp = get_stack_long(child, sizeof(long)*EFL-MAGICNUMBER) & ~TRAP_FLAG;
+			put_stack_long(child, sizeof(long)*EFL-MAGICNUMBER,tmp);
 			return 0;
 		}
 
@@ -339,8 +341,8 @@ extern "C" int sys_ptrace(long request, long pid, long addr, long data)
 			child->state = TASK_RUNNING;
 			child->exit_code = SIGKILL;
 	/* make sure the single step bit is not set. */
-			tmp = get_stack_long(child, 4*EFL-MAGICNUMBER) & ~TRAP_FLAG;
-			put_stack_long(child, 4*EFL-MAGICNUMBER,tmp);
+			tmp = get_stack_long(child, sizeof(long)*EFL-MAGICNUMBER) & ~TRAP_FLAG;
+			put_stack_long(child, sizeof(long)*EFL-MAGICNUMBER,tmp);
 			return 0;
 		}
 
@@ -350,8 +352,8 @@ extern "C" int sys_ptrace(long request, long pid, long addr, long data)
 			if ((unsigned long) data > NSIG)
 				return -EIO;
 			child->flags &= ~PF_TRACESYS;
-			tmp = get_stack_long(child, 4*EFL-MAGICNUMBER) | TRAP_FLAG;
-			put_stack_long(child, 4*EFL-MAGICNUMBER,tmp);
+			tmp = get_stack_long(child, sizeof(long)*EFL-MAGICNUMBER) | TRAP_FLAG;
+			put_stack_long(child, sizeof(long)*EFL-MAGICNUMBER,tmp);
 			child->state = TASK_RUNNING;
 			child->exit_code = data;
 	/* give it a chance to run. */
@@ -370,8 +372,8 @@ extern "C" int sys_ptrace(long request, long pid, long addr, long data)
 			child->p_pptr = child->p_opptr;
 			SET_LINKS(child);
 			/* make sure the single step bit is not set. */
-			tmp = get_stack_long(child, 4*EFL-MAGICNUMBER) & ~TRAP_FLAG;
-			put_stack_long(child, 4*EFL-MAGICNUMBER,tmp);
+			tmp = get_stack_long(child, sizeof(long)*EFL-MAGICNUMBER) & ~TRAP_FLAG;
+			put_stack_long(child, sizeof(long)*EFL-MAGICNUMBER,tmp);
 			return 0;
 		}
 

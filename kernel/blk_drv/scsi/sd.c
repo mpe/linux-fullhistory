@@ -25,6 +25,7 @@
 #include "hosts.h"
 #include "sd.h"
 #include "scsi_ioctl.h"
+#include "constants.h"
 
 #include <linux/genhd.h>
 
@@ -38,7 +39,7 @@ static const char RCSid[] = "$Header:";
  *	Time out in seconds
  */
 
-#define SD_TIMEOUT 200
+#define SD_TIMEOUT 300
 
 struct hd_struct * sd;
 
@@ -245,11 +246,6 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 */
 
         if (driver_byte(result) != 0) {
-	  {
-	    int i;
-	    printk("Dumping sense buffer: ");
-	    for(i=0;i<10;i++) printk(" %d",SCpnt->sense_buffer[i]);
-	  };
 	  if (sugestion(result) == SUGGEST_REMAP) {
 #ifdef REMAP
 /*
@@ -301,11 +297,7 @@ of the 	disk.
 		       rscsi_disks[DEVICE_NR(SCpnt->request.dev)].device->lun, result);
 
 		if (driver_byte(result) & DRIVER_SENSE)
-			printk("\tSense class %x, sense error %x, extended sense %x\n",
-				sense_class(SCpnt->sense_buffer[0]),
-				sense_error(SCpnt->sense_buffer[0]),
-				SCpnt->sense_buffer[2] & 0xf);
-
+			print_sense("sd", SCpnt);
 		end_scsi_request(SCpnt, 0, SCpnt->request.current_nr_sectors);
 		requeue_sd_request(SCpnt);
 		return;
@@ -675,7 +667,7 @@ static int sd_init_onedisk(int i)
 {
   int j = 0;
   unsigned char cmd[10];
-  unsigned char buffer[513];
+  unsigned char *buffer;
   int the_result, retries;
   Scsi_Cmnd * SCpnt;
 
@@ -684,19 +676,21 @@ static int sd_init_onedisk(int i)
      bus reset. */
 
   SCpnt = allocate_device(NULL, rscsi_disks[i].device->index, 1);
+  buffer = (unsigned char *) scsi_malloc(512);
 
   retries = 3;
   do {
     cmd[0] = READ_CAPACITY;
     cmd[1] = (rscsi_disks[i].device->lun << 5) & 0xe0;
     memset ((void *) &cmd[2], 0, 8);
+    memset ((void *) buffer, 0, 8);
     SCpnt->request.dev = 0xffff;  /* Mark as really busy again */
     SCpnt->sense_buffer[0] = 0;
     SCpnt->sense_buffer[2] = 0;
     
     scsi_do_cmd (SCpnt,
 		 (void *) cmd, (void *) buffer,
-		 512, sd_init_done,  SD_TIMEOUT,
+		 8, sd_init_done,  SD_TIMEOUT,
 		 MAX_RETRIES);
     
     if (current == task[0])
@@ -784,6 +778,7 @@ static int sd_init_onedisk(int i)
 	      rscsi_disks[j] = rscsi_disks[++j];
 	    --i;
 	    --NR_SD;
+	    scsi_free(buffer, 512);
 	    return i;
 	  };
 	}
@@ -795,6 +790,7 @@ static int sd_init_onedisk(int i)
 
   rscsi_disks[i].ten = 1;
   rscsi_disks[i].remap = 1;
+  scsi_free(buffer, 512);
   return i;
 }
 

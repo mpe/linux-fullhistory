@@ -9,6 +9,7 @@
 #include <linux/sched.h>
 #include <linux/sem.h>
 #include <linux/ipc.h>
+#include <linux/stat.h>
 
 extern int ipcperms (struct ipc_perm *ipcp, short semflg);
 static int newary (key_t, int, int);
@@ -79,7 +80,7 @@ found:
 	memset (sma, 0, size);
 	sma->sem_base = (struct sem *) &sma[1];
 	ipcp = &sma->sem_perm;
-	ipcp->mode = (semflg & 0x01FF);
+	ipcp->mode = (semflg & S_IRWXUGO);
 	ipcp->key = key;
 	ipcp->cuid = ipcp->uid = current->euid;
 	ipcp->gid = ipcp->cgid = current->egid;
@@ -198,7 +199,7 @@ int sys_semctl (int semid, int semnum, int cmd, void *arg)
 		sma = semary[semid];
 		if (sma == IPC_UNUSED || sma == IPC_NOID)
 			return -EINVAL;
-		if (ipcperms (&sma->sem_perm, 0444))
+		if (ipcperms (&sma->sem_perm, S_IRUGO))
 			return -EACCES;
 		id = semid + sma->sem_perm.seq * SEMMNI; 
 		memcpy_tofs (buf, sma, sizeof(*sma));
@@ -223,7 +224,7 @@ int sys_semctl (int semid, int semnum, int cmd, void *arg)
 	case GETNCNT:
 	case GETZCNT:
 	case GETALL:
-		if (ipcperms (ipcp, 0444))
+		if (ipcperms (ipcp, S_IRUGO))
 			return -EACCES;
 		switch (cmd) {
 		case GETVAL : return curr->semval; 
@@ -283,14 +284,14 @@ int sys_semctl (int semid, int semnum, int cmd, void *arg)
 	
 	switch (cmd) {
 	case GETALL:
-		if (ipcperms (ipcp, 0444))
+		if (ipcperms (ipcp, S_IRUGO))
 			return -EACCES;
 		for (i=0; i< sma->sem_nsems; i++)
 			sem_io[i] = sma->sem_base[i].semval;
 		memcpy_tofs (array, sem_io, nsems*sizeof(ushort));
 		break;
 	case SETVAL:
-		if (ipcperms (ipcp, 0222))
+		if (ipcperms (ipcp, S_IWUGO))
 			return -EACCES;
 		for (un = sma->undo; un; un = un->id_next)
 			if (semnum == un->sem_num)
@@ -307,19 +308,19 @@ int sys_semctl (int semid, int semnum, int cmd, void *arg)
 		    current->euid == ipcp->uid) {
 			ipcp->uid = tbuf.sem_perm.uid;
 			ipcp->gid = tbuf.sem_perm.gid;
-			ipcp->mode = (ipcp->mode & ~0777)
-				| (tbuf.sem_perm.mode & 0777);
+			ipcp->mode = (ipcp->mode & ~S_IRWXUGO)
+				| (tbuf.sem_perm.mode & S_IRWXUGO);
 			sma->sem_ctime = CURRENT_TIME;
 			return 0;
 		}
 		return -EPERM;
 	case IPC_STAT:
-		if (ipcperms (ipcp, 0444))
+		if (ipcperms (ipcp, S_IRUGO))
 			return -EACCES;
 		memcpy_tofs (buf, sma, sizeof (*sma));
 		break;
 	case SETALL:
-		if (ipcperms (ipcp, 0222))
+		if (ipcperms (ipcp, S_IWUGO))
 			return -EACCES;
 		for (i=0; i<nsems; i++) 
 			sma->sem_base[i].semval = sem_io[i];
@@ -368,7 +369,7 @@ int sys_semop (int semid, struct sembuf *tsops, unsigned nsops)
 				semncnt ++;
 		}
 	}
-	if (ipcperms(&sma->sem_perm, alter ? 0222 : 0444))
+	if (ipcperms(&sma->sem_perm, alter ? S_IWUGO : S_IRUGO))
 		return -EACCES;
 	/* 
 	 * ensure every sop with undo gets an undo structure 

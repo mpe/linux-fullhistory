@@ -1,19 +1,20 @@
 /* 8390.c: A general NS8390 ethernet driver core for linux. */
 /*
-    Written 1992,1993 by Donald Becker. This is alpha test code.
+    Written 1992,1993 by Donald Becker.
+
     Copyright 1993 United States Government as represented by the
     Director, National Security Agency.  This software may be used and
     distributed according to the terms of the GNU Public License,
     incorporated herein by reference.
-    
-    This driver should work with many 8390-based ethernet adaptors.
+
+    This is the chip-specific code for many 8390-based ethernet adaptors.
 
     The Author may be reached as becker@super.org or
     C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715
 */
 
 static char *version =
-    "8390.c:v0.99-10 5/28/93 for 0.99.6+ Donald Becker (becker@super.org)\n";
+    "8390.c:v0.99-12 8/9/93 for 0.99.12+ Donald Becker (becker@super.org)\n";
 #include <linux/config.h>
 #if !defined(EL2) && !defined(NE2000) && !defined(WD80x3) && !defined(HPLAN)
 /* They don't know what they want -- give it all to them! */
@@ -31,15 +32,11 @@ static char *version =
   statistics, and maybe read() and write() access to raw packets.
   This won't be done until after Linux 1.00.
 
-  This driver should support multiple, diverse boards simultaneousely.
-  This won't be done until after Linux 1.00.
-
 Sources:
   The National Semiconductor LAN Databook, and the 3Com 3c503 databook.
   The NE* programming info came from the Crynwr packet driver, and figuring
   out that the those boards are similar to the NatSemi evaluation board
   described in AN-729.  Thanks NS, no thanks to Novell/Eagle.
-  Cabletron provided only info I had already gotten from other sources -- hiss.
   */
 
 #include <linux/config.h>
@@ -60,7 +57,6 @@ Sources:
 
 #include "dev.h"
 #include "eth.h"
-#include "timer.h"
 #include "ip.h"
 #include "protocol.h"
 #include "tcp.h"
@@ -78,24 +74,21 @@ Sources:
 #ifdef EI_DEBUG
 int ei_debug = EI_DEBUG;
 #else
-int ei_debug = 2;
+int ei_debug = 1;
 #endif
-
-struct device *irq2dev_map[16] = {0,0,0, /* zeroed...*/};
 
 /* Max number of packets received at one Intr. */
 /*static int high_water_mark = 0;*/
 
 /* Index to functions. */
 /* Put in the device structure. */
-static int ei_open(struct device *dev);
+int ei_open(struct device *dev);
 /* Dispatch from interrupts. */
 void ei_interrupt(int reg_ptr);
 static void ei_tx_intr(struct device *dev);
 static void ei_receive(struct device *dev);
 static void ei_rx_overrun(struct device *dev);
 
-int ethdev_init(struct device *dev);
 /* Routines generic to NS8390-based boards. */
 void NS8390_init(struct device *dev, int startp);
 static void NS8390_trigger_send(struct device *dev, unsigned int length,
@@ -113,7 +106,7 @@ struct sigaction ei_sigaction = { ei_interrupt, 0, 0, NULL, };
    up anew at each open, even though many of these registers should only
    need to be set once at boot.
    */
-static int
+int
 ei_open(struct device *dev)
 {
     struct ei_device *ei_local = (struct ei_device *) dev->priv;
@@ -195,7 +188,7 @@ ei_start_xmit(struct sk_buff *skb, struct device *dev)
 	return 1;
     }
     outb(0x00,  e8390_base + EN0_IMR);
-    tmp_tbusy=dev->tbusy; 
+    tmp_tbusy=dev->tbusy;
     dev->tbusy = 1;                   /* lock dev_tint() in dev.c */
     ei_local->irqlock = 1;
     sti();
@@ -243,7 +236,8 @@ ei_start_xmit(struct sk_buff *skb, struct device *dev)
 	    tmp_tbusy = 1;
     } else {
 	dev->trans_start = jiffies;
-	ei_block_output(dev, length, (unsigned char *)(skb+1), ei_local->tx_start_page);
+	ei_block_output(dev, length, (unsigned char *)(skb+1),
+			ei_local->tx_start_page);
 	NS8390_trigger_send(dev, send_length, ei_local->tx_start_page);
 	tmp_tbusy = 1;
     }  /* PINGPONG */
@@ -290,7 +284,7 @@ ei_interrupt(int reg_ptr)
 
     dev->interrupt = 1;
     sti(); /* Allow other interrupts. */
-    
+
     /* Change to page 0 and read the intr status reg. */
     outb_p(E8390_NODMA+E8390_PAGE0, e8390_base + E8390_CMD);
     if (ei_debug > 3)
@@ -315,9 +309,9 @@ ei_interrupt(int reg_ptr)
 	    ei_tx_intr(dev);
 	} else if (interrupts & ENISR_COUNTERS) {
 	    struct ei_device *ei_local = (struct ei_device *) dev->priv;
-	    ei_local->soft_rx_errors += inb_p(e8390_base + EN0_COUNTER0);
-	    ei_local->soft_rx_errors += inb_p(e8390_base + EN0_COUNTER1);
-	    ei_local->missed_packets += inb_p(e8390_base + EN0_COUNTER2);
+	    ei_local->stat.rx_frame_errors += inb_p(e8390_base + EN0_COUNTER0);
+	    ei_local->stat.rx_crc_errors   += inb_p(e8390_base + EN0_COUNTER1);
+	    ei_local->stat.rx_missed_errors+= inb_p(e8390_base + EN0_COUNTER2);
 	    outb_p(ENISR_COUNTERS, e8390_base + EN0_ISR); /* Ack intr. */
 	}
 
@@ -347,10 +341,6 @@ ei_tx_intr(struct device *dev)
     struct ei_device *ei_local = (struct ei_device *) dev->priv;
 
     outb_p(ENISR_TX, e8390_base + EN0_ISR); /* Ack intr. */
-    if ((status & ENTSR_PTX) == 0)
-	ei_local->tx_errors++;
-    else
-	ei_local->tx_packets++;
 
     if (ei_local->pingpong) {
 	ei_local->txqueue--;
@@ -389,6 +379,25 @@ ei_tx_intr(struct device *dev)
 	ei_local->txing = 0;
 	dev->tbusy = 0;
     }
+
+    /* Do the statistics _after_ we start the next TX. */
+    if (status & ENTSR_PTX)
+	ei_local->stat.tx_packets++;
+    else
+	ei_local->stat.tx_errors++;
+    if (status & ENTSR_COL)
+	ei_local->stat.collisions++;
+    if (status & ENTSR_ABT)
+	ei_local->stat.tx_aborted_errors++;
+    if (status & ENTSR_CRS)
+	ei_local->stat.tx_carrier_errors++;
+    if (status & ENTSR_FU)
+	ei_local->stat.tx_fifo_errors++;
+    if (status & ENTSR_CDH)
+	ei_local->stat.tx_heartbeat_errors++;
+    if (status & ENTSR_OWC)
+	ei_local->stat.tx_window_errors++;
+
     mark_bh (INET_BH);
 }
 
@@ -450,19 +459,19 @@ ei_receive(struct device *dev)
 	       dev->name, rx_frame.status, rx_frame.next, rx_frame.count,
 	       current_offset);
 
-	if (ei_local->rx_packets != last_rx_bogosity) {
+	if (ei_local->stat.rx_packets != last_rx_bogosity) {
 	  /* Maybe we can avoid resetting the chip... empty the packet ring. */
 	  ei_local->current_page = rxing_page;
 	  printk("%s:   setting next frame to %#2x (nxt=%#2x, rx_frm.nx=%#2x rx_frm.stat=%#2x).\n",
 		 dev->name, ei_local->current_page, next_frame,
 		 rx_frame.next, rx_frame.status);
-	  last_rx_bogosity = ei_local->rx_packets;
+	  last_rx_bogosity = ei_local->stat.rx_packets;
 	  outb(ei_local->current_page-1, e8390_base+EN0_BOUNDARY);
 	  continue;
 	} else {
 	  /* Oh no Mr Bill! Last ditch error recovery. */
 	  printk("%s: recovery failed, resetting at packet #%d..",
-		 dev->name, ei_local->rx_packets);
+		 dev->name, ei_local->stat.rx_packets);
 	  sti();
 	  ei_reset_8390(dev);
 	  NS8390_init(dev, 1);
@@ -488,6 +497,7 @@ ei_receive(struct device *dev)
 			 current_offset + sizeof(rx_frame));
 	  if (dev_rint((unsigned char *)skb, size, IN_SKBUFF, dev)) {
 	      printk("%s: receive buffers full.\n", dev->name);
+	      kfree_s(skb, sksize);
 	      break;
 	  }
 	} else if (ei_debug) {
@@ -495,13 +505,14 @@ ei_receive(struct device *dev)
 		 dev->name, sksize);
 	  break;
 	}
-	ei_local->rx_packets++;
+	ei_local->stat.rx_packets++;
       } else {
+	int errs = rx_frame.status;
 	if (ei_debug)
 	  printk("%s: bogus packet, status=%#2x nxpg=%#2x size=%d\n",
 		 dev->name, rx_frame.status, rx_frame.next, rx_frame.count);
-	ei_local->soft_rx_err_bits |= rx_frame.status,
-	ei_local->soft_rx_errors++;
+	if (errs & ENRSR_FO)
+	    ei_local->stat.rx_fifo_errors++;
       }
       next_frame = rx_frame.next;
 
@@ -537,7 +548,7 @@ ei_rx_overrun(struct device *dev)
 
     if (ei_debug)
 	printk("%s: Receiver overrun.\n", dev->name);
-    ei_local->rx_overruns++;
+    ei_local->stat.rx_over_errors++;
 
     /* The we.c driver does dummy = inb_p( RBCR[01] ); at this point.
        It might mean something -- magic to speed up a reset?  A 8390 bug?*/
@@ -553,59 +564,44 @@ ei_rx_overrun(struct device *dev)
 	    return;
 	};
 
-    {
-	int old_rx_packets = ei_local->rx_packets;
-	/* Remove packets right away. */
-	ei_receive(dev);
-	ei_local->rx_overrun_packets +=
-	    (ei_local->rx_packets - old_rx_packets);
-    }
+    /* Remove packets right away. */
+    ei_receive(dev);
+
     outb_p(0xff, e8390_base+EN0_ISR);
     /* Generic 8390 insns to start up again, same as in open_8390(). */
     outb_p(E8390_NODMA + E8390_PAGE0 + E8390_START, e8390_base + E8390_CMD);
     outb_p(E8390_TXCONFIG, e8390_base + EN0_TXCR); /* xmit on. */
 }
 
+static struct enet_statistics *
+get_stats(struct device *dev)
+{
+    struct ei_device *ei_local = (struct ei_device *) dev->priv;
+    return &ei_local->stat;
+}
+
 int
 ethif_init(struct device *dev)
 {
-    struct ei_device *ei_local;
-    
-    if (ei_debug > 1)
-	printk(version);
-
-    /* The open call may be overridden by the card-specific code. */
-    dev->open = &ei_open;
-
-    /* Make up a ei_local structure. */
-    dev->priv = kmalloc(sizeof(struct ei_device), GFP_KERNEL);
-    memset(dev->priv, 0, sizeof(struct ei_device));
-    ei_local = (struct ei_device *)dev->priv;
-#ifndef NO_PINGPONG
-    ei_local->pingpong = 1;
-#endif
-
     if (1
 #ifdef WD80x3
 	&& ! wdprobe(dev->base_addr, dev)
-#endif		     
+#endif
 #ifdef EL2
 	&& ! el2autoprobe(dev->base_addr, dev)
 #endif
 #ifdef NE2000
 	&& ! neprobe(dev->base_addr, dev)
-#endif		     
+#endif
 #ifdef HPLAN
 	&& ! hpprobe(dev->base_addr, dev)
-#endif		     
+#endif
 	&& 1 ) {
-	printk("No ethernet device found.\n");
-	kfree(dev->priv);
-	dev->priv = NULL;
-	return 1;			/* ENODEV or EAGAIN would be more accurate. */
+	return 1;	/* -ENODEV or -EAGAIN would be more accurate. */
     }
-
-    return ethdev_init(dev);
+    if (ei_debug > 1)
+	printk(version);
+    return 0;
 }
 
 /* Initialize the rest of the device structure. */
@@ -617,6 +613,11 @@ ethdev_init(struct device *dev)
     for (i = 0; i < DEV_NUMBUFFS; i++)
 	dev->buffs[i] = NULL;
 
+    /* The open call may be overridden by the card-specific code. */
+    if (dev->open == NULL)
+	dev->open = &ei_open;
+
+    dev->get_stats	= get_stats;
     dev->hard_header	= eth_header;
     dev->add_arp	= eth_add_arp;
     dev->queue_xmit	= dev_queue_xmit;
@@ -624,8 +625,14 @@ ethdev_init(struct device *dev)
     dev->type_trans	= eth_type_trans;
 
     if (dev->priv == NULL) {
+	struct ei_device *ei_local;
+
 	dev->priv = kmalloc(sizeof(struct ei_device), GFP_KERNEL);
 	memset(dev->priv, 0, sizeof(struct ei_device));
+	ei_local = (struct ei_device *)dev->priv;
+#ifndef NO_PINGPONG
+	ei_local->pingpong = 1;
+#endif
     }
 
     dev->hard_start_xmit = &ei_start_xmit;
@@ -727,7 +734,7 @@ static void NS8390_trigger_send(struct device *dev, unsigned int length,
 
 /*
  * Local variables:
- *  compile-command: "gcc -DKERNEL -Wall -O6 -I/usr/src/linux/net/tcp -c 8390.c"
+ *  compile-command: "gcc -D__KERNEL__ -Wall -O6 -x c++ -c 8390.c"
  *  version-control: t
  *  kept-new-versions: 5
  * End:

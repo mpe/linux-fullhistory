@@ -7,6 +7,7 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/shm.h>
 #include <linux/errno.h>
 #include <linux/mman.h>
 #include <linux/string.h>
@@ -31,8 +32,8 @@
  *
  */
 
-#define CODE_SPACE(addr) ((((addr)+4095)&~4095) < \
-			  current->start_code + current->end_code)
+#define CODE_SPACE(addr)	\
+ (PAGE_ALIGN(addr) < current->start_code + current->end_code)
 
 int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	unsigned long prot, unsigned long flags, unsigned long off)
@@ -68,7 +69,7 @@ int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	 */
 
 	if (flags & MAP_FIXED) {
-		if ((addr & 0xfff) || addr == 0)
+		if (addr & ~PAGE_MASK)
 			return -EINVAL;
 		if (len > TASK_SIZE || addr > TASK_SIZE - len)
 			return -ENOMEM;
@@ -76,20 +77,20 @@ int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		struct vm_area_struct * vmm;
 
 		/* Maybe this works.. Ugly it is. */
-		addr = 0x40000000;
-		while (addr+len < 0x60000000) {
+		addr = SHM_RANGE_START;
+		while (addr+len < SHM_RANGE_END) {
 			for (vmm = current->mmap ; vmm ; vmm = vmm->vm_next) {
 				if (addr >= vmm->vm_end)
 					continue;
 				if (addr + len <= vmm->vm_start)
 					continue;
-				addr = (vmm->vm_end + 0xfff) & 0xfffff000;
+				addr = PAGE_ALIGN(vmm->vm_end);
 				break;
 			}
 			if (!vmm)
 				break;
 		}
-		if (addr+len >= 0x60000000)
+		if (addr+len >= SHM_RANGE_END)
 			return -ENOMEM;
 	}
 
@@ -136,7 +137,7 @@ extern "C" int sys_munmap(unsigned long addr, size_t len)
 {
 	struct vm_area_struct *mpnt, **p, *free;
 
-	if ((addr & 0xfff) || addr > 0x7fffffff || addr == 0 || addr + len > TASK_SIZE)
+	if ((addr & ~PAGE_MASK) || addr > LONG_MAX || addr == 0 || addr + len > TASK_SIZE)
 		return -EINVAL;
 
 	/* This needs a bit of work - we need to figure out how to
@@ -198,25 +199,16 @@ int generic_mmap(struct inode * inode, struct file * file,
 
 	if (off & (inode->i_sb->s_blocksize - 1))
 		return -EINVAL;
-
 	if (len > high_memory || off > high_memory - len) /* avoid overflow */
 		return -ENXIO;
-
 	if (get_limit(USER_DS)  != TASK_SIZE)
 		return -EINVAL;
-
-	if (!inode->i_sb || !S_ISREG(inode->i_mode) || !permission(inode,MAY_READ)) {
-		iput(inode);
+	if (!inode->i_sb || !S_ISREG(inode->i_mode))
 		return -EACCES;
-	}
-	if (!inode->i_op || !inode->i_op->bmap) {
-		iput(inode);
+	if (!inode->i_op || !inode->i_op->bmap)
 		return -ENOEXEC;
-	}
-	if (!(bh = bread(inode->i_dev,bmap(inode,0),inode->i_sb->s_blocksize))) {
-		iput(inode);
+	if (!(bh = bread(inode->i_dev,bmap(inode,0),inode->i_sb->s_blocksize)))
 		return -EACCES;
-	}
 	if (!IS_RDONLY(inode)) {
 		inode->i_atime = CURRENT_TIME;
 		inode->i_dirt = 1;
@@ -224,10 +216,8 @@ int generic_mmap(struct inode * inode, struct file * file,
 	brelse(bh);
 
 	mpnt = (struct vm_area_struct * ) kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
-	if (!mpnt){
-		iput(inode);
+	if (!mpnt)
 		return -ENOMEM;
-	}
 
 	unmap_page_range(addr, len);	
 	mpnt->vm_task = current;

@@ -21,7 +21,7 @@ SUBDIRS= sound
 OBJS  = tty_io.o console.o keyboard.o serial.o \
 	tty_ioctl.o pty.o lp.o vt.o mem.o mouse.o \
 	busmouse.o psaux.o msbusmouse.o atixlmouse.o \
-	tpqic02.o
+	tpqic02.o defkeymap.o
 
 all:	chr_drv.a subdirs
 
@@ -37,7 +37,7 @@ clean:
 	for i in $(SUBDIRS); do (cd $$i && $(MAKE) clean) || exit; done
 
 dep:
-	$(CPP) -M $(KEYBOARD) *.c > .depend
+	$(CPP) -M *.c > .depend
 	for i in $(SUBDIRS); do (cd $$i && $(MAKE) dep) || exit; done
 
 dummy:

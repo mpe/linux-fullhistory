@@ -21,16 +21,21 @@
 
 
 /* This routine must be called with non-empty source registers */
-void reg_mul(FPU_REG *a, FPU_REG *b, FPU_REG *dest, unsigned int control_w)
+int reg_mul(FPU_REG *a, FPU_REG *b, FPU_REG *dest, unsigned int control_w)
 {
+  char saved_sign = dest->sign;
   char sign = (a->sign ^ b->sign);
 
   if (!(a->tag | b->tag))
     {
-      /* This should be the most common case */
-      reg_u_mul(a, b, dest, control_w);
+      /* Both regs Valid, this should be the most common case. */
       dest->sign = sign;
-      return;
+      if ( reg_u_mul(a, b, dest, control_w) )
+	{
+	  dest->sign = saved_sign;
+	  return 1;
+	}
+      return 0;
     }
   else if ((a->tag <= TW_Zero) && (b->tag <= TW_Zero))
     {
@@ -38,7 +43,7 @@ void reg_mul(FPU_REG *a, FPU_REG *b, FPU_REG *dest, unsigned int control_w)
       if ( ((b->tag == TW_Valid) && (b->exp <= EXP_UNDER)) ||
 	  ((a->tag == TW_Valid) && (a->exp <= EXP_UNDER)) )
 	{
-	  if ( denormal_operand() ) return;
+	  if ( denormal_operand() ) return 1;
 	}
 #endif DENORM_OPERAND
       /* Must have either both arguments == zero, or
@@ -50,58 +55,50 @@ void reg_mul(FPU_REG *a, FPU_REG *b, FPU_REG *dest, unsigned int control_w)
 	 80486 appears to behave this way... */
       dest->sign = sign;
 #endif PECULIAR_486
-      return;
+      return 0;
     }
-#if 0  /* TW_Denormal is not used yet... perhaps never will be. */
-  else if ((a->tag <= TW_Denormal) && (b->tag <= TW_Denormal))
-    {
-      /* One or both arguments are de-normalized */
-      /* Internal de-normalized numbers are not supported yet */
-      EXCEPTION(EX_INTERNAL|0x105);
-      reg_move(&CONST_Z, dest);
-    }
-#endif
   else
     {
       /* Must have infinities, NaNs, etc */
       if ( (a->tag == TW_NaN) || (b->tag == TW_NaN) )
-	{ real_2op_NaN(a, b, dest); return; }
+	{ return real_2op_NaN(a, b, dest); }
       else if (a->tag == TW_Infinity)
 	{
 	  if (b->tag == TW_Zero)
-	    { arith_invalid(dest); return; }  /* Zero*Infinity is invalid */
+	    { return arith_invalid(dest); }  /* Zero*Infinity is invalid */
 	  else
 	    {
 #ifdef DENORM_OPERAND
 	      if ( (b->tag == TW_Valid) && (b->exp <= EXP_UNDER) &&
 		  denormal_operand() )
-		return;
+		return 1;
 #endif DENORM_OPERAND
 	      reg_move(a, dest);
 	      dest->sign = sign;
 	    }
-	  return;
+	  return 0;
 	}
       else if (b->tag == TW_Infinity)
 	{
 	  if (a->tag == TW_Zero)
-	    { arith_invalid(dest); return; }  /* Zero*Infinity is invalid */
+	    { return arith_invalid(dest); }  /* Zero*Infinity is invalid */
 	  else
 	    {
 #ifdef DENORM_OPERAND
 	      if ( (a->tag == TW_Valid) && (a->exp <= EXP_UNDER) &&
 		  denormal_operand() )
-		return;
+		return 1;
 #endif DENORM_OPERAND
 	      reg_move(b, dest);
 	      dest->sign = sign;
 	    }
-	  return;
+	  return 0;
 	}
 #ifdef PARANOID
       else
 	{
 	  EXCEPTION(EX_INTERNAL|0x102);
+	  return 1;
 	}
 #endif PARANOID
     }

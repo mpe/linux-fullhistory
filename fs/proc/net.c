@@ -164,8 +164,7 @@ static int proc_readnet(struct inode * inode, struct file * file,
 
 	if (count < 0)
 		return -EINVAL;
-	page = (char *) get_free_page(GFP_KERNEL);
-	if (!page)
+	if (!(page = (char*) __get_free_page(GFP_KERNEL)))
 		return -ENOMEM;
 	ino = inode->i_ino;
 	switch (ino) {

@@ -51,7 +51,7 @@ void	poly_atan(FPU_REG *arg)
 {
   char		recursions = 0;
   short		exponent;
-  FPU_REG       odd_poly, even_poly, pos_poly, neg_poly;
+  FPU_REG       odd_poly, even_poly, pos_poly, neg_poly, ratio;
   FPU_REG       argSq;
   long long     arg_signif, argSqSq;
   
@@ -85,6 +85,7 @@ void	poly_atan(FPU_REG *arg)
 	    }
 #ifdef PARANOID
 	  EXCEPTION(EX_INTERNAL|0x104);	/* There must be a logic error */
+	  return;
 #endif PARANOID
 	}
 
@@ -162,9 +163,6 @@ void	poly_atan(FPU_REG *arg)
   reg_move(&pos_poly, &odd_poly);
   poly_add_1(&odd_poly);
 
-  /* The complete odd polynomial */
-  reg_u_mul(&odd_poly, arg, &odd_poly, FULL_PRECISION);
-
   /* will be a valid positive nr with expon = 0 */
   *(short *)&(even_poly.sign) = 0;
 
@@ -173,10 +171,13 @@ void	poly_atan(FPU_REG *arg)
 
   poly_add_1(&even_poly);
 
-  reg_div(&odd_poly, &even_poly, arg, FULL_PRECISION);
+  reg_div(&odd_poly, &even_poly, &ratio, FULL_PRECISION);
+
+  reg_u_mul(&ratio, arg, arg, FULL_PRECISION);
 
   if ( recursions )
     reg_sub(&CONST_PI4, arg, arg, FULL_PRECISION);
+
 }
 
 

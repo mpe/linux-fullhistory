@@ -44,7 +44,7 @@ int block_write(struct inode * inode, struct file * filp, char * buf, int count)
 	if (blk_size[MAJOR(dev)])
 		size = (blk_size[MAJOR(dev)][MINOR(dev)] << BLOCK_SIZE_BITS) >> blocksize_bits;
 	else
-		size = 0x7fffffff;
+		size = INT_MAX;
 	while (count>0) {
 		if (block >= size)
 			return written;
@@ -106,7 +106,7 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 	if (blk_size[MAJOR(dev)])
 		size = blk_size[MAJOR(dev)][MINOR(dev)] << BLOCK_SIZE_BITS;
 	else
-		size = 0x7fffffff;
+		size = INT_MAX;
 
 	if (offset > size)
 		left = 0;

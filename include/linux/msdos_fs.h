@@ -103,11 +103,11 @@ struct fat_cache {
 
 /* Convert attribute bits and a mask to the UNIX mode. */
 
-#define MSDOS_MKMODE(a,m) (m & (a & ATTR_RO ? 0555 : 0777))
+#define MSDOS_MKMODE(a,m) (m & (a & ATTR_RO ? S_IRUGO|S_IXUGO : S_IRWXUGO))
 
 /* Convert the UNIX mode to MS-DOS attribute bits. */
 
-#define MSDOS_MKATTR(m) ((m & 0200) ? ATTR_NONE : ATTR_RO)
+#define MSDOS_MKATTR(m) ((m & S_IWUGO) ? ATTR_NONE : ATTR_RO)
 
 
 static inline struct buffer_head *msdos_sread(int dev,int sector,void **start)

@@ -22,7 +22,10 @@ static void fchs(void)
   if ( NOT_EMPTY_0 )
     {
       FPU_st0_ptr->sign ^= SIGN_POS^SIGN_NEG;
-      status_word &= ~SW_C1;
+#ifdef PECULIAR_486
+      /* Default, this conveys no information, but an 80486 does it. */
+      clear_C1();
+#endif PECULIAR_486
     }
   else
     stack_underflow();
@@ -33,7 +36,10 @@ static void fabs(void)
   if ( FPU_st0_tag ^ TW_Empty )
     {
       FPU_st0_ptr->sign = SIGN_POS;
-      status_word &= ~SW_C1;
+#ifdef PECULIAR_486
+      /* Default, this conveys no information, but an 80486 does it. */
+      clear_C1();
+#endif PECULIAR_486
     }
   else
     stack_underflow();
@@ -48,16 +54,23 @@ static void ftst_(void)
       setcc(SW_C3);
       break;
     case TW_Valid:
-
-#ifdef DENORM_OPERAND
-      if ( (FPU_st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
-	return;
-#endif DENORM_OPERAND
-
       if (FPU_st0_ptr->sign == SIGN_POS)
         setcc(0);
       else
         setcc(SW_C0);
+
+#ifdef DENORM_OPERAND
+      if ( (FPU_st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+	{
+#ifdef PECULIAR_486
+	  /* This is wierd! */
+	  if (FPU_st0_ptr->sign == SIGN_POS)
+	    setcc(SW_C3);
+#endif PECULIAR_486
+	  return;
+	}
+#endif DENORM_OPERAND
+
       break;
     case TW_NaN:
       setcc(SW_C0|SW_C2|SW_C3);   /* Operand is not comparable */ 
@@ -68,7 +81,6 @@ static void ftst_(void)
         setcc(0);
       else
         setcc(SW_C0);
-      EXCEPTION(EX_Invalid);
       break;
     case TW_Empty:
       setcc(SW_C0|SW_C2|SW_C3);
@@ -97,7 +109,7 @@ static void fxam(void)
       if ( FPU_st0_ptr->exp <= EXP_UNDER )
         c = SW_C2|SW_C3;  /* Denormal */
       else
-        c = SW_C3;
+        c = SW_C2;
       break;
     case TW_NaN:
       c = SW_C0;

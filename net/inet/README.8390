@@ -1,37 +1,60 @@
-Installation Directions:
 
-EMail me (becker@super.org) telling me which version you have gotten.
-I need to know how many people have tried, succeeded and
-failed before this is released as part of the official Linux.
+These drivers support all common 8390-based ethernet boards.  Currently
+"common" is defined as:
 
-Use Linux 0.99.5 or later.  Make certain you can make a working kernel
-_before_ you install the ethercard driver.
+	3Com Products:
+*	3Com 3c503	Board loaned by Chance Reschke, USRA.edu (thanks!)
+	3Com 3c503/16	and excellent documentation provided by 3Com.
 
-Put the all of the files into linux/net/tcp/.  You'll need all of the
-files in this directory.
-GNUmakefile 8390.c 8390.h auto_irq.c Space.c wd.c ne.c 3c503.[ch] and hp.c.
-Space.c is the only tricky one -- it overwrites the old Space.c.
-Stock versions of Space.c leave the "we" driver enabled and will not work.
+	Clones-n-things
+	NE1000		Novell and Eagle are useless for documentation,
+*	NE2000		but copied the designs directly from NatSemi;->.
 
-Change the GNUmakefile to reflect your configuration.  Use the guide at
-the end of these instructions and in the README file.  Note that the
-'GNUmakefile' name is magic; it is loaded in preference to 'Makefile'.
+	WD/SMC products
+	WD8003
+*	WD8013		Board loaned by Russ Nelson, Crynwr Software.  Thanks!
 
-Make and install your new kernel.
+* I've seen it work myself!
 
-To actually use this driver you must get the TCP/IP package and edit
-your /usr/etc/inet/rc.net file to config whatever you named your
-ethernet device.  (You can edit the GNUmakefile to use something
-besides the "eth0" name. Note that the default name has changed to
-the now-standard "eth0".)
+There is support for the following boards, but since I've only been
+able to borrow a thinnet of an HP ethercard I've relied upon reports
+from others:
 
-If you try to 'config' an interface that doesn't exist your kernel
-will report "invalid ioctl()" for anthing that tries to use the card.
-Note that the ethercard devices aren't (yet) '/dev/eth0' devices --
-they only exist in the socket namespace and thus you don't need to
-'mknode' them.
+	HP LAN adaptors
+**	HP27245
+**	HP27247
+**	HP27250
 
-________________
+Thanks are due to the dozens of alpha testers.  Special thanks are due
+to Chance Reschke <@usra.edu> and Russ Nelson <@crynwr.com> for
+loaning me ethercards.
+
+The following addresses are autoprobed, in this order:
+wd.c:	0x300, 0x280, 0x380, 0x240
+3c503:	0x300, 0x310, 0x330, 0x350, 0x250, 0x280, 0x2a0, 0x2e0
+ne.c:	0x300, 0x280, 0x320, 0x340, 0x360
+hp.c:	0x300, 0x320, 0x340, 0x280, 0x2C0, 0x200, 0x240
+
+80x3 clones that are reported to work:
+	LANNET LEC-45
+
+"NE2000" clones that are reported to work:
+	Alta Combo(NE2000 clone)
+	Aritsoft LANtastic AE-2 (NE2000 clone w/ extra memory)
+	Asante Etherpak 2001/2003
+	D-Link Ethernet II
+	LTC E-NET/16 P/N: 8300-200-002 (lipka@lip.hanse.de)
+	Network Solutions HE-203
+	SVEC 4 Dimension Ethernet
+	4-Dimension FD0490 EtherBoard16
+    	Cabletron products:
+	 E1010		No ID PROM and sketchy info from Ctron means you'll
+	 E1010-x 	have to compile-in information about your board.
+	 E2010
+	 E2010-x
+		N.B. The E2100 will not work with Linux until Cabletron
+		releases the programming information!
+
 Important defines
 
 For Space.c

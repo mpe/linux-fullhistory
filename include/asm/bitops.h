@@ -1,4 +1,5 @@
 #ifndef _ASM_BITOPS_H
+#define _ASM_BITOPS_H
 /*
  * Copyright 1992, Linus Torvalds.
  */
@@ -18,7 +19,7 @@
 struct __dummy { unsigned long a[100]; };
 #define ADDR (*(struct __dummy *) addr)
 
-extern inline int set_bit(int nr, void * addr)
+extern __inline__ int set_bit(int nr, void * addr)
 {
 	int oldbit;
 
@@ -28,7 +29,7 @@ extern inline int set_bit(int nr, void * addr)
 	return oldbit;
 }
 
-extern inline int clear_bit(int nr, void * addr)
+extern __inline__ int clear_bit(int nr, void * addr)
 {
 	int oldbit;
 
@@ -42,7 +43,7 @@ extern inline int clear_bit(int nr, void * addr)
  * This routine doesn't need to be atomic, but it's faster to code it
  * this way.
  */
-extern inline int test_bit(int nr, void * addr)
+extern __inline__ int test_bit(int nr, void * addr)
 {
 	int oldbit;
 
@@ -68,7 +69,7 @@ extern inline int test_bit(int nr, void * addr)
  * C language equivalents written by Theodore Ts'o, 9/26/92
  */
 
-extern inline int set_bit(int nr,int * addr)
+extern __inline__ int set_bit(int nr,int * addr)
 {
 	int	mask, retval;
 
@@ -81,7 +82,7 @@ extern inline int set_bit(int nr,int * addr)
 	return retval;
 }
 
-extern inline int clear_bit(int nr, int * addr)
+extern __inline__ int clear_bit(int nr, int * addr)
 {
 	int	mask, retval;
 
@@ -94,7 +95,7 @@ extern inline int clear_bit(int nr, int * addr)
 	return retval;
 }
 
-extern inline int test_bit(int nr, int * addr)
+extern __inline__ int test_bit(int nr, int * addr)
 {
 	int	mask;
 

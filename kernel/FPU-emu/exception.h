@@ -35,6 +35,10 @@
 #define EX_Invalid	Const_(0x0001)	/* invalid operation */
 
 
+#define PRECISION_LOST_UP    Const_((EX_Precision | SW_C1))
+#define PRECISION_LOST_DOWN  Const_(EX_Precision)
+
+
 #ifndef __ASSEMBLER__
 
 #ifdef DEBUG

@@ -83,8 +83,8 @@
 
  
 struct mouse_status {
-	char		buttons;
-	char		latch_buttons;
+	unsigned char	buttons;
+	unsigned char	latch_buttons;
 	int		dx;
 	int		dy;	
 	int 		present;

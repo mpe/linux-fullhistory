@@ -1,7 +1,7 @@
 #ifndef _LINUX_STAT_H
 #define _LINUX_STAT_H
 
-#ifndef __NOT_KERNEL
+#ifdef __KERNEL__
 
 struct old_stat {
 	unsigned short st_dev;
@@ -76,5 +76,13 @@ struct new_stat {
 #define S_IROTH 00004
 #define S_IWOTH 00002
 #define S_IXOTH 00001
+
+#ifdef __KERNEL__
+#define S_IRWXUGO	(S_IRWXU|S_IRWXG|S_IRWXO)
+#define S_IALLUGO	(S_ISUID|S_ISGID|S_ISVTX|S_IRWXUGO)
+#define S_IRUGO		(S_IRUSR|S_IRGRP|S_IROTH)
+#define S_IWUGO		(S_IWUSR|S_IWGRP|S_IWOTH)
+#define S_IXUGO		(S_IXUSR|S_IXGRP|S_IXOTH)
+#endif
 
 #endif

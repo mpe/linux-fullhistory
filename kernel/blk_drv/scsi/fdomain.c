@@ -1,10 +1,10 @@
 /* fdomain.c -- Future Domain TMC-16x0 driver
  * Created: Sun May  3 18:53:19 1992 by faith@cs.unc.edu
- * Revised: Sat Jul  3 13:48:18 1993 by faith@cs.unc.edu
+ * Revised: Fri Aug 13 22:44:05 1993 by faith@cs.unc.edu
  * Author: Rickard E. Faith, faith@cs.unc.edu
  * Copyright 1992, 1993 Rickard E. Faith
  *
- * $Id: fdomain.c,v 3.17 1993/07/03 14:06:31 root Exp $
+ * $Id: fdomain.c,v 3.18 1993/08/13 22:44:12 root Exp $
 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -17,8 +17,6 @@
  * General Public License for more details.
 
  **************************************************************************
-
-
  
  DESCRIPTION:
 
@@ -141,7 +139,7 @@
 #include <linux/errno.h>
 #include <linux/string.h>
 
-#define VERSION          "$Revision: 3.17 $"
+#define VERSION          "$Revision: 3.18 $"
 
 /* START OF USER DEFINABLE OPTIONS */
 
@@ -240,7 +238,6 @@ static int               adapter_mask      = 0x40;
 static volatile int      in_interrupt_flag = 0;
 #endif
 
-
 static int               SCSI_Mode_Cntl_port;
 static int               FIFO_Data_Count_port;
 static int               Interrupt_Cntl_port;
@@ -277,11 +274,12 @@ static unsigned short ints[] = { 3, 5, 10, 11, 12, 14, 15, 0 };
 
   READ EVERY WORD, ESPECIALLY THE WORD *NOT*
 
-  This driver works *ONLY* for Future Domain cards using the TMC-1800 chip.
-  This includes models TMC-1660, 1670, and 1680 *ONLY*.
+  This driver works *ONLY* for Future Domain cards using the TMC-1800 or
+  the TMC-18C50 chip.  This includes models TMC-1650, 1660, 1670, and 1680.
 
   The following BIOS signature signatures are for boards which do *NOT*
-  work with this driver (but they should work with the Seagate driver):
+  work with this driver (these TMC-8xx and TMC-9xx boards may work with the
+  Seagate driver):
 
   FUTURE DOMAIN CORP. (C) 1986-1988 V4.0I 03/16/88
   FUTURE DOMAIN CORP. (C) 1986-1989 V5.0C2/14/89
@@ -302,14 +300,22 @@ struct signature {
 } signatures[] = {
    /*          1         2         3         4         5         6 */
    /* 123456789012345678901234567890123456789012345678901234567890 */
-   { "FUTURE DOMAIN CORP. (C) 1986-1990 1800-V2.07/28/89", 5, 50, 2, 0 },
-   { "FUTURE DOMAIN CORP. (C) 1992 V3.00.004/02/92",       5, 44, 3, 0 },
-   { "FUTURE DOMAIN TMC-18XX (C) 1993 V3.203/12/93",       5, 44, 3, 2 },
+   { "FUTURE DOMAIN CORP. (C) 1986-1990 1800-V2.07/28/89", 5, 50,  2,  0 },
+   { "FUTURE DOMAIN CORP. (C) 1992 V3.00.004/02/92",       5, 44,  3,  0 },
+   { "FUTURE DOMAIN TMC-18XX (C) 1993 V3.203/12/93",       5, 44,  3,  2 },
+   { "FUTURE DOMAIN TMC-18XX",                             5, 22, -1, -1 },
 
    /* READ NOTICE ABOVE *BEFORE* YOU WASTE YOUR TIME ADDING A SIGANTURE
     Also, fix the disk geometry code for your signature and send your
     changes for faith@cs.unc.edu.  Above all, do *NOT* change any old
-    signatures! */
+    signatures!
+
+    Note that the last line will match a "generic" 18XX bios.  Because
+    Future Domain has changed the host SCSI ID and/or the location of the
+    geometry information in the on-board RAM area for each of the first
+    three BIOS's, it is still important to enter a fully qualified
+    signature in the table for any new BIOS's (after the host SCSI ID and
+    geometry location are verified. */
 };
 
 #define SIGNATURE_COUNT (sizeof( signatures ) / sizeof( struct signature ))
@@ -561,6 +567,46 @@ int fdomain_16x0_detect( int hostnum )
       return 0;
    }
 
+   this_host = hostnum;
+   
+   if (!interrupt_level) {
+      panic( "Future Domain: *NO* interrupt level selected!\n" );
+   } else {
+      /* Register the IRQ with the kernel */
+
+      sa.sa_handler  = fdomain_16x0_intr;
+      sa.sa_flags    = SA_INTERRUPT;
+      sa.sa_mask     = 0;
+      sa.sa_restorer = NULL;
+      
+      retcode = irqaction( interrupt_level, &sa );
+
+      if (retcode < 0) {
+	 if (retcode == -EINVAL) {
+	    printk( "Future Domain: IRQ %d is bad!\n", interrupt_level );
+	    printk( "               This shouldn't happen!\n" );
+	    printk( "               Send mail to faith@cs.unc.edu\n" );
+	 } else if (retcode == -EBUSY) {
+	    printk( "Future Domain: IRQ %d is already in use!\n",
+		    interrupt_level );
+	    printk( "               Please use another IRQ!\n" );
+	 } else {
+	    printk( "Future Domain: Error getting IRQ %d\n", interrupt_level );
+	    printk( "               This shouldn't happen!\n" );
+	    printk( "               Send mail to faith@cs.unc.edu\n" );
+	 }
+	 panic( "Future Domain: Driver requires interruptions\n" );
+      } else {
+	 printk( "Future Domain: IRQ %d requested from kernel\n",
+		 interrupt_level );
+      }
+   }
+
+   if ((bios_major == 3 && bios_minor >= 2) || bios_major < 0) {
+      adapter_mask = 0x80;
+      scsi_hosts[this_host].this_id = 7;
+   }
+   
 #if DO_DETECT
 
    /* These routines are here because of the way the SCSI bus behaves after
@@ -614,46 +660,6 @@ int fdomain_16x0_detect( int hostnum )
    }
 #endif
 
-   this_host = hostnum;
-   
-   if (!interrupt_level) {
-      panic( "Future Domain: *NO* interrupt level selected!\n" );
-   } else {
-      /* Register the IRQ with the kernel */
-
-      sa.sa_handler  = fdomain_16x0_intr;
-      sa.sa_flags    = SA_INTERRUPT;
-      sa.sa_mask     = 0;
-      sa.sa_restorer = NULL;
-      
-      retcode = irqaction( interrupt_level, &sa );
-
-      if (retcode < 0) {
-	 if (retcode == -EINVAL) {
-	    printk( "Future Domain: IRQ %d is bad!\n", interrupt_level );
-	    printk( "               This shouldn't happen!\n" );
-	    printk( "               Send mail to faith@cs.unc.edu\n" );
-	 } else if (retcode == -EBUSY) {
-	    printk( "Future Domain: IRQ %d is already in use!\n",
-		    interrupt_level );
-	    printk( "               Please use another IRQ!\n" );
-	 } else {
-	    printk( "Future Domain: Error getting IRQ %d\n", interrupt_level );
-	    printk( "               This shouldn't happen!\n" );
-	    printk( "               Send mail to faith@cs.unc.edu\n" );
-	 }
-	 panic( "Future Domain: Driver requires interruptions\n" );
-      } else {
-	 printk( "Future Domain: IRQ %d requested from kernel\n",
-		 interrupt_level );
-      }
-   }
-
-   if (bios_major == 3 && bios_minor >= 2) {
-      adapter_mask = 0x80;
-      scsi_hosts[this_host].this_id = 7;
-   }
-   
    return 1;
 }
 
@@ -1306,11 +1312,30 @@ int fdomain_16x0_queue( Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
    return 0;
 }
 
+/* The following code, which simulates the old-style command function, was
+   taken from Tommy Thorn's aha1542.c file.  This code is Copyright (C)
+   1992 Tommy Thorn. */
+
+static volatile int internal_done_flag    = 0;
+static volatile int internal_done_errcode = 0;
+
+static void internal_done( Scsi_Cmnd *SCpnt )
+{
+    internal_done_errcode = SCpnt->result;
+    ++internal_done_flag;
+}
+
 int fdomain_16x0_command( Scsi_Cmnd *SCpnt )
 {
-   panic( "Future Domain: must use interrupt-driven driver\n" );
-   return -1;
+    fdomain_16x0_queue( SCpnt, internal_done );
+
+    while (!internal_done_flag)
+	  ;
+    internal_done_flag = 0;
+    return internal_done_errcode;
 }
+
+/* End of code derived from Tommy Thorn's work. */
 
 void print_info( Scsi_Cmnd *SCpnt )
 {
@@ -1490,12 +1515,24 @@ int fdomain_16x0_biosparam( int size, int dev, int *info_array )
       info_array[2] = i->cylinders;
    } else {
       /* How the data is stored in the RAM area is very BIOS-dependent.
-         Therefore, return nothing if we are not *SURE* of the information. */
+         Therefore, assume a version 3 layout, and check for validity. */
       
-      info_array[0]
-	    = info_array[1]
-	    = info_array[2]
-	    = 0;
+      i = (struct drive_info *)( (char *)bios_base + 0x1f71 + drive * 10 );
+      info_array[0] = i->heads + 1;
+      info_array[1] = i->sectors;
+      info_array[2] = i->cylinders;
+
+      if (!info_array[0]
+	  || !info_array[1]
+	  || !info_array[2]
+	  || info_array[2] > 1024 /* DOS uses only 10 bits */
+	  ) {
+	 
+	 info_array[0]
+	       = info_array[1]
+	       = info_array[2]
+	       = 0;
+      }
    }
    
    return 0;

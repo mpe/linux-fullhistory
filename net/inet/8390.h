@@ -1,10 +1,13 @@
 /* Generic NS8390 register definitions. */
 /* This file is part of Donald Becker's 8390 drivers, and is distributed
    under the same license.
-   Some of these names and comments are from the Crynwr packet drivers. */
+   Some of these names and comments originated from the Crynwr
+   packet drivers, which are distributed under the GPL. */
 
-#ifndef e8390_h
-#define e8390_h
+#ifndef _8390_h
+#define _8390_h
+
+#include <linux/if_ether.h>
 
 #define TX_2X_PAGES 12
 #define TX_1X_PAGES 6
@@ -13,8 +16,17 @@
 #define ETHER_ADDR_LEN 6
 
 /* From 8390.c */
-void ei_interrupt(int reg_ptr);
+extern int ei_debug;
+extern struct sigaction ei_sigaction;
+
+extern int ethif_init(struct device *dev);
+extern int ethdev_init(struct device *dev);
+extern void NS8390_init(struct device *dev, int startp);
+extern int ei_open(struct device *dev);
+extern void ei_interrupt(int reg_ptr);
+
 /* From auto_irq.c */
+extern struct device *irq2dev_map[16];
 extern void autoirq_setup(int waittime);
 extern int autoirq_report(int waittime);
 
@@ -39,15 +51,11 @@ struct ei_device {
   unsigned char in_interrupt;
   short tx1, tx2;		/* Packet lengths for ping-pong tx. */
   short lasttx;			/* Alpha version consistency check. */
-  /* The statistics: these are returned from the ioctl() as a block.  */
-  int tx_packets;
-  int tx_errors;
-  int rx_packets;
-  int soft_rx_errors;
-  int soft_rx_err_bits;
-  int missed_packets;
-  int rx_overruns;
-  int rx_overrun_packets;
+  unsigned char reg0;		/* Register '0' in a WD8013 */
+  unsigned char reg5;		/* Register '5' in a WD8013 */
+  unsigned char saved_irq;	/* Original dev->irq value. */
+  /* The new statistics table. */
+  struct enet_statistics stat;
 };
 
 #define ei_status (*(struct ei_device *)(dev->priv))
@@ -130,16 +138,14 @@ struct ei_device {
 #define ENRSR_DEF	0x80	/* deferring */
 
 /* Transmitted packet status, EN0_TSR. */
-#define ENTSR_PTX	0x01	/* Packet transmitted without error */
-/* The other bits in the TX status register mean:
-   0x02	The transmit wasn't deferred.
-   0x04	The transmit collided at least once.
-   0x08 The transmit collided 16 times, and was deferred.
-   0x10	The carrier sense was lost (from the ethernet transceiver)
-   0x20 A "FIFO underrun" (internal error) occured during transmit.
-   0x40	The collision detect "heartbeat" signal was lost.
-   0x80 There was an out-of-window collision.
-   */
+#define ENTSR_PTX 0x01	/* Packet transmitted without error */
+#define ENTSR_ND  0x02	/* The transmit wasn't deferred. */
+#define ENTSR_COL 0x04	/* The transmit collided at least once. */
+#define ENTSR_ABT 0x08  /* The transmit collided 16 times, and was deferred. */
+#define ENTSR_CRS 0x10	/* The carrier sense was lost. */
+#define ENTSR_FU  0x20  /* A "FIFO underrun" occured during transmit. */
+#define ENTSR_CDH 0x40	/* The collision detect "heartbeat" signal was lost. */
+#define ENTSR_OWC 0x80  /* There was an out-of-window collision. */
 
 /* The per-packet-header format. */
 struct e8390_pkt_hdr {
@@ -147,4 +153,4 @@ struct e8390_pkt_hdr {
   unsigned char next;   /* pointer to next packet. */
   unsigned short count; /* header + packet lenght in bytes */
 };
-#endif /* e8390_h */
+#endif /* _8390_h */

@@ -28,8 +28,8 @@
 /*
  * The second extended file system version
  */
-#define EXT2FS_DATE	"93/06/06"
-#define EXT2FS_VERSION	"0.3a"
+#define EXT2FS_DATE		"93/08/05"
+#define EXT2FS_VERSION		"0.3c"
 
 /*
  * Special inodes numbers
@@ -38,6 +38,7 @@
 #define EXT2_ROOT_INO		 2	/* Root inode */
 #define EXT2_ACL_IDX_INO	 3	/* ACL inode */
 #define EXT2_ACL_DATA_INO	 4	/* ACL inode */
+#define EXT2_BOOT_LOADER_INO	 5	/* Boot loader inode */
 #define EXT2_FIRST_INO		11	/* First non reserved inode */
 
 /*
@@ -65,7 +66,7 @@
 #define EXT2_ACLE_PER_BLOCK(s)		(EXT2_BLOCK_SIZE(s) / sizeof (struct ext2_acl_entry))
 #define	EXT2_ADDR_PER_BLOCK(s)		(EXT2_BLOCK_SIZE(s) / sizeof (unsigned long))
 #ifdef __KERNEL__
-# define EXT2_BLOCK_SIZE_BITS(s)	((s)->u.ext2_sb.s_log_block_size + 10)
+# define EXT2_BLOCK_SIZE_BITS(s)	((s)->u.ext2_sb.s_es->s_log_block_size + 10)
 #else
 # define EXT2_BLOCK_SIZE_BITS(s)	((s)->s_log_block_size + 10)
 #endif
@@ -98,12 +99,12 @@ struct ext2_acl_header	/* Header of Access Control Lists */
 
 struct ext2_acl_entry	/* Access Control List Entry */
 {
-	unsigned long acle_size;
+	unsigned long  acle_size;
 	unsigned short acle_perms;	/* Access permissions */
 	unsigned short acle_type;	/* Type of entry */
 	unsigned short acle_tag;	/* User or group identity */
 	unsigned short acle_pad1;
-	unsigned long acle_next;	/* Pointer on next entry for the */
+	unsigned long  acle_next;	/* Pointer on next entry for the */
 					/* same inode or on next free entry */
 };
 
@@ -112,23 +113,23 @@ struct ext2_acl_entry	/* Access Control List Entry */
  */
 struct ext2_old_group_desc
 {
-	unsigned long bg_block_bitmap;		/* Blocks bitmap block */
-	unsigned long bg_inode_bitmap;		/* Inodes bitmap block */
-	unsigned long bg_inode_table;		/* Inodes table block */
+	unsigned long  bg_block_bitmap;		/* Blocks bitmap block */
+	unsigned long  bg_inode_bitmap;		/* Inodes bitmap block */
+	unsigned long  bg_inode_table;		/* Inodes table block */
 	unsigned short bg_free_blocks_count;	/* Free blocks count */
 	unsigned short bg_free_inodes_count;	/* Free inodes count */
 };
 
 struct ext2_group_desc
 {
-	unsigned long bg_block_bitmap;		/* Blocks bitmap block */
-	unsigned long bg_inode_bitmap;		/* Inodes bitmap block */
-	unsigned long bg_inode_table;		/* Inodes table block */
+	unsigned long  bg_block_bitmap;		/* Blocks bitmap block */
+	unsigned long  bg_inode_bitmap;		/* Inodes bitmap block */
+	unsigned long  bg_inode_table;		/* Inodes table block */
 	unsigned short bg_free_blocks_count;	/* Free blocks count */
 	unsigned short bg_free_inodes_count;	/* Free inodes count */
 	unsigned short bg_used_dirs_count;	/* Directories count */
 	unsigned short bg_pad;
-	unsigned long bg_reserved[3];
+	unsigned long  bg_reserved[3];
 };
 
 /*
@@ -147,11 +148,11 @@ struct ext2_group_desc
 /*
  * Constants relative to the data blocks
  */
-#define	EXT2_NDIR_BLOCKS	12
-#define	EXT2_IND_BLOCK		EXT2_NDIR_BLOCKS
-#define	EXT2_DIND_BLOCK		(EXT2_IND_BLOCK + 1)
-#define	EXT2_TIND_BLOCK		(EXT2_DIND_BLOCK + 1)
-#define	EXT2_N_BLOCKS		(EXT2_TIND_BLOCK + 1)
+#define	EXT2_NDIR_BLOCKS		12
+#define	EXT2_IND_BLOCK			EXT2_NDIR_BLOCKS
+#define	EXT2_DIND_BLOCK			(EXT2_IND_BLOCK + 1)
+#define	EXT2_TIND_BLOCK			(EXT2_DIND_BLOCK + 1)
+#define	EXT2_N_BLOCKS			(EXT2_TIND_BLOCK + 1)
 
 /*
  * Structure of an inode on the disk
@@ -159,50 +160,50 @@ struct ext2_group_desc
 struct ext2_inode {
 	unsigned short i_mode;		/* File mode */
 	unsigned short i_uid;		/* Owner Uid */
-	unsigned long i_size;		/* Size in bytes */
-	unsigned long i_atime;		/* Access time */
-	unsigned long i_ctime;		/* Creation time */
-	unsigned long i_mtime;		/* Modification time */
-	unsigned long i_dtime;		/* Deletion Time */
+	unsigned long  i_size;		/* Size in bytes */
+	unsigned long  i_atime;		/* Access time */
+	unsigned long  i_ctime;		/* Creation time */
+	unsigned long  i_mtime;		/* Modification time */
+	unsigned long  i_dtime;		/* Deletion Time */
 	unsigned short i_gid;		/* Group Id */
 	unsigned short i_links_count;	/* Links count */
-	unsigned long i_blocks;		/* Blocks count */
-	unsigned long i_flags;		/* File flags */
-	unsigned long i_reserved1;
-	unsigned long i_block[EXT2_N_BLOCKS];/* Pointers to blocks */
-	unsigned long i_version;	/* File version (for NFS) */
-	unsigned long i_file_acl;	/* File ACL */
-	unsigned long i_dir_acl;	/* Directory ACL */
-	unsigned long i_faddr;		/* Fragment address */
-	unsigned char i_frag;		/* Fragment number */
-	unsigned char i_fsize;		/* Fragment size */
+	unsigned long  i_blocks;	/* Blocks count */
+	unsigned long  i_flags;		/* File flags */
+	unsigned long  i_reserved1;
+	unsigned long  i_block[EXT2_N_BLOCKS];/* Pointers to blocks */
+	unsigned long  i_version;	/* File version (for NFS) */
+	unsigned long  i_file_acl;	/* File ACL */
+	unsigned long  i_dir_acl;	/* Directory ACL */
+	unsigned long  i_faddr;		/* Fragment address */
+	unsigned char  i_frag;		/* Fragment number */
+	unsigned char  i_fsize;		/* Fragment size */
 	unsigned short i_pad1;
-	unsigned long i_reserved2[2];
+	unsigned long  i_reserved2[2];
 };
 
 /*
  * Structure of the super block
  */
 struct ext2_super_block {
-	unsigned long s_inodes_count;	/* Inodes count */
-	unsigned long s_blocks_count;	/* Blocks count */
-	unsigned long s_r_blocks_count;	/* Reserved blocks count */
-	unsigned long s_free_blocks_count;/* Free blocks count */
-	unsigned long s_free_inodes_count;/* Free inodes count */
-	unsigned long s_first_data_block;/* First Data Block */
-	unsigned long s_log_block_size;	/* Block size */
-	long s_log_frag_size;		/* Fragment size */
-	unsigned long s_blocks_per_group;/* # Blocks per group */
-	unsigned long s_frags_per_group;/* # Fragments per group */
-	unsigned long s_inodes_per_group;/* # Inodes per group */
-	unsigned long s_mtime;		/* Mount time */
-	unsigned long s_wtime;		/* Write time */
-	unsigned long s_pad;		/* Padding to get the magic signature*/
+	unsigned long  s_inodes_count;	/* Inodes count */
+	unsigned long  s_blocks_count;	/* Blocks count */
+	unsigned long  s_r_blocks_count;/* Reserved blocks count */
+	unsigned long  s_free_blocks_count;/* Free blocks count */
+	unsigned long  s_free_inodes_count;/* Free inodes count */
+	unsigned long  s_first_data_block;/* First Data Block */
+	unsigned long  s_log_block_size;/* Block size */
+	long           s_log_frag_size;	/* Fragment size */
+	unsigned long  s_blocks_per_group;/* # Blocks per group */
+	unsigned long  s_frags_per_group;/* # Fragments per group */
+	unsigned long  s_inodes_per_group;/* # Inodes per group */
+	unsigned long  s_mtime;		/* Mount time */
+	unsigned long  s_wtime;		/* Write time */
+	unsigned long  s_pad;		/* Padding to get the magic signature*/
 					/* at the same offset as in the */
 					/* previous ext fs */
 	unsigned short s_magic;		/* Magic signature */
 	unsigned short s_valid;		/* Flag */
-	unsigned long s_reserved[243];	/* Padding to the end of the block */
+	unsigned long  s_reserved[243];	/* Padding to the end of the block */
 };
 
 /*
@@ -211,10 +212,10 @@ struct ext2_super_block {
 #define EXT2_NAME_LEN 255
 
 struct ext2_dir_entry {
-	unsigned long inode;		/* Inode number */
-	unsigned short rec_len;		/* Directory entry length */
-	unsigned short name_len;	/* Name length */
-	char name[EXT2_NAME_LEN];	/* File name */
+	unsigned long  inode;			/* Inode number */
+	unsigned short rec_len;			/* Directory entry length */
+	unsigned short name_len;		/* Name length */
+	char           name[EXT2_NAME_LEN];	/* File name */
 };
 
 /*
@@ -227,6 +228,7 @@ struct ext2_dir_entry {
 #define EXT2_DIR_REC_LEN(name_len)	(((name_len) + 8 + EXT2_DIR_ROUND) & \
 					 ~EXT2_DIR_ROUND)
 
+#ifdef __KERNEL__
 /*
  * Function prototypes
  */
@@ -261,7 +263,7 @@ extern int ext2_read (struct inode *, struct file *, char *, int);
 extern int ext2_write (struct inode *, struct file *, char *, int);
 
 /* fsync.c */
-extern int ext2_sync_file(struct inode *, struct file *);
+extern int ext2_sync_file (struct inode *, struct file *);
 
 /* ialloc.c */
 extern struct inode * ext2_new_inode (const struct inode *, int);
@@ -318,5 +320,7 @@ extern struct inode_operations ext2_file_inode_operations;
 
 /* symlink.c */
 extern struct inode_operations ext2_symlink_inode_operations;
+
+#endif
 
 #endif

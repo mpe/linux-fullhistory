@@ -28,7 +28,6 @@
 #include "inet.h"
 #include "dev.h"
 #include "eth.h"
-#include "timer.h"
 #include "ip.h"
 #include "route.h"
 #include "protocol.h"

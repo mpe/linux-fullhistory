@@ -44,7 +44,7 @@ static struct file_operations ext2_file_operations = {
 	ext2_file_write,	/* write */
 	NULL,			/* readdir - bad */
 	NULL,			/* select - default */
-	ext2_ioctl,		/* ioctl - default */
+	ext2_ioctl,		/* ioctl */
 	generic_mmap,  		/* mmap */
 	NULL,			/* no special open is needed */
 	NULL,			/* release */
@@ -228,9 +228,6 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 	while (written < count) {
 		bh = ext2_getblk (inode, pos / sb->s_blocksize, 1, &err);
 		if (!bh) {
-#ifdef EXT2FS_DEBUG
-			printk ("ext2_file_write: ext2_getblk returned NULL\n");
-#endif
 			if (!written)
 				written = err;
 			break;

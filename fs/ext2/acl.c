@@ -12,6 +12,7 @@
 #include <linux/sched.h>
 #include <linux/ext2_fs.h>
 #include <linux/errno.h>
+#include <linux/stat.h>
 
 /*
  * ext2_permission ()
@@ -30,7 +31,7 @@ int ext2_permission (struct inode * inode, int mask)
 		mode >>= 6;
 	else if (in_group_p (inode->i_gid))
 		mode >>= 3;
-	if (((mode & mask & 0007) == mask))
+	if (((mode & mask & S_IRWXO) == mask))
 		return 1;
 	else
 		return 0;

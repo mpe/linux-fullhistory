@@ -104,7 +104,8 @@ static int ext2_readdir (struct inode * inode, struct file * filp,
 	sb = inode->i_sb;
 	while (filp->f_pos < inode->i_size) {
 		offset = filp->f_pos & (sb->s_blocksize - 1);
-		bh = ext2_bread (inode, (filp->f_pos) >> EXT2_BLOCK_SIZE_BITS(sb), 0, &err);
+		bh = ext2_bread (inode, (filp->f_pos) >> EXT2_BLOCK_SIZE_BITS(sb),
+				 0, &err);
 		if (!bh) {
 			filp->f_pos += sb->s_blocksize - offset;
 			continue;

@@ -31,8 +31,14 @@
 #define TIMER_IRQ 0
 
 int need_resched = 0;
+
+/*
+ * Tell us the machine setup..
+ */
 int hard_math = 0;		/* set by boot/head.S */
+int x86 = 0;			/* set by boot/head.S to 3 or 4 */
 int ignore_irq13 = 0;		/* set if exception 16 works */
+int wp_works_ok = 0;		/* not used currently */
 
 extern int _setitimer(int, struct itimerval *, struct itimerval *);
 unsigned long * prof_buffer = NULL;
@@ -148,8 +154,7 @@ confuse_gcc1:
 	}
 confuse_gcc2:
 	if (!c) {
-		p = &init_task;
-		while ((p = p->next_task) != &init_task)
+		for_each_task(p)
 			p->counter = (p->counter >> 1) + p->priority;
 	}
 	switch_to(next);
@@ -277,9 +282,10 @@ void add_timer(struct timer_list * timer)
 	restore_flags(flags);
 }
 
-void del_timer(struct timer_list * timer)
+int del_timer(struct timer_list * timer)
 {
 	unsigned long flags;
+	unsigned long expires = 0;
 	struct timer_list **p;
 
 	p = &next_timer;
@@ -289,11 +295,15 @@ void del_timer(struct timer_list * timer)
 		if (*p == timer) {
 			if ((*p = timer->next) != NULL)
 				(*p)->expires += timer->expires;
-			break;
+			timer->expires += expires;
+			restore_flags(flags);
+			return 1;
 		}
+		expires += (*p)->expires;
 		p = &(*p)->next;
 	}
 	restore_flags(flags);
+	return 0;
 }
 
 unsigned long timer_active = 0;
@@ -345,7 +355,7 @@ static void do_timer(struct pt_regs * regs)
 {
 	unsigned long mask;
 	struct timer_struct *tp = timer_table+0;
-	struct task_struct ** task_p;
+	struct task_struct * task_p;
 
 	jiffies++;
 	calc_load();
@@ -372,13 +382,15 @@ static void do_timer(struct pt_regs * regs)
 		need_resched = 1;
 	}
 	/* Update ITIMER_REAL for every task */
-	for (task_p = &LAST_TASK; task_p >= &FIRST_TASK; task_p--)
-		if (*task_p && (*task_p)->it_real_value
-			&& !(--(*task_p)->it_real_value)) {
-			send_sig(SIGALRM,*task_p,1);
-			(*task_p)->it_real_value = (*task_p)->it_real_incr;
-			need_resched = 1;
-		}
+	for_each_task(task_p) {
+		if (!task_p->it_real_value)
+			continue;
+		if (--task_p->it_real_value)
+			continue;
+		send_sig(SIGALRM,task_p,1);
+		task_p->it_real_value = task_p->it_real_incr;
+		need_resched = 1;
+	}
 	/* Update ITIMER_PROF for the current task */
 	if (current->it_prof_value && !(--current->it_prof_value)) {
 		current->it_prof_value = current->it_prof_incr;
@@ -473,7 +485,7 @@ static void show_task(int nr,struct task_struct * p)
 	printk("%d: pid=%d, state=%d, father=%d, child=%d, ",(p == current)?-nr:nr,p->pid,
 		p->state, p->p_pptr->pid, p->p_cptr ? p->p_cptr->pid : -1);
 	i = 0;
-	j = 4096;
+	j = PAGE_SIZE;
 	if (!(stack = (unsigned char *) p->kernel_stack_page)) {
 		stack = (unsigned char *) init_kernel_stack;
 		j = sizeof(init_kernel_stack);
@@ -508,7 +520,7 @@ void sched_init(void)
 	if (sizeof(struct sigaction) != 16)
 		panic("Struct sigaction MUST be 16 bytes");
 	set_tss_desc(gdt+FIRST_TSS_ENTRY,&init_task.tss);
-	set_ldt_desc(gdt+FIRST_LDT_ENTRY,&init_task.ldt);
+	set_ldt_desc(gdt+FIRST_LDT_ENTRY,&default_ldt,1);
 	set_system_gate(0x80,&system_call);
 	p = gdt+2+FIRST_TSS_ENTRY;
 	for(i=1 ; i<NR_TASKS ; i++) {

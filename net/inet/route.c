@@ -26,7 +26,6 @@
 #include <linux/errno.h>
 #include <linux/in.h>
 #include "inet.h"
-#include "timer.h"
 #include "dev.h"
 #include "ip.h"
 #include "protocol.h"
@@ -216,65 +215,12 @@ rt_new(struct rtentry *r)
    */
 
   /* If we have a 'gateway' route here, check the correct address. */
-  if (r->rt_flags & RTF_GATEWAY) {
-	dev = dev_check(0,
-		((struct sockaddr_in *) &r->rt_gateway)->sin_addr.s_addr);
-	if (dev == NULL) {
-		dev = dev_check(1,
-		    ((struct sockaddr_in *) &r->rt_gateway)->sin_addr.s_addr);
-	}
-
-	/*
-	 * Aii.  We are using an indirect route.  Check the already
-	 * existing routing table for an entry.
-	 */
-	if (dev == NULL) {
-		for (rt = rt_base; rt != NULL; rt = rt->rt_next) {
-			if ((rt->rt_dev->flags & IFF_UP) == 0) continue;
-			if (ip_addr_match(rt->rt_dst, 
-		    			  ((struct sockaddr_in *)
-					    &r->rt_gateway)->sin_addr.s_addr)) {
-				dev = rt->rt_dev;
-				break;
-			}
-			if (ip_addr_match(rt->rt_dev->pa_brdaddr,
-		    			  ((struct sockaddr_in *)
-					    &r->rt_gateway)->sin_addr.s_addr)) {
-				dev = rt->rt_dev;
-				break;
-			}
-		}
-	}
-  } else {
-	dev = dev_check(0,
-		((struct sockaddr_in *) &r->rt_dst)->sin_addr.s_addr);
-	if (dev == NULL) {
-		dev = dev_check(1,
-		    ((struct sockaddr_in *) &r->rt_dst)->sin_addr.s_addr);
-	}
-
-	/*
-	 * Aii.  We are using an indirect route.  Check the already
-	 * existing routing table for an entry.
-	 */
-	if (dev == NULL) {
-		for (rt = rt_base; rt != NULL; rt = rt->rt_next) {
-			if ((rt->rt_dev->flags & IFF_UP) == 0) continue;
-			if (ip_addr_match(rt->rt_dst,
-		    			  ((struct sockaddr_in *)
-					    &r->rt_dst)->sin_addr.s_addr)) {
-				dev = rt->rt_dev;
-				break;
-			}
-			if (ip_addr_match(rt->rt_dev->pa_brdaddr,
-		    			  ((struct sockaddr_in *)
-					    &r->rt_dst)->sin_addr.s_addr)) {
-				dev = rt->rt_dev;
-				break;
-			}
-		}
-	}
-  }
+  if (!(r->rt_flags & RTF_GATEWAY))
+	dev = dev_check(((struct sockaddr_in *) &r->rt_dst)->sin_addr.s_addr);
+  else
+	if ((rt = rt_route(((struct sockaddr_in *) &r->rt_gateway)->sin_addr.
+	    s_addr,NULL))) dev = rt->rt_dev;
+	else dev = NULL;
 
   DPRINTF((DBG_RT, "RT: dev for %s gw ",
 	in_ntoa((*(struct sockaddr_in *)&r->rt_dst).sin_addr.s_addr)));
@@ -339,15 +285,23 @@ rt_route(unsigned long daddr, struct options *opt)
    * at the IP options to see if we have been given a hint as
    * to what kind of path we should use... -FvK
    */
-  for (rt = rt_base; rt != NULL; rt = rt->rt_next) {
-	DPRINTF((DBG_RT, "RT: %s via ", in_ntoa(daddr)));
-	if (ip_addr_match(rt->rt_dst, daddr)) {
+  for (rt = rt_base; rt != NULL; rt = rt->rt_next)
+	if ((rt->rt_flags & RTF_HOST) && rt->rt_dst == daddr) {
 		DPRINTF((DBG_RT, "%s (%s)\n",
 			rt->rt_dev->name, in_ntoa(rt->rt_gateway)));
 		rt->rt_use++;
 		return(rt);
 	}
-	if (ip_addr_match(rt->rt_dev->pa_brdaddr, daddr)) {
+  for (rt = rt_base; rt != NULL; rt = rt->rt_next) {
+	DPRINTF((DBG_RT, "RT: %s via ", in_ntoa(daddr)));
+	if (!(rt->rt_flags & RTF_HOST) && ip_addr_match(rt->rt_dst, daddr)) {
+		DPRINTF((DBG_RT, "%s (%s)\n",
+			rt->rt_dev->name, in_ntoa(rt->rt_gateway)));
+		rt->rt_use++;
+		return(rt);
+	}
+	if ((rt->rt_dev->flags & IFF_BROADCAST) &&
+	    ip_addr_match(rt->rt_dev->pa_brdaddr, daddr)) {
 		DPRINTF((DBG_RT, "%s (BCAST %s)\n",
 			rt->rt_dev->name, in_ntoa(rt->rt_dev->pa_brdaddr)));
 		rt->rt_use++;

@@ -80,7 +80,8 @@ struct serial_struct {
 	int	baud_base;
 	char	close_delay;
 	char	reserved_char[3];
-	int	reserved[6];
+	int	hub6;
+	int	reserved[5];
 };
 
 /*
@@ -99,6 +100,7 @@ struct serial_struct {
 #define ASYNC_HUP_NOTIFY 0x0001 /* Notify blocked open on hangups */
 #define ASYNC_FOURPORT  0x0002	/* Set OU1, OUT2 per AST Fourport settings */
 #define ASYNC_SAK	0x0004	/* Secure Attention Key (Orange book) */
+#define ASYNC_TERMIOS_RESTORE 0x0008 /* Restore termios when dialin unblocks */
 
 #define ASYNC_SPD_MASK	0x0030
 #define ASYNC_SPD_HI	0x0010	/* Use 56000 instead of 38400 bps */
@@ -107,8 +109,13 @@ struct serial_struct {
 
 #define ASYNC_SKIP_TEST	0x0040 /* Skip UART test during autoconfiguration */
 #define ASYNC_AUTO_IRQ  0x0080 /* Do automatic IRQ during autoconfiguration */
+#define ASYNC_SESSION_LOCKOUT 0x0100 /* Lock out cua opens based on session */
+#define ASYNC_PGRP_LOCKOUT    0x0200 /* Lock out cua opens based on pgrp */
+#define ASYNC_CALLOUT_NOHUP   0x0400 /* Don't do hangups for cua device */
 
-#define ASYNC_FLAGS	0x00F7	/* Possible legal async flags */
+#define ASYNC_FLAGS	0x0FFF	/* Possible legal async flags */
+#define ASYNC_USR_MASK 0x0430	/* Legal flags that non-privileged
+				 * users can set or reset */
 
 /* Internal flags used only by kernel/chr_drv/serial.c */
 #define ASYNC_INITIALIZED	0x80000000 /* Serial port was initialized */
@@ -223,6 +230,8 @@ struct tty_struct {
 		    unsigned int cmd, unsigned long arg);
 	void (*throttle)(struct tty_struct * tty, int status);
 	void (*set_termios)(struct tty_struct *tty, struct termios * old);
+	void (*stop)(struct tty_struct *tty);
+	void (*start)(struct tty_struct *tty);
 	struct tty_struct *link;
 	unsigned char *write_data_ptr;
 	int write_data_cnt;
@@ -318,6 +327,8 @@ extern void tty_write_flush(struct tty_struct *);
 extern void tty_read_flush(struct tty_struct *);
 
 extern struct tty_struct *tty_table[];
+extern struct termios *tty_termios[];
+extern struct termios *termios_locked[];
 extern int tty_check_write[];
 extern struct tty_struct * redirect;
 extern struct tty_ldisc ldiscs[];

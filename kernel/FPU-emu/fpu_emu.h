@@ -38,6 +38,8 @@
 #define EXP_BIAS	Const(0)
 #define EXP_OVER	Const(0x4000)    /* smallest invalid large exponent */
 #define	EXP_UNDER	Const(-0x3fff)   /* largest invalid small exponent */
+#define EXP_Infinity    EXP_OVER
+#define EXP_NaN         EXP_OVER
 
 #define SIGN_POS	Const(0)
 #define SIGN_NEG	Const(1)
@@ -46,13 +48,11 @@
 #define TW_Valid	Const(0)	/* valid */
 #define TW_Zero		Const(1)	/* zero */
 /* The following fold to 2 (Special) in the Tag Word */
-#define TW_Denormal     Const(4)        /* De-normal */
+/* #define TW_Denormal     Const(4) */       /* De-normal */
 #define TW_Infinity	Const(5)	/* + or - infinity */
 #define	TW_NaN		Const(6)	/* Not a Number */
 
 #define TW_Empty	Const(7)	/* empty */
-
-/* #define TW_FPU_Interrupt Const(0x80) */    /* Signals an interrupt */
 
 
 #ifndef __ASSEMBLER__
@@ -68,6 +68,16 @@ extern char emulating;
 #  define RE_ENTRANT_CHECK_ON
 #endif PARANOID
 
+/* These are to defeat the default action, giving the instruction
+   no net effect: */
+#define NO_NET_DATA_EFFECT \
+      { FPU_data_address = (void *)data_operand_offset; \
+	FPU_data_selector = operand_selector; }
+#define NO_NET_INSTR_EFFECT \
+      { FPU_entry_eip = ip_offset; \
+	FPU_entry_op_cs = cs_selector; }
+
+
 typedef void (*FUNC)(void);
 typedef struct fpu_reg FPU_REG;
 
@@ -82,7 +92,10 @@ extern unsigned char FPU_rm;
 extern	char	FPU_st0_tag;
 extern	FPU_REG	*FPU_st0_ptr;
 
-extern void  *FPU_data_address;
+/* ###### These need to be shifted to somewhere safe. */
+/* extern void  *FPU_data_address; has been shifted */
+extern unsigned short FPU_data_selector;
+extern unsigned long FPU_entry_op_cs;
 
 extern  FPU_REG  FPU_loaded_data;
 
@@ -99,7 +112,7 @@ extern  FPU_REG  FPU_loaded_data;
 
 
 /*----- Prototypes for functions written in assembler -----*/
-/* extern "C" void reg_move(FPU_REG *a, FPU_REG *b); */
+/* extern void reg_move(FPU_REG *a, FPU_REG *b); */
 
 extern "C" void mul64(long long *a, long long *b, long long *result);
 extern "C" void poly_div2(long long *x);
@@ -109,17 +122,17 @@ extern "C" void polynomial(unsigned accum[], unsigned x[],
 		       unsigned short terms[][4], int n);
 extern "C" void normalize(FPU_REG *x);
 extern "C" void normalize_nuo(FPU_REG *x);
-extern "C" void reg_div(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
+extern "C" int reg_div(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
 		    unsigned int control_w);
-extern "C" void reg_u_sub(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
+extern "C" int reg_u_sub(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
 		      unsigned int control_w);
-extern "C" void reg_u_mul(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
+extern "C" int reg_u_mul(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
 		      unsigned int control_w);
-extern "C" void reg_u_div(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
+extern "C" int reg_u_div(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
 		      unsigned int control_w);
-extern "C" void reg_u_add(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
+extern "C" int reg_u_add(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,
 		      unsigned int control_w);
-extern "C" void wm_sqrt(FPU_REG *n, unsigned int control_w);
+extern "C" int wm_sqrt(FPU_REG *n, unsigned int control_w);
 extern "C" unsigned	shrx(void *l, unsigned x);
 extern "C" unsigned	shrxs(void *v, unsigned x);
 extern "C" unsigned long div_small(unsigned long long *x, unsigned long y);

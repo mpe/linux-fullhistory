@@ -22,11 +22,14 @@
 #include <linux/fs.h>
 #include <linux/ctype.h>
 #include <linux/delay.h>
+#include <linux/utsname.h>
 
 extern unsigned long * prof_buffer;
 extern unsigned long prof_len;
 extern char edata, end;
 extern char *linux_banner;
+extern "C" void lcall7(void);
+struct desc_struct default_ldt;
 
 /*
  * we need this inline - forking from kernel space will result
@@ -61,7 +64,7 @@ static inline pid_t wait(int * wait_stat)
 
 static char printbuf[1024];
 
-extern char empty_zero_page[4096];
+extern char empty_zero_page[PAGE_SIZE];
 extern int vsprintf(char *,const char *,va_list);
 extern void init(void);
 extern void init_IRQ(void);
@@ -332,12 +335,13 @@ extern "C" void start_kernel(void)
  * Interrupts are still disabled. Do necessary setups, then
  * enable them
  */
+	set_call_gate(&default_ldt,lcall7);
  	ROOT_DEV = ORIG_ROOT_DEV;
  	drive_info = DRIVE_INFO;
  	screen_info = SCREEN_INFO;
 	aux_device_present = AUX_DEVICE_INFO;
 	memory_end = (1<<20) + (EXT_MEM_K<<10);
-	memory_end &= 0xfffff000;
+	memory_end &= PAGE_MASK;
 	ramdisk_size = RAMDISK_SIZE;
 	strcpy(command_line,COMMAND_LINE);
 #ifdef CONFIG_MAX_16M
@@ -348,13 +352,12 @@ extern "C" void start_kernel(void)
 		root_mountflags |= MS_RDONLY;
 	if ((unsigned long)&end >= (1024*1024)) {
 		memory_start = (unsigned long) &end;
-		low_memory_start = 4096;
+		low_memory_start = PAGE_SIZE;
 	} else {
 		memory_start = 1024*1024;
 		low_memory_start = (unsigned long) &end;
 	}
-	low_memory_start += 0xfff;
-	low_memory_start &= 0xfffff000;
+	low_memory_start = PAGE_ALIGN(low_memory_start);
 	memory_start = paging_init(memory_start,memory_end);
 	trap_init();
 	init_IRQ();
@@ -409,6 +412,13 @@ extern "C" void start_kernel(void)
 			printk("Ok, fpu using %s error reporting.\n",
 				ignore_irq13?"exception 16":"irq13");
 	}
+#ifndef CONFIG_MATH_EMULATION
+	else {
+		printk("No coprocessor found and no math emulation present.\n");
+		printk("Giving up.\n");
+		for (;;) ;
+	}
+#endif
 	move_to_user_mode();
 	if (!fork())		/* we count on this going ok */
 		init();
@@ -445,7 +455,9 @@ void init(void)
 	(void) dup(0);
 	(void) dup(0);
 
+	system_utsname.machine[1] = '0' + x86;
 	printf(linux_banner);
+
 	execve("/etc/init",argv_init,envp_init);
 	execve("/bin/init",argv_init,envp_init);
 	execve("/sbin/init",argv_init,envp_init);

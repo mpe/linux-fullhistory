@@ -27,7 +27,6 @@
 #include <linux/in.h>
 #include <linux/param.h>
 #include "inet.h"
-#include "timer.h"
 #include "dev.h"
 #include "ip.h"
 #include "protocol.h"
@@ -36,8 +35,6 @@
 #include "skbuff.h"
 #include "sock.h"
 #include "raw.h"
-
-extern struct timer *timer_base;
 
 /*
  * Get__netinfo returns the length of that string.
@@ -53,9 +50,9 @@ get__netinfo(struct proto *pro, char *buffer)
   struct sock *sp;
   char *pos=buffer;
   int i;
+  int timer_active;
   unsigned long  dest, src;
   unsigned short destp, srcp;
-  struct timer *tp;
 
   s_array = pro->sock_array;
   pos+=sprintf(pos, "sl  local_address rem_address   st tx_queue rx_queue tr tm->when\n");
@@ -71,21 +68,15 @@ get__netinfo(struct proto *pro, char *buffer)
 		destp = ntohs(destp);
 		srcp  = ntohs(srcp);
 
-		pos+=sprintf(pos, "%2d: %08X:%04X %08X:%04X %02X %08X:%08X %02X:%08X %02X",
+		timer_active = del_timer(&sp->timer);
+		if (!timer_active)
+			sp->timer.expires = 0;
+		pos+=sprintf(pos, "%2d: %08X:%04X %08X:%04X %02X %08X:%08X %02X:%08X %02X\n",
 			i, src, srcp, dest, destp, sp->state, 
 			sp->send_seq-sp->rcv_ack_seq, sp->acked_seq-sp->copied_seq,
-			sp->time_wait.running, sp->time_wait.when-jiffies, sp->retransmits);
-
-		cli();
-		tp = timer_base;
-		while (tp) {
-			if (tp == &(sp->time_wait)) {
-				pos+=sprintf(pos, " *");
-			}
-			tp = tp->next;
-		}
-		sti();
-		pos+=sprintf(pos, "\n");
+			timer_active, sp->timer.expires, sp->retransmits);
+		if (timer_active)
+			add_timer(&sp->timer);
 
 		/* Is place in buffer too rare? then abort. */
 		if (pos > buffer+PAGE_SIZE-80) {

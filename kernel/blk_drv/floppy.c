@@ -121,8 +121,12 @@ static unsigned char running = 0;
 /*
  * The DMA channel used by the floppy controller cannot access data at
  * addresses >= 16MB
+ *
+ * Went back to the 1MB limit, as some people had problems with the floppy
+ * driver otherwise. It doesn't matter much for performance anyway, as most
+ * floppy accesses go through the track buffer.
  */
-#define LAST_DMA_ADDR	(0x1000000 - BLOCK_SIZE)
+#define LAST_DMA_ADDR	(0x100000 - BLOCK_SIZE)
 
 /*
  * globals used by 'result()'
@@ -1137,6 +1141,8 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 		case FDFMTTRK:
 			if (!suser())
 				return -EPERM;
+			if (fd_ref[drive & 3] != 1)
+				return -EBUSY;
 			cli();
 			while (format_status != FORMAT_NONE)
 				sleep_on(&format_done);

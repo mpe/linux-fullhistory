@@ -5,11 +5,12 @@
  *
  *		Definitions for the Interfaces handler.
  *
- * Version:	@(#)dev.h	1.0.9	05/31/93
+ * Version:	@(#)dev.h	1.0.10	08/12/93
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Corey Minyard <wf-rch!minyard@relay.EU.net>
+ *		Donald J. Becker, <becker@super.org>
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -20,6 +21,7 @@
 #define _DEV_H
 
 #include <linux/if.h>
+#include <linux/if_ether.h>
 
 
 /* for future expansion when we will have different priorities. */
@@ -73,18 +75,28 @@ struct device {
   /* The device initialization function. Called only once. */
   int			  (*init)(struct device *dev);
 
+  /* Some hardware also needs these fields, but they are not part of the
+     usual set specified in Space.c. */
+  unsigned char		  if_port;		/* Selectable AUI, TP,..*/
+  unsigned char		  dma;			/* DMA channel		*/
+
+  struct enet_statistics* (*get_stats)(struct device *dev);
+
   /*
    * This marks the end of the "visible" part of the structure. All
    * fields hereafter are internal to the system, and may change at
    * will (read: may be cleaned up at will).
    */
 
+  /* These may be needed for future network-power-down code. */
+  unsigned long		  trans_start;	/* Time (in jiffies) of last Tx	*/
+  unsigned long		  last_rx;	/* Time of last Rx		*/
+
   unsigned short	  flags;	/* interface flags (a la BSD)	*/
   unsigned short	  family;	/* address family ID (AF_INET)	*/
   unsigned short	  metric;	/* routing metric (not used)	*/
   unsigned short	  mtu;		/* interface MTU value		*/
   unsigned short	  type;		/* interface hardware type	*/
-  unsigned long		  trans_start;	/* ??				*/
   unsigned short	  hard_header_len;	/* hardware hdr length	*/
   void			  *priv;	/* pointer to private data	*/
 
@@ -147,7 +159,7 @@ extern struct packet_type *ptype_base;
 
 extern int		ip_addr_match(unsigned long addr1, unsigned long addr2);
 extern int		chk_addr(unsigned long addr);
-extern struct device	*dev_check(int which, unsigned long daddr);
+extern struct device	*dev_check(unsigned long daddr);
 extern unsigned long	my_addr(void);
 
 extern void		dev_add_pack(struct packet_type *pt);

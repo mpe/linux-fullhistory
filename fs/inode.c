@@ -17,7 +17,7 @@ static struct inode * first_inode;
 static struct wait_queue * inode_wait = NULL;
 static int nr_inodes = 0, nr_free_inodes = 0;
 
-static inline int const hashfn(dev_t dev, int i)
+static inline int const hashfn(dev_t dev, unsigned int i)
 {
 	return (dev ^ i) % NR_IHASH;
 }
@@ -84,24 +84,21 @@ static void put_last_free(struct inode *inode)
 
 void grow_inodes(void)
 {
-	unsigned long page;
 	struct inode * inode;
 	int i;
 
-	page = get_free_page(GFP_BUFFER);
-	if (!page)
+	if(!(inode = (struct inode*) get_free_page(GFP_KERNEL)))
 		return;
-	inode = (struct inode *) page;
-	for (i=0; i < (PAGE_SIZE / sizeof(struct inode)); i++, inode++) {
-		if (!first_inode) {
-			inode->i_next = inode;
-			inode->i_prev = inode;
-			first_inode = inode;
-		} else
-			insert_inode_free(inode);
-	}
+
+	i=PAGE_SIZE / sizeof(struct inode);
 	nr_inodes += i;
 	nr_free_inodes += i;
+
+	if (!first_inode)
+		inode->i_next = inode->i_prev = first_inode = inode++, i--;
+
+	for ( ; i ; i-- )
+		insert_inode_free(inode++);
 }
 
 unsigned long inode_init(unsigned long start, unsigned long end)
@@ -400,7 +397,7 @@ struct inode * get_pipe_inode(void)
 
 	if (!(inode = get_empty_inode()))
 		return NULL;
-	if (!(PIPE_BASE(*inode) = (char *) get_free_page(GFP_USER))) {
+	if (!(PIPE_BASE(*inode) = (char*) __get_free_page(GFP_USER))) {
 		iput(inode);
 		return NULL;
 	}

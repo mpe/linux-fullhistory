@@ -42,26 +42,21 @@ static void put_last_free(struct file *file)
 
 void grow_files(void)
 {
-	unsigned long page;
 	struct file * file;
 	int i;
 
-	page = get_free_page(GFP_BUFFER);
-	if (!page)
+	file = (struct file*) __get_free_page(GFP_BUFFER);
+
+	if (!file)
 		return;
-	file = (struct file *) page;
-	for (i=0; i < (PAGE_SIZE / sizeof(struct file)); i++, file++)
-	{
-		if (!first_file)
-		{
-			file->f_next = file;
-			file->f_prev = file;
-			first_file = file;
-		}
-		else
-			insert_file_free(file);
-	}
-	nr_files += i;
+
+	nr_files+=i= PAGE_SIZE/sizeof(struct file);
+
+	if (!first_file)
+		file->f_next = file->f_prev = first_file = file++, i--;
+
+	for (; i ; i--)
+		insert_file_free(file++);
 }
 
 unsigned long file_table_init(unsigned long start, unsigned long end)

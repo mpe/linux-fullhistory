@@ -62,8 +62,7 @@ int send_sig(unsigned long sig,struct task_struct * p,int priv)
 	if ((sig >= SIGSTOP) && (sig <= SIGTTOU)) 
 		p->signal &= ~(1<<(SIGCONT-1));
 	/* Actually generate the signal */
-	if (!generate(sig,p))
-		return 0;
+	generate(sig,p);
 	return 0;
 }
 
@@ -196,17 +195,17 @@ void audit_ptree(void)
  */
 int session_of_pgrp(int pgrp)
 {
-	struct task_struct **p;
+	struct task_struct *p;
 	int fallback;
 
 	fallback = -1;
- 	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
- 		if (!*p || (*p)->session <= 0)
+	for_each_task(p) {
+ 		if (p->session <= 0)
  			continue;
-		if ((*p)->pgrp == pgrp)
-			return (*p)->session;
-		if ((*p)->pid == pgrp)
-			fallback = (*p)->session;
+		if (p->pgrp == pgrp)
+			return p->session;
+		if (p->pid == pgrp)
+			fallback = p->session;
 	}
 	return fallback;
 }
@@ -217,19 +216,20 @@ int session_of_pgrp(int pgrp)
  */
 int kill_pg(int pgrp, int sig, int priv)
 {
-	struct task_struct **p;
+	struct task_struct *p;
 	int err,retval = -ESRCH;
 	int found = 0;
 
 	if (sig<0 || sig>32 || pgrp<=0)
 		return -EINVAL;
- 	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p)
-		if (*p && (*p)->pgrp == pgrp) {
-			if ((err = send_sig(sig,*p,priv)) != 0)
+	for_each_task(p) {
+		if (p->pgrp == pgrp) {
+			if ((err = send_sig(sig,p,priv)) != 0)
 				retval = err;
 			else
 				found++;
 		}
+	}
 	return(found ? 0 : retval);
 }
 
@@ -240,31 +240,33 @@ int kill_pg(int pgrp, int sig, int priv)
  */
 int kill_sl(int sess, int sig, int priv)
 {
-	struct task_struct **p;
+	struct task_struct *p;
 	int err,retval = -ESRCH;
 	int found = 0;
 
 	if (sig<0 || sig>32 || sess<=0)
 		return -EINVAL;
- 	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p)
-		if (*p && (*p)->session == sess && (*p)->leader) {
-			if ((err = send_sig(sig,*p,priv)) != 0)
+	for_each_task(p) {
+		if (p->session == sess && p->leader) {
+			if ((err = send_sig(sig,p,priv)) != 0)
 				retval = err;
 			else
 				found++;
 		}
+	}
 	return(found ? 0 : retval);
 }
 
 int kill_proc(int pid, int sig, int priv)
 {
- 	struct task_struct **p;
+ 	struct task_struct *p;
 
 	if (sig<0 || sig>32)
 		return -EINVAL;
-	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p)
-		if (*p && (*p)->pid == pid)
-			return send_sig(sig,*p,priv);
+	for_each_task(p) {
+		if (p && p->pid == pid)
+			return send_sig(sig,p,priv);
+	}
 	return(-ESRCH);
 }
 
@@ -274,18 +276,19 @@ int kill_proc(int pid, int sig, int priv)
  */
 extern "C" int sys_kill(int pid,int sig)
 {
-	struct task_struct **p = NR_TASKS + task;
 	int err, retval = 0, count = 0;
 
 	if (!pid)
 		return(kill_pg(current->pgrp,sig,0));
 	if (pid == -1) {
-		while (--p > &FIRST_TASK)
-			if (*p && (*p)->pid > 1 && *p != current) {
+		struct task_struct * p;
+		for_each_task(p) {
+			if (p->pid > 1 && p != current) {
 				++count;
-				if ((err = send_sig(sig,*p,0)) != -EPERM)
+				if ((err = send_sig(sig,p,0)) != -EPERM)
 					retval = err;
 			}
+		}
 		return(count ? retval : -ESRCH);
 	}
 	if (pid < 0) 
@@ -304,16 +307,15 @@ extern "C" int sys_kill(int pid,int sig)
  */
 int is_orphaned_pgrp(int pgrp)
 {
-	struct task_struct **p;
+	struct task_struct *p;
 
-	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
-		if (!(*p) ||
-		    ((*p)->pgrp != pgrp) || 
-		    ((*p)->state == TASK_ZOMBIE) ||
-		    ((*p)->p_pptr->pid == 1))
+	for_each_task(p) {
+		if ((p->pgrp != pgrp) || 
+		    (p->state == TASK_ZOMBIE) ||
+		    (p->p_pptr->pid == 1))
 			continue;
-		if (((*p)->p_pptr->pgrp != pgrp) &&
-		    ((*p)->p_pptr->session == (*p)->session))
+		if ((p->p_pptr->pgrp != pgrp) &&
+		    (p->p_pptr->session == p->session))
 			return 0;
 	}
 	return(1);	/* (sighing) "Often!" */
@@ -321,12 +323,12 @@ int is_orphaned_pgrp(int pgrp)
 
 static int has_stopped_jobs(int pgrp)
 {
-	struct task_struct ** p;
+	struct task_struct * p;
 
-	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
-		if (!*p || (*p)->pgrp != pgrp)
+	for_each_task(p) {
+		if (p->pgrp != pgrp)
 			continue;
-		if ((*p)->state == TASK_STOPPED)
+		if (p->state == TASK_STOPPED)
 			return(1);
 	}
 	return(0);
@@ -334,14 +336,15 @@ static int has_stopped_jobs(int pgrp)
 
 static void forget_original_parent(struct task_struct * father)
 {
-	struct task_struct ** p;
+	struct task_struct * p;
 
-	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p)
-		if (*p && (*p)->p_opptr == father)
+	for_each_task(p) {
+		if (p->p_opptr == father)
 			if (task[1])
-				(*p)->p_opptr = task[1];
+				p->p_opptr = task[1];
 			else
-				(*p)->p_opptr = task[0];
+				p->p_opptr = task[0];
+	}
 }
 
 volatile void do_exit(long code)
@@ -377,6 +380,17 @@ fake_volatile:
 				mpnt->vm_ops->close(mpnt);
 			kfree(mpnt);
 			mpnt = mpnt1;
+		}
+	}
+
+	if (current->ldt) {
+		free_page((unsigned long) current->ldt);
+		current->ldt = NULL;
+		for (i=1 ; i<NR_TASKS ; i++) {
+			if (task[i] == current) {
+				set_ldt_desc(gdt+(i<<1)+FIRST_LDT_ENTRY, &default_ldt, 1);
+				load_ldt(i);
+			}
 		}
 	}
 
@@ -438,7 +452,7 @@ fake_volatile:
 		}
 	}
 	if (current->leader) {
-		struct task_struct **p;
+		struct task_struct *p;
 		struct tty_struct *tty;
 
 		if (current->tty >= 0) {
@@ -450,9 +464,10 @@ fake_volatile:
 				tty->session = 0;
 			}
 		}
-	 	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p)
-			if (*p && (*p)->session == current->session)
-				(*p)->tty = -1;
+		for_each_task(p) {
+			if (p->session == current->session)
+				p->tty = -1;
+		}
 	}
 	if (last_task_used_math == current)
 		last_task_used_math = NULL;

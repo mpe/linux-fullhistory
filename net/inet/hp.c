@@ -1,6 +1,6 @@
 /* hp.c: A HP LAN ethernet driver for linux. */
 /*
-    Written 1993 by Donald Becker. This is alpha test code.
+    Written 1993 by Donald Becker.
     Copyright 1993 United States Government as represented by the
     Director, National Security Agency.  This software may be used and
     distributed according to the terms of the GNU Public License,
@@ -12,28 +12,21 @@
     C/O Supercomputing Research Ctr., 17100 Science Dr., Bowie MD 20715
 */
 
-static char *version = "hp.c:v0.99-10 5/28/93 Donald Becker (becker@super.org)\n";
+static char *version =
+    "hp.c:v0.99.12+ 8/12/93 Donald Becker (becker@super.org)\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
-#include <asm/io.h>
 #include <asm/system.h>
+#include <asm/io.h>
+#ifndef port_read
+#include "iow.h"
+#endif
 
 #include "dev.h"
 #include "8390.h"
-
-/* These should be in <asm/io.h> someday, borrowed from blk_drv/hd.c. */
-#define port_read(port,buf,nr) \
-__asm__("cld;rep;insw": :"d" (port),"D" (buf),"c" (nr):"cx","di")
-#define port_write(port,buf,nr) \
-__asm__("cld;rep;outsw": :"d" (port),"S" (buf),"c" (nr):"cx","si")
-
-#define port_read_b(port,buf,nr) \
-__asm__("cld;rep;insb": :"d" (port),"D" (buf),"c" (nr):"cx","di")
-#define port_write_b(port,buf,nr) \
-__asm__("cld;rep;outsb": :"d" (port),"S" (buf),"c" (nr):"cx","si")
 
 #define HP_DATAPORT	0x0c	/* "Remote DMA" data port. */
 #define HP_ID		0x07
@@ -46,10 +39,6 @@ __asm__("cld;rep;outsb": :"d" (port),"S" (buf),"c" (nr):"cx","si")
 #define HP_START_PG	0x00	/* First page of TX buffer */
 #define HP_8BSTOP_PG	0x80	/* Last page +1 of RX ring */
 #define HP_16BSTOP_PG	0xFF	/* Last page +1 of RX ring */
-
-extern void NS8390_init(struct device *dev, int startp);
-extern int ei_debug;
-extern struct sigaction ei_sigaction;
 
 int hpprobe(int ioaddr, struct device *dev);
 int hpprobe1(int ioaddr, struct device *dev);
@@ -87,48 +76,40 @@ int hpprobe1(int ioaddr, struct device *dev)
 {
   int i;
   unsigned char *station_addr = dev->dev_addr;
-  unsigned char SA_prom[6];
   int tmp;
-  int hplan;
 
-  printk("HP-LAN ethercard probe at %#3x:", ioaddr);
-  tmp = inb_p(ioaddr);
-  if (tmp == 0xFF) {
-    printk(" not found (nothing there).\n");
-    return 0;
-  }
-
-  for(i = 0; i < sizeof(SA_prom); i++) {
-    SA_prom[i] = inb(ioaddr + i);
-    if (i < ETHER_ADDR_LEN  &&  station_addr) {
-      printk(" %2.2x", SA_prom[i]);
-      station_addr[i] = SA_prom[i];
-    }
-  }
-  hplan =  (SA_prom[0] == 0x08 && SA_prom[1] == 0x00 && SA_prom[2] == 0x09);
-  if (hplan == 0) {
-      printk(" not found (invalid station address prefix).\n");
+  /* Check for the HP physical address, 08 00 09 xx xx xx. */
+  if (inb(ioaddr) != 0x08
+      || inb(ioaddr+1) != 0x00
+      || inb(ioaddr+2) != 0x09)
       return 0;
-  }
+
+  /* Good enough, we will assume everything works. */
+  ethdev_init(dev);
 
   ei_status.tx_start_page = HP_START_PG;
   ei_status.rx_start_page = HP_START_PG + TX_PAGES;
   /* Set up the rest of the parameters. */
-  if ((tmp = inb_p(ioaddr + HP_ID)) & 0x80) {
+  if ((tmp = inb(ioaddr + HP_ID)) & 0x80) {
       ei_status.name = "HP27247";
       ei_status.word16 = 1;
-      ei_status.stop_page = HP_16BSTOP_PG; /* Safe for now */
+      ei_status.stop_page = HP_16BSTOP_PG; /* Safe (if small) value */
   } else {
       ei_status.name = "HP27250";
       ei_status.word16 = 0;
-      ei_status.stop_page = HP_8BSTOP_PG; /* Safe for now */
+      ei_status.stop_page = HP_8BSTOP_PG;
   }
 
-  /* Set the base address to point to the NIC! */
+  printk("%s: %s at %#3x,", dev->name, ei_status.name, ioaddr);
+
+  for(i = 0; i < ETHER_ADDR_LEN; i++)
+      printk(" %2.2x", station_addr[i] = inb(ioaddr + i));
+
+
+  /* Set the base address to point to the NIC, not the "real" base! */
   dev->base_addr = ioaddr + NIC_OFFSET;
 
-  /* Snarf the interrupt now.  There's no point in waiting since we cannot
-     share and the board will usually be enabled. */
+  /* Snarf the interrupt now.  Someday this could be moved to open(). */
   if (dev->irq < 2) {
       int irq_16list[] = { 11, 10, 5, 3, 4, 7, 9, 0};
       int irq_8list[] = { 7, 5, 3, 4, 9, 0};
@@ -141,14 +122,13 @@ int hpprobe1(int ioaddr, struct device *dev)
 	      outb_p( 0x00 | HP_RUN, ioaddr + HP_CONFIGURE);
 	      if (dev->irq == autoirq_report(0)	 /* It's a good IRQ line! */
 		  && request_irq (dev->irq, &ei_interrupt) == 0) {
-		  printk(" got IRQ %d", dev->irq);
+		  printk(" selecting IRQ %d.\n", dev->irq);
 		  break;
-	      } else
-		  printk(" IRQ%d busy..", dev->irq);
+	      }
 	  }
       } while (*++irqp);
       if (*irqp == 0) {
-	  printk(" unable to find an free IRQ line.\n");
+	  printk(" no free IRQ lines.\n");
 	  return 0;
       }
   } else {
@@ -160,7 +140,6 @@ int hpprobe1(int ioaddr, struct device *dev)
       }
   }
 
-  printk("\n%s: %s using IRQ %d.\n", dev->name, ei_status.name, dev->irq);
   if (ei_debug > 1)
       printk(version);
 

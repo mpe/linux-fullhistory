@@ -22,10 +22,17 @@
 #include "fpu_asm.h"
 
 
-//	#define	EXTRA_PRECISE
+//	#define	EXTRA_PRECISE	// Do not use: not complete
 
 #define	TERM_SIZE	$8
-
+#define	SUM_MS		-20(%ebp)	/* sum ms long */
+#define SUM_MIDDLE	-24(%ebp)	/* sum middle long */
+#define	SUM_LS		-28(%ebp)	/* sum ls long */
+#define	SUM_LS_HI	-25(%ebp)	/* high byte of sum ls */
+#define	ACCUM_MS	-4(%ebp)	/* accum ms long */
+#define	ACCUM_MIDDLE	-8(%ebp)	/* accum middle long */
+#define	ACCUM_LS	-12(%ebp)	/* accum ls long */
+#define ACCUM_LS_HI	-9(%ebp)	/* high byte of accum ls */
 
 .text
 	.align 2,144
@@ -38,101 +45,92 @@ _polynomial:
 	pushl	%edi
 	pushl	%ebx
 
-	movl	PARAM1,%esi		// accum
-	movl	PARAM2,%edi		// x
-	movl	PARAM3,%ebx		// terms
-	movl	PARAM4,%ecx		// n
+	movl	PARAM2,%esi		// x
+	movl	PARAM3,%edi		// terms
 
 	movl	TERM_SIZE,%eax
-	mull	%ecx
-	movl	%eax,%ecx
+	mull	PARAM4			// n
+	addl	%eax,%edi
 
-	movl	4(%ebx,%ecx,1),%edx	// terms[n]
-	movl	%edx,-20(%ebp)
-	movl	(%ebx,%ecx,1),%edx	// terms[n]
-	movl	%edx,-24(%ebp)		
+	movl	4(%edi),%edx		// terms[n]
+	movl	%edx,SUM_MS
+	movl	(%edi),%edx		// terms[n]
+	movl	%edx,SUM_MIDDLE
 	xor	%eax,%eax
-	movl	%eax,-28(%ebp)
+	movl	%eax,SUM_LS
 
-	subl	TERM_SIZE,%ecx
+	subl	TERM_SIZE,%edi
+	decl	PARAM4
 	js	L_accum_done
 
 L_accum_loop:
 	xor	%eax,%eax
-	movl	%eax,-4(%ebp)
-	movl	%eax,-8(%ebp)
+	movl	%eax,ACCUM_MS
+	movl	%eax,ACCUM_MIDDLE
 
-#ifdef EXTRA_PRECISE
-	movl	-28(%ebp),%eax
-	mull	4(%edi)			// x ms long
-	movl	%edx,-12(%ebp)
-#endif EXTRA_PRECISE
-
-	movl	-24(%ebp),%eax
-	mull	(%edi)			// x ls long
+	movl	SUM_MIDDLE,%eax
+	mull	(%esi)			// x ls long
 //	movl	%eax,-16(%ebp)		// Not needed
-	addl	%edx,-12(%ebp)
-	adcl	$0,-8(%ebp)
+	movl	%edx,ACCUM_LS
 
-	movl	-24(%ebp),%eax
-	mull	4(%edi)			// x ms long
-	addl	%eax,-12(%ebp)
-	adcl	%edx,-8(%ebp)
-	adcl	$0,-4(%ebp)
+	movl	SUM_MIDDLE,%eax
+	mull	4(%esi)			// x ms long
+	addl	%eax,ACCUM_LS
+	adcl	%edx,ACCUM_MIDDLE
+	adcl	$0,ACCUM_MS
 
-	movl	-20(%ebp),%eax
-	mull	(%edi)
-	addl	%eax,-12(%ebp)
-	adcl	%edx,-8(%ebp)
-	adcl	$0,-4(%ebp)
+	movl	SUM_MS,%eax
+	mull	(%esi)			// x ls long
+	addl	%eax,ACCUM_LS
+	adcl	%edx,ACCUM_MIDDLE
+	adcl	$0,ACCUM_MS
 
-	movl	-20(%ebp),%eax
-	mull	4(%edi)
-	addl	%eax,-8(%ebp)
-	adcl	%edx,-4(%ebp)
+	movl	SUM_MS,%eax
+	mull	4(%esi)			// x ms long
+	addl	%eax,ACCUM_MIDDLE
+	adcl	%edx,ACCUM_MS
 
-/* Now add the next term */
-	movl	(%ebx,%ecx,1),%eax
-	addl	%eax,-8(%ebp)
-	movl	4(%ebx,%ecx,1),%eax
-	adcl	%eax,-4(%ebp)
-
-/* And put into the second register */
-	movl	-4(%ebp),%eax
-	movl	%eax,-20(%ebp)
-	movl	-8(%ebp),%eax
-	movl	%eax,-24(%ebp)
+// Now put the sum of next term and the accumulator
+// into the sum register
+	movl	ACCUM_MIDDLE,%eax
+	addl	(%edi),%eax		// term ls long
+	movl	%eax,SUM_MIDDLE
+	movl	ACCUM_MS,%eax
+	adcl	4(%edi),%eax		// term ms long
+	movl	%eax,SUM_MS
 
 #ifdef EXTRA_PRECISE
-	movl	-12(%ebp),%eax
-	movl	%eax,-28(%ebp)
+	movl	ACCUM_LS,%eax
+	movl	%eax,SUM_LS
 #else
-	testb	$128,-25(%ebp)
+	testb	$0x80,ACCUM_LS_HI	// ms bit of ACCUM_LS
 	je	L_no_poly_round
 
-	addl	$1,-24(%ebp)
-	adcl	$0,-20(%ebp)
+	addl	$1,SUM_MIDDLE
+	adcl	$0,SUM_MS
 L_no_poly_round:
 #endif EXTRA_PRECISE
 
-	subl	TERM_SIZE,%ecx
+	subl	TERM_SIZE,%edi
+	decl	PARAM4
 	jns	L_accum_loop
 
 L_accum_done:
 #ifdef EXTRA_PRECISE
 /* And round the result */
-	testb	$128,-25(%ebp)
+	testb	$128,SUM_LS_HI
 	je	L_poly_done
 
-	addl	$1,-24(%ebp)
-	adcl	$0,-20(%ebp)
+	addl	$1,SUM_MIDDLE
+	adcl	$0,SUM_MS
 #endif EXTRA_PRECISE
 
 L_poly_done:
-	movl	-24(%ebp),%eax
-	movl	%eax,(%esi)
-	movl	-20(%ebp),%eax
-	movl	%eax,4(%esi)
+	movl	PARAM1,%edi		// accum
+	movl	SUM_MIDDLE,%eax
+	movl	%eax,(%edi)
+	movl	SUM_MS,%eax
+	movl	%eax,4(%edi)
 
 	popl	%ebx
 	popl	%edi

@@ -26,7 +26,6 @@
 #include <linux/sockios.h>
 #include <linux/in.h>
 #include "inet.h"
-#include "timer.h"
 #include "dev.h"
 #include "eth.h"
 #include "ip.h"
@@ -37,6 +36,8 @@
 #include "sock.h"
 #include "arp.h"
 #include "icmp.h"
+
+#define CONFIG_IP_FORWARD
 
 extern int last_retran;
 extern void sort_send(struct sock *sk);
@@ -578,7 +579,9 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
   /* Do any IP forwarding required. */
   if ((brd = chk_addr(iph->daddr)) == 0) {
+#ifdef CONFIG_IP_FORWARD
 	ip_forward(skb, dev);
+#endif
 	skb->sk = NULL;
 	kfree_skb(skb, FREE_WRITE);
 	return(0);
@@ -718,9 +721,8 @@ ip_queue_xmit(struct sock *sk, struct device *dev,
 		}
 	}
 	sti();
-	sk->time_wait.len = backoff(sk->backoff) * (2 * sk->mdev + sk->rtt);
-        sk->timeout = TIME_WRITE;
-        reset_timer ((struct timer *)&sk->time_wait);
+	reset_timer(sk, TIME_WRITE,
+		backoff(sk->backoff) * (2 * sk->mdev + sk->rtt));
   } else {
 	skb->sk = sk;
   }
@@ -787,10 +789,7 @@ ip_retransmit(struct sock *sk, int all)
    * back down reasonably quickly.
    */
   sk->backoff++;
-  sk->time_wait.len = backoff(sk->backoff) * (2 * sk->mdev + sk->rtt);
-  sk->timeout = TIME_WRITE;
-  reset_timer((struct timer *)&sk->time_wait);
-
+  reset_timer(sk, TIME_WRITE, backoff(sk->backoff) * (2 * sk->mdev + sk->rtt));
 }
 
 /* Backoff function - the subject of much research */

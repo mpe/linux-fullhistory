@@ -27,7 +27,7 @@
 
 
 #ifdef version
-static char *version="auto_irq.c:v0.01 1993 Donald Becker (becker@super.org)";
+static char *version="auto_irq.c:v0.02 1993 Donald Becker (becker@super.org)";
 #endif
 
 /*#include <linux/config.h>*/
@@ -35,7 +35,10 @@ static char *version="auto_irq.c:v0.01 1993 Donald Becker (becker@super.org)";
 #include <linux/sched.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
+#include "dev.h"
 /*#include <asm/system.h>*/
+
+struct device *irq2dev_map[16] = {0, 0, /* ... zeroed */};
 
 int irqs_busy = 0x01;		/* The set of fixed IRQs always enabled */
 int irqs_used = 0x01;		/* The set of fixed IRQs sometimes enabled. */

@@ -23,7 +23,6 @@
 #include <linux/socket.h>
 #include <linux/in.h>
 #include "inet.h"
-#include "timer.h"
 #include "dev.h"
 #include "ip.h"
 #include "route.h"

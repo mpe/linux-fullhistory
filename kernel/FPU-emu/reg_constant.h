@@ -18,6 +18,7 @@ extern FPU_REG CONST_L2T;
 extern FPU_REG CONST_L2E;
 extern FPU_REG CONST_PI;
 extern FPU_REG CONST_PI2;
+extern FPU_REG CONST_PI2extra;
 extern FPU_REG CONST_PI4;
 extern FPU_REG CONST_LG2;
 extern FPU_REG CONST_LN2;

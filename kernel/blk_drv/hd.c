@@ -556,6 +556,13 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 			put_fs_long(hd[MINOR(inode->i_rdev)].nr_sects,
 				(long *) arg);
 			return 0;
+		case BLKFLSBUF:
+			if(!suser())  return -EACCES;
+			if(!inode->i_rdev) return -EINVAL;
+			sync_dev(inode->i_rdev);
+			invalidate_buffers(inode->i_rdev);
+			return 0;
+
 		case BLKRRPART: /* Re-read partition tables */
 			return revalidate_hddisk(inode->i_rdev, 1);
 		RO_IOCTLS(inode->i_rdev,arg);

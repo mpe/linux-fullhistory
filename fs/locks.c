@@ -20,7 +20,7 @@
 #include <linux/stat.h>
 #include <linux/fcntl.h>
 
-#define OFFSET_MAX	0x7fffffff	/* FIXME: move elsewhere? */
+#define OFFSET_MAX	((off_t)0x7fffffff)	/* FIXME: move elsewhere? */
 
 static int copy_flock(struct file *filp, struct file_lock *fl, struct flock *l);
 static int conflict(struct file_lock *caller_fl, struct file_lock *sys_fl);

@@ -44,8 +44,7 @@ int getname(const char * filename, char **result)
 	c = get_fs_byte(filename++);
 	if (!c)
 		return -ENOENT;
-	page = __get_free_page(GFP_KERNEL);
-	if (!page)
+	if(!(page = __get_free_page(GFP_KERNEL)))
 		return -ENOMEM;
 	*result = tmp = (char *) page;
 	while (--i) {
@@ -283,7 +282,7 @@ int open_namei(const char * pathname, int flag, int mode,
 	struct inode * dir, *inode;
 	struct task_struct ** p;
 
-	mode &= 07777 & ~current->umask;
+	mode &= S_IALLUGO & ~current->umask;
 	mode |= S_IFREG;
 	error = dir_namei(pathname,&namelen,&basename,base,&dir);
 	if (error)

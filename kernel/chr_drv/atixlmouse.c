@@ -52,8 +52,8 @@
 /* Same general mouse structure */
 
 static struct mouse_status {
-	char buttons;
-	char latch_buttons;
+	unsigned char buttons;
+	unsigned char latch_buttons;
 	int dx;
 	int dy;
 	int present;
@@ -70,7 +70,7 @@ void mouse_interrupt(int unused)
 	outb(ATIXL_MSE_READ_Y, ATIXL_MSE_CONTROL_PORT); /* Select IR2 - Y movement */
 	mouse.dy += inb( ATIXL_MSE_DATA_PORT);
 	outb(ATIXL_MSE_READ_BUTTONS, ATIXL_MSE_CONTROL_PORT); /* Select IR0 - Button Status */
-	mouse.latch_buttons |= inb( ATIXL_MSE_DATA_PORT);
+	mouse.latch_buttons |= inb(ATIXL_MSE_DATA_PORT);
 	ATIXL_MSE_ENABLE_UPDATE();
 	mouse.ready = 1;
 	wake_up_interruptible(&mouse.wait);
@@ -118,9 +118,9 @@ static int read_mouse(struct inode * inode, struct file * file, char * buffer, i
 		return -EAGAIN;
 	ATIXL_MSE_DISABLE_UPDATE();
 	/* Allowed interrupts to occur during data gathering - shouldn't hurt */
-	put_fs_byte((char)(~mouse.latch_buttons&7) | 0x80 , buffer);
-	put_fs_byte((char)mouse.dx, buffer + 1);
-	put_fs_byte((char)-mouse.dy, buffer + 2);
+	put_fs_byte((~mouse.latch_buttons & 7) | 0x80 , buffer);
+	put_fs_byte(mouse.dx, buffer + 1);
+	put_fs_byte(-mouse.dy, buffer + 2);
 	mouse.dx = 0;
 	mouse.dy = 0;
 	mouse.latch_buttons = mouse.buttons;

@@ -52,6 +52,13 @@ int sd_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 			put_fs_long(sd[MINOR(inode->i_rdev)].nr_sects,
 				(long *) arg);
 			return 0;
+		case BLKFLSBUF:
+			if(!suser())  return -EACCES;
+			if(!inode->i_rdev) return -EINVAL;
+ 			sync_dev(inode->i_rdev);
+			invalidate_buffers(inode->i_rdev);
+			return 0;
+
 		case BLKRRPART: /* Re-read partition tables */
 			return revalidate_scsidisk(dev, 1);
 		default:

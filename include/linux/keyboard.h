@@ -5,31 +5,6 @@
 #define set_leds() mark_bh(KEYBOARD_BH)
 
 /*
- * Global flags: things that don't change between virtual consoles.
- * This includes things like "key-down" flags - if the shift key is
- * down when you change a console, it's down in both.
- *
- * Note that the KG_CAPSLOCK flags is NOT the flag that decides if
- * capslock is on or not: it's just a flag about the key being
- * physically down. The actual capslock status is in the local flags.
- */
-extern unsigned long kbd_flags;
-
-/*
- * These are the hardcoded global flags - use the numbers beyond 16
- * for non-standard or keyboard-dependent flags
- */
-#define KG_LSHIFT	0
-#define KG_RSHIFT	1
-#define KG_LCTRL	2
-#define KG_RCTRL	3
-#define KG_LALT		4
-#define KG_RALT		5	/* doesn't exist, but.. */
-#define KG_LALTGR	6	/* doesn't exist, but.. */
-#define KG_RALTGR	7
-#define KG_CAPSLOCK	8
-
-/*
  * "dead" keys - prefix key values that are valid only for the next
  * character code (sticky shift, E0/E1 special scancodes, diacriticals)
  */
@@ -72,26 +47,6 @@ extern struct kbd_struct kbd_table[];
 
 extern unsigned long kbd_init(unsigned long);
 
-extern inline int kbd_flag(int flag)
-{
-	return kbd_flags & (1 << flag);
-}
-
-extern inline void set_kbd_flag(int flag)
-{
-	kbd_flags |= 1 << flag;
-}
-
-extern inline void clr_kbd_flag(int flag)
-{
-	kbd_flags &= ~(1 << flag);
-}
-
-extern inline void chg_kbd_flag(int flag)
-{
-	kbd_flags ^= 1 << flag;
-}
-
 extern inline int kbd_dead(int flag)
 {
 	return kbd_prev_dead_keys & (1 << flag);
@@ -132,11 +87,16 @@ extern inline void chg_vc_kbd_flag(struct kbd_struct * kbd, int flag)
 	kbd->flags ^= 1 << flag;
 }
 
-#define NR_KEYS 112
-#define NR_KEYMAPS 3
+#define NR_KEYS 128
+#define NR_KEYMAPS 16
 extern const int NR_TYPES;
 extern const int max_vals[];
 extern unsigned short key_map[NR_KEYMAPS][NR_KEYS];
+
+#define NR_FUNC 32
+#define FUNC_BUFSIZE 512
+extern char func_buf[FUNC_BUFSIZE];
+extern char *func_table[NR_FUNC];
 
 #define KT_LATIN	0	/* we depend on this being zero */
 #define KT_FN		1
@@ -146,6 +106,8 @@ extern unsigned short key_map[NR_KEYMAPS][NR_KEYS];
 #define KT_CONS		5
 #define KT_CUR		6
 #define KT_SHIFT	7
+#define KT_META		8
+#define KT_ASCII	9
 
 #define K(t,v)		(((t)<<8)|(v))
 #define KTYP(x)		((x) >> 8)
@@ -188,6 +150,10 @@ extern unsigned short key_map[NR_KEYMAPS][NR_KEYS];
 #define K_CAPS		K(KT_SPEC,7)
 #define K_NUM		K(KT_SPEC,8)
 #define K_HOLD		K(KT_SPEC,9)
+#define K_SCROLLFORW	K(KT_SPEC,10)
+#define K_SCROLLBACK	K(KT_SPEC,11)
+#define K_BOOT		K(KT_SPEC,12)
+#define K_CAPSON	K(KT_SPEC,13)
 
 #define K_P0		K(KT_PAD,0)
 #define K_P1		K(KT_PAD,1)
@@ -218,16 +184,29 @@ extern unsigned short key_map[NR_KEYMAPS][NR_KEYS];
 #define K_RIGHT		K(KT_CUR,2)
 #define K_UP		K(KT_CUR,3)
 
-#define K_LSHIFT	K(KT_SHIFT,KG_LSHIFT)
-#define K_RSHIFT	K(KT_SHIFT,KG_RSHIFT)
-#define K_LCTRL		K(KT_SHIFT,KG_LCTRL)
-#define K_RCTRL		K(KT_SHIFT,KG_RCTRL)
-#define K_LALT		K(KT_SHIFT,KG_LALT)
-#define K_RALT		K(KT_SHIFT,KG_RALT)
-#define K_LALTGR	K(KT_SHIFT,KG_LALTGR)
-#define K_RALTGR	K(KT_SHIFT,KG_RALTGR)
+#define KG_SHIFT	0
+#define KG_CTRL		2
+#define KG_ALT		3
+#define KG_ALTGR	1
 
-#define K_ALT		K_LALT
-#define K_ALTGR		K_RALTGR
+#define K_SHIFT		K(KT_SHIFT,KG_SHIFT)
+#define K_CTRL		K(KT_SHIFT,KG_CTRL)
+#define K_ALT		K(KT_SHIFT,KG_ALT)
+#define K_ALTGR		K(KT_SHIFT,KG_ALTGR)
+
+#define NR_SHIFT	16
+
+#define K_CAPSSHIFT	K(KT_SHIFT,NR_SHIFT)
+
+#define K_ASC0		K(KT_ASCII,0)
+#define K_ASC1		K(KT_ASCII,1)
+#define K_ASC2		K(KT_ASCII,2)
+#define K_ASC3		K(KT_ASCII,3)
+#define K_ASC4		K(KT_ASCII,4)
+#define K_ASC5		K(KT_ASCII,5)
+#define K_ASC6		K(KT_ASCII,6)
+#define K_ASC7		K(KT_ASCII,7)
+#define K_ASC8		K(KT_ASCII,8)
+#define K_ASC9		K(KT_ASCII,9)
 
 #endif

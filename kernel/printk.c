@@ -20,13 +20,15 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 
+#define LOG_BUF_LEN	4096
+
 static char buf[1024];
 
 extern int vsprintf(char * buf, const char * fmt, va_list args);
 extern void console_print(const char *);
 
 static void (*console_print_proc)(const char *) = 0;
-static char log_buf[4096];
+static char log_buf[LOG_BUF_LEN];
 static unsigned long log_start = 0;
 static unsigned long logged_chars = 0;
 unsigned long log_size = 0;
@@ -73,15 +75,19 @@ extern "C" int sys_syslog(int type, char * buf, int len)
 				sti();
 			}
 			i = 0;
+			cli();
 			while (log_size && i < len) {
+				cli();
 				c = *((char *) log_buf+log_start);
 				log_start++;
 				log_size--;
-				log_start &= 4095;
+				log_start &= LOG_BUF_LEN-1;
+				sti();
 				put_fs_byte(c,buf);
 				buf++;
 				i++;
 			}
+			sti();
 			return i;
 		case 4:		/* Read/clear last 4k of kernel messages */
 			do_clear = 1; 
@@ -92,13 +98,13 @@ extern "C" int sys_syslog(int type, char * buf, int len)
 				return 0;
 			verify_area(VERIFY_WRITE,buf,len);
 			count = len;
-			if (count > 4096)
-				count = 4096;
+			if (count > LOG_BUF_LEN)
+				count = LOG_BUF_LEN;
 			if (count > logged_chars)
 				count = logged_chars;
 			j = log_start + log_size - count;
 			for (i = 0; i < count; i++) {
-				c = *((char *) log_buf + (j++ & 4095));
+				c = *((char *) log_buf + (j++ & LOG_BUF_LEN-1));
 				put_fs_byte(c, buf++);
 			}
 			if (do_clear)
@@ -127,8 +133,8 @@ extern "C" int printk(const char *fmt, ...)
 	i=vsprintf(buf,fmt,args);
 	va_end(args);
 	for (j = 0; j < i ; j++) {
-		log_buf[(log_start+log_size) & 4095] = buf[j];
-		if (log_size < 4096)
+		log_buf[(log_start+log_size) & LOG_BUF_LEN-1] = buf[j];
+		if (log_size < LOG_BUF_LEN)
 			log_size++;
 		else
 			log_start++;
@@ -156,7 +162,7 @@ void register_console(void (*proc)(const char *))
 
 	for (i=0,j=0; i < log_size; i++) {
 		buf[j++] = log_buf[p];
-		p++; p &= 4095;
+		p++; p &= LOG_BUF_LEN-1;
 		if (j < sizeof(buf)-1)
 			continue;
 		buf[j] = 0;

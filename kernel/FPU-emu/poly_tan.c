@@ -49,9 +49,8 @@ static unsigned short	evennegterms[HIPOWERen][4] =
 /*--- poly_tan() ------------------------------------------------------------+
  |                                                                           |
  +---------------------------------------------------------------------------*/
-void	poly_tan(FPU_REG *arg, FPU_REG *y_reg)
+void	poly_tan(FPU_REG *arg, FPU_REG *y_reg, int invert)
 {
-  char		invert = 0;
   short		exponent;
   FPU_REG       odd_poly, even_poly, pos_poly, neg_poly;
   FPU_REG       argSq;
@@ -59,39 +58,6 @@ void	poly_tan(FPU_REG *arg, FPU_REG *y_reg)
   
 
   exponent = arg->exp - EXP_BIAS;
-  
-  if ( arg->tag == TW_Zero )
-    {
-      /* Return 0.0 */
-      reg_move(&CONST_Z, y_reg);
-      return;
-    }
-
-  if ( exponent >= -1 )
-    {
-      /* argument is in the range  [0.5 .. 1.0] */
-      if ( exponent >= 0 )
-	{
-#ifdef PARANOID
-	  if ( (exponent == 0) && 
-	      (arg->sigl == 0) && (arg->sigh == 0x80000000) )
-#endif PARANOID
-	    {
-	      arith_overflow(y_reg);
-	      return;
-	    }
-#ifdef PARANOID
-	  EXCEPTION(EX_INTERNAL|0x104);	/* There must be a logic error */
-	  return;
-#endif PARANOID
-	}
-      /* The argument is in the range  [0.5 .. 1.0) */
-      /* Convert the argument to a number in the range  (0.0 .. 0.5] */
-      *((long long *)(&arg->sigl)) = - *((long long *)(&arg->sigl));
-      normalize(arg);	/* Needed later */
-      exponent = arg->exp - EXP_BIAS;
-      invert = 1;
-    }
 
 #ifdef PARANOID
   if ( arg->sign != 0 )	/* Can't hack a number < 0.0 */
@@ -135,8 +101,8 @@ void	poly_tan(FPU_REG *arg, FPU_REG *y_reg)
   normalize(&odd_poly);
   
   reg_mul(&odd_poly, arg, &odd_poly, FULL_PRECISION);
-  reg_u_add(&odd_poly, arg, &odd_poly, FULL_PRECISION);	/* This is just the odd polynomial */
-
+  /* Complete the odd polynomial. */
+  reg_u_add(&odd_poly, arg, &odd_poly, FULL_PRECISION);
 
   /* will be a valid positive nr with expon = 0 */
   *(short *)&(pos_poly.sign) = 0;
@@ -171,7 +137,8 @@ void	poly_tan(FPU_REG *arg, FPU_REG *y_reg)
 
   reg_mul(&even_poly, &argSq, &even_poly, FULL_PRECISION);
   reg_add(&even_poly, &argSq, &even_poly, FULL_PRECISION);
-  reg_sub(&CONST_1, &even_poly, &even_poly, FULL_PRECISION);  /* This is just the even polynomial */
+  /* Complete the even polynomial */
+  reg_sub(&CONST_1, &even_poly, &even_poly, FULL_PRECISION);
 
   /* Now ready to copy the results */
   if ( invert )

@@ -43,7 +43,7 @@ static unsigned short	negterms[HIPOWER][4] =
 void	poly_sine(FPU_REG *arg, FPU_REG *result)
 {
   short	exponent;
-  FPU_REG	Xx, Xx2, Xx4, accum, negaccum;
+  FPU_REG	fixed_arg, arg_sqrd, arg_to_4, accum, negaccum;
   
   
   exponent = arg->exp - EXP_BIAS;
@@ -76,34 +76,34 @@ void	poly_sine(FPU_REG *arg, FPU_REG *result)
     }
 #endif PARANOID
   
-  Xx.sigl = arg->sigl;
-  Xx.sigh = arg->sigh;
+  fixed_arg.sigl = arg->sigl;
+  fixed_arg.sigh = arg->sigh;
   if ( exponent < -1 )
     {
       /* shift the argument right by the required places */
-      if ( shrx(&(Xx.sigl), -1-exponent) >= 0x80000000U )
-	(*((long long *)(&(Xx.sigl))))++;	/* round up */
+      if ( shrx(&(fixed_arg.sigl), -1-exponent) >= 0x80000000U )
+	(*((long long *)(&(fixed_arg.sigl))))++;	/* round up */
     }
   
-  mul64((long long *)&(Xx.sigl), (long long *)&(Xx.sigl),
-	(long long *)&(Xx2.sigl));
-  mul64((long long *)&(Xx2.sigl), (long long *)&(Xx2.sigl),
-	(long long *)&(Xx4.sigl));
+  mul64((long long *)&(fixed_arg.sigl), (long long *)&(fixed_arg.sigl),
+	(long long *)&(arg_sqrd.sigl));
+  mul64((long long *)&(arg_sqrd.sigl), (long long *)&(arg_sqrd.sigl),
+	(long long *)&(arg_to_4.sigl));
   
   /* will be a valid positive nr with expon = 0 */
   *(short *)&(accum.sign) = 0;
   accum.exp = 0;
 
   /* Do the basic fixed point polynomial evaluation */
-  polynomial(&(accum.sigl), &(Xx4.sigl), lterms, HIPOWER-1);
+  polynomial(&(accum.sigl), &(arg_to_4.sigl), lterms, HIPOWER-1);
   
   /* will be a valid positive nr with expon = 0 */
   *(short *)&(negaccum.sign) = 0;
   negaccum.exp = 0;
   
   /* Do the basic fixed point polynomial evaluation */
-  polynomial(&(negaccum.sigl), &(Xx4.sigl), negterms, HIPOWER-1);
-  mul64((long long *)&(Xx2.sigl), (long long *)&(negaccum.sigl),
+  polynomial(&(negaccum.sigl), &(arg_to_4.sigl), negterms, HIPOWER-1);
+  mul64((long long *)&(arg_sqrd.sigl), (long long *)&(negaccum.sigl),
 	(long long *)&(negaccum.sigl));
 
   /* Subtract the mantissas */
@@ -111,20 +111,17 @@ void	poly_sine(FPU_REG *arg, FPU_REG *result)
   
   /* Convert to 64 bit signed-compatible */
   accum.exp = EXP_BIAS - 1 + accum.exp;
-  
-  *(short *)&(result->sign) = *(short *)&(accum.sign);
-  result->exp = accum.exp;
-  result->sigl = accum.sigl;
-  result->sigh = accum.sigh;
-  
+
+  reg_move(&accum, result);
+
   normalize(result);
 
   reg_mul(result, arg, result, FULL_PRECISION);
   reg_u_add(result, arg, result, FULL_PRECISION);
   
-  /* A small overflow may be possible... but an illegal result. */
   if ( result->exp >= EXP_BIAS )
     {
+      /* A small overflow may be possible... but an illegal result. */
       if (    (result->exp > EXP_BIAS) /* Larger or equal 2.0 */
 	  || (result->sigl > 1)	  /* Larger than 1.0+msb */
 	  ||	(result->sigh != 0x80000000) /* Much > 1.0 */
@@ -149,4 +146,5 @@ void	poly_sine(FPU_REG *arg, FPU_REG *result)
 
       result->sigl = 0;	/* Truncate the result to 1.00 */
     }
+
 }

@@ -45,9 +45,14 @@
 #define COMP_NaN	0x40
 #define COMP_SNaN	0x80
 
+#define status_word() \
+  ((partial_status & ~SW_Top & 0xffff) | ((top << SW_Top_Shift) & SW_Top))
 #define setcc(cc) ({ \
-  status_word &= ~(SW_C0|SW_C1|SW_C2|SW_C3); \
-  status_word |= (cc) & (SW_C0|SW_C1|SW_C2|SW_C3); })
+  partial_status &= ~(SW_C0|SW_C1|SW_C2|SW_C3); \
+  partial_status |= (cc) & (SW_C0|SW_C1|SW_C2|SW_C3); })
+
+/* Clear the SW_C1 bit, "other bits undefined" */
+#define clear_C1()  { partial_status &= ~SW_C1; }
 
 #endif __ASSEMBLER__
 

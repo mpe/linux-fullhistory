@@ -14,6 +14,7 @@
 
 #include <asm/system.h>
 #include <asm/segment.h>
+#include <asm/bitops.h>
 
 void minix_put_inode(struct inode *inode)
 {
@@ -116,8 +117,8 @@ struct super_block *minix_read_super(struct super_block *s,void *data,
 		printk("MINIX-fs: bad superblock or unable to read bitmaps\n");
 		return NULL;
 	}
-	s->u.minix_sb.s_imap[0]->b_data[0] |= 1;
-	s->u.minix_sb.s_zmap[0]->b_data[0] |= 1;
+	set_bit(0,s->u.minix_sb.s_imap[0]->b_data);
+	set_bit(0,s->u.minix_sb.s_zmap[0]->b_data);
 	/* set up enough so that it can read an inode */
 	s->s_dev = dev;
 	s->s_op = &minix_sops;

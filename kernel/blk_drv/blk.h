@@ -79,6 +79,8 @@ extern int * blk_size[MAX_BLKDEV];
 extern int * blksize_size[MAX_BLKDEV];
 
 extern unsigned long hd_init(unsigned long mem_start, unsigned long mem_end);
+extern unsigned long cdu31a_init(unsigned long mem_start, unsigned long mem_end);
+extern unsigned long mcd_init(unsigned long mem_start, unsigned long mem_end);
 extern int is_read_only(int dev);
 extern void set_device_ro(int dev,int flag);
 
@@ -165,6 +167,23 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_NAME "xt disk"
 #define DEVICE_REQUEST do_xd_request
 #define DEVICE_NR(device) (MINOR(device) >> 6)
+#define DEVICE_ON(device)
+#define DEVICE_OFF(device)
+
+#elif (MAJOR_NR == 15)
+/* CDU31A CD-ROM */
+#define DEVICE_NAME "CDU31A"
+#define DEVICE_REQUEST do_cdu31a_request
+#define DEVICE_NR(device) (MINOR(device))
+#define DEVICE_ON(device)
+#define DEVICE_OFF(device)
+
+#elif (MAJOR_NR == 23)
+/* MITSUMI CD-ROM */
+#define DEVICE_NAME "Mitsumi CD-ROM"
+/* #define DEVICE_INTR do_mcd */
+#define DEVICE_REQUEST do_mcd_request
+#define DEVICE_NR(device) (MINOR(device))
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)
 

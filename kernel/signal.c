@@ -317,6 +317,8 @@ extern "C" int do_signal(unsigned long oldmask, struct pt_regs * regs)
 	frame = (unsigned long *) regs->esp;
 	signr = 1;
 	sa = current->sigaction;
+	if (regs->cs != USER_CS || regs->ss != USER_DS)
+		printk("Warning: signal handler with nonstandard code/stack segment\n");
 	for (mask = 1 ; mask ; sa++,signr++,mask += mask) {
 		if (mask > handler_signal)
 			break;

@@ -176,4 +176,11 @@ struct kbentry {
 #define KDGKBENT	0x4B46	/* gets one entry in translation table */
 #define KDSKBENT	0x4B47	/* sets one entry in translation table */
 
+struct kbsentry {
+	u_char kb_func;
+	u_char kb_string[512];	/* FUNC_BUFSIZE from keyboard.h */
+};
+#define KDGKBSENT	0x4B48	/* gets one function key string entry */
+#define KDSKBSENT	0x4B49	/* sets one function key string entry */
+
 #endif /* _LINUX_KD_H */

@@ -38,6 +38,15 @@
 
 #include <asm/segment.h>
 
+#define FWAIT_OPCODE 0x9b
+#define OP_SIZE_PREFIX 0x66
+#define ADDR_SIZE_PREFIX 0x67
+#define PREFIX_CS 0x2e
+#define PREFIX_DS 0x3e
+#define PREFIX_ES 0x26
+#define PREFIX_SS 0x36
+#define PREFIX_FS 0x64
+#define PREFIX_GS 0x65
 
 #define __BAD__ Un_impl   /* Not implemented */
 
@@ -133,28 +142,43 @@ unsigned char  FPU_rm;
 char	       FPU_st0_tag;
 FPU_REG       *FPU_st0_ptr;
 
+/* ######## To be shifted */
+unsigned long FPU_entry_op_cs;
+unsigned short FPU_data_selector;
+
+
 #ifdef PARANOID
 char emulating=0;
 #endif PARANOID
 
 #define bswapw(x) __asm__("xchgb %%al,%%ah":"=a" (x):"0" ((short)x))
+static int valid_prefix(unsigned char byte);
 
 
 extern "C" void math_emulate(long arg)
 {
   unsigned char  FPU_modrm;
   unsigned short code;
+  int unmasked;
 
 #ifdef PARANOID
   if ( emulating )
     {
       printk("ERROR: wm-FPU-emu is not RE-ENTRANT!\n");
     }
-  RE_ENTRANT_CHECK_ON
+  RE_ENTRANT_CHECK_ON;
 #endif PARANOID
 
   if (!current->used_math)
     {
+      int i;
+      for ( i = 0; i < 8; i++ )
+	{
+	  /* Make sure that the registers are compatible
+	     with the assumptions of the emulator. */
+	  regs[i].exp = 0;
+	  regs[i].sigh = 0x80000000;
+	}
       finit();
       current->used_math = 1;
     }
@@ -181,22 +205,44 @@ extern "C" void math_emulate(long arg)
 
 do_another_FPU_instruction:
 
-  RE_ENTRANT_CHECK_OFF
+  RE_ENTRANT_CHECK_OFF;
   code = get_fs_word((unsigned short *) FPU_EIP);
-  RE_ENTRANT_CHECK_ON
+  RE_ENTRANT_CHECK_ON;
 
-  if ( (code & 0xff) == 0x9b )  /* fwait */
+#ifdef PECULIAR_486
+  /* It would be more logical to do this only in get_address(),
+     but although it is supposed to be undefined for many fpu
+     instructions, an 80486 behaves as if this were done here: */
+  FPU_data_selector = FPU_DS;
+#endif PECULIAR_486
+
+  if ( (code & 0xf8) != 0xd8 )
     {
-      if (status_word & SW_Summary)
-	goto do_the_FPU_interrupt;
-      else
+      if ( (code & 0xff) == FWAIT_OPCODE )
 	{
-	  FPU_EIP++;
-	  goto FPU_instruction_done;
+	  if (partial_status & SW_Summary)
+	    goto do_the_FPU_interrupt;
+	  else
+	    {
+	      FPU_EIP++;
+	      goto FPU_fwait_done;
+	    }
 	}
+      else if ( valid_prefix(code & 0xff) )
+	{
+	  goto do_another_FPU_instruction;
+	}
+#ifdef PARANOID
+      RE_ENTRANT_CHECK_OFF;
+      printk("FPU emulator: Unknown prefix byte 0x%02x\n", code & 0xff);
+      RE_ENTRANT_CHECK_ON;
+      EXCEPTION(EX_INTERNAL|0x126);
+      FPU_EIP++;
+      goto do_the_FPU_interrupt;
+#endif PARANOID
     }
 
-  if (status_word & SW_Summary)
+  if (partial_status & SW_Summary)
     {
       /* Ignore the error for now if the current instruction is a no-wait
 	 control instruction */
@@ -210,9 +256,6 @@ do_another_FPU_instruction:
 						     fnstsw */
 		 ((code & 0xc000) != 0xc000))) ) )
 	{
-	  /* This is a guess about what a real FPU might do to this bit: */
-/*	  status_word &= ~SW_Summary; ****/
-
 	  /*
 	   *  We need to simulate the action of the kernel to FPU
 	   *  interrupts here.
@@ -223,9 +266,9 @@ do_another_FPU_instruction:
 	   */
 	do_the_FPU_interrupt:
 	  cs_selector &= 0xffff0000;
-	  cs_selector |= (status_word & ~SW_Top) | ((top&7) << SW_Top_Shift);
+	  cs_selector |= status_word();
       	  operand_selector = tag_word();
-	  status_word = 0;
+	  partial_status = 0;
 	  top = 0;
 	  {
 	    int r;
@@ -235,7 +278,7 @@ do_another_FPU_instruction:
 	      }
 	  }
 
-	  RE_ENTRANT_CHECK_OFF
+	  RE_ENTRANT_CHECK_OFF;
 	  send_sig(SIGFPE, current, 1);
 	  return;
 	}
@@ -243,12 +286,18 @@ do_another_FPU_instruction:
 
   FPU_entry_eip = FPU_ORIG_EIP = FPU_EIP;
 
-  if ( (code & 0xff) == 0x66 )  /* size prefix */
+  {
+    unsigned short swapped_code = code;
+    bswapw(swapped_code);
+    FPU_entry_op_cs = (swapped_code << 16) | (FPU_CS & 0xffff) ;
+  }
+
+  if ( (code & 0xff) == OP_SIZE_PREFIX )
     {
       FPU_EIP++;
-      RE_ENTRANT_CHECK_OFF
+      RE_ENTRANT_CHECK_OFF;
       code = get_fs_word((unsigned short *) FPU_EIP);
-      RE_ENTRANT_CHECK_ON
+      RE_ENTRANT_CHECK_ON;
     }
   FPU_EIP += 2;
 
@@ -261,23 +310,24 @@ do_another_FPU_instruction:
       get_address(FPU_modrm);
       if ( !(code & 1) )
 	{
-	  unsigned short status1 = status_word;
+	  unsigned short status1 = partial_status;
 	  FPU_st0_ptr = &st(0);
 	  FPU_st0_tag = FPU_st0_ptr->tag;
 
 	  /* Stack underflow has priority */
 	  if ( NOT_EMPTY_0 )
 	    {
+	      unmasked = 0;  /* Do this here to stop compiler warnings. */
 	      switch ( (code >> 1) & 3 )
 		{
 		case 0:
-		  reg_load_single();
+		  unmasked = reg_load_single();
 		  break;
 		case 1:
 		  reg_load_int32();
 		  break;
 		case 2:
-		  reg_load_double();
+		  unmasked = reg_load_double();
 		  break;
 		case 3:
 		  reg_load_int16();
@@ -297,27 +347,74 @@ do_another_FPU_instruction:
 		{
 		  /* Restore the status word; we might have loaded a
 		     denormal. */
-		  status_word = status1;
+		  partial_status = status1;
 		  if ( (FPU_modrm & 0x30) == 0x10 )
 		    {
 		      /* fcom or fcomp */
 		      EXCEPTION(EX_Invalid);
 		      setcc(SW_C3 | SW_C2 | SW_C0);
-		      if ( FPU_modrm & 0x08 )
-			pop();             /* fcomp, so we pop. */
+		      if ( (FPU_modrm & 0x08) && (control_word & CW_Invalid) )
+			pop();             /* fcomp, masked, so we pop. */
 		    }
 		  else
-		    real_2op_NaN(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr);
+		    {
+#ifdef PECULIAR_486
+		      /* This is not really needed, but gives behaviour
+			 identical to an 80486 */
+		      if ( (FPU_modrm & 0x28) == 0x20 )
+			/* fdiv or fsub */
+			real_2op_NaN(&FPU_loaded_data, FPU_st0_ptr,
+				     FPU_st0_ptr);
+		      else
+#endif PECULIAR_486
+			/* fadd, fdivr, fmul, or fsubr */
+			real_2op_NaN(FPU_st0_ptr, &FPU_loaded_data,
+				     FPU_st0_ptr);
+		    }
+		  goto reg_mem_instr_done;
+		}
+
+	      if ( unmasked && !((FPU_modrm & 0x30) == 0x10) )
+		{
+		  /* Is not a comparison instruction. */
+		  if ( (FPU_modrm & 0x38) == 0x38 )
+		    {
+		      /* fdivr */
+		      if ( (FPU_st0_tag == TW_Zero) &&
+			  (FPU_loaded_data.tag == TW_Valid) )
+			{
+			  if ( divide_by_zero(FPU_loaded_data.sign,
+					      FPU_st0_ptr) )
+			    {
+			      /* We use the fact here that the unmasked
+				 exception in the loaded data was for a
+				 denormal operand */
+			      /* Restore the state of the denormal op bit */
+			      partial_status &= ~SW_Denorm_Op;
+			      partial_status |= status1 & SW_Denorm_Op;
+			    }
+			}
+		    }
 		  goto reg_mem_instr_done;
 		}
 
 	      switch ( (FPU_modrm >> 3) & 7 )
 		{
 		case 0:         /* fadd */
+#ifdef PECULIAR_486
+		  /* Default, this conveys no information,
+		     but an 80486 does it. */
+		  clear_C1();
+#endif PECULIAR_486
 		  reg_add(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr,
 			  control_word);
 		  break;
 		case 1:         /* fmul */
+#ifdef PECULIAR_486
+		  /* Default, this conveys no information,
+		     but an 80486 does it. */
+		  clear_C1();
+#endif PECULIAR_486
 		  reg_mul(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr,
 			  control_word);
 		  break;
@@ -325,24 +422,44 @@ do_another_FPU_instruction:
 		  compare_st_data();
 		  break;
 		case 3:         /* fcomp */
-		  compare_st_data();
-		  pop();
+		  if ( !compare_st_data() && !unmasked )
+		    pop();
 		  break;
 		case 4:         /* fsub */
+#ifdef PECULIAR_486
+		  /* Default, this conveys no information,
+		     but an 80486 does it. */
+		  clear_C1();
+#endif PECULIAR_486
 		  reg_sub(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr,
 			  control_word);
 		  break;
 		case 5:         /* fsubr */
+#ifdef PECULIAR_486
+		  /* Default, this conveys no information,
+		     but an 80486 does it. */
+		  clear_C1();
+#endif PECULIAR_486
 		  reg_sub(&FPU_loaded_data, FPU_st0_ptr, FPU_st0_ptr,
 			  control_word);
 		  break;
 		case 6:         /* fdiv */
+#ifdef PECULIAR_486
+		  /* Default, this conveys no information,
+		     but an 80486 does it. */
+		  clear_C1();
+#endif PECULIAR_486
 		  reg_div(FPU_st0_ptr, &FPU_loaded_data, FPU_st0_ptr,
 			  control_word);
 		  break;
 		case 7:         /* fdivr */
+#ifdef PECULIAR_486
+		  /* Default, this conveys no information,
+		     but an 80486 does it. */
+		  clear_C1();
+#endif PECULIAR_486
 		  if ( FPU_st0_tag == TW_Zero )
-		    status_word = status1;  /* Undo any denorm tag,
+		    partial_status = status1;  /* Undo any denorm tag,
 					       zero-divide has priority. */
 		  reg_div(&FPU_loaded_data, FPU_st0_ptr, FPU_st0_ptr,
 			  control_word);
@@ -356,8 +473,8 @@ do_another_FPU_instruction:
 		  /* The instruction is fcom or fcomp */
 		  EXCEPTION(EX_StackUnder);
 		  setcc(SW_C3 | SW_C2 | SW_C0);
-		  if ( FPU_modrm & 0x08 )
-		    pop();             /* fcomp, Empty or not, we pop. */
+		  if ( (FPU_modrm & 0x08) && (control_word & CW_Invalid) )
+		    pop();             /* fcomp */
 		}
 	      else
 		stack_underflow();
@@ -370,12 +487,21 @@ do_another_FPU_instruction:
 
     reg_mem_instr_done:
 
-      data_operand_offset = (unsigned long)FPU_data_address;
+#ifndef PECULIAR_486
+      *(unsigned short *)&operand_selector = FPU_data_selector;
+#endif PECULIAR_486
+      ;
     }
   else
     {
       /* None of these instructions access user memory */
       unsigned char instr_index = (FPU_modrm & 0x38) | (code & 7);
+
+#ifdef PECULIAR_486
+      /* This is supposed to be undefined, but a real 80486 seems
+	 to do this: */
+      FPU_data_address = 0;
+#endif PECULIAR_486
 
       FPU_st0_ptr = &st(0);
       FPU_st0_tag = FPU_st0_ptr->tag;
@@ -400,8 +526,7 @@ do_another_FPU_instruction:
 	case _REGIp:
 	  if ( !NOT_EMPTY_0 || !NOT_EMPTY(FPU_rm) )
 	    {
-	      stack_underflow_i(FPU_rm);
-	      pop();
+	      stack_underflow_pop(FPU_rm);
 	      goto FPU_instruction_done;
 	    }
 	  break;
@@ -427,45 +552,72 @@ do_another_FPU_instruction:
 FPU_instruction_done:
 
   ip_offset = FPU_entry_eip;
-  bswapw(code);
-  *(1 + (unsigned short *)&cs_selector) = code & 0x7ff;
+  cs_selector = FPU_entry_op_cs;
+  data_operand_offset = (unsigned long)FPU_data_address;
+#ifdef PECULIAR_486
+  *(unsigned short *)&operand_selector = FPU_data_selector;
+#endif PECULIAR_486
+  
+FPU_fwait_done:
 
 #ifdef DEBUG
-  RE_ENTRANT_CHECK_OFF
+  RE_ENTRANT_CHECK_OFF;
   emu_printall();
-  RE_ENTRANT_CHECK_ON
+  RE_ENTRANT_CHECK_ON;
 #endif DEBUG
 
   if (FPU_lookahead && !need_resched)
     {
       unsigned char next;
 
-      /* (This test should generate no machine code) */
-      while ( 1 )
-	{
-	  RE_ENTRANT_CHECK_OFF
-	  next = get_fs_byte((unsigned char *) FPU_EIP);
-	  RE_ENTRANT_CHECK_ON
-	  if ( ((next & 0xf8) == 0xd8) || (next == 0x9b) )  /* fwait */
-	    {
-	      goto do_another_FPU_instruction;
-	    }
-	  else if ( next == 0x66 )  /* size prefix */
-	    {
-	      RE_ENTRANT_CHECK_OFF
-	      next = get_fs_byte((unsigned char *) (FPU_EIP+1));
-	      RE_ENTRANT_CHECK_ON
-	      if ( (next & 0xf8) == 0xd8 )
-		{
-		  FPU_EIP++;
-		  goto do_another_FPU_instruction;
-		}
-	    }
-	  break;
-	}
+      RE_ENTRANT_CHECK_OFF;
+      next = get_fs_byte((unsigned char *) FPU_EIP);
+      RE_ENTRANT_CHECK_ON;
+      if ( valid_prefix(next) )
+	goto do_another_FPU_instruction;
     }
 
-  RE_ENTRANT_CHECK_OFF
+  RE_ENTRANT_CHECK_OFF;
+}
+
+
+/* This function is not yet complete. To properly handle all prefix
+   bytes, it will be necessary to change all emulator code which
+   accesses user address space. Access to separate segments is
+   important for msdos emulation. */
+static int valid_prefix(unsigned char byte)
+{
+  unsigned long ip = FPU_EIP;
+
+  while ( 1 )
+    {
+      switch ( byte )
+	{
+	case ADDR_SIZE_PREFIX:
+	case PREFIX_DS:   /* Redundant */
+	case PREFIX_CS:
+	case PREFIX_ES:
+	case PREFIX_SS:
+	case PREFIX_FS:
+	case PREFIX_GS:
+
+	case OP_SIZE_PREFIX:  /* Used often by gcc, but has no effect. */
+	  RE_ENTRANT_CHECK_OFF;
+	  byte = get_fs_byte((unsigned char *) (++FPU_EIP));
+	  RE_ENTRANT_CHECK_ON;
+	  break;
+	case FWAIT_OPCODE:
+	  return 1;
+	default:
+	  if ( (byte & 0xf8) == 0xd8 )
+	    return 1;
+	  else
+	    {
+	      FPU_EIP = ip;
+	      return 0;
+	    }
+	}
+    }
 }
 
 
@@ -473,7 +625,7 @@ void __math_abort(struct info * info, unsigned int signal)
 {
 	FPU_EIP = FPU_ORIG_EIP;
 	send_sig(signal,current,1);
-	RE_ENTRANT_CHECK_OFF
+	RE_ENTRANT_CHECK_OFF;
 	__asm__("movl %0,%%esp ; ret": :"g" (((long) info)-4));
 #ifdef PARANOID
       printk("ERROR: wm-FPU-emu math_abort failed!\n");
@@ -487,7 +639,7 @@ void __math_abort(struct info * info, unsigned int signal)
 
 extern "C" void math_emulate(long arg)
 {
-  printk("math-meulation not enabled and no coprocessor found.\n");
+  printk("math-emulation not enabled and no coprocessor found.\n");
   printk("killing %s.\n",current->comm);
   send_sig(SIGFPE,current,1);
   schedule();

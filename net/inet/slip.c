@@ -27,7 +27,6 @@
 #include "inet.h"
 #include "dev.h"
 #include "eth.h"
-#include "timer.h"
 #include "ip.h"
 #include "route.h"
 #include "protocol.h"
@@ -40,12 +39,6 @@
 
 
 #define	SLIP_VERSION	"0.7.5"
-
-#ifdef SL_COMPRESSED
-#define COMPRESSED_SLIP 1
-#else
-#define COMPRESSED_SLIP 0
-#endif
 
 /* Define some IP layer stuff.  Not all systems have it. */
 #ifdef SL_DUMP
@@ -104,6 +97,7 @@ ip_dump(unsigned char *ptr, int len)
 #endif
 }
 
+#if 0
 void clh_dump(unsigned char *cp, int len)
 {
   if (len > 60)
@@ -115,6 +109,7 @@ void clh_dump(unsigned char *cp, int len)
   }
   printk("\n\n");
 }
+#endif
 
 /* Initialize a SLIP control block for use. */
 static void
@@ -167,11 +162,11 @@ sl_alloc(void)
   struct slip *sl;
   int i;
 
+  save_flags (flags);
+  cli();
   for (i = 0; i < SL_NRUNIT; i++) {
 	sl = &sl_ctrl[i];
 	if (sl->inuse == 0) {
-		save_flags(flags);
-		cli();
 		sl->inuse = 1;
 		sl->tty = NULL;
 		restore_flags(flags);
@@ -268,7 +263,7 @@ sl_bump(struct slip *sl)
   int count;
 
   count = sl->rcount;
-  if (COMPRESSED_SLIP) {
+  if (1) {
     if ((c = sl->rbuff[0]) & SL_TYPE_COMPRESSED_TCP) {
       /* make sure we've reserved enough space for uncompress to use */
       save_flags(flags);
@@ -285,15 +280,14 @@ sl_bump(struct slip *sl)
       if (! done)  /* not enough space available */
 	return;
 
-      if ((count = slhc_uncompress((struct slcompress *)sl->slcomp, 
-				      sl->rbuff, count)) <= 0 ) {
+      count = slhc_uncompress(sl->slcomp, sl->rbuff, count);
+      if (count <= 0) {
 	sl->errors++;
 	return;
       }
     } else if (c >= SL_TYPE_UNCOMPRESSED_TCP) {
       sl->rbuff[0] &= 0x4f;
-      if ( slhc_remember((struct slcompress *)sl->slcomp, sl->rbuff, 
-			 count ) <= 0 ) {
+      if (slhc_remember(sl->slcomp, sl->rbuff, count) <= 0) {
 	sl->errors++;
 	return;
       }
@@ -334,20 +328,21 @@ sl_encaps(struct slip *sl, unsigned char *icp, int len)
   unsigned char c;
   int count;
 
-  DPRINTF((DBG_SLIP, "SLIP: sl_encaps(0x%X, %d) called\n", p, len));
+  DPRINTF((DBG_SLIP, "SLIP: sl_encaps(0x%X, %d) called\n", icp, len));
   DPRINTF((DBG_SLIP, ">> \"%s\" sent:\r\n", sl->dev->name));
   ip_dump(icp, len);
 
   p = icp;
-  len = slhc_compress((struct slcompress *)sl->slcomp, p, len, 
-		      sl->cbuff, &p, 1);
+#ifdef SL_COMPRESSED
+  len = slhc_compress(sl->slcomp, p, len, sl->cbuff, &p, 1);
+#endif
   
   /*
    * Send an initial END character to flush out any
    * data that may have accumulated in the receiver
    * due to line noise.
    */
-  bp = (unsigned char *) sl->xbuff;
+  bp = sl->xbuff;
   *bp++ = END;
   count = 1;
 
@@ -357,7 +352,7 @@ sl_encaps(struct slip *sl, unsigned char *icp, int len)
    */
   while(len-- > 0) {
 	c = *p++;
-	switch((c & 0377)) {
+	switch(c) {
 		case END:
 			*bp++ = ESC;
 			*bp++ = ESC_END;
@@ -376,7 +371,7 @@ sl_encaps(struct slip *sl, unsigned char *icp, int len)
   *bp++ = END;
   count++;
   sl->spacket++;
-  bp = (unsigned char *) sl->xbuff;
+  bp = sl->xbuff;
 
   /* Tell TTY to send it on its way. */
   DPRINTF((DBG_SLIP, "SLIP: kicking TTY for %d bytes at 0x%X\n", count, bp));
@@ -566,36 +561,28 @@ slip_recv(struct tty_struct *tty)
 
   /* Suck the bytes out of the TTY queues. */
   do {
-	memset(buff, 0, 128);
 	count = tty_read_raw_data(tty, buff, 128);
 	if (count <= 0) break;
 
 	p = buff;
-	while(count-- > 0) {
+	while (count--) {
 		c = *p++;
-		switch((c & 0377)) {
-			case ESC:
+		if (sl->escape) {
+			if (c == ESC_ESC)
+				sl_enqueue(sl, ESC);
+			else if (c == ESC_END)
+				sl_enqueue(sl, END);
+			else
+				printk ("SLIP: received wrong character\n");
+			sl->escape = 0;
+		} else {
+			if (c == ESC)
 				sl->escape = 1;
-				break;
-			case ESC_ESC:
-				if (sl->escape) sl_enqueue(sl, ESC);
-				  else sl_enqueue(sl, c);
-				sl->escape = 0;
-				break;
-			case ESC_END:
-				if (sl->escape) sl_enqueue(sl, END);
-				  else sl_enqueue(sl, c);
-				sl->escape = 0;
-				break;
-			case END:
+			else if (c == END) {
 				if (sl->rcount > 2) sl_bump(sl);
 				sl_dequeue(sl, sl->rcount);
 				sl->rcount = 0;
-				sl->escape = 0;
-				break;
-			default:
-				sl_enqueue(sl, c);
-				sl->escape = 0;
+			} else	sl_enqueue(sl, c);
 		}
 	}
   } while(1);

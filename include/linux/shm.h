@@ -34,13 +34,41 @@ struct	shminfo {
     int shmall;	
 };
 
-#define SHMMAX 0x400000	 /* <= 4M */          /* max shared seg size (bytes) */
-#define SHMMIN 1	 /* really PAGE_SIZE */  /* min shared seg size (bytes)*/
-#define SHMMNI 128       /* <= 4096 */        /* max num of segs system wide */
-#define SHMALL 0x10000 /* <= SHMMAX*SHMMNI/PAGE_SIZE */  /* max shm system wide (pages) */
-#define	SHMLBA 0x1000    /* = PAGE_SIZE */   /*  attach addr multiple */
-#define SHMSEG SHMMNI    /* <= SHMMNI */    /* max shared segs per process */
+#define SHM_RANGE_START	0x40000000
+#define SHM_RANGE_END	0x60000000
 
+				/* _SHM_ID_BITS is a variable you can adjust to */
+				/* tune the kernel.  It determines the value of */
+				/* SHMMNI, which specifies the maximum no. of */
+				/* shared segments (system wide).  SRB. */
+#define _SHM_ID_BITS	7		/* keep as low as possible */
+					/* a static array is declared */
+					/* using SHMMNI */
+
+#define __SHM_IDX_BITS	(BITS_PER_PTR-2-SHM_IDX_SHIFT)
+
+/* !!!!!!!?????
+ * Why reserve the two (2) high bits of the signature (shm_sgn) field?
+ * Since, as far as I can see, only the high bit is used (SHM_READ_ONLY).
+ *						SRB.
+ */
+
+#define _SHM_IDX_BITS	(__SHM_IDX_BITS+PAGE_SHIFT>=BITS_PER_PTR?\
+ BITS_PER_PTR-PAGE_SHIFT-1:__SHM_IDX_BITS)	/* sanity check */
+
+/* not present page table entry format bit 0 is 0, low byte defined in mm.h */
+#define SHM_ID_SHIFT	8
+#define SHM_ID_MASK	((1<<_SHM_ID_BITS)-1)
+#define SHM_IDX_SHIFT	(SHM_ID_SHIFT+_SHM_ID_BITS)
+#define SHM_IDX_MASK	((1<<_SHM_IDX_BITS)-1)
+#define SHM_READ_ONLY	(1<<BITS_PER_PTR-1)
+
+#define SHMMAX (1<<PAGE_SHIFT+_SHM_IDX_BITS)	/* max shared seg size (bytes) */
+#define SHMMIN 1	 /* really PAGE_SIZE */	/* min shared seg size (bytes)*/
+#define SHMMNI (1<<_SHM_ID_BITS)		/* max num of segs system wide */
+#define SHMALL (1<<_SHM_IDX_BITS+_SHM_ID_BITS)	/* max shm system wide (pages) */
+#define	SHMLBA PAGE_SIZE			/* attach addr a multiple of this */
+#define SHMSEG SHMMNI				/* max shared segs per process */
 
 #ifdef __KERNEL__
 
@@ -73,13 +101,6 @@ struct	shm_desc {
 	struct shm_desc *task_next;   /* next attach for task */
 	struct shm_desc *seg_next;    /* next attach for segment */
 };
-
-/* not present page table entry format bit 0 is 0, high byte defined in mm.h */
-#define SHM_IDX_SHIFT 20
-#define SHM_IDX_MASK  0x3FF
-#define SHM_ID_SHIFT  8
-#define SHM_ID_MASK   0xFFF
-#define SHM_READ_ONLY 0x80000000
 
 #endif /* __KERNEL__ */
 

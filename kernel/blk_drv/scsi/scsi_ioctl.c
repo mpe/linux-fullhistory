@@ -217,6 +217,7 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
 }
 
 	
+
 /*
 	the scsi_ioctl() function differs from most ioctls in that it does
 	not take a major/minor number as the dev filed.  Rather, it takes
@@ -267,3 +268,19 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
 			return -EINVAL;
 	}
 }
+
+/*
+ * Just like scsi_ioctl, only callable from kernel space with no 
+ * fs segment fiddling.
+ */
+
+int kernel_scsi_ioctl (Scsi_Device *dev, int cmd, void *arg) {
+  unsigned long oldfs;
+  int tmp;
+  oldfs = get_fs();
+  set_fs(get_ds());
+  tmp = scsi_ioctl (dev, cmd, arg);
+  set_fs(oldfs);
+  return tmp;
+}
+

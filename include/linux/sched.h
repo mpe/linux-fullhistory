@@ -1,6 +1,8 @@
 #ifndef _LINUX_SCHED_H
 #define _LINUX_SCHED_H
 
+#define NEW_SWAP
+
 /*
  * define DEBUG if you want the wait-queues to have some extra
  * debugging code. It's not normally used, but might catch some
@@ -165,7 +167,7 @@ struct task_struct {
 	int elf_executable:1;
 	int dumpable:1;
 	int swappable:1;
-	unsigned long start_code,end_code,end_data,brk,start_stack,start_mmap;
+	unsigned long start_code,end_code,end_data,start_brk,brk,start_stack,start_mmap;
 	unsigned long arg_start, arg_end, env_start, env_end;
 	long pid,pgrp,session,leader;
 	int	groups[NGROUPS];
@@ -206,10 +208,17 @@ struct task_struct {
 	struct sem_undo *semun;
 	struct file * filp[NR_OPEN];
 	fd_set close_on_exec;
-/* ldt for this task - not currently used */
-	struct desc_struct ldt[32];
+/* ldt for this task - used by Wine.  If NULL, default_ldt is used */
+	struct desc_struct *ldt;
 /* tss for this task */
 	struct tss_struct tss;
+#ifdef NEW_SWAP
+	unsigned long old_maj_flt;	/* old value of maj_flt */
+	unsigned long dec_flt;		/* page fault count of the last time */
+	unsigned long swap_cnt;		/* number of pages to swap on next pass */
+	short swap_table;		/* current page table */
+	short swap_page;		/* current page */
+#endif NEW_SWAP
 };
 
 /*
@@ -236,7 +245,7 @@ struct task_struct {
 /* schedlink */	&init_task,&init_task, \
 /* signals */	{{ 0, },}, \
 /* stack */	0,0, \
-/* ec,brk... */	0,0,0,0,0,0,0,0,0,0,0, \
+/* ec,brk... */	0,0,0,0,0,0,0,0,0,0,0,0, \
 /* argv.. */	0,0,0,0, \
 /* pid etc.. */	0,0,0,0, \
 /* suppl grps*/ {NOGROUP,}, \
@@ -244,9 +253,9 @@ struct task_struct {
 /* uid etc */	0,0,0,0,0,0, \
 /* timeout */	0,0,0,0,0,0,0,0,0,0,0,0, \
 /* min_flt */	0,0,0,0, \
-/* rlimits */   { {0x7fffffff, 0x7fffffff}, {0x7fffffff, 0x7fffffff},  \
-		  {0x7fffffff, 0x7fffffff}, {0x7fffffff, 0x7fffffff}, \
-		  {0x7fffffff, 0x7fffffff}, {0x7fffffff, 0x7fffffff}}, \
+/* rlimits */   { {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX},  \
+		  {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX},  \
+		  {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX}}, \
 /* math */	0, \
 /* rss */	2, \
 /* comm */	"swapper", \
@@ -255,9 +264,7 @@ struct task_struct {
 /* ipc */	NULL, NULL, \
 /* filp */	{NULL,}, \
 /* cloe */	{{ 0, }}, \
-		{ \
-/* ldt */		{0,0}, \
-		}, \
+/* ldt */	NULL, \
 /*tss*/	{0,0, \
 	 sizeof(init_kernel_stack) + (long) &init_kernel_stack, KERNEL_DS, 0, \
 	 0,0,0,0,0,0, \
@@ -266,7 +273,7 @@ struct task_struct {
 	 USER_DS,0,USER_DS,0,USER_DS,0,USER_DS,0,USER_DS,0,USER_DS,0, \
 	 _LDT(0),0, \
 	 0, 0x8000, \
-/* ioperm */ 	{0xffffffff, }, \
+/* ioperm */ 	{~0, }, \
 	 _TSS(0), \
 /* 387 state */	{ { 0, }, } \
 	} \
@@ -280,8 +287,11 @@ extern unsigned long volatile jiffies;
 extern unsigned long startup_time;
 extern int jiffies_offset;
 extern int need_resched;
+
 extern int hard_math;
+extern int x86;
 extern int ignore_irq13;
+extern int wp_works_ok;
 
 #define CURRENT_TIME (startup_time+(jiffies+jiffies_offset)/HZ)
 
@@ -344,8 +354,6 @@ __asm__("cmpl %%ecx,_current\n\t" \
 	:"m" (*(((char *)&tsk->tss.tr)-4)), \
 	 "c" (tsk) \
 	:"cx")
-
-#define PAGE_ALIGN(n) (((n)+0xfff)&0xfffff000)
 
 #define _set_base(addr,base) \
 __asm__("movw %%dx,%0\n\t" \
@@ -483,24 +491,39 @@ static inline unsigned long get_limit(unsigned long segment)
 	return __limit+1;
 }
 
-#define REMOVE_LINKS(p) \
+#define REMOVE_LINKS(p) do { unsigned long flags; \
+	save_flags(flags) ; cli(); \
 	(p)->next_task->prev_task = (p)->prev_task; \
 	(p)->prev_task->next_task = (p)->next_task; \
+	restore_flags(flags); \
 	if ((p)->p_osptr) \
 		(p)->p_osptr->p_ysptr = (p)->p_ysptr; \
 	if ((p)->p_ysptr) \
 		(p)->p_ysptr->p_osptr = (p)->p_osptr; \
 	else \
-		(p)->p_pptr->p_cptr = (p)->p_osptr
+		(p)->p_pptr->p_cptr = (p)->p_osptr; \
+	} while (0)
 
-#define SET_LINKS(p) \
+#define SET_LINKS(p) do { unsigned long flags; \
+	save_flags(flags); cli(); \
 	(p)->next_task = &init_task; \
 	(p)->prev_task = init_task.prev_task; \
 	init_task.prev_task->next_task = (p); \
 	init_task.prev_task = (p); \
+	restore_flags(flags); \
 	(p)->p_ysptr = NULL; \
 	if (((p)->p_osptr = (p)->p_pptr->p_cptr) != NULL) \
 		(p)->p_osptr->p_ysptr = p; \
-	(p)->p_pptr->p_cptr = p
+	(p)->p_pptr->p_cptr = p; \
+	} while (0)
+
+#define for_each_task(p) \
+	for (p = &init_task ; (p = p->next_task) != &init_task ; )
+
+/*
+ * This is the ldt that every process will get unless we need
+ * something other than this.
+ */
+extern struct desc_struct default_ldt;
 
 #endif

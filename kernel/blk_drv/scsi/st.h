@@ -31,6 +31,8 @@ typedef struct {
   unsigned write_prot:1;
   unsigned in_use:1;
   unsigned eof_hit:1;
+  unsigned drv_buffer:3;
+  unsigned char density;
   ST_buffer * buffer;
   int block_size;
   int min_block;

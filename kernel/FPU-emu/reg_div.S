@@ -86,8 +86,9 @@ L_div_special:
 L_arg1_NaN:
 L_arg2_NaN:
 	pushl	%edi			// Destination
-	pushl	%ebx
+//	pushl	%ebx
 	pushl	%esi
+	pushl	%ebx			// Ordering is important here
 	call	_real_2op_NaN
 	jmp	LDiv_exit
 
@@ -196,23 +197,18 @@ L_copy_arg1:
 	movl	SIGH(%esi),%eax
 	movl	%eax,SIGH(%edi)
 
+LDiv_set_result_sign:
 	movb	SIGN(%esi),%cl
 	cmpb	%cl,SIGN(%ebx)
 	jne	LDiv_negative_result
 
 	movb	SIGN_POS,SIGN(%edi)
-	jmp	LDiv_exit
-
-LDiv_set_result_sign:
-	movb	SIGN(%esi),%cl
-	cmpb	%cl,SIGN(%edi)
-	jne	LDiv_negative_result
-
-	movb	SIGN_POS,SIGN(%ebx)
+	xorl	%eax,%eax		// Valid result
 	jmp	LDiv_exit
 
 LDiv_negative_result:
 	movb	SIGN_NEG,SIGN(%edi)
+	xorl	%eax,%eax		// Valid result
 
 LDiv_exit:
 	leal	-12(%ebp),%esp
@@ -225,6 +221,10 @@ LDiv_exit:
 
 
 L_return_zero:
+	xorl	%eax,%eax
+	movl	%eax,SIGH(%edi)
+	movl	%eax,SIGL(%edi)
+	movl	EXP_UNDER,EXP(%edi)
 	movb	TW_Zero,TAG(%edi)
 	jmp	LDiv_set_result_sign
 
@@ -240,5 +240,5 @@ L_unknown_tags:
 	movl	%eax,SIGL(%edi)
 	movl	_CONST_QNaN+8,%eax
 	movl	%eax,SIGH(%edi)
-	jmp	LDiv_exit
+	jmp	LDiv_exit		// %eax is nz
 #endif PARANOID

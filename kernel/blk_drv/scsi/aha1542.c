@@ -376,7 +376,7 @@ int aha1542_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
     
     if(*cmd == REQUEST_SENSE){
 #ifndef DEBUG
-      if (bufflen != 16) {
+      if (bufflen != sizeof(SCpnt->sense_buffer)) {
 	printk("Wrong buffer length supplied for request sense (%d)\n",bufflen);
 	panic("aha1542.c");
       };
@@ -472,9 +472,11 @@ int aha1542_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	  panic("Foooooooood fight!");
 	};
 	any2scsi(cptr[i].dataptr, sgpnt[i].address);
+	if(((unsigned  int) sgpnt[i].address) & 0xff000000) goto baddma;
 	any2scsi(cptr[i].datalen, sgpnt[i].length);
       };
       any2scsi(ccb[mbo].datalen, SCpnt->use_sg * sizeof(struct chain));
+      if(((unsigned int) buff & 0xff000000)) goto baddma;
       any2scsi(ccb[mbo].dataptr, cptr);
 #ifdef DEBUG
       printk("cptr %x: ",cptr);
@@ -511,6 +513,8 @@ int aha1542_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
       printk("aha1542_queuecommand: done can't be NULL\n");
     
     return 0;
+ baddma:
+    panic("Buffer at address  > 16Mb used for 1542B");
 }
 
 static volatile int internal_done_flag = 0;

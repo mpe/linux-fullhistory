@@ -19,6 +19,8 @@
 
 static int nfs_file_read(struct inode *, struct file *, char *, int);
 static int nfs_file_write(struct inode *, struct file *, char *, int);
+extern int nfs_mmap(struct inode * inode, struct file * file,
+	      unsigned long addr, size_t len, int prot, unsigned long off);
 
 static struct file_operations nfs_file_operations = {
 	NULL,			/* lseek - default */
@@ -27,7 +29,7 @@ static struct file_operations nfs_file_operations = {
 	NULL,			/* readdir - bad */
 	NULL,			/* select - default */
 	NULL,			/* ioctl - default */
-	NULL,			/* mmap */
+	nfs_mmap,		/* mmap */
 	NULL,			/* no special open is needed */
 	NULL,			/* release */
 	NULL			/* fsync */

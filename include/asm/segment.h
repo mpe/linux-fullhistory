@@ -1,3 +1,6 @@
+#ifndef _ASM_SEGMENT_H
+#define _ASM_SEGMENT_H
+
 static inline unsigned char get_fs_byte(const char * addr)
 {
 	register unsigned char _v;
@@ -164,3 +167,4 @@ static inline void set_fs(unsigned long val)
 	__asm__ __volatile__("mov %w0,%%fs": /* no output */ :"r" (val));
 }
 
+#endif /* _ASM_SEGMENT_H */

@@ -7,6 +7,7 @@
 #include <asm/segment.h>
 #include <linux/sched.h>
 #include <linux/msg.h>
+#include <linux/stat.h>
 
 extern int ipcperms (struct ipc_perm *ipcp, short msgflg);
 
@@ -59,7 +60,7 @@ int sys_msgsnd (int msqid, struct msgbuf *msgp, int msgsz, int msgflg)
  slept:
 	if (ipcp->seq != (msqid / MSGMNI)) 
 		return -EIDRM;
-	if (ipcperms(ipcp, 0222)) 
+	if (ipcperms(ipcp, S_IWUGO)) 
 		return -EACCES;
 	
 	if (msgsz + msq->msg_cbytes > msq->msg_qbytes) { 
@@ -137,7 +138,7 @@ int sys_msgrcv (int msqid, struct msgbuf *msgp, int msgsz, long msgtyp,
 	while (!nmsg) {
 		if(ipcp->seq != msqid / MSGMNI)
 			return -EIDRM;
-		if (ipcperms (ipcp, 0444))
+		if (ipcperms (ipcp, S_IRUGO))
 			return -EACCES;
 		if (msgtyp == 0) 
 			nmsg = msq->msg_first;
@@ -243,7 +244,7 @@ found:
 		return -ENOMEM;
 	}
 	ipcp = &msq->msg_perm;
-	ipcp->mode = (msgflg & 0x01FF);
+	ipcp->mode = (msgflg & S_IRWXUGO);
 	ipcp->key = key;
 	ipcp->cuid = ipcp->uid = current->euid;
 	ipcp->gid = ipcp->cgid = current->egid;
@@ -359,7 +360,7 @@ int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 		msq = msgque[msqid];
 		if (msq == IPC_UNUSED || msq == IPC_NOID)
 			return -EINVAL;
-		if (ipcperms (&msq->msg_perm, 0444))
+		if (ipcperms (&msq->msg_perm, S_IRUGO))
 			return -EACCES;
 		id = msqid + msq->msg_perm.seq * MSGMNI; 
 		memcpy_tofs (buf, msq, sizeof(*msq));
@@ -388,7 +389,7 @@ int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 
 	switch (cmd) {
 	case IPC_STAT:
-		if (ipcperms (ipcp, 0444))
+		if (ipcperms (ipcp, S_IRUGO))
 			return -EACCES;
 		memcpy_tofs (buf, msq, sizeof (*msq));
 		return 0;
@@ -406,8 +407,8 @@ int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 		msq->msg_qbytes = tbuf.msg_qbytes;
 		ipcp->uid = tbuf.msg_perm.uid;
 		ipcp->gid =  tbuf.msg_perm.gid;
-		ipcp->mode = (ipcp->mode & ~0x1FF) | 
-			(0x1FF & tbuf.msg_perm.mode);
+		ipcp->mode = (ipcp->mode & ~S_IRWXUGO) | 
+			(S_IRWXUGO & tbuf.msg_perm.mode);
 		msq->msg_ctime = CURRENT_TIME;
 		break;
 	default:

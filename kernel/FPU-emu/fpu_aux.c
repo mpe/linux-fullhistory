@@ -14,14 +14,16 @@
 #include "exception.h"
 #include "fpu_emu.h"
 #include "status_w.h"
+#include "control_w.h"
 
 
 
 void fclex(void)
 {
-  status_word &= ~(SW_Backward|SW_Summary|SW_Stack_Fault|SW_Precision|
+  partial_status &= ~(SW_Backward|SW_Summary|SW_Stack_Fault|SW_Precision|
 		   SW_Underflow|SW_Overflow|SW_Zero_Div|SW_Denorm_Op|
 		   SW_Invalid);
+  NO_NET_DATA_EFFECT;
   FPU_entry_eip = ip_offset;               /* We want no net effect */
 }
 
@@ -30,12 +32,18 @@ void finit()
 {
   int r;
   control_word = 0x037f;
-  status_word = 0;
+  partial_status = 0;
   top = 0;            /* We don't keep top in the status word internally. */
   for (r = 0; r < 8; r++)
     {
       regs[r].tag = TW_Empty;
     }
+  /* The behaviour is different to that detailed in
+     Section 15.1.6 of the Intel manual */
+  data_operand_offset = 0;
+  operand_selector = 0;
+  NO_NET_DATA_EFFECT;
+  FPU_entry_op_cs = 0;
   FPU_entry_eip = ip_offset = 0;
 }
 
@@ -51,12 +59,8 @@ void finit_()
 
 static void fstsw_ax(void)
 {
-
-  status_word &= ~SW_Top;
-  status_word |= (top&7) << SW_Top_Shift;
-
-  *(short *) &FPU_EAX = status_word;
-
+  *(short *) &FPU_EAX = status_word();
+  NO_NET_INSTR_EFFECT;
 }
 
 static FUNC fstsw_table[] = {
@@ -123,16 +127,22 @@ void fxch_i()
 	  stack_underflow_i(FPU_rm);
 	  return;
 	}
-      reg_move(sti_ptr, FPU_st0_ptr);
+      if ( control_word & CW_Invalid )
+	reg_move(sti_ptr, FPU_st0_ptr);   /* Masked response */
       stack_underflow_i(FPU_rm);
       return;
     }
   if ( sti_ptr->tag == TW_Empty )
     {
-      reg_move(FPU_st0_ptr, sti_ptr);
+      if ( control_word & CW_Invalid )
+	reg_move(FPU_st0_ptr, sti_ptr);   /* Masked response */
       stack_underflow();
       return;
     }
+#ifdef PECULIAR_486
+  /* Default, this conveys no information, but an 80486 does it. */
+  clear_C1();
+#endif PECULIAR_486
   reg_move(FPU_st0_ptr, &t);
   reg_move(sti_ptr, FPU_st0_ptr);
   reg_move(&t, sti_ptr);

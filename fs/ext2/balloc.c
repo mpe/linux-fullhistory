@@ -35,7 +35,7 @@
 		"rep\n\t" \
 		"stosl" \
 		: \
-		:"a" (0), "c" (size/4), "D" ((long) (addr)) \
+		:"a" (0), "c" (size / 4), "D" ((long) (addr)) \
 		:"cx", "di")
 
 static inline int find_first_zero_bit (unsigned long * addr, unsigned size)
@@ -58,7 +58,7 @@ static inline int find_first_zero_bit (unsigned long * addr, unsigned size)
 		shll $3,%%edi
 		addl %%edi,%%edx"
 		:"=d" (res)
-		:"c" ((size+31)>>5), "D" (addr), "b" (addr)
+		:"c" ((size + 31) >> 5), "D" (addr), "b" (addr)
 		:"ax", "bx", "cx", "di");
 	return res;
 }
@@ -239,13 +239,12 @@ void ext2_free_block (struct super_block * sb, unsigned long block)
 		return;
 	}
 	lock_super (sb);
-	if (block < sb->u.ext2_sb.s_first_data_block ||
-	    block >= sb->u.ext2_sb.s_blocks_count) {
+	es = sb->u.ext2_sb.s_es;
+	if (block < es->s_first_data_block || block >= es->s_blocks_count) {
 		printk ("ext2_free_block: block not in datazone\n");
 		unlock_super (sb);
 		return;
 	}
-	es = (struct ext2_super_block *) sb->u.ext2_sb.s_sbh->b_data;
 #ifdef EXT2FS_DEBUG
 	printk ("ext2_free_block: freeing block %d\n", block);
 #endif
@@ -253,10 +252,9 @@ void ext2_free_block (struct super_block * sb, unsigned long block)
 	if (bh)
 		bh->b_dirt = 0;
 	brelse (bh);
-	block_group = (block - sb->u.ext2_sb.s_first_data_block) /
+	block_group = (block - es->s_first_data_block) /
 		      EXT2_BLOCKS_PER_GROUP(sb);
-	bit = (block - sb->u.ext2_sb.s_first_data_block) %
-		EXT2_BLOCKS_PER_GROUP(sb);
+	bit = (block - es->s_first_data_block) % EXT2_BLOCKS_PER_GROUP(sb);
 	bitmap_nr = load_block_bitmap (sb, block_group);
 	bh = sb->u.ext2_sb.s_block_bitmap[bitmap_nr];
 	if (!bh) {
@@ -275,11 +273,11 @@ void ext2_free_block (struct super_block * sb, unsigned long block)
 			panic ("ext2_free_block: Group descriptor not loaded");
 		}
 		gdp = (struct ext2_group_desc *) bh2->b_data;
-		gdp[desc].bg_free_blocks_count ++;
+		gdp[desc].bg_free_blocks_count++;
 		bh2->b_dirt = 1;
 	}
 	bh->b_dirt = 1;
-	es->s_free_blocks_count ++;
+	es->s_free_blocks_count++;
 	sb->u.ext2_sb.s_sbh->b_dirt = 1;
 	sb->s_dirt = 1;
 	unlock_super (sb);
@@ -313,7 +311,7 @@ int ext2_new_block (struct super_block * sb, unsigned long goal)
 		return 0;
 	}
 	lock_super (sb);
-	es = (struct ext2_super_block *) sb->u.ext2_sb.s_sbh->b_data;
+	es = sb->u.ext2_sb.s_es;
 	if (es->s_free_blocks_count <= es->s_r_blocks_count && !suser()) {
 		unlock_super (sb);
 		return 0;
@@ -325,8 +323,7 @@ int ext2_new_block (struct super_block * sb, unsigned long goal)
 	
 repeat:
 	/* First, test whether the goal block is free. */
-	i = ((goal - sb->u.ext2_sb.s_first_data_block) /
-	     EXT2_BLOCKS_PER_GROUP(sb));
+	i = ((goal - es->s_first_data_block) / EXT2_BLOCKS_PER_GROUP(sb));
 	group_desc = i / EXT2_DESC_PER_BLOCK(sb);
 	desc = i % EXT2_DESC_PER_BLOCK(sb);
 	gdp = (struct ext2_group_desc *) 
@@ -335,7 +332,7 @@ repeat:
 		panic ("ext2_new_block: Descriptor not loaded");
 	}
 	if (gdp[desc].bg_free_blocks_count > 0) {
-		j = ((goal - sb->u.ext2_sb.s_first_data_block) %
+		j = ((goal - es->s_first_data_block) %
 		       EXT2_BLOCKS_PER_GROUP(sb));
 #ifdef EXT2FS_DEBUG
 		if (j)
@@ -475,8 +472,8 @@ got_block:
 #ifdef EXT2FS_DEBUG
 	printk ("ext2_new_block: found bit %d\n", j);
 #endif
-	j += i * EXT2_BLOCKS_PER_GROUP(sb) + sb->u.ext2_sb.s_first_data_block;
-	if (j >= sb->u.ext2_sb.s_blocks_count) {
+	j += i * EXT2_BLOCKS_PER_GROUP(sb) + es->s_first_data_block;
+	if (j >= es->s_blocks_count) {
 		printk ("block_group = %d,block=%d\n", i, j);
 		printk ("ext2_new_block: block >= blocks count");
 		unlock_super (sb);
@@ -495,9 +492,9 @@ got_block:
 	printk("ext2_new_block: allocating block %d. "
 	       "Goal hits %d of %d.\n", j, goal_hits, goal_attempts);
 #endif
-	gdp[desc].bg_free_blocks_count --;
+	gdp[desc].bg_free_blocks_count--;
 	sb->u.ext2_sb.s_group_desc[group_desc]->b_dirt = 1;
-	es->s_free_blocks_count --;
+	es->s_free_blocks_count--;
 	sb->u.ext2_sb.s_sbh->b_dirt = 1;
 	sb->s_dirt = 1;
 	unlock_super (sb);
@@ -506,8 +503,8 @@ got_block:
 
 unsigned long ext2_count_free_blocks (struct super_block *sb)
 {
-	struct ext2_super_block * es;
 #ifdef EXT2FS_DEBUG
+	struct ext2_super_block * es;
 	unsigned long desc_count, bitmap_count, x;
 	unsigned long group_desc;
 	unsigned long desc;
@@ -516,7 +513,7 @@ unsigned long ext2_count_free_blocks (struct super_block *sb)
 	int i;
 	
 	lock_super (sb);
-	es = (struct ext2_super_block *) sb->u.ext2_sb.s_sbh->b_data;
+	es = sb->u.ext2_sb.s_es;
 	desc_count = 0;
 	bitmap_count = 0;
 	group_desc = 0;
@@ -545,9 +542,9 @@ unsigned long ext2_count_free_blocks (struct super_block *sb)
 		printk ("group %d: stored = %d, counted = %d\n",
 			i, gdp[desc].bg_free_blocks_count, x);
 		bitmap_count += x;
-		desc ++;
+		desc++;
 		if (desc == EXT2_DESC_PER_BLOCK(sb)) {
-			group_desc ++;
+			group_desc++;
 			desc = 0;
 			gdp = NULL;
 		}
@@ -557,7 +554,6 @@ unsigned long ext2_count_free_blocks (struct super_block *sb)
 	unlock_super (sb);
 	return bitmap_count;
 #else
-	es = (struct ext2_super_block *) sb->u.ext2_sb.s_sbh->b_data;
-	return es->s_free_blocks_count;
+	return sb->u.ext2_sb.s_es->s_free_blocks_count;
 #endif
 }

@@ -37,6 +37,8 @@ extern int set_selection(const int arg);
 extern int paste_selection(struct tty_struct *tty);
 #endif /* CONFIG_SELECTION */
 
+static int tty_set_ldisc(struct tty_struct *tty, int ldisc);
+
 static void flush(struct tty_queue * queue)
 {
 	if (queue) {
@@ -127,6 +129,29 @@ static int do_get_ps_info(int arg)
 	return(0);			
 }
 
+static void unset_locked_termios(struct termios *termios,
+				 struct termios *old,
+				 struct termios *locked)
+{
+	int	i;
+	
+#define NOSET_MASK(x,y,z) (x = ((x) & ~(z)) | ((y) & (z)))
+
+	if (!locked) {
+		printk("Warning?!? termios_locked is NULL.\n");
+		return;
+	}
+
+	NOSET_MASK(termios->c_iflag, old->c_iflag, locked->c_iflag);
+	NOSET_MASK(termios->c_oflag, old->c_oflag, locked->c_oflag);
+	NOSET_MASK(termios->c_cflag, old->c_cflag, locked->c_cflag);
+	NOSET_MASK(termios->c_lflag, old->c_lflag, locked->c_lflag);
+	termios->c_line = locked->c_line ? old->c_line : termios->c_line;
+	for (i=0; i < NCCS; i++)
+		termios->c_cc[i] = locked->c_cc[i] ?
+			old->c_cc[i] : termios->c_cc[i];
+}
+
 static int get_termios(struct tty_struct * tty, struct termios * termios)
 {
 	int i;
@@ -172,6 +197,15 @@ static int set_termios(struct tty_struct * tty, struct termios * termios,
 	   some situations can cause the kernel to do nothing but
 	   copy characters back and forth. -RAB */
 	if (IS_A_PTY_MASTER(channel)) tty->termios->c_lflag &= ~ECHO;
+
+	unset_locked_termios(tty->termios, &old_termios,
+			     termios_locked[tty->line]);
+
+#if 0
+	retval = tty_set_ldisc(tty, tty->termios->c_line);
+	if (retval)
+		return retval;
+#endif
 
 	if (tty->set_termios)
 		(*tty->set_termios)(tty, &old_termios);
@@ -234,12 +268,48 @@ static int set_termio(struct tty_struct * tty, struct termio * termio,
 	*(unsigned short *)&tty->termios->c_oflag = tmp_termio.c_oflag;
 	*(unsigned short *)&tty->termios->c_cflag = tmp_termio.c_cflag;
 	*(unsigned short *)&tty->termios->c_lflag = tmp_termio.c_lflag;
-	tty->termios->c_line = tmp_termio.c_line;
 	for(i=0 ; i < NCC ; i++)
 		tty->termios->c_cc[i] = tmp_termio.c_cc[i];
 
+	unset_locked_termios(tty->termios, &old_termios,
+			     termios_locked[tty->line]);
+
+#if 0
+	retval = tty_set_ldisc(tty, tmp_termio.c_line);
+	if (retval)
+		return retval;
+#endif
+
 	if (tty->set_termios)
 		(*tty->set_termios)(tty, &old_termios);
+
+	return 0;
+}
+
+static int get_lcktrmios(struct tty_struct * tty, struct termios * termios,
+			 int channel)
+{
+	int i;
+
+	i = verify_area(VERIFY_WRITE, termios, sizeof (*termios));
+	if (i)
+		return i;
+	for (i=0 ; i< (sizeof (*termios)) ; i++)
+		put_fs_byte( ((char *)termios_locked[channel])[i],
+			    i+(char *)termios);
+	return 0;
+}
+
+static int set_lcktrmios(struct tty_struct * tty, struct termios * termios,
+			 int channel)
+{
+	int i;
+
+	if (!suser())
+		return -EPERM;
+	for (i=0 ; i< (sizeof (*termios)) ; i++)
+		((char *)termios_locked[channel])[i] =
+			get_fs_byte(i+(char *)termios);
 
 	return 0;
 }
@@ -299,6 +369,7 @@ static int tty_set_ldisc(struct tty_struct *tty, int ldisc)
 
 	/* Now set up the new line discipline. */
 	tty->disc = ldisc;
+	tty->termios->c_line = ldisc;
 	if (ldiscs[tty->disc].open)
 		return(ldiscs[tty->disc].open(tty));
 	else
@@ -359,10 +430,14 @@ int tty_ioctl(struct inode * inode, struct file * file,
 			switch (arg) {
 			case TCOOFF:
 				tty->stopped = 1;
+				if (tty->stop)
+					(tty->stop)(tty);
 				TTY_WRITE_FLUSH(tty);
 				return 0;
 			case TCOON:
 				tty->stopped = 0;
+				if (tty->start)
+					(tty->start)(tty);
 				TTY_WRITE_FLUSH(tty);
 				return 0;
 			case TCIOFF:
@@ -507,7 +582,15 @@ int tty_ioctl(struct inode * inode, struct file * file,
 		case TIOCSETD:
 			arg = get_fs_long((unsigned long *) arg);
 			return tty_set_ldisc(tty, arg);
-	       case TIOCPKT:
+		case TIOCGLCKTRMIOS:
+			arg = get_fs_long((unsigned long *) arg);
+			return get_lcktrmios(tty, (struct termios *) arg,
+					     termios_dev);
+		case TIOCSLCKTRMIOS:
+			arg = get_fs_long((unsigned long *) arg);
+			return set_lcktrmios(tty, (struct termios *) arg,
+					     termios_dev);
+		case TIOCPKT:
 			{
 			   int on;
 			   if (!IS_A_PTY_MASTER(dev))

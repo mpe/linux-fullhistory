@@ -384,7 +384,14 @@ int ultrastor_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
     mscp.opcode = OP_SCSI;
     mscp.xdir = DTD_SCSI;
     mscp.dcn = FALSE;
-    mscp.ca = TRUE;
+    /* Tape drives don't work properly if the cache is used.  The SCSI
+       READ command for a tape doesn't have a block offset, and the adapter
+       incorrectly assumes that all reads from the tape read the same
+       blocks.  Results will depend on read buffer size and other disk
+       activity. 
+
+       ???  Which other device types should never use the cache?   */
+    mscp.ca = scsi_devices[SCpnt->index].type != TYPE_TAPE;
     mscp.target_id = SCpnt->target;
     mscp.ch_no = 0;
     mscp.lun = SCpnt->lun;

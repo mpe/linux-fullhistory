@@ -82,8 +82,8 @@ L_arg1_larger:
 
 L_accum_loaded:
 	movl	PARAM3,%edi		/* destination */
-	movb	SIGN(%esi),%dl
-	movb	%dl,SIGN(%edi)		/* Copy the sign from the first arg */
+//	movb	SIGN(%esi),%dl
+//	movb	%dl,SIGN(%edi)		/* Copy the sign from the first arg */
 
 
 	movl	EXP(%esi),%edx

@@ -221,12 +221,13 @@ void ext2_free_inode (struct inode * inode)
 #endif
 	sb = inode->i_sb;
 	lock_super (sb);
-	if (inode->i_ino < 1 || inode->i_ino > sb->u.ext2_sb.s_inodes_count) {
+	if (inode->i_ino < 1 ||
+	    inode->i_ino > sb->u.ext2_sb.s_es->s_inodes_count) {
 		printk("free_inode: inode 0 or nonexistent inode\n");
 		unlock_super (sb);
 		return;
 	}
-	es = (struct ext2_super_block *) sb->u.ext2_sb.s_sbh->b_data;
+	es = sb->u.ext2_sb.s_es;
 	block_group = (inode->i_ino - 1) / EXT2_INODES_PER_GROUP(sb);
 	bit = (inode->i_ino - 1) % EXT2_INODES_PER_GROUP(sb);
 	bitmap_nr = load_inode_bitmap (sb, block_group);
@@ -247,14 +248,14 @@ void ext2_free_inode (struct inode * inode)
 			panic ("ext2_free_inode: Group descriptor not loaded");
 		}
 		gdp = (struct ext2_group_desc *) bh2->b_data;
-		gdp[desc].bg_free_inodes_count ++;
+		gdp[desc].bg_free_inodes_count++;
 		if (S_ISDIR(inode->i_mode))
-			gdp[desc].bg_used_dirs_count --;
+			gdp[desc].bg_used_dirs_count--;
 		bh2->b_dirt = 1;
 		set_inode_dtime (inode, gdp, desc);
 	}
 	bh->b_dirt = 1;
-	es->s_free_inodes_count ++;
+	es->s_free_inodes_count++;
 	sb->u.ext2_sb.s_sbh->b_dirt = 1;
 	sb->s_dirt = 1;
 	unlock_super (sb);
@@ -295,10 +296,11 @@ static void inc_inode_version (struct inode * inode,
 	brelse (bh);
 }
 
-static struct ext2_group_desc * get_group_desc(struct super_block * sb,
-					       int group)
+static struct ext2_group_desc * get_group_desc (struct super_block * sb,
+					        int group)
 {
 	struct ext2_group_desc * gdp;
+
 	if (group >= sb->u.ext2_sb.s_groups_count || group < 0 )
 		panic ("ext2: get_group_desc: Invalid group\n");
 	if (!sb->u.ext2_sb.s_group_desc[group / EXT2_DESC_PER_BLOCK(sb)])
@@ -335,7 +337,7 @@ struct inode * ext2_new_inode (const struct inode * dir, int mode)
 	inode->i_sb = sb;
 	inode->i_flags = sb->s_flags;
 	lock_super (sb);
-	es = (struct ext2_super_block *) sb->u.ext2_sb.s_sbh->b_data;
+	es = sb->u.ext2_sb.s_es;
 repeat:
 	gdp = NULL; i=0;
 	
@@ -345,7 +347,7 @@ repeat:
 /* I am not yet convinced that this next bit is necessary.
 		i = dir->u.ext2_i.i_block_group;
 		for (j = 0; j < sb->u.ext2_sb.s_groups_count; j++) {
-			tmp = get_group_desc(sb, i);
+			tmp = get_group_desc (sb, i);
 			if ((tmp->bg_used_dirs_count << 8) < 
 			    tmp->bg_free_inodes_count) {
 				gdp = tmp;
@@ -357,7 +359,7 @@ repeat:
 */
 		if (!gdp) {
 			for (j = 0; j < sb->u.ext2_sb.s_groups_count; j++) {
-				tmp = get_group_desc(sb, j);
+				tmp = get_group_desc (sb, j);
 				if (tmp->bg_free_inodes_count &&
 					tmp->bg_free_inodes_count >= avefreei) {
 					if (!gdp || 
@@ -373,7 +375,7 @@ repeat:
 	else 
 	{ /* Try to place the inode in it\'s parent directory */
 		i = dir->u.ext2_i.i_block_group;
-		tmp = get_group_desc(sb, i);
+		tmp = get_group_desc (sb, i);
 		if (tmp->bg_free_inodes_count)
 			gdp = tmp;
 		else
@@ -382,7 +384,7 @@ repeat:
 				i += j;
 				if (i >= sb->u.ext2_sb.s_groups_count)
 					i -= sb->u.ext2_sb.s_groups_count;
-				tmp = get_group_desc(sb, i);
+				tmp = get_group_desc (sb, i);
 				if (tmp->bg_free_inodes_count) {
 					gdp = tmp;
 					break;
@@ -395,7 +397,7 @@ repeat:
 			for (j = 2; j < sb->u.ext2_sb.s_groups_count; j++) {
 				if (++i >= sb->u.ext2_sb.s_groups_count)
 					i = 0;
-				tmp = get_group_desc(sb,i);
+				tmp = get_group_desc (sb,i);
 				if (tmp->bg_free_inodes_count) {
 					gdp = tmp;
 					break;
@@ -426,16 +428,18 @@ repeat:
 	} else
 		goto repeat;
 	j += i * EXT2_INODES_PER_GROUP(sb) + 1;
-	if (j > sb->u.ext2_sb.s_inodes_count) {
+	if (j > es->s_inodes_count) {
 		printk ("block_group = %d,inode=%d\n", i, j);
 		printk ("ext2_new_inode: inode > inodes count");
+		unlock_super (sb);
+		iput (inode);
 		return NULL;
 	}
-	gdp->bg_free_inodes_count --;
+	gdp->bg_free_inodes_count--;
 	if (S_ISDIR(mode))
-		gdp->bg_used_dirs_count ++;
+		gdp->bg_used_dirs_count++;
 	sb->u.ext2_sb.s_group_desc[i / EXT2_DESC_PER_BLOCK(sb)]->b_dirt = 1;
-	es->s_free_inodes_count --;
+	es->s_free_inodes_count--;
 	sb->u.ext2_sb.s_sbh->b_dirt = 1;
 	sb->s_dirt = 1;
 	inode->i_mode = mode;
@@ -470,8 +474,8 @@ repeat:
 
 unsigned long ext2_count_free_inodes (struct super_block *sb)
 {
-	struct ext2_super_block * es;
 #ifdef EXT2FS_DEBUG
+	struct ext2_super_block * es;
 	unsigned long desc_count, bitmap_count, x;
 	unsigned long group_desc;
 	unsigned long desc;
@@ -480,7 +484,7 @@ unsigned long ext2_count_free_inodes (struct super_block *sb)
 	int i;
 
 	lock_super (sb);
-	es = (struct ext2_super_block *) sb->u.ext2_sb.s_sbh->b_data;
+	es = sb->u.ext2_sb.s_es;
 	desc_count = 0;
 	bitmap_count = 0;
 	group_desc = 0;
@@ -507,9 +511,9 @@ unsigned long ext2_count_free_inodes (struct super_block *sb)
 		printk ("group %d: stored = %d, counted = %d\n",
 			i, gdp[desc].bg_free_inodes_count, x);
 		bitmap_count += x;
-		desc ++;
+		desc++;
 		if (desc == EXT2_DESC_PER_BLOCK(sb)) {
-			group_desc ++;
+			group_desc++;
 			desc = 0;
 			gdp = NULL;
 		}
@@ -519,7 +523,6 @@ unsigned long ext2_count_free_inodes (struct super_block *sb)
 	unlock_super (sb);
 	return desc_count;
 #else
-	es = (struct ext2_super_block *) sb->u.ext2_sb.s_sbh->b_data;
-	return es->s_free_inodes_count;
+	return sb->u.ext2_sb.s_es->s_free_inodes_count;
 #endif
 }

@@ -28,7 +28,6 @@
 #include <linux/termios.h>
 #include <linux/mm.h>
 #include "inet.h"
-#include "timer.h"
 #include "dev.h"
 #include "ip.h"
 #include "protocol.h"

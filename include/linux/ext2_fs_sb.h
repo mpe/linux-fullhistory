@@ -8,12 +8,6 @@
  * second extended-fs super-block data in memory
  */
 struct ext2_sb_info {
-	unsigned long s_inodes_count;	/* Inodes count */
-	unsigned long s_blocks_count;	/* Blocks count */
-	unsigned long s_r_blocks_count;	/* Reserved blocks count */
-	unsigned long s_first_data_block;/* First data block */
-	unsigned long s_log_block_size;	/* Log of block size */
-	long s_log_frag_size;		/* Log of fragment size */
 	unsigned long s_frag_size;	/* Size of a fragment in bytes */
 	unsigned long s_frags_per_block;/* Number of fragments per block */
 	unsigned long s_inodes_per_block;/* Number of inodes per block */
@@ -23,6 +17,7 @@ struct ext2_sb_info {
 	unsigned long s_desc_per_block;	/* Number of group descriptors per block */
 	unsigned long s_groups_count;	/* Number of groups in the fs */
 	struct buffer_head * s_sbh;	/* Buffer containing the super block */
+	struct ext2_super_block * s_es;	/* Pointer to the super block in the buffer */
 	struct buffer_head * s_group_desc[EXT2_MAX_GROUP_DESC];
 	unsigned short s_loaded_inode_bitmaps;
 	unsigned short s_loaded_block_bitmaps;

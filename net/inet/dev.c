@@ -32,7 +32,6 @@
 #include "inet.h"
 #include "dev.h"
 #include "eth.h"
-#include "timer.h"
 #include "ip.h"
 #include "route.h"
 #include "protocol.h"
@@ -253,30 +252,21 @@ dev_get(char *name)
 
 /* Find an interface that can handle addresses for a certain address. */
 struct device *
-dev_check(int which, unsigned long addr)
+dev_check(unsigned long addr)
 {
   struct device *dev;
 
-  for(dev = dev_base; dev != NULL; dev = dev->next) {
-	if ((dev->flags & IFF_UP) == 0) continue;
-	switch(which) {
-		case 0:	/* local address */
-			if (ip_addr_match(addr & dev->pa_mask, dev->pa_addr))
-								return(dev);
-			break;
-		case 1:	/* p-p destination address */
-			if ((dev->flags & IFF_POINTOPOINT) &&
-			   ip_addr_match(addr & dev->pa_mask, dev->pa_dstaddr))
-				return(dev);
-			break;
-		case 2:	/* broadcast address */
-			if ((dev->flags & IFF_BROADCAST) &&
-			   ip_addr_match(addr, dev->pa_brdaddr))
-				return(dev);
-			break;
-	}
-  }
-  return(NULL);
+  for (dev = dev_base; dev; dev = dev->next)
+	if ((dev->flags & IFF_UP) && (dev->flags & IFF_POINTOPOINT) &&
+	    (addr == dev->pa_dstaddr))
+		return dev;
+  for (dev = dev_base; dev; dev = dev->next)
+	if ((dev->flags & IFF_UP) && !(dev->flags & IFF_POINTOPOINT) &&
+	    addr == (dev->flags & IFF_LOOPBACK ? dev->pa_addr : dev->pa_addr &
+	    dev->pa_mask))
+		break;
+  /* no need to check broadcast addresses */
+  return dev;
 }
 
 

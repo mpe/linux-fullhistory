@@ -1,9 +1,15 @@
 /*
- *	seagate.c Copyright (C) 1992 Drew Eckhardt 
- *	low level scsi driver for ST01/ST02 by
+ *	seagate.c Copyright (C) 1992, 1993 Drew Eckhardt 
+ *	low level scsi driver for ST01/ST02, Future Domain TMC-885, 
+ *	TMC-950  by
+ *
  *		Drew Eckhardt 
  *
  *	<drew@colorado.edu>
+ *
+ * 	Note : TMC-880 boards don't work because they have two bits in 
+ *		the status register flipped, I'll fix this "RSN"
+ *
  */
 
 /*
@@ -13,6 +19,18 @@
  * 
  * -DFAST or -DFAST32 will use blind transfers where possible
  *
+ * -DARBITRATE will cause the host adapter to arbitrate for the 
+ *	bus for better SCSI-II compatability, rather than just 
+ *	waiting for BUS FREE and then doing it's thing.  Should
+ *	let us do one command per Lun when I integrate my 
+ *	reorganization changes into the distribution sources.
+ *
+ * -DSLOW_HANDSHAKE will allow compatability with broken devices that don't 
+ *	handshake fast enough (ie, some CD ROM's) for the Seagate
+ * 	code.
+ *
+ * -DSLOW_RATE=x, x some number will let you specify a default 
+ *	transfer rate if handshaking isn't working correctly.
  */
 
 #include <linux/config.h>
@@ -26,6 +44,8 @@
 #include "scsi.h"
 #include "hosts.h"
 #include "seagate.h"
+#include "constants.h"
+
 
 #ifndef IRQ
 #define IRQ 5
@@ -34,6 +54,15 @@
 #if (defined(FAST32) && !defined(FAST))
 #define FAST
 #endif
+
+#if defined(SLOW_RATE) && !defined(SLOW_HANDSHAKE)
+#define SLOW_HANDSHAKE
+#endif
+
+#if defined(SLOW_HANDSHAKE) && !defined(SLOW_RATE)
+#define SLOW_RATE 50
+#endif
+
 
 #if defined(LINKED)
 #undef LINKED		/* Linked commands are currently broken ! */
@@ -87,6 +116,7 @@ static unsigned char controller_type;	/* set to SEAGATE for ST0x boards or FD fo
 #define STATUS (*(volatile unsigned char *) st0x_cr_sr)
 #define CONTROL STATUS 
 #define DATA (*(volatile unsigned char *) st0x_dr)
+
 
 #ifndef OVERRIDE		
 static const char *  seagate_bases[] = {
@@ -152,15 +182,83 @@ SEAGATE SCSI BIOS REVISION 3.2
 static int hostno = -1;
 static void seagate_reconnect_intr(int);
 
-/* 
- * We try to autodetect the 0ws jumper.  If we get an over / under run,
- * then we assume that the the handshaking done by 0ws to synchronize the 
- * SCSI and ISA busses failed, and disable fast transfers.  
- */
-
 #ifdef FAST
 static int fast = 1;
 #endif 
+
+#ifdef SLOW_HANDSHAKE
+/* 
+ * Support for broken devices : 
+ * The Seagate board has a handshaking problem.  Namely, a lack 
+ * thereof for slow devices.  You can blast 600K/second through 
+ * it if you are polling for each byte, more if you do a blind 
+ * transfer.  In the first case, with a fast device, REQ will 
+ * transition high-low or high-low-high before your loop restarts 
+ * and you'll have no problems.  In the second case, the board 
+ * will insert wait states for up to 13.2 usecs for REQ to 
+ * transition low->high, and everything will work.
+ *
+ * However, there's nothing in the state machine that says 
+ * you *HAVE* to see a high-low-high set of transitions before
+ * sending the next byte, and slow things like the Trantor CD ROMS
+ * will break because of this.
+ * 
+ * So, we need to slow things down, which isn't as simple as it 
+ * seems.  We can't slow things down period, because then people
+ * who don't recompile their kernels will shoot me for ruining 
+ * their performance.  We need to do it on a case per case basis.
+ *
+ * The best for performance will be to, only for borken devices 
+ * (this is stored on a per-target basis in the scsi_devices array)
+ * 
+ * Wait for a low->high transition before continuing with that 
+ * transfer.  If we timeout, continue anyways.  We don't need 
+ * a long timeout, because REQ should only be asserted until the 
+ * corresponding ACK is recieved and processed.
+ *
+ * Note that we can't use the system timer for this, because of 
+ * resolution, and we *really* can't use the timer chip since 
+ * gettimeofday() and the beeper routines use that.  So,
+ * the best thing for us to do will be to calibrate a timing
+ * loop in the initialization code using the timer chip before
+ * gettimeofday() can screw with it.
+ */
+
+static int borken_calibration = 0;
+static void borken_init (void) {
+  register int count = 0, start = jiffies + 1, stop = start + 25;
+
+  while (jiffies < start);
+  for (;jiffies < stop; ++count);
+
+/* 
+ * Ok, we now have a count for .25 seconds.  Convert to a 
+ * count per second and divide by transer rate in K.
+ */
+
+  borken_calibration =  (count * 4) / (SLOW_RATE*1024);
+
+  if (borken_calibration < 1)
+  	borken_calibration = 1;
+#if (DEBUG & DEBUG_BORKEN)
+  printk("scsi%d : borken calibrated to %dK/sec, %d cycles per transfer\n", 
+	hostno, BORKEN_RATE, borken_calibration);
+#endif
+}
+
+static inline void borken_wait(void) {
+  register int count;
+  for (count = borken_calibration; count && (STATUS & STAT_REQ); 
+  	--count);
+  if (count)
+#if (DEBUG & DEBUG_BORKEN) 
+  	printk("scsi%d : borken timeout\n", hostno);
+#else
+	;
+#endif 
+}
+
+#endif /* def SLOW_HANDSHAKE */
 
 int seagate_st0x_detect (int hostnum)
 	{
@@ -207,6 +305,9 @@ static struct sigaction seagate_sigaction = {
  *	from the BIOS version notice in all the possible locations
  *	of the ROM's.  This has a nice sideeffect of not trashing
  * 	any register locations that might be used by something else.
+ *
+ * XXX - note that we probably should be probing the address
+ * space for the on-board RAM instead.
  */
 
 	for (i = 0; i < (sizeof (seagate_bases) / sizeof (char  * )); ++i)
@@ -238,6 +339,10 @@ static struct sigaction seagate_sigaction = {
 				hostno, IRQ);
 			return 0;
 		}
+#ifdef SLOW_HANDSHAKE
+		borken_init();
+#endif
+		
 		return -1;
 		}
 	else
@@ -252,6 +357,12 @@ static struct sigaction seagate_sigaction = {
 const char *seagate_st0x_info(void) {
       static char buffer[256];
         sprintf(buffer, "scsi%d : %s at irq %d address %p options :"
+#ifdef ARBITRATE
+" ARBITRATE"
+#endif
+#ifdef SLOW_HANDSHAKE
+" SLOW_HANDSHAKE"
+#endif
 #ifdef FAST
 #ifdef FAST32
 " FAST32"
@@ -459,13 +570,21 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
 	int nobuffs;
 	int clock;			
 	int temp;
+#ifdef SLOW_HANDSHAKE
+	int borken;	/* Does the current target require Very Slow I/O ? */
+#endif
 
 
-#if ((DEBUG & PHASE_ETC) || (DEBUG & PRINT_COMMAND) || (DEBUG & PHASE_EXIT))	
+#if (DEBUG & PHASE_DATAIN) || (DEBUG & PHASE_DATOUT) 
+	int transfered = 0;
+#endif
+
+#if (((DEBUG & PHASE_ETC) == PHASE_ETC) || (DEBUG & PRINT_COMMAND) || \
+	(DEBUG & PHASE_EXIT))	
 	int i;
 #endif
 
-#if (DEBUG & PHASE_ETC)
+#if ((DEBUG & PHASE_ETC) == PHASE_ETC)
 	int phase=0, newphase;
 #endif
 
@@ -479,10 +598,13 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
 	incommand = 0;
 	st0x_aborted = 0;
 
+#ifdef SLOW_HANDSHAKE
+	borken = (int) scsi_devices[SCint->index].borken;
+#endif
+
 #if (DEBUG & PRINT_COMMAND)
 	printk ("scsi%d : target = %d, command = ", hostno, target);
-	for (i = 0; i < COMMAND_SIZE(((unsigned char *)cmnd)[0]); ++i)
-		printk("%02x ",  ((unsigned char *) cmnd)[i]);
+	print_command((unsigned char *) cmnd);
 	printk("\n");
 #endif
 
@@ -577,7 +699,11 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
  *	we must respond to the reselection by asserting BSY ourselves
  */
 
+#if 1
 		CONTROL = (BASE_CMD | CMD_DRVR_ENABLE | CMD_BSY);
+#else
+		CONTROL = (BASE_CMD | CMD_BSY);
+#endif
 
 /*
  *	The target will drop SEL, and raise BSY, at which time we must drop
@@ -632,6 +758,7 @@ connect_loop :
 
 		clock = jiffies + ST0X_BUS_FREE_DELAY;	
 
+#if !defined (ARBITRATE) 
 		while (((STATUS |  STATUS | STATUS) & 
 		         (STAT_BSY | STAT_SEL)) && 
 			 (!st0x_aborted) && (jiffies < clock));
@@ -640,19 +767,7 @@ connect_loop :
 			return retcode(DID_BUS_BUSY);
 		else if (st0x_aborted)
 			return retcode(st0x_aborted);
-
-/*
- *	Bus free has been detected, within BUS settle.  I used to 
- *	support an arbitration phase - however, on the Seagate, this 
- *	degraded performance by a factor > 10 - so it is no more.
- */
-
-/*
- *	SELECTION PHASE
- *
- *	Now, we select the disk, giving it the SCSI ID at data
- *	and a command of PARITY if necessary, and we raise SEL.
- */
+#endif
 
 #if (DEBUG & PHASE_SELECTION)
 		printk("scsi%d : phase = SELECTION\n", hostno);
@@ -661,35 +776,63 @@ connect_loop :
 		clock = jiffies + ST0X_SELECTION_DELAY;
 
 /*
- *	If we wish to disconnect, we should request a MESSAGE OUT
- *	at this point.  Technically, ATTN should be raised before 
- *	SEL = true and BSY = false (from arbitration), but I think this 
- *	should do.
+ * Arbitration/selection procedure : 
+ * 1.  Disable drivers
+ * 2.  Write HOST adapter address bit
+ * 3.  Set start arbitration.
+ * 4.  We get either ARBITRATION COMPLETE or SELECT at this
+ *     point.
+ * 5.  OR our ID and targets on bus.
+ * 6.  Enable SCSI drivers and asserted SEL and ATTN
  */
-		if (reselect)
-			CONTROL = BASE_CMD | CMD_DRVR_ENABLE |
-				CMD_ATTN;
 		
-/*
- *	We must assert both our ID and our target's ID on the bus.
- */
-		DATA = (unsigned char) ((1 << target) | (controller_type == SEAGATE ? 0x80 : 0x40));
+#if defined(ARBITRATE)	
+	cli();
+	CONTROL = 0;
+	DATA = (controller_type == SEAGATE) ? 0x80 : 0x40;
+	CONTROL = CMD_START_ARB; 
+	sti();
+	while (!((status_read = STATUS) & (STAT_ARB_CMPL | STAT_SEL)) &&
+		(jiffies < clock) && !st0x_aborted);
 
-/*
- *	If we are allowing ourselves to reconnect, then I will keep 
- *	ATTN raised so we get MSG OUT. 
- */ 
-		CONTROL =  BASE_CMD | CMD_DRVR_ENABLE | CMD_SEL | 
-			(reselect ? CMD_ATTN : 0);
+	if (!(status_read & STAT_ARB_CMPL)) {
+#if (DEBUG & PHASE_SELECTION)
+		if (status_read & STAT_SEL) 
+			printk("scsi%d : arbitration lost\n", hostno);
+		else
+			printk("scsi%d : arbitration timeout.\n", hostno);
+#endif
+		CONTROL = BASE_CMD;
+		return retcode(DID_NO_CONNECT);
+	};
+
+#if (DEBUG & PHASE_SELECTION)
+	printk("scsi%d : arbitration complete\n", hostno);
+#endif
+#endif
+
 
 /*
  *	When the SCSI device decides that we're gawking at it, it will 
  *	respond by asserting BUSY on the bus.
+ *
+ * 	Note : the Seagate ST-01/02 product manual says that we should 
+ * 	twiddle the DATA register before the control register.  However,
+ *	this does not work reliably so we do it the other way arround.
+ *
+ *	Probably could be a problem with arbitration too, we really should
+ *	try this with a SCSI protocol or logic analyzer to see what is 
+ *	going on.
  */
+	cli();
+	CONTROL = BASE_CMD | CMD_DRVR_ENABLE | CMD_SEL | 
+		(reselect ? CMD_ATTN : 0);
+	DATA = (unsigned char) ((1 << target) | (controller_type == SEAGATE ? 0x80 : 0x40));
+	sti();
 		while (!((status_read = STATUS) & STAT_BSY) && 
 			(jiffies < clock) && !st0x_aborted)
 
-#if (DEBUG & PHASE_SELECTION)
+#if 0 && (DEBUG & PHASE_SELECTION)
 		{
 		temp = clock - jiffies;
 
@@ -705,10 +848,9 @@ connect_loop :
 #endif
 	
 
-		if ((jiffies > clock)  || (!st0x_aborted && 
-			!(status_read & STAT_BSY)))
+		if ((jiffies >= clock)  && !(status_read & STAT_BSY))
 			{
-#if (DEBUG & PHASE_SELECT)
+#if (DEBUG & PHASE_SELECTION)
 			printk ("scsi%d : NO CONNECT with target %d, status = %x \n", 
 				hostno, target, STATUS);
 #endif
@@ -724,6 +866,8 @@ connect_loop :
 		if (st0x_aborted) {
 			CONTROL = BASE_CMD;
 			if (STATUS & STAT_BSY) {
+				printk("scsi%d : BST asserted after we've been aborted.\n",
+					hostno);
 				seagate_st0x_reset();
 				return retcode(DID_RESET);
 			}
@@ -755,6 +899,10 @@ connect_loop :
                 len = SCint->request_bufflen;
                 data = (unsigned char *) SCint->request_buffer;
         }
+
+#if (DEBUG & (PHASE_DATAIN | PHASE_DATAOUT))
+	printk("scsi%d : len = %d\n", hostno, len);
+#endif
 
 		break;
 #ifdef LINKED
@@ -791,7 +939,7 @@ connect_loop :
  *	really adds up.
  */
 
-#if (DEBUG & PHASE_ETC)
+#if ((DEBUG & PHASE_ETC) == PHASE_ETC)
 	printk("scsi%d : phase = INFORMATION TRANSFER\n", hostno);
 #endif  
 
@@ -813,14 +961,14 @@ connect_loop :
 #ifdef PARITY
 		if (status_read & STAT_PARITY)
 			{
-			done = 1;
+			printk("scsi%d : got parity error\n", hostno);
 			st0x_aborted = DID_PARITY;
 			}	
 #endif
 
 		if (status_read & STAT_REQ)
 			{
-#if (DEBUG & PHASE_ETC)
+#if ((DEBUG & PHASE_ETC) == PHASE_ETC)
 			if ((newphase = (status_read & REQ_MASK)) != phase)
 				{
 				phase = newphase;
@@ -853,8 +1001,7 @@ connect_loop :
 				default : 
 					printk("scsi%d : phase = UNKNOWN\n",
 						hostno); 
-					st0x_aborted = 1; 
-					done = 1;
+					st0x_aborted = DID_ERROR; 
 				}	
 				}
 #endif
@@ -890,7 +1037,6 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 
         __asm__("
 	cld;
-        movl %0, %%edi;
 "
 #ifdef FAST32
 "	shr $2, %%ecx;
@@ -904,9 +1050,9 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 #endif
 "	loop 1b;" : :
         /* input */
-        "r" (st0x_dr), "S" (data), "c" (SCint->transfersize) :
+        "D" (st0x_dr), "S" (data), "c" (SCint->transfersize) :
         /* clobbered */
-        "eax", "esi", "ecx", "edi");
+        "eax", "ecx", "esi" );
 
 	len -= transfersize;
 	data += transfersize;
@@ -936,8 +1082,6 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 
 	Test for any data here at all.
 */
-	"movl %0, %%esi\n"		/* local value of data */
-	"\tmovl %1, %%ecx\n"		/* local value of len */	
 	"\torl %%ecx, %%ecx
 	jz 2f
 
@@ -969,15 +1113,13 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 	loop 1b
 
 2: 
-	movl %%esi, %2
-	movl %%ecx, %3
 									":
 /* output */
-"=r" (data), "=r" (len) :
+"=S" (data), "=c" (len) :
 /* input */
 "0" (data), "1" (len) :
 /* clobbered */
-"ebx", "ecx", "edi", "esi"); 
+"eax", "ebx", "edi"); 
 }
 
                         if (!len && nobuffs) {
@@ -993,17 +1135,22 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 			break;
 
 		case REQ_DATAIN : 
-#ifdef FAST
-if (!len) {
-#if 0
-        printk("scsi%d: overflow from target %d lun %d \n", 
-                hostno, target, lun);
-        st0x_aborted = DID_ERROR;
-        fast = 0;
+#ifdef SLOW_HANDSHAKE
+	if (borken) {
+#if (DEBUG & (PHASE_DATAIN))
+		transfered += len;
 #endif
-        break;
+		for (; len && (STATUS & (REQ_MASK | STAT_REQ)) == (REQ_DATAIN |
+			STAT_REQ); --len) {
+				*data++ = DATA;
+				borken_wait();
 }
-
+#if (DEBUG & (PHASE_DATAIN))
+		transfered -= len;
+#endif
+	} else
+#endif
+#ifdef FAST
 if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 #ifdef FAST32
 	&& !(transfersize % 4)
@@ -1016,7 +1163,6 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 #endif
         __asm__("
 	cld;
-	movl %0, %%esi;
 "
 #ifdef FAST32
 "	shr $2, %%ecx;
@@ -1031,12 +1177,17 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 
 "	loop 1b;" : :
         /* input */
-        "r" (st0x_dr), "D" (data), "c" (SCint->transfersize) :
+        "S" (st0x_dr), "D" (data), "c" (SCint->transfersize) :
         /* clobbered */
-        "eax", "ecx", "edi", "esi");
+        "eax", "ecx", "edi");
 
 	len -= transfersize;
 	data += transfersize;
+
+#if (DEBUG & PHASE_DATAIN)
+	printk("scsi%d: transfered += %d\n", hostno, transfersize);
+	transfered += transfersize;
+#endif
 
 #if (DEBUG & DEBUG_FAST)
 	printk("scsi%d : FAST transfer complete len = %d data = %08x\n", 
@@ -1046,6 +1197,13 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 } else
 #endif
 {
+
+#if (DEBUG & PHASE_DATAIN)
+	printk("scsi%d: transfered += %d\n", hostno, len);
+	transfered += len;	/* Assume we'll transfer it all, then
+				   subtract what we *didn't* transfer */
+#endif
+	
 /*
  * 	We loop as long as we are in a data in phase, there is room to read, 
  * 	and BSY is still active
@@ -1061,9 +1219,6 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 
 	Test for room to read
 */
-
-	"movl %0, %%edi\n"		/* data */
-	"\tmovl %1, %%ecx\n"		/* len */
 	"\torl %%ecx, %%ecx
 	jz 2f
 
@@ -1095,18 +1250,24 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 
 	movb (%%ebx), %%al	
 	stosb	
-	loop 1b
+	loop 1b\n"
 
-2: 	movl %%edi, %2\n"	 	/* data */
-	"\tmovl %%ecx, %3\n" 		/* len */
+"2:\n"
 									:
 /* output */
-"=r" (data), "=r" (len) :
+"=D" (data), "=c" (len) :
 /* input */
 "0" (data), "1" (len) :
 /* clobbered */
-"ebx", "ecx", "edi", "esi"); 
+"eax","ebx", "esi"); 
+
+#if (DEBUG & PHASE_DATAIN)
+	printk("scsi%d: transfered -= %d\n", hostno, len);
+	transfered -= len;		/* Since we assumed all of Len got 
+					 * transfered, correct our mistake */
+#endif
 }
+	
                         if (!len && nobuffs) {
                                 --nobuffs;
                                 ++buffer;
@@ -1126,6 +1287,10 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 				if (status_read & STAT_REQ) {
 					DATA = *(unsigned char *) cmnd;
 					cmnd = 1+(unsigned char *) cmnd;
+#ifdef SLOW_HANDSHAKE
+					if (borken) 
+						borken_wait();
+#endif
 				}
 			break;
 	
@@ -1147,6 +1312,7 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 			switch (reselect) {
 			case CAN_RECONNECT:
 				DATA = IDENTIFY(1, lun);
+
 #if (DEBUG & (PHASE_RESELECT | PHASE_MSGOUT)) 
 				printk("scsi%d : sent IDENTIFY message.\n", hostno);
 #endif
@@ -1166,9 +1332,7 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 #endif
 			default:
 				DATA = NOP;
-#if (DEBUG & PHASE_MSGOUT)
-				printk("scsi%d : sent NOP message.\n", hostno);
-#endif
+				printk("scsi%d : target %d requested MSGOUT, sent NOP message.\n", hostno, target);
 			}
 			break;
 					
@@ -1263,21 +1427,39 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 			printk("scsi%d : unknown phase.\n", hostno); 
 			st0x_aborted = DID_ERROR; 
 		}	
-		} /* while ends */
+
+#ifdef SLOW_HANDSHAKE
+/*
+ * I really don't care to deal with borken devices in each single 
+ * byte transfer case (ie, message in, message out, status), so
+ * I'll do the wait here if necessary.
+ */
+		if (borken)
+			borken_wait();
+#endif
+ 
 		} /* if ends */
+		} /* while ends */
 
 #if (DEBUG & (PHASE_DATAIN | PHASE_DATAOUT | PHASE_EXIT))
-	printk("Transfered %d bytes, allowed %d additional bytes\n", (bufflen - len), len);
+	printk("scsi%d : Transfered %d bytes\n", hostno, transfered);
 #endif
 
 #if (DEBUG & PHASE_EXIT)
+#if 0		/* Doesn't work for scatter / gather */
 	printk("Buffer : \n");
 	for (i = 0; i < 20; ++i) 
 		printk ("%02x  ", ((unsigned char *) data)[i]);	/* WDE mod */
 	printk("\n");
-	printk("Status = %02x, message = %02x\n", status, message);
+#endif
+	printk("scsi%d : status = ", hostno);
+        print_status(status);
+	printk("message = %02x\n", message);
 #endif
 
+
+/* We shouldn't reach this until *after* BSY has been deasserted */
+#ifdef notyet
 	if (st0x_aborted) {
 		if (STATUS & STAT_BSY) {	
 			seagate_st0x_reset();
@@ -1285,6 +1467,8 @@ if (fast && transfersize && !(len % transfersize) && (len >= transfersize)
 		} 
 		abort_confirm = 1;
 	} 
+#endif
+
 #ifdef LINKED
 else {
 /*
@@ -1404,7 +1588,6 @@ int seagate_st0x_biosparam(int size, int dev, int* ip) {
   int *sizes, result, formatted_sectors, total_sectors;
   int cylinders, heads, sectors;
 
-  unsigned long oldfs;
   Scsi_Device *disk;
 
   disk = rscsi_disks[MINOR(dev) >> 4].device;
@@ -1419,14 +1602,6 @@ int seagate_st0x_biosparam(int size, int dev, int* ip) {
 
   sizes = (int *) buf;
   data = (unsigned char *) (sizes + 2);
-
-/*
- * Point fs, which normally points to user space, at kernel space so that 
- * we can do a syscall with the data coming from kernel space.  
- */
-
-  oldfs = get_fs();
-  set_fs(get_ds());
 
   cmd[0] = MODE_SENSE;
   cmd[1] = (disk->lun << 5) & 0xe5;
@@ -1445,7 +1620,7 @@ int seagate_st0x_biosparam(int size, int dev, int* ip) {
 
   memcpy (data, cmd, 6);
 
-  if (!(result = scsi_ioctl (disk, SCSI_IOCTL_SEND_COMMAND, (void *) buf))) {
+  if (!(result = kernel_scsi_ioctl (disk, SCSI_IOCTL_SEND_COMMAND, (void *) buf))) {
 /*
  * The mode page lies beyond the MODE SENSE header, with length 4, and 
  * the BLOCK DESCRIPTOR, with length header[3].
@@ -1458,7 +1633,7 @@ int seagate_st0x_biosparam(int size, int dev, int* ip) {
     cmd[2] = 0x03; /* Read page 3, format page current values */
     memcpy (data, cmd, 6);
 
-    if (!(result = scsi_ioctl (disk, SCSI_IOCTL_SEND_COMMAND, (void *) buf))) {
+    if (!(result = kernel_scsi_ioctl (disk, SCSI_IOCTL_SEND_COMMAND, (void *) buf))) {
       page = data + 4 + data[3];
       sectors = (page[10] << 8) | page[11];	
 
@@ -1484,7 +1659,10 @@ int seagate_st0x_biosparam(int size, int dev, int* ip) {
 printk("scsi%d : heads = %d cylinders = %d sectors = %d total = %d formatted = %d\n",
     hostno, heads, cylinders, sectors, total_sectors, formatted_sectors);
 
-      cylinders -= ((total_sectors - formatted_sectors) / (heads * sectors));
+      if (!heads || !sectors)
+	cylinders = 1025;
+      else
+	cylinders -= ((total_sectors - formatted_sectors) / (heads * sectors));
 
 /*
  * Now, we need to do a sanity check on the geometry to see if it is 
@@ -1508,7 +1686,6 @@ printk("scsi%d : heads = %d cylinders = %d sectors = %d total = %d formatted = %
       }
     }
     
-  set_fs(oldfs);
   return result;
 }
 #endif /* CONFIG_BLK_DEV_SD */

@@ -35,7 +35,7 @@ static int sync_block (struct inode * inode, unsigned long * block, int wait)
 	if (!*block)
 		return 0;
 	tmp = *block;
-	bh = get_hash_table(inode->i_dev, *block, blocksize);
+	bh = get_hash_table (inode->i_dev, *block, blocksize);
 	if (!bh)
 		return 0;
 	if (*block != tmp) {
@@ -43,21 +43,20 @@ static int sync_block (struct inode * inode, unsigned long * block, int wait)
 		return 1;
 	}
 	if (wait && bh->b_req && !bh->b_uptodate) {
-		brelse(bh);
+		brelse (bh);
 		return -1;
 	}
-	if (wait || !bh->b_uptodate || !bh->b_dirt)
-	{
-		brelse(bh);
+	if (wait || !bh->b_uptodate || !bh->b_dirt) {
+		brelse (bh);
 		return 0;
 	}
-	ll_rw_block(WRITE, 1, &bh);
+	ll_rw_block (WRITE, 1, &bh);
 	bh->b_count--;
 	return 0;
 }
 
 static int sync_iblock (struct inode * inode, unsigned long * iblock, 
-			struct buffer_head **bh, int wait) 
+			struct buffer_head ** bh, int wait) 
 {
 	int rc, tmp;
 	
@@ -68,9 +67,9 @@ static int sync_iblock (struct inode * inode, unsigned long * iblock,
 	rc = sync_block (inode, iblock, wait);
 	if (rc)
 		return rc;
-	*bh = bread(inode->i_dev, tmp, blocksize);
+	*bh = bread (inode->i_dev, tmp, blocksize);
 	if (tmp != *iblock) {
-		brelse(*bh);
+		brelse (*bh);
 		*bh = NULL;
 		return 1;
 	}
@@ -80,7 +79,7 @@ static int sync_iblock (struct inode * inode, unsigned long * iblock,
 }
 
 
-static int sync_direct(struct inode *inode, int wait)
+static int sync_direct (struct inode * inode, int wait)
 {
 	int i;
 	int rc, err = 0;
@@ -95,7 +94,8 @@ static int sync_direct(struct inode *inode, int wait)
 	return err;
 }
 
-static int sync_indirect(struct inode *inode, unsigned long *iblock, int wait)
+static int sync_indirect (struct inode * inode, unsigned long * iblock,
+			  int wait)
 {
 	int i;
 	struct buffer_head * ind_bh;
@@ -114,12 +114,12 @@ static int sync_indirect(struct inode *inode, unsigned long *iblock, int wait)
 		if (rc)
 			err = rc;
 	}
-	brelse(ind_bh);
+	brelse (ind_bh);
 	return err;
 }
 
-static int sync_dindirect(struct inode *inode, unsigned long *diblock,
-			  int wait)
+static int sync_dindirect (struct inode * inode, unsigned long * diblock,
+			   int wait)
 {
 	int i;
 	struct buffer_head * dind_bh;
@@ -138,12 +138,12 @@ static int sync_dindirect(struct inode *inode, unsigned long *diblock,
 		if (rc)
 			err = rc;
 	}
-	brelse(dind_bh);
+	brelse (dind_bh);
 	return err;
 }
 
-static int sync_tindirect(struct inode *inode, unsigned long *tiblock, 
-			  int wait)
+static int sync_tindirect (struct inode * inode, unsigned long * tiblock, 
+			   int wait)
 {
 	int i;
 	struct buffer_head * tind_bh;
@@ -162,11 +162,11 @@ static int sync_tindirect(struct inode *inode, unsigned long *tiblock,
 		if (rc)
 			err = rc;
 	}
-	brelse(tind_bh);
+	brelse (tind_bh);
 	return err;
 }
 
-int ext2_sync_file(struct inode * inode, struct file *file)
+int ext2_sync_file (struct inode * inode, struct file * file)
 {
 	int wait, err = 0;
 
@@ -179,16 +179,16 @@ int ext2_sync_file(struct inode * inode, struct file *file)
 
 	for (wait=0; wait<=1; wait++)
 	{
-		err |= sync_direct(inode, wait);
-		err |= sync_indirect(inode,
-				     inode->u.ext2_i.i_data+EXT2_IND_BLOCK,
-				     wait);
-		err |= sync_dindirect(inode,
-				      inode->u.ext2_i.i_data+EXT2_DIND_BLOCK, 
+		err |= sync_direct (inode, wait);
+		err |= sync_indirect (inode,
+				      inode->u.ext2_i.i_data+EXT2_IND_BLOCK,
 				      wait);
-		err |= sync_tindirect(inode, 
-				      inode->u.ext2_i.i_data+EXT2_TIND_BLOCK, 
-				      wait);
+		err |= sync_dindirect (inode,
+				       inode->u.ext2_i.i_data+EXT2_DIND_BLOCK, 
+				       wait);
+		err |= sync_tindirect (inode, 
+				       inode->u.ext2_i.i_data+EXT2_TIND_BLOCK, 
+				       wait);
 	}
 skip:
 	err |= ext2_sync_inode (inode);

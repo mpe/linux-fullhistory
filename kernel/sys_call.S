@@ -194,10 +194,8 @@ ret_from_sys_call:
 9:	movl EFLAGS(%esp),%eax		# check VM86 flag: CS/SS are
 	testl $(VM_MASK),%eax		# different then
 	jne 1f
-	cmpw $(USER_CS),CS(%esp)	# was old code segment supervisor ?
-	jne 2f
-	cmpw $(USER_DS),OLDSS(%esp)	# was stack segment user segment ?
-	jne 2f
+	cmpw $(KERNEL_CS),CS(%esp)	# was old code segment supervisor ?
+	je 2f
 1:	sti
 	orl $(IF_MASK),%eax		# these just try to make sure
 	andl $~NT_MASK,%eax		# the program doesn't do anything

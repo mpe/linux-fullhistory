@@ -146,10 +146,8 @@ static inline void init_bucket_desc(unsigned long page)
 	int i;
 
 	bdesc = (struct bucket_desc *) page;
-	for (i = PAGE_SIZE/sizeof(struct bucket_desc); i > 1; i--) {
+	for (i = PAGE_SIZE/sizeof(struct bucket_desc); --i > 0; bdesc++ )
 		bdesc->next = bdesc+1;
-		bdesc++;
-	}
 	/*
 	 * This is done last, to avoid race conditions in case
 	 * get_free_page() sleeps and this routine gets called again....
@@ -214,8 +212,7 @@ kmalloc(unsigned int len, int priority)
 	 */
 	if (!free_bucket_desc) {
 		restore_flags(flags);
-		page = get_free_page(priority);
-		if (!page)
+		if(!(page=__get_free_page(priority)))
 			return NULL;
 		init_bucket_desc(page);
 	}
@@ -224,12 +221,10 @@ kmalloc(unsigned int len, int priority)
 	free_bucket_desc = bdesc->next;
 	restore_flags(flags);
 
-	page = get_free_page(priority);
-
+	if(!(page=__get_free_page(priority))) {
 	/*
 	 * Out of memory? Put the bucket descriptor back on the free list
 	 */
-	if (!page) {
 		cli();
 		bdesc->next = free_bucket_desc;
 		free_bucket_desc = bdesc;
@@ -345,23 +340,25 @@ void deb_kcheck_s(const char *deb_file, unsigned short deb_line,
 	hd--;
 
 	if(hd->magic != DEB_MAGIC_ALLOC) {
-		if(hd->magic != DEB_MAGIC_USED && hd->magic != DEB_MAGIC_FREED)
-			printk("DEB_MALLOC Using %s block of 0x%x from %s:%d, by %s:%d, last %s:%d\n",
-				(hd->magic == DEB_MAGIC_FREE)?"free":"bad",obj,deb_file,deb_line,hd->file,hd->line,hd->ok_file,hd->ok_line);
-		if(hd->magic == DEB_MAGIC_FREE)
+		if(hd->magic == DEB_MAGIC_FREE) {
+			printk("DEB_MALLOC Using free block of 0x%x at %s:%d, by %s:%d, wasOK %s:%d\n",
+				obj,deb_file,deb_line,hd->file,hd->line,hd->ok_file,hd->ok_line);
+			/* For any other condition it is either superfluous or dangerous to print something. */
 			hd->magic = DEB_MAGIC_FREED;
+		}
 		return;
 	}
 	if(hd->size != size) {
 		if(size != 0) {
-			printk("DEB_MALLOC size for 0x%x given as %d, stored %d, from %s:%d, last %s:%d\n",
+			printk("DEB_MALLOC size for 0x%x given as %d, stored %d, at %s:%d, wasOK %s:%d\n",
 				obj,size,hd->size,deb_file,deb_line,hd->ok_file,hd->ok_line);
 		}
 		size = hd->size;
 	}
 	he = (struct hdr_end *)(((char *)obj)+size);
 	if(he->magic != DEB_MAGIC_END) {
-		printk("DEB_MALLOC overran block 0x%x:%d, free at %s:%d\n",obj,hd->size,deb_file,deb_line);
+		printk("DEB_MALLOC overran block 0x%x:%d, at %s:%d, wasOK %s:%d\n",
+			obj,hd->size,deb_file,deb_line,hd->ok_file,hd->ok_line);
 		hd->magic = DEB_MAGIC_USED;
 		return;
 	}
@@ -398,17 +395,15 @@ void kfree_s(void *obj, int size)
 		hd = (struct hdr_start *) obj;
 		hd--;
 
-		if(hd->magic != DEB_MAGIC_ALLOC && hd->magic != DEB_MAGIC_USED) {
-			if(hd->magic != DEB_MAGIC_FREED)
-				printk("DEB_MALLOC %s free of 0x%x from %s:%d by %s:%d, last %s:%d\n",
-					(hd->magic == DEB_MAGIC_FREE)?"dup":"bad",
+		if(hd->magic == DEB_MAGIC_FREE) {
+			printk("DEB_MALLOC dup free of 0x%x at %s:%d by %s:%d, wasOK %s:%d\n",
 					obj,deb_file,deb_line,hd->file,hd->line,hd->ok_file,hd->ok_line);
 			return;
 		}
 		if(hd->size != size) {
 			if(size != 0) {
 				if(hd->magic != DEB_MAGIC_USED)
-					printk("DEB_MALLOC size for 0x%x given as %d, stored %d, from %s:%d, last %s:%d\n",
+					printk("DEB_MALLOC size for 0x%x given as %d, stored %d, at %s:%d, wasOK %s:%d\n",
 						obj,size,hd->size,deb_file,deb_line,hd->ok_file,hd->ok_line);
 			}
 			size = hd->size;
@@ -416,16 +411,15 @@ void kfree_s(void *obj, int size)
 		he = (struct hdr_end *)(((char *)obj)+size);
 		if(he->magic != DEB_MAGIC_END) {
 			if(hd->magic != DEB_MAGIC_USED)
-				printk("DEB_MALLOC overran block 0x%x:%d, free at %s:%d, last %s:%d\n",
-					obj,hd->size,deb_file,deb_line,hd->ok_file,hd->ok_line);
-			return;
+				printk("DEB_MALLOC overran block 0x%x:%d, at %s:%d, from %s:%d, wasOK %s:%d\n",
+					obj,hd->size,deb_file,deb_line,hd->file,hd->line,hd->ok_file,hd->ok_line);
 		}
 		size += sizeof(struct hdr_start)+sizeof(struct hdr_end);
 	}
 #endif
 	save_flags(flags);
 	/* Calculate what page this object lives in */
-	page = (void *)  ((unsigned long) obj & 0xfffff000);
+	page = (void *)  ((unsigned long) obj & PAGE_MASK);
 
 	/* Now search the buckets looking for that page */
 	for (bdir = bucket_dir; bdir->size; bdir++) {
@@ -528,7 +522,7 @@ int get_malloc(char *buffer)
 				if(hd->magic == DEB_MAGIC_ALLOC) {
 					if(len > PAGE_SIZE-80) {
 						restore_flags(flags);
-						len += sprintf(buffer+len,"+++\n");
+						len += sprintf(buffer+len,"...\n");
 						return len;
 					}
 					len += sprintf(buffer+len,"%08x:%03x %s:%d %s:%d\n",

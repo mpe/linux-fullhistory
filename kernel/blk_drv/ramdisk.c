@@ -104,7 +104,7 @@ void rd_load(void)
 {
 	struct buffer_head *bh;
 	struct minix_super_block s;
-	int		block, try;
+	int		block, tries;
 	int		i = 1;
 	int		nblocks;
 	char		*cp;
@@ -125,8 +125,8 @@ void rd_load(void)
 	 * case, we have to look at block 0.  Be intelligent about
 	 * this, and check both... - FvK
 	 */
-	for (try = 0; try < 1000; try += 512) {
-		block = try;
+	for (tries = 0; tries < 1000; tries += 512) {
+		block = tries;
 		bh = breada(ROOT_DEV,block+1,block,block+2,-1);
 		if (!bh) {
 			printk("RAMDISK: I/O error while looking for super block!\n");

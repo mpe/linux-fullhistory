@@ -3,7 +3,7 @@ all:	Version zImage
 
 .EXPORT_ALL_VARIABLES:
 
-BASH = $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
+CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
 	  else if [ -x /bin/bash ]; then echo /bin/bash; \
 	  else echo sh; fi ; fi)
 
@@ -96,13 +96,8 @@ KERNELHDRS	=/usr/src/linux/include
 Version: dummy
 	rm -f tools/version.h
 
-lilo: $(CONFIGURE) Image
-	if [ -f /vmlinux ]; then mv /vmlinux /vmlinux.old; fi
-	cat Image > /vmlinux
-	/etc/lilo/install
-
 config:
-	$(BASH) Configure $(OPTS) < config.in
+	$(CONFIG_SHELL) Configure $(OPTS) < config.in
 	mv .config~ .config
 	$(MAKE) soundconf
 
@@ -116,19 +111,12 @@ tools/./version.h: tools/version.h
 
 tools/version.h: $(CONFIGURE) Makefile
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.99.11\" > tools/version.h
+	@echo \#define UTS_RELEASE \"0.99.12\" > tools/version.h
 	@echo \#define UTS_VERSION \"\#`cat .version` `date`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_HOST \"`hostname`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_DOMAIN \"`domainname`\" >> tools/version.h
-
-Image: $(CONFIGURE) boot/bootsect boot/setup tools/system tools/build
-	tools/build boot/bootsect boot/setup tools/system $(ROOT_DEV) > Image
-	sync
-
-disk: Image
-	dd bs=8192 if=Image of=/dev/fd0
 
 tools/build: $(CONFIGURE) tools/build.c
 	$(HOSTCC) $(CFLAGS) \
@@ -246,3 +234,27 @@ else
 dummy:
 
 endif
+
+#
+# Leave these dummy entries for now to tell people that they are going away..
+#
+lilo:
+	@echo
+	@echo Uncompressed kernel images no longer supported. Use
+	@echo \"make zlilo\" instead.
+	@echo
+	@exit 1
+
+Image:
+	@echo
+	@echo Uncompressed kernel images no longer supported. Use
+	@echo \"make zImage\" instead.
+	@echo
+	@exit 1
+
+disk:
+	@echo
+	@echo Uncompressed kernel images no longer supported. Use
+	@echo \"make zdisk\" instead.
+	@echo
+	@exit 1

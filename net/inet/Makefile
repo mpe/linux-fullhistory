@@ -18,8 +18,9 @@
 
 
 OBJS	= Space.o sock.o utils.o route.o proc.o timer.o protocol.o loopback.o \
-	  eth.o packet.o arp.o dev.o 8390.o wd.o ne.o el.o hp.o plip.o \
-	  slip.o slhc.o d_link.o auto_irq.o ip.o raw.o icmp.o tcp.o udp.o
+	  eth.o packet.o arp.o dev.o 8390.o wd.o ne.o el2.o hp.o plip.o \
+	  slip.o slhc.o d_link.o auto_irq.o ip.o raw.o icmp.o tcp.o udp.o\
+	  lance.o
 
 ifdef CONFIG_INET
 
@@ -33,6 +34,7 @@ inet.o:
 
 endif
 
+CARDS :=
 include	CONFIG
 
 
@@ -46,8 +48,8 @@ Space.o:	CONFIG Space.c Makefile
 wd.o:		CONFIG wd.c Makefile
 		$(CC) $(CPPFLAGS) $(CFLAGS) $(WD_OPTS) -c wd.c -o $@
 
-el.o:		CONFIG el.c elreg.h Makefile
-		$(CC) $(CPPFLAGS) $(CFLAGS) $(EL_OPTS) -c el.c -o $@
+el2.o:		CONFIG el2.c el2reg.h Makefile
+		$(CC) $(CPPFLAGS) $(CFLAGS) $(EL2_OPTS) -c el2.c -o $@
 
 ne.o:		CONFIG ne.c Makefile
 		$(CC) $(CPPFLAGS) $(CFLAGS) $(NE_OPTS) -c ne.c -o $@
@@ -63,6 +65,9 @@ slip.o:		CONFIG slip.c Makefile
 
 d_link.o:	CONFIG d_link.c Makefile
 		$(CC) $(CPPFLAGS) $(CFLAGS) $(DL_OPTS) -c d_link.c -o $@
+
+lance.o:	CONFIG lance.c Makefile
+		$(CC) $(CPPFLAGS) $(CFLAGS) $(AT_OPTS) -c lance.c -o $@
 
 subdirs:	dummy
 		for i in $(SUBDIRS); do (cd $$i; $(MAKE)); done

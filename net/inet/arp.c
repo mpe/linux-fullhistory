@@ -39,7 +39,6 @@
 #include <asm/segment.h>
 #include <stdarg.h>
 #include "inet.h"
-#include "timer.h"
 #include "dev.h"
 #include "eth.h"
 #include "ip.h"
@@ -410,7 +409,7 @@ arp_create(unsigned long paddr, unsigned char *addr, int hlen, int htype)
   apt->htype = htype;
   apt->flags = (ATF_INUSE | ATF_COM);	/* USED and COMPLETED entry */
   memcpy(apt->ha, addr, hlen);
-  apt->last_used = timer_seq;
+  apt->last_used = jiffies;
   cli();
   apt->next = arp_tables[hash];
   arp_tables[hash] = apt;
@@ -469,7 +468,7 @@ arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	memcpy(tbl->ha, ptr, arp->ar_hln);
 	tbl->hlen = arp->ar_hln;
 	tbl->flags |= ATF_COM;
-	tbl->last_used = timer_seq;
+	tbl->last_used = jiffies;
   } else {
 	memcpy(&dst, ptr + (arp->ar_hln * 2) + arp->ar_pln, arp->ar_pln);
 	if (chk_addr(dst) != IS_MYADDR) {
@@ -531,6 +530,7 @@ arp_send(unsigned long paddr, struct device *dev, unsigned long saddr)
 
   skb = (struct sk_buff *) kmalloc(sizeof(struct sk_buff) +
   		sizeof(struct arphdr) + (2 * dev->addr_len) +
+		dev->hard_header_len +
 		(2 * 4 /* arp->plen */), GFP_ATOMIC);
   if (skb == NULL) {
 	printk("ARP: No memory available for REQUEST %s\n", in_ntoa(paddr));
@@ -603,8 +603,8 @@ arp_find(unsigned char *haddr, unsigned long paddr, struct device *dev,
 	 * verify the address for us.
 	 */
         if ((!(apt->flags & ATF_PERM)) ||
-	    (!before(apt->last_used, timer_seq+ARP_TIMEOUT) && apt->hlen != 0)) {
-		apt->last_used = timer_seq;
+	    (!before(apt->last_used, jiffies+ARP_TIMEOUT) && apt->hlen != 0)) {
+		apt->last_used = jiffies;
 		memcpy(haddr, apt->ha, dev->addr_len);
 		return(0);
 	} else {
@@ -647,7 +647,7 @@ arp_add(unsigned long addr, unsigned char *haddr, struct device *dev)
   apt = arp_lookup(addr);
   if (apt != NULL) {
 	DPRINTF((DBG_ARP, "ARP: updating entry for %s\n", in_ntoa(addr)));
-	apt->last_used = timer_seq;
+	apt->last_used = jiffies;
 	memcpy(apt->ha, haddr , dev->addr_len);
 	return;
   }
@@ -789,7 +789,7 @@ arp_req_set(struct arpreq *req)
 
   /* We now have a pointer to an ARP entry.  Update it! */
   memcpy((char *) &apt->ha, (char *) &r.arp_ha.sa_data, hlen);
-  apt->last_used = timer_seq;
+  apt->last_used = jiffies;
   apt->flags = r.arp_flags;
 
   return(0);

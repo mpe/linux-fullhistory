@@ -28,7 +28,7 @@
 #define NR_SUPER 32
 #define NR_HASH 997
 #define NR_IHASH 131
-#define NR_FILE_LOCKS 32
+#define NR_FILE_LOCKS 64
 #define BLOCK_SIZE 1024
 #define BLOCK_SIZE_BITS 10
 #define MAX_CHRDEV 32
@@ -124,6 +124,12 @@ extern unsigned long file_table_init(unsigned long start, unsigned long end);
 #define BLKROGET 4702 /* get read-only status (0 = read_write) */
 #define BLKRRPART 4703 /* re-read partition table */
 #define BLKGETSIZE 4704 /* return device size */
+#define BLKFLSBUF 4705 /* flush buffer cache */
+
+/* These are a few other constants  only used by scsi  devices */
+
+#define SCSI_IOCTL_GET_IDLUN 0x5382
+
 
 #define BMAP_IOCTL 1	/* obsolete - kept for compatibility */
 #define FIBMAP	   1	/* bmap access */

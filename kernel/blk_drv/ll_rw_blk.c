@@ -185,6 +185,22 @@ repeat:
 				sti();
 				return;
 			      }
+			else if ( req->dev == bh->b_dev &&
+			    !req->waiting &&
+			    req->cmd == rw &&
+			    req->sector - count == sector &&
+			    req->nr_sectors < 254)
+			    	{
+			    	req->nr_sectors += count;
+			    	bh->b_reqnext = req->bh;
+			    	req->buffer = bh->b_data;
+			    	req->current_nr_sectors = count;
+			    	req->sector = sector;
+			    	bh->b_dirt = 0;
+			    	req->bh = bh;
+			    	sti();
+			    	return;
+			    }    
 			req = req->next;
 		      }
 	      }
@@ -414,6 +430,12 @@ long blk_dev_init(long mem_start, long mem_end)
 #endif
 #ifdef CONFIG_BLK_DEV_XD
 	mem_start = xd_init(mem_start,mem_end);
+#endif
+#ifdef CONFIG_CDU31A
+	mem_start = cdu31a_init(mem_start,mem_end);
+#endif
+#ifdef CONFIG_MCD
+	mem_start = mcd_init(mem_start,mem_end);
 #endif
 	if (ramdisk_size)
 		mem_start += rd_init(mem_start, ramdisk_size*1024);

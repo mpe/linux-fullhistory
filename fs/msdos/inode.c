@@ -315,7 +315,7 @@ void msdos_read_inode(struct inode *inode)
 	inode->i_uid = MSDOS_SB(inode->i_sb)->fs_uid;
 	inode->i_gid = MSDOS_SB(inode->i_sb)->fs_gid;
 	if (inode->i_ino == MSDOS_ROOT_INO) {
-		inode->i_mode = (0777 & ~MSDOS_SB(inode->i_sb)->fs_umask) |
+		inode->i_mode = (S_IRWXUGO & ~MSDOS_SB(inode->i_sb)->fs_umask) |
 		    S_IFDIR;
 		inode->i_op = &msdos_dir_inode_operations;
 		inode->i_nlink = msdos_subdirs(inode)+2;
@@ -339,7 +339,7 @@ void msdos_read_inode(struct inode *inode)
 	raw_entry = &((struct msdos_dir_entry *) (bh->b_data))
 	    [inode->i_ino & (MSDOS_DPB-1)];
 	if ((raw_entry->attr & ATTR_DIR) && !IS_FREE(raw_entry->name)) {
-		inode->i_mode = MSDOS_MKMODE(raw_entry->attr,0777 &
+		inode->i_mode = MSDOS_MKMODE(raw_entry->attr,S_IRWXUGO &
 		    ~MSDOS_SB(inode->i_sb)->fs_umask) | S_IFDIR;
 		inode->i_op = &msdos_dir_inode_operations;
 		MSDOS_I(inode)->i_start = CF_LE_W(raw_entry->start);
@@ -363,7 +363,7 @@ void msdos_read_inode(struct inode *inode)
 	}
 	else {
 		inode->i_mode = MSDOS_MKMODE(raw_entry->attr,(IS_NOEXEC(inode)
-		    ? 0666 : 0777) & ~MSDOS_SB(inode->i_sb)->fs_umask) |
+		    ? S_IRUGO|S_IWUGO : S_IRWXUGO) & ~MSDOS_SB(inode->i_sb)->fs_umask) |
 		    S_IFREG;
 		inode->i_op = MSDOS_CAN_BMAP(MSDOS_SB(inode->i_sb)) ? 
 		    &msdos_file_inode_operations :
@@ -436,10 +436,10 @@ int msdos_notify_change(int flags,struct inode *inode)
 		error = -EPERM;
 	}
 	if (IS_NOEXEC(inode) && !S_ISDIR(inode->i_mode))
-		inode->i_mode &= S_IFMT | 0666;
-	else inode->i_mode |= 0111;
+		inode->i_mode &= S_IFMT | S_IRUGO | S_IWUGO;
+	else inode->i_mode |= S_IXUGO;
 	inode->i_mode = ((inode->i_mode & S_IFMT) | ((((inode->i_mode & S_IRWXU
-	    & ~MSDOS_SB(inode->i_sb)->fs_umask) | S_IRUSR) >> 6)*0111)) &
+	    & ~MSDOS_SB(inode->i_sb)->fs_umask) | S_IRUSR) >> 6)*S_IXUGO)) &
 	    ~MSDOS_SB(inode->i_sb)->fs_umask;
 	return MSDOS_SB(inode->i_sb)->quiet ? 0 : error;
 }

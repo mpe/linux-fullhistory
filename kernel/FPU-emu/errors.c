@@ -68,25 +68,23 @@ void emu_printall()
   RE_ENTRANT_CHECK_OFF
   byte1 = get_fs_byte((unsigned char *) FPU_ORIG_EIP);
   FPU_modrm = get_fs_byte(1 + (unsigned char *) FPU_ORIG_EIP);
+  partial_status = status_word();
 
 #ifdef DEBUGGING
-if ( status_word & SW_Backward )    printk("SW: backward compatibility\n");
-if ( status_word & SW_C3 )          printk("SW: condition bit 3\n");
-if ( status_word & SW_C2 )          printk("SW: condition bit 2\n");
-if ( status_word & SW_C1 )          printk("SW: condition bit 1\n");
-if ( status_word & SW_C0 )          printk("SW: condition bit 0\n");
-if ( status_word & SW_Summary )     printk("SW: exception summary\n");
-if ( status_word & SW_Stack_Fault ) printk("SW: stack fault\n");
-if ( status_word & SW_Precision )   printk("SW: loss of precision\n");
-if ( status_word & SW_Underflow )   printk("SW: underflow\n");
-if ( status_word & SW_Overflow )    printk("SW: overflow\n");
-if ( status_word & SW_Zero_Div )    printk("SW: divide by zero\n");
-if ( status_word & SW_Denorm_Op )   printk("SW: denormalized operand\n");
-if ( status_word & SW_Invalid )     printk("SW: invalid operation\n");
+if ( partial_status & SW_Backward )    printk("SW: backward compatibility\n");
+if ( partial_status & SW_C3 )          printk("SW: condition bit 3\n");
+if ( partial_status & SW_C2 )          printk("SW: condition bit 2\n");
+if ( partial_status & SW_C1 )          printk("SW: condition bit 1\n");
+if ( partial_status & SW_C0 )          printk("SW: condition bit 0\n");
+if ( partial_status & SW_Summary )     printk("SW: exception summary\n");
+if ( partial_status & SW_Stack_Fault ) printk("SW: stack fault\n");
+if ( partial_status & SW_Precision )   printk("SW: loss of precision\n");
+if ( partial_status & SW_Underflow )   printk("SW: underflow\n");
+if ( partial_status & SW_Overflow )    printk("SW: overflow\n");
+if ( partial_status & SW_Zero_Div )    printk("SW: divide by zero\n");
+if ( partial_status & SW_Denorm_Op )   printk("SW: denormalized operand\n");
+if ( partial_status & SW_Invalid )     printk("SW: invalid operation\n");
 #endif DEBUGGING
-
-  status_word = status_word & ~SW_Top;
-  status_word |= (top&7) << SW_Top_Shift;
 
   printk("At %p: %02x ", FPU_ORIG_EIP, byte1);
   if (FPU_modrm >= 0300)
@@ -96,15 +94,15 @@ if ( status_word & SW_Invalid )     printk("SW: invalid operation\n");
 	   (FPU_modrm >> 3) & 7, (FPU_modrm >> 6) & 3, FPU_modrm & 7);
 
   printk(" SW: b=%d st=%d es=%d sf=%d cc=%d%d%d%d ef=%d%d%d%d%d%d\n",
-	 status_word & 0x8000 ? 1 : 0,   /* busy */
-	 (status_word & 0x3800) >> 11,   /* stack top pointer */
-	 status_word & 0x80 ? 1 : 0,     /* Error summary status */
-	 status_word & 0x40 ? 1 : 0,     /* Stack flag */
-	 status_word & SW_C3?1:0, status_word & SW_C2?1:0, /* cc */
-	 status_word & SW_C1?1:0, status_word & SW_C0?1:0, /* cc */
-	 status_word & SW_Precision?1:0, status_word & SW_Underflow?1:0,
-	 status_word & SW_Overflow?1:0, status_word & SW_Zero_Div?1:0,
-	 status_word & SW_Denorm_Op?1:0, status_word & SW_Invalid?1:0);
+	 partial_status & 0x8000 ? 1 : 0,   /* busy */
+	 (partial_status & 0x3800) >> 11,   /* stack top pointer */
+	 partial_status & 0x80 ? 1 : 0,     /* Error summary status */
+	 partial_status & 0x40 ? 1 : 0,     /* Stack flag */
+	 partial_status & SW_C3?1:0, partial_status & SW_C2?1:0, /* cc */
+	 partial_status & SW_C1?1:0, partial_status & SW_C0?1:0, /* cc */
+	 partial_status & SW_Precision?1:0, partial_status & SW_Underflow?1:0,
+	 partial_status & SW_Overflow?1:0, partial_status & SW_Zero_Div?1:0,
+	 partial_status & SW_Denorm_Op?1:0, partial_status & SW_Invalid?1:0);
   
 printk(" CW: ic=%d rc=%d%d pc=%d%d iem=%d     ef=%d%d%d%d%d%d\n",
 	 control_word & 0x1000 ? 1 : 0,
@@ -124,12 +122,14 @@ printk(" CW: ic=%d rc=%d%d pc=%d%d iem=%d     ef=%d%d%d%d%d%d\n",
 	  continue;
 	  break;
 	case TW_Zero:
+#if 0
 	  printk("st(%d)  %c .0000 0000 0000 0000         ",
 		 i, r->sign ? '-' : '+');
 	  break;
+#endif
 	case TW_Valid:
 	case TW_NaN:
-	case TW_Denormal:
+/*	case TW_Denormal: */
 	case TW_Infinity:
 	  printk("st(%d)  %c .%04x %04x %04x %04x e%+-6d ", i,
 		 r->sign ? '-' : '+',
@@ -179,21 +179,22 @@ static struct {
  error was detected.
 
  Internal error types:
-       0x14   in e14.c
+       0      in load_store.c
+       0x14   in fpu_etc.c
        0x1nn  in a *.c file:
               0x101  in reg_add_sub.c
               0x102  in reg_mul.c
               0x103  in poly_sin.c
-              0x104  in poly_tan.c
+              0x104  in poly_atan.c
               0x105  in reg_mul.c
-	      0x106  in reg_mov.c
+	      0x106  in reg_ld_str.c
               0x107  in fpu_trig.c
 	      0x108  in reg_compare.c
 	      0x109  in reg_compare.c
 	      0x110  in reg_add_sub.c
-	      0x111  in interface.c
+	      0x111  in fpe_entry.c
 	      0x112  in fpu_trig.c
-	      0x113  in reg_add_sub.c
+	      0x113  in errors.c
 	      0x114  in reg_ld_str.c
 	      0x115  in fpu_trig.c
 	      0x116  in fpu_trig.c
@@ -204,8 +205,11 @@ static struct {
 	      0x121  in reg_compare.c
 	      0x122  in reg_compare.c
 	      0x123  in reg_compare.c
+	      0x125  in fpu_trig.c
+	      0x126  in fpu_entry.c
+	      0x127  in poly_2xm1.c
        0x2nn  in an *.s file:
-              0x201  in reg_u_add.S
+              0x201  in reg_u_add.S, reg_round.S
               0x202  in reg_u_div.S
               0x203  in reg_u_div.S
               0x204  in reg_u_div.S
@@ -225,7 +229,7 @@ static struct {
 	      0x218  in reg_round.S
  */
 
-extern "C" void exception(int n)
+void exception(int n)
 {
   int i, int_type;
 
@@ -235,22 +239,23 @@ extern "C" void exception(int n)
       int_type = n - EX_INTERNAL;
       n = EX_INTERNAL;
       /* Set lots of exception bits! */
-      status_word |= (SW_Exc_Mask | SW_Summary | FPU_BUSY);
+      partial_status |= (SW_Exc_Mask | SW_Summary | SW_Backward);
     }
   else
     {
       /* Extract only the bits which we use to set the status word */
       n &= (SW_Exc_Mask);
       /* Set the corresponding exception bit */
-      status_word |= n;
-      if ( status_word & ~control_word & CW_Exceptions )
-	status_word |= SW_Summary;
+      partial_status |= n;
+      /* Set summary bits iff exception isn't masked */
+      if ( partial_status & ~control_word & CW_Exceptions )
+	partial_status |= (SW_Summary | SW_Backward);
       if ( n & (SW_Stack_Fault | EX_Precision) )
 	{
 	  if ( !(n & SW_C1) )
 	    /* This bit distinguishes over- from underflow for a stack fault,
 	       and roundup from round-down for precision loss. */
-	    status_word &= ~SW_C1;
+	    partial_status &= ~SW_C1;
 	}
     }
 
@@ -305,12 +310,15 @@ extern "C" void exception(int n)
 }
 
 
-/* Real operation attempted on two operands, one a NaN */
-extern "C" void real_2op_NaN(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
+/* Real operation attempted on two operands, one a NaN. */
+/* Returns nz if the exception is unmasked */
+extern "C" int real_2op_NaN(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
 {
   FPU_REG *x;
   int signalling;
 
+  /* The default result for the case of two "equal" NaNs (signs may
+     differ) is chosen to reproduce 80486 behaviour */
   x = a;
   if (a->tag == TW_NaN)
     {
@@ -349,7 +357,7 @@ extern "C" void real_2op_NaN(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
       if ( !(x->sigh & 0x80000000) )  /* pseudo-NaN ? */
 	x = &CONST_QNaN;
       reg_move(x, dest);
-      return;
+      return 0;
     }
 
   if ( control_word & CW_Invalid )
@@ -364,28 +372,30 @@ extern "C" void real_2op_NaN(FPU_REG *a, FPU_REG *b, FPU_REG *dest)
 
   EXCEPTION(EX_Invalid);
   
-  return;
+  return !(control_word & CW_Invalid);
 }
 
+
 /* Invalid arith operation on Valid registers */
-extern "C" void arith_invalid(FPU_REG *dest)
+/* Returns nz if the exception is unmasked */
+extern "C" int arith_invalid(FPU_REG *dest)
 {
+
+  EXCEPTION(EX_Invalid);
   
   if ( control_word & CW_Invalid )
     {
       /* The masked response */
       reg_move(&CONST_QNaN, dest);
     }
-
-  EXCEPTION(EX_Invalid);
   
-  return;
+  return !(control_word & CW_Invalid);
 
 }
 
 
 /* Divide a finite number by zero */
-extern "C" void divide_by_zero(int sign, FPU_REG *dest)
+extern "C" int divide_by_zero(int sign, FPU_REG *dest)
 {
 
   if ( control_word & CW_ZeroDiv )
@@ -397,8 +407,25 @@ extern "C" void divide_by_zero(int sign, FPU_REG *dest)
  
   EXCEPTION(EX_ZeroDiv);
 
-  return;
+  return !(control_word & CW_ZeroDiv);
 
+}
+
+
+/* This may be called often, so keep it lean */
+int set_precision_flag(int flags)
+{
+  if ( control_word & CW_Precision )
+    {
+      partial_status &= ~(SW_C1 & flags);
+      partial_status |= flags;   /* The masked response */
+      return 0;
+    }
+  else
+    {
+      exception(flags);
+      return 1;
+    }
 }
 
 
@@ -406,7 +433,7 @@ extern "C" void divide_by_zero(int sign, FPU_REG *dest)
 extern "C" void set_precision_flag_up(void)
 {
   if ( control_word & CW_Precision )
-    status_word |= (SW_Precision | SW_C1);   /* The masked response */
+    partial_status |= (SW_Precision | SW_C1);   /* The masked response */
   else
     exception(EX_Precision | SW_C1);
 
@@ -418,8 +445,8 @@ extern "C" void set_precision_flag_down(void)
 {
   if ( control_word & CW_Precision )
     {   /* The masked response */
-      status_word &= ~SW_C1;
-      status_word |= SW_Precision;
+      partial_status &= ~SW_C1;
+      partial_status |= SW_Precision;
     }
   else
     exception(EX_Precision);
@@ -430,7 +457,7 @@ extern "C" int denormal_operand(void)
 {
   if ( control_word & CW_Denormal )
     {   /* The masked response */
-      status_word |= SW_Denorm_Op;
+      partial_status |= SW_Denorm_Op;
       return 0;
     }
   else
@@ -441,14 +468,14 @@ extern "C" int denormal_operand(void)
 }
 
 
-extern "C" void arith_overflow(FPU_REG *dest)
+extern "C" int arith_overflow(FPU_REG *dest)
 {
 
   if ( control_word & CW_Overflow )
     {
       char sign;
       /* The masked response */
-/* **** The response here depends upon the rounding mode */
+/* ###### The response here depends upon the rounding mode */
       sign = dest->sign;
       reg_move(&CONST_INF, dest);
       dest->sign = sign;
@@ -459,33 +486,50 @@ extern "C" void arith_overflow(FPU_REG *dest)
       dest->exp -= (3 * (1 << 13));
     }
 
-  /* By definition, precision is lost.
-     It appears that the roundup bit (C1) is also set by convention. */
-  EXCEPTION(EX_Overflow | EX_Precision | SW_C1);
+  EXCEPTION(EX_Overflow);
+  if ( control_word & CW_Overflow )
+    {
+      /* The overflow exception is masked. */
+      /* By definition, precision is lost.
+	 The roundup bit (C1) is also set because we have
+	 "rounded" upwards to Infinity. */
+      EXCEPTION(EX_Precision | SW_C1);
+      return !(control_word & CW_Precision);
+    }
 
-  return;
+  return !(control_word & CW_Overflow);
 
 }
 
 
-extern "C" void arith_underflow(FPU_REG *dest)
+extern "C" int arith_underflow(FPU_REG *dest)
 {
 
   if ( control_word & CW_Underflow )
     {
       /* The masked response */
       if ( dest->exp <= EXP_UNDER - 63 )
-	reg_move(&CONST_Z, dest);
+	{
+	  reg_move(&CONST_Z, dest);
+	  partial_status &= ~SW_C1;       /* Round down. */
+	}
     }
   else
     {
-      /* Add the magic number to the exponent */
+      /* Add the magic number to the exponent. */
       dest->exp += (3 * (1 << 13));
     }
 
   EXCEPTION(EX_Underflow);
+  if ( control_word & CW_Underflow )
+    {
+      /* The underflow exception is masked. */
+      EXCEPTION(EX_Precision);
+      return !(control_word & CW_Precision);
+    }
 
-  return;
+  return !(control_word & CW_Underflow);
+
 }
 
 

@@ -18,7 +18,15 @@
 #include <asm/segment.h>
 #include <linux/errno.h>
 
+#if defined(CONFIG_BLK_DEV_SR)
 extern int check_cdrom_media_change(int, int);
+#endif
+#if defined(CONFIG_CDU31A)
+extern int check_cdu31a_media_change(int, int);
+#endif
+#if defined(CONFIG_MCD)
+extern int check_mcd_media_change(int, int);
+#endif
 
 #ifdef LEAK_CHECK
 static int check_malloc = 0;
@@ -254,11 +262,27 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 		printk("get root inode failed\n");
 		return NULL;
 	}
+#if defined(CONFIG_BLK_DEV_SR)
 	if(MAJOR(s->s_dev) == 11) {
-		/* Chech this one more time. */
+		/* Check this one more time. */
 		if(check_cdrom_media_change(s->s_dev, 0))
 		  goto out;
 	};
+#endif
+#if defined(CONFIG_CDU31A)
+	if(MAJOR(s->s_dev) == 15) {
+		/* Check this one more time. */
+		if(check_cdu31a_media_change(s->s_dev, 0))
+		  goto out;
+	};
+#endif
+#if defined(CONFIG_MCD)
+	if(MAJOR(s->s_dev) == 23) {
+		/* Check this one more time. */
+		if(check_mcd_media_change(s->s_dev, 0))
+		  goto out;
+	};
+#endif
 	return s;
  out: /* Kick out for various error conditions */
 	brelse(bh);
@@ -321,15 +345,15 @@ void isofs_read_inode(struct inode * inode)
 		raw_inode = ((struct iso_directory_record *) pnt);
 	};
 
-	inode->i_mode = 0444; /* Everybody gets to read the file. */
+	inode->i_mode = S_IRUGO; /* Everybody gets to read the file. */
 	inode->i_nlink = 1;
 	
 	if (raw_inode->flags[-high_sierra] & 2) {
-		inode->i_mode = 0555 | S_IFDIR;
+		inode->i_mode = S_IRUGO | S_IXUGO | S_IFDIR;
 		inode->i_nlink = 2; /* There are always at least 2.  It is
 				       hard to figure out what is correct*/
 	} else {
-		inode->i_mode = 0444; /* Everybody gets to read the file. */
+		inode->i_mode = S_IRUGO; /* Everybody gets to read the file. */
 		inode->i_nlink = 1;
 	        inode->i_mode |= S_IFREG;
 /* If there are no periods in the name, then set the execute permission bit */
@@ -337,7 +361,7 @@ void isofs_read_inode(struct inode * inode)
 			if(raw_inode->name[i]=='.' || raw_inode->name[i]==';')
 				break;
 		if(i == raw_inode->name_len[0] || raw_inode->name[i] == ';') 
-			inode->i_mode |= 0111; /* execute permission */
+			inode->i_mode |= S_IXUGO; /* execute permission */
 	};
 	inode->i_uid = 0;
 	inode->i_gid = 0;

@@ -13,6 +13,7 @@
 #include <linux/keyboard.h>
 #include <linux/kd.h>
 #include <linux/vt.h>
+#include <linux/string.h>
 
 #include <asm/io.h>
 #include <asm/segment.h>
@@ -255,6 +256,60 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		if (KVAL(v) > max_vals[KTYP(v)])
 			return -EINVAL;
 		key_map[s][i] = v;
+		return 0;
+	}
+
+	case KDGKBSENT:
+	{
+		const struct kbsentry *a = (struct kbsentry *)arg;
+		u_char i;
+		char *p;
+		u_char *q;
+
+		verify_area(VERIFY_WRITE, (void *)a, sizeof(struct kbsentry));
+		if ((i = get_fs_byte(&a->kb_func)) >= NR_FUNC)
+			return -EINVAL;
+		q = a->kb_string;
+		for (p = func_table[i]; *p; p++)
+			put_fs_byte(*p, q++);
+		put_fs_byte(0, q);
+		return 0;
+	}
+
+	case KDSKBSENT:
+	{
+		struct kbsentry * const a = (struct kbsentry *)arg;
+		int delta;
+		char *first_free;
+		u_char i;
+		int k;
+		u_char *p;
+		char *q;
+
+		verify_area(VERIFY_READ, (void *)a, sizeof(struct kbsentry));
+		if ((i = get_fs_byte(&a->kb_func)) >= NR_FUNC)
+			return -EINVAL;
+		delta = -strlen(func_table[i]);
+		for (p = a->kb_string; get_fs_byte(p); p++)
+			delta++;
+		first_free = func_table[NR_FUNC - 1] +
+			strlen(func_table[NR_FUNC - 1]) + 1;
+		if (
+			delta > 0 &&
+			first_free + delta > func_buf + FUNC_BUFSIZE
+		)
+			return -EINVAL;
+		if (i < NR_FUNC - 1) {
+			memmove(
+				func_table[i + 1] + delta,
+				func_table[i + 1],
+				first_free - func_table[i + 1]);
+			for (k = i + 1; k < NR_FUNC; k++)
+				func_table[k] += delta;
+		}
+		for (p = a->kb_string, q = func_table[i]; ; p++, q++)
+			if (!(*q = get_fs_byte(p)))
+				break;
 		return 0;
 	}
 

@@ -40,9 +40,6 @@ static int reg_offset[] = {
 #define REG_(x) (*(long *)(reg_offset[(x)]+(char *) FPU_info))
 
 
-void  *FPU_data_address;
-
-
 /* Decode the SIB byte. This function assumes mod != 0 */
 static void *sib(int mod)
 {
@@ -117,7 +114,12 @@ void get_address(unsigned char FPU_modrm)
   unsigned char mod;
   long *cpu_reg_ptr;
   int offset = 0;     /* Initialized just to stop compiler warnings. */
-  
+
+#ifndef PECULIAR_486
+  /* This is a reasonable place to do this */
+  FPU_data_selector = FPU_DS;
+#endif PECULIAR_486
+
   mod = (FPU_modrm >> 6) & 3;
 
   if (FPU_rm == 4 && mod != 3)

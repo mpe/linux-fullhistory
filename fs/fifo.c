@@ -99,7 +99,7 @@ static int fifo_open(struct inode * inode,struct file * filp)
 	}
 	if (retval || PIPE_BASE(*inode))
 		return retval;
-	page = get_free_page(GFP_KERNEL);
+	page = __get_free_page(GFP_KERNEL);
 	if (PIPE_BASE(*inode)) {
 		free_page(page);
 		return 0;

@@ -58,6 +58,7 @@
 struct tty_struct *tty_table[MAX_TTYS];
 struct termios *tty_termios[MAX_TTYS];	/* We need to keep the termios state */
 				  	/* around, even when a tty is closed */
+struct termios *termios_locked[MAX_TTYS]; /* Bitfield of locked termios flags*/
 struct tty_ldisc ldiscs[NR_LDISCS];	/* line disc dispatch table	*/
 int tty_check_write[MAX_TTYS/32];	/* bitfield for the bh handler */
 
@@ -125,9 +126,11 @@ int get_tty_queue(struct tty_queue * queue)
 
 /*
  * This routine copies out a maximum of buflen characters from the
- * read_q; it is a convenience for line disciplins so they can grab a
+ * read_q; it is a convenience for line disciplines so they can grab a
  * large block of data without calling get_tty_char directly.  It
- * returns the number of characters actually read.
+ * returns the number of characters actually read. Return terminates
+ * if an error character is read from the queue and the return value
+ * is negated.
  */
 int tty_read_raw_data(struct tty_struct *tty, unsigned char *bufp, int buflen)
 {
@@ -135,19 +138,21 @@ int tty_read_raw_data(struct tty_struct *tty, unsigned char *bufp, int buflen)
 	unsigned char	*p = bufp;
 	unsigned long flags;
 	int head, tail;
+	int ok = 1;
 
 	save_flags(flags);
 	cli();
 	tail = tty->read_q.tail;
 	head = tty->read_q.head;
-	while ((result < buflen) && (tail!=head)) {
+	while ((result < buflen) && (tail!=head) && ok) {
+		ok = !clear_bit (tail, &tty->readq_flags);
 		*p++ =  tty->read_q.buf[tail++];
 		tail &= TTY_BUF_SIZE-1;
 		result++;
 	}
 	tty->read_q.tail = tail;
 	restore_flags(flags);
-	return result;
+	return (ok) ? result : -result;
 }
 
 
@@ -616,6 +621,8 @@ void copy_to_cooked(struct tty_struct * tty)
 			        tty->status_changed = 1;
 				tty->ctrl_status |= TIOCPKT_STOP;
 				tty->stopped=1;
+				if (tty->stop)
+					(tty->stop)(tty);
 				if (IS_A_CONSOLE(tty->line)) {
 					set_vc_kbd_flag(kbd_table + fg_console, VC_SCROLLOCK);
 					set_leds();
@@ -627,6 +634,8 @@ void copy_to_cooked(struct tty_struct * tty)
 			        tty->status_changed = 1;
 				tty->ctrl_status |= TIOCPKT_START;
 				tty->stopped=0;
+				if (tty->start)
+					(tty->start)(tty);
 				if (IS_A_CONSOLE(tty->line)) {
 					clr_vc_kbd_flag(kbd_table + fg_console, VC_SCROLLOCK);
 					set_leds();
@@ -787,20 +796,22 @@ static int read_chan(struct tty_struct * tty, struct file * file, char * buf, in
 		if (tty->throttle && (LEFT(&tty->secondary) >= SQ_THRESHOLD_HW)
 		    && clear_bit(TTY_SQ_THROTTLED, &tty->flags))
 			tty->throttle(tty, TTY_THROTTLE_SQ_AVAIL);
+		if (tty->link) {
+			if (IS_A_PTY_MASTER(tty->line)) {
+				if ((tty->flags & (1 << TTY_SLAVE_OPENED))
+				    && tty->link->count <= 1) {
+					file->f_flags &= ~O_NONBLOCK;
+					break;
+				}
+			} else if (!tty->link->count) {
+				file->f_flags &= ~O_NONBLOCK;
+				break;
+			}
+		}
 		if (b-buf >= minimum || !current->timeout)
 			break;
 		if (current->signal & ~current->blocked) 
 			break;
-		if (tty->link) {
-			if (IS_A_PTY_MASTER(tty->line)) {
-				if ((tty->flags & (1 << TTY_SLAVE_OPENED))
-				    && tty->link->count <= 1)
-					break;
-			} else {
-				if (!tty->link->count)
-					break;
-			}
-		}
 		TTY_READ_FLUSH(tty);
 		if (tty->link)
 			TTY_WRITE_FLUSH(tty->link);
@@ -1042,47 +1053,67 @@ static int tty_write(struct inode * inode, struct file * file, char * buf, int c
 static int init_dev(int dev)
 {
 	struct tty_struct *tty, *o_tty;
-	struct termios *tp, *o_tp;
+	struct termios *tp, *o_tp, *ltp, *o_ltp;
 	int retval;
 	int o_dev;
 
 	o_dev = PTY_OTHER(dev);
 	tty = o_tty = NULL;
 	tp = o_tp = NULL;
+	ltp = o_ltp = NULL;
 repeat:
 	retval = -EAGAIN;
 	if (IS_A_PTY_MASTER(dev) && tty_table[dev] && tty_table[dev]->count)
 		goto end_init;
 	retval = -ENOMEM;
 	if (!tty_table[dev] && !tty) {
-		tty = (struct tty_struct *) get_free_page(GFP_KERNEL);
-		if (!tty)
+		if (!(tty = (struct tty_struct*) get_free_page(GFP_KERNEL)))
 			goto end_init;
 		initialize_tty_struct(dev, tty);
 		goto repeat;
 	}
 	if (!tty_termios[dev] && !tp) {
-		tp = (struct termios *) kmalloc(sizeof(struct termios), GFP_KERNEL);
+		tp = (struct termios *) kmalloc(sizeof(struct termios),
+						GFP_KERNEL);
 		if (!tp)
 			goto end_init;
 		initialize_termios(dev, tp);
 		goto repeat;
 	}
+	if (!termios_locked[dev] && !ltp) {
+		ltp = (struct termios *) kmalloc(sizeof(struct termios),
+						 GFP_KERNEL);
+		if (!ltp)
+			goto end_init;
+		memset(ltp, 0, sizeof(struct termios));
+		goto repeat;
+	}
 	if (IS_A_PTY(dev)) {
 		if (!tty_table[o_dev] && !o_tty) {
-			o_tty = (struct tty_struct *) get_free_page(GFP_KERNEL);
+			o_tty = (struct tty_struct *)
+				get_free_page(GFP_KERNEL);
 			if (!o_tty)
 				goto end_init;
 			initialize_tty_struct(o_dev, o_tty);
 			goto repeat;
 		}
 		if (!tty_termios[o_dev] && !o_tp) {
-			o_tp = (struct termios *) kmalloc(sizeof(struct termios), GFP_KERNEL);
+			o_tp = (struct termios *)
+				kmalloc(sizeof(struct termios), GFP_KERNEL);
 			if (!o_tp)
 				goto end_init;
 			initialize_termios(o_dev, o_tp);
 			goto repeat;
 		}
+		if (!termios_locked[o_dev] && !o_ltp) {
+			o_ltp = (struct termios *)
+				kmalloc(sizeof(struct termios), GFP_KERNEL);
+			if (!o_ltp)
+				goto end_init;
+			memset(o_ltp, 0, sizeof(struct termios));
+			goto repeat;
+		}
+		
 	}
 	/* Now we have allocated all the structures: update all the pointers.. */
 	if (!tty_termios[dev]) {
@@ -1094,10 +1125,18 @@ repeat:
 		tty_table[dev] = tty;
 		tty = NULL;
 	}
+	if (!termios_locked[dev]) {
+		termios_locked[dev] = ltp;
+		ltp = NULL;
+	}
 	if (IS_A_PTY(dev)) {
 		if (!tty_termios[o_dev]) {
 			tty_termios[o_dev] = o_tp;
 			o_tp = NULL;
+		}
+		if (!termios_locked[o_dev]) {
+			termios_locked[o_dev] = o_ltp;
+			o_ltp = NULL;
 		}
 		if (!tty_table[o_dev]) {
 			o_tty->termios = tty_termios[o_dev];
@@ -1120,6 +1159,10 @@ end_init:
 		kfree_s(tp, sizeof(struct termios));
 	if (o_tp)
 		kfree_s(o_tp, sizeof(struct termios));
+	if (ltp)
+		kfree_s(ltp, sizeof(struct termios));
+	if (o_ltp)
+		kfree_s(o_ltp, sizeof(struct termios));
 	return retval;
 }
 
@@ -1405,7 +1448,7 @@ void do_SAK( struct tty_struct *tty)
 		    ((session > 0) && ((*p)->session == session)))
 			send_sig(SIGKILL, *p, 1);
 		else {
-			for (i=0; i < NR_FILE; i++) {
+			for (i=0; i < NR_OPEN; i++) {
 				filp = (*p)->filp[i];
 				if (filp && (filp->f_op == &tty_fops) &&
 				    (MINOR(filp->f_rdev) == line)) {
@@ -1581,8 +1624,8 @@ long tty_init(long kmem_start)
 {
 	int i;
 
-	if (sizeof(struct tty_struct) > 4096)
-		panic("size of tty structure > 4096!");
+	if (sizeof(struct tty_struct) > PAGE_SIZE)
+		panic("size of tty structure > PAGE_SIZE!");
 	if (register_chrdev(4,"tty",&tty_fops))
 		panic("unable to get major 4 for tty device");
 	if (register_chrdev(5,"tty",&tty_fops))

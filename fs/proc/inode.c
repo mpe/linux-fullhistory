@@ -61,7 +61,7 @@ struct super_block *proc_read_super(struct super_block *s,void *data,
 void proc_statfs(struct super_block *sb, struct statfs *buf)
 {
 	put_fs_long(PROC_SUPER_MAGIC, &buf->f_type);
-	put_fs_long(1024, &buf->f_bsize);
+	put_fs_long(PAGE_SIZE/sizeof(long), &buf->f_bsize);
 	put_fs_long(0, &buf->f_blocks);
 	put_fs_long(0, &buf->f_bfree);
 	put_fs_long(0, &buf->f_bavail);
@@ -94,7 +94,7 @@ void proc_read_inode(struct inode * inode)
 	if (!p || i >= NR_TASKS)
 		return;
 	if (ino == PROC_ROOT_INO) {
-		inode->i_mode = S_IFDIR | 0555;
+		inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO;
 		inode->i_nlink = 2;
 		for (i = 1 ; i < NR_TASKS ; i++)
 			if (task[i])
@@ -103,23 +103,23 @@ void proc_read_inode(struct inode * inode)
 		return;
 	}
 	if ((ino >= 128) && (ino <= 160)) { /* files within /proc/net */
-		inode->i_mode = S_IFREG | 0444;
+		inode->i_mode = S_IFREG | S_IRUGO;
 		inode->i_op = &proc_net_inode_operations;
 		return;
 	}
 	if (!pid) {
 		switch (ino) {
 			case 5:
-				inode->i_mode = S_IFREG | 0444;
+				inode->i_mode = S_IFREG | S_IRUGO;
 				inode->i_op = &proc_kmsg_inode_operations;
 				break;
 			case 8: /* for the net directory */
-				inode->i_mode = S_IFDIR | 0555;
+				inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO;
 				inode->i_nlink = 2;
 				inode->i_op = &proc_net_inode_operations;
 				break;
 			default:
-				inode->i_mode = S_IFREG | 0444;
+				inode->i_mode = S_IFREG | S_IRUGO;
 				inode->i_op = &proc_array_inode_operations;
 				break;
 		}
@@ -131,23 +131,23 @@ void proc_read_inode(struct inode * inode)
 	switch (ino) {
 		case 2:
 			inode->i_nlink = 4;
-			inode->i_mode = S_IFDIR | 0555;
+			inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO;
 			inode->i_op = &proc_base_inode_operations;
 			return;
 		case 3:
 			inode->i_op = &proc_mem_inode_operations;
-			inode->i_mode = S_IFREG | 0600;
+			inode->i_mode = S_IFREG | S_IRUSR | S_IWUSR;
 			return;
 		case 4:
 		case 5:
 		case 6:
 			inode->i_op = &proc_link_inode_operations;
 			inode->i_size = 64;
-			inode->i_mode = S_IFLNK | 0700;
+			inode->i_mode = S_IFLNK | S_IRWXU;
 			return;
 		case 7:
 		case 8:
-			inode->i_mode = S_IFDIR | 0500;
+			inode->i_mode = S_IFDIR | S_IRUSR | S_IXUSR;
 			inode->i_op = &proc_fd_inode_operations;
 			inode->i_nlink = 2;
 			return;
@@ -155,7 +155,7 @@ void proc_read_inode(struct inode * inode)
 		case 10:
 		case 11:
 		case 12:
-			inode->i_mode = S_IFREG | 0444;
+			inode->i_mode = S_IFREG | S_IRUGO;
 			inode->i_op = &proc_array_inode_operations;
 			return;
 	}
@@ -166,7 +166,7 @@ void proc_read_inode(struct inode * inode)
 				return;
 			inode->i_op = &proc_link_inode_operations;
 			inode->i_size = 64;
-			inode->i_mode = S_IFLNK | 0700;
+			inode->i_mode = S_IFLNK | S_IRWXU;
 			return;
 		case 2:
 			ino &= 0xff;
@@ -181,7 +181,7 @@ void proc_read_inode(struct inode * inode)
 			}
 			inode->i_op = &proc_link_inode_operations;
 			inode->i_size = 64;
-			inode->i_mode = S_IFLNK | 0700;
+			inode->i_mode = S_IFLNK | S_IRWXU;
 			return;
 	}
 	return;

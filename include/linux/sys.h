@@ -129,6 +129,7 @@ extern int sys_sigreturn();
 extern int sys_setdomainname();
 extern int sys_olduname();
 extern int sys_old_syscall();
+extern int sys_modify_ldt();
 
 /*
  * These are system calls that will be removed at some time
@@ -167,7 +168,7 @@ sys_profil, sys_statfs, sys_fstatfs, sys_ioperm, sys_socketcall,
 sys_syslog, sys_setitimer, sys_getitimer, sys_newstat, sys_newlstat,
 sys_newfstat, sys_uname, sys_iopl, sys_vhangup, sys_idle, sys_vm86,
 sys_wait4, sys_swapoff, sys_sysinfo, sys_ipc, sys_fsync, sys_sigreturn,
-sys_clone, sys_setdomainname, sys_newuname};
+sys_clone, sys_setdomainname, sys_newuname, sys_modify_ldt};
 
 }
 

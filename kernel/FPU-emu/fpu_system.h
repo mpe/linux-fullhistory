@@ -27,7 +27,7 @@
 #define FPU_lookahead           (I387.soft.lookahead)
 #define FPU_entry_eip           (I387.soft.entry_eip)
 
-#define status_word		(I387.soft.swd)
+#define partial_status       	(I387.soft.swd)
 #define control_word		(I387.soft.cwd)
 #define regs			(I387.soft.regs)
 #define top			(I387.soft.top)
@@ -36,5 +36,8 @@
 #define cs_selector		(I387.soft.fcs)
 #define data_operand_offset	(I387.soft.foo)
 #define operand_selector	(I387.soft.fos)
+
+/* ######## temporary and ugly ;-) */
+#define FPU_data_address        ((void *)(I387.soft.twd))
 
 #endif

@@ -402,7 +402,7 @@ static void scsi_debug_intr_handle(void)
     };
 
     if(i == SCSI_DEBUG_MAILBOXES){
-      pending = 0x7fffffff;
+      pending = INT_MAX;
       for(i=0;i<SCSI_DEBUG_MAILBOXES; i++) {
 	if (SCint[i] == 0) continue;
 	if (timeout[i] == 0) continue;
@@ -412,7 +412,7 @@ static void scsi_debug_intr_handle(void)
 	  continue;
 	};
       };
-      if (pending && pending != 0x7fffffff) {
+      if (pending && pending != INT_MAX) {
 	timer_table[SCSI_DEBUG_TIMER].expires = 
 	  (pending <= jiffies ? jiffies+1 : pending);
 	timer_active |= 1 << SCSI_DEBUG_TIMER;

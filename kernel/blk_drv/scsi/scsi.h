@@ -76,28 +76,8 @@
 #define MODE_SELECT_10		0x55
 #define MODE_SENSE_10		0x5a
 
-static __inline__ int COMMAND_SIZE (int opcode) {
-    int group = (opcode >> 5) & 7;
-    switch (group) {
-    case 0:
-        return 6;
-    case 1:
-    case 2:
-        return 10;
-    case 3:
-    case 4:
-        printk("COMMAND_SIZE : reserved command group %d\n", group);
-        panic ("");
-    case 5:
-        return 12;
-    default:
-#ifdef DEBUG
-        printk("COMMAND_SIZE : vendor specific command group %d - assuming"
-	       " 10 bytes\n", group);
-#endif
-	return 10;
-    }
-}
+extern const unsigned char scsi_command_size[8];
+#define COMMAND_SIZE(opcode) scsi_command_size[((opcode) >> 5) & 7]
 
 /*
 	MESSAGE CODES
@@ -206,6 +186,7 @@ static __inline__ int COMMAND_SIZE (int opcode) {
 #define SUGGEST_ABORT		0x20 
 #define SUGGEST_REMAP		0x30
 #define SUGGEST_DIE		0x40
+#define SUGGEST_SENSE		0x80
 
 #define DRIVER_SENSE		0x08
 
@@ -280,6 +261,8 @@ typedef struct scsi_device {
 	unsigned changed:1;	/* Data invalid due to media change */
 	unsigned busy:1;	/* Used to prevent races */
 	unsigned lockable:1;    /* Able to prevent media removal */
+	unsigned borken:1;	/* Tell the Seagate driver to be 
+				   painfully slow on this device */ 
 } Scsi_Device;
 /*
 	Use these to separate status msg and our bytes

@@ -21,6 +21,8 @@
  * 
  * Virtual Consoles, Screen Blanking, Screen Dumping, Color, Graphics
  *   Chars, and VT100 enhancements by Peter MacDonald.
+ *
+ * Copy and paste function by Andrew Haylett.
  */
 
 /*
@@ -222,9 +224,9 @@ static unsigned char * translations[] = {
 	"\040\255\233\234\376\235\174\025\376\376\246\256\252\055\376\376"
 	"\370\361\375\376\376\346\024\371\376\376\247\257\254\253\376\250"
 	"\376\376\376\376\216\217\222\200\376\220\376\376\376\376\376\376"
-	"\376\245\376\376\376\376\231\376\376\376\376\376\232\376\376\341"
+	"\376\245\376\376\376\376\231\376\235\376\376\376\232\376\376\341"
 	"\205\240\203\376\204\206\221\207\212\202\210\211\215\241\214\213"
-	"\376\244\225\242\223\376\224\366\376\227\243\226\201\376\376\230",
+	"\376\244\225\242\223\376\224\366\233\227\243\226\201\376\376\230",
 /* vt100 graphics */
 (unsigned char *)
 	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
@@ -308,6 +310,9 @@ static unsigned short __origin;
 
 static inline void __set_origin(unsigned short offset)
 {
+#ifdef CONFIG_SELECTION
+	clear_selection();
+#endif /* CONFIG_SELECTION */
 	cli();
 	__origin = offset;
 	outb_p(12, video_port_reg);
@@ -1545,13 +1550,16 @@ int con_open(struct tty_struct *tty, struct file * filp)
 }
 
 #ifdef CONFIG_SELECTION
+/* correction factor for when screen is hardware-scrolled */
+#define	hwscroll_offset ((__real_origin - __origin) << 1)
+
 /* set reverse video on characters s-e of console with selection. */
 static void highlight(const int currcons, const int s, const int e)
 {
 	unsigned char *p, *p1, *p2;
 
-	p1 = (unsigned char *)origin + s + 1;
-	p2 = (unsigned char *)origin + e + 1;
+	p1 = (unsigned char *)origin - hwscroll_offset + s + 1;
+	p2 = (unsigned char *)origin - hwscroll_offset + e + 1;
 	if (p1 > p2)
 	{
 		p = p1;
@@ -1585,7 +1593,7 @@ int set_selection(const int arg)
 	int sel_mode, new_sel_start, new_sel_end, spc;
 	char *bp, *obp, *spos;
 	int i, ps, pe;
-	char *off = (char *)origin;
+	char *off = (char *)origin - hwscroll_offset;
 
 	unblank_screen();
 	args = (unsigned short *)(arg + 1);
@@ -1689,7 +1697,7 @@ int set_selection(const int arg)
 	obp = bp = sel_buffer;
 	for (i = sel_start; i <= sel_end; i += 2)
 	{
-		spos = (char *)origin + i;
+		spos = (char *)off + i;
 		*bp++ = *spos;
 		if (!isspace(*spos))
 			obp = bp;
@@ -1719,6 +1727,9 @@ int paste_selection(struct tty_struct *tty)
 {
 	char *bp = sel_buffer;
 
+	if (! *bp)
+		return 0;
+	unblank_screen();
 	while (*bp)
 	{
 		put_tty_queue(*bp, &tty->read_q);

@@ -47,6 +47,8 @@
 #define TIOCSERCONFIG	0x5453
 #define TIOCSERGWILD	0x5454
 #define TIOCSERSWILD	0x5455
+#define TIOCGLCKTRMIOS	0x5456
+#define TIOCSLCKTRMIOS	0x5457
 
 /* Used for packet mode */
 #define TIOCPKT_FLUSHREAD	 1

@@ -15,7 +15,7 @@
 /* Well-known binary file extensions */
 
 static char bin_extensions[] =
-  "EXECOMAPPSYSOVLOBJLIB"	/* program code */
+  "EXECOMBINAPPSYSDRVOVLOVROBJLIBDLLPIF"	/* program code */
   "ARCZIPLHALZHZOOTARZ  ARJ"	/* common archivers */
   "TZ TAZTZPTPZ"		/* abbreviations of tar.Z and tar.zip */
   "GIFBMPTIFGL JPGPCX"		/* graphics */
@@ -141,7 +141,7 @@ printk("set to %x\n",fat_access(inode->i_sb,nr,-1));
 #endif
 	last = 0;
 	if ((current = MSDOS_I(inode)->i_start) != 0) {
-		cache_lookup(inode,0x7fffffff,&last,&current);
+		cache_lookup(inode,INT_MAX,&last,&current);
 		while (current && current != -1)
 			if (!(current = fat_access(inode->i_sb,
 			    last = current,-1))) {

@@ -247,7 +247,7 @@ int aha1740_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
     
     if(*cmd == REQUEST_SENSE)
     {
-        if (bufflen != 16)
+        if (bufflen != sizeof(SCpnt->sense_buffer))
 	{
 	    printk("Wrong buffer length supplied for request sense (%d)\n",bufflen);
 	    panic("aha1740.c");

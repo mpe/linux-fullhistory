@@ -9,6 +9,11 @@
 
 #include <linux/config.h>
 
+#define INT_MAX		((int)(~0U>>1))
+#define UINT_MAX	(~0U)
+#define LONG_MAX	((long)(~0UL>>1))
+#define ULONG_MAX	(~0UL)
+
 #define VERIFY_READ 0
 #define VERIFY_WRITE 1
 

@@ -37,8 +37,12 @@ FPU_REG CONST_LG2  = { SIGN_POS, TW_Valid, EXP_BIAS-2,
 FPU_REG CONST_LN2  = { SIGN_POS, TW_Valid, EXP_BIAS-1,
 			    0xd1cf79ac, 0xb17217f7 };
 
+/* Extra bits to take pi/2 to more than 128 bits precision. */
+FPU_REG CONST_PI2extra = { SIGN_NEG, TW_Valid, EXP_BIAS-66,
+			    0xfc8f8cbb, 0xece675d1 };
+
 /* Only the sign (and tag) is used in internal zeroes */
-FPU_REG CONST_Z    = { SIGN_POS, TW_Zero, 0,          0x0,        0x0 };
+FPU_REG CONST_Z    = { SIGN_POS, TW_Zero, EXP_UNDER, 0x0, 0x0 };
 
 /* Only the sign and significand (and tag) are used in internal NaNs */
 /* The 80486 never generates one of these 
@@ -63,7 +67,10 @@ static void fld_const(FPU_REG *c)
     }
   push();
   reg_move(c, FPU_st0_ptr);
-  status_word &= ~SW_C1;
+#ifdef PECULIAR_486
+  /* Default, this conveys no information, but an 80486 does it. */
+  clear_C1();
+#endif PECULIAR_486
 }
 
 
