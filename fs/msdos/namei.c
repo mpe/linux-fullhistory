@@ -266,9 +266,11 @@ static int msdos_add_entry(struct inode *dir, const unsigned char *name,
 		de.attr |= ATTR_HIDDEN;
 	de.lcase = 0;
 	fat_date_unix2dos(ts->tv_sec, &time, &date);
-	de.time = de.ctime = time;
-	de.date = de.cdate = de.adate = date;
+	de.cdate = de.adate = 0;
+	de.ctime = 0;
 	de.ctime_cs = 0;
+	de.time = time;
+	de.date = date;
 	de.start = cpu_to_le16(cluster);
 	de.starthi = cpu_to_le16(cluster >> 16);
 	de.size = 0;
