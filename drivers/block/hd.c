@@ -655,8 +655,10 @@ static void hd_geninit(void)
 			hd_info[drive].ctl = *(8+BIOS);
 			hd_info[drive].lzone = *(unsigned short *) (12+BIOS);
 			hd_info[drive].sect = *(14+BIOS);
+#ifdef does_not_work_for_everybody_with_scsi_but_helps_ibm_vp
 			if (hd_info[drive].cyl && NR_HD == drive)
 				NR_HD++;
+#endif
 			BIOS += 16;
 		}
 

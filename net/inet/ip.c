@@ -1523,8 +1523,8 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 #ifdef CONFIG_IP_FORWARD
 		ip_forward(skb, dev, is_frag);
 #else
-		printk("Machine %lx tried to use us as a forwarder to %lx but we have forwarding disabled!\n",
-			iph->saddr,iph->daddr);
+/*		printk("Machine %lx tried to use us as a forwarder to %lx but we have forwarding disabled!\n",
+			iph->saddr,iph->daddr);*/
 		ip_statistics.IpInAddrErrors++;
 #endif			
 		/*

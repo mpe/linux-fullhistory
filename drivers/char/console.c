@@ -133,6 +133,8 @@ static struct {
 	/* mode flags */
 	unsigned long	vc_charset	: 1;	/* Character set G0 / G1 */
 	unsigned long	vc_s_charset	: 1;	/* Saved character set */
+	unsigned long	vc_disp_ctrl	: 1;	/* Display chars < 32? */
+	unsigned long	vc_toggle_meta	: 1;	/* Toggle high bit? */
 	unsigned long	vc_decscnm	: 1;	/* Screen Mode */
 	unsigned long	vc_decom	: 1;	/* Origin Mode */
 	unsigned long	vc_decawm	: 1;	/* Autowrap Mode */
@@ -185,6 +187,8 @@ static int console_blanked = 0;
 #define video_mem_start	(vc_cons[currcons].vc_video_mem_start)
 #define video_mem_end	(vc_cons[currcons].vc_video_mem_end)
 #define video_erase_char (vc_cons[currcons].vc_video_erase_char)	
+#define disp_ctrl	(vc_cons[currcons].vc_disp_ctrl)
+#define toggle_meta	(vc_cons[currcons].vc_toggle_meta)
 #define decscnm		(vc_cons[currcons].vc_decscnm)
 #define decom		(vc_cons[currcons].vc_decom)
 #define decawm		(vc_cons[currcons].vc_decawm)
@@ -682,6 +686,33 @@ static void csi_m(int currcons)
 			case 7:
 				reverse = 1;
 				break;
+			case 10: /* ANSI X3.64-1979 (SCO-ish?)
+				  * Select primary font, don't display
+				  * control chars if defined, don't set
+				  * bit 8 on output.
+				  */
+				translate = (charset == 0
+						? G0_charset
+						: G1_charset);
+				disp_ctrl = 0;
+				toggle_meta = 0;
+				break;
+			case 11: /* ANSI X3.64-1979 (SCO-ish?)
+				  * Select first alternate font, let's
+				  * chars < 32 be displayed as ROM chars.
+				  */
+				translate = NULL_TRANS;
+				disp_ctrl = 1;
+				toggle_meta = 0;
+				break;
+			case 12: /* ANSI X3.64-1979 (SCO-ish?)
+				  * Select second alternate font, toggle
+				  * high bit before displaying as ROM char.
+				  */
+				translate = NULL_TRANS;
+				disp_ctrl = 1;
+				toggle_meta = 1;
+				break;
 			case 21:
 			case 22:
 				intensity = 1;
@@ -695,8 +726,21 @@ static void csi_m(int currcons)
 			case 27:
 				reverse = 0;
 				break;
-			case 39:
+			case 38: /* ANSI X3.64-1979 (SCO-ish?)
+				  * Enables underscore, white foreground
+				  * with white underscore (Linux - use
+				  * default foreground).
+				  */
 				color = (def_color & 0x0f) | background;
+				underline = 1;
+				break;
+			case 39: /* ANSI X3.64-1979 (SCO-ish?)
+				  * Disable underline option.
+				  * Reset colour to default? It did this
+				  * before...
+				  */
+				color = (def_color & 0x0f) | background;
+				underline = 0;
 				break;
 			case 49:
 				color = (def_color & 0xf0) | foreground;
@@ -957,6 +1001,9 @@ static void reset_terminal(int currcons, int do_clear)
 	charset		= 0;
 	need_wrap	= 0;
 
+	disp_ctrl	= 0;
+	toggle_meta	= 0;
+
 	decscnm		= 0;
 	decom		= 0;
 	decawm		= 1;
@@ -1026,7 +1073,11 @@ static int con_write(struct tty_struct * tty, int from_user,
 	while (!tty->stopped &&	count) {
 		c = from_user ? get_fs_byte(buf) : *buf;
 		buf++; n++; count--;
-		if (vc_state == ESnormal && translate[c]) {
+		if (vc_state == ESnormal
+		&& (c >= 32 || (disp_ctrl && (c&0x7f) != 27))
+		&& (toggle_meta ? translate[c|0x80] : translate[c])) {
+			if (toggle_meta)
+				c |= 0x80;
 			if (need_wrap) {
 				cr(currcons);
 				lf(currcons);

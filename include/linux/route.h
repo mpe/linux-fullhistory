@@ -22,6 +22,7 @@
 
 
 /* This structure gets passed by the SIOCADDRTOLD and SIOCDELRTOLD calls. */
+
 struct old_rtentry {
 	unsigned long	rt_genmask;
 	struct sockaddr	rt_dst;
@@ -44,7 +45,8 @@ struct rtentry {
 	struct ifnet	*rt_ifp;
 	short		rt_metric;	/* +1 for binary compatibility!	*/
 	char		*rt_dev;	/* forcing the device at add	*/
-	unsigned long	rt_mtu;		/* per route MTU/Window */
+	unsigned long	rt_mss;		/* per route MTU/Window */
+	unsigned long	rt_window;	/* Window clamping */
 };
 
 
@@ -54,5 +56,14 @@ struct rtentry {
 #define RTF_REINSTATE	0x0008		/* re-instate route after tmout	  */
 #define	RTF_DYNAMIC	0x0010		/* created dyn. (by redirect)	  */
 #define	RTF_MODIFIED	0x0020		/* modified dyn. (by redirect)	  */
-#define RTF_MTU		0x0040		/* specific MSS for this route	  */
+#define RTF_MSS		0x0040		/* specific MSS for this route	  */
+#define RTF_WINDOW	0x0080		/* per route window clamping	  */
+
+/*
+ *	REMOVE THESE BY 1.2.0 !!!!!!!!!!!!!!!!!
+ */
+ 
+#define	RTF_MTU		RTF_MSS
+#define rt_mtu		rt_mss		
+
 #endif	/* _LINUX_ROUTE_H */

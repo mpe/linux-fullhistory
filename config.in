@@ -70,10 +70,10 @@ comment 'Network device support'
 bool 'Network device support?' CONFIG_NETDEVICES y
 if [ "$CONFIG_NETDEVICES" = "n" ]; then
 
-comment 'Skipping ethercard configuration options...'
+comment 'Skipping network driver configuration options...'
 
 else
-bool 'Dummy net driver support' CONFIG_DUMMY y
+bool 'Dummy net driver support' CONFIG_DUMMY n
 bool 'SLIP (serial line) support' CONFIG_SLIP n
 if [ "$CONFIG_SLIP" = "y" ]; then
   bool ' CSLIP compressed headers' SL_COMPRESSED y
@@ -81,29 +81,49 @@ if [ "$CONFIG_SLIP" = "y" ]; then
 fi
 bool 'PPP (point-to-point) support' CONFIG_PPP n
 bool 'Load balancing support (experimental)' CONFIG_SLAVE_BALANCING n
+bool 'Do you want to be offered ALPHA test drivers' CONFIG_NET_ALPHA n
+bool 'Western Digital/SMC cards' CONFIG_NET_VENDOR_SMC n
+if [ "$CONFIG_NET_VENDOR_SMC" = "y" ]; then
+	bool 'WD80*3 support' CONFIG_WD80x3 n
+	bool 'SMC Ultra support' CONFIG_ULTRA n
+fi
+bool '3COM cards' CONFIG_NET_VENDOR_3COM y
+if [ "$CONFIG_NET_VENDOR_3COM" = "y" ]; then
+	bool '3c501 support' CONFIG_EL1 n
+	bool '3c503 support' CONFIG_EL2 n
+	if [ "$CONFIG_NET_ALPHA" = "y" ]; then
+		bool '3c505 support' CONFIG_ELPLUS n
+		bool '3c507 support' CONFIG_EL16 n
+	fi
+	bool '3c509/3c579 support' CONFIG_EL3 y
+fi
+bool 'Other ISA cards' CONFIG_NET_ISA n
+if [ "$CONFIG_NET_ISA" = "y" ]; then
+	bool 'AT1500 and NE2100 (LANCE and PCnet-ISA) support' CONFIG_LANCE y
+	bool 'Cabletron E21xx support (not recommended)' CONFIG_E2100 n
+	bool 'DEPCA support' CONFIG_DEPCA n
+	if [ "$CONFIG_NET_ALPHA" = "y" ]; then
+		bool 'EtherExpress support' CONFIG_EEXPRESS n
+	fi
+	bool 'HP PCLAN support' CONFIG_HPLAN n
+	bool 'NE2000/NE1000 support' CONFIG_NE2000 n
+fi
 bool 'PLIP (parallel port) support' CONFIG_PLIP n
-bool 'NE2000/NE1000 support' CONFIG_NE2000 n
-bool 'WD80*3 support' CONFIG_WD80x3 n
-bool 'SMC Ultra support' CONFIG_ULTRA n
-bool '3c501 support' CONFIG_EL1 n
-bool '3c503 support' CONFIG_EL2 n
-#bool '3c505 support' CONFIG_ELPLUS n
-#bool '3c507 support' CONFIG_EL16 n
-bool '3c509/3c579 support' CONFIG_EL3 y
-bool 'HP PCLAN support' CONFIG_HPLAN n
-bool 'AT1500 and NE2100 (LANCE and PCnet-ISA) support' CONFIG_LANCE n
-bool 'AT1700 support' CONFIG_AT1700 n
-#bool 'Zenith Z-Note support' CONFIG_ZNET n
-#bool 'EtherExpress support' CONFIG_EEXPRESS n
-#bool 'Apricot Xen-II on board ethernet' CONFIG_APRICOT n
-bool 'DEPCA support' CONFIG_DEPCA n
+bool 'EISA and on board controllers' CONFIG_NET_EISA n
+	if [ "$CONFIG_NET_ALPHA" = "y" ]; then
+		bool 'Ansel Communications EISA 3200 support' CONFIG_AC3200 n
+		bool 'AT1700 support' CONFIG_AT1700 n
+	fi
+	bool 'Apricot Xen-II on board ethernet' CONFIG_APRICOT n
 #bool 'NI52EE support' CONFIG_NI52 n
 #bool 'NI65EE support' CONFIG_NI65 n
-#bool 'Ansel Communications EISA 3200 support' CONFIG_AC3200 n
-#bool 'Cabletron E21xx support (not recommended)' CONFIG_E2100 n
-bool 'D-Link DE600 pocket adaptor support' CONFIG_DE600 n
-bool 'D-Link DE620 pocket adaptor support' CONFIG_DE620 n
-bool 'AT-LAN-TEC/RealTek pocket adaptor support' CONFIG_ATP n
+bool 'Pocket and portable adaptors' CONFIG_NET_POCKET n
+if [ "$CONFIG_NET_POCKET" = "y" ]; then
+	bool 'D-Link DE600 pocket adaptor support' CONFIG_DE600 n
+	bool 'D-Link DE620 pocket adaptor support' CONFIG_DE620 n
+	bool 'AT-LAN-TEC/RealTek pocket adaptor support' CONFIG_ATP n
+	bool 'Zenith Z-Note support' CONFIG_ZNET n
+fi
 fi
 fi
 

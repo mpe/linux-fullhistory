@@ -37,6 +37,7 @@
 #define ARPHRD_CSLIP6	259
 #define ARPHRD_RSRVD	260		/* Notional KISS type 		*/
 #define ARPHRD_ADAPT	264
+#define ARPHRD_PPP	512
 
 /* ARP protocol opcodes. */
 #define	ARPOP_REQUEST	1		/* ARP request			*/

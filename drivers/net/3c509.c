@@ -94,7 +94,9 @@ int el3_probe(struct device *dev)
 
 	/* First check for a board on the EISA bus. */
 	if (EISA_bus) {
-		for (ioaddr = 0x1000; ioaddr < 0x9000; ioaddr += 0x1000) {
+		static int eisa_addr;
+		for (ioaddr=0x1000 ; ioaddr < 0x9000; ioaddr += 0x1000) {
+			eisa_addr = ioaddr;
 			/* Check the standard EISA ID register for an encoded '3Com'. */
 			if (inw(ioaddr + 0xC80) != 0x6d50)
 				continue;

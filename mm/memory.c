@@ -45,6 +45,8 @@
 #include <linux/types.h>
 #include <linux/ptrace.h>
 #include <linux/mman.h>
+#include <linux/segment.h>
+#include <asm/segment.h>
 
 /*
  * Define this if things work differently on a i386 and a i486:
@@ -677,6 +679,13 @@ static int __verify_write(unsigned long start, unsigned long size)
 int verify_area(int type, const void * addr, unsigned long size)
 {
 	struct vm_area_struct * vma;
+
+	/* If the current user space is mapped to kernel space (for the
+	 * case where we use a fake user buffer with get_fs/set_fs()) we
+	 * don't expect to find the address in the user vm map.
+	 */
+	if (get_fs() == get_ds())
+		return 0;
 
 	for (vma = current->mm->mmap ; ; vma = vma->vm_next) {
 		if (!vma)

@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 1
-SUBLEVEL = 21
+SUBLEVEL = 22
 
 all:	Version zImage
 

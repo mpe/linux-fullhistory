@@ -308,7 +308,7 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb,
 			 */
 #ifdef not_a_good_idea
 			ip_rt_add((RTF_DYNAMIC | RTF_MODIFIED | RTF_GATEWAY),
-				ip, 0, icmph->un.gateway, dev,0);
+				ip, 0, icmph->un.gateway, dev,0, 0);
 			break;
 #endif
 		case ICMP_REDIR_HOST:
@@ -324,7 +324,7 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb,
 				break;
 			printk("redirect from %08lx\n", source);
 			ip_rt_add((RTF_DYNAMIC | RTF_MODIFIED | RTF_HOST | RTF_GATEWAY),
-				ip, 0, icmph->un.gateway, dev,0);
+				ip, 0, icmph->un.gateway, dev,0, 0);
 			break;
 		case ICMP_REDIR_NETTOS:
 		case ICMP_REDIR_HOSTTOS:

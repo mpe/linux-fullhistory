@@ -21,6 +21,8 @@
  *		Alan Cox	:	Added BSD route gw semantics
  *		Alan Cox	:	Super /proc >4K 
  *		Alan Cox	:	MTU in route table
+ *		Alan Cox	: 	MSS actually. Also added the window
+ *					clamper.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -195,7 +197,7 @@ static inline struct device * get_gw_dev(unsigned long gw)
  */
  
 void ip_rt_add(short flags, unsigned long dst, unsigned long mask,
-	unsigned long gw, struct device *dev, unsigned short mtu)
+	unsigned long gw, struct device *dev, unsigned short mtu, unsigned long window)
 {
 	struct rtable *r, *rt;
 	struct rtable **rp;
@@ -267,12 +269,16 @@ void ip_rt_add(short flags, unsigned long dst, unsigned long mask,
 	rt->rt_dev = dev;
 	rt->rt_gateway = gw;
 	rt->rt_mask = mask;
-	rt->rt_mtu = dev->mtu;
+	rt->rt_mss = dev->mtu - HEADER_SIZE;
+	rt->rt_window = 0;	/* Default is no clamping */
 
 	/* Are the MSS/Window valid ? */
 
-	if(rt->rt_flags & RTF_MTU)
-		rt->rt_mtu = mtu;
+	if(rt->rt_flags & RTF_MSS)
+		rt->rt_mss = mtu;
+		
+	if(rt->rt_flags & RTF_WINDOW)
+		rt->rt_window = window;
 
 	/*
 	 *	What we have to do is loop though this until we have
@@ -449,7 +455,7 @@ static int rt_new(struct rtentry *r)
 	 *	Add the route
 	 */
 	 
-	ip_rt_add(flags, daddr, mask, gw, dev, r->rt_mtu);
+	ip_rt_add(flags, daddr, mask, gw, dev, r->rt_mss, r->rt_window);
 	return 0;
 }
 
@@ -481,7 +487,7 @@ int rt_get_info(char *buffer, char **start, off_t offset, int length)
 	int size;
 
 	len += sprintf(buffer,
-		 "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\n");
+		 "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\n");
 	pos=len;
   
 	/*
@@ -490,10 +496,10 @@ int rt_get_info(char *buffer, char **start, off_t offset, int length)
 	 
 	for (r = rt_base; r != NULL; r = r->rt_next) 
 	{
-        	size = sprintf(buffer+len, "%s\t%08lX\t%08lX\t%02X\t%d\t%lu\t%d\t%08lX\t%d\n",
+        	size = sprintf(buffer+len, "%s\t%08lX\t%08lX\t%02X\t%d\t%lu\t%d\t%08lX\t%d\t%lu\n",
 			r->rt_dev->name, r->rt_dst, r->rt_gateway,
 			r->rt_flags, r->rt_refcnt, r->rt_use, r->rt_metric,
-			r->rt_mask, (int)r->rt_mtu);
+			r->rt_mask, (int)r->rt_mss, r->rt_window);
 		len+=size;
 		pos+=size;
 		if(pos<offset)

@@ -26,6 +26,7 @@
  *			identification, support for local net 0 and
  *			multiple datalinks <Greg Page>
  *	Revision 0.26:  Device drop kills IPX routes via it. (needed for modules)
+ *	Revision 0.27:  Autobind <Mark Evans>
  *
  *			
  *
@@ -640,18 +641,11 @@ static int ipx_release(struct socket *sock, struct socket *peer)
 static unsigned short first_free_socketnum(void)
 {
 	static unsigned short	socketNum = 0x4000;
-	unsigned short	startNum, foundNum = 0;
 
-	startNum = socketNum;
-	do {
-		if (ipx_find_socket(htons(socketNum)) == NULL) {
-			foundNum = socketNum;
-		}
-		socketNum++;
+	while (ipx_find_socket(htons(socketNum)) != NULL)
 		if (socketNum > 0x7ffc) socketNum = 0x4000;
-	}	while (!foundNum && (socketNum != startNum));
 
-	return	htons(foundNum);
+	return	htons(socketNum++);
 }
 	
 static int ipx_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
@@ -736,9 +730,17 @@ static int ipx_connect(struct socket *sock, struct sockaddr *uaddr,
 		return(-EINVAL);
 	addr=(struct sockaddr_ipx *)uaddr;
 	
-	if(sk->ipx_source_addr.net==0)	/* Must bind first - no autobinding in this */
-		return -EINVAL;
-		
+	if(sk->ipx_source_addr.net==0)
+	/* put the autobinding in */
+	{
+		struct sockaddr_ipx uaddr;
+		int ret;
+	
+		uaddr.sipx_port = 0;
+		uaddr.sipx_network = 0L; 
+		ret = ipx_bind (sock, (struct sockaddr *)&uaddr, sizeof(struct sockaddr_ipx));
+		if (ret != 0) return (ret);
+	}
 	
 	sk->ipx_dest_addr.net=addr->sipx_network;
 	sk->ipx_dest_addr.sock=addr->sipx_port;
@@ -970,6 +972,18 @@ static int ipx_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 		
 	if(usipx)
 	{
+		if(sk->ipx_source_addr.net==0)
+		/* put the autobinding in */
+		{
+			struct sockaddr_ipx uaddr;
+			int ret;
+
+			uaddr.sipx_port = 0;
+			uaddr.sipx_network = 0L; 
+			ret = ipx_bind (sock, (struct sockaddr *)&uaddr, sizeof(struct sockaddr_ipx));
+			if (ret != 0) return (ret);
+		}
+
 		if(addr_len <sizeof(*usipx))
 			return(-EINVAL);
 		if(usipx->sipx_family != AF_IPX)

@@ -839,7 +839,7 @@ static int inet_connect(struct socket *sock, struct sockaddr * uaddr,
 	int err;
 	sock->conn = NULL;
 
-	if (sock->state == SS_CONNECTING && sk->state == TCP_ESTABLISHED)
+	if (sock->state == SS_CONNECTING && tcp_connected(sk->state))
 	{
 		sock->state = SS_CONNECTED;
 		/* Connection completing after a connect/EINPROGRESS/select/connect */

@@ -14,7 +14,9 @@
 #define DEPCA_RBI   ioaddr+0x02   /* RAM buffer index (2k buffer mode) */
 #define DEPCA_DATA  ioaddr+0x04   /* LANCE registers' data port */
 #define DEPCA_ADDR  ioaddr+0x06   /* LANCE registers' address port */
+#define DEPCA_HBASE ioaddr+0x08   /* EISA high memory base address reg. */
 #define DEPCA_PROM  ioaddr+0x0c   /* Ethernet address ROM data port */
+#define DEPCA_CNFG  ioaddr+0x0c   /* EISA Configuration port */
 #define DEPCA_RBSA  ioaddr+0x0e   /* RAM buffer starting address (2k buff.) */
 
 /*
@@ -35,6 +37,7 @@
 #define BUF      	0x0020	/* BUFfer size (1->32k, 0->64k) */
 #define RBE      	0x0010	/* Remote Boot Enable (1->net boot) */
 #define AAC      	0x0008  /* Address ROM Address Counter (1->enable) */
+#define _128KB      	0x0008  /* 128kB Network RAM (1->enable) */
 #define IM       	0x0004	/* Interrupt Mask (1->mask) */
 #define IEN      	0x0002	/* Interrupt tristate ENable (1->enable) */
 #define LED      	0x0001	/* LED control */
@@ -119,6 +122,20 @@
 #define TMD3_LCAR    0x0800	/* Loss of CARrier */
 #define TMD3_RTRY    0x0400	/* ReTRY error */
 
+/* 
+** EISA configuration Register (CNFG) bit definitions 
+*/
+ 
+#define TIMEOUT       	0x0100	/* 0:2.5 mins, 1: 30 secs */
+#define REMOTE      	0x0080  /* Remote Boot Enable -> 1 */
+#define IRQ11       	0x0040  /* Enable -> 1 */
+#define IRQ10    	0x0020	/* Enable -> 1 */
+#define IRQ9    	0x0010	/* Enable -> 1 */
+#define IRQ5      	0x0008  /* Enable -> 1 */
+#define BUFF     	0x0004	/* 0: 64kB or 128kB, 1: 32kB */
+#define PADR16   	0x0002	/* RAM on 64kB boundary */
+#define PADR17    	0x0001	/* RAM on 128kB boundary */
+
 /*
 ** Miscellaneous
 */
@@ -126,3 +143,6 @@
 #define MASK_INTERRUPTS   1
 #define UNMASK_INTERRUPTS 0
 
+#define EISA_EN         0x0001   /* Enable EISA bus buffers */
+#define DEPCA_EISA_ID   ioaddr+0x80   /* ID long word for EISA card */
+#define DEPCA_EISA_CTRL ioaddr+0x84   /* Control word for EISA card */

@@ -109,6 +109,7 @@ struct sock {
   volatile unsigned short	mss;       /* current eff. mss - can change */
   volatile unsigned short	user_mss;  /* mss requested by user in ioctl */
   volatile unsigned short	max_window;
+  unsigned long 		window_clamp;
   unsigned short		num;
   volatile unsigned short	cong_window;
   volatile unsigned short	cong_count;

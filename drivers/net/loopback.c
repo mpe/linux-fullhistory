@@ -128,7 +128,7 @@ loopback_init(struct device *dev)
 #endif
 
   /* New-style flags. */
-  dev->flags		= IFF_LOOPBACK;
+  dev->flags		= IFF_LOOPBACK|IFF_BROADCAST;
   dev->family		= AF_INET;
 #ifdef CONFIG_INET    
   dev->pa_addr		= in_aton("127.0.0.1");

@@ -76,6 +76,9 @@
  *		Alan Cox	:	Move to kernel side addressing changes.
  *		Alan Cox	:	Beginning work on TCP fastpathing (not yet usable)
  *		Arnt Gulbrandsen:	Turbocharged tcp_check() routine.
+ *		Alan Cox	:	TCP fast path debugging
+ *		Alan Cox	:	Window clamping
+ *		Michael Riepe	:	Bug in tcp_check()
  *
  *
  * To Fix:
@@ -152,7 +155,7 @@
 #include <asm/segment.h>
 #include <linux/mm.h>
 
-#define TCP_FASTPATH
+#undef TCP_FASTPATH
 
 #define SEQ_TICK 3
 unsigned long seq_offset;
@@ -183,8 +186,6 @@ static __inline__ int min(unsigned int a, unsigned int b)
    in order to get the data we are waiting for into the memory limit.
    Secondly we bin common duplicate forms at receive time
    
-   TODO: add sk->window_clamp to limit windows over the DE600 and AX.25
-
    Better heuristics welcome
 */
    
@@ -192,6 +193,8 @@ int tcp_select_window(struct sock *sk)
 {
 	int new_window = sk->prot->rspace(sk);
 	
+	if(sk->window_clamp)
+		new_window=min(sk->window_clamp,new_window);
 /*
  * two things are going on here.  First, we don't ever offer a
  * window less than min(sk->mss, MAX_WINDOW/2).  This is the
@@ -565,8 +568,7 @@ unsigned short tcp_check(struct tcphdr *th, int len,
 	    adcl $0, %%ebx
 	    movl %%edx, %%ecx
 2:	    andl $28, %%ecx
-	    cmpl $4, %%ecx
-	    jb 4f
+	    je 4f
 	    shrl $2, %%ecx
 	    clc
 3:	    lodsl
@@ -578,11 +580,13 @@ unsigned short tcp_check(struct tcphdr *th, int len,
 	    je 5f
 	    lodsw
 	    addl %%eax, %%ebx
+	    adcl $0, %%ebx
 	    movw $0, %%ax
 5:	    test $1, %%edx
 	    je 6f
 	    lodsb
 	    addl %%eax, %%ebx
+	    adcl $0, %%ebx
 6:	    movl %%ebx, %%eax
 	    shrl $16, %%eax
 	    addw %%ax, %%bx
@@ -2024,10 +2028,16 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	 */
 
 	rt=ip_rt_route(saddr, NULL,NULL);
+	
+	if(rt!=NULL && (rt->rt_flags&RTF_WINDOW))
+		sk->window_clamp=rt->rt_window;
+	else
+		sk->window_clamp=0;
+		
 	if (sk->user_mss)
 		newsk->mtu = sk->user_mss;
-	else if(rt!=NULL && (rt->rt_flags&RTF_MTU))
-		newsk->mtu = rt->rt_mtu - HEADER_SIZE;
+	else if(rt!=NULL && (rt->rt_flags&RTF_MSS))
+		newsk->mtu = rt->rt_mss - HEADER_SIZE;
 	else 
 	{
 #ifdef CONFIG_INET_SNARL	/* Sub Nets ARe Local */
@@ -2270,6 +2280,7 @@ static void tcp_close(struct sock *sk, int timeout)
 				         sizeof(struct tcphdr),sk->ip_tos,sk->ip_ttl);
 			if (tmp < 0) 
 			{
+				sk->write_seq++;	/* Very important 8) */
 				kfree_skb(buff,FREE_WRITE);
 
 				/*
@@ -2481,12 +2492,18 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int 
 	if (sk->retransmits && sk->timeout == TIME_KEEPOPEN)
 	  	sk->retransmits = 0;
 
+#if 0
 /*
  *	Not quite clear why the +1 and -1 here, and why not +1 in next line 
  */
  
 	if (after(ack, sk->sent_seq+1) || before(ack, sk->rcv_ack_seq-1)) 
+#else	
+	if (after(ack, sk->sent_seq) || before(ack, sk->rcv_ack_seq)) 
+#endif	
 	{
+		if(sk->debug)
+			printk("Ack ignored %lu %lu\n",ack,sk->sent_seq);
 		if (after(ack, sk->sent_seq) ||
 		   (sk->state != TCP_ESTABLISHED && sk->state != TCP_CLOSE_WAIT)) 
 		{
@@ -2841,6 +2858,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int 
 
 	if (sk->state == TCP_FIN_WAIT1) 
 	{
+
 		if (!sk->dead) 
 			sk->state_change(sk);
 		if (sk->rcv_ack_seq == sk->write_seq) 
@@ -2866,6 +2884,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int 
 
 	if (sk->state == TCP_CLOSING) 
 	{
+
 		if (!sk->dead) 
 			sk->state_change(sk);
 		if (sk->rcv_ack_seq == sk->write_seq) 
@@ -2974,10 +2993,12 @@ static int tcp_data(struct sk_buff *skb, struct sock *sk,
 				sk->state_change(sk);
 			return(0);
 		}
+#if 0		
 		/* Discard the frame here - we've already proved its a duplicate */
 		
 		kfree_skb(skb, FREE_READ);
 		return(0);				
+#endif		
 	}
 	/*
 	 * 	Now we have to walk the chain, and figure out where this one
@@ -3523,11 +3544,16 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	t1->urg_ptr = 0;
 	t1->doff = 6;
 	/* use 512 or whatever user asked for */
+	
+	if(rt!=NULL && (rt->rt_flags&RTF_WINDOW))
+		sk->window_clamp=rt->rt_window;
+	else
+		sk->window_clamp=0;
 
 	if (sk->user_mss)
 		sk->mtu = sk->user_mss;
-	else if(rt!=NULL && rt->rt_flags&RTF_MTU)
-		sk->mtu = rt->rt_mtu;
+	else if(rt!=NULL && (rt->rt_flags&RTF_MTU))
+		sk->mtu = rt->rt_mss;
 	else 
 	{
 #ifdef CONFIG_INET_SNARL
@@ -3779,7 +3805,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
  */
  
 	/* Im trusting gcc to optimise this sensibly... might need judicious application of a software mallet */
-	if(!(sk->shutdown & RCV_SHUTDOWN) && sk->state==TCP_ESTABLISHED && !th->urg && !th->syn && !th->fin && !th->rst && !th->urg)
+	if(!(sk->shutdown & RCV_SHUTDOWN) && sk->state==TCP_ESTABLISHED && !th->urg && !th->syn && !th->fin && !th->rst)
 	{	
 		/* Packets in order. Fits window */
 		if(th->seq == sk->acked_seq+1 && sk->window && tcp_clean_end(sk))
@@ -3804,7 +3830,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 					sk->window-=skb->len;			/* We know its effect on the window */
 				else
 					sk->window=0;
-				sk->acked_seq = th->ack_seq;		/* Easy */
+				sk->acked_seq = th->seq+skb->len;	/* Easy */
 				skb->acked=1;				/* Guaranteed true */
 				if(!sk->delay_acks || sk->ack_backlog >= sk->max_ack_backlog || 
 					sk->bytes_rcv > sk->max_unacked)
@@ -3939,17 +3965,18 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 				return(0);
 			}
 
-			if (th->fin && tcp_fin(skb, sk, th, saddr, dev)) {
-				kfree_skb(skb, FREE_READ);
-				release_sock(sk);
-				return(0);
-			}
 	
 			if (tcp_data(skb, sk, saddr, len)) {
 				kfree_skb(skb, FREE_READ);
 				release_sock(sk);
 				return(0);
 			}	
+
+			if (th->fin && tcp_fin(skb, sk, th, saddr, dev)) {
+				kfree_skb(skb, FREE_READ);
+				release_sock(sk);
+				return(0);
+			}
 	
 			release_sock(sk);
 			return(0);
