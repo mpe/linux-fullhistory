@@ -98,6 +98,7 @@ typedef struct idescsi_pc_s {
 
 typedef struct ide_scsi_obj {
 	ide_drive_t		*drive;
+	struct gendisk		*disk;
 	struct Scsi_Host	*host;
 
 	idescsi_pc_t *pc;			/* Current packet command */
@@ -323,6 +324,7 @@ static int idescsi_check_condition(ide_drive_t *drive, struct request *failed_co
 		printk ("ide-scsi: %s: queue cmd = ", drive->name);
 		hexdump(pc->c, 6);
 	}
+	rq->rq_disk = scsi->disk;
 	return ide_do_drive_cmd(drive, rq, ide_preempt);
 }
 
@@ -718,7 +720,8 @@ static void idescsi_setup (ide_drive_t *drive, idescsi_scsi_t *scsi)
 static int idescsi_cleanup (ide_drive_t *drive)
 {
 	struct Scsi_Host *scsihost = drive->driver_data;
-	struct gendisk *g = drive->disk;
+	struct ide_scsi_obj *scsi = scsihost_to_idescsi(scsihost);
+	struct gendisk *g = scsi->disk;
 
 	if (ide_unregister_subdriver(drive))
 		return 1;
@@ -727,10 +730,10 @@ static int idescsi_cleanup (ide_drive_t *drive)
 
 	drive->driver_data = NULL;
 	g->private_data = NULL;
-	g->fops = ide_fops;
+	put_disk(g);
 
 	scsi_remove_host(scsihost);
-	ide_scsi_put(scsihost_to_idescsi(scsihost));
+	ide_scsi_put(scsi);
 
 	return 0;
 }
@@ -912,6 +915,7 @@ static int idescsi_queue (struct scsi_cmnd *cmd,
 	rq->special = (char *) pc;
 	rq->flags = REQ_SPECIAL;
 	spin_unlock_irq(host->host_lock);
+	rq->rq_disk = scsi->disk;
 	(void) ide_do_drive_cmd (drive, rq, ide_end);
 	spin_lock_irq(host->host_lock);
 	return 0;
@@ -1087,9 +1091,9 @@ static int idescsi_attach(ide_drive_t *drive)
 {
 	idescsi_scsi_t *idescsi;
 	struct Scsi_Host *host;
-	struct gendisk *g = drive->disk;
+	struct gendisk *g;
 	static int warned;
-	int err;
+	int err = -ENOMEM;
 
 	if (!warned && drive->media == ide_cdrom) {
 		printk(KERN_WARNING "ide-scsi is deprecated for cd burning! Use ide-cd and give dev=/dev/hdX as device\n");
@@ -1101,6 +1105,12 @@ static int idescsi_attach(ide_drive_t *drive)
 	    drive->media == ide_disk ||
 	    !(host = scsi_host_alloc(&idescsi_template,sizeof(idescsi_scsi_t))))
 		return 1;
+
+	g = alloc_disk(1 << PARTN_BITS);
+	if (!g)
+		goto out_host_put;
+
+	ide_init_disk(g, drive);
 
 	host->max_id = 1;
 
@@ -1117,6 +1127,7 @@ static int idescsi_attach(ide_drive_t *drive)
 	idescsi = scsihost_to_idescsi(host);
 	idescsi->drive = drive;
 	idescsi->host = host;
+	idescsi->disk = g;
 	err = ide_register_subdriver(drive, &idescsi_driver);
 	if (!err) {
 		idescsi_setup (drive, idescsi);
@@ -1133,6 +1144,8 @@ static int idescsi_attach(ide_drive_t *drive)
 		ide_unregister_subdriver(drive);
 	}
 
+	put_disk(g);
+out_host_put:
 	scsi_host_put(host);
 	return err;
 }

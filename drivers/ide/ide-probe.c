@@ -1011,10 +1011,8 @@ static int ide_init_queue(ide_drive_t *drive)
 	blk_queue_max_hw_segments(q, max_sg_entries);
 	blk_queue_max_phys_segments(q, max_sg_entries);
 
-	/* assign drive and gendisk queue */
+	/* assign drive queue */
 	drive->queue = q;
-	if (drive->disk)
-		drive->disk->queue = drive->queue;
 
 	/* needs drive->queue to be set */
 	ide_toggle_bounce(drive, 1);
@@ -1268,33 +1266,18 @@ void ide_unregister_region(struct gendisk *disk)
 
 EXPORT_SYMBOL_GPL(ide_unregister_region);
 
-static int alloc_disks(ide_hwif_t *hwif)
+void ide_init_disk(struct gendisk *disk, ide_drive_t *drive)
 {
-	unsigned int unit;
-	struct gendisk *disks[MAX_DRIVES];
+	ide_hwif_t *hwif = drive->hwif;
+	unsigned int unit = (drive->select.all >> 4) & 1;
 
-	for (unit = 0; unit < MAX_DRIVES; unit++) {
-		disks[unit] = alloc_disk(1 << PARTN_BITS);
-		if (!disks[unit])
-			goto Enomem;
-	}
-	for (unit = 0; unit < MAX_DRIVES; ++unit) {
-		ide_drive_t *drive = &hwif->drives[unit];
-		struct gendisk *disk = disks[unit];
-		disk->major  = hwif->major;
-		disk->first_minor = unit << PARTN_BITS;
-		sprintf(disk->disk_name,"hd%c",'a'+hwif->index*MAX_DRIVES+unit);
-		disk->fops = ide_fops;
-		disk->private_data = drive;
-		drive->disk = disk;
-	}
-	return 0;
-Enomem:
-	printk(KERN_WARNING "(ide::init_gendisk) Out of memory\n");
-	while (unit--)
-		put_disk(disks[unit]);
-	return -ENOMEM;
+	disk->major = hwif->major;
+	disk->first_minor = unit << PARTN_BITS;
+	sprintf(disk->disk_name, "hd%c", 'a' + hwif->index * MAX_DRIVES + unit);
+	disk->queue = drive->queue;
 }
+
+EXPORT_SYMBOL_GPL(ide_init_disk);
 
 static void drive_release_dev (struct device *dev)
 {
@@ -1336,7 +1319,7 @@ static void init_gendisk (ide_hwif_t *hwif)
 
 static int hwif_init(ide_hwif_t *hwif)
 {
-	int old_irq, unit;
+	int old_irq;
 
 	/* Return success if no device is connected */
 	if (!hwif->present)
@@ -1372,9 +1355,6 @@ static int hwif_init(ide_hwif_t *hwif)
 		printk(KERN_ERR "%s: unable to allocate SG table.\n", hwif->name);
 		goto out;
 	}
-
-	if (alloc_disks(hwif) < 0)
-		goto out;
 	
 	if (init_irq(hwif) == 0)
 		goto done;
@@ -1387,12 +1367,12 @@ static int hwif_init(ide_hwif_t *hwif)
 	if (!(hwif->irq = ide_default_irq(hwif->io_ports[IDE_DATA_OFFSET]))) {
 		printk("%s: Disabled unable to get IRQ %d.\n",
 			hwif->name, old_irq);
-		goto out_disks;
+		goto out;
 	}
 	if (init_irq(hwif)) {
 		printk("%s: probed IRQ %d and default IRQ %d failed.\n",
 			hwif->name, old_irq, hwif->irq);
-		goto out_disks;
+		goto out;
 	}
 	printk("%s: probed IRQ %d failed, using default.\n",
 		hwif->name, hwif->irq);
@@ -1402,12 +1382,6 @@ done:
 	hwif->present = 1;	/* success */
 	return 1;
 
-out_disks:
-	for (unit = 0; unit < MAX_DRIVES; unit++) {
-		struct gendisk *disk = hwif->drives[unit].disk;
-		hwif->drives[unit].disk = NULL;
-		put_disk(disk);
-	}
 out:
 	unregister_blkdev(hwif->major, hwif->name);
 	return 0;

@@ -359,11 +359,6 @@ static int ide_system_bus_speed(void)
 	return system_bus_speed;
 }
 
-static int ide_open (struct inode * inode, struct file * filp)
-{
-	return -ENXIO;
-}
-
 /*
  *	drives_lock protects the list of drives, drivers_lock the
  *	list of drivers.  Currently nobody takes both at once.
@@ -763,11 +758,6 @@ void ide_unregister(unsigned int index)
 	 * Remove us from the kernel's knowledge
 	 */
 	blk_unregister_region(MKDEV(hwif->major, 0), MAX_DRIVES<<PARTN_BITS);
-	for (i = 0; i < MAX_DRIVES; i++) {
-		struct gendisk *disk = hwif->drives[i].disk;
-		hwif->drives[i].disk = NULL;
-		put_disk(disk);
-	}
 	kfree(hwif->sg_table);
 	unregister_blkdev(hwif->major, hwif->name);
 	spin_lock_irq(&ide_lock);
@@ -2163,13 +2153,6 @@ void ide_unregister_driver(ide_driver_t *driver)
 }
 
 EXPORT_SYMBOL(ide_unregister_driver);
-
-struct block_device_operations ide_fops[] = {{
-	.owner		= THIS_MODULE,
-	.open		= ide_open,
-}};
-
-EXPORT_SYMBOL(ide_fops);
 
 /*
  * Probe module

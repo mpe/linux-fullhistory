@@ -556,10 +556,13 @@ void cdrom_analyze_sense_data(ide_drive_t *drive,
 /*
  * Initialize a ide-cd packet command request
  */
-static void cdrom_prepare_request(struct request *rq)
+static void cdrom_prepare_request(ide_drive_t *drive, struct request *rq)
 {
+	struct cdrom_info *cd = drive->driver_data;
+
 	ide_init_drive_cmd(rq);
 	rq->flags = REQ_PC;
+	rq->rq_disk = cd->disk;
 }
 
 static void cdrom_queue_request_sense(ide_drive_t *drive, void *sense,
@@ -572,7 +575,7 @@ static void cdrom_queue_request_sense(ide_drive_t *drive, void *sense,
 		sense = &info->sense_data;
 
 	/* stuff the sense request in front of our current request */
-	cdrom_prepare_request(rq);
+	cdrom_prepare_request(drive, rq);
 
 	rq->data = sense;
 	rq->cmd[0] = GPCMD_REQUEST_SENSE;
@@ -1856,7 +1859,7 @@ static ide_startstop_t cdrom_start_write_cont(ide_drive_t *drive)
 static ide_startstop_t cdrom_start_write(ide_drive_t *drive, struct request *rq)
 {
 	struct cdrom_info *info = drive->driver_data;
-	struct gendisk *g = drive->disk;
+	struct gendisk *g = info->disk;
 	unsigned short sectors_per_frame = queue_hardsect_size(drive->queue) >> SECTOR_BITS;
 
 	/*
@@ -2048,7 +2051,7 @@ static int cdrom_check_status(ide_drive_t *drive, struct request_sense *sense)
 	struct cdrom_info *info = drive->driver_data;
 	struct cdrom_device_info *cdi = &info->devinfo;
 
-	cdrom_prepare_request(&req);
+	cdrom_prepare_request(drive, &req);
 
 	req.sense = sense;
 	req.cmd[0] = GPCMD_TEST_UNIT_READY;
@@ -2080,7 +2083,7 @@ cdrom_lockdoor(ide_drive_t *drive, int lockflag, struct request_sense *sense)
 	if (CDROM_CONFIG_FLAGS(drive)->no_doorlock) {
 		stat = 0;
 	} else {
-		cdrom_prepare_request(&req);
+		cdrom_prepare_request(drive, &req);
 		req.sense = sense;
 		req.cmd[0] = GPCMD_PREVENT_ALLOW_MEDIUM_REMOVAL;
 		req.cmd[4] = lockflag ? 1 : 0;
@@ -2124,7 +2127,7 @@ static int cdrom_eject(ide_drive_t *drive, int ejectflag,
 	if (CDROM_STATE_FLAGS(drive)->door_locked && ejectflag)
 		return 0;
 
-	cdrom_prepare_request(&req);
+	cdrom_prepare_request(drive, &req);
 
 	/* only tell drive to close tray if open, if it can do that */
 	if (ejectflag && !CDROM_CONFIG_FLAGS(drive)->close_tray)
@@ -2148,7 +2151,7 @@ static int cdrom_read_capacity(ide_drive_t *drive, unsigned long *capacity,
 	int stat;
 	struct request req;
 
-	cdrom_prepare_request(&req);
+	cdrom_prepare_request(drive, &req);
 
 	req.sense = sense;
 	req.cmd[0] = GPCMD_READ_CDVD_CAPACITY;
@@ -2171,7 +2174,7 @@ static int cdrom_read_tocentry(ide_drive_t *drive, int trackno, int msf_flag,
 {
 	struct request req;
 
-	cdrom_prepare_request(&req);
+	cdrom_prepare_request(drive, &req);
 
 	req.sense = sense;
 	req.data =  buf;
@@ -2228,7 +2231,7 @@ static int cdrom_read_toc(ide_drive_t *drive, struct request_sense *sense)
 	if (stat)
 		toc->capacity = 0x1fffff;
 
-	set_capacity(drive->disk, toc->capacity * sectors_per_frame);
+	set_capacity(info->disk, toc->capacity * sectors_per_frame);
 	blk_queue_hardsect_size(drive->queue,
 				sectors_per_frame << SECTOR_BITS);
 
@@ -2348,7 +2351,7 @@ static int cdrom_read_toc(ide_drive_t *drive, struct request_sense *sense)
 	stat = cdrom_get_last_written(cdi, &last_written);
 	if (!stat && (last_written > toc->capacity)) {
 		toc->capacity = last_written;
-		set_capacity(drive->disk, toc->capacity * sectors_per_frame);
+		set_capacity(info->disk, toc->capacity * sectors_per_frame);
 	}
 
 	/* Remember that we've read this stuff. */
@@ -2363,7 +2366,7 @@ static int cdrom_read_subchannel(ide_drive_t *drive, int format, char *buf,
 {
 	struct request req;
 
-	cdrom_prepare_request(&req);
+	cdrom_prepare_request(drive, &req);
 
 	req.sense = sense;
 	req.data = buf;
@@ -2383,7 +2386,7 @@ static int cdrom_select_speed(ide_drive_t *drive, int speed,
 			      struct request_sense *sense)
 {
 	struct request req;
-	cdrom_prepare_request(&req);
+	cdrom_prepare_request(drive, &req);
 
 	req.sense = sense;
 	if (speed == 0)
@@ -2413,7 +2416,7 @@ static int cdrom_play_audio(ide_drive_t *drive, int lba_start, int lba_end)
 	struct request_sense sense;
 	struct request req;
 
-	cdrom_prepare_request(&req);
+	cdrom_prepare_request(drive, &req);
 
 	req.sense = &sense;
 	req.cmd[0] = GPCMD_PLAY_AUDIO_MSF;
@@ -2463,7 +2466,7 @@ static int ide_cdrom_packet(struct cdrom_device_info *cdi,
 	/* here we queue the commands from the uniform CD-ROM
 	   layer. the packet must be complete, as we do not
 	   touch it at all. */
-	cdrom_prepare_request(&req);
+	cdrom_prepare_request(drive, &req);
 	memcpy(req.cmd, cgc->cmd, CDROM_PACKET_SIZE);
 	if (cgc->sense)
 		memset(cgc->sense, 0, sizeof(struct request_sense));
@@ -2613,7 +2616,7 @@ int ide_cdrom_reset (struct cdrom_device_info *cdi)
 	struct request req;
 	int ret;
 
-	cdrom_prepare_request(&req);
+	cdrom_prepare_request(drive, &req);
 	req.flags = REQ_SPECIAL | REQ_QUIET;
 	ret = ide_do_drive_cmd(drive, &req, ide_wait);
 
@@ -2857,7 +2860,7 @@ static int ide_cdrom_register (ide_drive_t *drive, int nslots)
 	if (!CDROM_CONFIG_FLAGS(drive)->mo_drive)
 		devinfo->mask |= CDC_MO_DRIVE;
 
-	devinfo->disk = drive->disk;
+	devinfo->disk = info->disk;
 	return register_cdrom(devinfo);
 }
 
@@ -3262,7 +3265,7 @@ int ide_cdrom_cleanup(ide_drive_t *drive)
 		return 1;
 	}
 
-	del_gendisk(drive->disk);
+	del_gendisk(info->disk);
 
 	ide_cd_put(info);
 
@@ -3274,7 +3277,7 @@ static void ide_cd_release(struct kref *kref)
 	struct cdrom_info *info = to_ide_cd(kref);
 	struct cdrom_device_info *devinfo = &info->devinfo;
 	ide_drive_t *drive = info->drive;
-	struct gendisk *g = drive->disk;
+	struct gendisk *g = info->disk;
 
 	if (info->buffer != NULL)
 		kfree(info->buffer);
@@ -3289,7 +3292,7 @@ static void ide_cd_release(struct kref *kref)
 	drive->driver_data = NULL;
 	blk_queue_prep_rq(drive->queue, NULL);
 	g->private_data = NULL;
-	g->fops = ide_fops;
+	put_disk(g);
 	kfree(info);
 }
 
@@ -3417,7 +3420,7 @@ MODULE_DESCRIPTION("ATAPI CD-ROM Driver");
 static int ide_cdrom_attach (ide_drive_t *drive)
 {
 	struct cdrom_info *info;
-	struct gendisk *g = drive->disk;
+	struct gendisk *g;
 	struct request_sense sense;
 
 	if (!strstr("ide-cdrom", drive->driver_req))
@@ -3442,17 +3445,25 @@ static int ide_cdrom_attach (ide_drive_t *drive)
 		printk(KERN_ERR "%s: Can't allocate a cdrom structure\n", drive->name);
 		goto failed;
 	}
+
+	g = alloc_disk(1 << PARTN_BITS);
+	if (!g)
+		goto out_free_cd;
+
+	ide_init_disk(g, drive);
+
 	if (ide_register_subdriver(drive, &ide_cdrom_driver)) {
 		printk(KERN_ERR "%s: Failed to register the driver with ide.c\n",
 			drive->name);
-		kfree(info);
-		goto failed;
+		goto out_put_disk;
 	}
 	memset(info, 0, sizeof (struct cdrom_info));
 
 	kref_init(&info->kref);
 
 	info->drive = drive;
+	info->disk = g;
+
 	drive->driver_data = info;
 
 	DRIVER(drive)->busy++;
@@ -3485,6 +3496,11 @@ static int ide_cdrom_attach (ide_drive_t *drive)
 	g->flags |= GENHD_FL_REMOVABLE;
 	add_disk(g);
 	return 0;
+
+out_put_disk:
+	put_disk(g);
+out_free_cd:
+	kfree(info);
 failed:
 	return 1;
 }

@@ -73,6 +73,7 @@
 
 struct ide_disk_obj {
 	ide_drive_t	*drive;
+	struct gendisk	*disk;
 	struct kref	kref;
 };
 
@@ -1024,7 +1025,7 @@ static void ide_cacheflush_p(ide_drive_t *drive)
 static int idedisk_cleanup (ide_drive_t *drive)
 {
 	struct ide_disk_obj *idkp = drive->driver_data;
-	struct gendisk *g = drive->disk;
+	struct gendisk *g = idkp->disk;
 
 	ide_cacheflush_p(drive);
 	if (ide_unregister_subdriver(drive))
@@ -1040,12 +1041,12 @@ static void ide_disk_release(struct kref *kref)
 {
 	struct ide_disk_obj *idkp = to_ide_disk(kref);
 	ide_drive_t *drive = idkp->drive;
-	struct gendisk *g = drive->disk;
+	struct gendisk *g = idkp->disk;
 
 	drive->driver_data = NULL;
 	drive->devfs_name[0] = '\0';
 	g->private_data = NULL;
-	g->fops = ide_fops;
+	put_disk(g);
 	kfree(idkp);
 }
 
@@ -1199,7 +1200,7 @@ MODULE_DESCRIPTION("ATA DISK Driver");
 static int idedisk_attach(ide_drive_t *drive)
 {
 	struct ide_disk_obj *idkp;
-	struct gendisk *g = drive->disk;
+	struct gendisk *g;
 
 	/* strstr("foo", "") is non-NULL */
 	if (!strstr("ide-disk", drive->driver_req))
@@ -1213,9 +1214,15 @@ static int idedisk_attach(ide_drive_t *drive)
 	if (!idkp)
 		goto failed;
 
+	g = alloc_disk(1 << PARTN_BITS);
+	if (!g)
+		goto out_free_idkp;
+
+	ide_init_disk(g, drive);
+
 	if (ide_register_subdriver(drive, &idedisk_driver)) {
 		printk (KERN_ERR "ide-disk: %s: Failed to register the driver with ide.c\n", drive->name);
-		goto out_free_idkp;
+		goto out_put_disk;
 	}
 
 	memset(idkp, 0, sizeof(*idkp));
@@ -1223,6 +1230,8 @@ static int idedisk_attach(ide_drive_t *drive)
 	kref_init(&idkp->kref);
 
 	idkp->drive = drive;
+	idkp->disk = g;
+
 	drive->driver_data = idkp;
 
 	DRIVER(drive)->busy++;
@@ -1243,6 +1252,9 @@ static int idedisk_attach(ide_drive_t *drive)
 	g->private_data = idkp;
 	add_disk(g);
 	return 0;
+
+out_put_disk:
+	put_disk(g);
 out_free_idkp:
 	kfree(idkp);
 failed:
