@@ -1324,9 +1324,8 @@ static void unmap_underlying_metadata(struct buffer_head * bh)
  * block_write_full_page() is SMP-safe - currently it's still
  * being called with the kernel lock held, but the code is ready.
  */
-int block_write_full_page(struct file *file, struct page *page)
+int block_write_full_page(struct dentry *dentry, struct page *page)
 {
-	struct dentry *dentry = file->f_dentry;
 	struct inode *inode = dentry->d_inode;
 	int err, i;
 	unsigned long block;
@@ -1998,9 +1997,8 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size)
  * mark_buffer_uptodate() functions propagate buffer state into the
  * page struct once IO has completed.
  */
-int block_read_full_page(struct file * file, struct page * page)
+int block_read_full_page(struct dentry * dentry, struct page * page)
 {
-	struct dentry *dentry = file->f_dentry;
 	struct inode *inode = dentry->d_inode;
 	unsigned long iblock;
 	struct buffer_head *bh, *head, *arr[MAX_BUF_PER_PAGE];

@@ -85,8 +85,8 @@ work to narrow it down.
 If you get it down to a routine, you'll probably get a fix in 24 hours.
 
 My apologies to Linus and the other kernel hackers for describing this
-brute force approach, it's hardly what a kernel hack would do.  However,
-it does work and it lets non-hackers help bug fix.  And it is cool
+brute force approach, it's hardly what a kernel hacker would do.  However,
+it does work and it lets non-hackers help fix bugs.  And it is cool
 because Linux snapshots will let you do this - something that you can't
-do with vender supplied releases.
+do with vendor supplied releases.
 

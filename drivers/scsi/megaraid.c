@@ -287,9 +287,9 @@ static mega_scb *pLastScb = NULL;
 static Scsi_Cmnd *qCompleted = NULL;
 
 #if SERDEBUG
-volatile static spinlock_t serial_lock;
+volatile static spinlock_t serial_lock = SPIN_LOCK_UNLOCKED;
 #endif
-volatile static spinlock_t mega_lock;
+volatile static spinlock_t mega_lock = SPIN_LOCK_UNLOCKED;
 
 #if SERDEBUG
 static char strbuf[MAX_SERBUF + 1];

@@ -11,13 +11,18 @@
  * for more info.
  */
 
+/* 26th Novemner 1999 - patched to compile without ISA PnP support in the
+   kernel. -Daniel Stone (tamriel@ductape.net) */
+
 #include <linux/config.h>
 #ifdef CONFIG_MCA
 #include <linux/mca.h>
 #endif
 #include <linux/module.h>
 #include <linux/init.h>
+#ifdef CONFIG_ISAPNP		/* Patched so it will compile withOUT ISA PnP */
 #include <linux/isapnp.h>
+#endif
 
 #include "sound_config.h"
 #include "soundmodule.h"
@@ -140,7 +145,11 @@ int pas2 = 0;		/* Set pas2=1 to load this as support for pas2 */
 int support = 0;	/* Set support to load this as a support module */
 int sm_games = 0;	/* Mixer - see sb_mixer.c */
 int acer = 0;		/* Do acer notebook init */
+#ifdef CONFIG_ISAPNP
+int isapnp = 1;
+#else
 int isapnp = 0;
+#endif
 
 MODULE_PARM(io, "i");
 MODULE_PARM(irq, "i");
@@ -154,10 +163,13 @@ MODULE_PARM(trix, "i");
 MODULE_PARM(pas2, "i");
 MODULE_PARM(sm_games, "i");
 MODULE_PARM(esstype, "i");
+#ifdef CONFIG_ISAPNP
 MODULE_PARM(isapnp, "i");
+#endif
 
 void *smw_free = NULL;
 
+#ifdef CONFIG_ISAPNP
 static struct { unsigned short vendor, function; char *name; }
 isapnp_sb_list[] __initdata = {
 	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0001), "Sound Blaster 16" },
@@ -212,6 +224,7 @@ static int __init sb_probe_isapnp(struct address_info *hw_config, struct address
 	}
 	return -ENODEV;
 }
+#endif
 
 int init_module(void)
 {
@@ -219,43 +232,39 @@ int init_module(void)
 
 	if (mad16 == 0 && trix == 0 && pas2 == 0 && support == 0)
 	{
-		if (isapnp == 1)
+#ifdef CONFIG_ISAPNP			
+		if (sb_probe_isapnp(&config, &config_mpu)<0)
 		{
-			if (sb_probe_isapnp(&config, &config_mpu)<0)
-			{
-				printk(KERN_ERR "sb_card: No ISAPnP cards found\n");
-				return -EINVAL;
-			}
-		} 
-		else 
-		{
-			if (io == -1 || dma == -1 || irq == -1)
-			{
-				printk(KERN_ERR "sb_card: I/O, IRQ, and DMA are mandatory\n");
-				return -EINVAL;
-			}
-			config.io_base = io;
-			config.irq = irq;
-			config.dma = dma;
-			config.dma2 = dma16;
+			printk(KERN_ERR "sb_card: No ISAPnP cards found\n");
+			return -EINVAL;
 		}
-		config.card_subtype = type;
-
-		if (!probe_sb(&config))
-			return -ENODEV;
-		attach_sb_card(&config);
-		
-		if(config.slots[0]==-1)
-			return -ENODEV;
-#ifdef CONFIG_MIDI
-		if (isapnp == 0) 
-		  config_mpu.io_base = mpu_io;
-		if (probe_sbmpu(&config_mpu))
-			sbmpu = 1;
-		if (sbmpu)
-			attach_sbmpu(&config_mpu);
 #endif
+	} 
+	if (io == -1 || dma == -1 || irq == -1)
+	{
+		printk(KERN_ERR "sb_card: I/O, IRQ, and DMA are mandatory\n");
+		return -EINVAL;
 	}
+	config.io_base = io;
+	config.irq = irq;
+	config.dma = dma;
+	config.dma2 = dma16;
+	config.card_subtype = type;
+
+	if (!probe_sb(&config))
+		return -ENODEV;
+	attach_sb_card(&config);
+	
+	if(config.slots[0]==-1)
+		return -ENODEV;
+#ifdef CONFIG_MIDI
+	if (isapnp == 0) 
+	  config_mpu.io_base = mpu_io;
+	if (probe_sbmpu(&config_mpu))
+		sbmpu = 1;
+	if (sbmpu)
+		attach_sbmpu(&config_mpu);
+#endif
 	SOUND_LOCK;
 	return 0;
 }

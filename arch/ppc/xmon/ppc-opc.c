@@ -533,8 +533,7 @@ extract_bdp (insn, invalid)
 /* Check for legal values of a BO field.  */
 
 static int
-valid_bo (value)
-     long value;
+valid_bo (long value)
 {
   /* Certain encodings have bits that are required to be zero.  These
      are (z must be zero, y may be anything):

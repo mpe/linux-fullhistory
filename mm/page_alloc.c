@@ -21,9 +21,9 @@ LIST_HEAD(lru_cache);
 
 static zone_t zones [MAX_NR_ZONES] =
 	{
-		{ name: "DMA" },
-		{ name: "Normal" },
-		{ name: "HighMem" }
+		{ SPIN_LOCK_UNLOCKED, name: "DMA" },
+		{ SPIN_LOCK_UNLOCKED, name: "Normal" },
+		{ SPIN_LOCK_UNLOCKED, name: "HighMem" }
 	};
 
 zonelist_t zonelists [NR_GFPINDEX];

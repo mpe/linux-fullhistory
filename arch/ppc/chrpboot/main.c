@@ -8,6 +8,10 @@
  */
 #include "../coffboot/nonstdio.h"
 #include "../coffboot/zlib.h"
+#include <asm/bootinfo.h>
+#include <asm/processor.h>
+#define __KERNEL__
+#include <asm/page.h>
 
 extern void *finddevice(const char *);
 extern int getprop(void *, const char *, void *, int);
@@ -71,6 +75,30 @@ chrpboot(int a1, int a2, void *prom)
     sa = (unsigned long)PROG_START;
     printf("start address = 0x%x\n\r", sa);
 
+    {
+	    struct bi_record *rec;
+	    
+	    rec = (struct bi_record *)PAGE_ALIGN((unsigned long)dst+len);
+	    
+	    rec->tag = BI_FIRST;
+	    rec->size = sizeof(struct bi_record);
+	    rec = (struct bi_record *)((unsigned long)rec + rec->size);
+
+	    rec->tag = BI_BOOTLOADER_ID;
+	    sprintf( (char *)rec->data, "chrpboot");
+	    rec->size = sizeof(struct bi_record) + strlen("chrpboot") + 1;
+	    rec = (struct bi_record *)((unsigned long)rec + rec->size);
+	    
+	    rec->tag = BI_MACHTYPE;
+	    rec->data[0] = _MACH_chrp;
+	    rec->data[1] = 1;
+	    rec->size = sizeof(struct bi_record) + sizeof(unsigned long);
+	    rec = (struct bi_record *)((unsigned long)rec + rec->size);
+	    
+	    rec->tag = BI_LAST;
+	    rec->size = sizeof(struct bi_record);
+	    rec = (struct bi_record *)((unsigned long)rec + rec->size);
+    }
     (*(void (*)())sa)(0, 0, prom, a1, a2);
 
     printf("returned?\n\r");

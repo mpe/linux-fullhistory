@@ -26,7 +26,6 @@ static int nvram_mult;
 
 #define NVRAM_SIZE	0x2000	/* 8kB of non-volatile RAM */
 
-
 __init
 void pmac_nvram_init(void)
 {
@@ -56,6 +55,7 @@ void pmac_nvram_init(void)
 	}
 }
 
+__openfirmware
 unsigned char nvram_read_byte(int addr)
 {
 	struct adb_request req;
@@ -80,6 +80,7 @@ unsigned char nvram_read_byte(int addr)
 	return 0;
 }
 
+__openfirmware
 void nvram_write_byte(unsigned char val, int addr)
 {
 	struct adb_request req;

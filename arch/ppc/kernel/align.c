@@ -1,8 +1,11 @@
 /*
  * align.c - handle alignment exceptions for the Power PC.
  *
- * Paul Mackerras	August 1996.
- * Copyright (C) 1996 Paul Mackerras	(paulus@cs.anu.edu.au).
+ * Copyright (c) 1996 Paul Mackerras <paulus@cs.anu.edu.au>
+ * Copyright (c) 1998-1999 TiVo, Inc.
+ *   PowerPC 403GCX modifications.
+ * Copyright (c) 1999 Grant Erickson <grant@lcse.umn.edu>
+ *   PowerPC 403GCX/405GP modifications.
  */
 #include <linux/kernel.h>
 #include <linux/mm.h>
@@ -15,6 +18,13 @@ struct aligninfo {
 	unsigned char len;
 	unsigned char flags;
 };
+
+#if defined(CONFIG_4xx)
+#define	OPCD(inst)	(((inst) & 0xFC000000) >> 26)
+#define	RS(inst)	(((inst) & 0x03E00000) >> 21)
+#define	RA(inst)	(((inst) & 0x001F0000) >> 16)
+#define	IS_DFORM(code)	((code) >= 32 && (code) <= 47)
+#endif
 
 #define INVALID	{ 0, 0 }
 
@@ -170,6 +180,9 @@ int
 fix_alignment(struct pt_regs *regs)
 {
 	int instr, nb, flags;
+#if defined(CONFIG_4xx)
+	int opcode, f1, f2, f3;
+#endif
 	int i, t;
 	int reg, areg;
 	unsigned char *addr;
@@ -180,13 +193,42 @@ fix_alignment(struct pt_regs *regs)
 		unsigned char v[8];
 	} data;
 
+#if defined(CONFIG_4xx)
+	/* The 4xx-family processors have no DSISR register,
+	 * so we emulate it.
+	 */
+
+	instr = *((unsigned int *)regs->nip);
+	opcode = OPCD(instr);
+	reg = RS(instr);
+	areg = RA(instr);
+
+	if (IS_DFORM(opcode)) {
+		f1 = 0;
+		f2 = (instr & 0x04000000) >> 26;
+		f3 = (instr & 0x78000000) >> 27;
+	} else {
+		f1 = (instr & 0x00000006) >> 1;
+		f2 = (instr & 0x00000040) >> 6;
+		f3 = (instr & 0x00000780) >> 7;
+	}
+
+	instr = ((f1 << 5) | (f2 << 4) | f3);
+#else
+	reg = (regs->dsisr >> 5) & 0x1f;	/* source/dest register */
+	areg = regs->dsisr & 0x1f;		/* register to update */
 	instr = (regs->dsisr >> 10) & 0x7f;
+#endif
 	nb = aligninfo[instr].len;
 	if (nb == 0)
 		return 0;	/* too hard or invalid instruction bits */
 	flags = aligninfo[instr].flags;
-	addr = (unsigned char *) regs->dar;
-	reg = (regs->dsisr >> 5) & 0x1f;	/* source/dest register */
+
+	/* For the 4xx-family processors, the 'dar' field of the
+	 * pt_regs structure is overloaded and is really from the DEAR.
+	 */
+
+	addr = (unsigned char *)regs->dar;
 
 	/* Verify the address of the operand */
 	if (user_mode(regs)) {
@@ -280,7 +322,6 @@ fix_alignment(struct pt_regs *regs)
 	}
 
 	if (flags & U) {
-		areg = regs->dsisr & 0x1f;	/* register to update */
 		regs->gpr[areg] = regs->dar;
 	}
 

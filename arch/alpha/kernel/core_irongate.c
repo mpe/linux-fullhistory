@@ -9,7 +9,6 @@
  * Code common to all IRONGATE core logic chips.
  */
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/pci.h>

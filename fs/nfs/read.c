@@ -227,9 +227,8 @@ out_free:
  *  -	The server is congested.
  */
 int
-nfs_readpage(struct file *file, struct page *page)
+nfs_readpage(struct dentry *dentry, struct page *page)
 {
-	struct dentry *dentry = file->f_dentry;
 	struct inode *inode = dentry->d_inode;
 	int		error;
 

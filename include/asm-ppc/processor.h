@@ -217,8 +217,6 @@ n:
 #ifndef CONFIG_MACH_SPECIFIC
 extern int _machine;
 extern int have_of;
-extern int is_chrp;
-extern int is_powerplus;
 #endif /* CONFIG_MACH_SPECIFIC */
 
 /* what kind of prep workstation we are */

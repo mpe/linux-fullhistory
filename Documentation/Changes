@@ -43,7 +43,7 @@ Current Minimal Requirements
 encountered a bug!  If you're unsure what version you're currently
 running, the suggested command should tell you.
 
-- Kernel modutils	 2.3.6                   ; insmod -V
+- Kernel modutils	 2.3.7                   ; insmod -V
 - Gnu C 		 2.7.2.3                 ; gcc --version
 - Binutils		 2.9.1.0.7               ; ld -v
 - Linux libc5 C Library	 5.4.46                  ; ls -l /lib/libc*
@@ -576,8 +576,8 @@ ftp://metalab.unc.edu/pub/Linux/GCC/ld.so-1.9.9.tar.gz
 Modules utilities
 =================
 
-The 2.3.6 release:
-ftp://ftp.ocs.com.au/pub/modutils/v2.3/modutils-2.3.6.tar.gz
+The 2.3.7 release:
+ftp://ftp.ocs.com.au/pub/modutils/v2.3/modutils-2.3.7.tar.gz
 
 Procps utilities
 ================

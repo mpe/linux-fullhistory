@@ -283,11 +283,6 @@ prom_init(int r3, int r4, prom_entry pp)
 	int l;
 	char *p, *d;
 
-#ifdef CONFIG_GEMINI
-	gemini_prom_init();
-	return;
-#endif /* CONFIG_GEMINI */
-
 	/* check if we're apus, return if we are */
 	if ( r3 == 0x61707573 )
 		return;

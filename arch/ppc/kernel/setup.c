@@ -30,6 +30,8 @@
 #include <asm/bootx.h>
 #include <asm/machdep.h>
 
+#include "oak_setup.h"
+
 extern void pmac_init(unsigned long r3,
                       unsigned long r4,
                       unsigned long r5,
@@ -67,11 +69,11 @@ extern void gemini_init(unsigned long r3,
                       unsigned long r7);
 
 extern boot_infos_t *boot_infos;
-extern char cmd_line[512];
 char saved_command_line[256];
 unsigned char aux_device_present;
 struct int_control_struct int_control;
 struct ide_machdep_calls ppc_ide_md;
+int parse_bootinfo(void);
 
 unsigned long ISA_DMA_THRESHOLD;
 unsigned long DMA_MODE_READ, DMA_MODE_WRITE;
@@ -84,13 +86,8 @@ int have_of = 0;
 #ifdef CONFIG_MAGIC_SYSRQ
 unsigned long SYSRQ_KEY;
 #endif /* CONFIG_MAGIC_SYSRQ */
-/* For MTX/MVME boards.. with Raven/Falcon Chipset
-      Real close to CHRP, but boot like PReP (via PPCbug)
-      There's probably a nicer way to do this.. --Troy */
-int is_powerplus = 0;
 
 struct machdep_calls ppc_md;
-
 
 /* copy of the residual data */
 #ifndef CONFIG_8xx
@@ -196,6 +193,7 @@ int get_cpuinfo(char *buffer)
 	unsigned long len = 0;
 	unsigned long bogosum = 0;
 	unsigned long i;
+	unsigned short maj, min;
 	
 #ifdef __SMP__
 #define CPU_PRESENT(x) (cpu_callin_map[(x)])
@@ -215,8 +213,8 @@ int get_cpuinfo(char *buffer)
 		if ( i )
 			len += sprintf(len+buffer,"\n");
 		len += sprintf(len+buffer,"processor\t: %lu\n",i);
-		len += sprintf(len+buffer,"cpu\t\t: ");
-	
+		len += sprintf(len+buffer,"cpu\t\t:  ");
+
 		switch (GET_PVR >> 16)
 		{
 		case 1:
@@ -254,7 +252,7 @@ int get_cpuinfo(char *buffer)
 			len += sprintf(len+buffer, "860\n");
 			break;
 		default:
-			len += sprintf(len+buffer, "unknown (%lu)\n",
+			len += sprintf(len+buffer, "unknown (%lx)\n",
 				       GET_PVR>>16);
 			break;
 		}
@@ -294,8 +292,7 @@ int get_cpuinfo(char *buffer)
 			len += ppc_md.setup_residual(buffer + len);
 		}
 		
-		len += sprintf(len+buffer, "revision\t: %ld.%ld\n",
-			       (GET_PVR & 0xff00) >> 8, GET_PVR & 0xff);
+		len += sprintf(len+buffer, "revision\t: %hd.%hd\n", maj, min);
 
 		len += sprintf(buffer+len, "bogomips\t: %lu.%02lu\n",
 			       (CD(loops_per_sec)+2500)/500000,
@@ -341,49 +338,58 @@ unsigned long __init
 identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		 unsigned long r6, unsigned long r7)
 {
+	int_control.int_sti = __no_use_sti;
+	int_control.int_cli = __no_use_cli;
+	int_control.int_save_flags = __no_use_save_flags;
+	int_control.int_restore_flags = __no_use_restore_flags;
 
-#ifndef CONFIG_8xx
-	if ( ppc_md.progress ) ppc_md.progress("id mach(): start", 0x100);
+	parse_bootinfo();
 	
+	if ( ppc_md.progress ) ppc_md.progress("id mach(): start", 0x100);
+#if !defined(CONFIG_4xx) && !defined(CONFIG_8xx)
 #ifndef CONFIG_MACH_SPECIFIC
-	/* boot loader will tell us if we're APUS */
-	if ( r3 == 0x61707573 )
+	/* if we didn't get any bootinfo telling us what we are... */
+	if ( _machine == 0 )
 	{
-		_machine = _MACH_apus;
-		r3 = 0;
-	}
-	/* prep boot loader tells us if we're prep or not */
-	else if ( *(unsigned long *)(KERNELBASE) == (0xdeadc0de) )
-	{
-		_machine = _MACH_prep;
-	} else
-	{
-		char *model;
-		struct device_node *root;
-
-		have_of = 1;
-
-		/* prom_init has already been called from __start */
-		if (boot_infos)
-			relocate_nodes();
-
-		/* ask the OF info if we're a chrp or pmac */
-		/* we need to set _machine before calling finish_device_tree */
-		root = find_path_device("/");
-		if (root != 0) {
-			/* assume pmac unless proven to be chrp -- Cort */
-			_machine = _MACH_Pmac;
-			model = get_property(root, "device_type", NULL);
-			if (model && !strncmp("chrp", model, 4))
-				_machine = _MACH_chrp;
-			else {
-				model = get_property(root, "model", NULL);
-				if (model && !strncmp(model, "IBM", 3))
-					_machine = _MACH_chrp;
-			}
+		/* boot loader will tell us if we're APUS */
+		if ( r3 == 0x61707573 )
+		{
+			_machine = _MACH_apus;
+			r3 = 0;
 		}
-
-		finish_device_tree();
+		/* prep boot loader tells us if we're prep or not */
+		else if ( *(unsigned long *)(KERNELBASE) == (0xdeadc0de) )
+		{
+			_machine = _MACH_prep;
+		} else
+		{
+			char *model;
+			struct device_node *root;
+			
+			have_of = 1;
+			
+			/* prom_init has already been called from __start */
+			if (boot_infos)
+				relocate_nodes();
+			
+			/* ask the OF info if we're a chrp or pmac */
+			/* we need to set _machine before calling finish_device_tree */
+			root = find_path_device("/");
+			if (root != 0) {
+				/* assume pmac unless proven to be chrp -- Cort */
+				_machine = _MACH_Pmac;
+				model = get_property(root, "device_type", NULL);
+				if (model && !strncmp("chrp", model, 4))
+					_machine = _MACH_chrp;
+				else {
+					model = get_property(root, "model", NULL);
+					if (model && !strncmp(model, "IBM", 3))
+						_machine = _MACH_chrp;
+				}
+			}
+			
+			finish_device_tree();
+		}
 	}
 #endif /* CONFIG_MACH_SPECIFIC */
 
@@ -444,11 +450,6 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		cmd_line[sizeof(cmd_line) - 1] = 0;
 	}
 
-	int_control.int_sti = __no_use_sti;
-	int_control.int_cli = __no_use_cli;
-	int_control.int_save_flags = __no_use_save_flags;
-	int_control.int_restore_flags = __no_use_restore_flags;
-
 	switch (_machine)
 	{
 	case _MACH_Pmac:
@@ -469,7 +470,7 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 	case _MACH_gemini:
 		gemini_init(r3, r4, r5, r6, r7);
 		break;
-#endif		
+#endif
 	default:
 		printk("Unknown machine type in identify_machine!\n");
 	}
@@ -478,14 +479,15 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		extern int __map_without_bats;
 		__map_without_bats = 1;
 	}
-#else /* CONFIG_8xx */
-	int_control.int_sti = __no_use_sti;
-	int_control.int_cli = __no_use_cli;
-	int_control.int_save_flags = __no_use_save_flags;
-	int_control.int_restore_flags = __no_use_restore_flags;
-
+#else
+#if defined(CONFIG_4xx)
+	oak_init(r3, r4, r5, r6, r7);
+#elif defined(CONFIG_8xx)
         m8xx_init(r3, r4, r5, r6, r7);
-#endif
+#else
+#error "No board type has been defined for identify_machine()!"
+#endif /* CONFIG_4xx */
+#endif /* !CONFIG_4xx && !CONFIG_8xx */
 
 	/* Look for mem= option on command line */
 	if (strstr(cmd_line, "mem=")) {
@@ -513,6 +515,53 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.ppc_machine = _machine;
 
 	if ( ppc_md.progress ) ppc_md.progress("id mach(): done", 0x200);
+
+	return 0;
+}
+
+int parse_bootinfo(void)
+{
+	struct bi_record *rec;
+	extern char _end[];
+
+	rec = (struct bi_record *)PAGE_ALIGN((ulong)_end);
+	if ( rec->tag != BI_FIRST )
+	{
+		/*
+		 * This 0x10000 offset is a terrible hack but it will go away when
+		 * we have the bootloader handle all the relocation and
+		 * prom calls -- Cort
+		 */
+		rec = (struct bi_record *)PAGE_ALIGN((ulong)_end+0x10000);
+		if ( rec->tag != BI_FIRST )
+			return -1;
+	}
+
+	for ( ; rec->tag != BI_LAST ;
+	      rec = (struct bi_record *)((ulong)rec + rec->size) )
+	{
+		ulong *data = rec->data;
+		switch (rec->tag)
+		{
+		case BI_CMD_LINE:
+			memcpy(cmd_line, (void *)data, rec->size);
+			break;
+#ifdef CONFIG_BLK_DEV_INITRD
+		case BI_INITRD:
+			initrd_start = data[0];
+			initrd_end = data[0] + rec->size;
+			break;
+#endif /* CONFIG_BLK_DEV_INITRD */
+#ifndef CONFIG_MACH_SPECIFIC
+		case BI_MACHTYPE:
+			_machine = data[0];
+			have_of = data[1];
+			break;
+#endif /* CONFIG_MACH_SPECIFIC */
+			
+		}
+	}
+
 	return 0;
 }
 

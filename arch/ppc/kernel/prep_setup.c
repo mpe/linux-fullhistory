@@ -760,22 +760,6 @@ prep_init(unsigned long r3, unsigned long r4, unsigned long r5,
 
 	prep_setup_pci_ptrs();
 
-#ifdef CONFIG_BLK_DEV_INITRD
-	/* take care of initrd if we have one */
-	if ( r4 )
-	{
-		initrd_start = r4 + KERNELBASE;
-		initrd_end = r5 + KERNELBASE;
-	}
-#endif /* CONFIG_BLK_DEV_INITRD */
-
-	/* take care of cmd line */
-	if ( r6  && (((char *) r6) != '\0'))
-	{
-		*(char *)(r7+KERNELBASE) = 0;
-		strcpy(cmd_line, (char *)(r6+KERNELBASE));
-	}
-
 	ppc_md.setup_arch     = prep_setup_arch;
 	ppc_md.setup_residual = prep_setup_residual;
 	ppc_md.get_cpuinfo    = prep_get_cpuinfo;

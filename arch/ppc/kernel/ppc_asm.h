@@ -10,6 +10,9 @@
  *  as published by the Free Software Foundation; either version
  *  2 of the License, or (at your option) any later version.
  */
+
+#include <linux/config.h>
+
 #include "ppc_asm.tmpl"
 #include "ppc_defs.h"
 
@@ -45,14 +48,20 @@
 	sync; \
 	isync
 
-/* This instruction is not implemented on the PPC 603 or 601 */
-#define tlbia \
-	li	r4,128; \
-	mtctr	r4; \
-	lis	r4,KERNELBASE@h; \
-0:	tlbie	r4; \
-	addi	r4,r4,0x1000; \
+/*
+ * This instruction is not implemented on the PPC 603 or 601; however, on
+ * the 403GCX and 405GP tlbia IS defined and tlbie is not.
+ */
+
+#if !defined(CONFIG_4xx)
+#define tlbia					\
+	li	r4,128;				\
+	mtctr	r4;				\
+	lis	r4,KERNELBASE@h;		\
+0:	tlbie	r4;				\
+	addi	r4,r4,0x1000;			\
 	bdnz	0b
+#endif
 
 /*
  * On APUS (Amiga PowerPC cpu upgrade board), we don't know the

@@ -12,6 +12,7 @@ CONFIG_EXPERIMENTAL=y
 #
 CONFIG_PPC=y
 CONFIG_6xx=y
+# CONFIG_4xx is not set
 # CONFIG_PPC64 is not set
 # CONFIG_82xx is not set
 # CONFIG_8xx is not set
@@ -22,7 +23,7 @@ CONFIG_ALL_PPC=y
 # CONFIG_GEMINI is not set
 # CONFIG_APUS is not set
 # CONFIG_SMP is not set
-CONFIG_6xx=y
+# CONFIG_ALTIVEC is not set
 
 #
 # Loadable module support
@@ -34,11 +35,13 @@ CONFIG_KMOD=y
 #
 # General setup
 #
+# CONFIG_PCI is not set
 CONFIG_PCI=y
 CONFIG_NET=y
 CONFIG_SYSCTL=y
 CONFIG_SYSVIPC=y
 # CONFIG_BSD_PROCESS_ACCT is not set
+CONFIG_KCORE_ELF=y
 CONFIG_BINFMT_ELF=y
 CONFIG_KERNEL_ELF=y
 # CONFIG_BINFMT_MISC is not set
@@ -273,7 +276,6 @@ CONFIG_BMAC=y
 # CONFIG_NET_VENDOR_RACAL is not set
 # CONFIG_YELLOWFIN is not set
 # CONFIG_RTL8139 is not set
-# CONFIG_SIS900 is not set
 # CONFIG_DM9102 is not set
 # CONFIG_AT1700 is not set
 # CONFIG_DEPCA is not set
@@ -292,6 +294,7 @@ CONFIG_DE4X5=y
 # CONFIG_LNE390 is not set
 # CONFIG_NE3210 is not set
 # CONFIG_NE2K_PCI is not set
+# CONFIG_SIS900 is not set
 # CONFIG_TLAN is not set
 # CONFIG_VIA_RHINE is not set
 # CONFIG_ES3210 is not set
@@ -356,6 +359,7 @@ CONFIG_PPP=y
 #
 CONFIG_FB=y
 CONFIG_DUMMY_CONSOLE=y
+# CONFIG_FB_RIVA is not set
 # CONFIG_FB_CLGEN is not set
 # CONFIG_FB_PM2 is not set
 CONFIG_FB_OF=y
@@ -367,13 +371,13 @@ CONFIG_FB_CT65550=y
 # CONFIG_FB_S3TRIO is not set
 # CONFIG_FB_VGA16 is not set
 CONFIG_FB_MATROX=y
-# CONFIG_FB_MATROX_MILLENIUM is not set
+CONFIG_FB_MATROX_MILLENIUM=y
 CONFIG_FB_MATROX_MYSTIQUE=y
 CONFIG_FB_MATROX_G100=y
 # CONFIG_FB_MATROX_MULTIHEAD is not set
 CONFIG_FB_ATY=y
-# CONFIG_FB_ATY128 is not set
-# CONFIG_FB_3DFX is not set
+CONFIG_FB_ATY128=y
+CONFIG_FB_3DFX=y
 # CONFIG_FB_VIRTUAL is not set
 # CONFIG_FBCON_ADVANCED is not set
 CONFIG_FBCON_CFB8=y
@@ -414,6 +418,10 @@ CONFIG_PSMOUSE=y
 # CONFIG_82C710_MOUSE is not set
 # CONFIG_PC110_PAD is not set
 # CONFIG_QIC02_TAPE is not set
+
+#
+# Watchdog Cards
+#
 # CONFIG_WATCHDOG is not set
 CONFIG_NVRAM=y
 # CONFIG_RTC is not set
@@ -438,9 +446,40 @@ CONFIG_NVRAM=y
 # CONFIG_DRM is not set
 
 #
-# USB drivers - not for the faint of heart
+# Support for USB
 #
-# CONFIG_USB is not set
+CONFIG_USB=y
+
+#
+# USB Controllers
+#
+# CONFIG_USB_UHCI is not set
+CONFIG_USB_OHCI=y
+CONFIG_USB_OHCI_DEBUG=y
+# CONFIG_USB_OHCI_HCD is not set
+
+#
+# Miscellaneous USB options
+#
+CONFIG_USB_DEBUG_ISOC=y
+CONFIG_USB_PROC=y
+# CONFIG_USB_EZUSB is not set
+
+#
+# USB Devices
+#
+CONFIG_USB_HUB=y
+CONFIG_USB_MOUSE=y
+CONFIG_USB_HP_SCANNER=m
+CONFIG_USB_KBD=y
+# CONFIG_USB_AUDIO is not set
+# CONFIG_USB_ACM is not set
+# CONFIG_USB_PRINTER is not set
+# CONFIG_USB_SERIAL is not set
+# CONFIG_USB_CPIA is not set
+# CONFIG_USB_DC2XX is not set
+CONFIG_USB_SCSI=m
+CONFIG_USB_SCSI_DEBUG=y
 
 #
 # Filesystems
@@ -449,11 +488,9 @@ CONFIG_NVRAM=y
 CONFIG_AUTOFS_FS=y
 # CONFIG_ADFS_FS is not set
 # CONFIG_AFFS_FS is not set
-CONFIG_HFS_FS=y
-CONFIG_FAT_FS=y
-CONFIG_MSDOS_FS=y
-# CONFIG_UMSDOS_FS is not set
-CONFIG_VFAT_FS=y
+# CONFIG_HFS_FS is not set
+# CONFIG_BFS_FS is not set
+# CONFIG_FAT_FS is not set
 # CONFIG_EFS_FS is not set
 CONFIG_ISO9660_FS=y
 # CONFIG_JOLIET is not set
@@ -466,7 +503,6 @@ CONFIG_DEVPTS_FS=y
 # CONFIG_QNX4FS_FS is not set
 # CONFIG_ROMFS_FS is not set
 CONFIG_EXT2_FS=y
-# CONFIG_BFS_FS is not set
 # CONFIG_SYSV_FS is not set
 # CONFIG_UFS_FS is not set
 
@@ -493,39 +529,7 @@ CONFIG_MSDOS_PARTITION=y
 # CONFIG_UNIXWARE_DISKLABEL is not set
 # CONFIG_SGI_PARTITION is not set
 # CONFIG_SUN_PARTITION is not set
-CONFIG_NLS=y
-
-#
-# Native Language Support
-#
-# CONFIG_NLS_CODEPAGE_437 is not set
-# CONFIG_NLS_CODEPAGE_737 is not set
-# CONFIG_NLS_CODEPAGE_775 is not set
-# CONFIG_NLS_CODEPAGE_850 is not set
-# CONFIG_NLS_CODEPAGE_852 is not set
-# CONFIG_NLS_CODEPAGE_855 is not set
-# CONFIG_NLS_CODEPAGE_857 is not set
-# CONFIG_NLS_CODEPAGE_860 is not set
-# CONFIG_NLS_CODEPAGE_861 is not set
-# CONFIG_NLS_CODEPAGE_862 is not set
-# CONFIG_NLS_CODEPAGE_863 is not set
-# CONFIG_NLS_CODEPAGE_864 is not set
-# CONFIG_NLS_CODEPAGE_865 is not set
-# CONFIG_NLS_CODEPAGE_866 is not set
-# CONFIG_NLS_CODEPAGE_869 is not set
-# CONFIG_NLS_CODEPAGE_874 is not set
-# CONFIG_NLS_ISO8859_1 is not set
-# CONFIG_NLS_ISO8859_2 is not set
-# CONFIG_NLS_ISO8859_3 is not set
-# CONFIG_NLS_ISO8859_4 is not set
-# CONFIG_NLS_ISO8859_5 is not set
-# CONFIG_NLS_ISO8859_6 is not set
-# CONFIG_NLS_ISO8859_7 is not set
-# CONFIG_NLS_ISO8859_8 is not set
-# CONFIG_NLS_ISO8859_9 is not set
-# CONFIG_NLS_ISO8859_14 is not set
-# CONFIG_NLS_ISO8859_15 is not set
-# CONFIG_NLS_KOI8_R is not set
+# CONFIG_NLS is not set
 
 #
 # Sound

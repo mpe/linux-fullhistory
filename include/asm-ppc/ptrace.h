@@ -49,7 +49,7 @@ struct pt_regs {
 #define __SIGNAL_FRAMESIZE	64
 
 #define instruction_pointer(regs) ((regs)->nip)
-#define user_mode(regs) ((regs)->msr & 0x4000)
+#define user_mode(regs) ((regs)->msr & MSR_PR)
 
 /*
  * Offsets used by 'ptrace' system call interface.

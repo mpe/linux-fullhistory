@@ -137,7 +137,7 @@ __start:
 #endif	
 /*
  * We have to do any OF calls before we map ourselves to KERNELBASE,
- * because OF may have I/O devices mapped in in that area
+ * because OF may have I/O devices mapped into that area
  * (particularly on CHRP).
  */
 	mr	r31,r3			/* save parameters */
@@ -444,7 +444,9 @@ SystemCall:
 	STD_EXCEPTION(0xd00, SingleStep, SingleStepException)
 
 	STD_EXCEPTION(0xe00, Trap_0e, UnknownException)
+#ifdef CONFIG_ALTIVEC	
 	STD_EXCEPTION(0xf20, AltiVec, AltiVecUnavailable)
+#endif /* CONFIG_ALTIVEC */
 
 /*
  * Handle TLB miss for instruction on 603/603e.
@@ -1166,7 +1168,6 @@ __secondary_start:
 	mtspr	SRR0,r3
 	mtspr	SRR1,r4
 	rfi
-
 #endif /* CONFIG_SMP */
 
 /*
@@ -1384,35 +1385,37 @@ cmd_line:
  *  -- Cort 
  */
 clear_bats:
-	mfmsr	r20
-	andi.	r19,r20,MSR_DR
-	beqlr
-	
+#if !defined(CONFIG_GEMINI)
 	li	r20,0
+	mfspr	r9,PVR
+	rlwinm	r9,r9,16,16,31		/* r9 = 1 for 601, 4 for 604 */
+	cmpwi	r9, 1
+	beq	1f
 	
 	mtspr	DBAT0U,r20
-	mtspr	DBAT0L,r20
-	mtspr	IBAT0U,r20
-	mtspr	IBAT0L,r20
-	sync
-	isync
-	
+	mtspr	DBAT0L,r20	
 	mtspr	DBAT1U,r20
 	mtspr	DBAT1L,r20
-	mtspr	IBAT1U,r20
-	mtspr	IBAT1L,r20
-	sync
-	isync	
-
 	mtspr	DBAT2U,r20
-	mtspr	DBAT2L,r20
-	mtspr	IBAT2U,r20
-	mtspr	IBAT2L,r20
-	
+	mtspr	DBAT2L,r20	
 	mtspr	DBAT3U,r20
 	mtspr	DBAT3L,r20
+1:	
+	mtspr	IBAT0U,r20
+	mtspr	IBAT0L,r20
+	mtspr	IBAT1U,r20
+	mtspr	IBAT1L,r20
+	mtspr	IBAT2U,r20
+	mtspr	IBAT2L,r20
 	mtspr	IBAT3U,r20
 	mtspr	IBAT3L,r20
-	
+#endif /* !defined(CONFIG_GEMINI) */
 	blr
 
+flush_tlbs:
+	lis	r20, 0x1000
+1:	addic.	r20, r20, -0x1000
+	tlbie	r20
+	blt	1b
+	sync
+	blr

@@ -77,6 +77,21 @@ void __init pcibios_init(void)
 		ppc_md.pcibios_fixup();
 }
 
+void __init
+pcibios_fixup_pbus_ranges(struct pci_bus * bus, struct pbus_set_ranges_data * ranges)
+{
+	ranges->io_start -= bus->resource[0]->start;
+	ranges->io_end -= bus->resource[0]->start;
+	ranges->mem_start -= bus->resource[1]->start;
+	ranges->mem_end -= bus->resource[1]->start;
+}
+
+unsigned long resource_fixup(struct pci_dev * dev, struct resource * res,
+			     unsigned long start, unsigned long size)
+{
+	return start;
+}
+
 static void __init pcibios_claim_resources(struct pci_bus *bus)
 {
 	struct pci_dev *dev;
@@ -116,31 +131,6 @@ char __init *pcibios_setup(char *str)
 {
 	return str;
 }
-
-#ifndef CONFIG_8xx
-/* Recursively searches any node that is of type PCI-PCI bridge. Without
- * this, the old code would miss children of P2P bridges and hence not
- * fix IRQ's for cards located behind P2P bridges.
- * - Ranjit Deshpande, 01/20/99
- */
-void __init fix_intr(struct device_node *node, struct pci_dev *dev)
-{
-	unsigned int *reg, *class_code;
-
-	for (; node != 0;node = node->sibling) {
-		class_code = (unsigned int *) get_property(node, "class-code", 0);
-		if((*class_code >> 8) == PCI_CLASS_BRIDGE_PCI)
-			fix_intr(node->child, dev);
-		reg = (unsigned int *) get_property(node, "reg", 0);
-		if (reg == 0 || ((reg[0] >> 8) & 0xff) != dev->devfn)
-			continue;
-		/* this is the node, see if it has interrupts */
-		if (node->n_intrs > 0) 
-			dev->irq = node->intrs[0].line;
-		break;
-	}
-}
-#endif
 
 int pcibios_assign_resource(struct pci_dev *pdev, int resource)
 {

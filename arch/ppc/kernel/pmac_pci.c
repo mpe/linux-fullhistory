@@ -442,6 +442,30 @@ static void __init add_bridges(struct device_node *dev)
 	}
 }
 
+/* Recursively searches any node that is of type PCI-PCI bridge. Without
+ * this, the old code would miss children of P2P bridges and hence not
+ * fix IRQ's for cards located behind P2P bridges.
+ * - Ranjit Deshpande, 01/20/99
+ */
+void __init
+fix_intr(struct device_node *node, struct pci_dev *dev)
+{
+	unsigned int *reg, *class_code;
+
+	for (; node != 0;node = node->sibling) {
+		class_code = (unsigned int *) get_property(node, "class-code", 0);
+		if((*class_code >> 8) == PCI_CLASS_BRIDGE_PCI)
+			fix_intr(node->child, dev);
+		reg = (unsigned int *) get_property(node, "reg", 0);
+		if (reg == 0 || ((reg[0] >> 8) & 0xff) != dev->devfn)
+			continue;
+		/* this is the node, see if it has interrupts */
+		if (node->n_intrs > 0) 
+			dev->irq = node->intrs[0].line;
+		break;
+	}
+}
+
 void __init
 pmac_pcibios_fixup(void)
 {

@@ -112,14 +112,6 @@ start_ldr:
 	cmpi	0,r2,0
 	bne	00b
 
-	/* r4,r5 have initrd_start, size */
-	lis	r2,initrd_start@h
-	ori	r2,r2,initrd_start@l
-	lwz	r4,0(r2)
-	lis	r2,initrd_end@h
-	ori	r2,r2,initrd_end@l
-	lwz	r5,0(r2)
-	
 	/* tell kernel we're prep */
 	/* 
 	 * get start address of kernel code which is stored as a coff

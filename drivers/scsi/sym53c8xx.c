@@ -496,7 +496,7 @@ static int ncr_debug = SCSI_NCR_DEBUG_FLAGS;
 
 #if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,93)
 
-spinlock_t sym53c8xx_lock;
+spinlock_t sym53c8xx_lock = SPIN_LOCK_UNLOCKED;
 #define	NCR_LOCK_DRIVER(flags)     spin_lock_irqsave(&sym53c8xx_lock, flags)
 #define	NCR_UNLOCK_DRIVER(flags)   spin_unlock_irqrestore(&sym53c8xx_lock,flags)
 

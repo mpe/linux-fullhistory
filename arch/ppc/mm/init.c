@@ -40,6 +40,7 @@
 #include <linux/blk.h>		/* for initrd_* */
 #endif
 
+#include <asm/pgalloc.h>
 #include <asm/prom.h>
 #include <asm/io.h>
 #include <asm/mmu_context.h>
@@ -56,6 +57,10 @@
 #include <asm/amigahw.h>
 #include <asm/gemini.h>
 
+#include "mem_pieces.h"
+
+#define	PGTOKB(pages)	(((pages) * PAGE_SIZE) >> 10)
+
 int prom_trashed;
 atomic_t next_mmu_context;
 unsigned long *end_of_DRAM;
@@ -71,7 +76,6 @@ extern char __prep_begin, __prep_end;
 extern char __pmac_begin, __pmac_end;
 extern char __apus_begin, __apus_end;
 extern char __openfirmware_begin, __openfirmware_end;
-char *klimit = _end;
 struct device_node *memory_node;
 unsigned long ioremap_base;
 unsigned long ioremap_bot;
@@ -98,34 +102,13 @@ void map_page(unsigned long va, unsigned long pa, int flags);
 extern void die_if_kernel(char *,struct pt_regs *,long);
 extern void show_net_buffers(void);
 
-
-/*
- * The following stuff defines a data structure for representing
- * areas of memory as an array of (address, length) pairs, and
- * procedures for manipulating them.
- */
-#define MAX_MEM_REGIONS	32
-
-struct mem_pieces {
-	int n_regions;
-	struct reg_property regions[MAX_MEM_REGIONS];
-};
 struct mem_pieces phys_mem;
-struct mem_pieces phys_avail;
-
-static void remove_mem_piece(struct mem_pieces *, unsigned, unsigned, int);
-static void set_phys_avail(void);
-void *find_mem_piece(unsigned, unsigned);
-static void print_mem_pieces(struct mem_pieces *);
-#if defined(CONFIG_PREP) || defined(CONFIG_APUS) || defined(CONFIG_ALL_PPC)
-static void append_mem_piece(struct mem_pieces *, unsigned, unsigned);
-#endif
 
 extern struct task_struct *current_set[NR_CPUS];
 
 PTE *Hash, *Hash_end;
 unsigned long Hash_size, Hash_mask;
-#ifndef CONFIG_8xx
+#if !defined(CONFIG_4xx) && !defined(CONFIG_8xx)
 #ifdef CONFIG_PPC64
 unsigned long long _SDR1;
 #else
@@ -174,12 +157,10 @@ static inline unsigned long p_mapped_by_bats(unsigned long pa)
 	return 0;
 }
 
-#else /* CONFIG_8xx */
-
-/* 8xx doesn't have BATs */
+#else /* CONFIG_4xx || CONFIG_8xx */
 #define v_mapped_by_bats(x)	(0UL)
 #define p_mapped_by_bats(x)	(0UL)
-#endif /* CONFIG_8xx */
+#endif /* !CONFIG_4xx && !CONFIG_8xx */
 
 /*
  * this tells the system to map all of ram with the segregs
@@ -422,7 +403,7 @@ __ioremap(unsigned long addr, unsigned long size, unsigned long flags)
 	
 	if (mem_init_done) {
 		struct vm_struct *area;
-		area = get_vm_area(size, VM_ALLOC);
+		area = get_vm_area(size, VM_IOREMAP);
 		if (area == 0)
 			return NULL;
 		v = VMALLOC_VMADDR(area->addr);
@@ -593,195 +574,14 @@ mmu_context_overflow(void)
 }
 #endif /* CONFIG_8xx */
 
-/*
- * Set phys_avail to phys_mem less the kernel text/data/bss.
- */
-static void __init set_phys_avail(void)
-{
-	unsigned long kstart, ksize;
-
-	/* we can't call the prom any more at this stage, so
-	   all of memory is available (after klimit) */
-	phys_avail = phys_mem;
-
-	/*
-	 * phys_avail records memory we can use.
-	 * Make sure the kernel text/data/bss is not in it.
-	 */
-	kstart = __pa(_stext);	/* should be 0 */
-	ksize = PAGE_ALIGN(klimit - _stext);
-	remove_mem_piece(&phys_avail, kstart, ksize, 0);
-	remove_mem_piece(&phys_avail, 0, 0x4000, 0);
-
-#ifdef CONFIG_BLK_DEV_INITRD
-	if (initrd_start) {
-		/*
-		 * Remove the initialized ramdisk from the available memory.
-		 */
-		remove_mem_piece(&phys_avail, __pa(initrd_start),
-				 initrd_end - initrd_start, 1);
-	}
-#endif /* CONFIG_BLK_DEV_INITRD */
-}
-
-/*
- * Scan a region for a piece of a given size with the required alignment.
- */
-void __init *find_mem_piece(unsigned size, unsigned align)
-{
-	int i;
-	unsigned a, e;
-	struct mem_pieces *mp = &phys_avail;
-
-	for (i = 0; i < mp->n_regions; ++i) {
-		a = mp->regions[i].address;
-		e = a + mp->regions[i].size;
-		a = (a + align - 1) & -align;
-		if (a + size <= e) {
-			remove_mem_piece(mp, a, size, 1);
-			return __va(a);
-		}
-	}
-	printk("Couldn't find %u bytes at %u alignment\n", size, align);
-	abort();
-	return NULL;
-}
-
-/*
- * Remove some memory from an array of pieces
- */
-static void __init 
-remove_mem_piece(struct mem_pieces *mp, unsigned start, unsigned size,
-		 int must_exist)
-{
-	int i, j;
-	unsigned end, rs, re;
-	struct reg_property *rp;
-
-	end = start + size;
-	for (i = 0, rp = mp->regions; i < mp->n_regions; ++i, ++rp) {
-		if (end > rp->address && start < rp->address + rp->size)
-			break;
-	}
-	if (i >= mp->n_regions) {
-		if (must_exist)
-			printk("remove_mem_piece: [%x,%x) not in any region\n",
-			       start, end);
-		return;
-	}
-	for (; i < mp->n_regions && end > rp->address; ++i, ++rp) {
-		rs = rp->address;
-		re = rs + rp->size;
-		if (must_exist && (start < rs || end > re)) {
-			printk("remove_mem_piece: bad overlap [%x,%x) with",
-			       start, end);
-			print_mem_pieces(mp);
-			must_exist = 0;
-		}
-		if (start > rs) {
-			rp->size = start - rs;
-			if (end < re) {
-				/* need to split this entry */
-				if (mp->n_regions >= MAX_MEM_REGIONS)
-					panic("eek... mem_pieces overflow");
-				for (j = mp->n_regions; j > i + 1; --j)
-					mp->regions[j] = mp->regions[j-1];
-				++mp->n_regions;
-				rp[1].address = end;
-				rp[1].size = re - end;
-			}
-		} else {
-			if (end < re) {
-				rp->address = end;
-				rp->size = re - end;
-			} else {
-				/* need to delete this entry */
-				for (j = i; j < mp->n_regions - 1; ++j)
-					mp->regions[j] = mp->regions[j+1];
-				--mp->n_regions;
-				--i;
-				--rp;
-			}
-		}
-	}
-}
-
-static void __init print_mem_pieces(struct mem_pieces *mp)
-{
-	int i;
-
-	for (i = 0; i < mp->n_regions; ++i)
-		printk(" [%x, %x)", mp->regions[i].address,
-		       mp->regions[i].address + mp->regions[i].size);
-	printk("\n");
-}
-
-#if defined(CONFIG_PREP) || defined(CONFIG_APUS) || defined(CONFIG_ALL_PPC)
-/*
- * Add some memory to an array of pieces
- */
-static void __init
-append_mem_piece(struct mem_pieces *mp, unsigned start, unsigned size)
-{
-	struct reg_property *rp;
-
-	if (mp->n_regions >= MAX_MEM_REGIONS)
-		return;
-	rp = &mp->regions[mp->n_regions++];
-	rp->address = start;
-	rp->size = size;
-}
-#endif
-
-#ifndef CONFIG_8xx
-static void hash_init(void);
+#if !defined(CONFIG_4xx) && !defined(CONFIG_8xx)
 static void get_mem_prop(char *, struct mem_pieces *);
-static void sort_mem_pieces(struct mem_pieces *);
-static void coalesce_mem_pieces(struct mem_pieces *);
 
-static void __init sort_mem_pieces(struct mem_pieces *mp)
-{
-	unsigned long a, s;
-	int i, j;
-
-	for (i = 1; i < mp->n_regions; ++i) {
-		a = mp->regions[i].address;
-		s = mp->regions[i].size;
-		for (j = i - 1; j >= 0; --j) {
-			if (a >= mp->regions[j].address)
-				break;
-			mp->regions[j+1] = mp->regions[j];
-		}
-		mp->regions[j+1].address = a;
-		mp->regions[j+1].size = s;
-	}
-}
-
-static void __init coalesce_mem_pieces(struct mem_pieces *mp)
-{
-	unsigned long a, s, ns;
-	int i, j, d;
-
-	d = 0;
-	for (i = 0; i < mp->n_regions; i = j) {
-		a = mp->regions[i].address;
-		s = mp->regions[i].size;
-		for (j = i + 1; j < mp->n_regions
-			     && mp->regions[j].address - a <= s; ++j) {
-			ns = mp->regions[j].address + mp->regions[j].size - a;
-			if (ns > s)
-				s = ns;
-		}
-		mp->regions[d].address = a;
-		mp->regions[d].size = s;
-		++d;
-	}
-	mp->n_regions = d;
-}
-
+#if defined(CONFIG_PMAC) || defined(CONFIG_CHRP) || defined(CONFIG_ALL_PPC)
 /*
  * Read in a property describing some pieces of memory.
  */
+
 static void __init get_mem_prop(char *name, struct mem_pieces *mp)
 {
 	struct reg_property *rp;
@@ -797,9 +597,10 @@ static void __init get_mem_prop(char *name, struct mem_pieces *mp)
 	memcpy(mp->regions, rp, s);
 
 	/* Make sure the pieces are sorted. */
-	sort_mem_pieces(mp);
-	coalesce_mem_pieces(mp);
+	mem_pieces_sort(mp);
+	mem_pieces_coalesce(mp);
 }
+#endif /* CONFIG_PMAC || CONFIG_CHRP || CONFIG_ALL_PPC */
 
 /*
  * Set up one of the I/D BAT (block address translation) register pairs.
@@ -936,7 +737,7 @@ static void __init *MMU_get_page(void)
 	} else if (init_bootmem_done) {
 		p = alloc_bootmem_pages(PAGE_SIZE);
 	} else {
-		p = find_mem_piece(PAGE_SIZE, PAGE_SIZE);
+		p = mem_pieces_find(PAGE_SIZE, PAGE_SIZE);
 	}
 	if (p == 0)
 		panic("couldn't get a page in MMU_get_page");
@@ -997,17 +798,31 @@ void __init free_initmem(void)
 			 num_openfirmware_pages );
 	
 	printk ("Freeing unused kernel memory: %ldk init",
-		(num_freed_pages * PAGE_SIZE) >> 10);
+		PGTOKB(num_freed_pages));
+
 	if ( num_prep_pages )
-		printk(" %ldk prep",(num_prep_pages*PAGE_SIZE)>>10);
+		printk(" %ldk prep", PGTOKB(num_prep_pages));
 	if ( num_pmac_pages )
-		printk(" %ldk pmac",(num_pmac_pages*PAGE_SIZE)>>10);
+		printk(" %ldk pmac", PGTOKB(num_pmac_pages));
 	if ( num_openfirmware_pages )
-		printk(" %ldk open firmware",(num_openfirmware_pages*PAGE_SIZE)>>10);
+		printk(" %ldk open firmware", PGTOKB(num_openfirmware_pages));
 	if ( num_apus_pages )
-		printk(" %ldk apus",(num_apus_pages*PAGE_SIZE)>>10);
+		printk(" %ldk apus", PGTOKB(num_apus_pages));
 	printk("\n");
 }
+
+#ifdef CONFIG_BLK_DEV_INITRD
+void free_initrd_mem(unsigned long start, unsigned long end)
+{
+	for (; start < end; start += PAGE_SIZE) {
+		ClearPageReserved(mem_map + MAP_NR(start));
+		set_page_count(mem_map+MAP_NR(start), 1);
+		free_page(start);
+		totalram_pages++;
+	}
+	printk ("Freeing initrd memory: %ldk freed\n", (end - start) >> 10);
+}
+#endif
 
 /*
  * Do very early mm setup such as finding the size of memory
@@ -1152,7 +967,7 @@ void __init do_init_bootmem(void)
 				    __pa(end_of_DRAM) >> PAGE_SHIFT);
 
 	/* remove the bootmem bitmap from the available memory */
-	remove_mem_piece(&phys_avail, start, boot_mapsize, 1);
+	mem_pieces_remove(&phys_avail, start, boot_mapsize, 1);
 	/* add everything in phys_avail into the bootmem map */
 	for (i = 0; i < phys_avail.n_regions; ++i)
 		free_bootmem(phys_avail.regions[i].address,
@@ -1213,15 +1028,21 @@ void __init paging_init(void)
 	empty_bad_page = alloc_bootmem_pages(PAGE_SIZE);
 	empty_bad_page_table = alloc_bootmem_pages(PAGE_SIZE);
 	{
-		unsigned int zones_size[2];
+		unsigned int zones_size[MAX_NR_ZONES], i;
 		/*
-		 * All pages are DMA-able so this is wrong - the zone code is assuming
-		 * both regions have a value so this is necessary for now.
+		 * All pages are DMA-able so this is wrong - the zone code is
+		 * assuming both regions have a value so this is necessary for
+		 * now.
 		 * -- Cort
 		 */
-		zones_size[0] = virt_to_phys(end_of_DRAM-(1<<20)) >> PAGE_SHIFT;
-		zones_size[1] = (1<<20) >> PAGE_SHIFT;
-
+#if 1
+		for ( i = 1; i < MAX_NR_ZONES; i++ )
+			zones_size[i] = 1<<MAX_ORDER;
+		zones_size[0] = (virt_to_phys(end_of_DRAM) >> PAGE_SHIFT) -
+			((MAX_NR_ZONES-1)*(1<<MAX_ORDER));
+#else
+		zones_size[0] = virt_to_phys(end_of_DRAM) >> PAGE_SHIFT;
+#endif
 		free_area_init(zones_size);
 	}
 }
@@ -1232,8 +1053,9 @@ void __init mem_init(void)
 	int codepages = 0;
 	int datapages = 0;
 	int initpages = 0;
+#if defined(CONFIG_CHRP) || defined(CONFIG_ALL_PPC)	
 	extern unsigned int rtas_data, rtas_size;
-
+#endif /* defined(CONFIG_CHRP) || defined(CONFIG_ALL_PPC) */
 	max_mapnr = max_low_pfn;
 	high_memory = (void *) __va(max_low_pfn * PAGE_SIZE);
 	num_physpages = max_mapnr;	/* RAM is assumed contiguous */
@@ -1249,11 +1071,13 @@ void __init mem_init(void)
 	}
 #endif /* CONFIG_BLK_DEV_INITRD */
 
+#if defined(CONFIG_CHRP) || defined(CONFIG_ALL_PPC)	
 	/* mark the RTAS pages as reserved */
 	if ( rtas_data )
-		for (addr = (rtas_data+PAGE_OFFSET); addr < PAGE_ALIGN(PAGE_OFFSET+rtas_data+rtas_size) ;
-		     rtas_data += PAGE_SIZE)
+		for (addr = rtas_data; addr < PAGE_ALIGN(rtas_data+rtas_size) ;
+		     addr += PAGE_SIZE)
 			SetPageReserved(mem_map + MAP_NR(addr));
+#endif /* defined(CONFIG_CHRP) || defined(CONFIG_ALL_PPC) */
 	
 	for (addr = PAGE_OFFSET; addr < (unsigned long)end_of_DRAM;
 	     addr += PAGE_SIZE) {
@@ -1277,7 +1101,7 @@ void __init mem_init(void)
 	mem_init_done = 1;
 }
 
-#ifndef CONFIG_8xx
+#if !defined(CONFIG_4xx) && !defined(CONFIG_8xx)
 #if defined(CONFIG_PMAC) || defined(CONFIG_CHRP) || defined(CONFIG_ALL_PPC)
 /*
  * On systems with Open Firmware, collect information about
@@ -1339,7 +1163,7 @@ unsigned long __init *pmac_find_end_of_memory(void)
 		phys_mem.n_regions = 1;
 	}
 
-	set_phys_avail();
+	set_phys_avail(&phys_mem);
 
 #undef RAM_LIMIT
 	return __va(total);
@@ -1368,8 +1192,8 @@ unsigned long __init *prep_find_end_of_memory(void)
 		total = 0x02000000;
 		printk("Ramsize default to be %ldM\n", total>>20);
 	}
-	append_mem_piece(&phys_mem, 0, total);
-	set_phys_avail();
+	mem_pieces_append(&phys_mem, 0, total);
+	set_phys_avail(&phys_mem);
 
 	return (__va(total));
 }
@@ -1391,7 +1215,7 @@ unsigned long __init *gemini_find_end_of_memory(void)
 	phys_mem.n_regions = 1;
 	
 	ret = __va(phys_mem.regions[0].size);
-	set_phys_avail();
+	set_phys_avail(&phys_mem);
 	return ret;
 }
 #endif /* defined(CONFIG_GEMINI) */
@@ -1427,8 +1251,8 @@ unsigned long __init *apus_find_end_of_memory(void)
 	}
 
 	/* Now register the memory block. */
-	append_mem_piece(&phys_mem, memory[0].addr, memory[0].size);
-	set_phys_avail();
+	mem_pieces_append(&phys_mem, memory[0].addr, memory[0].size);
+	set_phys_avail(&phys_mem);
 
 	/* Remove the memory chunks that are controlled by special
            Phase5 hardware. */
@@ -1442,8 +1266,8 @@ unsigned long __init *apus_find_end_of_memory(void)
 		if (shadow)
 		{
 			top -= HARDWARE_MAPPED_SIZE;
-			remove_mem_piece(&phys_avail, top,
-					 HARDWARE_MAPPED_SIZE, 0);
+			mem_pieces_remove(&phys_avail, top,
+					  HARDWARE_MAPPED_SIZE, 0);
 		}
 
 		/* Remove the upper 512KB where the PPC exception
@@ -1451,9 +1275,9 @@ unsigned long __init *apus_find_end_of_memory(void)
 		top -= HARDWARE_MAPPED_SIZE;
 #if 0
 		/* This would be neat, but it breaks on A3000 machines!? */
-		remove_mem_piece(&phys_avail, top, 16384, 0);
+		mem_pieces_remove(&phys_avail, top, 16384, 0);
 #else
-		remove_mem_piece(&phys_avail, top, HARDWARE_MAPPED_SIZE, 0);
+		mem_pieces_remove(&phys_avail, top, HARDWARE_MAPPED_SIZE, 0);
 #endif
 
 	}
@@ -1512,7 +1336,7 @@ static void __init hash_init(void)
 	if ( ppc_md.progress ) ppc_md.progress("hash:find piece", 0x322);
 	/* Find some memory for the hash table. */
 	if ( Hash_size )
-		Hash = find_mem_piece(Hash_size, Hash_size);
+		Hash = mem_pieces_find(Hash_size, Hash_size);
 	else
 		Hash = 0;
 
@@ -1590,7 +1414,7 @@ unsigned long __init *m8xx_find_end_of_memory(void)
 	ret = __va(phys_mem.regions[0].address+
 		   phys_mem.regions[0].size);
 
-	set_phys_avail();
+	set_phys_avail(&phys_mem);
 	return ret;
 }
 #endif /* ndef CONFIG_8xx */

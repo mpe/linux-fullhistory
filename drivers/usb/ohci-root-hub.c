@@ -205,7 +205,7 @@ int root_hub_control_msg(struct usb_device *usb_dev, unsigned int pipe, devreque
 					len = min(leni, min(sizeof(root_hub_config_des), wLength));
 					memcpy(data, root_hub_config_des, len); OK(len);
 				case (0x03): /* string descriptors */
-				default:
+				default: OK(-4);
 			}
 			break;
 		
@@ -229,13 +229,15 @@ int root_hub_control_msg(struct usb_device *usb_dev, unsigned int pipe, devreque
 		case RH_GET_CONFIGURATION: 	*(__u8 *)data = 0x01; OK(1);
 
 		case RH_SET_CONFIGURATION: 	WR_RH_STAT( 0x10000); OK(0);
+
+		default: OK(-4);
 	}
 	
 	OHCI_DEBUG(printk("USB HC roothubstat1: %x \n", readl( &(ohci->regs->roothub.portstatus[0]) ));)
 	OHCI_DEBUG(printk("USB HC roothubstat2: %x \n", readl( &(ohci->regs->roothub.portstatus[1]) ));)
   		
 	
-	return req_reply;
+	return len;
 }
 
 /* prepare Interrupt pipe transaction data; HUB INTERRUPT ENDPOINT */ 

@@ -83,23 +83,6 @@ extern char cmd_line[512];
 
 extern void setup_pci_ptrs(void);
 
-#define BOOT_INFO_VER 0x1
-#define BOOT_INFO_MAGIC 0x05027800
-
-struct boot_info
-{
-	unsigned long magic_start;
-	char cmd_line[256];
-	char boot_loader[128];
-	int _machine_type;
-	unsigned long initrd_start, initrd_size;
-	unsigned long systemmap_start, systemmap_size;
-	unsigned long prom_entry;
-	char reserved[3680];	/* pad to 1 page */
-	unsigned long magic_end;
-};
-struct boot_info *binfo;
-
 /*
  * Power macintoshes have either a CUDA or a PMU controlling
  * system reset, power, NVRAM, RTC.

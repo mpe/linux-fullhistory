@@ -89,55 +89,25 @@ static int hpfs_write_partial_page(struct file *file, struct page *page, unsigne
 {
 	struct dentry *dentry = file->f_dentry;
 	struct inode *inode = dentry->d_inode;
-	struct page *new_page, **hash;
+	struct page *new_page;
 	unsigned long pgpos;
-	struct page * page_cache = NULL;
 	long status;
 
-	printk("- off: %08x\n", (int)page->offset);
-	pgpos = (inode->i_blocks - 1) * 512 & PAGE_CACHE_MASK;
-	while (pgpos < page->offset) {
-long pgp = pgpos;
-		printk("pgpos: %08x, bl: %d\n", (int)pgpos, (int)inode->i_blocks);
-		hash = page_hash(&inode->i_data, pgpos);
-repeat_find:	new_page = __find_lock_page(&inode->i_data, pgpos, hash);
-		if (!new_page) {
-			if (!page_cache) {
-				page_cache = page_cache_alloc();
-				if (page_cache)
-					goto repeat_find;
-				status = -ENOMEM;
-				goto out;
-			}
-			new_page = page_cache;
-			if (add_to_page_cache_unique(new_page,&inode->i_data,pgpos,hash))
-				goto repeat_find;
-			page_cache = NULL;
-		}
-		printk("A\n");
+	pgpos = ((inode->i_blocks - 1) * 512) >> PAGE_CACHE_SHIFT;
+	while (pgpos < page->index) {
+		status = -ENOMEM;
+		new_page = grab_page_cache(&inode->i_data, pgpos);
+		if (!new_page)
+			goto out;
 		status = block_write_cont_page(file, new_page, PAGE_SIZE, 0, NULL);
-		printk("B\n");
 		UnlockPage(new_page);
 		page_cache_release(new_page);
 		if (status < 0)
 			goto out;
-		pgpos = (inode->i_blocks - 1) * 512 & PAGE_CACHE_MASK;
-		printk("pgpos2: %08x, bl: %d\n", (int)pgpos, (int)inode->i_blocks);
-		if (pgpos == pgp) {
-			status = -1;
-			printk("ERROR\n");
-			goto out;
-		}
+		pgpos = ((inode->i_blocks - 1) * 512) >> PAGE_CACHE_SHIFT;
 	}
-	//if ((status = block_write_cont_page(file, page, PAGE_SIZE, 0, NULL)) < 0) goto out;
-	printk("C\n");
 	status = block_write_cont_page(file, page, offset, bytes, buf);
-	printk("D\n");
 out:
-	printk("O\n");
-	if (page_cache)
-		page_cache_free(page_cache);
-	printk("E\n");
 	return status;
 }
 
@@ -147,7 +117,7 @@ ssize_t hpfs_file_write(struct file *file, const char *buf, size_t count, loff_t
 	ssize_t retval;
 
 	retval = generic_file_write(file, buf, count,
-				    ppos, /*hpfs_write_partial_page*/block_write_partial_page);
+				    ppos, hpfs_write_partial_page);
 	if (retval > 0) {
 		struct inode *inode = file->f_dentry->d_inode;
 		inode->i_mtime = CURRENT_TIME;

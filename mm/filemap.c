@@ -538,7 +538,7 @@ static inline int page_cache_read(struct file * file, unsigned long offset)
 		return -ENOMEM;
 
 	if (!add_to_page_cache_unique(page, &inode->i_data, offset, hash)) {
-		int error = inode->i_op->readpage(file, page);
+		int error = inode->i_op->readpage(file->f_dentry, page);
 		page_cache_release(page);
 		return error;
 	}
@@ -1075,7 +1075,7 @@ page_not_up_to_date:
 
 readpage:
 		/* ... and start the actual read. The read will unlock the page. */
-		error = inode->i_op->readpage(filp, page);
+		error = inode->i_op->readpage(filp->f_dentry, page);
 
 		if (!error) {
 			if (Page_Uptodate(page))
@@ -1397,7 +1397,7 @@ page_not_uptodate:
 		goto success;
 	}
 
-	if (!inode->i_op->readpage(file, page)) {
+	if (!inode->i_op->readpage(file->f_dentry, page)) {
 		wait_on_page(page);
 		if (Page_Uptodate(page))
 			goto success;
@@ -1415,7 +1415,7 @@ page_not_uptodate:
 		goto success;
 	}
 	ClearPageError(page);
-	if (!inode->i_op->readpage(file, page)) {
+	if (!inode->i_op->readpage(file->f_dentry, page)) {
 		wait_on_page(page);
 		if (Page_Uptodate(page))
 			goto success;
@@ -1438,7 +1438,7 @@ static inline int do_write_page(struct inode * inode, struct file * file,
 {
 	int retval;
 	unsigned long size;
-	int (*writepage) (struct file *, struct page *);
+	int (*writepage) (struct dentry *, struct page *);
 
 	size = (offset << PAGE_CACHE_SHIFT) + PAGE_CACHE_SIZE;
 	/* refuse to extend file size.. */
@@ -1453,7 +1453,7 @@ static inline int do_write_page(struct inode * inode, struct file * file,
 	writepage = inode->i_op->writepage;
 	lock_page(page);
 
-	retval = writepage(file, page);
+	retval = writepage(file->f_dentry, page);
 
 	UnlockPage(page);
 	return retval;
@@ -1767,6 +1767,70 @@ out:
 	return error;
 }
 
+struct page *read_cache_page(struct address_space *mapping,
+				unsigned long index,
+				int (*filler)(void *,struct page*),
+				void *data)
+{
+	struct page **hash = page_hash(mapping, index);
+	struct page *page, *cached_page = NULL;
+	int err;
+repeat:
+	page = __find_get_page(mapping, index, hash);
+	if (!page) {
+		if (!cached_page) {
+			cached_page = page_cache_alloc();
+			if (!cached_page)
+				return ERR_PTR(-ENOMEM);
+		}
+		page = cached_page;
+		if (add_to_page_cache_unique(page, mapping, index, hash))
+			goto repeat;
+		cached_page = NULL;
+		err = filler(data, page);
+		if (err < 0) {
+			page_cache_release(page);
+			page = ERR_PTR(err);
+		}
+	}
+	if (cached_page)
+		page_cache_free(cached_page);
+	return page;
+}
+
+static inline struct page * __grab_cache_page(struct address_space *mapping,
+				unsigned long index, struct page **cached_page)
+{
+	struct page *page, **hash = page_hash(mapping, index);
+repeat:
+	page = __find_lock_page(mapping, index, hash);
+	if (!page) {
+		if (!*cached_page) {
+			*cached_page = page_cache_alloc();
+			if (!*cached_page)
+				return NULL;
+		}
+		page = *cached_page;
+		if (add_to_page_cache_unique(page, mapping, index, hash))
+			goto repeat;
+		*cached_page = NULL;
+	}
+	return page;
+}
+
+/*
+ * Returns locked page at given index in given cache, creating it if needed.
+ */
+
+struct page *grab_cache_page(struct address_space *mapping, unsigned long index)
+{
+	struct page *cached_page = NULL;
+	struct page *page = __grab_cache_page(mapping,index,&cached_page);
+	if (cached_page)
+		page_cache_free(cached_page);
+	return page;
+}
+
 /*
  * Write to a file through the page cache. This is mainly for the
  * benefit of NFS and possibly other network-based file systems.
@@ -1792,7 +1856,7 @@ generic_file_write(struct file *file, const char *buf,
 	struct inode	*inode = dentry->d_inode; 
 	unsigned long	limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
 	loff_t		pos;
-	struct page	*page, **hash, *cached_page;
+	struct page	*page, *cached_page;
 	unsigned long	written;
 	long		status;
 	int		err;
@@ -1847,23 +1911,10 @@ generic_file_write(struct file *file, const char *buf,
 		if (bytes > count)
 			bytes = count;
 
-		hash = page_hash(&inode->i_data, index);
-repeat_find:
-		page = __find_lock_page(&inode->i_data, index, hash);
-		if (!page) {
-			if (!cached_page) {
-				cached_page = page_cache_alloc();
-				if (cached_page)
-					goto repeat_find;
-				status = -ENOMEM;
-				break;
-			}
-			page = cached_page;
-			if (add_to_page_cache_unique(page, &inode->i_data, index, hash))
-				goto repeat_find;
-
-			cached_page = NULL;
-		}
+		status = -ENOMEM;	/* we'll assign it later anyway */
+		page = __grab_cache_page(&inode->i_data, index, &cached_page);
+		if (!page)
+			break;
 
 		/* We have exclusive IO access to the page.. */
 		if (!PageLocked(page)) {

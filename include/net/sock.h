@@ -386,6 +386,7 @@ typedef struct {
 
 #define sock_lock_init(__sk) \
 do {	spin_lock_init(&((__sk)->lock.slock)); \
+	(__sk)->dst_lock = RW_LOCK_UNLOCKED; \
 	(__sk)->lock.users = 0; \
 	init_waitqueue_head(&((__sk)->lock.wq)); \
 } while(0);

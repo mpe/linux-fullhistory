@@ -219,7 +219,7 @@ usb_kbd_probe(struct usb_device *dev, unsigned int i)
         usb_set_protocol(dev, 0);
         usb_set_idle(dev, 0, 0);
         
-	kbd->irqpipe = usb_rcvctrlpipe(dev, endpoint->bEndpointAddress);
+	kbd->irqpipe = usb_rcvintpipe(dev, endpoint->bEndpointAddress);
 	ret = usb_request_irq(dev, kbd->irqpipe,
 				usb_kbd_irq, endpoint->bInterval,
 				kbd, &kbd->irq_handler);

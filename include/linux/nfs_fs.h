@@ -212,7 +212,7 @@ extern int nfs_lock(struct file *, int, struct file_lock *);
 /*
  * linux/fs/nfs/write.c
  */
-extern int  nfs_writepage(struct file *, struct page *);
+extern int  nfs_writepage(struct dentry *, struct page *);
 extern int  nfs_check_failed_request(struct inode *);
 
 /*
@@ -233,7 +233,7 @@ extern int  nfs_updatepage(struct file *, struct page *, unsigned long, unsigned
 /*
  * linux/fs/nfs/read.c
  */
-extern int  nfs_readpage(struct file *, struct page *);
+extern int  nfs_readpage(struct dentry *, struct page *);
 
 /*
  * linux/fs/mount_clnt.c

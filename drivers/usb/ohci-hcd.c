@@ -90,7 +90,7 @@ static int sohci_blocking_handler(void * ohci_in, struct usb_ohci_td *td, void *
 {  
 	struct usb_ohci_ed *ed = td->ed;
 	if(lw0 != NULL) {
-		if(0 < 0 && (status == USB_ST_DATAUNDERRUN || status == USB_ST_NOERROR)) 
+		if((status == USB_ST_DATAUNDERRUN || status == USB_ST_NOERROR)) 
 			((struct ohci_state * )lw0)->status = data_len;
 		else
 			((struct ohci_state * )lw0)->status = status;
@@ -123,7 +123,7 @@ static int sohci_int_handler(void * ohci_in, struct usb_ohci_td *td, void * data
  
 	ret = handler(status, data, data_len, dev_id);
 	if(ret == 0) return 0; /* 0 .. do not requeue  */
-	if(status > 0) return -1; /* error occured do not requeue ? */
+	if(status < 0) return -1; /* error occured do not requeue ? */
 	ohci_trans_req(ohci, ed, 0, NULL, data, (ed->hwINFO >> 16) & 0x3f, (__OHCI_BAG) handler, (__OHCI_BAG) dev_id, INT_IN, sohci_int_handler); /* requeue int request */
  
 	return 0;
@@ -342,15 +342,13 @@ static void * sohci_request_bulk(struct usb_device *usb_dev, unsigned int pipe, 
  
 static int sohci_terminate_bulk(struct usb_device *usb_dev, void * ed) 
 {
-	DECLARE_WAITQUEUE(wait, current);
 	
 	OHCI_DEBUG( printk("USB HC TERM_BULK>>>:%4x\n", (unsigned int) ed);)
  	
-	current->state = TASK_UNINTERRUPTIBLE;
-    usb_ohci_rm_ep(usb_dev, (struct usb_ohci_ed *) ed, sohci_blocking_handler, NULL, &wait, SEND);
-    schedule();
-    remove_wait_queue(&op_wakeup, &wait); 
-	return 1;
+	ED_setSTATE((struct usb_ohci_ed *)ed, ED_STOP);
+	 
+    usb_ohci_rm_ep(usb_dev, (struct usb_ohci_ed *) ed, NULL, NULL, NULL, 0);
+	return 0;
 }
 
 static int sohci_alloc_dev(struct usb_device *usb_dev)
@@ -382,7 +380,7 @@ static int sohci_free_dev(struct usb_device *usb_dev)
 	struct ohci_device *dev = usb_to_ohci(usb_dev);
 
 	OHCI_DEBUG(printk("USB HC ***** free %x\n", usb_dev->devnum);)
-
+	wait_ms(10);
 	if(usb_dev->devnum >= 0) {
 		current->state = TASK_UNINTERRUPTIBLE;
     	cnt = usb_ohci_rm_function(usb_dev, sohci_blocking_handler, NULL, &wait);
@@ -409,7 +407,7 @@ static int sohci_get_current_frame_number(struct usb_device *usb_dev) {
 
 	struct ohci * ohci = usb_dev->bus->hcpriv;
 	
-	return readl(&ohci->regs->fmnumber) & 0xffff;
+	return ohci->hc_area->hcca.frame_no & 0xffff;
 }
 
 
@@ -509,7 +507,9 @@ static int sohci_kill_isoc(struct usb_isoc_desc *id) {
 	for (i = 0; i < id->frame_count; i++) {
 		if(td[i]) {
 			td[i]->type |= DEL;
-			ed = td[i]->ed; printk(" %d", i);	
+			ed = td[i]->ed; 
+			OHCI_DEBUG(printk(" %d", i);)	
+			td[i] = NULL;
 		}
 	} 
 	if(ed) usb_ohci_rm_ep(id->usb_dev, ed, NULL, NULL, NULL, TD_RM);
@@ -1100,7 +1100,7 @@ static struct usb_ohci_td * usb_ohci_del_list(struct ohci *  ohci) {
 	__u32 * td_hw; 
 	
 	for(ed = ohci->ed_rm_list; ed != NULL; ed = ed->ed_prev) {
-		 OHCI_DEBUG(printk("USB HC ed_rm_list: %4x :\n", ed->hwINFO);)
+		 OHCI_DEBUG(printk("USB HC ed_rm_list: %4x :next : %p\n", ed->hwINFO, ed->ed_prev);)
 		  
   			
 		for( td_hw = &(ed->hwHeadP); (*td_hw & 0xfffffff0) != ed->hwTailP; td_hw = &(td->hwNextTD)) {
@@ -1483,6 +1483,8 @@ static int start_ohci(struct pci_dev *dev)
 static int handle_apm_event(apm_event_t event)
 {
 	static int down = 0;
+	struct ohci * ohci;
+	struct list_head *ohci_l;
 
 	switch (event) {
 	case APM_SYS_SUSPEND:
@@ -1491,6 +1493,12 @@ static int handle_apm_event(apm_event_t event)
 			printk(KERN_DEBUG "ohci: received extra suspend event\n");
 			break;
 		}
+		for(ohci_l = ohci_hcd_list.next; ohci_l != &ohci_hcd_list; ohci_l = ohci_l->next) {
+			ohci = list_entry(ohci_l, struct ohci, ohci_hcd_list);
+			OHCI_DEBUG(printk("USB OHCI suspend: %p\n", ohci);)
+			writel(0xff, &ohci->regs->control); /* Suspend */
+		}
+		wait_ms(10);
 		down = 1;
 		break;
 	case APM_NORMAL_RESUME:
@@ -1499,8 +1507,14 @@ static int handle_apm_event(apm_event_t event)
 			printk(KERN_DEBUG "ohci: received bogus resume event\n");
 			break;
 		}
+		for(ohci_l = ohci_hcd_list.next; ohci_l != &ohci_hcd_list; ohci_l = ohci_l->next) {
+			ohci = list_entry(ohci_l, struct ohci, ohci_hcd_list);
+			OHCI_DEBUG(printk("USB OHCI resume: %p\n", ohci);)
+			writel(0x7f, &ohci->regs->control); /* Resume */
+			wait_ms(20);
+			writel(0xBF, &ohci->regs->control); /* Operational */
+		}
 		down = 0;
-//		start_hc(ohci);
 		break;
 	}
 	return 0;

@@ -36,7 +36,6 @@
 
 void gemini_setup_pci_ptrs(void);
 
-static int l2_printed = 0;
 static unsigned char gemini_switch_map = 0;
 static char *gemini_board_families[] = {
 	"VGM", "VSS", "KGM", "VGR", "KSS"
@@ -178,10 +177,8 @@ void __init gemini_setup_arch(void)
 
 	/* take special pains to map the MPIC, since it isn't mapped yet */
 	gemini_openpic_init();
-
 	/* start the L2 */
 	gemini_init_l2();
-
 }
 
 
@@ -218,7 +215,6 @@ gemini_get_clock_speed(void)
 
 	return clock;
 }
-
 
 #define L2CR_PIPE_LATEWR   (0x01800000)   /* late-write SRAM */
 #define L2CR_L2CTL         (0x00100000)   /* RAM control */
@@ -259,18 +255,17 @@ void __init gemini_init_l2(void)
 		   probably always going to be late-write".  --Dan */
 
 		if (reg & 0xc0) {
-			if (!l2_printed) {
-				printk("Enabling 750 L2 cache: %dKb\n", 
-				       (128 << ((reg & 0xc0)>>6)));
-				l2_printed=1;
-			}
-    
+			printk("Enabling 750 L2 cache: %dKb\n", 
+			       (128 << ((reg & 0xc0)>>6)));
 			/* take the size given */
 			cache = (((reg>>6) & 0x3)<<28);
 		}
 		else
+		{
+			printk("Enabling 750 L2 cache: 1M\n");
 			/* default of 1Mb */
 			cache = 0x3<<28;
+		}
  
 		reg &= 0x3;
 
@@ -278,6 +273,7 @@ void __init gemini_init_l2(void)
 		   things.  If found, tune it down to 1:1.5.  -- Dan */
 		if (!reg) {
 
+printk("3\n");
 			speed = gemini_get_clock_speed();
    
 			if (speed >= 300) {
@@ -297,7 +293,10 @@ void __init gemini_init_l2(void)
 		   write-through.  This is fixed in IBM's 3.1 rev (I'm told), but
 		   for now, always make 2.x versions use L2 write-through. --Dan */
 		if (((_get_PVR()>>8) & 0xf) <= 2)
+		{
 			cache |= L2CR_L2WT;
+			printk("L2 cache: Enabling Write-Through due to 750 Errata.\n");
+		}
 #endif
 		cache |= L2CR_PIPE_LATEWR|L2CR_L2CTL|L2CR_INST_DISABLE;
 		_set_L2CR(0);
@@ -480,6 +479,39 @@ void __init gemini_calibrate_decr(void)
 	count_period_den = freq / 1000000;
 }
 
+int gemini_get_irq( struct pt_regs *regs )
+{
+        int irq;
+
+        irq = openpic_irq( smp_processor_id() );
+        if (irq == OPENPIC_VEC_SPURIOUS)
+                /*
+                 * Spurious interrupts should never be
+                 * acknowledged
+                 */
+		irq = -1;
+	/*
+	 * I would like to openpic_eoi here but there seem to be timing problems
+	 * between the openpic ack and the openpic eoi.
+	 *   -- Cort
+	 */
+	return irq;
+}
+
+void gemini_post_irq(int irq)
+{
+	/*
+	 * If it's an i8259 irq then we've already done the
+	 * openpic irq.  So we just check to make sure the controller
+	 * is an openpic and if it is then eoi
+	 *
+	 * We do it this way since our irq_desc[irq].ctl can change
+	 * with RTL and no longer be open_pic -- Cort
+	 */
+	if ( irq >= open_pic.irq_offset)
+		openpic_eoi( smp_processor_id() );
+}
+
 
 void __init gemini_init(unsigned long r3, unsigned long r4, unsigned long r5,
 			unsigned long r6, unsigned long r7)
@@ -506,8 +538,8 @@ void __init gemini_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.get_cpuinfo = gemini_get_cpuinfo;
 	ppc_md.irq_cannonicalize = NULL;
 	ppc_md.init_IRQ = gemini_init_IRQ;
-	ppc_md.get_irq = chrp_get_irq;
-	ppc_md.post_irq = chrp_post_irq;
+	ppc_md.get_irq = gemini_get_irq;
+	ppc_md.post_irq = gemini_post_irq;
 	ppc_md.init = NULL;
 
 	ppc_md.restart = gemini_restart;

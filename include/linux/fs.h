@@ -649,8 +649,8 @@ struct inode_operations {
 	 */
 	int (*get_block) (struct inode *, long, struct buffer_head *, int);
 
-	int (*readpage) (struct file *, struct page *);
-	int (*writepage) (struct file *, struct page *);
+	int (*readpage) (struct dentry *, struct page *);
+	int (*writepage) (struct dentry *, struct page *);
 	int (*flushpage) (struct inode *, struct page *, unsigned long);
 
 	void (*truncate) (struct inode *);
@@ -944,8 +944,8 @@ extern int brw_page(int, struct page *, kdev_t, int [], int);
 typedef int (*writepage_t)(struct file *, struct page *, unsigned long, unsigned long, const char *);
 
 /* Generic buffer handling for block filesystems.. */
-extern int block_read_full_page(struct file *, struct page *);
-extern int block_write_full_page (struct file *, struct page *);
+extern int block_read_full_page(struct dentry *, struct page *);
+extern int block_write_full_page (struct dentry *, struct page *);
 extern int block_write_partial_page (struct file *, struct page *, unsigned long, unsigned long, const char *);
 extern int block_write_cont_page (struct file *, struct page *, unsigned long, unsigned long, const char *);
 extern int block_flushpage(struct inode *, struct page *, unsigned long);
@@ -954,7 +954,6 @@ extern int generic_file_mmap(struct file *, struct vm_area_struct *);
 extern ssize_t generic_file_read(struct file *, char *, size_t, loff_t *);
 extern ssize_t generic_file_write(struct file *, const char *, size_t, loff_t *, writepage_t);
 extern void do_generic_file_read(struct file * filp, loff_t *ppos, read_descriptor_t * desc, read_actor_t actor);
-
 
 extern struct super_block *get_super(kdev_t);
 struct super_block *get_empty_super(void);

@@ -34,7 +34,7 @@
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
 
-static int qnx4_readpage(struct file *file, struct page *page);
+static int qnx4_readpage(struct dentry *dentry, struct page *page);
 
 #ifdef CONFIG_QNX4FS_RW
 static ssize_t qnx4_file_write(struct file *filp, const char *buf,
@@ -203,9 +203,8 @@ struct inode_operations qnx4_file_inode_operations =
 	NULL			/* revalidate */
 };
 
-static int qnx4_readpage(struct file *file, struct page *page)
+static int qnx4_readpage(struct dentry *dentry, struct page *page)
 {
-	struct dentry *dentry = file->f_dentry;
 	struct inode *inode = dentry->d_inode;
 	struct qnx4_inode_info *qnx4_ino = &inode->u.qnx4_i;
 	unsigned long buf;

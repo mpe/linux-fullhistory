@@ -12,7 +12,17 @@
 
 O_TARGET := kernel.o
 OX_OBJS := ppc_ksyms.o setup.o
-KHEAD := head.o
+
+
+ifeq ($(CONFIG_4xx),y)
+  KHEAD := head_4xx.o
+else
+  ifeq ($(CONFIG_8xx),y)
+    KHEAD := head_8xx.o
+  else
+    KHEAD := head.o
+  endif
+endif
 
 ifdef CONFIG_ALL_PPC
 CONFIG_PMAC=y
@@ -47,48 +57,50 @@ ifdef CONFIG_SMP
 O_OBJS += smp.o
 endif
 
+ifeq ($(CONFIG_OAK),y)
+  O_OBJS += oak_setup.o
+endif
+
 ifeq ($(CONFIG_8xx),y)
-KHEAD := head_8xx.o
-O_OBJS += m8xx_setup.o ppc8xx_pic.o
-ifndef CONFIG_MATH_EMULATION
-O_OBJS += softemu8xx.o
+  O_OBJS += m8xx_setup.o ppc8xx_pic.o
+  ifndef CONFIG_MATH_EMULATION
+    O_OBJS += softemu8xx.o
+  endif
+  ifdef CONFIG_PCI
+    O_OBJS += qspan_pci.c
+  endif
+  ifdef CONFIG_MBX
+    O_OBJS += i8259.o
+  endif
 endif
-ifdef CONFIG_PCI
-O_OBJS += qspan_pci.c
-endif
-ifdef CONFIG_MBX
-O_OBJS += i8259.o
-endif
-else
-O_OBJS += chrp_setup.o chrp_pci.o chrp_time.o \
-	  pmac_time.o pmac_pci.o pmac_setup.o \
-	  prom.o open_pic.o feature.o \
-	  i8259.o pmac_pic.o indirect_pci.o \
-	  gemini_pci.o gemini_prom.o gemini_setup.o
 
 ifeq ($(CONFIG_NVRAM),y)
-O_OBJS += pmac_support.o
+  O_OBJS += pmac_nvram.o
 endif
-
-ifeq ($(CONFIG_PREP), y)
-O_OBJS += prep_pci.o prep_setup.o prep_nvram.o prep_time.o residual.o
+ifeq ($(CONFIG_6xx),y)
+  O_OBJS += open_pic.o indirect_pci.o
 endif
-
-ifeq ($(CONFIG_PMAC), y)
+ifeq ($(CONFIG_APUS),y)
+  O_OBJS += apus_setup.o
 endif
-
-ifeq ($(CONFIG_PMAC), y)
+ifeq ($(CONFIG_PMAC),y)
+  O_OBJS += pmac_pic.o pmac_setup.o pmac_time.o feature.o pmac_pci.o prom.o
 endif
-
-ifdef CONFIG_APUS
-O_OBJS += apus_setup.o
+ifeq ($(CONFIG_CHRP),y)
+  O_OBJS += chrp_pci.o pmac_pci.o chrp_setup.o i8259.o \
+	chrp_time.o pmac_time.o prom.o
 endif
+ifeq ($(CONFIG_PREP),y)
+  O_OBJS += prep_pci.o i8259.o prep_setup.o prep_nvram.o prep_time.o residual.o
+endif
+ifeq ($(CONFIG_GEMINI),y)
+  O_OBJS += gemini_prom.o gemini_pci.o gemini_setup.o
 endif
 
 all: $(KHEAD) kernel.o
 
 head.o: head.S ppc_defs.h
-
+head_4xx.o: head_4xx.S ppc_defs.h
 head_8xx.o: head_8xx.S ppc_defs.h
 
 ppc_defs.h: mk_defs.c ppc_defs.head \
@@ -98,7 +110,7 @@ ppc_defs.h: mk_defs.c ppc_defs.head \
 		$(TOPDIR)/include/asm/ptrace.h
 	$(CC) $(CFLAGS) -S mk_defs.c
 	cp ppc_defs.head ppc_defs.h
-	grep '^#define' mk_defs.s >>ppc_defs.h
+	grep '^#define' mk_defs.s >> ppc_defs.h
 	rm mk_defs.s
 
 find_name : find_name.c

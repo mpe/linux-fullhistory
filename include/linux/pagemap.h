@@ -118,4 +118,10 @@ extern inline void wait_on_page(struct page * page)
 		___wait_on_page(page);
 }
 
+extern struct page * grab_cache_page (struct address_space *, unsigned long);
+
+typedef int filler_t(void *, struct page*);
+
+extern struct page *read_cache_page(struct address_space *, unsigned long,
+				filler_t *, void *);
 #endif

@@ -1007,7 +1007,7 @@ static inline void run_old_timers(void)
 	}
 }
 
-spinlock_t tqueue_lock;
+spinlock_t tqueue_lock = SPIN_LOCK_UNLOCKED;
 
 void tqueue_bh(void)
 {

@@ -386,13 +386,13 @@ _GLOBAL(fake_interrupt)
 	mtlr	r0
 	blr
 
-#ifndef CONFIG_8xx
+
 /*
  * PROM code for specific machines follows.  Put it 
  * here so it's easy to add arch-specific sections later.
  * -- Cort
  */
-	
+#if defined(CONFIG_CHRP) || defined(CONFIG_ALL_PPC)
 /*
  * On CHRP, the Run-Time Abstraction Services (RTAS) have to be
  * called with the MMU off.
@@ -432,4 +432,4 @@ enter_rtas:
 	mtspr	SRR0,r8
 	mtspr	SRR1,r9
 	rfi			/* return to caller */
-#endif /* CONFIG_8xx */
+#endif /* defined(CONFIG_CHRP) || defined(CONFIG_ALL_PPC) */

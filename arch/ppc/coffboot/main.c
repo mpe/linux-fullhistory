@@ -9,6 +9,10 @@
 #include "nonstdio.h"
 #include "rs6000.h"
 #include "zlib.h"
+#include <asm/bootinfo.h>
+#include <asm/processor.h>
+#define __KERNEL__
+#include <asm/page.h>
 
 extern void *finddevice(const char *);
 extern int getprop(void *, const char *, void *, int);
@@ -106,6 +110,31 @@ coffboot(int a1, int a2, void *prom)
 #if 0
     pause();
 #endif
+    {
+	    struct bi_record *rec;
+
+	    rec = (struct bi_record *)PAGE_ALIGN((unsigned long)dst+len);
+	    
+	    rec->tag = BI_FIRST;
+	    rec->size = sizeof(struct bi_record);
+	    rec = (struct bi_record *)((unsigned long)rec + rec->size);
+
+	    rec->tag = BI_BOOTLOADER_ID;
+	    sprintf( (char *)rec->data, "coffboot");
+	    rec->size = sizeof(struct bi_record) + strlen("coffboot") + 1;
+	    rec = (struct bi_record *)((unsigned long)rec + rec->size);
+	    
+	    rec->tag = BI_MACHTYPE;
+	    rec->data[0] = _MACH_Pmac;
+	    rec->data[1] = 1;
+	    rec->size = sizeof(struct bi_record) + sizeof(unsigned long);
+	    rec = (struct bi_record *)((unsigned long)rec + rec->size);
+	    
+	    rec->tag = BI_LAST;
+	    rec->size = sizeof(struct bi_record);
+	    rec = (struct bi_record *)((unsigned long)rec + rec->size);
+    }
+    
     (*(void (*)())sa)(a1, a2, prom);
 
     printf("returned?\n");
@@ -165,7 +194,6 @@ void gunzip(void *dst, int dstlen, unsigned char *src, int *lenp)
 	printf("gunzip: ran out of data in header\n");
 	exit();
     }
-printf("done 1\n");
     s.zalloc = zalloc;
     s.zfree = zfree;
     r = inflateInit2(&s, -MAX_WBITS);
@@ -177,14 +205,11 @@ printf("done 1\n");
     s.avail_in = *lenp - i;
     s.next_out = dst;
     s.avail_out = dstlen;
-printf("doing inflate\n");
     r = inflate(&s, Z_FINISH);
-printf("done inflate\n");
     if (r != Z_OK && r != Z_STREAM_END) {
 	printf("inflate returned %d\n", r);
 	exit();
     }
     *lenp = s.next_out - (unsigned char *) dst;
-printf("doing end\n");
     inflateEnd(&s);
 }

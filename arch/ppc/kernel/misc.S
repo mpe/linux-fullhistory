@@ -103,8 +103,7 @@ _GLOBAL(__no_use_sti)
  * We were about to enable interrupts but we have to simulate
  * some interrupts that were lost by enable_irq first.
  */
-	.globl do_lost_interrupts
-do_lost_interrupts:
+_GLOBAL(do_lost_interrupts)
 	stwu	r1,-16(r1)
 	mflr	r0
 	stw	r0,20(r1)
@@ -758,8 +757,19 @@ _GLOBAL(_set_L2CR)
  * We restore and save the fpscr so the task gets the same result
  * and exceptions as if the cpu had performed the load or store.
  */
+
+#if defined(CONFIG_4xx)
 _GLOBAL(cvt_fd)
-cvt_fd:
+	lfs	0,0(r3)
+	stfd	0,0(r4)
+	blr
+
+_GLOBAL(cvt_df)
+	lfd	0,0(r3)
+	stfs	0,0(r4)
+	blr
+#else
+_GLOBAL(cvt_fd)
 	lfd	0,-4(r5)	/* load up fpscr value */
 	mtfsf	0xff,0
 	lfs	0,0(r3)
@@ -769,7 +779,6 @@ cvt_fd:
 	blr
 
 _GLOBAL(cvt_df)
-cvt_df:
 	lfd	0,-4(r5)	/* load up fpscr value */
 	mtfsf	0xff,0
 	lfd	0,0(r3)
@@ -777,9 +786,9 @@ cvt_df:
 	mffs	0		/* save new fpscr value */
 	stfd	0,-4(r5)
 	blr
+#endif
 
-        .globl  __clear_msr_me
-__clear_msr_me:
+_GLOBAL(__clear_msr_me)
         mfmsr   r0                      /* Get current interrupt state */
         lis     r3,0
         ori     r3,r3,MSR_ME
@@ -843,8 +852,7 @@ SYSCALL(read)
 /* Why isn't this a) automatic, b) written in 'C'? */	
 	.data
 	.align 4
-	.globl	sys_call_table
-sys_call_table:
+_GLOBAL(sys_call_table)
 	.long sys_ni_syscall	/* 0  -  old "setup()" system call */
 	.long sys_exit
 	.long sys_fork

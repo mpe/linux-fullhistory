@@ -23,6 +23,7 @@
  *
  */
 
+_GLOBAL(prom_init)
 _GLOBAL(gemini_prom_init)
 #ifdef __SMP__
 	/* Since the MMU's on, get stuff in rom space that we'll need */

@@ -12,35 +12,49 @@ endmenu
 mainmenu_option next_comment
 comment 'Platform support'
 define_bool CONFIG_PPC y
-choice 'Processor type' \
-	"6xx/7xx		CONFIG_6xx \
-	 630/Power3(64-Bit) 	CONFIG_PPC64 \
-	 82xx		 	CONFIG_82xx \
-	 8xx			CONFIG_8xx" 6xx/7xx
+choice 'Processor Type'	\
+	"6xx/7xx		CONFIG_6xx	\
+	 4xx			CONFIG_4xx	\
+	 630/Power3(64-Bit)	CONFIG_PPC64	\
+	 82xx			CONFIG_82xx	\
+	 8xx			CONFIG_8xx"	6xx/7xx
+
+if [ "$CONFIG_4xx" = "y" ]; then
+    choice 'Machine Type'			\
+	"Oak			CONFIG_OAK 	\
+	 Walnut			CONFIG_WALNUT"	Oak
+fi
 
 if [ "$CONFIG_8xx" = "y" ]; then
-  choice 'Processor Model' \
-  	"821	CONFIG_MPC821 \
-  	 823	CONFIG_MPC823 \
-  	 850	CONFIG_MPC850 \
-  	 855	CONFIG_MPC855 \
-  	 860	CONFIG_MPC860 \
-  	 860T	CONFIG_MPC860T" 860
   define_bool CONFIG_SERIAL_CONSOLE y
-  choice 'Machine Type' \
-	"RPX-Lite	CONFIG_RPXLITE \
-	 RPX-Classic	CONFIG_RPXCLASSIC \
-	 BSE-IP		CONFIG_BSEIP \
-  	 MBX		CONFIG_MBX \
-	 WinCept	CONFIG_WINCEPT" RPX-Lite
-else
-  choice 'Machine Type' \
-	"PowerMac	CONFIG_PMAC \
-	 PReP/MTX	CONFIG_PREP \
-	 CHRP		CONFIG_CHRP \
-	 PowerMac/PReP/CHRP	CONFIG_ALL_PPC \
-	 Gemini		CONFIG_GEMINI \
-  	 APUS           CONFIG_APUS" PowerMac
+
+  choice 'Processor Model'	\
+	"821		CONFIG_MPC821		\
+	 823		CONFIG_MPC823		\
+	 850		CONFIG_MPC850		\
+	 855		CONFIG_MPC855		\
+	 860		CONFIG_MPC860		\
+	 860T		CONFIG_MPC860T"		860
+
+  choice 'Machine Type'		\
+	"RPX-Lite	CONFIG_RPXLITE		\
+	 RPX-Classic	CONFIG_RPXCLASSIC	\
+	 BSE-IP		CONFIG_BSEIP		\
+	 MBX		CONFIG_MBX		\
+	 WinCept	CONFIG_WINCEPT"		RPX-Lite
+fi
+if [ "$CONFIG_6xx" = "y" ]; then
+  choice 'Machine Type'		\
+	"PowerMac	CONFIG_PMAC		\
+	 PReP/MTX	CONFIG_PREP		\
+	 CHRP		CONFIG_CHRP		\
+	 PowerMac/PReP/CHRP	CONFIG_ALL_PPC	\
+	 Gemini		CONFIG_GEMINI		\
+	 APUS		CONFIG_APUS"		PowerMac
+fi
+
+if [ "$CONFIG_PPC64" = "y" ]; then
+  define_bool CONFIG_ALL_PPC y
 fi
 
 bool 'Symmetric multi-processing support' CONFIG_SMP
@@ -52,12 +66,8 @@ if [ "$CONFIG_ALL_PPC" != "y" ];then
   define_bool CONFIG_MACH_SPECIFIC y
 fi
 
-if [ "$CONFIG_8xx" = "y" ]; then
+if [ "$CONFIG_4xx" = "y" ] || [ "$CONFIG_8xx" = "y" ]; then
   bool 'Math emulation' CONFIG_MATH_EMULATION
-else
-  if [ "$CONFIG_PPC64" != "y" ];then
-    define_bool CONFIG_6xx y
-  fi
 fi
 endmenu
 
@@ -75,12 +85,12 @@ comment 'General setup'
 
 if [ "$CONFIG_APUS" = "y" ]; then
   define_bool CONFIG_PCI n
-else
-  if [ "$CONFIG_8xx" = "y" ]; then
+else if [ "$CONFIG_OAK" = "y" ]; then
+  define_bool CONFIG_PCI n
+else if [ "$CONFIG_8xx" = "y" ]; then
     bool 'QSpan PCI' CONFIG_PCI
-  else
+else
     define_bool CONFIG_PCI y
-  fi
 fi
 
 bool 'Networking support' CONFIG_NET

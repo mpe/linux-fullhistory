@@ -414,9 +414,8 @@ wait_on_write_request(struct nfs_wreq *req)
  * (for now), and we currently do this synchronously only.
  */
 int
-nfs_writepage(struct file * file, struct page *page)
+nfs_writepage(struct dentry * dentry, struct page *page)
 {
-	struct dentry *dentry = file->f_dentry;
 	return nfs_writepage_sync(dentry, dentry->d_inode, page, 0, PAGE_SIZE);
 }
 

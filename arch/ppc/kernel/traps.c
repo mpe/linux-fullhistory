@@ -128,6 +128,7 @@ MachineCheckException(struct pt_regs *regs)
 	_exception(SIGSEGV, regs);	
 }
 
+#if defined(CONFIG_ALTIVEC)
 void
 AltiVecUnavailable(struct pt_regs *regs)
 {
@@ -163,6 +164,7 @@ AltiVecUnavailable(struct pt_regs *regs)
 	/* enable altivec for the task on return */
 	regs->msr |= MSR_VEC;
 }
+#endif /* CONFIG_ALTIVEC */
 
 void
 UnknownException(struct pt_regs *regs)
@@ -191,6 +193,20 @@ RunModeException(struct pt_regs *regs)
 void
 ProgramCheckException(struct pt_regs *regs)
 {
+#if defined(CONFIG_4xx)
+	unsigned int instr;
+	unsigned int esr = mfspr(SPRN_ESR);
+
+	if (esr & ESR_PTR) {
+#if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
+		if (debugger_bpt(regs))
+			return;
+#endif
+		_exception(SIGTRAP, regs);
+	} else {
+		_exception(SIGILL, regs);
+	}
+#else
 	if (regs->msr & 0x100000) {
 		/* IEEE FP exception */
 		_exception(SIGFPE, regs);
@@ -204,6 +220,7 @@ ProgramCheckException(struct pt_regs *regs)
 	} else {
 		_exception(SIGILL, regs);
 	}
+#endif
 }
 
 void

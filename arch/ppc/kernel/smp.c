@@ -39,6 +39,7 @@
 #include <asm/gemini.h>
 
 #include "time.h"
+#include "open_pic.h"
 int smp_threads_ready = 0;
 volatile int smp_commenced = 0;
 int smp_num_cpus = 1;
@@ -309,6 +310,7 @@ void __init smp_boot_cpus(void)
 			openpic_enable_IPI(i);
                 cpu_nr = (readb(GEMINI_CPUSTAT) & GEMINI_CPU_COUNT_MASK)>>2;
                 cpu_nr = (cpu_nr == 0) ? 4 : cpu_nr;
+cpu_nr = 2;		
 		break;
 	}
 

@@ -290,7 +290,7 @@ extern pte_t * __bad_pagetable(void);
 extern inline int pgd_none(pgd_t pgd)		{ return 0; }
 extern inline int pgd_bad(pgd_t pgd)		{ return 0; }
 extern inline int pgd_present(pgd_t pgd)	{ return 1; }
-#define pgd_clear(xp)	do { pgd_val(*(xp)) = 0; } while (0)
+#define pgd_clear(xp) 				do { } while(0)
 
 #define pgd_page(pgd) \
 	((unsigned long) __va(pgd_val(pgd) & PAGE_MASK))

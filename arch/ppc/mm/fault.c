@@ -52,36 +52,36 @@ void bad_page_fault(struct pt_regs *, unsigned long);
 void do_page_fault(struct pt_regs *, unsigned long, unsigned long);
 
 /*
- * The error_code parameter is DSISR for a data fault, SRR1 for
- * an instruction fault.
+ * For 600- and 800-family processors, the error_code parameter is DSISR
+ * for a data fault, SRR1 for an instruction fault. For 400-family processors
+ * the error_code parameter is ESR for a data fault, 0 for an instruction
+ * fault.
  */
 void do_page_fault(struct pt_regs *regs, unsigned long address,
 		   unsigned long error_code)
 {
 	struct vm_area_struct * vma;
 	struct mm_struct *mm = current->mm;
+#if defined(CONFIG_4xx)
+	int is_write = error_code & ESR_DST;
+#else
+	int is_write = error_code & 0x02000000;
+#endif /* CONFIG_4xx */
 
-	/*printk("address: %08lx nip:%08lx code: %08lx %s%s%s%s%s%s\n",
-	       address,regs->nip,error_code,
-	       (error_code&0x40000000)?"604 tlb&htab miss ":"",
-	       (error_code&0x20000000)?"603 tlbmiss ":"",
-	       (error_code&0x02000000)?"write ":"",
-	       (error_code&0x08000000)?"prot ":"",
-	       (error_code&0x80000000)?"I/O ":"",
-	       (regs->trap == 0x400)?"instr":"data"
-	       );*/
-	       
 #if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
 	if (debugger_fault_handler && regs->trap == 0x300) {
 		debugger_fault_handler(regs);
 		return;
 	}
+#if !defined(CONFIG_4xx)
 	if (error_code & 0x00400000) {
 		/* DABR match */
 		if (debugger_dabr_match(regs))
 			return;
 	}
-#endif
+#endif /* !CONFIG_4xx */
+#endif /* CONFIG_XMON || CONFIG_KGDB */
+
 	if (in_interrupt()) {
 		static int complained;
 		if (complained < 20) {
@@ -107,12 +107,12 @@ void do_page_fault(struct pt_regs *regs, unsigned long address,
 		goto bad_area;
 
 good_area:
-#ifdef CONFIG_6xx
+#if defined(CONFIG_6xx)
 	if (error_code & 0x95700000)
 		/* an error such as lwarx to I/O controller space,
 		   address matching DABR, eciwx, etc. */
 #endif /* CONFIG_6xx */
-#ifdef CONFIG_8xx
+#if defined(CONFIG_8xx)
         /* The MPC8xx seems to always set 0x80000000, which is
          * "undefined".  Of those that can be set, this is the only
          * one which seems bad.
@@ -124,7 +124,7 @@ good_area:
 	
 	
 	/* a write */
-	if (error_code & 0x02000000) {
+	if (is_write) {
 		if (!(vma->vm_flags & VM_WRITE))
 			goto bad_area;
 	/* a read */
@@ -135,7 +135,7 @@ good_area:
 		if (!(vma->vm_flags & (VM_READ | VM_EXEC)))
 			goto bad_area;
 	}
-	if (!handle_mm_fault(current, vma, address, error_code & 0x02000000))
+	if (!handle_mm_fault(current, vma, address, is_write))
 		goto bad_area;
 	up(&mm->mmap_sem);
 	/*

@@ -134,7 +134,7 @@ znetboot.initrd : zImage.initrd
 	cp zImage.initrd $(TFTPIMAGE)
 
 clean:
-	rm -f vmlinux* zvmlinux* mkprep zImage*
+	rm -f vmlinux* zvmlinux* mkprep zImage* sImage*
 
 fastdep:
 	$(TOPDIR)/scripts/mkdep *.[Sch] > .depend

@@ -2,8 +2,8 @@
  *
  * Name:      	skge.c
  * Project:	GEnesis, PCI Gigabit Ethernet Adapter
- * Version:	$Revision: 1.25 $
- * Date:       	$Date: 1999/10/07 14:47:52 $
+ * Version:	$Revision: 1.27 $
+ * Date:       	$Date: 1999/11/25 09:06:28 $
  * Purpose:	The main driver source module
  *
  ******************************************************************************/
@@ -46,6 +46,16 @@
  * History:
  *
  *	$Log: skge.c,v $
+ *	Revision 1.27  1999/11/25 09:06:28  cgoos
+ *	Changed base_addr to unsigned long.
+ *	
+ *	Revision 1.26  1999/11/22 13:29:16  cgoos
+ *	Changed license header to GPL.
+ *	Changes for inclusion in linux kernel (2.2.13).
+ *	Removed 2.0.x defines.
+ *	Changed SkGeProbe to skge_probe.
+ *	Added checks in SkGeIoctl.
+ *	
  *	Revision 1.25  1999/10/07 14:47:52  cgoos
  *	Changed 984x to 98xx.
  *	
@@ -337,7 +347,7 @@ int boards_found = 0;
 int		version_disp = 0;
 SK_AC		*pAC;
 struct pci_dev	*pdev = NULL;
-unsigned int	base_address;
+unsigned long	base_address;
 
 	if (probed)
 		return -ENODEV;

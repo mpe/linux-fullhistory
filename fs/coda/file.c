@@ -26,7 +26,7 @@
 #include <linux/coda_proc.h>
 
 /* file operations */
-static int coda_readpage(struct file *file, struct page * page);
+static int coda_readpage(struct dentry *dentry, struct page * page);
 static ssize_t coda_file_read(struct file *f, char *buf, size_t count, loff_t *off);
 static ssize_t coda_file_write(struct file *f, const char *buf, size_t count, loff_t *off);
 static int coda_file_mmap(struct file * file, struct vm_area_struct * vma);
@@ -76,12 +76,10 @@ struct file_operations coda_file_operations = {
 };
 
 /*  File file operations */
-static int coda_readpage(struct file * coda_file, struct page * page)
+static int coda_readpage(struct dentry * dentry, struct page * page)
 {
-	struct dentry *de = coda_file->f_dentry;
-	struct inode *coda_inode = de->d_inode;
+	struct inode *coda_inode = dentry->d_inode;
 	struct dentry cont_dentry;
-	struct file cont_file;
         struct coda_inode_info *cii;
 
         ENTRY;
@@ -91,17 +89,16 @@ static int coda_readpage(struct file * coda_file, struct page * page)
 
         if ( ! cii->c_ovp ) {
 		printk("coda_readpage: no open inode for ino %ld, %s\n", 
-		       coda_inode->i_ino, de->d_name.name);
+		       coda_inode->i_ino, dentry->d_name.name);
                 return -ENXIO;
         }
        
-        coda_prepare_openfile(coda_inode, coda_file, cii->c_ovp,
-			      &cont_file, &cont_dentry);
+        cont_dentry.d_inode = cii->c_ovp;
 
         CDEBUG(D_INODE, "coda ino: %ld, cached ino %ld, page offset: %lx\n", 
 	       coda_inode->i_ino, cii->c_ovp->i_ino, page->index);
 
-        block_read_full_page(&cont_file, page);
+        block_read_full_page(&cont_dentry, page);
         EXIT;
         return 0;
 }

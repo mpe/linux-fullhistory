@@ -215,7 +215,9 @@ EXPORT_SYMBOL(ROOT_DEV);
 EXPORT_SYMBOL(add_to_page_cache_unique);
 EXPORT_SYMBOL(__find_get_page);
 EXPORT_SYMBOL(__find_lock_page);
-                        
+EXPORT_SYMBOL(grab_cache_page);
+EXPORT_SYMBOL(read_cache_page);
+
 #if !defined(CONFIG_NFSD) && defined(CONFIG_NFSD_MODULE)
 EXPORT_SYMBOL(do_nfsservctl);
 #endif

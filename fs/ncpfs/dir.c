@@ -368,37 +368,6 @@ finished:
 	return val;
 }
 
-static struct page *
-ncp_get_cache_page(struct inode *inode, unsigned long offset, int used)
-{
-	struct address_space *i_data = &inode->i_data;
-	struct page *new_page, *page, **hash;
-
-	hash = page_hash(i_data, offset);
-
-	page = __find_lock_page(i_data, offset, hash);
-	if (used || page)
-		return page;
-
-	new_page = page_cache_alloc();
-	if (!new_page)
-		return NULL;
-
-	for (;;) {
-		page = new_page;
-		if (!add_to_page_cache_unique(page, i_data, offset, hash))
-			break;
-		page_cache_release(page);
-		page = __find_lock_page(i_data, offset, hash);
-		if (page) {
-			page_cache_free(new_page);
-			break;
-		}
-	}
-
-	return page;
-}
-
 /* most parts from nfsd_d_validate() */
 static int
 ncp_d_validate(struct dentry *dentry)
@@ -518,7 +487,7 @@ static int ncp_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		filp->f_pos = 2;
 	}
 
-	page = ncp_get_cache_page(inode, 0, 0);
+	page = find_lock_page(&inode->i_data, 0);
 	if (!page)
 		goto read_really;
 
@@ -547,7 +516,7 @@ static int ncp_readdir(struct file *filp, void *dirent, filldir_t filldir)
 
 	for (;;) {
 		if (ctl.ofs != 0) {
-			ctl.page = ncp_get_cache_page(inode, ctl.ofs, 1);
+			ctl.page = grab_cache_page(&inode->i_data, ctl.ofs);
 			if (!ctl.page)
 				goto invalid_cache;
 			ctl.cache = (union ncp_dir_cache *)
@@ -692,7 +661,7 @@ ncp_fill_cache(struct file *filp, void *dirent, filldir_t filldir,
 		ctl.cache = NULL;
 		ctl.idx  -= NCP_DIRCACHE_SIZE;
 		ctl.ofs  += 1;
-		ctl.page  = ncp_get_cache_page(inode, ctl.ofs, 0);
+		ctl.page  = find_lock_page(&inode->i_data, ctl.ofs);
 		if (ctl.page)
 			ctl.cache = (union ncp_dir_cache *)
 					kmap(ctl.page);

@@ -201,7 +201,7 @@ static void show_registers(struct pt_regs *regs)
 	printk("\n");
 }	
 
-spinlock_t die_lock;
+spinlock_t die_lock = SPIN_LOCK_UNLOCKED;
 
 void die(const char * str, struct pt_regs * regs, long err)
 {

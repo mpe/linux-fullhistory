@@ -55,7 +55,7 @@ static int neigh_glbl_allocs;
 static struct neigh_table *neigh_tables;
 
 #if defined(__i386__) && defined(__SMP__)
-#define ASSERT_WL(n) if ((int)((n)->lock.lock) >= 0) { printk("WL assertion failed at " __FILE__ "(%d):" __FUNCTION__ "\n", __LINE__); }
+#define ASSERT_WL(n) if ((int)((n)->lock.lock) > 0) { printk("WL assertion failed at " __FILE__ "(%d):" __FUNCTION__ "\n", __LINE__); }
 #else
 #define ASSERT_WL(n) do { } while(0)
 #endif
@@ -881,6 +881,7 @@ static void neigh_hh_init(struct neighbour *n, struct dst_entry *dst, u16 protoc
 
 	if (!hh && (hh = kmalloc(sizeof(*hh), GFP_ATOMIC)) != NULL) {
 		memset(hh, 0, sizeof(struct hh_cache));
+		hh->hh_lock = RW_LOCK_UNLOCKED;
 		hh->hh_type = protocol;
 		atomic_set(&hh->hh_refcnt, 0);
 		hh->hh_next = NULL;

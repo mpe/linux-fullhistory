@@ -21,10 +21,14 @@ endif
 ASFLAGS		=
 LINKFLAGS	= -T arch/ppc/vmlinux.lds -Ttext $(KERNELLOAD) -Bstatic
 CFLAGSINC	= -D__KERNEL__ -I$(TOPDIR)/include -D__powerpc__
-CFLAGS		:= $(CFLAGS) -I$(HPATH) -D__powerpc__ -fsigned-char -msoft-float \
-		-pipe -fno-builtin -ffixed-r2 -Wno-uninitialized -mmultiple \
-		-mstring
+CFLAGS		:= $(CFLAGS) -I$(HPATH) -D__powerpc__ -fsigned-char \
+		-msoft-float -pipe -fno-builtin -ffixed-r2 -Wno-uninitialized \
+		-mmultiple -mstring
 CPP		= $(CC) -E $(CFLAGS)
+
+ifdef CONFIG_4xx
+CFLAGS := $(CFLAGS) -mcpu=403
+endif
 
 ifdef CONFIG_8xx
 CFLAGS := $(CFLAGS) -mcpu=860 -I../8xx_io
@@ -34,10 +38,13 @@ ifdef CONFIG_PPC64
 CFLAGS := $(CFLAGS) -Wa,-mppc64bridge #-mpowerpc64
 endif
 
-ifndef CONFIG_8xx
-HEAD := arch/ppc/kernel/head.o
+ifdef CONFIG_4xx
+  HEAD := arch/ppc/kernel/head_4xx.o
 else
-HEAD := arch/ppc/kernel/head_8xx.o
+  ifdef CONFIG_8xx
+    HEAD := arch/ppc/kernel/head_8xx.o
+  endif
+  HEAD := arch/ppc/kernel/head.o
 endif
 
 ARCH_SUBDIRS = arch/ppc/kernel arch/ppc/mm arch/ppc/lib
@@ -60,6 +67,7 @@ MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
 MAKECOFFBOOT = $(MAKE) -C arch/$(ARCH)/coffboot
 MAKECHRPBOOT = $(MAKE) -C arch/$(ARCH)/chrpboot
 MAKEMBXBOOT = $(MAKE) -C arch/$(ARCH)/mbxboot
+MAKETREEBOOT = $(MAKE) -C arch/$(ARCH)/treeboot
 
 ifdef CONFIG_8xx
 SUBDIRS += arch/ppc/8xx_io
@@ -77,11 +85,18 @@ checks:
 
 BOOT_TARGETS = zImage znetboot.initrd zImage.initrd
 
+ifdef CONFIG_4xx
+$(BOOT_TARGETS): $(CHECKS) vmlinux
+	@$(MAKETREEBOOT) $@
+endif
+
 ifdef CONFIG_8xx
 $(BOOT_TARGETS): $(CHECKS) vmlinux
 	@$(MAKECOFFBOOT) $@
 	@$(MAKEMBXBOOT) $@
-else
+endif
+
+ifdef CONFIG_6xx
 $(BOOT_TARGETS): $(CHECKS) vmlinux
 	@$(MAKECOFFBOOT) $@
 	@$(MAKEBOOT) $@
@@ -108,33 +123,36 @@ endif
 	@$(MAKECHRPBOOT) $@
 endif
 
-gemini_config:
+.PHONY: clean_config
+clean_config:
 	rm -f .config arch/ppc/defconfig
-	ln -s gemini_defconfig arch/ppc/defconfig
 
-pmac_config:
-	rm -f .config arch/ppc/defconfig
-	ln -s pmac_defconfig arch/ppc/defconfig
+gemini_config: clean_config
+	ln -s configs/gemini_defconfig arch/ppc/defconfig
 
-prep_config:
-	rm -f .config arch/ppc/defconfig
-	ln -s prep_defconfig arch/ppc/defconfig
+pmac_config: clean_config
+	ln -s configs/pmac_defconfig arch/ppc/defconfig
 
-chrp_config:
-	rm -f .config arch/ppc/defconfig
-	ln -s chrp_defconfig arch/ppc/defconfig
+prep_config: clean_config
+	ln -s configs/prep_defconfig arch/ppc/defconfig
 
-common_config:
-	rm -f .config arch/ppc/defconfig
-	ln -s common_defconfig arch/ppc/defconfig
+chrp_config: clean_config
+	ln -s configs/chrp_defconfig arch/ppc/defconfig
 
-mbx_config:
-	rm -f .config arch/ppc/defconfig
-	ln -s mbx_defconfig arch/ppc/defconfig
+common_config: clean_config
+	ln -s configs/common_defconfig arch/ppc/defconfig
 
-apus_config:
-	rm -f .config arch/ppc/defconfig
-	ln -s apus_defconfig arch/ppc/defconfig
+mbx_config: clean_config
+	ln -s configs/mbx_defconfig arch/ppc/defconfig
+
+apus_config: clean_config
+	ln -s configs/apus_defconfig arch/ppc/defconfig
+
+oak_config: clean_config
+	ln -s configs/oak_defconfig arch/ppc/defconfig
+
+walnut_config: clean_config
+	ln -s configs/walnut_defconfig arch/ppc/defconfig
 
 tags:
 	etags */*.c include/{asm,linux}/*.h arch/ppc/kernel/*.{c,h}
@@ -145,6 +163,7 @@ archclean:
 	@$(MAKEBOOT) clean
 	@$(MAKECHRPBOOT) clean
 	@$(MAKEMBXBOOT) clean
+	@$(MAKETREEBOOT) clean
 
 archmrproper:
 

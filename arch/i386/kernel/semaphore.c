@@ -2,7 +2,17 @@
  * i386 semaphore implementation.
  *
  * (C) Copyright 1999 Linus Torvalds
+ *
+ * Portions Copyright 1999 Red Hat, Inc.
+ *
+ *	This program is free software; you can redistribute it and/or
+ *	modify it under the terms of the GNU General Public License
+ *	as published by the Free Software Foundation; either version
+ *	2 of the License, or (at your option) any later version.
+ *
+ * rw semaphores implemented November 1999 by Benjamin LaHaise <bcrl@redhat.com>
  */
+#include <linux/config.h>
 #include <linux/sched.h>
 
 #include <asm/semaphore.h>
@@ -218,3 +228,226 @@ asm(
 	"popl %eax\n\t"
 	"ret"
 );
+
+asm(
+"
+.align 4
+.globl __down_read_failed
+__down_read_failed:
+	pushl	%edx
+	pushl	%ecx
+	jnc	2f
+
+3:	call	down_read_failed_biased
+
+1:	popl	%ecx
+	popl	%edx
+	ret
+
+2:	call	down_read_failed
+	" LOCK "subl	$1,(%eax)
+	jns	1b
+	jnc	2b
+	jmp	3b
+"
+);
+
+asm(
+"
+.align 4
+.globl __down_write_failed
+__down_write_failed:
+	pushl	%edx
+	pushl	%ecx
+	jnc	2f
+
+3:	call	down_write_failed_biased
+
+1:	popl	%ecx
+	popl	%edx
+	ret
+
+2:	call	down_write_failed
+	" LOCK "subl	$" RW_LOCK_BIAS_STR ",(%eax)
+	jz	1b
+	jnc	2b
+	jmp	3b
+"
+);
+
+struct rw_semaphore *FASTCALL(rwsem_wake_readers(struct rw_semaphore *sem));
+struct rw_semaphore *FASTCALL(rwsem_wake_writer(struct rw_semaphore *sem));
+
+struct rw_semaphore *FASTCALL(down_read_failed_biased(struct rw_semaphore *sem));
+struct rw_semaphore *FASTCALL(down_write_failed_biased(struct rw_semaphore *sem));
+struct rw_semaphore *FASTCALL(down_read_failed(struct rw_semaphore *sem));
+struct rw_semaphore *FASTCALL(down_write_failed(struct rw_semaphore *sem));
+
+struct rw_semaphore *down_read_failed_biased(struct rw_semaphore *sem)
+{
+	struct task_struct *tsk = current;
+	DECLARE_WAITQUEUE(wait, tsk);
+
+	add_wait_queue(&sem->wait, &wait);	/* put ourselves at the head of the list */
+
+	for (;;) {
+		if (sem->read_bias_granted && xchg(&sem->read_bias_granted, 0))
+			break;
+		set_task_state(tsk, TASK_UNINTERRUPTIBLE);
+		if (!sem->read_bias_granted)
+			schedule();
+	}
+
+	remove_wait_queue(&sem->wait, &wait);
+	tsk->state = TASK_RUNNING;
+
+	return sem;
+}
+
+struct rw_semaphore *down_write_failed_biased(struct rw_semaphore *sem)
+{
+	struct task_struct *tsk = current;
+	DECLARE_WAITQUEUE(wait, tsk);
+
+	add_wait_queue_exclusive(&sem->write_bias_wait, &wait);	/* put ourselves at the end of the list */
+
+	for (;;) {
+		if (sem->write_bias_granted && xchg(&sem->write_bias_granted, 0))
+			break;
+		set_task_state(tsk, TASK_UNINTERRUPTIBLE | TASK_EXCLUSIVE);
+		if (!sem->write_bias_granted)
+			schedule();
+	}
+
+	remove_wait_queue(&sem->write_bias_wait, &wait);
+	tsk->state = TASK_RUNNING;
+
+	/* if the lock is currently unbiased, awaken the sleepers
+	 * FIXME: this wakes up the readers early in a bit of a
+	 * stampede -> bad!
+	 */
+	if (atomic_read(&sem->count) >= 0)
+		wake_up(&sem->wait);
+
+	return sem;
+}
+
+/* Wait for the lock to become unbiased.  Readers
+ * are non-exclusive. =)
+ */
+struct rw_semaphore *down_read_failed(struct rw_semaphore *sem)
+{
+	struct task_struct *tsk = current;
+	DECLARE_WAITQUEUE(wait, tsk);
+
+	__up_read(sem);	/* this takes care of granting the lock */
+
+	add_wait_queue(&sem->wait, &wait);
+
+	while (atomic_read(&sem->count) < 0) {
+		set_task_state(tsk, TASK_UNINTERRUPTIBLE);
+		if (atomic_read(&sem->count) >= 0)
+			break;
+		schedule();
+	}
+
+	remove_wait_queue(&sem->wait, &wait);
+	tsk->state = TASK_RUNNING;
+
+	return sem;
+}
+
+/* Wait for the lock to become unbiased. Since we're
+ * a writer, we'll make ourselves exclusive.
+ */
+struct rw_semaphore *down_write_failed(struct rw_semaphore *sem)
+{
+	struct task_struct *tsk = current;
+	DECLARE_WAITQUEUE(wait, tsk);
+
+	__up_write(sem);	/* this takes care of granting the lock */
+
+	add_wait_queue_exclusive(&sem->wait, &wait);
+
+	while (atomic_read(&sem->count) < 0) {
+		set_task_state(tsk, TASK_UNINTERRUPTIBLE | TASK_EXCLUSIVE);
+		if (atomic_read(&sem->count) >= 0)
+			break;	/* we must attempt to aquire or bias the lock */
+		schedule();
+	}
+
+	remove_wait_queue(&sem->wait, &wait);
+	tsk->state = TASK_RUNNING;
+
+	return sem;
+}
+
+asm(
+"
+.align 4
+.globl __rwsem_wake
+__rwsem_wake:
+	pushl	%edx
+	pushl	%ecx
+
+	jz	1f
+	call	rwsem_wake_readers
+	jmp	2f
+
+1:	call	rwsem_wake_writer
+
+2:	popl	%ecx
+	popl	%edx
+	ret
+"
+);
+
+/* Called when someone has done an up that transitioned from
+ * negative to non-negative, meaning that the lock has been
+ * granted to whomever owned the bias.
+ */
+struct rw_semaphore *rwsem_wake_readers(struct rw_semaphore *sem)
+{
+	if (xchg(&sem->read_bias_granted, 1))
+		BUG();
+	wake_up(&sem->wait);
+	return sem;
+}
+
+struct rw_semaphore *rwsem_wake_writer(struct rw_semaphore *sem)
+{
+	if (xchg(&sem->write_bias_granted, 1))
+		BUG();
+	wake_up(&sem->write_bias_wait);
+	return sem;
+}
+
+#if defined(CONFIG_SMP)
+asm(
+"
+.align	4
+.globl	__write_lock_failed
+__write_lock_failed:
+	" LOCK "addl	$" RW_LOCK_BIAS_STR ",(%eax)
+1:	cmpl	$" RW_LOCK_BIAS_STR ",(%eax)
+	jne	1b
+
+	" LOCK "subl	$" RW_LOCK_BIAS_STR ",(%eax)
+	jnz	__write_lock_failed
+	ret
+
+
+.align	4
+.globl	__read_lock_failed
+__read_lock_failed:
+	lock ; incl	(%eax)
+1:	cmpl	$1,(%eax)
+	js	1b
+
+	lock ; decl	(%eax)
+	js	__read_lock_failed
+	ret
+"
+);
+#endif
+
