@@ -563,15 +563,7 @@ static int attr_add(struct device *dev, struct device_attribute *attr)
  **/
 int scsi_sysfs_add_sdev(struct scsi_device *sdev)
 {
-	struct Scsi_Host *shost = sdev->host;
-	struct scsi_target *starget = scsi_target(sdev);
 	int error, i;
-	unsigned long flags;
-
-	spin_lock_irqsave(shost->host_lock, flags);
-	list_add_tail(&sdev->same_target_siblings, &starget->devices);
-	list_add_tail(&sdev->siblings, &shost->__devices);
-	spin_unlock_irqrestore(shost->host_lock, flags);
 
 	if ((error = scsi_device_set_state(sdev, SDEV_RUNNING)) != 0)
 		return error;
@@ -788,6 +780,10 @@ int scsi_sysfs_add_host(struct Scsi_Host *shost)
 
 void scsi_sysfs_device_initialize(struct scsi_device *sdev)
 {
+	unsigned long flags;
+	struct Scsi_Host *shost = sdev->host;
+	struct scsi_target  *starget = sdev->sdev_target;
+
 	device_initialize(&sdev->sdev_gendev);
 	sdev->sdev_gendev.bus = &scsi_bus_type;
 	sdev->sdev_gendev.release = scsi_device_dev_release;
@@ -803,6 +799,10 @@ void scsi_sysfs_device_initialize(struct scsi_device *sdev)
 		 sdev->channel, sdev->id, sdev->lun);
 	sdev->scsi_level = SCSI_2;
 	transport_setup_device(&sdev->sdev_gendev);
+	spin_lock_irqsave(shost->host_lock, flags);
+	list_add_tail(&sdev->same_target_siblings, &starget->devices);
+	list_add_tail(&sdev->siblings, &shost->__devices);
+	spin_unlock_irqrestore(shost->host_lock, flags);
 }
 
 int scsi_is_sdev_device(const struct device *dev)
