@@ -106,7 +106,7 @@ struct thread_struct {
 	unsigned long v86flags, v86mask, v86mode;
 };
 
-#define INIT_MMAP { &init_task, 0, 0x40000000, PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC }
+#define INIT_MMAP { &init_mm, 0, 0x40000000, PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC }
 
 #define INIT_TSS  { \
 	0,0, \

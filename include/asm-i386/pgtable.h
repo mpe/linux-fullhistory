@@ -219,9 +219,9 @@ extern inline unsigned long pmd_page(pmd_t pmd)
 { return pmd_val(pmd) & PAGE_MASK; }
 
 /* to find an entry in a page-table-directory */
-extern inline pgd_t * pgd_offset(struct task_struct * tsk, unsigned long address)
+extern inline pgd_t * pgd_offset(struct mm_struct * mm, unsigned long address)
 {
-	return (pgd_t *) tsk->tss.cr3 + (address >> PGDIR_SHIFT);
+	return mm->pgd + (address >> PGDIR_SHIFT);
 }
 
 /* Find an entry in the second-level page table.. */

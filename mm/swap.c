@@ -310,8 +310,8 @@ void swap_free(unsigned long entry)
  * Also, don't bother to add to the swap cache if this page-in
  * was due to a write access.
  */
-void swap_in(struct vm_area_struct * vma, pte_t * page_table,
-	unsigned long entry, int write_access)
+void swap_in(struct task_struct * tsk, struct vm_area_struct * vma,
+	pte_t * page_table, unsigned long entry, int write_access)
 {
 	unsigned long page = __get_free_page(GFP_KERNEL);
 
@@ -322,7 +322,7 @@ void swap_in(struct vm_area_struct * vma, pte_t * page_table,
 	if (!page) {
 		set_pte(page_table, BAD_PAGE);
 		swap_free(entry);
-		oom(current);
+		oom(tsk);
 		return;
 	}
 	read_swap_page(entry, (char *) page);
@@ -330,8 +330,8 @@ void swap_in(struct vm_area_struct * vma, pte_t * page_table,
 		free_page(page);
 		return;
 	}
-	vma->vm_task->mm->rss++;
-	vma->vm_task->mm->maj_flt++;
+	vma->vm_mm->rss++;
+	vma->vm_mm->maj_flt++;
 	if (!write_access && add_to_swap_cache(page, entry)) {
 		set_pte(page_table, mk_pte(page, vma->vm_page_prot));
 		return;
@@ -352,7 +352,8 @@ void swap_in(struct vm_area_struct * vma, pte_t * page_table,
  * using a process that no longer actually exists (it might
  * have died while we slept).
  */
-static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned long address, pte_t * page_table, unsigned long limit)
+static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struct* vma,
+	unsigned long address, pte_t * page_table, unsigned long limit)
 {
 	pte_t pte;
 	unsigned long entry;
@@ -374,8 +375,8 @@ static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned long addr
 	}	
 	if (pte_dirty(pte)) {
 		if (vma->vm_ops && vma->vm_ops->swapout) {
-			pid_t pid = vma->vm_task->pid;
-			vma->vm_task->mm->rss--;
+			pid_t pid = tsk->pid;
+			vma->vm_mm->rss--;
 			if (vma->vm_ops->swapout(vma, address - vma->vm_start + vma->vm_offset, page_table))
 				kill_proc(pid, SIGBUS, 1);
 		} else {
@@ -383,7 +384,7 @@ static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned long addr
 				return 0;
 			if (!(entry = get_swap_page()))
 				return 0;
-			vma->vm_task->mm->rss--;
+			vma->vm_mm->rss--;
 			set_pte(page_table, __pte(entry));
 			invalidate();
 			write_swap_page(entry, (char *) page);
@@ -397,13 +398,13 @@ static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned long addr
 			printk("Aiee.. duplicated cached swap-cache entry\n");
 			return 0;
 		}
-		vma->vm_task->mm->rss--;
+		vma->vm_mm->rss--;
 		set_pte(page_table, __pte(entry));
 		invalidate();
 		free_page(page);
 		return 1;
 	} 
-	vma->vm_task->mm->rss--;
+	vma->vm_mm->rss--;
 	pte_clear(page_table);
 	invalidate();
 	entry = mem_map[MAP_NR(page)];
@@ -438,8 +439,8 @@ static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned long addr
  */
 #define SWAP_RATIO	128
 
-static inline int swap_out_pmd(struct vm_area_struct * vma, pmd_t *dir,
-	unsigned long address, unsigned long end, unsigned long limit)
+static inline int swap_out_pmd(struct task_struct * tsk, struct vm_area_struct * vma,
+	pmd_t *dir, unsigned long address, unsigned long end, unsigned long limit)
 {
 	pte_t * pte;
 	unsigned long pmd_end;
@@ -460,8 +461,8 @@ static inline int swap_out_pmd(struct vm_area_struct * vma, pmd_t *dir,
 
 	do {
 		int result;
-		vma->vm_task->mm->swap_address = address + PAGE_SIZE;
-		result = try_to_swap_out(vma, address, pte, limit);
+		vma->vm_mm->swap_address = address + PAGE_SIZE;
+		result = try_to_swap_out(tsk, vma, address, pte, limit);
 		if (result)
 			return result;
 		address += PAGE_SIZE;
@@ -470,8 +471,8 @@ static inline int swap_out_pmd(struct vm_area_struct * vma, pmd_t *dir,
 	return 0;
 }
 
-static inline int swap_out_pgd(struct vm_area_struct * vma, pgd_t *dir,
-	unsigned long address, unsigned long end, unsigned long limit)
+static inline int swap_out_pgd(struct task_struct * tsk, struct vm_area_struct * vma,
+	pgd_t *dir, unsigned long address, unsigned long end, unsigned long limit)
 {
 	pmd_t * pmd;
 	unsigned long pgd_end;
@@ -491,7 +492,7 @@ static inline int swap_out_pgd(struct vm_area_struct * vma, pgd_t *dir,
 		end = pgd_end;
 	
 	do {
-		int result = swap_out_pmd(vma, pmd, address, end, limit);
+		int result = swap_out_pmd(tsk, vma, pmd, address, end, limit);
 		if (result)
 			return result;
 		address = (address + PMD_SIZE) & PMD_MASK;
@@ -500,8 +501,8 @@ static inline int swap_out_pgd(struct vm_area_struct * vma, pgd_t *dir,
 	return 0;
 }
 
-static int swap_out_vma(struct vm_area_struct * vma, pgd_t *pgdir,
-	unsigned long start, unsigned long limit)
+static int swap_out_vma(struct task_struct * tsk, struct vm_area_struct * vma,
+	pgd_t *pgdir, unsigned long start, unsigned long limit)
 {
 	unsigned long end;
 
@@ -512,7 +513,7 @@ static int swap_out_vma(struct vm_area_struct * vma, pgd_t *pgdir,
 
 	end = vma->vm_end;
 	while (start < end) {
-		int result = swap_out_pgd(vma, pgdir, start, end, limit);
+		int result = swap_out_pgd(tsk, vma, pgdir, start, end, limit);
 		if (result)
 			return result;
 		start = (start + PGDIR_SIZE) & PGDIR_MASK;
@@ -542,7 +543,7 @@ static int swap_out_process(struct task_struct * p, unsigned long limit)
 		address = vma->vm_start;
 
 	for (;;) {
-		int result = swap_out_vma(vma, pgd_offset(p, address), address, limit);
+		int result = swap_out_vma(p, vma, pgd_offset(p->mm, address), address, limit);
 		if (result)
 			return result;
 		vma = vma->vm_next;
@@ -871,7 +872,7 @@ static inline int unuse_pte(struct vm_area_struct * vma, unsigned long address,
 		return 1;
 	}
 	set_pte(dir, pte_mkwrite(pte_mkdirty(mk_pte(page, vma->vm_page_prot))));
-	++vma->vm_task->mm->rss;
+	++vma->vm_mm->rss;
 	swap_free(pte_val(pte));
 	return 1;
 }
@@ -956,7 +957,7 @@ static int unuse_process(struct task_struct * p, unsigned int type, unsigned lon
 	 */
 	vma = p->mm->mmap;
 	while (vma) {
-		pgd_t * pgd = pgd_offset(p, vma->vm_start);
+		pgd_t * pgd = pgd_offset(p->mm, vma->vm_start);
 		if (unuse_vma(vma, pgd, vma->vm_start, vma->vm_end, type, page))
 			return 1;
 		vma = vma->vm_next;

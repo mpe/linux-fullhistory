@@ -352,6 +352,7 @@ extern int			sock_getsockopt(struct sock *sk, int level,
 						int *optlen);
 extern struct sk_buff 		*sock_alloc_send_skb(struct sock *skb,
 						     unsigned long size,
+						     unsigned long fallback,
 						     int noblock,
 						     int *errcode);
 

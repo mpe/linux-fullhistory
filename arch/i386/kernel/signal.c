@@ -90,7 +90,7 @@ void setup_frame(struct sigaction * sa, unsigned long ** fp, unsigned long eip,
 #define __CODE ((unsigned long)(frame+24))
 #define CODE(x) ((unsigned long *) ((x)+__CODE))
 	frame = *fp;
-	if (regs->ss != USER_DS)
+	if (regs->ss != USER_DS && sa->sa_restorer)
 		frame = (unsigned long *) sa->sa_restorer;
 	frame -= 32;
 	if (verify_area(VERIFY_WRITE,frame,32*4))

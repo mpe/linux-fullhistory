@@ -37,7 +37,7 @@ struct thread_struct {
 	unsigned long res1, res2;
 };
 
-#define INIT_MMAP { &init_task, 0xfffffc0000000000,  0xfffffc0010000000, \
+#define INIT_MMAP { &init_mm, 0xfffffc0000000000,  0xfffffc0010000000, \
 	PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC }
 
 #define INIT_TSS  { \

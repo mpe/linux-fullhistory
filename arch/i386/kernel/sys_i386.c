@@ -59,10 +59,10 @@ asmlinkage int old_mmap(unsigned long *buffer)
 		if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 			return -EBADF;
 	}
+	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
 	return do_mmap(file, get_user(buffer), get_user(buffer+1),
 		       get_user(buffer+2), flags, get_user(buffer+5));
 }
-
 
 extern asmlinkage int sys_select(int, fd_set *, fd_set *, fd_set *, struct timeval *);
 

@@ -79,20 +79,20 @@ repeat:
 	return free_task;
 }
 
-static int dup_mmap(struct task_struct * tsk)
+static int dup_mmap(struct mm_struct * mm)
 {
 	struct vm_area_struct * mpnt, **p, *tmp;
 
-	tsk->mm->mmap = NULL;
-	p = &tsk->mm->mmap;
+	mm->mmap = NULL;
+	p = &mm->mmap;
 	for (mpnt = current->mm->mmap ; mpnt ; mpnt = mpnt->vm_next) {
 		tmp = (struct vm_area_struct *) kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
 		if (!tmp) {
-			exit_mmap(tsk);
+			exit_mmap(mm);
 			return -ENOMEM;
 		}
 		*tmp = *mpnt;
-		tmp->vm_task = tsk;
+		tmp->vm_mm = mm;
 		tmp->vm_next = NULL;
 		if (tmp->vm_inode) {
 			tmp->vm_inode->i_count++;
@@ -106,7 +106,7 @@ static int dup_mmap(struct task_struct * tsk)
 		*p = tmp;
 		p = &tmp->vm_next;
 	}
-	build_mmap_avl(tsk);
+	build_mmap_avl(mm);
 	return 0;
 }
 
@@ -126,7 +126,7 @@ static int copy_mm(unsigned long clone_flags, struct allocation_struct * u)
 	u->mm.cmin_flt = u->mm.cmaj_flt = 0;
 	if (copy_page_tables(&u->tsk))
 		return -1;
-	if (dup_mmap(&u->tsk))
+	if (dup_mmap(&u->mm))
 		return -1;
 	mem_map[MAP_NR(u)]++;
 	return 0;

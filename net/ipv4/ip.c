@@ -90,6 +90,7 @@
  *	Gerhard Koerting	:	IP fragmentation forwarding fix
  *		Alan Cox	:	Device lock against page fault.
  *		Alan Cox	:	IP_HDRINCL facility.
+ *	Werner Almesberger	:	Zero fragment bug
  *
  *  
  *
@@ -2531,7 +2532,7 @@ int ip_build_xmit(struct sock *sk,
 	if(length+20 <= dev->mtu && !MULTICAST(daddr) && daddr!=0xFFFFFFFF && daddr!=dev->pa_brdaddr)
 	{	
 		int error;
-		struct sk_buff *skb=sock_alloc_send_skb(sk, length+20+15+dev->hard_header_len,0,&error);
+		struct sk_buff *skb=sock_alloc_send_skb(sk, length+20+15+dev->hard_header_len,0, 0,&error);
 		if(skb==NULL)
 		{
 			ip_statistics.IpOutDiscards++;
@@ -2614,7 +2615,7 @@ int ip_build_xmit(struct sock *sk,
 	 
 	fraglen = length - offset + fragheaderlen;
 	
-	if(fraglen==0)
+	if(length-offset==0)
 	{
 		fraglen = maxfraglen;
 		offset -= maxfraglen-fragheaderlen;
@@ -2660,7 +2661,7 @@ int ip_build_xmit(struct sock *sk,
 		 *	Get the memory we require with some space left for alignment.
 		 */
 
-		skb = sock_alloc_send_skb(sk, fraglen+15, 0, &error);
+		skb = sock_alloc_send_skb(sk, fraglen+15, 0, 0, &error);
 		if (skb == NULL)
 		{
 			ip_statistics.IpOutDiscards++;

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.12  Sep 1, 1995
+ *  linux/drivers/block/ide.c	Version 5.13  Sep 4, 1995
  *
  *  Copyright (C) 1994, 1995  Linus Torvalds & authors (see below)
  */
@@ -36,6 +36,8 @@
  *	Delman Lee	(delman@mipg.upenn.edu)		("Mr. atdisk2")
  *	Petri Mattila	(ptjmatti@kruuna.helsinki.fi)	(EIDE stuff)
  *	Scott Snyder	(snyder@fnald0.fnal.gov)	(ATAPI IDE cd-rom)
+ *
+ *  Maintained by Mark Lord (mlord@bnr.ca):  ide.c, ide.h, triton.c, hd.c, ..
  *
  *  This was a rewrite of just about everything from hd.c, though some original
  *  code is still sprinkled about.  Think of it as a major evolution, with 
@@ -136,6 +138,8 @@
  *			driver now forces "serialize" again for all cmd640 chips
  *			noticed REALLY_SLOW_IO had no effect, moved it to ide.c
  *			made do_drive_cmd() into public ide_do_drive_cmd()
+ *  Version 5.13	fixed typo ('B'), thanks to houston@boyd.geog.mcgill.ca
+ *			fixed ht6560b support
  *
  *  Driver compile-time options are in ide.h
  *
@@ -352,18 +356,18 @@ void ide_output_data (ide_drive_t *drive, void *buffer, unsigned int wcount)
 
 void ide_hwif_select (ide_hwif_t *hwif)
 {
-	static ide_hwif_t *current_hwif = NULL;
+	static byte current_select = 0;
 
-	if (hwif != current_hwif) {
+	if (hwif->select != current_select) {
 		unsigned long flags;
 		save_flags (flags);
 		cli();
+		current_select = hwif->select;
 		(void) inb(0x3e6);
 		(void) inb(0x3e6);
 		(void) inb(0x3e6);
 		(void) inb(0x3e6);
-		outb(0x1c,hwif->select);
-		current_hwif = hwif;
+		outb(current_select,0x3e6);
 		restore_flags (flags);
 	}
 }
@@ -1724,7 +1728,8 @@ static int revalidate_disk(dev_t  i_rdev)
 	};
 
 	drive->part[0].nr_sects = current_capacity(drive);
-	resetup_one_dev(HWIF(drive)->gd, drive->select.b.unit);
+	if (drive->media == disk)
+		resetup_one_dev(HWIF(drive)->gd, drive->select.b.unit);
 
 	drive->busy = 0;
 	wake_up(&drive->wqueue);
@@ -2582,6 +2587,11 @@ void ide_setup (char *s)
 				 *
 				 * Need to add an ioctl to select between them.
 				 */
+				if (check_region(0x3e6,1)) {
+					printk(" -- HT6560 PORT 0x3e6 ALREADY IN USE");
+					goto done;
+				}
+				request_region(0x3e6, 1, hwif->name);
 				ide_hwifs[0].select = 0x3c;
 				ide_hwifs[1].select = 0x3d;
 				goto do_serialize;
@@ -2921,7 +2931,6 @@ unsigned long ide_init (unsigned long mem_start, unsigned long mem_end)
 			if (hwif->irq == HD_IRQ && hwif->io_base != HD_DATA) {
 				printk("%s: CANNOT SHARE IRQ WITH OLD HARDDISK DRIVER (hd.c)\n", hwif->name);
 				hwif->present = 0;
-B
 			}
 #endif /* CONFIG_BLK_DEV_HD */
 		}

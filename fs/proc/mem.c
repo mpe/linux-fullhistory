@@ -81,7 +81,7 @@ static int mem_read(struct inode * inode, struct file * file,char * buf, int cou
 	while (count > 0) {
 		if (current->signal & ~current->blocked)
 			break;
-		page_dir = pgd_offset(tsk,addr);
+		page_dir = pgd_offset(tsk->mm,addr);
 		if (pgd_none(*page_dir))
 			break;
 		if (pgd_bad(*page_dir)) {
@@ -236,7 +236,7 @@ int mem_mmap(struct inode * inode, struct file * file,
 		if (!src_vma || (src_vma->vm_flags & VM_SHM))
 			return -EINVAL;
 
-		src_dir = pgd_offset(tsk, stmp);
+		src_dir = pgd_offset(tsk->mm, stmp);
 		if (pgd_none(*src_dir))
 			return -EINVAL;
 		if (pgd_bad(*src_dir)) {
@@ -271,11 +271,11 @@ int mem_mmap(struct inode * inode, struct file * file,
 		while (src_vma && stmp > src_vma->vm_end)
 			src_vma = src_vma->vm_next;
 
-		src_dir = pgd_offset(tsk, stmp);
+		src_dir = pgd_offset(tsk->mm, stmp);
 		src_middle = pmd_offset(src_dir, stmp);
 		src_table = pte_offset(src_middle, stmp);
 
-		dest_dir = pgd_offset(current, dtmp);
+		dest_dir = pgd_offset(current->mm, dtmp);
 		dest_middle = pmd_alloc(dest_dir, dtmp);
 		if (!dest_middle)
 			return -ENOMEM;
@@ -284,10 +284,10 @@ int mem_mmap(struct inode * inode, struct file * file,
 			return -ENOMEM;
 
 		if (!pte_present(*src_table))
-			do_no_page(src_vma, stmp, 1);
+			do_no_page(tsk, src_vma, stmp, 1);
 
 		if ((vma->vm_flags & VM_WRITE) && !pte_write(*src_table))
-			do_wp_page(src_vma, stmp, 1);
+			do_wp_page(tsk, src_vma, stmp, 1);
 
 		set_pte(src_table, pte_mkdirty(*src_table));
 		set_pte(dest_table, *src_table);

@@ -19,6 +19,7 @@ extern unsigned long event;
 #include <linux/tasks.h>
 #include <linux/kernel.h>
 #include <asm/system.h>
+#include <asm/page.h>
 
 /*
  * These are the constant used to fake the fixed-point load-average
@@ -114,6 +115,7 @@ struct fs_struct {
 
 struct mm_struct {
 	int count;
+	pgd_t * pgd;
 	unsigned long start_code, end_code, start_data, end_data;
 	unsigned long start_brk, brk, start_stack, start_mmap;
 	unsigned long arg_start, arg_end, env_start, env_end;
@@ -130,6 +132,7 @@ struct mm_struct {
 
 #define INIT_MM { \
 		1, \
+		swapper_pg_dir, \
 		0, 0, 0, 0, \
 		0, 0, 0, 0, \
 		0, 0, 0, 0, \
@@ -261,6 +264,7 @@ struct task_struct {
 
 #ifdef __KERNEL__
 
+extern struct   mm_struct init_mm;
 extern struct task_struct init_task;
 extern struct task_struct *task[NR_TASKS];
 extern struct task_struct *last_task_used_math;

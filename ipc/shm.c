@@ -393,8 +393,8 @@ static inline void remove_attach (struct shmid_ds * shp, struct vm_area_struct *
 		if (shp->attaches != shmd) {
 			printk("shm_close: shm segment (id=%ld) attach list inconsistent\n",
 			       SWP_OFFSET(shmd->vm_pte) & SHM_ID_MASK);
-			printk("shm_close: %d %08lx-%08lx %c%c%c%c %08lx %08lx\n",
-				shmd->vm_task->pid, shmd->vm_start, shmd->vm_end,
+			printk("shm_close: %08lx-%08lx %c%c%c%c %08lx %08lx\n",
+				shmd->vm_start, shmd->vm_end,
 				shmd->vm_flags & VM_READ ? 'r' : '-',
 				shmd->vm_flags & VM_WRITE ? 'w' : '-',
 				shmd->vm_flags & VM_EXEC ? 'x' : '-',
@@ -435,7 +435,7 @@ static int shm_map (struct vm_area_struct *shmd)
 	     tmp < shmd->vm_end;
 	     tmp += PAGE_SIZE, shm_sgn += SWP_ENTRY(0, 1 << SHM_IDX_SHIFT))
 	{
-		page_dir = pgd_offset(shmd->vm_task,tmp);
+		page_dir = pgd_offset(shmd->vm_mm,tmp);
 		page_middle = pmd_alloc(page_dir,tmp);
 		if (!page_middle)
 			return -ENOMEM;
@@ -514,7 +514,7 @@ asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	shmd->vm_pte = SWP_ENTRY(SHM_SWP_TYPE, id);
 	shmd->vm_start = addr;
 	shmd->vm_end = addr + shp->shm_npages * PAGE_SIZE;
-	shmd->vm_task = current;
+	shmd->vm_mm = current->mm;
 	shmd->vm_page_prot = (shmflg & SHM_RDONLY) ? PAGE_READONLY : PAGE_SHARED;
 	shmd->vm_flags = VM_SHM | VM_MAYSHARE | VM_SHARED
 			 | VM_MAYREAD | VM_MAYEXEC | VM_READ | VM_EXEC
@@ -738,7 +738,7 @@ int shm_swap (int prio, unsigned long limit)
 		tmp = shmd->vm_start + (idx << PAGE_SHIFT) - shmd->vm_offset;
 		if (!(tmp >= shmd->vm_start && tmp < shmd->vm_end))
 			continue;
-		page_dir = pgd_offset(shmd->vm_task,tmp);
+		page_dir = pgd_offset(shmd->vm_mm,tmp);
 		if (pgd_none(*page_dir) || pgd_bad(*page_dir)) {
 			printk("shm_swap: bad pgtbl! id=%ld start=%lx idx=%ld\n",
 					id, shmd->vm_start, idx);
@@ -765,8 +765,8 @@ int shm_swap (int prio, unsigned long limit)
 		set_pte(page_table,
 		  __pte(shmd->vm_pte + SWP_ENTRY(0, idx << SHM_IDX_SHIFT)));
 		mem_map[MAP_NR(pte_page(pte))]--;
-		if (shmd->vm_task->mm->rss > 0)
-			shmd->vm_task->mm->rss--;
+		if (shmd->vm_mm->rss > 0)
+			shmd->vm_mm->rss--;
 		invalid++;
 	    /* continue looping through circular list */
 	    } while (0);

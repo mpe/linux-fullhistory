@@ -97,6 +97,10 @@ void release(struct task_struct * p)
 			if (STACK_MAGIC != *(unsigned long *)p->kernel_stack_page)
 				printk(KERN_ALERT "release: %s kernel stack corruption. Aiee\n", p->comm);
 			free_page(p->kernel_stack_page);
+			free_page((long) p->mm);
+			free_page((long) p->files);
+			free_page((long) p->fs);
+			free_page((long) p->sigaction);
 			free_page((long) p);
 			return;
 		}
@@ -363,7 +367,6 @@ static void exit_files(void)
 			if (current->files->fd[i])
 				sys_close(i);
 	}
-	free_page((long) current->files);
 }
 
 static void exit_fs(void)
@@ -374,20 +377,15 @@ static void exit_fs(void)
 		iput(current->fs->root);
 		current->fs->root = NULL;
 	}
-	free_page((long) current->fs);
 }
 
 static void exit_mm(void)
 {
-	if (!--current->mm->count)
-		exit_mmap(current);
+	if (!--current->mm->count) {
+		current->mm->rss = 0;
+		exit_mmap(current->mm);
+	}
 	free_page_tables(current);
-	free_page((long) current->mm);
-}
-
-static void exit_signal(void)
-{
-	free_page((long) current->sigaction);
 }
 
 NORET_TYPE void do_exit(long code)
@@ -405,7 +403,6 @@ fake_volatile:
 	exit_mm();
 	exit_files();
 	exit_fs();
-	exit_signal();
 	exit_thread();
 	forget_original_parent(current);
 	/* 
@@ -468,7 +465,6 @@ fake_volatile:
 		last_task_used_math = NULL;
 	current->state = TASK_ZOMBIE;
 	current->exit_code = code;
-	current->mm->rss = 0;
 #ifdef DEBUG_PROC_TREE
 	audit_ptree();
 #endif

@@ -141,7 +141,7 @@
  *		Alan Cox	:	Per route irtt.
  *		Matt Day	:	Select() match BSD precisely on error
  *		Alan Cox	:	New buffers
- *		Mark Tamsky	:	Various sk->prot->retransmits and 
+ *		Marc Tamsky	:	Various sk->prot->retransmits and 
  *					sk->retransmits misupdating fixed.
  *					Fixed tcp_write_timeout: stuck close,
  *					and TCP syn retries gets used now.

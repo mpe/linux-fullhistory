@@ -1720,7 +1720,7 @@ static int ax25_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 	/* Assume the worst case */
 	size = len + 3 + size_ax25_addr(dp) + AX25_BPQ_HEADER_LEN;
 
-	if ((skb = sock_alloc_send_skb(sk, size, 0, &err)) == NULL)
+	if ((skb = sock_alloc_send_skb(sk, size, 0, 0, &err)) == NULL)
 		return err;
 
 	skb->sk   = sk;

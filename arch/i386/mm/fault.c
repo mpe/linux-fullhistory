@@ -92,10 +92,10 @@ good_area:
 		if (regs->cs == KERNEL_CS)
 			printk("WP fault at %08x\n", regs->eip);
 #endif
-		do_wp_page(vma, address, error_code & 2);
+		do_wp_page(current, vma, address, error_code & 2);
 		return;
 	}
-	do_no_page(vma, address, error_code & 2);
+	do_no_page(current, vma, address, error_code & 2);
 	return;
 
 /*

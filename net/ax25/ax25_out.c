@@ -71,7 +71,7 @@ void ax25_output(ax25_cb *ax25, struct sk_buff *skb)
 
 		while (skb->len > 0) {
 			if (skb->sk != NULL) {
-				if ((skbn = sock_alloc_send_skb(skb->sk, mtu + 2 + frontlen, 0, &err)) == NULL)
+				if ((skbn = sock_alloc_send_skb(skb->sk, mtu + 2 + frontlen, 0, 0, &err)) == NULL)
 					return;
 			} else {
 				if ((skbn = alloc_skb(mtu + 2 + frontlen, GFP_ATOMIC)) == NULL)

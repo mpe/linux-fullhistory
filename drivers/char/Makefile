@@ -34,10 +34,12 @@ M = y
 L_OBJS += busmouse.o
 endif
 
-ifdef CONFIG_PRINTER
+ifeq ($(CONFIG_PRINTER),y)
 L_OBJS += lp.o
 else
-M_OBJS += lp.o
+  ifeq ($(CONFIG_PRINTER),m)
+  M_OBJS += lp.o
+  endif
 endif
 
 ifdef CONFIG_MS_BUSMOUSE

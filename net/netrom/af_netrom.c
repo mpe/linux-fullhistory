@@ -1019,11 +1019,10 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 	return 1;
 }
 
-static int nr_sendto(struct socket *sock, const void *ubuf, int len, int noblock,
-	unsigned flags, struct sockaddr *usip, int addr_len)
+static int nr_sendmsg(struct socket *sock, struct msghdr *msg, int len, int noblock, int flags)
 {
 	struct sock *sk = (struct sock *)sock->data;
-	struct sockaddr_ax25 *usax = (struct sockaddr_ax25 *)usip;
+	struct sockaddr_ax25 *usax = (struct sockaddr_ax25 *)msg->msg_name;
 	int err;
 	struct sockaddr_ax25 sax;
 	struct sk_buff *skb;
@@ -1046,7 +1045,7 @@ static int nr_sendto(struct socket *sock, const void *ubuf, int len, int noblock
 		return -ENETUNREACH;
 		
 	if (usax) {
-		if (addr_len < sizeof(sax))
+		if (msg->msg_namelen < sizeof(sax))
 			return -EINVAL;
 		memcpy(&sax, usax, sizeof(sax));
 		if (sk->type == SOCK_SEQPACKET && memcmp(&sk->nr->dest_addr, &sax.sax25_call, sizeof(ax25_address)) != 0)
@@ -1069,7 +1068,7 @@ static int nr_sendto(struct socket *sock, const void *ubuf, int len, int noblock
 
 	size = len + AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + 3 + NR_NETWORK_LEN + NR_TRANSPORT_LEN;
 
-	if ((skb = sock_alloc_send_skb(sk, size, 0, &err)) == NULL)
+	if ((skb = sock_alloc_send_skb(sk, size, 0, 0, &err)) == NULL)
 		return err;
 
 	skb->sk   = sk;
@@ -1110,7 +1109,7 @@ static int nr_sendto(struct socket *sock, const void *ubuf, int len, int noblock
 		printk("NET/ROM: Appending user data\n");
 
 	/* User data follows immediately after the NET/ROM transport header */
-	memcpy_fromfs(asmptr, ubuf, len);
+	memcpy_fromiovec(asmptr, msg->msg_iov, len);
 
 	if (sk->debug)
 		printk("NET/ROM: Transmitting buffer\n");
@@ -1125,6 +1124,21 @@ static int nr_sendto(struct socket *sock, const void *ubuf, int len, int noblock
 	return len;
 }
 
+static int nr_sendto(struct socket *sock, const void *ubuf, int size, int noblock, unsigned flags,
+		struct sockaddr *sa, int addr_len)
+{
+	struct iovec iov;
+	struct msghdr msg;
+	iov.iov_base=(void *)ubuf;
+	iov.iov_len=size;
+	msg.msg_name=(void *)sa;
+	msg.msg_namelen=addr_len;
+	msg.msg_accrights=NULL;
+	msg.msg_iov=&iov;
+	msg.msg_iovlen=1;
+	return nr_sendmsg(sock,&msg,size,noblock,flags);	
+}
+
 static int nr_send(struct socket *sock, const void *ubuf, int size, int noblock, unsigned flags)
 {
 	return nr_sendto(sock, ubuf, size, noblock, flags, NULL, 0);
@@ -1132,21 +1146,23 @@ static int nr_send(struct socket *sock, const void *ubuf, int size, int noblock,
 
 static int nr_write(struct socket *sock, const char *ubuf, int size, int noblock)
 {
-	return nr_send(sock, ubuf, size, noblock, 0);
+	return nr_sendto(sock, ubuf, size, noblock, 0, NULL, 0);
 }
 
-static int nr_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
-		   unsigned flags, struct sockaddr *sip, int *addr_len)
+static int nr_recvmsg(struct socket *sock, struct msghdr *msg, int size, int noblock,
+		   int flags, int *addr_len)
 {
 	struct sock *sk = (struct sock *)sock->data;
-	struct sockaddr_ax25 *sax = (struct sockaddr_ax25 *)sip;
+	struct sockaddr_ax25 *sax = (struct sockaddr_ax25 *)msg->msg_name;
 	int copied;
 	struct sk_buff *skb;
 	int er;
 
 	if (sk->err) {
+		cli();
 		er      = -sk->err;
 		sk->err = 0;
+		sti();
 		return er;
 	}
 	
@@ -1170,7 +1186,7 @@ static int nr_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 	}
 
 	copied = (size < skb->len) ? size : skb->len;
-	skb_copy_datagram(skb, 0, ubuf, copied);
+	skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
 	
 	if (sax != NULL) {
 		struct sockaddr_ax25 addr;
@@ -1187,6 +1203,24 @@ static int nr_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 
 	return copied;
 }		
+
+static int nr_recvfrom(struct socket *sock, void *ubuf, int size, int noblock, unsigned flags,
+		struct sockaddr *sa, int *addr_len)
+{
+	struct iovec iov;
+	struct msghdr msg;
+	iov.iov_base=ubuf;
+	iov.iov_len=size;
+	msg.msg_name=(void *)sa;
+	msg.msg_namelen=0;
+	if (addr_len)
+		msg.msg_namelen = *addr_len;
+	msg.msg_accrights=NULL;
+	msg.msg_iov=&iov;
+	msg.msg_iovlen=1;
+	return nr_recvmsg(sock,&msg,size,noblock,flags,addr_len);	
+}
+
 
 static int nr_recv(struct socket *sock, void *ubuf, int size , int noblock,
 	unsigned flags)
@@ -1387,6 +1421,8 @@ static struct proto_ops nr_proto_ops = {
 	nr_setsockopt,
 	nr_getsockopt,
 	nr_fcntl,
+	nr_sendmsg,
+	nr_recvmsg
 };
 
 static struct notifier_block nr_dev_notifier = {

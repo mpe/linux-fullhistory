@@ -32,7 +32,7 @@ static inline void set_pgdir(unsigned long address, pgd_t entry)
 	struct task_struct * p;
 
 	for_each_task(p)
-		*pgd_offset(p,address) = entry;
+		*pgd_offset(p->mm,address) = entry;
 }
 
 static inline void free_area_pte(pmd_t * pmd, unsigned long address, unsigned long size)
@@ -96,7 +96,7 @@ static void free_area_pages(unsigned long address, unsigned long size)
 	pgd_t * dir;
 	unsigned long end = address + size;
 
-	dir = pgd_offset(&init_task, address);
+	dir = pgd_offset(&init_mm, address);
 	while (address < end) {
 		free_area_pmd(dir, address, end - address);
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
@@ -152,7 +152,7 @@ static int alloc_area_pages(unsigned long address, unsigned long size)
 	pgd_t * dir;
 	unsigned long end = address + size;
 
-	dir = pgd_offset(&init_task, address);
+	dir = pgd_offset(&init_mm, address);
 	while (address < end) {
 		pmd_t *pmd = pmd_alloc_kernel(dir, address);
 		if (!pmd)
@@ -213,7 +213,7 @@ static int remap_area_pages(unsigned long address, unsigned long offset, unsigne
 	unsigned long end = address + size;
 
 	offset -= address;
-	dir = pgd_offset(&init_task, address);
+	dir = pgd_offset(&init_mm, address);
 	while (address < end) {
 		pmd_t *pmd = pmd_alloc_kernel(dir, address);
 		if (!pmd)

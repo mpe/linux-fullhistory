@@ -15,6 +15,9 @@
 	Modifications/additions by Bjorn Ekwall <bj0rn@blox.se>:
 		ethdev_index[MAX_ETH_CARDS]
 		register_netdev() / unregister_netdev()
+		
+	Modifications by Wolfgang Walter
+		Use dev_close cleanly so we always shut things down tidily.
 */
 
 #include <linux/config.h>

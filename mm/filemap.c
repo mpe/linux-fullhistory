@@ -260,7 +260,7 @@ static int filemap_sync(struct vm_area_struct * vma, unsigned long address,
 	unsigned long end = address + size;
 	int error = 0;
 
-	dir = pgd_offset(current, address);
+	dir = pgd_offset(current->mm, address);
 	while (address < end) {
 		error |= filemap_sync_pmd_range(dir, address, end - address, vma, flags);
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;

@@ -33,7 +33,7 @@ extern int verify_area(int, const void *, unsigned long);
  * library, the executable area etc).
  */
 struct vm_area_struct {
-	struct task_struct * vm_task;		/* VM area parameters */
+	struct mm_struct * vm_mm;	/* VM area parameters */
 	unsigned long vm_start;
 	unsigned long vm_end;
 	pgprot_t vm_page_prot;
@@ -181,8 +181,8 @@ extern int remap_page_range(unsigned long from, unsigned long to, unsigned long 
 extern int zeromap_page_range(unsigned long from, unsigned long size, pgprot_t prot);
 
 extern void handle_mm_fault(struct vm_area_struct *vma, unsigned long address, int write_access);
-extern void do_wp_page(struct vm_area_struct * vma, unsigned long address, int write_access);
-extern void do_no_page(struct vm_area_struct * vma, unsigned long address, int write_access);
+extern void do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma, unsigned long address, int write_access);
+extern void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma, unsigned long address, int write_access);
 
 extern unsigned long paging_init(unsigned long start_mem, unsigned long end_mem);
 extern void mem_init(unsigned long start_mem, unsigned long end_mem);
@@ -201,7 +201,7 @@ extern int vread(char *buf, char *addr, int count);
 
 extern void swap_free(unsigned long);
 extern void swap_duplicate(unsigned long);
-extern void swap_in(struct vm_area_struct *, pte_t *, unsigned long id, int write_access);
+extern void swap_in(struct task_struct *, struct vm_area_struct *, pte_t *, unsigned long id, int write_access);
 
 extern void si_swapinfo(struct sysinfo * val);
 extern void rw_swap_page(int rw, unsigned long nr, char * buf);
@@ -214,8 +214,8 @@ extern struct vm_area_struct * find_vma_intersection (struct task_struct *, unsi
 extern void merge_segments(struct task_struct *, unsigned long, unsigned long);
 extern void insert_vm_struct(struct task_struct *, struct vm_area_struct *);
 extern void remove_shared_vm_struct(struct vm_area_struct *);
-extern void build_mmap_avl(struct task_struct *);
-extern void exit_mmap(struct task_struct *);
+extern void build_mmap_avl(struct mm_struct *);
+extern void exit_mmap(struct mm_struct *);
 extern int do_munmap(unsigned long, size_t);
 extern unsigned long get_unmapped_area(unsigned long, unsigned long);
 

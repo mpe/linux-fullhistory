@@ -216,7 +216,7 @@ void rd_load(void)
 		return;
 
 	/* for Slackware install disks */
-	printk(KERN_NOTICE "VFS: Insert ramdisk floppy and press ENTER\n");
+	printk(KERN_NOTICE "VFS: Insert root floppy to be loaded into ramdisk and press ENTER\n");
 	wait_for_keypress();
 
 	memset(&filp, 0, sizeof(filp));

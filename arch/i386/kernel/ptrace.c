@@ -83,7 +83,8 @@ static inline int put_stack_long(struct task_struct *task, int offset,
  * and that it is in the task area before calling this: this routine does
  * no checking.
  */
-static unsigned long get_long(struct vm_area_struct * vma, unsigned long addr)
+static unsigned long get_long(struct task_struct * tsk, 
+	struct vm_area_struct * vma, unsigned long addr)
 {
 	pgd_t * pgdir;
 	pmd_t * pgmiddle;
@@ -91,9 +92,9 @@ static unsigned long get_long(struct vm_area_struct * vma, unsigned long addr)
 	unsigned long page;
 
 repeat:
-	pgdir = pgd_offset(vma->vm_task, addr);
+	pgdir = pgd_offset(vma->vm_mm, addr);
 	if (pgd_none(*pgdir)) {
-		do_no_page(vma, addr, 0);
+		do_no_page(tsk, vma, addr, 0);
 		goto repeat;
 	}
 	if (pgd_bad(*pgdir)) {
@@ -103,7 +104,7 @@ repeat:
 	}
 	pgmiddle = pmd_offset(pgdir, addr);
 	if (pmd_none(*pgmiddle)) {
-		do_no_page(vma, addr, 0);
+		do_no_page(tsk, vma, addr, 0);
 		goto repeat;
 	}
 	if (pmd_bad(*pgmiddle)) {
@@ -113,7 +114,7 @@ repeat:
 	}
 	pgtable = pte_offset(pgmiddle, addr);
 	if (!pte_present(*pgtable)) {
-		do_no_page(vma, addr, 0);
+		do_no_page(tsk, vma, addr, 0);
 		goto repeat;
 	}
 	page = pte_page(*pgtable);
@@ -133,7 +134,7 @@ repeat:
  * Now keeps R/W state of page so that a text page stays readonly
  * even if a debugger scribbles breakpoints into it.  -M.U-
  */
-static void put_long(struct vm_area_struct * vma, unsigned long addr,
+static void put_long(struct task_struct * tsk, struct vm_area_struct * vma, unsigned long addr,
 	unsigned long data)
 {
 	pgd_t *pgdir;
@@ -142,9 +143,9 @@ static void put_long(struct vm_area_struct * vma, unsigned long addr,
 	unsigned long page;
 
 repeat:
-	pgdir = pgd_offset(vma->vm_task, addr);
+	pgdir = pgd_offset(vma->vm_mm, addr);
 	if (!pgd_present(*pgdir)) {
-		do_no_page(vma, addr, 1);
+		do_no_page(tsk, vma, addr, 1);
 		goto repeat;
 	}
 	if (pgd_bad(*pgdir)) {
@@ -154,7 +155,7 @@ repeat:
 	}
 	pgmiddle = pmd_offset(pgdir, addr);
 	if (pmd_none(*pgmiddle)) {
-		do_no_page(vma, addr, 1);
+		do_no_page(tsk, vma, addr, 1);
 		goto repeat;
 	}
 	if (pmd_bad(*pgmiddle)) {
@@ -164,12 +165,12 @@ repeat:
 	}
 	pgtable = pte_offset(pgmiddle, addr);
 	if (!pte_present(*pgtable)) {
-		do_no_page(vma, addr, 1);
+		do_no_page(tsk, vma, addr, 1);
 		goto repeat;
 	}
 	page = pte_page(*pgtable);
 	if (!pte_write(*pgtable)) {
-		do_wp_page(vma, addr, 1);
+		do_wp_page(tsk, vma, addr, 1);
 		goto repeat;
 	}
 /* this is a hack for non-kernel-mapped video buffers and similar */
@@ -220,8 +221,8 @@ static int read_long(struct task_struct * tsk, unsigned long addr,
 			if (!vma_high || vma_high->vm_start != vma->vm_end)
 				return -EIO;
 		}
-		low = get_long(vma, addr & ~(sizeof(long)-1));
-		high = get_long(vma_high, (addr+sizeof(long)) & ~(sizeof(long)-1));
+		low = get_long(tsk, vma, addr & ~(sizeof(long)-1));
+		high = get_long(tsk, vma_high, (addr+sizeof(long)) & ~(sizeof(long)-1));
 		switch (addr & (sizeof(long)-1)) {
 			case 1:
 				low >>= 8;
@@ -238,7 +239,7 @@ static int read_long(struct task_struct * tsk, unsigned long addr,
 		}
 		*result = low;
 	} else
-		*result = get_long(vma, addr);
+		*result = get_long(tsk, vma, addr);
 	return 0;
 }
 
@@ -262,8 +263,8 @@ static int write_long(struct task_struct * tsk, unsigned long addr,
 			if (!vma_high || vma_high->vm_start != vma->vm_end)
 				return -EIO;
 		}
-		low = get_long(vma, addr & ~(sizeof(long)-1));
-		high = get_long(vma_high, (addr+sizeof(long)) & ~(sizeof(long)-1));
+		low = get_long(tsk, vma, addr & ~(sizeof(long)-1));
+		high = get_long(tsk, vma_high, (addr+sizeof(long)) & ~(sizeof(long)-1));
 		switch (addr & (sizeof(long)-1)) {
 			case 0: /* shouldn't happen, but safety first */
 				low = data;
@@ -287,10 +288,10 @@ static int write_long(struct task_struct * tsk, unsigned long addr,
 				high |= data >> 8;
 				break;
 		}
-		put_long(vma, addr & ~(sizeof(long)-1),low);
-		put_long(vma_high, (addr+sizeof(long)) & ~(sizeof(long)-1),high);
+		put_long(tsk, vma, addr & ~(sizeof(long)-1),low);
+		put_long(tsk, vma_high, (addr+sizeof(long)) & ~(sizeof(long)-1),high);
 	} else
-		put_long(vma, addr, data);
+		put_long(tsk, vma, addr, data);
 	return 0;
 }
 

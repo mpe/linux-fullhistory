@@ -12,262 +12,342 @@ L_OBJS   := Space.o auto_irq.o net_init.o loopback.o
 M_OBJS   :=
 MOD_LIST_NAME := NET_MODULES
 
-ifdef CONFIG_SEEQ8005
+ifeq ($(CONFIG_SEEQ8005),y)
 L_OBJS += seeq8005.o
 endif
 
-ifdef CONFIG_IBMTR
+ifeq ($(CONFIG_IBMTR),y)
 L_OBJS += ibmtr.o
 else
-M_OBJS += ibmtr.o
+  ifeq ($(CONFIG_IBMTR),m)
+  M_OBJS += ibmtr.o
+  endif
 endif
 
-ifdef CONFIG_SK_G16
+ifeq ($(CONFIG_SK_G16),y)
 L_OBJS += sk_g16.o
 endif
 
-ifdef CONFIG_NET_IPIP
+ifeq ($(CONFIG_NET_IPIP),y)
 L_OBJS += tunnel.o
 else
-M_OBJS += tunnel.o
+  ifeq ($(CONFIG_NET_IPIP),m)
+  M_OBJS += tunnel.o
+  endif
 endif
 
-ifdef CONFIG_HP100
+ifeq ($(CONFIG_HP100),y)
 L_OBJS += hp100.o
 else
-M_OBJS += hp100.o
+  ifeq ($(CONFIG_HP100),m)
+  M_OBJS += hp100.o
+  endif
 endif
 
-ifdef CONFIG_WD80x3
+ifeq ($(CONFIG_WD80x3),y)
 L_OBJS += wd.o
-CONFIG_8390 = CONFIG_8390
+CONFIG_8390 = y
 else
-M_OBJS += wd.o
+  ifeq ($(CONFIG_WD80x3),m)
+  CONFIG_8390 = m
+  M_OBJS += wd.o
+  endif
 endif
 
-ifdef CONFIG_EL2
+ifeq ($(CONFIG_EL2),y)
 L_OBJS += 3c503.o
-CONFIG_8390 = CONFIG_8390
+CONFIG_8390 = y
 else
-M_OBJS += 3c503.o
+  ifeq ($(CONFIG_EL2),m)
+  CONFIG_8390 = m
+  M_OBJS += 3c503.o
+  endif
 endif
 
-ifdef CONFIG_NE2000
+ifeq ($(CONFIG_NE2000),y)
 L_OBJS += ne.o
-CONFIG_8390 = CONFIG_8390
+CONFIG_8390 = y
 else
-M_OBJS += ne.o
+  ifeq ($(CONFIG_NE2000),m)
+  CONFIG_8390 = m
+  M_OBJS += ne.o
+  endif
 endif
 
-ifdef CONFIG_HPLAN
+ifeq ($(CONFIG_HPLAN),y)
 L_OBJS += hp.o
-CONFIG_8390 = CONFIG_8390
+CONFIG_8390 = y
 else
-M_OBJS += hp.o
+  ifeq ($(CONFIG_HPLAN),m)
+  CONFIG_8390 = m
+  M_OBJS += hp.o
+  endif
 endif
 
-ifdef CONFIG_HPLAN_PLUS
+ifeq ($(CONFIG_HPLAN_PLUS),y)
 L_OBJS += hp-plus.o
-CONFIG_8390 = CONFIG_8390
+CONFIG_8390 = y
 else
-M_OBJS += hp-plus.o
+  ifeq ($(CONFIG_HPLAN_PLUS),m)
+  CONFIG_8390 = m
+  M_OBJS += hp-plus.o
+  endif
 endif
 
-ifdef CONFIG_ULTRA
+ifeq ($(CONFIG_ULTRA),y)
 L_OBJS += smc-ultra.o
-CONFIG_8390 = CONFIG_8390
+CONFIG_8390 = y
 else
-M_OBJS += smc-ultra.o
+  ifeq ($(CONFIG_ULTRA),m)
+  CONFIG_8390 = m
+  M_OBJS += smc-ultra.o
+  endif
 endif
 
-ifdef CONFIG_E2100
+ifeq ($(CONFIG_E2100),y)
 L_OBJS += e2100.o
-CONFIG_8390 = CONFIG_8390
+CONFIG_8390 = y
 else
-M_OBJS += e2100.o
+  ifeq ($(CONFIG_E2100),m)
+  CONFIG_8390 = m
+  M_OBJS += e2100.o
+  endif
 endif
 
-ifdef CONFIG_PLIP
+ifeq ($(CONFIG_PLIP),y)
 L_OBJS += plip.o
 else
-M_OBJS += plip.o
+  ifeq ($(CONFIG_PLIP),m)
+  M_OBJS += plip.o
+  endif
 endif
 
-ifdef CONFIG_PPP
+ifeq ($(CONFIG_PPP),y)
 L_OBJS += ppp.o
-CONFIG_SLHC = CONFIG_SLHC
+CONFIG_SLHC = y
 else
-M_OBJS += ppp.o
+  ifeq ($(CONFIG_PPP),m)
+  CONFIG_SLHC = m
+  M_OBJS += ppp.o
+  endif
 endif
 
-ifdef CONFIG_SLIP
+ifeq ($(CONFIG_SLIP),y)
 L_OBJS += slip.o
-CONFIG_SLHC = CONFIG_SLHC
+CONFIG_SLHC = y
 else
-M_OBJS += slip.o
+  ifeq ($(CONFIG_SLIP),m)
+  CONFIG_SLHC = m
+  M_OBJS += slip.o
+  endif
 endif
 
-ifdef CONFIG_DE650
+ifeq ($(CONFIG_DE650),y)
 ETDRV_OBJS := $(L_OBJS) de650.o
-CONFIG_8390 = CONFIG_8390
+CONFIG_8390 = y
 endif
 
-ifdef CONFIG_3C589
+ifeq ($(CONFIG_3C589),y)
 L_OBJS += 3c589.o
 endif
 
-ifdef CONFIG_DUMMY
+ifeq ($(CONFIG_DUMMY),y)
 L_OBJS += dummy.o
 else
-M_OBJS += dummy.o
+  ifeq ($(CONFIG_DUMMY),m)
+  M_OBJS += dummy.o
+  endif
 endif
 
-ifdef CONFIG_DE600
+ifeq ($(CONFIG_DE600),y)
 L_OBJS += de600.o
 else
-M_OBJS += de600.o
+  ifeq ($(CONFIG_DE600),m)
+  M_OBJS += de600.o
+  endif
 endif
 
-ifdef CONFIG_DE620
+ifeq ($(CONFIG_DE620),y)
 L_OBJS += de620.o
 else
-M_OBJS += de620.o
+  ifeq ($(CONFIG_DE620),m)
+  M_OBJS += de620.o
+  endif
 endif
 
-ifdef CONFIG_AT1500
+ifeq ($(CONFIG_AT1500),y)
 L_OBJS += lance.o
 endif
 
-ifdef CONFIG_LANCE
+ifeq ($(CONFIG_LANCE),y)
 L_OBJS += lance.o
 endif
 
-ifdef CONFIG_AT1700
+ifeq ($(CONFIG_AT1700),y)
 L_OBJS += at1700.o
 else
-M_OBJS += at1700.o
+  ifeq ($(CONFIG_AT1700),m)
+  M_OBJS += at1700.o
+  endif
 endif
 
-ifdef CONFIG_EL1
+ifeq ($(CONFIG_EL1),y)
 L_OBJS += 3c501.o
 else
-M_OBJS += 3c501.o
+  ifeq ($(CONFIG_EL1),m)
+  M_OBJS += 3c501.o
+  endif
 endif
 
-ifdef CONFIG_EL16
+ifeq ($(CONFIG_EL16),y)
 L_OBJS += 3c507.o
 else
-M_OBJS += 3c507.o
+  ifeq ($(CONFIG_EL16),m)
+  M_OBJS += 3c507.o
+  endif
 endif
 
-ifdef CONFIG_EL3
+ifeq ($(CONFIG_EL3),y)
 L_OBJS += 3c509.o
 else
-M_OBJS += 3c509.o
+  ifeq ($(CONFIG_EL3),m)
+  M_OBJS += 3c509.o
+  endif
 endif
 
-ifdef CONFIG_EEXPRESS
+ifeq ($(CONFIG_EEXPRESS),y)
 L_OBJS += eexpress.o
 else
-M_OBJS += eexpress.o
+  ifeq ($(CONFIG_EEXPRESS),m)
+  M_OBJS += eexpress.o
+  endif
 endif
 
-ifdef CONFIG_EEXPRESS_PRO
+ifeq ($(CONFIG_EEXPRESS_PRO),y)
 L_OBJS += eepro.o
 else
-M_OBJS += eepro.o
+  ifeq ($(CONFIG_EEXPRESS_PRO),m)
+  M_OBJS += eepro.o
+  endif
 endif
 
-ifdef CONFIG_WAVELAN
+ifeq ($(CONFIG_WAVELAN),y)
 L_OBJS += wavelan.o
 else
-M_OBJS += wavelan.o
+  ifeq ($(CONFIG_WAVELAN),m)
+  M_OBJS += wavelan.o
+  endif
 endif
 
-ifdef CONFIG_ZNET
+ifeq ($(CONFIG_ZNET),y)
 L_OBJS += znet.o
 endif
 
-ifdef CONFIG_DEPCA
+ifeq ($(CONFIG_DEPCA),y)
 L_OBJS += depca.o
 else
-M_OBJS += depca.o
+  ifeq ($(CONFIG_DEPCA),m)
+  M_OBJS += depca.o
+  endif
 endif
 
-ifdef CONFIG_EWRK3
+ifeq ($(CONFIG_EWRK3),y)
 L_OBJS += ewrk3.o
 else
-M_OBJS += ewrk3.o
+  ifeq ($(CONFIG_EWRK3),m)
+  M_OBJS += ewrk3.o
+  endif
 endif
 
-ifdef CONFIG_ATP
+ifeq ($(CONFIG_ATP),y)
 L_OBJS += atp.o
 endif
 
-ifdef CONFIG_DE4X5
+ifeq ($(CONFIG_DE4X5),y)
 L_OBJS += de4x5.o
 else
-M_OBJS += de4x5.o
+  ifeq ($(CONFIG_DE4X5),m)
+  M_OBJS += de4x5.o
+  endif
 endif
 
-ifdef CONFIG_NI52
+ifeq ($(CONFIG_NI52),y)
 L_OBJS += ni52.o
 endif
 
-ifdef CONFIG_NI65
+ifeq ($(CONFIG_NI65),y)
 L_OBJS += ni65.o
 endif
 
-ifdef CONFIG_ELPLUS
+ifeq ($(CONFIG_ELPLUS),y)
 L_OBJS += 3c505.o
 else
-M_OBJS += 3c505.o
+  ifeq ($(CONFIG_ELPLUS),m)
+  M_OBJS += 3c505.o
+  endif
 endif
 
-ifdef CONFIG_AC3200
+ifeq ($(CONFIG_AC3200),y)
 L_OBJS += ac3200.o
-CONFIG_8390 = CONFIG_8390
+CONFIG_8390 = y
 else
-M_OBJS += ac3200.o
+  ifeq ($(CONFIG_AC3200),m)
+  CONFIG_8390 = m
+  M_OBJS += ac3200.o
+  endif
 endif
 
-ifdef CONFIG_APRICOT
+ifeq ($(CONFIG_APRICOT),y)
 L_OBJS += apricot.o
 else
-M_OBJS += apricot.o
+  ifeq ($(CONFIG_APRICOT),m)
+  M_OBJS += apricot.o
+  endif
 endif
 
-ifdef CONFIG_DEC_ELCP
+ifeq ($(CONFIG_DEC_ELCP),y)
 L_OBJS += tulip.o
 else
-M_OBJS += tulip.o
+  ifeq ($(CONFIG_DEC_ELCP),m)
+  M_OBJS += tulip.o
+  endif
 endif
 
-ifdef CONFIG_ARCNET
+ifeq ($(CONFIG_ARCNET),y)
 L_OBJS += arcnet.o
+else
+  ifeq ($(CONFIG_ARCNET),m)
+  M_OBJS += arcnet.o
+  endif
 endif
 
-ifdef CONFIG_PI
+ifeq ($(CONFIG_PI),y)
 L_OBJS += pi2.o
 CONFIG_PI = CONFIG_PI
 endif
 
-ifdef CONFIG_SLHC
+ifeq ($(CONFIG_SLHC),y)
 L_OBJS += slhc.o
 else
-M_OBJS += slhc.o
+  ifeq ($(CONFIG_SLHC),m)
+  M_OBJS += slhc.o
+  endif
 endif
 
-ifdef CONFIG_8390
+ifeq ($(CONFIG_8390),y)
 L_OBJS += 8390.o
 else
-M_OBJS += 8390.o
+  ifeq ($(CONFIG_8390),m)
+  M_OBJS += 8390.o
+  endif
 endif
 
-ifdef CONFIG_EQUALIZER
+ifeq ($(CONFIG_EQUALIZER),y)
 L_OBJS += eql.o
 else
-M_OBJS += eql.o
+  ifeq ($(CONFIG_EQUALIZER),m)
+  M_OBJS += eql.o
+  endif
 endif
 
 include $(TOPDIR)/Rules.make

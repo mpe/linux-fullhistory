@@ -10,23 +10,14 @@
 /*
  * Modified by Alex Bligh (alex@cconcepts.co.uk) 4 Apr 1994 to use multiple
  * pages. So for 'page' throughout, read 'area'.
+ *
+ * Largely rewritten.. Linus
  */
 
 #include <linux/mm.h>
 #include <linux/delay.h>
 #include <asm/system.h>
 #include <asm/dma.h>
-
-/* I want this low enough for a while to catch errors.
-   I want this number to be increased in the near future:
-        loadable device drivers should use this function to get memory */
-
-#define MAX_KMALLOC_K ((PAGE_SIZE<<(NUM_AREA_ORDERS-1))>>10)
-
-
-/* This defines how many times we should try to allocate a free page before
-   giving up. Normally this shouldn't happen at all. */
-#define MAX_GET_FREE_PAGE_TRIES 4
 
 
 /* Private flags. */
@@ -229,17 +220,18 @@ void *kmalloc(size_t size, int priority)
 	}
 
 	/* We need to get a new free page..... */
+	/* This can be done with ints on: This is private to this invocation */
+	restore_flags(flags);
 
 	/* sz is the size of the blocks we're dealing with */
 	sz = BLOCKSIZE(order);
 
-	/* This can be done with ints on: This is private to this invocation */
-	page = (struct page_descriptor *) __get_free_pages(priority & GFP_LEVEL_MASK,
+	page = (struct page_descriptor *) __get_free_pages(priority,
 			sizes[order].gfporder, max_addr);
 
 	if (!page) {
 		static unsigned long last = 0;
-		if (last + 10 * HZ < jiffies) {
+		if (priority != GFP_BUFFER && (last + 10 * HZ < jiffies)) {
 			last = jiffies;
 			printk("Couldn't get a free page.....\n");
 		}

@@ -4,6 +4,8 @@
  *	Authors:
  *		Alan Cox <Alan.Cox@linux.org>	
  *
+ *	Extended to talk the BSD extended IGMP protocol of mrouted 3.6
+ *
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -24,30 +26,37 @@
  
 struct igmphdr
 {
-	unsigned char type;
-	unsigned char code;
-	unsigned short csum;
-	unsigned long group;
+	__u8 type;
+	__u8 code;		/* For newer IGMP */
+	__u16 csum;
+	__u32 group;
 };
-
-/*
- *	Header in host convenient format
- */
-
-struct igmp_header
-{
-	unsigned char type;
-	unsigned char code;
-	unsigned short csum;
-	unsigned long group;
-};
-
 
 #define IGMP_HOST_MEMBERSHIP_QUERY	0x11	/* From RFC1112 */
 #define IGMP_HOST_MEMBERSHIP_REPORT	0x12	/* Ditto */
+#define IGMP_DVMRP			0x13	/* DVMRP routing */
+#define IGMP_PIM			0x14	/* PIM routing */
+#define IGMP_HOST_NEW_MEMBERSHIP_REPORT	0x16	/* New version of 0x11 */
 #define IGMP_HOST_LEAVE_MESSAGE		0x17	/* An extra BSD seems to send */
 
-				/* 224.0.0.1 */
+#define IGMP_MTRACE_RESP		0x1e
+#define IGMP_MTRACE			0x1f
+
+/*
+ *	Use the BSD names for these for compatibility
+ */
+
+#define IGMP_DELAYING_MEMBER		0x01
+#define IGMP_IDLE_MEMBER		0x02
+#define IGMP_LAZY_MEMBER		0x03
+#define IGMP_SLEEPING_MEMBER		0x04
+#define IGMP_AWAKENING_MEMBER		0x05
+
+#define IGMP_OLD_ROUTER			0x00
+#define IGMP_NEW_ROUTER			0x01
+
+
+
 #define IGMP_ALL_HOSTS		htonl(0xE0000001L)
 
 /*

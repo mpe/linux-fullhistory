@@ -64,6 +64,7 @@
  *		Alan Cox	:	Make SO_DEBUG superuser only.
  *		Alan Cox	:	Allow anyone to clear SO_DEBUG
  *					(compatibility fix)
+ *		Alan Cox	:	Added optimistic memory grabbing for AF_UNIX throughput.
  *
  * To Fix:
  *
@@ -421,7 +422,7 @@ void sock_rfree(struct sock *sk, struct sk_buff *skb)
  *	Generic send/receive buffer handlers
  */
 
-struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, int noblock, int *errcode)
+struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigned long fallback, int noblock, int *errcode)
 {
 	struct sk_buff *skb;
 	int err;
@@ -446,8 +447,21 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, int nob
 			return NULL;
 		}
 		
-		skb = sock_wmalloc(sk, size, 0, GFP_KERNEL);
+		if(!fallback)
+			skb = sock_wmalloc(sk, size, 0, GFP_KERNEL);
+		else
+		{
+			/* The buffer get won't block, or use the atomic queue. It does
+			   produce annoying no free page messages still.... */
+			skb = sock_wmalloc(sk, size, 0 , GFP_BUFFER);
+			if(!skb)
+				skb=sock_wmalloc(sk, fallback, 0, GFP_KERNEL);
+		}
 		
+		/*
+		 *	This means we have too many buffers for this socket already.
+		 */
+		 
 		if(skb==NULL)
 		{
 			unsigned long tmp;

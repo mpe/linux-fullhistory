@@ -20,101 +20,123 @@ L_OBJS   := ll_rw_blk.o ramdisk.o genhd.o
 M_OBJS   :=
 MOD_LIST_NAME := BLOCK_MODULES
 
-ifdef CONFIG_BLK_DEV_FD
+ifeq ($(CONFIG_BLK_DEV_FD),y)
 L_OBJS += floppy.o
 else
-M_OBJS += floppy.o
+  ifeq ($(CONFIG_BLK_DEV_FD),m)
+  M_OBJS += floppy.o
+  endif
 endif
 
-ifdef CONFIG_AZTCD
+ifeq ($(CONFIG_AZTCD),y)
 L_OBJS += aztcd.o
 else
-M_OBJS += aztcd.o
+  ifeq ($(CONFIG_AZTCD),m)
+  M_OBJS += aztcd.o
+  endif
 endif #CONFIG_AZTCD
 
-ifdef CONFIG_CDU31A
+ifeq ($(CONFIG_CDU31A),y)
 L_OBJS += cdu31a.o
 else
-M_OBJS += cdu31a.o
+  ifeq ($(CONFIG_CDU31A),m)
+  M_OBJS += cdu31a.o
+  endif
 endif #CONFIG_CDU31A
 
-ifdef CONFIG_MCD
+ifeq ($(CONFIG_MCD),y)
 L_OBJS += mcd.o
 else
-M_OBJS += mcd.o
+  ifeq ($(CONFIG_MCD),m)
+  M_OBJS += mcd.o
+  endif
 endif #CONFIG_MCD
 
-ifdef CONFIG_MCDX
+ifeq ($(CONFIG_MCDX),y)
 L_OBJS += mcdx.o
 else
-M_OBJS += mcdx.o
+  ifeq ($(CONFIG_MCDX),m)
+  M_OBJS += mcdx.o
+  endif
 endif #CONFIG_MCDX
 
-ifdef CONFIG_SBPCD
+ifeq ($(CONFIG_SBPCD),y)
 L_OBJS += sbpcd.o
 else
-M_OBJS += sbpcd.o
+  ifeq ($(CONFIG_SBPCD),m)
+  M_OBJS += sbpcd.o
+  endif
 endif #CONFIG_SBPCD
 
-ifdef CONFIG_SBPCD2
+ifeq ($(CONFIG_SBPCD2),y)
 L_OBJS += sbpcd2.o
 endif #CONFIG_SBPCD2
 
-ifdef CONFIG_SBPCD3
+ifeq ($(CONFIG_SBPCD3),y)
 L_OBJS += sbpcd3.o
 endif #CONFIG_SBPCD3
 
-ifdef CONFIG_SBPCD4
+ifeq ($(CONFIG_SBPCD4),y)
 L_OBJS += sbpcd4.o
 endif #CONFIG_SBPCD4
 
-ifdef CONFIG_CDU535
+ifeq ($(CONFIG_CDU535),y)
 L_OBJS += sonycd535.o
 else
-M_OBJS += sonycd535.o
+  ifeq ($(CONFIG_CDU535),m)
+  M_OBJS += sonycd535.o
+  endif
 endif #CONFIG_CDU535
 
-ifdef CONFIG_GSCD
+ifeq ($(CONFIG_GSCD),y)
 L_OBJS += gscd.o
 else
-M_OBJS += gscd.o
+  ifeq ($(CONFIG_GSCD),m)
+  M_OBJS += gscd.o
+  endif
 endif #CONFIG_GSCD
 
-ifdef CONFIG_CM206
+ifeq ($(CONFIG_CM206),y)
 L_OBJS += cm206.o
 else
-M_OBJS += cm206.o
+  ifeq ($(CONFIG_CM206),m)
+  M_OBJS += cm206.o
+  endif
 endif #CONFIG_CM206
 
-ifdef CONFIG_OPTCD
+ifeq ($(CONFIG_OPTCD),y)
 L_OBJS += optcd.o
 else
-M_OBJS += optcd.o
+  ifeq ($(CONFIG_OPTCD),m)
+  M_OBJS += optcd.o
+  endif
 endif #CONFIG_OPTCD
 
-ifdef CONFIG_SJCD
+ifeq ($(CONFIG_SJCD),y)
 L_OBJS += sjcd.o
 #else
-#M_OBJS += sjcd.o
+#  ifeq ($(CONFIG_SJCD),m)
+#  M_OBJS += sjcd.o
+#  endif
 endif #CONFIG_SJCD
 
-ifdef CONFIG_BLK_DEV_HD
+ifeq ($(CONFIG_BLK_DEV_HD),y)
 L_OBJS += hd.o
 endif
 
-ifdef CONFIG_BLK_DEV_IDE
+ifeq ($(CONFIG_BLK_DEV_IDE),y)
 L_OBJS += ide.o
 endif
 
-ifdef CONFIG_BLK_DEV_TRITON
+ifeq ($(CONFIG_BLK_DEV_TRITON),y)
 L_OBJS += triton.o
 endif
 
-ifdef CONFIG_BLK_DEV_IDECD
+ifeq ($(CONFIG_BLK_DEV_IDECD),y)
 L_OBJS += ide-cd.o
 endif
 
-ifdef CONFIG_BLK_DEV_XD
+ifeq ($(CONFIG_BLK_DEV_XD),y)
 L_OBJS += xd.o
 endif
 

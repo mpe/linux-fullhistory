@@ -74,7 +74,7 @@ static void mark_screen_rdonly(struct task_struct * tsk)
 	pte_t *pte;
 	int i;
 
-	pgd = pgd_offset(tsk, 0xA0000);
+	pgd = pgd_offset(tsk->mm, 0xA0000);
 	if (pgd_none(*pgd))
 		return;
 	if (pgd_bad(*pgd)) {

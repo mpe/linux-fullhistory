@@ -43,146 +43,193 @@ endif
 M_OBJS += scsi_mod.o
 endif
 
-ifdef CONFIG_CHR_DEV_ST
+ifeq ($(CONFIG_CHR_DEV_ST),y)
 L_OBJS += st.o
 else
-M_OBJS += st.o
+  ifeq ($(CONFIG_CHR_DEV_ST),m)
+  M_OBJS += st.o
+  endif
 endif
 
-ifdef CONFIG_BLK_DEV_SD
+ifeq ($(CONFIG_BLK_DEV_SD),y)
 L_OBJS += sd.o sd_ioctl.o
 else
-M_OBJS += sd_mod.o
+  ifeq ($(CONFIG_BLK_DEV_SD),m)
+  M_OBJS += sd_mod.o
+  endif
 endif
 
-ifdef CONFIG_BLK_DEV_SR
+ifeq ($(CONFIG_BLK_DEV_SR),y)
 L_OBJS += sr.o sr_ioctl.o
 else
-M_OBJS += sr_mod.o
+  ifeq ($(CONFIG_BLK_DEV_SR),m)
+  M_OBJS += sr_mod.o
+  endif
 endif
 
-ifdef CONFIG_CHR_DEV_SG
+ifeq ($(CONFIG_CHR_DEV_SG),y)
 L_OBJS += sg.o
 else
-M_OBJS += sg.o
+  ifeq ($(CONFIG_CHR_DEV_SG),m)
+  M_OBJS += sg.o
+  endif
 endif
 
-ifdef CONFIG_SCSI_QLOGIC
+ifeq ($(CONFIG_SCSI_QLOGIC),y)
 L_OBJS += qlogic.o
 else
-M_OBJS += qlogic.o
+  ifeq ($(CONFIG_SCSI_QLOGIC),m)
+  M_OBJS += qlogic.o
+  endif
 endif
 
-ifdef CONFIG_SCSI_AHA152X
+ifeq ($(CONFIG_SCSI_AHA152X),y)
 L_OBJS += aha152x.o
 else
-M_OBJS += aha152x.o
+  ifeq ($(CONFIG_SCSI_AHA152X),m)
+  M_OBJS += aha152x.o
+  endif
 endif
 
-ifdef CONFIG_SCSI_AHA1542
+ifeq ($(CONFIG_SCSI_AHA1542),y)
 L_OBJS += aha1542.o
 else
-M_OBJS += aha1542.o
+  ifeq ($(CONFIG_SCSI_AHA1542),m)
+  M_OBJS += aha1542.o
+  endif
 endif
 
-ifdef CONFIG_SCSI_AHA1740
+ifeq ($(CONFIG_SCSI_AHA1740),y)
 L_OBJS += aha1740.o
 else
-M_OBJS += aha1740.o
+  ifeq ($(CONFIG_SCSI_AHA1740),m)
+  M_OBJS += aha1740.o
+  endif
 endif
 
-ifdef CONFIG_SCSI_AIC7XXX
+ifeq ($(CONFIG_SCSI_AIC7XXX),y)
 L_OBJS += aic7xxx.o
 else
-M_OBJS += aic7xxx.o
+  ifeq ($(CONFIG_SCSI_AIC7XXX),m)
+  M_OBJS += aic7xxx.o
+  endif
 endif
 
-ifdef CONFIG_SCSI_BUSLOGIC
+ifeq ($(CONFIG_SCSI_BUSLOGIC),y)
 L_OBJS += buslogic.o
 else
-M_OBJS += buslogic.o
+  ifeq ($(CONFIG_SCSI_BUSLOGIC),m)
+  M_OBJS += buslogic.o
+  endif
 endif
 
-ifdef CONFIG_SCSI_EATA_DMA
+ifeq ($(CONFIG_SCSI_EATA_DMA),y)
 L_OBJS += eata_dma.o
 else
-M_OBJS += eata_dma.o
+  ifeq ($(CONFIG_SCSI_EATA_DMA),m)
+  M_OBJS += eata_dma.o
+  endif
 endif
 
-ifdef CONFIG_SCSI_EATA_PIO
+ifeq ($(CONFIG_SCSI_EATA_PIO),y)
 L_OBJS += eata_pio.o
 else
-M_OBJS += eata_pio.o
+  ifeq ($(CONFIG_SCSI_EATA_PIO),m)
+  M_OBJS += eata_pio.o
+  endif
 endif
 
-ifdef CONFIG_SCSI_U14_34F
+ifeq ($(CONFIG_SCSI_U14_34F),y)
 L_OBJS += u14-34f.o
 else
-M_OBJS += u14-34f.o
+  ifeq ($(CONFIG_SCSI_U14_34F),m)
+  M_OBJS += u14-34f.o
+  endif
 endif
 
-ifdef CONFIG_SCSI_DEBUG
+ifeq ($(CONFIG_SCSI_DEBUG),y)
 L_OBJS += scsi_debug.o
 else
-M_OBJS += scsi_debug.o
+  ifeq ($(CONFIG_SCSI_DEBUG),m)
+  M_OBJS += scsi_debug.o
+  endif
 endif
 
-ifdef CONFIG_SCSI_FUTURE_DOMAIN
+ifeq ($(CONFIG_SCSI_FUTURE_DOMAIN),y)
 L_OBJS += fdomain.o
 else
-M_OBJS += fdomain.o
+  ifeq ($(CONFIG_SCSI_FUTURE_DOMAIN),m)
+  M_OBJS += fdomain.o
+  endif
 endif
 
-ifdef CONFIG_SCSI_IN2000
+ifeq ($(CONFIG_SCSI_IN2000),y)
 L_OBJS += in2000.o
 else
-M_OBJS += in2000.o
+  ifeq ($(CONFIG_SCSI_IN2000),m)
+  M_OBJS += in2000.o
+  endif
 endif
 
-ifdef CONFIG_SCSI_GENERIC_NCR5380
+ifeq ($(CONFIG_SCSI_GENERIC_NCR5380),y)
 L_OBJS += g_NCR5380.o
 endif
 
-ifdef CONFIG_SCSI_NCR53C7xx
+ifeq ($(CONFIG_SCSI_NCR53C7xx),y)
 L_OBJS += 53c7,8xx.o 
 else
-M_OBJS += 53c7,8xx.o
+  ifeq ($(CONFIG_SCSI_NCR53C7xx),m)
+  M_OBJS += 53c7,8xx.o
+  endif
 endif
 
-ifdef CONFIG_SCSI_PAS16
+ifeq ($(CONFIG_SCSI_PAS16),y)
 L_OBJS += pas16.o
 endif
 
-ifdef CONFIG_SCSI_SEAGATE
+ifeq ($(CONFIG_SCSI_SEAGATE),y)
 L_OBJS += seagate.o
 else
-ifdef CONFIG_SCSI_FD_8xx
-L_OBJS += seagate.o
-else
-M_OBJS += seagate.o
+  ifeq ($(CONFIG_SCSI_SEAGATE),m)
+  M_OBJS += seagate.o
+  endif
 endif
+ifndef CONFIG_SCSI_SEAGATE
+  ifeq ($(CONFIG_SCSI_FD_8xx),y)
+  L_OBJS += seagate.o
+  else
+    ifeq ($(CONFIG_SCSI_FD_8xx),m)
+    M_OBJS += seagate.o
+    endif
+  endif
 endif
 
-ifdef CONFIG_SCSI_7000FASST
+ifeq ($(CONFIG_SCSI_7000FASST),y)
 L_OBJS += wd7000.o
 else
-M_OBJS += wd7000.o
+  ifeq ($(CONFIG_SCSI_7000FASST),m)
+  M_OBJS += wd7000.o
+  endif
 endif
 
-ifdef CONFIG_SCSI_T128
+ifeq ($(CONFIG_SCSI_T128),y)
 L_OBJS += t128.o
 endif
 
-ifdef CONFIG_SCSI_ULTRASTOR
+ifeq ($(CONFIG_SCSI_ULTRASTOR),y)
 L_OBJS += ultrastor.o
 else
-M_OBJS += ultrastor.o
+  ifeq ($(CONFIG_SCSI_ULTRASTOR),m)
+  M_OBJS += ultrastor.o
+  endif
 endif
 
-ifdef CONFIG_SCSI_EATA
+ifeq ($(CONFIG_SCSI_EATA),y)
 L_OBJS += eata.o
 else
-M_OBJS += eata.o
+  ifeq ($(CONFIG_SCSI_EATA),m)
+  M_OBJS += eata.o
+  endif
 endif
 
 include $(TOPDIR)/Rules.make

@@ -12,11 +12,13 @@ IPV4_OBJS	:= utils.o route.o proc.o timer.o protocol.o packet.o \
 		   arp.o ip.o raw.o icmp.o tcp.o udp.o devinet.o af_inet.o \
 		   igmp.o ip_fw.o ipip.o ipmr.o
 
-ifdef CONFIG_INET_RARP
+ifeq ($(CONFIG_INET_RARP),y)
 IPV4_OBJS := $(IPV4_OBJS) rarp.o
 else
-M_OBJS := rarp.o
-MOD_LIST_NAME := IPV4_MODULES
+  ifeq ($(CONFIG_INET_RARP),m)
+    M_OBJS := rarp.o
+    MOD_LIST_NAME := IPV4_MODULES
+   endif
 endif
 
 ifdef CONFIG_INET

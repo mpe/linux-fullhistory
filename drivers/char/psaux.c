@@ -84,7 +84,7 @@
 #define QP_DATA         0x310		/* Data Port I/O Address */
 #define QP_STATUS       0x311		/* Status Port I/O Address */
 
-#define QP_DEV_IDLE     0x01	        /* Device Idle */
+#define QP_DEV_IDLE     0x01		/* Device Idle */
 #define QP_RX_FULL      0x02		/* Device Char received */
 #define QP_TX_IDLE      0x04		/* Device XMIT Idle */
 #define QP_RESET        0x08		/* Device Reset */
@@ -140,11 +140,10 @@ static void aux_write_dev(int val)
 /*
  * Write to device & handle returned ack
  */
- 
 #if defined INITIALIZE_DEVICE
 static int aux_write_ack(int val)
 {
-        int retries = 0;
+	int retries = 0;
 
 	poll_aux_status_nosleep();
 	outb_p(AUX_MAGIC_WRITE,AUX_COMMAND);
@@ -261,11 +260,11 @@ static void release_qp(struct inode * inode, struct file * file)
 	unsigned char status;
 
 	if (!poll_qp_status())
-	        printk("Warning: Mouse device busy in release_qp()\n");
+		printk("Warning: Mouse device busy in release_qp()\n");
 	status = inb_p(qp_status);
 	outb_p(status & ~(QP_ENABLE|QP_INTS_ON), qp_status);
 	if (!poll_qp_status())
-	        printk("Warning: Mouse device busy in release_qp()\n");
+		printk("Warning: Mouse device busy in release_qp()\n");
 	free_irq(QP_IRQ);
 	fasync_aux(inode, file, 0);
 	qp_busy = 0;
@@ -275,6 +274,7 @@ static void release_qp(struct inode * inode, struct file * file)
 static int fasync_aux(struct inode *inode, struct file *filp, int on)
 {
 	struct fasync_struct *fa, *prev;
+	unsigned long flags;
 
 	for (fa = queue->fasync, prev = 0; fa; prev= fa, fa = fa->fa_next) {
 		if (fa->fa_file == filp)
@@ -287,21 +287,27 @@ static int fasync_aux(struct inode *inode, struct file *filp, int on)
 		fa = (struct fasync_struct *)kmalloc(sizeof(struct fasync_struct), GFP_KERNEL);
 		if (!fa)
 			return -ENOMEM;
+		save_flags(flags);
+		cli();
 		fa->magic = FASYNC_MAGIC;
 		fa->fa_file = filp;
 		fa->fa_next = queue->fasync;
 		queue->fasync = fa;
+		restore_flags(flags);
 	}
 	else {
 		if (!fa)
 			return 0;
+		save_flags(flags);
+		cli();
 		if (prev)
 			prev->fa_next = fa->fa_next;
 		else
 			queue->fasync = fa->fa_next;
+		restore_flags(flags);
 		kfree_s(fa, sizeof(struct fasync_struct));
 	}
-	return 0;	
+	return 0;
 }
 
 /*
@@ -318,7 +324,7 @@ static int open_aux(struct inode * inode, struct file * file)
 	if (!poll_aux_status())
 		return -EBUSY;
 	aux_busy = 1;
-	queue->head = queue->tail = 0;	        /* Flush input queue */
+	queue->head = queue->tail = 0;		/* Flush input queue */
 	if (request_irq(AUX_IRQ, aux_interrupt, 0, "PS/2 Mouse")) {
 		aux_busy = 0;
 		return -EBUSY;
@@ -341,7 +347,7 @@ static int open_aux(struct inode * inode, struct file * file)
 
 static int open_qp(struct inode * inode, struct file * file)
 {
-        unsigned char status;
+	unsigned char status;
 
 	if (!qp_present)
 		return -EINVAL;
@@ -365,9 +371,9 @@ static int open_qp(struct inode * inode, struct file * file)
 	outb_p(status, qp_status);              /* Enable interrupts */
 
 	while (!poll_qp_status()) {
-	        printk("Error: Mouse device busy in open_qp()\n");
+		printk("Error: Mouse device busy in open_qp()\n");
 		return -EBUSY;
-        }
+	}
 
 	outb_p(AUX_ENABLE_DEV, qp_data);	/* Wake up mouse */
 
@@ -437,8 +443,8 @@ repeat:
 			goto repeat;
 		}
 		current->state = TASK_RUNNING;
-		remove_wait_queue(&queue->proc_list, &wait);			
-	}		
+		remove_wait_queue(&queue->proc_list, &wait);
+	}
 	while (i > 0 && !queue_empty()) {
 		c = get_from_queue();
 		put_user(c, buffer++);
@@ -488,11 +494,11 @@ struct file_operations psaux_fops = {
 
 unsigned long psaux_init(unsigned long kmem_start)
 {
-        int qp_found = 0;
+	int qp_found = 0;
 
 #ifdef CONFIG_82C710_MOUSE
-        if ((qp_found = probe_qp())) {
-	        printk("82C710 type pointing device detected -- driver installed.\n");
+	if ((qp_found = probe_qp())) {
+		printk("82C710 type pointing device detected -- driver installed.\n");
 /*		printk("82C710 address = %x (should be 0x310)\n", qp_data); */
 		qp_present = 1;
 		psaux_fops.write = write_qp;
@@ -501,8 +507,8 @@ unsigned long psaux_init(unsigned long kmem_start)
 	} else
 #endif
 	if (aux_device_present == 0xaa) {
-	        printk("PS/2 auxiliary pointing device detected -- driver installed.\n");
-         	aux_present = 1;
+		printk("PS/2 auxiliary pointing device detected -- driver installed.\n");
+	 	aux_present = 1;
 		kbd_read_mask = AUX_OBUF_FULL;
 	} else {
 		return kmem_start;              /* No mouse at all */
@@ -514,15 +520,15 @@ unsigned long psaux_init(unsigned long kmem_start)
 	queue->proc_list = NULL;
 	if (!qp_found) {
 #if defined INITIALIZE_DEVICE
-                outb_p(AUX_ENABLE,AUX_COMMAND);		/* Enable Aux */
-	        aux_write_ack(AUX_SET_SAMPLE);
-	        aux_write_ack(100);			/* 100 samples/sec */
-	        aux_write_ack(AUX_SET_RES);
-	        aux_write_ack(3);			/* 8 counts per mm */
-	        aux_write_ack(AUX_SET_SCALE21);		/* 2:1 scaling */
-	        poll_aux_status_nosleep();
+		outb_p(AUX_ENABLE,AUX_COMMAND);		/* Enable Aux */
+		aux_write_ack(AUX_SET_SAMPLE);
+		aux_write_ack(100);			/* 100 samples/sec */
+		aux_write_ack(AUX_SET_RES);
+		aux_write_ack(3);			/* 8 counts per mm */
+		aux_write_ack(AUX_SET_SCALE21);		/* 2:1 scaling */
+		poll_aux_status_nosleep();
 #endif /* INITIALIZE_DEVICE */
-        	outb_p(AUX_DISABLE,AUX_COMMAND);   /* Disable Aux device */
+		outb_p(AUX_DISABLE,AUX_COMMAND);   /* Disable Aux device */
 		poll_aux_status_nosleep();
 		outb_p(AUX_CMD_WRITE,AUX_COMMAND);
 		poll_aux_status_nosleep();             /* Disable interrupts */
@@ -568,11 +574,11 @@ static int poll_qp_status(void)
 	int retries=0;
 
 	while ((inb(qp_status)&(QP_RX_FULL|QP_TX_IDLE|QP_DEV_IDLE))
-	               != (QP_DEV_IDLE|QP_TX_IDLE)
-	               && retries < MAX_RETRIES) {
+		       != (QP_DEV_IDLE|QP_TX_IDLE)
+		       && retries < MAX_RETRIES) {
 
-	        if (inb_p(qp_status)&(QP_RX_FULL))
-		        inb_p(qp_data);
+		if (inb_p(qp_status)&(QP_RX_FULL))
+			inb_p(qp_data);
 		current->state = TASK_INTERRUPTIBLE;
 		current->timeout = jiffies + (5*HZ + 99) / 100;
 		schedule();
@@ -587,7 +593,7 @@ static int poll_qp_status(void)
 
 static inline unsigned char read_710(unsigned char index)
 {
-        outb_p(index, 0x390);			/* Write index */
+	outb_p(index, 0x390);			/* Write index */
 	return inb_p(0x391);			/* Read the data */
 }
 
@@ -597,7 +603,7 @@ static inline unsigned char read_710(unsigned char index)
 
 static int probe_qp(void)
 {
-        outb_p(0x55, 0x2fa);			/* Any value except 9, ff or 36 */
+	outb_p(0x55, 0x2fa);			/* Any value except 9, ff or 36 */
 	outb_p(0xaa, 0x3fa);			/* Inverse of 55 */
 	outb_p(0x36, 0x3fa);			/* Address the chip */
 	outb_p(0xe4, 0x3fa);			/* 390/4; 390 = config address */

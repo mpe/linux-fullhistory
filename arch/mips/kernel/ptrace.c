@@ -89,7 +89,7 @@ static unsigned long get_long(struct vm_area_struct * vma, unsigned long addr)
 	unsigned long page;
 
 repeat:
-	pgdir = PAGE_DIR_OFFSET(vma->vm_task, addr);
+	pgdir = PAGE_DIR_OFFSET(vma->vm_mm, addr);
 	if (pgd_none(*pgdir)) {
 		do_no_page(vma, addr, 0);
 		goto repeat;
@@ -129,7 +129,7 @@ static void put_long(struct vm_area_struct * vma, unsigned long addr,
 	unsigned long page;
 
 repeat:
-	pgdir = PAGE_DIR_OFFSET(vma->vm_task, addr);
+	pgdir = PAGE_DIR_OFFSET(vma->vm_mm, addr);
 	if (!pgd_present(*pgdir)) {
 		do_no_page(vma, addr, 1);
 		goto repeat;

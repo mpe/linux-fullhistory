@@ -77,8 +77,10 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		default:
 			return -EINVAL;
 		}
-		if ((flags & MAP_DENYWRITE) && (file->f_inode->i_wcount > 0))
-			return -ETXTBSY;
+		if (flags & MAP_DENYWRITE) {
+			if (file->f_inode->i_wcount > 0)
+				return -ETXTBSY;
+		}
 	} else if ((flags & MAP_TYPE) != MAP_PRIVATE)
 		return -EINVAL;
 
@@ -111,7 +113,7 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	if (!vma)
 		return -ENOMEM;
 
-	vma->vm_task = current;
+	vma->vm_mm = current->mm;
 	vma->vm_start = addr;
 	vma->vm_end = addr + len;
 	vma->vm_flags = prot & (VM_READ | VM_WRITE | VM_EXEC);
@@ -772,23 +774,23 @@ int do_munmap(unsigned long addr, size_t len)
 }
 
 /* Build the AVL tree corresponding to the VMA list. */
-void build_mmap_avl(struct task_struct * task)
+void build_mmap_avl(struct mm_struct * mm)
 {
 	struct vm_area_struct * vma;
 
-	task->mm->mmap_avl = NULL;
-	for (vma = task->mm->mmap; vma; vma = vma->vm_next)
-		avl_insert(vma, &task->mm->mmap_avl);
+	mm->mmap_avl = NULL;
+	for (vma = mm->mmap; vma; vma = vma->vm_next)
+		avl_insert(vma, &mm->mmap_avl);
 }
 
 /* Release all mmaps. */
-void exit_mmap(struct task_struct * task)
+void exit_mmap(struct mm_struct * mm)
 {
 	struct vm_area_struct * mpnt;
 
-	mpnt = task->mm->mmap;
-	task->mm->mmap = NULL;
-	task->mm->mmap_avl = NULL;
+	mpnt = mm->mmap;
+	mm->mmap = NULL;
+	mm->mmap_avl = NULL;
 	while (mpnt) {
 		struct vm_area_struct * next = mpnt->vm_next;
 		if (mpnt->vm_ops && mpnt->vm_ops->close)

@@ -136,7 +136,6 @@ static void unix_destroy_timer(unsigned long data)
 	 *	Retry;
 	 */
 	 
-	init_timer(&sk->timer);
 	sk->timer.expires=jiffies+10*HZ;	/* No real hurry try it every 10 seconds or so */
 	add_timer(&sk->timer);
 }
@@ -144,7 +143,6 @@ static void unix_destroy_timer(unsigned long data)
 	 
 static void unix_delayed_delete(unix_socket *sk)
 {
-	init_timer(&sk->timer);
 	sk->timer.data=(unsigned long)sk;
 	sk->timer.expires=jiffies+HZ;		/* Normally 1 second after will clean up. After that we try every 10 */
 	sk->timer.function=unix_destroy_timer;
@@ -275,6 +273,7 @@ static int unix_create(struct socket *sock, int protocol)
 			kfree_s(sk,sizeof(*sk));
 			return -ESOCKTNOSUPPORT;
 	}
+	init_timer(&sk->timer);
 	skb_queue_head_init(&sk->write_queue);
 	skb_queue_head_init(&sk->receive_queue);
 	skb_queue_head_init(&sk->back_log);
@@ -473,7 +472,7 @@ static int unix_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 		 *	Now ready to connect
 		 */
 	 
-		skb=sock_alloc_send_skb(sk, 0, 0, &err); /* Marker object */
+		skb=sock_alloc_send_skb(sk, 0, 0, 0, &err); /* Marker object */
 		if(skb==NULL)
 			return err;
 		skb->sk=sk;				/* So they know it is us */
@@ -658,6 +657,8 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 	struct sockaddr_un *sun=msg->msg_name;
 	int err,size;
 	struct sk_buff *skb;
+	int limit=0;
+	int sent=0;
 
 	if(sk->err)
 	{
@@ -687,62 +688,91 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 			return -ENOTCONN;
 	}
 
-	/*
-	 *	Optimisation for the fact that under 0.01% of X messages typically
-	 *	need breaking up.
-	 */
 
-	if(len>(sk->sndbuf-sizeof(struct sk_buff))/2)	/* Keep two messages in the pipe so it schedules better */
+	while(sent < len)
 	{
-		if(sock->type==SOCK_DGRAM)
-			return -EMSGSIZE;
-		len=(sk->sndbuf-sizeof(struct sk_buff))/2;
+		/*
+		 *	Optimisation for the fact that under 0.01% of X messages typically
+		 *	need breaking up.
+		 */
+		 
+		size=len-sent;
+
+		if(size>(sk->sndbuf-sizeof(struct sk_buff))/2)	/* Keep two messages in the pipe so it schedules better */
+		{
+			if(sock->type==SOCK_DGRAM)
+				return -EMSGSIZE;
+			size=(sk->sndbuf-sizeof(struct sk_buff))/2;
+		}
 		/*
 		 *	Keep to page sized kmalloc()'s as various people
 		 *	have suggested. Big mallocs stress the vm too
 		 *	much.
 		 */
-		if(len > 4000 && sock->type!=SOCK_DGRAM)
-			len = 4000;
-	}
-	 
-	size=/*protocol_size(&proto_unix)+*/len;
-	skb=sock_alloc_send_skb(sk,size,nonblock, &err);
-	if(skb==NULL)
-		return err;
-/*	protocol_adjust(skb,&proto_unix);*/
-	skb->sk=sk;
-	skb->free=1;
-	memcpy_fromiovec(skb_put(skb,len),msg->msg_iov, len);
 
-	cli();
-	if(sun==NULL)
-	{
-		other=sk->protinfo.af_unix.other;
-		if(sock->type==SOCK_DGRAM && other->dead)
+		if(size > 4000 && sock->type!=SOCK_DGRAM)
+			limit = 4000;	/* Fall back to 4K if we can't grab a big buffer this instant */
+		else
+			limit = 0;	/* Otherwise just grab and wait */
+
+		/*
+		 *	Grab a buffer
+		 */
+		 
+		skb=sock_alloc_send_skb(sk,size,limit,nonblock, &err);
+		
+		if(skb==NULL)
 		{
-			other->protinfo.af_unix.locks--;
-			sk->protinfo.af_unix.other=NULL;
-			sock->state=SS_UNCONNECTED;
-			sti();
-			return -ECONNRESET;
-		}
-	}
-	else
-	{
-		unix_mkname(sun, msg->msg_namelen);
-		other=unix_find_other(sun->sun_path, &err);
-		if(other==NULL)
-		{
-			kfree_skb(skb, FREE_WRITE);
-			sti();
+			if(sent)
+			{
+				sk->err=-err;
+				return sent;
+			}
 			return err;
 		}
+		size=skb_tailroom(skb);		/* If we dropped back on a limit then our skb is smaller */
+
+		skb->sk=sk;
+		skb->free=1;
+		
+		memcpy_fromiovec(skb_put(skb,size),msg->msg_iov, size);
+
+		cli();
+		if(sun==NULL)
+		{
+			other=sk->protinfo.af_unix.other;
+			if(sock->type==SOCK_DGRAM && other->dead)
+			{
+				other->protinfo.af_unix.locks--;
+				sk->protinfo.af_unix.other=NULL;
+				sock->state=SS_UNCONNECTED;
+				sti();
+				if(!sent)
+					return -ECONNRESET;
+				else
+					return sent;
+			}
+		}
+		else
+		{
+			unix_mkname(sun, msg->msg_namelen);
+			other=unix_find_other(sun->sun_path, &err);
+			if(other==NULL)
+			{
+				kfree_skb(skb, FREE_WRITE);
+				sti();
+				if(sent)
+					return sent;
+				else
+					return err;
+			}
+		}
+		skb_queue_tail(&other->receive_queue, skb);
+		sti();
+		other->data_ready(other,size);
+		sent+=size;
 	}
-	skb_queue_tail(&other->receive_queue, skb);
-	sti();
-	other->data_ready(other,len);
-	return len;
+	return sent;
 }
 		
 static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int noblock, int flags, int *addr_len)

@@ -18,10 +18,12 @@ O_OBJS    = open.o read_write.o inode.o devices.o file_table.o buffer.o \
 MOD_LIST_NAME := FS_MODULES
 ALL_SUB_DIRS = minix ext ext2 msdos proc isofs nfs xiafs umsdos hpfs sysv smbfs
 
-ifdef CONFIG_MINIX_FS
+ifeq ($(CONFIG_MINIX_FS),y)
 SUB_DIRS += minix
 else
-MOD_SUB_DIRS += minix
+  ifeq ($(CONFIG_MINIX_FS),m)
+  MOD_SUB_DIRS += minix
+  endif
 endif
 
 ifdef CONFIG_EXT_FS
@@ -32,62 +34,80 @@ ifdef CONFIG_EXT2_FS
 SUB_DIRS += ext2
 endif
 
-ifdef CONFIG_MSDOS_FS
+ifeq ($(CONFIG_MSDOS_FS),y)
 SUB_DIRS += msdos
 else
-MOD_SUB_DIRS += msdos
+  ifeq ($(CONFIG_MSDOS_FS),m)
+  MOD_SUB_DIRS += msdos
+  endif
 endif
 
 ifdef CONFIG_PROC_FS
 SUB_DIRS += proc
 endif
 
-ifdef CONFIG_ISO9660_FS
+ifeq ($(CONFIG_ISO9660_FS),y)
 SUB_DIRS += isofs
 else
-MOD_SUB_DIRS += isofs
+  ifeq ($(CONFIG_ISO9660_FS),m)
+  MOD_SUB_DIRS += isofs
+  endif
 endif
 
-ifdef CONFIG_NFS_FS
+ifeq ($(CONFIG_NFS_FS),y)
 SUB_DIRS += nfs
 else
-MOD_SUB_DIRS += nfs
+  ifeq ($(CONFIG_NFS_FS),m)
+  MOD_SUB_DIRS += nfs
+  endif
 endif
 
-ifdef CONFIG_XIA_FS
+ifeq ($(CONFIG_XIA_FS),y)
 SUB_DIRS += xiafs
 else
-MOD_SUB_DIRS += xiafs
+  ifeq ($(CONFIG_XIA_FS),m)
+  MOD_SUB_DIRS += xiafs
+  endif
 endif
 
-ifdef CONFIG_UMSDOS_FS
+ifeq ($(CONFIG_UMSDOS_FS),y)
 SUB_DIRS += umsdos
 else
-MOD_SUB_DIRS += umsdos
+  ifeq ($(CONFIG_UMSDOS_FS),m)
+  MOD_SUB_DIRS += umsdos
+  endif
 endif
 
-ifdef CONFIG_SYSV_FS
+ifeq ($(CONFIG_SYSV_FS),y)
 SUB_DIRS += sysv
 else
-MOD_SUB_DIRS += sysv
+  ifeq ($(CONFIG_SYSV_FS),m)
+  MOD_SUB_DIRS += sysv
+  endif
 endif
 
-ifdef CONFIG_SMB_FS
+ifeq ($(CONFIG_SMB_FS),y)
 SUB_DIRS += smbfs
 else
-MOD_SUB_DIRS += smbfs
+  ifeq ($(CONFIG_SMB_FS),m)
+  MOD_SUB_DIRS += smbfs
+  endif
 endif
 
-ifdef CONFIG_HPFS_FS
+ifeq ($(CONFIG_HPFS_FS),y)
 SUB_DIRS += hpfs
 else
-MOD_SUB_DIRS += hpfs
+  ifeq ($(CONFIG_HPFS_FS),m)
+  MOD_SUB_DIRS += hpfs
+  endif
 endif
 
-ifdef CONFIG_BINFMT_ELF
+ifeq ($(CONFIG_BINFMT_ELF),y)
 BINFMTS += binfmt_elf.o
 else
-MOD_SUB_DIRS += binfmt_elf.o
+  ifeq ($(CONFIG_BINFMT_ELF),m)
+  M_OBJS += binfmt_elf.o
+  endif
 endif
 
 include $(TOPDIR)/Rules.make

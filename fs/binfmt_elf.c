@@ -97,7 +97,7 @@ unsigned long * create_elf_tables(char * p,int argc,int envc,struct elfhdr * exe
 
 	mpnt = (struct vm_area_struct *)kmalloc(sizeof(*mpnt), GFP_KERNEL);
 	if (mpnt) {
-		mpnt->vm_task = current;
+		mpnt->vm_mm = current->mm;
 		mpnt->vm_start = PAGE_MASK & (unsigned long) p;
 		mpnt->vm_end = TASK_SIZE;
 		mpnt->vm_page_prot = PAGE_COPY;
@@ -235,7 +235,7 @@ static unsigned int load_elf_interp(struct elfhdr * interp_elf_ex,
 	    
 	    error = do_mmap(file, 
 			    vaddr & 0xfffff000,
-			    eppnt->p_filesz + (vaddr & 0xfff),
+			    eppnt->p_filesz + (eppnt->p_vaddr & 0xfff),
 			    elf_prot,
 			    elf_type,
 			    eppnt->p_offset & 0xfffff000);

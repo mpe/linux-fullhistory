@@ -293,7 +293,7 @@ static unsigned long get_phys_addr(struct task_struct * p, unsigned long ptr)
 
 	if (!p || ptr >= TASK_SIZE)
 		return 0;
-	page_dir = pgd_offset(p,ptr);
+	page_dir = pgd_offset(p->mm,ptr);
 	if (pgd_none(*page_dir))
 		return 0;
 	if (pgd_bad(*page_dir)) {
@@ -556,7 +556,7 @@ static int get_statm(int pid, char * buffer)
 		struct vm_area_struct * vma = (*p)->mm->mmap;
 
 		while (vma) {
-			pgd_t *pgd = pgd_offset(*p, vma->vm_start);
+			pgd_t *pgd = pgd_offset((*p)->mm, vma->vm_start);
 			int pages = 0, shared = 0, dirty = 0, total = 0;
 
 			statm_pgd_range(pgd, vma->vm_start, vma->vm_end, &pages, &shared, &dirty, &total);

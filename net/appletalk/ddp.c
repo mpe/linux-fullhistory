@@ -1545,7 +1545,7 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len, int n
 	
 	size += dev->hard_header_len;
 
-	skb = sock_alloc_send_skb(sk, size, 0 , &err);
+	skb = sock_alloc_send_skb(sk, size, 0, 0 , &err);
 	if(skb==NULL)
 		return err;
 

@@ -61,7 +61,7 @@ void nr_output(struct sock *sk, struct sk_buff *skb)
 		frontlen = skb_headroom(skb);
 
 		while (skb->len > 0) {
-			if ((skbn = sock_alloc_send_skb(sk, frontlen + mtu, 0, &err)) == NULL)
+			if ((skbn = sock_alloc_send_skb(sk, frontlen + mtu, 0, 0, &err)) == NULL)
 				return;
 
 			skbn->sk   = sk;

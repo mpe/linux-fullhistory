@@ -73,7 +73,7 @@ static void change_protection(unsigned long start, unsigned long end, pgprot_t n
 {
 	pgd_t *dir;
 
-	dir = pgd_offset(current, start);
+	dir = pgd_offset(current->mm, start);
 	while (start < end) {
 		change_pmd_range(dir, start, end - start, newprot);
 		start = (start + PGDIR_SIZE) & PGDIR_MASK;

@@ -305,7 +305,7 @@ unsigned long * create_tables(char * p, struct linux_binprm * bprm, int ibcs)
 
 	mpnt = (struct vm_area_struct *)kmalloc(sizeof(*mpnt), GFP_KERNEL);
 	if (mpnt) {
-		mpnt->vm_task = current;
+		mpnt->vm_mm = current->mm;
 		mpnt->vm_start = PAGE_MASK & (unsigned long) p;
 		mpnt->vm_end = STACK_TOP;
 		mpnt->vm_page_prot = PAGE_COPY;
@@ -542,7 +542,7 @@ void flush_old_exec(struct linux_binprm * bprm)
 	current->comm[i] = '\0';
 
 	/* Release all of the old mmap stuff. */
-	exit_mmap(current);
+	exit_mmap(current->mm);
 
 	flush_thread();
 

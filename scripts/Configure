@@ -13,6 +13,9 @@
 #
 # 050793 - use IFS='@' to get around a bug in a pre-version of bash-1.13
 # with an empty IFS.
+#
+# 030995 (storner@osiris.ping.dk) - added support for tri-state answers,
+# for selecting modules to compile.
 
 #
 # Make sure we're really running bash.
@@ -60,13 +63,22 @@ function comment () {
 #	define_bool define value
 #
 function define_bool () {
-	if [ "$2" = "y" ]; then
+        case "$2" in
+         "y" | "Y")
 		echo "$1=y" >>$CONFIG
 		echo "#define $1 1" >>$CONFIG_H
-	else
+		;;
+
+         "m" | "M")
+		echo "$1=m" >>$CONFIG
+		echo "#undef  $1" >>$CONFIG_H
+		;;
+
+         "n" | "N")
 		echo "# $1 is not set" >>$CONFIG
 		echo "#undef  $1" >>$CONFIG_H
-	fi
+                ;;
+	esac
 	eval "$1=$2"
 }
 
@@ -78,8 +90,36 @@ function define_bool () {
 function bool () {
 	ans=""
 	def=$(eval echo "\${$2:-$3}")
+        case "$def" in
+         "y") defprompt="Y/n"
+              ;;
+         "n") defprompt="N/y"
+              ;;
+        esac
 	while [ "$ans" != "y" -a "$ans" != "n" ]; do
-		readln "$1 ($2) [$def] " "$def"
+		readln "$1 ($2) [$defprompt] " "$def" 
+	done
+	define_bool "$2" "$ans"
+}
+
+#
+# tristate processes a tristate argument
+#
+#	tristate question define default
+#
+function tristate () {
+	ans=""
+	def=$(eval echo "\${$2:-$3}")
+        case "$def" in
+         "y") defprompt="Y/m/n"
+              ;;
+         "m") defprompt="M/n/y"
+              ;;
+         "n") defprompt="N/y/m"
+              ;;
+        esac
+	while [ "$ans" != "y" -a "$ans" != "n" -a "$ans" != "m" ]; do
+		readln "$1 ($2) [$defprompt] " "$def"
 	done
 	define_bool "$2" "$ans"
 }

@@ -6,6 +6,9 @@
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
+ *
+ *	Fixes:
+ *		Andrew Lunn	:	Errors in iovec copying.
  */
 
 
@@ -64,10 +67,15 @@ void memcpy_toiovec(struct iovec *iov, unsigned char *kdata, int len)
 {
 	while(len>0)
 	{
-		int copy = min(iov->iov_len,len);
-		memcpy_tofs(iov->iov_base,kdata,copy);
-		kdata+=copy;
-		len-=copy;
+		if(iov->iov_len)
+		{
+			int copy = min(iov->iov_len,len);
+			memcpy_tofs(iov->iov_base,kdata,copy);
+			kdata+=copy;
+			len-=copy;
+			iov->iov_len-=copy;
+			iov->iov_base+=copy;
+		}
 		iov++;
 	}
 }
@@ -78,13 +86,17 @@ void memcpy_toiovec(struct iovec *iov, unsigned char *kdata, int len)
  
 void memcpy_fromiovec(unsigned char *kdata, struct iovec *iov, int len)
 {
-	int copy;
 	while(len>0)
 	{
-		copy=min(len,iov->iov_len);
-		memcpy_fromfs(kdata, iov->iov_base, copy);
-		len-=copy;
-		kdata+=copy;
+		if(iov->iov_len)
+		{
+			int copy=min(len,iov->iov_len);
+			memcpy_fromfs(kdata, iov->iov_base, copy);
+			len-=copy;
+			kdata+=copy;
+			iov->iov_base+=copy;
+			iov->iov_len-=copy;
+		}
 		iov++;
 	}
 }

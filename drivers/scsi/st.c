@@ -11,7 +11,7 @@
   Copyright 1992, 1993, 1994, 1995 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Thu Aug 31 00:04:12 1995 by root@kai.makisara.fi
+  Last modified: Sat Sep  2 11:50:15 1995 by root@kai.makisara.fi
 */
 #ifdef MODULE
 #include <linux/autoconf.h>
@@ -249,13 +249,12 @@ back_over_eof(int dev)
   unsigned char cmd[10];
   unsigned int flags;
 
+  SCpnt = allocate_device(NULL, STp->device, 1);
   cmd[0] = SPACE;
-  cmd[1] = 0x01; /* Space FileMarks */
+  cmd[1] = ((SCpnt->lun << 5) & 0xe0) | 0x01; /* Space FileMarks */
   cmd[2] = cmd[3] = cmd[4] = 0xff;  /* -1 filemarks */
   cmd[5] = 0;
 
-  SCpnt = allocate_device(NULL, STp->device, 1);
-  SCpnt->sense_buffer[0] = 0;
   SCpnt->request.dev = dev;
   scsi_do_cmd(SCpnt,
 	      (void *) cmd, (void *) (STp->buffer)->b_data, 0,
@@ -320,10 +319,9 @@ flush_write_buffer(int dev)
 #endif
     memset((STp->buffer)->b_data + offset, 0, transfer - offset);
 
-    SCpnt->sense_buffer[0] = 0;
     memset(cmd, 0, 10);
     cmd[0] = WRITE_6;
-    cmd[1] = 1;
+    cmd[1] = ((SCpnt->lun << 5) & 0xe0) | 1;
     blks = transfer / STp->block_size;
     cmd[2] = blks >> 16;
     cmd[3] = blks >> 8;
@@ -465,9 +463,9 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       return (-EBUSY);
     }
 
-    SCpnt->sense_buffer[0]=0;
     memset ((void *) &cmd[0], 0, 10);
     cmd[0] = TEST_UNIT_READY;
+    cmd[1] = (SCpnt->lun << 5) & 0xe0;
     SCpnt->request.dev = dev;
     scsi_do_cmd(SCpnt,
 		(void *) cmd, (void *) (STp->buffer)->b_data,
@@ -483,9 +481,9 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     if ((SCpnt->sense_buffer[0] & 0x70) == 0x70 &&
 	(SCpnt->sense_buffer[2] & 0x0f) == UNIT_ATTENTION) { /* New media? */
       (STp->mt_status)->mt_fileno = 0 ;
-      SCpnt->sense_buffer[0]=0;
       memset ((void *) &cmd[0], 0, 10);
       cmd[0] = TEST_UNIT_READY;
+      cmd[1] = (SCpnt->lun << 5) & 0xe0;
       SCpnt->request.dev = dev;
       scsi_do_cmd(SCpnt,
 		  (void *) cmd, (void *) (STp->buffer)->b_data,
@@ -525,9 +523,9 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       return 0;
     }
 
-    SCpnt->sense_buffer[0]=0;
     memset ((void *) &cmd[0], 0, 10);
     cmd[0] = READ_BLOCK_LIMITS;
+    cmd[1] = (SCpnt->lun << 5) & 0xe0;
     SCpnt->request.dev = dev;
     scsi_do_cmd(SCpnt,
 		(void *) cmd, (void *) (STp->buffer)->b_data,
@@ -558,9 +556,9 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 #endif
     }
 
-    SCpnt->sense_buffer[0]=0;
     memset ((void *) &cmd[0], 0, 10);
     cmd[0] = MODE_SENSE;
+    cmd[1] = (SCpnt->lun << 5) & 0xe0;
     cmd[4] = 12;
     SCpnt->request.dev = dev;
     scsi_do_cmd(SCpnt,
@@ -687,9 +685,9 @@ scsi_tape_close(struct inode * inode, struct file * filp)
       if (result == 0 || result == (-ENOSPC)) {
 	SCpnt = allocate_device(NULL, STp->device, 1);
 
-	SCpnt->sense_buffer[0] = 0;
 	memset(cmd, 0, 10);
 	cmd[0] = WRITE_FILEMARKS;
+	cmd[1] = (SCpnt->lun << 5) & 0xe0;
 	cmd[4] = 1 + STp->two_fm;
 	SCpnt->request.dev = dev;
 	scsi_do_cmd( SCpnt,
@@ -833,7 +831,7 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
 
     memset(cmd, 0, 10);
     cmd[0] = WRITE_6;
-    cmd[1] = (STp->block_size != 0);
+    cmd[1] = ((SCpnt->lun << 5) & 0xe0) | (STp->block_size != 0);
 
     STp->rw = ST_WRITING;
 
@@ -863,7 +861,6 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
       cmd[2] = blks >> 16;
       cmd[3] = blks >> 8;
       cmd[4] = blks;
-      SCpnt->sense_buffer[0] = 0;
       SCpnt->request.dev = dev;
       scsi_do_cmd (SCpnt,
 		   (void *) cmd, (STp->buffer)->b_data, transfer,
@@ -978,7 +975,6 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
       cmd[2] = blks >> 16;
       cmd[3] = blks >> 8;
       cmd[4] = blks;
-      SCpnt->sense_buffer[0] = 0;
       SCpnt->request.dev = dev;
       STp->write_pending = 1;
       scsi_do_cmd (SCpnt,
@@ -1057,7 +1053,7 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 
 	memset(cmd, 0, 10);
 	cmd[0] = READ_6;
-	cmd[1] = (STp->block_size != 0);
+	cmd[1] = ((SCpnt->lun << 5) & 0xe0) | (STp->block_size != 0);
 	if (STp->block_size == 0)
 	  blks = bytes = count;
 	else {
@@ -1077,7 +1073,6 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 	cmd[3] = blks >> 8;
 	cmd[4] = blks;
 
-	SCpnt->sense_buffer[0] = 0;
 	SCpnt->request.dev = dev;
 	scsi_do_cmd (SCpnt,
 		     (void *) cmd, (STp->buffer)->b_data,
@@ -1643,7 +1638,7 @@ st_int_ioctl(struct inode * inode,struct file * file,
      }
 
    SCpnt = allocate_device(NULL, STp->device, 1);
-   SCpnt->sense_buffer[0] = 0;
+   cmd[1] |= (SCpnt->lun << 5) & 0xe0;
    SCpnt->request.dev = dev;
    scsi_do_cmd(SCpnt,
 	       (void *) cmd, (void *) (STp->buffer)->b_data, datalen,
@@ -1900,7 +1895,6 @@ st_ioctl(struct inode * inode,struct file * file,
 
      SCpnt = allocate_device(NULL, STp->device, 1);
 
-     SCpnt->sense_buffer[0]=0;
      memset (scmd, 0, 10);
      if ((STp->device)->scsi_level < SCSI_2) {
        scmd[0] = QFA_REQUEST_BLOCK;
@@ -1911,7 +1905,7 @@ st_ioctl(struct inode * inode,struct file * file,
        scmd[1] = 1;
      }
      SCpnt->request.dev = dev;
-     SCpnt->sense_buffer[0] = 0;
+     scmd[1] |= (SCpnt->lun << 5) & 0xe0;
      scsi_do_cmd(SCpnt,
 		 (void *) scmd, (void *) (STp->buffer)->b_data,
 		 20, st_sleep_done, ST_TIMEOUT, MAX_READY_RETRIES);
