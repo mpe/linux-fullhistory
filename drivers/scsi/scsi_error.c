@@ -31,6 +31,7 @@
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_ioctl.h>
 #include <scsi/scsi_request.h>
+#include <scsi/scsi_devinfo.h>
 
 #include "scsi_priv.h"
 #include "scsi_logging.h"
@@ -350,10 +351,18 @@ static int scsi_check_sense(struct scsi_cmnd *scmd)
 	case MEDIUM_ERROR:
 		return NEEDS_RETRY;
 
+	case HARDWARE_ERROR:
+		if (scsi_get_device_flags(scmd->device,
+					scmd->device->vendor,
+					scmd->device->model)
+				& BLIST_RETRY_HWERROR)
+			return NEEDS_RETRY;
+		else
+			return SUCCESS;
+
 	case ILLEGAL_REQUEST:
 	case BLANK_CHECK:
 	case DATA_PROTECT:
-	case HARDWARE_ERROR:
 	default:
 		return SUCCESS;
 	}
@@ -1364,6 +1373,7 @@ int scsi_decide_disposition(struct scsi_cmnd *scmd)
 		return ADD_TO_MLQUEUE;
 	case GOOD:
 	case COMMAND_TERMINATED:
+	case TASK_ABORTED:
 		return SUCCESS;
 	case CHECK_CONDITION:
 		rtn = scsi_check_sense(scmd);
@@ -1377,6 +1387,7 @@ int scsi_decide_disposition(struct scsi_cmnd *scmd)
 	case CONDITION_GOOD:
 	case INTERMEDIATE_GOOD:
 	case INTERMEDIATE_C_GOOD:
+	case ACA_ACTIVE:
 		/*
 		 * who knows?  FIXME(eric)
 		 */

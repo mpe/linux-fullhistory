@@ -34,6 +34,7 @@
 #include <linux/ptrace.h>
 #include <linux/seccomp.h>
 #include <linux/cpuset.h>
+#include <linux/audit.h>
 #include "internal.h"
 
 /*
@@ -715,7 +716,7 @@ static struct file_operations proc_mem_operations = {
 	.open		= mem_open,
 };
 
-static ssize_t oom_adjust_read(struct file *file, char *buf,
+static ssize_t oom_adjust_read(struct file *file, char __user *buf,
 				size_t count, loff_t *ppos)
 {
 	struct task_struct *task = proc_task(file->f_dentry->d_inode);
@@ -735,7 +736,7 @@ static ssize_t oom_adjust_read(struct file *file, char *buf,
 	return count;
 }
 
-static ssize_t oom_adjust_write(struct file *file, const char *buf,
+static ssize_t oom_adjust_write(struct file *file, const char __user *buf,
 				size_t count, loff_t *ppos)
 {
 	struct task_struct *task = proc_task(file->f_dentry->d_inode);
@@ -761,8 +762,8 @@ static ssize_t oom_adjust_write(struct file *file, const char *buf,
 }
 
 static struct file_operations proc_oom_adjust_operations = {
-	read:		oom_adjust_read,
-	write:		oom_adjust_write,
+	.read		= oom_adjust_read,
+	.write		= oom_adjust_write,
 };
 
 static struct inode_operations proc_mem_inode_operations = {
