@@ -102,7 +102,7 @@ struct uhci_td {
  */
 struct uhci;
 
-#define UHCI_MAXTD 32
+#define UHCI_MAXTD 64
 
 #define UHCI_MAXQH	16
 

@@ -1,4 +1,4 @@
-/* $Id: pcikbd.c,v 1.25 1999/02/08 07:01:48 ecd Exp $
+/* $Id: pcikbd.c,v 1.26 1999/04/28 11:55:42 davem Exp $
  * pcikbd.c: Ultra/AX PC keyboard support.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -227,8 +227,6 @@ unsigned char pcikbd_sysrq_xlate[128] =
 	"230\177\000\000\213\214\000\000\000\000\000\000\000\000\000\000" /* 0x50 - 0x5f */
 	"\r\000/";					/* 0x60 - 0x6f */
 #endif
-
-static unsigned int prev_scancode = 0;
 
 int pcikbd_setkeycode(unsigned int scancode, unsigned int keycode)
 {

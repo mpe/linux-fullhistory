@@ -1182,9 +1182,16 @@ int uhci_init(void)
 		if (retval < 0)
 			continue;
 
+#ifdef CONFIG_USB_MOUSE
 		usb_mouse_init();
+#endif
+#ifdef CONFIG_USB_KBD		
 		usb_kbd_init();
+#endif		
 		hub_init();
+#ifdef CONFIG_USB_AUDIO		
+		usb_audio_init();
+#endif		
 #ifdef CONFIG_APM
 		apm_register_callback(&handle_apm_event);
 #endif

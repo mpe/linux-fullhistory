@@ -716,6 +716,14 @@ extern __inline__ int tcp_raise_window(struct sock *sk)
 	return (new_win && (new_win > (cur_win << 1)));
 }
 
+/* TCP timestamps are only 32-bits, this causes a slight
+ * complication on 64-bit systems since we store a snapshot
+ * of jiffies in the buffer control blocks below.  We decidely
+ * only use of the low 32-bits of jiffies and hide the ugly
+ * casts with the following macro.
+ */
+#define tcp_time_stamp		((__u32)(jiffies))
+
 /* This is what the send packet queueing engine uses to pass
  * TCP per-packet control information to the transmission
  * code.  We also store the host-order sequence numbers in
@@ -732,7 +740,7 @@ struct tcp_skb_cb {
 	} header;	/* For incoming frames		*/
 	__u32		seq;		/* Starting sequence number	*/
 	__u32		end_seq;	/* SEQ + FIN + SYN + datalen	*/
-	unsigned long	when;		/* used to compute rtt's	*/
+	__u32		when;		/* used to compute rtt's	*/
 	__u8		flags;		/* TCP header flags.		*/
 
 	/* NOTE: These must match up to the flags byte in a

@@ -2183,7 +2183,6 @@ static int eb4231_attach(struct sparcaudio_driver *drv,
                    sizeof(struct linux_ebus_dma));
     release_region((unsigned long)cs4231_chip->eb2p, 
                    sizeof(struct linux_ebus_dma));
-  cleanup:
     kfree(drv->private);
     return -EIO;
   }

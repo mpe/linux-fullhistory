@@ -69,7 +69,7 @@ __initfunc(void cpu_probe(void))
 
 	fprs = fprs_read ();
 	fprs_write (FPRS_FEF);
-	__asm__ __volatile__ ("rdpr %%ver, %0; stx %%fsr, [%1]" : "=r" (ver) : "r" (&fpu_vers));
+	__asm__ __volatile__ ("rdpr %%ver, %0; stx %%fsr, [%1]" : "=&r" (ver) : "r" (&fpu_vers));
 	fprs_write (fprs);
 	
 	manuf = ((ver >> 48)&0xffff);

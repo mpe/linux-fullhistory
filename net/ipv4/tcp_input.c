@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.162 1999/04/24 00:27:16 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.163 1999/04/28 16:08:05 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -97,7 +97,7 @@ static int prune_queue(struct sock *sk);
 static void tcp_delack_estimator(struct tcp_opt *tp)
 {
 	if(tp->ato == 0) {
-		tp->lrcvtime = jiffies;
+		tp->lrcvtime = tcp_time_stamp;
 
 		/* Help sender leave slow start quickly,
 		 * and also makes sure we do not take this
@@ -106,9 +106,9 @@ static void tcp_delack_estimator(struct tcp_opt *tp)
 		tp->ato = 1;
 		tcp_enter_quickack_mode(tp);
 	} else {
-		int m = jiffies - tp->lrcvtime;
+		int m = tcp_time_stamp - tp->lrcvtime;
 
-		tp->lrcvtime = jiffies;
+		tp->lrcvtime = tcp_time_stamp;
 		if(m <= 0)
 			m = 1;
 		if(m > tp->rto)
@@ -231,7 +231,7 @@ extern __inline__ void tcp_replace_ts_recent(struct sock *sk, struct tcp_opt *tp
 		 */
 		if((s32)(tp->rcv_tsval - tp->ts_recent) >= 0) {
 			tp->ts_recent = tp->rcv_tsval;
-			tp->ts_recent_stamp = jiffies;
+			tp->ts_recent_stamp = tcp_time_stamp;
 		}
 	}
 }
@@ -241,7 +241,7 @@ extern __inline__ void tcp_replace_ts_recent(struct sock *sk, struct tcp_opt *tp
 extern __inline__ int tcp_paws_discard(struct tcp_opt *tp, struct tcphdr *th, unsigned len)
 {
 	/* ts_recent must be younger than 24 days */
-	return (((s32)(jiffies - tp->ts_recent_stamp) >= PAWS_24DAYS) ||
+	return (((s32)(tcp_time_stamp - tp->ts_recent_stamp) >= PAWS_24DAYS) ||
 		(((s32)(tp->rcv_tsval - tp->ts_recent) < 0) &&
 		 /* Sorry, PAWS as specified is broken wrt. pure-ACKs -DaveM */
 		 (len != (th->doff * 4))));
@@ -609,7 +609,7 @@ static int tcp_clean_rtx_queue(struct sock *sk, __u32 ack,
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 	struct sk_buff *skb;
-	unsigned long now = jiffies;
+	__u32 now = tcp_time_stamp;
 	int acked = 0;
 
 	/* If we are retransmitting, and this ACK clears up to
@@ -725,7 +725,7 @@ static void tcp_ack_saw_tstamp(struct sock *sk, struct tcp_opt *tp,
 	if (!(flag & FLAG_DATA_ACKED))
 		return;
 
-	seq_rtt = jiffies-tp->rcv_tsecr;
+	seq_rtt = tcp_time_stamp - tp->rcv_tsecr;
 	tcp_rtt_estimator(tp, seq_rtt);
 	if (tp->retransmits) {
 		if (tp->packets_out == 0) {
@@ -749,7 +749,7 @@ static void tcp_ack_saw_tstamp(struct sock *sk, struct tcp_opt *tp,
 static __inline__ void tcp_ack_packets_out(struct sock *sk, struct tcp_opt *tp)
 {
 	struct sk_buff *skb = skb_peek(&sk->write_queue);
-	long when = tp->rto - (jiffies - TCP_SKB_CB(skb)->when);
+	__u32 when = tp->rto - (tcp_time_stamp - TCP_SKB_CB(skb)->when);
 
 	/* Some data was ACK'd, if still retransmitting (due to a
 	 * timeout), resend more of the retransmit queue.  The
@@ -778,7 +778,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th,
 	if (tp->pending == TIME_KEEPOPEN)
 	  	tp->probes_out = 0;
 
-	tp->rcv_tstamp = jiffies;
+	tp->rcv_tstamp = tcp_time_stamp;
 
 	/* If the ack is newer than sent or older than previous acks
 	 * then we can probably ignore it.
@@ -2112,7 +2112,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 				tp->tcp_header_len = sizeof(struct tcphdr);
 			if (tp->saw_tstamp) {
 				tp->ts_recent = tp->rcv_tsval;
-				tp->ts_recent_stamp = jiffies;
+				tp->ts_recent_stamp = tcp_time_stamp;
 			}
 
 			/* Can't be earlier, doff would be wrong. */
@@ -2136,7 +2136,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 				tcp_parse_options(sk, th, tp, 0);
 				if (tp->saw_tstamp) {
 					tp->ts_recent = tp->rcv_tsval;
-					tp->ts_recent_stamp = jiffies;
+					tp->ts_recent_stamp = tcp_time_stamp;
 				}
 				
 				tp->rcv_nxt = TCP_SKB_CB(skb)->seq + 1;

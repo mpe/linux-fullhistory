@@ -394,7 +394,7 @@ struct openpromfs_dev {
 };
 extern struct inode_operations *
 proc_openprom_register(int (*readdir)(struct file *, void *, filldir_t),
-		       int (*lookup)(struct inode *, struct dentry *),
+		       struct dentry * (*lookup)(struct inode *, struct dentry *),
 		       void (*use)(struct inode *, int),
 		       struct openpromfs_dev ***);
 extern void proc_openprom_deregister(void);

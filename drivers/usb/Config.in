@@ -12,13 +12,14 @@ mainmenu_option next_comment
 comment 'USB drivers - not for the faint of heart'
 
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  bool 'Support for USB (EXPERIMENTAL!)' CONFIG_USB
-  if [ "$CONFIG_USB" = "y" ]; then
+  tristate 'Support for USB (EXPERIMENTAL!)' CONFIG_USB
+  if [ ! "$CONFIG_USB" = "n" ]; then
     bool 'UHCI (intel PIIX4 and others) support?' CONFIG_USB_UHCI
     bool 'OHCI (compaq and some others) support?' CONFIG_USB_OHCI
 
     bool 'USB mouse support' CONFIG_USB_MOUSE
     bool 'USB keyboard support' CONFIG_USB_KBD
+    bool 'USB audio parsing support' CONFIG_USB_AUDIO
   fi
 fi
 

@@ -101,43 +101,93 @@ void usb_device_descriptor(struct usb_device *dev)
 static int usb_expect_descriptor(unsigned char *ptr, int len, unsigned char desctype, unsigned char descindex)
 {
 	int parsed = 0;
+	int n_len;
+	unsigned short n_desc;
 
 	for (;;) {
-		unsigned short n_desc;
-		int n_len, i;
+		int i;
 
 		if (len < descindex)
 			return -1;
 		n_desc = *(unsigned short *)ptr;
+		n_len = n_desc & 0xff;
+
 		if (n_desc == ((desctype << 8) + descindex))
-			return parsed;
+			break;
+
+		if (((n_desc >> 8)&0xFF) == desctype &&
+			n_len > descindex)
+		{
+			printk("bug: oversized descriptor.\n");
+			break;
+		}
+			
+		if (n_len < 2 || n_len > len)
+		{
+			printk("Short descriptor.\n");
+			return -1;
+		}
 		printk(
 		"Expected descriptor %02X/%02X, got %02X/%02X - skipping\n",
 			desctype, descindex,
 			(n_desc >> 8) & 0xFF, n_desc & 0xFF);
-		n_len = n_desc & 0xff;
-		if (n_len < 2 || n_len > len)
-			return -1;
 		for (i = 0 ; i < n_len; i++)
 			printk("   %d %02x\n", i, ptr[i]);
 		len -= n_len;
 		ptr += n_len;
 		parsed += n_len;
 	}
+	
+	printk("Found %02X:%02X\n",
+		desctype, descindex);
+	return parsed;
 }
 
-static int usb_parse_endpoint(struct usb_endpoint_descriptor *endpoint, unsigned char *ptr, int len)
+/*
+ * Parse the even more incomprehensible mess made of the USB spec
+ * by USB audio having private magic to go with it.
+ */
+ 
+static int usb_check_descriptor(unsigned char *ptr, int len, unsigned char desctype)
+{
+	int n_len = ptr[0];
+
+	if (n_len < 2 || n_len > len)
+	{
+		printk("Short descriptor.\n");
+		return -1;
+	}
+
+	if (ptr[1] == desctype)
+		return 0;
+		
+	return -1;
+}
+
+
+static int usb_parse_endpoint(struct usb_device *dev, struct usb_endpoint_descriptor *endpoint, unsigned char *ptr, int len)
 {
 	int parsed = usb_expect_descriptor(ptr, len, USB_DT_ENDPOINT, 7);
+	int i;
 
 	if (parsed < 0)
 		return parsed;
+	memcpy(endpoint, ptr + parsed, ptr[parsed]);
 
-	memcpy(endpoint, ptr + parsed, 7);
-	return parsed + 7;
+	parsed += ptr[parsed];
+	len -= ptr[parsed];
+
+	while((i = usb_check_descriptor(ptr+parsed, len, 0x25))>=0)
+	{
+		usb_audio_endpoint(endpoint, ptr+parsed+i);
+		len -= ptr[parsed+i];
+		parsed += ptr[parsed+i];
+	}
+	
+	return parsed;// + ptr[parsed];
 }
 
-static int usb_parse_interface(struct usb_interface_descriptor *interface, unsigned char *ptr, int len)
+static int usb_parse_interface(struct usb_device *dev, struct usb_interface_descriptor *interface, unsigned char *ptr, int len)
 {
 	int i;
 	int parsed = usb_expect_descriptor(ptr, len, USB_DT_INTERFACE, 9);
@@ -146,19 +196,29 @@ static int usb_parse_interface(struct usb_interface_descriptor *interface, unsig
 	if (parsed < 0)
 		return parsed;
 
-	memcpy(interface, ptr + parsed, 9);
-	len -= 9;
-	parsed += 9;
+	memcpy(interface, ptr + parsed, *ptr);
+	len -= ptr[parsed];
+	parsed += ptr[parsed];
 
+	while((i=usb_check_descriptor(ptr+parsed, len, 0x24))>=0)
+	{
+		usb_audio_interface(interface, ptr+parsed+i);
+		len -= ptr[parsed+i];
+		parsed += ptr[parsed+i];
+	}
+	
 	if (interface->bNumEndpoints > USB_MAXENDPOINTS)
+	{
+		printk(KERN_WARNING "usb: too many endpoints.\n");
 		return -1;
+	}
 
 	for (i = 0; i < interface->bNumEndpoints; i++) {
-		if(((USB_DT_HID << 8) | 9) == *(unsigned short*)(ptr + parsed)) {
-			parsed += 9;	/* skip over the HID descriptor for now */
-			len -= 9;
-		}
-		retval = usb_parse_endpoint(interface->endpoint + i, ptr + parsed, len);
+//		if(((USB_DT_HID << 8) | 9) == *(unsigned short*)(ptr + parsed)) {
+//			parsed += 9;	/* skip over the HID descriptor for now */
+//			len -= 9;
+//		}
+		retval = usb_parse_endpoint(dev, interface->endpoint + i, ptr + parsed, len);
 		if (retval < 0) return retval;
 		parsed += retval;
 		len -= retval;
@@ -166,7 +226,7 @@ static int usb_parse_interface(struct usb_interface_descriptor *interface, unsig
 	return parsed;
 }
 
-static int usb_parse_config(struct usb_config_descriptor *config, unsigned char *ptr, int len)
+static int usb_parse_config(struct usb_device *dev, struct usb_config_descriptor *config, unsigned char *ptr, int len)
 {
 	int i;
 	int parsed = usb_expect_descriptor(ptr, len, USB_DT_CONFIG, 9);
@@ -174,17 +234,21 @@ static int usb_parse_config(struct usb_config_descriptor *config, unsigned char 
 	if (parsed < 0)
 		return parsed;
 
-	memcpy(config, ptr + parsed, 9);
-	len -= 9;
-	parsed += 9;
+	memcpy(config, ptr + parsed, *ptr);
+	len -= *ptr;
+	parsed += *ptr;
 
 	if (config->bNumInterfaces > USB_MAXINTERFACES)
+	{
+		printk(KERN_WARNING "usb: too many interfaces.\n");
 		return -1;
+	}
 
 	for (i = 0; i < config->bNumInterfaces; i++) {
-		int retval = usb_parse_interface(config->interface + i, ptr + parsed, len);
+		int retval = usb_parse_interface(dev, config->interface + i, ptr + parsed, len);
 		if (retval < 0)
-			return retval;
+			return parsed; // HACK
+//			return retval;
 		parsed += retval;
 		len -= retval;
 	}
@@ -197,10 +261,13 @@ int usb_parse_configuration(struct usb_device *dev, void *__buf, int bytes)
 	unsigned char *ptr = __buf;
 
 	if (dev->descriptor.bNumConfigurations > USB_MAXCONFIG)
+	{
+		printk(KERN_WARNING "usb: too many configurations.\n");
 		return -1;
+	}
 
 	for (i = 0; i < dev->descriptor.bNumConfigurations; i++) {
-		int retval = usb_parse_config(dev->config + i, ptr, bytes);
+		int retval = usb_parse_config(dev, dev->config + i, ptr, bytes);
 		if (retval < 0)
 			return retval;
 		ptr += retval;
@@ -451,7 +518,7 @@ int usb_get_report(struct usb_device *dev)
 int usb_get_configuration(struct usb_device *dev)
 {
 	unsigned int size;
-	unsigned char buffer[128];
+	unsigned char buffer[400];
 
 	/* Get the first 8 bytes - guaranteed */
 	if (usb_get_descriptor(dev, USB_DT_CONFIG, 0, buffer, 8))
@@ -460,7 +527,10 @@ int usb_get_configuration(struct usb_device *dev)
 	/* Get the full buffer */
 	size = *(unsigned short *)(buffer+2);
 	if (size > sizeof(buffer))
+	{
+		printk(KERN_INFO "usb: truncated DT_CONFIG (want %d).\n", size);
 		size = sizeof(buffer);
+	}
 
 	if (usb_get_descriptor(dev, USB_DT_CONFIG, 0, buffer, size))
 		return -1;

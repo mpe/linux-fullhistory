@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.106 1999/03/12 03:43:51 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.107 1999/04/28 16:08:12 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -167,7 +167,7 @@ void tcp_send_skb(struct sock *sk, struct sk_buff *skb, int force_queue)
 
 	if (!force_queue && tp->send_head == NULL && tcp_snd_test(sk, skb)) {
 		/* Send it out now. */
-		TCP_SKB_CB(skb)->when = jiffies;
+		TCP_SKB_CB(skb)->when = tcp_time_stamp;
 		tp->snd_nxt = TCP_SKB_CB(skb)->end_seq;
 		tp->packets_out++;
 		tcp_transmit_skb(sk, skb_clone(skb, GFP_KERNEL));
@@ -344,7 +344,7 @@ void tcp_write_xmit(struct sock *sk)
 
 			/* Advance the send_head.  This one is going out. */
 			update_send_head(sk);
-			TCP_SKB_CB(skb)->when = jiffies;
+			TCP_SKB_CB(skb)->when = tcp_time_stamp;
 			tp->snd_nxt = TCP_SKB_CB(skb)->end_seq;
 			tp->packets_out++;
 			tcp_transmit_skb(sk, skb_clone(skb, GFP_ATOMIC));
@@ -600,7 +600,7 @@ int tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb)
 	/* Make a copy, if the first transmission SKB clone we made
 	 * is still in somebody's hands, else make a clone.
 	 */
-	TCP_SKB_CB(skb)->when = jiffies;
+	TCP_SKB_CB(skb)->when = tcp_time_stamp;
 	if(skb_cloned(skb))
 		skb = skb_copy(skb, GFP_ATOMIC);
 	else
@@ -723,7 +723,7 @@ void tcp_send_fin(struct sock *sk)
 		   tp->packets_out &&
 		   !(TCP_SKB_CB(skb)->flags & TCPCB_FLAG_URG)) {
 			update_send_head(sk);
-			TCP_SKB_CB(skb)->when = jiffies;
+			TCP_SKB_CB(skb)->when = tcp_time_stamp;
 			tp->snd_nxt = TCP_SKB_CB(skb)->end_seq;
 			tp->packets_out++;
 			tcp_transmit_skb(sk, skb_clone(skb, GFP_ATOMIC));
@@ -778,7 +778,7 @@ void tcp_send_active_reset(struct sock *sk)
 	/* Send it off. */
 	TCP_SKB_CB(skb)->seq = tp->write_seq;
 	TCP_SKB_CB(skb)->end_seq = TCP_SKB_CB(skb)->seq;
-	TCP_SKB_CB(skb)->when = jiffies;
+	TCP_SKB_CB(skb)->when = tcp_time_stamp;
 	tcp_transmit_skb(sk, skb);
 }
 
@@ -808,7 +808,7 @@ int tcp_send_synack(struct sock *sk)
 	TCP_SKB_CB(skb)->seq = tp->snd_una;
 	TCP_SKB_CB(skb)->end_seq = TCP_SKB_CB(skb)->seq + 1;
 	__skb_queue_tail(&sk->write_queue, skb);
-	TCP_SKB_CB(skb)->when = jiffies;
+	TCP_SKB_CB(skb)->when = tcp_time_stamp;
 	tp->packets_out++;
 	tcp_transmit_skb(sk, skb_clone(skb, GFP_ATOMIC));
 	return 0;
@@ -875,7 +875,7 @@ struct sk_buff * tcp_make_synack(struct sock *sk, struct dst_entry *dst,
 	/* RFC1323: The window in SYN & SYN/ACK segments is never scaled. */
 	th->window = htons(req->rcv_wnd);
 
-	TCP_SKB_CB(skb)->when = jiffies;
+	TCP_SKB_CB(skb)->when = tcp_time_stamp;
 	tcp_syn_build_options((__u32 *)(th + 1), req->mss, req->tstamp_ok,
 			      req->sack_ok, req->wscale_ok, req->rcv_wscale,
 			      TCP_SKB_CB(skb)->when,
@@ -963,7 +963,7 @@ void tcp_connect(struct sock *sk, struct sk_buff *buff, int mtu)
 
 	/* Send it off. */
 	__skb_queue_tail(&sk->write_queue, buff);
-	TCP_SKB_CB(buff)->when = jiffies;
+	TCP_SKB_CB(buff)->when = tcp_time_stamp;
 	tp->packets_out++;
 	tcp_transmit_skb(sk, skb_clone(buff, GFP_KERNEL));
 	tcp_statistics.TcpActiveOpens++;
@@ -1037,7 +1037,7 @@ void tcp_send_ack(struct sock *sk)
 
 		/* Send it off, this clears delayed acks for us. */
 		TCP_SKB_CB(buff)->seq = TCP_SKB_CB(buff)->end_seq = tp->snd_nxt;
-		TCP_SKB_CB(buff)->when = jiffies;
+		TCP_SKB_CB(buff)->when = tcp_time_stamp;
 		tcp_transmit_skb(sk, buff);
 	}
 }
@@ -1075,7 +1075,7 @@ void tcp_write_wakeup(struct sock *sk)
 					return; /* Let a retransmit get it. */
 			}
 			update_send_head(sk);
-			TCP_SKB_CB(skb)->when = jiffies;
+			TCP_SKB_CB(skb)->when = tcp_time_stamp;
 			tp->snd_nxt = TCP_SKB_CB(skb)->end_seq;
 			tp->packets_out++;
 			tcp_transmit_skb(sk, skb_clone(skb, GFP_ATOMIC));
@@ -1101,7 +1101,7 @@ void tcp_write_wakeup(struct sock *sk)
 			 */
 			TCP_SKB_CB(skb)->seq = tp->snd_nxt - 1;
 			TCP_SKB_CB(skb)->end_seq = TCP_SKB_CB(skb)->seq;
-			TCP_SKB_CB(skb)->when = jiffies;
+			TCP_SKB_CB(skb)->when = tcp_time_stamp;
 			tcp_transmit_skb(sk, skb);
 		}
 	}

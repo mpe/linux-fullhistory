@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.173 1999/04/24 00:27:07 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.174 1999/04/28 16:08:19 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -1430,7 +1430,7 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 		}
 		if (newtp->tstamp_ok) {
 			newtp->ts_recent = req->ts_recent;
-			newtp->ts_recent_stamp = jiffies;
+			newtp->ts_recent_stamp = tcp_time_stamp;
 			newtp->tcp_header_len = sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED;
 		} else {
 			newtp->tcp_header_len = sizeof(struct tcphdr);

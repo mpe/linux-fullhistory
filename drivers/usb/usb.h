@@ -107,9 +107,9 @@ struct usb_devmap {
  * I'm not proud. I just want this dang
  * thing to start working.
  */
-#define USB_MAXCONFIG		1
-#define USB_MAXINTERFACES	3
-#define USB_MAXENDPOINTS	3
+#define USB_MAXCONFIG		2
+#define USB_MAXINTERFACES	8
+#define USB_MAXENDPOINTS	4
 
 struct usb_device_descriptor {
 	__u8  bLength;
@@ -354,6 +354,18 @@ void usb_show_interface_descriptor(struct usb_interface_descriptor *);
 void usb_show_endpoint_descriptor(struct usb_endpoint_descriptor *);
 void usb_show_hub_descriptor(struct usb_hub_descriptor *);
 void usb_show_device(struct usb_device *);
+
+/*
+ * Audio parsing helpers
+ */
+
+#ifdef CONFIG_USB_AUDIO
+void usb_audio_interface(struct usb_interface_descriptor *, u8 *);
+void usb_audio_endpoint(struct usb_endpoint_descriptor *, u8 *);
+#else
+extern inline void usb_audio_interface(struct usb_interface_descriptor *, u8 *) {}
+extern inline void usb_audio_endpoint(struct usb_endpoint_descriptor *, u8 *) {}
+#endif
 
 #endif
 

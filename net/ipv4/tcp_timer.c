@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_timer.c,v 1.59 1999/03/23 21:21:09 davem Exp $
+ * Version:	$Id: tcp_timer.c,v 1.60 1999/04/28 16:08:21 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -224,7 +224,7 @@ static __inline__ int tcp_keepopen_proc(struct sock *sk)
 
 	if ((1<<sk->state) & (TCPF_ESTABLISHED|TCPF_CLOSE_WAIT|TCPF_FIN_WAIT2)) {
 		struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
-		__u32 elapsed = jiffies - tp->rcv_tstamp;
+		__u32 elapsed = tcp_time_stamp - tp->rcv_tstamp;
 
 		if (elapsed >= sysctl_tcp_keepalive_time) {
 			if (tp->probes_out > sysctl_tcp_keepalive_probes) {
@@ -561,7 +561,7 @@ static void tcp_syn_recv_timer(unsigned long data)
 						if (!tp->syn_wait_queue)
 							break;
 					} else {
-						__u32 timeo;
+						unsigned long timeo;
 						struct open_request *op; 
 
 						(*conn->class->rtx_syn_ack)(sk, conn);

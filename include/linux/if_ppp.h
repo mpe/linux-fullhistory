@@ -1,4 +1,4 @@
-/*	$Id: if_ppp.h,v 1.14 1998/07/07 04:27:33 paulus Exp $	*/
+/*	$Id: if_ppp.h,v 1.19 1999/03/31 06:07:57 paulus Exp $	*/
 
 /*
  * if_ppp.h - Point-to-Point Protocol definitions.
@@ -21,7 +21,7 @@
  */
 
 /*
- *  ==FILEVERSION 980704==
+ *  ==FILEVERSION 990331==
  *
  *  NOTE TO MAINTAINERS:
  *     If you modify this file at all, please set the above date.
@@ -35,19 +35,13 @@
 #ifndef _IF_PPP_H_
 #define _IF_PPP_H_
 
-#if defined(__linux__)
-#include <linux/if.h>
-#include <linux/ioctl.h>
-#include <linux/ppp_defs.h>
-#endif
-
 /*
  * Packet sizes
  */
 
 #define	PPP_MTU		1500	/* Default MTU (size of Info field) */
 #define PPP_MAXMRU	65000	/* Largest MRU we allow */
-#define PPP_VERSION	"2.3.3"
+#define PPP_VERSION	"2.3.7"
 #define PPP_MAGIC	0x5002	/* Magic value for the ppp structure */
 #define PROTO_IPX	0x002b	/* protocol numbers */
 #define PROTO_DNA_RT    0x0027  /* DNA Routing */
@@ -73,7 +67,8 @@
 #define SC_LOG_OUTPKT	0x00040000	/* log contents of pkts sent */
 #define SC_LOG_RAWIN	0x00080000	/* log all chars received */
 #define SC_LOG_FLUSH	0x00100000	/* log all chars flushed */
-#define	SC_MASK		0x0f0000ff	/* bits that user can change */
+#define	SC_SYNC		0x00200000	/* synchronous serial mode */
+#define	SC_MASK		0x0f2000ff	/* bits that user can change */
 
 /* state bits */
 #define SC_XMIT_BUSY	0x10000000	/* (used by isdn_ppp?) */

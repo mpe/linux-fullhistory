@@ -201,7 +201,7 @@ typedef struct siginfo32 {
  */
 #define TRAP_BRKPT	1	/* process breakpoint */
 #define TRAP_TRACE	2	/* process trace trap */
-#define NSIGTRAP
+#define NSIGTRAP	2
 
 /*
  * SIGCHLD si_codes

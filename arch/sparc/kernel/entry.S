@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.157 1999/01/19 07:54:32 davem Exp $
+/* $Id: entry.S,v 1.158 1999/04/27 14:35:07 davem Exp $
  * arch/sparc/kernel/entry.S:  Sparc trap low-level entry points.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -874,7 +874,7 @@ C_LABEL(vac_hwflush_patch2_on):		sta	%g0, [%l3 + %l7] ASI_HWFLUSHSEG
 ! We want error in %l5, vaddr in %l6
 sun4c_fault:
 #ifdef CONFIG_SUN4
-	sethi	C_LABEL(sun4c_memerr_reg), %l4
+	sethi	%hi(C_LABEL(sun4c_memerr_reg)), %l4
 	ld	[%l4+%lo(C_LABEL(sun4c_memerr_reg))], %l4  ! memerr ctrl reg addr
 	ld	[%l4], %l6		! memerr ctrl reg
 	ld	[%l4 + 4], %l5		! memerr vaddr reg
@@ -956,7 +956,7 @@ sun4c_fault:
 	sll     %l6, 2, %l6
 	ld      [%l4 + %l6], %l4
 #ifdef CONFIG_SUN4
-	sethi	PAGE_MASK, %l6
+	sethi	%hi(PAGE_MASK), %l6
 	andcc	%l4, %l6, %g0
 #else
 	andcc   %l4, PAGE_MASK, %g0
@@ -1117,7 +1117,7 @@ C_LABEL(num_context_patch2):
 #ifndef CONFIG_SUN4
 	and	%l4, PAGE_MASK, %l4
 #else
-	sethi	PAGE_MASK, %l6
+	sethi	%hi(PAGE_MASK), %l6
 	and	%l4, %l6, %l4
 #endif
 

@@ -295,6 +295,8 @@ __initfunc(int rd_init(void))
 
 #ifdef MODULE
 
+MODULE_PARM (rd_size, "1i");
+
 int init_module(void)
 {
 	int error = rd_init();

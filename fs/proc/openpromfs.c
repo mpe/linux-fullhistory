@@ -1,4 +1,4 @@
-/* $Id: openpromfs.c,v 1.32 1998/11/18 06:15:20 davem Exp $
+/* $Id: openpromfs.c,v 1.33 1999/04/28 11:57:33 davem Exp $
  * openpromfs.c: /proc/openprom handling routines
  *
  * Copyright (C) 1996-1998 Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
@@ -59,7 +59,7 @@ static struct openpromfs_dev **devices;
 
 static int openpromfs_create (struct inode *, struct dentry *, int);
 static int openpromfs_readdir(struct file *, void *, filldir_t);
-static int openpromfs_lookup(struct inode *, struct dentry *dentry);
+static struct dentry *openpromfs_lookup(struct inode *, struct dentry *dentry);
 static int openpromfs_unlink (struct inode *, struct dentry *dentry);
 
 static ssize_t nodenum_read(struct file *file, char *buf,
@@ -685,7 +685,7 @@ static int lookup_children(u16 n, const char * name, int len)
 	return 0;
 }
 
-static int openpromfs_lookup(struct inode * dir, struct dentry *dentry)
+static struct dentry *openpromfs_lookup(struct inode * dir, struct dentry *dentry)
 {
 	int ino = 0;
 #define OPFSL_DIR	0
@@ -776,11 +776,11 @@ static int openpromfs_lookup(struct inode * dir, struct dentry *dentry)
 		if (ino)
 			type = OPFSL_DIR;
 		else
-			return -ENOENT;
+			return ERR_PTR(-ENOENT);
 	}
 	inode = proc_get_inode (dir->i_sb, ino, 0);
 	if (!inode)
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 	switch (type) {
 	case OPFSL_DIR:
 		inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO;
@@ -827,7 +827,7 @@ static int openpromfs_lookup(struct inode * dir, struct dentry *dentry)
 	inode->i_uid = 0;
 
 	d_add(dentry, inode);
-	return 0;
+	return NULL;
 }
 
 static int openpromfs_readdir(struct file * filp, void * dirent, filldir_t filldir)

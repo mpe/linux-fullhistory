@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.186 1999/04/13 14:17:19 jj Exp $
+/* $Id: srmmu.c,v 1.187 1999/04/28 17:00:45 davem Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -1949,12 +1949,13 @@ __initfunc(unsigned long srmmu_paging_init(unsigned long start_mem, unsigned lon
 		/* Find the number of contexts on the srmmu. */
 		cpunode = prom_getchild(prom_root_node);
 		num_contexts = 0;
-		while((cpunode = prom_getsibling(cpunode)) != 0) {
+		while(cpunode != 0) {
 			prom_getstring(cpunode, "device_type", node_str, sizeof(node_str));
 			if(!strcmp(node_str, "cpu")) {
 				num_contexts = prom_getintdefault(cpunode, "mmu-nctx", 0x8);
 				break;
 			}
+			cpunode = prom_getsibling(cpunode);
 		}
 	}
 
