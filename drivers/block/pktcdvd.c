@@ -2624,7 +2624,7 @@ static struct miscdevice pkt_misc = {
 	.fops  		= &pkt_ctl_fops
 };
 
-static int pkt_init(void)
+static int __init pkt_init(void)
 {
 	int ret;
 
@@ -2660,7 +2660,7 @@ out2:
 	return ret;
 }
 
-static void pkt_exit(void)
+static void __exit pkt_exit(void)
 {
 	remove_proc_entry("pktcdvd", proc_root_driver);
 	misc_deregister(&pkt_misc);
