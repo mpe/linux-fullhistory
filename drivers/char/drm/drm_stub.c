@@ -40,8 +40,8 @@ unsigned int drm_cards_limit = 16;	/* Enough for one machine */
 unsigned int drm_debug = 0;		/* 1 to enable debug output */
 EXPORT_SYMBOL(drm_debug);
 
-MODULE_AUTHOR( DRIVER_AUTHOR );
-MODULE_DESCRIPTION( DRIVER_DESC );
+MODULE_AUTHOR( CORE_AUTHOR );
+MODULE_DESCRIPTION( CORE_DESC );
 MODULE_LICENSE("GPL and additional rights");
 MODULE_PARM_DESC(cards_limit, "Maximum number of graphics cards");
 MODULE_PARM_DESC(debug, "Enable debug output");
