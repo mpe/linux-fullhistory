@@ -101,6 +101,8 @@
  *    15.06.99   0.23  Fix bad allocation bug.
  *                     Thanks to Deti Fliegl <fliegl@in.tum.de>
  *    28.06.99   0.24  Add pci_set_master
+ *    02.08.99   0.25  Added workaround for the "phantom write" bug first
+ *                     documented by Dave Sharpless from Anchor Games
  *
  * some important things missing in Ensoniq documentation:
  *
@@ -175,12 +177,14 @@
 #define ES1370_REG_DAC2_SCOUNT    0x28
 #define ES1370_REG_ADC_SCOUNT     0x2c
 
-#define ES1370_REG_DAC1_FRAMEADR  0xc30
-#define ES1370_REG_DAC1_FRAMECNT  0xc34
-#define ES1370_REG_DAC2_FRAMEADR  0xc38
-#define ES1370_REG_DAC2_FRAMECNT  0xc3c
-#define ES1370_REG_ADC_FRAMEADR   0xd30
-#define ES1370_REG_ADC_FRAMECNT   0xd34
+#define ES1370_REG_DAC1_FRAMEADR    0xc30
+#define ES1370_REG_DAC1_FRAMECNT    0xc34
+#define ES1370_REG_DAC2_FRAMEADR    0xc38
+#define ES1370_REG_DAC2_FRAMECNT    0xc3c
+#define ES1370_REG_ADC_FRAMEADR     0xd30
+#define ES1370_REG_ADC_FRAMECNT     0xd34
+#define ES1370_REG_PHANTOM_FRAMEADR 0xd38
+#define ES1370_REG_PHANTOM_FRAMECNT 0xd3c
 
 #define ES1370_FMT_U8_MONO     0
 #define ES1370_FMT_U8_STEREO   1
@@ -359,6 +363,13 @@ struct es1370_state {
 /* --------------------------------------------------------------------- */
 
 static struct es1370_state *devs = NULL;
+
+/*
+ * The following buffer is used to point the phantom write channel to,
+ * so that it cannot wreak havoc. The attribute makes sure it doesn't
+ * cross a page boundary and ensures dword alignment for the DMA engine
+ */
+static unsigned char bugbuf[16] __attribute__ ((aligned (16)));
 
 /* --------------------------------------------------------------------- */
 
@@ -2321,7 +2332,7 @@ int __init init_es1370(void)
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "es1370: version v0.24 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "es1370: version v0.25 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1370, pcidev))) {
 		if (pcidev->base_address[0] == 0 || 
@@ -2385,6 +2396,10 @@ int __init init_es1370(void)
 		/* initialize the chips */
 		outl(s->ctrl, s->io+ES1370_REG_CONTROL);
 		outl(s->sctrl, s->io+ES1370_REG_SERIAL_CONTROL);
+		/* point phantom write channel to "bugbuf" */
+		outl((ES1370_REG_PHANTOM_FRAMEADR >> 8) & 15, s->io+ES1370_REG_MEMPAGE);
+		outl(virt_to_bus(bugbuf), s->io+(ES1370_REG_PHANTOM_FRAMEADR & 0xff));
+		outl(0, s->io+(ES1370_REG_PHANTOM_FRAMECNT & 0xff));
 		pci_set_master(pcidev);  /* enable bus mastering */
 		wrcodec(s, 0x16, 3); /* no RST, PD */
 		wrcodec(s, 0x17, 0); /* CODEC ADC and CODEC DAC use {LR,B}CLK2 and run off the LRCLK2 PLL; program DAC_SYNC=0!!  */

@@ -2319,3 +2319,12 @@ int bdflush(void * unused)
 		}
 	}
 }
+
+static int __init bdflush_init(void)
+{
+	kernel_thread(bdflush, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
+	return 0;
+}
+
+module_init(bdflush_init)
+

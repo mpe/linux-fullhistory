@@ -36,13 +36,7 @@ static int aout_core_dump(long signr, struct pt_regs * regs, struct file *file);
 extern void dump_thread(struct pt_regs *, struct user *);
 
 static struct linux_binfmt aout_format = {
-	NULL,
-#ifndef MODULE
-	NULL,
-#else
-	&__this_module,
-#endif
-	load_aout_binary, load_aout_library, aout_core_dump, PAGE_SIZE
+	NULL, THIS_MODULE, load_aout_binary, load_aout_library, aout_core_dump, PAGE_SIZE
 };
 
 static void set_brk(unsigned long start, unsigned long end)
@@ -564,14 +558,10 @@ static int __init init_aout_binfmt(void)
 	return register_binfmt(&aout_format);
 }
 
-__initcall(init_aout_binfmt);
-
-#ifdef MODULE
-int init_module(void) {
-	return init_aout_binfmt();
-}
-
-void cleanup_module( void) {
+static void __exit exit_aout_binfmt(void)
+{
 	unregister_binfmt(&aout_format);
 }
-#endif
+
+module_init(init_aout_binfmt)
+module_exit(exit_aout_binfmt)

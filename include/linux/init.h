@@ -48,15 +48,74 @@
  */
 
 #ifndef MODULE
-#include <asm/init.h>
+
+/*
+ * Used for initialization calls..
+ */
+typedef int (*initcall_t)(void);
+
+extern initcall_t __initcall_start, __initcall_end;
+
+#define __initcall(fn)								\
+	static __attribute__ ((unused,__section__ (".initcall.init")))		\
+		initcall_t __initcall_##fn = fn
+
+/*
+ * Used for kernel command line parameter setup
+ */
+struct kernel_param {
+	const char *str;
+	int (*setup_func)(char *);
+};
+
+extern struct kernel_param __setup_start, __setup_end;
+
+#define __setup(str, fn)							\
+	static __attribute__ ((__section__ (".data.init")))			\
+		char __setup_str_##fn[] = str;					\
+	static __attribute__ ((unused,__section__ (".setup.init")))		\
+		struct kernel_param __setup_##fn = { __setup_str_##fn, fn }
+
+/*
+ * Mark functions and data as being only used at initialization
+ * or exit time.
+ */
+#define __init __attribute__ ((__section__ (".text.init")))
+#define __exit __attribute__ ((unused, __section__(".text.init")))
+#define __initdata __attribute__ ((__section__ (".data.init")))
+#define __exitdata __attribute__ ((unused, __section__ (".data.init")))
+
+#define __initfunc(__arginit) \
+	__arginit __init; \
+	__arginit
+
+/* For assembly routines */
+#define __INIT		.section	".text.init","ax"
+#define __FINIT		.previous
+#define __INITDATA	.section	".data.init","aw"
+
+#define __cacheline_aligned __attribute__ \
+			 ((__section__ (".data.cacheline_aligned")))
+
+#define module_init(x)	__initcall(x);
+#define module_exit(x)	/* nothing */
+
 #else
+
 #define __init
+#define __exit
 #define __initdata
+#define __exitdata
 #define __initfunc(__arginit) __arginit
+#defint __initcall
 /* For assembly routines */
 #define __INIT
 #define __FINIT
 #define __INITDATA
+
+#define module_init(x)	int init_module(void) { return x(); }
+#define module_exit(x)	void cleanup_module(void) { x(); }
+
 #endif
 
 #if __GNUC__ >= 2 && __GNUC_MINOR__ >= 8

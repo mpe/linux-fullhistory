@@ -64,13 +64,7 @@ static void entry_proc_cleanup(struct binfmt_entry *e);
 static int entry_proc_setup(struct binfmt_entry *e);
 
 static struct linux_binfmt misc_format = {
-	NULL,
-#ifndef MODULE
-	NULL,
-#else
-	&__this_module,
-#endif
-	load_misc_binary, NULL, NULL, 0
+	NULL, THIS_MODULE, load_misc_binary, NULL, NULL, 0
 };
 
 static struct proc_dir_entry *bm_dir = NULL;
@@ -530,16 +524,7 @@ cleanup_bm:
 	goto out;
 }
 
-__initcall(init_misc_binfmt);
-
-#ifdef MODULE
-EXPORT_NO_SYMBOLS;
-int init_module(void)
-{
-	return init_misc_binfmt();
-}
-
-void cleanup_module(void)
+static void __exit exit_misc_binfmt(void)
 {
 	unregister_binfmt(&misc_format);
 	remove_proc_entry("register", bm_dir);
@@ -547,5 +532,8 @@ void cleanup_module(void)
 	clear_entries();
 	remove_proc_entry("sys/fs/binfmt_misc", NULL);
 }
-#endif
-#undef VERBOSE_STATUS
+
+EXPORT_NO_SYMBOLS;
+
+module_init(init_misc_binfmt)
+module_exit(exit_misc_binfmt)

@@ -151,16 +151,11 @@ __initfunc(int ms_bus_mouse_init(void))
 	return msedev < 0 ? msedev : 0;
 }
 
-#ifdef MODULE
-int init_module(void)
-{
-	return ms_bus_mouse_init();
-}
-
-void cleanup_module(void)
+void ms_bus_mouse_exit(void)
 {
 	unregister_busmouse(msedev);
 	release_region(MS_MSE_CONTROL_PORT, 0x04);
 }
-#endif
 
+module_init(ms_bus_mouse_init)
+module_exit(ms_bus_mouse_exit)

@@ -98,8 +98,9 @@ static int write_ldt(void * ptr, unsigned long bytecount, int oldmode)
 			printk(KERN_WARNING "LDT allocated for cloned task!\n");
 		/*
 		 * Possibly do an SMP cross-call to other CPUs to reload
-		 * their LDTs
+		 * their LDTs?
 		 */
+		load_LDT(mm);
 	}
 
 	lp = (__u32 *) ((ldt_info.entry_number << 3) + (char *) mm->segments);

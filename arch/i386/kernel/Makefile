@@ -34,8 +34,12 @@ else
   endif
 endif
 
-ifdef CONFIG_APM
+ifeq ($(CONFIG_APM),y)
 OX_OBJS += apm.o
+else
+  ifeq ($(CONFIG_APM),m)
+  MX_OBJS += apm.o
+  endif
 endif
 
 ifdef CONFIG_SMP

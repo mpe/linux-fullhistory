@@ -101,13 +101,7 @@ static int load_script(struct linux_binprm *bprm,struct pt_regs *regs)
 }
 
 struct linux_binfmt script_format = {
-	NULL,
-#ifndef MODULE
-	NULL,
-#else
-	&__this_module,
-#endif
-	load_script, NULL, NULL, 0
+	NULL, THIS_MODULE, load_script, NULL, NULL, 0
 };
 
 static int __init init_script_binfmt(void)
@@ -115,15 +109,10 @@ static int __init init_script_binfmt(void)
 	return register_binfmt(&script_format);
 }
 
-__initcall(init_script_binfmt);
-
-#ifdef MODULE
-int init_module(void)
+static void __exit exit_script_binfmt(void)
 {
-	return init_script_binfmt();
-}
-
-void cleanup_module( void) {
 	unregister_binfmt(&script_format);
 }
-#endif
+
+module_init(init_script_binfmt)
+module_exit(exit_script_binfmt)

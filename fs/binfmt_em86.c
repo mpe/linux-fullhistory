@@ -105,13 +105,7 @@ static int load_em86(struct linux_binprm *bprm,struct pt_regs *regs)
 }
 
 struct linux_binfmt em86_format = {
-	NULL,
-#ifndef MODULE
-	NULL,
-#else
-	&__this_module,
-#endif
-	load_em86, NULL, NULL, 0
+	NULL, THIS_MODULE, load_em86, NULL, NULL, 0
 };
 
 static int __init init_em86_binfmt(void)
@@ -119,15 +113,10 @@ static int __init init_em86_binfmt(void)
 	return register_binfmt(&em86_format);
 }
 
-__initcall(init_em86_binfmt);
-
-#ifdef MODULE
-int init_module(void)
+static void __exit exit_em86_binfmt(void)
 {
-	return init_em86_binfmt();
-}
-
-void cleanup_module( void) {
 	unregister_binfmt(&em86_format);
 }
-#endif
+
+module_init(init_em86_binfmt)
+module_exit(exit_em86_binfmt)

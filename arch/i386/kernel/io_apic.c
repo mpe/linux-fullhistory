@@ -242,7 +242,7 @@ static void clear_IO_APIC (void)
 int pirq_entries [MAX_PIRQS];
 int pirqs_enabled;
 
-static void __init ioapic_setup(char *str, int *ints)
+static int __init ioapic_setup(char *str)
 {
 	extern int skip_ioapic_setup;	/* defined in arch/i386/kernel/smp.c */
 
@@ -252,7 +252,7 @@ static void __init ioapic_setup(char *str, int *ints)
 
 __setup("noapic", ioapic_setup);
 
-static void __init ioapic_pirq_setup(char *str)
+static int __init ioapic_pirq_setup(char *str)
 {
 	int i, max;
 	int ints[11];
@@ -275,6 +275,7 @@ static void __init ioapic_pirq_setup(char *str)
 		 */
 		pirq_entries[MAX_PIRQS-i-1] = ints[i+1];
 	}
+	return 1;
 }
 
 __setup("pirq=", ioapic_pirq_setup);

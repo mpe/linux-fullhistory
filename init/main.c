@@ -68,9 +68,6 @@ extern char *linux_banner;
 extern int console_loglevel;
 
 static int init(void *);
-extern int bdflush(void *);
-extern int kswapd(void *);
-extern void kswapd_setup(void);
 
 extern void init_IRQ(void);
 extern void init_modules(void);
@@ -606,28 +603,11 @@ static void __init do_basic_setup(void)
 #ifdef CONFIG_MAC
 	nubus_init();
 #endif
-#ifdef CONFIG_APM
-	apm_init();
-#endif
 
 	/* Networking initialization needs a process context */ 
 	sock_init();
 
 	do_initcalls();
-
-	/* Launch bdflush from here, instead of the old syscall way. */
-	kernel_thread(bdflush, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
-	/* Start the background pageout daemon. */
-	kswapd_setup();
-	kernel_thread(kswapd, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
-
-#if CONFIG_AP1000
-	/* Start the async paging daemon. */
-	{
-	  extern int asyncd(void *);	 
-	  kernel_thread(asyncd, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
-	}
-#endif
 
 #ifdef CONFIG_BLK_DEV_INITRD
 

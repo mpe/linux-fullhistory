@@ -18,19 +18,19 @@ ALL_SUB_DIRS := $(SUB_DIRS) ftape joystick
 #
 FONTMAPFILE = cp437.uni
 
-L_TARGET := char.a
+O_TARGET := char.o
 M_OBJS   :=
-L_OBJS   := tty_io.o n_tty.o tty_ioctl.o mem.o random.o raw.o
-LX_OBJS  := pty.o misc.o
+O_OBJS   := tty_io.o n_tty.o tty_ioctl.o mem.o random.o raw.o
+OX_OBJS  := pty.o misc.o
 
 ifdef CONFIG_VT
-L_OBJS += vt.o vc_screen.o consolemap.o consolemap_deftbl.o
-LX_OBJS += console.o selection.o
+O_OBJS += vt.o vc_screen.o consolemap.o consolemap_deftbl.o
+OX_OBJS += console.o selection.o
 endif
 
 ifeq ($(CONFIG_SERIAL),y)
   ifeq ($(CONFIG_SUN_SERIAL),)
-  LX_OBJS += serial.o
+  OX_OBJS += serial.o
   endif
 else
   ifeq ($(CONFIG_SERIAL),m)
@@ -42,24 +42,24 @@ endif
 
 ifndef CONFIG_SUN_KEYBOARD
 ifdef CONFIG_VT
-LX_OBJS += keyboard.o
+OX_OBJS += keyboard.o
 endif
  ifneq ($(ARCH),m68k)
-   L_OBJS += pc_keyb.o defkeymap.o
+   O_OBJS += pc_keyb.o defkeymap.o
  endif
 else
 ifdef CONFIG_PCI
-L_OBJS += defkeymap.o
-LX_OBJS += keyboard.o
+O_OBJS += defkeymap.o
+OX_OBJS += keyboard.o
 endif
 endif
 
 ifdef CONFIG_MAGIC_SYSRQ
-LX_OBJS += sysrq.o
+OX_OBJS += sysrq.o
 endif
 
 ifeq ($(CONFIG_ATARI_DSP56K),y)
-L_OBJS += dsp56k.o
+O_OBJS += dsp56k.o
 S = y
 else
   ifeq ($(CONFIG_ATARI_DSP56K),m)
@@ -69,7 +69,7 @@ else
 endif
 
 ifeq ($(CONFIG_ROCKETPORT),y)
-L_OBJS += rocket.o
+O_OBJS += rocket.o
 else
   ifeq ($(CONFIG_ROCKETPORT),m)
   M_OBJS += rocket.o
@@ -77,7 +77,7 @@ else
 endif
 
 ifeq ($(CONFIG_DIGI),y)
-L_OBJS += pcxx.o
+O_OBJS += pcxx.o
 else
   ifeq ($(CONFIG_DIGI),m)
   M_OBJS += pcxx.o
@@ -85,7 +85,7 @@ else
 endif
 
 ifeq ($(CONFIG_DIGIEPCA),y)
-L_OBJS += epca.o
+O_OBJS += epca.o
 else
   ifeq ($(CONFIG_DIGIEPCA),m)
   M_OBJS += epca.o
@@ -93,7 +93,7 @@ else
 endif
 
 ifeq ($(CONFIG_CYCLADES),y)
-L_OBJS += cyclades.o
+O_OBJS += cyclades.o
 else
   ifeq ($(CONFIG_CYCLADES),m)
   M_OBJS += cyclades.o
@@ -101,7 +101,7 @@ else
 endif
 
 ifeq ($(CONFIG_STALLION),y)
-L_OBJS += stallion.o
+O_OBJS += stallion.o
 else
   ifeq ($(CONFIG_STALLION),m)
   M_OBJS += stallion.o
@@ -109,7 +109,7 @@ else
 endif
 
 ifeq ($(CONFIG_ISTALLION),y)
-L_OBJS += istallion.o
+O_OBJS += istallion.o
 else
   ifeq ($(CONFIG_ISTALLION),m)
   M_OBJS += istallion.o
@@ -117,7 +117,7 @@ else
 endif
 
 ifeq ($(CONFIG_RISCOM8),y)
-L_OBJS += riscom8.o
+O_OBJS += riscom8.o
 else
   ifeq ($(CONFIG_RISCOM8),m)
   M_OBJS += riscom8.o
@@ -125,7 +125,7 @@ else
 endif
 
 ifeq ($(CONFIG_ISI),y)
-L_OBJS += isicom.o
+O_OBJS += isicom.o
 else
   ifeq ($(CONFIG_ISI),m)
   M_OBJS += isicom.o
@@ -133,7 +133,7 @@ else
 endif
 
 ifeq ($(CONFIG_ESPSERIAL),y)
-L_OBJS += esp.o
+O_OBJS += esp.o
 else
   ifeq ($(CONFIG_ESPSERIAL),m)
   M_OBJS += esp.o
@@ -149,7 +149,7 @@ ifeq ($(CONFIG_N_HDLC),m)
 endif
 
 ifeq ($(CONFIG_SPECIALIX),y)
-L_OBJS += specialix.o
+O_OBJS += specialix.o
 else
   ifeq ($(CONFIG_SPECIALIX),m)
   M_OBJS += specialix.o
@@ -157,7 +157,7 @@ else
 endif
 
 ifeq ($(CONFIG_ATIXL_BUSMOUSE),y)
-L_OBJS += atixlmouse.o
+O_OBJS += atixlmouse.o
 else
   ifeq ($(CONFIG_ATIXL_BUSMOUSE),m)
   M_OBJS += atixlmouse.o
@@ -165,7 +165,7 @@ else
 endif
 
 ifeq ($(CONFIG_LOGIBUSMOUSE),y)
-L_OBJS += logibusmouse.o
+O_OBJS += logibusmouse.o
 else
   ifeq ($(CONFIG_LOGIBUSMOUSE),m)
   M_OBJS += logibusmouse.o
@@ -173,7 +173,7 @@ else
 endif
 
 ifeq ($(CONFIG_PRINTER),y)
-L_OBJS += lp.o
+O_OBJS += lp.o
 else
   ifeq ($(CONFIG_PRINTER),m)
   M_OBJS += lp.o
@@ -181,7 +181,7 @@ else
 endif
 
 ifeq ($(CONFIG_JOYSTICK),y)
-L_OBJS += joystick/js.o
+O_OBJS += joystick/js.o
 SUB_DIRS += joystick
 MOD_SUB_DIRS += joystick
 else
@@ -192,7 +192,7 @@ endif
 
 ifeq ($(CONFIG_MOUSE),y)
 M = y
-LX_OBJS += busmouse.o
+OX_OBJS += busmouse.o
 else
   ifeq ($(CONFIG_MOUSE),m)
   MM = m
@@ -201,7 +201,7 @@ else
 endif
 
 ifeq ($(CONFIG_DTLK),y)
-L_OBJS += dtlk.o
+O_OBJS += dtlk.o
 else
   ifeq ($(CONFIG_DTLK),m)
   M_OBJS += dtlk.o
@@ -209,7 +209,7 @@ else
 endif
 
 ifeq ($(CONFIG_MS_BUSMOUSE),y)
-L_OBJS += msbusmouse.o
+O_OBJS += msbusmouse.o
 else
   ifeq ($(CONFIG_MS_BUSMOUSE),m)
   M_OBJS += msbusmouse.o
@@ -217,7 +217,7 @@ else
 endif
 
 ifeq ($(CONFIG_82C710_MOUSE),y)
-L_OBJS += qpmouse.o
+O_OBJS += qpmouse.o
 else
   ifeq ($(CONFIG_82C710_MOUSE),m)
   M_OBJS += qpmouse.o
@@ -225,7 +225,7 @@ else
 endif
 
 ifeq ($(CONFIG_SOFT_WATCHDOG),y)
-L_OBJS += softdog.o
+O_OBJS += softdog.o
 else
   ifeq ($(CONFIG_SOFT_WATCHDOG),m)
   M_OBJS += softdog.o
@@ -233,7 +233,7 @@ else
 endif
 
 ifeq ($(CONFIG_PCWATCHDOG),y)
-L_OBJS += pcwd.o
+O_OBJS += pcwd.o
 else
   ifeq ($(CONFIG_PCWATCHDOG),m)
   M_OBJS += pcwd.o
@@ -241,7 +241,7 @@ else
 endif
 
 ifeq ($(CONFIG_ACQUIRE_WDT),y)
-L_OBJS += acquirewdt.o
+O_OBJS += acquirewdt.o
 else
   ifeq ($(CONFIG_ACQUIRE_WDT),m)
   M_OBJS += acquirewdt.o
@@ -249,7 +249,7 @@ else
 endif
 
 ifeq ($(CONFIG_AMIGAMOUSE),y)
-L_OBJS += amigamouse.o
+O_OBJS += amigamouse.o
 else
   ifeq ($(CONFIG_AMIGAMOUSE),m)
     M_OBJS += amigamouse.o
@@ -257,7 +257,7 @@ else
 endif
 
 ifeq ($(CONFIG_ATARIMOUSE),y)
-L_OBJS += atarimouse.o
+O_OBJS += atarimouse.o
 else
   ifeq ($(CONFIG_ATARIMOUSE),m)
     M_OBJS += atarimouse.o
@@ -265,7 +265,7 @@ else
 endif
 
 ifeq ($(CONFIG_ADBMOUSE),y)
-L_OBJS += adbmouse.o
+O_OBJS += adbmouse.o
 else
   ifeq ($(CONFIG_ADBMOUSE),m)
     M_OBJS += adbmouse.o
@@ -273,7 +273,7 @@ else
 endif
 
 ifeq ($(CONFIG_PC110_PAD),y)
-L_OBJS += pc110pad.o
+O_OBJS += pc110pad.o
 else
   ifeq ($(CONFIG_PC110_PAD),m)
     M_OBJS += pc110pad.o
@@ -281,7 +281,7 @@ else
 endif
 
 ifeq ($(CONFIG_WDT),y)
-L_OBJS += wdt.o
+O_OBJS += wdt.o
 else
   ifeq ($(CONFIG_WDT),m)
     M_OBJS += wdt.o
@@ -289,12 +289,12 @@ else
 endif
 
 ifeq ($(CONFIG_RTC),y)
-L_OBJS += rtc.o
+O_OBJS += rtc.o
 endif
 
 ifeq ($(CONFIG_NVRAM),y)
   ifeq ($(CONFIG_PPC),)
-  L_OBJS += nvram.o
+  O_OBJS += nvram.o
   endif
 else
   ifeq ($(CONFIG_NVRAM),m)
@@ -305,7 +305,7 @@ else
 endif
 
 ifeq ($(CONFIG_VIDEO_DEV),y)
-LX_OBJS += videodev.o
+OX_OBJS += videodev.o
 else
   ifeq ($(CONFIG_VIDEO_DEV),m)
     MX_OBJS += videodev.o
@@ -321,7 +321,7 @@ else
 endif
 
 ifeq ($(CONFIG_VIDEO_BT848),y)
-L_OBJS += bttv.o msp3400.o tuner.o
+O_OBJS += bttv.o msp3400.o tuner.o
 L_I2C=y
 else
   ifeq ($(CONFIG_VIDEO_BT848),m)
@@ -331,7 +331,7 @@ else
 endif
 
 ifeq ($(CONFIG_VIDEO_SAA5249),y)
-L_OBJS += saa5249.o
+O_OBJS += saa5249.o
 L_I2C=y
 else
   ifeq ($(CONFIG_VIDEO_SAA5249),m)
@@ -341,7 +341,7 @@ else
 endif
 
 ifeq ($(CONFIG_I2C_PARPORT),y)
-L_OBJS += i2c-parport.o
+O_OBJS += i2c-parport.o
 L_I2C = y
 else
   ifeq ($(CONFIG_I2C_PARPORT),m)
@@ -351,7 +351,7 @@ else
 endif
 
 ifeq ($(CONFIG_VIDEO_BWQCAM),y)
-L_OBJS += bw-qcam.o
+O_OBJS += bw-qcam.o
 else
   ifeq ($(CONFIG_VIDEO_BWQCAM),m)
     M_OBJS += bw-qcam.o
@@ -359,7 +359,7 @@ else
 endif
 
 ifeq ($(CONFIG_VIDEO_CQCAM),y)
-L_OBJS += c-qcam.o
+O_OBJS += c-qcam.o
 else
   ifeq ($(CONFIG_VIDEO_CQCAM),m)
     M_OBJS += c-qcam.o
@@ -367,7 +367,7 @@ else
 endif
 
 ifeq ($(CONFIG_VIDEO_ZORAN),y)
-L_OBJS += buz.o
+O_OBJS += buz.o
 else
   ifeq ($(CONFIG_VIDEO_LML33),m)
     M_OBJS += buz.o
@@ -375,7 +375,7 @@ else
 endif
 
 ifeq ($(CONFIG_VIDEO_LML33),y)
-L_OBJS += bt856.o bt819.o
+O_OBJS += bt856.o bt819.o
 else
   ifeq ($(CONFIG_VIDEO_LML33),m)
     M_OBJS += bt856.o bt819.o
@@ -383,7 +383,7 @@ else
 endif
 
 ifeq ($(CONFIG_VIDEO_BUZ),y)
-L_OBJS += saa7111.o saa7185.o
+O_OBJS += saa7111.o saa7185.o
 else
   ifeq ($(CONFIG_VIDEO_BUZ),m)
     M_OBJS += saa7111.o saa7185.o
@@ -391,7 +391,7 @@ else
 endif
 
 ifeq ($(CONFIG_VIDEO_PMS),y)
-L_OBJS += pms.o
+O_OBJS += pms.o
 else
   ifeq ($(CONFIG_VIDEO_PMS),m)
   M_OBJS += pms.o
@@ -399,7 +399,7 @@ else
 endif
 
 ifeq ($(CONFIG_VIDEO_PLANB),y)
-L_OBJS += planb.o
+O_OBJS += planb.o
 else
   ifeq ($(CONFIG_VIDEO_PLANB),m)
   M_OBJS += planb.o
@@ -407,7 +407,7 @@ else
 endif
 
 ifeq ($(CONFIG_VIDEO_VINO),y)
-L_OBJS += vino.o
+O_OBJS += vino.o
 else
   ifeq ($(CONFIG_VIDEO_VINO),m)
   M_OBJS += vino.o
@@ -415,7 +415,7 @@ else
 endif
 
 ifeq ($(CONFIG_RADIO_AZTECH),y)
-L_OBJS += radio-aztech.o
+O_OBJS += radio-aztech.o
 else
   ifeq ($(CONFIG_RADIO_AZTECH),m)
   M_OBJS += radio-aztech.o
@@ -423,7 +423,7 @@ else
 endif                                             
 
 ifeq ($(CONFIG_RADIO_SF16FMI),y)
-L_OBJS += radio-sf16fmi.o
+O_OBJS += radio-sf16fmi.o
 else
   ifeq ($(CONFIG_RADIO_SF16FMI),m)
   M_OBJS += radio-sf16fmi.o
@@ -431,7 +431,7 @@ else
 endif                                             
 
 ifeq ($(CONFIG_RADIO_RTRACK),y)
-L_OBJS += radio-aimslab.o
+O_OBJS += radio-aimslab.o
 else
   ifeq ($(CONFIG_RADIO_RTRACK),m)
   M_OBJS += radio-aimslab.o
@@ -439,7 +439,7 @@ else
 endif                                             
 
 ifeq ($(CONFIG_RADIO_RTRACK2),y)
-L_OBJS += radio-rtrack2.o
+O_OBJS += radio-rtrack2.o
 else
   ifeq ($(CONFIG_RADIO_RTRACK2),m)
   M_OBJS += radio-rtrack2.o
@@ -447,7 +447,7 @@ else
 endif                                             
 
 ifeq ($(CONFIG_RADIO_TYPHOON),y)
-L_OBJS += radio-typhoon.o
+O_OBJS += radio-typhoon.o
 else
   ifeq ($(CONFIG_RADIO_TYPHOON),m)
   M_OBJS += radio-typhoon.o
@@ -455,7 +455,7 @@ else
 endif                                             
 
 ifeq ($(CONFIG_RADIO_ZOLTRIX),y)
-L_OBJS += radio-zoltrix.o
+O_OBJS += radio-zoltrix.o
 else
   ifeq ($(CONFIG_RADIO_ZOLTRIX),m)
   M_OBJS += radio-zoltrix.o
@@ -463,7 +463,7 @@ else
 endif                                             
 
 ifeq ($(CONFIG_RADIO_CADET),y)
-L_OBJS += radio-cadet.o
+O_OBJS += radio-cadet.o
 else
   ifeq ($(CONFIG_RADIO_CADET),m)
   M_OBJS += radio-cadet.o
@@ -471,7 +471,7 @@ else
 endif                                             
 
 ifeq ($(CONFIG_RADIO_MIROPCM20),y)
-L_OBJS += radio-miropcm20.o
+O_OBJS += radio-miropcm20.o
 else
   ifeq ($(CONFIG_RADIO_MIROPCM20),m)
   M_OBJS += radio-miropcm20.o
@@ -479,7 +479,7 @@ else
 endif
 
 ifeq ($(CONFIG_RADIO_GEMTEK),y)
-L_OBJS += radio-gemtek.o
+O_OBJS += radio-gemtek.o
 else
   ifeq ($(CONFIG_RADIO_GEMTEK),m)
   M_OBJS += radio-gemtek.o
@@ -487,7 +487,7 @@ else
 endif                                             
 
 ifeq ($(CONFIG_RADIO_TERRATEC),y)
-L_OBJS += radio-terratec.o
+O_OBJS += radio-terratec.o
 else
   ifeq ($(CONFIG_RADIO_TERRATEC),m)
   M_OBJS += radio-terratec.o
@@ -495,7 +495,7 @@ else
 endif
 
 ifeq ($(CONFIG_QIC02_TAPE),y)
-L_OBJS += tpqic02.o
+O_OBJS += tpqic02.o
 else
   ifeq ($(CONFIG_QIC02_TAPE),m)
   M_OBJS += tpqic02.o
@@ -503,7 +503,7 @@ else
 endif
 
 ifeq ($(CONFIG_FTAPE),y)
-L_OBJS       += ftape/ftape.o
+O_OBJS       += ftape/ftape.o
 SUB_DIRS     += ftape
 ifneq ($(CONFIG_ZFTAPE),n)
 MOD_SUB_DIRS += ftape
@@ -515,11 +515,11 @@ else
 endif
 
 ifdef CONFIG_H8
-LX_OBJS += h8.o
+OX_OBJS += h8.o
 endif
 
 ifeq ($(CONFIG_PPDEV),y)
-L_OBJS += ppdev.o
+O_OBJS += ppdev.o
 else
   ifeq ($(CONFIG_PPDEV),m)
   M_OBJS += ppdev.o
@@ -527,7 +527,7 @@ else
 endif
 
 ifeq ($(L_I2C),y)
-LX_OBJS += i2c.o
+OX_OBJS += i2c.o
 else
   ifeq ($(M_I2C),y)
   MX_OBJS += i2c.o
@@ -538,7 +538,7 @@ endif
 ifeq ($(CONFIG_HFMODEM),y)
 ALL_SUB_DIRS += hfmodem
 SUB_DIRS += hfmodem
-L_OBJS += hfmodem/hfmodem.o
+O_OBJS += hfmodem/hfmodem.o
 else
   ifeq ($(CONFIG_HFMODEM),m)
   ALL_SUB_DIRS += hfmodem

@@ -271,3 +271,14 @@ int asyncd(void *unused)
 	}
 }
 
+#if CONFIG_AP1000
+
+static int __init init_ap1000(void)
+{
+	kernel_thread(asyncd, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
+	return 0;
+}
+
+module_init(init_ap1000)
+
+#endif

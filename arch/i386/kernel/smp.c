@@ -1634,7 +1634,10 @@ static void flush_tlb_others(unsigned int cpumask)
 			 * Take care of "crossing" invalidates
 			 */
 			if (test_bit(cpu, &smp_invalidate_needed)) {
+				struct mm_struct *mm = current->mm;
 				clear_bit(cpu, &smp_invalidate_needed);
+				if (mm)
+					atomic_set_mask(1 << cpu, &mm->cpu_vm_mask);
 				local_flush_tlb();
 			}
 			--stuck;

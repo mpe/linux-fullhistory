@@ -1428,7 +1428,7 @@ static int apm(void *unused)
  * In short, if something bad happens, at least we have a choice
  * of just killing the apm thread..
  */
-void __init apm_init(void)
+static int __init apm_init(void)
 {
 	static struct proc_dir_entry *ent;
 
@@ -1533,3 +1533,5 @@ void __init apm_init(void)
 
 	kernel_thread(apm, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND | SIGCHLD);
 }
+
+module_init(apm_init)

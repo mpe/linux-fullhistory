@@ -437,27 +437,6 @@ done:
 	return priority >= 0;
 }
 
-/*
- * Before we start the kernel thread, print out the 
- * kswapd initialization message (otherwise the init message 
- * may be printed in the middle of another driver's init 
- * message).  It looks very bad when that happens.
- */
-void __init kswapd_setup(void)
-{
-       int i;
-       char *revision="$Revision: 1.5 $", *s, *e;
-
-       swap_setup();
-       
-       if ((s = strchr(revision, ':')) &&
-           (e = strchr(s, '$')))
-               s++, i = e - s;
-       else
-               s = revision, i = -1;
-       printk ("Starting kswapd v%.*s\n", i, s);
-}
-
 static struct task_struct *kswapd_process;
 
 /*
@@ -544,4 +523,13 @@ int try_to_free_pages(unsigned int gfp_mask)
 		retval = do_try_to_free_pages(gfp_mask);
 	return retval;
 }
-	
+
+static int __init kswapd_init(void)
+{
+	printk("Starting kswapd v1.6\n");
+	swap_setup();
+	kernel_thread(kswapd, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
+	return 0;
+}
+
+module_init(kswapd_init)

@@ -191,9 +191,10 @@ __asm__(".section .modinfo\n\t.previous");
 /* Define the module variable, and usage macros.  */
 extern struct module __this_module;
 
-#define MOD_INC_USE_COUNT	__MOD_INC_USE_COUNT(&__this_module)
-#define MOD_DEC_USE_COUNT	__MOD_DEC_USE_COUNT(&__this_module)
-#define MOD_IN_USE		__MOD_IN_USE(&__this_module)
+#define THIS_MODULE		(&__this_module)
+#define MOD_INC_USE_COUNT	__MOD_INC_USE_COUNT(THIS_MODULE)
+#define MOD_DEC_USE_COUNT	__MOD_DEC_USE_COUNT(THIS_MODULE)
+#define MOD_IN_USE		__MOD_IN_USE(THIS_MODULE)
 
 #ifndef __NO_VERSION__
 #include <linux/version.h>
@@ -215,6 +216,7 @@ const char __module_using_checksums[] __attribute__((section(".modinfo"))) =
 
 #ifndef __GENKSYMS__
 
+#define THIS_MODULE		NULL
 #define MOD_INC_USE_COUNT	do { } while (0)
 #define MOD_DEC_USE_COUNT	do { } while (0)
 #define MOD_IN_USE		1

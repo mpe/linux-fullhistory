@@ -64,13 +64,7 @@ static int elf_core_dump(long signr, struct pt_regs * regs, struct file * file);
 #define ELF_PAGEALIGN(_v) (((_v) + ELF_EXEC_PAGESIZE - 1) & ~(ELF_EXEC_PAGESIZE - 1))
 
 static struct linux_binfmt elf_format = {
-	NULL,
-#ifndef MODULE
-	NULL,
-#else
-	&__this_module,
-#endif
-	load_elf_binary, load_elf_library, elf_core_dump, ELF_EXEC_PAGESIZE
+	NULL, THIS_MODULE, load_elf_binary, load_elf_library, elf_core_dump, ELF_EXEC_PAGESIZE
 };
 
 static void set_brk(unsigned long start, unsigned long end)
@@ -1301,23 +1295,11 @@ static int __init init_elf_binfmt(void)
 	return register_binfmt(&elf_format);
 }
 
-__initcall(init_elf_binfmt);
-
-#ifdef MODULE
-
-int init_module(void)
-{
-	/* Install the COFF, ELF and XOUT loaders.
-	 * N.B. We *rely* on the table being the right size with the
-	 * right number of free slots...
-	 */
-	return init_elf_binfmt();
-}
-
-
-void cleanup_module( void)
+static void __exit exit_elf_binfmt(void)
 {
 	/* Remove the COFF and ELF loaders. */
 	unregister_binfmt(&elf_format);
 }
-#endif
+
+module_init(init_elf_binfmt)
+module_exit(exit_elf_binfmt)
