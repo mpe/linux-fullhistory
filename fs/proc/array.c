@@ -386,8 +386,8 @@ static int get_meminfo(char * buffer)
 		i.sharedram >> 10,
 		i.bufferram >> 10,
 		atomic_read(&page_cache_size) << (PAGE_SHIFT - 10),
-		i.totalbig >> 10,
-		i.freebig >> 10,
+		i.totalhigh >> 10,
+		i.freehigh >> 10,
 		i.totalswap >> 10,
 		i.freeswap >> 10);
 }
@@ -407,7 +407,7 @@ static int get_cmdline(char * buffer)
 	return sprintf(buffer, "%s\n", saved_command_line);
 }
 
-static unsigned long get_phys_addr(struct mm_struct * mm, unsigned long ptr)
+static struct page * get_phys_page(struct mm_struct * mm, unsigned long ptr)
 {
 	pgd_t *page_dir;
 	pmd_t *page_middle;
@@ -434,41 +434,41 @@ static unsigned long get_phys_addr(struct mm_struct * mm, unsigned long ptr)
 	pte = *pte_offset(page_middle,ptr);
 	if (!pte_present(pte))
 		return 0;
-	return pte_page(pte) + (ptr & ~PAGE_MASK);
+	return pte_page(pte);
 }
 
-#include <linux/bigmem.h>
+#include <linux/highmem.h>
 
 static int get_array(struct mm_struct *mm, unsigned long start, unsigned long end, char * buffer)
 {
 	unsigned long addr;
 	int size = 0, result = 0;
-	char c;
+	char *buf, c;
 
 	if (start >= end)
 		return result;
 	for (;;) {
-		addr = get_phys_addr(mm, start);
-		if (!addr)
+		struct page *page = get_phys_page(mm, start);
+		if (!page)
 			return result;
-		addr = kmap(addr, KM_READ);
+		addr = kmap(page, KM_READ);
+		buf = (char *) (addr + (start & ~PAGE_MASK));
 		do {
-			c = *(char *) addr;
+			c = *buf;
 			if (!c)
 				result = size;
-			if (size < PAGE_SIZE)
-				buffer[size++] = c;
-			else {
+			if (size >= PAGE_SIZE) {
 				kunmap(addr, KM_READ);
 				return result;
 			}
-			addr++;
+			buffer[size++] = c;
+			buf++;
 			start++;
 			if (!c && start >= end) {
 				kunmap(addr, KM_READ);
 				return result;
 			}
-		} while (addr & ~PAGE_MASK);
+		} while (~PAGE_MASK & (unsigned long)buf);
 		kunmap(addr, KM_READ);
 	}
 	return result;

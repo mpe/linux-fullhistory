@@ -39,6 +39,7 @@
 #include <linux/kernel_stat.h>
 #include <linux/smp_lock.h>
 #include <linux/irq.h>
+#include <linux/bootmem.h>
 
 #include <linux/delay.h>
 #include <linux/mc146818rtc.h>
@@ -630,12 +631,15 @@ static unsigned long __init setup_trampoline(void)
  * We are called very early to get the low memory for the
  * SMP bootup trampoline page.
  */
-unsigned long __init smp_alloc_memory(unsigned long mem_base)
+void __init smp_alloc_memory(void)
 {
-	if (virt_to_phys((void *)mem_base) >= 0x9F000)
+	trampoline_base = (void *) alloc_bootmem_pages(PAGE_SIZE);
+	/*
+	 * Has to be in very low memory so we can execute
+	 * real-mode AP code.
+	 */
+	if (__pa(trampoline_base) >= 0x9F000)
 		BUG();
-	trampoline_base = (void *)mem_base;
-	return mem_base + PAGE_SIZE;
 }
 
 /*
@@ -804,11 +808,10 @@ void __init setup_local_APIC(void)
  	apic_write(APIC_DFR, value);
 }
 
-unsigned long __init init_smp_mappings(unsigned long memory_start)
+void __init init_smp_mappings(void)
 {
 	unsigned long apic_phys;
 
-	memory_start = PAGE_ALIGN(memory_start);
 	if (smp_found_config) {
 		apic_phys = mp_lapic_addr;
 	} else {
@@ -818,11 +821,10 @@ unsigned long __init init_smp_mappings(unsigned long memory_start)
 		 * could use the real zero-page, but it's safer
 		 * this way if some buggy code writes to this page ...
 		 */
-		apic_phys = __pa(memory_start);
-		memset((void *)memory_start, 0, PAGE_SIZE);
-		memory_start += PAGE_SIZE;
+		apic_phys = __pa(alloc_bootmem_pages(PAGE_SIZE));
+		memset((void *)apic_phys, 0, PAGE_SIZE);
 	}
-	set_fixmap(FIX_APIC_BASE,apic_phys);
+	set_fixmap(FIX_APIC_BASE, apic_phys);
 	dprintk("mapped APIC to %08lx (%08lx)\n", APIC_BASE, apic_phys);
 
 #ifdef CONFIG_X86_IO_APIC
@@ -834,9 +836,8 @@ unsigned long __init init_smp_mappings(unsigned long memory_start)
 			if (smp_found_config) {
 				ioapic_phys = mp_ioapics[i].mpc_apicaddr;
 			} else {
-				ioapic_phys = __pa(memory_start);
-				memset((void *)memory_start, 0, PAGE_SIZE);
-				memory_start += PAGE_SIZE;
+				ioapic_phys = __pa(alloc_bootmem_pages(PAGE_SIZE));
+				memset((void *)ioapic_phys, 0, PAGE_SIZE);
 			}
 			set_fixmap(idx,ioapic_phys);
 			dprintk("mapped IOAPIC to %08lx (%08lx)\n",
@@ -845,8 +846,6 @@ unsigned long __init init_smp_mappings(unsigned long memory_start)
 		}
 	}
 #endif
-
-	return memory_start;
 }
 
 /*
@@ -1112,6 +1111,12 @@ int __init start_secondary(void *unused)
 	smp_callin();
 	while (!atomic_read(&smp_commenced))
 		/* nothing */ ;
+	/*
+	 * low-memory mappings have been cleared, flush them from
+	 * the local TLBs too.
+	 */
+	local_flush_tlb();
+
 	return cpu_idle();
 }
 
@@ -1153,7 +1158,6 @@ static int __init fork_by_hand(void)
 static void __init do_boot_cpu(int i)
 {
 	unsigned long cfg;
-	pgd_t maincfg;
 	struct task_struct *idle;
 	unsigned long send_status, accept_status;
 	int timeout, num_starts, j;
@@ -1206,9 +1210,6 @@ static void __init do_boot_cpu(int i)
 	dprintk("2.\n");
 	*((volatile unsigned short *) phys_to_virt(0x467)) = start_eip & 0xf;
 	dprintk("3.\n");
-
-	maincfg=swapper_pg_dir[0];
-	((unsigned long *)swapper_pg_dir)[0]=0x102007;
 
 	/*
 	 * Be paranoid about clearing APIC errors.
@@ -1366,9 +1367,6 @@ static void __init do_boot_cpu(int i)
 		cpu_number_map[i] = -1;
 		cpucount--;
 	}
-
-	swapper_pg_dir[0]=maincfg;
-	local_flush_tlb();
 
 	/* mark "stuck" area as not stuck */
 	*((volatile unsigned long *)phys_to_virt(8192)) = 0;
@@ -1567,14 +1565,9 @@ void __init smp_boot_cpus(void)
 
 #ifndef CONFIG_VISWS
 	{
-		unsigned long cfg;
-
 		/*
 		 * Install writable page 0 entry to set BIOS data area.
 		 */
-		cfg = pg0[0];
-		/* writeable, present, addr 0 */
-		pg0[0] = _PAGE_RW | _PAGE_PRESENT | 0;
 		local_flush_tlb();
 
 		/*
@@ -1584,12 +1577,6 @@ void __init smp_boot_cpus(void)
 		CMOS_WRITE(0, 0xf);
 
 		*((volatile long *) phys_to_virt(0x467)) = 0;
-
-		/*
-		 * Restore old page 0 entry.
-		 */
-		pg0[0] = cfg;
-		local_flush_tlb();
 	}
 #endif
 
@@ -1646,5 +1633,7 @@ smp_done:
 	 */
 	if (cpu_has_tsc && cpucount)
 		synchronize_tsc_bp();
+
+	zap_low_mappings();
 }
 

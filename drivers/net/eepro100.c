@@ -1495,7 +1495,7 @@ speedo_rx(struct net_device *dev)
 			rxf = sp->rx_ringp[entry] = (struct RxFD *)skb->tail;
 			skb->dev = dev;
 			skb_reserve(skb, sizeof(struct RxFD));
-			rxf->rx_buf_addr = virt_to_le32bus(skb->tail);
+			rxf->rx_buf_addr = virt_to_bus(skb->tail);
 		} else {
 			rxf = sp->rx_ringp[entry];
 		}

@@ -1127,7 +1127,7 @@ static int startup(struct async_struct * info)
 	unsigned short ICP;
 #endif
 
-	page = get_free_page(GFP_KERNEL);
+	page = get_zeroed_page(GFP_KERNEL);
 	if (!page)
 		return -ENOMEM;
 
@@ -2974,7 +2974,7 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 #endif
 
 	if (!tmp_buf) {
-		page = get_free_page(GFP_KERNEL);
+		page = get_zeroed_page(GFP_KERNEL);
 		if (!page) {
 			return -ENOMEM;
 		}
@@ -4359,10 +4359,9 @@ static struct console sercons = {
 /*
  *	Register console.
  */
-long __init serial_console_init(long kmem_start, long kmem_end)
+void __init serial_console_init(void)
 {
 	register_console(&sercons);
-	return kmem_start;
 }
 #endif
 

@@ -157,7 +157,7 @@ int alloc_uid(struct task_struct *p)
 	return 0;
 }
 
-void __init fork_init(unsigned long memsize)
+void __init fork_init(unsigned long mempages)
 {
 	int i;
 
@@ -175,7 +175,7 @@ void __init fork_init(unsigned long memsize)
 	 * value: the thread structures can take up at most half
 	 * of memory.
 	 */
-	max_threads = memsize / THREAD_SIZE / 2;
+	max_threads = mempages / (THREAD_SIZE/PAGE_SIZE) / 2;
 
 	init_task.rlim[RLIMIT_NPROC].rlim_cur = max_threads/2;
 	init_task.rlim[RLIMIT_NPROC].rlim_max = max_threads/2;

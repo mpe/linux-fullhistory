@@ -45,7 +45,7 @@ typedef struct kmem_cache_s kmem_cache_t;
 #define	SLAB_CTOR_VERIFY	0x004UL		/* tell constructor it's a verify call */
 
 /* prototypes */
-extern long kmem_cache_init(long, long);
+extern void kmem_cache_init(void);
 extern void kmem_cache_sizes_init(void);
 extern kmem_cache_t *kmem_find_general_cachep(size_t);
 extern kmem_cache_t *kmem_cache_create(const char *, size_t, size_t, unsigned long,

@@ -89,6 +89,7 @@ static void init_once(void * foo, kmem_cache_t * cachep, unsigned long flags)
 		memset(inode, 0, sizeof(*inode));
 		init_waitqueue_head(&inode->i_wait);
 		INIT_LIST_HEAD(&inode->i_hash);
+		INIT_LIST_HEAD(&inode->i_pages);
 		INIT_LIST_HEAD(&inode->i_dentry);
 		sema_init(&inode->i_sem, 1);
 		spin_lock_init(&inode->i_shared_lock);
@@ -401,7 +402,7 @@ int shrink_icache_memory(int priority, int gfp_mask)
 		prune_icache(count);
 		/* FIXME: kmem_cache_shrink here should tell us
 		   the number of pages freed, and it should
-		   work in a __GFP_DMA/__GFP_BIGMEM behaviour
+		   work in a __GFP_DMA/__GFP_HIGHMEM behaviour
 		   to free only the interesting pages in
 		   function of the needs of the current allocation. */
 		kmem_cache_shrink(inode_cachep);

@@ -81,6 +81,7 @@ static int full_duplex[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
 #endif
 
 #include <linux/kernel.h>
+#include <linux/version.h>
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/timer.h>

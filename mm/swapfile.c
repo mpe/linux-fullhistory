@@ -81,17 +81,18 @@ static inline int scan_swap_map(struct swap_info_struct *si)
 	return 0;
 }
 
-unsigned long get_swap_page(void)
+pte_t get_swap_page(void)
 {
 	struct swap_info_struct * p;
-	unsigned long offset, entry;
+	unsigned long offset;
+	pte_t entry = __pte(0);
 	int type, wrapped = 0;
 
 	type = swap_list.next;
 	if (type < 0)
-		return 0;
+		goto out;
 	if (nr_swap_pages == 0)
-		return 0;
+		goto out;
 
 	while (1) {
 		p = &swap_info[type];
@@ -106,7 +107,7 @@ unsigned long get_swap_page(void)
 				} else {
 					swap_list.next = type;
 				}
-				return entry;
+				goto out;
 			}
 		}
 		type = p->next;
@@ -115,19 +116,21 @@ unsigned long get_swap_page(void)
 				type = swap_list.head;
 				wrapped = 1;
 			}
-		} else if (type < 0) {
-			return 0;	/* out of swap space */
-		}
+		} else
+			if (type < 0)
+				goto out;	/* out of swap space */
 	}
+out:
+	return entry;
 }
 
 
-void swap_free(unsigned long entry)
+void swap_free(pte_t entry)
 {
 	struct swap_info_struct * p;
 	unsigned long offset, type;
 
-	if (!entry)
+	if (!pte_val(entry))
 		goto out;
 
 	type = SWP_TYPE(entry);
@@ -154,10 +157,6 @@ void swap_free(unsigned long entry)
 			nr_swap_pages++;
 		}
 	}
-#ifdef DEBUG_SWAP
-	printk("DebugVM: swap_free(entry %08lx, count now %d)\n",
-	       entry, p->swap_map[offset]);
-#endif
 out:
 	return;
 
@@ -171,24 +170,24 @@ bad_offset:
 	printk("swap_free: offset exceeds max\n");
 	goto out;
 bad_free:
-	printk("swap_free: swap-space map bad (entry %08lx)\n",entry);
+	pte_ERROR(entry);
 	goto out;
 }
 
 /* needs the big kernel lock */
-unsigned long acquire_swap_entry(struct page *page)
+pte_t acquire_swap_entry(struct page *page)
 {
 	struct swap_info_struct * p;
 	unsigned long offset, type;
-	unsigned long entry;
+	pte_t entry;
 
 	if (!test_bit(PG_swap_entry, &page->flags))
 		goto new_swap_entry;
 
 	/* We have the old entry in the page offset still */
-	entry = page->offset;
-	if (!entry)
+	if (!page->offset)
 		goto new_swap_entry;
+	entry = get_pagecache_pte(page);
 	type = SWP_TYPE(entry);
 	if (type & SHM_SWP_TYPE)
 		goto new_swap_entry;
@@ -223,7 +222,7 @@ new_swap_entry:
  * what to do if a write is requested later.
  */
 static inline void unuse_pte(struct vm_area_struct * vma, unsigned long address,
-	pte_t *dir, unsigned long entry, unsigned long page)
+	pte_t *dir, pte_t entry, struct page* page)
 {
 	pte_t pte = *dir;
 
@@ -239,7 +238,7 @@ static inline void unuse_pte(struct vm_area_struct * vma, unsigned long address,
 		set_pte(dir, pte_mkdirty(pte));
 		return;
 	}
-	if (pte_val(pte) != entry)
+	if (pte_val(pte) != pte_val(entry))
 		return;
 	set_pte(dir, pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
 	swap_free(entry);
@@ -249,7 +248,7 @@ static inline void unuse_pte(struct vm_area_struct * vma, unsigned long address,
 
 static inline void unuse_pmd(struct vm_area_struct * vma, pmd_t *dir,
 	unsigned long address, unsigned long size, unsigned long offset,
-	unsigned long entry, unsigned long page)
+	pte_t entry, struct page* page)
 {
 	pte_t * pte;
 	unsigned long end;
@@ -257,7 +256,7 @@ static inline void unuse_pmd(struct vm_area_struct * vma, pmd_t *dir,
 	if (pmd_none(*dir))
 		return;
 	if (pmd_bad(*dir)) {
-		printk("unuse_pmd: bad pmd (%08lx)\n", pmd_val(*dir));
+		pmd_ERROR(*dir);
 		pmd_clear(dir);
 		return;
 	}
@@ -271,12 +270,12 @@ static inline void unuse_pmd(struct vm_area_struct * vma, pmd_t *dir,
 		unuse_pte(vma, offset+address-vma->vm_start, pte, entry, page);
 		address += PAGE_SIZE;
 		pte++;
-	} while (address < end);
+	} while (address && (address < end));
 }
 
 static inline void unuse_pgd(struct vm_area_struct * vma, pgd_t *dir,
 	unsigned long address, unsigned long size,
-	unsigned long entry, unsigned long page)
+	pte_t entry, struct page* page)
 {
 	pmd_t * pmd;
 	unsigned long offset, end;
@@ -284,7 +283,7 @@ static inline void unuse_pgd(struct vm_area_struct * vma, pgd_t *dir,
 	if (pgd_none(*dir))
 		return;
 	if (pgd_bad(*dir)) {
-		printk("unuse_pgd: bad pgd (%08lx)\n", pgd_val(*dir));
+		pgd_ERROR(*dir);
 		pgd_clear(dir);
 		return;
 	}
@@ -294,28 +293,32 @@ static inline void unuse_pgd(struct vm_area_struct * vma, pgd_t *dir,
 	end = address + size;
 	if (end > PGDIR_SIZE)
 		end = PGDIR_SIZE;
+	if (address >= end)
+		BUG();
 	do {
 		unuse_pmd(vma, pmd, address, end - address, offset, entry,
 			  page);
 		address = (address + PMD_SIZE) & PMD_MASK;
 		pmd++;
-	} while (address < end);
+	} while (address && (address < end));
 }
 
 static void unuse_vma(struct vm_area_struct * vma, pgd_t *pgdir,
-			unsigned long entry, unsigned long page)
+			pte_t entry, struct page* page)
 {
 	unsigned long start = vma->vm_start, end = vma->vm_end;
 
-	while (start < end) {
+	if (start >= end)
+		BUG();
+	do {
 		unuse_pgd(vma, pgdir, start, end - start, entry, page);
 		start = (start + PGDIR_SIZE) & PGDIR_MASK;
 		pgdir++;
-	}
+	} while (start && (start < end));
 }
 
-static void unuse_process(struct mm_struct * mm, unsigned long entry, 
-			unsigned long page)
+static void unuse_process(struct mm_struct * mm,
+			pte_t entry, struct page* page)
 {
 	struct vm_area_struct* vma;
 
@@ -340,8 +343,8 @@ static int try_to_unuse(unsigned int type)
 {
 	struct swap_info_struct * si = &swap_info[type];
 	struct task_struct *p;
-	struct page *page_map;
-	unsigned long entry, page;
+	struct page *page;
+	pte_t entry;
 	int i;
 
 	while (1) {
@@ -361,8 +364,8 @@ static int try_to_unuse(unsigned int type)
 		/* Get a page for the entry, using the existing swap
                    cache page if there is one.  Otherwise, get a clean
                    page and read the swap into it. */
-		page_map = read_swap_cache(entry);
-		if (!page_map) {
+		page = read_swap_cache(entry);
+		if (!page) {
 			/*
 			 * Continue searching if the entry became unused.
 			 */
@@ -370,7 +373,6 @@ static int try_to_unuse(unsigned int type)
 				continue;
   			return -ENOMEM;
 		}
-		page = page_address(page_map);
 		read_lock(&tasklist_lock);
 		for_each_task(p)
 			unuse_process(p->mm, entry, page);
@@ -378,17 +380,15 @@ static int try_to_unuse(unsigned int type)
 		shm_unuse(entry, page);
 		/* Now get rid of the extra reference to the temporary
                    page we've been using. */
-		if (PageSwapCache(page_map))
-			delete_from_swap_cache(page_map);
-		__free_page(page_map);
+		if (PageSwapCache(page))
+			delete_from_swap_cache(page);
+		__free_page(page);
 		/*
 		 * Check for and clear any overflowed swap map counts.
 		 */
 		if (si->swap_map[i] != 0) {
 			if (si->swap_map[i] != SWAP_MAP_MAX)
-				printk(KERN_ERR
-					"try_to_unuse: entry %08lx count=%d\n",
-					entry, si->swap_map[i]);
+				pte_ERROR(entry);
 			si->swap_map[i] = 0;
 			nr_swap_pages++;
 		}

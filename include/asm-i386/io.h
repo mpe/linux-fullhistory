@@ -103,28 +103,27 @@ __OUTS(l)
 #include <linux/vmalloc.h>
 #include <asm/page.h>
 
-#define __io_virt(x)		((void *)(PAGE_OFFSET | (unsigned long)(x)))
-#define __io_phys(x)		((unsigned long)(x) & ~PAGE_OFFSET)
+/*
+ * Temporary debugging check to catch old code using
+ * unmapped ISA addresses. Will be removed in 2.4.
+ */
+#define __io_virt(x) ((unsigned long)(x) < PAGE_OFFSET ? \
+	({ __label__ __l; __l: printk("io mapaddr %p not valid at %p!\n", (char *)(x), &&__l); __va(x); }) : (char *)(x))
+#define __io_phys(x) ((unsigned long)(x) < PAGE_OFFSET ? \
+	({ __label__ __l; __l: printk("io mapaddr %p not valid at %p!\n", (char *)(x), &&__l); (unsigned long)(x); }) : __pa(x))
+
 /*
  * Change virtual addresses to physical addresses and vv.
  * These are pretty trivial
  */
 extern inline unsigned long virt_to_phys(volatile void * address)
 {
-#ifdef CONFIG_BIGMEM
 	return __pa(address);
-#else
-	return __io_phys(address);
-#endif
 }
 
 extern inline void * phys_to_virt(unsigned long address)
 {
-#ifdef CONFIG_BIGMEM
 	return __va(address);
-#else
-	return __io_virt(address);
-#endif
 }
 
 extern void * __ioremap(unsigned long offset, unsigned long size, unsigned long flags);
@@ -176,6 +175,23 @@ extern void iounmap(void *addr);
 #define memset_io(a,b,c)	memset(__io_virt(a),(b),(c))
 #define memcpy_fromio(a,b,c)	memcpy((a),__io_virt(b),(c))
 #define memcpy_toio(a,b,c)	memcpy(__io_virt(a),(b),(c))
+
+/*
+ * ISA space is 'always mapped' on a typical x86 system, no need to
+ * explicitly ioremap() it. The fact that the ISA IO space is mapped
+ * to PAGE_OFFSET is pure coincidence - it does not mean ISA values
+ * are physical addresses. The following constant pointer can be
+ * used as the IO-area pointer (it can be iounmapped as well, so the
+ * analogy with PCI is quite large):
+ */
+#define __ISA_IO_base ((char *)(PAGE_OFFSET))
+
+#define isa_readb(a) readb(__ISA_IO_base + (a))
+#define isa_readw(a) readb(__ISA_IO_base + (a))
+#define isa_readl(a) readb(__ISA_IO_base + (a))
+#define isa_writeb(b,a) writeb(b,__ISA_IO_base + (a))
+#define isa_writew(w,a) writeb(w,__ISA_IO_base + (a))
+#define isa_writel(l,a) writeb(l,__ISA_IO_base + (a))
 
 /*
  * Again, i386 does not require mem IO specific function.

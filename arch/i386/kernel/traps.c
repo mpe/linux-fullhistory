@@ -581,6 +581,7 @@ asmlinkage void math_emulate(long arg)
 
 #endif /* CONFIG_MATH_EMULATION */
 
+#ifndef CONFIG_M686
 void __init trap_init_f00f_bug(void)
 {
 	unsigned long page;
@@ -596,8 +597,8 @@ void __init trap_init_f00f_bug(void)
 	pgd = pgd_offset(&init_mm, page);
 	pmd = pmd_offset(pgd, page);
 	pte = pte_offset(pmd, page);
-	free_page(pte_page(*pte));
-	*pte = mk_pte(&idt_table, PAGE_KERNEL_RO);
+	__free_page(pte_page(*pte));
+	*pte = mk_pte_phys(__pa(&idt_table), PAGE_KERNEL_RO);
 	local_flush_tlb();
 
 	/*
@@ -608,6 +609,7 @@ void __init trap_init_f00f_bug(void)
 	idt = (struct desc_struct *)page;
 	__asm__ __volatile__("lidt %0": "=m" (idt_descr));
 }
+#endif
 
 #define _set_gate(gate_addr,type,dpl,addr) \
 do { \
@@ -772,7 +774,7 @@ cobalt_init(void)
 #endif
 void __init trap_init(void)
 {
-	if (readl(0x0FFFD9) == 'E' + ('I'<<8) + ('S'<<16) + ('A'<<24))
+	if (isa_readl(0x0FFFD9) == 'E'+('I'<<8)+('S'<<16)+('A'<<24))
 		EISA_bus = 1;
 
 	set_trap_gate(0,&divide_error);

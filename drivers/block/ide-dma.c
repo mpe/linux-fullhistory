@@ -461,7 +461,7 @@ int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 int ide_release_dma (ide_hwif_t *hwif)
 {
 	if (hwif->dmatable) {
-		clear_page((unsigned long)hwif->dmatable);	/* clear PRD 1st */
+		clear_page((void *)hwif->dmatable);	/* clear PRD 1st */
 		free_page((unsigned long)hwif->dmatable);	/* free PRD 2nd */
 	}
 	if ((hwif->dma_extra) && (hwif->channel == 0))

@@ -111,11 +111,6 @@ static const int multicast_filter_limit = 32;
 
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
-#else
-#ifndef __alpha__
-#define ioremap vremap
-#define iounmap vfree
-#endif
 #endif
 #if defined(MODULE) && LINUX_VERSION_CODE > 0x20115
 MODULE_AUTHOR("Donald Becker <becker@cesdis.gsfc.nasa.gov>");

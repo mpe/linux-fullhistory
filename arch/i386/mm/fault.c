@@ -76,6 +76,31 @@ bad_area:
 	return 0;
 }
 
+static inline void handle_wp_test (void)
+{
+	const unsigned long vaddr = PAGE_OFFSET;
+	pgd_t *pgd;
+	pmd_t *pmd;
+	pte_t *pte;
+
+	/*
+	 * make it read/writable temporarily, so that the fault
+	 * can be handled.
+	 */
+	pgd = swapper_pg_dir + __pgd_offset(vaddr);
+	pmd = pmd_offset(pgd, vaddr);
+	pte = pte_offset(pmd, vaddr);
+	*pte = mk_pte_phys(0, PAGE_KERNEL);
+	local_flush_tlb();
+
+	boot_cpu_data.wp_works_ok = 1;
+	/*
+	 * Beware: Black magic here. The printk is needed here to flush
+	 * CPU state on certain buggy processors.
+	 */
+	printk("Ok");
+}
+
 asmlinkage void do_invalid_op(struct pt_regs *, unsigned long);
 extern unsigned long idt;
 
@@ -226,15 +251,8 @@ no_context:
  * First we check if it was the bootup rw-test, though..
  */
 	if (boot_cpu_data.wp_works_ok < 0 &&
-	    address == PAGE_OFFSET && (error_code & 1)) {
-		boot_cpu_data.wp_works_ok = 1;
-		pg0[0] = pte_val(mk_pte(PAGE_OFFSET, PAGE_KERNEL));
-		local_flush_tlb();
-		/*
-		 * Beware: Black magic here. The printk is needed here to flush
-		 * CPU state on certain buggy processors.
-		 */
-		printk("Ok");
+			address == PAGE_OFFSET && (error_code & 1)) {
+		handle_wp_test();
 		return;
 	}
 

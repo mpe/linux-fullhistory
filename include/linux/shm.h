@@ -24,7 +24,7 @@ struct shmid_kernel
 	struct shmid_ds		u;
 	/* the following are private */
 	unsigned long		shm_npages;	/* size of segment (pages) */
-	unsigned long		*shm_pages;	/* array of ptrs to frames -> SHMMAX */ 
+	pte_t			*shm_pages;	/* array of ptrs to frames -> SHMMAX */ 
 	struct vm_area_struct	*attaches;	/* descriptors for attaches */
 };
 
@@ -72,7 +72,7 @@ asmlinkage long sys_shmget (key_t key, int size, int flag);
 asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, unsigned long *addr);
 asmlinkage long sys_shmdt (char *shmaddr);
 asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf);
-extern void shm_unuse(unsigned long entry, unsigned long page);
+extern void shm_unuse(pte_t entry, struct page *page);
 
 #endif /* __KERNEL__ */
 

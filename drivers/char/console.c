@@ -94,6 +94,7 @@
 #ifdef CONFIG_APM
 #include <linux/apm_bios.h>
 #endif
+#include <linux/bootmem.h>
 
 #include <asm/io.h>
 #include <asm/system.h>
@@ -2286,7 +2287,7 @@ static void vc_init(unsigned int currcons, unsigned int rows, unsigned int cols,
 struct tty_driver console_driver;
 static int console_refcount;
 
-unsigned long __init con_init(unsigned long kmem_start)
+void __init con_init(void)
 {
 	const char *display_desc = NULL;
 	unsigned int currcons = 0;
@@ -2295,7 +2296,7 @@ unsigned long __init con_init(unsigned long kmem_start)
 		display_desc = conswitchp->con_startup();
 	if (!display_desc) {
 		fg_console = 0;
-		return kmem_start;
+		return;
 	}
 
 	memset(&console_driver, 0, sizeof(struct tty_driver));
@@ -2336,19 +2337,18 @@ unsigned long __init con_init(unsigned long kmem_start)
 		timer_active |= 1<<BLANK_TIMER;
 	}
 
-	/* Unfortunately, kmalloc is not running yet */
-	/* Due to kmalloc roundup allocating statically is more efficient -
-	   so provide MIN_NR_CONSOLES for people with very little memory */
+	/*
+	 * kmalloc is not running yet - we use the bootmem allocator.
+	 */
 	for (currcons = 0; currcons < MIN_NR_CONSOLES; currcons++) {
 		int j, k ;
 
-		vc_cons[currcons].d = (struct vc_data *) kmem_start;
-		kmem_start += sizeof(struct vc_data);
-		vt_cons[currcons] = (struct vt_struct *) kmem_start;
-		kmem_start += sizeof(struct vt_struct);
+		vc_cons[currcons].d = (struct vc_data *)
+				alloc_bootmem(sizeof(struct vc_data));
+		vt_cons[currcons] = (struct vt_struct *)
+				alloc_bootmem(sizeof(struct vt_struct));
 		visual_init(currcons, 1);
-		screenbuf = (unsigned short *) kmem_start;
-		kmem_start += screenbuf_size;
+		screenbuf = (unsigned short *) alloc_bootmem(screenbuf_size);
 		kmalloced = 0;
 		vc_init(currcons, video_num_lines, video_num_columns, 
 			currcons || !sw->con_save_screen);
@@ -2376,8 +2376,6 @@ unsigned long __init con_init(unsigned long kmem_start)
 #endif
 
 	init_bh(CONSOLE_BH, console_bh);
-	
-	return kmem_start;
 }
 
 #ifndef VT_SINGLE_DRIVER

@@ -18,7 +18,7 @@
  */
 struct linux_binprm{
 	char buf[128];
-	unsigned long page[MAX_ARG_PAGES];
+	struct page *page[MAX_ARG_PAGES];
 	unsigned long p; /* current top of mem */
 	int sh_bang;
 	struct dentry * dentry;

@@ -35,8 +35,6 @@ union swap_header {
 #define MAX_SWAP_BADPAGES \
 	((__swapoffset(magic.magic) - __swapoffset(info.badpages)) / sizeof(int))
 
-#undef DEBUG_SWAP
-
 #include <asm/atomic.h>
 
 #define SWP_USED	1
@@ -69,7 +67,7 @@ extern struct list_head lru_cache;
 extern atomic_t nr_async_pages;
 extern struct inode swapper_inode;
 extern atomic_t page_cache_size;
-extern atomic_t buffermem;
+extern atomic_t buffermem_pages;
 
 /* Incomplete types for prototype declarations: */
 struct task_struct;
@@ -87,36 +85,35 @@ extern int try_to_free_pages(unsigned int gfp_mask);
 
 /* linux/mm/page_io.c */
 extern void rw_swap_page(int, struct page *, int);
-extern void rw_swap_page_nolock(int, unsigned long, char *, int);
-extern void swap_after_unlock_page (unsigned long entry);
+extern void rw_swap_page_nolock(int, pte_t, char *, int);
 
 /* linux/mm/page_alloc.c */
 
 /* linux/mm/swap_state.c */
 extern void show_swap_cache_info(void);
-extern void add_to_swap_cache(struct page *, unsigned long);
-extern int swap_duplicate(unsigned long);
+extern void add_to_swap_cache(struct page *, pte_t);
+extern int swap_duplicate(pte_t);
 extern int swap_check_entry(unsigned long);
-struct page * lookup_swap_cache(unsigned long);
-extern struct page * read_swap_cache_async(unsigned long, int);
+struct page * lookup_swap_cache(pte_t);
+extern struct page * read_swap_cache_async(pte_t, int);
 #define read_swap_cache(entry) read_swap_cache_async(entry, 1);
-extern int FASTCALL(swap_count(unsigned long));
-extern unsigned long acquire_swap_entry(struct page *page);
+extern int swap_count(struct page *);
+extern pte_t acquire_swap_entry(struct page *page);
 
 /*
  * Make these inline later once they are working properly.
  */
 extern void __delete_from_swap_cache(struct page *page);
 extern void delete_from_swap_cache(struct page *page);
-extern void free_page_and_swap_cache(unsigned long addr);
+extern void free_page_and_swap_cache(struct page *page);
 
 /* linux/mm/swapfile.c */
 extern unsigned int nr_swapfiles;
 extern struct swap_info_struct swap_info[];
 extern int is_swap_partition(kdev_t);
 void si_swapinfo(struct sysinfo *);
-unsigned long get_swap_page(void);
-extern void FASTCALL(swap_free(unsigned long));
+pte_t get_swap_page(void);
+extern void swap_free(pte_t);
 struct swap_list_t {
 	int head;	/* head of priority-ordered swapfile list */
 	int next;	/* swapfile to be used next */
@@ -158,7 +155,7 @@ static inline int is_page_shared(struct page *page)
 		return 1;
 	count = page_count(page);
 	if (PageSwapCache(page))
-		count += swap_count(page->offset) - 2;
+		count += swap_count(page) - 2;
 	return  count > 1;
 }
 

@@ -16,7 +16,7 @@
 
 
 /*
- * Allocate an fd array, using get_free_page() if possible.
+ * Allocate an fd array, using __get_free_page() if possible.
  * Note: the array isn't cleared at allocation time.
  */
 struct file ** alloc_fd_array(int num)
@@ -129,7 +129,7 @@ out:
 }
 
 /*
- * Allocate an fdset array, using get_free_page() if possible.
+ * Allocate an fdset array, using __get_free_page() if possible.
  * Note: the array isn't cleared at allocation time.
  */
 fd_set * alloc_fdset(int num)

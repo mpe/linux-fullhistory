@@ -94,9 +94,10 @@ struct sysinfo {
 	unsigned long totalswap;	/* Total swap space size */
 	unsigned long freeswap;		/* swap space still available */
 	unsigned short procs;		/* Number of current processes */
-	unsigned long totalbig;		/* Total big memory size */
-	unsigned long freebig;		/* Available big memory size */
-	char _f[20-2*sizeof(long)];	/* Padding: libc5 uses this.. */
+	unsigned long totalhigh;	/* Total high memory size */
+	unsigned long freehigh;		/* Available high memory size */
+	unsigned int mem_unit;		/* Memory unit size in bytes */
+	char _f[20-2*sizeof(long)-sizeof(int)];	/* Padding: libc5 uses this.. */
 };
 
 #endif

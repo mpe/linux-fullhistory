@@ -129,7 +129,7 @@ static int tty_fasync(int fd, struct file * filp, int on);
 extern int sx_init (void);
 #endif
 #ifdef CONFIG_8xx
-extern long console_8xx_init(long, long);
+extern console_8xx_init(void);
 extern int rs_8xx_init(void);
 #endif /* CONFIG_8xx */
 
@@ -798,7 +798,7 @@ static int init_dev(kdev_t device, struct tty_struct **ret_tty)
 	tp = o_tp = NULL;
 	ltp = o_ltp = NULL;
 
-	tty = (struct tty_struct*) get_free_page(GFP_KERNEL);
+	tty = (struct tty_struct*) get_zeroed_page(GFP_KERNEL);
 	if(!tty)
 		goto fail_no_mem;
 	initialize_tty_struct(tty);
@@ -824,7 +824,7 @@ static int init_dev(kdev_t device, struct tty_struct **ret_tty)
 	}
 
 	if (driver->type == TTY_DRIVER_TYPE_PTY) {
-		o_tty = (struct tty_struct *) get_free_page(GFP_KERNEL);
+		o_tty = (struct tty_struct *) get_zeroed_page(GFP_KERNEL);
 		if (!o_tty)
 			goto free_mem_out;
 		initialize_tty_struct(o_tty);
@@ -2062,7 +2062,7 @@ int tty_unregister_driver(struct tty_driver *driver)
  * Just do some early initializations, and do the complex setup
  * later.
  */
-long __init console_init(long kmem_start, long kmem_end)
+void __init console_init(void)
 {
 	/* Setup the default TTY line discipline. */
 	memset(ldiscs, 0, sizeof(ldiscs));
@@ -2085,16 +2085,15 @@ long __init console_init(long kmem_start, long kmem_end)
 	 * inform about problems etc..
 	 */
 #ifdef CONFIG_VT
-	kmem_start = con_init(kmem_start);
+	con_init();
 #endif
 #ifdef CONFIG_SERIAL_CONSOLE
 #ifdef CONFIG_8xx
-	kmem_start = console_8xx_init(kmem_start, kmem_end);
+	console_8xx_init();
 #else 	
-	kmem_start = serial_console_init(kmem_start, kmem_end);
+	serial_console_init();
 #endif /* CONFIG_8xx */
 #endif
-	return kmem_start;
 }
 
 static struct tty_driver dev_tty_driver, dev_syscons_driver;
@@ -2109,7 +2108,7 @@ static struct tty_driver dev_console_driver;
  * Ok, now we can initialize the rest of the tty devices and can count
  * on memory allocations, interrupts etc..
  */
-int __init tty_init(void)
+void __init tty_init(void)
 {
 	if (sizeof(struct tty_struct) > PAGE_SIZE)
 		panic("size of tty structure > PAGE_SIZE!");
@@ -2220,5 +2219,4 @@ int __init tty_init(void)
 #ifdef CONFIG_VT
 	vcs_init();
 #endif
-	return 0;
 }

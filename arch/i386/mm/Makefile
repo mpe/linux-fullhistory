@@ -10,8 +10,4 @@
 O_TARGET := mm.o
 O_OBJS	 := init.o fault.o ioremap.o extable.o
 
-ifeq ($(CONFIG_BIGMEM),y)
-O_OBJS += bigmem.o
-endif
-
 include $(TOPDIR)/Rules.make

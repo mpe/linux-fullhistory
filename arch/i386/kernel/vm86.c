@@ -102,7 +102,7 @@ static void mark_screen_rdonly(struct task_struct * tsk)
 	if (pgd_none(*pgd))
 		return;
 	if (pgd_bad(*pgd)) {
-		printk("vm86: bad pgd entry [%p]:%08lx\n", pgd, pgd_val(*pgd));
+		pgd_ERROR(*pgd);
 		pgd_clear(pgd);
 		return;
 	}
@@ -110,7 +110,7 @@ static void mark_screen_rdonly(struct task_struct * tsk)
 	if (pmd_none(*pmd))
 		return;
 	if (pmd_bad(*pmd)) {
-		printk("vm86: bad pmd entry [%p]:%08lx\n", pmd, pmd_val(*pmd));
+		pmd_ERROR(*pmd);
 		pmd_clear(pmd);
 		return;
 	}

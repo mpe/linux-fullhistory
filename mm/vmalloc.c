@@ -20,7 +20,7 @@ static inline void free_area_pte(pmd_t * pmd, unsigned long address, unsigned lo
 	if (pmd_none(*pmd))
 		return;
 	if (pmd_bad(*pmd)) {
-		printk("free_area_pte: bad pmd (%08lx)\n", pmd_val(*pmd));
+		pmd_ERROR(*pmd);
 		pmd_clear(pmd);
 		return;
 	}
@@ -29,7 +29,7 @@ static inline void free_area_pte(pmd_t * pmd, unsigned long address, unsigned lo
 	end = address + size;
 	if (end > PMD_SIZE)
 		end = PMD_SIZE;
-	while (address < end) {
+	do {
 		pte_t page = *pte;
 		pte_clear(pte);
 		address += PAGE_SIZE;
@@ -37,11 +37,11 @@ static inline void free_area_pte(pmd_t * pmd, unsigned long address, unsigned lo
 		if (pte_none(page))
 			continue;
 		if (pte_present(page)) {
-			free_page(pte_page(page));
+			__free_page(mem_map+pte_pagenr(page));
 			continue;
 		}
 		printk("Whee.. Swapped out page in kernel page table\n");
-	}
+	} while (address < end);
 }
 
 static inline void free_area_pmd(pgd_t * dir, unsigned long address, unsigned long size)
@@ -52,7 +52,7 @@ static inline void free_area_pmd(pgd_t * dir, unsigned long address, unsigned lo
 	if (pgd_none(*dir))
 		return;
 	if (pgd_bad(*dir)) {
-		printk("free_area_pmd: bad pgd (%08lx)\n", pgd_val(*dir));
+		pgd_ERROR(*dir);
 		pgd_clear(dir);
 		return;
 	}
@@ -61,11 +61,11 @@ static inline void free_area_pmd(pgd_t * dir, unsigned long address, unsigned lo
 	end = address + size;
 	if (end > PGDIR_SIZE)
 		end = PGDIR_SIZE;
-	while (address < end) {
+	do {
 		free_area_pte(pmd, address, end - address);
 		address = (address + PMD_SIZE) & PMD_MASK;
 		pmd++;
-	}
+	} while (address < end);
 }
 
 void vmfree_area_pages(unsigned long address, unsigned long size)
@@ -75,11 +75,11 @@ void vmfree_area_pages(unsigned long address, unsigned long size)
 
 	dir = pgd_offset_k(address);
 	flush_cache_all();
-	while (address < end) {
+	do {
 		free_area_pmd(dir, address, end - address);
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
-	}
+	} while (address && (address < end));
 	flush_tlb_all();
 }
 
@@ -91,17 +91,17 @@ static inline int alloc_area_pte(pte_t * pte, unsigned long address, unsigned lo
 	end = address + size;
 	if (end > PMD_SIZE)
 		end = PMD_SIZE;
-	while (address < end) {
-		unsigned long page;
+	do {
+		struct page * page;
 		if (!pte_none(*pte))
 			printk("alloc_area_pte: page already exists\n");
-		page = __get_free_page(GFP_KERNEL|GFP_BIGMEM);
+		page = get_free_highpage(GFP_KERNEL|__GFP_HIGHMEM);
 		if (!page)
 			return -ENOMEM;
 		set_pte(pte, mk_pte(page, PAGE_KERNEL));
 		address += PAGE_SIZE;
 		pte++;
-	}
+	} while (address < end);
 	return 0;
 }
 
@@ -113,7 +113,7 @@ static inline int alloc_area_pmd(pmd_t * pmd, unsigned long address, unsigned lo
 	end = address + size;
 	if (end > PGDIR_SIZE)
 		end = PGDIR_SIZE;
-	while (address < end) {
+	do {
 		pte_t * pte = pte_alloc_kernel(pmd, address);
 		if (!pte)
 			return -ENOMEM;
@@ -121,7 +121,7 @@ static inline int alloc_area_pmd(pmd_t * pmd, unsigned long address, unsigned lo
 			return -ENOMEM;
 		address = (address + PMD_SIZE) & PMD_MASK;
 		pmd++;
-	}
+	} while (address < end);
 	return 0;
 }
 
@@ -132,7 +132,7 @@ int vmalloc_area_pages(unsigned long address, unsigned long size)
 
 	dir = pgd_offset_k(address);
 	flush_cache_all();
-	while (address < end) {
+	do {
 		pmd_t *pmd;
 		pgd_t olddir = *dir;
 		
@@ -145,7 +145,7 @@ int vmalloc_area_pages(unsigned long address, unsigned long size)
 			set_pgdir(address, *dir);
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
-	}
+	} while (address && (address < end));
 	flush_tlb_all();
 	return 0;
 }
@@ -202,14 +202,19 @@ void * vmalloc(unsigned long size)
 	struct vm_struct *area;
 
 	size = PAGE_ALIGN(size);
-	if (!size || size > (max_mapnr << PAGE_SHIFT))
+	if (!size || size > (max_mapnr << PAGE_SHIFT)) {
+		BUG();
 		return NULL;
+	}
 	area = get_vm_area(size);
-	if (!area)
+	if (!area) {
+		BUG();
 		return NULL;
+	}
 	addr = area->addr;
 	if (vmalloc_area_pages(VMALLOC_VMADDR(addr), size)) {
 		vfree(addr);
+		BUG();
 		return NULL;
 	}
 	return addr;

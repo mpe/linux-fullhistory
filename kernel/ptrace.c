@@ -10,7 +10,7 @@
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/mm.h>
-#include <linux/bigmem.h>
+#include <linux/highmem.h>
 
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
@@ -23,7 +23,9 @@ static int access_one_page(struct task_struct * tsk, struct vm_area_struct * vma
 	pgd_t * pgdir;
 	pmd_t * pgmiddle;
 	pte_t * pgtable;
-	unsigned long page;
+	unsigned long mapnr;
+	unsigned long maddr; 
+	struct page *page;
 
 repeat:
 	pgdir = pgd_offset(vma->vm_mm, addr);
@@ -39,27 +41,25 @@ repeat:
 	pgtable = pte_offset(pgmiddle, addr);
 	if (!pte_present(*pgtable))
 		goto fault_in_page;
-	page = pte_page(*pgtable);
+	mapnr = pte_pagenr(*pgtable);
 	if (write && (!pte_write(*pgtable) || !pte_dirty(*pgtable)))
 		goto fault_in_page;
-	if (MAP_NR(page) >= max_mapnr)
+	if (mapnr >= max_mapnr)
 		return 0;
+	page = mem_map + mapnr;
 	flush_cache_page(vma, addr);
-	{
-		void *src = (void *) (page + (addr & ~PAGE_MASK));
-		void *dst = buf;
 
-		if (write) {
-			dst = src;
-			src = buf;
-		}
-		src = (void *) kmap((unsigned long) src, KM_READ);
-		dst = (void *) kmap((unsigned long) dst, KM_WRITE);
-		memcpy(dst, src, len);
-		kunmap((unsigned long) src, KM_READ);
-		kunmap((unsigned long) dst, KM_WRITE);
+	if (write) {
+		maddr = kmap(page, KM_WRITE);
+		memcpy((char *)maddr + (addr & ~PAGE_MASK), buf, len);
+		flush_page_to_ram(maddr);
+		kunmap(maddr, KM_WRITE);
+	} else {
+		maddr = kmap(page, KM_READ);
+		memcpy(buf, (char *)maddr + (addr & ~PAGE_MASK), len);
+		flush_page_to_ram(maddr);
+		kunmap(maddr, KM_READ);
 	}
-	flush_page_to_ram(page);
 	return len;
 
 fault_in_page:
@@ -69,11 +69,11 @@ fault_in_page:
 	return 0;
 
 bad_pgd:
-	printk("ptrace: bad pgd in '%s' at %08lx (%08lx)\n", tsk->comm, addr, pgd_val(*pgdir));
+	pgd_ERROR(*pgdir);
 	return 0;
 
 bad_pmd:
-	printk("ptrace: bad pmd in '%s' at %08lx (%08lx)\n", tsk->comm, addr, pmd_val(*pgmiddle));
+	pmd_ERROR(*pgmiddle);
 	return 0;
 }
 

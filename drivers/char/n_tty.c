@@ -811,7 +811,7 @@ static int n_tty_open(struct tty_struct *tty)
 
 	if (!tty->read_buf) {
 		tty->read_buf = (unsigned char *)
-			get_free_page(in_interrupt() ? GFP_ATOMIC : GFP_KERNEL);
+			get_zeroed_page(in_interrupt() ? GFP_ATOMIC : GFP_KERNEL);
 		if (!tty->read_buf)
 			return -ENOMEM;
 	}

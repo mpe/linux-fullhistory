@@ -10,7 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/proc_fs.h>
-#include <linux/bigmem.h>
+#include <linux/highmem.h>
 
 #include <asm/page.h>
 #include <asm/uaccess.h>
@@ -79,9 +79,10 @@ static ssize_t mem_read(struct file * file, char * buf,
 	pgd_t *page_dir;
 	pmd_t *page_middle;
 	pte_t pte;
-	char * page;
+	struct page * page;
 	struct task_struct * tsk;
 	unsigned long addr;
+	unsigned long maddr; /* temporary mapped address */
 	char *tmp;
 	ssize_t scount, i;
 
@@ -102,7 +103,7 @@ static ssize_t mem_read(struct file * file, char * buf,
 		if (pgd_none(*page_dir))
 			break;
 		if (pgd_bad(*page_dir)) {
-			printk("Bad page dir entry %08lx\n", pgd_val(*page_dir));
+			pgd_ERROR(*page_dir);
 			pgd_clear(page_dir);
 			break;
 		}
@@ -110,20 +111,20 @@ static ssize_t mem_read(struct file * file, char * buf,
 		if (pmd_none(*page_middle))
 			break;
 		if (pmd_bad(*page_middle)) {
-			printk("Bad page middle entry %08lx\n", pmd_val(*page_middle));
+			pmd_ERROR(*page_middle);
 			pmd_clear(page_middle);
 			break;
 		}
 		pte = *pte_offset(page_middle,addr);
 		if (!pte_present(pte))
 			break;
-		page = (char *) pte_page(pte) + (addr & ~PAGE_MASK);
+		page = pte_page(pte);
 		i = PAGE_SIZE-(addr & ~PAGE_MASK);
 		if (i > scount)
 			i = scount;
-		page = (char *) kmap((unsigned long) page, KM_READ);
-		copy_to_user(tmp, page, i);
-		kunmap((unsigned long) page, KM_READ);
+		maddr = kmap(page, KM_READ);
+		copy_to_user(tmp, (char *)maddr + (addr & ~PAGE_MASK), i);
+		kunmap(maddr, KM_READ);
 		addr += i;
 		tmp += i;
 		scount -= i;
@@ -141,9 +142,10 @@ static ssize_t mem_write(struct file * file, char * buf,
 	pgd_t *page_dir;
 	pmd_t *page_middle;
 	pte_t pte;
-	char * page;
+	struct page * page;
 	struct task_struct * tsk;
 	unsigned long addr;
+	unsigned long maddr; /* temporary mapped address */
 	char *tmp;
 	long i;
 
@@ -159,7 +161,7 @@ static ssize_t mem_write(struct file * file, char * buf,
 		if (pgd_none(*page_dir))
 			break;
 		if (pgd_bad(*page_dir)) {
-			printk("Bad page dir entry %08lx\n", pgd_val(*page_dir));
+			pgd_ERROR(*page_dir);
 			pgd_clear(page_dir);
 			break;
 		}
@@ -167,7 +169,7 @@ static ssize_t mem_write(struct file * file, char * buf,
 		if (pmd_none(*page_middle))
 			break;
 		if (pmd_bad(*page_middle)) {
-			printk("Bad page middle entry %08lx\n", pmd_val(*page_middle));
+			pmd_ERROR(*page_middle);
 			pmd_clear(page_middle);
 			break;
 		}
@@ -176,13 +178,13 @@ static ssize_t mem_write(struct file * file, char * buf,
 			break;
 		if (!pte_write(pte))
 			break;
-		page = (char *) pte_page(pte) + (addr & ~PAGE_MASK);
+		page = pte_page(pte);
 		i = PAGE_SIZE-(addr & ~PAGE_MASK);
 		if (i > count)
 			i = count;
-		page = (unsigned long) kmap((unsigned long) page, KM_WRITE);
-		copy_from_user(page, tmp, i);
-		kunmap((unsigned long) page, KM_WRITE);
+		maddr = kmap(page, KM_WRITE);
+		copy_from_user((char *)maddr + (addr & ~PAGE_MASK), tmp, i);
+		kunmap(maddr, KM_WRITE);
 		addr += i;
 		tmp += i;
 		count -= i;
@@ -248,14 +250,14 @@ int mem_mmap(struct file * file, struct vm_area_struct * vma)
 		if (pgd_none(*src_dir))
 			return -EINVAL;
 		if (pgd_bad(*src_dir)) {
-			printk("Bad source page dir entry %08lx\n", pgd_val(*src_dir));
+			pgd_ERROR(*src_dir);
 			return -EINVAL;
 		}
 		src_middle = pmd_offset(src_dir, stmp);
 		if (pmd_none(*src_middle))
 			return -EINVAL;
 		if (pmd_bad(*src_middle)) {
-			printk("Bad source page middle entry %08lx\n", pmd_val(*src_middle));
+			pmd_ERROR(*src_middle);
 			return -EINVAL;
 		}
 		src_table = pte_offset(src_middle, stmp);
@@ -301,9 +303,9 @@ int mem_mmap(struct file * file, struct vm_area_struct * vma)
 
 		set_pte(src_table, pte_mkdirty(*src_table));
 		set_pte(dest_table, *src_table);
-		mapnr = MAP_NR(pte_page(*src_table));
+		mapnr = pte_pagenr(*src_table);
 		if (mapnr < max_mapnr)
-			get_page(mem_map + MAP_NR(pte_page(*src_table)));
+			get_page(mem_map + pte_pagenr(*src_table));
 
 		stmp += PAGE_SIZE;
 		dtmp += PAGE_SIZE;

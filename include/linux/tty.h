@@ -339,12 +339,13 @@ extern int fg_console, last_console, want_console;
 
 extern int kmsg_redirect;
 
-extern unsigned long con_init(unsigned long);
+extern void con_init(void);
+extern void console_init(void);
 
 extern int rs_init(void);
 extern int lp_init(void);
 extern int pty_init(void);
-extern int tty_init(void);
+extern void tty_init(void);
 extern int ip2_init(void);
 extern int pcxe_init(void);
 extern int pc_init(void);
@@ -393,7 +394,7 @@ extern int n_tty_ioctl(struct tty_struct * tty, struct file * file,
 
 /* serial.c */
 
-extern long serial_console_init(long kmem_start, long kmem_end);
+extern void serial_console_init(void);
  
 /* pcxx.c */
 

@@ -20,7 +20,7 @@ static inline void change_pte_range(pmd_t * pmd, unsigned long address,
 	if (pmd_none(*pmd))
 		return;
 	if (pmd_bad(*pmd)) {
-		printk("change_pte_range: bad pmd (%08lx)\n", pmd_val(*pmd));
+		pmd_ERROR(*pmd);
 		pmd_clear(pmd);
 		return;
 	}
@@ -35,7 +35,7 @@ static inline void change_pte_range(pmd_t * pmd, unsigned long address,
 			set_pte(pte, pte_modify(entry, newprot));
 		address += PAGE_SIZE;
 		pte++;
-	} while (address < end);
+	} while (address && (address < end));
 }
 
 static inline void change_pmd_range(pgd_t * pgd, unsigned long address,
@@ -47,7 +47,7 @@ static inline void change_pmd_range(pgd_t * pgd, unsigned long address,
 	if (pgd_none(*pgd))
 		return;
 	if (pgd_bad(*pgd)) {
-		printk("change_pmd_range: bad pgd (%08lx)\n", pgd_val(*pgd));
+		pgd_ERROR(*pgd);
 		pgd_clear(pgd);
 		return;
 	}
@@ -60,7 +60,7 @@ static inline void change_pmd_range(pgd_t * pgd, unsigned long address,
 		change_pte_range(pmd, address, end - address, newprot);
 		address = (address + PMD_SIZE) & PMD_MASK;
 		pmd++;
-	} while (address < end);
+	} while (address && (address < end));
 }
 
 static void change_protection(unsigned long start, unsigned long end, pgprot_t newprot)
@@ -70,11 +70,13 @@ static void change_protection(unsigned long start, unsigned long end, pgprot_t n
 
 	dir = pgd_offset(current->mm, start);
 	flush_cache_range(current->mm, beg, end);
-	while (start < end) {
+	if (start >= end)
+		BUG();
+	do {
 		change_pmd_range(dir, start, end - start, newprot);
 		start = (start + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
-	}
+	} while (start && (start < end));
 	flush_tlb_range(current->mm, beg, end);
 	return;
 }

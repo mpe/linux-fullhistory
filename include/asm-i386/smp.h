@@ -166,7 +166,8 @@ struct mpc_config_lintsrc
  
 extern int smp_found_config;
 extern void init_smp_config(void);
-extern unsigned long smp_alloc_memory(unsigned long mem_base);
+extern void init_smp_mappings(void);
+extern void smp_alloc_memory(void);
 extern unsigned long cpu_present_map;
 extern unsigned long cpu_online_map;
 extern volatile unsigned long smp_invalidate_needed;
@@ -179,6 +180,7 @@ extern void smp_invalidate_rcv(void);		/* Process an NMI */
 extern void smp_local_timer_interrupt(struct pt_regs * regs);
 extern void (*mtrr_hook) (void);
 extern void setup_APIC_clocks(void);
+extern void zap_low_mappings (void);
 extern volatile int cpu_number_map[NR_CPUS];
 extern volatile int __cpu_logical_map[NR_CPUS];
 extern inline int cpu_logical_map(int cpu)

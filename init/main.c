@@ -24,6 +24,7 @@
 #include <linux/blk.h>
 #include <linux/hdreg.h>
 #include <linux/iobuf.h>
+#include <linux/bootmem.h>
 
 #include <asm/io.h>
 #include <asm/bugs.h>
@@ -79,7 +80,6 @@ static int init(void *);
 
 extern void init_IRQ(void);
 extern void init_modules(void);
-extern long console_init(long, long);
 extern void sock_init(void);
 extern void fork_init(unsigned long);
 extern void mca_init(void);
@@ -109,9 +109,6 @@ extern void dquot_init_hash(void);
 #define MAX_INIT_ENVS 8
 
 extern void time_init(void);
-
-static unsigned long memory_start = 0;
-static unsigned long memory_end = 0;
 
 int rows, cols;
 
@@ -423,7 +420,7 @@ static void __init parse_options(char *line)
 }
 
 
-extern void setup_arch(char **, unsigned long *, unsigned long *);
+extern void setup_arch(char **);
 extern void cpu_idle(void);
 
 #ifndef __SMP__
@@ -450,15 +447,15 @@ static void __init smp_init(void)
 asmlinkage void __init start_kernel(void)
 {
 	char * command_line;
-
+	unsigned long mempages;
 /*
  * Interrupts are still disabled. Do necessary setups, then
  * enable them
  */
 	lock_kernel();
 	printk(linux_banner);
-	setup_arch(&command_line, &memory_start, &memory_end);
-	memory_start = paging_init(memory_start,memory_end);
+	setup_arch(&command_line);
+	paging_init();
 	trap_init();
 	init_IRQ();
 	sched_init();
@@ -470,40 +467,45 @@ asmlinkage void __init start_kernel(void)
 	 * we've done PCI setups etc, and console_init() must be aware of
 	 * this. But we do want output early, in case something goes wrong.
 	 */
-	memory_start = console_init(memory_start,memory_end);
+	console_init();
 #ifdef CONFIG_MODULES
 	init_modules();
 #endif
 	if (prof_shift) {
-		prof_buffer = (unsigned int *) memory_start;
+		unsigned int size;
 		/* only text is profiled */
 		prof_len = (unsigned long) &_etext - (unsigned long) &_stext;
 		prof_len >>= prof_shift;
-		memory_start += prof_len * sizeof(unsigned int);
-		memset(prof_buffer, 0, prof_len * sizeof(unsigned int));
+		
+		size = prof_len * sizeof(unsigned int) + PAGE_SIZE-1;
+		prof_buffer = (unsigned int *) alloc_bootmem(size);
+		memset(prof_buffer, 0, size);
 	}
 
-	memory_start = kmem_cache_init(memory_start, memory_end);
+	kmem_cache_init();
 	sti();
 	calibrate_delay();
 #ifdef CONFIG_BLK_DEV_INITRD
+	// FIXME, use the bootmem.h interface.
 	if (initrd_start && !initrd_below_start_ok && initrd_start < memory_start) {
 		printk(KERN_CRIT "initrd overwritten (0x%08lx < 0x%08lx) - "
 		    "disabling it.\n",initrd_start,memory_start);
 		initrd_start = 0;
 	}
 #endif
-	mem_init(memory_start,memory_end);
+	mem_init();
 	kmem_cache_sizes_init();
 #ifdef CONFIG_PROC_FS
 	proc_root_init();
 #endif
-	fork_init(memory_end-memory_start);
+	mempages = num_physpages;
+
+	fork_init(mempages);
 	filescache_init();
 	dcache_init();
 	vma_init();
-	buffer_init(memory_end-memory_start);
-	page_cache_init(memory_end-memory_start);
+	buffer_init(mempages);
+	page_cache_init(mempages);
 	kiobuf_init();
 	signals_init();
 	inode_init();

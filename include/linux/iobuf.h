@@ -41,7 +41,6 @@ struct kiobuf
 	 * region, there won't necessarily be page structs defined for
 	 * every address. */
 
-	unsigned long *	pagelist;
 	struct page **	maplist;
 
 	unsigned int	locked : 1;	/* If set, pages has been locked */

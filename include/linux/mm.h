@@ -8,6 +8,7 @@
 
 #include <linux/config.h>
 #include <linux/string.h>
+#include <linux/list.h>
 
 extern unsigned long max_mapnr;
 extern unsigned long num_physpages;
@@ -103,9 +104,8 @@ struct vm_operations_struct {
 	void (*protect)(struct vm_area_struct *area, unsigned long, size_t, unsigned int newprot);
 	int (*sync)(struct vm_area_struct *area, unsigned long, size_t, unsigned int flags);
 	void (*advise)(struct vm_area_struct *area, unsigned long, size_t, unsigned int advise);
-	unsigned long (*nopage)(struct vm_area_struct * area, unsigned long address, int write_access);
-	unsigned long (*wppage)(struct vm_area_struct * area, unsigned long address,
-		unsigned long page);
+	struct page * (*nopage)(struct vm_area_struct * area, unsigned long address, int write_access);
+	struct page * (*wppage)(struct vm_area_struct * area, unsigned long address, struct page * page);
 	int (*swapout)(struct vm_area_struct *, struct page *);
 };
 
@@ -119,8 +119,7 @@ struct vm_operations_struct {
  */
 typedef struct page {
 	/* these must be first (free area handling) */
-	struct page *next;
-	struct page *prev;
+	struct list_head list;
 	struct inode *inode;
 	unsigned long offset;
 	struct page *next_hash;
@@ -149,11 +148,11 @@ typedef struct page {
 #define PG_uptodate		 3
 #define PG_decr_after		 5
 #define PG_DMA			 7
-#define PG_Slab			 8
+#define PG_slab			 8
 #define PG_swap_cache		 9
 #define PG_skip			10
 #define PG_swap_entry		11
-#define PG_BIGMEM		12
+#define PG_highmem		12
 				/* bits 21-30 unused */
 #define PG_reserved		31
 
@@ -183,26 +182,31 @@ if (!test_and_clear_bit(PG_locked, &(page)->flags)) { \
 #define PageReferenced(page)	(test_bit(PG_referenced, &(page)->flags))
 #define PageDecrAfter(page)	(test_bit(PG_decr_after, &(page)->flags))
 #define PageDMA(page)		(test_bit(PG_DMA, &(page)->flags))
-#define PageSlab(page)		(test_bit(PG_Slab, &(page)->flags))
+#define PageSlab(page)		(test_bit(PG_slab, &(page)->flags))
 #define PageSwapCache(page)	(test_bit(PG_swap_cache, &(page)->flags))
 #define PageReserved(page)	(test_bit(PG_reserved, &(page)->flags))
 
-#define PageSetSlab(page)	(set_bit(PG_Slab, &(page)->flags))
+#define PageSetSlab(page)	(set_bit(PG_slab, &(page)->flags))
 #define PageSetSwapCache(page)	(set_bit(PG_swap_cache, &(page)->flags))
 
 #define PageTestandSetSwapCache(page)	\
 			(test_and_set_bit(PG_swap_cache, &(page)->flags))
 
-#define PageClearSlab(page)	(clear_bit(PG_Slab, &(page)->flags))
+#define PageClearSlab(page)	(clear_bit(PG_slab, &(page)->flags))
 #define PageClearSwapCache(page)(clear_bit(PG_swap_cache, &(page)->flags))
 
 #define PageTestandClearSwapCache(page)	\
 			(test_and_clear_bit(PG_swap_cache, &(page)->flags))
-#ifdef CONFIG_BIGMEM
-#define PageBIGMEM(page)	(test_bit(PG_BIGMEM, &(page)->flags))
+#ifdef CONFIG_HIGHMEM
+#define PageHighMem(page)	(test_bit(PG_highmem, &(page)->flags))
 #else
-#define PageBIGMEM(page) 0 /* needed to optimize away at compile time */
+#define PageHighMem(page) 0 /* needed to optimize away at compile time */
 #endif
+
+#define SetPageReserved(page)	do { set_bit(PG_reserved, &(page)->flags); \
+					} while (0)
+#define ClearPageReserved(page)	do { test_and_clear_bit(PG_reserved, &(page)->flags); } while (0)
+
 
 /*
  * Various page->flags bits:
@@ -224,7 +228,7 @@ if (!test_and_clear_bit(PG_locked, &(page)->flags)) { \
  *   (e.g. a private data page of one process).
  *
  * A page may be used for kmalloc() or anyone else who does a
- * get_free_page(). In this case the page->count is at least 1, and
+ * __get_free_page(). In this case the page->count is at least 1, and
  * all other fields are unused but should be 0 or NULL. The
  * management of this page is the responsibility of the one who uses
  * it.
@@ -281,19 +285,26 @@ extern mem_map_t * mem_map;
  * goes to clearing the page. If you want a page without the clearing
  * overhead, just use __get_free_page() directly..
  */
+extern struct page * __get_pages(int gfp_mask, unsigned long order);
 #define __get_free_page(gfp_mask) __get_free_pages((gfp_mask),0)
 #define __get_dma_pages(gfp_mask, order) __get_free_pages((gfp_mask) | GFP_DMA,(order))
 extern unsigned long FASTCALL(__get_free_pages(int gfp_mask, unsigned long gfp_order));
+extern struct page * get_free_highpage(int gfp_mask);
 
-extern inline unsigned long get_free_page(int gfp_mask)
+extern inline unsigned long get_zeroed_page(int gfp_mask)
 {
 	unsigned long page;
 
 	page = __get_free_page(gfp_mask);
 	if (page)
-		clear_page(page);
+		clear_page((void *)page);
 	return page;
 }
+
+/*
+ * The old interface name will be removed in 2.5:
+ */
+#define get_free_page get_zeroed_page
 
 /* memory.c & swap.c*/
 
@@ -302,7 +313,7 @@ extern int FASTCALL(free_pages(unsigned long addr, unsigned long order));
 extern int FASTCALL(__free_page(struct page *));
 
 extern void show_free_areas(void);
-extern unsigned long put_dirty_page(struct task_struct * tsk,unsigned long page,
+extern struct page * put_dirty_page(struct task_struct * tsk, struct page *page,
 	unsigned long address);
 
 extern void clear_page_tables(struct mm_struct *, unsigned long, int);
@@ -322,12 +333,13 @@ extern int ptrace_writedata(struct task_struct *tsk, char * src, unsigned long d
 extern int pgt_cache_water[2];
 extern int check_pgt_cache(void);
 
-extern unsigned long paging_init(unsigned long start_mem, unsigned long end_mem);
-extern void mem_init(unsigned long start_mem, unsigned long end_mem);
+extern void paging_init(void);
+extern void free_area_init(unsigned long);
+extern void mem_init(void);
 extern void show_mem(void);
 extern void oom(struct task_struct * tsk);
 extern void si_meminfo(struct sysinfo * val);
-extern void swapin_readahead(unsigned long);
+extern void swapin_readahead(pte_t);
 
 /* mmap.c */
 extern void vma_init(void);
@@ -359,18 +371,18 @@ extern void put_cached_page(unsigned long);
 #define __GFP_HIGH	0x08
 #define __GFP_IO	0x10
 #define __GFP_SWAP	0x20
-#ifdef CONFIG_BIGMEM
-#define __GFP_BIGMEM	0x40
+#ifdef CONFIG_HIGHMEM
+#define __GFP_HIGHMEM	0x40
 #else
-#define __GFP_BIGMEM	0x0 /* noop */
+#define __GFP_HIGHMEM	0x0 /* noop */
 #endif
 
 #define __GFP_DMA	0x80
 
 #define GFP_BUFFER	(__GFP_LOW | __GFP_WAIT)
 #define GFP_ATOMIC	(__GFP_HIGH)
-#define GFP_BIGUSER	(__GFP_LOW | __GFP_WAIT | __GFP_IO | __GFP_BIGMEM)
 #define GFP_USER	(__GFP_LOW | __GFP_WAIT | __GFP_IO)
+#define GFP_HIGHUSER	(GFP_USER | __GFP_HIGHMEM)
 #define GFP_KERNEL	(__GFP_MED | __GFP_WAIT | __GFP_IO)
 #define GFP_NFS		(__GFP_HIGH | __GFP_WAIT | __GFP_IO)
 #define GFP_KSWAPD	(__GFP_IO | __GFP_SWAP)
@@ -380,10 +392,10 @@ extern void put_cached_page(unsigned long);
 
 #define GFP_DMA		__GFP_DMA
 
-/* Flag - indicates that the buffer can be taken from big memory which is not
+/* Flag - indicates that the buffer can be taken from high memory which is not
    directly addressable by the kernel */
 
-#define GFP_BIGMEM	__GFP_BIGMEM
+#define GFP_HIGHMEM	__GFP_HIGHMEM
 
 /* vma is the first one with  address < vma->vm_end,
  * and even  address < vma->vm_start. Have to extend vma. */
@@ -422,7 +434,7 @@ static inline struct vm_area_struct * find_vma_intersection(struct mm_struct * m
 
 extern struct vm_area_struct *find_extend_vma(struct task_struct *tsk, unsigned long addr);
 
-#define buffer_under_min()	((atomic_read(&buffermem) >> PAGE_SHIFT) * 100 < \
+#define buffer_under_min()	(atomic_read(&buffermem_pages) * 100 < \
 				buffer_mem.min_percent * num_physpages)
 #define pgcache_under_min()	(atomic_read(&page_cache_size) * 100 < \
 				page_cache.min_percent * num_physpages)

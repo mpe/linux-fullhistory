@@ -67,25 +67,16 @@ void show_swap_cache_info(void)
 }
 #endif
 
-void add_to_swap_cache(struct page *page, unsigned long entry)
+void add_to_swap_cache(struct page *page, pte_t entry)
 {
 #ifdef SWAP_CACHE_INFO
 	swap_cache_add_total++;
 #endif
-#ifdef DEBUG_SWAP
-	printk("DebugVM: add_to_swap_cache(%08lx count %d, entry %08lx)\n",
-		   page_address(page), page_count(page), entry);
-#endif
-	if (PageTestandSetSwapCache(page)) {
-		printk(KERN_ERR "swap_cache: replacing non-empty entry %08lx "
-			   "on page %08lx\n",
-			   page->offset, page_address(page));
-	}
-	if (page->inode) {
-		printk(KERN_ERR "swap_cache: replacing page-cached entry "
-			   "on page %08lx\n", page_address(page));
-	}
-	add_to_page_cache(page, &swapper_inode, entry);
+	if (PageTestandSetSwapCache(page))
+		BUG();
+	if (page->inode)
+		BUG();
+	add_to_page_cache(page, &swapper_inode, pte_val(entry));
 }
 
 /*
@@ -94,13 +85,13 @@ void add_to_swap_cache(struct page *page, unsigned long entry)
  * Note: if swap_map[] reaches SWAP_MAP_MAX the entries are treated as
  * "permanent", but will be reclaimed by the next swapoff.
  */
-int swap_duplicate(unsigned long entry)
+int swap_duplicate(pte_t entry)
 {
 	struct swap_info_struct * p;
 	unsigned long offset, type;
 	int result = 0;
 
-	if (!entry)
+	if (!pte_val(entry))
 		goto out;
 	type = SWP_TYPE(entry);
 	if (type & SHM_SWP_TYPE)
@@ -121,41 +112,32 @@ int swap_duplicate(unsigned long entry)
 	else {
 		static int overflow = 0;
 		if (overflow++ < 5)
-			printk(KERN_WARNING
-				"swap_duplicate: entry %08lx map count=%d\n",
-				entry, p->swap_map[offset]);
+			pte_ERROR(entry);
 		p->swap_map[offset] = SWAP_MAP_MAX;
 	}
 	result = 1;
-#ifdef DEBUG_SWAP
-	printk("DebugVM: swap_duplicate(entry %08lx, count now %d)\n",
-		   entry, p->swap_map[offset]);
-#endif
 out:
 	return result;
 
 bad_file:
-	printk(KERN_ERR
-		"swap_duplicate: entry %08lx, nonexistent swap file\n", entry);
+	pte_ERROR(entry);
 	goto out;
 bad_offset:
-	printk(KERN_ERR
-		"swap_duplicate: entry %08lx, offset exceeds max\n", entry);
+	pte_ERROR(entry);
 	goto out;
 bad_unused:
-	printk(KERN_ERR
-		"swap_duplicate at %8p: entry %08lx, unused page\n", 
-		   __builtin_return_address(0), entry);
+	pte_ERROR(entry);
 	goto out;
 }
 
-int swap_count(unsigned long entry)
+int swap_count(struct page *page)
 {
 	struct swap_info_struct * p;
 	unsigned long offset, type;
+	pte_t entry = get_pagecache_pte(page);
 	int retval = 0;
 
-	if (!entry)
+	if (!pte_val(entry))
 		goto bad_entry;
 	type = SWP_TYPE(entry);
 	if (type & SHM_SWP_TYPE)
@@ -169,10 +151,6 @@ int swap_count(unsigned long entry)
 	if (!p->swap_map[offset])
 		goto bad_unused;
 	retval = p->swap_map[offset];
-#ifdef DEBUG_SWAP
-	printk("DebugVM: swap_count(entry %08lx, count %d)\n",
-		   entry, retval);
-#endif
 out:
 	return retval;
 
@@ -180,17 +158,13 @@ bad_entry:
 	printk(KERN_ERR "swap_count: null entry!\n");
 	goto out;
 bad_file:
-	printk(KERN_ERR
-		   "swap_count: entry %08lx, nonexistent swap file!\n", entry);
+	pte_ERROR(entry);
 	goto out;
 bad_offset:
-	printk(KERN_ERR
-		   "swap_count: entry %08lx, offset exceeds max!\n", entry);
+	pte_ERROR(entry);
 	goto out;
 bad_unused:
-	printk(KERN_ERR
-		   "swap_count at %8p: entry %08lx, unused page!\n", 
-		   __builtin_return_address(0), entry);
+	pte_ERROR(entry);
 	goto out;
 }
 
@@ -198,22 +172,13 @@ static inline void remove_from_swap_cache(struct page *page)
 {
 	struct inode *inode = page->inode;
 
-	if (!inode) {
-		printk ("VM: Removing swap cache page with zero inode hash "
-			"on page %08lx\n", page_address(page));
-		return;
-	}
-	if (inode != &swapper_inode) {
-		printk ("VM: Removing swap cache page with wrong inode hash "
-			"on page %08lx\n", page_address(page));
-	}
+	if (!inode)
+		BUG();
+	if (inode != &swapper_inode)
+		BUG();
 	if (!PageSwapCache(page))
 		PAGE_BUG(page);
 
-#ifdef DEBUG_SWAP
-	printk("DebugVM: remove_from_swap_cache(%08lx count %d)\n",
-		   page_address(page), page_count(page));
-#endif
 	PageClearSwapCache(page);
 	remove_inode_page(page);
 }
@@ -224,19 +189,14 @@ static inline void remove_from_swap_cache(struct page *page)
  */
 void __delete_from_swap_cache(struct page *page)
 {
-	long entry = page->offset;
+	pte_t entry = get_pagecache_pte(page);
 
 #ifdef SWAP_CACHE_INFO
 	swap_cache_del_total++;
 #endif
-#ifdef DEBUG_SWAP
-	printk("DebugVM: delete_from_swap_cache(%08lx count %d, "
-		   "entry %08lx)\n",
-		   page_address(page), page_count(page), entry);
-#endif
-	remove_from_swap_cache (page);
+	remove_from_swap_cache(page);
 	lock_kernel();
-	swap_free (entry);
+	swap_free(entry);
 	unlock_kernel();
 }
 
@@ -268,10 +228,8 @@ void delete_from_swap_cache(struct page *page)
  * this page if it is the last user of the page. 
  */
 
-void free_page_and_swap_cache(unsigned long addr)
+void free_page_and_swap_cache(struct page *page)
 {
-	struct page *page = mem_map + MAP_NR(addr);
-
 	/* 
 	 * If we are the only user, then free up the swap cache. 
 	 */
@@ -295,7 +253,7 @@ void free_page_and_swap_cache(unsigned long addr)
  * lock before returning.
  */
 
-struct page * lookup_swap_cache(unsigned long entry)
+struct page * lookup_swap_cache(pte_t entry)
 {
 	struct page *found;
 
@@ -303,7 +261,10 @@ struct page * lookup_swap_cache(unsigned long entry)
 	swap_cache_find_total++;
 #endif
 	while (1) {
-		found = find_lock_page(&swapper_inode, entry);
+		/*
+		 * Right now the pagecache is 32-bit only.
+		 */
+		found = find_lock_page(&swapper_inode, pte_val(entry));
 		if (!found)
 			return 0;
 		if (found->inode != &swapper_inode || !PageSwapCache(found))
@@ -331,15 +292,11 @@ out_bad:
  * the swap entry is no longer in use.
  */
 
-struct page * read_swap_cache_async(unsigned long entry, int wait)
+struct page * read_swap_cache_async(pte_t entry, int wait)
 {
 	struct page *found_page = 0, *new_page;
 	unsigned long new_page_addr;
 	
-#ifdef DEBUG_SWAP
-	printk("DebugVM: read_swap_cache_async entry %08lx%s\n",
-		   entry, wait ? ", wait" : "");
-#endif
 	/*
 	 * Make sure the swap entry is still in use.
 	 */
@@ -368,11 +325,6 @@ struct page * read_swap_cache_async(unsigned long entry, int wait)
 	 */
 	add_to_swap_cache(new_page, entry);
 	rw_swap_page(READ, new_page, wait);
-#ifdef DEBUG_SWAP
-	printk("DebugVM: read_swap_cache_async created "
-		   "entry %08lx at %p\n",
-			entry, (char *) page_address(new_page));
-#endif
 	return new_page;
 
 out_free_page:

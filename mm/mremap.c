@@ -25,7 +25,7 @@ static inline pte_t *get_one_pte(struct mm_struct *mm, unsigned long addr)
 	if (pgd_none(*pgd))
 		goto end;
 	if (pgd_bad(*pgd)) {
-		printk("move_one_page: bad source pgd (%08lx)\n", pgd_val(*pgd));
+		pgd_ERROR(*pgd);
 		pgd_clear(pgd);
 		goto end;
 	}
@@ -34,7 +34,7 @@ static inline pte_t *get_one_pte(struct mm_struct *mm, unsigned long addr)
 	if (pmd_none(*pmd))
 		goto end;
 	if (pmd_bad(*pmd)) {
-		printk("move_one_page: bad source pmd (%08lx)\n", pmd_val(*pmd));
+		pmd_ERROR(*pmd);
 		pmd_clear(pmd);
 		goto end;
 	}

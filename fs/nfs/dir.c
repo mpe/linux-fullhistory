@@ -308,8 +308,7 @@ static struct page *try_to_get_dirent_page(struct file *file, __u32 cookie, int 
 	struct nfs_readdirres rd_res;
 	struct dentry *dentry = file->f_dentry;
 	struct inode *inode = dentry->d_inode;
-	struct page *page, **hash;
-	unsigned long page_cache;
+	struct page *page, **hash, *page_cache;
 	long offset;
 	__u32 *cookiep;
 
@@ -341,14 +340,14 @@ repeat:
 		goto unlock_out;
 	}
 
-	page = page_cache_entry(page_cache);
+	page = page_cache;
 	if (add_to_page_cache_unique(page, inode, offset, hash)) {
 		page_cache_release(page);
 		goto repeat;
 	}
 
 	rd_args.fh = NFS_FH(dentry);
-	rd_res.buffer = (char *)page_cache;
+	rd_res.buffer = (char *)page_address(page_cache);
 	rd_res.bufsiz = PAGE_CACHE_SIZE;
 	rd_res.cookie = *cookiep;
 	do {

@@ -31,6 +31,8 @@
 #include <linux/fcntl.h>
 #include <linux/smp_lock.h>
 #include <linux/init.h>
+#include <linux/pagemap.h>
+#include <linux/highmem.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -212,20 +214,42 @@ int copy_strings(int argc,char ** argv, struct linux_binprm *bprm)
 		/* XXX: add architecture specific overflow check here. */ 
 
 		pos = bprm->p;
-		while (len>0) {
-			char *pag;
+		while (len > 0) {
+			char *kaddr;
+			int i, new, err;
+			struct page *page;
 			int offset, bytes_to_copy;
 
 			offset = pos % PAGE_SIZE;
-			if (!(pag = (char *) bprm->page[pos/PAGE_SIZE]) &&
-			    !(pag = (char *) bprm->page[pos/PAGE_SIZE] =
-			      (unsigned long *) get_free_page(GFP_USER))) 
-				return -ENOMEM; 
+			i = pos/PAGE_SIZE;
+			page = bprm->page[i];
+			new = 0;
+			if (!page) {
+				/*
+				 * Cannot yet use highmem page because
+				 * we cannot sleep with a kmap held.
+				 */
+				page = __get_pages(GFP_USER, 0);
+				bprm->page[i] = page;
+				if (!page)
+					return -ENOMEM;
+				new = 1;
+			}
+			kaddr = (char *)kmap(page, KM_WRITE);
 
+			if (new && offset)
+				memset(kaddr, 0, offset);
 			bytes_to_copy = PAGE_SIZE - offset;
-			if (bytes_to_copy > len)
+			if (bytes_to_copy > len) {
 				bytes_to_copy = len;
-			if (copy_from_user(pag + offset, str, bytes_to_copy)) 
+				if (new)
+					memset(kaddr+offset+len, 0, PAGE_SIZE-offset-len);
+			}
+			err = copy_from_user(kaddr + offset, str, bytes_to_copy);
+			flush_page_to_ram(kaddr);
+			kunmap((unsigned long)kaddr, KM_WRITE);
+
+			if (err)
 				return -EFAULT; 
 
 			pos += bytes_to_copy;
@@ -647,14 +671,22 @@ void remove_arg_zero(struct linux_binprm *bprm)
 {
 	if (bprm->argc) {
 		unsigned long offset;
-		char * page;
+		char * kaddr;
+		struct page *page;
+
 		offset = bprm->p % PAGE_SIZE;
-		page = (char*)bprm->page[bprm->p/PAGE_SIZE];
-		while(bprm->p++,*(page+offset++))
-			if(offset==PAGE_SIZE){
-				offset=0;
-				page = (char*)bprm->page[bprm->p/PAGE_SIZE];
-			}
+		goto inside;
+
+		while (bprm->p++, *(kaddr+offset++)) {
+			if (offset != PAGE_SIZE)
+				continue;
+			offset = 0;
+			kunmap((unsigned long)kaddr, KM_WRITE);
+inside:
+			page = bprm->page[bprm->p/PAGE_SIZE];
+			kaddr = (char *)kmap(page, KM_WRITE);
+		}
+		kunmap((unsigned long)kaddr, KM_WRITE);
 		bprm->argc--;
 	}
 }
@@ -683,8 +715,8 @@ int search_binary_handler(struct linux_binprm *bprm,struct pt_regs *regs)
 		bprm->dentry = NULL;
 
 	        bprm_loader.p = PAGE_SIZE*MAX_ARG_PAGES-sizeof(void *);
-	        for (i=0 ; i<MAX_ARG_PAGES ; i++)       /* clear page-table */
-                    bprm_loader.page[i] = 0;
+	        for (i = 0 ; i < MAX_ARG_PAGES ; i++)	/* clear page-table */
+                    bprm_loader.page[i] = NULL;
 
 		dentry = open_namei(dynloader[0], 0, 0);
 		retval = PTR_ERR(dentry);
@@ -800,8 +832,9 @@ out:
 
 	/* Assumes that free_page() can take a NULL argument. */ 
 	/* I hope this is ok for all architectures */ 
-	for (i=0 ; i<MAX_ARG_PAGES ; i++)
-		free_page(bprm.page[i]);
+	for (i = 0 ; i < MAX_ARG_PAGES ; i++)
+		if (bprm.page[i])
+			__free_page(bprm.page[i]);
 
 	return retval;
 }

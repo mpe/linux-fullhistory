@@ -54,7 +54,8 @@
 #ifdef CONFIG_BLK_DEV_RAM
 #include <linux/blk.h>
 #endif
-#include <linux/bigmem.h>
+#include <linux/highmem.h>
+#include <linux/bootmem.h>
 #include <asm/processor.h>
 #include <linux/console.h>
 #include <asm/uaccess.h>
@@ -403,10 +404,9 @@ void __init add_memory_region(unsigned long start,
 
 #define LOWMEMSIZE()	((*(unsigned short *)__va(0x413)) * 1024)
 
-
 void __init setup_memory_region(void)
 {
-#define E820_DEBUG	0
+#define E820_DEBUG	1
 #ifdef E820_DEBUG
 	int i;
 #endif
@@ -432,9 +432,8 @@ void __init setup_memory_region(void)
 		memcpy(e820.map, E820_MAP, e820.nr_map * sizeof e820.map[0]);
 #ifdef E820_DEBUG
 		for (i=0; i < e820.nr_map; i++) {
-			printk("e820: %ld @ %08lx ",
-				(unsigned long)(e820.map[i].size),
-				(unsigned long)(e820.map[i].addr));
+			printk("e820: %08x @ %08x ", (int)e820.map[i].size,
+						(int)e820.map[i].addr);
 			switch (e820.map[i].type) {
 			case E820_RAM:	printk("(usable)\n");
 					break;
@@ -464,13 +463,72 @@ void __init setup_memory_region(void)
 } /* setup_memory_region */
 
 
-void __init setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigned long * memory_end_p)
+static inline void parse_mem_cmdline (char ** cmdline_p)
 {
-	unsigned long high_pfn, max_pfn;
 	char c = ' ', *to = command_line, *from = COMMAND_LINE;
 	int len = 0;
+	int usermem = 0;
+
+	/* Save unparsed command line copy for /proc/cmdline */
+	memcpy(saved_command_line, COMMAND_LINE, COMMAND_LINE_SIZE);
+	saved_command_line[COMMAND_LINE_SIZE-1] = '\0';
+
+	for (;;) {
+		/*
+		 * "mem=nopentium" disables the 4MB page tables.
+		 * "mem=XXX[kKmM]" defines a memory region from HIGH_MEM
+		 * to <mem>, overriding the bios size.
+		 * "mem=XXX[KkmM]@XXX[KkmM]" defines a memory region from
+		 * <start> to <start>+<mem>, overriding the bios size.
+		 */
+		if (c == ' ' && !memcmp(from, "mem=", 4)) {
+			if (to != command_line)
+				to--;
+			if (!memcmp(from+4, "nopentium", 9)) {
+				from += 9+4;
+				boot_cpu_data.x86_capability &= ~X86_FEATURE_PSE;
+			} else {
+				/* If the user specifies memory size, we
+				 * blow away any automatically generated
+				 * size
+				 */
+				unsigned long start_at, mem_size;
+ 
+				if (usermem == 0) {
+					/* first time in: zap the whitelist
+					 * and reinitialize it with the
+					 * standard low-memory region.
+					 */
+					e820.nr_map = 0;
+					usermem = 1;
+					add_memory_region(0, LOWMEMSIZE(), E820_RAM);
+				}
+				mem_size = memparse(from+4, &from);
+				if (*from == '@')
+					start_at = memparse(from+1, &from);
+				else {
+					start_at = HIGH_MEMORY;
+					mem_size -= HIGH_MEMORY;
+				}
+				add_memory_region(start_at, mem_size, E820_RAM);
+			}
+		}
+		c = *(from++);
+		if (!c)
+			break;
+		if (COMMAND_LINE_SIZE <= ++len)
+			break;
+		*(to++) = c;
+	}
+	*to = '\0';
+	*cmdline_p = command_line;
+}
+
+void __init setup_arch(char **cmdline_p)
+{
+	unsigned long bootmap_size;
+	unsigned long start_pfn, max_pfn, max_low_pfn;
 	int i;
-	int usermem=0;
 
 #ifdef CONFIG_VISWS
 	visws_get_board_type_and_rev();
@@ -507,106 +565,115 @@ void __init setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigne
 	data_resource.start = virt_to_bus(&_etext);
 	data_resource.end = virt_to_bus(&_edata)-1;
 
-	/* Save unparsed command line copy for /proc/cmdline */
-	memcpy(saved_command_line, COMMAND_LINE, COMMAND_LINE_SIZE);
-	saved_command_line[COMMAND_LINE_SIZE-1] = '\0';
+	parse_mem_cmdline(cmdline_p);
 
-	for (;;) {
-		/*
-		 * "mem=nopentium" disables the 4MB page tables.
-		 * "mem=XXX[kKmM]" defines a memory region from HIGH_MEM
-		 * to <mem>, overriding the bios size.
-		 * "mem=XXX[KkmM]@XXX[KkmM]" defines a memory region from
-		 * <start> to <start>+<mem>, overriding the bios size.
-		 */
-		if (c == ' ' && *(const unsigned long *)from == *(const unsigned long *)"mem=") {
-			if (to != command_line) to--;
-			if (!memcmp(from+4, "nopentium", 9)) {
-				from += 9+4;
-				boot_cpu_data.x86_capability &= ~X86_FEATURE_PSE;
-			} else {
-				/* If the user specifies memory size, we
-				 * blow away any automatically generated
-				 * size
-				 */
-				unsigned long start_at, mem_size;
- 
-				if (usermem == 0) {
-					/* first time in: zap the whitelist
-					 * and reinitialize it with the
-					 * standard low-memory region.
-					 */
-					e820.nr_map = 0;
-					usermem = 1;
-					add_memory_region(0, LOWMEMSIZE(), E820_RAM);
-				}
-				mem_size = memparse(from+4, &from);
-				if (*from == '@')
-					start_at = memparse(from+1,&from);
-				else {
-					start_at = HIGH_MEMORY;
-					mem_size -= HIGH_MEMORY;
-				}
-				add_memory_region(start_at, mem_size, E820_RAM);
-			}
-		}
-		c = *(from++);
-		if (!c)
-			break;
-		if (COMMAND_LINE_SIZE <= ++len)
-			break;
-		*(to++) = c;
-	}
-	*to = '\0';
-	*cmdline_p = command_line;
+#define PFN_UP(x)	(((x) + PAGE_SIZE-1) >> PAGE_SHIFT)
+#define PFN_DOWN(x)	((x) >> PAGE_SHIFT)
+#define PFN_PHYS(x)	((x) << PAGE_SHIFT)
 
-	/* Find the highest page frame number we have available */
+/*
+ * 128MB for vmalloc and initrd
+ */
+#define VMALLOC_RESERVE	(unsigned long)(128 << 20)
+#define MAXMEM		(unsigned long)(-PAGE_OFFSET-VMALLOC_RESERVE)
+#define MAXMEM_PFN	PFN_DOWN(MAXMEM)
+
+	/*
+	 * partially used pages are not usable - thus
+	 * we are rounding upwards:
+	 */
+	start_pfn = PFN_UP(__pa(&_end));
+
+	/*
+	 * Find the highest page frame number we have available
+	 */
 	max_pfn = 0;
-	for (i=0; i < e820.nr_map; i++) {
+	for (i = 0; i < e820.nr_map; i++) {
+		unsigned long curr_pfn;
 		/* RAM? */
-		if (e820.map[i].type == E820_RAM) {
-			unsigned long end_pfn = (e820.map[i].addr + e820.map[i].size) >> PAGE_SHIFT;
-
-			if (end_pfn > max_pfn)
-				max_pfn = end_pfn;
-		}
+		if (e820.map[i].type != E820_RAM)
+			continue;
+		curr_pfn = PFN_DOWN(e820.map[i].addr + e820.map[i].size);
+		if (curr_pfn > max_pfn)
+			max_pfn = curr_pfn;
 	}
 
-/*
- * We can only allocate a limited amount of direct-mapped memory
- */
-#define VMALLOC_RESERVE	(128 << 20)	/* 128MB for vmalloc and initrd */
-#define MAXMEM		((unsigned long)(-PAGE_OFFSET-VMALLOC_RESERVE))
-#define MAXMEM_PFN	(MAXMEM >> PAGE_SHIFT)
+	/*
+	 * Determine low and high memory ranges:
+	 */
+	max_low_pfn = max_pfn;
+	if (max_low_pfn > MAXMEM_PFN)
+		max_low_pfn = MAXMEM_PFN;
 
-	high_pfn = MAXMEM_PFN;
-	if (max_pfn < high_pfn)
-		high_pfn = max_pfn;
-
-/*
- * But the bigmem stuff may be able to use more of it
- * (but currently only up to about 4GB)
- */
-#ifdef CONFIG_BIGMEM
-	#define MAXBIGMEM	((unsigned long)(~(VMALLOC_RESERVE-1)))
-	#define MAXBIGMEM_PFN	(MAXBIGMEM >> PAGE_SHIFT)
-	if (max_pfn > MAX_PFN)
-		max_pfn = MAX_PFN;
-
-/* When debugging, make half of "normal" memory be BIGMEM memory instead */
-#ifdef BIGMEM_DEBUG
-	high_pfn >>= 1;
+#ifdef CONFIG_HIGHMEM
+	highstart_pfn = highend_pfn = max_pfn;
+	if (max_pfn > MAXMEM_PFN) {
+		highstart_pfn = MAXMEM_PFN;
+		highend_pfn = max_pfn;
+		printk(KERN_NOTICE "%ldMB HIGHMEM available.\n",
+			pages_to_mb(highend_pfn - highstart_pfn));
+	}
 #endif
+	/*
+	 * Initialize the boot-time allocator (with low memory only):
+	 */
+	bootmap_size = init_bootmem(start_pfn, max_low_pfn);
 
-	bigmem_start = high_pfn << PAGE_SHIFT;
-	bigmem_end = max_pfn << PAGE_SHIFT;
-	printk(KERN_NOTICE "%ldMB BIGMEM available.\n", (bigmem_end-bigmem_start) >> 20);
+	/*
+	 * FIXME: what about high memory?
+	 */
+	ram_resources[1].end = PFN_PHYS(max_low_pfn);
+
+	/*
+	 * Register fully available low RAM pages with the bootmem allocator.
+	 */
+	for (i = 0; i < e820.nr_map; i++) {
+		unsigned long curr_pfn, last_pfn, size;
+ 		/*
+		 * Reserve usable low memory
+		 */
+		if (e820.map[i].type != E820_RAM)
+			continue;
+		/*
+		 * We are rounding up the start address of usable memory:
+		 */
+		curr_pfn = PFN_UP(e820.map[i].addr);
+		if (curr_pfn >= max_low_pfn)
+			continue;
+		/*
+		 * ... and at the end of the usable range downwards:
+		 */
+		last_pfn = PFN_DOWN(e820.map[i].addr + e820.map[i].size);
+
+		if (last_pfn > max_low_pfn)
+			last_pfn = max_low_pfn;
+		size = last_pfn - curr_pfn;
+		free_bootmem(PFN_PHYS(curr_pfn), PFN_PHYS(size));
+	}
+	/*
+	 * Reserve the bootmem bitmap itself as well. We do this in two
+	 * steps (first step was init_bootmem()) because this catches
+	 * the (very unlikely) case of us accidentally initializing the
+	 * bootmem allocator with an invalid RAM area.
+	 */
+	reserve_bootmem(HIGH_MEMORY, (PFN_PHYS(start_pfn) +
+			 bootmap_size + PAGE_SIZE-1) - (HIGH_MEMORY));
+
+	/*
+	 * reserve physical page 0 - it's a special BIOS page on many boxes,
+	 * enabling clean reboots, SMP operation, laptop functions.
+	 */
+	reserve_bootmem(0, PAGE_SIZE);
+
+#ifdef __SMP__
+	/*
+	 * But first pinch a few for the stack/trampoline stuff
+	 * FIXME: Don't need the extra page at 4K, but need to fix
+	 * trampoline before removing it. (see the GDT stuff)
+	 */
+	reserve_bootmem(PAGE_SIZE, PAGE_SIZE);
+	smp_alloc_memory(); /* AP processor realmode stacks in low memory*/
 #endif
-
-	ram_resources[1].end = (high_pfn << PAGE_SHIFT)-1;
-
-	*memory_start_p = (unsigned long) &_end;
-	*memory_end_p = PAGE_OFFSET + (high_pfn << PAGE_SHIFT);
 
 #ifdef __SMP__
 	/*
@@ -616,10 +683,11 @@ void __init setup_arch(char **cmdline_p, unsigned long * memory_start_p, unsigne
 #endif
 
 #ifdef CONFIG_BLK_DEV_INITRD
+// FIXME needs to do the new bootmem alloc stuff
 	if (LOADER_TYPE) {
 		initrd_start = INITRD_START ? INITRD_START + PAGE_OFFSET : 0;
 		initrd_end = initrd_start+INITRD_SIZE;
-		if (initrd_end > memory_end) {
+		if (initrd_end > (max_low_pfn << PAGE_SHIFT)) {
 			printk("initrd extends beyond end of memory "
 			    "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
 			    initrd_end,memory_end);

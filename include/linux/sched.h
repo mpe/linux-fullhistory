@@ -426,7 +426,7 @@ struct task_struct {
 /* files */	&init_files, \
 /* mm */	NULL, &init_mm, \
 /* signals */	SPIN_LOCK_UNLOCKED, &init_signals, {{0}}, {{0}}, NULL, &init_task.sigqueue, 0, 0, \
-/* exec cts */	0,0,0, \
+/* exec cts */	0,0, \
 }
 
 #ifndef INIT_TASK_SIZE

@@ -33,7 +33,7 @@
  * that shared pages stay shared while being swapped.
  */
 
-static int rw_swap_page_base(int rw, unsigned long entry, struct page *page, int wait)
+static int rw_swap_page_base(int rw, pte_t entry, struct page *page, int wait)
 {
 	unsigned long type, offset;
 	struct swap_info_struct * p;
@@ -41,13 +41,6 @@ static int rw_swap_page_base(int rw, unsigned long entry, struct page *page, int
 	int zones_used;
 	kdev_t dev = 0;
 	int block_size;
-
-#ifdef DEBUG_SWAP
-	printk ("DebugVM: %s_swap_page entry %08lx, page %p (count %d), %s\n",
-		(rw == READ) ? "read" : "write", 
-		entry, (char *) page_address(page), page_count(page),
-		wait ? "wait" : "nowait");
-#endif
 
 	type = SWP_TYPE(entry);
 	if (type >= nr_swapfiles) {
@@ -66,9 +59,7 @@ static int rw_swap_page_base(int rw, unsigned long entry, struct page *page, int
 		return 0;
 	}
 	if (p->swap_map && !p->swap_map[offset]) {
-		printk(KERN_ERR "rw_swap_page: "
-			"Trying to %s unallocated swap (%08lx)\n", 
-			(rw == READ) ? "read" : "write", entry);
+		pte_ERROR(entry);
 		return 0;
 	}
 	if (!(p->flags & SWP_USED)) {
@@ -127,12 +118,6 @@ static int rw_swap_page_base(int rw, unsigned long entry, struct page *page, int
 	if (page_count(page) == 0)
 		printk(KERN_ERR "rw_swap_page: page unused while waiting!\n");
 
-#ifdef DEBUG_SWAP
-	printk ("DebugVM: %s_swap_page finished on page %p (count %d)\n",
-		(rw == READ) ? "read" : "write", 
-		(char *) page_address(page), 
-		page_count(page));
-#endif
 	return 1;
 }
 
@@ -145,7 +130,7 @@ static int rw_swap_page_base(int rw, unsigned long entry, struct page *page, int
  */
 void rw_swap_page(int rw, struct page *page, int wait)
 {
-	unsigned long entry = page->offset;
+	pte_t entry = get_pagecache_pte(page);
 
 	if (!PageLocked(page))
 		PAGE_BUG(page);
@@ -162,7 +147,7 @@ void rw_swap_page(int rw, struct page *page, int wait)
  * Therefore we can't use it.  Later when we can remove the need for the
  * lock map and we can reduce the number of functions exported.
  */
-void rw_swap_page_nolock(int rw, unsigned long entry, char *buf, int wait)
+void rw_swap_page_nolock(int rw, pte_t entry, char *buf, int wait)
 {
 	struct page *page = mem_map + MAP_NR(buf);
 	

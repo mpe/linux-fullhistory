@@ -100,44 +100,50 @@ static inline void flush_tlb_range(struct mm_struct * mm, unsigned long start, u
 	flush_tlb_mm(mm);
 }
 
-
 #endif
 #endif /* !__ASSEMBLY__ */
 
+#define pgd_quicklist (current_cpu_data.pgd_quick)
+#define pmd_quicklist (current_cpu_data.pmd_quick)
+#define pte_quicklist (current_cpu_data.pte_quick)
+#define pgtable_cache_size (current_cpu_data.pgtable_cache_sz)
 
-/* Certain architectures need to do special things when PTEs
+/*
+ * The Linux x86 paging architecture is 'compile-time dual-mode', it
+ * implements both the traditional 2-level x86 page tables and the
+ * newer 3-level PAE-mode page tables.
+ */
+#ifndef __ASSEMBLY__
+#if CONFIG_X86_PAE
+# include <asm/pgtable-3level.h>
+#else
+# include <asm/pgtable-2level.h>
+#endif
+#endif
+
+/*
+ * Certain architectures need to do special things when PTEs
  * within a page table are directly modified.  Thus, the following
  * hook is made available.
  */
 #define set_pte(pteptr, pteval) ((*(pteptr)) = (pteval))
 
-/* PMD_SHIFT determines the size of the area a second-level page table can map */
-#define PMD_SHIFT	22
+#define __beep() asm("movb $0x3,%al; outb %al,$0x61")
+
 #define PMD_SIZE	(1UL << PMD_SHIFT)
 #define PMD_MASK	(~(PMD_SIZE-1))
-
-/* PGDIR_SHIFT determines what a third-level page table entry can map */
-#define PGDIR_SHIFT	22
 #define PGDIR_SIZE	(1UL << PGDIR_SHIFT)
 #define PGDIR_MASK	(~(PGDIR_SIZE-1))
 
-/*
- * entries per page directory level: the i386 is two-level, so
- * we don't really have any PMD directory physically.
- */
-#define PTRS_PER_PTE	1024
-#define PTRS_PER_PMD	1
-#define PTRS_PER_PGD	1024
 #define USER_PTRS_PER_PGD	(TASK_SIZE/PGDIR_SIZE)
-
-/*
- * pgd entries used up by user/kernel:
- */
 
 #define USER_PGD_PTRS (PAGE_OFFSET >> PGDIR_SHIFT)
 #define KERNEL_PGD_PTRS (PTRS_PER_PGD-USER_PGD_PTRS)
-#define __USER_PGD_PTRS ((__PAGE_OFFSET >> PGDIR_SHIFT) & 0x3ff)
-#define __KERNEL_PGD_PTRS (PTRS_PER_PGD-__USER_PGD_PTRS)
+
+#define TWOLEVEL_PGDIR_SHIFT	22
+#define BOOT_USER_PGD_PTRS (__PAGE_OFFSET >> TWOLEVEL_PGDIR_SHIFT)
+#define BOOT_KERNEL_PGD_PTRS (1024-BOOT_USER_PGD_PTRS)
+
 
 #ifndef __ASSEMBLY__
 /* Just any arbitrary offset to the start of the vmalloc VM area: the
@@ -166,7 +172,7 @@ static inline void flush_tlb_range(struct mm_struct * mm, unsigned long start, u
 #define _PAGE_PCD	0x010
 #define _PAGE_ACCESSED	0x020
 #define _PAGE_DIRTY	0x040
-#define _PAGE_4M	0x080	/* 4 MB page, Pentium+, if present.. */
+#define _PAGE_PSE	0x080	/* 4 MB (or 2MB) page, Pentium+, if present.. */
 #define _PAGE_GLOBAL	0x100	/* Global TLB entry PPro+ */
 
 #define _PAGE_PROTNONE	0x080	/* If not present */
@@ -213,40 +219,24 @@ static inline void flush_tlb_range(struct mm_struct * mm, unsigned long start, u
 
 /* page table for 0-4MB for everybody */
 extern unsigned long pg0[1024];
-/* zero page used for uninitialized stuff */
-extern unsigned long empty_zero_page[1024];
 
 /*
- * BAD_PAGETABLE is used when we need a bogus page-table, while
- * BAD_PAGE is used for a bogus page.
- *
  * ZERO_PAGE is a global shared page that is always zero: used
  * for zero-mapped memory areas etc..
  */
-extern pte_t __bad_page(void);
-extern pte_t * __bad_pagetable(void);
+extern unsigned long empty_zero_page[1024];
+#define ZERO_PAGE(vaddr) (mem_map + MAP_NR(empty_zero_page))
 
-#define BAD_PAGETABLE __bad_pagetable()
-#define BAD_PAGE __bad_page()
-#define ZERO_PAGE(vaddr) ((unsigned long) empty_zero_page)
-
-/* number of bits that fit into a memory pointer */
-#define BITS_PER_PTR			(8*sizeof(unsigned long))
-
-/* to align the pointer to a pointer address */
-#define PTR_MASK			(~(sizeof(void*)-1))
-
-/* sizeof(void*)==1<<SIZEOF_PTR_LOG2 */
-/* 64-bit machines, beware!  SRB. */
-#define SIZEOF_PTR_LOG2			2
-
-/* to find an entry in a page-table */
-#define PAGE_PTR(address) \
-((unsigned long)(address)>>(PAGE_SHIFT-SIZEOF_PTR_LOG2)&PTR_MASK&~PAGE_MASK)
+/*
+ * Handling allocation failures during page table setup.
+ */
+extern void __handle_bad_pmd(pmd_t * pmd);
+extern void __handle_bad_pmd_kernel(pmd_t * pmd);
 
 #define pte_none(x)	(!pte_val(x))
 #define pte_present(x)	(pte_val(x) & (_PAGE_PRESENT | _PAGE_PROTNONE))
 #define pte_clear(xp)	do { pte_val(*(xp)) = 0; } while (0)
+#define pte_pagenr(x)	((unsigned long)((pte_val(x) >> PAGE_SHIFT)))
 
 #define pmd_none(x)	(!pmd_val(x))
 #define	pmd_bad(x)	((pmd_val(x) & (~PAGE_MASK & ~_PAGE_USER)) != _KERNPG_TABLE)
@@ -254,14 +244,12 @@ extern pte_t * __bad_pagetable(void);
 #define pmd_clear(xp)	do { pmd_val(*(xp)) = 0; } while (0)
 
 /*
- * The "pgd_xxx()" functions here are trivial for a folded two-level
- * setup: the pgd is never bad, and a pmd always exists (as it's folded
- * into the pgd entry)
+ * Permanent address of a page. Obviously must never be
+ * called on a highmem page.
  */
-extern inline int pgd_none(pgd_t pgd)		{ return 0; }
-extern inline int pgd_bad(pgd_t pgd)		{ return 0; }
-extern inline int pgd_present(pgd_t pgd)	{ return 1; }
-extern inline void pgd_clear(pgd_t * pgdp)	{ }
+#define page_address(page) ({ if (PageHighMem(page)) BUG(); PAGE_OFFSET + (((page) - mem_map) << PAGE_SHIFT); })
+#define pages_to_mb(x) ((x) >> (20-PAGE_SHIFT))
+#define pte_page(x) (mem_map+pte_pagenr(x))
 
 /*
  * The following only work if pte_present() is true.
@@ -288,8 +276,15 @@ extern inline pte_t pte_mkwrite(pte_t pte)	{ pte_val(pte) |= _PAGE_RW; return pt
  * Conversion functions: convert a page and protection to a page entry,
  * and a page entry and page directory to the page they refer to.
  */
-#define mk_pte(page, pgprot) \
-({ pte_t __pte; pte_val(__pte) = __pa(page) + pgprot_val(pgprot); __pte; })
+
+extern inline pte_t mk_pte(struct page *page, pgprot_t pgprot)
+{
+	pte_t __pte;
+
+	pte_val(__pte) = (page-mem_map)*(unsigned long long)PAGE_SIZE +
+				pgprot_val(pgprot);
+	return __pte;
+}
 
 /* This takes a physical page address that is used by the remapping functions */
 #define mk_pte_phys(physpage, pgprot) \
@@ -298,28 +293,29 @@ extern inline pte_t pte_mkwrite(pte_t pte)	{ pte_val(pte) |= _PAGE_RW; return pt
 extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 { pte_val(pte) = (pte_val(pte) & _PAGE_CHG_MASK) | pgprot_val(newprot); return pte; }
 
-#define pte_page(pte) \
-((unsigned long) __va(pte_val(pte) & PAGE_MASK))
+#define page_pte_prot(page,prot) mk_pte(page, prot)
+#define page_pte(page) page_pte_prot(page, __pgprot(0))
 
 #define pmd_page(pmd) \
 ((unsigned long) __va(pmd_val(pmd) & PAGE_MASK))
 
-/* to find an entry in a page-table-directory */
-#define pgd_offset(mm, address) \
-((mm)->pgd + ((address) >> PGDIR_SHIFT))
+/* to find an entry in a page-table-directory. */
+#define __pgd_offset(address) \
+		((address >> PGDIR_SHIFT) & (PTRS_PER_PGD-1))
+
+#define pgd_offset(mm, address) ((mm)->pgd+__pgd_offset(address))
 
 /* to find an entry in a kernel page-table-directory */
 #define pgd_offset_k(address) pgd_offset(&init_mm, address)
 
-/* Find an entry in the second-level page table.. */
-extern inline pmd_t * pmd_offset(pgd_t * dir, unsigned long address)
-{
-	return (pmd_t *) dir;
-}
+#define __pmd_offset(address) \
+		(((address) >> PMD_SHIFT) & (PTRS_PER_PMD-1))
 
-/* Find an entry in the third-level page table.. */ 
-#define pte_offset(pmd, address) \
-((pte_t *) (pmd_page(*pmd) + ((address>>10) & ((PTRS_PER_PTE-1)<<2))))
+/* Find an entry in the third-level page table.. */
+#define __pte_offset(address) \
+		((address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1))
+#define pte_offset(dir, address) ((pte_t *) pmd_page(*(dir)) + \
+			__pte_offset(address))
 
 /*
  * Allocate and free page tables. The xxx_kernel() versions are
@@ -327,17 +323,25 @@ extern inline pmd_t * pmd_offset(pgd_t * dir, unsigned long address)
  * if any.
  */
 
-#define pgd_quicklist (current_cpu_data.pgd_quick)
-#define pmd_quicklist ((unsigned long *)0)
-#define pte_quicklist (current_cpu_data.pte_quick)
-#define pgtable_cache_size (current_cpu_data.pgtable_cache_sz)
-
 extern __inline__ pgd_t *get_pgd_slow(void)
 {
 	pgd_t *ret = (pgd_t *)__get_free_page(GFP_KERNEL);
 
 	if (ret) {
+#if 0
+		/*
+		 * On PAE allocating a whole page is overkill - we will
+		 * either embedd this in mm_struct, or do a SLAB cache.
+		 */
+		memcpy(ret, swapper_pg_dir, PTRS_PER_PGD * sizeof(pgd_t));
+#endif
+#if CONFIG_X86_PAE
+		int i;
+		for (i = 0; i < USER_PTRS_PER_PGD; i++)
+			__pgd_clear(ret + i);
+#else
 		memset(ret, 0, USER_PTRS_PER_PGD * sizeof(pgd_t));
+#endif
 		memcpy(ret + USER_PTRS_PER_PGD, swapper_pg_dir + USER_PTRS_PER_PGD, (PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
 	}
 	return ret;
@@ -395,30 +399,15 @@ extern __inline__ void free_pte_slow(pte_t *pte)
 	free_page((unsigned long)pte);
 }
 
-/* We don't use pmd cache, so these are dummy routines */
-extern __inline__ pmd_t *get_pmd_fast(void)
-{
-	return (pmd_t *)0;
-}
-
-extern __inline__ void free_pmd_fast(pmd_t *pmd)
-{
-}
-
-extern __inline__ void free_pmd_slow(pmd_t *pmd)
-{
-}
-
-extern void __bad_pte(pmd_t *pmd);
-extern void __bad_pte_kernel(pmd_t *pmd);
-
 #define pte_free_kernel(pte)    free_pte_slow(pte)
-#define pte_free(pte)           free_pte_slow(pte)
-#define pgd_free(pgd)           free_pgd_slow(pgd)
-#define pgd_alloc()             get_pgd_fast()
+#define pte_free(pte)	   free_pte_slow(pte)
+#define pgd_free(pgd)	   free_pgd_slow(pgd)
+#define pgd_alloc()	     get_pgd_fast()
 
 extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
 {
+	if (!pmd)
+		BUG();
 	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
 	if (pmd_none(*pmd)) {
 		pte_t * page = (pte_t *) get_pte_fast();
@@ -429,7 +418,7 @@ extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
 		return page + address;
 	}
 	if (pmd_bad(*pmd)) {
-		__bad_pte_kernel(pmd);
+		__handle_bad_pmd_kernel(pmd);
 		return NULL;
 	}
 	return (pte_t *) pmd_page(*pmd) + address;
@@ -437,13 +426,13 @@ extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
 
 extern inline pte_t * pte_alloc(pmd_t * pmd, unsigned long address)
 {
-	address = (address >> (PAGE_SHIFT-2)) & 4*(PTRS_PER_PTE - 1);
+	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
 
 	if (pmd_none(*pmd))
 		goto getnew;
 	if (pmd_bad(*pmd))
 		goto fix;
-	return (pte_t *) (pmd_page(*pmd) + address);
+	return (pte_t *)pmd_page(*pmd) + address;
 getnew:
 {
 	unsigned long page = (unsigned long) get_pte_fast();
@@ -451,25 +440,19 @@ getnew:
 	if (!page)
 		return get_pte_slow(pmd, address);
 	pmd_val(*pmd) = _PAGE_TABLE + __pa(page);
-	return (pte_t *) (page + address);
+	return (pte_t *)page + address;
 }
 fix:
-	__bad_pte(pmd);
+	__handle_bad_pmd(pmd);
 	return NULL;
 }
 
 /*
  * allocating and freeing a pmd is trivial: the 1-entry pmd is
  * inside the pgd, so has no extra memory associated with it.
+ * (In the PAE case we free the page.)
  */
-extern inline void pmd_free(pmd_t * pmd)
-{
-}
-
-extern inline pmd_t * pmd_alloc(pgd_t * pgd, unsigned long address)
-{
-	return (pmd_t *) pgd;
-}
+#define pmd_free(pmd)	   free_pmd_slow(pmd)
 
 #define pmd_free_kernel		pmd_free
 #define pmd_alloc_kernel	pmd_alloc
@@ -483,7 +466,7 @@ extern inline void set_pgdir(unsigned long address, pgd_t entry)
 #ifdef __SMP__
 	int i;
 #endif	
-        
+
 	read_lock(&tasklist_lock);
 	for_each_task(p) {
 		if (!p->mm)
@@ -512,9 +495,8 @@ extern inline void update_mmu_cache(struct vm_area_struct * vma,
 {
 }
 
-#define SWP_TYPE(entry) (((entry) >> 1) & 0x3f)
-#define SWP_OFFSET(entry) ((entry) >> 8)
-#define SWP_ENTRY(type,offset) (((type) << 1) | ((offset) << 8))
+#define SWP_TYPE(entry) (((pte_val(entry)) >> 1) & 0x3f)
+#define SWP_OFFSET(entry) ((pte_val(entry)) >> 8)
 
 #define module_map      vmalloc
 #define module_unmap    vfree
@@ -527,4 +509,4 @@ extern inline void update_mmu_cache(struct vm_area_struct * vma,
 
 #define io_remap_page_range remap_page_range
 
-#endif /* _I386_PAGE_H */
+#endif /* _I386_PGTABLE_H */

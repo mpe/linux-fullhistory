@@ -17,7 +17,7 @@
 #include <linux/smp_lock.h>
 #include <linux/pagemap.h>
 #include <linux/init.h>
-#include <linux/bigmem.h>
+#include <linux/highmem.h>
 
 #include <asm/pgtable.h>
 
@@ -34,19 +34,15 @@
  */
 static int try_to_swap_out(struct vm_area_struct* vma, unsigned long address, pte_t * page_table, int gfp_mask)
 {
-	pte_t pte;
-	unsigned long entry;
-	unsigned long page_addr;
+	pte_t pte, entry;
 	struct page * page;
 
 	pte = *page_table;
 	if (!pte_present(pte))
 		goto out_failed;
-	page_addr = pte_page(pte);
-	if (MAP_NR(page_addr) >= max_mapnr)
+	page = pte_page(pte);
+	if (page-mem_map >= max_mapnr)
 		goto out_failed;
-
-	page = mem_map + MAP_NR(page_addr);
 
 	/* Don't look at this pte if it's been accessed recently. */
 	if (pte_young(pte)) {
@@ -62,7 +58,7 @@ static int try_to_swap_out(struct vm_area_struct* vma, unsigned long address, pt
 	if (PageReserved(page)
 	    || PageLocked(page)
 	    || ((gfp_mask & __GFP_DMA) && !PageDMA(page))
-	    || (!(gfp_mask & __GFP_BIGMEM) && PageBIGMEM(page)))
+	    || (!(gfp_mask & __GFP_HIGHMEM) && PageHighMem(page)))
 		goto out_failed;
 
 	/*
@@ -74,9 +70,9 @@ static int try_to_swap_out(struct vm_area_struct* vma, unsigned long address, pt
 	 * memory, and we should just continue our scan.
 	 */
 	if (PageSwapCache(page)) {
-		entry = page->offset;
+		entry = get_pagecache_pte(page);
 		swap_duplicate(entry);
-		set_pte(page_table, __pte(entry));
+		set_pte(page_table, entry);
 drop_pte:
 		vma->vm_mm->rss--;
 		flush_tlb_page(vma, address);
@@ -150,14 +146,14 @@ drop_pte:
 	 * page with that swap entry.
 	 */
 	entry = acquire_swap_entry(page);
-	if (!entry)
+	if (!pte_val(entry))
 		goto out_failed; /* No swap space left */
 		
-	if (!(page = prepare_bigmem_swapout(page)))
+	if (!(page = prepare_highmem_swapout(page)))
 		goto out_swap_free;
 
 	vma->vm_mm->rss--;
-	set_pte(page_table, __pte(entry));
+	set_pte(page_table, entry);
 	vmlist_access_unlock(vma->vm_mm);
 
 	flush_tlb_page(vma, address);
@@ -201,7 +197,7 @@ static inline int swap_out_pmd(struct vm_area_struct * vma, pmd_t *dir, unsigned
 	if (pmd_none(*dir))
 		return 0;
 	if (pmd_bad(*dir)) {
-		printk("swap_out_pmd: bad pmd (%08lx)\n", pmd_val(*dir));
+		pmd_ERROR(*dir);
 		pmd_clear(dir);
 		return 0;
 	}
@@ -220,7 +216,7 @@ static inline int swap_out_pmd(struct vm_area_struct * vma, pmd_t *dir, unsigned
 			return result;
 		address += PAGE_SIZE;
 		pte++;
-	} while (address < end);
+	} while (address && (address < end));
 	return 0;
 }
 
@@ -232,7 +228,7 @@ static inline int swap_out_pgd(struct vm_area_struct * vma, pgd_t *dir, unsigned
 	if (pgd_none(*dir))
 		return 0;
 	if (pgd_bad(*dir)) {
-		printk("swap_out_pgd: bad pgd (%08lx)\n", pgd_val(*dir));
+		pgd_ERROR(*dir);
 		pgd_clear(dir);
 		return 0;
 	}
@@ -240,7 +236,7 @@ static inline int swap_out_pgd(struct vm_area_struct * vma, pgd_t *dir, unsigned
 	pmd = pmd_offset(dir, address);
 
 	pgd_end = (address + PGDIR_SIZE) & PGDIR_MASK;	
-	if (end > pgd_end)
+	if (pgd_end && (end > pgd_end))
 		end = pgd_end;
 	
 	do {
@@ -249,7 +245,7 @@ static inline int swap_out_pgd(struct vm_area_struct * vma, pgd_t *dir, unsigned
 			return result;
 		address = (address + PMD_SIZE) & PMD_MASK;
 		pmd++;
-	} while (address < end);
+	} while (address && (address < end));
 	return 0;
 }
 
@@ -265,13 +261,15 @@ static int swap_out_vma(struct vm_area_struct * vma, unsigned long address, int 
 	pgdir = pgd_offset(vma->vm_mm, address);
 
 	end = vma->vm_end;
-	while (address < end) {
+	if (address >= end)
+		BUG();
+	do {
 		int result = swap_out_pgd(vma, pgdir, address, end, gfp_mask);
 		if (result)
 			return result;
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		pgdir++;
-	}
+	} while (address && (address < end));
 	return 0;
 }
 
@@ -498,8 +496,8 @@ int kswapd(void *unused)
 		 */
 		do {
 			/* kswapd is critical to provide GFP_ATOMIC
-			   allocations (not GFP_BIGMEM ones). */
-			if (nr_free_pages - nr_free_bigpages >= freepages.high)
+			   allocations (not GFP_HIGHMEM ones). */
+			if (nr_free_pages - nr_free_highpages >= freepages.high)
 				break;
 
 			if (!do_try_to_free_pages(GFP_KSWAPD))

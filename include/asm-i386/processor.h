@@ -46,6 +46,7 @@ struct cpuinfo_x86 {
 	int	coma_bug;
 	unsigned long loops_per_sec;
 	unsigned long *pgd_quick;
+	unsigned long *pmd_quick;
 	unsigned long *pte_quick;
 	unsigned long pgtable_cache_sz;
 };
@@ -106,6 +107,12 @@ extern struct cpuinfo_x86 cpu_data[];
 #define current_cpu_data boot_cpu_data
 #endif
 
+#define cpu_has_pge \
+		(boot_cpu_data.x86_capability & X86_FEATURE_PGE)
+#define cpu_has_pse \
+		(boot_cpu_data.x86_capability & X86_FEATURE_PSE)
+#define cpu_has_pae \
+		(boot_cpu_data.x86_capability & X86_FEATURE_PAE)
 #define cpu_has_tsc \
 		(cpu_data[smp_processor_id()].x86_capability & X86_FEATURE_TSC)
 

@@ -59,8 +59,7 @@ struct inode_operations nfs_symlink_inode_operations = {
 static struct page *try_to_get_symlink_page(struct dentry *dentry, struct inode *inode)
 {
 	struct nfs_readlinkargs rl_args;
-	struct page *page, **hash;
-	unsigned long page_cache;
+	struct page *page, **hash, *page_cache;
 
 	page = NULL;
 	page_cache = page_cache_alloc();
@@ -75,7 +74,7 @@ repeat:
 		goto unlock_out;
 	}
 
-	page = page_cache_entry(page_cache);
+	page = page_cache;
 	if (add_to_page_cache_unique(page, inode, 0, hash)) {
 		page_cache_release(page);
 		goto repeat;
@@ -86,7 +85,7 @@ repeat:
 	 * XDR response verification will NULL terminate it.
 	 */
 	rl_args.fh = NFS_FH(dentry);
-	rl_args.buffer = (const void *)page_cache;
+	rl_args.buffer = (const void *)page_address(page_cache);
 	if (rpc_call(NFS_CLIENT(inode), NFSPROC_READLINK,
 		     &rl_args, NULL, 0) < 0)
 		goto error;

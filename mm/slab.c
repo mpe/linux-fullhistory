@@ -317,10 +317,10 @@ static int slab_break_gfp_order = SLAB_BREAK_GFP_ORDER_LO;
  * slab an obj belongs to.  With kmalloc(), and kfree(), these are used
  * to find the cache which an obj belongs to.
  */
-#define	SLAB_SET_PAGE_CACHE(pg, x)	((pg)->next = (struct page *)(x))
-#define	SLAB_GET_PAGE_CACHE(pg)		((kmem_cache_t *)(pg)->next)
-#define	SLAB_SET_PAGE_SLAB(pg, x)	((pg)->prev = (struct page *)(x))
-#define	SLAB_GET_PAGE_SLAB(pg)		((kmem_slab_t *)(pg)->prev)
+#define	SLAB_SET_PAGE_CACHE(pg,x)  ((pg)->list.next = (struct list_head *)(x))
+#define	SLAB_GET_PAGE_CACHE(pg)    ((kmem_cache_t *)(pg)->list.next)
+#define	SLAB_SET_PAGE_SLAB(pg,x)   ((pg)->list.prev = (struct list_head *)(x))
+#define	SLAB_GET_PAGE_SLAB(pg)     ((kmem_slab_t *)(pg)->list.prev)
 
 /* Size description struct for general caches. */
 typedef struct cache_sizes {
@@ -402,7 +402,7 @@ static kmem_cache_t	*cache_slabp = NULL;
 static unsigned long bufctl_limit = 0;
 
 /* Initialisation - setup the `cache' cache. */
-long __init kmem_cache_init(long start, long end)
+void __init kmem_cache_init(void)
 {
 	size_t size, i;
 
@@ -450,7 +450,6 @@ long __init kmem_cache_init(long start, long end)
 	 */
 	if (num_physpages > (32 << 20) >> PAGE_SHIFT)
 		slab_break_gfp_order = SLAB_BREAK_GFP_ORDER_HI;
-	return start;
 }
 
 /* Initialisation - setup remaining internal and general caches.

@@ -236,6 +236,7 @@ static void __init check_amd_k6(void)
  * have the F0 0F bug, which lets nonpriviledged users lock up the system:
  */
 
+#ifndef CONFIG_M686
 extern void trap_init_f00f_bug(void);
 
 static void __init check_pentium_f00f(void)
@@ -250,6 +251,7 @@ static void __init check_pentium_f00f(void)
 		trap_init_f00f_bug();
 	}
 }
+#endif
 
 /*
  * Perform the Cyrix 5/2 test. A Cyrix won't change
@@ -424,7 +426,9 @@ static void __init check_bugs(void)
 	check_hlt();
 	check_popad();
 	check_amd_k6();
+#ifndef CONFIG_M686
 	check_pentium_f00f();
+#endif
 	check_cyrix_coma();
 	system_utsname.machine[1] = '0' + boot_cpu_data.x86;
 }

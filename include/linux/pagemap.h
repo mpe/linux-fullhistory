@@ -11,10 +11,16 @@
 
 #include <linux/mm.h>
 #include <linux/fs.h>
+#include <linux/highmem.h>
+#include <linux/list.h>
 
-static inline unsigned long page_address(struct page * page)
+extern inline pte_t get_pagecache_pte(struct page *page)
 {
-	return PAGE_OFFSET + ((page - mem_map) << PAGE_SHIFT);
+	/*
+	 * the pagecache is still machineword sized. The rest of the VM
+	 * can deal with arbitrary sized ptes.
+	 */
+        return __pte(page->offset);
 }
 
 /*
@@ -30,8 +36,8 @@ static inline unsigned long page_address(struct page * page)
 #define PAGE_CACHE_MASK		PAGE_MASK
 #define PAGE_CACHE_ALIGN(addr)	(((addr)+PAGE_CACHE_SIZE-1)&PAGE_CACHE_MASK)
 
-#define page_cache_alloc()	__get_free_page(GFP_USER)
-#define page_cache_free(x)	free_page(x)
+#define page_cache_alloc()	__get_pages(GFP_USER, 0)
+#define page_cache_free(x)	__free_page(x)
 #define page_cache_release(x)	__free_page(x)
 
 /*
@@ -54,7 +60,7 @@ extern void page_cache_init(unsigned long);
  * inode pointer and offsets are distributed (ie, we
  * roughly know which bits are "significant")
  */
-static inline unsigned long _page_hashfn(struct inode * inode, unsigned long offset)
+extern inline unsigned long _page_hashfn(struct inode * inode, unsigned long offset)
 {
 #define i (((unsigned long) inode)/(sizeof(struct inode) & ~ (sizeof(struct inode) - 1)))
 #define o (offset >> PAGE_SHIFT)
@@ -82,26 +88,37 @@ extern void __add_page_to_hash_queue(struct page * page, struct page **p);
 extern void add_to_page_cache(struct page * page, struct inode * inode, unsigned long offset);
 extern int add_to_page_cache_unique(struct page * page, struct inode * inode, unsigned long offset, struct page **hash);
 
-static inline void add_page_to_hash_queue(struct page * page, struct inode * inode, unsigned long offset)
+extern inline void add_page_to_hash_queue(struct page * page, struct inode * inode, unsigned long offset)
 {
 	__add_page_to_hash_queue(page, page_hash(inode,offset));
 }
 
-static inline void add_page_to_inode_queue(struct inode * inode, struct page * page)
+extern inline void add_page_to_inode_queue(struct inode * inode, struct page * page)
 {
-	struct page **p = &inode->i_pages;
+	struct list_head *head = &inode->i_pages;
 
-	inode->i_nrpages++;
+	if (!inode->i_nrpages++) {
+		if (!list_empty(head))
+			BUG();
+	} else {
+		if (list_empty(head))
+			BUG();
+	}
+	list_add(&page->list, head);
 	page->inode = inode;
-	page->prev = NULL;
-	if ((page->next = *p) != NULL)
-		page->next->prev = page;
-	*p = page;
+}
+
+extern inline void remove_page_from_inode_queue(struct page * page)
+{
+	struct inode * inode = page->inode;
+
+	inode->i_nrpages--;
+	list_del(&page->list);
 }
 
 extern void ___wait_on_page(struct page *);
 
-static inline void wait_on_page(struct page * page)
+extern inline void wait_on_page(struct page * page)
 {
 	if (PageLocked(page))
 		___wait_on_page(page);

@@ -97,7 +97,7 @@ static kmem_cache_t *bh_cachep;
 static int grow_buffers(int size);
 
 /* This is used by some architectures to estimate available memory. */
-atomic_t buffermem = ATOMIC_INIT(0);
+atomic_t buffermem_pages = ATOMIC_INIT(0);
 
 /* Here is the parameter block for the bdflush process. If you add or
  * remove any of the parameters, make sure to update kernel/sysctl.c.
@@ -827,7 +827,7 @@ static int balance_dirty_state(kdev_t dev)
 	unsigned long dirty, tot, hard_dirty_limit, soft_dirty_limit;
 
 	dirty = size_buffers_type[BUF_DIRTY] >> PAGE_SHIFT;
-	tot = nr_lru_pages + nr_free_pages - nr_free_bigpages;
+	tot = nr_lru_pages + nr_free_pages + nr_free_highpages;
 	hard_dirty_limit = tot * bdf_prm.b_un.nfract / 100;
 	soft_dirty_limit = hard_dirty_limit >> 1;
 
@@ -1267,7 +1267,7 @@ int block_flushpage(struct inode *inode, struct page *page, unsigned long offset
 	 */
 	if (!offset) {
 		if (!try_to_free_buffers(page)) {
-			atomic_add(PAGE_CACHE_SIZE, &buffermem);
+			atomic_inc(&buffermem_pages);
 			return 0;
 		}
 	}
@@ -1834,12 +1834,12 @@ int brw_kiovec(int rw, int nr, struct kiobuf *iovec[],
 		dprintk ("iobuf %d %d %d\n", offset, length, size);
 
 		for (pageind = 0; pageind < iobuf->nr_pages; pageind++) {
-			page = iobuf->pagelist[pageind];
 			map  = iobuf->maplist[pageind];
-			if (map && PageBIGMEM(map)) {
+			if (map && PageHighMem(map)) {
 				err = -EIO;
 				goto error;
 			}
+			page = page_address(map);
 
 			while (length > 0) {
 				blocknr = b[bufind++];
@@ -2115,7 +2115,7 @@ static int grow_buffers(int size)
 	page_map = mem_map + MAP_NR(page);
 	page_map->buffers = bh;
 	lru_cache_add(page_map);
-	atomic_add(PAGE_SIZE, &buffermem);
+	atomic_inc(&buffermem_pages);
 	return 1;
 
 no_buffer_head:
@@ -2208,7 +2208,8 @@ void show_buffers(void)
 	int nlist;
 	static char *buf_types[NR_LIST] = { "CLEAN", "LOCKED", "DIRTY" };
 
-	printk("Buffer memory:   %6dkB\n", atomic_read(&buffermem) >> 10);
+	printk("Buffer memory:   %6dkB\n",
+			atomic_read(&buffermem_pages) << (PAGE_SHIFT-10));
 
 #ifdef __SMP__ /* trylock does nothing on UP and so we could deadlock */
 	if (!spin_trylock(&lru_list_lock))
@@ -2246,7 +2247,7 @@ void show_buffers(void)
  * Use gfp() for the hash table to decrease TLB misses, use
  * SLAB cache for buffer heads.
  */
-void __init buffer_init(unsigned long memory_size)
+void __init buffer_init(unsigned long mempages)
 {
 	int order, i;
 	unsigned int nr_hash;
@@ -2254,9 +2255,11 @@ void __init buffer_init(unsigned long memory_size)
 	/* The buffer cache hash table is less important these days,
 	 * trim it a bit.
 	 */
-	memory_size >>= 14;
-	memory_size *= sizeof(struct buffer_head *);
-	for (order = 0; (PAGE_SIZE << order) < memory_size; order++)
+	mempages >>= 14;
+
+	mempages *= sizeof(struct buffer_head *);
+
+	for (order = 0; (1 << order) < mempages; order++)
 		;
 
 	/* try to allocate something until we get it or we're asking

@@ -50,7 +50,6 @@ int alloc_kiovec(int nr, struct kiobuf **bufp)
 		init_waitqueue_head(&iobuf->wait_queue);
 		iobuf->end_io = simple_wakeup_kiobuf;
 		iobuf->array_len = KIO_STATIC_PAGES;
-		iobuf->pagelist  = iobuf->page_array;
 		iobuf->maplist   = iobuf->map_array;
 		*bufp++ = iobuf;
 	}
@@ -65,50 +64,35 @@ void free_kiovec(int nr, struct kiobuf **bufp)
 	
 	for (i = 0; i < nr; i++) {
 		iobuf = bufp[i];
-		if (iobuf->array_len > KIO_STATIC_PAGES) {
-			kfree (iobuf->pagelist);
+		if (iobuf->array_len > KIO_STATIC_PAGES)
 			kfree (iobuf->maplist);
-		}
 		kmem_cache_free(kiobuf_cachep, bufp[i]);
 	}
 }
 
 int expand_kiobuf(struct kiobuf *iobuf, int wanted)
 {
-	unsigned long *	pagelist;
 	struct page ** maplist;
 	
 	if (iobuf->array_len >= wanted)
 		return 0;
 	
-	pagelist = (unsigned long *) 
-		kmalloc(wanted * sizeof(unsigned long), GFP_KERNEL);
-	if (!pagelist)
-		return -ENOMEM;
-	
 	maplist = (struct page **) 
 		kmalloc(wanted * sizeof(struct page **), GFP_KERNEL);
-	if (!maplist) {
-		kfree(pagelist);
+	if (!maplist)
 		return -ENOMEM;
-	}
 
 	/* Did it grow while we waited? */
 	if (iobuf->array_len >= wanted) {
-		kfree(pagelist);
 		kfree(maplist);
 		return 0;
 	}
 	
-	memcpy (pagelist, iobuf->pagelist, wanted * sizeof(unsigned long));
 	memcpy (maplist,  iobuf->maplist,   wanted * sizeof(struct page **));
 
-	if (iobuf->array_len > KIO_STATIC_PAGES) {
-		kfree (iobuf->pagelist);
+	if (iobuf->array_len > KIO_STATIC_PAGES)
 		kfree (iobuf->maplist);
-	}
 	
-	iobuf->pagelist  = pagelist;
 	iobuf->maplist   = maplist;
 	iobuf->array_len = wanted;
 	return 0;
