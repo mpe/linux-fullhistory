@@ -54,13 +54,6 @@
 #include "m32r_sio_reg.h"
 
 /*
- * Configuration:
- *   share_irqs - whether we pass SA_SHIRQ to request_irq().  This option
- *                is unsafe when used on edge-triggered interrupts.
- */
-unsigned int share_irqs_sio = M32R_SIO_SHARE_IRQS;
-
-/*
  * Debugging.
  */
 #if 0
@@ -86,14 +79,35 @@ unsigned int share_irqs_sio = M32R_SIO_SHARE_IRQS;
 
 #include <asm/serial.h>
 
+/* Standard COM flags */
+#define STD_COM_FLAGS (ASYNC_BOOT_AUTOCONF | ASYNC_SKIP_TEST)
+
 /*
  * SERIAL_PORT_DFNS tells us about built-in ports that have no
  * standard enumeration mechanism.   Platforms that can find all
  * serial ports via mechanisms like ACPI or PCI need not supply it.
  */
-#ifndef SERIAL_PORT_DFNS
-#define SERIAL_PORT_DFNS
+#undef SERIAL_PORT_DFNS
+#if defined(CONFIG_PLAT_USRV)
+
+#define SERIAL_PORT_DFNS						\
+       /* UART  CLK     PORT   IRQ            FLAGS */			\
+	{ 0, BASE_BAUD, 0x3F8, PLD_IRQ_UART0, STD_COM_FLAGS }, /* ttyS0 */ \
+	{ 0, BASE_BAUD, 0x2F8, PLD_IRQ_UART1, STD_COM_FLAGS }, /* ttyS1 */
+
+#else /* !CONFIG_PLAT_USRV */
+
+#if defined(CONFIG_SERIAL_M32R_PLDSIO)
+#define SERIAL_PORT_DFNS						\
+	{ 0, BASE_BAUD, ((unsigned long)PLD_ESIO0CR), PLD_IRQ_SIO0_RCV,	\
+	  STD_COM_FLAGS }, /* ttyS0 */
+#else
+#define SERIAL_PORT_DFNS						\
+	{ 0, BASE_BAUD, M32R_SIO_OFFSET, M32R_IRQ_SIO0_R,		\
+	  STD_COM_FLAGS }, /* ttyS0 */
 #endif
+
+#endif /* !CONFIG_PLAT_USRV */
 
 static struct old_serial_port old_serial_port[] = {
 	SERIAL_PORT_DFNS	/* defined in asm/serial.h */
@@ -581,10 +595,7 @@ static void serial_unlink_irq_chain(struct uart_sio_port *up)
 }
 
 /*
- * This function is used to handle ports that do not have an
- * interrupt.  This doesn't work very well for 16450's, but gives
- * barely passable results for a 16550A.  (Although at the expense
- * of much CPU overhead).
+ * This function is used to handle ports that do not have an interrupt.
  */
 static void m32r_sio_timeout(unsigned long data)
 {
@@ -966,7 +977,7 @@ static struct uart_ops m32r_sio_pops = {
 
 static struct uart_sio_port m32r_sio_ports[UART_NR];
 
-static void __init m32r_sio_isa_init_ports(void)
+static void __init m32r_sio_init_ports(void)
 {
 	struct uart_sio_port *up;
 	static int first = 1;
@@ -986,8 +997,6 @@ static void __init m32r_sio_isa_init_ports(void)
 		up->port.iotype   = old_serial_port[i].io_type;
 		up->port.regshift = old_serial_port[i].iomem_reg_shift;
 		up->port.ops      = &m32r_sio_pops;
-		if (share_irqs_sio)
-			up->port.flags |= UPF_SHARE_IRQ;
 	}
 }
 
@@ -995,7 +1004,7 @@ static void __init m32r_sio_register_ports(struct uart_driver *drv)
 {
 	int i;
 
-	m32r_sio_isa_init_ports();
+	m32r_sio_init_ports();
 
 	for (i = 0; i < UART_NR; i++) {
 		struct uart_sio_port *up = &m32r_sio_ports[i];
@@ -1129,7 +1138,7 @@ static int __init m32r_sio_console_init(void)
 {
 	sio_reset();
 	sio_init();
-	m32r_sio_isa_init_ports();
+	m32r_sio_init_ports();
 	register_console(&m32r_sio_console);
 	return 0;
 }
@@ -1150,81 +1159,6 @@ static struct uart_driver m32r_sio_reg = {
 	.nr			= UART_NR,
 	.cons			= M32R_SIO_CONSOLE,
 };
-
-/*
- * register_serial and unregister_serial allows for 16x50 serial ports to be
- * configured at run-time, to support PCMCIA modems.
- */
-
-static int __register_m32r_sio(struct serial_struct *req, int line)
-{
-	struct uart_port port;
-
-	port.iobase   = req->port;
-	port.membase  = req->iomem_base;
-	port.irq      = req->irq;
-	port.uartclk  = req->baud_base * 16;
-	port.fifosize = req->xmit_fifo_size;
-	port.regshift = req->iomem_reg_shift;
-	port.iotype   = req->io_type;
-	port.flags    = req->flags | UPF_BOOT_AUTOCONF;
-	port.mapbase  = req->iomap_base;
-	port.line     = line;
-
-	if (share_irqs_sio)
-		port.flags |= UPF_SHARE_IRQ;
-
-	if (HIGH_BITS_OFFSET)
-		port.iobase |= (long) req->port_high << HIGH_BITS_OFFSET;
-
-	/*
-	 * If a clock rate wasn't specified by the low level
-	 * driver, then default to the standard clock rate.
-	 */
-	if (port.uartclk == 0)
-		port.uartclk = BASE_BAUD * 16;
-
-	return uart_register_port(&m32r_sio_reg, &port);
-}
-
-/**
- *	register_m32r_sio - configure a 16x50 serial port at runtime
- *	@req: request structure
- *
- *	Configure the serial port specified by the request. If the
- *	port exists and is in use an error is returned. If the port
- *	is not currently in the table it is added.
- *
- *	The port is then probed and if necessary the IRQ is autodetected
- *	If this fails an error is returned.
- *
- *	On success the port is ready to use and the line number is returned.
- */
-int register_m32r_sio(struct serial_struct *req)
-{
-	return __register_m32r_sio(req, -1);
-}
-
-int __init early_serial_setup(struct uart_port *port)
-{
-	m32r_sio_isa_init_ports();
- 	m32r_sio_ports[port->line].port = *port;
-	m32r_sio_ports[port->line].port.ops = &m32r_sio_pops;
-
-	return 0;
-}
-
-/**
- *	unregister_m32r_sio - remove a 16x50 serial port at runtime
- *	@line: serial line number
- *
- *	Remove one serial port.  This may be called from interrupt
- *	context.
- */
-void unregister_m32r_sio(int line)
-{
-	uart_unregister_port(&m32r_sio_reg, line);
-}
 
 /**
  *	m32r_sio_suspend_port - suspend one serial port
@@ -1252,8 +1186,7 @@ static int __init m32r_sio_init(void)
 {
 	int ret, i;
 
-	printk(KERN_INFO "Serial: M32R SIO driver $Revision: 1.9 $ "
-		"IRQ sharing %sabled\n", share_irqs_sio ? "en" : "dis");
+	printk(KERN_INFO "Serial: M32R SIO driver $Revision: 1.11 $ ");
 
 	for (i = 0; i < NR_IRQS; i++)
 		spin_lock_init(&irq_lists[i].lock);
@@ -1278,14 +1211,8 @@ static void __exit m32r_sio_exit(void)
 module_init(m32r_sio_init);
 module_exit(m32r_sio_exit);
 
-EXPORT_SYMBOL(register_m32r_sio);
-EXPORT_SYMBOL(unregister_m32r_sio);
 EXPORT_SYMBOL(m32r_sio_suspend_port);
 EXPORT_SYMBOL(m32r_sio_resume_port);
 
 MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("Generic M32R SIO serial driver $Revision: 1.9 $");
-
-module_param(share_irqs_sio, bool, 0400);
-MODULE_PARM_DESC(share_irqs_sio, "Share IRQs with other non-M32R SIO devices"
-	" (unsafe)");
+MODULE_DESCRIPTION("Generic M32R SIO serial driver $Revision: 1.11 $");

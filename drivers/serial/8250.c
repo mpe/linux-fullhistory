@@ -2194,14 +2194,6 @@ static int __init serial8250_console_init(void)
 }
 console_initcall(serial8250_console_init);
 
-static int __init serial8250_late_console_init(void)
-{
-	if (!(serial8250_console.flags & CON_ENABLED))
-		register_console(&serial8250_console);
-	return 0;
-}
-late_initcall(serial8250_late_console_init);
-
 static int __init find_port(struct uart_port *p)
 {
 	int line;
