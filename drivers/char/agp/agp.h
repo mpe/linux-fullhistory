@@ -27,8 +27,6 @@
 #ifndef _AGP_BACKEND_PRIV_H
 #define _AGP_BACKEND_PRIV_H 1
 
-#include <linux/config.h>
-
 enum aper_size_type {
 	U8_APER_SIZE,
 	U16_APER_SIZE,

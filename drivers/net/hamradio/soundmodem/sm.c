@@ -34,17 +34,18 @@
  *
  *
  *  History:
- *   0.1  21.09.96  Started
- *        18.10.96  Changed to new user space access routines (copy_{to,from}_user)
- *   0.4  21.01.97  Separately compileable soundcard/modem modules
- *   0.5  03.03.97  fixed LPT probing (check_lpt result was interpreted the wrong way round)
- *   0.6  16.04.97  init code/data tagged
- *   0.7  30.07.97  fixed halfduplex interrupt handlers/hotfix for CS423X
- *   0.8  14.04.98  cleanups
- *   0.9  03.08.99  adapt to Linus' new __setup/__initcall
- *                  use parport lowlevel drivers instead of directly writing to a parallel port
- *                  removed some pre-2.2 kernel compatibility cruft
- *   0.10 10.08.99  Check if parport can do SPP and is safe to access during interrupt contexts
+ *   0.1  21.09.1996  Started
+ *        18.10.1996  Changed to new user space access routines (copy_{to,from}_user)
+ *   0.4  21.01.1997  Separately compileable soundcard/modem modules
+ *   0.5  03.03.1997  fixed LPT probing (check_lpt result was interpreted the wrong way round)
+ *   0.6  16.04.1997  init code/data tagged
+ *   0.7  30.07.1997  fixed halfduplex interrupt handlers/hotfix for CS423X
+ *   0.8  14.04.1998  cleanups
+ *   0.9  03.08.1999  adapt to Linus' new __setup/__initcall
+ *                    use parport lowlevel drivers instead of directly writing to a parallel port
+ *                    removed some pre-2.2 kernel compatibility cruft
+ *   0.10 10.08.1999  Check if parport can do SPP and is safe to access during interrupt contexts
+ *   0.11 12.02.2000  adapted to softnet driver interface
  */
 
 /*****************************************************************************/
@@ -63,8 +64,8 @@
 /* --------------------------------------------------------------------- */
 
 /*static*/ const char sm_drvname[] = "soundmodem";
-static const char sm_drvinfo[] = KERN_INFO "soundmodem: (C) 1996-1999 Thomas Sailer, HB9JNX/AE4WA\n"
-KERN_INFO "soundmodem: version 0.9 compiled " __TIME__ " " __DATE__ "\n";
+static const char sm_drvinfo[] = KERN_INFO "soundmodem: (C) 1996-2000 Thomas Sailer, HB9JNX/AE4WA\n"
+KERN_INFO "soundmodem: version 0.11 compiled " __TIME__ " " __DATE__ "\n";
 
 /* --------------------------------------------------------------------- */
 

@@ -26,14 +26,15 @@
  *
  *
  *  History:
- *   0.1  xx.xx.98  Initial version by Matthias Welwarsky (dg2fef)
- *   0.2  21.04.98  Massive rework by Thomas Sailer
- *                  Integrated FPGA EPP modem configuration routines
- *   0.3  11.05.98  Took FPGA config out and moved it into a separate program
- *   0.4  26.07.99  Adapted to new lowlevel parport driver interface
- *   0.5  03.08.99  adapt to Linus' new __setup/__initcall
- *                  removed some pre-2.2 kernel compatibility cruft
- *   0.6  10.08.99  Check if parport can do SPP and is safe to access during interrupt contexts
+ *   0.1  xx.xx.1998  Initial version by Matthias Welwarsky (dg2fef)
+ *   0.2  21.04.1998  Massive rework by Thomas Sailer
+ *                    Integrated FPGA EPP modem configuration routines
+ *   0.3  11.05.1998  Took FPGA config out and moved it into a separate program
+ *   0.4  26.07.1999  Adapted to new lowlevel parport driver interface
+ *   0.5  03.08.1999  adapt to Linus' new __setup/__initcall
+ *                    removed some pre-2.2 kernel compatibility cruft
+ *   0.6  10.08.1999  Check if parport can do SPP and is safe to access during interrupt contexts
+ *   0.7  12.02.2000  adapted to softnet driver interface
  *
  */
 
@@ -50,6 +51,7 @@
 #include <linux/smp_lock.h>
 #include <asm/uaccess.h>
 #include <linux/if_arp.h>
+#include <linux/kmod.h>
 #include <linux/hdlcdrv.h>
 #include <linux/baycom.h>
 #include <linux/soundmodem.h>
@@ -90,8 +92,8 @@ static const char paranoia_str[] = KERN_ERR
 /* --------------------------------------------------------------------- */
 
 static const char bc_drvname[] = "baycom_epp";
-static const char bc_drvinfo[] = KERN_INFO "baycom_epp: (C) 1998-1999 Thomas Sailer, HB9JNX/AE4WA\n"
-KERN_INFO "baycom_epp: version 0.5 compiled " __TIME__ " " __DATE__ "\n";
+static const char bc_drvinfo[] = KERN_INFO "baycom_epp: (C) 1998-2000 Thomas Sailer, HB9JNX/AE4WA\n"
+KERN_INFO "baycom_epp: version 0.7 compiled " __TIME__ " " __DATE__ "\n";
 
 /* --------------------------------------------------------------------- */
 
@@ -377,40 +379,6 @@ static char *envp[] = { "HOME=/", "TERM=linux", "PATH=/usr/bin:/bin", NULL };
 
 static int errno;
 
-static inline void use_init_fs_context(void)
-{
-        struct fs_struct *our_fs, *init_fs;
-
-        /*
-         * Make modprobe's fs context be a copy of init's.
-         *
-         * We cannot use the user's fs context, because it
-         * may have a different root than init.
-         * Since init was created with CLONE_FS, we can grab
-         * its fs context from "init_task".
-         *
-         * The fs context has to be a copy. If it is shared
-         * with init, then any chdir() call in modprobe will
-         * also affect init and the other threads sharing
-         * init_task's fs context.
-         *
-         * We created the exec_modprobe thread without CLONE_FS,
-         * so we can update the fields in our fs context freely.
-         */
-        lock_kernel();
-
-        our_fs = current->fs;
-        dput(our_fs->root);
-        dput(our_fs->pwd);
-
-        init_fs = init_task.fs;
-        our_fs->umask = init_fs->umask;
-        our_fs->root = dget(init_fs->root);
-        our_fs->pwd = dget(init_fs->pwd);
-
-        unlock_kernel();
-}
-
 static int exec_eppfpga(void *b)
 {
 	struct baycom_state *bc = (struct baycom_state *)b;
@@ -428,41 +396,11 @@ static int exec_eppfpga(void *b)
 	sprintf(portarg, "%ld", bc->pdev->port->base);
 	printk(KERN_DEBUG "%s: %s -s -p %s -m %s\n", bc_drvname, eppconfig_path, portarg, modearg);
 
-        current->session = 1;
-        current->pgrp = 1;
-
-        use_init_fs_context();
-
-        /* Prevent parent user process from sending signals to child.
-           Otherwise, if the modprobe program does not exist, it might
-           be possible to get a user defined signal handler to execute
-           as the super user right after the execve fails if you time
-           the signal just right.
-        */
-        spin_lock_irq(&current->sigmask_lock);
-        flush_signals(current);
-        flush_signal_handlers(current);
-        spin_unlock_irq(&current->sigmask_lock);
-
-        for (i = 0; i < current->files->max_fds; i++ ) {
-                if (current->files->fd[i]) close(i);
-        }
-
-        /* Drop the "current user" thing */
-        free_uid(current);
-
-        /* Give kmod all privileges.. */
-        current->uid = current->euid = current->fsuid = 0;
-        cap_set_full(current->cap_inheritable);
-        cap_set_full(current->cap_effective);
-
-        /* Allow execve args to be in kernel space. */
-        set_fs(KERNEL_DS);
-
-	if (execve(eppconfig_path, argv, envp) < 0) {
+	i = exec_usermodehelper(eppconfig_path, argv, envp);
+	if (i < 0) {
                 printk(KERN_ERR "%s: failed to exec %s -s -p %s -m %s, errno = %d\n",
-                       bc_drvname, eppconfig_path, portarg, modearg, errno);
-                return -errno;
+                       bc_drvname, eppconfig_path, portarg, modearg, i);
+                return i;
         }
         return 0;
 }
@@ -1459,6 +1397,7 @@ static int baycom_probe(struct net_device *dev)
 	dev->addr_len = AX25_ADDR_LEN;     /* sizeof an ax.25 address */
 	memcpy(dev->broadcast, ax25_bcast, AX25_ADDR_LEN);
 	memcpy(dev->dev_addr, ax25_nocall, AX25_ADDR_LEN);
+	dev->tx_queue_len = 16;
 
 	/* New style flags */
 	dev->flags = 0;

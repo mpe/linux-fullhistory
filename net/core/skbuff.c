@@ -4,7 +4,7 @@
  *	Authors:	Alan Cox <iiitac@pyr.swan.ac.uk>
  *			Florian La Roche <rzsfl@rz.uni-sb.de>
  *
- *	Version:	$Id: skbuff.c,v 1.66 2000/02/09 21:11:30 davem Exp $
+ *	Version:	$Id: skbuff.c,v 1.67 2000/02/11 22:27:23 davem Exp $
  *
  *	Fixes:	
  *		Alan Cox	:	Fixed the worst of the load balancer bugs.
@@ -49,6 +49,7 @@
 #include <linux/string.h>
 #include <linux/skbuff.h>
 #include <linux/slab.h>
+#include <linux/cache.h>
 #include <linux/init.h>
 
 #include <net/ip.h>

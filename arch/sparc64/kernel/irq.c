@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.82 2000/02/09 11:15:07 davem Exp $
+/* $Id: irq.c,v 1.83 2000/02/11 06:57:17 jj Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997  David S. Miller  (davem@caip.rutgers.edu)
@@ -57,7 +57,7 @@ struct ino_bucket ivector_table[NUM_IVECS] __attribute__ ((aligned (64)));
 
 #ifndef __SMP__
 unsigned int __up_workvec[16] __attribute__ ((aligned (64)));
-#define irq_work(__cpu, __pil)	&(__up_workvec[(__pil)])
+#define irq_work(__cpu, __pil)	&(__up_workvec[(void)(__cpu), (__pil)])
 #else
 #define irq_work(__cpu, __pil)	&(cpu_data[(__cpu)].irq_worklists[(__pil)])
 #endif

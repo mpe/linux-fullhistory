@@ -25,11 +25,11 @@ extern unsigned int local_irq_count;
 
 #ifndef __SMP__
 
-#define hardirq_trylock(cpu)	(local_irq_count == 0)
-#define hardirq_endlock(cpu)	do { } while(0)
+#define hardirq_trylock(cpu)	((void)(cpu), local_irq_count == 0)
+#define hardirq_endlock(cpu)	do { (void)(cpu); } while(0)
 
-#define hardirq_enter(cpu)	(local_irq_count++)
-#define hardirq_exit(cpu)	(local_irq_count--)
+#define hardirq_enter(cpu)	((void)(cpu), local_irq_count++)
+#define hardirq_exit(cpu)	((void)(cpu), local_irq_count--)
 
 #define synchronize_irq()	barrier()
 
@@ -73,7 +73,7 @@ static inline int hardirq_trylock(int cpu)
 		! spin_is_locked (&global_irq_lock));
 }
 
-#define hardirq_endlock(cpu)	do { } while (0)
+#define hardirq_endlock(cpu)	do { (void)(cpu); } while (0)
 
 extern void synchronize_irq(void);
 

@@ -69,6 +69,7 @@
 #include <linux/wanrouter.h>
 #include <linux/init.h>
 #include <linux/poll.h>
+#include <linux/cache.h>
 
 #if defined(CONFIG_KMOD) && defined(CONFIG_NET)
 #include <linux/kmod.h>

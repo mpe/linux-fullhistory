@@ -4,6 +4,7 @@
 
 #include <linux/kernel.h>
 #include <linux/smp.h>
+#include <linux/cache.h>
 #include <asm/bitops.h>
 #include <asm/atomic.h>
 

@@ -64,7 +64,6 @@ static int		svc_udp_sendto(struct svc_rqst *);
 static inline void
 svc_serv_enqueue(struct svc_serv *serv, struct svc_rqst *rqstp)
 {
-	BUG_TRAP(spin_is_locked(&serv->sv_lock));
 	rpc_append_list(&serv->sv_threads, rqstp);
 }
 
@@ -74,7 +73,6 @@ svc_serv_enqueue(struct svc_serv *serv, struct svc_rqst *rqstp)
 static inline void
 svc_serv_dequeue(struct svc_serv *serv, struct svc_rqst *rqstp)
 {
-	BUG_TRAP(spin_is_locked(&serv->sv_lock));
 	rpc_remove_list(&serv->sv_threads, rqstp);
 }
 
@@ -105,8 +103,6 @@ svc_sock_enqueue(struct svc_sock *svsk)
 {
 	struct svc_serv	*serv = svsk->sk_server;
 	struct svc_rqst	*rqstp;
-
-	BUG_TRAP(spin_is_locked(&svsk->sk_lock));
 
 	/* NOTE: Local BH is already disabled by our caller. */
 	spin_lock(&serv->sv_lock);
@@ -155,8 +151,6 @@ static inline struct svc_sock *
 svc_sock_dequeue(struct svc_serv *serv)
 {
 	struct svc_sock	*svsk;
-
-	BUG_TRAP(spin_is_locked(&serv->sv_lock));
 
 	if ((svsk = serv->sv_sockets) != NULL)
 		rpc_remove_list(&serv->sv_sockets, svsk);

@@ -2080,8 +2080,8 @@ void __init decnet_proto_init(struct net_proto *pro)
 #ifdef CONFIG_DECNET_RAW
 	proc_net_create("decnet_raw", 0, dn_raw_get_info);
 #endif
-	dn_dev_init();
 	dn_neigh_init();
+	dn_dev_init();
 	dn_route_init();
 
 #ifdef CONFIG_DECNET_ROUTER
@@ -2149,8 +2149,8 @@ void __exit cleanup_module(void)
 	unregister_netdevice_notifier(&dn_dev_notifier);
 
 	dn_route_cleanup();
-	dn_neigh_cleanup();
 	dn_dev_cleanup();
+	dn_neigh_cleanup();
 
 #ifdef CONFIG_DECNET_ROUTER
 	dn_fib_cleanup();

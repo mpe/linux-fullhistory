@@ -35,6 +35,7 @@
 
 #include <linux/config.h>
 #include <linux/timer.h>
+#include <linux/cache.h>
 #include <linux/in.h>		/* struct sockaddr_in */
 
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)

@@ -86,8 +86,6 @@ static int full_duplex[MAX_UNITS] = {-1, -1, -1, -1, -1, -1, -1, -1};
 
 #define RUN_AT(x) (jiffies + (x))
 
-#define DEV_FREE_SKB(skb) dev_kfree_skb(skb);
-
 /* The PCI I/O space extent. */
 #define YELLOWFIN_TOTAL_SIZE 0x100
 
@@ -858,7 +856,7 @@ static void yellowfin_interrupt(int irq, void *dev_instance, struct pt_regs *reg
 			if (yp->tx_ring[entry].status == 0)
 				break;
 			/* Free the original skb. */
-			DEV_FREE_SKB(yp->tx_skbuff[entry]);
+			dev_kfree_skb_irq(yp->tx_skbuff[entry]);
 			yp->tx_skbuff[entry] = 0;
 			yp->stats.tx_packets++;
 		}
@@ -921,7 +919,7 @@ static void yellowfin_interrupt(int irq, void *dev_instance, struct pt_regs *reg
 				}
 
 				/* Free the original skb. */
-				DEV_FREE_SKB(yp->tx_skbuff[entry]);
+				dev_kfree_skb_irq(yp->tx_skbuff[entry]);
 				yp->tx_skbuff[entry] = 0;
 				/* Mark status as empty. */
 				yp->tx_status[entry].tx_errs = 0;
@@ -1193,13 +1191,13 @@ static int yellowfin_close(struct net_device *dev)
 		yp->rx_ring[i].cmd = CMD_STOP;
 		yp->rx_ring[i].addr = 0xBADF00D0; /* An invalid address. */
 		if (yp->rx_skbuff[i]) {
-			DEV_FREE_SKB(yp->rx_skbuff[i]);
+			dev_kfree_skb(yp->rx_skbuff[i]);
 		}
 		yp->rx_skbuff[i] = 0;
 	}
 	for (i = 0; i < TX_RING_SIZE; i++) {
 		if (yp->tx_skbuff[i])
-			DEV_FREE_SKB(yp->tx_skbuff[i]);
+			dev_kfree_skb(yp->tx_skbuff[i]);
 		yp->tx_skbuff[i] = 0;
 	}
 

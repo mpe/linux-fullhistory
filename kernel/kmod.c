@@ -63,10 +63,8 @@ use_init_fs_context(void)
 	unlock_kernel();
 }
 
-static int exec_modprobe(void * module_name)
+int exec_usermodehelper(char *program_path, char *argv[], char *envp[])
 {
-	static char * envp[] = { "HOME=/", "TERM=linux", "PATH=/sbin:/usr/sbin:/bin:/usr/bin", NULL };
-	char *argv[] = { modprobe_path, "-s", "-k", (char*)module_name, NULL };
 	int i;
 
 	current->session = 1;
@@ -101,13 +99,24 @@ static int exec_modprobe(void * module_name)
 	set_fs(KERNEL_DS);
 
 	/* Go, go, go... */
-	if (execve(modprobe_path, argv, envp) < 0) {
+	if (execve(program_path, argv, envp) < 0)
+		return -errno;
+	return 0;
+}
+
+static int exec_modprobe(void * module_name)
+{
+	static char * envp[] = { "HOME=/", "TERM=linux", "PATH=/sbin:/usr/sbin:/bin:/usr/bin", NULL };
+	char *argv[] = { modprobe_path, "-s", "-k", (char*)module_name, NULL };
+	int ret;
+
+	ret = exec_usermodehelper(modprobe_path, argv, envp);
+	if (ret) {
 		printk(KERN_ERR
 		       "kmod: failed to exec %s -s -k %s, errno = %d\n",
 		       modprobe_path, (char*) module_name, errno);
-		return -errno;
 	}
-	return 0;
+	return ret;
 }
 
 /*

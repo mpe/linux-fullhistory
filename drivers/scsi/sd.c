@@ -720,7 +720,7 @@ static int sd_init_onedisk(int i)
 				SCpnt->sense_buffer[2] = 0;
 
 				scsi_wait_cmd(SCpnt, (void *) cmd, (void *) buffer,
-					    512, SD_TIMEOUT, MAX_RETRIES);
+					    0/*512*/, SD_TIMEOUT, MAX_RETRIES);
 			}
 			spintime = 1;
 			spintime_value = jiffies;

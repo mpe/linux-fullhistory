@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.199 2000/02/08 21:27:17 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.200 2000/02/11 22:27:26 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -51,6 +51,7 @@
 #include <linux/types.h>
 #include <linux/fcntl.h>
 #include <linux/random.h>
+#include <linux/cache.h>
 #include <linux/init.h>
 
 #include <net/icmp.h>

@@ -3,7 +3,7 @@
 /*
  *	baycom_ser_hdx.c  -- baycom ser12 halfduplex radio modem driver.
  *
- *	Copyright (C) 1996-1999  Thomas Sailer (sailer@ife.ee.ethz.ch)
+ *	Copyright (C) 1996-2000  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -47,14 +47,15 @@
  *
  *
  *  History:
- *   0.1  26.06.96  Adapted from baycom.c and made network driver interface
- *        18.10.96  Changed to new user space access routines (copy_{to,from}_user)
- *   0.3  26.04.97  init code/data tagged
- *   0.4  08.07.97  alternative ser12 decoding algorithm (uses delta CTS ints)
- *   0.5  11.11.97  ser12/par96 split into separate files
- *   0.6  14.04.98  cleanups
- *   0.7  03.08.99  adapt to Linus' new __setup/__initcall
- *   0.8  10.08.99  use module_init/module_exit
+ *   0.1  26.06.1996  Adapted from baycom.c and made network driver interface
+ *        18.10.1996  Changed to new user space access routines (copy_{to,from}_user)
+ *   0.3  26.04.1997  init code/data tagged
+ *   0.4  08.07.1997  alternative ser12 decoding algorithm (uses delta CTS ints)
+ *   0.5  11.11.1997  ser12/par96 split into separate files
+ *   0.6  14.04.1998  cleanups
+ *   0.7  03.08.1999  adapt to Linus' new __setup/__initcall
+ *   0.8  10.08.1999  use module_init/module_exit
+ *   0.9  12.02.2000  adapted to softnet driver interface
  */
 
 /*****************************************************************************/
@@ -76,8 +77,8 @@
 /* --------------------------------------------------------------------- */
 
 static const char bc_drvname[] = "baycom_ser_hdx";
-static const char bc_drvinfo[] = KERN_INFO "baycom_ser_hdx: (C) 1996-1999 Thomas Sailer, HB9JNX/AE4WA\n"
-KERN_INFO "baycom_ser_hdx: version 0.7 compiled " __TIME__ " " __DATE__ "\n";
+static const char bc_drvinfo[] = KERN_INFO "baycom_ser_hdx: (C) 1996-2000 Thomas Sailer, HB9JNX/AE4WA\n"
+KERN_INFO "baycom_ser_hdx: version 0.9 compiled " __TIME__ " " __DATE__ "\n";
 
 /* --------------------------------------------------------------------- */
 
@@ -597,7 +598,7 @@ static int baycom_ioctl(struct net_device *dev, struct ifreq *ifr,
 		return 0;
 
 	case HDLCDRVCTL_SETMODE:
-		if (dev->start || !suser())
+		if (test_bit(LINK_STATE_START, &dev->state) || !suser())
 			return -EACCES;
 		hi->data.modename[sizeof(hi->data.modename)-1] = '\0';
 		return baycom_setmode(bc, hi->data.modename);

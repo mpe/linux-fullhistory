@@ -567,7 +567,6 @@ static void ei_tx_intr(struct net_device *dev)
 			printk(KERN_ERR "%s: bogus last_tx_buffer %d, tx1=%d.\n",
 				ei_local->name, ei_local->lasttx, ei_local->tx1);
 		ei_local->tx1 = 0;
-		netif_start_queue(dev);
 		if (ei_local->tx2 > 0) 
 		{
 			ei_local->txing = 1;
@@ -584,7 +583,6 @@ static void ei_tx_intr(struct net_device *dev)
 			printk("%s: bogus last_tx_buffer %d, tx2=%d.\n",
 				ei_local->name, ei_local->lasttx, ei_local->tx2);
 		ei_local->tx2 = 0;
-		netif_start_queue(dev);
 		if (ei_local->tx1 > 0) 
 		{
 			ei_local->txing = 1;
@@ -604,7 +602,6 @@ static void ei_tx_intr(struct net_device *dev)
 	 *  Single Tx buffer: mark it free so another packet can be loaded.
 	 */
 	ei_local->txing = 0;
-	netif_start_queue(dev);
 #endif
 
 	/* Minimize Tx latency: update the statistics after we restart TXing. */

@@ -27,16 +27,17 @@
  *	Written 1993-94 by Donald Becker.
  *
  *  History:
- *   0.1  21.09.96  Started
- *        18.10.96  Changed to new user space access routines 
- *                  (copy_{to,from}_user)
- *   0.2  21.11.96  various small changes
- *   0.3  03.03.97  fixed (hopefully) IP not working with ax.25 as a module
- *   0.4  16.04.97  init code/data tagged
- *   0.5  30.07.97  made HDLC buffers bigger (solves a problem with the
- *                  soundmodem driver)
- *   0.6  05.04.98  add spinlocks
- *   0.7  03.08.99  removed some old compatibility cruft
+ *   0.1  21.09.1996  Started
+ *        18.10.1996  Changed to new user space access routines 
+ *                    (copy_{to,from}_user)
+ *   0.2  21.11.1996  various small changes
+ *   0.3  03.03.1997  fixed (hopefully) IP not working with ax.25 as a module
+ *   0.4  16.04.1997  init code/data tagged
+ *   0.5  30.07.1997  made HDLC buffers bigger (solves a problem with the
+ *                    soundmodem driver)
+ *   0.6  05.04.1998  add spinlocks
+ *   0.7  03.08.1999  removed some old compatibility cruft
+ *   0.8  12.02.2000  adapted to softnet driver interface
  */
 
 /*****************************************************************************/
@@ -789,7 +790,6 @@ static int hdlcdrv_probe(struct net_device *dev)
 	dev->get_stats = hdlcdrv_get_stats;
 
 	/* Fill in the fields of the device structure */
-
 	dev_init_buffers(dev);
 
 	s->skb = NULL;
@@ -809,6 +809,7 @@ static int hdlcdrv_probe(struct net_device *dev)
 	dev->addr_len = AX25_ADDR_LEN;     /* sizeof an ax.25 address */
 	memcpy(dev->broadcast, ax25_bcast, AX25_ADDR_LEN);
 	memcpy(dev->dev_addr, ax25_nocall, AX25_ADDR_LEN);
+	dev->tx_queue_len = 16;
 
 	/* New style flags */
 	dev->flags = 0;
@@ -897,8 +898,8 @@ MODULE_DESCRIPTION("Packet Radio network interface HDLC encoder/decoder");
 
 int __init init_module(void)
 {
-	printk(KERN_INFO "hdlcdrv: (C) 1996 Thomas Sailer HB9JNX/AE4WA\n");
-	printk(KERN_INFO "hdlcdrv: version 0.7 compiled " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "hdlcdrv: (C) 1996-2000 Thomas Sailer HB9JNX/AE4WA\n");
+	printk(KERN_INFO "hdlcdrv: version 0.8 compiled " __TIME__ " " __DATE__ "\n");
 	return 0;
 }
 

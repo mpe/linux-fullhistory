@@ -53,14 +53,16 @@
  *
  *
  *  History:
- *   0.1  26.06.96  Adapted from baycom.c and made network driver interface
- *        18.10.96  Changed to new user space access routines (copy_{to,from}_user)
- *   0.3  26.04.97  init code/data tagged
- *   0.4  08.07.97  alternative ser12 decoding algorithm (uses delta CTS ints)
- *   0.5  11.11.97  split into separate files for ser12/par96
- *   0.6  03.08.99  adapt to Linus' new __setup/__initcall
- *                  removed some pre-2.2 kernel compatibility cruft
- *   0.7  10.08.99  Check if parport can do SPP and is safe to access during interrupt contexts
+ *   0.1  26.06.1996  Adapted from baycom.c and made network driver interface
+ *        18.10.1996  Changed to new user space access routines (copy_{to,from}_user)
+ *   0.3  26.04.1997  init code/data tagged
+ *   0.4  08.07.1997  alternative ser12 decoding algorithm (uses delta CTS ints)
+ *   0.5  11.11.1997  split into separate files for ser12/par96
+ *   0.6  03.08.1999  adapt to Linus' new __setup/__initcall
+ *                    removed some pre-2.2 kernel compatibility cruft
+ *   0.7  10.08.1999  Check if parport can do SPP and is safe to access during interrupt contexts
+ *   0.8  12.02.2000  adapted to softnet driver interface
+ *                    removed direct parport access, uses parport driver methods
  */
 
 /*****************************************************************************/
@@ -77,7 +79,6 @@
 #include <linux/string.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
-#include <asm/io.h>
 #include <asm/uaccess.h>
 #include <linux/init.h>
 #include <linux/delay.h>
@@ -99,8 +100,8 @@
 /* --------------------------------------------------------------------- */
 
 static const char bc_drvname[] = "baycom_par";
-static const char bc_drvinfo[] = KERN_INFO "baycom_par: (C) 1996-1999 Thomas Sailer, HB9JNX/AE4WA\n"
-KERN_INFO "baycom_par: version 0.6 compiled " __TIME__ " " __DATE__ "\n";
+static const char bc_drvinfo[] = KERN_INFO "baycom_par: (C) 1996-2000 Thomas Sailer, HB9JNX/AE4WA\n"
+KERN_INFO "baycom_par: version 0.8 compiled " __TIME__ " " __DATE__ "\n";
 
 /* --------------------------------------------------------------------- */
 
@@ -109,13 +110,6 @@ KERN_INFO "baycom_par: version 0.6 compiled " __TIME__ " " __DATE__ "\n";
 static struct net_device baycom_device[NR_PORTS];
 
 /* --------------------------------------------------------------------- */
-
-#define SER12_EXTENT 8
-
-#define LPT_DATA(dev)    ((dev)->base_addr+0)
-#define LPT_STATUS(dev)  ((dev)->base_addr+1)
-#define LPT_CONTROL(dev) ((dev)->base_addr+2)
-#define LPT_IRQ_ENABLE      0x10
 
 #define PAR96_BURSTBITS 16
 #define PAR96_BURST     4
@@ -207,6 +201,7 @@ static __inline__ void par96_tx(struct net_device *dev, struct baycom_state *bc)
 {
 	int i;
 	unsigned int data = hdlcdrv_getbits(&bc->hdrv);
+	struct parport *pp = bc->pdev->port;
 
 	for(i = 0; i < PAR96_BURSTBITS; i++, data >>= 1) {
 		unsigned char val = PAR97_POWER;
@@ -219,8 +214,8 @@ static __inline__ void par96_tx(struct net_device *dev, struct baycom_state *bc)
 				(PAR96_SCRAM_TAPN << 1);
 		if (bc->modem.par96.scram & (PAR96_SCRAM_TAP1 << 2))
 			val |= PAR96_TXBIT;
-		outb(val, LPT_DATA(dev));
-		outb(val | PAR96_BURST, LPT_DATA(dev));
+		pp->ops->write_data(pp, val);
+		pp->ops->write_data(pp, val | PAR96_BURST);
 	}
 }
 
@@ -230,24 +225,25 @@ static __inline__ void par96_rx(struct net_device *dev, struct baycom_state *bc)
 {
 	int i;
 	unsigned int data, mask, mask2, descx;
+	struct parport *pp = bc->pdev->port;
 
 	/*
 	 * do receiver; differential decode and descramble on the fly
 	 */
 	for(data = i = 0; i < PAR96_BURSTBITS; i++) {
 		bc->modem.par96.descram = (bc->modem.par96.descram << 1);
-		if (inb(LPT_STATUS(dev)) & PAR96_RXBIT)
+		if (pp->ops->read_status(pp) & PAR96_RXBIT)
 			bc->modem.par96.descram |= 1;
 		descx = bc->modem.par96.descram ^
 			(bc->modem.par96.descram >> 1);
 		/* now the diff decoded data is inverted in descram */
-		outb(PAR97_POWER | PAR96_PTT, LPT_DATA(dev));
+		pp->ops->write_data(pp, PAR97_POWER | PAR96_PTT);
 		descx ^= ((descx >> PAR96_DESCRAM_TAPSH1) ^
 			  (descx >> PAR96_DESCRAM_TAPSH2));
 		data >>= 1;
 		if (!(descx & 1))
 			data |= 0x8000;
-		outb(PAR97_POWER | PAR96_PTT | PAR96_BURST, LPT_DATA(dev));
+		pp->ops->write_data(pp, PAR97_POWER | PAR96_PTT | PAR96_BURST);
 	}
 	hdlcdrv_putbits(&bc->hdrv, data);
 	/*
@@ -272,7 +268,7 @@ static __inline__ void par96_rx(struct net_device *dev, struct baycom_state *bc)
 			bc->modem.par96.dcd_count -= 2;
 		hdlcdrv_setdcd(&bc->hdrv, bc->modem.par96.dcd_count > 0);
 	} else {
-		hdlcdrv_setdcd(&bc->hdrv, !!(inb(LPT_STATUS(dev)) & PAR96_DCD));
+		hdlcdrv_setdcd(&bc->hdrv, !!(pp->ops->read_status(pp) & PAR96_DCD));
 	}
 }
 
@@ -353,13 +349,12 @@ static int par96_open(struct net_device *dev)
 		parport_unregister_device(bc->pdev);
 		return -EBUSY;
 	}
+	pp = bc->pdev->port;
 	dev->irq = pp->irq;
-	/* bc->pdev->port->ops->change_mode(bc->pdev->port, PARPORT_MODE_PCSPP);  not yet implemented */
+	pp->ops->data_forward(pp);
         bc->hdrv.par.bitrate = 9600;
-	/* switch off PTT */
-	outb(PAR96_PTT | PAR97_POWER, LPT_DATA(dev));
-	/*bc->pdev->port->ops->enable_irq(bc->pdev->port);  not yet implemented */
-        outb(LPT_IRQ_ENABLE, LPT_CONTROL(dev));	
+	pp->ops->write_data(pp, PAR96_PTT | PAR97_POWER); /* switch off PTT */
+	pp->ops->enable_irq(pp);
 	printk(KERN_INFO "%s: par96 at iobase 0x%lx irq %u options 0x%x\n",
 	       bc_drvname, dev->base_addr, dev->irq, bc->options);
 	MOD_INC_USE_COUNT;
@@ -371,14 +366,15 @@ static int par96_open(struct net_device *dev)
 static int par96_close(struct net_device *dev)
 {
 	struct baycom_state *bc = (struct baycom_state *)dev->priv;
+	struct parport *pp;
 
 	if (!dev || !bc)
 		return -EINVAL;
+	pp = bc->pdev->port;
 	/* disable interrupt */
-        outb(0, LPT_CONTROL(dev));
-	/*bc->pdev->port->ops->disable_irq(bc->pdev->port);  not yet implemented */
+	pp->ops->disable_irq(pp);
 	/* switch off PTT */
-	outb(PAR96_PTT | PAR97_POWER, LPT_DATA(dev));
+	pp->ops->write_data(pp, PAR96_PTT | PAR97_POWER);
 	parport_release(bc->pdev);
 	parport_unregister_device(bc->pdev);
 	printk(KERN_INFO "%s: close par96 at iobase 0x%lx irq %u\n",

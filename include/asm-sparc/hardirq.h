@@ -18,8 +18,8 @@ extern unsigned int local_irq_count;
  */
 #define in_interrupt()  ((local_irq_count + local_bh_count) != 0)
 
-#define hardirq_trylock(cpu)	(local_irq_count == 0)
-#define hardirq_endlock(cpu)	do { } while (0)
+#define hardirq_trylock(cpu)	((void)(cpu), local_irq_count == 0)
+#define hardirq_endlock(cpu)	do { (void)(cpu); } while (0)
 
 #define hardirq_enter(cpu)	(local_irq_count++)
 #define hardirq_exit(cpu)	(local_irq_count--)
