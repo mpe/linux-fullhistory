@@ -1,0 +1,160 @@
+This version contains some features which is are NOT enabled by default. 
+I'm trying to release an official/reliable version soon so that the
+Linux version of Doom (and other games) becomes possible. For that reason
+I have disabled some features which are not reliable enough to be
+released for wide public. If you are interested to try them, please
+read this file carefully.
+
+There are currently following goodies which I have disabled:
+
+1) ECHO PSS (Personal Sound System support)
+
+This version contains support for soundcards based on the AD20msp614
+chipset made by Analog Devices. This chipset consist of the
+AD1848 codec, ADSP-21xx DSP chip and a ESC614 ASIC and is used in some
+soundcards made by Orchid, Cardinal, Echo Speech Corporation, Western
+Digital and Wearnes Technology. The PSS support is by Marc M. Hoffman
+(marc.hoffman@analog.com). I received this stuff about a week ago and
+have not been able to test it yet.
+If you are interested, remove the B(OPT_PSS) from the DISABLED_OPTIONS
+(see above).
+You have also to enable the MSS support since I have not integrated
+the AD1848 driver with the PSS one yet.
+
+2) WSS/MSS (Microsoft Sound System) support
+
+The MSS standard is based on the AD1848 codec by Analog Devices.
+Since I don't know how the software configuration of the MSS works
+so it's not supported yet. This driver should work if your card
+has jumpers for the I/O base, IRQ and DMA or there is a way to configure
+them using DOS. You could try this if you have a soundcard with
+AD1848 codec. I have tried to use this with Aztech SG NX Pro 16 without
+success. 
+If you are interested, remove the B(OPT_MSS) from the DISABLED_OPTIONS
+(see above).
+
+3) /dev/sequencer2
+
+This version has a new device file called /dev/sequence2. I have not
+implemented all parts of it but it's there. It's only interesting if
+you are writing a sequencer program yourself. Enable by creating
+the device file /dev/sequencer (minor 8).
+
+4) /dev/midi##
+
+These are tty like raw devices for MIDI ports. Since there is a minor
+incompatibility between different versions of Linux, I have disabled
+this feature by default. You just need to create the device files yourself.
+IMPORTANT!	If you get warning at line 64 of midibuf.c,
+		don't try to use /dev/midi## files. Otherwise your
+		system halts. You may also try to fix the
+		DEFINE_TIMER() macro in os.h (just remove the 2nd NULL).
+		This could happen with some earlier versions of Linux
+		(before 1.1.0???).
+
+5) Support for hardware based u-Law/A-Law and ADPCM formats.
+
+The AD1848 (and compatibles) are able to do compression and
+decompression by hardware. This version has experimental support
+for some of them. Currently they are implemented just in the
+AD1848 driver. The GUS MAX (and the 16 bit daughtercard) support
+also 16->4 bit ADPCM (the IMA one) but it don't work yet.
+The argument ioctl(SNDCTL_DSP_SAMPLESIZE) can have some new values
+in addition to the 8 and 16 supported earlier. Look at soundcard.h
+for more info.
+(In case somebody dares to ask: The ASP chip of SB16 is not supported
+so the hardware compression/decompression doesn't work with it. Also
+the ADPCM format is different than the standard (IMA) one (I guess).
+This feature is enabled by default.
+
+5) Real time fix to /dev/dsp and /dev/audio drivers
+
+The following feature should help game writers. This stuff is enabled
+by default.
+---------------- cut here ---------------------
+There is a new ioctl called SNDCTL_DSP_SETFRAGMENT. It accepts a
+int parameter which has format 0x00nn00ss where the nn is max number of 
+buffer fragments (between 0x02 and 0xff) and the ss gives indirectly the 
+size of a buffer fragment (fragment_size = (1 << ss)). Valid sizes are 
+between (ss=0x07 -> 128 bytes and ss=0x11 (17 dec) -> 128k).
+
+This ioctl must be used ONCE between open() and first call to 
+read()/write() or ioctl(SNDCTL_DSP_GETBLKSIZE). 
+
+You need just to force the fragment size to a value which is sufficiently 
+short (gives the 1/20th of sec with the speed/#channels/#bits you are using).
+
+Using a small number of fragments offers (I guess) a significant advantage.
+For example with 2 fragments the driver works as the following (at least 
+I hope so). Assuming that the process writes exactly 'fragment_size' of 
+bytes each time (this is really important).
+
+	1) When the process writes the first fragment, it will be copied to
+	the DMA buffer area and the playback begins. The write() returns
+	immediately and the process is free to continue.
+
+
+	2a) If the fragment gets played before the application writes a new
+	one, the device will be stoppen and restarted which causes a click.
+	When the process calls write next time, it will be processes as 
+	in step 1.
+
+	2b) If the process calls write before the buffer underflows, the
+	data will be queued and the process is free to continue. (There
+	is now one full and one partially played fragment in the kernel
+	buffers. This gives average delay of 1.5*fragment_time (for 
+	example 1/20th sec) before the last byte in the buffer gets played.
+
+
+	3a) If the device gets both fragments played before the next write
+	(underflow), there will be a click. The write will be processed as
+	in step 1.
+
+	3b) If the 1st fragment gets played before next write (the process
+	calls write during playback of the second fragment), it will be
+	processed as step 2b.
+
+	3c) If the process writes 3rd fragment when there is already 2
+	fragments in the queue (1 playing and 1 waiting), the process
+	will block until the 1st fragment gets played. It will then be
+	woken up and it continues as in step 2b. This means that
+	the process blocks for at most the time required to play a
+	buffer fragment.
+
+This method syncronizes the process and the audio device together 
+automaticly. The process will block at most the 'fragment_time'. Usually 
+less, depending on how much it needs time to do other things. The maximum
+delay between writing a byte and the time when it finally plays is
+at most 3 times the 'fragment_time'. 
+
+The delay depends on how much time the program needs to do it's 
+computations for the next sample (updating screen etc). If it's about
+80% of the 'fragment_time' the game will run almost without delays. If it 
+uses more time, there is a risk that the audio buffer gets empty.
+	
+The application code should be something like the following:
+
+int frag = 0x00020008;	/* 2 fragments of 2^8=256 bytes */
+int frag_size;
+
+int fd=open("/dev/dsp");
+ioctl(fd, SNDCTL_DSP_SETFRAGMENT, &frag);
+ioctl(NDCTL_DSP_SPEED); /* And #channels & #bits if required */
+
+/*
+ * Query the actual fragment sice since the driver may refuse
+ * the requested one (unlikely but possible?)
+ */
+
+ioctl(fd, SNDCTL_DSP_GETBLKSIZE, &frag_size);
+
+while(True)
+{
+	do_computations();
+	write(fd, buf, frag_size);	/* Always the same size!!!!!!! */
+}
+
+I have tested this with a modified version of str.c. The algorithm works 
+as long as the playing program gets enough time to run. Hitting ENTER on 
+another virtual console causes a pause/click (with 2 frags of 64 bytes).
+------------------- cut here ---------------------

@@ -21,13 +21,12 @@ extern int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
 static void sr_ioctl_done(Scsi_Cmnd * SCpnt)
 {
   struct request * req;
-  struct task_struct * p;
   
   req = &SCpnt->request;
   req->dev = 0xfffe; /* Busy, but indicate request done */
   
   if (req->sem != NULL) {
-    up(&req->sem);
+    up(req->sem);
   }
 }
 

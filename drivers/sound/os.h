@@ -44,8 +44,8 @@
 #include <sys/kd.h>
 #include <linux/wait.h>
 #include <linux/malloc.h>
-#include <linux/soundcard.h>
 #include <linux/string.h>
+#include <linux/soundcard.h>
 
 typedef char snd_rw_buf;
 
@@ -73,7 +73,7 @@ struct snd_wait {
 #define DEFINE_WAIT_QUEUES(name, flag) static struct wait_queue *name = {NULL}; \
 	static volatile struct snd_wait flag = {{0}}
 #define RESET_WAIT_QUEUE(q, f) {f.aborting = 0;f.mode = WK_NONE;}
-#define PROCESS_ABORTING(q, f) (f.aborting | (current->signal & ~current->blocked))
+#define PROCESS_ABORTING(q, f) (/*f.aborting | */(current->signal & ~current->blocked))
 #define SET_ABORT_FLAG(q, f) f.aborting = 1
 #define TIMED_OUT(q, f) (f.mode & WK_TIMEOUT)
 #define DO_SLEEP(q, f, time_limit)	\
@@ -141,7 +141,7 @@ struct snd_wait {
 
 #define DEFINE_TIMER(name, proc) \
   static struct timer_list name = \
-  {NULL, 0, 0, 0, proc}
+  {NULL, NULL, 0, 0, proc}
 
 /*
  * The ACTIVATE_TIMER requests system to call 'proc' after 'time' ticks.
@@ -153,3 +153,9 @@ struct snd_wait {
 
 #define INB	inb
 #define OUTB	outb
+
+/*
+ * SND_SA_INTERRUPT is required. Otherwise the IRQ number is not passed 
+ * the handler.
+ */
+#define SND_SA_INTERRUPT

@@ -47,8 +47,11 @@
 
 /* Bits of FD_ST3 */
 #define ST3_HA		0x04		/* Head (Address) */
+#define ST3_DS		0x08		/* drive is double-sided */
 #define ST3_TZ		0x10		/* Track Zero signal (1=track 0) */
+#define ST3_RY		0x20		/* drive is ready */
 #define ST3_WP		0x40		/* Write Protect */
+#define ST3_FT		0x80		/* Drive Fault */
 
 /* Values for FD_COMMAND */
 #define FD_RECALIBRATE		0x07	/* move to track 0 */
@@ -61,6 +64,7 @@
 #define FD_VERSION		0x10	/* get version code */
 #define FD_CONFIGURE		0x13	/* configure FIFO operation */
 #define FD_PERPENDICULAR	0x12	/* perpendicular r/w mode */
+#define FD_GETSTATUS		0x04	/* read ST3 */
 
 /* DMA commands */
 #define DMA_READ	0x46

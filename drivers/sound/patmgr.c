@@ -67,7 +67,9 @@ void
 pmgr_release (int dev)
 {
 
-  if (mbox[dev])		/* Killed in action. Inform the client */
+  if (mbox[dev])		/*
+				 * Killed in action. Inform the client
+				 */
     {
 
       mbox[dev]->key = PM_ERROR;

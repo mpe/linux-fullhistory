@@ -1,4 +1,3 @@
-
 /*
  * linux/kernel/chr_drv/sound/soundcard.c
  *
@@ -34,18 +33,12 @@
 
 #include <linux/major.h>
 
-extern long     seq_time;
-
 static int      soundcards_installed = 0;	/* Number of installed
 
 						 * soundcards */
 static int      soundcard_configured = 0;
 
 static struct fileinfo files[SND_NDEVS];
-
-extern char    *snd_raw_buf[MAX_DSP_DEV][DSP_BUFFCOUNT];
-extern unsigned long snd_raw_buf_phys[MAX_DSP_DEV][DSP_BUFFCOUNT];
-extern int      snd_raw_count[MAX_DSP_DEV];
 
 int
 snd_ioctl_return (int *addr, int value)
@@ -146,9 +139,17 @@ sound_select (struct inode *inode, struct file *file, int sel_type, select_table
 
   switch (dev & 0x0f)
     {
+#ifndef EXCLUDE_SEQUENCER
     case SND_DEV_SEQ:
       return sequencer_select (dev, &files[dev], sel_type, wait);
       break;
+#endif
+
+#ifndef EXCLUDE_MIDI
+    case SND_DEV_MIDIN:
+      return MIDIbuf_select (dev, &files[dev], sel_type, wait);
+      break;
+#endif
 
     default:
       return 0;
@@ -183,19 +184,23 @@ soundcard_init (long mem_start)
   if (!(soundcards_installed = sndtable_get_cardcount ()))
     return mem_start;		/* No cards detected */
 
-  if (num_dspdevs)		/* Audio devices present */
+#ifndef EXCLUDE_AUDIO
+  if (num_audiodevs)		/* Audio devices present */
     {
       mem_start = DMAbuf_init (mem_start);
       mem_start = audio_init (mem_start);
     }
+#endif
 
-#ifndef EXCLUDE_MPU401
+#ifndef EXCLUDE_MIDI
   if (num_midis)
     mem_start = MIDIbuf_init (mem_start);
 #endif
 
+#ifndef EXCLUDE_SEQUENCER
   if (num_midis + num_synths)
     mem_start = sequencer_init (mem_start);
+#endif
 
   return mem_start;
 }
@@ -243,10 +248,13 @@ snd_release_irq (int vect)
   free_irq (vect);
 }
 
+#ifndef EXCLUDE_SEQUENCER
 void
 request_sound_timer (int count)
 {
-#ifndef EXCLUDE_SEQUENCER
+  extern unsigned long seq_time;
+
+#if 1
   if (count < 0)
     count = jiffies + (-count);
   else
@@ -257,10 +265,12 @@ request_sound_timer (int count)
 #endif
 }
 
+#endif
+
 void
 sound_stop_timer (void)
 {
-#ifndef EXCLUDE_SEQUENCER
+#if 1
   timer_table[SOUND_TIMER].expires = 0;
   timer_active &= ~(1 << SOUND_TIMER);
 #endif
@@ -281,6 +291,7 @@ sound_mem_init (void)
 {
   int             i, dev;
   unsigned long   start_addr, end_addr, mem_ptr, dma_pagesize;
+  struct dma_buffparms *dmap;
 
   mem_ptr = high_memory;
 
@@ -289,38 +300,40 @@ sound_mem_init (void)
   if (mem_ptr > (16 * 1024 * 1024))
     mem_ptr = 16 * 1024 * 1024;	/* Limit to 16M */
 
-  for (dev = 0; dev < num_dspdevs; dev++)	/* Enumerate devices */
-    if (sound_buffcounts[dev] > 0 && sound_dsp_dmachan[dev] > 0)
+  for (dev = 0; dev < num_audiodevs; dev++)	/* Enumerate devices */
+    if (audio_devs[dev]->buffcount > 0 && audio_devs[dev]->dmachan >= 0)
       {
-	if (sound_dma_automode[dev])
-	  sound_buffcounts[dev] = 1;
+	dmap = audio_devs[dev]->dmap;
 
-	if (sound_dsp_dmachan[dev] > 3 && sound_buffsizes[dev] > 65536)
+	if (audio_devs[dev]->flags & DMA_AUTOMODE)
+	  audio_devs[dev]->buffcount = 1;
+
+	if (audio_devs[dev]->dmachan > 3 && audio_devs[dev]->buffsize > 65536)
 	  dma_pagesize = 131072;/* 128k */
 	else
 	  dma_pagesize = 65536;
 
 	/* More sanity checks */
 
-	if (sound_buffsizes[dev] > dma_pagesize)
-	  sound_buffsizes[dev] = dma_pagesize;
-	sound_buffsizes[dev] &= 0xfffff000;	/* Truncate to n*4k */
-	if (sound_buffsizes[dev] < 4096)
-	  sound_buffsizes[dev] = 4096;
+	if (audio_devs[dev]->buffsize > dma_pagesize)
+	  audio_devs[dev]->buffsize = dma_pagesize;
+	audio_devs[dev]->buffsize &= 0xfffff000;	/* Truncate to n*4k */
+	if (audio_devs[dev]->buffsize < 4096)
+	  audio_devs[dev]->buffsize = 4096;
 
 	/* Now allocate the buffers */
 
-	for (snd_raw_count[dev] = 0; snd_raw_count[dev] < sound_buffcounts[dev]; snd_raw_count[dev]++)
+	for (dmap->raw_count = 0; dmap->raw_count < audio_devs[dev]->buffcount; dmap->raw_count++)
 	  {
-	    start_addr = mem_ptr - sound_buffsizes[dev];
-	    if (!valid_dma_page (start_addr, sound_buffsizes[dev], dma_pagesize))
+	    start_addr = mem_ptr - audio_devs[dev]->buffsize;
+	    if (!valid_dma_page (start_addr, audio_devs[dev]->buffsize, dma_pagesize))
 	      start_addr &= ~(dma_pagesize - 1);	/* Align address to
 							 * dma_pagesize */
 
-	    end_addr = start_addr + sound_buffsizes[dev] - 1;
+	    end_addr = start_addr + audio_devs[dev]->buffsize - 1;
 
-	    snd_raw_buf[dev][snd_raw_count[dev]] = (char *) start_addr;
-	    snd_raw_buf_phys[dev][snd_raw_count[dev]] = start_addr;
+	    dmap->raw_buf[dmap->raw_count] = (char *) start_addr;
+	    dmap->raw_buf_phys[dmap->raw_count] = start_addr;
 	    mem_ptr = start_addr;
 
 	    for (i = MAP_NR (start_addr); i <= MAP_NR (end_addr); i++)

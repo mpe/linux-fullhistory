@@ -26,7 +26,7 @@
  */
 static int isofs_match(int len,const char * name, char * compare, int dlen)
 {
-	register int same __asm__("ax");
+	register int same;
 	
 	if (!compare) return 0;
 	/* "" means "." ---> so paths like "/usr/lib//libc.a" work */
@@ -45,7 +45,8 @@ static int isofs_match(int len,const char * name, char * compare, int dlen)
 	
 	if (dlen != len)
 		return 0;
-	__asm__("cld\n\t"
+	__asm__ __volatile__(
+		"cld\n\t"
 		"repe ; cmpsb\n\t"
 		"setz %%al"
 		:"=a" (same)

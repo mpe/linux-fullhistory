@@ -869,7 +869,7 @@ void si_swapinfo(struct sysinfo *val)
 
 	val->freeswap = val->totalswap = 0;
 	for (i = 0; i < nr_swapfiles; i++) {
-		if (!(swap_info[i].flags & SWP_USED))
+		if ((swap_info[i].flags & SWP_WRITEOK) != SWP_WRITEOK)
 			continue;
 		for (j = 0; j < swap_info[i].max; ++j)
 			switch (swap_info[i].swap_map[j]) {

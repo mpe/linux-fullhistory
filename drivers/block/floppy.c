@@ -97,7 +97,7 @@
 #define MAJOR_NR FLOPPY_MAJOR
 #include "blk.h"
 
-static unsigned int changed_floppies = 0, fake_change = 0;
+static unsigned int changed_floppies = 0, fake_change = 0, read_only = 0;
 
 static int initial_reset_flag = 0;
 static int need_configure = 1;		/* for 82077 */
@@ -150,7 +150,7 @@ static unsigned char reply_buffer[MAX_REPLIES];
 #define ST0 (reply_buffer[0])
 #define ST1 (reply_buffer[1])
 #define ST2 (reply_buffer[2])
-#define ST3 (reply_buffer[3])
+#define ST3 (reply_buffer[0]) /* result of GETSTATUS */
 
 /*
  * This struct defines the different floppy types.
@@ -1037,8 +1037,20 @@ static void shake_one(void)
 	output_byte(1);
 }
 
+static void check_readonly(void)
+{
+	unsigned long mask = 1 << current_drive;
+
+	read_only &= ~mask;
+	output_byte(FD_GETSTATUS);
+	output_byte(current_drive);
+	if ((result() == 1) && (ST3 & ST3_RY) && !(ST3 & ST3_FT) && (ST3 & ST3_WP))
+		read_only |= mask;
+}
+
 static void floppy_ready(void)
 {
+	check_readonly();
 	if (inb(FD_DIR) & 0x80) {
 		changed_floppies |= 1<<current_drive;
 		buffer_track = -1;
@@ -1368,6 +1380,16 @@ static void config_types(void)
 	printk("\n");
 }
 
+static void floppy_release(struct inode * inode, struct file * filp)
+{
+	fsync_dev(inode->i_rdev);
+	if (!fd_ref[inode->i_rdev & 3]--) {
+		printk("floppy_release with fd_ref == 0");
+		fd_ref[inode->i_rdev & 3] = 0;
+	}
+	floppy_release_irq_and_dma();
+}
+
 /*
  * floppy_open check for aliasing (/dev/fd0 can be the same as
  * /dev/PS0 etc), and disallows simultaneous access to the same
@@ -1390,19 +1412,16 @@ static int floppy_open(struct inode * inode, struct file * filp)
 	buffer_drive = buffer_track = -1;
 	if (old_dev && old_dev != inode->i_rdev)
 		invalidate_buffers(old_dev);
-	if (filp && filp->f_mode)
+	if (filp && filp->f_mode) {
 		check_disk_change(inode->i_rdev);
-	return 0;
-}
-
-static void floppy_release(struct inode * inode, struct file * filp)
-{
-	fsync_dev(inode->i_rdev);
-	if (!fd_ref[inode->i_rdev & 3]--) {
-		printk("floppy_release with fd_ref == 0");
-		fd_ref[inode->i_rdev & 3] = 0;
+		if (filp->f_mode & 2) {
+			if (1 & (read_only >> drive)) {
+				floppy_release(inode, filp);
+				return -EACCES;
+			}
+		}
 	}
-        floppy_release_irq_and_dma();
+	return 0;
 }
 
 static int check_floppy_change(dev_t dev)

@@ -40,23 +40,31 @@
 
 #define OPT_GUS		3
 #define OPT_MPU401	4
+#define OPT_UART6850	5
+#define OPT_PSS		6
+#define OPT_GUS16	7
+#define OPT_GUSMAX	8
+#define OPT_MSS		9
 
-#define OPT_HIGHLEVEL   5
-#define OPT_SBPRO	5
-#define OPT_SB16	6
-#define OPT_AUDIO	7
-#define OPT_MIDI_AUTO	8
-#define OPT_MIDI	9
-#define OPT_YM3812_AUTO	10	/* Select this automaticly if user selects
-				   * MIDI or AdLib driver */
-#define OPT_YM3812	11	/* Select this if the previous one was not
-				   * selected */
-#define OPT_SEQUENCER	12
-#define OPT_CHIP_MIDI   13	/* New support added at UW - Milwauklee UW -
-				   * Milwauklee */
-#define OPT_LAST	12
+#define OPT_HIGHLEVEL   10	/* This must be same than the next one */
+#define OPT_SBPRO	10
+#define OPT_SB16	11
+#define OPT_AUDIO	12
+#define OPT_MIDI_AUTO	13
+#define OPT_MIDI	14
+#define OPT_YM3812_AUTO	15
+#define OPT_YM3812	16
+#define OPT_SEQUENCER	17
+#define OPT_LAST	17	/* Must be the same than the defined OPT */
 
-#define ANY_DEVS (B(OPT_AUDIO)|B(OPT_MIDI)|B(OPT_SEQUENCER)|B(OPT_GUS)|B(OPT_MPU401))
+#define ANY_DEVS (B(OPT_AUDIO)|B(OPT_MIDI)|B(OPT_SEQUENCER)|B(OPT_GUS)| \
+		  B(OPT_MPU401)|B(OPT_PSS)|B(OPT_GUS16)|B(OPT_GUSMAX)|B(OPT_MSS))
+/*
+ * Options that have been disabled for some reason (incompletely implemented
+ * and/or tested). Don't remove from this list before looking at file
+ * experimental.txt for further info.
+ */
+#define DISABLED_OPTIONS (B(OPT_PSS))
 
 typedef struct
   {
@@ -87,24 +95,29 @@ hw_entry;
 
 hw_entry        hw_table[] =
 {
-/* 0 */
+/*
+ * 0
+ */
   {0, 0, "PAS", 1, 0, 0},
   {0, 0, "SB", 1, 0, 0},
   {0, B (OPT_PAS) | B (OPT_SB), "ADLIB", 1, 0, 0},
 
-/* 3 */
   {0, 0, "GUS", 1, 0, 0},
   {0, 0, "MPU401", 1, 0, 0},
+  {0, 0, "UART6850", 1, 0, 0},
+  {0, 0, "PSS", 1, 0, 0},
+  {B (OPT_GUS), 0, "GUS16", 1, 0, 0},
+  {B (OPT_GUS), B (OPT_GUS16), "GUSMAX", 1, 0, 0},
+  {0, 0, "MSS", 1, 0, 0},
+
   {B (OPT_SB), B (OPT_PAS), "SBPRO", 1, 0, 1},
   {B (OPT_SB) | B (OPT_SBPRO), B (OPT_PAS), "SB16", 1, 0, 1},
-  {B (OPT_SB) | B (OPT_PAS) | B (OPT_GUS), 0, "AUDIO", 1, 0, 1},
+{B (OPT_PSS) | B (OPT_SB) | B (OPT_PAS) | B (OPT_GUS), 0, "AUDIO", 1, 0, 1},
   {B (OPT_MPU401), 0, "MIDI_AUTO", 0, OPT_MIDI, 0},
-  {B (OPT_SB) | B (OPT_PAS) | B (OPT_MPU401) | B (OPT_GUS), 0, "MIDI", 1, 0, 1},
+  {B (OPT_PSS) | B (OPT_SB) | B (OPT_PAS) | B (OPT_MPU401) | B (OPT_GUS), 0, "MIDI", 1, 0, 1},
   {B (OPT_ADLIB), 0, "YM3812_AUTO", 0, OPT_YM3812, 0},
-  {B (OPT_SB) | B (OPT_PAS) | B (OPT_ADLIB), B (OPT_YM3812_AUTO), "YM3812", 1, 0, 1},
-/* 10 */
-  {B (OPT_MIDI) | B (OPT_YM3812) | B (OPT_YM3812_AUTO) | B (OPT_GUS), 0, "SEQUENCER", 0, 0, 1},
-  {0, 0, "CHIP_MIDI", 1, 0, 0}
+  {B (OPT_PSS) | B (OPT_SB) | B (OPT_PAS) | B (OPT_ADLIB), B (OPT_YM3812_AUTO), "YM3812", 1, 0, 1},
+  {B (OPT_MIDI) | B (OPT_YM3812) | B (OPT_YM3812_AUTO) | B (OPT_GUS), 0, "SEQUENCER", 0, 0, 1}
 };
 
 char           *questions[] =
@@ -114,6 +127,11 @@ char           *questions[] =
   "AdLib support",
   "Gravis Ultrasound support",
   "MPU-401 support (NOT for SB16)",
+  "6850 UART Midi support",
+  "PSS (ECHO-ADI2111) support",
+  "16 bit sampling option of GUS (_NOT_ GUS MAX)",
+  "GUS MAX support",
+  "Microsoft Sound System support",
 
   "SoundBlaster Pro support",
   "SoundBlaster 16 support",
@@ -123,7 +141,7 @@ char           *questions[] =
   "This should not be asked",
   "FM synthesizer (YM3812/OPL-3) support",
   "/dev/sequencer support",
-  "MIDI on CHIP support"
+  "Should I die"
 };
 
 unsigned long   selected_options = 0;
@@ -136,12 +154,12 @@ can_select_option (int nr)
     {
     case 0:
       fprintf (stderr, "The SoundBlaster, AdLib and ProAudioSpectrum\n"
-	       "cards cannot be installed at the same time\n");
-      fprintf (stderr, "\nSelect at most one of them:\n");
+	       "CARDS cannot be installed at the same time.\n\n"
+	       "However the PAS16 has a SB emulator so you could select"
+	       "the SoundBlaster DRIVER with it.\n");
       fprintf (stderr, "	- ProAudioSpectrum 16\n");
       fprintf (stderr, "	- SoundBlaster / SB Pro\n");
-      fprintf (stderr, "          (Could be selected with PAS16 also\n"
-	       "	  since there is a SB emulation on it)\n");
+      fprintf (stderr, "          (Could be selected with a PAS16 also)\n");
       fprintf (stderr, "	- AdLib\n");
       fprintf (stderr, "\nDon't enable SoundBlaster if you have GUS at 0x220!\n\n");
       break;
@@ -166,6 +184,9 @@ can_select_option (int nr)
     if (hw_table[nr].exclusive_options & selected_options)
       return 0;
 
+  if (DISABLED_OPTIONS & B (nr))
+    return 0;
+
   return 1;
 }
 
@@ -185,7 +206,9 @@ think_positively (int def_answ)
       exit (-1);
     }
 
-  if (len < 2)			/* There is an additional LF at the end */
+  if (len < 2)			/*
+				 * There is an additional LF at the end
+				 */
     return def_answ;
 
   answ[len - 1] = 0;
@@ -214,7 +237,9 @@ play_it_again_Sam:
       exit (-1);
     }
 
-  if (len < 2)			/* There is an additional LF at the end */
+  if (len < 2)			/*
+				 * There is an additional LF at the end
+				 */
     return default_answer;
 
   answ[len - 1] = 0;
@@ -242,8 +267,15 @@ main (int argc, char *argv[])
 
   if (think_positively (0))
     {
-      selected_options = 0xffffffff & ~B (OPT_MPU401);
-      fprintf (stderr, "Note! MPU-401 driver was not enabled\n");
+      /*
+ * Select all but some most dangerous cards. These cards are difficult to
+ * detect reliably or conflict with some other cards (SCSI, Mitsumi)
+ */
+      selected_options = 0xffffffff &
+	~(B (OPT_MPU401) | B (OPT_UART6850) | B (OPT_PSS)) &
+	~DISABLED_OPTIONS;
+
+      fprintf (stderr, "Note! MPU-401, PSS and 6850 UART drivers not enabled\n");
       full_driver = 1;
     }
   else
@@ -255,14 +287,18 @@ main (int argc, char *argv[])
 	  printf ("#undef KERNEL_SOUNDCARD\n");
 	  exit (0);
 	}
-      /* Partial driver */
+      /*
+       * Partial driver
+       */
 
       full_driver = 0;
 
       for (i = 0; i <= OPT_LAST; i++)
 	if (can_select_option (i))
 	  {
-	    if (!(selected_options & B (i)))	/* Not selected yet */
+	    if (!(selected_options & B (i)))	/*
+						 * Not selected yet
+						 */
 	      if (!hw_table[i].verify)
 		{
 		  if (hw_table[i].alias)
@@ -289,6 +325,73 @@ main (int argc, char *argv[])
   if (selected_options & B (OPT_SB16))
     selected_options |= B (OPT_SBPRO);
 
+  if (selected_options & B (OPT_PSS))
+    {
+    genld_again:
+      fprintf
+	(stderr,
+       "if you wish to emulate the soundblaster and you have a DSPxxx.LD.\n"
+	 "then you must include the LD in the kernel.\n"
+	 "(do you wish to include a LD) ? ");
+      if (think_positively (1))
+	{
+	  char            path[512];
+
+	  fprintf (stderr,
+		   "Enter the path to your LD file (pwd is sound): ");
+	  scanf ("%s", path);
+	  fprintf (stderr, "including LD file %s\n", path);
+	  selected_options |= B (OPT_SB) | B (OPT_MPU401) | B (OPT_ADLIB);
+
+	  /* Gen LD header */
+	  {
+	    int             fd;
+	    int             count;
+	    char            c;
+	    int             i = 0;
+
+	    if ((fd = open (path, 0)) > 0)
+	      {
+		FILE           *sf = fopen ("synth-ld.h", "w");
+
+		fprintf (sf, "/* automaticaly generated by configure */\n");
+		fprintf (sf, "unsigned char pss_synth[] = {\n");
+		while (1)
+		  {
+		    count = read (fd, &c, 1);
+		    if (count == 0)
+		      break;
+		    if (i != 0 && (i % 10) == 0)
+		      fprintf (sf, "\n");
+		    fprintf (sf, "0x%02x,", c & 0xFFL);
+		    i++;
+		  }
+		fprintf (sf, "};\n"
+			 "#define pss_synthLen %d\n", i);
+		fclose (sf);
+		close (fd);
+	      }
+	    else
+	      {
+		fprintf (stderr, "couldn't open %s as the ld file\n",
+			 path);
+		fprintf (stderr, "try again with correct path? ");
+		if (think_positively (1))
+		  goto genld_again;
+	      }
+	  }
+	}
+      else
+	{
+	  FILE           *sf = fopen ("synth-ld.h", "w");
+
+	  fprintf (sf, "/* automaticaly generated by configure */\n");
+	  fprintf (sf, "unsigned char pss_synth[1];\n"
+		   "#define pss_synthLen 0\n");
+	  fclose (sf);
+	}
+    }
+
   if (!(selected_options & ANY_DEVS))
     {
       printf ("#undef CONFIGURE_SOUNDCARD\n");
@@ -307,21 +410,26 @@ main (int argc, char *argv[])
 	printf ("#define EXCLUDE_%s\n", hw_table[i].macro);
 
 
-  printf ("#define EXCLUDE_PRO_MIDI\n");
-  printf ("#define EXCLUDE_CHIP_MIDI\n");
-
   /*
    * IRQ and DMA settings
    */
   printf ("\n");
 
 #if defined(linux)
-  if (selected_options & B (OPT_SB) && selected_options & (B (OPT_AUDIO) | B (OPT_MIDI)))
+  if ((selected_options & B (OPT_SB)) && selected_options & (B (OPT_AUDIO) | B (OPT_MIDI)))
     {
+      fprintf (stderr, "\nI/O base for SB?\n"
+	       "The factory default is 220\n"
+	       "Enter the SB I/O base: ");
+
+      num = ask_value ("%x", 0x220);
+      fprintf (stderr, "SB I/O base set to %03x\n", num);
+      printf ("#define SBC_BASE 0x%03x\n", num);
+
       fprintf (stderr, "\nIRQ number for SoundBlaster?\n"
 	       "The IRQ address is defined by the jumpers on your card.\n"
 	  "The factory default is either 5 or 7 (depending on the model).\n"
-	       "Valid values are 9, 5, 7 and 10.\n"
+	       "Valid values are 9(=2), 5, 7 and 10.\n"
 	       "Enter the value: ");
 
       num = ask_value ("%d", 7);
@@ -332,12 +440,11 @@ main (int argc, char *argv[])
 	  num = 7;
 	}
       fprintf (stderr, "SoundBlaster IRQ set to %d\n", num);
-      printf ("#define SBC_BASE 0x220\n");
+
       printf ("#define SBC_IRQ %d\n", num);
 
-      if (selected_options & (B (OPT_SBPRO) | B (OPT_PAS)))
+      if (selected_options & (B (OPT_SBPRO) | B (OPT_PAS) | B (OPT_PSS)))
 	{
-
 	  fprintf (stderr, "\nDMA channel for SoundBlaster?\n"
 		   "For SB 1.0, 1.5 and 2.0 this MUST be 1\n"
 		   "SB Pro supports DMA channels 0, 1 and 3 (jumper)\n"
@@ -397,7 +504,9 @@ main (int argc, char *argv[])
 		   "Enter the value: ");
 
 	  num = ask_value ("%d", 10);
-	  if (num == 6 || num < 3 || num > 15 || num == 2)	/* Illegal */
+	  if (num == 6 || num < 3 || num > 15 || num == 2)	/*
+								 * Illegal
+								 */
 	    {
 
 	      fprintf (stderr, "*** Illegal input! ***\n");
@@ -461,7 +570,9 @@ main (int argc, char *argv[])
 	       "Enter the value: ");
 
       num = ask_value ("%d", 15);
-      if (num == 6 || num < 3 || num > 15 || num == 2)	/* Invalid */
+      if (num == 6 || num < 3 || num > 15 || num == 2)	/*
+							 * Invalid
+							 */
 	{
 
 	  fprintf (stderr, "*** Illegal input! ***\n");
@@ -498,11 +609,13 @@ main (int argc, char *argv[])
 
       fprintf (stderr, "\nIRQ number for MPU-401?\n"
 	       "Valid numbers are: 3, 4, 5, 7 and 9(=2).\n"
-	       "The default value is 5.\n"
+	       "The default value is 9.\n"
 	       "Enter the value: ");
 
-      num = ask_value ("%d", 5);
-      if (num == 6 || num < 3 || num > 15)	/* Used for floppy */
+      num = ask_value ("%d", 9);
+      if (num == 6 || num < 3 || num > 15)	/*
+						 * Used for floppy
+						 */
 	{
 
 	  fprintf (stderr, "*** Illegal input! ***\n");
@@ -510,6 +623,161 @@ main (int argc, char *argv[])
 	}
       fprintf (stderr, "MPU-401 IRQ set to %d\n", num);
       printf ("#define MPU_IRQ %d\n", num);
+    }
+
+  if (selected_options & B (OPT_UART6850))
+    {
+      fprintf (stderr, "\nI/O base for 6850 UART Midi?\n"
+	       "Be carefull. No defaults.\n"
+	       "Enter the 6850 UART I/O base: ");
+
+      num = ask_value ("%x", 0);
+      if (num == 0)
+	{
+	  /*
+ * Invalid value entered
+ */
+	  printf ("#define EXCLUDE_UART6850\n");
+	}
+      else
+	{
+	  fprintf (stderr, "6850 UART I/O base set to %03x\n", num);
+	  printf ("#define U6850_BASE 0x%03x\n", num);
+
+	  fprintf (stderr, "\nIRQ number for 6850 UART?\n"
+		   "Valid numbers are: 3, 4, 5, 7 and 9(=2).\n"
+		   "The default value is 5.\n"
+		   "Enter the value: ");
+
+	  num = ask_value ("%d", 5);
+	  if (num == 6 || num < 3 || num > 15)	/*
+						 * Used for floppy
+						 */
+	    {
+
+	      fprintf (stderr, "*** Illegal input! ***\n");
+	      num = 5;
+	    }
+	  fprintf (stderr, "6850 UART IRQ set to %d\n", num);
+	  printf ("#define U6850_IRQ %d\n", num);
+	}
+    }
+
+  if (selected_options & B (OPT_PSS))
+    {
+      fprintf (stderr, "\nI/O base for PSS?\n"
+	       "The factory default is 220\n"
+	       "Enter the PSS I/O base: ");
+
+      num = ask_value ("%x", 0x220);
+      fprintf (stderr, "PSS I/O base set to %03x\n", num);
+      printf ("#define PSS_BASE 0x%03x\n", num);
+
+      fprintf (stderr, "\nIRQ number for PSS?\n"
+	       "Valid numbers are: 3, 4, 5, 7, 9(=2) or 10.\n"
+	       "The default value is 10.\n"
+	       "Enter the value: ");
+
+      num = ask_value ("%d", 10);
+      if (num == 6 || num < 3 || num > 15)	/* Used for floppy */
+	{
+	  fprintf (stderr, "*** Illegal input! ***\n");
+	  num = 7;
+	}
+      fprintf (stderr, "PSS IRQ set to %d\n", num);
+      printf ("#define PSS_IRQ %d\n", num);
+
+      fprintf (stderr, "\nDMA number for ECHO-PSS?\n"
+	       "The default value is 3\n"
+	       "Enter the value: ");
+
+      num = ask_value ("%d", 3);
+      if (num == 4 || num < 0 || num > 7)
+	{
+	  fprintf (stderr, "*** Illegal input! ***\n");
+	  num = 3;
+	}
+      fprintf (stderr, "\nECHO-PSS DMA set to %d\n", num);
+      printf ("#define PSS_DMA %d\n", num);
+    }
+
+  if (selected_options & B (OPT_MSS))
+    {
+      fprintf (stderr, "\nI/O base for MSS (MS Sound System)?\n"
+	       "The factory default is 530\n"
+	       "Other possible values are  604, E80 or F40\n"
+	       "Enter the MSS I/O base: ");
+
+      num = ask_value ("%x", 0x530);
+      fprintf (stderr, "MSS I/O base set to %03x\n", num);
+      printf ("#define MSS_BASE 0x%03x\n", num);
+
+      fprintf (stderr, "\nIRQ number for MSS?\n"
+	       "Valid numbers are: 7, 9(=2), 10 and 11.\n"
+	       "The default value is 10.\n"
+	       "Enter the value: ");
+
+      num = ask_value ("%d", 10);
+      if (num == 6 || num < 3 || num > 15)	/* Used for floppy */
+	{
+	  fprintf (stderr, "*** Illegal input! ***\n");
+	  num = 7;
+	}
+      fprintf (stderr, "MSS IRQ set to %d\n", num);
+      printf ("#define MSS_IRQ %d\n", num);
+
+      fprintf (stderr, "\nDMA number for MSS?\n"
+	       "Valid values are 1 and 3 (sometimes 0)"
+	       "The default value is 3\n"
+	       "Enter the value: ");
+
+      num = ask_value ("%d", 3);
+      if (num == 4 || num < 0 || num > 7)
+	{
+	  fprintf (stderr, "*** Illegal input! ***\n");
+	  num = 3;
+	}
+      fprintf (stderr, "\nMSS DMA set to %d\n", num);
+      printf ("#define MSS_DMA %d\n", num);
+    }
+
+  if (selected_options & B (OPT_GUS16))
+    {
+      fprintf (stderr, "\nI/O base for GUS16 (GUS 16 bit sampling option)?\n"
+	       "The factory default is 530\n"
+	       "Other possible values are  604, E80 or F40\n"
+	       "Enter the GUS16 I/O base: ");
+
+      num = ask_value ("%x", 0x530);
+      fprintf (stderr, "GUS16 I/O base set to %03x\n", num);
+      printf ("#define GUS16_BASE 0x%03x\n", num);
+
+      fprintf (stderr, "\nIRQ number for GUS16?\n"
+	       "Valid numbers are: 3, 4, 5, 7, or 9(=2).\n"
+	       "The default value is 7.\n"
+	       "Enter the value: ");
+
+      num = ask_value ("%d", 7);
+      if (num == 6 || num < 3 || num > 15)	/* Used for floppy */
+	{
+	  fprintf (stderr, "*** Illegal input! ***\n");
+	  num = 7;
+	}
+      fprintf (stderr, "GUS16 IRQ set to %d\n", num);
+      printf ("#define GUS16_IRQ %d\n", num);
+
+      fprintf (stderr, "\nDMA number for GUS16?\n"
+	       "The default value is 3\n"
+	       "Enter the value: ");
+
+      num = ask_value ("%d", 3);
+      if (num < 0 || num > 3)
+	{
+	  fprintf (stderr, "*** Illegal input! ***\n");
+	  num = 3;
+	}
+      fprintf (stderr, "\nGUS16 DMA set to %d\n", num);
+      printf ("#define GUS16_DMA %d\n", num);
     }
 #endif
 
@@ -521,9 +789,12 @@ main (int argc, char *argv[])
 	def_size = 32768;
 
 #ifndef __386BSD__
-      if (((selected_options & B (OPT_PAS)) || (selected_options & B (OPT_SB16))) &&
+      if ((selected_options & (B (OPT_PAS) | B (OPT_PAS) | B (OPT_GUS16) | B (OPT_GUSMAX) |
+			       B (OPT_MSS) | B (OPT_PSS))) &&
 	  !full_driver)
-	def_size = 65536;	/* PAS16 or SB16 */
+	def_size = 65536;	/*
+				 * PAS16 or SB16
+				 */
 #endif
 
       fprintf (stderr, "\nSelect the DMA buffer size (4096, 16384, 32768 or 65536 bytes)\n"

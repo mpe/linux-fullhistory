@@ -98,7 +98,7 @@ repeat:
 		page = *((unsigned long *) page);
 	}
 	if (!(page & PAGE_PRESENT)) {
-		do_no_page(0,addr,tsk,0);
+		do_no_page(0,addr,tsk);
 		goto repeat;
 	}
 /* this is a hack for non-kernel-mapped video buffers and similar */
@@ -133,13 +133,13 @@ repeat:
 		page = *((unsigned long *) page);
 	}
 	if (!(page & PAGE_PRESENT)) {
-		do_no_page(0 /* PAGE_RW */ ,addr,tsk,0);
+		do_no_page(0 /* PAGE_RW */ ,addr,tsk);
 		goto repeat;
 	}
 	if (!(page & PAGE_RW)) {
 		if(!(page & PAGE_COW))
 			readonly = 1;
-		do_wp_page(PAGE_RW | PAGE_PRESENT,addr,tsk,0);
+		do_wp_page(PAGE_RW | PAGE_PRESENT,addr,tsk);
 		goto repeat;
 	}
 /* this is a hack for non-kernel-mapped video buffers and similar */

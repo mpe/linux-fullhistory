@@ -23,15 +23,8 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 
-extern int share_page(struct vm_area_struct * area, struct task_struct * tsk,
-	struct inode * inode, unsigned long address, unsigned long error_code,
-	unsigned long newpage);
-
-extern unsigned long put_page(struct task_struct * tsk,unsigned long page,
-	unsigned long address,int prot);
-
-static void nfs_file_mmap_nopage(int error_code, struct vm_area_struct * area,
-				unsigned long address);
+static unsigned long nfs_file_mmap_nopage(struct vm_area_struct * area,
+	unsigned long address, unsigned long page, int error_code);
 
 extern void file_mmap_free(struct vm_area_struct * area);
 extern int file_mmap_share(struct vm_area_struct * from, struct vm_area_struct * to,
@@ -85,12 +78,11 @@ int nfs_mmap(struct inode * inode, struct file * file,
 }
 
 
-static void nfs_file_mmap_nopage(int error_code, struct vm_area_struct * area,
-				unsigned long address)
+static unsigned long nfs_file_mmap_nopage(struct vm_area_struct * area, unsigned long address,
+	unsigned long page, int error_code)
 {
 	struct inode * inode = area->vm_inode;
 	unsigned int clear;
-	unsigned long page;
 	unsigned long tmp;
 	int n;
 	int i;
@@ -99,19 +91,6 @@ static void nfs_file_mmap_nopage(int error_code, struct vm_area_struct * area,
 
 	address &= PAGE_MASK;
 	pos = address - area->vm_start + area->vm_offset;
-
-	page = get_free_page(GFP_KERNEL);
-	if (share_page(area, area->vm_task, inode, address, error_code, page)) {
-		++area->vm_task->mm->min_flt;
-		return;
-	}
-
-	++area->vm_task->mm->maj_flt;
-	if (!page) {
-		oom(current);
-		put_page(area->vm_task, BAD_PAGE, address, PAGE_PRIVATE);
-		return;
-	}
 
 	clear = 0;
 	if (address + PAGE_SIZE > area->vm_end) {
@@ -141,17 +120,9 @@ static void nfs_file_mmap_nopage(int error_code, struct vm_area_struct * area,
 	nfs_refresh_inode(inode, &fattr);
 #endif
 
-	if (!(error_code & PAGE_RW)) {
-		if (share_page(area, area->vm_task, inode, address, error_code, page))
-			return;
-	}
-
 	tmp = page + PAGE_SIZE;
 	while (clear--) {
 		*(char *)--tmp = 0;
 	}
-	if (put_page(area->vm_task,page,address,area->vm_page_prot))
-		return;
-	free_page(page);
-	oom(current);
+	return page;
 }

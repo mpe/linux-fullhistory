@@ -55,9 +55,10 @@ struct vm_area_struct {
 struct vm_operations_struct {
 	void (*open)(struct vm_area_struct * area);
 	void (*close)(struct vm_area_struct * area);
-	void (*nopage)(int error_code,
-		       struct vm_area_struct * area, unsigned long address);
-	void (*wppage)(struct vm_area_struct * area, unsigned long address);
+	unsigned long (*nopage)(struct vm_area_struct * area, unsigned long address,
+		unsigned long page, int error_code);
+	unsigned long (*wppage)(struct vm_area_struct * area, unsigned long address,
+		unsigned long page);
 	int (*share)(struct vm_area_struct * from, struct vm_area_struct * to, unsigned long address);
 	int (*unmap)(struct vm_area_struct *area, unsigned long, size_t);
 };
@@ -135,6 +136,7 @@ extern void free_pages(unsigned long addr, unsigned long order);
 extern void show_free_areas(void);
 extern unsigned long put_dirty_page(struct task_struct * tsk,unsigned long page,
 	unsigned long address);
+
 extern void free_page_tables(struct task_struct * tsk);
 extern void clear_page_tables(struct task_struct * tsk);
 extern int copy_page_tables(struct task_struct * to);
@@ -144,9 +146,9 @@ extern int remap_page_range(unsigned long from, unsigned long to, unsigned long 
 extern int zeromap_page_range(unsigned long from, unsigned long size, int mask);
 
 extern void do_wp_page(unsigned long error_code, unsigned long address,
-	struct task_struct *tsk, unsigned long user_esp);
+	struct task_struct *tsk);
 extern void do_no_page(unsigned long error_code, unsigned long address,
-	struct task_struct *tsk, unsigned long user_esp);
+	struct task_struct *tsk);
 
 extern unsigned long paging_init(unsigned long start_mem, unsigned long end_mem);
 extern void mem_init(unsigned long low_start_mem,

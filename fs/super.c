@@ -610,7 +610,11 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 	}
 	fops = get_blkfops(MAJOR(dev));
 	if (fops && fops->open) {
-		retval = fops->open(inode,NULL);
+		struct file dummy;	/* allows read-write or read-only flag */
+		memset(&dummy, 0, sizeof(dummy));
+		dummy.f_inode = inode;
+		dummy.f_mode = (new_flags & MS_RDONLY) ? 1 : 3;
+		retval = fops->open(inode, &dummy);
 		if (retval) {
 			iput(inode);
 			return retval;
@@ -628,7 +632,7 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 	retval = do_mount(dev,dir_name,t,flags,(void *) page);
 	free_page(page);
 	if (retval && fops && fops->release)
-		fops->release(inode,NULL);
+		fops->release(inode, NULL);
 	iput(inode);
 	return retval;
 }

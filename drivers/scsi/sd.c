@@ -38,7 +38,7 @@ static const char RCSid[] = "$Header:";
  *	Time out in seconds for disks and Magneto-opticals (which are slower).
  */
 
-#define SD_TIMEOUT 300
+#define SD_TIMEOUT 600
 #define SD_MOD_TIMEOUT 750
 
 #define CLUSTERABLE_DEVICE(SC) (SC->host->hostt->use_clustering && \

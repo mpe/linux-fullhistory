@@ -636,7 +636,6 @@ void sr_attach(Scsi_Device * SDp){
 static void sr_init_done (Scsi_Cmnd * SCpnt)
 {
   struct request * req;
-  struct task_struct * p;
   
   req = &SCpnt->request;
   req->dev = 0xfffe; /* Busy, but indicate request done */

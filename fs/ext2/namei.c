@@ -390,6 +390,7 @@ int ext2_create (struct inode * dir,const char * name, int len, int mode,
 		return err;
 	}
 	de->inode = inode->i_ino;
+	dir->i_version++;
 #ifndef DONT_USE_DCACHE
 	ext2_dcache_add (dir->i_dev, dir->i_ino, de->name, de->name_len,
 			 de->inode);
@@ -456,6 +457,7 @@ int ext2_mknod (struct inode * dir, const char * name, int len, int mode,
 		return err;
 	}
 	de->inode = inode->i_ino;
+	dir->i_version++;
 #ifndef DONT_USE_DCACHE
 	ext2_dcache_add (dir->i_dev, dir->i_ino, de->name, de->name_len,
 			 de->inode);
@@ -532,6 +534,7 @@ int ext2_mkdir (struct inode * dir, const char * name, int len, int mode)
 		return err;
 	}
 	de->inode = inode->i_ino;
+	dir->i_version++;
 #ifndef DONT_USE_DCACHE
 	ext2_dcache_add (dir->i_dev, dir->i_ino, de->name, de->name_len,
 			 de->inode);
@@ -657,6 +660,7 @@ repeat:
 			inode->i_size = 0;
 		}
 		retval = ext2_delete_entry (de, bh);
+		dir->i_version++;
 	}
 	up(&inode->i_sem);
 	if (retval)
@@ -729,6 +733,7 @@ repeat:
 	retval = ext2_delete_entry (de, bh);
 	if (retval)
 		goto end_unlink;
+	dir->i_version++;
 	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
 		ll_rw_block (WRITE, 1, &bh);
@@ -817,6 +822,7 @@ int ext2_symlink (struct inode * dir, const char * name, int len,
 		return err;
 	}
 	de->inode = inode->i_ino;
+	dir->i_version++;
 #ifndef DONT_USE_DCACHE
 	ext2_dcache_add (dir->i_dev, dir->i_ino, de->name, de->name_len,
 			 de->inode);
@@ -863,6 +869,7 @@ int ext2_link (struct inode * oldinode, struct inode * dir,
 		return err;
 	}
 	de->inode = oldinode->i_ino;
+	dir->i_version++;
 #ifndef DONT_USE_DCACHE
 	ext2_dcache_add (dir->i_dev, dir->i_ino, de->name, de->name_len,
 			 de->inode);
@@ -1036,6 +1043,8 @@ start_up:
 		goto try_again;
 	if (retval)
 		goto end_rename;
+	new_dir->i_version++;
+	old_dir->i_version++;
 	if (new_inode) {
 		new_inode->i_nlink--;
 		new_inode->i_ctime = CURRENT_TIME;
@@ -1043,16 +1052,6 @@ start_up:
 	}
 	old_dir->i_ctime = old_dir->i_mtime = CURRENT_TIME;
 	old_dir->i_dirt = 1;
-	mark_buffer_dirty(old_bh,  1);
-	if (IS_SYNC(old_dir)) {
-		ll_rw_block (WRITE, 1, &old_bh);
-		wait_on_buffer (old_bh);
-	}
-	mark_buffer_dirty(new_bh, 1);
-	if (IS_SYNC(new_dir)) {
-		ll_rw_block (WRITE, 1, &new_bh);
-		wait_on_buffer (new_bh);
-	}
 	if (dir_bh) {
 		PARENT_INO(dir_bh->b_data) = new_dir->i_ino;
 		mark_buffer_dirty(dir_bh, 1);
@@ -1065,6 +1064,16 @@ start_up:
 			new_dir->i_nlink++;
 			new_dir->i_dirt = 1;
 		}
+	}
+	mark_buffer_dirty(old_bh,  1);
+	if (IS_SYNC(old_dir)) {
+		ll_rw_block (WRITE, 1, &old_bh);
+		wait_on_buffer (old_bh);
+	}
+	mark_buffer_dirty(new_bh, 1);
+	if (IS_SYNC(new_dir)) {
+		ll_rw_block (WRITE, 1, &new_bh);
+		wait_on_buffer (new_bh);
 	}
 	retval = 0;
 end_rename:

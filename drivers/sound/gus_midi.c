@@ -79,7 +79,9 @@ gus_midi_open (int dev, int mode,
       gus_midi_control |= MIDI_ENABLE_XMIT;
     }
 
-  OUTB (gus_midi_control, u_MidiControl);	/* Enable */
+  OUTB (gus_midi_control, u_MidiControl);	/*
+						 * Enable
+						 */
 
   midi_busy = 1;
   qlen = qhead = qtail = output_used = 0;
@@ -105,7 +107,9 @@ dump_to_midi (unsigned char midi_byte)
     }
   else
     {
-      /* Enable Midi xmit interrupts (again) */
+      /*
+       * Enable Midi xmit interrupts (again)
+       */
       gus_midi_control |= MIDI_ENABLE_XMIT;
       OUTB (gus_midi_control, u_MidiControl);
     }
@@ -117,7 +121,9 @@ dump_to_midi (unsigned char midi_byte)
 static void
 gus_midi_close (int dev)
 {
-  /* Reset FIFO pointers, disable intrs */
+  /*
+   * Reset FIFO pointers, disable intrs
+   */
 
   OUTB (MIDI_RESET, u_MidiControl);
   midi_busy = 0;
@@ -149,14 +155,18 @@ gus_midi_out (int dev, unsigned char midi_byte)
 
   if (!qlen)
     if (dump_to_midi (midi_byte))
-      return 1;			/* OK */
+      return 1;			/*
+				 * OK
+				 */
 
   /*
    * Put to the local queue
    */
 
   if (qlen >= 256)
-    return 0;			/* Local queue full */
+    return 0;			/*
+				 * Local queue full
+				 */
 
   DISABLE_INTR (flags);
 
@@ -213,9 +223,14 @@ gus_midi_buffer_status (int dev)
   return (qlen > 0) | !(GUS_MIDI_STATUS () & MIDI_XMIT_EMPTY);
 }
 
+#define MIDI_SYNTH_NAME	"Gravis Ultrasound Midi"
+#define MIDI_SYNTH_CAPS	SYNTH_CAP_INPUT
+#include "midi_synth.h"
+
 static struct midi_operations gus_midi_operations =
 {
-  {"Gravis UltraSound", 0, 0, SNDCARD_GUS},
+  {"Gravis UltraSound Midi", 0, 0, SNDCARD_GUS},
+  &std_midi_synth,
   gus_midi_open,
   gus_midi_close,
   gus_midi_ioctl,
@@ -223,16 +238,25 @@ static struct midi_operations gus_midi_operations =
   gus_midi_start_read,
   gus_midi_end_read,
   gus_midi_kick,
-  NULL,				/* command */
-  gus_midi_buffer_status
+  NULL,				/*
+				 * command
+				 */
+  gus_midi_buffer_status,
+  NULL
 };
 
 long
 gus_midi_init (long mem_start)
 {
+  if (num_midis >= MAX_MIDI_DEV)
+    {
+      printk ("Sound: Too many midi devices detected\n");
+      return mem_start;
+    }
+
   OUTB (MIDI_RESET, u_MidiControl);
 
-  my_dev = num_midis;
+  std_midi_synth.midi_dev = my_dev = num_midis;
   midi_devs[num_midis++] = &gus_midi_operations;
   return mem_start;
 }
@@ -264,7 +288,9 @@ gus_midi_interrupt (int dummy)
 
       if (!qlen)
 	{
-	  /* Disable Midi output interrupts, since no data in the buffer */
+	  /*
+	   * Disable Midi output interrupts, since no data in the buffer
+	   */
 	  gus_midi_control &= ~MIDI_ENABLE_XMIT;
 	  OUTB (gus_midi_control, u_MidiControl);
 	}

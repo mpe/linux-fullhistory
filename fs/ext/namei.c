@@ -55,7 +55,7 @@
  */
 static int ext_match(int len,const char * name,struct ext_dir_entry * de)
 {
-	register int same __asm__("ax");
+	register int same;
 
 	if (!de || !de->inode || len > EXT_NAME_LEN)
 		return 0;
@@ -64,7 +64,8 @@ static int ext_match(int len,const char * name,struct ext_dir_entry * de)
 		return 1;
 	if (len < EXT_NAME_LEN && len != de->name_len)
 		return 0;
-	__asm__("cld\n\t"
+	__asm__ __volatile__(
+		"cld\n\t"
 		"repe ; cmpsb\n\t"
 		"setz %%al"
 		:"=a" (same)
