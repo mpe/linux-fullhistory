@@ -13,7 +13,7 @@
  * Dale Farnsworth <dale.farnsworth@mvista.com> and
  * Wolfgang Denk <wd@denx.de>
  * 
- * Copyright 2004 Sylvain Munaut <tnt@246tNt.com>
+ * Copyright 2004-2005 Sylvain Munaut <tnt@246tNt.com>
  * Copyright 2003 Motorola Inc.
  * Copyright 2003 MontaVista Software Inc.
  * Copyright 2003 DENX Software Engineering (wd@denx.de)
@@ -29,10 +29,10 @@
 #include <linux/kdev_t.h>
 #include <linux/root_dev.h>
 #include <linux/console.h>
+#include <linux/module.h>
 
 #include <asm/bootinfo.h>
 #include <asm/io.h>
-#include <asm/ocp.h>
 #include <asm/mpc52xx.h>
 
 #include <syslib/mpc52xx_pci.h>
@@ -43,31 +43,6 @@ extern int powersave_nap;
 /* Board data given by U-Boot */
 bd_t __res;
 EXPORT_SYMBOL(__res);	/* For modules */
-
-
-/* ======================================================================== */
-/* OCP device definition                                                    */
-/* For board/shared resources like PSCs                                     */
-/* ======================================================================== */
-/* Be sure not to load conficting devices : e.g. loading the UART drivers for
- * PSC1 and then also loading a AC97 for this same PSC.
- * For details about how to create an entry, look in the doc of the concerned
- * driver ( eg drivers/serial/mpc52xx_uart.c for the PSC in uart mode )
- */
-
-static struct ocp_def board_ocp[] = {
-	{
-		.vendor		= OCP_VENDOR_FREESCALE,
-		.function	= OCP_FUNC_PSC_UART,
-		.index		= 0,
-		.paddr		= MPC52xx_PSC1,
-		.irq		= MPC52xx_PSC1_IRQ,
-		.pm		= OCP_CPM_NA,
-	},
-	{	/* Terminating entry */
-		.vendor		= OCP_VENDOR_INVALID
-	}
-};
 
 
 /* ======================================================================== */
@@ -131,9 +106,6 @@ unmap_regs:
 static void __init
 lite5200_setup_arch(void)
 {
-	/* Add board OCP definitions */
-	mpc52xx_add_board_devices(board_ocp);
-
 	/* CPU & Port mux setup */
 	lite5200_setup_cpu();
 

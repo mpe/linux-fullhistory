@@ -26,7 +26,6 @@
 #include <asm/types.h>
 
 struct pt_regs;
-struct ocp_def;
 #endif /* __ASSEMBLY__ */
 
 
@@ -391,7 +390,6 @@ extern void mpc52xx_halt(void);
 extern void mpc52xx_power_off(void);
 extern void mpc52xx_progress(char *s, unsigned short hex);
 extern void mpc52xx_calibrate_decr(void);
-extern void mpc52xx_add_board_devices(struct ocp_def board_ocp[]);
 
 extern void mpc52xx_find_bridges(void);
 

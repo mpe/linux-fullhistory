@@ -23,7 +23,6 @@
 #include <asm/time.h>
 #include <asm/mpc52xx.h>
 #include <asm/mpc52xx_psc.h>
-#include <asm/ocp.h>
 #include <asm/pgtable.h>
 #include <asm/ppcboot.h>
 
@@ -218,12 +217,3 @@ mpc52xx_calibrate_decr(void)
 	tb_ticks_per_jiffy = xlbfreq / HZ / divisor;
 	tb_to_us = mulhwu_scale_factor(xlbfreq / divisor, 1000000);
 }
-
-
-void __init
-mpc52xx_add_board_devices(struct ocp_def board_ocp[]) {
-	while (board_ocp->vendor != OCP_VENDOR_INVALID)
-		if(ocp_add_one_device(board_ocp++))
-			printk("mpc5200-ocp: Failed to add board device !\n");
-}
-
