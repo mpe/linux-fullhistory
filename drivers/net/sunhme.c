@@ -1,4 +1,4 @@
-/* $Id: sunhme.c,v 1.100 2000/11/12 10:23:30 davem Exp $
+/* $Id: sunhme.c,v 1.104 2000/11/17 01:40:00 davem Exp $
  * sunhme.c: Sparc HME/BigMac 10/100baseT half/full duplex auto switching,
  *           auto carrier detecting ethernet driver.  Also known as the
  *           "Happy Meal Ethernet" found on SunSwift SBUS cards.
@@ -48,8 +48,8 @@ static char *version =
 #ifndef __sparc_v9__
 #include <asm/io-unit.h>
 #endif
-#include <asm/uaccess.h>
 #endif
+#include <asm/uaccess.h>
 
 #include <asm/pgtable.h>
 #include <asm/irq.h>
@@ -170,6 +170,25 @@ static __inline__ void tx_dump_ring(struct happy_meal *hp)
 #define DEFAULT_IPG1       8 /* For all modes */
 #define DEFAULT_IPG2       4 /* For all modes */
 #define DEFAULT_JAMSIZE    4 /* Toe jam */
+
+#ifdef CONFIG_PCI
+/* This happy_pci_ids is declared __initdata because it is only used
+   as an advisory to depmod.  If this is ported to the new PCI interface
+   where it could be referenced at any time due to hot plugging,
+   it should be changed to __devinitdata. */
+
+struct pci_device_id happymeal_pci_ids[] __initdata = {
+	{
+	  vendor: PCI_VENDOR_ID_SUN,
+	  device: PCI_DEVICE_ID_SUN_HAPPYMEAL,
+	  subvendor: PCI_ANY_ID,
+	  subdevice: PCI_ANY_ID,
+	},
+	{ }			/* Terminating entry */
+};
+
+MODULE_DEVICE_TABLE(pci, happymeal_pci_ids);
+#endif
 
 /* NOTE: In the descriptor writes one _must_ write the address
  *	 member _first_.  The card must not be allowed to see
@@ -1600,6 +1619,10 @@ static int happy_meal_init(struct happy_meal *hp, int from_irq)
 	HMD(("happy_meal_init: old[%08x] bursts<",
 	     hme_read32(hp, gregs + GREG_CFG)));
 
+#ifndef __sparc__
+	/* It is always PCI and can handle 64byte bursts. */
+	hme_write32(hp, gregs + GREG_CFG, GREG_CFG_BURST64);
+#else
 	if ((hp->happy_bursts & DMA_BURST64) &&
 	    ((hp->happy_flags & HFLAG_PCI) != 0
 #ifdef CONFIG_SBUS
@@ -1633,6 +1656,7 @@ static int happy_meal_init(struct happy_meal *hp, int from_irq)
 		HMD(("XXX>"));
 		hme_write32(hp, gregs + GREG_CFG, 0);
 	}
+#endif /* __sparc__ */
 
 	/* Turn off interrupts we do not want to hear. */
 	HMD((", enable global interrupts, "));
@@ -2887,8 +2911,10 @@ static int __init happy_meal_pci_init(struct net_device *dev, struct pci_dev *pd
 	/* And of course, indicate this is PCI. */
 	hp->happy_flags |= HFLAG_PCI;
 
+#ifdef __sparc__
 	/* Assume PCI happy meals can handle all burst sizes. */
 	hp->happy_bursts = DMA_BURSTBITS;
+#endif
 
 	hp->happy_block = (struct hmeal_init_block *)
 		pci_alloc_consistent(pdev, PAGE_SIZE, &hp->hblock_dvma);

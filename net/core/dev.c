@@ -2704,6 +2704,7 @@ int __init net_dev_init(void)
 	return 0;
 }
 
+#ifdef CONFIG_HOTPLUG
 
 /* Notify userspace when a netdevice event occurs,
  * by running '/sbin/hotplug net' with certain
@@ -2765,3 +2766,4 @@ void __init net_notifier_init (void)
 		printk (KERN_WARNING "unable to register netdev notifier\n"
 			KERN_WARNING "/sbin/hotplug will not be run.\n");
 }
+#endif

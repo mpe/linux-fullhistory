@@ -215,7 +215,7 @@ static int proc_follow_link(struct dentry *dentry, struct nameidata *nd)
 
 static struct inode_operations proc_link_inode_operations = {
 	readlink:	proc_readlink,
-	follow_link:	proc_follow_link
+	follow_link:	proc_follow_link,
 };
 
 /*
@@ -396,8 +396,6 @@ static void proc_kill_inodes(struct proc_dir_entry *de)
 		if (dentry->d_op != &proc_dentry_operations)
 			continue;
 		inode = dentry->d_inode;
-		if (!inode)
-			continue;
 		if (inode->u.generic_ip != de)
 			continue;
 		fops_put(filp->f_op);
@@ -573,12 +571,12 @@ void remove_proc_entry(const char *name, struct proc_dir_entry *parent)
 				(void *) proc_alloc_map);
 		proc_kill_inodes(de);
 		de->nlink = 0;
-		de->deleted = 1;
-		if (!de->count)
+		if (!atomic_read(&de->count))
 			free_proc_entry(de);
 		else {
+			de->deleted = 1;
 			printk("remove_proc_entry: %s/%s busy, count=%d\n",
-				parent->name, de->name, de->count);
+				parent->name, de->name, atomic_read(&de->count));
 		}
 		break;
 	}

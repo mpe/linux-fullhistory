@@ -169,6 +169,7 @@ extern void x25_limit_facilities(struct x25_facilities *, struct x25_neigh *);
 
 /* x25_in.c */
 extern int  x25_process_rx_frame(struct sock *, struct sk_buff *);
+extern int  x25_backlog_rcv(struct sock *, struct sk_buff *);
 
 /* x25_link.c */
 extern void x25_link_control(struct sk_buff *, struct x25_neigh *, unsigned short);

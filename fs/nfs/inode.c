@@ -723,7 +723,6 @@ nfs_fhget(struct dentry *dentry, struct nfs_fh *fhandle,
 		struct inode *inode = new_inode(sb);
 		if (!inode)
 			goto out;
-		inode->i_flags = 0;
 		inode->i_ino = nfs_fattr_to_ino_t(fattr);
 		nfs_read_inode(inode);
 		nfs_fill_inode(inode, fattr);

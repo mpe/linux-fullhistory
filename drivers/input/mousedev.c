@@ -39,6 +39,7 @@
 #include <linux/input.h>
 #include <linux/config.h>
 #include <linux/smp_lock.h>
+#include <linux/random.h>
 
 #ifndef CONFIG_INPUT_MOUSEDEV_SCREEN_X
 #define CONFIG_INPUT_MOUSEDEV_SCREEN_X	1024
@@ -85,6 +86,8 @@ static void mousedev_event(struct input_handle *handle, unsigned int type, unsig
 	struct mousedev **mousedev = mousedevs;
 	struct mousedev_list *list;
 	int index, size;
+
+	add_mouse_randomness((type << 4) ^ code ^ (code >> 4) ^ value);
 
 	while (*mousedev) {
 		list = (*mousedev)->list;
@@ -213,7 +216,7 @@ static int mousedev_open(struct inode * inode, struct file * file)
 	struct mousedev_list *list;
 	int i = MINOR(inode->i_rdev) - MOUSEDEV_MINOR_BASE;
 
-	if (i > MOUSEDEV_MINORS || !mousedev_table[i])
+	if (i >= MOUSEDEV_MINORS || !mousedev_table[i])
 		return -ENODEV;
 
 	if (!(list = kmalloc(sizeof(struct mousedev_list), GFP_KERNEL)))
@@ -407,7 +410,7 @@ static struct input_handle *mousedev_connect(struct input_handler *handler, stru
 		return NULL;
 
 	for (minor = 0; minor < MOUSEDEV_MINORS && mousedev_table[minor]; minor++);
-	if (mousedev_table[minor]) {
+	if (minor == MOUSEDEV_MINORS) {
 		printk(KERN_ERR "mousedev: no more free mousedev devices\n");
 		return NULL;
 	}

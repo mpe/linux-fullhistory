@@ -96,10 +96,12 @@ static struct inode_operations proc_root_inode_operations = {
  * This is the root "inode" in the /proc tree..
  */
 struct proc_dir_entry proc_root = {
-	PROC_ROOT_INO, 5, "/proc",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,
-	0, &proc_root_inode_operations, &proc_root_operations,
-	NULL, NULL,
-	NULL,
-	&proc_root, NULL
+	low_ino:	PROC_ROOT_INO, 
+	namelen:	5, 
+	name:		"/proc",
+	mode:		S_IFDIR | S_IRUGO | S_IXUGO, 
+	nlink:		2, 
+	proc_iops:	&proc_root_inode_operations, 
+	proc_fops:	&proc_root_operations,
+	parent:		&proc_root,
 };

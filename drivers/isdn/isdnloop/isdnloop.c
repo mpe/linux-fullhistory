@@ -1,4 +1,4 @@
-/* $Id: isdnloop.c,v 1.9 1999/09/06 07:29:36 fritz Exp $
+/* $Id: isdnloop.c,v 1.11 2000/11/13 22:51:50 kai Exp $
 
  * ISDN low-level module implementing a dummy loop driver.
  *
@@ -18,48 +18,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Log: isdnloop.c,v $
- * Revision 1.9  1999/09/06 07:29:36  fritz
- * Changed my mail-address.
- *
- * Revision 1.8  1998/11/18 18:59:43  armin
- * changes for 2.1.127
- *
- * Revision 1.7  1998/10/30 18:58:03  he
- * typecast to suppress a compiler warning
- *
- * Revision 1.6  1998/06/17 19:51:37  he
- * merged with 2.1.10[34] (cosmetics and udelay() -> mdelay())
- * brute force fix to avoid Ugh's in isdn_tty_write()
- * cleaned up some dead code
- *
- * Revision 1.5  1998/04/14 20:59:32  he
- * merged 2.1.94 changes
- *
- * Revision 1.4  1998/02/24 21:39:05  he
- * L2_PROT_X25DTE / DCE
- * additional state 17 and new internal signal messages "BCON_I"
- * (for reliable connect confirmation primitive as needed by x.25 upper layer)
- * Changes for new LL-HL interface
- *
- * Revision 1.3  1998/02/20 17:33:30  fritz
- * Changes for recent kernels.
- *
- * Revision 1.2  1997/10/01 09:22:03  fritz
- * Removed old compatibility stuff for 2.0.X kernels.
- * From now on, this code is for 2.1.X ONLY!
- * Old stuff is still in the separate branch.
- *
- * Revision 1.1  1997/03/24 23:02:04  fritz
- * Added isdnloop driver.
- *
  */
 
 #include <linux/config.h>
 #include "isdnloop.h"
 
 static char
-*revision = "$Revision: 1.9 $";
+*revision = "$Revision: 1.11 $";
 
 static int isdnloop_addcard(char *);
 
@@ -865,6 +830,7 @@ isdnloop_parse_cmd(isdnloop_card * card)
 			if (card->rcard[ch - 1]) {
 				isdnloop_fake(card->rcard[ch - 1], "BCON_I",
 					      card->rch[ch - 1] + 1);
+				isdnloop_fake(card, "BCON_C", ch);
 			}
 			break;
 		case 17:

@@ -1050,7 +1050,7 @@ ntfs_clear_bit (unsigned char *byte, int bit)
 
 /* We have to skip the 16 metafiles and the 8 reserved entries */
 static int 
-new_inode (ntfs_volume* vol,int* result)
+ntfs_new_inode (ntfs_volume* vol,int* result)
 {
 	int byte,error;
 	int bit;
@@ -1236,11 +1236,11 @@ int ntfs_alloc_inode (ntfs_inode *dir, ntfs_inode *result,
 	ntfs_volume* vol=dir->vol;
 	int byte,bit;
 
-	error=new_inode (vol,&(result->i_number));
+	error=ntfs_new_inode (vol,&(result->i_number));
 	if(error==ENOSPC){
 		error=ntfs_extend_mft(vol);
 		if(error)return error;
-		error=new_inode(vol,&(result->i_number));
+		error=ntfs_new_inode(vol,&(result->i_number));
 	}
 	if(error){
 		ntfs_error ("ntfs_get_empty_inode: no free inodes\n");

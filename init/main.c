@@ -712,11 +712,13 @@ static void __init do_basic_setup(void)
 	init_pcmcia_ds();		/* Do this last */
 #endif
 
+#ifdef CONFIG_HOTPLUG
 	/* do this after other 'do this last' stuff, because we want
 	 * to minimize spurious executions of /sbin/hotplug
 	 * during boot-up
 	 */
 	net_notifier_init();
+#endif
 
 	/* Mount the root filesystem.. */
 	mount_root();

@@ -794,7 +794,6 @@ static void fat_fill_inode(struct inode *inode, struct msdos_dir_entry *de)
 			inode->i_nlink = 1;
 		}
 #endif
-		inode->i_size = 0;
 		if ((nr = MSDOS_I(inode)->i_start) != 0)
 			while (nr != -1) {
 				inode->i_size += SECTOR_SIZE*sbi->cluster_size;
@@ -818,7 +817,6 @@ static void fat_fill_inode(struct inode *inode, struct msdos_dir_entry *de)
 				(CF_LE_W(de->starthi) << 16);
 		}
 		MSDOS_I(inode)->i_logstart = MSDOS_I(inode)->i_start;
-		inode->i_nlink = 1;
 		inode->i_size = CF_LE_L(de->size);
 	        inode->i_op = &fat_file_inode_operations;
 	        inode->i_fop = &fat_file_operations;

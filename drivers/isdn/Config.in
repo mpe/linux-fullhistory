@@ -10,7 +10,7 @@ if [ "$CONFIG_INET" != "n" ]; then
 fi
 bool '  Support audio via ISDN' CONFIG_ISDN_AUDIO
 if [ "$CONFIG_ISDN_AUDIO" != "n" ]; then
-   bool '    Support AT-Fax Class 2 commands' CONFIG_ISDN_TTY_FAX
+   bool '    Support AT-Fax Class 1 and 2 commands' CONFIG_ISDN_TTY_FAX
 fi
 if [ "$CONFIG_X25" != "n" ]; then
    bool '  X.25 PLP on top of ISDN' CONFIG_ISDN_X25

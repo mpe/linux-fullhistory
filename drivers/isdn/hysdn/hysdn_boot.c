@@ -1,4 +1,4 @@
-/* $Id: hysdn_boot.c,v 1.3 2000/05/17 11:41:30 ualbrecht Exp $
+/* $Id: hysdn_boot.c,v 1.4 2000/11/13 22:51:47 kai Exp $
 
  * Linux driver for HYSDN cards, specific routines for booting and pof handling.
  *
@@ -19,18 +19,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
- *
- * $Log: hysdn_boot.c,v $
- * Revision 1.3  2000/05/17 11:41:30  ualbrecht
- * CAPI 2.0 support added
- *
- * Revision 1.2  2000/04/23 14:18:36  kai
- * merge changes from main tree
- *
- * Revision 1.1  2000/02/10 19:45:18  werner
- *
- * Initial release
- *
  *
  */
 

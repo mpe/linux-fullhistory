@@ -2054,8 +2054,8 @@ static void lower_callback(unsigned int cmd, __u32 contr, void *data)
 }
 
 static struct capi_interface_user cuser = {
-	"capi20",
-	lower_callback,
+	name: "capi20",
+	callback: lower_callback,
 };
 
 static char rev[10];

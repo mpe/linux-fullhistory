@@ -376,13 +376,14 @@ static void shm_read_inode(struct inode * inode)
 	struct shmid_kernel *shp;
 
 	id = inode->i_ino;
-	inode->i_op = NULL;
 	inode->i_mode = 0;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 
 	if (id < SEQ_MULTIPLIER) {
-		if (!(shp = shm_lock (id)))
+		if (!(shp = shm_lock (id))) {
+			make_bad_inode(inode);
 			return;
+		}
 		inode->i_mode = (shp->shm_flags & S_IALLUGO) | S_IFREG;
 		inode->i_uid  = shp->shm_perm.uid;
 		inode->i_gid  = shp->shm_perm.gid;
@@ -572,13 +573,13 @@ static pte_t **shm_alloc(unsigned long pages, int doacc)
 	if (pages == 0)
 		return NULL;
 
-	ret = kmalloc ((dir+1) * sizeof(pte_t *), GFP_KERNEL);
+	ret = kmalloc ((dir+1) * sizeof(pte_t *), GFP_USER);
 	if (!ret)
 		goto nomem;
 
 	for (ptr = ret; ptr < ret+dir ; ptr++)
 	{
-		*ptr = (pte_t *)__get_free_page (GFP_KERNEL);
+		*ptr = (pte_t *)__get_free_page (GFP_USER);
 		if (!*ptr)
 			goto free;
 		init_ptes (*ptr, PTES_PER_PAGE);
@@ -586,7 +587,7 @@ static pte_t **shm_alloc(unsigned long pages, int doacc)
 
 	/* The last one is probably not of PAGE_SIZE: we use kmalloc */
 	if (last) {
-		*ptr = kmalloc (last*sizeof(pte_t), GFP_KERNEL);
+		*ptr = kmalloc (last*sizeof(pte_t), GFP_USER);
 		if (!*ptr)
 			goto free;
 		init_ptes (*ptr, last);
@@ -724,7 +725,7 @@ static struct shmid_kernel *seg_alloc(int numpages, size_t namelen)
 	struct shmid_kernel *shp;
 	pte_t		   **dir;
 
-	shp = (struct shmid_kernel *) kmalloc (sizeof (*shp) + namelen, GFP_KERNEL);
+	shp = (struct shmid_kernel *) kmalloc (sizeof (*shp) + namelen, GFP_USER);
 	if (!shp)
 		return ERR_PTR(-ENOMEM);
 
@@ -1202,7 +1203,7 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	char   name[SHM_FMT_LEN+1];
 	void *user_addr;
 
-	if (!shm_sb || (shmid % SEQ_MULTIPLIER) == zero_id)
+	if (!shm_sb || shmid < 0 || (shmid % SEQ_MULTIPLIER) == zero_id)
 		return -EINVAL;
 
 	if ((addr = (ulong)shmaddr)) {

@@ -349,7 +349,6 @@ jffs_new_inode(const struct inode * dir, struct jffs_raw_inode *raw_inode,
 	inode->i_blksize = PAGE_SIZE;
 	inode->i_blocks = (inode->i_size + 511) >> 9;
 	inode->i_version = 0;
-	inode->i_flags = sb->s_flags;
 	inode->u.generic_ip = (void *)jffs_find_file(c, raw_inode->ino);
 
 	insert_inode_hash(inode);

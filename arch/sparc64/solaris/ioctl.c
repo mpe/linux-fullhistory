@@ -464,8 +464,8 @@ static inline int solaris_S(struct file *filp, unsigned int fd, unsigned int cmd
         struct sol_socket_struct *sock;
         struct module_info *mi;
 
-        if (! (ino = filp->f_dentry->d_inode) ||
-	    ! ino->i_sock)
+        ino = filp->f_dentry->d_inode;
+        if (! ino->i_sock)
 		return -EBADF;
         sock = filp->private_data;
         if (! sock) {

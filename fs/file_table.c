@@ -176,9 +176,12 @@ int fs_may_remount_ro(struct super_block *sb)
 	file_list_lock();
 	for (p = sb->s_files.next; p != &sb->s_files; p = p->next) {
 		struct file *file = list_entry(p, struct file, f_list);
-		struct inode *inode = file->f_dentry->d_inode;
-		if (!inode)
+		struct inode *inode;
+
+		if (!file->f_dentry)
 			continue;
+
+		inode = file->f_dentry->d_inode;
 
 		/* File with pending delete? */
 		if (inode->i_nlink == 0)

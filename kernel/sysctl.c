@@ -571,7 +571,7 @@ static void unregister_proc_table(ctl_table * table, struct proc_dir_entry *root
 		}
 
 		/* Don't unregister proc entries that are still being used.. */
-		if (de->count)
+		if (atomic_read(&de->count))
 			continue;
 
 		table->de = NULL;

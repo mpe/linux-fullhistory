@@ -67,7 +67,7 @@ struct proc_dir_entry {
 	void *data;
 	read_proc_t *read_proc;
 	write_proc_t *write_proc;
-	unsigned int count;	/* use count */
+	atomic_t count;		/* use count */
 	int deleted;		/* delete flag */
 	kdev_t	rdev;
 };

@@ -119,8 +119,6 @@ struct inode_operations capifs_root_inode_operations = {
 	lookup: capifs_root_lookup,
 };
 
-struct inode_operations capifs_inode_operations;
-
 static struct dentry_operations capifs_dentry_operations = {
 	d_revalidate: capifs_revalidate,
 };
@@ -468,10 +466,8 @@ static void capifs_read_inode(struct inode *inode)
 	ino_t ino = inode->i_ino;
 	struct capifs_sb_info *sbi = SBI(inode->i_sb);
 
-	inode->i_op = NULL;
 	inode->i_mode = 0;
 	inode->i_nlink = 0;
-	inode->i_size = 0;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
 	inode->i_blocks = 0;
 	inode->i_blksize = 1024;
@@ -484,9 +480,6 @@ static void capifs_read_inode(struct inode *inode)
 		inode->i_nlink = 2;
 		return;
 	} 
-
-	/* need dummy inode operations .... */
-	inode->i_op = &capifs_inode_operations;
 
 	ino -= 2;
 	if ( ino >= sbi->max_ncci )

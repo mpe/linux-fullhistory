@@ -86,12 +86,6 @@ int udf_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	struct inode *dir = filp->f_dentry->d_inode;
 	int result;
 
-	if (!dir)
-	   return -EBADF;
-
- 	if (!S_ISDIR(dir->i_mode))
-	   return -ENOTDIR;
-
 	if ( filp->f_pos == 0 ) 
 	{
 		if (filldir(dirent, ".", 1, filp->f_pos, dir->i_ino, DT_DIR))

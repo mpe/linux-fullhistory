@@ -858,13 +858,16 @@ static void compute_parity(struct stripe_head *sh, int method)
 
 	PRINTK("compute_parity, stripe %lu, method %d\n", sh->sector, method);
 	for (i = 0; i < disks; i++) {
+		char *bdata;
 		if (i == pd_idx || !sh->bh_new[i])
 			continue;
 		if (!sh->bh_copy[i])
 			sh->bh_copy[i] = raid5_alloc_buffer(sh, sh->size);
 		raid5_build_block(sh, sh->bh_copy[i], i);
 		atomic_set_buffer_dirty(sh->bh_copy[i]);
-		memcpy(sh->bh_copy[i]->b_data, sh->bh_new[i]->b_data, sh->size);
+		bdata = bh_kmap(sh->bh_new[i]);
+		memcpy(sh->bh_copy[i]->b_data, bdata, sh->size);
+		bh_kunmap(sh->bh_new[i]);
 	}
 	if (sh->bh_copy[pd_idx] == NULL) {
 		sh->bh_copy[pd_idx] = raid5_alloc_buffer(sh, sh->size);
@@ -965,12 +968,14 @@ static void complete_stripe(struct stripe_head *sh)
 			if (!sh->new[i]) {
 #if 0
 				if (sh->cmd == STRIPE_WRITE) {
-					if (memcmp(sh->bh_new[i]->b_data, sh->bh_copy[i]->b_data, sh->size)) {
+					char *bdata = bh_kmap(sh->bh_new[i]);
+					if (memcmp(bdata, sh->bh_copy[i]->b_data, sh->size)) {
 						printk("copy differs, %s, sector %lu ",
 							test_bit(BH_Dirty, &sh->bh_new[i]->b_state) ? "dirty" : "clean",
 							sh->sector);
 					} else if (test_bit(BH_Dirty, &sh->bh_new[i]->b_state))
 						printk("sector %lu dirty\n", sh->sector);
+					bh_kunmap(sh->bh_new[i]);
 				}
 #endif
 				if (sh->cmd == STRIPE_WRITE)
@@ -1136,11 +1141,14 @@ static void handle_stripe_read (mddev_t *mddev , raid5_conf_t *conf,
 	if (!method1 || (method1 == 1 && nr_cache == disks - 1)) {
 		PRINTK("read %lu completed from cache\n", sh->sector);
 		for (i = 0; i < disks; i++) {
+			char *bdata;
 			if (!sh->bh_new[i])
 				continue;
 			if (!sh->bh_old[i])
 				compute_block(sh, i);
-			memcpy(sh->bh_new[i]->b_data, sh->bh_old[i]->b_data, sh->size);
+			bdata = bh_kmap(sh->bh_new[i]);
+			memcpy(bdata, sh->bh_old[i]->b_data, sh->size);
+			bh_kunmap(sh->bh_new[i]);
 		}
 		complete_stripe(sh);
 		return;
@@ -1168,7 +1176,9 @@ static void handle_stripe_read (mddev_t *mddev , raid5_conf_t *conf,
 		if (!sh->bh_new[i])
 			continue;
 		if (sh->bh_old[i]) {
-			memcpy(sh->bh_new[i]->b_data, sh->bh_old[i]->b_data, sh->size);
+			char *bdata = bh_kmap(sh->bh_new[i]);
+			memcpy(bdata, sh->bh_old[i]->b_data, sh->size);
+			bh_kunmap(sh->bh_new[i]);
 			continue;
 		}
 #if RAID5_PARANOIA

@@ -467,6 +467,14 @@ fake_volatile:
 	goto fake_volatile;
 }
 
+NORET_TYPE void up_and_exit(struct semaphore *sem, long code)
+{
+	if (sem)
+		up(sem);
+	
+	do_exit(code);
+}
+
 asmlinkage long sys_exit(int error_code)
 {
 	do_exit((error_code&0xff)<<8);

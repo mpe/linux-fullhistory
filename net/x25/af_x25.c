@@ -25,6 +25,7 @@
  *					Fixed x25_output() related skb leakage.
  *	2000-10-02	Henner Eisen	Made x25_kick() single threaded per socket.
  *	2000-10-27	Henner Eisen    MSG_DONTWAIT for fragment allocation.
+ *	2000-11-14	Henner Eisen    Closing datalink from NETDEV_GOING_DOWN
  */
 
 #include <linux/config.h>
@@ -193,6 +194,7 @@ static void x25_kill_by_device(struct net_device *dev)
 static int x25_device_event(struct notifier_block *this, unsigned long event, void *ptr)
 {
 	struct net_device *dev = (struct net_device *)ptr;
+	struct x25_neigh *neigh;
 
 	if (dev->type == ARPHRD_X25
 #if defined(CONFIG_LLC) || defined(CONFIG_LLC_MODULE)
@@ -202,6 +204,10 @@ static int x25_device_event(struct notifier_block *this, unsigned long event, vo
 		switch (event) {
 			case NETDEV_UP:
 				x25_link_device_up(dev);
+				break;
+			case NETDEV_GOING_DOWN:
+				if ((neigh = x25_get_neigh(dev)))
+					x25_terminate_link(neigh);
 				break;
 			case NETDEV_DOWN:
 				x25_kill_by_device(dev);
@@ -473,7 +479,7 @@ static int x25_create(struct socket *sock, int protocol)
 
 	sock->ops    = &x25_proto_ops;
 	sk->protocol = protocol;
-	sk->backlog_rcv = x25_process_rx_frame;
+	sk->backlog_rcv = x25_backlog_rcv;
 
 	x25->t21   = sysctl_x25_call_request_timeout;
 	x25->t22   = sysctl_x25_reset_request_timeout;

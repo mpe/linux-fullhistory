@@ -259,20 +259,20 @@ static char *t1pci_procinfo(struct capi_ctr *ctrl)
 /* ------------------------------------------------------------- */
 
 static struct capi_driver t1pci_driver = {
-    "t1pci",
-    "0.0",
-    b1dma_load_firmware,
-    b1dma_reset_ctr,
-    t1pci_remove_ctr,
-    b1dma_register_appl,
-    b1dma_release_appl,
-    b1dma_send_message,
+    name: "t1pci",
+    revision: "0.0",
+    load_firmware: b1dma_load_firmware,
+    reset_ctr: b1dma_reset_ctr,
+    remove_ctr: t1pci_remove_ctr,
+    register_appl: b1dma_register_appl,
+    release_appl: b1dma_release_appl,
+    send_message: b1dma_send_message,
 
-    t1pci_procinfo,
-    b1dmactl_read_proc,
-    0,	/* use standard driver_read_proc */
+    procinfo: t1pci_procinfo,
+    ctr_read_proc: b1dmactl_read_proc,
+    driver_read_proc: 0,	/* use standard driver_read_proc */
 
-    0, /* no add_card function */
+    add_card: 0, /* no add_card function */
 };
 
 #ifdef MODULE

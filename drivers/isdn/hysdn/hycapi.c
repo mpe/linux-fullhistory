@@ -1,4 +1,4 @@
-/* $Id: hycapi.c,v 1.6 2000/07/25 08:07:42 ualbrecht Exp $
+/* $Id: hycapi.c,v 1.7 2000/11/13 22:51:47 kai Exp $
  *
  * Linux driver for HYSDN cards, CAPI2.0-Interface.
  * written by Ulrich Albrecht (u.albrecht@hypercope.de) for Hypercope GmbH
@@ -18,26 +18,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
- *
- * $Log: hycapi.c,v $
- * Revision 1.6  2000/07/25 08:07:42  ualbrecht
- * Fixed stupid re-registering bug resulting in system-freeze
- *
- * Revision 1.5  2000/06/18 16:08:18  keil
- * 2.4 PCI changes and some cosmetics
- *
- * Revision 1.4  2000/06/13 09:13:06  ualbrecht
- * Changed internal application handling: Registration is now deferred
- * until a CAPI-message is actually sent to the controller (no good
- * wasting memory on the card if it's never used anyways).
- * Module will now unload more gracefully.
- *
- * Revision 1.2  2000/05/22 10:31:22  ualbrecht
- * Parameter-checking for app-registration fixed
- *
- * Revision 1.1  2000/05/17 11:34:30  ualbrecht
- * Initial release
- *
  *
  */
 
@@ -61,7 +41,7 @@
 #include "hysdn_defs.h"
 #include <linux/kernelcapi.h>
 
-static char hycapi_revision[]="$Revision: 1.6 $";
+static char hycapi_revision[]="$Revision: 1.7 $";
 
 typedef struct _hycapi_appl {
 	unsigned int ctrl_mask;

@@ -1208,8 +1208,6 @@ asmlinkage ssize_t sys_sendfile(int out_fd, int in_fd, off_t *offset, size_t cou
 	if (!out_file->f_op || !out_file->f_op->write)
 		goto fput_out;
 	out_inode = out_file->f_dentry->d_inode;
-	if (!out_inode)
-		goto fput_out;
 	retval = locks_verify_area(FLOCK_VERIFY_WRITE, out_inode, out_file, out_file->f_pos, count);
 	if (retval)
 		goto fput_out;

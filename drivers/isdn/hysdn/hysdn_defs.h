@@ -1,4 +1,4 @@
-/* $Id: hysdn_defs.h,v 1.3 2000/06/13 09:14:26 ualbrecht Exp $
+/* $Id: hysdn_defs.h,v 1.4 2000/11/13 22:51:47 kai Exp $
 
  * Linux driver for HYSDN cards, global definitions and exported vars and functions.
  * written by Werner Cornelius (werner@titro.de) for Hypercope GmbH
@@ -18,18 +18,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
- *
- * $Log: hysdn_defs.h,v $
- * Revision 1.3  2000/06/13 09:14:26  ualbrecht
- * Removed obsolete struct for CAPI-application tracking.
- *
- * Revision 1.2  2000/05/17 11:41:30  ualbrecht
- * CAPI 2.0 support added
- *
- * Revision 1.1  2000/02/10 19:44:30  werner
- *
- * Initial release
- *
  *
  */
 

@@ -360,4 +360,14 @@ int x25_process_rx_frame(struct sock *sk, struct sk_buff *skb)
 	return queued;
 }
 
+int x25_backlog_rcv(struct sock *sk, struct sk_buff *skb)
+{
+	int queued;
+
+	queued = x25_process_rx_frame(sk,skb);
+	if(!queued) kfree_skb(skb);
+
+	return 0;
+}
+
 #endif

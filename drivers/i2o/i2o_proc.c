@@ -3237,7 +3237,7 @@ static void i2o_proc_remove_controller(struct i2o_controller *pctrl,
 	for(dev=pctrl->devices; dev; dev=dev->next)
 		i2o_proc_remove_device(dev);
 
-	if(!pctrl->proc_entry->count)
+	if(!atomic_read(&pctrl->proc_entry->count))
 	{
 		sprintf(buff, "iop%d", pctrl->unit);
 
@@ -3257,7 +3257,7 @@ void i2o_proc_remove_device(struct i2o_device *dev)
 
 	i2o_device_notify_off(dev, &i2o_proc_handler);
 	/* Would it be safe to remove _files_ even if they are in use? */
-	if((de) && (!de->count))
+	if((de) && (!atomic_read(&de->count)))
 	{
 		i2o_proc_remove_entries(generic_dev_entries, de);
 		switch(dev->lct_data.class_id)
@@ -3334,7 +3334,7 @@ static int __exit destroy_i2o_procfs(void)
 		}
 	}
 
-	if(!i2o_proc_dir_root->count)
+	if(!atomic_read(&i2o_proc_dir_root->count))
 		remove_proc_entry("i2o", 0);
 	else
 		return -1;

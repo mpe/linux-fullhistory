@@ -1,5 +1,5 @@
 /* 
- * $Id: isdn_divert.h,v 1.4 1999/09/02 13:24:12 paul Exp $
+ * $Id: isdn_divert.h,v 1.5 2000/11/13 22:51:47 kai Exp $
  *
  * Header for the diversion supplementary ioctl interface.
  *
@@ -18,19 +18,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
- *
- * $Log: isdn_divert.h,v $
- * Revision 1.4  1999/09/02 13:24:12  paul
- * cosmetics; text following #endif is not ANSI C
- *
- * Revision 1.3  1999/08/22 20:26:37  calle
- * backported changes from kernel 2.3.14:
- * - several #include "config.h" gone, others come.
- * - "struct device" changed to "struct net_device" in 2.3.14, added a
- *   define in isdn_compat.h for older kernel versions.
- *
- * Revision 1.2  1999/07/04 21:37:33  werner
- * Ported from kernel version 2.0
  *
  */
 

@@ -17,6 +17,17 @@ extern struct page * prepare_highmem_swapout(struct page *);
 extern struct page * replace_with_highmem(struct page *);
 extern struct buffer_head * create_bounce(int rw, struct buffer_head * bh_orig);
 
+
+static inline char *bh_kmap(struct buffer_head *bh)
+{
+	return kmap(bh->p_page) + bh_offset(bh);
+}
+
+static inline void bh_kunmap(struct buffer_head *bh)
+{
+	kunmap(bh->b_page);
+}
+
 #else /* CONFIG_HIGHMEM */
 
 static inline unsigned int nr_free_highpages(void) { return 0; }
@@ -29,6 +40,9 @@ static inline void *kmap(struct page *page) { return page_address(page); }
 
 #define kmap_atomic(page,idx)		kmap(page)
 #define kunmap_atomic(page,idx)		kunmap(page)
+
+#define bh_kmap(bh)	((bh)->b_data)
+#define bh_kunmap(bh)	do { } while (0);
 
 #endif /* CONFIG_HIGHMEM */
 

@@ -1,4 +1,4 @@
-/* $Id: w6692.c,v 1.7 2000/06/26 08:59:15 keil Exp $
+/* $Id: w6692.c,v 1.8 2000/09/07 20:33:30 werner Exp $
  *
  * w6692.c   Winbond W6692 specific routines
  *
@@ -46,7 +46,7 @@ static const PCI_ENTRY id_list[] =
 
 extern const char *CardType[];
 
-const char *w6692_revision = "$Revision: 1.7 $";
+const char *w6692_revision = "$Revision: 1.8 $";
 
 #define DBUSY_TIMER_VALUE 80
 
@@ -1056,6 +1056,7 @@ __initfunc(int setup_w6692(struct IsdnCard *card))
 	cs->BC_Send_Data = &W6692B_fill_fifo;
 	cs->cardmsg = &w6692_card_msg;
 	cs->irq_func = &W6692_interrupt;
+	cs->irq_flags |= SA_SHIRQ;
 	W6692Version(cs, "W6692:");
 	printk(KERN_INFO "W6692 ISTA=0x%X\n", ReadW6692(cs, W_ISTA));
 	printk(KERN_INFO "W6692 IMASK=0x%X\n", ReadW6692(cs, W_IMASK));

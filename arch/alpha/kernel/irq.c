@@ -747,7 +747,7 @@ probe_irq_mask(unsigned long val)
 	unsigned int mask;
 
 	mask = 0;
-	for (i = 0; i < 16; i++) {
+	for (i = 0; i < NR_IRQS; i++) {
 		irq_desc_t *desc = irq_desc + i;
 		unsigned int status;
 
@@ -755,8 +755,11 @@ probe_irq_mask(unsigned long val)
 		status = desc->status;
 
 		if (status & IRQ_AUTODETECT) {
-			if (!(status & IRQ_WAITING))
-				mask |= 1 << i;
+			/* We only react to ISA interrupts */
+			if (!(status & IRQ_WAITING)) {
+				if (i < 16)
+					mask |= 1 << i;
+			}
 
 			desc->status = status & ~IRQ_AUTODETECT;
 			desc->handler->shutdown(i);

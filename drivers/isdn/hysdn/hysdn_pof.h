@@ -1,4 +1,4 @@
-/* $Id: hysdn_pof.h,v 1.1 2000/02/10 19:44:30 werner Exp $
+/* $Id: hysdn_pof.h,v 1.2 2000/11/13 22:51:47 kai Exp $
 
  * Linux driver for HYSDN cards, definitions used for handling pof-files.
  * written by Werner Cornelius (werner@titro.de) for Hypercope GmbH
@@ -18,12 +18,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
- *
- * $Log: hysdn_pof.h,v $
- * Revision 1.1  2000/02/10 19:44:30  werner
- *
- * Initial release
- *
  *
  */
 

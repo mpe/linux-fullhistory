@@ -601,7 +601,6 @@ sunos_nfs_get_server_fd (int fd, struct sockaddr_in *addr)
 	int    try_port;
 	int    ret;
 	struct socket *socket;
-	struct dentry *dentry;
 	struct inode  *inode;
 	struct file   *file;
 
@@ -609,8 +608,7 @@ sunos_nfs_get_server_fd (int fd, struct sockaddr_in *addr)
 	if(!file)
 		return 0;
 
-	dentry = file->f_dentry;
-	inode = dentry->d_inode;
+	inode = file->f_dentry->d_inode;
 
 	socket = &inode->u.socket_i;
 	local.sin_family = AF_INET;

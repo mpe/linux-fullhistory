@@ -177,16 +177,17 @@ extern int iso_date(char *, int);
 
 extern int parse_rock_ridge_inode(struct iso_directory_record *, struct inode *);
 extern int get_rock_ridge_filename(struct iso_directory_record *, char *, struct inode *);
+extern int isofs_name_translate(struct iso_directory_record *, char *, struct inode *);
 
 extern int find_rock_ridge_relocation(struct iso_directory_record *, struct inode *);
 
-int get_joliet_filename(struct iso_directory_record *, struct inode *, unsigned char *);
+int get_joliet_filename(struct iso_directory_record *, unsigned char *, struct inode *);
 int get_acorn_filename(struct iso_directory_record *, char *, struct inode *);
 
 extern struct dentry *isofs_lookup(struct inode *, struct dentry *);
 extern int isofs_get_block(struct inode *, long, struct buffer_head *, int);
 extern int isofs_bmap(struct inode *, int);
-extern int isofs_lookup_grandparent(struct inode *, int);
+extern struct buffer_head *isofs_bread(struct inode *, unsigned int, unsigned int);
 
 extern struct inode_operations isofs_dir_inode_operations;
 extern struct file_operations isofs_dir_operations;

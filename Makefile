@@ -497,4 +497,4 @@ scripts/mkdep: scripts/mkdep.c
 	$(HOSTCC) $(HOSTCFLAGS) -o scripts/mkdep scripts/mkdep.c
 
 scripts/split-include: scripts/split-include.c
-	$(HOSTCC) $(HOSTCFLAGS) -I$(HPATH) -o scripts/split-include scripts/split-include.c
+	$(HOSTCC) $(HOSTCFLAGS) -o scripts/split-include scripts/split-include.c

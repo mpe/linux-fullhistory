@@ -405,7 +405,7 @@ struct socket *sockfd_lookup(int fd, int *err)
 	}
 
 	inode = file->f_dentry->d_inode;
-	if (!inode || !inode->i_sock || !(sock = socki_lookup(inode)))
+	if (!inode->i_sock || !(sock = socki_lookup(inode)))
 	{
 		*err = -ENOTSOCK;
 		fput(file);

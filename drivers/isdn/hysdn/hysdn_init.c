@@ -1,4 +1,4 @@
-/* $Id: hysdn_init.c,v 1.5 2000/08/20 16:46:09 keil Exp $
+/* $Id: hysdn_init.c,v 1.6 2000/11/13 22:51:47 kai Exp $
 
  * Linux driver for HYSDN cards, init functions.
  * written by Werner Cornelius (werner@titro.de) for Hypercope GmbH
@@ -19,24 +19,6 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Log: hysdn_init.c,v $
- * Revision 1.5  2000/08/20 16:46:09  keil
- * Changes for 2.4
- *
- * Revision 1.4  2000/06/18 16:08:18  keil
- * 2.4 PCI changes and some cosmetics
- *
- * Revision 1.3  2000/06/13 09:15:07  ualbrecht
- * Module will now unload more gracefully.
- *
- * Revision 1.2  2000/05/17 11:41:30  ualbrecht
- * CAPI 2.0 support added
- *
- * Revision 1.1  2000/02/10 19:45:18  werner
- *
- * Initial release
- *
- *
  */
 
 #include <linux/config.h>
@@ -49,7 +31,7 @@
 
 #include "hysdn_defs.h"
 
-static char *hysdn_init_revision = "$Revision: 1.5 $";
+static char *hysdn_init_revision = "$Revision: 1.6 $";
 int cardmax;			/* number of found cards */
 hysdn_card *card_root = NULL;	/* pointer to first card */
 

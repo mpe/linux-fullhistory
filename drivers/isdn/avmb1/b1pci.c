@@ -276,20 +276,20 @@ static int b1pci_add_card(struct capi_driver *driver, struct capicardparams *p)
 /* ------------------------------------------------------------- */
 
 static struct capi_driver b1pci_driver = {
-    "b1pci",
-    "0.0",
-    b1_load_firmware,
-    b1_reset_ctr,
-    b1pci_remove_ctr,
-    b1_register_appl,
-    b1_release_appl,
-    b1_send_message,
+    name: "b1pci",
+    revision: "0.0",
+    load_firmware: b1_load_firmware,
+    reset_ctr: b1_reset_ctr,
+    remove_ctr: b1pci_remove_ctr,
+    register_appl: b1_register_appl,
+    release_appl: b1_release_appl,
+    send_message: b1_send_message,
 
-    b1pci_procinfo,
-    b1ctl_read_proc,
-    0,	/* use standard driver_read_proc */
+    procinfo: b1pci_procinfo,
+    ctr_read_proc: b1ctl_read_proc,
+    driver_read_proc: 0,	/* use standard driver_read_proc */
 
-    0, /* no add_card function */
+    add_card: 0, /* no add_card function */
 };
 
 #ifdef CONFIG_ISDN_DRV_AVMB1_B1PCIV4
@@ -463,20 +463,20 @@ static int b1pciv4_add_card(struct capi_driver *driver, struct capicardparams *p
 
 
 static struct capi_driver b1pciv4_driver = {
-    "b1pciv4",
-    "0.0",
-    b1dma_load_firmware,
-    b1dma_reset_ctr,
-    b1pciv4_remove_ctr,
-    b1dma_register_appl,
-    b1dma_release_appl,
-    b1dma_send_message,
+    name: "b1pciv4",
+    revision: "0.0",
+    load_firmware: b1dma_load_firmware,
+    reset_ctr: b1dma_reset_ctr,
+    remove_ctr: b1pciv4_remove_ctr,
+    register_appl: b1dma_register_appl,
+    release_appl: b1dma_release_appl,
+    send_message: b1dma_send_message,
 
-    b1pciv4_procinfo,
-    b1dmactl_read_proc,
-    0,	/* use standard driver_read_proc */
+    procinfo: b1pciv4_procinfo,
+    ctr_read_proc: b1dmactl_read_proc,
+    driver_read_proc: 0,	/* use standard driver_read_proc */
 
-    0, /* no add_card function */
+    add_card: 0, /* no add_card function */
 };
 
 #endif /* CONFIG_ISDN_DRV_AVMB1_B1PCIV4 */

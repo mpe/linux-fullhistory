@@ -483,8 +483,7 @@ static void b1dma_handle_rx(avmcard *card)
 	struct capi_ctr *ctrl = cinfo->capi_ctrl;
 	struct sk_buff *skb;
 	void *p = dma->recvbuf+4;
-	__u32 ApplId, DataB3Len, NCCI, WindowSize;
-	__s32 MsgLen;
+	__u32 ApplId, MsgLen, DataB3Len, NCCI, WindowSize;
 	__u8 b1cmd =  _get_byte(&p);
 
 #ifdef CONFIG_B1DMA_DEBUG

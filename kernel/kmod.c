@@ -114,7 +114,8 @@ int exec_usermodehelper(char *program_path, char *argv[], char *envp[])
 	}
 
 	/* Give kmod all effective privileges.. */
-	current->uid = current->euid = current->fsuid = 0;
+	current->euid = current->fsuid = 0;
+	current->egid = current->fsgid = 0;
 	cap_set_full(current->cap_effective);
 
 	/* Allow execve args to be in kernel space. */

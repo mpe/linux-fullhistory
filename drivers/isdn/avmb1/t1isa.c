@@ -209,7 +209,7 @@ static void t1_handle_interrupt(avmcard * card)
 	struct sk_buff *skb;
 
 	unsigned ApplId;
-	signed MsgLen;
+	unsigned MsgLen;
 	unsigned DataB3Len;
 	unsigned NCCI;
 	unsigned WindowSize;
@@ -597,20 +597,20 @@ static char *t1isa_procinfo(struct capi_ctr *ctrl)
 /* ------------------------------------------------------------- */
 
 static struct capi_driver t1isa_driver = {
-    "t1isa",
-    "0.0",
-    t1isa_load_firmware,
-    t1isa_reset_ctr,
-    t1isa_remove_ctr,
-    b1_register_appl,
-    b1_release_appl,
-    t1isa_send_message,
+    name: "t1isa",
+    revision: "0.0",
+    load_firmware: t1isa_load_firmware,
+    reset_ctr: t1isa_reset_ctr,
+    remove_ctr: t1isa_remove_ctr,
+    register_appl: b1_register_appl,
+    release_appl: b1_release_appl,
+    send_message: t1isa_send_message,
 
-    t1isa_procinfo,
-    b1ctl_read_proc,
-    0,	/* use standard driver_read_proc */
+    procinfo: t1isa_procinfo,
+    ctr_read_proc: b1ctl_read_proc,
+    driver_read_proc: 0,	/* use standard driver_read_proc */
 
-    t1isa_add_card,
+    add_card: t1isa_add_card,
 };
 
 #ifdef MODULE

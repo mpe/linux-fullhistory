@@ -123,7 +123,7 @@ static int evdev_open(struct inode * inode, struct file * file)
 	struct evdev_list *list;
 	int i = MINOR(inode->i_rdev) - EVDEV_MINOR_BASE;
 
-	if (i > EVDEV_MINORS || !evdev_table[i])
+	if (i >= EVDEV_MINORS || !evdev_table[i])
 		return -ENODEV;
 
 	if (!(list = kmalloc(sizeof(struct evdev_list), GFP_KERNEL)))
@@ -288,7 +288,7 @@ static struct input_handle *evdev_connect(struct input_handler *handler, struct 
 	int minor;
 
 	for (minor = 0; minor < EVDEV_MINORS && evdev_table[minor]; minor++);
-	if (evdev_table[minor]) {
+	if (minor == EVDEV_MINORS) {
 		printk(KERN_ERR "evdev: no more free evdev devices\n");
 		return NULL;
 	}

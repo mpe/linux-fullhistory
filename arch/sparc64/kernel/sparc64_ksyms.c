@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.96 2000/11/06 06:59:03 davem Exp $
+/* $Id: sparc64_ksyms.c,v 1.98 2000/11/13 10:03:32 davem Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -109,25 +109,14 @@ extern void _do_write_unlock(rwlock_t *rw);
 
 extern unsigned long phys_base;
 
-/* One thing to note is that the way the symbols of the mul/div
- * support routines are named is a mess, they all start with
- * a '.' which makes it a bitch to export, here is the trick:
- */
-
-#define EXPORT_SYMBOL_PRIVATE(sym)				\
-extern int __sparc_priv_ ## sym (int) __asm__("__" #sym);	\
-const struct module_symbol __export_priv_##sym			\
-__attribute__((section("__ksymtab"))) =				\
-{ (unsigned long) &__sparc_priv_ ## sym, "__" #sym }
-
 /* used by various drivers */
 #ifdef CONFIG_SMP
 #ifndef SPIN_LOCK_DEBUG
 /* Out of line rw-locking implementation. */
-EXPORT_SYMBOL_PRIVATE(read_lock);
-EXPORT_SYMBOL_PRIVATE(read_unlock);
-EXPORT_SYMBOL_PRIVATE(write_lock);
-EXPORT_SYMBOL_PRIVATE(write_unlock);
+EXPORT_SYMBOL(__read_lock);
+EXPORT_SYMBOL(__read_unlock);
+EXPORT_SYMBOL(__write_lock);
+EXPORT_SYMBOL(__write_unlock);
 #endif
 
 /* Kernel wide locking */
@@ -136,10 +125,10 @@ EXPORT_SYMBOL(kernel_flag);
 /* Hard IRQ locking */
 EXPORT_SYMBOL(global_irq_holder);
 EXPORT_SYMBOL(synchronize_irq);
-EXPORT_SYMBOL_PRIVATE(global_cli);
-EXPORT_SYMBOL_PRIVATE(global_sti);
-EXPORT_SYMBOL_PRIVATE(global_save_flags);
-EXPORT_SYMBOL_PRIVATE(global_restore_flags);
+EXPORT_SYMBOL(__global_cli);
+EXPORT_SYMBOL(__global_sti);
+EXPORT_SYMBOL(__global_save_flags);
+EXPORT_SYMBOL(__global_restore_flags);
 
 /* Per-CPU information table */
 EXPORT_SYMBOL(cpu_data);
@@ -162,27 +151,33 @@ EXPORT_SYMBOL(_do_write_unlock);
 
 #endif
 
+/* semaphores */
+EXPORT_SYMBOL(__down);
+EXPORT_SYMBOL(__down_interruptible);
+EXPORT_SYMBOL(__down_trylock);
+EXPORT_SYMBOL(__up);
+
 /* rw semaphores */
 EXPORT_SYMBOL_NOVERS(__down_read_failed);
 EXPORT_SYMBOL_NOVERS(__down_write_failed);
 EXPORT_SYMBOL_NOVERS(__rwsem_wake);
 
 /* Atomic counter implementation. */
-EXPORT_SYMBOL_PRIVATE(atomic_add);
-EXPORT_SYMBOL_PRIVATE(atomic_sub);
+EXPORT_SYMBOL(__atomic_add);
+EXPORT_SYMBOL(__atomic_sub);
 
 /* Atomic bit operations. */
-EXPORT_SYMBOL_PRIVATE(test_and_set_bit);
-EXPORT_SYMBOL_PRIVATE(test_and_clear_bit);
-EXPORT_SYMBOL_PRIVATE(test_and_change_bit);
-EXPORT_SYMBOL_PRIVATE(test_and_set_le_bit);
-EXPORT_SYMBOL_PRIVATE(test_and_clear_le_bit);
+EXPORT_SYMBOL(__test_and_set_bit);
+EXPORT_SYMBOL(__test_and_clear_bit);
+EXPORT_SYMBOL(__test_and_change_bit);
+EXPORT_SYMBOL(__test_and_set_le_bit);
+EXPORT_SYMBOL(__test_and_clear_le_bit);
 
 EXPORT_SYMBOL(ivector_table);
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
 
-EXPORT_SYMBOL_PRIVATE(flushw_user);
+EXPORT_SYMBOL(__flushw_user);
 
 EXPORT_SYMBOL(__flush_dcache_page);
 

@@ -580,8 +580,7 @@ static void c4_handle_rx(avmcard *card)
 	avmctrl_info *cinfo;
 	struct sk_buff *skb;
 	void *p = dma->recvbuf;
-	__u32 ApplId, DataB3Len, NCCI, WindowSize;
-	__s32 MsgLen;
+	__u32 ApplId, MsgLen, DataB3Len, NCCI, WindowSize;
 	__u8 b1cmd =  _get_byte(&p);
 	__u32 cidx;
 
@@ -1311,21 +1310,22 @@ static int c4_add_card(struct capi_driver *driver, struct capicardparams *p)
 /* ------------------------------------------------------------- */
 
 static struct capi_driver c4_driver = {
-    "c4",
-    "0.0",
-    c4_load_firmware,
-    c4_reset_ctr,
-    c4_remove_ctr,
-    c4_register_appl,
-    c4_release_appl,
-    c4_send_message,
+    name: "c4",
+    revision: "0.0",
+    load_firmware: c4_load_firmware,
+    reset_ctr: c4_reset_ctr,
+    remove_ctr: c4_remove_ctr,
+    register_appl: c4_register_appl,
+    release_appl: c4_release_appl,
+    send_message: c4_send_message,
 
-    c4_procinfo,
-    c4_read_proc,
-    0,	/* use standard driver_read_proc */
+    procinfo: c4_procinfo,
+    ctr_read_proc: c4_read_proc,
+    driver_read_proc: 0,	/* use standard driver_read_proc */
 
-    0, /* no add_card function */
+    add_card: 0, /* no add_card function */
 };
+
 
 #ifdef MODULE
 #define c4_init init_module

@@ -29,6 +29,8 @@
  */
 
 #include <linux/init.h>
+#include <linux/sched.h>
+#include <linux/smp_lock.h>
 #include <linux/input.h>
 #include <linux/module.h>
 #include <linux/random.h>
@@ -378,7 +380,11 @@ static int input_open_file(struct inode *inode, struct file *file)
 	}
 	old_fops = file->f_op;
 	file->f_op = new_fops;
+
+	lock_kernel();
 	err = new_fops->open(inode, file);
+	unlock_kernel();
+
 	if (err) {
 		fops_put(file->f_op);
 		file->f_op = fops_get(old_fops);

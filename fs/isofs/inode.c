@@ -972,14 +972,24 @@ int isofs_bmap(struct inode *inode, int block)
 	return 0;
 }
 
+struct buffer_head *isofs_bread(struct inode *inode, unsigned int bufsize, unsigned int block)
+{
+	unsigned int blknr = isofs_bmap(inode, block);
+	if (!blknr)
+		return NULL;
+	return bread(inode->i_dev, blknr, bufsize);
+}
+
 static int isofs_readpage(struct file *file, struct page *page)
 {
 	return block_read_full_page(page,isofs_get_block);
 }
+
 static int _isofs_bmap(struct address_space *mapping, long block)
 {
 	return generic_block_bmap(mapping,block,isofs_get_block);
 }
+
 static struct address_space_operations isofs_aops = {
 	readpage: isofs_readpage,
 	sync_page: block_sync_page,
@@ -1002,93 +1012,89 @@ static inline void test_and_set_gid(gid_t *p, gid_t value)
 
 static int isofs_read_level3_size(struct inode * inode)
 {
-	unsigned long ino = inode->i_ino;
+	unsigned long f_pos = inode->i_ino;
 	unsigned long bufsize = ISOFS_BUFFER_SIZE(inode);
 	int high_sierra = inode->i_sb->u.isofs_sb.s_high_sierra;
 	struct buffer_head * bh = NULL;
-	int block = 0;
+	unsigned long block, offset;
 	int i = 0;
 	int more_entries = 0;
-	void *cpnt;
-	struct iso_directory_record * raw_inode;
+	struct iso_directory_record * tmpde = kmalloc(256, GFP_KERNEL);
+
+	if (!tmpde)
+		return -ENOMEM;
 
 	inode->i_size = 0;
 	inode->u.isofs_i.i_next_section_ino = 0;
-	do {
-		unsigned char *pnt;
-		unsigned int reclen;
-		int offset = (ino & (bufsize - 1));
 
-		cpnt = NULL;
-		/* Check whether to update our buffer */
-		if (block != ino >> ISOFS_BUFFER_BITS(inode)) {
-			block = ino >> ISOFS_BUFFER_BITS(inode);
-			brelse(bh);
+	block = f_pos >> ISOFS_BUFFER_BITS(inode);
+	offset = f_pos & (bufsize-1);
+
+	do {
+		struct iso_directory_record * de;
+		unsigned int de_len;
+
+		if (!bh) {
 			bh = bread(inode->i_dev, block, bufsize);
 			if (!bh)
 				goto out_noread;
 		}
-		pnt = ((unsigned char *) bh->b_data + offset);
-		/*
-		 * Note: this is invariant even if the record
-		 * spans buffers and must be copied ...
-		 */
-		reclen = *pnt;
+		de = (struct iso_directory_record *) (bh->b_data + offset);
+		de_len = *(unsigned char *) de;
 
-		/* N.B. this test doesn't trigger the i++ code ... */	
-		if(reclen == 0) {
-			ino = (ino & ~(ISOFS_BLOCK_SIZE - 1)) + ISOFS_BLOCK_SIZE;
+		if (de_len == 0) {
+			brelse(bh);
+			bh = NULL;
+			f_pos = (f_pos + ISOFS_BLOCK_SIZE) & ~(ISOFS_BLOCK_SIZE - 1);
+			block = f_pos >> ISOFS_BUFFER_BITS(inode);
+			offset = 0;
 			continue;
 		}
-		raw_inode = ((struct iso_directory_record *) pnt);
 
-		/* Check whether the raw inode spans the buffer ... */	
-		if (offset + reclen > bufsize){
-		        int frag1 = bufsize - offset;
-	
-		        cpnt = kmalloc(reclen, GFP_KERNEL);
-			if (cpnt == NULL)
-				goto out_nomem;
-			memcpy(cpnt, pnt, frag1);
+		offset += de_len;
+
+		/* Make sure we have a full directory entry */
+		if (offset >= bufsize) {
+			int slop = bufsize - offset + de_len;
+			memcpy(tmpde, de, slop);
+			offset &= bufsize - 1;
+			block++;
 			brelse(bh);
-			bh = bread(inode->i_dev, ++block, bufsize);
-			if (!bh)
-				goto out_noread;
-			offset += reclen - bufsize;
-			memcpy((char *)cpnt+frag1, bh->b_data, offset);
-			raw_inode = ((struct iso_directory_record *) cpnt);
+			bh = NULL;
+			if (offset) {
+				bh = bread(inode->i_dev, block, bufsize);
+				if (!bh)
+					goto out_noread;
+				memcpy((void *) tmpde + slop, bh->b_data, offset);
+			}
+			de = tmpde;
 		}
 
-		inode->i_size += isonum_733 (raw_inode->size);
-		if(i == 1) inode->u.isofs_i.i_next_section_ino = ino;
+		inode->i_size += isonum_733(de->size);
+		if (i == 1)
+			inode->u.isofs_i.i_next_section_ino = f_pos;
 
-		more_entries = raw_inode->flags[-high_sierra] & 0x80;
+		more_entries = de->flags[-high_sierra] & 0x80;
 
-		ino += reclen;
-		if (cpnt)
-			kfree (cpnt);
+		f_pos += de_len;
 		i++;
 		if(i > 100)
 			goto out_toomany;
 	} while(more_entries);
 out:
-	brelse(bh);
+	kfree(tmpde);
+	if (bh) brelse(bh);
 	return 0;
 
-out_nomem:
-	printk(KERN_INFO "ISOFS: NoMem ISO inode %lu\n", inode->i_ino);
-	brelse(bh);
-	return 1;
 out_noread:
-	printk(KERN_INFO "ISOFS: unable to read i-node block %d\n", block);
-	if (cpnt)
-		kfree(cpnt);
+	printk(KERN_INFO "ISOFS: unable to read i-node block %lu\n", block);
+	kfree(tmpde);
 	return 1;
 out_toomany:
 	printk(KERN_INFO "isofs_read_level3_size: "
 		"More than 100 file sections ?!?, aborting...\n"
 	  	"isofs_read_level3_size: inode=%lu ino=%lu\n",
-		inode->i_ino, ino);
+		inode->i_ino, f_pos);
 	goto out;
 }
 
@@ -1257,143 +1263,6 @@ static void isofs_read_inode(struct inode * inode)
 	/* With a data error we return this information */
 	make_bad_inode(inode);
 	return;
-}
-
-/* There are times when we need to know the inode number of a parent of
-   a particular directory.  When control passes through a routine that
-   has access to the parent information, it fills it into the inode structure,
-   but sometimes the inode gets flushed out of the queue, and someone
-   remembers the number.  When they try to open up again, we have lost
-   the information.  The '..' entry on the disc points to the data area
-   for a particular inode, so we can follow these links back up, but since
-   we do not know the inode number, we do not actually know how large the
-   directory is.  The disc is almost always correct, and there is
-   enough error checking on the drive itself, but an open ended search
-   makes me a little nervous.
-
-   The BSD iso filesystem uses the extent number for an inode, and this
-   would work really nicely for us except that the read_inode function
-   would not have any clean way of finding the actual directory record
-   that goes with the file.  If we had such info, then it would pay
-   to change the inode numbers and eliminate this function.
-*/
-
-int isofs_lookup_grandparent(struct inode * parent, int extent)
-{
-	unsigned long bufsize = ISOFS_BUFFER_SIZE(parent);
-	unsigned char bufbits = ISOFS_BUFFER_BITS(parent);
-	unsigned int block,offset;
-	int parent_dir, inode_number;
-	int result;
-	int directory_size;
-	struct buffer_head * bh;
-	struct iso_directory_record * de;
-
-	offset = 0;
-	block = extent << (ISOFS_ZONE_BITS(parent) - bufbits);
-	if (!(bh = bread(parent->i_dev, block, bufsize)))  return -1;
-
-	while (1 == 1) {
-		de = (struct iso_directory_record *) (bh->b_data + offset);
-		if (*((unsigned char *) de) == 0)
-		{
-			brelse(bh);
-			printk("Directory .. not found\n");
-			return -1;
-		}
-
-		offset += *((unsigned char *) de);
-
-		if (offset >= bufsize)
-		{
-			printk(".. Directory not in first block"
-			       " of directory.\n");
-			brelse(bh);
-			return -1;
-		}
-
-		if (de->name_len[0] == 1 && de->name[0] == 1)
-		{
-			parent_dir = find_rock_ridge_relocation(de, parent);
-			directory_size = isonum_733 (de->size);
-			brelse(bh);
-			break;
-		}
-	}
-#ifdef DEBUG
-	printk("Parent dir:%x\n",parent_dir);
-#endif
-	/* Now we know the extent where the parent dir starts on. */
-
-	result = -1;
-
-	offset = 0;
-	block = parent_dir << (ISOFS_ZONE_BITS(parent) - bufbits);
-	if (!block || !(bh = bread(parent->i_dev,block, bufsize)))
-	{
-		return -1;
-	}
-
-	for(;;)
-	{
-		de = (struct iso_directory_record *) (bh->b_data + offset);
-		inode_number = (block << bufbits)+(offset & (bufsize - 1));
-
-		/* If the length byte is zero, we should move on to the next
-		   CDROM sector.  If we are at the end of the directory, we
-		   kick out of the while loop. */
-
- 		if ((*((unsigned char *) de) == 0) || (offset == bufsize) )
-		{
-			brelse(bh);
-			offset = 0;
-			block++;
-			directory_size -= bufsize;
-			if(directory_size < 0) return -1;
-			if((block & 1) && (ISOFS_ZONE_BITS(parent) - bufbits) == 1)
-			{
-				return -1;
-			}
-			if((block & 3) && (ISOFS_ZONE_BITS(parent) - bufbits) == 2)
-			{
-				return -1;
-			}
-			if (!block
-			    || !(bh = bread(parent->i_dev,block, bufsize)))
-			{
-				return -1;
-			}
-			continue;
-		}
-
-		/* Make sure that the entire directory record is in the current
-		   bh block.  If not, we malloc a buffer, and put the two
-		   halves together, so that we can cleanly read the block.  */
-
-		offset += *((unsigned char *) de);
-
-		if (offset > bufsize)
-		{
- 			printk("Directory overrun\n");
- 			goto out;
-		}
-
-		if (find_rock_ridge_relocation(de, parent) == extent){
-			result = inode_number;
-			goto out;
-		}
-
-	}
-
-	/* We go here for any condition we cannot handle.
-	   We also drop through to here at the end of the directory. */
-
- out:
-	brelse(bh);
-#ifdef DEBUG
-	printk("Resultant Inode %d\n",result);
-#endif
-	return result;
 }
 
 #ifdef LEAK_CHECK

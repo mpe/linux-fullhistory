@@ -379,6 +379,12 @@ M:	jrv@vanzandt.mv.com
 L:	blinux-list@redhat.com
 S:	Maintained
 
+DRM DRIVERS
+P:	Rik Faith
+M:	faith@valinux.com
+L:	dri-devel@lists.sourceforge.net
+S:	Supported
+
 EATA-DMA SCSI DRIVER
 P:	Michael Neuffer
 M:	mike@i-Connect.Net

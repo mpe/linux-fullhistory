@@ -5,7 +5,7 @@
  * PPPoE --- PPP over Ethernet (RFC 2516)
  *
  *
- * Version:    0.6.3
+ * Version:    0.6.4
  *
  * 030700 :     Fixed connect logic to allow for disconnect.
  * 270700 :	Fixed potential SMP problems; we must protect against 
@@ -13,12 +13,11 @@
  *		and ppp_unregister_channel.
  * 040800 :	Respect reference count mechanisms on net-devices.
  * 200800 :     fix kfree(skb) in pppoe_rcv (acme)
- *
  *		Module reference count is decremented in the right spot now,
  *		guards against sock_put not actually freeing the sk 
  *		in pppoe_release.
- *
- * 051000 :	Initialization cleanup
+ * 051000 :	Initialization cleanup.
+ * 111100 :	Fix recvmsg.
  *
  * Author:	Michal Ostrowski <mostrows@styx.uwaterloo.ca>
  * Contributors:
@@ -533,13 +532,10 @@ int pppoe_release(struct socket *sock)
 	if (po->pppoe_dev)
 	    dev_put(po->pppoe_dev);
 
-	/* Should also do a queue purge here */
-
 	sock_orphan(sk);
 	sock->sk = NULL;
 
 	skb_queue_purge(&sk->receive_queue);
-
 	sock_put(sk);
 
 	return error;
@@ -566,7 +562,7 @@ int pppoe_connect(struct socket *sock, struct sockaddr *uservaddr,
 	if ((sk->state & PPPOX_CONNECTED) && sp->sa_addr.pppoe.sid)
 		goto end;
 
-	/* Check for already disconnected sockets, 
+	/* Check for already disconnected sockets,
 	   on attempts to disconnect */
 	error = -EALREADY;
 	if((sk->state & PPPOX_DEAD) && !sp->sa_addr.pppoe.sid )
@@ -590,7 +586,7 @@ int pppoe_connect(struct socket *sock, struct sockaddr *uservaddr,
 	/* Don't re-bind if sid==0 */
 	if (sp->sa_addr.pppoe.sid != 0) {
 		dev = dev_get_by_name(sp->sa_addr.pppoe.dev);
-	    
+
 		error = -ENODEV;
 		if (!dev)
 			goto end;
@@ -726,6 +722,7 @@ int pppoe_ioctl(struct socket *sock, unsigned int cmd,
 		if (!relay_po)
 			break;
 
+		sock_put(relay_po->sk);
 		sk->state |= PPPOX_RELAY;
 		err = 0;
 		break;
@@ -757,7 +754,6 @@ int pppoe_sendmsg(struct socket *sock, struct msghdr *m,
 	struct pppoe_hdr *ph;
 	struct net_device *dev;
 	char *start;
-	int copied = 0;
 
 	if (sk->dead || !(sk->state & PPPOX_CONNECTED)) {
 		error = -ENOTCONN;
@@ -772,6 +768,11 @@ int pppoe_sendmsg(struct socket *sock, struct msghdr *m,
 	lock_sock(sk);
 
 	dev = sk->protinfo.pppox->pppoe_dev;
+
+	error = -EMSGSIZE;
+ 	if(total_len > dev->mtu+dev->hard_header_len)
+		goto end;
+
 
 	skb = sock_wmalloc(sk, total_len + dev->hard_header_len + 32,
 			   0, GFP_KERNEL);
@@ -793,21 +794,25 @@ int pppoe_sendmsg(struct socket *sock, struct msghdr *m,
 	ph = (struct pppoe_hdr *) skb_put(skb, total_len + sizeof(struct pppoe_hdr));
 	start = (char *) &ph->tag[0];
 
-	error = copied = memcpy_fromiovec( start, m->msg_iov, m->msg_iovlen);
-	if( error <= 0 )
-	    goto end;
+	error = memcpy_fromiovec( start, m->msg_iov, total_len);
 
+	if (error < 0) {
+		kfree_skb(skb);
+		goto end;
+	}
+
+	error = total_len;
 	dev->hard_header(skb, dev, ETH_P_PPP_SES,
 			 sk->protinfo.pppox->pppoe_pa.remote,
-			 NULL, copied);
+			 NULL, total_len);
 
 	memcpy(ph, &hdr, sizeof(struct pppoe_hdr));
 
-	ph->length = htons(copied);
+	ph->length = htons(total_len);
 
 	dev_queue_xmit(skb);
 
-end:
+ end:
 	release_sock(sk);
 	return error;
 }
@@ -1025,7 +1030,7 @@ int __init pppoe_init(void)
  	int err = register_pppox_proto(PX_PROTO_OE, &pppoe_proto);
 
 	if (err == 0) {
-		printk(KERN_INFO "Registered PPPoE v0.6.3\n");
+		printk(KERN_INFO "Registered PPPoE v0.6.4\n");
 
 		dev_add_pack(&pppoes_ptype);
 		register_netdevice_notifier(&pppoe_notifier);

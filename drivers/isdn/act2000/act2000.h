@@ -1,4 +1,4 @@
-/* $Id: act2000.h,v 1.7 1999/04/12 13:13:54 fritz Exp $
+/* $Id: act2000.h,v 1.8 2000/11/12 16:32:06 kai Exp $
  *
  * ISDN lowlevel-module for the IBM ISDN-S0 Active 2000.
  *
@@ -18,31 +18,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
- *
- * $Log: act2000.h,v $
- * Revision 1.7  1999/04/12 13:13:54  fritz
- * Made cards pointer static to avoid name-clash.
- *
- * Revision 1.6  1998/11/05 22:12:38  fritz
- * Changed mail-address.
- *
- * Revision 1.5  1997/10/09 22:22:59  fritz
- * New HL<->LL interface:
- *   New BSENT callback with nr. of bytes included.
- *   Sending without ACK.
- *
- * Revision 1.4  1997/09/25 17:25:37  fritz
- * Support for adding cards at runtime.
- * Support for new Firmware.
- *
- * Revision 1.3  1997/09/24 23:11:43  fritz
- * Optimized IRQ load and polling-mode.
- *
- * Revision 1.2  1997/09/24 19:44:12  fritz
- * Added MSN mapping support, some cleanup.
- *
- * Revision 1.1  1997/09/23 18:00:05  fritz
- * New driver for IBM Active 2000.
  *
  */
 

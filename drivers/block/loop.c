@@ -411,10 +411,6 @@ static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 
 	error = -EINVAL;
 	inode = file->f_dentry->d_inode;
-	if (!inode) {
-		printk(KERN_ERR "loop_set_fd: NULL inode?!?\n");
-		goto out_putf;
-	}
 
 	if (S_ISBLK(inode->i_mode)) {
 		/* dentry will be wired, so... */

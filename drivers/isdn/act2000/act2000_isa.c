@@ -1,4 +1,4 @@
-/* $Id: act2000_isa.c,v 1.10 1999/10/24 18:46:05 fritz Exp $
+/* $Id: act2000_isa.c,v 1.11 2000/11/12 16:32:06 kai Exp $
  *
  * ISDN lowlevel-module for the IBM ISDN-S0 Active 2000 (ISA-Version).
  *
@@ -18,43 +18,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
- *
- * $Log: act2000_isa.c,v $
- * Revision 1.10  1999/10/24 18:46:05  fritz
- * Changed isa_ prefix to act2000_isa_ to prevent name-clash in latest
- * kernels.
- *
- * Revision 1.9  1999/09/04 06:20:04  keil
- * Changes from kernel set_current_state()
- *
- * Revision 1.8  1999/01/05 18:29:25  he
- * merged remaining schedule_timeout() changes from 2.1.127
- *
- * Revision 1.7  1998/11/05 22:12:41  fritz
- * Changed mail-address.
- *
- * Revision 1.6  1998/06/17 19:51:09  he
- * merged with 2.1.10[34] (cosmetics and udelay() -> mdelay())
- * brute force fix to avoid Ugh's in isdn_tty_write()
- * cleaned up some dead code
- *
- * Revision 1.5  1998/02/12 23:06:47  keil
- * change for 2.1.86 (removing FREE_READ/FREE_WRITE from [dev]_kfree_skb()
- *
- * Revision 1.4  1997/10/09 22:23:00  fritz
- * New HL<->LL interface:
- *   New BSENT callback with nr. of bytes included.
- *   Sending without ACK.
- *
- * Revision 1.3  1997/09/25 17:25:38  fritz
- * Support for adding cards at runtime.
- * Support for new Firmware.
- *
- * Revision 1.2  1997/09/24 23:11:44  fritz
- * Optimized IRQ load and polling-mode.
- *
- * Revision 1.1  1997/09/23 18:00:05  fritz
- * New driver for IBM Active 2000.
  *
  */
 

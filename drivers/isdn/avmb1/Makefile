@@ -1,5 +1,5 @@
 #
-# $Id: Makefile,v 1.18 2000/04/03 16:39:25 calle Exp $
+# $Id: Makefile,v 1.21 2000/11/01 14:05:02 calle Exp $
 #
 # Makefile for the CAPI and AVM-B1 device drivers.
 #
@@ -11,6 +11,23 @@
 # parent makes..
 #
 # $Log: Makefile,v $
+# Revision 1.21  2000/11/01 14:05:02  calle
+# - use module_init/module_exit from linux/init.h.
+# - all static struct variables are initialized with "membername:" now.
+# - avm_cs.c, let it work with newer pcmcia-cs.
+#
+# Revision 1.20  2000/10/18 06:13:34  ostoyke
+# Removing CAPI4Linux from I4L CVS.
+#
+# Revision 1.19  2000/08/10 14:46:25  ostoyke
+# CAPI4Linux.
+#
+# Revision 1.18  2000/04/03 16:39:25  calle
+# Makefile checked in with future things :-(
+#
+# Revision 1.17  2000/04/03 16:38:05  calle
+# made suppress_pollack static.
+#
 # Revision 1.16  2000/03/17 12:15:44  calle
 # ALL_SUB_DIRS were wrong.
 #
@@ -109,7 +126,7 @@
 
 SUB_DIRS     :=
 MOD_SUB_DIRS :=
-ALL_SUB_DIRS := # fcpci fcclassic
+ALL_SUB_DIRS :=
 #
 # Objects that don't export a symtab
 #
@@ -158,14 +175,6 @@ ifeq ($(CONFIG_ISDN_CAPI),y)
   ifdef CONFIG_ISDN_DRV_AVMB1_C4
   	O_OBJS   += c4.o
   endif
-  ifdef CONFIG_ISDN_DRV_AVMB1_FCPCI
-	SUB_DIRS += fcpci
-	MOD_SUB_DIRS += fcpci
-  endif
-  ifdef CONFIG_ISDN_DRV_AVMB1_FCCLASSIC
-	SUB_DIRS += fcclassic
-	MOD_SUB_DIRS += fcclassic
-  endif
   OX_OBJS  += capiutil.o capidrv.o b1.o b1dma.o
 else
   ifeq ($(CONFIG_ISDN_CAPI),m)
@@ -198,12 +207,6 @@ else
   	ifdef CONFIG_ISDN_DRV_AVMB1_C4
   		M_OBJS   += c4.o
   	endif
-  	ifdef CONFIG_ISDN_DRV_AVMB1_FCPCI
-    		MOD_SUB_DIRS += fcpci
-	endif
-  	ifdef CONFIG_ISDN_DRV_AVMB1_FCCLASSIC
-    		MOD_SUB_DIRS += fcclassic
-	endif
   	MX_OBJS  += capiutil.o capidrv.o b1.o b1dma.o
   endif
 endif

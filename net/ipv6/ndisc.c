@@ -660,7 +660,8 @@ static void ndisc_router_discovery(struct sk_buff *skb)
 		if (ra_msg->reachable_time) {
 			__u32 rtime = (ntohl(ra_msg->reachable_time)*HZ)/1000;
 
-			if (rtime != in6_dev->nd_parms->base_reachable_time) {
+			if (rtime &&
+			    rtime != in6_dev->nd_parms->base_reachable_time) {
 				in6_dev->nd_parms->base_reachable_time = rtime;
 				in6_dev->nd_parms->gc_staletime = 3 * rtime;
 				in6_dev->nd_parms->reachable_time = neigh_rand_reach_time(rtime);

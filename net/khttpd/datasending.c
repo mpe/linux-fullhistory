@@ -114,7 +114,7 @@ int DataSending(const int CPUNR)
 			
 			inode = CurrentRequest->filp->f_dentry->d_inode;
 			
-			if (inode && inode->i_mapping->a_ops->readpage) {
+			if (inode->i_mapping->a_ops->readpage) {
 				/* This does the actual transfer using sendfile */		
 				read_descriptor_t desc;
 				loff_t *ppos;

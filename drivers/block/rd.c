@@ -199,6 +199,7 @@ static int rd_make_request(request_queue_t * q, int rw, struct buffer_head *sbh)
 	unsigned int minor;
 	unsigned long offset, len;
 	struct buffer_head *rbh;
+	char *bdata;
 
 	
 	minor = MINOR(sbh->b_rdev);
@@ -221,12 +222,17 @@ static int rd_make_request(request_queue_t * q, int rw, struct buffer_head *sbh)
 	}
 
 	rbh = getblk(sbh->b_rdev, sbh->b_rsector/(sbh->b_size>>9), sbh->b_size);
+	/* I think that it is safe to assume that rbh is not in HighMem, though
+	 * sbh might be - NeilBrown
+	 */
+	bdata = bh_kmap(sbh);
 	if (rw == READ) {
 		if (sbh != rbh)
-			memcpy(sbh->b_data, rbh->b_data, rbh->b_size);
+			memcpy(bdata, rbh->b_data, rbh->b_size);
 	} else
 		if (sbh != rbh)
-			memcpy(rbh->b_data, sbh->b_data, rbh->b_size);
+			memcpy(rbh->b_data, bdata, rbh->b_size);
+	bh_kunmap(sbh);
 	mark_buffer_protected(rbh);
 	brelse(rbh);
 

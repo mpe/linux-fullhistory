@@ -142,7 +142,6 @@ struct inode * sysv_new_inode(const struct inode * dir)
 	mark_inode_dirty(inode);
 	/* Change directory entry: */
 	inode->i_mode = 0;		/* for sysv_write_inode() */
-	inode->i_size = 0;		/* ditto */
 	sysv_write_inode(inode, 0);	/* ensure inode not allocated again */
 					/* FIXME: caller may call this too. */
 	mark_inode_dirty(inode);	/* cleared by sysv_write_inode() */

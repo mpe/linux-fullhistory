@@ -45,10 +45,14 @@
 #define FASTCALL(x)	x
 #endif
 
+struct semaphore;
+
 extern struct notifier_block *panic_notifier_list;
 NORET_TYPE void panic(const char * fmt, ...)
 	__attribute__ ((NORET_AND format (printf, 1, 2)));
 NORET_TYPE void do_exit(long error_code)
+	ATTRIB_NORET;
+NORET_TYPE void up_and_exit(struct semaphore *, long)
 	ATTRIB_NORET;
 extern unsigned long simple_strtoul(const char *,char **,unsigned int);
 extern long simple_strtol(const char *,char **,unsigned int);

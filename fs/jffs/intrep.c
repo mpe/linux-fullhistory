@@ -3054,9 +3054,8 @@ jffs_garbage_collect_thread(void *ptr)
 			case SIGKILL:
 				D1(printk("jffs_garbage_collect_thread(): SIGKILL received.\n"));
 				c->gc_task = NULL;
-				up(&c->gc_thread_sem);
 				unlock_kernel();
-				return(0);
+				up_and_exit(&c->gc_thread_sem, 0);
 			}
 		}
 

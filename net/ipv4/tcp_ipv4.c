@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.219 2000/11/10 04:02:04 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.220 2000/11/14 07:26:02 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -1721,93 +1721,88 @@ static void __tcp_v4_rehash(struct sock *sk)
 	sk->prot->hash(sk);
 }
 
+static int tcp_v4_reselect_saddr(struct sock *sk)
+{
+	int err;
+	struct rtable *rt;
+	__u32 old_saddr = sk->saddr;
+	__u32 new_saddr;
+	__u32 daddr = sk->daddr;
+
+	if(sk->protinfo.af_inet.opt && sk->protinfo.af_inet.opt->srr)
+		daddr = sk->protinfo.af_inet.opt->faddr;
+
+	/* Query new route. */
+	err = ip_route_connect(&rt, daddr, 0,
+			       RT_TOS(sk->protinfo.af_inet.tos)|sk->localroute,
+			       sk->bound_dev_if);
+	if (err)
+		return err;
+
+	__sk_dst_set(sk, &rt->u.dst);
+	/* sk->route_caps = rt->u.dst.dev->features; */
+
+	new_saddr = rt->rt_src;
+
+	if (new_saddr == old_saddr)
+		return 0;
+
+	if (sysctl_ip_dynaddr > 1) {
+		printk(KERN_INFO "tcp_v4_rebuild_header(): shifting sk->saddr "
+		       "from %d.%d.%d.%d to %d.%d.%d.%d\n",
+		       NIPQUAD(old_saddr), 
+		       NIPQUAD(new_saddr));
+	}
+
+	sk->saddr = new_saddr;
+	sk->rcv_saddr = new_saddr;
+
+	/* XXX The only one ugly spot where we need to
+	 * XXX really change the sockets identity after
+	 * XXX it has entered the hashes. -DaveM
+	 *
+	 * Besides that, it does not check for connection
+	 * uniqueness. Wait for troubles.
+	 */
+	__tcp_v4_rehash(sk);
+	return 0;
+}
+
 int tcp_v4_rebuild_header(struct sock *sk)
 {
 	struct rtable *rt = (struct rtable *)__sk_dst_check(sk, 0);
-	__u32 new_saddr;
-        int want_rewrite = sysctl_ip_dynaddr && sk->state == TCP_SYN_SENT &&
-		!(sk->userlocks & SOCK_BINDADDR_LOCK);
+	u32 daddr;
+	int err;
 
-	if (rt == NULL) {
-		int err;
+	/* Route is OK, nothing to do. */
+	if (rt != NULL)
+		return 0;
 
-		u32 daddr = sk->daddr;
+	/* Reroute. */
+	daddr = sk->daddr;
+	if(sk->protinfo.af_inet.opt && sk->protinfo.af_inet.opt->srr)
+		daddr = sk->protinfo.af_inet.opt->faddr;
 
-		if(sk->protinfo.af_inet.opt && sk->protinfo.af_inet.opt->srr)
-			daddr = sk->protinfo.af_inet.opt->faddr;
-
-		err = ip_route_output(&rt, daddr, sk->saddr,
-				      RT_TOS(sk->protinfo.af_inet.tos) | RTO_CONN | sk->localroute,
-				      sk->bound_dev_if);
-		if (err) {
-			sk->err_soft=-err;
-			sk->error_report(sk);
-			return -1;
-		}
+	err = ip_route_output(&rt, daddr, sk->saddr,
+			      RT_TOS(sk->protinfo.af_inet.tos) | RTO_CONN | sk->localroute,
+			      sk->bound_dev_if);
+	if (!err) {
 		__sk_dst_set(sk, &rt->u.dst);
+		/* sk->route_caps = rt->u.dst.dev->features; */
+		return 0;
 	}
 
-	/* Force route checking if want_rewrite. */
-	if (want_rewrite) {
-		int tmp;
-		struct rtable *new_rt;
-		__u32 old_saddr = rt->rt_src;
+	/* Routing failed... */
+	/* sk->route_caps = 0; */
 
-		/* Query new route using another rt buffer */
-		tmp = ip_route_connect(&new_rt, rt->rt_dst, 0,
-					RT_TOS(sk->protinfo.af_inet.tos)|sk->localroute,
-					sk->bound_dev_if);
-
-		/* Only useful if different source addrs */
-		if (tmp == 0) {
-			/*
-			 *	Only useful if different source addrs
-			 */
-			if (new_rt->rt_src != old_saddr ) {
-				__sk_dst_set(sk, &new_rt->u.dst);
-				rt = new_rt;
-				goto do_rewrite;
-			}
-			dst_release(&new_rt->u.dst);
-		}
+	if (!sysctl_ip_dynaddr ||
+	    sk->state != TCP_SYN_SENT ||
+	    (sk->userlocks & SOCK_BINDADDR_LOCK) ||
+	    (err = tcp_v4_reselect_saddr(sk)) != 0) {
+		sk->err_soft=-err;
+		/* sk->error_report(sk); */
 	}
-
-	return 0;
-
-do_rewrite:
-	new_saddr = rt->rt_src;
-                
-	/* Ouch!, this should not happen. */
-	if (!sk->saddr || !sk->rcv_saddr) {
-		printk(KERN_WARNING "tcp_v4_rebuild_header(): not valid sock addrs: "
-		       "saddr=%08X rcv_saddr=%08X\n",
-		       ntohl(sk->saddr), 
-		       ntohl(sk->rcv_saddr));
-		return -1;
-	}
-
-	if (new_saddr != sk->saddr) {
-		if (sysctl_ip_dynaddr > 1) {
-			printk(KERN_INFO "tcp_v4_rebuild_header(): shifting sk->saddr "
-			       "from %d.%d.%d.%d to %d.%d.%d.%d\n",
-			       NIPQUAD(sk->saddr), 
-			       NIPQUAD(new_saddr));
-		}
-
-		sk->saddr = new_saddr;
-		sk->rcv_saddr = new_saddr;
-
-		/* XXX The only one ugly spot where we need to
-		 * XXX really change the sockets identity after
-		 * XXX it has entered the hashes. -DaveM
-		 *
-		 * Besides that, it does not check for connection
-		 * uniqueness. Wait for troubles.
-		 */
-		__tcp_v4_rehash(sk);
-	} 
-        
-	return 0;
+	return err;
 }
 
 static void v4_addr2sockaddr(struct sock *sk, struct sockaddr * uaddr)

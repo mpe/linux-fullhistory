@@ -418,6 +418,7 @@ EXPORT_SYMBOL(ioport_resource);
 EXPORT_SYMBOL(iomem_resource);
 
 /* process management */
+EXPORT_SYMBOL(up_and_exit);
 EXPORT_SYMBOL(__wake_up);
 EXPORT_SYMBOL(wake_up_process);
 EXPORT_SYMBOL(sleep_on);

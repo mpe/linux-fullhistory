@@ -17,6 +17,7 @@
  *	History
  *	LAPBETH 001	Jonathan Naylor		Cloned from bpqether.c
  *	2000-10-29	Henner Eisen	lapb_data_indication() return status.
+ *	2000-11-14	Henner Eisen	dev_hold/put, NETDEV_GOING_DOWN support
  */
 
 #include <linux/errno.h>
@@ -80,6 +81,7 @@ static struct lapbethdev {
 /*
  *	Get the ethernet device for a LAPB device
  */
+#if 0
 static __inline__ struct net_device *lapbeth_get_ether_dev(struct net_device *dev)
 {
 	struct lapbethdev *lapbeth;
@@ -88,7 +90,7 @@ static __inline__ struct net_device *lapbeth_get_ether_dev(struct net_device *de
 
 	return (lapbeth != NULL) ? lapbeth->ethdev : NULL;
 }
-
+#endif
 /*
  *	Get the LAPB device for the ethernet device
  */
@@ -137,6 +139,7 @@ static int lapbeth_check_devices(struct net_device *dev)
 				result = 1;
 
 			unregister_netdev(&lapbeth->axdev);
+			dev_put(lapbeth->ethdev);
 			kfree(lapbeth);
 		}
 
@@ -419,6 +422,7 @@ static int lapbeth_new_device(struct net_device *dev)
 		
 	memset(lapbeth, 0, sizeof(struct lapbethdev));
 	
+	dev_hold(dev);
 	lapbeth->ethdev = dev;
 
 	lapbeth->ethname[sizeof(lapbeth->ethname)-1] = '\0';
@@ -437,6 +441,7 @@ static int lapbeth_new_device(struct net_device *dev)
 	}
 
 	if (k == MAXLAPBDEV) {
+		dev_put(dev);
 		kfree(lapbeth);
 		return -ENODEV;
 	}
@@ -446,6 +451,7 @@ static int lapbeth_new_device(struct net_device *dev)
 	dev->init = lapbeth_dev_init;
 
 	if (register_netdev(dev) != 0) {
+		dev_put(dev);
 		kfree(lapbeth);
                 return -EIO;
         }
@@ -499,6 +505,7 @@ static int lapbeth_device_event(struct notifier_block *this,unsigned long event,
 				lapbeth_new_device(dev);
 			break;
 
+		case NETDEV_GOING_DOWN:
 		case NETDEV_DOWN:	/* ethernet device closed -> close LAPB interface */
 			if ((dev = lapbeth_get_x25_dev(dev)) != NULL)
 				dev_close(dev);

@@ -2250,7 +2250,6 @@ static void devfs_read_inode (struct inode *inode)
 	printk ("%s: read_inode(%d): VFS inode: %p  devfs_entry: %p\n",
 		DEVFS_NAME, (int) inode->i_ino, inode, de);
 #endif
-    inode->i_size = 0;
     inode->i_blocks = 0;
     inode->i_blksize = 1024;
     inode->i_op = &devfs_iops;
@@ -2416,11 +2415,6 @@ static int devfs_readdir (struct file *file, void *dirent, filldir_t filldir)
     struct devfs_entry *parent, *de;
     struct inode *inode = file->f_dentry->d_inode;
 
-    if (inode == NULL)
-    {
-	printk ("%s: readdir(): NULL inode\n", DEVFS_NAME);
-	return -EBADF;
-    }
     if ( !S_ISDIR (inode->i_mode) )
     {
 	printk ("%s: readdir(): inode is not a directory\n", DEVFS_NAME);

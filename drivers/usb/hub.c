@@ -36,7 +36,7 @@ static LIST_HEAD(hub_list);		/* List containing all of the hubs (for cleanup) */
 
 static DECLARE_WAIT_QUEUE_HEAD(khubd_wait);
 static int khubd_pid = 0;			/* PID of khubd */
-static int khubd_running = 0;
+static DECLARE_MUTEX_LOCKED(khubd_exited);
 
 static int usb_get_hub_descriptor(struct usb_device *dev, void *data, int size)
 {
@@ -741,8 +741,6 @@ he_unlock:
 
 static int usb_hub_thread(void *__hub)
 {
-	khubd_running = 1;
-
 	lock_kernel();
 
 	/*
@@ -762,9 +760,8 @@ static int usb_hub_thread(void *__hub)
 	} while (!signal_pending(current));
 
 	dbg("usb_hub_thread exiting");
-	khubd_running = 0;
 
-	return 0;
+	up_and_exit(&khubd_exited, 0);
 }
 
 static struct usb_device_id hub_id_table [] = {
@@ -815,18 +812,8 @@ void usb_hub_cleanup(void)
 
 	/* Kill the thread */
 	ret = kill_proc(khubd_pid, SIGTERM, 1);
-	if (!ret) {
-		/* Wait 10 seconds */
-		int count = 10 * 100;
 
-		while (khubd_running && --count) {
-			current->state = TASK_INTERRUPTIBLE;
-			schedule_timeout(1);
-		}
-
-		if (!count)
-			err("giving up on killing khubd");
-	}
+	down(&khubd_exited);
 
 	/*
 	 * Hub resources are freed for us by usb_deregister. It calls

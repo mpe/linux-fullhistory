@@ -679,8 +679,6 @@ restart:
 		if (!filp->f_dentry)
 			continue;
 		inode = filp->f_dentry->d_inode;
-		if (!inode)
-			continue;
 		if (filp->f_mode & FMODE_WRITE && dqinit_needed(inode, type)) {
 			file_list_unlock();
 			sb->dq_op->initialize(inode, type);

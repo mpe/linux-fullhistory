@@ -386,16 +386,16 @@ static inline __u32 b3prot(int l2, int l3)
 	}
 }
 
-static _cstruct b1config_sync_v110(__u16 rate)
+static _cstruct b1config_async_v110(__u16 rate)
 {
 	/* CAPI-Spec "B1 Configuration" */
 	static unsigned char buf[9];
 	buf[0] = 8; /* len */
 	/* maximum bitrate */
 	buf[1] = rate & 0xff; buf[2] = (rate >> 8) & 0xff;
-	buf[3] = buf[4] = 0; /* reserved, bits per character */
-	buf[5] = buf[6] = 0; /* reserved, parity */
-	buf[7] = buf[9] = 0; /* reserved, stop bits */
+	buf[3] = 8; buf[4] = 0; /* 8 bits per character */
+	buf[5] = 0; buf[6] = 0; /* parity none */
+	buf[7] = 0; buf[8] = 0; /* 1 stop bit */
 	return buf;
 }
 
@@ -410,11 +410,11 @@ static _cstruct b1config(int l2, int l3)
 	default:
 		return 0;
         case ISDN_PROTO_L2_V11096:
-	    return b1config_sync_v110(9600);
+	    return b1config_async_v110(9600);
         case ISDN_PROTO_L2_V11019:
-	    return b1config_sync_v110(19200);
+	    return b1config_async_v110(19200);
         case ISDN_PROTO_L2_V11038:
-	    return b1config_sync_v110(38400);
+	    return b1config_async_v110(38400);
 	}
 }
 
@@ -2464,8 +2464,8 @@ static void __exit proc_exit(void)
 }
 
 static struct capi_interface_user cuser = {
-	"capidrv",
-	lower_callback
+	name: "capidrv",
+	callback: lower_callback
 };
 
 int __init capidrv_init(void)

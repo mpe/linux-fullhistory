@@ -148,7 +148,7 @@ int nubus_proc_detach_device(struct nubus_dev *dev)
 	struct proc_dir_entry *e;
 
 	if ((e = dev->procdir)) {
-		if (e->count)
+		if (atomic_read(&e->count))
 			return -EBUSY;
 		remove_proc_entry(e->name, proc_bus_nubus_dir);
 		dev->procdir = NULL;

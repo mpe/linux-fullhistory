@@ -7,7 +7,7 @@ ifeq ($(CONFIG_ISDN_DRV_ACT2000),y)
   O_TARGET += act2000.o
 else
   ifeq ($(CONFIG_ISDN_DRV_ACT2000),m)
-  	O_TARGET += act2000.o
+	O_TARGET += act2000.o
 	M_OBJS = act2000.o
   endif
 endif

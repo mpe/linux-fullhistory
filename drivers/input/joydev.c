@@ -193,7 +193,7 @@ static int joydev_open(struct inode *inode, struct file *file)
 	struct joydev_list *list;
 	int i = MINOR(inode->i_rdev) - JOYDEV_MINOR_BASE;
 
-	if (i > JOYDEV_MINORS || !joydev_table[i])
+	if (i >= JOYDEV_MINORS || !joydev_table[i])
 		return -ENODEV;
 
 	if (!(list = kmalloc(sizeof(struct joydev_list), GFP_KERNEL)))
@@ -395,7 +395,7 @@ static struct input_handle *joydev_connect(struct input_handler *handler, struct
 		|| test_bit(BTN_1, dev->keybit)))) return NULL; 
 
 	for (minor = 0; minor < JOYDEV_MINORS && joydev_table[minor]; minor++);
-	if (joydev_table[minor]) {
+	if (minor == JOYDEV_MINORS) {
 		printk(KERN_ERR "joydev: no more free joydev devices\n");
 		return NULL;
 	}

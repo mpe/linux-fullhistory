@@ -765,11 +765,10 @@ S: D-57250 Netphen
 S: Germany
 
 N: Rik Faith
-E: faith@cs.unc.edu
 E: faith@acm.org
-D: Author: Future Domain TMC-16x0 SCSI driver
-D: Debugging: SCSI code; Cyclades serial driver; APM driver
-D: Debugging: XFree86 Mach 32 server, accelerated server code
+D: Future Domain TMC-16x0 SCSI driver (author)
+D: APM driver (early port)
+D: DRM drivers (author of several)
 
 N: János Farkas
 E: chexum@shadow.banki.hu

@@ -84,7 +84,6 @@ struct inode * udf_new_inode (const struct inode *dir, int mode, int * err)
 		*err = -ENOMEM;
 		return NULL;
 	}
-	inode->i_flags = 0;
 	*err = -ENOSPC;
 
 	block = udf_new_block(dir, UDF_I_LOCATION(dir).partitionReferenceNum,
@@ -128,7 +127,6 @@ struct inode * udf_new_inode (const struct inode *dir, int mode, int * err)
 	inode->i_ino = udf_get_lb_pblock(sb, UDF_I_LOCATION(inode), 0);
 	inode->i_blksize = PAGE_SIZE;
 	inode->i_blocks = 0;
-	inode->i_size = 0;
 	UDF_I_LENEATTR(inode) = 0;
 	UDF_I_LENALLOC(inode) = 0;
 	if (UDF_QUERY_FLAG(inode->i_sb, UDF_FLAG_USE_EXTENDED_FE))

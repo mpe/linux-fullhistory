@@ -120,11 +120,6 @@ ncp_file_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 	DPRINTK("ncp_file_read: enter %s/%s\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name);
 
-	error = -EINVAL;
-	if (inode == NULL) {
-		DPRINTK("ncp_file_read: inode = NULL\n");
-		goto out;
-	}
 	error = -EIO;
 	if (!ncp_conn_valid(NCP_SERVER(inode)))
 		goto out;
@@ -210,10 +205,6 @@ ncp_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 
 	DPRINTK("ncp_file_write: enter %s/%s\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name);
-	if (inode == NULL) {
-		DPRINTK("ncp_file_write: inode = NULL\n");
-		return -EINVAL;
-	}
 	errno = -EIO;
 	if (!ncp_conn_valid(NCP_SERVER(inode)))
 		goto out;
