@@ -31,6 +31,7 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 
+#include <asm/setup.h>
 #include <asm/system.h>
 #include <asm/irq.h>
 #include <asm/traps.h>
@@ -212,7 +213,7 @@ static void dummy_free_irq(unsigned int irq, void *dev_id)
 
 asmlinkage void process_int(unsigned long vec, struct pt_regs *fp)
 {
-	if (vec >= VEC_INT1 && vec <= VEC_INT7) {
+	if (vec >= VEC_INT1 && vec <= VEC_INT7 && !MACH_IS_BVME6000) {
 		vec -= VEC_SPUR;
 		kstat.irqs[0][vec]++;
 		irq_list[vec].handler(vec, irq_list[vec].dev_id, fp);

@@ -44,6 +44,8 @@
 #include <linux/mman.h>
 #include <linux/mm.h>
 #include <linux/swap.h>
+#include <linux/smp.h>
+#include <linux/smp_lock.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -67,8 +69,6 @@ static inline void copy_cow_page(unsigned long from, unsigned long to)
 	}
 	copy_page(to, from);
 }
-
-#define USER_PTRS_PER_PGD (TASK_SIZE / PGDIR_SIZE)
 
 mem_map_t * mem_map = NULL;
 
@@ -163,13 +163,10 @@ void free_page_tables(struct mm_struct * mm)
 
 int new_page_tables(struct task_struct * tsk)
 {
-	pgd_t * page_dir, * new_pg;
+	pgd_t * new_pg;
 
 	if (!(new_pg = pgd_alloc()))
 		return -ENOMEM;
-	page_dir = pgd_offset(&init_mm, 0);
-	memcpy(new_pg + USER_PTRS_PER_PGD, page_dir + USER_PTRS_PER_PGD,
-	       (PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof (pgd_t));
 	SET_PAGE_DIR(tsk, new_pg);
 	tsk->mm->pgd = new_pg;
 	return 0;
@@ -919,4 +916,23 @@ void handle_mm_fault(struct task_struct *tsk, struct vm_area_struct * vma,
 	return;
 no_memory:
 	oom(tsk);
+}
+
+/* Low and high watermarks for page table cache.
+   The system should try to have pgt_water[0] <= cache elements <= pgt_water[1]
+ */
+int pgt_cache_water[2] = { 25, 50 };
+
+void check_pgt_cache(void)
+{
+        if(pgtable_cache_size > pgt_cache_water[0]) {
+                do {
+                        if(pgd_quicklist)
+                                free_pgd_slow(get_pgd_fast());
+                        if(pmd_quicklist)
+                                free_pmd_slow(get_pmd_fast());
+                        if(pte_quicklist)
+                                free_pte_slow(get_pte_fast());
+                } while(pgtable_cache_size > pgt_cache_water[1]);
+        }
 }

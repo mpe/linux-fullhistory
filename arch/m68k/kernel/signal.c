@@ -875,6 +875,30 @@ segv_and_exit:
 	do_exit(SIGSEGV);
 }
 
+static inline void
+handle_restart(struct pt_regs *regs, struct k_sigaction *ka, int has_handler)
+{
+	switch (regs->d0) {
+	case -ERESTARTNOHAND:
+		if (!has_handler)
+			goto do_restart;
+		regs->d0 = -EINTR;
+		break;
+
+	case -ERESTARTSYS:
+		if (has_handler && !(ka->sa.sa_flags & SA_RESTART)) {
+			regs->d0 = -EINTR;
+			break;
+		}
+	/* fallthrough */
+	case -ERESTARTNOINTR:
+	do_restart:
+		regs->d0 = regs->orig_d0;
+		regs->pc -= 2;
+		break;
+	}
+}
+
 /*
  * OK, we're invoking a handler
  */
@@ -883,24 +907,9 @@ handle_signal(int sig, struct k_sigaction *ka, siginfo_t *info,
 	      sigset_t *oldset, struct pt_regs *regs)
 {
 	/* are we from a system call? */
-	if (regs->orig_d0 >= 0) {
+	if (regs->orig_d0 >= 0)
 		/* If so, check system call restarting.. */
-		switch (regs->d0) {
-			case -ERESTARTNOHAND:
-				regs->d0 = -EINTR;
-				break;
-
-			case -ERESTARTSYS:
-				if (!(ka->sa.sa_flags & SA_RESTART)) {
-					regs->d0 = -EINTR;
-					break;
-				}
-			/* fallthrough */
-			case -ERESTARTNOINTR:
-				regs->d0 = regs->orig_d0;
-				regs->pc -= 2;
-		}
-	}
+		handle_restart(regs, ka, 1);
 
 	/* set up the stack frame */
 	if (ka->sa.sa_flags & SA_SIGINFO)
@@ -952,13 +961,14 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs)
 
 			/* Did we come from a system call? */
 			if (regs->orig_d0 >= 0) {
-				/* Restart the system call */
-				if (regs->d0 == -ERESTARTNOHAND ||
-				    regs->d0 == -ERESTARTSYS ||
-				    regs->d0 == -ERESTARTNOINTR) {
-					regs->d0 = regs->orig_d0;
-					regs->pc -= 2;
-				}
+				/* Restart the system call the same way as
+				   if the process were not traced.  */
+				struct k_sigaction *ka =
+					&current->sig->action[signr-1];
+				int has_handler =
+					(ka->sa.sa_handler != SIG_IGN &&
+					 ka->sa.sa_handler != SIG_DFL);
+				handle_restart(regs, ka, has_handler);
 			}
 			notify_parent(current, SIGCHLD);
 			schedule();
@@ -1052,15 +1062,9 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs *regs)
 	}
 
 	/* Did we come from a system call? */
-	if (regs->orig_d0 >= 0) {
+	if (regs->orig_d0 >= 0)
 		/* Restart the system call - no handlers present */
-		if (regs->d0 == -ERESTARTNOHAND ||
-		    regs->d0 == -ERESTARTSYS ||
-		    regs->d0 == -ERESTARTNOINTR) {
-			regs->d0 = regs->orig_d0;
-			regs->pc -= 2;
-		}
-	}
+		handle_restart(regs, NULL, 0);
 
 	/* If we are about to discard some frame stuff we must copy
 	   over the remaining frame. */

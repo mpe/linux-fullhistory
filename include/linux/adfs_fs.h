@@ -111,30 +111,22 @@ union adfs_dirtail {
 };
 
 #ifdef __KERNEL__
-
-
 /*
  * Calculate the boot block checksum on an ADFS drive.  Note that this will
  * appear to be correct if the sector contains all zeros, so also check that
  * the disk size is non-zero!!!
  */
- 
 extern inline int adfs_checkbblk(unsigned char *ptr)
 {
-	int i = 511;
-
-	int result = 0;
+	unsigned int result = 0;
+	unsigned char *p = ptr + 511;
 
 	do {
-		result = (result & 0xff) + (result >> 8);
-		result = result + ptr[i];
-		i--;
-	}
-	while (i != 0);
-	
-	result &= 0xff;
-	return result != ptr[511];
-	return 0;
+	        result = (result & 0xff) + (result >> 8);
+        	result = result + *--p;
+	} while (p != ptr);
+
+	return (result & 0xff) != ptr[511];
 }
 
 /* dir.c */

@@ -63,9 +63,9 @@ void minix_put_super(struct super_block *sb)
 		sb->u.minix_sb.s_ms->s_state = sb->u.minix_sb.s_mount_state;
 		mark_buffer_dirty(sb->u.minix_sb.s_sbh, 1);
 	}
-	for(i = 0 ; i < MINIX_I_MAP_SLOTS ; i++)
+	for (i = 0; i < sb->u.minix_sb.s_imap_blocks; i++)
 		brelse(sb->u.minix_sb.s_imap[i]);
-	for(i = 0 ; i < MINIX_Z_MAP_SLOTS ; i++)
+	for (i = 0; i < sb->u.minix_sb.s_zmap_blocks; i++)
 		brelse(sb->u.minix_sb.s_zmap[i]);
 	brelse (sb->u.minix_sb.s_sbh);
 	kfree(sb->u.minix_sb.s_imap);
@@ -173,7 +173,8 @@ struct super_block *minix_read_super(struct super_block *s, void *data,
 	const char * errmsg;
 	struct inode *root_inode;
 	
-	/* N.B. These should be compile-time tests */
+	/* N.B. These should be compile-time tests.
+	   Unfortunately that is impossible. */
 	if (32 != sizeof (struct minix_inode))
 		panic("bad V1 i-node size");
 	if (64 != sizeof(struct minix2_inode))
@@ -203,33 +204,37 @@ struct super_block *minix_read_super(struct super_block *s, void *data,
 		s->u.minix_sb.s_version = MINIX_V1;
 		s->u.minix_sb.s_dirsize = 16;
 		s->u.minix_sb.s_namelen = 14;
+		s->u.minix_sb.s_link_max = MINIX_LINK_MAX;
 	} else if (s->s_magic == MINIX_SUPER_MAGIC2) {
 		s->u.minix_sb.s_version = MINIX_V1;
 		s->u.minix_sb.s_dirsize = 32;
 		s->u.minix_sb.s_namelen = 30;
+		s->u.minix_sb.s_link_max = MINIX_LINK_MAX;
 	} else if (s->s_magic == MINIX2_SUPER_MAGIC) {
 		s->u.minix_sb.s_version = MINIX_V2;
+		s->u.minix_sb.s_nzones = ms->s_zones;
 		s->u.minix_sb.s_dirsize = 16;
 		s->u.minix_sb.s_namelen = 14;
+		s->u.minix_sb.s_link_max = MINIX2_LINK_MAX;
 	} else if (s->s_magic == MINIX2_SUPER_MAGIC2) {
 		s->u.minix_sb.s_version = MINIX_V2;
+		s->u.minix_sb.s_nzones = ms->s_zones;
 		s->u.minix_sb.s_dirsize = 32;
 		s->u.minix_sb.s_namelen = 30;
+		s->u.minix_sb.s_link_max = MINIX2_LINK_MAX;
 	} else
 		goto out_no_fs;
 
-	if (s->u.minix_sb.s_zmap_blocks > MINIX_Z_MAP_SLOTS)
-		goto out_too_big;
 	/*
 	 * Allocate the buffer map to keep the superblock small.
 	 */
-	i = (MINIX_I_MAP_SLOTS + MINIX_Z_MAP_SLOTS) * sizeof(bh);
+	i = (s->u.minix_sb.s_imap_blocks + s->u.minix_sb.s_zmap_blocks) * sizeof(bh);
 	map = kmalloc(i, GFP_KERNEL);
 	if (!map)
 		goto out_no_map;
 	memset(map, 0, i);
 	s->u.minix_sb.s_imap = &map[0];
-	s->u.minix_sb.s_zmap = &map[MINIX_I_MAP_SLOTS];
+	s->u.minix_sb.s_zmap = &map[s->u.minix_sb.s_imap_blocks];
 
 	block=2;
 	for (i=0 ; i < s->u.minix_sb.s_imap_blocks ; i++) {
@@ -242,8 +247,6 @@ struct super_block *minix_read_super(struct super_block *s, void *data,
 			goto out_no_bitmap;
 		block++;
 	}
-	if (block != 2+s->u.minix_sb.s_imap_blocks+s->u.minix_sb.s_zmap_blocks)
-		goto out_no_bitmap;
 
 	minix_set_bit(0,s->u.minix_sb.s_imap[0]->b_data);
 	minix_set_bit(0,s->u.minix_sb.s_zmap[0]->b_data);
@@ -262,6 +265,8 @@ struct super_block *minix_read_super(struct super_block *s, void *data,
 	s->s_root = d_alloc_root(root_inode, NULL);
 	if (!s->s_root)
 		goto out_iput;
+
+	s->s_root->d_op = &minix_dentry_operations;
 
 	if (!(s->s_flags & MS_RDONLY)) {
 		ms->s_state &= ~MINIX_VALID_FS;
@@ -292,9 +297,9 @@ out_no_root:
 out_no_bitmap:
 	printk("MINIX-fs: bad superblock or unable to read bitmaps\n");
     out_freemap:
-	for(i=0;i<MINIX_I_MAP_SLOTS;i++)
+	for (i = 0; i < s->u.minix_sb.s_imap_blocks; i++)
 		brelse(s->u.minix_sb.s_imap[i]);
-	for(i=0;i<MINIX_Z_MAP_SLOTS;i++)
+	for (i = 0; i < s->u.minix_sb.s_zmap_blocks; i++)
 		brelse(s->u.minix_sb.s_zmap[i]);
 	kfree(s->u.minix_sb.s_imap);
 	goto out_release;
@@ -302,11 +307,6 @@ out_no_bitmap:
 out_no_map:
 	if (!silent)
 		printk ("MINIX-fs: can't allocate map\n");
-	goto out_release;
-
-out_too_big:
-	if (!silent)
-		printk ("MINIX-fs: filesystem too big\n");
 	goto out_release;
 
 out_no_fs:
@@ -729,7 +729,7 @@ static void V1_minix_read_inode(struct inode * inode)
 	ino = inode->i_ino;
 	inode->i_op = NULL;
 	inode->i_mode = 0;
-	if (!ino || ino >= inode->i_sb->u.minix_sb.s_ninodes) {
+	if (!ino || ino > inode->i_sb->u.minix_sb.s_ninodes) {
 		printk("Bad inode number on dev %s"
 		       ": %d is out of range\n",
 			kdevname(inode->i_dev), ino);
@@ -783,7 +783,7 @@ static void V2_minix_read_inode(struct inode * inode)
 	ino = inode->i_ino;
 	inode->i_op = NULL;
 	inode->i_mode = 0;
-	if (!ino || ino >= inode->i_sb->u.minix_sb.s_ninodes) {
+	if (!ino || ino > inode->i_sb->u.minix_sb.s_ninodes) {
 		printk("Bad inode number on dev %s"
 		       ": %d is out of range\n",
 			kdevname(inode->i_dev), ino);
@@ -848,7 +848,7 @@ static struct buffer_head * V1_minix_update_inode(struct inode * inode)
 	int ino, block;
 
 	ino = inode->i_ino;
-	if (!ino || ino >= inode->i_sb->u.minix_sb.s_ninodes) {
+	if (!ino || ino > inode->i_sb->u.minix_sb.s_ninodes) {
 		printk("Bad inode number on dev %s"
 		       ": %d is out of range\n",
 			kdevname(inode->i_dev), ino);
@@ -886,7 +886,7 @@ static struct buffer_head * V2_minix_update_inode(struct inode * inode)
 	int ino, block;
 
 	ino = inode->i_ino;
-	if (!ino || ino >= inode->i_sb->u.minix_sb.s_ninodes) {
+	if (!ino || ino > inode->i_sb->u.minix_sb.s_ninodes) {
 		printk("Bad inode number on dev %s"
 		       ": %d is out of range\n",
 			kdevname(inode->i_dev), ino);

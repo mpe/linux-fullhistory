@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.118 1998/05/06 04:53:48 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.119 1998/05/23 13:10:24 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1686,8 +1686,13 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 			}
 		} else if (TCP_SKB_CB(skb)->ack_seq == tp->snd_una) {
 			/* Bulk data transfer: receiver */
-			if (atomic_read(&sk->rmem_alloc) > sk->rcvbuf) 
+			if (atomic_read(&sk->rmem_alloc) > sk->rcvbuf) {
+				/* We must send an ACK for zero window probes. */
+				if (!before(TCP_SKB_CB(skb)->seq,
+						tp->rcv_wup + tp->rcv_wnd))
+					tcp_send_ack(sk);
 				goto discard;
+			}
 			
 			skb_pull(skb,th->doff*4);
 
@@ -1714,15 +1719,21 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 	}
 
 	if (!tcp_sequence(tp, TCP_SKB_CB(skb)->seq, TCP_SKB_CB(skb)->end_seq)) {
-		if (!th->rst) {
-			if (after(TCP_SKB_CB(skb)->seq, tp->rcv_nxt)) {
-				SOCK_DEBUG(sk, "seq:%d end:%d wup:%d wnd:%d\n",
-					   TCP_SKB_CB(skb)->seq, TCP_SKB_CB(skb)->end_seq,
-					   tp->rcv_wup, tp->rcv_wnd);
-			}
-			tcp_send_ack(sk);
+		/* RFC793, page 37: "In all states except SYN-SENT, all reset
+		 * (RST) segments are validated by checking their SEQ-fields."
+		 * And page 69: "If an incoming segment is not acceptable,
+		 * an acknowledgment should be sent in reply (unless the RST bit
+		 * is set, if so drop the segment and return)".
+		 */
+		if (th->rst)
 			goto discard;
+		if (after(TCP_SKB_CB(skb)->seq, tp->rcv_nxt)) {
+			SOCK_DEBUG(sk, "seq:%d end:%d wup:%d wnd:%d\n",
+				   TCP_SKB_CB(skb)->seq, TCP_SKB_CB(skb)->end_seq,
+				   tp->rcv_wup, tp->rcv_wnd);
 		}
+		tcp_send_ack(sk);
+		goto discard;
 	}
 
 	if(th->syn && TCP_SKB_CB(skb)->seq != tp->syn_seq) {

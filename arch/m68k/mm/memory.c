@@ -4,6 +4,7 @@
  *  Copyright (C) 1995  Hamish Macdonald
  */
 
+#include <linux/config.h>
 #include <linux/mm.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
@@ -16,7 +17,9 @@
 #include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/traps.h>
+#ifdef CONFIG_AMIGA
 #include <asm/amigahw.h>
+#endif
 
 /* Strings for `extern inline' functions in <asm/pgtable.h>.  If put
    directly into these functions, they are output for every file that
@@ -451,12 +454,14 @@ unsigned long mm_ptov (unsigned long paddr)
 	 *
 	 */
 
+#ifdef CONFIG_AMIGA
 	/*
 	 * if on an amiga and address is in first 16M, move it 
 	 * to the ZTWO_VADDR range
 	 */
 	if (MACH_IS_AMIGA && paddr < 16*1024*1024)
 		return ZTWO_VADDR(paddr);
+#endif
 	return paddr;
 }
 

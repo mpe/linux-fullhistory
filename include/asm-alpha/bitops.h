@@ -183,6 +183,24 @@ extern inline unsigned long ffz(unsigned long word)
 }
 
 /*
+ * ffs: find first bit set. This is defined the same way as
+ * the libc and compiler builtin ffs routines, therefore
+ * differs in spirit from the above ffz (man ffs).
+ */
+
+#define ffs(x) generic_ffs(x)
+
+/*
+ * hweightN: returns the hamming weight (i.e. the number
+ * of bits set) of a N-bit word
+ */
+
+#define hweight32(x) generic_hweight32(x)
+#define hweight16(x) generic_hweight16(x)
+#define hweight8(x) generic_hweight8(x)
+
+
+/*
  * Find next zero bit in a bitmap reasonably efficiently..
  */
 extern inline unsigned long find_next_zero_bit(void * addr, unsigned long size, unsigned long offset)

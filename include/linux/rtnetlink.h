@@ -658,7 +658,7 @@ extern __inline__ void rtnl_shunlock(void)
 	atomic_dec(&rtnl_rlockct);
 	if (atomic_read(&rtnl_rlockct) <= 1) {
 		wake_up(&rtnl_wait);
-		if (rtnl->receive_queue.qlen)
+		if (rtnl && rtnl->receive_queue.qlen)
 			rtnl->data_ready(rtnl, 0);
 	}
 }
@@ -672,7 +672,7 @@ extern __inline__ void rtnl_shunlock(void)
 	atomic_dec(&rtnl_rlockct); \
 	if (atomic_read(&rtnl_rlockct) <= 1) { \
 		wake_up(&rtnl_wait); \
-		if (rtnl->receive_queue.qlen) \
+		if (rtnl && rtnl->receive_queue.qlen) \
 			rtnl->data_ready(rtnl, 0); \
 	} \
 })

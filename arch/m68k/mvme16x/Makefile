@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := mvme16x.o
-O_OBJS   := config.o 16xints.o
+O_OBJS   := config.o 16xints.o rtc.o
 #OX_OBJS = ksyms.o
 
 include $(TOPDIR)/Rules.make

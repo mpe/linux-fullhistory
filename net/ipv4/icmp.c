@@ -3,7 +3,7 @@
  *	
  *		Alan Cox, <alan@cymru.net>
  *
- *	Version: $Id: icmp.c,v 1.41 1998/04/29 22:12:10 alan Exp $
+ *	Version: $Id: icmp.c,v 1.43 1998/06/11 03:15:43 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -539,7 +539,7 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info)
 	 */
 	
 	saddr = iph->daddr;
-	if (!(rt->rt_flags&RTCF_LOCAL))
+	if (!(rt->rt_flags & RTCF_LOCAL))
 		saddr = 0;
 
 	tos = icmp_pointers[type].error ?

@@ -454,6 +454,11 @@ void	paride_init( void )
           pi_register(&fit2);
         };
 #endif
+#ifdef CONFIG_PARIDE_FIT3
+        { extern struct pi_protocol fit3;
+          pi_register(&fit3);
+        };
+#endif
 #ifdef CONFIG_PARIDE_KBIC
         { extern struct pi_protocol k951;
           extern struct pi_protocol k971;

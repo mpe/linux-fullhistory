@@ -1922,7 +1922,7 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			}
 			btv->win.sheight=v.height;
 			btv->win.swidth=v.width;
-+			btv->win.bpp=((v.depth+1)&0x18)/8;
+			btv->win.bpp=((v.depth+1)&0x38)/8;
 			btv->win.depth=v.depth;
 			btv->win.bpl=v.bytesperline;
 			
@@ -2313,6 +2313,8 @@ static struct vidbases vbs[] = {
 		"DEC DC21030", PCI_BASE_ADDRESS_0},
 	{ PCI_VENDOR_ID_MATROX, PCI_DEVICE_ID_MATROX_MIL,
 		"Matrox Millennium", PCI_BASE_ADDRESS_1},
+	{ PCI_VENDOR_ID_MATROX, PCI_DEVICE_ID_MATROX_MIL_2,
+		"Matrox Millennium II", PCI_BASE_ADDRESS_0},
 	{ PCI_VENDOR_ID_MATROX, 0x051a, "Matrox Mystique", PCI_BASE_ADDRESS_1},
 	{ PCI_VENDOR_ID_N9, PCI_DEVICE_ID_N9_I128, 
 		"Number Nine Imagine 128", PCI_BASE_ADDRESS_0},

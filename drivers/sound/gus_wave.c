@@ -3128,30 +3128,24 @@ void gus_wave_init(struct address_info *hw_config)
 	
 	if ((gus_mem_size > 0) & !gus_no_wave_dma)
 	{
-		if ((dev = sound_alloc_audiodev()) != -1)
+		hw_config->slots[4] = -1;
+		if ((gus_devnum = sound_install_audiodrv(AUDIO_DRIVER_VERSION,
+					"Ultrasound",
+					&gus_audio_driver,
+					sizeof(struct audio_driver),
+					NEEDS_RESTART |
+		                   	((!iw_mode && dma2 != dma && dma2 != -1) ?
+						DMA_DUPLEX : 0),
+					AFMT_U8 | AFMT_S16_LE,
+					NULL, dma, dma2)) < 0)
 		{
-			hw_config->slots[4] = dev;
-			if ((gus_devnum = sound_install_audiodrv(AUDIO_DRIVER_VERSION,
-							    "Ultrasound",
-						       &gus_audio_driver,
-					     sizeof(struct audio_driver),
-							  NEEDS_RESTART |
-								                   ((!iw_mode && dma2 != dma && dma2 != -1) ?
-							 DMA_DUPLEX : 0),
-						   AFMT_U8 | AFMT_S16_LE,
-								   NULL,
-								   dma,
-							      dma2)) < 0)
-			{
-				return;
-			}
+			return;
+		}
 
-			audio_devs[gus_devnum]->min_fragment = 9;	/* 512k */
-			audio_devs[gus_devnum]->max_fragment = 11;	/* 8k (must match size of bounce_buf */
-			audio_devs[gus_devnum]->mixer_dev = -1;	/* Next mixer# */
-			audio_devs[gus_devnum]->flags |= DMA_HARDSTOP;
-		} else
-			printk(KERN_WARNING "GUS: Too many audio devices available\n");
+		audio_devs[gus_devnum]->min_fragment = 9;	/* 512k */
+		audio_devs[gus_devnum]->max_fragment = 11;	/* 8k (must match size of bounce_buf */
+		audio_devs[gus_devnum]->mixer_dev = -1;	/* Next mixer# */
+		audio_devs[gus_devnum]->flags |= DMA_HARDSTOP;
 	}
 	
 	/*

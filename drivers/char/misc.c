@@ -72,6 +72,7 @@ extern int atixl_busmouse_init(void);
 extern int amiga_mouse_init(void);
 extern int atari_mouse_init(void);
 extern int sun_mouse_init(void);
+extern int adb_mouse_init(void);
 extern void watchdog_init(void);
 extern void wdt_init(void);
 extern void acq_init(void);
@@ -223,6 +224,9 @@ __initfunc(int misc_init(void))
 #ifdef CONFIG_SUN_MOUSE
 	sun_mouse_init();
 #endif
+#ifdef CONFIG_MACMOUSE
+	adb_mouse_init();
+#endif
 #ifdef CONFIG_PC110_PAD
 	pc110pad_init();
 #endif
@@ -250,7 +254,7 @@ __initfunc(int misc_init(void))
 #ifdef CONFIG_H8
 	h8_init();
 #endif
-#ifdef CONFIG_RTC
+#if defined(CONFIG_RTC) || defined(CONFIG_SUN_MOSTEK_RTC)
 	rtc_init();
 #endif
 #ifdef CONFIG_ATARI_DSP56K

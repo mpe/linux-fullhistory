@@ -38,6 +38,7 @@ struct stat {
 	unsigned long  __unused5;
 };
 
+#if 0
 typedef struct {
 	unsigned int	major;
 	unsigned int	minor;
@@ -62,6 +63,7 @@ struct stat64 {
 	unsigned long	st_blksize;
 	unsigned long	__unused4;
 };
+#endif
 
 #define __XSTAT_VER_1		1
 #define __XSTAT_VER_2		2

@@ -8,19 +8,41 @@
 #define ECONTROL 0x402
 #define CONFIGB  0x401
 #define CONFIGA  0x400
-#define EPPREG   0x4
+#define EPPDATA  0x4
+#define EPPADDR  0x3
 #define CONTROL  0x2
 #define STATUS   0x1
 #define DATA     0
 
+extern int parport_pc_epp_clear_timeout(struct parport *pb);
+
+
 extern __inline__ void parport_pc_write_epp(struct parport *p, unsigned char d)
 {
-	outb(d, p->base+EPPREG);
+	outb(d, p->base+EPPDATA);
 }
 
 extern __inline__ unsigned char parport_pc_read_epp(struct parport *p)
 {
-	return inb(p->base+EPPREG);
+	return inb(p->base+EPPDATA);
+}
+
+extern __inline__ void parport_pc_write_epp_addr(struct parport *p, unsigned char d)
+{
+	outb(d, p->base+EPPADDR);
+}
+
+extern __inline__ unsigned char parport_pc_read_epp_addr(struct parport *p)
+{
+	return inb(p->base+EPPADDR);
+}
+
+extern __inline__ int parport_pc_check_epp_timeout(struct parport *p)
+{
+	if (!(inb(p->base+STATUS) & 1))
+		return 0;
+	parport_pc_epp_clear_timeout(p);
+	return 1;
 }
 
 extern __inline__ unsigned char parport_pc_read_configb(struct parport *p)

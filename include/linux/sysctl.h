@@ -80,7 +80,8 @@ enum
 	VM_OVERCOMMIT_MEMORY,	/* Turn off the virtual memory safety limit */
 	VM_BUFFERMEM,		/* struct: Set buffer memory thresholds */
 	VM_PAGECACHE,		/* struct: Set cache memory thresholds */
-	VM_PAGERDAEMON		/* struct: Control kswapd behaviour */
+	VM_PAGERDAEMON,		/* struct: Control kswapd behaviour */
+	VM_PGT_CACHE		/* struct: Set page table cache parameters */
 };
 
 

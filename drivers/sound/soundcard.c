@@ -153,13 +153,16 @@ static int sound_proc_get_info(char *buffer, char **start, off_t offset, int len
 #else
 #define MODULEPROCSTRING "Driver compiled into kernel"
 #endif
-	
+
+	down(&uts_sem);	
+
 	len = sprintf(buffer, "OSS/Free:" SOUND_VERSION_STRING "\n"
 		      "Load type: " MODULEPROCSTRING "\n"
 		      "Kernel: %s %s %s %s %s\n"
 		      "Config options: %x\n\nInstalled drivers: \n", 
 		      system_utsname.sysname, system_utsname.nodename, system_utsname.release, 
 		      system_utsname.version, system_utsname.machine, SELECTED_SOUND_OPTIONS);
+	up(&uts_sem);
 	
 	for (i = 0; (i < num_sound_drivers) && (pos <= offset + length); i++) {
 		if (!sound_drivers[i].card_type)

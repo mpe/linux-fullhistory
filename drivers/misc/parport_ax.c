@@ -39,7 +39,8 @@
 #define DATA		0x00
 #define STATUS		0x01
 #define CONTROL		0x02
-#define EPPREG		0x04
+#define EPPADDR		0x03
+#define EPPDATA		0x04
 
 #define CFIFO		0x400
 #define DFIFO		0x400
@@ -57,13 +58,34 @@ parport_ax_null_intr_func(int irq, void *dev_id, struct pt_regs *regs)
 void
 parport_ax_write_epp(struct parport *p, unsigned char d)
 {
-	outb(d, p->base + EPPREG);
+	outb(d, p->base + EPPDATA);
 }
 
 unsigned char
 parport_ax_read_epp(struct parport *p)
 {
-	return inb(p->base + EPPREG);
+	return inb(p->base + EPPDATA);
+}
+
+void
+parport_ax_write_epp_addr(struct parport *p, unsigned char d)
+{
+	outb(d, p->base + EPPADDR);
+}
+
+unsigned char
+parport_ax_read_epp_addr(struct parport *p)
+{
+	return inb(p->base + EPPADDR);
+}
+
+int 
+parport_ax_check_epp_timeout(struct parport *p)
+{
+	if (!(inb(p->base+STATUS) & 1))
+		return 0;
+	parport_ax_epp_clear_timeout(p);
+	return 1;
 }
 
 unsigned char
@@ -302,6 +324,12 @@ static struct parport_operations parport_ax_ops =
 	parport_ax_release_resources,
 	parport_ax_claim_resources,
 	
+	parport_ax_write_epp,
+	parport_ax_read_epp,
+	parport_ax_write_epp_addr,
+	parport_ax_read_epp_addr,
+	parport_ax_check_epp_timeout,
+
 	parport_ax_epp_write_block,
 	parport_ax_epp_read_block,
 
@@ -498,7 +526,7 @@ init_one_port(struct linux_ebus_device *dev)
 	if (!(p = parport_register_port(base, irq, dma, &parport_ax_ops)))
 		return 0;
 
-	/* Safe away pointer to our EBus DMA */
+	/* Save away pointer to our EBus DMA */
 	p->private_data = (void *)dev->base_address[2];
 
 	p->modes = PARPORT_MODE_PCSPP | parport_PS2_supported(p);

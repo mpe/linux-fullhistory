@@ -48,6 +48,8 @@ asmlinkage int do_page_fault(struct pt_regs *regs, unsigned long address,
 	vma = find_vma(mm, address);
 	if (!vma)
 	  goto bad_area;
+	if (vma->vm_flags & VM_IO)
+		goto bad_area;
 	if (vma->vm_start <= address)
 		goto good_area;
 	if (!(vma->vm_flags & VM_GROWSDOWN))

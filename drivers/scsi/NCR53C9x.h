@@ -107,6 +107,15 @@
         (printk ("Internal ESP driver error in file %s, line %d\n", \
 		 __FILE__, __LINE__))
 
+/*
+ * padding for register structure
+ */
+#ifdef CONFIG_JAZZ_ESP
+#define EREGS_PAD(n)
+#else
+#define EREGS_PAD(n)    unchar n[3];
+#endif
+
 /* The ESP SCSI controllers have their register sets in three
  * "classes":
  *
@@ -124,44 +133,45 @@
 struct ESP_regs {
                                 /* Access    Description              Offset */
     volatile unchar esp_tclow;  /* rw  Low bits of the transfer count 0x00   */
-                                unchar tlpad1[3];
+                                EREGS_PAD(tlpad1);
     volatile unchar esp_tcmed;  /* rw  Mid bits of the transfer count 0x04   */
-                                unchar fdpad[3];
+                                EREGS_PAD(fdpad);
     volatile unchar esp_fdata;  /* rw  FIFO data bits                 0x08   */
-                                unchar cbpad[3];
+                                EREGS_PAD(cbpad);
     volatile unchar esp_cmd;    /* rw  SCSI command bits              0x0c   */
-                                unchar stpad[3];
+                                EREGS_PAD(stpad);
     volatile unchar esp_status; /* ro  ESP status register            0x10   */
 #define esp_busid   esp_status  /* wo  Bus ID for select/reselect     0x10   */
-                                unchar irqpd[3];
+                                EREGS_PAD(irqpd);
     volatile unchar esp_intrpt; /* ro  Kind of interrupt              0x14   */
 #define esp_timeo   esp_intrpt  /* wo  Timeout value for select/resel 0x14   */
-                                unchar sspad[3];
+                                EREGS_PAD(sspad);
     volatile unchar esp_sstep;  /* ro  Sequence step register         0x18   */
 #define esp_stp     esp_sstep   /* wo  Transfer period per sync       0x18   */
-                                unchar ffpad[3];
+                                EREGS_PAD(ffpad);
     volatile unchar esp_fflags; /* ro  Bits of current FIFO info      0x1c   */
 #define esp_soff    esp_fflags  /* wo  Sync offset                    0x1c   */
-                                unchar cf1pd[3];
+                                EREGS_PAD(cf1pd);
     volatile unchar esp_cfg1;   /* rw  First configuration register   0x20   */
-                                unchar cfpad[3];
+                                EREGS_PAD(cfpad);
     volatile unchar esp_cfact;  /* wo  Clock conversion factor        0x24   */
 #define esp_status2 esp_cfact   /* ro  HME status2 register           0x24   */
-                                unchar ctpad[3];
+                                EREGS_PAD(ctpad);
     volatile unchar esp_ctest;  /* wo  Chip test register             0x28   */
-                                unchar cf2pd[3];
+                                EREGS_PAD(cf2pd);
     volatile unchar esp_cfg2;   /* rw  Second configuration register  0x2c   */
-                                unchar cf3pd[3];
+                                EREGS_PAD(cf3pd);
 
     /* The following is only found on the 53C9X series SCSI chips */
     volatile unchar esp_cfg3;   /* rw  Third configuration register   0x30  */
-                                unchar thpd[7];
-
+                                EREGS_PAD(holep);
+    volatile unchar esp_hole;   /* hole in register map               0x34  */
+                                EREGS_PAD(thpd);    
     /* The following is found on all chips except the NCR53C90 (ESP100) */
     volatile unchar esp_tchi;   /* rw  High bits of transfer count    0x38  */
 #define esp_uid     esp_tchi    /* ro  Unique ID code                 0x38  */
 #define fas_rlo     esp_tchi    /* rw  HME extended counter           0x38  */
-                                unchar fgpad[3];
+                                EREGS_PAD(fgpad);    
     volatile unchar esp_fgrnd;  /* rw  Data base for fifo             0x3c  */
 #define fas_rhi     esp_fgrnd   /* rw  HME extended counter           0x3c  */
 };
@@ -175,7 +185,8 @@ enum esp_rev {
   fas100a    = 0x04,
   fast       = 0x05,
   fashme     = 0x06,
-  espunknown = 0x07
+  fas216     = 0x07,    
+  espunknown = 0x08
 };
 
 /* We get one of these for each ESP probed. */
@@ -303,6 +314,13 @@ struct NCR_ESP {
   void (*dma_led_on)(struct NCR_ESP *);
   void (*dma_poll)(struct NCR_ESP *, unsigned char *);
   void (*dma_reset)(struct NCR_ESP *);
+    
+  /* Optional virtual DMA functions */
+  void (*dma_mmu_get_scsi_one)(struct NCR_ESP *, Scsi_Cmnd *);
+  void (*dma_mmu_get_scsi_sgl)(struct NCR_ESP *, Scsi_Cmnd *);
+  void (*dma_mmu_release_scsi_one)(struct NCR_ESP *, Scsi_Cmnd *);
+  void (*dma_mmu_release_scsi_sgl)(struct NCR_ESP *, Scsi_Cmnd *);
+  void (*dma_advance_sg)(Scsi_Cmnd *);
 };
 
 /* Bitfield meanings for the above registers. */

@@ -129,7 +129,7 @@ do_aout_core_dump(long signr, struct pt_regs * regs)
 	if (get_write_access(inode))
 		goto end_coredump;
 	if (init_private_file(&file, dentry, 3))
-		goto end_coredump;
+		goto end_coredump_write;
 	if (!file.f_op->write)
 		goto close_coredump;
 	has_dumped = 1;
@@ -213,6 +213,7 @@ do_aout_core_dump(long signr, struct pt_regs * regs)
 close_coredump:
 	if (file.f_op->release)
 		file.f_op->release(inode,&file);
+end_coredump_write:
 	put_write_access(inode);
 end_coredump:
 	set_fs(fs);

@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.50 1998/05/13 06:23:25 davem Exp $
+ * Version:	$Id: route.c,v 1.52 1998/06/11 03:15:47 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1095,11 +1095,12 @@ local_input:
 	rth->rt_gateway	= daddr;
 	rth->rt_spec_dst= spec_dst;
 	rth->u.dst.input= ip_local_deliver;
+	rth->rt_flags 	= flags|RTCF_LOCAL;
 	if (res.type == RTN_UNREACHABLE) {
 		rth->u.dst.input= ip_error;
-		rth->u.dst.error= err;
+		rth->u.dst.error= -err;
+		rth->rt_flags 	&= ~RTCF_LOCAL;
 	}
-	rth->rt_flags 	= flags|RTCF_LOCAL;
 	rth->rt_type	= res.type;
 	skb->dst = (struct dst_entry*)rt_intern_hash(hash, rth);
 	return 0;

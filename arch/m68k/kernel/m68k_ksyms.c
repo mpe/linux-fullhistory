@@ -62,7 +62,3 @@ EXPORT_SYMBOL_NOVERS(memcmp);
 EXPORT_SYMBOL_NOVERS(__down_failed);
 EXPORT_SYMBOL_NOVERS(__down_failed_interruptible);
 EXPORT_SYMBOL_NOVERS(__up_wakeup);
-
-#ifdef CONFIG_PCI
-EXPORT_SYMBOL(pci_devices);
-#endif

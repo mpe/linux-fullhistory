@@ -180,10 +180,8 @@ nfsd_proc_write(struct svc_rqst *rqstp, struct nfsd_writeargs *argp,
 
 /*
  * CREATE processing is complicated. The keyword here is `overloaded.'
- * There's a small race condition here between the check for existence
- * and the actual create() call, but one could even consider this a
- * feature because this only happens if someone else creates the file
- * at the same time.
+ * The parent directory is kept locked between the check for existence
+ * and the actual create() call in compliance with VFS protocols.
  * N.B. After this call _both_ argp->fh and resp->fh need an fh_put
  */
 static int
@@ -193,15 +191,14 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 	svc_fh		*dirfhp = &argp->fh;
 	svc_fh		*newfhp = &resp->fh;
 	struct iattr	*attr = &argp->attrs;
-	struct inode	*inode = NULL;
-	int		nfserr, type, mode;
-	int		rdonly = 0, exists;
+	struct inode	*inode;
+	int		nfserr, type, mode, rdonly = 0;
 	dev_t		rdev = NODEV;
 
 	dprintk("nfsd: CREATE   %d/%ld %s\n",
 		SVCFH_DEV(dirfhp), SVCFH_INO(dirfhp), argp->name);
 
-	/* Get the directory inode */
+	/* First verify the parent filehandle */
 	nfserr = fh_verify(rqstp, dirfhp, S_IFDIR, MAY_EXEC);
 	if (nfserr)
 		goto done; /* must fh_put dirfhp even on error */
@@ -214,18 +211,32 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 	} else if (nfserr)
 		goto done;
 
-	/* First, check if the file already exists.  */
-	exists = !nfsd_lookup(rqstp, dirfhp, argp->name, argp->len, newfhp);
+	/*
+	 * Do a lookup to verify the new filehandle.
+	 */
+	nfserr = nfsd_lookup(rqstp, dirfhp, argp->name, argp->len, newfhp);
+	if (nfserr) {
+		if (nfserr != nfserr_noent)
+			goto done;
+		/*
+		 * If the new filehandle wasn't verified, we can't tell
+		 * whether the file exists or not. Time to bail ...
+		 */
+		nfserr = nfserr_acces;
+		if (!newfhp->fh_dverified) {
+			printk(KERN_WARNING 
+				"nfsd_proc_create: filehandle not verified\n");
+			goto done;
+		}
+	}
 
-	if (newfhp->fh_dverified)
-		inode = newfhp->fh_dentry->d_inode;
-
-	/* Get rid of this soon... */
-	if (exists && !inode) {
-		printk("nfsd_proc_create: Wheee... exists but d_inode==NULL\n");
-		nfserr = nfserr_rofs;
+	/*
+	 * Lock the parent directory and check for existence.
+	 */
+	nfserr = fh_lock_parent(dirfhp, newfhp->fh_dentry);
+	if (nfserr)
 		goto done;
-	}		
+	inode = newfhp->fh_dentry->d_inode;
 
 	/* Unfudge the mode bits */
 	if (attr->ia_valid & ATTR_MODE) { 
@@ -233,7 +244,7 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 		mode = attr->ia_mode & ~S_IFMT;
 		if (!type)	/* HP weirdness */
 			type = S_IFREG;
-	} else if (exists) {
+	} else if (inode) {
 		type = inode->i_mode & S_IFMT;
 		mode = inode->i_mode & ~S_IFMT;
 	} else {
@@ -243,8 +254,8 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 
 	/* This is for "echo > /dev/null" a la SunOS. Argh. */
 	nfserr = nfserr_rofs;
-	if (rdonly && (!exists || type == S_IFREG))
-		goto done;
+	if (rdonly && (!inode || type == S_IFREG))
+		goto out_unlock;
 
 	attr->ia_valid |= ATTR_MODE;
 	attr->ia_mode = type | mode;
@@ -252,7 +263,6 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 	/* Special treatment for non-regular files according to the
 	 * gospel of sun micro
 	 */
-	nfserr = 0;
 	if (type != S_IFREG) {
 		int	is_borc = 0;
 		u32	size = attr->ia_size;
@@ -267,21 +277,21 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 		} else if (size != rdev) {
 			/* dev got truncated because of 16bit Linux dev_t */
 			nfserr = nfserr_io;	/* or nfserr_inval? */
-			goto done;
+			goto out_unlock;
 		} else {
 			/* Okay, char or block special */
 			is_borc = 1;
 		}
 
 		/* Make sure the type and device matches */
-		if (exists && (type != (inode->i_mode & S_IFMT)
-		 || (is_borc && inode->i_rdev != rdev))) {
-			nfserr = nfserr_exist;
-			goto done;
-		}
+		nfserr = nfserr_exist;
+		if (inode && (type != (inode->i_mode & S_IFMT) || 
+		    (is_borc && inode->i_rdev != rdev)))
+			goto out_unlock;
 	}
 	
-	if (!exists) {
+	nfserr = 0;
+	if (!inode) {
 		/* File doesn't exist. Create it and set attrs */
 		nfserr = nfsd_create(rqstp, dirfhp, argp->name, argp->len,
 					attr, type, rdev, newfhp);
@@ -296,6 +306,10 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 		if (attr->ia_valid)
 			nfserr = nfsd_setattr(rqstp, newfhp, attr);
 	}
+
+out_unlock:
+	/* We don't really need to unlock, as fh_put does it. */
+	fh_unlock(dirfhp);
 
 done:
 	fh_put(dirfhp);
@@ -359,9 +373,9 @@ nfsd_proc_symlink(struct svc_rqst *rqstp, struct nfsd_symlinkargs *argp,
 	int		nfserr;
 
 	dprintk("nfsd: SYMLINK  %p %s -> %s\n",
-		SVCFH_DENTRY(&argp->ffh),
-		argp->fname, argp->tname);
+		SVCFH_DENTRY(&argp->ffh), argp->fname, argp->tname);
 
+	memset(&newfh, 0, sizeof(struct svc_fh));
 	/*
 	 * Create the link, look up new file and set attrs.
 	 */
@@ -386,12 +400,13 @@ nfsd_proc_mkdir(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 {
 	int	nfserr;
 
-	dprintk("nfsd: MKDIR    %p %s\n",
-		SVCFH_DENTRY(&argp->fh),
-		argp->name);
+	dprintk("nfsd: MKDIR    %p %s\n", SVCFH_DENTRY(&argp->fh), argp->name);
 
-	/* N.B. what about the dentry count?? */
-	resp->fh.fh_dverified = 0; /* paranoia */
+	if (resp->fh.fh_dverified) {
+		printk(KERN_WARNING
+			"nfsd_proc_mkdir: response already verified??\n");
+	}
+
 	nfserr = nfsd_create(rqstp, &argp->fh, argp->name, argp->len,
 				    &argp->attrs, S_IFDIR, 0, &resp->fh);
 	fh_put(&argp->fh);

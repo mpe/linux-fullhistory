@@ -463,6 +463,7 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	     case IDE4_MAJOR:
 	     case IDE5_MAJOR:
 	     case ACSI_MAJOR:
+	     case MFM_ACORN_MAJOR:
 		/*
 		 * The scsi disk and cdrom drivers completely remove the request
 		 * from the queue when they start processing an entry.  For this
@@ -816,6 +817,9 @@ __initfunc(int blk_dev_init(void))
 #endif
 #ifdef CONFIG_BLK_DEV_XD
 	xd_init();
+#endif
+#ifdef CONFIG_BLK_DEV_MFM
+	mfm_init();
 #endif
 #ifdef CONFIG_PARIDE
 	{ extern void paride_init(void); paride_init(); };

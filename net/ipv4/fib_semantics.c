@@ -5,7 +5,7 @@
  *
  *		IPv4 Forwarding Information Base: semantics.
  *
- * Version:	$Id: fib_semantics.c,v 1.8 1998/04/28 06:21:58 davem Exp $
+ * Version:	$Id: fib_semantics.c,v 1.9 1998/06/11 03:15:41 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -866,8 +866,36 @@ fib_convert_rtentry(int cmd, struct nlmsghdr *nl, struct rtmsg *rtm,
 			*rta->rta_mtu = r->rt_mtu;
 	}
 #else
-	if (r->rt_flags&(RTF_MTU|RTF_WINDOW|RTF_IRTT))
-	    printk(KERN_DEBUG "SIOCRT*: mtu/window/irtt are not implemnted.\n");
+	if (r->rt_flags&(RTF_MTU|RTF_WINDOW|RTF_IRTT)) {
+		struct rtattr *rec;
+		struct rtattr *mx = kmalloc(RTA_LENGTH(3*RTA_LENGTH(4)), GFP_KERNEL);
+		if (mx == NULL)
+			return -ENOMEM;
+		rta->rta_mx = mx;
+		mx->rta_type = RTA_METRICS;
+		mx->rta_len  = RTA_LENGTH(0);
+		if (r->rt_flags&RTF_MTU) {
+			rec = (void*)((char*)mx + RTA_ALIGN(mx->rta_len));
+			rec->rta_type = RTAX_MTU;
+			rec->rta_len = RTA_LENGTH(4);
+			mx->rta_len += RTA_LENGTH(4);
+			*(u32*)RTA_DATA(rec) = r->rt_mtu;
+		}
+		if (r->rt_flags&RTF_WINDOW) {
+			rec = (void*)((char*)mx + RTA_ALIGN(mx->rta_len));
+			rec->rta_type = RTAX_WINDOW;
+			rec->rta_len = RTA_LENGTH(4);
+			mx->rta_len += RTA_LENGTH(4);
+			*(u32*)RTA_DATA(rec) = r->rt_window;
+		}
+		if (r->rt_flags&RTF_IRTT) {
+			rec = (void*)((char*)mx + RTA_ALIGN(mx->rta_len));
+			rec->rta_type = RTAX_RTT;
+			rec->rta_len = RTA_LENGTH(4);
+			mx->rta_len += RTA_LENGTH(4);
+			*(u32*)RTA_DATA(rec) = r->rt_irtt;
+		}
+	}
 #endif
 	return 0;
 }

@@ -39,6 +39,10 @@ extern unsigned int
 csum_partial_copy_from_user ( const char *src, char *dst,
 			      int len, int sum, int *csum_err);
 
+/* FIXME: this needs to be written to really do no check -- Cort */
+#define csum_partial_copy_nocheck(src, dst, len, sum)	\
+	csum_partial_copy((src), (dst), (len), (sum))
+
 /*
  *	This is a version of ip_compute_csum() optimized for IP headers,
  *	which always checksum on 4 octet boundaries.

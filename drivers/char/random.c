@@ -513,6 +513,10 @@ static void init_std_data(struct random_bucket *r)
 	do_gettimeofday(&tv);
 	add_entropy_words(r, tv.tv_sec, tv.tv_usec);
 
+	/*
+	 *	This doesnt lock system.utsname. Howeve we are generating
+	 *	entropy so a race with a name set here is fine.
+	 */
 	p = (__u32 *)&system_utsname;
 	for (i = sizeof(system_utsname) / sizeof(words); i; i--) {
 		memcpy(words, p, sizeof(words));

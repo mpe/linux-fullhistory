@@ -361,7 +361,7 @@ static struct cpu_model_info cpu_models[] __initdata = {
 	{ X86_VENDOR_AMD,	5,
 	  { "K5/SSA5 (PR-75, PR-90, PR-100)", "K5 (PR-120, PR-133)",
 	    "K5 (PR-166)", "K5 (PR-200)", NULL, NULL,
-	    "K6 (166 - 266)", "K6 (166 - 300)", "K6-3D (200 - 450)",
+	    "K6 (166 - 266)", "K6 (166 - 300)", "K6-2 (200 - 450)",
 	    "K6-3D-Plus (200 - 450)", NULL, NULL, NULL, NULL, NULL, NULL }},
 	{ X86_VENDOR_UMC,	4,
 	  { NULL, "U5D", "U5S", NULL, NULL, NULL, NULL, NULL, NULL, NULL,
@@ -442,11 +442,11 @@ int get_cpuinfo(char * buffer)
 {
 	char *p = buffer;
 	int sep_bug;
-        static const char *x86_cap_flags[] = {
-                "fpu", "vme", "de", "pse", "tsc", "msr", "pae", "mce",
-                "cx8", "apic", "10", "sep", "mtrr", "pge", "mca", "cmov",
-                "fcmov", "17", "18", "19", "20", "21", "22", "mmx",
-                "osfxsr", "25", "26", "27", "28", "29", "30", "amd3d"
+        static char *x86_cap_flags[] = {
+                "fpu", "vme", "de", "pse", "tsc", "msr", "6", "mce",
+                "cx8", "9", "10", "sep", "12", "pge", "14", "cmov",
+                "16", "17", "18", "19", "20", "21", "22", "mmx",
+                "24", "25", "26", "27", "28", "29", "30", "31"
         };
 	struct cpuinfo_x86 *c = cpu_data;
 	int i, n;
@@ -473,6 +473,24 @@ int get_cpuinfo(char * buffer)
 				p += sprintf(p, "stepping\t: %d\n", c->x86_mask);
 		} else
 			p += sprintf(p, "stepping\t: unknown\n");
+
+		/* Modify the capabilities according to chip type */
+		if (c->x86_mask) {
+			if (c->x86_vendor == X86_VENDOR_CYRIX) {
+				x86_cap_flags[24] = "cxmmx";
+			} else if (c->x86_vendor == X86_VENDOR_AMD) {
+				x86_cap_flags[16] = "fcmov";
+				x86_cap_flags[31] = "amd3d";
+			} else if (c->x86_vendor == X86_VENDOR_INTEL) {
+				x86_cap_flags[6] = "pae";
+				x86_cap_flags[9] = "apic";
+				x86_cap_flags[12] = "mtrr";
+				x86_cap_flags[14] = "mca";
+				x86_cap_flags[16] = "pat";
+				x86_cap_flags[17] = "pse";
+				x86_cap_flags[24] = "osfxsr";
+			}
+		}
 
 		sep_bug = c->x86_vendor == X86_VENDOR_INTEL &&
 			  c->x86 == 0x06 &&

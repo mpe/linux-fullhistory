@@ -131,4 +131,7 @@ if [ "$CONFIG_PPC" = "y" ]; then
   fi
   dep_tristate '53C94 (Power Mac external SCSI) support' CONFIG_SCSI_MAC53C94 $CONFIG_SCSI
 fi
+if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
+  source drivers/acorn/scsi/Config.in
+fi
 endmenu

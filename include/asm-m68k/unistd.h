@@ -187,6 +187,9 @@
 #define __NR_pread		180
 #define __NR_pwrite		181
 #define __NR_lchown		182
+#define __NR_getcwd		183
+#define __NR_capget		184
+#define __NR_capset		185
 
 /* user-visible error numbers are in the range -1 - -122: see
    <asm-m68k/errno.h> */

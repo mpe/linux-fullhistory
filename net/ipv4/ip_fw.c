@@ -1,6 +1,6 @@
 /*
- * This code is heavily based on the code in ip_fw.c; see that file for
- * copyrights and attributions.  This code is basically GPL.
+ * This code is heavily based on the code on the old ip_fw.c code; see below for
+ * copyrights and attributions of the old code.  This code is basically GPL.
  *
  * 15-Aug-1997: Major changes to allow graphs for firewall rules.
  *              Paul Russell <Paul.Russell@rustcorp.com.au> and
@@ -26,9 +26,31 @@
  *              Added packet and byte counters for policy matches.
  * 26-Feb-1998: Fixed race conditions, added SMP support.
  * 18-Mar-1998: Fix SMP, fix race condition fix.
- * 1-May-1998:  Remove caching of device pointer, added caching
- *              for proc output (no longer order n^2).
+ * 1-May-1998:  Remove caching of device pointer.
+ * 12-May-1998: Allow tiny fragment case for TCP/UDP.
+ * 15-May-1998: Treat short packets as fragments, don't just block.
  */
+
+/*
+ *
+ * The origina Linux port was done Alan Cox, with changes/fixes from
+ * Pauline Middlelink, Jos Vos, Thomas Quinot, Wouter Gadeyne, Juan
+ * Jose Ciarlante, Bernd Eckenfels, Keith Owens and others.
+ * 
+ * Copyright from the original FreeBSD version follows:
+ *
+ * Copyright (c) 1993 Daniel Boulet
+ * Copyright (c) 1994 Ugen J.S.Antsilevich
+ *
+ * Redistribution and use in source forms, with and without modification,
+ * are permitted provided that this entire comment appears intact.
+ *
+ * Redistribution in binary form may occur without any restrictions.
+ * Obviously, it would be nice if you gave credit where credit is due
+ * but requiring it would be too onerous.
+ *
+ * This software is provided ``AS IS'' without any warranties of any kind.  */
+
 
 #include <linux/config.h>
 
@@ -75,6 +97,12 @@
  * 2) A packet off the bh handlers (timer or net).
  *
  * For SMP (kernel v2.1+), multiply this by # CPUs.
+ *
+ * [Note that this in not correct for 2.2 - because the socket code always
+ *  uses lock_kernel() to serialize, and bottom halves (timers and net_bhs)
+ *  only run on one CPU at a time.  This will probably change for 2.3.
+ *  It is still good to use spinlocks because that avoids the global cli() 
+ *  for updating the tables, which is rather costly in SMP kernels -AK]
  *
  * This means counters and backchains can get corrupted if no precautions
  * are taken.
@@ -573,14 +601,10 @@ ip_fw_check(struct iphdr *ip,
 		return FW_BLOCK;
 	}
 
-	/* Check for too-small packets (not non-first fragments).
-	 * For each protocol, we assume that we can get the required
-	 * information, eg. port number or ICMP type.  If this fails,
-	 * reject it. 
-	 * 
-	 * Sizes might as well be rounded up to 8 here, since either
-	 * there are more fragments to come (which must be on 8-byte
-	 * boundaries), or this is a bogus packet anyway.
+	/* If we can't investigate ports, treat as fragment.  It's
+	 * either a trucated whole packet, or a truncated first
+	 * fragment, or a TCP first fragment of length 8-15, in which
+	 * case the above rule stops reassembly.
 	 */
 	if (offset == 0) {
 		unsigned int size_req;
@@ -598,13 +622,7 @@ ip_fw_check(struct iphdr *ip,
 		default:
 			size_req = 0;
 		}
-		if (ntohs(ip->tot_len) < (ip->ihl<<2)+size_req) {
-			if (!testing && net_ratelimit()) {
-				printk("Packet too short.\n");
-				dump_packet(ip,rif,NULL,NULL,0,0);
-			}
-			return FW_BLOCK;
-		}
+		offset = (ntohs(ip->tot_len) < (ip->ihl<<2)+size_req);
 	}
 
 	src = ip->saddr;
@@ -613,10 +631,10 @@ ip_fw_check(struct iphdr *ip,
 	
 	/*
 	 *	If we got interface from which packet came
-	 *	we can use the address directly. This is unlike
-	 *	4.4BSD derived systems that have an address chain
-	 *	per device. We have a device per address with dummy
-	 *	devices instead.
+	 *	we can use the address directly. Linux 2.1 now uses address
+	 *	chains per device too, but unlike BSD we first check if the
+	 *	incoming packet matches a device address and the routing
+	 *	table before calling the firewall. 
 	 */
 	 
 	dprintf("Packet ");
@@ -1117,7 +1135,7 @@ static struct ip_fwkernel *convert_ipfw(struct ip_fwuser *fwuser, int *errno)
 		return NULL;
 	}
 
-#if DEBUG_IP_FIREWALL_USER
+#ifdef DEBUG_IP_FIREWALL_USER
 	/* These are sanity checks that don't really matter.
 	 * We can get rid of these once testing is complete. 
 	 */

@@ -64,6 +64,11 @@ CORE_FILES := $(CORE_FILES) arch/m68k/mac/mac.o
 SUBDIRS := $(SUBDIRS) arch/m68k/mac
 endif
 
+ifdef CONFIG_HP300
+CORE_FILES := $(CORE_FILES) arch/m68k/hp300/hp300.o
+SUBDIRS := $(SUBDIRS) arch/m68k/hp300
+endif
+
 ifdef CONFIG_APOLLO
 CORE_FILES := $(CORE_FILES) arch/m68k/apollo/apollo.o
 SUBDIRS := $(SUBDIRS) arch/m68k/apollo
@@ -72,6 +77,11 @@ endif
 ifdef CONFIG_MVME16x
 CORE_FILES := $(CORE_FILES) arch/m68k/mvme16x/mvme16x.o
 SUBDIRS := $(SUBDIRS) arch/m68k/mvme16x
+endif
+
+ifdef CONFIG_BVME6000
+CORE_FILES := $(CORE_FILES) arch/m68k/bvme6000/bvme6000.o
+SUBDIRS := $(SUBDIRS) arch/m68k/bvme6000
 endif
 
 ifdef CONFIG_M68040

@@ -52,7 +52,7 @@
 #include <linux/if_ether.h>	/* For the statistics structure. */
 #include <linux/if_arp.h>	/* For ARPHRD_ETHER */
 
-#define LOOPBACK_MTU (PAGE_SIZE*7/8)
+#define LOOPBACK_MTU	(PAGE_SIZE - 172)
 
 /*
  * The higher levels take care of making this non-reentrant (it's

@@ -579,6 +579,9 @@ SYMBOL_NAME_LABEL(sys_call_table)
 	.long SYMBOL_NAME(sys_pread)		/* 180 */
 	.long SYMBOL_NAME(sys_pwrite)
 	.long SYMBOL_NAME(sys_lchown);
+	.long SYMBOL_NAME(sys_getcwd)
+	.long SYMBOL_NAME(sys_capget)
+	.long SYMBOL_NAME(sys_capset)           /* 185 */
 	.rept NR_syscalls-(.-SYMBOL_NAME(sys_call_table))/4
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr

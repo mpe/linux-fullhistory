@@ -1256,13 +1256,12 @@ static void setterm_command(int currcons)
 
 static void insert_char(int currcons, unsigned int nr)
 {
-	unsigned int i = x;
-	unsigned short * p, * q = (unsigned short *) pos;
+	unsigned short *p, *q = (unsigned short *) pos;
 
-	while (i++ <= video_num_columns - nr) {
+	p = q + video_num_columns - nr - x;
+	while (--p >= q)
 		scr_writew(scr_readw(p), p + nr);
-		p++;
-	}
+
 	memsetw(q, video_erase_char, nr*2);
 	need_wrap = 0;
 }

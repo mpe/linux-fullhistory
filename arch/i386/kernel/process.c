@@ -125,8 +125,10 @@ asmlinkage int sys_idle(void)
 		 *	the APM bios knowing only one CPU at a time will do
 		 *	so.
 		 */
-		if (!start_idle) 
+		if (!start_idle) {
+			check_pgt_cache();
 			start_idle = jiffies;
+		}
 		if (jiffies - start_idle > HARD_IDLE_TIMEOUT) 
 			hard_idle();
 		else  {
@@ -158,6 +160,7 @@ int cpu_idle(void *unused)
 		if(current_cpu_data.hlt_works_ok &&
 		 		!hlt_counter && !need_resched)
 			__asm("hlt");
+		check_pgt_cache();
 		/*
 		 * tq_scheduler currently assumes we're running in a process
 		 * context (ie that we hold the kernel lock..)
@@ -551,9 +554,9 @@ int dump_fpu (struct pt_regs * regs, struct user_i387_struct* fpu)
 
 	if ((fpvalid = current->used_math) != 0) {
 		if (boot_cpu_data.hard_math) {
-		  if (last_task_used_math == current) {
-			  __asm__("clts ; fsave %0; fwait": :"m" (*fpu));
-		  }
+			if (last_task_used_math == current) {
+				__asm__("clts ; fsave %0; fwait": :"m" (*fpu));
+			}
 			else
 				memcpy(fpu,&current->tss.i387.hard,sizeof(*fpu));
 		} else {

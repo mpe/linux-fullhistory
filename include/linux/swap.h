@@ -75,6 +75,11 @@ extern struct swap_info_struct swap_info[];
 void si_swapinfo(struct sysinfo *);
 unsigned long get_swap_page(void);
 extern void FASTCALL(swap_free(unsigned long));
+struct swap_list_t {
+	int head;	/* head of priority-ordered swapfile list */
+	int next;	/* swapfile to be used next */
+};
+extern struct swap_list_t swap_list;
 
 /*
  * vm_ops not present page codes for shared memory.

@@ -60,7 +60,7 @@ asmlinkage void resume(void);
 struct __xchg_dummy { unsigned long a[100]; };
 #define __xg(x) ((volatile struct __xchg_dummy *)(x))
 
-#if defined(CONFIG_ATARI) && !defined(CONFIG_AMIGA) && !defined(CONFIG_MAC) && !defined(CONFIG_HADES)
+#if defined(CONFIG_ATARI) && !defined(CONFIG_AMIGA) && !defined(CONFIG_MAC) && !defined(CONFIG_HADES) && !defined(CONFIG_VME) && !defined(CONFIG_APOLLO)
 /* block out HSYNC on the atari */
 #define __sti() __asm__ __volatile__ ("andiw #0xfbff,%/sr": : : "memory")
 #else /* portable version */

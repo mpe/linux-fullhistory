@@ -184,9 +184,9 @@ parseHandle *parseInit(char *buf, char *cmdList, int cmdNum)
     
     if (!buf || !cmdList)                           /* bad input ?     */
 	return(NULL);
-    if ((handle = (parseHandle*) kmalloc(sizeof(parseHandle), 1)) == 0)
+    if ((handle = (parseHandle*) kmalloc(sizeof(parseHandle), GFP_KERNEL)) == 0)
 	return(NULL);                               /* out of memory   */
-    if ((handle->cmdPos = (char**) kmalloc(sizeof(int), cmdNum)) == 0) {
+    if ((handle->cmdPos = (char**) kmalloc(sizeof(int) * cmdNum, GFP_KERNEL)) == 0) {
 	kfree(handle);
 	return(NULL);                               /* out of memory   */
     }

@@ -38,6 +38,7 @@
 #define MACH_MVME147  6
 #define MACH_MVME16x  7
 #define MACH_BVME6000 8
+#define MACH_HP300    9
 
 #ifdef __KERNEL__
 
@@ -48,10 +49,10 @@ extern u_long m68k_machtype;
 #if !defined(CONFIG_AMIGA)
 #  define MACH_IS_AMIGA (0)
 #elif defined(CONFIG_ATARI) || defined(CONFIG_MAC) || defined(CONFIG_APOLLO) \
-	|| defined(CONFIG_MVME16x) || defined(CONFIG_BVME6000)
+	|| defined(CONFIG_MVME16x) || defined(CONFIG_BVME6000) || defined(CONFIG_HP300)
 #  define MACH_IS_AMIGA (m68k_machtype == MACH_AMIGA)
 #else
-#  define MACH_AMIGA_ONLY
+#  define CONFIG_AMIGA_ONLY
 #  define MACH_IS_AMIGA (1)
 #  define MACH_TYPE (MACH_AMIGA)
 #endif
@@ -59,17 +60,18 @@ extern u_long m68k_machtype;
 #if !defined(CONFIG_ATARI)
 #  define MACH_IS_ATARI (0)
 #elif defined(CONFIG_AMIGA) || defined(CONFIG_MAC) || defined(CONFIG_APOLLO) \
-	|| defined(CONFIG_MVME16x) || defined(CONFIG_BVME6000)
+	|| defined(CONFIG_MVME16x) || defined(CONFIG_BVME6000) || defined(CONFIG_HP300)
 #  define MACH_IS_ATARI (m68k_machtype == MACH_ATARI)
 #else
-#  define MACH_ATARI_ONLY
+#  define CONFIG_ATARI_ONLY
 #  define MACH_IS_ATARI (1)
 #  define MACH_TYPE (MACH_ATARI)
 #endif
 
 #if !defined(CONFIG_MAC)
 #  define MACH_IS_MAC (0)
-#elif defined(CONFIG_AMIGA) || defined(CONFIG_ATARI) || defined(CONFIG_APOLLO)
+#elif defined(CONFIG_AMIGA) || defined(CONFIG_ATARI) || defined(CONFIG_APOLLO) \
+	|| defined(CONFIG_HP300) || defined(CONFIG_MVME16x) || defined(CONFIG_BVME6000)
 #  define MACH_IS_MAC (m68k_machtype == MACH_MAC)
 #else
 #  define CONFIG_MAC_ONLY
@@ -86,7 +88,7 @@ extern u_long m68k_machtype;
 #if !defined (CONFIG_APOLLO)
 #  define MACH_IS_APOLLO (0)
 #elif defined(CONFIG_AMIGA) || defined(CONFIG_MAC) || defined(CONFIG_ATARI) \
-	|| defined(CONFIG_MVME16x) || defined(CONFIG_BVME6000)
+	|| defined(CONFIG_MVME16x) || defined(CONFIG_BVME6000) || defined(CONFIG_HP300)
 #  define MACH_IS_APOLLO (m68k_machtype == MACH_APOLLO)
 #else
 #  define CONFIG_APOLLO_ONLY
@@ -97,7 +99,7 @@ extern u_long m68k_machtype;
 #if !defined (CONFIG_MVME16x)
 #  define MACH_IS_MVME16x (0)
 #elif defined(CONFIG_AMIGA) || defined(CONFIG_MAC) || defined(CONFIG_ATARI) \
-	|| defined(CONFIG_APOLLO) || defined(CONFIG_BVME6000)
+	|| defined(CONFIG_APOLLO) || defined(CONFIG_BVME6000) || defined(CONFIG_HP300)
 #  define MACH_IS_MVME16x (m68k_machtype == MACH_MVME16x)
 #else
 #  define CONFIG_MVME16x_ONLY
@@ -108,7 +110,7 @@ extern u_long m68k_machtype;
 #if !defined (CONFIG_BVME6000)
 #  define MACH_IS_BVME6000 (0)
 #elif defined(CONFIG_AMIGA) || defined(CONFIG_MAC) || defined(CONFIG_ATARI) \
-	|| defined(CONFIG_APOLLO) || defined(CONFIG_MVME16x)
+	|| defined(CONFIG_APOLLO) || defined(CONFIG_MVME16x) || defined(CONFIG_HP300)
 #  define MACH_IS_BVME6000 (m68k_machtype == MACH_BVME6000)
 #else
 #  define CONFIG_BVME6000_ONLY
@@ -116,6 +118,16 @@ extern u_long m68k_machtype;
 #  define MACH_TYPE (MACH_BVME6000)
 #endif
 
+#if !defined (CONFIG_HP300)
+#  define MACH_IS_HP300 (0)
+#elif defined(CONFIG_AMIGA) || defined(CONFIG_MAC) || defined(CONFIG_ATARI) \
+	|| defined(CONFIG_APOLLO) || defined(CONFIG_MVME16x) || defined(CONFIG_BVME6000)
+#  define MAC_IS_HP300 (m68k_machtype == MACH_HP300)
+#else
+#  define CONFIG_HP300_ONLY
+#  define MACH_IS_HP300 (1)
+#  define MACH_TYPE (MACH_HP300)
+#endif
 
 #ifndef MACH_TYPE
 #  define MACH_TYPE (m68k_machtype)

@@ -137,6 +137,19 @@ if [ "$CONFIG_SOUND_OSS" != "n" ]; then
   	string '  Full pathname of OSWF.MOT firmware file' CONFIG_MAUI_BOOT_FILE
       fi
   fi
+
+  if [ "$CONFIG_SOUND" = "m" ]; then
+    dep_tristate 'Support for Turtle Beach MultiSound Classic, Tahiti, Monterey' CONFIG_SOUND_MSNDCLAS $CONFIG_SOUND
+    if [ "$CONFIG_SOUND_MSNDCLAS" = "m" ]; then
+       string '  Full pathname of MSNDINIT.BIN firmware file' CONFIG_MSNDCLAS_INIT_FILE
+       string '  Full pathname of MSNDPERM.BIN firmware file' CONFIG_MSNDCLAS_PERM_FILE
+    fi
+    dep_tristate 'Support for Turtle Beach MultiSound Pinnacle, Fiji' CONFIG_SOUND_MSNDPIN $CONFIG_SOUND
+    if [ "$CONFIG_SOUND_MSNDPIN" = "m" ]; then
+       string '  Full pathname of PNDSPINI.BIN firmware file' CONFIG_MSNDPIN_INIT_FILE
+       string '  Full pathname of PNDSPERM.BIN firmware file' CONFIG_MSNDPIN_PERM_FILE
+    fi
+  fi
   
   dep_tristate 'Support for Aztech Sound Galaxy (non-PnP) cards' CONFIG_SOUND_SGALAXY $CONFIG_SOUND_OSS
   if [ "$CONFIG_SOUND_SGALAXY" = "y" ]; then

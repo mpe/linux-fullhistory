@@ -10,6 +10,9 @@
 struct cpuinfo_alpha {
 	unsigned long loops_per_sec;
 	unsigned int next;
+	unsigned long *pgd_cache;
+	unsigned long *pte_cache;
+	unsigned long pgtable_cache_sz;
 };
 
 extern struct cpuinfo_alpha cpu_data[NR_CPUS];

@@ -954,7 +954,7 @@ static int unswap_by_read( unsigned char *map, unsigned long max,
 				return( -ENOMEM );
 			}
 			DPRINTK( "unswap: reading swap page %lu to %08lx\n", i, page );
-			read_swap_page( entry, (char *)page );
+			rw_swap_page( READ, entry, (char *)page, 1 );
 
 			for_each_task(p) {
 				if (unswap_process( p->mm, entry, page, 0 )) {

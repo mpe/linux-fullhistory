@@ -36,6 +36,9 @@ extern unsigned long mac_videobase;
 extern unsigned long mac_videodepth;
 extern unsigned long mac_rowbytes;
 
+#define DEBUG_SCREEN
+#define DEBUG_SERIAL
+
 /*
  * These two auxiliary debug functions should go away ASAP. Only usage: 
  * before the console output is up (after head.S come some other crucial
@@ -46,21 +49,30 @@ extern unsigned long mac_rowbytes;
  * The 'pos' argument now simply means 'linefeed after print' ...
  */
 
+#ifdef DEBUG_SCREEN
 static int peng=0, line=0;
+#endif
 
 void mac_debugging_short(int pos, short num)
 {
+#ifdef DEBUG_SCREEN
 	unsigned char *pengoffset;
 	unsigned char *pptr;
 	int i;
+#endif
 
+#ifdef DEBUG_SERIAL
+	printk("debug: %d !\n", num);
+#endif
+
+#ifdef DEBUG_SCREEN
 	if (!MACH_IS_MAC) {
 		/* printk("debug: %d !\n", num); */
 		return;
 	}
 
 	/* calculate current offset */
-	pengoffset=(unsigned char *)(mac_videobase+(20+line*2)*mac_rowbytes)
+	pengoffset=(unsigned char *)(mac_videobase+(150+line*2)*mac_rowbytes)
 		    +80*peng;
 	
 	pptr=pengoffset;
@@ -77,20 +89,28 @@ void mac_debugging_short(int pos, short num)
 		line++;
 		peng = 0;
 	}
+#endif
 }
 
 void mac_debugging_long(int pos, long addr)
 {
+#ifdef DEBUG_SCREEN
 	unsigned char *pengoffset;
 	unsigned char *pptr;
 	int i;
+#endif
 
+#ifdef DEBUG_SERIAL
+	printk("debug: #%ld !\n", addr);
+#endif
+
+#ifdef DEBUG_SCREEN
 	if (!MACH_IS_MAC) {
 		/* printk("debug: #%ld !\n", addr); */
 		return;
 	}
 	
-	pengoffset=(unsigned char *)(mac_videobase+(20+line*2)*mac_rowbytes)
+	pengoffset=(unsigned char *)(mac_videobase+(150+line*2)*mac_rowbytes)
 		    +80*peng;
 	
 	pptr=pengoffset;
@@ -106,6 +126,7 @@ void mac_debugging_long(int pos, long addr)
 		line++;
 		peng = 0;
 	}
+#endif
 }
 
 /*
@@ -115,20 +136,29 @@ char that_penguin[]={
 #include "that_penguin.h"
 };
 
+#ifdef DEBUG_SCREEN
 /* 
  * B/W version of penguin, unfinished - any takers??
  */
 static char bw_penguin[]={
 #include "bw_penguin.h"
 };
+#endif
 
 void mac_debugging_penguin(int peng)
 {
+#ifdef DEBUG_SCREEN
 	unsigned char *pengoffset;
 	unsigned char *pptr;
 	unsigned char *bwpdptr=bw_penguin;
 	int i;
+#endif
 
+#ifdef DEBUG_SERIAL
+	printk("Penguin: #%d !\n", peng);
+#endif
+
+#ifdef DEBUG_SCREEN
 	if (!MACH_IS_MAC) 
 		return;
 
@@ -147,15 +177,19 @@ void mac_debugging_penguin(int peng)
 		bwpdptr+=4;
 		pptr+=mac_rowbytes;
 	}
+#endif
 }
 
+#ifdef DEBUG_SCREEN
 /*
  * B/W version of flaming Mac, unfinished (see above).
  */
 static char bw_kaboom_map[]={
 #include "bw_mac.h"
 };
+#endif
 
+#ifdef DEBUG_SCREEN
 static void mac_boom_boom(void)
 {
 	static unsigned char *boomoffset=NULL;
@@ -163,6 +197,13 @@ static void mac_boom_boom(void)
 	unsigned char *bwpdptr=bw_kaboom_map;
 	int i;
 	
+#ifdef DEBUG_SERIAL
+	printk("BOOM !\n");
+#endif
+
+	if (!MACH_IS_MAC) 
+		return;
+
 	if(!boomoffset)
 		if (mac_videodepth == 1) {
 			boomoffset=(unsigned char *)(mac_videobase+160*mac_rowbytes);
@@ -184,24 +225,42 @@ static void mac_boom_boom(void)
 		pptr+=mac_rowbytes;
 	}
 }
+#endif
 
 void mac_boom(int booms)
 {
+#ifdef DEBUG_SCREEN
 	int i;
+#endif
 
 	if (!MACH_IS_MAC) 
 		return;
 
+#ifdef DEBUG_SCREEN
 	for(i=0;i<booms;i++)
 		mac_boom_boom();
 	while(1);
+#endif
 }
 
 
-#if 0
+#ifdef DEBUG_SERIAL
 /*
  * TODO: serial debug code
  */
+
+#define SCC_BAS (0x50F04000)
+struct SCC
+ {
+  u_char cha_b_ctrl;
+  u_char char_dummy1;
+  u_char cha_a_ctrl;
+  u_char char_dummy2;
+  u_char cha_b_data;
+  u_char char_dummy3;
+  u_char cha_a_data;
+ };
+# define scc ((*(volatile struct SCC*)SCC_BAS))
 
 /* Flag that serial port is already initialized and used */
 int mac_SCC_init_done = 0;
@@ -225,54 +284,113 @@ static struct console mac_console_driver = {
 
 static int scc_port;
 
-static inline void mac_scc_out (char c)
+/* Mac: loops_per_sec min. 1900000 ^= .5 us; MFPDELAY was 0.6 us*/
+
+#define US 1
+
+static inline void mac_sccb_out (char c)
 {
+    int i;
     do {
-	MFPDELAY();
+	for( i = US; i > 0; --i )
+		barrier();
     } while (!(scc.cha_b_ctrl & 0x04)); /* wait for tx buf empty */
-    MFPDELAY();
+    for( i = US; i > 0; --i )
+	barrier();
     scc.cha_b_data = c;
 }
 
-void mac_scc_console_write (struct console *co, const char *str,
+static inline void mac_scca_out (char c)
+{
+    int i;
+    do {
+	for( i = US; i > 0; --i )
+		barrier();
+    } while (!(scc.cha_a_ctrl & 0x04)); /* wait for tx buf empty */
+    for( i = US; i > 0; --i )
+	barrier();
+    scc.cha_a_data = c;
+}
+
+void mac_sccb_console_write (struct console *co, const char *str,
 			      unsigned int count)
 {
     while (count--) {
 	if (*str == '\n')
-	    mac_scc_out( '\r' );
-	mac_scc_out( *str++ );
+	    mac_sccb_out( '\r' );
+	mac_sccb_out( *str++ );
+    }
+}
+
+void mac_scca_console_write (struct console *co, const char *str,
+			      unsigned int count)
+{
+    while (count--) {
+	if (*str == '\n')
+	    mac_scca_out( '\r' );
+	mac_scca_out( *str++ );
     }
 }
 
 #ifdef CONFIG_SERIAL_CONSOLE
-int mac_scc_console_wait_key(struct console *co)
+int mac_sccb_console_wait_key(struct console *co)
 {
+    int i;
     do {
-	MFPDELAY();
+	for( i = US; i > 0; --i )
+		barrier();
     } while( !(scc.cha_b_ctrl & 0x01) ); /* wait for rx buf filled */
-    MFPDELAY();
+    for( i = US; i > 0; --i )
+	barrier();
     return( scc.cha_b_data );
+}
+
+int mac_scca_console_wait_key(struct console *co)
+{
+    int i;
+    do {
+	for( i = US; i > 0; --i )
+		barrier();
+    } while( !(scc.cha_a_ctrl & 0x01) ); /* wait for rx buf filled */
+    for( i = US; i > 0; --i )
+	barrier();
+    return( scc.cha_a_data );
 }
 #endif
 
 /* The following two functions do a quick'n'dirty initialization of the MFP or
  * SCC serial ports. They're used by the debugging interface, kgdb, and the
  * serial console code. */
-#define SCC_WRITE(reg,val)				\
+#define SCCB_WRITE(reg,val)				\
     do {						\
+	int i;						\
 	scc.cha_b_ctrl = (reg);				\
-	MFPDELAY();					\
+	for( i = US; i > 0; --i )			\
+		barrier();				\
 	scc.cha_b_ctrl = (val);				\
-	MFPDELAY();					\
+	for( i = US; i > 0; --i )			\
+		barrier();				\
+    } while(0)
+
+#define SCCA_WRITE(reg,val)				\
+    do {						\
+	int i;						\
+	scc.cha_a_ctrl = (reg);				\
+	for( i = US; i > 0; --i )			\
+		barrier();				\
+	scc.cha_a_ctrl = (val);				\
+	for( i = US; i > 0; --i )			\
+		barrier();				\
     } while(0)
 
 /* loops_per_sec isn't initialized yet, so we can't use udelay(). This does a
  * delay of ~ 60us. */
+/* Mac: loops_per_sec min. 1900000 ^= .5 us; MFPDELAY was 0.6 us*/
 #define LONG_DELAY()				\
     do {					\
 	int i;					\
-	for( i = 100; i > 0; --i )		\
-	    MFPDELAY();				\
+	for( i = 60*US; i > 0; --i )		\
+	    barrier();				\
     } while(0)
     
 #ifndef CONFIG_SERIAL_CONSOLE
@@ -310,30 +428,56 @@ void mac_init_scc_port( int cflag, int port )
 
     reg3 = (cflag & CSIZE) == CS8 ? 0xc0 : 0x40;
     reg5 = (cflag & CSIZE) == CS8 ? 0x60 : 0x20 | 0x82 /* assert DTR/RTS */;
-    
-    (void)scc.cha_b_ctrl;	/* reset reg pointer */
-    SCC_WRITE( 9, 0xc0 );	/* reset */
-    LONG_DELAY();		/* extra delay after WR9 access */
-    SCC_WRITE( 4, (cflag & PARENB) ? ((cflag & PARODD) ? 0x01 : 0x03) : 0 |
-		  0x04 /* 1 stopbit */ |
-		  clkmode );
-    SCC_WRITE( 3, reg3 );
-    SCC_WRITE( 5, reg5 );
-    SCC_WRITE( 9, 0 );		/* no interrupts */
-    LONG_DELAY();		/* extra delay after WR9 access */
-    SCC_WRITE( 10, 0 );		/* NRZ mode */
-    SCC_WRITE( 11, clksrc );	/* main clock source */
-    SCC_WRITE( 12, div );	/* BRG value */
-    SCC_WRITE( 13, 0 );		/* BRG high byte */
-    SCC_WRITE( 14, brgsrc_table[baud] );
-    SCC_WRITE( 14, brgsrc_table[baud] | (div ? 1 : 0) );
-    SCC_WRITE( 3, reg3 | 1 );
-    SCC_WRITE( 5, reg5 | 8 );
-    
+
+#if 0    
+    if (port) {
+#endif
+	    (void)scc.cha_b_ctrl;	/* reset reg pointer */
+	    SCCB_WRITE( 9, 0xc0 );	/* reset */
+	    LONG_DELAY();		/* extra delay after WR9 access */
+	    SCCB_WRITE( 4, (cflag & PARENB) ? ((cflag & PARODD) ? 0x01 : 0x03) : 0 |
+			  0x04 /* 1 stopbit */ |
+			  clkmode );
+	    SCCB_WRITE( 3, reg3 );
+	    SCCB_WRITE( 5, reg5 );
+	    SCCB_WRITE( 9, 0 );		/* no interrupts */
+	    LONG_DELAY();		/* extra delay after WR9 access */
+	    SCCB_WRITE( 10, 0 );		/* NRZ mode */
+	    SCCB_WRITE( 11, clksrc );	/* main clock source */
+	    SCCB_WRITE( 12, div );	/* BRG value */
+	    SCCB_WRITE( 13, 0 );		/* BRG high byte */
+	    SCCB_WRITE( 14, brgsrc_table[baud] );
+	    SCCB_WRITE( 14, brgsrc_table[baud] | (div ? 1 : 0) );
+	    SCCB_WRITE( 3, reg3 | 1 );
+	    SCCB_WRITE( 5, reg5 | 8 );
+#if 0
+    } else {
+#endif
+	    (void)scc.cha_a_ctrl;	/* reset reg pointer */
+	    SCCA_WRITE( 9, 0xc0 );	/* reset */
+	    LONG_DELAY();		/* extra delay after WR9 access */
+	    SCCA_WRITE( 4, (cflag & PARENB) ? ((cflag & PARODD) ? 0x01 : 0x03) : 0 |
+			  0x04 /* 1 stopbit */ |
+			  clkmode );
+	    SCCA_WRITE( 3, reg3 );
+	    SCCA_WRITE( 5, reg5 );
+	    SCCA_WRITE( 9, 0 );		/* no interrupts */
+	    LONG_DELAY();		/* extra delay after WR9 access */
+	    SCCA_WRITE( 10, 0 );		/* NRZ mode */
+	    SCCA_WRITE( 11, clksrc );	/* main clock source */
+	    SCCA_WRITE( 12, div );	/* BRG value */
+	    SCCA_WRITE( 13, 0 );		/* BRG high byte */
+	    SCCA_WRITE( 14, brgsrc_table[baud] );
+	    SCCA_WRITE( 14, brgsrc_table[baud] | (div ? 1 : 0) );
+	    SCCA_WRITE( 3, reg3 | 1 );
+	    SCCA_WRITE( 5, reg5 | 8 );
+#if 0
+    }
+#endif
     mac_SCC_reset_done = 1;
     mac_SCC_init_done = 1;
 }
-
+#endif /* DEBUG_SERIAL */
 
 __initfunc(void mac_debug_init(void))
 {
@@ -341,23 +485,24 @@ __initfunc(void mac_debug_init(void))
     /* the m68k_debug_device is used by the GDB stub, do nothing here */
     return;
 #endif
+#ifdef DEBUG_SERIAL
     if (!strcmp( m68k_debug_device, "ser" )) {
 	strcpy( m68k_debug_device, "ser1" );
     }
     if (!strcmp( m68k_debug_device, "ser1" )) {
 	/* ST-MFP Modem1 serial port */
 	mac_init_scc_port( B9600|CS8, 0 );
-	mac_console_driver.write = mac_scc_console_write;
+	mac_console_driver.write = mac_scca_console_write;
     }
     else if (!strcmp( m68k_debug_device, "ser2" )) {
 	/* SCC Modem2 serial port */
 	mac_init_scc_port( B9600|CS8, 1 );
-	mac_console_driver.write = mac_scc_console_write;
+	mac_console_driver.write = mac_sccb_console_write;
     }
     if (mac_console_driver.write)
 	register_console(&mac_console_driver);
-}
 #endif
+}
 
 /*
  * Local variables:

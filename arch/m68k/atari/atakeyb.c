@@ -28,7 +28,6 @@
 #include <asm/atariints.h>
 #include <asm/atarihw.h>
 #include <asm/atarikb.h>
-#include <asm/atari_mouse.h>
 #include <asm/atari_joystick.h>
 #include <asm/irq.h>
 
@@ -193,7 +192,7 @@ static u_short ataalt_map[NR_KEYS] __initdata = {
 	0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200, 0xf200
 };
 
-static u_short atashift_alt_map[NR_KEYS] = {
+static u_short atashift_alt_map[NR_KEYS] __initdata = {
 	0xf200, 0xf81b, 0xf821, 0xf840, 0xf823, 0xf824, 0xf825, 0xf85e,
 	0xf826, 0xf82a, 0xf828, 0xf829, 0xf85f, 0xf82b, 0xf808, 0xf809,
 	0xf851, 0xf857, 0xf845, 0xf852, 0xf854, 0xf859, 0xf855, 0xf849,
@@ -767,14 +766,17 @@ void atari_kbd_leds (unsigned int leds)
 __initfunc(int atari_keyb_init(void))
 {
     /* setup key map */
-    memcpy(plain_map, ataplain_map, sizeof(plain_map));
-    memcpy(shift_map, atashift_map, sizeof(shift_map));
+    memcpy(key_maps[0], ataplain_map, sizeof(plain_map));
+    memcpy(key_maps[1], atashift_map, sizeof(plain_map));
+    memcpy(key_maps[4], atactrl_map, sizeof(plain_map));
+    memcpy(key_maps[5], atashift_ctrl_map, sizeof(plain_map));
+    memcpy(key_maps[8], ataalt_map, sizeof(plain_map));
+    /* Atari doesn't have an altgr_map, so we can reuse its memory for
+       atashift_alt_map */
+    memcpy(key_maps[2], atashift_alt_map, sizeof(plain_map));
+    key_maps[9]  = key_maps[2];
     key_maps[2]  = 0; /* ataaltgr_map */
-    memcpy(ctrl_map, atactrl_map, sizeof(ctrl_map));
-    memcpy(shift_ctrl_map, atashift_ctrl_map, sizeof(shift_ctrl_map));
-    memcpy(alt_map, ataalt_map, sizeof(alt_map));
-    key_maps[9]  = atashift_alt_map;
-    memcpy(ctrl_alt_map, atactrl_alt_map, sizeof(ctrl_alt_map));
+    memcpy(key_maps[12], atactrl_alt_map, sizeof(plain_map));
     key_maps[13] = atashift_ctrl_alt_map;
     keymap_count = 8;
 
@@ -859,4 +861,9 @@ int atari_kbdrate( struct kbd_repeat *k )
 	k->rate  = key_repeat_rate  * 1000 / HZ;
 	
 	return( 0 );
+}
+
+/* for "kbd-reset" cmdline param */
+__initfunc(void kbd_reset_setup(char *str, int *ints))
+{
 }

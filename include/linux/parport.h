@@ -106,6 +106,11 @@ struct parport_operations {
 	void (*release_resources)(struct parport *);
 	int (*claim_resources)(struct parport *);
 
+	void (*epp_write_data)(struct parport *, unsigned char);
+	unsigned char (*epp_read_data)(struct parport *);
+	void (*epp_write_addr)(struct parport *, unsigned char);
+	unsigned char (*epp_read_addr)(struct parport *);
+	int (*epp_check_timeout)(struct parport *);
 	size_t (*epp_write_block)(struct parport *, void *, size_t);
 	size_t (*epp_read_block)(struct parport *, void *, size_t);
 
@@ -330,6 +335,11 @@ extern void (*parport_probe_hook)(struct parport *port);
 #define parport_change_mode(p,m)           parport_pc_change_mode(p,m)
 #define parport_release_resources(p)       parport_pc_release_resources(p)
 #define parport_claim_resources(p)         parport_pc_claim_resources(p)
+#define parport_epp_write_data(p,x)        parport_pc_write_epp(p,x)
+#define parport_epp_read_data(p)           parport_pc_read_epp(p)
+#define parport_epp_write_addr(p,x)        parport_pc_write_epp_addr(p,x)
+#define parport_epp_read_addr(p)           parport_pc_read_epp_addr(p)
+#define parport_epp_check_timeout(p)       parport_pc_check_epp_timeout(p)
 #endif
 
 #ifdef PARPORT_NEED_GENERIC_OPS
@@ -349,6 +359,11 @@ extern void (*parport_probe_hook)(struct parport *port);
 #define parport_change_mode(p,m)           (p)->ops->change_mode(p,m)
 #define parport_release_resources(p)       (p)->ops->release_resources(p)
 #define parport_claim_resources(p)         (p)->ops->claim_resources(p)
+#define parport_epp_write_data(p,x)        (p)->ops->epp_write_data(p,x)
+#define parport_epp_read_data(p)           (p)->ops->epp_read_data(p)
+#define parport_epp_write_addr(p,x)        (p)->ops->epp_write_addr(p,x)
+#define parport_epp_read_addr(p)           (p)->ops->epp_read_addr(p)
+#define parport_epp_check_timeout(p)       (p)->ops->epp_check_timeout(p)
 #endif
 
 #endif /* __KERNEL__ */

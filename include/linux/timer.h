@@ -71,4 +71,22 @@ extern inline void init_timer(struct timer_list * timer)
 	timer->prev = NULL;
 }
 
+/*
+ *	These inlines deal with timer wrapping correctly. You are 
+ *	strongly encouraged to use them
+ *	1. Because people otherwise forget
+ *	2. Because if the timer wrap changes in future you wont have to
+ *	   alter your driver code.
+ */
+
+extern inline int time_before(unsigned long a, unsigned long b)
+{
+	return((long)((a) - (b)) < 0L);
+}
+
+extern inline int time_after(unsigned long a, unsigned long b)
+{
+	return((long)((a) - (b)) > 0L);
+}
+
 #endif

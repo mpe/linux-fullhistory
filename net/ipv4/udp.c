@@ -5,7 +5,7 @@
  *
  *		The User Datagram Protocol (UDP).
  *
- * Version:	$Id: udp.c,v 1.56 1998/05/08 21:06:30 davem Exp $
+ * Version:	$Id: udp.c,v 1.57 1998/05/14 06:32:44 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -57,6 +57,8 @@
  *		Andi Kleen	:	Some cleanups, cache destination entry
  *					for connect. 
  *	Vitaly E. Lavrov	:	Transparent proxy revived after year coma.
+ *		Melvin Smith	:	Check msg_name not msg_namelen in sendto(),
+ *					return ENOTCONN for unconnected sockets (POSIX)
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -657,7 +659,7 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	 *	Get and verify the address. 
 	 */
 	 
-	if (msg->msg_namelen) {
+	if (msg->msg_name) {
 		struct sockaddr_in * usin = (struct sockaddr_in*)msg->msg_name;
 		if (msg->msg_namelen < sizeof(*usin))
 			return(-EINVAL);
@@ -684,7 +686,7 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 		 */
 	} else {
 		if (sk->state != TCP_ESTABLISHED)
-			return -EINVAL;
+			return -ENOTCONN;
 		ufh.daddr = sk->daddr;
 		ufh.uh.dest = sk->dport;
 

@@ -110,9 +110,7 @@ asmlinkage unsigned long sys_brk(unsigned long brk)
 
 	/* Check against rlimit and stack.. */
 	rlim = current->rlim[RLIMIT_DATA].rlim_cur;
-	if (rlim >= RLIM_INFINITY)
-		rlim = ~0;
-	if (brk - mm->end_code > rlim)
+	if (rlim < RLIM_INFINITY && brk - mm->end_code > rlim)
 		goto out;
 
 	/* Check against existing mmap mappings. */
@@ -465,7 +463,7 @@ static int unmap_fixup(struct vm_area_struct *area, unsigned long addr,
 int do_munmap(unsigned long addr, size_t len)
 {
 	struct mm_struct * mm;
-	struct vm_area_struct *mpnt, *next, *free, *extra;
+	struct vm_area_struct *mpnt, *free, *extra;
 	int freed;
 
 	if ((addr & ~PAGE_MASK) || addr > TASK_SIZE || len > TASK_SIZE-addr)
@@ -486,6 +484,11 @@ int do_munmap(unsigned long addr, size_t len)
 	if (!mpnt)
 		return 0;
 
+	/* If we'll make "hole", check the vm areas limit */
+	if ((mpnt->vm_start < addr && mpnt->vm_end > addr+len) &&
+	    mm->map_count > MAX_MAP_COUNT)
+		return -ENOMEM;
+
 	/*
 	 * We may need one additional vma to fix up the mappings ... 
 	 * and this is the last chance for an easy error exit.
@@ -494,9 +497,7 @@ int do_munmap(unsigned long addr, size_t len)
 	if (!extra)
 		return -ENOMEM;
 
-	next = mpnt->vm_next;
-
-	/* we have mpnt->vm_next = next and addr < mpnt->vm_end */
+	/* we have addr < mpnt->vm_end */
 	free = NULL;
 	for ( ; mpnt && mpnt->vm_start < addr+len; ) {
 		struct vm_area_struct *next = mpnt->vm_next;
@@ -508,13 +509,6 @@ int do_munmap(unsigned long addr, size_t len)
 		mpnt->vm_next = free;
 		free = mpnt;
 		mpnt = next;
-	}
-
-	if (free && (free->vm_start < addr) && (free->vm_end > addr+len)) {
-		if (mm->map_count > MAX_MAP_COUNT) {
-			kmem_cache_free(vm_area_cachep, extra);
-			return -ENOMEM;
-		}
 	}
 
 	/* Ok - we have the memory areas we should free on the 'free' list,

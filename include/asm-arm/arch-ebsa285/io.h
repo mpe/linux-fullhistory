@@ -140,4 +140,26 @@ DECLARE_IO(long,l,"","Jr")
 #define inl_t(p)								\
 	(*(volatile unsigned long *)(p))
 
+/*
+ * This is not sufficient... (and it's a hack anyway)
+ */
+static inline void writeb(unsigned char b, unsigned int addr)
+{
+	*(volatile unsigned char *)(0xe0000000 + (addr)) = b;
+}
+
+static inline unsigned char readb(unsigned int addr)
+{
+	return *(volatile unsigned char *)(0xe0000000 + (addr));
+}
+
+static inline void writew(unsigned short b, unsigned int addr)
+{
+	*(volatile unsigned short *)(0xe0000000 + (addr)) = b;
+}
+
+static inline unsigned short readw(unsigned int addr)
+{
+	return *(volatile unsigned short *)(0xe0000000 + (addr));
+}
 #endif

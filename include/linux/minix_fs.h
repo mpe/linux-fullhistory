@@ -15,6 +15,7 @@
 
 /* Not the same as the bogus LINK_MAX in <linux/limits.h>. Oh well. */
 #define MINIX_LINK_MAX	250
+#define MINIX2_LINK_MAX	65530
 
 #define MINIX_I_MAP_SLOTS	8
 #define MINIX_Z_MAP_SLOTS	64
@@ -126,6 +127,7 @@ extern int minix_sync_file(struct file *, struct dentry *);
 extern struct inode_operations minix_file_inode_operations;
 extern struct inode_operations minix_dir_inode_operations;
 extern struct inode_operations minix_symlink_inode_operations;
+extern struct dentry_operations minix_dentry_operations;
 
 #endif /* __KERNEL__ */
 

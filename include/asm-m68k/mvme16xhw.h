@@ -34,37 +34,59 @@ typedef struct {
 		spare3,
 		spare4,
 		data;
-} lpr_ctrl;
+} MVMElp, *MVMElpPtr;
 
-#define LPR_REGS	((volatile lpr_ctrl *)0xfff42030)
+#define MVME_LPR_BASE	0xfff42030
 
-#define I596_BASE	0xfff46000
+#define mvmelp   ((*(volatile MVMElpPtr)(MVME_LPR_BASE)))
 
-#define SCC_A_ADDR	0xfff45005
-#define SCC_B_ADDR	0xfff45001
+typedef struct {
+	unsigned char
+		ctrl,
+		bcd_sec,
+		bcd_min,
+		bcd_hr,
+		bcd_dow,
+		bcd_dom,
+		bcd_mth,
+		bcd_year;
+} MK48T08_t, *MK48T08ptr_t;
 
-#define IRQ_MVME162_TYPE_PRIO	0
+#define RTC_WRITE	0x80
+#define RTC_READ	0x40
+#define RTC_STOP	0x20
 
-#define IRQ_MVME167_PRN		0x54
-#define IRQ_MVME16x_I596	0x57
-#define IRQ_MVME16x_SCSI	0x55
-#define IRQ_MVME16x_FLY		0x7f
-#define IRQ_MVME167_SER_ERR	0x5c
-#define IRQ_MVME167_SER_MODEM	0x5d
-#define IRQ_MVME167_SER_TX	0x5e
-#define IRQ_MVME167_SER_RX	0x5f
-#define IRQ_MVME16x_TIMER	0x59
+#define MVME_RTC_BASE	0xfffc1ff8
+
+#define MVME_I596_BASE	0xfff46000
+
+#define MVME_SCC_A_ADDR	0xfff45005
+#define MVME_SCC_B_ADDR	0xfff45001
+
+#define MVME162_IRQ_TYPE_PRIO	0
+                
+#define MVME167_IRQ_PRN		0x54
+#define MVME16x_IRQ_I596	0x57
+#define MVME16x_IRQ_SCSI	0x55
+#define MVME16x_IRQ_FLY		0x7f
+#define MVME167_IRQ_SER_ERR	0x5c
+#define MVME167_IRQ_SER_MODEM	0x5d
+#define MVME167_IRQ_SER_TX	0x5e
+#define MVME167_IRQ_SER_RX	0x5f
+#define MVME16x_IRQ_TIMER	0x59
+#define MVME167_IRQ_ABORT	0x6e
+#define MVME162_IRQ_ABORT	0x5e
 
 /* SCC interrupts, for MVME162 */
-#define IRQ_MVME162_SCC_BASE		0x40
-#define IRQ_MVME162_SCCB_TX		0x40
-#define IRQ_MVME162_SCCB_STAT		0x42
-#define IRQ_MVME162_SCCB_RX		0x44
-#define IRQ_MVME162_SCCB_SPCOND		0x46
-#define IRQ_MVME162_SCCA_TX		0x48
-#define IRQ_MVME162_SCCA_STAT		0x4a
-#define IRQ_MVME162_SCCA_RX		0x4c
-#define IRQ_MVME162_SCCA_SPCOND		0x4e
+#define MVME162_IRQ_SCC_BASE		0x40
+#define MVME162_IRQ_SCCB_TX		0x40
+#define MVME162_IRQ_SCCB_STAT		0x42
+#define MVME162_IRQ_SCCB_RX		0x44
+#define MVME162_IRQ_SCCB_SPCOND		0x46
+#define MVME162_IRQ_SCCA_TX		0x48
+#define MVME162_IRQ_SCCA_STAT		0x4a
+#define MVME162_IRQ_SCCA_RX		0x4c
+#define MVME162_IRQ_SCCA_SPCOND		0x4e
 
 /* MVME162 version register */
 
@@ -85,34 +107,4 @@ extern unsigned short mvme16x_config;
 #define MVME16x_CONFIG_GOT_SCCA		0x0400
 #define MVME16x_CONFIG_GOT_SCCB		0x0800
 
-/* Specials for the ethernet driver */
-
-#define CA()		(((struct i596_reg *)dev->base_addr)->ca = 1)
-
-#define MPU_PORT(c,x)	\
-  ((struct i596_reg *)(dev->base_addr))->porthi = ((c) | (u32)(x)) & 0xffff; \
-  ((struct i596_reg *)(dev->base_addr))->portlo = ((c) | (u32)(x)) >> 16
-
-#define SCP_SYSBUS	0x00000054
-
-#define WSWAPrfd(x)	((struct i596_rfd *) (((u32)(x)<<16) | ((((u32)(x)))>>16)))
-#define WSWAPrbd(x)	((struct i596_rbd *) (((u32)(x)<<16) | ((((u32)(x)))>>16)))
-#define WSWAPiscp(x)	((struct i596_iscp *)(((u32)(x)<<16) | ((((u32)(x)))>>16)))
-#define WSWAPscb(x)	((struct i596_scb *) (((u32)(x)<<16) | ((((u32)(x)))>>16)))
-#define WSWAPcmd(x)	((struct i596_cmd *) (((u32)(x)<<16) | ((((u32)(x)))>>16)))
-#define WSWAPtbd(x)	((struct i596_tbd *) (((u32)(x)<<16) | ((((u32)(x)))>>16)))
-#define WSWAPchar(x)	((char *)            (((u32)(x)<<16) | ((((u32)(x)))>>16)))
-
-/*
- * The MPU_PORT command allows direct access to the 82596. With PORT access
- * the following commands are available (p5-18). The 32-bit port command
- * must be word-swapped with the most significant word written first.
- */
-#define PORT_RESET	0x00	/* reset 82596 */
-#define PORT_SELFTEST	0x01	/* selftest */
-#define PORT_ALTSCP	0x02	/* alternate SCB address */
-#define PORT_ALTDUMP	0x03	/* Alternate DUMP address */
-
-#define ISCP_BUSY	0x00010000
-
-#endif /* _M68K_MVME16xHW_H_ */
+#endif

@@ -93,6 +93,9 @@ static int prefix_len;
 
 static int status = ST_IDLE|TREQ;
 static int last_status;
+
+static int driver_running = 0;
+
 /*static int adb_delay;*/
 int in_keybinit = 1;
 
@@ -106,10 +109,14 @@ static void adb_input(unsigned char *buf, int nb, struct pt_regs *regs);
 static void adb_hw_setup_IIsi(void);
 
 /*
- * Misc. defines for testing 
+ * debug level 10 required for ADB logging (should be && debug_adb, ideally)
  */
 
 extern int console_loglevel;
+
+/*
+ * Misc. defines for testing - should go to header :-(
+ */
 
 #define ADBDEBUG_STATUS		(1)
 #define ADBDEBUG_STATE		(2)
@@ -128,7 +135,7 @@ extern int console_loglevel;
 #define ADBDEBUG_IISI		(8192)
 
 
-#define DEBUG_ADB
+/*#define DEBUG_ADB*/
 
 #ifdef DEBUG_ADB
 #define ADBDEBUG	(ADBDEBUG_INPUT | ADBDEBUG_READ | ADBDEBUG_START | ADBDEBUG_WRITE | ADBDEBUG_SRQ | ADBDEBUG_REQUEST)
@@ -857,10 +864,22 @@ void adb_data_interrupt(int irq, void *arg, struct pt_regs *regs)
 void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 {
 	int x, adbdir;
+	unsigned long flags;
 	struct adb_request *req;
 
 	last_status = status;
 
+	/* prevent races due to SCSI enabling ints */
+	save_flags(flags);
+	cli();
+
+	if (driver_running) {
+		restore_flags(flags);
+		return;
+	}
+
+	driver_running = 1;
+	
 #ifdef USE_ORIG
 	status = (~via_read(via1, vBufB) & (TIP|TREQ)) | (via_read(via1, vACR) & SR_OUT);
 #else
@@ -876,7 +895,6 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 		printk("adb_interrupt: state=%d status=%x last=%x direction=%x\n", 
 			adb_state, status, last_status, adbdir);
 #endif
-
 
 	switch (adb_state) 
 	{
@@ -1614,6 +1632,9 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 			printk("adb_interrupt: unknown adb_state %d?\n", adb_state);
 #endif
 	}
+	/* reset mutex and interrupts */
+	driver_running = 0;
+	restore_flags(flags);
 }
 
 /*

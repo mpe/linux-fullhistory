@@ -100,9 +100,16 @@ struct VIA
 # define via_1         ((*(volatile struct VIA *)VIA1_BAS))
 # define via_2         ((*(volatile struct VIA *)VIA2_BAS))
 # define via1_regp    ((volatile unsigned char *)VIA1_BAS)
-
-# define via2_regp    ((volatile unsigned char *)VIA2_BAS)
-# define via2_ci_regp ((volatile unsigned char *)VIA2_BAS_IIci)
-# define rbv_regp     ((volatile unsigned char *)VIA2_BAS_IIci)
  
+/*
+ * OSS/RBV base address 
+ */
+
+#define OSS_BAS		0x50f1a000
+#define PSC_BAS		0x50f31000
+
+/* move to oss.h?? */
+#define nIFR	0x203
+#define oIFR	0x202
+
 #endif /* linux/machw.h */

@@ -33,7 +33,6 @@
  *    been removed in this version.
  */
 
-#include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/malloc.h>
 #include <linux/mm.h>
@@ -49,7 +48,7 @@
 #define GB		(1024*MB)
 
 #define MAJOR_REV	0
-#define MINOR_REV	0
+#define MINOR_REV	1
 
 /*
  * Base addresses of the PCI memory and I/O areas on the Hades.
@@ -264,12 +263,14 @@ __initfunc(static void disable_dev(struct pci_dev *dev))
 
 #define MAX(val1, val2) ( ((val1) > (val2)) ? val1 : val2)
 
-__initfunc(static void layout_dev(struct pci_dev *dev))
+__initfunc(static void layout_dev(struct pci_dev *dev, unsigned long pci_mem_base,
+								  unsigned long pci_io_base))
 {
 	struct pci_bus *bus;
 	unsigned short cmd;
 	unsigned int base, mask, size, reg;
 	unsigned int alignto;
+	int i;
 
 	/*
 	 * Skip video cards for the time being.
@@ -283,7 +284,7 @@ __initfunc(static void layout_dev(struct pci_dev *dev))
 	bus = dev->bus;
 	pcibios_read_config_word(bus->number, dev->devfn, PCI_COMMAND, &cmd);
 
-	for (reg = PCI_BASE_ADDRESS_0; reg <= PCI_BASE_ADDRESS_5; reg += 4)
+	for (reg = PCI_BASE_ADDRESS_0, i = 0; reg <= PCI_BASE_ADDRESS_5; reg += 4, i++)
 	{
 		/*
 		 * Figure out how much space and of what type this
@@ -297,6 +298,7 @@ __initfunc(static void layout_dev(struct pci_dev *dev))
 		if (!base)
 		{
 			/* this base-address register is unused */
+			dev->base_address[i] = 0;
 			continue;
 		}
 
@@ -322,6 +324,7 @@ __initfunc(static void layout_dev(struct pci_dev *dev))
 			io_base = base + size;
 			pcibios_write_config_dword(bus->number, dev->devfn,
 						   reg, base | 0x1);
+			dev->base_address[i] = (pci_io_base + base) | 1;
 			DBG_DEVS(("layout_dev: IO address: %lX\n", base));
 		}
 		else
@@ -369,6 +372,7 @@ __initfunc(static void layout_dev(struct pci_dev *dev))
 			mem_base = base + size;
 			pcibios_write_config_dword(bus->number, dev->devfn,
 						   reg, base);
+			dev->base_address[i] = pci_mem_base + base;
 		}
 	}
 
@@ -396,7 +400,8 @@ __initfunc(static void layout_dev(struct pci_dev *dev))
 		  bus->number, PCI_SLOT(dev->devfn), dev->vendor, dev->device, dev->class));
 }
 
-__initfunc(static void layout_bus(struct pci_bus *bus))
+__initfunc(static void layout_bus(struct pci_bus *bus, unsigned long pci_mem_base,
+								  unsigned long pci_io_base))
 {
 	struct pci_dev *dev;
 
@@ -438,7 +443,7 @@ __initfunc(static void layout_bus(struct pci_bus *bus))
 	for (dev = bus->devices; dev; dev = dev->sibling)
 	{
 		if (dev->class >> 16 != PCI_BASE_CLASS_BRIDGE)
-			layout_dev(dev);
+			layout_dev(dev, pci_mem_base, pci_io_base);
 	}
 }
 
@@ -507,8 +512,7 @@ int pcibios_present(void)
 		return 0;
 }
 
-__initfunc(unsigned long pcibios_init(unsigned long mem_start,
-				      unsigned long mem_end))
+__initfunc(void pcibios_init(void))
 {
 	printk("Linux/m68k PCI BIOS32 revision %x.%02x\n", MAJOR_REV, MINOR_REV);
 
@@ -516,7 +520,8 @@ __initfunc(unsigned long pcibios_init(unsigned long mem_start,
 	printk("...NOT modifying existing PCI configuration\n");
 #endif
 
-	return mem_start;
+	pci_mem_base = 0x80000000;
+	pci_io_base = 0xB0000000;
 }
 
 /*
@@ -555,26 +560,35 @@ __initfunc(static inline void hades_fixup(void))
 	}
 }
 
-__initfunc(unsigned long pcibios_fixup(unsigned long mem_start,
-				       unsigned long mem_end))
+__initfunc(void pcibios_fixup(void))
 {
 #if PCI_MODIFY
+	unsigned long orig_mem_base, orig_io_base;
+
+	orig_mem_base = pci_mem_base;
+	orig_io_base = pci_io_base;
+	pci_mem_base = 0;
+	pci_io_base = 0;
+
 	/*
 	 * Scan the tree, allocating PCI memory and I/O space.
 	 */
 
-	layout_bus(&pci_root);
-#endif
+	layout_bus(&pci_root, orig_mem_base, orig_io_base);
 
-	pci_mem_base = 0x80000000;
-	pci_io_base = 0xB0000000;
+	pci_mem_base = orig_mem_base;
+	pci_io_base = orig_io_base;
+#endif
 
 	/*
 	 * Now is the time to do all those dirty little deeds...
 	 */
 
 	hades_fixup();
+}
 
-	return mem_start;
+__initfunc(char *pcibios_setup(char *str))
+{
+	return str;
 }
 #endif /* CONFIG_PCI */

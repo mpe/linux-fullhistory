@@ -44,6 +44,10 @@
 #include <linux/pci.h>
 #endif
 
+#ifdef CONFIG_DIO
+#include <linux/dio.h>
+#endif
+
 /*
  * Versions of gcc older than that listed below may actually compile
  * and link okay, but the end product can have subtle run time bugs.
@@ -75,6 +79,10 @@ extern long powermac_init(unsigned long, unsigned long);
 extern void sysctl_init(void);
 extern void filescache_init(void);
 extern void signals_init(void);
+
+#ifdef CONFIG_ARCH_ACORN
+extern void ecard_init(void);
+#endif
 
 extern void smp_setup(char *str, int *ints);
 #ifdef __i386__
@@ -123,6 +131,9 @@ extern void pf_setup(char *str, int *ints);
 #endif
 #ifdef CONFIG_PARIDE_PT
 extern void pt_setup(char *str, int *ints);
+#endif
+#ifdef CONFIG_PARIDE_PG
+extern void pg_setup(char *str, int *ints);
 #endif
 #ifdef CONFIG_PARIDE_PCD
 extern void pcd_setup(char *str, int *ints);
@@ -789,6 +800,9 @@ static struct kernel_param raw_params[] __initdata = {
 #ifdef CONFIG_PARIDE_PT
         { "pt.", pt_setup },
 #endif
+#ifdef CONFIG_PARIDE_PG
+        { "pg.", pg_setup },
+#endif
 	{ 0, 0 }
 };
 
@@ -1101,6 +1115,9 @@ __initfunc(asmlinkage void start_kernel(void))
 #ifdef CONFIG_SYSCTL
 	sysctl_init();
 #endif
+#ifdef CONFIG_DIO
+	dio_init();
+#endif
 
 	/*
 	 * Ok, at this point all CPU's should be initialized, so
@@ -1117,6 +1134,9 @@ __initfunc(asmlinkage void start_kernel(void))
 #endif
 #ifdef CONFIG_MCA
 	mca_init();
+#endif
+#ifdef CONFIG_ARCH_ACORN
+	ecard_init();
 #endif
 
 	/* 

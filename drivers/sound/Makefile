@@ -23,8 +23,9 @@ endif
 # This list comes from 'grep -l EXPORT_SYMBOL *.[hc]'.
 
 export-objs	:=  ad1848.o audio_syms.o midi_syms.o mpu401.o \
-		    opl3.o sb_card.o sequencer_syms.o sound_core.o \
-		    sound_firmware.o sound_syms.o uart401.o
+		    msnd.o opl3.o sb_card.o sequencer_syms.o \
+		    sound_core.o sound_firmware.o sound_syms.o \
+		    uart401.o
 
 
 
@@ -53,6 +54,8 @@ obj-$(CONFIG_SOUND_GUS)		+= gus.o ad1848.o
 obj-$(CONFIG_SOUND_MAD16)	+= mad16.o ad1848.o sb.o uart401.o
 obj-$(CONFIG_SOUND_MAUI)	+= maui.o mpu401.o
 obj-$(CONFIG_SOUND_MPU401)	+= mpu401.o
+obj-$(CONFIG_SOUND_MSNDCLAS)	+= msnd.o msnd_classic.o
+obj-$(CONFIG_SOUND_MSNDPIN)	+= msnd.o msnd_pinnacle.o
 obj-$(CONFIG_SOUND_MSS)		+= ad1848.o
 obj-$(CONFIG_SOUND_OPL3SA1)	+= opl3sa.o ad1848.o uart401.o
 obj-$(CONFIG_SOUND_PAS)		+= pas2.o sb.o uart401.o

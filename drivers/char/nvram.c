@@ -156,7 +156,7 @@ static __inline__ void nvram_set_checksum_int( void )
  *
  * They're only built if CONFIG_ATARI is defined, because Atari drivers use
  * them. For other configurations (PC), the rest of the kernel can't rely on
- * them being present (this driver couldn't be configured at all, or as a
+ * them being present (this driver may not be configured at all, or as a
  * module), so they access config information themselves.
  */
 
@@ -227,12 +227,15 @@ static long long nvram_llseek(struct file *file,loff_t offset, int origin )
 	return( (offset >= 0) ? (file->f_pos = offset) : -EINVAL );
 }
 
-static ssize_t nvram_read( struct file * file,
-						char * buf, size_t count, loff_t *ppos )
+static ssize_t nvram_read(struct file * file,
+	char * buf, size_t count, loff_t *ppos )
 {
 	unsigned long flags;
 	unsigned i = *ppos;
 	char *tmp = buf;
+	
+	if (i != *ppos)
+		return -EINVAL;
 
 	save_flags(flags);
 	cli();
@@ -250,12 +253,16 @@ static ssize_t nvram_read( struct file * file,
 	return( tmp - buf );
 }
 
-static ssize_t nvram_write( struct file * file, const char * buf, size_t count, loff_t *ppos )
+static ssize_t nvram_write(struct file * file,
+		const char * buf, size_t count, loff_t *ppos )
 {
 	unsigned long flags;
 	unsigned i = *ppos;
 	const char *tmp = buf;
 	char c;
+	
+	if (i != *ppos)
+		return -EINVAL;
 
 	save_flags(flags);
 	cli();
@@ -411,7 +418,7 @@ __initfunc(int nvram_init(void))
 	if (!CHECK_DRIVER_INIT())
 	    return( -ENXIO );
 
-	printk( "Non-volatile memory driver v%s\n", NVRAM_VERSION );
+	printk(KERN_INFO "Non-volatile memory driver v%s\n", NVRAM_VERSION );
 	misc_register( &nvram_dev );
 #ifdef CONFIG_PROC_FS
 	if ((proc_nvram = create_proc_entry( "nvram", 0, 0 )))
@@ -618,7 +625,7 @@ static char *colors[] = {
 #define fieldsize(a)	(sizeof(a)/sizeof(*a))
 
 static int atari_proc_infos( unsigned char *nvram, char *buffer, int *len,
-							 off_t *begin, off_t offset, int size )
+			    off_t *begin, off_t offset, int size )
 {
 	int checksum = nvram_check_checksum();
 	int i;
@@ -645,7 +652,7 @@ static int atari_proc_infos( unsigned char *nvram, char *buffer, int *len,
 
 	/* the following entries are defined only for the Falcon */
 	if ((atari_mch_cookie >> 16) != ATARI_MCH_FALCON)
-		return;
+		return 1;
 
 	PRINT_PROC( "OS language      : " );
 	if (nvram[6] < fieldsize(languages))

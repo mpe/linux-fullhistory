@@ -23,6 +23,7 @@
 #define PI_PCD	1	/* ATAPI CDrom */
 #define PI_PF   2	/* ATAPI disk */
 #define PI_PT	3	/* ATAPI tape */
+#define PI_PG   4       /* ATAPI generic */
 
 /* The paride module contains no state, instead the drivers allocate
    a pi_adapter data structure and pass it to paride in every operation.

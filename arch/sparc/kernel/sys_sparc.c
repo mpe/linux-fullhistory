@@ -334,15 +334,23 @@ asmlinkage int sys_pause(void)
 
 asmlinkage int sys_getdomainname(char *name, int len)
 {
-	int nlen = strlen(system_utsname.domainname);
+	int nlen;
+	int err = -EFAULT;
+	
+	down(&uts_sem);
+	
+	nlen = strlen(system_utsname.domainname);
 
 	if (nlen < len)
 		len = nlen;
 	if(len > __NEW_UTS_LEN)
-		return -EFAULT;
+		goto done
 	if(copy_to_user(name, system_utsname.domainname, len))
-		return -EFAULT;
-	return 0;
+		goto done;
+	err=0;
+done:	
+	up(&uts_sem);	
+	return err;
 }
 
 

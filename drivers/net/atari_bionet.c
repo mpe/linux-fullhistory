@@ -7,6 +7,8 @@
  *
  * Little adaptions for integration into pl7 by Roman Hodek
  *
+ * Some changes in bionet_poll_rx by Karl-Heinz Lohner
+ *
 	What is it ?
 	------------
 	This driver controls the BIONET-100 LAN-Adapter which connects
@@ -238,7 +240,7 @@ get_frame(unsigned long paddr, int odd) {
 	dma_wd.dma_mode_status		= 0x9a;
 	dma_wd.dma_mode_status		= 0x19a;
 	dma_wd.dma_mode_status		= 0x9a;
-	dma_wd.fdc_acces_seccount	= 0x05;		/* sector count */
+	dma_wd.fdc_acces_seccount	= 0x04;		/* sector count (was 5) */
 	dma_wd.dma_lo			= (unsigned char)paddr;
 	paddr >>= 8;
 	dma_wd.dma_md			= (unsigned char)paddr;
@@ -293,7 +295,7 @@ hardware_send_packet(unsigned long paddr, int cnt) {
 	paddr >>= 8;
 	dma_wd.dma_hi		= (unsigned char)paddr;
 
-	dma_wd.fdc_acces_seccount	= 0xaa;		/* sector count */
+	dma_wd.fdc_acces_seccount	= 0x4;		/* sector count */
 	restore_flags(flags);
 
 	c = sendcmd(0,0x100,NODE_ADR | C_WRITE);	/* CMD: WRITE */
@@ -454,6 +456,28 @@ bionet_send_packet(struct sk_buff *skb, struct device *dev) {
 			buf = (unsigned long)&((struct nic_pkt_s *)phys_nic_packet)->buffer;
 		}
 
+		if (bionet_debug >1) {
+			u_char *data = nic_packet->buffer, *p;
+			int i;
+			
+			printk( "%s: TX pkt type 0x%4x from ", dev->name,
+				  ((u_short *)data)[6]);
+
+			for( p = &data[6], i = 0; i < 6; i++ )
+				printk("%02x%s", *p++,i != 5 ? ":" : "" );
+			printk(" to ");
+
+			for( p = data, i = 0; i < 6; i++ )
+				printk("%02x%s", *p++,i != 5 ? ":" : "" "\n" );
+
+			printk( "%s: ", dev->name );
+			printk(" data %02x%02x %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x"
+			       " %02x%02x%02x%02x len %d\n",
+				  data[12], data[13], data[14], data[15], data[16], data[17], data[18], data[19],
+				  data[20], data[21], data[22], data[23], data[24], data[25], data[26], data[27],
+				  data[28], data[29], data[30], data[31], data[32], data[33],
+				  length );
+		}
 		dma_cache_maintenance(buf, length, 1);
 
 		stat = hardware_send_packet(buf, length);
@@ -499,7 +523,7 @@ bionet_poll_rx(struct device *dev) {
 	while(boguscount--) {
 		status = get_frame((unsigned long)phys_nic_packet, 0);
 
-		if( status != 1 ) break;
+		if( status == 0 ) break;
 
 		/* Good packet... */
 
@@ -508,34 +532,63 @@ bionet_poll_rx(struct device *dev) {
 		pkt_len = (nic_packet->l_hi << 8) | nic_packet->l_lo;
 
 		lp->poll_time = bionet_min_poll_time;    /* fast poll */
-		if( pkt_len >= 60 && pkt_len <= 1514 ) {
-
+		if( pkt_len >= 60 && pkt_len <= 1520 ) {
+					/*	^^^^ war 1514  KHL */
 			/* Malloc up new buffer.
 			 */
-			struct sk_buff *skb = alloc_skb(pkt_len, GFP_ATOMIC);
+			struct sk_buff *skb = dev_alloc_skb( pkt_len + 2 );
 			if (skb == NULL) {
 				printk("%s: Memory squeeze, dropping packet.\n",
 					dev->name);
 				lp->stats.rx_dropped++;
 				break;
 			}
-			skb->len = pkt_len;
+
 			skb->dev = dev;
+			skb_reserve( skb, 2 );		/* 16 Byte align  */
+			skb_put( skb, pkt_len );	/* make room */
 
 			/* 'skb->data' points to the start of sk_buff data area.
 			 */
 			memcpy(skb->data, nic_packet->buffer, pkt_len);
+			skb->protocol = eth_type_trans( skb, dev ); 
 			netif_rx(skb);
 			lp->stats.rx_packets++;
 			lp->stats.rx_bytes+=pkt_len;
-		}
-	}
 
 	/* If any worth-while packets have been received, dev_rint()
 	   has done a mark_bh(INET_BH) for us and will work on them
 	   when we get to the bottom-half routine.
 	 */
 
+ 			if (bionet_debug >1) {
+ 				u_char *data = nic_packet->buffer, *p;
+ 				int i;
+ 				
+ 				printk( "%s: RX pkt type 0x%4x from ", dev->name,
+ 					  ((u_short *)data)[6]);
+ 					 
+ 				
+ 				for( p = &data[6], i = 0; i < 6; i++ )
+ 					printk("%02x%s", *p++,i != 5 ? ":" : "" );
+ 				printk(" to ");
+ 				for( p = data, i = 0; i < 6; i++ )
+ 					printk("%02x%s", *p++,i != 5 ? ":" : "" "\n" );
+ 
+ 				printk( "%s: ", dev->name );
+ 				printk(" data %02x%02x %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x"
+ 				       " %02x%02x%02x%02x len %d\n",
+ 					  data[12], data[13], data[14], data[15], data[16], data[17], data[18], data[19],
+ 					  data[20], data[21], data[22], data[23], data[24], data[25], data[26], data[27],
+ 					  data[28], data[29], data[30], data[31], data[32], data[33],
+ 						  pkt_len );
+ 			}
+ 		}
+ 		else {
+ 			printk(" Packet has wrong length: %04d bytes\n", pkt_len);
+ 			lp->stats.rx_errors++;
+ 		}
+ 	}
 	stdma_release();
 	ENABLE_IRQ();
 	return;

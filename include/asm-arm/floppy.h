@@ -9,7 +9,14 @@
 #include <asm/arch/floppy.h>
 #endif
 
-#define fd_outb(val,port)	outb((val),(port))
+#define fd_outb(val,port)			\
+	do {					\
+		if ((port) == FD_DOR)		\
+			fd_setdor((val));	\
+		else				\
+			outb((val),(port));	\
+	} while(0)
+
 #define fd_inb(port)		inb((port))
 #define fd_request_irq()	request_irq(IRQ_FLOPPYDISK,floppy_interrupt,\
 					SA_INTERRUPT|SA_SAMPLE_RANDOM,"floppy",NULL)
@@ -27,6 +34,9 @@
 #define fd_set_dma_count(len)	set_dma_count(FLOPPY_DMA, (len))
 #define fd_cacheflush(addr,sz)
 
+/* need to clean up dma.h */
+#define DMA_FLOPPYDISK		DMA_FLOPPY
+
 /* Floppy_selects is the list of DOR's to select drive fd
  *
  * On initialisation, the floppy list is scanned, and the drives allocated
@@ -40,13 +50,14 @@ static unsigned char floppy_selects[2][4] =
 	{ 0x10, 0x21, 0x23, 0x33 }
 };
 
-#define fd_setdor(dor)										\
-do {												\
-	int new_dor = (dor);									\
-	if (new_dor & 0xf0)									\
-		fd_outb((new_dor & 0x0c) | floppy_selects[fdc][new_dor & 3], FD_DOR);		\
-	else											\
-		fd_outb((new_dor & 0x0c), FD_DOR);						\
+#define fd_setdor(dor)								\
+do {										\
+	int new_dor = (dor);							\
+	if (new_dor & 0xf0)							\
+		new_dor = (new_dor & 0x0c) | floppy_selects[fdc][new_dor & 3];	\
+	else									\
+		new_dor &= 0x0c;						\
+	outb(new_dor, FD_DOR);							\
 } while (0)
 
 /*

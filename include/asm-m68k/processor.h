@@ -19,7 +19,7 @@
 /* This decides where the kernel will search for a free chunk of vm
  * space during mmap's.
  */
-#define TASK_UNMAPPED_BASE(off)	0xC0000000UL
+#define TASK_UNMAPPED_BASE	0xC0000000UL
 #define TASK_UNMAPPED_ALIGN(addr, off)	PAGE_ALIGN(addr)
 
 /*
@@ -72,6 +72,9 @@ static inline void release_thread(struct task_struct *dead_task)
 {
 }
 
+#define copy_segments(nr, tsk, mm)	do { } while (0)
+#define release_segments(mm)		do { } while (0)
+
 /*
  * Free current thread data structures etc..
  */
@@ -84,19 +87,16 @@ static inline void exit_thread(void)
  */
 extern inline unsigned long thread_saved_pc(struct thread_struct *t)
 {
-	extern int sys_pause(void);
-	extern void schedule(void);
+	extern void scheduling_functions_start_here(void);
+	extern void scheduling_functions_end_here(void);
 	struct switch_stack *sw = (struct switch_stack *)t->ksp;
 	/* Check whether the thread is blocked in resume() */
-	if (sw->retpc >= (unsigned long)schedule &&
-	    sw->retpc < (unsigned long)sys_pause)
+	if (sw->retpc > (unsigned long)scheduling_functions_start_here &&
+	    sw->retpc < (unsigned long)scheduling_functions_end_here)
 		return ((unsigned long *)sw->a6)[1];
 	else
 		return sw->retpc;
 }
-
-#define copy_segments(nr, tsk, mm)	do { } while (0)
-#define release_segments(mm)		do { } while (0)
 
 /* Allocation and freeing of basic task resources. */
 #define alloc_task_struct() \

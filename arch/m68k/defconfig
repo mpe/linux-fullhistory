@@ -45,6 +45,8 @@ CONFIG_ZORRO=y
 # CONFIG_AMIGA_GSP is not set
 # CONFIG_GSP_RESOLVER is not set
 # CONFIG_GSP_A2410 is not set
+# CONFIG_HEARTBEAT is not set
+CONFIG_PROC_HARDWARE=y
 
 #
 # Block device driver configuration
@@ -133,6 +135,8 @@ CONFIG_GVP11_SCSI=y
 # CONFIG_A4091_SCSI is not set
 # CONFIG_WARPENGINE_SCSI is not set
 CONFIG_ATARI_SCSI=y
+# CONFIG_ATARI_SCSI_TOSHIBA_DELAY is not set
+# CONFIG_ATARI_SCSI_RESET_BOOT is not set
 
 #
 # Network device support

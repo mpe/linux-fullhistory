@@ -10,7 +10,7 @@
  *
  *  Machine hang caused by NULLing a live wait queue fix. <Alan.Cox@linux.org>
  *
- *  ==FILEVERSION 980607==
+ *  ==FILEVERSION 980608==
  *
  *  NOTE TO MAINTAINERS:
  *     If you modify this file at all, please set the number above to the
@@ -208,6 +208,7 @@ static void ppp_tty_wakeup (struct tty_struct *tty);
 	CHECK_PPP_MAGIC(ppp); \
 	if (!ppp->inuse) { \
 		printk (ppp_warning, __LINE__); \
+		return; \
 	} \
 } while (0)
 
@@ -1706,7 +1707,6 @@ ppp_tty_read (struct tty_struct *tty, struct file *file, __u8 * buf, size_t nr)
 {
 	struct ppp *ppp = tty2ppp (tty);
 	__u8 c;
-	int error;
 	ssize_t len, ret;
 
 #define GETC(c)						\
@@ -1720,41 +1720,40 @@ ppp_tty_read (struct tty_struct *tty, struct file *file, __u8 * buf, size_t nr)
  */
 	if (!ppp)
 		return -EIO;
-
-	/* if (ppp->magic != PPP_MAGIC)
-		return -EIO; */
-
 	CHECK_PPP (-ENXIO);
 
 /*
  * Before we attempt to write the frame to the user, ensure that the
  * user has access to the pages for the total buffer length.
  */
-	error = verify_area (VERIFY_WRITE, buf, nr);
-	if (error != 0)
-		return (error);
+	if (verify_area (VERIFY_WRITE, buf, nr))
+		return -EFAULT;
+
+/*
+ * Increment the module use count so that the module can't get unloaded
+ * while we're sleeping below.  The problem is that ppp_tty_close() can
+ * get called (as a result of a hangup from the tty) while we're sleeping.
+ */
+	MOD_INC_USE_COUNT;
 
 /*
  * Acquire the read lock.
  */
 	for (;;) {
+		ret = 0;
 		ppp = tty2ppp (tty);
 		if (!ppp || ppp->magic != PPP_MAGIC || !ppp->inuse
 		    || tty != ppp->tty)
-			return 0;
+			goto done;
 
 		if (test_and_set_bit (0, &ppp->ubuf->locked) != 0) {
-#if 0
-			if (ppp->flags & SC_DEBUG)
-				printk (KERN_DEBUG
-				     "ppp_tty_read: sleeping(ubuf)\n");
-#endif
 			current->timeout = 0;
 			current->state	 = TASK_INTERRUPTIBLE;
-			schedule ();
+			schedule();
 
+			ret = -EINTR;
 			if (signal_pending(current))
-				return -EINTR;
+				goto done;
 			continue;
 		}
 
@@ -1777,17 +1776,14 @@ ppp_tty_read (struct tty_struct *tty, struct file *file, __u8 * buf, size_t nr)
  */
 		/* no data */
 		clear_bit (0, &ppp->ubuf->locked);
+		ret = -EAGAIN;
 		if (file->f_flags & O_NONBLOCK)
-			return -EAGAIN;
+			goto done;
 		current->timeout = 0;
-#if 0
-		if (ppp->flags & SC_DEBUG)
-			printk (KERN_DEBUG
-				"ppp_tty_read: sleeping(read_wait)\n");
-#endif
 		interruptible_sleep_on (&ppp->read_wait);
+		ret = -EINTR;
 		if (signal_pending(current))
-			return -EINTR;
+			goto done;
 	}
 
 /*
@@ -1802,7 +1798,7 @@ ppp_tty_read (struct tty_struct *tty, struct file *file, __u8 * buf, size_t nr)
 				"ppp: read of %lu bytes too small for %ld "
 				"frame\n", (unsigned long) nr, (long) len + 2);
 		ppp->stats.ppp_ierrors++;
-		error = -EOVERFLOW;
+		ret = -EOVERFLOW;
 		goto out;
 	}
 
@@ -1810,35 +1806,32 @@ ppp_tty_read (struct tty_struct *tty, struct file *file, __u8 * buf, size_t nr)
  * Fake the insertion of the ADDRESS and CONTROL information because these
  * were not saved in the buffer.
  */
-	error = put_user((u_char) PPP_ALLSTATIONS, buf);
-	if (error)
+	ret = -EFAULT;
+	if (put_user((u_char) PPP_ALLSTATIONS, buf)
+	    || put_user((u_char) PPP_UI, buf+1))
 		goto out;
-	++buf;
-	error = put_user((u_char) PPP_UI, buf);
-	if (error)
-		goto out;
-	++buf;
+	buf += 2;
 
 /*
  * Copy the received data from the buffer to the caller's area.
  */
-	ret = len + 2; 	/* Account for ADDRESS and CONTROL bytes */
+	nr = len + 2; 	/* Account for ADDRESS and CONTROL bytes */
 	while (len-- > 0) {
 		GETC (c);
-		error = put_user(c, buf);
-		if (error)
+		if (put_user(c, buf))
 			goto out;
 		++buf;
 	}
-
-	clear_bit (0, &ppp->ubuf->locked);
-	return ret;
+	ret = nr;
 
 out:
-	ppp->ubuf->tail += len;
-	ppp->ubuf->tail &= ppp->ubuf->size;
-	clear_bit (0, &ppp->ubuf->locked);
-	return error;
+	if (len > 0)
+		ppp->ubuf->tail = (ppp->ubuf->tail + len) & ppp->ubuf->size;
+	clear_bit(0, &ppp->ubuf->locked);
+
+done:
+	MOD_DEC_USE_COUNT;
+	return ret;
 #undef GETC
 }
 
@@ -2100,6 +2093,14 @@ ppp_tty_write (struct tty_struct *tty, struct file *file, const __u8 * data,
 	error = -EFAULT;
 	if (copy_from_user(new_data, data, count))
 		goto out_free;
+
+/*
+ * Increment the module use count so that the module can't get unloaded
+ * while we're sleeping below.  The problem is that ppp_tty_close() can
+ * get called (as a result of a hangup from the tty) while we're sleeping.
+ */
+	MOD_INC_USE_COUNT;
+
 /*
  * Lock this PPP unit so we will be the only writer,
  * sleeping if necessary.
@@ -2131,7 +2132,7 @@ ppp_tty_write (struct tty_struct *tty, struct file *file, const __u8 * data,
 	current->state = TASK_RUNNING;
 	remove_wait_queue(&ppp->write_wait, &wait);
 	if (error)
-		goto out_free;
+		goto out_free_dec;
 
 /*
  * Change the LQR frame
@@ -2154,6 +2155,8 @@ ppp_tty_write (struct tty_struct *tty, struct file *file, const __u8 * data,
 	}
 	error = count;
 
+out_free_dec:
+	MOD_DEC_USE_COUNT;
 out_free:
 	kfree (new_data);
 out:
@@ -2619,6 +2622,7 @@ ppp_dev_open (struct device *dev)
 			dev->name);
 
 	CHECK_PPP (-ENXIO);
+	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -2631,6 +2635,7 @@ ppp_dev_close (struct device *dev)
 {
 	struct ppp *ppp = dev2ppp (dev);
 
+	MOD_DEC_USE_COUNT;
 	if (ppp2tty (ppp) == NULL) {
 		return -ENXIO;
 	}
@@ -3094,6 +3099,8 @@ ppp_alloc (void)
 		ppp_last->next = ppp;
 	ppp_last = ppp;
 	ppp->next = 0;
+	ppp->read_wait	= NULL;
+	ppp->write_wait = NULL;
 
 	dev = ppp2dev(ppp);
 	dev->next      = NULL;

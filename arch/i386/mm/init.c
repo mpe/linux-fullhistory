@@ -27,10 +27,65 @@
 #include <asm/pgtable.h>
 #include <asm/dma.h>
 
-const char bad_pmd_string[] = "Bad pmd in pte_alloc: %08lx\n";
-
 extern void die_if_kernel(char *,struct pt_regs *,long);
 extern void show_net_buffers(void);
+
+void __bad_pte_kernel(pmd_t *pmd)
+{
+	printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
+	pmd_val(*pmd) = _KERNPG_TABLE + __pa(BAD_PAGETABLE);
+}
+
+void __bad_pte(pmd_t *pmd)
+{
+	printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
+	pmd_val(*pmd) = _PAGE_TABLE + __pa(BAD_PAGETABLE);
+}
+
+pte_t *get_pte_kernel_slow(pmd_t *pmd, unsigned long offset)
+{
+	pte_t *pte;
+
+	pte = (pte_t *) __get_free_page(GFP_KERNEL);
+	if (pmd_none(*pmd)) {
+		if (pte) {
+			clear_page((unsigned long)pte);
+			pmd_val(*pmd) = _KERNPG_TABLE + __pa(pte);
+			return pte + offset;
+		}
+		pmd_val(*pmd) = _KERNPG_TABLE + __pa(BAD_PAGETABLE);
+		return NULL;
+	}
+	free_page((unsigned long)pte);
+	if (pmd_bad(*pmd)) {
+		__bad_pte_kernel(pmd);
+		return NULL;
+	}
+	return (pte_t *) pmd_page(*pmd) + offset;
+}
+
+pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
+{
+	unsigned long pte;
+
+	pte = (unsigned long) __get_free_page(GFP_KERNEL);
+	if (pmd_none(*pmd)) {
+		if (pte) {
+			clear_page(pte);
+			pmd_val(*pmd) = _PAGE_TABLE + __pa(pte);
+			return (pte_t *)(pte + offset);
+		}
+		pmd_val(*pmd) = _PAGE_TABLE + __pa(BAD_PAGETABLE);
+		return NULL;
+	}
+	free_page(pte);
+	if (pmd_bad(*pmd)) {
+		__bad_pte(pmd);
+		return NULL;
+	}
+	return (pte_t *) (pmd_page(*pmd) + offset);
+}
+
 
 /*
  * BAD_PAGE is the page that is used for page faults when linux
@@ -82,7 +137,7 @@ void show_mem(void)
 		total++;
 		if (PageReserved(mem_map+i))
 			reserved++;
-		if (PageSwapCache(mem_map+i))
+		else if (PageSwapCache(mem_map+i))
 			cached++;
 		else if (!atomic_read(&mem_map[i].count))
 			free++;
@@ -93,6 +148,7 @@ void show_mem(void)
 	printk("%d reserved pages\n",reserved);
 	printk("%d pages shared\n",shared);
 	printk("%d pages swap cached\n",cached);
+	printk("%ld pages in page table cache\n",pgtable_cache_size);
 	show_buffers();
 #ifdef CONFIG_NET
 	show_net_buffers();

@@ -133,12 +133,16 @@ int vmalloc_area_pages(unsigned long address, unsigned long size)
 	dir = pgd_offset_k(address);
 	flush_cache_all();
 	while (address < end) {
-		pmd_t *pmd = pmd_alloc_kernel(dir, address);
+		pmd_t *pmd;
+		pgd_t olddir = *dir;
+		
+		pmd = pmd_alloc_kernel(dir, address);
 		if (!pmd)
 			return -ENOMEM;
 		if (alloc_area_pmd(pmd, address, end - address))
 			return -ENOMEM;
-		set_pgdir(address, *dir);
+		if (pgd_val(olddir) != pgd_val(*dir))
+			set_pgdir(address, *dir);
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	}
@@ -155,14 +159,13 @@ struct vm_struct * get_vm_area(unsigned long size)
 	if (!area)
 		return NULL;
 	addr = (void *) VMALLOC_START;
-	area->size = size + PAGE_SIZE;
-	area->next = NULL;
 	for (p = &vmlist; (tmp = *p) ; p = &tmp->next) {
 		if (size + (unsigned long) addr < (unsigned long) tmp->addr)
 			break;
 		addr = (void *) (tmp->size + (unsigned long) tmp->addr);
 	}
 	area->addr = addr;
+	area->size = size + PAGE_SIZE;
 	area->next = *p;
 	*p = area;
 	return area;
@@ -210,16 +213,18 @@ void * vmalloc(unsigned long size)
 
 long vread(char *buf, char *addr, unsigned long count)
 {
-	struct vm_struct **p, *tmp;
+	struct vm_struct *tmp;
 	char *vaddr, *buf_start = buf;
-	int n;
+	unsigned long n;
 
 	/* Don't allow overflow */
 	if ((unsigned long) addr + count < count)
 		count = -(unsigned long) addr;
 
-	for (p = &vmlist; (tmp = *p) ; p = &tmp->next) {
+	for (tmp = vmlist; tmp; tmp = tmp->next) {
 		vaddr = (char *) tmp->addr;
+		if (addr >= vaddr + tmp->size - PAGE_SIZE)
+			continue;
 		while (addr < vaddr) {
 			if (count == 0)
 				goto finished;
@@ -228,17 +233,15 @@ long vread(char *buf, char *addr, unsigned long count)
 			addr++;
 			count--;
 		}
-		n = tmp->size - PAGE_SIZE;
-		if (addr > vaddr)
-			n -= addr - vaddr;
-		while (--n >= 0) {
+		n = vaddr + tmp->size - PAGE_SIZE - addr;
+		do {
 			if (count == 0)
 				goto finished;
 			put_user(*addr, buf);
 			buf++;
 			addr++;
 			count--;
-		}
+		} while (--n > 0);
 	}
 finished:
 	return buf - buf_start;

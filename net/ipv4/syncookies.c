@@ -9,7 +9,7 @@
  *      as published by the Free Software Foundation; either version
  *      2 of the License, or (at your option) any later version.
  * 
- *  $Id: syncookies.c,v 1.5 1998/04/03 09:49:46 freitag Exp $
+ *  $Id: syncookies.c,v 1.6 1998/06/10 07:29:22 davem Exp $
  *
  *  Missing: IPv6 support. 
  */

@@ -20,8 +20,8 @@
  *
  * In addition, there are some optional registers:
  *
- *	base+3		EPP command
- *	base+4		EPP
+ *	base+3		EPP address
+ *	base+4		EPP data
  *	base+0x400	ECP config A
  *	base+0x401	ECP config B
  *	base+0x402	ECP control
@@ -60,12 +60,30 @@ static void parport_pc_null_intr_func(int irq, void *dev_id, struct pt_regs *reg
 
 void parport_pc_write_epp(struct parport *p, unsigned char d)
 {
-	outb(d, p->base+EPPREG);
+	outb(d, p->base+EPPDATA);
 }
 
 unsigned char parport_pc_read_epp(struct parport *p)
 {
-	return inb(p->base+EPPREG);
+	return inb(p->base+EPPDATA);
+}
+
+void parport_pc_write_epp_addr(struct parport *p, unsigned char d)
+{
+	outb(d, p->base+EPPADDR);
+}
+
+unsigned char parport_pc_read_epp_addr(struct parport *p)
+{
+	return inb(p->base+EPPADDR);
+}
+
+int parport_pc_check_epp_timeout(struct parport *p)
+{
+	if (!(inb(p->base+STATUS) & 1))
+		return 0;
+	parport_pc_epp_clear_timeout(p);
+	return 1;
 }
 
 unsigned char parport_pc_read_configb(struct parport *p)
@@ -196,7 +214,7 @@ size_t parport_pc_epp_read_block(struct parport *p, void *buf, size_t length)
 {
 	size_t got = 0;
 	for (; got < length; got++) {
-		*((char*)buf)++ = inb (p->base+EPPREG);
+		*((char*)buf)++ = inb (p->base+EPPDATA);
 		if (inb (p->base+STATUS) & 0x01)
 			break;
 	}
@@ -207,7 +225,7 @@ size_t parport_pc_epp_write_block(struct parport *p, void *buf, size_t length)
 {
 	size_t written = 0;
 	for (; written < length; written++) {
-		outb (*((char*)buf)++, p->base+EPPREG);
+		outb (*((char*)buf)++, p->base+EPPDATA);
 		if (inb (p->base+STATUS) & 0x01)
 			break;
 	}
@@ -267,6 +285,12 @@ struct parport_operations parport_pc_ops =
 	parport_pc_release_resources,
 	parport_pc_claim_resources,
 	
+	parport_pc_write_epp,
+	parport_pc_read_epp,
+	parport_pc_write_epp_addr,
+	parport_pc_read_epp_addr,
+	parport_pc_check_epp_timeout,
+
 	parport_pc_epp_write_block,
 	parport_pc_epp_read_block,
 
@@ -290,7 +314,7 @@ struct parport_operations parport_pc_ops =
 /*
  * Clear TIMEOUT BIT in EPP MODE
  */
-static int epp_clear_timeout(struct parport *pb)
+int parport_pc_epp_clear_timeout(struct parport *pb)
 {
 	unsigned char r;
 
@@ -313,6 +337,14 @@ static int epp_clear_timeout(struct parport *pb)
  */
 static int parport_SPP_supported(struct parport *pb)
 {
+	/*
+	 * first clear an eventually pending EPP timeout 
+	 * I (sailer@ife.ee.ethz.ch) have an SMSC chipset
+	 * that does not even respond to SPP cycles if an EPP
+	 * timeout is pending
+	 */
+	parport_pc_epp_clear_timeout(pb);
+
 	/* Do a simple read-write test to make sure the port exists. */
 	parport_pc_write_control(pb, 0xc);
 	parport_pc_write_data(pb, 0xaa);
@@ -406,18 +438,18 @@ static int parport_ECP_supported(struct parport *pb)
 static int parport_EPP_supported(struct parport *pb)
 {
 	/* If EPP timeout bit clear then EPP available */
-	if (!epp_clear_timeout(pb))
+	if (!parport_pc_epp_clear_timeout(pb))
 		return 0;  /* No way to clear timeout */
 
 	parport_pc_write_control(pb, parport_pc_read_control(pb) | 0x20);
 	parport_pc_write_control(pb, parport_pc_read_control(pb) | 0x10);
-	epp_clear_timeout(pb);
+	parport_pc_epp_clear_timeout(pb);
 	
 	parport_pc_read_epp(pb);
 	udelay(30);  /* Wait for possible EPP timeout */
 	
 	if (parport_pc_read_status(pb) & 0x01) {
-		epp_clear_timeout(pb);
+		parport_pc_epp_clear_timeout(pb);
 		return PARPORT_MODE_PCEPP;
 	}
 
@@ -465,7 +497,7 @@ static int parport_PS2_supported(struct parport *pb)
 	int ok = 0;
 	unsigned char octr = parport_pc_read_control(pb);
   
-	epp_clear_timeout(pb);
+	parport_pc_epp_clear_timeout(pb);
 
 	parport_pc_write_control(pb, octr | 0x20);  /* try to tri-state the buffer */
 	
@@ -563,10 +595,10 @@ static int irq_probe_EPP(struct parport *pb)
 	if (pb->modes & PARPORT_MODE_PCECR)
 		parport_pc_frob_econtrol (pb, 0x10, 0x10);
 	
-	epp_clear_timeout(pb);
+	parport_pc_epp_clear_timeout(pb);
 	parport_pc_frob_control (pb, 0x20, 0x20);
 	parport_pc_frob_control (pb, 0x10, 0x10);
-	epp_clear_timeout(pb);
+	parport_pc_epp_clear_timeout(pb);
 
 	/* Device isn't expecting an EPP read
 	 * and generates an IRQ.
@@ -648,12 +680,12 @@ static int parport_irq_probe(struct parport *pb)
 	    (pb->modes & PARPORT_MODE_PCECPEPP))
 		pb->irq = irq_probe_EPP(pb);
 
-	epp_clear_timeout(pb);
+	parport_pc_epp_clear_timeout(pb);
 
 	if (pb->irq == PARPORT_IRQ_NONE && (pb->modes & PARPORT_MODE_PCEPP))
 		pb->irq = irq_probe_EPP(pb);
 
-	epp_clear_timeout(pb);
+	parport_pc_epp_clear_timeout(pb);
 
 	if (pb->irq == PARPORT_IRQ_NONE)
 		pb->irq = irq_probe_SPP(pb);

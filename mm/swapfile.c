@@ -28,10 +28,7 @@
 
 unsigned int nr_swapfiles = 0;
 
-static struct {
-	int head;	/* head of priority-ordered swapfile list */
-	int next;	/* swapfile to be used next */
-} swap_list = {-1, -1};
+struct swap_list_t swap_list = {-1, -1};
 
 struct swap_info_struct swap_info[MAX_SWAPFILES];
 
@@ -595,7 +592,7 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 	p->flags = SWP_WRITEOK;
 	p->pages = j;
 	nr_swap_pages += j;
-	printk("Adding Swap: %dk swap-space (priority %d)\n",
+	printk(KERN_INFO "Adding Swap: %dk swap-space (priority %d)\n",
 	       j<<(PAGE_SHIFT-10), p->prio);
 
 	/* insert swap space into swap_list: */

@@ -26,9 +26,9 @@
 
 #define VIA1_SOURCE_BASE	8
 #define VIA2_SOURCE_BASE	16
-#define RBF_SOURCE_BASE		24
+#define RBV_SOURCE_BASE		24
 #define MAC_SCC_SOURCE_BASE	32
-#define NUBUS_SOURCE_BASE	40
+#define NUBUS_SOURCE_BASE	56
 #define NUBUS_MAX_SOURCES	8
 
 /* FIXME: sources not contigous ... */
@@ -41,14 +41,6 @@
  * quick hack to adapt old MACHSPEC-aware source
  */
 #define	IRQ_IDX(irq)	(irq)
-
-#if 0
-/* convert vector number to int source number */
-#define IRQ_VECTOR_TO_SOURCE(v)	(v)
-
-/* convert irq_handler index to vector number */
-#define IRQ_SOURCE_TO_VECTOR(i)	(i)
-#endif
 
 /* interrupt service types */
 #define IRQ_TYPE_SLOW     0
@@ -96,6 +88,7 @@
 #define IRQ_VIA2_6	  (22)
 #define IRQ_VIA2_7        (23)
 
+#if 0
 /* RBV interrupts */
 #define IRQ_RBV_0	  (24)
 #define IRQ_RBV_1	  (25)
@@ -105,10 +98,19 @@
 #define IRQ_RBV_5	  (29)
 #define IRQ_RBV_6	  (30)
 #define IRQ_RBV_7	  (31)
+#endif
 
+/* Level 3 (PSC, AV Macs only) interrupts */
+#define IRQ_PSC3_0	  (24)
+#define IRQ_MAC_MACE	  IRQ_PSC3_0
+#define IRQ_PSC3_1	  (25)
+#define IRQ_PSC3_2	  (26)
+#define IRQ_PSC3_3	  (27)
+
+/* Level 4 (SCC) interrupts */
 #define IRQ_SCC 	     (32)
-#define IRQ_SCCB	     (32)
-#define IRQ_SCCA	     (33)
+#define IRQ_SCCB	     (33)
+#define IRQ_SCCA	     (34)
 #if 0 /* FIXME: are there multiple interrupt conditions on the SCC ?? */
 /* SCC interrupts */
 #define IRQ_SCCB_TX	     (32)
@@ -121,7 +123,27 @@
 #define IRQ_SCCA_SPCOND	     (39)
 #endif
 
-#define IRQ_NUBUS_1	     (40)
+/* Level 4 (PSC, AV Macs only) interrupts */
+#define IRQ_PSC4_0	  (32)
+#define IRQ_PSC4_1	  (33)
+#define IRQ_PSC4_2	  (34)
+#define IRQ_PSC4_3	  (35)
+#define IRQ_MAC_MACE_DMA  IRQ_PSC4_3
+
+/* Level 5 (PSC, AV Macs only) interrupts */
+#define IRQ_PSC5_0	  (40)
+#define IRQ_PSC5_1	  (41)
+#define IRQ_PSC5_2	  (42)
+#define IRQ_PSC5_3	  (43)
+
+/* Level 6 (PSC, AV Macs only) interrupts */
+#define IRQ_PSC6_0	  (48)
+#define IRQ_PSC6_1	  (49)
+#define IRQ_PSC6_2	  (50)
+#define IRQ_PSC6_3	  (51)
+
+/* Nubus interrupts (cascaded to VIA2) */
+#define IRQ_NUBUS_1	  (56)
 
 #define INT_CLK   24576	    /* CLK while int_clk =2.456MHz and divide = 100 */
 #define INT_TICKS 246	    /* to make sched_time = 99.902... HZ */

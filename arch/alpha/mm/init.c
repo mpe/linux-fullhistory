@@ -28,6 +28,67 @@ extern void show_net_buffers(void);
 
 struct thread_struct * original_pcb_ptr;
 
+#ifndef __SMP__
+struct pgtable_cache_struct quicklists;
+#endif
+
+void __bad_pmd(pgd_t *pgd)
+{
+	printk("Bad pgd in pmd_alloc: %08lx\n", pgd_val(*pgd));
+	pgd_set(pgd, BAD_PAGETABLE);
+}
+
+void __bad_pte(pmd_t *pmd)
+{
+	printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
+	pmd_set(pmd, (pte_t *) BAD_PAGETABLE);
+}
+
+pmd_t *get_pmd_slow(pgd_t *pgd, unsigned long offset)
+{
+	pmd_t *pmd;
+
+	pmd = (pmd_t *) __get_free_page(GFP_KERNEL);
+	if (pgd_none(*pgd)) {
+		if (pmd) {
+			clear_page((unsigned long)pmd);
+			pgd_set(pgd, pmd);
+			return pmd + offset;
+		}
+		pgd_set(pgd, BAD_PAGETABLE);
+		return NULL;
+	}
+	free_page((unsigned long)pmd);
+	if (pgd_bad(*pgd)) {
+		__bad_pmd(pgd);
+		return NULL;
+	}
+	return (pmd_t *) pgd_page(*pgd) + offset;
+}
+
+pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
+{
+	pte_t *pte;
+
+	pte = (pte_t *) __get_free_page(GFP_KERNEL);
+	if (pmd_none(*pmd)) {
+		if (pte) {
+			clear_page((unsigned long)pte);
+			pmd_set(pmd, pte);
+			return pte + offset;
+		}
+		pmd_set(pmd, (pte_t *) BAD_PAGETABLE);
+		return NULL;
+	}
+	free_page((unsigned long)pte);
+	if (pmd_bad(*pmd)) {
+		__bad_pte(pmd);
+		return NULL;
+	}
+	return (pte_t *) pmd_page(*pmd) + offset;
+}
+
+
 /*
  * BAD_PAGE is the page that is used for page faults when linux
  * is out-of-memory. Older versions of linux just did a
@@ -56,7 +117,7 @@ pte_t __bad_page(void)
 void show_mem(void)
 {
 	int i,free = 0,total = 0,reserved = 0;
-	int shared = 0;
+	int shared = 0, cached = 0;
 
 	printk("\nMem-info:\n");
 	show_free_areas();
@@ -66,6 +127,8 @@ void show_mem(void)
 		total++;
 		if (PageReserved(mem_map+i))
 			reserved++;
+		else if (PageSwapCache(mem_map+i))
+			cached++;
 		else if (!atomic_read(&mem_map[i].count))
 			free++;
 		else
@@ -75,6 +138,8 @@ void show_mem(void)
 	printk("%d free pages\n",free);
 	printk("%d reserved pages\n",reserved);
 	printk("%d pages shared\n",shared);
+	printk("%d pages swap cached\n",cached);
+	printk("%d pages in page table cache\n",pgtable_cache_size);
 	show_buffers();
 #ifdef CONFIG_NET
 	show_net_buffers();
@@ -213,16 +278,16 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 
 void free_initmem (void)
 {
-        extern char __init_begin, __init_end;
-        unsigned long addr;
+	extern char __init_begin, __init_end;
+	unsigned long addr;
 
-        addr = (unsigned long)(&__init_begin);
-        for (; addr < (unsigned long)(&__init_end); addr += PAGE_SIZE) {
-                mem_map[MAP_NR(addr)].flags &= ~(1 << PG_reserved);
-                atomic_set(&mem_map[MAP_NR(addr)].count, 1);
-                free_page(addr);
-        }
-        printk ("Freeing unused kernel memory: %ldk freed\n",
+	addr = (unsigned long)(&__init_begin);
+	for (; addr < (unsigned long)(&__init_end); addr += PAGE_SIZE) {
+		mem_map[MAP_NR(addr)].flags &= ~(1 << PG_reserved);
+		atomic_set(&mem_map[MAP_NR(addr)].count, 1);
+		free_page(addr);
+	}
+	printk ("Freeing unused kernel memory: %ldk freed\n",
 		(&__init_end - &__init_begin) >> 10);
 }
 

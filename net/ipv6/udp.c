@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.28 1998/05/03 14:31:12 alan Exp $
+ *	$Id: udp.c,v 1.29 1998/05/15 15:21:39 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -689,7 +689,7 @@ static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen)
 		}
 	} else {
 		if (sk->state != TCP_ESTABLISHED)
-			return(-EINVAL);
+			return(-ENOTCONN);
 		
 		udh.uh.dest = sk->dport;
 		daddr = &sk->net_pinfo.af_inet6.daddr;

@@ -5,8 +5,8 @@
  * This driver is based on the CyberStorm driver, hence the occasional
  * reference to CyberStorm.
  *
- * Betatesting & crucial adjustments by Patrik Rak 
- * (prak3264@ss1000.ms.mff.cuni.cz)
+ * Betatesting & crucial adjustments by
+ *        Patrik Rak (prak3264@ss1000.ms.mff.cuni.cz)
  *
  */
 
@@ -43,8 +43,11 @@
 
 #include <asm/pgtable.h>
 
+/* Such day has just come... */
+#if 0
 /* Let this defined unless you really need to enable DMA IRQ one day */
 #define NODMAIRQ
+#endif
 
 static int  dma_bytes_sent(struct NCR_ESP *esp, int fifo_count);
 static int  dma_can_transfer(struct NCR_ESP *esp, Scsi_Cmnd *sp);
@@ -55,6 +58,7 @@ static void dma_init_write(struct NCR_ESP *esp, __u32 vaddr, int length);
 static void dma_ints_off(struct NCR_ESP *esp);
 static void dma_ints_on(struct NCR_ESP *esp);
 static int  dma_irq_p(struct NCR_ESP *esp);
+static void dma_irq_exit(struct NCR_ESP *esp);
 static void dma_led_off(struct NCR_ESP *esp);
 static void dma_led_on(struct NCR_ESP *esp);
 static int  dma_ports_p(struct NCR_ESP *esp);
@@ -113,7 +117,7 @@ int fastlane_esp_detect(Scsi_Host_Template *tpnt)
 		esp->dma_drain = 0;
 		esp->dma_invalidate = 0;
 		esp->dma_irq_entry = 0;
-		esp->dma_irq_exit = 0;
+		esp->dma_irq_exit = &dma_irq_exit;
 		esp->dma_led_on = &dma_led_on;
 		esp->dma_led_off = &dma_led_off;
 		esp->dma_poll = 0;
@@ -158,6 +162,7 @@ int fastlane_esp_detect(Scsi_Host_Template *tpnt)
 		esp->edev = (void *) address;
 		
 		/* Set the command buffer */
+		esp->esp_command = (volatile unsigned char*) cmd_buffer;
 		esp->esp_command_dvma = VTOP((unsigned long) cmd_buffer);
 
 		esp->irq = IRQ_AMIGA_PORTS;
@@ -278,39 +283,34 @@ static void dma_ints_on(struct NCR_ESP *esp)
 	enable_irq(esp->irq);
 }
 
+static void dma_irq_exit(struct NCR_ESP *esp)
+{
+	struct fastlane_dma_registers *dregs = 
+		(struct fastlane_dma_registers *) (esp->dregs);
+
+	dregs->ctrl_reg = ctrl_data & ~(FASTLANE_DMA_EDI|FASTLANE_DMA_ESI);
+	nop();
+	dregs->ctrl_reg = ctrl_data;
+}
+
 static int dma_irq_p(struct NCR_ESP *esp)
 {
 	struct fastlane_dma_registers *dregs = 
 		(struct fastlane_dma_registers *) (esp->dregs);
-#if 0
 	unsigned char dma_status;
-	int r = 0;
 
 	dma_status = dregs->cond_reg;
 
 	if(dma_status & FASTLANE_DMA_IACT)
 		return 0;	/* not our IRQ */
 
-	/* Return 1 if ESP requested IRQ */
-	if(
+	/* Return non-zero if ESP requested IRQ */
+	return (
 #ifndef NODMAIRQ
 	   (dma_status & FASTLANE_DMA_CREQ) &&
 #endif
 	   (!(dma_status & FASTLANE_DMA_MINT)) &&
-	   ((((struct ESP_regs *) (esp->eregs))->esp_status) & ESP_STAT_INTR))
-		r = 1;
-
-	dregs->ctrl_reg = (ctrl_data & ~(FASTLANE_DMA_EDI|FASTLANE_DMA_ESI) );
-	dregs->ctrl_reg = ctrl_data;
-
-	return r;
-#else
-	int r;
-	r = (((struct ESP_regs *) (esp->eregs))->esp_status) & ESP_STAT_INTR;
-	dregs->ctrl_reg = ctrl_data & ~(FASTLANE_DMA_EDI|FASTLANE_DMA_ESI);
-	dregs->ctrl_reg = ctrl_data;
-	return r;
-#endif
+	   ((((struct ESP_regs *) (esp->eregs))->esp_status) & ESP_STAT_INTR));
 }
 
 static void dma_led_off(struct NCR_ESP *esp)

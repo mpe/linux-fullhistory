@@ -178,6 +178,9 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 			dlen = get_joliet_filename(de, dir, page);
 			dpnt = page;
 #endif
+		} else if (dir->i_sb->u.isofs_sb.s_mapping == 'a') {
+			dlen = get_acorn_filename(de, page, dir);
+			dpnt = page;
 		} else if (dir->i_sb->u.isofs_sb.s_mapping == 'n') {
 			for (i = 0; i < dlen; i++) {
 				c = dpnt[i];

@@ -5,7 +5,7 @@ with 2.1.86 and 2.1.88) with modularized sound support these lines can
 be issued (of course with the suitable values for the parameters)
 after PNP setup:
 
-insmod  sound.o
+modprobe  sound.o
 insmod  uart401.o
 insmod  sb.o io=0x220 irq=5 dma=1 dma16=5 mpu_io=0x330
 insmod  awe_wave.o
@@ -59,5 +59,6 @@ rmmod opl3
 rmmod sb
 rmmod uart401
 rmmod sound
+rmmod soundcore
  -----
 

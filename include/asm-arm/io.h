@@ -170,44 +170,5 @@ __IO(l,"",long)
 #undef ARCH_IO_DELAY
 #undef ARCH_IO_CONSTANT
 
-/*
- * Leftovers...
- */
-#if 0
-#define __outwc(value,port)						\
-({									\
-	if (port < 256)							\
-		__asm__ __volatile__(					\
-		"strh	%0, [%1, %2]"					\
-		: : "r" (value), "r" (PCIO_BASE), "J" (port << 2));	\
-	else if (__PORT_PCIO(port))					\
-		__asm__ __volatile__(					\
-		"strh	%0, [%1, %2]"					\
-		: : "r" (value), "r" (PCIO_BASE), "r" (port << 2));	\
-	else								\
-		__asm__ __volatile__(					\
-		"strh	%0, [%1, %2]"					\
-		: : "r" (value), "r" (IO_BASE), "r" (port << 2));	\
-})
-
-#define __inwc(port)							\
-({									\
-	unsigned short result;						\
-	if (port < 256)							\
-		__asm__ __volatile__(					\
-		"ldrh	%0, [%1, %2]"					\
-		: "=r" (result) : "r" (PCIO_BASE), "J" (port << 2));	\
-	else								\
-	if (__PORT_PCIO(port))						\
-		__asm__ __volatile__(					\
-		"ldrh	%0, [%1, %2]"					\
-		: "=r" (result) : "r" (PCIO_BASE), "r" (port << 2));	\
-	else								\
-		__asm__ __volatile__(					\
-		"ldrh	%0, [%1, %2]"					\
-		: "=r" (result) : "r" (IO_BASE), "r" (port << 2));	\
-	result;								\
-})
-#endif
 #endif
 

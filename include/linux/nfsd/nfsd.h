@@ -60,6 +60,7 @@ struct readdir_cd {
 };
 typedef int		(*encode_dent_fn)(struct readdir_cd *, const char *,
 						int, off_t, ino_t);
+typedef int (*nfsd_dirop_t)(struct inode *, struct dentry *, int, int);
 
 /*
  * Procedure table for NFSv2
@@ -72,6 +73,8 @@ extern struct svc_program	nfsd_program;
  */
 int		nfsd_svc(unsigned short port, int nrservs);
 
+/* nfsd/vfs.c */
+int		fh_lock_parent(struct svc_fh *, struct dentry *);
 void		nfsd_racache_init(void);
 int		nfsd_lookup(struct svc_rqst *, struct svc_fh *,
 				const char *, int, struct svc_fh *);

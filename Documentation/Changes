@@ -33,7 +33,7 @@ http://cyberbuzz.gatech.edu/kaboom/linux/ as well.
    Also, don't forget http://www.linuxhq.com/ for all your Linux kernel
 needs.
 
-Last updated: May 12, 1998
+Last updated: May 31, 1998
 Current Author: Chris Ricker (kaboom@gatech.edu).
 
 Current Minimal Requirements
@@ -47,10 +47,10 @@ running, the suggested command should tell you.
 - Gnu C 		 2.7.2.3                 ; gcc --version
 - Binutils		 2.8.1.0.23              ; ld -v
 - Linux C Library	 5.4.44                  ; ls -l /lib/libc.so.*
-- Dynamic Linker (ld.so) 1.9.5                   ; ldd --version
+- Dynamic Linker (ld.so) 1.9.9                   ; ldd --version or ldd -v
 - Linux C++ Library	 2.7.2.8                 ; ls -l /usr/lib/libg++.so.*
 - Procps		 1.2.7                   ; ps --version
-- Procinfo               13                      ; procinfo -v
+- Procinfo               14                      ; procinfo -v
 - Mount                  2.7l                    ; mount --version
 - Net-tools              1.45                    ; hostname -V
 - Loadlin                1.6a
@@ -190,6 +190,17 @@ net-tools.  This will also fix other problems.  For example, the format
 of /proc/net/dev changed; as a result, an older ifconfig will
 incorrectly report errors.
 
+   As of 2.1.102, the firewalling code has been replaced with
+firewalling chains.  See
+http://www.adelaide.net.au/~rustcorp/ipfwchains/ipfwchains.html for
+more information.  Among other things, you'll now need to use ipchains
+instead of ipfwadm to configure your filters.
+
+   The IP firewalling code has been replaced: ipfwadm will no longer
+work.  You need to obtain `ipchains', available from
+http://www.adelaide.net.au/~rustcorp/ipfwchains/ipfwchains.html
+which includes an ipfwadm wrapper.
+
 Memory
 ======
 
@@ -209,8 +220,8 @@ use autofs as well as the new NFS utils.
 RPM
 ===
 
-   If you run Red Hat Linux or any other distribution that uses RPM, you
-need to upgrade RPM to version 2.2.7 or later.
+   If you run Red Hat Linux or any other distribution that uses RPM,
+you need to upgrade RPM to version 2.2.7 or later.
 
 DOSEMU
 ======
@@ -344,9 +355,9 @@ ftp://sunsite.unc.edu/pub/Linux/GCC/release.libg++-2.7.2.8
 Dynamic Linker
 ==============
 
-The 1.9.5 release:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/ld.so-1.9.5.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/GCC/ld.so-1.9.5.tar.gz
+The 1.9.9 release:
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/ld.so-1.9.9.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/GCC/ld.so-1.9.9.tar.gz
 
 Modules utilities
 =================
@@ -364,21 +375,21 @@ ftp://sunsite.unc.edu/pub/Linux/system/status/ps/procps-1.2.7.tgz
 Procinfo utilities
 ==================
 
-The 13 release:
-ftp://ftp.cistron.nl/pub/people/svm/procinfo-13.tar.gz
+The 14 release:
+ftp://ftp.cistron.nl/pub/people/svm/procinfo-14.tar.gz
 
 RPM utilities
 =============
 
 The 2.2.7 release for Intel:
-ftp://ftp.redhat.com/pub/redhat/redhat-4.0/updates/i386/rpm-2.2.7-1.i386.rpm
-ftp://ftp.redhat.com/pub/redhat/redhat-4.0/updates/i386/rpm-devel-2.2.7-1.i386.rpm
+ftp://ftp.redhat.com/pub/redhat/old-releases/redhat-4.0/updates/i386/rpm-2.2.7-1.i386.rpm
+ftp://ftp.redhat.com/pub/redhat/old-releases/redhat-4.0/updates/i386/rpm-devel-2.2.7-1.i386.rpm
 The 2.2.7 release for Alpha:
-ftp://ftp.redhat.com/pub/redhat/redhat-4.0/updates/axp/rpm-2.2.7-1.axp.rpm
-ftp://ftp.redhat.com/pub/redhat/redhat-4.0/updates/axp/rpm-devel-2.2.7-1.axp.rpm
+ftp://ftp.redhat.com/pub/redhat/old-releases/redhat-4.0/updates/axp/rpm-2.2.7-1.axp.rpm
+ftp://ftp.redhat.com/pub/redhat/old-releases/redhat-4.0/updates/axp/rpm-devel-2.2.7-1.axp.rpm
 The 2.2.7 release for SPARC:
-ftp://ftp.redhat.com/pub/redhat/redhat-4.0/updates/i386/rpm-2.2.7-1.sparc.rpm
-ftp://ftp.redhat.com/pub/redhat/redhat-4.0/updates/i386/rpm-devel-2.2.7-1.sparc.rpm
+ftp://ftp.redhat.com/pub/redhat/old-releases/redhat-4.0/updates/sparc/rpm-2.2.7-1.sparc.rpm
+ftp://ftp.redhat.com/pub/redhat/old-releases/redhat-4.0/updates/sparc/rpm-devel-2.2.7-1.sparc.rpm
 
 DOSEMU
 ======
@@ -455,6 +466,13 @@ PPP
 
 The 2.3.5 release:
 ftp://cs.anu.edu.au/pub/software/ppp/ppp-2.3.5.tar.gz
+
+IP Chains
+=========
+
+The 1.3.3 release:
+http://www.adelaide.net.au/~rustcorp/ipfwchains/ipchains-source-1.3.3.tar.gz
+http://www.adelaide.net.au/~rustcorp/ipfwchains/ipchains-source-1.3.3.tar.bz2
 
 Other Info
 ==========

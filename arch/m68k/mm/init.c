@@ -30,40 +30,6 @@
 extern void die_if_kernel(char *,struct pt_regs *,long);
 extern void init_kpointer_table(void);
 extern void show_net_buffers(void);
-extern const char PgtabStr_bad_pmd[];
-
-struct pgtable_cache_struct quicklists;
-
-void __bad_pte(pmd_t *pmd)
-{
-	printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
-	pmd_set(pmd, BAD_PAGETABLE);
-}
-
-pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
-{
-	pte_t *pte;
-
-	pte = (pte_t *) __get_free_page(GFP_KERNEL);
-	if (pmd_none(*pmd)) {
-		if (pte) {
-			memset(pte, 0, PAGE_SIZE)
- 			flush_page_to_ram((unsigned long)pte);
-			flush_tlb_kernel_page((unsigned long)pte);
-			nocache_page((unsigned long)pte);
-			pmd_set(pmd, pte);
-			return pte + offset;
-		}
-		pmd_set(pmd, BAD_PAGETABLE);
-		return NULL;
-	}
-	free_page((unsigned long)pte);
-	if (pmd_bad(*pmd)) {
-		__bad_pte(pmd);
-		return NULL;
-	}
-	return (pte_t *) pmd_page(*pmd) + offset;
-}
 
 /*
  * BAD_PAGE is the page that is used for page faults when linux
@@ -110,7 +76,7 @@ void show_mem(void)
 	total++;
 	if (PageReserved(mem_map+i))
 	    reserved++;
-	else if (PageSwapCache(mem_map+i))
+	if (PageSwapCache(mem_map+i))
 	    cached++;
 	else if (!atomic_read(&mem_map[i].count))
 	    free++;
@@ -125,7 +91,6 @@ void show_mem(void)
     printk("%d pages nonshared\n",nonshared);
     printk("%d pages shared\n",shared);
     printk("%d pages swap cached\n",cached);
-    printk("%d pages in page table cache\n",pgtable_cache_size);
     show_buffers();
 #ifdef CONFIG_NET
     show_net_buffers();
@@ -266,7 +231,7 @@ map_chunk (unsigned long addr, unsigned long size, unsigned long *memavailp))
 			 */
 			for (i = 0; i < 64; i++) {
 				pte_val(ktablep[i]) = physaddr | _PAGE_PRESENT
-					| _PAGE_CACHE040 | _PAGE_GLOBAL040
+				  | m68k_supervisor_cachemode | _PAGE_GLOBAL040
 					| _PAGE_ACCESSED;
 				physaddr += PAGE_SIZE;
 			}

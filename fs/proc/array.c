@@ -544,6 +544,23 @@ static unsigned long get_wchan(struct task_struct *p)
 	}
 #elif defined(__powerpc__)
 	return (p->tss.wchan);
+#elif defined (CONFIG_ARM)
+	{
+		unsigned long fp, lr;
+		unsigned long stack_page;
+		int count = 0;
+
+		stack_page = 4096 + (unsigned long)p;
+		fp = get_css_fp (&p->tss);
+		do {
+			if (fp < stack_page || fp > 4092+stack_page)
+				return 0;
+			lr = pc_pointer (((unsigned long *)fp)[-1]);
+			if (lr < first_sched || lr > last_sched)
+				return lr;
+			fp = *(unsigned long *) (fp - 12);
+		} while (count ++ < 16);
+	}
 #endif
 	return 0;
 }
@@ -560,6 +577,9 @@ static unsigned long get_wchan(struct task_struct *p)
 # define KSTK_EIP(tsk) \
     (*(unsigned long *)(PT_REG(pc) + PAGE_SIZE + (unsigned long)(tsk)))
 # define KSTK_ESP(tsk)	((tsk) == current ? rdusp() : (tsk)->tss.usp)
+#elif defined(CONFIG_ARM)
+# define KSTK_EIP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1022])
+# define KSTK_ESP(tsk)	(((unsigned long *)(4096+(unsigned long)(tsk)))[1020])
 #elif defined(__mc68000__)
 #define	KSTK_EIP(tsk)	\
     ({			\
@@ -704,21 +724,6 @@ static inline char * task_mem(struct task_struct *p, char *buffer)
 			data - stack, stack,
 			exec - lib, lib);
 	}
-	return buffer;
-}
-
-char * render_sigset_t(sigset_t *set, char *buffer)
-{
-	int i = _NSIG, x;
-	do {
-		i -= 4, x = 0;
-		if (sigismember(set, i+1)) x |= 1;
-		if (sigismember(set, i+2)) x |= 2;
-		if (sigismember(set, i+3)) x |= 4;
-		if (sigismember(set, i+4)) x |= 8;
-		*buffer++ = (x < 10 ? '0' : 'a' - 10) + x;
-	} while (i >= 4);
-	*buffer = 0;
 	return buffer;
 }
 

@@ -12,14 +12,16 @@ L_OBJS   := auto_irq.o
 M_OBJS   :=
 MOD_LIST_NAME := NET_MODULES
 
-# Need these to keep track of whether the 8390, PPP and SLHC modules should
-# really go in the kernel or a module.
+# Need these to keep track of whether the 7990 (LANCE), 8390, PPP and SLHC 
+# modules should really go in the kernel or a module.
 CONFIG_8390_BUILTIN :=
 CONFIG_8390_MODULE  :=
 CONFIG_SLHC_BUILTIN :=
 CONFIG_SLHC_MODULE  :=
 CONFIG_PPPDEF_BUILTIN :=
 CONFIG_PPPDEF_MODULE  :=
+CONFIG_7990_BUILTIN :=
+CONFIG_7990_MODULE :=
 
 ifeq ($(CONFIG_ISDN),y)
   ifeq ($(CONFIG_ISDN_PPP),y)
@@ -111,6 +113,13 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_ETHERH),y)
+CONFIG_8390_BUILTIN = y
+else
+  ifeq ($(CONFIG_ETHERH),m)
+  CONFIG_8390_MODULE = y
+  endif
+endif
 
 ifeq ($(CONFIG_WD80x3),y)
 L_OBJS += wd.o
@@ -667,6 +676,24 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_HPLANCE),y)
+L_OBJS += hplance.o
+CONFIG_7990_BUILTIN = y
+else
+  ifeq ($(CONFIG_HPLANCE),m)
+  CONFIG_7990_MODULE = y
+  M_OBJS += hplance.o
+  endif
+endif
+# If we need generic LANCE support, either in the kernel or as a module,
+# build it in the appropriate way.
+ifdef CONFIG_7990_BUILTIN
+L_OBJS += 7990.o
+else
+  ifdef CONFIG_7990_MODULE
+  M_OBJS += 7990.o
+  endif
+endif
 
 ifeq ($(CONFIG_EQUALIZER),y)
 L_OBJS += eql.o

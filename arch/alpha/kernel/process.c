@@ -120,6 +120,7 @@ asmlinkage int sys_idle(void)
 	/* endless idle loop with no priority at all */
 	current->counter = -100;
 	for (;;) {
+		check_pgt_cache();
 		schedule();
 	}
 	ret = 0;

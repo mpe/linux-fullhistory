@@ -55,8 +55,12 @@ extern char reboot_command [];
 extern unsigned long htab_reclaim_on, zero_paged_on;
 #endif
 
+extern int pgt_cache_water[];
+
 static int parse_table(int *, int, void *, size_t *, void *, size_t,
 		       ctl_table *, void **);
+static int proc_doutsstring(ctl_table *table, int write, struct file *filp,
+		  void *buffer, size_t *lenp);
 
 
 static ctl_table root_table[];
@@ -138,15 +142,15 @@ static ctl_table root_table[] = {
 
 static ctl_table kern_table[] = {
 	{KERN_OSTYPE, "ostype", system_utsname.sysname, 64,
-	 0444, NULL, &proc_dostring, &sysctl_string},
+	 0444, NULL, &proc_doutsstring, &sysctl_string},
 	{KERN_OSRELEASE, "osrelease", system_utsname.release, 64,
-	 0444, NULL, &proc_dostring, &sysctl_string},
+	 0444, NULL, &proc_doutsstring, &sysctl_string},
 	{KERN_VERSION, "version", system_utsname.version, 64,
-	 0444, NULL, &proc_dostring, &sysctl_string},
+	 0444, NULL, &proc_doutsstring, &sysctl_string},
 	{KERN_NODENAME, "hostname", system_utsname.nodename, 64,
-	 0644, NULL, &proc_dostring, &sysctl_string},
+	 0644, NULL, &proc_doutsstring, &sysctl_string},
 	{KERN_DOMAINNAME, "domainname", system_utsname.domainname, 64,
-	 0644, NULL, &proc_dostring, &sysctl_string},
+	 0644, NULL, &proc_doutsstring, &sysctl_string},
 	{KERN_PANIC, "panic", &panic_timeout, sizeof(int),
 	 0644, NULL, &proc_dointvec},
 #ifdef CONFIG_BLK_DEV_INITRD
@@ -202,6 +206,8 @@ static ctl_table vm_table[] = {
 	 &page_cache, sizeof(buffer_mem_t), 0644, NULL, &proc_dointvec},
 	{VM_PAGERDAEMON, "kswapd",
 	 &pager_daemon, sizeof(pager_daemon_t), 0644, NULL, &proc_dointvec},
+	{VM_PGT_CACHE, "pagetable_cache", 
+	 &pgt_cache_water, 2*sizeof(int), 0600, NULL, &proc_dointvec},
 	{0}
 };
 
@@ -627,6 +633,21 @@ int proc_dostring(ctl_table *table, int write, struct file *filp,
 		filp->f_pos += len;
 	}
 	return 0;
+}
+
+/*
+ *	Special case of dostring for the UTS structure. This has locks
+ *	to observe. Should this be in kernel/sys.c ????
+ */
+ 
+static int proc_doutsstring(ctl_table *table, int write, struct file *filp,
+		  void *buffer, size_t *lenp)
+{
+	int r;
+	down(&uts_sem);
+	r=proc_dostring(table,write,filp,buffer,lenp);
+	up(&uts_sem);
+	return r;
 }
 
 static int do_proc_dointvec(ctl_table *table, int write, struct file *filp,

@@ -294,7 +294,7 @@ SYMBOL_NAME_STR(atari_fast_irq_handler) ":
 	addql	#8,%%sp
 	addql	#4,%%sp
 	jbra	"SYMBOL_NAME_STR(ret_from_interrupt)
-	 : : "i" (&kstat.irqs), "n" (PT_OFF_FORMATVEC)
+	 : : "i" (&kstat.irqs[0]), "n" (PT_OFF_FORMATVEC)
 );
 }
 

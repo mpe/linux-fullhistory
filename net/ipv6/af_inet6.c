@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.33 1998/05/08 21:06:32 davem Exp $
+ *	$Id: af_inet6.c,v 1.36 1998/06/10 07:29:25 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -422,6 +422,11 @@ int ipv6_unload(void)
 }
 #endif
 
+#if defined(MODULE) && defined(CONFIG_SYSCTL)
+extern void ipv6_sysctl_register(void);
+extern void ipv6_sysctl_unregister(void);
+#endif
+
 #ifdef MODULE
 int init_module(void)
 #else
@@ -515,7 +520,7 @@ icmp_fail:
 void cleanup_module(void)
 {
 	/* First of all disallow new sockets creation. */
-	sock_unregister(AF_INET6);
+	sock_unregister(PF_INET6);
 #ifdef CONFIG_PROC_FS
 	proc_net_unregister(proc_net_raw6.low_ino);
 	proc_net_unregister(proc_net_tcp6.low_ino);

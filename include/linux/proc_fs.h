@@ -49,6 +49,7 @@ enum root_directory_inos {
 	PROC_SLABINFO,
 	PROC_PARPORT,
 	PROC_PPC_HTAB,
+	PROC_STRAM,
 	PROC_SOUND,
 	PROC_MTRR, /* whether enabled or not */
 	PROC_FS

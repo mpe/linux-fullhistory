@@ -34,26 +34,10 @@
 #include <asm/machdep.h>
 #include <asm/mvme16xhw.h>
 
-typedef struct {
-	unsigned char
-		ctrl,
-		bcd_sec,
-		bcd_min,
-		bcd_hr,
-		bcd_dow,
-		bcd_dom,
-		bcd_mth,
-		bcd_year;
-} MK48T08;
-
-#define RTC_WRITE	0x80
-#define RTC_READ	0x40
-#define RTC_STOP	0x20
-
 int atari_SCC_reset_done = 1;		/* So SCC doesn't get reset */
 u_long atari_mch_cookie = 0;
 
-MK48T08 * volatile rtc = (MK48T08 *)0xfffc1ff8;
+static MK48T08ptr_t volatile rtc = (MK48T08ptr_t)MVME_RTC_BASE;
 
 extern void mvme16x_process_int (int level, struct pt_regs *regs);
 extern void mvme16x_init_IRQ (void);
@@ -143,6 +127,11 @@ static int mvme16x_get_hardware_list(char *buffer)
 }
 
 
+#define pcc2chip	((volatile u_char *)0xfff42000)
+#define PccSCCMICR	0x1d
+#define PccSCCTICR	0x1e
+#define PccSCCRICR	0x1f
+
 __initfunc(void config_mvme16x(void))
 {
     p_bdid p = (p_bdid)mvme_bdid_ptr;
@@ -197,7 +186,43 @@ __initfunc(void config_mvme16x(void))
 			rev & MVME16x_CONFIG_NO_ETHERNET ? "NOT " : "");
     }
     else
+    {
 	mvme16x_config = MVME16x_CONFIG_GOT_LP | MVME16x_CONFIG_GOT_CD2401;
+
+	/* Dont allow any interrupts from the CD2401 until the interrupt */
+	/* handlers are installed					 */
+
+	pcc2chip[PccSCCMICR] = 0x10;
+	pcc2chip[PccSCCTICR] = 0x10;
+	pcc2chip[PccSCCRICR] = 0x10;
+    }
+}
+
+static void mvme16x_abort_int (int irq, void *dev_id, struct pt_regs *fp)
+{
+	p_bdid p = (p_bdid)mvme_bdid_ptr;
+	unsigned long *new = (unsigned long *)vectors;
+	unsigned long *old = (unsigned long *)0xffe00000;
+	volatile unsigned char uc, *ucp;
+
+	if (p->brdno == 0x0162 || p->brdno == 0x172)
+	{
+		ucp = (volatile unsigned char *)0xfff42043;
+		uc = *ucp | 8;
+		*ucp = uc;
+	}
+	else
+	{
+		*(volatile unsigned long *)0xfff40074 = 0x40000000;
+	}
+	*(new+4) = *(old+4);		/* Illegal instruction */
+	*(new+9) = *(old+9);		/* Trace */
+	*(new+47) = *(old+47);		/* Trap #15 */
+
+	if (p->brdno == 0x0162 || p->brdno == 0x172)
+		*(new+0x5e) = *(old+0x5e);	/* ABORT switch */
+	else
+		*(new+0x6e) = *(old+0x6e);	/* ABORT switch */
 }
 
 static void mvme16x_timer_int (int irq, void *dev_id, struct pt_regs *fp)
@@ -208,15 +233,26 @@ static void mvme16x_timer_int (int irq, void *dev_id, struct pt_regs *fp)
 
 void mvme16x_sched_init (void (*timer_routine)(int, void *, struct pt_regs *))
 {
+    p_bdid p = (p_bdid)mvme_bdid_ptr;
+    int irq;
+
     tick_handler = timer_routine;
     /* Using PCCchip2 or MC2 chip tick timer 1 */
     *(volatile unsigned long *)0xfff42008 = 0;
     *(volatile unsigned long *)0xfff42004 = 10000;	/* 10ms */
     *(volatile unsigned char *)0xfff42017 |= 3;
     *(volatile unsigned char *)0xfff4201b = 0x16;
-    if (request_irq(IRQ_MVME16x_TIMER, mvme16x_timer_int, 0,
+    if (request_irq(MVME16x_IRQ_TIMER, mvme16x_timer_int, 0,
 				"timer", mvme16x_timer_int))
 	panic ("Couldn't register timer int");
+
+    if (p->brdno == 0x0162 || p->brdno == 0x172)
+	irq = MVME162_IRQ_ABORT;
+    else
+        irq = MVME167_IRQ_ABORT;
+    if (request_irq(irq, mvme16x_abort_int, 0,
+				"abort", mvme16x_abort_int))
+	panic ("Couldn't register abort int");
 }
 
 
@@ -254,74 +290,9 @@ int mvme16x_set_clock_mmss (unsigned long nowtime)
 	return 0;
 }
 
-/*
- * console_map_init(), here to avoid having to modify drivers/block/genhd.c
- */
-
-void console_map_init(void)
-{
-}
-
-/*
- * fbmem_init(), here to avoid having to modify drivers/char/mem.c
- */
-
-void fbmem_init(void)
-{
-}
-
-/* Avoid mods to drivers/char/tty_io.c */
-
-unsigned long con_init(unsigned long kmem_start)
-{
-	return (kmem_start);
-}
-
-/* Avoid mods to drivers/char/tty_io.c */
-
-int vcs_init(void)
-{
-	return (0);
-}
-
-/* Avoid mods to drivers/char/tty_io.c */
-
-int kbd_init(void)
-{
-	return (0);
-}
-
-/* Avoid mods to init/main.c */
-
-void no_scroll(char *str, int *ints)
-{
-}
-
-/* Avoid mods to kernel/panic.c */
-
-void do_unblank_screen(void)
-{
-}
-
 int mvme16x_keyb_init (void)
 {
 	return 0;
-}
-
-void mvme16x_set_vectors (void)
-{
-	p_bdid p = (p_bdid)mvme_bdid_ptr;
-	unsigned long *new = (unsigned long *)vectors;
-	unsigned long *old = (unsigned long *)0xffe00000;;
-
-	*(new+4) = *(old+4);		/* Illegal instruction */
-	*(new+9) = *(old+9);		/* Trace */
-	*(new+47) = *(old+47);		/* Trap #15 */
-
-	if (p->brdno == 0x0162 || p->brdno == 0x172)
-		*(new+0x5e) = *(old+0x5e);	/* ABORT switch */
-	else
-		*(new+0x6e) = *(old+0x6e);	/* ABORT switch */
 }
 
 /*-------------------  Serial console stuff ------------------------*/
@@ -372,7 +343,7 @@ static void scc_delay (void)
 
 static void scc_write (char ch)
 {
-	volatile char *p = (volatile char *)SCC_A_ADDR;
+	volatile char *p = (volatile char *)MVME_SCC_A_ADDR;
 
 	do {
 		scc_delay();

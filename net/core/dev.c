@@ -1097,7 +1097,7 @@ static int sprintf_stats(char *buffer, struct device *dev)
 	int size;
 	
 	if (stats)
-		size = sprintf(buffer, "%6s:%8lu %7lu %4lu %4lu %4lu %5lu %10lu %9lu %8lu %8lu %4lu %4lu %4lu %5lu %4lu %4lu\n",
+		size = sprintf(buffer, "%6s:%8lu %7lu %4lu %4lu %4lu %5lu %10lu %9lu %8lu %7lu %4lu %4lu %4lu %5lu %7lu %10lu\n",
  		   dev->name,
 		   stats->rx_bytes,
 		   stats->rx_packets, stats->rx_errors,
@@ -1325,7 +1325,7 @@ int dev_change_flags(struct device *dev, unsigned flags)
 	dev->flags = (flags & (IFF_DEBUG|IFF_NOTRAILERS|IFF_RUNNING|IFF_NOARP|
 			       IFF_SLAVE|IFF_MASTER|
 			       IFF_MULTICAST|IFF_PORTSEL|IFF_AUTOMEDIA)) |
-				       (dev->flags & (IFF_UP|IFF_VOLATILE|IFF_PROMISC));
+				       (dev->flags & (IFF_UP|IFF_VOLATILE|IFF_PROMISC|IFF_ALLMULTI));
 
 	/*
 	 *	Load in the correct multicast list now the flags have changed.
@@ -1346,18 +1346,26 @@ int dev_change_flags(struct device *dev, unsigned flags)
 
 		if (ret == 0) 
 			dev_mc_upload(dev);
-	}       
+	}
 
 	if (dev->flags&IFF_UP &&
-	    ((old_flags^dev->flags)&~(IFF_UP|IFF_RUNNING|IFF_PROMISC|IFF_VOLATILE))) {
-		printk(KERN_DEBUG "SIFFL %s(%s)\n", dev->name, current->comm);
+	    ((old_flags^dev->flags)&~(IFF_UP|IFF_RUNNING|IFF_PROMISC|IFF_ALLMULTI|IFF_VOLATILE)))
 		notifier_call_chain(&netdev_chain, NETDEV_CHANGE, dev);
-	}
 
 	if ((flags^dev->gflags)&IFF_PROMISC) {
 		int inc = (flags&IFF_PROMISC) ? +1 : -1;
 		dev->gflags ^= IFF_PROMISC;
 		dev_set_promiscuity(dev, inc);
+	}
+
+	/* NOTE: order of synchronization of IFF_PROMISC and IFF_ALLMULTI
+	   is important. Some (broken) drivers set IFF_PROMISC, when
+	   IFF_ALLMULTI is requested not asking us and not reporting.
+	 */
+	if ((flags^dev->gflags)&IFF_ALLMULTI) {
+		int inc = (flags&IFF_ALLMULTI) ? +1 : -1;
+		dev->gflags ^= IFF_ALLMULTI;
+		dev_set_allmulti(dev, inc);
 	}
 
 	return ret;
@@ -1378,7 +1386,8 @@ static int dev_ifsioc(struct ifreq *ifr, unsigned int cmd)
 	switch(cmd) 
 	{
 		case SIOCGIFFLAGS:	/* Get interface flags */
-			ifr->ifr_flags = (dev->flags&~IFF_PROMISC)|(dev->gflags&IFF_PROMISC);
+			ifr->ifr_flags = (dev->flags&~(IFF_PROMISC|IFF_ALLMULTI))
+				|(dev->gflags&(IFF_PROMISC|IFF_ALLMULTI));
 			return 0;
 
 		case SIOCSIFFLAGS:	/* Set interface flags */

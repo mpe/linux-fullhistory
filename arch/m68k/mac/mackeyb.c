@@ -600,13 +600,13 @@ __initfunc(int mac_keyb_init(void))
 	volatile int ct;
 
 	/* setup key map */
-	memcpy (plain_map, mac_plain_map, sizeof(plain_map));
-	memcpy(shift_map, mac_shift_map, sizeof(shift_map));
-	memcpy(altgr_map, mac_altgr_map, sizeof(altgr_map));
-	memcpy(ctrl_map, mac_ctrl_map, sizeof(ctrl_map));
-	memcpy(shift_ctrl_map, mac_shift_ctrl_map, sizeof(shift_ctrl_map));
-	memcpy(alt_map, mac_alt_map, sizeof(alt_map));
-	memcpy(ctrl_alt_map, mac_ctrl_alt_map, sizeof(ctrl_alt_map));
+	memcpy(key_maps[0], mac_plain_map, sizeof(plain_map));
+	memcpy(key_maps[1], mac_shift_map, sizeof(plain_map));
+	memcpy(key_maps[2], mac_altgr_map, sizeof(plain_map));
+	memcpy(key_maps[4], mac_ctrl_map, sizeof(plain_map));
+	memcpy(key_maps[5], mac_shift_ctrl_map, sizeof(plain_map));
+	memcpy(key_maps[8], mac_alt_map, sizeof(plain_map));
+	memcpy(key_maps[12], mac_ctrl_alt_map, sizeof(plain_map));
 
 	/* initialize mouse interrupt hook */
 	mac_mouse_interrupt_hook = NULL;

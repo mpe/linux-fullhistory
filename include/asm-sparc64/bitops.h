@@ -186,6 +186,53 @@ extern __inline__ unsigned long ffz(unsigned long word)
 	return result;
 }
 
+/*
+ * ffs: find first bit set. This is defined the same way as
+ * the libc and compiler builtin ffs routines, therefore
+ * differs in spirit from the above ffz (man ffs).
+ */
+
+#define ffs(x) generic_ffs(x)
+
+/*
+ * hweightN: returns the hamming weight (i.e. the number
+ * of bits set) of a N-bit word
+ */
+
+#ifdef ULTRA_HAS_POPULATION_COUNT
+
+extern __inline__ unsigned int hweight32(unsigned int w)
+{
+	unsigned int res;
+
+	__asm__ ("popc %1,%0" : "=r" (res) : "r" (w & 0xffffffff));
+	return res;
+}
+
+extern __inline__ unsigned int hweight16(unsigned int w)
+{
+	unsigned int res;
+
+	__asm__ ("popc %1,%0" : "=r" (res) : "r" (w & 0xffff));
+	return res;
+}
+
+extern __inline__ unsigned int hweight8(unsigned int w)
+{
+	unsigned int res;
+
+	__asm__ ("popc %1,%0" : "=r" (res) : "r" (w & 0xff));
+	return res;
+}
+
+#else
+
+#define hweight32(x) generic_hweight32(x)
+#define hweight16(x) generic_hweight16(x)
+#define hweight8(x) generic_hweight8(x)
+
+#endif
+
 /* find_next_zero_bit() finds the first zero bit in a bit string of length
  * 'size' bits, starting the search at bit 'offset'. This is largely based
  * on Linus's ALPHA routines, which are pretty portable BTW.

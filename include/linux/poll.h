@@ -79,8 +79,8 @@ int get_fd_set(unsigned long nr, void *ufdset, unsigned long *fdset)
 	if (ufdset) {
 		int error;
 		error = verify_area(VERIFY_WRITE, ufdset, nr);
-		if (!error)
-			error = __copy_from_user(fdset, ufdset, nr);
+		if (!error && __copy_from_user(fdset, ufdset, nr))
+			error = -EFAULT;
 		return error;
 	}
 	memset(fdset, 0, nr);

@@ -123,6 +123,10 @@ static int tty_release(struct inode *, struct file *);
 static int tty_ioctl(struct inode * inode, struct file * file,
 		     unsigned int cmd, unsigned long arg);
 static int tty_fasync(struct file * filp, int on);
+#ifdef CONFIG_8xx
+extern long console_8xx_init(void);
+extern int rs_8xx_init(void);
+#endif /* CONFIG_8xx */
 
 #ifndef MIN
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
@@ -2055,6 +2059,9 @@ __initfunc(int tty_init(void))
 #ifdef CONFIG_SERIAL
 	rs_init();
 #endif
+#ifdef CONFIG_MAC_SERIAL
+	macserial_init();
+#endif
 #ifdef CONFIG_ROCKETPORT
 	rp_init();
 #endif
@@ -2079,6 +2086,9 @@ __initfunc(int tty_init(void))
 #ifdef CONFIG_SPECIALIX
 	specialix_init();
 #endif
+#ifdef CONFIG_8xx
+        rs_8xx_init();
+#endif /* CONFIG_8xx */
 	pty_init();
 #ifdef CONFIG_VT
 	vcs_init();

@@ -252,7 +252,7 @@ __teql_resolve(struct sk_buff *skb, struct sk_buff *skb_res, struct device *dev)
 		return 0;
 	}
 	neigh_release(n);
-	return (skb_res != NULL);
+	return (skb_res == NULL) ? -EAGAIN : 1;
 }
 
 static __inline__ int
@@ -280,7 +280,7 @@ static int teql_master_xmit(struct sk_buff *skb, struct device *dev)
 
 restart:
 	nores = 0;
-	busy = 1;
+	busy = 0;
 
 	if ((q = start) == NULL)
 		goto drop;
@@ -288,34 +288,39 @@ restart:
 	do {
 		struct device *slave = q->dev;
 		
-		if (!slave->tbusy && slave->qdisc_sleeping == q) {
-			busy = 0;
-			
-			if (q->h.forw == NULL) {
-				q->h.forw = qdisc_head.forw;
-				qdisc_head.forw = &q->h;
-			}
+		if (slave->qdisc_sleeping != q)
+			continue;
+		if (slave->tbusy) {
+			busy = 1;
+			continue;
+		}
 
-			switch (teql_resolve(skb, skb_res, slave)) {
-			case 0:
-				if (slave->hard_start_xmit(skb, slave) == 0) {
-					master->slaves = NEXT_SLAVE(q);
-					dev->tbusy = 0;
-					master->stats.tx_packets++;
-					master->stats.tx_bytes += len;
-					return 0;
-				}
-				break;
-			case 1:
+		if (q->h.forw == NULL) {
+			q->h.forw = qdisc_head.forw;
+			qdisc_head.forw = &q->h;
+		}
+
+		switch (teql_resolve(skb, skb_res, slave)) {
+		case 0:
+			if (slave->hard_start_xmit(skb, slave) == 0) {
 				master->slaves = NEXT_SLAVE(q);
 				dev->tbusy = 0;
-				return 0;
-			default:
-				nores = 1;
-				break;
+				master->stats.tx_packets++;
+				master->stats.tx_bytes += len;
+					return 0;
 			}
-			__skb_pull(skb, skb->nh.raw - skb->data);
+			if (dev->tbusy)
+				busy = 1;
+			break;
+		case 1:
+			master->slaves = NEXT_SLAVE(q);
+			dev->tbusy = 0;
+			return 0;
+		default:
+			nores = 1;
+			break;
 		}
+		__skb_pull(skb, skb->nh.raw - skb->data);
 	} while ((q = NEXT_SLAVE(q)) != start);
 
 	if (nores && skb_res == NULL) {

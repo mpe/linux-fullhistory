@@ -334,7 +334,6 @@ void ei_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	}
     
 	dev->interrupt = 1;
-	sti();
     
 	/* Change to page 0 and read the intr status reg. */
 	outb_p(E8390_NODMA+E8390_PAGE0, e8390_base + E8390_CMD);

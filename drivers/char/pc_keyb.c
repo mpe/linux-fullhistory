@@ -178,6 +178,20 @@ __initfunc(static char *initialize_kbd2(void))
 		              | KBD_MODE_DISABLE_MOUSE
 		              | KBD_MODE_KCC);
 
+	/* ibm powerpc portables need this to use scan-code set 1 -- Cort */
+	kbd_write(KBD_CNTL_REG, KBD_CCMD_READ_MODE);
+	if (!(kbd_wait_for_input() & KBD_MODE_KCC)) {
+		/*
+		 * If the controller does not support conversion,
+		 * Set the keyboard to scan-code set 1.
+		 */
+		kbd_write(KBD_DATA_REG, 0xF0);
+		kbd_wait_for_input();
+		kbd_write(KBD_DATA_REG, 0x01);
+		kbd_wait_for_input();
+	}
+
+	
 	kbd_write(KBD_DATA_REG, KBD_CMD_ENABLE);
 	if (kbd_wait_for_input() != KBD_REPLY_ACK)
 		return "Enable keyboard: no ACK";

@@ -39,8 +39,8 @@ WHAT IS LINUX?
 ON WHAT HARDWARE DOES IT RUN?
 
   Linux was first developed for 386/486-based PCs.  These days it also
-  runs on DEC Alphas, SUN Sparcs, M68000 machines (like Atari and Amiga),
-  MIPS, PowerPC, and others.
+  runs on ARMs, DEC Alphas, SUN Sparcs, M68000 machines (like Atari and
+  Amiga), MIPS and PowerPC, and others.
 
 DOCUMENTATION:
 

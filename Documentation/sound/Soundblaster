@@ -32,7 +32,11 @@ To make this driver work with Mwave you must set mwave_bug. You also need
 to warm boot from DOS/Windows with the required firmware loaded under this
 OS. IBM are being difficult about documenting how to load this firmware.
 
-Advance Logic ALS007
+Avance Logic ALS007
 
-This card isn't currently supported. I have patches to merge however that
-add limited support.
+This card is supported; see the separate file ALS007 for full details.
+
+Avance Logic ALS100
+
+This card is supported; setup should be as for a standard Sound Blaster 16.
+The driver will identify the audio device as a "Sound Blaster 16 (ALS-100)".

@@ -1435,7 +1435,7 @@ static __inline__ int cbq_dump_police(struct sk_buff *skb, struct cbq_class *cl)
 
 	if (cl->police) {
 		opt.police = cl->police;
-		RTA_PUT(skb, TCA_CBQ_OVL_STRATEGY, sizeof(opt), &opt);
+		RTA_PUT(skb, TCA_CBQ_POLICE, sizeof(opt), &opt);
 	}
 	return skb->len;
 

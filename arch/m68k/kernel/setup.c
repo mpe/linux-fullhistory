@@ -102,6 +102,8 @@ extern void config_mac(void);
 extern void config_sun3(void);
 extern void config_apollo(void);
 extern void config_mvme16x(void);
+extern void config_bmve6000(void);
+extern void config_hp300(void);
 
 #define MASK_256K 0xfffc0000
 
@@ -249,6 +251,16 @@ __initfunc(void setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 	    case MACH_MVME16x:
 	    	config_mvme16x();
 	    	break;
+#endif
+#ifdef CONFIG_BVME6000
+	    case MACH_BVME6000:
+	    	config_bvme6000();
+	    	break;
+#endif
+#ifdef CONFIG_HP300
+	    case MACH_HP300:
+		config_hp300();
+		break;
 #endif
 	    default:
 		panic ("No configuration setup");

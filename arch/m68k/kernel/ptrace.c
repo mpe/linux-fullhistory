@@ -347,9 +347,13 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			goto out;
 		child->flags |= PF_PTRACED;
 		if (child->p_pptr != current) {
+			unsigned long flags;
+
+			write_lock_irqsave(&tasklist_lock, flags);
 			REMOVE_LINKS(child);
 			child->p_pptr = current;
 			SET_LINKS(child);
+			write_unlock_irqrestore(&tasklist_lock, flags);
 		}
 		send_sig(SIGSTOP, child, 1);
 		ret = 0;
@@ -491,6 +495,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		}
 
 		case PTRACE_DETACH: { /* detach a process that was attached. */
+			unsigned long flags;
 			long tmp;
 
 			ret = -EIO;
@@ -499,9 +504,11 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			child->flags &= ~(PF_PTRACED|PF_TRACESYS);
 			wake_up_process(child);
 			child->exit_code = data;
+			write_lock_irqsave(&tasklist_lock, flags);
 			REMOVE_LINKS(child);
 			child->p_pptr = child->p_opptr;
 			SET_LINKS(child);
+			write_unlock_irqrestore(&tasklist_lock, flags);
 			/* make sure the single step bit is not set. */
 			tmp = get_reg(child, PT_SR) & ~(TRACE_BITS << 16);
 			put_reg(child, PT_SR, tmp);

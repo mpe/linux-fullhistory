@@ -253,6 +253,7 @@ struct device
 	
 	void 			*atalk_ptr;	/* Appletalk link 	*/
 	void			*ip_ptr;	/* IPv4 specific data	*/  
+	void                    *dn_ptr;        /* DECnet specific data */
 
 	struct Qdisc		*qdisc;
 	struct Qdisc		*qdisc_sleeping;

@@ -106,6 +106,7 @@ int blz2060_esp_detect(Scsi_Host_Template *tpnt)
 		esp->eregs = (struct ESP_regs *)(address + BLZ2060_ESP_ADDR);
 		
 		/* Set the command buffer */
+		esp->esp_command = (volatile unsigned char*) cmd_buffer;
 		esp->esp_command_dvma = VTOP((unsigned long) cmd_buffer);
 
 		esp->irq = IRQ_AMIGA_PORTS;

@@ -182,6 +182,7 @@ extern char * get_rock_ridge_symlink(struct inode *);
 extern int find_rock_ridge_relocation(struct iso_directory_record *, struct inode *);
 
 int get_joliet_filename(struct iso_directory_record *, struct inode *, unsigned char *);
+int get_acorn_filename(struct iso_directory_record *, char *, struct inode *);
 
 /* The stuff that follows may be totally unneeded. I have not checked to see 
  which prototypes we are still using.  */
@@ -227,6 +228,3 @@ extern void leak_check_brelse(struct buffer_head * bh);
 #endif /* __KERNEL__ */
 
 #endif
-
-
-

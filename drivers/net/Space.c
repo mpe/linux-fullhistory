@@ -92,12 +92,17 @@ extern int atarilance_probe(struct device *);
 extern int a2065_probe(struct device *);
 extern int ariadne_probe(struct device *);
 extern int hydra_probe(struct device *);
+extern int bionet_probe(struct device *);
+extern int pamsnet_probe(struct device *);
 extern int tlan_probe(struct device *);
 extern int mace_probe(struct device *);
 extern int cs89x0_probe(struct device *dev);
 extern int ethertap_probe(struct device *dev);
+extern int acorn_ethif_probe(struct device *dev);
+extern int am79c961_probe(struct device *dev);
 extern int epic100_probe(struct device *dev);
 extern int rtl8139_probe(struct device *dev);
+extern int hplance_probe(struct device *dev);
 
 /* Gigabit Ethernet adapters */
 extern int yellowfin_probe(struct device *dev);
@@ -276,6 +281,15 @@ __initfunc(static int ethif_probe(struct device *dev))
 #ifdef CONFIG_HYDRA		/* Hydra Systems Amiganet Ethernet board */
 	&& hydra_probe(dev)
 #endif
+#ifdef CONFIG_ATARI_BIONET	/* Atari Bionet Ethernet board */
+	&& bionet_probe(dev)
+#endif
+#ifdef CONFIG_ATARI_PAMSNET	/* Atari PAMsNet Ethernet board */
+	&& pamsnet_probe(dev)
+#endif
+#ifdef CONFIG_HPLANCE		/* HP300 internal Ethernet */
+	&& hplance_probe(dev)
+#endif
 #ifdef CONFIG_SUNLANCE
 	&& sparc_lance_probe(dev)
 #endif
@@ -296,7 +310,7 @@ __initfunc(static int ethif_probe(struct device *dev))
 #endif
 #ifdef CONFIG_MIPS_JAZZ_SONIC
 	&& sonic_probe(dev)
-#endif	
+#endif
 #ifdef CONFIG_ARCH_ACORN
 	&& acorn_ethif_probe(dev)
 #endif
@@ -425,7 +439,7 @@ static struct device atp_dev = {
 # define ETH0_IRQ 0
 #endif
 
-#ifndef __sparc__
+#if !defined(__sparc__) && !defined(CONFIG_ARCH_ACORN)
 #define ETH_NOPROBE_ADDR 0xffe0
 #else
 #define ETH_NOPROBE_ADDR 0

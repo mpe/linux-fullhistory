@@ -127,7 +127,7 @@ int mvme16x_get_irq_list (char *buf)
 
 static void mvme16x_defhand (int irq, void *dev_id, struct pt_regs *fp)
 {
-	panic ("Unknown interrupt 0x%02x", irq);
+	printk ("Unknown interrupt 0x%02x\n", irq);
 }
 
 

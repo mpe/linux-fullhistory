@@ -326,7 +326,8 @@ EXPORT_SYMBOL(sprintf);
 EXPORT_SYMBOL(vsprintf);
 EXPORT_SYMBOL(kdevname);
 EXPORT_SYMBOL(simple_strtoul);
-EXPORT_SYMBOL(system_utsname);
+EXPORT_SYMBOL(system_utsname);	/* UTS data */
+EXPORT_SYMBOL(uts_sem);		/* UTS semaphore */
 EXPORT_SYMBOL(sys_call_table);
 EXPORT_SYMBOL(machine_restart);
 EXPORT_SYMBOL(machine_halt);

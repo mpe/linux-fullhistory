@@ -654,17 +654,24 @@ static __inline__ unsigned int tcp_current_mss(struct sock *sk)
 	return mss_now; 
 }
 
-/* Compute the actual receive window we are currently advertising. */
+/* Compute the actual receive window we are currently advertising.
+ * Rcv_nxt can be after the window if our peer push more data
+ * than the offered window.
+ */
 static __inline__ u32 tcp_receive_window(struct tcp_opt *tp)
 {
-	return tp->rcv_wup - (tp->rcv_nxt - tp->rcv_wnd);
+	s32 win = tp->rcv_wup + tp->rcv_wnd - tp->rcv_nxt;
+
+	if (win < 0)
+		win = 0;
+	return (u32) win;
 }
 
 /* Choose a new window, without checks for shrinking, and without
  * scaling applied to the result.  The caller does these things
  * if necessary.  This is a "raw" window selection.
  */
-extern u32	__tcp_select_window(struct sock *sk);
+extern u32	__tcp_select_window(struct sock *sk, u32 cur_win);
 
 /* Chose a new window to advertise, update state in tcp_opt for the
  * socket, and return result with RFC1323 scaling applied.  The return
@@ -674,8 +681,8 @@ extern u32	__tcp_select_window(struct sock *sk);
 extern __inline__ u16 tcp_select_window(struct sock *sk)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-	u32 new_win = __tcp_select_window(sk);
 	u32 cur_win = tcp_receive_window(tp);
+	u32 new_win = __tcp_select_window(sk, cur_win);
 
 	/* Never shrink the offered window */
 	if(new_win < cur_win)
@@ -694,8 +701,8 @@ extern __inline__ u16 tcp_select_window(struct sock *sk)
 extern __inline__ int tcp_raise_window(struct sock *sk)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-	u32 new_win = __tcp_select_window(sk);
 	u32 cur_win = tcp_receive_window(tp);
+	u32 new_win = __tcp_select_window(sk, cur_win);
 
 	return (new_win && (new_win > (cur_win << 1)));
 }

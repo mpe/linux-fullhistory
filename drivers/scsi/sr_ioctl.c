@@ -93,7 +93,14 @@ retry:
                     printk(KERN_INFO "sr%d: CDROM not ready yet.\n", target);
 		if (retries++ < 10) {
 		    /* sleep 2 sec and try again */
+		    /*
+		     * The spinlock is silly - we should really lock more of this
+		     * function, but the minimal locking required to not lock up
+		     * is around this - scsi_sleep() assumes we hold the spinlock.
+		     */
+		    spin_lock_irqsave(&io_request_lock, flags);
 		    scsi_sleep(2*HZ);
+		    spin_unlock_irqrestore(&io_request_lock, flags);
                     goto retry;
 		} else {
 		    /* 20 secs are enouth? */

@@ -93,7 +93,7 @@ int request_module(const char * module_name)
 	int pid;
 	int waitpid_result;
 
-	/* Don't allow request_mode() before the root fs is mounted!  */
+	/* Don't allow request_module() before the root fs is mounted!  */
 	if ( ! current->fs->root ) {
 		printk(KERN_ERR "request_module[%s]: Root fs not mounted\n",
 			module_name);

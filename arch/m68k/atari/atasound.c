@@ -10,6 +10,9 @@
  * License.  See the file COPYING in the main directory of this archive
  * for more details.
  *
+ * 1998-05-31 ++andreas: atari_mksound rewritten to always use the envelope,
+ *			 no timer, atari_nosound removed.
+ *
  */
 
 
@@ -31,22 +34,6 @@
  * stuff from the old atasound.c
  */
 
-
-static void atari_nosound (unsigned long ignored)
-{
-	unsigned char	tmp;
-	unsigned long flags;
-	
-	/* turn off generator A in mixer control */
-	save_flags(flags);
-	cli();
-	sound_ym.rd_data_reg_sel = 7;
-	tmp = sound_ym.rd_data_reg_sel;
-	sound_ym.wd_data = tmp | 0x39;
-	restore_flags(flags);
-}	
-		
-
 void atari_microwire_cmd (int cmd)
 {
 	tt_microwire.mask = 0x7ff;
@@ -58,90 +45,62 @@ void atari_microwire_cmd (int cmd)
 }
 
 
-#define	PC_FREQ		1192180
+/* PSG base frequency */
 #define	PSG_FREQ	125000
+/* PSG envelope base frequency times 10 */
+#define PSG_ENV_FREQ_10	78125
 
-
-void atari_mksound (unsigned int count, unsigned int ticks)
+void atari_mksound (unsigned int hz, unsigned int ticks)
 {
-	static struct timer_list sound_timer = { NULL, NULL, 0, 0,
-						     atari_nosound };
-	/*
-	 * Generates sound of some count for some number of clock ticks
-	 * [count = 1193180 / frequency]
-	 */
+	/* Generates sound of some frequency for some number of clock
+	   ticks.  */
 	unsigned long flags;
 	unsigned char tmp;
+	int period;
 
 	save_flags(flags);
 	cli();
 
-	if (count == 750 && ticks == HZ/8) {
-		/* Special case: These values are used by console.c to
-		 * generate the console bell. They are cached here and the
-		 * sound actually generated is somehow special: it uses the
-		 * generator B and an envelope. No timer is needed therefore
-		 * and the bell doesn't disturb an other ongoing sound.
-		 */
+	/* Convert from frequency value to PSG period value (base
+	   frequency 125 kHz).  */
+	period = PSG_FREQ / hz;
 
-		/* set envelope duration to 492 ms */
+	if (period > 0xfff) period = 0xfff;
+
+	/* Disable generator A in mixer control.  */
+	sound_ym.rd_data_reg_sel = 7;
+	tmp = sound_ym.rd_data_reg_sel;
+	tmp |= 011;
+	sound_ym.wd_data = tmp;
+	/* Set generator A frequency to hz.  */
+	sound_ym.rd_data_reg_sel = 0;
+	sound_ym.wd_data = period & 0xff;
+	sound_ym.rd_data_reg_sel = 1;
+	sound_ym.wd_data = (period >> 8) & 0xf;
+	if (ticks) {
+		/* Set length of envelope (max 8 sec).  */
+		int length = (ticks * PSG_ENV_FREQ_10) / HZ / 10;
+
+		if (length > 0xffff) length = 0xffff;
 		sound_ym.rd_data_reg_sel = 11;
-		sound_ym.wd_data = 0;
+		sound_ym.wd_data = length & 0xff;
 		sound_ym.rd_data_reg_sel = 12;
-		sound_ym.wd_data = 15;
-		/* envelope form: max -> min single */
+		sound_ym.wd_data = length >> 8;
+		/* Envelope form: max -> min single.  */
 		sound_ym.rd_data_reg_sel = 13;
-		sound_ym.wd_data = 9;
-		/* set generator B frequency to 2400 Hz */
-		sound_ym.rd_data_reg_sel = 2;
-		sound_ym.wd_data = 52;
-		sound_ym.rd_data_reg_sel = 3;
 		sound_ym.wd_data = 0;
-		/* set volume of generator B to envelope control */
-		sound_ym.rd_data_reg_sel = 9;
+		/* Use envelope for generator A.  */
+		sound_ym.rd_data_reg_sel = 8;
 		sound_ym.wd_data = 0x10;
-		/* enable generator B in the mixer control */
-		sound_ym.rd_data_reg_sel = 7;
-		tmp = sound_ym.rd_data_reg_sel;
-		sound_ym.wd_data = (tmp & ~0x02) | 0x38;
-
-		restore_flags(flags);
-		return;
-	}
-
-	del_timer( &sound_timer );
-
-	if (!count) {
-		atari_nosound( 0 );
-	}
-	else {
-
-		/* convert from frequency value
-		 * to PSG period value (base frequency 125 kHz).
-		 */
-		int period = PSG_FREQ / count;
-
-		if (period > 0xfff) period = 0xfff;
-
-		/* set generator A frequency to 0 */
-		sound_ym.rd_data_reg_sel = 0;
-		sound_ym.wd_data = period & 0xff;
-		sound_ym.rd_data_reg_sel = 1;
-		sound_ym.wd_data = (period >> 8) & 0xf;
-		/* turn on generator A in mixer control (but not noise
-		 * generator!) */
-		sound_ym.rd_data_reg_sel = 7;
-		tmp = sound_ym.rd_data_reg_sel;
-		sound_ym.wd_data = (tmp & ~0x01) | 0x38;
-		/* set generator A level to maximum, no envelope */
+	} else {
+		/* Set generator A level to maximum, no envelope.  */
 		sound_ym.rd_data_reg_sel = 8;
 		sound_ym.wd_data = 15;
-		
-		if (ticks) {
-			sound_timer.expires = jiffies + ticks;
-			add_timer( &sound_timer );
-		}
 	}
+	/* Turn on generator A in mixer control.  */
+	sound_ym.rd_data_reg_sel = 7;
+	tmp &= ~1;
+	sound_ym.wd_data = tmp;
 
 	restore_flags(flags);
 }

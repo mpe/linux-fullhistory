@@ -332,4 +332,4 @@ struct tod2000 {
 #define TOD2000_HOUR1_PM	(1<<2)
 #define TOD_2000 ((struct tod2000 *)(zTwoBase+0xDC0000))
 
-#endif /* __ASMm68k_AMIGAHW_H */
+#endif /* _M68K_AMIGAHW_H */

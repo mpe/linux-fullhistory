@@ -28,9 +28,9 @@
 #define readl(addr) \
     ({ unsigned int __v = (*(volatile unsigned int *) (addr)); __v; })
 
-#define writeb(b,addr) ((*(volatile unsigned char *) (addr)) = (b))
-#define writew(b,addr) ((*(volatile unsigned short *) (addr)) = (b))
-#define writel(b,addr) ((*(volatile unsigned int *) (addr)) = (b))
+#define writeb(b,addr) (void)((*(volatile unsigned char *) (addr)) = (b))
+#define writew(b,addr) (void)((*(volatile unsigned short *) (addr)) = (b))
+#define writel(b,addr) (void)((*(volatile unsigned int *) (addr)) = (b))
 
 #define memset_io(a,b,c)	memset((void *)(a),(b),(c))
 #define memcpy_fromio(a,b,c)	memcpy((a),(void *)(b),(c))

@@ -35,6 +35,7 @@
 #include <linux/lp_intern.h>
 
 static int minor = -1;
+MODULE_PARM(minor,"i");
 
 static void lp_int_out(int, int);
 static int lp_int_busy(int);

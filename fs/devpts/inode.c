@@ -28,15 +28,6 @@
 
 static struct super_block *mounts = NULL;
 
-static void devpts_put_inode(struct inode *inode)
-{
-}
-
-static void devpts_delete_inode(struct inode *inode)
-{
-	inode->i_size = 0;
-}
-
 static void devpts_put_super(struct super_block *sb)
 {
 	struct devpts_sb_info *sbi = SBI(sb);
@@ -48,6 +39,7 @@ static void devpts_put_super(struct super_block *sb)
 			if ( inode->i_count != 1 )
 				printk("devpts_put_super: badness: entry %d count %d\n",
 				       i, inode->i_count);
+			inode->i_nlink--;
 			iput(inode);
 		}
 	}
@@ -70,8 +62,8 @@ static void devpts_write_inode(struct inode *inode);
 static struct super_operations devpts_sops = {
 	devpts_read_inode,
 	devpts_write_inode,
-	devpts_put_inode,
-	devpts_delete_inode,
+	NULL,			/* put_inode */
+	NULL,			/* delete_inode */
 	NULL,			/* notify_change */
 	devpts_put_super,
 	NULL,			/* write_super */
@@ -281,8 +273,6 @@ static void devpts_read_inode(struct inode *inode)
 	if ( ino >= NR_PTYS )
 		return;		/* Bogus */
 	
-	inode->i_nlink = 1;
-
 	inode->i_mode = S_IFCHR;
 	inode->i_rdev = MKDEV(0,0); /* Gets filled in by devpts_pty_new() */
 
@@ -322,6 +312,7 @@ void devpts_pty_new(int number, kdev_t device)
 			inode->i_gid = sbi->setgid ? sbi->gid : current->fsgid;
 			inode->i_mode = sbi->mode | S_IFCHR;
 			inode->i_rdev = device;
+			inode->i_nlink++;
 			sbi->inodes[number] = inode;
 		}
 	}
@@ -340,7 +331,7 @@ void devpts_pty_kill(int number)
 
 		if ( inode ) {
 			sbi->inodes[number] = NULL;
-			inode->i_nlink = 0; /* Is this right? */
+			inode->i_nlink--;
 			iput(inode);
 		}
 	}

@@ -34,6 +34,8 @@
 #define SER_WHIPPET	108	/* Amiga Hisoft Whippet PCMCIA (16c550B) */
 #define SER_SCC_MVME	109	/* MVME162/MVME172 ports */
 #define SER_SCC_MAC	110	/* Macintosh SCC channel */
+#define SER_HPDCA	111	/* HP DCA serial */
+#define SER_SCC_BVME	112	/* BVME6000 ports */
 
 struct serial_struct {
 	int	type;

@@ -17,6 +17,7 @@
 ** 95/11/18 Richard Hirst: Added MVME166 support
 ** 96/04/26 Guenther Kelleter: fixed identity mapping for Falcon with
 ** 			      Magnum- and FX-alternate ram
+** 98/04/25 Phil Blundell: added HP300 support
 **
 ** This file is subject to the terms and conditions of the GNU General Public
 ** License. See the file README.legal in the main directory of this archive
@@ -73,9 +74,24 @@
 #include <asm/pgtable.h>
 
 .globl SYMBOL_NAME(kernel_pg_dir), SYMBOL_NAME(kpt)
-.globl SYMBOL_NAME(availmem), SYMBOL_NAME(mvme_bdid_ptr)
+.globl SYMBOL_NAME(availmem)
 .globl SYMBOL_NAME(m68k_pgtable_cachemode)
 .globl SYMBOL_NAME(kernel_pmd_table), SYMBOL_NAME(swapper_pg_dir)
+
+#if defined(CONFIG_MVME16x)
+.globl SYMBOL_NAME(mvme_bdid_ptr)
+#endif
+
+/*
+ * Added m68k_supervisor_cachemode for 68060 boards where some drivers
+ * need writethrough caching for supervisor accesses.  Drivers known to
+ * be effected are 53c7xx.c and apricot.c (when used on VME boards).
+ * Richard Hirst.
+ */
+
+#ifdef CONFIG_060_WRITETHROUGH
+.globl SYMBOL_NAME(m68k_supervisor_cachemode)
+#endif
 
 D6B_0460 = 16		/* indicates 680[46]0 in d6 */
 D6B_060  = 17		/* indicates 68060 in d6 */
@@ -146,11 +162,22 @@ TABLENR_16MB	= 64	/* same for 16 MB */
 #define is_not_amiga(lab) moveq &MACH_AMIGA,%d7; cmpl %d4,%d7; jne lab
 #define is_not_atari(lab) moveq &MACH_ATARI,%d7; cmpl %d4,%d7; jne lab
 #define is_not_mvme16x(lab) moveq &MACH_MVME16x,%d7; cmpl %d4,%d7; jne lab
+#define is_not_bvme6000(lab) moveq &MACH_BVME6000,%d7; cmpl %d4,%d7; jne lab
+#define is_not_hp300(lab) moveq &MACH_HP300,%d7	;  cmpl %d4,%d7; jne lab
 
 #define is_040_or_060(lab) btst &D6B_0460,%d6; jne lab
 #define is_not_040_or_060(lab) btst &D6B_0460,%d6; jeq lab
 #define is_060(lab) btst &D6B_060,%d6; jne lab
 #define is_not_060(lab) btst &D6B_060,%d6; jeq lab
+
+/* On the HP300 we use the on-board LEDs for debug output before
+   the console is running.  Writing a 1 bit turns the corresponding LED
+   _off_ - on the 340 bit 7 is towards the back panel of the machine.  */
+#ifdef CONFIG_HP300
+#define leds(x) is_not_hp300(42f) ; moveb #(x),%d7 ; jbsr Lset_leds; 42:
+#else
+#define leds(x)
+#endif
 
 .text
 ENTRY(_stext)
@@ -164,6 +191,7 @@ ENTRY(_stext)
 	.long	MACH_AMIGA, AMIGA_BOOTI_VERSION
 	.long	MACH_ATARI, ATARI_BOOTI_VERSION
 	.long	MACH_MVME16x, MVME16x_BOOTI_VERSION
+	.long	MACH_BVME6000, BVME6000_BOOTI_VERSION
 	.long	0
 1:	jra	SYMBOL_NAME(_start)
 
@@ -223,6 +251,22 @@ ENTRY(_start)
 	moveq	#0,%d0
 	movew	%d6,%d0
 	movel	%d0,%a0@		/* save cache mode for page tables */
+
+	/*
+	 * If this is a 68060 board using drivers with cache coherency
+	 * problems, then supervisor memory accesses need to be write-through
+         * also; otherwise, we want copyback.
+	 */
+
+#if defined(CONFIG_060_WRITETHROUGH)
+	is_not_060(Lset_norm)
+	jra	1f
+Lset_norm:
+	move.w	#_PAGE_CACHE040,%d0
+1:
+  	lea	%pc@(SYMBOL_NAME(m68k_supervisor_cachemode)),%a0
+	movel	%d0,%a0@
+#endif
 
 /*
  * raise interrupt level
@@ -386,7 +430,12 @@ Lnotypetest:
 
 	movel	%a3,%a0
 	movel	%d5,%a1
-	addw	#_PAGE_GLOBAL040+_PAGE_CACHE040+_PAGE_PRESENT+_PAGE_ACCESSED,%a1
+#if defined(CONFIG_060_WRITETHROUGH)
+	addw	#_PAGE_GLOBAL040+_PAGE_PRESENT+_PAGE_ACCESSED,%a1
+	addl	m68k_supervisor_cachemode,%a1
+#else
+	addw    #_PAGE_GLOBAL040+_PAGE_CACHE040+_PAGE_PRESENT+_PAGE_ACCESSED,%a1
+#endif
 	movew	#(PAGE_TABLE_SIZE*TABLENR_4MB)-1,%d1
 	movel	#PAGESIZE,%d2
 1:	movel	%a1,%a0@+
@@ -424,6 +473,9 @@ Lnotypetest:
 	 * of %a2 are forgotten.
 	 */
 Lnot040:
+
+	leds(0x4)
+	
 /*
  * Do any machine specific page table initializations.
  */
@@ -615,6 +667,21 @@ Lspata68040:
 Lnotatari:
 #endif
 
+#ifdef CONFIG_HP300
+	is_not_hp300(Lnothp300)
+
+/* On the HP300, we map the ROM, INTIO and DIO regions (phys. 0x00xxxxxx)
+   by mapping 32MB from 0xf0xxxxxx -> 0x00xxxxxx) using an 030 early 
+   termination page descriptor.  The ROM mapping is needed because the LEDs 
+   are mapped there too.  */
+
+	movel	#_PAGE_NOCACHE030+_PAGE_PRESENT+_PAGE_ACCESSED,%d0
+	movel	%d0,%a5@(0x78<<2)
+
+Lnothp300:
+	
+#endif
+
 #if defined(CONFIG_MVME16x)
 	is_not_mvme16x(Lnot16x)
 
@@ -639,6 +706,25 @@ Lnotatari:
 Lnot16x:
 #endif
 
+#if defined(CONFIG_BVME6000)
+	is_not_bvme6000(Lnotbvm)
+
+	/*
+	 * On BVME6000 we have already created kernel page tables for
+	 * 4MB of RAM at address 0, so now need to do a transparent
+	 * mapping of the top of memory space.  Make it 0.5GByte for now.
+	 */
+
+	movel	#0xe01f0000,%d2		/* logical address base */
+	orw	#0xa040,%d2		/* add in magic bits */
+	.long	0x4e7b2005		/* movec d2,ittr1 */
+	.long	0x4e7b2007		/* movec d2,dttr1 */
+	.long	0x4e7b2004		/* movec d2,ittr0 */
+	.long	0x4e7b2006		/* movec d2,dttr0 */
+
+Lnotbvm:
+#endif
+
 /*
  * Setup a transparent mapping of the physical memory we are executing in.
  *
@@ -647,6 +733,7 @@ Lnot16x:
  */
 Lmapphys:
 	putc('J')
+	leds(0x8)
 
 #ifdef CONFIG_AMIGA
 	is_not_amiga(Lmapphysnotamiga)
@@ -853,6 +940,80 @@ Lmapphysnot16x:
 
 #endif
 
+#if defined(CONFIG_HP300)
+	is_not_hp300(Lmapphysnothp300)
+
+/*
+ * Physical RAM is at 0xff000000.  We want to map the kernel at 0x00000000.
+ * In order to avoid disaster when we enable the MMU we need to make a
+ * transparent mapping of the RAM we're executing out of as well.
+ */
+	/*
+	 * save physaddr of phys mem in register a3
+	 */
+
+	.chip	68030
+	lea	%pc@(Lmmu),%a3
+	movel	%d5,%d0
+	andl	#0xff000000,%d0 /* logical address base */
+	orw	#TTR_ENABLE+TTR_CI+TTR_RWM+TTR_FCB2+TTR_FCM1+TTR_FCM0,%d0
+	movel	%d0,%a3@
+	pmove	%a3@,%tt0
+	/* no limit, 4byte descriptors */
+	movel	#0x80000002,%a3@
+	movel	%a5,%a3@(4)
+	pmove	%a3@,%srp
+	pmove	%a3@,%crp
+	pflusha
+	/*
+	 * enable,super root enable,4096 byte pages,7 bit root index,
+	 * 7 bit pointer index, 6 bit page table index.
+	 */
+	movel	#0x82c07760,%a3@
+	pmove	%a3@,%tc	/* enable the MMU */
+	jmp	1f
+1:	
+	.chip	68k
+
+	/*
+	 * Fix up the custom register to point to the new location of the LEDs.
+	 */
+	lea	%pc@(Lcustom),%a1
+	movel	#0xf0000000,%a1@
+
+	/*
+	 * Energise the FPU and caches.
+	 */
+	orl	#0x64, 0xf05f400c 
+	
+Lmapphysnothp300:
+
+#endif
+
+#if defined(CONFIG_BVME6000)
+	is_not_bvme6000(Lmapphysnotbvm)
+	/*
+	 * save physaddr of phys mem in register a3
+	 */
+	moveq	#'L',%d7
+	jbsr	Lserial_putc
+
+	.word	0xf4d8		/* CINVA I/D    */
+	.word	0xf518		/* pflusha      */
+	.long	0x4e7bd807	/* movec a5,srp */
+	.long	0x4e7bd806	/* movec a5,urp */
+	movel	#(TC_ENABLE+TC_PAGE4K),%d0
+	/*
+	 * this value is also ok for the 68060, we don`t use the cache
+	 * mode/protection defaults
+	 */
+	.long	0x4e7b0003	/* movec d0,tc  (enable the MMU) */
+	jra	LdoneMMUenable	/* branch to continuation of startup */
+
+Lmapphysnotbvm:
+
+#endif
+
 LdoneMMUenable:
 
 /*
@@ -861,6 +1022,7 @@ LdoneMMUenable:
  */
 
 	putc('M')
+	leds(0x10)
 
 	/*
 	 * d5 contains physaddr of kernel start
@@ -917,6 +1079,7 @@ Lcache68060:
 
 /* jump to the kernel start */
 	putr()
+	leds(0x55)
 
 	subl	%a6,%a6 /* clear a6 for gdb */
 	jbsr	SYMBOL_NAME(start_kernel)
@@ -998,6 +1161,11 @@ LMFP_UDR     = 0xfffa2f
 #endif
 #endif
 
+#if defined (CONFIG_BVME6000)
+BVME_SCC_CTRL_A = 0xffb0000b
+BVME_SCC_DATA_A = 0xffb0000f
+#endif
+
 /*
  * Serial port output support.
  */
@@ -1062,6 +1230,17 @@ Lserial_init:
 9:
 	rts
 
+#ifdef CONFIG_HP300
+/* Set LEDs to %d7 */
+	.even
+Lset_leds:
+	moveml	%a0/%a1,%sp@-
+	movel	%pc@(Lcustom),%a1
+	moveb	%d7,%a1@(0x1ffff)
+	moveml	%sp@+,%a0/%a1
+	rts
+#endif
+	
 /*
  * Output character in d7 on serial port.
  * d7 thrashed.
@@ -1073,6 +1252,16 @@ Lserial_putc:
 	jne	2f
 	moveb	%d7,%sp@-
 	.long	0x4e4f0020
+	jra	9f
+2:
+#endif
+#ifdef CONFIG_BVME6000
+	cmpil	#MACH_BVME6000,%d4
+	jne	2f
+1:	btst	#2,BVME_SCC_CTRL_A
+	jeq	1b
+	moveb	%d7,BVME_SCC_DATA_A
+	jra	9f
 2:
 #endif
 #ifdef CONFIG_AMIGA
@@ -1199,5 +1388,11 @@ SYMBOL_NAME_LABEL(availmem)
 	.long 0
 SYMBOL_NAME_LABEL(m68k_pgtable_cachemode)
 	.long 0
+#ifdef CONFIG_060_WRITETHROUGH
+SYMBOL_NAME_LABEL(m68k_supervisor_cachemode)
+	.long 0
+#endif
+#if defined(CONFIG_MVME16x)
 SYMBOL_NAME_LABEL(mvme_bdid_ptr)
 	.long 0
+#endif

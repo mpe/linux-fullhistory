@@ -531,6 +531,24 @@ end_move_self:
 	out	#0x60,al
 	call	empty_8042
 
+! wait until a20 really *is* enabled; it can take a fair amount of
+! time on any
+	
+	push	ds
+	push	es
+	xor	ax,ax			! segment 0x0000
+	mov	ds,ax
+	dec	ax			! segment 0xffff (HMA)
+	mov	es,ax
+a20_wait:
+	inc	ax
+	mov	[0x7c00],ax		! any unused memory location < 64K
+	seg	es
+	cmp	ax,[0x7c10]		! corresponding HMA address
+	je	a20_wait		! loop until no longer aliased
+	pop	es
+	pop	ds
+		
 ! make sure any possible coprocessor is properly reset..
 
 	xor	ax,ax

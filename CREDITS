@@ -1492,6 +1492,12 @@ N: Alessandro Rubini
 E: rubini@ipvvis.unipv.it
 D: the gpm mouse server and kernel support for it
 
+N: Paul Russell
+E: Paul.Russell@rustcorp.com.au
+W: http://www.adelaide.net.au/~rustcorp
+D: Ruggedly handsome.
+D: Developed Generic IP Firewalling Chains with Michael Neuling.
+
 N: Thomas Sailer
 E: sailer@ife.ee.ethz.ch
 E: HB9JNX@HB9W.CHE.EU (packet radio)
@@ -1786,6 +1792,11 @@ D: Small contributions to ncpfs
 S: Chudenicka 8
 S: 10200 Prague 10, Hostivar
 S: Czech Republic
+
+N: Andrew Veliath
+E: andrewtv@usa.net
+D: Turtle Beach MultiSound sound driver
+S: USA
 
 N: Dirk Verworner
 D: Co-author of german book ``Linux-Kernel-Programmierung''

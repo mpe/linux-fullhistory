@@ -28,6 +28,12 @@
  *
  *	7	- Debug output
  *
+ * AV Macs only, handled by PSC:
+ *
+ *	3	- MACE ethernet IRQ (DMA complete on level 4)
+ *
+ *	5	- DSP ?? 
+ *
  * Using the autovector irq numbers for Linux/m68k hardware interrupts without
  * the IRQ_MACHSPEC bit set would interfere with the general m68k interrupt 
  * handling in kernel versions 2.0.x, so the following strategy is used:
@@ -57,6 +63,10 @@
  *   should be sufficient to use the same numbers (everything > 7 is assumed 
  *   to be machspec, according to Jes!).
  *
+ *   TODO:
+ * - integrate Nubus interrupts in request/free_irq
+ *
+ * - 
  */
 
 #include <linux/types.h>
@@ -64,6 +74,7 @@
 #include <linux/sched.h>
 #include <linux/kernel_stat.h>
 #include <linux/interrupt.h> /* for intr_count */
+#include <linux/delay.h>
 
 #include <asm/system.h>
 #include <asm/irq.h>
@@ -98,7 +109,10 @@ struct irqflags {
 static struct irqhandler  via1_handler[8];
 static struct irqhandler  via2_handler[8];
 static struct irqhandler   rbv_handler[8];
+static struct irqhandler  psc3_handler[8];
 static struct irqhandler   scc_handler[8];
+static struct irqhandler  psc5_handler[8];
+static struct irqhandler  psc6_handler[8];
 static struct irqhandler nubus_handler[8];
 
 static struct irqhandler *handler_table[8];
@@ -111,7 +125,10 @@ static struct irqhandler *handler_table[8];
 static struct irqparam  via1_param[8];
 static struct irqparam  via2_param[8];
 static struct irqparam   rbv_param[8];
+static struct irqparam  psc3_param[8];
 static struct irqparam   scc_param[8];
+static struct irqparam  psc5_param[8];
+static struct irqparam  psc6_param[8];
 static struct irqparam nubus_param[8];
 
 static struct irqparam *param_table[8];
@@ -125,26 +142,50 @@ static struct irqflags irq_flags[8];
 
 /*
  * This array holds the pointers to the various VIA or other interrupt 
- * controllers
+ * controllers, indexed by interrupt level
  */
 
 static volatile unsigned char *via_table[8];
 
-#ifdef VIABASE_WEIRDNESS
 /*
- * VIA2 / RBV default base address 
+ * Arrays with irq statistics
+ */
+static unsigned long via1_irqs[8];
+static unsigned long via2_irqs[8];
+static unsigned long rbv_irqs[8];
+static unsigned long psc3_irqs[8];
+static unsigned long scc_irqs[8];
+static unsigned long psc5_irqs[8];
+static unsigned long psc6_irqs[8];
+static unsigned long nubus_irqs[8];
+
+static unsigned long *mac_irqs[8];
+
+/*
+ * VIA2 / RBV register base pointers
  */
 
-volatile unsigned char *via2_regp = ((volatile unsigned char *)VIA2_BAS);
-volatile unsigned char *rbv_regp  = ((volatile unsigned char *)VIA2_BAS_IIci);
-#endif
+volatile unsigned char *via2_regp=(volatile unsigned char *)VIA2_BAS;
+volatile unsigned char *rbv_regp=(volatile unsigned char *)VIA2_BAS_IIci;
+volatile unsigned char *oss_regp=(volatile unsigned char *)OSS_BAS;
+volatile unsigned char *psc_regp=(volatile unsigned char *)PSC_BAS;
 
 /*
  * Flags to control via2 / rbv behaviour
  */ 
 
 static int via2_is_rbv = 0;
+static int via2_is_oss = 0;
 static int rbv_clear = 0;
+
+/* fake VIA2 to OSS bit mapping */
+static int oss_map[8] = {2, 7, 0, 1, 3, 4, 5};
+
+void oss_irq(int irq, void *dev_id, struct pt_regs *regs);
+static void oss_do_nubus(int irq, void *dev_id, struct pt_regs *regs);
+
+/* PSC ints */
+void psc_irq(int irq, void *dev_id, struct pt_regs *regs);
 
 /*
  * console_loglevel determines NMI handler function
@@ -177,6 +218,10 @@ void mac_init_IRQ(void)
 #ifdef DEBUG_MACINTS
 	printk("Mac interrupt stuff initializing ...\n");
 #endif
+
+	via2_regp = (unsigned char *)VIA2_BAS;
+	rbv_regp  = (unsigned char *)VIA2_BAS_IIci;
+
         /* initialize the hardwired (primary, autovector) IRQs */
 
 	/* level 1 IRQ: VIA1, always present */
@@ -184,17 +229,34 @@ void mac_init_IRQ(void)
 
 	/* via2 or rbv?? */
 	if (macintosh_config->via_type == MAC_VIA_IIci) {
-		/* VIA2 is part of the RBV: different base, other offsets */
-		via2_is_rbv = 1;
-		/* LC III weirdness: IFR seems to behave like VIA2 */
-		/* FIXME: maybe also for LC II ?? */ 
-		if (macintosh_config->ident == MAC_MODEL_LCIII) {
-			rbv_clear = 0x0;
+		/*
+		 * A word of caution: the definitions here only affect interrupt
+		 * handling, see via6522.c for yet another file to change
+		 * base addresses and RBV flags
+		 */
+
+		/* yes, this is messy - the IIfx deserves a class of his own */
+		if (macintosh_config->ident == MAC_MODEL_IIFX) {
+			/* no real VIA2, the OSS seems _very_different */	
+			via2_is_oss = 1;
+			/* IIfx has OSS, at a different base address than RBV */
+			if (macintosh_config->ident == MAC_MODEL_IIFX)
+				rbv_regp = (unsigned char *) OSS_BAS;
+			sys_request_irq(2, oss_irq, IRQ_FLG_LOCK, "oss", oss_irq);
 		} else {
-			rbv_clear = 0x80;
+			/* VIA2 is part of the RBV: different base, other offsets */
+			via2_is_rbv = 1;
+
+			/* LC III weirdness: IFR seems to behave like VIA2 */
+			/* FIXME: maybe also for LC II ?? */ 
+			if (macintosh_config->ident == MAC_MODEL_LCIII) {
+				rbv_clear = 0x0;
+			} else {
+				rbv_clear = 0x80;
+			}
+			/* level 2 IRQ: RBV/OSS; we only care about RBV for now */
+			sys_request_irq(2, rbv_irq, IRQ_FLG_LOCK, "rbv", rbv_irq);
 		}
-		/* level 2 IRQ: RBV/OSS; we only care about RBV for now */
-		sys_request_irq(2, rbv_irq, IRQ_FLG_LOCK, "rbv", rbv_irq);
 	} else
 		/* level 2 IRQ: VIA2 */
 		sys_request_irq(2, via2_irq, IRQ_FLG_LOCK, "via2", via2_irq);
@@ -205,7 +267,7 @@ void mac_init_IRQ(void)
 	 *		Currently, one interrupt per channel is used, solely
 	 *		to pass the correct async_info as parameter!
 	 */
-#if 0	/* doesn't seem to work yet */
+#if 0	/* want to install debug/SCC shutup routine until SCC init */
 	sys_request_irq(4, mac_SCC_handler, IRQ_FLG_STD, "INT4", mac_SCC_handler);
 #else
 	sys_request_irq(4, mac_debug_handler, IRQ_FLG_STD, "INT4", mac_debug_handler);
@@ -253,24 +315,64 @@ void mac_init_IRQ(void)
 	via_table[0]     =  via1_regp;
 	handler_table[0] =  &via1_handler[0];
 	param_table[0]   =  &via1_param[0];
+	mac_irqs[0]	 =  &via1_irqs[0];
 
 	if (via2_is_rbv) {
 		via_table[1]     =  rbv_regp;
 		handler_table[1] =  &rbv_handler[0];
 		param_table[1]   =  &rbv_param[0];
+		mac_irqs[1]	 =  &rbv_irqs[0];
 	} else {
 		via_table[1]     =  via2_regp;
 		handler_table[1] =  &via2_handler[0];
 		param_table[1]   =  &via2_param[0];
+		mac_irqs[1]	 =  &via2_irqs[0];
 	}
 	via_table[2]     =  NULL;
 	via_table[3]     =  NULL;
 	
 	handler_table[2] =   &rbv_handler[0];
-	handler_table[3] = &nubus_handler[0];
+	handler_table[3] =  &scc_handler[0];
+	handler_table[4] =  NULL;
+	handler_table[5] =  NULL;
+	handler_table[6] =  NULL;
+	handler_table[7] = &nubus_handler[0];
 
 	param_table[2]   =   &rbv_param[0];
-	param_table[3]   = &nubus_param[0];
+	param_table[3]   =  &scc_param[0];
+	param_table[7]   = &nubus_param[0];
+
+	mac_irqs[2]	 =  &rbv_irqs[0];
+	mac_irqs[3]	 =  &scc_irqs[0];
+	mac_irqs[7]	 =  &nubus_irqs[0];
+
+	/*
+	 *	AV Macs: shutup the PSC ints
+	 */
+	if (macintosh_config->ident == MAC_MODEL_C660
+	 || macintosh_config->ident == MAC_MODEL_Q840) {
+		psc_init();
+
+		handler_table[2] = &psc3_handler[0];
+		/* handler_table[3] = &psc4_handler[0]; */
+		handler_table[4] = &psc5_handler[0];
+		handler_table[5] = &psc6_handler[0];
+
+		param_table[2]   = &psc3_param[0];
+		/* param_table[3]   = &psc4_param[0]; */
+		param_table[4]   = &psc5_param[0];
+		param_table[5]   = &psc6_param[0];
+
+		mac_irqs[2]	 = &psc3_irqs[0]; 
+		/* mac_irqs[3]	 = &psc4_irqs[0]; */
+		mac_irqs[4]	 = &psc5_irqs[0];
+		mac_irqs[5]	 = &psc6_irqs[0];
+
+		sys_request_irq(3, psc_irq, IRQ_FLG_STD, "PSC3", psc_irq);
+		sys_request_irq(4, psc_irq, IRQ_FLG_STD, "PSC4", psc_irq);
+		sys_request_irq(5, psc_irq, IRQ_FLG_STD, "PSC5", psc_irq);
+		sys_request_irq(6, psc_irq, IRQ_FLG_STD, "PSC6", psc_irq);
+	}
 
 #ifdef DEBUG_MACINTS
 	printk("Mac interrupt init done!\n");
@@ -281,7 +383,7 @@ void mac_init_IRQ(void)
  *	We have no machine specific interrupts on a macintoy
  *      Yet, we need to register/unregister interrupts ... :-)
  *      Currently unimplemented: Test for valid irq number, chained irqs,
- *      Nubus interrupts.
+ *      Nubus interrupts (use nubus_request_irq!).
  */
  
 int mac_request_irq (unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
@@ -312,8 +414,8 @@ int mac_request_irq (unsigned int irq, void (*handler)(int, void *, struct pt_re
 		return -EINVAL;
 	} 
 
-	/* figure out if SCC pseudo-irq */
-        if (irq >= IRQ_IDX(IRQ_SCC) && irq < IRQ_IDX(IRQ_NUBUS_1)) {
+	/* figure out if SCC pseudo-irq (redundant ??) */
+        if (irq >= IRQ_IDX(IRQ_SCC) && irq < IRQ_IDX(IRQ_PSC5_0)) {
 		/* set specific SCC handler */
 		scc_handler[irqidx].handler = handler;
 		scc_handler[irqidx].dev_id  = dev_id;
@@ -322,6 +424,8 @@ int mac_request_irq (unsigned int irq, void (*handler)(int, void *, struct pt_re
 		/* and done! */
 		return 0;
 	} 
+
+	/* add similar hack for Nubus pseudo-irq here - hide nubus_request_irq */
 
 	via         = (volatile unsigned char *) via_table[srcidx];
 	if (!via) 
@@ -338,9 +442,11 @@ int mac_request_irq (unsigned int irq, void (*handler)(int, void *, struct pt_re
 	via_param[irqidx].flags     = flags;
 	via_param[irqidx].devname   = devname;
 
-	/* and turn it on ... */
+	/* and turn it on ... careful, that's VIA only ... */
 	if (srcidx == SRC_VIA2 && via2_is_rbv)
 		via_write(via, rIER, via_read(via, rIER)|0x80|(1<<(irqidx)));
+	else if (srcidx == SRC_VIA2 && via2_is_oss)
+		via_write(oss_regp, oss_map[irqidx]+8, 2);
 	else
 		via_write(via, vIER, via_read(via, vIER)|0x80|(1<<(irqidx)));
 
@@ -348,8 +454,18 @@ int mac_request_irq (unsigned int irq, void (*handler)(int, void *, struct pt_re
 	if (irq == IRQ_IDX(IRQ_MAC_SCSI)) {
 		/*
 		 * Set vPCR for SCSI interrupts. (what about RBV here?)
+		 * 980429 MS: RBV is ok, OSS seems to be differentt
 		 */
-		via_write(via, vPCR, 0x66);
+		if (!via2_is_oss)
+			/* CB2 (IRQ) indep. interrupt input, positive edge */
+			/* CA2 (DRQ) indep. interrupt input, positive edge */
+			via_write(via, vPCR, 0x66);
+#if 0
+		else
+			/* CB2 (IRQ) indep. interrupt input, negative edge */
+			/* CA2 (DRQ) indep. interrupt input, negative edge */
+			via_write(via, vPCR, 0x22);
+#endif
 	}
 
 	return 0;
@@ -379,7 +495,7 @@ void mac_free_irq (unsigned int irq, void *dev_id)
 	cli();
 
 	/* figure out if SCC pseudo-irq */
-        if (irq >= IRQ_IDX(IRQ_SCC) && irq < IRQ_IDX(IRQ_NUBUS_1)) {
+        if (irq >= IRQ_IDX(IRQ_SCC) && irq < IRQ_IDX(IRQ_PSC5_0)) {
 		/* clear specific SCC handler */
 		scc_handler[irqidx].handler = mac_default_handler;
 		scc_handler[irqidx].dev_id  = NULL;
@@ -408,6 +524,8 @@ void mac_free_irq (unsigned int irq, void *dev_id)
 	/* and turn it off */
 	if (srcidx == SRC_VIA2 && via2_is_rbv)
 		via_write(via, rIER, (via_read(via, rIER)&(1<<irqidx)));
+	else if (srcidx == SRC_VIA2 && via2_is_oss)
+		via_write(oss_regp, oss_map[irqidx]+8, 0);
 	else
 		via_write(via, vIER, (via_read(via, vIER)&(1<<irqidx)));
 
@@ -450,8 +568,8 @@ not_found:
 
 void mac_enable_irq (unsigned int irq)
 {
-        int srcidx = ((irq & IRQ_SRC_MASK)>>3) - 1;
-        int irqidx = (irq & IRQ_IDX_MASK);
+	int srcidx = ((irq & IRQ_SRC_MASK)>>3) - 1;
+	int irqidx = (irq & IRQ_IDX_MASK);
 
 	irq_flags[srcidx].disabled &= ~(1<<irqidx);
 	/*
@@ -465,8 +583,8 @@ void mac_enable_irq (unsigned int irq)
 
 void mac_disable_irq (unsigned int irq)
 {
-        int srcidx = ((irq & IRQ_SRC_MASK)>>3) - 1;
-        int irqidx = (irq & IRQ_IDX_MASK);
+	int srcidx = ((irq & IRQ_SRC_MASK)>>3) - 1;
+	int irqidx = (irq & IRQ_IDX_MASK);
 
 	irq_flags[srcidx].disabled |= (1<<irqidx);
 }
@@ -478,8 +596,8 @@ void mac_disable_irq (unsigned int irq)
 
 void mac_turnon_irq( unsigned int irq )
 {
-        int srcidx = ((irq & IRQ_SRC_MASK)>>3) - 1;
-        int irqidx = (irq & IRQ_IDX_MASK);
+	int srcidx = ((irq & IRQ_SRC_MASK)>>3) - 1;
+	int irqidx = (irq & IRQ_IDX_MASK);
 	volatile unsigned char *via;
 
 	via         = (volatile unsigned char *) via_table[srcidx];
@@ -488,6 +606,11 @@ void mac_turnon_irq( unsigned int irq )
 
 	if (srcidx == SRC_VIA2 && via2_is_rbv)
 	        via_write(via, rIER, via_read(via, rIER)|0x80|(1<<(irqidx)));
+	else if (srcidx == SRC_VIA2 && via2_is_oss)
+		via_write(oss_regp, oss_map[irqidx]+8, 2);
+	else if (srcidx >= SRC_VIA2)
+	        via_write(via, (0x104 + 0x10*srcidx), 
+	        	via_read(via, (0x104 + 0x10*srcidx))|0x80|(1<<(irqidx)));
 	else
 	        via_write(via, vIER, via_read(via, vIER)|0x80|(1<<(irqidx)));
 
@@ -495,8 +618,8 @@ void mac_turnon_irq( unsigned int irq )
 
 void mac_turnoff_irq( unsigned int irq )
 {
-        int srcidx = ((irq & IRQ_SRC_MASK)>>3) - 1;
-        int irqidx = (irq & IRQ_IDX_MASK);
+	int srcidx = ((irq & IRQ_SRC_MASK)>>3) - 1;
+	int irqidx = (irq & IRQ_IDX_MASK);
 	volatile unsigned char *via;
 
 	via         = (volatile unsigned char *) via_table[srcidx];
@@ -505,6 +628,11 @@ void mac_turnoff_irq( unsigned int irq )
 
 	if (srcidx == SRC_VIA2 && via2_is_rbv)
 		via_write(via, rIER, (via_read(via, rIER)&(1<<irqidx)));
+	else if (srcidx == SRC_VIA2 && via2_is_oss)
+		via_write(oss_regp, oss_map[irqidx]+8, 0);
+	else if (srcidx >= SRC_VIA2)
+	        via_write(via, (0x104 + 0x10*srcidx), 
+	        	via_read(via, (0x104 + 0x10*srcidx))|(1<<(irqidx)));
 	else
 		via_write(via, vIER, (via_read(via, vIER)&(1<<irqidx)));
 }
@@ -519,23 +647,91 @@ void mac_turnoff_irq( unsigned int irq )
 
 void mac_clear_pending_irq( unsigned int irq )
 {
-        int srcidx = ((irq & IRQ_SRC_MASK)>>3) - 1;
-        int irqidx = (irq & IRQ_IDX_MASK);
+	int srcidx = ((irq & IRQ_SRC_MASK)>>3) - 1;
+	int irqidx = (irq & IRQ_IDX_MASK);
 
 	irq_flags[srcidx].pending &= ~(1<<irqidx);
 }
 
 int  mac_irq_pending( unsigned int irq )
 {
-        int srcidx = ((irq & IRQ_SRC_MASK)>>3) - 1;
-        int irqidx = (irq & IRQ_IDX_MASK);
+	int srcidx = ((irq & IRQ_SRC_MASK)>>3) - 1;
+	int irqidx = (irq & IRQ_IDX_MASK);
 
 	return (irq_flags[srcidx].pending & (1<<irqidx));
 }
 
 int mac_get_irq_list (char *buf)
 {
-	return 0;
+	int i, len = 0;
+	int srcidx, irqidx;
+
+	for (i = VIA1_SOURCE_BASE; i < NUM_MAC_SOURCES+8; ++i) {
+		srcidx = ((i & IRQ_SRC_MASK)>>3) - 1;
+		irqidx = (i & IRQ_IDX_MASK);
+
+		/*
+		 * Not present: skip
+		 */
+
+		if (mac_irqs[srcidx] == NULL)
+			continue;
+
+		/* 
+		 * never used by VIAs, unused by others so far, counts 
+		 * the magic 'nothing pending' cases ...
+		 */
+		if (irqidx == 7 && mac_irqs[srcidx][irqidx]) {
+			len += sprintf(buf+len, "Level %01d: %10u (spurious) \n",
+				       srcidx, 
+				       mac_irqs[srcidx][irqidx]);
+			continue;
+		}
+
+		/*
+		 * Nothing registered for this IPL: skip
+		 */
+
+		if (handler_table[srcidx] == NULL)
+			continue;
+
+		/*
+		 * No handler installed: skip
+		 */ 
+
+		if (handler_table[srcidx][irqidx].handler == mac_default_handler ||
+		    handler_table[srcidx][irqidx].handler == nubus_wtf)
+			continue;
+
+
+		if (i < VIA2_SOURCE_BASE)
+			len += sprintf(buf+len, "via1  %01d: %10u ",
+				       irqidx,
+				       mac_irqs[srcidx][irqidx]);
+		else if (i < RBV_SOURCE_BASE)
+			len += sprintf(buf+len, "via2  %01d: %10u ",
+				       irqidx,
+				       mac_irqs[srcidx][irqidx]);
+		else if (i < MAC_SCC_SOURCE_BASE)
+			len += sprintf(buf+len, "rbv   %01d: %10u ",
+				       irqidx,
+				       mac_irqs[srcidx][irqidx]);
+		else if (i < NUBUS_SOURCE_BASE)
+			len += sprintf(buf+len, "scc   %01d: %10u ",
+				       irqidx,
+				       mac_irqs[srcidx][irqidx]);
+		else /* Nubus */
+			len += sprintf(buf+len, "nubus %01d: %10u ",
+				       irqidx,
+				       mac_irqs[srcidx][irqidx]);
+
+			len += sprintf(buf+len, "%s\n", 
+				       param_table[srcidx][irqidx].devname);
+
+	}
+	if (num_spurious)
+		len += sprintf(buf+len, "spurio.: %10u\n", num_spurious);
+	return len;
 }
 
 void via_scsi_clear(void)
@@ -544,6 +740,9 @@ void via_scsi_clear(void)
 	if (via2_is_rbv) {
 		via_write(rbv_regp, rIFR, (1<<3)|(1<<0)|0x80);
 		deep_magic = via_read(rbv_regp, rBufB);
+	} else if (via2_is_oss) {
+		/* nothing */
+		/* via_write(oss_regp, 9, 0) */;
 	} else
 		deep_magic = via_read(via2_regp, vBufB);
 	mac_enable_irq( IRQ_IDX(IRQ_MAC_SCSI) );
@@ -567,12 +766,24 @@ void mac_debug_handler(int irq, void *dev_id, struct pt_regs *regs)
 	}
 }
 
+void scsi_mac_debug(void);
+void scsi_mac_polled(void);
+
 void mac_nmi_handler(int irq, void *dev_id, struct pt_regs *fp)
 {
+	int i;
 	/* 
 	 * generate debug output on NMI switch if 'debug' kernel option given
 	 * (only works with Penguin!)
 	 */
+#if 0
+	scsi_mac_debug();
+	printk("PC: %08lx\nSR: %04x  SP: %p\n", fp->pc, fp->sr, fp);
+#endif
+	for (i=0; i<100; i++)
+		udelay(1000);
+	scsi_mac_polled();
+
 	if ( console_loglevel >= 8 ) {
 #if 0
 		show_state();
@@ -607,6 +818,7 @@ static void via_irq(unsigned char *via, int *viaidx, struct pt_regs *regs)
 	int ct = 0;
 	struct irqhandler *via_handler = handler_table[*viaidx];
 	struct irqparam   *via_param   = param_table[*viaidx];
+	unsigned long     *via_irqs    = mac_irqs[*viaidx];
 
 	/* to be changed, possibly: for each non'masked', enabled IRQ, read 
 	 * flag bit, ack and call handler ...
@@ -623,7 +835,12 @@ static void via_irq(unsigned char *via, int *viaidx, struct pt_regs *regs)
 	 
 	if(events==0)
 	{
-		printk("via%d_irq: nothing pending!\n", *viaidx + 1);
+#ifdef DEBUG_VIA
+		/* should go away; mostly missing timer ticks and ADB events */
+		printk("via%d_irq: nothing pending, flags %x mask %x!\n",
+			*viaidx + 1, via_read(via, vIFR), via_read(via,vIER));
+#endif
+		via_irqs[7]++;
 		return;
 	}
 
@@ -658,9 +875,12 @@ static void via_irq(unsigned char *via, int *viaidx, struct pt_regs *regs)
 		        /* call corresponding handlers */
 		        if (events&(1<<i)) {
 			        if (irq_flags[*viaidx].disabled & (1<<i)) {
+					if (!irq_flags[*viaidx].pending&(1<<i))
+						via_irqs[i]++;
 				        /* irq disabled -> mark pending */
 				        irq_flags[*viaidx].pending |= (1<<i);
 				} else {
+					via_irqs[i]++;
 				        /* irq enabled -> call handler */
 				        (via_handler[i].handler)(irq, via, regs);
 				}
@@ -683,7 +903,9 @@ static void via_irq(unsigned char *via, int *viaidx, struct pt_regs *regs)
 		ct++;
 		if(events && ct>8)
 		{
+#ifdef DEBUG_VIA
 		        printk("via%d: stuck events %x\n", (*viaidx)+1, events);
+#endif
 		        break;
 		}
 	}
@@ -740,6 +962,23 @@ void rbv_irq(int irq, void *dev_id, struct pt_regs *regs)
 	struct irqhandler *via_handler = handler_table[srcidx];
 	struct irqparam   *via_param   = param_table[srcidx];
 
+        /* shouldn't we disable interrupts here ?? */
+
+	
+	/*
+	 *	Shouldnt happen
+	 */
+	 
+	if(events==0)
+	{
+#ifdef DEBUG_VIA
+		printk("rbv_irq: nothing pending, flags %x mask %x!\n",
+			via_read(via, rIFR), via_read(via,rIER));
+#endif
+		rbv_irqs[7]++;
+		return;
+	}
+
 #ifdef DEBUG_VIA	
 	/*
 	 * limited verbosity for RBV interrupts (add more if needed)
@@ -754,19 +993,6 @@ void rbv_irq(int irq, void *dev_id, struct pt_regs *regs)
 	 * If ack for masked IRQ required: keep 'pending' info separate.
 	 */
 
-        /* shouldn't we disable interrupts here ?? */
-
-	
-	/*
-	 *	Shouldnt happen
-	 */
-	 
-	if(events==0)
-	{
-		printk("rbv_irq: nothing pending!\n");
-		return;
-	}
-	
 	do {
 		/*
 		 *	Clear the pending flag
@@ -784,12 +1010,16 @@ void rbv_irq(int irq, void *dev_id, struct pt_regs *regs)
 			int irq = (srcidx+1)* 8 + i;
 		        /* call corresponding handlers */
 		        if (events&(1<<i)) {
-			        if (irq_flags[srcidx].disabled & (1<<i))
+			        if (irq_flags[srcidx].disabled & (1<<i)) {
+					if (!irq_flags[srcidx].pending&(1<<i))
+						rbv_irqs[i]++;
 				        /* irq disabled -> mark pending */
 				        irq_flags[srcidx].pending |= (1<<i);
-				else
+				} else {
+					rbv_irqs[i]++;
 				        /* irq enabled -> call handler */
 				        (via_handler[i].handler)(irq, via, regs);
+				}
 			}
 			/* and call handlers for pending irqs - first ?? */
 			if (    (irq_flags[srcidx].pending  & (1<<i))
@@ -800,7 +1030,7 @@ void rbv_irq(int irq, void *dev_id, struct pt_regs *regs)
 				irq_flags[srcidx].pending  &= ~(1<<i);
 			}
 		}
-	
+
 		/*
 		 *	And done ... check for more punishment!
 		 */
@@ -840,22 +1070,275 @@ void via_wtf(int slot, void *via, struct pt_regs *regs)
 #endif
 }
 
+/*
+ *	Nubus / SCSI interrupts; OSS style
+ *	The OSS is even more different than the RBV. OSS appears to stand for 
+ *	Obscenely Screwed Silicon ... 
+ *
+ *	Latest NetBSD sources suggest the OSS should behave like a RBV, but 
+ *	that's probably true for the 0x203 offset (Nubus/ADB-SWIM IOP) at best
+ */
+ 
+void oss_irq(int irq, void *dev_id, struct pt_regs *regs)
+{
+	int srcidx = IRQ_IDX(irq) - 1;	/* MUST be 1 !! */
+	volatile unsigned char *via = oss_regp;
+	unsigned char events=(via_read(via, oIFR))&0x03;
+	unsigned char nub_ev=(via_read(via, nIFR))&0x4F;
+	unsigned char adb_ev;
+	int i;
+	int ct = 0;
+	struct irqhandler *via_handler = handler_table[srcidx];
+	struct irqparam   *via_param   = param_table[srcidx];
+
+        /* shouldn't we disable interrupts here ?? */
+
+	adb_ev = nub_ev & 0x40;
+	nub_ev &= 0x3F;
+
+	/*
+	 *	Shouldnt happen
+	 */
+
+	if (events==0 && adb_ev==0 && nub_ev==0)
+	{
+		printk("oss_irq: nothing pending, flags %x %x!\n",
+			via_read(via, oIFR), via_read(via, nIFR));
+		rbv_irqs[7]++;
+		return;
+	}
+
+#ifdef DEBUG_VIA	
+	/*
+	 * limited verbosity for RBV interrupts (add more if needed)
+	 */
+	if ( events != 1<<3 )		/* SCSI IRQ */
+		printk("oss_irq: irq %d events %x %x %x !\n", irq, srcidx+1, 
+			events, adb_ev, nub_ev);
+#endif
+
+	/* 
+	 * OSS priorities: call ADB handler first if registered, other events,
+	 * then Nubus 
+	 * ADB: yet to be implemented!
+	 */
+
+	/*
+	 * ADB: try to shutup the IOP 
+	 */
+	if (adb_ev) {
+		printk("Hands off ! Don't press this button ever again !!!\n");
+		via_write(via, 6, 0);
+	}
+
+	do {
+		/*
+		 *	Clear the pending flags
+		 *	How exactly is that supposed to work ??
+		 */
+
+		/*
+		 *	Now see what bits are raised
+		 */
+		 
+		for(i=0;i<7;i++)
+		{
+			/* HACK HACK: map to bit number in OSS register */
+			int irqidx = oss_map[i];
+			/* determine machspec. irq no. */
+			int irq = (srcidx+1)* 8 + i;
+		        /* call corresponding handlers */
+		        if ( (events&(1<<irqidx)) && 		/* bit set*/
+		             (via_read(via, irqidx+8)&0x7) ) {	/* irq enabled */
+			        if (irq_flags[srcidx].disabled & (1<<i)) {
+					if (!irq_flags[srcidx].pending&(1<<i))
+						rbv_irqs[i]++;
+				        /* irq disabled -> mark pending */
+				        irq_flags[srcidx].pending |= (1<<i);
+				} else {
+					rbv_irqs[i]++;
+				        /* irq enabled -> call handler */
+				        (via_handler[i].handler)(irq, via, regs);
+				}
+			}
+			/* and call handlers for pending irqs - first ?? */
+			if (    (irq_flags[srcidx].pending  & (1<<i))
+			    && !(irq_flags[srcidx].disabled & (1<<i)) ) {
+				/* call handler for re-enabled irq */
+			        (via_handler[i].handler)(irq, via, regs);
+				/* and clear pending flag :-) */
+				irq_flags[srcidx].pending  &= ~(1<<i);
+			}
+		}
+	
+		/*
+		 *	And done ... check for more punishment!
+		 */
+
+		events=(via_read(via, oIFR)/*&via_read(via,rIER)*/)&0x03;
+		ct++;
+		if(events && ct>8)
+		{
+		        printk("oss: stuck events %x\n",events);
+			for(i=0;i<7;i++)
+			{
+				if(events&(1<<i))
+				{
+					printk("oss - bashing source %d\n",
+						i);
+					/* that should disable it */
+					via_write(via, 8+i, 0);
+				}
+			}
+		        break;
+		}
+	}
+	while(events);
+#if 0
+	scsi_mac_polled();
+#endif
+
+	if (nub_ev)
+		oss_do_nubus(irq, via, regs);
+
+}
+
+/*
+ *	Unexpected slot interrupt
+ */
+ 
 void nubus_wtf(int slot, void *via, struct pt_regs *regs)
 {
-#ifdef DEBUG_VIA
+#ifdef DEBUG_VIA_NUBUS
 	printk("Unexpected interrupt on nubus slot %d\n",slot);
 #endif
 }
 
+/*
+ *	SCC master interrupt handler; sole purpose: pass the registered 
+ *	async struct to the SCC handler proper.
+ */
+
 void mac_SCC_handler(int irq, void *dev_id, struct pt_regs *regs)
 {
 	int i;
-
-	for (i = 0; i < 8; i++) 
+				/* 1+2: compatibility with PSC ! */
+	for (i = 1; i < 3; i++) /* currently only these two used */
 		if (scc_handler[i].handler != mac_default_handler)
 			(scc_handler[i].handler)(i, scc_handler[i].dev_id, regs);
 
 }
+
+/*
+ *	PSC interrupt handler
+ */
+
+void psc_irq(int irq, void *dev_id, struct pt_regs *regs)
+{
+	int srcidx = IRQ_IDX(irq) - 1;
+	volatile unsigned char *via = psc_regp;
+	unsigned int pIFR = 0x100 + 0x10*srcidx;
+	unsigned int pIER = 0x104 + 0x10*srcidx;
+	unsigned char events=(via_read(via, pIFR)&via_read(via,pIER))&0xF;
+	int i;
+	int ct = 0;
+	struct irqhandler *via_handler = handler_table[srcidx];
+	struct irqparam   *via_param   = param_table[srcidx];
+
+        /* shouldn't we disable interrupts here ?? */
+
+	
+	/*
+	 *	Shouldnt happen
+	 */
+	 
+	if(events==0)
+	{
+#ifdef DEBUG_VIA
+		printk("rbv_irq: nothing pending, flags %x mask %x!\n",
+			via_read(via, pIFR), via_read(via,pIER));
+#endif
+		mac_irqs[srcidx][7]++;
+		return;
+	}
+
+#ifdef DEBUG_VIA	
+	/*
+	 * limited verbosity for RBV interrupts (add more if needed)
+	 */
+	if ( srcidx == 1 && events != 1<<3 && events != 1<<1 )		/* SCSI IRQ */
+		printk("psc_irq: irq %d events %x !\n", irq, srcidx+1, events);
+#endif
+
+	/* to be changed, possibly: for each non'masked', enabled IRQ, read 
+	 * flag bit, ack and call handler ...
+         * Currently: all pending irqs ack'ed en bloc.
+	 * If ack for masked IRQ required: keep 'pending' info separate.
+	 */
+
+	do {
+		/*
+		 *	Clear the pending flag
+		 */
+		 
+		/* via_write(via, pIFR, events); */
+		 
+		/*
+		 *	Now see what bits are raised
+		 */
+		 
+		for(i=0;i<7;i++)
+		{
+			/* determine machspec. irq no. */
+			int irq = (srcidx+1)* 8 + i;
+		        /* call corresponding handlers */
+		        if (events&(1<<i)) {
+			        if (irq_flags[srcidx].disabled & (1<<i)) {
+					if (!irq_flags[srcidx].pending&(1<<i))
+						mac_irqs[srcidx][i]++;
+				        /* irq disabled -> mark pending */
+				        irq_flags[srcidx].pending |= (1<<i);
+				} else {
+					mac_irqs[srcidx][i]++;
+				        /* irq enabled -> call handler */
+				        (via_handler[i].handler)(irq, via, regs);
+				}
+			}
+			/* and call handlers for pending irqs - first ?? */
+			if (    (irq_flags[srcidx].pending  & (1<<i))
+			    && !(irq_flags[srcidx].disabled & (1<<i)) ) {
+				/* call handler for re-enabled irq */
+			        (via_handler[i].handler)(irq, via, regs);
+				/* and clear pending flag :-) */
+				irq_flags[srcidx].pending  &= ~(1<<i);
+			}
+		}
+
+		/*
+		 *	And done ... check for more punishment!
+		 */
+
+		events=(via_read(via,pIFR)&via_read(via,pIER))&0x7F;
+		ct++;
+		if(events && ct>8)
+		{
+		        printk("psc: stuck events %x\n",events);
+			for(i=0;i<7;i++)
+			{
+				if(events&(1<<i))
+				{
+					printk("psc - bashing source %d\n",
+						i);
+					via_write(via, pIER, 1<<i);
+					/* via_write(via, pIFR, (1<<i)); */
+				}
+			}
+		        break;
+		}
+	}
+	while(events);
+}
+
 
 /*
  *	Nubus handling
@@ -875,16 +1358,17 @@ int nubus_request_irq(int slot, void *dev_id, void (*handler)(int,void *,struct 
 	nubus_handler[slot].handler=handler;
 	nubus_handler[slot].dev_id =dev_id;
 	nubus_param[slot].flags    = IRQ_FLG_LOCK;
-	nubus_param[slot].devname  = "nubus";
+	nubus_param[slot].devname  = "nubus slot";
 
 	/* 
 	 * if no nubus int. was active previously: register the main nubus irq
 	 * handler now!
 	 */
 
-	if (!nubus_active)
-	  request_irq(IRQ_MAC_NUBUS, via_do_nubus, IRQ_FLG_LOCK, 
-		      "nubus dispatch", via_do_nubus);
+	if (!nubus_active && !via2_is_oss) {
+		request_irq(IRQ_MAC_NUBUS, via_do_nubus, IRQ_FLG_LOCK, 
+			    "nubus dispatch", via_do_nubus);
+	}
 
 	nubus_active|=1<<slot;
 /*	printk("program slot %d\n",slot);*/
@@ -894,7 +1378,9 @@ int nubus_request_irq(int slot, void *dev_id, void (*handler)(int,void *,struct 
 		via_read(via2, vDirA)|(1<<slot));
 	via_write(via2, vBufA, 0);
 #endif		
-	if (!via2_is_rbv) {
+	if (via2_is_oss)
+		via_write(oss_regp, slot, 2);
+	else if (!via2_is_rbv) {
 		/* Make sure the bit is an input */
 		via_write(via2_regp, vDirA, 
 			via_read(via2_regp, vDirA)&~(1<<slot));
@@ -914,6 +1400,8 @@ int nubus_free_irq(int slot)
 
 	if (via2_is_rbv)
 		via_write(rbv_regp, rBufA, 1<<slot);
+	else if (via2_is_oss)
+		via_write(oss_regp, slot, 0);
 	else {
 		via_write(via2_regp, vDirA, 
 			via_read(via2_regp, vDirA)|(1<<slot));
@@ -924,6 +1412,16 @@ int nubus_free_irq(int slot)
 	return 0;
 }
 
+#ifdef CONFIG_BLK_DEV_MAC_IDE
+/*
+ * IDE interrupt hook
+ */
+extern void (*mac_ide_intr_hook)(int, void *, struct pt_regs *);
+#endif
+
+/*
+ * Nubus dispatch handler - VIA/RBV style
+ */
 static void via_do_nubus(int slot, void *via, struct pt_regs *regs)
 {
 	unsigned char map;
@@ -938,6 +1436,14 @@ static void via_do_nubus(int slot, void *via, struct pt_regs *regs)
 	else
 		via_write(via2_regp, vIFR, 0x82);
 	
+#ifdef CONFIG_BLK_DEV_MAC_IDE
+	/* IDE hack */
+	if (mac_ide_intr_hook)
+		/* 'slot' is lacking the machspec bit in 2.0 */
+		/* need to pass proper dev_id = hwgroup here */
+		mac_ide_intr_hook(IRQ_MAC_NUBUS, via, regs);
+#endif
+
 	while(1)
 	{
 		if (via2_is_rbv)
@@ -945,15 +1451,23 @@ static void via_do_nubus(int slot, void *via, struct pt_regs *regs)
 		else
 			map = ~via_read(via2_regp, vBufA);
 		
-#ifdef DEBUG_VIA
+		if( (map = (map&nubus_active)) ==0 ) {
+#ifdef DEBUG_NUBUS_INT
+			printk("nubus_irq: nothing pending, map %x mask %x\n", 
+				map, nubus_active);
+#endif
+			nubus_irqs[7]++;
+			break;
+		}
+#ifdef DEBUG_NUBUS_INT
 		printk("nubus_irq: map %x mask %x\n", map, nubus_active);
 #endif
-		if( (map = (map&nubus_active)) ==0 )
-			break;
 
 		if(ct++>2)
 		{
+#ifdef DEBUG_NUBUS_INT
 			printk("nubus stuck events - %d/%d\n", map, nubus_active);
+#endif
 			return;
 		}
 
@@ -961,6 +1475,7 @@ static void via_do_nubus(int slot, void *via, struct pt_regs *regs)
 		{
 			if(map&(1<<i))
 			{
+				nubus_irqs[i]++;
 				(nubus_handler[i].handler)(i+9, nubus_handler[i].dev_id, regs);
 			}
 		}
@@ -970,6 +1485,75 @@ static void via_do_nubus(int slot, void *via, struct pt_regs *regs)
 		else
 			via_write(via2_regp, vIFR, 0x02);
 
+	}
+	
+	/* And done */
+}
+
+/*
+ * Nubus dispatch handler - OSS style
+ */
+static void oss_do_nubus(int slot, void *via, struct pt_regs *regs)
+{
+	unsigned char map;
+	int i;
+	int ct=0;
+
+/*	printk("nubus interrupt\n");*/
+		
+#if 0
+	/* lock the nubus interrupt */
+	if (via2_is_rbv) 
+		via_write(rbv_regp, rIFR, 0x82);
+	else
+		via_write(via2_regp, vIFR, 0x82);
+#endif
+
+	/* IDE hack for Quadra: uses Nubus interrupt without any slot bit set */
+	if (mac_ide_intr_hook)
+		mac_ide_intr_hook(IRQ_MAC_NUBUS, via, regs);
+	
+	while(1)
+	{
+		/* pending events */
+		map=(via_read(via, nIFR))&0x3F;
+		
+#ifdef DEBUG_VIA_NUBUS
+		printk("nubus_irq: map %x mask %x\n", map, nubus_active);
+#endif
+		if( (map = (map&nubus_active)) ==0 ) {
+			if (!mac_ide_intr_hook)
+				printk("nubus_irq: nothing pending, map %x mask %x\n", 
+					map, nubus_active);
+			nubus_irqs[7]++;
+			break;
+		}
+
+		if(ct++>2)
+		{
+#if 0
+			printk("nubus stuck events - %d/%d\n", map, nubus_active);
+#endif
+			return;
+		}
+
+		for(i=0;i<7;i++)
+		{
+			if(map&(1<<i))
+			{
+				nubus_irqs[i]++;
+				/* call handler */
+				(nubus_handler[i].handler)((i+9), nubus_handler[i].dev_id, regs);
+				/* clear interrupt ?? */
+#if 0
+				via_write(oss_regp, i, 0);
+#endif
+			}
+		}
+		/* clear it */ 
+#if 0
+		via_write(oss_regp, nIFR, map);
+#endif
 	}
 	
 	/* And done */

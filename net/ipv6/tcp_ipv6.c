@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.81 1998/05/03 14:31:10 alan Exp $
+ *	$Id: tcp_ipv6.c,v 1.82 1998/06/11 03:15:52 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -64,9 +64,7 @@ static __inline__ int tcp_v6_hashfn(struct in6_addr *laddr, u16 lport,
 {
 	int hashent = (lport ^ fport);
 
-	hashent ^= (laddr->s6_addr32[0] ^ laddr->s6_addr32[1]);
-	hashent ^= (faddr->s6_addr32[0] ^ faddr->s6_addr32[1]);
-	hashent ^= (faddr->s6_addr32[2] ^ faddr->s6_addr32[3]);
+	hashent ^= (laddr->s6_addr32[3] ^ faddr->s6_addr32[3]);
 	return (hashent & ((TCP_HTABLE_SIZE/2) - 1));
 }
 
@@ -145,6 +143,13 @@ go_like_smoke:
 
 static void tcp_v6_hash(struct sock *sk)
 {
+	/* Well, I know that it is ugly...
+	   All this ->prot, ->af_specific etc. need LARGE cleanup --ANK
+	 */
+	if (sk->tp_pinfo.af_tcp.af_specific == &ipv6_mapped) {
+		tcp_prot.hash(sk);
+		return;
+	}
 	if(sk->state != TCP_CLOSE) {
 		struct sock **skp;
 
@@ -415,8 +420,14 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 		if (err) {
 			sk->tp_pinfo.af_tcp.af_specific = &ipv6_specific;
 			sk->backlog_rcv = tcp_v6_do_rcv;
+		} else {
+			/* Yuup... And it is not the only place... --ANK */
+			ipv6_addr_set(&np->saddr, 0, 0, __constant_htonl(0x0000FFFF),
+				      sk->saddr);
+			ipv6_addr_set(&np->rcv_saddr, 0, 0, __constant_htonl(0x0000FFFF),
+				      sk->rcv_saddr);
 		}
-		
+
 		return err;
 	}
 

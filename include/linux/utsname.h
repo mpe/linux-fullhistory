@@ -32,4 +32,5 @@ struct new_utsname {
 
 extern struct new_utsname system_utsname;
 
+extern struct semaphore uts_sem;
 #endif

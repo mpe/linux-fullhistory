@@ -95,7 +95,7 @@ __initfunc(void snap_proto_init(struct net_proto *pro))
 }
 
 /*
- *	Register SNAP clients. We don't yet use this for IP or IPX.
+ *	Register SNAP clients. We don't yet use this for IP.
  */
 
 struct datalink_proto *register_snap_client(unsigned char *desc, int (*rcvfunc)(struct sk_buff *, struct device *, struct packet_type *))

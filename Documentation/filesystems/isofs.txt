@@ -21,7 +21,8 @@ Mount options that are unique to the isofs filesystem.
   check=strict  Matches only filenames with the exact same case
   cruft         Try to handle badly formatted CDs.
   map=off       Do not map non-rockridge filenames to lowercase
-  map=normal    Map rockridge filenames to lowercase
+  map=normal    Map non-rockridge filenames to lowecase
+  map=acorn     As map=normal but also apply Acorn extensions if present
   mode=xxx      Sets the permissions on files to xxx
   nojoliet      Ignore Joliet extensions if they are present.
   norock        Ignore rockridge extensions if they are present.

@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) output module.
  *
- * Version:	$Id: ip_output.c,v 1.57 1998/05/08 01:54:56 davem Exp $
+ * Version:	$Id: ip_output.c,v 1.58 1998/05/15 15:21:36 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -99,6 +99,7 @@ void ip_build_and_send_pkt(struct sk_buff *skb, struct sock *sk,
 {
 	struct rtable *rt = (struct rtable *)skb->dst;
 	struct iphdr *iph;
+	struct device *dev;
 	
 	/* Build the IP header. */
 	if (opt)
@@ -126,10 +127,19 @@ void ip_build_and_send_pkt(struct sk_buff *skb, struct sock *sk,
 		ip_options_build(skb, opt, daddr, rt, 0);
 	}
 
+	dev = rt->u.dst.dev;
+
+	if (call_out_firewall(PF_INET, dev, iph, NULL, &skb) < FW_ACCEPT)
+		goto drop;
+
 	ip_send_check(iph);
 
 	/* Send it out. */
 	skb->dst->output(skb);
+	return;
+
+drop:
+	kfree_skb(skb);
 }
 
 int __ip_finish_output(struct sk_buff *skb)

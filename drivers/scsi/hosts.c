@@ -237,6 +237,29 @@
 #include "scsi_debug.h"
 #endif
 
+#ifdef CONFIG_SCSI_ACORNSCSI_3
+#include "../acorn/scsi/acornscsi.h"
+#endif
+
+#ifdef CONFIG_SCSI_CUMANA_1
+#include "../acorn/scsi/cumana_1.h"
+#endif
+
+#ifdef CONFIG_SCSI_CUMANA_2
+#include "../acorn/scsi/cumana_2.h"
+#endif
+
+#ifdef CONFIG_SCSI_ECOSCSI
+#include "../acorn/scsi/ecoscsi.h"
+#endif
+
+#ifdef CONFIG_SCSI_OAK1
+#include "../acorn/scsi/oak.h"
+#endif
+
+#ifdef CONFIG_SCSI_POWERTECSCSI
+#include "../acorn/scsi/powertec.h"
+#endif
 
 /*
 static const char RCSid[] = "$Header: /vger/u4/cvs/linux/drivers/scsi/hosts.c,v 1.20 1996/12/12 19:18:32 davem Exp $";
@@ -423,6 +446,26 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_PLUTO
     PLUTO,
+#endif
+#ifdef CONFIG_ARCH_ACORN
+#ifdef CONFIG_SCSI_ACORNSCSI_3
+    ACORNSCSI_3,
+#endif
+#ifdef CONFIG_SCSI_CUMANA_1
+    CUMANA_NCR5380,
+#endif
+#ifdef CONFIG_SCSI_CUMANA_2
+    CUMANA_FAS216,
+#endif
+#ifdef CONFIG_SCSI_ECOSCSI
+    ECOSCSI_NCR5380,
+#endif
+#ifdef CONFIG_SCSI_OAK1
+    OAK_NCR5380,
+#endif
+#ifdef CONFIG_SCSI_POWERTECSCSI
+    POWERTECSCSI,
+#endif
 #endif
 #ifdef CONFIG_SCSI_DEBUG
     SCSI_DEBUG,

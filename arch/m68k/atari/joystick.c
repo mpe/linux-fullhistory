@@ -15,7 +15,6 @@
 
 #include <asm/atarikb.h>
 #include <asm/atari_joystick.h>
-#include <asm/atari_mouse.h>
 #include <asm/uaccess.h>
 
 #define MAJOR_NR    JOYSTICK_MAJOR

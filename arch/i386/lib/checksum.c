@@ -8,6 +8,9 @@
  * Authors:	Jorge Cwik, <jorge@laser.satlink.net>
  *		Arnt Gulbrandsen, <agulbra@nvg.unit.no>
  *		Tom May, <ftom@netcom.com>
+ *              Pentium Pro/II routines:
+ *              Alexander Kjeldaas <astor@guardian.no>
+ *              Finn Arne Gangstad <finnag@guardian.no>
  *		Lots of code moved from tcp.c and ip.c; see those files
  *		for more names.
  *
@@ -25,6 +28,8 @@
 /*
  * computes a partial checksum, e.g. for TCP/UDP fragments
  */
+
+#if CPU!=686
 
 unsigned int csum_partial(const unsigned char * buff, int len, unsigned int sum) {
 	  /*
@@ -97,6 +102,101 @@ unsigned int csum_partial(const unsigned char * buff, int len, unsigned int sum)
 	return(sum);
 }
 
+#else  /* 686 */
+
+unsigned int csum_partial(const unsigned char * buf, int len, unsigned int sum) {
+         __asm__ ("
+            testl $2, %%esi         
+            jnz 30f                 
+10:
+            movl %%ecx, %%edx
+            movl %%ecx, %%ebx
+            andl $0x7c, %%ebx
+            shrl $7, %%ecx
+            addl %%ebx,%%esi
+            shrl $2, %%ebx  
+            negl %%ebx
+            lea 45f(%%ebx,%%ebx,2), %%ebx
+            testl %%esi, %%esi
+            jmp %%ebx
+
+            # Handle 2-byte-aligned regions
+20:         addw (%%esi), %%ax
+            lea 2(%%esi), %%esi
+            adcl $0, %%eax
+            jmp 10b
+
+30:         subl $2, %%ecx          
+            ja 20b                 
+            je 32f
+            movzbl (%%esi),%%ebx # csumming 1 byte, 2-aligned
+            addl %%ebx, %%eax
+            adcl $0, %%eax
+            jmp 80f
+32:
+            addw (%%esi), %%ax # csumming 2 bytes, 2-aligned
+            adcl $0, %%eax
+            jmp 80f
+
+40: 
+	    addl -128(%%esi), %%eax
+            adcl -124(%%esi), %%eax
+            adcl -120(%%esi), %%eax
+            adcl -116(%%esi), %%eax   
+	    adcl -112(%%esi), %%eax   
+            adcl -108(%%esi), %%eax
+            adcl -104(%%esi), %%eax
+            adcl -100(%%esi), %%eax
+            adcl -96(%%esi), %%eax
+            adcl -92(%%esi), %%eax
+            adcl -88(%%esi), %%eax
+            adcl -84(%%esi), %%eax
+            adcl -80(%%esi), %%eax
+            adcl -76(%%esi), %%eax
+            adcl -72(%%esi), %%eax
+            adcl -68(%%esi), %%eax
+	    adcl -64(%%esi), %%eax     
+            adcl -60(%%esi), %%eax     
+            adcl -56(%%esi), %%eax     
+            adcl -52(%%esi), %%eax   
+            adcl -48(%%esi), %%eax   
+            adcl -44(%%esi), %%eax
+            adcl -40(%%esi), %%eax
+            adcl -36(%%esi), %%eax
+            adcl -32(%%esi), %%eax
+            adcl -28(%%esi), %%eax
+            adcl -24(%%esi), %%eax
+            adcl -20(%%esi), %%eax
+            adcl -16(%%esi), %%eax
+            adcl -12(%%esi), %%eax
+            adcl -8(%%esi), %%eax
+            adcl -4(%%esi), %%eax
+45:
+            lea 128(%%esi), %%esi
+            adcl $0, %%eax
+            dec %%ecx
+            jge 40b
+            movl %%edx, %%ecx
+50:         andl $3, %%ecx
+            jz 80f
+
+            # Handle the last 1-3 bytes without jumping
+            notl %%ecx            # 1->2, 2->1, 3->0, higher bits are masked
+	    movl $0xffffff,%%ebx  # by the shll and shrl instructions
+	    shll $3,%%ecx
+	    shrl %%cl,%%ebx
+	    andl -128(%%esi),%%ebx # esi is 4-aligned so should be ok
+	    addl %%ebx,%%eax
+	    adcl $0,%%eax
+80:          "
+        : "=a"(sum)
+        : "0"(sum), "c"(len), "S"(buf)
+        : "bx", "cx", "dx", "si");
+        return(sum);
+}
+
+#endif
+
 /*
  * Copy from ds while checksumming, otherwise like csum_partial
  *
@@ -112,13 +212,15 @@ unsigned int csum_partial(const unsigned char * buff, int len, unsigned int sum)
 "	9999: "#y";			\n \
 	.section __ex_table, \"a\";	\n \
 	.long 9999b, 6001f		\n \
-	.previous"
+	.previous\n"
 
 #define DST(y...)			\
 "	9999: "#y";			\n \
 	.section __ex_table, \"a\";	\n \
 	.long 9999b, 6002f		\n \
-	.previous"
+	.previous\n"
+
+#if CPU!=686
 
 unsigned int csum_partial_copy_generic (const char *src, char *dst,
 				  int len, int sum, int *src_err_ptr, int *dst_err_ptr)
@@ -241,6 +343,79 @@ unsigned int csum_partial_copy_generic (const char *src, char *dst,
 
     return(sum);
 }
+
+#else /* CPU == 686 */
+
+#define ROUND1(x) \
+        SRC(movl x(%%esi), %%ebx         ) \
+        "addl %%ebx, %%eax\n" \
+        DST(movl %%ebx, x(%%edi)         )
+
+#define ROUND(x) \
+        SRC(movl x(%%esi), %%ebx         ) \
+        "adcl %%ebx, %%eax\n" \
+        DST(movl %%ebx, x(%%edi)         )
+
+unsigned int csum_partial_copy_generic (const char *src, char *dst,
+				  int len, int sum, int *src_err_ptr, int *dst_err_ptr)
+{
+	__asm__ __volatile__ ("
+        movl %%ecx, %%edx  
+        movl %%ecx, %%ebx  
+        shrl $6, %%ecx     
+        andl $0x3c, %%ebx  
+        negl %%ebx
+        subl %%ebx, %%esi  
+        subl %%ebx, %%edi  
+        lea 3f(%%ebx,%%ebx), %%ebx
+        testl %%esi, %%esi 
+        jmp %%ebx         
+1:      addl $64,%%esi
+        addl $64,%%edi\n" 
+ROUND1(-64) ROUND(-60) ROUND(-56) ROUND(-52)
+ROUND (-48) ROUND(-44) ROUND(-40) ROUND(-36)
+ROUND (-32) ROUND(-28) ROUND(-24) ROUND(-20)
+ROUND (-16) ROUND(-12) ROUND(-8)  ROUND(-4)
+"3:     adcl $0,%%eax
+        dec %%ecx
+        jge 1b
+4:      andl $3, %%edx
+        jz 7f
+        cmpl $2, %%edx
+        jb 5f
+  " SRC(movw (%%esi), %%dx         )"
+        leal 2(%%esi), %%esi
+  " DST(movw %%dx, (%%edi)         )"
+        leal 2(%%edi), %%edi
+        je 6f
+        shll $16,%%edx
+5:" SRC(movb (%%esi), %%dl         )"
+  " DST(movb %%dl, (%%edi)         )"
+6:      addl %%edx, %%eax
+        adcl $0, %%eax
+7:
+.section .fixup, \"ax\"
+6000:	movl	%7, (%%ebx)
+# FIXME: do zeroing of rest of the buffer here.
+	jmp	7b
+6001:	movl    %1, %%ebx	
+	jmp	6000b	
+6002:	movl    %2, %%ebx
+	jmp	6000b
+.previous
+        "
+	: "=a"(sum), "=m"(src_err_ptr), "=m"(dst_err_ptr)
+        : "0"(sum), "c"(len), "S"(src), "D" (dst),
+		"i" (-EFAULT)
+        : "bx", "cx", "dx", "si", "di" );
+	return(sum);
+}
+
+#undef ROUND
+#undef ROUND1
+
+#endif
+
 
 #undef SRC
 #undef DST

@@ -23,31 +23,9 @@
 static inline int namecompare(int len, int maxlen,
 	const char * name, const char * buffer)
 {
-	if (len > maxlen)
-		return 0;
 	if (len < maxlen && buffer[len])
 		return 0;
 	return !memcmp(name, buffer, len);
-}
-
-/*
- * ok, we cannot use strncmp, as the name is not in our data space.
- * Thus we'll have to use minix_match. No big problem. Match also makes
- * some sanity tests.
- *
- * NOTE! unlike strncmp, minix_match returns 1 for success, 0 for failure.
- */
-static int minix_match(int len, const char * name,
-	struct buffer_head * bh, unsigned long * offset,
-	struct minix_sb_info * info)
-{
-	struct minix_dir_entry * de;
-
-	de = (struct minix_dir_entry *) (bh->b_data + *offset);
-	*offset += info->s_dirsize;
-	if (!de->inode || len > info->s_namelen)
-		return 0;
-	return namecompare(len,info->s_namelen,name,de->name);
 }
 
 /*
@@ -64,6 +42,7 @@ static struct buffer_head * minix_find_entry(struct inode * dir,
 	unsigned long block, offset;
 	struct buffer_head * bh;
 	struct minix_sb_info * info;
+	struct minix_dir_entry *de;
 
 	*res_dir = NULL;
 	if (!dir || !dir->i_sb)
@@ -86,9 +65,12 @@ static struct buffer_head * minix_find_entry(struct inode * dir,
 				continue;
 			}
 		}
-		*res_dir = (struct minix_dir_entry *) (bh->b_data + offset);
-		if (minix_match(namelen,name,bh,&offset,info))
+		de = (struct minix_dir_entry *) (bh->b_data + offset);
+		offset += info->s_dirsize;
+		if (de->inode && namecompare(namelen,info->s_namelen,name,de->name)) {
+			*res_dir = de;
 			return bh;
+		}
 		if (offset < bh->b_size)
 			continue;
 		brelse(bh);
@@ -97,9 +79,42 @@ static struct buffer_head * minix_find_entry(struct inode * dir,
 		block++;
 	}
 	brelse(bh);
-	*res_dir = NULL;
 	return NULL;
 }
+
+#ifndef NO_TRUNCATE
+
+static int minix_hash(struct dentry *dentry, struct qstr *qstr)
+{
+	unsigned long hash;
+	int i;
+	const char *name;
+
+	i = dentry->d_inode->i_sb->u.minix_sb.s_namelen;
+	if (i >= qstr->len)
+		return 0;
+	/* Truncate the name in place, avoids having to define a compare
+	   function. */
+	qstr->len = i;
+	name = qstr->name;
+	hash = init_name_hash();
+	while (i--)
+		hash = partial_name_hash(*name++, hash);
+	qstr->hash = end_name_hash(hash);
+	return 0;
+}
+
+#endif
+
+struct dentry_operations minix_dentry_operations = {
+	0,		/* revalidate */
+#ifndef NO_TRUNCATE
+	minix_hash,
+#else
+	0,
+#endif
+	0		/* compare */
+};
 
 int minix_lookup(struct inode * dir, struct dentry *dentry)
 {
@@ -107,6 +122,9 @@ int minix_lookup(struct inode * dir, struct dentry *dentry)
 	struct minix_dir_entry * de;
 	struct buffer_head * bh;
 
+#ifndef NO_TRUNCATE
+	dentry->d_op = &minix_dentry_operations;
+#endif
 	bh = minix_find_entry(dir, dentry->d_name.name, dentry->d_name.len, &de);
 	if (bh) {
 		int ino = de->inode;
@@ -296,7 +314,7 @@ int minix_mkdir(struct inode * dir, struct dentry *dentry, int mode)
 		brelse(bh);
 		return -EEXIST;
 	}
-	if (dir->i_nlink >= MINIX_LINK_MAX)
+	if (dir->i_nlink >= info->s_link_max)
 		return -EMLINK;
 	inode = minix_new_inode(dir);
 	if (!inode)
@@ -434,7 +452,7 @@ int minix_rmdir(struct inode * dir, struct dentry *dentry)
 		retval = -ENOENT;
 		goto end_rmdir;
 	}
-	if (inode->i_count > 1) {
+	if (dentry->d_count > 1) {
 		retval = -EBUSY;
 		goto end_rmdir;
 	}
@@ -573,7 +591,7 @@ int minix_link(struct dentry * old_dentry, struct inode * dir,
 	if (S_ISDIR(inode->i_mode))
 		return -EPERM;
 
-	if (inode->i_nlink >= MINIX_LINK_MAX)
+	if (inode->i_nlink >= inode->i_sb->u.minix_sb.s_link_max)
 		return -EMLINK;
 
 	bh = minix_find_entry(dir, dentry->d_name.name,
@@ -689,7 +707,7 @@ start_up:
 		if (PARENT_INO(dir_bh->b_data) != old_dir->i_ino)
 			goto end_rename;
 		retval = -EMLINK;
-		if (!new_inode && new_dir->i_nlink >= MINIX_LINK_MAX)
+		if (!new_inode && new_dir->i_nlink >= info->s_link_max)
 			goto end_rename;
 	}
 	if (!new_bh) {

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.90 1998/05/06 04:59:15 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.91 1998/05/23 13:10:21 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -331,16 +331,18 @@ void tcp_write_xmit(struct sock *sk)
  *
  * Note, we don't "adjust" for TIMESTAMP or SACK option bytes.
  */
-u32 __tcp_select_window(struct sock *sk)
+u32 __tcp_select_window(struct sock *sk, u32 cur_win)
 {
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 	unsigned int mss = sk->mss;
-	unsigned int free_space;
-	u32 window, cur_win;
+	int free_space;
+	u32 window;
 
+	/* Sometimes free_space can be < 0. */
 	free_space = (sk->rcvbuf - atomic_read(&sk->rmem_alloc)) / 2;
 	if (tp->window_clamp) {
-		free_space = min(tp->window_clamp, free_space);
+		if (free_space > ((int) tp->window_clamp))
+			free_space = tp->window_clamp;
 		mss = min(tp->window_clamp, mss);
 	} else {
 		printk("tcp_select_window: tp->window_clamp == 0.\n");
@@ -351,8 +353,7 @@ u32 __tcp_select_window(struct sock *sk)
 		printk("tcp_select_window: sk->mss fell to 0.\n");
 	}
 	
-	cur_win = tcp_receive_window(tp);
-	if (free_space < sk->rcvbuf/4 && free_space < mss/2) {
+	if ((free_space < (sk->rcvbuf/4)) && (free_space < ((int) (mss/2)))) {
 		window = 0;
 	} else {
 		/* Get the largest window that is a nice multiple of mss.
@@ -364,8 +365,9 @@ u32 __tcp_select_window(struct sock *sk)
 		 * is too small.
 		 */
 		window = tp->rcv_wnd;
-		if ((window <= (free_space - mss)) || (window > free_space))
-			window = (free_space/mss)*mss;
+		if ((((int) window) <= (free_space - ((int) mss))) ||
+				(((int) window) > free_space))
+			window = (((unsigned int) free_space)/mss)*mss;
 	}
 	return window;
 }

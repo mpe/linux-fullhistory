@@ -79,7 +79,7 @@ static int scsi_abort (Scsi_Cmnd *, int code);
 static int scsi_reset (Scsi_Cmnd *, unsigned int);
 
 extern void scsi_old_done (Scsi_Cmnd *SCpnt);
-static int update_timeout (Scsi_Cmnd *, int);
+int update_timeout (Scsi_Cmnd *, int);
 extern void scsi_old_times_out (Scsi_Cmnd * SCpnt);
 extern void internal_cmnd (Scsi_Cmnd * SCpnt);
 
@@ -1058,7 +1058,7 @@ static int scsi_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
  * set the timer, we want to take this value into account.
  */
 
-static int update_timeout(Scsi_Cmnd * SCset, int timeout)
+int update_timeout(Scsi_Cmnd * SCset, int timeout)
 {
   int	rtn;
 

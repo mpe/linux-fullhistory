@@ -41,6 +41,10 @@
 #include <asm/atari_stdma.h>
 #endif
 
+#ifdef CONFIG_MAC
+#include <asm/macints.h>
+#endif
+
 typedef unsigned char * ide_ioreg_t;
 
 #ifndef MAX_HWIFS
@@ -71,6 +75,10 @@ typedef union {
 	} b;
 	} select_t;
 
+#ifdef CONFIG_MAC	/* MSch: Hack; wrapper for ide_intr */
+void mac_ide_intr(int irq, void *dev_id, struct pt_regs *regs);
+#endif
+
 static __inline__ int ide_request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
 			unsigned long flags, const char *device, void *dev_id)
 {
@@ -78,6 +86,14 @@ static __inline__ int ide_request_irq(unsigned int irq, void (*handler)(int, voi
 	if (MACH_IS_AMIGA)
 		return request_irq(irq, handler, 0, device, dev_id);
 #endif /* CONFIG_AMIGA */
+#ifdef CONFIG_MAC
+	if (MACH_IS_MAC)
+#if 0	/* MSch Hack: maybe later we'll call ide_intr without a wrapper */
+	return nubus_request_irq(12, dev_id, handler);
+#else
+	return nubus_request_irq(12, dev_id, mac_ide_intr);
+#endif
+#endif /* CONFIG_MAC */
 	return 0;
 }
 
@@ -87,6 +103,10 @@ static __inline__ void ide_free_irq(unsigned int irq, void *dev_id)
 	if (MACH_IS_AMIGA)
 		free_irq(irq, dev_id);
 #endif /* CONFIG_AMIGA */
+#ifdef CONFIG_MAC
+	if (MACH_IS_MAC)
+		nubus_free_irq(12);
+#endif /* CONFIG_MAC */
 }
 
 /*
@@ -117,81 +137,83 @@ static __inline__ void ide_release_region (ide_ioreg_t from, unsigned int extent
 #define insl(data_reg, buffer, wcount) insw(data_reg, buffer, (wcount)<<1)
 #define outsl(data_reg, buffer, wcount) outsw(data_reg, buffer, (wcount)<<1)
 
-#define insw(port, buf, nr) \
-    if ((nr) % 16) \
-	__asm__ __volatile__ \
-	       ("movel %0,%/a0; \
-		 movel %1,%/a1; \
-		 movel %2,%/d6; \
-		 subql #1,%/d6; \
-	       1:movew %/a0@,%/a1@+; \
-		 dbra %/d6,1b" : \
-		: "g" (port), "g" (buf), "g" (nr) \
-		: "a0", "a1", "d6"); \
-    else \
-	__asm__ __volatile__ \
-	       ("movel %0,%/a0; \
-		 movel %1,%/a1; \
-		 movel %2,%/d6; \
-		 lsrl  #4,%/d6; \
-		 subql #1,%/d6; \
-	       1:movew %/a0@,%/a1@+; \
-		 movew %/a0@,%/a1@+; \
-		 movew %/a0@,%/a1@+; \
-		 movew %/a0@,%/a1@+; \
-		 movew %/a0@,%/a1@+; \
-		 movew %/a0@,%/a1@+; \
-		 movew %/a0@,%/a1@+; \
-		 movew %/a0@,%/a1@+; \
-		 movew %/a0@,%/a1@+; \
-		 movew %/a0@,%/a1@+; \
-		 movew %/a0@,%/a1@+; \
-		 movew %/a0@,%/a1@+; \
-		 movew %/a0@,%/a1@+; \
-		 movew %/a0@,%/a1@+; \
-		 movew %/a0@,%/a1@+; \
-		 movew %/a0@,%/a1@+; \
-		 dbra %/d6,1b" : \
-		: "g" (port), "g" (buf), "g" (nr) \
-		: "a0", "a1", "d6")
+#define insw(port, buf, nr) ({				\
+	unsigned char *_port = (unsigned char *)(port);	\
+	unsigned char *_buf = (buf);			\
+	int _nr = (nr);					\
+	unsigned long _tmp;				\
+							\
+	if (_nr & 15) {					\
+		_tmp = (_nr & 15) - 1;			\
+		asm volatile (				\
+			"1: movew %2@,%3@+; dbra %4,1b"	\
+			: "=a" (_buf), "=d" (_tmp)	\
+			: "a" (_port), "0" (_buf),	\
+			  "1" (_tmp));			\
+	}						\
+	_tmp = (_nr >> 4) - 1;				\
+	asm volatile (					\
+		"1: "					\
+		"movew %2@,%3@+; "			\
+		"movew %2@,%3@+; "			\
+		"movew %2@,%3@+; "			\
+		"movew %2@,%3@+; "			\
+		"movew %2@,%3@+; "			\
+		"movew %2@,%3@+; "			\
+		"movew %2@,%3@+; "			\
+		"movew %2@,%3@+; "			\
+		"movew %2@,%3@+; "			\
+		"movew %2@,%3@+; "			\
+		"movew %2@,%3@+; "			\
+		"movew %2@,%3@+; "			\
+		"movew %2@,%3@+; "			\
+		"movew %2@,%3@+; "			\
+		"movew %2@,%3@+; "			\
+		"movew %2@,%3@+; "			\
+		"dbra %4,1b"				\
+		: "=a" (_buf), "=d" (_tmp)		\
+		: "a" (_port), "0" (_buf),		\
+		  "1" (_tmp));				\
+})
 
-#define outsw(port, buf, nr) \
-    if ((nr) % 16) \
-	__asm__ __volatile__ \
-	       ("movel %0,%/a0; \
-		 movel %1,%/a1; \
-		 movel %2,%/d6; \
-		 subql #1,%/d6; \
-	       1:movew %/a1@+,%/a0@; \
-		 dbra %/d6,1b" : \
-		: "g" (port), "g" (buf), "g" (nr) \
-		: "a0", "a1", "d6"); \
-    else \
-	__asm__ __volatile__ \
-	       ("movel %0,%/a0; \
-		 movel %1,%/a1; \
-		 movel %2,%/d6; \
-		 lsrl  #4,%/d6; \
-		 subql #1,%/d6; \
-	       1:movew %/a1@+,%/a0@; \
-		 movew %/a1@+,%/a0@; \
-		 movew %/a1@+,%/a0@; \
-		 movew %/a1@+,%/a0@; \
-		 movew %/a1@+,%/a0@; \
-		 movew %/a1@+,%/a0@; \
-		 movew %/a1@+,%/a0@; \
-		 movew %/a1@+,%/a0@; \
-		 movew %/a1@+,%/a0@; \
-		 movew %/a1@+,%/a0@; \
-		 movew %/a1@+,%/a0@; \
-		 movew %/a1@+,%/a0@; \
-		 movew %/a1@+,%/a0@; \
-		 movew %/a1@+,%/a0@; \
-		 movew %/a1@+,%/a0@; \
-		 movew %/a1@+,%/a0@; \
-		 dbra %/d6,1b" : \
-		: "g" (port), "g" (buf), "g" (nr) \
-		: "a0", "a1", "d6")
+#define outsw(port, buf, nr) ({				\
+	unsigned char *_port = (unsigned char *)(port);	\
+	unsigned char *_buf = (buf);			\
+	int _nr = (nr);					\
+	unsigned long _tmp;				\
+							\
+	if (_nr & 15) {					\
+		_tmp = (_nr & 15) - 1;			\
+		asm volatile (				\
+			"1: movew %3@,%2@+; dbra %4,1b"	\
+			: "=a" (_buf), "=d" (_tmp)	\
+			: "a" (_port), "0" (_buf),	\
+			  "1" (_tmp));			\
+	}						\
+	_tmp = (_nr >> 4) - 1;				\
+	asm volatile (					\
+		"1: "					\
+		"movew %3@+,%2@; "			\
+		"movew %3@+,%2@; "			\
+		"movew %3@+,%2@; "			\
+		"movew %3@+,%2@; "			\
+		"movew %3@+,%2@; "			\
+		"movew %3@+,%2@; "			\
+		"movew %3@+,%2@; "			\
+		"movew %3@+,%2@; "			\
+		"movew %3@+,%2@; "			\
+		"movew %3@+,%2@; "			\
+		"movew %3@+,%2@; "			\
+		"movew %3@+,%2@; "			\
+		"movew %3@+,%2@; "			\
+		"movew %3@+,%2@; "			\
+		"movew %3@+,%2@; "			\
+		"movew %3@+,%2@; "			\
+		"dbra %4,1b"	   			\
+		: "=a" (_buf), "=d" (_tmp)		\
+		: "a" (_port), "0" (_buf),		\
+		  "1" (_tmp));				\
+})
 
 #ifdef CONFIG_ATARI
 #define insl_swapw(data_reg, buffer, wcount) \
@@ -310,11 +332,11 @@ static __inline__ void ide_release_region (ide_ioreg_t from, unsigned int extent
 #define D_INT(cnt)      (T_INT   | (cnt))
 #define D_TEXT(cnt)     (T_TEXT  | (cnt))
 
-#ifdef CONFIG_AMIGA
+#if defined(CONFIG_AMIGA) || defined (CONFIG_MAC)
 static u_short driveid_types[] = {
 	D_SHORT(10),	/* config - vendor2 */
 	D_TEXT(20),	/* serial_no */
-	D_SHORT(3),	/* buf_type - ecc_bytes */
+	D_SHORT(3),	/* buf_type, buf_size - ecc_bytes */
 	D_TEXT(48),	/* fw_rev - model */
 	D_CHAR(2),	/* max_multsect - vendor3 */
 	D_SHORT(1),	/* dword_io */
@@ -333,12 +355,12 @@ static u_short driveid_types[] = {
 
 static __inline__ void ide_fix_driveid(struct hd_driveid *id)
 {
-#ifdef CONFIG_AMIGA
+#if defined(CONFIG_AMIGA) || defined (CONFIG_MAC)
    u_char *p = (u_char *)id;
    int i, j, cnt;
    u_char t;
 
-   if (!MACH_IS_AMIGA)
+   if (!MACH_IS_AMIGA && !MACH_IS_MAC)
    	return;
    for (i = 0; i < num_driveid_types; i++) {
       cnt = driveid_types[i] & T_MASK_COUNT;
@@ -423,7 +445,7 @@ static __inline__ void ide_get_lock (int *ide_lock, void (*handler)(int, void *,
  * an interrupt, and in that case it does nothing. Hope that is reasonable and
  * works. (Roman)
  */
-#if defined(CONFIG_ATARI) && !defined(CONFIG_AMIGA)
+#ifdef CONFIG_ATARI_ONLY
 #define	ide__sti()					\
     do {						\
 	if (!in_interrupt()) __sti();			\

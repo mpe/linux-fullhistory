@@ -82,6 +82,12 @@ static struct parport_operations parport_arc_ops =
 	arc_release_resources,
 	arc_claim_resources,
 	
+	NULL, /* epp_write_data */
+	NULL, /* epp_read_data */
+	NULL, /* epp_write_addr */
+	NULL, /* epp_read_addr */
+	NULL, /* epp_check_timeout */
+
 	NULL, /* epp_write_block */
 	NULL, /* epp_read_block */
 

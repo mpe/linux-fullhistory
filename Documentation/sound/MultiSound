@@ -1,0 +1,146 @@
+Getting Firmware
+~~~~~~~~~~~~~~~~
+
+See the end of this document on how to obtain and create the necessary
+firmware files.
+
+
+Supported Features
+~~~~~~~~~~~~~~~~~~
+
+Currently digital audio and mixer functionality is supported.  (memory
+mapped digital audio is not yet supported).  MultiSound support is
+fully modularized, and can only be used as modules:
+
+msnd		- MultiSound base (requires soundcore)
+msnd_classic	- Base audio/mixer support for Classic, Monetery and
+                  Tahiti cards
+msnd_pinnacle	- Base audio/mixer support for Pinnacle and Fiji cards
+
+
+Important Notes - Read Before Using
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* The firmware files are not included (may change in future).  You
+must obtain these images from Turtle Beach (they are included in the
+MultiSound Development Kits), and place them in /etc/sound for
+example, and give the full paths in the Linux configuration.  Please
+note these files must be binary files, not assember.
+
+* You need the following information to use this driver: the card's
+I/O base (i.e. 0x250), the IRQ (i.e. 5), and the shared memory area
+(i.e. 0xd8000).
+
+* Probing is not currently implemented, and only the msnd_classic
+driver will actually program the card's IRQ and SMA locations; the
+msnd_pinnacle is primarily for use with the card in PnP mode, however
+it should work if you know what the card's resource values are (this
+will change in the future).
+
+* Note the Turtle Beach Pinnacle card contains a Kurzweil MA-1
+synthesizer with an MPU compatible interface, which should work with
+the mpu401 module.  You must know the resource values of the MA-1.
+
+
+Examples
+~~~~~~~~
+
+* If you have a MultiSound Classic/Monterey/Tahiti:
+
+insmod soundcore
+insmod msnd
+insmod msnd_classic io=0x290 irq=7 mem=0xd0000
+
+* If you have a MultiSound Pinnacle:
+
+insmod soundcore
+insmod msnd
+insmod msnd_pinnacle io=0x210 irq=5 mem=0xd8000
+
+* To use the MPU-compatible Kurzweil synth on the Pinnacle, add the
+following:
+
+insmod sound
+insmod mpu401 io=0x330 irq=9
+
+
+msnd_classic, msnd_pinnacle Required Options
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If the following options are not given, the module will not load.
+Examine the kernel message log for informative error messages.
+WARNING--probing isn't supported so try to make sure you have the
+correct shared memory area, otherwise you may experience problems.
+
+io		        I/O base of DSP, e.g. io=0x210
+irq		        IRQ number, e.g. irq=5
+mem		        Shared memory area, e.g. mem=0xd8000
+
+
+msnd_classic, msnd_pinnacle Additional Options
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+fifosize		The digital audio FIFOs, in kilobytes.  The default is
+			64kB (two FIFOs are allocated, so this uses up 128kB).
+
+calibrate_signal	Setting this to one calibrates the ADCs to the
+			signal, zero calibrates to the card (defaults
+			to zero).
+
+
+Creating and Obtaining Firmware
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	For the Classic/Tahiti/Monterey
+	~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~	
+
+Download to /tmp and unzip the following file from Turtle Beach:
+
+	ftp://ftp.tbeach.com/pub/tbs/pinn/msndvkit.zip
+
+When unzipped, unzip the file named MsndFiles.zip.  Then copy the
+following firmware files to /etc/sound (note the file renaming):
+
+  cp DSPCODE/MSNDINIT.BIN /etc/sound/msndinit.bin
+  cp DSPCODE/MSNDPERM.REB /etc/sound/msndperm.bin
+
+When configuring the Linux kernel, specify /etc/sound/msndinit.bin and
+/etc/sound/msndperm.bin for the two firmware files.
+
+
+	For the Pinnacle/Fiji
+	~~~~~~~~~~~~~~~~~~~~~
+
+Download to /tmp and unzip the following file from Turtle Beach (be
+sure to use the entire URL; some have had trouble navigating to the
+URL):
+
+	ftp://ftp.tbeach.com/oldpub/tbs/pinn/pnddk100.zip
+
+Put the following lines into a file named conv.l (between the start
+and end lines):
+
+-- conv.l start --
+%%
+[ \n\t,\r]	;
+\;.*		;
+DB		;
+[0-9A-Fa-f]+H	{ int n; sscanf(yytext, "%xH", &n); printf("%c", n); }
+-- conv.l end --
+
+Then, compile the conv program with GNU make with the following
+command:
+
+  make LEX=flex LOADLIBES=-lfl conv
+
+This should give you an executable named conv.  Now, we create the
+binary firmware files by doing the following conversion (assuming the
+archive unpacked into a directory named PINNDDK):
+
+  ./conv < PINNDDK/dspcode/pndspini.asm > /etc/sound/pndspini.bin
+  ./conv < PINNDDK/dspcode/pndsperm.asm > /etc/sound/pndsperm.bin
+
+The conv (and conv.l) program is not needed after conversion and can
+be safely deleted.  Then, when configuring the Linux kernel, specify
+/etc/sound/pndspini.bin and /etc/sound/pndsperm.bin for the two
+firmware files.

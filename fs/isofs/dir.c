@@ -91,6 +91,32 @@ static int isofs_name_translate(char * old, int len, char * new)
 	return i;
 }
 
+/* Acorn extensions written by Matthew Wilcox <willy@bofh.ai> 1998 */
+int get_acorn_filename(struct iso_directory_record * de,
+			    char * retname, struct inode * inode)
+{
+	int std;
+	unsigned char * chr;
+	int retnamlen = isofs_name_translate(de->name,
+				de->name_len[0], retname);
+	if (retnamlen == 0) return 0;
+	std = sizeof(struct iso_directory_record) + de->name_len[0];
+	if (std & 1) std++;
+	if ((*((unsigned char *) de) - std) != 32) return retnamlen;
+	chr = ((unsigned char *) de) + std;
+	if (strncmp(chr, "ARCHIMEDES", 10)) return retnamlen;
+	if ((*retname == '_') && ((chr[19] & 1) == 1)) *retname = '!';
+	if (((de->flags[0] & 2) == 0) && (chr[13] == 0xff)
+		&& ((chr[12] & 0xf0) == 0xf0))
+	{
+		retname[retnamlen] = ',';
+		sprintf(retname+retnamlen+1, "%3.3x",
+			((chr[12] & 0xf) << 8) | chr[11]);
+		retnamlen += 4;
+	}
+	return retnamlen;
+}
+
 /*
  * This should _really_ be cleaned up some day..
  */
@@ -230,15 +256,17 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 				p = tmpname;
 			} else
 #endif
-			{
-				if (inode->i_sb->u.isofs_sb.s_mapping == 'n') {
-					len = isofs_name_translate(de->name, de->name_len[0],
-								   tmpname);
-					p = tmpname;
-				} else {
-					p = de->name;
-					len = de->name_len[0];
-				}
+			if (inode->i_sb->u.isofs_sb.s_mapping == 'a') {
+				len = get_acorn_filename(de, tmpname, inode);
+				p = tmpname;
+			} else
+			if (inode->i_sb->u.isofs_sb.s_mapping == 'n') {
+				len = isofs_name_translate(de->name,
+					de->name_len[0], tmpname);
+				p = tmpname;
+			} else {
+				p = de->name;
+				len = de->name_len[0];
 			}
 		}
 		if (len > 0) {

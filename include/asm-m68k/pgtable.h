@@ -328,6 +328,16 @@ typedef pte_table pte_tablepage[PTE_TABLES_PER_PAGE];
  * and initialized in head.S */
 extern int m68k_pgtable_cachemode;
 
+/* This is the cache mode for normal pages, for supervisor access on
+ * processors >= '040. It is used in pte_mkcache(), and the variable is
+ * defined and initialized in head.S */
+
+#if defined(CONFIG_060_WRITETHROUGH)
+extern int m68k_supervisor_cachemode;
+#else
+#define m68k_supervisor_cachemode _PAGE_CACHE040
+#endif
+
 #if defined(CPU_M68040_OR_M68060_ONLY)
 #define mm_cachebits _PAGE_CACHE040
 #elif defined(CPU_M68020_OR_M68030_ONLY)
@@ -495,7 +505,7 @@ extern inline pte_t pte_mknocache(pte_t pte)
 	pte_val(pte) = (pte_val(pte) & _CACHEMASK040) | m68k_pgtable_cachemode;
 	return pte;
 }
-extern inline pte_t pte_mkcache(pte_t pte)	{ pte_val(pte) = (pte_val(pte) & _CACHEMASK040) | _PAGE_CACHE040; return pte; }
+extern inline pte_t pte_mkcache(pte_t pte)	{ pte_val(pte) = (pte_val(pte) & _CACHEMASK040) | m68k_supervisor_cachemode; return pte; }
 
 /* to set the page-dir */
 extern inline void SET_PAGE_DIR(struct task_struct * tsk, pgd_t * pgdir)

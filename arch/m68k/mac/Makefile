@@ -10,7 +10,8 @@
 EXTRA_CFLAGS := -Wa,-m68020
 
 O_TARGET := mac.o
-O_OBJS	 := config.o ksyms.o bootparse.o macints.o via6522.o \
+O_OBJS	 := config.o bootparse.o macints.o via6522.o \
 		mackeyb.o adb-bus.o macboing.o debug.o
+OX_OBJS  := mac_ksyms.o
 
 include $(TOPDIR)/Rules.make

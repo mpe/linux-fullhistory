@@ -34,6 +34,9 @@ struct cpuinfo_x86 {
 	int	fdiv_bug;
 	int	f00f_bug;
 	unsigned long loops_per_sec;
+	unsigned long *pgd_quick;
+	unsigned long *pte_quick;
+	unsigned long pgtable_cache_sz;
 };
 
 #define X86_VENDOR_INTEL 0

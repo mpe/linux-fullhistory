@@ -1,10 +1,10 @@
 /*
- *	Wavelan ISA driver
+ *	WaveLAN ISA driver
  *
  *		Jean II - HPLB '96
  *
  * Reorganisation and extension of the driver.
- * Original copyrigth follow (see also end of this file).
+ * Original copyright follows (also see the end of this file).
  * See wavelan.p.h for details.
  */
 
@@ -19,7 +19,7 @@
 /************************* MISC SUBROUTINES **************************/
 /*
  * Subroutines which won't fit in one of the following category
- * (wavelan modem or i82586)
+ * (WaveLAN modem or i82586)
  */
 
 /*------------------------------------------------------------------*/
@@ -95,14 +95,14 @@ wv_struct_check(void)
 #undef	SC
 
   return((char *) NULL);
-} /* wv_structuct_check */
+} /* wv_struct_check */
 #endif	/* STRUCT_CHECK */
 
 /********************* HOST ADAPTER SUBROUTINES *********************/
 /*
- * Usefull subroutines to manage the wavelan ISA interface
+ * Useful subroutines to manage the WaveLAN ISA interface
  *
- * One major difference with the Pcmcia hardware (exept the port mapping)
+ * One major difference with the PCMCIA hardware (except the port mapping)
  * is that we have to keep the state of the Host Control Register
  * because of the interrupt enable & bus size flags.
  */
@@ -166,7 +166,7 @@ wv_hacr_reset(u_long	ioaddr)
 
 /*------------------------------------------------------------------*/
 /*
- * Set the i/o transfer over the ISA bus to 8 bits mode
+ * Set the I/O transfer over the ISA bus to 8-bit mode
  */
 static inline void
 wv_16_off(u_long	ioaddr,
@@ -178,7 +178,7 @@ wv_16_off(u_long	ioaddr,
 
 /*------------------------------------------------------------------*/
 /*
- * Set the i/o transfer over the ISA bus to 8 bits mode
+ * Set the I/O transfer over the ISA bus to 8-bit mode
  */
 static inline void
 wv_16_on(u_long		ioaddr,
@@ -190,7 +190,7 @@ wv_16_on(u_long		ioaddr,
 
 /*------------------------------------------------------------------*/
 /*
- * Disable interrupts on the wavelan hardware
+ * Disable interrupts on the WaveLAN hardware.
  */
 static inline void
 wv_ints_off(device *	dev)
@@ -209,7 +209,7 @@ wv_ints_off(device *	dev)
 
 /*------------------------------------------------------------------*/
 /*
- * Enable interrupts on the wavelan hardware
+ * Enable interrupts on the WaveLAN hardware.
  */
 static inline void
 wv_ints_on(device *	dev)
@@ -228,7 +228,7 @@ wv_ints_on(device *	dev)
 
 /******************* MODEM MANAGEMENT SUBROUTINES *******************/
 /*
- * Usefull subroutines to manage the modem of the wavelan
+ * Useful subroutines to manage the modem of the WaveLAN
  */
 
 /*------------------------------------------------------------------*/
@@ -259,7 +259,7 @@ psa_read(u_long		ioaddr,
 
 /*------------------------------------------------------------------*/
 /*
- * Write the Paramter Storage Area to the WaveLAN card's memory
+ * Write the Parameter Storage Area to the WaveLAN card's memory.
  */
 static void
 psa_write(u_long	ioaddr,
@@ -294,10 +294,10 @@ psa_write(u_long	ioaddr,
 /*------------------------------------------------------------------*/
 /*
  * Calculate the PSA CRC (not tested yet)
- * As the Wavelan drivers don't use the CRC, I won't use it either...
- * Thanks to Valster, Nico <NVALSTER@wcnd.nl.lucent.com> for the code
+ * As the WaveLAN drivers don't use the CRC, I won't use it either.
+ * Thanks to Nico Valster <NVALSTER@wcnd.nl.lucent.com> for the code
  * NOTE: By specifying a length including the CRC position the
- * returned value should be zero. (i.e. a correct checksum in the PSA)
+ * returned value should be zero. (i.e. a correct checksum in the PSA).
  */
 static u_short
 psa_crc(u_short *	psa,	/* The PSA */
@@ -344,7 +344,7 @@ mmc_out(u_long		ioaddr,
 /*------------------------------------------------------------------*/
 /*
  * Routine to write bytes to the Modem Management Controller.
- * We start by the end because it is the way it should be !
+ * We start at the end because it is the way it should be!
  */
 static inline void
 mmc_write(u_long	ioaddr,
@@ -361,8 +361,8 @@ mmc_write(u_long	ioaddr,
 
 /*------------------------------------------------------------------*/
 /*
- * Read 1 byte from the MMC.
- * Optimised version for 1 byte, avoid using memory...
+ * Read a byte from the MMC.
+ * Optimised version for 1 byte, avoid using memory.
  */
 static inline u_char
 mmc_in(u_long	ioaddr,
@@ -383,7 +383,7 @@ mmc_in(u_long	ioaddr,
  * The implementation is complicated by a lack of address lines,
  * which prevents decoding of the low-order bit.
  * (code has just been moved in the above function)
- * We start by the end because it is the way it should be !
+ * We start at the end because it is the way it should be!
  */
 static inline void
 mmc_read(u_long		ioaddr,
@@ -400,7 +400,7 @@ mmc_read(u_long		ioaddr,
 
 /*------------------------------------------------------------------*/
 /*
- * Get the type of encryption available...
+ * Get the type of encryption available.
  */
 static inline int
 mmc_encr(u_long		ioaddr)	/* i/o port of the card */
@@ -416,8 +416,8 @@ mmc_encr(u_long		ioaddr)	/* i/o port of the card */
 
 /*------------------------------------------------------------------*/
 /*
- * Wait for the frequency EEprom to complete a command...
- * I hope this one will be optimally inlined...
+ * Wait for the frequency EEPROM to complete a command.
+ * I hope this one will be optimally inlined.
  */
 static inline void
 fee_wait(u_long		ioaddr,	/* i/o port of the card */
@@ -433,7 +433,7 @@ fee_wait(u_long		ioaddr,	/* i/o port of the card */
 
 /*------------------------------------------------------------------*/
 /*
- * Read bytes from the Frequency EEprom (frequency select cards).
+ * Read bytes from the Frequency EEPROM (frequency select cards).
  */
 static void
 fee_read(u_long		ioaddr,	/* i/o port of the card */
@@ -452,21 +452,21 @@ fee_read(u_long		ioaddr,	/* i/o port of the card */
       /* Write the read command */
       mmc_out(ioaddr, mmwoff(0, mmw_fee_ctrl), MMW_FEE_CTRL_READ);
 
-      /* Wait until EEprom is ready (should be quick !) */
+      /* Wait until EEPROM is ready (should be quick). */
       fee_wait(ioaddr, 10, 100);
 
-      /* Read the value */
+      /* Read the value. */
       *--b = ((mmc_in(ioaddr, mmroff(0, mmr_fee_data_h)) << 8) |
 	      mmc_in(ioaddr, mmroff(0, mmr_fee_data_l)));
     }
 }
 
-#ifdef WIRELESS_EXT	/* If wireless extension exist in the kernel */
+#ifdef WIRELESS_EXT	/* if the wireless extension exists in the kernel */
 
 /*------------------------------------------------------------------*/
 /*
- * Write bytes from the Frequency EEprom (frequency select cards).
- * This is a bit complicated, because the frequency eeprom has to
+ * Write bytes from the Frequency EEPROM (frequency select cards).
+ * This is a bit complicated, because the frequency EEPROM has to
  * be unprotected and the write enabled.
  * Jean II
  */
@@ -476,7 +476,7 @@ fee_write(u_long	ioaddr,	/* i/o port of the card */
 	  u_short *	b,	/* data buffer */
 	  int		n)	/* number of registers */
 {
-  b += n;		/* Position at the end of the area */
+  b += n;		/* Position at the end of the area. */
 
 #ifdef EEPROM_IS_PROTECTED	/* disabled */
 #ifdef DOESNT_SEEM_TO_WORK	/* disabled */
@@ -485,19 +485,19 @@ fee_write(u_long	ioaddr,	/* i/o port of the card */
 
   fee_wait(ioaddr, 10, 100);
 
-  /* Read the protected register */
+  /* Read the protected register. */
   printk("Protected 2 : %02X-%02X\n",
 	 mmc_in(ioaddr, mmroff(0, mmr_fee_data_h)),
 	 mmc_in(ioaddr, mmroff(0, mmr_fee_data_l)));
 #endif	/* DOESNT_SEEM_TO_WORK */
 
-  /* Enable protected register */
+  /* Enable protected register. */
   mmc_out(ioaddr, mmwoff(0, mmw_fee_addr), MMW_FEE_ADDR_EN);
   mmc_out(ioaddr, mmwoff(0, mmw_fee_ctrl), MMW_FEE_CTRL_PREN);
 
   fee_wait(ioaddr, 10, 100);
 
-  /* Unprotect area */
+  /* Unprotect area. */
   mmc_out(ioaddr, mmwoff(0, mmw_fee_addr), o + n);
   mmc_out(ioaddr, mmwoff(0, mmw_fee_ctrl), MMW_FEE_CTRL_PRWRITE);
 #ifdef DOESNT_SEEM_TO_WORK	/* disabled */
@@ -508,38 +508,38 @@ fee_write(u_long	ioaddr,	/* i/o port of the card */
   fee_wait(ioaddr, 10, 100);
 #endif	/* EEPROM_IS_PROTECTED */
 
-  /* Write enable */
+  /* Write enable. */
   mmc_out(ioaddr, mmwoff(0, mmw_fee_addr), MMW_FEE_ADDR_EN);
   mmc_out(ioaddr, mmwoff(0, mmw_fee_ctrl), MMW_FEE_CTRL_WREN);
 
   fee_wait(ioaddr, 10, 100);
 
-  /* Write the EEprom address */
+  /* Write the EEPROM address. */
   mmc_out(ioaddr, mmwoff(0, mmw_fee_addr), o + n - 1);
 
   /* Loop on all buffer */
   while(n-- > 0)
     {
-      /* Write the value */
+      /* Write the value. */
       mmc_out(ioaddr, mmwoff(0, mmw_fee_data_h), (*--b) >> 8);
       mmc_out(ioaddr, mmwoff(0, mmw_fee_data_l), *b & 0xFF);
 
-      /* Write the write command */
+      /* Write the write command. */
       mmc_out(ioaddr, mmwoff(0, mmw_fee_ctrl), MMW_FEE_CTRL_WRITE);
 
-      /* Wavelan doc says : wait at least 10 ms for EEBUSY = 0 */
+      /* WaveLAN documentation says to wait at least 10 ms for EEBUSY = 0 */
       mdelay(10);
       fee_wait(ioaddr, 10, 100);
     }
 
-  /* Write disable */
+  /* Write disable. */
   mmc_out(ioaddr, mmwoff(0, mmw_fee_addr), MMW_FEE_ADDR_DS);
   mmc_out(ioaddr, mmwoff(0, mmw_fee_ctrl), MMW_FEE_CTRL_WDS);
 
   fee_wait(ioaddr, 10, 100);
 
 #ifdef EEPROM_IS_PROTECTED	/* disabled */
-  /* Reprotect EEprom */
+  /* Reprotect EEPROM. */
   mmc_out(ioaddr, mmwoff(0, mmw_fee_addr), 0x00);
   mmc_out(ioaddr, mmwoff(0, mmw_fee_ctrl), MMW_FEE_CTRL_PRWRITE);
 
@@ -550,13 +550,13 @@ fee_write(u_long	ioaddr,	/* i/o port of the card */
 
 /************************ I82586 SUBROUTINES *************************/
 /*
- * Usefull subroutines to manage the Ethernet controler
+ * Useful subroutines to manage the Ethernet controller
  */
 
 /*------------------------------------------------------------------*/
 /*
  * Read bytes from the on-board RAM.
- * Why inlining this function make it fail ???
+ * Why does inlining this function make it fail?
  */
 static /*inline*/ void
 obram_read(u_long	ioaddr,
@@ -584,7 +584,7 @@ obram_write(u_long	ioaddr,
 
 /*------------------------------------------------------------------*/
 /*
- * Acknowledge the reading of the status issued by the i82586
+ * Acknowledge the reading of the status issued by the i82586.
  */
 static void
 wv_ack(device *		dev)
@@ -626,7 +626,7 @@ wv_ack(device *		dev)
 /*------------------------------------------------------------------*/
 /*
  * Set channel attention bit and busy wait until command has
- * completed, then acknowledge the command completion.
+ * completed, then acknowledge completion of the command.
  */
 static inline int
 wv_synchronous_cmd(device *	dev,
@@ -675,7 +675,7 @@ wv_synchronous_cmd(device *	dev,
 /*------------------------------------------------------------------*/
 /*
  * Configuration commands completion interrupt.
- * Check if done, and if ok...
+ * Check if done, and if OK.
  */
 static inline int
 wv_config_complete(device *	dev,
@@ -693,7 +693,7 @@ wv_config_complete(device *	dev,
   mcs_addr = lp->tx_first_in_use + sizeof(ac_tx_t) + sizeof(ac_nop_t)
     + sizeof(tbd_t) + sizeof(ac_cfg_t) + sizeof(ac_ias_t);
 
-  /* Read the status of the last command (set mc list) */
+  /* Read the status of the last command (set mc list). */
   obram_read(ioaddr, acoff(mcs_addr, ac_status), (unsigned char *)&status, sizeof(status));
 
   /* If not completed -> exit */
@@ -717,7 +717,7 @@ wv_config_complete(device *	dev,
 	printk(KERN_INFO "wv_config_complete(): set_MAC_address; status = 0x%x\n",
 	       dev->name, str, status);
 
-      /* Check config command */
+      /* Check config command. */
       cfg_addr = ias_addr - sizeof(ac_cfg_t);
       obram_read(ioaddr, acoff(cfg_addr, ac_status), (unsigned char *)&status, sizeof(status));
       if(status & AC_SFLD_OK != 0)
@@ -776,7 +776,7 @@ if (lp->tx_n_in_use > 0)
 	printk("%c", "0123456789abcdefghijk"[lp->tx_n_in_use]);
 */
 
-      /* Was it the last one ? */
+      /* Was it the last one? */
       if(lp->tx_n_in_use <= 0)
 	lp->tx_first_in_use = I82586NULL;
       else
@@ -882,12 +882,12 @@ if (lp->tx_n_in_use > 0)
 
 /*------------------------------------------------------------------*/
 /*
- * Reconfigure the i82586, or at least ask for it...
- * Because wv_82586_config use a transmission buffer, we must do it
+ * Reconfigure the i82586, or at least ask for it.
+ * Because wv_82586_config uses a transmission buffer, we must do it
  * when we are sure that there is one left, so we do it now
  * or in wavelan_packet_xmit() (I can't find any better place,
- * wavelan_interrupt is not an option...), so you may experience
- * some delay sometime...
+ * wavelan_interrupt is not an option), so you may experience
+ * delays sometimes.
  */
 static inline void
 wv_82586_reconfig(device *	dev)
@@ -909,8 +909,8 @@ wv_82586_reconfig(device *	dev)
 
 /********************* DEBUG & INFO SUBROUTINES *********************/
 /*
- * This routines are used in the code to show debug informations.
- * Most of the time, it dump the content of hardware structures...
+ * This routine is used in the code to show information for debugging.
+ * Most of the time, it dumps the contents of hardware structures.
  */
 
 #ifdef DEBUG_PSA_SHOW
@@ -921,7 +921,7 @@ wv_82586_reconfig(device *	dev)
 static void
 wv_psa_show(psa_t *	p)
 {
-  printk(KERN_DEBUG "##### wavelan psa contents: #####\n");
+  printk(KERN_DEBUG "##### WaveLAN psa contents: #####\n");
   printk(KERN_DEBUG "psa_io_base_addr_1: 0x%02X %02X %02X %02X\n",
 	 p->psa_io_base_addr_1,
 	 p->psa_io_base_addr_2,
@@ -1006,7 +1006,7 @@ wv_psa_show(psa_t *	p)
 /*------------------------------------------------------------------*/
 /*
  * Print the formatted status of the Modem Management Controller.
- * This function need to be completed...
+ * This function needs to be completed.
  */
 static void
 wv_mmc_show(device *	dev)
@@ -1028,12 +1028,12 @@ wv_mmc_show(device *	dev)
   mmc_read(ioaddr, 0, (u_char *)&m, sizeof(m));
   mmc_out(ioaddr, mmwoff(0, mmw_freeze), 0);
 
-#ifdef WIRELESS_EXT	/* If wireless extension exist in the kernel */
+#ifdef WIRELESS_EXT	/* if wireless extension exists in the kernel */
   /* Don't forget to update statistics */
   lp->wstats.discard.nwid += (m.mmr_wrong_nwid_h << 8) | m.mmr_wrong_nwid_l;
 #endif	/* WIRELESS_EXT */
 
-  printk(KERN_DEBUG "##### wavelan modem status registers: #####\n");
+  printk(KERN_DEBUG "##### WaveLAN modem status registers: #####\n");
 #ifdef DEBUG_SHOW_UNUSED
   printk(KERN_DEBUG "mmc_unused0[]: %02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X\n",
 	 m.mmr_unused0[0],
@@ -1045,7 +1045,7 @@ wv_mmc_show(device *	dev)
 	 m.mmr_unused0[6],
 	 m.mmr_unused0[7]);
 #endif	/* DEBUG_SHOW_UNUSED */
-  printk(KERN_DEBUG "Encryption algorythm: %02X - Status: %02X\n",
+  printk(KERN_DEBUG "Encryption algorithm: %02X - Status: %02X\n",
 	 m.mmr_des_avail, m.mmr_des_status);
 #ifdef DEBUG_SHOW_UNUSED
   printk(KERN_DEBUG "mmc_unused1[]: %02X:%02X:%02X:%02X:%02X\n",
@@ -1093,7 +1093,7 @@ wv_mmc_show(device *	dev)
 #ifdef DEBUG_I82586_SHOW
 /*------------------------------------------------------------------*/
 /*
- * Print the last block of the i82586 memory
+ * Print the last block of the i82586 memory.
  */
 static void
 wv_scb_show(u_long	ioaddr)
@@ -1102,7 +1102,7 @@ wv_scb_show(u_long	ioaddr)
 
   obram_read(ioaddr, OFFSET_SCB, (unsigned char *)&scb, sizeof(scb));   
 
-  printk(KERN_DEBUG "##### wavelan system control block: #####\n");
+  printk(KERN_DEBUG "##### WaveLAN system control block: #####\n");
 
   printk(KERN_DEBUG "status: ");
   printk("stat 0x%x[%s%s%s%s] ",
@@ -1163,7 +1163,7 @@ wv_ru_show(device *	dev)
 {
   /* net_local *lp = (net_local *) dev->priv; */
 
-  printk(KERN_DEBUG "##### wavelan i82586 receiver unit status: #####\n");
+  printk(KERN_DEBUG "##### WaveLAN i82586 receiver unit status: #####\n");
   printk(KERN_DEBUG "ru:");
   /*
    * Not implemented yet...
@@ -1173,7 +1173,7 @@ wv_ru_show(device *	dev)
 
 /*------------------------------------------------------------------*/
 /*
- * Display info about one control block of the i82586 memory
+ * Display info about one control block of the i82586 memory.
  */
 static void
 wv_cu_show_one(device *		dev,
@@ -1206,7 +1206,7 @@ wv_cu_show_one(device *		dev,
 
 /*------------------------------------------------------------------*/
 /*
- * Print status of the command unit of the i82586
+ * Print status of the command unit of the i82586.
  */
 static void
 wv_cu_show(device *	dev)
@@ -1215,7 +1215,7 @@ wv_cu_show(device *	dev)
   unsigned int	i;
   u_short	p;
 
-  printk(KERN_DEBUG "##### wavelan i82586 command unit status: #####\n");
+  printk(KERN_DEBUG "##### WaveLAN i82586 command unit status: #####\n");
 
   printk(KERN_DEBUG);
   for(i = 0, p = lp->tx_first_in_use; i < NTXBLOCKS; i++)
@@ -1310,8 +1310,8 @@ wv_packet_info(u_char *		p,		/* Packet to dump */
 
 /*------------------------------------------------------------------*/
 /*
- * This is the information which is displayed by the driver at startup
- * There  is a lot of flag to configure it at your will...
+ * This is the information which is displayed by the driver at startup.
+ * There are lots of flags for configuring it to your liking.
  */
 static inline void
 wv_init_info(device *	dev)
@@ -1341,7 +1341,7 @@ wv_init_info(device *	dev)
     printk("%s%02X", (i == 0) ? " " : ":", dev->dev_addr[i]);
   printk(", IRQ %d", dev->irq);
 
-  /* Print current network id */
+  /* Print current network ID. */
   if(psa.psa_nwid_select)
     printk(", nwid 0x%02X-%02X", psa.psa_nwid[0], psa.psa_nwid[1]);
   else
@@ -1353,14 +1353,14 @@ wv_init_info(device *	dev)
     {
       unsigned short	freq;
 
-      /* Ask the EEprom to read the frequency from the first area */
+      /* Ask the EEPROM to read the frequency from the first area */
       fee_read(ioaddr, 0x00 /* 1st area - frequency... */,
 	       &freq, 1);
 
       /* Print frequency */
       printk(", 2.00, %ld", (freq >> 6) + 2400L);
 
-      /* Hack !!! */
+      /* Hack! */
       if(freq & 0x20)
 	printk(".5");
     }
@@ -1381,7 +1381,7 @@ wv_init_info(device *	dev)
 	  printk("MCIA");
 	  break;
 	default:
-	  printk("???");
+	  printk("?");
 	}
       printk(", ");
       switch (psa.psa_subband)
@@ -1402,7 +1402,7 @@ wv_init_info(device *	dev)
 	  printk("2430.5");
 	  break;
 	default:
-	  printk("???");
+	  printk("?");
 	}
     }
 
@@ -1417,7 +1417,7 @@ wv_init_info(device *	dev)
 
 /********************* IOCTL, STATS & RECONFIG *********************/
 /*
- * We found here routines that are called by Linux on differents
+ * We found here routines that are called by Linux on different
  * occasions after the configuration and not for transmitting data
  * These may be called when the user use ifconfig, /proc/net/dev
  * or wireless extensions
@@ -1425,7 +1425,7 @@ wv_init_info(device *	dev)
 
 /*------------------------------------------------------------------*/
 /*
- * Get the current ethernet statistics. This may be called with the
+ * Get the current Ethernet statistics. This may be called with the
  * card open or closed.
  * Used when the user read /proc/net/dev
  */
@@ -1461,9 +1461,9 @@ wavelan_set_multicast_list(device *	dev)
 	 dev->name, dev->flags, dev->mc_count);
 #endif
 
-  /* If we ask for promiscuous mode,
-   * or all multicast addresses (we don't have that !)
-   * or too much multicast addresses for the hardware filter */
+  /* Are we asking for promiscuous mode,
+   * or all multicast addresses (we don't have that!)
+   * or too many multicast addresses for the hardware filter? */
   if((dev->flags & IFF_PROMISC) ||
      (dev->flags & IFF_ALLMULTI) ||
      (dev->mc_count > I82586_MAX_MULTICAST_ADDRESSES))
@@ -1478,12 +1478,12 @@ wavelan_set_multicast_list(device *	dev)
 
 	  wv_82586_reconfig(dev);
 
-	  /* Tell the kernel that we are doing a really bad job... */
+	  /* Tell the kernel that we are doing a really bad job. */
 	  dev->flags |= IFF_PROMISC;
 	}
     }
   else
-    /* If there is some multicast addresses to send */
+    /* Are there multicast addresses to send? */
     if(dev->mc_list != (struct dev_mc_list *) NULL)
       {
 	/*
@@ -1522,7 +1522,7 @@ wavelan_set_multicast_list(device *	dev)
 
 /*------------------------------------------------------------------*/
 /*
- * This function doesn't exist...
+ * This function doesn't exist.
  */
 static int
 wavelan_set_mac_address(device *	dev,
@@ -1530,16 +1530,16 @@ wavelan_set_mac_address(device *	dev,
 {
   struct sockaddr *	mac = addr;
 
-  /* Copy the address */
+  /* Copy the address. */
   memcpy(dev->dev_addr, mac->sa_data, WAVELAN_ADDR_SIZE);
 
-  /* Reconfig the beast */
+  /* Reconfigure the beast. */
   wv_82586_reconfig(dev);
 
   return 0;
 }
 
-#ifdef WIRELESS_EXT	/* If wireless extension exist in the kernel */
+#ifdef WIRELESS_EXT	/* if wireless extension exists in the kernel */
 
 /*------------------------------------------------------------------*/
 /*
@@ -1558,10 +1558,10 @@ wv_set_frequency(u_long		ioaddr,	/* i/o port of the card */
 #endif
 
   /* Setting by frequency */
-  /* Theoritically, you may set any frequency between
+  /* Theoretically, you may set any frequency between
    * the two limits with a 0.5 MHz precision. In practice,
    * I don't want you to have trouble with local
-   * regulations... */
+   * regulations. */
   if((frequency->e == 1) &&
      (frequency->m >= (int) 2.412e8) && (frequency->m <= (int) 2.487e8))
     {
@@ -1569,29 +1569,29 @@ wv_set_frequency(u_long		ioaddr,	/* i/o port of the card */
     }
 
   /* Setting by channel (same as wfreqsel) */
-  /* Warning : each channel is 22MHz wide, so some of the channels
-   * will interfere... */
+  /* Warning: each channel is 22 MHz wide, so some of the channels
+   * will interfere. */
   if((frequency->e == 0) &&
      (frequency->m >= 0) && (frequency->m < BAND_NUM))
     {
-      /* frequency in 1/4 of MHz (as read in the offset register) */
+      /* frequency in units of 250 kHz (as read in the offset register) */
       short	bands[] = { 0x30, 0x58, 0x64, 0x7A, 0x80, 0xA8, 0xD0, 0xF0, 0xF8, 0x150 };
 
-      /* Get frequency offset */
+      /* Get frequency offset. */
       freq = bands[frequency->m] >> 1;
     }
 
-  /* Verify if the frequency is allowed */
+  /* Verify that the frequency is allowed. */
   if(freq != 0L)
     {
       u_short	table[10];	/* Authorized frequency table */
 
-      /* Read the frequency table */
+      /* Read the frequency table. */
       fee_read(ioaddr, 0x71 /* frequency table */,
 	       table, 10);
 
 #ifdef DEBUG_IOCTL_INFO
-      printk(KERN_DEBUG "Frequency table :");
+      printk(KERN_DEBUG "Frequency table: ");
       for(i = 0; i < 10; i++)
 	{
 	  printk(" %04X",
@@ -1600,7 +1600,7 @@ wv_set_frequency(u_long		ioaddr,	/* i/o port of the card */
       printk("\n");
 #endif
 
-      /* Look in the table if the frequency is allowed */
+      /* Look in the table to see whether the frequency is allowed. */
       if(!(table[9 - ((freq - 24) / 16)] &
 	   (1 << ((freq - 24) % 16))))
 	return -EINVAL;		/* not allowed */
@@ -1608,7 +1608,7 @@ wv_set_frequency(u_long		ioaddr,	/* i/o port of the card */
   else
     return -EINVAL;
 
-  /* If we get a usable frequency */
+  /* if we get a usable frequency */
   if(freq != 0L)
     {
       unsigned short	area[16];
@@ -1616,7 +1616,7 @@ wv_set_frequency(u_long		ioaddr,	/* i/o port of the card */
       unsigned short	area_verify[16];
       unsigned short	dac_verify[2];
       /* Corresponding gain (in the power adjust value table)
-       * see AT&T Wavelan Data Manual, REF 407-024689/E, page 3-8
+       * see AT&T WaveLAN Data Manual, REF 407-024689/E, page 3-8
        * & WCIN062D.DOC, page 6.2.9 */
       unsigned short	power_limit[] = { 40, 80, 120, 160, 0 };
       int		power_band = 0;		/* Selected band */
@@ -1628,15 +1628,15 @@ wv_set_frequency(u_long		ioaddr,	/* i/o port of the card */
 	    (power_limit[++power_band] != 0))
 	;
 
-      /* Read the first area */
+      /* Read the first area. */
       fee_read(ioaddr, 0x00,
 	       area, 16);
 
-      /* Read the DAC */
+      /* Read the DAC. */
       fee_read(ioaddr, 0x60,
 	       dac, 2);
 
-      /* Read the new power adjust value */
+      /* Read the new power adjust value. */
       fee_read(ioaddr, 0x6B - (power_band >> 1),
 	       &power_adjust, 1);
       if(power_band & 0x1)
@@ -1645,7 +1645,7 @@ wv_set_frequency(u_long		ioaddr,	/* i/o port of the card */
 	power_adjust &= 0xFF;
 
 #ifdef DEBUG_IOCTL_INFO
-      printk(KERN_DEBUG "Wavelan EEprom Area 1 :");
+      printk(KERN_DEBUG "WaveLAN EEPROM Area 1: ");
       for(i = 0; i < 16; i++)
 	{
 	  printk(" %04X",
@@ -1653,11 +1653,11 @@ wv_set_frequency(u_long		ioaddr,	/* i/o port of the card */
 	}
       printk("\n");
 
-      printk(KERN_DEBUG "Wavelan EEprom DAC : %04X %04X\n",
+      printk(KERN_DEBUG "WaveLAN EEPROM DAC: %04X %04X\n",
 	     dac[0], dac[1]);
 #endif
 
-      /* Frequency offset (for info only...) */
+      /* Frequency offset (for info only) */
       area[0] = ((freq << 5) & 0xFFE0) | (area[0] & 0x1F);
 
       /* Receiver Principle main divider coefficient */
@@ -1668,43 +1668,43 @@ wv_set_frequency(u_long		ioaddr,	/* i/o port of the card */
       area[13] = (freq >> 1) + 2400L;
       area[12] = ((freq & 0x1) << 4) | (area[2] & 0xFFEF);
 
-      /* Others part of the area are flags, bit streams or unused... */
+      /* Other parts of the area are flags, bit streams or unused. */
 
-      /* Set the value in the DAC */
+      /* Set the value in the DAC. */
       dac[1] = ((power_adjust >> 1) & 0x7F) | (dac[1] & 0xFF80);
       dac[0] = ((power_adjust & 0x1) << 4) | (dac[0] & 0xFFEF);
 
-      /* Write the first area */
+      /* Write the first area. */
       fee_write(ioaddr, 0x00,
 		area, 16);
 
-      /* Write the DAC */
+      /* Write the DAC. */
       fee_write(ioaddr, 0x60,
 		dac, 2);
 
-      /* We now should verify here that the EEprom writting was ok */
+      /* We now should verify here that the writing of the EEPROM was OK. */
 
-      /* ReRead the first area */
+      /* Reread the first area. */
       fee_read(ioaddr, 0x00,
 	       area_verify, 16);
 
-      /* ReRead the DAC */
+      /* Reread the DAC. */
       fee_read(ioaddr, 0x60,
 	       dac_verify, 2);
 
-      /* Compare */
+      /* Compare. */
       if(memcmp(area, area_verify, 16 * 2) ||
 	 memcmp(dac, dac_verify, 2 * 2))
 	{
 #ifdef DEBUG_IOCTL_ERROR
-	  printk(KERN_INFO "Wavelan: wv_set_frequency : unable to write new frequency to EEprom (??)\n");
+	  printk(KERN_INFO "WaveLAN: wv_set_frequency: unable to write new frequency to EEPROM(?).\n");
 #endif
 	  return -EOPNOTSUPP;
 	}
 
       /* We must download the frequency parameters to the
-       * synthetisers (from the EEprom - area 1)
-       * Note : as the EEprom is auto decremented, we set the end
+       * synthesizers (from the EEPROM - area 1)
+       * Note: as the EEPROM is automatically decremented, we set the end
        * if the area... */
       mmc_out(ioaddr, mmwoff(0, mmw_fee_addr), 0x0F);
       mmc_out(ioaddr, mmwoff(0, mmw_fee_ctrl),
@@ -1714,7 +1714,7 @@ wv_set_frequency(u_long		ioaddr,	/* i/o port of the card */
       fee_wait(ioaddr, 100, 100);
 
       /* We must now download the power adjust value (gain) to
-       * the synthetisers (from the EEprom - area 7 - DAC) */
+       * the synthesizers (from the EEPROM - area 7 - DAC) */
       mmc_out(ioaddr, mmwoff(0, mmw_fee_addr), 0x61);
       mmc_out(ioaddr, mmwoff(0, mmw_fee_ctrl),
 	      MMW_FEE_CTRL_READ | MMW_FEE_CTRL_DWLD);
@@ -1723,9 +1723,9 @@ wv_set_frequency(u_long		ioaddr,	/* i/o port of the card */
       fee_wait(ioaddr, 100, 100);
 
 #ifdef DEBUG_IOCTL_INFO
-      /* Verification of what we have done... */
+      /* Verification of what we have done */
 
-      printk(KERN_DEBUG "Wavelan EEprom Area 1 :");
+      printk(KERN_DEBUG "WaveLAN EEPROM Area 1: ");
       for(i = 0; i < 16; i++)
 	{
 	  printk(" %04X",
@@ -1733,7 +1733,7 @@ wv_set_frequency(u_long		ioaddr,	/* i/o port of the card */
 	}
       printk("\n");
 
-      printk(KERN_DEBUG "Wavelan EEprom DAC : %04X %04X\n",
+      printk(KERN_DEBUG "WaveLAN EEPROM DAC:  %04X %04X\n",
 	     dac_verify[0], dac_verify[1]);
 #endif
 
@@ -1760,7 +1760,7 @@ wv_frequency_list(u_long	ioaddr,	/* i/o port of the card */
   fee_read(ioaddr, 0x71 /* frequency table */,
 	   table, 10);
 
-  /* Look all frequencies */
+  /* Check all frequencies */
   i = 0;
   for(freq = 0; freq < 150; freq++)
     /* Look in the table if the frequency is allowed */
@@ -1770,7 +1770,7 @@ wv_frequency_list(u_long	ioaddr,	/* i/o port of the card */
 	list[i].m = (((freq + 24) * 5) + 24000L) * 10000;
 	list[i++].e = 1;
 
-	/* Check number */
+	/* Check number. */
 	if(i >= max)
 	  return(i);
       }
@@ -1781,9 +1781,9 @@ wv_frequency_list(u_long	ioaddr,	/* i/o port of the card */
 #ifdef WIRELESS_SPY
 /*------------------------------------------------------------------*/
 /*
- * Gather wireless spy statistics : for each packet, compare the source
- * address with out list, and if match, get the stats...
- * Sorry, but this function really need wireless extensions...
+ * Gather wireless spy statistics:  for each packet, compare the source
+ * address with our list, and if they match, get the statistics.
+ * Sorry, but this function really needs the wireless extensions.
  */
 static inline void
 wl_spy_gather(device *	dev,
@@ -1793,7 +1793,7 @@ wl_spy_gather(device *	dev,
   net_local *	lp = (net_local *) dev->priv;
   int		i;
 
-  /* Look all addresses */
+  /* Check all addresses. */
   for(i = 0; i < lp->spy_number; i++)
     /* If match */
     if(!memcmp(mac, lp->spy_address[i], WAVELAN_ADDR_SIZE))
@@ -1810,12 +1810,12 @@ wl_spy_gather(device *	dev,
 #ifdef HISTOGRAM
 /*------------------------------------------------------------------*/
 /*
- * This function calculate an histogram on the signal level.
+ * This function calculates a histogram of the signal level.
  * As the noise is quite constant, it's like doing it on the SNR.
  * We have defined a set of interval (lp->his_range), and each time
  * the level goes in that interval, we increment the count (lp->his_sum).
- * With this histogram you may detect if one wavelan is really weak,
- * or you may also calculate the mean and standard deviation of the level...
+ * With this histogram you may detect if one WaveLAN is really weak,
+ * or you may also calculate the mean and standard deviation of the level.
  */
 static inline void
 wl_his_gather(device *	dev,
@@ -1825,25 +1825,25 @@ wl_his_gather(device *	dev,
   u_char	level = stats[0] & MMR_SIGNAL_LVL;
   int		i;
 
-  /* Find the correct interval */
+  /* Find the correct interval. */
   i = 0;
   while((i < (lp->his_number - 1)) && (level >= lp->his_range[i++]))
     ;
 
-  /* Increment interval counter */
+  /* Increment interval counter. */
   (lp->his_sum[i])++;
 }
 #endif	/* HISTOGRAM */
 
 /*------------------------------------------------------------------*/
 /*
- * Perform ioctl : config & info stuff
+ * Perform ioctl:  configuration and information
  * This is here that are treated the wireless extensions (iwconfig)
  */
 static int
-wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
-	      struct ifreq *	rq,	/* Data passed */
-	      int		cmd)	/* Ioctl number */
+wavelan_ioctl(struct device *	dev,	/* device on which the ioctl is applied */
+	      struct ifreq *	rq,	/* data passed */
+	      int		cmd)	/* ioctl number */
 {
   u_long		ioaddr = dev->base_addr;
   net_local *		lp = (net_local *)dev->priv;	/* lp is not unused */
@@ -1870,7 +1870,7 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
       break;
 
     case SIOCSIWNWID:
-      /* Set NWID in wavelan */
+      /* Set NWID in WaveLAN. */
       if(wrq->u.nwid.on)
 	{
 	  /* Set NWID in psa */
@@ -1889,19 +1889,19 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
 	}
       else
 	{
-	  /* Disable nwid in the psa */
+	  /* Disable NWID in the psa. */
 	  psa.psa_nwid_select = 0x00;
 	  psa_write(ioaddr, lp->hacr,
 		    (char *)&psa.psa_nwid_select - (char *)&psa,
 		    (unsigned char *)&psa.psa_nwid_select, 1);
 
-	  /* Disable nwid in the mmc (no filtering) */
+	  /* Disable NWID in the mmc (no filtering). */
 	  mmc_out(ioaddr, mmwoff(0, mmw_loopt_sel), MMW_LOOPT_SEL_DIS_NWID);
 	}
       break;
 
     case SIOCGIWNWID:
-      /* Read the NWID */
+      /* Read the NWID. */
       psa_read(ioaddr, lp->hacr, (char *)psa.psa_nwid - (char *)&psa,
 	       (unsigned char *)psa.psa_nwid, 3);
       wrq->u.nwid.nwid = (psa.psa_nwid[0] << 8) + psa.psa_nwid[1];
@@ -1909,7 +1909,7 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
       break;
 
     case SIOCSIWFREQ:
-      /* Attempt to recognise 2.00 cards (2.4 GHz frequency selectable) */
+      /* Attempt to recognise 2.00 cards (2.4 GHz frequency selectable). */
       if(!(mmc_in(ioaddr, mmroff(0, mmr_fee_status)) &
 	   (MMR_FEE_STATUS_DWLD | MMR_FEE_STATUS_BUSY)))
 	ret = wv_set_frequency(ioaddr, &(wrq->u.freq));
@@ -1918,14 +1918,14 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
       break;
 
     case SIOCGIWFREQ:
-      /* Attempt to recognise 2.00 cards (2.4 GHz frequency selectable)
-       * (does it work for everybody ??? - especially old cards...) */
+      /* Attempt to recognise 2.00 cards (2.4 GHz frequency selectable).
+       * Does it work for everybody, especially old cards? */
       if(!(mmc_in(ioaddr, mmroff(0, mmr_fee_status)) &
 	   (MMR_FEE_STATUS_DWLD | MMR_FEE_STATUS_BUSY)))
 	{
 	  unsigned short	freq;
 
-	  /* Ask the EEprom to read the frequency from the first area */
+	  /* Ask the EEPROM to read the frequency from the first area */
 	  fee_read(ioaddr, 0x00 /* 1st area - frequency... */,
 		   &freq, 1);
 	  wrq->u.freq.m = ((freq >> 5) * 5 + 24000L) * 10000;
@@ -1949,7 +1949,7 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
       break;
 
     case SIOCSIWSENS:
-      /* Set the level threshold */
+      /* Set the level threshold. */
       if(!suser())
 	return -EPERM;
       psa.psa_thr_pre_set = wrq->u.sensitivity & 0x3F;
@@ -1959,14 +1959,14 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
       break;
 
     case SIOCGIWSENS:
-      /* Read the level threshold */
+      /* Read the level threshold. */
       psa_read(ioaddr, lp->hacr, (char *)&psa.psa_thr_pre_set - (char *)&psa,
 	       (unsigned char *) &psa.psa_thr_pre_set, 1);
       wrq->u.sensitivity = psa.psa_thr_pre_set & 0x3F;
       break;
 
      case SIOCSIWENCODE:
-       /* Set encryption key */
+       /* Set encryption key. */
        if(!mmc_encr(ioaddr))
 	 {
 	   ret = -EOPNOTSUPP;
@@ -1974,7 +1974,7 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
 	 }
 
        if(wrq->u.encoding.method)
-	 {	/* enable encryption */
+	 {	/* Enable encryption. */
 	   int		i;
 	   long long	key = wrq->u.encoding.code;
 
@@ -1994,7 +1994,7 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
 		     (unsigned char *) &psa.psa_encryption_key, 8);
 	 }
        else
-	 {	/* disable encryption */
+	 {	/* Disable encryption. */
 	   psa.psa_encryption_select = 0;
 	   psa_write(ioaddr, lp->hacr,
 		     (char *) &psa.psa_encryption_select - (char *) &psa,
@@ -2005,14 +2005,14 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
        break;
 
      case SIOCGIWENCODE:
-       /* Read the encryption key */
+       /* Read the encryption key. */
        if(!mmc_encr(ioaddr))
 	 {
 	   ret = -EOPNOTSUPP;
 	   break;
 	 }
 
-       /* only super-user can see encryption key */
+       /* Only super-user can see encryption key. */
        if(!suser())
 	 {
 	   ret = -EPERM;
@@ -2042,26 +2042,26 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
        break;
 
     case SIOCGIWRANGE:
-      /* Basic checking... */
+      /* basic checking */
       if(wrq->u.data.pointer != (caddr_t) 0)
 	{
 	  struct iw_range	range;
 
-	  /* Verify the user buffer */
+	  /* Verify the user buffer. */
 	  ret = verify_area(VERIFY_WRITE, wrq->u.data.pointer,
 			    sizeof(struct iw_range));
 	  if(ret)
 	    break;
 
-	  /* Set the length (useless : its constant...) */
+	  /* Set the length (useless:  it's constant). */
 	  wrq->u.data.length = sizeof(struct iw_range);
 
-	  /* Set information in the range struct */
+	  /* Set information in the range struct.  */
 	  range.throughput = 1.6 * 1024 * 1024;	/* don't argue on this ! */
 	  range.min_nwid = 0x0000;
 	  range.max_nwid = 0xFFFF;
 
-	  /* Attempt to recognise 2.00 cards (2.4 GHz frequency selectable) */
+	  /* Attempt to recognise 2.00 cards (2.4 GHz frequency selectable). */
 	  if(!(mmc_in(ioaddr, mmroff(0, mmr_fee_status)) &
 	       (MMR_FEE_STATUS_DWLD | MMR_FEE_STATUS_BUSY)))
 	    {
@@ -2077,14 +2077,14 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
 	  range.max_qual.level = MMR_SIGNAL_LVL;
 	  range.max_qual.noise = MMR_SILENCE_LVL;
 
-	  /* Copy structure to the user buffer */
+	  /* Copy structure to the user buffer. */
 	  copy_to_user(wrq->u.data.pointer, &range,
 		       sizeof(struct iw_range));
 	}
       break;
 
     case SIOCGIWPRIV:
-      /* Basic checking... */
+      /* Basic checking */
       if(wrq->u.data.pointer != (caddr_t) 0)
 	{
 	  struct iw_priv_args	priv[] =
@@ -2102,10 +2102,10 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
 	  if(ret)
 	    break;
 
-	  /* Set the number of ioctl available */
+	  /* Set the number of available ioctls. */
 	  wrq->u.data.length = 4;
 
-	  /* Copy structure to the user buffer */
+	  /* Copy structure to the user buffer. */
 	  copy_to_user(wrq->u.data.pointer, (u_char *) priv,
 		       sizeof(priv));
 	}
@@ -2115,7 +2115,7 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
     case SIOCSIWSPY:
       /* Set the spy list */
 
-      /* Check the number of addresses */
+      /* Check the number of addresses. */
       if(wrq->u.data.length > IW_MAX_SPY)
 	{
 	  ret = -E2BIG;
@@ -2123,33 +2123,33 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
 	}
       lp->spy_number = wrq->u.data.length;
 
-      /* If there is some addresses to copy */
+      /* Are there are addresses to copy? */
       if(lp->spy_number > 0)
 	{
 	  struct sockaddr	address[IW_MAX_SPY];
 	  int			i;
 
-	  /* Verify where the user has set his addresses */
+	  /* Verify where the user has set his addresses. */
 	  ret = verify_area(VERIFY_READ, wrq->u.data.pointer,
 			    sizeof(struct sockaddr) * lp->spy_number);
 	  if(ret)
 	    break;
-	  /* Copy addresses to the driver */
+	  /* Copy addresses to the driver. */
 	  copy_from_user(address, wrq->u.data.pointer,
 			 sizeof(struct sockaddr) * lp->spy_number);
 
-	  /* Copy addresses to the lp structure */
+	  /* Copy addresses to the lp structure. */
 	  for(i = 0; i < lp->spy_number; i++)
 	    {
 	      memcpy(lp->spy_address[i], address[i].sa_data,
 		     WAVELAN_ADDR_SIZE);
 	    }
 
-	  /* Reset structure... */
+	  /* Reset structure. */
 	  memset(lp->spy_stat, 0x00, sizeof(iw_qual) * IW_MAX_SPY);
 
 #ifdef DEBUG_IOCTL_INFO
-	  printk(KERN_DEBUG "SetSpy - Set of new addresses is :\n");
+	  printk(KERN_DEBUG "SetSpy - Set of new addresses is: \n");
 	  for(i = 0; i < wrq->u.data.length; i++)
 	    printk(KERN_DEBUG "%02X:%02X:%02X:%02X:%02X:%02X \n",
 		   lp->spy_address[i][0],
@@ -2164,25 +2164,25 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
       break;
 
     case SIOCGIWSPY:
-      /* Get the spy list and spy stats */
+      /* Get the spy list and spy stats. */
 
       /* Set the number of addresses */
       wrq->u.data.length = lp->spy_number;
 
-      /* If the user want to have the addresses back... */
+      /* Does the user want to have the addresses back? */
       if((lp->spy_number > 0) && (wrq->u.data.pointer != (caddr_t) 0))
 	{
 	  struct sockaddr	address[IW_MAX_SPY];
 	  int			i;
 
-	  /* Verify the user buffer */
+	  /* Verify the user buffer. */
 	  ret = verify_area(VERIFY_WRITE, wrq->u.data.pointer,
 			    (sizeof(iw_qual) + sizeof(struct sockaddr))
 			    * IW_MAX_SPY);
 	  if(ret)
 	    break;
 
-	  /* Copy addresses from the lp structure */
+	  /* Copy addresses from the lp structure. */
 	  for(i = 0; i < lp->spy_number; i++)
 	    {
 	      memcpy(address[i].sa_data, lp->spy_address[i],
@@ -2190,16 +2190,16 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
 	      address[i].sa_family = AF_UNIX;
 	    }
 
-	  /* Copy addresses to the user buffer */
+	  /* Copy addresses to the user buffer. */
 	  copy_to_user(wrq->u.data.pointer, address,
 		       sizeof(struct sockaddr) * lp->spy_number);
 
-	  /* Copy stats to the user buffer (just after) */
+	  /* Copy stats to the user buffer (just after). */
 	  copy_to_user(wrq->u.data.pointer +
 		       (sizeof(struct sockaddr) * lp->spy_number),
 		       lp->spy_stat, sizeof(iw_qual) * lp->spy_number);
 
-	  /* Reset updated flags */
+	  /* Reset updated flags. */
 	  for(i = 0; i < lp->spy_number; i++)
 	    lp->spy_stat[i].updated = 0x0;
 	}	/* if(pointer != NULL) */
@@ -2230,7 +2230,7 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
       if(!suser())
 	return -EPERM;
 
-      /* Check the number of intervals */
+      /* Check the number of intervals. */
       if(wrq->u.data.length > 16)
 	{
 	  ret = -E2BIG;
@@ -2238,10 +2238,10 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
 	}
       lp->his_number = wrq->u.data.length;
 
-      /* If there is some addresses to copy */
+      /* Are there addresses to copy? */
       if(lp->his_number > 0)
 	{
-	  /* Verify where the user has set his addresses */
+	  /* Verify where the user has set his addresses. */
 	  ret = verify_area(VERIFY_READ, wrq->u.data.pointer,
 			    sizeof(char) * lp->his_number);
 	  if(ret)
@@ -2250,25 +2250,25 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
 	  copy_from_user(lp->his_range, wrq->u.data.pointer,
 			 sizeof(char) * lp->his_number);
 
-	  /* Reset structure... */
+	  /* Reset structure. */
 	  memset(lp->his_sum, 0x00, sizeof(long) * 16);
 	}
       break;
 
     case SIOCGIPHISTO:
-      /* Set the number of intervals */
+      /* Set the number of intervals. */
       wrq->u.data.length = lp->his_number;
 
       /* Give back the distribution statistics */
       if((lp->his_number > 0) && (wrq->u.data.pointer != (caddr_t) 0))
 	{
-	  /* Verify the user buffer */
+	  /* Verify the user buffer. */
 	  ret = verify_area(VERIFY_WRITE, wrq->u.data.pointer,
 			    sizeof(long) * 16);
 	  if(ret)
 	    break;
 
-	  /* Copy data to the user buffer */
+	  /* Copy data to the user buffer. */
 	  copy_to_user(wrq->u.data.pointer, lp->his_sum,
 		       sizeof(long) * lp->his_number);
 	}	/* if(pointer != NULL) */
@@ -2281,7 +2281,7 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
       ret = -EOPNOTSUPP;
     }
 
-  /* ReEnable interrupts & restore flags */
+  /* Enable interrupts and restore flags. */
   wv_splx(x);
 
 #ifdef DEBUG_IOCTL_TRACE
@@ -2292,8 +2292,8 @@ wavelan_ioctl(struct device *	dev,	/* Device on wich the ioctl apply */
 
 /*------------------------------------------------------------------*/
 /*
- * Get wireless statistics
- * Called by /proc/net/wireless...
+ * Get wireless statistics.
+ * Called by /proc/net/wireless
  */
 static iw_stats *
 wavelan_get_wireless_stats(device *	dev)
@@ -2308,14 +2308,14 @@ wavelan_get_wireless_stats(device *	dev)
   printk(KERN_DEBUG "%s: ->wavelan_get_wireless_stats()\n", dev->name);
 #endif
 
-  /* Disable interrupts & save flags */
+  /* Disable interrupts and save flags. */
   x = wv_splhi();
 
   if(lp == (net_local *) NULL)
     return (iw_stats *) NULL;
   wstats = &lp->wstats;
 
-  /* Get data from the mmc */
+  /* Get data from the mmc. */
   mmc_out(ioaddr, mmwoff(0, mmw_freeze), 1);
 
   mmc_read(ioaddr, mmroff(0, mmr_dce_status), &m.mmr_dce_status, 1);
@@ -2324,7 +2324,7 @@ wavelan_get_wireless_stats(device *	dev)
 
   mmc_out(ioaddr, mmwoff(0, mmw_freeze), 0);
 
-  /* Copy data to wireless stuff */
+  /* Copy data to wireless stuff. */
   wstats->status = m.mmr_dce_status;
   wstats->qual.qual = m.mmr_sgnl_qual & MMR_SGNL_QUAL;
   wstats->qual.level = m.mmr_signal_lvl & MMR_SIGNAL_LVL;
@@ -2336,7 +2336,7 @@ wavelan_get_wireless_stats(device *	dev)
   wstats->discard.code = 0L;
   wstats->discard.misc = 0L;
 
-  /* ReEnable interrupts & restore flags */
+  /* Enable interrupts and restore flags. */
   wv_splx(x);
 
 #ifdef DEBUG_IOCTL_TRACE
@@ -2348,22 +2348,22 @@ wavelan_get_wireless_stats(device *	dev)
 
 /************************* PACKET RECEPTION *************************/
 /*
- * This part deal with receiving the packets.
- * The interrupt handler get an interrupt when a packet has been
- * successfully received and called this part...
+ * This part deals with receiving the packets.
+ * The interrupt handler gets an interrupt when a packet has been
+ * successfully received and calls this part.
  */
 
 /*------------------------------------------------------------------*/
 /*
- * This routine does the actual copy of data (including the ethernet
+ * This routine does the actual copying of data (including the Ethernet
  * header structure) from the WaveLAN card to an sk_buff chain that
- * will be passed up to the network interface layer. NOTE: We
+ * will be passed up to the network interface layer. NOTE: we
  * currently don't handle trailer protocols (neither does the rest of
  * the network interface), so if that is needed, it will (at least in
  * part) be added here.  The contents of the receive ring buffer are
  * copied to a message chain that is then passed to the kernel.
  *
- * Note: if any errors occur, the packet is "dropped on the floor"
+ * Note: if any errors occur, the packet is "dropped on the floor".
  * (called by wv_packet_rcv())
  */
 static inline void
@@ -2393,7 +2393,7 @@ wv_packet_read(device *		dev,
 
   skb->dev = dev;
 
-  /* Copy the packet to the buffer */
+  /* Copy the packet to the buffer. */
   obram_read(ioaddr, buf_off, skb_put(skb, sksize), sksize);
   skb->protocol=eth_type_trans(skb, dev);
 
@@ -2401,7 +2401,7 @@ wv_packet_read(device *		dev,
   wv_packet_info(skb->mac.raw, sksize, dev->name, "wv_packet_read");
 #endif	/* DEBUG_RX_INFO */
 
-  /* Statistics gathering & stuff associated.
+  /* Statistics-gathering and associated stuff.
    * It seem a bit messy with all the define, but it's really simple... */
 #if defined(WIRELESS_SPY) || defined(HISTOGRAM)
   if(
@@ -2413,13 +2413,13 @@ wv_packet_read(device *		dev,
 #endif	/* HISTOGRAM */
      0)
     {
-      u_char	stats[3];	/* Signal level, Noise level, Signal quality */
+      u_char	stats[3];	/* signal level, noise level, signal quality */
 
-      /* read signal level, silence level and signal quality bytes */
-      /* Note : in the Pcmcia hardware, these are part of the frame. It seem
+      /* Read signal level, silence level and signal quality bytes. */
+      /* Note: in the PCMCIA hardware, these are part of the frame. It seems
        * that for the ISA hardware, it's nowhere to be found in the frame,
-       * so I'm oblige to do this (it has side effect on /proc/net/wireless)
-       * Any idea ? */
+       * so I'm obliged to do this (it has a side effect on /proc/net/wireless).
+       * Any ideas? */
       mmc_out(ioaddr, mmwoff(0, mmw_freeze), 1);
       mmc_read(ioaddr, mmroff(0, mmr_signal_lvl), stats, 3);
       mmc_out(ioaddr, mmwoff(0, mmw_freeze), 0);
@@ -2440,11 +2440,11 @@ wv_packet_read(device *		dev,
 #endif	/* defined(WIRELESS_SPY) || defined(HISTOGRAM) */
 
   /*
-   * Hand the packet to the Network Module
+   * Hand the packet to the network module.
    */
   netif_rx(skb);
 
-  /* Keep stats up to date */
+  /* Keep statistics up to date */
   lp->stats.rx_packets++;
   lp->stats.rx_bytes += skb->len;
 
@@ -2470,7 +2470,7 @@ wv_receive(device *	dev)
   printk(KERN_DEBUG "%s: ->wv_receive()\n", dev->name);
 #endif
 
-  /* Loop on each received packet */
+  /* Loop on each received packet. */
   for(;;)
     {
       fd_t		fd;
@@ -2479,13 +2479,13 @@ wv_receive(device *	dev)
 
       obram_read(ioaddr, lp->rx_head, (unsigned char *) &fd, sizeof(fd));
 
-      /* If the current frame is not complete, we have reach the end... */
+      /* If the current frame is not complete, we have reached the end. */
       if((fd.fd_status & FD_STATUS_C) != FD_STATUS_C)
-	break;		/* This is how we exit the loop */
+	break;		/* This is how we exit the loop. */
 
       nreaped++;
 
-      /* Check if frame correctly received */
+      /* Check whether frame was correctly received. */
       if((fd.fd_status & (FD_STATUS_B | FD_STATUS_OK)) !=
 	 (FD_STATUS_B | FD_STATUS_OK))
 	{
@@ -2508,7 +2508,7 @@ wv_receive(device *	dev)
 #endif
 	}
 
-      /* Check is there was problems in the frame processing */
+      /* Were there problems in processing the frame?  Let's check. */
       if((fd.fd_status & (FD_STATUS_S6 | FD_STATUS_S7 | FD_STATUS_S8 |
 			  FD_STATUS_S9 | FD_STATUS_S10 | FD_STATUS_S11))
 	 != 0)
@@ -2565,7 +2565,7 @@ wv_receive(device *	dev)
 	    }
 	}
 
-      /* Check if frame contain a pointer to the data */
+      /* Does the frame contain a pointer to the data?  Let's check. */
       if(fd.fd_rbd_offset == I82586NULL)
 #ifdef DEBUG_RX_ERROR
 	printk(KERN_INFO "%s: wv_receive(): frame has no data.\n", dev->name);
@@ -2618,7 +2618,7 @@ wv_receive(device *	dev)
 
 /*********************** PACKET TRANSMISSION ***********************/
 /*
- * This part deal with sending packet through the wavelan
+ * This part deals with sending packets through the WaveLAN.
  *
  */
 
@@ -2628,13 +2628,13 @@ wv_receive(device *	dev)
  * locations on the WaveLAN card and starts the card off on
  * the transmit.
  *
- * The principle :
- * Each block contains a transmit command, a nop command,
+ * The principle:
+ * Each block contains a transmit command, a NOP command,
  * a transmit block descriptor and a buffer.
  * The CU reads the transmit block which points to the tbd,
  * reads the tbd and the content of the buffer.
  * When it has finished with it, it goes to the next command
- * which in our case is the nop. The nop points on itself,
+ * which in our case is the NOP. The NOP points on itself,
  * so the CU stops here.
  * When we add the next block, we modify the previous nop
  * to make it point on the new tx command.
@@ -2665,13 +2665,13 @@ wv_packet_write(device *	dev,
   printk(KERN_DEBUG "%s: ->wv_packet_write(%d)\n", dev->name, length);
 #endif
 
-  /* Check if we need some padding */
+  /* Do we need some padding? */
   if(clen < ETH_ZLEN)
     clen = ETH_ZLEN;
 
   x = wv_splhi();
 
-  /* Calculate addresses of next block and previous block */
+  /* Calculate addresses of next block and previous block. */
   txblock = lp->tx_first_free;
   txpred = txblock - TXBLOCKZ;
   if(txpred < OFFSET_CU)
@@ -2687,14 +2687,14 @@ if (lp->tx_n_in_use > 0)
 
   lp->tx_n_in_use++;
 
-  /* Calculate addresses of the differents part of the block */
+  /* Calculate addresses of the different parts of the block. */
   tx_addr = txblock;
   nop_addr = tx_addr + sizeof(tx);
   tbd_addr = nop_addr + sizeof(nop);
   buf_addr = tbd_addr + sizeof(tbd);
 
   /*
-   * Transmit command.
+   * Transmit command
    */
   tx.tx_h.ac_status = 0;
   obram_write(ioaddr, toff(ac_tx_t, tx_addr, tx_h.ac_status),
@@ -2702,7 +2702,7 @@ if (lp->tx_n_in_use > 0)
 	      sizeof(tx.tx_h.ac_status));
 
   /*
-   * NOP command.
+   * NOP command
    */
   nop.nop_h.ac_status = 0;
   obram_write(ioaddr, toff(ac_nop_t, nop_addr, nop_h.ac_status),
@@ -2714,7 +2714,7 @@ if (lp->tx_n_in_use > 0)
 	      sizeof(nop.nop_h.ac_link));
 
   /*
-   * Transmit buffer descriptor. 
+   * Transmit buffer descriptor
    */
   tbd.tbd_status = TBD_STATUS_EOF | (TBD_STATUS_ACNT & clen);
   tbd.tbd_next_bd_offset = I82586NULL;
@@ -2723,7 +2723,7 @@ if (lp->tx_n_in_use > 0)
   obram_write(ioaddr, tbd_addr, (unsigned char *)&tbd, sizeof(tbd));
 
   /*
-   * Data.
+   * Data
    */
   obram_write(ioaddr, buf_addr, buf, clen);
 
@@ -2741,13 +2741,13 @@ if (lp->tx_n_in_use > 0)
 	      (unsigned char *) &nop.nop_h.ac_link,
 	      sizeof(nop.nop_h.ac_link));
 
-  /* Keep stats up to date */
+  /* Keep stats up to date. */
   lp->stats.tx_bytes += length;
 
   /* If watchdog not already active, activate it... */
   if(lp->watchdog.prev == (timer_list *) NULL)
     {
-      /* set timer to expire in WATCHDOG_JIFFIES */
+      /* Set timer to expire in WATCHDOG_JIFFIES. */
       lp->watchdog.expires = jiffies + WATCHDOG_JIFFIES;
       add_timer(&lp->watchdog);
     }
@@ -2774,7 +2774,7 @@ if (lp->tx_n_in_use > 0)
  * This routine is called when we want to send a packet (NET3 callback)
  * In this routine, we check if the hardware is ready to accept
  * the packet. We also prevent reentrance. Then, we call the function
- * to send the packet...
+ * to send the packet.
  */
 static int
 wavelan_packet_xmit(struct sk_buff *	skb,
@@ -2788,9 +2788,9 @@ wavelan_packet_xmit(struct sk_buff *	skb,
 #endif
 
   /* This flag indicate that the hardware can't perform a transmission.
-   * Theoritically, NET3 check it before sending a packet to the driver,
-   * but in fact it never do that and pool continuously.
-   * As the watchdog will abort too long transmissions, we are quite safe...
+   * Theoretically, NET3 checks it before sending a packet to the driver,
+   * but in fact it never does that and pools continuously.
+   * As the watchdog will abort overly long transmissions, we are quite safe.
    */
   if(dev->tbusy)
     return 1;
@@ -2805,7 +2805,9 @@ wavelan_packet_xmit(struct sk_buff *	skb,
 #endif
   else
     {
-      /* If somebody has asked to reconfigure the controler, we can do it now */
+      /* If somebody has asked to reconfigure the controller, 
+       * we can do it now.
+       */
       if(lp->reconfig_82586)
 	{
 	  wv_82586_config(dev);
@@ -2829,12 +2831,12 @@ wavelan_packet_xmit(struct sk_buff *	skb,
   return 0;
 }
 
-/********************** HARDWARE CONFIGURATION **********************/
+/*********************** HARDWARE CONFIGURATION ***********************/
 /*
- * This part do the real job of starting and configuring the hardware.
+ * This part does the real job of starting and configuring the hardware.
  */
 
-/*------------------------------------------------------------------*/
+/*--------------------------------------------------------------------*/
 /*
  * Routine to initialize the Modem Management Controller.
  * (called by wv_hw_reset())
@@ -2852,7 +2854,7 @@ wv_mmc_init(device *	dev)
   printk(KERN_DEBUG "%s: ->wv_mmc_init()\n", dev->name);
 #endif
 
-  /* Read the parameter storage area */
+  /* Read the parameter storage area. */
   psa_read(ioaddr, lp->hacr, 0, (unsigned char *) &psa, sizeof(psa));
 
 #ifdef USE_PSA_CONFIG
@@ -2864,11 +2866,11 @@ wv_mmc_init(device *	dev)
   /* Is the PSA is not configured */
   if(!configured)
     {
-      /* User will be able to configure NWID after (with iwconfig) */
+      /* User will be able to configure NWID later (with iwconfig). */
       psa.psa_nwid[0] = 0;
       psa.psa_nwid[1] = 0;
 
-      /* As NWID is not set : no NWID checking */
+      /* no NWID checking since NWID is not set */
       psa.psa_nwid_select = 0;
 
       /* Disable encryption */
@@ -2901,10 +2903,10 @@ wv_mmc_init(device *	dev)
 #endif
     }
 
-  /* Zero the mmc structure */
+  /* Zero the mmc structure. */
   memset(&m, 0x00, sizeof(m));
 
-  /* Copy PSA info to the mmc */
+  /* Copy PSA info to the mmc. */
   m.mmw_netw_id_l = psa.psa_nwid[1];
   m.mmw_netw_id_h = psa.psa_nwid[0];
   
@@ -2924,7 +2926,7 @@ wv_mmc_init(device *	dev)
   m.mmw_thr_pre_set = psa.psa_thr_pre_set & 0x3F;
   m.mmw_quality_thr = psa.psa_quality_thr & 0x0F;
 
-  /* Missing : encryption stuff... */
+  /* Encryption stuff is missing. */
 
   /*
    * Set default modem control parameters.
@@ -2942,58 +2944,58 @@ wv_mmc_init(device *	dev)
   m.mmw_decay_prm = 0;
   m.mmw_decay_updat_prm = 0;
 
-  /* Write all info to mmc */
+  /* Write all info to MMC. */
   mmc_write(ioaddr, 0, (u_char *)&m, sizeof(m));
 
-  /* The following code start the modem of the 2.00 frequency
+  /* The following code starts the modem of the 2.00 frequency
    * selectable cards at power on. It's not strictly needed for the
-   * following boots...
+   * following boots.
    * The original patch was by Joe Finney for the PCMCIA driver, but
-   * I've cleaned it a bit and add documentation.
+   * I've cleaned it up a bit and added documentation.
    * Thanks to Loeke Brederveld from Lucent for the info.
    */
 
   /* Attempt to recognise 2.00 cards (2.4 GHz frequency selectable)
-   * (does it work for everybody ??? - especially old cards...) */
-  /* Note : WFREQSEL verify that it is able to read from EEprom
-   * a sensible frequency (address 0x00) + that MMR_FEE_STATUS_ID
-   * is 0xA (Xilinx version) or 0xB (Ariadne version).
-   * My test is more crude but do work... */
+   * Does it work for everybody, especially old cards? */
+  /* Note: WFREQSEL verifies that it is able to read a sensible
+   * frequency from from EEPROM (address 0x00) and that
+   * MMR_FEE_STATUS_ID is 0xA (Xilinx version) or 0xB (Ariadne version).
+   * My test is more crude but does work. */
   if(!(mmc_in(ioaddr, mmroff(0, mmr_fee_status)) &
        (MMR_FEE_STATUS_DWLD | MMR_FEE_STATUS_BUSY)))
     {
       /* We must download the frequency parameters to the
-       * synthetisers (from the EEprom - area 1)
-       * Note : as the EEprom is auto decremented, we set the end
+       * synthesizers (from the EEPROM - area 1)
+       * Note: as the EEPROM is automatically decremented, we set the end
        * if the area... */
       m.mmw_fee_addr = 0x0F;
       m.mmw_fee_ctrl = MMW_FEE_CTRL_READ | MMW_FEE_CTRL_DWLD;
       mmc_write(ioaddr, (char *)&m.mmw_fee_ctrl - (char *)&m,
 		(unsigned char *)&m.mmw_fee_ctrl, 2);
 
-      /* Wait until the download is finished */
+      /* Wait until the download is finished. */
       fee_wait(ioaddr, 100, 100);
 
 #ifdef DEBUG_CONFIG_INFO
-      /* The frequency was in the last word downloaded... */
+      /* The frequency was in the last word downloaded. */
       mmc_read(ioaddr, (char *)&m.mmw_fee_data_l - (char *)&m,
 	       (unsigned char *)&m.mmw_fee_data_l, 2);
 
-      /* Print some info for the user */
-      printk(KERN_DEBUG "%s: Wavelan 2.00 recognised (frequency select) : Current frequency = %ld\n",
+      /* Print some info for the user. */
+      printk(KERN_DEBUG "%s: WaveLAN 2.00 recognised (frequency select).  Current frequency = %ld\n",
 	     dev->name,
 	     ((m.mmw_fee_data_h << 4) |
 	      (m.mmw_fee_data_l >> 4)) * 5 / 2 + 24000L);
 #endif
 
       /* We must now download the power adjust value (gain) to
-       * the synthetisers (from the EEprom - area 7 - DAC) */
+       * the synthesizers (from the EEPROM - area 7 - DAC). */
       m.mmw_fee_addr = 0x61;
       m.mmw_fee_ctrl = MMW_FEE_CTRL_READ | MMW_FEE_CTRL_DWLD;
       mmc_write(ioaddr, (char *)&m.mmw_fee_ctrl - (char *)&m,
 		(unsigned char *)&m.mmw_fee_ctrl, 2);
 
-      /* Wait until the download is finished */
+      /* Wait until the download is finished. */
     }	/* if 2.00 card */
 
 #ifdef DEBUG_CONFIG_TRACE
@@ -3091,13 +3093,13 @@ wv_ru_start(device *	dev)
  * Start the command unit executing the NOP
  * self-loop of the first transmit block.
  *
- * Here, we create the list of send buffer used to transmit packets
+ * Here we create the list of send buffers used to transmit packets
  * between the PC and the command unit. For each buffer, we create a
  * buffer descriptor (pointing on the buffer), a transmit command
- * (pointing to the buffer descriptor) and a nop command.
- * The transmit command is linked to the nop, and the nop to itself.
- * When we will have finish to execute the transmit command, we will
- * then loop on the nop. By releasing the nop link to a new command,
+ * (pointing to the buffer descriptor) and a NOP command.
+ * The transmit command is linked to the NOP, and the NOP to itself.
+ * When we will have finished executing the transmit command, we will
+ * then loop on the NOP. By releasing the NOP link to a new command,
  * we may send another buffer.
  *
  * (called by wv_hw_reset())
@@ -3194,12 +3196,13 @@ wv_cu_start(device *	dev)
 
 /*------------------------------------------------------------------*/
 /*
- * This routine does a standard config of the WaveLAN controler (i82586).
+ * This routine does a standard configuration of the WaveLAN 
+ * controller (i82586).
  *
- * It initialise the scp, iscp and scb structure
- * The two first are only pointer to the next.
+ * It initialises the scp, iscp and scb structure
+ * The first two are just pointers to the next.
  * The last one is used for basic configuration and for basic
- * communication (interrupt status)
+ * communication (interrupt status).
  *
  * (called by wv_hw_reset())
  */
@@ -3240,7 +3243,7 @@ wv_82586_start(device *	dev)
   iscp.iscp_offset = OFFSET_SCB;
   obram_write(ioaddr, OFFSET_ISCP, (unsigned char *)&iscp, sizeof(iscp));
 
-  /* Our first command is to reset the i82586 */
+  /* Our first command is to reset the i82586. */
   memset(&scb, 0x00, sizeof(scb));
   scb.scb_command = SCB_CMD_RESET;
   scb.scb_cbl_offset = OFFSET_CU;
@@ -3249,7 +3252,7 @@ wv_82586_start(device *	dev)
 
   set_chan_attn(ioaddr, lp->hacr);
 
-  /* Wait for command to finish */
+  /* Wait for command to finish. */
   for(i = 1000; i > 0; i--)
     {
       obram_read(ioaddr, OFFSET_ISCP, (unsigned char *) &iscp, sizeof(iscp));
@@ -3269,7 +3272,7 @@ wv_82586_start(device *	dev)
       return -1;
     }
 
-  /* Check command completion */
+  /* Check command completion. */
   for(i = 15; i > 0; i--)
     {
       obram_read(ioaddr, OFFSET_SCB, (unsigned char *) &scb, sizeof(scb));
@@ -3291,7 +3294,7 @@ wv_82586_start(device *	dev)
 
   wv_ack(dev);
 
-  /* Set the action command header */
+  /* Set the action command header. */
   memset(&cb, 0x00, sizeof(cb));
   cb.ac_command = AC_CFLD_EL | (AC_CFLD_CMD & acmd_diagnose);
   cb.ac_link = OFFSET_CU;
@@ -3322,14 +3325,15 @@ wv_82586_start(device *	dev)
 
 /*------------------------------------------------------------------*/
 /*
- * This routine does a standard config of the WaveLAN controler (i82586).
+ * This routine does a standard configuration of the WaveLAN
+ * controller (i82586).
  *
  * This routine is a violent hack. We use the first free transmit block
  * to make our configuration. In the buffer area, we create the three
- * configure command (linked). We make the previous nop point to the
- * beggining of the buffer instead of the tx command. After, we go as
- * usual to the nop command...
- * Note that only the last command (mc_set) will generate an interrupt...
+ * configuration commands (linked). We make the previous NOP point to
+ * the beginning of the buffer instead of the tx command. After, we go
+ * as usual to the NOP command.
+ * Note that only the last command (mc_set) will generate an interrupt.
  *
  * (called by wv_hw_reset(), wv_82586_reconfig())
  */
@@ -3360,7 +3364,7 @@ wv_82586_config(device *	dev)
 
   x = wv_splhi();
 
-  /* Calculate addresses of next block and previous block */
+  /* Calculate addresses of next block and previous block. */
   txblock = lp->tx_first_free;
   txpred = txblock - TXBLOCKZ;
   if(txpred < OFFSET_CU)
@@ -3371,16 +3375,16 @@ wv_82586_config(device *	dev)
 
   lp->tx_n_in_use++;
 
-  /* Calculate addresses of the differents part of the block */
+  /* Calculate addresses of the different parts of the block. */
   tx_addr = txblock;
   nop_addr = tx_addr + sizeof(tx);
   tbd_addr = nop_addr + sizeof(nop);
-  cfg_addr = tbd_addr + sizeof(tbd_t);	/* beggining of the buffer */
+  cfg_addr = tbd_addr + sizeof(tbd_t);	/* beginning of the buffer */
   ias_addr = cfg_addr + sizeof(cfg);
   mcs_addr = ias_addr + sizeof(ias);
 
   /*
-   * Transmit command.
+   * Transmit command
    */
   tx.tx_h.ac_status = 0xFFFF;	/* Fake completion value */
   obram_write(ioaddr, toff(ac_tx_t, tx_addr, tx_h.ac_status),
@@ -3388,7 +3392,7 @@ wv_82586_config(device *	dev)
 	      sizeof(tx.tx_h.ac_status));
 
   /*
-   * NOP command.
+   * NOP command
    */
   nop.nop_h.ac_status = 0;
   obram_write(ioaddr, toff(ac_nop_t, nop_addr, nop_h.ac_status),
@@ -3399,23 +3403,23 @@ wv_82586_config(device *	dev)
 	      (unsigned char *) &nop.nop_h.ac_link,
 	      sizeof(nop.nop_h.ac_link));
 
-  /* Create a configure action */
+  /* Create a configure action. */
   memset(&cfg, 0x00, sizeof(cfg));
 
 #if	0
   /*
-   * The default board configuration.
+   * The default board configuration
    */
   cfg.fifolim_bytecnt 	= 0x080c;
   cfg.addrlen_mode  	= 0x2600;
   cfg.linprio_interframe	= 0x7820;	/* IFS=120, ACS=2 */
   cfg.slot_time      	= 0xf00c;	/* slottime=12    */
-  cfg.hardware	     	= 0x0008;	/* tx even w/o CD */
+  cfg.hardware	     	= 0x0008;	/* tx even without CD */
   cfg.min_frame_len   	= 0x0040;
 #endif	/* 0 */
 
   /*
-   * For Linux we invert AC_CFG_ALOC(..) so as to conform
+   * For Linux we invert AC_CFG_ALOC() so as to conform
    * to the way that net packets reach us from above.
    * (See also ac_tx_t.)
    */
@@ -3456,21 +3460,21 @@ wv_82586_config(device *	dev)
   cfg.cfg_h.ac_link = ias_addr;
   obram_write(ioaddr, cfg_addr, (unsigned char *)&cfg, sizeof(cfg));
 
-  /* Setup the MAC address */
+  /* Set up the MAC address */
   memset(&ias, 0x00, sizeof(ias));
   ias.ias_h.ac_command = (AC_CFLD_CMD & acmd_ia_setup);
   ias.ias_h.ac_link = mcs_addr;
   memcpy(&ias.ias_addr[0], (unsigned char *)&dev->dev_addr[0], sizeof(ias.ias_addr));
   obram_write(ioaddr, ias_addr, (unsigned char *)&ias, sizeof(ias));
 
-  /* Initialize adapter's ethernet multicast addresses */
+  /* Initialize adapter's Ethernet multicast addresses */
   memset(&mcs, 0x00, sizeof(mcs));
   mcs.mcs_h.ac_command = AC_CFLD_I | (AC_CFLD_CMD & acmd_mc_setup);
   mcs.mcs_h.ac_link = nop_addr;
   mcs.mcs_cnt = WAVELAN_ADDR_SIZE * lp->mc_count;
   obram_write(ioaddr, mcs_addr, (unsigned char *)&mcs, sizeof(mcs));
 
-  /* If any address to set */
+  /* Any address to set? */
   if(lp->mc_count)
     {
       for(dmi=dev->mc_list; dmi; dmi=dmi->next)
@@ -3526,8 +3530,8 @@ wv_82586_config(device *	dev)
 
 /*------------------------------------------------------------------*/
 /*
- * This routine stop gracefully the WaveLAN controler (i82586).
- * (called by wavelan_close())
+ * This routine, called by wavelan_close(), gracefully stops the 
+ * WaveLAN controller (i82586).
  */
 static inline void
 wv_82586_stop(device *	dev)
@@ -3540,7 +3544,7 @@ wv_82586_stop(device *	dev)
   printk(KERN_DEBUG "%s: ->wv_82586_stop()\n", dev->name);
 #endif
 
-  /* Suspend both command unit and receive unit */
+  /* Suspend both command unit and receive unit. */
   scb_cmd = (SCB_CMD_CUC & SCB_CMD_CUC_SUS) | (SCB_CMD_RUC & SCB_CMD_RUC_SUS);
   obram_write(ioaddr, scboff(OFFSET_SCB, scb_command),
 	      (unsigned char *)&scb_cmd, sizeof(scb_cmd));
@@ -3556,7 +3560,7 @@ wv_82586_stop(device *	dev)
 
 /*------------------------------------------------------------------*/
 /*
- * Totally reset the wavelan and restart it.
+ * Totally reset the WaveLAN and restart it.
  * Performs the following actions:
  *	1. A power reset (reset DMA)
  *	2. Initialize the radio modem (using wv_mmc_init)
@@ -3575,11 +3579,11 @@ wv_hw_reset(device *	dev)
 	 (unsigned int)dev);
 #endif
 
-  /* If watchdog was activated, kill it ! */
+  /* If watchdog was activated, kill it! */
   if(lp->watchdog.prev != (timer_list *) NULL)
     del_timer(&lp->watchdog);
 
-  /* Increase the number of resets done */
+  /* Increase the number of resets done. */
   lp->nresets++;
 
   wv_hacr_reset(ioaddr);
@@ -3589,7 +3593,7 @@ wv_hw_reset(device *	dev)
      (wv_82586_start(dev) < 0))
     return -1;
 
-  /* Enable the card to send interrupts */
+  /* Enable the card to send interrupts. */
   wv_ints_on(dev);
 
   /* Start card functions */
@@ -3597,7 +3601,7 @@ wv_hw_reset(device *	dev)
      (wv_cu_start(dev) < 0))
     return -1;
 
-  /* Finish configuration */
+  /* Finish configuration. */
   wv_82586_config(dev);
 
 #ifdef DEBUG_CONFIG_TRACE
@@ -3608,8 +3612,8 @@ wv_hw_reset(device *	dev)
 
 /*------------------------------------------------------------------*/
 /*
- * Check if there is a wavelan at the specific base address.
- * As a side effect, it read the MAC address.
+ * Check if there is a WaveLAN at the specific base address.
+ * As a side effect, this reads the MAC address.
  * (called in wavelan_probe() and init_module())
  */
 static int
@@ -3618,22 +3622,22 @@ wv_check_ioaddr(u_long		ioaddr,
 {
   int		i;		/* Loop counter */
 
-  /* Check if the base address if available */
+  /* Check if the base address if available. */
   if(check_region(ioaddr, sizeof(ha_t)))
-    return  EADDRINUSE;		/* ioaddr already used... */
+    return  EADDRINUSE;		/* ioaddr already used */
 
   /* Reset host interface */
   wv_hacr_reset(ioaddr);
 
-  /* Read the MAC address from the parameter storage area */
+  /* Read the MAC address from the parameter storage area. */
   psa_read(ioaddr, HACR_DEFAULT, psaoff(0, psa_univ_mac_addr),
 	   mac, 6);
 
   /*
-   * Check the first three octets of the addr for the manufacturer's code.
-   * Note: If you can't find your wavelan card, you've got a
-   * non-NCR/AT&T/Lucent ISA cards, see wavelan.p.h for detail on
-   * how to configure your card...
+   * Check the first three octets of the address for the manufacturer's code.
+   * Note: if this can't find your WaveLAN card, you've got a
+   * non-NCR/AT&T/Lucent ISA card.  See wavelan.p.h for detail on
+   * how to configure your card.
    */
   for(i = 0; i < (sizeof(MAC_ADDRESSES) / sizeof(char) / 3); i++)
     if((mac[0] == MAC_ADDRESSES[i][0]) &&
@@ -3642,7 +3646,7 @@ wv_check_ioaddr(u_long		ioaddr,
       return 0;
 
 #ifdef DEBUG_CONFIG_INFO
-  printk(KERN_WARNING "Wavelan (0x%3X) : Your MAC address might be : %02X:%02X:%02X...\n",
+  printk(KERN_WARNING "WaveLAN (0x%3X): your MAC address might be %02X:%02X:%02X.\n",
 	 ioaddr, mac[0], mac[1], mac[2]);
 #endif
     return ENODEV;
@@ -3675,7 +3679,7 @@ wavelan_interrupt(int			irq,
   lp = (net_local *) dev->priv;
   ioaddr = dev->base_addr;
 
-  /* Prevent reentrance. What should we do here ? */
+  /* Prevent reentrance. What should we do here? */
 #ifdef DEBUG_INTERRUPT_ERROR
   if(dev->interrupt)
     printk(KERN_INFO "%s: wavelan_interrupt(): Re-entering the interrupt handler.\n",
@@ -3708,7 +3712,7 @@ wavelan_interrupt(int			irq,
       return;
     }
 
-  /* Read interrupt data */
+  /* Read interrupt data. */
   obram_read(ioaddr, scboff(OFFSET_SCB, scb_status),
 	     (unsigned char *) &status, sizeof(status));
 
@@ -3755,7 +3759,7 @@ wavelan_interrupt(int			irq,
       wv_receive(dev);
     }
 
-  /* Check the state of the command unit */
+  /* Check the state of the command unit. */
   if(((status & SCB_ST_CNA) == SCB_ST_CNA) ||
      (((status & SCB_ST_CUS) != SCB_ST_CUS_ACTV) && dev->start))
     {
@@ -3766,7 +3770,7 @@ wavelan_interrupt(int			irq,
       wv_hw_reset(dev);
     }
 
-  /* Check the state of the command unit */
+  /* Check the state of the command unit. */
   if(((status & SCB_ST_RNR) == SCB_ST_RNR) ||
      (((status & SCB_ST_RUS) != SCB_ST_RUS_RDY) && dev->start))
     {
@@ -3786,14 +3790,14 @@ wavelan_interrupt(int			irq,
 
 /*------------------------------------------------------------------*/
 /*
- * Watchdog : when we start a transmission, we set a timer in the
- * kernel.  If the transmission complete, this timer is disabled. If
- * it expire, it try to unlock the hardware.
+ * Watchdog: when we start a transmission, we set a timer in the
+ * kernel.  If the transmission completes, this timer is disabled. If
+ * the timer expires, we try to unlock the hardware.
  *
- * Note : this watchdog doesn't work on the same principle as the
- * watchdog in the previous version of the ISA driver. I make it this
+ * Note: this watchdog doesn't work on the same principle as the
+ * watchdog in the previous version of the ISA driver. I made it this
  * way because the overhead of add_timer() and del_timer() is nothing
- * and that it avoid calling the watchdog, saving some CPU...
+ * and because it avoids calling the watchdog, saving some CPU.
  */
 static void
 wavelan_watchdog(u_long		a)
@@ -3860,7 +3864,7 @@ wavelan_watchdog(u_long		a)
       wv_hw_reset(dev);
     }
   else
-    /* Re-set watchodog for next transmission */
+    /* Reset watchdog for next transmission. */
     if(lp->tx_n_in_use > 0)
       {
 	/* set timer to expire in WATCHDOG_JIFFIES */
@@ -3877,15 +3881,15 @@ wavelan_watchdog(u_long		a)
 
 /********************* CONFIGURATION CALLBACKS *********************/
 /*
- * Here are the functions called by the linux networking (NET3) for
- * initialization, configuration and deinstallations of the Wavelan
- * ISA Hardware.
+ * Here are the functions called by the Linux networking code (NET3)
+ * for initialization, configuration and deinstallations of the 
+ * WaveLAN ISA hardware.
  */
 
 /*------------------------------------------------------------------*/
 /*
  * Configure and start up the WaveLAN PCMCIA adaptor.
- * Called by NET3 when it "open" the device.
+ * Called by NET3 when it "opens" the device.
  */
 static int
 wavelan_open(device *	dev)
@@ -3901,7 +3905,7 @@ wavelan_open(device *	dev)
   if(dev->irq == 0)
     {
 #ifdef DEBUG_CONFIG_ERRORS
-      printk(KERN_WARNING "%s: wavelan_open(): no irq\n", dev->name);
+      printk(KERN_WARNING "%s: wavelan_open(): no IRQ\n", dev->name);
 #endif
       return -ENXIO;
     }
@@ -3909,7 +3913,7 @@ wavelan_open(device *	dev)
   if(request_irq(dev->irq, &wavelan_interrupt, 0, "WaveLAN", dev) != 0)
     {
 #ifdef DEBUG_CONFIG_ERRORS
-      printk(KERN_WARNING "%s: wavelan_open(): invalid irq\n", dev->name);
+      printk(KERN_WARNING "%s: wavelan_open(): invalid IRQ\n", dev->name);
 #endif
       return -EAGAIN;
     }
@@ -3941,8 +3945,8 @@ wavelan_open(device *	dev)
 
 /*------------------------------------------------------------------*/
 /*
- * Shutdown the WaveLAN ISA card.
- * Called by NET3 when it "close" the device.
+ * Shut down the WaveLAN ISA card.
+ * Called by NET3 when it "closes" the device.
  */
 static int
 wavelan_close(device *	dev)
@@ -3954,14 +3958,14 @@ wavelan_close(device *	dev)
 	 (unsigned int) dev);
 #endif
 
-  /* Not do the job twice... */
+  /* Don't do the job twice. */
   if(dev->start == 0)
     return 0;
 
   dev->tbusy = 1;
   dev->start = 0;
 
-  /* If watchdog was activated, kill it ! */
+  /* If watchdog was activated, kill it! */
   if(lp->watchdog.prev != (timer_list *) NULL)
     del_timer(&lp->watchdog);
 
@@ -3982,9 +3986,9 @@ wavelan_close(device *	dev)
 
 /*------------------------------------------------------------------*/
 /*
- * Probe an i/o address, and if the wavelan is there configure the
+ * Probe an I/O address, and if the WaveLAN is there configure the
  * device structure
- * (called by wavelan_probe() & via init_module())
+ * (called by wavelan_probe() and via init_module()).
  */
 __initfunc(static int
 wavelan_config(device *	dev))
@@ -3999,7 +4003,7 @@ wavelan_config(device *	dev))
 	 (unsigned int)dev, ioaddr);
 #endif
 
-  /* Check irq arg on command line */
+  /* Check IRQ argument on command line. */
   if(dev->irq != 0)
     {
       irq_mask = wv_irq_to_psa(dev->irq);
@@ -4007,7 +4011,7 @@ wavelan_config(device *	dev))
       if(irq_mask == 0)
 	{
 #ifdef DEBUG_CONFIG_ERROR
-	  printk(KERN_WARNING "%s: wavelan_config(): invalid irq %d -- ignored.\n",
+	  printk(KERN_WARNING "%s: wavelan_config(): invalid IRQ %d ignored.\n",
 		 dev->name, dev->irq);
 #endif
 	  dev->irq = 0;
@@ -4015,7 +4019,7 @@ wavelan_config(device *	dev))
       else
 	{
 #ifdef DEBUG_CONFIG_INFO
-	  printk(KERN_DEBUG "%s: wavelan_config(): changing irq to %d\n",
+	  printk(KERN_DEBUG "%s: wavelan_config(): changing IRQ to %d\n",
 		 dev->name, dev->irq);
 #endif
 	  psa_write(ioaddr, HACR_DEFAULT,
@@ -4049,9 +4053,9 @@ wavelan_config(device *	dev))
   memset(dev->priv, 0x00, sizeof(net_local));
   lp = (net_local *)dev->priv;
 
-  /* Back link to the device structure */
+  /* Back link to the device structure. */
   lp->dev = dev;
-  /* Add the device at the beggining of the linked list */
+  /* Add the device at the beginning of the linked list. */
   lp->next = wavelan_list;
   wavelan_list = lp;
 
@@ -4064,7 +4068,7 @@ wavelan_config(device *	dev))
 
   /*
    * Fill in the fields of the device structure
-   * with ethernet-generic values.
+   * with generic Ethernet values.
    */
   ether_setup(dev);
 
@@ -4075,14 +4079,14 @@ wavelan_config(device *	dev))
   dev->set_multicast_list = &wavelan_set_multicast_list;
   dev->set_mac_address = &wavelan_set_mac_address;
 
-#ifdef WIRELESS_EXT	/* If wireless extension exist in the kernel */
+#ifdef WIRELESS_EXT	/* if wireless extension exists in the kernel */
   dev->do_ioctl = wavelan_ioctl;
   dev->get_wireless_stats = wavelan_get_wireless_stats;
 #endif
 
   dev->mtu = WAVELAN_MTU;
 
-  /* Display nice info */
+  /* Display nice information. */
   wv_init_info(dev);
 
 #ifdef DEBUG_CALLBACK_TRACE
@@ -4093,18 +4097,17 @@ wavelan_config(device *	dev))
 
 /*------------------------------------------------------------------*/
 /*
- * Check for a network adaptor of this type.
- * Return '0' iff one exists.
- * (There seem to be different interpretations of
+ * Check for a network adaptor of this type.  Return '0' iff one 
+ * exists.  There seem to be different interpretations of
  * the initial value of dev->base_addr.
- * We follow the example in drivers/net/ne.c.)
+ * We follow the example in drivers/net/ne.c.
  * (called in "Space.c")
  */
 __initfunc(int
 wavelan_probe(device *	dev))
 {
   short		base_addr;
-  mac_addr	mac;		/* Mac address (check wavelan existence) */
+  mac_addr	mac;		/* MAC address (check existence of WaveLAN) */
   int		i;
   int		r;
 
@@ -4122,7 +4125,7 @@ wavelan_probe(device *	dev))
     }
 #endif	/* STRUCT_CHECK */
 
-  /* Check the value of the command line parameter for base address */
+  /* Check the value of the command line parameter for base address. */
   base_addr = dev->base_addr;
 
   /* Don't probe at all. */
@@ -4138,10 +4141,10 @@ wavelan_probe(device *	dev))
   /* Check a single specified location. */
   if(base_addr > 0x100)
     {
-      /* Check if the is something at this base address */
+      /* Check if there is something at this base address */
       if((r = wv_check_ioaddr(base_addr, mac)) == 0)
 	{
-	  memcpy(dev->dev_addr, mac, 6);	/* Copy mac address */
+	  memcpy(dev->dev_addr, mac, 6);	/* Copy MAC address. */
 	  r = wavelan_config(dev);
 	}
 
@@ -4157,14 +4160,14 @@ wavelan_probe(device *	dev))
       return r;
     }
 
-  /* Scan all possible address of the wavelan hardware */
+  /* Scan all possible addresses of the WaveLAN hardware. */
   for(i = 0; i < NELS(iobase); i++)
     {
-      /* Check if the is something at this base address */
+      /* Check whether there is something at this base address. */
       if(wv_check_ioaddr(iobase[i], mac) == 0)
 	{
-	  dev->base_addr = iobase[i];		/* Copy base address */
-	  memcpy(dev->dev_addr, mac, 6);	/* Copy mac address */
+	  dev->base_addr = iobase[i];		/* Copy base address. */
+	  memcpy(dev->dev_addr, mac, 6);	/* Copy MAC address. */
 	  if(wavelan_config(dev) == 0)
 	    {
 #ifdef DEBUG_CALLBACK_TRACE
@@ -4175,7 +4178,7 @@ wavelan_probe(device *	dev))
 	}
     }
 
-  /* We may have touch base_addr : another driver may not like it... */
+  /* We may have touched base_addr.  Another driver may not like it. */
   dev->base_addr = base_addr;
 
 #ifdef DEBUG_CONFIG_INFO
@@ -4188,19 +4191,19 @@ wavelan_probe(device *	dev))
 
 /****************************** MODULE ******************************/
 /*
- * Module entry point : insertion & removal
+ * Module entry point: insertion and removal
  */
 
 #ifdef	MODULE
 /*------------------------------------------------------------------*/
 /*
- * Insertion of the module...
- * I'm now quite proud of the multi-device support...
+ * Insertion of the module
+ * I'm now quite proud of the multi-device support.
  */
 int
 init_module(void)
 {
-  mac_addr	mac;		/* Mac address (check wavelan existence) */
+  mac_addr	mac;		/* MAC address (check WaveLAN existence) */
   int		ret = 0;
   int		i;
 
@@ -4212,48 +4215,48 @@ init_module(void)
   if(io[0] == 0)
     {
 #ifdef DEBUG_CONFIG_ERRORS
-      printk(KERN_WARNING "wavelan init_module(): doing device probing (bad !)\n");
+      printk(KERN_WARNING "WaveLAN init_module(): doing device probing (bad !)\n");
       printk(KERN_WARNING "Specify base addresses while loading module to correct the problem\n");
 #endif
 
-      /* Copy the basic set of address to be probed */
+      /* Copy the basic set of address to be probed. */
       for(i = 0; i < NELS(iobase); i++)
 	io[i] = iobase[i];
     }
 
 
-  /* Loop on all possible base addresses */
+  /* Loop on all possible base addresses. */
   i = -1;
   while((io[++i] != 0) && (i < NELS(io)))
     {
-      /* Check if the is something at this base address */
+      /* Check if there is something at this base address. */
       if(wv_check_ioaddr(io[i], mac) == 0)
 	{
 	  device *	dev;
 
-	  /* Create device and set basics args */
+	  /* Create device and set basic arguments. */
 	  dev = kmalloc(sizeof(struct device), GFP_KERNEL);
 	  memset(dev, 0x00, sizeof(struct device));
 	  dev->name = name[i];
 	  dev->base_addr = io[i];
 	  dev->irq = irq[i];
 	  dev->init = &wavelan_config;
-	  memcpy(dev->dev_addr, mac, 6);	/* Copy mac address */
+	  memcpy(dev->dev_addr, mac, 6);	/* Copy MAC address. */
 
-	  /* Try to create the device */
+	  /* Try to create the device. */
 	  if(register_netdev(dev) != 0)
 	    {
-	      /* DeAllocate everything */
-	      /* Note : if dev->priv is mallocated, there is no way to fail */
+	      /* Deallocate everything. */
+	      /* Note: if dev->priv is mallocated, there is no way to fail. */
 	      kfree_s(dev, sizeof(struct device));
 	      ret = -EIO;
 	    }
-	}	/* If there is something at the address */
-    }		/* Loop on all addresses */
+	}	/* if there is something at the address */
+    }		/* Loop on all addresses. */
 
 #ifdef DEBUG_CONFIG_ERRORS
   if(wavelan_list == (net_local *) NULL)
-    printk(KERN_WARNING "wavelan init_module(): No device found\n");
+    printk(KERN_WARNING "WaveLAN init_module(): no device found\n");
 #endif
 
 #ifdef DEBUG_MODULE_TRACE
@@ -4273,7 +4276,7 @@ cleanup_module(void)
   printk(KERN_DEBUG "-> cleanup_module()\n");
 #endif
 
-  /* Loop on all devices and release them */
+  /* Loop on all devices and release them. */
   while(wavelan_list != (net_local *) NULL)
     {
       device *	dev = wavelan_list->dev;
@@ -4283,16 +4286,16 @@ cleanup_module(void)
 	     dev->name, (unsigned int) dev);
 #endif
 
-      /* Release the ioport-region. */
+      /* Release the ioport region. */
       release_region(dev->base_addr, sizeof(ha_t));
 
-      /* Remove definitely the device */
+      /* Definitely remove the device. */
       unregister_netdev(dev);
 
-      /* Unlink the device */
+      /* Unlink the device. */
       wavelan_list = wavelan_list->next;
 
-      /* Free pieces */
+      /* Free pieces. */
       kfree_s(dev->priv, sizeof(struct net_local));
       kfree_s(dev, sizeof(struct device));
     }

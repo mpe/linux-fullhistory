@@ -537,11 +537,15 @@ asmlinkage int osf_utsname(char *name)
 	error = verify_area(VERIFY_WRITE, name, 5 * 32);
 	if (error)
 		goto out;
+		
+	down(&uts_sem);
 	copy_to_user(name + 0, system_utsname.sysname, 32);
 	copy_to_user(name + 32, system_utsname.nodename, 32);
 	copy_to_user(name + 64, system_utsname.release, 32);
 	copy_to_user(name + 96, system_utsname.version, 32);
 	copy_to_user(name + 128, system_utsname.machine, 32);
+	up(&uts_sem);
+	
 out:
 	unlock_kernel();
 	return error;
@@ -602,11 +606,13 @@ asmlinkage int osf_getdomainname(char *name, int namelen)
 	if (namelen > 32)
 		len = 32;
 
+	down(&uts_sem);
 	for (i = 0; i < len; ++i) {
-		put_user(system_utsname.domainname[i], name + i);
+		__put_user(system_utsname.domainname[i], name + i);
 		if (system_utsname.domainname[i] == '\0')
 			break;
 	}
+	up(&uts_sem);
 out:
 	unlock_kernel();
 	return error;
@@ -843,6 +849,8 @@ asmlinkage long osf_sysinfo(int command, char *buf, long count)
 		printk("sysinfo(%d)", command);
 		goto out;
 	}
+	
+	down(&uts_sem);
 	res = sysinfo_table[offset];
 	len = strlen(res)+1;
 	if (len > count)
@@ -851,6 +859,7 @@ asmlinkage long osf_sysinfo(int command, char *buf, long count)
 		err = -EFAULT;
 	else
 		err = 0;
+	up(&uts_sem);
 out:
 	unlock_kernel();
 	return err;

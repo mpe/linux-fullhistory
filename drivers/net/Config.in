@@ -24,6 +24,13 @@ fi
 #
 bool 'Ethernet (10 or 100Mbit)' CONFIG_NET_ETHERNET
 if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
+  if [ "$CONFIG_ARM" = "y" ]; then
+    if [ "$CONFIG_ARCH_ACORN" != "y" ]; then
+      tristate 'AM79C961A support' CONFIG_ARM_AM79C961A
+    else
+      source drivers/acorn/net/Config.in
+    fi
+  fi
   if [ "$CONFIG_PMAC" = "y" ]; then
     bool 'MACE (Power Mac Ethernet) support' CONFIG_MACE
   fi

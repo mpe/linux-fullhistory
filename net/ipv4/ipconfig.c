@@ -1,5 +1,5 @@
 /*
- *  $Id: ipconfig.c,v 1.12 1998/05/03 14:30:53 alan Exp $
+ *  $Id: ipconfig.c,v 1.13 1998/06/09 03:40:47 zaitcev Exp $
  *
  *  Automatic Configuration of IP -- use BOOTP or RARP or user-supplied
  *  information to configure own IP address and routes.
@@ -248,6 +248,11 @@ __initfunc(int ic_setup_routes(void))
 
 __initfunc(int ic_defaults(void))
 {
+	/*
+	 *	At this point we have no userspace running so need not
+	 *	claim locks on system_utsname
+	 */
+	 
 	if (!ic_host_name_set)
 		strcpy(system_utsname.nodename, in_ntoa(ic_myaddr));
 
@@ -1072,8 +1077,8 @@ __initfunc(int ip_auto_config(void))
 }
 
 /*
- *  Decode any IP configuration options in the "ipconfig" kernel command
- *  line parameter. It consists of option fields separated by colons in
+ *  Decode any IP configuration options in the "ip=" or "nfsaddrs=" kernel
+ *  command line parameter. It consists of option fields separated by colons in
  *  the following order:
  *
  *  <client-ip>:<server-ip>:<gw-ip>:<netmask>:<host name>:<device>:<bootp|rarp>

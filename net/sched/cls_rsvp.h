@@ -525,6 +525,7 @@ insert:
 					break;
 			f->next = *fp;
 			*fp = f;
+			*arg = (unsigned long)f;
 			return 0;
 		}
 	}

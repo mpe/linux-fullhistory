@@ -90,7 +90,7 @@ static int parse_options(char *options, struct iso9660_options * popt)
 {
 	char *this_char,*value;
 
-	popt->map = 'n';
+	popt->map = 'a';
 	popt->rock = 'y';
 	popt->joliet = 'y';
 	popt->cruft = 'n';
@@ -141,10 +141,11 @@ static int parse_options(char *options, struct iso9660_options * popt)
 		} else
 #endif
 		if (!strcmp(this_char,"map") && value) {
-			if (value[0] && !value[1] && strchr("on",*value))
+			if (value[0] && !value[1] && strchr("ano",*value))
 				popt->map = *value;
 			else if (!strcmp(value,"off")) popt->map = 'o';
 			else if (!strcmp(value,"normal")) popt->map = 'n';
+			else if (!strcmp(value,"acorn")) popt->map = 'a';
 			else return 0;
 		}
 		else if (!strcmp(this_char,"check") && value) {
