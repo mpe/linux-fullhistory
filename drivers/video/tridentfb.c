@@ -1163,7 +1163,7 @@ static int __devinit trident_pci_probe(struct pci_dev * dev, const struct pci_de
 	fb_info.var = default_var;
 	fb_info.device = &dev->dev;
 	if (register_framebuffer(&fb_info) < 0) {
-		output("Could not register Trident framebuffer\n");
+		printk(KERN_ERR "tridentfb: could not register Trident framebuffer\n");
 		return -EINVAL;
 	}
 	output("fb%d: %s frame buffer device %dx%d-%dbpp\n",
