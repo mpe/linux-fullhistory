@@ -196,9 +196,6 @@ static void rfcomm_sock_destruct(struct sock *sk)
 	rfcomm_dlc_unlock(d);
 
 	rfcomm_dlc_put(d);
-
-	if (sk->sk_protinfo)
-		kfree(sk->sk_protinfo);
 }
 
 static void rfcomm_sock_cleanup_listen(struct sock *parent)

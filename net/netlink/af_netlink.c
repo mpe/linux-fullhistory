@@ -55,10 +55,6 @@
 
 #define Nprintk(a...)
 
-#if defined(CONFIG_NETLINK_DEV) || defined(CONFIG_NETLINK_DEV_MODULE)
-#define NL_EMULATE_DEV
-#endif
-
 struct netlink_sock {
 	/* struct sock has to be the first member of netlink_sock */
 	struct sock		sk;
@@ -67,7 +63,6 @@ struct netlink_sock {
 	u32			dst_pid;
 	unsigned int		dst_groups;
 	unsigned long		state;
-	int			(*handler)(int unit, struct sk_buff *skb);
 	wait_queue_head_t	wait;
 	struct netlink_callback	*cb;
 	spinlock_t		cb_lock;
@@ -593,10 +588,6 @@ int netlink_attachskb(struct sock *sk, struct sk_buff *skb, int nonblock, long t
 
 	nlk = nlk_sk(sk);
 
-#ifdef NL_EMULATE_DEV
-	if (nlk->handler)
-		return 0;
-#endif
 	if (atomic_read(&sk->sk_rmem_alloc) > sk->sk_rcvbuf ||
 	    test_bit(0, &nlk->state)) {
 		DECLARE_WAITQUEUE(wait, current);
@@ -636,14 +627,6 @@ int netlink_sendskb(struct sock *sk, struct sk_buff *skb, int protocol)
 	int len = skb->len;
 
 	nlk = nlk_sk(sk);
-#ifdef NL_EMULATE_DEV
-	if (nlk->handler) {
-		skb_orphan(skb);
-		len = nlk->handler(protocol, skb);
-		sock_put(sk);
-		return len;
-	}
-#endif
 
 	skb_queue_tail(&sk->sk_receive_queue, skb);
 	sk->sk_data_ready(sk, len);
@@ -708,12 +691,7 @@ retry:
 static __inline__ int netlink_broadcast_deliver(struct sock *sk, struct sk_buff *skb)
 {
 	struct netlink_sock *nlk = nlk_sk(sk);
-#ifdef NL_EMULATE_DEV
-	if (nlk->handler) {
-		nlk->handler(sk->sk_protocol, skb);
-		return 0;
-	} else
-#endif
+
 	if (atomic_read(&sk->sk_rmem_alloc) <= sk->sk_rcvbuf &&
 	    !test_bit(0, &nlk->state)) {
 		skb_set_owner_r(skb, sk);
