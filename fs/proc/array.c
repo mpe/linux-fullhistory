@@ -770,10 +770,12 @@ static int read_maps (int pid, struct file * file, char * buf, int count)
 	return destptr-buf;
 }
 
+#ifdef CONFIG_MODULES
 extern int get_module_list(char *);
+extern int get_ksyms_list(char *, char **, off_t, int);
+#endif
 extern int get_device_list(char *);
 extern int get_filesystem_list(char *);
-extern int get_ksyms_list(char *, char **, off_t, int);
 extern int get_irq_list(char *);
 extern int get_dma_list(char *);
 extern int get_cpuinfo(char *);
@@ -807,8 +809,13 @@ static int get_root_array(char * page, int type, char **start, off_t offset, int
 			return get_malloc(page);
 #endif
 
+#ifdef CONFIG_MODULES
 		case PROC_MODULES:
 			return get_module_list(page);
+
+		case PROC_KSYMS:
+			return get_ksyms_list(page, start, offset, length);
+#endif
 
 		case PROC_STAT:
 			return get_kstat(page);
@@ -821,9 +828,6 @@ static int get_root_array(char * page, int type, char **start, off_t offset, int
 
 		case PROC_FILESYSTEMS:
 			return get_filesystem_list(page);
-
-		case PROC_KSYMS:
-			return get_ksyms_list(page, start, offset, length);
 
 		case PROC_DMA:
 			return get_dma_list(page);

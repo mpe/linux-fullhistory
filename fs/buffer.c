@@ -1042,6 +1042,10 @@ int bread_page(unsigned long address, kdev_t dev, int b[], int size)
 		}
 		tmp = get_hash_table(dev, block, size);
 		if (tmp) {
+			if (!buffer_uptodate(tmp)) {
+				ll_rw_block(READ, 1, &tmp);
+				wait_on_buffer(tmp);
+			}
 			memcpy(next->b_data, tmp->b_data, size);
 			brelse(tmp);
 			continue;
@@ -1789,6 +1793,8 @@ int bdflush(void * unused) {
 	in a few more things so "top" and /proc/2/{exe,root,cwd}
 	display semi-sane things. Not real crucial though...  */
 
+	current->session = 1;
+	current->pgrp = 1;
 	sprintf(current->comm, "kernel bdflush");
 
 	for (;;) {

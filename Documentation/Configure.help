@@ -317,13 +317,20 @@ CONFIG_M486
   not sure, say N; This option will make the kernel use some
   instructions that are only available on 486+ machines.
 
+Enable loadable module support
+CONFIG_MODULES
+  Kernel modules are small pieces of compiled code which can be 
+  inserted in or removed from the running kernel, using the
+  programs insmod and rmmod. This is described in the file 
+  Documentation/modules.txt. Modules can be device drivers, file 
+  systems, binary executable formats, and so on. If you think that 
+  you may want to make use of modules with this kernel in the future, 
+  then say Y here.
+
 Set version information on all symbols for modules
 CONFIG_MODVERSIONS
-  Kernel modules are pieces of code which can be inserted in or
-  removed from the running kernel, using the programs insmod and
-  rmmod. This is described in the file
-  Documentation/modules.txt. Usually, modules have to be recompiled
-  whenever you switch to a new kernel. Enabling this option allows you
+  Usually, modules have to be recompiled whenever you
+  switch to a new kernel. Enabling this option allows you
   to keep using the same modules even after compiling a new kernel;
   this requires the program modprobe. All the software needed for
   module support is in the modules package in
@@ -813,14 +820,16 @@ CONFIG_SCSI_U14_34F
 
 Future Domain 16xx SCSI support
 CONFIG_SCSI_FUTURE_DOMAIN
-  This is support for an SCSI host adaptor. It is explained in section
-  3.7 of the SCSI-HOWTO, available via ftp (user: anonymous) at
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If it doesn't work out of
-  the box, you may have to change some settings in
-  drivers/scsi/fdomain.h. This driver is also available as a module (
-  = code which can be inserted in and removed from the running kernel
-  whenever you want). If you want to compile it as a module, say M
-  here and read Documentation/modules.txt.
+  This is support for Future Domain's 16-bit SCSI host adaptors
+  (TMC-1660/1680, TMC-1650/1670, TMC-3260) and other adaptors based on the
+  Future Domain chipsets (Quantum ISA-200S, ISA-250MG; and at least one IBM
+  board).  It is explained in section 3.7 of the SCSI-HOWTO, available via
+  ftp (user: anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If it
+  doesn't work out of the box, you may have to change some settings in
+  drivers/scsi/fdomain.h. This driver is also available as a module ( =
+  code which can be inserted in and removed from the running kernel
+  whenever you want). If you want to compile it as a module, say M here and
+  read Documentation/modules.txt.
 
 Generic NCR5380 SCSI support
 CONFIG_SCSI_GENERIC_NCR5380
@@ -2182,6 +2191,54 @@ Zilog serial support
 CONFIG_SUN_ZS
   This driver does not exist at this point, so you might as well say
   N.
+
+Advanced Power Management
+CONFIG_APM
+  This driver provides APM support on machines with an APM-compliant 32-bit
+  BIOS.  Specifically, the time will be reset after a USER RESUME
+  operation, the /proc/apm device will provide battery status information,
+  and ioctls are provided to put the machine in STANDBY or SUSPEND mode.
+  This is most useful on laptops with a compliant BIOS.
+
+Ignore USER SUSPEND
+CONFIG_APM_IGNORE_USER_SUSPEND
+  This option will ignore USER SUSPEND requests.  On machines with a
+  compliant APM BIOS, this is never what you want to do.  However, this is
+  necessary on the NEC Versa M series, which generates these when resuming
+  from SYSTEM SUSPEND.  Enabling this on other laptops may cause the laptop
+  to generate a CRITICAL SUSPEND when an appropriate USER SUSPEND is
+  ignored -- this may prevent the APM driver from updating the system time
+  on a RESUME.
+
+Enable APM features
+CONFIG_APM_DO_ENABLE
+  Enable APM features at boot time.  From page 36 of the APM BIOS
+  specification: "When disabled, the APM BIOS does not automatically power
+  manage devices, enter the Standby State, enter the Suspend State, or take
+  power saving steps in response to CPU Idle calls."  This driver will make
+  CPU Idle calls when Linux is idle (unless this feature is turned off --
+  see below).  This should always save battery power, but more complicated
+  APM features will be dependent on your BIOS implementation.  You may need
+  to turn this option off if your computer hangs at boot time when using
+  APM support, or if it beeps continuously instead of suspending.  Turn
+  this off if you have a NEC UltraLite Versa 33/C or a Toshiba T400CDT.
+  This is off by default since most machines do fine without this feature.
+
+Do CPU IDLE calls
+CONFIG_APM_CPU_IDLE
+  Enable calls to APM CPU Idle/CPU Busy inside the kernel's idle loop.  On
+  some machines, this can activate improved power savings, such as a slowed
+  CPU clock rate, when the machine is idle.  These idle call is made after
+  the idle loop has run for some length of time (e.g., 333 mS).  On some
+  machines, this will cause a hang at boot time or whenever the CPU becomes
+  idle.  (On machines with more than one CPU, this option does nothing.)
+
+Black display
+CONFIG_APM_DISPLAY_BLANK
+  Enable console blanking using the APM.  Some laptops can use this to turn
+  off the LCD backlight when the VC screen blanker blanks the screen.  Note
+  that this is only used by the VC screen blanker, and won't turn off the
+  backlight when using X11.
 
 Sound card support
 CONFIG_SOUND

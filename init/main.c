@@ -594,7 +594,9 @@ asmlinkage void start_kernel(void)
 	sched_init();
 	time_init();
 	parse_options(command_line);
+#ifdef CONFIG_MODULES
 	init_modules();
+#endif
 #ifdef CONFIG_PROFILE
 	if (!prof_shift)
 #ifdef CONFIG_PROFILE_SHIFT

@@ -131,6 +131,7 @@ struct proc_dir_entry proc_net = {
 	NULL, NULL	
 };
 
+#ifdef CONFIG_SCSI
 struct proc_dir_entry proc_scsi = {
 	PROC_SCSI, 4, "scsi",
 	S_IFDIR | S_IRUGO | S_IXUGO, 2, 0, 0,
@@ -138,6 +139,7 @@ struct proc_dir_entry proc_scsi = {
 	NULL, NULL,
 	NULL, &proc_root, NULL
 };
+#endif
 
 int proc_register(struct proc_dir_entry * dir, struct proc_dir_entry * dp)
 {
@@ -258,7 +260,9 @@ void proc_root_init(void)
 	});
 	proc_register(&proc_root, &proc_net);
 
+#ifdef CONFIG_SCSI
 	proc_register(&proc_root, &proc_scsi);
+#endif
 
 #ifdef CONFIG_DEBUG_MALLOC
 	proc_register(&proc_root, &(struct proc_dir_entry) {
@@ -270,10 +274,17 @@ void proc_root_init(void)
 		PROC_KCORE, 5, "kcore",
 		S_IFREG | S_IRUSR, 1, 0, 0,
 	});
+
+#ifdef CONFIG_MODULES
 	proc_register(&proc_root, &(struct proc_dir_entry) {
 		PROC_MODULES, 7, "modules",
 		S_IFREG | S_IRUGO, 1, 0, 0,
 	});
+	proc_register(&proc_root, &(struct proc_dir_entry) {
+		PROC_KSYMS, 5, "ksyms",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+	});
+#endif
 	proc_register(&proc_root, &(struct proc_dir_entry) {
 		PROC_STAT, 4, "stat",
 		S_IFREG | S_IRUGO, 1, 0, 0,
@@ -288,10 +299,6 @@ void proc_root_init(void)
 	});
 	proc_register(&proc_root, &(struct proc_dir_entry) {
 		PROC_FILESYSTEMS, 11,"filesystems",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-	});
-	proc_register(&proc_root, &(struct proc_dir_entry) {
-		PROC_KSYMS, 5, "ksyms",
 		S_IFREG | S_IRUGO, 1, 0, 0,
 	});
 	proc_register(&proc_root, &(struct proc_dir_entry) {

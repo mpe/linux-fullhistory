@@ -2147,8 +2147,10 @@ static int update_timeout(Scsi_Cmnd * SCset, int timeout)
 
 #define MALLOC_PAGEBITS 12
 
+#ifdef CONFIG_MODULES
 static int scsi_register_host(Scsi_Host_Template *);
 static void scsi_unregister_host(Scsi_Host_Template *);
+#endif
 
 void *scsi_malloc(unsigned int len)
 {
@@ -2638,6 +2640,8 @@ static void resize_dma_pool(void)
     restore_flags(flags);
 }
 
+#ifdef CONFIG_MODULES		/* a big #ifdef block... */
+
 /*
  * This entry point should be called by a loadable module if it is trying
  * add a low level scsi driver to the system.
@@ -3043,6 +3047,8 @@ void scsi_unregister_module(int module_type, void * ptr)
     }
     return;
 }
+
+#endif		/* CONFIG_MODULES */
 
 #ifdef DEBUG_TIMEOUT
 static void

@@ -3,6 +3,12 @@
 #
 
 #
+# Loadable module support
+#
+CONFIG_MODULES=y
+# CONFIG_MODVERSIONS is not set
+
+#
 # General setup
 #
 CONFIG_NATIVE=y
@@ -22,11 +28,6 @@ CONFIG_PCI_OPTIMIZE=y
 CONFIG_NET=y
 CONFIG_SYSVIPC=y
 # CONFIG_BINFMT_ELF is not set
-
-#
-# Loadable module support
-#
-# CONFIG_MODVERSIONS is not set
 
 #
 # block devices

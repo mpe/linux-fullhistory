@@ -5,6 +5,14 @@
 mainmenu_name "Linux Kernel Configuration"
 
 mainmenu_option next_comment
+comment 'Loadable module support'
+bool 'Enable loadable module support' CONFIG_MODULES
+if [ "$CONFIG_MODULES" = "y" ]; then
+  MODULES=y
+  bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
+fi
+
+mainmenu_option next_comment
 comment 'General setup'
 
 bool 'Kernel math emulation' CONFIG_MATH_EMULATION
@@ -23,10 +31,6 @@ fi
 #if [ "$CONFIG_M586" = "n" ]; then
 bool 'Use 486-specific optimizations (does NOT work on i386)' CONFIG_M486
 #fi
-
-mainmenu_option next_comment
-comment 'Loadable module support'
-bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
 
 source drivers/block/Config.in
 

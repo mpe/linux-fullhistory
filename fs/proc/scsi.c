@@ -38,9 +38,9 @@ static int proc_scsilseek(struct inode *, struct file *, off_t, int);
 extern void build_proc_dir_hba_entries(uint);
 
 /* the *_get_info() functions are in the respective scsi driver code */
-extern int (* dispatch_scsi_info_ptr)(int, char *, char **, off_t, int, int);
-    
-    
+int (* dispatch_scsi_info_ptr) (int ino, char *buffer, char **start,
+				off_t offset, int length, int inout) = 0;
+
 static struct file_operations proc_scsi_operations = {
     proc_scsilseek,	/* lseek   */
     proc_readscsi,	/* read	   */

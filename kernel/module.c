@@ -6,6 +6,7 @@
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/malloc.h>
+#include <linux/config.h>
 /*
  * Originally by Anonymous (as far as I know...)
  * Linux version by Bas Laarhoven <bas@vimec.nl>
@@ -38,7 +39,12 @@
  * On 1-Aug-95:  <Matti.Aarnio@utu.fi>  altered code to use same style as
  *		 do  /proc/net/XXX  "files".  Namely allow more than 4kB
  *		 (or what the block size if) output.
+ *
+ *	- Use dummy syscall functions for users who disable all
+ *	  module support. Similar to kernel/sys.c (Paul Gortmaker)
  */
+
+#ifdef CONFIG_MODULES		/* a *big* #ifdef block... */
 
 #ifdef DEBUG_MODULE
 #define PRINTK(a) printk a
@@ -781,3 +787,30 @@ register_symtab(struct symbol_table *intab)
 
 	return 0;
 }
+
+#else		/* CONFIG_MODULES */
+
+/* Dummy syscalls for people who don't want modules */
+
+asmlinkage unsigned long sys_create_module(void)
+{
+	return -ENOSYS;
+}
+
+asmlinkage int sys_init_module(void)
+{
+	return -ENOSYS;
+}
+
+asmlinkage int sys_delete_module(void)
+{
+	return -ENOSYS;
+}
+
+asmlinkage int sys_get_kernel_syms(void)
+{
+	return -ENOSYS;
+}
+
+#endif	/* CONFIG_MODULES */
+

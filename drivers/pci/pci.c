@@ -69,9 +69,11 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( CIRRUS,		CIRRUS_5430,	"GD 5430"),
 	DEVICE( CIRRUS,		CIRRUS_5434_4,	"GD 5434"),
 	DEVICE( CIRRUS,		CIRRUS_5434_8,	"GD 5434"),
+	DEVICE( CIRRUS,		CIRRUS_5436,	"GD 5436"),
 	DEVICE( CIRRUS,		CIRRUS_6729,	"CL 6729"),
 	DEVICE( CIRRUS,		CIRRUS_7542,	"CL 7542"),
 	DEVICE( CIRRUS,		CIRRUS_7543,	"CL 7543"),
+	DEVICE( WD,		WD_7197,	"WD 7197"),
 	DEVICE( AMD,		AMD_LANCE,	"79C970"),
 	DEVICE( AMD,		AMD_SCSI,	"53C974"),
 	DEVICE( TRIDENT,	TRIDENT_9420,	"TG 9420"),
@@ -83,6 +85,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( MATROX,		MATROX_MGA_IMP,	"MGA Impression"),
 	DEVICE( CT,		CT_65545,	"65545"),
 	DEVICE( FD,		FD_36C70,	"TMC-18C30"),
+	DEVICE( SI,		SI_6202,	"6202"),
 	DEVICE( SI,		SI_503,		"85C503"),
 	DEVICE( SI,		SI_501,		"85C501"),
 	DEVICE( SI,		SI_496,		"85C496"),
@@ -103,10 +106,13 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( N9,		N9_I128,	"Imagine 128"),
 	DEVICE( UMC,		UMC_UM8673F,	"UM8673F"),
 	BRIDGE( UMC,		UMC_UM8891A,	"UM8891A", 		0x01),
+	DEVICE( UMC,		UMC_UM8886BF,	"UM8886BF"),
 	DEVICE( UMC,		UMC_UM8886A,	"UM8886A"),
 	BRIDGE( UMC,		UMC_UM8881F,	"UM8881F",		0x02),
 	DEVICE( UMC,		UMC_UM8886F,	"UM8886F"),
 	DEVICE( UMC,		UMC_UM9017F,	"UM9017F"),
+	DEVICE( UMC,		UMC_UM8886N,	"UM8886N"),
+	DEVICE( UMC,		UMC_UM8891N,	"UM8891N"),
 	DEVICE( X,		X_AGX016,	"ITT AGX016"),
 	DEVICE( QLOGIC,		QLOGIC_ISP1020,	"ISP1020"),
 	DEVICE( QLOGIC,		QLOGIC_ISP1022,	"ISP1022"),
@@ -126,6 +132,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( AL,		AL_M1449,	"M1449"),
 	DEVICE( AL,		AL_M1451,	"M1451"),
 	DEVICE( AL,		AL_M1461,	"M1461"),
+	DEVICE( AL,		AL_M1489,	"M1489"),
 	DEVICE( AL,		AL_M4803,	"M4803"),
 	DEVICE( ASP,		ASP_ABP940,	"ABP940"),
 	DEVICE( IMS,		IMS_8849,	"8849"),
@@ -139,6 +146,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( EF,		EF_ATM_ASIC,	"155P-MF1 (ASIC)"),
 	DEVICE( IMAGINGTECH,	IMAGINGTECH_ICPCI, "MVC IC-PCI"),
 	DEVICE( PLX,		PLX_9060,	"PCI9060 i960 bridge"),
+	DEVICE( ALLIANCE,	ALLIANCE_PROMOTIO, "Promotion-6410"),
 	DEVICE( ALLIANCE,	ALLIANCE_PROVIDEO, "Provideo"),
 	DEVICE( MUTECH,		MUTECH_MV1000,	"MV-1000"),
 	DEVICE( ZEITNET,	ZEITNET_1221,	"1221"),
@@ -388,6 +396,7 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_DEC:		return "DEC";
 	      case PCI_VENDOR_ID_CIRRUS:	return "Cirrus Logic";
 	      case PCI_VENDOR_ID_IBM:		return "IBM";
+	      case PCI_VENDOR_ID_WD:		return "Western Digital";
 	      case PCI_VENDOR_ID_AMD:		return "AMD";
 	      case PCI_VENDOR_ID_TRIDENT:	return "Trident";
 	      case PCI_VENDOR_ID_AI:		return "Acer Incorporated";
@@ -407,6 +416,7 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_QLOGIC:	return "Q Logic";
 	      case PCI_VENDOR_ID_LEADTEK:	return "Leadtek Research";
 	      case PCI_VENDOR_ID_CONTAQ:	return "Contaq";
+	      case PCI_VENDOR_ID_FOREX:		return "Forex";
 	      case PCI_VENDOR_ID_OLICOM:	return "Olicom";
 	      case PCI_VENDOR_ID_CMD:		return "CMD";
 	      case PCI_VENDOR_ID_VISION:	return "Vision";
@@ -418,6 +428,7 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_ASP:		return "Advanced System Products";
 	      case PCI_VENDOR_ID_IMS:		return "IMS";
 	      case PCI_VENDOR_ID_TEKRAM2:	return "Tekram";
+	      case PCI_VENDOR_ID_AMCC:		return "AMCC";
 	      case PCI_VENDOR_ID_REALTEK:	return "Realtek";
 	      case PCI_VENDOR_ID_VIA:		return "VIA Technologies";
 	      case PCI_VENDOR_ID_VORTEX:	return "VORTEX";

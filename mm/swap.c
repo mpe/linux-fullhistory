@@ -709,8 +709,8 @@ static inline void add_mem_queue(struct mem_list * head, struct mem_list * entry
 
 static inline void remove_mem_queue(struct mem_list * head, struct mem_list * entry)
 {
-	entry->next->prev = entry->prev;
-	entry->prev->next = entry->next;
+	struct mem_list * next = entry->next;
+	(next->prev = entry->prev)->next = next;
 }
 
 /*

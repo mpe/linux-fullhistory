@@ -37,6 +37,7 @@
 #include <linux/minix_fs.h>
 #include <linux/ext2_fs.h>
 #include <linux/random.h>
+#include <linux/mount.h>
 
 extern unsigned char aux_device_present, kbd_read_mask;
 
@@ -79,6 +80,7 @@ extern void __remqu (void);
 #include <net/udp.h>
 #include <net/tcp.h>
 #include <net/route.h>
+#include <linux/net_alias.h>
 #if defined(CONFIG_PPP) || defined(CONFIG_SLIP)
 #include "../drivers/net/slhc.h"
 #endif
@@ -122,14 +124,11 @@ extern void *sys_call_table;
 #include "../drivers/scsi/scsi_ioctl.h"
 #include "../drivers/scsi/hosts.h"
 #include "../drivers/scsi/constants.h"
+#include "../drivers/scsi/sd.h"
 #include <linux/scsicam.h>
 
 extern int generic_proc_info(char *, char **, off_t, int, int, int);
 #endif
-
-int (* dispatch_scsi_info_ptr) (int ino, char *buffer, char **start, 
-				off_t offset, int length, 
-				int inode, int func) = 0; /* Dirty hack */
 
 extern int sys_tz;
 extern int request_dma(unsigned int dmanr, char * deviceID);
@@ -500,7 +499,6 @@ struct symbol_table symbol_table = {
  	X(kernel_scsi_ioctl),
  	X(need_isa_buffer),
  	X(request_queueable),
- 	X(dispatch_scsi_info_ptr),
 	X(generic_proc_info),
  	X(scsi_devices),
 	X(gendisk_head), /* Needed for sd.c */
@@ -515,7 +513,6 @@ struct symbol_table symbol_table = {
 	 */
 	X(gendisk_head),
 	X(resetup_one_dev),
-	X(dispatch_scsi_info_ptr),
 #endif
 	/* Added to make file system as module */
 	X(set_writetime),
@@ -563,8 +560,10 @@ struct symbol_table symbol_table = {
 	X(proc_unregister),
 	X(in_group_p),
 	X(generate_cluster),
+#ifdef CONFIG_SCSI
 	X(proc_scsi),
 	X(proc_scsi_inode_operations),
+#endif
 	X(proc_net_inode_operations),
 	X(proc_net),
 #endif

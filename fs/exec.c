@@ -55,7 +55,7 @@ extern void dump_thread(struct pt_regs *, struct user *);
 
 /*
  * Here are the actual binaries that will be accepted:
- * add more with "register_binfmt()"..
+ * add more with "register_binfmt()" if using modules...
  */
 extern struct linux_binfmt elf_format;
 
@@ -69,6 +69,7 @@ static struct linux_binfmt aout_format = {
 
 static struct linux_binfmt *formats = &aout_format;
 
+#ifdef CONFIG_MODULES
 int register_binfmt(struct linux_binfmt * fmt)
 {
 	struct linux_binfmt ** tmp = &formats;
@@ -100,6 +101,7 @@ int unregister_binfmt(struct linux_binfmt * fmt)
 	}
 	return -EINVAL;
 }
+#endif	/* CONFIG_MODULES */
 
 int open_inode(struct inode * inode, int mode)
 {

@@ -10,6 +10,14 @@ unset CONFIG_PCI CONFIG_ALPHA_LCA CONFIG_ALPHA_APECS
 unset CONFIG_ALPHA_NEED_ROUNDING_EMULATION
 
 mainmenu_option next_comment
+comment 'Loadable module support'
+bool 'Enable loadable module support' CONFIG_MODULES
+if [ "$CONFIG_MODULES" = "y" ]; then
+  MODULES=y
+  bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
+fi
+
+mainmenu_option next_comment
 comment 'General setup'
 
 if [ "`uname`" != "Linux" ]; then
@@ -49,10 +57,6 @@ fi
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
-
-mainmenu_option next_comment
-comment 'Loadable module support'
-bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
 
 source drivers/block/Config.in
 

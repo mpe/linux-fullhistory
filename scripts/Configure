@@ -22,6 +22,9 @@
 #
 # 301195 (boldt@math.ucsb.edu) - added help text support
 #
+# 281295 Paul Gortmaker - make tri_state functions collapse to boolean
+# if module support is not enabled.
+#
 
 #
 # Make sure we're really running bash.
@@ -137,7 +140,8 @@ function define_bool () {
 function bool () {
 	def=$(eval echo "\${$2:-'n'}")
         case "$def" in
-         "y") defprompt="Y/n/?"
+         "y" | "m") defprompt="Y/n/?"
+              def="y"
               ;;
          "n") defprompt="N/y/?"
               ;;
@@ -161,28 +165,32 @@ function bool () {
 #	tristate question define
 #
 function tristate () {
-	def=$(eval echo "\${$2:-'n'}")
-        case "$def" in
-         "y") defprompt="Y/m/n/?"
-              ;;
-         "m") defprompt="M/n/y/?"
-              ;;
-         "n") defprompt="N/y/m/?"
-              ;;
-        esac
-        while :; do
-          readln "$1 ($2) [$defprompt] " "$def"
-          case "$ans" in
-            [yY] | [yY]es ) define_bool "$2" "y"
-                            break ;;
-            [nN] | [nN]o )  define_bool "$2" "n"
-                            break ;;
-            [mM] )          define_bool "$2" "m"
-                            break ;;
-	    * )             help "$2"
-                            ;;
+        if [ "$MODULES" != "y" ]; then
+          bool "$1" "$2"
+        else 
+	  def=$(eval echo "\${$2:-'n'}")
+          case "$def" in
+           "y") defprompt="Y/m/n/?"
+                ;;
+           "m") defprompt="M/n/y/?"
+                ;;
+           "n") defprompt="N/y/m/?"
+                ;;
           esac
-        done
+          while :; do
+            readln "$1 ($2) [$defprompt] " "$def"
+            case "$ans" in
+              [yY] | [yY]es ) define_bool "$2" "y"
+                              break ;;
+              [nN] | [nN]o )  define_bool "$2" "n"
+                              break ;;
+              [mM] )          define_bool "$2" "m"
+                              break ;;
+	      * )             help "$2"
+                              ;;
+            esac
+          done
+        fi
 }
 
 #
@@ -200,6 +208,7 @@ function dep_tristate () {
 	if [ "$3" != "m" ]; then
 		tristate "$1" "$2"
 	else
+           if [ "$MODULES" = "y" ]; then
 	        case "$def" in
         	 "y" | "m") defprompt="M/n/?"
 		      def="m"
@@ -226,6 +235,7 @@ function dep_tristate () {
                                       ;;
                   esac
                 done
+           fi
 	fi
 }
 

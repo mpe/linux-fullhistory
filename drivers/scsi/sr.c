@@ -1021,6 +1021,8 @@ static void get_sectorsize(int i){
 	scsi_CDs[i].sector_size = (buffer[4] << 24) |
 	    (buffer[5] << 16) | (buffer[6] << 8) | buffer[7];
 	if(scsi_CDs[i].sector_size == 0) scsi_CDs[i].sector_size = 2048;
+	/* Work around bug/feature in HP 4020i CD-Recorder... */
+	if(scsi_CDs[i].sector_size == 2340) scsi_CDs[i].sector_size = 2048;
 	if(scsi_CDs[i].sector_size != 2048 && 
 	   scsi_CDs[i].sector_size != 512) {
 	    printk ("scd%d : unsupported sector size %d.\n",

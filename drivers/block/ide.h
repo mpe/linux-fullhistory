@@ -198,7 +198,15 @@ struct atapi_toc_entry {
   unsigned adr     : 4;
   byte track;
   byte reserved2;
-  unsigned lba;
+  union {
+    unsigned lba;
+    struct {
+      byte reserved3;
+      byte m;
+      byte s;
+      byte f;
+    } msf;
+  } addr;
 };
 
 struct atapi_toc {
@@ -208,6 +216,43 @@ struct atapi_toc {
   struct atapi_toc_header hdr;
   struct atapi_toc_entry  ent[MAX_TRACKS+1];  /* One extra for the leadout. */
 };
+
+
+/* This structure is annoyingly close to, but not identical with,
+   the cdrom_subchnl structure from cdrom.h. */
+struct atapi_cdrom_subchnl 
+{
+  u_char  acdsc_reserved;
+  u_char  acdsc_audiostatus;
+  u_short acdsc_length;
+  u_char  acdsc_format;
+
+  u_char  acdsc_adr:	4;
+  u_char  acdsc_ctrl:	4;
+  u_char  acdsc_trk;
+  u_char  acdsc_ind;
+  union
+  {
+    struct 			
+    {
+      u_char	minute;
+      u_char	second;
+      u_char	frame;
+    } msf;
+    int	lba;
+  } acdsc_absaddr;
+  union 
+  {
+    struct 
+    {
+      u_char	minute;
+      u_char	second;
+      u_char	frame;
+    } msf;
+    int	lba;
+  } acdsc_reladdr;
+};
+
 
 /* Extra per-device info for cdrom drives. */
 struct cdrom_info {

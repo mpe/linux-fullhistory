@@ -8,7 +8,12 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 O_TARGET := proc.o
-O_OBJS   := inode.o root.o base.o mem.o link.o fd.o array.o kmsg.o net.o scsi.o
+O_OBJS   := inode.o root.o base.o mem.o link.o fd.o array.o kmsg.o net.o
 M_OBJS   := $(O_TARGET)
+
+# For either CONFIG_SCSI=y or CONFIG_SCSI=m
+ifdef CONFIG_SCSI
+O_OBJS += scsi.o
+endif
 
 include $(TOPDIR)/Rules.make

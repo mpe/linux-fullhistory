@@ -61,21 +61,27 @@ asmlinkage int sys_fstatfs(unsigned int fd, struct statfs * buf)
 	return 0;
 }
 
-static int do_truncate(struct inode *inode, unsigned long length)
+int do_truncate(struct inode *inode, unsigned long length)
 {
+	int error;
 	struct iattr newattrs;
+
+	newattrs.ia_size = length;
+	newattrs.ia_ctime = newattrs.ia_mtime = CURRENT_TIME;
+	newattrs.ia_valid = ATTR_SIZE | ATTR_CTIME | ATTR_MTIME;
+	error = notify_change(inode, &newattrs);
+	if (error)
+		return error;
 
 	/* truncate virtual mappings of this file */
 	down(&inode->i_sem);
 	vmtruncate(inode, length);
-	inode->i_size = newattrs.ia_size = length;
+	inode->i_size = length;
+	inode->i_dirt = 1;
 	if (inode->i_op && inode->i_op->truncate)
 		inode->i_op->truncate(inode);
 	up(&inode->i_sem);
-	newattrs.ia_ctime = newattrs.ia_mtime = CURRENT_TIME;
-	newattrs.ia_valid = ATTR_SIZE | ATTR_CTIME | ATTR_MTIME;
-	inode->i_dirt = 1;
-	return notify_change(inode, &newattrs);
+	return 0;
 }
 
 asmlinkage int sys_truncate(const char * path, unsigned long length)

@@ -5334,8 +5334,7 @@ static void tcp_write_wakeup(struct sock *sk)
 		 *	Find the first data byte.
 		 */
 		 
-		tcp_data_start = skb->ip_hdr + 
-				((iph->ihl + th->doff) << 2);
+		tcp_data_start = (char *) th + (th->doff << 2);
 
 		/*
 		 *	Add it to our new buffer

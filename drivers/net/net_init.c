@@ -237,6 +237,7 @@ int ether_config(struct device *dev, struct ifmap *map)
 	return 0;
 }
 
+#ifdef CONFIG_MODULES
 int register_netdev(struct device *dev)
 {
 	struct device *d = dev_base;
@@ -356,6 +357,7 @@ void unregister_netdev(struct device *dev)
 
 	restore_flags(flags);
 }
+#endif		/* CONFIG_MODULES */
 
 
 

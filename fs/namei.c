@@ -416,28 +416,19 @@ int open_namei(const char * pathname, int flag, int mode,
 		return -EPERM;
 	}
 	if (flag & O_TRUNC) {
-		struct iattr newattrs;
-
 		if ((error = get_write_access(inode))) {
 			iput(inode);
 			return error;
 		}
 		if (inode->i_sb && inode->i_sb->dq_op)
 			inode->i_sb->dq_op->initialize(inode, -1);
-		newattrs.ia_size = 0;
-		newattrs.ia_valid = ATTR_SIZE;
-		if ((error = notify_change(inode, &newattrs))) {
-			put_write_access(inode);
+			
+		error = do_truncate(inode, 0);
+		put_write_access(inode);
+		if (error) {
 			iput(inode);
 			return error;
 		}
-		down(&inode->i_sem);
-		inode->i_size = 0;
-		if (inode->i_op && inode->i_op->truncate)
-			inode->i_op->truncate(inode);
-		up(&inode->i_sem);
-		inode->i_dirt = 1;
-		put_write_access(inode);
 	} else
 		if (flag & FMODE_WRITE)
 			if (inode->i_sb && inode->i_sb->dq_op)

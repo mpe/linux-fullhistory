@@ -71,8 +71,14 @@
  *                       Fix transfers with odd bytelengths.
  * 3.03  Oct 27, 1995 -- Some Creative drives have an id of just `CD'.
  *                       `DCI-2S10' drives are broken too.
- * 3.04  Nov 20, 1995 -- So are Vertros drives.
+ * 3.04  Nov 20, 1995 -- So are Vertos drives.
  * 3.05  Dec  1, 1995 -- Changes to go with overhaul of ide.c and ide-tape.c
+ * 3.06  Dec 16, 1995 -- Add support needed for partitions.
+ *                       More workarounds for Vertos bugs (based on patches
+ *                        from Holger Dietze <dietze@aix520.informatik.uni-leipzig.de>).
+ *                       Try to eliminate byteorder assumptions.
+ *                       Use atapi_cdrom_subchnl struct definition.
+ *                       Add STANDARD_ATAPI compilation option.
  *
  * NOTE: Direct audio reads will only work on some types of drive.
  * So far, i've received reports of success for Sony and Toshiba drives.
@@ -100,9 +106,12 @@
 #include <linux/cdrom.h>
 #include <asm/irq.h>
 #include <asm/io.h>
+#include <asm/byteorder.h>
 
 #define _IDE_CD_C	/* used in blk.h */
 #include "ide.h"
+
+
 
 /* Turn this on to have the driver print out the meanings of the
    ATAPI error codes.  This will use up additional kernel-space
@@ -111,6 +120,18 @@
 #ifndef VERBOSE_IDE_CD_ERRORS
 #define VERBOSE_IDE_CD_ERRORS 0
 #endif
+
+
+/* Turning this on will remove code to work around various nonstandard
+   ATAPI implementations.  If you know your drive follows the standard,
+   this will give you a slightly smaller kernel. */
+
+#ifndef STANDARD_ATAPI
+#define STANDARD_ATAPI 0
+#endif
+
+
+/************************************************************************/
 
 #define SECTOR_SIZE 512
 #define SECTOR_BITS 9
@@ -159,13 +180,17 @@
 struct ide_cd_config_flags {
   unsigned drq_interrupt : 1; /* Device sends an interrupt when ready
                                  for a packet command. */
+  unsigned no_doorlock   : 1; /* Drive cannot lock the door. */
+#if ! STANDARD_ATAPI
   unsigned no_playaudio12: 1; /* The PLAYAUDIO12 command is not supported. */
  
   unsigned no_lba_toc    : 1; /* Drive cannot return TOC info in LBA format. */
-  unsigned msf_as_bcd    : 1; /* Drive uses BCD in PLAYAUDIO_MSF. */
-  unsigned no_doorlock   : 1; /* Drive cannot lock the door. */
+  unsigned playmsf_uses_bcd : 1; /* Drive uses BCD in PLAYAUDIO_MSF. */
   unsigned old_readcd    : 1; /* Drive uses old READ CD opcode. */
-  unsigned reserved : 2;
+  unsigned vertos_lossage: 1; /* Drive is a Vertos 300,
+				 and likes to speak BCD. */
+#endif  /* not STANDARD_ATAPI */
+  unsigned reserved : 1;
 };
 #define CDROM_CONFIG_FLAGS(drive) ((struct ide_cd_config_flags *)&((drive)->bios_sect))
 
@@ -1123,19 +1148,7 @@ static void cdrom_start_read_continuation (ide_drive_t *drive)
   pc.c[0] = READ_10;
   pc.c[7] = (nframes >> 8);
   pc.c[8] = (nframes & 0xff);
-
-  /* Write the sector address into the command image. */
-  {
-    union {
-      struct {unsigned char b0, b1, b2, b3;} b;
-      struct {unsigned long l0;} l;
-    } conv;
-    conv.l.l0 = frame;
-    pc.c[2] = conv.b.b3;
-    pc.c[3] = conv.b.b2;
-    pc.c[4] = conv.b.b1;
-    pc.c[5] = conv.b.b0;
-  }
+  *(int *)(&pc.c[2]) = htonl (frame);
 
   /* Send the command to the drive and return. */
   (void) cdrom_transfer_packet_command (drive, pc.c, sizeof (pc.c),
@@ -1149,6 +1162,15 @@ static void cdrom_start_read_continuation (ide_drive_t *drive)
 static void cdrom_start_read (ide_drive_t *drive, unsigned int block)
 {
   struct request *rq = HWGROUP(drive)->rq;
+  int minor = MINOR (rq->rq_dev);
+
+  /* If the request is relative to a partition, fix it up to refer to the
+     absolute address.  */
+  if ((minor & PARTN_MASK) != 0) {
+    rq->sector = block;
+    minor &= ~PARTN_MASK;
+    rq->rq_dev = MKDEV (MAJOR(rq->rq_dev), minor);
+  }
 
   /* We may be retrying this request after an error.
      Fix up any weirdness which might be present in the request packet. */
@@ -1439,34 +1461,20 @@ void ide_do_rw_cdrom (ide_drive_t *drive, unsigned long block)
  * can also be NULL, in which case no sense information is returned.
  */
 
-static inline
-void byte_swap_word (unsigned short *x)
-{
-  char *c = (char *)x;
-  char d = c[0];
-  c[0] = c[1];
-  c[1] = d;
-}
-
-
-static inline
-void byte_swap_long (unsigned *x)
-{
-  char *c = (char *)x;
-  char d = c[0];
-  c[0] = c[3];
-  c[3] = d;
-  d = c[1];
-  c[1] = c[2];
-  c[2] = d;
-}
-
-
+#if ! STANDARD_ATAPI
 static
 int bin2bcd (int x)
 {
   return (x%10) | ((x/10) << 4);
 }
+
+
+static
+int bcd2bin (int x)
+{
+  return (x >> 4) * 10 + (x & 0x0f);
+}
+#endif /* not STANDARD_ATAPI */
 
 
 static inline
@@ -1616,8 +1624,7 @@ cdrom_read_capacity (ide_drive_t *drive, unsigned *capacity,
   stat = cdrom_queue_packet_command (drive, &pc);
   if (stat == 0)
     {
-      byte_swap_long (&capbuf.lba);
-      *capacity = capbuf.lba;
+      *capacity = ntohl (capbuf.lba);
     }
 
   return stat;
@@ -1680,8 +1687,12 @@ cdrom_read_toc (ide_drive_t *drive,
 
   if (CDROM_STATE_FLAGS (drive)->toc_valid) return 0;
 
+#if STANDARD_ATAPI
+  msf_flag = 0;
+#else  /* not STANDARD_ATAPI */
   /* Some drives can't return TOC data in LBA format. */
   msf_flag = (CDROM_CONFIG_FLAGS (drive)->no_lba_toc);
+#endif  /* not STANDARD_ATAPI */
 
   /* First read just the header, so we know how long the TOC is. */
   stat = cdrom_read_tocentry (drive, 0, msf_flag, 0, (char *)&toc->hdr,
@@ -1689,6 +1700,15 @@ cdrom_read_toc (ide_drive_t *drive,
                               sizeof (struct atapi_toc_entry),
 			      reqbuf);
   if (stat) return stat;
+
+#if ! STANDARD_ATAPI
+  if (CDROM_CONFIG_FLAGS (drive)->vertos_lossage)
+    {
+      toc->hdr.first_track = bcd2bin (toc->hdr.first_track);
+      toc->hdr.last_track  = bcd2bin (toc->hdr.last_track);
+      /* hopefully the length is not BCD, too ;-| */
+    }
+#endif  /* not STANDARD_ATAPI */
 
   ntracks = toc->hdr.last_track - toc->hdr.first_track + 1;
   if (ntracks <= 0) return -EIO;
@@ -1700,16 +1720,36 @@ cdrom_read_toc (ide_drive_t *drive,
                               (ntracks+1) * sizeof (struct atapi_toc_entry),
 			      reqbuf);
   if (stat) return stat;
-  byte_swap_word (&toc->hdr.toc_length);
+  toc->hdr.toc_length = ntohs (toc->hdr.toc_length);
+
+#if ! STANDARD_ATAPI
+  if (CDROM_CONFIG_FLAGS (drive)->vertos_lossage)
+    {
+      toc->hdr.first_track = bcd2bin (toc->hdr.first_track);
+      toc->hdr.last_track  = bcd2bin (toc->hdr.last_track);
+      /* hopefully the length is not BCD, too ;-| */
+    }
+#endif  /* not STANDARD_ATAPI */
+
   for (i=0; i<=ntracks; i++)
     {
+#if ! STANDARD_ATAPI
       if (msf_flag)
 	{
-	  byte *adr = (byte *)&(toc->ent[i].lba);
-	  toc->ent[i].lba = msf_to_lba (adr[1], adr[2], adr[3]);
+	  if (CDROM_CONFIG_FLAGS (drive)->vertos_lossage)
+	    {
+	      toc->ent[i].track = bcd2bin (toc->ent[i].track);
+	      toc->ent[i].addr.msf.m = bcd2bin (toc->ent[i].addr.msf.m);
+	      toc->ent[i].addr.msf.s = bcd2bin (toc->ent[i].addr.msf.s);
+	      toc->ent[i].addr.msf.f = bcd2bin (toc->ent[i].addr.msf.f);
+	    }
+	  toc->ent[i].addr.lba = msf_to_lba (toc->ent[i].addr.msf.m,
+					     toc->ent[i].addr.msf.s,
+					     toc->ent[i].addr.msf.f);
 	}
       else
-	byte_swap_long (&toc->ent[i].lba);
+#endif  /* not STANDARD_ATAPI */
+	toc->ent[i].addr.lba = ntohl (toc->ent[i].addr.lba);
     }
 
   /* Read the multisession information. */
@@ -1717,16 +1757,15 @@ cdrom_read_toc (ide_drive_t *drive,
 			      (char *)&ms_tmp, sizeof (ms_tmp),
 			      reqbuf);
   if (stat) return stat;
+#if ! STANDARD_ATAPI
   if (msf_flag)
-    {
-      byte *adr = (byte *)&(ms_tmp.ent.lba);
-      toc->last_session_lba = msf_to_lba (adr[1], adr[2], adr[3]);
-    }
+    toc->last_session_lba = msf_to_lba (ms_tmp.ent.addr.msf.m,
+					ms_tmp.ent.addr.msf.s,
+					ms_tmp.ent.addr.msf.f);
   else
-    {
-      byte_swap_long (&ms_tmp.ent.lba);
-      toc->last_session_lba = ms_tmp.ent.lba;
-    }
+#endif  /* not STANDARD_ATAPI */
+    toc->last_session_lba = ntohl (ms_tmp.ent.addr.lba);
+
   toc->xa_flag = (ms_tmp.hdr.first_track != ms_tmp.hdr.last_track);
 
   /* Now try to get the total cdrom capacity. */
@@ -1816,15 +1855,14 @@ cdrom_play_lba_range_play12 (ide_drive_t *drive, int lba_start, int lba_end,
   pc.sense_data = reqbuf;
 
   pc.c[0] = SCMD_PLAYAUDIO12;
-  *(int *)(&pc.c[2]) = lba_start;
-  *(int *)(&pc.c[6]) = lba_end - lba_start;
-  byte_swap_long ((int *)(&pc.c[2]));
-  byte_swap_long ((int *)(&pc.c[6]));
+  *(int *)(&pc.c[2]) = htonl (lba_start);
+  *(int *)(&pc.c[6]) = htonl (lba_end - lba_start);
 
   return cdrom_queue_packet_command (drive, &pc);
 }
 
 
+#if !  STANDARD_ATAPI
 static int
 cdrom_play_lba_range_msf (ide_drive_t *drive, int lba_start, int lba_end,
 			  struct atapi_request_sense *reqbuf)
@@ -1838,7 +1876,7 @@ cdrom_play_lba_range_msf (ide_drive_t *drive, int lba_start, int lba_end,
   lba_to_msf (lba_start, &pc.c[3], &pc.c[4], &pc.c[5]);
   lba_to_msf (lba_end-1, &pc.c[6], &pc.c[7], &pc.c[8]);
 
-  if (CDROM_CONFIG_FLAGS (drive)->msf_as_bcd)
+  if (CDROM_CONFIG_FLAGS (drive)->playmsf_uses_bcd)
     {
       pc.c[3] = bin2bcd (pc.c[3]);
       pc.c[4] = bin2bcd (pc.c[4]);
@@ -1850,6 +1888,7 @@ cdrom_play_lba_range_msf (ide_drive_t *drive, int lba_start, int lba_end,
 
   return cdrom_queue_packet_command (drive, &pc);
 }
+#endif  /* not STANDARD_ATAPI */
 
 
 /* Play audio starting at LBA LBA_START and finishing with the
@@ -1869,9 +1908,11 @@ cdrom_play_lba_range (ide_drive_t *drive, int lba_start, int lba_end,
      great.  Otherwise, if the drive reports an illegal command code,
      try PLAYAUDIO_MSF using the NEC 260-style bcd parameters. */
 
+#if ! STANDARD_ATAPI
   if (CDROM_CONFIG_FLAGS (drive)->no_playaudio12)
     return cdrom_play_lba_range_msf (drive, lba_start, lba_end, reqbuf);
   else
+#endif  /* not STANDARD_ATAPI */
     {
       int stat;
       struct atapi_request_sense my_reqbuf;
@@ -1882,6 +1923,7 @@ cdrom_play_lba_range (ide_drive_t *drive, int lba_start, int lba_end,
       stat = cdrom_play_lba_range_play12 (drive, lba_start, lba_end, reqbuf);
       if (stat == 0) return 0;
 
+#if ! STANDARD_ATAPI
       /* It failed.  Try to find out why. */
       if (reqbuf->sense_key == ILLEGAL_REQUEST && reqbuf->asc == 0x20)
         {
@@ -1890,9 +1932,10 @@ cdrom_play_lba_range (ide_drive_t *drive, int lba_start, int lba_end,
           printk ("%s: Drive does not support PLAYAUDIO12; "
                   "trying PLAYAUDIO_MSF\n", drive->name);
           CDROM_CONFIG_FLAGS (drive)->no_playaudio12 = 1;
-          CDROM_CONFIG_FLAGS (drive)->msf_as_bcd = 1;
+          CDROM_CONFIG_FLAGS (drive)->playmsf_uses_bcd = 1;
           return cdrom_play_lba_range_msf (drive, lba_start, lba_end, reqbuf);
         }
+#endif  /* not STANDARD_ATAPI */
 
       /* Failed for some other reason.  Give up. */
       return stat;
@@ -1946,19 +1989,21 @@ cdrom_read_block (ide_drive_t *drive, int format, int lba,
   pc.buffer = buf;
   pc.buflen = buflen;
 
+#if ! STANDARD_ATAPI
   if (CDROM_CONFIG_FLAGS (drive)->old_readcd)
     pc.c[0] = 0xd4;
   else
+#endif  /* not STANDARD_ATAPI */
     pc.c[0] = READ_CD;
 
   pc.c[1] = (format << 2);
-  *(int *)(&pc.c[2]) = lba;
-  byte_swap_long ((int *)(&pc.c[2]));
+  *(int *)(&pc.c[2]) = htonl (lba);
   pc.c[8] = 1;  /* one block */
   pc.c[9] = 0x10;
 
   stat = cdrom_queue_packet_command (drive, &pc);
 
+#if ! STANDARD_ATAPI
   /* If the drive doesn't recognize the READ CD opcode, retry the command
      with an older opcode for that command. */
   if (stat && reqbuf->sense_key == ILLEGAL_REQUEST && reqbuf->asc == 0x20 &&
@@ -1969,6 +2014,7 @@ cdrom_read_block (ide_drive_t *drive, int format, int lba,
       CDROM_CONFIG_FLAGS (drive)->old_readcd = 1;
       return cdrom_read_block (drive, format, lba, buf, buflen, reqbuf);
     }
+#endif  /* not STANDARD_ATAPI */
 
   return stat;
 }
@@ -2056,8 +2102,8 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
         if (stat) return stat;
 
         if (ti.cdti_trk1 != CDROM_LEADOUT) ++last_toc;
-        lba_start = first_toc->lba;
-        lba_end   = last_toc->lba;
+        lba_start = first_toc->addr.lba;
+        lba_end   = last_toc->addr.lba;
 
         if (lba_end <= lba_start) return -EINVAL;
 
@@ -2108,13 +2154,13 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
         if (tocentry.cdte_format == CDROM_MSF)
           {
             /* convert to MSF */
-            lba_to_msf (toce->lba,
+            lba_to_msf (toce->addr.lba,
                         &tocentry.cdte_addr.msf.minute,
                         &tocentry.cdte_addr.msf.second,
                         &tocentry.cdte_addr.msf.frame);
           }
         else
-          tocentry.cdte_addr.lba = toce->lba;
+          tocentry.cdte_addr.lba = toce->addr.lba;
 
         memcpy_tofs ((void *) arg, &tocentry, sizeof (tocentry));
 
@@ -2123,7 +2169,7 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 
     case CDROMSUBCHNL:
       {
-        char buffer[16];
+        struct atapi_cdrom_subchnl scbuf;
         int stat, abs_lba, rel_lba;
         struct cdrom_subchnl subchnl;
 
@@ -2134,13 +2180,27 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
 
         memcpy_fromfs (&subchnl, (void *) arg, sizeof (subchnl));
 
-        stat = cdrom_read_subchannel (drive, buffer, sizeof (buffer), NULL);
+        stat = cdrom_read_subchannel (drive, (char *)&scbuf, sizeof (scbuf),
+				      NULL);
         if (stat) return stat;
 
-        abs_lba = *(int *)&buffer[8];
-        rel_lba = *(int *)&buffer[12];
-        byte_swap_long (&abs_lba);
-        byte_swap_long (&rel_lba);
+#if ! STANDARD_ATAPI
+	if (CDROM_CONFIG_FLAGS (drive)->vertos_lossage)
+	  {
+	    abs_lba = msf_to_lba (bcd2bin (scbuf.acdsc_absaddr.msf.minute),
+				  bcd2bin (scbuf.acdsc_absaddr.msf.second),
+				  bcd2bin (scbuf.acdsc_absaddr.msf.frame));
+	    rel_lba = msf_to_lba (bcd2bin (scbuf.acdsc_reladdr.msf.minute),
+				  bcd2bin (scbuf.acdsc_reladdr.msf.second),
+				  bcd2bin (scbuf.acdsc_reladdr.msf.frame));
+	    scbuf.acdsc_trk = bcd2bin (scbuf.acdsc_trk);
+	  }
+	else
+#endif /* not STANDARD_ATAPI */
+	  {
+	    abs_lba = ntohl (scbuf.acdsc_absaddr.lba);
+	    rel_lba = ntohl (scbuf.acdsc_reladdr.lba);
+	  }
 
         if (subchnl.cdsc_format == CDROM_MSF)
           {
@@ -2159,10 +2219,10 @@ int ide_cdrom_ioctl (ide_drive_t *drive, struct inode *inode,
             subchnl.cdsc_reladdr.lba = rel_lba;
           }
 
-        subchnl.cdsc_audiostatus = buffer[1];
-        subchnl.cdsc_ctrl = buffer[5] & 0xf;
-        subchnl.cdsc_trk = buffer[6];
-        subchnl.cdsc_ind = buffer[7];
+        subchnl.cdsc_audiostatus = scbuf.acdsc_audiostatus;
+        subchnl.cdsc_ctrl = scbuf.acdsc_ctrl;
+        subchnl.cdsc_trk  = scbuf.acdsc_trk;
+        subchnl.cdsc_ind  = scbuf.acdsc_ind;
 
         memcpy_tofs ((void *) arg, &subchnl, sizeof (subchnl));
 
@@ -2517,12 +2577,15 @@ void ide_cdrom_setup (ide_drive_t *drive)
   CDROM_STATE_FLAGS (drive)->eject_on_close= 0;
 
   CDROM_CONFIG_FLAGS (drive)->no_doorlock = 0;
+  CDROM_CONFIG_FLAGS (drive)->drq_interrupt =
+    ((drive->id->config & 0x0060) == 0x20);
+
+#if ! STANDARD_ATAPI
   CDROM_CONFIG_FLAGS (drive)->no_playaudio12 = 0;
   CDROM_CONFIG_FLAGS (drive)->old_readcd = 0;
   CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 0;
-  CDROM_CONFIG_FLAGS (drive)->msf_as_bcd = 0;
-  CDROM_CONFIG_FLAGS (drive)->drq_interrupt =
-    ((drive->id->config & 0x0060) == 0x20);
+  CDROM_CONFIG_FLAGS (drive)->playmsf_uses_bcd = 0;
+  CDROM_CONFIG_FLAGS (drive)->vertos_lossage = 0;
 
   /* Accommodate some broken drives... */
   if (strcmp (drive->id->model, "CD220E") == 0 ||
@@ -2546,11 +2609,18 @@ void ide_cdrom_setup (ide_drive_t *drive)
       CDROM_CONFIG_FLAGS (drive)->no_playaudio12 = 1;
     }
 
-  else if (strcmp (drive->id->model, "V003S0DS") == 0 ||  /* Vertros */
-	   strcmp (drive->id->model, "0V300SSD") == 0 ||
-	   strcmp (drive->id->model, "V004E0DT") == 0 ||
+  else if (strcmp (drive->id->model, "V003S0DS") == 0 ||  /* Vertos */
+	   strcmp (drive->id->model, "0V300SSD") == 0)
+    {
+      CDROM_CONFIG_FLAGS (drive)->vertos_lossage = 1;
+      CDROM_CONFIG_FLAGS (drive)->playmsf_uses_bcd = 1;
+      CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 1;
+    }
+
+  else if (strcmp (drive->id->model, "V004E0DT") == 0 ||
 	   strcmp (drive->id->model, "0V400ETD") == 0)
     CDROM_CONFIG_FLAGS (drive)->no_lba_toc = 1;
+#endif  /* not STANDARD_ATAPI */
 
   drive->cdrom_info.toc               = NULL;
   drive->cdrom_info.sector_buffer     = NULL;

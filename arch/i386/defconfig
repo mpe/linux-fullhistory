@@ -3,6 +3,12 @@
 #
 
 #
+# Loadable module support
+#
+CONFIG_MODULES=y
+# CONFIG_MODVERSIONS is not set
+
+#
 # General setup
 #
 # CONFIG_MATH_EMULATION is not set
@@ -14,11 +20,6 @@ CONFIG_SYSVIPC=y
 CONFIG_BINFMT_ELF=y
 CONFIG_KERNEL_ELF=y
 CONFIG_M486=y
-
-#
-# Loadable module support
-#
-# CONFIG_MODVERSIONS is not set
 
 #
 # block devices
@@ -98,6 +99,7 @@ CONFIG_EL3=y
 #
 # Filesystems
 #
+# CONFIG_QUOTA is not set
 CONFIG_MINIX_FS=y
 # CONFIG_EXT_FS is not set
 CONFIG_EXT2_FS=y
@@ -124,6 +126,7 @@ CONFIG_ISO9660_FS=y
 # CONFIG_ATIXL_BUSMOUSE is not set
 # CONFIG_QIC02_TAPE is not set
 # CONFIG_APM is not set
+# CONFIG_WATCHDOG is not set
 
 #
 # Sound

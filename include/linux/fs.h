@@ -450,7 +450,7 @@ extern void kill_fasync(struct fasync_struct *fa, int sig);
 
 extern int getname(const char * filename, char **result);
 extern void putname(char * name);
-
+extern int do_truncate(struct inode *, unsigned long);
 extern int register_blkdev(unsigned int, const char *, struct file_operations *);
 extern int unregister_blkdev(unsigned int major, const char * name);
 extern int blkdev_open(struct inode * inode, struct file * filp);

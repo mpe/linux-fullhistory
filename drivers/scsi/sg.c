@@ -5,6 +5,9 @@
  *  Development Sponsored by Killy Corp. NY NY
  *   
  *  Borrows code from st driver.
+ *
+ *  Version from 1.3.51 modified by Rick Richardson to fix problem in
+ *  detecting whether its a send or a recieve style command (see sg_write)
  */
 #include <linux/module.h>
 
@@ -341,10 +344,18 @@ static int sg_write(struct inode *inode,struct file *filp,const char *buf,int co
 
     /*
      * fix input size, and see if we are sending data.
+     *
+     * Mod by Rick Richardson (rick@dgii.com):
+     * The original test to see if its a SEND/REC was:
+     *     if( device->header.pack_len > device->header.reply_len )
+     * I haven't a clue why the author thought this would work.  Instead,
+     * I've changed it to see if there is any additional data in this
+     * packet beyond the length of the SCSI command itself.
      */
     device->header.pack_len=count;
     buf+=sizeof(struct sg_header);
-    if( device->header.pack_len > device->header.reply_len )
+    size = COMMAND_SIZE(get_user(buf)) + sizeof(struct sg_header);
+    if( device->header.pack_len > size)
     {
         bsize = device->header.pack_len;
         direction = SG_SEND;

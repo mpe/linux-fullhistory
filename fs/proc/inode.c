@@ -12,6 +12,7 @@
 #include <linux/stat.h>
 #include <linux/locks.h>
 #include <linux/limits.h>
+#include <linux/config.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -170,11 +171,13 @@ void proc_read_inode(struct inode * inode)
 			case PROC_NET:
 				inode->i_nlink = 2;
 				break;
+#ifdef CONFIG_SCSI
 			case PROC_SCSI:
                                 inode->i_mode = S_IFDIR | S_IRUGO | S_IXUGO;
                                 inode->i_nlink = 2;
                                 inode->i_op = &proc_scsi_inode_operations;
                                 break;
+#endif
 			case PROC_KCORE:
 				inode->i_mode = S_IFREG | S_IRUSR;
 				inode->i_op = &proc_kcore_inode_operations;

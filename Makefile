@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 51
+SUBLEVEL = 52
 
 ARCH = i386
 
@@ -243,7 +243,7 @@ net: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=net
 
 MODFLAGS = -DMODULE
-
+ifdef CONFIG_MODULES
 ifdef CONFIG_MODVERSIONS
 MODFLAGS += -DMODVERSIONS -include $(HPATH)/linux/modversions.h
 endif
@@ -272,6 +272,18 @@ modules_install:
 	if [ -s .misc ]; then inst_mod .misc misc; fi; \
 	rm -f .misc .allmods; \
 	)
+
+# modules disabled....
+
+else
+modules modules_install: dummy
+	@echo
+	@echo "The present kernel configuration has modules disabled."
+	@echo "Type 'make config' and enable loadable module support."
+	@echo "Then build a kernel with module support enabled."
+	@echo
+	@exit 1
+endif
 
 clean:	archclean
 	rm -f kernel/ksyms.lst include/linux/compile.h
