@@ -2945,10 +2945,10 @@ static void __exit cleanup_raw1394(void)
 {
 	class_simple_device_remove(MKDEV(
 		IEEE1394_MAJOR, IEEE1394_MINOR_BLOCK_RAW1394 * 16));
-	hpsb_unregister_protocol(&raw1394_driver);
 	cdev_del(&raw1394_cdev);
 	devfs_remove(RAW1394_DEVICE_NAME);
 	hpsb_unregister_highlevel(&raw1394_highlevel);
+	hpsb_unregister_protocol(&raw1394_driver);
 }
 
 module_init(init_raw1394);
