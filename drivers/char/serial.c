@@ -673,7 +673,7 @@ static _INLINE_ void receive_chars(struct async_struct *info,
 #if (LINUX_VERSION_CODE > 131394) /* 2.1.66 */
 	tty_flip_buffer_push(tty);
 #else
-	queue_task_irq_off(&tty->flip.tqueue, &tq_timer);
+	queue_task(&tty->flip.tqueue, &tq_timer);
 #endif	
 }
 

@@ -19,15 +19,15 @@ static DECLARE_TASK_QUEUE(tq_context);
 static DECLARE_WAIT_QUEUE_HEAD(context_task_wq);
 static int keventd_running;
 
-void schedule_task(struct tq_struct *task)
+int schedule_task(struct tq_struct *task)
 {
+	int ret;
 	if (keventd_running == 0)
 		printk(KERN_ERR "schedule_task(): keventd has not started\n");
-	queue_task(task, &tq_context);
+	ret = queue_task(task, &tq_context);
 	wake_up(&context_task_wq);
+	return ret;
 }
-
-EXPORT_SYMBOL(schedule_task);
 
 static int context_thread(void *dummy)
 {
@@ -50,20 +50,18 @@ static int context_thread(void *dummy)
 	siginitset(&sa.sa.sa_mask, sigmask(SIGCHLD));
 	do_sigaction(SIGCHLD, &sa, (struct k_sigaction *)0);
 
-	for (;;) {
-		__set_task_state(curtask, TASK_INTERRUPTIBLE);
-		add_wait_queue(&context_task_wq, &wait);
-
-		/*
-		 * Careful: we depend on the wait-queue modifications
-		 * to also act as memory barriers.
-		 */
-		if (!tq_context)
-			schedule();
-
-		remove_wait_queue(&context_task_wq, &wait);
-		__set_task_state(curtask, TASK_RUNNING);
-		run_task_queue(&tq_context);
+ 	/*
+ 	 * If one of the functions on a task queue re-adds itself
+ 	 * to the task queue we call schedule() in state TASK_RUNNING
+ 	 */
+ 	for (;;) {
+		set_task_state(curtask, TASK_INTERRUPTIBLE);
+ 		add_wait_queue(&context_task_wq, &wait);
+		if (tq_context)
+			set_task_state(curtask, TASK_RUNNING);
+		schedule();
+ 		remove_wait_queue(&context_task_wq, &wait);
+ 		run_task_queue(&tq_context);
 		if (signal_pending(curtask)) {
 			while (waitpid(-1, (unsigned int *)0, __WALL|WNOHANG) > 0)
 				;
@@ -73,8 +71,20 @@ static int context_thread(void *dummy)
 	}
 }
 
+/*
+ * Run the tq_context queue right now.  Must be called from process context
+ */
+void run_schedule_tasks(void)
+{
+	run_task_queue(&tq_context);
+}
+	
 int start_context_thread(void)
 {
 	kernel_thread(context_thread, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 	return 0;
 }
+
+EXPORT_SYMBOL(schedule_task);
+EXPORT_SYMBOL(run_schedule_tasks);
+

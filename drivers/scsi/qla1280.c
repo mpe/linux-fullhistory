@@ -312,7 +312,7 @@ STATIC void qla1280_abort_queue_single(scsi_qla_host_t *,uint32_t,uint32_t,uint3
 STATIC int qla1280_return_status( sts_entry_t *sts, Scsi_Cmnd       *cp);
 STATIC void qla1280_removeq(scsi_lu_t *q, srb_t *sp);
 STATIC void qla1280_mem_free(scsi_qla_host_t *ha);
-void qla1280_do_dpc(void *p);
+static void qla1280_do_dpc(void *p);
 #ifdef  QLA1280_UNUSED 
 static void qla1280_set_flags(char * s);
 #endif
@@ -1082,7 +1082,8 @@ qla1280_queuecommand(Scsi_Cmnd *cmd, void (*fn)(Scsi_Cmnd *))
         {
             CMD_RESULT(cmd) = (int) (DID_BUS_BUSY << 16);
             qla1280_done_q_put(sp, &ha->done_q_first, &ha->done_q_last);
-            queue_task(&ha->run_qla_bh,&tq_scheduler); 
+
+            schedule_task(&ha->run_qla_bh);
             ha->flags.dpc_sched = TRUE;
             DRIVER_UNLOCK
             return(0);
@@ -1580,7 +1581,7 @@ void qla1280_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
             ha->run_qla_bh.routine = qla1280_do_dpc; 
 
              COMTRACE('P') 
-            queue_task_irq(&ha->run_qla_bh,&tq_scheduler); 
+            schedule_task(&ha->run_qla_bh);
             ha->flags.dpc_sched = TRUE;
         }
         clear_bit(QLA1280_IN_ISR_BIT, (int *)&ha->flags);
@@ -1604,7 +1605,7 @@ void qla1280_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
  * "host->can_queue". This can cause a panic if we were in our interrupt
  * code .
  **************************************************************************/
-void qla1280_do_dpc(void *p)
+static void qla1280_do_dpc(void *p)
 {
     scsi_qla_host_t *ha = (scsi_qla_host_t *) p;
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2,1,95)

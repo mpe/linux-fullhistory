@@ -84,8 +84,7 @@ static void nfs_readdata_release(struct rpc_task *task)
 static int
 nfs_readpage_sync(struct file *file, struct inode *inode, struct page *page)
 {
-	struct dentry	*dentry = file->f_dentry;
-	struct rpc_cred	*cred = nfs_file_cred(file);
+	struct rpc_cred	*cred = NULL;
 	struct nfs_fattr fattr;
 	loff_t		offset = page_offset(page);
 	char		*buffer;
@@ -97,6 +96,9 @@ nfs_readpage_sync(struct file *file, struct inode *inode, struct page *page)
 
 	dprintk("NFS: nfs_readpage_sync(%p)\n", page);
 
+	if (file)
+		cred = nfs_file_cred(file);
+
 	/*
 	 * This works now because the socket layer never tries to DMA
 	 * into this buffer directly.
@@ -106,9 +108,9 @@ nfs_readpage_sync(struct file *file, struct inode *inode, struct page *page)
 		if (count < rsize)
 			rsize = count;
 
-		dprintk("NFS: nfs_proc_read(%s, (%s/%s), %Ld, %d, %p)\n",
+		dprintk("NFS: nfs_proc_read(%s, (%x/%Ld), %Ld, %d, %p)\n",
 			NFS_SERVER(inode)->hostname,
-			dentry->d_parent->d_name.name, dentry->d_name.name,
+			inode->i_dev, (long long)NFS_FILEID(inode),
 			(long long)offset, rsize, buffer);
 
 		lock_kernel();

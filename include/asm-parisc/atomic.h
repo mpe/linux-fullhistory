@@ -1,6 +1,7 @@
 #ifndef _ASM_PARISC_ATOMIC_H_
 #define _ASM_PARISC_ATOMIC_H_
 
+#include <linux/config.h>
 #include <asm/system.h>
 
 /* Copyright (C) 2000 Philipp Rumpf <prumpf@tux.org>.  */

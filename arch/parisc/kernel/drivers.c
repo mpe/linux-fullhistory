@@ -10,7 +10,6 @@ in a system, and register device drivers.
 */
 
 #include <linux/slab.h>
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <asm/hardware.h>

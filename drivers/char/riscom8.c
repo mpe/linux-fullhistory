@@ -537,8 +537,11 @@ static inline void rc_check_modem(struct riscom_board const * bp)
 		if (rc_in(bp, CD180_MSVR) & MSVR_CD) 
 			wake_up_interruptible(&port->open_wait);
 		else if (!((port->flags & ASYNC_CALLOUT_ACTIVE) &&
-			   (port->flags & ASYNC_CALLOUT_NOHUP)))
-			queue_task(&port->tqueue_hangup,  &tq_scheduler);      
+			   (port->flags & ASYNC_CALLOUT_NOHUP))) {
+			MOD_INC_USE_COUNT;
+			if (schedule_task(&port->tqueue_hangup) == 0)
+				MOD_DEC_USE_COUNT;
+		}
 	}
 	
 #ifdef RISCOM_BRAIN_DAMAGED_CTS
@@ -1648,10 +1651,9 @@ static void do_rc_hangup(void *private_)
 	struct tty_struct	*tty;
 	
 	tty = port->tty;
-	if (!tty)
-		return;
-
-	tty_hangup(tty);
+	if (tty)
+		tty_hangup(tty);	/* FIXME: module removal race still here */
+	MOD_DEC_USE_COUNT;
 }
 
 static void rc_hangup(struct tty_struct * tty)

@@ -2,7 +2,6 @@
 /* Copyright (c) 1999 The Puffin Group */
 /* Written by David Kennedy and Alex deVries */
 
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <asm/hardware.h>

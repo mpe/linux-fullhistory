@@ -7,7 +7,6 @@
 #define _ASMPARISC_TIMEX_H
 
 #include <asm/system.h>
-#include <linux/config.h>
 #include <linux/time.h>
 
 typedef unsigned long cycles_t;

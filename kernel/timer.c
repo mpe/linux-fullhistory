@@ -39,7 +39,6 @@ int tickadj = 500/HZ ? : 1;		/* microsecs */
 
 DECLARE_TASK_QUEUE(tq_timer);
 DECLARE_TASK_QUEUE(tq_immediate);
-DECLARE_TASK_QUEUE(tq_scheduler);
 
 /*
  * phase-lock loop variables

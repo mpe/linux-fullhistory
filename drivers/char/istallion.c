@@ -2363,12 +2363,18 @@ static void stli_dohangup(void *arg)
 	printk("stli_dohangup(portp=%x)\n", (int) arg);
 #endif
 
+	/*
+	 * FIXME: There's a module removal race here: tty_hangup
+	 * calls schedule_task which will call into this
+	 * driver later.
+	 */
 	portp = (stliport_t *) arg;
-	if (portp == (stliport_t *) NULL)
-		return;
-	if (portp->tty == (struct tty_struct *) NULL)
-		return;
-	tty_hangup(portp->tty);
+	if (portp != (stliport_t *) NULL) {
+		if (portp->tty != (struct tty_struct *) NULL) {
+			tty_hangup(portp->tty);
+		}
+	}
+	MOD_DEC_USE_COUNT;
 }
 
 /*****************************************************************************/
@@ -2999,8 +3005,11 @@ static inline int stli_hostcmd(stlibrd_t *brdp, stliport_t *portp)
 				if (portp->flags & ASYNC_CHECK_CD) {
 					if (! ((portp->flags & ASYNC_CALLOUT_ACTIVE) &&
 					    (portp->flags & ASYNC_CALLOUT_NOHUP))) {
-						if (tty != (struct tty_struct *) NULL)
-							queue_task(&portp->tqhangup, &tq_scheduler);
+						if (tty != (struct tty_struct *) NULL) {
+							MOD_INC_USE_COUNT;
+							if (schedule_task(&portp->tqhangup) == 0)
+								MOD_DEC_USE_COUNT;
+						}
 					}
 				}
 			}

@@ -513,10 +513,7 @@ asmlinkage void schedule(void)
 	int this_cpu, c;
 
 	if (!current->active_mm) BUG();
-	if (tq_scheduler)
-		goto handle_tq_scheduler;
-tq_scheduler_back:
-
+need_resched_back:
 	prev = current;
 	this_cpu = prev->processor;
 
@@ -654,7 +651,7 @@ still_running_back:
 same_process:
 	reacquire_kernel_lock(current);
 	if (current->need_resched)
-		goto tq_scheduler_back;
+		goto need_resched_back;
 
 	return;
 
@@ -678,15 +675,6 @@ still_running:
 handle_softirq:
 	do_softirq();
 	goto handle_softirq_back;
-
-handle_tq_scheduler:
-	/*
-	 * do not run the task queue with disabled interrupts,
-	 * cli() wouldn't work on SMP
-	 */
-	sti();
-	run_task_queue(&tq_scheduler);
-	goto tq_scheduler_back;
 
 move_rr_last:
 	if (!prev->counter) {

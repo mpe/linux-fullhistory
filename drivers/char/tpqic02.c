@@ -760,7 +760,7 @@ static int rdstatus(char *stp, unsigned size, char qcmd)
 static int get_status(volatile struct tpstatus *stp)
 {
 	int stat = rdstatus((char *) stp, TPSTATSIZE, QCMD_RD_STAT);
-#if defined(i386) || defined(i486)
+#ifdef __i386__
 	byte_swap_w(&(stp->dec));
 	byte_swap_w(&(stp->urc));
 #else

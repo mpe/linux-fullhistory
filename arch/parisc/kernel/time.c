@@ -20,7 +20,6 @@
 #include <linux/time.h>
 #include <linux/init.h>
 #include <linux/smp.h>
-#include <linux/init.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>

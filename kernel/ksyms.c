@@ -369,7 +369,6 @@ EXPORT_SYMBOL(del_timer_sync);
 EXPORT_SYMBOL(mod_timer);
 EXPORT_SYMBOL(tq_timer);
 EXPORT_SYMBOL(tq_immediate);
-EXPORT_SYMBOL(tq_scheduler);
 
 #ifdef CONFIG_SMP
 /* Various random spinlocks we want to export */

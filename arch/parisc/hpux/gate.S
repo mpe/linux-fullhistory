@@ -13,8 +13,6 @@
 #include <asm/offset.h>
 #include <asm/unistd.h>
 #include <asm/errno.h>
-#define __ASSEMBLY__
-#include <asm/assembly.h>	/* for STREG/LDREG */
 
 	.text
 

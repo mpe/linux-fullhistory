@@ -5,8 +5,6 @@
 #ifndef __ARCH_PARISC_CACHE_H
 #define __ARCH_PARISC_CACHE_H
 
-#include <linux/config.h>
-
 /*
 ** XXX FIXME : L1_CACHE_BYTES (cacheline size) should be a boot time thing.
 ** 

@@ -9,6 +9,7 @@
  * Copyright (C) 1999 Hewlett-Packard Company
  * Copyright (C) 1999, 2000 Grant Grundler
  */
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/init.h>		/* for __init and __devinit */

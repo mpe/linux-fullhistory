@@ -2401,6 +2401,7 @@ static int __devinit uhci_pci_probe(struct pci_dev *dev, const struct pci_device
 		if (check_region(io_addr, io_size))
 			break;
 
+		pci_set_master(dev);
 		return setup_uhci(dev, dev->irq, io_addr, io_size);
 	}
 

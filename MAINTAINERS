@@ -216,6 +216,13 @@ M:	jgarzik@mandrakesoft.com
 L:	linux-fbdev@vuser.vu.union.edu
 S:	Odd Fixes
 
+CIRRUS LOGIC CS4280/CS461x SOUNDDRIVER
+P:	Cirrus Logic Corporation (kernel 2.2 driver)
+M:	Cirrus Logic Corporation, Thomas Woller <twoller@crystal.cirrus.com>
+P:	Nils Faerber (port to kernel 2.4)
+M:	Nils Faerber <nils@kernelconcepts.de>
+S:	Maintained
+
 COMPAQ FIBRE CHANNEL 64-bit/66MHz PCI non-intelligent HBA
 P:      Amy Vanzant-Hodge 
 M:      Amy Vanzant-Hodge (fibrechannel@compaq.com)

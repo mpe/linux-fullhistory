@@ -194,9 +194,6 @@ MODULE_DESCRIPTION ("AMI MegaRAID driver");
  *================================================================
  */
 
-#define queue_task_irq(a,b)     queue_task(a,b)
-#define queue_task_irq_off(a,b) queue_task(a,b)
-
 #define MAX_SERBUF 160
 #define COM_BASE 0x2f8
 

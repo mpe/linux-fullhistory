@@ -2,7 +2,6 @@
 #define _PARISC_PGTABLE_H
 
 #ifndef __ASSEMBLY__
-#include <linux/config.h>
 /*
  * we simulate an x86-style page table for the linux mm code
  */

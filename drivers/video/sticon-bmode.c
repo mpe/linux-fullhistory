@@ -59,7 +59,6 @@ this file *will* be replaced with it.  You have been warned.
  *   - try to make it work on m68k hp workstations ;)
  */
 
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
@@ -78,22 +77,9 @@ this file *will* be replaced with it.  You have been warned.
 #include <asm/io.h>
 #include <asm/real.h>
 
-#include <linux/config.h>
 #include <linux/module.h>
-#include <linux/types.h>
-#include <linux/sched.h>
-#include <linux/fs.h>
-#include <linux/kernel.h>
-#include <linux/tty.h>
-#include <linux/console.h>
-#include <linux/string.h>
-#include <linux/kd.h>
-#include <linux/malloc.h>
 #include <linux/fb.h>
-#include <linux/vt_kern.h>
-#include <linux/selection.h>
 #include <linux/smp.h>
-#include <linux/init.h>
 
 #include <asm/irq.h>
 #include <asm/system.h>

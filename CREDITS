@@ -767,6 +767,7 @@ N: Nils Faerber
 E: nils@kernelconcepts.de
 D: i810 TCO watchdog driver author
 D: Mitsumi LU005 tests and fixes
+D: port and fixes of cs46xx sounddriver
 S: Dreisbachstrasse 24
 S: D-57250 Netphen
 S: Germany

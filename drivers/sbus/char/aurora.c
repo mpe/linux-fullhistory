@@ -666,9 +666,11 @@ static void aurora_check_modem(struct Aurora_board const * bp, int chip)
 		if (sbus_readb(&bp->r[chip]->r[CD180_MSVR]) & MSVR_CD) 
 			wake_up_interruptible(&port->open_wait);
 		else if (!((port->flags & ASYNC_CALLOUT_ACTIVE) &&
-			   (port->flags & ASYNC_CALLOUT_NOHUP)))
-			queue_task(&port->tqueue_hangup,  
-					   &tq_scheduler);      
+			   (port->flags & ASYNC_CALLOUT_NOHUP))) {
+			MOD_INC_USE_COUNT;
+			if (schedule_task(&port->tqueue_hangup) == 0)
+				MOD_DEC_USE_COUNT;
+		}
 	}
 	
 /* We don't have such things yet. My aurora board has DTR and RTS swapped, but that doesn't count in this driver. Let's hope
@@ -2211,13 +2213,13 @@ static void do_aurora_hangup(void *private_)
 	printk("do_aurora_hangup: start\n");
 #endif
 	tty = port->tty;
-	if (tty == NULL)
-		return;
-
-	tty_hangup(tty);
+	if (tty != NULL) {
+		tty_hangup(tty);	/* FIXME: module removal race - AKPM */
 #ifdef AURORA_DEBUG
-	printk("do_aurora_hangup: end\n");
+		printk("do_aurora_hangup: end\n");
 #endif
+	}
+	MOD_DEC_USE_COUNT;
 }
 
 static void aurora_hangup(struct tty_struct * tty)

@@ -3,7 +3,6 @@
 #ifdef __KERNEL__
 
 #include <linux/types.h>
-#include <linux/config.h>
 #include <asm/hardware.h>	/* for struct hp_device */
 
 /*

@@ -1324,7 +1324,7 @@ static void ide_do_request(ide_hwgroup_t *hwgroup, int masked_irq)
 				mod_timer(&hwgroup->timer, sleep);
 				/* we purposely leave hwgroup->busy==1 while sleeping */
 			} else {
-				/* Ugly, but how can we sleep for the lock otherwise? perhaps from tq_scheduler? */
+				/* Ugly, but how can we sleep for the lock otherwise? perhaps from tq_disk? */
 				ide_release_lock(&ide_lock);	/* for atari only */
 				hwgroup->busy = 0;
 			}

@@ -495,7 +495,7 @@ Release version       : 1.1.0
 Programmer            : Daniel Taylor
 Date                  : April 25, 1997
 Description (Verbose) : Updated driver:
-                        1.  Fixed DCD bug. (&tq_scheduler)
+                        1.  Fixed DCD bug. (&tq scheduler)
                         2.  Removed BH handler code, as it was only handling
                             hangups, and not being called for that.
                         3.  Namespace cleanup (DIGI_TIMER2 => DIGI_TIMER)

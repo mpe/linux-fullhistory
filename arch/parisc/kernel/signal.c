@@ -13,8 +13,6 @@
  *  arch/parisc/hpux/signal.c when we figure out how to do them.
  */
 
-#include <linux/config.h>
-
 #include <linux/version.h>
 #include <linux/sched.h>
 #include <linux/mm.h>

@@ -690,17 +690,18 @@ static void mxser_do_softint(void *private_)
 	struct tty_struct *tty;
 
 	tty = info->tty;
-	if (!tty)
-		return;
-	if (test_and_clear_bit(MXSER_EVENT_TXLOW, &info->event)) {
-		if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) &&
-		    tty->ldisc.write_wakeup)
-			(tty->ldisc.write_wakeup) (tty);
-		wake_up_interruptible(&tty->write_wait);
+	if (tty) {
+		if (test_and_clear_bit(MXSER_EVENT_TXLOW, &info->event)) {
+			if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) &&
+			    tty->ldisc.write_wakeup)
+				(tty->ldisc.write_wakeup) (tty);
+			wake_up_interruptible(&tty->write_wait);
+		}
+		if (test_and_clear_bit(MXSER_EVENT_HANGUP, &info->event)) {
+			tty_hangup(tty);	/* FIXME: module removal race here - AKPM */
+		}
 	}
-	if (test_and_clear_bit(MXSER_EVENT_HANGUP, &info->event)) {
-		tty_hangup(tty);
-	}
+	MOD_DEC_USE_COUNT;
 }
 
 /*
@@ -1456,7 +1457,7 @@ static inline void mxser_transmit_chars(struct mxser_struct *info)
 
 	if (info->xmit_cnt < WAKEUP_CHARS) {
 		set_bit(MXSER_EVENT_TXLOW, &info->event);
-		queue_task(&info->tqueue, &tq_scheduler);
+		schedule_task(&info->tqueue);
 	}
 	if (info->xmit_cnt <= 0) {
 		info->IER &= ~UART_IER_THRI;
@@ -1485,7 +1486,7 @@ static inline void mxser_check_modem_status(struct mxser_struct *info,
 		else if (!((info->flags & ASYNC_CALLOUT_ACTIVE) &&
 			   (info->flags & ASYNC_CALLOUT_NOHUP)))
 			set_bit(MXSER_EVENT_HANGUP, &info->event);
-		queue_task(&info->tqueue, &tq_scheduler);
+		schedule_task(&info->tqueue);
 
 	}
 	if (info->flags & ASYNC_CTS_FLOW) {
@@ -1496,7 +1497,9 @@ static inline void mxser_check_modem_status(struct mxser_struct *info,
 				outb(info->IER, info->base + UART_IER);
 
 				set_bit(MXSER_EVENT_TXLOW, &info->event);
-				queue_task(&info->tqueue, &tq_scheduler);
+				MOD_INC_USE_COUNT;
+				if (schedule_task(&info->tqueue) == 0)
+					MOD_DEC_USE_COUNT;
 			}
 		} else {
 			if (!(status & UART_MSR_CTS)) {

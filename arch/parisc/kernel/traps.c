@@ -10,7 +10,6 @@
  * state in 'asm.s'.
  */
 
-#include <linux/autoconf.h>	/* for CONFIG_KWDB */
 #include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>

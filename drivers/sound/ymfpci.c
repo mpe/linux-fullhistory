@@ -54,7 +54,6 @@
 /* Channels, such as play and record. I do only play a.t.m. XXX */
 #define NR_HW_CH	1
 
-static void ymfpci_free(ymfpci_t *codec);
 static int ymf_playback_trigger(ymfpci_t *codec, ymfpci_pcm_t *ypcm, int cmd);
 static int ymfpci_voice_alloc(ymfpci_t *codec, ymfpci_voice_type_t type,
     int pair, ymfpci_voice_t **rvoice);
@@ -62,23 +61,25 @@ static int ymfpci_voice_free(ymfpci_t *codec, ymfpci_voice_t *pvoice);
 static int ymf_playback_prepare(ymfpci_t *codec, struct ymf_state *state);
 static int ymf_state_alloc(ymfpci_t *unit, int nvirt, int instance);
 
-static ymfpci_t *ymf_devs = NULL;
+static LIST_HEAD(ymf_devs);
 
 /*
  *  constants
  */
 
-static struct ymf_devid {
-	int id;
-	char *name;
-} ymf_devv[] = {
-	{ PCI_DEVICE_ID_YAMAHA_724,  "YMF724" },
-	{ PCI_DEVICE_ID_YAMAHA_724F, "YMF724F" },
-	{ PCI_DEVICE_ID_YAMAHA_740,  "YMF740" },
-	{ PCI_DEVICE_ID_YAMAHA_740C, "YMF740C" },
-	{ PCI_DEVICE_ID_YAMAHA_744,  "YMF744" },
-	{ PCI_DEVICE_ID_YAMAHA_754,  "YMF754" },
+static struct pci_device_id ymf_id_tbl[] __devinitdata = {
+#define DEV(v, d, data) \
+  { PCI_VENDOR_ID_##v, PCI_DEVICE_ID_##v##_##d, PCI_ANY_ID, PCI_ANY_ID, 0, 0, (unsigned long)data }
+	DEV (YAMAHA, 724,  "YMF724"),
+	DEV (YAMAHA, 724F, "YMF724F"),
+	DEV (YAMAHA, 740,  "YMF740"),
+	DEV (YAMAHA, 740C, "YMF740C"),
+	DEV (YAMAHA, 744,  "YMF744"),
+	DEV (YAMAHA, 754,  "YMF754"),
+#undef DEV
+	{ }
 };
+MODULE_DEVICE_TABLE(pci, ymf_id_tbl);
 
 /*
  * Mindlessly copied from cs46xx XXX
@@ -181,7 +182,7 @@ static u16 ymfpci_codec_read(struct ac97_codec *dev, u8 reg)
 	ymfpci_writew(codec, YDSXGR_AC97CMDADR, YDSXG_AC97READCMD | reg);
 	if (ymfpci_codec_ready(codec, 0, 0))
 		return ~0;
-	if (codec->device_id == PCI_DEVICE_ID_YAMAHA_744 && codec->rev < 2) {
+	if (codec->pci->device == PCI_DEVICE_ID_YAMAHA_744 && codec->rev < 2) {
 		int i;
 		for (i = 0; i < 600; i++)
 			ymfpci_readw(codec, YDSXGR_PRISTATUSDATA);
@@ -1870,7 +1871,7 @@ static int ymf_ioctl(struct inode *inode, struct file *file,
 		return -ENOTTY;
 
 	default:
-	/* P3 */ printk("ymfpci: ioctl cmd 0x%x\n", cmd);
+	/* P3 */ printk(KERN_WARNING "ymfpci: unknown ioctl cmd 0x%x\n", cmd);
 		/*
 		 * Some programs mix up audio devices and ioctls
 		 * or perhaps they expect "universal" ioctls,
@@ -1883,6 +1884,7 @@ static int ymf_ioctl(struct inode *inode, struct file *file,
 
 static int ymf_open(struct inode *inode, struct file *file)
 {
+	struct list_head *list;
 	ymfpci_t *unit;
 	int minor, instance;
 	struct ymf_state *state;
@@ -1905,10 +1907,13 @@ static int ymf_open(struct inode *inode, struct file *file)
 	nvirt = 0;			/* Such is the partitioning of minor */
 
 	/* XXX Semaphore here! */
-	for (unit = ymf_devs; unit != NULL; unit = unit->next) {
-		if (unit->inst == instance) break;
+	for (list = ymf_devs.next; list != &ymf_devs; list = list->next) {
+		unit = list_entry(list, ymfpci_t, ymf_devs);
+		if (unit->inst == instance)
+			break;
 	}
-	if (unit == NULL) return -ENODEV;
+	if (list == &ymf_devs)
+		return -ENODEV;
 
 	if (unit->states[nvirt] != NULL) {
 		/* P3 */ printk("ymfpci%d: busy\n", unit->inst);
@@ -1987,20 +1992,22 @@ static int ymf_open_mixdev(struct inode *inode, struct file *file)
 {
 	int i;
 	int minor = MINOR(inode->i_rdev);
-	ymfpci_t *codec;
+	struct list_head *list;
+	ymfpci_t *unit;
 
-	for (codec = ymf_devs; codec != NULL; codec = codec->next) {
+	for (list = ymf_devs.next; list != &ymf_devs; list = list->next) {
+		unit = list_entry(list, ymfpci_t, ymf_devs);
 		for (i = 0; i < NR_AC97; i++) {
-			if (codec->ac97_codec[i] != NULL &&
-			    codec->ac97_codec[i]->dev_mixer == minor)
+			if (unit->ac97_codec[i] != NULL &&
+			    unit->ac97_codec[i]->dev_mixer == minor) {
 				goto match;
+			}
 		}
 	}
-	if (!codec)
-		return -ENODEV;
+	return -ENODEV;
 
  match:
-	file->private_data = codec->ac97_codec[i];
+	file->private_data = unit->ac97_codec[i];
 
 	MOD_INC_USE_COUNT;
 	return 0;
@@ -2097,7 +2104,7 @@ static void ymfpci_download_image(ymfpci_t *codec)
 	for (i = 0; i < YDSXG_DSPLENGTH; i++)
 		ymfpci_writel(codec, YDSXGR_DSPINSTRAM + i, DspInst[i >> 2]);
 
-	switch (codec->device_id) {
+	switch (codec->pci->device) {
 	case PCI_DEVICE_ID_YAMAHA_724F:
 	case PCI_DEVICE_ID_YAMAHA_740C:
 	case PCI_DEVICE_ID_YAMAHA_744:
@@ -2200,6 +2207,16 @@ static int ymfpci_memalloc(ymfpci_t *codec)
 	return 0;
 }
 
+static void ymfpci_memfree(ymfpci_t *codec)
+{
+	ymfpci_writel(codec, YDSXGR_PLAYCTRLBASE, 0);
+	ymfpci_writel(codec, YDSXGR_RECCTRLBASE, 0);
+	ymfpci_writel(codec, YDSXGR_EFFCTRLBASE, 0);
+	ymfpci_writel(codec, YDSXGR_WORKBASE, 0);
+	ymfpci_writel(codec, YDSXGR_WORKSIZE, 0);
+	kfree(codec->work_ptr);
+}
+
 static int ymf_ac97_init(ymfpci_t *card, int num_ac97)
 {
 	struct ac97_codec *codec;
@@ -2220,37 +2237,42 @@ static int ymf_ac97_init(ymfpci_t *card, int num_ac97)
 	if (ac97_probe_codec(codec) == 0) {
 		/* Alan does not have this printout. P3 */
 		printk("ymfpci: ac97_probe_codec failed\n");
-		return -ENODEV;
+		goto out_kfree;
 	}
 
 	eid = ymfpci_codec_read(codec, AC97_EXTENDED_ID);
-
-	if (eid==0xFFFFFF)
-	{
+	if (eid==0xFFFFFF) {
 		printk(KERN_WARNING "ymfpci: no codec attached ?\n");
-		kfree(codec);
-		return -ENODEV;
+		goto out_kfree;
 	}
 
 	card->ac97_features = eid;
 
 	if ((codec->dev_mixer = register_sound_mixer(&ymf_mixer_fops, -1)) < 0) {
 		printk(KERN_ERR "ymfpci: couldn't register mixer!\n");
-		kfree(codec);
-		return -ENODEV;
+		goto out_kfree;
 	}
 
 	card->ac97_codec[num_ac97] = codec;
 
 	return 0;
+ out_kfree:
+	kfree(codec);
+	return -ENODEV;
 }
 
-static int /* __init */
-ymf_install(struct pci_dev *pcidev, int instance, int devx)
+static int __devinit ymf_probe_one(struct pci_dev *pcidev, const struct pci_device_id *ent)
 {
+	u16 ctrl;
+	static int ymf_instance; /* = 0 */
 	ymfpci_t *codec;
 
 	int err;
+
+	if (pci_enable_device(pcidev) < 0) {
+		printk(KERN_ERR "ymfpci: pci_enable_device failed\n");
+		return -ENODEV;
+	}
 
 	if ((codec = kmalloc(sizeof(ymfpci_t), GFP_KERNEL)) == NULL) {
 		printk(KERN_ERR "ymfpci: no core\n");
@@ -2261,153 +2283,108 @@ ymf_install(struct pci_dev *pcidev, int instance, int devx)
 	spin_lock_init(&codec->reg_lock);
 	spin_lock_init(&codec->voice_lock);
 	codec->pci = pcidev;
-	codec->inst = instance;
-	codec->irq = pcidev->irq;
-	codec->device_id = pcidev->device;
-
-	pci_enable_device(pcidev);
-	pci_set_master(pcidev);
+	codec->inst = ymf_instance;
 
 	pci_read_config_byte(pcidev, PCI_REVISION_ID, (u8 *)&codec->rev);
-	codec->reg_area_phys = pci_resource_start(pcidev, 0);
-	codec->reg_area_virt = (unsigned long)ioremap(codec->reg_area_phys, 0x8000);
+	codec->reg_area_virt = ioremap(pci_resource_start(pcidev, 0), 0x8000);
 
-	/* XXX KERN_INFO */
-	printk("ymfpci%d: %s at 0x%lx IRQ %d\n", instance,
-	    ymf_devv[devx].name, codec->reg_area_phys, codec->irq);
+	printk(KERN_INFO "ymfpci%d: %s at 0x%lx IRQ %d\n", ymf_instance,
+	    (char *)ent->driver_data, pci_resource_start(pcidev, 0), pcidev->irq);
 
 	ymfpci_aclink_reset(pcidev);
-	if (ymfpci_codec_ready(codec, 0, 1) < 0) {
-		ymfpci_free(codec);
-		return -ENODEV;
-	}
+	if (ymfpci_codec_ready(codec, 0, 1) < 0)
+		goto out_unmap;
 
 	ymfpci_download_image(codec);
 
 	udelay(100); /* seems we need some delay after downloading image.. */
 
-	if (ymfpci_memalloc(codec) < 0) {
-		ymfpci_free(codec);
-		return -ENODEV;
-	}
+	if (ymfpci_memalloc(codec) < 0)
+		goto out_disable_dsp;
 
 	/* ymfpci_proc_init(card, codec); */
 
-	if (request_irq(codec->irq, ymf_interrupt, SA_SHIRQ, "ymfpci", codec) != 0) {
+	if (request_irq(pcidev->irq, ymf_interrupt, SA_SHIRQ, "ymfpci", codec) != 0) {
 		printk(KERN_ERR "ymfpci%d: unable to request IRQ %d\n",
-		    codec->inst, codec->irq);
-		ymfpci_free(codec);
-		return -ENODEV;
+		       codec->inst, pcidev->irq);
+		goto out_memfree;
 	}
 
 	/* register /dev/dsp */
 	if ((codec->dev_audio = register_sound_dsp(&ymf_fops, -1)) < 0) {
 		printk(KERN_ERR "ymfpci%d: unable to register dsp\n", codec->inst);
-		free_irq(codec->irq, codec);
-		ymfpci_free(codec);
-		return -ENODEV;
+		goto out_free_irq;
 	}
 
 	/*
 	 * Poke just the primary for the moment.
 	 */
-	if ((err = ymf_ac97_init(codec, 0)) != 0) {
-		unregister_sound_dsp(codec->dev_audio);
-		free_irq(codec->irq, codec);
-		ymfpci_free(codec);
-		return err;
-	}
+	if ((err = ymf_ac97_init(codec, 0)) != 0)
+		goto out_unregister_sound_dsp;
 
-	codec->next = ymf_devs;
-	ymf_devs = codec;
+	/* put it into driver list */
+	list_add_tail(&codec->ymf_devs, &ymf_devs);
+	pci_set_drvdata(pcidev, codec);
+	ymf_instance++;
 
 	return 0;
-}
 
-static void
-ymfpci_free(ymfpci_t *codec)
-{
-	u16 ctrl;
-
-	/* ymfpci_proc_done(codec); */
-
+ out_unregister_sound_dsp:
 	unregister_sound_dsp(codec->dev_audio);
-
-	ymfpci_writel(codec, YDSXGR_NATIVEDACOUTVOL, 0);
-	ymfpci_writel(codec, YDSXGR_BUF441OUTVOL, 0);
-	ymfpci_writel(codec, YDSXGR_STATUS, ~0);
+ out_free_irq:
+	free_irq(pcidev->irq, codec);
+ out_memfree:
+	ymfpci_memfree(codec);
+ out_disable_dsp:
 	ymfpci_disable_dsp(codec);
-	ymfpci_writel(codec, YDSXGR_PLAYCTRLBASE, 0);
-	ymfpci_writel(codec, YDSXGR_RECCTRLBASE, 0);
-	ymfpci_writel(codec, YDSXGR_EFFCTRLBASE, 0);
-	ymfpci_writel(codec, YDSXGR_WORKBASE, 0);
-	ymfpci_writel(codec, YDSXGR_WORKSIZE, 0);
 	ctrl = ymfpci_readw(codec, YDSXGR_GLOBALCTRL);
 	ymfpci_writew(codec, YDSXGR_GLOBALCTRL, ctrl & ~0x0007);
+	ymfpci_writel(codec, YDSXGR_STATUS, ~0);
+ out_unmap:
+	iounmap(codec->reg_area_virt);
+	kfree(codec);
+	return -ENODEV;
+}
 
-	if (codec->reg_area_virt)
-		iounmap((void *)codec->reg_area_virt);
-	if (codec->work_ptr)
-		kfree(codec->work_ptr);
-	if (codec->ac97_codec[0]) {
-		unregister_sound_mixer(codec->ac97_codec[0]->dev_mixer);
-		kfree(codec->ac97_codec[0]);
-	}
+static void __devexit ymf_remove_one(struct pci_dev *pcidev)
+{
+	__u16 ctrl;
+	ymfpci_t *codec = pci_get_drvdata(pcidev);
+
+	/* remove from list of devices */
+	list_del(&codec->ymf_devs);
+
+	unregister_sound_mixer(codec->ac97_codec[0]->dev_mixer);
+	kfree(codec->ac97_codec[0]);
+	unregister_sound_dsp(codec->dev_audio);
+	free_irq(pcidev->irq, codec);
+	ymfpci_memfree(codec);
+	ymfpci_writel(codec, YDSXGR_STATUS, ~0);
+	ymfpci_disable_dsp(codec);
+	ctrl = ymfpci_readw(codec, YDSXGR_GLOBALCTRL);
+	ymfpci_writew(codec, YDSXGR_GLOBALCTRL, ctrl & ~0x0007);
+	iounmap(codec->reg_area_virt);
 	kfree(codec);
 }
 
 MODULE_AUTHOR("Jaroslav Kysela");
 MODULE_DESCRIPTION("Yamaha YMF7xx PCI Audio");
 
-static int /* __init */
-ymf_probe(void)
+static struct pci_driver ymfpci_driver = {
+	name:		"ymfpci",
+	id_table:	ymf_id_tbl,
+	probe:		ymf_probe_one,
+	remove:         ymf_remove_one,
+};
+
+static int __init ymf_init_module(void)
 {
-	struct pci_dev *pcidev;
-	int foundone;
-	int i;
-
-	if (!pci_present())
-		return -ENODEV;
-
-	/*
-	 * Print our proud ego-nursing "Hello, World!" message as in MS-DOS.
-	 */
-	/* printk(KERN_INFO "ymfpci: Yamaha YMF7xx\n"); */
-
-	/*
-	 * Not very efficient, but Alan did it so in cs46xx.c.
-	 */
-	foundone = 0;
-	pcidev = NULL;
-	for (i = 0; i < sizeof(ymf_devv)/sizeof(ymf_devv[0]); i++) {
-		while ((pcidev = pci_find_device(PCI_VENDOR_ID_YAMAHA,
-		    ymf_devv[i].id, pcidev)) != NULL) {
-			if (ymf_install(pcidev, foundone, i) == 0) {
-				foundone++;
-			}
-		}
-	}
-
-	return foundone;
+	return pci_module_init(&ymfpci_driver);
 }
 
-static int ymf_init_module(void)
+static void __exit ymf_cleanup_module (void)
 {
-	if (ymf_probe()==0)
-		printk(KERN_ERR "ymfpci: No devices found.\n");
-	return 0;
-}
-
-static void ymf_cleanup_module (void)
-{
-	ymfpci_t *next;
-
-	while (ymf_devs){
-		next = ymf_devs->next;
-		free_irq(ymf_devs->irq, ymf_devs);
-		ymfpci_free(ymf_devs);
-		ymf_devs = next;
-	}
+	pci_unregister_driver(&ymfpci_driver);
 }
 
 module_init(ymf_init_module);

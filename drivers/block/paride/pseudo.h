@@ -71,7 +71,7 @@ static void ps_set_intr( void (*continuation)(void),
                 disable_hlt();
 #endif
 		ps_tq_active = 1;
-                queue_task(&ps_tq,&tq_scheduler);
+                schedule_task(&ps_tq);
 	}
 
         if (!ps_timer_active) {
@@ -114,7 +114,7 @@ static void ps_tq_int( void *data )
 #endif
 
         ps_tq_active = 1;
-	queue_task(&ps_tq,&tq_scheduler);
+	schedule_task(&ps_tq);
         spin_unlock_irqrestore(&ps_spinlock,flags);
 }
 

@@ -2956,7 +2956,8 @@ uhci_pci_probe (struct pci_dev *dev, const struct pci_device_id *id)
 			break;
 		/* disable legacy emulation */
 		pci_write_config_word (dev, USBLEGSUP, 0);
-	
+
+		pci_set_master(dev);
 		return alloc_uhci(dev, dev->irq, io_addr, io_size);
 	}
 	return -ENODEV;

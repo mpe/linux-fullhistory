@@ -834,8 +834,9 @@ extern inline void sx_check_modem(struct specialix_board * bp)
 #ifdef SPECIALIX_DEBUG
 			printk ( "Sending HUP.\n");
 #endif
-			queue_task(&port->tqueue_hangup,  
-			           &tq_scheduler);      
+			MOD_INC_USE_COUNT;
+			if (schedule_task(&port->tqueue_hangup) == 0)
+				MOD_DEC_USE_COUNT;
 		} else {
 #ifdef SPECIALIX_DEBUG
 			printk ( "Don't need to send HUP.\n");
@@ -2121,10 +2122,9 @@ static void do_sx_hangup(void *private_)
 	struct tty_struct	*tty;
 	
 	tty = port->tty;
-	if (!tty)
-		return;
-
-	tty_hangup(tty);
+	if (tty)
+		tty_hangup(tty);	/* FIXME: module removal race here */
+	MOD_DEC_USE_COUNT;
 }
 
 

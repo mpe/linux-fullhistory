@@ -30,7 +30,7 @@
  * Revision 1.15  2000/04/06 15:01:25  calle
  * Bugfix: crash in capidrv.c when reseting a capi controller.
  * - changed code order on remove of controller.
- * - using tq_schedule for notifier in kcapi.c.
+ * - using tq schedule for notifier in kcapi.c.
  * - now using spin_lock_irqsave() and spin_unlock_irqrestore().
  * strange: sometimes even MP hang on unload of isdn.o ...
  *
@@ -630,7 +630,9 @@ static int notify_push(unsigned int cmd, __u32 controller,
 	 * of devices. Devices can only removed in
 	 * user process, not in bh.
 	 */
-	queue_task(&tq_state_notify, &tq_scheduler);
+	MOD_INC_USE_COUNT;
+	if (schedule_task(&tq_state_notify) == 0)
+		MOD_DEC_USE_COUNT;
 	return 0;
 }
 
@@ -726,6 +728,7 @@ static void notify_handler(void *dummy)
 		kfree(np);
 		MOD_DEC_USE_COUNT;
 	}
+	MOD_DEC_USE_COUNT;
 }
 	
 /* -------- NCCI Handling ------------------------------------- */

@@ -104,7 +104,6 @@ static inline void *ioremap(unsigned long base, long length)
 
 #define capable(x)                   suser()
 
-#define queue_task                   queue_task_irq_off
 #define tty_flip_buffer_push(tty)    queue_task(&tty->flip.tqueue, &tq_timer)
 #define signal_pending(current)      (current->signal & ~current->blocked)
 #define schedule_timeout(to)         do {current->timeout = jiffies + (to);schedule ();} while (0)

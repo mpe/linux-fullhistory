@@ -425,11 +425,9 @@ static struct file_operations hung_up_tty_fops = {
 };
 
 /*
- * This can be called through the "tq_scheduler" 
- * task-list. That is process synchronous, but
- * doesn't hold any locks, so we need to make
- * sure we have the appropriate locks for what
- * we're doing..
+ * This can be called by the "eventd" kernel thread.  That is process synchronous,
+ * but doesn't hold any locks, so we need to make sure we have the appropriate
+ * locks for what we're doing..
  */
 void do_tty_hangup(void *data)
 {
@@ -541,7 +539,7 @@ void tty_hangup(struct tty_struct * tty)
 	
 	printk("%s hangup...\n", tty_name(tty, buf));
 #endif
-	queue_task(&tty->tq_hangup, &tq_scheduler);
+	schedule_task(&tty->tq_hangup);
 }
 
 void tty_vhangup(struct tty_struct * tty)
@@ -1264,7 +1262,7 @@ static void release_dev(struct file * filp)
 	 * Make sure that the tty's task queue isn't activated. 
 	 */
 	run_task_queue(&tq_timer);
-	run_task_queue(&tq_scheduler);
+	run_schedule_tasks();
 
 	/* 
 	 * The release_mem function takes care of the details of clearing

@@ -640,7 +640,9 @@ static _INLINE_ void check_modem_status(struct esp_struct *info)
 #ifdef SERIAL_DEBUG_OPEN
 			printk("scheduling hangup...");
 #endif
-			queue_task(&info->tqueue_hangup, &tq_scheduler);
+			MOD_INC_USE_COUNT;
+			if (schedule_task(&info->tqueue_hangup) == 0)
+				MOD_DEC_USE_COUNT;
 		}
 	}
 }
@@ -802,10 +804,9 @@ static void do_serial_hangup(void *private_)
 	struct tty_struct	*tty;
 	
 	tty = info->tty;
-	if (!tty)
-		return;
-
-	tty_hangup(tty);
+	if (tty)
+		tty_hangup(tty);
+	MOD_DEC_USE_COUNT;
 }
 
 /*

@@ -2231,11 +2231,11 @@ static void stl_offintr(void *private)
 #endif
 
 	if (portp == (stlport_t *) NULL)
-		return;
+		goto out;
 
 	tty = portp->tty;
 	if (tty == (struct tty_struct *) NULL)
-		return;
+		goto out;
 
 	lock_kernel();
 	if (test_bit(ASYI_TXLOW, &portp->istate)) {
@@ -2254,12 +2254,14 @@ static void stl_offintr(void *private)
 			if (portp->flags & ASYNC_CHECK_CD) {
 				if (! ((portp->flags & ASYNC_CALLOUT_ACTIVE) &&
 				    (portp->flags & ASYNC_CALLOUT_NOHUP))) {
-					tty_hangup(tty);
+					tty_hangup(tty);	/* FIXME: module removal race here - AKPM */
 				}
 			}
 		}
 	}
 	unlock_kernel();
+out:
+	MOD_DEC_USE_COUNT;
 }
 
 /*****************************************************************************/
@@ -4108,7 +4110,9 @@ static void stl_cd1400txisr(stlpanel_t *panelp, int ioaddr)
 	if ((len == 0) || ((len < STL_TXBUFLOW) &&
 	    (test_bit(ASYI_TXLOW, &portp->istate) == 0))) {
 		set_bit(ASYI_TXLOW, &portp->istate);
-		queue_task(&portp->tqueue, &tq_scheduler);
+		MOD_INC_USE_COUNT;
+		if (schedule_task(&portp->tqueue) == 0)
+			MOD_DEC_USE_COUNT;
 	}
 
 	if (len == 0) {
@@ -4288,7 +4292,9 @@ static void stl_cd1400mdmisr(stlpanel_t *panelp, int ioaddr)
 	misr = inb(ioaddr + EREG_DATA);
 	if (misr & MISR_DCD) {
 		set_bit(ASYI_DCDCHANGE, &portp->istate);
-		queue_task(&portp->tqueue, &tq_scheduler);
+		MOD_INC_USE_COUNT;
+		if (schedule_task(&portp->tqueue) == 0)
+			MOD_DEC_USE_COUNT;
 		portp->stats.modem++;
 	}
 
@@ -5085,7 +5091,9 @@ static void stl_sc26198txisr(stlport_t *portp)
 	if ((len == 0) || ((len < STL_TXBUFLOW) &&
 	    (test_bit(ASYI_TXLOW, &portp->istate) == 0))) {
 		set_bit(ASYI_TXLOW, &portp->istate);
-		queue_task(&portp->tqueue, &tq_scheduler);
+		MOD_INC_USE_COUNT;
+		if (schedule_task(&portp->tqueue) == 0)
+			MOD_DEC_USE_COUNT;
 	}
 
 	if (len == 0) {
@@ -5302,7 +5310,9 @@ static void stl_sc26198otherisr(stlport_t *portp, unsigned int iack)
 		ipr = stl_sc26198getreg(portp, IPR);
 		if (ipr & IPR_DCDCHANGE) {
 			set_bit(ASYI_DCDCHANGE, &portp->istate);
-			queue_task(&portp->tqueue, &tq_scheduler);
+			MOD_INC_USE_COUNT;
+			if (schedule_task(&portp->tqueue) == 0)
+				MOD_DEC_USE_COUNT;
 			portp->stats.modem++;
 		}
 		break;

@@ -846,6 +846,7 @@ static void i2o_lan_batch_send(struct net_device *dev)
 	}
 	priv->send_active = 0;
 	spin_unlock_irq(&priv->tx_lock);
+	MOD_DEC_USE_COUNT;
 }
 
 #ifdef CONFIG_NET_FC
@@ -900,7 +901,9 @@ static int i2o_lan_sdu_send(struct sk_buff *skb, struct net_device *dev)
 
 		if ((priv->tx_batch_mode & 0x01) && !priv->send_active) {
 			priv->send_active = 1;
-			queue_task(&priv->i2o_batch_send_task, &tq_scheduler);
+			MOD_INC_USE_COUNT;
+			if (schedule_task(&priv->i2o_batch_send_task) == 0)
+				MOD_DEC_USE_COUNT;
 		}
 	} else {  /* Add new SGL element to the previous message frame */
 
@@ -986,7 +989,9 @@ static int i2o_lan_packet_send(struct sk_buff *skb, struct net_device *dev)
 
 		if ((priv->tx_batch_mode & 0x01) && !priv->send_active) {
 			priv->send_active = 1;
-			queue_task(&priv->i2o_batch_send_task, &tq_scheduler);
+			MOD_INC_USE_COUNT;
+			if (schedule_task(&priv->i2o_batch_send_task) == 0)
+				MOD_DEC_USE_COUNT;
 		}
 	} else {  /* Add new SGL element to the previous message frame */
 

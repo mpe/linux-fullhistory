@@ -171,8 +171,7 @@ static int
 nfs_writepage_sync(struct file *file, struct inode *inode, struct page *page,
 		   unsigned int offset, unsigned int count)
 {
-	struct dentry	*dentry = file->f_dentry;
-	struct rpc_cred	*cred = nfs_file_cred(file);
+	struct rpc_cred	*cred = NULL;
 	loff_t		base;
 	unsigned int	wsize = NFS_SERVER(inode)->wsize;
 	int		result, refresh = 0, written = 0, flags;
@@ -180,9 +179,13 @@ nfs_writepage_sync(struct file *file, struct inode *inode, struct page *page,
 	struct nfs_fattr fattr;
 	struct nfs_writeverf verf;
 
+
+	if (file)
+		cred = nfs_file_cred(file);
+
 	lock_kernel();
-	dprintk("NFS:      nfs_writepage_sync(%s/%s %d@%Ld)\n",
-		dentry->d_parent->d_name.name, dentry->d_name.name,
+	dprintk("NFS:      nfs_writepage_sync(%x/%Ld %d@%Ld)\n",
+		inode->i_dev, (long long)NFS_FILEID(inode),
 		count, (long long)(page_offset(page) + offset));
 
 	buffer = kmap(page) + offset;

@@ -582,9 +582,11 @@ static void isicom_interrupt(int irq, void * dev_id, struct pt_regs * regs)
 #endif							
 							port->status &= ~ISI_DCD;
 							if (!((port->flags & ASYNC_CALLOUT_ACTIVE) &&
-								(port->flags & ASYNC_CALLOUT_NOHUP)))
-								queue_task(&port->hangup_tq,
-									&tq_scheduler);
+								(port->flags & ASYNC_CALLOUT_NOHUP))) {
+								MOD_INC_USE_COUNT;
+								if (schedule_task(&port->hangup_tq) == 0)
+									MOD_DEC_USE_COUNT;
+							}
 						}
 					}
 					else {
@@ -1630,10 +1632,9 @@ static void do_isicom_hangup(void * data)
 	struct tty_struct * tty;
 	
 	tty = port->tty;
-	if (!tty)
-		return;
-		
-	tty_hangup(tty);	
+	if (tty)
+		tty_hangup(tty);	/* FIXME: module removal race here - AKPM */
+	MOD_DEC_USE_COUNT;
 }
 
 static void isicom_hangup(struct tty_struct * tty)

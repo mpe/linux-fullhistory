@@ -483,7 +483,9 @@ static inline void pc_sched_event(struct channel *ch, int event)
 	-------------------------------------------------------------------------*/
 
 	ch->event |= 1 << event;
-	queue_task(&ch->tqueue, &tq_scheduler);
+	MOD_INC_USE_COUNT;
+	if (schedule_task(&ch->tqueue) == 0)
+		MOD_DEC_USE_COUNT;
 
 
 } /* End pc_sched_event */
@@ -3435,7 +3437,7 @@ static void do_softint(void *private_)
 			if (test_and_clear_bit(EPCA_EVENT_HANGUP, &ch->event)) 
 			{ /* Begin if clear_bit */
 
-				tty_hangup(tty);
+				tty_hangup(tty);	/* FIXME: module removal race here - AKPM */
 				wake_up_interruptible(&ch->open_wait);
 				ch->asyncflags &= ~(ASYNC_NORMAL_ACTIVE | ASYNC_CALLOUT_ACTIVE);
 
@@ -3443,7 +3445,7 @@ static void do_softint(void *private_)
 		}
 
 	} /* End EPCA_MAGIC */
-
+	MOD_DEC_USE_COUNT;
 } /* End do_softint */
 
 /* ------------------------------------------------------------

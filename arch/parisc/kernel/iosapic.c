@@ -157,7 +157,6 @@
 
 
 /* FIXME: determine which include files are really needed */
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/spinlock.h>

@@ -168,7 +168,7 @@ smb_data_ready(struct sock *sk, int len)
 	job->cb.routine = smb_data_callback;
 	job->cb.data = job;
 	job->sk = sk;
-	queue_task(&job->cb, &tq_scheduler);
+	schedule_task(&job->cb);
 }
 
 int

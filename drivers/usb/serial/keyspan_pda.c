@@ -130,7 +130,7 @@ static void keyspan_pda_wakeup_write( struct usb_serial_port *port )
 	/* wake up other tty processes */
 	wake_up_interruptible( &tty->write_wait );
 	/* For 2.2.16 backport -- wake_up_interruptible( &tty->poll_wait ); */
-
+	MOD_DEC_USE_COUNT;
 }
 
 static void keyspan_pda_request_unthrottle( struct usb_serial *serial )
@@ -149,7 +149,7 @@ static void keyspan_pda_request_unthrottle( struct usb_serial *serial )
 			     NULL,
 			     0,
 			     2*HZ);
-
+	MOD_DEC_USE_COUNT;
 }
 
 
@@ -198,7 +198,9 @@ static void keyspan_pda_rx_interrupt (struct urb *urb)
 			tty = serial->port[0].tty;
 			priv->tx_throttled = 0;
 			/* queue up a wakeup at scheduler time */
-			queue_task( &priv->wakeup_task, &tq_scheduler );
+			MOD_INC_USE_COUNT;
+			if (schedule_task(&priv->wakeup_task) == 0)
+				MOD_DEC_USE_COUNT;
 			break;
 		default:
 			break;
@@ -540,7 +542,9 @@ static int keyspan_pda_write(struct usb_serial_port *port, int from_user,
 
 	if (request_unthrottle) {
 		priv->tx_throttled = 1; /* block writers */
-		queue_task( &priv->unthrottle_task, &tq_scheduler );
+		MOD_INC_USE_COUNT;
+		if (schedule_task(&priv->unthrottle_task) == 0)
+			MOD_DEC_USE_COUNT;
 	}
 
 	spin_unlock_irqrestore (&port->port_lock, flags);
@@ -566,8 +570,9 @@ static void keyspan_pda_write_bulk_callback (struct urb *urb)
 	}
 	
 	/* queue up a wakeup at scheduler time */
-	queue_task( &priv->wakeup_task, &tq_scheduler );
-
+	MOD_INC_USE_COUNT;
+	if (schedule_task(&priv->wakeup_task) == 0)
+		MOD_DEC_USE_COUNT;
 }
 
 

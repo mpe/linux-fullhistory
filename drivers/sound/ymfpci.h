@@ -247,11 +247,8 @@ struct ymf_pcm {
 };
 
 struct ymf_unit {
-	unsigned int device_id;	/* PCI device ID */
 	unsigned int rev;	/* PCI revision */
-	unsigned long reg_area_phys;
-	unsigned long reg_area_virt;
-
+	void *reg_area_virt;
 	void *work_ptr;				// +
 
 	unsigned int bank_size_playback;
@@ -278,7 +275,6 @@ struct ymf_unit {
 	u16 ac97_features;
 
 	struct pci_dev *pci;
-	int irq;
 	int inst;		/* Unit number (instance) */
 
 	spinlock_t reg_lock;
@@ -287,7 +283,7 @@ struct ymf_unit {
 	/* soundcore stuff */
 	int dev_audio;
 
-	ymfpci_t *next;					// *
+	struct list_head ymf_devs;
 	struct ymf_state *states[1];			// *
 	/* ypcm may be the same thing as state, but not for record, effects. */
 };

@@ -22,6 +22,7 @@
  *    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#include <linux/config.h>
 #include <asm/offset.h>
 
 /* the following is the setup i think we should follow:

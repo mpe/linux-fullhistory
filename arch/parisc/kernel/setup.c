@@ -61,11 +61,9 @@
 #include <asm/machdep.h>	/* for pa7300lc_init() proto */
 
 #include <asm/irq.h>		/* for struct irq_region */
-#include <asm/pdc.h>		/* for mem_pdc_call() proto */
 #include <asm/pdcpat.h>		/* for PA_VIEW PDC_PAT_CPU_GET_NUMBER etc */
 
 #include <linux/proc_fs.h>
-#include <asm/cache.h>          /* for get_cache_info() proto */
 
 #define COMMAND_LINE_SIZE 1024
 char	saved_command_line[COMMAND_LINE_SIZE];

@@ -601,7 +601,7 @@ static void digi_wakeup_write_lock( struct usb_serial_port *port )
 	spin_lock_irqsave( &priv->dp_port_lock, flags );
 	digi_wakeup_write( port );
 	spin_unlock_irqrestore( &priv->dp_port_lock, flags );
-
+	MOD_DEC_USE_COUNT;
 }
 
 static void digi_wakeup_write( struct usb_serial_port *port )
@@ -1409,7 +1409,9 @@ dbg( "digi_write_bulk_callback: TOP, urb->status=%d", urb->status );
 
 	/* also queue up a wakeup at scheduler time, in case we */
 	/* lost the race in write_chan(). */
-	queue_task( &priv->dp_wakeup_task, &tq_scheduler );
+	MOD_INC_USE_COUNT;
+	if (schedule_task(&priv->dp_wakeup_task) == 0)
+		MOD_DEC_USE_COUNT;
 
 	spin_unlock( &priv->dp_port_lock );
 

@@ -3,6 +3,7 @@
  * 
  * Copyright 1999 Philipp Rumpf (prumpf@tux.org */
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/spinlock.h>
 #include <asm/system.h>

@@ -149,7 +149,8 @@ extern void update_one_process(struct task_struct *p, unsigned long user,
 extern signed long FASTCALL(schedule_timeout(signed long timeout));
 asmlinkage void schedule(void);
 
-extern void schedule_task(struct tq_struct *task);
+extern int schedule_task(struct tq_struct *task);
+extern void run_schedule_tasks(void);
 extern int start_context_thread(void);
 
 /*

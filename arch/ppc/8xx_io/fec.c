@@ -1214,7 +1214,7 @@ static void mii_queue_relink(uint mii_reg, struct net_device *dev)
 
 	fep->phy_task.routine = (void *)mii_relink;
 	fep->phy_task.data = dev;
-	queue_task(&fep->phy_task, &tq_scheduler);
+	schedule_task(&fep->phy_task);
 }
 
 static void mii_queue_config(uint mii_reg, struct net_device *dev)
@@ -1223,7 +1223,7 @@ static void mii_queue_config(uint mii_reg, struct net_device *dev)
 
 	fep->phy_task.routine = (void *)mii_display_config;
 	fep->phy_task.data = dev;
-	queue_task(&fep->phy_task, &tq_scheduler);
+	schedule_task(&fep->phy_task);
 }
 
 

@@ -11,7 +11,6 @@
  *	void check_bugs(void);
  */
 
-#include <linux/config.h>
 #include <asm/processor.h>
 
 static inline void check_bugs(void)

@@ -468,6 +468,7 @@ static void notify_handler(void *dummy)
 	for (contr=1; VALID_CARD(contr); contr++)
 		 if (test_and_clear_bit(contr, &notify_down_set))
 			 notify_down(contr);
+	MOD_DEC_USE_COUNT;
 }
 
 /* -------- card ready callback ------------------------------- */
@@ -508,7 +509,9 @@ void avmb1_card_ready(avmb1_card * card)
 	}
 
         set_bit(CARDNR(card), &notify_up_set);
-        queue_task(&tq_state_notify, &tq_scheduler);
+	MOD_INC_USE_COUNT;
+        if (schedule_task(&tq_state_notify) == 0)
+		MOD_DEC_USE_COUNT;
 
         flag = ((__u8 *)(profp->manu))[1];
         switch (flag) {
@@ -568,7 +571,9 @@ static void avmb1_card_down(avmb1_card * card, int notify)
 		}
 	}
 	set_bit(CARDNR(card), &notify_down_set);
-	queue_task(&tq_state_notify, &tq_scheduler);
+	MOD_INC_USE_COUNT;
+	if (schedule_task(&tq_state_notify) == 0)
+		MOD_DEC_USE_COUNT;
 	printk(KERN_NOTICE "b1capi: card %d down.\n", CARDNR(card));
 }
 
