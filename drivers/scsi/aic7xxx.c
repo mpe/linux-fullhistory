@@ -263,12 +263,6 @@
  */
 #define VIRT_TO_BUS(a) (unsigned int)virt_to_bus((void *)(a))
 
-struct proc_dir_entry proc_scsi_aic7xxx = {
-    PROC_SCSI_AIC7XXX, 7, "aic7xxx",
-    S_IFDIR | S_IRUGO | S_IXUGO, 2,
-    0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL
-};
-
 #define AIC7XXX_C_VERSION  "5.1.20"
 
 #define NUMBER(arr)     (sizeof(arr) / sizeof(arr[0]))
@@ -9076,7 +9070,7 @@ aic7xxx_detect(Scsi_Host_Template *template)
       "aic7xxx: insmod or else it might trash certain memory areas.\n");
 #endif
 
-  template->proc_dir = &proc_scsi_aic7xxx;
+  template->proc_name = "aic7xxx";
   template->sg_tablesize = AIC7XXX_MAX_SG;
 
 

@@ -271,7 +271,6 @@
  #define IPS {                            \
     next : NULL,                          \
     module : NULL,                        \
-    proc_dir : NULL,                      \
     proc_info : NULL,                     \
     name : NULL,                          \
     detect : ips_detect,                  \

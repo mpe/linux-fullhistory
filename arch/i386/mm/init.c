@@ -171,9 +171,11 @@ int do_check_pgt_cache(int low, int high)
 	return freed;
 }
 
-/* NOTE: fixmap_init alloc all the fixmap pagetables contigous on the
-   physical space so we can cache the place of the first one and move
-   around without checking the pgd every time. */
+/*
+ * NOTE: pagetable_init alloc all the fixmap pagetables contiguous on the
+ * physical space so we can cache the place of the first one and move
+ * around without checking the pgd every time.
+ */
 
 #if CONFIG_HIGHMEM
 pte_t *kmap_pte;
@@ -268,6 +270,44 @@ void set_fixmap (enum fixed_addresses idx, unsigned long phys)
 	set_pte_phys (address,phys);
 }
 
+static void __init fixrange_init (unsigned long start, unsigned long end, pgd_t *pgd_base)
+{
+	pgd_t *pgd;
+	pmd_t *pmd;
+	pte_t *pte;
+	int i, j;
+
+	i = __pgd_offset(start);
+	j = __pmd_offset(start);
+	pgd = pgd_base + i;
+
+	for ( ; (i < PTRS_PER_PGD) && (start != end); pgd++, i++) {
+#if CONFIG_X86_PAE
+		if (pgd_none(*pgd)) {
+			pmd = (pmd_t *) alloc_bootmem_low_pages(PAGE_SIZE);
+			memset((void*)pmd, 0, PAGE_SIZE);
+			pgd_val(*pgd) = __pa(pmd) + 0x1;
+			if (pmd != pmd_offset(pgd, start))
+				BUG();
+		}
+		pmd = pmd_offset(pgd, start);
+#else
+		pmd = (pmd_t *)pgd;
+#endif
+		for (; (j < PTRS_PER_PMD) && start; pmd++, j++) {
+			if (pmd_none(*pmd)) {
+				pte = (pte_t *) alloc_bootmem_low_pages(PAGE_SIZE);
+				memset((void*)pte, 0, PAGE_SIZE);
+				pmd_val(*pmd) = _KERNPG_TABLE + __pa(pte);
+				if (pte != pte_offset(pmd, 0))
+					BUG();
+			}
+			start += PMD_SIZE;
+		}
+		j = 0;
+	}
+}
+
 static void __init pagetable_init(void)
 {
 	pgd_t *pgd, *pgd_base;
@@ -331,37 +371,21 @@ static void __init pagetable_init(void)
 	 * Fixed mappings, only the page table structure has to be
 	 * created - mappings will be set by set_fixmap():
 	 */
-
 	vaddr = __fix_to_virt(__end_of_fixed_addresses - 1) & PMD_MASK;
-	i = __pgd_offset(vaddr);
-	j = __pmd_offset(vaddr);
-	pgd = pgd_base + i;
+	fixrange_init(vaddr, 0, pgd_base);
 
-	for ( ; (i < PTRS_PER_PGD) && vaddr; pgd++, i++) {
-#if CONFIG_X86_PAE
-		if (pgd_none(*pgd)) {
-			pmd = (pmd_t *) alloc_bootmem_low_pages(PAGE_SIZE);
-			memset((void*)pmd, 0, PAGE_SIZE);
-			pgd_val(*pgd) = __pa(pmd) + 0x1;
-			if (pmd != pmd_offset(pgd, vaddr))
-				BUG();
-		}
-		pmd = pmd_offset(pgd, vaddr);
-#else
-		pmd = (pmd_t *)pgd;
+#if CONFIG_HIGHMEM
+	/*
+	 * Permanent kmaps:
+	 */
+	vaddr = PKMAP_BASE;
+	fixrange_init(vaddr, vaddr + 4*1024*1024, pgd_base);
+
+	pgd = swapper_pg_dir + __pgd_offset(vaddr);
+	pmd = pmd_offset(pgd, vaddr);
+	pte = pte_offset(pmd, vaddr);
+	pkmap_page_table = pte;
 #endif
-		for (; (j < PTRS_PER_PMD) && vaddr; pmd++, j++) {
-			if (pmd_none(*pmd)) {
-				pte = (pte_t *) alloc_bootmem_low_pages(PAGE_SIZE);
-				memset((void*)pte, 0, PAGE_SIZE);
-				pmd_val(*pmd) = _KERNPG_TABLE + __pa(pte);
-				if (pte != pte_offset(pmd, 0))
-					BUG();
-			}
-			vaddr += PMD_SIZE;
-		}
-		j = 0;
-	}
 
 #if CONFIG_X86_PAE
 	/*
@@ -389,6 +413,7 @@ void __init zap_low_mappings (void)
 	 */
 	for (i = 0; i < USER_PTRS_PER_PGD; i++)
 		pgd_val(swapper_pg_dir[i]) = 0;
+	flush_tlb_all();
 }
 
 /*
@@ -420,7 +445,7 @@ void __init paging_init(void)
 #endif
 
 #ifdef CONFIG_HIGHMEM
-	kmap_init(); /* run after fixmap_init */
+	kmap_init();
 #endif
 	{
 		unsigned int zones_size[3];
@@ -446,7 +471,6 @@ void __init test_wp_bit(void)
 /*
  * Ok, all PAE-capable CPUs are definitely handling the WP bit right.
  */
-//#ifndef CONFIG_X86_PAE
 	const unsigned long vaddr = PAGE_OFFSET;
 	pgd_t *pgd;
 	pmd_t *pmd;
@@ -483,7 +507,6 @@ void __init test_wp_bit(void)
 #endif
 	} else
 		printk(".\n");
-//#endif
 }
 
 static inline int page_is_ram (unsigned long pagenr)
@@ -577,7 +600,7 @@ void __init mem_init(void)
 void free_initmem(void)
 {
 	unsigned long addr;
-	
+
 	addr = (unsigned long)(&__init_begin);
 	for (; addr < (unsigned long)(&__init_end); addr += PAGE_SIZE) {
 		ClearPageReserved(mem_map + MAP_NR(addr));

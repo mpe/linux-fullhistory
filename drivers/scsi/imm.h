@@ -146,10 +146,7 @@ static int imm_init(int);
 static void imm_interrupt(void *);
 static int imm_out(int, char *, int);
 
-struct proc_dir_entry proc_scsi_imm =
-{PROC_SCSI_PPA, 3, "imm", S_IFDIR | S_IRUGO | S_IXUGO, 2};
 #else
-extern struct proc_dir_entry proc_scsi_imm;
 #define imm_release 0
 #endif
 
@@ -162,7 +159,7 @@ int imm_reset(Scsi_Cmnd *);
 int imm_proc_info(char *, char **, off_t, int, int, int);
 int imm_biosparam(Disk *, kdev_t, int *);
 
-#define IMM {	proc_dir:			&proc_scsi_imm,		\
+#define IMM {	proc_name:			"imm",			\
 		proc_info:			imm_proc_info,		\
 		name:				"Iomega VPI2 (imm) interface",\
 		detect:				imm_detect,		\

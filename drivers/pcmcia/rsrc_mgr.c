@@ -2,7 +2,7 @@
 
     Resource management routines
 
-    rsrc_mgr.c 1.73 1999/10/19 00:54:04
+    rsrc_mgr.c 1.76 1999/11/08 20:47:02
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -15,7 +15,7 @@
     rights and limitations under the License.
 
     The initial developer of the original code is David A. Hinds
-    <dhinds@hyper.stanford.edu>.  Portions created by David A. Hinds
+    <dhinds@pcmcia.sourceforge.org>.  Portions created by David A. Hinds
     are Copyright (C) 1999 David A. Hinds.  All Rights Reserved.
 
     Alternatively, the contents of this file may be used under the
@@ -100,6 +100,14 @@ static irq_info_t irq_table[NR_IRQS] = { { 0, 0, 0 }, /* etc */ };
 
 /*======================================================================
 
+    Linux resource management extensions
+    
+======================================================================*/
+
+#define check_io_region(b,n) (0)
+
+/*======================================================================
+
     These manage the internal databases of available resources.
     
 ======================================================================*/
@@ -180,7 +188,7 @@ static void do_io_probe(ioaddr_t base, ioaddr_t num)
     b = kmalloc(256, GFP_KERNEL);
     memset(b, 0, 256);
     for (i = base, most = 0; i < base+num; i += 8) {
-	if (check_region(i, 8))
+	if (check_region(i, 8) || check_io_region(i, 8))
 	    continue;
 	hole = inb(i);
 	for (j = 1; j < 8; j++)
@@ -193,7 +201,7 @@ static void do_io_probe(ioaddr_t base, ioaddr_t num)
 
     bad = any = 0;
     for (i = base; i < base+num; i += 8) {
-	if (check_region(i, 8))
+	if (check_region(i, 8) || check_io_region(i, 8))
 	    continue;
 	for (j = 0; j < 8; j++)
 	    if (inb(i+j) != most) break;
@@ -344,67 +352,59 @@ void validate_mem(int (*is_valid)(u_long), int (*do_cksum)(u_long),
 
     These find ranges of I/O ports or memory addresses that are not
     currently allocated by other devices.
+
+    The 'align' field should reflect the number of bits of address
+    that need to be preserved from the initial value of *base.  It
+    should be a power of two, greater than or equal to 'num'.  A value
+    of 0 means that all bits of *base are significant.  *base should
+    also be strictly less than 'align'.
     
 ======================================================================*/
 
-int find_io_region(ioaddr_t *base, ioaddr_t num, char *name)
+int find_io_region(ioaddr_t *base, ioaddr_t num, ioaddr_t align,
+		   char *name)
 {
-    ioaddr_t align;
+    ioaddr_t try;
     resource_map_t *m;
     
-    if (*base != 0) {
-	for (m = io_db.next; m != &io_db; m = m->next) {
-	    if ((*base >= m->base) && (*base+num <= m->base+m->num)) {
-		if (check_region(*base, num)) {
-		    return -1;
-		} else {
-		    request_region(*base, num, name);
-		    return 0;
-		}
-	    }
-	}
-	return -1;
-    }
-    
-    for (align = 1; align < num; align *= 2) ;
     for (m = io_db.next; m != &io_db; m = m->next) {
-	for (*base = (m->base + align - 1) & (~(align-1));
-	     *base+align <= m->base + m->num;
-	     *base += align)
-	    if (check_region(*base, num) == 0) {
-		request_region(*base, num, name);
+	try = (m->base & ~(align-1)) + *base;
+	for (try = (try >= m->base) ? try : try+align;
+	     (try >= m->base) && (try+num <= m->base+m->num);
+	     try += align) {
+	    if ((check_region(try, num) == 0) &&
+		(check_io_region(try, num) == 0)) {
+		*base = try;
+		request_region(try, num, name);
 		return 0;
 	    }
+	    if (!align) break;
+	}
     }
     return -1;
 } /* find_io_region */
 
-int find_mem_region(u_long *base, u_long num, char *name,
-		    u_long align, int force_low)
+int find_mem_region(u_long *base, u_long num, u_long align,
+		    int force_low, char *name)
 {
+    u_long try;
     resource_map_t *m;
 
-    if (*base != 0) {
-	for (m = mem_db.next; m != &mem_db; m = m->next) {
-	    if ((*base >= m->base) && (*base+num <= m->base+m->num))
-		if (check_mem_region(*base, num) == 0) {
-		    request_mem_region(*base, num, name);
-		    return 0;
-		}
-	}
-	return -1;
-    }
-    
     while (1) {
 	for (m = mem_db.next; m != &mem_db; m = m->next) {
 	    /* first pass >1MB, second pass <1MB */
 	    if ((force_low != 0) ^ (m->base < 0x100000)) continue;
-	    for (*base = (m->base + align - 1) & (~(align-1));
-		 *base+num <= m->base+m->num; *base += align)
-		if (check_mem_region(*base, num) == 0) {
-		    request_mem_region(*base, num, name);
+	    try = (m->base & ~(align-1)) + *base;
+	    for (try = (try >= m->base) ? try : try+align;
+		 (try >= m->base) && (try+num <= m->base+m->num);
+		 try += align) {
+		if (check_mem_region(try, num) == 0) {
+		    request_mem_region(try, num, name);
+		    *base = try;
 		    return 0;
 		}
+		if (!align) break;
+	    }
 	}
 	if (force_low) break;
 	force_low++;

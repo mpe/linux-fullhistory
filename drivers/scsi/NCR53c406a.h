@@ -26,7 +26,7 @@
  * Use SG_NONE if DMA mode is enabled!
  */
 #define NCR53c406a { \
-     proc_dir:          &proc_scsi_NCR53c406a   /* proc_dir */,         \
+     proc_name:         "NCR53c406a"		/* proc_name */,        \
      name:              "NCR53c406a"		/* name */,             \
      detect:            NCR53c406a_detect	/* detect */,           \
      info:              NCR53c406a_info		/* info */,             \
@@ -42,8 +42,6 @@
      unchecked_isa_dma: 1			/* unchecked_isa_dma */, \
      use_clustering:    ENABLE_CLUSTERING                               \
 }
-
-extern struct proc_dir_entry proc_scsi_NCR53c406a;
 
 int NCR53c406a_detect(Scsi_Host_Template *);
 const char* NCR53c406a_info(struct Scsi_Host *);

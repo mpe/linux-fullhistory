@@ -116,32 +116,16 @@
 #include <linux/module.h>
 #endif
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 #include <stdarg.h>
 #include <asm/irq.h>
 #include <linux/errno.h>
-#if LINUX_VERSION_CODE <= CVT_LINUX_VERSION(2,1,92)
-#include <linux/bios32.h>
-#endif
 #include <linux/delay.h>
 #include <linux/pci.h>
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,23)
 #include <linux/init.h>
-#endif
 #include <linux/blk.h>
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 #include <linux/spinlock.h>
-#endif
 #include <linux/stat.h>
 #include <linux/config.h>
-
-#else
-
-#include <linux/head.h>
-#include <linux/types.h>
-#include <asm/system.h>
-#include "../block/blk.h"
-#endif
 
 #include <linux/kernel.h>
 #include <linux/string.h>
@@ -169,15 +153,6 @@ char *i91uInitioName = "by Initio Corporation";
 char *i91uProductName = "INI-9X00U/UW";
 char *i91uVersion = "v1.03g";
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
-struct proc_dir_entry proc_scsi_ini9100u =
-{
-	PROC_SCSI_INI9100U, 7, "INI9100U",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2,
-	0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL
-};
-#endif
-
 #define TULSZ(sz)     (sizeof(sz) / sizeof(sz[0]))
 #define TUL_RDWORD(x,y)         (short)(inl((int)((ULONG)((ULONG)x+(UCHAR)y)) ))
 
@@ -195,7 +170,6 @@ static int setup_debug = 0;
 
 static char *setup_str = (char *) NULL;
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 static void i91u_intr0(int irq, void *dev_id, struct pt_regs *);
 static void i91u_intr1(int irq, void *dev_id, struct pt_regs *);
 static void i91u_intr2(int irq, void *dev_id, struct pt_regs *);
@@ -204,16 +178,6 @@ static void i91u_intr4(int irq, void *dev_id, struct pt_regs *);
 static void i91u_intr5(int irq, void *dev_id, struct pt_regs *);
 static void i91u_intr6(int irq, void *dev_id, struct pt_regs *);
 static void i91u_intr7(int irq, void *dev_id, struct pt_regs *);
-#else
-static void i91u_intr0(int irq, struct pt_regs *);
-static void i91u_intr1(int irq, struct pt_regs *);
-static void i91u_intr2(int irq, struct pt_regs *);
-static void i91u_intr3(int irq, struct pt_regs *);
-static void i91u_intr4(int irq, struct pt_regs *);
-static void i91u_intr5(int irq, struct pt_regs *);
-static void i91u_intr6(int irq, struct pt_regs *);
-static void i91u_intr7(int irq, struct pt_regs *);
-#endif
 
 static void i91u_panic(char *msg);
 
@@ -261,12 +225,7 @@ const PCI_ID i91u_pci_devices[] = {
 static void i91uAppendSRBToQueue(HCS * pHCB, Scsi_Cmnd * pSRB)
 {
 	ULONG flags;
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	spin_lock_irqsave(&(pHCB->pSRB_lock), flags);
-#else
-	save_flags(flags);
-	cli();
-#endif
 
 	pSRB->next = NULL;	/* Pointer to next              */
 
@@ -276,11 +235,7 @@ static void i91uAppendSRBToQueue(HCS * pHCB, Scsi_Cmnd * pSRB)
 		pHCB->pSRB_tail->next = pSRB;	/* Pointer to next              */
 	pHCB->pSRB_tail = pSRB;
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	spin_unlock_irqrestore(&(pHCB->pSRB_lock), flags);
-#else
-	restore_flags(flags);
-#endif
 	return;
 }
 
@@ -296,22 +251,13 @@ static Scsi_Cmnd *i91uPopSRBFromQueue(HCS * pHCB)
 	Scsi_Cmnd *pSRB;
 	ULONG flags;
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	spin_lock_irqsave(&(pHCB->pSRB_lock), flags);
-#else
-	save_flags(flags);
-	cli();
-#endif
 
 	if ((pSRB = pHCB->pSRB_head) != NULL) {
 		pHCB->pSRB_head = pHCB->pSRB_head->next;
 		pSRB->next = NULL;
 	}
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	spin_unlock_irqrestore(&(pHCB->pSRB_lock), flags);
-#else
-	restore_flags(flags);
-#endif
 
 	return (pSRB);
 }
@@ -331,7 +277,6 @@ void i91u_setup(char *str, int *ints)
 #endif
 }
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,93)
 int tul_NewReturnNumberOfAdapters(void)
 {
 	struct pci_dev *pDev = NULL;	/* Start from none              */
@@ -363,102 +308,6 @@ int tul_NewReturnNumberOfAdapters(void)
 	return (iAdapters);
 }
 
-#else				/* <01> */
-
-/*****************************************************************************
- Function name	: tul_ReturnNumberOfAdapters
- Description	: This function will scan PCI bus to get all Orchid card
- Input		: None.
- Output		: None.
- Return		: SUCCESSFUL	- Successful scan
-		  ohterwise	- No drives founded
-*****************************************************************************/
-int tul_ReturnNumberOfAdapters(void)
-{
-	unsigned int i, iAdapters;
-	unsigned int dRegValue;
-	unsigned short command;
-	WORD wBIOS, wBASE;
-	BYTE bPCIBusNum, bInterrupt, bPCIDeviceNum;
-
-	iAdapters = 0;
-	/*
-	 * PCI-bus probe.
-	 */
-	if (pcibios_present()) {
-#ifdef MMAPIO
-		unsigned long page_offset, base;
-#endif
-
-		int index;
-		unsigned char pci_bus, pci_devfn;
-
-		bPCIBusNum = 0;
-		bPCIDeviceNum = 0;
-		init_i91uAdapter_table();
-		for (i = 0; i < TULSZ(i91u_pci_devices); i++) {
-			index = 0;
-			while (!(pcibios_find_device(i91u_pci_devices[i].vendor_id,
-					   i91u_pci_devices[i].device_id,
-					 index++, &pci_bus, &pci_devfn)))
-			{
-				if (i == 2) {
-					   printk("i91u: The RAID controller is not supported by\n");
-					   printk("i91u:         this driver, we are ignoring it.\n");
-				} else {
-					/*
-					 * Read sundry information from PCI BIOS.
-					 */
-					bPCIBusNum = pci_bus;
-					bPCIDeviceNum = pci_devfn;
-					pcibios_read_config_dword(pci_bus, pci_devfn, PCI_BASE_ADDRESS_0,
-							     &dRegValue);
-					if (dRegValue == -1) {	/* Check return code            */
-						printk("\n\ri91u: tulip read configuration error.\n");
-						return (0);	/* Read configuration space error  */
-					}
-					/* <02> read from base address + 0x50 offset to get the wBIOS balue. */
-					wBASE = (WORD) dRegValue;
-
-					/* Now read the interrupt line  */
-					pcibios_read_config_dword(pci_bus, pci_devfn, PCI_INTERRUPT_LINE,
-							     &dRegValue);
-					bInterrupt = dRegValue & 0xFF;	/* Assign interrupt line      */
-					pcibios_read_config_word(pci_bus, pci_devfn, PCI_COMMAND, &command);
-					pcibios_write_config_word(pci_bus, pci_devfn, PCI_COMMAND,
-								  command | PCI_COMMAND_MASTER | PCI_COMMAND_IO);
-					wBASE &= PCI_BASE_ADDRESS_IO_MASK;
-					wBIOS = TUL_RDWORD(wBASE, 0x50);
-
-#ifdef MMAPIO
-					base = wBASE & PAGE_MASK;
-					page_offset = wBASE - base;
-
-					/*
-					 * replace the next line with this one if you are using 2.1.x:
-					 * temp_p->maddr = ioremap(base, page_offset + 256);
-					 */
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,0)
-					wBASE = ioremap(base, page_offset + 256);
-#else
-					wBASE = (WORD) vremap(base, page_offset + 256);
-#endif
-					if (wBASE) {
-						wBASE += page_offset;
-					}
-#endif
-
-					if (Addi91u_into_Adapter_table(wBIOS, wBASE, bInterrupt, bPCIBusNum,
-						   bPCIDeviceNum) == 0x0)
-						iAdapters++;
-				}
-			}	/* while(pdev=....) */
-		}		/* for PCI_DEVICES */
-	}			/* PCI BIOS present */
-	return (iAdapters);
-}
-#endif
-
 int i91u_detect(Scsi_Host_Template * tpnt)
 {
 	SCB *pSCB;
@@ -469,9 +318,7 @@ int i91u_detect(Scsi_Host_Template * tpnt)
 	ULONG dBiosAdr;
 	BYTE *pbBiosAdr;
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
-	tpnt->proc_dir = &proc_scsi_ini9100u;
-#endif
+	tpnt->proc_name = "INI9100U";
 
 	if (setup_called) {	/* Setup by i91u_setup          */
 		printk("i91u: processing commandline: ");
@@ -486,12 +333,8 @@ int i91u_detect(Scsi_Host_Template * tpnt)
 #endif
 	}
 	/* Get total number of adapters in the motherboard */
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,93)
 #ifdef CONFIG_PCI
 	iAdapters = tul_NewReturnNumberOfAdapters();
-#else
-	iAdapters = tul_ReturnNumberOfAdapters();
-#endif
 #else
 	iAdapters = tul_ReturnNumberOfAdapters();
 #endif
@@ -512,16 +355,11 @@ int i91u_detect(Scsi_Host_Template * tpnt)
 	memset((unsigned char *) &tul_hcs[0], 0, i);	/* Initialize tul_hcs 0 */
 	/* Get total memory needed for SCB */
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 	for (; tul_num_scb >= MAX_TARGETS + 3; tul_num_scb--) {
 		i = tul_num_ch * tul_num_scb * sizeof(SCB);
 		if ((tul_scb = (SCB *) kmalloc(i, GFP_ATOMIC | GFP_DMA)) != NULL)
 			break;
 	}
-#else
-	i = tul_num_ch * tul_num_scb * sizeof(SCB);
-	tul_scb = (SCB *) scsi_init_malloc(i, GFP_ATOMIC | GFP_DMA);
-#endif
 	if (tul_scb == NULL) {
 		printk("i91u: SCB memory allocation error\n");
 		return (0);
@@ -530,11 +368,7 @@ int i91u_detect(Scsi_Host_Template * tpnt)
 
 	pSCB = tul_scb;
 	for (i = 0; i < tul_num_ch * tul_num_scb; i++, pSCB++) {
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 		pSCB->SCB_SGPAddr = (U32) VIRT_TO_BUS(&pSCB->SCB_SGList[0]);
-#else
-		pSCB->SCB_SGPAddr = (U32) (&pSCB->SCB_SGList[0]);
-#endif
 	}
 
 	for (i = 0, pHCB = &tul_hcs[0];		/* Get pointer for control block */
@@ -542,9 +376,7 @@ int i91u_detect(Scsi_Host_Template * tpnt)
 	     i++, pHCB++) {
 		pHCB->pSRB_head = NULL;		/* Initial SRB save queue       */
 		pHCB->pSRB_tail = NULL;		/* Initial SRB save queue       */
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 		pHCB->pSRB_lock = SPIN_LOCK_UNLOCKED;	/* SRB save queue lock */
-#endif
 		request_region(pHCB->HCS_Base, 0x100, "i91u");	/* Register */
 
 		get_tulipPCIConfig(pHCB, i);
@@ -552,9 +384,7 @@ int i91u_detect(Scsi_Host_Template * tpnt)
 		dBiosAdr = pHCB->HCS_BIOS;
 		dBiosAdr = (dBiosAdr << 4);
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 		pbBiosAdr = phys_to_virt(dBiosAdr);
-#endif
 
 		init_tulip(pHCB, tul_scb + (i * tul_num_scb), tul_num_scb, pbBiosAdr, 10);
 		pHCB->HCS_Index = i;	/* 7/29/98 */
@@ -562,10 +392,8 @@ int i91u_detect(Scsi_Host_Template * tpnt)
 		hreg->io_port = pHCB->HCS_Base;
 		hreg->n_io_port = 0xff;
 		hreg->can_queue = tul_num_scb;	/* 03/05/98                      */
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 		hreg->unique_id = pHCB->HCS_Base;
 		hreg->max_id = pHCB->HCS_MaxTar;
-#endif
 		hreg->max_lun = 32;	/* 10/21/97                     */
 		hreg->irq = pHCB->HCS_Intr;
 		hreg->this_id = pHCB->HCS_SCSI_ID;	/* Assign HCS index           */
@@ -574,7 +402,6 @@ int i91u_detect(Scsi_Host_Template * tpnt)
 
 		/* Initial tulip chip           */
 		switch (i) {
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 		case 0:
 			ok = request_irq(pHCB->HCS_Intr, i91u_intr0, SA_INTERRUPT | SA_SHIRQ, "i91u", NULL);
 			break;
@@ -617,7 +444,6 @@ int i91u_detect(Scsi_Host_Template * tpnt)
 			}
 			i91u_panic("i91u: driver needs an IRQ.\n");
 		}
-#endif
 	}
 
 	tpnt->this_id = -1;
@@ -642,11 +468,7 @@ static void i91uBuildSCB(HCS * pHCB, SCB * pSCB, Scsi_Cmnd * SCpnt)
 	pSCB->SCB_Ident = SCpnt->lun | DISC_ALLOW;
 	pSCB->SCB_Flags |= SCF_SENSE;	/* Turn on auto request sense   */
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 	pSCB->SCB_SensePtr = (U32) VIRT_TO_BUS(SCpnt->sense_buffer);
-#else
-	pSCB->SCB_SensePtr = (U32) (SCpnt->sense_buffer);
-#endif
 
 	pSCB->SCB_SenseLen = SENSE_SIZE;
 
@@ -664,11 +486,7 @@ static void i91uBuildSCB(HCS * pHCB, SCB * pSCB, Scsi_Cmnd * SCpnt)
 	if (SCpnt->use_sg) {
 		pSrbSG = (struct scatterlist *) SCpnt->request_buffer;
 		if (SCpnt->use_sg == 1) {	/* If only one entry in the list *//*      treat it as regular I/O */
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 			pSCB->SCB_BufPtr = (U32) VIRT_TO_BUS(pSrbSG->address);
-#else
-			pSCB->SCB_BufPtr = (U32) (pSrbSG->address);
-#endif
 			TotalLen = pSrbSG->length;
 			pSCB->SCB_SGLen = 0;
 		} else {	/* Assign SG physical address   */
@@ -677,11 +495,7 @@ static void i91uBuildSCB(HCS * pHCB, SCB * pSCB, Scsi_Cmnd * SCpnt)
 			for (i = 0, TotalLen = 0, pSG = &pSCB->SCB_SGList[0];	/* 1.01g */
 			     i < SCpnt->use_sg;
 			     i++, pSG++, pSrbSG++) {
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 				pSG->SG_Ptr = (U32) VIRT_TO_BUS(pSrbSG->address);
-#else
-				pSG->SG_Ptr = (U32) (pSrbSG->address);
-#endif
 				TotalLen += pSG->SG_Len = pSrbSG->length;
 			}
 			pSCB->SCB_SGLen = i;
@@ -689,11 +503,7 @@ static void i91uBuildSCB(HCS * pHCB, SCB * pSCB, Scsi_Cmnd * SCpnt)
 		pSCB->SCB_BufLen = (SCpnt->request_bufflen > TotalLen) ?
 		    TotalLen : SCpnt->request_bufflen;
 	} else {		/* Non SG                       */
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 		pSCB->SCB_BufPtr = (U32) VIRT_TO_BUS(SCpnt->request_buffer);
-#else
-		pSCB->SCB_BufPtr = (U32) (SCpnt->request_buffer);
-#endif
 		pSCB->SCB_BufLen = SCpnt->request_bufflen;
 		pSCB->SCB_SGLen = 0;
 	}
@@ -768,11 +578,7 @@ int i91u_reset(Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 /*
  * Return the "logical geometry"
  */
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 int i91u_biosparam(Scsi_Disk * disk, kdev_t dev, int *info_array)
-#else
-int i91u_biosparam(Scsi_Disk * disk, int dev, int *info_array)
-#endif
 {
 	HCS *pHcb;		/* Point to Host adapter control block */
 	TCS *pTcb;
@@ -887,196 +693,116 @@ static void i91uSCBPost(BYTE * pHcb, BYTE * pScb)
 /*
  * Interrupts handler (main routine of the driver)
  */
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 static void i91u_intr0(int irqno, void *dev_id, struct pt_regs *regs)
-#else
-static void i91u_intr0(int irqno, struct pt_regs *regs)
-#endif
 {
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	unsigned long flags;
-#endif
 
 	if (tul_hcs[0].HCS_Intr != irqno)
 		return;
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	spin_lock_irqsave(&io_request_lock, flags);
-#endif
 
 	tul_isr(&tul_hcs[0]);
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	spin_unlock_irqrestore(&io_request_lock, flags);
-#endif
 }
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 static void i91u_intr1(int irqno, void *dev_id, struct pt_regs *regs)
-#else
-static void i91u_intr1(int irqno, struct pt_regs *regs)
-#endif
 {
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	unsigned long flags;
-#endif
 
 	if (tul_hcs[1].HCS_Intr != irqno)
 		return;
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	spin_lock_irqsave(&io_request_lock, flags);
-#endif
 
 	tul_isr(&tul_hcs[1]);
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	spin_unlock_irqrestore(&io_request_lock, flags);
-#endif
 }
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 static void i91u_intr2(int irqno, void *dev_id, struct pt_regs *regs)
-#else
-static void i91u_intr2(int irqno, struct pt_regs *regs)
-#endif
 {
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	unsigned long flags;
-#endif
 
 	if (tul_hcs[2].HCS_Intr != irqno)
 		return;
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	spin_lock_irqsave(&io_request_lock, flags);
-#endif
 
 	tul_isr(&tul_hcs[2]);
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	spin_unlock_irqrestore(&io_request_lock, flags);
-#endif
 }
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 static void i91u_intr3(int irqno, void *dev_id, struct pt_regs *regs)
-#else
-static void i91u_intr3(int irqno, struct pt_regs *regs)
-#endif
 {
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	unsigned long flags;
-#endif
 
 	if (tul_hcs[3].HCS_Intr != irqno)
 		return;
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	spin_lock_irqsave(&io_request_lock, flags);
-#endif
 
 	tul_isr(&tul_hcs[3]);
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	spin_unlock_irqrestore(&io_request_lock, flags);
-#endif
 }
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 static void i91u_intr4(int irqno, void *dev_id, struct pt_regs *regs)
-#else
-static void i91u_intr4(int irqno, struct pt_regs *regs)
-#endif
 {
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	unsigned long flags;
-#endif
 
 	if (tul_hcs[4].HCS_Intr != irqno)
 		return;
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	spin_lock_irqsave(&io_request_lock, flags);
-#endif
 
 	tul_isr(&tul_hcs[4]);
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	spin_unlock_irqrestore(&io_request_lock, flags);
-#endif
 }
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 static void i91u_intr5(int irqno, void *dev_id, struct pt_regs *regs)
-#else
-static void i91u_intr5(int irqno, struct pt_regs *regs)
-#endif
 {
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	unsigned long flags;
-#endif
 
 	if (tul_hcs[5].HCS_Intr != irqno)
 		return;
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	spin_lock_irqsave(&io_request_lock, flags);
-#endif
 
 	tul_isr(&tul_hcs[5]);
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	spin_unlock_irqrestore(&io_request_lock, flags);
-#endif
 }
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 static void i91u_intr6(int irqno, void *dev_id, struct pt_regs *regs)
-#else
-static void i91u_intr6(int irqno, struct pt_regs *regs)
-#endif
 {
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	unsigned long flags;
-#endif
 
 	if (tul_hcs[6].HCS_Intr != irqno)
 		return;
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	spin_lock_irqsave(&io_request_lock, flags);
-#endif
 
 	tul_isr(&tul_hcs[6]);
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	spin_unlock_irqrestore(&io_request_lock, flags);
-#endif
 }
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1,3,0)
 static void i91u_intr7(int irqno, void *dev_id, struct pt_regs *regs)
-#else
-static void i91u_intr7(int irqno, struct pt_regs *regs)
-#endif
 {
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	unsigned long flags;
-#endif
 
 	if (tul_hcs[7].HCS_Intr != irqno)
 		return;
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	spin_lock_irqsave(&io_request_lock, flags);
-#endif
 
 	tul_isr(&tul_hcs[7]);
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	spin_unlock_irqrestore(&io_request_lock, flags);
-#endif
 }
 
 /* 

@@ -2,9 +2,9 @@
 
     A PCMCIA ethernet driver for the 3com 3c589 card.
     
-    Copyright (C) 1999 David A. Hinds -- dhinds@hyper.stanford.edu
+    Copyright (C) 1999 David A. Hinds -- dhinds@pcmcia.sourceforge.org
 
-    3c589_cs.c 1.135 1999/10/07 20:14:54
+    3c589_cs.c 1.137 1999/11/08 20:46:17
 
     The network driver code is based on Donald Becker's 3c589 code:
     
@@ -115,7 +115,7 @@ static int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 static char *version =
-"3c589_cs.c 1.135 1999/10/07 20:14:54 (David Hinds)";
+"3c589_cs.c 1.137 1999/11/08 20:46:17 (David Hinds)";
 #else
 #define DEBUG(n, args...)
 #endif
@@ -226,7 +226,6 @@ static dev_link_t *tc589_attach(void)
     link->release.data = (u_long)link;
     link->io.NumPorts1 = 16;
     link->io.Attributes1 = IO_DATA_PATH_WIDTH_16;
-    link->io.IOAddrLines = 4;
     link->irq.Attributes = IRQ_TYPE_EXCLUSIVE | IRQ_HANDLE_PRESENT;
     link->irq.IRQInfo1 = IRQ_INFO2_VALID|IRQ_LEVEL_ID;
     if (irq_list[0] == -1)
@@ -392,6 +391,7 @@ static void tc589_config(dev_link_t *link)
     link->state |= DEV_CONFIG;
 
     /* For the 3c562, the base address must be xx00-xx7f */
+    link->io.IOAddrLines = 16;
     for (i = j = 0; j < 0x400; j += 0x10) {
 	if (multi && (j & 0x80)) continue;
 	link->io.BasePort1 = j ^ 0x300;

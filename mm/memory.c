@@ -808,7 +808,7 @@ static int do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	 * Ok, we need to copy. Oh, well..
 	 */
 	spin_unlock(&tsk->mm->page_table_lock);
-	new_page = get_free_highpage(GFP_HIGHUSER);
+	new_page = alloc_page(GFP_HIGHUSER);
 	if (!new_page)
 		return -1;
 	spin_lock(&tsk->mm->page_table_lock);
@@ -1025,7 +1025,7 @@ static int do_anonymous_page(struct task_struct * tsk, struct vm_area_struct * v
 	struct page *page = NULL;
 	pte_t entry = pte_wrprotect(mk_pte(ZERO_PAGE(addr), vma->vm_page_prot));
 	if (write_access) {
-		page = get_free_highpage(GFP_HIGHUSER);
+		page = alloc_page(GFP_HIGHUSER);
 		if (!page)
 			return -1;
 		if (PageHighMem(page))

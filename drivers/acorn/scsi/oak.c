@@ -71,10 +71,6 @@ static const card_ids oakscsi_cids[] = {
 	{ 0xffff, 0xffff }
 };
 
-static struct proc_dir_entry proc_scsi_oakscsi = {
-	PROC_SCSI_PAS16, 7, "oakscsi", S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 #define OAK_ADDRESS(card) (ecard_address((card), ECARD_MEMC, 0))
 #define OAK_IRQ(card)	  (IRQ_NONE)
 /*
@@ -95,7 +91,7 @@ int oakscsi_detect(Scsi_Host_Template * tpnt)
     int count = 0;
     struct Scsi_Host *instance;
 
-    tpnt->proc_dir = &proc_scsi_oakscsi;
+    tpnt->proc_name = "oakscsi";
 
     memset (ecs, 0, sizeof (ecs));
 

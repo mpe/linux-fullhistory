@@ -23,11 +23,6 @@
 
 #include<linux/stat.h>
 
-struct proc_dir_entry proc_scsi_bvme6000 = {
-    PROC_SCSI_BVME6000, 8, "BVME6000",
-    S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 extern ncr53c7xx_init (Scsi_Host_Template *tpnt, int board, int chip,
 			u32 base, int io_port, int irq, int dma,
 			long long options, int clock);
@@ -43,7 +38,7 @@ int bvme6000_scsi_detect(Scsi_Host_Template *tpnt)
     if (!MACH_IS_BVME6000)
 	return 0;
 
-    tpnt->proc_dir = &proc_scsi_bvme6000;
+    tpnt->proc_name = "BVME6000";
 
     options = OPTION_MEMORY_MAPPED|OPTION_DEBUG_TEST1|OPTION_INTFLY|OPTION_SYNCHRONOUS|OPTION_ALWAYS_SYNCHRONOUS|OPTION_DISCONNECT;
 

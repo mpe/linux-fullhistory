@@ -58,11 +58,6 @@
 
 static struct expansion_card *ecs[MAX_ECARDS];
 
-static struct proc_dir_entry proc_scsi_arxescsi = {
-	PROC_SCSI_QLOGICFAS, 6, "arxescsi",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 /*
  * Function: int arxescsi_dma_setup(host, SCpnt, direction, min_type)
  * Purpose : initialises DMA/PIO
@@ -223,7 +218,7 @@ int arxescsi_detect(Scsi_Host_Template *tpnt)
 	int count = 0;
 	struct Scsi_Host *host;
   
-	tpnt->proc_dir = &proc_scsi_arxescsi;
+	tpnt->proc_name = "arxescsi";
 	memset(ecs, 0, sizeof (ecs));
 
 	ecard_startfind();

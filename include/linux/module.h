@@ -287,5 +287,4 @@ __attribute__((section("__ksymtab"))) =			\
 #define EXPORT_NO_SYMBOLS
 #endif /* MODULE */
 
-extern unsigned long get_kcore_size(void);
 #endif /* _LINUX_MODULE_H */

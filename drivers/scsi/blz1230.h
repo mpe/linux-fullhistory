@@ -57,7 +57,7 @@ extern int esp_reset(Scsi_Cmnd *, unsigned int);
 extern int esp_proc_info(char *buffer, char **start, off_t offset, int length,
 			 int hostno, int inout);
 
-#define SCSI_BLZ1230      { proc_dir:		&proc_scsi_esp, \
+#define SCSI_BLZ1230      { proc_name:		"esp-blz1230", \
 			    proc_info:		esp_proc_info, \
 			    name:		"Blizzard1230 SCSI IV", \
 			    detect:		blz1230_esp_detect, \

@@ -20,11 +20,6 @@
 
 #include<linux/stat.h>
 
-struct proc_dir_entry proc_scsi_a3000 = {
-    PROC_SCSI_A3000, 5, "A3000",
-    S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 #define DMA(ptr) ((a3000_scsiregs *)((ptr)->base))
 #define HDATA(ptr) ((struct WD33C93_hostdata *)((ptr)->hostdata))
 
@@ -176,7 +171,7 @@ int __init a3000_detect(Scsi_Host_Template *tpnt)
     if  (!MACH_IS_AMIGA || !AMIGAHW_PRESENT(A3000_SCSI))
 	return 0;
 
-    tpnt->proc_dir = &proc_scsi_a3000;
+    tpnt->proc_name = "A3000";
     tpnt->proc_info = &wd33c93_proc_info;
 
     a3000_host = scsi_register (tpnt, sizeof(struct WD33C93_hostdata));

@@ -83,68 +83,16 @@ extern int i91u_queue(Scsi_Cmnd *, void (*done) (Scsi_Cmnd *));
 extern int i91u_abort(Scsi_Cmnd *);
 extern int i91u_reset(Scsi_Cmnd *, unsigned int);
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1, 3, 0)
 extern int i91u_biosparam(Scsi_Disk *, kdev_t, int *);	/*for linux v2.0 */
 extern struct proc_dir_entry proc_scsi_ini9100u;
-#else
-extern int i91u_biosparam(Disk *, int, int *);	/*for linux v1.13 */
 #endif
 
 #define i91u_REVID "Initio INI-9X00U/UW SCSI device driver; Revision: 1.03g"
 
-#if LINUX_VERSION_CODE < CVT_LINUX_VERSION(1, 3, 0)
-#define INI9100U	{ \
-		NULL, \
-		NULL, \
-		i91u_REVID, \
-		i91u_detect, \
-		NULL, \
-		NULL, \
-		i91u_command, \
-		i91u_queue, \
-		i91u_abort, \
-		i91u_reset, \
-		NULL, \
-		i91u_biosparam, \
-		1, \
-		7, \
-		SG_ALL, \
-		1, \
-		0, \
-		0, \
-		ENABLE_CLUSTERING \
-}
-#else
-
-#if LINUX_VERSION_CODE < CVT_LINUX_VERSION(2, 1, 75)
-#define INI9100U	{ \
-		NULL, \
-		NULL, \
-		&proc_scsi_ini9100u, \
-		NULL, \
-		i91u_REVID, \
-		i91u_detect, \
-		NULL, \
-		NULL, \
-		i91u_command, \
-		i91u_queue, \
-		i91u_abort, \
-		i91u_reset, \
-		NULL, \
-		i91u_biosparam, \
-		1, \
-		7, \
-		SG_ALL, \
-		1, \
-		0, \
-		0, \
-		ENABLE_CLUSTERING \
-}
-#else				/* Version >= 2.1.75 */
 #define INI9100U	{ \
 	next:		NULL,						\
 	module:		NULL,						\
-	proc_dir:	&proc_scsi_ini9100u, \
+	proc_name:	"INI9100U", \
 	proc_info:	NULL,				\
 	name:		i91u_REVID, \
 	detect:		i91u_detect, \
@@ -170,9 +118,6 @@ extern int i91u_biosparam(Disk *, int, int *);	/*for linux v1.13 */
 	use_clustering:	ENABLE_CLUSTERING, \
  use_new_eh_code: 0 \
 }
-#endif
-#endif
-
 
 #define VIRT_TO_BUS(i)  (unsigned int) virt_to_bus((void *)(i))
 #define ULONG   unsigned long
@@ -330,11 +275,9 @@ typedef struct Ha_Ctrl_Struc {
 	TCS HCS_Tcs[16];	/* 78 -> 16 Targets */
 	Scsi_Cmnd *pSRB_head;	/* SRB save queue header     */
 	Scsi_Cmnd *pSRB_tail;	/* SRB save queue tail       */
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	spinlock_t HCS_AvailLock;
 	spinlock_t HCS_SemaphLock;
 	spinlock_t pSRB_lock;
-#endif
 } HCS;
 
 /* Bit Definition for HCB_Flags */

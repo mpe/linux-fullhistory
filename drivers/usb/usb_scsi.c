@@ -108,7 +108,7 @@ struct us_data {
 
 static struct proc_dir_entry proc_usb_scsi =
 {
-    PROC_SCSI_USB_SCSI,
+    PROC_SCSI_USB_SCSI,		/* It's currently b0rken */
     0,
     NULL,
     S_IFDIR | S_IRUGO | S_IXUGO,

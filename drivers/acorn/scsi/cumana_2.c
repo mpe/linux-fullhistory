@@ -84,11 +84,6 @@ MODULE_PARM_DESC(term, "SCSI bus termination");
  */
 int term[MAX_ECARDS] = { 1, 1, 1, 1, 1, 1, 1, 1 };
 
-static struct proc_dir_entry proc_scsi_cumanascsi_2 = {
-	PROC_SCSI_QLOGICFAS, 6, "cumanascs2",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 /* Prototype: void cumanascsi_2_irqenable(ec, irqnr)
  * Purpose  : Enable interrupts on Cumana SCSI 2 card
  * Params   : ec    - expansion card structure
@@ -329,7 +324,7 @@ cumanascsi_2_detect(Scsi_Host_Template *tpnt)
 	int count = 0;
 	struct Scsi_Host *host;
   
-	tpnt->proc_dir = &proc_scsi_cumanascsi_2;
+	tpnt->proc_name = "cumanascs2";
 	memset(ecs, 0, sizeof (ecs));
 
 	ecard_startfind();

@@ -2,7 +2,7 @@
   
     Cardbus device configuration
     
-    cardbus.c 1.61 1999/10/20 22:36:57
+    cardbus.c 1.63 1999/11/08 20:47:02
 
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -15,7 +15,7 @@
     rights and limitations under the License.
 
     The initial developer of the original code is David A. Hinds
-    <dhinds@hyper.stanford.edu>.  Portions created by David A. Hinds
+    <dhinds@pcmcia.sourceforge.org>.  Portions created by David A. Hinds
     are Copyright (C) 1999 David A. Hinds.  All Rights Reserved.
 
     Alternatively, the contents of this file may be used under the
@@ -190,7 +190,7 @@ int cb_setup_cis_mem(socket_info_t *s, int space)
     sz &= PCI_BASE_ADDRESS_MEM_MASK;
     sz = FIND_FIRST_BIT(sz);
     if (sz < PAGE_SIZE) sz = PAGE_SIZE;
-    if (find_mem_region(&base, sz, "cb_enabler", sz, 0) != 0) {
+    if (find_mem_region(&base, sz, sz, 0, "cb_enabler") != 0) {
 	printk(KERN_NOTICE "cs: could not allocate %dK memory for"
 	       " CardBus socket %d\n", sz/1024, s->sock);
 	return CS_OUT_OF_RESOURCE;
@@ -413,7 +413,8 @@ int cb_config(socket_info_t *s)
     s->io[0].NumPorts = num[B_IO];
     s->io[0].BasePort = 0;
     if (num[B_IO]) {
-	if (find_io_region(&s->io[0].BasePort, num[B_IO], name) != 0) {
+	if (find_io_region(&s->io[0].BasePort, num[B_IO],
+			   num[B_IO], name) != 0) {
 	    printk(KERN_NOTICE "cs: could not allocate %d IO ports for"
 		   " CardBus socket %d\n", num[B_IO], s->sock);
 	    goto failed;
@@ -423,8 +424,8 @@ int cb_config(socket_info_t *s)
     s->win[0].size = num[B_M1];
     s->win[0].base = 0;
     if (num[B_M1]) {
-	if (find_mem_region(&s->win[0].base, num[B_M1],
-			    name, num[B_M1], 0) != 0) {
+	if (find_mem_region(&s->win[0].base, num[B_M1], num[B_M1],
+			    0, name) != 0) {
 	    printk(KERN_NOTICE "cs: could not allocate %dK memory for"
 		   " CardBus socket %d\n", num[B_M1]/1024, s->sock);
 	    goto failed;
@@ -434,8 +435,8 @@ int cb_config(socket_info_t *s)
     s->win[1].size = num[B_M2];
     s->win[1].base = 0;
     if (num[B_M2]) {
-	if (find_mem_region(&s->win[1].base, num[B_M2],
-			    name, num[B_M2], 0) != 0) {
+	if (find_mem_region(&s->win[1].base, num[B_M2], num[B_M2],
+			    0, name) != 0) {
 	    printk(KERN_NOTICE "cs: could not allocate %dK memory for"
 		   " CardBus socket %d\n", num[B_M2]/1024, s->sock);
 	    goto failed;

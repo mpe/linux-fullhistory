@@ -625,8 +625,6 @@ struct NCR_ESP {
 #define ESP_TICK(ccf, cycle)  ((7682 * (ccf) * (cycle) / 1000))
 
 
-extern struct proc_dir_entry proc_scsi_esp;
-
 /* UGLY, UGLY, UGLY! */
 extern int nesps, esps_in_use, esps_running;
 

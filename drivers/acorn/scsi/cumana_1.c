@@ -69,10 +69,6 @@ static const card_ids cumanascsi_cids[] = {
 	{ 0xffff, 0xffff }
 };
 
-static struct proc_dir_entry proc_scsi_cumana1 = {
-	PROC_SCSI_T128, 12, "CumanaSCSI-1", S_IFDIR | S_IRUGO, S_IXUGO, 2
-};
-
 /*
  * Function : cumanascsi_setup(char *str, int *ints)
  *
@@ -106,7 +102,7 @@ int cumanascsi_detect(Scsi_Host_Template * tpnt)
     int count = 0;
     struct Scsi_Host *instance;
 
-    tpnt->proc_dir = &proc_scsi_cumana1;
+    tpnt->proc_name = "CumanaSCSI-1";
 
     memset (ecs, 0, sizeof (ecs));
 

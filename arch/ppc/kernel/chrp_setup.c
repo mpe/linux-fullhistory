@@ -11,7 +11,6 @@
  */
 
 #include <linux/config.h>
-#include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -34,6 +33,7 @@
 #include <linux/openpic.h>
 #include <linux/version.h>
 #include <linux/adb.h>
+#include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/ide.h>
 

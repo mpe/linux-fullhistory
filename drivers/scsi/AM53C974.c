@@ -390,12 +390,6 @@ override_t overrides[7] =
 {
 	{-1, 0, 0, 0},};	/* LILO overrides */
 
-struct proc_dir_entry proc_scsi_am53c974 =
-{
-	PROC_SCSI_AM53C974, 8, "am53c974",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 #ifdef AM53C974_DEBUG
 static int deb_stop = 1;
 
@@ -664,7 +658,7 @@ int __init AM53C974_detect(Scsi_Host_Template * tpnt)
 {
 	int count = 0;		/* number of boards detected */
 
-	tpnt->proc_dir = &proc_scsi_am53c974;
+	tpnt->proc_name = "am53c974";
 
 #if defined (CONFIG_PCI)
 	if (pci_present())

@@ -7,8 +7,6 @@
 #ifndef _MESH_H
 #define _MESH_H
 
-extern struct proc_dir_entry proc_scsi_mesh;
-
 int mesh_detect(Scsi_Host_Template *);
 int mesh_command(Scsi_Cmnd *);
 int mesh_queue(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
@@ -16,7 +14,7 @@ int mesh_abort(Scsi_Cmnd *);
 int mesh_reset(Scsi_Cmnd *, unsigned int);
 
 #define SCSI_MESH {					\
-	proc_dir:	&proc_scsi_mesh,		\
+	proc_name:	"mesh",				\
 	name:		"MESH",				\
 	detect:		mesh_detect,			\
 	command:	mesh_command,			\

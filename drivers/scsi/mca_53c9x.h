@@ -31,7 +31,7 @@ extern int esp_proc_info(char *buffer, char **start, off_t offset, int length,
 			 int hostno, int inout);
 
 
-#define MCA_53C9X         { proc_dir:		&proc_scsi_esp, \
+#define MCA_53C9X         { proc_name:		"esp", \
 			    name:		"NCR 53c9x SCSI", \
 			    detect:		mca_esp_detect, \
 			    release:		mca_esp_release, \

@@ -16,6 +16,8 @@
 #include <linux/mca.h>
 #endif
 #include <linux/module.h>
+#include <linux/init.h>
+#include <linux/isapnp.h>
 
 #include "sound_config.h"
 #include "soundmodule.h"
@@ -138,6 +140,7 @@ int pas2 = 0;		/* Set pas2=1 to load this as support for pas2 */
 int support = 0;	/* Set support to load this as a support module */
 int sm_games = 0;	/* Mixer - see sb_mixer.c */
 int acer = 0;		/* Do acer notebook init */
+int isapnp = 0;
 
 MODULE_PARM(io, "i");
 MODULE_PARM(irq, "i");
@@ -151,8 +154,64 @@ MODULE_PARM(trix, "i");
 MODULE_PARM(pas2, "i");
 MODULE_PARM(sm_games, "i");
 MODULE_PARM(esstype, "i");
+MODULE_PARM(isapnp, "i");
 
 void *smw_free = NULL;
+
+static struct { unsigned short vendor, function; char *name; }
+isapnp_sb_list[] __initdata = {
+	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0001), "Sound Blaster 16" },
+	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031), "Sound Blaster 16" },
+	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0041), "Sound Blaster 16" },
+	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0042), "Sound Blaster 16" },
+	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0043), "Sound Blaster 16" },
+	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0044), "Sound Blaster 16" },
+	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0045), "Sound Blaster 16" },
+	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1868), "ESS 1868" },
+	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x8611), "ESS 1868" },
+	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1869), "ESS 1869" },
+	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1878), "ESS 1878" },
+	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1879), "ESS 1879" },
+	{0,}
+};
+
+
+static int __init sb_probe_isapnp(struct address_info *hw_config, struct address_info *mpu_config) {
+	int i;
+	
+	for (i = 0; isapnp_sb_list[i].vendor != 0; i++) {
+		struct pci_dev *idev = NULL;
+			
+		while ((idev = isapnp_find_dev(NULL,
+					       isapnp_sb_list[i].vendor,
+					       isapnp_sb_list[i].function,
+					       idev))) {
+			idev->prepare(idev);
+			idev->activate(idev);
+			if (!idev->resource[0].start || check_region(idev->resource[0].start,16))
+			  continue;
+			hw_config->io_base = idev->resource[0].start;
+			hw_config->irq = idev->irq_resource[0].start;
+			hw_config->dma = idev->dma_resource[0].start;
+			hw_config->dma2 = idev->dma_resource[1].start;
+#ifdef CONFIG_MIDI
+			if (isapnp_sb_list[i].vendor == ISAPNP_VENDOR('E','S','S'))
+			  mpu_config->io_base = idev->resource[2].start;
+			else
+			  mpu_config->io_base = idev->resource[1].start;
+#endif
+			break;
+		}
+		if (!idev)
+		  continue;
+		printk(KERN_INFO "ISAPnP reports %s at i/o %#x, irq %d, dma %d, %d\n",
+		       isapnp_sb_list[i].name,
+		       hw_config->io_base, hw_config->irq, hw_config->dma,
+		       hw_config->dma2);
+		return 0;
+	}
+	return -ENODEV;
+}
 
 int init_module(void)
 {
@@ -160,15 +219,26 @@ int init_module(void)
 
 	if (mad16 == 0 && trix == 0 && pas2 == 0 && support == 0)
 	{
-		if (io == -1 || dma == -1 || irq == -1)
+		if (isapnp == 1)
 		{
-			printk(KERN_ERR "sb_card: I/O, IRQ, and DMA are mandatory\n");
-			return -EINVAL;
+			if (sb_probe_isapnp(&config, &config_mpu)<0)
+			{
+				printk(KERN_ERR "sb_card: No ISAPnP cards found\n");
+				return -EINVAL;
+			}
+		} 
+		else 
+		{
+			if (io == -1 || dma == -1 || irq == -1)
+			{
+				printk(KERN_ERR "sb_card: I/O, IRQ, and DMA are mandatory\n");
+				return -EINVAL;
+			}
+			config.io_base = io;
+			config.irq = irq;
+			config.dma = dma;
+			config.dma2 = dma16;
 		}
-		config.io_base = io;
-		config.irq = irq;
-		config.dma = dma;
-		config.dma2 = dma16;
 		config.card_subtype = type;
 
 		if (!probe_sb(&config))
@@ -178,7 +248,8 @@ int init_module(void)
 		if(config.slots[0]==-1)
 			return -ENODEV;
 #ifdef CONFIG_MIDI
-		config_mpu.io_base = mpu_io;
+		if (isapnp == 0) 
+		  config_mpu.io_base = mpu_io;
 		if (probe_sbmpu(&config_mpu))
 			sbmpu = 1;
 		if (sbmpu)

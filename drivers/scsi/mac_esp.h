@@ -21,7 +21,7 @@ extern int esp_abort(Scsi_Cmnd *);
 extern int esp_reset(Scsi_Cmnd *, unsigned int);
 
 
-#define SCSI_MAC_ESP      { proc_dir:		&proc_scsi_esp, \
+#define SCSI_MAC_ESP      { proc_name:		"esp", \
 			    name:		"Mac 53C9x SCSI", \
 			    detect:		mac_esp_detect, \
 			    release:		NULL, \

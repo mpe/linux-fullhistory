@@ -328,7 +328,7 @@ int ufs_read_cylinder_structures (struct super_block * sb) {
 	 * on the device. 
 	 */
 	size = uspi->s_cssize;
-	blks = howmany(size, uspi->s_fsize);
+	blks = (size + uspi->s_fsize - 1) >> uspi->s_fshift;
 	base = space = kmalloc(size, GFP_KERNEL);
 	if (!base)
 		goto failed; 
@@ -405,7 +405,7 @@ void ufs_put_cylinder_structures (struct super_block * sb) {
 	uspi = sb->u.ufs_sb.s_uspi;
 
 	size = uspi->s_cssize;
-	blks = howmany(size, uspi->s_fsize);
+	blks = (size + uspi->s_fsize - 1) >> uspi->s_fshift;
 	base = space = (char*) sb->u.ufs_sb.s_csp[0];
 	for (i = 0; i < blks; i += uspi->s_fpb) {
 		size = uspi->s_bsize;

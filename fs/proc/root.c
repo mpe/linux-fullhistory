@@ -437,9 +437,6 @@ static struct proc_dir_entry proc_root_ppc_htab = {
 	0, 8, "ppc_htab",
 	S_IFREG | S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH, 1, 0, 0,
 	0, &proc_ppc_htab_inode_operations,
-	NULL, NULL,                		/* get_info, fill_inode */
-	NULL,					/* next */
-	NULL, NULL				/* parent, subdir */
 };
 #endif
 

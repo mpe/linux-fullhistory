@@ -59,8 +59,8 @@
  *		Linus
  */
 
-#define DIRECT_BLOCK howmany (inode->i_size, uspi->s_bsize)
-#define DIRECT_FRAGMENT howmany (inode->i_size, uspi->s_fsize)
+#define DIRECT_BLOCK ((inode->i_size + uspi->s_bsize - 1) >> uspi->s_bshift)
+#define DIRECT_FRAGMENT ((inode->i_size + uspi->s_fsize - 1) >> uspi->s_fshift)
 
 #define DATA_BUFFER_USED(bh) \
 	(atomic_read(&bh->b_count) || buffer_locked(bh))
@@ -312,7 +312,7 @@ static int ufs_trunc_dindirect (struct inode * inode, unsigned offset, u32 * p)
 	uspi = sb->u.ufs_sb.s_uspi;
 
 	dindirect_block = (DIRECT_BLOCK > offset) 
-		? ((DIRECT_BLOCK - offset) / uspi->s_apb) : 0;
+		? ((DIRECT_BLOCK - offset) >> uspi->s_apbshift) : 0;
 	retry = 0;
 	
 	tmp = SWAB32(*p);
@@ -382,7 +382,7 @@ static int ufs_trunc_tindirect (struct inode * inode)
 	retry = 0;
 	
 	tindirect_block = (DIRECT_BLOCK > (UFS_NDADDR + uspi->s_apb + uspi->s_2apb))
-		? ((DIRECT_BLOCK - UFS_NDADDR - uspi->s_apb - uspi->s_2apb) / uspi->s_2apb) : 0;
+		? ((DIRECT_BLOCK - UFS_NDADDR - uspi->s_apb - uspi->s_2apb) >> uspi->s_2apbshift) : 0;
 	p = inode->u.ufs_i.i_u1.i_data + UFS_TIND_BLOCK;
 	if (!(tmp = SWAB32(*p)))
 		return 0;
@@ -471,7 +471,7 @@ void ufs_truncate (struct inode * inode)
 		}
 	}
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
-	inode->u.ufs_i.i_lastfrag = howmany (inode->i_size, uspi->s_fsize);
+	inode->u.ufs_i.i_lastfrag = DIRECT_FRAGMENT;
 	mark_inode_dirty(inode);
 	UFSD(("EXIT\n"))
 }

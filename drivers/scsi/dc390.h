@@ -34,11 +34,10 @@ static int DC390_release(struct Scsi_Host *);
 # define DC390_release NULL
 #endif
 
-extern struct proc_dir_entry DC390_proc_scsi_tmscsim;
 extern int DC390_proc_info(char *buffer, char **start, off_t offset, int length, int hostno, int inout);
 
 #define DC390_T    {					\
-   proc_dir:       &DC390_proc_scsi_tmscsim,		\
+   proc_name:      "tmscsim",				\
    proc_info:      DC390_proc_info,			\
    name:           DC390_BANNER " V" DC390_VERSION,	\
    detect:         DC390_detect,			\

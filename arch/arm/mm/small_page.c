@@ -33,7 +33,7 @@
  *  second level page tables on 32-bit ARMs.
  *
  * Theory:
- *  We "misuse" the Linux memory management system.  We use __get_pages
+ *  We "misuse" the Linux memory management system.  We use alloc_page
  *  to allocate a page and then mark it as reserved.  The Linux memory
  *  management system will then ignore the "offset", "next_hash" and
  *  "pprev_hash" entries in the mem_map for this page.
@@ -119,7 +119,7 @@ again:
 	return page_address(page) + (offset << order->shift);
 
 need_new_page:
-	page = __get_pages(priority, 0);
+	page = alloc_page(priority);
 	if (!order->queue) {
 		if (!page)
 			goto no_page;

@@ -21,7 +21,7 @@ extern int esp_proc_info(char *buffer, char **start, off_t offset, int length,
 			 int hostno, int inout);
 
 #define SCSI_JAZZ_ESP {                                         \
-		proc_dir:       &proc_scsi_esp,			\
+		proc_name:      "esp",				\
 		proc_info:      &esp_proc_info,			\
 		name:           "ESP 100/100a/200",		\
 		detect:         jazz_esp_detect,		\

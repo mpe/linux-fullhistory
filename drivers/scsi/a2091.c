@@ -21,11 +21,6 @@
 
 #include<linux/stat.h>
 
-struct proc_dir_entry proc_scsi_a2091 = {
-    PROC_SCSI_A2091, 5, "A2091",
-    S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 #define DMA(ptr) ((a2091_scsiregs *)((ptr)->base))
 #define HDATA(ptr) ((struct WD33C93_hostdata *)((ptr)->hostdata))
 
@@ -201,7 +196,7 @@ int __init a2091_detect(Scsi_Host_Template *tpnt)
 	return 0;
     called = 1;
 
-    tpnt->proc_dir = &proc_scsi_a2091;
+    tpnt->proc_name = "A2091";
     tpnt->proc_info = &wd33c93_proc_info;
 
     while ((key = zorro_find(ZORRO_PROD_CBM_A590_A2091_1, 0, 0)) ||

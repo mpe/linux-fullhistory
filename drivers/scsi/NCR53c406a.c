@@ -212,10 +212,6 @@ static volatile int internal_done_flag = 0;
 static volatile int internal_done_errcode = 0;
 static char info_msg[256];
 
-struct proc_dir_entry proc_scsi_NCR53c406a = {
-    PROC_SCSI_NCR53C406A, 7, "NCR53c406a",
-    S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
 /* ================================================================= */
 
 /* possible BIOS locations */
@@ -571,7 +567,7 @@ NCR53c406a_detect(Scsi_Host_Template * tpnt){
 #endif USE_DMA 
     
     tpnt->present = 1;
-    tpnt->proc_dir = &proc_scsi_NCR53c406a;
+    tpnt->proc_name = "NCR53c406a";
     
     shpnt = scsi_register(tpnt, 0);
     shpnt->irq = irq_level;

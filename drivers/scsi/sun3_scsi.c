@@ -115,10 +115,6 @@ static int polled_scsi_on = 0;
 
 #define	AFTER_RESET_DELAY	(HZ/2)
 
-static struct proc_dir_entry proc_scsi_sun3_5380 = {
-	PROC_SCSI_MAC, 13, "Sun3 5380 SCSI", S_IFDIR | S_IRUGO, S_IXUGO, 2
-};
-
 static volatile unsigned char *sun3_scsi_regp = IOBASE_SUN3_SCSI;
 /*
 static volatile unsigned char *sun3_scsi_drq  = NULL;
@@ -179,7 +175,7 @@ int sun3scsi_detect(Scsi_Host_Template * tpnt)
 
 printk("sun3scsi_detect(0x%p)\n",tpnt);
 
-	tpnt->proc_dir = &proc_scsi_sun3_5380;
+	tpnt->proc_name = "Sun3 5380 SCSI"; /* Could you spell "ewww..."? */
 
 	/* setup variables */
 	tpnt->can_queue =

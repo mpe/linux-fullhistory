@@ -57,10 +57,6 @@
 #include "../../scsi/NCR5380.h"
 #include "../../scsi/constants.h"
 
-static struct proc_dir_entry proc_scsi_ecoscsi = {
-	PROC_SCSI_GENERIC_NCR5380, 7, "ecoscsi", S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 static char ecoscsi_read(struct Scsi_Host *instance, int reg)
 {
   int iobase = instance->io_port;
@@ -104,7 +100,7 @@ int ecoscsi_detect(Scsi_Host_Template * tpnt)
 {
     struct Scsi_Host *instance;
 
-    tpnt->proc_dir = &proc_scsi_ecoscsi;
+    tpnt->proc_name = "ecoscsi";
 
     instance = scsi_register (tpnt, sizeof(struct NCR5380_hostdata));
     instance->io_port = 0x80ce8000;

@@ -1,5 +1,5 @@
 /*
- * cs_internal.h 1.43 1999/09/07 15:19:04
+ * cs_internal.h 1.46 1999/11/08 20:46:49
  *
  * The contents of this file are subject to the Mozilla Public License
  * Version 1.1 (the "License"); you may not use this file except in
@@ -12,7 +12,7 @@
  * limitations under the License. 
  *
  * The initial developer of the original code is David A. Hinds
- * <dhinds@hyper.stanford.edu>.  Portions created by David A. Hinds
+ * <dhinds@pcmcia.sourceforge.org>.  Portions created by David A. Hinds
  *  are Copyright (C) 1999 David A. Hinds.  All Rights Reserved.
  */
 
@@ -241,9 +241,10 @@ int copy_memory(memory_handle_t handle, copy_op_t *req);
 /* In rsrc_mgr */
 void validate_mem(int (*is_valid)(u_long), int (*do_cksum)(u_long),
 		  int force_low);
-int find_io_region(ioaddr_t *base, ioaddr_t num, char *name);
-int find_mem_region(u_long *base, u_long num, char *name,
-		    u_long align, int force_low);
+int find_io_region(ioaddr_t *base, ioaddr_t num, ioaddr_t align,
+		   char *name);
+int find_mem_region(u_long *base, u_long num, u_long align,
+		    int force_low, char *name);
 int try_irq(u_int Attributes, int irq, int specific);
 void undo_irq(u_int Attributes, int irq);
 int adjust_resource_info(client_handle_t handle, adjust_t *adj);
@@ -252,15 +253,6 @@ int proc_read_io(char *buf, char **start, off_t pos,
 		 int count, int *eof, void *data);
 int proc_read_mem(char *buf, char **start, off_t pos,
 		  int count, int *eof, void *data);
-
-/* in pnp components */
-int proc_read_irq(char *buf, char **start, off_t pos,
-		  int count, int *eof, void *data);
-void pnp_bios_init(void);
-void pnp_proc_init(void);
-void pnp_proc_done(void);
-void pnp_rsrc_init(void);
-void pnp_rsrc_done(void);
 
 #define MAX_SOCK 8
 extern socket_t sockets;

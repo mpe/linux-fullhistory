@@ -172,12 +172,6 @@ int sim710_debug = 0;
 #define offsetof(t, m)      ((size_t) (&((t *)0)->m))
 #endif
 
-
-struct proc_dir_entry proc_scsi_sim710 = {
-    PROC_SCSI_SIM710, 6, "sim710",
-    S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 #define STATE_INITIALISED	0
 #define STATE_HALTED		1
 #define STATE_IDLE		2
@@ -1441,7 +1435,7 @@ sim710_detect(Scsi_Host_Template * tpnt)
     DEB(DEB_ANY, printk("sim710: hostdata %d bytes, size %d, order %d\n",
 	sizeof(struct sim710_hostdata), size, order));
 
-    tpnt->proc_dir = &proc_scsi_sim710;
+    tpnt->proc_name = "sim710";
 
     for(indx = 0; indx < no_of_boards; indx++) {
 	host = scsi_register(tpnt, 4);

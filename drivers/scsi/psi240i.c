@@ -46,9 +46,6 @@
 
 #include<linux/stat.h>
 
-struct proc_dir_entry Proc_Scsi_Psi240i =
-	{ PROC_SCSI_PSI240I, 7, "psi240i", S_IFDIR | S_IRUGO | S_IXUGO, 2 };
-
 //#define DEBUG 1
 
 #ifdef DEBUG

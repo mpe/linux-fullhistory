@@ -119,6 +119,7 @@ struct class_info clas_info [] =
 	{USB_CLASS_HUB,			"hub"},
 	{USB_CLASS_PRINTER,		"print"},
 	{USB_CLASS_MASS_STORAGE,	"stor."},
+	{USB_CLASS_DATA,		"data"},
 	{USB_CLASS_VENDOR_SPEC,		"vend."},
 	{-1,				"unk."}		/* leave as last */
 };

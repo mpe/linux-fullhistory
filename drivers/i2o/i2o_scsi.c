@@ -59,10 +59,6 @@
 
 #define MAXHOSTS 32
 
-struct proc_dir_entry proc_scsi_i2o_scsi = {
-	PROC_SCSI_I2O, 8, "i2o_scsi", S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 struct i2o_scsi_host
 {
 	struct i2o_controller *controller;

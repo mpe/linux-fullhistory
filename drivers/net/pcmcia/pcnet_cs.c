@@ -9,9 +9,9 @@
     Conrad ethernet card, and the Kingston KNE-PCM/x in shared-memory
     mode.  It will also handle the Socket EA card in either mode.
 
-    Copyright (C) 1999 David A. Hinds -- dhinds@hyper.stanford.edu
+    Copyright (C) 1999 David A. Hinds -- dhinds@pcmcia.sourceforge.org
 
-    pcnet_cs.c 1.101 1999/10/21 00:56:19
+    pcnet_cs.c 1.106 1999/11/09 21:53:13
     
     The network driver code is based on Donald Becker's NE2000 code:
 
@@ -72,7 +72,7 @@ static int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 static char *version =
-"pcnet_cs.c 1.101 1999/10/21 00:56:19 (David Hinds)";
+"pcnet_cs.c 1.106 1999/11/09 21:53:13 (David Hinds)";
 #else
 #define DEBUG(n, args...)
 #endif
@@ -187,6 +187,8 @@ static hw_info_t hw_info[] = {
       HAS_MISC_REG | HAS_IBM_MISC },
     { /* Kansai KLA-PCM/T */ 0x0ff0, 0x00, 0x60, 0x87,
       HAS_MISC_REG | HAS_IBM_MISC },
+    { /* NSC DP83903 */ 0x0374, 0x08, 0x00, 0x17,
+      HAS_MISC_REG | HAS_IBM_MISC },
     { /* NSC DP83903 */ 0x0374, 0x00, 0xc0, 0xa8,
       HAS_MISC_REG | HAS_IBM_MISC },
     { /* NSC DP83903 */ 0x0374, 0x00, 0xa0, 0xb0,
@@ -229,7 +231,7 @@ typedef struct pcnet_dev_t {
     u_long		flags;
     caddr_t		base;
     struct timer_list	watchdog;
-    int			stale;
+    int			stale, link;
     u_short		fast_poll;
 } pcnet_dev_t;
 
@@ -578,6 +580,7 @@ static int try_io_port(dev_link_t *link)
 	link->io.Attributes2 = IO_DATA_PATH_WIDTH_16;
     }
     if (link->io.BasePort1 == 0) {
+	link->io.IOAddrLines = 16;
 	for (j = 0; j < 0x400; j += 0x20) {
 	    link->io.BasePort1 = j ^ 0x300;
 	    link->io.BasePort2 = (j ^ 0x300) + 0x10;
@@ -656,6 +659,7 @@ static void pcnet_config(dev_link_t *link)
 		     (cfg->mem.win[0].len >= 0x4000));
 	link->io.BasePort1 = io->win[i].base;
 	link->io.NumPorts1 = io->win[i].len;
+	link->io.IOAddrLines = io->flags & CISTPL_IO_LINES_MASK;
 	if (link->io.NumPorts1 + link->io.NumPorts2 >= 32) {
 	    last_ret = try_io_port(link);
 	    if (last_ret == CS_SUCCESS) break;
@@ -681,10 +685,14 @@ static void pcnet_config(dev_link_t *link)
     CS_CHECK(RequestConfiguration, handle, &link->conf);
     dev->irq = link->irq.AssignedIRQ;
     dev->base_addr = link->io.BasePort1;
-    if ((if_port == 1) || (if_port == 2))
-	dev->if_port = if_port;
-    else
-	printk(KERN_NOTICE "pcnet_cs: invalid if_port requested\n");
+    if (info->flags & HAS_MISC_REG) {
+	if ((if_port == 1) || (if_port == 2))
+	    dev->if_port = if_port;
+	else
+	    printk(KERN_NOTICE "pcnet_cs: invalid if_port requested\n");
+    } else {
+	dev->if_port = 0;
+    }
     dev->tbusy = 0;
     if (register_netdev(dev) != 0) {
 	printk(KERN_NOTICE "pcnet_cs: register_netdev() failed\n");
@@ -885,19 +893,11 @@ static int pcnet_open(struct net_device *dev)
     link->open++;
     MOD_INC_USE_COUNT;
 
-    /* For D-Link EtherFast, wait for something(?) to happen */
-    if (info->flags & IS_DL10019A) {
-	int i;
-	for (i = 0; i < 20; i++) {
-	    if ((inb(dev->base_addr+0x1c) & 0x01) == 0) break;
-	    __set_current_state(TASK_UNINTERRUPTIBLE);
-	    schedule_timeout(HZ/10);
-	}
-    }
-    
     set_misc_reg(dev);
     request_irq(dev->irq, ei_irq_wrapper, SA_SHIRQ, dev_info, dev);
 
+    /* Start by assuming the link is bad */
+    info->link = 1;
     info->watchdog.function = &ei_watchdog;
     info->watchdog.data = (u_long)info;
     info->watchdog.expires = jiffies + HZ;
@@ -969,17 +969,14 @@ static int set_config(struct net_device *dev, struct ifmap *map)
 {
     pcnet_dev_t *info = (pcnet_dev_t *)dev;
     if ((map->port != (u_char)(-1)) && (map->port != dev->if_port)) {
-	if ((map->port != 0) && !(info->flags & HAS_MISC_REG)) {
-	    printk(KERN_NOTICE "%s: transceiver selection not "
-		   "implemented\n", dev->name);
+	if (!(info->flags & HAS_MISC_REG))
+	    return -EOPNOTSUPP;
+	else if ((map->port < 1) || (map->port > 2))
 	    return -EINVAL;
-	}
-	if ((map->port == 1) || (map->port == 2)) {
-	    dev->if_port = map->port;
-	    printk(KERN_INFO "%s: switched to %s port\n",
-		   dev->name, if_names[dev->if_port]);
-	} else
-	    return -EINVAL;
+	dev->if_port = map->port;
+	printk(KERN_INFO "%s: switched to %s port\n",
+	       dev->name, if_names[dev->if_port]);
+	NS8390_init(dev, 1);
     }
     return 0;
 }
@@ -1015,6 +1012,17 @@ static void ei_watchdog(u_long arg)
 	info->watchdog.expires = jiffies + 1;
 	add_timer(&info->watchdog);
 	return;
+    }
+
+    if (info->flags & IS_DL10019A) {
+	int state = inb(dev->base_addr+0x1c) & 0x01;
+	if (state != info->link) {
+	    printk(KERN_INFO "%s: %s link beat\n", dev->name,
+		   (state) ? "lost" : "found");
+	    if (!state)
+		NS8390_init(dev, 1);
+	    info->link = state;
+	}
     }
 
 reschedule:

@@ -59,7 +59,4 @@ ifdef CONFIG_X86_VISWS_APIC
 O_OBJS += visws_apic.o
 endif
 
-head.o: head.S
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -c $*.S -o $*.o
-
 include $(TOPDIR)/Rules.make

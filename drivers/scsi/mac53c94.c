@@ -26,11 +26,6 @@
 #include "hosts.h"
 #include "mac53c94.h"
 
-struct proc_dir_entry proc_scsi_mac53c94 = {
-	PROC_SCSI_53C94, 5, "53c94",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 enum fsc_phase {
 	idle,
 	selecting,

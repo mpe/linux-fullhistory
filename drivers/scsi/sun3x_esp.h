@@ -18,12 +18,10 @@ extern int esp_reset(Scsi_Cmnd *, unsigned int);
 extern int esp_proc_info(char *buffer, char **start, off_t offset, int length,
 			 int hostno, int inout);
 
-extern struct proc_dir_entry proc_scsi_esp;
-
 #define DMA_PORTS_P        (dregs->cond_reg & DMA_INT_ENAB)
 
 #define SCSI_SUN3X_ESP {                                        \
-		proc_dir:       &proc_scsi_esp,			\
+		proc_name:      "esp",  			\
 		proc_info:      &esp_proc_info,			\
 		name:           "Sun ESP 100/100a/200",		\
 		detect:         sun3x_esp_detect,		\

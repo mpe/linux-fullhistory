@@ -14,6 +14,7 @@
 #include <linux/locks.h>
 #include <linux/limits.h>
 #include <linux/config.h>
+#include <linux/module.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -77,11 +78,8 @@ static void proc_delete_inode(struct inode *inode)
 		return;
 
 	if (de) {
-		/*
-		 * Call the fill_inode hook to release module counts.
-		 */
-		if (de->fill_inode)
-			de->fill_inode(inode, 0);
+		if (de->owner)
+			__MOD_DEC_USE_COUNT(de->owner);
 		de_put(de);
 	}
 }
@@ -178,12 +176,8 @@ printk("proc_iget: using deleted entry %s, count=%d\n", de->name, de->count);
 			inode->i_op = de->ops;
 		if (de->nlink)
 			inode->i_nlink = de->nlink;
-		/*
-		 * The fill_inode routine should use this call 
-		 * to increment module counts, if necessary.
-		 */
-		if (de->fill_inode)
-			de->fill_inode(inode, 1);
+		if (de->owner)
+			__MOD_INC_USE_COUNT(de->owner);
 	}
 	/*
 	 * Fixup the root inode's nlink value

@@ -14,9 +14,6 @@
 #include <linux/types.h>
 #include <linux/kdev_t.h>
 
-extern struct proc_dir_entry proc_scsi_wd7000;
-
-
 int wd7000_set_info (char *buffer, int length, struct Scsi_Host *host);
 int wd7000_proc_info (char *buffer, char **start, off_t offset, int length, int hostno, int inout);
 int wd7000_detect (Scsi_Host_Template *);
@@ -45,7 +42,7 @@ int wd7000_biosparam (Disk *, kdev_t, int *);
 #define WD7000_SG   16
 
 #define WD7000 {						\
-	proc_dir:		&proc_scsi_wd7000,		\
+	proc_name:		"wd7000",			\
 	proc_info:		wd7000_proc_info,		\
 	name:			"Western Digital WD-7000",	\
 	detect:			wd7000_detect,			\

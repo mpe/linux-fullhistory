@@ -9,6 +9,7 @@
  * High loaded stuff by Hans Lermen & Werner Almesberger, Feb. 1996
  */
 
+#include <linux/mm.h>
 #include <asm/segment.h>
 #include <asm/io.h>
 

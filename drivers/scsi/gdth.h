@@ -814,9 +814,7 @@ typedef struct {
 
 /* PCI resources */
 typedef struct {
-#if LINUX_VERSION_CODE >= 0x02015C
     struct pci_dev      *pdev;
-#endif
     ushort              device_id;              /* device ID (0,..,9) */
     unchar              bus;                    /* PCI bus */
     unchar              device_fn;              /* PCI device/function no. */
@@ -888,9 +886,7 @@ typedef struct {
     gdth_cpar_str       cpar;                   /* controller cache par. */
     gdth_bfeat_str      bfeat;                  /* controller features */
     gdth_binfo_str      binfo;                  /* controller info */
-#if LINUX_VERSION_CODE >= 0x02015F
     spinlock_t          smp_lock;
-#endif
 } gdth_ha_str;
 
 /* structure for scsi_register(), SCSI bus != 0 */
@@ -971,22 +967,16 @@ int gdth_release(struct Scsi_Host *);
 int gdth_command(Scsi_Cmnd *);
 int gdth_queuecommand(Scsi_Cmnd *,void (*done)(Scsi_Cmnd *));
 int gdth_abort(Scsi_Cmnd *);
-#if LINUX_VERSION_CODE >= 0x010346
 int gdth_reset(Scsi_Cmnd *, unsigned int reset_flags);
-#else
-int gdth_reset(Scsi_Cmnd *);
-#endif
 const char *gdth_info(struct Scsi_Host *);
 
-#if LINUX_VERSION_CODE >= 0x02015F
 int gdth_bios_param(Disk *,kdev_t,int *);
-extern struct proc_dir_entry proc_scsi_gdth;
 int gdth_proc_info(char *,char **,off_t,int,int,int);
 int gdth_eh_abort(Scsi_Cmnd *scp);
 int gdth_eh_device_reset(Scsi_Cmnd *scp);
 int gdth_eh_bus_reset(Scsi_Cmnd *scp);
 int gdth_eh_host_reset(Scsi_Cmnd *scp);
-#define GDTH { proc_dir:        &proc_scsi_gdth,                 \
+#define GDTH { proc_name:       "gdth",                          \
                proc_info:       gdth_proc_info,                  \
                name:            "GDT SCSI Disk Array Controller",\
                detect:          gdth_detect,                     \
@@ -1009,51 +999,5 @@ int gdth_eh_host_reset(Scsi_Cmnd *scp);
                unchecked_isa_dma: 1,                             \
                use_clustering:  ENABLE_CLUSTERING,               \
                use_new_eh_code: 1       /* use new error code */ }    
-#elif LINUX_VERSION_CODE >= 0x010300
-int gdth_bios_param(Disk *,kdev_t,int *);
-extern struct proc_dir_entry proc_scsi_gdth;
-int gdth_proc_info(char *,char **,off_t,int,int,int);
-#define GDTH { NULL, NULL,                              \
-                   &proc_scsi_gdth,                     \
-                   gdth_proc_info,                      \
-                   "GDT SCSI Disk Array Controller",    \
-                   gdth_detect,                         \
-                   gdth_release,                        \
-                   gdth_info,                           \
-                   gdth_command,                        \
-                   gdth_queuecommand,                   \
-                   gdth_abort,                          \
-                   gdth_reset,                          \
-                   NULL,                                \
-                   gdth_bios_param,                     \
-                   GDTH_MAXCMDS,                        \
-                   -1,                                  \
-                   GDTH_MAXSG,                          \
-                   GDTH_MAXC_P_L,                       \
-                   0,                                   \
-                   1,                                   \
-                   ENABLE_CLUSTERING}
-#else
-int gdth_bios_param(Disk *,int,int *);
-#define GDTH { NULL, NULL,                              \
-                   "GDT SCSI Disk Array Controller",    \
-                   gdth_detect,                         \
-                   gdth_release,                        \
-                   gdth_info,                           \
-                   gdth_command,                        \
-                   gdth_queuecommand,                   \
-                   gdth_abort,                          \
-                   gdth_reset,                          \
-                   NULL,                                \
-                   gdth_bios_param,                     \
-                   GDTH_MAXCMDS,                        \
-                   -1,                                  \
-                   GDTH_MAXSG,                          \
-                   GDTH_MAXC_P_L,                       \
-                   0,                                   \
-                   1,                                   \
-                   ENABLE_CLUSTERING}
-#endif
-
 #endif
 

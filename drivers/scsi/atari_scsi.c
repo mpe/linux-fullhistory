@@ -112,11 +112,6 @@
 
 #include <linux/stat.h>
 
-struct proc_dir_entry proc_scsi_atari = {
-    PROC_SCSI_ATARI, 5, "Atari",
-    S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 #define	IS_A_TT()	ATARIHW_PRESENT(TT_SCSI)
 
 #define	SCSI_DMA_WRITE_P(elt,val)				\
@@ -616,7 +611,7 @@ int atari_scsi_detect (Scsi_Host_Template *host)
 	    called)
 		return( 0 );
 
-	host->proc_dir = &proc_scsi_atari;
+	host->proc_name = "Atari";
 
 	atari_scsi_reg_read  = IS_A_TT() ? atari_scsi_tt_reg_read :
 					   atari_scsi_falcon_reg_read;

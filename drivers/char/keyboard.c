@@ -159,6 +159,7 @@ static int sysrq_pressed;
 int sysrq_enabled = 1;
 #endif
 
+static struct acpi_dev_info acpi_kbd_info = {ACPI_SYS_DEV, ACPI_KBC_HID, NULL};
 static struct acpi_dev *acpi_kbd = NULL;
 
 /*
@@ -928,7 +929,7 @@ int __init kbd_init(void)
 	init_bh(KEYBOARD_BH, kbd_bh);
 	mark_bh(KEYBOARD_BH);
 	
-	acpi_kbd = acpi_register(ACPI_SYS_DEV, 0, ACPI_KBC_HID, NULL);
+	acpi_kbd = acpi_register(&acpi_kbd_info, 0);
 
 	return 0;
 }

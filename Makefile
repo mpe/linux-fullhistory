@@ -166,6 +166,10 @@ ifeq ($(CONFIG_PCMCIA_NETCARD),y)
 DRIVERS := $(DRIVERS) drivers/net/pcmcia/pcmcia_net.o
 endif
 
+ifeq ($(CONFIG_PCMCIA_CHRDEV),y)
+DRIVERS := $(DRIVERS) drivers/char/pcmcia/pcmcia_char.o
+endif
+
 ifdef CONFIG_DIO
 DRIVERS := $(DRIVERS) drivers/dio/dio.a
 endif
@@ -362,6 +366,8 @@ modules_install:
 	if [ -f IRDA_MODULES  ]; then inst_mod IRDA_MODULES  net;   fi; \
 	if [ -f USB_MODULES   ]; then inst_mod USB_MODULES   usb;   fi; \
 	if [ -f PCMCIA_MODULES ]; then inst_mod PCMCIA_MODULES pcmcia; fi; \
+	if [ -f PCMCIA_NET_MODULES ]; then inst_mod PCMCIA_NET_MODULES pcmcia; fi; \
+	if [ -f PCMCIA_CHAR_MODULES ]; then inst_mod PCMCIA_CHAR_MODULES pcmcia; fi; \
 	\
 	ls *.o > $$MODLIB/.allmods; \
 	echo $$MODULES | tr ' ' '\n' | sort | comm -23 $$MODLIB/.allmods - > $$MODLIB/.misc; \

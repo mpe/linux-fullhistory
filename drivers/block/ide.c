@@ -307,6 +307,7 @@ int drive_is_flashcard (ide_drive_t *drive)
 	struct hd_driveid *id = drive->id;
 
 	if (drive->removable && id != NULL) {
+		if (id->config == 0x848a) return 1;	/* CompactFlash */
 		if (!strncmp(id->model, "KODAK ATA_FLASH", 15)	/* Kodak */
 		 || !strncmp(id->model, "Hitachi CV", 10)	/* Hitachi */
 		 || !strncmp(id->model, "SunDisk SDCFB", 13)	/* SunDisk */

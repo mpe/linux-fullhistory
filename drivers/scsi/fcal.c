@@ -68,11 +68,6 @@ static unsigned char target2alpa[] = {
 0x25, 0x23, 0x1f, 0x1e, 0x1d, 0x1b, 0x18, 0x17, 0x10, 0x0f, 0x08, 0x04, 0x02, 0x01, 0x00
 };
 
-struct proc_dir_entry proc_scsi_fcal = {
-	PROC_SCSI_FCAL, 4, "fcal",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 static int fcal_encode_addr(Scsi_Cmnd *SCpnt, u16 *addr, fc_channel *fc, fcp_cmnd *fcmd);
 
 static void fcal_select_queue_depths(struct Scsi_Host *host, Scsi_Device *devlist)
@@ -97,7 +92,7 @@ int __init fcal_detect(Scsi_Host_Template *tpnt)
 	int fcalcount;
 	int i;
 
-	tpnt->proc_dir = &proc_scsi_fcal;
+	tpnt->proc_name = "fcal";
 	fcalcount = 0;
 	for_each_online_fc_channel(fc)
 		if (fc->posmap)

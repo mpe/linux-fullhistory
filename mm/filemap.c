@@ -21,10 +21,12 @@
 #include <linux/swapctl.h>
 #include <linux/slab.h>
 #include <linux/init.h>
-#include <linux/highmem.h>
+#include <linux/mm.h>
 
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
+
+#include <linux/highmem.h>
 
 /*
  * Shared mappings implemented 30.11.1994. It's not fully working yet,
@@ -1142,12 +1144,10 @@ static int file_read_actor(read_descriptor_t * desc, struct page *page, unsigned
 
 	if (size > count)
 		size = count;
-	/*
-	 * FIXME: We cannot yet sleep with kmaps held.
-	 */
-	kaddr = kmap(page, KM_READ);
-	left = __copy_to_user(desc->buf, (void *)(kaddr+offset), size);
-	kunmap(kaddr, KM_READ);
+
+	kaddr = kmap(page);
+	left = __copy_to_user(desc->buf, (void *)(kaddr + offset), size);
+	kunmap(page);
 	
 	if (left) {
 		size -= left;
@@ -1200,9 +1200,11 @@ static int file_send_actor(read_descriptor_t * desc, struct page *page, unsigned
 		size = count;
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
-	kaddr = kmap(page, KM_READ);
-	written = file->f_op->write(file, (char *)kaddr + offset, size, &file->f_pos);
-	kunmap(kaddr, KM_READ);
+
+	kaddr = kmap(page);
+	written = file->f_op->write(file, (char *)kaddr + offset,
+						 size, &file->f_pos);
+	kunmap(page);
 	set_fs(old_fs);
 	if (written < 0) {
 		desc->error = written;
@@ -1347,8 +1349,6 @@ success:
 		struct page *new_page = page_cache_alloc();
 
 		if (new_page) {
-			if (PageHighMem(new_page) || PageHighMem(old_page))
-				BUG();
 			copy_highpage(new_page, old_page);
 			flush_page_to_ram(new_page);
 		} else
@@ -1530,8 +1530,6 @@ static inline int filemap_sync_pte(pte_t * ptep, struct vm_area_struct *vma,
 			return 0;
 		}
 	}
-	if (PageHighMem(page))
-		BUG();
 	pgoff = (address - vma->vm_start) >> PAGE_CACHE_SHIFT;
 	pgoff += vma->vm_pgoff;
 	if (page->index != pgoff) {

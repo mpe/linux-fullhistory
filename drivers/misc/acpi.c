@@ -70,6 +70,11 @@ static int acpi_do_event(ctl_table *ctl,
 			 struct file *file,
 			 void *buffer,
 			 size_t *len);
+static int acpi_do_sleep_wake(ctl_table *ctl,
+			      int write,
+			      struct file *file,
+			      void *buffer,
+			      size_t *len);
 
 DECLARE_WAIT_QUEUE_HEAD(acpi_idle_wait);
 
@@ -152,6 +157,11 @@ static struct ctl_table acpi_table[] =
 	{ACPI_S5_SLP_TYP, "s5_slp_typ",
 	 &acpi_slp_typ[5], sizeof(acpi_slp_typ[5]),
 	 0600, NULL, &acpi_do_ulong},
+
+#if 0
+	{123, "sleep", (void*) 1, 0, 0600, NULL, &acpi_do_sleep_wake},
+	{124, "wake", NULL, 0, 0600, NULL, &acpi_do_sleep_wake},
+#endif
 
 	{0}
 };
@@ -325,15 +335,23 @@ static struct acpi_table *__init acpi_map_table(u32 addr)
 	if (addr) {
 		// map table header to determine size
 		table = (struct acpi_table *)
-			ioremap_nocache((unsigned long) addr,
-					sizeof(struct acpi_table));
+			ioremap((unsigned long) addr,
+				sizeof(struct acpi_table));
 		if (table) {
 			unsigned long table_size = table->length;
 			iounmap(table);
 			// remap entire table
 			table = (struct acpi_table *)
-				ioremap_nocache((unsigned long) addr,
-						table_size);
+				ioremap((unsigned long) addr, table_size);
+		}
+
+		if (!table) {
+			/* ioremap is a pain, it returns NULL if the
+			 * table starts within mapped physical memory.
+			 * Hopefully, no table straddles a mapped/unmapped
+			 * physical memory boundary, ugh
+			 */
+			table = (struct acpi_table*) phys_to_virt(addr);
 		}
 	}
 	return table;
@@ -344,6 +362,7 @@ static struct acpi_table *__init acpi_map_table(u32 addr)
  */
 static void acpi_unmap_table(struct acpi_table *table)
 {
+	// iounmap ignores addresses within physical memory
 	if (table)
 		iounmap(table);
 }
@@ -386,8 +405,14 @@ static int __init acpi_find_tables(void)
 
 	// fetch RSDT from RSDP
 	rsdt = acpi_map_table(rsdp->rsdt);
-	if (!rsdt || rsdt->signature != ACPI_RSDT_SIG) {
-		printk(KERN_ERR "ACPI: missing RSDT\n");
+	if (!rsdt) {
+		printk(KERN_ERR "ACPI: missing RSDT at 0x%p\n",
+		       (void*) rsdp->rsdt);
+		return -ENODEV;
+	}
+	else if (rsdt->signature != ACPI_RSDT_SIG) {
+		printk(KERN_ERR "ACPI: bad RSDT at 0x%p (%08x)\n",
+		       (void*) rsdp->rsdt, (unsigned) rsdt->signature);
 		acpi_unmap_table(rsdt);
 		return -ENODEV;
 	}
@@ -402,9 +427,15 @@ static int __init acpi_find_tables(void)
 			acpi_facp_addr = *rsdt_entry;
 			acpi_dsdt_addr = acpi_facp->dsdt;
 
+			// map FACS if it exists
 			if (acpi_facp->facs) {
-				acpi_facs = (struct acpi_facs*)
-					acpi_map_table(acpi_facp->facs);
+				dt = acpi_map_table(acpi_facp->facs);
+				if (dt && dt->signature == ACPI_FACS_SIG) {
+					acpi_facs = (struct acpi_facs*) dt;
+				}
+				else {
+					acpi_unmap_table(dt);
+				}
 			}
 		}
 		else {
@@ -627,6 +658,34 @@ static void acpi_idle_handler(void)
 		sleep_level = 2;
 	else
 		sleep_level = 1;
+}
+
+/*
+ * Put all devices into specified D-state
+ */
+static int acpi_enter_dx(acpi_dstate_t state)
+{
+	int status = 0;
+	struct list_head *i = acpi_devs.next;
+
+	while (i != &acpi_devs)	{
+		struct acpi_dev *dev = list_entry(i, struct acpi_dev, entry);
+		if (dev->state != state) {
+			int dev_status = 0;
+			if (dev->info.transition)
+				dev_status = dev->info.transition(dev, state);
+			if (!dev_status) {
+				// put hardware into D-state
+				dev->state = state;
+			}
+			if (dev_status)
+				status = dev_status;
+		}
+
+		i = i->next;
+	}
+
+	return status;
 }
 
 /*
@@ -909,6 +968,35 @@ static int acpi_do_event(ctl_table *ctl,
 }
 
 /*
+ * Sleep or wake system
+ */
+static int acpi_do_sleep_wake(ctl_table *ctl,
+			      int write,
+			      struct file *file,
+			      void *buffer,
+			      size_t *len)
+{
+	if (!write) {
+		if (file->f_pos) {
+			*len = 0;
+			return 0;
+		}
+	}
+	else
+	{
+		// just shutdown some devices for now
+		if (ctl->data) {
+			acpi_enter_dx(ACPI_D3);
+		}
+		else {
+			acpi_enter_dx(ACPI_D0);
+		}
+	}
+	file->f_pos += *len;
+	return 0;
+}
+
+/*
  * Initialize and enable ACPI
  */
 static int __init acpi_init(void)
@@ -976,24 +1064,22 @@ static void __exit acpi_exit(void)
 /*
  * Register a device with the ACPI subsystem
  */
-struct acpi_dev* acpi_register(acpi_dev_t type,
-			       unsigned long adr,
-			       acpi_hid_t hid,
-			       acpi_transition trans)
+struct acpi_dev* acpi_register(struct acpi_dev_info *info, unsigned long adr)
 {
-	struct acpi_dev *dev = kmalloc(sizeof(struct acpi_dev), GFP_KERNEL);
-	if (dev) {
-		unsigned long flags;
-
-		memset(dev, 0, sizeof(*dev));
-		dev->type = type;
-		dev->adr = adr;
-		dev->hid = hid;
-		dev->transition = trans;
-
-		spin_lock_irqsave(&acpi_devs_lock, flags);
-		list_add(&dev->entry, &acpi_devs);
-		spin_unlock_irqrestore(&acpi_devs_lock, flags);
+	struct acpi_dev *dev = NULL;
+	if (info) {
+		dev = kmalloc(sizeof(struct acpi_dev), GFP_KERNEL);
+		if (dev) {
+			unsigned long flags;
+			
+			memset(dev, 0, sizeof(*dev));
+			memcpy(&dev->info, info, sizeof(dev->info));
+			dev->adr = adr;
+			
+			spin_lock_irqsave(&acpi_devs_lock, flags);
+			list_add(&dev->entry, &acpi_devs);
+			spin_unlock_irqrestore(&acpi_devs_lock, flags);
+		}
 	}
 	return dev;
 }

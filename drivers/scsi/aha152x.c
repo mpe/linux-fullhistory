@@ -352,12 +352,6 @@
 
 #include <scsi/scsicam.h>
 
-struct proc_dir_entry proc_scsi_aha152x =
-{
-	PROC_SCSI_AHA152X, 7, "aha152x",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 /* DEFINES */
 
 /* For PCMCIA cards, always use AUTOCONF */
@@ -716,8 +710,7 @@ static int getphase(struct Scsi_Host *shpnt)
 	}
 }
 
-#if 0
-/* called from init/main.c */
+#ifdef PCMCIA
 void aha152x_setup(char *str, int *ints)
 {
 	if (setup_count > 2)
@@ -745,8 +738,9 @@ void aha152x_setup(char *str, int *ints)
 	} else
 		setup_count++;
 }
-#endif
+#endif /* PCMCIA */
 
+#ifndef MODULE
 static int __init do_aha152x_setup (char * str)
 {
 	if (setup_count > 2) {
@@ -765,10 +759,9 @@ controllers\n");
 	return 1;
 }
 
-#ifndef MODULE
 __setup("aha152x=",do_aha152x_setup);
 #endif
-
+ 
 /*
  * Test, if port_base is valid.
  */
@@ -843,7 +836,7 @@ int aha152x_detect(Scsi_Host_Template * tpnt)
 	aha152x_config conf;
 #endif
 
-	tpnt->proc_dir = &proc_scsi_aha152x;
+	tpnt->proc_name = "aha152x";
 
 	for (i = 0; i < IRQS; i++)
 		aha152x_host[i] = (struct Scsi_Host *) NULL;

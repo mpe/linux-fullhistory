@@ -173,11 +173,6 @@ enum {
 /*5*/	do_intr_end
 };
 
-struct proc_dir_entry proc_scsi_esp = {
-	PROC_SCSI_ESP, 3, "esp",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 /* The master ring of all esp hosts we are managing in this driver. */
 static struct Sparc_ESP *espchain;
 static int esps_running = 0;

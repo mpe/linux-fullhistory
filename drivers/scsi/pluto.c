@@ -39,11 +39,6 @@
 #define PLND(x)
 #endif
 
-struct proc_dir_entry proc_scsi_pluto = {
-	PROC_SCSI_PLUTO, 5, "pluto",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 static struct ctrl_inquiry {
 	struct Scsi_Host host;
 	struct pluto pluto;
@@ -98,7 +93,7 @@ int __init pluto_detect(Scsi_Host_Template *tpnt)
 	fc_channel *fc;
 	Scsi_Device dev;
 
-	tpnt->proc_dir = &proc_scsi_pluto;
+	tpnt->proc_name = "pluto";
 	fcscount = 0;
 	for_each_online_fc_channel(fc) {
 		if (!fc->posmap)

@@ -52,7 +52,6 @@ typedef struct scatterlist SCSI_ScatterList_T;
   Define prototypes for the BusLogic Driver Interface Functions.
 */
 
-extern PROC_DirectoryEntry_T BusLogic_ProcDirectoryEntry;
 extern const char *BusLogic_DriverInfo(SCSI_Host_T *);
 extern int BusLogic_DetectHostAdapter(SCSI_Host_Template_T *);
 extern int BusLogic_ReleaseHostAdapter(SCSI_Host_T *);
@@ -69,7 +68,7 @@ extern int BusLogic_ProcDirectoryInfo(char *, char **, off_t, int, int, int);
 */
 
 #define BUSLOGIC							       \
-  { proc_dir:       &BusLogic_ProcDirectoryEntry, /* ProcFS Directory Entry */ \
+  { proc_name:      "BusLogic",			  /* ProcFS Directory Entry */ \
     proc_info:      BusLogic_ProcDirectoryInfo,	  /* ProcFS Info Function   */ \
     name:           "BusLogic",			  /* Driver Name            */ \
     detect:         BusLogic_DetectHostAdapter,	  /* Detect Host Adapter    */ \

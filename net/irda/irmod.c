@@ -525,24 +525,6 @@ void irda_mod_dec_use_count(void)
 #endif
 }
 
-/*
- * Function irda_proc_modcount (inode, fill)
- *
- *    Use by the proc file system functions to prevent the irda module
- *    being removed while the use is standing in the net/irda directory
- */
-void irda_proc_modcount(struct inode *inode, int fill)
-{
-#ifdef MODULE
-#ifdef CONFIG_PROC_FS
-	if (fill)
-		MOD_INC_USE_COUNT;
-	else
-		MOD_DEC_USE_COUNT;
-#endif /* CONFIG_PROC_FS */
-#endif /* MODULE */
-}
-
 #ifdef MODULE
 
 MODULE_AUTHOR("Dag Brattli <dagb@cs.uit.no>");

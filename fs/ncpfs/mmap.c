@@ -43,7 +43,7 @@ static struct page* ncp_file_mmap_nopage(struct vm_area_struct *area,
 	int bufsize;
 	int pos;
 
-	page = __get_pages(GFP_KERNEL, 0);
+	page = alloc_page(GFP_KERNEL);
 	if (!page)
 		return page;
 	pg_addr = page_address(page);

@@ -225,19 +225,13 @@ int copy_strings(int argc,char ** argv, struct linux_binprm *bprm)
 			page = bprm->page[i];
 			new = 0;
 			if (!page) {
-				unsigned long pageaddr;
-				/*
-				 * Cannot yet use highmem page because
-				 * we cannot sleep with a kmap held.
-				 */
-				pageaddr = __get_free_page(GFP_USER);
-				if (!pageaddr)
-					return -ENOMEM;
-				page = mem_map + MAP_NR(pageaddr);
+				page = alloc_page(GFP_HIGHUSER);
 				bprm->page[i] = page;
+				if (!page)
+					return -ENOMEM;
 				new = 1;
 			}
-			kaddr = (char *)kmap(page, KM_WRITE);
+			kaddr = (char *)kmap(page);
 
 			if (new && offset)
 				memset(kaddr, 0, offset);
@@ -249,7 +243,7 @@ int copy_strings(int argc,char ** argv, struct linux_binprm *bprm)
 			}
 			err = copy_from_user(kaddr + offset, str, bytes_to_copy);
 			flush_page_to_ram(page);
-			kunmap((unsigned long)kaddr, KM_WRITE);
+			kunmap(page);
 
 			if (err)
 				return -EFAULT; 
@@ -686,12 +680,12 @@ void remove_arg_zero(struct linux_binprm *bprm)
 			if (offset != PAGE_SIZE)
 				continue;
 			offset = 0;
-			kunmap((unsigned long)kaddr, KM_WRITE);
+			kunmap(page);
 inside:
 			page = bprm->page[bprm->p/PAGE_SIZE];
-			kaddr = (char *)kmap(page, KM_WRITE);
+			kaddr = (char *)kmap(page);
 		}
-		kunmap((unsigned long)kaddr, KM_WRITE);
+		kunmap(page);
 		bprm->argc--;
 	}
 }

@@ -131,10 +131,6 @@
 #include <linux/stat.h>
 #include <linux/init.h>
 
-struct proc_dir_entry proc_scsi_pas16 = {
-    PROC_SCSI_PAS16, 5, "pas16",
-    S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
 static int pas_maxi = 0;
 static int pas_wmaxi = 0;
 static unsigned short pas16_addr = 0;
@@ -392,7 +388,7 @@ int __init pas16_detect(Scsi_Host_Template * tpnt)
     unsigned short io_port;
     int  count;
 
-    tpnt->proc_dir = &proc_scsi_pas16;
+    tpnt->proc_name = "pas16";
     tpnt->proc_info = &pas16_proc_info;
 
     if (pas16_addr != 0) {

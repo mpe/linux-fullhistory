@@ -83,10 +83,6 @@
 /* Enable the bug fix for CEM56 to use modem and ethernet simultaneously */
 #define CEM56_FIX
 
-#if !defined(PCMCIA_DEBUG) && 0
-  #define PCMCIA_DEBUG 4
-#endif
-
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
@@ -250,6 +246,9 @@ static char *if_names[] = { "Auto", "10BaseT", "10Base2", "AUI", "100BaseT" };
 #ifdef PCMCIA_DEBUG
 static int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
+#define DEBUG(n, args...) if (pc_debug>(n)) printk(KDBG_XIRC args)
+#else
+#define DEBUG(n, args...)
 #endif
 static char *version =
 "xirc2ps_cs.c 1.31 1998/12/09 19:32:55 (dd9jn+kvh)";
@@ -313,11 +312,11 @@ static unsigned maxrx_bytes = 22000;
 /* MII management prototypes */
 static void mii_idle(ioaddr_t ioaddr);
 static void mii_putbit(ioaddr_t ioaddr, unsigned data);
-static int  mii_getbit( ioaddr_t ioaddr );
+static int  mii_getbit(ioaddr_t ioaddr);
 static void mii_wbits(ioaddr_t ioaddr, unsigned data, int len);
 static unsigned mii_rd(ioaddr_t ioaddr,	u_char phyaddr, u_char phyreg);
 static void mii_wr(ioaddr_t ioaddr, u_char phyaddr, u_char phyreg,
-				   unsigned data, int len);
+		   unsigned data, int len);
 
 /*
  * The event() function is this driver's Card Services event handler.
@@ -396,6 +395,7 @@ typedef struct local_info_t {
     int silicon; /* silicon revision. 0=old CE2, 1=Scipper, 4=Mohawk */
     int mohawk;  /* a CE3 type card */
     int dingo;	 /* a CEM56 type card */
+    int new_mii; /* has full 10baseT/100baseT MII */
     int modem;	 /* is a multi function card (i.e with a modem) */
     caddr_t dingo_ccr; /* only used for CEM56 cards */
     int suspended;
@@ -411,7 +411,7 @@ static struct enet_statistics *do_get_stats(struct net_device *dev);
 static void set_addresses(struct net_device *dev);
 static void set_multicast_list(struct net_device *dev);
 static int do_init(struct net_device *dev);
-static int set_card_type( dev_link_t *link, const void *s );
+static int set_card_type(dev_link_t *link, const void *s);
 static int do_config(struct net_device *dev, struct ifmap *map);
 static int do_open(struct net_device *dev);
 static int do_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
@@ -441,11 +441,11 @@ cs_error(client_handle_t handle, int func, int ret)
 }
 
 static int
-get_tuple_data(int fn, client_handle_t handle, tuple_t *tuple )
+get_tuple_data(int fn, client_handle_t handle, tuple_t *tuple)
 {
     int err;
 
-    if( (err=CardServices(fn, handle, tuple)) )
+    if ((err=CardServices(fn, handle, tuple)))
 	return err;
     return CardServices(GetTupleData, handle, tuple);
 }
@@ -455,7 +455,7 @@ get_tuple(int fn, client_handle_t handle, tuple_t *tuple, cisparse_t *parse)
 {
     int err;
 
-    if( (err=get_tuple_data(fn, handle, tuple)) )
+    if ((err=get_tuple_data(fn, handle, tuple)))
 	return err;
     return CardServices(ParseTuple, handle, tuple, parse);
 }
@@ -477,7 +477,7 @@ busy_loop(u_long len)
 
     save_flags(flags);
     sti();
-    while(timeout >= jiffies)
+    while (timeout >= jiffies)
 	;
     restore_flags(flags);
 }
@@ -489,27 +489,27 @@ PrintRegisters(struct net_device *dev)
 {
     ioaddr_t ioaddr = dev->base_addr;
 
-    if(pc_debug > 1) {
+    if (pc_debug > 1) {
 	int i, page;
 
 	printk(KDBG_XIRC "Register  common: ");
-	for(i = 0; i < 8; i++ )
-	    printk(" %2.2x", GetByte(i) );
+	for (i = 0; i < 8; i++)
+	    printk(" %2.2x", GetByte(i));
 	printk("\n");
-	for(page = 0; page <= 8; page++) {
+	for (page = 0; page <= 8; page++) {
 	    printk(KDBG_XIRC "Register page %2x: ", page);
 	    SelectPage(page);
-	    for(i = 8; i < 16; i++)
+	    for (i = 8; i < 16; i++)
 		printk(" %2.2x", GetByte(i));
 	    printk("\n");
 	}
-	for(page=0x40 ; page <= 0x5f; page++) {
-	    if( page == 0x43 || (page >= 0x46 && page <= 0x4f)
-		|| (page >= 0x51 && page <=0x5e) )
+	for (page=0x40 ; page <= 0x5f; page++) {
+	    if (page == 0x43 || (page >= 0x46 && page <= 0x4f)
+		|| (page >= 0x51 && page <=0x5e))
 		continue;
 	    printk(KDBG_XIRC "Register page %2x: ", page);
 	    SelectPage(page);
-	    for(i = 8; i < 16; i++)
+	    for (i = 8; i < 16; i++)
 		printk(" %2.2x", GetByte(i));
 	    printk("\n");
 	}
@@ -525,9 +525,9 @@ PrintRegisters(struct net_device *dev)
 static void
 mii_idle(ioaddr_t ioaddr)
 {
-    PutByte(XIRCREG2_GPR2, 0x04|0 ); /* drive MDCK low */
+    PutByte(XIRCREG2_GPR2, 0x04|0); /* drive MDCK low */
     udelay(1);
-    PutByte(XIRCREG2_GPR2, 0x04|1 ); /* and drive MDCK high */
+    PutByte(XIRCREG2_GPR2, 0x04|1); /* and drive MDCK high */
     udelay(1);
 }
 
@@ -538,29 +538,27 @@ static void
 mii_putbit(ioaddr_t ioaddr, unsigned data)
 {
   #if 1
-    if( data ) {
-	PutByte(XIRCREG2_GPR2, 0x0c|2|0 ); /* set MDIO */
+    if (data) {
+	PutByte(XIRCREG2_GPR2, 0x0c|2|0); /* set MDIO */
 	udelay(1);
-	PutByte(XIRCREG2_GPR2, 0x0c|2|1 ); /* and drive MDCK high */
+	PutByte(XIRCREG2_GPR2, 0x0c|2|1); /* and drive MDCK high */
 	udelay(1);
-    }
-    else {
-	PutByte(XIRCREG2_GPR2, 0x0c|0|0 ); /* clear MDIO */
+    } else {
+	PutByte(XIRCREG2_GPR2, 0x0c|0|0); /* clear MDIO */
 	udelay(1);
-	PutByte(XIRCREG2_GPR2, 0x0c|0|1 ); /* and drive MDCK high */
+	PutByte(XIRCREG2_GPR2, 0x0c|0|1); /* and drive MDCK high */
 	udelay(1);
     }
   #else
-    if( data ) {
-	PutWord(XIRCREG2_GPR2-1, 0x0e0e );
+    if (data) {
+	PutWord(XIRCREG2_GPR2-1, 0x0e0e);
 	udelay(1);
-	PutWord(XIRCREG2_GPR2-1, 0x0f0f );
+	PutWord(XIRCREG2_GPR2-1, 0x0f0f);
 	udelay(1);
-    }
-    else {
-	PutWord(XIRCREG2_GPR2-1, 0x0c0c );
+    } else {
+	PutWord(XIRCREG2_GPR2-1, 0x0c0c);
 	udelay(1);
-	PutWord(XIRCREG2_GPR2-1, 0x0d0d );
+	PutWord(XIRCREG2_GPR2-1, 0x0d0d);
 	udelay(1);
     }
   #endif
@@ -570,14 +568,14 @@ mii_putbit(ioaddr_t ioaddr, unsigned data)
  * Get a bit from MDI/O
  */
 static int
-mii_getbit( ioaddr_t ioaddr )
+mii_getbit(ioaddr_t ioaddr)
 {
     unsigned d;
 
-    PutByte(XIRCREG2_GPR2, 4|0 ); /* drive MDCK low */
+    PutByte(XIRCREG2_GPR2, 4|0); /* drive MDCK low */
     udelay(1);
     d = GetByte(XIRCREG2_GPR2); /* read MDIO */
-    PutByte(XIRCREG2_GPR2, 4|1 ); /* drive MDCK high again */
+    PutByte(XIRCREG2_GPR2, 4|1); /* drive MDCK high again */
     udelay(1);
     return d & 0x20; /* read MDIO */
 }
@@ -586,8 +584,8 @@ static void
 mii_wbits(ioaddr_t ioaddr, unsigned data, int len)
 {
     unsigned m = 1 << (len-1);
-    for( ; m; m >>= 1)
-	mii_putbit( ioaddr, data & m );
+    for (; m; m >>= 1)
+	mii_putbit(ioaddr, data & m);
 }
 
 static unsigned
@@ -597,16 +595,16 @@ mii_rd(ioaddr_t ioaddr,	u_char phyaddr, u_char phyreg)
     unsigned data=0, m;
 
     SelectPage(2);
-    for( i=0; i < 32; i++ )		/* 32 bit preamble */
+    for (i=0; i < 32; i++)		/* 32 bit preamble */
 	mii_putbit(ioaddr, 1);
     mii_wbits(ioaddr, 0x06, 4); 	/* Start and opcode for read */
     mii_wbits(ioaddr, phyaddr, 5);	/* PHY address to be accessed */
     mii_wbits(ioaddr, phyreg, 5);	/* PHY register to read */
     mii_idle(ioaddr);			/* turn around */
-    mii_getbit( ioaddr);
+    mii_getbit(ioaddr);
 
-    for( m = 1<<15; m; m >>= 1 )
-	if( mii_getbit( ioaddr ) )
+    for (m = 1<<15; m; m >>= 1)
+	if (mii_getbit(ioaddr))
 	    data |= m;
     mii_idle(ioaddr);
     return data;
@@ -618,7 +616,7 @@ mii_wr(ioaddr_t ioaddr, u_char phyaddr, u_char phyreg, unsigned data, int len)
     int i;
 
     SelectPage(2);
-    for( i=0; i < 32; i++ )		/* 32 bit preamble */
+    for (i=0; i < 32; i++)		/* 32 bit preamble */
 	mii_putbit(ioaddr, 1);
     mii_wbits(ioaddr, 0x05, 4); 	/* Start and opcode for write */
     mii_wbits(ioaddr, phyaddr, 5);	/* PHY address to be accessed */
@@ -640,13 +638,13 @@ mii_dump(struct net_device *dev)
      * not be read according to the DP83840A specs.
      */
     printk(KERN_DEBUG "%s: MII register dump:\n", dev->name);
-    for(i=0; i < 32; i++ ) {
-	if( !(i % 8) ) {
-	    if( i )
+    for (i=0; i < 32; i++) {
+	if (!(i % 8)) {
+	    if (i)
 		printk("\n");
-	    printk(KERN_DEBUG "%s:", dev->name );
+	    printk(KERN_DEBUG "%s:", dev->name);
 	}
-	printk(" %04x", mii_rd(ioaddr, 0, i) );
+	printk(" %04x", mii_rd(ioaddr, 0, i));
     }
     printk("\n");
 }
@@ -673,10 +671,7 @@ xirc2ps_attach(void)
     local_info_t *local;
     int err;
 
-  #ifdef PCMCIA_DEBUG
-    if(pc_debug)
-	printk(KDBG_XIRC "attach()\n");
-  #endif
+    DEBUG(0, "attach()\n");
     flush_stale_links();
 
     /* Initialize the dev_link_t structure */
@@ -725,7 +720,7 @@ xirc2ps_attach(void)
     client_reg.event_handler = &xirc2ps_event;
     client_reg.Version = 0x0210;
     client_reg.event_callback_args.client_data = link;
-    if( (err = CardServices(RegisterClient, &link->handle, &client_reg)) ) {
+    if ((err = CardServices(RegisterClient, &link->handle, &client_reg))) {
 	cs_error(link->handle, RegisterClient, err);
 	xirc2ps_detach(link);
 	return NULL;
@@ -747,25 +742,20 @@ xirc2ps_detach(dev_link_t * link)
     dev_link_t **linkp;
     long flags;
 
-  #ifdef PCMCIA_DEBUG
-    if(pc_debug)
-	printk(KDBG_XIRC "detach(0x%p)\n", link);
-  #endif
+    DEBUG(0, "detach(0x%p)\n", link);
 
     /* Locate device structure */
-    for( linkp = &dev_list; *linkp; linkp = &(*linkp)->next )
-	if( *linkp == link)
+    for (linkp = &dev_list; *linkp; linkp = &(*linkp)->next)
+	if (*linkp == link)
 	    break;
-    if( !*linkp ) {
-      #ifdef PCMCIA_DEBUG
-	printk(KDBG_XIRC "detach(0x%p): dev_link lost\n", link );
-      #endif
+    if (!*linkp) {
+	DEBUG(0, "detach(0x%p): dev_link lost\n", link);
 	return;
     }
 
     save_flags(flags);
     cli();
-    if( link->state & DEV_RELEASE_PENDING ) {
+    if (link->state & DEV_RELEASE_PENDING) {
 	del_timer(&link->release);
 	link->state &= ~DEV_RELEASE_PENDING;
     }
@@ -777,26 +767,24 @@ xirc2ps_detach(dev_link_t * link)
      * the release() function is called, that will trigger a proper
      * detach().
      */
-    if(link->state & DEV_CONFIG) {
-      #ifdef PCMCIA_DEBUG
-	printk(KDBG_XIRC "detach postponed, '%s' "
-			  "still locked\n", link->dev->dev_name);
-      #endif
+    if (link->state & DEV_CONFIG) {
+	DEBUG(0, "detach postponed, '%s' still locked\n",
+	      link->dev->dev_name);
 	link->state |= DEV_STALE_LINK;
 	return;
     }
 
     /* Break the link with Card Services */
-    if(link->handle)
+    if (link->handle)
 	CardServices(DeregisterClient, link->handle);
 
     /* Unlink device structure, free pieces */
     *linkp = link->next;
-    if(link->priv) {
+    if (link->priv) {
 	struct net_device *dev = link->priv;
 	if (link->dev != NULL)
 	    unregister_netdev(dev);
-	if( dev->priv )
+	if (dev->priv)
 	    kfree(dev->priv);
 	kfree(link->priv);
     }
@@ -823,7 +811,7 @@ xirc2ps_detach(dev_link_t * link)
  *
  */
 static int
-set_card_type( dev_link_t *link, const void *s )
+set_card_type(dev_link_t *link, const void *s)
 {
     struct net_device *dev = link->priv;
     local_info_t *local = dev->priv;
@@ -833,27 +821,24 @@ set_card_type( dev_link_t *link, const void *s )
     unsigned mediaid= ((const unsigned char *)s)[3];
     unsigned prodid = ((const unsigned char *)s)[4];
 
-  #ifdef PCMCIA_DEBUG
-    if(pc_debug)
-	printk(KDBG_XIRC "cisrev=%02x mediaid=%02x prodid=%02x\n",
-			  cisrev, mediaid, prodid );
-  #endif
+    DEBUG(0, "cisrev=%02x mediaid=%02x prodid=%02x\n",
+	  cisrev, mediaid, prodid);
 
     local->mohawk = 0;
     local->dingo = 0;
     local->modem = 0;
     local->card_type = XIR_UNKNOWN;
-    if( !(prodid & 0x40) ) {
+    if (!(prodid & 0x40)) {
 	printk(KNOT_XIRC "Ooops: Not a creditcard\n");
 	return 0;
     }
-    if( !(mediaid & 0x01) ) {
+    if (!(mediaid & 0x01)) {
 	printk(KNOT_XIRC "Not an Ethernet card\n");
 	return 0;
     }
-    if( mediaid & 0x10 ) {
+    if (mediaid & 0x10) {
 	local->modem = 1;
-	switch( prodid & 15 ) {
+	switch(prodid & 15) {
 	  case 1: local->card_type = XIR_CEM   ; break;
 	  case 2: local->card_type = XIR_CEM2  ; break;
 	  case 3: local->card_type = XIR_CEM3  ; break;
@@ -868,9 +853,8 @@ set_card_type( dev_link_t *link, const void *s )
 		  local->dingo = 1;
 		  break;
 	}
-    }
-    else {
-	switch( prodid & 15 ) {
+    } else {
+	switch(prodid & 15) {
 	  case 1: local->card_type = has_ce2_string(link)? XIR_CE2 : XIR_CE ;
 		  break;
 	  case 2: local->card_type = XIR_CE2; break;
@@ -879,13 +863,13 @@ set_card_type( dev_link_t *link, const void *s )
 		  break;
 	}
     }
-    if( local->card_type == XIR_CE || local->card_type == XIR_CEM ) {
+    if (local->card_type == XIR_CE || local->card_type == XIR_CEM) {
 	printk(KNOT_XIRC "Sorry, this is an old CE card\n");
 	return 0;
     }
-    if( local->card_type == XIR_UNKNOWN )
-	printk(KNOT_XIRC "Warning: Unknown card (mediaid=%02x prodid=%02x)\n",
-				  mediaid, prodid );
+    if (local->card_type == XIR_UNKNOWN)
+	printk(KNOT_XIRC "unknown card (mediaid=%02x prodid=%02x)\n",
+	       mediaid, prodid);
 
     return 1;
 }
@@ -908,8 +892,8 @@ has_ce2_string(dev_link_t * link)
     tuple.TupleDataMax = 254;
     tuple.TupleOffset = 0;
     tuple.DesiredTuple = CISTPL_VERS_1;
-    if( !first_tuple(handle, &tuple, &parse) && parse.version_1.ns > 2 ) {
-	if( strstr(parse.version_1.str + parse.version_1.ofs[2], "CE2") )
+    if (!first_tuple(handle, &tuple, &parse) && parse.version_1.ns > 2) {
+	if (strstr(parse.version_1.str + parse.version_1.ofs[2], "CE2"))
 	    return 1;
     }
     return 0;
@@ -939,10 +923,7 @@ xirc2ps_config(dev_link_t * link)
     local = dev->priv;
     local->dingo_ccr = 0;
 
-  #ifdef PCMCIA_DEBUG
-    if(pc_debug)
-	printk(KDBG_XIRC "config(0x%p)\n", link);
-  #endif
+    DEBUG(0, "config(0x%p)\n", link);
 
     /*
      * This reads the card's CONFIG tuple to find its configuration
@@ -955,101 +936,89 @@ xirc2ps_config(dev_link_t * link)
 
     /* Is this a valid	card */
     tuple.DesiredTuple = CISTPL_MANFID;
-    if( (err=first_tuple(handle, &tuple, &parse))) {
+    if ((err=first_tuple(handle, &tuple, &parse))) {
 	printk(KNOT_XIRC "manfid not found in CIS\n");
 	goto failure;
     }
 
-    switch( parse.manfid.manf ) {
+    switch(parse.manfid.manf) {
       case MANFID_XIRCOM:
 	local->manf_str = "Xircom";
-	#ifdef PCMCIA_DEBUG
-	  if(pc_debug)
-	    printk(KDBG_XIRC "found xircom card\n");
-	#endif
+	DEBUG(0, "found xircom card\n");
 	break;
       case MANFID_ACCTON:
 	local->manf_str = "Accton";
-	#ifdef PCMCIA_DEBUG
-	  if(pc_debug)
-	    printk(KDBG_XIRC "found Accton card\n");
-	#endif
+	DEBUG(0, "found Accton card\n");
 	break;
       case MANFID_COMPAQ:
       case MANFID_COMPAQ2:
 	local->manf_str = "Compaq";
-	#ifdef PCMCIA_DEBUG
-	  if(pc_debug)
-	    printk(KDBG_XIRC "found Compaq card\n");
-	#endif
+	DEBUG(0, "found Compaq card\n");
 	break;
       case MANFID_INTEL:
 	local->manf_str = "Intel";
-	#ifdef PCMCIA_DEBUG
-	  if(pc_debug)
-	    printk(KDBG_XIRC "found Intel card\n");
-	#endif
+	DEBUG(0, "found Intel card\n");
 	break;
       default:
 	printk(KNOT_XIRC "Unknown Card Manufacturer ID: 0x%04x\n",
-						 (unsigned)parse.manfid.manf);
+	       (unsigned)parse.manfid.manf);
 	goto failure;
     }
 
-    if( !set_card_type(link, buf ) ) {
+    if (!set_card_type(link, buf)) {
 	printk(KNOT_XIRC "this card is not supported\n");
 	goto failure;
     }
 
     /* get configuration stuff */
     tuple.DesiredTuple = CISTPL_CONFIG;
-    if( (err=first_tuple(handle, &tuple, &parse)))
+    if ((err=first_tuple(handle, &tuple, &parse)))
 	goto cis_error;
     link->conf.ConfigBase = parse.config.base;
     link->conf.Present =    parse.config.rmask[0];
 
     /* get the ethernet address from the CIS */
     tuple.DesiredTuple = CISTPL_FUNCE;
-    for( err = first_tuple(handle, &tuple, &parse); !err;
-			     err = next_tuple(handle, &tuple, &parse) ) {
+    for (err = first_tuple(handle, &tuple, &parse); !err;
+			     err = next_tuple(handle, &tuple, &parse)) {
 	/* Once I saw two CISTPL_FUNCE_LAN_NODE_ID entries:
 	 * the first one with a length of zero the second correct -
 	 * so I skip all entries with length 0 */
-	if( parse.funce.type == CISTPL_FUNCE_LAN_NODE_ID
-	    && ((cistpl_lan_node_id_t *)parse.funce.data)->nb )
+	if (parse.funce.type == CISTPL_FUNCE_LAN_NODE_ID
+	    && ((cistpl_lan_node_id_t *)parse.funce.data)->nb)
 	    break;
     }
-    if( err ) { /* not found: try to get the node-id from tuple 0x89 */
+    if (err) { /* not found: try to get the node-id from tuple 0x89 */
 	tuple.DesiredTuple = 0x89;  /* data layout looks like tuple 0x22 */
-	if( !(err = get_tuple_data(GetFirstTuple, handle, &tuple )) ) {
-	    if( tuple.TupleDataLen == 8 && *buf == CISTPL_FUNCE_LAN_NODE_ID )
-		memcpy( &parse, buf, 8 );
+	if (!(err = get_tuple_data(GetFirstTuple, handle, &tuple))) {
+	    if (tuple.TupleDataLen == 8 && *buf == CISTPL_FUNCE_LAN_NODE_ID)
+		memcpy(&parse, buf, 8);
 	    else
 		err = -1;
 	}
     }
-    if( err ) { /* another try	(James Lehmer's CE2 version 4.1)*/
+    if (err) { /* another try	(James Lehmer's CE2 version 4.1)*/
 	tuple.DesiredTuple = CISTPL_FUNCE;
-	for( err = first_tuple(handle, &tuple, &parse); !err;
-				 err = next_tuple(handle, &tuple, &parse) ) {
-	    if( parse.funce.type == 0x02 && parse.funce.data[0] == 1
-		&& parse.funce.data[1] == 6 && tuple.TupleDataLen == 13 ) {
+	for (err = first_tuple(handle, &tuple, &parse); !err;
+				 err = next_tuple(handle, &tuple, &parse)) {
+	    if (parse.funce.type == 0x02 && parse.funce.data[0] == 1
+		&& parse.funce.data[1] == 6 && tuple.TupleDataLen == 13) {
 		buf[1] = 4;
-		memcpy( &parse, buf+1, 8 );
+		memcpy(&parse, buf+1, 8);
 		break;
 	    }
 	}
     }
-    if( err ) {
+    if (err) {
 	printk(KNOT_XIRC "node-id not found in CIS\n");
 	goto failure;
     }
     node_id = (cistpl_lan_node_id_t *)parse.funce.data;
-    if( node_id->nb != 6 ) {
+    if (node_id->nb != 6) {
 	printk(KNOT_XIRC "malformed node-id in CIS\n");
 	goto failure;
     }
-    for( i=0; i < 6; i++ )
+    for (i=0; i < 6; i++)
 	dev->dev_addr[i] = node_id->id[i];
 
     /* Configure card */
@@ -1059,61 +1028,60 @@ xirc2ps_config(dev_link_t * link)
     link->io.Attributes1 = IO_DATA_PATH_WIDTH_16;
     link->irq.Attributes = IRQ_HANDLE_PRESENT;
     link->irq.IRQInfo1 = IRQ_INFO2_VALID | IRQ_LEVEL_ID;
-    if( irq_list[0] == -1 )
+    if (irq_list[0] == -1)
 	link->irq.IRQInfo2 = irq_mask;
     else {
-	for( i = 0; i < 4; i++)
+	for (i = 0; i < 4; i++)
 	    link->irq.IRQInfo2 |= 1 << irq_list[i];
     }
     link->irq.Handler = xirc2ps_interrupt;
     link->irq.Instance = dev;
-    if( local->modem ) {
+    if (local->modem) {
 	int pass;
 
-	if( do_sound ) {
+	if (do_sound) {
 	    link->conf.Attributes |= CONF_ENABLE_SPKR;
 	    link->conf.Status |= CCSR_AUDIO_ENA;
 	}
 	link->irq.Attributes |= IRQ_TYPE_DYNAMIC_SHARING|IRQ_FIRST_SHARED ;
 	link->io.NumPorts2 = 8;
 	link->io.Attributes2 = IO_DATA_PATH_WIDTH_8;
-	if( local->dingo ) {
+	if (local->dingo) {
 	    /* Take the Modem IO port from the CIS and scan for a free
 	     * Ethernet port */
 	    link->io.NumPorts1 = 16; /* no Mako stuff anymore */
 	    tuple.DesiredTuple = CISTPL_CFTABLE_ENTRY;
-	    for( err = first_tuple(handle, &tuple, &parse); !err;
-				 err = next_tuple(handle, &tuple, &parse) ) {
-		if( cf->io.nwin > 0  &&  (cf->io.win[0].base & 0xf) == 8 ) {
-		    for(ioaddr = 0x300; ioaddr < 0x400; ioaddr += 0x10) {
+	    for (err = first_tuple(handle, &tuple, &parse); !err;
+				 err = next_tuple(handle, &tuple, &parse)) {
+		if (cf->io.nwin > 0  &&  (cf->io.win[0].base & 0xf) == 8) {
+		    for (ioaddr = 0x300; ioaddr < 0x400; ioaddr += 0x10) {
 			link->conf.ConfigIndex = cf->index ;
 			link->io.BasePort2 = cf->io.win[0].base;
 			link->io.BasePort1 = ioaddr;
-			if( !(err=CardServices(RequestIO, link->handle,
-								&link->io)) )
+			if (!(err=CardServices(RequestIO, link->handle,
+								&link->io)))
 			    goto port_found;
 		    }
 		}
 	    }
-	}
-	else {
+	} else {
 	    link->io.NumPorts1 = 18;
 	    /* We do 2 passes here: The first one uses the regular mapping and
 	     * the second tries again, thereby considering that the 32 ports are
 	     * mirrored every 32 bytes. Actually we use a mirrored port for
 	     * the Mako if (on the first pass) the COR bit 5 is set.
 	     */
-	    for( pass=0; pass < 2; pass++ ) {
+	    for (pass=0; pass < 2; pass++) {
 		tuple.DesiredTuple = CISTPL_CFTABLE_ENTRY;
-		for( err = first_tuple(handle, &tuple, &parse); !err;
-				     err = next_tuple(handle, &tuple, &parse) ){
-		    if( cf->io.nwin > 0  &&  (cf->io.win[0].base & 0xf) == 8 ){
+		for (err = first_tuple(handle, &tuple, &parse); !err;
+				     err = next_tuple(handle, &tuple, &parse)){
+		    if (cf->io.nwin > 0  &&  (cf->io.win[0].base & 0xf) == 8){
 			link->conf.ConfigIndex = cf->index ;
 			link->io.BasePort2 = cf->io.win[0].base;
 			link->io.BasePort1 = link->io.BasePort2
-				    + (pass ? ( cf->index & 0x20 ? -24:8 )
-					    : ( cf->index & 0x20 ?   8:-24) );
-			if( !(err=CardServices(RequestIO, link->handle,
+				    + (pass ? (cf->index & 0x20 ? -24:8)
+					    : (cf->index & 0x20 ?   8:-24));
+			if (!(err=CardServices(RequestIO, link->handle,
 								&link->io)))
 			    goto port_found;
 		    }
@@ -1124,30 +1092,29 @@ xirc2ps_config(dev_link_t * link)
 	     * .... */
 	}
 	printk(KNOT_XIRC "no ports available\n");
-    }
-    else {
+    } else {
 	link->irq.Attributes |= IRQ_TYPE_EXCLUSIVE;
 	link->io.NumPorts1 = 16;
-	for(ioaddr = 0x300; ioaddr < 0x400; ioaddr += 0x10) {
+	for (ioaddr = 0x300; ioaddr < 0x400; ioaddr += 0x10) {
 	    link->io.BasePort1 = ioaddr;
-	    if( !(err=CardServices(RequestIO, link->handle, &link->io)) )
+	    if (!(err=CardServices(RequestIO, link->handle, &link->io)))
 		goto port_found;
 	}
 	link->io.BasePort1 = 0; /* let CS decide */
-	if( (err=CardServices(RequestIO, link->handle, &link->io)) ) {
+	if ((err=CardServices(RequestIO, link->handle, &link->io))) {
 	    cs_error(link->handle, RequestIO, err);
 	    goto config_error;
 	}
     }
   port_found:
-    if( err )
+    if (err)
 	 goto config_error;
 
     /****************
      * Now allocate an interrupt line.	Note that this does not
      * actually assign a handler to the interrupt.
      */
-    if( (err=CardServices(RequestIRQ, link->handle, &link->irq))) {
+    if ((err=CardServices(RequestIRQ, link->handle, &link->irq))) {
 	cs_error(link->handle, RequestIRQ, err);
 	goto config_error;
     }
@@ -1156,13 +1123,13 @@ xirc2ps_config(dev_link_t * link)
      * This actually configures the PCMCIA socket -- setting up
      * the I/O windows and the interrupt mapping.
      */
-    if( (err=CardServices(RequestConfiguration,
-					link->handle, &link->conf)) ) {
+    if ((err=CardServices(RequestConfiguration,
+					link->handle, &link->conf))) {
 	cs_error(link->handle, RequestConfiguration, err);
 	goto config_error;
     }
 
-    if( local->dingo ) {
+    if (local->dingo) {
       #ifdef CEM56_FIX
 	conf_reg_t reg;
       #endif
@@ -1178,16 +1145,16 @@ xirc2ps_config(dev_link_t * link)
 	reg.Action = CS_WRITE;
 	reg.Offset = CISREG_IOBASE_0;
 	reg.Value = link->io.BasePort2 & 0xff;
-	if( (err = CardServices(AccessConfigurationRegister, link->handle,
-							     &reg )) ) {
+	if ((err = CardServices(AccessConfigurationRegister, link->handle,
+							     &reg))) {
 	    cs_error(link->handle, AccessConfigurationRegister, err);
 	    goto config_error;
 	}
 	reg.Action = CS_WRITE;
 	reg.Offset = CISREG_IOBASE_1;
 	reg.Value = (link->io.BasePort2 >> 8) & 0xff;
-	if( (err = CardServices(AccessConfigurationRegister, link->handle,
-							      &reg )) ) {
+	if ((err = CardServices(AccessConfigurationRegister, link->handle,
+							      &reg))) {
 	    cs_error(link->handle, AccessConfigurationRegister, err);
 	    goto config_error;
 	}
@@ -1202,14 +1169,14 @@ xirc2ps_config(dev_link_t * link)
 	req.Size = 0x1000; /* 4k window */
 	req.AccessSpeed = 0;
 	link->win = (window_handle_t)link->handle;
-	if( (err = CardServices(RequestWindow, &link->win, &req )) ) {
+	if ((err = CardServices(RequestWindow, &link->win, &req))) {
 	    cs_error(link->handle, RequestWindow, err);
 	    goto config_error;
 	}
 	local->dingo_ccr = ioremap(req.Base,0x1000) + 0x0800;
 	mem.CardOffset = 0x0;
 	mem.Page = 0;
-	if( (err = CardServices(MapMemPage, link->win, &mem) ) ) {
+	if ((err = CardServices(MapMemPage, link->win, &mem))) {
 	    cs_error(link->handle, MapMemPage, err);
 	    goto config_error;
 	}
@@ -1217,72 +1184,72 @@ xirc2ps_config(dev_link_t * link)
 	/* Setup the CCRs; there are no infos in the CIS about the Ethernet
 	 * part.
 	 */
-	writeb(0x47, local->dingo_ccr + CISREG_COR );
+	writeb(0x47, local->dingo_ccr + CISREG_COR);
 	ioaddr = link->io.BasePort1;
-	writeb( ioaddr & 0xff	  , local->dingo_ccr + CISREG_IOBASE_0 );
-	writeb((ioaddr >> 8)&0xff , local->dingo_ccr + CISREG_IOBASE_1 );
+	writeb(ioaddr & 0xff	  , local->dingo_ccr + CISREG_IOBASE_0);
+	writeb((ioaddr >> 8)&0xff , local->dingo_ccr + CISREG_IOBASE_1);
 
       #if 0
 	{
 	    u_char tmp;
-	    printk(KERN_INFO "ECOR:" );
-	    for(i=0; i < 7; i++ ) {
-		tmp = readb(local->dingo_ccr + i*2 );
-		printk(" %02x", tmp );
+	    printk(KERN_INFO "ECOR:");
+	    for (i=0; i < 7; i++) {
+		tmp = readb(local->dingo_ccr + i*2);
+		printk(" %02x", tmp);
 	    }
-	    printk("\n" );
-	    printk(KERN_INFO "DCOR:" );
-	    for(i=0; i < 4; i++ ) {
-		tmp = readb(local->dingo_ccr + 0x20 + i*2 );
-		printk(" %02x", tmp );
+	    printk("\n");
+	    printk(KERN_INFO "DCOR:");
+	    for (i=0; i < 4; i++) {
+		tmp = readb(local->dingo_ccr + 0x20 + i*2);
+		printk(" %02x", tmp);
 	    }
-	    printk("\n" );
-	    printk(KERN_INFO "SCOR:" );
-	    for(i=0; i < 10; i++ ) {
-		tmp = readb(local->dingo_ccr + 0x40 + i*2 );
-		printk(" %02x", tmp );
+	    printk("\n");
+	    printk(KERN_INFO "SCOR:");
+	    for (i=0; i < 10; i++) {
+		tmp = readb(local->dingo_ccr + 0x40 + i*2);
+		printk(" %02x", tmp);
 	    }
-	    printk("\n" );
+	    printk("\n");
 	}
       #endif
 
-	writeb( 0x01		  , local->dingo_ccr + 0x20 );
-	writeb( 0x0c		  , local->dingo_ccr + 0x22 );
-	writeb( 0x00		  , local->dingo_ccr + 0x24 );
-	writeb( 0x00		  , local->dingo_ccr + 0x26 );
-	writeb( 0x00		  , local->dingo_ccr + 0x28 );
+	writeb(0x01		  , local->dingo_ccr + 0x20);
+	writeb(0x0c		  , local->dingo_ccr + 0x22);
+	writeb(0x00		  , local->dingo_ccr + 0x24);
+	writeb(0x00		  , local->dingo_ccr + 0x26);
+	writeb(0x00		  , local->dingo_ccr + 0x28);
     }
 
     /* The if_port symbol can be set when the module is loaded */
     local->probe_port=0;
-    if( !if_port ) {
+    if (!if_port) {
 	local->probe_port=1;
 	dev->if_port = 1;
     }
-    else if( (if_port >= 1 && if_port <= 2) || (local->mohawk && if_port==4) )
+    else if ((if_port >= 1 && if_port <= 2) || (local->mohawk && if_port==4))
 	dev->if_port = if_port;
     else
-	printk(KERN_NOTICE "xirc2ps_cs: invalid if_port requested\n");
+	printk(KNOT_XIRC "invalid if_port requested\n");
 
     /* we can now register the device with the net subsystem */
     dev->irq = link->irq.AssignedIRQ;
     dev->base_addr = link->io.BasePort1;
     dev->tbusy = 0;
-    if( (err=register_netdev(dev)) ) {
-	printk(KERN_NOTICE "xirc2ps_cs: register_netdev() failed\n");
+    if ((err=register_netdev(dev))) {
+	printk(KNOT_XIRC "register_netdev() failed\n");
 	goto config_error;
     }
 
     link->state &= ~DEV_CONFIG_PENDING;
     link->dev = &local->node;
 
-    if( local->dingo )
+    if (local->dingo)
 	do_reset(dev, 1); /* a kludge to make the cem56 work */
 
     /* give some infos about the hardware */
     printk(KERN_INFO "%s: %s: port %#3lx, irq %d, hwaddr",
-	 dev->name, local->manf_str,(u_long)dev->base_addr, (int)dev->irq );
-    for(i = 0; i < 6; i++)
+	 dev->name, local->manf_str,(u_long)dev->base_addr, (int)dev->irq);
+    for (i = 0; i < 6; i++)
 	printk("%c%02X", i?':':' ', dev->dev_addr[i]);
     printk("\n");
 
@@ -1294,7 +1261,7 @@ xirc2ps_config(dev_link_t * link)
     return;
 
   cis_error:
-    printk(KERN_NOTICE "xirc2ps_cs: unable to parse CIS\n");
+    printk(KNOT_XIRC "unable to parse CIS\n");
   failure:
     link->state &= ~DEV_CONFIG_PENDING;
 } /* xirc2ps_config */
@@ -1305,35 +1272,29 @@ xirc2ps_config(dev_link_t * link)
  * still open, this will be postponed until it is closed.
  */
 static void
-xirc2ps_release( u_long arg)
+xirc2ps_release(u_long arg)
 {
     dev_link_t *link = (dev_link_t *) arg;
     struct net_device *dev = link->priv;
 
-  #ifdef PCMCIA_DEBUG
-    if(pc_debug)
-	printk(KDBG_XIRC "release(0x%p)\n", link);
-  #endif
+    DEBUG(0, "release(0x%p)\n", link);
 
     /*
      * If the device is currently in use, we won't release until it
      * is actually closed.
      */
-    if(link->open) {
-      #ifdef PCMCIA_DEBUG
-	if(pc_debug)
-	    printk(KDBG_XIRC "release postponed, '%s' "
-			      "still open\n", link->dev->dev_name);
-      #endif
+    if (link->open) {
+	DEBUG(0, "release postponed, '%s' "
+	      "still open\n", link->dev->dev_name);
 	link->state |= DEV_STALE_CONFIG;
 	return;
     }
 
-    if( link->win ) {
+    if (link->win) {
 	local_info_t *local = dev->priv;
-	if( local->dingo )
-	    iounmap( local->dingo_ccr - 0x0800 );
-	CardServices(ReleaseWindow, link->win );
+	if (local->dingo)
+	    iounmap(local->dingo_ccr - 0x0800);
+	CardServices(ReleaseWindow, link->win);
     }
     CardServices(ReleaseConfiguration, link->handle);
     CardServices(ReleaseIO, link->handle, &link->io);
@@ -1364,21 +1325,15 @@ xirc2ps_event(event_t event, int priority,
     struct net_device *dev = link->priv;
     local_info_t *lp = dev? dev->priv : NULL;
 
-  #ifdef PCMCIA_DEBUG
-    if(pc_debug)
-	printk(KDBG_XIRC "event(%d)\n", (int)event );
-  #endif
+    DEBUG(0, "event(%d)\n", (int)event);
 
     switch (event) {
       case CS_EVENT_REGISTRATION_COMPLETE:
-	 #ifdef PCMCIA_DEBUG
-	  if(pc_debug)
-	      printk(KDBG_XIRC "registration complete\n");
-	 #endif
+	  DEBUG(0, "registration complete\n");
 	  break;
       case CS_EVENT_CARD_REMOVAL:
 	  link->state &= ~DEV_PRESENT;
-	  if(link->state & DEV_CONFIG) {
+	  if (link->state & DEV_CONFIG) {
 	      dev->tbusy = 1; dev->start = 0;
 	      link->release.expires = jiffies + HZ / 20;
 	      add_timer(&link->release);
@@ -1392,8 +1347,8 @@ xirc2ps_event(event_t event, int priority,
 	  link->state |= DEV_SUSPEND;
 	  /* Fall through... */
       case CS_EVENT_RESET_PHYSICAL:
-	  if(link->state & DEV_CONFIG) {
-	      if(link->open) {
+	  if (link->state & DEV_CONFIG) {
+	      if (link->open) {
 		  dev->tbusy = 1; dev->start = 0;
 		  lp->suspended=1;
 		  do_powerdown(dev);
@@ -1405,9 +1360,9 @@ xirc2ps_event(event_t event, int priority,
 	  link->state &= ~DEV_SUSPEND;
 	  /* Fall through... */
       case CS_EVENT_CARD_RESET:
-	  if(link->state & DEV_CONFIG) {
+	  if (link->state & DEV_CONFIG) {
 	     CardServices(RequestConfiguration, link->handle, &link->conf);
-	     if( link->open) {
+	     if (link->open) {
 		 do_reset(dev,1);
 		 lp->suspended=0;
 		 dev->tbusy = 0; dev->start = 1;
@@ -1438,24 +1393,21 @@ xirc2ps_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 				  * -- on a laptop?
 				  */
 
-    if( !dev->start )
+    if (!dev->start)
        return;
 
-    if( dev->interrupt ) {
+    if (dev->interrupt) {
 	printk(KERR_XIRC "re-entering isr on irq %d (dev=%p)\n", irq, dev);
 	return;
     }
     dev->interrupt = 1;
     lp = dev->priv;
     ioaddr = dev->base_addr;
-    if( lp->mohawk ) { /* must disable the interrupt */
-	PutByte(XIRCREG_CR, 0 );
+    if (lp->mohawk) { /* must disable the interrupt */
+	PutByte(XIRCREG_CR, 0);
     }
 
-  #ifdef PCMCIA_DEBUG
-    if(pc_debug > 6 )
-	printk(KERN_DEBUG "%s: interrupt %d at %#x.\n", dev->name, irq, ioaddr);
-  #endif
+    DEBUG(6, "%s: interrupt %d at %#x.\n", dev->name, irq, ioaddr);
 
     saved_page = GetByte(XIRCREG_PR);
     /* Read the ISR to see whats the cause for the interrupt.
@@ -1464,91 +1416,74 @@ xirc2ps_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     int_status = GetByte(XIRCREG_ISR);
     bytes_rcvd = 0;
   loop_entry:
-    if( int_status == 0xff ) { /* card may be ejected */
-      #ifdef PCMCIA_DEBUG
-	if( pc_debug > 3 )
-	    printk(KERN_DEBUG "%s: interrupt %d for dead card\n", dev->name, irq );
-      #endif
+    if (int_status == 0xff) { /* card may be ejected */
+	DEBUG(3, "%s: interrupt %d for dead card\n", dev->name, irq);
 	goto leave;
     }
     eth_status = GetByte(XIRCREG_ESR);
 
     SelectPage(0x40);
     rx_status  = GetByte(XIRCREG40_RXST0);
-    PutByte(XIRCREG40_RXST0, (~rx_status & 0xff) );
+    PutByte(XIRCREG40_RXST0, (~rx_status & 0xff));
     tx_status = GetByte(XIRCREG40_TXST0);
     tx_status |= GetByte(XIRCREG40_TXST1) << 8;
-    PutByte(XIRCREG40_TXST0, 0 );
-    PutByte(XIRCREG40_TXST1, 0 );
+    PutByte(XIRCREG40_TXST0, 0);
+    PutByte(XIRCREG40_TXST1, 0);
 
-  #ifdef PCMCIA_DEBUG
-    if( pc_debug > 3 )
-	printk(KERN_DEBUG "%s: ISR=%#2.2x ESR=%#2.2x RSR=%#2.2x TSR=%#4.4x\n",
-		    dev->name, int_status, eth_status, rx_status, tx_status );
-  #endif
+    DEBUG(3, "%s: ISR=%#2.2x ESR=%#2.2x RSR=%#2.2x TSR=%#4.4x\n",
+	  dev->name, int_status, eth_status, rx_status, tx_status);
 
     /***** receive section ******/
     SelectPage(0);
-    while( eth_status & FullPktRcvd ) {
+    while (eth_status & FullPktRcvd) {
 	rsr = GetByte(XIRCREG0_RSR);
-	if( bytes_rcvd > maxrx_bytes && (rsr & PktRxOk) ) {
+	if (bytes_rcvd > maxrx_bytes && (rsr & PktRxOk)) {
 	    /* too many bytes received during this int, drop the rest of the
 	     * packets */
 	    lp->stats.rx_dropped++;
-	  #ifdef PCMCIA_DEBUG
-	    if( pc_debug > 3 )
-		printk(KNOT_XIRC "%s: RX drop, too much done\n", dev->name);
-	  #endif
-	    PutWord(XIRCREG0_DO, 0x8000 ); /* issue cmd: skip_rx_packet */
-	}
-	else if( rsr & PktRxOk ) {
+	    printk(KINF_XIRC "%s: RX drop, too much done\n", dev->name);
+	    PutWord(XIRCREG0_DO, 0x8000); /* issue cmd: skip_rx_packet */
+	} else if (rsr & PktRxOk) {
 	    struct sk_buff *skb;
 
 	    pktlen = GetWord(XIRCREG0_RBC);
 	    bytes_rcvd += pktlen;
 
-	  #ifdef PCMCIA_DEBUG
-	    if( pc_debug > 5 )
-		printk(KDBG_XIRC "rsr=%#02x packet_length=%u\n", rsr, pktlen );
-	  #endif
+	    DEBUG(5, "rsr=%#02x packet_length=%u\n", rsr, pktlen);
 
 	    skb = dev_alloc_skb(pktlen+3); /* 1 extra so we can use insw */
-	    if( !skb ) {
-	      #ifdef PCMCIA_DEBUG
-		if( pc_debug )
-		    printk(KNOT_XIRC "low memory, packet dropped (size=%u)\n",
-								     pktlen );
-	      #endif
+	    if (!skb) {
+		printk(KNOT_XIRC "low memory, packet dropped (size=%u)\n",
+		       pktlen);
 		lp->stats.rx_dropped++;
-	    }
-	    else { /* okay get the packet */
+	    } else { /* okay get the packet */
 		skb_reserve(skb, 2);
-		if( lp->silicon == 0  ) { /* work around a hardware bug */
+		if (lp->silicon == 0 ) { /* work around a hardware bug */
 		    unsigned rhsa; /* receive start address */
 
 		    SelectPage(5);
 		    rhsa = GetWord(XIRCREG5_RHSA0);
 		    SelectPage(0);
 		    rhsa += 3; /* skip control infos */
-		    if( rhsa >= 0x8000 )
+		    if (rhsa >= 0x8000)
 			rhsa = 0;
-		    if( rhsa + pktlen > 0x8000 ) {
+		    if (rhsa + pktlen > 0x8000) {
 			unsigned i;
 			u_char *buf = skb_put(skb, pktlen);
-			for(i=0; i < pktlen ; i++, rhsa++ ) {
+			for (i=0; i < pktlen ; i++, rhsa++) {
 			    buf[i] = GetByte(XIRCREG_EDP);
-			    if( rhsa == 0x8000 ) {
+			    if (rhsa == 0x8000) {
 				rhsa = 0;
 				i--;
 			    }
 			}
 		    } else {
 			insw(ioaddr+XIRCREG_EDP,
-				skb_put(skb, pktlen), (pktlen+1)>>1 );
+				skb_put(skb, pktlen), (pktlen+1)>>1);
 		    }
 		}
 	      #if 0
-		else if( lp->mohawk ) {
+		else if (lp->mohawk) {
 		    /* To use this 32 bit access we should use
 		     * a manual optimized loop
 		     * Also the words are swapped, we can get more
@@ -1561,7 +1496,7 @@ xirc2ps_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		    u_long *p = skb_put(skb, pktlen);
 		    register u_long a;
 		    ioaddr_t edpreg = ioaddr+XIRCREG_EDP-2;
-		    for(i=0; i < len ; i += 4, p++ ) {
+		    for (i=0; i < len ; i += 4, p++) {
 			a = inl(edpreg);
 			__asm__("rorl $16,%0\n\t"
 				:"=q" (a)
@@ -1572,129 +1507,100 @@ xirc2ps_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	      #endif
 		else {
 		    insw(ioaddr+XIRCREG_EDP, skb_put(skb, pktlen),
-			    (pktlen+1)>>1 );
+			    (pktlen+1)>>1);
 		}
 		skb->protocol = eth_type_trans(skb, dev);
 		skb->dev = dev;
 		netif_rx(skb);
 		lp->stats.rx_packets++;
 		lp->stats.rx_bytes += pktlen;
-		if( !(rsr & PhyPkt) )
+		if (!(rsr & PhyPkt))
 		    lp->stats.multicast++;
 	    }
-	    PutWord(XIRCREG0_DO, 0x8000 ); /* issue cmd: skip_rx_packet */
+	    PutWord(XIRCREG0_DO, 0x8000); /* issue cmd: skip_rx_packet */
+	} else {
+	    DEBUG(5, "rsr=%#02x\n", rsr);
 	}
-	else {
-	  #ifdef PCMCIA_DEBUG
-	    if( pc_debug > 5 )
-		printk("rsr=%#02x\n", rsr );
-	  #endif
-	}
-	if( rsr & PktTooLong ) {
+	if (rsr & PktTooLong) {
 	    lp->stats.rx_frame_errors++;
-	  #ifdef PCMCIA_DEBUG
-	    if( pc_debug > 3 )
-		printk(KNOT_XIRC "%s: Packet too long\n", dev->name);
-	  #endif
+	    DEBUG(3, "%s: Packet too long\n", dev->name);
 	}
-	if( rsr & CRCErr ) {
+	if (rsr & CRCErr) {
 	    lp->stats.rx_crc_errors++;
-	  #ifdef PCMCIA_DEBUG
-	    if( pc_debug > 3 )
-		printk(KNOT_XIRC "%s: CRC error\n", dev->name);
-	  #endif
+	    DEBUG(3, "%s: CRC error\n", dev->name);
 	}
-	if( rsr & AlignErr ) {
+	if (rsr & AlignErr) {
 	    lp->stats.rx_fifo_errors++; /* okay ? */
-	  #ifdef PCMCIA_DEBUG
-	    if( pc_debug > 3 )
-		printk(KNOT_XIRC "%s: Alignment error\n", dev->name);
-	  #endif
+	    DEBUG(3, "%s: Alignment error\n", dev->name);
 	}
 
 	/* get the new ethernet status */
 	eth_status = GetByte(XIRCREG_ESR);
     }
-    if( rx_status & 0x10 ) { /* Receive overrun */
+    if (rx_status & 0x10) { /* Receive overrun */
 	lp->stats.rx_over_errors++;
 	PutByte(XIRCREG_CR, ClearRxOvrun);
-      #ifdef PCMCIA_DEBUG
-	if( pc_debug > 3 )
-	    printk(KDBG_XIRC "receive overrun cleared\n" );
-      #endif
+	DEBUG(3, "receive overrun cleared\n");
     }
 
     /***** transmit section ******/
-    if( int_status & PktTxed ) {
+    if (int_status & PktTxed) {
 	unsigned n, nn;
 
 	n = lp->last_ptr_value;
 	nn = GetByte(XIRCREG0_PTR);
 	lp->last_ptr_value = nn;
-	if( nn < n ) /* rollover */
+	if (nn < n) /* rollover */
 	    lp->stats.tx_packets += 256 - n;
-	else if( n == nn ) { /* happens sometimes - don't know why */
-	  #ifdef PCMCIA_DEBUG
-	    if( pc_debug )
-		printk(KDBG_XIRC "PTR not changed?\n" );
-	  #endif
-	}
-	else
+	else if (n == nn) { /* happens sometimes - don't know why */
+	    DEBUG(0, "PTR not changed?\n");
+	} else
 	    lp->stats.tx_packets += lp->last_ptr_value - n;
 	dev->tbusy = 0;
 	mark_bh(NET_BH);  /* Inform upper layers. */
     }
-    if( tx_status & 0x0002 ) {	/* Execessive collissions */
-      #ifdef PCMCIA_DEBUG
-	if( pc_debug )
-	    printk(KDBG_XIRC "tx restarted due to execssive collissions\n" );
-      #endif
-	PutByte(XIRCREG_CR, RestartTx );  /* restart transmitter process */
+    if (tx_status & 0x0002) {	/* Execessive collissions */
+	DEBUG(0, "tx restarted due to execssive collissions\n");
+	PutByte(XIRCREG_CR, RestartTx);  /* restart transmitter process */
     }
-    if( tx_status & 0x0040 )
+    if (tx_status & 0x0040)
 	lp->stats.tx_aborted_errors++;
 
     /* recalculate our work chunk so that we limit the duration of this
      * ISR to about 1/10 of a second.
      * Calculate only if we received a reasonable amount of bytes.
      */
-    if( bytes_rcvd > 1000 ) {
+    if (bytes_rcvd > 1000) {
 	u_long duration = jiffies - start_ticks;
 
-	if( duration >= HZ/10 ) { /* if more than about 1/10 second */
+	if (duration >= HZ/10) { /* if more than about 1/10 second */
 	    maxrx_bytes = (bytes_rcvd * (HZ/10)) / duration;
-	    if( maxrx_bytes < 2000 )
+	    if (maxrx_bytes < 2000)
 		maxrx_bytes = 2000;
-	    else if( maxrx_bytes > 22000 )
+	    else if (maxrx_bytes > 22000)
 		maxrx_bytes = 22000;
-	  #ifdef PCMCIA_DEBUG
-	    if( pc_debug > 1)
-		printk(KDBG_XIRC "set maxrx=%u (rcvd=%u ticks=%lu)\n",
-				  maxrx_bytes, bytes_rcvd, duration  );
-	  #endif
-	}
-	else if( !duration && maxrx_bytes < 22000 ) { /* now much faster*/
+	    DEBUG(1, "set maxrx=%u (rcvd=%u ticks=%lu)\n",
+		  maxrx_bytes, bytes_rcvd, duration);
+	} else if (!duration && maxrx_bytes < 22000) {
+	    /* now much faster */
 	    maxrx_bytes += 2000;
-	    if( maxrx_bytes > 22000 )
+	    if (maxrx_bytes > 22000)
 		maxrx_bytes = 22000;
-	  #ifdef PCMCIA_DEBUG
-	    if( pc_debug > 1 )
-		printk(KDBG_XIRC "set maxrx=%u\n", maxrx_bytes );
-	  #endif
+	    DEBUG(1, "set maxrx=%u\n", maxrx_bytes);
 	}
     }
 
   leave:
-    if( lockup_hack ) {
-	if( int_status != 0xff && (int_status = GetByte(XIRCREG_ISR)) != 0 )
+    if (lockup_hack) {
+	if (int_status != 0xff && (int_status = GetByte(XIRCREG_ISR)) != 0)
 	    goto loop_entry;
     }
     SelectPage(saved_page);
     dev->interrupt = 0;
-    PutByte(XIRCREG_CR, EnableIntr );  /* re-enable interrupts */
+    PutByte(XIRCREG_CR, EnableIntr);  /* re-enable interrupts */
     /* Instead of dropping packets during a receive, we could
      * force an interrupt with this command:
-     *	  PutByte(XIRCREG_CR, EnableIntr|ForceIntr );
+     *	  PutByte(XIRCREG_CR, EnableIntr|ForceIntr);
      */
 } /* xirc2ps_interrupt */
 
@@ -1709,26 +1615,23 @@ do_start_xmit(struct sk_buff *skb, struct net_device *dev)
     unsigned freespace;
     unsigned pktlen = skb? skb->len : 0;
 
-  #ifdef PCMCIA_DEBUG
-    if(pc_debug>1 )
-	printk(KDBG_XIRC "do_start_xmit(skb=%p, dev=%p) len=%u\n",
-						    skb, dev, pktlen );
-  #endif
+    DEBUG(1, "do_start_xmit(skb=%p, dev=%p) len=%u\n",
+	  skb, dev, pktlen);
 
     /* Transmitter timeout, serious problems */
-    if( dev->tbusy ) {
+    if (dev->tbusy) {
 	int tickssofar = jiffies - dev->trans_start;
 
-	if( lp->suspended ) {
+	if (lp->suspended) {
 	    dev_kfree_skb (skb);
 	    dev->trans_start = jiffies;
 	    lp->stats.tx_dropped++;
 	    return 0;
 	}
-	if( tickssofar < TX_TIMEOUT )
+	if (tickssofar < TX_TIMEOUT)
 	    return 1;
 
-	printk(KERN_NOTICE "%s: transmit timed out\n", dev->name );
+	printk(KERN_NOTICE "%s: transmit timed out\n", dev->name);
 	lp->stats.tx_errors++;
 	/* reset the card */
 	do_reset(dev,1);
@@ -1736,7 +1639,7 @@ do_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	dev->tbusy = 0;
     }
 
-    if( test_and_set_bit(0, (void*)&dev->tbusy ) ) {
+    if (test_and_set_bit(0, (void*)&dev->tbusy)) {
 	printk(KWRN_XIRC "transmitter access conflict\n");
 	dev_kfree_skb (skb);
 	return 0;
@@ -1749,33 +1652,30 @@ do_start_xmit(struct sk_buff *skb, struct net_device *dev)
      * a larger packetlen than we actually have; the chip will
      * pad this in his buffer with random bytes
      */
-    if( pktlen < ETH_ZLEN )
+    if (pktlen < ETH_ZLEN)
 	pktlen = ETH_ZLEN;
 
     SelectPage(0);
-    PutWord(XIRCREG0_TRS, (u_short)pktlen+2 );
+    PutWord(XIRCREG0_TRS, (u_short)pktlen+2);
     freespace = GetWord(XIRCREG0_TSO);
     okay = freespace & 0x8000;
     freespace &= 0x7fff;
     /* TRS doesn't work - (indeed it is eliminated with sil-rev 1) */
     okay = pktlen +2 < freespace;
-  #ifdef PCMCIA_DEBUG
-    if(pc_debug > 2  + ( okay ? 2 : 0) )
-	printk(KERN_DEBUG "%s: avail. tx space=%u%s\n", dev->name, freespace,
-				okay? " (okay)":" (not enough)" );
-  #endif
-    if( !okay ) { /* not enough space */
+    DEBUG(2 + (okay ? 2 : 0), "%s: avail. tx space=%u%s\n",
+	  dev->name, freespace, okay ? " (okay)":" (not enough)");
+    if (!okay) { /* not enough space */
 	dev->tbusy = 1;
 	return 1;  /* upper layer may decide to requeue this packet */
     }
     /* send the packet */
-    PutWord(XIRCREG_EDP, (u_short)pktlen );
-    outsw(ioaddr+XIRCREG_EDP, skb->data, pktlen>>1 );
-    if( pktlen & 1 )
-	PutByte(XIRCREG_EDP, skb->data[pktlen-1] );
+    PutWord(XIRCREG_EDP, (u_short)pktlen);
+    outsw(ioaddr+XIRCREG_EDP, skb->data, pktlen>>1);
+    if (pktlen & 1)
+	PutByte(XIRCREG_EDP, skb->data[pktlen-1]);
 
-    if( lp->mohawk )
-	PutByte(XIRCREG_CR, TransmitPacket|EnableIntr );
+    if (lp->mohawk)
+	PutByte(XIRCREG_CR, TransmitPacket|EnableIntr);
 
     dev_kfree_skb (skb);
     dev->trans_start = jiffies;
@@ -1808,29 +1708,28 @@ set_addresses(struct net_device *dev)
     int i,j,k,n;
 
     SelectPage(k=0x50);
-    for(i=0,j=8,n=0; ; i++, j++) {
-	if( i > 5 ) {
-	    if( ++n > 9 )
+    for (i=0,j=8,n=0; ; i++, j++) {
+	if (i > 5) {
+	    if (++n > 9)
 		break;
 	    i = 0;
 	}
-	if( j > 15 ) {
+	if (j > 15) {
 	    j = 8;
 	    k++;
 	    SelectPage(k);
 	}
 
-	if( n && n <= dev->mc_count && dmi ) {
+	if (n && n <= dev->mc_count && dmi) {
 	    addr = dmi->dmi_addr;
 	    dmi = dmi->next;
-	}
-	else
+	} else
 	    addr = dev->dev_addr;
 
-	if( lp->mohawk )
-	    PutByte( j, addr[5-i] );
+	if (lp->mohawk)
+	    PutByte(j, addr[5-i]);
 	else
-	    PutByte( j, addr[i] );
+	    PutByte(j, addr[i]);
     }
     SelectPage(0);
 }
@@ -1847,21 +1746,19 @@ set_multicast_list(struct net_device *dev)
     ioaddr_t ioaddr = dev->base_addr;
 
     SelectPage(0x42);
-    if( dev->flags & IFF_PROMISC ) { /* snoop */
+    if (dev->flags & IFF_PROMISC) { /* snoop */
 	PutByte(XIRCREG42_SWC1, 0x06); /* set MPE and PME */
-    }
-    else if( dev->mc_count > 9 || (dev->flags & IFF_ALLMULTI) ) {
+    } else if (dev->mc_count > 9 || (dev->flags & IFF_ALLMULTI)) {
 	PutByte(XIRCREG42_SWC1, 0x06); /* set MPE */
-    }
-    else if( dev->mc_count ) { /* the chip can filter 9 addresses perfectly */
+    } else if (dev->mc_count) {
+	/* the chip can filter 9 addresses perfectly */
 	PutByte(XIRCREG42_SWC1, 0x00);
 	SelectPage(0x40);
-	PutByte(XIRCREG40_CMD0, Offline );
+	PutByte(XIRCREG40_CMD0, Offline);
 	set_addresses(dev);
 	SelectPage(0x40);
-	PutByte(XIRCREG40_CMD0, EnableRecv | Online );
-    }
-    else { /* standard usage */
+	PutByte(XIRCREG40_CMD0, EnableRecv | Online);
+    } else { /* standard usage */
 	PutByte(XIRCREG42_SWC1, 0x00);
     }
     SelectPage(0);
@@ -1874,10 +1771,7 @@ set_multicast_list(struct net_device *dev)
 static int
 do_init(struct net_device *dev)
 {
-  #ifdef PCMCIA_DEBUG
-    if(pc_debug)
-	printk(KDBG_XIRC "do_init(%p)\n", dev );
-  #endif
+    DEBUG(0, "do_init(%p)\n", dev);
     return 0;
 }
 
@@ -1886,30 +1780,25 @@ do_config(struct net_device *dev, struct ifmap *map)
 {
     local_info_t *local = dev->priv;
 
-  #ifdef PCMCIA_DEBUG
-    if(pc_debug)
-	printk(KDBG_XIRC "do_config(%p)\n", dev );
-  #endif
-
-    if( map->port != 255 && map->port != dev->if_port ) {
-	if( map->port <= 4 ) {
-	    if( !map->port ) {
-		local->probe_port = 1;
-		dev->if_port = 1;
-	    }
-	    else {
-		local->probe_port = 0;
-		dev->if_port = map->port;
-	    }
-	    printk(KERN_INFO "%s: switching to %s port\n",
-			      dev->name, if_names[dev->if_port]);
-	    do_reset(dev,1);  /* not the fine way :-) */
-	}
-	else
+    DEBUG(0, "do_config(%p)\n", dev);
+    if (map->port != 255 && map->port != dev->if_port) {
+	if (local->new_mii)
+	    return -EOPNOTSUPP;
+	if (map->port > 4)
 	    return -EINVAL;
+	if (!map->port) {
+	    local->probe_port = 1;
+	    dev->if_port = 1;
+	} else {
+	    local->probe_port = 0;
+	    dev->if_port = map->port;
+	}
+	printk(KERN_INFO "%s: switching to %s port\n",
+	       dev->name, if_names[dev->if_port]);
+	do_reset(dev,1);  /* not the fine way :-) */
     }
   #ifdef PCMCIA_DEBUG
-    else if( map->port == dev->if_port && local->mohawk ) {
+    else if (local->mohawk) {
 	/* kludge to print the mii regsiters */
 	mii_dump(dev);
     }
@@ -1926,17 +1815,14 @@ do_open(struct net_device *dev)
     local_info_t *lp = dev->priv;
     dev_link_t *link;
 
-  #ifdef PCMCIA_DEBUG
-    if(pc_debug)
-	printk(KDBG_XIRC "do_open(%p)\n", dev );
-  #endif
+    DEBUG(0, "do_open(%p)\n", dev);
 
     /* Check that the PCMCIA card is still here. */
-    for( link = dev_list; link; link = link->next )
-	if( link->priv == dev )
+    for (link = dev_list; link; link = link->next)
+	if (link->priv == dev)
 	    break;
     /* Physical device present signature. */
-    if( !DEV_OK(link) )
+    if (!DEV_OK(link))
 	return -ENODEV;
 
     /* okay */
@@ -1957,25 +1843,22 @@ do_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
     ioaddr_t ioaddr = dev->base_addr;
     u16 *data = (u16 *)&rq->ifr_data;
 
-  #ifdef PCMCIA_DEBUG
-    if(pc_debug > 1)
-	printk(KERN_DEBUG "%s: ioctl(%-.6s, %#04x) %04x %04x %04x %04x\n",
-			   dev->name, rq->ifr_ifrn.ifrn_name, cmd,
-			   data[0], data[1], data[2], data[3] );
-  #endif
+    DEBUG(1, "%s: ioctl(%-.6s, %#04x) %04x %04x %04x %04x\n",
+	  dev->name, rq->ifr_ifrn.ifrn_name, cmd,
+	  data[0], data[1], data[2], data[3]);
 
-    if( !local->mohawk )
+    if (!local->mohawk)
 	return -EOPNOTSUPP;
 
-    switch( cmd ) {
+    switch(cmd) {
       case SIOCDEVPRIVATE:	/* Get the address of the PHY in use. */
 	data[0] = 0;		/* we have only this address */
 	/* fall trough */
       case SIOCDEVPRIVATE+1:	/* Read the specified MII register. */
-	data[3] = mii_rd( ioaddr, data[0] & 0x1f, data[1] & 0x1f);
+	data[3] = mii_rd(ioaddr, data[0] & 0x1f, data[1] & 0x1f);
 	break;
       case SIOCDEVPRIVATE+2:	/* Write the specified MII register */
-	if( !suser() )
+	if (!suser())
 	    return -EPERM;
 	mii_wr(ioaddr, data[0] & 0x1f, data[1] & 0x1f, data[2], 16);
 	break;
@@ -1995,7 +1878,7 @@ hardreset(struct net_device *dev)
     udelay(1);
     PutByte(XIRCREG4_GPR1, 0);	     /* clear bit 0: power down */
     busy_loop(HZ/25);		     /* wait 40 msec */
-    if( local->mohawk )
+    if (local->mohawk)
 	PutByte(XIRCREG4_GPR1, 1);	 /* set bit 0: power up */
     else
 	PutByte(XIRCREG4_GPR1, 1 | 4);	 /* set bit 0: power up, bit 2: AIC */
@@ -2009,18 +1892,14 @@ do_reset(struct net_device *dev, int full)
     ioaddr_t ioaddr = dev->base_addr;
     unsigned value;
 
-  #ifdef PCMCIA_DEBUG
-    if(pc_debug)
-	printk(KERN_DEBUG "%s: do_reset(%p,%d)\n",
-					  dev? dev->name:"eth?", dev, full );
-  #endif
+    DEBUG(0, "%s: do_reset(%p,%d)\n", dev? dev->name:"eth?", dev, full);
 
     hardreset(dev);
-    PutByte(XIRCREG_CR, SoftReset ); /* set */
+    PutByte(XIRCREG_CR, SoftReset); /* set */
     busy_loop(HZ/50);		     /* wait 20 msec */
-    PutByte(XIRCREG_CR, 0 );	     /* clear */
+    PutByte(XIRCREG_CR, 0);	     /* clear */
     busy_loop(HZ/25);		     /* wait 40 msec */
-    if( local->mohawk ) {
+    if (local->mohawk) {
 	SelectPage(4);
 	/* set pin GP1 and GP2 to output  (0x0c)
 	 * set GP1 to low to power up the ML6692 (0x00)
@@ -2036,25 +1915,23 @@ do_reset(struct net_device *dev, int full)
     local->silicon = local->mohawk ? (GetByte(XIRCREG4_BOV) & 0x70) >> 4
 				   : (GetByte(XIRCREG4_BOV) & 0x30) >> 4;
 
-    if( local->probe_port ) {
-	if( !local->mohawk ) {
+    if (local->probe_port) {
+	if (!local->mohawk) {
 	    SelectPage(4);
 	    PutByte(XIRCREG4_GPR0, 4);
 	    local->probe_port = 0;
 	}
-    }
-    else if( dev->if_port == 2 ) { /* enable 10Base2 */
+    } else if (dev->if_port == 2) { /* enable 10Base2 */
 	SelectPage(0x42);
 	PutByte(XIRCREG42_SWC1, 0xC0);
-    }
-    else { /* enable 10BaseT */
+    } else { /* enable 10BaseT */
 	SelectPage(0x42);
 	PutByte(XIRCREG42_SWC1, 0x80);
     }
     busy_loop(HZ/25);		     /* wait 40 msec to let it complete */
 
   #ifdef PCMCIA_DEBUG
-    if(pc_debug) {
+    if (pc_debug) {
 	SelectPage(0);
 	value = GetByte(XIRCREG_ESR);	 /* read the ESR */
 	printk(KERN_DEBUG "%s: ESR is: %#02x\n", dev->name, value);
@@ -2063,33 +1940,30 @@ do_reset(struct net_device *dev, int full)
 
     /* setup the ECR */
     SelectPage(1);
-    PutByte(XIRCREG1_IMR0, 0xff ); /* allow all ints */
+    PutByte(XIRCREG1_IMR0, 0xff); /* allow all ints */
     PutByte(XIRCREG1_IMR1, 1	); /* and Set TxUnderrunDetect */
     value = GetByte(XIRCREG1_ECR);
   #if 0
-    if( local->mohawk )
+    if (local->mohawk)
 	value |= DisableLinkPulse;
     PutByte(XIRCREG1_ECR, value);
   #endif
-  #ifdef PCMCIA_DEBUG
-    if(pc_debug)
-	printk(KERN_DEBUG "%s: ECR is: %#02x\n", dev->name, value);
-  #endif
+    DEBUG(0, "%s: ECR is: %#02x\n", dev->name, value);
 
     SelectPage(0x42);
     PutByte(XIRCREG42_SWC0, 0x20); /* disable source insertion */
 
-    if( local->silicon != 1 ) {
+    if (local->silicon != 1) {
 	/* set the local memory dividing line.
 	 * The comments in the sample code say that this is only
 	 * settable with the scipper version 2 which is revision 0.
 	 * Always for CE3 cards
 	 */
 	SelectPage(2);
-	PutWord(XIRCREG2_RBS, 0x2000 );
+	PutWord(XIRCREG2_RBS, 0x2000);
     }
 
-    if( full )
+    if (full)
 	set_addresses(dev);
 
     /* Hardware workaround:
@@ -2097,7 +1971,7 @@ do_reset(struct net_device *dev, int full)
      * to move the offset pointer back to 0.
      */
     SelectPage(0);
-    PutWord(XIRCREG0_DO, 0x2000 ); /* change offset command, off=0 */
+    PutWord(XIRCREG0_DO, 0x2000); /* change offset command, off=0 */
 
     /* setup MAC IMRs and clear status registers */
     SelectPage(0x40);		     /* Bit 7 ... bit 0 */
@@ -2108,36 +1982,23 @@ do_reset(struct net_device *dev, int full)
     PutByte(XIRCREG40_TXST0,  0x00); /* TOK, TAB, SQE, LL, TU, JAB, EXC, CRS */
     PutByte(XIRCREG40_TXST1,  0x00); /* TEN, rsv, PTD, EXT, retry_counter:4  */
 
-    if( full && local->mohawk && init_mii(dev) ) {
-	if( dev->if_port == 4 || local->dingo ) { /* and use it */
-	    SelectPage(2);
-	    value = GetByte(XIRCREG2_MSR);
-	    value |= 0x08;     /* Select MII */
-	    PutByte(XIRCREG2_MSR, value);
-	    busy_loop(HZ/50);	/* wait 20 msec */
-	  #ifdef PCMCIA_DEBUG
-	    if(pc_debug)
-		printk(KERN_DEBUG "%s: MII selected\n", dev->name);
-	  #endif
-	}
-	else {
+    if (full && local->mohawk && init_mii(dev)) {
+	if (dev->if_port == 4 || local->dingo || local->new_mii) {
+	    printk(KERN_INFO "%s: MII selected\n", dev->name);
 	    SelectPage(2);
 	    PutByte(XIRCREG2_MSR, GetByte(XIRCREG2_MSR) | 0x08);
 	    busy_loop(HZ/50);
-	  #ifdef PCMCIA_DEBUG
-	    if(pc_debug)
-		printk(KERN_DEBUG "%s: MII detected; using 10mbs\n",
-								dev->name);
-	  #endif
+	} else {
+	    printk(KERN_INFO "%s: MII detected; using 10mbs\n",
+		   dev->name);
 	    SelectPage(0x42);
-	    if( dev->if_port == 2 ) /* enable 10Base2 */
+	    if (dev->if_port == 2) /* enable 10Base2 */
 		PutByte(XIRCREG42_SWC1, 0xC0);
 	    else  /* enable 10BaseT */
 		PutByte(XIRCREG42_SWC1, 0x80);
 	    busy_loop(HZ/25);	/* wait 40 msec to let it complete */
 	}
-    }
-    else {  /* No MII */
+    } else {  /* No MII */
 	SelectPage(0);
 	value = GetByte(XIRCREG_ESR);	 /* read the ESR */
 	dev->if_port = (value & MediaSelect) ? 1 : 2;
@@ -2145,34 +2006,34 @@ do_reset(struct net_device *dev, int full)
 
     /* configure the LEDs */
     SelectPage(2);
-    if( dev->if_port == 1 || dev->if_port == 4 ) /* TP: Link and Activity */
-	PutByte(XIRCREG2_LED, 0x3b );
+    if (dev->if_port == 1 || dev->if_port == 4) /* TP: Link and Activity */
+	PutByte(XIRCREG2_LED, 0x3b);
     else			      /* Coax: Not-Collision and Activity */
-	PutByte(XIRCREG2_LED, 0x3a );
+	PutByte(XIRCREG2_LED, 0x3a);
 
     if (local->dingo)
-	PutByte( 0x0b, 0x04 ); /* 100 Mbit LED */
+	PutByte(0x0b, 0x04); /* 100 Mbit LED */
 
     /* enable receiver and put the mac online */
-    if( full ) {
+    if (full) {
 	SelectPage(0x40);
-	PutByte(XIRCREG40_CMD0, EnableRecv | Online );
+	PutByte(XIRCREG40_CMD0, EnableRecv | Online);
     }
 
     /* setup Ethernet IMR and enable interrupts */
     SelectPage(1);
-    PutByte(XIRCREG1_IMR0, 0xff );
+    PutByte(XIRCREG1_IMR0, 0xff);
     udelay(1);
     SelectPage(0);
-    PutByte(XIRCREG_CR, EnableIntr );
-    if( local->modem && !local->dingo ) { /* do some magic */
-	if( !(GetByte( 0x10 ) & 0x01 ) )
-	    PutByte( 0x10, 0x11 ); /* unmask master-int bit */
+    PutByte(XIRCREG_CR, EnableIntr);
+    if (local->modem && !local->dingo) { /* do some magic */
+	if (!(GetByte(0x10) & 0x01))
+	    PutByte(0x10, 0x11); /* unmask master-int bit */
     }
 
-    if( full )
-	printk(KERN_INFO "%s: media %s, silicon revision %d\n", dev->name,
-				      if_names[dev->if_port], local->silicon);
+    if (full)
+	printk(KERN_INFO "%s: media %s, silicon revision %d\n",
+	       dev->name, if_names[dev->if_port], local->silicon);
     /* We should switch back to page 0 to avoid a bug in revision 0
      * where regs with offset below 8 can't be read after an access
      * to the MAC registers */
@@ -2192,68 +2053,70 @@ init_mii(struct net_device *dev)
     int i;
 
   #ifdef PCMCIA_DEBUG
-    if(pc_debug>1) {
+    if (pc_debug>1) {
 	mii_dump(dev);
     }
   #endif
 
-    status = mii_rd(ioaddr,  0, 1 );
-    if( (status & 0xff00) != 0x7800 )
+    status = mii_rd(ioaddr,  0, 1);
+    if ((status & 0xff00) != 0x7800)
 	return 0; /* No MII */
 
-    if( local->probe_port )
+    local->new_mii = (mii_rd(ioaddr, 0, 2) != 0xffff);
+    
+    if (local->new_mii || local->probe_port)
 	control = 0x1000; /* auto neg */
-    else if( dev->if_port == 4 )
+    else if (dev->if_port == 4)
 	control = 0x2000; /* no auto neg, 100mbs mode */
     else
 	control = 0x0000; /* no auto neg, 10mbs mode */
-    mii_wr(ioaddr,  0, 0, control, 16 );
+    mii_wr(ioaddr,  0, 0, control, 16);
     udelay(100);
-    control = mii_rd(ioaddr, 0, 0 );
+    control = mii_rd(ioaddr, 0, 0);
 
-    if( control & 0x0400 ) {
+    if (control & 0x0400) {
 	printk(KERN_NOTICE "%s can't take PHY out of isolation mode\n",
-								dev->name);
+	       dev->name);
 	local->probe_port = 0;
 	return 0;
     }
 
-    if( local->probe_port ) {
+    if (local->new_mii || local->probe_port) {
 	/* according to the DP83840A specs the auto negotation process
 	 * may take up to 3.5 sec, so we use this also for our ML6692
 	 * Fixme: Better to use a timer here!
 	 */
-	for(i=0; i < 35; i++ ) {
+	for (i=0; i < 35; i++) {
 	    busy_loop(HZ/10);	 /* wait 100 msec */
-	    status = mii_rd(ioaddr,  0, 1 );
-	    if( (status & 0x0020) && (status & 0x0004) )
+	    status = mii_rd(ioaddr,  0, 1);
+	    if ((status & 0x0020) && (status & 0x0004))
 		break;
 	}
 
-	if( !(status & 0x0020) ) {
-	    printk(KERN_NOTICE "%s: auto negotation failed;"
-			       " using 10mbs\n", dev->name );
-	    control = 0x0000;
-	    mii_wr(ioaddr,  0, 0, control, 16 );
-	    udelay(100);
-	    SelectPage(0);
-	    dev->if_port = (GetByte(XIRCREG_ESR) & MediaSelect) ? 1 : 2;
-	}
-	else {
-	    linkpartner = mii_rd(ioaddr, 0, 5 );
-	    printk(KERN_INFO "%s: MII link partner: %04x\n", dev->name,
-							linkpartner );
-	    if( linkpartner & 0x0080 ) { /* 100BaseTx capability */
-		dev->if_port = 4;
+	if (!(status & 0x0020)) {
+	    printk(KERN_INFO "%s: auto negotation failed;"
+		   " using 10mbs\n", dev->name);
+	    if (!local->new_mii) {
+		control = 0x0000;
+		mii_wr(ioaddr,  0, 0, control, 16);
+		udelay(100);
+		SelectPage(0);
+		dev->if_port = (GetByte(XIRCREG_ESR) & MediaSelect) ? 1 : 2;
 	    }
-	    else
+	} else {
+	    linkpartner = mii_rd(ioaddr, 0, 5);
+	    printk(KERN_INFO "%s: MII link partner: %04x\n",
+		   dev->name, linkpartner);
+	    if (linkpartner & 0x0080) {
+		dev->if_port = 4;
+	    } else
 		dev->if_port = 1;
 	}
 	local->probe_port = 0;
     }
 
   #ifdef PCMCIA_DEBUG
-    if( pc_debug )
+    if (pc_debug)
 	mii_dump(dev);
   #endif
 
@@ -2266,10 +2129,7 @@ do_powerdown(struct net_device *dev)
 
     ioaddr_t ioaddr = dev->base_addr;
 
-  #ifdef PCMCIA_DEBUG
-    if(pc_debug)
-	printk(KDBG_XIRC "do_powerdown(%p)\n", dev );
-  #endif
+    DEBUG(0, "do_powerdown(%p)\n", dev);
 
     SelectPage(4);
     PutByte(XIRCREG4_GPR1, 0);	     /* clear bit 0: power down */
@@ -2277,33 +2137,26 @@ do_powerdown(struct net_device *dev)
 }
 
 static int
-do_stop( struct net_device *dev)
+do_stop(struct net_device *dev)
 {
     ioaddr_t ioaddr = dev->base_addr;
     dev_link_t *link;
 
-  #ifdef PCMCIA_DEBUG
-    if(pc_debug)
-	printk(KDBG_XIRC "do_stop(%p)\n", dev );
-  #endif
+    DEBUG(0, "do_stop(%p)\n", dev);
 
-    for(link = dev_list; link; link = link->next)
-	if(link->priv == dev)
+    for (link = dev_list; link; link = link->next)
+	if (link->priv == dev)
 	    break;
-    if( !link )
+    if (!link)
 	return -ENODEV;
 
-  #ifdef PCMCIA_DEBUG
-    if(pc_debug)
-	printk(KDBG_XIRC "shutting down\n");
-  #endif
     dev->tbusy = 1;
     dev->start = 0;
 
     SelectPage(0);
-    PutByte(XIRCREG_CR, 0 );  /* disable interrupts */
+    PutByte(XIRCREG_CR, 0);  /* disable interrupts */
     SelectPage(0x01);
-    PutByte(XIRCREG1_IMR0, 0x00 ); /* forbid all ints */
+    PutByte(XIRCREG1_IMR0, 0x00); /* forbid all ints */
     SelectPage(4);
     PutByte(XIRCREG4_GPR1, 0);	/* clear bit 0: power down */
     SelectPage(0);
@@ -2326,19 +2179,16 @@ init_xirc2ps_cs(void)
     servinfo_t serv;
 
     printk(KERN_INFO "%s\n", version);
-    if( card_type )
+    if (card_type)
 	printk(KINF_XIRC "option card_type is obsolete\n");
-    if( lockup_hack )
+    if (lockup_hack)
 	printk(KINF_XIRC "lockup hack is enabled\n");
     CardServices(GetCardServicesInfo, &serv);
-    if( serv.Revision != CS_RELEASE_CODE ) {
+    if (serv.Revision != CS_RELEASE_CODE) {
 	printk(KNOT_XIRC "Card Services release does not match!\n");
 	return -1;
     }
-  #ifdef PCMCIA_DEBUG
-    if( pc_debug )
-	printk(KDBG_XIRC "pc_debug=%d\n", pc_debug);
-  #endif
+    DEBUG(0, "pc_debug=%d\n", pc_debug);
     register_pccard_driver(&dev_info, &xirc2ps_attach, &xirc2ps_detach);
     return 0;
 }
@@ -2346,16 +2196,13 @@ init_xirc2ps_cs(void)
 static void __exit
 exit_xirc2ps_cs(void)
 {
-  #ifdef PCMCIA_DEBUG
-    if(pc_debug)
-	printk(KDBG_XIRC "unloading\n");
-  #endif
+    DEBUG(0, "unloading\n");
     unregister_pccard_driver(&dev_info);
-    while( dev_list ) {
-	if( dev_list->state & DEV_CONFIG )
-	    xirc2ps_release( (u_long)dev_list );
-	if( dev_list )	/* xirc2ps_release() might already have detached... */
-	    xirc2ps_detach( dev_list );
+    while (dev_list) {
+	if (dev_list->state & DEV_CONFIG)
+	    xirc2ps_release((u_long)dev_list);
+	if (dev_list)	/* xirc2ps_release() might already have detached... */
+	    xirc2ps_detach(dev_list);
     }
 }
 

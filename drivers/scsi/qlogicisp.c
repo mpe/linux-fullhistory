@@ -535,12 +535,6 @@ static void	isp1020_print_scsi_cmd(Scsi_Cmnd *);
 static void	isp1020_print_status_entry(struct Status_Entry *);
 #endif
 
-static struct proc_dir_entry proc_scsi_isp1020 = {
-	PROC_SCSI_QLOGICISP, 7, "isp1020",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
-
 static inline void isp1020_enable_irqs(struct Scsi_Host *host)
 {
 	outw(ISP_EN_INT|ISP_EN_RISC, host->io_port + PCI_INTF_CTL);
@@ -562,7 +556,7 @@ int isp1020_detect(Scsi_Host_Template *tmpt)
 
 	ENTER("isp1020_detect");
 
-	tmpt->proc_dir = &proc_scsi_isp1020;
+	tmpt->proc_name = "isp1020";
 
 	if (pci_present() == 0) {
 		printk("qlogicisp : PCI not present\n");

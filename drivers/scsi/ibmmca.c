@@ -275,15 +275,6 @@ struct subsys_list_struct subsys_list[] =
   {0x8efe, "IBM SCSI Adapter"}, /* special = 4 */
 };
 
-/*for /proc filesystem */
-struct proc_dir_entry proc_scsi_ibmmca =
-{
-  PROC_SCSI_IBMMCA, 6, "ibmmca",
-  S_IFDIR | S_IRUGO | S_IXUGO, 2,
-  0, 0, 0, NULL, NULL, NULL, NULL,
-  NULL, NULL, NULL
-};
-
 /* Max number of logical devices (can be up from 0 to 14).  15 is the address
 of the adapter itself. */
 #define MAX_LOG_DEV  15

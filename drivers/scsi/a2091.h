@@ -31,9 +31,7 @@ int wd33c93_reset(Scsi_Cmnd *, unsigned int);
 
 #ifdef HOSTS_C
 
-extern struct proc_dir_entry proc_scsi_a2091;
-
-#define A2091_SCSI {  proc_dir:		   &proc_scsi_a2091, \
+#define A2091_SCSI {  proc_name:	   "A2901", \
 		      name:                "Commodore A2091/A590 SCSI", \
 		      detect:              a2091_detect,    \
 		      release:             a2091_release,   \

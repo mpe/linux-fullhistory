@@ -610,7 +610,7 @@ void ufs_read_inode (struct inode * inode)
 	inode->u.ufs_i.i_gen = SWAB32(ufs_inode->ui_gen);
 	inode->u.ufs_i.i_shadow = SWAB32(ufs_inode->ui_u3.ui_sun.ui_shadow);
 	inode->u.ufs_i.i_oeftflag = SWAB32(ufs_inode->ui_u3.ui_sun.ui_oeftflag);
-	inode->u.ufs_i.i_lastfrag = howmany (inode->i_size, uspi->s_fsize);
+	inode->u.ufs_i.i_lastfrag = (inode->i_size + uspi->s_fsize - 1) >> uspi->s_fshift;
 	
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
 		;

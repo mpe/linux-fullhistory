@@ -25,8 +25,6 @@ void NCR53c7x0_intr(int irq, void *dev_id, struct pt_regs * regs);
 #if defined(HOSTS_C) || defined(MODULE)
 #include <scsi/scsicam.h>
 
-extern struct proc_dir_entry proc_scsi_amiga7xx;
-
 #define AMIGA7XX_SCSI {name:                "Amiga NCR53c710 SCSI", \
 		       detect:              amiga7xx_detect,    \
 		       queuecommand:        NCR53c7xx_queue_command, \

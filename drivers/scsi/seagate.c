@@ -108,12 +108,6 @@
 #endif
 #define DANY( msg... ) DPRINTK( 0xffff, msg );
 
-static struct proc_dir_entry proc_scsi_seagate =
-{
-  PROC_SCSI_SEAGATE, 7, "seagate",
-  S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 #ifndef IRQ
 #define IRQ 5
 #endif
@@ -418,7 +412,7 @@ int __init seagate_st0x_detect (Scsi_Host_Template * tpnt)
   struct Scsi_Host *instance;
   int i, j;
 
-  tpnt->proc_dir = &proc_scsi_seagate;
+  tpnt->proc_name = "seagate";
 /*
  *    First, we try for the manual override.  */
   DANY ("Autodetecting ST0x / TMC-8xx\n");

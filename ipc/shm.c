@@ -36,6 +36,7 @@ struct shmid_kernel /* extend struct shmis_ds with private fields */
 	pte_t			**shm_dir;  /* ptr to array of ptrs to frames -> SHMMAX */ 
 	struct vm_area_struct	*attaches;  /* descriptors for attaches */
 	int                     id; /* backreference to id for shm_close */
+	struct semaphore sem;
 };
 
 static int findkey (key_t key);
@@ -50,7 +51,7 @@ static int shm_swapout(struct page *, struct file *);
 static int sysvipc_shm_read_proc(char *buffer, char **start, off_t offset, int length, int *eof, void *data);
 #endif
 
-size_t shm_prm[3] = {SHMMAX, SHMALL, SHMMNI};
+unsigned int shm_prm[3] = {SHMMAX, SHMALL, SHMMNI};
 
 static int shm_tot = 0; /* total number of shared memory pages */
 static int shm_rss = 0; /* number of shared memory pages that are in memory */
@@ -61,6 +62,9 @@ static struct shmid_kernel **shm_segs = NULL;
 static unsigned int num_segs = 0;
 static unsigned short shm_seq = 0; /* incremented, for recognizing stale ids */
 
+/* locks order:
+	shm_lock -> pagecache_lock (end of shm_swap)
+	shp->sem -> other spinlocks (shm_nopage) */
 spinlock_t shm_lock = SPIN_LOCK_UNLOCKED;
 
 /* some statistics */
@@ -260,6 +264,7 @@ found:
 	shp->u.shm_ctime = CURRENT_TIME;
 	shp->shm_npages = numpages;
 	shp->id = id;
+	init_MUTEX(&shp->sem);
 
 	spin_lock(&shm_lock);
 
@@ -770,19 +775,20 @@ static struct page * shm_nopage(struct vm_area_struct * shmd, unsigned long addr
 	idx = (address - shmd->vm_start) >> PAGE_SHIFT;
 	idx += shmd->vm_pgoff;
 
+	down(&shp->sem);
 	spin_lock(&shm_lock);
-again:
 	pte = SHM_ENTRY(shp,idx);
 	if (!pte_present(pte)) {
+		/* page not present so shm_swap can't race with us
+		   and the semaphore protects us by other tasks that
+		   could potentially fault on our pte under us */
 		if (pte_none(pte)) {
 			spin_unlock(&shm_lock);
-			page = get_free_highpage(GFP_HIGHUSER);
+			page = alloc_page(GFP_HIGHUSER);
 			if (!page)
 				goto oom;
 			clear_highpage(page);
 			spin_lock(&shm_lock);
-			if (pte_val(pte) != pte_val(SHM_ENTRY(shp, idx)))
-				goto changed;
 		} else {
 			swp_entry_t entry = pte_to_swp_entry(pte);
 
@@ -803,9 +809,6 @@ again:
 			unlock_kernel();
 			spin_lock(&shm_lock);
 			shm_swp--;
-			pte = SHM_ENTRY(shp, idx);
-			if (pte_present(pte))
-				goto present;
 		}
 		shm_rss++;
 		pte = pte_mkdirty(mk_pte(page, PAGE_SHARED));
@@ -813,21 +816,15 @@ again:
 	} else
 		--current->maj_flt;  /* was incremented in do_no_page */
 
-done:
 	/* pte_val(pte) == SHM_ENTRY (shp, idx) */
 	get_page(pte_page(pte));
 	spin_unlock(&shm_lock);
+	up(&shp->sem);
 	current->min_flt++;
 	return pte_page(pte);
 
-changed:
-	__free_page(page);
-	goto again;
-present:
-	if (page)
-		free_page_and_swap_cache(page);
-	goto done;
 oom:
+	up(&shp->sem);
 	return NOPAGE_OOM;
 }
 
@@ -851,7 +848,11 @@ int shm_swap (int prio, int gfp_mask)
 	if (!counter)
 		return 0;
 	lock_kernel();
-	swap_entry = get_swap_page();
+	/* subtle: preload the swap count for the swap cache. We can't
+	   increase the count inside the critical section as we can't release
+	   the shm_lock there. And we can't acquire the big lock with the
+	   shm_lock held (otherwise we would deadlock too easily). */
+	swap_entry = __get_swap_page(2);
 	if (!swap_entry.val) {
 		unlock_kernel();
 		return 0;
@@ -893,7 +894,7 @@ int shm_swap (int prio, int gfp_mask)
 failed:
 		spin_unlock(&shm_lock);
 		lock_kernel();
-		swap_free(swap_entry);
+		__swap_free(swap_entry, 2);
 		unlock_kernel();
 		return 0;
 	}
@@ -905,11 +906,16 @@ failed:
 	swap_successes++;
 	shm_swp++;
 	shm_rss--;
+
+	/* add the locked page to the swap cache before allowing
+	   the swapin path to run lookup_swap_cache(). This avoids
+	   reading a not yet uptodate block from disk.
+	   NOTE: we just accounted the swap space reference for this
+	   swap cache page at __get_swap_page() time. */
+	add_to_swap_cache(page_map, swap_entry);
 	spin_unlock(&shm_lock);
 
 	lock_kernel();
-	swap_duplicate(swap_entry);
-	add_to_swap_cache(page_map, swap_entry);
 	rw_swap_page(WRITE, page_map, 0);
 	unlock_kernel();
 

@@ -26,8 +26,6 @@ void NCR53c7x0_intr(int irq, void *dev_id, struct pt_regs * regs);
 #if defined(HOSTS_C) || defined(MODULE)
 #include <scsi/scsicam.h>
 
-extern struct proc_dir_entry proc_scsi_mvme16x;
-
 #define MVME16x_SCSI  {name:                "MVME16x NCR53c710 SCSI", \
 		       detect:              mvme16x_scsi_detect,    \
 		       queuecommand:        NCR53c7xx_queue_command, \

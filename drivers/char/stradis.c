@@ -41,7 +41,6 @@
 #include <linux/types.h>
 #include <linux/wrapper.h>
 #include <linux/interrupt.h>
-#include <linux/version.h>
 #include <asm/uaccess.h>
 #include <linux/vmalloc.h>
 #include <linux/videodev.h>

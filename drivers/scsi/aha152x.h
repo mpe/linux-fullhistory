@@ -26,10 +26,8 @@ int aha152x_proc_info(char *buffer, char **start, off_t offset, int length, int 
 
 #define AHA152X_REVID "Adaptec 152x SCSI driver; $Revision: 1.7 $"
 
-extern struct proc_dir_entry proc_scsi_aha152x;
-
 /* Initial value of Scsi_Host entry */
-#define AHA152X { proc_dir:           &proc_scsi_aha152x, \
+#define AHA152X { proc_name:          "a152x",		  \
                   proc_info:          aha152x_proc_info,  \
                   name:               AHA152X_REVID,	  \
                   detect:             aha152x_detect,	  \

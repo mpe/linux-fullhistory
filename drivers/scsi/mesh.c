@@ -65,11 +65,6 @@ unsigned char use_active_neg = 0;  /* bit mask for SEQ_ACTIVE_NEG if used */
 #define ALLOW_DEBUG(tgt)	((mesh_debug_targets >> (tgt)) & 1)
 #define DEBUG_TARGET(cmd)	((cmd) && ALLOW_DEBUG((cmd)->target))
 
-struct proc_dir_entry proc_scsi_mesh = {
-	PROC_SCSI_MESH, 4, "mesh",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 #undef MESH_DBG
 #define N_DBG_LOG	50
 #define N_DBG_SLOG	20

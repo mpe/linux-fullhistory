@@ -482,12 +482,6 @@ static char*  dc390_adapname = "DC390";
 UCHAR  dc390_eepromBuf[MAX_ADAPTER_NUM][EE_LEN];
 UCHAR  dc390_clock_period1[] = {4, 5, 6, 7, 8, 10, 13, 20};
 
-struct proc_dir_entry	DC390_proc_scsi_tmscsim ={
-       PROC_SCSI_DC390T, 7 ,"tmscsim",
-       S_IFDIR | S_IRUGO | S_IXUGO, 2
-       };
-
-
 /***********************************************************************
  * Functions for access to DC390 EEPROM
  * and some to emulate it
@@ -2024,7 +2018,7 @@ int __init DC390_detect (Scsi_Host_Template *psht)
 	printk (KERN_ERR "DC390: No PCI BIOS found!\n");
    
     if (dc390_adapterCnt)
-	psht->proc_dir = &DC390_proc_scsi_tmscsim;
+	psht->proc_name = "tmscsim";
 
     printk(KERN_INFO "DC390: %i adapters found\n", dc390_adapterCnt);
     DC390_UNLOCK_DRV;

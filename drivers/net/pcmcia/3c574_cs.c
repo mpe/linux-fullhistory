@@ -2,7 +2,7 @@
 
 	Written 1993-1998 by
 	Donald Becker, becker@cesdis.gsfc.nasa.gov, (driver core) and
-	David Hinds, dhinds@allegro.stanford.edu (derived from his PC card code).
+	David Hinds, dhinds@pcmcia.sourceforge.org (from his PC card code).
 
 	This software may be used and distributed according to the terms of
 	the GNU Public License, incorporated herein by reference.
@@ -322,7 +322,6 @@ static dev_link_t *tc574_attach(void)
 	link->release.data = (u_long)link;
 	link->io.NumPorts1 = 32;
 	link->io.Attributes1 = IO_DATA_PATH_WIDTH_16;
-	link->io.IOAddrLines = 5;
 	link->irq.Attributes = IRQ_TYPE_EXCLUSIVE | IRQ_HANDLE_PRESENT;
 	link->irq.IRQInfo1 = IRQ_INFO2_VALID|IRQ_LEVEL_ID;
 	if (irq_list[0] == -1)
@@ -483,6 +482,7 @@ static void tc574_config(dev_link_t *link)
 	/* Configure card */
 	link->state |= DEV_CONFIG;
 
+	link->io.IOAddrLines = 16;
 	for (i = j = 0; j < 0x400; j += 0x20) {
 		link->io.BasePort1 = j ^ 0x300;
 		i = CardServices(RequestIO, link->handle, &link->io);

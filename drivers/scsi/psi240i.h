@@ -318,9 +318,7 @@ int Psi240i_BiosParam		(Disk *disk, kdev_t dev, int geom[]);
 	#define NULL 0
 #endif
 
-extern struct proc_dir_entry Proc_Scsi_Psi240i;
-
-#define PSI240I { proc_dir:       &Proc_Scsi_Psi240i,/* proc_dir_entry */ \
+#define PSI240I { proc_name:      "psi240i", \
 		  name:           "PSI-240I EIDE Disk Controller",\
 		  detect:         Psi240i_Detect,			\
 		  command:	  Psi240i_Command,			\

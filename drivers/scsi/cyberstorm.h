@@ -56,7 +56,7 @@ extern int esp_proc_info(char *buffer, char **start, off_t offset, int length,
 			 int hostno, int inout);
 
 
-#define SCSI_CYBERSTORM   { proc_dir:		&proc_scsi_esp, \
+#define SCSI_CYBERSTORM   { proc_name:		"esp-cyberstorm", \
 			    proc_info:		esp_proc_info, \
 			    name:		"CyberStorm SCSI", \
 			    detect:		cyber_esp_detect, \

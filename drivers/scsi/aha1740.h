@@ -170,9 +170,7 @@ int aha1740_proc_info(char *buffer, char **start, off_t offset,
 	#define NULL 0
 #endif
 
-extern struct proc_dir_entry proc_scsi_aha1740;
-
-#define AHA1740 {  proc_dir:       &proc_scsi_aha1740,			\
+#define AHA1740 {  proc_name:      "aha1740",				\
 		   proc_info:      aha1740_proc_info,	                \
 		   name:           "Adaptec 174x (EISA)",		\
 		   detect:         aha1740_detect,			\

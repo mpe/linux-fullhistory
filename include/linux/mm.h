@@ -138,6 +138,7 @@ typedef struct page {
 	wait_queue_head_t wait;
 	struct page **pprev_hash;
 	struct buffer_head * buffers;
+	unsigned long virtual; /* nonzero if kmapped */
 } mem_map_t;
 
 #define get_page(p)		atomic_inc(&(p)->count)
@@ -285,11 +286,16 @@ extern mem_map_t * mem_map;
  * This is timing-critical - most of the time in getting a new page
  * goes to clearing the page. If you want a page without the clearing
  * overhead, just use __get_free_page() directly..
+ *
+ * We have two allocation namespaces - the *get*page*() variants
+ * return virtual kernel addresses to the allocated page(s), the
+ * alloc_page*() variants return 'struct page *'.
  */
 #define __get_free_page(gfp_mask) __get_free_pages((gfp_mask),0)
 #define __get_dma_pages(gfp_mask, order) __get_free_pages((gfp_mask) | GFP_DMA,(order))
-extern unsigned long FASTCALL(__get_free_pages(int gfp_mask, unsigned long gfp_order));
-extern struct page * get_free_highpage(int gfp_mask);
+extern unsigned long FASTCALL(__get_free_pages(int gfp_mask, unsigned long order));
+extern struct page * FASTCALL(alloc_pages(int gfp_mask, unsigned long order));
+#define alloc_page(gfp_mask) alloc_pages(gfp_mask, 0)
 
 extern inline unsigned long get_zeroed_page(int gfp_mask)
 {

@@ -200,13 +200,10 @@ int Pci2000_BiosParam		(Disk *disk, kdev_t dev, int geom[]);
 	#define NULL 0
 #endif
 
-extern struct proc_dir_entry Proc_Scsi_Pci2000;
-
-#if LINUX_VERSION_CODE >= LINUXVERSION(2,1,75)
 #define PCI2000 {																\
 		next:						NULL,										\
 		module:						NULL,										\
-		proc_dir:					&Proc_Scsi_Pci2000,							\
+		proc_name:					"pci2000",							\
 		proc_info:					NULL,	/* let's not bloat the kernel */	\
 		name:						"PCI-2000 SCSI Intelligent Disk Controller",\
 		detect:						Pci2000_Detect,								\
@@ -232,27 +229,4 @@ extern struct proc_dir_entry Proc_Scsi_Pci2000;
 		use_clustering:				DISABLE_CLUSTERING,							\
 		use_new_eh_code:			0											\
 		}
-#else
-#define PCI2000 { NULL, NULL,							\
-			&Proc_Scsi_Pci2000,/* proc_dir_entry */		\
-			NULL,		                				\
-			"PCI-2000 SCSI Intelligent Disk Controller",\
-			Pci2000_Detect,								\
-			Pci2000_Release,							\
-			NULL,	 									\
-			Pci2000_Command,							\
-			Pci2000_QueueCommand,						\
-			Pci2000_Abort,								\
-			Pci2000_Reset,								\
-			NULL,										\
-			Pci2000_BiosParam,                 			\
-			16, 										\
-			-1, 										\
-			16,		 									\
-			1, 											\
-			0, 											\
-			0, 											\
-			DISABLE_CLUSTERING }
-#endif
-
 #endif

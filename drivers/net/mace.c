@@ -104,6 +104,7 @@ bitrev(int b)
 int mace_probe(void)
 {
 	int j, rev;
+	struct net_device *dev;
 	struct mace_data *mp;
 	struct device_node *mace;
 	unsigned char *addr;

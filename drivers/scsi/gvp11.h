@@ -32,9 +32,7 @@ int wd33c93_reset(Scsi_Cmnd *, unsigned int);
 
 #ifdef HOSTS_C
 
-extern struct proc_dir_entry proc_scsi_gvp11;
-
-#define GVP11_SCSI {  proc_dir:		   &proc_scsi_gvp11, \
+#define GVP11_SCSI {  proc_name:	   "GVP11", \
 		      name:                "GVP Series II SCSI", \
 		      detect:              gvp11_detect,    \
 		      release:             gvp11_release,   \

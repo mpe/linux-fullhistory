@@ -134,13 +134,6 @@
 /*!!!! for dtc, it's a 128 byte buffer at 3900 !!! */
 #define DTC_DATA_BUF		0x3900  /* rw 128 bytes long */
 
-
-struct proc_dir_entry proc_scsi_dtc = {
-   PROC_SCSI_T128, 7, "dtc3x80",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2
-     };
-
-
 static struct override {
    unsigned int address;
    int irq;
@@ -214,7 +207,7 @@ int __init dtc_detect(Scsi_Host_Template * tpnt){
    unsigned int base;
    int sig, count;
 
-   tpnt->proc_dir = &proc_scsi_dtc;
+   tpnt->proc_name = "dtc3x80";
    tpnt->proc_info = &dtc_proc_info;
 
    for (count = 0; current_override < NO_OVERRIDES; ++current_override) {

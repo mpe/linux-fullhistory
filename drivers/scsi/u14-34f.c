@@ -374,11 +374,6 @@ MODULE_AUTHOR("Dario Ballabio");
 #define SPIN_UNLOCK_RESTORE \
                   spin_unlock_irqrestore(&io_request_lock, spin_flags);
 
-struct proc_dir_entry proc_scsi_u14_34f = {
-    PROC_SCSI_U14_34F, 6, "u14_34f",
-    S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 /* Values for the PRODUCT_ID ports for the 14/34F */
 #define PRODUCT_ID1  0x56
 #define PRODUCT_ID2  0x40        /* NOTE: Only upper nibble is used */
@@ -955,7 +950,7 @@ int u14_34f_detect(Scsi_Host_Template *tpnt)
 {
    unsigned int j = 0, k;
 
-   tpnt->proc_dir = &proc_scsi_u14_34f;
+   tpnt->proc_name = "u14-34f";
 
    if(boot_options) option_setup(boot_options);
 

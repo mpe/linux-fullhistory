@@ -25,7 +25,7 @@ struct swap_info_struct swap_info[MAX_SWAPFILES];
 
 #define SWAPFILE_CLUSTER 256
 
-static inline int scan_swap_map(struct swap_info_struct *si)
+static inline int scan_swap_map(struct swap_info_struct *si, unsigned short count)
 {
 	unsigned long offset;
 	/* 
@@ -73,7 +73,7 @@ static inline int scan_swap_map(struct swap_info_struct *si)
 			si->lowest_bit++;
 		if (offset == si->highest_bit)
 			si->highest_bit--;
-		si->swap_map[offset] = 1;
+		si->swap_map[offset] = count;
 		nr_swap_pages--;
 		si->cluster_next = offset+1;
 		return offset;
@@ -81,7 +81,7 @@ static inline int scan_swap_map(struct swap_info_struct *si)
 	return 0;
 }
 
-swp_entry_t get_swap_page(void)
+swp_entry_t __get_swap_page(unsigned short count)
 {
 	struct swap_info_struct * p;
 	unsigned long offset;
@@ -94,11 +94,13 @@ swp_entry_t get_swap_page(void)
 		goto out;
 	if (nr_swap_pages == 0)
 		goto out;
+	if (count >= SWAP_MAP_MAX)
+		goto bad_count;
 
 	while (1) {
 		p = &swap_info[type];
 		if ((p->flags & SWP_WRITEOK) == SWP_WRITEOK) {
-			offset = scan_swap_map(p);
+			offset = scan_swap_map(p, count);
 			if (offset) {
 				entry = SWP_ENTRY(type,offset);
 				type = swap_info[type].next;
@@ -123,10 +125,15 @@ swp_entry_t get_swap_page(void)
 	}
 out:
 	return entry;
+
+bad_count:
+	printk(KERN_ERR "get_swap_page: bad count %hd from %p\n",
+	       count, __builtin_return_address(0));
+	goto out;
 }
 
 
-void swap_free(swp_entry_t entry)
+void __swap_free(swp_entry_t entry, unsigned short count)
 {
 	struct swap_info_struct * p;
 	unsigned long offset, type;
@@ -148,7 +155,9 @@ void swap_free(swp_entry_t entry)
 	if (!p->swap_map[offset])
 		goto bad_free;
 	if (p->swap_map[offset] < SWAP_MAP_MAX) {
-		if (!--p->swap_map[offset]) {
+		if (p->swap_map[offset] < count)
+			goto bad_count;
+		if (!(p->swap_map[offset] -= count)) {
 			if (offset < p->lowest_bit)
 				p->lowest_bit = offset;
 			if (offset > p->highest_bit)
@@ -170,6 +179,9 @@ bad_offset:
 	goto out;
 bad_free:
 	printk("VM: Bad swap entry %08lx\n", entry.val);
+	goto out;
+bad_count:
+	printk(KERN_ERR "VM: Bad count %hd current count %hd\n", count, p->swap_map[offset]);
 	goto out;
 }
 

@@ -25,6 +25,7 @@
 
 #include <linux/miscdevice.h>
 #include <linux/proc_fs.h>
+#include <linux/module.h>
 
 #include <net/irda/irda.h>
 #include <net/irda/irmod.h>
@@ -70,9 +71,7 @@ void irda_proc_register(void)
 	int i;
 
 	proc_irda = create_proc_entry("net/irda", S_IFDIR, NULL);
-#ifdef MODULE
-	proc_irda->fill_inode = &irda_proc_modcount;
-#endif /* MODULE */
+	proc_irda->owner = THIS_MODULE;
 
 	for (i=0;i<IRDA_ENTRIES_NUM;i++)
 		create_proc_info_entry(dir[i].name,0,proc_irda,dir[i].fn);

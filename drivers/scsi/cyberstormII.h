@@ -43,7 +43,7 @@ extern int esp_reset(Scsi_Cmnd *, unsigned int);
 extern int esp_proc_info(char *buffer, char **start, off_t offset, int length,
 			 int hostno, int inout);
 
-#define SCSI_CYBERSTORMII { proc_dir:		&proc_scsi_esp, \
+#define SCSI_CYBERSTORMII { proc_name:		"esp-cyberstormII", \
 			    proc_info:		esp_proc_info, \
 			    name:		"CyberStorm Mk II SCSI", \
 			    detect:		cyberII_esp_detect, \

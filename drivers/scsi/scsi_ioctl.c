@@ -404,7 +404,7 @@ int scsi_ioctl(Scsi_Device * dev, int cmd, void *arg)
 		put_user(dev->id
 			 + (dev->lun << 8)
 			 + (dev->channel << 16)
-		  + ((dev->host->hostt->proc_dir->low_ino & 0xff) << 24),
+			 + ((dev->host->host_no & 0xff) << 24),
 			 &((Scsi_Idlun *) arg)->dev_id);
 		put_user(dev->host->unique_id, &((Scsi_Idlun *) arg)->host_unique_id);
 		return 0;

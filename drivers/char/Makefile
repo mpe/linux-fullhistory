@@ -11,7 +11,7 @@
 
 SUB_DIRS     := 
 MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS) ftape joystick
+ALL_SUB_DIRS := $(SUB_DIRS) ftape joystick pcmcia
 
 #
 # This file contains the font map for the default (hardware) font
@@ -589,6 +589,15 @@ endif
 ifeq ($(CONFIG_DRM),y)
   ALL_SUB_DIRS += drm
   MOD_SUB_DIRS += drm
+endif
+
+ifeq ($(CONFIG_PCMCIA),y)
+  SUB_DIRS += pcmcia
+  MOD_IN_SUB_DIRS += pcmcia
+else
+  ifeq ($(CONFIG_PCMCIA),m)
+    MOD_IN_SUB_DIRS += pcmcia
+  endif
 endif
 
 include $(TOPDIR)/Rules.make

@@ -98,11 +98,6 @@
 #include "fd_mcs.h"
 
 #define DRIVER_VERSION "v0.2 by ZP Gu<zpg@castle.net>"
-
-struct proc_dir_entry proc_scsi_fd_mcs = {
-  PROC_SCSI_FD_MCS, 6, "fd_mcs",
-  S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
   
 /* START OF USER DEFINABLE OPTIONS */
 

@@ -81,11 +81,6 @@ static struct expansion_card *ecs[MAX_ECARDS];
  */
 int term[MAX_ECARDS] = { 1, 1, 1, 1, 1, 1, 1, 1 };
 
-static struct proc_dir_entry proc_scsi_powertec = {
-	PROC_SCSI_QLOGICISP, 8, "powertec",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 /* Prototype: void powertecscsi_irqenable(ec, irqnr)
  * Purpose  : Enable interrupts on Powertec SCSI card
  * Params   : ec    - expansion card structure
@@ -236,7 +231,7 @@ powertecscsi_detect(Scsi_Host_Template *tpnt)
 	int count = 0;
 	struct Scsi_Host *host;
   
-	tpnt->proc_dir = &proc_scsi_powertec;
+	tpnt->proc_name = "powertec";
 	memset(ecs, 0, sizeof (ecs));
 
 	ecard_startfind();

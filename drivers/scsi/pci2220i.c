@@ -47,12 +47,7 @@
 #include "hosts.h"
 #include "pci2220i.h"
 
-#if LINUX_VERSION_CODE >= LINUXVERSION(2,1,95)
 #include <linux/spinlock.h>
-#endif
-#if LINUX_VERSION_CODE < LINUXVERSION(2,1,93)
-#include <linux/bios32.h>
-#endif
 
 #define	PCI2220I_VERSION		"1.11"
 //#define	READ_CMD				IDE_COMMAND_READ
@@ -61,10 +56,6 @@
 #define	READ_CMD				IDE_CMD_READ_MULTIPLE
 #define	WRITE_CMD				IDE_CMD_WRITE_MULTIPLE
 #define	MAX_BUS_MASTER_BLOCKS	SECTORSXFER		// This is the maximum we can bus master
-
-
-struct proc_dir_entry Proc_Scsi_Pci2220i =
-	{ PROC_SCSI_PCI2220I, 8, "pci2220i", S_IFDIR | S_IRUGO | S_IXUGO, 2 };
 
 //#define DEBUG 1
 
@@ -725,23 +716,13 @@ static void TimerExpiry (unsigned long data)
 	POUR_DEVICE		pdev = padapter->pdev;
 	UCHAR			status = IDE_STATUS_BUSY;
 	UCHAR			temp, temp1;
-#if LINUX_VERSION_CODE < LINUXVERSION(2,1,95)
-    int					flags;
-#else /* version >= v2.1.95 */
     unsigned long		flags;
-#endif /* version >= v2.1.95 */
 
-#if LINUX_VERSION_CODE < LINUXVERSION(2,1,95)
-    /* Disable interrupts, if they aren't already disabled. */
-    save_flags (flags);
-    cli ();
-#else /* version >= v2.1.95 */
     /*
      * Disable interrupts, if they aren't already disabled and acquire
      * the I/O spinlock.
      */
     spin_lock_irqsave (&io_request_lock, flags);
-#endif /* version >= v2.1.95 */
 	DEB (printk ("\nPCI2220I: Timeout expired "));
 
 	if ( padapter->failinprog )
@@ -866,20 +847,12 @@ static void TimerExpiry (unsigned long data)
 	OpDone (padapter, DecodeError (padapter, status));
 
 timerExpiryDone:;
-#if LINUX_VERSION_CODE < LINUXVERSION(2,1,95)
-    /*
-     * Restore the original flags which will enable interrupts
-     * if and only if they were enabled on entry.
-     */
-    restore_flags (flags);
-#else /* version >= v2.1.95 */
     /*
      * Release the I/O spinlock and restore the original flags
      * which will enable interrupts if and only if they were
      * enabled on entry.
      */
     spin_unlock_irqrestore (&io_request_lock, flags);
-#endif /* version >= v2.1.95 */
 	}
 /****************************************************************
  *	Name:			SetReconstruct	:LOCAL
@@ -920,23 +893,13 @@ static void ReconTimerExpiry (unsigned long data)
 	USHORT			minmode;
 	ULONG			zl;
 	UCHAR			zc;
-#if LINUX_VERSION_CODE < LINUXVERSION(2,1,95)
-    int				flags;
-#else /* version >= v2.1.95 */
     unsigned long	flags;
-#endif /* version >= v2.1.95 */
 
-#if LINUX_VERSION_CODE < LINUXVERSION(2,1,95)
-    /* Disable interrupts, if they aren't already disabled. */
-    save_flags (flags);
-    cli ();
-#else /* version >= v2.1.95 */
     /*
      * Disable interrupts, if they aren't already disabled and acquire
      * the I/O spinlock.
      */
     spin_lock_irqsave (&io_request_lock, flags);
-#endif /* version >= v2.1.95 */
 
 	padapter = (PADAPTER2220I)data;
 	if ( padapter->SCpnt )
@@ -1132,20 +1095,12 @@ static void ReconTimerExpiry (unsigned long data)
 	padapter->reconPhase = RECON_PHASE_LAST;
 
 reconTimerExpiry:;
-#if LINUX_VERSION_CODE < LINUXVERSION(2,1,95)
-    /*
-     * Restore the original flags which will enable interrupts
-     * if and only if they were enabled on entry.
-     */
-    restore_flags (flags);
-#else /* version >= v2.1.95 */
     /*
      * Release the I/O spinlock and restore the original flags
      * which will enable interrupts if and only if they were
      * enabled on entry.
      */
     spin_unlock_irqrestore (&io_request_lock, flags);
-#endif /* version >= v2.1.95 */
 	}
 /****************************************************************
  *	Name:	Irq_Handler	:LOCAL
@@ -1169,23 +1124,13 @@ static void Irq_Handler (int irq, void *dev_id, struct pt_regs *regs)
 	UCHAR				status1;
 	int					z;
 	ULONG				zl;
-#if LINUX_VERSION_CODE < LINUXVERSION(2,1,95)
-    int					flags;
-#else /* version >= v2.1.95 */
     unsigned long		flags;
-#endif /* version >= v2.1.95 */
 
-#if LINUX_VERSION_CODE < LINUXVERSION(2,1,95)
-    /* Disable interrupts, if they aren't already disabled. */
-    save_flags (flags);
-    cli ();
-#else /* version >= v2.1.95 */
     /*
      * Disable interrupts, if they aren't already disabled and acquire
      * the I/O spinlock.
      */
     spin_lock_irqsave (&io_request_lock, flags);
-#endif /* version >= v2.1.95 */
 
 //	DEB (printk ("\npci2220i recieved interrupt\n"));
 
@@ -1513,20 +1458,12 @@ static void Irq_Handler (int irq, void *dev_id, struct pt_regs *regs)
 
 	OpDone (padapter, zl);
 irq_return:;
-#if LINUX_VERSION_CODE < LINUXVERSION(2,1,95)
-    /*
-     * Restore the original flags which will enable interrupts
-     * if and only if they were enabled on entry.
-     */
-    restore_flags (flags);
-#else /* version >= v2.1.95 */
     /*
      * Release the I/O spinlock and restore the original flags
      * which will enable interrupts if and only if they were
      * enabled on entry.
      */
     spin_unlock_irqrestore (&io_request_lock, flags);
-#endif /* version >= v2.1.95 */
 	}
 /****************************************************************
  *	Name:	Pci2220i_QueueCommand
@@ -1796,27 +1733,15 @@ int Pci2220i_Detect (Scsi_Host_Template *tpnt)
 	int					setirq;
 	UCHAR				spigot1 = FALSE;
 	UCHAR				spigot2 = FALSE;
-#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
 	struct pci_dev	   *pdev = NULL;
-#else
-	UCHAR				pci_bus, pci_device_fn;
-#endif
 
-#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
 	if ( !pci_present () )
-#else
-	if ( !pcibios_present () )
-#endif
 		{
 		printk ("pci2220i: PCI BIOS not present\n");
 		return 0;
 		}
 
-#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
 	while ( (pdev = pci_find_device (VENDOR_PSI, DEVICE_DALE_1, pdev)) != NULL )
-#else
-	while ( !pcibios_find_device (VENDOR_PSI, DEVICE_DALE_1, found, &pci_bus, &pci_device_fn) )
-#endif
 		{
 		pshost = scsi_register (tpnt, sizeof(ADAPTER2220I));
 		padapter = HOSTDATA(pshost);
@@ -1854,11 +1779,7 @@ int Pci2220i_Detect (Scsi_Host_Template *tpnt)
 		if ( !inb_p (padapter->regScratchPad + DALE_NUM_DRIVES) )	// if no devices on this board
 			goto unregister;
 
-#if LINUX_VERSION_CODE > LINUXVERSION(2,1,92)
 		pshost->irq = pdev->irq;
-#else
-		pcibios_read_config_byte (pci_bus, pci_device_fn, PCI_INTERRUPT_LINE, &pshost->irq);
-#endif
 		setirq = 1;
 		for ( z = 0;  z < installed;  z++ )							// scan for shared interrupts
 			{
@@ -1881,11 +1802,7 @@ int Pci2220i_Detect (Scsi_Host_Template *tpnt)
 		if ( !padapter->kBuffer )
 			{
 			printk ("Unable to allocate DMA buffer for PCI-2220I controller.\n");
-#if LINUX_VERSION_CODE < LINUXVERSION(1,3,70)
-			free_irq (pshost->irq);
-#else /* version >= v1.3.70 */
 			free_irq (pshost->irq, padapter);
-#endif /* version >= v1.3.70 */
 			goto unregister;
 			}
 		PsiHost[installed]	= pshost;								// save SCSI_HOST pointer
@@ -2068,11 +1985,7 @@ int Pci2220i_Release (struct Scsi_Host *pshost)
 	outb_p (DiskMirror[1].status, padapter->regScratchPad + DALE_RAID_1_STATUS);		
 
 	if ( padapter->irqOwned )
-#if LINUX_VERSION_CODE < LINUXVERSION(1,3,70)
-		free_irq (pshost->irq);
-#else /* version >= v1.3.70 */
 		free_irq (pshost->irq, padapter);
-#endif /* version >= v1.3.70 */
     release_region (pshost->io_port, pshost->n_io_port);
 	kfree (padapter->kBuffer);
     scsi_unregister(pshost);

@@ -113,20 +113,6 @@
 #define IPS_VERSION_HIGH        "1.00"  /* MUST be 4 chars */
 #define IPS_VERSION_LOW         ".00 "  /* MUST be 4 chars */
 
-struct proc_dir_entry proc_scsi_ips = {
-#if !defined(PROC_SCSI_IPS)
-   0,                                /* Use dynamic inode allocation */
-#else
-   PROC_SCSI_IPS,
-#endif
-   3, "ips",
-   S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
-#if LINUX_VERSION_CODE < LinuxVersionCode(2,1,93)
-   #include <linux/bios32.h>
-#endif
-
 #if !defined(__i386__)
    #error "This driver has only been tested on the x86 platform"
 #endif
@@ -262,7 +248,7 @@ ips_detect(Scsi_Host_Template *SHT) {
    DBG("ips_detect");
 
    SHT->proc_info = ips_proc_info;
-   SHT->proc_dir = &proc_scsi_ips;
+   SHT->proc_name = "ips";
 
 #if defined(CONFIG_PCI)
 

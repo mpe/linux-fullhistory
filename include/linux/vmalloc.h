@@ -20,5 +20,6 @@ long vread(char *buf, char *addr, unsigned long count);
 void vmfree_area_pages(unsigned long address, unsigned long size);
 int vmalloc_area_pages(unsigned long address, unsigned long size);
 
+extern struct vm_struct * vmlist;
 #endif
 

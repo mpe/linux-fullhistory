@@ -103,9 +103,8 @@ __OUTS(l)
 
 #ifdef __KERNEL__
 
-#include <linux/config.h>
-#include <linux/vmalloc.h>
 #include <asm/page.h>
+#include <linux/vmalloc.h>
 
 /*
  * Temporary debugging check to catch old code using

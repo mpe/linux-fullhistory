@@ -733,10 +733,6 @@ static Scsi_Host_Template	*the_template	= NULL;
 **	/proc directory entry and proc_info function
 */
 
-static struct proc_dir_entry proc_scsi_ncr53c8xx = {
-    PROC_SCSI_NCR53C8XX, 9, "ncr53c8xx",
-    S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
 #ifdef SCSI_NCR_PROC_INFO_SUPPORT
 static int ncr53c8xx_proc_info(char *buffer, char **start, off_t offset,
 			int length, int hostno, int func);
@@ -9383,7 +9379,7 @@ int __init ncr53c8xx_detect(Scsi_Host_Template *tpnt)
 	ncr_debug = driver_setup.debug;
 #endif
 
-     tpnt->proc_dir = &proc_scsi_ncr53c8xx;
+     tpnt->proc_name = "ncr53c8xx";
 #ifdef SCSI_NCR_PROC_INFO_SUPPORT
      tpnt->proc_info = ncr53c8xx_proc_info;
 #endif

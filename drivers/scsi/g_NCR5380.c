@@ -119,11 +119,6 @@
 #include <linux/init.h>
 #include<linux/ioport.h>
 
-struct proc_dir_entry proc_scsi_g_ncr5380 = {
-    PROC_SCSI_GENERIC_NCR5380, 9, "g_NCR5380",
-    S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 #define NCR_NOT_SET 0
 static int ncr_irq=NCR_NOT_SET;
 static int ncr_dma=NCR_NOT_SET;
@@ -285,7 +280,7 @@ int __init generic_NCR5380_detect(Scsi_Host_Template * tpnt){
     else if (dtc_3181e != NCR_NOT_SET)
         overrides[0].board=BOARD_DTC3181E;
 
-    tpnt->proc_dir = &proc_scsi_g_ncr5380;
+    tpnt->proc_name = "g_NCR5380";
 
     for (count = 0; current_override < NO_OVERRIDES; ++current_override) {
 	if (!(overrides[current_override].NCR5380_map_name))

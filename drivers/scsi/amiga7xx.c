@@ -31,11 +31,6 @@
 
 #include<linux/stat.h>
 
-struct proc_dir_entry proc_scsi_amiga7xx = {
-    PROC_SCSI_AMIGA7XX, 8, "Amiga7xx",
-    S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 extern int ncr53c7xx_init (Scsi_Host_Template *tpnt, int board, int chip, 
 			   u32 base, int io_port, int irq, int dma,
 			   long long options, int clock);
@@ -51,7 +46,7 @@ int __init amiga7xx_detect(Scsi_Host_Template *tpnt)
     if (called || !MACH_IS_AMIGA)
 	return 0;
 
-    tpnt->proc_dir = &proc_scsi_amiga7xx;
+    tpnt->proc_name = "Amiga7xx";
 
 #ifdef CONFIG_BLZ603EPLUS_SCSI
     if ((key = zorro_find(ZORRO_PROD_PHASE5_BLIZZARD_603E_PLUS, 0, 0)))

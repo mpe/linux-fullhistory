@@ -15,10 +15,11 @@ Overview:
  * Description: Register a device with the ACPI subsystem
  *
  * Parameters:
- *   type - device type
+ *   info - static device information
+ *     type - device type
+ *     hid - PnP identifier (or 0 if unknown)
+ *     trans - device state transition callback
  *   adr - bus number and address or unique id
- *   hid - PnP identifier (or 0 if unknown)
- *   trans - device state transition callback
  *
  * Returns: Registered ACPI device or NULL on error
  *
@@ -27,15 +28,14 @@ Overview:
  *          identify device dependencies
  *
  * Examples:
- *   dev = acpi_register(ACPI_SYS_DEV, 0, ACPI_VGA_HID, vga_trans);
+ *   struct acpi_dev_info info = {ACPI_SYS_DEV, ACPI_VGA_HID, vga_trans};
+ *   dev = acpi_register(&info, 0);
  *
  *   struct pci_dev *pci_dev = pci_find_dev(...);
- *   dev = acpi_register(ACPI_PCI_DEV, ACPI_PCI_ADR(pci_dev), 0, trans);
+ *   struct acpi_dev_info info = {ACPI_PCI_DEV, 0, trans};
+ *   dev = acpi_register(&info, ACPI_PCI_ADR(pci_dev));
  */
-struct acpi_dev *acpi_register(acpi_dev_t type,
-                               unsigned long adr,
-                               acpi_hid_t hid,
-                               acpi_transition trans);
+struct acpi_dev *acpi_register(struct acpi_dev_info *info, unsigned long adr);
 
 /*
  * Description: Unregister a device with ACPI

@@ -44,11 +44,6 @@
 #include "aha1740.h"
 #include<linux/stat.h>
 
-struct proc_dir_entry proc_scsi_aha1740 = {
-    PROC_SCSI_AHA1740, 7, "aha1740",
-    S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 /* IF YOU ARE HAVING PROBLEMS WITH THIS DRIVER, AND WANT TO WATCH
    IT WORK, THEN:
 #define DEBUG

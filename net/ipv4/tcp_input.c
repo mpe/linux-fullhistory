@@ -1401,11 +1401,6 @@ static void tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 
 	tcp_send_ack(sk);
 
-	if (!sk->dead) {
-		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket, 1, POLL_HUP);
-	}
-
 	switch(sk->state) {
 		case TCP_SYN_RECV:
 		case TCP_ESTABLISHED:
@@ -1440,7 +1435,11 @@ static void tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 			 */
 			printk("tcp_fin: Impossible, sk->state=%d\n", sk->state);
 			break;
-	};
+	}
+	if (!sk->dead) {
+		wake_up_interruptible(sk->sleep);
+		sock_wake_async(sk->socket, 1, POLL_HUP);
+	}
 }
 
 /* These routines update the SACK block as out-of-order packets arrive or

@@ -698,13 +698,6 @@ static void isp2x00_print_scsi_cmd(Scsi_Cmnd *);
 static void isp2x00_print_status_entry(struct Status_Entry *);
 #endif
 
-static struct proc_dir_entry proc_scsi_isp2x00 =
-{
-	PROC_SCSI_QLOGICFC, 7, "isp2x00",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
-
 static inline void isp2x00_enable_irqs(struct Scsi_Host *host)
 {
 	outw(ISP_EN_INT | ISP_EN_RISC, host->io_port + PCI_INTER_CTL);
@@ -733,7 +726,7 @@ int isp2x00_detect(Scsi_Host_Template * tmpt)
        	device_ids[0] = PCI_DEVICE_ID_QLOGIC_ISP2100;
 	device_ids[1] = PCI_DEVICE_ID_QLOGIC_ISP2200;
 
-	tmpt->proc_dir = &proc_scsi_isp2x00;
+	tmpt->proc_name = "isp2x00";
 
 	if (pci_present() == 0) {
 		printk("qlogicfc : PCI not present\n");

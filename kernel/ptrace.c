@@ -50,15 +50,15 @@ repeat:
 	flush_cache_page(vma, addr);
 
 	if (write) {
-		maddr = kmap(page, KM_WRITE);
+		maddr = kmap(page);
 		memcpy((char *)maddr + (addr & ~PAGE_MASK), buf, len);
 		flush_page_to_ram(page);
-		kunmap(maddr, KM_WRITE);
+		kunmap(page);
 	} else {
-		maddr = kmap(page, KM_READ);
+		maddr = kmap(page);
 		memcpy(buf, (char *)maddr + (addr & ~PAGE_MASK), len);
 		flush_page_to_ram(page);
-		kunmap(maddr, KM_READ);
+		kunmap(page);
 	}
 	return len;
 

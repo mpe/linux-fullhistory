@@ -263,13 +263,6 @@ typedef unsigned int  u32;
 #include <linux/stat.h>
 #include <linux/stddef.h>
 
-#ifndef LINUX_1_2
-struct proc_dir_entry proc_scsi_ncr53c7xx = {
-    PROC_SCSI_NCR53C7xx, 9, "ncr53c7xx",
-    S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-#endif
-
 static int check_address (unsigned long addr, int size);
 static void dump_events (struct Scsi_Host *host, int count);
 static Scsi_Cmnd * return_outstanding_commands (struct Scsi_Host *host, 
@@ -1568,9 +1561,7 @@ NCR53c7xx_detect(Scsi_Host_Template *tpnt){
     unsigned char pci_bus, pci_device_fn;
     static short pci_index=0;	/* Device index to PCI BIOS calls */
 
-#ifndef LINUX_1_2
-    tpnt->proc_dir = &proc_scsi_ncr53c7xx;
-#endif
+    tpnt->proc_name = "ncr53c7xx";
 
     for (current_override = count = 0; current_override < OVERRIDE_LIMIT; 
 	 ++current_override) {

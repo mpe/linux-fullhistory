@@ -22,74 +22,6 @@ enum {
 	PROC_ROOT_INO = 1,
 };
 
-enum scsi_directory_inos {
-	PROC_SCSI_ADVANSYS = 256,
-	PROC_SCSI_PCI2000,
-	PROC_SCSI_PCI2220I,
-	PROC_SCSI_PSI240I,
-	PROC_SCSI_EATA,
-	PROC_SCSI_EATA_PIO,
-	PROC_SCSI_AHA152X,
-	PROC_SCSI_AHA1542,
-	PROC_SCSI_AHA1740,
-	PROC_SCSI_AIC7XXX,
-	PROC_SCSI_BUSLOGIC,
-	PROC_SCSI_U14_34F,
-	PROC_SCSI_FDOMAIN,
-	PROC_SCSI_GDTH,
-	PROC_SCSI_GENERIC_NCR5380,
-	PROC_SCSI_IN2000,
-	PROC_SCSI_PAS16,
-	PROC_SCSI_QLOGICFAS,
-	PROC_SCSI_QLOGICISP,
-	PROC_SCSI_QLOGICFC,
-	PROC_SCSI_SEAGATE,
-	PROC_SCSI_T128,
-	PROC_SCSI_NCR53C7xx,
-	PROC_SCSI_SYM53C8XX,
-	PROC_SCSI_NCR53C8XX,
-	PROC_SCSI_ULTRASTOR,
-	PROC_SCSI_7000FASST,
-	PROC_SCSI_IBMMCA,
-	PROC_SCSI_FD_MCS,
-	PROC_SCSI_EATA2X,
-	PROC_SCSI_DC390T,
-	PROC_SCSI_AM53C974,
-	PROC_SCSI_SSC,
-	PROC_SCSI_NCR53C406A,
-	PROC_SCSI_SYM53C416,
-	PROC_SCSI_MEGARAID,
-	PROC_SCSI_PPA,
-	PROC_SCSI_ATP870U,
-	PROC_SCSI_ESP,
-	PROC_SCSI_QLOGICPTI,
-	PROC_SCSI_AMIGA7XX,
-	PROC_SCSI_MVME147,
-	PROC_SCSI_MVME16x,
-	PROC_SCSI_BVME6000,
-	PROC_SCSI_SIM710,
-	PROC_SCSI_A3000,
-	PROC_SCSI_A2091,
-	PROC_SCSI_GVP11,
-	PROC_SCSI_ATARI,
-	PROC_SCSI_MAC,
-	PROC_SCSI_IDESCSI,
-	PROC_SCSI_SGIWD93,
-	PROC_SCSI_MESH,
-	PROC_SCSI_53C94,
-	PROC_SCSI_PLUTO,
-	PROC_SCSI_INI9100U,
-	PROC_SCSI_INIA100,
- 	PROC_SCSI_IPH5526_FC,
-	PROC_SCSI_FCAL,
-	PROC_SCSI_I2O,
-	PROC_SCSI_USB_SCSI,
-	PROC_SCSI_SCSI_DEBUG,	
-	PROC_SCSI_NOT_PRESENT,
-	PROC_SCSI_FILE,                        /* I'm assuming here that we */
-	PROC_SCSI_LAST = (PROC_SCSI_FILE + 16) /* won't ever see more than */
-};                                             /* 16 HBAs in one machine   */
-
 /* Finally, the dynamically allocatable proc entries are reserved: */
 
 #define PROC_DYNAMIC_FIRST 4096
@@ -113,9 +45,8 @@ enum scsi_directory_inos {
  * /proc file has a parent, but "subdir" is NULL for all
  * non-directory entries).
  *
- * "get_info" is called at "read", while "fill_inode" is used to
- * fill in file type/protection/owner information specific to the
- * particular /proc file.
+ * "get_info" is called at "read", while "owner" is used to protect module
+ * from unloading while proc_dir_entry is in use
  */
 
 typedef	int (read_proc_t)(char *page, char **start, off_t off,
@@ -135,7 +66,7 @@ struct proc_dir_entry {
 	unsigned long size;
 	struct inode_operations * ops;
 	get_info_t *get_info;
-	void (*fill_inode)(struct inode *, int);
+	struct module *owner;
 	struct proc_dir_entry *next, *parent, *subdir;
 	void *data;
 	read_proc_t *read_proc;

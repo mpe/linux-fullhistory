@@ -3,6 +3,8 @@
 
 #define UDF_VERSION_NOTICE "v0.8.9.3"
 
+#include <linux/udf_udf.h>
+
 #ifdef __KERNEL__
 
 #include <linux/types.h>
@@ -113,7 +115,6 @@ extern int udf_sync_file(struct file *, struct dentry *);
 
 #endif /* __KERNEL__ */
 
-#include <linux/udf_udf.h>
 #include "udfend.h"
 
 /* structures */

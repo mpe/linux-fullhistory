@@ -171,17 +171,6 @@
 #include "wd7000.h"
 #include <linux/stat.h>
 
-
-struct proc_dir_entry proc_scsi_wd7000 =
-{
-    PROC_SCSI_7000FASST,
-    6,
-    "wd7000",
-    S_IFDIR | S_IRUGO | S_IXUGO,
-    2
-};
-
-
 /*
  *  Mailbox structure sizes.
  *  I prefer to keep the number of ICMBs much larger than the number of
@@ -1542,7 +1531,7 @@ int wd7000_detect (Scsi_Host_Template *tpnt)
     for (i = 0; i < IRQS; wd7000_host[i++] = NULL) ;
     for (i = 0; i < NUM_CONFIGS; biosptr[i++] = -1) ;
 
-    tpnt->proc_dir = &proc_scsi_wd7000;
+    tpnt->proc_name = "wd7000";
     tpnt->proc_info = &wd7000_proc_info;
 
     /*

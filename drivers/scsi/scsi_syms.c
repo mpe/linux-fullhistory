@@ -74,7 +74,6 @@ EXPORT_SYMBOL(scsi_sleep);
 
 EXPORT_SYMBOL(proc_print_scsidevice);
 EXPORT_SYMBOL(proc_scsi);
-EXPORT_SYMBOL(proc_scsi_inode_operations);
 
 /*
  * These are here only while I debug the rest of the scsi stuff.

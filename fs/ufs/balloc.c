@@ -676,7 +676,7 @@ unsigned ufs_bitmap_search (struct super_block * sb,
 	else
 		start = ucpi->c_frotor >> 3;
 		
-	length = howmany(uspi->s_fpg, 8) - start;
+	length = ((uspi->s_fpg + 7) >> 3) - start;
 	location = ubh_scanc(UCPI_UBH, ucpi->c_freeoff + start, length,
 		(uspi->s_fpb == 8) ? ufs_fragtable_8fpb : ufs_fragtable_other,
 		1 << (count - 1 + (uspi->s_fpb & 7))); 

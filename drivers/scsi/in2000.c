@@ -2023,7 +2023,7 @@ char buf[32];
  * initialize it.
  */
 
-      tpnt->proc_dir = &proc_scsi_in2000; /* done more than once? harmless. */
+      tpnt->proc_name = "in2000";
       detect_count++;
       instance  = scsi_register(tpnt, sizeof(struct IN2000_hostdata));
       if (!instance_list)
@@ -2186,13 +2186,6 @@ int size;
       }
     return 0;
 }
-
-
-
-struct proc_dir_entry proc_scsi_in2000 = {
-   PROC_SCSI_IN2000, 6, "in2000",
-   S_IFDIR | S_IRUGO | S_IXUGO, 2
-   };
 
 
 int in2000_proc_info(char *buf, char **start, off_t off, int len, int hn, int in)

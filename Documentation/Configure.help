@@ -1680,6 +1680,29 @@ CONFIG_HUB6
   Say Y here to enable support in the dumb serial driver to support
   the HUB6 card.
 
+PCMCIA serial device support
+CONFIG_PCMCIA_SERIAL_CS
+  Say Y here to enable support for 16-bit PCMCIA serial devices,
+  including serial port cards, modems, and the modem functions of
+  multifunction ethernet/modem cards.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called serial_cs.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt. If unsure,
+  say N.
+
+CardBus serial device support
+CONFIG_PCMCIA_SERIAL_CB
+  Say Y here to enable support for CardBus serial devices, including
+  the modem functions of multifunction ethernet/modem devices.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called serial_cb.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt. If unsure,
+  say N.
+
 PCI support
 CONFIG_PCI
   Find out whether you have a PCI motherboard. PCI is the name of a
@@ -5607,6 +5630,36 @@ CONFIG_PCMCIA_XIRC2PS
   module, say M here and read Documentation/modules.txt. If unsure,
   say N.
 
+3Com 3c575 CardBus support
+CONFIG_PCMCIA_3C575
+  This driver supports the 3Com 3c575 series of CardBus Fast Ethernet
+  adapters.
+
+  This driver can only be compiled as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called 3c575_cb.o. If you want to do that, say M
+  here and read Documentation/modules.txt.  If unsure, say N.
+
+DEC Tulip CardBus support
+CONFIG_PCMCIA_TULIP
+  This driver supports CardBus Fast Ethernet adapters based on DEC
+  Tulip and compatible chipsets.
+
+  This driver can only be compiled as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called tulip_cb.o. If you want to do that, say M
+  here and read Documentation/modules.txt.  If unsure, say N.
+
+SMC EPIC CardBus support
+CONFIG_PCMCIA_EPIC100
+  This driver supports CardBus Fast Ethernet adapters based on the SMC
+  EPIC chipset.
+
+  This driver can only be compiled as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called epic100_cb.o. If you want to do that, say
+  M here and read Documentation/modules.txt.  If unsure, say N.
+
 Aviator/Raytheon 2.4MHz wireless support
 CONFIG_PCMCIA_RAYCS
   Say Y here if you intend to attach an Aviator/Raytheon PCMCIA
@@ -7924,11 +7977,6 @@ CONFIG_ACPI
   Advanced Configuration and Power Interface (ACPI) is an interface
   specification to support power management of peripherals. If your
   system supports it, say Y here.
-
-  This code is also available as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want).
-  The module will be called acpi.o. If you want to compile it as a
-  module, say M here and read Documentation/modules.txt.
 
 Minix fs support
 CONFIG_MINIX_FS

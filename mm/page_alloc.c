@@ -89,13 +89,6 @@ static zone_t zones[NR_ZONES] =
  * for the normal case, giving better asm-code.
  */
 
-/*
- * Buddy system. Hairy. You really aren't expected to understand this
- *
- * Hint: -mask = 1+~mask
- */
-spinlock_t page_alloc_lock = SPIN_LOCK_UNLOCKED;
-
 #define memlist_init(x) INIT_LIST_HEAD(x)
 #define memlist_add_head list_add
 #define memlist_add_tail list_add_tail
@@ -109,8 +102,13 @@ spinlock_t page_alloc_lock = SPIN_LOCK_UNLOCKED;
  */
 #define BAD_RANGE(zone,x) ((((x)-mem_map) < zone->offset) || (((x)-mem_map) >= zone->offset+zone->size))
 
+/*
+ * Buddy system. Hairy. You really aren't expected to understand this
+ *
+ * Hint: -mask = 1+~mask
+ */
 
-static inline void free_pages_ok(struct page *page, unsigned long map_nr, unsigned long order)
+static inline void free_pages_ok (struct page *page, unsigned long map_nr, unsigned long order)
 {
 	struct free_area_struct *area;
 	unsigned long index, page_idx, mask, offset;
@@ -180,7 +178,7 @@ static inline void free_pages_ok(struct page *page, unsigned long map_nr, unsign
 	change_bit((index) >> (1+(order)), (area)->map)
 #define ADDRESS(x) (PAGE_OFFSET + ((x) << PAGE_SHIFT))
 
-int __free_page(struct page *page)
+int __free_page (struct page *page)
 {
 	if (!PageReserved(page) && put_page_testzero(page)) {
 		if (PageSwapCache(page))
@@ -194,7 +192,7 @@ int __free_page(struct page *page)
 	return 0;
 }
 
-int free_pages(unsigned long addr, unsigned long order)
+int free_pages (unsigned long addr, unsigned long order)
 {
 	unsigned long map_nr = MAP_NR(addr);
 
@@ -232,7 +230,7 @@ static inline unsigned long EXPAND (zone_t *zone, struct page *map, unsigned lon
 	return index;
 }
 
-static inline struct page * rmqueue (zone_t *zone, int order)
+static inline struct page * rmqueue (zone_t *zone, unsigned long order)
 {
 	struct free_area_struct * area = zone->free_area + order;
 	unsigned long curr_order = order, map_nr;
@@ -297,7 +295,7 @@ static inline int balance_memory (zone_t *zone, int gfp_mask)
 	return 1;
 }
 
-struct page * __get_pages(zone_t *zone, unsigned int gfp_mask,
+static inline struct page * __get_pages (zone_t *zone, unsigned int gfp_mask,
 			unsigned long order)
 {
 	struct page *page;
@@ -345,27 +343,35 @@ nopage:
 	return NULL;
 }
 
-unsigned long __get_free_pages(int gfp_mask, unsigned long order)
+static inline zone_t * gfp_mask_to_zone (int gfp_mask)
 {
-	struct page *page;
 	zone_t *zone;
 
-	if (gfp_mask & __GFP_DMA)
-		zone = zones + ZONE_DMA;
+#if CONFIG_HIGHMEM
+	if (gfp_mask & __GFP_HIGHMEM)
+		zone = zones + ZONE_HIGHMEM;
 	else
-		zone = zones + ZONE_NORMAL;
-	page = __get_pages(zone, gfp_mask, order);
-	if (gfp_mask & __GFP_DMA)
-		if (!PageDMA(page))
-			BUG();
+#endif
+		if (gfp_mask & __GFP_DMA)
+			zone = zones + ZONE_DMA;
+		else
+			zone = zones + ZONE_NORMAL;
+	return zone;
+}
+
+unsigned long __get_free_pages (int gfp_mask, unsigned long order)
+{
+	struct page *page;
+
+	page = __get_pages(gfp_mask_to_zone(gfp_mask), gfp_mask, order);
 	if (!page)
 		return 0;
 	return page_address(page);
 }
 
-struct page * get_free_highpage(int gfp_mask)
+struct page * alloc_pages (int gfp_mask, unsigned long order)
 {
-	return __get_pages(zones + NR_ZONES-1, gfp_mask, 0);
+	return __get_pages(gfp_mask_to_zone(gfp_mask), gfp_mask, order);
 }
 
 /*
@@ -410,10 +416,9 @@ unsigned int nr_free_highpages (void)
  */
 void show_free_areas(void)
 {
- 	unsigned long order, flags;
+ 	unsigned long order;
 	unsigned type;
 
-	spin_lock_irqsave(&page_alloc_lock, flags);
 	printk("Free pages:      %6dkB (%6dkB HighMem)\n",
 		nr_free_pages()<<(PAGE_SHIFT-10),
 		nr_free_highpages()<<(PAGE_SHIFT-10));
@@ -444,7 +449,6 @@ void show_free_areas(void)
 		}
 		printk("= %lukB)\n", total);
 	}
-	spin_unlock_irqrestore(&page_alloc_lock, flags);
 
 #ifdef SWAP_CACHE_INFO
 	show_swap_cache_info();

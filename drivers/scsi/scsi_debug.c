@@ -30,13 +30,6 @@
 
 #include<linux/stat.h>
 
-struct proc_dir_entry proc_scsi_scsi_debug =
-{
-	PROC_SCSI_SCSI_DEBUG, 10, "scsi_debug",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
-
 /* A few options that we want selected */
 
 #define NR_HOSTS_PRESENT 20
@@ -558,7 +551,7 @@ int scsi_debug_detect(Scsi_Host_Template * tpnt)
 	int i;
 
 	for (i = 0; i < NR_HOSTS_PRESENT; i++) {
-		tpnt->proc_dir = &proc_scsi_scsi_debug;
+		tpnt->proc_name = "scsi_debug";	/* Huh? In the loop??? */
 		scsi_register(tpnt, 0);
 	}
 	return NR_HOSTS_PRESENT;

@@ -149,9 +149,7 @@ int aha1542_biosparam(Disk *, kdev_t, int*);
 	#define NULL 0
 #endif
 
-extern struct proc_dir_entry proc_scsi_aha1542;
-
-#define AHA1542 {    proc_dir:			&proc_scsi_aha1542,	\
+#define AHA1542 {    proc_name:			"aha1542",		\
 		     name:			"Adaptec 1542", 	\
 		     detect:			aha1542_detect,		\
 		     command:			aha1542_command,	\

@@ -32,10 +32,8 @@ extern int fd_mcs_biosparam( Disk *, kdev_t, int * );
 extern int fd_mcs_proc_info( char *, char **, off_t, int, int, int );
 extern const char *fd_mcs_info(struct Scsi_Host *);
 
-extern struct proc_dir_entry proc_scsi_fd_mcs;
-
 #define FD_MCS {\
-                    proc_dir:       &proc_scsi_fd_mcs,          \
+                    proc_name:      "fd_mcs",                   \
                     proc_info:      fd_mcs_proc_info,           \
 		    detect:         fd_mcs_detect,              \
 		    release:        fd_mcs_release,             \

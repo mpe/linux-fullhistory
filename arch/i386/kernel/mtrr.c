@@ -1204,7 +1204,7 @@ int mtrr_add (unsigned long base, unsigned long size, unsigned int type,
     i = (*get_free_region) (base, size);
     if (i < 0)
     {
-	spin_unlock (&main_lock);
+	up(&main_lock);
 	printk ("mtrr: no more MTRRs available\n");
 	return i;
     }

@@ -54,11 +54,6 @@
 
 #include<linux/stat.h>
 
-struct proc_dir_entry proc_scsi_aha1542 = {
-    PROC_SCSI_AHA1542, 7, "aha1542",
-    S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 #ifdef DEBUG
 #define DEB(x) x
 #else
@@ -967,7 +962,7 @@ int aha1542_detect(Scsi_Host_Template * tpnt)
 
     DEB(printk("aha1542_detect: \n"));
 
-    tpnt->proc_dir = &proc_scsi_aha1542;
+    tpnt->proc_name = "aha1542";
 
 #ifdef MODULE
     bases[0]        = aha1542[0];              

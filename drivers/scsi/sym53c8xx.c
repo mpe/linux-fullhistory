@@ -635,9 +635,9 @@ struct m_link {
 #endif
 
 #if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,0)
-#define get_pages(order) __get_free_pages(GFP_ATOMIC | GFP_DMA_32BIT, order)
+#define sym53c8xx_get_pages(order) __get_free_pages(GFP_ATOMIC | GFP_DMA_32BIT, order)
 #else
-#define get_pages(order) __get_free_pages(GFP_ATOMIC | GFP_DMA_32BIT, order, 0)
+#define sym53c8xx_get_pages(order) __get_free_pages(GFP_ATOMIC | GFP_DMA_32BIT, order, 0)
 #endif
 
 /*
@@ -668,7 +668,7 @@ static void *__m_alloc(int size)
 	j = i;
 	while (!h[j].next) {
 		if (s == (PAGE_SIZE << MEMO_PAGE_ORDER)) {
-			h[j].next = (struct m_link *)get_pages(MEMO_PAGE_ORDER);
+			h[j].next = (struct m_link *)sym53c8xx_get_pages(MEMO_PAGE_ORDER);
 			if (h[j].next)
 				h[j].next->next = 0;
 			break;
@@ -828,10 +828,6 @@ static struct Scsi_Host	*first_host = NULL;
 **	/proc directory entry and proc_info function
 */
 
-static struct proc_dir_entry proc_scsi_sym53c8xx = {
-    PROC_SCSI_SYM53C8XX, 9, NAME53C8XX,
-    S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
 #ifdef SCSI_NCR_PROC_INFO_SUPPORT
 static int sym53c8xx_proc_info(char *buffer, char **start, off_t offset,
 			int length, int hostno, int func);
@@ -11382,7 +11378,7 @@ int __init sym53c8xx_detect(Scsi_Host_Template *tpnt)
 	**    Initialize driver general stuff.
 	*/
 #ifdef SCSI_NCR_PROC_INFO_SUPPORT
-     tpnt->proc_dir  = &proc_scsi_sym53c8xx;
+     tpnt->proc_name  = NAME53C8XX;
      tpnt->proc_info = sym53c8xx_proc_info;
 #endif
 

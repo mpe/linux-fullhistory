@@ -30,12 +30,6 @@
 
 #include<linux/stat.h>
 
-struct proc_dir_entry proc_scsi_atp870u =
-{
-	PROC_SCSI_ATP870U, 7, "atp870u",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 void mydlyu(unsigned int);
 
 /*
@@ -1457,7 +1451,7 @@ int atp870u_detect(Scsi_Host_Template * tpnt)
 		printk("   NO BIOS32 SUPPORT.\n");
 		return count;
 	}
-	tpnt->proc_dir = &proc_scsi_atp870u;
+	tpnt->proc_name = "atp870u";
 
 	for (h = 0; h < 2; h++) {
 		active_idu[h] = 0;

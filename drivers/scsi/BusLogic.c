@@ -140,16 +140,6 @@ static BusLogic_ProbeInfo_T
 static char
   *BusLogic_CommandFailureReason;
 
-
-/*
-  BusLogic_ProcDirectoryEntry is the BusLogic /proc/scsi directory entry.
-*/
-
-PROC_DirectoryEntry_T
-  BusLogic_ProcDirectoryEntry =
-    { PROC_SCSI_BUSLOGIC, 8, "BusLogic", S_IFDIR | S_IRUGO | S_IXUGO, 2 };
-
-
 /*
   BusLogic_AnnounceDriver announces the Driver Version and Date, Author's
   Name, Copyright Notice, and Electronic Mail Address.

@@ -30,6 +30,7 @@ static const char *version =
   	0.48	Receive working
 */
 
+#include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>
@@ -780,7 +781,7 @@ void cleanup_module(void)
 	/*
 	 *	If we don't do this, we can't re-insmod it later.
 	 */
-	release_region(dev_seeq.base_addr, EL1_IO_EXTENT);
+	release_region(dev_seeq.base_addr, SEEQ8005_IO_EXTENT);
 }
 
 #endif /* MODULE */

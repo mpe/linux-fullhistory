@@ -50,10 +50,8 @@ struct AM53C974_hostdata {
 	unsigned char max_offset[8];	/* max. sync. offset (setup), only valid if corresponding sync_en is nonzero */
 };
 
-extern struct proc_dir_entry proc_scsi_am53c974;
-
 #define AM53C974 {				  \
-    proc_dir:       &proc_scsi_am53c974,          \
+    proc_name:      "am53c974",    	          \
     name:           "AM53C974",        		  \
     detect:         AM53C974_detect,   		  \
     release:        AM53C974_release,		  \

@@ -299,6 +299,9 @@ CONFIG_PCMCIA_PCNET=y
 # CONFIG_PCMCIA_NMCLAN is not set
 # CONFIG_PCMCIA_SMC91C92 is not set
 # CONFIG_PCMCIA_XIRC2PS is not set
+# CONFIG_PCMCIA_3C575 is not set
+# CONFIG_PCMCIA_TULIP is not set
+# CONFIG_PCMCIA_EPIC100 is not set
 CONFIG_PCMCIA_RAYCS=y
 # CONFIG_PCMCIA_NETWAVE is not set
 # CONFIG_PCMCIA_WAVELAN is not set
@@ -345,6 +348,10 @@ CONFIG_PSMOUSE=y
 # CONFIG_82C710_MOUSE is not set
 # CONFIG_PC110_PAD is not set
 # CONFIG_QIC02_TAPE is not set
+
+#
+# Watchdog Cards
+#
 # CONFIG_WATCHDOG is not set
 # CONFIG_NVRAM is not set
 # CONFIG_RTC is not set
@@ -366,6 +373,12 @@ CONFIG_PSMOUSE=y
 # Ftape, the floppy tape device driver
 #
 # CONFIG_FTAPE is not set
+
+#
+# PCMCIA character device support
+#
+# CONFIG_PCMCIA_SERIAL_CS is not set
+# CONFIG_PCMCIA_SERIAL_CB is not set
 
 #
 # USB drivers - not for the faint of heart

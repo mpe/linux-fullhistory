@@ -24,7 +24,7 @@ extern int esp_proc_info(char *buffer, char **start, off_t offset, int length,
 			 int hostno, int inout);
 
 #define SCSI_DEC_ESP {                                         \
-		proc_dir:       &proc_scsi_esp,			\
+		proc_name:      "esp",				\
 		proc_info:      &esp_proc_info,			\
 		name:           "PMAZ-AA",			\
 		detect:         dec_esp_detect,			\

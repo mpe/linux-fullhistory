@@ -348,7 +348,7 @@ void si_meminfo(struct sysinfo *val)
 	i = max_mapnr;
 	val->totalram = 0;
 	val->sharedram = 0;
-	val->freeram = nr_free_pages << PAGE_SHIFT;
+	val->freeram = nr_free_pages();
 	val->bufferram = atomic_read(&buffermem_pages);
 	while (i-- > 0)  {
 		if (PageReserved(mem_map+i))
@@ -1215,8 +1215,6 @@ void __init paging_init(void)
 	 */
 	empty_bad_page = alloc_bootmem_pages(PAGE_SIZE);
 	empty_bad_page_table = alloc_bootmem_pages(PAGE_SIZE);
-
-	free_area_init(max_low_pfn);
 }
 
 void __init mem_init(void)

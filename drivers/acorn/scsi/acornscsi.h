@@ -23,10 +23,7 @@ extern int acornscsi_biosparam (Disk *, kdev_t, int []);
 #define CAN_QUEUE 16
 #endif
 
-#ifndef PROC_SCSI_AKA30
 #include "linux/proc_fs.h"
-#define PROC_SCSI_AKA30 PROC_SCSI_EATA
-#endif
 
 #include <scsi/scsicam.h>
 

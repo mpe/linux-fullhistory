@@ -224,7 +224,8 @@ struct buffer_head {
 	struct buffer_head *b_reqnext;	/* request queue */
 
 	struct buffer_head **b_pprev;	/* doubly linked list of hash-queue */
-	char *b_data;			/* pointer to data block (1024 bytes) */
+	char * b_data;			/* pointer to data block (512 byte) */
+	struct page *b_page;		/* the page this bh is mapped to */
 	void (*b_end_io)(struct buffer_head *bh, int uptodate); /* I/O completion */
 	void *b_dev_id;
 
@@ -246,8 +247,11 @@ void init_buffer(struct buffer_head *, bh_end_io_t *, void *);
 #define buffer_new(bh)		__buffer_state(bh,New)
 #define buffer_protected(bh)	__buffer_state(bh,Protected)
 
-#define buffer_page(bh)		(mem_map + MAP_NR((bh)->b_data))
-#define touch_buffer(bh)	set_bit(PG_referenced, &buffer_page(bh)->flags)
+#define bh_offset(bh)		((unsigned long)(bh)->b_data & ~PAGE_MASK)
+
+extern void set_bh_page(struct buffer_head *bh, struct page *page, unsigned int offset);
+
+#define touch_buffer(bh)	set_bit(PG_referenced, &bh->b_page->flags)
 
 #include <linux/pipe_fs_i.h>
 #include <linux/minix_fs_i.h>
@@ -935,6 +939,7 @@ extern void set_blocksize(kdev_t, int);
 extern unsigned int get_hardblocksize(kdev_t);
 extern struct buffer_head * bread(kdev_t, int, int);
 extern struct buffer_head * breada(kdev_t, int, int, unsigned int, unsigned int);
+extern void wakeup_bdflush(int wait);
 
 extern int brw_page(int, struct page *, kdev_t, int [], int);
 

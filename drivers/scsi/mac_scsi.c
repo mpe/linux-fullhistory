@@ -141,10 +141,6 @@ static int polled_scsi_on = 0;
 #define	AFTER_RESET_DELAY	(HZ/2)
 #endif
 
-static struct proc_dir_entry proc_scsi_mac5380 = {
-	PROC_SCSI_MAC, 13, "Mac 5380 SCSI", S_IFDIR | S_IRUGO, S_IXUGO, 2
-};
-
 static volatile unsigned char *mac_scsi_regp = NULL;
 static volatile unsigned char *mac_scsi_drq  = NULL;
 static volatile unsigned char *mac_scsi_nodrq = NULL;
@@ -257,7 +253,7 @@ int macscsi_detect(Scsi_Host_Template * tpnt)
     if (macintosh_config->scsi_type != MAC_SCSI_OLD)
 	 return( 0 );
 
-    tpnt->proc_dir = &proc_scsi_mac5380;
+    tpnt->proc_name = "Mac 5380 SCSI";
 
     /* setup variables */
     tpnt->can_queue =

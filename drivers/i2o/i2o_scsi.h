@@ -14,8 +14,6 @@
 #define I2O_SCSI_CAN_QUEUE 4
 #define I2O_SCSI_CMD_PER_LUN 6
 
-extern struct proc_dir_entry proc_scsi_i2o_scsi;
-
 extern int i2o_scsi_detect(Scsi_Host_Template *);
 extern const char *i2o_scsi_info(struct Scsi_Host *);
 extern int i2o_scsi_command(Scsi_Cmnd *);
@@ -27,7 +25,7 @@ extern void i2o_scsi_setup(char *str, int *ints);
 
 #define I2OSCSI {                                          \
 		  next: NULL,				    \
-                  proc_dir:          &proc_scsi_i2o_scsi,   \
+                  proc_name:         "i2o_scsi",   \
                   name:              "I2O SCSI Layer", 	    \
                   detect:            i2o_scsi_detect,       \
                   release:	     i2o_scsi_release,	    \

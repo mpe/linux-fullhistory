@@ -3752,11 +3752,6 @@ struct fc_info *fi = (struct fc_info*)dev->priv;
 
 /* SCSI stuff starts here */
 
-static struct proc_dir_entry proc_scsi_iph5526 =  {
-	PROC_SCSI_IPH5526_FC, 7, "iph5526", S_IFDIR, S_IRUGO | S_IXUGO, 2
-};
-
-
 int iph5526_detect(Scsi_Host_Template *tmpt)
 {
 struct Scsi_Host *host = NULL;
@@ -3766,7 +3761,7 @@ int no_of_hosts = 0, timeout, i, j, count = 0;
 u_int pci_maddr = 0;
 struct pci_dev *pdev = NULL;
 
-	tmpt->proc_dir = &proc_scsi_iph5526;
+	tmpt->proc_name = "iph5526";
 	if (pci_present() == 0) {
 		printk("iph5526: PCI not present\n");
 		return 0;

@@ -168,7 +168,7 @@ int ufs_check_dir_entry (const char * function,	struct inode * dir,
 		error_msg = "inode out of bounds";
 
 	if (error_msg != NULL)
-		ufs_error (sb, function, "bad entry in directory #%lu, size %lu: %s - "
+		ufs_error (sb, function, "bad entry in directory #%lu, size %Lu: %s - "
 			    "offset=%lu, inode=%lu, reclen=%d, namlen=%d",
 			    dir->i_ino, dir->i_size, error_msg, offset,
 			    (unsigned long) SWAB32(de->d_ino),

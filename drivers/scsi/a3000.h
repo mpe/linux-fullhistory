@@ -31,9 +31,7 @@ int wd33c93_reset(Scsi_Cmnd *, unsigned int);
 
 #ifdef HOSTS_C
 
-extern struct proc_dir_entry proc_scsi_a3000;
-
-#define A3000_SCSI {  proc_dir:		   &proc_scsi_a3000,		\
+#define A3000_SCSI {  proc_name:	   "A3000",			\
 		      proc_info:           NULL,			\
 		      name:                "Amiga 3000 built-in SCSI",	\
 		      detect:              a3000_detect,		\

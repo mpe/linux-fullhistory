@@ -2,7 +2,7 @@
 
     PC Card Driver Services
     
-    ds.c 1.98 1999/09/15 15:32:19
+    ds.c 1.100 1999/11/08 20:47:02
     
     The contents of this file are subject to the Mozilla Public
     License Version 1.1 (the "License"); you may not use this file
@@ -15,7 +15,7 @@
     rights and limitations under the License.
 
     The initial developer of the original code is David A. Hinds
-    <dhinds@hyper.stanford.edu>.  Portions created by David A. Hinds
+    <dhinds@pcmcia.sourceforge.org>.  Portions created by David A. Hinds
     are Copyright (C) 1999 David A. Hinds.  All Rights Reserved.
 
     Alternatively, the contents of this file may be used under the
@@ -43,6 +43,7 @@
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/ioctl.h>
+#include <linux/proc_fs.h>
 #include <linux/poll.h>
 
 #include <pcmcia/version.h>
@@ -57,7 +58,7 @@ int pc_debug = PCMCIA_DEBUG;
 MODULE_PARM(pc_debug, "i");
 #define DEBUG(n, args...) if (pc_debug>(n)) printk(KERN_DEBUG args)
 static const char *version =
-"ds.c 1.98 1999/09/15 15:32:19 (David Hinds)";
+"ds.c 1.100 1999/11/08 20:47:02 (David Hinds)";
 #else
 #define DEBUG(n, args...)
 #endif
@@ -66,7 +67,7 @@ static const char *version =
 
 typedef struct driver_info_t {
     dev_info_t		dev_info;
-    int			use_count;
+    int			use_count, status;
     dev_link_t		*(*attach)(void);
     void		(*detach)(dev_link_t *);
     struct driver_info_t *next;
@@ -116,6 +117,11 @@ static driver_info_t *root_driver = NULL;
 static int sockets = 0, major_dev = -1;
 static socket_info_t *socket_table = NULL;
 
+extern struct proc_dir_entry *proc_pccard;
+
+/* We use this to distinguish in-kernel from modular drivers */
+static int init_status = 1;
+
 /*====================================================================*/
 
 static void cs_error(client_handle_t handle, int func, int ret)
@@ -149,6 +155,7 @@ int register_pccard_driver(dev_info_t *dev_info,
 	driver = kmalloc(sizeof(driver_info_t), GFP_KERNEL);
 	strncpy(driver->dev_info, (char *)dev_info, DEV_NAME_LEN);
 	driver->use_count = 0;
+	driver->status = init_status;
 	driver->next = root_driver;
 	root_driver = driver;
     }
@@ -199,6 +206,21 @@ int unregister_pccard_driver(dev_info_t *dev_info)
     }
     return 0;
 } /* unregister_pccard_driver */
+
+/*====================================================================*/
+
+#ifdef CONFIG_PROC_FS
+static int proc_read_drivers(char *buf, char **start, off_t pos,
+			     int count, int *eof, void *data)
+{
+    driver_info_t *d;
+    char *p = buf;
+    for (d = root_driver; d; d = d->next)
+	p += sprintf(p, "%-24.24s %d %d\n", d->dev_info,
+		     d->status, d->use_count);
+    return (p - buf);
+}
+#endif
 
 /*======================================================================
 
@@ -874,7 +896,15 @@ int __init init_pcmcia_ds(void)
 	       "Driver Services\n");
     else
 	major_dev = i;
-    
+
+#ifdef CONFIG_PROC_FS
+    if (proc_pccard) {
+	struct proc_dir_entry *ent;
+	ent = create_proc_entry("drivers", 0, proc_pccard);
+	ent->read_proc = proc_read_drivers;
+    }
+    init_status = 0;
+#endif
     return 0;
 }
 
@@ -888,6 +918,10 @@ int __init init_module(void)
 void __exit cleanup_module(void)
 {
     int i;
+#ifdef CONFIG_PROC_FS
+    if (proc_pccard)
+	remove_proc_entry("drivers", proc_pccard);
+#endif
     if (major_dev != -1)
 	unregister_chrdev(major_dev, "pcmcia");
     for (i = 0; i < sockets; i++)

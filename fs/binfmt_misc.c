@@ -471,24 +471,6 @@ static int entry_proc_setup(struct binfmt_entry *e)
 	return 0;
 }
 
-#ifdef MODULE
-/*
- * This is called as the fill_inode function when an inode
- * is going into (fill = 1) or out of service (fill = 0).
- * We use it here to manage the module use counts.
- *
- * Note: only the top-level directory needs to do this; if
- * a lower level is referenced, the parent will be as well.
- */
-static void bm_modcount(struct inode *inode, int fill)
-{
-	if (fill)
-		MOD_INC_USE_COUNT;
-	else
-		MOD_DEC_USE_COUNT;
-}
-#endif
-
 static int __init init_misc_binfmt(void)
 {
 	int error = -ENOENT;
@@ -497,9 +479,7 @@ static int __init init_misc_binfmt(void)
 	bm_dir = create_proc_entry("sys/fs/binfmt_misc", S_IFDIR, NULL);
 	if (!bm_dir)
 		goto out;
-#ifdef MODULE
-	bm_dir->fill_inode = bm_modcount;
-#endif
+	bm_dir->owner = THIS_MODULE;
 
 	status = create_proc_entry("status", S_IFREG | S_IRUGO | S_IWUSR,
 					bm_dir);

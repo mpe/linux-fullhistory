@@ -4011,19 +4011,6 @@ typedef struct _PCI_CONFIG_SPACE_
  * --- Driver Data
  */
 
-/* Note: All driver global data should be initialized. */
-
-#if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(1,3,0)
-struct proc_dir_entry proc_scsi_advansys =
-{
-    PROC_SCSI_ADVANSYS,              /* unsigned short low_ino */
-    8,                               /* unsigned short namelen */
-    "advansys",                      /* const char *name */
-    S_IFDIR | S_IRUGO | S_IXUGO,     /* mode_t mode */
-    2                                /* nlink_t nlink */
-};
-#endif /* version >= v1.3.0 */
-
 /* Number of boards detected in system. */
 STATIC int asc_board_count = 0;
 STATIC struct Scsi_Host    *asc_host[ASC_NUM_BOARD_SUPPORTED] = { 0 };
@@ -4481,9 +4468,7 @@ advansys_detect(Scsi_Host_Template *tpnt)
 
     ASC_DBG(1, "advansys_detect: begin\n");
 
-#if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(1,3,0)
-    tpnt->proc_dir = &proc_scsi_advansys;
-#endif /* version >= v1.3.0 */
+    tpnt->proc_name = "advansys";
 
     asc_board_count = 0;
 

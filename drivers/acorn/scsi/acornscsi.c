@@ -190,10 +190,6 @@
 unsigned int sdtr_period = SDTR_PERIOD;
 unsigned int sdtr_size   = SDTR_SIZE;
 
-static struct proc_dir_entry proc_scsi_acornscsi = {
-	PROC_SCSI_EATA, 9, "acornscsi", S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 static void acornscsi_done(AS_Host *host, Scsi_Cmnd **SCpntp, unsigned int result);
 static int acornscsi_reconnect_finish(AS_Host *host);
 static void acornscsi_dma_cleanup(AS_Host *host);
@@ -2875,7 +2871,7 @@ int acornscsi_detect(Scsi_Host_Template * tpnt)
     struct Scsi_Host *instance;
     AS_Host *host;
 
-    tpnt->proc_dir = &proc_scsi_acornscsi;
+    tpnt->proc_name = "acornscsi";
 
     for (i = 0; i < MAX_ECARDS; i++)
 	ecs[i] = NULL;

@@ -1089,7 +1089,10 @@ static void NS8390_trigger_send(struct net_device *dev, unsigned int length,
 								int start_page)
 {
 	long e8390_base = dev->base_addr;
+#if defined(CONFIG_MAC) || defined(CONFIG_AMIGA_PCMCIA) || \
+    defined(CONFIG_ARIADNE2) || defined(CONFIG_ARIADNE2_MODULE)
  	struct ei_device *ei_local = (struct ei_device *) dev->priv;
+#endif
    
 	outb_p(E8390_NODMA+E8390_PAGE0, e8390_base+E8390_CMD);
     

@@ -478,15 +478,6 @@ int coda_cache_inv_stats_get_info( char * buffer, char ** start, off_t offset,
 
 struct proc_dir_entry* proc_fs_coda;
 
-static void coda_proc_modcount(struct inode *inode, int fill)
-{
-	if (fill)
-		MOD_INC_USE_COUNT;
-	else
-		MOD_DEC_USE_COUNT;
-			
-}
-
 #endif
 
 #define coda_proc_create(name,get_info) \
@@ -502,7 +493,7 @@ void coda_sysctl_init()
 
 #ifdef CONFIG_PROC_FS
 	proc_fs_coda = create_proc_entry("coda", S_IFDIR, proc_root_fs);
-	proc_fs_coda->fill_inode = &coda_proc_modcount;
+	proc_fs_coda->owner = THIS_MODULE;
 	coda_proc_create("vfs_stats", coda_vfs_stats_get_info);
 	coda_proc_create("upcall_stats", coda_upcall_stats_get_info);
 	coda_proc_create("permission_stats", coda_permission_stats_get_info);

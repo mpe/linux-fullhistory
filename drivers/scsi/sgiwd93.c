@@ -37,11 +37,6 @@ struct hpc_chunk {
 	unsigned long padding;
 };
 
-struct proc_dir_entry proc_scsi_sgiwd93 = {
-	PROC_SCSI_SGIWD93, 5, "SGIWD93",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 struct Scsi_Host *sgiwd93_host = NULL;
 
 /* Wuff wuff, wuff, wd33c93.c, wuff wuff, object oriented, bow wow. */
@@ -272,7 +267,7 @@ int __init sgiwd93_detect(Scsi_Host_Template *HPsUX)
 	if(called)
 		return 0; /* Should bitch on the console about this... */
 
-	HPsUX->proc_dir = &proc_scsi_sgiwd93;
+	HPsUX->proc_name = "SGIWD93";
 
 	sgiwd93_host = scsi_register(HPsUX, sizeof(struct WD33C93_hostdata));
 	sgiwd93_host->base = (unsigned char *) hregs;

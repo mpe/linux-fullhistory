@@ -424,11 +424,6 @@ MODULE_AUTHOR("Dario Ballabio");
 #define SPIN_UNLOCK_RESTORE \
                   spin_unlock_irqrestore(&io_request_lock, spin_flags);
 
-struct proc_dir_entry proc_scsi_eata2x = {
-    PROC_SCSI_EATA2X, 6, "eata2x",
-    S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 /* Subversion values */
 #define ISA  0
 #define ESA 1
@@ -1257,7 +1252,7 @@ static void add_pci_ports(void) {
 int eata2x_detect(Scsi_Host_Template *tpnt) {
    unsigned int j = 0, k;
 
-   tpnt->proc_dir = &proc_scsi_eata2x;
+   tpnt->proc_name = "eata2x";
 
    if(boot_options) option_setup(boot_options);
 

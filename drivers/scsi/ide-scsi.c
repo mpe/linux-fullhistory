@@ -558,8 +558,6 @@ static ide_module_t idescsi_module = {
 	NULL
 };
 
-static struct proc_dir_entry idescsi_proc_dir = {PROC_SCSI_IDESCSI, 8, "ide-scsi", S_IFDIR | S_IRUGO | S_IXUGO, 2};
-
 /*
  *	idescsi_init will register the driver for each scsi.
  */
@@ -603,7 +601,7 @@ int idescsi_detect (Scsi_Host_Template *host_template)
 	struct Scsi_Host *host;
 	int id;
 
-	host_template->proc_dir = &idescsi_proc_dir;
+	host_template->proc_name = "ide-scsi";
 	host = scsi_register(host_template, 0);
 	for (id = 0; id < MAX_HWIFS * MAX_DRIVES && idescsi_drives[id]; id++);
 	host->max_id = id;

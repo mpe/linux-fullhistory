@@ -260,7 +260,7 @@ static void __init network_ldisc_init(void)
 	strip_init_ctrl_dev();
 #endif
 #if defined(CONFIG_PPP)
-	ppp_init():
+	ppp_init();
 #endif
 }
 

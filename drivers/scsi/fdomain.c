@@ -274,9 +274,7 @@
 #define MODULE
 #endif
 
-#ifdef MODULE
 #include <linux/module.h>
-#endif
 
 #ifdef PCMCIA
 #undef MODULE
@@ -299,11 +297,6 @@
 #include <linux/delay.h>
 
 #include <linux/config.h>	/* for CONFIG_PCI */
-
-struct proc_dir_entry proc_scsi_fdomain = {
-    PROC_SCSI_FDOMAIN, 7, "fdomain",
-    S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
   
 #define VERSION          "$Revision: 5.50 $"
 
@@ -884,7 +877,7 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
    unsigned char    buf[buflen];
 #endif
 
-   tpnt->proc_dir = &proc_scsi_fdomain;
+   tpnt->proc_name = "fdomain";
 
 #ifdef MODULE
    if (fdomain[0] || fdomain[1] || fdomain[2]) {

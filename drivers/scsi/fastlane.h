@@ -48,7 +48,7 @@ extern int esp_reset(Scsi_Cmnd *, unsigned int);
 extern int esp_proc_info(char *buffer, char **start, off_t offset, int length,
 			 int hostno, int inout);
 
-#define SCSI_FASTLANE     { proc_dir:		&proc_scsi_esp, \
+#define SCSI_FASTLANE     { proc_name:		"esp-fastlane", \
 			    proc_info:		esp_proc_info, \
 			    name:		"Fastlane SCSI", \
 			    detect:		fastlane_esp_detect, \

@@ -133,12 +133,10 @@
 #include <linux/modversions.h>
 #include <linux/module.h>
 
-#if LINUX_VERSION_CODE >= 0x20100
 char kernel_version[] = UTS_RELEASE;
 
 MODULE_AUTHOR ("American Megatrends Inc.");
 MODULE_DESCRIPTION ("AMI MegaRAID driver");
-#endif
 #endif
 
 #include <linux/types.h>
@@ -157,11 +155,7 @@ MODULE_DESCRIPTION ("AMI MegaRAID driver");
 #include <linux/interrupt.h>
 
 #include <linux/stat.h>
-#if LINUX_VERSION_CODE < 0x20100
-#include <linux/bios32.h>
-#else
 #include <linux/spinlock.h>
-#endif
 
 #include <asm/io.h>
 #include <asm/irq.h>
@@ -180,27 +174,8 @@ MODULE_DESCRIPTION ("AMI MegaRAID driver");
  *================================================================
  */
 
-#if LINUX_VERSION_CODE < 0x020100
-#define ioremap vremap
-#define iounmap vfree
-
-/* simulate spin locks */
-typedef struct {
-  volatile char lock;
-} spinlock_t;
-
-#define spin_lock_init(x) { (x)->lock = 0;}
-#define spin_lock_irqsave(x,flags) { while ((x)->lock) barrier();\
-                                        (x)->lock=1; save_flags(flags);\
-                                        cli();}
-#define spin_unlock_irqrestore(x,flags) { (x)->lock=0; restore_flags(flags);}
-
-#endif
-
-#if LINUX_VERSION_CODE >= 0x020100
 #define queue_task_irq(a,b)     queue_task(a,b)
 #define queue_task_irq_off(a,b) queue_task(a,b)
-#endif
 
 #define MAX_SERBUF 160
 #define COM_BASE 0x2f8
@@ -294,10 +269,8 @@ static int ser_printk (const char *fmt,...);
     XX scsi id on each channel.  Used for Madrona motherboard, where SAF_TE
     processor id cannot be scanned */
 static char *megaraid;
-#if LINUX_VERSION_CODE > 0x20100
 #ifdef MODULE
 MODULE_PARM(megaraid, "s");
-#endif
 #endif
 static int skip_id;
 
@@ -317,12 +290,6 @@ static Scsi_Cmnd *qCompleted = NULL;
 volatile static spinlock_t serial_lock;
 #endif
 volatile static spinlock_t mega_lock;
-
-struct proc_dir_entry proc_scsi_megaraid =
-{
-  PROC_SCSI_MEGARAID, 8, "megaraid",
-  S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
 
 #if SERDEBUG
 static char strbuf[MAX_SERBUF + 1];
@@ -930,9 +897,7 @@ static void megaraid_isr (int irq, void *devp, struct pt_regs *regs)
   megaCfg = (mega_host_config *) devp;
   mbox = (mega_mailbox *)tmpBox;
 
-#if LINUX_VERSION_CODE >= 0x20100
   spin_lock_irqsave (&io_request_lock, flags);
-#endif
 
   while (megaCfg->host->irq == irq) {
 
@@ -1028,9 +993,7 @@ static void megaraid_isr (int irq, void *devp, struct pt_regs *regs)
 
   }
 
-#if LINUX_VERSION_CODE >= 0x20100
   spin_unlock_irqrestore (&io_request_lock, flags);
-#endif
 }
 
 /*==================================================*/
@@ -1450,20 +1413,11 @@ int findCard (Scsi_Host_Template * pHostTmpl,
   u16 pciIdx = 0;
   u16 numFound = 0;
 
-#if LINUX_VERSION_CODE < 0x20100
-  while (!pcibios_find_device (pciVendor, pciDev, pciIdx, &pciBus, &pciDevFun)) {
-
-#if 0
-  } /* keep auto-indenters happy */
-#endif
-#else
-  
   struct pci_dev *pdev = pci_devices;
   
   while ((pdev = pci_find_device (pciVendor, pciDev, pdev))) {
     pciBus = pdev->bus->number;
     pciDevFun = pdev->devfn;
-#endif
     if ((flag & BOARD_QUARTZ) && (skip_id == -1)) {
       u16 magic;
       pcibios_read_config_word (pciBus, pciDevFun,
@@ -1555,14 +1509,8 @@ int megaraid_detect (Scsi_Host_Template * pHostTmpl)
 {
   int count = 0;
 
-  pHostTmpl->proc_dir = &proc_scsi_megaraid;
+  pHostTmpl->proc_name = "megaraid";
 
-#if LINUX_VERSION_CODE < 0x20100
-  if (!pcibios_present ()) {
-    printk (KERN_WARNING "megaraid: PCI bios not present." CRLFSTR);
-    return 0;
-  }
-#endif
   skip_id = -1;
   if (megaraid && !strncmp(megaraid,"skip",strlen("skip"))) {
       if (megaraid[4] != '\0') {

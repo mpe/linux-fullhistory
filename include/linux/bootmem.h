@@ -1,7 +1,6 @@
 #ifndef _LINUX_BOOTMEM_H
 #define _LINUX_BOOTMEM_H
 
-#include <linux/config.h>
 #include <asm/pgtable.h>
 #include <asm/dma.h>
 

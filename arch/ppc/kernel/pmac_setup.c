@@ -39,9 +39,9 @@
 #include <linux/ioport.h>
 #include <linux/major.h>
 #include <linux/blk.h>
-#include <linux/ide.h>
 #include <linux/vt_kern.h>
 #include <linux/console.h>
+#include <linux/ide.h>
 #include <linux/pci.h>
 #include <linux/adb.h>
 #include <linux/cuda.h>

@@ -148,11 +148,6 @@
 #include "sd.h"
 #include<linux/stat.h>
 
-struct proc_dir_entry proc_scsi_ultrastor = {
-    PROC_SCSI_ULTRASTOR, 9, "ultrastor",
-    S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 #define FALSE 0
 #define TRUE 1
 
@@ -631,7 +626,7 @@ static int ultrastor_24f_detect(Scsi_Host_Template * tpnt)
 
 int ultrastor_detect(Scsi_Host_Template * tpnt)
 {
-    tpnt->proc_dir = &proc_scsi_ultrastor;
+    tpnt->proc_name = "ultrastor";
   return ultrastor_14f_detect(tpnt) || ultrastor_24f_detect(tpnt);
 }
 

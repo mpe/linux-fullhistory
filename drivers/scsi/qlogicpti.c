@@ -132,11 +132,6 @@ const u_char mbox_param[] = {
 						    QLOGICISP_REQ_QUEUE_LEN)
 #define RES_QUEUE_DEPTH(in, out)	QUEUE_DEPTH(in, out, RES_QUEUE_LEN)
 
-static struct proc_dir_entry proc_scsi_qlogicpti = {
-	PROC_SCSI_QLOGICPTI, 7, "qlogicpti",
-	S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 static inline void qlogicpti_enable_irqs(struct qlogicpti_regs *qregs)
 {
 	qregs->sbus_ctrl = SBUS_CTRL_ERIRQ | SBUS_CTRL_GENAB;
@@ -596,7 +591,7 @@ int __init qlogicpti_detect(Scsi_Host_Template *tpnt)
 	int qpti_node;
 	int is_pti;
 
-	tpnt->proc_dir = &proc_scsi_qlogicpti;
+	tpnt->proc_name = "qlogicpti";
 	qptichain = 0;
 	if(!SBus_chain)
 		return 0;

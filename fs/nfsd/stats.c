@@ -17,6 +17,7 @@
 #include <linux/sched.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+#include <linux/module.h>
 
 #include <linux/sunrpc/svc.h>
 #include <linux/sunrpc/stats.h>
@@ -77,9 +78,7 @@ nfsd_stat_init(void)
 
 	if ((ent = svc_proc_register(&nfsd_svcstats)) != 0) {
 		ent->read_proc = nfsd_proc_read;
-#ifdef MODULE
-		ent->fill_inode = nfsd_modcount;
-#endif
+		ent->owner = THIS_MODULE;
 	}
 }
 

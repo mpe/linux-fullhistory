@@ -22,6 +22,7 @@
 #include <asm/system.h>
 #include <asm/io.h>
 #include <linux/blk.h>
+#include <linux/highmem.h>
 
 #include <linux/module.h>
 
@@ -491,6 +492,15 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	   won't clear the mapped bit under us. */
 	if (!buffer_mapped(bh))
 		BUG();
+
+	/*
+	 * Temporary solution - in 2.5 this will be done by the lowlevel
+	 * driver. Create a bounce buffer if the buffer data points into
+	 * high memory - keep the original buffer otherwise.
+	 */
+#if CONFIG_HIGHMEM
+	bh = create_bounce(rw, bh);
+#endif
 
 /* look for a free request. */
        /* Loop uses two requests, 1 for loop and 1 for the real device.

@@ -227,4 +227,8 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
    fi
 fi
 
+if [ "$CONFIG_PCMCIA" != "n" ]; then
+   source drivers/char/pcmcia/Config.in
+fi
+
 endmenu

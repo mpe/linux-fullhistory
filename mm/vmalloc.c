@@ -10,7 +10,7 @@
 
 #include <asm/uaccess.h>
 
-static struct vm_struct * vmlist = NULL;
+struct vm_struct * vmlist = NULL;
 
 static inline void free_area_pte(pmd_t * pmd, unsigned long address, unsigned long size)
 {
@@ -97,7 +97,7 @@ static inline int alloc_area_pte(pte_t * pte, unsigned long address, unsigned lo
 		struct page * page;
 		if (!pte_none(*pte))
 			printk(KERN_ERR "alloc_area_pte: page already exists\n");
-		page = get_free_highpage(GFP_KERNEL|__GFP_HIGHMEM);
+		page = alloc_page(GFP_KERNEL|__GFP_HIGHMEM);
 		if (!page)
 			return -ENOMEM;
 		set_pte(pte, mk_pte(page, PAGE_KERNEL));

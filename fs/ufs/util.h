@@ -14,7 +14,6 @@
  * some useful macros
  */
 #define in_range(b,first,len)	((b)>=(first)&&(b)<(first)+(len))
-#define howmany(x,y)		(((x)+(y)-1)/(y))
 #define min(x,y)		((x)<(y)?(x):(y))
 #define max(x,y)		((x)>(y)?(x):(y))
 

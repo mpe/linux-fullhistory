@@ -76,69 +76,14 @@ extern int inia100_queue(Scsi_Cmnd *, void (*done) (Scsi_Cmnd *));
 extern int inia100_abort(Scsi_Cmnd *);
 extern int inia100_reset(Scsi_Cmnd *, unsigned int);
 
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(1, 3, 0)
 extern int inia100_biosparam(Scsi_Disk *, kdev_t, int *);	/*for linux v2.0 */
-extern struct proc_dir_entry proc_scsi_inia100;
-#else
-extern int inia100_biosparam(Disk *, int, int *);	/*for linux v1.13 */
-#endif
 
 #define inia100_REVID "Initio INI-A100U2W SCSI device driver; Revision: 1.02c"
 
-#if LINUX_VERSION_CODE < CVT_LINUX_VERSION(1, 3, 0)
-#define INIA100	{ \
-		NULL, \
-		NULL, \
-		inia100_REVID, \
-		inia100_detect, \
-		NULL, \
-		NULL, \
-		inia100_command, \
-		inia100_queue, \
-		inia100_abort, \
-		inia100_reset, \
-		NULL, \
-		inia100_biosparam, \
-		1, \
-7, \
-SG_ALL, \
-1, \
-0, \
-0, \
-ENABLE_CLUSTERING \
-}
-
-#else
-
-#if LINUX_VERSION_CODE < CVT_LINUX_VERSION(2, 1, 75)
-#define INIA100	{ \
-		NULL, \
-		NULL, \
-		&proc_scsi_inia100, \
-		NULL, \
-		inia100_REVID, \
-		inia100_detect, \
-		NULL, \
-		NULL, \
-		inia100_command, \
-		inia100_queue, \
-		inia100_abort, \
-		inia100_reset, \
-		NULL, \
-		inia100_biosparam, \
-		1, \
-		7, \
-		0, \
-		1, \
-		0, \
-		0, \
-		ENABLE_CLUSTERING \
-}
-#else				/* Version >= 2.1.75 */
 #define INIA100	{ \
 	next:		NULL,						\
 	module:		NULL,						\
-	proc_dir:	&proc_scsi_inia100, \
+	proc_name:	"INIA100", \
 	proc_info:	NULL,				\
 	name:		inia100_REVID, \
 	detect:		inia100_detect, \
@@ -164,8 +109,6 @@ ENABLE_CLUSTERING \
 	use_clustering:	ENABLE_CLUSTERING, \
  use_new_eh_code: 0 \
 }
-#endif
-#endif
 
 #define VIRT_TO_BUS(i)  (unsigned int) virt_to_bus((void *)(i))
 #define ULONG   unsigned long
@@ -441,14 +384,10 @@ typedef struct ORC_Ha_Ctrl_Struc {
 	UBYTE ActiveTags[16][16];	/* 50 */
 	ORC_TCS HCS_Tcs[16];	/* 28 */
 	U32 BitAllocFlag[MAX_CHANNELS][8];	/* Max STB is 256, So 256/32 */
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	spinlock_t BitAllocFlagLock;
-#endif
 	Scsi_Cmnd *pSRB_head;
 	Scsi_Cmnd *pSRB_tail;
-#if LINUX_VERSION_CODE >= CVT_LINUX_VERSION(2,1,95)
 	spinlock_t pSRB_lock;
-#endif
 } ORC_HCS;
 
 /* Bit Definition for HCS_Flags */

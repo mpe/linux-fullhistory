@@ -2531,23 +2531,6 @@ ctl_table cdrom_root_table[] = {
 
 static struct ctl_table_header *cdrom_sysctl_header;
 
-/*
- * This is called as the fill_inode function when an inode
- * is going into (fill = 1) or out of service (fill = 0).
- * We use it here to manage the module use counts.
- *
- * Note: only the top-level directory needs to do this; if
- * a lower level is referenced, the parent will be as well.
- */
-static void cdrom_procfs_modcount(struct inode *inode, int fill)
-{
-	if (fill) {
-		MOD_INC_USE_COUNT;
-	} else {
-		MOD_DEC_USE_COUNT;
-	}
-}
-
 static void cdrom_sysctl_register(void)
 {
 	static int initialized = 0;
@@ -2556,7 +2539,7 @@ static void cdrom_sysctl_register(void)
 		return;
 
 	cdrom_sysctl_header = register_sysctl_table(cdrom_root_table, 1);
-	cdrom_root_table->child->de->fill_inode = &cdrom_procfs_modcount;
+	cdrom_root_table->child->de->owner = THIS_MODULE;
 
 	/* set the defaults */
 	cdrom_sysctl_settings.autoclose = autoclose;

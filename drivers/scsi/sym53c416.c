@@ -170,7 +170,7 @@
 #define PIO_MODE                  0x80
 
 #define IO_RANGE 0x20         /* 0x00 - 0x1F                   */
-#define ID       "sym53c416"
+#define ID       "sym53c416"	/* Attention: copied to the sym53c416.h */
 #define PIO_SIZE 128          /* Size of PIO fifo is 128 bytes */
 
 #define READ_TIMEOUT              150
@@ -236,8 +236,6 @@ static int host_index = 0;
 static char info[120];
 
 static Scsi_Cmnd *current_command = NULL;
-
-struct proc_dir_entry proc_scsi_sym53c416 = {PROC_SCSI_SYM53C416, 7, ID, S_IFDIR | S_IRUGO | S_IXUGO, 2};
 
 int fastpio = 1;
 
@@ -809,13 +807,11 @@ int sym53c416_bios_param(Disk *disk, kdev_t dev, int *ip)
 /* Loadable module support */
 #ifdef MODULE
 
-#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,26)
 MODULE_AUTHOR("Lieven Willems");
 MODULE_PARM(sym53c416, "1-2i");
 MODULE_PARM(sym53c416_1, "1-2i");
 MODULE_PARM(sym53c416_2, "1-2i");
 MODULE_PARM(sym53c416_3, "1-2i");
-#endif
 
 Scsi_Host_Template driver_template = SYM53C416;
 

@@ -21,11 +21,6 @@
 
 #include<linux/stat.h>
 
-struct proc_dir_entry proc_scsi_gvp11 = {
-    PROC_SCSI_GVP11, 5, "GVP11",
-    S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 #define DMA(ptr) ((gvp11_scsiregs *)((ptr)->base))
 #define HDATA(ptr) ((struct WD33C93_hostdata *)((ptr)->hostdata))
 
@@ -200,7 +195,7 @@ int __init gvp11_detect(Scsi_Host_Template *tpnt)
 	return 0;
     called = 1;
 
-    tpnt->proc_dir = &proc_scsi_gvp11;
+    tpnt->proc_name = "GVP11";
     tpnt->proc_info = &wd33c93_proc_info;
 
     while (1) {

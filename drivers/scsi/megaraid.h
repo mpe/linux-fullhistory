@@ -605,8 +605,6 @@ typedef struct _mega_host_config {
     mega_scb scbList[MAX_COMMANDS];
 } mega_host_config;
 
-extern struct proc_dir_entry proc_scsi_megaraid;
-
 const char *megaraid_info(struct Scsi_Host *);
 int megaraid_detect(Scsi_Host_Template *);
 int megaraid_release(struct Scsi_Host *);

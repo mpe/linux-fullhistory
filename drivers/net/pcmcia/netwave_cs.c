@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Authors:       John Markus Bjørndalen <johnm@cs.uit.no>
  *                Dag Brattli <dagb@cs.uit.no>
- *                David Hinds <dhinds@hyper.stanford.edu>
+ *                David Hinds <dhinds@pcmcia.sourceforge.org>
  * Created at:    A long time ago!
  * Modified at:   Mon Nov 10 11:54:37 1997
  * Modified by:   Dag Brattli <dagb@cs.uit.no>

@@ -92,11 +92,6 @@
 #include <linux/stat.h>
 #include <linux/config.h>	/* for CONFIG_PCI */
 
-struct proc_dir_entry proc_scsi_eata_dma = {
-    PROC_SCSI_EATA, 8, "eata_dma",
-    S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 static u32 ISAbases[] =
 {0x1F0, 0x170, 0x330, 0x230};
 static unchar EISAbases[] =
@@ -1472,7 +1467,7 @@ int eata_detect(Scsi_Host_Template * tpnt)
     DBG((DBG_PROBE && DBG_DELAY) || DPT_DEBUG,
 	printk("Using lots of delays to let you read the debugging output\n"));
 
-    tpnt->proc_dir = &proc_scsi_eata_dma;
+    tpnt->proc_name = "eata_dma";
 
     status = scsi_init_malloc(512, GFP_ATOMIC | GFP_DMA);
     dma_scratch = scsi_init_malloc(1024, GFP_ATOMIC | GFP_DMA);

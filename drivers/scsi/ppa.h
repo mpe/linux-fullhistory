@@ -138,10 +138,7 @@ static int ppa_init(int);
 static void ppa_interrupt(void *);
 static int ppa_out(int, char *, int);
 
-struct proc_dir_entry proc_scsi_ppa =
-{PROC_SCSI_PPA, 3, "ppa", S_IFDIR | S_IRUGO | S_IXUGO, 2};
 #else
-extern struct proc_dir_entry proc_scsi_ppa;
 #define ppa_release 0
 #endif
 
@@ -154,7 +151,7 @@ int ppa_reset(Scsi_Cmnd *);
 int ppa_proc_info(char *, char **, off_t, int, int, int);
 int ppa_biosparam(Disk *, kdev_t, int *);
 
-#define PPA {	proc_dir:			&proc_scsi_ppa,		\
+#define PPA {	proc_name:			"ppa",		\
 		proc_info:			ppa_proc_info,		\
 		name:				"Iomega VPI0 (ppa) interface",\
 		detect:				ppa_detect,		\

@@ -14,6 +14,7 @@
 #include <linux/ctype.h>
 #include <linux/fs.h>
 #include <linux/sysctl.h>
+#include <linux/module.h>
 
 #include <asm/uaccess.h>
 #include <linux/sunrpc/types.h>
@@ -38,11 +39,9 @@ rpc_register_sysctl(void)
 {
 	if (!sunrpc_table_header) {
 		sunrpc_table_header = register_sysctl_table(sunrpc_table, 1);
-#ifdef MODULE
 #ifdef CONFIG_PROC_FS
 		if (sunrpc_table[0].de)
-			sunrpc_table[0].de->fill_inode = rpc_modcount;
-#endif
+			sunrpc_table[0].de->owner = THIS_MODULE;
 #endif
 	}
 			

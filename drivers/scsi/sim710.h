@@ -24,9 +24,7 @@ int sim710_release(struct Scsi_Host *);
 #if defined(HOSTS_C) || defined(MODULE)
 #include <scsi/scsicam.h>
 
-extern struct proc_dir_entry proc_scsi_sim710;
-
-#define SIM710_SCSI { proc_dir:			&proc_scsi_sim710,	\
+#define SIM710_SCSI { proc_name:		"sim710",	\
 		      name:			"Simple 53c710", 	\
 		      detect:			sim710_detect,		\
 		      release:			sim710_release,		\

@@ -17,8 +17,6 @@
 #include <linux/kernel.h>
 #include <linux/kernel_stat.h>
 #include <linux/tty.h>
-#include <linux/user.h>
-#include <linux/a.out.h>
 #include <linux/string.h>
 #include <linux/mman.h>
 #include <linux/proc_fs.h>
@@ -164,6 +162,8 @@ static int meminfo_read_proc(char *page, char **start, off_t off,
                 "Cached:    %8u kB\n"
                 "HighTotal: %8lu kB\n"
                 "HighFree:  %8lu kB\n"
+                "LowTotal:  %8lu kB\n"
+                "LowFree:   %8lu kB\n"
                 "SwapTotal: %8lu kB\n"
                 "SwapFree:  %8lu kB\n",
                 K(i.totalram),
@@ -173,6 +173,8 @@ static int meminfo_read_proc(char *page, char **start, off_t off,
                 K(atomic_read(&page_cache_size)),
                 K(i.totalhigh),
                 K(i.freehigh),
+                K(i.totalram-i.totalhigh),
+                K(i.freeram-i.freehigh),
                 K(i.totalswap),
                 K(i.freeswap));
 
@@ -546,28 +548,6 @@ static int memory_read_proc(char *page, char **start, off_t off,
 	return len;
 }
 
-static int open_kcore(struct inode * inode, struct file * filp)
-{
-	return capable(CAP_SYS_RAWIO) ? 0 : -EPERM;
-}
-
-extern ssize_t read_kcore(struct file *, char *, size_t, loff_t *);
-
-static struct file_operations proc_kcore_operations = {
-	NULL,           /* lseek */
-	read_kcore,
-	NULL,		/* write */
-	NULL,		/* readdir */
-	NULL,		/* poll */
-	NULL,		/* ioctl */
-	NULL,		/* mmap */
-	open_kcore
-};
-
-static struct inode_operations proc_kcore_inode_operations = {
-	&proc_kcore_operations,
-};
-
 /*
  * This function accesses profiling information. The returned data is
  * binary: the sampling step and the actual contents of the profile
@@ -704,7 +684,7 @@ void proc_misc_init(void)
 	/* And now for trickier ones */
 	proc_register(&proc_root, &proc_root_kmsg);
 	proc_register(&proc_root, &proc_root_kcore);
-	proc_root_kcore.size = get_kcore_size();
+	proc_root_kcore.size = (size_t)high_memory - PAGE_OFFSET + PAGE_SIZE;
 	if (prof_shift) {
 		proc_register(&proc_root, &proc_root_profile);
 		proc_root_profile.size = (1+prof_len) * sizeof(unsigned int);

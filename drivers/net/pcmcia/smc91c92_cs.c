@@ -6,13 +6,13 @@
     Megahertz, Motorola, Ositech, and Psion Dacom ethernet/modem
     multifunction cards.
 
-    Copyright (C) 1999 David A. Hinds -- dhinds@hyper.stanford.edu
+    Copyright (C) 1999 David A. Hinds -- dhinds@pcmcia.sourceforge.org
 
-    smc91c92_cs.c 1.79 1999/10/19 00:38:29
+    smc91c92_cs.c 1.82 1999/11/08 20:46:17
     
     This driver contains code written by Donald Becker
     (becker@cesdis.gsfc.nasa.gov), Rowan Hughes (x-csrdh@jcu.edu.au),
-    David Hinds (dhinds@hyper.stanford.edu), and Erik Stahlman
+    David Hinds (dhinds@pcmcia.sourceforge.org), and Erik Stahlman
     (erik@vt.edu).  Donald wrote the SMC 91c92 code using parts of
     Erik's SMC 91c94 driver.  Rowan wrote a similar driver, and I've
     incorporated some parts of his driver here.  I (Dave) wrote most
@@ -717,6 +717,7 @@ static int smc_config(dev_link_t *link)
 	if (i == CS_SUCCESS) {
 	    link->conf.ConfigIndex = cf->index;
 	    link->io.BasePort1 = cf->io.win[0].base;
+	    link->io.IOAddrLines = cf->io.flags & CISTPL_IO_LINES_MASK;
 	    i = CardServices(RequestIO, link->handle, &link->io);
 	    if (i == CS_SUCCESS) break;
 	}
@@ -784,6 +785,7 @@ static int osi_config(dev_link_t *link)
     link->io.NumPorts1 = 64;
     link->io.Attributes2 = IO_DATA_PATH_WIDTH_8;
     link->io.NumPorts2 = 8;
+    link->io.IOAddrLines = 16;
     
     /* Enable Hard Decode, LAN, Modem */
     link->conf.ConfigIndex = 0x23;
@@ -1799,15 +1801,17 @@ static void set_rx_mode(struct net_device *dev)
 
 static int s9k_config(struct net_device *dev, struct ifmap *map)
 {
+    struct smc_private *lp = dev->priv;
     if ((map->port != (u_char)(-1)) && (map->port != dev->if_port)) {
-	if (map->port <= 2) {
-	    dev->if_port = map->port;
-	    printk(KERN_INFO "%s: switched to %s port\n",
-		   dev->name, if_names[dev->if_port]);
-	} else
+	if (lp->cfg & CFG_MII_SELECT)
+	    return -EOPNOTSUPP;
+	else if (map->port > 2)
 	    return -EINVAL;
+	dev->if_port = map->port;
+	printk(KERN_INFO "%s: switched to %s port\n",
+	       dev->name, if_names[dev->if_port]);
+	smc_reset(dev);
     }
-    smc_reset(dev);
     return 0;
 }
 

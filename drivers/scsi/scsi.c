@@ -2883,33 +2883,28 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 
 	for (shpnt = scsi_hostlist; shpnt; shpnt = sh1) {
 		sh1 = shpnt->next;
-		if (shpnt->hostt == tpnt) {
-			if (shpnt->loaded_as_module) {
-				pcount = next_scsi_host;
-				/* Remove the /proc/scsi directory entry */
-#ifdef CONFIG_PROC_FS
-				proc_scsi_unregister(tpnt->proc_dir,
-					shpnt->host_no + PROC_SCSI_FILE);
-#endif
-				if (tpnt->release)
-					(*tpnt->release) (shpnt);
-				else {
-					/* This is the default case for the release function.
-					 * It should do the right thing for most correctly
-					 * written host adapters.
-					 */
-					if (shpnt->irq)
-						free_irq(shpnt->irq, NULL);
-					if (shpnt->dma_channel != 0xff)
-						free_dma(shpnt->dma_channel);
-					if (shpnt->io_port && shpnt->n_io_port)
-						release_region(shpnt->io_port, shpnt->n_io_port);
-				}
-				if (pcount == next_scsi_host)
-					scsi_unregister(shpnt);
-				tpnt->present--;
-			}
+		if (shpnt->hostt != tpnt || !shpnt->loaded_as_module)
+			continue;
+		pcount = next_scsi_host;
+		/* Remove the /proc/scsi directory entry */
+		remove_proc_entry(shpnt->proc_name, tpnt->proc_dir);
+		if (tpnt->release)
+			(*tpnt->release) (shpnt);
+		else {
+			/* This is the default case for the release function.
+			 * It should do the right thing for most correctly
+			 * written host adapters.
+			 */
+			if (shpnt->irq)
+			free_irq(shpnt->irq, NULL);
+			if (shpnt->dma_channel != 0xff)
+				free_dma(shpnt->dma_channel);
+			if (shpnt->io_port && shpnt->n_io_port)
+				release_region(shpnt->io_port, shpnt->n_io_port);
 		}
+		if (pcount == next_scsi_host)
+			scsi_unregister(shpnt);
+		tpnt->present--;
 	}
 
 	/*
@@ -2949,9 +2944,7 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 			break;
 		}
 	/* Rebuild the /proc/scsi directory entries */
-#ifdef CONFIG_PROC_FS
-	proc_scsi_unregister(tpnt->proc_dir, tpnt->proc_dir->low_ino);
-#endif
+	remove_proc_entry(tpnt->proc_name, proc_scsi);
 	MOD_DEC_USE_COUNT;
 }
 

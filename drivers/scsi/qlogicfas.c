@@ -131,11 +131,6 @@
 #include "qlogicfas.h"
 #include<linux/stat.h>
 
-static struct proc_dir_entry proc_scsi_qlogicfas = {
-    PROC_SCSI_QLOGICFAS, 6, "qlogicfas",
-    S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
 /*----------------------------------------------------------------*/
 /* driver state info, local to driver */
 static int	    qbase = 0;	/* Port */
@@ -550,7 +545,7 @@ int	qltyp;			/* type of chip */
 struct	Scsi_Host	*hreg;	/* registered host structure */
 unsigned long	flags;
 
-host->proc_dir =  &proc_scsi_qlogicfas;
+host->proc_name =  "qlogicfas";
 
 /* Qlogic Cards only exist at 0x230 or 0x330 (the chip itself decodes the
    address - I check 230 first since MIDI cards are typically at 330

@@ -121,12 +121,6 @@
 #include <linux/stat.h>
 #include <linux/init.h>
 
-struct proc_dir_entry proc_scsi_t128 = {
-    PROC_SCSI_T128, 4, "t128",
-    S_IFDIR | S_IRUGO | S_IXUGO, 2
-};
-
-
 static struct override {
     unsigned char *address;
     int irq;
@@ -205,7 +199,7 @@ int __init t128_detect(Scsi_Host_Template * tpnt){
     unsigned char *base;
     int sig, count;
 
-    tpnt->proc_dir = &proc_scsi_t128;
+    tpnt->proc_name = "t128";
     tpnt->proc_info = &t128_proc_info;
 
     for (count = 0; current_override < NO_OVERRIDES; ++current_override) {

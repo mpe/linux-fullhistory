@@ -64,6 +64,7 @@ struct asyncppp {
 
 	struct ppp_channel chan;	/* interface to generic ppp layer */
 	int		connected;
+	int	index;
 	unsigned char	obuf[OBUFSIZE];
 };
 
@@ -387,6 +388,7 @@ ppp_async_ioctl(struct tty_struct *tty, struct file *file,
 		if (err != 0)
 			break;
 		ap->connected = 1;
+		ap->index = val;
 		break;
 	case PPPIOCDETACH:
 		err = -ENXIO;
@@ -394,6 +396,14 @@ ppp_async_ioctl(struct tty_struct *tty, struct file *file,
 			break;
 		ppp_unregister_channel(&ap->chan);
 		ap->connected = 0;
+		err = 0;
+		break;
+	case PPPIOCGUNIT:
+		err = -ENXIO;
+		if (!ap->connected)
+			break;
+		if (put_user(ap->index, (int *) arg))
+			break;
 		err = 0;
 		break;
 
