@@ -564,7 +564,7 @@ static int sisusb_send_packet(struct sisusb_usb_data *sisusb, int len,
 						struct sisusb_packet *packet)
 {
 	int ret;
-	int bytes_transferred = 0;
+	ssize_t bytes_transferred = 0;
 	__le32 tmp;
 
 	if (len == 6)
@@ -601,7 +601,7 @@ static int sisusb_send_bridge_packet(struct sisusb_usb_data *sisusb, int len,
 					unsigned int tflags)
 {
 	int ret;
-	int bytes_transferred = 0;
+	ssize_t bytes_transferred = 0;
 	__le32 tmp;
 
 	if (len == 6)
@@ -983,7 +983,7 @@ static int sisusb_write_mem_bulk(struct sisusb_usb_data *sisusb, u32 addr,
 				msgcount++;
 				if (msgcount < 500)
 					printk(KERN_ERR
-						"sisusbvga[%d]: Wrote %d of "
+						"sisusbvga[%d]: Wrote %Zd of "
 						"%d bytes, error %d\n",
 						sisusb->minor, *bytes_written,
 						length, ret);
@@ -1381,7 +1381,8 @@ sisusb_read_pci_config(struct sisusb_usb_data *sisusb, int regnum, u32 *data)
 static int
 sisusb_clear_vram(struct sisusb_usb_data *sisusb, u32 address, int length)
 {
-	int ret, i, j;
+	int ret, i;
+	ssize_t j;
 
 	if (address < sisusb->vrambase)
 		return 1;
