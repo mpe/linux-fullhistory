@@ -551,7 +551,7 @@ int __init rtc_init(void)
 	return -EIO;
 
 found:
-	rtc_port = edev->base_address[0];
+	rtc_port = edev->resource[0].start;
 	rtc_irq = edev->irqs[0];
 	/*
 	 * XXX Interrupt pin #7 in Espresso is shared between RTC and

@@ -57,7 +57,7 @@ struct notifier_block idepmac_sleep_notifier = {
 #endif /* CONFIG_PMAC_PBOOK */
 
 /*
- * N.B. this can't be an initfunc, because the media-bay task can
+ * N.B. this can't be an __init, because the media-bay task can
  * call ide_[un]register at any time.
  */
 void pmac_ide_init_hwif_ports(hw_regs_t *hw,

@@ -518,7 +518,7 @@ repeat:
 		}
 	}
 
-	tmp = minix_new_block(inode->i_sb);
+	tmp = minix_new_block(inode);
 	if (!tmp) {
 		*err = -ENOSPC;
 		return NULL;
@@ -526,7 +526,7 @@ repeat:
 	if (metadata) {
 		result = getblk(inode->i_dev, tmp, BLOCK_SIZE);
 		if (*p) {
-			minix_free_block(inode->i_sb, tmp);
+			minix_free_block(inode, tmp);
 			brelse(result);
 			goto repeat;
 		}
@@ -540,7 +540,7 @@ repeat:
 			 * state from under us:
 			 */
 			BUG();
-			minix_free_block(inode->i_sb, tmp);
+			minix_free_block(inode, tmp);
 			goto repeat;
 		}
 		*phys = tmp;
@@ -599,13 +599,13 @@ repeat:
 		}
 	}
 
-	tmp = minix_new_block(inode->i_sb);
+	tmp = minix_new_block(inode);
 	if (!tmp)
 		goto out;
 	if (metadata) {
 		result = getblk(bh->b_dev, tmp, BLOCK_SIZE);
 		if (*p) {
-			minix_free_block(inode->i_sb, tmp);
+			minix_free_block(inode, tmp);
 			brelse(result);
 			goto repeat;
 		}
@@ -617,7 +617,7 @@ repeat:
 		*new = 1;
 	}
 	if (*p) {
-		minix_free_block(inode->i_sb, tmp);
+		minix_free_block(inode, tmp);
 		brelse(result);
 		goto repeat;
 	}
@@ -754,7 +754,7 @@ repeat:
 		}
 	}
 
-	tmp = minix_new_block(inode->i_sb);
+	tmp = minix_new_block(inode);
 	if (!tmp) {
 		*err = -ENOSPC;
 		return NULL;
@@ -762,7 +762,7 @@ repeat:
 	if (metadata) {
 		result = getblk(inode->i_dev, tmp, BLOCK_SIZE);
 		if (*p) {
-			minix_free_block(inode->i_sb, tmp);
+			minix_free_block(inode, tmp);
 			brelse(result);
 			goto repeat;
 		}
@@ -776,7 +776,7 @@ repeat:
 			 * state from under us:
 			 */
 			BUG();
-			minix_free_block(inode->i_sb, tmp);
+			minix_free_block(inode, tmp);
 			goto repeat;
 		}
 		*phys = tmp;
@@ -835,13 +835,13 @@ repeat:
 		}
 	}
 
-	tmp = minix_new_block(inode->i_sb);
+	tmp = minix_new_block(inode);
 	if (!tmp)
 		goto out;
 	if (metadata) {
 		result = getblk(bh->b_dev, tmp, BLOCK_SIZE);
 		if (*p) {
-			minix_free_block(inode->i_sb, tmp);
+			minix_free_block(inode, tmp);
 			brelse(result);
 			goto repeat;
 		}
@@ -853,7 +853,7 @@ repeat:
 		*new = 1;
 	}
 	if (*p) {
-		minix_free_block(inode->i_sb, tmp);
+		minix_free_block(inode, tmp);
 		brelse(result);
 		goto repeat;
 	}

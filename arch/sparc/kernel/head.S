@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.96 1999/06/03 15:02:15 davem Exp $
+/* $Id: head.S,v 1.97 1999/08/14 03:51:10 anton Exp $
  * head.S: The initial boot code for the Sparc port of Linux.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -1037,7 +1037,7 @@ sun4c_continue_boot:
 #endif
 		st	%g6, [%g2]
 
-		st	%g0, [%g6 + AOFF_task_tss + AOFF_thread_uwinmask]
+		st	%g0, [%g6 + AOFF_task_thread + AOFF_thread_uwinmask]
 
 /* Compute NWINDOWS and stash it away. Now uses %wim trick explained
  * in the V8 manual. Ok, this method seems to work, Sparc is cool...

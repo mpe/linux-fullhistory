@@ -152,6 +152,7 @@ extern __inline__ void spin_unlock(spinlock_t *lock)
 {
 	__asm__ __volatile__("membar	#StoreStore | #LoadStore\n\t"
 			     "stb	%%g0, [%0]\n\t"
+			     "membar	#StoreStore | #StoreLoad"
 			     : /* No outputs */
 			     : "r" (lock)
 			     : "memory");
@@ -177,13 +178,13 @@ extern __inline__ void spin_lock_irq(spinlock_t *lock)
 
 extern __inline__ void spin_unlock_irq(spinlock_t *lock)
 {
-	__asm__ __volatile__("
-	membar		#StoreStore | #LoadStore
-	stb		%%g0, [%0]
-	wrpr		%%g0, 0x0, %%pil
-"	: /* no outputs */
-	: "r" (lock)
-	: "memory");
+	__asm__ __volatile__("membar	#StoreStore | #LoadStore\n\t"
+			     "stb	%%g0, [%0]\n\t"
+			     "membar	#StoreStore | #StoreLoad\n\t"
+			     "wrpr	%%g0, 0x0, %%pil"
+			     : /* no outputs */
+			     : "r" (lock)
+			     : "memory");
 }
 
 #define spin_lock_bh(__lock)	\
@@ -218,13 +219,13 @@ do {	register spinlock_t *__lp asm("g1");			\
 
 extern __inline__ void spin_unlock_irqrestore(spinlock_t *lock, unsigned long flags)
 {
-	__asm__ __volatile__("
-	membar		#StoreStore | #LoadStore
-	stb		%%g0, [%0]
-	wrpr		%1, 0x0, %%pil
-"	: /* no outputs */
-	: "r" (lock), "r" (flags)
-	: "memory");
+	__asm__ __volatile__("membar	#StoreStore | #LoadStore\n\t"
+			     "stb	%%g0, [%0]\n\t"
+			     "membar	#StoreStore | #StoreLoad\n\t"
+			     "wrpr	%1, 0x0, %%pil"
+			     : /* no outputs */
+			     : "r" (lock), "r" (flags)
+			     : "memory");
 }
 
 #else /* !(SPIN_LOCK_DEBUG) */

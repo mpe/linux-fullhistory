@@ -1,4 +1,4 @@
-/* $Id: rwlock.S,v 1.1 1999/07/03 22:11:06 davem Exp $
+/* $Id: rwlock.S,v 1.2 1999/08/23 05:15:58 davem Exp $
  * rwlocks.S: These things are too big to do inline.
  *
  * Copyright (C) 1999 David S. Miller (davem@redhat.com)
@@ -7,10 +7,13 @@
 	.text
 	.align	64
 
+	.globl	rwlock_impl_begin, rwlock_impl_end
+
 	/* The non-contention read lock usage is 2 cache lines. */
 
 	.globl	__read_lock, __read_unlock
 	/* g1=lock, g3=retpc, g5/g7=scratch */
+rwlock_impl_begin:
 __read_lock:
 	ldsw		[%g1], %g5
 	brlz,pn		%g5, __read_wait_for_writer
@@ -78,4 +81,5 @@ __write_lock:
 	be,pn		%icc, 99b
 	 membar		#LoadLoad
 	b,a,pt		%xcc, 99b
+rwlock_impl_end:
 

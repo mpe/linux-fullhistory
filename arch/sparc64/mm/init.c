@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.131 1999/07/30 09:35:45 davem Exp $
+/*  $Id: init.c,v 1.134 1999/08/31 06:54:58 davem Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996-1999 David S. Miller (davem@caip.rutgers.edu)
@@ -586,7 +586,8 @@ void mmu_set_sbus64(struct linux_sbus_device *sdev, int bursts)
 	struct linux_sbus *sbus = sdev->my_bus;
 	struct sysio_regs *sregs = sbus->iommu->sysio_regs;
 	int slot = sdev->slot;
-	u64 *cfg, tmp;
+	volatile u64 *cfg;
+	u64 tmp;
 
 	switch(slot) {
 	case 0:
@@ -1322,6 +1323,7 @@ void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 	max_mapnr = MAP_NR(end_mem);
 	high_memory = (void *) end_mem;
 	
+	start_mem = ((start_mem + 7UL) & ~7UL);
 	sparc64_valid_addr_bitmap = (unsigned long *)start_mem;
 	i = max_mapnr >> ((22 - PAGE_SHIFT) + 6);
 	i += 1;

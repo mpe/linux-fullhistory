@@ -1,4 +1,4 @@
-/* $Id: ppc-stub.c,v 1.4 1998/07/28 08:25:01 paulus Exp $
+/* $Id: ppc-stub.c,v 1.6 1999/08/12 22:18:11 cort Exp $
  * ppc-stub.c:  KGDB support for the Linux kernel.
  *
  * adapted from arch/sparc/kernel/sparc-stub.c for the PowerPC
@@ -438,13 +438,13 @@ static struct hard_trap_info
 	{ 0x400, SIGBUS },			/* instruction bus error */
 	{ 0x500, SIGINT },			/* interrupt */
 	{ 0x600, SIGBUS },			/* alingment */
-	{ 0x700, SIGILL },			/* reserved instruction or sumpin' */
+	{ 0x700, SIGTRAP },			/* breakpoint trap */
 	{ 0x800, SIGFPE },			/* fpu unavail */
 	{ 0x900, SIGALRM },			/* decrementer */
 	{ 0xa00, SIGILL },			/* reserved */
 	{ 0xb00, SIGILL },			/* reserved */
 	{ 0xc00, SIGCHLD },			/* syscall */
-	{ 0xd00, SIGINT },			/* watch */
+	{ 0xd00, SIGTRAP },			/* single-step/watch */
 	{ 0xe00, SIGFPE },			/* fp assist */
 	{ 0, 0}				/* Must be last */
 };
@@ -482,8 +482,10 @@ handle_exception (struct pt_regs *regs)
 	}
 	kgdb_active = 1;
 
+#ifdef KGDB_DEBUG
 	printk("kgdb: entering handle_exception; trap [0x%x]\n",
 	       (unsigned int)regs->trap);
+#endif
 
 	kgdb_interruptible(0);
 	lock_kernel();

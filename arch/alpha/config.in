@@ -150,11 +150,6 @@ if [ "$CONFIG_ALPHA_CABRIOLET" = "y" -o "$CONFIG_ALPHA_AVANTI" = "y" \
 	-o "$CONFIG_ALPHA_DP264" = "y" -o "$CONFIG_ALPHA_RAWHIDE" = "y" ]
 then
   bool 'Use SRM as bootloader' CONFIG_ALPHA_SRM
-  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-    if [ "$CONFIG_ALPHA_SRM" = "y" ]; then
-      bool '  Use SRM PCI setup' CONFIG_ALPHA_SRM_SETUP
-    fi
-  fi
 fi
 if [ "$CONFIG_ALPHA_ALCOR" = "y" -o "$CONFIG_ALPHA_MIKASA" = "y" \
 	-o "$CONFIG_ALPHA_SABLE" = "y" -o "$CONFIG_ALPHA_NORITAKE" = "y" \

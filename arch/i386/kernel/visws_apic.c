@@ -102,7 +102,7 @@ static struct hw_interrupt_type cobalt_irq_type = {
 
 
 /*
- * Not an initfunc, needed by the reboot code
+ * Not an __init, needed by the reboot code
  */
 void init_pic_mode(void)
 {

@@ -3413,7 +3413,6 @@ static void mgsl_wait_until_sent(struct tty_struct *tty, int timeout)
 	if ( info->params.mode == MGSL_MODE_HDLC ) {
 		while (info->tx_active) {
 			current->state = TASK_INTERRUPTIBLE;
-			current->counter = 0;   /* make us low-priority */
 			schedule_timeout(char_time);
 			if (signal_pending(current))
 				break;
@@ -3424,7 +3423,6 @@ static void mgsl_wait_until_sent(struct tty_struct *tty, int timeout)
 		while (!(usc_InReg(info,TCSR) & TXSTATUS_ALL_SENT) &&
 			info->tx_enabled) {
 			current->state = TASK_INTERRUPTIBLE;
-			current->counter = 0;   /* make us low-priority */
 			schedule_timeout(char_time);
 			if (signal_pending(current))
 				break;
@@ -3561,7 +3559,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 			spin_unlock_irqrestore(&info->irq_spinlock,flags);
 		}
 		
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		
 		if (tty_hung_up_p(filp) || !(info->flags & ASYNC_INITIALIZED)){
 			retval = (info->flags & ASYNC_HUP_NOTIFY) ?

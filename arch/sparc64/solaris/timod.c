@@ -677,7 +677,7 @@ int timod_getmsg(unsigned int fd, char *ctl_buf, int ctl_maxlen, s32 *ctl_len,
 		wait = &wait_table;
 		for(;;) {
 			SOLD("loop");
-			current->state = TASK_INTERRUPTIBLE;
+			set_current_state(TASK_INTERRUPTIBLE);
 			/* ! ( l<0 || ( l>=0 && ( ! pfirst || (flags == HIPRI && pri != HIPRI) ) ) ) */ 
 			/* ( ! l<0 && ! ( l>=0 && ( ! pfirst || (flags == HIPRI && pri != HIPRI) ) ) ) */ 
 			/* ( l>=0 && ( ! l>=0 || ! ( ! pfirst || (flags == HIPRI && pri != HIPRI) ) ) ) */ 

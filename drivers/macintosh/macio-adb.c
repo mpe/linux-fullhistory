@@ -74,8 +74,6 @@ static struct adb_controller	macio_controller = {
 	macio_adb_poll
 };
 
-__openfirmware
-
 void macio_adb_init(void)
 {
 	struct device_node *adbs;

@@ -1,9 +1,9 @@
 /*
     NetWinder Floating Point Emulator
-    (c) Corel Computer Corporation, 1998
+    (c) Rebel.com, 1998-1999
     (c) Philip Blundell, 1998-1999
 
-    Direct questions, comments to Scott Bambrough <scottb@corelcomputer.com>
+    Direct questions, comments to Scott Bambrough <scottb@netwinder.org>
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -62,7 +62,7 @@ typedef struct task_struct*	PTASK;
 int fp_printk(const char *,...);
 void fp_send_sig(unsigned long sig, PTASK p, int priv);
 #if LINUX_VERSION_CODE > 0x20115
-MODULE_AUTHOR("Scott Bambrough <scottb@corelcomputer.com>");
+MODULE_AUTHOR("Scott Bambrough <scottb@netwinder.org>");
 MODULE_DESCRIPTION("NWFPE floating point emulator");
 #endif
 
@@ -91,7 +91,7 @@ void __init C_SYMBOL_NAME(fpe_version)(void)
 {
   static const char szTitle[] = "<4>NetWinder Floating Point Emulator ";
   static const char szVersion[] = "V0.94.1 ";
-  static const char szCopyright[] = "(c) 1998 Corel Computer Corp.\n";
+  static const char szCopyright[] = "(c) 1998-1999 Rebel.com\n";
   C_SYMBOL_NAME(fp_printk)(szTitle);
   C_SYMBOL_NAME(fp_printk)(szVersion);
   C_SYMBOL_NAME(fp_printk)(szCopyright);

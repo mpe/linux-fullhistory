@@ -1,4 +1,4 @@
-/* $Id: sab82532.c,v 1.32 1999/07/03 08:57:41 davem Exp $
+/* $Id: sab82532.c,v 1.34 1999/08/31 06:58:16 davem Exp $
  * sab82532.c: ASYNC Driver for the SIEMENS SAB82532 DUSCC.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -174,7 +174,7 @@ static struct ebrg_struct ebrg_table[] = {
 static __inline__ void sab82532_tec_wait(struct sab82532 *info)
 {
 	int count = SAB82532_MAX_TEC_DELAY;
-	while ((info->regs->r.star & SAB82532_STAR_TEC) && --count)
+	while ((readb(&info->regs->r.star) & SAB82532_STAR_TEC) && --count)
 		udelay(1);
 }
 
@@ -188,12 +188,13 @@ static __inline__ void sab82532_start_tx(struct sab82532 *info)
 	if (info->xmit_cnt <= 0)
 		goto out;
 
-	if (!(info->regs->r.star & SAB82532_STAR_XFW))
+	if (!(readb(&info->regs->r.star) & SAB82532_STAR_XFW))
 		goto out;
 
 	info->all_sent = 0;
 	for (i = 0; i < info->xmit_fifo_size; i++) {
-		info->regs->w.xfifo[i] = info->xmit_buf[info->xmit_tail++];
+		u8 val = info->xmit_buf[info->xmit_tail++];
+		writeb(val, &info->regs->w.xfifo[i]);
 		info->xmit_tail &= (SERIAL_XMIT_SIZE - 1);
 		info->icount.tx++;
 		if (--info->xmit_cnt <= 0)
@@ -201,9 +202,9 @@ static __inline__ void sab82532_start_tx(struct sab82532 *info)
 	}
 
 	/* Issue a Transmit Frame command. */
-	if (info->regs->r.star & SAB82532_STAR_CEC)
+	if (readb(&info->regs->r.star) & SAB82532_STAR_CEC)
 		udelay(1);
-	info->regs->w.cmdr = SAB82532_CMDR_XF;
+	writeb(SAB82532_CMDR_XF, &info->regs->w.cmdr);
 
 out:
 	restore_flags(flags);
@@ -228,7 +229,7 @@ static void sab82532_stop(struct tty_struct *tty)
 
 	save_flags(flags); cli();
 	info->interrupt_mask1 |= SAB82532_IMR1_XPR;
-	info->regs->w.imr1 = info->interrupt_mask1;
+	writeb(info->interrupt_mask1, &info->regs->w.imr1);
 	restore_flags(flags);
 }
 
@@ -242,14 +243,14 @@ static void sab82532_start(struct tty_struct *tty)
 
 	save_flags(flags); cli();
 	info->interrupt_mask1 &= ~(SAB82532_IMR1_XPR);
-	info->regs->w.imr1 = info->interrupt_mask1;
+	writeb(info->interrupt_mask1, &info->regs->w.imr1);
 	sab82532_start_tx(info);
 	restore_flags(flags);
 }
 
 static void batten_down_hatches(struct sab82532 *info)
 {
-	unsigned char saved_rfc;
+	unsigned char saved_rfc, tmp;
 
 	/* If we are doing kadb, we call the debugger
 	 * else we just drop into the boot monitor.
@@ -262,11 +263,13 @@ static void batten_down_hatches(struct sab82532 *info)
 	/*
 	 * Set FIFO to single character mode.
 	 */
-	saved_rfc = info->regs->r.rfc;
-	info->regs->rw.rfc &= ~(SAB82532_RFC_RFDF);
-	if (info->regs->r.star & SAB82532_STAR_CEC)
+	saved_rfc = readb(&info->regs->r.rfc);
+	tmp = readb(&info->regs->rw.rfc);
+	tmp &= ~(SAB82532_RFC_RFDF);
+	writeb(tmp, &info->regs->rw.rfc);
+	if (readb(&info->regs->r.star) & SAB82532_STAR_CEC)
 		udelay(1);
-	info->regs->w.cmdr = SAB82532_CMDR_RRES;
+	writeb(SAB82532_CMDR_RRES, &info->regs->w.cmdr);
 
 #ifndef __sparc_v9__
 	if ((((unsigned long)linux_dbvec) >= DEBUG_FIRSTVADDR) &&
@@ -279,10 +282,10 @@ static void batten_down_hatches(struct sab82532 *info)
 	/*
 	 * Reset FIFO to character + status mode.
 	 */
-	info->regs->w.rfc = saved_rfc;
-	if (info->regs->r.star & SAB82532_STAR_CEC)
+	writeb(saved_rfc, &info->regs->w.rfc);
+	if (readb(&info->regs->r.star) & SAB82532_STAR_CEC)
 		udelay(1);
-	info->regs->w.cmdr = SAB82532_CMDR_RRES;
+	writeb(SAB82532_CMDR_RRES, &info->regs->w.cmdr);
 }
 
 /*
@@ -333,15 +336,15 @@ static inline void receive_chars(struct sab82532 *info,
 	}
 
 	if (stat->sreg.isr0 & SAB82532_ISR0_TCD) {
-		count = info->regs->r.rbcl & (info->recv_fifo_size - 1);
+		count = readb(&info->regs->r.rbcl) & (info->recv_fifo_size - 1);
 		free_fifo++;
 	}
 
 	/* Issue a FIFO read command in case we where idle. */
 	if (stat->sreg.isr0 & SAB82532_ISR0_TIME) {
-		if (info->regs->r.star & SAB82532_STAR_CEC)
+		if (readb(&info->regs->r.star) & SAB82532_STAR_CEC)
 			udelay(1);
-		info->regs->w.cmdr = SAB82532_CMDR_RFRD;
+		writeb(SAB82532_CMDR_RFRD, &info->regs->w.cmdr);
 	}
 
 	if (stat->sreg.isr0 & SAB82532_ISR0_RFO) {
@@ -353,13 +356,13 @@ static inline void receive_chars(struct sab82532 *info,
 
 	/* Read the FIFO. */
 	for (i = 0; i < count; i++)
-		buf[i] = info->regs->r.rfifo[i];
+		buf[i] = readb(&info->regs->r.rfifo[i]);
 
 	/* Issue Receive Message Complete command. */
 	if (free_fifo) {
-		if (info->regs->r.star & SAB82532_STAR_CEC)
+		if (readb(&info->regs->r.star) & SAB82532_STAR_CEC)
 			udelay(1);
-		info->regs->w.cmdr = SAB82532_CMDR_RMC;
+		writeb(SAB82532_CMDR_RMC, &info->regs->w.cmdr);
 	}
 
 	if (info->is_console)
@@ -410,26 +413,27 @@ static inline void transmit_chars(struct sab82532 *info,
 
 	if (stat->sreg.isr1 & SAB82532_ISR1_ALLS)
 		info->all_sent = 1;
-	if (!(info->regs->r.star & SAB82532_STAR_XFW))
+	if (!(readb(&info->regs->r.star) & SAB82532_STAR_XFW))
 		return;
 
 	if (!info->tty) {
 		info->interrupt_mask1 |= SAB82532_IMR1_XPR;
-		info->regs->w.imr1 = info->interrupt_mask1;
+		writeb(info->interrupt_mask1, &info->regs->w.imr1);
 		return;
 	}
 
 	if ((info->xmit_cnt <= 0) || info->tty->stopped ||
 	    info->tty->hw_stopped) {
 		info->interrupt_mask1 |= SAB82532_IMR1_XPR;
-		info->regs->w.imr1 = info->interrupt_mask1;
+		writeb(info->interrupt_mask1, &info->regs->w.imr1);
 		return;
 	}
 
 	/* Stuff 32 bytes into Transmit FIFO. */
 	info->all_sent = 0;
 	for (i = 0; i < info->xmit_fifo_size; i++) {
-		info->regs->w.xfifo[i] = info->xmit_buf[info->xmit_tail++];
+		u8 val = info->xmit_buf[info->xmit_tail++];
+		writeb(val, &info->regs->w.xfifo[i]);
 		info->xmit_tail &= (SERIAL_XMIT_SIZE - 1);
 		info->icount.tx++;
 		if (--info->xmit_cnt <= 0)
@@ -437,9 +441,9 @@ static inline void transmit_chars(struct sab82532 *info,
 	}
 
 	/* Issue a Transmit Frame command. */
-	if (info->regs->r.star & SAB82532_STAR_CEC)
+	if (readb(&info->regs->r.star) & SAB82532_STAR_CEC)
 		udelay(1);
-	info->regs->w.cmdr = SAB82532_CMDR_XF;
+	writeb(SAB82532_CMDR_XF, &info->regs->w.cmdr);
 
 	if (info->xmit_cnt < WAKEUP_CHARS)
 		sab82532_sched_event(info, RS_EVENT_WRITE_WAKEUP);
@@ -449,7 +453,7 @@ static inline void transmit_chars(struct sab82532 *info,
 #endif
 	if (info->xmit_cnt <= 0) {
 		info->interrupt_mask1 |= SAB82532_IMR1_XPR;
-		info->regs->w.imr1 = info->interrupt_mask1;
+		writeb(info->interrupt_mask1, &info->regs->w.imr1);
 	}
 }
 
@@ -490,7 +494,7 @@ static inline void check_status(struct sab82532 *info,
 
 check_modem:
 	if (stat->sreg.isr0 & SAB82532_ISR0_CDSC) {
-		info->dcd = (info->regs->r.vstr & SAB82532_VSTR_CD) ? 0 : 1;
+		info->dcd = (readb(&info->regs->r.vstr) & SAB82532_VSTR_CD) ? 0 : 1;
 		info->icount.dcd++;
 		modem_change++;
 #if 0
@@ -498,15 +502,15 @@ check_modem:
 #endif
 	}
 	if (stat->sreg.isr1 & SAB82532_ISR1_CSC) {
-		info->cts = info->regs->r.star & SAB82532_STAR_CTS;
+		info->cts = readb(&info->regs->r.star) & SAB82532_STAR_CTS;
 		info->icount.cts++;
 		modem_change++;
 #if 0
 		printk("CTS change: %d, CTS %s\n", info->icount.cts, info->cts ? "on" : "off");
 #endif
 	}
-	if ((info->regs->r.pvr & info->pvr_dsr_bit) ^ info->dsr) {
-		info->dsr = (info->regs->r.pvr & info->pvr_dsr_bit) ? 0 : 1;
+	if ((readb(&info->regs->r.pvr) & info->pvr_dsr_bit) ^ info->dsr) {
+		info->dsr = (readb(&info->regs->r.pvr) & info->pvr_dsr_bit) ? 0 : 1;
 		info->icount.dsr++;
 		modem_change++;
 #if 0
@@ -548,7 +552,7 @@ check_modem:
 				sab82532_sched_event(info,
 						     RS_EVENT_WRITE_WAKEUP);
 				info->interrupt_mask1 &= ~(SAB82532_IMR1_XPR);
-				info->regs->w.imr1 = info->interrupt_mask1;
+				writeb(info->interrupt_mask1, &info->regs->w.imr1);
 				sab82532_start_tx(info);
 			}
 		} else {
@@ -576,10 +580,10 @@ static void sab82532_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 #endif
 
 	status.stat = 0;
-	if (info->regs->r.gis & SAB82532_GIS_ISA0)
-		status.sreg.isr0 = info->regs->r.isr0;
-	if (info->regs->r.gis & SAB82532_GIS_ISA1)
-		status.sreg.isr1 = info->regs->r.isr1;
+	if (readb(&info->regs->r.gis) & SAB82532_GIS_ISA0)
+		status.sreg.isr0 = readb(&info->regs->r.isr0);
+	if (readb(&info->regs->r.gis) & SAB82532_GIS_ISA1)
+		status.sreg.isr1 = readb(&info->regs->r.isr1);
 
 #ifdef SERIAL_DEBUG_INTR
 	printk("%d<%02x.%02x>", info->line,
@@ -601,10 +605,10 @@ static void sab82532_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 next:
 	info = info->next;
 	status.stat = 0;
-	if (info->regs->r.gis & SAB82532_GIS_ISB0)
-		status.sreg.isr0 = info->regs->r.isr0;
-	if (info->regs->r.gis & SAB82532_GIS_ISB1)
-		status.sreg.isr1 = info->regs->r.isr1;
+	if (readb(&info->regs->r.gis) & SAB82532_GIS_ISB0)
+		status.sreg.isr0 = readb(&info->regs->r.isr0);
+	if (readb(&info->regs->r.gis) & SAB82532_GIS_ISB1)
+		status.sreg.isr1 = readb(&info->regs->r.isr1);
 
 #ifdef SERIAL_DEBUG_INTR
 	printk("%d<%02x.%02x>", info->line,
@@ -690,63 +694,73 @@ static void do_serial_hangup(void *private_)
 static void
 sab82532_init_line(struct sab82532 *info)
 {
-	unsigned char stat;
+	unsigned char stat, tmp;
 
 	/*
 	 * Wait for any commands or immediate characters
 	 */
-	if (info->regs->r.star & SAB82532_STAR_CEC)
+	if (readb(&info->regs->r.star) & SAB82532_STAR_CEC)
 		udelay(1);
 	sab82532_tec_wait(info);
 
 	/*
 	 * Clear the FIFO buffers.
 	 */
-	if (info->regs->r.star & SAB82532_STAR_CEC)
+	if (readb(&info->regs->r.star) & SAB82532_STAR_CEC)
 		udelay(1);
-	info->regs->w.cmdr = SAB82532_CMDR_RRES;
-	if (info->regs->r.star & SAB82532_STAR_CEC)
+	writeb(SAB82532_CMDR_RRES, &info->regs->w.cmdr);
+	if (readb(&info->regs->r.star) & SAB82532_STAR_CEC)
 		udelay(1);
-	info->regs->w.cmdr = SAB82532_CMDR_XRES;
+	writeb(SAB82532_CMDR_XRES, &info->regs->w.cmdr);
 
 	/*
 	 * Clear the interrupt registers.
 	 */
-	stat = info->regs->r.isr0;
-	stat = info->regs->r.isr1;
+	stat = readb(&info->regs->r.isr0);
+	stat = readb(&info->regs->r.isr1);
 
 	/*
 	 * Now, initialize the UART 
 	 */
-	info->regs->w.ccr0 = 0;				/* power-down */
-	info->regs->w.ccr0 = SAB82532_CCR0_MCE | SAB82532_CCR0_SC_NRZ |
-			     SAB82532_CCR0_SM_ASYNC;
-	info->regs->w.ccr1 = SAB82532_CCR1_ODS | SAB82532_CCR1_BCR | 7;
-	info->regs->w.ccr2 = SAB82532_CCR2_BDF | SAB82532_CCR2_SSEL |
-			     SAB82532_CCR2_TOE;
-	info->regs->w.ccr3 = 0;
-	info->regs->w.ccr4 = SAB82532_CCR4_MCK4 | SAB82532_CCR4_EBRG;
-	info->regs->w.mode = SAB82532_MODE_RTS | SAB82532_MODE_FCTS |
-			     SAB82532_MODE_RAC;
-	info->regs->w.rfc = SAB82532_RFC_DPS | SAB82532_RFC_RFDF;
+	writeb(0, &info->regs->w.ccr0);				/* power-down */
+	writeb(SAB82532_CCR0_MCE | SAB82532_CCR0_SC_NRZ |
+	       SAB82532_CCR0_SM_ASYNC, &info->regs->w.ccr0);
+	writeb(SAB82532_CCR1_ODS | SAB82532_CCR1_BCR | 7, &info->regs->w.ccr1);
+	writeb(SAB82532_CCR2_BDF | SAB82532_CCR2_SSEL |
+	       SAB82532_CCR2_TOE, &info->regs->w.ccr2);
+	writeb(0, &info->regs->w.ccr3);
+	writeb(SAB82532_CCR4_MCK4 | SAB82532_CCR4_EBRG, &info->regs->w.ccr4);
+	writeb(SAB82532_MODE_RTS | SAB82532_MODE_FCTS |
+	       SAB82532_MODE_RAC, &info->regs->w.mode);
+	writeb(SAB82532_RFC_DPS | SAB82532_RFC_RFDF, &info->regs->w.rfc);
 	switch (info->recv_fifo_size) {
 		case 1:
-			info->regs->w.rfc |= SAB82532_RFC_RFTH_1;
+			tmp = readb(&info->regs->w.rfc);
+			tmp |= SAB82532_RFC_RFTH_1;
+			writeb(tmp, &info->regs->w.rfc);
 			break;
 		case 4:
-			info->regs->w.rfc |= SAB82532_RFC_RFTH_4;
+			tmp = readb(&info->regs->w.rfc);
+			tmp |= SAB82532_RFC_RFTH_4;
+			writeb(tmp, &info->regs->w.rfc);
 			break;
 		case 16:
-			info->regs->w.rfc |= SAB82532_RFC_RFTH_16;
+			tmp = readb(&info->regs->w.rfc);
+			tmp |= SAB82532_RFC_RFTH_16;
+			writeb(tmp, &info->regs->w.rfc);
 			break;
 		default:
 			info->recv_fifo_size = 32;
 			/* fall through */
 		case 32:
-			info->regs->w.rfc |= SAB82532_RFC_RFTH_32;
+			tmp = readb(&info->regs->w.rfc);
+			tmp |= SAB82532_RFC_RFTH_32;
+			writeb(tmp, &info->regs->w.rfc);
 			break;
 	}
-	info->regs->rw.ccr0 |= SAB82532_CCR0_PU;	/* power-up */
+	tmp = readb(&info->regs->rw.ccr0);
+	tmp |= SAB82532_CCR0_PU;	/* power-up */
+	writeb(tmp, &info->regs->rw.ccr0);
 }
 
 static int startup(struct sab82532 *info)
@@ -788,9 +802,16 @@ static int startup(struct sab82532 *info)
 	sab82532_init_line(info);
 
 	if (info->tty->termios->c_cflag & CBAUD) {
-		info->regs->rw.mode &= ~(SAB82532_MODE_FRTS);
-		info->regs->rw.mode |= SAB82532_MODE_RTS;
-		info->regs->rw.pvr &= ~(info->pvr_dtr_bit);
+		u8 tmp;
+
+		tmp = readb(&info->regs->rw.mode);
+		tmp &= ~(SAB82532_MODE_FRTS);
+		tmp |= SAB82532_MODE_RTS;
+		writeb(tmp, &info->regs->rw.mode);
+
+		tmp = readb(&info->regs->rw.pvr);
+		tmp &= ~(info->pvr_dtr_bit);
+		writeb(tmp, &info->regs->rw.pvr);
 	}
 
 	/*
@@ -798,11 +819,11 @@ static int startup(struct sab82532 *info)
 	 */
 	info->interrupt_mask0 = SAB82532_IMR0_PERR | SAB82532_IMR0_FERR |
 				SAB82532_IMR0_PLLA;
-	info->regs->w.imr0 = info->interrupt_mask0;
+	writeb(info->interrupt_mask0, &info->regs->w.imr0);
 	info->interrupt_mask1 = SAB82532_IMR1_BRKT | SAB82532_IMR1_XOFF |
 				SAB82532_IMR1_TIN | SAB82532_IMR1_XON |
 				SAB82532_IMR1_XPR;
-	info->regs->w.imr1 = info->interrupt_mask1;
+	writeb(info->interrupt_mask1, &info->regs->w.imr1);
 
 	if (info->tty)
 		clear_bit(TTY_IO_ERROR, &info->tty->flags);
@@ -829,6 +850,7 @@ errout:
 static void shutdown(struct sab82532 *info)
 {
 	unsigned long flags;
+	u8 tmp;
 
 	if (!(info->flags & ASYNC_INITIALIZED))
 		return;
@@ -853,12 +875,12 @@ static void shutdown(struct sab82532 *info)
 	if (info->is_console) {
 		info->interrupt_mask0 = SAB82532_IMR0_PERR | SAB82532_IMR0_FERR |
 					SAB82532_IMR0_PLLA | SAB82532_IMR0_CDSC;
-		info->regs->w.imr0 = info->interrupt_mask0;
+		writeb(info->interrupt_mask0, &info->regs->w.imr0);
 		info->interrupt_mask1 = SAB82532_IMR1_BRKT | SAB82532_IMR1_ALLS |
 					SAB82532_IMR1_XOFF | SAB82532_IMR1_TIN |
 					SAB82532_IMR1_CSC | SAB82532_IMR1_XON |
 					SAB82532_IMR1_XPR;
-		info->regs->w.imr1 = info->interrupt_mask1;
+		writeb(info->interrupt_mask1, &info->regs->w.imr1);
 		if (info->tty)
 			set_bit(TTY_IO_ERROR, &info->tty->flags);
 		info->flags &= ~ASYNC_INITIALIZED;
@@ -868,24 +890,30 @@ static void shutdown(struct sab82532 *info)
 
 	/* Disable Interrupts */
 	info->interrupt_mask0 = 0xff;
-	info->regs->w.imr0 = info->interrupt_mask0;
+	writeb(info->interrupt_mask0, &info->regs->w.imr0);
 	info->interrupt_mask1 = 0xff;
-	info->regs->w.imr1 = info->interrupt_mask1;
+	writeb(info->interrupt_mask1, &info->regs->w.imr1);
 
 	if (!info->tty || (info->tty->termios->c_cflag & HUPCL)) {
-		info->regs->rw.mode |= SAB82532_MODE_FRTS;
-		info->regs->rw.mode |= SAB82532_MODE_RTS;
-		info->regs->rw.pvr |= info->pvr_dtr_bit;
+		writeb(readb(&info->regs->rw.mode) | SAB82532_MODE_FRTS, &info->regs->rw.mode);
+		writeb(readb(&info->regs->rw.mode) | SAB82532_MODE_RTS, &info->regs->rw.mode);
+		writeb(readb(&info->regs->rw.pvr) | info->pvr_dtr_bit, &info->regs->rw.pvr);
 	}
 
 	/* Disable break condition */
-	info->regs->rw.dafo &= ~(SAB82532_DAFO_XBRK);
+	tmp = readb(&info->regs->rw.dafo);
+	tmp &= ~(SAB82532_DAFO_XBRK);
+	writeb(tmp, &info->regs->rw.dafo);
 
 	/* Disable Receiver */	
-	info->regs->rw.mode &= ~(SAB82532_MODE_RAC);
+	tmp = readb(&info->regs->rw.mode);
+	tmp &= ~(SAB82532_MODE_RAC);
+	writeb(tmp, &info->regs->rw.mode);
 
 	/* Power Down */	
-	info->regs->rw.ccr0 &= ~(SAB82532_CCR0_PU);
+	tmp = readb(&info->regs->rw.ccr0);
+	tmp &= ~(SAB82532_CCR0_PU);
+	writeb(tmp, &info->regs->rw.ccr0);
 
 	if (info->tty)
 		set_bit(TTY_IO_ERROR, &info->tty->flags);
@@ -999,23 +1027,23 @@ static void change_speed(struct sab82532 *info)
 					    SAB82532_ISR0_TIME;
 
 	save_flags(flags); cli();
-	if (info->regs->r.star & SAB82532_STAR_CEC)
+	if (readb(&info->regs->r.star) & SAB82532_STAR_CEC)
 		udelay(1);
 	sab82532_tec_wait(info);
-	info->regs->w.dafo = dafo;
-	info->regs->w.bgr = ebrg & 0xff;
-	info->regs->rw.ccr2 &= ~(0xc0);
-	info->regs->rw.ccr2 |= (ebrg >> 2) & 0xc0;
+	writeb(dafo, &info->regs->w.dafo);
+	writeb(ebrg & 0xff, &info->regs->w.bgr);
+	writeb(readb(&info->regs->rw.ccr2) & ~(0xc0), &info->regs->rw.ccr2);
+	writeb(readb(&info->regs->rw.ccr2) | ((ebrg >> 2) & 0xc0), &info->regs->rw.ccr2);
 	if (info->flags & ASYNC_CTS_FLOW) {
-		info->regs->rw.mode &= ~(SAB82532_MODE_RTS);
-		info->regs->rw.mode |= SAB82532_MODE_FRTS;
-		info->regs->rw.mode &= ~(SAB82532_MODE_FCTS);
+		writeb(readb(&info->regs->rw.mode) & ~(SAB82532_MODE_RTS), &info->regs->rw.mode);
+		writeb(readb(&info->regs->rw.mode) | SAB82532_MODE_FRTS, &info->regs->rw.mode);
+		writeb(readb(&info->regs->rw.mode) & ~(SAB82532_MODE_FCTS), &info->regs->rw.mode);
 	} else {
-		info->regs->rw.mode |= SAB82532_MODE_RTS;
-		info->regs->rw.mode &= ~(SAB82532_MODE_FRTS);
-		info->regs->rw.mode |= SAB82532_MODE_FCTS;
+		writeb(readb(&info->regs->rw.mode) | SAB82532_MODE_RTS, &info->regs->rw.mode);
+		writeb(readb(&info->regs->rw.mode) & ~(SAB82532_MODE_FRTS), &info->regs->rw.mode);
+		writeb(readb(&info->regs->rw.mode) | SAB82532_MODE_FCTS, &info->regs->rw.mode);
 	}
-	info->regs->rw.mode |= SAB82532_MODE_RAC;
+	writeb(readb(&info->regs->rw.mode) | SAB82532_MODE_RAC, &info->regs->rw.mode);
 	restore_flags(flags);
 }
 
@@ -1056,7 +1084,7 @@ static void sab82532_flush_chars(struct tty_struct *tty)
 
 	save_flags(flags); cli();
 	info->interrupt_mask1 &= ~(SAB82532_IMR1_XPR);
-	info->regs->w.imr1 = info->interrupt_mask1;
+	writeb(info->interrupt_mask1, &info->regs->w.imr1);
 	sab82532_start_tx(info);
 	restore_flags(flags);
 }
@@ -1108,7 +1136,7 @@ static int sab82532_write(struct tty_struct * tty, int from_user,
 
 	if (info->xmit_cnt && !tty->stopped && !tty->hw_stopped) {
 		info->interrupt_mask1 &= ~(SAB82532_IMR1_XPR);
-		info->regs->w.imr1 = info->interrupt_mask1;
+		writeb(info->interrupt_mask1, &info->regs->w.imr1);
 		sab82532_start_tx(info);
 	}
 
@@ -1167,7 +1195,7 @@ static void sab82532_send_xchar(struct tty_struct *tty, char ch)
 
 	save_flags(flags); cli();
 	sab82532_tec_wait(info);
-	info->regs->w.tic = ch;
+	writeb(ch, &info->regs->w.tic);
 	restore_flags(flags);
 }
 
@@ -1196,7 +1224,7 @@ static void sab82532_throttle(struct tty_struct * tty)
 		sab82532_send_xchar(tty, STOP_CHAR(tty));
 #if 0
 	if (tty->termios->c_cflag & CRTSCTS)
-		info->regs->rw.mode |= SAB82532_MODE_RTS;
+		writeb(readb(&info->regs->rw.mode) | SAB82532_MODE_RTS, &info->regs->rw.mode);
 #endif
 }
 
@@ -1222,7 +1250,7 @@ static void sab82532_unthrottle(struct tty_struct * tty)
 
 #if 0
 	if (tty->termios->c_cflag & CRTSCTS)
-		info->regs->rw.mode &= ~(SAB82532_MODE_RTS);
+		writeb(readb(&info->regs->rw.mode) & ~(SAB82532_MODE_RTS), &info->regs->rw.mode);
 #endif
 }
 
@@ -1286,13 +1314,13 @@ static int get_modem_info(struct sab82532 * info, unsigned int *value)
 {
 	unsigned int result;
 
-	result =  ((info->regs->r.mode & SAB82532_MODE_RTS) ? 
-		    ((info->regs->r.mode & SAB82532_MODE_FRTS) ? 0 : TIOCM_RTS)
+	result =  ((readb(&info->regs->r.mode) & SAB82532_MODE_RTS) ? 
+		    ((readb(&info->regs->r.mode) & SAB82532_MODE_FRTS) ? 0 : TIOCM_RTS)
 							    : TIOCM_RTS)
-		| ((info->regs->r.pvr & info->pvr_dtr_bit) ? 0 : TIOCM_DTR)
-		| ((info->regs->r.vstr & SAB82532_VSTR_CD) ? 0 : TIOCM_CAR)
-		| ((info->regs->r.pvr & info->pvr_dsr_bit) ? 0 : TIOCM_DSR)
-		| ((info->regs->r.star & SAB82532_STAR_CTS) ? TIOCM_CTS : 0);
+		| ((readb(&info->regs->r.pvr) & info->pvr_dtr_bit) ? 0 : TIOCM_DTR)
+		| ((readb(&info->regs->r.vstr) & SAB82532_VSTR_CD) ? 0 : TIOCM_CAR)
+		| ((readb(&info->regs->r.pvr) & info->pvr_dsr_bit) ? 0 : TIOCM_DSR)
+		| ((readb(&info->regs->r.star) & SAB82532_STAR_CTS) ? TIOCM_CTS : 0);
 	return put_user(result,value);
 }
 
@@ -1308,34 +1336,34 @@ static int set_modem_info(struct sab82532 * info, unsigned int cmd,
 	switch (cmd) {
 	case TIOCMBIS: 
 		if (arg & TIOCM_RTS) {
-			info->regs->rw.mode &= ~(SAB82532_MODE_FRTS);
-			info->regs->rw.mode |= SAB82532_MODE_RTS;
+			writeb(readb(&info->regs->rw.mode) & ~(SAB82532_MODE_FRTS), &info->regs->rw.mode);
+			writeb(readb(&info->regs->rw.mode) | SAB82532_MODE_RTS, &info->regs->rw.mode);
 		}
 		if (arg & TIOCM_DTR) {
-			info->regs->rw.pvr &= ~(info->pvr_dtr_bit);
+			writeb(readb(&info->regs->rw.pvr) & ~(info->pvr_dtr_bit), &info->regs->rw.pvr);
 		}
 		break;
 	case TIOCMBIC:
 		if (arg & TIOCM_RTS) {
-			info->regs->rw.mode |= SAB82532_MODE_FRTS;
-			info->regs->rw.mode |= SAB82532_MODE_RTS;
+			writeb(readb(&info->regs->rw.mode) | SAB82532_MODE_FRTS, &info->regs->rw.mode);
+			writeb(readb(&info->regs->rw.mode) | SAB82532_MODE_RTS, &info->regs->rw.mode);
 		}
 		if (arg & TIOCM_DTR) {
-			info->regs->rw.pvr |= info->pvr_dtr_bit;
+			writeb(readb(&info->regs->rw.pvr) | info->pvr_dtr_bit, &info->regs->rw.pvr);
 		}
 		break;
 	case TIOCMSET:
 		if (arg & TIOCM_RTS) {
-			info->regs->rw.mode &= ~(SAB82532_MODE_FRTS);
-			info->regs->rw.mode |= SAB82532_MODE_RTS;
+			writeb(readb(&info->regs->rw.mode) & ~(SAB82532_MODE_FRTS), &info->regs->rw.mode);
+			writeb(readb(&info->regs->rw.mode) | SAB82532_MODE_RTS, &info->regs->rw.mode);
 		} else {
-			info->regs->rw.mode |= SAB82532_MODE_FRTS;
-			info->regs->rw.mode |= SAB82532_MODE_RTS;
+			writeb(readb(&info->regs->rw.mode) | SAB82532_MODE_FRTS, &info->regs->rw.mode);
+			writeb(readb(&info->regs->rw.mode) | SAB82532_MODE_RTS, &info->regs->rw.mode);
 		}
 		if (arg & TIOCM_DTR) {
-			info->regs->rw.pvr &= ~(info->pvr_dtr_bit);
+			writeb(readb(&info->regs->rw.pvr) & ~(info->pvr_dtr_bit), &info->regs->rw.pvr);
 		} else {
-			info->regs->rw.pvr |= info->pvr_dtr_bit;
+			writeb(readb(&info->regs->rw.pvr) | info->pvr_dtr_bit, &info->regs->rw.pvr);
 		}
 		break;
 	default:
@@ -1363,9 +1391,9 @@ static void sab82532_break(struct tty_struct *tty, int break_state)
 #endif
 	save_flags(flags); cli();
 	if (break_state == -1)
-		info->regs->rw.dafo |= SAB82532_DAFO_XBRK;
+		writeb(readb(&info->regs->rw.dafo) | SAB82532_DAFO_XBRK, &info->regs->rw.dafo);
 	else
-		info->regs->rw.dafo &= ~(SAB82532_DAFO_XBRK);
+		writeb(readb(&info->regs->rw.dafo) & ~(SAB82532_DAFO_XBRK), &info->regs->rw.dafo);
 	restore_flags(flags);
 }
 
@@ -1496,19 +1524,19 @@ static void sab82532_set_termios(struct tty_struct *tty,
 	/* Handle transition to B0 status */
 	if ((old_termios->c_cflag & CBAUD) &&
 	    !(tty->termios->c_cflag & CBAUD)) {
-		info->regs->w.mode |= SAB82532_MODE_FRTS;
-		info->regs->w.mode |= SAB82532_MODE_RTS;
-		info->regs->w.pvr |= info->pvr_dtr_bit;
+		writeb(readb(&info->regs->w.mode) | SAB82532_MODE_FRTS, &info->regs->w.mode);
+		writeb(readb(&info->regs->w.mode) | SAB82532_MODE_RTS, &info->regs->w.mode);
+		writeb(readb(&info->regs->w.pvr) | info->pvr_dtr_bit, &info->regs->w.pvr);
 	}
 	
 	/* Handle transition away from B0 status */
 	if (!(old_termios->c_cflag & CBAUD) &&
 	    (tty->termios->c_cflag & CBAUD)) {
-		info->regs->w.pvr &= ~(info->pvr_dtr_bit);
+		writeb(readb(&info->regs->w.pvr) & ~(info->pvr_dtr_bit), &info->regs->w.pvr);
 		if (!tty->hw_stopped ||
 		    !(tty->termios->c_cflag & CRTSCTS)) {
-			info->regs->w.mode &= ~(SAB82532_MODE_FRTS);
-			info->regs->w.mode |= SAB82532_MODE_RTS;
+			writeb(readb(&info->regs->w.mode) & ~(SAB82532_MODE_FRTS), &info->regs->w.mode);
+			writeb(readb(&info->regs->w.mode) | SAB82532_MODE_RTS, &info->regs->w.mode);
 		}
 	}
 	
@@ -1606,9 +1634,9 @@ static void sab82532_close(struct tty_struct *tty, struct file * filp)
 	 * the receiver.
 	 */
 	info->interrupt_mask0 |= SAB82532_IMR0_TCD;
-	info->regs->w.imr0 = info->interrupt_mask0;
+	writeb(info->interrupt_mask0, &info->regs->w.imr0);
 #if 0
-	info->regs->rw.mode &= ~(SAB82532_MODE_RAC);
+	writeb(readb(&info->regs->rw.mode) & ~(SAB82532_MODE_RAC), &info->regs->rw.mode);
 #endif
 	if (info->flags & ASYNC_INITIALIZED) {
 		/*
@@ -1797,12 +1825,12 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 		cli();
 		if (!(info->flags & ASYNC_CALLOUT_ACTIVE) &&
 		    (tty->termios->c_cflag & CBAUD)) {
-			info->regs->rw.pvr &= ~(info->pvr_dtr_bit);
-			info->regs->rw.mode |= SAB82532_MODE_FRTS;
-			info->regs->rw.mode &= ~(SAB82532_MODE_RTS);
+			writeb(readb(&info->regs->rw.pvr) & ~(info->pvr_dtr_bit), &info->regs->rw.pvr);
+			writeb(readb(&info->regs->rw.mode) | SAB82532_MODE_FRTS, &info->regs->rw.mode);
+			writeb(readb(&info->regs->rw.mode) & ~(SAB82532_MODE_RTS), &info->regs->rw.mode);
 		}
 		sti();
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		if (tty_hung_up_p(filp) ||
 		    !(info->flags & ASYNC_INITIALIZED)) {
 #ifdef SERIAL_DO_RESTART
@@ -1817,7 +1845,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 		}
 		if (!(info->flags & ASYNC_CALLOUT_ACTIVE) &&
 		    !(info->flags & ASYNC_CLOSING) &&
-		    (do_clocal || !(info->regs->r.vstr & SAB82532_VSTR_CD)))
+		    (do_clocal || !(readb(&info->regs->r.vstr) & SAB82532_VSTR_CD)))
 			break;
 		if (signal_pending(current)) {
 			retval = -ERESTARTSYS;
@@ -1825,7 +1853,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 		}
 #ifdef SERIAL_DEBUG_OPEN
 		printk("block_til_ready blocking: ttyS%d, count = %d, flags = %x, clocal = %d, vstr = %02x\n",
-		       info->line, info->count, info->flags, do_clocal, info->regs->r.vstr);
+		       info->line, info->count, info->flags, do_clocal, readb(&info->regs->r.vstr));
 #endif
 		schedule();
 	}
@@ -1995,19 +2023,19 @@ line_info(char *buf, struct sab82532 *info)
 	stat_buf[0] = 0;
 	stat_buf[1] = 0;
 	save_flags(flags); cli();
-	if (info->regs->r.mode & SAB82532_MODE_RTS) {
-		if (!(info->regs->r.mode & SAB82532_MODE_FRTS))
+	if (readb(&info->regs->r.mode) & SAB82532_MODE_RTS) {
+		if (!(readb(&info->regs->r.mode) & SAB82532_MODE_FRTS))
 			strcat(stat_buf, "|RTS");
 	} else {
 		strcat(stat_buf, "|RTS");
 	}
-	if (info->regs->r.star & SAB82532_STAR_CTS)
+	if (readb(&info->regs->r.star) & SAB82532_STAR_CTS)
 		strcat(stat_buf, "|CTS");
-	if (!(info->regs->r.pvr & info->pvr_dtr_bit))
+	if (!(readb(&info->regs->r.pvr) & info->pvr_dtr_bit))
 		strcat(stat_buf, "|DTR");
-	if (!(info->regs->r.pvr & info->pvr_dsr_bit))
+	if (!(readb(&info->regs->r.pvr) & info->pvr_dsr_bit))
 		strcat(stat_buf, "|DSR");
-	if (!(info->regs->r.vstr & SAB82532_VSTR_CD))
+	if (!(readb(&info->regs->r.vstr) & SAB82532_VSTR_CD))
 		strcat(stat_buf, "|CD");
 	restore_flags(flags);
 
@@ -2065,7 +2093,7 @@ done:
  * sab82532_init() is called at boot-time to initialize the serial driver.
  * ---------------------------------------------------------------------
  */
-__initfunc(static int get_sab82532(unsigned long *memory_start))
+static int __init get_sab82532(unsigned long *memory_start)
 {
 	struct linux_ebus *ebus;
 	struct linux_ebus_device *edev = 0;
@@ -2083,7 +2111,7 @@ ebus_done:
 	if (!edev)
 		return -ENODEV;
 
-	regs = edev->base_address[0];
+	regs = edev->resource[0].start;
 	offset = sizeof(union sab82532_async_regs);
 
 	for (i = 0; i < 2; i++) {
@@ -2107,16 +2135,7 @@ ebus_done:
 		sab->xmit_fifo_size = 32;
 		sab->recv_fifo_size = 32;
 
-		if (check_region((unsigned long)sab->regs,
-				 sizeof(union sab82532_async_regs))) {
-			kfree(sab);
-			continue;
-		}
-		request_region((unsigned long)sab->regs,
-			       sizeof(union sab82532_async_regs),
-			       "serial(sab82532)");
-
-		sab->regs->w.ipc = SAB82532_IPC_IC_ACT_LOW;
+		writeb(SAB82532_IPC_IC_ACT_LOW, &sab->regs->w.ipc);
 
 		sab->next = sab82532_chain;
 		sab82532_chain = sab;
@@ -2126,16 +2145,15 @@ ebus_done:
 	return 0;
 }
 
-__initfunc(static void
-sab82532_kgdb_hook(int line))
+static void __init sab82532_kgdb_hook(int line)
 {
 	prom_printf("sab82532: kgdb support is not implemented, yet\n");
 	prom_halt();
 }
 
-__initfunc(static inline void show_serial_version(void))
+static inline void __init show_serial_version(void)
 {
-	char *revision = "$Revision: 1.32 $";
+	char *revision = "$Revision: 1.34 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');
@@ -2148,7 +2166,7 @@ __initfunc(static inline void show_serial_version(void))
 /*
  * The serial driver boot-time initialization code!
  */
-__initfunc(int sab82532_init(void))
+int __init sab82532_init(void)
 {
 	struct sab82532 *info;
 	int i;
@@ -2220,9 +2238,9 @@ __initfunc(int sab82532_init(void))
 	for (info = sab82532_chain, i = 0; info; info = info->next, i++) {
 		info->magic = SERIAL_MAGIC;
 
-		info->type = info->regs->r.vstr & 0x0f;
-		info->regs->w.pcr = ~((1 << 1) | (1 << 2) | (1 << 4));
-		info->regs->w.pim = 0xff;
+		info->type = readb(&info->regs->r.vstr) & 0x0f;
+		writeb(~((1 << 1) | (1 << 2) | (1 << 4)), &info->regs->w.pcr);
+		writeb(0xff, &info->regs->w.pim);
 		if (info->line == 0) {
 			info->pvr_dsr_bit = (1 << 0);
 			info->pvr_dtr_bit = (1 << 1);
@@ -2230,9 +2248,9 @@ __initfunc(int sab82532_init(void))
 			info->pvr_dsr_bit = (1 << 3);
 			info->pvr_dtr_bit = (1 << 2);
 		}
-		info->regs->w.pvr = (1 << 1) | (1 << 2) | (1 << 4);
-		info->regs->rw.mode |= SAB82532_MODE_FRTS;
-		info->regs->rw.mode |= SAB82532_MODE_RTS;
+		writeb((1 << 1) | (1 << 2) | (1 << 4), &info->regs->w.pvr);
+		writeb(readb(&info->regs->rw.mode) | SAB82532_MODE_FRTS, &info->regs->rw.mode);
+		writeb(readb(&info->regs->rw.mode) | SAB82532_MODE_RTS, &info->regs->rw.mode);
 
 		info->custom_divisor = 16;
 		info->close_delay = 5*HZ/10;
@@ -2276,7 +2294,7 @@ __initfunc(int sab82532_init(void))
 	return 0;
 }
 
-__initfunc(int sab82532_probe(unsigned long *memory_start))
+int __init sab82532_probe(unsigned long *memory_start)
 {
 	int node, enode, snode;
 	char model[32];
@@ -2340,7 +2358,6 @@ void cleanup_module(void)
 {
 	unsigned long flags;
 	int e1, e2;
-	int i;
 
 	/* printk("Unloading %s: version %s\n", serial_name, serial_version); */
 	save_flags(flags);
@@ -2357,12 +2374,6 @@ void cleanup_module(void)
 		       e2);
 	restore_flags(flags);
 
-	for (i = 0; i < NR_PORTS; i++) {
-		struct sab82532 *info = (struct sab82532 *)sab82532_table[i]->driver_data;
-		if (info->type != PORT_UNKNOWN)
-			release_region((unsigned long)info->regs,
-				       sizeof(union sab82532_async_regs));
-	}
 	if (tmp_buf) {
 		free_page((unsigned long) tmp_buf);
 		tmp_buf = NULL;
@@ -2379,7 +2390,7 @@ sab82532_console_putchar(struct sab82532 *info, char c)
 
 	save_flags(flags); cli();
 	sab82532_tec_wait(info);
-	info->regs->w.tic = c;
+	writeb(c, &info->regs->w.tic);
 	restore_flags(flags);
 }
 
@@ -2445,12 +2456,12 @@ sab82532_console_setup(struct console *con, char *options)
 	 */
 	info->interrupt_mask0 = SAB82532_IMR0_PERR | SAB82532_IMR0_FERR |
 				SAB82532_IMR0_PLLA | SAB82532_IMR0_CDSC;
-	info->regs->w.imr0 = info->interrupt_mask0;
+	writeb(info->interrupt_mask0, &info->regs->w.imr0);
 	info->interrupt_mask1 = SAB82532_IMR1_BRKT | SAB82532_IMR1_ALLS |
 				SAB82532_IMR1_XOFF | SAB82532_IMR1_TIN |
 				SAB82532_IMR1_CSC | SAB82532_IMR1_XON |
 				SAB82532_IMR1_XPR;
-	info->regs->w.imr1 = info->interrupt_mask1;
+	writeb(info->interrupt_mask1, &info->regs->w.imr1);
 
 	printk("Console: ttyS%d (SAB82532)\n", info->line);
 
@@ -2524,24 +2535,24 @@ sab82532_console_setup(struct console *con, char *options)
 		info->flags |= ASYNC_CHECK_CD;
 
 	save_flags(flags); cli();
-	if (info->regs->r.star & SAB82532_STAR_CEC)
+	if (readb(&info->regs->r.star) & SAB82532_STAR_CEC)
 		udelay(1);
 	sab82532_tec_wait(info);
-	info->regs->w.dafo = dafo;
-	info->regs->w.bgr = ebrg & 0xff;
-	info->regs->rw.ccr2 &= ~(0xc0);
-	info->regs->rw.ccr2 |= (ebrg >> 2) & 0xc0;
+	writeb(dafo, &info->regs->w.dafo);
+	writeb(ebrg & 0xff, &info->regs->w.bgr);
+	writeb(readb(&info->regs->rw.ccr2) & ~(0xc0), &info->regs->rw.ccr2);
+	writeb(readb(&info->regs->rw.ccr2) | ((ebrg >> 2) & 0xc0), &info->regs->rw.ccr2);
 	if (info->flags & ASYNC_CTS_FLOW) {
-		info->regs->rw.mode &= ~(SAB82532_MODE_RTS);
-		info->regs->rw.mode |= SAB82532_MODE_FRTS;
-		info->regs->rw.mode &= ~(SAB82532_MODE_FCTS);
+		writeb(readb(&info->regs->rw.mode) & ~(SAB82532_MODE_RTS), &info->regs->rw.mode);
+		writeb(readb(&info->regs->rw.mode) | SAB82532_MODE_FRTS, &info->regs->rw.mode);
+		writeb(readb(&info->regs->rw.mode) & ~(SAB82532_MODE_FCTS), &info->regs->rw.mode);
 	} else {
-		info->regs->rw.mode |= SAB82532_MODE_RTS;
-		info->regs->rw.mode &= ~(SAB82532_MODE_FRTS);
-		info->regs->rw.mode |= SAB82532_MODE_FCTS;
+		writeb(readb(&info->regs->rw.mode) | SAB82532_MODE_RTS, &info->regs->rw.mode);
+		writeb(readb(&info->regs->rw.mode) & ~(SAB82532_MODE_FRTS), &info->regs->rw.mode);
+		writeb(readb(&info->regs->rw.mode) | SAB82532_MODE_FCTS, &info->regs->rw.mode);
 	}
-	info->regs->rw.pvr &= ~(info->pvr_dtr_bit);
-	info->regs->rw.mode |= SAB82532_MODE_RAC;
+	writeb(~(info->pvr_dtr_bit), &info->regs->rw.pvr);
+	writeb(readb(&info->regs->rw.mode) | SAB82532_MODE_RAC, &info->regs->rw.mode);
 	restore_flags(flags);
 
 	return 0;
@@ -2561,7 +2572,7 @@ static struct console sab82532_console = {
 	NULL
 };
 
-__initfunc(int sab82532_console_init(void))
+int __init sab82532_console_init(void)
 {
 	extern int con_is_present(void);
 

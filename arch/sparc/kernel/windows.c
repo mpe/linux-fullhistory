@@ -32,7 +32,7 @@ void flush_user_windows(void)
 	 restore %%g0, %%g0, %%g0"
 	: "=&r" (ctr)
 	: "0" (ctr),
-	  "i" ((const unsigned long)(&(((struct task_struct *)0)->tss.uwinmask)))
+	  "i" ((const unsigned long)(&(((struct task_struct *)0)->thread.uwinmask)))
 	: "g4", "cc");
 }
 
@@ -61,7 +61,7 @@ void synchronize_user_stack(void)
 	int window;
 
 	flush_user_windows();
-	tp = &current->tss;
+	tp = &current->thread;
 	if(!tp->w_saved)
 		return;
 
@@ -115,7 +115,7 @@ void try_to_clear_window_buffer(struct pt_regs *regs, int who)
 
 	lock_kernel();
 	flush_user_windows();
-	tp = &current->tss;
+	tp = &current->thread;
 	for(window = 0; window < tp->w_saved; window++) {
 		unsigned long sp = tp->rwbuf_stkptrs[window];
 

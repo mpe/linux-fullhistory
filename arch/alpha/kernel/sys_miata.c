@@ -3,7 +3,7 @@
  *
  *	Copyright (C) 1995 David A Rusling
  *	Copyright (C) 1996 Jay A Estabrook
- *	Copyright (C) 1998 Richard Henderson
+ *	Copyright (C) 1998, 1999 Richard Henderson
  *
  * Code supporting the MIATA (EV56+PYXIS).
  */
@@ -25,9 +25,9 @@
 #include <asm/core_pyxis.h>
 
 #include "proto.h"
-#include "irq.h"
-#include "bios32.h"
-#include "machvec.h"
+#include "irq_impl.h"
+#include "pci_impl.h"
+#include "machvec_impl.h"
 
 
 static void 
@@ -202,7 +202,7 @@ miata_init_irq(void)
  */
 
 static int __init
-miata_map_irq(struct pci_dev *dev, int slot, int pin)
+miata_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
         static char irq_tab[18][5] __initlocaldata = {
 		/*INT    INTA   INTB   INTC   INTD */
@@ -224,21 +224,24 @@ miata_map_irq(struct pci_dev *dev, int slot, int pin)
 		{16+20, 16+20, 16+21, 16+22, 16+23},  /* IdSel 28,  slot 1  */
 		{16+24, 16+24, 16+25, 16+26, 16+27},  /* IdSel 29,  slot 2  */
 		{16+28, 16+28, 16+29, 16+30, 16+31},  /* IdSel 30,  slot 3  */
-		/* this bridge is on the main bus of the later original MIATA */
+		/* This bridge is on the main bus of the later orig MIATA */
 		{   -1,    -1,    -1,    -1,    -1},  /* IdSel 31,  PCI-PCI */
         };
 	const long min_idsel = 3, max_idsel = 20, irqs_per_slot = 5;
 	return COMMON_TABLE_LOOKUP;
 }
 
-static int __init
-miata_swizzle(struct pci_dev *dev, int *pinp)
+static u8 __init
+miata_swizzle(struct pci_dev *dev, u8 *pinp)
 {
 	int slot, pin = *pinp;
 
-	/* Check first for the built-in bridge.  */
-	if ((PCI_SLOT(dev->bus->self->devfn) == 8) ||
-	    (PCI_SLOT(dev->bus->self->devfn) == 20)) {
+	if (dev->bus->number == 0) {
+		slot = PCI_SLOT(dev->devfn);
+	}		
+	/* Check for the built-in bridge.  */
+	else if ((PCI_SLOT(dev->bus->self->devfn) == 8) ||
+		 (PCI_SLOT(dev->bus->self->devfn) == 20)) {
 		slot = PCI_SLOT(dev->devfn) + 9;
 	}
 	else 
@@ -263,10 +266,9 @@ miata_swizzle(struct pci_dev *dev, int *pinp)
 }
 
 static void __init
-miata_pci_fixup(void)
+miata_init_pci(void)
 {
-	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
-	common_pci_fixup(miata_map_irq, miata_swizzle);
+	common_init_pci();
 	SMC669_Init(0); /* it might be a GL (fails harmlessly if not) */
 	es1888_init();
 }
@@ -279,7 +281,7 @@ miata_kill_arch (int mode, char *reboot_cmd)
 		*(vuip) PYXIS_RESET = 0x0000dead;
 		mb();
 	}
-	generic_kill_arch(mode, reboot_cmd);
+	common_kill_arch(mode, reboot_cmd);
 }
 
 
@@ -295,17 +297,21 @@ struct alpha_machine_vector miata_mv __initmv = {
 	DO_PYXIS_BUS,
 	machine_check:		pyxis_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	min_io_address:		DEFAULT_IO_BASE,
+	min_mem_address:	DEFAULT_MEM_BASE,
 
 	nr_irqs:		48,
 	irq_probe_mask:		_PROBE_MASK(48),
 	update_irq_hw:		miata_update_irq_hw,
-	ack_irq:		generic_ack_irq,
+	ack_irq:		common_ack_irq,
 	device_interrupt:	miata_device_interrupt,
 
 	init_arch:		pyxis_init_arch,
 	init_irq:		miata_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		miata_pci_fixup,
+	init_pit:		common_init_pit,
+	init_pci:		miata_init_pci,
 	kill_arch:		miata_kill_arch,
+	pci_map_irq:		miata_map_irq,
+	pci_swizzle:		miata_swizzle,
 };
 ALIAS_MV(miata)

@@ -383,7 +383,7 @@ static void __planb_wait(struct planb *pb)
 
 	add_wait_queue(&pb->lockq, &wait);
 repeat:
-	current->state = TASK_UNINTERRUPTIBLE;
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	if (pb->lock) {
 		schedule();
 		goto repeat;

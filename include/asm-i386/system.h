@@ -133,7 +133,7 @@ struct __xchg_dummy { unsigned long a[100]; };
  * Note 2: xchg has side effect, so that attribute volatile is necessary,
  *	  but generally the primitive is invalid, *ptr is output argument. --ANK
  */
-static inline unsigned long __xchg(unsigned long x, void * ptr, int size)
+static inline unsigned long __xchg(unsigned long x, volatile void * ptr, int size)
 {
 	switch (size) {
 		case 1:
@@ -175,6 +175,9 @@ static inline unsigned long __xchg(unsigned long x, void * ptr, int size)
 #define mb() 	__asm__ __volatile__ ("lock; addl $0,0(%%esp)": : :"memory")
 #define rmb()	mb()
 #define wmb()	__asm__ __volatile__ ("": : :"memory")
+#define set_rmb(var, value) do { xchg(&var, value); } while (0)
+#define set_mb(var, value) set_rmb(var, value)
+#define set_wmb(var, value) do { var = value; wmb(); } while (0)
 
 /* interrupt control.. */
 #define __save_flags(x)		__asm__ __volatile__("pushfl ; popl %0":"=g" (x): /* no input */ :"memory")

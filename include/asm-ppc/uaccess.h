@@ -21,8 +21,8 @@
 #define USER_DS		((mm_segment_t) { 1 })
 
 #define get_ds()	(KERNEL_DS)
-#define get_fs()	(current->tss.fs)
-#define set_fs(val)	(current->tss.fs = (val))
+#define get_fs()	(current->thread.fs)
+#define set_fs(val)	(current->thread.fs = (val))
 
 #define segment_eq(a,b)	((a).seg == (b).seg)
 

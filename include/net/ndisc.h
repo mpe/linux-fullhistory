@@ -104,15 +104,9 @@ extern void			igmp6_cleanup(void);
 extern __inline__ struct neighbour * ndisc_get_neigh(struct net_device *dev, struct in6_addr *addr)
 {
 
-	if (dev) {
-		struct neighbour *neigh;
+	if (dev)
+		return __neigh_lookup(&nd_tbl, addr, dev, 1);
 
-		start_bh_atomic();
-		neigh = __neigh_lookup(&nd_tbl, addr, dev, 1);
-		end_bh_atomic();
-
-		return neigh;
-	}
 	return NULL;
 }
 

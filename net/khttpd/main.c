@@ -144,7 +144,7 @@ static int MainDaemon(void *cpu_pointer)
 			changes +=AcceptConnections(CPUNR,MainSocket);
 		}
 		
-		current->state = TASK_INTERRUPTIBLE|TASK_EXCLUSIVE;	
+		set_current_state(TASK_INTERRUPTIBLE|TASK_EXCLUSIVE);	
 		if (changes==0) 
 		{
 			(void)interruptible_sleep_on_timeout(&(DummyWQ[CPUNR]),1);	

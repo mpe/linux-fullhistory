@@ -1,4 +1,4 @@
-/* $Id: sbus.c,v 1.78 1999/07/23 02:00:27 davem Exp $
+/* $Id: sbus.c,v 1.79 1999/08/31 06:57:40 davem Exp $
  * sbus.c:  SBus support routines.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -40,8 +40,7 @@ extern void prom_sbus_ranges_init (int, struct linux_sbus *);
 
 /* #define DEBUG_FILL */
 
-__initfunc(static void
-fill_sbus_device(int nd, struct linux_sbus_device *sbus_dev))
+static void __init fill_sbus_device(int nd, struct linux_sbus_device *sbus_dev)
 {
 	int grrr, len;
 	unsigned long dev_base_addr, base;
@@ -210,9 +209,9 @@ extern int flash_init(void);
 extern int aurora_init(void);
 #endif
 
-__initfunc(static void
-sbus_do_child_siblings(int start_node, struct linux_sbus_device *child,
-		       struct linux_sbus *sbus))
+static void __init sbus_do_child_siblings(int start_node,
+					  struct linux_sbus_device *child,
+					  struct linux_sbus *sbus)
 {
 	struct linux_sbus_device *this_dev = child;
 	int this_node = start_node;
@@ -240,7 +239,7 @@ sbus_do_child_siblings(int start_node, struct linux_sbus_device *child,
 	}
 }
 
-__initfunc(void sbus_init(void))
+void __init sbus_init(void)
 {
 	register int nd, this_sbus, sbus_devs, topnd, iommund;
 	unsigned int sbus_clock;

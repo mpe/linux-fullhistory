@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.117 1999/08/02 08:39:40 davem Exp $
+/* $Id: sys_sparc32.c,v 1.118 1999/08/30 10:01:15 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -3741,7 +3741,7 @@ asmlinkage ssize_t32 sys32_pwrite(unsigned int fd, char *ubuf,
 }
 
 
-extern asmlinkage int sys_personality(unsigned long);
+extern asmlinkage long sys_personality(unsigned long);
 
 asmlinkage int sys32_personality(unsigned long personality)
 {

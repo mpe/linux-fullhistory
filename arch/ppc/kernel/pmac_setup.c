@@ -43,6 +43,8 @@
 #include <linux/console.h>
 #include <linux/ide.h>
 #include <linux/pci.h>
+
+#include <asm/init.h>
 #include <asm/prom.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
@@ -440,7 +442,7 @@ void __init find_boot_device(void)
 #endif
 }
 
-/* can't be initfunc - can be called whenever a disk is first accessed */
+/* can't be __init - can be called whenever a disk is first accessed */
 __pmac
 void note_bootable_part(kdev_t dev, int part)
 {

@@ -22,7 +22,7 @@
 
 #include "proto.h"
 
-static void
+void
 dik_show_regs(struct pt_regs *regs, unsigned long *r9_15)
 {
 	printk("pc = [<%016lx>]  ra = [<%016lx>]  ps = %04lx\n",

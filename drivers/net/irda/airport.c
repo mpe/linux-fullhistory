@@ -52,7 +52,7 @@ static struct dongle dongle = {
 };
 
 
-__initfunc(int airport_init(void))
+int __init airport_init(void)
 {
 	int ret;
 

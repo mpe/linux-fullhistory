@@ -1,4 +1,4 @@
-/* $Id: teles3.c,v 2.12 1999/07/12 21:05:32 keil Exp $
+/* $Id: teles3.c,v 2.13 1999/08/30 12:01:28 keil Exp $
 
  * teles3.c     low level stuff for Teles 16.3 & PNP isdn cards
  *
@@ -11,6 +11,9 @@
  *              Beat Doebeli
  *
  * $Log: teles3.c,v $
+ * Revision 2.13  1999/08/30 12:01:28  keil
+ * HW version v1.3 support
+ *
  * Revision 2.12  1999/07/12 21:05:32  keil
  * fix race in IRQ handling
  * added watchdog for lost IRQs
@@ -85,7 +88,7 @@
 #include "isdnl1.h"
 
 extern const char *CardType[];
-const char *teles3_revision = "$Revision: 2.12 $";
+const char *teles3_revision = "$Revision: 2.13 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -464,9 +467,10 @@ setup_teles3(struct IsdnCard *card))
 							 * 0x1f=with AB
 							 * 0x1c 16.3 ???
 							 * 0x39 16.3 1.1
+							 * 0x38 16.3 1.3
 							 * 0x46 16.3 with AB + Video (Teles-Vision)
 							 */
-		if (val != 0x46 && val != 0x39 && val != 0x1c && val != 0x1e && val != 0x1f) {
+		if (val != 0x46 && val != 0x39 && val != 0x38 && val != 0x1c && val != 0x1e && val != 0x1f) {
 			printk(KERN_WARNING "Teles: 16.3 Byte at %x is %x\n",
 			       cs->hw.teles3.cfg_reg + 2, val);
 			release_io_teles3(cs);

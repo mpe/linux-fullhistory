@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.71 1999/05/27 04:52:43 davem Exp $
+/* $Id: processor.h,v 1.72 1999/08/14 03:52:04 anton Exp $
  * include/asm-sparc/processor.h
  *
  * Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
@@ -96,7 +96,7 @@ struct thread_struct {
 #define INIT_MMAP { &init_mm, (0), (0), \
 		    NULL, __pgprot(0x0) , VM_READ | VM_WRITE | VM_EXEC, 1, NULL, NULL }
 
-#define INIT_TSS  { \
+#define INIT_THREAD  { \
 /* uwinmask, kregs, sig_address, sig_desc, ksp, kpc, kpsr, kwim */ \
    0,        0,     0,           0,        0,   0,   0,    0, \
 /* fork_kpsr, fork_kwim */ \
@@ -154,7 +154,7 @@ extern __inline__ void start_thread(struct pt_regs * regs, unsigned long pc,
 extern pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long flags);
 
 
-#define copy_segments(__nr, __tsk, __mm)	\
+#define copy_segments(__tsk, __mm)		\
 	if((__tsk) == current &&		\
 	   (__mm) != NULL)			\
 		flush_user_windows()
@@ -162,6 +162,7 @@ extern pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long flags);
 #define forget_segments()		do { } while (0)
 
 #ifdef __KERNEL__
+#define THREAD_SIZE (2*PAGE_SIZE)
 
 extern struct task_struct *last_task_used_math;
 

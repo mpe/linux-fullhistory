@@ -3,6 +3,8 @@
 #include <linux/init.h>
 #include <linux/sched.h>
 #include <linux/signal.h>
+
+#include <asm/init.h>
 #include <asm/io.h>
 #include <asm/smp.h>
 #include <asm/prom.h>

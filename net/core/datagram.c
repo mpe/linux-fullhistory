@@ -65,10 +65,8 @@ static int wait_for_packet(struct sock * sk, int *err)
 
 	DECLARE_WAITQUEUE(wait, current);
 
+	__set_current_state(TASK_INTERRUPTIBLE);
 	add_wait_queue(sk->sleep, &wait);
-	current->state = TASK_INTERRUPTIBLE;
-
-	barrier();
 
 	/* Socket errors? */
 	error = sock_error(sk);

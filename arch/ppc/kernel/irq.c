@@ -1,5 +1,5 @@
 /*
- * $Id: irq.c,v 1.107 1999/06/17 05:39:12 paulus Exp $
+ * $Id: irq.c,v 1.108 1999/07/23 01:55:44 davem Exp $
  *
  *  arch/ppc/kernel/irq.c
  *

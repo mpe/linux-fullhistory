@@ -1,4 +1,4 @@
-/* $Id: su.c,v 1.22 1999/07/03 08:57:43 davem Exp $
+/* $Id: su.c,v 1.25 1999/08/31 06:58:20 davem Exp $
  * su.c: Small serial driver for keyboard/mouse interface on sparc32/PCI
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -1965,7 +1965,7 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 				   serial_inp(info, UART_MCR) |
 				   (UART_MCR_DTR | UART_MCR_RTS));
 		restore_flags(flags);
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		if (tty_hung_up_p(filp) ||
 		    !(info->flags & ASYNC_INITIALIZED)) {
 #ifdef SERIAL_DO_RESTART
@@ -2212,9 +2212,9 @@ done:
  * number, and identifies which options were configured into this
  * driver.
  */
-__initfunc(static __inline__ void show_su_version(void))
+static __inline__ void __init show_su_version(void)
 {
-	char *revision = "$Revision: 1.22 $";
+	char *revision = "$Revision: 1.25 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');
@@ -2251,11 +2251,7 @@ autoconfig(struct su_struct *info)
 	for_each_ebus(ebus) {
 		for_each_ebusdev(dev, ebus) {
 			if (dev->prom_node == info->port_node) {
-				info->port = dev->base_address[0];
-#ifdef __sparc_v9__
-				if (check_region(info->port, 8))
-					return;
-#endif
+				info->port = dev->resource[0].start;
 				info->irq = dev->irqs[0];
 				goto ebus_done;
 			}
@@ -2400,10 +2396,6 @@ ebus_done:
 
 	sprintf(info->name, "su(%s)", su_typev[info->port_type]);
 
-#ifdef __sparc_v9__
-	request_region(info->port, 8, info->name);
-#endif
-
 	/*
 	 * Reset the UART.
 	 */
@@ -2418,7 +2410,7 @@ ebus_done:
 /*
  * The serial driver boot-time initialization code!
  */
-__initfunc(int su_serial_init(void))
+int __init su_serial_init(void)
 {
 	int i;
 	struct su_struct *info;
@@ -2516,7 +2508,7 @@ __initfunc(int su_serial_init(void))
 	return 0;
 }
 
-__initfunc(int su_kbd_ms_init(void))
+int __init su_kbd_ms_init(void)
 {
 	int i;
 	struct su_struct *info;
@@ -2541,7 +2533,7 @@ __initfunc(int su_kbd_ms_init(void))
 		if (info->type == PORT_UNKNOWN)
 			continue;
 
-		printk(KERN_INFO "%s at %16lx (irq = %s) is a %s\n",
+		printk(KERN_INFO "%s at 0x%lx (irq = %s) is a %s\n",
 		       info->name, info->port, __irq_itoa(info->irq),
 		       uart_config[info->type].name);
 
@@ -2559,7 +2551,7 @@ __initfunc(int su_kbd_ms_init(void))
  * of device tree. 'su' may be found under obio, ebus, isa and pci.
  * We walk over the tree and find them wherever PROM hides them.
  */
-__initfunc(void su_probe_any(struct su_probe_scan *t, int sunode))
+void __init su_probe_any(struct su_probe_scan *t, int sunode)
 {
 	struct su_struct *info;
 	int len;
@@ -2590,7 +2582,7 @@ __initfunc(void su_probe_any(struct su_probe_scan *t, int sunode))
 	}
 }
 
-__initfunc(int su_probe (unsigned long *memory_start))
+int __init su_probe (unsigned long *memory_start)
 {
 	int node;
 	int len;
@@ -2792,7 +2784,7 @@ serial_console_device(struct console *c)
  *	- initialize the serial port
  *	Return non-zero if we didn't find a serial port.
  */
-__initfunc(static int serial_console_setup(struct console *co, char *options))
+static int __init serial_console_setup(struct console *co, char *options)
 {
 	struct su_struct *info;
 	unsigned cval;
@@ -2915,7 +2907,7 @@ static struct console sercons = {
 /*
  *	Register console.
  */
-__initfunc(int su_serial_console_init(void))
+int __init su_serial_console_init(void)
 {
 	extern int con_is_present(void);
 

@@ -8,12 +8,7 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := math-emu.o
-O_OBJS   := math.o fabsq.o faddq.o fdivq.o fdmulq.o fitoq.o 		\
-		fmovq.o fmulq.o fnegq.o fqtoi.o fqtox.o fsubq.o		\
-		fxtoq.o fdtoq.o fstoq.o fqtos.o fqtod.o fsqrtq.o	\
-		fcmpq.o fcmpeq.o					\
-		fsqrts.o fsqrtd.o fadds.o faddd.o fsubs.o fsubd.o	\
-		fmuls.o fmuld.o fdivs.o fdivd.o fsmuld.o		\
-		fstoi.o fdtoi.o fstox.o fdtox.o fstod.o fdtos.o
+O_OBJS   := math.o
+CFLAGS += -I. -I$(TOPDIR)/include/math-emu -w
 
 include $(TOPDIR)/Rules.make

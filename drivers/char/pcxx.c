@@ -356,7 +356,7 @@ static int pcxx_waitcarrier(struct tty_struct *tty,struct file *filp,struct chan
 			memoff(info);
 		}
 		sti();
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		if(tty_hung_up_p(filp) || (info->asyncflags & ASYNC_INITIALIZED) == 0) {
 			if(info->asyncflags & ASYNC_HUP_NOTIFY)
 				retval = -EAGAIN;

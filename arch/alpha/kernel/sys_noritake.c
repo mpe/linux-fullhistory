@@ -3,7 +3,7 @@
  *
  *	Copyright (C) 1995 David A Rusling
  *	Copyright (C) 1996 Jay A Estabrook
- *	Copyright (C) 1998 Richard Henderson
+ *	Copyright (C) 1998, 1999 Richard Henderson
  *
  * Code supporting the NORITAKE (AlphaServer 1000A), 
  * CORELLE (AlphaServer 800), and ALCOR Primo (AlphaStation 600A).
@@ -29,9 +29,9 @@
 #include <asm/core_cia.h>
 
 #include "proto.h"
-#include "irq.h"
-#include "bios32.h"
-#include "machvec.h"
+#include "irq_impl.h"
+#include "pci_impl.h"
+#include "machvec_impl.h"
 
 
 static void 
@@ -168,7 +168,7 @@ noritake_init_irq(void)
  */
 
 static int __init
-noritake_map_irq(struct pci_dev *dev, int slot, int pin)
+noritake_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
 	static char irq_tab[15][5] __initlocaldata = {
 		/*INT    INTA   INTB   INTC   INTD */
@@ -195,13 +195,16 @@ noritake_map_irq(struct pci_dev *dev, int slot, int pin)
 	return COMMON_TABLE_LOOKUP;
 }
 
-static int __init
-noritake_swizzle(struct pci_dev *dev, int *pinp)
+static u8 __init
+noritake_swizzle(struct pci_dev *dev, u8 *pinp)
 {
 	int slot, pin = *pinp;
 
-	/* Check first for the built-in bridge */
-	if (PCI_SLOT(dev->bus->self->devfn) == 8) {
+	if (dev->bus->number == 0) {
+		slot = PCI_SLOT(dev->devfn);
+	}
+	/* Check for the built-in bridge */
+	else if (PCI_SLOT(dev->bus->self->devfn) == 8) {
 		slot = PCI_SLOT(dev->devfn) + 15; /* WAG! */
 	}
 	else
@@ -224,20 +227,6 @@ noritake_swizzle(struct pci_dev *dev, int *pinp)
 	return slot;
 }
 
-static void __init
-noritake_pci_fixup(void)
-{
-	layout_all_busses(EISA_DEFAULT_IO_BASE,APECS_AND_LCA_DEFAULT_MEM_BASE);
-	common_pci_fixup(noritake_map_irq, noritake_swizzle);
-}
-
-static void __init
-noritake_primo_pci_fixup(void)
-{
-	layout_all_busses(EISA_DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
-	common_pci_fixup(noritake_map_irq, noritake_swizzle);
-}
-
 
 /*
  * The System Vectors
@@ -252,18 +241,22 @@ struct alpha_machine_vector noritake_mv __initmv = {
 	DO_APECS_BUS,
 	machine_check:		apecs_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	min_io_address:		EISA_DEFAULT_IO_BASE,
+	min_mem_address:	APECS_AND_LCA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		48,
 	irq_probe_mask:		_PROBE_MASK(48),
 	update_irq_hw:		noritake_update_irq_hw,
-	ack_irq:		generic_ack_irq,
+	ack_irq:		common_ack_irq,
 	device_interrupt:	noritake_device_interrupt,
 
 	init_arch:		apecs_init_arch,
 	init_irq:		noritake_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		noritake_pci_fixup,
-	kill_arch:		generic_kill_arch,
+	init_pit:		common_init_pit,
+	init_pci:		common_init_pci,
+	kill_arch:		common_kill_arch,
+	pci_map_irq:		noritake_map_irq,
+	pci_swizzle:		noritake_swizzle,
 };
 ALIAS_MV(noritake)
 #endif
@@ -277,18 +270,22 @@ struct alpha_machine_vector noritake_primo_mv __initmv = {
 	DO_CIA_BUS,
 	machine_check:		cia_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	min_io_address:		EISA_DEFAULT_IO_BASE,
+	min_mem_address:	CIA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		48,
 	irq_probe_mask:		_PROBE_MASK(48),
 	update_irq_hw:		noritake_update_irq_hw,
-	ack_irq:		generic_ack_irq,
+	ack_irq:		common_ack_irq,
 	device_interrupt:	noritake_device_interrupt,
 
 	init_arch:		cia_init_arch,
 	init_irq:		noritake_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		noritake_primo_pci_fixup,
-	kill_arch:		generic_kill_arch,
+	init_pit:		common_init_pit,
+	init_pci:		common_init_pci,
+	kill_arch:		common_kill_arch,
+	pci_map_irq:		noritake_map_irq,
+	pci_swizzle:		noritake_swizzle,
 };
 ALIAS_MV(noritake_primo)
 #endif

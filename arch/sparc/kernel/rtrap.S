@@ -1,4 +1,4 @@
-/* $Id: rtrap.S,v 1.51 1998/07/26 03:02:38 davem Exp $
+/* $Id: rtrap.S,v 1.52 1999/08/14 03:51:18 anton Exp $
  * rtrap.S: Return from Sparc trap low-level code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -95,7 +95,7 @@ ret_trap_continue:
 	wr	%t_psr, 0x0, %psr
 	WRITE_PAUSE
 
-	ld	[%curptr + AOFF_task_tss + AOFF_thread_w_saved], %twin_tmp1
+	ld	[%curptr + AOFF_task_thread + AOFF_thread_w_saved], %twin_tmp1
 	orcc	%g0, %twin_tmp1, %g0
 	be	ret_trap_nobufwins
 	 nop
@@ -119,7 +119,7 @@ ret_trap_nobufwins:
 	/* If there are already live user windows in the
 	 * set we can return from trap safely.
 	 */
-	ld	[%curptr + AOFF_task_tss + AOFF_thread_uwinmask], %twin_tmp1
+	ld	[%curptr + AOFF_task_thread + AOFF_thread_uwinmask], %twin_tmp1
 	orcc	%g0, %twin_tmp1, %g0
 	bne	ret_trap_userwins_ok
 	 nop

@@ -662,7 +662,7 @@ static unsigned char rwa_unlock[] __initdata =
 #define dprintk printk
 #endif
 
-#define WRITE_RWA(r,v) do { outb((r), 0x279); outb((v), 0xa79); } while (0)
+#define WRITE_RWA(r,v) do { outb((r), 0x279); udelay(10); outb((v), 0xa79); } while (0)
 
 static inline void rwa010_unlock(void)
 {
@@ -671,8 +671,10 @@ static inline void rwa010_unlock(void)
 	WRITE_RWA(2, 2);
 	mdelay(10);
 
-	for (i = 0; i < sizeof(rwa_unlock); i++)
+	for (i = 0; i < sizeof(rwa_unlock); i++) {
 		outb(rwa_unlock[i], 0x279);
+		udelay(10);
+	}
 }
 
 static inline void rwa010_read_ident(void)
@@ -685,22 +687,22 @@ static inline void rwa010_read_ident(void)
 
 	outb(1, 0x279);
 
-	mdelay(10);
+	mdelay(1);
 
 	dprintk("Identifier: ");
 	for (i = 0; i < 9; i++) {
 		si[i] = 0;
 		for (j = 0; j < 8; j++) {
 			int bit;
-			mdelay(1);
+			udelay(250);
 			inb(0x203);
-			mdelay(1);
+			udelay(250);
 			bit = inb(0x203);
 			dprintk("%02X ", bit);
+			bit = (bit == 0xaa) ? 1 : 0;
 			si[i] |= bit << j;
 		}
-		mdelay(10);
-		dprintk("%02X ", si[i]);
+		dprintk("(%02X) ", si[i]);
 	}
 	dprintk("\n");
 }
@@ -943,9 +945,10 @@ void __init hw_init(void)
 		spin_unlock_irqrestore(&gpio_lock, flags);
 	}
 #endif
-
+#ifdef CONFIG_CATS
 	if (machine_is_cats())
 		cats_hw_init();
+#endif
 
 	leds_event(led_start);
 }

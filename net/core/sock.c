@@ -672,7 +672,7 @@ static void sock_wait_for_wmem(struct sock * sk)
 	for (;;) {
 		if (signal_pending(current))
 			break;
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		if (atomic_read(&sk->wmem_alloc) < sk->sndbuf)
 			break;
 		if (sk->shutdown & SEND_SHUTDOWN)
@@ -681,7 +681,7 @@ static void sock_wait_for_wmem(struct sock * sk)
 			break;
 		schedule();
 	}
-	current->state = TASK_RUNNING;
+	__set_current_state(TASK_RUNNING);
 	remove_wait_queue(sk->sleep, &wait);
 }
 

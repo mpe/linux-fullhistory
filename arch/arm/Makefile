@@ -12,21 +12,52 @@
 #
 # Copyright (C) 1995-1999 by Russell King
 
-CFLAGS_PROC		:=
-ASFLAGS_PROC		:=
-
 # GCC 2.7 uses different options to later compilers; sort out which we have
 CONFIG_GCC_NEW		:= $(shell if $(CC) --version 2>&1 | grep '^2\.7' > /dev/null; then echo n; else echo y; fi)
 
-# Hack to get around RiscPC with StrongARM optimistaion
-# problem - force ARM710 optimisation for now.
+# See if this is ld "2.9.4" or later
+NEW_LINKER		:= $(shell if $(LD) --gc-sections --version >/dev/null 2>&1; then echo y; else echo n; fi)
+
+# CFLAGS_PROC - processor dependent CFLAGS
+# PROCESSOR   - processor type
+# TEXTADDR    - Uncompressed kernel link text address
+# ZTEXTADDR   - Compressed kernel link text address
+# ZRELADDR    - Compressed kernel relocating address
+#	        (point at which uncompressed kernel is loaded).
+
+#
+# select flags depending on the compiler
+#
 ifeq ($(CONFIG_GCC_NEW),y)
-  ifeq ($(CONFIG_ARCH_RPC),y)
-    ifeq ($(CONFIG_CPU_SA110),y)
-      CONFIG_CPU_SA110	:= n
-      CONFIG_CPU_ARM7	:= y
-    endif
-  endif
+  CFLAGS_PROC		:= -mshort-load-bytes -msoft-float
+  CFLAGS_PROC_CPU_26	:= -mcpu=arm3 -Os
+  CFLAGS_PROC_CPU_32v3	:= -march=armv3
+  CFLAGS_PROC_CPU_32v4	:= -march=armv4
+  CFLAGS_ARM6		:= -mtune=arm6
+  CFLAGS_ARM7		:= -mtune=arm7
+  CFLAGS_SA110		:= -mtune=strongarm110
+else
+  CFLAGS_PROC		:=
+  CFLAGS_PROC_CPU_26	:= -m3
+  CFLAGS_PROC_CPU_32v3	:=
+  CFLAGS_PROC_CPU_32v4	:=
+  CFLAGS_ARM6		:= -m6
+  CFLAGS_ARM7		:= -m6
+  CFLAGS_SA110		:= -m6
+endif
+
+ifeq ($(NEW_LINKER),y)
+  ASFLAGS_PROC		:= -mno-fpu
+  ASFLAGS_PROC_CPU_26	:= -mapcs-26
+  ASFLAGS_PROC_CPU_32v3	:= -mapcs-32 -marmv3m
+  ASFLAGS_PROC_CPU_32v4	:= -mapcs-32 -marmv4t
+  LINKFLAGS		:= -p
+else
+  ASFLAGS_PROC		:=
+  ASFLAGS_PROC_CPU_26	:= -m3
+  ASFLAGS_PROC_CPU_32v3	:= -m6
+  ASFLAGS_PROC_CPU_32v4	:= -m6
+  LINKFLAGS		:=
 endif
 
 ifeq ($(CONFIG_CPU_26),y)
@@ -34,56 +65,36 @@ ifeq ($(CONFIG_CPU_26),y)
   TEXTADDR		 = 0x02080000
   ZTEXTADDR		 = 0x01800000
   ZRELADDR		 = 0x02080000
-  ifeq ($(CONFIG_GCC_NEW),y)
-    CFLAGS_PROC		+= -mapcs-26 -mshort-load-bytes
-    ifeq ($(CONFIG_CPU_ARM2),y)
-      CFLAGS_PROC	+= -mcpu=arm2
-      ASFLAGS_PROC	+= -m2
-    endif
-    ifeq ($(CONFIG_CPU_ARM3),y)
-      CFLAGS_PROC	+= -mcpu=arm3
-      ASFLAGS_PROC	+= -m3
-    endif
-  else
-    ifeq ($(CONFIG_CPU_ARM2),y)
-      CFLAGS_PROC	+= -m2
-      ASFLAGS_PROC	+= -m2
-    endif
-    ifeq ($(CONFIG_CPU_ARM3),y)
-      CFLAGS_PROC	+= -m3
-      ASFLAGS_PROC	+= -m3
-    endif
-  endif
+  CFLAGS_PROC		+= $(CFLAGS_PROC_CPU_26)
+  ASFLAGS_PROC		+= $(ASFLAGS_PROC_CPU_26)
 endif
 
 ifeq ($(CONFIG_CPU_32),y)
   PROCESSOR		 = armv
   TEXTADDR		 = 0xC0008000
-  ifeq ($(CONFIG_GCC_NEW),y)
-    CFLAGS_PROC		+= -mapcs-32 -mshort-load-bytes
-    ifeq ($(CONFIG_CPU_ARM6),y)
-      CFLAGS_PROC	+= -mcpu=arm6
-    endif
-    ifeq ($(CONFIG_CPU_ARM7),y)
-      CFLAGS_PROC	+= -mcpu=arm7
-    endif
-    ifeq ($(CONFIG_CPU_SA110),y)
-      CFLAGS_PROC	+= -mcpu=strongarm110
-    endif
+  ifeq ($(CONFIG_CPU_32v4),y)
+    CFLAGS_PROC		+= $(CFLAGS_PROC_CPU_32v4)
+    ASFLAGS_PROC	+= $(ASFLAGS_PROC_CPU_32v4)
   else
-    CFLAGS_PROC		+= -m6
+    CFLAGS_PROC		+= $(CFLAGS_PROC_CPU_32v3)
+    ASFLAGS_PROC	+= $(ASFLAGS_PROC_CPU_32v3)
   endif
-  ASFLAGS_PROC		+= -m6
+  #
+  # Exactly one of the following must be selected
+  #
+  ifeq ($(CONFIG_CPU_ARM6),y)
+    CFLAGS_PROC		+= $(CFLAGS_ARM6)
+  else
+  ifeq ($(CONFIG_CPU_ARM7),y)
+    CFLAGS_PROC		+= $(CFLAGS_ARM7)
+  else
+  ifeq ($(CONFIG_CPU_SA110),y)
+    CFLAGS_PROC		+= $(CFLAGS_SA110)
+  endif
+  endif
+  endif
 endif
 
-# Processor Architecture
-# CFLAGS_PROC - processor dependent CFLAGS
-# PROCESSOR   - processor type
-# TEXTADDR    - Uncompressed kernel link text address
-# ZTEXTADDR   - Compressed kernel link text address
-# ZRELADDR    - Compressed kernel relocating address
-#	        (point at which uncompressed kernel is loaded).
-#
 
 COMPRESSED_HEAD	 = head.o
 
@@ -131,6 +142,8 @@ COMPRESSED_EXTRA = $(TOPDIR)/arch/arm/lib/ll_char_wr_scc.o
 COMPRESSED_HEAD	 = head-nexuspci.o
 endif
 
+
+
 PERL		 = perl
 LD		 = $(CROSS_COMPILE)ld
 OBJCOPY		 = $(CROSS_COMPILE)objcopy -O binary -R .note -R .comment -S
@@ -144,7 +157,7 @@ CFLAGS		:= $(CFLAGS:-fomit-frame-pointer=)
 endif
 CFLAGS		:= $(CFLAGS_PROC) $(CFLAGS) -pipe
 ASFLAGS		:= $(ASFLAGS_PROC) $(ASFLAGS)
-LINKFLAGS	 = -T $(TOPDIR)/arch/arm/vmlinux-$(PROCESSOR).lds -e stext -Ttext $(TEXTADDR)
+LINKFLAGS	+= -X -T $(TOPDIR)/arch/arm/vmlinux-$(PROCESSOR).lds -e stext
 ZLINKFLAGS	 = -Ttext $(ZTEXTADDR)
 
 # If we're intending to debug the kernel, make sure it has line number
@@ -175,11 +188,30 @@ ifeq ($(CONFIG_NWFPE),y)
 DRIVERS		+= arch/arm/nwfpe/math-emu.a
 endif
 
-MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
+MAKEBOOT	 = $(MAKE) -C arch/$(ARCH)/boot
 
-symlinks::
+# The following is a hack to get 'constants.h' up
+# to date before starting compilation
+CONSTANTS	:= constants
+
+constants: dummy
+	@$(MAKE) -C arch/arm/lib constants.h
+
+symlinks: archsymlinks
+
+archsymlinks:
 	$(RM) include/asm-arm/arch include/asm-arm/proc
 	(cd include/asm-arm; ln -sf arch-$(ARCHDIR) arch; ln -sf proc-$(PROCESSOR) proc)
+
+# We need to rebuild the linker script
+# each time, in case the architecture has
+# changed.
+.PHONY: arch/arm/vmlinux-$(PROCESSOR).lds
+
+vmlinux: arch/arm/vmlinux-$(PROCESSOR).lds
+
+arch/arm/vmlinux-$(PROCESSOR).lds: $(TOPDIR)/arch/arm/vmlinux-$(PROCESSOR).lds.in
+	@sed 's/TEXTADDR/$(TEXTADDR)/' <$< >$@
 
 arch/arm/kernel: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=arch/arm/kernel
@@ -197,6 +229,7 @@ zImage zinstall Image install: vmlinux
 archmrproper:
 	rm -f include/asm-arm/arch include/asm-arm/proc
 	@$(MAKE) -C arch/$(ARCH)/special mrproper
+	rm -f $(TOPDIR)/arch/arm/vmlinux-*.lds
 
 archclean:
 	@$(MAKEBOOT) clean

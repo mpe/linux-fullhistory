@@ -1,0 +1,436 @@
+/*
+ *  arch/ppc/kernel/entry.S
+ *
+ *  $Id: entry.S,v 1.2 1999/08/23 02:53:16 paulus Exp $
+ *
+ *  PowerPC version 
+ *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
+ *  Rewritten by Cort Dougan (cort@cs.nmt.edu) for PReP
+ *    Copyright (C) 1996 Cort Dougan <cort@cs.nmt.edu>
+ *  Adapted for Power Macintosh by Paul Mackerras.
+ *  Low-level exception handlers and MMU support
+ *  rewritten by Paul Mackerras.
+ *    Copyright (C) 1996 Paul Mackerras.
+ *  MPC8xx modifications Copyright (C) 1997 Dan Malek (dmalek@jlc.net).
+ *
+ *  This file contains the system call entry code, context switch
+ *  code, and exception/interrupt return code for PowerPC.
+ *
+ *  This program is free software; you can redistribute it and/or
+ *  modify it under the terms of the GNU General Public License
+ *  as published by the Free Software Foundation; either version
+ *  2 of the License, or (at your option) any later version.
+ *	
+ */
+
+#include "ppc_asm.h"
+#include <asm/processor.h>
+#include <asm/page.h>
+#include <linux/errno.h>
+#include <linux/sys.h>
+#include <linux/config.h>
+
+#define SHOW_SYSCALLS
+#define SHOW_SYSCALLS_TASK
+
+#ifdef SHOW_SYSCALLS_TASK
+	.data
+show_syscalls_task:
+	.long	-1
+#endif
+
+/*
+ * Handle a system call.
+ */
+	.text
+_GLOBAL(DoSyscall)
+	stw	r0,THREAD+LAST_SYSCALL(r2)
+	lwz	r11,_CCR(r1)	/* Clear SO bit in CR */
+	lis	r10,0x1000
+	andc	r11,r11,r10
+	stw	r11,_CCR(r1)
+#ifdef SHOW_SYSCALLS
+#ifdef SHOW_SYSCALLS_TASK
+	lis	r31,show_syscalls_task@ha
+	lwz	r31,show_syscalls_task@l(r31)
+	cmp	0,r2,r31
+	bne	1f
+#endif
+	lis	r3,7f@ha
+	addi	r3,r3,7f@l
+	lwz	r4,GPR0(r1)
+	lwz	r5,GPR3(r1)
+	lwz	r6,GPR4(r1)
+	lwz	r7,GPR5(r1)
+	lwz	r8,GPR6(r1)
+	lwz	r9,GPR7(r1)
+	bl	printk
+	lis	r3,77f@ha
+	addi	r3,r3,77f@l
+	lwz	r4,GPR8(r1)
+	lwz	r5,GPR9(r1)
+	mr	r6,r2
+	bl	printk
+	lwz	r0,GPR0(r1)
+	lwz	r3,GPR3(r1)
+	lwz	r4,GPR4(r1)
+	lwz	r5,GPR5(r1)
+	lwz	r6,GPR6(r1)
+	lwz	r7,GPR7(r1)
+	lwz	r8,GPR8(r1)
+1:
+#endif /* SHOW_SYSCALLS */
+	cmpi	0,r0,0x7777	/* Special case for 'sys_sigreturn' */
+	beq-	10f
+	lwz	r10,TASK_FLAGS(r2)
+	andi.	r10,r10,PF_TRACESYS
+	bne-	50f
+	cmpli	0,r0,NR_syscalls
+	bge-	66f
+	lis	r10,sys_call_table@h
+	ori	r10,r10,sys_call_table@l
+	slwi	r0,r0,2
+	lwzx	r10,r10,r0	/* Fetch system call handler [ptr] */
+	cmpi	0,r10,0
+	beq-	66f
+	mtlr	r10
+	addi	r9,r1,STACK_FRAME_OVERHEAD
+	blrl			/* Call handler */
+	.globl	ret_from_syscall_1
+ret_from_syscall_1:
+20:	stw	r3,RESULT(r1)	/* Save result */
+#ifdef SHOW_SYSCALLS
+#ifdef SHOW_SYSCALLS_TASK
+	cmp	0,r2,r31
+	bne	91f
+#endif
+	mr	r4,r3
+	lis	r3,79f@ha
+	addi	r3,r3,79f@l
+	bl	printk
+	lwz	r3,RESULT(r1)
+91:
+#endif
+	li	r10,-_LAST_ERRNO
+	cmpl	0,r3,r10
+	blt	30f
+	neg	r3,r3
+	cmpi	0,r3,ERESTARTNOHAND
+	bne	22f
+	li	r3,EINTR
+22:	lwz	r10,_CCR(r1)	/* Set SO bit in CR */
+	oris	r10,r10,0x1000
+	stw	r10,_CCR(r1)
+30:	stw	r3,GPR3(r1)	/* Update return value */
+	b	ret_from_except
+66:	li	r3,ENOSYS
+	b	22b
+/* sys_sigreturn */
+10:	addi	r3,r1,STACK_FRAME_OVERHEAD
+	bl	sys_sigreturn
+	cmpi	0,r3,0		/* Check for restarted system call */
+	bge	ret_from_except
+	b	20b
+/* Traced system call support */
+50:	bl	syscall_trace
+	lwz	r0,GPR0(r1)	/* Restore original registers */
+	lwz	r3,GPR3(r1)
+	lwz	r4,GPR4(r1)
+	lwz	r5,GPR5(r1)
+	lwz	r6,GPR6(r1)
+	lwz	r7,GPR7(r1)
+	lwz	r8,GPR8(r1)
+	lwz	r9,GPR9(r1)
+	cmpli	0,r0,NR_syscalls
+	bge-	66f
+	lis	r10,sys_call_table@h
+	ori	r10,r10,sys_call_table@l
+	slwi	r0,r0,2
+	lwzx	r10,r10,r0	/* Fetch system call handler [ptr] */
+	cmpi	0,r10,0
+	beq-	66f
+	mtlr	r10
+	addi	r9,r1,STACK_FRAME_OVERHEAD
+	blrl			/* Call handler */
+	.globl	ret_from_syscall_2
+ret_from_syscall_2:
+	stw	r3,RESULT(r1)	/* Save result */	
+	stw	r3,GPR0(r1)	/* temporary gross hack to make strace work */
+	li	r10,-_LAST_ERRNO
+	cmpl	0,r3,r10
+	blt	60f
+	neg	r3,r3
+	cmpi	0,r3,ERESTARTNOHAND
+	bne	52f
+	li	r3,EINTR
+52:	lwz	r10,_CCR(r1)	/* Set SO bit in CR */
+	oris	r10,r10,0x1000
+	stw	r10,_CCR(r1)
+60:	stw	r3,GPR3(r1)	/* Update return value */
+	bl	syscall_trace
+	b	ret_from_except
+66:	li	r3,ENOSYS
+	b	52b
+#ifdef SHOW_SYSCALLS
+7:	.string	"syscall %d(%x, %x, %x, %x, %x, "
+77:	.string	"%x, %x), current=%p\n"
+79:	.string	" -> %x\n"
+	.align	2
+#endif
+
+/*
+ * This routine switches between two different tasks.  The process
+ * state of one is saved on its kernel stack.  Then the state
+ * of the other is restored from its kernel stack.  The memory
+ * management hardware is updated to the second process's state.
+ * Finally, we can return to the second process, via ret_from_except.
+ * On entry, r3 points to the THREAD for the current task, r4
+ * points to the THREAD for the new task.
+ *
+ * Note: there are two ways to get to the "going out" portion
+ * of this code; either by coming in via the entry (_switch)
+ * or via "fork" which must set up an environment equivalent
+ * to the "_switch" path.  If you change this (or in particular, the
+ * SAVE_REGS macro), you'll have to change the fork code also.
+ *
+ * The code which creates the new task context is in 'copy_thread'
+ * in arch/ppc/kernel/process.c
+ */	
+_GLOBAL(_switch)
+	stwu	r1,-INT_FRAME_SIZE(r1)
+	stw	r0,GPR0(r1)
+	lwz	r0,0(r1)
+	stw	r0,GPR1(r1)
+	/* r3-r13 are caller saved -- Cort */
+	SAVE_GPR(2, r1)
+	SAVE_8GPRS(14, r1)
+	SAVE_10GPRS(22, r1)
+	mflr	r20		/* Return to switch caller */
+	mfmsr	r22
+	li	r0,MSR_FP	/* Disable floating-point */
+	andc	r22,r22,r0
+	stw	r20,_NIP(r1)
+	stw	r22,_MSR(r1)
+	stw	r20,_LINK(r1)
+	mfcr	r20
+	mfctr	r22
+	mfspr	r23,XER
+	stw	r20,_CCR(r1)
+	stw	r22,_CTR(r1)
+	stw	r23,_XER(r1)
+	li	r0,0x0ff0
+	stw	r0,TRAP(r1)
+	stw	r1,KSP(r3)	/* Set old stack pointer */
+	sync
+	tophys(r0,r4)
+	mtspr	SPRG3,r0	/* Update current THREAD phys addr */
+#ifdef CONFIG_8xx
+	/* XXX it would be nice to find a SPRGx for this on 6xx,7xx too */
+	lwz	r9,PGDIR(r4)	/* cache the page table root */
+        tophys(r9,r9)		/* convert to phys addr */
+        mtspr   M_TWB,r9	/* Update MMU base address */
+#endif /* CONFIG_8xx */
+	lwz	r1,KSP(r4)	/* Load new stack pointer */
+	/* save the old current 'last' for return value */
+	mr	r3,r2
+	addi	r2,r4,-THREAD	/* Update current */
+	lwz	r9,_MSR(r1)	/* Returning to user mode? */
+	andi.	r9,r9,MSR_PR
+	beq+	10f		/* if not, don't adjust kernel stack */
+8:	addi	r4,r1,INT_FRAME_SIZE	/* size of frame */
+	stw	r4,THREAD+KSP(r2)	/* save kernel stack pointer */
+	tophys(r9,r1)
+	mtspr	SPRG2,r9	/* phys exception stack pointer */
+10:	lwz	r2,_CTR(r1)
+	lwz	r0,_LINK(r1)
+	mtctr	r2
+	mtlr	r0
+	lwz	r2,_XER(r1)
+	lwz	r0,_CCR(r1)
+	mtspr	XER,r2
+	mtcrf	0xFF,r0
+	/* r3-r13 are destroyed -- Cort */
+	REST_GPR(14, r1)
+	REST_8GPRS(15, r1)
+	REST_8GPRS(23, r1)
+	REST_GPR(31, r1)
+	lwz	r2,_NIP(r1)	/* Restore environment */
+	lwz	r0,_MSR(r1)
+	mtspr	SRR0,r2
+	mtspr	SRR1,r0
+	lwz	r0,GPR0(r1)
+	lwz	r2,GPR2(r1)
+	lwz	r1,GPR1(r1)
+	SYNC
+	rfi
+
+/*
+ * ret_from_int():
+ *
+ * Return from an interrupt (external interrupt and
+ * decrementer).  This checks the first argument so
+ * we know if rtl_intercept wants us to check for
+ * a bottom half, signals and so on (normal return) or
+ * we're returning from a real-time interrupt or have
+ * interrupts soft disabled so we cannot enter Linux.
+ *   -- Cort
+ */
+	.globl	ret_from_int
+ret_from_int:
+	cmpi	0,r3,0
+	beq	10f
+	/* we're allowed to do signal/bh checks */
+	b	ret_from_syscall
+#ifdef __SMP__	
+	.globl	ret_from_smpfork
+ret_from_smpfork:
+	bl	schedule_tail
+#endif
+	.globl	ret_from_syscall
+ret_from_syscall:
+	.globl	ret_from_except
+ret_from_except:
+0:	mfmsr	r30		/* Disable interrupts */
+	li	r3,0
+	ori	r3,r3,MSR_EE
+	andc	r30,r30,r3
+	SYNC			/* Some chip revs need this... */
+	mtmsr	r30
+	SYNC
+	lwz	r5,_MSR(r1)
+	and.	r5,r5,r4
+	beq	2f
+3:	lis	r4,ppc_n_lost_interrupts@ha
+	lwz	r4,ppc_n_lost_interrupts@l(r4)
+	cmpi	0,r4,0
+	beq+	1f
+	addi	r3,r1,STACK_FRAME_OVERHEAD
+	bl	do_IRQ
+	.globl	lost_irq_ret
+lost_irq_ret:
+	b	3b
+1:	lis	r4,bh_mask@ha
+	lwz	r4,bh_mask@l(r4)
+	lis	r5,bh_active@ha
+	lwz	r5,bh_active@l(r5)
+	and.	r4,r4,r5
+	beq+	2f
+	bl	do_bottom_half
+	.globl	do_bottom_half_ret
+do_bottom_half_ret:
+2:	SYNC
+	mtmsr	r30		/* disable interrupts again */
+	SYNC
+	lwz	r3,_MSR(r1)	/* Returning to user mode? */
+	andi.	r3,r3,MSR_PR
+	beq+	10f		/* if so, check need_resched and signals */
+	lwz	r3,NEED_RESCHED(r2)
+	cmpi	0,r3,0		/* check need_resched flag */
+	beq+	7f
+	bl	schedule
+	b	0b
+7:	lwz	r5,SIGPENDING(r2) /* Check for pending unblocked signals */
+	cmpwi	0,r5,0
+	beq+	8f
+	li	r3,0
+	addi	r4,r1,STACK_FRAME_OVERHEAD
+	bl	do_signal
+	.globl	do_signal_ret
+do_signal_ret:
+	b	0b
+8:	addi	r4,r1,INT_FRAME_SIZE	/* size of frame */
+	stw	r4,THREAD+KSP(r2)	/* save kernel stack pointer */
+	tophys(r3,r1)
+	mtspr	SPRG2,r3	/* phys exception stack pointer */
+10:	lwz	r2,_CTR(r1)
+	lwz	r0,_LINK(r1)
+	mtctr	r2
+	mtlr	r0
+	lwz	r2,_XER(r1)
+	lwz	r0,_CCR(r1)
+	mtspr	XER,r2
+	mtcrf	0xFF,r0
+	REST_10GPRS(3, r1)
+	REST_10GPRS(13, r1)
+	REST_8GPRS(23, r1)
+	REST_GPR(31, r1)
+	lwz	r2,_NIP(r1)	/* Restore environment */
+	lwz	r0,_MSR(r1)
+	mtspr	SRR0,r2
+	mtspr	SRR1,r0
+	lwz	r0,GPR0(r1)
+	lwz	r2,GPR2(r1)
+	lwz	r1,GPR1(r1)
+	SYNC
+	rfi
+
+/*
+ * Fake an interrupt from kernel mode.
+ * This is used when enable_irq loses an interrupt.
+ * We only fill in the stack frame minimally.
+ */
+_GLOBAL(fake_interrupt)
+	mflr	r0
+	stw	r0,4(r1)
+	stwu	r1,-INT_FRAME_SIZE(r1)
+	stw	r0,_NIP(r1)
+	stw	r0,_LINK(r1)
+	mfmsr	r3
+	stw	r3,_MSR(r1)
+	li	r0,0x0fac
+	stw	r0,TRAP(r1)
+	addi	r3,r1,STACK_FRAME_OVERHEAD
+	li	r4,1
+	bl	do_IRQ
+	addi	r1,r1,INT_FRAME_SIZE
+	lwz	r0,4(r1)
+	mtlr	r0
+	blr
+
+#ifndef CONFIG_8xx
+/*
+ * PROM code for specific machines follows.  Put it 
+ * here so it's easy to add arch-specific sections later.
+ * -- Cort
+ */
+	
+/*
+ * On CHRP, the Run-Time Abstraction Services (RTAS) have to be
+ * called with the MMU off.
+ */
+	.globl	enter_rtas
+enter_rtas:
+	mflr	r0
+	stw	r0,20(r1)
+	lis	r4,rtas_data@ha
+	lwz	r4,rtas_data@l(r4)
+	addis	r4,r4,-KERNELBASE@h
+	lis	r6,1f@ha	/* physical return address for rtas */
+	addi	r6,r6,1f@l
+	addis	r6,r6,-KERNELBASE@h
+	subi	r7,r1,INT_FRAME_SIZE
+	addis	r7,r7,-KERNELBASE@h
+	lis	r8,rtas_entry@ha
+	lwz	r8,rtas_entry@l(r8)
+	addis	r5,r8,-KERNELBASE@h
+	mfmsr	r9
+	stw	r9,8(r1)
+	ori	r0,r0,MSR_EE|MSR_SE|MSR_BE
+	andc	r0,r9,r0
+	andi.	r9,r9,MSR_ME|MSR_RI
+	sync			/* disable interrupts so SRR0/1 */
+	mtmsr	r0		/* don't get trashed */
+	mtlr	r6
+	mtspr	SPRG2,r7
+	mtspr	SRR0,r8
+	mtspr	SRR1,r9
+	rfi
+1:	addis	r9,r1,-KERNELBASE@h
+	lwz	r8,20(r9)	/* get return address */
+	lwz	r9,8(r9)	/* original msr value */
+	li	r0,0
+	mtspr	SPRG2,r0
+	mtspr	SRR0,r8
+	mtspr	SRR1,r9
+	rfi			/* return to caller */
+#endif /* CONFIG_8xx */

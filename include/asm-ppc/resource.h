@@ -24,7 +24,7 @@
     {_STK_LIM, LONG_MAX},			/* RLIMIT_STACK */	\
     {       0, LONG_MAX},			/* RLIMIT_CORE */	\
     {LONG_MAX, LONG_MAX},			/* RLIMIT_RSS */	\
-    {MAX_TASKS_PER_USER, MAX_TASKS_PER_USER},	/* RLIMIT_NPROC */	\
+    {0, 0},								\
     {INR_OPEN, INR_OPEN},			/* RLIMIT_NOFILE */	\
     {LONG_MAX, LONG_MAX},			/* RLIMIT_MEMLOCK */	\
     {LONG_MAX, LONG_MAX},			/* RLIMIT_AS */		\

@@ -100,9 +100,10 @@ enum
 	KERN_SHMMAX=34,         /* int: Maximum shared memory segment */
 	KERN_MSGMAX=35,         /* int: Maximum size of a messege */
 	KERN_MSGMNB=36,         /* int: Maximum message queue size */
-	KERN_MSGPOOL=37,         /* int: Maximum system message pool size */
+	KERN_MSGPOOL=37,        /* int: Maximum system message pool size */
 	KERN_SYSRQ=38,		/* int: Sysreq enable */
-	KERN_MAX_THREADS=39     /* int: Maximum nr of threads in the system */
+	KERN_MAX_THREADS=39,    /* int: Maximum nr of threads in the system */
+ 	KERN_RANDOM=40		/* Random driver */
 };
 
 
@@ -142,6 +143,17 @@ enum
 	NET_DECNET=15,
 	NET_ECONET=16,
 	NET_KHTTPD=17
+};
+
+/* /proc/sys/kernel/random */
+enum
+{
+	RANDOM_POOLSIZE=1,
+	RANDOM_ENTROPY_COUNT=2,
+	RANDOM_READ_THRESH=3,
+	RANDOM_WRITE_THRESH=4,
+	RANDOM_BOOT_ID=5,
+	RANDOM_UUID=6
 };
 
 /* /proc/sys/bus/isa */

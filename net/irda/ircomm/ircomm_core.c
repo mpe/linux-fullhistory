@@ -60,7 +60,7 @@ extern struct proc_dir_entry *proc_irda;
 
 hashbin_t *ircomm = NULL;
 
-__initfunc(int ircomm_init(void))
+int __init ircomm_init(void)
 {
 	ircomm = hashbin_new(HB_LOCAL); 
 	if (ircomm == NULL) {

@@ -1194,7 +1194,7 @@ static int block_til_ready (struct tty_struct *tty, struct file *filp, struct dz
   info->count--;
   info->blocked_open++;
   while (1) {
-    current->state = TASK_INTERRUPTIBLE;
+    set_current_state(TASK_INTERRUPTIBLE);
     if (tty_hung_up_p (filp) || !(info->is_initialized)) {
       retval = -EAGAIN;
       break;

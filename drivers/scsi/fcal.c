@@ -90,7 +90,7 @@ static void fcal_select_queue_depths(struct Scsi_Host *host, Scsi_Device *devlis
 
 /* Detect all FC Arbitrated Loops attached to the machine.
    fc4 module has done all the work for us... */
-__initfunc(int fcal_detect(Scsi_Host_Template *tpnt))
+int __init fcal_detect(Scsi_Host_Template *tpnt)
 {
 	int nfcals = 0;
 	fc_channel *fc;

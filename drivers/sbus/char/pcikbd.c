@@ -1,4 +1,4 @@
-/* $Id: pcikbd.c,v 1.30 1999/06/03 15:02:36 davem Exp $
+/* $Id: pcikbd.c,v 1.32 1999/08/31 06:58:11 davem Exp $
  * pcikbd.c: Ultra/AX PC keyboard support.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -367,7 +367,7 @@ void pcikbd_leds(unsigned char leds)
 		
 }
 
-__initfunc(static int pcikbd_wait_for_input(void))
+static int __init pcikbd_wait_for_input(void)
 {
 	int status, data;
 	unsigned long start = jiffies;
@@ -384,7 +384,7 @@ __initfunc(static int pcikbd_wait_for_input(void))
 	return -1;
 }
 
-__initfunc(static void pcikbd_write(int address, int data))
+static void __init pcikbd_write(int address, int data)
 {
 	int status;
 
@@ -436,7 +436,7 @@ static void nop_kd_mksound(unsigned int hz, unsigned int ticks)
 
 extern void (*kd_mksound)(unsigned int hz, unsigned int ticks);
 
-__initfunc(static char *do_pcikbd_init_hw(void))
+static char * __init do_pcikbd_init_hw(void)
 {
 
 	while(pcikbd_wait_for_input() != -1)
@@ -479,7 +479,7 @@ __initfunc(static char *do_pcikbd_init_hw(void))
 	return NULL; /* success */
 }
 
-__initfunc(void pcikbd_init_hw(void))
+void __init pcikbd_init_hw(void)
 {
 	struct linux_ebus *ebus;
 	struct linux_ebus_device *edev;
@@ -516,16 +516,7 @@ __initfunc(void pcikbd_init_hw(void))
 		return;
 
 found:
-		pcikbd_iobase = child->base_address[0];
-#ifdef __sparc_v9__
-		if (check_region(pcikbd_iobase, sizeof(unsigned long))) {
-			printk("8042: can't get region %lx, %d\n",
-			       pcikbd_iobase, (int)sizeof(unsigned long));
-			return;
-		}
-		request_region(pcikbd_iobase, sizeof(unsigned long), "8042 controller");
-#endif
-
+		pcikbd_iobase = child->resource[0].start;
 		pcikbd_irq = child->irqs[0];
 		if (request_irq(pcikbd_irq, &pcikbd_interrupt,
 				SA_SHIRQ, "keyboard", (void *)pcikbd_iobase)) {
@@ -559,17 +550,11 @@ ebus_done:
 	if (!edev)
 		pcibeep_iobase = (pcikbd_iobase & ~(0xffffff)) | 0x722000;
 	else
-		pcibeep_iobase = edev->base_address[0];
+		pcibeep_iobase = edev->resource[0].start;
 
-	if (check_region(pcibeep_iobase, sizeof(unsigned int))) {
-		printk("8042: can't get region %lx, %d\n",
-		       pcibeep_iobase, (int)sizeof(unsigned int));
-	} else {
-		request_region(pcibeep_iobase, sizeof(unsigned int), "speaker");
-		kd_mksound = pcikbd_kd_mksound;
-		printk("8042(speaker): iobase[%016lx]%s\n", pcibeep_iobase,
-		       edev ? "" : " (forced)");
-	}
+	kd_mksound = pcikbd_kd_mksound;
+	printk("8042(speaker): iobase[%016lx]%s\n", pcibeep_iobase,
+	       edev ? "" : " (forced)");
 #endif
 
 	disable_irq(pcikbd_irq);
@@ -711,7 +696,7 @@ static void aux_write_dev(int val)
  * Write to device & handle returned ack
  */
 
-__initfunc(static int aux_write_ack(int val))
+static int __init aux_write_ack(int val)
 {
 	aux_write_dev(val);
 	poll_aux_status();
@@ -893,7 +878,7 @@ static ssize_t aux_read(struct file * file, char * buffer,
 			return -EAGAIN;
 		add_wait_queue(&queue->proc_list, &wait);
 repeat:
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		if (queue_empty() && !signal_pending(current)) {
 			schedule();
 			goto repeat;
@@ -943,7 +928,7 @@ static struct miscdevice psaux_mouse = {
 	PSMOUSE_MINOR, "ps2aux", &psaux_fops
 };
 
-__initfunc(int pcimouse_init(void))
+int __init pcimouse_init(void)
 {
 	struct linux_ebus *ebus;
 	struct linux_ebus_device *edev;
@@ -971,14 +956,7 @@ __initfunc(int pcimouse_init(void))
 		return -ENODEV;
 
 found:
-		pcimouse_iobase = child->base_address[0];
-		/*
-		 * Just in case the iobases for kbd/mouse ever differ...
-		 */
-		if (!check_region(pcimouse_iobase, sizeof(unsigned long)))
-			request_region(pcimouse_iobase, sizeof(unsigned long),
-				       "8042 controller");
-
+		pcimouse_iobase = child->resource[0].start;
 		pcimouse_irq = child->irqs[0];
 	}
 
@@ -1027,7 +1005,7 @@ found:
 }
 
 
-__initfunc(int ps2kbd_probe(unsigned long *memory_start))
+int __init ps2kbd_probe(unsigned long *memory_start)
 {
 	int pnode, enode, node, dnode, xnode;
 	int kbnode = 0, msnode = 0, bnode = 0;

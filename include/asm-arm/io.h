@@ -21,6 +21,7 @@
 #endif
 
 extern void * __ioremap(unsigned long offset, unsigned long size, unsigned long flags);
+extern void __iounmap(void *addr);
 
 #endif
 

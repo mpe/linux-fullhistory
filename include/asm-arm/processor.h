@@ -114,6 +114,11 @@ extern void free_task_struct(struct task_struct *);
 #define init_task	(init_task_union.task)
 #define init_stack	(init_task_union.stack)
 
+/*
+ * Create a new kernel thread
+ */
+extern int kernel_thread(int (*fn)(void *), void *arg, unsigned long flags);
+
 #endif
 
 #endif /* __ASM_ARM_PROCESSOR_H */

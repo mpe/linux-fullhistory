@@ -33,7 +33,7 @@ struct cpuinfo_alpha {
 	int irq_count, bh_count;
 	unsigned char mcheck_expected;
 	unsigned char mcheck_taken;
-	unsigned char mcheck_hose;
+	unsigned char mcheck_extra;
 } __attribute__((aligned(64)));
 
 extern struct cpuinfo_alpha cpu_data[NR_CPUS];

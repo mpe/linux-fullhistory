@@ -1,4 +1,4 @@
-/* $Id: floppy.h,v 1.19 1999/08/03 08:01:15 davem Exp $
+/* $Id: floppy.h,v 1.22 1999/08/31 07:02:12 davem Exp $
  * asm-sparc64/floppy.h: Sparc specific parts of the Floppy driver.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -276,16 +276,19 @@ extern void floppy_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 
 static unsigned char sun_pci_fd_inb(unsigned long port)
 {
+	udelay(5);
 	return inb(port);
 }
 
 static void sun_pci_fd_outb(unsigned char val, unsigned long port)
 {
+	udelay(5);
 	outb(val, port);
 }
 
 static void sun_pci_fd_broken_outb(unsigned char val, unsigned long port)
 {
+	udelay(5);
 	/*
 	 * XXX: Due to SUN's broken floppy connector on AX and AXi
 	 *      we need to turn on MOTOR_0 also, if the floppy is
@@ -304,6 +307,7 @@ static void sun_pci_fd_broken_outb(unsigned char val, unsigned long port)
 #ifdef PCI_FDC_SWAP_DRIVES
 static void sun_pci_fd_lde_broken_outb(unsigned char val, unsigned long port)
 {
+	udelay(5);
 	/*
 	 * XXX: Due to SUN's broken floppy connector on AX and AXi
 	 *      we need to turn on MOTOR_0 also, if the floppy is
@@ -326,9 +330,9 @@ static void sun_pci_fd_reset_dma(void)
 	unsigned int dcsr;
 
 	writel(EBUS_DCSR_RESET, &sun_pci_fd_ebus_dma->dcsr);
-
+	udelay(1);
 	dcsr = EBUS_DCSR_BURST_SZ_16 | EBUS_DCSR_TCI_DIS |
-	       EBUS_DCSR_EN_CNT | EBUS_DCSR_INT_EN;
+	       EBUS_DCSR_EN_CNT;
 	writel(dcsr, (unsigned long)&sun_pci_fd_ebus_dma->dcsr);
 }
 
@@ -346,12 +350,19 @@ static void sun_pci_fd_disable_dma(void)
 	unsigned int dcsr;
 
 	dcsr = readl(&sun_pci_fd_ebus_dma->dcsr);
-	while (dcsr & EBUS_DCSR_DRAIN)
-		dcsr = readl(&sun_pci_fd_ebus_dma->dcsr);
-	dcsr &= ~(EBUS_DCSR_EN_DMA);
-	if (dcsr & EBUS_DCSR_ERR_PEND)
-		sun_pci_fd_reset_dma();
-	writel(dcsr, &sun_pci_fd_ebus_dma->dcsr);
+	if (dcsr & EBUS_DCSR_EN_DMA) {
+		while (dcsr & EBUS_DCSR_DRAIN) {
+			udelay(1);
+			dcsr = readl(&sun_pci_fd_ebus_dma->dcsr);
+		}
+		dcsr &= ~(EBUS_DCSR_EN_DMA);
+		writel(dcsr, &sun_pci_fd_ebus_dma->dcsr);
+		if (dcsr & EBUS_DCSR_ERR_PEND) {
+			sun_pci_fd_reset_dma();
+			dcsr &= ~(EBUS_DCSR_ERR_PEND);
+			writel(dcsr, &sun_pci_fd_ebus_dma->dcsr);
+		}
+	}
 }
 
 static void sun_pci_fd_set_dma_mode(int mode)
@@ -359,6 +370,11 @@ static void sun_pci_fd_set_dma_mode(int mode)
 	unsigned int dcsr;
 
 	dcsr = readl(&sun_pci_fd_ebus_dma->dcsr);
+	if (readl(&sun_pci_fd_ebus_dma->dbcr)) {
+		sun_pci_fd_reset_dma();
+		writel(dcsr, &sun_pci_fd_ebus_dma->dcsr);
+	}
+
 	dcsr |= EBUS_DCSR_EN_CNT | EBUS_DCSR_TC;
 	/*
 	 * For EBus WRITE means to system memory, which is
@@ -384,7 +400,15 @@ static void sun_pci_fd_set_dma_addr(char *buffer)
 
 static unsigned int sun_pci_get_dma_residue(void)
 {
-	return readl(&sun_pci_fd_ebus_dma->dbcr);
+	unsigned int dcsr, res;
+
+	res = readl(&sun_pci_fd_ebus_dma->dbcr);
+	if (res != 0) {
+		dcsr = readl(&sun_pci_fd_ebus_dma->dcsr);
+		sun_pci_fd_reset_dma();
+		writel(dcsr, &sun_pci_fd_ebus_dma->dcsr);
+	}
+	return res;
 }
 
 static void sun_pci_fd_enable_irq(void)
@@ -548,7 +572,9 @@ static unsigned long __init sun_floppy_init(void)
 #ifdef CONFIG_PCI
 		struct linux_ebus *ebus;
 		struct linux_ebus_device *edev = 0;
+		unsigned long config = 0;
 		unsigned long auxio_reg;
+		unsigned char cfg;
 
 		for_each_ebus(ebus) {
 			for_each_ebusdev(edev, ebus) {
@@ -565,26 +591,17 @@ static unsigned long __init sun_floppy_init(void)
 		if(!strncmp(state, "disabled", 8))
 			return 0;
 			
-		if (check_region(edev->base_address[1],
-				 sizeof(struct linux_ebus_dma))) {
-			printk("sun_floppy_init: can't get region at %016lx\n",
-			       edev->base_address[1]);
-			return 0;
-		}
-		request_region(edev->base_address[1],
-			       sizeof(struct linux_ebus_dma), "floppy DMA");
-
-		sun_fdc = (struct sun_flpy_controller *)edev->base_address[0];
+		sun_fdc = (struct sun_flpy_controller *)edev->resource[0].start;
 		FLOPPY_IRQ = edev->irqs[0];
 
 		/* Make sure the high density bit is set, some systems
 		 * (most notably Ultra5/Ultra10) come up with it clear.
 		 */
-		auxio_reg = edev->base_address[2];
+		auxio_reg = edev->resource[2].start;
 		writel(readl(auxio_reg)|0x2, auxio_reg);
 
 		sun_pci_fd_ebus_dma = (struct linux_ebus_dma *)
-							edev->base_address[1];
+			edev->resource[1].start;
 		sun_pci_fd_reset_dma();
 
 		sun_fdops.fd_inb = sun_pci_fd_inb;
@@ -622,57 +639,62 @@ static unsigned long __init sun_floppy_init(void)
 		if (sun_pci_fd_test_drive((unsigned long)sun_fdc, 1))
 			sun_floppy_types[1] = 4;
 
+		/*
+		 * Find NS87303 SuperIO config registers (through ecpp).
+		 */
+		for_each_ebus(ebus) {
+			for_each_ebusdev(edev, ebus) {
+				if (!strcmp(edev->prom_name, "ecpp")) {
+					config = edev->resource[1].start;
+					goto config_done;
+				}
+			}
+		}
+	config_done:
+
+		/*
+		 * Sanity check, is this really the NS87303?
+		 */
+		switch (config & 0x3ff) {
+		case 0x02e:
+		case 0x15c:
+		case 0x26e:
+		case 0x398:
+			break;
+		default:
+			config = 0;
+		}
+
+		if (!config)
+			return sun_floppy_types[0];
+
+		/* Enable PC-AT mode. */
+		cfg = ns87303_readb(config, ASC);
+		cfg |= 0xc0;
+		ns87303_writeb(config, ASC, cfg);
+
 #ifdef PCI_FDC_SWAP_DRIVES
 		/*
 		 * If only Floppy 1 is present, swap drives.
 		 */
 		if (!sun_floppy_types[0] && sun_floppy_types[1]) {
-			unsigned long config = 0;
-			unsigned char tmp;
-
-			for_each_ebus(ebus) {
-				for_each_ebusdev(edev, ebus) {
-					if (!strcmp(edev->prom_name, "ecpp")) {
-						config = edev->base_address[1];
-						goto config_done;
-					}
-				}
-			}
-		config_done:
-
-			/*
-			 * Sanity check, is this really the NS87303?
-			 */
-			switch (config & 0x3ff) {
-			case 0x02e:
-			case 0x15c:
-			case 0x26e:
-			case 0x398:
-				break;
-			default:
-				config = 0;
-			}
-
-			if (!config)
-				return sun_floppy_types[0];
-
 			/*
 			 * Set the drive exchange bit in FCR on NS87303,
 			 * make shure other bits are sane before doing so.
 			 */
-			tmp = ns87303_readb(config, FER);
-			tmp &= ~(FER_EDM);
-			ns87303_writeb(config, FER, tmp);
-			tmp = ns87303_readb(config, ASC);
-			tmp &= ~(ASC_DRV2_SEL);
-			ns87303_writeb(config, ASC, tmp);
-			tmp = ns87303_readb(config, FCR);
-			tmp |= FCR_LDE;
-			ns87303_writeb(config, FCR, tmp);
+			cfg = ns87303_readb(config, FER);
+			cfg &= ~(FER_EDM);
+			ns87303_writeb(config, FER, cfg);
+			cfg = ns87303_readb(config, ASC);
+			cfg &= ~(ASC_DRV2_SEL);
+			ns87303_writeb(config, ASC, cfg);
+			cfg = ns87303_readb(config, FCR);
+			cfg |= FCR_LDE;
+			ns87303_writeb(config, FCR, cfg);
 
-			tmp = sun_floppy_types[0];
+			cfg = sun_floppy_types[0];
 			sun_floppy_types[0] = sun_floppy_types[1];
-			sun_floppy_types[1] = tmp;
+			sun_floppy_types[1] = cfg;
 
 			if (sun_pci_broken_drive != -1) {
 				sun_pci_broken_drive = 1 - sun_pci_broken_drive;

@@ -6,6 +6,7 @@
 #include <linux/reboot.h>
 #include <linux/nvram.h>
 #include <linux/init.h>
+#include <asm/init.h>
 #include <asm/ptrace.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>

@@ -33,7 +33,7 @@
 #define SNDCARD_WAVEFRONT               41
 #define SNDCARD_OPL3SA2                 42
 #define SNDCARD_OPL3SA2_MPU             43
-#define SNDCARD_WAVEARTIST		44
+#define SNDCARD_WAVEARTIST              44	/* Rebel Waveartist */
 #define SNDCARD_OPL3SA2_MSS             45	/* Originally missed */
 #define SNDCARD_AD1816                  88
 

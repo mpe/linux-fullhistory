@@ -1,4 +1,4 @@
-/* $Id: leofb.c,v 1.6 1999/04/01 13:03:25 jj Exp $
+/* $Id: leofb.c,v 1.7 1999/08/09 11:06:52 jj Exp $
  * leofb.c: Leo (ZX) 24/8bit frame buffer driver
  *
  * Copyright (C) 1996-1999 Jakub Jelinek (jj@ultra.linux.cz)
@@ -505,8 +505,9 @@ static void leo_switch_from_graph (struct fb_info_sbusfb *fb)
 	us->fontt = 0;
 }
 
-static void __init leo_rasterimg (struct fb_info_sbusfb *fb, int start)
+static int __init leo_rasterimg (struct fb_info *info, int start)
 {
+	struct fb_info_sbusfb *fb = sbusfbinfo(info);
 	register struct leo_lc_ss0_usr *us = fb->s.leo.lc_ss0_usr;
 	register struct leo_ld *ss = fb->s.leo.ld_ss0;
 
@@ -521,6 +522,7 @@ static void __init leo_rasterimg (struct fb_info_sbusfb *fb, int start)
 		ss->rop = 0x310850;
 		us->addrspace = 4;
 	}
+	return 0;
 }
 
 static char idstring[40] __initdata = { 0 };

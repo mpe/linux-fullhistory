@@ -328,6 +328,8 @@ CONFIG_82C710_MOUSE=y
 #
 # CONFIG_JOYSTICK is not set
 # CONFIG_DTLK is not set
+# CONFIG_R3964 is not set
+# CONFIG_APPLICOM is not set
 
 #
 # Ftape, the floppy tape device driver

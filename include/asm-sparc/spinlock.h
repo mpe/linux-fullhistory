@@ -6,7 +6,7 @@
 #ifndef __SPARC_SPINLOCK_H
 #define __SPARC_SPINLOCK_H
 
-#include <linux/tasks.h>	/* For NR_CPUS */
+#include <linux/threads.h>	/* For NR_CPUS */
 
 #ifndef __ASSEMBLY__
 

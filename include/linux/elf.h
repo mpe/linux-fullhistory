@@ -59,6 +59,8 @@ typedef __u64	Elf64_Word;
 
 #define EM_PPC	       20	/* PowerPC */
 
+#define EM_SH	       42	/* SuperH */
+
 #define EM_SPARCV9     43	/* SPARC v9 64-bit */
 
 #define EM_IA_64	50	/* HP/Intel IA-64 */

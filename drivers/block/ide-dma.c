@@ -470,7 +470,7 @@ int ide_release_dma (ide_hwif_t *hwif)
 }
 
 /*
- *	This can be called for a dynamically installed interface. Don't initfunc it
+ *	This can be called for a dynamically installed interface. Don't __init it
  */
  
 void ide_setup_dma (ide_hwif_t *hwif, unsigned long dma_base, unsigned int num_ports)

@@ -6,141 +6,48 @@
 #define vuip	volatile unsigned int   *
 #define vulp	volatile unsigned long  *
 
-struct linux_hose_info;
+struct pt_regs;
+struct task_struct;
+struct pci_dev;
 
 /* core_apecs.c */
-extern int apecs_hose_read_config_byte (u8, u8, u8, u8 *value,
-					struct linux_hose_info *hose);
-extern int apecs_hose_read_config_word (u8, u8, u8, u16 *value,
-					struct linux_hose_info *hose);
-extern int apecs_hose_read_config_dword (u8, u8, u8, u32 *value,
-					 struct linux_hose_info *hose);
-extern int apecs_hose_write_config_byte (u8, u8, u8, u8 value,
-					 struct linux_hose_info *hose);
-extern int apecs_hose_write_config_word (u8, u8, u8, u16 value,
-					 struct linux_hose_info *hose);
-extern int apecs_hose_write_config_dword (u8, u8, u8, u32 value,
-					  struct linux_hose_info *hose);
+extern struct pci_ops apecs_pci_ops;
 extern void apecs_init_arch(unsigned long *, unsigned long *);
-
-extern volatile unsigned int apecs_mcheck_expected;
-extern volatile unsigned int apecs_mcheck_taken;
 extern void apecs_pci_clr_err(void);
 extern void apecs_machine_check(u64, u64, struct pt_regs *);
 
 /* core_cia.c */
-extern int cia_hose_read_config_byte (u8, u8, u8, u8 *value,
-				      struct linux_hose_info *hose);
-extern int cia_hose_read_config_word (u8, u8, u8, u16 *value,
-				      struct linux_hose_info *hose);
-extern int cia_hose_read_config_dword (u8, u8, u8, u32 *value,
-				       struct linux_hose_info *hose);
-extern int cia_hose_write_config_byte (u8, u8, u8, u8 value,
-				       struct linux_hose_info *hose);
-extern int cia_hose_write_config_word (u8, u8, u8, u16 value,
-				       struct linux_hose_info *hose);
-extern int cia_hose_write_config_dword (u8, u8, u8, u32 value,
-					struct linux_hose_info *hose);
+extern struct pci_ops cia_pci_ops;
 extern void cia_init_arch(unsigned long *, unsigned long *);
 extern void cia_machine_check(u64, u64, struct pt_regs *);
 
 /* core_lca.c */
-extern int lca_hose_read_config_byte (u8, u8, u8, u8 *value,
-				      struct linux_hose_info *hose);
-extern int lca_hose_read_config_word (u8, u8, u8, u16 *value,
-				      struct linux_hose_info *hose);
-extern int lca_hose_read_config_dword (u8, u8, u8, u32 *value,
-				       struct linux_hose_info *hose);
-extern int lca_hose_write_config_byte (u8, u8, u8, u8 value,
-				       struct linux_hose_info *hose);
-extern int lca_hose_write_config_word (u8, u8, u8, u16 value,
-				       struct linux_hose_info *hose);
-extern int lca_hose_write_config_dword (u8, u8, u8, u32 value,
-					struct linux_hose_info *hose);
+extern struct pci_ops lca_pci_ops;
 extern void lca_init_arch(unsigned long *, unsigned long *);
 extern void lca_machine_check(u64, u64, struct pt_regs *);
 
 /* core_mcpcia.c */
-extern int mcpcia_hose_read_config_byte (u8, u8, u8, u8 *value,
-					 struct linux_hose_info *hose);
-extern int mcpcia_hose_read_config_word (u8, u8, u8, u16 *value,
-					 struct linux_hose_info *hose);
-extern int mcpcia_hose_read_config_dword (u8, u8, u8, u32 *value,
-					  struct linux_hose_info *hose);
-extern int mcpcia_hose_write_config_byte (u8, u8, u8, u8 value,
-					  struct linux_hose_info *hose);
-extern int mcpcia_hose_write_config_word (u8, u8, u8, u16 value,
-					  struct linux_hose_info *hose);
-extern int mcpcia_hose_write_config_dword (u8, u8, u8, u32 value,
-					   struct linux_hose_info *hose);
+extern struct pci_ops mcpcia_pci_ops;
 extern void mcpcia_init_arch(unsigned long *, unsigned long *);
 extern void mcpcia_machine_check(u64, u64, struct pt_regs *);
 
 /* core_polaris.c */
-extern int polaris_hose_read_config_byte (u8, u8, u8, u8 *value,
-					struct linux_hose_info *hose);
-extern int polaris_hose_read_config_word (u8, u8, u8, u16 *value,
-					struct linux_hose_info *hose);
-extern int polaris_hose_read_config_dword (u8, u8, u8, u32 *value,
-					 struct linux_hose_info *hose);
-extern int polaris_hose_write_config_byte (u8, u8, u8, u8 value,
-					 struct linux_hose_info *hose);
-extern int polaris_hose_write_config_word (u8, u8, u8, u16 value,
-					 struct linux_hose_info *hose);
-extern int polaris_hose_write_config_dword (u8, u8, u8, u32 value,
-					  struct linux_hose_info *hose);
+extern struct pci_ops polaris_pci_ops;
 extern void polaris_init_arch(unsigned long *, unsigned long *);
 extern void polaris_machine_check(u64, u64, struct pt_regs *);
 
 /* core_pyxis.c */
-extern int pyxis_hose_read_config_byte (u8, u8, u8, u8 *value,
-					struct linux_hose_info *hose);
-extern int pyxis_hose_read_config_word (u8, u8, u8, u16 *value,
-					struct linux_hose_info *hose);
-extern int pyxis_hose_read_config_dword (u8, u8, u8, u32 *value,
-					 struct linux_hose_info *hose);
-extern int pyxis_hose_write_config_byte (u8, u8, u8, u8 value,
-					 struct linux_hose_info *hose);
-extern int pyxis_hose_write_config_word (u8, u8, u8, u16 value,
-					 struct linux_hose_info *hose);
-extern int pyxis_hose_write_config_dword (u8, u8, u8, u32 value,
-					  struct linux_hose_info *hose);
-extern void pyxis_enable_errors (void);
-extern int pyxis_srm_window_setup (void);
-extern void pyxis_native_window_setup(void);
-extern void pyxis_finish_init_arch(void);
+extern struct pci_ops pyxis_pci_ops;
 extern void pyxis_init_arch(unsigned long *, unsigned long *);
 extern void pyxis_machine_check(u64, u64, struct pt_regs *);
 
 /* core_t2.c */
-extern int t2_hose_read_config_byte (u8, u8, u8, u8 *value,
-				     struct linux_hose_info *hose);
-extern int t2_hose_read_config_word (u8, u8, u8, u16 *value,
-				     struct linux_hose_info *hose);
-extern int t2_hose_read_config_dword (u8, u8, u8, u32 *value,
-				      struct linux_hose_info *hose);
-extern int t2_hose_write_config_byte (u8, u8, u8, u8 value,
-				      struct linux_hose_info *hose);
-extern int t2_hose_write_config_word (u8, u8, u8, u16 value,
-				      struct linux_hose_info *hose);
-extern int t2_hose_write_config_dword (u8, u8, u8, u32 value,
-				       struct linux_hose_info *hose);
+extern struct pci_ops t2_pci_ops;
 extern void t2_init_arch(unsigned long *, unsigned long *);
 extern void t2_machine_check(u64, u64, struct pt_regs *);
 
 /* core_tsunami.c */
-extern int tsunami_hose_read_config_byte (u8, u8, u8, u8 *value,
-					  struct linux_hose_info *hose);
-extern int tsunami_hose_read_config_word (u8, u8, u8, u16 *value,
-					  struct linux_hose_info *hose);
-extern int tsunami_hose_read_config_dword (u8, u8, u8, u32 *value,
-					   struct linux_hose_info *hose);
-extern int tsunami_hose_write_config_byte (u8, u8, u8, u8 value,
-					   struct linux_hose_info *hose);
-extern int tsunami_hose_write_config_word (u8, u8, u8, u16 value,
-					   struct linux_hose_info *hose);
-extern int tsunami_hose_write_config_dword (u8, u8, u8, u32 value,
-					    struct linux_hose_info *hose);
+extern struct pci_ops tsunami_pci_ops;
 extern void tsunami_init_arch(unsigned long *, unsigned long *);
 extern void tsunami_machine_check(u64, u64, struct pt_regs *);
 
@@ -155,14 +62,13 @@ extern void smp_percpu_timer_interrupt(struct pt_regs *);
 extern int smp_boot_cpuid;
 
 /* bios32.c */
-extern void reset_for_srm(void);
+/* extern void reset_for_srm(void); */
 
 /* time.c */
 extern void timer_interrupt(int irq, void *dev, struct pt_regs * regs);
 extern void rtc_init_pit(void);
-extern void generic_init_pit(void);
+extern void common_init_pit(void);
 extern unsigned long est_cycle_freq;
-extern struct resource timer_resource;
 
 /* smc37c93x.c */
 extern void SMC93x_Init(void);
@@ -172,6 +78,9 @@ extern void SMC669_Init(int);
 
 /* es1888.c */
 extern void es1888_init(void);
+
+/* ns87312.c */
+extern void ns87312_enable_ide(long ide_base);
 
 /* fpregs.c */
 extern void alpha_write_fp_reg (unsigned long reg, unsigned long val);
@@ -193,12 +102,16 @@ extern void entUna(void);
 extern void entDbg(void);
 
 /* process.c */
-extern void generic_kill_arch (int mode, char *reboot_cmd);
+extern void common_kill_arch (int mode, char *reboot_cmd);
 extern void cpu_idle(void) __attribute__((noreturn));
 
 /* ptrace.c */
 extern int ptrace_set_bpt (struct task_struct *child);
 extern int ptrace_cancel_bpt (struct task_struct *child);
+
+/* traps.c */
+extern void dik_show_regs(struct pt_regs *regs, unsigned long *r9_15);
+extern void die_if_kernel(char *, struct pt_regs *, long, unsigned long *);
 
 /* ../mm/init.c */
 void srm_paging_stop(void);
@@ -208,18 +121,18 @@ void srm_paging_stop(void);
 #ifdef __SMP__
 #define mcheck_expected(cpu)	(cpu_data[cpu].mcheck_expected)
 #define mcheck_taken(cpu)	(cpu_data[cpu].mcheck_taken)
-#define mcheck_hose(cpu)	(cpu_data[cpu].mcheck_hose)
+#define mcheck_extra(cpu)	(cpu_data[cpu].mcheck_extra)
 #else
 extern struct mcheck_info
 {
 	unsigned char expected __attribute__((aligned(8)));
 	unsigned char taken;
-	unsigned char hose;
+	unsigned char extra;
 } __mcheck_info;
 
 #define mcheck_expected(cpu)	(__mcheck_info.expected)
 #define mcheck_taken(cpu)	(__mcheck_info.taken)
-#define mcheck_hose(cpu)	(__mcheck_info.hose)
+#define mcheck_extra(cpu)	(__mcheck_info.extra)
 #endif
 
 #define DEBUG_MCHECK 0          /* 0 = minimal, 1 = debug, 2 = debug+dump.  */

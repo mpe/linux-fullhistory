@@ -103,7 +103,7 @@ static void __wait_on_inode(struct inode * inode)
 
 	add_wait_queue(&inode->i_wait, &wait);
 repeat:
-	current->state = TASK_UNINTERRUPTIBLE;
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	if (inode->i_state & I_LOCK) {
 		schedule();
 		goto repeat;

@@ -20,6 +20,7 @@
  *                       Fixed various race conditions and possible nasties.
  *    Steve Whitehouse:  Now handles returned conninit frames.
  *     David S. Miller:  New socket locking
+ *    Steve Whitehouse:  Fixed lockup when socket filtering was enabled.
  */
 
 /******************************************************************************
@@ -394,16 +395,15 @@ out:
 }
 
 /*
- * Copy of sock_queue_rcv_skb (from sock.h) to
- * queue other data segments. Also we send SIGURG here instead
- * of the normal SIGIO, 'cos its out of band data.
+ * Copy of sock_queue_rcv_skb (from sock.h) with out
+ * bh_lock_sock() (its already held when this is called) which
+ * also allows data and other data to be queued to a socket.
  */
-static __inline__ int dn_queue_other_skb(struct sock *sk, struct sk_buff *skb)
+static __inline__ int dn_queue_skb(struct sock *sk, struct sk_buff *skb, int sig, struct sk_buff_head *queue)
 {
 #ifdef CONFIG_FILTER
 	struct sk_filter *filter;
 #endif
-	struct dn_scp *scp = &sk->protinfo.dn;
 	unsigned long flags;
 
         /* Cast skb->rcvbuf to unsigned... It's pointless, but reduces
@@ -416,24 +416,22 @@ static __inline__ int dn_queue_other_skb(struct sock *sk, struct sk_buff *skb)
 #ifdef CONFIG_FILTER
         if (sk->filter) {
 		int err = 0;
-		bh_lock_sock(sk);
                 if ((filter = sk->filter) != NULL && sk_filter(skb, sk->filter))
                         err = -EPERM;  /* Toss packet */
-		bh_unlock_sock(sk);
 		if (err)
 			return err;
         }
 #endif /* CONFIG_FILTER */
 
         skb_set_owner_r(skb, sk);
-        skb_queue_tail(&scp->other_receive_queue, skb);
+        skb_queue_tail(queue, skb);
 
 	read_lock_irqsave(&sk->callback_lock, flags);
         if (!sk->dead) {
 		struct socket *sock = sk->socket;
 		wake_up_interruptible(sk->sleep);
 		if (!(sock->flags & SO_WAITDATA) && sock->fasync_list)
-			kill_fasync(sock->fasync_list, SIGURG);
+			kill_fasync(sock->fasync_list, sig);
 	}
 	read_unlock_irqrestore(&sk->callback_lock, flags);
 
@@ -455,7 +453,7 @@ static void dn_nsp_otherdata(struct sock *sk, struct sk_buff *skb)
 
 	if (((sk->protinfo.dn.numoth_rcv + 1) & 0x0fff) == (segnum & 0x0fff)) {
 
-		if (dn_queue_other_skb(sk, skb) == 0) {
+		if (dn_queue_skb(sk, skb, SIGURG, &scp->other_receive_queue) == 0) {
 			sk->protinfo.dn.numoth_rcv++;
 			scp->other_report = 0;
 			queued = 1;
@@ -484,7 +482,7 @@ static void dn_nsp_data(struct sock *sk, struct sk_buff *skb)
 	if (((sk->protinfo.dn.numdat_rcv + 1) & 0x0FFF) == 
                      (segnum & 0x0FFF)) {
 
-                if (sock_queue_rcv_skb(sk, skb) == 0) {
+                if (dn_queue_skb(sk, skb, SIGIO, &sk->receive_queue) == 0) {
 			sk->protinfo.dn.numdat_rcv++;
                 	queued = 1;
                 }

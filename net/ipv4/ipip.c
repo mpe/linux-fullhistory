@@ -1,7 +1,7 @@
 /*
  *	Linux NET3:	IP/IP protocol decoder. 
  *
- *	Version: $Id: ipip.c,v 1.28 1999/08/20 11:05:51 davem Exp $
+ *	Version: $Id: ipip.c,v 1.29 1999/08/31 07:03:42 davem Exp $
  *
  *	Authors:
  *		Sam Lantinga (slouken@cs.ucdavis.edu)  02/01/95

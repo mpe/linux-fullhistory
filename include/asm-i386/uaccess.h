@@ -42,7 +42,7 @@ extern int __verify_write(const void *, unsigned long);
 	unsigned long flag,sum; \
 	asm("addl %3,%1 ; sbbl %0,%0; cmpl %1,%4; sbbl $0,%0" \
 		:"=&r" (flag), "=r" (sum) \
-		:"1" (addr),"g" (size),"g" (current->addr_limit.seg)); \
+		:"1" (addr),"g" ((int)(size)),"g" (current->addr_limit.seg)); \
 	flag; })
 
 #ifdef CONFIG_X86_WP_WORKS_OK

@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.73 1999/08/06 12:11:47 davem Exp $
+# $Id: config.in,v 1.77 1999/08/31 12:49:42 davem Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -36,7 +36,7 @@ endmenu
 # Global things across all Sun machines.
 define_bool CONFIG_SBUS y
 define_bool CONFIG_SBUSCHAR y
-define_bool CONFIG_MOUSE y
+define_bool CONFIG_BUSMOUSE y
 define_bool CONFIG_SUN_MOUSE y
 define_bool CONFIG_SERIAL y
 define_bool CONFIG_SUN_SERIAL y
@@ -64,10 +64,9 @@ tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Solaris binary emulation' CONFIG_SOLARIS_EMUL
 fi
-
+source drivers/parport/Config.in
+dep_tristate '  Parallel printer support' CONFIG_PRINTER $CONFIG_PARPORT
 if [ "$CONFIG_PCI" = "y" ]; then
-  source drivers/parport/Config.in
-  dep_tristate '  Parallel printer support' CONFIG_PRINTER $CONFIG_PARPORT
   tristate 'SUNW,envctrl support' CONFIG_ENVCTRL
 fi
 endmenu
@@ -205,6 +204,7 @@ if [ "$CONFIG_NET" = "y" ]; then
 		if [ "$CONFIG_PCI" = "y" ]; then
 			tristate 'Generic DECchip & DIGITAL EtherWORKS PCI/EISA' CONFIG_DE4X5
 			tristate '3c590/3c900 series (592/595/597) "Vortex/Boomerang" support' CONFIG_VORTEX
+			tristate 'Adaptec Starfire support' CONFIG_ADAPTEC_STARFIRE
 		fi
 #		bool 'FDDI driver support' CONFIG_FDDI
 #		if [ "$CONFIG_FDDI" = "y" ]; then

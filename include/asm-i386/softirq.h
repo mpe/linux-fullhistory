@@ -18,6 +18,8 @@ extern unsigned int local_bh_count[NR_CPUS];
 #define get_active_bhs()	(bh_mask & bh_active)
 #define clear_active_bhs(x)	atomic_clear_mask((x),&bh_active)
 
+extern spinlock_t i386_bh_lock;
+
 #ifdef __SMP__
 
 /*
@@ -27,7 +29,6 @@ extern unsigned int local_bh_count[NR_CPUS];
  */
 extern atomic_t global_bh_lock;
 extern atomic_t global_bh_count;
-extern spinlock_t i386_bh_lock;
 
 extern void synchronize_bh(void);
 

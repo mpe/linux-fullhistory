@@ -1212,7 +1212,7 @@ static void sunkbd_kd_mksound(unsigned int hz, unsigned int ticks)
 
 extern void (*kd_mksound)(unsigned int hz, unsigned int ticks);
 
-__initfunc(int sun_kbd_init(void))
+int __init sun_kbd_init(void)
 {
 	int i, opt_node;
 	struct kbd_struct kbd0;
@@ -1502,7 +1502,7 @@ file_operations kbd_fops =
 	NULL,			/* revalidate */
 };
 
-__initfunc(void keyboard_zsinit(void (*put_char)(unsigned char)))
+void __init keyboard_zsinit(void (*put_char)(unsigned char))
 {
 	int timeout = 0;
 

@@ -1,5 +1,5 @@
 /*
- * $Id: idle.c,v 1.63 1999/06/10 22:55:35 geert Exp $
+ * $Id: idle.c,v 1.65 1999/08/03 19:16:19 cort Exp $
  *
  * Idle daemon for PowerPC.  Idle daemon will handle any action
  * that needs to be taken when the system becomes idle.
@@ -69,7 +69,6 @@ int idled(void *unused)
 	return 0;
 }
 
-#ifdef __SMP__
 /*
  * SMP entry into the idle task - calls the same thing as the
  * non-smp versions. -- Cort
@@ -78,19 +77,6 @@ int cpu_idle(void *unused)
 {
 	idled(unused);
 	return 0; 
-}
-#endif /* __SMP__ */
-
-/*
- * Syscall entry into the idle task. -- Cort
- */
-asmlinkage int sys_idle(void)
-{
-	if(current->pid != 0)
-		return -EPERM;
-
-	idled(NULL);
-	return 0; /* should never execute this but it makes gcc happy -- Cort */
 }
 
 /*

@@ -229,25 +229,25 @@ trace_syscall(struct pt_regs *regs)
 void
 SoftwareEmulation(struct pt_regs *regs)
 {
-	int	errcode;
-	extern int	Soft_emulate_8xx (struct pt_regs *regs);
-	extern void print_8xx_pte(struct mm_struct *, unsigned long);	
+	extern int do_mathemu(struct pt_regs *);
+	int errcode;
 
-	if (user_mode(regs))
-	{
-		if ((errcode = Soft_emulate_8xx(regs))) {
-printk("Software Emulation %s/%d NIP: %lx *NIP: 0x%x code: %x",
-       current->comm,current->pid,
-       regs->nip, *((uint *)regs->nip), errcode);
-/*print_8xx_pte(current->mm, regs->nip);*/
-			if (errcode == EFAULT)
-				_exception(SIGBUS, regs);
-			else
-				_exception(SIGILL, regs);
-		}
-	}
-	else {
+	if (!user_mode(regs)) {
+		show_regs(regs);
+#if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
+		debugger(regs);
+#endif
+		print_backtrace((unsigned long *)regs->gpr[1]);
 		panic("Kernel Mode Software FPU Emulation");
+	}
+
+	if ((errcode = do_mathemu(regs))) {
+		if (errcode > 0)
+			_exception(SIGFPE, regs);
+		else if (errcode == -EFAULT;
+			_exception(SIGSEGV, regs);
+		else
+			_exception(SIGILL, regs);
 	}
 }
 #endif

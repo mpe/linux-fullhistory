@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.102 1999/07/23 01:56:19 davem Exp $
+/* $Id: sys_sunos.c,v 1.104 1999/08/31 12:30:50 anton Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -597,9 +597,9 @@ asmlinkage int sunos_nosys(void)
 	struct pt_regs *regs;
 
 	lock_kernel();
-	regs = current->tss.kregs;
-	current->tss.sig_address = regs->pc;
-	current->tss.sig_desc = regs->u_regs[UREG_G1];
+	regs = current->thread.kregs;
+	current->thread.sig_address = regs->pc;
+	current->thread.sig_desc = regs->u_regs[UREG_G1];
 	send_sig(SIGSYS, current, 1);
 	printk("Process makes ni_syscall number %d, register dump:\n",
 	       (int) regs->u_regs[UREG_G1]);
@@ -1009,10 +1009,6 @@ extern asmlinkage long sunos_sysconf (int name)
 	return ret;
 }
 
-extern asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg);
-extern asmlinkage int sys_semget (key_t key, int nsems, int semflg);
-extern asmlinkage int sys_semop  (int semid, struct sembuf *tsops, unsigned nsops);
-
 asmlinkage int sunos_semsys(int op, unsigned long arg1, unsigned long arg2,
 			    unsigned long arg3, void *ptr)
 {
@@ -1059,13 +1055,6 @@ asmlinkage int sunos_semsys(int op, unsigned long arg1, unsigned long arg2,
 	return ret;
 }
 
-extern asmlinkage int sys_msgget (key_t key, int msgflg);
-extern asmlinkage int sys_msgrcv (int msqid, struct msgbuf *msgp,
-				  size_t msgsz, long msgtyp, int msgflg);
-extern asmlinkage int sys_msgsnd (int msqid, struct msgbuf *msgp,
-				  size_t msgsz, int msgflg);
-extern asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf);
-
 asmlinkage int sunos_msgsys(int op, unsigned long arg1, unsigned long arg2,
 			    unsigned long arg3, unsigned long arg4)
 {
@@ -1083,7 +1072,7 @@ asmlinkage int sunos_msgsys(int op, unsigned long arg1, unsigned long arg2,
 				  (struct msqid_ds *)arg3);
 		break;
 	case 2:
-		sp = (struct sparc_stackf *)current->tss.kregs->u_regs[UREG_FP];
+		sp = (struct sparc_stackf *)current->thread.kregs->u_regs[UREG_FP];
 		arg5 = sp->xxargs[0];
 		rval = sys_msgrcv((int)arg1, (struct msgbuf *)arg2,
 				  (size_t)arg3, (long)arg4, (int)arg5);
@@ -1099,11 +1088,6 @@ asmlinkage int sunos_msgsys(int op, unsigned long arg1, unsigned long arg2,
 	unlock_kernel();
 	return rval;
 }
-
-extern asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr);
-extern asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf);
-extern asmlinkage int sys_shmdt (char *shmaddr);
-extern asmlinkage int sys_shmget (key_t key, int size, int shmflg);
 
 asmlinkage int sunos_shmsys(int op, unsigned long arg1, unsigned long arg2,
 			    unsigned long arg3)

@@ -1,4 +1,4 @@
-/* $Id: creatorfb.c,v 1.27 1999/03/28 12:37:12 jj Exp $
+/* $Id: creatorfb.c,v 1.29 1999/08/10 15:56:07 davem Exp $
  * creatorfb.c: Creator/Creator3D frame buffer driver
  *
  * Copyright (C) 1997,1998,1999 Jakub Jelinek (jj@ultra.linux.cz)
@@ -633,7 +633,13 @@ static void ffb_switch_from_graph (struct fb_info_sbusfb *fb)
 	fbc->fg = fb->s.ffb.fg_cache;
 	fbc->bg = fb->s.ffb.bg_cache;
 	FFBWait(fbc);
-}                                
+}
+
+static int __init ffb_rasterimg (struct fb_info *info, int start)
+{
+	ffb_switch_from_graph (sbusfbinfo(info));
+	return 0;
+}
 
 static char idstring[60] __initdata = { 0 };
 
@@ -647,6 +653,7 @@ char __init *creatorfb_init(struct fb_info_sbusfb *fb)
 	int i, afb = 0;
 	unsigned int btype;
 	char name[64];
+	struct fb_ops *fbops;
 
 	if (prom_getproperty(fb->prom_node, "reg", (void *) regs, sizeof(regs)) <= 0)
 		return NULL;
@@ -655,6 +662,13 @@ char __init *creatorfb_init(struct fb_info_sbusfb *fb)
 	if (!disp->dispsw_data)
 		return NULL;
 	memset(disp->dispsw_data, 0, 16 * sizeof(u32));
+
+	fbops = kmalloc(sizeof(*fbops), GFP_KERNEL);
+	if (!fbops) return NULL;
+	
+	*fbops = *fb->info.fbops;
+	fbops->fb_rasterimg = ffb_rasterimg;
+	fb->info.fbops = fbops;
 
 	prom_getstring(fb->prom_node, "name", name, sizeof(name));
 	if (!strcmp(name, "SUNW,afb"))

@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.76 1999/04/02 14:54:30 davem Exp $
+/* $Id: irq.c,v 1.78 1999/08/31 06:54:54 davem Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997  David S. Miller  (davem@caip.rutgers.edu)
@@ -30,11 +30,6 @@
 #include <asm/smp.h>
 #include <asm/hardirq.h>
 #include <asm/softirq.h>
-
-#ifdef CONFIG_PCI
-#include <linux/pci.h>
-#include <asm/pbm.h>
-#endif
 
 /* Internal flag, should not be visible elsewhere at all. */
 #define SA_IMAP_MASKED		0x100
@@ -78,15 +73,6 @@ struct irqaction *irq_action[NR_IRQS+1] = {
 	  NULL, NULL, NULL, NULL, NULL, NULL , NULL, NULL,
 	  NULL, NULL, NULL, NULL, NULL, NULL , NULL, NULL
 };
-
-/* Only 8-bits are available, be careful.  -DaveM */
-#define IBF_DMA_SYNC	0x01	/* DMA synchronization behind PCI bridge needed. */
-#define IBF_PCI		0x02	/* Indicates PSYCHO/SCHIZO PCI interrupt.	 */
-#define IBF_ACTIVE	0x04	/* This interrupt is active and has a handler.	 */
-#define IBF_MULTI	0x08	/* On PCI, indicates shared bucket.		 */
-
-#define __bucket(irq) ((struct ino_bucket *)(unsigned long)(irq))
-#define __irq(bucket) ((unsigned int)(unsigned long)(bucket))
 
 int get_irq_list(char *buf)
 {
@@ -183,67 +169,22 @@ offset(imap_pmgmt),
 /* Convert Interrupt Mapping register pointer to assosciated
  * Interrupt Clear register pointer, SYSIO specific version.
  */
-static unsigned int *sysio_imap_to_iclr(unsigned int *imap)
+static volatile unsigned int *sysio_imap_to_iclr(volatile unsigned int *imap)
 {
 	unsigned long diff;
 
 	diff = offset(iclr_unused0) - offset(imap_slot0);
-	return (unsigned int *) (((unsigned long)imap) + diff);
+	return (volatile unsigned int *) (((unsigned long)imap) + diff);
 }
 
 #undef offset
-
-#ifdef CONFIG_PCI
-/* PCI PSYCHO INO number to Sparc PIL level. */
-unsigned char psycho_ino_to_pil[] = {
-	7, 5, 4, 2,			/* PCI A slot 0  Int A, B, C, D */
-	7, 5, 4, 2,			/* PCI A slot 1  Int A, B, C, D */
-	7, 5, 4, 2,			/* PCI A slot 2  Int A, B, C, D */
-	7, 5, 4, 2,			/* PCI A slot 3  Int A, B, C, D */
-	6, 4, 3, 1,			/* PCI B slot 0  Int A, B, C, D */
-	6, 4, 3, 1,			/* PCI B slot 1  Int A, B, C, D */
-	6, 4, 3, 1,			/* PCI B slot 2  Int A, B, C, D */
-	6, 4, 3, 1,			/* PCI B slot 3  Int A, B, C, D */
-	3,  /* SCSI */
-	5,  /* Ethernet */
-	8,  /* Parallel Port */
-	13, /* Audio Record */
-	14, /* Audio Playback */
-	15, /* PowerFail */
-	3,  /* second SCSI */
-	11, /* Floppy */
-	2,  /* Spare Hardware */
-	9,  /* Keyboard */
-	4,  /* Mouse */
-	12, /* Serial */
-	10, /* Timer 0 */
-	11, /* Timer 1 */
-	15, /* Uncorrectable ECC */
-	15, /* Correctable ECC */
-	15, /* PCI Bus A Error */
-	15, /* PCI Bus B Error */
-	1, /* Power Management */
-};
-
-/* INO number to IMAP register offset for PSYCHO external IRQ's. */
-#define psycho_offset(x) ((unsigned long)(&(((struct psycho_regs *)0)->x)))
-
-#define psycho_imap_offset(ino)						      \
-	((ino & 0x20) ? (psycho_offset(imap_scsi) + (((ino) & 0x1f) << 3)) :  \
-			(psycho_offset(imap_a_slot0) + (((ino) & 0x3c) << 1)))
-
-#define psycho_iclr_offset(ino)						      \
-	((ino & 0x20) ? (psycho_offset(iclr_scsi) + (((ino) & 0x1f) << 3)) :  \
-			(psycho_offset(iclr_a_slot0[0]) + (((ino) & 0x1f)<<3)))
-
-#endif
 
 /* Now these are always passed a true fully specified sun4u INO. */
 void enable_irq(unsigned int irq)
 {
 	extern int this_is_starfire;
 	struct ino_bucket *bucket = __bucket(irq);
-	unsigned int *imap;
+	volatile unsigned int *imap;
 	unsigned long tid;
 
 	imap = bucket->imap;
@@ -257,7 +198,7 @@ void enable_irq(unsigned int irq)
 				     : "i" (ASI_UPA_CONFIG));
 		tid = ((tid & UPA_CONFIG_MID) << 9);
 	} else {
-		extern unsigned int starfire_translate(unsigned int *imap,
+		extern unsigned int starfire_translate(volatile unsigned int *imap,
 						       unsigned int upaid);
 
 		tid = (starfire_translate(imap, current->processor) << 26);
@@ -278,7 +219,7 @@ void enable_irq(unsigned int irq)
 void disable_irq(unsigned int irq)
 {
 	struct ino_bucket *bucket = __bucket(irq);
-	unsigned int *imap;
+	volatile unsigned int *imap;
 
 	imap = bucket->imap;
 	if (imap != NULL) {
@@ -306,7 +247,7 @@ static struct ino_bucket pil0_dummy_bucket = {
 	NULL,	/* imap */
 };
 
-unsigned int build_irq(int pil, int inofixup, unsigned int *iclr, unsigned int *imap)
+unsigned int build_irq(int pil, int inofixup, volatile unsigned int *iclr, volatile unsigned int *imap)
 {
 	struct ino_bucket *bucket;
 	int ino;
@@ -365,7 +306,7 @@ unsigned int sbus_build_irq(void *buscookie, unsigned int ino)
 	struct sysio_regs *sregs = sbus->iommu->sysio_regs;
 	unsigned long offset;
 	int pil;
-	unsigned int *imap, *iclr;
+	volatile unsigned int *imap, *iclr;
 	int sbus_level = 0;
 
 	pil = sysio_ino_to_pil[ino];
@@ -380,7 +321,7 @@ unsigned int sbus_build_irq(void *buscookie, unsigned int ino)
 		panic("BAD SYSIO IRQ offset...");
 	}
 	offset += ((unsigned long)sregs);
-	imap = ((unsigned int *)offset);
+	imap = ((volatile unsigned int *)offset);
 
 	/* SYSIO inconsistancy.  For external SLOTS, we have to select
 	 * the right ICLR register based upon the lower SBUS irq level
@@ -412,80 +353,10 @@ unsigned int sbus_build_irq(void *buscookie, unsigned int ino)
 
 		iclraddr = (unsigned long) iclr;
 		iclraddr += ((sbus_level - 1) * 8);
-		iclr = (unsigned int *) iclraddr;
+		iclr = (volatile unsigned int *) iclraddr;
 	}
 	return build_irq(pil, sbus_level, iclr, imap);
 }
-
-#ifdef CONFIG_PCI
-unsigned int psycho_build_irq(void *buscookie, int imap_off, int ino, int need_dma_sync)
-{
-	struct linux_psycho *psycho = (struct linux_psycho *)buscookie;
-	struct psycho_regs *pregs = psycho->psycho_regs;
-	unsigned long addr;
-	struct ino_bucket *bucket;
-	int pil;
-	unsigned int *imap, *iclr;
-	int inofixup = 0;
-
-	pil = psycho_ino_to_pil[ino & PCI_IRQ_INO];
-	
-	addr = (unsigned long) &pregs->imap_a_slot0;
-	addr = addr + imap_off;
-	imap = ((unsigned int *)addr) + 1;
-
-	addr = (unsigned long) pregs;
-	addr += psycho_iclr_offset(ino & (PCI_IRQ_INO));
-	iclr = ((unsigned int *)addr) + 1;
-
-	if(!(ino & 0x20))
-		inofixup = ino & 0x03;
-
-	/* First check for sharing. */
-	ino = (*imap & (SYSIO_IMAP_IGN | SYSIO_IMAP_INO)) + inofixup;
-	if (ino > NUM_IVECS) {
-		prom_printf("PSYCHO: Invalid INO %04x (%d:%d:%016lx:%016lx)\n",
-			    ino, pil, inofixup, iclr, imap);
-		prom_halt();
-	}
-	bucket = &ivector_table[ino];
-	if(bucket->flags & IBF_ACTIVE) {
-		void *old_handler = bucket->irq_info;
-		unsigned long flags;
-
-		if(old_handler == NULL) {
-			prom_printf("PSYCHO: Active bucket, but no handler.\n");
-			prom_halt();
-		}
-		save_and_cli(flags);
-		if((bucket->flags & IBF_MULTI) == 0) {
-			void **vector;
-
-			vector = kmalloc(sizeof(void *) * 4,
-					 GFP_KERNEL);
-
-			/* We might have slept. */
-			if((bucket->flags & IBF_MULTI) != 0) {
-				kfree(vector);
-			} else {
-				vector[0] = old_handler;
-				vector[1] = vector[2] = vector[3] = NULL;
-				bucket->irq_info = vector;
-				bucket->flags |= IBF_MULTI;
-			}
-		}
-		restore_flags(flags);
-	} else {
-		/* Just init the bucket */
-		bucket = __bucket(build_irq(pil, inofixup, iclr, imap));
-	}	
-	if (need_dma_sync)
-		bucket->flags |= IBF_DMA_SYNC;
-		
-	bucket->flags |= IBF_PCI;
-	return __irq(bucket);
-}
-#endif
 
 static void atomic_bucket_insert(struct ino_bucket *bucket)
 {
@@ -731,7 +602,7 @@ void free_irq(unsigned int irq, void *dev_id)
 		*(bucket->pil + irq_action) = action->next;
 
 	if(action->flags & SA_IMAP_MASKED) {
-		unsigned int *imap = bucket->imap;
+		volatile unsigned int *imap = bucket->imap;
 		void **vector, *orig;
 		int ent;
 
@@ -1286,7 +1157,7 @@ static int retarget_one_irq(struct irqaction *p, int goal_cpu)
 {
 	extern int this_is_starfire;
 	struct ino_bucket *bucket = __bucket(p->mask);
-	unsigned int *imap = bucket->imap;
+	volatile unsigned int *imap = bucket->imap;
 	unsigned int tid;
 
 	/* Never change this, it causes problems on Ex000 systems. */
@@ -1296,7 +1167,7 @@ static int retarget_one_irq(struct irqaction *p, int goal_cpu)
 	if(this_is_starfire == 0) {
 		tid = __cpu_logical_map[goal_cpu] << 26;
 	} else {
-		extern unsigned int starfire_translate(unsigned int *imap,
+		extern unsigned int starfire_translate(volatile unsigned int *imap,
 						       unsigned int upaid);
 
 		tid = (starfire_translate(imap, __cpu_logical_map[goal_cpu]) << 26);

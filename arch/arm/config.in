@@ -17,7 +17,7 @@ choice 'ARM system type'	\
 	 FootBridge-based	CONFIG_FOOTBRIDGE" RiscPC
 
 if [ "$CONFIG_FOOTBRIDGE" = "y" ]; then
-  bool 'FootBridge in HOST mode'	CONFIG_HOST_FOOTBRIDGE
+  bool 'FootBridge in HOST mode' CONFIG_HOST_FOOTBRIDGE
   if [ "$CONFIG_HOST_FOOTBRIDGE" = "y" ]; then
     define_bool CONFIG_ADDIN_FOOTBRIDGE n
   else
@@ -37,8 +37,10 @@ if [ "$CONFIG_ADDIN_FOOTBRIDGE" = "y" ]; then
   define_bool CONFIG_ARCH_CO285 y
 fi
 
+#
 # Select various configuration options depending on the machine type
 #  Easy check for Acorn-style architectures
+#
 if [ "$CONFIG_ARCH_ARC" = "y" -o \
      "$CONFIG_ARCH_A5K" = "y" -o \
      "$CONFIG_ARCH_RPC" = "y" ]; then
@@ -47,17 +49,53 @@ else
   define_bool CONFIG_ARCH_ACORN n
 fi
 
-#if [ "$CONFIG_ARCH_TBOX" = "y" ]; then
-#  define_bool CONFIG_BUS_I2C y
-#fi
+#
+# Figure out whether this system uses 26-bit or 32-bit CPUs.  Nobody has
+# ever built a machine that can take both, and now that ARM3 is obsolete
+# nobody is likely to either.
+#
+if [ "$CONFIG_ARCH_ARC" = "y" -o \
+     "$CONFIG_ARCH_A5K" = "y" ]; then
+  define_bool CONFIG_CPU_32 n
+  define_bool CONFIG_CPU_26 y
 
+  #
+  # Select memory size
+  #
+  bool '2MB physical memory' CONFIG_PAGESIZE_16
+else
+  define_bool CONFIG_CPU_32 y
+  define_bool CONFIG_CPU_26 n
+
+  #
+  # Select CPU and optimisation dependent on architecture
+  #
+  if [ "$CONFIG_ARCH_EBSA110" = "y" -o \
+       "$CONFIG_FOOTBRIDGE" = "y" -o \
+       "$CONFIG_ARCH_NEXUSPCI" = "y" ]; then
+    define_bool CONFIG_CPU_32v4 y
+    define_bool CONFIG_CPU_SA110 y
+  else
+  if [ "$CONFIG_ARCH_RPC" = "y" ]; then
+    define_bool CONFIG_CPU_32v3 y
+    bool 'Support ARM610' CONFIG_CPU_ARM6
+    bool 'Support ARM710' CONFIG_CPU_ARM7
+    bool 'Support StrongARM110' CONFIG_CPU_SA110
+  fi
+  fi
+fi
+
+#
 #  These machines always have PCI
+#
 if [ "$CONFIG_ARCH_NEXUSPCI" = "y" -o \
      "$CONFIG_HOST_FOOTBRIDGE" = "y" ]; then
   define_bool CONFIG_PCI y
 fi
 
+#
 # These machines have ISA-DMA
+#
 if [ "$CONFIG_CATS" = "y" -o \
      "$CONFIG_ARCH_NETWINDER" = "y" ]; then
   define_bool CONFIG_ISA_DMA y
@@ -65,34 +103,6 @@ else
   define_bool CONFIG_ISA_DMA n
 fi
 
-# Figure out whether this system uses 26-bit or 32-bit CPUs.  Nobody has
-# ever built a machine that can take both, and now that ARM3 is obsolete
-# nobody is likely to either.
-if [ "$CONFIG_ARCH_ARC" = "y" -o \
-     "$CONFIG_ARCH_A5K" = "y" ]; then
-  define_bool CONFIG_CPU_32 n
-  define_bool CONFIG_CPU_26 y
-else
-  define_bool CONFIG_CPU_32 y
-  define_bool CONFIG_CPU_26 n
-fi
-
-# Now allow the user to choose a more precise CPU.  This is only used to set
-# the flags we pass to GCC, not in any code.
-choice 'Optimise for CPU'				\
-	"ARM2		CONFIG_CPU_ARM2 \
-	 ARM3		CONFIG_CPU_ARM3 \
-	 ARM6		CONFIG_CPU_ARM6 \
-	 ARM7		CONFIG_CPU_ARM7 \
-	 SA110		CONFIG_CPU_SA110" ARM6
-
-if [ "$CONFIG_CPU_26" = "y" ]; then
-# For 26-bit CPUs, the page size changes with the amount of physical RAM!
-# The default is 4MB but if the user has less they have to own up to it here.
-  choice 'Physical memory size'		\
-	"4MB+		CONFIG_PAGESIZE_32	\
-	 2MB		CONFIG_PAGESIZE_16" 4MB+
-fi
 endmenu
 
 mainmenu_option next_comment
@@ -101,7 +111,7 @@ bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
 if [ "$CONFIG_CPU_32" = "y" -a "$CONFIG_ARCH_EBSA110" != "y" ]; then
   bool 'Enable kernel-mode alignment trap handler (EXPERIMENTAL)' CONFIG_ALIGNMENT_TRAP
 fi
-bool 'Split text into discardable sections' CONFIG_TEXT_SECTIONS
+#bool 'Split text into discardable sections' CONFIG_TEXT_SECTIONS
 endmenu
 
 mainmenu_option next_comment

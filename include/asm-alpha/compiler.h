@@ -18,6 +18,8 @@
   (((unsigned long)(val) & 0xfful) << ((shift) * 8))
 #define __kernel_inswl(val, shift) \
   (((unsigned long)(val) & 0xfffful) << ((shift) * 8))
+#define __kernel_insql(val, shift) \
+  ((unsigned long)(val) << ((shift) * 8))
 #else
 #define __kernel_insbl(val, shift)					\
   ({ unsigned long __kir;						\
@@ -26,6 +28,10 @@
 #define __kernel_inswl(val, shift)					\
   ({ unsigned long __kir;						\
      __asm__("inswl %2,%1,%0" : "=r"(__kir) : "rI"(shift), "r"(val));	\
+     __kir; })
+#define __kernel_insql(val, shift)					\
+  ({ unsigned long __kir;						\
+     __asm__("insql %2,%1,%0" : "=r"(__kir) : "rI"(shift), "r"(val));	\
      __kir; })
 #endif
 
@@ -47,11 +53,10 @@
 /* 
  * Beginning with EGCS 1.1, GCC defines __alpha_bwx__ when the BWX 
  * extension is enabled.  Previous versions did not define anything
- * we could test during compilation, so allow users to tell us when
- * the compiler will DTRT.
+ * we could test during compilation -- too bad, so sad.
  */
 
-#if defined(HAVE_BWX) || defined(__alpha_bwx__)
+#if defined(__alpha_bwx__)
 #define __kernel_ldbu(mem)	(mem)
 #define __kernel_ldwu(mem)	(mem)
 #define __kernel_stb(val,mem)	((mem) = (val))

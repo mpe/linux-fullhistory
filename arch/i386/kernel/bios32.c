@@ -760,6 +760,36 @@ static void __init pcibios_sort(void)
 #endif
 
 /*
+ * Assign new address to PCI resource.  We hope our resource information
+ * is complete.  On the PC, we don't re-assign resources unless we are
+ * forced to do so.
+ *
+ * Expects start=0, end=size-1, flags=resource type.
+ */
+
+int __init pcibios_assign_resource(struct pci_dev *dev, int i)
+{
+	struct resource *r = &dev->resource[i];
+	struct resource *pr = pci_find_parent_resource(dev, r);
+	unsigned long size = r->end + 1;
+
+	if (!pr)
+		return -EINVAL;
+	if (r->flags & IORESOURCE_IO) {
+		if (size > 0x100)
+			return -EFBIG;
+		if (allocate_resource(pr, r, size, 0x1000, ~0, 1024))
+			return -EBUSY;
+	} else {
+		if (allocate_resource(pr, r, size, 0x10000000, ~0, size))
+			return -EBUSY;
+	}
+	if (i < 6)
+		pci_write_config_dword(dev, PCI_BASE_ADDRESS_0 + 4*i, r->start);
+	return 0;
+}
+
+/*
  * Several BIOS'es forget to assign addresses to I/O ranges. Try to fix it.
  */
 
@@ -792,12 +822,13 @@ static void __init pcibios_fixup_io_addr(struct pci_dev *dev, int idx)
 	} else {
 		u32 try;
 
-		if (allocate_resource(&ioport_resource, r, size, 0x1000, ~0, 1024)) {
+		r->start = 0;
+		r->end = size - 1;
+		if (pcibios_assign_resource(dev, idx)) {
 			printk(KERN_ERR "PCI: Unable to find free %d bytes of I/O space for device %s.\n", size, dev->name);
 			return;
 		}
-		printk("PCI: Assigning I/O space %04lx-%04lx to device %s\n", r->start, r->end, dev->name);
-		pci_write_config_dword(dev, reg, r->start | PCI_BASE_ADDRESS_SPACE_IO);
+		printk("PCI: Assigned I/O space %04lx-%04lx to device %s\n", r->start, r->end, dev->name);
 		pci_read_config_dword(dev, reg, &try);
 		if ((try & PCI_BASE_ADDRESS_IO_MASK) != r->start) {
 			r->start = 0;
@@ -819,12 +850,12 @@ static void __init pcibios_fixup_rom_addr(struct pci_dev *dev)
 	struct resource *r = &dev->resource[PCI_ROM_RESOURCE];
 	unsigned long rom_size = r->end - r->start + 1;
 
-	if (allocate_resource(&iomem_resource, r, rom_size, 0xf0000000, ~0, rom_size) < 0) {
+	r->start = 0;
+	r->end = rom_size - 1;
+	if (pcibios_assign_resource(dev, PCI_ROM_RESOURCE))
 		printk(KERN_ERR "PCI: Unable to find free space for expansion ROM of device %s (0x%lx bytes)\n",
 		       dev->name, rom_size);
-		r->start = 0;
-		r->end = rom_size - 1;
-	} else {
+	else {
 		DBG("PCI: Assigned address %08lx to expansion ROM of %s (0x%lx bytes)\n", r->start, dev->name, rom_size);
 		pci_write_config_dword(dev, reg, r->start | PCI_ROM_ADDRESS_ENABLE);
 		r->flags |= PCI_ROM_ADDRESS_ENABLE;
@@ -947,7 +978,8 @@ static void __init pcibios_fixup_peer_bridges(void)
 		if (found) {
 			printk("PCI: Discovered primary peer bus %02x\n", n);
 			b = pci_scan_bus(n, ops, NULL);
-			n = b->subordinate;
+			if (b)
+				n = b->subordinate;
 		}
 		n++;
 	}
@@ -979,33 +1011,6 @@ static void __init pci_fixup_i450nx(struct pci_dev *d)
 	pci_probe |= PCI_NO_PEER_FIXUP;
 }
 
-static void __init pci_fixup_i440bx(struct pci_dev *d)
-{
-#if 0							    /* Temporarily disabled   FIXME */
-	/*
-	 * i440BX/ZX -- Occupy the AGP bridge windows.
-	 */
-	u16 a, b;
-	u8 u, v;
-	pci_read_config_byte(d, 0x1c, &u);
-	pci_read_config_byte(d, 0x1d, &v);
-	if (v >= u) {
-		a = u<<8;
-		b = ((v-u)<<8) + 0x100;
-		occupy_region(a, a+b, b, 1, &d->dev);
-	}
-	for (u = 0; u < 2; u++) {
-		pci_read_config_word(d, 0x20+(u*4), &a);
-		pci_read_config_word(d, 0x22+(u*4), &b);
-		if (b >= a) {
-			u32 m = a<<16;
-			u32 n = ((b-a)<<16) + 0x100000;
-			occupy_mem_region(m, m+n, n, 1, &d->dev);
-		}
-	}
-#endif
-}
-
 static void __init pci_fixup_umc_ide(struct pci_dev *d)
 {
 	/*
@@ -1021,7 +1026,6 @@ static void __init pci_fixup_umc_ide(struct pci_dev *d)
 
 struct pci_fixup pcibios_fixups[] = {
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82451NX,	pci_fixup_i450nx },
-	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_INTEL,	PCI_DEVICE_ID_INTEL_82443BX_1,	pci_fixup_i440bx },
 	{ PCI_FIXUP_HEADER,	PCI_VENDOR_ID_UMC,	PCI_DEVICE_ID_UMC_UM8886BF,	pci_fixup_umc_ide },
 	{ 0 }
 };
@@ -1031,20 +1035,28 @@ struct pci_fixup pcibios_fixups[] = {
  * we try to fix up anything.
  */
 
-static void __init pcibios_claim_resources(void)
+static void __init pcibios_claim_resources(struct pci_bus *bus)
 {
 	struct pci_dev *dev;
 	int idx;
 
-	for (dev=pci_devices; dev; dev=dev->next)
-		for (idx = 0; idx < PCI_NUM_RESOURCES; idx++) {
-			struct resource *r = &dev->resource[idx];
-			if (!r->start)
-				continue;
-			if (request_resource((r->flags & PCI_BASE_ADDRESS_SPACE_IO) ? &ioport_resource : &iomem_resource, r) < 0)
-				printk(KERN_ERR "PCI: Address space collision on region %d of device %s\n", idx, dev->name);
-				/* We probably should disable the region, shouldn't we? */
+	while (bus) {
+		for (dev=bus->devices; dev; dev=dev->sibling)
+			for (idx = 0; idx < PCI_NUM_RESOURCES; idx++) {
+				struct resource *r = &dev->resource[idx];
+				struct resource *pr;
+				if (!r->start)
+					continue;
+				pr = pci_find_parent_resource(dev, r);
+				if (!pr || request_resource(pr, r) < 0) {
+					printk(KERN_ERR "PCI: Address space collision on region %d of device %s\n", idx, dev->name);
+					/* We probably should disable the region, shouldn't we? */
+				}
 		}
+		if (bus->children)
+			pcibios_claim_resources(bus->children);
+		bus = bus->next;
+	}
 }
 
 /*
@@ -1190,7 +1202,7 @@ void __init pcibios_init(void)
 
 	if (!(pci_probe & PCI_NO_PEER_FIXUP))
 		pcibios_fixup_peer_bridges();
-	pcibios_claim_resources();
+	pcibios_claim_resources(pci_root);
 	pcibios_fixup_devices();
 
 #ifdef CONFIG_PCI_BIOS

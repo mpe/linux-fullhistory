@@ -527,7 +527,7 @@ static void apmmu_quick_kernel_fault(unsigned long address)
 {
 	printk("Kernel faults at addr=0x%08lx\n", address);
 	printk("PTE=%08lx\n", apmmu_hwprobe((address & PAGE_MASK)));
-	die_if_kernel("APMMU bolixed...", current->tss.kregs);
+	die_if_kernel("APMMU bolixed...", current->thread.kregs);
 }
 
 static inline void alloc_context(struct task_struct *tsk)

@@ -5635,6 +5635,16 @@ static struct board {
 		NULL,
 		NULL}};
 	
+#ifndef MODULE
+		/* it cannot be static const struct due to __initdata
+		marker */
+		static struct fb_videomode defaultmode __initdata = {
+			/* 640x480 @ 60Hz, 31.5 kHz */
+			NULL, 60, 640, 480, 39721, 40, 24, 32, 11, 96, 2,
+			0, FB_VMODE_NONINTERLACED
+		};
+#endif /* !MODULE */
+
 static int __init initMatrox2(WPMINFO struct display* d, struct board* b){
 	unsigned long ctrlptr_phys = 0;
 	unsigned long video_base_phys = 0;
@@ -5876,14 +5886,6 @@ static int __init initMatrox2(WPMINFO struct display* d, struct board* b){
 #ifndef MODULE
 	/* mode database is marked __init ... */
 	{
-		/* it cannot be static const struct due to __initdata
-		marker */
-		static struct fb_videomode defaultmode __initdata = {
-			/* 640x480 @ 60Hz, 31.5 kHz */
-			NULL, 60, 640, 480, 39721, 40, 24, 32, 11, 96, 2,
-			0, FB_VMODE_NONINTERLACED
-		};
-
 		fb_find_mode(&vesafb_defined, &ACCESS_FBINFO(fbcon), videomode[0]?videomode:NULL,
 		NULL, 0, &defaultmode, vesafb_defined.bits_per_pixel);
 	}

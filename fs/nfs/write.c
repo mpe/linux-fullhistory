@@ -392,7 +392,7 @@ wait_on_write_request(struct nfs_wreq *req)
 	rpc_clnt_sigmask(clnt, &oldmask);
 	add_wait_queue(&req->wb_wait, &wait);
 	for (;;) {
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		retval = 0;
 		if (req->wb_flags & NFS_WRITE_COMPLETE)
 			break;

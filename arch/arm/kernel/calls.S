@@ -119,9 +119,9 @@
 		.long	SYMBOL_NAME(sys_newlstat)
 		.long	SYMBOL_NAME(sys_newfstat)
 		.long	SYMBOL_NAME(sys_uname)
-/* 110 */	.long	SYMBOL_NAME(sys_ni_syscall)
+/* 110 */	.long	SYMBOL_NAME(sys_iopl)
 		.long	SYMBOL_NAME(sys_vhangup)
-		.long	SYMBOL_NAME(sys_idle)
+		.long	SYMBOL_NAME(sys_ni_syscall)
 		.long	SYMBOL_NAME(sys_syscall)		/* call a syscall */
 		.long	SYMBOL_NAME(sys_wait4)
 /* 115 */	.long	SYMBOL_NAME(sys_swapoff)
@@ -129,7 +129,7 @@
 		.long	SYMBOL_NAME(sys_ipc)
 		.long	SYMBOL_NAME(sys_fsync)
 		.long	SYMBOL_NAME(sys_sigreturn_wrapper)
-		.long	SYMBOL_NAME(sys_clone_wapper)
+/* 120 */	.long	SYMBOL_NAME(sys_clone_wapper)
 		.long	SYMBOL_NAME(sys_setdomainname)
 		.long	SYMBOL_NAME(sys_newuname)
 		.long	SYMBOL_NAME(sys_ni_syscall)		/* .long	SYMBOL_NAME(sys_modify_ldt) */

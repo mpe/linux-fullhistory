@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.94 1999/08/20 11:04:51 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.95 1999/08/30 10:17:00 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -564,13 +564,9 @@ static void inet_wait_for_connect(struct sock *sk)
 {
 	DECLARE_WAITQUEUE(wait, current);
 
+	__set_current_state(TASK_INTERRUPTIBLE);
 	add_wait_queue(sk->sleep, &wait);
-	current->state = TASK_INTERRUPTIBLE;
 
-	/* RED-PEN. current->state is volatile. Is it enough to prevent
-	 * reordering it and sk->state check? I put barrier to be sure.
-	 */
-	barrier();
 	while ((1<<sk->state)&(TCPF_SYN_SENT|TCPF_SYN_RECV)) {
 		if (signal_pending(current))
 			break;
@@ -579,10 +575,9 @@ static void inet_wait_for_connect(struct sock *sk)
 		release_sock(sk);
 		schedule();
 		lock_sock(sk);
-		current->state = TASK_INTERRUPTIBLE;
-		barrier();
+		set_current_state(TASK_INTERRUPTIBLE);
 	}
-	current->state = TASK_RUNNING;
+	__set_current_state(TASK_RUNNING);
 	remove_wait_queue(sk->sleep, &wait);
 }
 

@@ -32,6 +32,7 @@ else
 fi
 if [ "$CONFIG_PARTITION_ADVANCED" = "y" ]; then
   bool 'Amiga partition table support' CONFIG_AMIGA_PARTITION
+  bool 'Atari partition table support' CONFIG_ATARI_PARTITION
   bool 'Acorn partition support' CONFIG_ACORN_PARTITION
   if [ "$CONFIG_ACORN_PARTITION" != "n" ]; then
     bool '  Native filecore partition support' CONFIG_ACORN_PARTITION_ADFS

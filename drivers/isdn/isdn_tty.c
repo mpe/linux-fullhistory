@@ -1,4 +1,4 @@
-/* $Id: isdn_tty.c,v 1.72 1999/07/31 12:59:45 armin Exp $
+/* $Id: isdn_tty.c,v 1.73 1999/08/28 21:56:27 keil Exp $
 
  * Linux ISDN subsystem, tty functions and AT-command emulator (linklevel).
  *
@@ -20,6 +20,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_tty.c,v $
+ * Revision 1.73  1999/08/28 21:56:27  keil
+ * misplaced #endif caused ttyI crash in 2.3.X
+ *
  * Revision 1.72  1999/07/31 12:59:45  armin
  * Added tty fax capabilities.
  *
@@ -345,7 +348,7 @@ static int bit2si[8] =
 static int si2bit[8] =
 {4, 1, 4, 4, 4, 4, 4, 4};
 
-char *isdn_tty_revision = "$Revision: 1.72 $";
+char *isdn_tty_revision = "$Revision: 1.73 $";
 
 
 /* isdn_tty_try_read() is called from within isdn_tty_rcv_skb()
@@ -1981,7 +1984,7 @@ isdn_tty_block_til_ready(struct tty_struct *tty, struct file *filp, modem_info *
 	restore_flags(flags);
 	info->blocked_open++;
 	while (1) {
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		if (tty_hung_up_p(filp) ||
 		    !(info->flags & ISDN_ASYNC_INITIALIZED)) {
 #ifdef MODEM_DO_RESTART
@@ -2399,8 +2402,8 @@ isdn_tty_modem_init(void)
 #else
 		info->open_wait = 0;
 		info->close_wait = 0;
-		info->isdn_driver = -1;
 #endif
+		info->isdn_driver = -1;
 		info->isdn_channel = -1;
 		info->drv_index = -1;
 		info->xmit_size = ISDN_SERIAL_XMIT_SIZE;

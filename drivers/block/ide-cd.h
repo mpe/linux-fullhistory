@@ -1,9 +1,9 @@
 #ifndef _IDE_CD_H
 #define _IDE_CD_H
 /*
- *  linux/drivers/block/ide_modes.h
+ *  linux/drivers/block/ide_cd.h
  *
- *  Copyright (C) 1996  Erik Andersen
+ *  Copyright (C) 1996, 1997, 1998  Erik Andersen
  *  Copyright (C) 1998, 1999 Jens Axboe
  */
 
@@ -55,65 +55,6 @@
 #define REQUEST_SENSE_COMMAND 4316
 #define RESET_DRIVE_COMMAND   4317
 
-/*
- * For controlling drive spindown time.
- */
-#define CDROMGETSPINDOWN        0x531d
-#define CDROMSETSPINDOWN        0x531e
- 
-
-/* Some ATAPI command opcodes (just like SCSI).
-   (Some other cdrom-specific codes are in cdrom.h.) */
-#define TEST_UNIT_READY         0x00
-#define REQUEST_SENSE           0x03
-#define INQUIRY                 0x12
-#define START_STOP              0x1b
-#define ALLOW_MEDIUM_REMOVAL    0x1e
-#define READ_CAPACITY           0x25
-#define READ_10                 0x28
-#define SEEK			0x2b
-#define READ_HEADER             0x44
-#define STOP_PLAY_SCAN		0x4e
-#define MODE_SELECT_10          0x55
-#define MODE_SENSE_10           0x5a
-#define LOAD_UNLOAD             0xa6
-#define READ_12                 0xa8
-#define READ_CD_MSF             0xb9
-#define SCAN			0xba
-#define SET_CD_SPEED            0xbb
-#define PLAY_CD                 0xbc
-#define MECHANISM_STATUS        0xbd
-#define READ_CD                 0xbe
-
-/* MMC2/MTFuji Opcodes */
-#define BLANK			0xa1
-#define CLOSE_TRACK		0x5b
-#define ERASE			0x2c
-#define FORMAT_UNIT		0x04
-#define GET_CONFIGURATION	0x46
-#define GET_EVENT		0xa4
-#define GET_PERFORMANCE		0xac
-#define READ_BUFFER		0x3c
-#define READ_DISC_INFO		0x51
-
-/* Page codes for mode sense/set */
-#define PAGE_READERR            0x01
-#define PAGE_CDROM              0x0d
-#define PAGE_AUDIO              0x0e
-#define PAGE_CAPABILITIES       0x2a
-#define PAGE_ALL                0x3f
-
-/* ATAPI sense keys (from table 140 of ATAPI 2.6) */
-#define NO_SENSE                0x00
-#define RECOVERED_ERROR         0x01
-#define NOT_READY               0x02
-#define MEDIUM_ERROR            0x03
-#define HARDWARE_ERROR          0x04
-#define ILLEGAL_REQUEST         0x05
-#define UNIT_ATTENTION          0x06
-#define DATA_PROTECT            0x07
-#define ABORTED_COMMAND         0x0b
-#define MISCOMPARE              0x0e
 
 /* Configuration flags.  These describe the capabilities of the drive.
    They generally do not change after initialization, unless we learn
@@ -287,6 +228,9 @@ typedef enum {
 } mechtype_t;
 
 
+/* This should probably go into cdrom.h along with the other
+ * generic stuff now in the Mt. Fuji spec.
+ */
 struct atapi_capabilities_page {
 #if defined(__BIG_ENDIAN_BITFIELD)
 	__u8 parameters_saveable : 1;
@@ -608,11 +552,85 @@ struct cdrom_info {
 
 #define ARY_LEN(a) ((sizeof(a) / sizeof(a[0])))
 
+/* This stuff should be in cdrom.h, since it is now generic... */
+
+/* ATAPI sense keys (from table 140 of ATAPI 2.6) */
+#define NO_SENSE                0x00
+#define RECOVERED_ERROR         0x01
+#define NOT_READY               0x02
+#define MEDIUM_ERROR            0x03
+#define HARDWARE_ERROR          0x04
+#define ILLEGAL_REQUEST         0x05
+#define UNIT_ATTENTION          0x06
+#define DATA_PROTECT            0x07
+#define ABORTED_COMMAND         0x0b
+#define MISCOMPARE              0x0e
+
+ 
+
+/* This stuff should be in cdrom.h, since it is now generic... */
 #if VERBOSE_IDE_CD_ERRORS
 
-/* From Table 124 of the ATAPI 1.2 spec.
-   Unchanged in Table 140 of the ATAPI 2.6 draft standard. */
+ /* The generic packet command opcodes for CD/DVD Logical Units,
+ * From Table 57 of the SFF8090 Ver. 3 (Mt. Fuji) draft standard. */ 
+const struct {
+	unsigned short packet_command;
+	const char * const text;
+} packet_command_texts[] = {
+	{ GPCMD_TEST_UNIT_READY, "Test Unit Ready" },
+	{ GPCMD_REQUEST_SENSE, "Request Sense" },
+	{ GPCMD_FORMAT_UNIT, "Format Unit" },
+	{ GPCMD_INQUIRY, "Inquiry" },
+	{ GPCMD_START_STOP_UNIT, "Start/Stop Unit" },
+	{ GPCMD_PREVENT_ALLOW_MEDIUM_REMOVAL, "Prevent/Allow Medium Removal" },
+	{ GPCMD_READ_FORMAT_CAPACITIES, "Read Format Capacities" },
+	{ GPCMD_READ_CDVD_CAPACITY, "Read Cd/Dvd Capacity" },
+	{ GPCMD_READ_10, "Read 10" },
+	{ GPCMD_WRITE_10, "Write 10" },
+	{ GPCMD_SEEK, "Seek" },
+	{ GPCMD_WRITE_AND_VERIFY_10, "Write and Verify 10" },
+	{ GPCMD_VERIFY_10, "Verify 10" },
+	{ GPCMD_FLUSH_CACHE, "Flush Cache" },
+	{ GPCMD_READ_SUBCHANNEL, "Read Subchannel" },
+	{ GPCMD_READ_TOC_PMA_ATIP, "Read Table of Contents" },
+	{ GPCMD_READ_HEADER, "Read Header" },
+	{ GPCMD_PLAY_AUDIO_10, "Play Audio 10" },
+	{ GPCMD_GET_CONFIGURATION, "Get Configuration" },
+	{ GPCMD_PLAY_AUDIO_MSF, "Play Audio MSF" },
+	{ GPCMD_PLAYAUDIO_TI, "Play Audio TrackIndex" },
+	{ GPCMD_GET_EVENT_STATUS_NOTIFICATION, "Get Event Status Notification" },
+	{ GPCMD_PAUSE_RESUME, "Pause/Resume" },
+	{ GPCMD_STOP_PLAY_SCAN, "Stop Play/Scan" },
+	{ GPCMD_READ_DISC_INFO, "Read Disc Info" },
+	{ GPCMD_READ_TRACK_RZONE_INFO, "Read Track Rzone Info" },
+	{ GPCMD_RESERVE_RZONE_TRACK, "Reserve Rzone Track" },
+	{ GPCMD_SEND_OPC, "Send OPC" },
+	{ GPCMD_MODE_SELECT_10, "Mode Select 10" },
+	{ GPCMD_REPAIR_RZONE_TRACK, "Repair Rzone Track" },
+	{ GPCMD_MODE_SENSE_10, "Mode Sense 10" },
+	{ GPCMD_CLOSE_TRACK, "Close Track" },
+	{ GPCMD_BLANK, "Blank" },
+	{ GPCMD_SEND_EVENT, "Send Event" },
+	{ GPCMD_SEND_KEY, "Send Key" },
+	{ GPCMD_REPORT_KEY, "Report Key" },
+	{ GPCMD_LOAD_UNLOAD, "Load/Unload" },
+	{ GPCMD_SET_READ_AHEAD, "Set Read-ahead" },
+	{ GPCMD_READ_12, "Read 12" },
+	{ GPCMD_GET_PERFORMANCE, "Get Performance" },
+	{ GPCMD_SEND_DVD_STRUCTURE, "Send DVD Structure" },
+	{ GPCMD_READ_DVD_STRUCTURE, "Read DVD Structure" },
+	{ GPCMD_SET_STREAMING, "Set Streaming" },
+	{ GPCMD_READ_CD_MSF, "Read CD MSF" },
+	{ GPCMD_SCAN, "Scan" },
+	{ GPCMD_SET_SPEED, "Set Speed" },
+	{ GPCMD_PLAY_CD, "Play CD" },
+	{ GPCMD_MECHANISM_STATUS, "Mechanism Status" },
+	{ GPCMD_READ_CD, "Read CD" },
+};
 
+
+
+/* From Table 303 of the SFF8090 Ver. 3 (Mt. Fuji) draft standard. */
 const char * const sense_key_texts[16] = {
 	"No sense data",
 	"Recovered error",
@@ -632,162 +650,108 @@ const char * const sense_key_texts[16] = {
 	"(reserved)",
 };
 
-
-/* From Table 37 of the ATAPI 2.6 draft standard. */
+/* From Table 304 of the SFF8090 Ver. 3 (Mt. Fuji) draft standard. */
 const struct {
-	unsigned short packet_command;
-	const char * const text;
-} packet_command_texts[] = {
-	{ TEST_UNIT_READY, "Test Unit Ready" },
-	{ REQUEST_SENSE, "Request Sense" },
-	{ INQUIRY, "Inquiry" },
-	{ START_STOP, "Start Stop Unit" },
-	{ ALLOW_MEDIUM_REMOVAL, "Prevent/Allow Medium Removal" },
-	{ READ_CAPACITY, "Read CD-ROM Capacity" },
-	{ READ_10, "Read(10)" },
-	{ SEEK, "Seek" },
-	{ SCMD_READ_TOC, "Read TOC" },
-	{ SCMD_READ_SUBCHANNEL, "Read Sub-Channel" },
-	{ READ_HEADER, "Read Header" },
-	{ STOP_PLAY_SCAN, "Stop Play/Scan" },
-	{ SCMD_PLAYAUDIO10, "Play Audio" },
-	{ SCMD_PLAYAUDIO_MSF, "Play Audio MSF" },
-	{ SCMD_PAUSE_RESUME, "Pause/Resume" },
-	{ MODE_SELECT_10, "Mode Select" },
-	{ MODE_SENSE_10, "Mode Sense" },
-	{ LOAD_UNLOAD, "Load/Unload CD" },
-	{ READ_12, "Read(12)" },
-	{ GET_PERFORMANCE, "Get Performance" },
-	{ READ_CD_MSF, "Read CD MSF" },
-	{ SCAN, "Scan" },
-	{ SET_CD_SPEED, "Set CD Speed" },
-	{ PLAY_CD, "Play CD" },
-	{ MECHANISM_STATUS, "Mechanism Status" },
-	{ READ_CD, "Read CD" },
-};
-
-
-/* From Table 125 of the ATAPI 1.2 spec.,
-   with additions from Tables 141 and 142 of the ATAPI 2.6 draft standard. */
-
-const struct {
-	unsigned short asc_ascq;
+	unsigned long asc_ascq;
 	const char * const text;
 } sense_data_texts[] = {
-	{ 0x0000, "No additional sense information" },
+	{ 0x000000, "No additional sense information" },
+	{ 0x000011, "Play operation in progress" },
+	{ 0x000012, "Play operation paused" },
+	{ 0x000013, "Play operation successfully completed" },
+	{ 0x000014, "Play operation stopped due to error" },
+	{ 0x000015, "No current audio status to return" },
+	{ 0x011700, "Recovered data with no error correction applied" },
+	{ 0x011701, "Recovered data with retries" },
+	{ 0x011702, "Recovered data with positive head offset" },
+	{ 0x011703, "Recovered data with negative head offset" },
+	{ 0x011704, "Recovered data with retries and/or CIRC applied" },
+	{ 0x011705, "Recovered data using previous sector ID" },
+	{ 0x011800, "Recovered data with error correction applied" },
+	{ 0x011801, "Recovered data with error correction and retries applied"},
+	{ 0x011802, "Recovered data - the data was auto-reallocated" },
+	{ 0x011803, "Recovered data with CIRC" },
+	{ 0x011804, "Recovered data with L-EC" },
+	{ 0x015d00, 
+	    "Failure prediction threshold exceeded - Predicted logical unit failure" },
+	{ 0x015d01, 
+	    "Failure prediction threshold exceeded - Predicted media failure" },
+	{ 0x015dff, "Failure prediction threshold exceeded - False" },
+	{ 0x020400, "Logical unit not ready - cause not reportable" },
+	/* Following is misspelled in ATAPI 2.6, _and_ in Mt. Fuji */
+	{ 0x020401,
+	  "Logical unit not ready - in progress [sic] of becoming ready" },
+	{ 0x020402, "Logical unit not ready - initializing command required" },
+	{ 0x020403, "Logical unit not ready - manual intervention required" },
+	{ 0x020404, "In process of becoming ready - writing" },
+	{ 0x020600, "No reference position found (media may be upside down)" },
+	{ 0x023000, "Incompatible medium installed" },
+	{ 0x023a00, "Medium not present" },
+	{ 0x025300, "Media load or eject failed" },
+	{ 0x025700, "Unable to recover table of contents" },
+	{ 0x031100, "Unrecovered read error" },
+	{ 0x031106, "CIRC unrecovered error" },
+	{ 0x033101, "Format command failed" },
+	{ 0x040200, "No seek complete" },
+	{ 0x040300, "Write fault" },
+	{ 0x040900, "Track following error" },
+	{ 0x040901, "Tracking servo failure" },
+	{ 0x040902, "Focus servo failure" },
+	{ 0x040903, "Spindle servo failure" },
+	{ 0x041500, "Random positioning error" },
+	{ 0x041501, "Mechanical positioning or changer error" },
+	{ 0x041502, "Positioning error detected by read of medium" },
+	{ 0x043c00, "Mechanical positioning or changer error" },
+	{ 0x044000, "Diagnostic failure on component (ASCQ)" },
+	{ 0x044400, "Internal CD/DVD logical unit failure" },
+	{ 0x04b600, "Media load mechanism failed" },
+	{ 0x051a00, "Parameter list length error" },
+	{ 0x052000, "Invalid command operation code" },
+	{ 0x052c00, "Command sequence error" },
+	{ 0x052100, "Logical block address out of range" },
+	{ 0x052400, "Invalid field in command packet" },
+	{ 0x052600, "Invalid field in parameter list" },
+	{ 0x052601, "Parameter not supported" },
+	{ 0x052602, "Parameter value invalid" },
+	{ 0x052700, "Write protected media" },
+	{ 0x053001, "Cannot read medium - unknown format" },
+	{ 0x053002, "Cannot read medium - incompatible format" },
+	{ 0x053900, "Saving parameters not supported" },
+	{ 0x054e00, "Overlapped commands attempted" },
+	{ 0x055302, "Medium removal prevented" },
+	{ 0x055500, "System resource failure" },
+	{ 0x056300, "End of user area encountered on this track" },
+	{ 0x056400, "Illegal mode for this track or incompatible medium" },
+	{ 0x056f00, 
+	    "Copy protection key exchange failure - Authentication failure" },
+	{ 0x056f01, "Copy protection key exchange failure - Key not present" },
+	{ 0x056f02, 
+	    "Copy protection key exchange failure - Key not established" },
+	{ 0x05bf00, "Loss of streaming" },
+	{ 0x062800, "Not ready to ready transition, medium may have changed" },
+	{ 0x062900, "Power on, reset or hardware reset occurred" },
+	{ 0x062a00, "Parameters changed" },
+	{ 0x062a01, "Mode parameters changed" },
+	{ 0x062e00, "Insufficient time for operation" },
+	{ 0x063f00, "Logical unit operating conditions have changed" },
+	{ 0x063f01, "Microcode has been changed" },
+	{ 0x065a00, "Operator request or state change input (unspecified)" },
+	{ 0x065a01, "Operator medium removal request" },
+	{ 0x0bb900, "Play operation aborted" },
 
-	{ 0x0011, "Audio play operation in progress" },
-	{ 0x0012, "Audio play operation paused" },
-	{ 0x0013, "Audio play operation successfully completed" },
-	{ 0x0014, "Audio play operation stopped due to error" },
-	{ 0x0015, "No current audio status to return" },
-
-	{ 0x0100, "Mechanical positioning or changer error" },
-
-	{ 0x0200, "No seek complete" },
-
-	{ 0x0400, "Logical unit not ready - cause not reportable" },
-	{ 0x0401,
-	  "Logical unit not ready - in progress (sic) of becoming ready" },
-	{ 0x0402, "Logical unit not ready - initializing command required" },
-	{ 0x0403, "Logical unit not ready - manual intervention required" },
-
-	{ 0x0501, "Media load - eject failed" },
-
-	{ 0x0600, "No reference position found" },
-
-	{ 0x0900, "Track following error" },
-	{ 0x0901, "Tracking servo failure" },
-	{ 0x0902, "Focus servo failure" },
-	{ 0x0903, "Spindle servo failure" },
-
-	{ 0x1100, "Unrecovered read error" },
-	{ 0x1106, "CIRC unrecovered error" },
-
-	{ 0x1500, "Random positioning error" },
-	{ 0x1501, "Mechanical positioning or changer error" },
-	{ 0x1502, "Positioning error detected by read of medium" },
-
-	{ 0x1700, "Recovered data with no error correction applied" },
-	{ 0x1701, "Recovered data with retries" },
-	{ 0x1702, "Recovered data with positive head offset" },
-	{ 0x1703, "Recovered data with negative head offset" },
-	{ 0x1704, "Recovered data with retries and/or CIRC applied" },
-	{ 0x1705, "Recovered data using previous sector ID" },
-
-	{ 0x1800, "Recovered data with error correction applied" },
-	{ 0x1801, "Recovered data with error correction and retries applied" },
-	{ 0x1802, "Recovered data - the data was auto-reallocated" },
-	{ 0x1803, "Recovered data with CIRC" },
-	{ 0x1804, "Recovered data with L-EC" },
-	/* Following two not in 2.6. */
-	{ 0x1805, "Recovered data - recommend reassignment" },
-	{ 0x1806, "Recovered data - recommend rewrite" },
-
-	{ 0x1a00, "Parameter list length error" },
-
-	{ 0x2000, "Invalid command operation code" },
-
-	{ 0x2100, "Logical block address out of range" },
-
-	{ 0x2400, "Invalid field in command packet" },
-
-	{ 0x2600, "Invalid field in parameter list" },
-	{ 0x2601, "Parameter not supported" },
-	{ 0x2602, "Parameter value invalid" },
-	/* Following code not in 2.6. */
-	{ 0x2603, "Threshold parameters not supported" },
-
-	{ 0x2800, "Not ready to ready transition, medium may have changed" },
-
-	{ 0x2900, "Power on, reset or bus device reset occurred" },
-
-	{ 0x2a00, "Parameters changed" },
-	{ 0x2a01, "Mode parameters changed" },
-
-	{ 0x3000, "Incompatible medium installed" },
-	{ 0x3001, "Cannot read medium - unknown format" },
-	{ 0x3002, "Cannot read medium - incompatible format" },
-
-	/* Following code not in 2.6. */
-	{ 0x3700, "Rounded parameter" },
-
-	{ 0x3900, "Saving parameters not supported" },
-
-	{ 0x3a00, "Medium not present" },
-
-	{ 0x3f00, "ATAPI CD-ROM drive operating conditions have changed" },
-	{ 0x3f01, "Microcode has been changed" },
-	/* Following two not in 2.6. */
-	{ 0x3f02, "Changed operating definition" },
-	{ 0x3f03, "Inquiry data has changed" },
-
-	{ 0x4000, "Diagnostic failure on component (ASCQ)" },
-
-	{ 0x4400, "Internal ATAPI CD-ROM drive failure" },
-
-	{ 0x4e00, "Overlapped commands attempted" },
-
-	{ 0x5300, "Media load or eject failed" },
-	{ 0x5302, "Medium removal prevented" },
-
-	{ 0x5700, "Unable to recover table of contents" },
-
-	{ 0x5a00, "Operator request or state change input (unspecified)" },
-	{ 0x5a01, "Operator medium removal request" },
-
-	/* Following two not in 2.6. */
-	{ 0x5b00, "Threshold condition met" },
-	{ 0x5c00, "Status change" },
-
-	{ 0x6300, "End of user area encountered on this track" },
-
-	{ 0x6400, "Illegal mode for this track or incompatible medium" },
-
-	/* Following error is misspelled in ATAPI 2.6 */
-	{ 0xb900, "Play operation oborted [sic]" },
-
-	{ 0xbf00, "Loss of streaming" },
+	/* Here we use 0xff for the key (not a valid key) to signify
+	 * that these can have _any_ key value associated with them... */
+	{ 0xff0401, "Logical unit is in process of becoming ready" },
+	{ 0xff0400, "Logical unit not ready, cause not reportable" },
+	{ 0xff0402, "Logical unit not ready, initializing command required" },
+	{ 0xff0403, "Logical unit not ready, manual intervention required" },
+	{ 0xff0500, "Logical unit does not respond to selection" },
+	{ 0xff0800, "Logical unit communication failure" },
+	{ 0xff0802, "Logical unit communication parity error" },
+	{ 0xff0801, "Logical unit communication time-out" },
+	{ 0xff2500, "Logical unit not supported" },
+	{ 0xff4c00, "Logical unit failed self-configuration" },
+	{ 0xff3e00, "Logical unit has not self-configured yet" },
 };
 #endif
 

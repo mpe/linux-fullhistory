@@ -35,6 +35,7 @@
 #include <linux/openpic.h>
 #include <linux/ide.h>
 
+#include <asm/init.h>
 #include <asm/mmu.h>
 #include <asm/processor.h>
 #include <asm/residual.h>
@@ -491,7 +492,7 @@ prep_restart(char *cmd)
         unsigned long i = 10000;
 
 
-        _disable_interrupts();
+	__cli();
 
         /* set exception prefix high - to the prom */
         _nmask_and_or_msr(0, MSR_IP);
@@ -518,7 +519,7 @@ prep_direct_restart(char *cmd)
 	 * This will ALWAYS work regardless of port 92
 	 * functionality
 	 */
-	_disable_interrupts();
+	__cli();
 
 	__asm__ __volatile__("\n\
 	mtspr   26, %1  /* SRR0 */
@@ -535,7 +536,7 @@ void
 prep_halt(void)
 {
         unsigned long flags;
-	_disable_interrupts();
+	__cli();
 	/* set exception prefix high - to the prom */
 	save_flags( flags );
 	restore_flags( flags|MSR_IP );

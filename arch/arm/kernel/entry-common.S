@@ -2,6 +2,16 @@
 /*============================================================================
  * All exits to user mode from the kernel go through this code.
  */
+
+/*
+ * Define to favour ARM8, ARM9 and StrongARM cpus.  This says that it is
+ * cheaper to use two LDR instructions than a two-register LDM, if the
+ * latter would entail calculating an address specially.
+ */
+#if defined(CONFIG_CPU_SA110)
+#define HARVARD_CACHE
+#endif
+
 		.globl	ret_from_sys_call
 
 		.align	5
@@ -10,18 +20,23 @@ fast_syscall_return:
 slow_syscall_return:
 		add	sp, sp, #4
 ret_from_sys_call:
+#ifdef HARVARD_CACHE
+		ldr	r0, bh_data
+		ldr	r4, bh_data+4
+#else
 		adr	r0, bh_data
 		ldmia	r0, {r0, r4}
+#endif
 		ldr	r0, [r0]
 		ldr	r1, [r4]
 		tst	r0, r1
 		blne	SYMBOL_NAME(do_bottom_half)
 ret_with_reschedule:
-		get_current_task r1		@ check for scheduling
-		ldr	r0, [r1, #TSK_NEED_RESCHED]
+		get_current_task r5
+		ldr	r0, [r5, #TSK_NEED_RESCHED]
+		ldr	r1, [r5, #TSK_SIGPENDING]
 		teq	r0, #0
 		bne	ret_reschedule
-		ldr	r1, [r1, #TSK_SIGPENDING]
 		teq	r1, #0			@ check for signals
 		bne	ret_signal
 
@@ -37,8 +52,13 @@ ret_reschedule:	adrsvc	al, lr, ret_with_reschedule
 
 		.globl	ret_from_exception
 ret_from_exception:
+#ifdef HARVARD_CACHE
+		ldr	r0, bh_data
+		ldr	r1, bh_data + 4
+#else
 		adr	r0, bh_data
 		ldmia	r0, {r0, r1}
+#endif
 		ldr	r0, [r0]
 		ldr	r1, [r1]
 		mov	r4, #0

@@ -43,7 +43,7 @@
 #include <asm/fpu.h>
 
 #include "proto.h"
-#include "bios32.h"
+#include "pci_impl.h"
 
 /*
  * Initial task structure. Make this a per-architecture thing,
@@ -95,7 +95,7 @@ cpu_idle(void)
 }
 
 void
-generic_kill_arch (int mode, char *restart_cmd)
+common_kill_arch (int mode, char *restart_cmd)
 {
 	/* The following currently only has any effect on SRM.  We should
 	   fix MILO to understand it.  Should be pretty easy.  Also we can
@@ -130,7 +130,7 @@ generic_kill_arch (int mode, char *restart_cmd)
 		cpup->flags = flags;					       
 		mb();						
 
-		reset_for_srm();
+		/* reset_for_srm(); */
 		set_hae(srm_hae);
 
 #ifdef CONFIG_DUMMY_CONSOLE

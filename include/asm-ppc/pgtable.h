@@ -20,11 +20,6 @@ extern void local_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 #define flush_tlb_page local_flush_tlb_page
 #define flush_tlb_range local_flush_tlb_range
 
-extern __inline__ void flush_tlb_pgtables(struct mm_struct *mm, unsigned long start, unsigned long end)
-{
-	/* PPC has hw page tables. */
-}
-
 /*
  * No cache flushing is required when address mappings are
  * changed, because the caches on PowerPCs are physically
@@ -44,6 +39,7 @@ extern unsigned long va_to_phys(unsigned long address);
 extern pte_t *va_to_pte(struct task_struct *tsk, unsigned long address);
 extern unsigned long ioremap_bot, ioremap_base;
 #endif /* __ASSEMBLY__ */
+
 /*
  * The PowerPC MMU uses a hash table containing PTEs, together with
  * a set of 16 segment registers (on 32-bit implementations), to define
@@ -56,7 +52,9 @@ extern unsigned long ioremap_bot, ioremap_base;
  * for extracting ptes from the tree and putting them into the hash table
  * when necessary, and updating the accessed and modified bits in the
  * page table tree.
- *
+ */
+
+/*
  * The PowerPC MPC8xx uses a TLB with hardware assisted, software tablewalk.
  * We also use the two level tables, but we can put the real bits in them
  * needed for the TLB and tablewalk.  These definitions require Mx_CTR.PPM = 0,
@@ -94,7 +92,8 @@ extern unsigned long ioremap_bot, ioremap_base;
 #define PTRS_PER_PGD	1024
 #define USER_PTRS_PER_PGD	(TASK_SIZE / PGDIR_SIZE)
 
-/* Just any arbitrary offset to the start of the vmalloc VM area: the
+/*
+ * Just any arbitrary offset to the start of the vmalloc VM area: the
  * current 64MB value just means that there will be a 64MB "hole" after the
  * physical memory until the kernel virtual memory starts.  That means that
  * any out-of-bounds memory accesses will hopefully be caught.
@@ -120,6 +119,7 @@ extern unsigned long ioremap_bot, ioremap_base;
  * (hardware-defined) PowerPC PTE as closely as possible.
  */
 #ifndef CONFIG_8xx
+/* Definitions for 60x, 740/750, etc. */
 #define _PAGE_PRESENT	0x001	/* software: pte contains a translation */
 #define _PAGE_USER	0x002	/* matches one of the PP bits */
 #define _PAGE_RW	0x004	/* software: user write access allowed */
@@ -133,6 +133,7 @@ extern unsigned long ioremap_bot, ioremap_base;
 #define _PAGE_SHARED	0
 
 #else
+/* Definitions for 8xx embedded chips. */
 #define _PAGE_PRESENT	0x0001	/* Page is valid */
 #define _PAGE_NO_CACHE	0x0002	/* I: cache inhibit */
 #define _PAGE_SHARED	0x0004	/* No ASID (context) compare */
@@ -225,20 +226,6 @@ extern unsigned long empty_zero_page[1024];
 /* 64-bit machines, beware!  SRB. */
 #define SIZEOF_PTR_LOG2	2
 
-/* to set the page-dir */
-/* tsk is a task_struct and pgdir is a pte_t */
-#ifndef CONFIG_8xx
-#define SET_PAGE_DIR(tsk,pgdir)  \
-	((tsk)->tss.pg_tables = (unsigned long *)(pgdir))
-#else /* CONFIG_8xx */     
-#define SET_PAGE_DIR(tsk,pgdir)  \
- do { \
-	unsigned long __pgdir = (unsigned long)pgdir; \
-	((tsk)->tss.pg_tables = (unsigned long *)(__pgdir)); \
-	asm("mtspr %0,%1 \n\t" : : "i"(M_TWB), "r"(__pa(__pgdir))); \
- } while (0)
-#endif /* CONFIG_8xx */
-     
 #ifndef __ASSEMBLY__
 extern inline int pte_none(pte_t pte)		{ return !pte_val(pte); }
 extern inline int pte_present(pte_t pte)	{ return pte_val(pte) & _PAGE_PRESENT; }
@@ -648,6 +635,23 @@ extern void kernel_set_cachemode (unsigned long address, unsigned long size,
 #define kern_addr_valid(addr)	(1)
 
 #define io_remap_page_range remap_page_range 
+
+#ifdef CONFIG_8xx
+#define __tlbia()	asm volatile ("tlbia" : : )
+
+extern inline void local_flush_tlb_all(void)
+	{ __tlbia(); }
+extern inline void local_flush_tlb_mm(struct mm_struct *mm)
+	{ __tlbia(); }
+extern inline void local_flush_tlb_page(struct vm_area_struct *vma,
+				unsigned long vmaddr)
+	{ __tlbia(); }
+extern inline void local_flush_tlb_range(struct mm_struct *mm,
+				unsigned long start, unsigned long end)
+	{ __tlbia(); }
+extern inline void flush_hash_page(unsigned context, unsigned long va)
+	{ }
+#endif
 
 #endif __ASSEMBLY__
 #endif /* _PPC_PGTABLE_H */

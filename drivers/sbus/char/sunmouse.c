@@ -69,7 +69,7 @@ struct sun_mouse {
 	unsigned char prev_state;      /* Previous button state */
 	int delta_x;                   /* Current delta-x */
 	int delta_y;                   /* Current delta-y */
-	int present;
+	int present;                   
 	int ready;		       /* set if there if data is available */
 	int active;		       /* set if device is open */
         int vuid_mode;	               /* VUID_NATIVE or VUID_FIRM_EVENT */
@@ -170,11 +170,16 @@ void mouse_baud_detection(unsigned char c)
 	static int ctr = 0;
 
 	if(wait_for_synchron) {
-		if((c < 0x80) || (c > 0x87))
+		if((c & ~0x0f) != 0x80)
 			mouse_bogon_bytes++;
 		else {
-			ctr = 0;
-			wait_for_synchron = 0;
+		        if (c & 8) {
+				ctr = 2;
+				wait_for_synchron = 0;
+			} else {
+				ctr = 0;
+				wait_for_synchron = 0;
+			}
 		}
 	} else {
 		ctr++;
@@ -212,6 +217,11 @@ sun_mouse_inbyte(unsigned char byte)
 	mouse_baud_detection(byte);
 
 	if (!gen_events){
+		if (((byte & ~0x0f) == 0x80) && (byte & 0x8)) {
+			/* Push dummy 4th and 5th byte for last txn */
+			push_char(0x0);
+			push_char(0x0);
+		}
 		push_char (byte);
 		return;
 	}
@@ -220,7 +230,7 @@ sun_mouse_inbyte(unsigned char byte)
 	 * we are starting at byte zero in the transaction
 	 * protocol.
 	 */
-	if(byte >= 0x80 && byte <= 0x87)
+	if((byte & ~0x0f) == 0x80) 
 		sunmouse.byte = 0;
 
 	mvalue = (signed char) byte;
@@ -234,6 +244,12 @@ sun_mouse_inbyte(unsigned char byte)
 		       ((sunmouse.button_state & 0x2) ? "DOWN" : "UP"),
 		       ((sunmouse.button_state & 0x1) ? "DOWN" : "UP"));
 #endif
+		/* To deal with the Sparcbook 3 */
+		if (byte & 0x8) {
+			sunmouse.byte += 2;
+			sunmouse.delta_y = 0;
+			sunmouse.delta_x = 0;
+		}
 		sunmouse.byte++;
 		return;
 	case 1:
@@ -492,7 +508,7 @@ static struct miscdevice sun_mouse_mouse = {
 	SUN_MOUSE_MINOR, "sunmouse", &sun_mouse_fops
 };
 
-__initfunc(int sun_mouse_init(void))
+int __init sun_mouse_init(void)
 {
 	if (!sunmouse.present)
 		return -ENODEV;

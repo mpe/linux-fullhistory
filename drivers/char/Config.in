@@ -69,6 +69,7 @@ if [ "$CONFIG_BUSMOUSE" != "n" ]; then
   dep_tristate 'ATIXL busmouse support' CONFIG_ATIXL_BUSMOUSE $CONFIG_BUSMOUSE
   dep_tristate 'Logitech busmouse support' CONFIG_LOGIBUSMOUSE $CONFIG_BUSMOUSE
   dep_tristate 'Microsoft busmouse support' CONFIG_MS_BUSMOUSE $CONFIG_BUSMOUSE
+  dep_tristate 'Apple Desktop Bus mouse support' CONFIG_ADBMOUSE $CONFIG_BUSMOUSE
 fi
 
 tristate 'Mouse Support (not serial and bus mice)' CONFIG_MOUSE
@@ -195,6 +196,9 @@ fi
 endmenu
 
 tristate 'Double Talk PC internal speech card support' CONFIG_DTLK
+
+tristate 'Siemens R3964 line discipline' CONFIG_R3964
+tristate 'Applicom intelligent fieldbus card support' CONFIG_APPLICOM
 
 mainmenu_option next_comment
 comment 'Ftape, the floppy tape device driver'

@@ -3,7 +3,7 @@
  *
  *	Copyright (C) 1995 David A Rusling
  *	Copyright (C) 1996 Jay A Estabrook
- *	Copyright (C) 1998 Richard Henderson
+ *	Copyright (C) 1998, 1999 Richard Henderson
  *
  * Code supporting the SX164 (PCA56+PYXIS).
  */
@@ -26,9 +26,9 @@
 #include <asm/core_pyxis.h>
 
 #include "proto.h"
-#include "irq.h"
-#include "bios32.h"
-#include "machvec.h"
+#include "irq_impl.h"
+#include "pci_impl.h"
+#include "machvec_impl.h"
 
 
 static void
@@ -164,7 +164,7 @@ sx164_init_irq(void)
  */
 
 static int __init
-sx164_map_irq(struct pci_dev *dev, int slot, int pin)
+sx164_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
 	static char irq_tab[5][5] __initlocaldata = {
 		/*INT    INTA   INTB   INTC   INTD */
@@ -179,10 +179,9 @@ sx164_map_irq(struct pci_dev *dev, int slot, int pin)
 }
 
 void __init
-sx164_pci_fixup(void)
+sx164_init_pci(void)
 {
-	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
-	common_pci_fixup(sx164_map_irq, common_swizzle);
+	common_init_pci();
 	SMC669_Init(0);
 }
 
@@ -199,17 +198,21 @@ struct alpha_machine_vector sx164_mv __initmv = {
 	DO_PYXIS_BUS,
 	machine_check:		pyxis_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	min_io_address:		DEFAULT_IO_BASE,
+	min_mem_address:	DEFAULT_MEM_BASE,
 
 	nr_irqs:		40,
 	irq_probe_mask:		_PROBE_MASK(40),
 	update_irq_hw:		sx164_update_irq_hw,
-	ack_irq:		generic_ack_irq,
+	ack_irq:		common_ack_irq,
 	device_interrupt:	sx164_device_interrupt,
 
 	init_arch:		pyxis_init_arch,
 	init_irq:		sx164_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		sx164_pci_fixup,
-	kill_arch:		generic_kill_arch,
+	init_pit:		common_init_pit,
+	init_pci:		sx164_init_pci,
+	kill_arch:		common_kill_arch,
+	pci_map_irq:		sx164_map_irq,
+	pci_swizzle:		common_swizzle,
 };
 ALIAS_MV(sx164)

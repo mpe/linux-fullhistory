@@ -1,5 +1,5 @@
 /*
- * $Id: locks.c,v 1.23 1999/02/12 07:06:32 cort Exp $
+ * $Id: locks.c,v 1.24 1999/08/03 19:16:47 cort Exp $
  *
  * Locks for smp ppc 
  * 
@@ -113,7 +113,7 @@ void _read_unlock(rwlock_t *rw)
 #ifdef DEBUG_LOCKS
 	if ( rw->lock == 0 )
 		printk("_read_unlock(): %s/%d (nip %08lX) lock %lx\n",
-		       current->comm,current->pid,current->tss.regs->nip,
+		       current->comm,current->pid,current->thread.regs->nip,
 		      rw->lock);
 #endif /* DEBUG_LOCKS */
 	wmb();
@@ -173,7 +173,7 @@ void _write_unlock(rwlock_t *rw)
 #ifdef DEBUG_LOCKS
 	if ( !(rw->lock & (1<<31)) )
 		printk("_write_lock(): %s/%d (nip %08lX) lock %lx\n",
-		      current->comm,current->pid,current->tss.regs->nip,
+		      current->comm,current->pid,current->thread.regs->nip,
 		      rw->lock);
 #endif /* DEBUG_LOCKS */
 	wmb();
@@ -189,7 +189,7 @@ void __lock_kernel(struct task_struct *task)
 	if ( (signed long)(task->lock_depth) < 0 )
 	{
 		printk("__lock_kernel(): %s/%d (nip %08lX) lock depth %x\n",
-		      task->comm,task->pid,task->tss.regs->nip,
+		      task->comm,task->pid,task->thread.regs->nip,
 		      task->lock_depth);
 	}
 #endif /* DEBUG_LOCKS */
@@ -219,7 +219,7 @@ void __unlock_kernel(struct task_struct *task)
 	{
 		printk("__unlock_kernel(): %s/%d (nip %08lX) "
 		       "lock depth %x flags %lx\n",
-		       task->comm,task->pid,task->tss.regs->nip,
+		       task->comm,task->pid,task->thread.regs->nip,
 		       task->lock_depth, klock_info.kernel_flag);
 		klock_info.akp = NO_PROC_ID;		
 		klock_info.kernel_flag = 0;

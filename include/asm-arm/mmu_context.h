@@ -12,6 +12,7 @@
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
 #include <asm/arch/memory.h>
+#include <asm/proc-fns.h>
 
 #define destroy_context(mm)		do { } while(0)
 #define init_new_context(tsk,mm)	do { } while(0)
@@ -20,13 +21,18 @@
  * This is the actual mm switch as far as the scheduler
  * is concerned.  No registers are touched.
  */
-static inline void switch_mm(struct mm_struct *prev, struct mm_struct *next, unsigned int cpu)
+static inline void
+switch_mm(struct mm_struct *prev, struct mm_struct *next,
+	  struct task_struct *tsk, unsigned int cpu)
 {
 	if (prev != next) {
-		processor.u.armv3v4._set_pgd(__virt_to_phys((unsigned long)next->pgd));
+		cpu_switch_mm(__virt_to_phys((unsigned long)next->pgd), tsk);
 		clear_bit(cpu, &prev->cpu_vm_mask);
 	}
 	set_bit(cpu, &next->cpu_vm_mask);
 }
+
+#define activate_mm(prev, next) \
+	switch_mm((prev),(next),NULL,smp_processor_id())
 
 #endif

@@ -1,4 +1,4 @@
-/* $Id: rtc.c,v 1.14 1999/06/03 15:02:38 davem Exp $
+/* $Id: rtc.c,v 1.17 1999/08/31 13:32:01 anton Exp $
  *
  * Linux/SPARC Real Time Clock Driver
  * Copyright (C) 1996 Thomas K. Dyas (tdyas@eden.rutgers.edu)
@@ -29,12 +29,16 @@ static int rtc_busy = 0;
 /* Retrieve the current date and time from the real time clock. */
 void get_rtc_time(struct rtc_time *t)
 {
-	register struct mostek48t02 *regs = mstk48t02_regs;
+	struct mostek48t02 *regs = (struct mostek48t02 *)mstk48t02_regs;
 	unsigned long flags;
+	u8 tmp;
 
 	save_flags(flags);
 	cli();
-	regs->creg |= MSTK_CREG_READ;
+
+	tmp = mostek_read(regs + MOSTEK_CREG);
+	tmp |= MSTK_CREG_READ;
+	mostek_write(regs + MOSTEK_CREG, tmp);
 
 	t->sec = MSTK_REG_SEC(regs);
 	t->min = MSTK_REG_MIN(regs);
@@ -44,19 +48,24 @@ void get_rtc_time(struct rtc_time *t)
 	t->month = MSTK_REG_MONTH(regs);
 	t->year = MSTK_CVT_YEAR( MSTK_REG_YEAR(regs) );
 
-	regs->creg &= ~MSTK_CREG_READ;
+	tmp = mostek_read(regs + MOSTEK_CREG);
+	tmp &= ~MSTK_CREG_READ;
+	mostek_write(regs + MOSTEK_CREG, tmp);
 	restore_flags(flags);
 }
 
 /* Set the current date and time inthe real time clock. */
 void set_rtc_time(struct rtc_time *t)
 {
-	register struct mostek48t02 *regs = mstk48t02_regs;
+	struct mostek48t02 *regs = (struct mostek48t02 *)mstk48t02_regs;
 	unsigned long flags;
+	u8 tmp;
 
 	save_flags(flags);
 	cli();
-	regs->creg |= MSTK_CREG_WRITE;
+	tmp = mostek_read(regs + MOSTEK_CREG);
+	tmp |= MSTK_CREG_WRITE;
+	mostek_write(regs + MOSTEK_CREG, tmp);
 
 	MSTK_SET_REG_SEC(regs,t->sec);
 	MSTK_SET_REG_MIN(regs,t->min);
@@ -66,7 +75,9 @@ void set_rtc_time(struct rtc_time *t)
 	MSTK_SET_REG_MONTH(regs,t->month);
 	MSTK_SET_REG_YEAR(regs,t->year - MSTK_YEAR_ZERO);
 
-	regs->creg &= ~MSTK_CREG_WRITE;
+	tmp = mostek_read(regs + MOSTEK_CREG);
+	tmp &= ~MSTK_CREG_WRITE;
+	mostek_write(regs + MOSTEK_CREG, tmp);
 	restore_flags(flags);
 }
 
@@ -145,7 +156,7 @@ EXPORT_NO_SYMBOLS;
 #ifdef MODULE
 int init_module(void)
 #else
-__initfunc(int rtc_sun_init(void))
+int __init rtc_sun_init(void)
 #endif
 {
 	int error;

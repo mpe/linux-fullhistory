@@ -28,7 +28,6 @@
  *     
  ********************************************************************/
 
-#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/init.h>
 

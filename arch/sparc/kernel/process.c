@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.138 1999/07/23 01:56:10 davem Exp $
+/*  $Id: process.c,v 1.139 1999/08/14 03:51:14 anton Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -51,7 +51,7 @@ struct task_struct *current_set[NR_CPUS] = {&init_task, };
 /*
  * the idle loop on a Sparc... ;)
  */
-asmlinkage int sys_idle(void)
+int cpu_idle(void)
 {
 	int ret = -EPERM;
 
@@ -107,7 +107,7 @@ out:
 #else
 
 /* This is being executed in task 0 'user space'. */
-int cpu_idle(void *unused)
+int cpu_idle(void)
 {
 	/* endless idle loop with no priority at all */
 	current->priority = 0;
@@ -121,15 +121,6 @@ int cpu_idle(void *unused)
 		}
 		barrier(); /* or else gcc optimizes... */
 	}
-}
-
-asmlinkage int sys_idle(void)
-{
-	if(current->pid != 0)
-		return -EPERM;
-
-	cpu_idle(NULL);
-	return 0;
 }
 
 #endif
@@ -299,33 +290,33 @@ void show_regs(struct pt_regs * regs)
 }
 
 #if NOTUSED
-void show_thread(struct thread_struct *tss)
+void show_thread(struct thread_struct *thread)
 {
 	int i;
 
-	printk("uwinmask:          0x%08lx  kregs:             0x%08lx\n", tss->uwinmask, (unsigned long)tss->kregs);
-	show_regs(tss->kregs);
-	printk("sig_address:       0x%08lx  sig_desc:          0x%08lx\n", tss->sig_address, tss->sig_desc);
-	printk("ksp:               0x%08lx  kpc:               0x%08lx\n", tss->ksp, tss->kpc);
-	printk("kpsr:              0x%08lx  kwim:              0x%08lx\n", tss->kpsr, tss->kwim);
-	printk("fork_kpsr:         0x%08lx  fork_kwim:         0x%08lx\n", tss->fork_kpsr, tss->fork_kwim);
+	printk("uwinmask:          0x%08lx  kregs:             0x%08lx\n", thread->uwinmask, (unsigned long)thread->kregs);
+	show_regs(thread->kregs);
+	printk("sig_address:       0x%08lx  sig_desc:          0x%08lx\n", thread->sig_address, thread->sig_desc);
+	printk("ksp:               0x%08lx  kpc:               0x%08lx\n", thread->ksp, thread->kpc);
+	printk("kpsr:              0x%08lx  kwim:              0x%08lx\n", thread->kpsr, thread->kwim);
+	printk("fork_kpsr:         0x%08lx  fork_kwim:         0x%08lx\n", thread->fork_kpsr, thread->fork_kwim);
 
 	for (i = 0; i < NSWINS; i++) {
-		if (!tss->rwbuf_stkptrs[i])
+		if (!thread->rwbuf_stkptrs[i])
 			continue;
 		printk("reg_window[%d]:\n", i);
-		printk("stack ptr:         0x%08lx\n", tss->rwbuf_stkptrs[i]);
-		show_regwindow(&tss->reg_window[i]);
+		printk("stack ptr:         0x%08lx\n", thread->rwbuf_stkptrs[i]);
+		show_regwindow(&thread->reg_window[i]);
 	}
-	printk("w_saved:           0x%08lx\n", tss->w_saved);
+	printk("w_saved:           0x%08lx\n", thread->w_saved);
 
 	/* XXX missing: float_regs */
-	printk("fsr:               0x%08lx  fpqdepth:          0x%08lx\n", tss->fsr, tss->fpqdepth);
+	printk("fsr:               0x%08lx  fpqdepth:          0x%08lx\n", thread->fsr, thread->fpqdepth);
 	/* XXX missing: fpqueue */
 
-	printk("flags:             0x%08lx  current_ds:        0x%08lx\n", tss->flags, tss->current_ds.seg);
+	printk("flags:             0x%08lx  current_ds:        0x%08lx\n", thread->flags, thread->current_ds.seg);
 	
-	show_regwindow((struct reg_window *)tss->ksp);
+	show_regwindow((struct reg_window *)thread->ksp);
 
 	/* XXX missing: core_exec */
 }
@@ -343,8 +334,8 @@ void exit_thread(void)
 #endif
 		/* Keep process from leaving FPU in a bogon state. */
 		put_psr(get_psr() | PSR_EF);
-		fpsave(&current->tss.float_regs[0], &current->tss.fsr,
-		       &current->tss.fpqueue[0], &current->tss.fpqdepth);
+		fpsave(&current->thread.float_regs[0], &current->thread.fsr,
+		       &current->thread.fpqueue[0], &current->thread.fpqdepth);
 #ifndef __SMP__
 		last_task_used_math = NULL;
 #else
@@ -355,10 +346,10 @@ void exit_thread(void)
 
 void flush_thread(void)
 {
-	current->tss.w_saved = 0;
+	current->thread.w_saved = 0;
 
 	/* No new signal delivery by default */
-	current->tss.new_signal = 0;
+	current->thread.new_signal = 0;
 #ifndef __SMP__
 	if(last_task_used_math == current) {
 #else
@@ -366,8 +357,8 @@ void flush_thread(void)
 #endif
 		/* Clean the fpu. */
 		put_psr(get_psr() | PSR_EF);
-		fpsave(&current->tss.float_regs[0], &current->tss.fsr,
-		       &current->tss.fpqueue[0], &current->tss.fpqdepth);
+		fpsave(&current->thread.float_regs[0], &current->thread.fsr,
+		       &current->thread.fpqueue[0], &current->thread.fpqdepth);
 #ifndef __SMP__
 		last_task_used_math = NULL;
 #else
@@ -376,24 +367,15 @@ void flush_thread(void)
 	}
 
 	/* Now, this task is no longer a kernel thread. */
-	current->tss.current_ds = USER_DS;
-	if (current->tss.flags & SPARC_FLAG_KTHREAD) {
-		current->tss.flags &= ~SPARC_FLAG_KTHREAD;
+	current->thread.current_ds = USER_DS;
+	if (current->thread.flags & SPARC_FLAG_KTHREAD) {
+		current->thread.flags &= ~SPARC_FLAG_KTHREAD;
 
 		/* We must fixup kregs as well. */
-		current->tss.kregs = (struct pt_regs *)
+		current->thread.kregs = (struct pt_regs *)
 			(((unsigned long)current) +
 			 (TASK_UNION_SIZE - TRACEREG_SZ));
 	}
-
-	/* Exec'ing out of a vfork() shared address space is
-	 * tricky on sparc32.  exec_mmap will not set the mmu
-	 * context because it sets the new current->mm after
-	 * calling init_new_context and activate_context is
-	 * a nop on sparc32, so we gotta catch it here.  And
-	 * clone()'s had the same problem.  -DaveM
-	 */
-	switch_to_context(current);
 }
 
 static __inline__ void copy_regs(struct pt_regs *dst, struct pt_regs *src)
@@ -457,12 +439,10 @@ clone_stackframe(struct sparc_stackf *dst, struct sparc_stackf *src)
 	 * temporarily so we can build the child clone stack frame
 	 * without deadlocking.
 	 */
-	up(&current->mm->mmap_sem);
 	if (copy_to_user(sp, src, size))
 		sp = (struct sparc_stackf *) 0;
 	else if (put_user(dst, &sp->fp))
 		sp = (struct sparc_stackf *) 0;
-	down(&current->mm->mmap_sem);
 
 	return sp;
 }
@@ -499,8 +479,8 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 	if(current->flags & PF_USEDFPU) {
 #endif
 		put_psr(get_psr() | PSR_EF);
-		fpsave(&p->tss.float_regs[0], &p->tss.fsr,
-		       &p->tss.fpqueue[0], &p->tss.fpqdepth);
+		fpsave(&p->thread.float_regs[0], &p->thread.fsr,
+		       &p->thread.fpqueue[0], &p->thread.fpqdepth);
 #ifdef __SMP__
 		current->flags &= ~PF_USEDFPU;
 #endif
@@ -516,36 +496,36 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 	new_stack = (((struct reg_window *) childregs) - 1);
 	copy_regwin(new_stack, (((struct reg_window *) regs) - 1));
 
-	p->tss.ksp = (unsigned long) new_stack;
+	p->thread.ksp = (unsigned long) new_stack;
 #ifdef __SMP__
-	p->tss.kpc = (((unsigned long) ret_from_smpfork) - 0x8);
-	p->tss.kpsr = current->tss.fork_kpsr | PSR_PIL;
+	p->thread.kpc = (((unsigned long) ret_from_smpfork) - 0x8);
+	p->thread.kpsr = current->thread.fork_kpsr | PSR_PIL;
 #else
-	p->tss.kpc = (((unsigned long) ret_from_syscall) - 0x8);
-	p->tss.kpsr = current->tss.fork_kpsr;
+	p->thread.kpc = (((unsigned long) ret_from_syscall) - 0x8);
+	p->thread.kpsr = current->thread.fork_kpsr;
 #endif
-	p->tss.kwim = current->tss.fork_kwim;
+	p->thread.kwim = current->thread.fork_kwim;
 
 	if(regs->psr & PSR_PS) {
 		extern struct pt_regs fake_swapper_regs;
 
-		p->tss.kregs = &fake_swapper_regs;
+		p->thread.kregs = &fake_swapper_regs;
 		new_stack = (struct reg_window *)
 			((((unsigned long)p) +
 			  (TASK_UNION_SIZE)) -
 			 (REGWIN_SZ));
 		childregs->u_regs[UREG_FP] = (unsigned long) new_stack;
-		p->tss.flags |= SPARC_FLAG_KTHREAD;
-		p->tss.current_ds = KERNEL_DS;
+		p->thread.flags |= SPARC_FLAG_KTHREAD;
+		p->thread.current_ds = KERNEL_DS;
 		memcpy((void *)new_stack,
 		       (void *)regs->u_regs[UREG_FP],
 		       sizeof(struct reg_window));
 		childregs->u_regs[UREG_G6] = (unsigned long) p;
 	} else {
-		p->tss.kregs = childregs;
+		p->thread.kregs = childregs;
 		childregs->u_regs[UREG_FP] = sp;
-		p->tss.flags &= ~SPARC_FLAG_KTHREAD;
-		p->tss.current_ds = USER_DS;
+		p->thread.flags &= ~SPARC_FLAG_KTHREAD;
+		p->thread.current_ds = USER_DS;
 
 		if (sp != regs->u_regs[UREG_FP]) {
 			struct sparc_stackf *childstack;
@@ -601,7 +581,7 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 	dump->regs.y = regs->y;
 	/* fuck me plenty */
 	memcpy(&dump->regs.regs[0], &regs->u_regs[1], (sizeof(unsigned long) * 15));
-	dump->uexec = current->tss.core_exec;
+	dump->uexec = current->thread.core_exec;
 	dump->u_tsize = (((unsigned long) current->mm->end_code) -
 		((unsigned long) current->mm->start_code)) & ~(PAGE_SIZE - 1);
 	dump->u_dsize = ((unsigned long) (current->mm->brk + (PAGE_SIZE-1)));
@@ -609,13 +589,13 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 	dump->u_dsize &= ~(PAGE_SIZE - 1);
 	first_stack_page = (regs->u_regs[UREG_FP] & ~(PAGE_SIZE - 1));
 	dump->u_ssize = (TASK_SIZE - first_stack_page) & ~(PAGE_SIZE - 1);
-	memcpy(&dump->fpu.fpstatus.fregs.regs[0], &current->tss.float_regs[0], (sizeof(unsigned long) * 32));
-	dump->fpu.fpstatus.fsr = current->tss.fsr;
+	memcpy(&dump->fpu.fpstatus.fregs.regs[0], &current->thread.float_regs[0], (sizeof(unsigned long) * 32));
+	dump->fpu.fpstatus.fsr = current->thread.fsr;
 	dump->fpu.fpstatus.flags = dump->fpu.fpstatus.extra = 0;
-	dump->fpu.fpstatus.fpq_count = current->tss.fpqdepth;
-	memcpy(&dump->fpu.fpstatus.fpq[0], &current->tss.fpqueue[0],
+	dump->fpu.fpstatus.fpq_count = current->thread.fpqdepth;
+	memcpy(&dump->fpu.fpstatus.fpq[0], &current->thread.fpqueue[0],
 	       ((sizeof(unsigned long) * 2) * 16));
-	dump->sigcode = current->tss.sig_desc;
+	dump->sigcode = current->thread.sig_desc;
 }
 
 /*
@@ -631,30 +611,30 @@ int dump_fpu (struct pt_regs * regs, elf_fpregset_t * fpregs)
 #ifdef __SMP__
 	if (current->flags & PF_USEDFPU) {
 		put_psr(get_psr() | PSR_EF);
-		fpsave(&current->tss.float_regs[0], &current->tss.fsr,
-		       &current->tss.fpqueue[0], &current->tss.fpqdepth);
+		fpsave(&current->thread.float_regs[0], &current->thread.fsr,
+		       &current->thread.fpqueue[0], &current->thread.fpqdepth);
 		regs->psr &= ~(PSR_EF);
 		current->flags &= ~(PF_USEDFPU);
 	}
 #else
 	if (current == last_task_used_math) {
 		put_psr(get_psr() | PSR_EF);
-		fpsave(&current->tss.float_regs[0], &current->tss.fsr,
-		       &current->tss.fpqueue[0], &current->tss.fpqdepth);
+		fpsave(&current->thread.float_regs[0], &current->thread.fsr,
+		       &current->thread.fpqueue[0], &current->thread.fpqdepth);
 		last_task_used_math = 0;
 		regs->psr &= ~(PSR_EF);
 	}
 #endif
 	memcpy(&fpregs->pr_fr.pr_regs[0],
-	       &current->tss.float_regs[0],
+	       &current->thread.float_regs[0],
 	       (sizeof(unsigned long) * 32));
-	fpregs->pr_fsr = current->tss.fsr;
-	fpregs->pr_qcnt = current->tss.fpqdepth;
+	fpregs->pr_fsr = current->thread.fsr;
+	fpregs->pr_qcnt = current->thread.fpqdepth;
 	fpregs->pr_q_entrysize = 8;
 	fpregs->pr_en = 1;
 	if(fpregs->pr_qcnt != 0) {
 		memcpy(&fpregs->pr_q[0],
-		       &current->tss.fpqueue[0],
+		       &current->thread.fpqueue[0],
 		       sizeof(struct fpq) * fpregs->pr_qcnt);
 	}
 	/* Zero out the rest. */

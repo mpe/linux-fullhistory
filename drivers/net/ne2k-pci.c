@@ -86,7 +86,7 @@ pci_clone_list[] __initdata = {
 	{0x4a14, 0x5000, "NetVin NV5000SC", 0},
 	{0x1106, 0x0926, "Via 86C926", ONLY_16BIT_IO},
 	{0x10bd, 0x0e34, "SureCom NE34", 0},
-	{0x1050, 0x5a5a, "Winbond", 0},
+	{0x1050, 0x5a5a, "Winbond W89C940F", 0},
 	{0x12c3, 0x0058, "Holtek HT80232", ONLY_16BIT_IO | HOLTEK_FDX},
 	{0x12c3, 0x5598, "Holtek HT80229",
 	 ONLY_32BIT_IO | HOLTEK_FDX | STOP_PG_0x60 },

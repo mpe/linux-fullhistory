@@ -39,7 +39,8 @@
 #define IOPTE_64K           0x2000000000000000 /* IOPTE is for 64k page            */
 #define IOPTE_STBUF         0x1000000000000000 /* DVMA can use streaming buffer    */
 #define IOPTE_INTRA         0x0800000000000000 /* SBUS slot-->slot direct transfer */
-#define IOPTE_PAGE          0x000001ffffffe000 /* Physical page number (PA[40:13]) */
+#define IOPTE_CONTEXT	    0x07ff800000000000 /* Context number		   */
+#define IOPTE_PAGE          0x00007fffffffe000 /* Physical page number (PA[40:13]) */
 #define IOPTE_CACHE         0x0000000000000010 /* Cached (in UPA E-cache)          */
 #define IOPTE_WRITE         0x0000000000000002 /* Writeable                        */
 

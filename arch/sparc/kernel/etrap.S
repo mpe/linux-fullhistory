@@ -1,4 +1,4 @@
-/* $Id: etrap.S,v 1.29 1998/02/09 13:48:40 jj Exp $
+/* $Id: etrap.S,v 1.30 1999/08/14 03:51:08 anton Exp $
  * etrap.S: Sparc trap window preparation for entry into the
  *          Linux kernel.
  *
@@ -101,7 +101,7 @@ trap_setup:
 	 mov	%t_kstack, %sp		! jump onto new stack
 
 trap_setup_kernel_spill:
-	ld	[%curptr + AOFF_task_tss + AOFF_thread_uwinmask], %g1
+	ld	[%curptr + AOFF_task_thread + AOFF_thread_uwinmask], %g1
 	orcc	%g0, %g1, %g0
 	bne	trap_setup_user_spill	! there are some user windows, yuck
 	/* Spill from kernel, but only kernel windows, adjust
@@ -153,8 +153,8 @@ trap_setup_from_user:
 	and	%t_kstack, %curptr, %curptr
 #endif
 
-	/* Clear current->tss.w_saved */
-	st	%g0, [%curptr + AOFF_task_tss + AOFF_thread_w_saved]
+	/* Clear current->thread.w_saved */
+	st	%g0, [%curptr + AOFF_task_thread + AOFF_thread_w_saved]
 
 	/* See if we are in the trap window. */
 	andcc	%t_twinmask, %t_wim, %g0
@@ -185,7 +185,7 @@ trap_setup_from_user:
 	andn	%g2, %t_twinmask, %g2
 tsetup_patch3:
 	and	%g2, 0xff, %g2			! patched on 7win Sparcs
-	st	%g2, [%curptr + AOFF_task_tss + AOFF_thread_uwinmask]	! store new umask
+	st	%g2, [%curptr + AOFF_task_thread + AOFF_thread_uwinmask]	! store new umask
 
 	jmpl	%t_retpc + 0x8, %g0		! return to caller
 	 mov	%t_kstack, %sp			! and onto kernel stack
@@ -206,7 +206,7 @@ tsetup_patch5:
 tsetup_patch6:
 	and	%g2, 0xff, %g2		! patched on 7win Sparcs
 	andn	%g1, %g2, %g1		! clear this bit in %g1
-	st	%g1, [%curptr + AOFF_task_tss + AOFF_thread_uwinmask]
+	st	%g1, [%curptr + AOFF_task_thread + AOFF_thread_uwinmask]
 
 	save	%g0, %g0, %g0
 

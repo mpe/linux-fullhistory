@@ -1907,18 +1907,10 @@ static int dbri_open(struct inode * inode, struct file * file,
 {
 	MOD_INC_USE_COUNT;
 
-	/* SunOS 5.5.1 audio(7I) man page says:
-	 * "Upon the initial open() of the audio device, the driver
-	 *  will reset the data format of the device to the default
-	 *  state of 8-bit, 8KHz, mono u-law data."
-	 *
-	 * I've also taken the liberty of setting half gain and
+        /*
+	 * I've taken the liberty of setting half gain and
 	 * mid balance, to put the codec in a known state.
 	 */
-
-	dbri_set_output_channels(drv, 1);
-	dbri_set_output_encoding(drv, AUDIO_ENCODING_ULAW);
-	dbri_set_output_rate(drv, 8000);
 
 	dbri_set_output_balance(drv, AUDIO_MID_BALANCE);
 	dbri_set_output_volume(drv, AUDIO_MAX_GAIN/2);
@@ -2162,7 +2154,6 @@ int dbri_bopen(int dev, unsigned int chan,
                int hdlcmode, u_char xmit_idle_char)
 {
        struct dbri *dbri;
-       int val;
 
        if (dev >= num_drivers || chan > 1) {
                return -1;
@@ -2356,7 +2347,7 @@ static int dbri_attach(struct sparcaudio_driver *drv,
 #ifdef MODULE
 int init_module(void)
 #else
-__initfunc(int dbri_init(void))
+int __init dbri_init(void)
 #endif
 {
 	struct linux_sbus *bus;

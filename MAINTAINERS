@@ -418,6 +418,7 @@ IDE/ATAPI CDROM DRIVER
 P:	Jens Axboe
 M:	axboe@image.dk
 L:	linux-kernel@vger.rutgers.edu
+W:	http://www.kernel.dk
 S:	Maintained
 
 IDE/ATAPI TAPE/FLOPPY DRIVERS
@@ -723,6 +724,13 @@ M:	emoenke@gwdg.de
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
+SCSI CDROM DRIVER 
+P:	Jens Axboe
+M:	axboe@image.dk
+L:	linux-kernel@vger.rutgers.edu
+W:	http://www.kernel.dk
+S:	Maintained
+
 SCSI SG DRIVER
 P:	Doug Gilbert
 M:	dgilbert@interlog.com
@@ -850,6 +858,7 @@ UNIFORM CDROM DRIVER
 P:	Jens Axboe
 M:	axboe@image.dk
 L:	linux-kernel@vger.rutgers.edu
+W:	http://www.kernel.dk
 S:	Maintained
 
 USB HUB AND UHCI DRIVERS

@@ -103,16 +103,16 @@ static void netlink_table_grab(void)
 		DECLARE_WAITQUEUE(wait, current);
 
 		add_wait_queue(&nl_table_wait, &wait);
-		do {
-			current->state = TASK_UNINTERRUPTIBLE;
+		for(;;) {
+			set_current_state(TASK_UNINTERRUPTIBLE);
 			if (atomic_read(&nl_table_users) == 0)
 				break;
 			write_unlock_bh(&nl_table_lock);
 			schedule();
 			write_lock_bh(&nl_table_lock);
-		} while (atomic_read(&nl_table_users));
+		}
 
-		current->state = TASK_RUNNING;
+		__set_current_state(TASK_RUNNING);
 		remove_wait_queue(&nl_table_wait, &wait);
 	}
 }
@@ -417,10 +417,8 @@ retry:
 			return -EAGAIN;
 		}
 
+		__set_current_state(TASK_INTERRUPTIBLE);
 		add_wait_queue(&sk->protinfo.af_netlink->wait, &wait);
-		current->state = TASK_INTERRUPTIBLE;
-
-		barrier();
 
 		if ((atomic_read(&sk->rmem_alloc) > sk->rcvbuf ||
 		    test_bit(0, &sk->protinfo.af_netlink->state)) &&
@@ -428,7 +426,7 @@ retry:
 		    !sk->dead)
 			schedule();
 
-		current->state = TASK_RUNNING;
+		__set_current_state(TASK_RUNNING);
 		remove_wait_queue(&sk->protinfo.af_netlink->wait, &wait);
 		sock_put(sk);
 

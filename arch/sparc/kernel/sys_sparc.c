@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.52 1999/05/08 08:09:48 anton Exp $
+/* $Id: sys_sparc.c,v 1.53 1999/08/14 03:51:25 anton Exp $
  * linux/arch/sparc/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -263,7 +263,7 @@ sparc_sigaction (int sig, const struct old_sigaction *act,
 	int ret;
 
 	if (sig < 0) {
-		current->tss.new_signal = 1;
+		current->thread.new_signal = 1;
 		sig = -sig;
 	}
 
@@ -313,7 +313,7 @@ sys_rt_sigaction(int sig, const struct sigaction *act, struct sigaction *oact,
 	/* All tasks which use RT signals (effectively) use
 	 * new style signals.
 	 */
-	current->tss.new_signal = 1;
+	current->thread.new_signal = 1;
 
 	if (act) {
 		new_ka.ka_restorer = restorer;

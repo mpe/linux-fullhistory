@@ -1,4 +1,4 @@
-/* $Id: cache.h,v 1.8 1999/03/11 00:14:45 davem Exp $
+/* $Id: cache.h,v 1.9 1999/08/14 03:51:58 anton Exp $
  * cache.h:  Cache specific code for the Sparc.  These include flushing
  *           and direct tag/data line access.
  *
@@ -14,6 +14,14 @@
 #define L1_CACHE_ALIGN(x) ((((x)+(L1_CACHE_BYTES-1))&~(L1_CACHE_BYTES-1)))
 
 #define SMP_CACHE_BYTES 32
+
+#ifdef MODULE
+#define __cacheline_aligned __attribute__((__aligned__(SMP_CACHE_BYTES)))
+#else
+#define __cacheline_aligned					\
+  __attribute__((__aligned__(SMP_CACHE_BYTES),			\
+		 __section__(".data.cacheline_aligned")))
+#endif
 
 /* Direct access to the instruction cache is provided through and
  * alternate address space.  The IDC bit must be off in the ICCR on

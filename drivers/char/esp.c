@@ -2317,7 +2317,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 				scratch | UART_MCR_DTR | UART_MCR_RTS);
 		}
 		sti();
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		if (tty_hung_up_p(filp) ||
 		    !(info->flags & ASYNC_INITIALIZED)) {
 #ifdef SERIAL_DO_RESTART

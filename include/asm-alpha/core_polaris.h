@@ -41,16 +41,9 @@
  * supports transfers of all sizes in dense space.
  */
 
-#define POLARIS_DMA_WIN_BASE_DEFAULT	0x80000000	/* fixed, 2G @ 2G */
-#define POLARIS_DMA_WIN_SIZE_DEFAULT	0x80000000	/* fixed, 2G @ 2G */
+#define POLARIS_DMA_WIN_BASE	0x80000000UL	/* fixed, 2G @ 2G */
+#define POLARIS_DMA_WIN_SIZE	0x80000000UL	/* fixed, 2G @ 2G */
 
-#if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_SRM_SETUP)
-#define POLARIS_DMA_WIN_BASE		alpha_mv.dma_win_base
-#define POLARIS_DMA_WIN_SIZE		alpha_mv.dma_win_size
-#else
-#define POLARIS_DMA_WIN_BASE		POLARIS_DMA_WIN_BASE_DEFAULT
-#define POLARIS_DMA_WIN_SIZE		POLARIS_DMA_WIN_SIZE_DEFAULT
-#endif
 
 /*
  * Data structure for handling POLARIS machine checks:
@@ -96,6 +89,11 @@ __EXTERN_INLINE void * polaris_bus_to_virt(unsigned long address)
 
 __EXTERN_INLINE unsigned int polaris_inb(unsigned long addr)
 {
+	/* ??? I wish I could get rid of this.  But there's no ioremap
+	   equivalent for I/O space.  PCI I/O can be forced into the
+	   POLARIS I/O region, but that doesn't take care of legacy
+	   ISA crap.  */
+
 	return __kernel_ldbu(*(vucp)(addr + POLARIS_DENSE_IO_BASE));
 }
 
@@ -136,116 +134,52 @@ __EXTERN_INLINE void polaris_outl(unsigned int b, unsigned long addr)
 
 __EXTERN_INLINE unsigned long polaris_readb(unsigned long addr)
 {
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "polaris: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += POLARIS_DENSE_MEM_BASE;
-	}
-#endif
-
 	return __kernel_ldbu(*(vucp)addr);
 }
 
 __EXTERN_INLINE unsigned long polaris_readw(unsigned long addr)
 {
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "polaris: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += POLARIS_DENSE_MEM_BASE;
-	}
-#endif
-
 	return __kernel_ldwu(*(vusp)addr);
 }
 
 __EXTERN_INLINE unsigned long polaris_readl(unsigned long addr)
 {
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "polaris: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += POLARIS_DENSE_MEM_BASE;
-	}
-#endif
-
 	return *(vuip)addr;
 }
 
 __EXTERN_INLINE unsigned long polaris_readq(unsigned long addr)
 {
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "polaris: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += POLARIS_DENSE_MEM_BASE;
-	}
-#endif
-
 	return *(vulp)addr;
 }
 
 __EXTERN_INLINE void polaris_writeb(unsigned char b, unsigned long addr)
 {
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "polaris: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += POLARIS_DENSE_MEM_BASE;
-	}
-#endif
-
 	__kernel_stb(b, *(vucp)addr);
 }
 
 __EXTERN_INLINE void polaris_writew(unsigned short b, unsigned long addr)
 {
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "polaris: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += POLARIS_DENSE_MEM_BASE;
-	}
-#endif
-
 	__kernel_stw(b, *(vusp)addr);
 }
 
 __EXTERN_INLINE void polaris_writel(unsigned int b, unsigned long addr)
 {
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "polaris: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += POLARIS_DENSE_MEM_BASE;
-	}
-#endif
-
 	*(vuip)addr = b;
 }
 
 __EXTERN_INLINE void polaris_writeq(unsigned long b, unsigned long addr)
 {
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "polaris: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += POLARIS_DENSE_MEM_BASE;
-	}
-#endif
-
 	*(vulp)addr = b;
 }
 
 __EXTERN_INLINE unsigned long polaris_ioremap(unsigned long addr)
 {
-	return POLARIS_DENSE_MEM_BASE + addr;
+	return addr + POLARIS_DENSE_MEM_BASE;
 }
 
 __EXTERN_INLINE int polaris_is_ioaddr(unsigned long addr)
 {
-	return addr >= IDENT_ADDR + 0x8000000000UL;
+	return addr >= POLARIS_SPARSE_MEM_BASE;
 }
 
 #undef vucp
@@ -275,24 +209,21 @@ __EXTERN_INLINE int polaris_is_ioaddr(unsigned long addr)
 #define __ioremap       polaris_ioremap
 #define __is_ioaddr	polaris_is_ioaddr
 
-#define inb(port) __inb((port))
-#define inw(port) __inw((port))
-#define inl(port) __inl((port))
+#define inb(port)	__inb((port))
+#define inw(port)	__inw((port))
+#define inl(port)	__inl((port))
+#define outb(v, port)	__outb((v),(port))
+#define outw(v, port)	__outw((v),(port))
+#define outl(v, port)	__outl((v),(port))
 
-#define outb(v, port) __outb((v),(port))
-#define outw(v, port) __outw((v),(port))
-#define outl(v, port) __outl((v),(port))
-
-#if !__DEBUG_IOREMAP
 #define __raw_readb(a)		__readb((unsigned long)(a))
 #define __raw_readw(a)		__readw((unsigned long)(a))
 #define __raw_readl(a)		__readl((unsigned long)(a))
 #define __raw_readq(a)		__readq((unsigned long)(a))
 #define __raw_writeb(v,a)	__writeb((v),(unsigned long)(a))
-#define __raw_writeb(v,a)	__writew((v),(unsigned long)(a))
+#define __raw_writew(v,a)	__writew((v),(unsigned long)(a))
 #define __raw_writel(v,a)	__writel((v),(unsigned long)(a))
 #define __raw_writeq(v,a)	__writeq((v),(unsigned long)(a))
-#endif
 
 #endif /* __WANT_IO_DEF */
 

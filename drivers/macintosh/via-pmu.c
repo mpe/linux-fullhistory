@@ -28,7 +28,7 @@
 #include <asm/io.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
-#include <linux/init.h>
+#include <asm/init.h>
 #include <asm/irq.h>
 #include <asm/feature.h>
 #include <asm/uaccess.h>
@@ -556,10 +556,11 @@ pmu_poll()
 {
 	int ie;
 
-	ie = _disable_interrupts();
+	__save_flags(ie);
+	__cli();
 	if (via[IFR] & (SR_INT | CB1_INT))
 		via_pmu_interrupt(0, 0, 0);
-	_enable_interrupts(ie);
+	__restore_flags(ie);
 }
 
 static void __openfirmware
@@ -846,7 +847,7 @@ pmu_restart(void)
 {
 	struct adb_request req;
 
-	_disable_interrupts();
+	__cli();
 	
 	pmu_request(&req, NULL, 2, PMU_SET_INTR_MASK, PMU_INT_ADB |
 					PMU_INT_TICK );
@@ -865,7 +866,7 @@ pmu_shutdown(void)
 {
 	struct adb_request req;
 
-	_disable_interrupts();
+	__cli();
 	
 	pmu_request(&req, NULL, 2, PMU_SET_INTR_MASK, PMU_INT_ADB |
 					PMU_INT_TICK );
@@ -945,9 +946,9 @@ pbook_pci_restore(void)
 			for (j = 0; j < 6; ++j)
 				pci_write_config_dword(pd,
 					PCI_BASE_ADDRESS_0 + j*4,
-					pd->base_address[j]);
+					pd->resource[j].start);
 			pci_write_config_dword(pd, PCI_ROM_ADDRESS,
-				pd->rom_address);
+			       pd->resource[PCI_ROM_RESOURCE].start);
 			pci_write_config_word(pd, PCI_CACHE_LINE_SIZE,
 				ps->cache_lat);
 			pci_write_config_word(pd, PCI_INTERRUPT_LINE,

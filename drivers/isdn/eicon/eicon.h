@@ -1,4 +1,4 @@
-/* $Id: eicon.h,v 1.10 1999/08/22 20:26:41 calle Exp $
+/* $Id: eicon.h,v 1.11 1999/08/29 17:23:44 armin Exp $
  *
  * ISDN low-level module for Eicon.Diehl active ISDN-Cards.
  *
@@ -21,6 +21,10 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon.h,v $
+ * Revision 1.11  1999/08/29 17:23:44  armin
+ * New setup compat.
+ * Bugfix if compile as not module.
+ *
  * Revision 1.10  1999/08/22 20:26:41  calle
  * backported changes from kernel 2.3.14:
  * - several #include "config.h" gone, others come.
@@ -221,6 +225,8 @@ typedef struct {
 #include <linux/ctype.h>
 
 #include <linux/isdnif.h>
+
+#include <linux/isdn_compat.h>
 
 typedef struct {
   __u16 length __attribute__ ((packed)); /* length of data/parameter field */

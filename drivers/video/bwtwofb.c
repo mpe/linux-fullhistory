@@ -1,4 +1,4 @@
-/* $Id: bwtwofb.c,v 1.7 1999/01/26 10:55:02 jj Exp $
+/* $Id: bwtwofb.c,v 1.8 1999/08/26 05:13:09 shadow Exp $
  * bwtwofb.c: BWtwo frame buffer driver
  *
  * Copyright (C) 1998 Jakub Jelinek   (jj@ultra.linux.cz)
@@ -216,7 +216,7 @@ char __init *bwtwofb_init(struct fb_info_sbusfb *fb)
 #endif
 	fb->margins = bw2_margins;
 	
-	fb->physbase = phys;
+	fb->physbase = __get_phys(fb->sbdp->sbus_vaddrs[0]);
 	fb->mmap_map = bw2_mmap_map;
 
 #ifdef __sparc_v9__

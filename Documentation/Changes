@@ -419,9 +419,16 @@ PCI utils
 =========
 
    Linux PCI utils are available; these include lspci, which displays
-the detailed information about your system's PCI devices which used to
-be in /proc/pci, and setpci, which allws you to read and write
-configuration registers on your PCI devices.
+detailed information about your system's PCI devices (much more than
+the basic things in /proc/pci), and setpci, which allows you to read
+and write PCI configuration registers of your devices.
+
+Powertweak
+==========
+
+   The PCI Bridge Optimization has been removed from the kernel. If you
+think your BIOS does a poor job when setting up your chipset, there
+is a utility called PowerTweak whose job is to tune chipset parameters.
 
 Xosview
 =======
@@ -734,9 +741,16 @@ http://www.cs.kuleuven.ac.be/~geert/bin/fbset-2.0-pre-19981104.tar.gz
 PCI utils
 =========
 
-The 1.09 release:
-ftp://atrey.karlin.mff.cuni.cz/pub/linux/pci/pciutils-1.09.tar.gz
-ftp://metalab.unc.edu/pub/Linux/hardware/pciutils-1.09.tar.gz
+The 2.0 release:
+ftp://atrey.karlin.mff.cuni.cz/pub/linux/pci/pciutils-2.0.tar.gz
+ftp://metalab.unc.edu/pub/Linux/hardware/pciutils-2.0.tar.gz
+
+Powertweak
+==========
+
+The 0.1.2 release:
+http://linux.powertweak.com/files/powertweak-0.1.2.tgz
+ftp://atrey.karlin.mff.cuni.cz/pub/linux/pci/powertweak/powertweak-0.1.2.tgz
 
 Tunelp
 ======

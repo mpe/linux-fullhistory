@@ -1,4 +1,4 @@
-/* $Id: parport.h,v 1.4 1999/08/08 01:38:18 davem Exp $
+/* $Id: parport.h,v 1.5 1999/08/30 10:14:52 davem Exp $
  * parport.h: sparc64 specific parport initialization and dma.
  *
  * Copyright (C) 1999  Eddie C. Dost  (ecd@skynet.be)
@@ -134,13 +134,13 @@ parport_pc_init(int *io, int *io_hi, int *irq, int *dma)
 	for_each_ebus(ebus) {
 		for_each_ebusdev(edev, ebus) {
 			if (!strcmp(edev->prom_name, "ecpp")) {
-				unsigned long base = edev->base_address[0];
-				unsigned long config = edev->base_address[1];
+				unsigned long base = edev->resource[0].start;
+				unsigned long config = edev->resource[1].start;
 				unsigned char cfg;
 
 				sparc_ebus_dmas[count] =
 						(struct linux_ebus_dma *)
-							edev->base_address[2];
+							edev->resource[2].start;
 				reset_dma(count);
 
 				/* Enable ECP, set bit 2 of the CTR first */

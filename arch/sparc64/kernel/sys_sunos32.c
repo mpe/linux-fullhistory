@@ -1,4 +1,4 @@
-/* $Id: sys_sunos32.c,v 1.30 1999/07/30 09:35:31 davem Exp $
+/* $Id: sys_sunos32.c,v 1.31 1999/08/30 10:01:19 davem Exp $
  * sys_sunos32.c: SunOS binary compatability layer on sparc64.
  *
  * Copyright (C) 1995, 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -981,10 +981,6 @@ extern asmlinkage s32 sunos_sysconf (int name)
 	return ret;
 }
 
-extern asmlinkage int sys_semctl (int semid, int semnum, int cmd, union semun arg);
-extern asmlinkage int sys_semget (key_t key, int nsems, int semflg);
-extern asmlinkage int sys_semop  (int semid, struct sembuf *tsops, unsigned nsops);
-
 asmlinkage int sunos_semsys(int op, u32 arg1, u32 arg2, u32 arg3, u32 ptr)
 {
 	union semun arg4;
@@ -1119,13 +1115,6 @@ static inline int sunos_msgbuf_put(struct msgbuf32 *user, struct msgbuf *kern, i
 	return 0;
 }
 
-extern asmlinkage int sys_msgget (key_t key, int msgflg);
-extern asmlinkage int sys_msgrcv (int msqid, struct msgbuf *msgp,
-				  size_t msgsz, long msgtyp, int msgflg);
-extern asmlinkage int sys_msgsnd (int msqid, struct msgbuf *msgp,
-				  size_t msgsz, int msgflg);
-extern asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf);
-
 asmlinkage int sunos_msgsys(int op, u32 arg1, u32 arg2, u32 arg3, u32 arg4)
 {
 	struct sparc_stackf32 *sp;
@@ -1241,11 +1230,6 @@ static inline int sunos_shmid_put(struct shmid_ds32 *user,
 		return -EFAULT;
 	return 0;
 }
-
-extern asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr);
-extern asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf);
-extern asmlinkage int sys_shmdt (char *shmaddr);
-extern asmlinkage int sys_shmget (key_t key, int size, int shmflg);
 
 asmlinkage int sunos_shmsys(int op, u32 arg1, u32 arg2, u32 arg3)
 {

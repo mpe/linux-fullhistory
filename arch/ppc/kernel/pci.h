@@ -11,6 +11,18 @@ extern unsigned char *pci_config_data;
 
 void fix_intr(struct device_node *node, struct pci_dev *dev);
 
+#if 0
+#define decl_config_access_method(name) 	\
+struct pci_ops name##_pci_ops = { 		\
+	name##_pcibios_read_config_byte,	\
+	name##_pcibios_read_config_word,	\
+	name##_pcibios_read_config_dword,	\
+	name##_pcibios_write_config_byte,	\
+	name##_pcibios_write_config_word,	\
+	name##_pcibios_write_config_dword	\
+}
+#endif
+
 #define decl_config_access_method(name) \
 extern int name##_pcibios_read_config_byte(unsigned char bus, \
 	unsigned char dev_fn, unsigned char offset, unsigned char *val); \

@@ -64,7 +64,7 @@ Soft_emulate_8xx(struct pt_regs *regs)
 	disp = instword & 0xffff;
 
 	ea = (uint *)(regs->gpr[idxreg] + disp);
-	ip = (uint *)&current->tss.fpr[flreg];
+	ip = (uint *)&current->thread.fpr[flreg];
 
 	switch ( inst )
 	{
@@ -108,7 +108,7 @@ Soft_emulate_8xx(struct pt_regs *regs)
 		break;
 	case FMR:
 		/* assume this is a fp move -- Cort */
-		memcpy( ip, &current->tss.fpr[(instword>>11)&0x1f],
+		memcpy( ip, &current->thread.fpr[(instword>>11)&0x1f],
 			sizeof(double) );
 		break;
 	default:

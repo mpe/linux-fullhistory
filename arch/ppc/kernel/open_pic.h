@@ -1,8 +1,5 @@
-
 #ifndef _PPC_KERNEL_OPEN_PIC_H
 #define _PPC_KERNEL_OPEN_PIC_H
-
-#include "local_irq.h"
 
 extern struct hw_interrupt_type open_pic;
 

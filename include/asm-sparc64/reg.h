@@ -1,4 +1,4 @@
-/* $Id: reg.h,v 1.4 1997/09/14 08:40:29 davem Exp $
+/* $Id: reg.h,v 1.5 1999/08/17 17:52:32 jj Exp $
  * linux/asm-sparc64/reg.h
  * Layout of the registers as expected by gdb on the Sparc
  * we should replace the user.h definitions with those in
@@ -37,6 +37,9 @@ struct regs {
         unsigned int  r_y;
         unsigned int  r_fprs;
 };
+
+#define FPU_REGS_TYPE unsigned int
+#define FPU_FSR_TYPE unsigned long
 
 struct fp_status {
         unsigned long fpu_fr[32];

@@ -274,7 +274,7 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
     dep_tristate 'Netwinder WaveArtist' CONFIG_SOUND_WAVEARTIST $CONFIG_SOUND_OSS
     if [ "$CONFIG_SOUND_WAVEARTIST" != "n" ]; then
       hex '  WaveArtist I/O base' CONFIG_WAVEARTIST_BASE 250
-      int '  WaveArtist IRQ' CONFIG_WAVEARTIST_IRQ 28
+      int '  WaveArtist IRQ' CONFIG_WAVEARTIST_IRQ 12
       int '  WaveArtist DMA' CONFIG_WAVEARTIST_DMA 3
       int '  WaveArtist second DMA' CONFIG_WAVEARTIST_DMA2 7
     fi

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_timer.c,v 1.66 1999/08/20 11:06:10 davem Exp $
+ * Version:	$Id: tcp_timer.c,v 1.67 1999/08/30 12:14:43 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -549,6 +549,14 @@ void tcp_sltimer_handler(unsigned long data)
 		mod_timer(&tcp_slow_timer, (now + next));
 }
 
+/* __tcp_inc_slow_timer is called when an slow timer is started
+ * first time (slt->count was 0). There is race condition between
+ * timer creation and deletion and if we do not force adding timer here,
+ * we might lose timer. We could avoid it with global spinlock, but
+ * it is apparently overkill, so that we restart timer ALWAYS when
+ * this function is entered, it guarantees that timer will not lost.
+ */
+
 void __tcp_inc_slow_timer(struct tcp_sl_timer *slt)
 {
 	unsigned long now = jiffies;
@@ -558,13 +566,11 @@ void __tcp_inc_slow_timer(struct tcp_sl_timer *slt)
 
 	when = now + slt->period;
 
-	if (tcp_slow_timer.prev) {
-		if ((long)(tcp_slow_timer.expires - when) >= 0)
-			mod_timer(&tcp_slow_timer, when);
-	} else {
-		tcp_slow_timer.expires = when;
-		add_timer(&tcp_slow_timer);
-	}
+	if (tcp_slow_timer.prev &&
+	    (long)(tcp_slow_timer.expires - when) < 0)
+		when = tcp_slow_timer.expires;
+
+	mod_timer(&tcp_slow_timer, when);
 }
 
 void tcp_delete_keepalive_timer (struct sock *sk)

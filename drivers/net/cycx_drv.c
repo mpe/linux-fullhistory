@@ -638,7 +638,6 @@ static void delay_cycx (int sec)
    know it all the contexts where this routine is used are interruptible... */
 
 	current->state = TASK_INTERRUPTIBLE;
-	current->counter = 0;       /* make us low-priority */
 	schedule_timeout(sec*HZ);
 }
 

@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.95 1999/07/03 08:57:06 davem Exp $
+# $Id: config.in,v 1.102 1999/08/30 10:06:53 davem Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -25,8 +25,12 @@ if [ "$CONFIG_ALL_PPC" != "y" ];then
   define_bool CONFIG_MACH_SPECIFIC y
 fi
 
-if [ "$CONFIG_PPC64" != "y" ];then
-  define_bool CONFIG_6xx y
+if [ "$CONFIG_8xx" = "y" ]; then
+  bool 'Math emulation' CONFIG_MATH_EMULATION
+else
+  if [ "$CONFIG_PPC64" != "y" ];then
+    define_bool CONFIG_6xx y
+  fi
 fi
 endmenu
 
@@ -71,11 +75,10 @@ fi
 bool 'Power management support for PowerBook 3400/2400' CONFIG_PMAC_PBOOK
 bool 'Support for PowerMac keyboard' CONFIG_MAC_KEYBOARD
 bool 'Support for PowerMac floppy' CONFIG_MAC_FLOPPY
-bool 'Support for PowerMac serial ports' CONFIG_MAC_SERIAL
+tristate 'Support for PowerMac serial ports' CONFIG_MAC_SERIAL
 if [ "$CONFIG_MAC_SERIAL" = "y" ]; then
    bool '   Support for console on serial port' CONFIG_SERIAL_CONSOLE
 fi
-bool 'Support for PowerMac ADB mouse' CONFIG_ADBMOUSE
 bool 'Support for Open Firmware device tree in /proc' CONFIG_PROC_DEVICETREE
 bool 'Support for TotalImpact TotalMP' CONFIG_TOTALMP
 bool 'Support for early boot text console (BootX only)' CONFIG_BOOTX_TEXT
@@ -166,6 +169,7 @@ source drivers/video/Config.in
 endmenu
 
 source drivers/char/Config.in
+source drivers/usb/Config.in
 source fs/Config.in
 
 mainmenu_option next_comment

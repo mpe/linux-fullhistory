@@ -56,6 +56,10 @@ struct fb_info_cgfourteen {
 	int ramsize;
 	int mode;
 };
+struct fb_info_p9100 {
+	struct p9100_ctrl *ctrl;
+	volatile u32 *fbmem;
+};
 
 struct cg_cursor {
 	char	enable;         /* cursor is enabled */
@@ -96,6 +100,7 @@ struct fb_info_sbusfb {
 		struct fb_info_tcx tcx;
 		struct fb_info_leo leo;
 		struct fb_info_cgfourteen cg14;
+		struct fb_info_p9100 p9100;
 	} s;
 	unsigned char *color_map;
 	struct cg_cursor cursor;
@@ -134,6 +139,7 @@ extern char *tcxfb_init(struct fb_info_sbusfb *);
 extern char *leofb_init(struct fb_info_sbusfb *);
 extern char *bwtwofb_init(struct fb_info_sbusfb *);
 extern char *cgfourteenfb_init(struct fb_info_sbusfb *);
+extern char *p9100fb_init(struct fb_info_sbusfb *);
 
 #define sbusfbinfod(disp) ((struct fb_info_sbusfb *)(disp->fb_info))
 #define sbusfbinfo(info) ((struct fb_info_sbusfb *)(info))

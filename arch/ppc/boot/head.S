@@ -6,7 +6,7 @@
 	.text
 
 /*
- * $Id: head.S,v 1.31 1999/04/22 06:32:00 davem Exp $
+ * $Id: head.S,v 1.32 1999/08/12 19:51:12 cort Exp $
  *	
  * Boot loader philosophy:
  *      ROM loads us to some arbitrary location
@@ -126,9 +126,7 @@ start_ldr:
 	 * entry.  see boot/head.S -- Cort 
 	 */
 	li	r9,0x0
-	lwz	r9,0(r9)
 	mtlr	r9
-	li	r9,0
 	lis	r10,0xdeadc0de@h
 	ori	r10,r10,0xdeadc0de@l
 	stw	r10,0(r9)

@@ -130,7 +130,7 @@ printk ("sh%dx%d", type, shift);
 		val = (((signed long)val) >> shift);
 		break;
 	case 3:
-		__asm__ __volatile__("mov %0, %0, ror %1" : "=r" (val) : "0" (val), "r" (shift));
+ 		val = (val >> shift) | (val << (32 - shift));
 		break;
 	}
 printk ("=%08lX ", val);
@@ -158,7 +158,7 @@ printk ("op2=r%02ldsh%dx%d", insn & 15, shift, type);
 		val = (((signed long)val) >> shift);
 		break;
 	case 3:
-		__asm__ __volatile__("mov %0, %0, ror %1" : "=r" (val) : "0" (val), "r" (shift));
+ 		val = (val >> shift) | (val << (32 - shift));
 		break;
 	}
 printk ("=%08lX ", val);

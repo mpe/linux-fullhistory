@@ -9,6 +9,7 @@
 #include <linux/malloc.h>
 #include <linux/ioport.h>
 
+#include <asm/init.h>
 #include <asm/segment.h>
 #include <asm/io.h>
 #include <asm/processor.h>

@@ -103,7 +103,6 @@
 #include "ips.h"
 
 #include <linux/stat.h>
-#include <linux/malloc.h>
 #include <linux/config.h>
 #include <asm/spinlock.h>
 #include <linux/smp.h>

@@ -79,12 +79,12 @@ void __init pci_name_device(struct pci_dev *dev)
 		}
 
 		/* Ok, found the vendor, but unknown device */
-		sprintf(name, " PCI device %04x:%04x (%s)", dev->vendor, dev->device, vendor_p->name);
+		sprintf(name, "PCI device %04x:%04x (%s)", dev->vendor, dev->device, vendor_p->name);
 		return;
 
 		/* Full match */
 		match_device: {
-			char *n = name + sprintf(name, " %s %s", vendor_p->name, device_p->name);
+			char *n = name + sprintf(name, "%s %s", vendor_p->name, device_p->name);
 			int nr = device_p->seen + 1;
 			device_p->seen = nr;
 			if (nr > 1)

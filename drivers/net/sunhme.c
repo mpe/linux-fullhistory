@@ -3325,7 +3325,7 @@ static int __init happy_meal_pci_init(struct net_device *dev, struct pci_dev *pd
 	}		
 
 	hpreg_base = pdev->resource[0].start;
-	if ((pdev->resource[0].flags & IORESOURCE_IOPORT) != 0) {
+	if ((pdev->resource[0].flags & IORESOURCE_IO) != 0) {
 		printk("happymeal(PCI): Cannot find proper PCI device base address.\n");
 		return ENODEV;
 	}

@@ -72,8 +72,8 @@
 #define PYXIS_MEM_R2_MASK 0x07ffffff  /* SPARSE Mem region 2 mask is 27 bits */
 #define PYXIS_MEM_R3_MASK 0x03ffffff  /* SPARSE Mem region 3 mask is 26 bits */
 
-#define PYXIS_DMA_WIN_BASE_DEFAULT	(1UL*1024*1024*1024)
-#define PYXIS_DMA_WIN_SIZE_DEFAULT	(2UL*1024*1024*1024)
+#define PYXIS_DMA_WIN_BASE		(1UL*1024*1024*1024)
+#define PYXIS_DMA_WIN_SIZE		(2UL*1024*1024*1024)
 
 /* Window 0 at 1GB size 1GB mapping 0 */
 #define PYXIS_DMA_WIN0_BASE_DEFAULT	(1UL*1024*1024*1024)
@@ -85,13 +85,6 @@
 #define PYXIS_DMA_WIN1_SIZE_DEFAULT	(1UL*1024*1024*1024)
 #define PYXIS_DMA_WIN1_TRAN_DEFAULT	(1UL*1024*1024*1024)
 
-#if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_SRM_SETUP)
-#define PYXIS_DMA_WIN_BASE		alpha_mv.dma_win_base
-#define PYXIS_DMA_WIN_SIZE		alpha_mv.dma_win_size
-#else
-#define PYXIS_DMA_WIN_BASE		PYXIS_DMA_WIN_BASE_DEFAULT
-#define PYXIS_DMA_WIN_SIZE		PYXIS_DMA_WIN_SIZE_DEFAULT
-#endif
 
 /*
  *  General Registers
@@ -293,77 +286,40 @@ __EXTERN_INLINE void * pyxis_bus_to_virt(unsigned long address)
 #define vuip	volatile unsigned int *
 #define vulp	volatile unsigned long *
 
-__EXTERN_INLINE unsigned int pyxis_bw_inb(unsigned long addr)
+__EXTERN_INLINE unsigned int pyxis_inb(unsigned long addr)
 {
+	/* ??? I wish I could get rid of this.  But there's no ioremap
+	   equivalent for I/O space.  PCI I/O can be forced into the
+	   PYXIS I/O region, but that doesn't take care of legacy ISA crap.  */
+
 	return __kernel_ldbu(*(vucp)(addr+PYXIS_BW_IO));
 }
 
-__EXTERN_INLINE void pyxis_bw_outb(unsigned char b, unsigned long addr)
+__EXTERN_INLINE void pyxis_outb(unsigned char b, unsigned long addr)
 {
 	__kernel_stb(b, *(vucp)(addr+PYXIS_BW_IO));
 	mb();
 }
 
-__EXTERN_INLINE unsigned int pyxis_bw_inw(unsigned long addr)
+__EXTERN_INLINE unsigned int pyxis_inw(unsigned long addr)
 {
 	return __kernel_ldwu(*(vusp)(addr+PYXIS_BW_IO));
 }
 
-__EXTERN_INLINE void pyxis_bw_outw(unsigned short b, unsigned long addr)
+__EXTERN_INLINE void pyxis_outw(unsigned short b, unsigned long addr)
 {
 	__kernel_stw(b, *(vusp)(addr+PYXIS_BW_IO));
 	mb();
 }
 
-__EXTERN_INLINE unsigned int pyxis_bw_inl(unsigned long addr)
+__EXTERN_INLINE unsigned int pyxis_inl(unsigned long addr)
 {
 	return *(vuip)(addr+PYXIS_BW_IO);
 }
 
-__EXTERN_INLINE void pyxis_bw_outl(unsigned int b, unsigned long addr)
-{
-	*(vuip)(addr+PYXIS_BW_IO) = b;
-	mb();
-}
-
-__EXTERN_INLINE unsigned int pyxis_inb(unsigned long addr)
-{
-	long result = *(vip) ((addr << 5) + PYXIS_IO + 0x00);
-	return __kernel_extbl(result, addr & 3);
-}
-
-__EXTERN_INLINE void pyxis_outb(unsigned char b, unsigned long addr)
-{
-	unsigned long w;
-
-	w = __kernel_insbl(b, addr & 3);
-	*(vuip) ((addr << 5) + PYXIS_IO + 0x00) = w;
-	mb();
-}
-
-__EXTERN_INLINE unsigned int pyxis_inw(unsigned long addr)
-{
-	long result = *(vip) ((addr << 5) + PYXIS_IO + 0x08);
-	return __kernel_extwl(result, addr & 3);
-}
-
-__EXTERN_INLINE void pyxis_outw(unsigned short b, unsigned long addr)
-{
-	unsigned long w;
-
-	w = __kernel_inswl(b, addr & 3);
-	*(vuip) ((addr << 5) + PYXIS_IO + 0x08) = w;
-	mb();
-}
-
-__EXTERN_INLINE unsigned int pyxis_inl(unsigned long addr)
-{
-	return *(vuip) ((addr << 5) + PYXIS_IO + 0x18);
-}
-
 __EXTERN_INLINE void pyxis_outl(unsigned int b, unsigned long addr)
 {
-	*(vuip) ((addr << 5) + PYXIS_IO + 0x18) = b;
+	*(vuip)(addr+PYXIS_BW_IO) = b;
 	mb();
 }
 
@@ -400,344 +356,54 @@ __EXTERN_INLINE void pyxis_outl(unsigned int b, unsigned long addr)
  *
  */
 
-__EXTERN_INLINE unsigned long pyxis_bw_readb(unsigned long addr)
-{
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "pyxis: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += PYXIS_BW_MEM;
-	}
-#endif
-
-	return __kernel_ldbu(*(vucp)addr);
-}
-
-__EXTERN_INLINE unsigned long pyxis_bw_readw(unsigned long addr)
-{
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "pyxis: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += PYXIS_BW_MEM;
-	}
-#endif
-
-	return __kernel_ldwu(*(vusp)addr);
-}
-
-__EXTERN_INLINE unsigned long pyxis_bw_readl(unsigned long addr)
-{
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "pyxis: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += PYXIS_BW_MEM;
-	}
-#endif
-
-	return *(vuip)addr;
-}
-
-__EXTERN_INLINE unsigned long pyxis_bw_readq(unsigned long addr)
-{
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "pyxis: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += PYXIS_BW_MEM;
-	}
-#endif
-
-	return *(vulp)addr;
-}
-
-__EXTERN_INLINE void pyxis_bw_writeb(unsigned char b, unsigned long addr)
-{
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "pyxis: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += PYXIS_BW_MEM;
-	}
-#endif
-
-	__kernel_stb(b, *(vucp)addr);
-}
-
-__EXTERN_INLINE void pyxis_bw_writew(unsigned short b, unsigned long addr)
-{
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "pyxis: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += PYXIS_BW_MEM;
-	}
-#endif
-
-	__kernel_stw(b, *(vusp)addr);
-}
-
-__EXTERN_INLINE void pyxis_bw_writel(unsigned int b, unsigned long addr)
-{
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "pyxis: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += PYXIS_BW_MEM;
-	}
-#endif
-
-	*(vuip)addr = b;
-}
-
-__EXTERN_INLINE void pyxis_bw_writeq(unsigned long b, unsigned long addr)
-{
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "pyxis: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += PYXIS_BW_MEM;
-	}
-#endif
-
-	*(vulp)addr = b;
-}
-
-__EXTERN_INLINE unsigned long pyxis_bw_ioremap(unsigned long addr)
-{
-	return PYXIS_BW_MEM + addr;
-}
-
-__EXTERN_INLINE unsigned long pyxis_srm_base(unsigned long addr)
-{
-	unsigned long mask, base;
-
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "pyxis: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += PYXIS_BW_MEM;
-	}
-#endif
-
-	addr -= PYXIS_BW_MEM;
-	if (addr >= alpha_mv.sm_base_r1
-	    && addr <= alpha_mv.sm_base_r1 + PYXIS_MEM_R1_MASK) {
-		mask = PYXIS_MEM_R1_MASK;
-		base = PYXIS_SPARSE_MEM;
-	}
-	else if (addr >= alpha_mv.sm_base_r2
-		 && addr <= alpha_mv.sm_base_r2 + PYXIS_MEM_R2_MASK) {
-		mask = PYXIS_MEM_R2_MASK;
-		base = PYXIS_SPARSE_MEM_R2;
-	}
-	else if (addr >= alpha_mv.sm_base_r3
-		 && addr <= alpha_mv.sm_base_r3 + PYXIS_MEM_R3_MASK) {
-		mask = PYXIS_MEM_R3_MASK;
-		base = PYXIS_SPARSE_MEM_R3;
-	}
-	else
-	{
-#if 0
-	  printk("pyxis: address 0x%lx not covered by HAE\n", addr);
-#endif
-	  return 0;
-	}
-
-	return ((addr & mask) << 5) + base;
-}
-
-__EXTERN_INLINE unsigned long pyxis_srm_readb(unsigned long addr)
-{
-	unsigned long result, work;
-
-	if ((work = pyxis_srm_base(addr)) == 0)
-		return 0xff;
-	work += 0x00;	/* add transfer length */
-
-	result = *(vip) work;
-	return __kernel_extbl(result, addr & 3);
-}
-
-__EXTERN_INLINE unsigned long pyxis_srm_readw(unsigned long addr)
-{
-	unsigned long result, work;
-
-	if ((work = pyxis_srm_base(addr)) == 0)
-		return 0xffff;
-	work += 0x08;	/* add transfer length */
-
-	result = *(vip) work;
-	return __kernel_extwl(result, addr & 3);
-}
-
-__EXTERN_INLINE void pyxis_srm_writeb(unsigned char b, unsigned long addr)
-{
-	unsigned long w, work = pyxis_srm_base(addr);
-	if (work) {
-		work += 0x00;	/* add transfer length */
-		w = __kernel_insbl(b, addr & 3);
-		*(vuip)work = w;
-	}
-}
-
-__EXTERN_INLINE void pyxis_srm_writew(unsigned short b, unsigned long addr)
-{
-	unsigned long w, work = pyxis_srm_base(addr);
-	if (work) {
-		work += 0x08;	/* add transfer length */
-		w = __kernel_inswl(b, addr & 3);
-		*(vuip)work = w;
-	}
-}
-
 __EXTERN_INLINE unsigned long pyxis_readb(unsigned long addr)
 {
-	unsigned long result, msb, work, temp;
-
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "pyxis: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-	}
-#endif
-
-	/* Note that PYXIS_DENSE_MEM has no bits not masked in these
-	   operations, so we don't have to subtract it back out.  */
-	msb = addr & 0xE0000000UL;
-	temp = addr & PYXIS_MEM_R1_MASK;
-	set_hae(msb);
-
-	work = ((temp << 5) + PYXIS_SPARSE_MEM + 0x00);
-	result = *(vip) work;
-	return __kernel_extbl(result, addr & 3);
+	return __kernel_ldbu(*(vucp)addr);
 }
 
 __EXTERN_INLINE unsigned long pyxis_readw(unsigned long addr)
 {
-	unsigned long result, msb, work, temp;
-
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "pyxis: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-	}
-#endif
-
-	/* Note that PYXIS_DENSE_MEM has no bits not masked in these
-	   operations, so we don't have to subtract it back out.  */
-	msb = addr & 0xE0000000UL;
-	temp = addr & PYXIS_MEM_R1_MASK;
-	set_hae(msb);
-
-	work = ((temp << 5) + PYXIS_SPARSE_MEM + 0x08);
-	result = *(vip) work;
-	return __kernel_extwl(result, addr & 3);
-}
-
-__EXTERN_INLINE void pyxis_writeb(unsigned char b, unsigned long addr)
-{
-	unsigned long msb, w;
-
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "pyxis: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-	}
-#endif
-
-	/* Note that PYXIS_DENSE_MEM has no bits not masked in these
-	   operations, so we don't have to subtract it back out.  */
-	msb = addr & 0xE0000000;
-	addr &= PYXIS_MEM_R1_MASK;
-	set_hae(msb);
-
-	w = __kernel_insbl(b, addr & 3);
-	*(vuip) ((addr << 5) + PYXIS_SPARSE_MEM + 0x00) = w;
-}
-
-__EXTERN_INLINE void pyxis_writew(unsigned short b, unsigned long addr)
-{
-	unsigned long msb, w;
-
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "pyxis: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-	}
-#endif
-
-	/* Note that PYXIS_DENSE_MEM has no bits not masked in these
-	   operations, so we don't have to subtract it back out.  */
-	msb = addr & 0xE0000000;
-	addr &= PYXIS_MEM_R1_MASK;
-	set_hae(msb);
-
-	w = __kernel_inswl(b, addr & 3);
-	*(vuip) ((addr << 5) + PYXIS_SPARSE_MEM + 0x08) = w;
+	return __kernel_ldwu(*(vusp)addr);
 }
 
 __EXTERN_INLINE unsigned long pyxis_readl(unsigned long addr)
 {
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "pyxis: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += PYXIS_DENSE_MEM;
-	}
-#endif
-
 	return *(vuip)addr;
 }
 
 __EXTERN_INLINE unsigned long pyxis_readq(unsigned long addr)
 {
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "pyxis: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += PYXIS_DENSE_MEM;
-	}
-#endif
-
 	return *(vulp)addr;
+}
+
+__EXTERN_INLINE void pyxis_writeb(unsigned char b, unsigned long addr)
+{
+	__kernel_stb(b, *(vucp)addr);
+}
+
+__EXTERN_INLINE void pyxis_writew(unsigned short b, unsigned long addr)
+{
+	__kernel_stw(b, *(vusp)addr);
 }
 
 __EXTERN_INLINE void pyxis_writel(unsigned int b, unsigned long addr)
 {
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "pyxis: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += PYXIS_DENSE_MEM;
-	}
-#endif
-
 	*(vuip)addr = b;
 }
 
 __EXTERN_INLINE void pyxis_writeq(unsigned long b, unsigned long addr)
 {
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "pyxis: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += PYXIS_DENSE_MEM;
-	}
-#endif
-
 	*(vulp)addr = b;
 }
 
 __EXTERN_INLINE unsigned long pyxis_ioremap(unsigned long addr)
 {
-	return PYXIS_DENSE_MEM + addr;
+	return addr + PYXIS_BW_MEM;
 }
 
 __EXTERN_INLINE int pyxis_is_ioaddr(unsigned long addr)
 {
-	return addr >= IDENT_ADDR + 0x8000000000UL;
+	return addr >= IDENT_ADDR + 0x8740000000UL;
 }
 
 #undef vucp
@@ -751,75 +417,37 @@ __EXTERN_INLINE int pyxis_is_ioaddr(unsigned long addr)
 #define virt_to_bus	pyxis_virt_to_bus
 #define bus_to_virt	pyxis_bus_to_virt
 
-#if defined(BWIO_ENABLED) && !defined(CONFIG_ALPHA_RUFFIAN)
-# define __inb		pyxis_bw_inb
-# define __inw		pyxis_bw_inw
-# define __inl		pyxis_bw_inl
-# define __outb		pyxis_bw_outb
-# define __outw		pyxis_bw_outw
-# define __outl		pyxis_bw_outl
-# define __readb	pyxis_bw_readb
-# define __readw	pyxis_bw_readw
-# define __writeb	pyxis_bw_writeb
-# define __writew	pyxis_bw_writew
-# define __readl	pyxis_bw_readl
-# define __readq	pyxis_bw_readq
-# define __writel	pyxis_bw_writel
-# define __writeq	pyxis_bw_writeq
-# define __ioremap	pyxis_bw_ioremap
-#else
-# define __inb		pyxis_inb
-# define __inw		pyxis_inw
-# define __inl		pyxis_inl
-# define __outb		pyxis_outb
-# define __outw		pyxis_outw
-# define __outl		pyxis_outl
-# ifdef CONFIG_ALPHA_SRM_SETUP
-#  define __readb	pyxis_srm_readb
-#  define __readw	pyxis_srm_readw
-#  define __writeb	pyxis_srm_writeb
-#  define __writew	pyxis_srm_writew
-# else
-#  define __readb	pyxis_readb
-#  define __readw	pyxis_readw
-#  define __writeb	pyxis_writeb
-#  define __writew	pyxis_writew
-# endif
-# define __readl	pyxis_readl
-# define __readq	pyxis_readq
-# define __writel	pyxis_writel
-# define __writeq	pyxis_writeq
-# define __ioremap	pyxis_ioremap
-#endif /* BWIO */
-
+#define __inb		pyxis_inb
+#define __inw		pyxis_inw
+#define __inl		pyxis_inl
+#define __outb		pyxis_outb
+#define __outw		pyxis_outw
+#define __outl		pyxis_outl
+#define __readb		pyxis_readb
+#define __readw		pyxis_readw
+#define __writeb	pyxis_writeb
+#define __writew	pyxis_writew
+#define __readl		pyxis_readl
+#define __readq		pyxis_readq
+#define __writel	pyxis_writel
+#define __writeq	pyxis_writeq
+#define __ioremap	pyxis_ioremap
 #define __is_ioaddr	pyxis_is_ioaddr
 
-#if defined(BWIO_ENABLED) && !defined(CONFIG_ALPHA_RUFFIAN)
-# define inb(port)		__inb((port))
-# define inw(port)		__inw((port))
-# define inl(port)		__inl((port))
-# define outb(x, port)		__outb((x),(port))
-# define outw(x, port)		__outw((x),(port))
-# define outl(x, port)		__outl((x),(port))
-# if !__DEBUG_IOREMAP
-#  define __raw_readb(addr)	__readb((addr))
-#  define __raw_readw(addr)	__readw((addr))
-#  define __raw_writeb(b, addr)	__writeb((b),(addr))
-#  define __raw_writeb(b, addr)	__writew((b),(addr))
-# endif
-#else
-# define inb(port) \
-  (__builtin_constant_p((port))?__inb(port):_inb(port))
-# define outb(x, port) \
-  (__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
-#endif /* BWIO */
-
-#if !__DEBUG_IOREMAP
+#define inb(port)		__inb((port))
+#define inw(port)		__inw((port))
+#define inl(port)		__inl((port))
+#define outb(x, port)		__outb((x),(port))
+#define outw(x, port)		__outw((x),(port))
+#define outl(x, port)		__outl((x),(port))
+#define __raw_readb(addr)	__readb((addr))
+#define __raw_readw(addr)	__readw((addr))
+#define __raw_writeb(b, addr)	__writeb((b),(addr))
+#define __raw_writew(b, addr)	__writew((b),(addr))
 #define __raw_readl(a)		__readl((unsigned long)(a))
 #define __raw_readq(a)		__readq((unsigned long)(a))
 #define __raw_writel(v,a)	__writel((v),(unsigned long)(a))
 #define __raw_writeq(v,a)	__writeq((v),(unsigned long)(a))
-#endif
 
 #endif /* __WANT_IO_DEF */
 

@@ -9,7 +9,7 @@ if [ "$ARCH" = "sparc64" ]; then
 fi
 
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  tristate 'Bidirectional parallel port support (EXPERIMENTAL)' CONFIG_SUN_BPP
+  tristate 'Bidirectional parallel port support (obsolete)' CONFIG_SUN_BPP
   tristate 'Videopix Frame Grabber (EXPERIMENTAL)' CONFIG_SUN_VIDEOPIX
   tristate 'Aurora Multiboard 1600se (EXPERIMENTAL)' CONFIG_SUN_AURORA
 

@@ -77,7 +77,7 @@ extern unsigned long pci_dram_offset;
 #define outb_p(val, port)	out_8((unsigned char *)((port)+_IO_BASE), (val))
 #define inw_p(port)		in_le16((unsigned short *)((port)+_IO_BASE))
 #define outw_p(val, port)	out_le16((unsigned short *)((port)+_IO_BASE), (val))
-#define inl_p(port)		in_le32(((unsigned *)(port)+_IO_BASE))
+#define inl_p(port)		in_le32((unsigned *)((port)+_IO_BASE))
 #define outl_p(val, port)	out_le32((unsigned *)((port)+_IO_BASE), (val))
 
 extern void _insb(volatile unsigned char *port, void *buf, int ns);

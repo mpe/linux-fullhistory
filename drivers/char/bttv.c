@@ -3595,11 +3595,7 @@ int configure_bt848(struct pci_dev *dev, int bttv_num)
                 }
         }
         
-#ifdef __sparc__
-        btv->bt848_mem=(unsigned char *)btv->bt848_adr;
-#else
-        btv->bt848_mem=ioremap(btv->bt848_adr, 0x1000);
-#endif
+        btv->bt848_mem = ioremap(btv->bt848_adr, 0x1000);
         
         /* clear interrupt mask */
 	btwrite(0, BT848_INT_MASK);

@@ -1170,7 +1170,7 @@ static int isp1020_reset_hardware(struct Scsi_Host *host)
 
 static int isp1020_init(struct Scsi_Host *sh)
 {
-	u_long io_base;
+	u_long io_base, io_flags;
 	struct isp1020_hostdata *hostdata;
 	u_char revision;
 	u_int irq;
@@ -1188,7 +1188,9 @@ static int isp1020_init(struct Scsi_Host *sh)
 		printk("qlogicisp : error reading PCI configuration\n");
 		return 1;
 	}
+
 	io_base = pdev->resource[0].start;
+	io_flags = pdev->resource[0].flags;
 	irq = pdev->irq;
 
 	if (pdev->vendor != PCI_VENDOR_ID_QLOGIC) {
@@ -1212,9 +1214,9 @@ static int isp1020_init(struct Scsi_Host *sh)
 	pci_write_config_byte(pdev, PCI_LATENCY_TIMER, 64);
 #endif
 
-	if (command & PCI_COMMAND_IO && (io_base & 3) == 1)
-		io_base &= PCI_BASE_ADDRESS_IO_MASK;
-	else {
+	if (! ((command & PCI_COMMAND_IO)
+	       && ((io_flags & PCI_BASE_ADDRESS_SPACE)
+		   == PCI_BASE_ADDRESS_SPACE_IO))) {
 		printk("qlogicisp : i/o mapping is disabled\n");
 		return 1;
 	}

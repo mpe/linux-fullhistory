@@ -1,4 +1,4 @@
-/* $Id: sunserial.c,v 1.68 1998/12/09 18:53:51 davem Exp $
+/* $Id: sunserial.c,v 1.69 1999/08/31 06:58:29 davem Exp $
  * serial.c: Serial port driver infrastructure for the Sparc.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -20,13 +20,12 @@
 
 int serial_console;
 
-__initfunc(int con_is_present(void))
+int __init con_is_present(void)
 {
 	return serial_console ? 0 : 1;
 }
 
-__initfunc(static void
-nop_rs_kgdb_hook(int channel))
+static void __init nop_rs_kgdb_hook(int channel)
 {
 	printk("Oops: %s called\n", __FUNCTION__);
 }
@@ -63,13 +62,12 @@ int rs_init(void)
 	return err;
 }
 
-__initfunc(void
-rs_kgdb_hook(int channel))
+void __init rs_kgdb_hook(int channel)
 {
 	rs_ops.rs_kgdb_hook(channel);
 }
 
-__initfunc(long serial_console_init(long kmem_start, long kmem_end))
+long __init serial_console_init(long kmem_start, long kmem_end)
 {
 	return kmem_start;
 }
@@ -352,8 +350,7 @@ extern int sab82532_probe(unsigned long *);
 extern int ps2kbd_probe(unsigned long *);
 #endif
 
-__initfunc(unsigned long
-sun_serial_setup(unsigned long memory_start))
+unsigned long __init sun_serial_setup(unsigned long memory_start)
 {
 	int ret = 1;
 	

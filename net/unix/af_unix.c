@@ -8,7 +8,7 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  *
- * Version:	$Id: af_unix.c,v 1.81 1999/08/20 11:06:56 davem Exp $
+ * Version:	$Id: af_unix.c,v 1.82 1999/08/30 10:17:37 davem Exp $
  *
  * Fixes:
  *		Linus Torvalds	:	Assorted bug cures.
@@ -747,10 +747,8 @@ static void unix_wait_for_peer(unix_socket *other)
 	int sched;
 	DECLARE_WAITQUEUE(wait, current);
 
+	__set_current_state(TASK_INTERRUPTIBLE);
 	add_wait_queue(&other->protinfo.af_unix.peer_wait, &wait);
-	current->state = TASK_INTERRUPTIBLE;
-
-	barrier();
 
 	sched = (!other->dead &&
 		 !(other->shutdown&RCV_SHUTDOWN) &&
@@ -762,7 +760,7 @@ static void unix_wait_for_peer(unix_socket *other)
 	if (sched)
 		schedule();
 
-	current->state = TASK_RUNNING;
+	__set_current_state(TASK_RUNNING);
 	remove_wait_queue(&other->protinfo.af_unix.peer_wait, &wait);
 }
 
@@ -1393,9 +1391,7 @@ static void unix_stream_data_wait(unix_socket * sk)
 	add_wait_queue(sk->sleep, &wait);
 
 	for (;;) {
-		current->state = TASK_INTERRUPTIBLE;
-
-		barrier();
+		set_current_state(TASK_INTERRUPTIBLE);
 
 		if (skb_queue_len(&sk->receive_queue) ||
 		    sk->err ||
@@ -1410,7 +1406,7 @@ static void unix_stream_data_wait(unix_socket * sk)
 		sk->socket->flags &= ~SO_WAITDATA;
 	}
 
-	current->state = TASK_RUNNING;
+	__set_current_state(TASK_RUNNING);
 	remove_wait_queue(sk->sleep, &wait);
 	unix_state_runlock(sk);
 }

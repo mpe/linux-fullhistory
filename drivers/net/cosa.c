@@ -1560,7 +1560,6 @@ static int get_wait_data(struct cosa_data *cosa)
 		/* sleep if not ready to read */
 		current->state = TASK_INTERRUPTIBLE;
 		schedule_timeout(1);
-		current->state = TASK_RUNNING;
 	}
 	printk(KERN_INFO "cosa: timeout in get_wait_data (status 0x%x)\n",
 		cosa_getstatus(cosa));
@@ -1588,7 +1587,6 @@ static int put_wait_data(struct cosa_data *cosa, int data)
 		/* sleep if not ready to read */
 		current->state = TASK_INTERRUPTIBLE;
 		schedule_timeout(1);
-		current->state = TASK_RUNNING;
 #endif
 	}
 	printk(KERN_INFO "cosa%d: timeout in put_wait_data (status 0x%x)\n",

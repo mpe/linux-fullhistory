@@ -21,16 +21,8 @@
 
 #define T2_MEM_R1_MASK 0x03ffffff  /* Mem sparse region 1 mask is 26 bits */
 
-#define T2_DMA_WIN_BASE_DEFAULT	(1024*1024*1024)
-#define T2_DMA_WIN_SIZE_DEFAULT	(1024*1024*1024)
-
-#if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_SRM_SETUP)
-#define T2_DMA_WIN_BASE		alpha_mv.dma_win_base
-#define T2_DMA_WIN_SIZE		alpha_mv.dma_win_size
-#else
-#define T2_DMA_WIN_BASE		T2_DMA_WIN_BASE_DEFAULT
-#define T2_DMA_WIN_SIZE		T2_DMA_WIN_SIZE_DEFAULT
-#endif
+#define T2_DMA_WIN_BASE		(1UL*1024*1024*1024)
+#define T2_DMA_WIN_SIZE		(1UL*1024*1024*1024)
 
 /* GAMMA-SABLE is a SABLE with EV5-based CPUs */
 #define _GAMMA_BIAS		0x8000000000UL
@@ -428,112 +420,6 @@ __EXTERN_INLINE void t2_outl(unsigned int b, unsigned long addr)
  *
  */
 
-__EXTERN_INLINE unsigned long t2_srm_base(unsigned long addr)
-{
-	if ((addr >= alpha_mv.sm_base_r1
-	     && addr <= alpha_mv.sm_base_r1 + T2_MEM_R1_MASK)
-	    || (addr >= 512*1024 && addr < 1024*1024)) {
-		return ((addr & T2_MEM_R1_MASK) << 5) + T2_SPARSE_MEM;
-	}
-#if 0
-	printk("T2: address 0x%lx not covered by HAE\n", addr);
-#endif
-	return 0;
-}
-
-__EXTERN_INLINE unsigned long t2_srm_readb(unsigned long addr)
-{
-	unsigned long result, work;
-
-	if ((work = t2_srm_base(addr)) == 0)
-		return 0xff;
-	work += 0x00;	/* add transfer length */
-
-	result = *(vip) work;
-	return __kernel_extbl(result, addr & 3);
-}
-
-__EXTERN_INLINE unsigned long t2_srm_readw(unsigned long addr)
-{
-	unsigned long result, work;
-
-	if ((work = t2_srm_base(addr)) == 0)
-		return 0xffff;
-	work += 0x08;	/* add transfer length */
-
-	result = *(vip) work;
-	return __kernel_extwl(result, addr & 3);
-}
-
-/* On SABLE with T2, we must use SPARSE memory even for 32-bit access ... */
-__EXTERN_INLINE unsigned long t2_srm_readl(unsigned long addr)
-{
-	unsigned long work;
-
-	if ((work = t2_srm_base(addr)) == 0)
-		return 0xffffffff;
-	work += 0x18;	/* add transfer length */
-
-	return *(vuip) work;
-}
-
-/* ... which makes me wonder why we advertise we have DENSE memory at all.
-   Anyway, guess that means we should emulate 64-bit access as two cycles.  */
-__EXTERN_INLINE unsigned long t2_srm_readq(unsigned long addr)
-{
-	unsigned long work, r0, r1;
-
-	if ((work = t2_srm_base(addr)) == 0)
-		return ~0UL;
-	work += 0x18;	/* add transfer length */
-
-	r0 = *(vuip) work;
-	r1 = *(vuip) (work + (4 << 5));
-	return r1 << 32 | r0;
-}
-
-__EXTERN_INLINE void t2_srm_writeb(unsigned char b, unsigned long addr)
-{
-	unsigned long w, work = t2_srm_base(addr);
-	if (work) {
-		work += 0x00;	/* add transfer length */
-		w = __kernel_insbl(b, addr & 3);
-		*(vuip) work = w;
-	}
-}
-
-__EXTERN_INLINE void t2_srm_writew(unsigned short b, unsigned long addr)
-{
-	unsigned long w, work = t2_srm_base(addr);
-	if (work) {
-		work += 0x08;	/* add transfer length */
-		w = __kernel_inswl(b, addr & 3);
-		*(vuip) work = w;
-	}
-}
-
-/* On SABLE with T2, we must use SPARSE memory even for 32-bit access ... */
-__EXTERN_INLINE void t2_srm_writel(unsigned int b, unsigned long addr)
-{
-	unsigned long work = t2_srm_base(addr);
-	if (work) {
-		work += 0x18;	/* add transfer length */
-		*(vuip) work = b;
-	}
-}
-
-/* ... which makes me wonder why we advertise we have DENSE memory at all.
-   Anyway, guess that means we should emulate 64-bit access as two cycles.  */
-__EXTERN_INLINE void t2_srm_writeq(unsigned long b, unsigned long addr)
-{
-	unsigned long work = t2_srm_base(addr);
-	if (work) {
-		work += 0x18;	/* add transfer length */
-		*(vuip) work = b;
-		*(vuip) (work + (4 << 5)) = b >> 32;
-	}
-}
-
 __EXTERN_INLINE unsigned long t2_readb(unsigned long addr)
 {
 	unsigned long result, msb;
@@ -656,17 +542,6 @@ __EXTERN_INLINE int t2_is_ioaddr(unsigned long addr)
 #define __outb		t2_outb
 #define __outw		t2_outw
 #define __outl		t2_outl
-
-#ifdef CONFIG_ALPHA_SRM_SETUP
-#define __readb		t2_srm_readb
-#define __readw		t2_srm_readw
-#define __readl		t2_srm_readl
-#define __readq		t2_srm_readq
-#define __writeb	t2_srm_writeb
-#define __writew	t2_srm_writew
-#define __writel	t2_srm_writel
-#define __writeq	t2_srm_writeq
-#else
 #define __readb		t2_readb
 #define __readw		t2_readw
 #define __readl		t2_readl
@@ -675,16 +550,13 @@ __EXTERN_INLINE int t2_is_ioaddr(unsigned long addr)
 #define __writew	t2_writew
 #define __writel	t2_writel
 #define __writeq	t2_writeq
-#endif
-
 #define __ioremap	t2_ioremap
 #define __is_ioaddr	t2_is_ioaddr
 
 #define inb(port) \
-(__builtin_constant_p((port))?__inb(port):_inb(port))
-
+  (__builtin_constant_p((port))?__inb(port):_inb(port))
 #define outb(x, port) \
-(__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
+  (__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
 
 #endif /* __WANT_IO_DEF */
 

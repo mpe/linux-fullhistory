@@ -28,6 +28,7 @@
 #include <linux/string.h>
 #include <linux/malloc.h>
 #include <linux/proc_fs.h>
+#include <linux/delay.h>
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <asm/irq.h>

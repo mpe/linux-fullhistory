@@ -34,6 +34,7 @@
 #include <video/fbcon-cfb4.h>
 #include <video/fbcon-cfb8.h>
 #include <video/fbcon-cfb16.h>
+#include <video/fbcon-cfb32.h>
 
 /*
  * Default resolution.
@@ -58,7 +59,7 @@
 #endif
 
 #define EXTEND8(x) ((x)|(x)<<8)
-#define EXTEND4(x) ((x)|(x)<<4|(x)<<8|(x)<<16)
+#define EXTEND4(x) ((x)|(x)<<4|(x)<<8|(x)<<12)
 
 struct vidc20_palette {
 	u_int red:8;
@@ -554,14 +555,14 @@ acornfb_vidc20_find_rates(struct vidc_timing *vidc,
 	bandwidth = var->pixclock * 8 / var->bits_per_pixel;
 
 	/* Encode bandwidth as VIDC20 setting */
-	if (bandwidth > 16667*2)
-		vidc->control |= VIDC20_CTRL_FIFO_16;
-	else if (bandwidth > 13333*2)
-		vidc->control |= VIDC20_CTRL_FIFO_20;
-	else if (bandwidth > 11111*2)
-		vidc->control |= VIDC20_CTRL_FIFO_24;
+	if (bandwidth > 33334)
+		vidc->control |= VIDC20_CTRL_FIFO_16;	/* < 30.0MB/s */
+	else if (bandwidth > 26666)
+		vidc->control |= VIDC20_CTRL_FIFO_20;	/* < 37.5MB/s */
+	else if (bandwidth > 22222)
+		vidc->control |= VIDC20_CTRL_FIFO_24;	/* < 45.0MB/s */
 	else
-		vidc->control |= VIDC20_CTRL_FIFO_28;
+		vidc->control |= VIDC20_CTRL_FIFO_28;	/* > 45.0MB/s */
 
 	/* Find the PLL values */
 	vidc->pll_ctl  = acornfb_vidc20_find_pll(var->pixclock / div);
@@ -742,7 +743,7 @@ acornfb_palette_decode(u_int regno, u_int *red, u_int *green, u_int *blue,
  * Before selecting the timing parameters, adjust
  * the resolution to fit the rules.
  */
-static void
+static int
 acornfb_pre_adjust_timing(struct fb_var_screeninfo *var, int con)
 {
 	u_int font_line_len;
@@ -785,6 +786,13 @@ acornfb_pre_adjust_timing(struct fb_var_screeninfo *var, int con)
 	font_line_len = var->xres * var->bits_per_pixel * fontht / 8;
 	min_size = var->xres * var->yres * var->bits_per_pixel / 8;
 
+	/*
+	 * If minimum screen size is greater than that we have
+	 * available, reject it.
+	 */
+	if (min_size > current_par.screen_size)
+		return -EINVAL;
+
 	/* Find int 'y', such that y * fll == s * sam < maxsize
 	 * y = s * sam / fll; s = maxsize / sam
 	 */
@@ -820,6 +828,7 @@ acornfb_pre_adjust_timing(struct fb_var_screeninfo *var, int con)
 		if (var->yoffset + var->yres > var->yres_virtual)
 			var->yoffset = var->yres_virtual - var->yres;
 	}
+	return 0;
 }
 
 /*
@@ -897,31 +906,74 @@ acornfb_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
 	return 0;
 }
 
+/*
+ * We have to take note of the VIDC20's 16-bit palette here.
+ * The VIDC20 looks up a 16 bit pixel as follows:
+ *
+ *   bits   111111
+ *          5432109876543210
+ *   red            ++++++++  (8 bits,  7 to 0)
+ *  green       ++++++++      (8 bits, 11 to 4)
+ *   blue   ++++++++          (8 bits, 15 to 8)
+ *
+ * We use a pixel which looks like:
+ *
+ *   bits   111111
+ *          5432109876543210
+ *   red               +++++  (5 bits,  4 to  0)
+ *  green         +++++       (5 bits,  9 to  5)
+ *   blue    +++++            (5 bits, 14 to 10)
+ */
 static int
 acornfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 		  u_int trans, struct fb_info *info)
 {
 	union palette pal;
+	int bpp = fb_display[current_par.currcon].var.bits_per_pixel;
 
 	if (regno >= current_par.palette_size)
 		return 1;
 
 	pal = acornfb_palette_encode(regno, red, green, blue, trans);
-	acornfb_palette_write(regno, pal);
 	current_par.palette[regno] = pal;
 
+#ifdef HAS_VIDC20
 	if (regno < 16) {
-		switch (info->disp->var.bits_per_pixel) {
+		switch (bpp) {
 #ifdef FBCON_HAS_CFB16
-		case 16:	/* RGB555 */
-			current_par.cmap.cfb16[regno] = (regno << 10) | (regno << 5) | regno;
+		case 16:
+			current_par.cmap.cfb16[regno] =
+				regno | regno << 5 | regno << 10;
 			break;
 #endif
-
+#ifdef FBCON_HAS_CFB32
+		case 32:
+			current_par.cmap.cfb32[regno] =
+				regno | regno << 8 | regno << 16;
+			break;
+#endif
 		default:
 			break;
 		}
 	}
+
+#ifdef FBCON_HAS_CFB16
+	if (bpp == 16) {
+		int i;
+
+		pal.p = 0;
+		outl(0x10000000, IO_VIDC_BASE);
+		for (i = 0; i < 256; i += 1) {
+			pal.vidc20.red   = current_par.palette[ i       & 31].vidc20.red;
+			pal.vidc20.green = current_par.palette[(i >> 1) & 31].vidc20.green;
+			pal.vidc20.blue  = current_par.palette[(i >> 2) & 31].vidc20.blue;
+			outl(pal.p, IO_VIDC_BASE);
+			/* Palette register pointer auto-increments */
+		}
+	} else
+#endif
+#endif
+		acornfb_palette_write(regno, pal);
 
 	return 0;
 }
@@ -965,6 +1017,8 @@ acornfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 static int
 acornfb_decode_var(struct fb_var_screeninfo *var, int con, int *visual)
 {
+	int err;
+
 	switch (var->bits_per_pixel) {
 #ifdef FBCON_HAS_MFB
 	case 1:
@@ -990,10 +1044,18 @@ acornfb_decode_var(struct fb_var_screeninfo *var, int con, int *visual)
 		*visual = FB_VISUAL_PSEUDOCOLOR;
 		break;
 #endif
+#ifdef HAS_VIDC20
+#ifdef FBCON_HAS_CFB16
 	case 16:
-	case 24:
+		*visual = FB_VISUAL_DIRECTCOLOR;
+		break;
+#endif
+#ifdef FBCON_HAS_CFB32
 	case 32:
 		*visual = FB_VISUAL_TRUECOLOR;
+		break;
+#endif
+#endif
 	default:
 		return -EINVAL;
 	}
@@ -1002,20 +1064,52 @@ acornfb_decode_var(struct fb_var_screeninfo *var, int con, int *visual)
 		return -EINVAL;
 
 	/*
-	 * Adjust the resolution before using it.
+	 * Validate and adjust the resolution
+	 * before using it.
 	 */
-	acornfb_pre_adjust_timing(var, con);
+	err = acornfb_pre_adjust_timing(var, con);
+	if (err)
+		return err;
 
 #if defined(HAS_VIDC20)
-	var->red.length	   = 8;
-	var->transp.length = 4;
+	switch (var->bits_per_pixel) {
+	case 1: case 2: case 4: case 8:
+		var->red.offset    = 0;
+		var->red.length    = 8;
+		var->green         = var->red;
+		var->blue          = var->red;
+		var->transp.offset = 0;
+		var->transp.length = 4;
+		break;
+
+	case 16:
+		var->red.offset    = 0;
+		var->red.length    = 5;
+		var->green.offset  = 5;
+		var->green.length  = 5;
+		var->blue.offset   = 10;
+		var->blue.length   = 5;
+		var->transp.offset = 15;
+		var->transp.length = 1;
+		break;
+
+	case 32:
+		var->red.offset    = 0;
+		var->red.length    = 8;
+		var->green.offset  = 8;
+		var->green.length  = 8;
+		var->blue.offset   = 16;
+		var->blue.length   = 8;
+		var->transp.offset = 24;
+		var->transp.length = 4;
+		break;
+	}
 #elif defined(HAS_VIDC)
 	var->red.length	   = 4;
+	var->green         = var->red;
+	var->blue          = var->red;
 	var->transp.length = 1;
 #endif
-	var->green = var->red;
-	var->blue  = var->red;
-
 	/*
 	 * Now adjust the timing parameters
 	 */
@@ -1153,9 +1247,16 @@ acornfb_set_var(struct fb_var_screeninfo *var, int con, struct fb_info *info)
 #endif
 #ifdef FBCON_HAS_CFB16
 	case 16:
-		current_par.palette_size = VIDC_PALETTE_SIZE;
+		current_par.palette_size = 32;
 		display->dispsw = &fbcon_cfb16;
 		display->dispsw_data = current_par.cmap.cfb16;
+		break;
+#endif
+#ifdef FBCON_HAS_CFB32
+	case 32:
+		current_par.palette_size = VIDC_PALETTE_SIZE;
+		display->dispsw = &fbcon_cfb32;
+		display->dispsw_data = current_par.cmap.cfb32;
 		break;
 #endif
 	default:
@@ -1290,19 +1391,32 @@ acornfb_switch(int con, struct fb_info *info)
 static void
 acornfb_blank(int blank, struct fb_info *info)
 {
-	int i;
+	union palette p;
+	int i, bpp = fb_display[current_par.currcon].var.bits_per_pixel;
 
-	if (blank)
+	if (bpp != 16) {
 		for (i = 0; i < current_par.palette_size; i++) {
-			union palette p;
-
-			p = acornfb_palette_encode(i, 0, 0, 0, 0);
+			if (blank)
+				p = acornfb_palette_encode(i, 0, 0, 0, 0);
+			else
+				p = current_par.palette[i];
 
 			acornfb_palette_write(i, p);
 		}
-	else
-		for (i = 0; i < current_par.palette_size; i++)
+	} else {
+		p.p = 0;
+
+		for (i = 0; i < 256; i++) {
+			if (blank)
+				p = acornfb_palette_encode(i, 0, 0, 0, 0);
+			else {
+				p.vidc20.red   = current_par.palette[ i       & 31].vidc20.red;
+				p.vidc20.green = current_par.palette[(i >> 1) & 31].vidc20.green;
+				p.vidc20.blue  = current_par.palette[(i >> 2) & 31].vidc20.blue;
+			}
 			acornfb_palette_write(i, current_par.palette[i]);
+		}
+	}
 }
 
 /*
@@ -1842,7 +1956,7 @@ acornfb_init(void)
 
 	size = PAGE_ALIGN(size);
 
-#ifdef CONFIG_ARCH_RPC
+#if defined(HAS_VIDC20)
 	if (!current_par.using_vram) {
 		/*
 		 * RiscPC needs to allocate the DRAM memory
@@ -1850,17 +1964,30 @@ acornfb_init(void)
 		 * VRAM.  Archimedes/A5000 machines use a
 		 * fixed address for their framebuffers.
 		 */
-		current_par.screen_base = (unsigned long)kmalloc(size, GFP_KERNEL);
+		int order = 0;
+		unsigned long page, top;
+		while (size > (PAGE_SIZE * (1 << order)))
+			order++;
+		current_par.screen_base = __get_free_pages(GFP_KERNEL, order);
 		if (current_par.screen_base == 0) {
 			printk(KERN_ERR "acornfb: unable to allocate screen "
 			       "memory\n");
 			return;
 		}
+		top = current_par.screen_base + (PAGE_SIZE * (1 << order));
+		/* Mark the framebuffer pages as reserved so mmap will work. */
+		for (page = current_par.screen_base; 
+		     page < PAGE_ALIGN(current_par.screen_base + size);
+		     page += PAGE_SIZE)
+			mem_map[MAP_NR(page)].flags |= (1 << PG_reserved);
+		/* Hand back any excess pages that we allocated. */
+		for (page = current_par.screen_base + size; page < top; page += PAGE_SIZE)
+			free_page(page);
 		current_par.screen_base_p =
 			virt_to_phys(current_par.screen_base);
 	}
 #endif
-#if defined(CONFIG_ARCH_A5K) || defined(CONFIG_ARCH_ARC)
+#if defined(HAS_VIDC)
 #define MAX_SIZE	480*1024
 	/*
 	 * Limit maximum screen size.

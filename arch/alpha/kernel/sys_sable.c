@@ -3,7 +3,7 @@
  *
  *	Copyright (C) 1995 David A Rusling
  *	Copyright (C) 1996 Jay A Estabrook
- *	Copyright (C) 1998 Richard Henderson
+ *	Copyright (C) 1998, 1999 Richard Henderson
  *
  * Code supporting the Sable and Sable-Gamma systems.
  */
@@ -26,9 +26,9 @@
 #include <asm/core_t2.h>
 
 #include "proto.h"
-#include "irq.h"
-#include "bios32.h"
-#include "machvec.h"
+#include "irq_impl.h"
+#include "pci_impl.h"
+#include "machvec_impl.h"
 
 
 /*
@@ -198,7 +198,7 @@ sable_init_irq(void)
  */
 
 static int __init
-sable_map_irq(struct pci_dev *dev, int slot, int pin)
+sable_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
         static char irq_tab[9][5] __initlocaldata = {
 		/*INT    INTA   INTB   INTC   INTD */
@@ -214,13 +214,6 @@ sable_map_irq(struct pci_dev *dev, int slot, int pin)
         };
 	const long min_idsel = 0, max_idsel = 8, irqs_per_slot = 5;
 	return COMMON_TABLE_LOOKUP;
-}
-
-void __init
-sable_pci_fixup(void)
-{
-	layout_all_busses(EISA_DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
-        common_pci_fixup(sable_map_irq, common_swizzle);
 }
 
 
@@ -242,6 +235,8 @@ struct alpha_machine_vector sable_mv __initmv = {
 	DO_T2_BUS,
 	machine_check:		t2_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	min_io_address:		EISA_DEFAULT_IO_BASE,
+	min_mem_address:	DEFAULT_MEM_BASE,
 
 	nr_irqs:		40,
 	irq_probe_mask:		_PROBE_MASK(40),
@@ -251,9 +246,11 @@ struct alpha_machine_vector sable_mv __initmv = {
 
 	init_arch:		t2_init_arch,
 	init_irq:		sable_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		sable_pci_fixup,
-	kill_arch:		generic_kill_arch,
+	init_pit:		common_init_pit,
+	init_pci:		common_init_pci,
+	kill_arch:		common_kill_arch,
+	pci_map_irq:		sable_map_irq,
+	pci_swizzle:		common_swizzle,
 
 	sys: { t2: {
 	    gamma_bias:		0
@@ -273,6 +270,8 @@ struct alpha_machine_vector sable_gamma_mv __initmv = {
 	DO_T2_BUS,
 	machine_check:		t2_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	min_io_address:		EISA_DEFAULT_IO_BASE,
+	min_mem_address:	DEFAULT_MEM_BASE,
 
 	nr_irqs:		40,
 	irq_probe_mask:		_PROBE_MASK(40),
@@ -282,9 +281,11 @@ struct alpha_machine_vector sable_gamma_mv __initmv = {
 
 	init_arch:		t2_init_arch,
 	init_irq:		sable_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		sable_pci_fixup,
-	kill_arch:		generic_kill_arch,
+	init_pit:		common_init_pit,
+	init_pci:		common_init_pci,
+	kill_arch:		common_kill_arch,
+	pci_map_irq:		sable_map_irq,
+	pci_swizzle:		common_swizzle,
 
 	sys: { t2: {
 	    gamma_bias:		_GAMMA_BIAS

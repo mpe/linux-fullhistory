@@ -9,7 +9,6 @@
  * This file handles the architecture-dependent parts of process handling..
  */
 
-#define __KERNEL_SYSCALLS__
 #include <stdarg.h>
 
 #include <linux/errno.h>
@@ -54,16 +53,15 @@ void enable_hlt(void)
 /*
  * The idle loop on an ARM...
  */
-asmlinkage int sys_idle(void)
+void cpu_idle(void)
 {
-	if (current->pid != 0)
-		return -EPERM;
-
 	/* endless idle loop with no priority at all */
+	init_idle();
+	current->priority = 0;
+	current->counter = -100;
 	while (1) {
 		if (!current->need_resched && !hlt_counter)
 			proc_idle();
-		current->policy = SCHED_YIELD;
 		schedule();
 #ifndef CONFIG_NO_PGT_CACHE
 		check_pgt_cache();
@@ -283,7 +281,6 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
  */
 pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 {
-	extern int sys_exit(int) __attribute__((noreturn));
 	pid_t __ret;
 
 	__asm__ __volatile__(

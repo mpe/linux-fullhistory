@@ -1499,10 +1499,11 @@ static int tiocswinsz(struct tty_struct *tty, struct tty_struct *real_tty,
 	return 0;
 }
 
-static int tioccons(struct tty_struct *tty, struct tty_struct *real_tty)
+static int tioccons(struct inode *inode,
+	struct tty_struct *tty, struct tty_struct *real_tty)
 {
-	if (tty->driver.type == TTY_DRIVER_TYPE_CONSOLE ||
-	    tty->driver.type == TTY_DRIVER_TYPE_SYSCONS) {
+	if (inode->i_rdev == SYSCONS_DEV ||
+	    inode->i_rdev == CONSOLE_DEV) {
 		if (!suser())
 			return -EPERM;
 		redirect = NULL;
@@ -1631,7 +1632,7 @@ static int tiocsetd(struct tty_struct *tty, int *arg)
 
 static int send_break(struct tty_struct *tty, int duration)
 {
-	current->state = TASK_INTERRUPTIBLE;
+	set_current_state(TASK_INTERRUPTIBLE);
 
 	tty->driver.break_ctl(tty, -1);
 	if (!signal_pending(current))
@@ -1712,7 +1713,7 @@ int tty_ioctl(struct inode * inode, struct file * file,
 		case TIOCSWINSZ:
 			return tiocswinsz(tty, real_tty, (struct winsize *) arg);
 		case TIOCCONS:
-			return tioccons(tty, real_tty);
+			return tioccons(inode, tty, real_tty);
 		case FIONBIO:
 			return fionbio(file, (int *) arg);
 		case TIOCEXCL:

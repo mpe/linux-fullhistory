@@ -25,6 +25,7 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/string.h>
+#include <linux/ioport.h>
 
 #ifdef CONFIG_RTC
 #include <linux/timex.h>
@@ -39,16 +40,18 @@
 #include <asm/hwrpb.h>
 #include <asm/dma.h>
 #include <asm/io.h>
-
+#include <asm/pci.h>
 
 #include "proto.h"
+#include "pci_impl.h"
+
 
 struct hwrpb_struct *hwrpb;
 unsigned long srm_hae;
 
 #ifdef CONFIG_ALPHA_GENERIC
 struct alpha_machine_vector alpha_mv;
-int alpha_using_srm, alpha_use_srm_setup;
+int alpha_using_srm;
 #endif
 
 unsigned char aux_device_present = 0xaa;
@@ -89,6 +92,7 @@ struct screen_info screen_info = {
 	orig_video_isVGA: 1,
 	orig_video_points: 16
 };
+
 
 /*
  * Declare all of the machine vectors.
@@ -136,6 +140,47 @@ WEAK(xlt_mv);
 
 #undef WEAK
 
+/*
+ * I/O resources inherited from PeeCees.  Except for perhaps the
+ * turbochannel alphas, everyone has these on some sort of SuperIO chip.
+ *
+ * ??? If this becomes less standard, move the struct out into the
+ * machine vector.
+ */
+
+static void __init
+reserve_std_resources(void)
+{
+	static struct resource standard_io_resources[] = {
+		{ "rtc", -1, -1 },
+        	{ "dma1", 0x00, 0x1f },
+        	{ "pic1", 0x20, 0x3f },
+        	{ "timer", 0x40, 0x5f },
+        	{ "keyboard", 0x60, 0x6f },
+        	{ "dma page reg", 0x80, 0x8f },
+        	{ "pic2", 0xa0, 0xbf },
+        	{ "dma2", 0xc0, 0xdf },
+	};
+
+	struct resource *io = &ioport_resource;
+	long i;
+
+	if (hose_head) {
+		struct pci_controler *hose;
+		for (hose = hose_head; hose; hose = hose->next)
+			if (hose->index == 0) {
+				io = hose->io_space;
+				break;
+			}
+	}
+
+	/* Fix up for the Jensen's queer RTC placement.  */
+	standard_io_resources[0].start = RTC_PORT(0);
+	standard_io_resources[0].end = RTC_PORT(0) + 0x10;
+
+	for (i = 0; i < N(standard_io_resources); ++i)
+		request_resource(io, standard_io_resources+i);
+}
 
 void __init
 setup_arch(char **cmdline_p, unsigned long * memory_start_p,
@@ -171,20 +216,10 @@ setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 	 */
 
 	for (p = strtok(command_line, " \t"); p ; p = strtok(NULL, " \t")) {
-#ifndef alpha_use_srm_setup
-		/* Allow a command-line option to respect the
-		   SRM's configuration.  */
-		if (strncmp(p, "srm_setup=", 10) == 0) {
-			alpha_use_srm_setup = (p[10] != '0');
-			continue;
-		}
-#endif
-
 		if (strncmp(p, "alpha_mv=", 9) == 0) {
 			vec = get_sysvec_byname(p+9);
 			continue;
 		}
-
 		if (strncmp(p, "cycle=", 6) == 0) {
 			est_cycle_freq = simple_strtol(p+6, NULL, 0);
 			continue;
@@ -270,6 +305,9 @@ setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 	   DMA windows and the like.  */
 	if (alpha_mv.init_arch)
 		alpha_mv.init_arch(memory_start_p, memory_end_p);
+
+	/* Reserve standard resources.  */
+	reserve_std_resources();
 
 	/* Initialize the timers.  */
 	/* ??? There is some circumstantial evidence that this needs

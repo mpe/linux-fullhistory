@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.38 1999/08/02 08:39:50 davem Exp $
+/* $Id: fault.c,v 1.39 1999/08/30 10:07:09 davem Exp $
  * arch/sparc64/mm/fault.c: Page fault handlers for the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -312,6 +312,16 @@ do_kernel_fault:
 				return;
 			}
 		} else {
+#if 0
+			extern void __show_regs(struct pt_regs *);
+			printk("SHIT(%s:%d:cpu(%d)): PC[%016lx] ADDR[%016lx]\n",
+			       current->comm, current->pid, smp_processor_id(),
+			       regs->tpc, address);
+			__show_regs(regs);
+			__sti();
+			while(1)
+				barrier();
+#endif
 			current->thread.sig_address = address;
 			current->thread.sig_desc = SUBSIG_NOMAPPING;
 			force_sig(SIGSEGV, current);

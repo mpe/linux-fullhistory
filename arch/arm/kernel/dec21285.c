@@ -1,7 +1,7 @@
 /*
- * arch/arm/kernel/dec21285.c: PCI functions for DEC 21285
+ * arch/arm/kernel/dec21285.c: PCI functions for DC21285
  *
- * Copyright (C) 1998 Russell King, Phil Blundell
+ * Copyright (C) 1998-1999 Russell King, Phil Blundell
  */
 #include <linux/config.h>
 #include <linux/sched.h>
@@ -11,6 +11,7 @@
 #include <linux/interrupt.h>
 #include <linux/mm.h>
 #include <linux/init.h>
+#include <linux/ioport.h>
 
 #include <asm/irq.h>
 #include <asm/system.h>

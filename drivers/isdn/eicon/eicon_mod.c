@@ -1,4 +1,4 @@
-/* $Id: eicon_mod.c,v 1.9 1999/08/18 20:17:02 armin Exp $
+/* $Id: eicon_mod.c,v 1.11 1999/08/29 17:23:45 armin Exp $
  *
  * ISDN lowlevel-module for Eicon.Diehl active cards.
  * 
@@ -26,6 +26,14 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: eicon_mod.c,v $
+ * Revision 1.11  1999/08/29 17:23:45  armin
+ * New setup compat.
+ * Bugfix if compile as not module.
+ *
+ * Revision 1.10  1999/08/28 21:32:53  armin
+ * Prepared for fax related functions.
+ * Now compilable without errors/warnings.
+ *
  * Revision 1.9  1999/08/18 20:17:02  armin
  * Added XLOG function for all cards.
  * Bugfix of alloc_skb NULL pointer.
@@ -83,7 +91,7 @@
 static eicon_card *cards = (eicon_card *) NULL;   /* glob. var , contains
                                                      start of card-list   */
 
-static char *eicon_revision = "$Revision: 1.9 $";
+static char *eicon_revision = "$Revision: 1.11 $";
 
 extern char *eicon_pci_revision;
 extern char *eicon_isa_revision;
@@ -1006,7 +1014,7 @@ eicon_alloccard(int Type, int membase, int irq, char *id)
 					ISDN_FEATURE_L2_V11019 |
 					ISDN_FEATURE_L2_V11038 |
 					ISDN_FEATURE_L2_MODEM |
-					ISDN_FEATURE_L2_FAX |
+					/* ISDN_FEATURE_L2_FAX | */ 
 					ISDN_FEATURE_L3_TRANSDSP |
 					ISDN_FEATURE_L3_FAX;
                                 card->hwif.pci.card = (void *)card;
@@ -1030,7 +1038,7 @@ eicon_alloccard(int Type, int membase, int irq, char *id)
 					ISDN_FEATURE_L2_V11019 |
 					ISDN_FEATURE_L2_V11038 |
 					ISDN_FEATURE_L2_MODEM |
-					ISDN_FEATURE_L2_FAX |
+					/* ISDN_FEATURE_L2_FAX | */
 					ISDN_FEATURE_L3_TRANSDSP |
 					ISDN_FEATURE_L3_FAX;
                                 card->hwif.pci.card = (void *)card;
@@ -1335,7 +1343,7 @@ eicon_init(void))
 #else
                 printk(KERN_INFO "Eicon: No PCI-cards found, driver not loaded !\n");
 #endif
-#endif
+#endif /* MODULE */
 		return -ENODEV;
 
 	} else
@@ -1373,13 +1381,26 @@ cleanup_module(void)
 }
 
 #else /* no module */
+
+#ifdef COMPAT_HAS_NEW_SETUP
+static int __init
+eicon_setup(char *line)
+{
+        int i, argc;
+	int ints[5];
+	char *str;
+
+	str = get_options(line, 4, ints);
+#else
 __initfunc(void
 eicon_setup(char *str, int *ints))
 {
         int i, argc;
+#endif
 
         argc = ints[0];
         i = 1;
+#ifdef CONFIG_ISDN_DRV_EICON_ISA
         if (argc) {
 		membase = irq = -1;
 		if (argc) {
@@ -1397,10 +1418,20 @@ eicon_setup(char *str, int *ints))
 		} else {
 			strcpy(id, "eicon");
 		} 
-		/* eicon_addcard(0, membase, irq, id); */
-       		printk(KERN_INFO "eicon: membase=0x%x irq=%d id=%s\n", membase, irq, id);
+       		printk(KERN_INFO "Eicon ISDN active driver setup (id=%s membase=0x%x irq=%d)\n",
+			id, membase, irq);
 	}
+#else
+	printk(KERN_INFO "Eicon ISDN active driver setup\n");
+#endif
+#ifdef COMPAT_HAS_NEW_SETUP
+	return(1);
 }
+__setup("eicon=", eicon_setup);
+#else
+}
+#endif
+
 #endif /* MODULE */
 
 #ifdef CONFIG_ISDN_DRV_EICON_ISA

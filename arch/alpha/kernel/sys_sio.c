@@ -3,7 +3,7 @@
  *
  *	Copyright (C) 1995 David A Rusling
  *	Copyright (C) 1996 Jay A Estabrook
- *	Copyright (C) 1998 Richard Henderson
+ *	Copyright (C) 1998, 1999 Richard Henderson
  *
  * Code for all boards that route the PCI interrupts through the SIO
  * PCI/ISA bridge.  This includes Noname (AXPpci33), Multia (UDB),
@@ -28,11 +28,12 @@
 #include <asm/pgtable.h>
 #include <asm/core_apecs.h>
 #include <asm/core_lca.h>
+#include <asm/pci.h>
 
 #include "proto.h"
-#include "irq.h"
-#include "bios32.h"
-#include "machvec.h"
+#include "irq_impl.h"
+#include "pci_impl.h"
+#include "machvec_impl.h"
 
 static void
 sio_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
@@ -57,6 +58,8 @@ sio_init_irq(void)
 static inline void __init
 xl_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 {
+	struct pci_controler *hose;
+
 	/*
 	 * Set up the PCI->physical memory translation windows.  For
 	 * the XL we *must* use both windows, in order to maximize the
@@ -86,6 +89,16 @@ xl_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 	 */
 
 	*(vuip)APECS_IOC_HAXR2 = 0; mb();
+
+	/*
+	 * Create our single hose.
+	 */
+
+	hose = alloc_pci_controler(mem_start);
+	hose->io_space = &ioport_resource;
+	hose->mem_space = &iomem_resource;
+	hose->config_space = LCA_CONF;
+	hose->index = 0;
 }
 
 static inline void __init
@@ -114,26 +127,12 @@ alphabook1_init_arch(unsigned long *mem_start, unsigned long *mem_end)
  * This is NOT how we should do it. PIRQ0-X should have
  * their own IRQ's, the way intel uses the IO-APIC irq's.
  */
-static unsigned long sio_route_tab __initdata = 0;
 
 static void __init
-sio_pci_fixup(int (*map_irq)(struct pci_dev *dev, int sel, int pin),
-	      unsigned long new_route_tab)
+sio_pci_route(void)
 {
-	unsigned int route_tab;
-
-	/* Examine or update the PCI routing table.  */
-        pcibios_read_config_dword(0, PCI_DEVFN(7, 0), 0x60, &route_tab);
-
-	sio_route_tab = route_tab; 
-	if (PCI_MODIFY) {
-		sio_route_tab = new_route_tab;
-		pcibios_write_config_dword(0, PCI_DEVFN(7, 0), 0x60,
-					   new_route_tab);
-	}
-
-	/* Update all the IRQs.  */
-	common_pci_fixup(map_irq, common_swizzle);
+	pcibios_write_config_dword(0, PCI_DEVFN(7, 0), 0x60,
+				   alpha_mv.sys.sio.route_tab);
 }
 
 static unsigned int __init
@@ -180,7 +179,7 @@ sio_fixup_irq_levels(unsigned int level_bits)
 }
 
 static inline int __init
-noname_map_irq(struct pci_dev *dev, int slot, int pin)
+noname_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
 	/*
 	 * The Noname board has 5 PCI slots with each of the 4
@@ -214,49 +213,12 @@ noname_map_irq(struct pci_dev *dev, int slot, int pin)
 	};
 	const long min_idsel = 6, max_idsel = 14, irqs_per_slot = 5;
 	int irq = COMMON_TABLE_LOOKUP, tmp;
-	tmp = __kernel_extbl(sio_route_tab, irq);
+	tmp = __kernel_extbl(alpha_mv.sys.sio.route_tab, irq);
 	return irq >= 0 ? tmp : -1;
 }
 
-static inline void __init
-noname_pci_fixup(void)
-{
-	/*
-	 * For UDB, the only available PCI slot must not map to IRQ 9,
-	 * since that's the builtin MSS sound chip. That PCI slot
-	 * will map to PIRQ1 (for INTA at least), so we give it IRQ 15
-	 * instead.
-	 *
-	 * Unfortunately we have to do this for NONAME as well, since
-	 * they are co-indicated when the platform type "Noname" is
-	 * selected... :-(
-	 */
-	layout_all_busses(DEFAULT_IO_BASE, APECS_AND_LCA_DEFAULT_MEM_BASE);
-	sio_pci_fixup(noname_map_irq, 0x0b0a0f0d);
-	sio_fixup_irq_levels(sio_collect_irq_levels());
-        enable_ide(0x26e);
-}
-
-static inline void __init
-avanti_pci_fixup(void)
-{
-	layout_all_busses(DEFAULT_IO_BASE, APECS_AND_LCA_DEFAULT_MEM_BASE);
-	sio_pci_fixup(noname_map_irq, 0x0b0a0e0f);
-	sio_fixup_irq_levels(sio_collect_irq_levels());
-        enable_ide(0x26e);
-}
-
-static inline void __init
-xl_pci_fixup(void)
-{
-	layout_all_busses(DEFAULT_IO_BASE, XL_DEFAULT_MEM_BASE);
-	sio_pci_fixup(noname_map_irq, 0x0b0a090f);
-	sio_fixup_irq_levels(sio_collect_irq_levels());
-        enable_ide(0x26e);
-}
-
 static inline int __init
-p2k_map_irq(struct pci_dev *dev, int slot, int pin)
+p2k_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
 	static char irq_tab[][5] __initlocaldata = {
 		/*INT A   B   C   D */
@@ -270,29 +232,27 @@ p2k_map_irq(struct pci_dev *dev, int slot, int pin)
 	};
 	const long min_idsel = 6, max_idsel = 12, irqs_per_slot = 5;
 	int irq = COMMON_TABLE_LOOKUP, tmp;
-	tmp = __kernel_extbl(sio_route_tab, irq);
+	tmp = __kernel_extbl(alpha_mv.sys.sio.route_tab, irq);
 	return irq >= 0 ? tmp : -1;
 }
 
 static inline void __init
-p2k_pci_fixup(void)
+noname_init_pci(void)
 {
-	layout_all_busses(DEFAULT_IO_BASE, APECS_AND_LCA_DEFAULT_MEM_BASE);
-	sio_pci_fixup(p2k_map_irq, 0x0b0a090f);
+	sio_pci_route();
+	common_init_pci();
 	sio_fixup_irq_levels(sio_collect_irq_levels());
-        enable_ide(0x26e);
+	ns87312_enable_ide(0x26e);
 }
 
 static inline void __init
-alphabook1_pci_fixup(void)
+alphabook1_init_pci(void)
 {
 	struct pci_dev *dev;
 	unsigned char orig, config;
 
-	layout_all_busses(DEFAULT_IO_BASE, APECS_AND_LCA_DEFAULT_MEM_BASE);
-
-        /* For the AlphaBook1, NCR810 SCSI is 14, PCMCIA controller is 15. */
-	sio_pci_fixup(noname_map_irq, 0x0e0f0a0a);
+	sio_pci_route();
+	common_init_pci();
 
 	/*
 	 * On the AlphaBook1, the PCMCIA chip (Cirrus 6729)
@@ -304,20 +264,17 @@ alphabook1_pci_fixup(void)
 	 * moment (2.0.29), ncr53c8xx.c does NOT do this, but
 	 * 53c7,8xx.c DOES.
 	 */
-	for (dev = pci_devices; dev; dev = dev->next) {
-                if (dev->vendor == PCI_VENDOR_ID_NCR &&
-                    (dev->device == PCI_DEVICE_ID_NCR_53C810 ||
-                     dev->device == PCI_DEVICE_ID_NCR_53C815 ||
-                     dev->device == PCI_DEVICE_ID_NCR_53C820 ||
-                     dev->device == PCI_DEVICE_ID_NCR_53C825)) {
-			unsigned int io_port;
+
+	dev = NULL;
+	while ((dev = pci_find_device(PCI_VENDOR_ID_NCR, PCI_ANY_ID, dev))) {
+                if (dev->device == PCI_DEVICE_ID_NCR_53C810
+		    || dev->device == PCI_DEVICE_ID_NCR_53C815
+		    || dev->device == PCI_DEVICE_ID_NCR_53C820
+		    || dev->device == PCI_DEVICE_ID_NCR_53C825) {
+			unsigned long io_port;
 			unsigned char ctest4;
 
-			pcibios_read_config_dword(dev->bus->number,
-						  dev->devfn,
-						  PCI_BASE_ADDRESS_0,
-						  &io_port);
-			io_port &= PCI_BASE_ADDRESS_IO_MASK;
+			io_port = dev->resource[0].start;
 			ctest4 = inb(io_port+0x21);
 			if (!(ctest4 & 0x80)) {
 				printk("AlphaBook1 NCR init: setting"
@@ -356,18 +313,27 @@ struct alpha_machine_vector alphabook1_mv __initmv = {
 	DO_LCA_BUS,
 	machine_check:		lca_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	min_io_address:		DEFAULT_IO_BASE,
+	min_mem_address:	APECS_AND_LCA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		16,
 	irq_probe_mask:		_PROBE_MASK(16),
 	update_irq_hw:		sio_update_irq_hw,
-	ack_irq:		generic_ack_irq,
+	ack_irq:		common_ack_irq,
 	device_interrupt:	isa_device_interrupt,
 
 	init_arch:		alphabook1_init_arch,
 	init_irq:		sio_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		alphabook1_pci_fixup,
-	kill_arch:		generic_kill_arch,
+	init_pit:		common_init_pit,
+	init_pci:		alphabook1_init_pci,
+	kill_arch:		common_kill_arch,
+	pci_map_irq:		noname_map_irq,
+	pci_swizzle:		common_swizzle,
+
+	sys: { sio: {
+		/* NCR810 SCSI is 14, PCMCIA controller is 15.  */
+		route_tab:	0x0e0f0a0a,
+	}}
 };
 ALIAS_MV(alphabook1)
 #endif
@@ -381,18 +347,26 @@ struct alpha_machine_vector avanti_mv __initmv = {
 	DO_APECS_BUS,
 	machine_check:		apecs_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	min_io_address:		DEFAULT_IO_BASE,
+	min_mem_address:	APECS_AND_LCA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		16,
 	irq_probe_mask:		_PROBE_MASK(16),
 	update_irq_hw:		sio_update_irq_hw,
-	ack_irq:		generic_ack_irq,
+	ack_irq:		common_ack_irq,
 	device_interrupt:	isa_device_interrupt,
 
 	init_arch:		apecs_init_arch,
 	init_irq:		sio_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		avanti_pci_fixup,
-	kill_arch:		generic_kill_arch,
+	init_pit:		common_init_pit,
+	init_pci:		noname_init_pci,
+	kill_arch:		common_kill_arch,
+	pci_map_irq:		noname_map_irq,
+	pci_swizzle:		common_swizzle,
+
+	sys: { sio: {
+		route_tab:	0x0b0a0e0f,
+	}}
 };
 ALIAS_MV(avanti)
 #endif
@@ -406,18 +380,35 @@ struct alpha_machine_vector noname_mv __initmv = {
 	DO_LCA_BUS,
 	machine_check:		lca_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	min_io_address:		DEFAULT_IO_BASE,
+	min_mem_address:	APECS_AND_LCA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		16,
 	irq_probe_mask:		_PROBE_MASK(16),
 	update_irq_hw:		sio_update_irq_hw,
-	ack_irq:		generic_ack_irq,
+	ack_irq:		common_ack_irq,
 	device_interrupt:	srm_device_interrupt,
 
 	init_arch:		lca_init_arch,
 	init_irq:		sio_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		noname_pci_fixup,
-	kill_arch:		generic_kill_arch,
+	init_pit:		common_init_pit,
+	init_pci:		noname_init_pci,
+	kill_arch:		common_kill_arch,
+	pci_map_irq:		noname_map_irq,
+	pci_swizzle:		common_swizzle,
+
+	sys: { sio: {
+		/* For UDB, the only available PCI slot must not map to IRQ 9,
+		   since that's the builtin MSS sound chip. That PCI slot
+		   will map to PIRQ1 (for INTA at least), so we give it IRQ 15
+		   instead.
+
+		   Unfortunately we have to do this for NONAME as well, since
+		   they are co-indicated when the platform type "Noname" is
+		   selected... :-(  */
+
+		route_tab:	0x0b0a0f0d,
+	}}
 };
 ALIAS_MV(noname)
 #endif
@@ -431,18 +422,26 @@ struct alpha_machine_vector p2k_mv __initmv = {
 	DO_LCA_BUS,
 	machine_check:		lca_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	min_io_address:		DEFAULT_IO_BASE,
+	min_mem_address:	APECS_AND_LCA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		16,
 	irq_probe_mask:		P2K_PROBE_MASK,
 	update_irq_hw:		sio_update_irq_hw,
-	ack_irq:		generic_ack_irq,
+	ack_irq:		common_ack_irq,
 	device_interrupt:	srm_device_interrupt,
 
 	init_arch:		lca_init_arch,
 	init_irq:		sio_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		p2k_pci_fixup,
-	kill_arch:		generic_kill_arch,
+	init_pit:		common_init_pit,
+	init_pci:		noname_init_pci,
+	kill_arch:		common_kill_arch,
+	pci_map_irq:		p2k_map_irq,
+	pci_swizzle:		common_swizzle,
+
+	sys: { sio: {
+		route_tab:	0x0b0a090f,
+	}}
 };
 ALIAS_MV(p2k)
 #endif
@@ -456,18 +455,26 @@ struct alpha_machine_vector xl_mv __initmv = {
 	BUS(apecs_xl),
 	machine_check:		apecs_machine_check,
 	max_dma_address:	ALPHA_XL_MAX_DMA_ADDRESS,
+	min_io_address:		DEFAULT_IO_BASE,
+	min_mem_address:	XL_DEFAULT_MEM_BASE,
 
 	nr_irqs:		16,
 	irq_probe_mask:		_PROBE_MASK(16),
 	update_irq_hw:		sio_update_irq_hw,
-	ack_irq:		generic_ack_irq,
+	ack_irq:		common_ack_irq,
 	device_interrupt:	isa_device_interrupt,
 
 	init_arch:		xl_init_arch,
 	init_irq:		sio_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		xl_pci_fixup,
-	kill_arch:		generic_kill_arch,
+	init_pit:		common_init_pit,
+	init_pci:		noname_init_pci,
+	kill_arch:		common_kill_arch,
+	pci_map_irq:		noname_map_irq,
+	pci_swizzle:		common_swizzle,
+
+	sys: { sio: {
+		route_tab:	0x0b0a090f,
+	}}
 };
 ALIAS_MV(xl)
 #endif

@@ -27,6 +27,9 @@
 #define ACCENT_FLAGS 0
 #define BOCA_FLAGS 0
 #define HUB6_FLAGS 0
+#define RS_TABLE_SIZE	64
+#else
+#define RS_TABLE_SIZE
 #endif
 	
 /*

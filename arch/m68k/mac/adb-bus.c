@@ -2334,8 +2334,8 @@ static int adb_wait_reply(struct adbdev_state *state, struct file *file)
 	int ret = 0;
 	DECLARE_WAITQUEUE(wait,current);
 
+	__set_current_state(TASK_INTERRUPTIBLE);
 	add_wait_queue(&adb_wait, &wait);
-	current->state = TASK_INTERRUPTIBLE;
 
 	while (!state->req.got_reply) {
 		if (file->f_flags & O_NONBLOCK) {
@@ -2349,7 +2349,7 @@ static int adb_wait_reply(struct adbdev_state *state, struct file *file)
 		schedule();
 	}
 
-	current->state = TASK_RUNNING;
+	__set_current_state(TASK_RUNNING);
 	remove_wait_queue(&adb_wait, &wait);
 
 	return ret;
@@ -2562,8 +2562,8 @@ static int adb_wait_reply(struct adbdev_state *state, struct file *file)
 	printk("ADB request: wait_reply (blocking ... \n");
 #endif
 
+	__set_current_state(TASK_INTERRUPTIBLE);
 	add_wait_queue(&adb_wait, &wait);
-	current->state = TASK_INTERRUPTIBLE;
 
 	while (!state->req.got_reply) {
 		if (file->f_flags & O_NONBLOCK) {
@@ -2577,7 +2577,7 @@ static int adb_wait_reply(struct adbdev_state *state, struct file *file)
 		schedule();
 	}
 
-	current->state = TASK_RUNNING;
+	__set_current_state(TASK_RUNNING);
 	remove_wait_queue(&adb_wait, &wait);
 
 	return ret;

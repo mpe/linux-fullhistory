@@ -19,27 +19,26 @@
  * Cache flushing...
  */
 #define flush_cache_all()						\
-	processor.u.armv3v4._flush_cache_all()
+	cpu_flush_cache_all()
 
 #define flush_cache_mm(_mm)						\
 	do {								\
 		if ((_mm) == current->mm)				\
-			processor.u.armv3v4._flush_cache_all();		\
+			cpu_flush_cache_all();				\
 	} while (0)
 
 #define flush_cache_range(_mm,_start,_end)				\
 	do {								\
 		if ((_mm) == current->mm)				\
-			processor.u.armv3v4._flush_cache_area		\
-				((_start), (_end), 1);			\
+			cpu_flush_cache_area((_start), (_end), 1);	\
 	} while (0)
 
 #define flush_cache_page(_vma,_vmaddr)					\
 	do {								\
 		if ((_vma)->vm_mm == current->mm)			\
-			processor.u.armv3v4._flush_cache_area		\
-				((_vmaddr), (_vmaddr) + PAGE_SIZE,	\
-				 ((_vma)->vm_flags & VM_EXEC) ? 1 : 0);	\
+			cpu_flush_cache_area((_vmaddr),			\
+				(_vmaddr) + PAGE_SIZE,			\
+				((_vma)->vm_flags & VM_EXEC) ? 1 : 0);	\
 	} while (0)
 
 #define clean_cache_range(_start,_end)					\
@@ -47,18 +46,18 @@
 		unsigned long _s, _sz;					\
 		_s = (unsigned long)_start;				\
 		_sz = (unsigned long)_end - _s;				\
-		processor.u.armv3v4._clean_cache_area(_s, _sz);		\
+		cpu_clean_cache_area(_s, _sz);				\
 	} while (0)
 
 #define clean_cache_area(_start,_size)					\
 	do {								\
 		unsigned long _s;					\
 		_s = (unsigned long)_start;				\
-		processor.u.armv3v4._clean_cache_area(_s, _size);	\
+		cpu_clean_cache_area(_s, _size);			\
 	} while (0)
 
 #define flush_icache_range(_start,_end)					\
-	processor.u.armv3v4._flush_icache_area((_start), (_end) - (_start))
+	cpu_flush_icache_area((_start), (_end) - (_start))
 
 /*
  * We don't have a MEMC chip...
@@ -73,7 +72,7 @@
  * in the cache for this page.  Is it necessary to invalidate the I-cache?
  */
 #define flush_page_to_ram(_page)					\
-	processor.u.armv3v4._flush_ram_page ((_page) & PAGE_MASK);
+	cpu_flush_ram_page((_page) & PAGE_MASK);
 
 /*
  * TLB flushing:
@@ -92,26 +91,24 @@
 #define flush_tlb() flush_tlb_all()
 
 #define flush_tlb_all()								\
-	processor.u.armv3v4._flush_tlb_all()
+	cpu_flush_tlb_all()
 
 #define flush_tlb_mm(_mm)							\
 	do {									\
 		if ((_mm) == current->mm)					\
-			processor.u.armv3v4._flush_tlb_all();			\
+			cpu_flush_tlb_all();					\
 	} while (0)
 
 #define flush_tlb_range(_mm,_start,_end)					\
 	do {									\
 		if ((_mm) == current->mm)					\
-			processor.u.armv3v4._flush_tlb_area			\
-				((_start), (_end), 1);				\
+			cpu_flush_tlb_area((_start), (_end), 1);		\
 	} while (0)
 
 #define flush_tlb_page(_vma,_vmaddr)						\
 	do {									\
 		if ((_vma)->vm_mm == current->mm)				\
-			processor.u.armv3v4._flush_tlb_area			\
-				((_vmaddr), (_vmaddr) + PAGE_SIZE,		\
+			cpu_flush_tlb_area((_vmaddr), (_vmaddr) + PAGE_SIZE,	\
 				 ((_vma)->vm_flags & VM_EXEC) ? 1 : 0);		\
 	} while (0)
 
@@ -268,7 +265,7 @@ extern struct pgtable_cache_struct {
 #define pmd_bad(pmd)		(pmd_val(pmd) & 2)
 #define mk_user_pmd(ptep)	__mk_pmd(ptep, _PAGE_USER_TABLE)
 #define mk_kernel_pmd(ptep)	__mk_pmd(ptep, _PAGE_KERNEL_TABLE)
-#define set_pmd(pmdp,pmd)	processor.u.armv3v4._set_pmd(pmdp,pmd)
+#define set_pmd(pmdp,pmd)	cpu_set_pmd(pmdp,pmd)
 
 /* Find an entry in the second-level page table.. */
 #define pmd_offset(dir, address) ((pmd_t *)(dir))
@@ -374,7 +371,7 @@ extern __inline__ pte_t mk_pte_phys(unsigned long physpage, pgprot_t pgprot)
 	return pte;
 }
 
-#define set_pte(ptep, pte)	processor.u.armv3v4._set_pte(ptep,pte)
+#define set_pte(ptep, pte)	cpu_set_pte(ptep,pte)
 
 extern __inline__ unsigned long pte_page(pte_t pte)
 {

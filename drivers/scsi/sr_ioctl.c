@@ -19,9 +19,6 @@
 # define DEBUG
 #endif
 
-/* for now we borrow the "operation not supported" from the network folks */
-#define EDRIVE_CANT_DO_THIS  EOPNOTSUPP
-
 /* The sr_is_xa() seems to trigger firmware bugs with some drives :-(
  * It is off by default and can be turned on with this module parameter */
 static int xa_test = 0;
@@ -160,7 +157,7 @@ static int test_unit_ready(int minor)
 {
 	u_char  sr_cmd[10];
 
-        sr_cmd[0] = TEST_UNIT_READY;
+        sr_cmd[0] = GPCMD_TEST_UNIT_READY;
         sr_cmd[1] = ((scsi_CDs[minor].device -> lun) << 5);
         sr_cmd[2] = sr_cmd[3] = sr_cmd[4] = sr_cmd[5] = 0;
         return sr_do_ioctl(minor, sr_cmd, NULL, 255, 1);
@@ -170,7 +167,7 @@ int sr_tray_move(struct cdrom_device_info *cdi, int pos)
 {
         u_char  sr_cmd[10];
 
-        sr_cmd[0] = START_STOP;
+        sr_cmd[0] = GPCMD_START_STOP_UNIT;
         sr_cmd[1] = ((scsi_CDs[MINOR(cdi->dev)].device -> lun) << 5);
         sr_cmd[2] = sr_cmd[3] = sr_cmd[5] = 0;
         sr_cmd[4] = (pos == 0) ? 0x03 /* close */ : 0x02 /* eject */;
@@ -243,7 +240,7 @@ int sr_get_mcn(struct cdrom_device_info *cdi,struct cdrom_mcn *mcn)
 	char buffer[32];
         int result;
         	
-	sr_cmd[0] = SCMD_READ_SUBCHANNEL;
+	sr_cmd[0] = GPCMD_READ_SUBCHANNEL;
 	sr_cmd[1] = ((scsi_CDs[MINOR(cdi->dev)].device->lun) << 5);
 	sr_cmd[2] = 0x40;    /* I do want the subchannel info */
 	sr_cmd[3] = 0x02;    /* Give me medium catalog number info */
@@ -277,7 +274,7 @@ int sr_select_speed(struct cdrom_device_info *cdi, int speed)
             speed *= 177;   /* Nx to kbyte/s */
         
 	memset(sr_cmd,0,12);
-	sr_cmd[0] = 0xbb; /* SET CD SPEED */
+	sr_cmd[0] = GPCMD_SET_SPEED; /* SET CD SPEED */
 	sr_cmd[1] = (scsi_CDs[MINOR(cdi->dev)].device->lun) << 5;
 	sr_cmd[2] = (speed >> 8) & 0xff; /* MSB for speed (in kbytes/sec) */
 	sr_cmd[3] =  speed       & 0xff; /* LSB */
@@ -290,6 +287,8 @@ int sr_select_speed(struct cdrom_device_info *cdi, int speed)
 /* ----------------------------------------------------------------------- */
 /* this is called by the generic cdrom driver. arg is a _kernel_ pointer,  */
 /* becauce the generic cdrom driver does the user access stuff for us.     */
+/* only cdromreadtochdr and cdromreadtocentry are left - for use with the  */
+/* sr_disk_status interface for the generic cdrom driver.                  */
 
 int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 {
@@ -300,94 +299,12 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
     
     switch (cmd) 
     {
-	/* Sun-compatible */
-    case CDROMPAUSE:
-	
-	sr_cmd[0] = SCMD_PAUSE_RESUME;
-	sr_cmd[1] = scsi_CDs[target].device->lun << 5;
-	sr_cmd[2] = sr_cmd[3] = sr_cmd[4] = 0;
-	sr_cmd[5] = sr_cmd[6] = sr_cmd[7] = 0;
-	sr_cmd[8] = 0;
-	sr_cmd[9] = 0;
-	
-	result = sr_do_ioctl(target, sr_cmd, NULL, 255, 0);
-        break;
-	
-    case CDROMRESUME:
-	
-	sr_cmd[0] = SCMD_PAUSE_RESUME;
-	sr_cmd[1] = scsi_CDs[target].device->lun << 5;
-	sr_cmd[2] = sr_cmd[3] = sr_cmd[4] = 0;
-	sr_cmd[5] = sr_cmd[6] = sr_cmd[7] = 0;
-	sr_cmd[8] = 1;
-	sr_cmd[9] = 0;
-	
-	result = sr_do_ioctl(target, sr_cmd, NULL, 255, 0);
-        break;
-	
-    case CDROMPLAYMSF:
-    {
-	struct cdrom_msf* msf = (struct cdrom_msf*)arg;
-
-	sr_cmd[0] = SCMD_PLAYAUDIO_MSF;
-	sr_cmd[1] = scsi_CDs[target].device->lun << 5;
-	sr_cmd[2] = 0;
-	sr_cmd[3] = msf->cdmsf_min0;
-	sr_cmd[4] = msf->cdmsf_sec0;
-	sr_cmd[5] = msf->cdmsf_frame0;
-	sr_cmd[6] = msf->cdmsf_min1;
-	sr_cmd[7] = msf->cdmsf_sec1;
-	sr_cmd[8] = msf->cdmsf_frame1;
-	sr_cmd[9] = 0;
-	
-	result = sr_do_ioctl(target, sr_cmd, NULL, 255, 0);
-        break;
-    }
-
-    case CDROMPLAYBLK:
-    {
-	struct cdrom_blk* blk = (struct cdrom_blk*)arg;
-
-	sr_cmd[0] = SCMD_PLAYAUDIO10;
-	sr_cmd[1] = scsi_CDs[target].device->lun << 5;
-	sr_cmd[2] = blk->from >> 24;
-	sr_cmd[3] = blk->from >> 16;
-	sr_cmd[4] = blk->from >> 8;
-	sr_cmd[5] = blk->from;
-	sr_cmd[6] = 0;
-	sr_cmd[7] = blk->len >> 8;
-	sr_cmd[8] = blk->len;
-	sr_cmd[9] = 0;
-	
-	result = sr_do_ioctl(target, sr_cmd, NULL, 255, 0);
-        break;
-    }
-		
-    case CDROMPLAYTRKIND:
-    {
-	struct cdrom_ti* ti = (struct cdrom_ti*)arg;
-
-	sr_cmd[0] = SCMD_PLAYAUDIO_TI;
-	sr_cmd[1] = scsi_CDs[target].device->lun << 5;
-	sr_cmd[2] = 0;
-	sr_cmd[3] = 0;
-	sr_cmd[4] = ti->cdti_trk0;
-	sr_cmd[5] = ti->cdti_ind0;
-	sr_cmd[6] = 0;
-	sr_cmd[7] = ti->cdti_trk1;
-	sr_cmd[8] = ti->cdti_ind1;
-	sr_cmd[9] = 0;
-	
-	result = sr_do_ioctl(target, sr_cmd, NULL, 255, 0);
-        break;
-    }
-	
     case CDROMREADTOCHDR:
     {
 	struct cdrom_tochdr* tochdr = (struct cdrom_tochdr*)arg;
 	char buffer[32];
 	
-	sr_cmd[0] = SCMD_READ_TOC;
+	sr_cmd[0] = GPCMD_READ_TOC_PMA_ATIP;
 	sr_cmd[1] = ((scsi_CDs[target].device->lun) << 5);
 	sr_cmd[2] = sr_cmd[3] = sr_cmd[4] = sr_cmd[5] = 0;
 	sr_cmd[6] = 0;
@@ -408,7 +325,7 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 	struct cdrom_tocentry* tocentry = (struct cdrom_tocentry*)arg;
 	unsigned char buffer[32];
 	
-	sr_cmd[0] = SCMD_READ_TOC;
+	sr_cmd[0] = GPCMD_READ_TOC_PMA_ATIP;
 	sr_cmd[1] = ((scsi_CDs[target].device->lun) << 5) |
           (tocentry->cdte_format == CDROM_MSF ? 0x02 : 0);
 	sr_cmd[2] = sr_cmd[3] = sr_cmd[4] = sr_cmd[5] = 0;
@@ -432,39 +349,7 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 	
         break;
     }
-	
-    case CDROMSUBCHNL:
-    {
-	struct cdrom_subchnl* subchnl = (struct cdrom_subchnl*)arg;
-	char buffer[32];
-	
-	sr_cmd[0] = SCMD_READ_SUBCHANNEL;
-	sr_cmd[1] = ((scsi_CDs[target].device->lun) << 5) | 0x02;    /* MSF format */
-	sr_cmd[2] = 0x40;    /* I do want the subchannel info */
-	sr_cmd[3] = 0x01;    /* Give me current position info */
-	sr_cmd[4] = sr_cmd[5] = 0;
-	sr_cmd[6] = 0;
-	sr_cmd[7] = 0;
-	sr_cmd[8] = 16;
-	sr_cmd[9] = 0;
-	
-	result = sr_do_ioctl(target, sr_cmd, buffer, 16, 0);
-	
-	subchnl->cdsc_audiostatus = buffer[1];
-	subchnl->cdsc_format = CDROM_MSF;
-	subchnl->cdsc_ctrl = buffer[5] & 0xf;
-	subchnl->cdsc_trk = buffer[6];
-	subchnl->cdsc_ind = buffer[7];
-	
-	subchnl->cdsc_reladdr.msf.minute = buffer[13];
-	subchnl->cdsc_reladdr.msf.second = buffer[14];
-	subchnl->cdsc_reladdr.msf.frame = buffer[15];
-	subchnl->cdsc_absaddr.msf.minute = buffer[9];
-	subchnl->cdsc_absaddr.msf.second = buffer[10];
-	subchnl->cdsc_absaddr.msf.frame = buffer[11];
-	
-        break;
-    }
+
     default:
         return -EINVAL;
     }
@@ -502,7 +387,7 @@ sr_read_cd(int minor, unsigned char *dest, int lba, int format, int blksize)
 #endif
 
     memset(cmd,0,12);
-    cmd[0] = 0xbe /* READ_CD */;
+    cmd[0] = GPCMD_READ_CD; /* READ_CD */
     cmd[1] = (scsi_CDs[minor].device->lun << 5) | ((format & 7) << 2);
     cmd[2] = (unsigned char)(lba >> 24) & 0xff;
     cmd[3] = (unsigned char)(lba >> 16) & 0xff;
@@ -548,7 +433,7 @@ sr_read_sector(int minor, int lba, int blksize, unsigned char *dest)
 #endif
     
     memset(cmd,0,12);
-    cmd[0] = READ_10;
+    cmd[0] = GPCMD_READ_10;
     cmd[1] = (scsi_CDs[minor].device->lun << 5);
     cmd[2] = (unsigned char)(lba >> 24) & 0xff;
     cmd[3] = (unsigned char)(lba >> 16) & 0xff;
@@ -603,89 +488,6 @@ int sr_dev_ioctl(struct cdrom_device_info *cdi,
     target = MINOR(cdi->dev);
     
     switch (cmd) {
-    case CDROMREADMODE1:
-    case CDROMREADMODE2:
-    case CDROMREADRAW:
-    {
-	unsigned char      *raw;
-        struct cdrom_msf   msf;
-        int                lba, rc;
-	int                blocksize = 2048;
-        unsigned long flags;
-
-        switch (cmd) {
-        case CDROMREADMODE2: blocksize = CD_FRAMESIZE_RAW0; break; /* 2336 */
-        case CDROMREADRAW:   blocksize = CD_FRAMESIZE_RAW;  break; /* 2352 */
-        }
-
-	if (copy_from_user(&msf,(void*)arg,sizeof(msf)))
-		return -EFAULT;
-        spin_lock_irqsave(&io_request_lock, flags);
-        raw = scsi_malloc(2048+512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
-	if (!(raw))
-                return -ENOMEM;
-
-	lba = (((msf.cdmsf_min0 * CD_SECS) + msf.cdmsf_sec0)
-			* CD_FRAMES + msf.cdmsf_frame0) - CD_MSF_OFFSET;
-        if (lba < 0 || lba >= scsi_CDs[target].capacity)
-            return -EINVAL;
-
-        rc = sr_read_sector(target, lba, blocksize, raw);
-	if (!rc)
-		if (copy_to_user((void*)arg, raw, blocksize))
-			rc = -EFAULT;
-
-        spin_lock_irqsave(&io_request_lock, flags);
-	scsi_free(raw,2048+512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
-	return rc;
-    }
-    case CDROMREADAUDIO:
-    {
-	unsigned char      *raw;
-        int                lba, rc=0;
-        struct cdrom_read_audio ra;
-        unsigned long flags;
-
-        if (!scsi_CDs[target].readcd_known || !scsi_CDs[target].readcd_cdda)
-            return -EINVAL;  /* -EDRIVE_DOES_NOT_SUPPORT_THIS ? */
-        
-	if (copy_from_user(&ra,(void*)arg,sizeof(ra)))
-            return -EFAULT;
-        
-        if (ra.addr_format == CDROM_LBA)
-            lba = ra.addr.lba;
-        else
-            lba = (((ra.addr.msf.minute * CD_SECS) + ra.addr.msf.second)
-                   * CD_FRAMES + ra.addr.msf.frame) - CD_MSF_OFFSET;
-
-        if (lba < 0 || lba >= scsi_CDs[target].capacity)
-            return -EINVAL;
-        spin_lock_irqsave(&io_request_lock, flags);
-        raw = scsi_malloc(2048+512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
-	if (!(raw))
-            return -ENOMEM;
-
-        while (ra.nframes > 0) {
-            rc = sr_read_cd(target, raw, lba, 1, CD_FRAMESIZE_RAW);
-            if (!rc)
-		if (copy_to_user(ra.buf, raw, CD_FRAMESIZE_RAW))
-                    rc = -EFAULT;
-            if (rc)
-                break;
-
-            ra.buf     += CD_FRAMESIZE_RAW;
-            ra.nframes -= 1;
-            lba++;
-        }
-        spin_lock_irqsave(&io_request_lock, flags);
-	scsi_free(raw,2048+512);
-        spin_unlock_irqrestore(&io_request_lock, flags);
-        return rc;
-    }
-
     case BLKROSET:
     case BLKROGET:
     case BLKRASET:

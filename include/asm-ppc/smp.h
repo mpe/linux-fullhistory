@@ -7,7 +7,6 @@
 #define _PPC_SMP_H
 
 #include <linux/kernel.h>
-#include <linux/tasks.h>
 
 #ifdef __SMP__
 

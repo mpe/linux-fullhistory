@@ -1,4 +1,4 @@
-/* $Id: irq.h,v 1.14 1998/12/19 11:05:41 davem Exp $
+/* $Id: irq.h,v 1.15 1999/08/30 10:14:48 davem Exp $
  * irq.h: IRQ registers on the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -61,12 +61,18 @@ struct ino_bucket {
 /*0x08*/void *irq_info;
 
 	/* Sun5 Interrupt Clear Register. */
-/*0x10*/unsigned int *iclr;
+/*0x10*/volatile unsigned int *iclr;
 
 	/* Sun5 Interrupt Mapping Register. */
-/*0x18*/unsigned int *imap;
+/*0x18*/volatile unsigned int *imap;
 
 };
+
+/* Only 8-bits are available, be careful.  -DaveM */
+#define IBF_DMA_SYNC	0x01	/* DMA synchronization behind PCI bridge needed. */
+#define IBF_PCI		0x02	/* Indicates PSYCHO/SABRE/SCHIZO PCI interrupt.	 */
+#define IBF_ACTIVE	0x04	/* This interrupt is active and has a handler.	 */
+#define IBF_MULTI	0x08	/* On PCI, indicates shared bucket.		 */
 
 #define NUM_IVECS	8192
 extern struct ino_bucket ivector_table[NUM_IVECS];
@@ -74,6 +80,8 @@ extern struct ino_bucket ivector_table[NUM_IVECS];
 #define __irq_ino(irq) \
         (((struct ino_bucket *)(unsigned long)(irq)) - &ivector_table[0])
 #define __irq_pil(irq) ((struct ino_bucket *)(unsigned long)(irq))->pil
+#define __bucket(irq) ((struct ino_bucket *)(unsigned long)(irq))
+#define __irq(bucket) ((unsigned int)(unsigned long)(bucket))
 
 static __inline__ char *__irq_itoa(unsigned int irq)
 {
@@ -89,7 +97,7 @@ extern void disable_irq(unsigned int);
 extern void enable_irq(unsigned int);
 extern void init_timers(void (*lvl10_irq)(int, void *, struct pt_regs *),
 			unsigned long *);
-extern unsigned int build_irq(int pil, int inofixup, unsigned int *iclr, unsigned int *imap);
+extern unsigned int build_irq(int pil, int inofixup, volatile unsigned int *iclr, volatile unsigned int *imap);
 extern unsigned int sbus_build_irq(void *sbus, unsigned int ino);
 extern unsigned int psycho_build_irq(void *psycho, int imap_off, int ino, int need_dma_sync);
 

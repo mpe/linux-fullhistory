@@ -129,8 +129,7 @@ static struct irqaction isa_timer_irq = {
 	NULL
 };
 
-__initfunc(static unsigned long
-get_isa_cmos_time(void))
+static unsigned long __init get_isa_cmos_time(void)
 {
 	unsigned int year, mon, day, hour, min, sec;
 	int i;
@@ -240,10 +239,8 @@ static void __ebsa285_text timer1_interrupt(int irq, void *dev_id, struct pt_reg
 {
 	*CSR_TIMER1_CLR = 0;
 
-	/* Do the LEDs things on non-CATS hardware.
-	 */
-	if (!machine_is_cats())
-		do_leds();
+	/* Do the LEDs things */
+	do_leds();
 
 	do_timer(regs);
 

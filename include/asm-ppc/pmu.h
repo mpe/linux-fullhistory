@@ -6,6 +6,7 @@
  * Copyright (C) 1998 Paul Mackerras.
  */
 
+#include <linux/config.h>
 /*
  * PMU commands
  */

@@ -21,8 +21,8 @@ endif
 ASFLAGS		=
 LINKFLAGS	= -T arch/ppc/vmlinux.lds -Ttext $(KERNELLOAD) -Bstatic
 CFLAGSINC	= -D__KERNEL__ -I$(TOPDIR)/include -D__powerpc__
-CFLAGS		:= $(CFLAGS) -D__powerpc__ -fsigned-char -msoft-float -pipe \
-		-fno-builtin -ffixed-r2 -Wno-uninitialized -mmultiple \
+CFLAGS		:= $(CFLAGS) -I$(HPATH) -D__powerpc__ -fsigned-char -msoft-float \
+		-pipe -fno-builtin -ffixed-r2 -Wno-uninitialized -mmultiple \
 		-mstring
 CPP		= $(CC) -E $(CFLAGS)
 
@@ -34,12 +34,22 @@ ifdef CONFIG_PPC64
 CFLAGS := $(CFLAGS) -Wa,-mppc64bridge #-mpowerpc64
 endif
 
+ifndef CONFIG_8xx
 HEAD := arch/ppc/kernel/head.o
+else
+HEAD := arch/ppc/kernel/head_8xx.o
+endif
 
 ARCH_SUBDIRS = arch/ppc/kernel arch/ppc/mm arch/ppc/lib
 SUBDIRS := $(SUBDIRS) $(ARCH_SUBDIRS)
 ARCHIVES := arch/ppc/kernel/kernel.o arch/ppc/mm/mm.o arch/ppc/lib/lib.o $(ARCHIVES)
 CORE_FILES := arch/ppc/kernel/kernel.o arch/ppc/mm/mm.o arch/ppc/lib/lib.o $(CORE_FILES)
+
+ifdef CONFIG_8xx
+SUBDIRS += arch/ppc/math-emu
+ARCHIVES += arch/ppc/math-emu/math-emu.o
+CORE_FILES += arch/ppc/math-emu/math-emu.o
+endif
 
 ifdef CONFIG_XMON
 SUBDIRS += arch/ppc/xmon

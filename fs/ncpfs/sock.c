@@ -172,7 +172,10 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size,
 	      re_select:
 		wait_table.nr = 0;
 		wait_table.entry = &entry;
-		current->state = TASK_INTERRUPTIBLE;
+		/* mb() is not necessary because ->poll() will serialize
+		   instructions adding the wait_table waitqueues in the
+		   waitqueue-head before going to calculate the mask-retval. */
+		__set_current_state(TASK_INTERRUPTIBLE);
 		if (!(file->f_op->poll(file, &wait_table) & POLLIN)) {
 			int timed_out;
 			if (timeout > max_timeout) {

@@ -643,7 +643,7 @@ static struct sparcaudio_operations dummy_ops = {
 #ifdef MODULE
 int init_module(void)
 #else
-__initfunc(int dummy_init(void))
+int __init dummy_init(void)
 #endif
 {
   num_drivers = 0;

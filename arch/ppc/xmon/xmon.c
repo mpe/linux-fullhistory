@@ -116,13 +116,11 @@ xmon(struct pt_regs *excp)
 	struct pt_regs regs;
 	int msr, cmd;
 
-	printk("Entering xmon kernel debugger.\n");
-	
 	if (excp == NULL) {
 		asm volatile ("stw	0,0(%0)\n\
 			lwz	0,0(1)\n\
 			stw	0,4(%0)\n\
-			stmw	2,8(%0)" : : "r" (&regs));
+			stmw	2,8(%0)" : : "b" (&regs));
 		regs.nip = regs.link = ((unsigned long *)regs.gpr[1])[1];
 		regs.msr = get_msr();
 		regs.ctr = get_ctr();
@@ -472,8 +470,9 @@ backtrace(struct pt_regs *excp)
 	unsigned sp;
 	unsigned stack[2];
 	struct pt_regs regs;
-	extern char int_return, syscall_ret_1, syscall_ret_2;
+	extern char ret_from_int, ret_from_syscall_1, ret_from_syscall_2;
 	extern char lost_irq_ret, do_bottom_half_ret, do_signal_ret;
+	extern char ret_from_except;
 
 	if (excp != NULL)
 		sp = excp->gpr[1];
@@ -485,9 +484,10 @@ backtrace(struct pt_regs *excp)
 		if (mread(sp, stack, sizeof(stack)) != sizeof(stack))
 			break;
 		printf("%x ", stack[1]);
-		if (stack[1] == (unsigned) &int_return
-		    || stack[1] == (unsigned) &syscall_ret_1
-		    || stack[1] == (unsigned) &syscall_ret_2
+		if (stack[1] == (unsigned) &ret_from_int
+		    || stack[1] == (unsigned) &ret_from_except
+		    || stack[1] == (unsigned) &ret_from_syscall_1
+		    || stack[1] == (unsigned) &ret_from_syscall_2
 		    || stack[1] == (unsigned) &lost_irq_ret
 		    || stack[1] == (unsigned) &do_bottom_half_ret
 		    || stack[1] == (unsigned) &do_signal_ret) {

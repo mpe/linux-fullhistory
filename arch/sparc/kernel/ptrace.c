@@ -70,8 +70,8 @@ pt_os_succ_return (struct pt_regs *regs, unsigned long val, long *addr)
 static inline void read_sunos_user(struct pt_regs *regs, unsigned long offset,
 				   struct task_struct *tsk, long *addr)
 {
-	struct pt_regs *cregs = tsk->tss.kregs;
-	struct thread_struct *t = &tsk->tss;
+	struct pt_regs *cregs = tsk->thread.kregs;
+	struct thread_struct *t = &tsk->thread;
 	int v;
 	
 	if(offset >= 1024)
@@ -128,7 +128,7 @@ static inline void read_sunos_user(struct pt_regs *regs, unsigned long offset,
 		v = cregs->u_regs[UREG_I6];
 		break;
 	case 924:
-		if(tsk->tss.flags & MAGIC_CONSTANT)
+		if(tsk->thread.flags & MAGIC_CONSTANT)
 			v = cregs->u_regs[UREG_G1];
 		else
 			v = 0;
@@ -165,8 +165,8 @@ static inline void read_sunos_user(struct pt_regs *regs, unsigned long offset,
 static inline void write_sunos_user(struct pt_regs *regs, unsigned long offset,
 				    struct task_struct *tsk)
 {
-	struct pt_regs *cregs = tsk->tss.kregs;
-	struct thread_struct *t = &tsk->tss;
+	struct pt_regs *cregs = tsk->thread.kregs;
+	struct thread_struct *t = &tsk->thread;
 	unsigned long value = regs->u_regs[UREG_I3];
 
 	if(offset >= 1024)
@@ -398,7 +398,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 
 	case PTRACE_GETREGS: {
 		struct pt_regs *pregs = (struct pt_regs *) addr;
-		struct pt_regs *cregs = child->tss.kregs;
+		struct pt_regs *cregs = child->thread.kregs;
 		int rval;
 
 		rval = verify_area(VERIFY_WRITE, pregs, sizeof(struct pt_regs));
@@ -421,7 +421,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 
 	case PTRACE_SETREGS: {
 		struct pt_regs *pregs = (struct pt_regs *) addr;
-		struct pt_regs *cregs = child->tss.kregs;
+		struct pt_regs *cregs = child->thread.kregs;
 		unsigned long psr, pc, npc, y;
 		int i;
 
@@ -471,15 +471,15 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 			goto out;
 		}
 		for(i = 0; i < 32; i++)
-			__put_user(child->tss.float_regs[i], (&fps->regs[i]));
-		__put_user(child->tss.fsr, (&fps->fsr));
-		__put_user(child->tss.fpqdepth, (&fps->fpqd));
+			__put_user(child->thread.float_regs[i], (&fps->regs[i]));
+		__put_user(child->thread.fsr, (&fps->fsr));
+		__put_user(child->thread.fpqdepth, (&fps->fpqd));
 		__put_user(0, (&fps->flags));
 		__put_user(0, (&fps->extra));
 		for(i = 0; i < 16; i++) {
-			__put_user(child->tss.fpqueue[i].insn_addr,
+			__put_user(child->thread.fpqueue[i].insn_addr,
 				   (&fps->fpq[i].insnaddr));
-			__put_user(child->tss.fpqueue[i].insn, (&fps->fpq[i].insn));
+			__put_user(child->thread.fpqueue[i].insn, (&fps->fpq[i].insn));
 		}
 		pt_succ_return(regs, 0);
 		goto out;
@@ -504,13 +504,13 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 			pt_error_return(regs, -i);
 			goto out;
 		}
-		copy_from_user(&child->tss.float_regs[0], &fps->regs[0], (32 * sizeof(unsigned long)));
-		__get_user(child->tss.fsr, (&fps->fsr));
-		__get_user(child->tss.fpqdepth, (&fps->fpqd));
+		copy_from_user(&child->thread.float_regs[0], &fps->regs[0], (32 * sizeof(unsigned long)));
+		__get_user(child->thread.fsr, (&fps->fsr));
+		__get_user(child->thread.fpqdepth, (&fps->fpqd));
 		for(i = 0; i < 16; i++) {
-			__get_user(child->tss.fpqueue[i].insn_addr,
+			__get_user(child->thread.fpqueue[i].insn_addr,
 				   (&fps->fpq[i].insnaddr));
-			__get_user(child->tss.fpqueue[i].insn, (&fps->fpq[i].insn));
+			__get_user(child->thread.fpqueue[i].insn, (&fps->fpq[i].insn));
 		}
 		pt_succ_return(regs, 0);
 		goto out;
@@ -560,11 +560,11 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 				goto out;
 			}
 #ifdef DEBUG_PTRACE
-			printk ("Original: %08lx %08lx\n", child->tss.kregs->pc, child->tss.kregs->npc);
+			printk ("Original: %08lx %08lx\n", child->thread.kregs->pc, child->thread.kregs->npc);
 			printk ("Continuing with %08lx %08lx\n", addr, addr+4);
 #endif
-			child->tss.kregs->pc = addr;
-			child->tss.kregs->npc = addr + 4;
+			child->thread.kregs->pc = addr;
+			child->thread.kregs->npc = addr + 4;
 		}
 
 		if (request == PTRACE_SYSCALL)
@@ -576,8 +576,8 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 #ifdef DEBUG_PTRACE
 		printk("CONT: %s [%d]: set exit_code = %x %x %x\n", child->comm,
 			child->pid, child->exit_code,
-			child->tss.kregs->pc,
-			child->tss.kregs->npc);
+			child->thread.kregs->pc,
+			child->thread.kregs->npc);
 		       
 #endif
 		wake_up_process(child);
@@ -639,7 +639,7 @@ asmlinkage void syscall_trace(void)
 		return;
 	current->exit_code = SIGTRAP;
 	current->state = TASK_STOPPED;
-	current->tss.flags ^= MAGIC_CONSTANT;
+	current->thread.flags ^= MAGIC_CONSTANT;
 	notify_parent(current, SIGCHLD);
 	schedule();
 	/*

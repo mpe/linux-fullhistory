@@ -40,18 +40,12 @@
 #include <linux/timex.h>
 
 #include "proto.h"
-#include "irq.h"
+#include "irq_impl.h"
 
 extern rwlock_t xtime_lock;
 extern volatile unsigned long lost_ticks;	/* kernel/sched.c */
 
 static int set_rtc_mmss(unsigned long);
-
-#ifdef CONFIG_RTC
-struct resource timer_resource = { "pit", 0x40, 0x40+0x20 };
-#else
-struct resource timer_resource = { "rtc", 0, 0 };
-#endif
 
 
 /*
@@ -190,8 +184,6 @@ rtc_init_pit (void)
 	CMOS_WRITE(control, RTC_CONTROL);
 	(void) CMOS_READ(RTC_INTR_FLAGS);
 
-	request_resource(&ioport_resource, &timer_resource);
-
 	/* Setup interval timer.  */
 	outb(0x34, 0x43);		/* binary, mode 2, LSB/MSB, ch 0 */
 	outb(LATCH & 0xff, 0x40);	/* LSB */
@@ -204,7 +196,7 @@ rtc_init_pit (void)
 #endif
 
 void
-generic_init_pit (void)
+common_init_pit (void)
 {
 	unsigned char x;
 
@@ -224,10 +216,6 @@ generic_init_pit (void)
 		CMOS_WRITE(x, RTC_CONTROL);
 	}
 	(void) CMOS_READ(RTC_INTR_FLAGS);
-
-	timer_resource.start = RTC_PORT(0);
-	timer_resource.end = RTC_PORT(0) + 0x10;
-	request_resource(&ioport_resource, &timer_resource);
 
 	outb(0x36, 0x43);	/* pit counter 0: system timer */
 	outb(0x00, 0x40);
@@ -331,7 +319,7 @@ time_init(void)
 
 	/* setup timer */ 
 	irq_handler = timer_interrupt;
-	if (request_irq(TIMER_IRQ, irq_handler, 0, timer_resource.name, NULL))
+	if (request_irq(TIMER_IRQ, irq_handler, 0, "timer", NULL))
 		panic("Could not allocate timer IRQ!");
 }
 

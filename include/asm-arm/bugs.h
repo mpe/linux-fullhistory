@@ -8,6 +8,6 @@
 
 #include <asm/proc-fns.h>
 
-#define check_bugs() processor._check_bugs()
+#define check_bugs() cpu_check_bugs()
 
 #endif

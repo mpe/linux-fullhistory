@@ -82,20 +82,16 @@ void do_page_fault(struct pt_regs *regs, unsigned long address,
 			return;
 	}
 #endif
-	if (in_interrupt() || !mm) {
+	if (in_interrupt()) {
 		static int complained;
 		if (complained < 20) {
 			++complained;
 			printk("page fault in interrupt handler, addr=%lx\n",
 			       address);
 			show_regs(regs);
-#if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
-			if (debugger_kernel_faults)
-				debugger(regs);
-#endif
 		}
 	}
-	if (current == NULL) {
+	if (current == NULL || mm == NULL) {
 		bad_page_fault(regs, address);
 		return;
 	}
@@ -161,6 +157,7 @@ void
 bad_page_fault(struct pt_regs *regs, unsigned long address)
 {
 	unsigned long fixup;
+
 	if (user_mode(regs)) {
 		force_sig(SIGSEGV, current);
 		return;
@@ -174,11 +171,11 @@ bad_page_fault(struct pt_regs *regs, unsigned long address)
 
 	/* kernel has accessed a bad area */
 	show_regs(regs);
-	print_backtrace( (unsigned long *)regs->gpr[1] );
 #if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
 	if (debugger_kernel_faults)
 		debugger(regs);
 #endif
+	print_backtrace( (unsigned long *)regs->gpr[1] );
 	panic("kernel access of bad area pc %lx lr %lx address %lX tsk %s/%d",
 	      regs->nip,regs->link,address,current->comm,current->pid);
 }

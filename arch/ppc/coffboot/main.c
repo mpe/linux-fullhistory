@@ -100,7 +100,7 @@ coffboot(int a1, int a2, void *prom)
 
     flush_cache(dst, len);
 
-    sa = *(unsigned *)dst + PROG_START;
+    sa = (unsigned long)dst;
     printf("start address = 0x%x\n", sa);
 
 #if 0
@@ -165,7 +165,7 @@ void gunzip(void *dst, int dstlen, unsigned char *src, int *lenp)
 	printf("gunzip: ran out of data in header\n");
 	exit();
     }
-
+printf("done 1\n");
     s.zalloc = zalloc;
     s.zfree = zfree;
     r = inflateInit2(&s, -MAX_WBITS);
@@ -177,11 +177,14 @@ void gunzip(void *dst, int dstlen, unsigned char *src, int *lenp)
     s.avail_in = *lenp - i;
     s.next_out = dst;
     s.avail_out = dstlen;
+printf("doing inflate\n");
     r = inflate(&s, Z_FINISH);
+printf("done inflate\n");
     if (r != Z_OK && r != Z_STREAM_END) {
 	printf("inflate returned %d\n", r);
 	exit();
     }
     *lenp = s.next_out - (unsigned char *) dst;
+printf("doing end\n");
     inflateEnd(&s);
 }

@@ -1,5 +1,6 @@
 #include <linux/config.h>
 #include <linux/module.h>
+#include <linux/threads.h>
 #include <linux/smp.h>
 #include <linux/elfcore.h>
 #include <linux/sched.h>
@@ -35,7 +36,6 @@
 #define EXPORT_SYMTAB_STROPS
 
 extern void transfer_to_handler(void);
-extern void int_return(void);
 extern void syscall_trace(void);
 extern void do_IRQ(struct pt_regs *regs, int isfake);
 extern void MachineCheckException(struct pt_regs *regs);
@@ -53,7 +53,6 @@ EXPORT_SYMBOL(clear_page);
 EXPORT_SYMBOL(do_signal);
 EXPORT_SYMBOL(syscall_trace);
 EXPORT_SYMBOL(transfer_to_handler);
-EXPORT_SYMBOL(int_return);
 EXPORT_SYMBOL(do_IRQ);
 EXPORT_SYMBOL(init_task_union);
 EXPORT_SYMBOL(MachineCheckException);
@@ -153,11 +152,9 @@ EXPORT_SYMBOL(ppc_ide_md);
 EXPORT_SYMBOL(start_thread);
 EXPORT_SYMBOL(kernel_thread);
 
-EXPORT_SYMBOL(__cli);
-EXPORT_SYMBOL(__sti);
 /*EXPORT_SYMBOL(__restore_flags);*/
-EXPORT_SYMBOL(_disable_interrupts);
-EXPORT_SYMBOL(_enable_interrupts);
+/*EXPORT_SYMBOL(_disable_interrupts);
+  EXPORT_SYMBOL(_enable_interrupts);*/
 EXPORT_SYMBOL(flush_instruction_cache);
 EXPORT_SYMBOL(_get_PVR);
 EXPORT_SYMBOL(giveup_fpu);
@@ -189,6 +186,7 @@ EXPORT_SYMBOL(pmu_request);
 EXPORT_SYMBOL(pmu_poll);
 #ifdef CONFIG_PMAC_PBOOK
 EXPORT_SYMBOL(sleep_notifier_list);
+EXPORT_SYMBOL(pmu_enable_irled);
 #endif CONFIG_PMAC_PBOOK
 EXPORT_SYMBOL(abort);
 EXPORT_SYMBOL(find_devices);

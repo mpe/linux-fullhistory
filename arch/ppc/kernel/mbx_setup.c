@@ -1,5 +1,5 @@
 /*
- * $Id: mbx_setup.c,v 1.11 1999/06/28 17:59:43 cort Exp $
+ * $Id: mbx_setup.c,v 1.12 1999/08/31 06:53:56 davem Exp $
  *
  *  linux/arch/ppc/kernel/setup.c
  *
@@ -182,8 +182,7 @@ mbx_set_rtc_time(unsigned long time)
 	return(0);
 }
 
-initfunc(unsigned long
-mbx_get_rtc_time(void)
+unsigned long __init mbx_get_rtc_time(void)
 {
 	/* First, unlock all of the registers we are going to modify.
 	 * To protect them from corruption during power down, registers

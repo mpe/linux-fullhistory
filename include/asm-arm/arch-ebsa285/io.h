@@ -62,6 +62,8 @@ extern __inline__ void __outw(unsigned int value, unsigned int port)
  */
 #define IO_FUDGE_FACTOR		PCIMEM_BASE
 
+#define __pci_mem_addr(x)	((void *)(IO_FUDGE_FACTOR + (unsigned long)(x)))
+
 /*
  * ioremap takes a PCI memory address, as specified in
  * linux/Documentation/IO-mapping.txt
@@ -78,9 +80,7 @@ extern __inline__ void __outw(unsigned int value, unsigned int port)
 
 #define ioremap_nocache(iomem_addr,size) ioremap((iomem_addr),(size))
 
-extern void iounmap(void *addr);
-
-#define __pci_mem_addr(x)	((void *)(IO_FUDGE_FACTOR + (unsigned long)(x)))
+#define iounmap(_addr)	do { __iounmap(__pci_mem_addr((_addr))); } while (0)
 
 #define readb(addr)	(*(volatile unsigned char *)__pci_mem_addr(addr))
 #define readw(addr)	(*(volatile unsigned short *)__pci_mem_addr(addr))

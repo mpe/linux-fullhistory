@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.59 1999/03/06 12:07:31 anton Exp $
+/* $Id: traps.c,v 1.60 1999/08/14 03:51:31 anton Exp $
  * arch/sparc/kernel/traps.c
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -132,17 +132,17 @@ void do_hw_interrupt(unsigned long type, unsigned long psr, unsigned long pc)
 	if(type < 0x80) {
 		/* Sun OS's puke from bad traps, Linux survives! */
 		printk("Unimplemented Sparc TRAP, type = %02lx\n", type);
-		die_if_kernel("Whee... Hello Mr. Penguin", current->tss.kregs);
+		die_if_kernel("Whee... Hello Mr. Penguin", current->thread.kregs);
 	}	
 
 	if(type == SP_TRAP_SBPT) {
 		send_sig(SIGTRAP, current, 1);
 	} else {
 		if(psr & PSR_PS)
-			die_if_kernel("Kernel bad trap", current->tss.kregs);
+			die_if_kernel("Kernel bad trap", current->thread.kregs);
 
-		current->tss.sig_desc = SUBSIG_BADTRAP(type - 0x80);
-		current->tss.sig_address = pc;
+		current->thread.sig_desc = SUBSIG_BADTRAP(type - 0x80);
+		current->thread.sig_address = pc;
 		send_sig(SIGILL, current, 1);
 	}
 	unlock_kernel();
@@ -163,8 +163,8 @@ void do_illegal_instruction(struct pt_regs *regs, unsigned long pc, unsigned lon
 		if (!do_user_muldiv (regs, pc))
 			goto out;
 	}
-	current->tss.sig_address = pc;
-	current->tss.sig_desc = SUBSIG_ILLINST;
+	current->thread.sig_address = pc;
+	current->thread.sig_desc = SUBSIG_ILLINST;
 	send_sig(SIGILL, current, 1);
 out:
 	unlock_kernel();
@@ -176,8 +176,8 @@ void do_priv_instruction(struct pt_regs *regs, unsigned long pc, unsigned long n
 	lock_kernel();
 	if(psr & PSR_PS)
 		die_if_kernel("Penguin instruction from Penguin mode??!?!", regs);
-	current->tss.sig_address = pc;
-	current->tss.sig_desc = SUBSIG_PRIVINST;
+	current->thread.sig_address = pc;
+	current->thread.sig_desc = SUBSIG_PRIVINST;
 	send_sig(SIGILL, current, 1);
 	unlock_kernel();
 }
@@ -194,8 +194,8 @@ void do_memaccess_unaligned(struct pt_regs *regs, unsigned long pc, unsigned lon
 		die_if_kernel("BOGUS", regs);
 		/* die_if_kernel("Kernel MNA access", regs); */
 	}
-	current->tss.sig_address = pc;
-	current->tss.sig_desc = SUBSIG_PRIVINST;
+	current->thread.sig_address = pc;
+	current->thread.sig_desc = SUBSIG_PRIVINST;
 #if 0
 	show_regs (regs);
 	instruction_dump ((unsigned long *) regs->pc);
@@ -232,12 +232,12 @@ void do_fpd_trap(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 	if(last_task_used_math) {
 		/* Other processes fpu state, save away */
 		struct task_struct *fptask = last_task_used_math;
-		fpsave(&fptask->tss.float_regs[0], &fptask->tss.fsr,
-		       &fptask->tss.fpqueue[0], &fptask->tss.fpqdepth);
+		fpsave(&fptask->thread.float_regs[0], &fptask->thread.fsr,
+		       &fptask->thread.fpqueue[0], &fptask->thread.fpqdepth);
 	}
 	last_task_used_math = current;
 	if(current->used_math) {
-		fpload(&current->tss.float_regs[0], &current->tss.fsr);
+		fpload(&current->thread.float_regs[0], &current->thread.fsr);
 	} else {
 		/* Set initial sane state. */
 		fpload(&init_fregs[0], &init_fsr);
@@ -248,7 +248,7 @@ void do_fpd_trap(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 		fpload(&init_fregs[0], &init_fsr);
 		current->used_math = 1;
 	} else {
-		fpload(&current->tss.float_regs[0], &current->tss.fsr);
+		fpload(&current->thread.float_regs[0], &current->thread.fsr);
 	}
 	current->flags |= PF_USEDFPU;
 #endif
@@ -290,13 +290,13 @@ void do_fpe_trap(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 		regs->psr &= ~PSR_EF;
 		goto out;
 	}
-	fpsave(&fpt->tss.float_regs[0], &fpt->tss.fsr,
-	       &fpt->tss.fpqueue[0], &fpt->tss.fpqdepth);
+	fpsave(&fpt->thread.float_regs[0], &fpt->thread.fsr,
+	       &fpt->thread.fpqueue[0], &fpt->thread.fpqdepth);
 #ifdef DEBUG_FPU
-	printk("Hmm, FP exception, fsr was %016lx\n", fpt->tss.fsr);
+	printk("Hmm, FP exception, fsr was %016lx\n", fpt->thread.fsr);
 #endif
 
-	switch ((fpt->tss.fsr & 0x1c000)) {
+	switch ((fpt->thread.fsr & 0x1c000)) {
 	/* switch on the contents of the ftt [floating point trap type] field */
 #ifdef DEBUG_FPU
 	case (1 << 14):
@@ -321,13 +321,13 @@ void do_fpe_trap(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 	}
 	/* If we successfully emulated the FPop, we pretend the trap never happened :-> */
 	if (ret) {
-		fpload(&current->tss.float_regs[0], &current->tss.fsr);
+		fpload(&current->thread.float_regs[0], &current->thread.fsr);
 		return;
 	}
 	/* nope, better SIGFPE the offending process... */
 	       
-	fpt->tss.sig_address = pc;
-	fpt->tss.sig_desc = SUBSIG_FPERROR; /* as good as any */
+	fpt->thread.sig_address = pc;
+	fpt->thread.sig_desc = SUBSIG_FPERROR; /* as good as any */
 #ifdef __SMP__
 	fpt->flags &= ~PF_USEDFPU;
 #endif
@@ -362,8 +362,8 @@ void handle_tag_overflow(struct pt_regs *regs, unsigned long pc, unsigned long n
 	lock_kernel();
 	if(psr & PSR_PS)
 		die_if_kernel("Penguin overflow trap from kernel mode", regs);
-	current->tss.sig_address = pc;
-	current->tss.sig_desc = SUBSIG_TAG; /* as good as any */
+	current->thread.sig_address = pc;
+	current->thread.sig_desc = SUBSIG_TAG; /* as good as any */
 	send_sig(SIGEMT, current, 1);
 	unlock_kernel();
 }
@@ -436,4 +436,11 @@ int thiscpus_mid;
 
 void trap_init(void)
 {
+	/* Attach to the address space of init_task. */
+	atomic_inc(&init_mm.mm_count);
+	current->active_mm = &init_mm;
+
+	/* NOTE: Other cpus have this done as they are started
+	 *       up on SMP.
+	 */
 }

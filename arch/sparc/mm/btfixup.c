@@ -1,4 +1,4 @@
-/* $Id: btfixup.c,v 1.7 1998/03/09 14:03:56 jj Exp $
+/* $Id: btfixup.c,v 1.8 1999/08/31 06:54:31 davem Exp $
  * btfixup.c: Boot time code fixup and relocator, so that
  * we can get rid of most indirect calls to achieve single
  * image sun4c and srmmu kernel.

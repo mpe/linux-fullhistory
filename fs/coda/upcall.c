@@ -625,9 +625,9 @@ static inline unsigned long coda_waitfor_upcall(struct upc_req *vmp)
 	add_wait_queue(&vmp->uc_sleep, &wait);
 	for (;;) {
 		if ( coda_hard == 0 ) 
-			current->state = TASK_INTERRUPTIBLE;
+			set_current_state(TASK_INTERRUPTIBLE);
 		else
-			current->state = TASK_UNINTERRUPTIBLE;
+			set_current_state(TASK_UNINTERRUPTIBLE);
 
 		/* got a reply */
 		if ( vmp->uc_flags & REQ_WRITE )

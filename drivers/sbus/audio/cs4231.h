@@ -255,19 +255,19 @@ struct cs4231_chip {
 #define APC_XINT_PLAY   0x40000  /* Playback ext intr */
 #define APC_XINT_CAPT   0x20000  /* Capture ext intr */
 #define APC_XINT_GENL   0x10000  /* Error ext intr */
-#define APC_XINT_EMPT   0x8000   /* Pipe empty interrupt */
-#define APC_XINT_PEMP   0x4000   /* Play pipe empty */
+#define APC_XINT_EMPT   0x8000   /* Pipe empty interrupt (0 write to pva) */
+#define APC_XINT_PEMP   0x4000   /* Play pipe empty (pva and pnva not set) */
 #define APC_XINT_PNVA   0x2000   /* Playback NVA dirty */
 #define APC_XINT_PENA   0x1000   /* play pipe empty Int enable */
 #define APC_XINT_COVF   0x800    /* Cap data dropped on floor */
 #define APC_XINT_CNVA   0x400    /* Capture NVA dirty */
-#define APC_XINT_CEMP   0x200    /* Capture pipe empty interrupt */
+#define APC_XINT_CEMP   0x200    /* Capture pipe empty (cva and cnva not set) */
 #define APC_XINT_CENA   0x100    /* Cap. pipe empty int enable */
 #define APC_PPAUSE      0x80     /* Pause the play DMA */
 #define APC_CPAUSE      0x40     /* Pause the capture DMA */
 #define APC_CDC_RESET   0x20     /* CODEC RESET */
-#define APC_PDMA_READY     0x08     /* Play DMA Go */
-#define APC_CDMA_READY     0x04     /* Capture DMA Go */
+#define APC_PDMA_READY  0x08     /* Play DMA Go */
+#define APC_CDMA_READY  0x04     /* Capture DMA Go */
 #define APC_CHIP_RESET  0x01     /* Reset the chip */
 
 #define APC_INIT_SETUP  (APC_CDMA_READY | APC_PDMA_READY | APC_XINT_ENA | APC_XINT_PLAY | APC_XINT_GENL | APC_INT_PENDING | APC_PLAY_INT | APC_CAPT_INT | APC_GENL_INT) 

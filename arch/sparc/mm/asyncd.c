@@ -1,4 +1,4 @@
-/*  $Id: asyncd.c,v 1.16 1999/08/04 03:19:16 davem Exp $
+/*  $Id: asyncd.c,v 1.17 1999/08/14 03:51:44 anton Exp $
  *  The asyncd kernel daemon. This handles paging on behalf of 
  *  processes that receive page faults due to remote (async) memory
  *  accesses. 
@@ -178,8 +178,8 @@ no_memory:
 	
 bad_area:	  
 	stats.failure++;
-	tsk->tss.sig_address = address;
-	tsk->tss.sig_desc = SUBSIG_NOMAPPING;
+	tsk->thread.sig_address = address;
+	tsk->thread.sig_desc = SUBSIG_NOMAPPING;
 	send_sig(SIGSEGV, tsk, 1);
 	return 1;
 }

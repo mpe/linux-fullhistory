@@ -418,78 +418,33 @@ static const char *pci_strclass (unsigned int class)
  */
 static int sprint_dev_config(struct pci_dev *dev, char *buf, int size)
 {
-	unsigned int class_rev, bus, devfn;
-	unsigned short vendor, device, status;
-	unsigned char bist, latency, min_gnt, max_lat;
+	unsigned int class_rev;
+	unsigned char latency, min_gnt, max_lat;
 	int reg, len = 0;
-	const char *str;
 
-	bus   = dev->bus->number;
-	devfn = dev->devfn;
-
-	pcibios_read_config_dword(bus, devfn, PCI_CLASS_REVISION, &class_rev);
-	pcibios_read_config_word (bus, devfn, PCI_VENDOR_ID, &vendor);
-	pcibios_read_config_word (bus, devfn, PCI_DEVICE_ID, &device);
-	pcibios_read_config_word (bus, devfn, PCI_STATUS, &status);
-	pcibios_read_config_byte (bus, devfn, PCI_BIST, &bist);
-	pcibios_read_config_byte (bus, devfn, PCI_LATENCY_TIMER, &latency);
-	pcibios_read_config_byte (bus, devfn, PCI_MIN_GNT, &min_gnt);
-	pcibios_read_config_byte (bus, devfn, PCI_MAX_LAT, &max_lat);
-	if (len + 80 > size) {
+	pci_read_config_dword(dev, PCI_CLASS_REVISION, &class_rev);
+	pci_read_config_byte (dev, PCI_LATENCY_TIMER, &latency);
+	pci_read_config_byte (dev, PCI_MIN_GNT, &min_gnt);
+	pci_read_config_byte (dev, PCI_MAX_LAT, &max_lat);
+	if (len + 160 > size)
 		return -1;
-	}
 	len += sprintf(buf + len, "  Bus %2d, device %3d, function %2d:\n",
-		       bus, PCI_SLOT(devfn), PCI_FUNC(devfn));
-
-	if (len + 80 > size) {
-		return -1;
-	}
-	len += sprintf(buf + len, "    %s: %s (rev %d).\n      ",
+		       dev->bus->number, PCI_SLOT(dev->devfn), PCI_FUNC(dev->devfn));
+	len += sprintf(buf + len, "    %s: %s (rev %d).\n",
 		       pci_strclass(class_rev >> 8),
 		       dev->name,
 		       class_rev & 0xff);
 
-	switch (status & PCI_STATUS_DEVSEL_MASK) {
-	      case PCI_STATUS_DEVSEL_FAST:   str = "Fast devsel.  "; break;
-	      case PCI_STATUS_DEVSEL_MEDIUM: str = "Medium devsel.  "; break;
-	      case PCI_STATUS_DEVSEL_SLOW:   str = "Slow devsel.  "; break;
-	      default:			     str = "Unknown devsel.  ";
-	}
-	if (len + strlen(str) > size) {
-		return -1;
-	}
-	len += sprintf(buf + len, str);
-
-	if (status & PCI_STATUS_FAST_BACK) {
-#		define fast_b2b_capable	"Fast back-to-back capable.  "
-		if (len + strlen(fast_b2b_capable) > size) {
-			return -1;
-		}
-		len += sprintf(buf + len, fast_b2b_capable);
-#		undef fast_b2b_capable
-	}
-
-	if (bist & PCI_BIST_CAPABLE) {
-#		define BIST_capable	"BIST capable.  "
-		if (len + strlen(BIST_capable) > size) {
-			return -1;
-		}
-		len += sprintf(buf + len, BIST_capable);
-#		undef BIST_capable
-	}
-
 	if (dev->irq) {
-		if (len + 40 > size) {
+		if (len + 40 > size)
 			return -1;
-		}
-		len += sprintf(buf + len, "IRQ %d.  ", dev->irq);
+		len += sprintf(buf + len, "      IRQ %d.\n", dev->irq);
 	}
 
-	if (dev->master) {
-		if (len + 80 > size) {
+	if (latency || min_gnt || max_lat) {
+		if (len + 80 > size)
 			return -1;
-		}
-		len += sprintf(buf + len, "Master Capable.  ");
+		len += sprintf(buf + len, "      Master Capable.  ");
 		if (latency)
 		  len += sprintf(buf + len, "Latency=%d.  ", latency);
 		else
@@ -498,15 +453,15 @@ static int sprint_dev_config(struct pci_dev *dev, char *buf, int size)
 		  len += sprintf(buf + len, "Min Gnt=%d.", min_gnt);
 		if (max_lat)
 		  len += sprintf(buf + len, "Max Lat=%d.", max_lat);
+		len += sprintf(buf + len, "\n");
 	}
 
 	for (reg = 0; reg < 6; reg++) {
 		struct resource *res = dev->resource + reg;
 		unsigned long base, end, flags;
 
-		if (len + 40 > size) {
+		if (len + 40 > size)
 			return -1;
-		}
 		base = res->start;
 		end = res->end;
 		flags = res->flags;
@@ -515,16 +470,15 @@ static int sprint_dev_config(struct pci_dev *dev, char *buf, int size)
 
 		if (flags & PCI_BASE_ADDRESS_SPACE_IO) {
 			len += sprintf(buf + len,
-				       "\n      I/O at 0x%lx [0x%lx].",
+				       "      I/O at 0x%lx [0x%lx].\n",
 				       base, end);
 		} else {
 			const char *pref, *type = "unknown";
 
-			if (flags & PCI_BASE_ADDRESS_MEM_PREFETCH) {
+			if (flags & PCI_BASE_ADDRESS_MEM_PREFETCH)
 				pref = "P";
-			} else {
+			else
 				pref = "Non-p";
-			}
 			switch (flags & PCI_BASE_ADDRESS_MEM_TYPE_MASK) {
 			      case PCI_BASE_ADDRESS_MEM_TYPE_32:
 				type = "32 bit"; break;
@@ -534,17 +488,22 @@ static int sprint_dev_config(struct pci_dev *dev, char *buf, int size)
 				type = "64 bit"; break;
 			}
 			len += sprintf(buf + len,
-				       "\n      %srefetchable %s memory at "
-				       "0x%lx [0x%lx].", pref, type,
+				       "      %srefetchable %s memory at "
+				       "0x%lx [0x%lx].\n", pref, type,
 				       base,
 				       end);
 		}
 	}
 
-	len += sprintf(buf + len, "\n");
 	return len;
 }
 
+
+static struct proc_dir_entry proc_old_pci = {
+	PROC_PCI, 3, "pci",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
+};
 
 /*
  * Return list of PCI devices as a character string for /proc/pci.
@@ -563,18 +522,15 @@ int get_pci_list(char *buf)
 	for (dev = pci_devices; dev; dev = dev->next) {
 		nprinted = sprint_dev_config(dev, buf + len, size - len);
 		if (nprinted < 0) {
-			return len + sprintf(buf + len, MSG);
+			len += sprintf(buf + len, MSG);
+			proc_old_pci.size = len;
+			return len;
 		}
 		len += nprinted;
 	}
+	proc_old_pci.size = len;
 	return len;
 }
-
-static struct proc_dir_entry proc_old_pci = {
-	PROC_PCI, 3, "pci",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	0, &proc_array_inode_operations
-};
 
 static int __init pci_proc_init(void)
 {

@@ -606,7 +606,7 @@ static unsigned long get_wchan(struct task_struct *p)
 		unsigned long stack_page = (unsigned long) p;
 		int count = 0;
 
-		sp = p->tss.ksp;
+		sp = p->thread.ksp;
 		do {
 			sp = *(unsigned long *)sp;
 			if (sp < stack_page || sp >= stack_page + 8188)
@@ -688,8 +688,8 @@ static unsigned long get_wchan(struct task_struct *p)
 	eip; })
 #define	KSTK_ESP(tsk)	((tsk) == current ? rdusp() : (tsk)->thread.usp)
 #elif defined(__powerpc__)
-#define KSTK_EIP(tsk)	((tsk)->tss.regs->nip)
-#define KSTK_ESP(tsk)	((tsk)->tss.regs->gpr[1])
+#define KSTK_EIP(tsk)	((tsk)->thread.regs->nip)
+#define KSTK_ESP(tsk)	((tsk)->thread.regs->gpr[1])
 #elif defined (__sparc_v9__)
 # define KSTK_EIP(tsk)  ((tsk)->thread.kregs->tpc)
 # define KSTK_ESP(tsk)  ((tsk)->thread.kregs->u_regs[UREG_FP])
@@ -702,6 +702,9 @@ static unsigned long get_wchan(struct task_struct *p)
 #define KSTK_TOS(tsk) ((unsigned long)(tsk) + KERNEL_STACK_SIZE - 32)
 # define KSTK_EIP(tsk)	(*(unsigned long *)(KSTK_TOS(tsk) + PT_REG(cp0_epc)))
 # define KSTK_ESP(tsk)	(*(unsigned long *)(KSTK_TOS(tsk) + PT_REG(regs[29])))
+#elif defined(__sh__)
+# define KSTK_EIP(tsk)  ((tsk)->thread.pc)
+# define KSTK_ESP(tsk)  ((tsk)->thread.sp)
 #endif
 
 /* Gcc optimizes away "strlen(x)" for constant x */
@@ -1350,7 +1353,7 @@ static long get_root_array(char * page, int type, char **start,
 		case PROC_MEMINFO:
 			return get_meminfo(page);
 
-#ifdef CONFIG_PCI_OLD_PROC
+#ifdef CONFIG_PCI
 	        case PROC_PCI:
 			return get_pci_list(page);
 #endif

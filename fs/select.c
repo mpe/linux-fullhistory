@@ -174,7 +174,7 @@ int do_select(int n, fd_set_bits *fds, long *timeout)
 	n = retval;
 	retval = 0;
 	for (;;) {
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		for (i = 0 ; i < n; i++) {
 			unsigned long bit = BIT(i);
 			unsigned long mask;
@@ -337,7 +337,7 @@ static int do_poll(unsigned int nfds, struct pollfd *fds, poll_table *wait,
 		unsigned int j;
 		struct pollfd * fdpnt;
 
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		for (fdpnt = fds, j = 0; j < nfds; j++, fdpnt++) {
 			int fd;
 			unsigned int mask;

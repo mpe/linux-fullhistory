@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.94 1999/07/30 09:35:04 davem Exp $
+/*  $Id: signal.c,v 1.95 1999/08/14 03:51:22 anton Exp $
  *  linux/arch/sparc/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -211,12 +211,12 @@ restore_fpu_state(struct pt_regs *regs, __siginfo_fpu_t *fpu)
 	if (verify_area (VERIFY_READ, fpu, sizeof(*fpu)))
 		return -EFAULT;
 
-	err = __copy_from_user(&current->tss.float_regs[0], &fpu->si_float_regs[0],
+	err = __copy_from_user(&current->thread.float_regs[0], &fpu->si_float_regs[0],
 			       (sizeof(unsigned long) * 32));
-	err |= __get_user(current->tss.fsr, &fpu->si_fsr);
-	err |= __get_user(current->tss.fpqdepth, &fpu->si_fpqdepth);
-	if (current->tss.fpqdepth != 0)
-		err |= __copy_from_user(&current->tss.fpqueue[0],
+	err |= __get_user(current->thread.fsr, &fpu->si_fsr);
+	err |= __get_user(current->thread.fpqdepth, &fpu->si_fpqdepth);
+	if (current->thread.fpqdepth != 0)
+		err |= __copy_from_user(&current->thread.fpqueue[0],
 					&fpu->si_fpqueue[0],
 					((sizeof(unsigned long) +
 					(sizeof(unsigned long *)))*16));
@@ -289,7 +289,7 @@ asmlinkage void do_sigreturn(struct pt_regs *regs)
 
 	synchronize_user_stack();
 
-	if (current->tss.new_signal)
+	if (current->thread.new_signal)
 		return do_new_sigreturn (regs);
 
 	scptr = (struct sigcontext *) regs->u_regs[UREG_I0];
@@ -459,28 +459,28 @@ setup_frame(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	err |= __put_user(regs->psr, &sc->sigc_psr);
 	err |= __put_user(regs->u_regs[UREG_G1], &sc->sigc_g1);
 	err |= __put_user(regs->u_regs[UREG_I0], &sc->sigc_o0);
-	err |= __put_user(current->tss.w_saved, &sc->sigc_oswins);
-	if(current->tss.w_saved)
-		for(window = 0; window < current->tss.w_saved; window++) {
+	err |= __put_user(current->thread.w_saved, &sc->sigc_oswins);
+	if(current->thread.w_saved)
+		for(window = 0; window < current->thread.w_saved; window++) {
 			sc->sigc_spbuf[window] =
-				(char *)current->tss.rwbuf_stkptrs[window];
+				(char *)current->thread.rwbuf_stkptrs[window];
 			err |= __copy_to_user(&sc->sigc_wbuf[window],
-					      &current->tss.reg_window[window],
+					      &current->thread.reg_window[window],
 					      sizeof(struct reg_window));
 		}
 	else
 		err |= __copy_to_user(sframep, (char *)regs->u_regs[UREG_FP],
 				      sizeof(struct reg_window));
 
-	current->tss.w_saved = 0; /* So process is allowed to execute. */
+	current->thread.w_saved = 0; /* So process is allowed to execute. */
 	err |= __put_user(signr, &sframep->sig_num);
 	if(signr == SIGSEGV ||
 	   signr == SIGILL ||
 	   signr == SIGFPE ||
 	   signr == SIGBUS ||
 	   signr == SIGEMT) {
-		err |= __put_user(current->tss.sig_desc, &sframep->sig_code);
-		err |= __put_user(current->tss.sig_address, &sframep->sig_address);
+		err |= __put_user(current->thread.sig_desc, &sframep->sig_code);
+		err |= __put_user(current->thread.sig_address, &sframep->sig_address);
 	} else {
 		err |= __put_user(0, &sframep->sig_code);
 		err |= __put_user(0, &sframep->sig_address);
@@ -508,26 +508,26 @@ save_fpu_state(struct pt_regs *regs, __siginfo_fpu_t *fpu)
 #ifdef __SMP__
 	if (current->flags & PF_USEDFPU) {
 		put_psr(get_psr() | PSR_EF);
-		fpsave(&current->tss.float_regs[0], &current->tss.fsr,
-		       &current->tss.fpqueue[0], &current->tss.fpqdepth);
+		fpsave(&current->thread.float_regs[0], &current->thread.fsr,
+		       &current->thread.fpqueue[0], &current->thread.fpqdepth);
 		regs->psr &= ~(PSR_EF);
 		current->flags &= ~(PF_USEDFPU);
 	}
 #else
 	if (current == last_task_used_math) {
 		put_psr(get_psr() | PSR_EF);
-		fpsave(&current->tss.float_regs[0], &current->tss.fsr,
-		       &current->tss.fpqueue[0], &current->tss.fpqdepth);
+		fpsave(&current->thread.float_regs[0], &current->thread.fsr,
+		       &current->thread.fpqueue[0], &current->thread.fpqdepth);
 		last_task_used_math = 0;
 		regs->psr &= ~(PSR_EF);
 	}
 #endif
-	err |= __copy_to_user(&fpu->si_float_regs[0], &current->tss.float_regs[0],
+	err |= __copy_to_user(&fpu->si_float_regs[0], &current->thread.float_regs[0],
 			      (sizeof(unsigned long) * 32));
-	err |= __put_user(current->tss.fsr, &fpu->si_fsr);
-	err |= __put_user(current->tss.fpqdepth, &fpu->si_fpqdepth);
-	if (current->tss.fpqdepth != 0)
-		err |= __copy_to_user(&fpu->si_fpqueue[0], &current->tss.fpqueue[0],
+	err |= __put_user(current->thread.fsr, &fpu->si_fsr);
+	err |= __put_user(current->thread.fpqdepth, &fpu->si_fpqdepth);
+	if (current->thread.fpqdepth != 0)
+		err |= __copy_to_user(&fpu->si_fpqueue[0], &current->thread.fpqueue[0],
 				      ((sizeof(unsigned long) +
 				      (sizeof(unsigned long *)))*16));
 	current->used_math = 0;
@@ -553,7 +553,7 @@ new_setup_frame(struct k_sigaction *ka, struct pt_regs *regs,
 	if (invalid_frame_pointer (sf, sigframe_size))
 		goto sigill_and_return;
 
-	if (current->tss.w_saved != 0) {
+	if (current->thread.w_saved != 0) {
 #ifdef DEBUG_SIGNALS 
 		printk ("%s [%d]: Invalid user stack frame for "
 			"signal delivery.\n", current->comm, current->pid);
@@ -631,7 +631,7 @@ new_setup_rt_frame(struct k_sigaction *ka, struct pt_regs *regs,
 	sf = (struct rt_signal_frame *)get_sigframe(&ka->sa, regs, sigframe_size);
 	if(invalid_frame_pointer(sf, sigframe_size))
 		goto sigill;
-	if(current->tss.w_saved != 0)
+	if(current->thread.w_saved != 0)
 		goto sigill;
 
 	err  = __put_user(regs->pc, &sf->regs.pc);
@@ -764,7 +764,7 @@ setup_svr4_frame(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	err |= __put_user(gw, &mc->gwin);
 	    
 	/* 2. Number of windows to restore at setcontext (): */
-	err |= __put_user(current->tss.w_saved, &gw->count);
+	err |= __put_user(current->thread.w_saved, &gw->count);
 
 	/* 3. Save each valid window
 	 *    Currently, it makes a copy of the windows from the kernel copy.
@@ -777,21 +777,21 @@ setup_svr4_frame(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	 *    These windows are just used in case synchronize_user_stack failed
 	 *    to flush the user windows.
 	 */
-	for(window = 0; window < current->tss.w_saved; window++) {
+	for(window = 0; window < current->thread.w_saved; window++) {
 		err |= __put_user((int *) &(gw->win [window]), &gw->winptr [window]);
 		err |= __copy_to_user(&gw->win [window],
-				      &current->tss.reg_window [window],
+				      &current->thread.reg_window [window],
 				      sizeof (svr4_rwindow_t));
 		err |= __put_user(0, gw->winptr [window]);
 	}
 
 	/* 4. We just pay attention to the gw->count field on setcontext */
-	current->tss.w_saved = 0; /* So process is allowed to execute. */
+	current->thread.w_saved = 0; /* So process is allowed to execute. */
 
 	/* Setup the signal information.  Solaris expects a bunch of
 	 * information to be passed to the signal handler, we don't provide
 	 * that much currently, should use those that David already
-	 * is providing with tss.sig_desc
+	 * is providing with thread.sig_desc
 	 */
 	err |= __put_user(signr, &si->siginfo.signo);
 	err |= __put_user(SVR4_SINOINFO, &si->siginfo.code);
@@ -837,7 +837,7 @@ asmlinkage int svr4_getcontext (svr4_ucontext_t *uc, struct pt_regs *regs)
 
 	synchronize_user_stack();
 
-	if (current->tss.w_saved)
+	if (current->thread.w_saved)
 		goto sigsegv_and_return;
 
 	err = clear_user(uc, sizeof (*uc));
@@ -884,7 +884,7 @@ sigsegv_and_return:
 /* Set the context for a svr4 application, this is Solaris way to sigreturn */
 asmlinkage int svr4_setcontext (svr4_ucontext_t *c, struct pt_regs *regs)
 {
-	struct thread_struct *tp = &current->tss;
+	struct thread_struct *tp = &current->thread;
 	svr4_gregset_t  *gr;
 	unsigned long pc, npc, psr;
 	sigset_t set;
@@ -973,7 +973,7 @@ handle_signal(unsigned long signr, struct k_sigaction *ka,
 	else {
 		if (ka->sa.sa_flags & SA_SIGINFO)
 			new_setup_rt_frame(ka, regs, signr, oldset, info);
-		else if (current->tss.new_signal)
+		else if (current->thread.new_signal)
 			new_setup_frame (ka, regs, signr, oldset);
 		else
 			setup_frame(&ka->sa, regs->pc, regs->npc, regs, signr, oldset);

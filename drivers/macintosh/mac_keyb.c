@@ -269,8 +269,6 @@ static struct adb_ids buttons_ids;
 
 static int adb_mouse_kinds[16];
 
-__openfirmware
-
 int mackbd_setkeycode(unsigned int scancode, unsigned int keycode)
 {
 	return -EINVAL;

@@ -381,7 +381,6 @@ type name(type1 arg1, type2 arg2, type3 arg3, type4 arg4, type5 arg5)	\
  * System call prototypes.
  */
 #define __NR__exit __NR_exit
-static inline _syscall0(int,idle)
 static inline _syscall0(int,pause)
 static inline _syscall0(int,sync)
 static inline _syscall0(pid_t,setsid)

@@ -141,7 +141,7 @@ extern asmlinkage void __backtrace(void);
 #define wmb() mb()
 #define nop() __asm__ __volatile__("mov\tr0,r0\t@ nop\n\t");
 
-#define prepare_to_switch()	do { } while(0)
+#define prepare_to_switch()    do { } while(0)
 
 /*
  * switch_to(prev, next) should switch from task `prev' to `next'

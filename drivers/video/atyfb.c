@@ -1,4 +1,4 @@
-/*  $Id: atyfb.c,v 1.109 1999/08/08 01:38:05 davem Exp $
+/*  $Id: atyfb.c,v 1.120 1999/08/30 10:12:18 davem Exp $
  *  linux/drivers/video/atyfb.c -- Frame buffer device for ATI Mach64
  *
  *	Copyright (C) 1997-1998  Geert Uytterhoeven
@@ -262,6 +262,7 @@ static int atyfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 static int atyfb_mmap(struct fb_info *info, struct file *file,
 		      struct vm_area_struct *vma);
 #endif
+static int atyfb_rasterimg(struct fb_info *info, int start);
 
 
     /*
@@ -400,10 +401,11 @@ static struct fb_ops atyfb_ops = {
     atyfb_open, atyfb_release, atyfb_get_fix, atyfb_get_var, atyfb_set_var,
     atyfb_get_cmap, atyfb_set_cmap, atyfb_pan_display, atyfb_ioctl,
 #ifdef __sparc__
-    atyfb_mmap
+    atyfb_mmap,
 #else
-    NULL
+    NULL,
 #endif
+    atyfb_rasterimg
 };
 
 static char atyfb_name[16] = "ATY Mach64";
@@ -488,7 +490,7 @@ static inline u32 aty_ld_le32(unsigned int regindex,
     asm volatile("lwbrx %0,%1,%2" : "=r"(val) : "b" (regindex), "r" (temp));
 #elif defined(__sparc_v9__)
     temp = info->ati_regbase + regindex;
-    asm volatile("lduwa [%1] %2, %0" : "=r" (val) : "r" (temp), "i" (ASI_PL));
+    val = readl(temp);
 #else
     temp = info->ati_regbase+regindex;
     val = le32_to_cpu(*((volatile u32 *)(temp)));
@@ -507,7 +509,7 @@ static inline void aty_st_le32(unsigned int regindex, u32 val,
 	"memory");
 #elif defined(__sparc_v9__)
     temp = info->ati_regbase + regindex;
-    asm volatile("stwa %0, [%1] %2" : : "r" (val), "r" (temp), "i" (ASI_PL) : "memory");
+    writel(val, temp);
 #else
     temp = info->ati_regbase+regindex;
     *((volatile u32 *)(temp)) = cpu_to_le32(val);
@@ -517,13 +519,21 @@ static inline void aty_st_le32(unsigned int regindex, u32 val,
 static inline u8 aty_ld_8(unsigned int regindex,
 			  const struct fb_info_aty *info)
 {
+#ifdef __sparc_v9__
+    return readb(info->ati_regbase + regindex);
+#else
     return *(volatile u8 *)(info->ati_regbase+regindex);
+#endif
 }
 
 static inline void aty_st_8(unsigned int regindex, u8 val,
 			    const struct fb_info_aty *info)
 {
+#ifdef __sparc_v9__
+    writeb(val, info->ati_regbase + regindex);
+#else
     *(volatile u8 *)(info->ati_regbase+regindex) = val;
+#endif
 }
 
 
@@ -2224,6 +2234,7 @@ struct atyclk {
 static int atyfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		       u_long arg, int con, struct fb_info *info2)
 {
+    struct fb_info_aty *info = (struct fb_info_aty *)info2;
 #ifdef __sparc__
     struct fbtype fbtyp;
     struct display *disp;
@@ -2295,6 +2306,15 @@ static int atyfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
     default:
 	return -EINVAL;
     }
+    return 0;
+}
+
+static int atyfb_rasterimg(struct fb_info *info, int start)
+{
+    struct fb_info_aty *fb = (struct fb_info_aty *)info;
+
+    if (fb->blitter_may_be_busy)
+	wait_for_idle(fb);
     return 0;
 }
 
@@ -2511,6 +2531,9 @@ static int __init aty_init(struct fb_info_aty *info, const char *name)
     u8 pll_ref_div;
 
     info->aty_cmap_regs = (struct aty_cmap_regs *)(info->ati_regbase+0xc0);
+#ifdef __sparc_v9__
+    info->aty_cmap_regs = __va(info->aty_cmap_regs);
+#endif
     chip_id = aty_ld_le32(CONFIG_CHIP_ID, info);
     Gx = chip_id & CFG_CHIP_TYPE;
     Rev = (chip_id & CFG_CHIP_REV)>>24;
@@ -2755,6 +2778,7 @@ static int __init aty_init(struct fb_info_aty *info, const char *name)
 #ifdef MODULE
     var = default_var;
 #else /* !MODULE */
+    memset(&var, 0, sizeof(var));
 #if defined(CONFIG_PPC)
     if (mode_option) {
 	if (!mac_find_mode(&var, &info->fb_info, mode_option, 8))
@@ -2784,8 +2808,16 @@ static int __init aty_init(struct fb_info_aty *info, const char *name)
 	    var = default_var;
     }
 #else /* !CONFIG_PPC */
+#ifdef __sparc__
+    if (mode_option) {
+    	if (!fb_find_mode(&var, &info->fb_info, mode_option, NULL, 0, NULL, 8))
+	    var = default_var;
+    } else
+	var = default_var;
+#else
     if (!fb_find_mode(&var, &info->fb_info, mode_option, NULL, 0, NULL, 8))
 	var = default_var;
+#endif /* !__sparc__ */
 #endif /* !CONFIG_PPC */
 #endif /* !MODULE */
     if (noaccel)
@@ -2884,14 +2916,14 @@ int __init atyfb_init(void)
 	    /*
 	     * Map memory-mapped registers.
 	     */
-	    info->ati_regbase = addr + 0x7ffc00;
-	    info->ati_regbase_phys = __pa(addr + 0x7ffc00);
+	    info->ati_regbase = addr + 0x7ffc00UL;
+	    info->ati_regbase_phys = addr + 0x7ffc00UL;
 
 	    /*
 	     * Map in big-endian aperture.
 	     */
-	    info->frame_buffer = (unsigned long)(addr + 0x800000);
-	    info->frame_buffer_phys = __pa(addr + 0x800000);
+	    info->frame_buffer = (unsigned long) __va(addr + 0x800000UL);
+	    info->frame_buffer_phys = addr + 0x800000UL;
 
 	    /*
 	     * Figure mmap addresses from PCI config space.
@@ -2934,7 +2966,7 @@ int __init atyfb_init(void)
 		 */
 		if (base == addr) {
 		    info->mmap_map[j].voff = (pbase + 0x10000000) & PAGE_MASK;
-		    info->mmap_map[j].poff = __pa(base & PAGE_MASK);
+		    info->mmap_map[j].poff = base & PAGE_MASK;
 		    info->mmap_map[j].size = (size + ~PAGE_MASK) & PAGE_MASK;
 		    info->mmap_map[j].prot_mask = _PAGE_CACHE;
 		    info->mmap_map[j].prot_flag = _PAGE_E;
@@ -2947,7 +2979,7 @@ int __init atyfb_init(void)
 		 */
 		if (base == addr) {
 		    info->mmap_map[j].voff = (pbase + 0x800000) & PAGE_MASK;
-		    info->mmap_map[j].poff = __pa((base+0x800000) & PAGE_MASK);
+		    info->mmap_map[j].poff = (base+0x800000) & PAGE_MASK;
 		    info->mmap_map[j].size = 0x800000;
 		    info->mmap_map[j].prot_mask = _PAGE_CACHE;
 		    info->mmap_map[j].prot_flag = _PAGE_E|_PAGE_IE;
@@ -2956,7 +2988,7 @@ int __init atyfb_init(void)
 		}
 
 		info->mmap_map[j].voff = pbase & PAGE_MASK;
-		info->mmap_map[j].poff = __pa(base & PAGE_MASK);
+		info->mmap_map[j].poff = base & PAGE_MASK;
 		info->mmap_map[j].size = (size + ~PAGE_MASK) & PAGE_MASK;
 		info->mmap_map[j].prot_mask = _PAGE_CACHE;
 		info->mmap_map[j].prot_flag = _PAGE_E;
@@ -3136,7 +3168,7 @@ int __init atyfb_init(void)
 	    info->mmap_map[0].prot_mask = _PAGE_CACHE;
 	    info->mmap_map[0].prot_flag = _PAGE_E;
 	    info->mmap_map[1].voff = info->mmap_map[0].voff + info->total_vram;
-	    info->mmap_map[1].poff = __pa(info->ati_regbase & PAGE_MASK);
+	    info->mmap_map[1].poff = info->ati_regbase & PAGE_MASK;
 	    info->mmap_map[1].size = PAGE_SIZE;
 	    info->mmap_map[1].prot_mask = _PAGE_CACHE;
 	    info->mmap_map[1].prot_flag = _PAGE_E;
@@ -3334,8 +3366,8 @@ int __init atyfb_setup(char *options)
 	    }
 	}
 #endif
-       else
-           mode_option = this_opt;
+	else
+	    mode_option = this_opt;
     }
     return 0;
 }

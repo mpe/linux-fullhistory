@@ -1,4 +1,4 @@
-/* $Id: io.h,v 1.20 1999/05/14 07:23:18 davem Exp $ */
+/* $Id: io.h,v 1.21 1999/08/30 10:14:44 davem Exp $ */
 #ifndef __SPARC64_IO_H
 #define __SPARC64_IO_H
 
@@ -61,7 +61,7 @@ extern __inline__ unsigned int inb(unsigned long addr)
 
 	__asm__ __volatile__("lduba [%1] %2, %0"
 			     : "=r" (ret)
-			     : "r" (addr), "i" (ASI_PL));
+			     : "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
 
 	return ret;
 }
@@ -72,7 +72,7 @@ extern __inline__ unsigned int inw(unsigned long addr)
 
 	__asm__ __volatile__("lduha [%1] %2, %0"
 			     : "=r" (ret)
-			     : "r" (addr), "i" (ASI_PL));
+			     : "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
 
 	return ret;
 }
@@ -83,7 +83,7 @@ extern __inline__ unsigned int inl(unsigned long addr)
 
 	__asm__ __volatile__("lduwa [%1] %2, %0"
 			     : "=r" (ret)
-			     : "r" (addr), "i" (ASI_PL));
+			     : "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
 
 	return ret;
 }
@@ -92,21 +92,21 @@ extern __inline__ void outb(unsigned char b, unsigned long addr)
 {
 	__asm__ __volatile__("stba %0, [%1] %2"
 			     : /* no outputs */
-			     : "r" (b), "r" (addr), "i" (ASI_PL));
+			     : "r" (b), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
 }
 
 extern __inline__ void outw(unsigned short w, unsigned long addr)
 {
 	__asm__ __volatile__("stha %0, [%1] %2"
 			     : /* no outputs */
-			     : "r" (w), "r" (addr), "i" (ASI_PL));
+			     : "r" (w), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
 }
 
 extern __inline__ void outl(unsigned int l, unsigned long addr)
 {
 	__asm__ __volatile__("stwa %0, [%1] %2"
 			     : /* no outputs */
-			     : "r" (l), "r" (addr), "i" (ASI_PL));
+			     : "r" (l), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
 }
 
 #define inb_p inb
@@ -190,19 +190,11 @@ out:
 	return retval;
 }
 
-/*
- * On the sparc we have the whole physical IO address space mapped at all
- * times, so ioremap() and iounmap() do not need to do anything.
+/* On sparc64 we have the whole physical IO address space accessible
+ * using physically addressed loads and stores, so this does nothing.
  */
-extern __inline__ void *ioremap(unsigned long offset, unsigned long size)
-{
-	return __va(offset);
-}
-
-extern __inline__ void iounmap(void *addr)
-{
-}
-
+#define ioremap(__offset, __size)	((void *)(__offset))
+#define iounmap(__addr)			do { } while(0)
 
 extern void sparc_ultra_mapioaddr(unsigned long physaddr,
 				  unsigned long virt_addr,

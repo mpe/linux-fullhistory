@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.20 1999/03/15 22:13:40 davem Exp $
+/* $Id: time.c,v 1.22 1999/08/30 10:01:22 davem Exp $
  * time.c: UltraSparc timer and TOD clock support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -33,9 +33,9 @@
 
 extern rwlock_t xtime_lock;
 
-struct mostek48t02 *mstk48t02_regs = 0;
-static struct mostek48t08 *mstk48t08_regs = 0;
-static struct mostek48t59 *mstk48t59_regs = 0;
+unsigned long mstk48t02_regs = 0UL;
+static unsigned long mstk48t08_regs = 0UL;
+static unsigned long mstk48t59_regs = 0UL;
 
 static int set_rtc_mmss(unsigned long);
 
@@ -47,7 +47,7 @@ static int set_rtc_mmss(unsigned long);
  */
 unsigned long timer_tick_offset;
 static unsigned long timer_tick_compare;
-static unsigned long timer_ticks_per_usec;
+static unsigned long timer_ticks_per_usec_quotient;
 
 static __inline__ void timer_check_rtc(void)
 {
@@ -146,17 +146,25 @@ static inline unsigned long mktime(unsigned int year, unsigned int mon,
 /* Kick start a stopped clock (procedure from the Sun NVRAM/hostid FAQ). */
 static void __init kick_start_clock(void)
 {
-	register struct mostek48t02 *regs = mstk48t02_regs;
-	unsigned char sec;
+	unsigned long regs = mstk48t02_regs;
+	u8 sec, tmp;
 	int i, count;
 
 	prom_printf("CLOCK: Clock was stopped. Kick start ");
 
 	/* Turn on the kick start bit to start the oscillator. */
-	regs->creg |= MSTK_CREG_WRITE;
-	regs->sec &= ~MSTK_STOP;
-	regs->hour |= MSTK_KICK_START;
-	regs->creg &= ~MSTK_CREG_WRITE;
+	tmp = mostek_read(regs + MOSTEK_CREG);
+	tmp |= MSTK_CREG_WRITE;
+	mostek_write(regs + MOSTEK_CREG, tmp);
+	tmp = mostek_read(regs + MOSTEK_SEC);
+	tmp &= ~MSTK_STOP;
+	mostek_write(regs + MOSTEK_SEC, tmp);
+	tmp = mostek_read(regs + MOSTEK_HOUR);
+	tmp |= MSTK_KICK_START;
+	mostek_write(regs + MOSTEK_HOUR, tmp);
+	tmp = mostek_read(regs + MOSTEK_CREG);
+	tmp &= ~MSTK_CREG_WRITE;
+	mostek_write(regs + MOSTEK_CREG, tmp);
 
 	/* Delay to allow the clock oscillator to start. */
 	sec = MSTK_REG_SEC(regs);
@@ -165,13 +173,17 @@ static void __init kick_start_clock(void)
 			for (count = 0; count < 100000; count++)
 				/* nothing */ ;
 		prom_printf(".");
-		sec = regs->sec;
+		sec = MSTK_REG_SEC(regs);
 	}
 	prom_printf("\n");
 
 	/* Turn off kick start and set a "valid" time and date. */
-	regs->creg |= MSTK_CREG_WRITE;
-	regs->hour &= ~MSTK_KICK_START;
+	tmp = mostek_read(regs + MOSTEK_CREG);
+	tmp |= MSTK_CREG_WRITE;
+	mostek_write(regs + MOSTEK_CREG, tmp);
+	tmp = mostek_read(regs + MOSTEK_HOUR);
+	tmp &= ~MSTK_KICK_START;
+	mostek_write(regs + MOSTEK_HOUR, tmp);
 	MSTK_SET_REG_SEC(regs,0);
 	MSTK_SET_REG_MIN(regs,0);
 	MSTK_SET_REG_HOUR(regs,0);
@@ -179,14 +191,24 @@ static void __init kick_start_clock(void)
 	MSTK_SET_REG_DOM(regs,1);
 	MSTK_SET_REG_MONTH(regs,8);
 	MSTK_SET_REG_YEAR(regs,1996 - MSTK_YEAR_ZERO);
-	regs->creg &= ~MSTK_CREG_WRITE;
+	tmp = mostek_read(regs + MOSTEK_CREG);
+	tmp &= ~MSTK_CREG_WRITE;
+	mostek_write(regs + MOSTEK_CREG, tmp);
 
 	/* Ensure the kick start bit is off. If it isn't, turn it off. */
-	while (regs->hour & MSTK_KICK_START) {
+	while (mostek_read(regs + MOSTEK_HOUR) & MSTK_KICK_START) {
 		prom_printf("CLOCK: Kick start still on!\n");
-		regs->creg |= MSTK_CREG_WRITE;
-		regs->hour &= ~MSTK_KICK_START;
-		regs->creg &= ~MSTK_CREG_WRITE;
+		tmp = mostek_read(regs + MOSTEK_CREG);
+		tmp |= MSTK_CREG_WRITE;
+		mostek_write(regs + MOSTEK_CREG, tmp);
+
+		tmp = mostek_read(regs + MOSTEK_HOUR);
+		tmp &= ~MSTK_KICK_START;
+		mostek_write(regs + MOSTEK_HOUR, tmp);
+
+		tmp = mostek_read(regs + MOSTEK_CREG);
+		tmp &= ~MSTK_CREG_WRITE;
+		mostek_write(regs + MOSTEK_CREG, tmp);
 	}
 
 	prom_printf("CLOCK: Kick start procedure successful.\n");
@@ -195,13 +217,13 @@ static void __init kick_start_clock(void)
 /* Return nonzero if the clock chip battery is low. */
 static int __init has_low_battery(void)
 {
-	register struct mostek48t02 *regs = mstk48t02_regs;
-	unsigned char data1, data2;
+	unsigned long regs = mstk48t02_regs;
+	u8 data1, data2;
 
-	data1 = regs->eeprom[0];	/* Read some data. */
-	regs->eeprom[0] = ~data1;	/* Write back the complement. */
-	data2 = regs->eeprom[0];	/* Read back the complement. */
-	regs->eeprom[0] = data1;	/* Restore the original value. */
+	data1 = mostek_read(regs + MOSTEK_EEPROM);	/* Read some data. */
+	mostek_write(regs + MOSTEK_EEPROM, ~data1);	/* Write back the complement. */
+	data2 = mostek_read(regs + MOSTEK_EEPROM);	/* Read back the complement. */
+	mostek_write(regs + MOSTEK_EEPROM, data1);	/* Restore original value. */
 
 	return (data1 == data2);	/* Was the write blocked? */
 }
@@ -211,17 +233,20 @@ static int __init has_low_battery(void)
 static void __init set_system_time(void)
 {
 	unsigned int year, mon, day, hour, min, sec;
-	struct mostek48t02 *mregs;
+	unsigned long mregs = mstk48t02_regs;
+	u8 tmp;
 
 	do_get_fast_time = do_gettimeofday;
 
-	mregs = mstk48t02_regs;
 	if(!mregs) {
 		prom_printf("Something wrong, clock regs not mapped yet.\n");
 		prom_halt();
 	}		
 
-	mregs->creg |= MSTK_CREG_READ;
+	tmp = mostek_read(mregs + MOSTEK_CREG);
+	tmp |= MSTK_CREG_READ;
+	mostek_write(mregs + MOSTEK_CREG, tmp);
+
 	sec = MSTK_REG_SEC(mregs);
 	min = MSTK_REG_MIN(mregs);
 	hour = MSTK_REG_HOUR(mregs);
@@ -230,7 +255,10 @@ static void __init set_system_time(void)
 	year = MSTK_CVT_YEAR( MSTK_REG_YEAR(mregs) );
 	xtime.tv_sec = mktime(year, mon, day, hour, min, sec);
 	xtime.tv_usec = 0;
-	mregs->creg &= ~MSTK_CREG_READ;
+
+	tmp = mostek_read(mregs + MOSTEK_CREG);
+	tmp &= ~MSTK_CREG_READ;
+	mostek_write(mregs + MOSTEK_CREG, tmp);
 }
 
 void __init clock_probe(void)
@@ -315,19 +343,8 @@ void __init clock_probe(void)
 				prom_halt();
 			}
 
-			if (check_region(edev->base_address[0],
-					 sizeof(struct mostek48t59))) {
-				prom_printf("%s: Can't get region %lx, %d\n",
-					    __FUNCTION__, edev->base_address[0],
-					    sizeof(struct mostek48t59));
-				prom_halt();
-			}
-			request_region(edev->base_address[0],
-				       sizeof(struct mostek48t59), "clock");
-
-			mstk48t59_regs = (struct mostek48t59 *)
-						edev->base_address[0];
-			mstk48t02_regs = &mstk48t59_regs->regs;
+			mstk48t59_regs = edev->resource[0].start;
+			mstk48t02_regs = mstk48t59_regs + MOSTEK_48T59_48T02;
 			break;
 		}
 #endif
@@ -338,22 +355,16 @@ void __init clock_probe(void)
 		}
 
 		if(model[5] == '0' && model[6] == '2') {
-			mstk48t02_regs = (struct mostek48t02 *)
-				sparc_alloc_io(clk_reg[0].phys_addr,
-					       (void *) 0, sizeof(*mstk48t02_regs),
-					       "clock", clk_reg[0].which_io, 0x0);
+			mstk48t02_regs = (((u64)clk_reg[0].phys_addr) |
+					  (((u64)clk_reg[0].which_io)<<32UL));
 		} else if(model[5] == '0' && model[6] == '8') {
-			mstk48t08_regs = (struct mostek48t08 *)
-				sparc_alloc_io(clk_reg[0].phys_addr,
-					       (void *) 0, sizeof(*mstk48t08_regs),
-					       "clock", clk_reg[0].which_io, 0x0);
-			mstk48t02_regs = &mstk48t08_regs->regs;
+			mstk48t08_regs = (((u64)clk_reg[0].phys_addr) |
+					  (((u64)clk_reg[0].which_io)<<32UL));
+			mstk48t02_regs = mstk48t08_regs + MOSTEK_48T08_48T02;
 		} else {
-			mstk48t59_regs = (struct mostek48t59 *)
-				sparc_alloc_io(clk_reg[0].phys_addr,
-					       (void *) 0, sizeof(*mstk48t59_regs),
-					       "clock", clk_reg[0].which_io, 0x0);
-			mstk48t02_regs = &mstk48t59_regs->regs;
+			mstk48t59_regs = (((u64)clk_reg[0].phys_addr) |
+					  (((u64)clk_reg[0].which_io)<<32UL));
+			mstk48t02_regs = mstk48t59_regs + MOSTEK_48T59_48T02;
 		}
 		break;
 	}
@@ -363,7 +374,7 @@ void __init clock_probe(void)
 		prom_printf("NVRAM: Low battery voltage!\n");
 
 	/* Kick start the clock if it is completely stopped. */
-	if (mstk48t02_regs->sec & MSTK_STOP)
+	if (mostek_read(mstk48t02_regs + MOSTEK_SEC) & MSTK_STOP)
 		kick_start_clock();
 
 	set_system_time();
@@ -392,7 +403,7 @@ void __init time_init(void)
 
 	init_timers(timer_interrupt, &clock);
 	timer_tick_offset = clock / HZ;
-	timer_ticks_per_usec = clock / 1000000;
+	timer_ticks_per_usec_quotient = ((1UL<<32) / (clock / 1000020));
 }
 
 static __inline__ unsigned long do_gettimeoffset(void)
@@ -408,7 +419,7 @@ static __inline__ unsigned long do_gettimeoffset(void)
 		: "r" (timer_tick_offset), "r" (timer_tick_compare)
 		: "g1", "g2");
 
-	return ticks / timer_ticks_per_usec;
+	return (ticks * timer_ticks_per_usec_quotient) >> 32UL;
 }
 
 /* This need not obtain the xtime_lock as it is coded in
@@ -431,24 +442,22 @@ void do_gettimeofday(struct timeval *tv)
 	or	%g2, %lo(xtime), %g2
 	or	%g1, %lo(timer_tick_compare), %g1
 1:	ldda	[%g2] 0x24, %o4
-	membar	#LoadLoad | #MemIssue
 	rd	%tick, %o1
 	ldx	[%g1], %g7
-	membar	#LoadLoad | #MemIssue
 	ldda	[%g2] 0x24, %o2
-	membar	#LoadLoad
 	xor	%o4, %o2, %o2
 	xor	%o5, %o3, %o3
 	orcc	%o2, %o3, %g0
 	bne,pn	%xcc, 1b
 	 sethi	%hi(lost_ticks), %o2
-	sethi	%hi(timer_ticks_per_usec), %o3
+	sethi	%hi(timer_ticks_per_usec_quotient), %o3
 	ldx	[%o2 + %lo(lost_ticks)], %o2
 	add	%g3, %o1, %o1
-	ldx	[%o3 + %lo(timer_ticks_per_usec)], %o3
+	ldx	[%o3 + %lo(timer_ticks_per_usec_quotient)], %o3
 	sub	%o1, %g7, %o1
+	mulx	%o3, %o1, %o1
 	brz,pt	%o2, 1f
-	 udivx	%o1, %o3, %o1
+	 srlx	%o1, 32, %o1
 	sethi	%hi(10000), %g2
 	or	%g2, %lo(10000), %g2
 	add	%o1, %g2, %o1
@@ -487,16 +496,23 @@ void do_settimeofday(struct timeval *tv)
 static int set_rtc_mmss(unsigned long nowtime)
 {
 	int real_seconds, real_minutes, mostek_minutes;
-	struct mostek48t02 *regs = mstk48t02_regs;
+	unsigned long regs = mstk48t02_regs;
+	u8 tmp;
 
 	/* Not having a register set can lead to trouble. */
 	if (!regs) 
 		return -1;
 
 	/* Read the current RTC minutes. */
-	regs->creg |= MSTK_CREG_READ;
+	tmp = mostek_read(regs + MOSTEK_CREG);
+	tmp |= MSTK_CREG_READ;
+	mostek_write(regs + MOSTEK_CREG, tmp);
+
 	mostek_minutes = MSTK_REG_MIN(regs);
-	regs->creg &= ~MSTK_CREG_READ;
+
+	tmp = mostek_read(regs + MOSTEK_CREG);
+	tmp &= ~MSTK_CREG_READ;
+	mostek_write(regs + MOSTEK_CREG, tmp);
 
 	/*
 	 * since we're only adjusting minutes and seconds,
@@ -511,10 +527,16 @@ static int set_rtc_mmss(unsigned long nowtime)
 	real_minutes %= 60;
 
 	if (abs(real_minutes - mostek_minutes) < 30) {
-		regs->creg |= MSTK_CREG_WRITE;
+		tmp = mostek_read(regs + MOSTEK_CREG);
+		tmp |= MSTK_CREG_WRITE;
+		mostek_write(regs + MOSTEK_CREG, tmp);
+
 		MSTK_SET_REG_SEC(regs,real_seconds);
 		MSTK_SET_REG_MIN(regs,real_minutes);
-		regs->creg &= ~MSTK_CREG_WRITE;
+
+		tmp = mostek_read(regs + MOSTEK_CREG);
+		tmp &= ~MSTK_CREG_WRITE;
+		mostek_write(regs + MOSTEK_CREG, tmp);
 	} else
 		return -1;
 

@@ -639,7 +639,7 @@ static char *dn_state2asc(unsigned char state)
 
 static int dn_create(struct socket *sock, int protocol)
 {
-	struct	sock	*sk;
+	struct sock *sk;
 
 	switch(sock->type) {
 		case SOCK_SEQPACKET:
@@ -651,9 +651,6 @@ static int dn_create(struct socket *sock, int protocol)
 #ifdef CONFIG_DECNET_RAW
 		case SOCK_RAW:
 			if ((protocol != DNPROTO_NSP) &&
-#ifdef CONFIG_DECNET_MOP
-					(protocol != DNPROTO_MOP) &&
-#endif /* CONFIG_DECNET_MOP */
 					(protocol != DNPROTO_ROU))
 				return -EPROTONOSUPPORT;
 			break;
@@ -2116,7 +2113,7 @@ void __init decnet_proto_init(struct net_proto *pro)
 #ifdef CONFIG_SYSCTL
 	dn_register_sysctl();
 #endif /* CONFIG_SYSCTL */
-        printk(KERN_INFO "NET4: DECnet for Linux: V.2.3.13s (C) 1995-1999 Linux DECnet Project Team\n");
+        printk(KERN_INFO "NET4: DECnet for Linux: V.2.3.15s (C) 1995-1999 Linux DECnet Project Team\n");
 
 }
 

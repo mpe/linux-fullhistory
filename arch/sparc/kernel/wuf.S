@@ -1,4 +1,4 @@
-/* $Id: wuf.S,v 1.37 1998/02/19 21:25:50 ecd Exp $
+/* $Id: wuf.S,v 1.38 1999/08/14 03:51:36 anton Exp $
  * wuf.S: Window underflow trap handler for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller
@@ -40,7 +40,7 @@
 	 * andcc %l0, PSR_PS, %g0
 	 */
 
-	/* Datum current->tss.uwinmask contains at all times a bitmask
+	/* Datum current->thread.uwinmask contains at all times a bitmask
 	 * where if any user windows are active, at least one bit will
 	 * be set in to mask.  If no user windows are active, the bitmask
 	 * will be all zeroes.
@@ -184,8 +184,8 @@ fwin_user_stack_is_bolixed:
 	/* Fix users window mask and buffer save count. */
 	mov	0x1, %g5
 	sll	%g5, %g3, %g5
-	st	%g5, [%curptr + AOFF_task_tss + AOFF_thread_uwinmask]		! one live user window still
-	st	%g0, [%curptr + AOFF_task_tss + AOFF_thread_w_saved]		! no windows in the buffer
+	st	%g5, [%curptr + AOFF_task_thread + AOFF_thread_uwinmask]		! one live user window still
+	st	%g0, [%curptr + AOFF_task_thread + AOFF_thread_w_saved]		! no windows in the buffer
 
 	wr	%t_psr, PSR_ET, %psr			! enable traps
 	nop

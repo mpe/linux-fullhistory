@@ -29,7 +29,6 @@
  ********************************************************************/
 
 #include <linux/init.h>
-#include <linux/config.h>
 #include <linux/fs.h>
 #include <linux/sched.h>
 #include <linux/termios.h>

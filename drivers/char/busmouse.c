@@ -273,7 +273,7 @@ busmouse_read(struct file *file, char *buffer, size_t count, loff_t *ppos)
 
 		add_wait_queue(&mse->wait, &wait);
 repeat:
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		if (!mse->ready && !signal_pending(current)) {
 			spin_unlock_irqrestore(&mse->lock, flags);
 			schedule();

@@ -83,6 +83,26 @@ extern int last_pid;
 #define TASK_SWAPPING		16
 #define TASK_EXCLUSIVE		32
 
+#define __set_task_state(tsk, state_value)		\
+	do { tsk->state = state_value; } while (0)
+#ifdef __SMP__
+#define set_task_state(tsk, state_value)		\
+	set_mb(tsk->state, state_value)
+#else
+#define set_task_state(tsk, state_value)		\
+	__set_task_state(tsk, state_value)
+#endif
+
+#define __set_current_state(state_value)			\
+	do { current->state = state_value; } while (0)
+#ifdef __SMP__
+#define set_current_state(state_value)		\
+	set_mb(current->state, state_value)
+#else
+#define set_current_state(state_value)		\
+	__set_current_state(state_value)
+#endif
+
 /*
  * Scheduling policies
  */
@@ -715,8 +735,7 @@ do {									\
 									\
 	add_wait_queue(&wq, &__wait);					\
 	for (;;) {							\
-		current->state = TASK_UNINTERRUPTIBLE;			\
-		mb();							\
+		set_current_state(TASK_UNINTERRUPTIBLE);		\
 		if (condition)						\
 			break;						\
 		schedule();						\
@@ -739,8 +758,7 @@ do {									\
 									\
 	add_wait_queue(&wq, &__wait);					\
 	for (;;) {							\
-		current->state = TASK_INTERRUPTIBLE;			\
-		mb();							\
+		set_current_state(TASK_INTERRUPTIBLE);			\
 		if (condition)						\
 			break;						\
 		if (!signal_pending(current)) {				\

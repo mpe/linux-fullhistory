@@ -1,4 +1,4 @@
-/*  $Id: irq.c,v 1.94 1999/05/28 14:59:20 anton Exp $
+/*  $Id: irq.c,v 1.96 1999/08/31 06:54:21 davem Exp $
  *  arch/sparc/kernel/irq.c:  Interrupt request handling routines. On the
  *                            Sparc the IRQ's are basically 'cast in stone'
  *                            and you are supposed to probe the prom's device
@@ -25,7 +25,7 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/delay.h>
-#include <linux/tasks.h>
+#include <linux/threads.h>
 
 #include <asm/ptrace.h>
 #include <asm/processor.h>

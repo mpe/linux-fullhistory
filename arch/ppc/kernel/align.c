@@ -243,10 +243,10 @@ fix_alignment(struct pt_regs *regs)
 		}
 		break;
 	case LD+F:
-		current->tss.fpr[reg] = data.d;
+		current->thread.fpr[reg] = data.d;
 		break;
 	case ST+F:
-		data.d = current->tss.fpr[reg];
+		data.d = current->thread.fpr[reg];
 		break;
 	/* these require some floating point conversions... */
 	/* we'd like to use the assignment, but we have to compile
@@ -254,13 +254,13 @@ fix_alignment(struct pt_regs *regs)
 	 * fp regs for copying 8-byte objects. */
 	case LD+F+S:
 		enable_kernel_fp();
-		cvt_fd(&data.f, &current->tss.fpr[reg], &current->tss.fpscr);
-		/* current->tss.fpr[reg] = data.f; */
+		cvt_fd(&data.f, &current->thread.fpr[reg], &current->thread.fpscr);
+		/* current->thread.fpr[reg] = data.f; */
 		break;
 	case ST+F+S:
 		enable_kernel_fp();
-		cvt_df(&current->tss.fpr[reg], &data.f, &current->tss.fpscr);
-		/* data.f = current->tss.fpr[reg]; */
+		cvt_df(&current->thread.fpr[reg], &data.f, &current->thread.fpscr);
+		/* data.f = current->thread.fpr[reg]; */
 		break;
 	default:
 		printk("align: can't handle flags=%x\n", flags);

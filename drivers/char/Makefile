@@ -224,6 +224,22 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_R3964),y)
+O_OBJS += n_r3964.o
+else
+  ifeq ($(CONFIG_R3964),m)
+  M_OBJS += n_r3964.o
+  endif
+endif
+
+ifeq ($(CONFIG_APPLICOM),y)
+O_OBJS += applicom.o
+else
+  ifeq ($(CONFIG_APPLICOM),m)
+  M_OBJS += applicom.o
+  endif
+endif
+
 ifeq ($(CONFIG_MS_BUSMOUSE),y)
 O_OBJS += msbusmouse.o
 else

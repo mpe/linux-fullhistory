@@ -795,9 +795,8 @@ static int msp3410d_thread(void *data)
 		UNLOCK_I2C_BUS(msp->bus);
 
 		/* wait 1 sec */
-		current->state = TASK_INTERRUPTIBLE;
-		current->timeout = jiffies + HZ;
-		schedule();
+		__set_current_state(TASK_INTERRUPTIBLE);
+		schedule_timeout(HZ);
 		if (signal_pending(current))
 			goto done;
 		if (msp->restart) {

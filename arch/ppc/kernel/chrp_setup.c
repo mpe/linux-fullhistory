@@ -315,7 +315,10 @@ void
 chrp_event_scan(void)
 {
 	unsigned char log[1024];
-	call_rtas( "event-scan", 4, 1, NULL, 0x0, 1, __pa(log), 1024 );
+	unsigned long ret = 0;
+	/* XXX: we should loop until the hardware says no more error logs -- Cort */
+	call_rtas( "event-scan", 4, 1, &ret, 0xffffffff, 0,
+		   __pa(log), 1024 );
 	ppc_md.heartbeat_count = ppc_md.heartbeat_reset;
 }
 	
@@ -331,12 +334,8 @@ void
 chrp_power_off(void)
 {
 	/* allow power on only with power button press */
-#define	PWR_FIELD(x) (0x8000000000000000ULL >> ((x)-96))
 	printk("RTAS power-off returned %d\n",
-	       call_rtas("power-off", 2, 1, NULL,
-			 ((PWR_FIELD(96)|PWR_FIELD(97))>>32)&0xffffffff,
-			 (PWR_FIELD(96)|PWR_FIELD(97))&0xffffffff));
-#undef PWR_FIELD	
+	       call_rtas("power-off", 2, 1, NULL,0xffffffff,0xffffffff));
 	for (;;);
 }
 
@@ -448,12 +447,9 @@ void __init
 			(*(unsigned long *)get_property(np,
 							"8259-interrupt-acknowledge", NULL));
 	}
+	open_pic.irq_offset = 16;
 	for ( i = 16 ; i < NR_IRQS ; i++ )
 		irq_desc[i].ctl = &open_pic;
-	/* openpic knows that it's at irq 16 offset
-	 * so we don't need to set it in the pic structure
-	 * -- Cort
-	 */
 	openpic_init(1);
 	for ( i = 0 ; i < 16  ; i++ )
 		irq_desc[i].ctl = &i8259_pic;
@@ -493,12 +489,9 @@ void chrp_ide_probe(void) {
         chrp_ide_ports_known = 1;
 
         if(pdev) {
-                chrp_ide_regbase[0]=pdev->base_address[0] &
-                        PCI_BASE_ADDRESS_IO_MASK;
-                chrp_ide_regbase[1]=pdev->base_address[2] &
-                        PCI_BASE_ADDRESS_IO_MASK;
-                chrp_idedma_regbase=pdev->base_address[4] &
-                        PCI_BASE_ADDRESS_IO_MASK;
+                chrp_ide_regbase[0]=pdev->resource[0].start;
+                chrp_ide_regbase[1]=pdev->resource[2].start;
+                chrp_idedma_regbase=pdev->resource[4].start;
                 chrp_ide_irq=pdev->irq;
         }
 }
@@ -688,14 +681,18 @@ void __init
 void chrp_progress(char *s, unsigned short hex)
 {
 	extern unsigned int rtas_data;
-	unsigned long width;
+	int max_width, width;
 	struct device_node *root;
 	char *os = s;
-	
-	if ( (root = find_path_device("/rtas")) )
-		width = *(unsigned long *)get_property(root, "ibm,display-line-length", NULL);
+	unsigned long *p;
+
+	if ( (root = find_path_device("/rtas")) &&
+	     (p = (unsigned long *)get_property(root,
+						"ibm,display-line-length",
+						NULL)) )
+		max_width = *p;
 	else
-		width = 0x10;
+		max_width = 0x10;
 
 	if ( (_machine != _MACH_chrp) || !rtas_data )
 		return;
@@ -704,11 +701,22 @@ void chrp_progress(char *s, unsigned short hex)
 		/* assume no display-character RTAS method - use hex display */
 		return;
 	}
+
+	width = max_width;
 	while ( *os )
+	{
+		if ( (*os == '\n') || (*os == '\r') )
+			width = max_width;
+		else
+			width--;
 		call_rtas( "display-character", 1, 1, NULL, *os++ );
-	/* scan back for the last newline or carriage return */
-	for ( os-- ; (*os != '\n') && (*os != '\r') && (os > s) ; os--, width-- )
-		/* nothing */ ;
-	/*while ( width-- )*/
+		/* if we overwrite the screen length */
+		if ( width == 0 )
+			while ( (*os != 0) && (*os != '\n') && (*os != '\r') )
+				os++;
+	}
+
+	/*while ( width-- > 0 )*/
 	call_rtas( "display-character", 1, 1, NULL, ' ' );
 }
+

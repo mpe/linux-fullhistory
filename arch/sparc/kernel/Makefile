@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.49 1999/01/02 16:45:37 davem Exp $
+# $Id: Makefile,v 1.50 1999/08/31 13:26:13 anton Exp $
 # Makefile for the linux kernel.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -22,7 +22,7 @@ O_OBJS   := entry.o wof.o wuf.o etrap.o rtrap.o traps.o ${IRQ_OBJS} \
 	    sys_sparc.o sunos_asm.o sparc-stub.o systbls.o sys_sunos.o  \
 	    sunos_ioctl.o time.o windows.o cpu.o devices.o \
 	    sclow.o solaris.o tadpole.o tick14.o ptrace.o sys_solaris.o \
-	    unaligned.o muldiv.o pcic.o
+	    unaligned.o muldiv.o pcic.o semaphore.o
 
 OX_OBJS  := sparc_ksyms.o
 

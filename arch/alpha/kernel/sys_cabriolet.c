@@ -3,7 +3,7 @@
  *
  *	Copyright (C) 1995 David A Rusling
  *	Copyright (C) 1996 Jay A Estabrook
- *	Copyright (C) 1998 Richard Henderson
+ *	Copyright (C) 1998, 1999 Richard Henderson
  *
  * Code supporting the Cabriolet (AlphaPC64), EB66+, and EB164,
  * PC164 and LX164.
@@ -31,9 +31,9 @@
 #include <asm/core_pyxis.h>
 
 #include "proto.h"
-#include "irq.h"
-#include "bios32.h"
-#include "machvec.h"
+#include "irq_impl.h"
+#include "pci_impl.h"
+#include "machvec_impl.h"
 
 
 static void
@@ -124,7 +124,7 @@ cabriolet_init_irq(void)
  */
 
 static inline int __init
-eb66p_map_irq(struct pci_dev *dev, int slot, int pin)
+eb66p_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
 	static char irq_tab[5][5] __initlocaldata = {
 		/*INT  INTA  INTB  INTC   INTD */
@@ -136,14 +136,6 @@ eb66p_map_irq(struct pci_dev *dev, int slot, int pin)
 	};
 	const long min_idsel = 6, max_idsel = 10, irqs_per_slot = 5;
 	return COMMON_TABLE_LOOKUP;
-}
-
-static inline void __init
-eb66p_pci_fixup(void)
-{
-	layout_all_busses(DEFAULT_IO_BASE, APECS_AND_LCA_DEFAULT_MEM_BASE);
-	common_pci_fixup(eb66p_map_irq, common_swizzle);
-	enable_ide(0x398);
 }
 
 
@@ -162,7 +154,7 @@ eb66p_pci_fixup(void)
  */
 
 static inline int __init
-cabriolet_map_irq(struct pci_dev *dev, int slot, int pin)
+cabriolet_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
 	static char irq_tab[5][5] __initlocaldata = {
 		/*INT   INTA  INTB  INTC   INTD */
@@ -177,19 +169,10 @@ cabriolet_map_irq(struct pci_dev *dev, int slot, int pin)
 }
 
 static inline void __init
-cabriolet_pci_fixup(void)
+cabriolet_init_pci(void)
 {
-	layout_all_busses(DEFAULT_IO_BASE, APECS_AND_LCA_DEFAULT_MEM_BASE);
-	common_pci_fixup(cabriolet_map_irq, common_swizzle);
-	enable_ide(0x398);
-}
-
-static inline void __init
-eb164_pci_fixup(void)
-{
-	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
-	common_pci_fixup(cabriolet_map_irq, common_swizzle);
-	enable_ide(0x398);
+	common_init_pci();
+	ns87312_enable_ide(0x398);
 }
 
 
@@ -236,7 +219,7 @@ eb164_pci_fixup(void)
  */
 
 static inline int __init
-alphapc164_map_irq(struct pci_dev *dev, int slot, int pin)
+alphapc164_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
 	static char irq_tab[7][5] __initlocaldata = {
 		/*INT   INTA  INTB   INTC   INTD */
@@ -253,12 +236,12 @@ alphapc164_map_irq(struct pci_dev *dev, int slot, int pin)
 }
 
 static inline void __init
-alphapc164_pci_fixup(void)
+alphapc164_init_pci(void)
 {
-	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
-	common_pci_fixup(alphapc164_map_irq, common_swizzle);
+	common_init_pci();
 	SMC93x_Init();
 }
+
 
 /*
  * The System Vector
@@ -273,18 +256,22 @@ struct alpha_machine_vector cabriolet_mv __initmv = {
 	DO_APECS_BUS,
 	machine_check:		apecs_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	min_io_address:		DEFAULT_IO_BASE,
+	min_mem_address:	APECS_AND_LCA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		35,
 	irq_probe_mask:		_PROBE_MASK(35),
 	update_irq_hw:		cabriolet_update_irq_hw,
-	ack_irq:		generic_ack_irq,
+	ack_irq:		common_ack_irq,
 	device_interrupt:	cabriolet_device_interrupt,
 
 	init_arch:		apecs_init_arch,
 	init_irq:		cabriolet_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		cabriolet_pci_fixup,
-	kill_arch:		generic_kill_arch,
+	init_pit:		common_init_pit,
+	init_pci:		cabriolet_init_pci,
+	kill_arch:		common_kill_arch,
+	pci_map_irq:		cabriolet_map_irq,
+	pci_swizzle:		common_swizzle,
 };
 ALIAS_MV(cabriolet)
 #endif
@@ -298,18 +285,22 @@ struct alpha_machine_vector eb164_mv __initmv = {
 	DO_CIA_BUS,
 	machine_check:		cia_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	min_io_address:		DEFAULT_IO_BASE,
+	min_mem_address:	CIA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		35,
 	irq_probe_mask:		_PROBE_MASK(35),
 	update_irq_hw:		cabriolet_update_irq_hw,
-	ack_irq:		generic_ack_irq,
+	ack_irq:		common_ack_irq,
 	device_interrupt:	cabriolet_device_interrupt,
 
 	init_arch:		cia_init_arch,
 	init_irq:		cabriolet_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		eb164_pci_fixup,
-	kill_arch:		generic_kill_arch,
+	init_pit:		common_init_pit,
+	init_pci:		cabriolet_init_pci,
+	kill_arch:		common_kill_arch,
+	pci_map_irq:		cabriolet_map_irq,
+	pci_swizzle:		common_swizzle,
 };
 ALIAS_MV(eb164)
 #endif
@@ -323,18 +314,22 @@ struct alpha_machine_vector eb66p_mv __initmv = {
 	DO_LCA_BUS,
 	machine_check:		lca_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	min_io_address:		DEFAULT_IO_BASE,
+	min_mem_address:	APECS_AND_LCA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		35,
 	irq_probe_mask:		_PROBE_MASK(35),
 	update_irq_hw:		cabriolet_update_irq_hw,
-	ack_irq:		generic_ack_irq,
+	ack_irq:		common_ack_irq,
 	device_interrupt:	cabriolet_device_interrupt,
 
 	init_arch:		lca_init_arch,
 	init_irq:		cabriolet_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		eb66p_pci_fixup,
-	kill_arch:		generic_kill_arch,
+	init_pit:		common_init_pit,
+	init_pci:		cabriolet_init_pci,
+	kill_arch:		common_kill_arch,
+	pci_map_irq:		eb66p_map_irq,
+	pci_swizzle:		common_swizzle,
 };
 ALIAS_MV(eb66p)
 #endif
@@ -348,18 +343,22 @@ struct alpha_machine_vector lx164_mv __initmv = {
 	DO_PYXIS_BUS,
 	machine_check:		pyxis_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	min_io_address:		DEFAULT_IO_BASE,
+	min_mem_address:	DEFAULT_MEM_BASE,
 
 	nr_irqs:		35,
 	irq_probe_mask:		_PROBE_MASK(35),
 	update_irq_hw:		cabriolet_update_irq_hw,
-	ack_irq:		generic_ack_irq,
+	ack_irq:		common_ack_irq,
 	device_interrupt:	cabriolet_device_interrupt,
 
 	init_arch:		pyxis_init_arch,
 	init_irq:		cabriolet_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		alphapc164_pci_fixup,
-	kill_arch:		generic_kill_arch,
+	init_pit:		common_init_pit,
+	init_pci:		alphapc164_init_pci,
+	kill_arch:		common_kill_arch,
+	pci_map_irq:		alphapc164_map_irq,
+	pci_swizzle:		common_swizzle,
 };
 ALIAS_MV(lx164)
 #endif
@@ -373,19 +372,22 @@ struct alpha_machine_vector pc164_mv __initmv = {
 	DO_CIA_BUS,
 	machine_check:		cia_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	min_io_address:		DEFAULT_IO_BASE,
+	min_mem_address:	CIA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		35,
 	irq_probe_mask:		_PROBE_MASK(35),
 	update_irq_hw:		cabriolet_update_irq_hw,
-	ack_irq:		generic_ack_irq,
+	ack_irq:		common_ack_irq,
 	device_interrupt:	cabriolet_device_interrupt,
 
 	init_arch:		cia_init_arch,
 	init_irq:		cabriolet_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		alphapc164_pci_fixup,
-	kill_arch:		generic_kill_arch,
+	init_pit:		common_init_pit,
+	init_pci:		alphapc164_init_pci,
+	kill_arch:		common_kill_arch,
+	pci_map_irq:		alphapc164_map_irq,
+	pci_swizzle:		common_swizzle,
 };
 ALIAS_MV(pc164)
 #endif
-

@@ -1,6 +1,6 @@
 /* linux/net/inet/arp.c
  *
- * Version:	$Id: arp.c,v 1.80 1999/08/20 11:04:54 davem Exp $
+ * Version:	$Id: arp.c,v 1.81 1999/08/30 10:17:05 davem Exp $
  *
  * Copyright (C) 1994 by Florian  La Roche
  *

@@ -237,6 +237,7 @@ typedef struct audio_device {
 
 #ifdef __KERNEL__
 
+#include <linux/types.h>
 #include <linux/fs.h>
 #include <linux/tqueue.h>
 #include <linux/wait.h>
@@ -299,6 +300,8 @@ struct sparcaudio_driver
 
         /* Hack to make it look like we support variable size buffers. */
         int buffer_size;
+
+        int mixer_modify_counter;
 };
 
 struct sparcaudio_operations
@@ -432,23 +435,6 @@ extern int cs4231_init(void);
 
 #endif
 
-/* Mixer helper ioctls */
-#define right(a) (((a >> 8) & 0xff) % 101)
-#define left(a) ((a & 0xff) % 101)
-
-/* Macros to convert between mixer stereo volumes and gain (mono) */
-#define s_to_m(a) ((((left(a) + right(a)) * 255) / 200) % 256)
-#define m_to_s(a) ((a * 100 / 255) + ((a * 100 / 255) << 8))
-
-/* convert mixer stereo volume to balance */
-#define s_to_b(a) (s_to_g(a) == 0) ? 32 : ((left(a) * AUDIO_RIGHT_BALANCE / (left(a) + right(a))))
-
-/* convert mixer stereo volume to audio gain */
-#define s_to_g(a) ((((right(a) + left(a)) * 255) / 200) % 256)
-
-/* convert gain a and balance b to mixer volume */
-#define b_to_s(a,b) (((((b * a * 200) / (AUDIO_RIGHT_BALANCE * 255)) % 100) << 8) + ((((AUDIO_RIGHT_BALANCE - b) * a * 200) / (AUDIO_RIGHT_BALANCE * 255)) % 100))
-
 /* Device minor numbers */
 
 #define SPARCAUDIO_MIXER_MINOR 0
@@ -514,4 +500,147 @@ struct stdata
 
 #define I_GETSIG _IOR('S',012,int)
 #define I_GETSIG_SOLARIS (('S'<<8)|12)
-#endif
+
+/* Conversion between Sun and OSS volume settings */
+static __inline__ 
+int OSS_LEFT(int value)
+{
+  return ((value & 0xff) % 101);
+}
+
+static __inline__ 
+int OSS_RIGHT(int value)
+{
+  return  (((value >> 8) & 0xff) % 101);
+}
+
+static __inline__ 
+int O_TO_S(int value)
+{
+  return value * 255 / 100;
+}
+
+static __inline__ 
+int S_TO_O(int value)
+{
+  return value * 100 / 255;
+}
+
+static __inline__ 
+int OSS_TO_GAIN(int value)
+{
+  int l = O_TO_S(OSS_LEFT(value));
+  int r = O_TO_S(OSS_RIGHT(value));
+  return ((l > r) ? l : r);
+}
+
+static __inline__ 
+int OSS_TO_LGAIN(int value)
+{
+  int l = O_TO_S(OSS_LEFT(value));
+  int r = O_TO_S(OSS_RIGHT(value));
+  return ((l < r) ? l : r);
+}
+
+static __inline__ 
+int OSS_TO_BAL(int value) 
+{
+  if (!OSS_TO_GAIN(value))
+    return AUDIO_MID_BALANCE;
+  if (!OSS_TO_LGAIN(value)) {
+    if (OSS_TO_GAIN(value) == OSS_TO_GAIN(OSS_RIGHT(value)))
+      return AUDIO_RIGHT_BALANCE;
+    else
+      return AUDIO_LEFT_BALANCE;
+  }
+  if (OSS_TO_GAIN(value) == OSS_TO_GAIN(OSS_RIGHT(value)))
+    return ((OSS_TO_GAIN(value) - OSS_TO_LGAIN(value)) >> AUDIO_BALANCE_SHIFT)
+      + AUDIO_MID_BALANCE;
+  else
+    return AUDIO_MID_BALANCE - ((OSS_TO_GAIN(value) - OSS_TO_LGAIN(value)) 
+				>> AUDIO_BALANCE_SHIFT);
+}
+
+static __inline__ 
+int BAL_TO_OSS(int value, unsigned char balance)
+{
+  int l, r, adj;
+  if (balance > 63) balance = 63;
+  if (balance < AUDIO_MID_BALANCE) {
+    l = (int)value * 100 / 255 + ((value * 100 % 255) > 0);
+    adj = ((AUDIO_MID_BALANCE - balance) << AUDIO_BALANCE_SHIFT);
+    if (adj < value)
+      r = (int)(value - adj)
+	* 100 / 255;
+    else r = 0;
+  } else if (balance > AUDIO_MID_BALANCE) {
+    r = (int)value * 100 / 255 + ((value * 100 % 255) > 0);
+    adj = ((balance - AUDIO_MID_BALANCE) << AUDIO_BALANCE_SHIFT);
+    if (adj < value)
+      l = (int)(value - adj)
+	* 100 / 255;
+    else l = 0;
+  } else {
+    l = r = (int)value * 100 / 255 + ((value * 100 % 255) > 0);
+  }
+
+  return ((r << 8) + l);
+}
+
+/* OSS mixer ioctl port handling */
+static __inline__
+int OSS_PORT_AUDIO(struct sparcaudio_driver *drv, unsigned int set) 
+{
+  int p;
+  if (drv->ops->get_output_port) {
+    p = drv->ops->get_output_port(drv);
+    if (p & set)
+      return 0x6464;
+  }  
+  return 0;
+}
+
+static __inline__
+int OSS_IPORT_AUDIO(struct sparcaudio_driver *drv, unsigned int set) 
+{
+  int p;
+  if (drv->ops->get_input_port) {
+    p = drv->ops->get_input_port(drv);
+    if (p & set)
+      return 0x6464;
+  }  
+  return 0;
+}
+
+static __inline__ 
+void OSS_TWIDDLE_PORT(struct sparcaudio_driver *drv, unsigned int ioctl, 
+		      unsigned int port, unsigned int set, unsigned int value) 
+{
+  if (ioctl == port) {
+    int p;
+    if (drv->ops->get_output_port && drv->ops->set_output_port) {
+      p = drv->ops->get_output_port(drv);
+      if ((value == 0) || ((p & set) && (OSS_LEFT(value) < 100)))
+	drv->ops->set_output_port(drv, p & ~(set));
+      else
+	drv->ops->set_output_port(drv, p | set);
+    }
+  }
+}
+
+static __inline__ 
+void OSS_TWIDDLE_IPORT(struct sparcaudio_driver *drv, unsigned int ioctl, 
+		      unsigned int port, unsigned int set, unsigned int value) 
+{
+  if (ioctl == port) {
+    int p;
+    if (drv->ops->get_input_port && drv->ops->set_input_port) {
+      p = drv->ops->get_input_port(drv);
+      if ((value == 0) || ((p & set) && (OSS_LEFT(value) < 100)))
+	drv->ops->set_input_port(drv, p & ~(set));
+      else
+	drv->ops->set_input_port(drv, p | set);
+    }
+  }
+}
+#endif /* _AUDIOIO_H_ */

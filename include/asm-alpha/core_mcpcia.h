@@ -1,6 +1,10 @@
 #ifndef __ALPHA_MCPCIA__H__
 #define __ALPHA_MCPCIA__H__
 
+/* Define to experiment with fitting everything into one 128MB HAE window.
+   One window per bus, that is.  */
+#define MCPCIA_ONE_HAE_WINDOW 1
+
 #include <linux/config.h>
 #include <linux/types.h>
 #include <linux/pci.h>
@@ -71,99 +75,112 @@
 
 #define MCPCIA_MEM_MASK 0x07ffffff /* SPARSE Mem region mask is 27 bits */
 
-#define MCPCIA_DMA_WIN_BASE_DEFAULT    (2*1024*1024*1024U)
-#define MCPCIA_DMA_WIN_SIZE_DEFAULT    (2*1024*1024*1024U)
+#define MCPCIA_DMA_WIN_BASE		(2UL*1024*1024*1024)
+#define MCPCIA_DMA_WIN_SIZE		(2UL*1024*1024*1024)
 
-#if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_SRM_SETUP)
-#define MCPCIA_DMA_WIN_BASE		alpha_mv.dma_win_base
-#define MCPCIA_DMA_WIN_SIZE		alpha_mv.dma_win_size
-#else
-#define MCPCIA_DMA_WIN_BASE		MCPCIA_DMA_WIN_BASE_DEFAULT
-#define MCPCIA_DMA_WIN_SIZE		MCPCIA_DMA_WIN_SIZE_DEFAULT
-#endif
-
-#define HOSE(h) (((unsigned long)(h)) << 33)
-
-/*
- *  General Registers
- */
-#define MCPCIA_REV(h)		(IDENT_ADDR + 0xf9e0000000UL + HOSE(h))
-#define MCPCIA_WHOAMI(h)	(IDENT_ADDR + 0xf9e0000040UL + HOSE(h))
-#define MCPCIA_PCI_LAT(h)	(IDENT_ADDR + 0xf9e0000080UL + HOSE(h))
-#define MCPCIA_CAP_CTRL(h)	(IDENT_ADDR + 0xf9e0000100UL + HOSE(h))
-#define MCPCIA_HAE_MEM(h)	(IDENT_ADDR + 0xf9e0000400UL + HOSE(h))
-#define MCPCIA_HAE_IO(h)	(IDENT_ADDR + 0xf9e0000440UL + HOSE(h))
-#if 0
-#define MCPCIA_IACK_SC(h)	(IDENT_ADDR + 0xf9e0000480UL + HOSE(h))
-#endif
-#define MCPCIA_HAE_DENSE(h)	(IDENT_ADDR + 0xf9e00004c0UL + HOSE(h))
-
-/*
- * Interrupt Control registers
- */
-#define MCPCIA_INT_CTL(h)	(IDENT_ADDR + 0xf9e0000500UL + HOSE(h))
-#define MCPCIA_INT_REQ(h)	(IDENT_ADDR + 0xf9e0000540UL + HOSE(h))
-#define MCPCIA_INT_TARG(h)	(IDENT_ADDR + 0xf9e0000580UL + HOSE(h))
-#define MCPCIA_INT_ADR(h)	(IDENT_ADDR + 0xf9e00005c0UL + HOSE(h))
-#define MCPCIA_INT_ADR_EXT(h)	(IDENT_ADDR + 0xf9e0000600UL + HOSE(h))
-#define MCPCIA_INT_MASK0(h)	(IDENT_ADDR + 0xf9e0000640UL + HOSE(h))
-#define MCPCIA_INT_MASK1(h)	(IDENT_ADDR + 0xf9e0000680UL + HOSE(h))
-#define MCPCIA_INT_ACK0(h)	(IDENT_ADDR + 0xf9f0003f00UL + HOSE(h))
-#define MCPCIA_INT_ACK1(h)	(IDENT_ADDR + 0xf9e0003f40UL + HOSE(h))
-
-/*
- * Performance Monitor registers
- */
-#define MCPCIA_PERF_MONITOR(h)	(IDENT_ADDR + 0xf9e0000300UL + HOSE(h))
-#define MCPCIA_PERF_CONTROL(h)	(IDENT_ADDR + 0xf9e0000340UL + HOSE(h))
-
-/*
- * Diagnostic Registers
- */
-#define MCPCIA_CAP_DIAG(h)	(IDENT_ADDR + 0xf9e0000700UL + HOSE(h))
-#define MCPCIA_TOP_OF_MEM(h)	(IDENT_ADDR + 0xf9e00007c0UL + HOSE(h))
-
-/*
- * Error registers
- */
-#define MCPCIA_MC_ERR0(h)	(IDENT_ADDR + 0xf9e0000800UL + HOSE(h))
-#define MCPCIA_MC_ERR1(h)	(IDENT_ADDR + 0xf9e0000840UL + HOSE(h))
-#define MCPCIA_CAP_ERR(h)	(IDENT_ADDR + 0xf9e0000880UL + HOSE(h))
-#define MCPCIA_PCI_ERR1(h)	(IDENT_ADDR + 0xf9e0001040UL + HOSE(h))
-
-/*
- * PCI Address Translation Registers.
- */
-#define MCPCIA_SG_TBIA(h)	(IDENT_ADDR + 0xf9e0001300UL + HOSE(h))
-#define MCPCIA_HBASE(h)		(IDENT_ADDR + 0xf9e0001340UL + HOSE(h))
-
-#define MCPCIA_W0_BASE(h)	(IDENT_ADDR + 0xf9e0001400UL + HOSE(h))
-#define MCPCIA_W0_MASK(h)	(IDENT_ADDR + 0xf9e0001440UL + HOSE(h))
-#define MCPCIA_T0_BASE(h)	(IDENT_ADDR + 0xf9e0001480UL + HOSE(h))
-
-#define MCPCIA_W1_BASE(h)	(IDENT_ADDR + 0xf9e0001500UL + HOSE(h))
-#define MCPCIA_W1_MASK(h)	(IDENT_ADDR + 0xf9e0001540UL + HOSE(h))
-#define MCPCIA_T1_BASE(h)	(IDENT_ADDR + 0xf9e0001580UL + HOSE(h))
-
-#define MCPCIA_W2_BASE(h)	(IDENT_ADDR + 0xf9e0001600UL + HOSE(h))
-#define MCPCIA_W2_MASK(h)	(IDENT_ADDR + 0xf9e0001640UL + HOSE(h))
-#define MCPCIA_T2_BASE(h)	(IDENT_ADDR + 0xf9e0001680UL + HOSE(h))
-
-#define MCPCIA_W3_BASE(h)	(IDENT_ADDR + 0xf9e0001700UL + HOSE(h))
-#define MCPCIA_W3_MASK(h)	(IDENT_ADDR + 0xf9e0001740UL + HOSE(h))
-#define MCPCIA_T3_BASE(h)	(IDENT_ADDR + 0xf9e0001780UL + HOSE(h))
+#define MCPCIA_MID(m)		((unsigned long)(m) << 33)
 
 /*
  * Memory spaces:
  */
-#define MCPCIA_CONF(h)		(IDENT_ADDR + 0xf9c0000000UL + HOSE(h))
-#define MCPCIA_IO(h)		(IDENT_ADDR + 0xf980000000UL + HOSE(h))
-#define MCPCIA_SPARSE(h)	(IDENT_ADDR + 0xf800000000UL + HOSE(h))
-#define MCPCIA_DENSE(h)		(IDENT_ADDR + 0xf900000000UL + HOSE(h))
-#define _MCPCIA_IACK_SC(h)	(IDENT_ADDR + 0xf9f0003f00UL + HOSE(h))
+#define MCPCIA_SPARSE(m)	(IDENT_ADDR + 0xf000000000UL + MCPCIA_MID(m))
+#define MCPCIA_DENSE(m)		(IDENT_ADDR + 0xf100000000UL + MCPCIA_MID(m))
+#define MCPCIA_IO(m)		(IDENT_ADDR + 0xf180000000UL + MCPCIA_MID(m))
+#define MCPCIA_CONF(m)		(IDENT_ADDR + 0xf1c0000000UL + MCPCIA_MID(m))
+#define MCPCIA_CSR(m)		(IDENT_ADDR + 0xf1e0000000UL + MCPCIA_MID(m))
+#define MCPCIA_IO_IACK(m)	(IDENT_ADDR + 0xf1f0000000UL + MCPCIA_MID(m))
+#define MCPCIA_DENSE_IO(m)	(IDENT_ADDR + 0xe1fc000000UL + MCPCIA_MID(m))
+#define MCPCIA_DENSE_CONF(m)	(IDENT_ADDR + 0xe1fe000000UL + MCPCIA_MID(m))
 
-#define MCPCIA_HAE_ADDRESS	MCPCIA_HAE_MEM(0)
-#define MCPCIA_IACK_SC		_MCPCIA_IACK_SC(0)
+/*
+ *  General Registers
+ */
+#define MCPCIA_REV(m)		(MCPCIA_CSR(m) + 0x000)
+#define MCPCIA_WHOAMI(m)	(MCPCIA_CSR(m) + 0x040)
+#define MCPCIA_PCI_LAT(m)	(MCPCIA_CSR(m) + 0x080)
+#define MCPCIA_CAP_CTRL(m)	(MCPCIA_CSR(m) + 0x100)
+#define MCPCIA_HAE_MEM(m)	(MCPCIA_CSR(m) + 0x400)
+#define MCPCIA_HAE_IO(m)	(MCPCIA_CSR(m) + 0x440)
+#define _MCPCIA_IACK_SC(m)	(MCPCIA_CSR(m) + 0x480)
+#define MCPCIA_HAE_DENSE(m)	(MCPCIA_CSR(m) + 0x4C0)
+
+/*
+ * Interrupt Control registers
+ */
+#define MCPCIA_INT_CTL(m)	(MCPCIA_CSR(m) + 0x500)
+#define MCPCIA_INT_REQ(m)	(MCPCIA_CSR(m) + 0x540)
+#define MCPCIA_INT_TARG(m)	(MCPCIA_CSR(m) + 0x580)
+#define MCPCIA_INT_ADR(m)	(MCPCIA_CSR(m) + 0x5C0)
+#define MCPCIA_INT_ADR_EXT(m)	(MCPCIA_CSR(m) + 0x600)
+#define MCPCIA_INT_MASK0(m)	(MCPCIA_CSR(m) + 0x640)
+#define MCPCIA_INT_MASK1(m)	(MCPCIA_CSR(m) + 0x680)
+#define MCPCIA_INT_ACK0(m)	(MCPCIA_CSR(m) + 0x10003f00)
+#define MCPCIA_INT_ACK1(m)	(MCPCIA_CSR(m) + 0x10003f40)
+
+/*
+ * Performance Monitor registers
+ */
+#define MCPCIA_PERF_MON(m)	(MCPCIA_CSR(m) + 0x300)
+#define MCPCIA_PERF_CONT(m)	(MCPCIA_CSR(m) + 0x340)
+
+/*
+ * Diagnostic Registers
+ */
+#define MCPCIA_CAP_DIAG(m)	(MCPCIA_CSR(m) + 0x700)
+#define MCPCIA_TOP_OF_MEM(m)	(MCPCIA_CSR(m) + 0x7C0)
+
+/*
+ * Error registers
+ */
+#define MCPCIA_MC_ERR0(m)	(MCPCIA_CSR(m) + 0x800)
+#define MCPCIA_MC_ERR1(m)	(MCPCIA_CSR(m) + 0x840)
+#define MCPCIA_CAP_ERR(m)	(MCPCIA_CSR(m) + 0x880)
+#define MCPCIA_PCI_ERR1(m)	(MCPCIA_CSR(m) + 0x1040)
+#define MCPCIA_MDPA_STAT(m)	(MCPCIA_CSR(m) + 0x4000)
+#define MCPCIA_MDPA_SYN(m)	(MCPCIA_CSR(m) + 0x4040)
+#define MCPCIA_MDPA_DIAG(m)	(MCPCIA_CSR(m) + 0x4080)
+#define MCPCIA_MDPB_STAT(m)	(MCPCIA_CSR(m) + 0x8000)
+#define MCPCIA_MDPB_SYN(m)	(MCPCIA_CSR(m) + 0x8040)
+#define MCPCIA_MDPB_DIAG(m)	(MCPCIA_CSR(m) + 0x8080)
+
+/*
+ * PCI Address Translation Registers.
+ */
+#define MCPCIA_SG_TBIA(m)	(MCPCIA_CSR(m) + 0x1300)
+#define MCPCIA_HBASE(m)		(MCPCIA_CSR(m) + 0x1340)
+
+#define MCPCIA_W0_BASE(m)	(MCPCIA_CSR(m) + 0x1400)
+#define MCPCIA_W0_MASK(m)	(MCPCIA_CSR(m) + 0x1440)
+#define MCPCIA_T0_BASE(m)	(MCPCIA_CSR(m) + 0x1480)
+
+#define MCPCIA_W1_BASE(m)	(MCPCIA_CSR(m) + 0x1500)
+#define MCPCIA_W1_MASK(m)	(MCPCIA_CSR(m) + 0x1540)
+#define MCPCIA_T1_BASE(m)	(MCPCIA_CSR(m) + 0x1580)
+
+#define MCPCIA_W2_BASE(m)	(MCPCIA_CSR(m) + 0x1600)
+#define MCPCIA_W2_MASK(m)	(MCPCIA_CSR(m) + 0x1640)
+#define MCPCIA_T2_BASE(m)	(MCPCIA_CSR(m) + 0x1680)
+
+#define MCPCIA_W3_BASE(m)	(MCPCIA_CSR(m) + 0x1700)
+#define MCPCIA_W3_MASK(m)	(MCPCIA_CSR(m) + 0x1740)
+#define MCPCIA_T3_BASE(m)	(MCPCIA_CSR(m) + 0x1780)
+
+/* Hack!  Only words for bus 0.  */
+
+#if !MCPCIA_ONE_HAE_WINDOW
+#define MCPCIA_HAE_ADDRESS	MCPCIA_HAE_MEM(4)
+#endif
+#define MCPCIA_IACK_SC		_MCPCIA_IACK_SC(4)
+
+/* 
+ * The canonical non-remaped I/O and MEM addresses have these values
+ * subtracted out.  This is arranged so that folks manipulating ISA
+ * devices can use their familiar numbers and have them map to bus 0.
+ */
+
+#define MCPCIA_IO_BIAS		MCPCIA_IO(4)
+#define MCPCIA_MEM_BIAS		MCPCIA_DENSE(4)
+
 
 /*
  * Data structure for handling MCPCIA machine checks:
@@ -215,54 +232,79 @@ __EXTERN_INLINE void * mcpcia_bus_to_virt(unsigned long address)
 
 __EXTERN_INLINE unsigned int mcpcia_inb(unsigned long in_addr)
 {
-	unsigned long addr = in_addr & 0xffffffffUL;
-	unsigned long hose = (in_addr >> 32) & 3;
-	long result = *(vip) ((addr << 5) + MCPCIA_IO(hose) + 0x00);
+	unsigned long addr, hose, result;
+
+	addr = in_addr & 0xffffUL;
+	hose = in_addr & ~0xffffUL;
+
+	/* ??? I wish I could get rid of this.  But there's no ioremap
+	   equivalent for I/O space.  PCI I/O can be forced into the
+	   correct hose's I/O region, but that doesn't take care of
+	   legacy ISA crap.  */
+	hose += MCPCIA_IO_BIAS;
+
+	result = *(vip) ((addr << 5) + hose + 0x00);
 	return __kernel_extbl(result, addr & 3);
 }
 
 __EXTERN_INLINE void mcpcia_outb(unsigned char b, unsigned long in_addr)
 {
-	unsigned long addr = in_addr & 0xffffffffUL;
-	unsigned long hose = (in_addr >> 32) & 3;
-	unsigned long w;
+	unsigned long addr, hose, w;
+
+	addr = in_addr & 0xffffUL;
+	hose = in_addr & ~0xffffUL;
+	hose += MCPCIA_IO_BIAS;
 
 	w = __kernel_insbl(b, addr & 3);
-	*(vuip) ((addr << 5) + MCPCIA_IO(hose) + 0x00) = w;
+	*(vuip) ((addr << 5) + hose + 0x00) = w;
 	mb();
 }
 
 __EXTERN_INLINE unsigned int mcpcia_inw(unsigned long in_addr)
 {
-	unsigned long addr = in_addr & 0xffffffffUL;
-	unsigned long hose = (in_addr >> 32) & 3;
-	long result = *(vip) ((addr << 5) + MCPCIA_IO(hose) + 0x08);
+	unsigned long addr, hose, result;
+
+	addr = in_addr & 0xffffUL;
+	hose = in_addr & ~0xffffUL;
+	hose += MCPCIA_IO_BIAS;
+
+	result = *(vip) ((addr << 5) + hose + 0x08);
 	return __kernel_extwl(result, addr & 3);
 }
 
 __EXTERN_INLINE void mcpcia_outw(unsigned short b, unsigned long in_addr)
 {
-	unsigned long addr = in_addr & 0xffffffffUL;
-	unsigned long hose = (in_addr >> 32) & 3;
-	unsigned long w;
+	unsigned long addr, hose, w;
+
+	addr = in_addr & 0xffffUL;
+	hose = in_addr & ~0xffffUL;
+	hose += MCPCIA_IO_BIAS;
 
 	w = __kernel_inswl(b, addr & 3);
-	*(vuip) ((addr << 5) + MCPCIA_IO(hose) + 0x08) = w;
+	*(vuip) ((addr << 5) + hose + 0x08) = w;
 	mb();
 }
 
 __EXTERN_INLINE unsigned int mcpcia_inl(unsigned long in_addr)
 {
-	unsigned long addr = in_addr & 0xffffffffUL;
-	unsigned long hose = (in_addr >> 32) & 3;
-	return *(vuip) ((addr << 5) + MCPCIA_IO(hose) + 0x18);
+	unsigned long addr, hose;
+
+	addr = in_addr & 0xffffUL;
+	hose = in_addr & ~0xffffUL;
+	hose += MCPCIA_IO_BIAS;
+
+	return *(vuip) ((addr << 5) + hose + 0x18);
 }
 
 __EXTERN_INLINE void mcpcia_outl(unsigned int b, unsigned long in_addr)
 {
-	unsigned long addr = in_addr & 0xffffffffUL;
-	unsigned long hose = (in_addr >> 32) & 3;
-	*(vuip) ((addr << 5) + MCPCIA_IO(hose) + 0x18) = b;
+	unsigned long addr, hose;
+
+	addr = in_addr & 0xffffUL;
+	hose = in_addr & ~0xffffUL;
+	hose += MCPCIA_IO_BIAS;
+
+	*(vuip) ((addr << 5) + hose + 0x18) = b;
 	mb();
 }
 
@@ -299,234 +341,107 @@ __EXTERN_INLINE void mcpcia_outl(unsigned int b, unsigned long in_addr)
  *
  */
 
-__EXTERN_INLINE unsigned long mcpcia_ioremap(unsigned long in_addr)
+__EXTERN_INLINE unsigned long mcpcia_ioremap(unsigned long addr)
 {
-	unsigned long addr = in_addr & 0xffffffffUL;
-	unsigned long hose = (in_addr >> 32) & 3;
-	return addr + MCPCIA_DENSE(hose);
+	return addr + MCPCIA_MEM_BIAS;
 }
 
 __EXTERN_INLINE int mcpcia_is_ioaddr(unsigned long addr)
 {
-	return addr >= IDENT_ADDR + 0x8000000000UL;
-}
-
-__EXTERN_INLINE unsigned long mcpcia_srm_base(unsigned long addr)
-{
-	unsigned long mask, base;
-	unsigned long hose = (addr >> 32) & 3;
-
-#if __DEBUG_IOREMAP
-	if (addr <= 0x1000000000) {
-		printk(KERN_CRIT "mcpcia: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-	}
-#endif
-
-	addr &= 0xfffffffful;
-	if (addr >= alpha_mv.sm_base_r1
-	    && addr <= alpha_mv.sm_base_r1 + MCPCIA_MEM_MASK) {
-		mask = MCPCIA_MEM_MASK;
-		base = MCPCIA_SPARSE(hose);
-	}
-	else
-	{
-#if 0
-	  printk("mcpcia: address 0x%lx not covered by HAE\n", addr);
-#endif
-	  return 0;
-	}
-
-	return ((addr & mask) << 5) + base;
-}
-
-__EXTERN_INLINE unsigned long mcpcia_srm_readb(unsigned long addr)
-{
-	unsigned long result, work;
-
-	if ((work = mcpcia_srm_base(addr)) == 0)
-		return 0xff;
-	work += 0x00;	/* add transfer length */
-
-	result = *(vip)work;
-	return __kernel_extbl(result, addr & 3);
-}
-
-__EXTERN_INLINE unsigned long mcpcia_srm_readw(unsigned long addr)
-{
-	unsigned long result, work;
-
-	if ((work = mcpcia_srm_base(addr)) == 0)
-		return 0xffff;
-	work += 0x08;	/* add transfer length */
-
-	result = *(vip) work;
-	return __kernel_extwl(result, addr & 3);
-}
-
-__EXTERN_INLINE void mcpcia_srm_writeb(unsigned char b, unsigned long addr)
-{
-	unsigned long w, work = mcpcia_srm_base(addr);
-	if (work) {
-		work += 0x00;	/* add transfer length */
-		w = __kernel_insbl(b, addr & 3);
-		*(vuip)work = w;
-	}
-}
-
-__EXTERN_INLINE void mcpcia_srm_writew(unsigned short b, unsigned long addr)
-{
-	unsigned long w, work = mcpcia_srm_base(addr);
-	if (work) {
-		work += 0x08;	/* add transfer length */
-		w = __kernel_inswl(b, addr & 3);
-		*(vuip)work = w;
-	}
+	return addr >= MCPCIA_SPARSE(0);
 }
 
 __EXTERN_INLINE unsigned long mcpcia_readb(unsigned long in_addr)
 {
-	/* Note that MCPCIA_DENSE(hose) has no bits not masked here, and
-	   that the hose calculation is still correct.  */
 	unsigned long addr = in_addr & 0xffffffffUL;
-	unsigned long hose = (in_addr >> 32) & 3;
-	unsigned long result, msb, work, temp;
+	unsigned long hose = in_addr & ~0xffffffffUL;
+	unsigned long result, work;
 
-#if __DEBUG_IOREMAP
-	if (in_addr <= 0x1000000000) {
-		printk(KERN_CRIT "mcpcia: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-	}
-#endif
-
+#if !MCPCIA_ONE_HAE_WINDOW
+	unsigned long msb;
 	msb = addr & ~MCPCIA_MEM_MASK;
-	temp = addr & MCPCIA_MEM_MASK;
 	set_hae(msb);
+#endif
+	addr = addr & MCPCIA_MEM_MASK;
 
-	work = ((temp << 5) + MCPCIA_SPARSE(hose) + 0x00);
+	hose = hose - MCPCIA_DENSE(4) + MCPCIA_SPARSE(4);
+	work = ((addr << 5) + hose + 0x00);
 	result = *(vip) work;
 	return __kernel_extbl(result, addr & 3);
 }
 
 __EXTERN_INLINE unsigned long mcpcia_readw(unsigned long in_addr)
 {
-	/* Note that MCPCIA_DENSE(hose) has no bits not masked here, and
-	   that the hose calculation is still correct.  */
 	unsigned long addr = in_addr & 0xffffffffUL;
-	unsigned long hose = (in_addr >> 32) & 3;
-	unsigned long result, msb, work, temp;
+	unsigned long hose = in_addr & ~0xffffffffUL;
+	unsigned long result, work;
 
-#if __DEBUG_IOREMAP
-	if (in_addr <= 0x1000000000) {
-		printk(KERN_CRIT "mcpcia: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-	}
-#endif
-
+#if !MCPCIA_ONE_HAE_WINDOW
+	unsigned long msb;
 	msb = addr & ~MCPCIA_MEM_MASK;
-	temp = addr & MCPCIA_MEM_MASK;
 	set_hae(msb);
+#endif
+	addr = addr & MCPCIA_MEM_MASK;
 
-	work = ((temp << 5) + MCPCIA_SPARSE(hose) + 0x08);
+	hose = hose - MCPCIA_DENSE(4) + MCPCIA_SPARSE(4);
+	work = ((addr << 5) + hose + 0x08);
 	result = *(vip) work;
 	return __kernel_extwl(result, addr & 3);
 }
 
 __EXTERN_INLINE void mcpcia_writeb(unsigned char b, unsigned long in_addr)
 {
-	/* Note that MCPCIA_DENSE(hose) has no bits not masked here, and
-	   that the hose calculation is still correct.  */
 	unsigned long addr = in_addr & 0xffffffffUL;
-	unsigned long hose = (in_addr >> 32) & 3;
-	unsigned long msb, w;
+	unsigned long hose = in_addr & ~0xffffffffUL;
+	unsigned long w;
 
-#if __DEBUG_IOREMAP
-	if (in_addr <= 0x1000000000) {
-		printk(KERN_CRIT "mcpcia: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-	}
-#endif
-
+#if !MCPCIA_ONE_HAE_WINDOW
+	unsigned long msb;
 	msb = addr & ~MCPCIA_MEM_MASK;
-	addr &= MCPCIA_MEM_MASK;
 	set_hae(msb);
+#endif
+	addr = addr & MCPCIA_MEM_MASK;
 
 	w = __kernel_insbl(b, in_addr & 3);
-	*(vuip) ((addr << 5) + MCPCIA_SPARSE(hose) + 0x00) = w;
+	hose = hose - MCPCIA_DENSE(4) + MCPCIA_SPARSE(4);
+	*(vuip) ((addr << 5) + hose + 0x00) = w;
 }
 
 __EXTERN_INLINE void mcpcia_writew(unsigned short b, unsigned long in_addr)
 {
-	/* Note that MCPCIA_DENSE(hose) has no bits not masked here, and
-	   that the hose calculation is still correct.  */
 	unsigned long addr = in_addr & 0xffffffffUL;
-	unsigned long hose = (in_addr >> 32) & 3;
-	unsigned long msb, w;
+	unsigned long hose = in_addr & ~0xffffffffUL;
+	unsigned long w;
 
-#if __DEBUG_IOREMAP
-	if (in_addr <= 0x1000000000) {
-		printk(KERN_CRIT "mcpcia: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-	}
-#endif
-
+#if !MCPCIA_ONE_HAE_WINDOW
+	unsigned long msb;
 	msb = addr & ~MCPCIA_MEM_MASK;
-	addr &= MCPCIA_MEM_MASK;
 	set_hae(msb);
+#endif
+	addr = addr & MCPCIA_MEM_MASK;
 
 	w = __kernel_inswl(b, in_addr & 3);
-	*(vuip) ((addr << 5) + MCPCIA_SPARSE(hose) + 0x08) = w;
+	hose = hose - MCPCIA_DENSE(4) + MCPCIA_SPARSE(4);
+	*(vuip) ((addr << 5) + hose + 0x08) = w;
 }
 
 __EXTERN_INLINE unsigned long mcpcia_readl(unsigned long addr)
 {
-#if __DEBUG_IOREMAP
-	if (addr <= 0x1000000000) {
-		printk(KERN_CRIT "mcpcia: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr = mcpcia_ioremap(addr);
-	}
-#endif
-
 	return *(vuip)addr;
 }
 
 __EXTERN_INLINE unsigned long mcpcia_readq(unsigned long addr)
 {
-#if __DEBUG_IOREMAP
-	if (addr <= 0x1000000000) {
-		printk(KERN_CRIT "mcpcia: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr = mcpcia_ioremap(addr);
-	}
-#endif
-
 	return *(vulp)addr;
 }
 
 __EXTERN_INLINE void mcpcia_writel(unsigned int b, unsigned long addr)
 {
-#if __DEBUG_IOREMAP
-	if (addr <= 0x1000000000) {
-		printk(KERN_CRIT "mcpcia: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr = mcpcia_ioremap(addr);
-	}
-#endif
-
 	*(vuip)addr = b;
 }
 
 __EXTERN_INLINE void mcpcia_writeq(unsigned long b, unsigned long addr)
 {
-#if __DEBUG_IOREMAP
-	if (addr <= 0x1000000000) {
-		printk(KERN_CRIT "mcpcia: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr = mcpcia_ioremap(addr);
-	}
-#endif
-
 	*(vulp)addr = b;
 }
 
@@ -547,22 +462,14 @@ __EXTERN_INLINE void mcpcia_writeq(unsigned long b, unsigned long addr)
 #define __outb		mcpcia_outb
 #define __outw		mcpcia_outw
 #define __outl		mcpcia_outl
-#ifdef CONFIG_ALPHA_SRM_SETUP
-# define __readb	mcpcia_srm_readb
-# define __readw	mcpcia_srm_readw
-# define __writeb	mcpcia_srm_writeb
-# define __writew	mcpcia_srm_writew
-#else
-# define __readb	mcpcia_readb
-# define __readw	mcpcia_readw
-# define __writeb	mcpcia_writeb
-# define __writew	mcpcia_writew
-#endif
+#define __readb		mcpcia_readb
+#define __readw		mcpcia_readw
+#define __writeb	mcpcia_writeb
+#define __writew	mcpcia_writew
 #define __readl		mcpcia_readl
 #define __readq		mcpcia_readq
 #define __writel	mcpcia_writel
 #define __writeq	mcpcia_writeq
-
 #define __ioremap	mcpcia_ioremap
 #define __is_ioaddr	mcpcia_is_ioaddr
 
@@ -571,12 +478,10 @@ __EXTERN_INLINE void mcpcia_writeq(unsigned long b, unsigned long addr)
 # define outb(x, port) \
   (__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
 
-#if !__DEBUG_IOREMAP
 #define __raw_readl(a)		__readl((unsigned long)(a))
 #define __raw_readq(a)		__readq((unsigned long)(a))
 #define __raw_writel(v,a)	__writel((v),(unsigned long)(a))
 #define __raw_writeq(v,a)	__writeq((v),(unsigned long)(a))
-#endif
 
 #endif /* __WANT_IO_DEF */
 

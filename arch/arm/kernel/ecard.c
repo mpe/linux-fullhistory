@@ -44,6 +44,7 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/pgtable.h>
+#include <asm/mmu_context.h>
 
 #ifdef CONFIG_ARCH_ARC
 #include <asm/arch/oldlatches.h>
@@ -231,8 +232,42 @@ static wait_queue_head_t ecard_wait;
 static wait_queue_head_t ecard_done;
 static struct ecard_request *ecard_req;
 
+/* to be removed when exec_mmap becomes extern */
+static int exec_mmap(void)
+{
+	struct mm_struct * mm, * old_mm;
+
+	old_mm = current->mm;
+	if (old_mm && atomic_read(&old_mm->mm_users) == 1) {
+		flush_cache_mm(old_mm);
+		mm_release();
+		exit_mmap(old_mm);
+		flush_tlb_mm(old_mm);
+		return 0;
+	}
+
+	mm = mm_alloc();
+	if (mm) {
+		struct mm_struct *active_mm = current->active_mm;
+
+		current->mm = mm;
+		current->active_mm = mm;
+		activate_mm(active_mm, mm);
+		mm_release();
+		if (old_mm) {
+			if (active_mm != old_mm) BUG();
+			mmput(old_mm);
+			return 0;
+		}
+		mmdrop(active_mm);
+		return 0;
+	}
+	return -ENOMEM;
+}
+
 /*
- * Set up the expansion card daemon's environment.
+ * Set up the expansion card
+ * daemon's environment.
  */
 static void
 ecard_init_task(void)
@@ -250,6 +285,8 @@ ecard_init_task(void)
 	 */
 	pgd_t *src_pgd, *dst_pgd;
 	unsigned int dst_addr = IO_START;
+
+	exec_mmap();
 
 	src_pgd = pgd_offset(current->mm, IO_BASE);
 	dst_pgd = pgd_offset(current->mm, dst_addr);
@@ -333,7 +370,7 @@ ecard_call(struct ecard_request *req)
 	 * call the loader.  We can't schedule, or
 	 * sleep for this call.
 	 */
-	if ((current == task[0] || in_interrupt()) &&
+	if ((current == &init_task || in_interrupt()) &&
 	    req->req == req_reset && req->ec == NULL) {
 		ecard_init_task();
 		ecard_task_reset(req);
@@ -798,8 +835,6 @@ unsigned int ecard_address(ecard_t *ec, card_type_t type, card_speed_t speed)
 	return address;
 }
 
-static const char *unknown = "*unknown*";
-
 static int ecard_prints(char *buffer, ecard_t *ec)
 {
 	char *start = buffer;
@@ -818,7 +853,7 @@ static int ecard_prints(char *buffer, ecard_t *ec)
 			ec->card_desc = kmalloc(strlen(incd.d.string)+1, GFP_KERNEL);
 
 			if (ec->card_desc)
-				strcpy(ec->card_desc, incd.d.string);
+				strcpy((char *)ec->card_desc, incd.d.string);
 		}
 
 		buffer += sprintf(buffer, "%s\n", ec->card_desc ? ec->card_desc : "*unknown*");

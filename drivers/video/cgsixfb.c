@@ -1,4 +1,4 @@
-/* $Id: cgsixfb.c,v 1.17 1999/05/25 01:00:31 davem Exp $
+/* $Id: cgsixfb.c,v 1.19 1999/08/10 15:56:03 davem Exp $
  * cgsixfb.c: CGsix (GX,GXplus) frame buffer driver
  *
  * Copyright (C) 1996,1998 Jakub Jelinek (jj@ultra.linux.cz)
@@ -588,6 +588,18 @@ static void cg6_margins (struct fb_info_sbusfb *fb, struct display *p, int x_mar
 	p->screen_base += (y_margin - fb->y_margin) * p->line_length + (x_margin - fb->x_margin);
 }
 
+static int __init cg6_rasterimg (struct fb_info *info, int start)
+{
+	struct fb_info_sbusfb *fb = sbusfbinfo(info);
+	register struct cg6_fbc *fbc = fb->s.cg6.fbc;
+	int i;
+	
+	do {
+		i = fbc->s;
+	} while (i & 0x10000000);
+	return 0;
+}
+
 static char idstring[70] __initdata = { 0 };
 
 char __init *cgsixfb_init(struct fb_info_sbusfb *fb)
@@ -601,10 +613,20 @@ char __init *cgsixfb_init(struct fb_info_sbusfb *fb)
 	char *p;
 	char *cardtype;
 	struct bt_regs *bt;
+	struct fb_ops *fbops;
 
-	strcpy(fb->info.modename, "CGsix");
-		
-	strcpy(fix->id, "CGsix");
+	fbops = kmalloc(sizeof(*fbops), GFP_KERNEL);
+	if (!fbops) return NULL;
+	
+	*fbops = *fb->info.fbops;
+	fbops->fb_rasterimg = cg6_rasterimg;
+	fb->info.fbops = fbops;
+	
+	if (prom_getbool (fb->prom_node, "dblbuf")) {
+		type->fb_size *= 4;
+		fix->smem_len *= 4;
+	}
+
 	fix->line_length = fb->var.xres_virtual;
 	fix->accel = FB_ACCEL_SUN_CGSIX;
 	
@@ -660,9 +682,9 @@ char __init *cgsixfb_init(struct fb_info_sbusfb *fb)
 
 	if (((conf >> CG6_FHC_REV_SHIFT) & CG6_FHC_REV_MASK) >= 11) {
 		if (fix->smem_len <= 0x100000) {
-			cardtype = "TurboGX";
+			cardtype = "TGX";
 		} else {
-			cardtype = "TurboGX+";
+			cardtype = "TGX+";
 		}
 	} else {
 		if (fix->smem_len <= 0x100000) {
@@ -680,6 +702,9 @@ char __init *cgsixfb_init(struct fb_info_sbusfb *fb)
 #endif
 		    (fb->s.cg6.thc->thc_misc >> CG6_THC_MISC_REV_SHIFT) & CG6_THC_MISC_REV_MASK,
 		    p, conf >> CG6_FHC_REV_SHIFT & CG6_FHC_REV_MASK, cardtype);
+
+	sprintf(fb->info.modename, "CGsix [%s]", cardtype);
+	sprintf(fix->id, "CGsix [%s]", cardtype);
 		    
 	cg6_reset(fb);
 		    

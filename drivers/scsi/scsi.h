@@ -715,7 +715,7 @@ static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors
 	DECLARE_WAITQUEUE(wait, current);	    \
 	add_wait_queue(QUEUE, &wait);		    \
 	for(;;) {			            \
-	current->state = TASK_UNINTERRUPTIBLE;	    \
+	set_current_state(TASK_UNINTERRUPTIBLE);    \
 	if (CONDITION) {		            \
             if (in_interrupt())	                    \
 	        panic("scsi: trying to call schedule() in interrupt" \

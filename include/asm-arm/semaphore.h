@@ -6,11 +6,12 @@
 
 #include <linux/linkage.h>
 #include <asm/atomic.h>
+#include <asm/spinlock.h>
 #include <linux/wait.h>
 
 struct semaphore {
 	atomic_t count;
-	int waking;
+	int sleepers;
 	wait_queue_head_t wait;
 };
 
@@ -30,7 +31,7 @@ struct semaphore {
 #define sema_init(sem, val)			\
 do {						\
 	atomic_set(&((sem)->count), (val));	\
-	(sem)->waking = 0;			\
+	(sem)->sleepers = 0;			\
 	init_waitqueue_head(&(sem)->wait);	\
 } while (0)
 
@@ -46,7 +47,7 @@ static inline void init_MUTEX_LOCKED(struct semaphore *sem)
 
 asmlinkage void __down_failed (void /* special register calling convention */);
 asmlinkage int  __down_interruptible_failed (void /* special register calling convention */);
-asmlinkage int  __down_failed_trylock(void  /* params in registers */);
+asmlinkage int  __down_trylock_failed(void  /* params in registers */);
 asmlinkage void __up_wakeup (void /* special register calling convention */);
 
 extern void __down(struct semaphore * sem);

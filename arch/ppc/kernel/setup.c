@@ -1,5 +1,5 @@
 /*
- * $Id: setup.c,v 1.138 1999/07/11 16:32:21 cort Exp $
+ * $Id: setup.c,v 1.146 1999/08/31 06:54:08 davem Exp $
  * Common prep/pmac/chrp boot and setup code.
  */
 
@@ -12,6 +12,7 @@
 #include <linux/delay.h>
 #include <linux/blk.h>
 
+#include <asm/init.h>
 #include <asm/adb.h>
 #include <asm/cuda.h>
 #include <asm/pmu.h>
@@ -58,6 +59,12 @@ extern void mbx_init(unsigned long r3,
 		     unsigned long r7);
 
 extern void apus_init(unsigned long r3,
+                      unsigned long r4,
+                      unsigned long r5,
+                      unsigned long r6,
+                      unsigned long r7);
+
+extern void gemini_init(unsigned long r3,
                       unsigned long r4,
                       unsigned long r5,
                       unsigned long r6,
@@ -267,6 +274,15 @@ int get_cpuinfo(char *buffer)
 			
 			cpu_node = find_type_devices("cpu");
 			if ( !cpu_node ) break;
+			{
+				int s;
+				for ( s = 0; (s < i) && cpu_node->next ;
+				      s++, cpu_node = cpu_node->next )
+					/* nothing */ ;
+				if ( s != i )
+					printk("get_cpuinfo(): ran out of "
+					       "cpu nodes.\n");
+			}
 			fp = (int *) get_property(cpu_node, "clock-frequency", NULL);
 			if ( !fp ) break;
 			len += sprintf(len+buffer, "clock\t\t: %dMHz\n",
@@ -392,6 +408,8 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 	_machine = _MACH_fads;
 #elif defined(CONFIG_APUS)
 	_machine = _MACH_apus;
+#elif defined(CONFIG_GEMINI)
+	_machine = _MACH_gemini;
 #else
 #error "Machine not defined correctly"
 #endif /* CONFIG_APUS */
@@ -475,6 +493,9 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
                 mbx_init(r3, r4, r5, r6, r7);
                 break;
 #endif
+	case _MACH_gemini:
+		gemini_init(r3, r4, r5, r6, r7);
+		break;
 	default:
 		printk("Unknown machine type in identify_machine!\n");
 	}
@@ -500,16 +521,18 @@ void ppc_setup_l2cr(char *str, int *ints)
 	}
 }
 
-void __init
-	   ppc_init(void)
+void __init ppc_init(void)
 {
+	/* clear the progress line */
+	if ( ppc_md.progress ) ppc_md.progress(" ", 0xffff);
+	
 	if (ppc_md.init != NULL) {
 		ppc_md.init();
 	}
 }
 
 void __init setup_arch(char **cmdline_p,
-			   unsigned long * memory_start_p, unsigned long * memory_end_p)
+		       unsigned long * memory_start_p, unsigned long * memory_end_p)
 {
 	extern int panic_timeout;
 	extern char _etext[], _edata[];
@@ -526,7 +549,7 @@ void __init setup_arch(char **cmdline_p,
  
 	/* reboot on panic */	
 	panic_timeout = 180;
-	
+
 	init_mm.start_code = PAGE_OFFSET;
 	init_mm.end_code = (unsigned long) _etext;
 	init_mm.end_data = (unsigned long) _edata;
@@ -541,7 +564,7 @@ void __init setup_arch(char **cmdline_p,
 
 	ppc_md.setup_arch(memory_start_p, memory_end_p);
 	/* clear the progress line */
-	if ( ppc_md.progress ) ppc_md.progress(" ", 0xffff);
+	if ( ppc_md.progress ) ppc_md.progress("arch: exit", 0x3eab);
 }
 
 void ppc_generic_ide_fix_driveid(struct hd_driveid *id)

@@ -94,8 +94,6 @@ static struct adb_controller	cuda_controller = {
 	cuda_poll
 };
 
-__openfirmware
-
 void
 find_via_cuda()
 {
@@ -340,10 +338,11 @@ cuda_poll()
 {
     int ie;
 
-    ie = _disable_interrupts();
+    __save_flags(ie);
+    __cli();
     if (via[IFR] & SR_INT)
 	via_interrupt(0, 0, 0);
-    _enable_interrupts(ie);
+    __restore_flags(ie);
 }
 
 static void

@@ -15,8 +15,8 @@
 
 #include <asm/spinlock.h>
 
-struct resource ioport_resource = { "PCI IO", 0x0000, 0xFFFF };
-struct resource iomem_resource = { "PCI mem", 0x00000000, 0xFFFFFFFF };
+struct resource ioport_resource = { "PCI IO", 0x0000, 0xFFFF, IORESOURCE_IO };
+struct resource iomem_resource = { "PCI mem", 0x00000000, 0xFFFFFFFF, IORESOURCE_MEM };
 
 static rwlock_t resource_lock = RW_LOCK_UNLOCKED;
 

@@ -1,4 +1,4 @@
-/* $Id: hypersparc.S,v 1.13 1998/02/13 15:35:09 jj Exp $
+/* $Id: hypersparc.S,v 1.14 1999/08/14 03:51:47 anton Exp $
  * hypersparc.S: High speed Hypersparc mmu/cache operations.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -13,7 +13,7 @@
 
 #define WINDOW_FLUSH(tmp1, tmp2)					\
 	mov	0, tmp1;						\
-98:	ld	[%g6 + AOFF_task_tss + AOFF_thread_uwinmask], tmp2;	\
+98:	ld	[%g6 + AOFF_task_thread + AOFF_thread_uwinmask], tmp2;	\
 	orcc	%g0, tmp2, %g0;						\
 	add	tmp1, 1, tmp1;						\
 	bne	98b;							\

@@ -43,6 +43,8 @@ struct termio {
 #define TIOCM_DSR	0x100
 #define TIOCM_CD	TIOCM_CAR
 #define TIOCM_RI	TIOCM_RNG
+#define TIOCM_OUT1	0x2000
+#define TIOCM_OUT2	0x4000
 
 /* ioctl (fd, TIOCSERGETLSR, &result) where result may be as below */
 
@@ -60,6 +62,7 @@ struct termio {
 #define N_PROFIBUS_FDL	10	/* Reserved for Profibus <Dave@mvhi.com> */
 #define N_IRDA		11	/* Linux IrDa - http://www.cs.uit.no/~dagb/irda/irda.html */
 #define N_SMSBLOCK	12	/* SMS block mode - for talking to GSM data cards about SMS messages */
+#define N_HDLC		13	/* synchronous HDLC */
 
 #ifdef __KERNEL__
 

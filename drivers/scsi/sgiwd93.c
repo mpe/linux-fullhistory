@@ -217,7 +217,7 @@ static inline void init_hpc_chain(uchar *buf)
 	hcp->desc.pnext = PHYSADDR(buf);
 }
 
-__initfunc(int sgiwd93_detect(Scsi_Host_Template *HPsUX))
+int __init sgiwd93_detect(Scsi_Host_Template *HPsUX)
 {
 	static unsigned char called = 0;
 	struct hpc3_scsiregs *hregs = &hpc3c0->scsi_chan0;

@@ -1,34 +1,45 @@
 /*
  * linux/include/asm-arm/procinfo.h
  *
- * Copyright (C) 1996 Russell King
+ * Copyright (C) 1996-1999 Russell King
  */
-
 #ifndef __ASM_PROCINFO_H
 #define __ASM_PROCINFO_H
 
-#include <asm/proc-fns.h>
-
 #ifndef __ASSEMBLER__
 
-#define HWCAP_SWP	(1 << 0)
-#define HWCAP_HALF	(1 << 1)
+#include <asm/proc-fns.h>
 
-struct armversions {
-	const unsigned long id;		/* Processor ID			*/
-	const unsigned long mask;	/* Processor ID mask		*/
-	const char *manu;		/* Manufacturer			*/
-	const char *name;		/* Processor name		*/
-	const char *arch_vsn;		/* Architecture version		*/
-	const char *elf_vsn;		/* ELF library version		*/
-	const int hwcap;		/* ELF HWCAP			*/
-	const struct processor *proc;	/* Processor-specific ASM	*/
+struct proc_info_item {
+	const char	 *manufacturer;
+	const char	 *cpu_name;
 };
 
-extern const struct armversions armidlist[];
-extern int armidindex;
+/*
+ * Note!  struct processor is always defined if we're
+ * using MULTI_CPU, otherwise this entry is unused,
+ * but still exists.
+ */
+struct proc_info_list {
+	unsigned int	 cpu_val;
+	unsigned int	 cpu_mask;
+	const char	 *arch_name;
+	const char	 *elf_name;
+	unsigned int	 elf_hwcap;
+	struct proc_info_item *info;
+#ifdef MULTI_CPU
+	struct processor *proc;
+#else
+	void		 *unused;
+#endif
+};
 
 #endif
+
+#define HWCAP_SWP	1
+#define HWCAP_HALF	2
+#define HWCAP_THUMB	4
+#define HWCAP_26BIT	8	/* Play it safe */
 
 #endif
 

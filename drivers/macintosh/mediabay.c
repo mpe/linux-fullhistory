@@ -25,7 +25,7 @@
 #include <asm/io.h>
 #include <asm/feature.h>
 #include <asm/mediabay.h>
-#include <linux/init.h>
+#include <asm/init.h>
 
 
 #undef MB_USE_INTERRUPTS
@@ -64,8 +64,7 @@ int media_bay_count = 0;
 #ifdef CONFIG_BLK_DEV_IDE
 /* check the busy bit in the media-bay ide interface
    (assumes the media-bay contains an ide device) */
-#define MB_IDE_READY(i)	((in_8((volatile unsigned char *) \
-			       (media_bays[i].cd_base + 0x70)) & 0x80) == 0)
+#define MB_IDE_READY(i)	((inb(media_bays[i].cd_base + 0x70) & 0x80) == 0)
 #endif
 
 /*

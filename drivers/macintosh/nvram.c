@@ -17,12 +17,6 @@
 
 #define NVRAM_SIZE	8192
 
-/* when building as a module, __openfirmware is both unavailable
- * and unnecessary. */
-#ifndef MODULE
-__openfirmware
-#endif
-
 static long long nvram_llseek(struct file *file, loff_t offset, int origin)
 {
 	switch (origin) {

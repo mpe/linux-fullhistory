@@ -12,10 +12,6 @@ ifeq ($(CONFIG_DECNET_RAW),y)
 O_OBJS += dn_raw.o
 endif
 
-#ifeq ($(CONFIG_DECNET_MOP),y)
-#O_OBJS += dn_mop.o
-#endif
-
 ifeq ($(CONFIG_DECNET_FW),y)
 O_OBJS += dn_fw.o
 endif

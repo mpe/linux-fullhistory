@@ -577,7 +577,7 @@ EXPORT_NO_SYMBOLS;
 #ifdef MODULE
 int init_module(void)
 #else
-__initfunc(int openprom_init(void))
+int __init openprom_init(void)
 #endif
 {
 	unsigned long flags;

@@ -57,7 +57,10 @@ floppy: zImage
 	mcopy zImage a:zImage
 
 piggyback: piggyback.c
-	$(HOSTCC) -DKERNELBASE=$(KERNELBASE) -o piggyback piggyback.c
+	$(HOSTCC) $(HOSTCFLAGS) -DKERNELBASE=$(KERNELBASE) -o piggyback piggyback.c
+
+mknote: mknote.c
+	$(HOSTCC) $(HOSTCFLAGS) -o mknote mknote.c
 
 image.o: piggyback ../coffboot/vmlinux.gz
 	./piggyback image < ../coffboot/vmlinux.gz | $(AS) -o image.o
@@ -69,9 +72,6 @@ zImage: $(OBJS) no_initrd.o mknote
 	$(LD) $(LD_ARGS) -o $@ $(OBJS) no_initrd.o $(LIBS)
 	./mknote > note
 	$(OBJCOPY) $@ $@ --add-section=.note=note -R .comment
-
-mknote: mknote.c
-	$(HOSTCC) $(HOSTCFLAGS) -o $@ mknote.c
 
 zImage.initrd: $(OBJS) initrd.o
 	$(LD) $(LD_ARGS) -o $@ $(OBJS) initrd.o $(LIBS)

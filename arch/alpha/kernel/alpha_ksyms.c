@@ -36,6 +36,7 @@
 extern struct hwrpb_struct *hwrpb;
 extern void dump_thread(struct pt_regs *, struct user *);
 extern int dump_fpu(struct pt_regs *, elf_fpregset_t *);
+extern void ___delay(void);
 
 /* these are C runtime functions with special calling conventions: */
 extern void __divl (void);
@@ -146,6 +147,11 @@ EXPORT_SYMBOL(__strlen_user);
 EXPORT_SYMBOL_NOVERS(__down_failed);
 EXPORT_SYMBOL_NOVERS(__down_failed_interruptible);
 EXPORT_SYMBOL_NOVERS(__up_wakeup);
+
+/*
+ * This is called specially from __delay.
+ */
+EXPORT_SYMBOL_NOVERS(___delay);
 
 /* 
  * SMP-specific symbols.

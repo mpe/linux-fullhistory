@@ -25,12 +25,12 @@ foreach $file (@ARGV)
 	m+/\*+o && (s+/\*.*?\*/+ +go, (s+/\*.*$+ +o && ($fInComment = 1)));
 
 	# Pick up definitions.
-	if ( m/^#/o )
+	if ( m/^\s*#/o )
 	{
-	    $iLinuxConfig      = $. if m/^#\s*include\s*<linux\/config\.h>/o;
-	    $configList{uc $1} = 1  if m/^#\s*include\s*<config\/(\S*)\.h>/o;
-	    $configList{$1}    = 1  if m/^#\s*define\s+CONFIG_(\w*)/o;
-	    $configList{$1}    = 1  if m/^#\s*undef\s+CONFIG_(\w*)/o;
+	    $iLinuxConfig      = $. if m/^\s*#\s*include\s*<linux\/config\.h>/o;
+	    $configList{uc $1} = 1  if m/^\s*#\s*include\s*<config\/(\S*)\.h>/o;
+	    $configList{$1}    = 1  if m/^\s*#\s*define\s+CONFIG_(\w*)/o;
+	    $configList{$1}    = 1  if m/^\s*#\s*undef\s+CONFIG_(\w*)/o;
 	}
 
 	# Look for usages.

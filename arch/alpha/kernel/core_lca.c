@@ -1,12 +1,13 @@
 /*
  *	linux/arch/alpha/kernel/core_lca.c
  *
- * Code common to all LCA core logic chips.
- *
  * Written by David Mosberger (davidm@cs.arizona.edu) with some code
  * taken from Dave Rusling's (david.rusling@reo.mts.dec.com) 32-bit
  * bios code.
+ *
+ * Code common to all LCA core logic chips.
  */
+
 #include <linux/kernel.h>
 #include <linux/config.h>
 #include <linux/types.h>
@@ -17,6 +18,7 @@
 #include <asm/ptrace.h>
 #include <asm/system.h>
 #include <asm/smp.h>
+#include <asm/pci.h>
 
 #define __EXTERN_INLINE inline
 #include <asm/io.h>
@@ -24,6 +26,8 @@
 #undef __EXTERN_INLINE
 
 #include "proto.h"
+#include "pci_impl.h"
+
 
 /*
  * BIOS32-style PCI interface:
@@ -97,9 +101,11 @@
  */
 
 static int
-mk_conf_addr(u8 bus, u8 device_fn, u8 where, unsigned long *pci_addr)
+mk_conf_addr(struct pci_dev *dev, int where, unsigned long *pci_addr)
 {
 	unsigned long addr;
+	u8 bus = dev->bus->number;
+	u8 device_fn = dev->devfn;
 
 	if (bus == 0) {
 		int device = device_fn >> 3;
@@ -194,154 +200,103 @@ conf_write(unsigned long addr, unsigned int value)
 	__restore_flags(flags);
 }
 
-int
-lca_hose_read_config_byte (u8 bus, u8 device_fn, u8 where, u8 *value,
-			   struct linux_hose_info *hose)
+static int
+lca_read_config_byte(struct pci_dev *dev, int where, u8 *value)
 {
-	unsigned long addr = LCA_CONF;
-	unsigned long pci_addr;
+	unsigned long addr, pci_addr;
 
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr))
+	if (mk_conf_addr(dev, where, &pci_addr))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	addr |= (pci_addr << 5) + 0x00;
+	addr = (pci_addr << 5) + 0x00 + LCA_CONF;
 	*value = conf_read(addr) >> ((where & 3) * 8);
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int 
-lca_hose_read_config_word (u8 bus, u8 device_fn, u8 where, u16 *value,
-			   struct linux_hose_info *hose)
+static int 
+lca_read_config_word(struct pci_dev *dev, int where, u16 *value)
 {
-	unsigned long addr = LCA_CONF;
-	unsigned long pci_addr;
+	unsigned long addr, pci_addr;
 
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr))
+	if (mk_conf_addr(dev, where, &pci_addr))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	addr |= (pci_addr << 5) + 0x08;
+	addr = (pci_addr << 5) + 0x08 + LCA_CONF;
 	*value = conf_read(addr) >> ((where & 3) * 8);
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int
-lca_hose_read_config_dword (u8 bus, u8 device_fn, u8 where, u32 *value,
-			    struct linux_hose_info *hose)
+static int
+lca_read_config_dword(struct pci_dev *dev, int where, u32 *value)
 {
-	unsigned long addr = LCA_CONF;
-	unsigned long pci_addr;
+	unsigned long addr, pci_addr;
 
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr))
+	if (mk_conf_addr(dev, where, &pci_addr))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	addr |= (pci_addr << 5) + 0x18;
+	addr = (pci_addr << 5) + 0x18 + LCA_CONF;
 	*value = conf_read(addr);
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int 
-lca_hose_write_config_byte (u8 bus, u8 device_fn, u8 where, u8 value,
-			    struct linux_hose_info *hose)
+static int 
+lca_write_config(struct pci_dev *dev, int where, u32 value, long mask)
 {
-	unsigned long addr = LCA_CONF;
-	unsigned long pci_addr;
+	unsigned long addr, pci_addr;
 
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr))
+	if (mk_conf_addr(dev, where, &pci_addr))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	addr |= (pci_addr << 5) + 0x00;
+	addr = (pci_addr << 5) + mask + LCA_CONF;
 	conf_write(addr, value << ((where & 3) * 8));
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int
-lca_hose_write_config_word (u8 bus, u8 device_fn, u8 where, u16 value,
-			    struct linux_hose_info *hose)
+static int
+lca_write_config_byte(struct pci_dev *dev, int where, u8 value)
 {
-	unsigned long addr = LCA_CONF;
-	unsigned long pci_addr;
-
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr))
-		return PCIBIOS_DEVICE_NOT_FOUND;
-
-	addr |= (pci_addr << 5) + 0x08;
-	conf_write(addr, value << ((where & 3) * 8));
-	return PCIBIOS_SUCCESSFUL;
+	return lca_write_config(dev, where, value, 0x00);
 }
 
-int 
-lca_hose_write_config_dword (u8 bus, u8 device_fn, u8 where, u32 value,
-			     struct linux_hose_info *hose)
+static int
+lca_write_config_word(struct pci_dev *dev, int where, u16 value)
 {
-	unsigned long addr = LCA_CONF;
-	unsigned long pci_addr;
-
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr))
-		return PCIBIOS_DEVICE_NOT_FOUND;
-
-	addr |= (pci_addr << 5) + 0x18;
-	conf_write(addr, value << ((where & 3) * 8));
-	return PCIBIOS_SUCCESSFUL;
+	return lca_write_config(dev, where, value, 0x08);
 }
 
+static int
+lca_write_config_dword(struct pci_dev *dev, int where, u32 value)
+{
+	return lca_write_config(dev, where, value, 0x18);
+}
+
+struct pci_ops lca_pci_ops = 
+{
+	read_byte:	lca_read_config_byte,
+	read_word:	lca_read_config_word,
+	read_dword:	lca_read_config_dword,
+	write_byte:	lca_write_config_byte,
+	write_word:	lca_write_config_word,
+	write_dword:	lca_write_config_dword
+};
+
 void __init
 lca_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 {
-	switch (alpha_use_srm_setup)
-	{
-	default:
-#if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_SRM_SETUP)
-		/* Check window 0 for enabled and mapped to 0.  */
-		if ((*(vulp)LCA_IOC_W_BASE0 & (1UL<<33))
-		    && (*(vulp)LCA_IOC_T_BASE0 == 0)) {
-			LCA_DMA_WIN_BASE = *(vulp)LCA_IOC_W_BASE0 & 0xffffffffUL;
-			LCA_DMA_WIN_SIZE = *(vulp)LCA_IOC_W_MASK0 & 0xffffffffUL;
-			LCA_DMA_WIN_SIZE += 1;
-#if 0
-			printk("lca_init: using Window 0 settings\n");
-			printk("lca_init: BASE 0x%lx MASK 0x%lx TRANS 0x%lx\n",
-			       *(vulp)LCA_IOC_W_BASE0,
-			       *(vulp)LCA_IOC_W_MASK0,
-			       *(vulp)LCA_IOC_T_BASE0);
-#endif
-			break;
-		}
+	struct pci_controler *hose;
 
-		/* Check window 2 for enabled and mapped to 0.  */
-		if ((*(vulp)LCA_IOC_W_BASE1 & (1UL<<33))
-		    && (*(vulp)LCA_IOC_T_BASE1 == 0)) {
-			LCA_DMA_WIN_BASE = *(vulp)LCA_IOC_W_BASE1 & 0xffffffffUL;
-			LCA_DMA_WIN_SIZE = *(vulp)LCA_IOC_W_MASK1 & 0xffffffffUL;
-			LCA_DMA_WIN_SIZE += 1;
-#if 1
-			printk("lca_init: using Window 1 settings\n");
-			printk("lca_init: BASE 0x%lx MASK 0x%lx TRANS 0x%lx\n",
-			       *(vulp)LCA_IOC_W_BASE1,
-			       *(vulp)LCA_IOC_W_MASK1,
-			       *(vulp)LCA_IOC_T_BASE1);
-#endif
-			break;
-		}
+	/*
+	 * Set up the PCI->physical memory translation windows.
+	 * For now, window 1 is disabled.  In the future, we may
+	 * want to use it to do scatter/gather DMA. 
+	 *
+	 * Window 0 goes at 1 GB and is 1 GB large.
+	 */
+	*(vulp)LCA_IOC_W_BASE0 = 1UL << 33 | LCA_DMA_WIN_BASE;
+	*(vulp)LCA_IOC_W_MASK0 = LCA_DMA_WIN_SIZE - 1;
+	*(vulp)LCA_IOC_T_BASE0 = 0;
 
-		/* Otherwise, we must use our defaults.  */
-		LCA_DMA_WIN_BASE = LCA_DMA_WIN_BASE_DEFAULT;
-		LCA_DMA_WIN_SIZE = LCA_DMA_WIN_SIZE_DEFAULT;
-#endif
-	case 0:
-		/*
-		 * Set up the PCI->physical memory translation windows.
-		 * For now, window 1 is disabled.  In the future, we may
-		 * want to use it to do scatter/gather DMA. 
-		 *
-		 * Window 0 goes at 1 GB and is 1 GB large.
-		 */
-		*(vulp)LCA_IOC_W_BASE1 = 0UL<<33;
-
-		*(vulp)LCA_IOC_W_BASE0 = 1UL<<33 | LCA_DMA_WIN_BASE_DEFAULT;
-		*(vulp)LCA_IOC_W_MASK0 = LCA_DMA_WIN_SIZE_DEFAULT - 1;
-		*(vulp)LCA_IOC_T_BASE0 = 0;
-		break;
-	}
+	*(vulp)LCA_IOC_W_BASE1 = 0UL;
 
 	/*
 	 * Disable PCI parity for now.  The NCR53c810 chip has
@@ -349,6 +304,16 @@ lca_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 	 * data parity errors.
 	 */
 	*(vulp)LCA_IOC_PAR_DIS = 1UL<<5;
+
+	/*
+	 * Create our single hose.
+	 */
+
+	hose = alloc_pci_controler(mem_start);
+	hose->io_space = &ioport_resource;
+	hose->mem_space = &iomem_resource;
+	hose->config_space = LCA_CONF;
+	hose->index = 0;
 }
 
 /*
@@ -376,7 +341,7 @@ lca_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 #define IOC_P_NBR	((__u32) ~((1<<13) - 1))
 
 static void
-mem_error (unsigned long esr, unsigned long ear)
+mem_error(unsigned long esr, unsigned long ear)
 {
 	printk("    %s %s error to %s occurred at address %x\n",
 	       ((esr & ESR_CEE) ? "Correctable" :
@@ -399,7 +364,7 @@ mem_error (unsigned long esr, unsigned long ear)
 }
 
 static void
-ioc_error (__u32 stat0, __u32 stat1)
+ioc_error(__u32 stat0, __u32 stat1)
 {
 	static const char * const pci_cmd[] = {
 		"Interrupt Acknowledge", "Special", "I/O Read", "I/O Write",
@@ -430,8 +395,8 @@ ioc_error (__u32 stat0, __u32 stat1)
 }
 
 void
-lca_machine_check (unsigned long vector, unsigned long la_ptr,
-		   struct pt_regs *regs)
+lca_machine_check(unsigned long vector, unsigned long la_ptr,
+		  struct pt_regs *regs)
 {
 	const char * reason;
 	union el_lca el;

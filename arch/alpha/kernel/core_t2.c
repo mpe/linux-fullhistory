@@ -1,14 +1,14 @@
 /*
  *	linux/arch/alpha/kernel/core_t2.c
  *
- * Code common to all T2 core logic chips.
- *
  * Written by Jay A Estabrook (jestabro@amt.tay1.dec.com).
  * December 1996.
  *
  * based on CIA code by David A Rusling (david.rusling@reo.mts.dec.com)
  *
+ * Code common to all T2 core logic chips.
  */
+
 #include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
@@ -18,6 +18,7 @@
 
 #include <asm/ptrace.h>
 #include <asm/system.h>
+#include <asm/pci.h>
 
 #define __EXTERN_INLINE
 #include <asm/io.h>
@@ -25,6 +26,8 @@
 #undef __EXTERN_INLINE
 
 #include "proto.h"
+#include "pci_impl.h"
+
 
 /*
  * NOTE: Herein lie back-to-back mb instructions.  They are magic. 
@@ -88,10 +91,12 @@
  */
 
 static int
-mk_conf_addr(u8 bus, u8 device_fn, u8 where, unsigned long *pci_addr,
+mk_conf_addr(struct pci_dev *dev, int where, unsigned long *pci_addr,
 	     unsigned char *type1)
 {
 	unsigned long addr;
+	u8 bus = dev->bus->number;
+	u8 device_fn = dev->devfn;
 
 	DBG(("mk_conf_addr(bus=%d, dfn=0x%x, where=0x%x,"
 	     " addr=0x%lx, type1=0x%x)\n",
@@ -234,105 +239,94 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1)
 	__restore_flags(flags);
 }
 
-int
-t2_hose_read_config_byte (u8 bus, u8 device_fn, u8 where, u8 *value,
-			  struct linux_hose_info *hose)
+static int
+t2_read_config_byte(struct pci_dev *dev, int where, u8 *value)
 {
-	unsigned long addr = T2_CONF;
-	unsigned long pci_addr;
+	unsigned long addr, pci_addr;
 	unsigned char type1;
 
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
+	if (mk_conf_addr(dev, where, &pci_addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	addr |= (pci_addr << 5) + 0x00;
+	addr = (pci_addr << 5) + 0x00 + T2_CONF;
 	*value = conf_read(addr, type1) >> ((where & 3) * 8);
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int 
-t2_hose_read_config_word (u8 bus, u8 device_fn, u8 where, u16 *value,
-			  struct linux_hose_info *hose)
+static int 
+t2_read_config_word(struct pci_dev *dev, int where, u16 *value)
 {
-	unsigned long addr = T2_CONF;
-	unsigned long pci_addr;
+	unsigned long addr, pci_addr;
 	unsigned char type1;
 
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
+	if (mk_conf_addr(dev, where, &pci_addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	addr |= (pci_addr << 5) + 0x08;
+	addr = (pci_addr << 5) + 0x08 + T2_CONF;
 	*value = conf_read(addr, type1) >> ((where & 3) * 8);
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int 
-t2_hose_read_config_dword (u8 bus, u8 device_fn, u8 where, u32 *value,
-			   struct linux_hose_info *hose)
+static int 
+t2_read_config_dword(struct pci_dev *dev, int where, u32 *value)
 {
-	unsigned long addr = T2_CONF;
-	unsigned long pci_addr;
+	unsigned long addr, pci_addr;
 	unsigned char type1;
 
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
+	if (mk_conf_addr(dev, where, &pci_addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	addr |= (pci_addr << 5) + 0x18;
+	addr = (pci_addr << 5) + 0x18 + T2_CONF;
 	*value = conf_read(addr, type1);
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int 
-t2_hose_write_config_byte (u8 bus, u8 device_fn, u8 where, u8 value,
-			   struct linux_hose_info *hose)
+static int 
+t2_write_config(struct pci_dev *dev, int where, u32 value, long mask)
 {
-	unsigned long addr = T2_CONF;
-	unsigned long pci_addr;
+	unsigned long addr, pci_addr;
 	unsigned char type1;
 
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
+	if (mk_conf_addr(dev, where, &pci_addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	addr |= (pci_addr << 5) + 0x00;
+	addr = (pci_addr << 5) + mask + T2_CONF;
 	conf_write(addr, value << ((where & 3) * 8), type1);
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int
-t2_hose_write_config_word (u8 bus, u8 device_fn, u8 where, u16 value,
-			   struct linux_hose_info *hose)
+static int 
+t2_write_config_byte(struct pci_dev *dev, int where, u8 value)
 {
-	unsigned long addr = T2_CONF;
-	unsigned long pci_addr;
-	unsigned char type1;
-
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
-		return PCIBIOS_DEVICE_NOT_FOUND;
-
-	addr |= (pci_addr << 5) + 0x08;
-	conf_write(addr, value << ((where & 3) * 8), type1);
-	return PCIBIOS_SUCCESSFUL;
+	return t2_write_config(dev, where, value, 0x00);
 }
 
-int 
-t2_hose_write_config_dword (u8 bus, u8 device_fn, u8 where, u32 value,
-			    struct linux_hose_info *hose)
+static int 
+t2_write_config_word(struct pci_dev *dev, int where, u16 value)
 {
-	unsigned long addr = T2_CONF;
-	unsigned long pci_addr;
-	unsigned char type1;
-
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
-		return PCIBIOS_DEVICE_NOT_FOUND;
-
-	addr |= (pci_addr << 5) + 0x18;
-	conf_write(addr, value << ((where & 3) * 8), type1);
-	return PCIBIOS_SUCCESSFUL;
+	return t2_write_config(dev, where, value, 0x08);
 }
 
+static int 
+t2_write_config_dword(struct pci_dev *dev, int where, u32 value)
+{
+	return t2_write_config(dev, where, value, 0x18);
+}
+
+struct pci_ops t2_pci_ops = 
+{
+	read_byte:	t2_read_config_byte,
+	read_word:	t2_read_config_word,
+	read_dword:	t2_read_config_dword,
+	write_byte:	t2_write_config_byte,
+	write_word:	t2_write_config_word,
+	write_dword:	t2_write_config_dword
+};
+
 void __init
 t2_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 {
+	struct pci_controler *hose;
 	unsigned int i;
 
 	for (i = 0; i < NR_CPUS; i++) {
@@ -364,100 +358,39 @@ t2_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 	       *(vulp)T2_TBASE2);
 #endif
 
-	switch (alpha_use_srm_setup) 
-	{
-	default:
-#if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_SRM_SETUP)
-		/* Check window 1 for enabled and mapped to 0.  */
-		if (((*(vulp)T2_WBASE1 & (3UL<<18)) == (2UL<<18))
-		    && (*(vulp)T2_TBASE1 == 0)) {
-			T2_DMA_WIN_BASE = *(vulp)T2_WBASE1 & 0xfff00000UL;
-			T2_DMA_WIN_SIZE = *(vulp)T2_WMASK1 & 0xfff00000UL;
-			T2_DMA_WIN_SIZE += 0x00100000UL;
-			/* DISABLE window 2!! ?? */
-#if 1
-			printk("t2_init: using Window 1 settings\n");
-			printk("t2_init: BASE 0x%lx MASK 0x%lx TRANS 0x%lx\n",
-			       *(vulp)T2_WBASE1,
-			       *(vulp)T2_WMASK1,
-			       *(vulp)T2_TBASE1);
+	/*
+	 * Set up the PCI->physical memory translation windows.
+	 * For now, window 2 is  disabled.  In the future, we may
+	 * want to use it to do scatter/gather DMA. 
+	 *
+	 * Window 1 goes at 1 GB and is 1 GB large.
+	 */
+
+	/* WARNING!! must correspond to the DMA_WIN params!!! */
+	*(vulp)T2_WBASE1 = 0x400807ffU;
+	*(vulp)T2_WMASK1 = 0x3ff00000U;
+	*(vulp)T2_TBASE1 = 0;
+
+	*(vulp)T2_WBASE2 = 0x0;
+	*(vulp)T2_HBASE = 0x0;
+
+	/* Zero HAE.  */
+	*(vulp)T2_HAE_1 = 0; mb();
+	*(vulp)T2_HAE_2 = 0; mb();
+	*(vulp)T2_HAE_3 = 0; mb();
+#if 0
+	*(vulp)T2_HAE_4 = 0; mb(); /* do not touch this */
 #endif
-			break;
-		}
-
-		/* Check window 2 for enabled and mapped to 0.  */
-		if (((*(vulp)T2_WBASE2 & (3UL<<18)) == (2UL<<18))
-		    && (*(vulp)T2_TBASE2 == 0)) {
-			T2_DMA_WIN_BASE = *(vulp)T2_WBASE2 & 0xfff00000UL;
-			T2_DMA_WIN_SIZE = *(vulp)T2_WMASK2 & 0xfff00000UL;
-			T2_DMA_WIN_SIZE += 0x00100000UL;
-			/* DISABLE window 1!! ?? */
-#if 1
-			printk("t2_init: using Window 2 settings\n");
-			printk("t2_init: BASE 0x%lx MASK 0x%lx TRANS 0x%lx\n",
-			       *(vulp)T2_WBASE2,
-			       *(vulp)T2_WMASK2,
-			       *(vulp)T2_TBASE2);
-#endif
-			break;
-		}
-
-		/* Otherwise, we must use our defaults.  */
-		T2_DMA_WIN_BASE = T2_DMA_WIN_BASE_DEFAULT;
-		T2_DMA_WIN_SIZE = T2_DMA_WIN_SIZE_DEFAULT;
-#endif
-	case 0:
-		/*
-		 * Set up the PCI->physical memory translation windows.
-		 * For now, window 2 is  disabled.  In the future, we may
-		 * want to use it to do scatter/gather DMA. 
-		 *
-		 * Window 1 goes at 1 GB and is 1 GB large.
-		 */
-
-		/* WARNING!! must correspond to the DMA_WIN params!!! */
-		*(vulp)T2_WBASE1 = 0x400807ffU;
-		*(vulp)T2_WMASK1 = 0x3ff00000U;
-		*(vulp)T2_TBASE1 = 0;
-
-		*(vulp)T2_WBASE2 = 0x0;
-		*(vulp)T2_HBASE = 0x0;
-		break;
-	}
 
 	/*
-	 * Sigh... For the SRM setup, unless we know apriori what the HAE
-	 * contents will be, we need to setup the arbitrary region bases
-	 * so we can test against the range of addresses and tailor the
-	 * region chosen for the SPARSE memory access.
-	 *
-	 * See include/asm-alpha/t2.h for the SPARSE mem read/write.
+	 * Create our single hose.
 	 */
-	if (alpha_use_srm_setup) {
-		unsigned long t2_hae_1 = *(vulp)T2_HAE_1;
 
-		alpha_mv.sm_base_r1 = (t2_hae_1 << 27) & 0xf8000000UL;
-
-		/*
-		 * Set the HAE cache, so that setup_arch() code
-		 * will use the SRM setting always. Our readb/writeb
-		 * code in .h expects never to have to change
-		 * the contents of the HAE.
-		 */
-		alpha_mv.hae_cache = t2_hae_1;
-
-		alpha_mv.mv_readb = t2_srm_readb;
-		alpha_mv.mv_readw = t2_srm_readw;
-		alpha_mv.mv_writeb = t2_srm_writeb;
-		alpha_mv.mv_writew = t2_srm_writew;
-	} else {
-		*(vulp)T2_HAE_1 = 0; mb();
-		*(vulp)T2_HAE_2 = 0; mb();
-		*(vulp)T2_HAE_3 = 0; mb();
-#if 0
-		*(vulp)T2_HAE_4 = 0; mb(); /* do not touch this */
-#endif
-	}
+	hose = alloc_pci_controler(mem_start);
+	hose->io_space = &ioport_resource;
+	hose->mem_space = &iomem_resource;
+	hose->config_space = T2_CONF;
+	hose->index = 0;
 }
 
 #define SIC_SEIC (1UL << 33)    /* System Event Clear */

@@ -838,21 +838,21 @@ static int pcd_audio_ioctl(struct cdrom_device_info *cdi,
     
 	case CDROMPAUSE: 
 
-	{       char cmd[12]={SCMD_PAUSE_RESUME,0,0,0,0,0,0,0,0,0,0,0};
+	{       char cmd[12]={GPCMD_PAUSE_RESUME,0,0,0,0,0,0,0,0,0,0,0};
 
 		return (pcd_atapi(unit,cmd,0,NULL,"pause")) * EIO;
 	}
 
 	case CDROMRESUME:
 	
-	{       char cmd[12]={SCMD_PAUSE_RESUME,0,0,0,0,0,0,0,1,0,0,0};
+	{       char cmd[12]={GPCMD_PAUSE_RESUME,0,0,0,0,0,0,0,1,0,0,0};
 
 		return (pcd_atapi(unit,cmd,0,NULL,"resume")) * EIO;
 	}
 	
 	case CDROMPLAYMSF:
 
-	{	char cmd[12]={SCMD_PLAYAUDIO_MSF,0,0,0,0,0,0,0,0,0,0,0};
+	{	char cmd[12]={GPCMD_PLAY_AUDIO_MSF,0,0,0,0,0,0,0,0,0,0,0};
 		struct cdrom_msf* msf = (struct cdrom_msf*)arg;
 
 		cmd[3] = msf->cdmsf_min0;
@@ -867,7 +867,7 @@ static int pcd_audio_ioctl(struct cdrom_device_info *cdi,
 
     	case CDROMPLAYBLK:
 
-    	{	char cmd[12]={SCMD_PLAYAUDIO10,0,0,0,0,0,0,0,0,0,0,0};
+    	{	char cmd[12]={GPCMD_PLAY_AUDIO_10,0,0,0,0,0,0,0,0,0,0,0};
 		struct cdrom_blk* blk = (struct cdrom_blk*)arg;
 
 		cmd[2] = blk->from >> 24;
@@ -882,7 +882,7 @@ static int pcd_audio_ioctl(struct cdrom_device_info *cdi,
 		
     	case CDROMPLAYTRKIND:
 
-    	{	char cmd[12]={SCMD_PLAYAUDIO_TI,0,0,0,0,0,0,0,0,0,0,0};
+    	{	char cmd[12]={GPCMD_PLAYAUDIO_TI,0,0,0,0,0,0,0,0,0,0,0};
 		struct cdrom_ti* ti = (struct cdrom_ti*)arg;
 
 		cmd[4] = ti->cdti_trk0;
@@ -895,7 +895,7 @@ static int pcd_audio_ioctl(struct cdrom_device_info *cdi,
 	
     	case CDROMREADTOCHDR:
     
-	{	char cmd[12]={SCMD_READ_TOC,0,0,0,0,0,0,0,12,0,0,0};
+	{	char cmd[12]={GPCMD_READ_TOC_PMA_ATIP,0,0,0,0,0,0,0,12,0,0,0};
 		struct cdrom_tochdr* tochdr = (struct cdrom_tochdr*)arg;
 		char buffer[32];
 		int r;
@@ -910,7 +910,7 @@ static int pcd_audio_ioctl(struct cdrom_device_info *cdi,
 	
     	case CDROMREADTOCENTRY:
 
-    	{	char cmd[12]={SCMD_READ_TOC,0,0,0,0,0,0,0,12,0,0,0};
+    	{	char cmd[12]={GPCMD_READ_TOC_PMA_ATIP,0,0,0,0,0,0,0,12,0,0,0};
 
 		struct cdrom_tocentry* tocentry = (struct cdrom_tocentry*)arg;
 		unsigned char buffer[32];
@@ -938,21 +938,21 @@ static int pcd_audio_ioctl(struct cdrom_device_info *cdi,
 
     	case CDROMSTOP:
 
-	{	char cmd[12]={0x1b,1,0,0,0,0,0,0,0,0,0,0};
+	{	char cmd[12]={GPCMD_START_STOP_UNIT,1,0,0,0,0,0,0,0,0,0,0};
 
                 return (pcd_atapi(unit,cmd,0,NULL,"stop")) * EIO;
         }                                                         
 	
     	case CDROMSTART:
 
-        {       char cmd[12]={0x1b,1,0,0,1,0,0,0,0,0,0,0};
+        {       char cmd[12]={GPCMD_START_STOP_UNIT,1,0,0,1,0,0,0,0,0,0,0};
 
                 return (pcd_atapi(unit,cmd,0,NULL,"start")) * EIO;
         } 
 	
     	case CDROMVOLCTRL:
 
-	{	char cmd[12]={0x5a,0,0,0,0,0,0,0,0,0,0,0};
+	{	char cmd[12]={GPCMD_MODE_SENSE_10,0,0,0,0,0,0,0,0,0,0,0};
 		char buffer[32];
 		char mask[32];
 		struct cdrom_volctrl* volctrl = (struct cdrom_volctrl*)arg;
@@ -983,7 +983,7 @@ static int pcd_audio_ioctl(struct cdrom_device_info *cdi,
 
     	case CDROMVOLREAD:
 
-        {       char cmd[12]={0x5a,0,0,0,0,0,0,0,0,0,0,0};
+        {       char cmd[12]={GPCMD_MODE_SENSE_10,0,0,0,0,0,0,0,0,0,0,0};
                 char buffer[32];
                 struct cdrom_volctrl* volctrl = (struct cdrom_volctrl*)arg;
                 int     r;
@@ -1004,7 +1004,7 @@ static int pcd_audio_ioctl(struct cdrom_device_info *cdi,
 	
     	case CDROMSUBCHNL:
 
-	{	char cmd[12]={SCMD_READ_SUBCHANNEL,2,0x40,1,0,0,0,0,16,0,0,0};
+	{	char cmd[12]={GPCMD_READ_SUBCHANNEL,2,0x40,1,0,0,0,0,16,0,0,0};
 		struct cdrom_subchnl* subchnl = (struct cdrom_subchnl*)arg;
 		char buffer[32];
 	
@@ -1035,7 +1035,7 @@ static int pcd_audio_ioctl(struct cdrom_device_info *cdi,
 	
 static int pcd_get_mcn (struct cdrom_device_info *cdi, struct cdrom_mcn *mcn)
 
-{	char 	cmd[12]={SCMD_READ_SUBCHANNEL,0,0x40,2,0,0,0,0,24,0,0,0};
+{	char 	cmd[12]={GPCMD_READ_SUBCHANNEL,0,0x40,2,0,0,0,0,24,0,0,0};
         char 	buffer[32];
 	int	k;
 	int	unit = DEVICE_NR(cdi->dev);

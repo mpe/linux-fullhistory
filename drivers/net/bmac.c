@@ -297,7 +297,6 @@ bmac_mif_read(struct net_device *dev, unsigned int addr)
 	val = bmac_mif_readbits(dev, 17);
 	bmwrite(dev, MIFCSR, 4);
 	MIFDELAY;
-	/* printk(KERN_DEBUG "bmac_mif_read(%x) -> %x\n", addr, val); */
 	return val;
 }
 
@@ -431,18 +430,26 @@ bmac_start_chip(struct net_device *dev)
 static int
 bmac_init_chip(struct net_device *dev)
 {
-	if (is_bmac_plus && bmac_mif_read(dev, 2) == 0x7810) {
-		if (bmac_mif_read(dev, 4) == 0xa1) {
-			bmac_mif_write(dev, 0, 0x1000);
-		} else {
-			bmac_mif_write(dev, 4, 0xa1);
+	unsigned int addr;
+
+	printk(KERN_DEBUG "phy registers:");
+	for (addr = 0; addr < 32; ++addr) {
+		if ((addr & 7) == 0)
+			printk("\n" KERN_DEBUG);
+		printk(" %.4x", bmac_mif_read(dev, addr));
+	}
+	printk("\n");
+	if (is_bmac_plus) {
+		unsigned int capable, ctrl;
+
+		ctrl = bmac_mif_read(dev, 0);
+		capable = ((bmac_mif_read(dev, 1) & 0xf800) >> 6) | 1;
+		if (bmac_mif_read(dev, 4) != capable
+		    || (ctrl & 0x1000) == 0) {
+			bmac_mif_write(dev, 4, capable);
 			bmac_mif_write(dev, 0, 0x1200);
-		}
-#if 0
-		/* XXX debugging */
-		bmac_mif_read(dev, 0);
-		bmac_mif_read(dev, 4);
-#endif
+		} else
+			bmac_mif_write(dev, 0, 0x1000);
 	}
 	bmac_init_registers(dev);
 	return 1;
@@ -1330,6 +1337,7 @@ static int bmac_open(struct net_device *dev)
 
 	dev->flags |= IFF_UP | IFF_RUNNING;
 
+	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -1374,6 +1382,8 @@ static int bmac_close(struct net_device *dev)
 	}
 	bp->reset_and_enabled = 0;
 	XXDEBUG(("bmac: all bufs freed\n"));
+
+	MOD_DEC_USE_COUNT;
 
 	return 0;
 }

@@ -640,7 +640,6 @@ i2QueueCommands(int type, i2ChanStrPtr pCh, int timeout, int nCommands,
 		
 		if (!in_interrupt()) {
 			current->state = TASK_INTERRUPTIBLE;
-			current->counter = 0;
 			schedule_timeout(1);	// short nap 
 		} else {
 			// we cannot sched/sleep in interrrupt silly
@@ -1135,7 +1134,6 @@ i2Output(i2ChanStrPtr pCh, const char *pSource, int count, int user )
 	ip2trace (CHANN, ITRC_OUTPUT, 61, 0 );
 #endif
 					current->state = TASK_INTERRUPTIBLE;
-					current->counter = 0;
 					schedule_timeout(2);
 					if (signal_pending(current)) {
 						break;

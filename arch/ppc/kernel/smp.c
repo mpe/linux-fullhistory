@@ -1,5 +1,5 @@
 /*
- * $Id: smp.c,v 1.55 1999/07/03 08:57:09 davem Exp $
+ * $Id: smp.c,v 1.61 1999/08/24 22:06:26 cort Exp $
  *
  * Smp support for ppc.
  *
@@ -12,7 +12,6 @@
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
-#include <linux/tasks.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/interrupt.h>
@@ -31,8 +30,10 @@
 #include <asm/spinlock.h>
 #include <asm/hardirq.h>
 #include <asm/softirq.h>
+#include <asm/init.h>
 #include <asm/io.h>
 #include <asm/prom.h>
+#include <asm/smp.h>
 
 #include "time.h"
 int first_cpu_booted = 0;
@@ -241,6 +242,7 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 void __init smp_boot_cpus(void)
 {
 	extern struct task_struct *current_set[NR_CPUS];
+	extern unsigned long smp_chrp_cpu_nr;
 	extern void __secondary_start_psurge(void);
 	extern void __secondary_start_chrp(void);
 	int i, cpu_nr;
@@ -285,9 +287,13 @@ void __init smp_boot_cpus(void)
 		cpu_nr = 2; 
 		break;
 	case _MACH_chrp:
+		/* openpic doesn't report # of cpus, just # possible -- Cort */
+#if 0		
 		cpu_nr = ((openpic_read(&OpenPIC->Global.Feature_Reporting0)
 				 & OPENPIC_FEATURE_LAST_PROCESSOR_MASK) >>
 				OPENPIC_FEATURE_LAST_PROCESSOR_SHIFT)+1;
+#endif
+		cpu_nr = smp_chrp_cpu_nr;
 		break;
 	}
 
@@ -301,7 +307,7 @@ void __init smp_boot_cpus(void)
 		
 		/* create a process for the processor */
 		kernel_thread(start_secondary, NULL, CLONE_PID);
-		p = task[i];
+		p = init_tasks[i];
 		if ( !p )
 			panic("No idle task for secondary processor\n");
 		p->processor = i;

@@ -49,7 +49,7 @@ static u8 *load_pointer(struct sk_buff *skb, int k)
 	else if (k>=SKF_LL_OFF)
 		ptr = skb->mac.raw + k - SKF_LL_OFF;
 
-	if (ptr<skb->head && ptr < skb->tail)
+	if (ptr >= skb->head && ptr < skb->tail)
 		return ptr;
 	return NULL;
 }
@@ -248,6 +248,7 @@ load_b:
 						continue;
 					}
 				}
+				return 0;
 
 			case BPF_LD|BPF_W|BPF_LEN:
 				A = len;

@@ -97,7 +97,7 @@ void __wait_on_stripe(struct stripe_head *sh)
 	sh->count++;
 	add_wait_queue(&sh->wait, &wait);
 repeat:
-	current->state = TASK_UNINTERRUPTIBLE;
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	if (stripe_locked(sh)) {
 		schedule();
 		goto repeat;

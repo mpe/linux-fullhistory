@@ -1778,7 +1778,6 @@ static void rs_wait_until_sent(struct tty_struct *tty, int timeout)
 		baget_printk("lsr = %d (jiff=%lu)...", lsr, jiffies);
 #endif
 		current->state = TASK_INTERRUPTIBLE;
-		current->counter = 0;	/* make us low-priority */
 		schedule_timeout(char_time);
 		if (signal_pending(current))
 			break;
@@ -1903,7 +1902,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 	restore_flags(flags); 
 	info->blocked_open++;
 	while (1) {
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		if (tty_hung_up_p(filp) ||
 		    !(info->flags & ASYNC_INITIALIZED)) {
 #ifdef SERIAL_DO_RESTART

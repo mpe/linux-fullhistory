@@ -205,6 +205,7 @@ static int proc_alignment_read(char *page, char **start, off_t off,
 	return len;
 }
 
+#ifdef CONFIG_SYSCTL
 /*
  * This needs to be done after sysctl_init, otherwise sys/
  * will be overwritten.
@@ -218,6 +219,9 @@ void __init alignment_init(void)
 	if (e)
 		e->read_proc = proc_alignment_read;
 }
+
+__initcall(alignment_init);
+#endif
 
 static int
 do_alignment_exception(struct pt_regs *regs)
@@ -405,8 +409,25 @@ do_alignment_exception(struct pt_regs *regs)
 asmlinkage void
 do_DataAbort(unsigned long addr, int fsr, int error_code, struct pt_regs *regs)
 {
-	if (user_mode(regs))
+	if (user_mode(regs)) {
+		if (addr == regs->ARM_pc) {
+			static int first = 1;
+			if (first) {
+				/*
+				 * I want statistical information on this problem!
+				 */
+				printk(KERN_ERR "Buggy processor (%08X), "
+					"trying to continue.\n"
+					"Please send contents of /proc/cpuinfo "
+					"and this message to linux@arm.linux.org.uk",
+					fsr);
+				first = 0;
+			}
+			return;
+		}
+
 		error_code |= FAULT_CODE_USER;
+	}
 
 #define DIE(signr,nam)\
 		force_sig(signr, current);\

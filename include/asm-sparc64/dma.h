@@ -1,4 +1,4 @@
-/* $Id: dma.h,v 1.13 1998/12/16 04:33:55 davem Exp $
+/* $Id: dma.h,v 1.14 1999/08/30 10:14:36 davem Exp $
  * include/asm-sparc64/dma.h
  *
  * Copyright 1996 (C) David S. Miller (davem@caip.rutgers.edu)
@@ -187,5 +187,13 @@ extern void dvma_init(struct linux_sbus *);
 extern int get_dma_list(char *);
 extern int request_dma(unsigned int, __const__ char *);
 extern void free_dma(unsigned int);
+
+/* From PCI */
+
+#ifdef CONFIG_PCI
+extern int isa_dma_bridge_buggy;
+#else
+#define isa_dma_bridge_buggy 	(0)
+#endif
 
 #endif /* !(_ASM_SPARC64_DMA_H) */

@@ -1,34 +1,92 @@
-/* $Id: pbm.h,v 1.16 1999/03/14 18:13:03 davem Exp $
- * pbm.h: U2P PCI bus module pseudo driver software state.
+/* $Id: pbm.h,v 1.17 1999/08/30 10:14:54 davem Exp $
+ * pbm.h: UltraSparc PCI controller software state.
  *
- * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@redhat.com)
  */
 
 #ifndef __SPARC64_PBM_H
 #define __SPARC64_PBM_H
 
+#include <linux/types.h>
 #include <linux/pci.h>
+#include <linux/ioport.h>
 
-#include <asm/psycho.h>
+#include <asm/io.h>
+#include <asm/page.h>
 #include <asm/oplib.h>
+#include <asm/spinlock.h>
 
-struct linux_pbm_info;
-
-/* This is what we use to determine what the PROM has assigned so
- * far, so that we can perform assignments for addresses which
- * were not taken care of by OBP.  See psycho.c for details.
- * Per-PBM these are ordered by start address.
+/* The abstraction used here is that there are PCI controllers,
+ * each with one (Sabre) or two (PSYCHO/SCHIZO) PCI bus modules
+ * underneath.  Each PCI controller has a single IOMMU shared
+ * by the PCI bus modules underneath, and if a streaming buffer
+ * is present, each PCI bus module has it's own. (ie. the IOMMU
+ * is shared between PBMs, the STC is not)  Furthermore, each
+ * PCI bus module controls it's own autonomous PCI bus.
  */
-struct pci_vma {
-	struct pci_vma			*next;
-	struct linux_pbm_info		*pbm;
-	unsigned int			start;
-	unsigned int			end;
-	unsigned int			offset;
-	unsigned int			_pad;
+
+struct pci_controller_info;
+
+/* This contains the software state necessary to drive a PCI
+ * controller's IOMMU.
+ */
+struct pci_iommu {
+	/* This protects the controller's IOMMU and all
+	 * streaming buffers underneath.
+	 */
+	spinlock_t	lock;
+
+	/* Context allocator. */
+	unsigned int	iommu_cur_ctx;
+
+	/* IOMMU page table, a linear array of ioptes. */
+	iopte_t		*page_table;	/* The page table itself. */
+	int		page_table_sz;	/* How many pages does it map? */
+
+	/* Base PCI memory space address where IOMMU mappings
+	 * begin.
+	 */
+	u32		page_table_map_base;
+
+	/* IOMMU Controller Registers */
+	int		iommu_has_ctx_flush;	/* Feature test. */
+	unsigned long	iommu_control;		/* IOMMU control register */
+	unsigned long	iommu_tsbbase;		/* IOMMU page table base register */
+	unsigned long	iommu_flush;		/* IOMMU page flush register */
+	unsigned long	iommu_ctxflush;		/* IOMMU context flush register */
+
+	/* This is a register in the PCI controller, which if
+	 * read will have no side-effects but will guarentee
+	 * completion of all previous writes into IOMMU/STC.
+	 */
+	unsigned long	write_complete_reg;
 };
 
-struct linux_psycho;
+/* This describes a PCI bus module's streaming buffer. */
+struct pci_strbuf {
+	int		strbuf_enabled;		/* Present and using it? */
+	int		strbuf_has_ctx_flush;	/* Supports context flushing? */
+
+	/* Streaming Buffer Control Registers */
+	unsigned long	strbuf_control;		/* STC control register */
+	unsigned long	strbuf_pflush;		/* STC page flush register */
+	unsigned long	strbuf_fsync;		/* STC flush synchronization reg */
+	unsigned long	strbuf_ctxflush;	/* STC context flush register */
+	unsigned long	strbuf_ctxmatch_base;	/* STC context flush match reg */
+	unsigned long	strbuf_flushflag_pa;	/* Physical address of flush flag */
+	volatile unsigned long *strbuf_flushflag; /* The flush flag itself */
+
+	/* And this is the actual flush flag area.
+	 * We allocate extra because the chips require
+	 * a 64-byte aligned area.
+	 */
+	volatile unsigned long	__flushflag_buf[(64 + (64 - 1)) / sizeof(long)];
+};
+
+#define PCI_STC_FLUSHFLAG_INIT(STC) \
+	(*((STC)->strbuf_flushflag) = 0UL)
+#define PCI_STC_FLUSHFLAG_SET(STC) \
+	(*((STC)->strbuf_flushflag) != 0UL)
 
 /* There can be quite a few ranges and interrupt maps on a PCI
  * segment.  Thus...
@@ -36,10 +94,14 @@ struct linux_psycho;
 #define PROM_PCIRNG_MAX		64
 #define PROM_PCIIMAP_MAX	64
 
-struct linux_pbm_info {
-	struct linux_psycho		*parent;
-	struct pci_vma			*IO_assignments;
-	struct pci_vma			*MEM_assignments;
+struct pci_pbm_info {
+	/* PCI controller we sit under. */
+	struct pci_controller_info	*parent;
+
+	/* Name used for top-level resources. */
+	char				name[64];
+
+	/* OBP specific information. */
 	int				prom_node;
 	char				prom_name[64];
 	struct linux_prom_pci_ranges	pbm_ranges[PROM_PCIRNG_MAX];
@@ -48,27 +110,54 @@ struct linux_pbm_info {
 	int				num_pbm_intmap;
 	struct linux_prom_pci_intmask	pbm_intmask;
 
-	/* Now things for the actual PCI bus probes. */
-	unsigned int			pci_first_busno;
-	unsigned int			pci_last_busno;
-	struct pci_bus			pci_bus;
-};
+	/* PBM I/O and Memory space resources. */
+	struct resource			io_space;
+	struct resource			mem_space;
 
-struct linux_psycho {
-	struct linux_psycho		*next;
-	struct psycho_regs		*psycho_regs;
-	unsigned long			*pci_config_space;
-	unsigned long			*pci_IO_space;
-	unsigned long			*pci_mem_space;
-	u32				upa_portid;
-	int				index;
-	struct linux_pbm_info		pbm_A;
-	struct linux_pbm_info		pbm_B;
+	/* This PBM's streaming buffer. */
+	struct pci_strbuf		stc;
 
 	/* Now things for the actual PCI bus probes. */
 	unsigned int			pci_first_busno;
 	unsigned int			pci_last_busno;
 	struct pci_bus			*pci_bus;
+};
+
+struct pci_controller_info {
+	/* List of all PCI controllers. */
+	struct pci_controller_info	*next;
+
+	/* Physical address base of controller registers
+	 * and PCI config space.
+	 */
+	unsigned long			controller_regs;
+	unsigned long			config_space;
+
+	/* Opaque 32-bit system bus Port ID. */
+	u32				portid;
+
+	/* Each controller gets a unique index, used mostly for
+	 * error logging purposes.
+	 */
+	int				index;
+
+	/* The PCI bus modules controlled by us. */
+	struct pci_pbm_info		pbm_A;
+	struct pci_pbm_info		pbm_B;
+
+	/* Operations which are controller specific. */
+	void (*scan_bus)(struct pci_controller_info *);
+	unsigned int (*irq_build)(struct pci_controller_info *, struct pci_dev *, unsigned int);
+	void (*base_address_update)(struct pci_dev *, int);
+	void (*resource_adjust)(struct pci_dev *, struct resource *, struct resource *);
+
+	/* Now things for the actual PCI bus probes. */
+	struct pci_ops			*pci_ops;
+	unsigned int			pci_first_busno;
+	unsigned int			pci_last_busno;
+
+	/* IOMMU state shared by both PBM segments. */
+	struct pci_iommu		iommu;
 
 	void				*starfire_cookie;
 };
@@ -78,17 +167,19 @@ struct linux_psycho {
  * code.
  */
 struct pcidev_cookie {
-	struct linux_pbm_info		*pbm;
+	struct pci_pbm_info		*pbm;
+	char				prom_name[64];
 	int				prom_node;
+	struct linux_prom_pci_registers	prom_regs[PROMREG_MAX];
+	int num_prom_regs;
+	struct linux_prom_pci_registers prom_assignments[PROMREG_MAX];
+	int num_prom_assignments;
 };
 
-
-#define PCI_IRQ_IGN	0x000007c0	/* PSYCHO "Int Group Number". */
-#define PCI_IRQ_INO	0x0000003f	/* PSYCHO INO.                */
-
-/* Used by EBus */
-extern unsigned int psycho_irq_build(struct linux_pbm_info *pbm,
-				     struct pci_dev *pdev,
-				     unsigned int full_ino);
+/* Currently these are the same across all PCI controllers
+ * we support.  Someday they may not be...
+ */
+#define PCI_IRQ_IGN	0x000007c0	/* Interrupt Group Number */
+#define PCI_IRQ_INO	0x0000003f	/* Interrupt Number */
 
 #endif /* !(__SPARC64_PBM_H) */

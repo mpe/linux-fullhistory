@@ -1,7 +1,7 @@
 /*
  * misc.c
  *
- * $Id: misc.c,v 1.65 1999/05/17 19:11:13 cort Exp $
+ * $Id: misc.c,v 1.67 1999/08/10 22:53:57 cort Exp $
  * 
  * Adapted for PowerPC by Gary Thomas
  *
@@ -309,8 +309,6 @@ void gunzip(void *dst, int dstlen, unsigned char *src, int *lenp)
 	inflateEnd(&s);
 }
 
-unsigned char sanity[0x2000];
-
 unsigned long
 decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum,
 		  RESIDUAL *residual, void *OFW_interface)
@@ -333,7 +331,6 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum,
 	cols = 80;
 	orig_x = 0;
 	orig_y = 24;
-
 	
 	/*
 	 * IBM's have the MMU on, so we have to disable it or
@@ -525,7 +522,6 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum,
 		puts("initrd_start located > 16M\n");
        
 	puts("Uncompressing Linux...");
-
 	gunzip(0, 0x400000, zimage_start, &zimage_size);
 	puts("done.\n");
 	puts("Now booting the kernel\n");

@@ -14,8 +14,11 @@ O_TARGET := kernel.o
 OX_OBJS := ppc_ksyms.o setup.o
 
 
-O_OBJS := traps.o irq.o idle.o time.o process.o signal.o syscalls.o misc.o \
-	  bitops.o ptrace.o align.o ppc_htab.o
+O_OBJS := entry.o traps.o irq.o idle.o time.o process.o signal.o syscalls.o \
+	  misc.o bitops.o ptrace.o align.o ppc_htab.o semaphore.o
+ifndef CONFIG_8xx
+O_OBJS += hashtable.o
+endif
 ifdef CONFIG_PCI
 O_OBJS += pci.o
 endif
@@ -27,17 +30,18 @@ O_OBJS += totalmp.o
 endif
 
 ifeq ($(CONFIG_MBX),y)
-O_OBJS += mbx_setup.o mbx_pci.o softemu8xx.o i8259.o ppc8xx_pic.o
+O_OBJS += mbx_setup.o mbx_pci.o i8259.o ppc8xx_pic.o
 else
 ifeq ($(CONFIG_APUS),y)
-O_OBJS += apus_setup.o prom.o openpic.o
+O_OBJS += apus_setup.o prom.o open_pic.o
 else
 ifneq ($(CONFIG_MBX),y)
 O_OBJS += prep_time.o pmac_time.o chrp_time.o \
 	  pmac_setup.o pmac_support.o \
 	  prep_pci.o pmac_pci.o chrp_pci.o \
-	  residual.o prom.o openpic.o feature.o \
-	  prep_nvram.o open_pic.o i8259.o pmac_pic.o indirect_pci.o
+	  residual.o prom.o open_pic.o feature.o \
+	  prep_nvram.o i8259.o pmac_pic.o indirect_pci.o \
+	  gemini_pci.o gemini_prom.o gemini_setup.o
 OX_OBJS += chrp_setup.o prep_setup.o
 endif
 endif
@@ -49,7 +53,7 @@ endif
 
 all: head.o kernel.o
 
-head.o: head.S $(TOPDIR)/include/linux/tasks.h ppc_defs.h
+head.o: head.S ppc_defs.h
 
 ppc_defs.h: mk_defs.c ppc_defs.head \
 		$(TOPDIR)/include/asm/mmu.h \
@@ -65,7 +69,7 @@ find_name : find_name.c
 	$(HOSTCC) $(HOSTCFLAGS) -o find_name find_name.c
 
 checks: checks.c
-	$(HOSTCC) $(HOSTCFLAGS) -D__KERNEL__ -o checks checks.c
+	$(HOSTCC) -I$(HPATH) $(HOSTCFLAGS) -D__KERNEL__ -o checks checks.c
 	./checks
 
 include $(TOPDIR)/Rules.make

@@ -1327,7 +1327,7 @@ printk("block_til_ready: start\n");
 			bp->r[chip]->r[CD180_MSVR]=port->MSVR;/* auto drops DTR */
 		}
 		sti();
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		if (tty_hung_up_p(filp) ||
 		    !(port->flags & ASYNC_INITIALIZED)) {
 			if (port->flags & ASYNC_HUP_NOTIFY)

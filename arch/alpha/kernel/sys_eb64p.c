@@ -3,7 +3,7 @@
  *
  *	Copyright (C) 1995 David A Rusling
  *	Copyright (C) 1996 Jay A Estabrook
- *	Copyright (C) 1998 Richard Henderson
+ *	Copyright (C) 1998, 1999 Richard Henderson
  *
  * Code supporting the EB64+ and EB66.
  */
@@ -28,9 +28,9 @@
 #include <asm/core_lca.h>
 
 #include "proto.h"
-#include "irq.h"
-#include "bios32.h"
-#include "machvec.h"
+#include "irq_impl.h"
+#include "pci_impl.h"
+#include "machvec_impl.h"
 
 
 static void
@@ -142,7 +142,7 @@ eb64p_init_irq(void)
  */
 
 static int __init
-eb64p_map_irq(struct pci_dev *dev, int slot, int pin)
+eb64p_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
 	static char irq_tab[5][5] __initlocaldata = {
 		/*INT  INTA  INTB  INTC   INTD */
@@ -154,13 +154,6 @@ eb64p_map_irq(struct pci_dev *dev, int slot, int pin)
 	};
 	const long min_idsel = 5, max_idsel = 9, irqs_per_slot = 5;
 	return COMMON_TABLE_LOOKUP;
-}
-
-static void __init
-eb64p_pci_fixup(void)
-{
-	layout_all_busses(DEFAULT_IO_BASE, APECS_AND_LCA_DEFAULT_MEM_BASE);
-	common_pci_fixup(eb64p_map_irq, common_swizzle);
 }
 
 
@@ -177,18 +170,22 @@ struct alpha_machine_vector eb64p_mv __initmv = {
 	DO_APECS_BUS,
 	machine_check:		apecs_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	min_io_address:		DEFAULT_IO_BASE,
+	min_mem_address:	APECS_AND_LCA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		32,
 	irq_probe_mask:		_PROBE_MASK(32),
 	update_irq_hw:		eb64p_update_irq_hw,
-	ack_irq:		generic_ack_irq,
+	ack_irq:		common_ack_irq,
 	device_interrupt:	eb64p_device_interrupt,
 
 	init_arch:		apecs_init_arch,
 	init_irq:		eb64p_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		eb64p_pci_fixup,
-	kill_arch:		generic_kill_arch,
+	init_pit:		common_init_pit,
+	init_pci:		common_init_pci,
+	kill_arch:		common_kill_arch,
+	pci_map_irq:		eb64p_map_irq,
+	pci_swizzle:		common_swizzle,
 };
 ALIAS_MV(eb64p)
 #endif
@@ -202,18 +199,22 @@ struct alpha_machine_vector eb66_mv __initmv = {
 	DO_LCA_BUS,
 	machine_check:		lca_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	min_io_address:		DEFAULT_IO_BASE,
+	min_mem_address:	APECS_AND_LCA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		32,
 	irq_probe_mask:		_PROBE_MASK(32),
 	update_irq_hw:		eb64p_update_irq_hw,
-	ack_irq:		generic_ack_irq,
+	ack_irq:		common_ack_irq,
 	device_interrupt:	eb64p_device_interrupt,
 
 	init_arch:		lca_init_arch,
 	init_irq:		eb64p_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		eb64p_pci_fixup,
-	kill_arch:		generic_kill_arch,
+	init_pit:		common_init_pit,
+	init_pci:		common_init_pci,
+	kill_arch:		common_kill_arch,
+	pci_map_irq:		eb64p_map_irq,
+	pci_swizzle:		common_swizzle,
 };
 ALIAS_MV(eb66)
 #endif

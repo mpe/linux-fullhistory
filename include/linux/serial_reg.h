@@ -17,17 +17,29 @@
 #define UART_RX		0	/* In:  Receive buffer (DLAB=0) */
 #define UART_TX		0	/* Out: Transmit buffer (DLAB=0) */
 #define UART_DLL	0	/* Out: Divisor Latch Low (DLAB=1) */
+#define UART_TRG	0	/* (LCR=BF) FCTR bit 7 selects Rx or Tx
+				 * In: Fifo count
+				 * Out: Fifo custom trigger levels
+				 * XR16C85x only */
+
 #define UART_DLM	1	/* Out: Divisor Latch High (DLAB=1) */
 #define UART_IER	1	/* Out: Interrupt Enable Register */
+#define UART_FCTR	1	/* (LCR=BF) Feature Control Register
+				 * XR16C85x only */
+
 #define UART_IIR	2	/* In:  Interrupt ID Register */
 #define UART_FCR	2	/* Out: FIFO Control Register */
 #define UART_EFR	2	/* I/O: Extended Features Register */
 				/* (DLAB=1, 16C660 only) */
+
 #define UART_LCR	3	/* Out: Line Control Register */
 #define UART_MCR	4	/* Out: Modem Control Register */
 #define UART_LSR	5	/* In:  Line Status Register */
 #define UART_MSR	6	/* In:  Modem Status Register */
 #define UART_SCR	7	/* I/O: Scratch Register */
+#define UART_EMSR	7	/* (LCR=BF) Extended Mode Select Register 
+				 * FCTR bit 6 selects SCR or EMSR
+				 * XR16c85x only */
 
 /*
  * These are the definitions for the FIFO Control Register
@@ -139,6 +151,83 @@
 /*
  * the low four bits control software flow control
  */
+
+/*
+ * These register definitions are for the 16C950
+ */
+#define UART_ASR	0x01	/* Additional Status Register */
+#define UART_RFL	0x03	/* Transmitter FIFO level */
+#define UART_TFL 	0x04	/* Receiver FIFO level */
+#define UART_ICR	0x05	/* Index Control Register */
+
+/* The 16950 ICR registers */
+#define UART_ACR	0x00	/* Additional Control Register */
+#define UART_CPR	0x01	/* Clock Prescalar Register */
+#define UART_TCR	0x02	/* Times Clock Register */
+#define UART_CKS	0x03	/* Clock Select Register */
+#define UART_TTL	0x04	/* Transmitter Interrupt Trigger Level */
+#define UART_RTL	0x05	/* Receiver Interrupt Trigger Level */
+#define UART_FCL	0x06	/* Flow Control Level Lower */
+#define UART_FCH	0x07	/* Flow Control Level Higher */
+#define UART_ID1	0x08	/* ID #1 */
+#define UART_ID2	0x09	/* ID #2 */
+#define UART_ID3	0x0A	/* ID #3 */
+#define UART_REV	0x0B	/* Revision */
+#define UART_CSR	0x0C	/* Channel Software Reset */
+#define UART_NMR	0x0D	/* Nine-bit Mode Register */
+#define UART_CTR	0xFF
+
+/*
+ * The 16C950 Additional Control Reigster
+ */
+#define UART_ACR_RXDIS	0x01	/* Receiver disable */
+#define UART_ACR_TXDIS	0x02	/* Receiver disable */
+#define UART_ACR_DSRFC	0x04	/* DSR Flow Control */
+#define UART_ACR_TLENB	0x20	/* 950 trigger levels enable */
+#define UART_ACR_ICRRD	0x40	/* ICR Read enable */
+#define UART_ACR_ASREN	0x80	/* Additional status enable */
+
+/*
+ * These are the definitions for the Feature Control Register
+ * (XR16C85x only, when LCR=bf; doubles with the Interrupt Enable
+ * Register, UART register #1)
+ */
+#define UART_FCTR_RTS_NODELAY	0x00  /* RTS flow control delay */
+#define UART_FCTR_RTS_4DELAY	0x01
+#define UART_FCTR_RTS_6DELAY	0x02
+#define UART_FCTR_RTS_8DELAY	0x03
+#define UART_FCTR_IRDA	0x04  /* IrDa data encode select */
+#define UART_FCTR_TX_INT	0x08  /* Tx interrupt type select */
+#define UART_FCTR_TRGA	0x00  /* Tx/Rx 550 trigger table select */
+#define UART_FCTR_TRGB	0x10  /* Tx/Rx 650 trigger table select */
+#define UART_FCTR_TRGC	0x20  /* Tx/Rx 654 trigger table select */
+#define UART_FCTR_TRGD	0x30  /* Tx/Rx 850 programmable trigger select */
+#define UART_FCTR_SCR_SWAP	0x40  /* Scratch pad register swap */
+#define UART_FCTR_RX	0x00  /* Programmable trigger mode select */
+#define UART_FCTR_TX	0x80  /* Programmable trigger mode select */
+
+/*
+ * These are the definitions for the Enhanced Mode Select Register
+ * (XR16C85x only, when LCR=bf and FCTR bit 6=1; doubles with the
+ * Scratch register, UART register #7)
+ */
+#define UART_EMSR_FIFO_COUNT	0x01  /* Rx/Tx select */
+#define UART_EMSR_ALT_COUNT	0x02  /* Alternating count select */
+
+/*
+ * These are the definitions for the Programmable Trigger
+ * Register (XR16C85x only, when LCR=bf; doubles with the UART RX/TX
+ * register, UART register #0)
+ */
+#define UART_TRG_1	0x01
+#define UART_TRG_4	0x04
+#define UART_TRG_8	0x08
+#define UART_TRG_16	0x10
+#define UART_TRG_32	0x20
+#define UART_TRG_64	0x40
+#define UART_TRG_96	0x60
+#define UART_TRG_120	0x78
+#define UART_TRG_128	0x80
 
 #endif /* _LINUX_SERIAL_REG_H */
 

@@ -319,7 +319,7 @@ static int __init find_timer_pin(int type)
 
 /*
  * Find a specific PCI IRQ entry.
- * Not an initfunc, possibly needed by modules
+ * Not an __init, possibly needed by modules
  */
 static int __init pin_2_irq(int idx, int apic, int pin);
 int IO_APIC_get_PCI_irq_vector(int bus, int slot, int pci_pin)
@@ -836,7 +836,7 @@ static void __init init_sym_mode(void)
 }
 
 /*
- * Not an initfunc, needed by the reboot code
+ * Not an __init, needed by the reboot code
  */
 void init_pic_mode(void)
 {

@@ -1,11 +1,11 @@
 /*
  *	linux/arch/alpha/kernel/core_pyxis.c
  *
- * Code common to all PYXIS core logic chips.
- *
  * Based on code written by David A Rusling (david.rusling@reo.mts.dec.com).
  *
+ * Code common to all PYXIS core logic chips.
  */
+
 #include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
@@ -15,6 +15,7 @@
 
 #include <asm/ptrace.h>
 #include <asm/system.h>
+#include <asm/pci.h>
 
 #define __EXTERN_INLINE inline
 #include <asm/io.h>
@@ -22,6 +23,8 @@
 #undef __EXTERN_INLINE
 
 #include "proto.h"
+#include "pci_impl.h"
+
 
 /* NOTE: Herein are back-to-back mb instructions.  They are magic.
    One plausible explanation is that the I/O controller does not properly
@@ -83,9 +86,12 @@
  */
 
 static int
-mk_conf_addr(u8 bus, u8 device_fn, u8 where, unsigned long *pci_addr,
+mk_conf_addr(struct pci_dev *dev, int where, unsigned long *pci_addr,
 	     unsigned char *type1)
 {
+	u8 bus = dev->bus->number;
+	u8 device_fn = dev->devfn;
+
 	*type1 = (bus == 0) ? 0 : 1;
 	*pci_addr = (bus << 16) | (device_fn << 8) | (where);
 
@@ -196,106 +202,95 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1)
 		 addr, value, type1));
 }
 
-int
-pyxis_hose_read_config_byte (u8 bus, u8 device_fn, u8 where, u8 *value,
-			     struct linux_hose_info *hose)
+static int
+pyxis_read_config_byte(struct pci_dev *dev, int where, u8 *value)
 {
-	unsigned long addr = PYXIS_CONF;
-	unsigned long pci_addr;
+	unsigned long addr, pci_addr;
 	unsigned char type1;
 
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
+	if (mk_conf_addr(dev, where, &pci_addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	addr |= (pci_addr << 5) + 0x00;
+	addr = (pci_addr << 5) + 0x00 + PYXIS_CONF;
 	*value = conf_read(addr, type1) >> ((where & 3) * 8);
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int
-pyxis_hose_read_config_word (u8 bus, u8 device_fn, u8 where, u16 *value,
-			     struct linux_hose_info *hose)
+static int
+pyxis_read_config_word(struct pci_dev *dev, int where, u16 *value)
 {
-	unsigned long addr = PYXIS_CONF;
-	unsigned long pci_addr;
+	unsigned long addr, pci_addr;
 	unsigned char type1;
 
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
+	if (mk_conf_addr(dev, where, &pci_addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	addr |= (pci_addr << 5) + 0x08;
+	addr = (pci_addr << 5) + 0x08 + PYXIS_CONF;
 	*value = conf_read(addr, type1) >> ((where & 3) * 8);
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int
-pyxis_hose_read_config_dword (u8 bus, u8 device_fn, u8 where, u32 *value,
-			      struct linux_hose_info *hose)
+static int
+pyxis_read_config_dword(struct pci_dev *dev, int where, u32 *value)
 {
-	unsigned long addr = PYXIS_CONF;
-	unsigned long pci_addr;
+	unsigned long addr, pci_addr;
 	unsigned char type1;
 
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
+	if (mk_conf_addr(dev, where, &pci_addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	addr |= (pci_addr << 5) + 0x18;
+	addr = (pci_addr << 5) + 0x18 + PYXIS_CONF;
 	*value = conf_read(addr, type1);
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int 
-pyxis_hose_write_config_byte (u8 bus, u8 device_fn, u8 where, u8 value,
-			      struct linux_hose_info *hose)
+static int
+pyxis_write_config(struct pci_dev *dev, int where, u32 value, long mask)
 {
-	unsigned long addr = PYXIS_CONF;
-	unsigned long pci_addr;
+	unsigned long addr, pci_addr;
 	unsigned char type1;
 
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
+	if (mk_conf_addr(dev, where, &pci_addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	addr |= (pci_addr << 5) + 0x00;
+	addr = (pci_addr << 5) + mask + PYXIS_CONF;
 	conf_write(addr, value << ((where & 3) * 8), type1);
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int 
-pyxis_hose_write_config_word (u8 bus, u8 device_fn, u8 where, u16 value,
-			      struct linux_hose_info *hose)
+static int 
+pyxis_write_config_byte(struct pci_dev *dev, int where, u8 value)
 {
-	unsigned long addr = PYXIS_CONF;
-	unsigned long pci_addr;
-	unsigned char type1;
-
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
-		return PCIBIOS_DEVICE_NOT_FOUND;
-
-	addr |= (pci_addr << 5) + 0x08;
-	conf_write(addr, value << ((where & 3) * 8), type1);
-	return PCIBIOS_SUCCESSFUL;
+	return pyxis_write_config(dev, where, value, 0x00);
 }
 
-int 
-pyxis_hose_write_config_dword (u8 bus, u8 device_fn, u8 where, u32 value,
-			       struct linux_hose_info *hose)
+static int 
+pyxis_write_config_word(struct pci_dev *dev, int where, u16 value)
 {
-	unsigned long addr = PYXIS_CONF;
-	unsigned long pci_addr;
-	unsigned char type1;
-
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
-		return PCIBIOS_DEVICE_NOT_FOUND;
-
-	addr |= (pci_addr << 5) + 0x18;
-	conf_write(addr, value << ((where & 3) * 8), type1);
-	return PCIBIOS_SUCCESSFUL;
+	return pyxis_write_config(dev, where, value, 0x08);
 }
 
+static int 
+pyxis_write_config_dword(struct pci_dev *dev, int where, u32 value)
+{
+	return pyxis_write_config(dev, where, value, 0x18);
+}
+
+struct pci_ops pyxis_pci_ops = 
+{
+	read_byte:	pyxis_read_config_byte,
+	read_word:	pyxis_read_config_word,
+	read_dword:	pyxis_read_config_dword,
+	write_byte:	pyxis_write_config_byte,
+	write_word:	pyxis_write_config_word,
+	write_dword:	pyxis_write_config_dword
+};
+
 void __init
-pyxis_enable_errors (void)
+pyxis_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 {
-	unsigned int pyxis_err;
+	struct pci_controler *hose;
+	unsigned int temp;
 
 #if 0
 	printk("pyxis_init: PYXIS_ERR_MASK 0x%x\n", *(vuip)PYXIS_ERR_MASK);
@@ -311,105 +306,16 @@ pyxis_enable_errors (void)
 	/* 
 	 * Set up error reporting. Make sure CPU_PE is OFF in the mask.
 	 */
-	pyxis_err = *(vuip)PYXIS_ERR_MASK;
-	pyxis_err &= ~4;   
-	*(vuip)PYXIS_ERR_MASK = pyxis_err; mb();
-	pyxis_err = *(vuip)PYXIS_ERR_MASK; /* re-read to force write */
+	temp = *(vuip)PYXIS_ERR_MASK;
+	temp &= ~4;   
+	*(vuip)PYXIS_ERR_MASK = temp; mb();
+	temp = *(vuip)PYXIS_ERR_MASK; /* re-read to force write */
 
-	pyxis_err = *(vuip)PYXIS_ERR ;
-	pyxis_err |= 0x180;   /* master/target abort */
-	*(vuip)PYXIS_ERR = pyxis_err; mb();
-	pyxis_err = *(vuip)PYXIS_ERR; /* re-read to force write */
-}
+	temp = *(vuip)PYXIS_ERR ;
+	temp |= 0x180;   /* master/target abort */
+	*(vuip)PYXIS_ERR = temp; mb();
+	temp = *(vuip)PYXIS_ERR; /* re-read to force write */
 
-int __init
-pyxis_srm_window_setup (void)
-{
-	switch (alpha_use_srm_setup)
-	{
-	default:
-#if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_SRM_SETUP)
-		/* Check window 0 for enabled and mapped to 0.  */
-		if (((*(vuip)PYXIS_W0_BASE & 3) == 1)
-		    && (*(vuip)PYXIS_T0_BASE == 0)
-		    && ((*(vuip)PYXIS_W0_MASK & 0xfff00000U) > 0x0ff00000U)) {
-			PYXIS_DMA_WIN_BASE = *(vuip)PYXIS_W0_BASE & 0xfff00000U;
-			PYXIS_DMA_WIN_SIZE = *(vuip)PYXIS_W0_MASK & 0xfff00000U;
-			PYXIS_DMA_WIN_SIZE += 0x00100000U;
-#if 1
-			printk("pyxis_init: using Window 0 settings\n");
-			printk("pyxis_init: BASE 0x%x MASK 0x%x TRANS 0x%x\n",
-			       *(vuip)PYXIS_W0_BASE,
-			       *(vuip)PYXIS_W0_MASK,
-			       *(vuip)PYXIS_T0_BASE);
-#endif
-			break;
-		}
-
-		/* Check window 1 for enabled and mapped to 0.  */
-		if (((*(vuip)PYXIS_W1_BASE & 3) == 1)
-		    && (*(vuip)PYXIS_T1_BASE == 0)
-		    && ((*(vuip)PYXIS_W1_MASK & 0xfff00000U) > 0x0ff00000U)) {
-			PYXIS_DMA_WIN_BASE = *(vuip)PYXIS_W1_BASE & 0xfff00000U;
-			PYXIS_DMA_WIN_SIZE = *(vuip)PYXIS_W1_MASK & 0xfff00000U;
-			PYXIS_DMA_WIN_SIZE += 0x00100000U;
-#if 1
-			printk("pyxis_init: using Window 1 settings\n");
-			printk("pyxis_init: BASE 0x%x MASK 0x%x TRANS 0x%x\n",
-			       *(vuip)PYXIS_W1_BASE,
-			       *(vuip)PYXIS_W1_MASK,
-			       *(vuip)PYXIS_T1_BASE);
-#endif
-			break;
-		}
-
-		/* Check window 2 for enabled and mapped to 0.  */
-		if (((*(vuip)PYXIS_W2_BASE & 3) == 1)
-		    && (*(vuip)PYXIS_T2_BASE == 0)
-		    && ((*(vuip)PYXIS_W2_MASK & 0xfff00000U) > 0x0ff00000U)) {
-			PYXIS_DMA_WIN_BASE = *(vuip)PYXIS_W2_BASE & 0xfff00000U;
-			PYXIS_DMA_WIN_SIZE = *(vuip)PYXIS_W2_MASK & 0xfff00000U;
-			PYXIS_DMA_WIN_SIZE += 0x00100000U;
-#if 1
-			printk("pyxis_init: using Window 2 settings\n");
-			printk("pyxis_init: BASE 0x%x MASK 0x%x TRANS 0x%x\n",
-			       *(vuip)PYXIS_W2_BASE,
-			       *(vuip)PYXIS_W2_MASK,
-			       *(vuip)PYXIS_T2_BASE);
-#endif
-			break;
-		}
-
-		/* Check window 3 for enabled and mapped to 0.  */
-		if (((*(vuip)PYXIS_W3_BASE & 3) == 1)
-		    && (*(vuip)PYXIS_T3_BASE == 0)
-		    && ((*(vuip)PYXIS_W3_MASK & 0xfff00000U) > 0x0ff00000U)) {
-			PYXIS_DMA_WIN_BASE = *(vuip)PYXIS_W3_BASE & 0xfff00000U;
-			PYXIS_DMA_WIN_SIZE = *(vuip)PYXIS_W3_MASK & 0xfff00000U;
-			PYXIS_DMA_WIN_SIZE += 0x00100000U;
-#if 1
-			printk("pyxis_init: using Window 3 settings\n");
-			printk("pyxis_init: BASE 0x%x MASK 0x%x TRANS 0x%x\n",
-			       *(vuip)PYXIS_W3_BASE,
-			       *(vuip)PYXIS_W3_MASK,
-			       *(vuip)PYXIS_T3_BASE);
-#endif
-			break;
-		}
-
-		/* Otherwise, we must use our defaults.  */
-		PYXIS_DMA_WIN_BASE = PYXIS_DMA_WIN_BASE_DEFAULT;
-		PYXIS_DMA_WIN_SIZE = PYXIS_DMA_WIN_SIZE_DEFAULT;
-#endif
-	case 0:
-		return 0;
-	}
-	return 1;
-}
-
-void __init
-pyxis_native_window_setup(void)
-{
 	/*
 	 * Set up the PCI->physical memory translation windows.
 	 * For now, windows 2 and 3 are disabled.  In the future, we may
@@ -430,11 +336,7 @@ pyxis_native_window_setup(void)
 	*(vuip)PYXIS_W2_BASE = 0x0;
 	*(vuip)PYXIS_W3_BASE = 0x0;
 	mb();
-}
 
-void __init
-pyxis_finish_init_arch(void)
-{
 	/*
          * Next, clear the PYXIS_CFG register, which gets used
 	 *  for PCI Config Space accesses. That is the way
@@ -453,42 +355,11 @@ pyxis_finish_init_arch(void)
 		}
 	}
  
-	/*
-	 * Sigh... For the SRM setup, unless we know apriori what the HAE
-	 * contents will be, we need to setup the arbitrary region bases
-	 * so we can test against the range of addresses and tailor the
-	 * region chosen for the SPARSE memory access.
-	 *
-	 * See include/asm-alpha/pyxis.h for the SPARSE mem read/write.
-	 */
-	if (alpha_use_srm_setup) {
-		unsigned int pyxis_hae_mem = *(vuip)PYXIS_HAE_MEM;
-
-		alpha_mv.sm_base_r1 = (pyxis_hae_mem      ) & 0xe0000000UL;
-		alpha_mv.sm_base_r2 = (pyxis_hae_mem << 16) & 0xf8000000UL;
-		alpha_mv.sm_base_r3 = (pyxis_hae_mem << 24) & 0xfc000000UL;
-
-		/*
-		 * Set the HAE cache, so that setup_arch() code
-		 * will use the SRM setting always. Our readb/writeb
-		 * code in pyxis.h expects never to have to change
-		 * the contents of the HAE.
-		 */
-		alpha_mv.hae_cache = pyxis_hae_mem;
-
-#ifndef CONFIG_ALPHA_GENERIC
-		/* In a generic kernel, we can always use BWIO.  */
-		alpha_mv.mv_readb = pyxis_srm_readb;
-		alpha_mv.mv_readw = pyxis_srm_readw;
-		alpha_mv.mv_writeb = pyxis_srm_writeb;
-		alpha_mv.mv_writew = pyxis_srm_writew;
-#endif
-	} else {
-		*(vuip)PYXIS_HAE_MEM = 0U; mb();
-		*(vuip)PYXIS_HAE_MEM; /* re-read to force write */
-		*(vuip)PYXIS_HAE_IO = 0; mb();
-		*(vuip)PYXIS_HAE_IO;  /* re-read to force write */
-        }
+	/* Zero the HAE.  */
+	*(vuip)PYXIS_HAE_MEM = 0U; mb();
+	*(vuip)PYXIS_HAE_MEM; /* re-read to force write */
+	*(vuip)PYXIS_HAE_IO = 0; mb();
+	*(vuip)PYXIS_HAE_IO;  /* re-read to force write */
 
 	/*
 	 * Finally, check that the PYXIS_CTRL1 has IOA_BEN set for
@@ -505,15 +376,16 @@ pyxis_finish_init_arch(void)
 			ctrl1 = *(vuip)PYXIS_CTRL1;  /* re-read */
 		}
 	}
-}
 
-void __init
-pyxis_init_arch(unsigned long *mem_start, unsigned long *mem_end)
-{
-	pyxis_enable_errors();
-	if (!pyxis_srm_window_setup())
-		pyxis_native_window_setup();
-	pyxis_finish_init_arch();
+	/*
+	 * Create our single hose.
+	 */
+
+	hose = alloc_pci_controler(mem_start);
+	hose->io_space = &ioport_resource;
+	hose->mem_space = &iomem_resource;
+	hose->config_space = PYXIS_CONF;
+	hose->index = 0;
 }
 
 static inline void

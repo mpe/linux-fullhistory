@@ -13,7 +13,7 @@ static volatile unsigned char *sccc, *sccd;
 unsigned long TXRDY, RXRDY;
 extern void xmon_printf(const char *fmt, ...);
 
-static int console = 0;
+static int console = 1;
 
 void buf_access(void)
 {

@@ -1077,7 +1077,7 @@ static ssize_t do_read(struct file *fp, char *buf, size_t count, loff_t *ppos)
 			return -EAGAIN;
 		add_wait_queue(&apm_waitqueue, &wait);
 repeat:
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		if (queue_empty(as) && !signal_pending(current)) {
 			schedule();
 			goto repeat;

@@ -47,7 +47,7 @@
 static inline long get_reg(struct task_struct *task, int regno)
 {
 	if (regno < sizeof(struct pt_regs) / sizeof(unsigned long))
-		return ((unsigned long *)task->tss.regs)[regno];
+		return ((unsigned long *)task->thread.regs)[regno];
 	return (0);
 }
 
@@ -60,8 +60,8 @@ static inline int put_reg(struct task_struct *task, int regno,
 	if (regno <= PT_MQ) {
 		if (regno == PT_MSR)
 			data = (data & MSR_DEBUGCHANGE)
-				| (task->tss.regs->msr & ~MSR_DEBUGCHANGE);
-		((unsigned long *)task->tss.regs)[regno] = data;
+				| (task->thread.regs->msr & ~MSR_DEBUGCHANGE);
+		((unsigned long *)task->thread.regs)[regno] = data;
 		return 0;
 	}
 	return -1;
@@ -70,14 +70,14 @@ static inline int put_reg(struct task_struct *task, int regno,
 static inline void
 set_single_step(struct task_struct *task)
 {
-	struct pt_regs *regs = task->tss.regs;
+	struct pt_regs *regs = task->thread.regs;
 	regs->msr |= MSR_SE;
 }
 
 static inline void
 clear_single_step(struct task_struct *task)
 {
-	struct pt_regs *regs = task->tss.regs;
+	struct pt_regs *regs = task->thread.regs;
 	regs->msr &= ~MSR_SE;
 }
 
@@ -384,9 +384,9 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 				tmp = get_reg(child, addr);
 			}
 			else if (addr >= PT_FPR0 && addr <= PT_FPSCR) {
-				if (child->tss.regs->msr & MSR_FP)
+				if (child->thread.regs->msr & MSR_FP)
 					giveup_fpu(child);
-				tmp = ((long *)child->tss.fpr)[addr - PT_FPR0];
+				tmp = ((long *)child->thread.fpr)[addr - PT_FPR0];
 			}
 			else
 				ret = -EIO;
@@ -419,9 +419,9 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 				goto out;
 			}
 			if (addr >= PT_FPR0 && addr < PT_FPR0 + 64) {
-				if (child->tss.regs->msr & MSR_FP)
+				if (child->thread.regs->msr & MSR_FP)
 					giveup_fpu(child);
-				((long *)child->tss.fpr)[addr - PT_FPR0] = data;
+				((long *)child->thread.fpr)[addr - PT_FPR0] = data;
 				ret = 0;
 				goto out;
 			}

@@ -525,8 +525,8 @@ static int js_read(struct inode *inode, struct file *file, char *buf, int count)
 
 		if (GOF(curl->tail) == jd->bhead && curl->startup == jd->num_axes + jd->num_buttons) {
 
+			__set_current_state(TASK_INTERRUPTIBLE);
 			add_wait_queue(&jd->wait, &wait);
-			current->state = TASK_INTERRUPTIBLE;
 
 			while (GOF(curl->tail) == jd->bhead) {
 

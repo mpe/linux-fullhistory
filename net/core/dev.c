@@ -1933,8 +1933,9 @@ int unregister_netdevice(struct net_device *dev)
 		return 0;
 	}
 
-	if (atomic_dec_and_test(&dev->refcnt)) {
-		netdev_finish_unregister(dev);
+	/* Last reference is our one */
+	if (atomic_read(&dev->refcnt) == 1) {
+		dev_put(dev);
 		return 0;
 	}
 
@@ -1942,16 +1943,46 @@ int unregister_netdevice(struct net_device *dev)
 	printk("unregister_netdevice: waiting %s refcnt=%d\n", dev->name, atomic_read(&dev->refcnt));
 #endif
 
+	/* EXPLANATION. If dev->refcnt is not 1 now (1 is our own reference)
+	   it means that someone in the kernel still has reference
+	   to this device and we cannot release it.
+
+	   "New style" devices have destructors, hence we can return from this
+	   function and destructor will do all the work later.
+
+	   "Old style" devices expect that device is free of any references
+	   upon exit from this function. WE CANNOT MAKE such release
+	   without delay. Note that it is not new feature. Referencing devices
+	   after they are released occured in 2.0 and 2.2.
+	   Now we just can know about each fact of illegal usage.
+
+	   So, we linger for 10*HZ (it is an arbitrary number)
+
+	   After 1 second, we start to rebroadcast unregister notifications
+	   in hope that careless clients will release the device.
+
+	   If timeout expired, we have no choice how to cross fingers
+	   and return. Real alternative would be block here forever
+	   and we will make it eventually, when all peaceful citizens
+	   will be notified and repaired.
+	 */
+
 	now = jiffies;
-	while (atomic_read(&dev->refcnt)) {
-		schedule_timeout(HZ/10);
+	while (atomic_read(&dev->refcnt) != 1) {
+		if ((jiffies - now) > 1*HZ) {
+			/* Rebroadcast unregister notification */
+			notifier_call_chain(&netdev_chain, NETDEV_UNREGISTER, dev);
+		}
+		current->state = TASK_INTERRUPTIBLE;
+		schedule_timeout(HZ/4);
+		current->state = TASK_RUNNING;
 		if ((jiffies - now) > 10*HZ)
 			break;
 	}
 
-	if (atomic_read(&dev->refcnt))
-		printk("unregister_netdevice: Old style device %s leaked(refcnt=%d). Wait for crash.\n", dev->name, atomic_read(&dev->refcnt));
-
+	if (atomic_read(&dev->refcnt) != 1)
+		printk("unregister_netdevice: Old style device %s leaked(refcnt=%d). Wait for crash.\n", dev->name, atomic_read(&dev->refcnt)-1);
+	dev_put(dev);
 	return 0;
 }
 

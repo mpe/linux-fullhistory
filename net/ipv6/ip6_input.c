@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *	Ian P. Morris		<I.P.Morris@soton.ac.uk>
  *
- *	$Id: ip6_input.c,v 1.13 1999/08/20 11:06:21 davem Exp $
+ *	$Id: ip6_input.c,v 1.14 1999/08/30 12:14:56 davem Exp $
  *
  *	Based in linux/net/ipv4/ip_input.c
  *
@@ -159,7 +159,8 @@ int ip6_input(struct sk_buff *skb)
 		if (ipprot->copy || raw_sk)
 			buff = skb_clone(skb, GFP_ATOMIC);
 
-		ipprot->handler(buff, len);
+		if (buff)
+			ipprot->handler(buff, len);
 		found = 1;
 	}
 	read_unlock(&inet6_protocol_lock);

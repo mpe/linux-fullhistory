@@ -9763,9 +9763,6 @@ static int __init ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	 *	each and every PCI card, if they don't use Fcode?
 	 */
 
-	base = __pa(base);
-	base_2 = __pa(base_2);
-
 	if (!(command & PCI_COMMAND_MASTER)) {
 		if (initverbose >= 2)
 			printk("ncr53c8xx: setting PCI_COMMAND_MASTER bit (fixup)\n");

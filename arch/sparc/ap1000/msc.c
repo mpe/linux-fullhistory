@@ -623,8 +623,8 @@ static void fail_write(int context,int intr,unsigned vaddr)
 		if (vaddr - MSC_REM_SIGNAL < _NSIG*PAGE_SIZE) {
 			handle_signal(context,vaddr);
 		} else {
-			task[tsk]->tss.sig_address = vaddr;
-			task[tsk]->tss.sig_desc = SUBSIG_NOMAPPING;
+			task[tsk]->thread.sig_address = vaddr;
+			task[tsk]->thread.sig_desc = SUBSIG_NOMAPPING;
 			send_sig(SIGSEGV, task[tsk], 1);
 		}
 	}
@@ -650,8 +650,8 @@ static void fail_read(int context,int intr,unsigned vaddr)
 		if (vaddr - MSC_REM_SIGNAL < _NSIG*PAGE_SIZE) {
 			handle_signal(context,vaddr);
 		} else {
-			task[tsk]->tss.sig_address = vaddr;
-			task[tsk]->tss.sig_desc = SUBSIG_NOMAPPING;
+			task[tsk]->thread.sig_address = vaddr;
+			task[tsk]->thread.sig_desc = SUBSIG_NOMAPPING;
 			send_sig(SIGSEGV, task[tsk], 1);
 		}
 	}	

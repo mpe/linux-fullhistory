@@ -174,8 +174,27 @@ static int dst_dev_event(struct notifier_block *this, unsigned long event, void 
 		spin_lock_bh(&dst_lock);
 		for (dst = dst_garbage_list; dst; dst = dst->next) {
 			if (dst->dev == dev) {
-				dst->input = dst_discard;
-				dst->output = dst_blackhole;
+				/* Dirty hack. We did it in 2.2 (in __dst_free),
+				   we have _very_ good reasons not to repeat
+				   this mistake in 2.3, but we have no choice
+				   now. _It_ _is_ _explicit_ _deliberate_
+				   _race_ _condition_.
+				 */
+				if (event!=NETDEV_DOWN && !dev->new_style &&
+				    dst->output == dst_blackhole) {
+					dst->dev = &loopback_dev;
+					dev_put(dev);
+					dev_hold(&loopback_dev);
+					dst->output = dst_discard;
+					if (dst->neighbour && dst->neighbour->dev == dev) {
+						dst->neighbour->dev = &loopback_dev;
+						dev_put(dev);
+						dev_hold(&loopback_dev);
+					}
+				} else {
+					dst->input = dst_discard;
+					dst->output = dst_blackhole;
+				}
 			}
 		}
 		spin_unlock_bh(&dst_lock);

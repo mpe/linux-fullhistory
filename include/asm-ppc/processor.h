@@ -66,8 +66,33 @@
 #define HID0_BTCD	(1<<1)		/* Branch target cache disable */
 
 /* fpscr settings */
-#define FPSCR_FX        (1<<31)
-#define FPSCR_FEX       (1<<30)
+#define FPSCR_FX	0x80000000	/* FPU exception summary */
+#define FPSCR_FEX	0x40000000	/* FPU enabled exception summary */
+#define FPSCR_VX	0x20000000	/* Invalid operation summary */
+#define FPSCR_OX	0x10000000	/* Overflow exception summary */
+#define FPSCR_UX	0x08000000	/* Underflow exception summary */
+#define FPSCR_ZX	0x04000000	/* Zero-devide exception summary */
+#define FPSCR_XX	0x02000000	/* Inexact exception summary */
+#define FPSCR_VXSNAN	0x01000000	/* Invalid op for SNaN */
+#define FPSCR_VXISI	0x00800000	/* Invalid op for Inv - Inv */
+#define FPSCR_VXIDI	0x00400000	/* Invalid op for Inv / Inv */
+#define FPSCR_VXZDZ	0x00200000	/* Invalid op for Zero / Zero */
+#define FPSCR_VXIMZ	0x00100000	/* Invalid op for Inv * Zero */
+#define FPSCR_VXVC	0x00080000	/* Invalid op for Compare */
+#define FPSCR_FR	0x00040000	/* Fraction rounded */
+#define FPSCR_FI	0x00020000	/* Fraction inexact */
+#define FPSCR_FPRF	0x0001f000	/* FPU Result Flags */
+#define FPSCR_FPCC	0x0000f000	/* FPU Condition Codes */
+#define FPSCR_VXSOFT	0x00000400	/* Invalid op for software request */
+#define FPSCR_VXSQRT	0x00000200	/* Invalid op for square root */
+#define FPSCR_VXCVI	0x00000100	/* Invalid op for integer convert */
+#define FPSCR_VE	0x00000080	/* Invalid op exception enable */
+#define FPSCR_OE	0x00000040	/* IEEE overflow exception enable */
+#define FPSCR_UE	0x00000020	/* IEEE underflow exception enable */
+#define FPSCR_ZE	0x00000010	/* IEEE zero divide exception enable */
+#define FPSCR_XE	0x00000008	/* FP inexact exception enable */
+#define FPSCR_NI	0x00000004	/* FPU non IEEE-Mode */
+#define FPSCR_RN	0x00000003	/* FPU rounding control */
 
 #define _MACH_prep     1
 #define _MACH_Pmac     2  /* pmac or pmac clone (non-chrp) */
@@ -78,6 +103,7 @@
 #define _MACH_rpxlite 64  /* RPCG RPX-Lite 8xx board */
 #define _MACH_bseip   128 /* Bright Star Engineering ip-Engine */
 #define _MACH_yk      256 /* Motorola Yellowknife */
+#define _MACH_gemini  512 /* Synergy Microsystems gemini board */
 
 /* see residual.h for these */
 #define _PREP_Motorola 0x01  /* motorola prep */
@@ -154,6 +180,7 @@ n:
 #define DEC	22	/* Decrementer */
 #define EAR	282	/* External Address Register */
 #define L2CR	1017    /* PPC 750 L2 control register */
+#define IMMR	638	/* PPC 860/821 Internal Memory Map Register */
 
 #define THRM1	1020
 #define THRM2	1021
@@ -242,10 +269,10 @@ typedef struct {
 
 struct thread_struct {
 	unsigned long	ksp;		/* Kernel stack pointer */
-	unsigned long	*pg_tables;	/* Base of page-table tree */
 	unsigned long	wchan;		/* Event task is sleeping on */
 	struct pt_regs	*regs;		/* Pointer to saved register state */
 	mm_segment_t	fs;		/* for get_fs() validation */
+	void		*pgdir;		/* root of page-table tree */
 	signed long     last_syscall;
 	double		fpr[32];	/* Complete floating point set */
 	unsigned long	fpscr_pad;	/* fpr ... fpscr must be contiguous */
@@ -254,12 +281,12 @@ struct thread_struct {
 
 #define INIT_SP		(sizeof(init_stack) + (unsigned long) &init_stack)
 
-#define INIT_TSS  { \
+#define INIT_THREAD  { \
 	INIT_SP, /* ksp */ \
-	(unsigned long *) swapper_pg_dir, /* pg_tables */ \
 	0, /* wchan */ \
 	(struct pt_regs *)INIT_SP - 1, /* regs */ \
 	KERNEL_DS, /*fs*/ \
+	swapper_pg_dir, /* pgdir */ \
 	0, /* last_syscall */ \
 	{0}, 0, 0 \
 }
@@ -280,13 +307,14 @@ static inline unsigned long thread_saved_pc(struct thread_struct *t)
 	return (t->regs) ? t->regs->nip : 0;
 }
 
-#define copy_segments(nr, tsk, mm)	do { } while (0)
+#define copy_segments(tsk, mm)		do { } while (0)
 #define release_segments(mm)		do { } while (0)
 #define forget_segments()		do { } while (0)
 
 /*
  * NOTE! The task struct and the stack go together
  */
+#define THREAD_SIZE (2*PAGE_SIZE)
 #define alloc_task_struct() \
 	((struct task_struct *) __get_free_pages(GFP_KERNEL,1))
 #define free_task_struct(p)	free_pages((unsigned long)(p),1)

@@ -16,7 +16,7 @@ all: kernel.o head.o
 
 O_TARGET := kernel.o
 O_OBJS   := entry.o traps.o process.o osf_sys.o irq.o signal.o setup.o \
-	    bios32.o ptrace.o time.o fpreg.o semaphore.o
+	    ptrace.o time.o fpreg.o semaphore.o pci_syscall.o
 OX_OBJS  := alpha_ksyms.o
 
 
@@ -28,8 +28,13 @@ O_OBJS	 += core_apecs.o core_cia.o core_lca.o core_mcpcia.o core_pyxis.o \
 	    sys_jensen.o sys_miata.o sys_mikasa.o sys_noritake.o \
 	    sys_rawhide.o sys_ruffian.o sys_sable.o sys_sio.o \
 	    sys_sx164.o sys_takara.o sys_rx164.o \
-	    es1888.o smc37c669.o smc37c93x.o
+	    es1888.o smc37c669.o smc37c93x.o ns87312.o \
+	    pci.o pci_setup.o
 else
+
+ifdef CONFIG_PCI
+O_OBJS   += pci.o pci_setup.o
+endif
 
 # Core logic support
 ifdef CONFIG_ALPHA_APECS
@@ -62,10 +67,10 @@ ifneq ($(CONFIG_ALPHA_ALCOR)$(CONFIG_ALPHA_XLT),)
 O_OBJS   += sys_alcor.o
 endif
 ifneq ($(CONFIG_ALPHA_CABRIOLET)$(CONFIG_ALPHA_EB164)$(CONFIG_ALPHA_EB66P)$(CONFIG_ALPHA_LX164)$(CONFIG_ALPHA_PC164),)
-O_OBJS   += sys_cabriolet.o
+O_OBJS   += sys_cabriolet.o ns87312.o
 endif
 ifdef CONFIG_ALPHA_DP264
-O_OBJS   += sys_dp264.o
+O_OBJS   += sys_dp264.o es1888.o smc37c669.o
 endif
 ifneq ($(CONFIG_ALPHA_EB64P)$(CONFIG_ALPHA_EB66),)
 O_OBJS   += sys_eb64p.o
@@ -74,7 +79,7 @@ ifdef CONFIG_ALPHA_JENSEN
 O_OBJS   += sys_jensen.o
 endif
 ifdef CONFIG_ALPHA_MIATA
-O_OBJS   += sys_miata.o
+O_OBJS   += sys_miata.o es1888.o smc37c669.o
 endif
 ifdef CONFIG_ALPHA_MIKASA
 O_OBJS   += sys_mikasa.o
@@ -95,22 +100,16 @@ ifdef CONFIG_ALPHA_SABLE
 O_OBJS   += sys_sable.o
 endif
 ifneq ($(CONFIG_ALPHA_BOOK1)$(CONFIG_ALPHA_AVANTI)$(CONFIG_ALPHA_NONAME)$(CONFIG_ALPHA_P2K)$(CONFIG_ALPHA_XL),)
-O_OBJS   += sys_sio.o
+O_OBJS   += sys_sio.o ns87312.o
 endif
 ifdef CONFIG_ALPHA_SX164
-O_OBJS   += sys_sx164.o
+O_OBJS   += sys_sx164.o smc37c669.o
 endif
 ifdef CONFIG_ALPHA_TAKARA
-O_OBJS   += sys_takara.o
+O_OBJS   += sys_takara.o ns87312.o
 endif
 
 # Device support
-ifneq ($(CONFIG_ALPHA_MIATA)$(CONFIG_ALPHA_DP264),)
-O_OBJS   += es1888.o
-endif
-ifneq ($(CONFIG_ALPHA_SX164)$(CONFIG_ALPHA_MIATA)$(CONFIG_ALPHA_DP264),)
-O_OBJS   += smc37c669.o
-endif
 ifneq ($(CONFIG_ALPHA_PC164)$(CONFIG_ALPHA_LX164),)
 O_OBJS   += smc37c93x.o
 endif

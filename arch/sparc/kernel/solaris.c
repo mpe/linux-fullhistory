@@ -13,8 +13,6 @@
 #include <asm/errno.h>
 #include <asm/solerrno.h>
 
-extern asmlinkage int sys_open(const char *,int,int);
-
 asmlinkage int solaris_open(const char *filename, int flags, int mode)
 {
 	int newflags;
@@ -39,5 +37,3 @@ asmlinkage int solaris_open(const char *filename, int flags, int mode)
 	unlock_kernel();
 	return ret;
 }
-
-

@@ -28,11 +28,10 @@
 #include <asm/hwrpb.h>
 
 #include "proto.h"
-#include "irq.h"
-#include "bios32.h"
-#include "machvec.h"
+#include "irq_impl.h"
+#include "pci_impl.h"
+#include "machvec_impl.h"
 
-#define dev2hose(d) (bus2hose[(d)->bus->number]->pci_hose_index)
 
 /*
  * HACK ALERT! only the boot cpu is used for interrupts.
@@ -260,7 +259,7 @@ clipper_init_irq(void)
  */
 
 static int __init
-dp264_map_irq(struct pci_dev *dev, int slot, int pin)
+dp264_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
 	static char irq_tab[6][5] __initlocaldata = {
 		/*INT    INTA   INTB   INTC   INTD */
@@ -272,16 +271,18 @@ dp264_map_irq(struct pci_dev *dev, int slot, int pin)
 		{ 16+ 3, 16+ 3, 16+ 2, 16+ 1, 16+ 0}  /* IdSel 10 slot 3 */
 	};
 	const long min_idsel = 5, max_idsel = 10, irqs_per_slot = 5;
+
+	struct pci_controler *hose = dev->sysdata;
 	int irq = COMMON_TABLE_LOOKUP;
 
 	if (irq > 0)
-		irq += 16 * dev2hose(dev);
+		irq += 16 * hose->index;
 
 	return irq;
 }
 
 static int __init
-monet_map_irq(struct pci_dev *dev, int slot, int pin)
+monet_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
 	static char irq_tab[13][5] __initlocaldata = {
 		/*INT    INTA   INTB   INTC   INTD */
@@ -308,19 +309,23 @@ monet_map_irq(struct pci_dev *dev, int slot, int pin)
 	return COMMON_TABLE_LOOKUP;
 }
 
-static int __init
-monet_swizzle(struct pci_dev *dev, int *pinp)
+static u8 __init
+monet_swizzle(struct pci_dev *dev, u8 *pinp)
 {
+	struct pci_controler *hose = dev->sysdata;
 	int slot, pin = *pinp;
 
-	/* Check first for the built-in bridge on hose 1. */
-	if (dev2hose(dev) == 1 && PCI_SLOT(dev->bus->self->devfn) == 8) {
+	if (hose->first_busno == dev->bus->number) {
+		slot = PCI_SLOT(dev->devfn);
+	}
+	/* Check for the built-in bridge on hose 1. */
+	else if (hose->index == 1 && PCI_SLOT(dev->bus->self->devfn) == 8) {
 		slot = PCI_SLOT(dev->devfn);
 	} else {
 		/* Must be a card-based bridge.  */
 		do {
 			/* Check for built-in bridge on hose 1. */
-			if (dev2hose(dev) == 1 &&
+			if (hose->index == 1 &&
 			    PCI_SLOT(dev->bus->self->devfn) == 8) {
 				slot = PCI_SLOT(dev->devfn);
 				break;
@@ -338,7 +343,7 @@ monet_swizzle(struct pci_dev *dev, int *pinp)
 }
 
 static int __init
-webbrick_map_irq(struct pci_dev *dev, int slot, int pin)
+webbrick_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
 	static char irq_tab[13][5] __initlocaldata = {
 		/*INT    INTA   INTB   INTC   INTD */
@@ -359,7 +364,7 @@ webbrick_map_irq(struct pci_dev *dev, int slot, int pin)
 }
 
 static int __init
-clipper_map_irq(struct pci_dev *dev, int slot, int pin)
+clipper_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
 	static char irq_tab[7][5] __initlocaldata = {
 		/*INT    INTA   INTB   INTC   INTD */
@@ -372,44 +377,29 @@ clipper_map_irq(struct pci_dev *dev, int slot, int pin)
 		{    -1,    -1,    -1,    -1,    -1}  /* IdSel 7 ISA Bridge */
 	};
 	const long min_idsel = 1, max_idsel = 7, irqs_per_slot = 5;
+
+	struct pci_controler *hose = dev->sysdata;
 	int irq = COMMON_TABLE_LOOKUP;
 
 	if (irq > 0)
-		irq += 16 * dev2hose(dev);
+		irq += 16 * hose->index;
 
 	return irq;
 }
 
 static void __init
-dp264_pci_fixup(void)
+dp264_init_pci(void)
 {
-	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
-	common_pci_fixup(dp264_map_irq, common_swizzle);
+	common_init_pci();
 	SMC669_Init(0);
 }
 
 static void __init
-monet_pci_fixup(void)
+monet_init_pci(void)
 {
-	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
-	common_pci_fixup(monet_map_irq, monet_swizzle);
+	common_init_pci();
 	SMC669_Init(1);
 	es1888_init();
-}
-
-static void __init
-webbrick_pci_fixup(void)
-{
-	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
-	common_pci_fixup(webbrick_map_irq, common_swizzle);
-	SMC669_Init(0);
-}
-
-static void __init
-clipper_pci_fixup(void)
-{
-	layout_all_busses(DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
-	common_pci_fixup(clipper_map_irq, common_swizzle);
 }
 
 
@@ -425,18 +415,22 @@ struct alpha_machine_vector dp264_mv __initmv = {
 	DO_TSUNAMI_BUS,
 	machine_check:		tsunami_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	min_io_address:		DEFAULT_IO_BASE,
+	min_mem_address:	DEFAULT_MEM_BASE,
 
 	nr_irqs:		64,
 	irq_probe_mask:		_PROBE_MASK(64),
 	update_irq_hw:		dp264_update_irq_hw,
-	ack_irq:		generic_ack_irq,
+	ack_irq:		common_ack_irq,
 	device_interrupt:	dp264_device_interrupt,
 
 	init_arch:		tsunami_init_arch,
 	init_irq:		dp264_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		dp264_pci_fixup,
-	kill_arch:		generic_kill_arch,
+	init_pit:		common_init_pit,
+	init_pci:		dp264_init_pci,
+	kill_arch:		common_kill_arch,
+	pci_map_irq:		dp264_map_irq,
+	pci_swizzle:		common_swizzle,
 };
 ALIAS_MV(dp264)
 
@@ -448,18 +442,22 @@ struct alpha_machine_vector monet_mv __initmv = {
 	DO_TSUNAMI_BUS,
 	machine_check:		tsunami_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	min_io_address:		DEFAULT_IO_BASE,
+	min_mem_address:	DEFAULT_MEM_BASE,
 
 	nr_irqs:		64,
 	irq_probe_mask:		_PROBE_MASK(64),
 	update_irq_hw:		dp264_update_irq_hw,
-	ack_irq:		generic_ack_irq,
+	ack_irq:		common_ack_irq,
 	device_interrupt:	dp264_device_interrupt,
 
 	init_arch:		tsunami_init_arch,
 	init_irq:		dp264_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		monet_pci_fixup,
-	kill_arch:		generic_kill_arch,
+	init_pit:		common_init_pit,
+	init_pci:		monet_init_pci,
+	kill_arch:		common_kill_arch,
+	pci_map_irq:		monet_map_irq,
+	pci_swizzle:		monet_swizzle,
 };
 
 struct alpha_machine_vector webbrick_mv __initmv = {
@@ -470,18 +468,22 @@ struct alpha_machine_vector webbrick_mv __initmv = {
 	DO_TSUNAMI_BUS,
 	machine_check:		tsunami_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	min_io_address:		DEFAULT_IO_BASE,
+	min_mem_address:	DEFAULT_MEM_BASE,
 
 	nr_irqs:		64,
 	irq_probe_mask:		_PROBE_MASK(64),
 	update_irq_hw:		dp264_update_irq_hw,
-	ack_irq:		generic_ack_irq,
+	ack_irq:		common_ack_irq,
 	device_interrupt:	dp264_device_interrupt,
 
 	init_arch:		tsunami_init_arch,
 	init_irq:		dp264_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		webbrick_pci_fixup,
-	kill_arch:		generic_kill_arch,
+	init_pit:		common_init_pit,
+	init_pci:		dp264_init_pci,
+	kill_arch:		common_kill_arch,
+	pci_map_irq:		webbrick_map_irq,
+	pci_swizzle:		common_swizzle,
 };
 
 struct alpha_machine_vector clipper_mv __initmv = {
@@ -492,18 +494,22 @@ struct alpha_machine_vector clipper_mv __initmv = {
 	DO_TSUNAMI_BUS,
 	machine_check:		tsunami_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	min_io_address:		DEFAULT_IO_BASE,
+	min_mem_address:	DEFAULT_MEM_BASE,
 
 	nr_irqs:		64,
 	irq_probe_mask:		_PROBE_MASK(64),
 	update_irq_hw:		clipper_update_irq_hw,
-	ack_irq:		generic_ack_irq,
+	ack_irq:		common_ack_irq,
 	device_interrupt:	dp264_device_interrupt,
 
 	init_arch:		tsunami_init_arch,
 	init_irq:		clipper_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		clipper_pci_fixup,
-	kill_arch:		generic_kill_arch,
+	init_pit:		common_init_pit,
+	init_pci:		common_init_pci,
+	kill_arch:		common_kill_arch,
+	pci_map_irq:		clipper_map_irq,
+	pci_swizzle:		common_swizzle,
 };
 
 /* No alpha_mv alias for webbrick/monet/clipper, since we compile them

@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.33 1999/01/02 16:45:47 davem Exp $
+# $Id: Makefile,v 1.34 1999/08/14 03:51:42 anton Exp $
 # Makefile for the linux Sparc-specific parts of the memory manager.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -8,7 +8,10 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := mm.o
-O_OBJS   := fault.o init.o loadmmu.o generic.o asyncd.o extable.o btfixup.o
+O_OBJS   := fault.o init.o loadmmu.o generic.o extable.o btfixup.o
+ifeq ($(CONFIG_AP1000),y)
+O_OBJS	 += asyncd.o
+endif
 ifeq ($(CONFIG_SUN4),y)
 O_OBJS	 += nosrmmu.o
 else

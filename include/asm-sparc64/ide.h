@@ -1,4 +1,4 @@
-/* $Id: ide.h,v 1.15 1999/08/08 01:38:18 davem Exp $
+/* $Id: ide.h,v 1.16 1999/08/30 10:14:42 davem Exp $
  * ide.h: Ultra/PCI specific IDE glue.
  *
  * Copyright (C) 1997  David S. Miller (davem@caip.rutgers.edu)
@@ -135,50 +135,62 @@ static __inline__ void ide_release_region(ide_ioreg_t base, unsigned int size)
 #define insw(port, buf, nr) ide_insw((port), (buf), (nr))
 #define outsw(port, buf, nr) ide_outsw((port), (buf), (nr))
 
+static __inline__ unsigned int inw_be(unsigned long addr)
+{
+	unsigned int ret;
+
+	__asm__ __volatile__("lduha [%1] %2, %0"
+			     : "=r" (ret)
+			     : "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E));
+
+	return ret;
+}
+
 static __inline__ void ide_insw(unsigned long port,
 				void *dst,
 				unsigned long count)
 {
-	volatile unsigned short *data_port;
 	unsigned long end = (unsigned long)dst + (count << 1);
 	u16 *ps = dst;
 	u32 *pi;
 
-	data_port = (volatile unsigned short *)port;
-
 	if(((u64)ps) & 0x2) {
-		*ps++ = *data_port;
+		*ps++ = inw_be(port);
 		count--;
 	}
 	pi = (u32 *)ps;
 	while(count >= 2) {
 		u32 w;
 
-		w  = (*data_port) << 16;
-		w |= (*data_port);
+		w  = inw_be(port) << 16;
+		w |= inw_be(port);
 		*pi++ = w;
 		count -= 2;
 	}
 	ps = (u16 *)pi;
 	if(count)
-		*ps++ = *data_port;
+		*ps++ = inw_be(port);
 
 	__flush_dcache_range((unsigned long)dst, end);
+}
+
+static __inline__ void outw_be(unsigned short w, unsigned long addr)
+{
+	__asm__ __volatile__("stha %0, [%1] %2"
+			     : /* no outputs */
+			     : "r" (w), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E));
 }
 
 static __inline__ void ide_outsw(unsigned long port,
 				 const void *src,
 				 unsigned long count)
 {
-	volatile unsigned short *data_port;
 	unsigned long end = (unsigned long)src + (count << 1);
 	const u16 *ps = src;
 	const u32 *pi;
 
-	data_port = (volatile unsigned short *)port;
-
 	if(((u64)src) & 0x2) {
-		*data_port = *ps++;
+		outw_be(*ps++, port);
 		count--;
 	}
 	pi = (const u32 *)ps;
@@ -186,13 +198,13 @@ static __inline__ void ide_outsw(unsigned long port,
 		u32 w;
 
 		w = *pi++;
-		*data_port = (w >> 16);
-		*data_port = w;
+		outw_be((w >> 16), port);
+		outw_be(w, port);
 		count -= 2;
 	}
 	ps = (const u16 *)pi;
 	if(count)
-		*data_port = *ps;
+		outw_be(*ps, port);
 
 	__flush_dcache_range((unsigned long)src, end);
 }

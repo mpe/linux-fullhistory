@@ -86,6 +86,7 @@ static ctl_table proc_table[];
 static ctl_table fs_table[];
 static ctl_table debug_table[];
 static ctl_table dev_table[];
+extern ctl_table random_table[];
 
 
 /* /proc declarations: */
@@ -221,6 +222,7 @@ static ctl_table kern_table[] = {
 #endif	 
 	{KERN_MAX_THREADS, "threads-max", &max_threads, sizeof(int),
 	 0644, NULL, &proc_dointvec},
+	{KERN_RANDOM, "random", NULL, 0, 0555, random_table},
 	{0}
 };
 

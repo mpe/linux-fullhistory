@@ -1,4 +1,4 @@
-/* $Id: resource.h,v 1.8 1999/07/30 09:37:56 davem Exp $
+/* $Id: resource.h,v 1.9 1999/08/14 03:52:05 anton Exp $
  * resource.h: Resource definitions.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -25,14 +25,13 @@
 #define RLIM_NLIMITS	10
 
 #ifdef __KERNEL__
-
-#define INIT_RLIMITS							\
-{									\
-    {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX},				\
-    {LONG_MAX, LONG_MAX}, {_STK_LIM, LONG_MAX},				\
-    {       0, LONG_MAX}, {LONG_MAX, LONG_MAX},				\
-    {INR_OPEN, INR_OPEN}, {MAX_TASKS_PER_USER, MAX_TASKS_PER_USER},	\
-    {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX}                          \
+#define INIT_RLIMITS				\
+{						\
+    {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX},	\
+    {LONG_MAX, LONG_MAX}, {_STK_LIM, LONG_MAX},	\
+    {       0, LONG_MAX}, {LONG_MAX, LONG_MAX},	\
+    {INR_OPEN, INR_OPEN}, {0, 0},		\
+    {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX}  \
 }
 
 #endif /* __KERNEL__ */

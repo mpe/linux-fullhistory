@@ -1,4 +1,4 @@
-/* $Id: wof.S,v 1.38 1998/02/06 14:14:22 jj Exp $
+/* $Id: wof.S,v 1.39 1999/08/14 03:51:35 anton Exp $
  * wof.S: Sparc window overflow handler.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -62,7 +62,7 @@ spnwin_patch3_7win:	and	%twin_tmp, 0x7f, %twin_tmp
 	 * andcc %l0, PSR_PS, %g0
 	 */
 
-	/* Datum current->tss.uwinmask contains at all times a bitmask
+	/* Datum current->thread.uwinmask contains at all times a bitmask
 	 * where if any user windows are active, at least one bit will
 	 * be set in to mask.  If no user windows are active, the bitmask
 	 * will be all zeroes.
@@ -96,7 +96,7 @@ spnwin_patch2:	and	%glob_tmp, 0xff, %glob_tmp
 	 save	%g0, %g0, %g0				! Go where saving will occur
 	
 	/* See if any user windows are active in the set. */
-	ld	[%curptr + AOFF_task_tss + AOFF_thread_uwinmask], %twin_tmp	! grab win mask
+	ld	[%curptr + AOFF_task_thread + AOFF_thread_uwinmask], %twin_tmp	! grab win mask
 	orcc	%g0, %twin_tmp, %g0			! check for set bits
 	bne	spwin_exist_uwins			! yep, there are some
 	 andn	%twin_tmp, %glob_tmp, %twin_tmp		! compute new umask
@@ -139,7 +139,7 @@ spwin_exist_uwins:
 	 * But first, store the new user window mask calculated
 	 * above.
 	 */
-	st	%twin_tmp, [%curptr + AOFF_task_tss + AOFF_thread_uwinmask]
+	st	%twin_tmp, [%curptr + AOFF_task_thread + AOFF_thread_uwinmask]
 	save	%g0, %g0, %g0		! Go to where the saving will occur
 
 spwin_fromuser:
@@ -212,15 +212,15 @@ spwin_user_stack_is_bolixed:
 	/* Oh well, throw this one window into the per-task window
 	 * buffer, the first one.
 	 */
-	st	%sp, [%curptr + AOFF_task_tss + AOFF_thread_rwbuf_stkptrs]
-	STORE_WINDOW(curptr + AOFF_task_tss + AOFF_thread_reg_window)
+	st	%sp, [%curptr + AOFF_task_thread + AOFF_thread_rwbuf_stkptrs]
+	STORE_WINDOW(curptr + AOFF_task_thread + AOFF_thread_reg_window)
 	restore	%g0, %g0, %g0
 
 	/* LOCATION: Trap Window */
 
 	/* Back in the trap window, update winbuffer save count. */
 	mov	1, %glob_tmp
-	st	%glob_tmp, [%curptr + AOFF_task_tss + AOFF_thread_w_saved]
+	st	%glob_tmp, [%curptr + AOFF_task_thread + AOFF_thread_w_saved]
 
 		/* Compute new user window mask.  What we are basically
 		 * doing is taking two windows, the invalid one at trap
@@ -232,7 +232,7 @@ spwin_user_stack_is_bolixed:
 		or	%twin_tmp, %t_wim, %twin_tmp
 		not	%twin_tmp
 spnwin_patch3:	and	%twin_tmp, 0xff, %twin_tmp	! patched on 7win Sparcs
-		st	%twin_tmp, [%curptr + AOFF_task_tss + AOFF_thread_uwinmask]
+		st	%twin_tmp, [%curptr + AOFF_task_thread + AOFF_thread_uwinmask]
 
 #define STACK_OFFSET	(TASK_UNION_SIZE - TRACEREG_SZ - REGWIN_SZ)
 

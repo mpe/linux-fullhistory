@@ -3,7 +3,7 @@
  *
  *	Copyright (C) 1995 David A Rusling
  *	Copyright (C) 1996 Jay A Estabrook
- *	Copyright (C) 1998 Richard Henderson
+ *	Copyright (C) 1998, 1999 Richard Henderson
  *
  * Code supporting the ALCOR and XLT (XL-300/366/433).
  */
@@ -27,9 +27,9 @@
 #include <asm/core_cia.h>
 
 #include "proto.h"
-#include "irq.h"
-#include "bios32.h"
-#include "machvec.h"
+#include "irq_impl.h"
+#include "pci_impl.h"
+#include "machvec_impl.h"
 
 
 static void 
@@ -158,7 +158,7 @@ alcor_init_irq(void)
  */
 
 static int __init
-alcor_map_irq(struct pci_dev *dev, int slot, int pin)
+alcor_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
 	static char irq_tab[7][5] __initlocaldata = {
 		/*INT    INTA   INTB   INTC   INTD */
@@ -175,16 +175,8 @@ alcor_map_irq(struct pci_dev *dev, int slot, int pin)
 	return COMMON_TABLE_LOOKUP;
 }
 
-static void __init
-alcor_pci_fixup(void)
-{
-	layout_all_busses(EISA_DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
-	common_pci_fixup(alcor_map_irq, common_swizzle);
-}
-
-
 static void
-alcor_kill_arch (int mode, char *reboot_cmd)
+alcor_kill_arch(int mode, char *reboot_cmd)
 {
 	/* Who said DEC engineer's have no sense of humor? ;-)  */
 	if (alpha_using_srm) {
@@ -192,7 +184,7 @@ alcor_kill_arch (int mode, char *reboot_cmd)
 		mb();
 	}
 
-	generic_kill_arch(mode, reboot_cmd);
+	common_kill_arch(mode, reboot_cmd);
 }
 
 
@@ -209,6 +201,8 @@ struct alpha_machine_vector alcor_mv __initmv = {
 	DO_CIA_BUS,
 	machine_check:		cia_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	min_io_address:		EISA_DEFAULT_IO_BASE,
+	min_mem_address:	CIA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		48,
 	irq_probe_mask:		ALCOR_PROBE_MASK,
@@ -218,9 +212,11 @@ struct alpha_machine_vector alcor_mv __initmv = {
 
 	init_arch:		cia_init_arch,
 	init_irq:		alcor_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		alcor_pci_fixup,
+	init_pit:		common_init_pit,
+	init_pci:		common_init_pci,
 	kill_arch:		alcor_kill_arch,
+	pci_map_irq:		alcor_map_irq,
+	pci_swizzle:		common_swizzle,
 
 	sys: { cia: {
 	    gru_int_req_bits:	ALCOR_GRU_INT_REQ_BITS
@@ -238,6 +234,8 @@ struct alpha_machine_vector xlt_mv __initmv = {
 	DO_CIA_BUS,
 	machine_check:		cia_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	min_io_address:		EISA_DEFAULT_IO_BASE,
+	min_mem_address:	CIA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		48,
 	irq_probe_mask:		ALCOR_PROBE_MASK,
@@ -247,9 +245,11 @@ struct alpha_machine_vector xlt_mv __initmv = {
 
 	init_arch:		cia_init_arch,
 	init_irq:		alcor_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		alcor_pci_fixup,
+	init_pit:		common_init_pit,
+	init_pci:		common_init_pci,
 	kill_arch:		alcor_kill_arch,
+	pci_map_irq:		alcor_map_irq,
+	pci_swizzle:		common_swizzle,
 
 	sys: { cia: {
 	    gru_int_req_bits:	XLT_GRU_INT_REQ_BITS

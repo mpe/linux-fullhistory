@@ -595,8 +595,8 @@ void ___wait_on_page(struct page *page)
 
 	add_wait_queue(&page->wait, &wait);
 	do {
-		tsk->state = TASK_UNINTERRUPTIBLE;
 		run_task_queue(&tq_disk);
+		set_task_state(tsk, TASK_UNINTERRUPTIBLE);
 		if (!PageLocked(page))
 			break;
 		schedule();
@@ -610,23 +610,8 @@ void ___wait_on_page(struct page *page)
  */
 void lock_page(struct page *page)
 {
-	if (TryLockPage(page)) {
-		struct task_struct *tsk = current;
-		DECLARE_WAITQUEUE(wait, current);
-
-		run_task_queue(&tq_disk);
-		add_wait_queue(&page->wait, &wait);
-		tsk->state = TASK_UNINTERRUPTIBLE;
-
-		while (TryLockPage(page)) {
-			run_task_queue(&tq_disk);
-			schedule();
-			tsk->state = TASK_UNINTERRUPTIBLE;
-		}
-
-		remove_wait_queue(&page->wait, &wait);
-		tsk->state = TASK_RUNNING;
-	}
+	while (TryLockPage(page))
+		___wait_on_page(page);
 }
 
 
@@ -655,13 +640,14 @@ repeat:
 		struct task_struct *tsk = current;
 		DECLARE_WAITQUEUE(wait, tsk);
 
-		add_wait_queue(&page->wait, &wait);
-		tsk->state = TASK_UNINTERRUPTIBLE;
-
 		run_task_queue(&tq_disk);
+
+		__set_task_state(tsk, TASK_UNINTERRUPTIBLE);
+		add_wait_queue(&page->wait, &wait);
+
 		if (PageLocked(page))
 			schedule();
-		tsk->state = TASK_RUNNING;
+		__set_task_state(tsk, TASK_RUNNING);
 		remove_wait_queue(&page->wait, &wait);
 
 		/*
@@ -704,13 +690,14 @@ repeat:
 		struct task_struct *tsk = current;
 		DECLARE_WAITQUEUE(wait, tsk);
 
-		add_wait_queue(&page->wait, &wait);
-		tsk->state = TASK_UNINTERRUPTIBLE;
-
 		run_task_queue(&tq_disk);
+
+		__set_task_state(tsk, TASK_UNINTERRUPTIBLE);
+		add_wait_queue(&page->wait, &wait);
+
 		if (PageLocked(page))
 			schedule();
-		tsk->state = TASK_RUNNING;
+		__set_task_state(tsk, TASK_RUNNING);
 		remove_wait_queue(&page->wait, &wait);
 
 		/*

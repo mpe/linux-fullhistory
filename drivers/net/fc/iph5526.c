@@ -224,7 +224,7 @@ static int iph5526_probe_pci(struct net_device *dev);
 #endif
 
 
-__initfunc(int iph5526_probe(struct net_device *dev))
+int __init iph5526_probe(struct net_device *dev)
 {
 #ifdef CONFIG_PCI
 	if (pci_present() && (iph5526_probe_pci(dev) == 0))
@@ -234,7 +234,7 @@ __initfunc(int iph5526_probe(struct net_device *dev))
 }
 
 #ifdef CONFIG_PCI
-__initfunc(static int iph5526_probe_pci(struct net_device *dev))
+static int __init iph5526_probe_pci(struct net_device *dev)
 {
 #ifndef MODULE
 struct fc_info *fi;
@@ -278,7 +278,7 @@ struct fc_info *fi = (struct fc_info *)dev->priv;
 }
 #endif  /* CONFIG_PCI */
 
-__initfunc(static int fcdev_init(struct net_device *dev))
+static int __init fcdev_init(struct net_device *dev)
 {
 	dev->open = iph5526_open;
 	dev->stop = iph5526_close;

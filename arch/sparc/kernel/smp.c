@@ -107,13 +107,13 @@ void __init initialize_secondary(void)
 {
 }
 
-extern int cpu_idle(void *unused);
+extern int cpu_idle(void);
 
 /* Activate a secondary processor. */
 int start_secondary(void *unused)
 {
 	prom_printf("Start secondary called. Should not happen\n");
-	return cpu_idle(NULL);
+	return cpu_idle();
 }
 
 void cpu_panic(void)

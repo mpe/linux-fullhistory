@@ -47,7 +47,8 @@ typedef struct { void *null; } elf_fpregset_t;
 /* This yields a mask that user programs can use to figure out what
    instruction set this cpu supports. */
 
-#define ELF_HWCAP	(armidlist[armidindex].hwcap)
+extern unsigned int elf_hwcap;
+#define ELF_HWCAP	(elf_hwcap)
 
 /* This yields a string that ld.so will use to load implementation
    specific libraries for optimization.  This is more specific in

@@ -7,7 +7,7 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/smp.h>
-#include <linux/tasks.h>
+#include <linux/threads.h>
 #include <asm/oplib.h>
 #include <asm/page.h>
 #include <asm/head.h>

@@ -395,11 +395,6 @@ static inline pid_t wait(int * wait_stat)
  */
 static inline _syscall3(int,execve,const char *,file,char **,argv,char **,envp);
 
-/*
- * Create a new kernel thread
- */
-extern pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags);
-
 #endif
 #endif /* __ASM_ARM_UNISTD_H */
 

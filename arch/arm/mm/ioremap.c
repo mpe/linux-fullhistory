@@ -143,7 +143,7 @@ void * __ioremap(unsigned long phys_addr, unsigned long size, unsigned long flag
 	return (void *) (offset + (char *)addr);
 }
 
-void iounmap(void *addr)
+void __iounmap(void *addr)
 {
 	return vfree((void *) (PAGE_MASK & (unsigned long) addr));
 }

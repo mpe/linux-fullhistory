@@ -125,10 +125,13 @@ int get_irq_list(char *buf)
 	return p - buf;
 }
 
+
 /*
  * Global interrupt locks for SMP. Allow interrupts to come in on any
  * CPU, yet make cli/sti act globally to protect critical regions..
  */
+spinlock_t i386_bh_lock = SPIN_LOCK_UNLOCKED;
+
 #ifdef __SMP__
 unsigned char global_irq_holder = NO_PROC_ID;
 unsigned volatile int global_irq_lock;
@@ -136,7 +139,6 @@ atomic_t global_irq_count;
 
 atomic_t global_bh_count;
 atomic_t global_bh_lock;
-spinlock_t i386_bh_lock = SPIN_LOCK_UNLOCKED;
 
 /*
  * "global_cli()" is a special case, in that it can hold the

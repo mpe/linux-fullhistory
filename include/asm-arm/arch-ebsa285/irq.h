@@ -110,6 +110,8 @@ static void no_action(int cpl, void *dev_id, struct pt_regs *regs)
 }
 
 static struct irqaction irq_cascade = { no_action, 0, 0, "cascade", NULL, NULL };
+static struct resource pic1_resource = { "pic1", 0x20, 0x3f };
+static struct resource pic2_resource = { "pic2", 0xa0, 0xbf };
 
 static __inline__ void irq_init_irq(void)
 {
@@ -203,8 +205,8 @@ static __inline__ void irq_init_irq(void)
 			irq_desc[irq].unmask	= isa_unmask_pic_hi_irq;
 		}
 
-		request_region(PIC_LO, 2, "pic1");
-		request_region(PIC_HI, 2, "pic2");
+		request_resource(&ioport_resource, &pic1_resource);
+		request_resource(&ioport_resource, &pic2_resource);
 		setup_arm_irq(IRQ_ISA_CASCADE, &irq_cascade);
 		setup_arm_irq(isa_irq, &irq_cascade);
 	}

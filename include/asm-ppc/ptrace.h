@@ -6,7 +6,7 @@
  * kernel stack during a system call or other kernel entry.
  *
  * this should only contain volatile regs
- * since we can keep non-volatile in the tss
+ * since we can keep non-volatile in the thread_struct
  * should set this up when only volatiles are saved
  * by intr code.
  *

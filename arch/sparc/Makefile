@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.41 1999/06/04 13:29:05 jj Exp $
+# $Id: Makefile,v 1.44 1999/08/19 06:22:20 jj Exp $
 # sparc/Makefile
 #
 # Makefile for the architecture dependent flags and dependencies on the
@@ -15,7 +15,7 @@ SHELL  =/bin/bash
 # Uncomment the first CFLAGS if you are doing kgdb source level
 # debugging of the kernel to get the proper debugging information.
 
-IS_EGCS := $(shell if $(CC) -c -m32 -o _tmp.o arch/sparc/math-emu/fnegs.c >/dev/null 2>&1; then echo y; else echo n; fi; rm -f _tmp.o)
+IS_EGCS := $(shell if $(CC) -m32 -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo y; else echo n; fi; )
 NEW_GAS := $(shell if $(LD) --version 2>&1 | grep 'elf64_sparc' > /dev/null; then echo y; else echo n; fi)
 
 ifeq ($(NEW_GAS),y)
@@ -62,10 +62,8 @@ archclean:
 	-$(MAKE) -C arch/sparc/boot clean
 
 archmrproper:
-	-$(MAKE) -C arch/sparc/math-emu cleansymlinks
 
 archdep:
-	-$(MAKE) -C arch/sparc/math-emu symlinks
 
 check_asm:
 	$(MAKE) -C arch/sparc/kernel check_asm

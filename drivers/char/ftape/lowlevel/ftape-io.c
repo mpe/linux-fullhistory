@@ -95,19 +95,19 @@ void ftape_sleep(unsigned int time)
 
 		TRACE(ft_t_any, "%d msec, %d ticks", time/1000, ticks);
 		timeout = ticks;
-		current->state = TASK_INTERRUPTIBLE;
 		save_flags(flags);
 		sti();
+		set_current_state(TASK_INTERRUPTIBLE);
 		do {
-			while (current->state != TASK_RUNNING) {
-				timeout = schedule_timeout(timeout);
-			}
 			/*  Mmm. Isn't current->blocked == 0xffffffff ?
 			 */
 			if (signal_pending(current)) {
 				TRACE(ft_t_err,
 				      "awoken by non-blocked signal :-(");
 				break;	/* exit on signal */
+			}
+			while (current->state != TASK_RUNNING) {
+				timeout = schedule_timeout(timeout);
 			}
 		} while (timeout);
 		restore_flags(flags);

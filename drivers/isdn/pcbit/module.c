@@ -105,7 +105,7 @@ void cleanup_module(void)
 #ifdef COMPAT_HAS_NEW_SETUP
 #define MAX_PARA	(MAX_PCBIT_CARDS * 2)
 #include <linux/init.h>
-int pcbit_setup(char *line)
+static int __init pcbit_setup(char *line)
 {
 	int i, j, argc;
 	char *str;

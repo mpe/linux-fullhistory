@@ -1,8 +1,6 @@
 #ifndef __ALPHA_IO_H
 #define __ALPHA_IO_H
 
-#define __DEBUG_IOREMAP 1
-
 #include <linux/config.h>
 #include <linux/kernel.h>
 #include <asm/system.h>

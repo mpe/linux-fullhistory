@@ -1,6 +1,7 @@
 /*
- * Written by Cort Dougan to replace the version written by
- * Paul Mackerras that had copyright conflicts with Linux.
+ * Written by Cort Dougan to replace the version originally used
+ * by Paul Mackerras, which came from NetBSD and thus had copyright
+ * conflicts with Linux.
  *
  * This file makes liberal use of the standard linux utility
  * routines to reduce the size of the binary.  We assume we can
@@ -20,9 +21,11 @@ extern int xmon_write(void *, void *, int);
 void
 xmon_vfprintf(void *f, const char *fmt, va_list ap)
 {
-	char buf[2048];
-	vsprintf( buf, fmt, ap );
-	xmon_write( f, buf, strlen(buf) );
+	static char xmon_buf[2048];
+	int n;
+
+	n = vsprintf(xmon_buf, fmt, ap);
+	xmon_write(f, xmon_buf, n);
 }
 
 void

@@ -5,7 +5,7 @@
  *
  *		PACKET - implements raw packet sockets.
  *
- * Version:	$Id: af_packet.c,v 1.23 1999/08/23 06:30:40 davem Exp $
+ * Version:	$Id: af_packet.c,v 1.24 1999/08/30 12:14:52 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -241,7 +241,7 @@ extern struct proto_ops packet_ops_spkt;
 static int packet_rcv_spkt(struct sk_buff *skb, struct net_device *dev,  struct packet_type *pt)
 {
 	struct sock *sk;
-	struct sockaddr_pkt *spkt = (struct sockaddr_pkt*)skb->cb;
+	struct sockaddr_pkt *spkt;
 
 	/*
 	 *	When we registered the protocol we saved the socket in the data
@@ -266,6 +266,8 @@ static int packet_rcv_spkt(struct sk_buff *skb, struct net_device *dev,  struct 
 
 	if ((skb = skb_share_check(skb, GFP_ATOMIC)) == NULL)
 		goto oom;
+
+	spkt = (struct sockaddr_pkt*)skb->cb;
 
 	skb_push(skb, skb->data-skb->mac.raw);
 

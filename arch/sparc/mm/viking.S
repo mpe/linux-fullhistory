@@ -1,4 +1,4 @@
-/* $Id: viking.S,v 1.13 1999/03/24 11:42:32 davem Exp $
+/* $Id: viking.S,v 1.14 1999/08/14 03:51:50 anton Exp $
  * viking.S: High speed Viking cache/mmu operations
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -144,7 +144,7 @@ viking_mxcc_flush_chunk:
 
 #define WINDOW_FLUSH(tmp1, tmp2)					\
 	mov	0, tmp1;						\
-98:	ld	[%g6 + AOFF_task_tss + AOFF_thread_uwinmask], tmp2;	\
+98:	ld	[%g6 + AOFF_task_thread + AOFF_thread_uwinmask], tmp2;	\
 	orcc	%g0, tmp2, %g0;						\
 	add	tmp1, 1, tmp1;						\
 	bne	98b;							\

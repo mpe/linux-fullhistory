@@ -145,7 +145,7 @@ static int open_mouse(struct inode *inode, struct file *file)
 
 static struct busmouse adb_mouse =
 {
-	ADB_MOUSE_MINOR, "adbmouse", open_mouse, close_mouse, 7
+	ADB_MOUSE_MINOR, "adbmouse", open_mouse, release_mouse, 7
 };
 
 int __init adb_mouse_init(void)

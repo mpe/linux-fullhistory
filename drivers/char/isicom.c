@@ -995,7 +995,7 @@ static int block_til_ready(struct tty_struct * tty, struct file * filp, struct i
 			raise_dtr_rts(port);
 		
 		sti();
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		if (tty_hung_up_p(filp) || !(port->flags & ASYNC_INITIALIZED)) { 	
 			if (port->flags & ASYNC_HUP_NOTIFY)
 				retval = -EAGAIN;

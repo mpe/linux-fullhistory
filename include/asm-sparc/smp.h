@@ -6,7 +6,7 @@
 #ifndef _SPARC_SMP_H
 #define _SPARC_SMP_H
 
-#include <linux/tasks.h>
+#include <linux/threads.h>
 #include <asm/head.h>
 #include <asm/btfixup.h>
 

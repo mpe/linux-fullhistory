@@ -1,5 +1,5 @@
 /*
- * $Id: prep_pci.c,v 1.35 1999/05/10 23:31:03 cort Exp $
+ * $Id: prep_pci.c,v 1.39 1999/08/31 15:42:39 cort Exp $
  * PReP pci functions.
  * Originally by Gary Thomas
  * rewritten and updated by Cort Dougan (cort@cs.nmt.edu)
@@ -13,6 +13,7 @@
 #include <linux/init.h>
 #include <linux/openpic.h>
 
+#include <asm/init.h>
 #include <asm/byteorder.h>
 #include <asm/io.h>
 #include <asm/ptrace.h>
@@ -1016,17 +1017,17 @@ prep_pcibios_fixup(void)
 
 		for ( i = 0 ; i <= 5 ; i++ )
 		{
-		        if ( dev->base_address[i] > 0x10000000 )
+		        if ( dev->resource[i].start > 0x10000000 )
 		        {
 		                printk("Relocating PCI address %lx -> %lx\n",
-		                       dev->base_address[i],
-		                       (dev->base_address[i] & 0x00FFFFFF)
+		                       dev->resource[i].start,
+		                       (dev->resource[i].start & 0x00FFFFFF)
 		                       | 0x01000000);
-		                dev->base_address[i] =
-		                  (dev->base_address[i] & 0x00FFFFFF) | 0x01000000;
+		                dev->resource[i].start =
+		                  (dev->resource[i].start & 0x00FFFFFF) | 0x01000000;
 		                pci_write_config_dword(dev,
 		                        PCI_BASE_ADDRESS_0+(i*0x4),
-		                       dev->base_address[i] );
+		                       dev->resource[i].start );
 		        }
 		}
 #if 0
@@ -1053,7 +1054,7 @@ prep_setup_pci_ptrs(void)
         {
 		pci_config_address = (unsigned *)0x80000cf8;
 		pci_config_data = (char *)0x80000cfc;
-                set_config_access_method(indirect);		
+		set_config_access_method(indirect);		
         }
         else
         {

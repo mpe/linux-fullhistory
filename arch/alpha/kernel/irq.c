@@ -30,7 +30,7 @@
 #include <asm/machvec.h>
 
 #include "proto.h"
-#include "irq.h"
+#include "irq_impl.h"
 
 #define vulp	volatile unsigned long *
 #define vuip	volatile unsigned int *
@@ -67,7 +67,7 @@ unsigned long alpha_irq_mask = ~0UL;
  */
 
 void
-generic_ack_irq(unsigned long irq)
+common_ack_irq(unsigned long irq)
 {
 	if (irq < 16) {
 		/* Ack the interrupt making it the lowest priority */
@@ -987,7 +987,9 @@ process_mcheck_info(unsigned long vector, unsigned long la_ptr,
 
 	printk(KERN_CRIT "machine check type: %s%s\n",
 	       reason, mchk_header->retry ? " (retryable)" : "");
-	
+
+	dik_show_regs(regs, NULL);
+
 #if DEBUG_MCHECK > 1
 	{
 		/* Dump the logout area to give all info.  */

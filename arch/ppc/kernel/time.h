@@ -1,5 +1,5 @@
 /*
- * $Id: time.h,v 1.11 1999/03/18 04:16:34 cort Exp $
+ * $Id: time.h,v 1.12 1999/08/27 04:21:23 cort Exp $
  * Common time prototypes and such for all ppc machines.
  *
  * Written by Cort Dougan (cort@cs.nmt.edu) to merge
@@ -15,7 +15,7 @@ extern unsigned count_period_den;
 extern unsigned long mktime(unsigned int, unsigned int, unsigned int,
 			    unsigned int, unsigned int, unsigned int);
 extern void to_tm(int tim, struct rtc_time * tm);
-extern unsigned long last_rtc_update;
+extern time_t last_rtc_update;
 
 int via_calibrate_decr(void);
 

@@ -1,5 +1,5 @@
 /*
- * $Id: totalmp.c,v 1.5 1998/08/26 13:58:50 cort Exp $
+ * $Id: totalmp.c,v 1.6 1999/08/31 06:54:10 davem Exp $
  *
  * Support for Total Impact's TotalMP PowerPC accelerator board.
  *

@@ -30,7 +30,6 @@
  ********************************************************************/
 
 #include <linux/init.h>
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/sched.h>
@@ -90,7 +89,7 @@ hashbin_t *ircomm_tty = NULL;
  *    Init IrCOMM TTY layer/driver
  *
  */
-__initfunc(int ircomm_tty_init(void))
+int __init ircomm_tty_init(void)
 {	
 	ircomm_tty = hashbin_new(HB_LOCAL); 
 	if (ircomm_tty == NULL) {
@@ -305,7 +304,7 @@ static int ircomm_tty_block_til_ready(struct ircomm_tty_cb *self,
 			restore_flags(flags);
 		}
 		
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		
 		if (tty_hung_up_p(filp) || !(self->flags & ASYNC_INITIALIZED)){
 			retval = (self->flags & ASYNC_HUP_NOTIFY) ?
@@ -337,7 +336,7 @@ static int ircomm_tty_block_til_ready(struct ircomm_tty_cb *self,
 		schedule();
 	}
 	
-	current->state = TASK_RUNNING;
+	__set_current_state(TASK_RUNNING);
 	remove_wait_queue(&self->open_wait, &wait);
 	
 	if (extra_count)

@@ -1,0 +1,261 @@
+#ifndef __ASM_SH_BITOPS_H
+#define __ASM_SH_BITOPS_H
+
+#ifdef __KERNEL__
+#include <asm/system.h>
+/* For __swab32 */
+#include <asm/byteorder.h>
+
+extern __inline__ void set_bit(int nr, void * addr)
+{
+	int	mask;
+	unsigned int *a = addr;
+	unsigned long flags;
+
+	a += nr >> 5;
+	mask = 1 << (nr & 0x1f);
+	save_flags(flags);
+	cli();
+	*a |= mask;
+	restore_flags(flags);
+}
+
+extern __inline__ void clear_bit(int nr, void * addr)
+{
+	int	mask;
+	unsigned int *a = addr;
+	unsigned long flags;
+
+	a += nr >> 5;
+	mask = 1 << (nr & 0x1f);
+	save_flags(flags);
+	cli();
+	*a &= ~mask;
+	restore_flags(flags);
+}
+
+extern __inline__ void change_bit(int nr, void * addr)
+{
+	int	mask;
+	unsigned int *a = addr;
+	unsigned long flags;
+
+	a += nr >> 5;
+	mask = 1 << (nr & 0x1f);
+	save_flags(flags);
+	cli();
+	*a ^= mask;
+	restore_flags(flags);
+}
+
+extern __inline__ int test_and_set_bit(int nr, void * addr)
+{
+	int	mask, retval;
+	unsigned int *a = addr;
+	unsigned long flags;
+
+	a += nr >> 5;
+	mask = 1 << (nr & 0x1f);
+	save_flags(flags);
+	cli();
+	retval = (mask & *a) != 0;
+	*a |= mask;
+	restore_flags(flags);
+
+	return retval;
+}
+
+extern __inline__ int test_and_clear_bit(int nr, void * addr)
+{
+	int	mask, retval;
+	unsigned int *a = addr;
+	unsigned long flags;
+
+	a += nr >> 5;
+	mask = 1 << (nr & 0x1f);
+	save_flags(flags);
+	cli();
+	retval = (mask & *a) != 0;
+	*a &= ~mask;
+	restore_flags(flags);
+
+	return retval;
+}
+
+extern __inline__ int test_and_change_bit(int nr, void * addr)
+{
+	int	mask, retval;
+	unsigned int *a = addr;
+	unsigned long flags;
+
+	a += nr >> 5;
+	mask = 1 << (nr & 0x1f);
+	save_flags(flags);
+	cli();
+	retval = (mask & *a) != 0;
+	*a ^= mask;
+	restore_flags(flags);
+
+	return retval;
+}
+
+
+extern __inline__ int test_bit(int nr, const void *addr)
+{
+	return 1UL & (((const int *) addr)[nr >> 5] >> (nr & 31));
+}
+
+extern __inline__ unsigned long ffz(unsigned long word)
+{
+	unsigned long result;
+
+	__asm__("1:\n"
+		"shlr	%1\n\t"
+		"bt/s	1b\n\t"
+		"add	#1, %0"
+		: "=r" (result)
+		: "r" (word), "0" (~0L));
+	return result;
+}
+
+extern __inline__ int find_next_zero_bit(void *addr, int size, int offset)
+{
+	unsigned long *p = ((unsigned long *) addr) + (offset >> 5);
+	unsigned long result = offset & ~31UL;
+	unsigned long tmp;
+
+	if (offset >= size)
+		return size;
+	size -= result;
+	offset &= 31UL;
+	if (offset) {
+		tmp = *(p++);
+		tmp |= ~0UL >> (32-offset);
+		if (size < 32)
+			goto found_first;
+		if (~tmp)
+			goto found_middle;
+		size -= 32;
+		result += 32;
+	}
+	while (size & ~31UL) {
+		if (~(tmp = *(p++)))
+			goto found_middle;
+		result += 32;
+		size -= 32;
+	}
+	if (!size)
+		return result;
+	tmp = *p;
+
+found_first:
+	tmp |= ~0UL << size;
+found_middle:
+	return result + ffz(tmp);
+}
+
+#define find_first_zero_bit(addr, size) \
+        find_next_zero_bit((addr), (size), 0)
+
+extern __inline__ int ext2_set_bit(int nr,void * addr)
+{
+	int		mask, retval;
+	unsigned long flags;
+	unsigned char	*ADDR = (unsigned char *) addr;
+
+	ADDR += nr >> 3;
+	mask = 1 << (nr & 0x07);
+	save_flags(flags); cli();
+	retval = (mask & *ADDR) != 0;
+	*ADDR |= mask;
+	restore_flags(flags);
+	return retval;
+}
+
+extern __inline__ int ext2_clear_bit(int nr, void * addr)
+{
+	int		mask, retval;
+	unsigned long flags;
+	unsigned char	*ADDR = (unsigned char *) addr;
+
+	ADDR += nr >> 3;
+	mask = 1 << (nr & 0x07);
+	save_flags(flags); cli();
+	retval = (mask & *ADDR) != 0;
+	*ADDR &= ~mask;
+	restore_flags(flags);
+	return retval;
+}
+
+extern __inline__ int ext2_test_bit(int nr, const void * addr)
+{
+	int			mask;
+	const unsigned char	*ADDR = (const unsigned char *) addr;
+
+	ADDR += nr >> 3;
+	mask = 1 << (nr & 0x07);
+	return ((mask & *ADDR) != 0);
+}
+
+#define ext2_find_first_zero_bit(addr, size) \
+        ext2_find_next_zero_bit((addr), (size), 0)
+
+extern __inline__ unsigned long ext2_find_next_zero_bit(void *addr, unsigned long size, unsigned long offset)
+{
+	unsigned long *p = ((unsigned long *) addr) + (offset >> 5);
+	unsigned long result = offset & ~31UL;
+	unsigned long tmp;
+
+	if (offset >= size)
+		return size;
+	size -= result;
+	offset &= 31UL;
+	if(offset) {
+		/* We hold the little endian value in tmp, but then the
+		 * shift is illegal. So we could keep a big endian value
+		 * in tmp, like this:
+		 *
+		 * tmp = __swab32(*(p++));
+		 * tmp |= ~0UL >> (32-offset);
+		 *
+		 * but this would decrease preformance, so we change the
+		 * shift:
+		 */
+		tmp = *(p++);
+		tmp |= __swab32(~0UL >> (32-offset));
+		if(size < 32)
+			goto found_first;
+		if(~tmp)
+			goto found_middle;
+		size -= 32;
+		result += 32;
+	}
+	while(size & ~31UL) {
+		if(~(tmp = *(p++)))
+			goto found_middle;
+		result += 32;
+		size -= 32;
+	}
+	if(!size)
+		return result;
+	tmp = *p;
+
+found_first:
+	/* tmp is little endian, so we would have to swab the shift,
+	 * see above. But then we have to swab tmp below for ffz, so
+	 * we might as well do this here.
+	 */
+	return result + ffz(__swab32(tmp) | (~0UL << size));
+found_middle:
+	return result + ffz(__swab32(tmp));
+}
+
+/* Bitmap functions for the minix filesystem.  */
+#define minix_set_bit(nr,addr) test_and_set_bit(nr,addr)
+#define minix_clear_bit(nr,addr) test_and_clear_bit(nr,addr)
+#define minix_test_bit(nr,addr) test_bit(nr,addr)
+#define minix_find_first_zero_bit(addr,size) find_first_zero_bit(addr,size)
+
+#endif /* __KERNEL__ */
+
+#endif /* __ASM_SH_BITOPS_H */

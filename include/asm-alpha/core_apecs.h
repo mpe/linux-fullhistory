@@ -67,25 +67,17 @@
    make the AVANTI support pay for the limitations of the XL. It is true,
    however, that an XL kernel will run on an AVANTI without problems.
 */
-#define APECS_XL_DMA_WIN1_BASE		(64*1024*1024)
-#define APECS_XL_DMA_WIN1_SIZE		(64*1024*1024)
-#define APECS_XL_DMA_WIN1_SIZE_PARANOID	(48*1024*1024)
-#define APECS_XL_DMA_WIN2_BASE		(1024*1024*1024)
-#define APECS_XL_DMA_WIN2_SIZE		(1024*1024*1024)
+#define APECS_XL_DMA_WIN1_BASE		(64UL*1024*1024)
+#define APECS_XL_DMA_WIN1_SIZE		(64UL*1024*1024)
+#define APECS_XL_DMA_WIN1_SIZE_PARANOID	(48UL*1024*1024)
+#define APECS_XL_DMA_WIN2_BASE		(1UL*1024*1024*1024)
+#define APECS_XL_DMA_WIN2_SIZE		(1UL*1024*1024*1024)
 
 
 /* These are for normal APECS family machines, AVANTI/MUSTANG/EB64/PC64.  */
 
-#define APECS_DMA_WIN_BASE_DEFAULT	(1024*1024*1024)
-#define APECS_DMA_WIN_SIZE_DEFAULT	(1024*1024*1024)
-
-#if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_SRM_SETUP)
-#define APECS_DMA_WIN_BASE		alpha_mv.dma_win_base
-#define APECS_DMA_WIN_SIZE		alpha_mv.dma_win_size
-#else
-#define APECS_DMA_WIN_BASE		APECS_DMA_WIN_BASE_DEFAULT
-#define APECS_DMA_WIN_SIZE		APECS_DMA_WIN_SIZE_DEFAULT
-#endif
+#define APECS_DMA_WIN_BASE		(1UL*1024*1024*1024)
+#define APECS_DMA_WIN_SIZE		(1UL*1024*1024*1024)
 
 
 /*
@@ -400,9 +392,9 @@ static inline unsigned long apecs_xl_virt_to_bus(void * address)
 {
 	unsigned long paddr = virt_to_phys(address);
 	if (paddr < APECS_XL_DMA_WIN1_SIZE_PARANOID)
-	  return paddr + APECS_XL_DMA_WIN1_BASE;
+		return paddr + APECS_XL_DMA_WIN1_BASE;
 	else
-	  return paddr + APECS_XL_DMA_WIN2_BASE; /* win 2 xlates to 0 also */
+		return paddr + APECS_XL_DMA_WIN2_BASE;
 }
 
 __EXTERN_INLINE void * apecs_bus_to_virt(unsigned long address)
@@ -501,14 +493,6 @@ __EXTERN_INLINE unsigned long apecs_readb(unsigned long addr)
 {
 	unsigned long result, msb;
 
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "apecs: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += APECS_DENSE_MEM;
-	}
-#endif
-
 	addr -= APECS_DENSE_MEM;
 	if (addr >= (1UL << 24)) {
 		msb = addr & 0xf8000000;
@@ -523,14 +507,6 @@ __EXTERN_INLINE unsigned long apecs_readw(unsigned long addr)
 {
 	unsigned long result, msb;
 
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "apecs: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += APECS_DENSE_MEM;
-	}
-#endif
-
 	addr -= APECS_DENSE_MEM;
 	if (addr >= (1UL << 24)) {
 		msb = addr & 0xf8000000;
@@ -543,41 +519,17 @@ __EXTERN_INLINE unsigned long apecs_readw(unsigned long addr)
 
 __EXTERN_INLINE unsigned long apecs_readl(unsigned long addr)
 {
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "apecs: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += APECS_DENSE_MEM;
-	}
-#endif
-
 	return *(vuip)addr;
 }
 
 __EXTERN_INLINE unsigned long apecs_readq(unsigned long addr)
 {
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "apecs: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += APECS_DENSE_MEM;
-	}
-#endif
-
 	return *(vulp)addr;
 }
 
 __EXTERN_INLINE void apecs_writeb(unsigned char b, unsigned long addr)
 {
 	unsigned long msb;
-
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "apecs: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += APECS_DENSE_MEM;
-	}
-#endif
 
 	addr -= APECS_DENSE_MEM;
 	if (addr >= (1UL << 24)) {
@@ -592,14 +544,6 @@ __EXTERN_INLINE void apecs_writew(unsigned short b, unsigned long addr)
 {
 	unsigned long msb;
 
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "apecs: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += APECS_DENSE_MEM;
-	}
-#endif
-
 	addr -= APECS_DENSE_MEM;
 	if (addr >= (1UL << 24)) {
 		msb = addr & 0xf8000000;
@@ -611,38 +555,22 @@ __EXTERN_INLINE void apecs_writew(unsigned short b, unsigned long addr)
 
 __EXTERN_INLINE void apecs_writel(unsigned int b, unsigned long addr)
 {
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "apecs: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += APECS_DENSE_MEM;
-	}
-#endif
-
 	*(vuip)addr = b;
 }
 
 __EXTERN_INLINE void apecs_writeq(unsigned long b, unsigned long addr)
 {
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "apecs: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += APECS_DENSE_MEM;
-	}
-#endif
-
 	*(vulp)addr = b;
 }
 
 __EXTERN_INLINE unsigned long apecs_ioremap(unsigned long addr)
 {
-	return APECS_DENSE_MEM + addr;
+	return addr + APECS_DENSE_MEM;
 }
 
 __EXTERN_INLINE int apecs_is_ioaddr(unsigned long addr)
 {
-	return addr >= IDENT_ADDR + 0x100000000UL;
+	return addr >= IDENT_ADDR + 0x180000000UL;
 }
 
 #undef vip
@@ -677,17 +605,14 @@ __EXTERN_INLINE int apecs_is_ioaddr(unsigned long addr)
 #define __is_ioaddr	apecs_is_ioaddr
 
 #define inb(port) \
-(__builtin_constant_p((port))?__inb(port):_inb(port))
-
+  (__builtin_constant_p((port))?__inb(port):_inb(port))
 #define outb(x, port) \
-(__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
+  (__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
 
-#if !__DEBUG_IOREMAP
 #define __raw_readl(a)		__readl((unsigned long)(a))
 #define __raw_readq(a)		__readq((unsigned long)(a))
 #define __raw_writel(v,a)	__writel((v),(unsigned long)(a))
 #define __raw_writeq(v,a)	__writeq((v),(unsigned long)(a))
-#endif
 
 #endif /* __WANT_IO_DEF */
 

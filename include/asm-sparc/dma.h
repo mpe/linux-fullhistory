@@ -1,4 +1,4 @@
-/* $Id: dma.h,v 1.29 1998/11/29 15:49:44 davem Exp $
+/* $Id: dma.h,v 1.30 1999/08/08 14:03:37 shadow Exp $
  * include/asm-sparc/dma.h
  *
  * Copyright 1995 (C) David S. Miller (davem@caip.rutgers.edu)
@@ -119,6 +119,7 @@ extern void dvma_init(struct linux_sbus *);
 #define DMA_FIFO_STDRAIN 0x00000040        /* DMA_VERS1 Drain the FIFO */
 #define DMA_RST_SCSI     0x00000080        /* Reset the SCSI controller */
 #define DMA_RST_ENET     DMA_RST_SCSI      /* Reset the ENET controller */
+#define DMA_RST_BPP      DMA_RST_SCSI      /* Reset the BPP controller */
 #define DMA_ST_WRITE     0x00000100        /* write from device to memory */
 #define DMA_ENABLE       0x00000200        /* Fire up DMA, handle requests */
 #define DMA_PEND_READ    0x00000400        /* DMA_VERS1/0/PLUS Pending Read */
@@ -135,8 +136,8 @@ extern void dvma_init(struct linux_sbus *);
 #define DMA_E_BURST8	 0x00040000	   /* ENET: SBUS r/w burst size */
 #define DMA_BRST_SZ      0x000c0000        /* SCSI: SBUS r/w burst size */
 #define DMA_BRST64       0x00080000        /* SCSI: 64byte bursts (HME on UltraSparc only) */
-#define DMA_BRST32       0x00040000        /* SCSI: 32byte bursts */
-#define DMA_BRST16       0x00000000        /* SCSI: 16byte bursts */
+#define DMA_BRST32       0x00040000        /* SCSI/BPP: 32byte bursts */
+#define DMA_BRST16       0x00000000        /* SCSI/BPP: 16byte bursts */
 #define DMA_BRST0        0x00080000        /* SCSI: no bursts (non-HME gate arrays) */
 #define DMA_ADDR_DISAB   0x00100000        /* No FIFO drains during addr */
 #define DMA_2CLKS        0x00200000        /* Each transfer = 2 clock ticks */
@@ -145,6 +146,7 @@ extern void dvma_init(struct linux_sbus *);
 #define DMA_CNTR_DISAB   0x00800000        /* No IRQ when DMA_TERM_CNTR set */
 #define DMA_AUTO_NADDR   0x01000000        /* Use "auto nxt addr" feature */
 #define DMA_SCSI_ON      0x02000000        /* Enable SCSI dma */
+#define DMA_BPP_ON       DMA_SCSI_ON       /* Enable BPP dma */
 #define DMA_PARITY_OFF   0x02000000        /* HME: disable parity checking */
 #define DMA_LOADED_ADDR  0x04000000        /* Address has been loaded */
 #define DMA_LOADED_NADDR 0x08000000        /* Next address has been loaded */

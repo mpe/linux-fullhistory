@@ -30,7 +30,7 @@ extern __inline__ void arch_reset(char mode)
 	/*
 	 * Do any cleanups that the processor may require
 	 */
-	processor._proc_fin();
+	cpu_proc_fin();
 
 	/*
 	 * Reset all expansion cards.

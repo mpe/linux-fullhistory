@@ -372,7 +372,7 @@ static int __init root_nfs_getport(int program, int version)
  *  by the user. Use defaults if portmapper is not available.
  *  XXX: Is there any nfs server with no portmapper?
  */
-static __init int root_nfs_ports(void)
+static int __init root_nfs_ports(void)
 {
 	int port;
 

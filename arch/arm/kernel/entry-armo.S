@@ -653,10 +653,10 @@ Ldata_ldcstc_pre:
  * Register switch for older 26-bit only ARMs
  */
 ENTRY(__switch_to)
-		stmfd	sp!, {r4 - r9, fp, lr}		@ Store most regs on stack
+		stmfd	sp!, {r4 - sl, fp, lr}		@ Store most regs on stack
 		str	sp, [r0, #TSS_SAVE]		@ Save sp_SVC
 		ldr	sp, [r1, #TSS_SAVE]		@ Get saved sp_SVC
-		ldmfd	sp!, {r4 - r9, fp, pc}^		@ Load all regs saved previously
+		ldmfd	sp!, {r4 - sl, fp, pc}^		@ Load all regs saved previously
 
 /*
  *=============================================================================

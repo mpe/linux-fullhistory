@@ -12,9 +12,13 @@
 extern __inline__ void
 __delay(unsigned long loops)
 {
-	__asm__ __volatile__(".align 3\n"
-		"1:\tsubq %0,1,%0\n\t"
-		"bge %0,1b": "=r" (loops) : "0" (loops));
+	register unsigned long r0 __asm__("$0") = loops;
+#ifdef MODULE
+	__asm__ __volatile__("lda $28,___delay; jsr $28,($28),0"
+			     : "=r"(r0) : "r"(r0) : "$28");
+#else
+	__asm__ __volatile__("bsr $28,___delay" : "=r"(r0) : "r"(r0) : "$28");
+#endif
 }
 
 /*

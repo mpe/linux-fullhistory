@@ -20,6 +20,8 @@
  *                                 DECnet routing design
  *              Alexey Kuznetsov : New SMP locking
  *              Steve Whitehouse : More SMP locking changes & dn_cache_dump()
+ *              Steve Whitehouse : Prerouting NF hook, now really is prerouting.
+ *				   Fixed possible skb leak in rtnetlink funcs.
  */
 
 /******************************************************************************
@@ -208,11 +210,10 @@ void dn_run_flush(unsigned long dummy)
 	int i;
 	struct dn_route *rt, *next;
 
+	write_lock_bh(&dn_hash_lock);
 	for(i = 0; i < DN_HASHBUCKETS; i++) {
-		write_lock_bh(&dn_hash_lock);
 		if ((rt = xchg(&dn_route_cache[i], NULL)) == NULL)
 			continue;
-		write_unlock_bh(&dn_hash_lock);
 
 		for(; rt; rt=next) {
 			next = rt->u.rt_next;
@@ -220,14 +221,24 @@ void dn_run_flush(unsigned long dummy)
 			dst_free((struct dst_entry *)rt);
 		}
 	}
+	write_unlock_bh(&dn_hash_lock);
 }
 
+static int dn_route_rx_packet(struct sk_buff *skb)
+{
+	int err;
+
+	if ((err = dn_route_input(skb)) == 0)
+		return skb->dst->input(skb);
+
+	kfree_skb(skb);
+	return err;
+}
 
 static int dn_route_rx_long(struct sk_buff *skb)
 {
 	struct dn_skb_cb *cb = (struct dn_skb_cb *)skb->cb;
 	unsigned char *ptr = skb->data;
-	int err;
 
 	if (skb->len < 21) /* 20 for long header, 1 for shortest nsp */
 		goto drop_it;
@@ -253,8 +264,7 @@ static int dn_route_rx_long(struct sk_buff *skb)
         ptr++;
         cb->hops = *ptr++; /* Visit Count */
 
-	if ((err = dn_route_input(skb)) == 0)
-		return NF_HOOK(PF_DECnet, NF_DN_PRE_ROUTING, skb, skb->dev, NULL, skb->dst->input);
+	return NF_HOOK(PF_DECnet, NF_DN_PRE_ROUTING, skb, skb->dev, NULL, dn_route_rx_packet);
 
 drop_it:
 	kfree_skb(skb);
@@ -267,7 +277,6 @@ static int dn_route_rx_short(struct sk_buff *skb)
 {
 	struct dn_skb_cb *cb = (struct dn_skb_cb *)skb->cb;
 	unsigned char *ptr = skb->data;
-	int err;
 
 	if (skb->len < 6) /* 5 for short header + 1 for shortest nsp */
 		goto drop_it;
@@ -281,8 +290,7 @@ static int dn_route_rx_short(struct sk_buff *skb)
         ptr += 2;
         cb->hops = *ptr & 0x3f;
 
-	if ((err = dn_route_input(skb)) == 0)
-		return NF_HOOK(PF_DECnet, NF_DN_PRE_ROUTING, skb, skb->dev, NULL, skb->dst->input);
+	return NF_HOOK(PF_DECnet, NF_DN_PRE_ROUTING, skb, skb->dev, NULL, dn_route_rx_packet);
 
 drop_it:
         kfree_skb(skb);
@@ -836,10 +844,8 @@ int dn_cache_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh, void *arg)
 		dev_put(skb->dev);
 	skb->dev = NULL;
 	skb->rx_dev = NULL;
-	if (err) {
-		kfree_skb(skb);
-		return err;
-	}
+	if (err)
+		goto out_free;
 	skb->dst = &rt->u.dst;
 
 	NETLINK_CB(skb).dst_pid = NETLINK_CB(in_skb).pid;
@@ -847,12 +853,18 @@ int dn_cache_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh, void *arg)
 	err = dn_rt_fill_info(skb, NETLINK_CB(in_skb).pid, nlh->nlmsg_seq, RTM_NEWROUTE, 0);
 
 	if (err == 0)
-		return 0;
-	if (err < 0)
-		return -EMSGSIZE;
+		goto out_free;
+	if (err < 0) {
+		err = -EMSGSIZE;
+		goto out_free;
+	}
 
 	err = netlink_unicast(rtnl, skb, NETLINK_CB(in_skb).pid, MSG_DONTWAIT);
 
+	return err;
+
+out_free:
+	kfree_skb(skb);
 	return err;
 }
 

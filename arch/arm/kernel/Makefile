@@ -9,8 +9,8 @@ HEAD_OBJ  = head-$(PROCESSOR).o
 ENTRY_OBJ = entry-$(PROCESSOR).o
 
 O_TARGET := kernel.o
-O_OBJS   := $(ENTRY_OBJ) irq.o process.o ptrace.o setup.o \
-	    signal.o sys_arm.o time.o traps.o
+O_OBJS   := $(ENTRY_OBJ) ioport.o irq.o process.o ptrace.o \
+	    semaphore.o setup.o signal.o sys_arm.o time.o traps.o
 
 ifeq ($(CONFIG_ISA_DMA),y)
   ISA_DMA_OBJS += dma-isa.o
@@ -30,7 +30,7 @@ OX_OBJS_ebsa110	  =
 OX_OBJS_footbridge= dma.o hw-footbridge.o
 OX_OBJS_nexuspci  =
 
-all: lib kernel.o $(HEAD_OBJ) init_task.o
+all: kernel.o $(HEAD_OBJ) init_task.o
 
 O_OBJS += $(O_OBJS_$(MACHINE))
 
@@ -48,7 +48,7 @@ ifeq ($(MACHINE),nexuspci)
   endif
 else
   ifdef CONFIG_PCI
-    O_OBJS += dec21285.o
+    O_OBJS += bios32.o dec21285.o
   endif
 endif
 
@@ -79,11 +79,6 @@ $(ENTRY_OBJ): $(ENTRY_OBJ:.o=.S)
 include $(TOPDIR)/Rules.make
 
 $(ENTRY_OBJ): ../lib/constants.h
-
-.PHONY: lib
-
-lib:
-	$(MAKE) -C ../lib constants.h
 
 # Spell out some dependencies that `make dep' doesn't spot
 entry-armv.o: calls.S

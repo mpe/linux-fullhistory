@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.148 1999/08/23 05:16:11 davem Exp $
+ * Version:	$Id: tcp.c,v 1.149 1999/08/30 10:17:17 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -689,7 +689,7 @@ static int wait_for_tcp_connect(struct sock * sk, int flags)
 		if(signal_pending(tsk))
 			return -ERESTARTSYS;
 
-		tsk->state = TASK_INTERRUPTIBLE;
+		__set_task_state(tsk, TASK_INTERRUPTIBLE);
 		add_wait_queue(sk->sleep, &wait);
 		sk->tp_pinfo.af_tcp.write_pending++;
 
@@ -697,7 +697,7 @@ static int wait_for_tcp_connect(struct sock * sk, int flags)
 		schedule();
 		lock_sock(sk);
 
-		tsk->state = TASK_RUNNING;
+		__set_task_state(tsk, TASK_RUNNING);
 		remove_wait_queue(sk->sleep, &wait);
 		sk->tp_pinfo.af_tcp.write_pending--;
 	}
@@ -720,7 +720,7 @@ static void wait_for_tcp_memory(struct sock * sk)
 		sk->socket->flags &= ~SO_NOSPACE;
 		add_wait_queue(sk->sleep, &wait);
 		for (;;) {
-			current->state = TASK_INTERRUPTIBLE;
+			set_current_state(TASK_INTERRUPTIBLE);
 
 			if (signal_pending(current))
 				break;
@@ -1121,7 +1121,7 @@ static void tcp_data_wait(struct sock *sk)
 
 	add_wait_queue(sk->sleep, &wait);
 
-	current->state = TASK_INTERRUPTIBLE;
+	__set_current_state(TASK_INTERRUPTIBLE);
 
 	sk->socket->flags |= SO_WAITDATA;
 	release_sock(sk);
@@ -1133,7 +1133,7 @@ static void tcp_data_wait(struct sock *sk)
 	sk->socket->flags &= ~SO_WAITDATA;
 
 	remove_wait_queue(sk->sleep, &wait);
-	current->state = TASK_RUNNING;
+	__set_current_state(TASK_RUNNING);
 }
 
 /*
@@ -1595,7 +1595,7 @@ void tcp_close(struct sock *sk, long timeout)
 		add_wait_queue(sk->sleep, &wait);
 
 		while (1) {
-			tsk->state = TASK_INTERRUPTIBLE;
+			set_current_state(TASK_INTERRUPTIBLE);
 			if (!closing(sk))
 				break;
 			release_sock(sk);

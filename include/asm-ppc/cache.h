@@ -15,6 +15,14 @@
 
 #define        SMP_CACHE_BYTES L1_CACHE_BYTES
 
+#ifdef MODULE
+#define __cacheline_aligned __attribute__((__aligned__(L1_CACHE_BYTES)))
+#else
+#define __cacheline_aligned					\
+  __attribute__((__aligned__(L1_CACHE_BYTES),			\
+		 __section__(".data.cacheline_aligned")))
+#endif
+
 #if defined(__KERNEL__) && !defined(__ASSEMBLY__)
 extern void flush_dcache_range(unsigned long start, unsigned long stop);
 

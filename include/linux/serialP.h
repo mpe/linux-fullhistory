@@ -21,6 +21,10 @@
 
 #include <linux/termios.h>
 #include <linux/tqueue.h>
+#include <linux/wait.h>
+#ifdef CONFIG_PCI
+#include <linux/pci.h>
+#endif
 
 /*
  * Counters of the input lines (CTS, DSR, RI, CD) interrupts
@@ -40,9 +44,12 @@ struct serial_state {
 	int	hub6;
 	int	type;
 	int	line;
+	int	revision;	/* Chip revision (950) */
 	int	xmit_fifo_size;
 	int	custom_divisor;
 	int	count;
+	u8	*iomem_base;
+	u16	iomem_reg_shift;
 	unsigned short	close_delay;
 	unsigned short	closing_wait; /* time to wait before closing */
 	struct async_icount	icount;	
@@ -69,6 +76,8 @@ struct async_struct {
 	unsigned short		closing_wait2;
 	int			IER; 	/* Interrupt Enable Register */
 	int			MCR; 	/* Modem control register */
+	int			LCR; 	/* Line control register */
+	int			ACR;	 /* 16950 Additional Control Reg. */
 	unsigned long		event;
 	unsigned long		last_active;
 	int			line;
@@ -79,13 +88,23 @@ struct async_struct {
 	int			xmit_head;
 	int			xmit_tail;
 	int			xmit_cnt;
+	u8			*iomem_base;
+	u16			iomem_reg_shift;
 	struct tq_struct	tqueue;
+#ifdef DECLARE_WAITQUEUE
 	wait_queue_head_t	open_wait;
 	wait_queue_head_t	close_wait;
 	wait_queue_head_t	delta_msr_wait;
+#else	
+	struct wait_queue	*open_wait;
+	struct wait_queue	*close_wait;
+	struct wait_queue	*delta_msr_wait;
+#endif	
 	struct async_struct	*next_port; /* For the linked list */
 	struct async_struct	*prev_port;
 };
+
+#define CONFIGURED_SERIAL_PORT(info) ((info)->port || ((info)->iomem_base))
 
 #define SERIAL_MAGIC 0x5301
 #define SSTATE_MAGIC 0x5302
@@ -115,5 +134,51 @@ struct rs_multiport_struct {
 	unsigned char	mask4, match4;
 	int		port_monitor;
 };
+
+#if defined(__alpha__) && !defined(CONFIG_PCI)
+/*
+ * Digital did something really horribly wrong with the OUT1 and OUT2
+ * lines on at least some ALPHA's.  The failure mode is that if either
+ * is cleared, the machine locks up with endless interrupts.
+ */
+#define ALPHA_KLUDGE_MCR  (UART_MCR_OUT2 | UART_MCR_OUT1)
+#else
+#define ALPHA_KLUDGE_MCR 0
+#endif
+
+/*
+ * Structures and definitions for PCI support
+ */
+struct pci_board {
+	unsigned short vendor;
+	unsigned short device;
+	unsigned short subvendor;
+	unsigned short subdevice;
+	int flags;
+	int num_ports;
+	int base_baud;
+	int uart_offset;
+	int reg_shift;
+	void (*init_fn)(struct pci_dev *dev, struct pci_board *board,
+			int enable);
+};
+
+struct pci_board_inst {
+	struct pci_board	*board;
+	struct pci_dev		*dev;
+};
+
+#ifndef PCI_ANY_ID
+#define PCI_ANY_ID (~0)
+#endif
+
+#define SPCI_FL_BASE_MASK	0x0007
+#define SPCI_FL_BASE0	0x0000
+#define SPCI_FL_BASE1	0x0001
+#define SPCI_FL_BASE2	0x0002
+#define SPCI_FL_BASE3	0x0003
+#define SPCI_FL_BASE4	0x0004
+#define SPCI_FL_IOMEM		0x0008 /* Use I/O mapped memory */
+#define SPCI_FL_BASE_TABLE	0x0010 /* Use base address table for UART */
 
 #endif /* _LINUX_SERIAL_H */

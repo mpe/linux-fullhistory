@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.43 1999/03/15 22:13:31 davem Exp $
+/* $Id: time.c,v 1.46 1999/08/31 13:11:26 anton Exp $
  * linux/arch/sparc/kernel/time.c
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -42,8 +42,8 @@
 extern rwlock_t xtime_lock;
 
 enum sparc_clock_type sp_clock_typ;
-struct mostek48t02 *mstk48t02_regs = 0;
-struct mostek48t08 *mstk48t08_regs = 0;
+unsigned long mstk48t02_regs = 0UL;
+static struct mostek48t08 *mstk48t08_regs = 0;
 static int set_rtc_mmss(unsigned long);
 static void sbus_do_settimeofday(struct timeval *tv);
 
@@ -142,7 +142,7 @@ static inline unsigned long mktime(unsigned int year, unsigned int mon,
 /* Kick start a stopped clock (procedure from the Sun NVRAM/hostid FAQ). */
 static void __init kick_start_clock(void)
 {
-	register struct mostek48t02 *regs = mstk48t02_regs;
+	struct mostek48t02 *regs = (struct mostek48t02 *)mstk48t02_regs;
 	unsigned char sec;
 	int i, count;
 
@@ -191,7 +191,7 @@ static void __init kick_start_clock(void)
 /* Return nonzero if the clock chip battery is low. */
 static __inline__ int has_low_battery(void)
 {
-	register struct mostek48t02 *regs = mstk48t02_regs;
+	struct mostek48t02 *regs = (struct mostek48t02 *)mstk48t02_regs;
 	unsigned char data1, data2;
 
 	data1 = regs->eeprom[0];	/* Read some data. */
@@ -210,15 +210,15 @@ static __inline__ void sun4_clock_probe(void)
 
 	if( idprom->id_machtype == (SM_SUN4 | SM_4_330) ) {
 		sp_clock_typ = MSTK48T02;
-		mstk48t02_regs = (struct mostek48t02 *) 
+		mstk48t02_regs = (unsigned long) 
 				sparc_alloc_io(sun4_clock_physaddr, 0,
-				       sizeof(*mstk48t02_regs),
+				       sizeof(struct mostek48t02),
 				       "clock", 0x0, 0x0);
 		mstk48t08_regs = 0;  /* To catch weirdness */
 		intersil_clock = 0;  /* just in case */
 
 		/* Kick start the clock if it is completely stopped. */
-		if (mstk48t02_regs->sec & MSTK_STOP)
+		if (mostek_read(mstk48t02_regs + MOSTEK_SEC) & MSTK_STOP)
 			kick_start_clock();
 	} else if( idprom->id_machtype == (SM_SUN4 | SM_4_260)) {
 		/* intersil setup code */
@@ -297,9 +297,9 @@ static __inline__ void clock_probe(void)
 		else
 			prom_apply_obio_ranges(clk_reg, 1);
 		/* Map the clock register io area read-only */
-		mstk48t02_regs = (struct mostek48t02 *) 
+		mstk48t02_regs = (unsigned long) 
 			sparc_alloc_io(clk_reg[0].phys_addr,
-				       (void *) 0, sizeof(*mstk48t02_regs),
+				       (void *) 0, sizeof(struct mostek48t02),
 				       "clock", clk_reg[0].which_io, 0x0);
 		mstk48t08_regs = 0;  /* To catch weirdness */
 	} else if (strcmp(model, "mk48t08") == 0) {
@@ -319,7 +319,7 @@ static __inline__ void clock_probe(void)
 				       (void *) 0, sizeof(*mstk48t08_regs),
 				       "clock", clk_reg[0].which_io, 0x0);
 
-		mstk48t02_regs = &mstk48t08_regs->regs;
+		mstk48t02_regs = (unsigned long)&mstk48t08_regs->regs;
 	} else {
 		prom_printf("CLOCK: Unknown model name '%s'\n",model);
 		prom_halt();
@@ -330,7 +330,7 @@ static __inline__ void clock_probe(void)
 		printk(KERN_CRIT "NVRAM: Low battery voltage!\n");
 
 	/* Kick start the clock if it is completely stopped. */
-	if (mstk48t02_regs->sec & MSTK_STOP)
+	if (mostek_read(mstk48t02_regs + MOSTEK_SEC) & MSTK_STOP)
 		kick_start_clock();
 }
 
@@ -364,7 +364,7 @@ void __init sbus_time_init(void)
 #ifdef CONFIG_SUN4
 	if(idprom->id_machtype == (SM_SUN4 | SM_4_330)) {
 #endif
-	mregs = mstk48t02_regs;
+	mregs = (struct mostek48t02 *)mstk48t02_regs;
 	if(!mregs) {
 		prom_printf("Something wrong, clock regs not mapped yet.\n");
 		prom_halt();
@@ -521,7 +521,7 @@ static void sbus_do_settimeofday(struct timeval *tv)
 static int set_rtc_mmss(unsigned long nowtime)
 {
 	int real_seconds, real_minutes, mostek_minutes;
-	struct mostek48t02 *regs = mstk48t02_regs;
+	struct mostek48t02 *regs = (struct mostek48t02 *)mstk48t02_regs;
 #ifdef CONFIG_SUN4
 	struct intersil *iregs = intersil_clock;
 	int temp;

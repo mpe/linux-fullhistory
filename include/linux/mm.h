@@ -6,6 +6,7 @@
 
 #ifdef __KERNEL__
 
+#include <linux/config.h>
 #include <linux/string.h>
 
 extern unsigned long max_mapnr;

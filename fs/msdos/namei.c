@@ -361,8 +361,6 @@ int msdos_mkdir(struct inode *dir,struct dentry *dentry,int mode)
 	struct inode *inode;
 	int res,is_hid;
 	char msdos_name[MSDOS_NAME];
-	struct buffer_head *bh1;
-	struct msdos_dir_entry *de1;
 	int ino;
 
 	res = msdos_format_name(dentry->d_name.name,dentry->d_name.len,

@@ -17,19 +17,17 @@
 #include <asm/unistd.h>
 #include <asm/errno.h>
 #include <asm/processor.h>
-#include "ppc_asm.tmpl"
-#include "ppc_defs.h"
+#include <asm/page.h>
+#include "ppc_asm.h"
 
 #ifndef CONFIG_8xx
-/* This instruction is not implemented on the PPC 601 or 603 */
-#define tlbia \
-	li	r4,128; \
-	mtspr	CTR,r4; \
-	li	r4,0; \
-0:	tlbie	r4; \
-	addi	r4,r4,0x1000; \
-	bdnz	0b
-#endif	
+CACHE_LINE_SIZE = 32
+LG_CACHE_LINE_SIZE = 5
+#else
+CACHE_LINE_SIZE = 16
+LG_CACHE_LINE_SIZE = 4
+#endif /* CONFIG_8xx */
+
 	.text
 
 /*
@@ -143,6 +141,117 @@ _GLOBAL(_tlbie)
 	tlbsync
 	sync
 #endif
+	blr
+
+/*
+ * Flush instruction cache.
+ * This is a no-op on the 601.
+ */
+_GLOBAL(flush_instruction_cache)
+	mfspr	r3,PVR
+	rlwinm	r3,r3,16,16,31
+	cmpi	0,r3,1
+	beqlr			/* for 601, do nothing */
+	/* 603/604 processor - use invalidate-all bit in HID0 */
+	mfspr	r3,HID0
+	ori	r3,r3,HID0_ICFI
+	mtspr	HID0,r3
+	SYNC
+	blr
+
+/*
+ * Write any modified data cache blocks out to memory
+ * and invalidate the corresponding instruction cache blocks.
+ * This is a no-op on the 601.
+ *
+ * flush_icache_range(unsigned long start, unsigned long stop)
+ */
+_GLOBAL(flush_icache_range)
+	mfspr	r5,PVR
+	rlwinm	r5,r5,16,16,31
+	cmpi	0,r5,1
+	beqlr				/* for 601, do nothing */
+	li	r5,CACHE_LINE_SIZE-1
+	andc	r3,r3,r5
+	subf	r4,r3,r4
+	add	r4,r4,r5
+	srwi.	r4,r4,LG_CACHE_LINE_SIZE
+	beqlr
+	mtctr	r4
+	mr	r6,r3
+1:	dcbst	0,r3
+	addi	r3,r3,CACHE_LINE_SIZE
+	bdnz	1b
+	sync				/* wait for dcbst's to get to ram */
+	mtctr	r4
+2:	icbi	0,r6
+	addi	r6,r6,CACHE_LINE_SIZE
+	bdnz	2b
+	sync
+	isync
+	blr
+
+/*
+ * Like above, but only do the D-cache.
+ *
+ * flush_dcache_range(unsigned long start, unsigned long stop)
+ */
+_GLOBAL(flush_dcache_range)
+       li      r5,CACHE_LINE_SIZE-1
+       andc    r3,r3,r5
+       subf    r4,r3,r4
+       add     r4,r4,r5
+       srwi.   r4,r4,LG_CACHE_LINE_SIZE
+       beqlr
+       mtctr   r4
+
+1:     dcbst   0,r3
+       addi    r3,r3,CACHE_LINE_SIZE
+       bdnz    1b
+       sync                            /* wait for dcbst's to get to ram */
+       blr
+
+/*
+ * Flush a particular page from the DATA cache
+ * Note: this is necessary because the instruction cache does *not*
+ * snoop from the data cache.
+ * This is a no-op on the 601 which has a unified cache.
+ *
+ *	void flush_page_to_ram(void *page)
+ */
+_GLOBAL(flush_page_to_ram)
+	mfspr	r5,PVR
+	rlwinm	r5,r5,16,16,31
+	cmpi	0,r5,1
+	beqlr				/* for 601, do nothing */
+	li	r4,0x0FFF
+	andc	r3,r3,r4		/* Get page base address */
+	li	r4,4096/CACHE_LINE_SIZE	/* Number of lines in a page */
+	mtctr	r4
+	mr	r6,r3
+0:	dcbst	0,r3			/* Write line to ram */
+	addi	r3,r3,CACHE_LINE_SIZE
+	bdnz	0b
+	sync
+	mtctr	r4
+1:	icbi	0,r6
+	addi	r6,r6,CACHE_LINE_SIZE
+	bdnz	1b
+	sync
+	isync
+	blr
+
+/*
+ * Clear a page using the dcbz instruction, which doesn't cause any
+ * memory traffic (except to write out any cache lines which get
+ * displaced).  This only works on cacheable memory.
+ */
+_GLOBAL(clear_page)
+	li	r0,4096/CACHE_LINE_SIZE
+	mtctr	r0
+1:	dcbz	0,r3
+	addi	r3,r3,CACHE_LINE_SIZE
+	bdnz	1b
 	blr
 
 /*
@@ -659,14 +768,20 @@ _GLOBAL(kernel_thread)
 	sc
 	cmpi	0,r3,0		/* parent or child? */
 	bnelr			/* return if parent */
-	li	r0,0		/* clear out p->tss.regs */
-	stw	r0,TSS+PT_REGS(r2)	/* since we don't have user ctx */
+	li	r0,0		/* clear out p->thread.regs */
+	stw	r0,THREAD+PT_REGS(r2)	/* since we don't have user ctx */
 	mtlr	r6              /* fn addr in lr */
 	mr	r3,r4	        /* load arg and call fn */
 	blrl
 	li	r0,__NR_exit	/* exit after child exits */
         li	r3,0
 	sc
+
+/*
+ * This routine is just here to keep GCC happy - sigh...
+ */	
+_GLOBAL(__main)
+	blr
 
 #define SYSCALL(name) \
 _GLOBAL(name) \
@@ -680,7 +795,6 @@ _GLOBAL(name) \
 
 #define __NR__exit __NR_exit
 
-SYSCALL(idle)
 SYSCALL(sync)
 SYSCALL(setsid)
 SYSCALL(write)
@@ -812,7 +926,7 @@ sys_call_table:
 	.long sys_uname
 	.long sys_iopl		/* 110 */
 	.long sys_vhangup
-	.long sys_idle
+	.long sys_ni_syscall	/* old 'idle' syscall */
 	.long sys_vm86
 	.long sys_wait4
 	.long sys_swapoff	/* 115 */

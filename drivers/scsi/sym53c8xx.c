@@ -569,11 +569,10 @@ spinlock_t sym53c8xx_lock;
 #endif
 
 #ifdef __sparc__
-#define remap_pci_mem(base, size)	((u_long) __va(base))
-#define unmap_pci_mem(vaddr, size)
 #define pcivtobus(p)			((p) & pci_dvma_mask)
 #else	/* __sparc__ */
 #define pcivtobus(p)			(p)
+#endif
 
 #if !defined(NCR_IOMAPPED) || defined(__i386__)
 static u_long __init remap_pci_mem(u_long base, u_long size)
@@ -591,7 +590,6 @@ static void __init unmap_pci_mem(u_long vaddr, u_long size)
 		iounmap((void *) (vaddr & PAGE_MASK));
 }
 #endif	/* !NCR_IOMAPPED || __i386__ */
-#endif	/* __sparc__ */
 
 /*
 **	Insert a delay in micro-seconds and milli-seconds.
@@ -10269,9 +10267,6 @@ static int __init sym53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	**    coherent with hardware and software resource identifications.
 	**    This is fairly simple, but seems still too complex for Sparc.
 	*/
-	base = __pa(base);
-	base_2 = __pa(base_2);
-
 	if (!cache_line_size)
 		suggested_cache_line_size = 16;
 

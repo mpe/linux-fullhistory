@@ -267,7 +267,7 @@ static ssize_t read_qp(struct file * file, char * buffer,
 			return -EAGAIN;
 		add_wait_queue(&queue->proc_list, &wait);
 repeat:
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		if (queue_empty() && !signal_pending(current)) {
 			schedule();
 			goto repeat;

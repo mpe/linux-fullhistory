@@ -1,4 +1,4 @@
-/* $Id: debuglocks.c,v 1.8 1999/08/05 09:49:59 anton Exp $
+/* $Id: debuglocks.c,v 1.9 1999/08/14 03:51:39 anton Exp $
  * debuglocks.c: Debugging versions of SMP locking primitives.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -7,7 +7,7 @@
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
-#include <linux/tasks.h>	/* For NR_CPUS */
+#include <linux/threads.h>	/* For NR_CPUS */
 #include <asm/psr.h>
 #include <asm/system.h>
 #include <asm/spinlock.h>

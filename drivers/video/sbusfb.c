@@ -1086,6 +1086,10 @@ sizechange:
 	case FBTYPE_MDICOLOR:
 		p = cgfourteenfb_init(fb); break;
 #endif
+#ifdef CONFIG_FB_P9100
+	case FBTYPE_P9100COLOR:
+		p = p9100fb_init(fb); break;
+#endif
 	}
 	
 	if (!p) {
@@ -1149,6 +1153,8 @@ static inline int known_card(char *name)
 		return FBTYPE_SUN2BW;
 	if (!strcmp(name, "tcx"))
 		return FBTYPE_TCXCOLOR;
+	if (!strcmp(name, "p9100"))
+		return FBTYPE_P9100COLOR;
 	return FBTYPE_NOTYPE;
 }
 
@@ -1188,7 +1194,7 @@ int __init sbusfb_init(void)
 		}
 	}
 #endif
-	if (!SBus_chain) return;
+	if (!SBus_chain) return 0;
 	for_all_sbusdev(sbdp, sbus) {
 		type = known_card(sbdp->prom_name);
 		if (type == FBTYPE_NOTYPE) continue;

@@ -20,6 +20,9 @@
  *          Modified by Gerd Knorr <kraxel@cs.tu-berlin.de> to support the
  *          generic cdrom interface
  *
+ *	 Modified by Jens Axboe <axboe@image.dk> - Uniform sr_packet()
+ *	 interface, capabilities probe additions, ioctl cleanups, etc.
+ *
  */
 
 #include <linux/module.h>
@@ -925,10 +928,13 @@ void get_sectorsize(int i){
 	scsi_CDs[i].sector_size = 2048;  /* A guess, just in case */
 	scsi_CDs[i].needs_sector_size = 1;
     } else {
-	scsi_CDs[i].capacity = 1 + ((buffer[0] << 24) |
-				    (buffer[1] << 16) |
-				    (buffer[2] << 8) |
-				    buffer[3]);
+	if (cdrom_get_last_written(MKDEV(MAJOR_NR, i),
+	   (long*)&scsi_CDs[i].capacity)) {
+		scsi_CDs[i].capacity = 1 + ((buffer[0] << 24) |
+					    (buffer[1] << 16) |
+					    (buffer[2] << 8) |
+					     buffer[3]);
+	}
 	scsi_CDs[i].sector_size = (buffer[4] << 24) |
 	    (buffer[5] << 16) | (buffer[6] << 8) | buffer[7];
 	switch (scsi_CDs[i].sector_size) {

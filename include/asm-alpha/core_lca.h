@@ -56,16 +56,9 @@
  * ugh).
  */
 
-#define LCA_DMA_WIN_BASE_DEFAULT	(1024*1024*1024)
-#define LCA_DMA_WIN_SIZE_DEFAULT	(1024*1024*1024)
+#define LCA_DMA_WIN_BASE	(1UL*1024*1024*1024)
+#define LCA_DMA_WIN_SIZE	(1UL*1024*1024*1024)
 
-#if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_SRM_SETUP)
-#define LCA_DMA_WIN_BASE		alpha_mv.dma_win_base
-#define LCA_DMA_WIN_SIZE		alpha_mv.dma_win_size
-#else
-#define LCA_DMA_WIN_BASE		LCA_DMA_WIN_BASE_DEFAULT
-#define LCA_DMA_WIN_SIZE		LCA_DMA_WIN_SIZE_DEFAULT
-#endif
 
 /*
  * Memory Controller registers:
@@ -305,14 +298,6 @@ __EXTERN_INLINE unsigned long lca_readb(unsigned long addr)
 {
 	unsigned long result, msb;
 
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "lca: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += LCA_DENSE_MEM;
-	}
-#endif
-
 	addr -= LCA_DENSE_MEM;
 	if (addr >= (1UL << 24)) {
 		msb = addr & 0xf8000000;
@@ -327,14 +312,6 @@ __EXTERN_INLINE unsigned long lca_readw(unsigned long addr)
 {
 	unsigned long result, msb;
 
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "lca: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += LCA_DENSE_MEM;
-	}
-#endif
-
 	addr -= LCA_DENSE_MEM;
 	if (addr >= (1UL << 24)) {
 		msb = addr & 0xf8000000;
@@ -347,27 +324,11 @@ __EXTERN_INLINE unsigned long lca_readw(unsigned long addr)
 
 __EXTERN_INLINE unsigned long lca_readl(unsigned long addr)
 {
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "lca: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += LCA_DENSE_MEM;
-	}
-#endif
-
 	return *(vuip)addr;
 }
 
 __EXTERN_INLINE unsigned long lca_readq(unsigned long addr)
 {
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "lca: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += LCA_DENSE_MEM;
-	}
-#endif
-
 	return *(vulp)addr;
 }
 
@@ -375,14 +336,6 @@ __EXTERN_INLINE void lca_writeb(unsigned char b, unsigned long addr)
 {
 	unsigned long msb;
 	unsigned long w;
-
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "lca: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += LCA_DENSE_MEM;
-	}
-#endif
 
 	addr -= LCA_DENSE_MEM;
 	if (addr >= (1UL << 24)) {
@@ -399,14 +352,6 @@ __EXTERN_INLINE void lca_writew(unsigned short b, unsigned long addr)
 	unsigned long msb;
 	unsigned long w;
 
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "lca: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += LCA_DENSE_MEM;
-	}
-#endif
-
 	addr -= LCA_DENSE_MEM;
 	if (addr >= (1UL << 24)) {
 		msb = addr & 0xf8000000;
@@ -419,38 +364,22 @@ __EXTERN_INLINE void lca_writew(unsigned short b, unsigned long addr)
 
 __EXTERN_INLINE void lca_writel(unsigned int b, unsigned long addr)
 {
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "lca: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += LCA_DENSE_MEM;
-	}
-#endif
-
 	*(vuip)addr = b;
 }
 
 __EXTERN_INLINE void lca_writeq(unsigned long b, unsigned long addr)
 {
-#if __DEBUG_IOREMAP
-	if (addr <= 0x100000000) {
-		printk(KERN_CRIT "lca: 0x%lx not ioremapped (%p)\n",
-		       addr, __builtin_return_address(0));
-		addr += LCA_DENSE_MEM;
-	}
-#endif
-
 	*(vulp)addr = b;
 }
 
 __EXTERN_INLINE unsigned long lca_ioremap(unsigned long addr)
 {
-	return LCA_DENSE_MEM + addr;
+	return addr + LCA_DENSE_MEM;
 }
 
 __EXTERN_INLINE int lca_is_ioaddr(unsigned long addr)
 {
-	return addr >= IDENT_ADDR + 0x100000000UL;
+	return addr >= IDENT_ADDR + 0x120000000UL;
 }
 
 #undef vip
@@ -479,17 +408,14 @@ __EXTERN_INLINE int lca_is_ioaddr(unsigned long addr)
 #define __is_ioaddr	lca_is_ioaddr
 
 #define inb(port) \
-(__builtin_constant_p((port))?__inb(port):_inb(port))
-
+  (__builtin_constant_p((port))?__inb(port):_inb(port))
 #define outb(x, port) \
-(__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
+  (__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
 
-#if !__DEBUG_IOREMAP
 #define __raw_readl(a)		__readl((unsigned long)(a))
 #define __raw_readq(a)		__readq((unsigned long)(a))
 #define __raw_writel(v,a)	__writel((v),(unsigned long)(a))
 #define __raw_writeq(v,a)	__writeq((v),(unsigned long)(a))
-#endif
 
 #endif /* __WANT_IO_DEF */
 

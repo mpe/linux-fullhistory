@@ -10,6 +10,10 @@
 #define IOMD_KARTRX	__IOMD(0x004)
 #define IOMD_KCTRL	__IOMD(0x008)
 
+#ifdef CONFIG_ARCH_CL7500
+#define IOMD_IOLINES	__IOMD(0x00C)
+#endif
+
 #define IOMD_IRQSTATA	__IOMD(0x010)
 #define IOMD_IRQREQA	__IOMD(0x014)
 #define IOMD_IRQCLRA	__IOMD(0x014)
@@ -37,9 +41,23 @@
 #define IOMD_T1GO	__IOMD(0x058)
 #define IOMD_T1LATCH	__IOMD(0x05c)
 
+#ifdef CONFIG_ARCH_CL7500
+#define IOMD_IRQSTATC	__IOMD(0x060)
+#define IOMD_IRQREQC	__IOMD(0x064)
+#define IOMD_IRQMASKC	__IOMD(0x068)
+
+#define IOMD_VIDMUX	__IOMD(0x06c)
+
+#define IOMD_IRQSTATD	__IOMD(0x070)
+#define IOMD_IRQREQD	__IOMD(0x074)
+#define IOMD_IRQMASKD	__IOMD(0x078)
+#endif
+
 #define IOMD_ROMCR0	__IOMD(0x080)
 #define IOMD_ROMCR1	__IOMD(0x084)
+#ifdef CONFIG_ARCH_RPC
 #define IOMD_DRAMCR	__IOMD(0x088)
+#endif
 #define IOMD_VREFCR	__IOMD(0x08C)
 
 #define IOMD_FSIZE	__IOMD(0x090)
@@ -47,14 +65,38 @@
 #define IOMD_ID1	__IOMD(0x098)
 #define IOMD_VERSION	__IOMD(0x09C)
 
+#ifdef CONFIG_ARCH_RPC
 #define IOMD_MOUSEX	__IOMD(0x0A0)
 #define IOMD_MOUSEY	__IOMD(0x0A4)
+#endif
 
+#ifdef CONFIG_ARCH_CL7500
+#define IOMD_MSEDAT	__IOMD(0x0A8)
+#define IOMD_MSECTL	__IOMD(0x0Ac)
+#endif
+
+#ifdef CONFIG_ARCH_RPC
 #define IOMD_DMATCR	__IOMD(0x0C0)
+#endif
 #define IOMD_IOTCR	__IOMD(0x0C4)
 #define IOMD_ECTCR	__IOMD(0x0C8)
+#ifdef CONFIG_ARCH_RPC
 #define IOMD_DMAEXT	__IOMD(0x0CC)
+#endif
+#ifdef CONFIG_ARCH_CL7500
+#define IOMD_ASTCR	__IOMD(0x0CC)
+#define IOMD_DRAMCR	__IOMD(0x0D0)
+#define IOMD_SELFREF	__IOMD(0x0D4)
+#define IOMD_ATODICR	__IOMD(0x0E0)
+#define IOMD_ATODSR	__IOMD(0x0E4)
+#define IOMD_ATODCC	__IOMD(0x0E8)
+#define IOMD_ATODCNT1	__IOMD(0x0EC)
+#define IOMD_ATODCNT2	__IOMD(0x0F0)
+#define IOMD_ATODCNT3	__IOMD(0x0F4)
+#define IOMD_ATODCNT4	__IOMD(0x0F8)
+#endif
 
+#ifdef CONFIG_ARCH_RPC
 #define DMA_EXT_IO0	1
 #define DMA_EXT_IO1	2
 #define DMA_EXT_IO2	4
@@ -87,6 +129,7 @@
 #define IOMD_IO3ENDB	__IOMD(0x16C)
 #define IOMD_IO3CR	__IOMD(0x170)
 #define IOMD_IO3ST	__IOMD(0x174)
+#endif
 
 #define IOMD_SD0CURA	__IOMD(0x180)
 #define IOMD_SD0ENDA	__IOMD(0x184)
@@ -95,12 +138,14 @@
 #define IOMD_SD0CR	__IOMD(0x190)
 #define IOMD_SD0ST	__IOMD(0x194)
 
+#ifdef CONFIG_ARCH_RPC
 #define IOMD_SD1CURA	__IOMD(0x1A0)
 #define IOMD_SD1ENDA	__IOMD(0x1A4)
 #define IOMD_SD1CURB	__IOMD(0x1A8)
 #define IOMD_SD1ENDB	__IOMD(0x1AC)
 #define IOMD_SD1CR	__IOMD(0x1B0)
 #define IOMD_SD1ST	__IOMD(0x1B4)
+#endif
 
 #define IOMD_CURSCUR	__IOMD(0x1C0)
 #define IOMD_CURSINIT	__IOMD(0x1C4)

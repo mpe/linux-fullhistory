@@ -95,3 +95,21 @@ halt:
 	.prologue 0
 	call_pal PAL_halt
 	.end	halt
+
+	#
+	# Having the delay loop out of line guarantees that we wont
+	# run into weird alignment conditions (on new processors)
+	# that vary the speed of the loop.
+	#
+	.align 5
+	.globl	___delay
+	.ent	___delay
+___delay:
+	.set noat
+	.frame $30,0,$28,0
+	.prologue 0
+1:	subq	$0,1,$0
+	bge	$0,1b
+	ret	$31,($28),0
+	.set at
+	.end	___delay

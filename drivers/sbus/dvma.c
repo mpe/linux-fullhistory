@@ -29,8 +29,7 @@ dump_dma_regs(struct sparc_dma_registers *dregs)
 	return;
 }
 
-__initfunc(void
-init_one_dvma(struct Linux_SBus_DMA *dma, int num_dma))
+void __init init_one_dvma(struct Linux_SBus_DMA *dma, int num_dma)
 {
 	printk("dma%d: ", num_dma);
 	
@@ -75,8 +74,7 @@ init_one_dvma(struct Linux_SBus_DMA *dma, int num_dma))
 }
 
 /* Probe this SBus DMA module(s) */
-__initfunc(void
-dvma_init(struct linux_sbus *sbus))
+void __init dvma_init(struct linux_sbus *sbus)
 {
 	struct linux_sbus_device *this_dev;
 	struct Linux_SBus_DMA *dma;
@@ -133,7 +131,7 @@ dvma_init(struct linux_sbus *sbus))
 
 #include <asm/sun4paddr.h>
 
-__initfunc(void sun4_dvma_init(void))
+void __init sun4_dvma_init(void)
 {
 	struct Linux_SBus_DMA *dma;
 	struct Linux_SBus_DMA *dchain;

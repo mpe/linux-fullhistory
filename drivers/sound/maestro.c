@@ -2708,9 +2708,9 @@ static int maestro_install(struct pci_dev *pcidev, int card_type, int index)
 
 #ifdef MODULE
 
-__initfunc(int init_module(void))
+int __init init_module(void)
 #else
-__initfunc(int init_maestro(void))
+int __init init_maestro(void)
 #endif
 {
 	struct pci_dev *pcidev = NULL;

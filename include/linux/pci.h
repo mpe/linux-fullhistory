@@ -455,6 +455,7 @@
 #define PCI_DEVICE_ID_CIRRUS_5436	0x00ac
 #define PCI_DEVICE_ID_CIRRUS_5446	0x00b8
 #define PCI_DEVICE_ID_CIRRUS_5480	0x00bc
+#define PCI_DEVICE_ID_CIRRUS_5462	0x00d0
 #define PCI_DEVICE_ID_CIRRUS_5464	0x00d4
 #define PCI_DEVICE_ID_CIRRUS_5465	0x00d6
 #define PCI_DEVICE_ID_CIRRUS_6729	0x1100
@@ -485,11 +486,21 @@
 #define PCI_DEVICE_ID_AMD_SCSI		0x2020
 
 #define PCI_VENDOR_ID_TRIDENT		0x1023
+#define PCI_DEVICE_ID_TRIDENT_9320	0x9320
+#define PCI_DEVICE_ID_TRIDENT_9388	0x9388
 #define PCI_DEVICE_ID_TRIDENT_9397	0x9397
+#define PCI_DEVICE_ID_TRIDENT_939A	0x939A
+#define PCI_DEVICE_ID_TRIDENT_9520	0x9520
+#define PCI_DEVICE_ID_TRIDENT_9525	0x9525
 #define PCI_DEVICE_ID_TRIDENT_9420	0x9420
 #define PCI_DEVICE_ID_TRIDENT_9440	0x9440
 #define PCI_DEVICE_ID_TRIDENT_9660	0x9660
 #define PCI_DEVICE_ID_TRIDENT_9750	0x9750
+#define PCI_DEVICE_ID_TRIDENT_9850	0x9850
+#define PCI_DEVICE_ID_TRIDENT_9880	0x9880
+#define PCI_DEVICE_ID_TRIDENT_8400	0x8400
+#define PCI_DEVICE_ID_TRIDENT_8420	0x8420
+#define PCI_DEVICE_ID_TRIDENT_8500	0x8500
 
 #define PCI_VENDOR_ID_AI		0x1025
 #define PCI_DEVICE_ID_AI_M1435		0x1435
@@ -500,11 +511,13 @@
 #define PCI_DEVICE_ID_MATROX_MYS	0x051A
 #define PCI_DEVICE_ID_MATROX_MIL_2	0x051b
 #define PCI_DEVICE_ID_MATROX_MIL_2_AGP	0x051f
-#define PCI_DEVICE_ID_MATROX_G200_PCI   0x0520
-#define PCI_DEVICE_ID_MATROX_G200_AGP   0x0521
 #define PCI_DEVICE_ID_MATROX_MGA_IMP	0x0d10
 #define PCI_DEVICE_ID_MATROX_G100_MM    0x1000
 #define PCI_DEVICE_ID_MATROX_G100_AGP   0x1001
+#define PCI_DEVICE_ID_MATROX_G200_PCI   0x0520
+#define PCI_DEVICE_ID_MATROX_G200_AGP   0x0521
+#define	PCI_DEVICE_ID_MATROX_G400	0x0525
+#define PCI_DEVICE_ID_MATROX_VIA	0x4536
 
 #define PCI_VENDOR_ID_CT		0x102c
 #define PCI_DEVICE_ID_CT_65545		0x00d8
@@ -595,6 +608,7 @@
 /* Winbond have two vendor IDs! See 0x10ad as well */
 #define PCI_VENDOR_ID_WINBOND2		0x1050
 #define PCI_DEVICE_ID_WINBOND2_89C940	0x0940
+#define PCI_DEVICE_ID_WINBOND2_89C940F	0x5a5a
 
 #define PCI_VENDOR_ID_MOTOROLA		0x1057
 #define PCI_VENDOR_ID_MOTOROLA_OOPS	0x1507
@@ -728,11 +742,13 @@
 #define PCI_DEVICE_ID_DATABOOK_87144	0xb106
 
 #define PCI_VENDOR_ID_PLX		0x10b5
+#define PCI_DEVICE_ID_PLX_SPCOM200	0x1103
 #define PCI_DEVICE_ID_PLX_9050		0x9050
 #define PCI_DEVICE_ID_PLX_9060		0x9060
 #define PCI_DEVICE_ID_PLX_9060ES	0x906E
 #define PCI_DEVICE_ID_PLX_9060SD	0x906D
 #define PCI_DEVICE_ID_PLX_9080		0x9080
+#define PCI_DEVICE_ID_PLX_GTEK_SERIAL2	0xa001
 
 #define PCI_VENDOR_ID_MADGE		0x10b6
 #define PCI_DEVICE_ID_MADGE_MK2		0x0002
@@ -805,6 +821,12 @@
 #define PCI_DEVICE_ID_CERN_HIPPI_SRC	0x0022
 
 #define PCI_VENDOR_ID_NVIDIA		0x10de
+#define PCI_DEVICE_ID_NVIDIA_TNT	0x0020
+#define PCI_DEVICE_ID_NVIDIA_TNT2	0x0028
+#define PCI_DEVICE_ID_NVIDIA_UTNT2	0x0029
+#define PCI_DEVICE_ID_NVIDIA_VTNT2	0x002C
+#define PCI_DEVICE_ID_NVIDIA_UVTNT2	0x002D
+#define PCI_DEVICE_ID_NVIDIA_ITNT2	0x00A0
 
 #define PCI_VENDOR_ID_IMS		0x10e0
 #define PCI_DEVICE_ID_IMS_8849		0x8849
@@ -824,6 +846,7 @@
 #define PCI_VENDOR_ID_INTERG		0x10ea
 #define PCI_DEVICE_ID_INTERG_1680	0x1680
 #define PCI_DEVICE_ID_INTERG_1682	0x1682
+#define PCI_DEVICE_ID_INTERG_2000	0x2000
 
 #define PCI_VENDOR_ID_REALTEK		0x10ec
 #define PCI_DEVICE_ID_REALTEK_8029	0x8029
@@ -976,14 +999,20 @@
 #define PCI_VENDOR_ID_OMEGA		0x119b
 #define PCI_DEVICE_ID_OMEGA_82C092G	0x1221
 
-#define PCI_VENDOR_ID_GALILEO		0x11ab
-#define PCI_DEVICE_ID_GALILEO_GT64011	0x4146
+#define PCI_SUBVENDOR_ID_KEYSPAN	0x11a9
+#define PCI_SUBDEVICE_ID_KEYSPAN_SX2	0x5334
 
 #define PCI_VENDOR_ID_GALILEO		0x11ab
 #define PCI_DEVICE_ID_GALILEO_GT64011	0x4146
 
 #define PCI_VENDOR_ID_LITEON		0x11ad
 #define PCI_DEVICE_ID_LITEON_LNE100TX	0x0002
+
+#define PCI_VENDOR_ID_V3		0x11b0
+#define PCI_DEVICE_ID_V3_V960		0x0001
+#define PCI_DEVICE_ID_V3_V350		0x0001
+#define PCI_DEVICE_ID_V3_V960V2		0x0002
+#define PCI_DEVICE_ID_V3_V350V2		0x0002
 
 #define PCI_VENDOR_ID_NP		0x11bc
 #define PCI_DEVICE_ID_NP_PCI_FDDI	0x0001
@@ -1089,6 +1118,16 @@
 #define PCI_VENDOR_ID_ALTEON		0x12ae
 #define PCI_DEVICE_ID_ALTEON_ACENIC	0x0001
 
+#define PCI_SUBVENDOR_ID_CONNECT_TECH			0x12c4
+#define PCI_SUBDEVICE_ID_CONNECT_TECH_BH8_232		0x0001
+#define PCI_SUBDEVICE_ID_CONNECT_TECH_BH4_232		0x0002
+#define PCI_SUBDEVICE_ID_CONNECT_TECH_BH2_232		0x0003
+#define PCI_SUBDEVICE_ID_CONNECT_TECH_BH8_485		0x0004
+#define PCI_SUBDEVICE_ID_CONNECT_TECH_BH8_485_4_4	0x0005
+#define PCI_SUBDEVICE_ID_CONNECT_TECH_BH4_485		0x0006
+#define PCI_SUBDEVICE_ID_CONNECT_TECH_BH4_485_2_2	0x0007
+#define PCI_SUBDEVICE_ID_CONNECT_TECH_BH2_485		0x0008
+
 #define PCI_VENDOR_ID_PICTUREL		0x12c5
 #define PCI_DEVICE_ID_PICTUREL_PCIVST	0x0081
 
@@ -1119,6 +1158,14 @@
 #define PCI_DEVICE_ID_SIIG_2S1P_20x_650	0x2061
 #define PCI_DEVICE_ID_SIIG_2S1P_20x_850	0x2062
 
+#define PCI_VENDOR_ID_SEALEVEL		0x135e
+#define PCI_DEVICE_ID_SEALEVEL_U530	0x7101
+#define PCI_DEVICE_ID_SEALEVEL_UCOMM2	0x7201
+#define PCI_DEVICE_ID_SEALEVEL_UCOMM422	0x7402
+#define PCI_DEVICE_ID_SEALEVEL_UCOMM232	0x7202
+#define PCI_DEVICE_ID_SEALEVEL_COMM4	0x7401
+#define PCI_DEVICE_ID_SEALEVEL_COMM8	0x7801
+
 #define PCI_VENDOR_ID_NETGEAR		0x1385
 #define PCI_DEVICE_ID_NETGEAR_GA620	0x620a
 
@@ -1126,6 +1173,10 @@
 #define PCI_DEVICE_ID_LAVA_PARALLEL	0x8000
 #define PCI_DEVICE_ID_LAVA_DUAL_PAR_A	0x8001 /* The Lava Dual Parallel is */
 #define PCI_DEVICE_ID_LAVA_DUAL_PAR_B	0x8002 /* two PCI devices on a card */
+
+#define PCI_VENDOR_ID_PANACOM		0x14d4
+#define PCI_DEVICE_ID_PANACOM_QUADMODEM	0x0400
+#define PCI_DEVICE_ID_PANACOM_DUALMODEM	0x0402
 
 #define PCI_VENDOR_ID_SYMPHONY		0x1c1c
 #define PCI_DEVICE_ID_SYMPHONY_101	0x0001
@@ -1334,7 +1385,6 @@ struct pci_dev {
 	unsigned short	subsystem_device;
 	unsigned int	class;		/* 3 bytes: (base,sub,prog-if) */
 	unsigned int	hdr_type;	/* PCI header type */
-	unsigned int	master : 1;	/* set if device is master capable */
 
 	unsigned short	regs;
 
@@ -1358,12 +1408,18 @@ struct pci_dev {
 	int (*deactivate)(struct pci_dev *dev);
 };
 
-#define PCI_ROM_RESOURCE 6
-#define PCI_NUM_RESOURCES 7
+/*
+ *  For PCI devices, the region numbers are assigned this way:
+ *
+ *	0-5	standard PCI regions
+ *	6	expansion ROM
+ *	7-10	bridges: address space assigned to buses behind the bridge
+ */
 
-#define PCI_REGION_EXISTS(dev, r) (dev)->resource[r].start
-#define PCI_REGION_IS_IO(dev, r) (PCI_REGION_EXISTS(dev,r) && ((dev)->resource[r].flags & PCI_BASE_ADDRESS_SPACE_IO))
-#define PCI_REGION_IS_MEM(dev, r) (PCI_REGION_EXISTS(dev,r) && !((dev)->resource[r].flags & PCI_BASE_ADDRESS_SPACE_IO))
+#define PCI_ROM_RESOURCE 6
+#define PCI_BRIDGE_RESOURCES 7
+#define PCI_NUM_RESOURCES 11
+  
 #define PCI_REGION_FLAG_MASK 0x0f	/* These bits of resource flags tell us the PCI region flags */
 
 struct pci_bus {
@@ -1374,6 +1430,7 @@ struct pci_bus {
 
 	struct pci_dev	*self;		/* bridge device as seen by parent */
 	struct pci_dev	*devices;	/* devices behind this bridge */
+	struct resource	*resource[4];	/* address space routed to this bus */
 
 	void		*sysdata;	/* hook for sys-specific extension */
 	struct proc_dir_entry *procdir;	/* directory entry in /proc/bus/pci */
@@ -1421,6 +1478,7 @@ struct pci_ops {
 void pcibios_init(void);
 void pcibios_fixup_bus(struct pci_bus *);
 char *pcibios_setup (char *str);
+int pcibios_assign_resource(struct pci_dev *, int i);
 
 
 /* Backward compatibility, don't use in new code! */
@@ -1452,6 +1510,7 @@ int get_pci_list(char *buf);
 int pci_proc_attach_device(struct pci_dev *dev);
 int pci_proc_detach_device(struct pci_dev *dev);
 void pci_name_device(struct pci_dev *dev);
+struct resource *pci_find_parent_resource(struct pci_dev *dev, struct resource *res);
 
 struct pci_dev *pci_find_device (unsigned int vendor, unsigned int device, struct pci_dev *from);
 struct pci_dev *pci_find_subsys (unsigned int vendor, unsigned int device,
@@ -1459,6 +1518,7 @@ struct pci_dev *pci_find_subsys (unsigned int vendor, unsigned int device,
 				 struct pci_dev *from);
 struct pci_dev *pci_find_class (unsigned int class, struct pci_dev *from);
 struct pci_dev *pci_find_slot (unsigned int bus, unsigned int devfn);
+int pci_find_capability (struct pci_dev *dev, int cap);
 
 #define PCI_ANY_ID (~0)
 

@@ -1,12 +1,13 @@
 /*
  *  arch/ppc/kernel/head.S
  *
- *  $Id: head.S,v 1.134 1999/06/30 05:05:52 paulus Exp $
+ *  $Id: head.S,v 1.142 1999/08/23 02:53:18 paulus Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
  *
  *  Rewritten by Cort Dougan (cort@cs.nmt.edu) for PReP
+ *    Copyright (C) 1996 Cort Dougan <cort@cs.nmt.edu>
  *  Adapted for Power Macintosh by Paul Mackerras.
  *  Low-level exception handlers and MMU support
  *  rewritten by Paul Mackerras.
@@ -16,7 +17,7 @@
  *
  *  This file contains the low-level support and setup for the
  *  PowerPC platform, including trap and interrupt dispatch.
- *  Also included here is low-level thread/task switch support.
+ *  (The PPC 8xx embedded CPUs use head_8xx.S instead.)
  *
  *  This program is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU General Public License
@@ -25,118 +26,42 @@
  *	
  */
 
-#include "ppc_asm.tmpl"
-#include "ppc_defs.h"
+#include "ppc_asm.h"
 #include <asm/processor.h>
 #include <asm/page.h>
-#include <asm/ptrace.h>
-#include <linux/sys.h>
-#include <linux/errno.h>
 #include <linux/config.h>
 #include <asm/mmu.h>
-#include <asm/pgtable.h>
-#include <asm/cache.h>
 
 #ifdef CONFIG_APUS
 #include <asm/amigappc.h>
 #endif
 
-/* optimization for 603 to load the tlb directly from the linux table */
-#define NO_RELOAD_HTAB 1
-	
-#ifndef CONFIG_8xx
-CACHE_LINE_SIZE = 32
-LG_CACHE_LINE_SIZE = 5
-#else
-CACHE_LINE_SIZE = 16
-LG_CACHE_LINE_SIZE = 4
-#endif
-
-#define TOPHYS(x)	(x - KERNELBASE)
-
-/*
- * Macros for storing registers into and loading registers from
- * exception frames.
- */
-#define SAVE_GPR(n, base)	stw	n,GPR0+4*(n)(base)
-#define SAVE_2GPRS(n, base)	SAVE_GPR(n, base); SAVE_GPR(n+1, base)
-#define SAVE_4GPRS(n, base)	SAVE_2GPRS(n, base); SAVE_2GPRS(n+2, base)
-#define SAVE_8GPRS(n, base)	SAVE_4GPRS(n, base); SAVE_4GPRS(n+4, base)
-#define SAVE_10GPRS(n, base)	SAVE_8GPRS(n, base); SAVE_2GPRS(n+8, base)
-#define REST_GPR(n, base)	lwz	n,GPR0+4*(n)(base)
-#define REST_2GPRS(n, base)	REST_GPR(n, base); REST_GPR(n+1, base)
-#define REST_4GPRS(n, base)	REST_2GPRS(n, base); REST_2GPRS(n+2, base)
-#define REST_8GPRS(n, base)	REST_4GPRS(n, base); REST_4GPRS(n+4, base)
-#define REST_10GPRS(n, base)	REST_8GPRS(n, base); REST_2GPRS(n+8, base)
-
-#define SAVE_FPR(n, base)	stfd	n,TSS_FPR0+8*(n)(base)
-#define SAVE_2FPRS(n, base)	SAVE_FPR(n, base); SAVE_FPR(n+1, base)
-#define SAVE_4FPRS(n, base)	SAVE_2FPRS(n, base); SAVE_2FPRS(n+2, base)
-#define SAVE_8FPRS(n, base)	SAVE_4FPRS(n, base); SAVE_4FPRS(n+4, base)
-#define SAVE_16FPRS(n, base)	SAVE_8FPRS(n, base); SAVE_8FPRS(n+8, base)
-#define SAVE_32FPRS(n, base)	SAVE_16FPRS(n, base); SAVE_16FPRS(n+16, base)
-#define REST_FPR(n, base)	lfd	n,TSS_FPR0+8*(n)(base)
-#define REST_2FPRS(n, base)	REST_FPR(n, base); REST_FPR(n+1, base)
-#define REST_4FPRS(n, base)	REST_2FPRS(n, base); REST_2FPRS(n+2, base)
-#define REST_8FPRS(n, base)	REST_4FPRS(n, base); REST_4FPRS(n+4, base)
-#define REST_16FPRS(n, base)	REST_8FPRS(n, base); REST_8FPRS(n+8, base)
-#define REST_32FPRS(n, base)	REST_16FPRS(n, base); REST_16FPRS(n+16, base)
-
-#define SYNC \
-	sync; \
-	isync
-
-#ifndef CONFIG_8xx
-/* This instruction is not implemented on the PPC 603 or 601 */
-#define tlbia \
-	li	r4,128; \
-	mtctr	r4; \
-	lis	r4,KERNELBASE@h; \
-0:	tlbie	r4; \
-	addi	r4,r4,0x1000; \
-	bdnz	0b
-#endif
-
 #ifdef CONFIG_PPC64
-#define LOAD_BAT(n, offset, reg, RA, RB) \
-	ld	RA,offset+0(reg);	\
-	ld	RB,offset+8(reg);	\
+#define LOAD_BAT(n, reg, RA, RB)	\
+	ld	RA,(n*32)+0(reg);	\
+	ld	RB,(n*32)+8(reg);	\
 	mtspr	IBAT##n##U,RA;		\
 	mtspr	IBAT##n##L,RB;		\
-	ld	RA,offset+16(reg);	\
-	ld	RB,offset+24(reg);	\
+	ld	RA,(n*32)+16(reg);	\
+	ld	RB,(n*32)+24(reg);	\
 	mtspr	DBAT##n##U,RA;		\
 	mtspr	DBAT##n##L,RB;		\
 	
 #else /* CONFIG_PPC64 */
 	
-/* 601 only have IBAT cr0.eq is set on 601 when using this macro */ 
-#define LOAD_BAT(n, offset, reg, RA, RB) \
-	lwz	RA,offset+0(reg);	\
-	lwz	RB,offset+4(reg);	\
+/* 601 only have IBAT; cr0.eq is set on 601 when using this macro */
+#define LOAD_BAT(n, reg, RA, RB)	\
+	lwz	RA,(n*16)+0(reg);	\
+	lwz	RB,(n*16)+4(reg);	\
 	mtspr	IBAT##n##U,RA;		\
 	mtspr	IBAT##n##L,RB;		\
 	beq	1f;			\
-	lwz	RA,offset+8(reg);	\
-	lwz	RB,offset+12(reg);	\
+	lwz	RA,(n*16)+8(reg);	\
+	lwz	RB,(n*16)+12(reg);	\
 	mtspr	DBAT##n##U,RA;		\
 	mtspr	DBAT##n##L,RB;		\
 1:	
 #endif /* CONFIG_PPC64 */	 
-
-#ifndef CONFIG_APUS
-#define tophys(rd,rs,rt)	addis	rd,rs,-KERNELBASE@h
-#define tovirt(rd,rs,rt)	addis	rd,rs,KERNELBASE@h
-#else
-#define tophys(rd,rs,rt)	 \
-	lis	rt,CYBERBASEp@h; \
-	lwz	rt,0(rt);	 \
-	add	rd,rs,rt
-#define tovirt(rd,rs,rt)	 \
-	lis	rt,CYBERBASEp@h; \
-	lwz	rt,0(rt);	 \
-	sub	rd,rs,rt
-#endif
 	
 	.text
 	.globl	_stext
@@ -149,7 +74,15 @@ _stext:
 	.text
 	.globl	_start
 _start:
-	.long	TOPHYS(__start),0,0
+	/* 
+	 * These are here for legacy reasons, the kernel used to
+	 * need to look like a coff function entry for the pmac
+	 * but we're always started by some kind of bootloader now.
+	 *  -- Cort
+	 */
+	nop
+	nop
+	nop
 
 /* PMAC
  * Enter here with the kernel text, data and bss loaded starting at
@@ -168,6 +101,7 @@ _start:
  *
  * APUS
  *   r3: 'APUS'
+ *   r4: physical address of memory base
  *   Linux/m68k style BootInfo structure at &_end.
  *
  * PREP
@@ -183,39 +117,6 @@ _start:
  * This just gets a minimal mmu environment setup so we can call
  * start_here() to do the real work.
  * -- Cort
- *
- * MPC8xx
- * This port was done on an MBX board with an 860.  Right now I only
- * support an ELF compressed (zImage) boot from EPPC-Bug because the
- * code there loads up some registers before calling us:
- *   r3: ptr to board info data
- *   r4: initrd_start or if no initrd then 0
- *   r5: initrd_end - unused if r4 is 0
- *   r6: Start of command line string
- *   r7: End of command line string
- *
- * I decided to use conditional compilation instead of checking PVR and
- * adding more processor specific branches around code I don't need.
- * Since this is an embedded processor, I also appreciate any memory
- * savings I can get.
- *
- * The MPC8xx does not have any BATs, but it supports large page sizes.
- * We first initialize the MMU to support 8M byte pages, then load one
- * entry into each of the instruction and data TLBs to map the first
- * 8M 1:1.  I also mapped an additional I/O space 1:1 so we can get to
- * the "internal" processor registers before MMU_init is called.
- *
- * The TLB code currently contains a major hack.  Since I use the condition
- * code register, I have to save and restore it.  I am out of registers, so
- * I just store it in memory location 0 (the TLB handlers are not reentrant).
- * To avoid making any decisions, I need to use the "segment" valid bit
- * in the first level table, but that would require many changes to the
- * Linux page directory/table functions that I don't want to do right now.
- *
- * I used to use SPRG2 for a temporary register in the TLB handler, but it
- * has since been put to other uses.  I now use a hack to save a register
- * and the CCR at memory location 0.....Someday I'll fix this.....
- *	-- Dan
  */
 	
 	.globl	__start
@@ -241,8 +142,14 @@ __start:
 	mr	r28,r6
 	mr	r27,r7
 	li	r24,0			/* cpu # */
-#ifndef CONFIG_8xx
 	bl	prom_init
+#ifdef CONFIG_APUS
+/* On APUS the __va/__pa constants need to be set to the correct 
+ * values before continuing. 
+ */
+	mr	r4,r30
+	bl	fix_mem_constants
+#endif
 	.globl	__secondary_start
 __secondary_start:
 /*
@@ -267,16 +174,9 @@ __secondary_start:
 	b	5f
 #endif /* CONFIG_PPC64 */
 4:
-#ifdef CONFIG_APUS
-	ori	r11,r11,BL_8M<<2|0x2	/* set up an 8MB mapping */
-	ori	r11,r11,0xfe		/* set up an 8MB mapping */
-	lis	r8,CYBERBASEp@h
-	lwz	r8,0(r8)
-	addis	r8,r8,KERNELBASE@h
-	addi	r8,r8,2
-#else	
+	tophys(r8,r11)
+	ori	r8,r8,2			/* R/W access */
 	ori	r11,r11,BL_256M<<2|0x2	/* set up BAT registers for 604 */
-	li	r8,2			/* R/W access */
 #ifdef CONFIG_PPC64
 	/* clear out the high 32 bits in the BAT */
 	clrldi	r11,r11,32
@@ -295,15 +195,16 @@ __secondary_start:
 	mtspr	DBAT1U,r21		/* bit in upper BAT register */
 	mtspr	IBAT1L,r18
 	mtspr	IBAT1U,r21
-	
+
+#if 0	/* for now, otherwise we overflow the 0x100 bytes we have here */
 	oris	r18,r8,0x20000000@h
 	oris	r21,r11,(KERNELBASE+0x20000000)@h
 	mtspr	DBAT2L,r18		/* N.B. 6xx (not 601) have valid */
 	mtspr	DBAT2U,r21		/* bit in upper BAT register */
 	mtspr	IBAT2L,r18
 	mtspr	IBAT2U,r21
+#endif /* 0 */
 #endif /* CONFIG_PPC64 */
-#endif
 	mtspr	DBAT0L,r8		/* N.B. 6xx (not 601) have valid */
 	mtspr	DBAT0U,r11		/* bit in upper BAT register */
 	mtspr	IBAT0L,r8
@@ -325,7 +226,7 @@ __secondary_start:
 	
 	/* Copy exception code to exception vector base. */
 	lis	r3,KERNELBASE@h
-	tophys(r4,r3,r5)
+	tophys(r4,r3)
 	lis	r3,0xfff0		/* Copy to 0xfff00000 on APUS */
 	li	r5,0x4000		/* # bytes of memory to copy */
 	li	r6,0
@@ -359,80 +260,6 @@ __secondary_start:
  * this shouldn't bother the pmac since it just gets turned on again
  * as we jump to our code at KERNELBASE. -- Cort
  */
-	
-#else /* CONFIG_8xx */
-	tlbia			/* Invalidate all TLB entries */
-	li	r8, 0
-	mtspr	MI_CTR, r8	/* Set instruction control to zero */
-	lis	r8, MD_RESETVAL@h
-	mtspr	MD_CTR, r8	/* Set data TLB control */
-
-	/* Now map the lower 8 Meg into the TLBs.  For this quick hack,
-	 * we can load the instruction and data TLB registers with the
-	 * same values.
-	 */
-	lis	r8, KERNELBASE@h	/* Create vaddr for TLB */
-	ori	r8, r8, MI_EVALID	/* Mark it valid */
-	mtspr	MI_EPN, r8
-	mtspr	MD_EPN, r8
-	li	r8, MI_PS8MEG		/* Set 8M byte page */
-	ori	r8, r8, MI_SVALID	/* Make it valid */
-	mtspr	MI_TWC, r8
-	mtspr	MD_TWC, r8
-	li	r8, MI_BOOTINIT		/* Create RPN for address 0 */
-	mtspr	MI_RPN, r8		/* Store TLB entry */
-	mtspr	MD_RPN, r8
-	lis	r8, MI_Kp@h		/* Set the protection mode */
-	mtspr	MI_AP, r8
-	mtspr	MD_AP, r8
-
-/* We will get these from a configuration file as soon as I verify
- * the extraneous bits don't cause problems in the TLB.
- */
-#if defined(CONFIG_MBX) || defined(CONFIG_RPXLITE)
-#define BOOT_IMMR      0xfa000000
-#endif
-#ifdef CONFIG_BSEIP
-#define BOOT_IMMR      0xff000000
-#endif
-	/* Map another 8 MByte at 0xfa000000 to get the processor
-	 * internal registers (among other things).
-	 */
-	lis     r8, BOOT_IMMR@h         /* Create vaddr for TLB */
-	ori	r8, r8, MD_EVALID	/* Mark it valid */
-	mtspr	MD_EPN, r8
-	li	r8, MD_PS8MEG		/* Set 8M byte page */
-	ori	r8, r8, MD_SVALID	/* Make it valid */
-	mtspr	MD_TWC, r8
-	lis     r8, BOOT_IMMR@h         /* Create paddr for TLB */
-	ori	r8, r8, MI_BOOTINIT|0x2 /* Inhibit cache -- Cort */
-	mtspr	MD_RPN, r8
-
-	/* Since the cache is enabled according to the information we
-	 * just loaded into the TLB, invalidate and enable the caches here.
-	 * We should probably check/set other modes....later.
-	 */
-	lis	r8, IDC_INVALL@h
-	mtspr	IC_CST, r8
-	mtspr	DC_CST, r8
-	lis	r8, IDC_ENABLE@h
-	mtspr	IC_CST, r8
-#if 0
-	mtspr	DC_CST, r8
-#else
-	/* For a debug option, I left this here to easily enable
-	 * the write through cache mode
-	 */
-	lis	r8, DC_SFWT@h
-	mtspr	DC_CST, r8
-	lis	r8, IDC_ENABLE@h
-	mtspr	DC_CST, r8
-#endif
-
-/* We now have the lower 8 Meg mapped into TLB entries, and the caches
- * ready to work.
- */
-#endif /* CONFIG_8xx */
 
 turn_on_mmu:
 	mfmsr	r0
@@ -444,14 +271,6 @@ turn_on_mmu:
 	SYNC
 	rfi				/* enables MMU */
 
-/*
- * GCC sometimes accesses words at negative offsets from the stack
- * pointer, although the SysV ABI says it shouldn't.  To cope with
- * this, we leave this much untouched space on the stack on exception
- * entry.
- */
-#define STACK_UNDERHEAD	0
-	
 /*
  * Exception entry code.  This code runs with address translation
  * turned off, i.e. using physical addresses.
@@ -465,8 +284,8 @@ turn_on_mmu:
 	mfspr	r21,SPRG2;		/* exception stack to use from */ \
 	cmpwi	0,r21,0;		/* user mode or RTAS */ \
 	bne	1f;		\
-	tophys(r21,r1,r21);		/* use tophys(kernel sp) otherwise */ \
-	subi	r21,r21,INT_FRAME_SIZE+STACK_UNDERHEAD;	/* alloc exc. frame */\
+	tophys(r21,r1);			/* use tophys(kernel sp) otherwise */ \
+	subi	r21,r21,INT_FRAME_SIZE;	/* alloc exc. frame */\
 1:	stw	r20,_CCR(r21);		/* save registers */ \
 	stw	r22,GPR22(r21);	\
 	stw	r23,GPR23(r21);	\
@@ -486,7 +305,7 @@ turn_on_mmu:
 	stw	r1,GPR1(r21);	\
 	stw	r2,GPR2(r21);	\
 	stw	r1,0(r21);	\
-	tovirt(r1,r21,r1);		/* set new kernel sp */	\
+	tovirt(r1,r21);			/* set new kernel sp */	\
 	SAVE_4GPRS(3, r21);
 /*
  * Note: code which follows this uses cr0.eq (set if from kernel),
@@ -504,7 +323,7 @@ label:						\
 	li	r20,MSR_KERNEL;			\
 	bl	transfer_to_handler; 		\
 	.long	hdlr;				\
-	.long	int_return
+	.long	ret_from_except
 
 /* System reset */
 #ifdef CONFIG_SMP /* MVME/MTX start the secondary here */
@@ -516,23 +335,18 @@ label:						\
 /* Machine check */
 	STD_EXCEPTION(0x200, MachineCheck, MachineCheckException)
 
-/* Data access exception.
- * This is "never generated" by the MPC8xx.  We jump to it for other
- * translation errors.
- */
+/* Data access exception. */
 	. = 0x300
 DataAccess:
 	EXCEPTION_PROLOG
 	mfspr	r20,DSISR
-#ifndef CONFIG_8xx
 	andis.	r0,r20,0xa470		/* weird error? */
 	bne	1f			/* if not, try to put a PTE */
 	mfspr	r3,DAR			/* into the hash table */
 	rlwinm	r4,r23,32-13,30,30	/* MSR_PR -> _PAGE_USER */
 	rlwimi	r4,r20,32-23,29,29	/* DSISR_STORE -> _PAGE_RW */
-	mfspr	r5,SPRG3		/* phys addr of TSS */
+	mfspr	r5,SPRG3		/* phys addr of THREAD */
 	bl	hash_page
-#endif
 1:	stw	r20,_DSISR(r21)
 	mr	r5,r20
 	mfspr	r4,DAR
@@ -542,24 +356,19 @@ DataAccess:
 	rlwimi	r20,r23,0,16,16		/* copy EE bit from saved MSR */
 	bl	transfer_to_handler
 	.long	do_page_fault
-	.long	int_return
+	.long	ret_from_except
 
-/* Instruction access exception.
- * This is "never generated" by the MPC8xx.  We jump to it for other
- * translation errors.
- */
+/* Instruction access exception. */
 	. = 0x400
 InstructionAccess:
 	EXCEPTION_PROLOG
-#ifndef CONFIG_8xx
 	andis.	r0,r23,0x4000		/* no pte found? */
 	beq	1f			/* if so, try to put a PTE */
 	mr	r3,r22			/* into the hash table */
 	rlwinm	r4,r23,32-13,30,30	/* MSR_PR -> _PAGE_USER */
 	mr	r20,r23			/* SRR1 has reason bits */
-	mfspr	r5,SPRG3		/* phys addr of TSS */
+	mfspr	r5,SPRG3		/* phys addr of THREAD */
 	bl	hash_page
-#endif
 1:	addi	r3,r1,STACK_FRAME_OVERHEAD
 	mr	r4,r22
 	mr	r5,r23
@@ -567,7 +376,7 @@ InstructionAccess:
 	rlwimi	r20,r23,0,16,16		/* copy EE bit from saved MSR */
 	bl	transfer_to_handler
 	.long	do_page_fault
-	.long	int_return
+	.long	ret_from_except
 
 /* External interrupt */
 	. = 0x500;
@@ -606,7 +415,7 @@ HardwareInterrupt:
 	li	r4,0
 	bl	transfer_to_handler
 	.long	do_IRQ;
-	.long	int_return
+	.long	ret_from_except
 	
 
 /* Alignment exception */
@@ -622,7 +431,7 @@ Alignment:
 	rlwimi	r20,r23,0,16,16		/* copy EE bit from saved MSR */
 	bl	transfer_to_handler
 	.long	AlignmentException
-	.long	int_return
+	.long	ret_from_except
 
 /* Program check exception */
 	. = 0x700
@@ -633,9 +442,8 @@ ProgramCheck:
 	rlwimi	r20,r23,0,16,16		/* copy EE bit from saved MSR */
 	bl	transfer_to_handler
 	.long	ProgramCheckException
-	.long	int_return
+	.long	ret_from_except
 
-#ifndef CONFIG_8xx
 /* Floating-point unavailable */
 	. = 0x800
 FPUnavailable:
@@ -644,12 +452,7 @@ FPUnavailable:
 	li	r20,MSR_KERNEL
 	bl	transfer_to_handler	/* if from kernel, take a trap */
 	.long	KernelFP
-	.long	int_return
-#else
-/* No FPU on MPC8xx.  This exception is not supposed to happen.
-*/
-	STD_EXCEPTION(0x800, FPUnavailable, UnknownException)
-#endif
+	.long	ret_from_except
 
 	STD_EXCEPTION(0x900, Decrementer, timer_interrupt)
 	STD_EXCEPTION(0xa00, Trap_0a, UnknownException)
@@ -664,7 +467,7 @@ SystemCall:
 	rlwimi	r20,r23,0,16,16		/* copy EE bit from saved MSR */
 	bl	transfer_to_handler
 	.long	DoSyscall
-	.long	int_return
+	.long	ret_from_except
 
 /* Single step - not used on 601 */
 	STD_EXCEPTION(0xd00, SingleStep, SingleStepException)
@@ -672,14 +475,12 @@ SystemCall:
 	STD_EXCEPTION(0xe00, Trap_0e, UnknownException)
 	STD_EXCEPTION(0xf00, Trap_0f, UnknownException)
 
-#ifndef CONFIG_8xx
 /*
  * Handle TLB miss for instruction on 603/603e.
  * Note: we get an alternate set of r0 - r3 to use automatically.
  */
 	. = 0x1000
 InstructionTLBMiss:
-#ifdef NO_RELOAD_HTAB
 /*
  * r0:	stored ctr
  * r1:	linux style pte ( later becomes ppc hardware pte )
@@ -689,14 +490,14 @@ InstructionTLBMiss:
 	mfctr	r0
 	/* Get PTE (linux-style) and check access */
 	mfspr	r2,SPRG3
-	lwz	r2,PG_TABLES(r2)
-	tophys(r2,r2,r3)
+	lwz	r2,PGDIR(r2)
+	tophys(r2,r2)
 	mfspr	r3,IMISS
 	rlwimi	r2,r3,12,20,29		/* insert top 10 bits of address */
 	lwz	r2,0(r2)		/* get pmd entry */
 	rlwinm.	r2,r2,0,0,19		/* extract address of pte page */
 	beq-	InstructionAddressInvalid	/* return if no mapping */
-	tophys(r2,r2,r1)
+	tophys(r2,r2)
 	rlwimi	r2,r3,22,20,29		/* insert next 10 bits of address */
 	lwz	r1,0(r2)		/* get linux-style pte */
 	/* setup access flags in r3 */
@@ -719,40 +520,11 @@ InstructionTLBMiss:
 	mfspr	r3,SRR1		/* Need to restore CR0 */
 	mtcrf	0x80,r3
 	rfi	
-#else
-	mfctr	r0		/* Need to save this - CTR can't be touched! */
-	mfspr	r2,HASH1	/* Get PTE pointer */
-	mfspr	r3,ICMP		/* Partial item compare value */
-00:	li	r1,8		/* 8 items / bucket */
-	mtctr	r1
-	subi	r2,r2,8		/* Preset pointer */
-10:	lwzu	r1,8(r2)	/* Get next PTE */
-	cmp	0,r1,r3		/* Found entry yet? */
-	bdnzf	2,10b		/* Jump back if not, until CTR==0 */
-	bne	30f		/* Try secondary hash if CTR==0 */
-	lwz	r1,4(r2)	/* Get second word of entry */
-20:	mtctr	r0		/* Restore CTR */
-	mfspr	r3,SRR1		/* Need to restore CR0 */
-	mtcrf	0x80,r3
-	mfspr	r0,IMISS	/* Set to update TLB */
-	mtspr	RPA,r1
-	tlbli	r0
-	rfi			/* All done */
-/* Secondary hash */
-30:	andi.	r1,r3,0x40	/* Already doing secondary hash? */
-	bne	InstructionAddressInvalid /* Yes - item not in hash table */
-	mfspr	r2,HASH2	/* Get hash table pointer */
-	ori	r3,r3,0x40	/* Set secondary hash */
-	b	00b		/* Try lookup again */
-#endif /* NO_RELOAD_HTAB */
 InstructionAddressInvalid:
 	mfspr	r3,SRR1
 	rlwinm	r1,r3,9,6,6	/* Get load/store bit */
-#ifdef NO_RELOAD_HTAB
+
 	addis	r1,r1,0x2000
-#else
-	addis	r1,r1,0x4000	/* Set bit 1 -> PTE not found (in HTAB) */
-#endif /* NO_RELOAD_HTAB */
 	mtspr	DSISR,r1	/* (shouldn't be needed) */
 	mtctr	r0		/* Restore CTR */
 	andi.	r2,r3,0xFFFF	/* Clear upper bits of SRR1 */
@@ -769,20 +541,12 @@ InstructionAddressInvalid:
 	sync			/* Some chip revs have problems here... */
 	mtmsr	r0
 	b	InstructionAccess
-#else
-/* On the MPC8xx, this is a software emulation interrupt.  It occurs
- * for all unimplemented and illegal instructions.
- */
-	STD_EXCEPTION(0x1000, SoftEmu, SoftwareEmulation)
-#endif
 
 /*
  * Handle TLB miss for DATA Load operation on 603/603e
  */
 	. = 0x1100
-#ifndef CONFIG_8xx
 DataLoadTLBMiss:
-#ifdef NO_RELOAD_HTAB
 /*
  * r0:	stored ctr
  * r1:	linux style pte ( later becomes ppc hardware pte )
@@ -792,14 +556,14 @@ DataLoadTLBMiss:
 	mfctr	r0
 	/* Get PTE (linux-style) and check access */
 	mfspr	r2,SPRG3
-	lwz	r2,PG_TABLES(r2)		
-	tophys(r2,r2,r3)
+	lwz	r2,PGDIR(r2)
+	tophys(r2,r2)
 	mfspr	r3,DMISS
 	rlwimi	r2,r3,12,20,29		/* insert top 10 bits of address */
 	lwz	r2,0(r2)		/* get pmd entry */
 	rlwinm.	r2,r2,0,0,19		/* extract address of pte page */
 	beq-	DataAddressInvalid	/* return if no mapping */
-	tophys(r2,r2,r1)
+	tophys(r2,r2)
 	rlwimi	r2,r3,22,20,29		/* insert next 10 bits of address */
 	lwz	r1,0(r2)		/* get linux-style pte */
 	/* setup access flags in r3 */
@@ -823,40 +587,10 @@ DataLoadTLBMiss:
 	mfspr	r3,SRR1		/* Need to restore CR0 */
 	mtcrf	0x80,r3
 	rfi	
-#else
-	mfctr	r0		/* Need to save this - CTR can't be touched! */
-	mfspr	r2,HASH1	/* Get PTE pointer */
-	mfspr	r3,DCMP		/* Partial item compare value */
-00:	li	r1,8		/* 8 items / bucket */
-	mtctr	r1
-	subi	r2,r2,8		/* Preset pointer */
-10:	lwzu	r1,8(r2)	/* Get next PTE */
-	cmp	0,r1,r3		/* Found entry yet? */
-	bdnzf	2,10b		/* Jump back if not, until CTR==0 */
-	bne	30f		/* Try secondary hash if CTR==0 */
-	lwz	r1,4(r2)	/* Get second word of entry */
-20:	mtctr	r0		/* Restore CTR */
-	mfspr	r3,SRR1		/* Need to restore CR0 */
-	mtcrf	0x80,r3
-	mfspr	r0,DMISS	/* Set to update TLB */
-	mtspr	RPA,r1
-	tlbld	r0
-	rfi			/* All done */
-/* Secondary hash */
-30:	andi.	r1,r3,0x40	/* Already doing secondary hash? */
-	bne	DataAddressInvalid /* Yes - item not in hash table */
-	mfspr	r2,HASH2	/* Get hash table pointer */
-	ori	r3,r3,0x40	/* Set secondary hash */
-	b	00b		/* Try lookup again */
-#endif /* NO_RELOAD_HTAB */
 DataAddressInvalid:
 	mfspr	r3,SRR1
 	rlwinm	r1,r3,9,6,6	/* Get load/store bit */
-#ifdef NO_RELOAD_HTAB
 	addis	r1,r1,0x2000
-#else
-	addis	r1,r1,0x4000	/* Set bit 1 -> PTE not found */
-#endif /* NO_RELOAD_HTAB */
 	mtspr	DSISR,r1
 	mtctr	r0		/* Restore CTR */
 	andi.	r2,r3,0xFFFF	/* Clear upper bits of SRR1 */
@@ -872,79 +606,12 @@ DataAddressInvalid:
 	sync			/* Some chip revs have problems here... */
 	mtmsr	r0
 	b	DataAccess
-#else
-/*
- * For the MPC8xx, this is a software tablewalk to load the instruction
- * TLB.  It is modelled after the example in the Motorola manual.  The task
- * switch loads the M_TWB register with the pointer to the first level table.
- * If we discover there is no second level table (the value is zero), the
- * plan was to load that into the TLB, which causes another fault into the
- * TLB Error interrupt where we can handle such problems.  However, that did
- * not work, so if we discover there is no second level table, we restore
- * registers and branch to the error exception.  We have to use the MD_xxx
- * registers for the tablewalk because the equivalent MI_xxx registers
- * only perform the attribute functions.
- */
-InstructionTLBMiss:
-	mtspr	M_TW, r20	/* Save a couple of working registers */
-	mfcr	r20
-	stw	r20, 0(r0)
-	stw	r21, 4(r0)
-	mfspr	r20, SRR0	/* Get effective address of fault */
-	mtspr	MD_EPN, r20	/* Have to use MD_EPN for walk, MI_EPN can't */
-	mfspr	r20, M_TWB	/* Get level 1 table entry address */
-	lwz	r21, 0(r20)	/* Get the level 1 entry */
-	rlwinm.	r20, r21,0,0,20	/* Extract page descriptor page address */
-	beq	2f		/* If zero, don't try to find a pte */
-
-	/* We have a pte table, so load the MI_TWC with the attributes
-	 * for this page, which has only bit 31 set.
-	 */
-	tophys(r21,r21,0)
-	ori	r21,r21,1		/* Set valid bit */
-	mtspr	MI_TWC, r21	/* Set page attributes */
-	mtspr	MD_TWC, r21	/* Load pte table base address */
-	mfspr	r21, MD_TWC	/* ....and get the pte address */
-	lwz	r21, 0(r21)	/* Get the pte */
-
-	/* Set four subpage valid bits (24, 25, 26, and 27).
-	 * Since we currently run MI_CTR.PPCS = 0, the manual says,
-	 *	"If the page size is larger than 4k byte, then all the
-	 *	 4 bits should have the same value."
-	 * I don't really know what to do if the page size is 4k Bytes,
-	 * but I know setting them all to 0 does not work, and setting them
-	 * all to 1 does, so that is the way it is right now.
-	 * BTW, these four bits map to the software only bits in the
-	 * linux page table.  I used to turn them all of, but now just
-	 * set them all for the hardware.
-	li	r20, 0x00f0
-	andc	r20, r21, r20
-	ori	r20, r20, 0x0080
-	 */
-	ori	r20, r21, 0x00f0
-
-	mtspr	MI_RPN, r20	/* Update TLB entry */
-
-	mfspr	r20, M_TW	/* Restore registers */
-	lwz	r21, 0(r0)
-	mtcr	r21
-	lwz	r21, 4(r0)
-	rfi
-
-2:	mfspr	r20, M_TW	/* Restore registers */
-	lwz	r21, 0(r0)
-	mtcr	r21
-	lwz	r21, 4(r0)
-	b	InstructionAccess
-#endif /* CONFIG_8xx */
 	
 /*
  * Handle TLB miss for DATA Store on 603/603e
  */
 	. = 0x1200
 DataStoreTLBMiss:
-#ifndef CONFIG_8xx
-#ifdef NO_RELOAD_HTAB
 /*
  * r0:	stored ctr
  * r1:	linux style pte ( later becomes ppc hardware pte )
@@ -954,14 +621,14 @@ DataStoreTLBMiss:
 	mfctr	r0
 	/* Get PTE (linux-style) and check access */
 	mfspr	r2,SPRG3
-	lwz	r2,PG_TABLES(r2)		
-	tophys(r2,r2,r3)
+	lwz	r2,PGDIR(r2)
+	tophys(r2,r2)
 	mfspr	r3,DMISS
 	rlwimi	r2,r3,12,20,29		/* insert top 10 bits of address */
 	lwz	r2,0(r2)		/* get pmd entry */
 	rlwinm.	r2,r2,0,0,19		/* extract address of pte page */
 	beq-	DataAddressInvalid	/* return if no mapping */
-	tophys(r2,r2,r1)
+	tophys(r2,r2)
 	rlwimi	r2,r3,22,20,29		/* insert next 10 bits of address */
 	lwz	r1,0(r2)		/* get linux-style pte */
 	/* setup access flags in r3 */
@@ -985,171 +652,12 @@ DataStoreTLBMiss:
 	mfspr	r3,SRR1		/* Need to restore CR0 */
 	mtcrf	0x80,r3
 	rfi	
-#else	
-	mfctr	r0		/* Need to save this - CTR can't be touched! */
-	mfspr	r2,HASH1	/* Get PTE pointer */
-	mfspr	r3,DCMP		/* Partial item compare value */
-00:	li	r1,8		/* 8 items / bucket */
-	mtctr	r1
-	subi	r2,r2,8		/* Preset pointer */
-10:	lwzu	r1,8(r2)	/* Get next PTE */
-	cmp	0,r1,r3		/* Found entry yet? */
-	bdnzf	2,10b		/* Jump back if not, until CTR==0 */
-	bne	30f		/* Try secondary hash if CTR==0 */
-	lwz	r1,4(r2)	/* Get second word of entry */
-20:	mtctr	r0		/* Restore CTR */
-	mfspr	r3,SRR1		/* Need to restore CR0 */
-	mtcrf	0x80,r3
-	mfspr	r0,DMISS	/* Set to update TLB */
-	mtspr	RPA,r1
-	tlbld	r0
-	rfi			/* All done */	
-/* Secondary hash */
-30:	andi.	r1,r3,0x40	/* Already doing secondary hash? */
-	bne	DataAddressInvalid /* Yes - item not in hash table */
-	mfspr	r2,HASH2	/* Get hash table pointer */
-	ori	r3,r3,0x40	/* Set secondary hash */
-	b	00b			/* Try lookup again */
-#endif /* NO_RELOAD_HTAB */
-#else /* CONFIG_8xx */	
-	mtspr	M_TW, r20	/* Save a couple of working registers */
-	mfcr	r20
-	stw	r20, 0(r0)
-	stw	r21, 4(r0)
-	mfspr	r20, M_TWB	/* Get level 1 table entry address */
-	lwz	r21, 0(r20)	/* Get the level 1 entry */
-	rlwinm.	r20, r21,0,0,20	/* Extract page descriptor page address */
-	beq	2f		/* If zero, don't try to find a pte */
 
-	/* We have a pte table, so load fetch the pte from the table.
-	 */
-	tophys(r21, r21, 0)
-	ori	r21, r21, 1	/* Set valid bit in physical L2 page */
-	mtspr	MD_TWC, r21	/* Load pte table base address */
-	mfspr	r21, MD_TWC	/* ....and get the pte address */
-	lwz	r21, 0(r21)	/* Get the pte */
-
-	/* Set four subpage valid bits (24, 25, 26, and 27).
-	 * Since we currently run MD_CTR.PPCS = 0, the manual says,
-	 *	"If the page size is larger than 4k byte, then all the
-	 *	 4 bits should have the same value."
-	 * I don't really know what to do if the page size is 4k Bytes,
-	 * but I know setting them all to 0 does not work, and setting them
-	 * all to 1 does, so that is the way it is right now.
-	 * BTW, these four bits map to the software only bits in the
-	 * linux page table.  I used to turn them all of, but now just
-	 * set them all for the hardware.
-	li	r20, 0x00f0
-	andc	r20, r21, r20
-	ori	r20, r20, 0x0080
-	 */
-	ori	r20, r21, 0x00f0
-
-	mtspr	MD_RPN, r20	/* Update TLB entry */
-
-	mfspr	r20, M_TW	/* Restore registers */
-	lwz	r21, 0(r0)
-	mtcr	r21
-	lwz	r21, 4(r0)
-	rfi
-
-2:	mfspr	r20, M_TW	/* Restore registers */
-	lwz	r21, 0(r0)
-	mtcr	r21
-	lwz	r21, 4(r0)
-	b	DataAccess
-#endif /* CONFIG_8xx */
-
-#ifndef CONFIG_8xx
 /* Instruction address breakpoint exception (on 603/604) */
 	STD_EXCEPTION(0x1300, Trap_13, InstructionBreakpoint)
-#else
-
-/* This is an instruction TLB error on the MPC8xx.  This could be due
- * to many reasons, such as executing guarded memory or illegal instruction
- * addresses.  There is nothing to do but handle a big time error fault.
- */
-	. = 0x1300
-InstructionTLBError:
-	b	InstructionAccess
-#endif
 
 /* System management exception (603?) */
-#ifndef CONFIG_8xx
 	STD_EXCEPTION(0x1400, Trap_14, UnknownException)
-#else
-
-/* This is the data TLB error on the MPC8xx.  This could be due to
- * many reasons, including a dirty update to a pte.  We can catch that
- * one here, but anything else is an error.  First, we track down the
- * Linux pte.  If it is valid, write access is allowed, but the
- * page dirty bit is not set, we will set it and reload the TLB.  For
- * any other case, we bail out to a higher level function that can
- * handle it.
- */
-	. = 0x1400
-DataTLBError:
-	mtspr	M_TW, r20	/* Save a couple of working registers */
-	mfcr	r20
-	stw	r20, 0(r0)
-	stw	r21, 4(r0)
-
-	/* First, make sure this was a store operation.
-	*/
-	mfspr	r20, DSISR
-	andis.	r21, r20, 0x0200	/* If set, indicates store op */
-	beq	2f
-
-	mfspr	r20, M_TWB	/* Get level 1 table entry address */
-	lwz	r21, 0(r20)	/* Get the level 1 entry */
-	rlwinm.	r20, r21,0,0,20	/* Extract page descriptor page address */
-	beq	2f		/* If zero, bail */
-
-	/* We have a pte table, so fetch the pte from the table.
-	 */
-	tophys(r21, r21, 0)
-	ori	r21, r21, 1		/* Set valid bit in physical L2 page */
-	mtspr	MD_TWC, r21		/* Load pte table base address */
-	mfspr	r21, MD_TWC		/* ....and get the pte address */
-	lwz	r21, 0(r21)		/* Get the pte */
-
-	andi.	r20, r21, _PAGE_RW	/* Is it writeable? */
-	beq	2f			/* Bail out if not */
-
-	ori	r21, r21, _PAGE_DIRTY	/* Update changed bit */
-	mfspr	r20, MD_TWC		/* Get pte address again */
-	stw	r21, 0(r20)		/* and update pte in table */
-
-	/* Set four subpage valid bits (24, 25, 26, and 27).
-	 * Since we currently run MD_CTR.PPCS = 0, the manual says,
-	 *	"If the page size is larger than 4k byte, then all the
-	 *	 4 bits should have the same value."
-	 * I don't really know what to do if the page size is 4k Bytes,
-	 * but I know setting them all to 0 does not work, and setting them
-	 * all to 1 does, so that is the way it is right now.
-	 * BTW, these four bits map to the software only bits in the
-	 * linux page table.  I used to turn them all of, but now just
-	 * set them all for the hardware.
-	li	r20, 0x00f0
-	andc	r20, r21, r20
-	ori	r20, r20, 0x0080
-	 */
-	ori	r20, r21, 0x00f0
-
-	mtspr	MD_RPN, r20	/* Update TLB entry */
-
-	mfspr	r20, M_TW	/* Restore registers */
-	lwz	r21, 0(r0)
-	mtcr	r21
-	lwz	r21, 4(r0)
-	rfi
-2:
-	mfspr	r20, M_TW	/* Restore registers */
-	lwz	r21, 0(r0)
-	mtcr	r21
-	lwz	r21, 4(r0)
-	b	DataAccess
-#endif /* CONFIG_8xx */
 
 	STD_EXCEPTION(0x1500, Trap_15, UnknownException)
 	STD_EXCEPTION(0x1600, Trap_16, UnknownException)
@@ -1158,16 +666,11 @@ DataTLBError:
 	STD_EXCEPTION(0x1900, Trap_19, UnknownException)
 	STD_EXCEPTION(0x1a00, Trap_1a, UnknownException)
 	STD_EXCEPTION(0x1b00, Trap_1b, UnknownException)
-/* On the MPC8xx, these next four traps are used for development
- * support of breakpoints and such.  Someday I will get around to
- * using them.
- */
 	STD_EXCEPTION(0x1c00, Trap_1c, UnknownException)
 	STD_EXCEPTION(0x1d00, Trap_1d, UnknownException)
 	STD_EXCEPTION(0x1e00, Trap_1e, UnknownException)
 	STD_EXCEPTION(0x1f00, Trap_1f, UnknownException)
 
-#ifndef CONFIG_8xx
 	/* Run mode exception */
 	STD_EXCEPTION(0x2000, RunMode, RunModeException)
 
@@ -1188,9 +691,6 @@ DataTLBError:
 	STD_EXCEPTION(0x2f00, Trap_2f, UnknownException)
 
 	. = 0x3000
-#else
-	. = 0x2000
-#endif
 
 /*
  * This code finishes saving the registers to the exception frame
@@ -1208,12 +708,12 @@ transfer_to_handler:
 	SAVE_8GPRS(12, r21)
 	SAVE_8GPRS(24, r21)
 	andi.	r23,r23,MSR_PR
-	mfspr	r23,SPRG3		/* if from user, fix up tss.regs */
+	mfspr	r23,SPRG3		/* if from user, fix up THREAD.regs */
 	beq	2f
 	addi	r24,r1,STACK_FRAME_OVERHEAD
 	stw	r24,PT_REGS(r23)
-2:	addi	r2,r23,-TSS		/* set r2 to current */
-	tovirt(r2,r2,r23)
+2:	addi	r2,r23,-THREAD		/* set r2 to current */
+	tovirt(r2,r2)
 	mflr	r23
 	andi.	r24,r23,0x3f00		/* get vector offset */
 	stw	r24,TRAP(r21)
@@ -1252,300 +752,6 @@ stack_ovf:
 	SYNC
 	rfi
 
-#ifndef CONFIG_8xx
-/*
- * Load a PTE into the hash table, if possible.
- * The address is in r3, and r4 contains access flags:
- * _PAGE_USER (4) if a user-mode access, ored with
- * _PAGE_RW (2) if a write.  r20 contains DSISR or SRR1,
- * so bit 1 (0x40000000) is set if the exception was due
- * to no matching PTE being found in the hash table.
- * r5 contains the physical address of the current task's tss.
- *
- * Returns to the caller if the access is illegal or there is no
- * mapping for the address.  Otherwise it places an appropriate PTE
- * in the hash table and returns from the exception.
- * Uses r0, r2 - r6, ctr, lr.
- *
- * For speed, 4 of the instructions get patched once the size and
- * physical address of the hash table are known.  These definitions
- * of Hash_base and Hash_bits below are just an example.
- */
-Hash_base = 0x180000
-Hash_bits = 12				/* e.g. 256kB hash table */
-Hash_msk = (((1 << Hash_bits) - 1) * 64)
-	
-	.globl	hash_page
-hash_page:
-#ifdef __SMP__
-	eieio
-	lis	r2,hash_table_lock@h
-	ori	r2,r2,hash_table_lock@l
- 	tophys(r2,r2,r6)
-	lis	r6,100000000@h
-	mtctr	r6
-	lwz	r0,PROCESSOR-TSS(r5)
-	or	r0,r0,r6
-10:	lwarx	r6,0,r2
-	cmpi	0,r6,0
-	bne-	12f
-	stwcx.	r0,0,r2
-	beq+	11f
-12:	cmpw	r6,r0
-	bdnzf	2,10b
-	tw	31,31,31
-11:	eieio
-#endif
-	/* Get PTE (linux-style) and check access */
-	lwz	r5,PG_TABLES(r5)		
-	tophys(r5,r5,r2)		/* convert to phys addr */
-	rlwimi	r5,r3,12,20,29		/* insert top 10 bits of address */
-	lwz	r5,0(r5)		/* get pmd entry */
-	rlwinm.	r5,r5,0,0,19		/* extract address of pte page */
-#ifdef __SMP__
-	beq-	hash_page_out		/* return if no mapping */
-#else
-	/* XXX it seems like the 601 will give a machine fault on the
-	   rfi if its alignment is wrong (bottom 4 bits of address are
-	   8 or 0xc) and we have had a not-taken conditional branch
-	   to the address following the rfi. */
-	beqlr-
-#endif
-	tophys(r2,r5,r2)
-	rlwimi	r2,r3,22,20,29		/* insert next 10 bits of address */
-	lwz	r6,0(r2)		/* get linux-style pte */
-	ori	r4,r4,1			/* set _PAGE_PRESENT bit in access */
-	andc.	r0,r4,r6		/* check access & ~permission */
-#ifdef __SMP__
-	bne-	hash_page_out		/* return if access not permitted */
-#else
-	bnelr-
-#endif
-
-	ori	r6,r6,0x100		/* set _PAGE_ACCESSED in pte */
-	rlwinm	r5,r4,5,24,24		/* _PAGE_RW access -> _PAGE_DIRTY */
-	rlwimi	r5,r4,7,22,22		/* _PAGE_RW -> _PAGE_HWWRITE */
-	or	r6,r6,r5
-	stw	r6,0(r2)		/* update PTE (accessed/dirty bits) */
-
-	/* Convert linux-style PTE to low word of PPC-style PTE */
-#ifdef CONFIG_PPC64
-	/* clear the high 32 bits just in case */
-	clrldi	r6,r6,32
-	clrldi	r4,r4,32
-#endif /* CONFIG_PPC64 */
-	rlwinm	r4,r6,32-9,31,31	/* _PAGE_HWWRITE -> PP lsb */
-	rlwimi	r6,r6,32-1,31,31	/* _PAGE_USER -> PP (both bits now) */
-	ori	r4,r4,0xe04		/* clear out reserved bits */
-	andc	r6,r6,r4		/* PP=2 or 0, when _PAGE_HWWRITE */
-
-	/* Construct the high word of the PPC-style PTE */
-	mfsrin	r5,r3			/* get segment reg for segment */
-#ifdef CONFIG_PPC64
-	sldi	r5,r5,12
-#else /* CONFIG_PPC64 */
-	rlwinm	r5,r5,7,1,24		/* put VSID in 0x7fffff80 bits */
-#endif /* CONFIG_PPC64 */
-	
-#ifndef __SMP__				/* do this later for SMP */
-#ifdef CONFIG_PPC64
-	ori	r5,r5,1			/* set V (valid) bit */
-#else /* CONFIG_PPC64 */
-	oris	r5,r5,0x8000		/* set V (valid) bit */
-#endif /* CONFIG_PPC64 */
-#endif
-	
-#ifdef CONFIG_PPC64
-/* XXX:	 does this insert the api correctly? -- Cort */
-	rlwimi	r5,r3,17,21,25		/* put in API (abbrev page index) */
-#else /* CONFIG_PPC64 */
-	rlwimi	r5,r3,10,26,31		/* put in API (abbrev page index) */
-#endif /* CONFIG_PPC64 */
-	/* Get the address of the primary PTE group in the hash table */
-	.globl	hash_page_patch_A
-hash_page_patch_A:
-	lis	r4,Hash_base@h		/* base address of hash table */
-#ifdef CONFIG_PPC64
-	/* just in case */
-	clrldi	r4,r4,32
-#endif	
-	rlwimi	r4,r5,32-1,26-Hash_bits,25	/* (VSID & hash_mask) << 6 */
-	rlwinm	r0,r3,32-6,26-Hash_bits,25	/* (PI & hash_mask) << 6 */
-	xor	r4,r4,r0		/* make primary hash */
-
-	/* See whether it was a PTE not found exception or a
-	   protection violation. */
-	andis.	r0,r20,0x4000
-	li	r2,8			/* PTEs/group */
-	bne	10f			/* no PTE: go look for an empty slot */
-	tlbie	r3			/* invalidate TLB entry */
-
-	/* Search the primary PTEG for a PTE whose 1st word matches r5 */
-	mtctr	r2
-	addi	r3,r4,-8
-1:	lwzu	r0,8(r3)		/* get next PTE */
-	cmp	0,r0,r5
-	bdnzf	2,1b			/* loop while ctr != 0 && !cr0.eq */
-	beq+	found_slot
-
-	/* Search the secondary PTEG for a matching PTE */
-	ori	r5,r5,0x40		/* set H (secondary hash) bit */
-	.globl	hash_page_patch_B
-hash_page_patch_B:
-	xoris	r3,r4,Hash_msk>>16	/* compute secondary hash */
-	xori	r3,r3,0xffc0
-	addi	r3,r3,-8
-	mtctr	r2
-2:	lwzu	r0,8(r3)
-	cmp	0,r0,r5
-	bdnzf	2,2b
-	beq+	found_slot
-	xori	r5,r5,0x40		/* clear H bit again */
-
-	/* Search the primary PTEG for an empty slot */
-10:	mtctr	r2
-	addi	r3,r4,-8		/* search primary PTEG */
-1:	lwzu	r0,8(r3)		/* get next PTE */
-	srwi.	r0,r0,31		/* only want to check valid bit */
-	bdnzf	2,1b			/* loop while ctr != 0 && !cr0.eq */
-	beq+	found_empty
-
-	/* Search the secondary PTEG for an empty slot */
-	ori	r5,r5,0x40		/* set H (secondary hash) bit */
-	.globl	hash_page_patch_C
-hash_page_patch_C:
-	xoris	r3,r4,Hash_msk>>16	/* compute secondary hash */
-	xori	r3,r3,0xffc0
-	addi	r3,r3,-8
-	mtctr	r2
-2:	lwzu	r0,8(r3)
-	srwi.	r0,r0,31		/* only want to check valid bit */
-	bdnzf	2,2b
-	beq+	found_empty
-
-	/*
-	 * Choose an arbitrary slot in the primary PTEG to overwrite.
-	 * Since both the primary and secondary PTEGs are full, and we
-	 * have no information that the PTEs in the primary PTEG are
-	 * more important or useful than those in the secondary PTEG,
-	 * and we know there is a definite (although small) speed
-	 * advantage to putting the PTE in the primary PTEG, we always
-	 * put the PTE in the primary PTEG.
-	 */
-	xori	r5,r5,0x40		/* clear H bit again */
-	lwz	r2,next_slot@l(0)
-	addi	r2,r2,8
-	andi.	r2,r2,0x38
-	stw	r2,next_slot@l(0)
-	add	r3,r4,r2
-11:		
-	/* update counter of evicted pages */
-	lis	r2,htab_evicts@h
-	ori	r2,r2,htab_evicts@l
-	tophys(r2,r2,r4)
-	lwz	r4,0(r2)
-	addi	r4,r4,1
-	stw	r4,0(r2)
-
-#ifndef __SMP__
-	/* Store PTE in PTEG */
-found_empty:
-	stw	r5,0(r3)
-found_slot:
-	stw	r6,4(r3)
-	sync
-
-#else /* __SMP__ */
-/*
- * Between the tlbie above and updating the hash table entry below,
- * another CPU could read the hash table entry and put it in its TLB.
- * There are 3 cases:
- * 1. using an empty slot
- * 2. updating an earlier entry to change permissions (i.e. enable write)
- * 3. taking over the PTE for an unrelated address
- *
- * In each case it doesn't really matter if the other CPUs have the old
- * PTE in their TLB.  So we don't need to bother with another tlbie here,
- * which is convenient as we've overwritten the register that had the
- * address. :-)  The tlbie above is mainly to make sure that this CPU comes
- * and gets the new PTE from the hash table.
- *
- * We do however have to make sure that the PTE is never in an invalid
- * state with the V bit set.
- */
-found_empty:
-found_slot:
-	stw	r5,0(r3)	/* clear V (valid) bit in PTE */
-	sync
-	tlbsync
-	sync
-	stw	r6,4(r3)	/* put in correct RPN, WIMG, PP bits */
-	sync
-	oris	r5,r5,0x8000
-	stw	r5,0(r3)	/* finally set V bit in PTE */
-#endif /* __SMP__ */
-
-/*
- * Update the hash table miss count.  We only want misses here
- * that _are_ valid addresses and have a pte otherwise we don't
- * count it as a reload.  do_page_fault() takes care of bad addrs
- * and entries that need linux-style pte's created.
- *
- * safe to use r2 here since we're not using it as current yet 
- * update the htab misses count
- *   -- Cort
- */
-	lis	r2,htab_reloads@h
-	ori	r2,r2,htab_reloads@l
-	tophys(r2,r2,r3)
-	lwz	r3,0(r2)
-	addi	r3,r3,1
-	stw	r3,0(r2)
-
-#ifdef __SMP__
-	lis	r2,hash_table_lock@ha
-	tophys(r2,r2,r6)
-	li	r0,0
-	stw	r0,hash_table_lock@l(r2)
-	eieio
-#endif
-
-	/* Return from the exception */
-	lwz	r3,_CCR(r21)
-	lwz	r4,_LINK(r21)
-	lwz	r5,_CTR(r21)
-	mtcrf	0xff,r3
-	mtlr	r4
-	mtctr	r5
-	REST_GPR(0, r21)
-	REST_2GPRS(1, r21)
-	REST_4GPRS(3, r21)
-	/* we haven't used xer */
-	mtspr	SRR1,r23
-	mtspr	SRR0,r22
-	REST_GPR(20, r21)
-	REST_2GPRS(22, r21)
-	lwz	r21,GPR21(r21)
-	rfi
-	
-#ifdef __SMP__
-hash_page_out:
-	lis	r2,hash_table_lock@ha
-	tophys(r2,r2,r6)
-	li	r0,0
-	stw	r0,hash_table_lock@l(r2)
-	eieio
-	blr
-
-	.globl	hash_table_lock
-hash_table_lock:
-	.long	0
-#endif
-
-next_slot:
-	.long	0
-
-load_up_fpu:
 /*
  * Disable FP for the task which had the FPU previously,
  * and save its floating-point registers in its thread_struct.
@@ -1553,6 +759,7 @@ load_up_fpu:
  * On SMP we know the fpu is free, since we give it up every
  * switch.  -- Cort
  */
+load_up_fpu:
 	mfmsr	r5
 	ori	r5,r5,MSR_FP
 	SYNC
@@ -1564,21 +771,17 @@ load_up_fpu:
  * to another.  Instead we call giveup_fpu in switch_to.
  */
 #ifndef __SMP__
-#ifndef CONFIG_APUS
-	lis	r6,-KERNELBASE@h
-#else
-	lis	r6,CYBERBASEp@h
-	lwz	r6,0(r6)
-#endif
+	lis	r6,0                    /* get __pa constant */
+	tophys(r6,r6)
 	addis	r3,r6,last_task_used_math@ha
 	lwz	r4,last_task_used_math@l(r3)
 	cmpi	0,r4,0
 	beq	1f
 	add	r4,r4,r6
-	addi	r4,r4,TSS	        /* want TSS of last_task_used_math */
+	addi	r4,r4,THREAD	        /* want THREAD of last_task_used_math */
 	SAVE_32FPRS(0, r4)
 	mffs	fr0
-	stfd	fr0,TSS_FPSCR-4(r4)
+	stfd	fr0,THREAD_FPSCR-4(r4)
 	lwz	r5,PT_REGS(r4)
 	add	r5,r5,r6
 	lwz	r4,_MSR-STACK_FRAME_OVERHEAD(r5)
@@ -1589,12 +792,12 @@ load_up_fpu:
 #endif /* __SMP__ */
 	/* enable use of FP after return */
 	ori	r23,r23,MSR_FP|MSR_FE0|MSR_FE1
-	mfspr	r5,SPRG3		/* current task's TSS (phys) */
-	lfd	fr0,TSS_FPSCR-4(r5)
+	mfspr	r5,SPRG3		/* current task's THREAD (phys) */
+	lfd	fr0,THREAD_FPSCR-4(r5)
 	mtfsf	0xff,fr0
 	REST_32FPRS(0, r5)
 #ifndef __SMP__
-	subi	r4,r5,TSS
+	subi	r4,r5,THREAD
 	sub	r4,r4,r6
 	stw	r4,last_task_used_math@l(r3)
 #endif /* __SMP__ */
@@ -1627,7 +830,7 @@ KernelFP:
 	mr	r4,r2			/* current */
 	lwz	r5,_NIP(r1)
 	bl	printk
-	b	int_return
+	b	ret_from_except
 86:	.string	"floating point used in kernel (task=%p, pc=%x)\n"
 	.align	4
 
@@ -1646,12 +849,12 @@ giveup_fpu:
 	SYNC
 	cmpi	0,r3,0
 	beqlr-				/* if no previous owner, done */
-	addi	r3,r3,TSS	        /* want TSS of task */
+	addi	r3,r3,THREAD	        /* want THREAD of task */
 	lwz	r5,PT_REGS(r3)
 	cmpi	0,r5,0
 	SAVE_32FPRS(0, r3)
 	mffs	fr0
-	stfd	fr0,TSS_FPSCR-4(r3)
+	stfd	fr0,THREAD_FPSCR-4(r3)
 	beq	1f
 	lwz	r4,_MSR-STACK_FRAME_OVERHEAD(r5)
 	li	r3,MSR_FP|MSR_FE0|MSR_FE1
@@ -1664,12 +867,6 @@ giveup_fpu:
 	stw	r5,last_task_used_math@l(r4)
 #endif /* __SMP__ */
 	blr
-
-#else  /* CONFIG_8xx */
-	.globl	giveup_fpu
-giveup_fpu:
-	blr
-#endif /* CONFIG_8xx */
 
 /*
  * This code is jumped to from the startup code to copy
@@ -1721,11 +918,66 @@ copy_and_flush:
 	blr
 
 #ifdef CONFIG_APUS
-	/* On APUS the first 0x4000 bytes of the kernel	will be mapped
-	 * at a different physical address than the rest. For this
-	 * reason, the exception code cannot use relative branches to
-	 * access the code below.
-	 */
+/*
+ * On APUS the physical base address of the kernel is not known at compile
+ * time, which means the __pa/__va constants used are incorect. In the
+ * __init section is recorded the virtual addresses of instructions using
+ * these constants, so all that has to be done is fix these before
+ * continuing the kernel boot.
+ *
+ * r4 = The physical address of the kernel base.
+ */
+fix_mem_constants:
+	mr	r10,r4
+	addis	r10,r10,-KERNELBASE@h    /* virt_to_phys constant */
+	neg	r11,r10	                 /* phys_to_virt constant */
+
+	lis	r12,__vtop_table_begin@h
+	ori	r12,r12,__vtop_table_begin@l
+	add	r12,r12,r10	         /* table begin phys address */
+	lis	r13,__vtop_table_end@h
+	ori	r13,r13,__vtop_table_end@l
+	add	r13,r13,r10	         /* table end phys address */
+	subi	r12,r12,4
+	subi	r13,r13,4
+1:	lwzu	r14,4(r12)               /* virt address of instruction */
+	add     r14,r14,r10              /* phys address of instruction */
+	lwz     r15,0(r14)               /* instruction, now insert top */
+	rlwimi  r15,r10,16,16,31         /* half of vp const in low half */
+	stw	r15,0(r14)               /* of instruction and restore. */
+	dcbst	r0,r14			 /* write it to memory */
+	sync
+	icbi	r0,r14			 /* flush the icache line */
+	cmpw	r12,r13
+	bne     1b
+
+	lis	r12,__ptov_table_begin@h
+	ori	r12,r12,__ptov_table_begin@l
+	add	r12,r12,r10	         /* table begin phys address */
+	lis	r13,__ptov_table_end@h
+	ori	r13,r13,__ptov_table_end@l
+	add	r13,r13,r10	         /* table end phys address */
+	subi	r12,r12,4
+	subi	r13,r13,4
+1:	lwzu	r14,4(r12)               /* virt address of instruction */
+	add     r14,r14,r10              /* phys address of instruction */
+	lwz     r15,0(r14)               /* instruction, now insert top */
+	rlwimi  r15,r11,16,16,31         /* half of pv const in low half*/
+	stw	r15,0(r14)               /* of instruction and restore. */
+	dcbst	r0,r14			 /* write it to memory */
+	sync
+	icbi	r0,r14			 /* flush the icache line */
+	cmpw	r12,r13
+	bne     1b
+
+	isync				/* No speculative loading until now */
+	blr
+
+       /* On APUS the first 0x4000 bytes of the kernel will be mapped
+        * at a different physical address than the rest. For this
+        * reason, the exception code cannot use relative branches to
+        * access the code below.
+        */
 	. = 0x4000
 #endif
 
@@ -1752,7 +1004,7 @@ __secondary_hold:
 	/* our cpu # was at addr 0 - go */
 	lis	r5,__secondary_start@h
 	ori	r5,r5,__secondary_start@l
-	tophys(r5,r5,r4)
+	tophys(r5,r5)
 	mtlr	r5
 	mr	r24,r3			/* cpu # */
 	blr
@@ -1762,7 +1014,6 @@ __secondary_hold:
  * This is where the main kernel code starts.
  */
 start_here:
-#ifndef CONFIG_8xx
 	/*
 	 * Enable caches and 604-specific features if necessary.
 	 */
@@ -1794,7 +1045,6 @@ start_here:
 	ori	r11,r11,HID0_BTCD
 5:	mtspr	HID0,r11		/* superscalar exec & br history tbl */
 4:
-#endif /* CONFIG_8xx */
 #ifdef __SMP__
 	/* if we're the second cpu stack and r2 are different
 	* and we want to not clear the bss -- Cort */
@@ -1848,33 +1098,21 @@ start_here:
 	mr	r7,r27
 	bl	identify_machine
 	bl	MMU_init
+
 /*
  * Go back to running unmapped so we can load up new values
  * for SDR1 (hash table pointer) and the segment registers
  * and change to using our exception vectors.
- * On the 8xx, all we have to do is invalidate the TLB to clear
- * the old 8M byte TLB mappings and load the page table base register.
  */
-#ifndef CONFIG_8xx
 	lis	r6,_SDR1@ha
 #ifdef CONFIG_PPC64	
 	ld	r6,_SDR1@l(r6)
 #else
 	lwz	r6,_SDR1@l(r6)
 #endif		
-#else
-	/* The right way to do this would be to track it down through
-	 * init's TSS like the context switch code does, but this is
-	 * easier......until someone changes init's static structures.
-	 */
-	lis	r6, swapper_pg_dir@h
-	tophys(r6,r6,0)
-	ori	r6, r6, swapper_pg_dir@l
-	mtspr	M_TWB, r6
-#endif
 	lis	r4,2f@h
 	ori	r4,r4,2f@l
-	tophys(r4,r4,r3)
+	tophys(r4,r4)
 	li	r3,MSR_KERNEL & ~(MSR_IR|MSR_DR)
 	mtspr	SRR0,r4
 	mtspr	SRR1,r3
@@ -1888,7 +1126,6 @@ start_here:
 	tlbsync			/* ... on all CPUs */
 	sync
 #endif
-#ifndef CONFIG_8xx
 	mtspr	SDR1,r6
 #ifdef CONFIG_PPC64
 	/* clear the v bit in the ASR so we can
@@ -1913,23 +1150,23 @@ start_here:
 	cmpwi	r3,1
 	lis	r3,BATS@ha
 	addi	r3,r3,BATS@l
-	tophys(r3,r3,r4)
+	tophys(r3,r3)
 #ifdef CONFIG_PPC64
-	LOAD_BAT(0,0,r3,r4,r5)
-	LOAD_BAT(1,32,r3,r4,r5)
-	LOAD_BAT(2,64,r3,r4,r5)
-	LOAD_BAT(3,96,r3,r4,r5)
+	LOAD_BAT(0,r3,r4,r5)
+	LOAD_BAT(1,r3,r4,r5)
+	LOAD_BAT(2,r3,r4,r5)
+	LOAD_BAT(3,r3,r4,r5)
 #else /* CONFIG_PPC64 */
-	LOAD_BAT(0,0,r3,r4,r5)
-	LOAD_BAT(1,16,r3,r4,r5)
-	LOAD_BAT(2,32,r3,r4,r5)
-	LOAD_BAT(3,48,r3,r4,r5)
+	LOAD_BAT(0,r3,r4,r5)
+	LOAD_BAT(1,r3,r4,r5)
+	LOAD_BAT(2,r3,r4,r5)
+	LOAD_BAT(3,r3,r4,r5)
 #endif /* CONFIG_PPC64 */
-#endif /* CONFIG_8xx */
+
 /* Set up for using our exception vectors */
-	/* ptr to phys current tss */
-	tophys(r4,r2,r4)
-	addi	r4,r4,TSS	/* init task's TSS */
+	/* ptr to phys current thread */
+	tophys(r4,r2)
+	addi	r4,r4,THREAD	/* init task's THREAD */
 	mtspr	SPRG3,r4
 	li	r3,0
 	mtspr	SPRG2,r3	/* 0 => r1 has kernel sp */
@@ -1943,7 +1180,7 @@ start_here:
 	 */
 	lis	r5,first_cpu_booted@h
 	ori	r5,r5,first_cpu_booted@l
-	tophys(r5,r5,r3)
+	tophys(r5,r5)
 	lwz	r5,0(r5)
 	cmpi	0,r5,0
 	beq	10f
@@ -1954,371 +1191,6 @@ start_here:
 	mtspr	SRR0,r3
 	mtspr	SRR1,r4
 	rfi			/* enable MMU and jump to start_kernel */
-
-/*
- * Handle a system call.
- */
-DoSyscall:
-	stw	r0,TSS+LAST_SYSCALL(r2)
-	lwz	r11,_CCR(r1)	/* Clear SO bit in CR */
-	lis	r10,0x1000
-	andc	r11,r11,r10
-	stw	r11,_CCR(r1)
-#ifdef SHOW_SYSCALLS
-#ifdef SHOW_SYSCALLS_TASK
-	lis	r31,show_syscalls_task@ha
-	lwz	r31,show_syscalls_task@l(r31)
-	cmp	0,r2,r31
-	bne	1f
-#endif
-	lis	r3,7f@ha
-	addi	r3,r3,7f@l
-	lwz	r4,GPR0(r1)
-	lwz	r5,GPR3(r1)
-	lwz	r6,GPR4(r1)
-	lwz	r7,GPR5(r1)
-	lwz	r8,GPR6(r1)
-	lwz	r9,GPR7(r1)
-	bl	printk
-	lis	r3,77f@ha
-	addi	r3,r3,77f@l
-	lwz	r4,GPR8(r1)
-	lwz	r5,GPR9(r1)
-	mr	r6,r2
-	bl	printk
-	lwz	r0,GPR0(r1)
-	lwz	r3,GPR3(r1)
-	lwz	r4,GPR4(r1)
-	lwz	r5,GPR5(r1)
-	lwz	r6,GPR6(r1)
-	lwz	r7,GPR7(r1)
-	lwz	r8,GPR8(r1)
-1:
-#endif /* SHOW_SYSCALLS */
-	cmpi	0,r0,0x7777	/* Special case for 'sys_sigreturn' */
-	beq-	10f
-	lwz	r10,TASK_FLAGS(r2)
-	andi.	r10,r10,PF_TRACESYS
-	bne-	50f
-	cmpli	0,r0,NR_syscalls
-	bge-	66f
-	lis	r10,sys_call_table@h
-	ori	r10,r10,sys_call_table@l
-	slwi	r0,r0,2
-	lwzx	r10,r10,r0	/* Fetch system call handler [ptr] */
-	cmpi	0,r10,0
-	beq-	66f
-	mtlr	r10
-	addi	r9,r1,STACK_FRAME_OVERHEAD
-	blrl			/* Call handler */
-	.globl	syscall_ret_1
-syscall_ret_1:
-20:	stw	r3,RESULT(r1)	/* Save result */
-#ifdef SHOW_SYSCALLS
-#ifdef SHOW_SYSCALLS_TASK
-	cmp	0,r2,r31
-	bne	91f
-#endif
-	mr	r4,r3
-	lis	r3,79f@ha
-	addi	r3,r3,79f@l
-	bl	printk
-	lwz	r3,RESULT(r1)
-91:
-#endif
-	li	r10,-_LAST_ERRNO
-	cmpl	0,r3,r10
-	blt	30f
-	neg	r3,r3
-	cmpi	0,r3,ERESTARTNOHAND
-	bne	22f
-	li	r3,EINTR
-22:	lwz	r10,_CCR(r1)	/* Set SO bit in CR */
-	oris	r10,r10,0x1000
-	stw	r10,_CCR(r1)
-30:	stw	r3,GPR3(r1)	/* Update return value */
-	b	int_return
-66:	li	r3,ENOSYS
-	b	22b
-/* sys_sigreturn */
-10:	addi	r3,r1,STACK_FRAME_OVERHEAD
-	bl	sys_sigreturn
-	cmpi	0,r3,0		/* Check for restarted system call */
-	bge	int_return
-	b	20b
-/* Traced system call support */
-50:	bl	syscall_trace
-	lwz	r0,GPR0(r1)	/* Restore original registers */
-	lwz	r3,GPR3(r1)
-	lwz	r4,GPR4(r1)
-	lwz	r5,GPR5(r1)
-	lwz	r6,GPR6(r1)
-	lwz	r7,GPR7(r1)
-	lwz	r8,GPR8(r1)
-	lwz	r9,GPR9(r1)
-	cmpli	0,r0,NR_syscalls
-	bge-	66f
-	lis	r10,sys_call_table@h
-	ori	r10,r10,sys_call_table@l
-	slwi	r0,r0,2
-	lwzx	r10,r10,r0	/* Fetch system call handler [ptr] */
-	cmpi	0,r10,0
-	beq-	66f
-	mtlr	r10
-	addi	r9,r1,STACK_FRAME_OVERHEAD
-	blrl			/* Call handler */
-	.globl	syscall_ret_2
-syscall_ret_2:
-	stw	r3,RESULT(r1)	/* Save result */	
-	stw	r3,GPR0(r1)	/* temporary gross hack to make strace work */
-	li	r10,-_LAST_ERRNO
-	cmpl	0,r3,r10
-	blt	60f
-	neg	r3,r3
-	cmpi	0,r3,ERESTARTNOHAND
-	bne	52f
-	li	r3,EINTR
-52:	lwz	r10,_CCR(r1)	/* Set SO bit in CR */
-	oris	r10,r10,0x1000
-	stw	r10,_CCR(r1)
-60:	stw	r3,GPR3(r1)	/* Update return value */
-	bl	syscall_trace
-	b	int_return
-66:	li	r3,ENOSYS
-	b	52b
-#ifdef SHOW_SYSCALLS
-7:	.string	"syscall %d(%x, %x, %x, %x, %x, "
-77:	.string	"%x, %x), current=%p\n"
-79:	.string	" -> %x\n"
-	.align	2
-#endif
-
-/*
- * This routine switches between two different tasks.  The process
- * state of one is saved on its kernel stack.  Then the state
- * of the other is restored from its kernel stack.  The memory
- * management hardware is updated to the second process's state.
- * Finally, we can return to the second process, via int_return.
- * On entry, r3 points to the TSS for the current task, r4
- * points to the TSS for the new task, and r5 contains the
- * MMU context number for the new task.
- *
- * Note: there are two ways to get to the "going out" portion
- * of this code; either by coming in via the entry (_switch)
- * or via "fork" which must set up an environment equivalent
- * to the "_switch" path.  If you change this (or in particular, the
- * SAVE_REGS macro), you'll have to change the fork code also.
- *
- * The code which creates the new task context is in 'copy_thread'
- * in arch/ppc/kernel/process.c
- *
- * The MPC8xx has something that currently happens "automagically."
- * Unshared user space address translations are subject to ASID (context)
- * match.  During each task switch, the ASID is incremented.  We can
- * guarantee (I hope :-) that no entries currently match this ASID
- * because every task will cause at least a TLB entry to be loaded for
- * the first instruction and data access, plus the kernel running will
- * have displaced several more TLBs.  The MMU contains 32 entries for
- * each TLB, and there are 16 contexts, so we just need to make sure
- * two pages get replaced for every context switch, which currently
- * happens.  There are other TLB management techniques that I will
- * eventually implement, but this is the easiest for now.  -- Dan
- */	
-_GLOBAL(_switch)
-	stwu	r1,-INT_FRAME_SIZE-STACK_UNDERHEAD(r1)
-	stw	r0,GPR0(r1)
-	lwz	r0,0(r1)
-	stw	r0,GPR1(r1)
-	/* r3-r13 are caller saved -- Cort */
-	SAVE_GPR(2, r1)
-	SAVE_8GPRS(14, r1)
-	SAVE_10GPRS(22, r1)
-	mflr	r20		/* Return to switch caller */
-	mfmsr	r22
-	li	r0,MSR_FP	/* Disable floating-point */
-	andc	r22,r22,r0
-	stw	r20,_NIP(r1)
-	stw	r22,_MSR(r1)
-	stw	r20,_LINK(r1)
-	mfcr	r20
-	mfctr	r22
-	mfspr	r23,XER
-	stw	r20,_CCR(r1)
-	stw	r22,_CTR(r1)
-	stw	r23,_XER(r1)
-	li	r0,0x0ff0
-	stw	r0,TRAP(r1)
-	stw	r1,KSP(r3)	/* Set old stack pointer */
-	sync
-	tophys(r0,r4,r3)
-	mtspr	SPRG3,r0	/* Update current TSS phys addr */
-	SYNC
-	lwz	r1,KSP(r4)	/* Load new stack pointer */
-	/* save the old current 'last' for return value */
-	mr	r3,r2
-	addi	r2,r4,-TSS	/* Update current */
-#ifndef CONFIG_8xx
-	/* Set up segment registers for new task */
-	rlwinm	r5,r5,4,8,27	/* VSID = context << 4 */
-	addis	r5,r5,0x6000	/* Set Ks, Ku bits */
-	li	r0,12		/* TASK_SIZE / SEGMENT_SIZE */
-	mtctr	r0
-	li	r9,0
-3:	mtsrin	r5,r9
-	addi	r5,r5,1		/* next VSID */
-	addis	r9,r9,0x1000	/* address of next segment */
-	bdnz	3b
-#else
-/* On the MPC8xx, we place the physical address of the new task
- * page directory loaded into the MMU base register, and set the
- * ASID compare register with the new "context".
- */
-        lwz     r9,MM-TSS(r4)           /* Get virtual address of mm */
-        lwz     r9,PGD(r9)              /* get new->mm->pgd */
-        addis   r9,r9,-KERNELBASE@h     /* convert to phys addr */
-        mtspr   M_TWB, r9               /* Update MMU base address */
-        mtspr   M_CASID, r5             /* Update context */
-        tlbia
-#endif
-	SYNC
-2:	lwz	r9,_MSR(r1)	/* Returning to user mode? */
-	andi.	r9,r9,MSR_PR
-	beq+	10f		/* if not, don't adjust kernel stack */
-8:	addi	r4,r1,INT_FRAME_SIZE+STACK_UNDERHEAD	/* size of frame */
-	stw	r4,TSS+KSP(r2)	/* save kernel stack pointer */
-	tophys(r9,r1,r9)
-	mtspr	SPRG2,r9	/* phys exception stack pointer */
-10:	lwz	r2,_CTR(r1)
-	lwz	r0,_LINK(r1)
-	mtctr	r2
-	mtlr	r0
-	lwz	r2,_XER(r1)
-	lwz	r0,_CCR(r1)
-	mtspr	XER,r2
-	mtcrf	0xFF,r0
-	/* r3-r13 are destroyed -- Cort */
-	REST_GPR(14, r1)
-	REST_8GPRS(15, r1)
-	REST_8GPRS(23, r1)
-	REST_GPR(31, r1)
-	lwz	r2,_NIP(r1)	/* Restore environment */
-	lwz	r0,_MSR(r1)
-	mtspr	SRR0,r2
-	mtspr	SRR1,r0
-	lwz	r0,GPR0(r1)
-	lwz	r2,GPR2(r1)
-	lwz	r1,GPR1(r1)
-	SYNC
-	rfi
-
-/*
- * Trap exit.
- */
-#ifdef __SMP__	
-	.globl	ret_from_smpfork
-ret_from_smpfork:
-	bl	schedule_tail
-#endif	
-	.globl	ret_from_syscall
-ret_from_syscall:	
-	.globl	int_return
-int_return:
-0:	mfmsr	r30		/* Disable interrupts */
-	li	r4,0
-	ori	r4,r4,MSR_EE
-	andc	r30,r30,r4
-	SYNC			/* Some chip revs need this... */
-	mtmsr	r30
-	SYNC
-	lwz	r5,_MSR(r1)
-	and.	r5,r5,r4
-	beq	2f
-3:	lis	r4,ppc_n_lost_interrupts@ha
-	lwz	r4,ppc_n_lost_interrupts@l(r4)
-	cmpi	0,r4,0
-	beq+	1f
-	addi	r3,r1,STACK_FRAME_OVERHEAD
-	bl	do_IRQ
-	.globl	lost_irq_ret
-lost_irq_ret:
-	b	3b
-1:	lis	r4,bh_mask@ha
-	lwz	r4,bh_mask@l(r4)
-	lis	r5,bh_active@ha
-	lwz	r5,bh_active@l(r5)
-	and.	r4,r4,r5
-	beq+	2f
-	bl	do_bottom_half
-	.globl	do_bottom_half_ret
-do_bottom_half_ret:
-	SYNC
-	mtmsr	r30		/* disable interrupts again */
-	SYNC
-2:	lwz	r3,_MSR(r1)	/* Returning to user mode? */
-	andi.	r3,r3,MSR_PR
-	beq+	10f		/* if so, check need_resched and signals */
-	lwz	r3,NEED_RESCHED(r2)
-	cmpi	0,r3,0		/* check need_resched flag */
-	beq+	7f
-	bl	schedule
-	b	0b
-7:	lwz	r5,SIGPENDING(r2) /* Check for pending unblocked signals */
-	cmpwi	0,r5,0
-	beq+	8f
-	li	r3,0
-	addi	r4,r1,STACK_FRAME_OVERHEAD
-	bl	do_signal
-	.globl	do_signal_ret
-do_signal_ret:
-	b	0b
-8:	addi	r4,r1,INT_FRAME_SIZE+STACK_UNDERHEAD	/* size of frame */
-	stw	r4,TSS+KSP(r2)	/* save kernel stack pointer */
-	tophys(r3,r1,r3)
-	mtspr	SPRG2,r3	/* phys exception stack pointer */
-10:	lwz	r2,_CTR(r1)
-	lwz	r0,_LINK(r1)
-	mtctr	r2
-	mtlr	r0
-	lwz	r2,_XER(r1)
-	lwz	r0,_CCR(r1)
-	mtspr	XER,r2
-	mtcrf	0xFF,r0
-	REST_10GPRS(3, r1)
-	REST_10GPRS(13, r1)
-	REST_8GPRS(23, r1)
-	REST_GPR(31, r1)
-	lwz	r2,_NIP(r1)	/* Restore environment */
-	lwz	r0,_MSR(r1)
-	mtspr	SRR0,r2
-	mtspr	SRR1,r0
-	lwz	r0,GPR0(r1)
-	lwz	r2,GPR2(r1)
-	lwz	r1,GPR1(r1)
-	SYNC
-	rfi
-
-/*
- * Fake an interrupt from kernel mode.
- * This is used when enable_irq loses an interrupt.
- * We only fill in the stack frame minimally.
- */
-_GLOBAL(fake_interrupt)
-	mflr	r0
-	stw	r0,4(r1)
-	stwu	r1,-INT_FRAME_SIZE-STACK_UNDERHEAD(r1)
-	stw	r0,_NIP(r1)
-	stw	r0,_LINK(r1)
-	mfmsr	r3
-	stw	r3,_MSR(r1)
-	li	r0,0x0fac
-	stw	r0,TRAP(r1)
-	addi	r3,r1,STACK_FRAME_OVERHEAD
-	li	r4,1
-	bl	do_IRQ
-	addi	r1,r1,INT_FRAME_SIZE+STACK_UNDERHEAD
-	lwz	r0,4(r1)
-	mtlr	r0
-	blr
 
 /*
  * Set up the segment registers for a new context.
@@ -2336,349 +1208,6 @@ _GLOBAL(set_context)
 	SYNC
 	blr
 
-/*
- * Flush instruction cache.
- * This is a no-op on the 601.
- */
-_GLOBAL(flush_instruction_cache)
-	mfspr	r3,PVR
-	rlwinm	r3,r3,16,16,31
-	cmpi	0,r3,1
-	beqlr			/* for 601, do nothing */
-	/* 603/604 processor - use invalidate-all bit in HID0 */
-	mfspr	r3,HID0
-	ori	r3,r3,HID0_ICFI
-	mtspr	HID0,r3
-	SYNC
-	blr
-
-/*
- * Write any modified data cache blocks out to memory
- * and invalidate the corresponding instruction cache blocks.
- * This is a no-op on the 601.
- *
- * flush_icache_range(unsigned long start, unsigned long stop)
- */
-_GLOBAL(flush_icache_range)
-	mfspr	r5,PVR
-	rlwinm	r5,r5,16,16,31
-	cmpi	0,r5,1
-	beqlr				/* for 601, do nothing */
-	li	r5,CACHE_LINE_SIZE-1
-	andc	r3,r3,r5
-	subf	r4,r3,r4
-	add	r4,r4,r5
-	srwi.	r4,r4,LG_CACHE_LINE_SIZE
-	beqlr
-	mtctr	r4
-	mr	r6,r3
-1:	dcbst	0,r3
-	addi	r3,r3,CACHE_LINE_SIZE
-	bdnz	1b
-	sync				/* wait for dcbst's to get to ram */
-	mtctr	r4
-2:	icbi	0,r6
-	addi	r6,r6,CACHE_LINE_SIZE
-	bdnz	2b
-	sync
-	isync
-	blr
-
-/*
- * Like above, but only do the D-cache.  This is used by the 8xx
- * to push the cache so the CPM doesn't get stale data.
- *
- * flush_dcache_range(unsigned long start, unsigned long stop)
- */
-_GLOBAL(flush_dcache_range)
-       li      r5,CACHE_LINE_SIZE-1
-       andc    r3,r3,r5
-       subf    r4,r3,r4
-       add     r4,r4,r5
-       srwi.   r4,r4,LG_CACHE_LINE_SIZE
-       beqlr
-       mtctr   r4
-
-1:     dcbst   0,r3
-       addi    r3,r3,CACHE_LINE_SIZE
-       bdnz    1b
-       sync                            /* wait for dcbst's to get to ram */
-       blr
-
-/*
- * Flush a particular page from the DATA cache
- * Note: this is necessary because the instruction cache does *not*
- * snoop from the data cache.
- * This is a no-op on the 601 which has a unified cache.
- *
- *	void flush_page_to_ram(void *page)
- */
-_GLOBAL(flush_page_to_ram)
-	mfspr	r5,PVR
-	rlwinm	r5,r5,16,16,31
-	cmpi	0,r5,1
-	beqlr				/* for 601, do nothing */
-	li	r4,0x0FFF
-	andc	r3,r3,r4		/* Get page base address */
-	li	r4,4096/CACHE_LINE_SIZE	/* Number of lines in a page */
-	mtctr	r4
-	mr	r6,r3
-0:	dcbst	0,r3			/* Write line to ram */
-	addi	r3,r3,CACHE_LINE_SIZE
-	bdnz	0b
-	sync
-	mtctr	r4
-1:	icbi	0,r6
-	addi	r6,r6,CACHE_LINE_SIZE
-	bdnz	1b
-	sync
-	isync
-	blr
-
-/*
- * Clear a page using the dcbz instruction, which doesn't cause any
- * memory traffic (except to write out any cache lines which get
- * displaced).  This only works on cacheable memory.
- */
-_GLOBAL(clear_page)
-	li	r0,4096/CACHE_LINE_SIZE
-	mtctr	r0
-1:	dcbz	0,r3
-	addi	r3,r3,CACHE_LINE_SIZE
-	bdnz	1b
-	blr
-
-/*
- * Flush entries from the hash table with VSIDs in the range
- * given.
- */
-#ifndef CONFIG_8xx	
-_GLOBAL(flush_hash_segments)
-	lis	r5,Hash@ha
-	lwz	r5,Hash@l(r5)		/* base of hash table */
-#ifdef NO_RELOAD_HTAB
-	cmpwi	0,r5,0
-	bne+	99f
-	tlbia
-	sync
-#ifdef __SMP__
-	tlbsync
-	sync
-#endif
-	blr
-99:
-#endif /* NO_RELOAD_HTAB */
-#ifdef __SMP__
-	/* Note - we had better not do anything which could generate
-	   a hash table miss while we have the hash table locked,
-	   or we'll get a deadlock.  -paulus */
-	mfmsr	r10
-	sync
-	rlwinm	r0,r10,0,17,15	/* clear bit 16 (MSR_EE) */
-	mtmsr	r0
-	SYNC
-	lis	r9,hash_table_lock@h
-	ori	r9,r9,hash_table_lock@l
-	lwz	r8,PROCESSOR(r2)
-	oris	r8,r8,8
-10:	lwarx	r6,0,r9
-	cmpi	0,r6,0
-	bne-	10b
-	stwcx.	r8,0,r9
-	bne-	10b
-	eieio
-#endif
-	rlwinm	r3,r3,7,1,24		/* put VSID lower limit in position */
-	oris	r3,r3,0x8000		/* set V bit */
-	rlwinm	r4,r4,7,1,24		/* put VSID upper limit in position */
-	oris	r4,r4,0x8000
-	ori	r4,r4,0x7f
-	lis	r6,Hash_size@ha
-	lwz	r6,Hash_size@l(r6)	/* size in bytes */
-	srwi	r6,r6,3			/* # PTEs */
-	mtctr	r6
-	addi	r5,r5,-8
-	li	r0,0
-1:	lwzu	r6,8(r5)		/* get next tag word */
-	cmplw	0,r6,r3
-	cmplw	1,r6,r4
-	cror	0,0,5			/* set cr0.lt if out of range */
-	blt	2f			/* branch if out of range */
-	stw	r0,0(r5)		/* invalidate entry */
-2:	bdnz	1b			/* continue with loop */
-	sync
-	tlbia
-	sync
-#ifdef __SMP__
-	tlbsync
-	sync
-	lis	r3,hash_table_lock@ha
-	stw	r0,hash_table_lock@l(r3)
-	mtmsr	r10
-	SYNC
-#endif
-	blr
-
-/*
- * Flush the entry for a particular page from the hash table.
- *
- * flush_hash_page(unsigned context, unsigned long va)
- */
-_GLOBAL(flush_hash_page)
-	lis	r6,Hash@ha
-	lwz	r6,Hash@l(r6)		/* hash table base */
-#ifdef NO_RELOAD_HTAB
-	cmpwi	0,r6,0			/* hash table in use? */
-	bne+	99f
-	tlbie	r4			/* in hw tlb too */
-	sync
-#ifdef __SMP__
-	tlbsync
-	sync
-#endif
-	blr
-99:
-#endif /* NO_RELOAD_HTAB */		
-#ifdef __SMP__
-	/* Note - we had better not do anything which could generate
-	   a hash table miss while we have the hash table locked,
-	   or we'll get a deadlock.  -paulus */
-	mfmsr	r10
-	sync
-	rlwinm	r0,r10,0,17,15		/* clear bit 16 (MSR_EE) */
-	mtmsr	r0
-	SYNC
-	lis	r9,hash_table_lock@h
-	ori	r9,r9,hash_table_lock@l
-	lwz	r8,PROCESSOR(r2)
-	oris	r8,r8,9
-10:	lwarx	r7,0,r9
-	cmpi	0,r7,0
-	bne-	10b
-	stwcx.	r8,0,r9
-	bne-	10b
-	eieio
-#endif
-	rlwinm	r3,r3,11,1,20		/* put context into vsid */
-	rlwimi	r3,r4,11,21,24		/* put top 4 bits of va into vsid */
-	oris	r3,r3,0x8000		/* set V (valid) bit */
-	rlwimi	r3,r4,10,26,31		/* put in API (abbrev page index) */
-	rlwinm	r7,r4,32-6,10,25	/* get page index << 6 */
-	rlwinm	r5,r3,32-1,7,25		/* vsid << 6 */
-	xor	r7,r7,r5		/* primary hash << 6 */
-	lis	r5,Hash_mask@ha
-	lwz	r5,Hash_mask@l(r5)	/* hash mask */
-	slwi	r5,r5,6			/*  << 6 */
-	and	r7,r7,r5
-	add	r6,r6,r7		/* address of primary PTEG */
-	li	r8,8
-	mtctr	r8
-	addi	r7,r6,-8
-1:	lwzu	r0,8(r7)		/* get next PTE */
-	cmpw	0,r0,r3			/* see if tag matches */
-	bdnzf	2,1b			/* while --ctr != 0 && !cr0.eq */
-	beq	3f			/* if we found it */
-	ori	r3,r3,0x40		/* set H (alt. hash) bit */
-	xor	r6,r6,r5		/* address of secondary PTEG */
-	mtctr	r8
-	addi	r7,r6,-8
-2:	lwzu	r0,8(r7)		/* get next PTE */
-	cmpw	0,r0,r3			/* see if tag matches */
-	bdnzf	2,2b			/* while --ctr != 0 && !cr0.eq */
-	bne	4f			/* if we didn't find it */
-3:	li	r0,0
-	stw	r0,0(r7)		/* invalidate entry */
-4:	sync
-	tlbie	r4			/* in hw tlb too */
-	sync
-#ifdef __SMP__
-	tlbsync
-	sync
-	lis	r3,hash_table_lock@h
-	li	r0,0
-	stw	r0,hash_table_lock@l(r3)
-	mtmsr	r10
-	SYNC
-#endif
-	blr
-#endif /* CONFIG_8xx */
-
-/*
- * This routine is just here to keep GCC happy - sigh...
- */	
-_GLOBAL(__main)
-	blr
-
-/*
- * PROM code for specific machines follows.  Put it 
- * here so it's easy to add arch-specific sections later.
- * -- Cort
- */
-	
-#ifndef CONFIG_8xx		
-/*
- * On CHRP, the Run-Time Abstraction Services (RTAS) have to be
- * called with the MMU off.
- */
-	.globl	enter_rtas
-enter_rtas:
-	mflr	r0
-	stw	r0,20(r1)
-	lis	r4,rtas_data@ha
-	lwz	r4,rtas_data@l(r4)
-	addis	r4,r4,-KERNELBASE@h
-	lis	r6,1f@ha	/* physical return address for rtas */
-	addi	r6,r6,1f@l
-	addis	r6,r6,-KERNELBASE@h
-	subi	r7,r1,INT_FRAME_SIZE+STACK_UNDERHEAD
-	addis	r7,r7,-KERNELBASE@h
-	lis	r8,rtas_entry@ha
-	lwz	r8,rtas_entry@l(r8)
-	addis	r5,r8,-KERNELBASE@h
-	mfmsr	r9
-	stw	r9,8(r1)
-	ori	r0,r0,MSR_EE|MSR_SE|MSR_BE
-	andc	r0,r9,r0
-	andi.	r9,r9,MSR_ME|MSR_RI
-	sync			/* disable interrupts so SRR0/1 */
-	mtmsr	r0		/* don't get trashed */
-	mtlr	r6
-	mtspr	SPRG2,r7
-	mtspr	SRR0,r8
-	mtspr	SRR1,r9
-	rfi
-1:	addis	r9,r1,-KERNELBASE@h
-	lwz	r8,20(r9)	/* get return address */
-	lwz	r9,8(r9)	/* original msr value */
-	li	r0,0
-	mtspr	SPRG2,r0
-	mtspr	SRR0,r8
-	mtspr	SRR1,r9
-	rfi			/* return to caller */
-#endif /* CONFIG_8xx */
-
-#ifdef CONFIG_8xx
-/* Jump into the system reset for the rom.
- * We first disable the MMU, and then jump to the ROM reset address.
- *
- * r3 is the board info structure, r4 is the location for starting.
- * I use this for building a small kernel that can load other kernels,
- * rather than trying to write or rely on a rom monitor that can tftp load.
- */
-       .globl  m8xx_gorom
-m8xx_gorom:
-       li      r5,MSR_KERNEL & ~(MSR_IR|MSR_DR)
-       lis     r6,2f@h
-       addis   r6,r6,-KERNELBASE@h
-       ori     r6,r6,2f@l
-       mtspr   SRR0,r6
-       mtspr   SRR1,r5
-       rfi
-2:
-       mtlr    r4
-       blr
-#endif /* CONFIG_8xx */
-	
 /*
  * We put a few things here that have to be page-aligned.
  * This stuff goes at the beginning of the data segment,

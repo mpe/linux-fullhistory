@@ -146,8 +146,8 @@ void __wait_on_buffer(struct buffer_head * bh)
 	atomic_inc(&bh->b_count);
 	add_wait_queue(&bh->b_wait, &wait);
 repeat:
-	tsk->state = TASK_UNINTERRUPTIBLE;
 	run_task_queue(&tq_disk);
+	set_task_state(tsk, TASK_UNINTERRUPTIBLE);
 	if (buffer_locked(bh)) {
 		schedule();
 		goto repeat;
@@ -1088,7 +1088,6 @@ static struct buffer_head * get_unused_buffer_head(int async)
  */
 static struct buffer_head * create_buffers(unsigned long page, unsigned long size, int async)
 {
-	DECLARE_WAITQUEUE(wait, current);
 	struct buffer_head *bh, *head;
 	long offset;
 
@@ -1153,14 +1152,7 @@ no_grow:
 	 * Set our state for sleeping, then check again for buffer heads.
 	 * This ensures we won't miss a wake_up from an interrupt.
 	 */
-	add_wait_queue(&buffer_wait, &wait);
-	current->state = TASK_UNINTERRUPTIBLE;
-	if (nr_unused_buffer_heads < MAX_BUF_PER_PAGE) {
-		current->policy |= SCHED_YIELD;
-		schedule();
-	}
-	remove_wait_queue(&buffer_wait, &wait);
-	current->state = TASK_RUNNING;
+	wait_event(buffer_wait, nr_unused_buffer_heads >= MAX_BUF_PER_PAGE);
 	goto try_again;
 }
 

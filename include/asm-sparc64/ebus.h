@@ -1,12 +1,14 @@
-/* $Id: ebus.h,v 1.8 1998/05/07 21:00:27 ecd Exp $
+/* $Id: ebus.h,v 1.9 1999/08/30 10:14:37 davem Exp $
  * ebus.h: PCI to Ebus pseudo driver software state.
  *
  * Copyright (C) 1997 Eddie C. Dost (ecd@skynet.be)
+ * Copyright (C) 1999 David S. Miller (davem@redhat.com)
  */
 
 #ifndef __SPARC64_EBUS_H
 #define __SPARC64_EBUS_H
 
+#include <asm/pbm.h>
 #include <asm/oplib.h>
 
 struct linux_ebus_child {
@@ -15,7 +17,7 @@ struct linux_ebus_child {
 	struct linux_ebus		*bus;
 	int				 prom_node;
 	char				 prom_name[64];
-	unsigned long			 base_address[PROMREG_MAX];
+	struct resource			 resource[PROMREG_MAX];
 	int				 num_addrs;
 	unsigned int			 irqs[PROMINTR_MAX];
 	int				 num_irqs;
@@ -27,7 +29,7 @@ struct linux_ebus_device {
 	struct linux_ebus		*bus;
 	int				 prom_node;
 	char				 prom_name[64];
-	unsigned long			 base_address[PROMREG_MAX];
+	struct resource			 resource[PROMREG_MAX];
 	int				 num_addrs;
 	unsigned int			 irqs[PROMINTR_MAX];
 	int				 num_irqs;
@@ -36,8 +38,9 @@ struct linux_ebus_device {
 struct linux_ebus {
 	struct linux_ebus		*next;
 	struct linux_ebus_device	*devices;
-	struct linux_pbm_info		*parent;
+	struct pci_pbm_info		*parent;
 	struct pci_dev			*self;
+	int				 index;
 	int				 prom_node;
 	char				 prom_name[64];
 	struct linux_prom_ebus_ranges	 ebus_ranges[PROMREG_MAX];

@@ -1,14 +1,14 @@
 /*
- * linux/arch/arm/mm/arm2,3.S: MMU functions for ARM2,3
+ * linux/arch/arm/mm/proc-arm2,3.S: MMU functions for ARM2,3
  *
- * (C) 1997 Russell King
+ * (C) 1997-1999 Russell King
  *
  * These are the low level assembler for performing cache
  * and memory functions on ARM2, ARM250 and ARM3 processors.
  */
 #include <linux/linkage.h>
-
 #include <asm/assembler.h>
+#include <asm/procinfo.h>
 #include "../lib/constants.h"
 
 /*
@@ -424,17 +424,18 @@ _arm3_xchg_4:	swp	r0, r0, [r1]
 		movs	pc, lr
 
 
+armvlsi_name:	.asciz	"ARM/VLSI"
+_arm2_name:	.asciz	"arm2"
+_arm250_name:	.asciz	"arm250"
+_arm3_name:	.asciz	"arm3"
+
+		.section ".text.init", #alloc, #execinstr
 /*
  * Purpose : Function pointers used to access above functions - all calls
  *	     come through these
  */
-_arm2_name:
-		.ascii	"arm2\0"
-		.align
-
 		.globl	SYMBOL_NAME(arm2_processor_functions)
 SYMBOL_NAME(arm2_processor_functions):
-		.word	_arm2_name			@  0
 		.word	_arm2_switch_to			@  4
 		.word	_arm2_3_data_abort		@  8
 		.word	_arm2_3_check_bugs		@ 12
@@ -448,13 +449,8 @@ SYMBOL_NAME(arm2_processor_functions):
 		.word	SYMBOL_NAME(abort)		@ 40
 		.word	_arm2_xchg_4			@ 44
 
-_arm250_name:
-		.ascii	"arm250\0"
-		.align
-
 		.globl	SYMBOL_NAME(arm250_processor_functions)
 SYMBOL_NAME(arm250_processor_functions):
-		.word	_arm250_name			@  0
 		.word	_arm2_switch_to			@  4
 		.word	_arm2_3_data_abort		@  8
 		.word	_arm2_3_check_bugs		@ 12
@@ -468,13 +464,8 @@ SYMBOL_NAME(arm250_processor_functions):
 		.word	SYMBOL_NAME(abort)		@ 40
 		.word	_arm3_xchg_4			@ 44
 
-_arm3_name:
-		.ascii	"arm3\0"
-		.align
-
 		.globl	SYMBOL_NAME(arm3_processor_functions)
 SYMBOL_NAME(arm3_processor_functions):
-		.word	_arm3_name			@  0
 		.word	_arm3_switch_to			@  4
 		.word	_arm2_3_data_abort		@  8
 		.word	_arm2_3_check_bugs		@ 12
@@ -487,4 +478,48 @@ SYMBOL_NAME(arm3_processor_functions):
 		.word	_arm3_xchg_1			@ 36
 		.word	SYMBOL_NAME(abort)		@ 40
 		.word	_arm3_xchg_4			@ 44
+
+cpu_arm2_info:
+		.long	armvlsi_name
+		.long	_arm2_name
+
+cpu_arm250_info:
+		.long	armvlsi_name
+		.long	_arm250_name
+
+cpu_arm3_info:
+		.long	armvlsi_name
+		.long	_arm3_name
+
+arm2_arch_name:	.asciz	"armv1"
+arm3_arch_name:	.asciz	"armv2"
+arm2_elf_name:	.asciz	"v1"
+arm3_elf_name:	.asciz	"v2"
+		.align
+
+		.section ".proc.info", #alloc
+
+		.long	0x41560200
+		.long	0xfffffff0
+		.long	arm2_arch_name
+		.long	arm2_elf_name
+		.long	0
+		.long	cpu_arm2_info
+		.long	SYMBOL_NAME(arm2_processor_functions)
+
+		.long	0x41560250
+		.long	0xfffffff0
+		.long	arm3_arch_name
+		.long	arm3_elf_name
+		.long	0
+		.long	cpu_arm250_info
+		.long	SYMBOL_NAME(arm250_processor_functions)
+
+		.long	0x41560300
+		.long	0xfffffff0
+		.long	arm3_arch_name
+		.long	arm3_elf_name
+		.long	0
+		.long	cpu_arm3_info
+		.long	SYMBOL_NAME(arm3_processor_functions)
 

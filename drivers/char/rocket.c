@@ -888,7 +888,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 			sSetDTR(&info->channel);
 			sSetRTS(&info->channel);
 		}
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		if (tty_hung_up_p(filp) ||
 		    !(info->flags & ROCKET_INITIALIZED)) {
 			if (info->flags & ROCKET_HUP_NOTIFY)

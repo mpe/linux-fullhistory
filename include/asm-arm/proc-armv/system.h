@@ -116,7 +116,7 @@ extern unsigned long cr_alignment;	/* defined in entry-armv.S */
 "	bic	%0, %0, #192\n"					\
 "	orr	%0, %0, %1\n"					\
 "	msr	cpsr, %0"					\
-	  : "=r" (temp)						\
+	  : "=&r" (temp)					\
 	  : "r" (x)						\
 	  : "memory");			\
 	} while (0)

@@ -35,19 +35,19 @@ main(void)
 	DEFINE(COUNTER, offsetof(struct task_struct, counter));
 	DEFINE(PROCESSOR, offsetof(struct task_struct, processor));
 	DEFINE(SIGPENDING, offsetof(struct task_struct, sigpending));
-	DEFINE(TSS, offsetof(struct task_struct, tss));
+	DEFINE(THREAD, offsetof(struct task_struct, thread));
 	DEFINE(MM, offsetof(struct task_struct, mm));
+	DEFINE(ACTIVE_MM, offsetof(struct task_struct, active_mm));
 	DEFINE(TASK_STRUCT_SIZE, sizeof(struct task_struct));
 	DEFINE(KSP, offsetof(struct thread_struct, ksp));
-	DEFINE(PG_TABLES, offsetof(struct thread_struct, pg_tables));
-	DEFINE(PGD, offsetof(struct mm_struct, pgd));
+	DEFINE(PGDIR, offsetof(struct thread_struct, pgdir));
 	DEFINE(LAST_SYSCALL, offsetof(struct thread_struct, last_syscall));
 	DEFINE(PT_REGS, offsetof(struct thread_struct, regs));
 	DEFINE(PF_TRACESYS, PF_TRACESYS);
 	DEFINE(TASK_FLAGS, offsetof(struct task_struct, flags));
 	DEFINE(NEED_RESCHED, offsetof(struct task_struct, need_resched));
-	DEFINE(TSS_FPR0, offsetof(struct thread_struct, fpr[0]));
-	DEFINE(TSS_FPSCR, offsetof(struct thread_struct, fpscr));
+	DEFINE(THREAD_FPR0, offsetof(struct thread_struct, fpr[0]));
+	DEFINE(THREAD_FPSCR, offsetof(struct thread_struct, fpscr));
 	/* Interrupt register frame */
 	DEFINE(TASK_UNION_SIZE, sizeof(union task_union));
 	DEFINE(STACK_FRAME_OVERHEAD, STACK_FRAME_OVERHEAD);

@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.106 1999/07/30 09:35:07 davem Exp $
+/* $Id: fault.c,v 1.107 1999/08/14 03:51:46 anton Exp $
  * fault.c:  Page fault handlers for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -12,7 +12,7 @@
 #include <linux/types.h>
 #include <linux/ptrace.h>
 #include <linux/mman.h>
-#include <linux/tasks.h>
+#include <linux/threads.h>
 #include <linux/kernel.h>
 #include <linux/signal.h>
 #include <linux/mm.h>
@@ -280,8 +280,8 @@ do_kernel_fault:
 		printk("Fault whee %s [%d]: segfaults at %08lx pc=%08lx\n",
 		       tsk->comm, tsk->pid, address, regs->pc);
 #endif
-		tsk->tss.sig_address = address;
-		tsk->tss.sig_desc = SUBSIG_NOMAPPING;
+		tsk->thread.sig_address = address;
+		tsk->thread.sig_desc = SUBSIG_NOMAPPING;
 		force_sig(SIGSEGV, tsk);
 		return;
 	}
@@ -290,8 +290,8 @@ do_kernel_fault:
 
 do_sigbus:
 	up(&mm->mmap_sem);
-	tsk->tss.sig_address = address;
-	tsk->tss.sig_desc = SUBSIG_MISCERROR;
+	tsk->thread.sig_address = address;
+	tsk->thread.sig_desc = SUBSIG_MISCERROR;
 	force_sig(SIGBUS, tsk);
 	if (! from_user)
 		goto do_kernel_fault;
@@ -399,15 +399,15 @@ bad_area:
 	printk("Window whee %s [%d]: segfaults at %08lx\n",
 	       tsk->comm, tsk->pid, address);
 #endif
-	tsk->tss.sig_address = address;
-	tsk->tss.sig_desc = SUBSIG_NOMAPPING;
+	tsk->thread.sig_address = address;
+	tsk->thread.sig_desc = SUBSIG_NOMAPPING;
 	send_sig(SIGSEGV, tsk, 1);
 	return;
 
 do_sigbus:
 	up(&mm->mmap_sem);
-	tsk->tss.sig_address = address;
-	tsk->tss.sig_desc = SUBSIG_MISCERROR;
+	tsk->thread.sig_address = address;
+	tsk->thread.sig_desc = SUBSIG_MISCERROR;
 	force_sig(SIGBUS, tsk);
 }
 
@@ -416,7 +416,7 @@ void window_overflow_fault(void)
 	unsigned long sp;
 
 	lock_kernel();
-	sp = current->tss.rwbuf_stkptrs[0];
+	sp = current->thread.rwbuf_stkptrs[0];
 	if(((sp + 0x38) & PAGE_MASK) != (sp & PAGE_MASK))
 		force_user_fault(sp + 0x38, 1);
 	force_user_fault(sp, 1);

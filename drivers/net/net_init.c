@@ -135,9 +135,11 @@ found:						/* From the double loop above. */
 
 	ether_setup(dev); 	/* Hmmm, should this be called here? */
 	
-	if (new_device)
+	if (new_device) {
+		rtnl_lock();
 		register_netdevice(dev);
-
+		rtnl_unlock();
+	}
 	return dev;
 }
 
@@ -259,9 +261,11 @@ hipfound:				/* From the double loop above. */
 
 	hippi_setup(dev);
 	
-	if (new_device)
+	if (new_device) {
+		rtnl_lock();
 		register_netdevice(dev);
-
+		rtnl_unlock();
+	}
 	return dev;
 }
 
@@ -601,9 +605,11 @@ trfound:						/* From the double loop above. */
 	/* New-style flags. */
 	dev->flags		= IFF_BROADCAST;
 
-	if (new_device)
+	if (new_device) {
+		rtnl_lock();
 		register_netdevice(dev);
-
+		rtnl_unlock();
+	}
 	return dev;
 }
 
@@ -744,9 +750,11 @@ fcfound:                       /* From the double loop */
                 }
                                                 
         fc_setup(dev);                                 
-        if (new_device)                 
+        if (new_device) {
+		rtnl_lock();
                 register_netdevice(dev);  
-                
+		rtnl_unlock();
+	}                
         return dev;
 }
 
@@ -775,7 +783,7 @@ int register_fcdev(struct net_device *dev)
 void unregister_fcdev(struct net_device *dev)
 {
         rtnl_lock();
-		unregister_netdevice(dev);
+	unregister_netdevice(dev);
         rtnl_unlock();
         fc_freedev(dev);
 }

@@ -68,7 +68,7 @@ chrpboot(int a1, int a2, void *prom)
 
     flush_cache(dst, len);
     
-    sa = *(unsigned long *)PROG_START+PROG_START;
+    sa = (unsigned long)PROG_START;
     printf("start address = 0x%x\n\r", sa);
 
     (*(void (*)())sa)(0, 0, prom, a1, a2);

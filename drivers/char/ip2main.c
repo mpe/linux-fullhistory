@@ -1573,7 +1573,6 @@ ip2_close( PTTY tty, struct file *pFile )
 	if (pCh->wopen) {
 		if (pCh->ClosingDelay) {
 			current->state = TASK_INTERRUPTIBLE;
-			current->counter = 0;
 			schedule_timeout(pCh->ClosingDelay);
 		}
 		wake_up_interruptible(&pCh->open_wait);

@@ -71,6 +71,9 @@
 
 #include "sfp-util.h"
 #include "soft-fp.h"
+#include "single.h"
+#include "double.h"
+#include "quad.h"
 
 #define FLOATFUNC(x) extern int x(void *,void *,void *)
 
@@ -78,45 +81,45 @@
  * each insn is. This is from the binutils source :->
  */
 /* quadword instructions */
-FLOATFUNC(FSQRTQ);                                /* v8 */
-FLOATFUNC(FADDQ);                                 /* v8 */
-FLOATFUNC(FSUBQ);                                 /* v8 */
-FLOATFUNC(FMULQ);                                 /* v8 */
-FLOATFUNC(FDIVQ);                                 /* v8 */
-FLOATFUNC(FDMULQ);                                /* v8 */
-FLOATFUNC(FQTOS);                                 /* v8 */
-FLOATFUNC(FQTOD);                                 /* v8 */
-FLOATFUNC(FITOQ);                                 /* v8 */
-FLOATFUNC(FSTOQ);                                 /* v8 */
-FLOATFUNC(FDTOQ);                                 /* v8 */
-FLOATFUNC(FQTOI);                                 /* v8 */
-FLOATFUNC(FCMPQ);                                 /* v8 */
-FLOATFUNC(FCMPEQ);                                /* v8 */
+#define FSQRTQ	0x02b		/* v8 */
+#define FADDQ	0x043		/* v8 */
+#define FSUBQ	0x047		/* v8 */
+#define FMULQ	0x04b		/* v8 */
+#define FDIVQ	0x04f		/* v8 */
+#define FDMULQ	0x06e		/* v8 */
+#define FQTOS	0x0c7		/* v8 */
+#define FQTOD	0x0cb		/* v8 */
+#define FITOQ	0x0cc		/* v8 */
+#define FSTOQ	0x0cd		/* v8 */
+#define FDTOQ	0x0ce		/* v8 */
+#define FQTOI	0x0d3		/* v8 */
+#define FCMPQ	0x053		/* v8 */
+#define FCMPEQ	0x057		/* v8 */
 /* single/double instructions (subnormal): should all work */
-FLOATFUNC(FSQRTS);                                /* v7 */
-FLOATFUNC(FSQRTD);                                /* v7 */
-FLOATFUNC(FADDS);                                 /* v6 */
-FLOATFUNC(FADDD);                                 /* v6 */
-FLOATFUNC(FSUBS);                                 /* v6 */
-FLOATFUNC(FSUBD);                                 /* v6 */
-FLOATFUNC(FMULS);                                 /* v6 */
-FLOATFUNC(FMULD);                                 /* v6 */
-FLOATFUNC(FDIVS);                                 /* v6 */
-FLOATFUNC(FDIVD);                                 /* v6 */
-FLOATFUNC(FSMULD);                                /* v8 */
-FLOATFUNC(FDTOS);                                 /* v6 */
-FLOATFUNC(FSTOD);                                 /* v6 */
-FLOATFUNC(FSTOI);                                 /* v6 */
-FLOATFUNC(FDTOI);                                 /* v6 */
-FLOATFUNC(FABSS);                                 /* v6 */
-FLOATFUNC(FCMPS);                                 /* v6 */
-FLOATFUNC(FCMPES);                                /* v6 */
-FLOATFUNC(FCMPD);                                 /* v6 */
-FLOATFUNC(FCMPED);                                /* v6 */
-FLOATFUNC(FMOVS);                                 /* v6 */
-FLOATFUNC(FNEGS);                                 /* v6 */
-FLOATFUNC(FITOS);                                 /* v6 */
-FLOATFUNC(FITOD);                                 /* v6 */
+#define FSQRTS	0x029		/* v7 */
+#define FSQRTD	0x02a		/* v7 */
+#define FADDS	0x041		/* v6 */
+#define FADDD	0x042		/* v6 */
+#define FSUBS	0x045		/* v6 */
+#define FSUBD	0x046		/* v6 */
+#define FMULS	0x049		/* v6 */
+#define FMULD	0x04a		/* v6 */
+#define FDIVS	0x04d		/* v6 */
+#define FDIVD	0x04e		/* v6 */
+#define FSMULD	0x069		/* v6 */
+#define FDTOS	0x0c6		/* v6 */
+#define FSTOD	0x0c9		/* v6 */
+#define FSTOI	0x0d1		/* v6 */
+#define FDTOI	0x0d2		/* v6 */
+#define FABSS	0x009		/* v6 */
+#define FCMPS	0x051		/* v6 */
+#define FCMPES	0x055		/* v6 */
+#define FCMPD	0x052		/* v6 */
+#define FCMPED	0x056		/* v6 */
+#define FMOVS	0x001		/* v6 */
+#define FNEGS	0x005		/* v6 */
+#define FITOS	0x0c4		/* v6 */
+#define FITOD	0x0c8		/* v6 */
 
 #define FSR_TEM_SHIFT	23UL
 #define FSR_TEM_MASK	(0x1fUL << FSR_TEM_SHIFT)
@@ -162,18 +165,18 @@ int do_mathemu(struct pt_regs *regs, struct task_struct *fpt)
 
 #ifdef DEBUG_MATHEMU
 	printk("In do_mathemu()... pc is %08lx\n", regs->pc);
-	printk("fpqdepth is %ld\n", fpt->tss.fpqdepth);
-	for (i = 0; i < fpt->tss.fpqdepth; i++)
-		printk("%d: %08lx at %08lx\n", i, fpt->tss.fpqueue[i].insn,
-		       (unsigned long)fpt->tss.fpqueue[i].insn_addr);
+	printk("fpqdepth is %ld\n", fpt->thread.fpqdepth);
+	for (i = 0; i < fpt->thread.fpqdepth; i++)
+		printk("%d: %08lx at %08lx\n", i, fpt->thread.fpqueue[i].insn,
+		       (unsigned long)fpt->thread.fpqueue[i].insn_addr);
 #endif
 
-	if (fpt->tss.fpqdepth == 0) {                   /* no queue, guilty insn is at regs->pc */
+	if (fpt->thread.fpqdepth == 0) {                   /* no queue, guilty insn is at regs->pc */
 #ifdef DEBUG_MATHEMU
 		printk("precise trap at %08lx\n", regs->pc);
 #endif
 		if (!get_user(insn, (u32 *)regs->pc)) {
-			retcode = do_one_mathemu(insn, &fpt->tss.fsr, fpt->tss.float_regs);
+			retcode = do_one_mathemu(insn, &fpt->thread.fsr, fpt->thread.float_regs);
 			if (retcode) {
 				/* in this case we need to fix up PC & nPC */
 				regs->pc = regs->npc;
@@ -184,17 +187,17 @@ int do_mathemu(struct pt_regs *regs, struct task_struct *fpt)
 	}
 
 	/* Normal case: need to empty the queue... */
-	for (i = 0; i < fpt->tss.fpqdepth; i++) {
-		retcode = do_one_mathemu(fpt->tss.fpqueue[i].insn, &(fpt->tss.fsr), fpt->tss.float_regs);
+	for (i = 0; i < fpt->thread.fpqdepth; i++) {
+		retcode = do_one_mathemu(fpt->thread.fpqueue[i].insn, &(fpt->thread.fsr), fpt->thread.float_regs);
 		if (!retcode)                               /* insn failed, no point doing any more */
 			break;
 	}
 	/* Now empty the queue and clear the queue_not_empty flag */
 	if(retcode)
-		fpt->tss.fsr &= ~(0x3000 | FSR_CEXC_MASK);
+		fpt->thread.fsr &= ~(0x3000 | FSR_CEXC_MASK);
 	else
-		fpt->tss.fsr &= ~0x3000;
-	fpt->tss.fpqdepth = 0;
+		fpt->thread.fsr &= ~0x3000;
+	fpt->thread.fpqdepth = 0;
 
 	return retcode;
 }
@@ -207,7 +210,7 @@ int do_mathemu(struct pt_regs *regs, struct task_struct *fpt)
  *
  * We return 0 if a SIGFPE should be sent, 1 otherwise.
  */
-static int record_exception(unsigned long *pfsr, int eflag)
+static inline int record_exception(unsigned long *pfsr, int eflag)
 {
 	unsigned long fsr = *pfsr;
 	int would_trap;
@@ -259,19 +262,28 @@ static int record_exception(unsigned long *pfsr, int eflag)
 	return (would_trap ? 0 : 1);
 }
 
-static int do_one_mathemu(u32 insn, unsigned long *fsr, unsigned long *fregs)
+typedef union {
+	u32 s;
+	u64 d;
+	u64 q[2];
+} *argp;
+
+static int do_one_mathemu(u32 insn, unsigned long *pfsr, unsigned long *fregs)
 {
 	/* Emulate the given insn, updating fsr and fregs appropriately. */
 	int type = 0;
-	/* 01 is single, 10 is double, 11 is quad,
-	 * 000011 is rs1, 001100 is rs2, 110000 is rd (00 in rd is fcc)
-	 * 111100000000 tells which ftt that may happen in
-	 * (this field not used on sparc32 code, as we can't
-	 * extract trap type info for ops on the FP queue)
-	 */
-	int freg, eflag;
-	int (*func)(void *,void *,void *) = NULL;
-	void *rs1 = NULL, *rs2 = NULL, *rd = NULL;
+	/* r is rd, b is rs2 and a is rs1. The *u arg tells
+	   whether the argument should be packed/unpacked (0 - do not unpack/pack, 1 - unpack/pack)
+	   non-u args tells the size of the argument (0 - no argument, 1 - single, 2 - double, 3 - quad */
+#define TYPE(dummy, r, ru, b, bu, a, au) type = (au << 2) | (a << 0) | (bu << 5) | (b << 3) | (ru << 8) | (r << 6)
+	int freg;
+	argp rs1 = NULL, rs2 = NULL, rd = NULL;
+	FP_DECL_EX;
+	FP_DECL_S(SA); FP_DECL_S(SB); FP_DECL_S(SR);
+	FP_DECL_D(DA); FP_DECL_D(DB); FP_DECL_D(DR);
+	FP_DECL_Q(QA); FP_DECL_Q(QB); FP_DECL_Q(QR);
+	int IR;
+	long fsr;
 
 #ifdef DEBUG_MATHEMU
 	printk("In do_mathemu(), emulating %08lx\n", insn);
@@ -279,38 +291,38 @@ static int do_one_mathemu(u32 insn, unsigned long *fsr, unsigned long *fregs)
 
 	if ((insn & 0xc1f80000) == 0x81a00000)	/* FPOP1 */ {
 		switch ((insn >> 5) & 0x1ff) {
-		/* QUAD - ftt == 3 */
-		case 0x001: type = 0x314; func = FMOVS; break;
-		case 0x005: type = 0x314; func = FNEGS; break;
-		case 0x009: type = 0x314; func = FABSS; break;
-		case 0x02b: type = 0x33c; func = FSQRTQ; break;
-		case 0x043: type = 0x33f; func = FADDQ; break;
-		case 0x047: type = 0x33f; func = FSUBQ; break;
-		case 0x04b: type = 0x33f; func = FMULQ; break;
-		case 0x04f: type = 0x33f; func = FDIVQ; break;
-		case 0x06e: type = 0x33a; func = FDMULQ; break;
-		case 0x0c7: type = 0x31c; func = FQTOS; break;
-		case 0x0cb: type = 0x32c; func = FQTOD; break;
-		case 0x0cc: type = 0x334; func = FITOQ; break;
-		case 0x0cd: type = 0x334; func = FSTOQ; break;
-		case 0x0ce: type = 0x338; func = FDTOQ; break;
-		case 0x0d3: type = 0x31c; func = FQTOI; break;
-		/* SUBNORMAL - ftt == 2 */
-		case 0x029: type = 0x214; func = FSQRTS; break;
-		case 0x02a: type = 0x228; func = FSQRTD; break;
-		case 0x041: type = 0x215; func = FADDS; break;
-		case 0x042: type = 0x22a; func = FADDD; break;
-		case 0x045: type = 0x215; func = FSUBS; break;
-		case 0x046: type = 0x22a; func = FSUBD; break;
-		case 0x049: type = 0x215; func = FMULS; break;
-		case 0x04a: type = 0x22a; func = FMULD; break;
-		case 0x04d: type = 0x215; func = FDIVS; break;
-		case 0x04e: type = 0x22a; func = FDIVD; break;
-		case 0x069: type = 0x225; func = FSMULD; break;
-		case 0x0c6: type = 0x218; func = FDTOS; break;
-		case 0x0c9: type = 0x224; func = FSTOD; break;
-		case 0x0d1: type = 0x214; func = FSTOI; break;
-		case 0x0d2: type = 0x218; func = FDTOI; break;
+		case FSQRTQ: TYPE(3,3,1,3,1,0,0); break;
+		case FADDQ:
+		case FSUBQ:
+		case FMULQ:
+		case FDIVQ: TYPE(3,3,1,3,1,3,1); break;
+		case FDMULQ: TYPE(3,3,1,2,1,2,1); break;
+		case FQTOS: TYPE(3,1,1,3,1,0,0); break;
+		case FQTOD: TYPE(3,2,1,3,1,0,0); break;
+		case FITOQ: TYPE(3,3,1,1,0,0,0); break;
+		case FSTOQ: TYPE(3,3,1,1,1,0,0); break;
+		case FDTOQ: TYPE(3,3,1,2,1,0,0); break;
+		case FQTOI: TYPE(3,1,0,3,1,0,0); break;
+		case FSQRTS: TYPE(2,1,1,1,1,0,0); break;
+		case FSQRTD: TYPE(2,2,1,2,1,0,0); break;
+		case FADDD:
+		case FSUBD:
+		case FMULD:
+		case FDIVD: TYPE(2,2,1,2,1,2,1); break;
+		case FADDS:
+		case FSUBS:
+		case FMULS:
+		case FDIVS: TYPE(2,1,1,1,1,1,1); break;
+		case FSMULD: TYPE(2,2,1,1,1,1,1); break;
+		case FDTOS: TYPE(2,1,1,2,1,0,0); break;
+		case FSTOD: TYPE(2,2,1,1,1,0,0); break;
+		case FSTOI: TYPE(2,1,0,1,1,0,0); break;
+		case FDTOI: TYPE(2,1,0,2,1,0,0); break;
+		case FITOS: TYPE(2,1,1,1,0,0,0); break;
+		case FITOD: TYPE(2,2,1,1,0,0,0); break;
+		case FMOVS:
+		case FABSS:
+		case FNEGS: TYPE(2,1,0,1,0,0,0); break;
 		default:
 #ifdef DEBUG_MATHEMU
 			printk("unknown FPop1: %03lx\n",(insn>>5)&0x1ff);
@@ -318,12 +330,12 @@ static int do_one_mathemu(u32 insn, unsigned long *fsr, unsigned long *fregs)
 		}
 	} else if ((insn & 0xc1f80000) == 0x81a80000)	/* FPOP2 */ {
 		switch ((insn >> 5) & 0x1ff) {
-		case 0x051: type = 0x305; func = FCMPS; break;
-		case 0x052: type = 0x30a; func = FCMPD; break;
-		case 0x053: type = 0x30f; func = FCMPQ; break;
-		case 0x055: type = 0x305; func = FCMPES; break;
-		case 0x056: type = 0x30a; func = FCMPED; break;
-		case 0x057: type = 0x30f; func = FCMPEQ; break;
+		case FCMPS: TYPE(3,0,0,1,1,1,1); break;
+		case FCMPES: TYPE(3,0,0,1,1,1,1); break;
+		case FCMPD: TYPE(3,0,0,2,1,2,1); break;
+		case FCMPED: TYPE(3,0,0,2,1,2,1); break;
+		case FCMPQ: TYPE(3,0,0,3,1,3,1); break;
+		case FCMPEQ: TYPE(3,0,0,3,1,3,1); break;
 		default:
 #ifdef DEBUG_MATHEMU
 			printk("unknown FPop2: %03lx\n",(insn>>5)&0x1ff);
@@ -332,67 +344,78 @@ static int do_one_mathemu(u32 insn, unsigned long *fsr, unsigned long *fregs)
 	}
 
 	if (!type) {	/* oops, didn't recognise that FPop */
+#ifdef DEBUG_MATHEMU
 		printk("attempt to emulate unrecognised FPop!\n");
+#endif
 		return 0;
 	}
 
 	/* Decode the registers to be used */
-	freg = (*fsr >> 14) & 0xf;
+	freg = (*pfsr >> 14) & 0xf;
 
-	*fsr &= ~0x1c000;				/* clear the traptype bits */
-
+	*pfsr &= ~0x1c000;				/* clear the traptype bits */
+	
 	freg = ((insn >> 14) & 0x1f);
 	switch (type & 0x3) {				/* is rs1 single, double or quad? */
 	case 3:
 		if (freg & 3) {				/* quadwords must have bits 4&5 of the */
 							/* encoded reg. number set to zero. */
-			*fsr |= (6 << 14);
+			*pfsr |= (6 << 14);
 			return 0;			/* simulate invalid_fp_register exception */
 		}
 	/* fall through */
 	case 2:
 		if (freg & 1) {				/* doublewords must have bit 5 zeroed */
-			*fsr |= (6 << 14);
+			*pfsr |= (6 << 14);
 			return 0;
 		}
 	}
-	rs1 = (void *)&fregs[freg];
+	rs1 = (argp)&fregs[freg];
+	switch (type & 0x7) {
+	case 7: FP_UNPACK_QP (QA, rs1); break;
+	case 6: FP_UNPACK_DP (DA, rs1); break;
+	case 5: FP_UNPACK_SP (SA, rs1); break;
+	}
 	freg = (insn & 0x1f);
-	switch ((type >> 2) & 0x3) {			/* same again for rs2 */
+	switch ((type >> 3) & 0x3) {			/* same again for rs2 */
 	case 3:
 		if (freg & 3) {				/* quadwords must have bits 4&5 of the */
 							/* encoded reg. number set to zero. */
-			*fsr |= (6 << 14);
+			*pfsr |= (6 << 14);
 			return 0;			/* simulate invalid_fp_register exception */
 		}
 	/* fall through */
 	case 2:
 		if (freg & 1) {				/* doublewords must have bit 5 zeroed */
-			*fsr |= (6 << 14);
+			*pfsr |= (6 << 14);
 			return 0;
 		}
 	}
-	rs2 = (void *)&fregs[freg];
+	rs2 = (argp)&fregs[freg];
+	switch ((type >> 3) & 0x7) {
+	case 7: FP_UNPACK_QP (QB, rs2); break;
+	case 6: FP_UNPACK_DP (DB, rs2); break;
+	case 5: FP_UNPACK_SP (SB, rs2); break;
+	}
 	freg = ((insn >> 25) & 0x1f);
-	switch ((type >> 4) & 0x3) {			/* and finally rd. This one's a bit different */
+	switch ((type >> 6) & 0x3) {			/* and finally rd. This one's a bit different */
 	case 0:						/* dest is fcc. (this must be FCMPQ or FCMPEQ) */
 		if (freg) {				/* V8 has only one set of condition codes, so */
 							/* anything but 0 in the rd field is an error */
-			*fsr |= (6 << 14);		/* (should probably flag as invalid opcode */
+			*pfsr |= (6 << 14);		/* (should probably flag as invalid opcode */
 			return 0;			/* but SIGFPE will do :-> ) */
 		}
-		rd = (void *)(fsr);			/* FCMPQ and FCMPEQ are special and only  */
-		break;					/* set bits they're supposed to :-> */
+		break;
 	case 3:
 		if (freg & 3) {				/* quadwords must have bits 4&5 of the */
 							/* encoded reg. number set to zero. */
-			*fsr |= (6 << 14);
+			*pfsr |= (6 << 14);
 			return 0;			/* simulate invalid_fp_register exception */
 		}
 	/* fall through */
 	case 2:
 		if (freg & 1) {				/* doublewords must have bit 5 zeroed */
-			*fsr |= (6 << 14);
+			*pfsr |= (6 << 14);
 			return 0;
 		}
 	/* fall through */
@@ -403,8 +426,94 @@ static int do_one_mathemu(u32 insn, unsigned long *fsr, unsigned long *fregs)
 #ifdef DEBUG_MATHEMU
 	printk("executing insn...\n");
 #endif
-	eflag = func(rd, rs2, rs1);			/* do the Right Thing */
-	if(eflag == 0)
+	/* do the Right Thing */
+	switch ((insn >> 5) & 0x1ff) {
+	/* + */
+	case FADDS: FP_ADD_S (SR, SA, SB); break;
+	case FADDD: FP_ADD_D (DR, DA, DB); break;
+	case FADDQ: FP_ADD_Q (QR, QA, QB); break;
+	/* - */
+	case FSUBS: FP_SUB_S (SR, SA, SB); break;
+	case FSUBD: FP_SUB_D (DR, DA, DB); break;
+	case FSUBQ: FP_SUB_Q (QR, QA, QB); break;
+	/* * */
+	case FMULS: FP_MUL_S (SR, SA, SB); break;
+	case FSMULD: FP_CONV (D, S, 2, 1, DA, SA);
+		     FP_CONV (D, S, 2, 1, DB, SB);
+	case FMULD: FP_MUL_D (DR, DA, DB); break;
+	case FDMULQ: FP_CONV (Q, D, 4, 2, QA, DA);
+		     FP_CONV (Q, D, 4, 2, QB, DB);
+	case FMULQ: FP_MUL_Q (QR, QA, QB); break;
+	/* / */
+	case FDIVS: FP_DIV_S (SR, SA, SB); break;
+	case FDIVD: FP_DIV_D (DR, DA, DB); break;
+	case FDIVQ: FP_DIV_Q (QR, QA, QB); break;
+	/* sqrt */
+	case FSQRTS: FP_SQRT_S (SR, SB); break;
+	case FSQRTD: FP_SQRT_D (DR, DB); break;
+	case FSQRTQ: FP_SQRT_Q (QR, QB); break;
+	/* mov */
+	case FMOVS: rd->s = rs2->s; break;
+	case FABSS: rd->s = rs2->s & 0x7fffffff; break;
+	case FNEGS: rd->s = rs2->s ^ 0x80000000; break;
+	/* float to int */
+	case FSTOI: FP_TO_INT_S (IR, SB, 32, 1); break;
+	case FDTOI: FP_TO_INT_D (IR, DB, 32, 1); break;
+	case FQTOI: FP_TO_INT_Q (IR, QB, 32, 1); break;
+	/* int to float */
+	case FITOS: IR = rs2->s; FP_FROM_INT_S (SR, IR, 32, int); break;
+	case FITOD: IR = rs2->s; FP_FROM_INT_D (DR, IR, 32, int); break;
+	case FITOQ: IR = rs2->s; FP_FROM_INT_Q (QR, IR, 32, int); break;
+	/* float to float */
+	case FSTOD: FP_CONV (D, S, 2, 1, DR, SB); break;
+	case FSTOQ: FP_CONV (Q, S, 4, 1, QR, SB); break;
+	case FDTOQ: FP_CONV (Q, D, 4, 2, QR, DB); break;
+	case FDTOS: FP_CONV (S, D, 1, 2, SR, DB); break;
+	case FQTOS: FP_CONV (S, Q, 1, 4, SR, QB); break;
+	case FQTOD: FP_CONV (D, Q, 2, 4, DR, QB); break;
+	/* comparison */
+	case FCMPS:
+	case FCMPES:
+		FP_CMP_S(IR, SB, SA, 3);
+		if (IR == 3 &&
+		    (((insn >> 5) & 0x1ff) == FCMPES ||
+		     FP_ISSIGNAN_S(SA) ||
+		     FP_ISSIGNAN_S(SB)))
+			FP_SET_EXCEPTION (FP_EX_INVALID);
+		break;
+	case FCMPD:
+	case FCMPED:
+		FP_CMP_D(IR, DB, DA, 3);
+		if (IR == 3 &&
+		    (((insn >> 5) & 0x1ff) == FCMPED ||
+		     FP_ISSIGNAN_D(DA) ||
+		     FP_ISSIGNAN_D(DB)))
+			FP_SET_EXCEPTION (FP_EX_INVALID);
+		break;
+	case FCMPQ:
+	case FCMPEQ:
+		FP_CMP_Q(IR, QB, QA, 3);
+		if (IR == 3 &&
+		    (((insn >> 5) & 0x1ff) == FCMPEQ ||
+		     FP_ISSIGNAN_Q(QA) ||
+		     FP_ISSIGNAN_Q(QB)))
+			FP_SET_EXCEPTION (FP_EX_INVALID);
+	}
+	if (!FP_INHIBIT_RESULTS) {
+		switch ((type >> 6) & 0x7) {
+		case 0: fsr = *pfsr;
+			if (IR == -1) IR = 2;
+			/* fcc is always fcc0 */
+			fsr &= ~0xc00; fsr |= (IR << 10); break;
+			*pfsr = fsr;
+			break;
+		case 1: rd->s = IR; break;
+		case 5: FP_PACK_SP (rd, SR); break;
+		case 6: FP_PACK_DP (rd, DR); break;
+		case 7: FP_PACK_QP (rd, QR); break;
+		}
+	}
+	if(_fex == 0)
 		return 1;				/* success! */
-	return record_exception(fsr, eflag);
+	return record_exception(pfsr, _fex);
 }

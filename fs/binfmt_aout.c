@@ -315,7 +315,7 @@ static inline int do_load_aout_binary(struct linux_binprm * bprm, struct pt_regs
 	current->personality = PER_LINUX;
 
 #if defined(__sparc__) && !defined(__sparc_v9__)
-	memcpy(&current->tss.core_exec, &ex, sizeof(struct exec));
+	memcpy(&current->thread.core_exec, &ex, sizeof(struct exec));
 #endif
 
 	current->mm->end_code = ex.a_text +

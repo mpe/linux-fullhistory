@@ -11,6 +11,7 @@
  *  Copyright (C) 1998 Phil Blundell
  */
 #include <linux/sched.h>
+#include <linux/ioport.h>
 #include <linux/init.h>
 
 #include <asm/dma.h>
@@ -138,7 +139,7 @@ int __init isa_init_dma(void)
 	dmac_found = inb(0x00) == 0x55 && inb(0x00) == 0xaa;
 
 	if (dmac_found) {
-		int channel;
+		int channel, i;
 
 		for (channel = 0; channel < 8; channel++)
 			isa_disable_dma(channel, NULL);
@@ -173,6 +174,9 @@ int __init isa_init_dma(void)
 		outb(0x33, 0x4d6);
 
 		request_dma(DMA_ISA_CASCADE, "cascade");
+
+		for (i = 0; i < sizeof(dma_resources) / sizeof(dma_resources[0]); i++)
+			request_resource(&ioport_resource, dma_resources + i);
 	}
 
 	return dmac_found;

@@ -1,4 +1,4 @@
-/* $Id: sysio.h,v 1.8 1998/11/29 15:49:54 davem Exp $
+/* $Id: sysio.h,v 1.9 1999/08/30 10:15:03 davem Exp $
  * sysio.h: UltraSparc sun5 specific SBUS definitions.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -11,34 +11,34 @@
 
 /* SUN5 SYSIO Register Set, one per controller probed. */
 struct sysio_regs {
-/*0x0000*/	u64	upa_id;		/* SYSIO UPA Port ID Register		*/
-/*0x0008*/	u64	upa_cfg;	/* SYSIO UPA Config Register		*/
-/*0x0010*/	u64	control;	/* SYSIO Control Register		*/
-/*0x0018*/	u64	_unused1;
-/*0x0020*/	u64	ecc_control;	/* ECC Control Register			*/
-/*0x0028*/	u64	_unused2;
+/*0x0000*/	volatile u64	upa_id;		/* SYSIO UPA Port ID Register	*/
+/*0x0008*/	volatile u64	upa_cfg;	/* SYSIO UPA Config Register	*/
+/*0x0010*/	volatile u64	control;	/* SYSIO Control Register	*/
+/*0x0018*/	volatile u64	_unused1;
+/*0x0020*/	volatile u64	ecc_control;	/* ECC Control Register		*/
+/*0x0028*/	volatile u64	_unused2;
 
 		/* Uncorrectable Error Fault Registers */
-/*0x0030*/	u64	ue_afsr;	/* UE Async Fault Status		*/
-/*0x0038*/	u64	ue_afar;	/* UE Async Fault Address		*/
+/*0x0030*/	volatile u64	ue_afsr;	/* UE Async Fault Status	*/
+/*0x0038*/	volatile u64	ue_afar;	/* UE Async Fault Address	*/
 
 		/* Correctable Error Fault Registers */
-/*0x0040*/	u64	ce_afsr;	/* CE Async Fault Status		*/
-/*0x0048*/	u64	ce_afar;	/* CE Async Fault Address		*/
+/*0x0040*/	volatile u64	ce_afsr;	/* CE Async Fault Status	*/
+/*0x0048*/	volatile u64	ce_afar;	/* CE Async Fault Address	*/
 
-		u64	__pad0[0x16];
+		volatile u64	__pad0[0x16];
 
 		/* Performance Monitoring Registers */
-/*0x0100*/	u64	pmon_control;
-/*0x0108*/	u64	pmon_counter;
+/*0x0100*/	volatile u64	pmon_control;
+/*0x0108*/	volatile u64	pmon_counter;
 
-		u64	__pad1[0x3de];
+		volatile u64	__pad1[0x3de];
 
 		/* SBUS Module Registers */
-/*0x2000*/	u64	sbus_control;	/* SBUS Control Register		*/
-/*0x2008*/	u64	_unused3;
-/*0x2010*/	u64	sbus_afsr;	/* SBUS Async Fault Status		*/
-/*0x2018*/	u64	sbus_afar;	/* SBUS Async Fault Address		*/
+/*0x2000*/	volatile u64	sbus_control;	/* SBUS Control Register	*/
+/*0x2008*/	volatile u64	_unused3;
+/*0x2010*/	volatile u64	sbus_afsr;	/* SBUS Async Fault Status	*/
+/*0x2018*/	volatile u64	sbus_afar;	/* SBUS Async Fault Address	*/
 
 		/* SBUS Slot Configuration Registers.
 		 * On Fusion/Electron/Pulsar desktops/servers slots 4-->6
@@ -52,137 +52,137 @@ struct sysio_regs {
 		 * On Sunfire/Starfire/Wildfire enterprise boxen these upper slots
 		 * are unused.
 		 */
-/*0x2020*/	u64	sbus_s0cfg;	/* SBUS Slot 0 Config			*/
-/*0x2028*/	u64	sbus_s1cfg;	/* SBUS Slot 1 Config			*/
-/*0x2030*/	u64	sbus_s2cfg;	/* SBUS Slot 2 Config			*/
-/*0x2038*/	u64	sbus_s3cfg;	/* SBUS Slot 3 Config			*/
-/*0x2040*/	u64	sbus_s4cfg;	/* SBUS Slot 4 Config			*/
-/*0x2048*/	u64	sbus_s5cfg;	/* SBUS Slot 5 Config			*/
-/*0x2050*/	u64	sbus_s6cfg;	/* SBUS Slot 6 Config			*/
+/*0x2020*/	volatile u64	sbus_s0cfg;	/* SBUS Slot 0 Config		*/
+/*0x2028*/	volatile u64	sbus_s1cfg;	/* SBUS Slot 1 Config		*/
+/*0x2030*/	volatile u64	sbus_s2cfg;	/* SBUS Slot 2 Config		*/
+/*0x2038*/	volatile u64	sbus_s3cfg;	/* SBUS Slot 3 Config		*/
+/*0x2040*/	volatile u64	sbus_s4cfg;	/* SBUS Slot 4 Config		*/
+/*0x2048*/	volatile u64	sbus_s5cfg;	/* SBUS Slot 5 Config		*/
+/*0x2050*/	volatile u64	sbus_s6cfg;	/* SBUS Slot 6 Config		*/
 
-		u64	__pad2[0x75];
+		volatile u64	__pad2[0x75];
 
 		/* SBUS IOMMU lives here */
-/*0x2400*/	u64	iommu_control;	/* IOMMU Control			*/
-/*0x2408*/	u64	iommu_tsbbase;	/* IOMMU TSB Base			*/
-/*0x2410*/	u64	iommu_flush;	/* IOMMU Flush Register			*/
+/*0x2400*/	volatile u64	iommu_control;	/* IOMMU Control		*/
+/*0x2408*/	volatile u64	iommu_tsbbase;	/* IOMMU TSB Base		*/
+/*0x2410*/	volatile u64	iommu_flush;	/* IOMMU Flush Register		*/
 
-		u64	__pad3[0x7d];
+		volatile u64	__pad3[0x7d];
 
 		/* SBUS/IOMMU Streaming Buffer Registers */
-/*0x2800*/	u64	sbuf_control;	/* StrBuffer Control			*/
-/*0x2808*/	u64	sbuf_pflush;	/* StrBuffer Page Flush			*/
-/*0x2810*/	u64	sbuf_fsync;	/* StrBuffer Flush Synchronization Reg	*/
+/*0x2800*/	volatile u64	sbuf_control;	/* StrBuffer Control		*/
+/*0x2808*/	volatile u64	sbuf_pflush;	/* StrBuffer Page Flush		*/
+/*0x2810*/	volatile u64	sbuf_fsync;	/* StrBuffer Flush Synchronization Reg */
 
-		u64	__pad4[0x7d];
+		volatile u64	__pad4[0x7d];
 
 		/* Interrupt mapping/control registers */
-/*0x2c00*/	u32	_uim0, imap_slot0;	/* SBUS Slot 0 Int Mapping	*/
-/*0x2c08*/	u32	_uim1, imap_slot1;	/* SBUS Slot 1 Int Mapping	*/
-/*0x2c10*/	u32	_uim2, imap_slot2;	/* SBUS Slot 2 Int Mapping	*/
-/*0x2c18*/	u32	_uim3, imap_slot3;	/* SBUS Slot 3 Int Mapping	*/
+/*0x2c00*/	volatile u32	_uim0, imap_slot0;	/* SBUS Slot 0 Int Mapping */
+/*0x2c08*/	volatile u32	_uim1, imap_slot1;	/* SBUS Slot 1 Int Mapping */
+/*0x2c10*/	volatile u32	_uim2, imap_slot2;	/* SBUS Slot 2 Int Mapping */
+/*0x2c18*/	volatile u32	_uim3, imap_slot3;	/* SBUS Slot 3 Int Mapping */
 
 		/* Interrupt Retry Timer. */
-/*0x2c20*/	u32	_irpad, irq_retry;
+/*0x2c20*/	volatile u32	_irpad, irq_retry;
 
-		u64	__pad5[0x7b];
+		volatile u64	__pad5[0x7b];
 
 		/* The following are only used on Fusion/Electron/Pulsar
 		 * desktop systems, they mean nothing on Sunfire/Starfire/Wildfire
 		 */
-/*0x3000*/	u32	_uis, imap_scsi;	/* SCSI Int Mapping		*/
-/*0x3008*/	u32	_uie, imap_eth;		/* Ethernet Int Mapping		*/
-/*0x3010*/	u32	_uip, imap_bpp;		/* Parallel Port Int Mapping	*/
-/*0x3018*/	u32	_uia, imap_audio;	/* Audio Int Mapping		*/
-/*0x3020*/	u32	_uipf, imap_pfail;	/* Power Fail Int Mapping	*/
-/*0x3028*/	u32	_uik, imap_kms;		/* Kbd/Mouse/Serial Int Mapping	*/
-/*0x3030*/	u32	_uif, imap_flpy;	/* Floppy Int Mapping		*/
-/*0x3038*/	u32	_uishw, imap_shw;	/* Spare HW Int Mapping		*/
-/*0x3040*/	u32	_uikbd, imap_kbd;	/* Kbd Only Int Mapping		*/
-/*0x3048*/	u32	_uims, imap_ms;		/* Mouse Only Int Mapping	*/
-/*0x3050*/	u32	_uiser, imap_ser;	/* Serial Only Int Mapping	*/
-/*0x3058*/	u64	_imap_unused;
-/*0x3060*/	u32	_uit0, imap_tim0;	/* Timer 0 Int Mapping		*/
-/*0x3068*/	u32	_uit1, imap_tim1;	/* Timer 1 Int Mapping		*/
-/*0x3070*/	u32	_uiue, imap_ue;		/* UE Int Mapping		*/
-/*0x3078*/	u32	_uice, imap_ce;		/* CE Int Mapping		*/
-/*0x3080*/	u32	_uisbe, imap_sberr;	/* SBUS Err Int Mapping		*/
-/*0x3088*/	u32	_uipm, imap_pmgmt;	/* Power Mgmt Int Mapping	*/
-/*0x3090*/	u32	_uigfx, imap_gfx;	/* OB Graphics Int Mapping	*/
-/*0x3098*/	u32	_uieupa, imap_eupa;	/* UPA Expansion Int Mapping	*/
+/*0x3000*/	volatile u32	_uis, imap_scsi;	/* SCSI Int Mapping	*/
+/*0x3008*/	volatile u32	_uie, imap_eth;		/* Ethernet Int Mapping	*/
+/*0x3010*/	volatile u32	_uip, imap_bpp;		/* Parallel Port Int Mapping */
+/*0x3018*/	volatile u32	_uia, imap_audio;	/* Audio Int Mapping	*/
+/*0x3020*/	volatile u32	_uipf, imap_pfail;	/* Power Fail Int Mapping */
+/*0x3028*/	volatile u32	_uik, imap_kms;		/* Kbd/Ms/Serial Int Mapping */
+/*0x3030*/	volatile u32	_uif, imap_flpy;	/* Floppy Int Mapping	*/
+/*0x3038*/	volatile u32	_uishw, imap_shw;	/* Spare HW Int Mapping	*/
+/*0x3040*/	volatile u32	_uikbd, imap_kbd;	/* Kbd Only Int Mapping	*/
+/*0x3048*/	volatile u32	_uims, imap_ms;		/* Mouse Only Int Mapping */
+/*0x3050*/	volatile u32	_uiser, imap_ser;	/* Serial Only Int Mapping */
+/*0x3058*/	volatile u64	_imap_unused;
+/*0x3060*/	volatile u32	_uit0, imap_tim0;	/* Timer 0 Int Mapping	*/
+/*0x3068*/	volatile u32	_uit1, imap_tim1;	/* Timer 1 Int Mapping	*/
+/*0x3070*/	volatile u32	_uiue, imap_ue;		/* UE Int Mapping	*/
+/*0x3078*/	volatile u32	_uice, imap_ce;		/* CE Int Mapping	*/
+/*0x3080*/	volatile u32	_uisbe, imap_sberr;	/* SBUS Err Int Mapping	*/
+/*0x3088*/	volatile u32	_uipm, imap_pmgmt;	/* Power Mgmt Int Mapping */
+/*0x3090*/	volatile u32	_uigfx, imap_gfx;	/* OB Graphics Int Mapping */
+/*0x3098*/	volatile u32	_uieupa, imap_eupa;	/* UPA Expansion Int Mapping */
 
-		u64	__pad6[0x6c];
+		volatile u64	__pad6[0x6c];
 
 		/* Interrupt Clear Registers */
-/*0x3400*/	u32	__ucu0, iclr_unused0;
-/*0x3408*/	u32	_ucs0, iclr_slot0;
-		u64	__pad7[0x7];
-/*0x3448*/	u32	_ucs1, iclr_slot1;
-		u64	__pad8[0x7];
-/*0x3488*/	u32	_ucs2, iclr_slot2;
-		u64	__pad9[0x7];
-/*0x34c8*/	u32	_ucs3, iclr_slot3;
-		u64	__pad10[0x66];
-/*0x3800*/	u32	_ucscsi, iclr_scsi;
-/*0x3808*/	u32	_uceth, iclr_eth;
-/*0x3810*/	u32	_ucbpp, iclr_bpp;
-/*0x3818*/	u32	_ucaudio, iclr_audio;
-/*0x3820*/	u32	_ucpfail, iclr_pfail;
-/*0x3828*/	u32	_uckms, iclr_kms;
-/*0x3830*/	u32	_ucflpy, iclr_flpt;
-/*0x3838*/	u32	_ucshw, iclr_shw;
-/*0x3840*/	u32	_uckbd, iclr_kbd;
-/*0x3848*/	u32	_ucms, iclr_ms;
-/*0x3850*/	u32	_ucser, iclr_ser;
-/*0x3858*/	u64	iclr_unused1;
-/*0x3860*/	u32	_uctim0, iclr_tim0;
-/*0x3868*/	u32	_uctim1, iclr_tim1;
-/*0x3870*/	u32	_ucue, iclr_ue;
-/*0x3878*/	u32	_ucce, iclr_ce;
-/*0x3880*/	u32	_ucserr, iclr_serr;
-/*0x3888*/	u32	_ucpmgmt, iclr_pmgmt;
+/*0x3400*/	volatile u32	__ucu0, iclr_unused0;
+/*0x3408*/	volatile u32	_ucs0, iclr_slot0;
+		volatile u64	__pad7[0x7];
+/*0x3448*/	volatile u32	_ucs1, iclr_slot1;
+		volatile u64	__pad8[0x7];
+/*0x3488*/	volatile u32	_ucs2, iclr_slot2;
+		volatile u64	__pad9[0x7];
+/*0x34c8*/	volatile u32	_ucs3, iclr_slot3;
+		volatile u64	__pad10[0x66];
+/*0x3800*/	volatile u32	_ucscsi, iclr_scsi;
+/*0x3808*/	volatile u32	_uceth, iclr_eth;
+/*0x3810*/	volatile u32	_ucbpp, iclr_bpp;
+/*0x3818*/	volatile u32	_ucaudio, iclr_audio;
+/*0x3820*/	volatile u32	_ucpfail, iclr_pfail;
+/*0x3828*/	volatile u32	_uckms, iclr_kms;
+/*0x3830*/	volatile u32	_ucflpy, iclr_flpt;
+/*0x3838*/	volatile u32	_ucshw, iclr_shw;
+/*0x3840*/	volatile u32	_uckbd, iclr_kbd;
+/*0x3848*/	volatile u32	_ucms, iclr_ms;
+/*0x3850*/	volatile u32	_ucser, iclr_ser;
+/*0x3858*/	volatile u64	iclr_unused1;
+/*0x3860*/	volatile u32	_uctim0, iclr_tim0;
+/*0x3868*/	volatile u32	_uctim1, iclr_tim1;
+/*0x3870*/	volatile u32	_ucue, iclr_ue;
+/*0x3878*/	volatile u32	_ucce, iclr_ce;
+/*0x3880*/	volatile u32	_ucserr, iclr_serr;
+/*0x3888*/	volatile u32	_ucpmgmt, iclr_pmgmt;
 
-		u64	__pad11[0x6e];
+		volatile u64	__pad11[0x6e];
 
 		/* Counters/Timers */
-/*0x3c00*/	u64	tim0_cnt;
-/*0x3c08*/	u64	tim0_lim;
-/*0x3c10*/	u64	tim1_cnt;
-/*0x3c18*/	u64	tim1_lim;
+/*0x3c00*/	volatile u64	tim0_cnt;
+/*0x3c08*/	volatile u64	tim0_lim;
+/*0x3c10*/	volatile u64	tim1_cnt;
+/*0x3c18*/	volatile u64	tim1_lim;
 
-		u64	__pad12[0x7c];
+		volatile u64	__pad12[0x7c];
 
 		/* DMA Scoreboard Diagnostic Registers */
-/*0x4000*/	u64	dscore_reg0;	/* DMA Scoreboard Diag Reg 0		*/
-/*0x4008*/	u64	dscore_reg1;	/* DMA Scoreboard Diag Reg 1		*/
+/*0x4000*/	volatile u64	dscore_reg0;	/* DMA Scoreboard Diag Reg 0	*/
+/*0x4008*/	volatile u64	dscore_reg1;	/* DMA Scoreboard Diag Reg 1	*/
 
-		u64	__pad13[0x7e];
+		volatile u64	__pad13[0x7e];
 
 		/* SBUS IOMMU Diagnostic Registers */
-/*0x4400*/	u64	sbus_vdiag;	/* SBUS VADDR Diagnostic Register	*/
-/*0x4408*/	u64	sbus_tcompare;	/* SBUS IOMMU TLB Tag Compare		*/
+/*0x4400*/	volatile u64	sbus_vdiag;	/* SBUS VADDR Diagnostic Register */
+/*0x4408*/	volatile u64	sbus_tcompare;	/* SBUS IOMMU TLB Tag Compare	  */
 
-		u64	__pad14[0x1e];
+		volatile u64	__pad14[0x1e];
 
 		/* More IOMMU diagnostic things */
-/*0x4500*/	u64	iommu_lru[16];	/* IOMMU LRU Queue Diagnostic Access	*/
-/*0x4580*/	u64	iommu_tag[16];	/* IOMMU TLB Tag Diagnostic Access	*/
-/*0x4600*/	u64	iommu_data[32];	/* IOMMU TLB Data RAM Diagnostic Access	*/
+/*0x4500*/	volatile u64	iommu_lru[16];	/* IOMMU LRU Queue Diagnostic Access */
+/*0x4580*/	volatile u64	iommu_tag[16];	/* IOMMU TLB Tag Diagnostic Access   */
+/*0x4600*/	volatile u64	iommu_data[32];	/* IOMMU TLB Data RAM Diag Access    */
 
-		u64	__pad15[0x20];
+		volatile u64	__pad15[0x20];
 
 		/* Interrupt State Diagnostics */
-/*0x4800*/	u64	sbus_istate;
-/*0x4808*/	u64	obio_istate;
+/*0x4800*/	volatile u64	sbus_istate;
+/*0x4808*/	volatile u64	obio_istate;
 
-		u64	__pad16[0xfe];
+		volatile u64	__pad16[0xfe];
 
 		/* Streaming Buffer Diagnostic Area */
-/*0x5000*/	u64	sbuf_data[128];	/* StrBuffer Data Ram Diagnostic	*/
-/*0x5400*/	u64	sbuf_errs[128];	/* StrBuffer Error Status Diagnostics	*/
-/*0x5800*/	u64	sbuf_ptag[16];	/* StrBuffer Page Tag Diagnostics	*/
-/*0x5880*/	u64	_unusedXXX[16];
-/*0x5900*/	u64	sbuf_ltag[16];	/* StrBuffer Line Tag Diagnostics	*/
+/*0x5000*/	volatile u64	sbuf_data[128];	/* StrBuffer Data Ram Diagnostic */
+/*0x5400*/	volatile u64	sbuf_errs[128];	/* StrBuffer Error Status Diagnostics */
+/*0x5800*/	volatile u64	sbuf_ptag[16];	/* StrBuffer Page Tag Diagnostics */
+/*0x5880*/	volatile u64	_unusedXXX[16];
+/*0x5900*/	volatile u64	sbuf_ltag[16];	/* StrBuffer Line Tag Diagnostics */
 };
 
 /* SYSIO UPA Port ID */

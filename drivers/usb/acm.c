@@ -23,10 +23,7 @@
  * uhci.c. Should have the correct interface now. 
  * (6/6/99)
  *
- * version 0.5 driver now generates a tty instead of a simple character
- * device
- *
- * version 0.3: Mayor changes. Changed Bulk transfer to interrupt based
+ * version 0.3: Major changes. Changed Bulk transfer to interrupt based
  * transfer. Using FIFO Buffers now. Consistent handling of open/close
  * file state and detected/nondetected device. File operations behave
  * according to this. Driver is able to send+receive now! Heureka!
@@ -485,6 +482,7 @@ static int acm_probe(struct usb_device *dev)
 	struct usb_interface_descriptor *interface;
 	struct usb_endpoint_descriptor *endpoint;
 	int cfgnum,acmno;
+	int swapped=0;
 	
 	info("acm_probe\n");
 	
@@ -500,14 +498,13 @@ static int acm_probe(struct usb_device *dev)
             dev->descriptor.bDeviceProtocol != 0)
 		return -1;
 
-	/* Now scan all configs for a ACM configuration */
+#define IFCLASS(if) ((if->bInterfaceClass << 24) | (if->bInterfaceSubClass << 16) | (if->bInterfaceProtocol << 8) | (if->bNumEndpoints))
+
+	/* Now scan all configs for a ACM configuration*/
 	for (cfgnum=0;cfgnum<dev->descriptor.bNumConfigurations;cfgnum++) {
 		/* The first one should be Communications interface? */
 		interface = &dev->config[cfgnum].interface[0].altsetting[0];
-		if (interface->bInterfaceClass != 2 ||
-		    interface->bInterfaceSubClass != 2 ||
-		    interface->bInterfaceProtocol != 1 ||
-	    	    interface->bNumEndpoints != 1)
+		if (IFCLASS(interface) != 0x02020101)
 			continue;
 
 		/*Which uses an interrupt input */
@@ -519,19 +516,20 @@ static int acm_probe(struct usb_device *dev)
 		/* The second one should be a Data interface? */
 		interface = &dev->config[cfgnum].interface[1].altsetting[0];
 		if (interface->bInterfaceClass != 10 ||
-		    interface->bInterfaceSubClass != 0 ||
-		    interface->bInterfaceProtocol != 0 ||
-	    	    interface->bNumEndpoints != 2)
+		    interface->bNumEndpoints != 2)
 			continue;
 
+		if ((endpoint->bEndpointAddress & 0x80) == 0x80)
+			swapped = 1;
+
 		/*With a bulk input */
-		endpoint = &interface->endpoint[0];
+		endpoint = &interface->endpoint[0^swapped];
 		if ((endpoint->bEndpointAddress & 0x80) != 0x80 ||
 		    (endpoint->bmAttributes & 3) != 2)
 			continue;
 			
 		/*And a bulk output */
-		endpoint = &interface->endpoint[1];
+		endpoint = &interface->endpoint[1^swapped];
 		if ((endpoint->bEndpointAddress & 0x80) == 0x80 ||
 		    (endpoint->bmAttributes & 3) != 2)
 			continue;
@@ -542,30 +540,30 @@ static int acm_probe(struct usb_device *dev)
 		acm->dev=dev;
 		dev->private=acm;
 
-		acm->readendp=dev->config[cfgnum].interface[1].altsetting[0].endpoint[0].bEndpointAddress;
+		acm->readendp=dev->config[cfgnum].interface[1].altsetting[0].endpoint[0^swapped].bEndpointAddress;
 		acm->readpipe=usb_rcvbulkpipe(dev,acm->readendp);
-		acm->readbuffer=kmalloc(acm->readsize=dev->config[cfgnum].interface[1].altsetting[0].endpoint[0].wMaxPacketSize,GFP_KERNEL);
+		acm->readbuffer=kmalloc(acm->readsize=dev->config[cfgnum].interface[1].altsetting[0].endpoint[0^swapped].wMaxPacketSize,GFP_KERNEL);
 		acm->reading=0;
 		if (!acm->readbuffer) {
 			printk("ACM: Couldn't allocate readbuffer\n");
 			return -1;
 		}
-		
-		acm->writeendp=dev->config[cfgnum].interface[1].altsetting[0].endpoint[1].bEndpointAddress;
+
+		acm->writeendp=dev->config[cfgnum].interface[1].altsetting[0].endpoint[1^swapped].bEndpointAddress;
 		acm->writepipe=usb_sndbulkpipe(dev,acm->writeendp);
-		acm->writebuffer=kmalloc(acm->writesize=dev->config[cfgnum].interface[1].altsetting[0].endpoint[1].wMaxPacketSize, GFP_KERNEL);
+		acm->writebuffer=kmalloc(acm->writesize=dev->config[cfgnum].interface[1].altsetting[0].endpoint[1^swapped].wMaxPacketSize, GFP_KERNEL);
 		acm->writing=0;
 		if (!acm->writebuffer) {
 			printk("ACM: Couldn't allocate writebuffer\n");
 			kfree(acm->readbuffer);
 			return -1;
 		}
-		
+
 		acm->ctrlendp=dev->config[cfgnum].interface[0].altsetting[0].endpoint[0].bEndpointAddress;
 		acm->ctrlpipe=usb_rcvctrlpipe(acm->dev,acm->ctrlendp);
 		acm->ctrlinterval=dev->config[cfgnum].interface[0].altsetting[0].endpoint[0].bInterval;
 
-		acm->present=1;
+		acm->present=1;				
 		MOD_INC_USE_COUNT;
 		return 0;
 	}
@@ -660,7 +658,10 @@ int usb_acm_init(void)
 	acm_tty_driver.read_proc = NULL; //rs_read_proc;
 	acm_tty_driver.chars_in_buffer = rs_chars_in_buffer;
 	acm_tty_driver.flush_buffer = NULL; //rs_flush_buffer;
-	tty_register_driver(&acm_tty_driver);
+	if (tty_register_driver(&acm_tty_driver)) {
+		printk( "acm: failed to register tty driver\n" );
+		return -EPERM;
+	}
 	
 	//REGISTER USB DRIVER
 	usb_register(&acm_driver);

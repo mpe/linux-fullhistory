@@ -199,7 +199,7 @@ static void __wait_on_dquot(struct dquot *dquot)
 
 	add_wait_queue(&dquot->dq_wait, &wait);
 repeat:
-	current->state = TASK_UNINTERRUPTIBLE;
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	if (dquot->dq_flags & DQ_LOCKED) {
 		schedule();
 		goto repeat;

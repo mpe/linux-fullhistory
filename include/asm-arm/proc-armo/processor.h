@@ -10,6 +10,7 @@
  *  28-09-1996	RMK	Moved start_thread into the processor dependencies
  *  11-01-1998	RMK	Added new uaccess_t
  *  09-09-1998	PJB	Delete redundant `wp_works_ok'
+ *  30-05-1999	PJB	Save sl across context switches
  */
 #ifndef __ASM_PROC_PROCESSOR_H
 #define __ASM_PROC_PROCESSOR_H
@@ -26,11 +27,12 @@ struct context_save_struct {
 	unsigned long r7;
 	unsigned long r8;
 	unsigned long r9;
+	unsigned long sl;
 	unsigned long fp;
 	unsigned long pc;
 };
 
-#define INIT_CSS (struct context_save_struct){ 0, 0, 0, 0, 0, 0, 0, SVC26_MODE }
+#define INIT_CSS (struct context_save_struct){ 0, 0, 0, 0, 0, 0, 0, 0, SVC26_MODE }
 
 typedef struct {
 	void (*put_byte)(void);			/* Special calling convention */

@@ -2094,7 +2094,7 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 #endif
 	    }
 	restore_flags(flags);
-	current->state = TASK_INTERRUPTIBLE;
+	set_current_state(TASK_INTERRUPTIBLE);
 	if (tty_hung_up_p(filp)
 	|| !(info->flags & ASYNC_INITIALIZED) ){
 	    if (info->flags & ASYNC_HUP_NOTIFY) {

@@ -1,4 +1,4 @@
-/* $Id: icn.c,v 1.58 1999/08/25 16:44:17 keil Exp $
+/* $Id: icn.c,v 1.59 1999/08/28 22:10:55 keil Exp $
 
  * ISDN low-level module for the ICN active ISDN-Card.
  *
@@ -19,6 +19,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: icn.c,v $
+ * Revision 1.59  1999/08/28 22:10:55  keil
+ * __setup function should be static
+ *
  * Revision 1.58  1999/08/25 16:44:17  keil
  * Support for new __setup function
  *
@@ -235,7 +238,7 @@
 #undef MAP_DEBUG
 
 static char
-*revision = "$Revision: 1.58 $";
+*revision = "$Revision: 1.59 $";
 
 static int icn_addcard(int, char *, char *);
 
@@ -1851,7 +1854,7 @@ icn_addcard(int port, char *id1, char *id2)
 #else
 #ifdef COMPAT_HAS_NEW_SETUP
 #include <linux/init.h>
-int
+static int __init
 icn_setup(char *line)
 {
 	char *p, *str;

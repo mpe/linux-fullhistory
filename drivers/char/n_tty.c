@@ -948,7 +948,7 @@ do_it_again:
 		/* This statement must be first before checking for input
 		   so that any interrupt will set the state back to
 		   TASK_RUNNING. */
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		
 		if (((minimum - (b - buf)) < tty->minimum_to_wake) &&
 		    ((minimum - (b - buf)) >= 1))
@@ -1073,7 +1073,7 @@ static ssize_t write_chan(struct tty_struct * tty, struct file * file,
 
 	add_wait_queue(&tty->write_wait, &wait);
 	while (1) {
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		if (signal_pending(current)) {
 			retval = -ERESTARTSYS;
 			break;

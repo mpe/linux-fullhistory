@@ -1,12 +1,16 @@
 /*
  *	linux/arch/alpha/kernel/core_cia.c
  *
- * Code common to all CIA core logic chips.
- *
  * Written by David A Rusling (david.rusling@reo.mts.dec.com).
  * December 1995.
  *
+ *	Copyright (C) 1995  David A Rusling
+ *	Copyright (C) 1997, 1998  Jay Estabrook
+ *	Copyright (C) 1998, 1999  Richard Henderson
+ *
+ * Code common to all CIA core logic chips.
  */
+
 #include <linux/kernel.h>
 #include <linux/config.h>
 #include <linux/types.h>
@@ -16,6 +20,7 @@
 
 #include <asm/system.h>
 #include <asm/ptrace.h>
+#include <asm/pci.h>
 
 #define __EXTERN_INLINE inline
 #include <asm/io.h>
@@ -23,6 +28,8 @@
 #undef __EXTERN_INLINE
 
 #include "proto.h"
+#include "pci_impl.h"
+
 
 /*
  * NOTE: Herein lie back-to-back mb instructions.  They are magic. 
@@ -88,10 +95,12 @@
  */
 
 static int
-mk_conf_addr(u8 bus, u8 device_fn, u8 where, unsigned long *pci_addr,
+mk_conf_addr(struct pci_dev *dev, int where, unsigned long *pci_addr,
 	     unsigned char *type1)
 {
 	unsigned long addr;
+	u8 bus = dev->bus->number;
+	u8 device_fn = dev->devfn;
 
 	DBGC(("mk_conf_addr(bus=%d, device_fn=0x%x, where=0x%x, "
 	      "pci_addr=0x%p, type1=0x%p)\n",
@@ -166,30 +175,6 @@ conf_read(unsigned long addr, unsigned char type1)
 	mcheck_expected(0) = 0;
 	mb();
 
-#if 0
-	/* This code might be necessary if machine checks aren't taken,
-	   but I can't get it to work on CIA-2, so its disabled. */
-	draina();
-
-	/* Now look for any errors.  */
-	stat0 = *(vuip)CIA_IOC_CIA_ERR;
-	DBGC(("conf_read: CIA ERR after read 0x%x\n", stat0));
-
-	/* Is any error bit set? */
-	if (stat0 & 0x8FEF0FFFU) {
-		/* If not MAS_ABT, print status. */
-		if (!(stat0 & 0x0080)) {
-			printk("CIA.c:conf_read: got stat0=%x\n", stat0);
-		}
-
-		/* reset error status: */
-		*(vuip)CIA_IOC_CIA_ERR = stat0;
-		mb();
-		wrmces(0x7);			/* reset machine check */
-		value = 0xffffffff;
-	}
-#endif
-
 	/* If Type1 access, must reset IOC CFG so normal IO space ops work.  */
 	if (type1) {
 		*(vuip)CIA_IOC_CFG = cia_cfg & ~1;
@@ -237,30 +222,6 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1)
 	mcheck_expected(0) = 0;
 	mb();
 
-#if 0
-	/* This code might be necessary if machine checks aren't taken,
-	   but I can't get it to work on CIA-2, so its disabled. */
-	draina();
-
-	/* Now look for any errors */
-	stat0 = *(vuip)CIA_IOC_CIA_ERR;
-	DBGC(("conf_write: CIA ERR after write 0x%x\n", stat0));
-
-	/* Is any error bit set? */
-	if (stat0 & 0x8FEF0FFFU) {
-		/* If not MAS_ABT, print status */
-		if (!(stat0 & 0x0080)) {
-			printk("CIA.c:conf_read: got stat0=%x\n", stat0);
-		}
-
-		/* Reset error status.  */
-		*(vuip)CIA_IOC_CIA_ERR = stat0;
-		mb();
-		wrmces(0x7);			/* reset machine check */
-		value = 0xffffffff;
-	}
-#endif
-
 	/* If Type1 access, must reset IOC CFG so normal IO space ops work.  */
 	if (type1) {
 		*(vuip)CIA_IOC_CFG = cia_cfg & ~1;
@@ -271,267 +232,179 @@ conf_write(unsigned long addr, unsigned int value, unsigned char type1)
 	__restore_flags(flags);
 }
 
-int
-cia_hose_read_config_byte (u8 bus, u8 device_fn, u8 where, u8 *value,
-			   struct linux_hose_info *hose)
+static int
+cia_read_config_byte(struct pci_dev *dev, int where, u8 *value)
 {
-	unsigned long addr = CIA_CONF;
-	unsigned long pci_addr;
+	unsigned long addr, pci_addr;
 	unsigned char type1;
 
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
+	if (mk_conf_addr(dev, where, &pci_addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	addr |= (pci_addr << 5) + 0x00;
+	addr = (pci_addr << 5) + 0x00 + CIA_CONF;
 	*value = conf_read(addr, type1) >> ((where & 3) * 8);
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int 
-cia_hose_read_config_word (u8 bus, u8 device_fn, u8 where, u16 *value,
-			   struct linux_hose_info *hose)
+static int 
+cia_read_config_word(struct pci_dev *dev, int where, u16 *value)
 {
-	unsigned long addr = CIA_CONF;
-	unsigned long pci_addr;
+	unsigned long addr, pci_addr;
 	unsigned char type1;
 
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
+	if (mk_conf_addr(dev, where, &pci_addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	addr |= (pci_addr << 5) + 0x08;
+	addr = (pci_addr << 5) + 0x08 + CIA_CONF;
 	*value = conf_read(addr, type1) >> ((where & 3) * 8);
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int 
-cia_hose_read_config_dword (u8 bus, u8 device_fn, u8 where, u32 *value,
-			    struct linux_hose_info *hose)
+static int 
+cia_read_config_dword(struct pci_dev *dev, int where, u32 *value)
 {
-	unsigned long addr = CIA_CONF;
-	unsigned long pci_addr;
+	unsigned long addr, pci_addr;
 	unsigned char type1;
 
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
+	if (mk_conf_addr(dev, where, &pci_addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	addr |= (pci_addr << 5) + 0x18;
+	addr = (pci_addr << 5) + 0x18 + CIA_CONF;
 	*value = conf_read(addr, type1);
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int 
-cia_hose_write_config_byte (u8 bus, u8 device_fn, u8 where, u8 value,
-			    struct linux_hose_info *hose)
+static int 
+cia_write_config(struct pci_dev *dev, int where, u32 value, long mask)
 {
-	unsigned long addr = CIA_CONF;
-	unsigned long pci_addr;
+	unsigned long addr, pci_addr;
 	unsigned char type1;
 
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
+	if (mk_conf_addr(dev, where, &pci_addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
-	addr |= (pci_addr << 5) + 0x00;
+	addr = (pci_addr << 5) + mask + CIA_CONF;
 	conf_write(addr, value << ((where & 3) * 8), type1);
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int 
-cia_hose_write_config_word (u8 bus, u8 device_fn, u8 where, u16 value,
-			    struct linux_hose_info *hose)
+static int
+cia_write_config_byte(struct pci_dev *dev, int where, u8 value)
 {
-	unsigned long addr = CIA_CONF;
-	unsigned long pci_addr;
-	unsigned char type1;
-
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
-		return PCIBIOS_DEVICE_NOT_FOUND;
-
-	addr |= (pci_addr << 5) + 0x08;
-	conf_write(addr, value << ((where & 3) * 8), type1);
-	return PCIBIOS_SUCCESSFUL;
+	return cia_write_config(dev, where, value, 0x00);
 }
 
-int 
-cia_hose_write_config_dword (u8 bus, u8 device_fn, u8 where, u32 value,
-			     struct linux_hose_info *hose)
+static int 
+cia_write_config_word(struct pci_dev *dev, int where, u16 value)
 {
-	unsigned long addr = CIA_CONF;
-	unsigned long pci_addr;
-	unsigned char type1;
-
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr, &type1))
-		return PCIBIOS_DEVICE_NOT_FOUND;
-
-	addr |= (pci_addr << 5) + 0x18;
-	conf_write(addr, value << ((where & 3) * 8), type1);
-	return PCIBIOS_SUCCESSFUL;
+	return cia_write_config(dev, where, value, 0x08);
 }
 
+static int 
+cia_write_config_dword(struct pci_dev *dev, int where, u32 value)
+{
+	return cia_write_config(dev, where, value, 0x18);
+}
+
+struct pci_ops cia_pci_ops = 
+{
+	read_byte:	cia_read_config_byte,
+	read_word:	cia_read_config_word,
+	read_dword:	cia_read_config_dword,
+	write_byte:	cia_write_config_byte,
+	write_word:	cia_write_config_word,
+	write_dword:	cia_write_config_dword
+};
+
 void __init
 cia_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 {
-        unsigned int cia_tmp;
+	struct pci_controler *hose;
+	struct resource *hae_mem;
+        unsigned int temp;
 
 #if DEBUG_DUMP_REGS
-	{
-		unsigned int temp;
-		temp = *(vuip)CIA_IOC_CIA_REV; mb();
-		printk("cia_init: CIA_REV was 0x%x\n", temp);
-		temp = *(vuip)CIA_IOC_PCI_LAT; mb();
-		printk("cia_init: CIA_PCI_LAT was 0x%x\n", temp);
-		temp = *(vuip)CIA_IOC_CIA_CTRL; mb();
-		printk("cia_init: CIA_CTRL was 0x%x\n", temp);
-		temp = *(vuip)0xfffffc8740000140UL; mb();
-		printk("cia_init: CIA_CTRL1 was 0x%x\n", temp);
-		temp = *(vuip)CIA_IOC_HAE_MEM; mb();
-		printk("cia_init: CIA_HAE_MEM was 0x%x\n", temp);
-		temp = *(vuip)CIA_IOC_HAE_IO; mb();
-		printk("cia_init: CIA_HAE_IO was 0x%x\n", temp);
-		temp = *(vuip)CIA_IOC_CFG; mb();
-		printk("cia_init: CIA_CFG was 0x%x\n", temp);
-		temp = *(vuip)CIA_IOC_CACK_EN; mb();
-		printk("cia_init: CIA_CACK_EN was 0x%x\n", temp);
-		temp = *(vuip)CIA_IOC_CFG; mb();
-		printk("cia_init: CIA_CFG was 0x%x\n", temp);
-		temp = *(vuip)CIA_IOC_CIA_DIAG; mb();
-		printk("cia_init: CIA_DIAG was 0x%x\n", temp);
-		temp = *(vuip)CIA_IOC_DIAG_CHECK; mb();
-		printk("cia_init: CIA_DIAG_CHECK was 0x%x\n", temp);
-		temp = *(vuip)CIA_IOC_PERF_MONITOR; mb();
-		printk("cia_init: CIA_PERF_MONITOR was 0x%x\n", temp);
-		temp = *(vuip)CIA_IOC_PERF_CONTROL; mb();
-		printk("cia_init: CIA_PERF_CONTROL was 0x%x\n", temp);
-		temp = *(vuip)CIA_IOC_CIA_ERR; mb();
-		printk("cia_init: CIA_ERR was 0x%x\n", temp);
-		temp = *(vuip)CIA_IOC_CIA_STAT; mb();
-		printk("cia_init: CIA_STAT was 0x%x\n", temp);
-		temp = *(vuip)CIA_IOC_MCR; mb();
-		printk("cia_init: CIA_MCR was 0x%x\n", temp);
-		temp = *(vuip)CIA_IOC_CIA_CTRL; mb();
-		printk("cia_init: CIA_CTRL was 0x%x\n", temp);
-		temp = *(vuip)CIA_IOC_ERR_MASK; mb();
-		printk("cia_init: CIA_ERR_MASK was 0x%x\n", temp);
-		temp = *((vuip)CIA_IOC_PCI_W0_BASE); mb();
-		printk("cia_init: W0_BASE was 0x%x\n", temp);
-		temp = *((vuip)CIA_IOC_PCI_W1_BASE); mb();
-		printk("cia_init: W1_BASE was 0x%x\n", temp);
-		temp = *((vuip)CIA_IOC_PCI_W2_BASE); mb();
-		printk("cia_init: W2_BASE was 0x%x\n", temp);
-		temp = *((vuip)CIA_IOC_PCI_W3_BASE); mb();
-		printk("cia_init: W3_BASE was 0x%x\n", temp);
-	}
+	temp = *(vuip)CIA_IOC_CIA_REV; mb();
+	printk("cia_init: CIA_REV was 0x%x\n", temp);
+	temp = *(vuip)CIA_IOC_PCI_LAT; mb();
+	printk("cia_init: CIA_PCI_LAT was 0x%x\n", temp);
+	temp = *(vuip)CIA_IOC_CIA_CTRL; mb();
+	printk("cia_init: CIA_CTRL was 0x%x\n", temp);
+	temp = *(vuip)0xfffffc8740000140UL; mb();
+	printk("cia_init: CIA_CTRL1 was 0x%x\n", temp);
+	temp = *(vuip)CIA_IOC_HAE_MEM; mb();
+	printk("cia_init: CIA_HAE_MEM was 0x%x\n", temp);
+	temp = *(vuip)CIA_IOC_HAE_IO; mb();
+	printk("cia_init: CIA_HAE_IO was 0x%x\n", temp);
+	temp = *(vuip)CIA_IOC_CFG; mb();
+	printk("cia_init: CIA_CFG was 0x%x\n", temp);
+	temp = *(vuip)CIA_IOC_CACK_EN; mb();
+	printk("cia_init: CIA_CACK_EN was 0x%x\n", temp);
+	temp = *(vuip)CIA_IOC_CFG; mb();
+	printk("cia_init: CIA_CFG was 0x%x\n", temp);
+	temp = *(vuip)CIA_IOC_CIA_DIAG; mb();
+	printk("cia_init: CIA_DIAG was 0x%x\n", temp);
+	temp = *(vuip)CIA_IOC_DIAG_CHECK; mb();
+	printk("cia_init: CIA_DIAG_CHECK was 0x%x\n", temp);
+	temp = *(vuip)CIA_IOC_PERF_MONITOR; mb();
+	printk("cia_init: CIA_PERF_MONITOR was 0x%x\n", temp);
+	temp = *(vuip)CIA_IOC_PERF_CONTROL; mb();
+	printk("cia_init: CIA_PERF_CONTROL was 0x%x\n", temp);
+	temp = *(vuip)CIA_IOC_CIA_ERR; mb();
+	printk("cia_init: CIA_ERR was 0x%x\n", temp);
+	temp = *(vuip)CIA_IOC_CIA_STAT; mb();
+	printk("cia_init: CIA_STAT was 0x%x\n", temp);
+	temp = *(vuip)CIA_IOC_MCR; mb();
+	printk("cia_init: CIA_MCR was 0x%x\n", temp);
+	temp = *(vuip)CIA_IOC_CIA_CTRL; mb();
+	printk("cia_init: CIA_CTRL was 0x%x\n", temp);
+	temp = *(vuip)CIA_IOC_ERR_MASK; mb();
+	printk("cia_init: CIA_ERR_MASK was 0x%x\n", temp);
+	temp = *((vuip)CIA_IOC_PCI_W0_BASE); mb();
+	printk("cia_init: W0_BASE was 0x%x\n", temp);
+	temp = *((vuip)CIA_IOC_PCI_W1_BASE); mb();
+	printk("cia_init: W1_BASE was 0x%x\n", temp);
+	temp = *((vuip)CIA_IOC_PCI_W2_BASE); mb();
+	printk("cia_init: W2_BASE was 0x%x\n", temp);
+	temp = *((vuip)CIA_IOC_PCI_W3_BASE); mb();
+	printk("cia_init: W3_BASE was 0x%x\n", temp);
 #endif /* DEBUG_DUMP_REGS */
 
         /* 
 	 * Set up error reporting.
 	 */
-	cia_tmp = *(vuip)CIA_IOC_CIA_ERR;
-	cia_tmp |= 0x180;   /* master, target abort */
-	*(vuip)CIA_IOC_CIA_ERR = cia_tmp;
+	temp = *(vuip)CIA_IOC_CIA_ERR;
+	temp |= 0x180;   /* master, target abort */
+	*(vuip)CIA_IOC_CIA_ERR = temp;
 	mb();
 
-	cia_tmp = *(vuip)CIA_IOC_CIA_CTRL;
-	cia_tmp |= 0x400;	/* turn on FILL_ERR to get mchecks */
-	*(vuip)CIA_IOC_CIA_CTRL = cia_tmp;
+	temp = *(vuip)CIA_IOC_CIA_CTRL;
+	temp |= 0x400;	/* turn on FILL_ERR to get mchecks */
+	*(vuip)CIA_IOC_CIA_CTRL = temp;
 	mb();
 
-	switch (alpha_use_srm_setup)
-	{
-	default:
-#if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_SRM_SETUP)
-		/* Check window 0 for enabled and mapped to 0 */
-		if (((*(vuip)CIA_IOC_PCI_W0_BASE & 3) == 1)
-		    && (*(vuip)CIA_IOC_PCI_T0_BASE == 0)) {
-			CIA_DMA_WIN_BASE = *(vuip)CIA_IOC_PCI_W0_BASE & 0xfff00000U;
-			CIA_DMA_WIN_SIZE = *(vuip)CIA_IOC_PCI_W0_MASK & 0xfff00000U;
-			CIA_DMA_WIN_SIZE += 0x00100000U;
-#if 1
-			printk("cia_init: using Window 0 settings\n");
-			printk("cia_init: BASE 0x%x MASK 0x%x TRANS 0x%x\n",
-			       *(vuip)CIA_IOC_PCI_W0_BASE,
-			       *(vuip)CIA_IOC_PCI_W0_MASK,
-			       *(vuip)CIA_IOC_PCI_T0_BASE);
-#endif
-			break;
-		}
+	/*
+	 * Set up the PCI->physical memory translation windows.
+	 * For now, windows 2 and 3 are disabled.  In the future,
+	 * we may want to use them to do scatter/gather DMA. 
+	 *
+	 * Window 0 goes at 1 GB and is 1 GB large.
+	 * Window 1 goes at 2 GB and is 1 GB large.
+	 */
 
-		/* Check window 1 for enabled and mapped to 0.  */
-		if (((*(vuip)CIA_IOC_PCI_W1_BASE & 3) == 1)
-		    && (*(vuip)CIA_IOC_PCI_T1_BASE == 0)) {
-			CIA_DMA_WIN_BASE = *(vuip)CIA_IOC_PCI_W1_BASE & 0xfff00000U;
-			CIA_DMA_WIN_SIZE = *(vuip)CIA_IOC_PCI_W1_MASK & 0xfff00000U;
-			CIA_DMA_WIN_SIZE += 0x00100000U;
-#if 1
-			printk("cia_init: using Window 1 settings\n");
-			printk("cia_init: BASE 0x%x MASK 0x%x TRANS 0x%x\n",
-			       *(vuip)CIA_IOC_PCI_W1_BASE,
-			       *(vuip)CIA_IOC_PCI_W1_MASK,
-			       *(vuip)CIA_IOC_PCI_T1_BASE);
-#endif
-			break;
-		}
-
-		/* Check window 2 for enabled and mapped to 0.  */
-		if (((*(vuip)CIA_IOC_PCI_W2_BASE & 3) == 1)
-		    && (*(vuip)CIA_IOC_PCI_T2_BASE == 0)) {
-			CIA_DMA_WIN_BASE = *(vuip)CIA_IOC_PCI_W2_BASE & 0xfff00000U;
-			CIA_DMA_WIN_SIZE = *(vuip)CIA_IOC_PCI_W2_MASK & 0xfff00000U;
-			CIA_DMA_WIN_SIZE += 0x00100000U;
-#if 1
-			printk("cia_init: using Window 2 settings\n");
-			printk("cia_init: BASE 0x%x MASK 0x%x TRANS 0x%x\n",
-			       *(vuip)CIA_IOC_PCI_W2_BASE,
-			       *(vuip)CIA_IOC_PCI_W2_MASK,
-			       *(vuip)CIA_IOC_PCI_T2_BASE);
-#endif
-			break;
-		}
-
-		/* Check window 3 for enabled and mapped to 0.  */
-		if (((*(vuip)CIA_IOC_PCI_W3_BASE & 3) == 1)
-		    && (*(vuip)CIA_IOC_PCI_T3_BASE == 0)) {
-			CIA_DMA_WIN_BASE = *(vuip)CIA_IOC_PCI_W3_BASE & 0xfff00000U;
-			CIA_DMA_WIN_SIZE = *(vuip)CIA_IOC_PCI_W3_MASK & 0xfff00000U;
-			CIA_DMA_WIN_SIZE += 0x00100000U;
-#if 1
-			printk("cia_init: using Window 3 settings\n");
-			printk("cia_init: BASE 0x%x MASK 0x%x TRANS 0x%x\n",
-			       *(vuip)CIA_IOC_PCI_W3_BASE,
-			       *(vuip)CIA_IOC_PCI_W3_MASK,
-			       *(vuip)CIA_IOC_PCI_T3_BASE);
-#endif
-			break;
-		}
-
-		/* Otherwise, we must use our defaults.  */
-		CIA_DMA_WIN_BASE = CIA_DMA_WIN_BASE_DEFAULT;
-		CIA_DMA_WIN_SIZE = CIA_DMA_WIN_SIZE_DEFAULT;
-#endif
-	case 0:
-		/*
-		 * Set up the PCI->physical memory translation windows.
-		 * For now, windows 2 and 3 are disabled.  In the future,
-		 * we may want to use them to do scatter/gather DMA. 
-		 *
-		 * Window 0 goes at 1 GB and is 1 GB large.
-		 * Window 1 goes at 2 GB and is 1 GB large.
-		 */
-
-		*(vuip)CIA_IOC_PCI_W0_BASE = CIA_DMA_WIN0_BASE_DEFAULT | 1U;
-		*(vuip)CIA_IOC_PCI_W0_MASK = (CIA_DMA_WIN0_SIZE_DEFAULT - 1) &
-					     0xfff00000U;
-		*(vuip)CIA_IOC_PCI_T0_BASE = CIA_DMA_WIN0_TRAN_DEFAULT >> 2;
+	*(vuip)CIA_IOC_PCI_W0_BASE = CIA_DMA_WIN0_BASE_DEFAULT | 1U;
+	*(vuip)CIA_IOC_PCI_W0_MASK = (CIA_DMA_WIN0_SIZE_DEFAULT - 1) &
+				     0xfff00000U;
+	*(vuip)CIA_IOC_PCI_T0_BASE = CIA_DMA_WIN0_TRAN_DEFAULT >> 2;
 		
-		*(vuip)CIA_IOC_PCI_W1_BASE = CIA_DMA_WIN1_BASE_DEFAULT | 1U;
-		*(vuip)CIA_IOC_PCI_W1_MASK = (CIA_DMA_WIN1_SIZE_DEFAULT - 1) &
-					     0xfff00000U;
-		*(vuip)CIA_IOC_PCI_T1_BASE = CIA_DMA_WIN1_TRAN_DEFAULT >> 2;
+	*(vuip)CIA_IOC_PCI_W1_BASE = CIA_DMA_WIN1_BASE_DEFAULT | 1U;
+	*(vuip)CIA_IOC_PCI_W1_MASK = (CIA_DMA_WIN1_SIZE_DEFAULT - 1) &
+				     0xfff00000U;
+	*(vuip)CIA_IOC_PCI_T1_BASE = CIA_DMA_WIN1_TRAN_DEFAULT >> 2;
 
-		*(vuip)CIA_IOC_PCI_W2_BASE = 0x0;
-		*(vuip)CIA_IOC_PCI_W3_BASE = 0x0;
-		mb();
-		break;
-	}
+	*(vuip)CIA_IOC_PCI_W2_BASE = 0x0;
+	*(vuip)CIA_IOC_PCI_W3_BASE = 0x0;
+	mb();
 
         /*
          * Next, clear the CIA_CFG register, which gets used
@@ -541,40 +414,31 @@ cia_init_arch(unsigned long *mem_start, unsigned long *mem_end)
          */
 	*((vuip)CIA_IOC_CFG) = 0; mb();
  
+	/*
+	 * Zero the HAEs. 
+	 */
+	*((vuip)CIA_IOC_HAE_MEM) = 0; mb();
+	*((vuip)CIA_IOC_HAE_MEM); /* read it back. */
+	*((vuip)CIA_IOC_HAE_IO) = 0; mb();
+	*((vuip)CIA_IOC_HAE_IO);  /* read it back. */
 
 	/*
-	 * Sigh... For the SRM setup, unless we know apriori what the HAE
-	 * contents will be, we need to setup the arbitrary region bases
-	 * so we can test against the range of addresses and tailor the
-	 * region chosen for the SPARSE memory access.
-	 *
-	 * See include/asm-alpha/cia.h for the SPARSE mem read/write.
+	 * Create our single hose.
 	 */
-	if (alpha_use_srm_setup) {
-		unsigned int cia_hae_mem = *((vuip)CIA_IOC_HAE_MEM);
 
-		alpha_mv.sm_base_r1 = (cia_hae_mem      ) & 0xe0000000UL;
-		alpha_mv.sm_base_r2 = (cia_hae_mem << 16) & 0xf8000000UL;
-		alpha_mv.sm_base_r3 = (cia_hae_mem << 24) & 0xfc000000UL;
+	hose = alloc_pci_controler(mem_start);
+	hae_mem = alloc_resource(mem_start);
 
-		/*
-		 * Set the HAE cache, so that setup_arch() code
-		 * will use the SRM setting always. Our readb/writeb
-		 * code in cia.h expects never to have to change
-		 * the contents of the HAE.
-		 */
-		alpha_mv.hae_cache = cia_hae_mem;
+	hose->io_space = &ioport_resource;
+	hose->mem_space = hae_mem;
+	hose->config_space = CIA_CONF;
+	hose->index = 0;
 
-		alpha_mv.mv_readb = cia_srm_readb;
-		alpha_mv.mv_readw = cia_srm_readw;
-		alpha_mv.mv_writeb = cia_srm_writeb;
-		alpha_mv.mv_writew = cia_srm_writew;
-	} else {
-		*((vuip)CIA_IOC_HAE_MEM) = 0; mb();
-		*((vuip)CIA_IOC_HAE_MEM); /* read it back. */
-		*((vuip)CIA_IOC_HAE_IO) = 0; mb();
-		*((vuip)CIA_IOC_HAE_IO);  /* read it back. */
-        }
+	hae_mem->start = 0;
+	hae_mem->end = CIA_MEM_R1_MASK;
+	hae_mem->name = pci_hae0_name;
+
+	request_resource(&iomem_resource, hae_mem);
 }
 
 static inline void

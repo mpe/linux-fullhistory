@@ -43,18 +43,11 @@ CONFIG_PMAC_PBOOK=y
 CONFIG_MAC_KEYBOARD=y
 CONFIG_MAC_FLOPPY=y
 CONFIG_MAC_SERIAL=y
-# CONFIG_SERIAL_CONSOLE is not set
-CONFIG_ADBMOUSE=y
 CONFIG_PROC_DEVICETREE=y
 # CONFIG_TOTALMP is not set
 CONFIG_BOOTX_TEXT=y
 # CONFIG_MOTOROLA_HOTSWAP is not set
 # CONFIG_CMDLINE_BOOL is not set
-
-#
-# Plug and Play support
-#
-# CONFIG_PNP is not set
 
 #
 # Block devices
@@ -79,9 +72,11 @@ CONFIG_BLK_DEV_IDEFLOPPY=y
 CONFIG_BLK_DEV_SL82C105=y
 CONFIG_BLK_DEV_IDE_PMAC=y
 CONFIG_BLK_DEV_IDEDMA_PMAC=y
-CONFIG_BLK_DEV_IDEDMA=y
 CONFIG_IDEDMA_PMAC_AUTO=y
+CONFIG_BLK_DEV_IDEDMA=y
+CONFIG_IDEDMA_AUTO=y
 # CONFIG_IDE_CHIPSETS is not set
+# CONFIG_BLK_CPQ_DA is not set
 
 #
 # Additional Block Devices
@@ -229,10 +224,18 @@ CONFIG_SCSI_MAC53C94=y
 # Network device support
 #
 CONFIG_NETDEVICES=y
+
+#
+# ARCnet devices
+#
 # CONFIG_ARCNET is not set
 # CONFIG_DUMMY is not set
 # CONFIG_EQUALIZER is not set
 # CONFIG_ETHERTAP is not set
+
+#
+# Ethernet (10 or 100Mbit)
+#
 CONFIG_NET_ETHERNET=y
 CONFIG_MACE=y
 CONFIG_BMAC=y
@@ -242,10 +245,10 @@ CONFIG_BMAC=y
 # CONFIG_NET_VENDOR_RACAL is not set
 # CONFIG_RTL8139 is not set
 # CONFIG_YELLOWFIN is not set
-# CONFIG_ACENIC is not set
 # CONFIG_NET_ISA is not set
 CONFIG_NET_EISA=y
 CONFIG_PCNET32=y
+# CONFIG_ACENIC is not set
 # CONFIG_AC3200 is not set
 # CONFIG_APRICOT is not set
 # CONFIG_CS89x0 is not set
@@ -264,7 +267,10 @@ CONFIG_DE4X5=y
 # CONFIG_NET_POCKET is not set
 # CONFIG_FDDI is not set
 # CONFIG_HIPPI is not set
-# CONFIG_DLCI is not set
+
+#
+# Appletalk devices
+#
 # CONFIG_LTPC is not set
 # CONFIG_COPS is not set
 # CONFIG_IPDDP is not set
@@ -275,11 +281,21 @@ CONFIG_PPP=y
 #
 # CONFIG_SLIP is not set
 # CONFIG_NET_RADIO is not set
+
+#
+# Token ring devices
+#
 # CONFIG_TR is not set
+# CONFIG_RCPCI is not set
 # CONFIG_SHAPER is not set
+
+#
+# Wan interfaces
+#
 # CONFIG_HOSTESS_SV11 is not set
 # CONFIG_COSA is not set
-# CONFIG_RCPCI is not set
+# CONFIG_SEALEVEL_4021 is not set
+# CONFIG_DLCI is not set
 
 #
 # Amateur Radio support
@@ -341,14 +357,16 @@ CONFIG_SERIAL=m
 # CONFIG_SERIAL_NONSTANDARD is not set
 CONFIG_UNIX98_PTYS=y
 CONFIG_UNIX98_PTY_COUNT=256
-CONFIG_MOUSE=y
 
 #
 # Mice
 #
+CONFIG_BUSMOUSE=y
 # CONFIG_ATIXL_BUSMOUSE is not set
-# CONFIG_BUSMOUSE is not set
+# CONFIG_LOGIBUSMOUSE is not set
 # CONFIG_MS_BUSMOUSE is not set
+CONFIG_ADBMOUSE=y
+CONFIG_MOUSE=y
 CONFIG_PSMOUSE=y
 # CONFIG_82C710_MOUSE is not set
 # CONFIG_PC110_PAD is not set
@@ -382,17 +400,19 @@ CONFIG_NVRAM=y
 # CONFIG_FT_ALT_FDC is not set
 
 #
+# USB drivers - not for the faint of heart
+#
+# CONFIG_USB is not set
+
+#
 # Filesystems
 #
 # CONFIG_QUOTA is not set
 CONFIG_AUTOFS_FS=y
 # CONFIG_ADFS_FS is not set
 # CONFIG_AFFS_FS is not set
-CONFIG_HFS_FS=y
-CONFIG_FAT_FS=y
-CONFIG_MSDOS_FS=y
-# CONFIG_UMSDOS_FS is not set
-CONFIG_VFAT_FS=y
+# CONFIG_HFS_FS is not set
+# CONFIG_FAT_FS is not set
 # CONFIG_EFS_FS is not set
 CONFIG_ISO9660_FS=y
 # CONFIG_JOLIET is not set
@@ -428,38 +448,7 @@ CONFIG_MAC_PARTITION=y
 # CONFIG_SOLARIS_X86_PARTITION is not set
 # CONFIG_SGI_DISKLABEL is not set
 # CONFIG_UNIXWARE_DISKLABEL is not set
-CONFIG_NLS=y
-
-#
-# Native Language Support
-#
-CONFIG_NLS_CODEPAGE_437=y
-# CONFIG_NLS_CODEPAGE_737 is not set
-# CONFIG_NLS_CODEPAGE_775 is not set
-# CONFIG_NLS_CODEPAGE_850 is not set
-# CONFIG_NLS_CODEPAGE_852 is not set
-# CONFIG_NLS_CODEPAGE_855 is not set
-# CONFIG_NLS_CODEPAGE_857 is not set
-# CONFIG_NLS_CODEPAGE_860 is not set
-# CONFIG_NLS_CODEPAGE_861 is not set
-# CONFIG_NLS_CODEPAGE_862 is not set
-# CONFIG_NLS_CODEPAGE_863 is not set
-# CONFIG_NLS_CODEPAGE_864 is not set
-# CONFIG_NLS_CODEPAGE_865 is not set
-# CONFIG_NLS_CODEPAGE_866 is not set
-# CONFIG_NLS_CODEPAGE_869 is not set
-# CONFIG_NLS_CODEPAGE_874 is not set
-# CONFIG_NLS_ISO8859_1 is not set
-# CONFIG_NLS_ISO8859_2 is not set
-# CONFIG_NLS_ISO8859_3 is not set
-# CONFIG_NLS_ISO8859_4 is not set
-# CONFIG_NLS_ISO8859_5 is not set
-# CONFIG_NLS_ISO8859_6 is not set
-# CONFIG_NLS_ISO8859_7 is not set
-# CONFIG_NLS_ISO8859_8 is not set
-# CONFIG_NLS_ISO8859_9 is not set
-# CONFIG_NLS_ISO8859_15 is not set
-# CONFIG_NLS_KOI8_R is not set
+# CONFIG_NLS is not set
 
 #
 # Sound

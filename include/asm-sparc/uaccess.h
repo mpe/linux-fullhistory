@@ -1,4 +1,4 @@
-/* $Id: uaccess.h,v 1.18 1999/03/30 06:38:38 jj Exp $
+/* $Id: uaccess.h,v 1.19 1999/08/14 03:52:11 anton Exp $
  * uaccess.h: User space memore access functions.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -29,8 +29,8 @@
 #define VERIFY_WRITE	1
 
 #define get_ds()	(KERNEL_DS)
-#define get_fs()	(current->tss.current_ds)
-#define set_fs(val)	((current->tss.current_ds) = (val))
+#define get_fs()	(current->thread.current_ds)
+#define set_fs(val)	((current->thread.current_ds) = (val))
 
 #define segment_eq(a,b)	((a).seg == (b).seg)
 

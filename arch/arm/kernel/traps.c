@@ -292,9 +292,7 @@ asmlinkage int arm_syscall (int no, struct pt_regs *regs)
 	case 2:	/* sys_cacheflush */
 #ifdef CONFIG_CPU_32
 		/* r0 = start, r1 = length, r2 = flags */
-		processor.u.armv3v4._flush_cache_area(regs->ARM_r0,
-						      regs->ARM_r1,
-						      1);
+		cpu_flush_cache_area(regs->ARM_r0, regs->ARM_r1, 1);
 #endif
 		break;
 

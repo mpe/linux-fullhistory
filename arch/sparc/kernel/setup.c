@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.108 1999/07/30 09:35:03 davem Exp $
+/*  $Id: setup.c,v 1.110 1999/08/31 06:54:23 davem Exp $
  *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)
@@ -425,6 +425,8 @@ void __init setup_arch(char **cmdline_p,
 				initrd_start -= KERNBASE;
 				initrd_end -= KERNBASE;
 				break;
+			default:
+				break;
 			}
 		}
 	}
@@ -493,7 +495,7 @@ void __init setup_arch(char **cmdline_p,
 	init_mm.mmap->vm_start = KERNBASE;
 	init_mm.mmap->vm_end = *memory_end_p;
 	init_mm.context = (unsigned long) NO_CONTEXT;
-	init_task.tss.kregs = &fake_swapper_regs;
+	init_task.thread.kregs = &fake_swapper_regs;
 
 	if (serial_console)
 		conswitchp = NULL;

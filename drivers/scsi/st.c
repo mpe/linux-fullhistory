@@ -3499,7 +3499,7 @@ static int st_detect(Scsi_Device * SDp)
 
 static int st_registered = 0;
 
-/* Driver initialization (not __initfunc because may be called later) */
+/* Driver initialization (not __init because may be called later) */
 static int st_init()
 {
   int i;

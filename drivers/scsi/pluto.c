@@ -58,18 +58,18 @@ DECLARE_MUTEX_LOCKED(fc_sem);
 
 static int pluto_encode_addr(Scsi_Cmnd *SCpnt, u16 *addr, fc_channel *fc, fcp_cmnd *fcmd);
 
-__initfunc(static void pluto_detect_timeout(unsigned long data))
+static void __init pluto_detect_timeout(unsigned long data)
 {
 	PLND(("Timeout\n"))
 	up(&fc_sem);
 }
 
-__initfunc(static void pluto_detect_done(Scsi_Cmnd *SCpnt))
+static void __init pluto_detect_done(Scsi_Cmnd *SCpnt)
 {
 	/* Do nothing */
 }
 
-__initfunc(static void pluto_detect_scsi_done(Scsi_Cmnd *SCpnt))
+static void __init pluto_detect_scsi_done(Scsi_Cmnd *SCpnt)
 {
 	SCpnt->request.rq_status = RQ_SCSI_DONE;
 	PLND(("Detect done %08lx\n", (long)SCpnt))
@@ -92,7 +92,7 @@ static void pluto_select_queue_depths(struct Scsi_Host *host, Scsi_Device *devli
 
 /* Detect all SSAs attached to the machine.
    To be fast, do it on all online FC channels at the same time. */
-__initfunc(int pluto_detect(Scsi_Host_Template *tpnt))
+int __init pluto_detect(Scsi_Host_Template *tpnt)
 {
 	int i, retry, nplutos;
 	fc_channel *fc;

@@ -17,7 +17,7 @@
 			     "mcr  p15, 0, %0, c1, c0, 0;"		\
 			     "movs pc, #0"				\
 			 : 						\
-			 : "r" (processor.u.armv3v4.reset()));		\
+			 : "r" (cpu_reset()));				\
 	}
 
 #endif

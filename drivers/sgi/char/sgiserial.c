@@ -1591,7 +1591,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 		if (!(info->flags & ZILOG_CALLOUT_ACTIVE))
 			zs_rtsdtr(info, 1);
 		sti();
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		if (tty_hung_up_p(filp) ||
 		    !(info->flags & ZILOG_INITIALIZED)) {
 #ifdef SERIAL_DO_RESTART
@@ -2045,7 +2045,7 @@ static kdev_t zs_console_device(struct console *con)
 }
 
 
-__initfunc(static int zs_console_setup(struct console *con, char *options))
+static int __init zs_console_setup(struct console *con, char *options)
 {
 	struct sgi_serial *info;
 	int	baud = 9600;
@@ -2185,7 +2185,7 @@ static struct console sgi_console_driver = {
 /*
  *	Register console.
  */
-__initfunc (long serial_console_init(long kmem_start, long kmem_end))
+long __init serial_console_init(long kmem_start, long kmem_end)
 {
 	register_console(&sgi_console_driver);
 	return kmem_start;

@@ -30,7 +30,7 @@
 #include <asm/unistd.h>
 
 #include "proto.h"
-#include "irq.h"
+#include "irq_impl.h"
 
 
 #define DEBUG_SMP 0

@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.83 1999/04/07 17:14:06 davem Exp $
+/* $Id: systbls.S,v 1.84 1999/08/14 03:51:29 anton Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -58,7 +58,7 @@ sys_call_table:
 /*195*/	.long sys_nis_syscall, sys_nis_syscall, sys_getppid, sparc_sigaction, sys_sgetmask
 /*200*/	.long sys_ssetmask, sys_sigsuspend, sys_newlstat, sys_uselib, old_readdir
 /*205*/	.long sys_nis_syscall, sys_socketcall, sys_syslog, sys_nis_syscall, sys_nis_syscall
-/*210*/	.long sys_idle, sys_nis_syscall, sys_waitpid, sys_swapoff, sys_sysinfo
+/*210*/	.long sys_nis_syscall, sys_nis_syscall, sys_waitpid, sys_swapoff, sys_sysinfo
 /*215*/	.long sys_ipc, sys_sigreturn, sys_clone, sys_nis_syscall, sys_adjtimex
 /*220*/	.long sys_sigprocmask, sys_create_module, sys_delete_module, sys_get_kernel_syms, sys_getpgid
 /*225*/	.long sys_bdflush, sys_sysfs, sys_nis_syscall, sys_setfsuid, sys_setfsgid

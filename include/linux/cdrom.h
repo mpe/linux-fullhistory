@@ -11,6 +11,8 @@
 #ifndef	_LINUX_CDROM_H
 #define	_LINUX_CDROM_H
 
+#include <linux/types.h>
+
 /*******************************************************
  * As of Linux 2.1.x, all Linux CD-ROM application programs will use this 
  * (and only this) include file.  It is my hope to provide Linux with
@@ -94,16 +96,26 @@
 #define CDROMPLAYBLK		0x5317	/* (struct cdrom_blk) */
 
 /* 
- * These ioctls are used only used in optcd.c
+ * These ioctls are only used in optcd.c
  */
 #define CDROMREADALL		0x5318	/* read all 2646 bytes */
-#define CDROMCLOSETRAY		0x5319	/* pendant of CDROMEJECT */
+
+/* 
+ * These ioctls are (now) only in ide-cd.c for controlling 
+ * drive spindown time.  They should be implemented in the
+ * Uniform driver, via generic packet commands, GPCMD_MODE_SELECT_10,
+ * GPCMD_MODE_SENSE_10 and the GPMODE_POWER_PAGE...
+ *  -Erik
+ */
+#define CDROMGETSPINDOWN        0x531d
+#define CDROMSETSPINDOWN        0x531e
 
 /* 
  * These ioctls are implemented through the uniform CD-ROM driver
  * They _will_ be adopted by all CD-ROM drivers, when all the CD-ROM
  * drivers are eventually ported to the uniform CD-ROM driver interface.
  */
+#define CDROMCLOSETRAY		0x5319	/* pendant of CDROMEJECT */
 #define CDROM_SET_OPTIONS	0x5320  /* Set behavior options */
 #define CDROM_CLEAR_OPTIONS	0x5321  /* Clear behavior options */
 #define CDROM_SELECT_SPEED	0x5322  /* Set the CD-ROM speed */
@@ -125,7 +137,8 @@
 #define DVD_AUTH		0x5392  /* Authentication */
 
 #define CDROM_SEND_PACKET	0x5393	/* send a packet to the drive */
-#define CDROM_BLANK		0x5394	/* blank */
+#define CDROM_NEXT_WRITABLE	0x5394	/* get next writable block */
+#define CDROM_LAST_WRITTEN	0x5395	/* get last block written on disc */
 
 /*******************************************************
  * CDROM IOCTL structures
@@ -340,14 +353,6 @@ struct cdrom_generic_command
 #define	CDROM_AUDIO_ERROR	0x14	/* audio play stopped due to error */
 #define	CDROM_AUDIO_NO_STATUS	0x15	/* no current audio status to return */
 
-/* CD-ROM-specific SCSI command opcodes */
-#define SCMD_READ_TOC		0x43	/* read table of contents */
-#define SCMD_PLAYAUDIO_MSF	0x47	/* play data at time offset */
-#define SCMD_PLAYAUDIO_TI	0x48	/* play data at track/index */
-#define SCMD_PAUSE_RESUME	0x4B	/* pause/resume audio */
-#define SCMD_READ_SUBCHANNEL	0x42	/* read SC info on playing disc */
-#define SCMD_PLAYAUDIO10	0x45	/* play data at logical block */
-
 /* capability flags used with the uniform CD-ROM driver */ 
 #define CDC_CLOSE_TRAY		0x1     /* caddy systems _can't_ close */
 #define CDC_OPEN_TRAY		0x2     /* but _can_ eject.  */
@@ -396,13 +401,93 @@ struct cdrom_generic_command
 #define CDSL_CURRENT    	((int) (~0U>>1))
 
 /*********************************************************************
- * MMC commands and such
+ * Generic Packet commands, MMC commands, and such
  *********************************************************************/
 
-#define DVD_SEND_KEY		0xa3
-#define DVD_REPORT_KEY		0xa4
-#define DVD_READ_STRUCTURE	0xad
+ /* The generic packet command opcodes for CD/DVD Logical Units,
+ * From Table 57 of the SFF8090 Ver. 3 (Mt. Fuji) draft standard. */
+#define GPCMD_BLANK			    0xa1
+#define GPCMD_CLOSE_TRACK		    0x5b
+#define GPCMD_FLUSH_CACHE		    0x35
+#define GPCMD_FORMAT_UNIT		    0x04
+#define GPCMD_GET_CONFIGURATION		    0x46
+#define GPCMD_GET_EVENT_STATUS_NOTIFICATION 0x4a
+#define GPCMD_GET_PERFORMANCE		    0xac
+#define GPCMD_INQUIRY			    0x12
+#define GPCMD_LOAD_UNLOAD		    0xa6
+#define GPCMD_MECHANISM_STATUS		    0xbd
+#define GPCMD_MODE_SELECT_10		    0x55
+#define GPCMD_MODE_SENSE_10		    0x5a
+#define GPCMD_PAUSE_RESUME		    0x4b
+#define GPCMD_PLAY_AUDIO_10		    0x45
+#define GPCMD_PLAY_AUDIO_MSF		    0x47
+#define GPCMD_PLAY_CD			    0xbc
+#define GPCMD_PREVENT_ALLOW_MEDIUM_REMOVAL  0x1e
+#define GPCMD_READ_10			    0x28
+#define GPCMD_READ_12			    0xa8
+#define GPCMD_READ_CDVD_CAPACITY	    0x25
+#define GPCMD_READ_CD			    0xbe
+#define GPCMD_READ_CD_MSF		    0xb9
+#define GPCMD_READ_DISC_INFO		    0x51
+#define GPCMD_READ_DVD_STRUCTURE	    0xad
+#define GPCMD_READ_FORMAT_CAPACITIES	    0x23
+#define GPCMD_READ_HEADER		    0x44
+#define GPCMD_READ_TRACK_RZONE_INFO	    0x52
+#define GPCMD_READ_SUBCHANNEL		    0x42
+#define GPCMD_READ_TOC_PMA_ATIP		    0x43
+#define GPCMD_REPAIR_RZONE_TRACK	    0x58
+#define GPCMD_REPORT_KEY		    0xa4
+#define GPCMD_REQUEST_SENSE		    0x03
+#define GPCMD_RESERVE_RZONE_TRACK	    0x53
+#define GPCMD_SCAN			    0xba
+#define GPCMD_SEEK			    0x2b
+#define GPCMD_SEND_DVD_STRUCTURE	    0xad
+#define GPCMD_SEND_EVENT		    0xa2
+#define GPCMD_SEND_KEY			    0xa3
+#define GPCMD_SEND_OPC			    0x54
+#define GPCMD_SET_READ_AHEAD		    0xa7
+#define GPCMD_SET_STREAMING		    0xb6
+#define GPCMD_START_STOP_UNIT		    0x1b
+#define GPCMD_STOP_PLAY_SCAN		    0x4e
+#define GPCMD_TEST_UNIT_READY		    0x00
+#define GPCMD_VERIFY_10			    0x2f
+#define GPCMD_WRITE_10			    0x2a
+#define GPCMD_WRITE_AND_VERIFY_10	    0x2e
+/* This is listed as optional in ATAPI 2.6, but is (curiously) 
+ * missing from Mt. Fuji, Table 57.  It _is_ mentioned in Mt. Fuji
+ * Table 377 as an MMC command for SCSi devices though...  Most ATAPI
+ * drives support it. */
+#define GPCMD_SET_SPEED			    0xbb
+/* This seems to be a SCSI specific CD-ROM opcode 
+ * to play data at track/index */
+#define GPCMD_PLAYAUDIO_TI		    0x48
 
+/* Is this really used by anything?  I couldn't find these...*/
+#if 0
+/* MMC2/MTFuji Opcodes */
+#define ERASE			0x2c
+#define READ_BUFFER		0x3c
+#endif
+
+
+
+
+/* Mode page codes for mode sense/set */
+#define GPMODE_R_W_ERROR_PAGE	    0x1
+#define GPMODE_WRITE_PARMS_PAGE	    0x5
+#define GPMODE_AUDIO_CTL_PAGE	    0xe
+#define GPMODE_POWER_PAGE	    0x1a
+#define GPMODE_FAULT_FAIL_PAGE	    0x1c
+#define GPMODE_TO_PROTECT_PAGE	    0x1d
+#define GPMODE_CAPABILITIES_PAGE    0x2a
+#define GPMODE_ALL_PAGES	    0x3f
+/* Not in Mt. Fuji, but in ATAPI 2.6 -- depricated now in favor
+ * of MODE_SENSE_POWER_PAGE */
+#define GPMODE_CDROM_PAGE              0x0d
+
+
+
+/* DVD struct types */
 #define DVD_STRUCT_PHYSICAL	0x00
 #define DVD_STRUCT_COPYRIGHT	0x01
 #define DVD_STRUCT_DISCKEY	0x02
@@ -622,6 +707,95 @@ typedef struct {
     long error;
 } tracktype;
 extern void cdrom_count_tracks(struct cdrom_device_info *cdi,tracktype* tracks);
+extern int cdrom_get_next_writable(kdev_t dev, long *next_writable);
+extern int cdrom_get_last_written(kdev_t dev, long *last_written);
+
+typedef struct {
+	__u16 disc_information_length;
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 reserved1			: 3;
+        __u8 erasable			: 1;
+        __u8 border_status		: 2;
+        __u8 disc_border		: 2;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+        __u8 disc_border		: 2;
+        __u8 border_status		: 2;
+        __u8 erasable			: 1;
+	__u8 reserved1			: 3;
+#else
+#error "Please fix <asm/byteorder.h>"
+#endif
+	__u8 n_first_track;
+	__u8 n_sessions_lsb;
+	__u8 first_track_lsb;
+	__u8 last_track_lsb;
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 did_v			: 1;
+        __u8 dbc_v			: 1;
+        __u8 uru			: 1;
+        __u8 reserved2			: 5;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+        __u8 reserved2			: 5;
+        __u8 uru			: 1;
+        __u8 dbc_v			: 1;
+	__u8 did_v			: 1;
+#else
+#error "Please fix <asm/byteorder.h>"
+#endif
+	__u8 disc_type;
+	__u8 n_sessions_msb;
+	__u8 first_track_msb;
+	__u8 last_track_msb;
+	__u32 disc_id;
+	__u32 lead_in;
+	__u32 lead_out;
+	__u8 disc_bar_code[8];
+	__u8 reserved3;
+	__u8 n_opc;
+} disc_information;
+
+typedef struct {
+	__u16 track_information_length;
+	__u8 track_lsb;
+	__u8 session_lsb;
+	__u8 reserved1;
+#if defined(__BIG_ENDIAN_BITFIELD)
+	__u8 reserved2			: 2;
+        __u8 damage			: 1;
+        __u8 copy			: 1;
+        __u8 track_mode			: 4;
+	__u8 rt				: 1;
+	__u8 blank			: 1;
+	__u8 packet			: 1;
+	__u8 fp				: 1;
+	__u8 data_mode			: 4;
+	__u8 reserved3			: 6;
+	__u8 lra_v			: 1;
+	__u8 nwa_v			: 1;
+#elif defined(__LITTLE_ENDIAN_BITFIELD)
+        __u8 track_mode			: 4;
+        __u8 copy			: 1;
+        __u8 damage			: 1;
+	__u8 reserved2			: 2;
+	__u8 data_mode			: 4;
+	__u8 fp				: 1;
+	__u8 packet			: 1;
+	__u8 blank			: 1;
+	__u8 rt				: 1;
+	__u8 nwa_v			: 1;
+	__u8 lra_v			: 1;
+	__u8 reserved3			: 6;
+#else
+#error "Please fix <asm/byteorder.h>"
+#endif
+	__u32 track_start;
+	__u32 next_writable;
+	__u32 free_blocks;
+	__u32 fixed_packet_size;
+	__u32 track_size;
+	__u32 last_rec_address;
+} track_information;
+
 #endif  /* End of kernel only stuff */ 
 
 #endif  /* _LINUX_CDROM_H */

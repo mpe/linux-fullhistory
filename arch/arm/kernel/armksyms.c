@@ -12,6 +12,7 @@
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <asm/pgtable.h>
+#include <asm/proc-fns.h>
 #include <asm/semaphore.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -25,9 +26,6 @@ extern void outswb(unsigned int port, const void *to, int len);
 extern unsigned int local_bh_count[NR_CPUS];
 extern unsigned int local_irq_count[NR_CPUS];
 
-extern void * __ioremap(unsigned long phys_addr, unsigned long size, unsigned long flags);
-extern void iounmap(void *addr);
-
 extern pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags);
 
 /*
@@ -36,7 +34,6 @@ extern pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags);
 extern int sys_write(int, const char *, int);
 extern int sys_read(int, char *, int);
 extern int sys_lseek(int, off_t, int);
-extern int sys_open(const char *, int, int);
 extern int sys_exit(int);
 extern int sys_wait4(int, int *, int, struct rusage *);
 
@@ -93,7 +90,7 @@ EXPORT_SYMBOL(local_bh_count);
 EXPORT_SYMBOL(local_irq_count);
 #ifdef CONFIG_CPU_32
 EXPORT_SYMBOL(__ioremap);
-EXPORT_SYMBOL(iounmap);
+EXPORT_SYMBOL(__iounmap);
 #endif
 EXPORT_SYMBOL(kernel_thread);
 
@@ -101,11 +98,28 @@ EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
 
 	/* processor dependencies */
+#ifdef MULTI_CPU
 EXPORT_SYMBOL(processor);
+#else
+EXPORT_SYMBOL(cpu_flush_cache_all);
+EXPORT_SYMBOL(cpu_flush_cache_area);
+EXPORT_SYMBOL(cpu_flush_cache_entry);
+EXPORT_SYMBOL(cpu_clean_cache_area);
+EXPORT_SYMBOL(cpu_flush_ram_page);
+EXPORT_SYMBOL(cpu_flush_tlb_all);
+EXPORT_SYMBOL(cpu_flush_tlb_area);
+EXPORT_SYMBOL(cpu_switch_mm);
+EXPORT_SYMBOL(cpu_set_pmd);
+EXPORT_SYMBOL(cpu_set_pte);
+EXPORT_SYMBOL(cpu_flush_icache_area);
+EXPORT_SYMBOL(cpu_cache_wback_area);
+EXPORT_SYMBOL(cpu_cache_purge_area);
+#endif
 EXPORT_SYMBOL(__machine_arch_type);
 
 	/* networking */
 EXPORT_SYMBOL(csum_partial_copy);
+EXPORT_SYMBOL(csum_partial_copy_nocheck);
 EXPORT_SYMBOL(__csum_ipv6_magic);
 
 	/* io */
@@ -150,6 +164,7 @@ EXPORT_SYMBOL_NOVERS(strspn);
 EXPORT_SYMBOL_NOVERS(strpbrk);
 EXPORT_SYMBOL_NOVERS(strtok);
 EXPORT_SYMBOL_NOVERS(strrchr);
+EXPORT_SYMBOL_NOVERS(strstr);
 EXPORT_SYMBOL_NOVERS(memset);
 EXPORT_SYMBOL_NOVERS(memcpy);
 EXPORT_SYMBOL_NOVERS(memmove);
@@ -198,9 +213,8 @@ EXPORT_SYMBOL(find_first_zero_bit);
 EXPORT_SYMBOL(find_next_zero_bit);
 
 	/* elf */
-EXPORT_SYMBOL(armidlist);
-EXPORT_SYMBOL(armidindex);
 EXPORT_SYMBOL(elf_platform);
+EXPORT_SYMBOL(elf_hwcap);
 
 	/* syscalls */
 EXPORT_SYMBOL(sys_write);
@@ -213,5 +227,5 @@ EXPORT_SYMBOL(sys_wait4);
 	/* semaphores */
 EXPORT_SYMBOL_NOVERS(__down_failed);
 EXPORT_SYMBOL_NOVERS(__down_interruptible_failed);
+EXPORT_SYMBOL_NOVERS(__down_trylock_failed);
 EXPORT_SYMBOL_NOVERS(__up_wakeup);
-

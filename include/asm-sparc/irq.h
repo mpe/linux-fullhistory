@@ -1,4 +1,4 @@
-/* $Id: irq.h,v 1.26 1999/04/20 13:22:44 anton Exp $
+/* $Id: irq.h,v 1.27 1999/08/14 03:52:02 anton Exp $
  * irq.h: IRQ registers on the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -8,7 +8,7 @@
 #define _SPARC_IRQ_H
 
 #include <linux/linkage.h>
-#include <linux/tasks.h>     /* For NR_CPUS */
+#include <linux/threads.h>     /* For NR_CPUS */
 
 #include <asm/system.h>     /* For SUN4M_NCPUS */
 #include <asm/btfixup.h>

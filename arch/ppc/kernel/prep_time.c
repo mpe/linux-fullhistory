@@ -19,6 +19,7 @@
 #include <linux/kernel_stat.h>
 #include <linux/init.h>
 
+#include <asm/init.h>
 #include <asm/segment.h>
 #include <asm/io.h>
 #include <asm/processor.h>

@@ -15,6 +15,8 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/init.h>
+
+#include <asm/init.h>
 #include <asm/adb.h>
 #include <asm/cuda.h>
 #include <asm/pmu.h>

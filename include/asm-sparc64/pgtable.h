@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.109 1999/08/02 08:57:46 jj Exp $
+/* $Id: pgtable.h,v 1.110 1999/08/30 10:14:57 davem Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -529,6 +529,7 @@ struct mmu_sglist {
 	char *__dont_touch;
 	unsigned int len;
 	__u32 dvma_addr;
+	__u32 dvma_len;
 };
 
 extern __u32 mmu_get_scsi_one(char *, unsigned long, struct linux_sbus *sbus);

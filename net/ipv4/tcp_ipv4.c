@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.186 1999/08/21 21:46:29 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.187 1999/08/31 07:03:48 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -412,16 +412,16 @@ void tcp_listen_wlock(void)
 		DECLARE_WAITQUEUE(wait, current);
 
 		add_wait_queue(&tcp_lhash_wait, &wait);
-		do {
-			current->state = TASK_UNINTERRUPTIBLE;
+		for (;;) {
+			set_current_state(TASK_UNINTERRUPTIBLE);
 			if (atomic_read(&tcp_lhash_users) == 0)
 				break;
 			write_unlock_bh(&tcp_lhash_lock);
 			schedule();
 			write_lock_bh(&tcp_lhash_lock);
-		} while (atomic_read(&tcp_lhash_users));
+		}
 
-		current->state = TASK_RUNNING;
+		__set_current_state(TASK_RUNNING);
 		remove_wait_queue(&tcp_lhash_wait, &wait);
 	}
 }

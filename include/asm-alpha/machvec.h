@@ -19,6 +19,8 @@ struct mm_struct;
 struct pt_regs;
 struct vm_area_struct;
 struct linux_hose_info;
+struct pci_dev;
+struct pci_ops;
 
 struct alpha_machine_vector
 {
@@ -34,6 +36,8 @@ struct alpha_machine_vector
 	unsigned long max_dma_address;
 	unsigned long irq_probe_mask;
 	unsigned long iack_sc;
+	unsigned long min_io_address;
+	unsigned long min_mem_address;
 
 	unsigned long (*mv_virt_to_bus)(void *);
 	void * (*mv_bus_to_virt)(unsigned long);
@@ -59,20 +63,6 @@ struct alpha_machine_vector
 	unsigned long (*mv_ioremap)(unsigned long);
 	int (*mv_is_ioaddr)(unsigned long);
 
-	int (*hose_read_config_byte)(u8, u8, u8, u8 *value,
-				     struct linux_hose_info *);
-	int (*hose_read_config_word)(u8, u8, u8, u16 *value,
-				     struct linux_hose_info *);
-	int (*hose_read_config_dword)(u8, u8, u8, u32 *value,
-				      struct linux_hose_info *);
-
-	int (*hose_write_config_byte)(u8, u8, u8, u8 value,
-				      struct linux_hose_info *);
-	int (*hose_write_config_word)(u8, u8, u8, u16 value,
-				      struct linux_hose_info *);
-	int (*hose_write_config_dword)(u8, u8, u8, u32 value,
-				       struct linux_hose_info *);
-	
 	void (*mv_switch_mm)(struct mm_struct *, struct mm_struct *,
 			     struct task_struct *, long);
 	void (*mv_activate_mm)(struct mm_struct *, struct mm_struct *, long);
@@ -91,8 +81,12 @@ struct alpha_machine_vector
 	void (*init_arch)(unsigned long *, unsigned long *);
 	void (*init_irq)(void);
 	void (*init_pit)(void);
-	void (*pci_fixup)(void);
+	void (*init_pci)(void);
 	void (*kill_arch)(int, char *);
+
+	u8 (*pci_swizzle)(struct pci_dev *, u8 *);
+	int (*pci_map_irq)(struct pci_dev *, u8, u8);
+	struct pci_ops *pci_ops;
 
 	const char *vector_name;
 
@@ -105,29 +99,22 @@ struct alpha_machine_vector
 	    struct {
 		unsigned long gamma_bias;
 	    } t2;
-	} sys;
 
-	/* Runtime variables it is handy to keep close.  */
-	unsigned long dma_win_base;
-	unsigned long dma_win_size;
-	unsigned long sm_base_r1, sm_base_r2, sm_base_r3;
+	    struct {
+		unsigned int route_tab;
+	    } sio;
+	} sys;
 };
 
 extern struct alpha_machine_vector alpha_mv;
 
 #ifdef CONFIG_ALPHA_GENERIC
 extern int alpha_using_srm;
-extern int alpha_use_srm_setup;
 #else
 #ifdef CONFIG_ALPHA_SRM
 #define alpha_using_srm 1
 #else
 #define alpha_using_srm 0
-#endif
-#if defined(CONFIG_ALPHA_SRM_SETUP)
-#define alpha_use_srm_setup 1
-#else
-#define alpha_use_srm_setup 0
 #endif
 #endif /* GENERIC */
 

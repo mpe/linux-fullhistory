@@ -57,6 +57,13 @@ ifeq ($(CONFIG_PARPORT),y)
       M_OBJS += parport_atari.o
     endif
   endif
+  ifeq ($(CONFIG_PARPORT_SUNBPP),y)
+    LX_OBJS += parport_sunbpp.o
+  else
+    ifeq ($(CONFIG_PARPORT_SUNBPP),m)
+      MX_OBJS += parport_sunbpp.o
+    endif
+  endif
   LX_OBJS += init.o
 else
   ifeq ($(CONFIG_PARPORT),m)
@@ -81,6 +88,9 @@ else
   endif
   ifeq ($(CONFIG_PARPORT_ATARI),m)
     M_OBJS += parport_atari.o
+  endif
+  ifeq ($(CONFIG_PARPORT_SUNBPP),m)
+    M_OBJS += parport_sunbpp.o
   endif
 endif
 

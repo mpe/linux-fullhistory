@@ -162,7 +162,7 @@ void irlan_start_watchdog_timer(struct irlan_cb *self, int timeout)
  *    Initialize IrLAN layer
  *
  */
-__initfunc(int irlan_init(void))
+int __init irlan_init(void)
 {
 	struct irlan_cb *new;
 	__u16 hints;

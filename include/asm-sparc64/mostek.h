@@ -1,4 +1,4 @@
-/* $Id: mostek.h,v 1.2 1997/03/25 03:58:30 davem Exp $
+/* $Id: mostek.h,v 1.3 1999/08/30 10:14:50 davem Exp $
  * mostek.h:  Describes the various Mostek time of day clock registers.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -35,22 +35,38 @@
 /* The Mostek 48t02 real time clock and NVRAM chip. The registers
  * other than the control register are in binary coded decimal. Some
  * control bits also live outside the control register.
+ *
+ * We now deal with physical addresses for I/O to the chip. -DaveM
  */
+static __inline__ u8 mostek_read(unsigned long addr)
+{
+	u8 ret;
 
-struct mostek48t02 {
-	volatile char eeprom[2008];	/* This is the eeprom, don't touch! */
-	struct idprom idprom;		/* The idprom lives here. */
-	volatile unsigned char creg;	/* Control register */
-	volatile unsigned char sec;	/* Seconds (0-59) */
-	volatile unsigned char min;	/* Minutes (0-59) */
-	volatile unsigned char hour;	/* Hour (0-23) */
-	volatile unsigned char dow;	/* Day of the week (1-7) */
-	volatile unsigned char dom;	/* Day of the month (1-31) */
-	volatile unsigned char month;	/* Month of year (1-12) */
-	volatile unsigned char year;	/* Year (0-99) */
-};
+	__asm__ __volatile__("lduba	[%1] %2, %0"
+			     : "=r" (ret)
+			     : "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E));
+	return ret;
+}
 
-extern struct mostek48t02 *mstk48t02_regs;
+static __inline__ void mostek_write(unsigned long addr, u8 val)
+{
+	__asm__ __volatile__("stba	%0, [%1] %2"
+			     : /* no outputs */
+			     : "r" (val), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E));
+}
+
+#define MOSTEK_EEPROM		0x0000UL
+#define MOSTEK_IDPROM		0x07d8UL
+#define MOSTEK_CREG		0x07f8UL
+#define MOSTEK_SEC		0x07f9UL
+#define MOSTEK_MIN		0x07faUL
+#define MOSTEK_HOUR		0x07fbUL
+#define MOSTEK_DOW		0x07fcUL
+#define MOSTEK_DOM		0x07fdUL
+#define MOSTEK_MONTH		0x07feUL
+#define MOSTEK_YEAR		0x07ffUL
+
+extern unsigned long mstk48t02_regs;
 
 /* Control register values. */
 #define	MSTK_CREG_WRITE	0x80	/* Must set this before placing values. */
@@ -79,48 +95,51 @@ extern struct mostek48t02 *mstk48t02_regs;
 #define MSTK_DECIMAL_TO_REGVAL(x)  ((((x) / 0x0A) << 0x04) + ((x) % 0x0A))
 
 /* Generic register set and get macros for internal use. */
-#define MSTK_GET(regs,var,mask) (MSTK_REGVAL_TO_DECIMAL(regs->var & MSTK_ ## mask ## _MASK))
-#define MSTK_SET(regs,var,value,mask) do { regs->var &= ~(MSTK_ ## mask ## _MASK); regs->var |= MSTK_DECIMAL_TO_REGVAL(value) & (MSTK_ ## mask ## _MASK); } while (0)
+#define MSTK_GET(regs,name)	\
+	(MSTK_REGVAL_TO_DECIMAL(mostek_read(regs + MOSTEK_ ## name) & MSTK_ ## name ## _MASK))
+#define MSTK_SET(regs,name,value) \
+do {	u8 __val = mostek_read(regs + MOSTEK_ ## name); \
+	__val &= ~(MSTK_ ## name ## _MASK); \
+	__val |= (MSTK_DECIMAL_TO_REGVAL(value) & \
+		  (MSTK_ ## name ## _MASK)); \
+	mostek_write(regs + MOSTEK_ ## name, __val); \
+} while(0)
 
 /* Macros to make register access easier on our fingers. These give you
  * the decimal value of the register requested if applicable. You pass
  * the a pointer to a 'struct mostek48t02'.
  */
-#define	MSTK_REG_CREG(regs)	(regs->creg)
-#define	MSTK_REG_SEC(regs)	MSTK_GET(regs,sec,SEC)
-#define	MSTK_REG_MIN(regs)	MSTK_GET(regs,min,MIN)
-#define	MSTK_REG_HOUR(regs)	MSTK_GET(regs,hour,HOUR)
-#define	MSTK_REG_DOW(regs)	MSTK_GET(regs,dow,DOW)
-#define	MSTK_REG_DOM(regs)	MSTK_GET(regs,dom,DOM)
-#define	MSTK_REG_MONTH(regs)	MSTK_GET(regs,month,MONTH)
-#define	MSTK_REG_YEAR(regs)	MSTK_GET(regs,year,YEAR)
+#define	MSTK_REG_CREG(regs)	(mostek_read((regs) + MOSTEK_CREG))
+#define	MSTK_REG_SEC(regs)	MSTK_GET(regs,SEC)
+#define	MSTK_REG_MIN(regs)	MSTK_GET(regs,MIN)
+#define	MSTK_REG_HOUR(regs)	MSTK_GET(regs,HOUR)
+#define	MSTK_REG_DOW(regs)	MSTK_GET(regs,DOW)
+#define	MSTK_REG_DOM(regs)	MSTK_GET(regs,DOM)
+#define	MSTK_REG_MONTH(regs)	MSTK_GET(regs,MONTH)
+#define	MSTK_REG_YEAR(regs)	MSTK_GET(regs,YEAR)
 
-#define	MSTK_SET_REG_SEC(regs,value)	MSTK_SET(regs,sec,value,SEC)
-#define	MSTK_SET_REG_MIN(regs,value)	MSTK_SET(regs,min,value,MIN)
-#define	MSTK_SET_REG_HOUR(regs,value)	MSTK_SET(regs,hour,value,HOUR)
-#define	MSTK_SET_REG_DOW(regs,value)	MSTK_SET(regs,dow,value,DOW)
-#define	MSTK_SET_REG_DOM(regs,value)	MSTK_SET(regs,dom,value,DOM)
-#define	MSTK_SET_REG_MONTH(regs,value)	MSTK_SET(regs,month,value,MONTH)
-#define	MSTK_SET_REG_YEAR(regs,value)	MSTK_SET(regs,year,value,YEAR)
+#define	MSTK_SET_REG_SEC(regs,value)	MSTK_SET(regs,SEC,value)
+#define	MSTK_SET_REG_MIN(regs,value)	MSTK_SET(regs,MIN,value)
+#define	MSTK_SET_REG_HOUR(regs,value)	MSTK_SET(regs,HOUR,value)
+#define	MSTK_SET_REG_DOW(regs,value)	MSTK_SET(regs,DOW,value)
+#define	MSTK_SET_REG_DOM(regs,value)	MSTK_SET(regs,DOM,value)
+#define	MSTK_SET_REG_MONTH(regs,value)	MSTK_SET(regs,MONTH,value)
+#define	MSTK_SET_REG_YEAR(regs,value)	MSTK_SET(regs,YEAR,value)
 
 
 /* The Mostek 48t08 clock chip. Found on Sun4m's I think. It has the
  * same (basically) layout of the 48t02 chip except for the extra
  * NVRAM on board (8 KB against the 48t02's 2 KB).
  */
-struct mostek48t08 {
-	char offset[6*1024];         /* Magic things may be here, who knows? */
-	struct mostek48t02 regs;     /* Here is what we are interested in.   */
-};
-extern struct mostek48t08 *mstk48t08_regs;
+#define MOSTEK_48T08_OFFSET	0x0000UL	/* Lower NVRAM portions */
+#define MOSTEK_48T08_48T02	0x1800UL	/* Offset to 48T02 chip */
+extern unsigned long mstk48t08_regs;
 
 /* SUN5 systems usually have 48t59 model clock chipsets.  But we keep the older
  * clock chip definitions around just in case.
  */
-struct mostek48t59 {
-	char offset[6*1024];
-	struct mostek48t02 regs;
-};
-extern struct mostek48t59 *mstk48t59_regs;
+#define MOSTEK_48T59_OFFSET	0x0000UL	/* Lower NVRAM portions */
+#define MOSTEK_48T59_48T02	0x1800UL	/* Offset to 48T02 chip */
+extern unsigned long mstk48t59_regs;
 
 #endif /* !(_SPARC64_MOSTEK_H) */

@@ -19,10 +19,6 @@ struct hw_interrupt_type {
 	int irq_offset;
 };
 
-#define mask_irq(irq) ({if (irq_desc[irq].ctl && irq_desc[irq].ctl->disable) irq_desc[irq].ctl->disable(irq);})
-#define unmask_irq(irq) ({if (irq_desc[irq].ctl && irq_desc[irq].ctl->enable) irq_desc[irq].ctl->enable(irq);})
-#define mask_and_ack_irq(irq) ({if (irq_desc[irq].ctl && irq_desc[irq].ctl->mask_and_ack) irq_desc[irq].ctl->mask_and_ack(irq);})
-
 struct irqdesc {
 	struct irqaction *action;
 	struct hw_interrupt_type *ctl;

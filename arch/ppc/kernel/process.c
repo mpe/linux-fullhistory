@@ -1,5 +1,5 @@
 /*
- * $Id: process.c,v 1.87 1999/07/03 08:57:07 davem Exp $
+ * $Id: process.c,v 1.95 1999/08/31 06:54:07 davem Exp $
  *
  *  linux/arch/ppc/kernel/process.c
  *
@@ -50,7 +50,10 @@ static struct fs_struct init_fs = INIT_FS;
 static struct files_struct init_files = INIT_FILES;
 static struct signal_struct init_signals = INIT_SIGNALS;
 struct mm_struct init_mm = INIT_MM(init_mm);
-union task_union init_task_union = { INIT_TASK(init_task_union.task) };
+/* this is 16-byte aligned because it has a stack in it */
+union task_union __attribute((aligned(16))) init_task_union = {
+	INIT_TASK(init_task_union.task)
+};
 /* only used to get secondary processor up */
 struct task_struct *current_set[NR_CPUS] = {&init_task, };
 
@@ -74,7 +77,7 @@ dump_fpu(struct pt_regs *regs, elf_fpregset_t *fpregs)
 {
 	if (regs->msr & MSR_FP)
 		giveup_fpu(current);
-	memcpy(fpregs, &current->tss.fpr[0], sizeof(*fpregs));
+	memcpy(fpregs, &current->thread.fpr[0], sizeof(*fpregs));
 	return 1;
 }
 
@@ -82,7 +85,7 @@ void
 enable_kernel_fp(void)
 {
 #ifdef __SMP__
-	if (current->tss.regs && (current->tss.regs->msr & MSR_FP))
+	if (current->thread.regs && (current->thread.regs->msr & MSR_FP))
 		giveup_fpu(current);
 	else
 		giveup_fpu(NULL);	/* just enables FP for kernel */
@@ -99,11 +102,11 @@ int check_stack(struct task_struct *tsk)
 	int ret = 0;
 
 #if 0	
-	/* check tss magic */
-	if ( tsk->tss.magic != TSS_MAGIC )
+	/* check thread magic */
+	if ( tsk->thread.magic != THREAD_MAGIC )
 	{
 		ret |= 1;
-		printk("tss.magic bad: %08x\n", tsk->tss.magic);
+		printk("thread.magic bad: %08x\n", tsk->thread.magic);
 	}
 #endif
 
@@ -111,12 +114,12 @@ int check_stack(struct task_struct *tsk)
 		printk("check_stack(): tsk bad tsk %p\n",tsk);
 	
 	/* check if stored ksp is bad */
-	if ( (tsk->tss.ksp > stack_top) || (tsk->tss.ksp < tsk_top) )
+	if ( (tsk->thread.ksp > stack_top) || (tsk->thread.ksp < tsk_top) )
 	{
 		printk("stack out of bounds: %s/%d\n"
 		       " tsk_top %08lx ksp %08lx stack_top %08lx\n",
 		       tsk->comm,tsk->pid,
-		       tsk_top, tsk->tss.ksp, stack_top);
+		       tsk_top, tsk->thread.ksp, stack_top);
 		ret |= 2;
 	}
 	
@@ -158,8 +161,11 @@ void
 _switch_to(struct task_struct *prev, struct task_struct *new,
 	  struct task_struct **last)
 {
-	struct thread_struct *new_tss, *old_tss;
-	int s = _disable_interrupts();
+	struct thread_struct *new_thread, *old_thread;
+	int s;
+	
+	__save_flags(s);
+	__cli();
 #if CHECK_STACK
 	check_stack(prev);
 	check_stack(new);
@@ -168,7 +174,7 @@ _switch_to(struct task_struct *prev, struct task_struct *new,
 #ifdef SHOW_TASK_SWITCHES
 	printk("%s/%d -> %s/%d NIP %08lx cpu %d root %x/%x\n",
 	       prev->comm,prev->pid,
-	       new->comm,new->pid,new->tss.regs->nip,new->processor,
+	       new->comm,new->pid,new->thread.regs->nip,new->processor,
 	       new->fs->root,prev->fs->root);
 #endif
 #ifdef __SMP__
@@ -181,16 +187,16 @@ _switch_to(struct task_struct *prev, struct task_struct *new,
 	 * every switch, just a save.
 	 *  -- Cort
 	 */
-	if (prev->tss.regs && (prev->tss.regs->msr & MSR_FP))
+	if (prev->thread.regs && (prev->thread.regs->msr & MSR_FP))
 		giveup_fpu(prev);
 
 	prev->last_processor = prev->processor;
 	current_set[smp_processor_id()] = new;
 #endif /* __SMP__ */
-	new_tss = &new->tss;
-	old_tss = &current->tss;
-	*last = _switch(old_tss, new_tss, new->mm->context);
-	_enable_interrupts(s);
+	new_thread = &new->thread;
+	old_thread = &current->thread;
+	*last = _switch(old_thread, new_thread);
+	__restore_flags(s);
 }
 
 void show_regs(struct pt_regs * regs)
@@ -204,9 +210,9 @@ void show_regs(struct pt_regs * regs)
 	       regs->msr & MSR_FP ? 1 : 0,regs->msr&MSR_ME ? 1 : 0,
 	       regs->msr&MSR_IR ? 1 : 0,
 	       regs->msr&MSR_DR ? 1 : 0);
-	printk("TASK = %p[%d] '%s' mm->pgd %p ",
-	       current, current->pid, current->comm, current->mm->pgd);
-	printk("Last syscall: %ld ", current->tss.last_syscall);
+	printk("TASK = %p[%d] '%s' ",
+	       current, current->pid, current->comm);
+	printk("Last syscall: %ld ", current->thread.last_syscall);
 	printk("\nlast math %p", last_task_used_math);
 	
 #ifdef __SMP__	
@@ -271,10 +277,10 @@ copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	if ((childregs->msr & MSR_PR) == 0)
 		childregs->gpr[2] = (unsigned long) p;	/* `current' in new task */
 	childregs->gpr[3] = 0;  /* Result from fork() */
-	p->tss.regs = childregs;
-	p->tss.ksp = (unsigned long) childregs - STACK_FRAME_OVERHEAD;
-	p->tss.ksp -= sizeof(struct pt_regs ) + STACK_FRAME_OVERHEAD;
-	kregs = (struct pt_regs *)(p->tss.ksp + STACK_FRAME_OVERHEAD);
+	p->thread.regs = childregs;
+	p->thread.ksp = (unsigned long) childregs - STACK_FRAME_OVERHEAD;
+	p->thread.ksp -= sizeof(struct pt_regs ) + STACK_FRAME_OVERHEAD;
+	kregs = (struct pt_regs *)(p->thread.ksp + STACK_FRAME_OVERHEAD);
 #ifdef __SMP__
 	kregs->nip = (unsigned long)ret_from_smpfork;
 #else	
@@ -291,7 +297,7 @@ copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 		/* Provided stack is in user space */
 		childregs->gpr[1] = usp;
 	}
-	p->tss.last_syscall = -1;
+	p->thread.last_syscall = -1;
 	  
 	/*
 	 * copy fpu info - assume lazy fpu switch now always
@@ -300,11 +306,10 @@ copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	if (regs->msr & MSR_FP)
 		giveup_fpu(current);
 
-	memcpy(&p->tss.fpr, &current->tss.fpr, sizeof(p->tss.fpr));
-	p->tss.fpscr = current->tss.fpscr;
+	memcpy(&p->thread.fpr, &current->thread.fpr, sizeof(p->thread.fpr));
+	p->thread.fpscr = current->thread.fpscr;
 	childregs->msr &= ~MSR_FP;
 
-	p->processor = 0;
 #ifdef __SMP__
 	p->last_processor = NO_PROC_ID;
 #endif /* __SMP__ */
@@ -362,7 +367,7 @@ void start_thread(struct pt_regs *regs, unsigned long nip, unsigned long sp)
 	shove_aux_table(sp);
 	if (last_task_used_math == current)
 		last_task_used_math = 0;
-	current->tss.fpscr = 0;
+	current->thread.fpscr = 0;
 }
 
 asmlinkage int sys_clone(int p1, int p2, int p3, int p4, int p5, int p6,

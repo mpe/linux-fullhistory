@@ -1,4 +1,4 @@
-/* $Id: sedlbauer.c,v 1.15 1999/08/25 17:00:00 keil Exp $
+/* $Id: sedlbauer.c,v 1.16 1999/08/29 18:23:01 niemann Exp $
 
  * sedlbauer.c  low level stuff for Sedlbauer cards
  *              includes support for the Sedlbauer speed star (speed star II),
@@ -17,6 +17,9 @@
  *            Edgar Toernig
  *
  * $Log: sedlbauer.c,v $
+ * Revision 1.16  1999/08/29 18:23:01  niemann
+ * Fixed typo in errormsg
+ *
  * Revision 1.15  1999/08/25 17:00:00  keil
  * Make ISAR V32bis modem running
  * Make LL->HL interface open for additional commands
@@ -103,7 +106,7 @@
 
 extern const char *CardType[];
 
-const char *Sedlbauer_revision = "$Revision: 1.15 $";
+const char *Sedlbauer_revision = "$Revision: 1.16 $";
 
 const char *Sedlbauer_Types[] =
 	{"None", "speed card/win", "speed star", "speed fax+", 
@@ -584,7 +587,7 @@ setup_sedlbauer(struct IsdnCard *card))
 #if CONFIG_PCI
 #ifdef COMPAT_HAS_NEW_PCI
 		if (!pci_present()) {
-			printk(KERN_ERR "FritzPCI: no PCI bus present\n");
+			printk(KERN_ERR "Sedlbauer: no PCI bus present\n");
 			return(0);
 		}
 		if ((dev_sedl = pci_find_device(PCI_VENDOR_SEDLBAUER,

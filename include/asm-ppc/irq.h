@@ -29,11 +29,9 @@ extern void enable_irq(unsigned int);
 #endif /* CONFIG_APUS */
 
 #define NUM_8259_INTERRUPTS	16
-#define NUM_OPENPIC_INTERRUPTS	20
-#define is_8259_irq(n)		((n) < NUM_8259_INTERRUPTS)
+#define IRQ_8259_CASCADE	16
 #define openpic_to_irq(n)	((n)+NUM_8259_INTERRUPTS)
 #define irq_to_openpic(n)	((n)-NUM_8259_INTERRUPTS)
-#define IRQ_8259_CASCADE	NUM_8259_INTERRUPTS
 
 #ifndef CONFIG_APUS
 /*

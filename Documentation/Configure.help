@@ -9107,6 +9107,35 @@ CONFIG_DTLK
   running kernel whenever you want), say M here and read
   Documentation/modules.txt. The module will be called dtlk.o.
 
+Siemens R3964 serial protocol support
+CONFIG_R3964
+  This driver allows syncronous communication with devices using the
+  Siemens R3964 packet protocol. Unless you are dealing with special
+  hardware like PLCs, you are unlikely to need this.
+
+  To compile this driver as a module ( = code which can be inserted in
+  and removed from the running kernel whenever you want), say M here
+  and read Documentation/modules.txt. The module will be called 
+  n_r3964.o.
+
+  If unsure, say N.
+
+Applicom intelligent fieldbus card support
+CONFIG_APPLICOM
+  This driver provides the kernel-side support for the intelligent 
+  fieldbus cards made by Applicom International. More information
+  about these cards can be found on the WWW at the address
+  http://www.applicom-int.com/ (to browse the WWW, you need to have
+  access to a machine on the Internet that has a program like lynx
+  or netscape), or by email from David Woodhouse <dwmw2@mvhi.com>.
+
+  To compile this driver as a module ( = code which can be inserted in
+  and removed from the running kernel whenever you want), say M here
+  and read Documentation/modules.txt. The module will be called
+  applicom.o.
+
+  If unsure, say N.
+
 Advanced Power Management
 CONFIG_APM
   APM is a BIOS specification for saving power using several different

@@ -2,7 +2,7 @@
  * see arch/m68k/mm/hwtest.c.
  *  -- PMM <pmaydell@chiark.greenend.org.uk> 05/1998
  *
- * Removed initfunc from decls.  We might want them in modules, and 
+ * Removed __init from decls.  We might want them in modules, and 
  * the code is tiny anyway.  16/5/98 pb
  */
 

@@ -417,7 +417,7 @@ void __wait_on_super(struct super_block * sb)
 
 	add_wait_queue(&sb->s_wait, &wait);
 repeat:
-	current->state = TASK_UNINTERRUPTIBLE;
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	if (sb->s_lock) {
 		schedule();
 		goto repeat;

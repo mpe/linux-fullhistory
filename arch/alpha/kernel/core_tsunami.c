@@ -1,10 +1,9 @@
 /*
  *	linux/arch/alpha/kernel/core_tsunami.c
  *
- * Code common to all TSUNAMI core logic chips.
- *
  * Based on code written by David A. Rusling (david.rusling@reo.mts.dec.com).
  *
+ * Code common to all TSUNAMI core logic chips.
  */
 
 #include <linux/config.h>
@@ -25,7 +24,7 @@
 #undef __EXTERN_INLINE
 
 #include "proto.h"
-#include "bios32.h"
+#include "pci_impl.h"
 
 int TSUNAMI_bootcpu;
 
@@ -84,115 +83,118 @@ int TSUNAMI_bootcpu;
  */
 
 static int
-mk_conf_addr(u8 bus, u8 device_fn, u8 where, struct linux_hose_info *hose,
-	     unsigned long *pci_addr, unsigned char *type1)
+mk_conf_addr(struct pci_dev *dev, int where, unsigned long *pci_addr,
+	     unsigned char *type1)
 {
+	struct pci_controler *hose = dev->sysdata ? : probing_hose;
 	unsigned long addr;
-
-	if (!pci_probe_enabled)
-		return -1;
+	u8 bus = dev->bus->number;
+	u8 device_fn = dev->devfn;
 
 	DBG_CFG(("mk_conf_addr(bus=%d ,device_fn=0x%x, where=0x%x, "
 		 "pci_addr=0x%p, type1=0x%p)\n",
 		 bus, device_fn, where, pci_addr, type1));
 
+        if (hose->first_busno == dev->bus->number)
+		bus = 0;
         *type1 = (bus != 0);
 
-        if (hose->pci_first_busno == bus)
-		bus = 0;
-
         addr = (bus << 16) | (device_fn << 8) | where;
-	addr |= hose->pci_config_space;
+	addr |= hose->config_space;
 		
 	*pci_addr = addr;
 	DBG_CFG(("mk_conf_addr: returning pci_addr 0x%lx\n", addr));
 	return 0;
 }
 
-int 
-tsunami_hose_read_config_byte (u8 bus, u8 device_fn, u8 where, u8 *value,
-			       struct linux_hose_info *hose)
+static int 
+tsunami_read_config_byte(struct pci_dev *dev, int where, u8 *value)
 {
 	unsigned long addr;
 	unsigned char type1;
 
-	if (mk_conf_addr(bus, device_fn, where, hose, &addr, &type1))
+	if (mk_conf_addr(dev, where, &addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
 	*value = __kernel_ldbu(*(vucp)addr);
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int
-tsunami_hose_read_config_word (u8 bus, u8 device_fn, u8 where, u16 *value,
-			       struct linux_hose_info *hose)
+static int
+tsunami_read_config_word(struct pci_dev *dev, int where, u16 *value)
 {
 	unsigned long addr;
 	unsigned char type1;
 
-	if (mk_conf_addr(bus, device_fn, where, hose, &addr, &type1))
+	if (mk_conf_addr(dev, where, &addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
 	*value = __kernel_ldwu(*(vusp)addr);
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int
-tsunami_hose_read_config_dword (u8 bus, u8 device_fn, u8 where, u32 *value,
-				struct linux_hose_info *hose)
+static int
+tsunami_read_config_dword(struct pci_dev *dev, int where, u32 *value)
 {
 	unsigned long addr;
 	unsigned char type1;
 
-	if (mk_conf_addr(bus, device_fn, where, hose, &addr, &type1))
+	if (mk_conf_addr(dev, where, &addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
 	*value = *(vuip)addr;
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int 
-tsunami_hose_write_config_byte (u8 bus, u8 device_fn, u8 where, u8 value,
-				struct linux_hose_info *hose)
+static int 
+tsunami_write_config_byte(struct pci_dev *dev, int where, u8 value)
 {
 	unsigned long addr;
 	unsigned char type1;
 
-	if (mk_conf_addr(bus, device_fn, where, hose, &addr, &type1))
+	if (mk_conf_addr(dev, where, &addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
 	__kernel_stb(value, *(vucp)addr);
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int 
-tsunami_hose_write_config_word (u8 bus, u8 device_fn, u8 where, u16 value,
-				struct linux_hose_info *hose)
+static int 
+tsunami_write_config_word(struct pci_dev *dev, int where, u16 value)
 {
 	unsigned long addr;
 	unsigned char type1;
 
-	if (mk_conf_addr(bus, device_fn, where, hose, &addr, &type1))
+	if (mk_conf_addr(dev, where, &addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
 	__kernel_stw(value, *(vusp)addr);
 	return PCIBIOS_SUCCESSFUL;
 }
 
-int
-tsunami_hose_write_config_dword (u8 bus, u8 device_fn, u8 where, u32 value,
-				 struct linux_hose_info *hose)
+static int
+tsunami_write_config_dword(struct pci_dev *dev, int where, u32 value)
 {
 	unsigned long addr;
 	unsigned char type1;
 
-	if (mk_conf_addr(bus, device_fn, where, hose, &addr, &type1))
+	if (mk_conf_addr(dev, where, &addr, &type1))
 		return PCIBIOS_DEVICE_NOT_FOUND;
 
 	*(vuip)addr = value;
 	return PCIBIOS_SUCCESSFUL;
 }
 
+struct pci_ops tsunami_pci_ops = 
+{
+	read_byte:	tsunami_read_config_byte,
+	read_word:	tsunami_read_config_word,
+	read_dword:	tsunami_read_config_dword,
+	write_byte:	tsunami_write_config_byte,
+	write_word:	tsunami_write_config_word,
+	write_dword:	tsunami_write_config_dword
+};
+
 #ifdef NXM_MACHINE_CHECKS_ON_TSUNAMI
 static long
 tsunami_probe_read(volatile unsigned long *vaddr)
@@ -246,75 +248,51 @@ static void __init
 tsunami_init_one_pchip(tsunami_pchip *pchip, int index,
 		       unsigned long *mem_start)
 {
-	struct linux_hose_info *hose;
-	int i;
+	struct pci_controler *hose;
 
 	if (tsunami_probe_read(&pchip->pctl.csr) == 0)
 		return;
 
-	hose = (struct linux_hose_info *)*mem_start;
-	*mem_start = (unsigned long)(hose + 1);
-	memset(hose, 0, sizeof(*hose));
+	hose = alloc_pci_controler(mem_start);
+	hose->io_space = alloc_resource(mem_start);
+	hose->mem_space = alloc_resource(mem_start);
 
-	*hose_tail = hose;
-	hose_tail = &hose->next;
+	hose->config_space = TSUNAMI_CONF(index);
+	hose->index = index;
 
-	hose->pci_io_space = TSUNAMI_IO(index);
-	hose->pci_mem_space = TSUNAMI_MEM(index);
-	hose->pci_config_space = TSUNAMI_CONF(index);
-	hose->pci_sparse_space = 0;
-	hose->pci_hose_index = index;
+	hose->io_space->start = TSUNAMI_IO(index) - TSUNAMI_IO_BIAS;
+	hose->io_space->end = hose->io_space->start + 0xffff;
+	hose->io_space->name = pci_io_names[index];
 
-	switch (alpha_use_srm_setup)
-	{
-	default:
-#if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_SRM_SETUP)
-		for (i = 0; i < 4; ++i) {
-			if ((pchip->wsba[i].csr & 3) == 1
-			    && pchip->tba[i].csr == 0
-			    && (pchip->wsm[i].csr & 0xfff00000) > 0x0ff00000) {
-				TSUNAMI_DMA_WIN_BASE = pchip->wsba[i].csr & 0xfff00000;
-				TSUNAMI_DMA_WIN_SIZE = pchip->wsm[i].csr & 0xfff00000;
-				TSUNAMI_DMA_WIN_SIZE += 0x00100000;
-#if 1
-				printk("%s: using Window %d settings\n", FN, i);
-				printk("%s: BASE 0x%lx MASK 0x%lx TRANS 0x%lx\n",
-				       FN, pchip->wsba[i].csr, pchip->wsm[i].csr,
-				       pchip->tba[i].csr);
-#endif
-				goto found;
-			}
-		}
+	hose->mem_space->start = TSUNAMI_MEM(index) - TSUNAMI_MEM_BIAS;
+	hose->mem_space->end = hose->mem_space->start + 0xffffffff;
+	hose->mem_space->name = pci_mem_names[index];
 
-		/* Otherwise, we must use our defaults.  */
-		TSUNAMI_DMA_WIN_BASE = TSUNAMI_DMA_WIN_BASE_DEFAULT;
-		TSUNAMI_DMA_WIN_SIZE = TSUNAMI_DMA_WIN_SIZE_DEFAULT;
-#endif
-	case 0:
-		/*
-		 * Set up the PCI->physical memory translation windows.
-		 * For now, windows 1,2 and 3 are disabled.  In the future,
-		 * we may want to use them to do scatter/gather DMA. 
-		 *
-		 * Window 0 goes at 1 GB and is 1 GB large, mapping to 0.
-		 * Window 1 goes at 2 GB and is 1 GB large, mapping to 1GB.
-		 */
+	request_resource(&ioport_resource, hose->io_space);
+	request_resource(&iomem_resource, hose->mem_space);
 
-		pchip->wsba[0].csr = TSUNAMI_DMA_WIN0_BASE_DEFAULT | 1UL;
-		pchip->wsm[0].csr  = (TSUNAMI_DMA_WIN0_SIZE_DEFAULT - 1) &
-				     0xfff00000UL;
-		pchip->tba[0].csr  = TSUNAMI_DMA_WIN0_TRAN_DEFAULT;
-		
-		pchip->wsba[1].csr = TSUNAMI_DMA_WIN1_BASE_DEFAULT | 1UL;
-		pchip->wsm[1].csr  = (TSUNAMI_DMA_WIN1_SIZE_DEFAULT - 1) &
-				     0xfff00000UL;
-		pchip->tba[1].csr  = TSUNAMI_DMA_WIN1_TRAN_DEFAULT;
+	/*
+	 * Set up the PCI->physical memory translation windows.
+	 * For now, windows 1,2 and 3 are disabled.  In the future,
+	 * we may want to use them to do scatter/gather DMA. 
+	 *
+	 * Window 0 goes at 1 GB and is 1 GB large, mapping to 0.
+	 * Window 1 goes at 2 GB and is 1 GB large, mapping to 1GB.
+	 */
 
-		pchip->wsba[2].csr = 0;
-		pchip->wsba[3].csr = 0;
-		mb();
-	}
-found:;
+	pchip->wsba[0].csr = TSUNAMI_DMA_WIN0_BASE_DEFAULT | 1UL;
+	pchip->wsm[0].csr  = (TSUNAMI_DMA_WIN0_SIZE_DEFAULT - 1) &
+			     0xfff00000UL;
+	pchip->tba[0].csr  = TSUNAMI_DMA_WIN0_TRAN_DEFAULT;
+
+	pchip->wsba[1].csr = TSUNAMI_DMA_WIN1_BASE_DEFAULT | 1UL;
+	pchip->wsm[1].csr  = (TSUNAMI_DMA_WIN1_SIZE_DEFAULT - 1) &
+			     0xfff00000UL;
+	pchip->tba[1].csr  = TSUNAMI_DMA_WIN1_TRAN_DEFAULT;
+
+	pchip->wsba[2].csr = 0;
+	pchip->wsba[3].csr = 0;
+	mb();
 }
 
 void __init
@@ -353,17 +331,18 @@ tsunami_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 	printk("%s: CSR_STR 0x%lx\n", FN, TSUNAMI_dchip->str.csr);
 	printk("%s: CSR_DREV 0x%lx\n", FN, TSUNAMI_dchip->drev.csr);
 #endif
-
-	/* Align memory to cache line; we'll be allocating from it.  */
-	*mem_start = (*mem_start | 31) + 1;
-
 	TSUNAMI_bootcpu = __hard_smp_processor_id();
+
+	/* With multiple PCI busses, we play with I/O as physical addrs.  */
+	ioport_resource.end = ~0UL;
+	iomem_resource.end = ~0UL;
 
 	/* Find how many hoses we have, and initialize them.  TSUNAMI
 	   and TYPHOON can have 2, but might only have 1 (DS10).  */
+
 	tsunami_init_one_pchip(TSUNAMI_pchip0, 0, mem_start);
 	if (TSUNAMI_cchip->csc.csr & 1L<<14)
-	    tsunami_init_one_pchip(TSUNAMI_pchip1, 1, mem_start);
+		tsunami_init_one_pchip(TSUNAMI_pchip1, 1, mem_start);
 }
 
 static inline void

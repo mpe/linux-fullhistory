@@ -1,4 +1,4 @@
-/* $Id: winmacro.h,v 1.20 1998/03/09 14:04:54 jj Exp $
+/* $Id: winmacro.h,v 1.21 1999/08/14 03:52:13 anton Exp $
  * winmacro.h: Window loading-unloading macros.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -98,18 +98,18 @@
         STORE_PT_INS(base_reg)
 
 #define SAVE_BOLIXED_USER_STACK(cur_reg, scratch) \
-        ld       [%cur_reg + AOFF_task_tss + AOFF_thread_w_saved], %scratch; \
+        ld       [%cur_reg + AOFF_task_thread + AOFF_thread_w_saved], %scratch; \
         sll      %scratch, 2, %scratch; \
         add      %scratch, %cur_reg, %scratch; \
-        st       %sp, [%scratch + AOFF_task_tss + AOFF_thread_rwbuf_stkptrs]; \
+        st       %sp, [%scratch + AOFF_task_thread + AOFF_thread_rwbuf_stkptrs]; \
         sub      %scratch, %cur_reg, %scratch; \
         sll      %scratch, 4, %scratch; \
         add      %scratch, %cur_reg, %scratch; \
-        STORE_WINDOW(scratch + AOFF_task_tss + AOFF_thread_reg_window); \
+        STORE_WINDOW(scratch + AOFF_task_thread + AOFF_thread_reg_window); \
         sub      %scratch, %cur_reg, %scratch; \
         srl      %scratch, 6, %scratch; \
         add      %scratch, 1, %scratch; \
-        st       %scratch, [%cur_reg + AOFF_task_tss + AOFF_thread_w_saved];
+        st       %scratch, [%cur_reg + AOFF_task_thread + AOFF_thread_w_saved];
 
 #ifdef __SMP__
 #define LOAD_CURRENT4M(dest_reg, idreg) \

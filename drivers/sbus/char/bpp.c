@@ -1050,7 +1050,7 @@ static inline void freeLptPort(int idx)
 #ifdef MODULE
 int init_module(void)
 #else
-__initfunc(int bpp_init(void))
+int __init bpp_init(void)
 #endif
 {
 	int rc;

@@ -1,7 +1,8 @@
-/* $Id: ebus.c,v 1.38 1999/08/06 10:37:32 davem Exp $
+/* $Id: ebus.c,v 1.42 1999/08/31 09:12:31 davem Exp $
  * ebus.c: PCI to EBus bridge device.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
+ * Copyright (C) 1999  David S. Miller (davem@redhat.com)
  */
 
 #include <linux/config.h>
@@ -18,15 +19,6 @@
 #include <asm/oplib.h>
 #include <asm/bpp.h>
 #include <asm/irq.h>
-
-#undef PROM_DEBUG
-#undef DEBUG_FILL_EBUS_DEV
-
-#ifdef PROM_DEBUG
-#define dprintf	prom_printf
-#else
-#define dprintf	printk
-#endif
 
 struct linux_ebus *ebus_chain = 0;
 
@@ -46,11 +38,11 @@ extern int flash_init(void);
 extern int envctrl_init(void);
 #endif
 
-static inline unsigned long ebus_alloc(size_t size)
+static inline void *ebus_alloc(size_t size)
 {
-	unsigned long mem;
+	void *mem;
 
-	mem = (unsigned long)kmalloc(size, GFP_ATOMIC);
+	mem = kmalloc(size, GFP_ATOMIC);
 	if (!mem)
 		panic(__FUNCTION__ ": out of memory");
 	memset((char *)mem, 0, size);
@@ -89,23 +81,26 @@ void __init fill_ebus_child(int node, struct linux_prom_registers *preg,
 {
 	int regs[PROMREG_MAX];
 	int irqs[PROMREG_MAX];
-	char lbuf[128];
 	int i, len;
 
 	dev->prom_node = node;
-	prom_getstring(node, "name", lbuf, sizeof(lbuf));
-	strcpy(dev->prom_name, lbuf);
+	prom_getstring(node, "name", dev->prom_name, sizeof(dev->prom_name));
+	printk("(%s)", dev->prom_name);
 
 	len = prom_getproperty(node, "reg", (void *)regs, sizeof(regs));
 	dev->num_addrs = len / sizeof(regs[0]);
 
 	for (i = 0; i < dev->num_addrs; i++) {
-		if (regs[i] >= dev->parent->num_addrs) {
+		int rnum = regs[i];
+		if (rnum >= dev->parent->num_addrs) {
 			prom_printf("UGH: property for %s was %d, need < %d\n",
 				    dev->prom_name, len, dev->parent->num_addrs);
 			panic(__FUNCTION__);
 		}
-		dev->base_address[i] = dev->parent->base_address[regs[i]];
+		dev->resource[i].start = dev->parent->resource[i].start;
+		dev->resource[i].end = dev->parent->resource[i].end;
+		dev->resource[i].flags = IORESOURCE_MEM;
+		dev->resource[i].name = dev->prom_name;
 	}
 
 	len = prom_getproperty(node, "interrupts", (char *)&irqs, sizeof(irqs));
@@ -129,25 +124,13 @@ void __init fill_ebus_child(int node, struct linux_prom_registers *preg,
 	} else {
 		dev->num_irqs = len / sizeof(irqs[0]);
 		for (i = 0; i < dev->num_irqs; i++) {
+			struct pci_pbm_info *pbm = dev->bus->parent;
+			struct pci_controller_info *p = pbm->parent;
+
 			ebus_intmap_match(dev->bus, preg, &irqs[i]);
-			dev->irqs[i] = psycho_irq_build(dev->bus->parent,
-							dev->bus->self, irqs[i]);
+			dev->irqs[i] = p->irq_build(p, dev->bus->self, irqs[i]);
 		}
 	}
-
-#ifdef DEBUG_FILL_EBUS_DEV
-	dprintf("child '%s': address%s ", dev->prom_name,
-	       dev->num_addrs > 1 ? "es" : "");
-	for (i = 0; i < dev->num_addrs; i++)
-		dprintf("%016lx ", dev->base_address[i]);
-	dprintf("\n");
-	if (dev->num_irqs) {
-		dprintf("        IRQ%s", dev->num_irqs > 1 ? "s" : "");
-		for (i = 0; i < dev->num_irqs; i++)
-			dprintf(" %s", __irq_itoa(dev->irqs[i]));
-		dprintf("\n");
-	}
-#endif
 }
 
 void __init fill_ebus_device(int node, struct linux_ebus_device *dev)
@@ -155,27 +138,32 @@ void __init fill_ebus_device(int node, struct linux_ebus_device *dev)
 	struct linux_prom_registers regs[PROMREG_MAX];
 	struct linux_ebus_child *child;
 	int irqs[PROMINTR_MAX];
-	char lbuf[128];
 	int i, n, len;
 
 	dev->prom_node = node;
-	prom_getstring(node, "name", lbuf, sizeof(lbuf));
-	strcpy(dev->prom_name, lbuf);
+	prom_getstring(node, "name", dev->prom_name, sizeof(dev->prom_name));
+	printk(" [%s", dev->prom_name);
 
 	len = prom_getproperty(node, "reg", (void *)regs, sizeof(regs));
 	if (len % sizeof(struct linux_prom_registers)) {
 		prom_printf("UGH: proplen for %s was %d, need multiple of %d\n",
 			    dev->prom_name, len,
 			    (int)sizeof(struct linux_prom_registers));
-		panic(__FUNCTION__);
+		prom_halt();
 	}
 	dev->num_addrs = len / sizeof(struct linux_prom_registers);
 
 	for (i = 0; i < dev->num_addrs; i++) {
 		n = (regs[i].which_io - 0x10) >> 2;
 
-		dev->base_address[i] = dev->bus->self->resource[n].start;
-		dev->base_address[i] += (unsigned long)regs[i].phys_addr;
+		dev->resource[i].start  = dev->bus->self->resource[n].start;
+		dev->resource[i].start += (unsigned long)regs[i].phys_addr;
+		dev->resource[i].end    =
+			(dev->resource[i].start + (unsigned long)regs[i].reg_size - 1UL);
+		dev->resource[i].flags  = IORESOURCE_MEM;
+		dev->resource[i].name   = dev->prom_name;
+		request_resource(&dev->bus->self->resource[n],
+				 &dev->resource[i]);
 	}
 
 	len = prom_getproperty(node, "interrupts", (char *)&irqs, sizeof(irqs));
@@ -184,28 +172,17 @@ void __init fill_ebus_device(int node, struct linux_ebus_device *dev)
 	} else {
 		dev->num_irqs = len / sizeof(irqs[0]);
 		for (i = 0; i < dev->num_irqs; i++) {
+			struct pci_pbm_info *pbm = dev->bus->parent;
+			struct pci_controller_info *p = pbm->parent;
+
 			ebus_intmap_match(dev->bus, &regs[0], &irqs[i]);
-			dev->irqs[i] = psycho_irq_build(dev->bus->parent,
-							dev->bus->self, irqs[i]);
+			dev->irqs[i] = p->irq_build(p, dev->bus->self, irqs[i]);
 		}
 	}
 
-#ifdef DEBUG_FILL_EBUS_DEV
-	dprintf("'%s': address%s ", dev->prom_name,
-	       dev->num_addrs > 1 ? "es" : "");
-	for (i = 0; i < dev->num_addrs; i++)
-		dprintf("%016lx ", dev->base_address[i]);
-	dprintf("\n");
-	if (dev->num_irqs) {
-		dprintf("  IRQ%s", dev->num_irqs > 1 ? "s" : "");
-		for (i = 0; i < dev->num_irqs; i++)
-			dprintf(" %s", __irq_itoa(dev->irqs[i]));
-		dprintf("\n");
-	}
-#endif
 	if ((node = prom_getchild(node))) {
-		dev->children = (struct linux_ebus_child *)
-			ebus_alloc(sizeof(struct linux_ebus_child));
+		printk(" ->");
+		dev->children = ebus_alloc(sizeof(struct linux_ebus_child));
 
 		child = dev->children;
 		child->next = 0;
@@ -214,8 +191,7 @@ void __init fill_ebus_device(int node, struct linux_ebus_device *dev)
 		fill_ebus_child(node, &regs[0], child);
 
 		while ((node = prom_getsibling(node))) {
-			child->next = (struct linux_ebus_child *)
-				ebus_alloc(sizeof(struct linux_ebus_child));
+			child->next = ebus_alloc(sizeof(struct linux_ebus_child));
 
 			child = child->next;
 			child->next = 0;
@@ -224,24 +200,21 @@ void __init fill_ebus_device(int node, struct linux_ebus_device *dev)
 			fill_ebus_child(node, &regs[0], child);
 		}
 	}
+	printk("]");
 }
 
 extern void clock_probe(void);
+extern void power_init(void);
 
 void __init ebus_init(void)
 {
-	struct linux_prom_pci_registers regs[PROMREG_MAX];
-	struct linux_pbm_info *pbm;
+	struct pci_pbm_info *pbm;
 	struct linux_ebus_device *dev;
 	struct linux_ebus *ebus;
 	struct pci_dev *pdev;
 	struct pcidev_cookie *cookie;
-	char lbuf[128];
-	struct resource *base;
-	unsigned long addr;
 	unsigned short pci_command;
-	int nd, len, ebusnd;
-	int reg, rng, nreg;
+	int nd, ebusnd;
 	int num_ebus = 0;
 
 	if (!pci_present())
@@ -250,17 +223,13 @@ void __init ebus_init(void)
 	pdev = pci_find_device(PCI_VENDOR_ID_SUN, PCI_DEVICE_ID_SUN_EBUS, 0);
 	if (!pdev) {
 		printk("ebus: No EBus's found.\n");
-#ifdef PROM_DEBUG
-		dprintf("ebus: No EBus's found.\n");
-#endif
 		return;
 	}
 
 	cookie = pdev->sysdata;
 	ebusnd = cookie->prom_node;
 
-	ebus_chain = ebus = (struct linux_ebus *)
-			ebus_alloc(sizeof(struct linux_ebus));
+	ebus_chain = ebus = ebus_alloc(sizeof(struct linux_ebus));
 	ebus->next = 0;
 
 	while (ebusnd) {
@@ -277,9 +246,6 @@ void __init ebus_init(void)
 				if (ebus == ebus_chain) {
 					ebus_chain = NULL;
 					printk("ebus: No EBus's found.\n");
-#ifdef PROM_DEBUG
-					dprintf("ebus: No EBus's found.\n");
-#endif
 					return;
 				}
 				break;
@@ -290,14 +256,10 @@ void __init ebus_init(void)
 			continue;
 		}
 		printk("ebus%d:", num_ebus);
-#ifdef PROM_DEBUG
-		dprintf("ebus%d:", num_ebus);
-#endif
 
-		prom_getstring(ebusnd, "name", lbuf, sizeof(lbuf));
+		prom_getstring(ebusnd, "name", ebus->prom_name, sizeof(ebus->prom_name));
+		ebus->index = num_ebus;
 		ebus->prom_node = ebusnd;
-		strcpy(ebus->prom_name, lbuf);
-
 		ebus->self = pdev;
 		ebus->parent = pbm = cookie->pbm;
 
@@ -310,56 +272,7 @@ void __init ebus_init(void)
 		pci_write_config_byte(pdev, PCI_LATENCY_TIMER, 64);
 
 		/* NOTE: Cache line size is in 32-bit word units. */
-		pci_write_config_byte(pdev, PCI_CACHE_LINE_SIZE, 0x10);
-
-		len = prom_getproperty(ebusnd, "reg", (void *)regs,
-				       sizeof(regs));
-		if (len == 0 || len == -1) {
-			prom_printf("%s: can't find reg property\n",
-				    __FUNCTION__);
-			prom_halt();
-		}
-		nreg = len / sizeof(struct linux_prom_pci_registers);
-
-		base = &ebus->self->resource[0];
-		for (reg = 0; reg < nreg; reg++) {
-			if (!(regs[reg].phys_hi & 0x03000000))
-				continue;
-
-			for (rng = 0; rng < pbm->num_pbm_ranges; rng++) {
-				struct linux_prom_pci_ranges *rp =
-						&pbm->pbm_ranges[rng];
-
-				if ((rp->child_phys_hi ^ regs[reg].phys_hi)
-								& 0x03000000)
-					continue;
-
-				addr = (u64)regs[reg].phys_lo;
-				addr += (u64)regs[reg].phys_mid << 32UL;
-				addr += (u64)rp->parent_phys_lo;
-				addr += (u64)rp->parent_phys_hi << 32UL;
-
-				base->name = "EBUS";
-				base->start = (unsigned long)__va(addr);
-				base->end = base->start + regs[reg].size_lo - 1;
-				base->flags = 0;
-				request_resource(&ioport_resource, base);
-
-				base += 1;
-
-				printk(" %lx[%x]", (unsigned long)__va(addr),
-				       regs[reg].size_lo);
-#ifdef PROM_DEBUG
-				dprintf(" %lx[%x]", (unsigned long)__va(addr),
-				        regs[reg].size_lo);
-#endif
-				break;
-			}
-		}
-		printk("\n");
-#ifdef PROM_DEBUG
-		dprintf("\n");
-#endif
+		pci_write_config_byte(pdev, PCI_CACHE_LINE_SIZE, 64/sizeof(u32));
 
 		prom_ebus_ranges_init(ebus);
 		prom_ebus_intmap_init(ebus);
@@ -368,8 +281,7 @@ void __init ebus_init(void)
 		if (!nd)
 			goto next_ebus;
 
-		ebus->devices = (struct linux_ebus_device *)
-				ebus_alloc(sizeof(struct linux_ebus_device));
+		ebus->devices = ebus_alloc(sizeof(struct linux_ebus_device));
 
 		dev = ebus->devices;
 		dev->next = 0;
@@ -378,8 +290,7 @@ void __init ebus_init(void)
 		fill_ebus_device(nd, dev);
 
 		while ((nd = prom_getsibling(nd))) {
-			dev->next = (struct linux_ebus_device *)
-				ebus_alloc(sizeof(struct linux_ebus_device));
+			dev->next = ebus_alloc(sizeof(struct linux_ebus_device));
 
 			dev = dev->next;
 			dev->next = 0;
@@ -389,6 +300,8 @@ void __init ebus_init(void)
 		}
 
 	next_ebus:
+		printk("\n");
+
 		pdev = pci_find_device(PCI_VENDOR_ID_SUN,
 				       PCI_DEVICE_ID_SUN_EBUS, pdev);
 		if (!pdev)
@@ -397,8 +310,7 @@ void __init ebus_init(void)
 		cookie = pdev->sysdata;
 		ebusnd = cookie->prom_node;
 
-		ebus->next = (struct linux_ebus *)
-			ebus_alloc(sizeof(struct linux_ebus));
+		ebus->next = ebus_alloc(sizeof(struct linux_ebus));
 		ebus = ebus->next;
 		ebus->next = 0;
 		++num_ebus;
@@ -420,4 +332,5 @@ void __init ebus_init(void)
 	flash_init();
 #endif
 	clock_probe();
+	power_init();
 }

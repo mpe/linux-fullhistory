@@ -122,8 +122,8 @@ void kiobuf_wait_for_io(struct kiobuf *kiobuf)
 
 	add_wait_queue(&kiobuf->wait_queue, &wait);
 repeat:
-	tsk->state = TASK_UNINTERRUPTIBLE;
 	run_task_queue(&tq_disk);
+	set_task_state(tsk, TASK_UNINTERRUPTIBLE);
 	if (atomic_read(&kiobuf->io_count) != 0) {
 		schedule();
 		goto repeat;

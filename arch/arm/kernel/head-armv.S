@@ -164,9 +164,16 @@ __entry:	teq	r0, #0					@ check for illegal entry...
 		addne	r0, r4, #0x3600				@ d8000000
 		strne	r3, [r0]
 #endif
-@
-@ The following should work on both v3 and v4 implementations
-@
+		b	aligned_call
+/*
+ * The following should work on both v3 and v4 implementations
+ * Note: it seems that if the mov pc,lr is on the next cache
+ * line, it doesn't get fetched before the MMU starts
+ * translating, which prevents the kernel from booting.
+ * Ensure that this never happens.
+ */
+		.align 5
+aligned_call:
 		mov	lr, pc
 		mov	pc, r10					@ Call processor flush (returns ctrl reg)
 		adr	r5, __entry
@@ -180,7 +187,7 @@ __entry:	teq	r0, #0					@ check for illegal entry...
 #ifdef CONFIG_ARCH_RPC
 /* Turn the screen red on a error - RiscPC only.
  */
-1:		mov	r0, #0x02000000
+		mov	r0, #0x02000000
 		mov	r3, #0x11
 		orr	r3, r3, r3, lsl #8
 		orr	r3, r3, r3, lsl #16
@@ -189,6 +196,7 @@ __entry:	teq	r0, #0					@ check for illegal entry...
 		str	r3, [r0], #4
 		str	r3, [r0], #4
 #endif
+1:		mov	r0, r0
 		b	1b
 
 .Lbranch:	.long	.Lalready_done_mmap			@ Real address of routine

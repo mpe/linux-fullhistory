@@ -3,7 +3,7 @@
  *
  *	Copyright (C) 1995 David A Rusling
  *	Copyright (C) 1996 Jay A Estabrook
- *	Copyright (C) 1998 Richard Henderson
+ *	Copyright (C) 1998, 1999 Richard Henderson
  *
  * Code supporting the MIKASA (AlphaServer 1000).
  */
@@ -28,9 +28,9 @@
 #include <asm/core_cia.h>
 
 #include "proto.h"
-#include "irq.h"
-#include "bios32.h"
-#include "machvec.h"
+#include "irq_impl.h"
+#include "pci_impl.h"
+#include "machvec_impl.h"
 
 static void
 mikasa_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
@@ -120,7 +120,7 @@ mikasa_init_irq(void)
  */
 
 static int __init
-mikasa_map_irq(struct pci_dev *dev, int slot, int pin)
+mikasa_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 {
 	static char irq_tab[8][5] __initlocaldata = {
 		/*INT    INTA   INTB   INTC   INTD */
@@ -137,19 +137,6 @@ mikasa_map_irq(struct pci_dev *dev, int slot, int pin)
 	return COMMON_TABLE_LOOKUP;
 }
 
-static void __init
-mikasa_pci_fixup(void)
-{
-	layout_all_busses(EISA_DEFAULT_IO_BASE,APECS_AND_LCA_DEFAULT_MEM_BASE);
-	common_pci_fixup(mikasa_map_irq, common_swizzle);
-}
-
-static void __init
-mikasa_primo_pci_fixup(void)
-{
-	layout_all_busses(EISA_DEFAULT_IO_BASE, DEFAULT_MEM_BASE);
-	common_pci_fixup(mikasa_map_irq, common_swizzle);
-}
 
 #if defined(CONFIG_ALPHA_GENERIC) || !defined(CONFIG_ALPHA_PRIMO)
 static void
@@ -180,6 +167,7 @@ mikasa_apecs_machine_check(unsigned long vector, unsigned long la_ptr,
 }
 #endif
 
+
 /*
  * The System Vector
  */
@@ -193,18 +181,22 @@ struct alpha_machine_vector mikasa_mv __initmv = {
 	DO_APECS_BUS,
 	machine_check:		mikasa_apecs_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	min_io_address:		DEFAULT_IO_BASE,
+	min_mem_address:	APECS_AND_LCA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		32,
 	irq_probe_mask:		_PROBE_MASK(32),
 	update_irq_hw:		mikasa_update_irq_hw,
-	ack_irq:		generic_ack_irq,
+	ack_irq:		common_ack_irq,
 	device_interrupt:	mikasa_device_interrupt,
 
 	init_arch:		apecs_init_arch,
 	init_irq:		mikasa_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		mikasa_pci_fixup,
-	kill_arch:		generic_kill_arch,
+	init_pit:		common_init_pit,
+	init_pci:		common_init_pci,
+	kill_arch:		common_kill_arch,
+	pci_map_irq:		mikasa_map_irq,
+	pci_swizzle:		common_swizzle,
 };
 ALIAS_MV(mikasa)
 #endif
@@ -218,18 +210,22 @@ struct alpha_machine_vector mikasa_primo_mv __initmv = {
 	DO_CIA_BUS,
 	machine_check:		cia_machine_check,
 	max_dma_address:	ALPHA_MAX_DMA_ADDRESS,
+	min_io_address:		DEFAULT_IO_BASE,
+	min_mem_address:	CIA_DEFAULT_MEM_BASE,
 
 	nr_irqs:		32,
 	irq_probe_mask:		_PROBE_MASK(32),
 	update_irq_hw:		mikasa_update_irq_hw,
-	ack_irq:		generic_ack_irq,
+	ack_irq:		common_ack_irq,
 	device_interrupt:	mikasa_device_interrupt,
 
 	init_arch:		cia_init_arch,
 	init_irq:		mikasa_init_irq,
-	init_pit:		generic_init_pit,
-	pci_fixup:		mikasa_primo_pci_fixup,
-	kill_arch:		generic_kill_arch,
+	init_pit:		common_init_pit,
+	init_pci:		common_init_pci,
+	kill_arch:		common_kill_arch,
+	pci_map_irq:		mikasa_map_irq,
+	pci_swizzle:		common_swizzle,
 };
 ALIAS_MV(mikasa_primo)
 #endif

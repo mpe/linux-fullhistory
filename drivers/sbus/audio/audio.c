@@ -1,12 +1,12 @@
 /*
  * drivers/sbus/audio/audio.c
  *
- * Copyright (C) 1996 Thomas K. Dyas (tdyas@noc.rutgers.edu)
- * Copyright (C) 1997,1998 Derrick J. Brashear (shadow@dementia.org)
- * Copyright (C) 1997 Brent Baccala (baccala@freesoft.org)
+ * Copyright 1996 Thomas K. Dyas (tdyas@noc.rutgers.edu)
+ * Copyright 1997,1998,1999 Derrick J. Brashear (shadow@dementia.org)
+ * Copyright 1997 Brent Baccala (baccala@freesoft.org)
  * 
  * Mixer code adapted from code contributed by and
- * Copyright (C) 1998 Michael Mraka (michael@fi.muni.cz)
+ * Copyright 1998 Michael Mraka (michael@fi.muni.cz)
  * and with fixes from Michael Shuey (shuey@ecn.purdue.edu)
  * The mixer code cheats; Sparc hardware doesn't generally allow independent
  * line control, and this fakes it badly.
@@ -40,10 +40,16 @@
 #undef __AUDIO_DEBUG
 #define __AUDIO_ERROR
 #undef __AUDIO_TRACE
+#undef __AUDIO_OSSDEBUG
 #ifdef __AUDIO_DEBUG
 #define dprintk(x) printk x
 #else
 #define dprintk(x)
+#endif
+#ifdef __AUDIO_OSSDEBUG
+#define oprintk(x) printk x
+#else
+#define oprintk(x)
 #endif
 #ifdef __AUDIO_ERROR
 #define eprintk(x) printk x
@@ -117,10 +123,12 @@ int register_sparcaudio_driver(struct sparcaudio_driver *drv, int duplex)
          * TODO: Make number of input/output buffers tunable parameters
          */
 
+#if defined (LINUX_VERSION_CODE) && LINUX_VERSION_CODE > 0x202ff
         init_waitqueue_head(&drv->open_wait);
         init_waitqueue_head(&drv->output_write_wait);
         init_waitqueue_head(&drv->output_drain_wait);
         init_waitqueue_head(&drv->input_read_wait);
+#endif
 
         drv->num_output_buffers = 8;
 	drv->output_buffer_size = (4096 * 2);
@@ -269,6 +277,7 @@ void sparcaudio_output_done(struct sparcaudio_driver * drv, int status)
    * If status & 2, a buffer was claimed for DMA and is still in use.
    *
    * The playing_count for non-DMA hardware should never be non-zero.
+   * Value of status for non-DMA hardware should always be 1.
    */
   if (status & 1) {
     if (drv->playing_count) 
@@ -305,15 +314,16 @@ void sparcaudio_output_done(struct sparcaudio_driver * drv, int status)
 
   /* If we got back a buffer, see if anyone wants to write to it */
   if ((status & 1) || ((drv->output_count + drv->playing_count) 
-		  < drv->num_output_buffers)) 
+                       < drv->num_output_buffers)) {
     wake_up_interruptible(&drv->output_write_wait);
+  }
 
   /* If the output queue is empty, shut down the driver. */
   if ((drv->output_count < 1) && (drv->playing_count < 1)) {
     kill_procs(drv->sd_siglist,SIGPOLL,S_MSG);
 
     /* Stop the lowlevel driver from outputing. */
-    drv->ops->stop_output(drv); 
+    /* drv->ops->stop_output(drv); Should not be necessary  -- DJB 5/25/98 */
     drv->output_active = 0;
 		  
     /* Wake up any waiting writers or syncers and return. */
@@ -638,8 +648,11 @@ static int sparcaudio_mixer_ioctl(struct inode * inode, struct file * file,
 {
   struct sparcaudio_driver *drv = drivers[(MINOR(inode->i_rdev) >>
 					   SPARCAUDIO_DEVICE_SHIFT)];
-  unsigned long i = 0, j = 0;
-  unsigned int k;
+  unsigned long i = 0, j = 0, l = 0, m = 0;
+  unsigned int k = 0;
+
+  if (_SIOC_DIR(cmd) & _SIOC_WRITE)
+    drv->mixer_modify_counter++;
 
   if(cmd == SOUND_MIXER_INFO) {
           audio_device_t tmp;
@@ -651,9 +664,7 @@ static int sparcaudio_mixer_ioctl(struct inode * inode, struct file * file,
                   memset(&info, 0, sizeof(info));
                   strncpy(info.id, tmp.name, sizeof(info.id));
                   strncpy(info.name, "Sparc Audio", sizeof(info.name));
-
-                  /* XXX do this right... */
-                  info.modify_counter = 0;
+                  info.modify_counter = drv->mixer_modify_counter;
 
                   if(copy_to_user((char *)arg, &info, sizeof(info)))
                           retval = -EFAULT;
@@ -665,74 +676,130 @@ static int sparcaudio_mixer_ioctl(struct inode * inode, struct file * file,
 
   switch (cmd) {
   case SOUND_MIXER_WRITE_RECLEV:
+    if(COPY_IN(arg, k))
+      return -EFAULT;
+  iretry:
+    oprintk(("setting input volume (0x%x)", k));
+    if (drv->ops->get_input_channels)
+      j = drv->ops->get_input_channels(drv);
+    if (drv->ops->get_input_volume)
+      l = drv->ops->get_input_volume(drv);
+    if (drv->ops->get_input_balance)
+      m = drv->ops->get_input_balance(drv);
+    i = OSS_TO_GAIN(k);
+    j = OSS_TO_BAL(k);
+    oprintk((" for stereo to to %d (bal %d):", i, j));
+    if (drv->ops->set_input_volume)
+      drv->ops->set_input_volume(drv, i);
+    if (drv->ops->set_input_balance)
+      drv->ops->set_input_balance(drv, j);
+  case SOUND_MIXER_READ_RECLEV:
+    if (drv->ops->get_input_volume)
+      i = drv->ops->get_input_volume(drv);
+    if (drv->ops->get_input_balance)
+      j = drv->ops->get_input_balance(drv);
+    oprintk((" got (0x%x)\n", BAL_TO_OSS(i,j)));
+    i = BAL_TO_OSS(i,j);
+    /* Try to be reasonable about volume changes */
+    if ((cmd == SOUND_MIXER_WRITE_RECLEV) && (i != k) && 
+        (i == BAL_TO_OSS(l,m))) 
+      {
+        k += (OSS_LEFT(k) > OSS_LEFT(i)) ? 256 : -256;
+        k += (OSS_RIGHT(k) > OSS_RIGHT(i)) ? 1 : -1;
+        oprintk((" try 0x%x\n", k));
+        goto iretry;
+      }
+    return COPY_OUT(arg, i);
+  case SOUND_MIXER_WRITE_VOLUME:
+    if(COPY_IN(arg, k))
+	return -EFAULT;
+    if (drv->ops->get_output_muted && drv->ops->set_output_muted) {
+      i = drv->ops->get_output_muted(drv);
+      if ((k == 0) || ((i == 0) && (OSS_LEFT(k) < 100)))
+        drv->ops->set_output_muted(drv, 1);
+      else
+        drv->ops->set_output_muted(drv, 0);
+    }
+  case SOUND_MIXER_READ_VOLUME:
+    if (drv->ops->get_output_muted) 
+      i = drv->ops->get_output_muted(drv);
+    k = 0x6464 * (1 - i);
+    return COPY_OUT(arg, k);
+  case SOUND_MIXER_WRITE_PCM:
+    if(COPY_IN(arg, k))
+	return -EFAULT;
+  oretry:
+    oprintk(("setting output volume (0x%x)\n", k));
+    if (drv->ops->get_output_channels)
+      j = drv->ops->get_output_channels(drv);
+    if (drv->ops->get_output_volume)
+      l = drv->ops->get_output_volume(drv);
+    if (drv->ops->get_output_balance)
+      m = drv->ops->get_output_balance(drv);
+    oprintk((" started as (0x%x)\n", BAL_TO_OSS(l,m)));
+    i = OSS_TO_GAIN(k);
+    j = OSS_TO_BAL(k);
+    oprintk((" for stereo to %d (bal %d)\n", i, j));
+    if (drv->ops->set_output_volume)
+      drv->ops->set_output_volume(drv, i);
+    if (drv->ops->set_output_balance)
+      drv->ops->set_output_balance(drv, j);
+  case SOUND_MIXER_READ_PCM:
+    if (drv->ops->get_output_volume)
+      i = drv->ops->get_output_volume(drv);
+    if (drv->ops->get_output_balance)
+      j = drv->ops->get_output_balance(drv);
+    oprintk((" got 0x%x\n", BAL_TO_OSS(i,j)));
+    i = BAL_TO_OSS(i,j);
+    /* Try to be reasonable about volume changes */
+    if ((cmd == SOUND_MIXER_WRITE_PCM) && (i != k) && 
+        (i == BAL_TO_OSS(l,m))) 
+      {
+        k += (OSS_LEFT(k) > OSS_LEFT(i)) ? 256 : -256;
+        k += (OSS_RIGHT(k) > OSS_RIGHT(i)) ? 1 : -1;
+        oprintk((" try 0x%x\n", k));
+        goto oretry;
+      }
+    return COPY_OUT(arg, i);
+  case SOUND_MIXER_READ_SPEAKER:
+    k = OSS_PORT_AUDIO(drv, AUDIO_SPEAKER);
+    return COPY_OUT(arg, k);
+  case SOUND_MIXER_READ_MIC:
+    k = OSS_IPORT_AUDIO(drv, AUDIO_MICROPHONE);
+    return COPY_OUT(arg, k);
+  case SOUND_MIXER_READ_CD:
+    k = OSS_IPORT_AUDIO(drv, AUDIO_CD);
+    return COPY_OUT(arg, k);
+  case SOUND_MIXER_READ_LINE:
+    k = OSS_IPORT_AUDIO(drv, AUDIO_LINE_IN);
+    return COPY_OUT(arg, k);
+  case SOUND_MIXER_READ_LINE1:
+    k = OSS_PORT_AUDIO(drv, AUDIO_HEADPHONE);
+    return COPY_OUT(arg, k);
+  case SOUND_MIXER_READ_LINE2:
+    k = OSS_PORT_AUDIO(drv, AUDIO_LINE_OUT);
+    return COPY_OUT(arg, k);
+
   case SOUND_MIXER_WRITE_MIC:
   case SOUND_MIXER_WRITE_CD:
   case SOUND_MIXER_WRITE_LINE:
-  case SOUND_MIXER_WRITE_IMIX:
-    if(COPY_IN(arg, k))
-      return -EFAULT;
-    tprintk(("setting input volume (0x%x)", k));
-    if (drv->ops->get_input_channels)
-      j = drv->ops->get_input_channels(drv);
-    if (j == 1) {
-      i = s_to_m(k);
-      tprintk((" for mono to %d\n", i));
-      if (drv->ops->set_input_volume)
-	drv->ops->set_input_volume(drv, i);
-      if (drv->ops->get_input_volume)
-	i = drv->ops->get_input_volume(drv);
-      i = m_to_s(i);
-    } else {
-      i = s_to_g(k);
-      j = s_to_b(k);
-      tprintk((" for stereo to to %d (bal %d)\n", i, j));
-      if (drv->ops->set_input_volume)
-	drv->ops->set_input_volume(drv, i);
-      if (drv->ops->get_input_volume)
-	i = drv->ops->get_input_volume(drv);
-      if (drv->ops->set_input_balance)
-	drv->ops->set_input_balance(drv, j);
-      if (drv->ops->get_input_balance)
-	j = drv->ops->get_input_balance(drv);
-      i = b_to_s(i,j);
-    }
-    return COPY_OUT(arg, i);
-  case SOUND_MIXER_WRITE_PCM:
-  case SOUND_MIXER_WRITE_VOLUME:
+  case SOUND_MIXER_WRITE_LINE1:
+  case SOUND_MIXER_WRITE_LINE2:
   case SOUND_MIXER_WRITE_SPEAKER:
     if(COPY_IN(arg, k))
 	return -EFAULT;
-    tprintk(("setting output volume (0x%x)", k));
-    if (drv->ops->get_output_channels)
-      j = drv->ops->get_output_channels(drv);
-    if (j == 1) {
-      i = s_to_m(k);
-      tprintk((" for mono to %d\n", i));
-      if (drv->ops->set_output_volume)
-	drv->ops->set_output_volume(drv, i);
-      if (drv->ops->get_output_volume)
-	i = drv->ops->get_output_volume(drv);
-      i = m_to_s(i);
-    } else {
-      i = s_to_g(k);
-      j = s_to_b(k);
-      tprintk((" for stereo to to %d (bal %d)\n", i, j));
-      if (drv->ops->set_output_volume)
-	drv->ops->set_output_volume(drv, i);
-      if (drv->ops->get_output_volume)
-	i = drv->ops->get_output_volume(drv);
-      if (drv->ops->set_output_balance)
-	drv->ops->set_output_balance(drv, j);
-      if (drv->ops->get_output_balance)
-	j = drv->ops->get_output_balance(drv);
-      i = b_to_s(i,j);
-    }
-    return COPY_OUT(arg, i);
+    OSS_TWIDDLE_IPORT(drv, cmd, SOUND_MIXER_WRITE_LINE, AUDIO_LINE_IN, k);
+    OSS_TWIDDLE_IPORT(drv, cmd, SOUND_MIXER_WRITE_MIC, AUDIO_MICROPHONE, k);
+    OSS_TWIDDLE_IPORT(drv, cmd, SOUND_MIXER_WRITE_CD, AUDIO_CD, k);
+
+    OSS_TWIDDLE_PORT(drv, cmd, SOUND_MIXER_WRITE_SPEAKER, AUDIO_SPEAKER, k);
+    OSS_TWIDDLE_PORT(drv, cmd, SOUND_MIXER_WRITE_LINE1, AUDIO_HEADPHONE, k);
+    OSS_TWIDDLE_PORT(drv, cmd, SOUND_MIXER_WRITE_LINE2, AUDIO_LINE_OUT, k);
+    return COPY_OUT(arg, k);
   case SOUND_MIXER_READ_RECSRC: 
     if (drv->ops->get_input_port)
       i = drv->ops->get_input_port(drv);
     /* only one should ever be selected */
-    if (i & AUDIO_ANALOG_LOOPBACK) j = SOUND_MASK_IMIX; /* ? */
     if (i & AUDIO_CD) j = SOUND_MASK_CD;
     if (i & AUDIO_LINE_IN) j = SOUND_MASK_LINE;
     if (i & AUDIO_MICROPHONE) j = SOUND_MASK_MIC;
@@ -744,11 +811,10 @@ static int sparcaudio_mixer_ioctl(struct inode * inode, struct file * file,
     if(COPY_IN(arg, k))
       return -EFAULT;
     /* only one should ever be selected */
-    if (k & SOUND_MASK_IMIX) j = AUDIO_ANALOG_LOOPBACK;
     if (k & SOUND_MASK_CD) j = AUDIO_CD;
     if (k & SOUND_MASK_LINE) j = AUDIO_LINE_IN;
     if (k & SOUND_MASK_MIC) j = AUDIO_MICROPHONE;
-    tprintk(("setting inport to %d\n", j));
+    oprintk(("setting inport to %d\n", j));
     i = drv->ops->set_input_port(drv, j);
     
     return COPY_OUT(arg, i);
@@ -759,7 +825,6 @@ static int sparcaudio_mixer_ioctl(struct inode * inode, struct file * file,
     if (i & AUDIO_MICROPHONE) j |= SOUND_MASK_MIC;
     if (i & AUDIO_LINE_IN) j |= SOUND_MASK_LINE;
     if (i & AUDIO_CD) j |= SOUND_MASK_CD;
-    if (i & AUDIO_ANALOG_LOOPBACK) j |= SOUND_MASK_IMIX; /* ? */
     
     return COPY_OUT(arg, j);
   case SOUND_MIXER_READ_CAPS: /* mixer capabilities */
@@ -767,62 +832,27 @@ static int sparcaudio_mixer_ioctl(struct inode * inode, struct file * file,
     return COPY_OUT(arg, i);
 
   case SOUND_MIXER_READ_DEVMASK: /* all supported devices */
-  case SOUND_MIXER_READ_STEREODEVS: /* what supports stereo */
     if (drv->ops->get_input_ports)
       i = drv->ops->get_input_ports(drv);
     /* what do we support? */
     if (i & AUDIO_MICROPHONE) j |= SOUND_MASK_MIC;
     if (i & AUDIO_LINE_IN) j |= SOUND_MASK_LINE;
     if (i & AUDIO_CD) j |= SOUND_MASK_CD;
-    if (i & AUDIO_ANALOG_LOOPBACK) j |= SOUND_MASK_IMIX; /* ? */
     
     if (drv->ops->get_output_ports)
       i = drv->ops->get_output_ports(drv);
     if (i & AUDIO_SPEAKER) j |= SOUND_MASK_SPEAKER;
-    if (i & AUDIO_HEADPHONE) j |= SOUND_MASK_LINE; /* ? */
-    if (i & AUDIO_LINE_OUT) j |= SOUND_MASK_LINE;
-    
+    if (i & AUDIO_HEADPHONE) j |= SOUND_MASK_LINE1;
+    if (i & AUDIO_LINE_OUT) j |= SOUND_MASK_LINE2;
+
     j |= SOUND_MASK_VOLUME;
-    
+
+  case SOUND_MIXER_READ_STEREODEVS: /* what supports stereo */
+    j |= SOUND_MASK_PCM|SOUND_MASK_RECLEV;
+
     if (cmd == SOUND_MIXER_READ_STEREODEVS)
       j &= ~(MONO_DEVICES);
     return COPY_OUT(arg, j);
-  case SOUND_MIXER_READ_PCM:
-  case SOUND_MIXER_READ_SPEAKER:
-  case SOUND_MIXER_READ_VOLUME:
-    if (drv->ops->get_output_channels)
-      j = drv->ops->get_output_channels(drv);
-    if (j == 1) {
-      if (drv->ops->get_output_volume)
-	i = drv->ops->get_output_volume(drv);
-      i = m_to_s(i);
-    } else {
-      if (drv->ops->get_output_volume)
-	i = drv->ops->get_output_volume(drv);
-      if (drv->ops->get_output_balance)
-	j = drv->ops->get_output_balance(drv);
-      i = b_to_s(i,j);
-    }
-    return COPY_OUT(arg, i);
-  case SOUND_MIXER_READ_RECLEV:
-  case SOUND_MIXER_READ_MIC:
-  case SOUND_MIXER_READ_CD:
-  case SOUND_MIXER_READ_LINE:
-  case SOUND_MIXER_READ_IMIX:
-    if (drv->ops->get_input_channels)
-      j = drv->ops->get_input_channels(drv);
-    if (j == 1) {
-      if (drv->ops->get_input_volume)
-	i = drv->ops->get_input_volume(drv);
-      i = m_to_s(i);
-    } else {
-      if (drv->ops->get_input_volume)
-	i = drv->ops->get_input_volume(drv);
-      if (drv->ops->get_input_balance)
-	j = drv->ops->get_input_balance(drv);
-      i = b_to_s(i,j);
-    }
-    return COPY_OUT(arg, i);
   default:
     return -EINVAL;
   }
@@ -881,6 +911,10 @@ static int sparcaudio_ioctl(struct inode * inode, struct file * file,
         case SPARCAUDIO_DSP_MINOR:
 	case SPARCAUDIO_AUDIO_MINOR:
 	case SPARCAUDIO_AUDIOCTL_MINOR:
+          /* According to the OSS prog int, you can mixer ioctl /dev/dsp */
+          if (_IOC_TYPE(cmd) == 'M')
+            return sparcaudio_mixer_ioctl(inode, 
+                                          file, cmd, (unsigned int *)arg);
 	  switch (cmd) {
 	  case I_GETSIG:
 	  case I_GETSIG_SOLARIS:
@@ -1997,6 +2031,36 @@ static int sparcaudio_open(struct inode * inode, struct file * file)
 	  return -ENXIO;
 	}
 
+        /* From the dbri driver:
+         * SunOS 5.5.1 audio(7I) man page says:
+         * "Upon the initial open() of the audio device, the driver
+         *  will reset the data format of the device to the default
+         *  state of 8-bit, 8KHz, mono u-law data."
+         *
+         * Of course, we only do this for /dev/audio, and assume
+         * OSS semantics on /dev/dsp
+         */
+
+	if ((minor & 0xf) == SPARCAUDIO_AUDIO_MINOR) {
+	  if (file->f_mode & FMODE_WRITE) {
+            if (drv->ops->set_output_channels)
+              drv->ops->set_output_channels(drv, 1);
+            if (drv->ops->set_output_encoding)
+              drv->ops->set_output_encoding(drv, AUDIO_ENCODING_ULAW);
+            if (drv->ops->set_output_rate)
+              drv->ops->set_output_rate(drv, 8000);
+          }          
+
+	  if (file->f_mode & FMODE_READ) {
+            if (drv->ops->set_input_channels)
+              drv->ops->set_input_channels(drv, 1);
+            if (drv->ops->set_input_encoding)
+              drv->ops->set_input_encoding(drv, AUDIO_ENCODING_ULAW);
+            if (drv->ops->set_input_rate)
+              drv->ops->set_input_rate(drv, 8000);
+          }          
+        }
+
 	MOD_INC_USE_COUNT;
 
 	/* Success! */
@@ -2098,7 +2162,7 @@ EXPORT_SYMBOL(sparcaudio_input_done);
 #ifdef MODULE
 int init_module(void)
 #else
-__initfunc(int sparcaudio_init(void))
+int __init sparcaudio_init(void)
 #endif
 {
 #if defined (LINUX_VERSION_CODE) && LINUX_VERSION_CODE < 0x20100
