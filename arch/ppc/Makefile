@@ -65,8 +65,7 @@ endif
 checks:
 	@$(MAKE) -C arch/$(ARCH)/kernel checks
 
-BOOT_TARGETS = netboot znetboot zImage floppy install \
-	vmlinux.coff znetboot.initrd zImage.initrd vmlinux.coff.initrd
+BOOT_TARGETS = zImage znetboot.initrd zImage.initrd
 
 ifdef CONFIG_MBX
 $(BOOT_TARGETS): $(CHECKS) vmlinux
@@ -74,6 +73,24 @@ $(BOOT_TARGETS): $(CHECKS) vmlinux
 	@$(MAKEMBXBOOT) $@
 else
 $(BOOT_TARGETS): $(CHECKS) vmlinux
+	@$(MAKECOFFBOOT) $@
+	@$(MAKEBOOT) $@
+	@$(MAKECHRPBOOT) $@
+
+znetboot: $(CHECKS) vmlinux
+ifdef CONFIG_SMP
+ifdef CONFIG_PPC64
+	cp -f vmlinux /tftpboot/vmlinux.smp.64
+else
+	cp -f vmlinux /tftpboot/vmlinux.smp
+endif
+else
+ifdef CONFIG_PPC64
+	cp -f vmlinux /tftpboot/vmlinux.64
+else
+	cp -f vmlinux /tftpboot/vmlinux
+endif
+endif
 	@$(MAKECOFFBOOT) $@
 	@$(MAKEBOOT) $@
 	@$(MAKECHRPBOOT) $@

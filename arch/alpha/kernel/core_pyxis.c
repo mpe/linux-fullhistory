@@ -425,19 +425,24 @@ pyxis_native_window_setup(void)
 {
 	/*
 	 * Set up the PCI->physical memory translation windows.
-	 * For now, windows 1,2 and 3 are disabled.  In the future, we may
+	 * For now, windows 2 and 3 are disabled.  In the future, we may
 	 * want to use them to do scatter/gather DMA. 
 	 *
-	 * Window 0 goes at 1 GB and is 1 GB large.
+	 * Window 0 goes at 2 GB and is 1 GB large.
+	 * Window 1 goes at 3 GB and is 1 GB large.
 	 */
 
-	*(vuip)PYXIS_W0_BASE = 1U | (PYXIS_DMA_WIN_BASE_DEFAULT & 0xfff00000U);
+	*(vuip)PYXIS_W0_BASE = PYXIS_DMA_WIN_BASE_DEFAULT | 1UL;
 	*(vuip)PYXIS_W0_MASK = (PYXIS_DMA_WIN_SIZE_DEFAULT - 1) & 0xfff00000U;
 	*(vuip)PYXIS_T0_BASE = 0;
 
-	*(vuip)PYXIS_W1_BASE = 0x0 ;
-	*(vuip)PYXIS_W2_BASE = 0x0 ;
-	*(vuip)PYXIS_W3_BASE = 0x0 ;
+	*(vuip)PYXIS_W1_BASE = (PYXIS_DMA_WIN_BASE_DEFAULT +
+				PYXIS_DMA_WIN_SIZE_DEFAULT) | 1U;
+	*(vuip)PYXIS_W1_MASK = (PYXIS_DMA_WIN_SIZE_DEFAULT - 1) & 0xfff00000U;
+	*(vuip)PYXIS_T1_BASE = PYXIS_DMA_WIN_SIZE_DEFAULT;
+
+	*(vuip)PYXIS_W2_BASE = 0x0;
+	*(vuip)PYXIS_W3_BASE = 0x0;
 	mb();
 }
 

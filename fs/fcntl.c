@@ -31,6 +31,7 @@ out:
 	return error;
 
 out_putf:
+	write_unlock(&files->file_lock);
 	fput(file);
 	goto out;
 }

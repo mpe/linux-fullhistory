@@ -757,9 +757,9 @@ static void end_buffer_io_async(struct buffer_head * bh, int uptodate)
 
 	free = test_and_clear_bit(PG_free_after, &page->flags);
 
-	if (page->owner != -1)
+	if (page->owner != (void *)-1)
 		PAGE_BUG(page);
-	page->owner = (int)current;
+	page->owner = current;
 	UnlockPage(page);
 
 	if (free)
@@ -1195,7 +1195,7 @@ static int create_page_buffers(int rw, struct page *page, kdev_t dev, int b[], i
 
 	if (!PageLocked(page))
 		BUG();
-	if (page->owner != (int)current)
+	if (page->owner != current)
 		PAGE_BUG(page);
 	/*
 	 * Allocate async buffer heads pointing to this page, just for I/O.
@@ -1557,7 +1557,7 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 	}
 	if (!page->buffers)
 		BUG();
-	page->owner = -1;
+	page->owner = (void *)-1;
 
 	head = page->buffers;
 	bh = head;
@@ -1606,7 +1606,7 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 	} else {
 		if (!nr && rw == READ) {
 			SetPageUptodate(page);
-			page->owner = (int)current;
+			page->owner = current;
 			UnlockPage(page);
 		}
 		if (nr && (rw == WRITE))
@@ -1640,7 +1640,7 @@ int block_read_full_page(struct file * file, struct page * page)
 
 	blocks = PAGE_SIZE >> inode->i_sb->s_blocksize_bits;
 	iblock = page->offset >> inode->i_sb->s_blocksize_bits;
-	page->owner = -1;
+	page->owner = (void *)-1;
 	head = page->buffers;
 	bh = head;
 	nr = 0;
@@ -1675,7 +1675,7 @@ int block_read_full_page(struct file * file, struct page * page)
 		 * uptodate as well.
 		 */
 		SetPageUptodate(page);
-		page->owner = (int)current;
+		page->owner = current;
 		UnlockPage(page);
 	}
 	return 0;
@@ -1969,8 +1969,25 @@ asmlinkage int sys_bdflush(int func, long data)
 		goto out;
 
 	if (func == 1) {
-		 error = sync_old_buffers();
-		 goto out;
+		struct mm_struct *user_mm;
+		/*
+		 * bdflush will spend all of it's time in kernel-space,
+		 * without touching user-space, so we can switch it into
+		 * 'lazy TLB mode' to reduce the cost of context-switches
+		 * to and from bdflush.
+		 */
+		user_mm = current->mm;
+		mmget(user_mm);
+		current->flags |= PF_LAZY_TLB;
+
+		error = sync_old_buffers();
+
+		current->flags &= ~PF_LAZY_TLB;
+		SET_PAGE_DIR(current, user_mm->pgd);
+		mmput(current->mm);
+		current->mm = user_mm;
+
+		goto out;
 	}
 
 	/* Basically func 1 means read param 1, 2 means write param 1, etc */

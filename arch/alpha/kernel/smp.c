@@ -97,6 +97,8 @@ smp_store_cpu_info(int cpuid)
 	cpu_data[cpuid].loops_per_sec = loops_per_sec;
 	cpu_data[cpuid].last_asn
 	  = (cpuid << WIDTH_HARDWARE_ASN) + ASN_FIRST_VERSION;
+	cpu_data[cpuid].irq_count = 0;
+	cpu_data[cpuid].bh_count = 0;
 }
 
 /*
@@ -107,12 +109,6 @@ smp_setup_percpu_timer(int cpuid)
 {
 	cpu_data[cpuid].prof_counter = 1;
 	cpu_data[cpuid].prof_multiplier = 1;
-
-#ifdef NOT_YET_PROFILING
-	load_profile_irq(mid_xlate[cpu], lvl14_resolution);
-	if (cpu == smp_boot_cpuid)
-		enable_pil_irq(14);
-#endif
 }
 
 /*
@@ -586,14 +582,12 @@ void
 smp_percpu_timer_interrupt(struct pt_regs *regs)
 {
 	int cpu = smp_processor_id();
-	int user = user_mode(regs);
+	unsigned long user = user_mode(regs);
 	struct cpuinfo_alpha *data = &cpu_data[cpu];
 
-#ifdef NOT_YET_PROFILING
-	clear_profile_irq(mid_xlate[cpu]);
+	/* Record kernel PC.  */
 	if (!user)
 		alpha_do_profile(regs->pc);
-#endif
 
 	if (!--data->prof_counter) {
 		/* We need to make like a normal interrupt -- otherwise
@@ -630,28 +624,7 @@ smp_percpu_timer_interrupt(struct pt_regs *regs)
 int __init
 setup_profiling_timer(unsigned int multiplier)
 {
-#ifdef NOT_YET_PROFILING
-	int i;
-	unsigned long flags;
-
-	/* Prevent level14 ticker IRQ flooding. */
-	if((!multiplier) || (lvl14_resolution / multiplier) < 500)
-	        return -EINVAL;
-
-	save_and_cli(flags);
-	for (i = 0; i < NR_CPUS; i++) {
-	        if (cpu_present_mask & (1L << i)) {
-	                load_profile_irq(mid_xlate[i],
-					 lvl14_resolution / multiplier);
-	                prof_multiplier[i] = multiplier;
-	        }
-	}
-	restore_flags(flags);
-
-	return 0;
-#else
 	return -EINVAL;
-#endif
 }
 
 
@@ -893,9 +866,11 @@ ipi_flush_tlb_mm(void *x)
 void
 flush_tlb_mm(struct mm_struct *mm)
 {
-	if (mm == current->mm)
+	if (mm == current->mm) {
 		flush_tlb_current(mm);
-	else
+		if (atomic_read(&mm->count) == 1)
+			return;
+	} else
 		flush_tlb_other(mm);
 
 	if (smp_call_function(ipi_flush_tlb_mm, mm, 1, 1)) {
@@ -923,15 +898,17 @@ flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)
 	struct flush_tlb_page_struct data;
 	struct mm_struct *mm = vma->vm_mm;
 
+	if (mm == current->mm) {
+		flush_tlb_current_page(mm, vma, addr);
+		if (atomic_read(&mm->count) == 1)
+			return;
+	} else
+		flush_tlb_other(mm);
+
 	data.vma = vma;
 	data.mm = mm;
 	data.addr = addr;
 
-	if (mm == current->mm)
-		flush_tlb_current_page(mm, vma, addr);
-	else
-		flush_tlb_other(mm);
-	
 	if (smp_call_function(ipi_flush_tlb_page, &data, 1, 1)) {
 		printk(KERN_CRIT "flush_tlb_page: timed out\n");
 	}

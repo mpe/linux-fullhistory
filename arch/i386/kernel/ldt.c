@@ -2,7 +2,7 @@
  * linux/kernel/ldt.c
  *
  * Copyright (C) 1992 Krishna Balasubramanian and Linus Torvalds
- * Copyright (C) 1998 Ingo Molnar
+ * Copyright (C) 1999 Ingo Molnar <mingo@redhat.com>
  */
 
 #include <linux/errno.h>

@@ -231,7 +231,6 @@ sys_ptrace(long request, long pid, long addr, long data,
 	   int a4, int a5, struct pt_regs regs)
 {
 	struct task_struct *child;
-	unsigned long tmp;
 	long ret;
 
 	lock_kernel();

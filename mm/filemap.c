@@ -463,7 +463,7 @@ static inline void __add_to_page_cache(struct page * page,
 
 	flags = page->flags & ~((1 << PG_uptodate) | (1 << PG_error));
 	page->flags = flags |  ((1 << PG_locked) | (1 << PG_referenced));
-	page->owner = (int)current;	/* REMOVEME */
+	page->owner = current;	/* REMOVEME */
 	get_page(page);
 	page->offset = offset;
 	add_page_to_inode_queue(inode, page);
@@ -1855,7 +1855,7 @@ repeat_find:
 		if (!PageLocked(page)) {
 			PAGE_BUG(page);
 		} else {
-			if (page->owner != (int)current) {
+			if (page->owner != current) {
 				PAGE_BUG(page);
 			}
 		}

@@ -182,6 +182,8 @@ __initfunc(void openpic_init(int main_pic))
     if (!OpenPIC)
 	panic("No OpenPIC found");
 
+    if ( ppc_md.progress ) ppc_md.progress("openpic enter",0x122);
+
     t = openpic_read(&OpenPIC->Global.Feature_Reporting0);
     switch (t & OPENPIC_FEATURE_VERSION_MASK) {
 	case 1:
@@ -201,6 +203,7 @@ __initfunc(void openpic_init(int main_pic))
 		     OPENPIC_FEATURE_LAST_PROCESSOR_SHIFT) + 1;
     NumSources = ((t & OPENPIC_FEATURE_LAST_SOURCE_MASK) >>
 		  OPENPIC_FEATURE_LAST_SOURCE_SHIFT) + 1;
+
     printk("OpenPIC Version %s (%d CPUs and %d IRQ sources) at %p\n", version,
 	   NumProcessors, NumSources, OpenPIC);
     timerfreq = openpic_read(&OpenPIC->Global.Timer_Frequency);
@@ -212,6 +215,8 @@ __initfunc(void openpic_init(int main_pic))
 
     if ( main_pic )
     {
+	    if ( ppc_md.progress ) ppc_md.progress("openpic main",0x3ff);
+      
 	    /* Initialize timer interrupts */
 	    for (i = 0; i < OPENPIC_NUM_TIMERS; i++) {
 		    /* Disabled, Priority 0 */
@@ -226,9 +231,12 @@ __initfunc(void openpic_init(int main_pic))
 		    openpic_initipi(i, 0, OPENPIC_VEC_IPI+i);
 	    }
 	    
+	    if ( ppc_md.progress ) ppc_md.progress("openpic initirq",0x3bb);
 	    /* Initialize external interrupts */
 	    /* SIOint (8259 cascade) is special */
 	    openpic_initirq(0, 8, OPENPIC_VEC_SOURCE, 1, 1);
+	    
+	    if ( ppc_md.progress ) ppc_md.progress("openpic map",0x3cc);
 	    /* Processor 0 */
 	    openpic_mapirq(0, 1<<0);
 	    for (i = 1; i < NumSources; i++) {
@@ -248,6 +256,7 @@ __initfunc(void openpic_init(int main_pic))
 	    openpic_set_priority(0, 0);
 	    openpic_disable_8259_pass_through();
     }
+    if ( ppc_md.progress ) ppc_md.progress("openpic exit",0x222);
 }
 
 

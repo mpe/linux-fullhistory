@@ -772,8 +772,18 @@ still_running_back:
 #endif /* __SMP__ */
 
 	kstat.context_swtch++;
-	get_mmu_context(next);
+	/*
+	 * there are 3 processes which are affected by a context switch:
+	 *
+	 * prev == .... ==> (last => next)
+	 *
+	 * It's the 'much more previous' 'prev' that is on next's stack,
+	 * but prev is set to (the just run) 'last' process by switch_to().
+	 * This might sound slightly confusing but makes tons of sense.
+	 */
+	get_mmu_context(prev, next);
 	switch_to(prev, next, prev);
+	put_mmu_context(prev, next);
 	__schedule_tail(prev);
 
 same_process:
@@ -1921,6 +1931,10 @@ static void show_task(struct task_struct * p)
 		printk("%5d ", p->p_cptr->pid);
 	else
 		printk("      ");
+	if (p->flags & PF_LAZY_TLB)
+		printk(" (L-TLB) ");
+	else
+		printk(" (NOTLB) ");
 	if (p->p_ysptr)
 		printk("%7d", p->p_ysptr->pid);
 	else
@@ -2010,5 +2024,11 @@ void __init sched_init(void)
 	init_bh(TIMER_BH, timer_bh);
 	init_bh(TQUEUE_BH, tqueue_bh);
 	init_bh(IMMEDIATE_BH, immediate_bh);
+
+	/*
+	 * The boot idle thread does lazy MMU switching as well:
+	 */
+	mmget(&init_mm);
+	current->flags |= PF_LAZY_TLB;
 }
 

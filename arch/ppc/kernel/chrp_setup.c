@@ -71,6 +71,8 @@ void chrp_calibrate_decr(void);
 void chrp_time_init(void);
 
 void chrp_setup_pci_ptrs(void);
+extern void chrp_progress(char *, unsigned short);
+void chrp_event_scan(void);
 
 extern int pckbd_setkeycode(unsigned int scancode, unsigned int keycode);
 extern int pckbd_getkeycode(unsigned int scancode);
@@ -589,10 +591,10 @@ __initfunc(void
 	chrp_setup_pci_ptrs();
 #ifdef CONFIG_BLK_DEV_INITRD
 	/* take care of initrd if we have one */
-	if ( r3 )
+	if ( r6 )
 	{
-		initrd_start = r3 + KERNELBASE;
-		initrd_end = r3 + r4 + KERNELBASE;
+		initrd_start = r6 + KERNELBASE;
+		initrd_end = r6 + r7 + KERNELBASE;
 	}
 #endif /* CONFIG_BLK_DEV_INITRD */
 
@@ -658,6 +660,8 @@ __initfunc(void
 	ppc_md.ppc_kbd_sysrq_xlate	 = pckbd_sysrq_xlate;
 	SYSRQ_KEY = 0x54;
 #endif
+	if ( rtas_data )
+		ppc_md.progress = chrp_progress;
 #endif
 #endif
 
@@ -678,16 +682,33 @@ __initfunc(void
 	 * Print the banner, then scroll down so boot progress
 	 * can be printed.  -- Cort 
 	 */
-	chrp_progress("Linux/PPC "UTS_RELEASE"\n");
+	if ( ppc_md.progress ) ppc_md.progress("Linux/PPC "UTS_RELEASE"\n", 0x0);
 }
 
-void chrp_progress(char *s)
+void chrp_progress(char *s, unsigned short hex)
 {
 	extern unsigned int rtas_data;
+	unsigned long width;
+	struct device_node *root;
+	char *os = s;
 	
+	if ( (root = find_path_device("/rtas")) )
+		width = *(unsigned long *)get_property(root, "ibm,display-line-length", NULL);
+	else
+		width = 0x10;
+
 	if ( (_machine != _MACH_chrp) || !rtas_data )
 		return;
-	call_rtas( "display-character", 1, 1, NULL, '\r' );
-	while ( *s )
-		call_rtas( "display-character", 1, 1, NULL, *s++ );
+	if ( call_rtas( "display-character", 1, 1, NULL, '\r' ) )
+	{
+		/* assume no display-character RTAS method - use hex display */
+		return;
+	}
+	while ( *os )
+		call_rtas( "display-character", 1, 1, NULL, *os++ );
+	/* scan back for the last newline or carriage return */
+	for ( os-- ; (*os != '\n') && (*os != '\r') && (os > s) ; os--, width-- )
+		/* nothing */ ;
+	/*while ( width-- )*/
+	call_rtas( "display-character", 1, 1, NULL, ' ' );
 }

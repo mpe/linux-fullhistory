@@ -1,5 +1,5 @@
 /*
- * $Id: smp.c,v 1.54 1999/06/24 17:13:34 cort Exp $
+ * $Id: smp.c,v 1.55 1999/07/03 08:57:09 davem Exp $
  *
  * Smp support for ppc.
  *

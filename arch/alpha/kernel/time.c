@@ -94,6 +94,10 @@ void timer_interrupt(int irq, void *dev, struct pt_regs * regs)
 	smp_percpu_timer_interrupt(regs);
 	if (smp_processor_id() != smp_boot_cpuid)
 		return;
+#else
+	/* Not SMP, do kernel PC profiling here.  */
+	if (!user_mode(regs))
+		alpha_do_profile(regs->pc);
 #endif
 
 	write_lock(&xtime_lock);

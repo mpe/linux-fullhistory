@@ -536,6 +536,8 @@ static inline void copy_flags(unsigned long clone_flags, struct task_struct *p)
 		new_flags &= ~(PF_PTRACED|PF_TRACESYS);
 	if (clone_flags & CLONE_VFORK)
 		new_flags |= PF_VFORK;
+	if ((clone_flags & CLONE_TLB) && capable(CAP_SYS_ADMIN))
+		new_flags |= PF_LAZY_TLB;
 	p->flags = new_flags;
 }
 

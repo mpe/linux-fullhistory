@@ -105,7 +105,7 @@ O_OBJS   += sys_takara.o
 endif
 
 # Device support
-ifdef CONFIG_ALPHA_MIATA
+ifneq ($(CONFIG_ALPHA_MIATA)$(CONFIG_ALPHA_DP264),)
 O_OBJS   += es1888.o
 endif
 ifneq ($(CONFIG_ALPHA_SX164)$(CONFIG_ALPHA_MIATA)$(CONFIG_ALPHA_DP264),)

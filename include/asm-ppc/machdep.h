@@ -39,6 +39,8 @@ struct machdep_calls {
 	unsigned long	heartbeat_reset;
 	unsigned long	heartbeat_count;
 
+  	void		(*progress)(char *, unsigned short);
+
 	unsigned char 	(*nvram_read_val)(int addr);
 	void		(*nvram_write_val)(int addr, unsigned char val);
 

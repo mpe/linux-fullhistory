@@ -40,6 +40,7 @@
 #include <asm/residual.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
+#include <linux/ide.h>
 #include <asm/ide.h>
 #include <asm/cache.h>
 #include <asm/dma.h>

@@ -76,7 +76,7 @@ sys_sethae(unsigned long hae, unsigned long a1, unsigned long a2,
 }
 
 #ifdef __SMP__
-void
+int
 cpu_idle(void *unused)
 {
 	/* An endless idle loop with no priority at all.  */
@@ -329,7 +329,6 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	p->tss.ksp = (unsigned long) childstack;
 	p->tss.pal_flags = 1;	/* set FEN, clear everything else */
 	p->tss.flags = current->tss.flags;
-	p->tss.mm_context = p->tss.asn = 0;
 
 	return 0;
 }

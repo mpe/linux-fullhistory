@@ -49,7 +49,6 @@ ev4_flush_tlb_other(struct mm_struct *mm)
 __EXTERN_INLINE void
 ev5_flush_tlb_current(struct mm_struct *mm)
 {
-	mm->context = 0;
 	get_new_mmu_context(current, mm);
 	reload_context(current);
 }

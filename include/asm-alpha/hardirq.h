@@ -5,8 +5,12 @@
 
 #include <linux/tasks.h>
 
-extern unsigned int local_irq_count[NR_CPUS];
-extern unsigned long hardirq_no[NR_CPUS];
+#ifndef __SMP__
+extern int __local_irq_count;
+#define local_irq_count(cpu)  ((void)(cpu), __local_irq_count)
+#else
+#define local_irq_count(cpu)  (cpu_data[cpu].irq_count)
+#endif
 
 /*
  * Are we in an interrupt context? Either doing bottom half
@@ -16,16 +20,16 @@ extern unsigned long hardirq_no[NR_CPUS];
 #define in_interrupt()						\
 ({								\
 	int __cpu = smp_processor_id();				\
-	(local_irq_count[__cpu] + local_bh_count[__cpu]) != 0;	\
+	(local_irq_count(__cpu) + local_bh_count(__cpu)) != 0;	\
 })
 
 #ifndef __SMP__
 
-#define hardirq_trylock(cpu)	(local_irq_count[cpu] == 0)
+#define hardirq_trylock(cpu)	(local_irq_count(cpu) == 0)
 #define hardirq_endlock(cpu)	((void) 0)
 
-#define hardirq_enter(cpu, irq)	(local_irq_count[cpu]++)
-#define hardirq_exit(cpu, irq)	(local_irq_count[cpu]--)
+#define hardirq_enter(cpu, irq)	(local_irq_count(cpu)++)
+#define hardirq_exit(cpu, irq)	(local_irq_count(cpu)--)
 
 #define synchronize_irq()	barrier()
 
@@ -50,21 +54,20 @@ static inline void release_irqlock(int cpu)
 
 static inline void hardirq_enter(int cpu, int irq)
 {
-	++local_irq_count[cpu];
+	++local_irq_count(cpu);
         atomic_inc(&global_irq_count);
-	hardirq_no[cpu] |= 1L << irq;		/* debugging only */
 }
 
 static inline void hardirq_exit(int cpu, int irq)
 {
-	hardirq_no[cpu] &= ~(1L << irq);	/* debugging only */
 	atomic_dec(&global_irq_count);
-        --local_irq_count[cpu];
+        --local_irq_count(cpu);
 }
 
 static inline int hardirq_trylock(int cpu)
 {
-	return !atomic_read(&global_irq_count) && !global_irq_lock.lock;
+	return (!atomic_read(&global_irq_count)
+		&& !spin_is_locked(&global_irq_lock));
 }
 
 #define hardirq_endlock(cpu)  ((void)0)

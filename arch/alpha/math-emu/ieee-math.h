@@ -20,7 +20,7 @@
 extern unsigned long ieee_CVTST (int rm, unsigned long a, unsigned long *b);
 extern unsigned long ieee_CVTTS (int rm, unsigned long a, unsigned long *b);
 extern unsigned long ieee_CVTQS (int rm, unsigned long a, unsigned long *b);
-extern unsigned long ieee_CVTQT (int rm, unsigned long a, unsigned long *b);
+extern unsigned long ieee_CVTQT (int rm, long a, unsigned long *b);
 extern unsigned long ieee_CVTTQ (int rm, unsigned long a, unsigned long *b);
 
 extern unsigned long ieee_CMPTEQ (unsigned long a, unsigned long b,

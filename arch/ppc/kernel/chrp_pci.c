@@ -97,7 +97,7 @@ int gg2_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
 #define python_config_data(bus) ((0xfef00000+0xf8010)-(bus*0x100000))
 #define PYTHON_CFA(b, d, o)	(0x80 | ((b<<6) << 8) | ((d) << 16) \
 				 | (((o) & ~3) << 24))
-unsigned int python_busnr = 1;
+unsigned int python_busnr = 0;
 
 int python_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
 				    unsigned char offset, unsigned char *val)
@@ -347,7 +347,7 @@ chrp_setup_pci_ptrs(void)
 			} else if ( !strncmp("IBM,7043-260",
 			   get_property(find_path_device("/"), "name", NULL),12) )
 			{
-				pci_dram_offset = 0x80000000;
+				pci_dram_offset = 0x0;
 				isa_mem_base = 0xc0000000;
 				isa_io_base = 0xf8000000;
 			}

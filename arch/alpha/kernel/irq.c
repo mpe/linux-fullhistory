@@ -35,9 +35,12 @@
 #define vulp	volatile unsigned long *
 #define vuip	volatile unsigned int *
 
-unsigned int local_irq_count[NR_CPUS];
-unsigned int local_bh_count[NR_CPUS];
-unsigned long hardirq_no[NR_CPUS];
+/* Only uniprocessor needs this IRQ/BH locking depth, on SMP it lives
+   in the per-cpu structure for cache reasons.  */
+#ifndef __SMP__
+int __local_irq_count;
+int __local_bh_count;
+#endif
 
 #if NR_IRQS > 64
 #  error Unable to handle more than 64 irq levels.
@@ -384,6 +387,8 @@ static void *previous_irqholder = NULL;
 
 static void show(char * str, void *where);
 
+#define SYNC_OTHER_CPUS(x)	udelay((x)+1);
+
 static inline void
 wait_on_irq(int cpu, void *where)
 {
@@ -397,8 +402,8 @@ wait_on_irq(int cpu, void *where)
 		 * already executing in one..
 		 */
 		if (!atomic_read(&global_irq_count)) {
-			if (local_bh_count[cpu] ||
-			    !atomic_read(&global_bh_count))
+			if (local_bh_count(cpu)
+			    || !atomic_read(&global_bh_count))
 				break;
 		}
 
@@ -412,19 +417,15 @@ wait_on_irq(int cpu, void *where)
 				count = MAXCOUNT;
 			}
 			__sti();
-#if 0
-			SYNC_OTHER_CORES(cpu);
-#else
-			udelay(cpu+1);
-#endif
+			SYNC_OTHER_CPUS(cpu);
 			__cli();
 
 			if (atomic_read(&global_irq_count))
 				continue;
-			if (global_irq_lock.lock)
+			if (spin_is_locked(&global_irq_lock))
 				continue;
-			if (!local_bh_count[cpu] &&
-			    atomic_read(&global_bh_count))
+			if (!local_bh_count(cpu)
+			    && atomic_read(&global_bh_count))
 				continue;
 			if (spin_trylock(&global_irq_lock))
 				break;
@@ -469,14 +470,14 @@ get_irqlock(int cpu, void* where)
 void
 __global_cli(void)
 {
-	int cpu;
+	int cpu = smp_processor_id();
 	void *where = __builtin_return_address(0);
 
 	/*
 	 * Maximize ipl.  If ipl was previously 0 and if this thread
 	 * is not in an irq, then take global_irq_lock.
 	 */
-	if ((swpipl(7) == 0) && !local_irq_count[cpu = smp_processor_id()])
+	if (swpipl(7) == 0 && !local_irq_count(cpu))
 		get_irqlock(cpu, where);
 }
 
@@ -485,9 +486,8 @@ __global_sti(void)
 {
         int cpu = smp_processor_id();
 
-        if (!local_irq_count[cpu]) {
+        if (!local_irq_count(cpu))
 		release_irqlock(cpu);
-	}
 	__sti();
 }
 
@@ -512,7 +512,7 @@ __global_save_flags(void)
         retval = 2 + local_enabled;
 
         /* Check for global flags if we're not in an interrupt.  */
-        if (!local_irq_count[cpu]) {
+        if (!local_irq_count(cpu)) {
                 if (local_enabled)
                         retval = 1;
                 if (global_irq_holder == cpu)
@@ -550,7 +550,7 @@ __global_restore_flags(unsigned long flags)
 #define STUCK							\
   if (!--stuck) {						\
     printk("irq_enter stuck (irq=%d, cpu=%d, global=%d)\n",	\
-	   irq, cpu,global_irq_holder);				\
+	   irq, cpu, global_irq_holder);			\
     stuck = INIT_STUCK;						\
   }
 
@@ -566,11 +566,11 @@ irq_enter(int cpu, int irq)
 
 	hardirq_enter(cpu, irq);
 	barrier();
-	while (global_irq_lock.lock) {
+	while (spin_is_locked(&global_irq_lock)) {
 		if (cpu == global_irq_holder) {
-			int globl_locked = global_irq_lock.lock;
+			int globl_locked = spin_is_locked(&global_irq_lock);
 			int globl_icount = atomic_read(&global_irq_count);
-			int local_count = local_irq_count[cpu];
+			int local_count = local_irq_count(cpu);
 
 			/* It is very important that we load the state
 			   variables before we do the first call to
@@ -609,19 +609,16 @@ show(char * str, void *where)
 #endif
         int cpu = smp_processor_id();
 
-	int global_count = atomic_read(&global_irq_count);
-        int local_count0 = local_irq_count[0];
-        int local_count1 = local_irq_count[1];
-        long hardirq_no0 = hardirq_no[0];
-        long hardirq_no1 = hardirq_no[1];
-
         printk("\n%s, CPU %d: %p\n", str, cpu, where);
-        printk("irq:  %d [%d(0x%016lx) %d(0x%016lx)]\n", global_count,
-               local_count0, hardirq_no0, local_count1, hardirq_no1);
+        printk("irq:  %d [%d %d]\n",
+	       atomic_read(&global_irq_count),
+               cpu_data[0].irq_count,
+	       cpu_data[1].irq_count);
 
         printk("bh:   %d [%d %d]\n",
-	       atomic_read(&global_bh_count), local_bh_count[0],
-	       local_bh_count[1]);
+	       atomic_read(&global_bh_count),
+	       cpu_data[0].bh_count,
+	       cpu_data[1].bh_count);
 #if 0
         stack = (unsigned long *) &str;
         for (i = 40; i ; i--) {
@@ -644,6 +641,7 @@ wait_on_bh(void)
                         count = ~0;
                 }
                 /* nothing .. wait for the other bh's to go away */
+		barrier();
         } while (atomic_read(&global_bh_count) != 0);
 }
 
@@ -658,12 +656,8 @@ wait_on_bh(void)
 void
 synchronize_bh(void)
 {
-	if (atomic_read(&global_bh_count)) {
-		int cpu = smp_processor_id();
-                if (!local_irq_count[cpu] && !local_bh_count[cpu]) {
-			wait_on_bh();
-		}
-        }
+	if (atomic_read(&global_bh_count) && !in_interrupt())
+		wait_on_bh();
 }
 
 /*
@@ -680,6 +674,8 @@ synchronize_bh(void)
 void
 synchronize_irq(void)
 {
+#if 0
+	/* Joe's version.  */
 	int cpu = smp_processor_id();
 	int local_count;
 	int global_count;
@@ -688,7 +684,7 @@ synchronize_irq(void)
 
 	mb();
 	do {
-		local_count = local_irq_count[cpu];
+		local_count = local_irq_count(cpu);
 		global_count = atomic_read(&global_irq_count);
 		if (DEBUG_SYNCHRONIZE_IRQ && (--countdown == 0)) {
 			printk("%d:%d/%d\n", cpu, local_count, global_count);
@@ -696,12 +692,19 @@ synchronize_irq(void)
 			break;
 		}
 	} while (global_count != local_count);
+#else
+	/* Jay's version.  */
+	if (atomic_read(&global_irq_count)) {
+		cli();
+		sti();
+	}
+#endif
 }
 
 #else /* !__SMP__ */
 
-#define irq_enter(cpu, irq)	(++local_irq_count[cpu])
-#define irq_exit(cpu, irq)	(--local_irq_count[cpu])
+#define irq_enter(cpu, irq)	(++local_irq_count(cpu))
+#define irq_exit(cpu, irq)	(--local_irq_count(cpu))
 
 #endif /* __SMP__ */
 
@@ -868,31 +871,23 @@ do_entInt(unsigned long type, unsigned long vector, unsigned long la_ptr,
 	  unsigned long a3, unsigned long a4, unsigned long a5,
 	  struct pt_regs regs)
 {
-	unsigned long flags;
-
 	switch (type) {
 	case 0:
 #ifdef __SMP__
-		__save_and_cli(flags);
 		handle_ipi(&regs);
-		__restore_flags(flags);
 		return;
 #else
 		printk("Interprocessor interrupt? You must be kidding\n");
 #endif
 		break;
 	case 1:
-		__save_and_cli(flags);
 		handle_irq(RTC_IRQ, -1, &regs);
-		__restore_flags(flags);
 		return;
 	case 2:
 		alpha_mv.machine_check(vector, la_ptr, &regs);
 		return;
 	case 3:
-		__save_and_cli(flags);
 		alpha_mv.device_interrupt(vector, &regs);
-		__restore_flags(flags);
 		return;
 	case 4:
 		perf_irq(vector, &regs);

@@ -128,7 +128,7 @@ typedef struct page {
 	wait_queue_head_t wait;
 	struct page **pprev_hash;
 	struct buffer_head * buffers;
-	int owner; /* temporary debugging check */
+	void *owner; /* temporary debugging check */
 } mem_map_t;
 
 #define get_page(p) do { atomic_inc(&(p)->count); \
@@ -167,11 +167,11 @@ typedef struct page {
 	do { int _ret = test_and_set_bit(PG_locked, &(page)->flags); \
 	if (_ret) PAGE_BUG(page); \
 	if (page->owner) PAGE_BUG(page); \
-	page->owner = (int)current; } while (0)
+	page->owner = current; } while (0)
 #define TryLockPage(page)	({ int _ret = test_and_set_bit(PG_locked, &(page)->flags); \
-				if (!_ret) page->owner = (int)current; _ret; })
+				if (!_ret) page->owner = current; _ret; })
 #define UnlockPage(page)	do { \
-					if (page->owner != (int)current) { \
+					if (page->owner != current) { \
 BUG(); } page->owner = 0; \
 if (!test_and_clear_bit(PG_locked, &(page)->flags)) { \
 			PAGE_BUG(page); } wake_up(&page->wait); } while (0)

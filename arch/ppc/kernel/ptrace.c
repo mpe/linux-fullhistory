@@ -81,6 +81,7 @@ clear_single_step(struct task_struct *task)
 	regs->msr &= ~MSR_SE;
 }
 
+#if 0
 /*
  * This routine gets a long from any process space by following the page
  * tables. NOTE! You should check that the long isn't on a page boundary,
@@ -283,11 +284,13 @@ static int write_long(struct task_struct * tsk, unsigned long addr,
 		put_long(tsk, vma,addr,data);
 	return 0;
 }
+#endif
 
 asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 {
 	struct task_struct *child;
 	int ret = -EPERM;
+	unsigned long flags;
 
 	lock_kernel();
 	if (request == PTRACE_TRACEME) {
@@ -302,7 +305,10 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	if (pid == 1)		/* you may not mess with init */
 		goto out;
 	ret = -ESRCH;
-	if (!(child = find_task_by_pid(pid)))
+	read_lock(&tasklist_lock);
+	child = find_task_by_pid(pid);
+	read_unlock(&tasklist_lock);	/* FIXME!!! */
+	if ( !child )
 		goto out;
 	ret = -EPERM;
 	if (request == PTRACE_ATTACH) {
@@ -322,11 +328,15 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		if (child->flags & PF_PTRACED)
 			goto out;
 		child->flags |= PF_PTRACED;
+		
+		write_lock_irqsave(&tasklist_lock, flags);
 		if (child->p_pptr != current) {
 			REMOVE_LINKS(child);
 			child->p_pptr = current;
 			SET_LINKS(child);
 		}
+		write_unlock_irqrestore(&tasklist_lock, flags);
+
 		send_sig(SIGSTOP, child, 1);
 		ret = 0;
 		goto out;
@@ -342,22 +352,19 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		goto out;
 
 	switch (request) {
-	/* If I and D space are separate, these will need to be fixed. */
+	/* when I and D space are separate, these will need to be fixed. */
 		case PTRACE_PEEKTEXT: /* read word at location addr. */ 
 		case PTRACE_PEEKDATA: {
 			unsigned long tmp;
+			int copied;
 
-			down(&child->mm->mmap_sem);
-			ret = read_long(child, addr, &tmp);
-			up(&child->mm->mmap_sem);
-			if (ret < 0)
+			copied = access_process_vm(child, addr, &tmp, sizeof(tmp), 0);
+			ret = -EIO;
+			if (copied != sizeof(tmp))
 				goto out;
-			ret = verify_area(VERIFY_WRITE, (void *) data, sizeof(long));
-			if (!ret)
-				put_user(tmp, (unsigned long *) data);
+			ret = put_user(tmp,(unsigned long *) data);
 			goto out;
 		}
-
 	/* read the word at location addr in the USER area. */
 		case PTRACE_PEEKUSR: {
 			unsigned long tmp;
@@ -391,11 +398,11 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
       /* If I and D space are separate, this will have to be fixed. */
 		case PTRACE_POKETEXT: /* write the word at location addr. */
 		case PTRACE_POKEDATA:
-			down(&child->mm->mmap_sem);
-			ret = write_long(child,addr,data);
-			up(&child->mm->mmap_sem);
+			ret = 0;
+			if (access_process_vm(child, addr, &data, sizeof(data), 1) == sizeof(data))
+				goto out;
+			ret = -EIO;
 			goto out;
-
 		case PTRACE_POKEUSR: /* write the word at location addr in the USER area */
 			ret = -EIO;
 			if ((addr & 3) || addr < 0 || addr >= ((PT_FPR0 + 64) << 2))
@@ -459,9 +466,9 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 				goto out;
 			child->flags &= ~PF_TRACESYS;
 			set_single_step(child);
-			wake_up_process(child);
 			child->exit_code = data;
 			/* give it a chance to run. */
+			wake_up_process(child);
 			ret = 0;
 			goto out;
 		}
@@ -473,9 +480,11 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			child->flags &= ~(PF_PTRACED|PF_TRACESYS);
 			wake_up_process(child);
 			child->exit_code = data;
+			write_lock_irqsave(&tasklist_lock, flags);
 			REMOVE_LINKS(child);
 			child->p_pptr = child->p_opptr;
 			SET_LINKS(child);
+			write_unlock_irqrestore(&tasklist_lock, flags);
 			/* make sure the single step bit is not set. */
 			clear_single_step(child);
 			ret = 0;
@@ -493,7 +502,6 @@ out:
 
 asmlinkage void syscall_trace(void)
 {
-	lock_kernel();
 	if ((current->flags & (PF_PTRACED|PF_TRACESYS))
 			!= (PF_PTRACED|PF_TRACESYS))
 		goto out;
@@ -511,5 +519,4 @@ asmlinkage void syscall_trace(void)
 		current->exit_code = 0;
 	}
 out:
-	unlock_kernel();
 }

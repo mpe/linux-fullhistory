@@ -66,7 +66,11 @@ extern unsigned long last_asn;
 #endif /* __SMP__ */
 
 #define WIDTH_HARDWARE_ASN	8
+#ifdef __SMP__
 #define WIDTH_THIS_PROCESSOR	5
+#else
+#define WIDTH_THIS_PROCESSOR	0
+#endif
 #define ASN_FIRST_VERSION (1UL << (WIDTH_THIS_PROCESSOR + WIDTH_HARDWARE_ASN))
 #define HARDWARE_ASN_MASK ((1UL << WIDTH_HARDWARE_ASN) - 1)
 
@@ -95,12 +99,11 @@ __get_new_mmu_context(struct task_struct *p, struct mm_struct *mm)
 	unsigned long asn = cpu_last_asn(smp_processor_id());
 	unsigned long next = asn + 1;
 
-	if ((next ^ asn) & ~MAX_ASN) {
+	if ((asn & HARDWARE_ASN_MASK) >= MAX_ASN) {
 		tbiap();
 		next = (asn & ~HARDWARE_ASN_MASK) + ASN_FIRST_VERSION;
 	}
 	cpu_last_asn(smp_processor_id()) = next;
-	mm->context = next;                      /* full version + asn */
 	return next;
 }
 
@@ -110,6 +113,12 @@ ev4_get_mmu_context(struct task_struct *p)
 	/* As described, ASN's are broken.  But we can optimize for
 	   switching between threads -- if the mm is unchanged from
 	   current we needn't flush.  */
+	/* ??? May not be needed because EV4 PALcode recognizes that
+	   ASN's are broken and does a tbiap itself on swpctx, under
+	   the "Must set ASN or flush" rule.  At least this is true
+	   for a 1992 SRM, reports Joseph Martin (jmartin@hlo.dec.com).
+	   I'm going to leave this here anyway, just to Be Sure.  -- r~  */
+
 	if (current->mm != p->mm)
 		tbiap();
 }
@@ -119,17 +128,23 @@ ev5_get_mmu_context(struct task_struct *p)
 {
 	/* Check if our ASN is of an older version, or on a different CPU,
 	   and thus invalid.  */
+	/* ??? If we have two threads on different cpus, we'll continually
+	   fight over the context.  Find a way to record a per-mm, per-cpu
+	   value for the asn.  */
 
-	long asn = cpu_last_asn(smp_processor_id());
+	unsigned long asn = cpu_last_asn(smp_processor_id());
 	struct mm_struct *mm = p->mm;
-	long mmc = mm->context;
+	unsigned long mmc = mm->context;
 	
-	if ((p->tss.mm_context ^ asn) & ~HARDWARE_ASN_MASK) {
-		if ((mmc ^ asn) & ~HARDWARE_ASN_MASK)
-			mmc = __get_new_mmu_context(p, mm);
-		p->tss.mm_context = mmc;
-		p->tss.asn = mmc & HARDWARE_ASN_MASK;
+	if ((mmc ^ asn) & ~HARDWARE_ASN_MASK) {
+		mmc = __get_new_mmu_context(p, mm);
+		mm->context = mmc;
 	}
+
+	/* Always update the PCB ASN.  Another thread may have allocated
+	   a new mm->context (via flush_tlb_mm) without the ASN serial
+	   number wrapping.  We have no way to detect when this is needed.  */
+	p->tss.asn = mmc & HARDWARE_ASN_MASK;
 }
 
 #ifdef CONFIG_ALPHA_GENERIC

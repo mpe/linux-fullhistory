@@ -5,28 +5,33 @@
 #include <asm/atomic.h>
 #include <asm/hardirq.h>
 
-extern unsigned int local_bh_count[NR_CPUS];
+#ifndef __SMP__
+extern int __local_bh_count;
+#define local_bh_count(cpu)	((void)(cpu), __local_bh_count)
+#else
+#define local_bh_count(cpu)	(cpu_data[cpu].bh_count)
+#endif
 
 extern inline void cpu_bh_disable(int cpu)
 {
-	local_bh_count[cpu]++;
+	local_bh_count(cpu)++;
 	mb();
 }
 
 extern inline void cpu_bh_enable(int cpu)
 {
 	mb();
-	local_bh_count[cpu]--;
+	local_bh_count(cpu)--;
 }
 
 extern inline int cpu_bh_trylock(int cpu)
 {
-	return local_bh_count[cpu] ? 0 : (local_bh_count[cpu] = 1);
+	return local_bh_count(cpu) ? 0 : (local_bh_count(cpu) = 1);
 }
 
 extern inline void cpu_bh_endlock(int cpu)
 {
-	local_bh_count[cpu] = 0;
+	local_bh_count(cpu) = 0;
 }
 
 #define local_bh_enable()	cpu_bh_enable(smp_processor_id())

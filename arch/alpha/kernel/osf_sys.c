@@ -927,6 +927,7 @@ asmlinkage unsigned long osf_getsysinfo(unsigned long op, void *buffer,
 			return -EINVAL;
 		cpu = (struct percpu_struct*)
 		  ((char*)hwrpb + hwrpb->processor_offset);
+		w = cpu->type;
 		if (put_user(w, (unsigned long *)buffer))
 			return -EFAULT;
 		return 1;

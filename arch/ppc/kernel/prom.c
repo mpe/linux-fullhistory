@@ -1,5 +1,5 @@
 /*
- * $Id: prom.c,v 1.61 1999/06/17 06:05:52 paulus Exp $
+ * $Id: prom.c,v 1.62 1999/07/02 19:59:31 cort Exp $
  *
  * Procedures for interfacing to the Open Firmware PROM on
  * Power Macintosh computers.
@@ -502,8 +502,8 @@ prom_init(int r3, int r4, prom_entry pp)
 			return;
 		
 		/* copy the holding pattern code to someplace safe (8M) */
-		memcpy( (void *)(8<<20), RELOC(__secondary_hold), 0x10000 );
-		for (i = 8<<20; i < ((8<<20)+0x10000); i += 32)
+		memcpy( (void *)(8<<20), RELOC(__secondary_hold), 0x100 );
+		for (i = 8<<20; i < ((8<<20)+0x100); i += 32)
 		{
 			asm volatile("dcbf 0,%0" : : "r" (i) : "memory");
 			asm volatile("icbi 0,%0" : : "r" (i) : "memory");

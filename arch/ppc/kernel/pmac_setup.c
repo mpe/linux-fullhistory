@@ -58,6 +58,7 @@
 #include <asm/ide.h>
 #include <asm/machdep.h>
 #include <asm/keyboard.h>
+#include <asm/dma.h>
 
 #include "time.h"
 #include "local_irq.h"
@@ -204,11 +205,12 @@ kdev_t sd_find_target(void *host, int tgt)
 {
     Scsi_Disk *dp;
     int i;
-
+#ifdef CONFIG_BLK_DEV_SD
     for (dp = rscsi_disks, i = 0; i < sd_template.dev_max; ++i, ++dp)
         if (dp->device != NULL && dp->device->host == host
             && dp->device->id == tgt)
             return MKDEV_SD(i);
+#endif /* CONFIG_BLK_DEV_SD */
     return 0;
 }
 #endif
@@ -517,13 +519,13 @@ pmac_halt(void)
 void
 pmac_ide_insw(ide_ioreg_t port, void *buf, int ns)
 {
-	_insw_ns(port+_IO_BASE, buf, ns);
+	_insw_ns((unsigned short *)(port+_IO_BASE), buf, ns);
 }
 
 void
 pmac_ide_outsw(ide_ioreg_t port, void *buf, int ns)
 {
-	_outsw_ns(port+_IO_BASE, buf, ns);
+	_outsw_ns((unsigned short *)(port+_IO_BASE), buf, ns);
 }
 
 int

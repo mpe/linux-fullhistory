@@ -1,5 +1,5 @@
 /*
- * $Id: setup.c,v 1.136 1999/06/18 07:11:35 cort Exp $
+ * $Id: setup.c,v 1.138 1999/07/11 16:32:21 cort Exp $
  * Common prep/pmac/chrp boot and setup code.
  */
 
@@ -32,6 +32,7 @@
 #endif
 #include <asm/bootx.h>
 #include <asm/machdep.h>
+#include <asm/ide.h>
 
 extern void pmac_init(unsigned long r3,
                       unsigned long r4,
@@ -331,6 +332,7 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 #ifdef __SMP__
 	if ( first_cpu_booted ) return 0;
 #endif /* __SMP__ */
+	if ( ppc_md.progress ) ppc_md.progress("id mach(): start", 0x100);
 	
 #ifndef CONFIG_MACH_SPECIFIC
 	/* boot loader will tell us if we're APUS */
@@ -477,13 +479,13 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 	default:
 		printk("Unknown machine type in identify_machine!\n");
 	}
-
 	/* Check for nobats option (used in mapin_ram). */
 	if (strstr(cmd_line, "nobats")) {
 		extern int __map_without_bats;
 		__map_without_bats = 1;
 	}
-	
+
+	if ( ppc_md.progress ) ppc_md.progress("id mach(): done", 0x200);
 	return 0;
 }
 
@@ -539,6 +541,8 @@ __initfunc(void setup_arch(char **cmdline_p,
 	*memory_end_p = (unsigned long) end_of_DRAM;
 
 	ppc_md.setup_arch(memory_start_p, memory_end_p);
+	/* clear the progress line */
+	if ( ppc_md.progress ) ppc_md.progress(" ", 0xffff);
 }
 
 void ppc_generic_ide_fix_driveid(struct hd_driveid *id)

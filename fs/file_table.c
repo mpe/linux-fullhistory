@@ -182,7 +182,7 @@ int fs_may_remount_ro(struct super_block *sb)
 
 		/* Writable file? */
 		if (S_ISREG(inode->i_mode) && (file->f_mode & FMODE_WRITE))
-			return 0;
+			goto too_bad;
 	}
 	file_list_unlock();
 	return 1; /* Tis' cool bro. */

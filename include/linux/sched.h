@@ -35,6 +35,7 @@ extern unsigned long event;
 #define CLONE_PID	0x00001000	/* set if pid shared */
 #define CLONE_PTRACE	0x00002000	/* set if we want to let tracing continue on the child too */
 #define CLONE_VFORK	0x00004000	/* set if the parent wants the child to wake it up on mm_release */
+#define CLONE_TLB	0x00008000	/* system thread does lazy TLB flushing (kernel-internal only!) */
 
 /*
  * These are the constant used to fake the fixed-point load-average
@@ -333,6 +334,7 @@ struct task_struct {
 #define PF_SIGNALED	0x00000400	/* killed by a signal */
 #define PF_MEMALLOC	0x00000800	/* Allocating memory */
 #define PF_VFORK	0x00001000	/* Wake up parent in mm_release */
+#define PF_LAZY_TLB	0x00002000	/* thread does lazy TLB switching */
 
 #define PF_USEDFPU	0x00100000	/* task used FPU this quantum (SMP) */
 #define PF_DTRACE	0x00200000	/* delayed trace (used on m68k, i386) */

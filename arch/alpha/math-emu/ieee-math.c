@@ -704,20 +704,21 @@ ieee_CVTQS (int f, unsigned long a, unsigned long *b)
  *       FPCR_INV if invalid operation occurred, etc.
  */
 unsigned long
-ieee_CVTQT (int f, unsigned long a, unsigned long *b)
+ieee_CVTQT (int f, long a, unsigned long *b)
 {
 	EXTENDED op_b;
 
-	op_b.s    = 0;
-	op_b.f[0] = a;
-	op_b.f[1] = 0;
-	if (sign(a) < 0) {
-		op_b.s = 1;
-		op_b.f[0] = -a;
+	if (a != 0) {
+		op_b.s = (a < 0 ? 1 : 0);
+		op_b.f[0] = (a < 0 ? -a : a);
+		op_b.f[1] = 0;
+		op_b.e = 55;
+		normalize(&op_b);
+		return round_t_ieee(f, &op_b, b);
+	} else {
+		*b = 0;
+		return 0;
 	}
-	op_b.e = 55;
-	normalize(&op_b);
-	return round_t_ieee(f, &op_b, b);
 }
 
 

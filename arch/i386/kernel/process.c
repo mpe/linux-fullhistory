@@ -539,7 +539,7 @@ int kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
 		:"=&a" (retval), "=&S" (d0)
 		:"0" (__NR_clone), "i" (__NR_exit),
 		 "r" (arg), "r" (fn),
-		 "b" (flags | CLONE_VM)
+		 "b" (flags | CLONE_VM | CLONE_TLB)
 		: "memory");
 	return retval;
 }
@@ -762,7 +762,7 @@ void __switch_to(struct task_struct *prev_p, struct task_struct *next_p)
 		unsigned long new_cr3 = next->cr3;
 
 		tss->cr3 = new_cr3;
-		if (new_cr3 != prev->cr3) 
+		if (new_cr3 != prev->cr3)
 			asm volatile("movl %0,%%cr3": :"r" (new_cr3));
 	}
 

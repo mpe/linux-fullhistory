@@ -1,5 +1,5 @@
 /*
- *  $Id: init.c,v 1.170 1999/06/29 12:33:51 davem Exp $
+ *  $Id: init.c,v 1.171 1999/07/08 23:20:14 cort Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -50,6 +50,7 @@
 #include <asm/mbx.h>
 #include <asm/smp.h>
 #include <asm/bootx.h>
+#include <asm/machdep.h>
 /* APUS includes */
 #include <asm/setup.h>
 #include <asm/amigahw.h>
@@ -961,7 +962,6 @@ static void *MMU_get_page(void)
 	} else {
 		p = find_mem_piece(PAGE_SIZE, PAGE_SIZE);
 	}
-	/*memset(p, 0, PAGE_SIZE);*/
 	__clear_user(p, PAGE_SIZE);
 	return p;
 }
@@ -1027,7 +1027,7 @@ __initfunc(void MMU_init(void))
 #ifdef __SMP__
 	if ( first_cpu_booted ) return;
 #endif /* __SMP__ */
-	
+	if ( ppc_md.progress ) ppc_md.progress("MMU:enter", 0x111);
 #ifndef CONFIG_8xx
 	if (have_of)
 		end_of_DRAM = pmac_find_end_of_memory();
@@ -1038,10 +1038,12 @@ __initfunc(void MMU_init(void))
 	else /* prep */
 		end_of_DRAM = prep_find_end_of_memory();
 
+	if ( ppc_md.progress ) ppc_md.progress("MMU:hash init", 0x300);
         hash_init();
         _SDR1 = __pa(Hash) | (Hash_mask >> 10);
 	ioremap_base = 0xf8000000;
 
+	if ( ppc_md.progress ) ppc_md.progress("MMU:mapin", 0x301);
 	/* Map in all of RAM starting at KERNELBASE */
 	mapin_ram();
 
@@ -1050,6 +1052,7 @@ __initfunc(void MMU_init(void))
 	 * the io areas.  RAM was mapped by mapin_ram().
 	 * -- Cort
 	 */
+	if ( ppc_md.progress ) ppc_md.progress("MMU:setbat", 0x302);
 	switch (_machine) {
 	case _MACH_prep:
 		setbat(0, 0x80000000, 0x80000000, 0x10000000, IO_PAGE);
@@ -1102,6 +1105,7 @@ __initfunc(void MMU_init(void))
         ioremap(0x80000000, 0x4000);
         ioremap(0x81000000, 0x4000);
 #endif /* CONFIG_8xx */
+	if ( ppc_md.progress ) ppc_md.progress("MMU:exit", 0x211);
 }
 
 /*
@@ -1310,7 +1314,7 @@ __initfunc(unsigned long *pmac_find_end_of_memory(void))
 	int i;
 	
 	/* max amount of RAM we allow -- Cort */
-#define RAM_LIMIT (768<<20)
+#define RAM_LIMIT (256<<20)
 
 	memory_node = find_devices("memory");
 	if (memory_node == NULL) {
@@ -1509,6 +1513,7 @@ __initfunc(static void hash_init(void))
 	extern unsigned int hash_page_patch_A[], hash_page_patch_B[],
 		hash_page_patch_C[], hash_page[];
 
+	if ( ppc_md.progress ) ppc_md.progress("hash:enter", 0x105);
 	/*
 	 * Allow 64k of hash table for every 16MB of memory,
 	 * up to a maximum of 2MB.
@@ -1542,6 +1547,7 @@ __initfunc(static void hash_init(void))
  	}
 #endif /* NO_RELOAD_HTAB */
 	
+	if ( ppc_md.progress ) ppc_md.progress("hash:find piece", 0x322);
 	/* Find some memory for the hash table. */
 	if ( Hash_size )
 		Hash = find_mem_piece(Hash_size, Hash_size);
@@ -1557,11 +1563,11 @@ __initfunc(static void hash_init(void))
 #else
 #define b(x) (x)
 #endif
-		/*memset(Hash, 0, Hash_size);*/
-		__clear_user(Hash, Hash_size);
 		
 		Hash_end = (PTE *) ((unsigned long)Hash + Hash_size);
-
+		__clear_user(Hash, Hash_size);
+		
+		if ( ppc_md.progress ) ppc_md.progress("hash:patch", 0x345);
 		/*
 		 * Patch up the instructions in head.S:hash_page
 		 */
@@ -1601,5 +1607,6 @@ __initfunc(static void hash_init(void))
 		flush_icache_range((unsigned long) b(hash_page),
 				   (unsigned long) b(hash_page + 1));
 	}
+	if ( ppc_md.progress ) ppc_md.progress("hash:done", 0x205);
 }
 #endif /* ndef CONFIG_8xx */

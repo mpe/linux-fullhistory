@@ -65,11 +65,12 @@
   #define SPIN_LOCK_UNLOCKED (spinlock_t) { 0 }
 #endif
 
-#define spin_lock_init(lock)			((void) 0)
-#define spin_lock(lock)				((void) 0)
-#define spin_trylock(lock)			(1)
-#define spin_unlock_wait(lock)			((void) 0)
-#define spin_unlock(lock)			((void) 0)
+#define spin_lock_init(lock)			((void)(lock))
+#define spin_lock(lock)				((void)(lock))
+#define spin_trylock(lock)			((void)(lock), 1)
+#define spin_unlock_wait(lock)			((void)(lock))
+#define spin_unlock(lock)			((void)(lock))
+#define spin_is_locked(lock)			((void)(lock), 0)
 
 /*
  * Read-write spinlocks, allowing multiple readers
@@ -91,10 +92,10 @@
   #define RW_LOCK_UNLOCKED (rwlock_t) { 0 }
 #endif
 
-#define read_lock(lock)				((void) 0)
-#define read_unlock(lock)			((void) 0)
-#define write_lock(lock)			((void) 0)
-#define write_unlock(lock)			((void) 0)
+#define read_lock(lock)				((void)(lock))
+#define read_unlock(lock)			((void)(lock))
+#define write_lock(lock)			((void)(lock))
+#define write_unlock(lock)			((void)(lock))
 
 #else /* __SMP__ */
 
@@ -131,8 +132,8 @@ typedef struct {
 #define spin_lock_init(x)	((x)->lock = 0)
 #endif
 
-#define spin_unlock_wait(x) \
-	({ do { barrier(); } while(((volatile spinlock_t *)x)->lock); })
+#define spin_is_locked(x)	((x)->lock != 0)
+#define spin_unlock_wait(x)	({ do { barrier(); } while ((x)->lock); })
 
 typedef struct { unsigned long a[100]; } __dummy_lock_t;
 #define __dummy_lock(lock) (*(__dummy_lock_t *)(lock))

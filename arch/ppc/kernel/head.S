@@ -1,7 +1,7 @@
 /*
  *  arch/ppc/kernel/head.S
  *
- *  $Id: head.S,v 1.133 1999/05/20 05:13:08 cort Exp $
+ *  $Id: head.S,v 1.134 1999/06/30 05:05:52 paulus Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -300,7 +300,7 @@ __secondary_start:
 	oris	r21,r11,(KERNELBASE+0x20000000)@h
 	mtspr	DBAT2L,r18		/* N.B. 6xx (not 601) have valid */
 	mtspr	DBAT2U,r21		/* bit in upper BAT register */
-	mtspr	IBAT2L,r28
+	mtspr	IBAT2L,r18
 	mtspr	IBAT2U,r21
 #endif /* CONFIG_PPC64 */
 #endif
@@ -1978,7 +1978,13 @@ DoSyscall:
 	lwz	r6,GPR4(r1)
 	lwz	r7,GPR5(r1)
 	lwz	r8,GPR6(r1)
-	mr	r9,r2
+	lwz	r9,GPR7(r1)
+	bl	printk
+	lis	r3,77f@ha
+	addi	r3,r3,77f@l
+	lwz	r4,GPR8(r1)
+	lwz	r5,GPR9(r1)
+	mr	r6,r2
 	bl	printk
 	lwz	r0,GPR0(r1)
 	lwz	r3,GPR3(r1)
@@ -2081,7 +2087,8 @@ syscall_ret_2:
 66:	li	r3,ENOSYS
 	b	52b
 #ifdef SHOW_SYSCALLS
-7:	.string	"syscall %d(%x, %x, %x, %x), current=%p\n"
+7:	.string	"syscall %d(%x, %x, %x, %x, %x, "
+77:	.string	"%x, %x), current=%p\n"
 79:	.string	" -> %x\n"
 	.align	2
 #endif

@@ -4,7 +4,6 @@
 #ifdef __SMP__
 
 #include <linux/tasks.h>
-#include <asm/init.h>
 #include <asm/pal.h>
 
 struct cpuinfo_alpha {
@@ -16,7 +15,8 @@ struct cpuinfo_alpha {
 	unsigned long ipi_count;
 	unsigned long prof_multiplier;
 	unsigned long prof_counter;
-} __cacheline_aligned;
+	int irq_count, bh_count;
+} __attribute__((aligned(64)));
 
 extern struct cpuinfo_alpha cpu_data[NR_CPUS];
 

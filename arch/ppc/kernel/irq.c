@@ -50,6 +50,7 @@
 #include <asm/io.h>
 #include <asm/pgtable.h>
 #include <asm/irq.h>
+#include <asm/bitops.h>
 #include <asm/gg2.h>
 #include <asm/cache.h>
 #include <asm/prom.h>
