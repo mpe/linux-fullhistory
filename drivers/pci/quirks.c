@@ -700,7 +700,7 @@ DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_VIA,	PCI_ANY_ID,                     quir
 /*
  *	Serverworks CSB5 IDE does not fully support native mode
  */
-static void __init quirk_svwks_csb5ide(struct pci_dev *pdev)
+static void __devinit quirk_svwks_csb5ide(struct pci_dev *pdev)
 {
 	u8 prog;
 	pci_read_config_byte(pdev, PCI_CLASS_PROG, &prog);
