@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.60 1997/05/01 02:26:56 davem Exp $ */
+/* $Id: system.h,v 1.65 1997/05/14 20:47:59 davem Exp $ */
 #ifndef __SPARC_SYSTEM_H
 #define __SPARC_SYSTEM_H
 
@@ -75,6 +75,7 @@ extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 #define switch_to(prev, next) do {							\
 	__label__ here;									\
 	register unsigned long task_pc asm("o7");					\
+	extern struct task_struct *current_set[NR_CPUS];				\
 	SWITCH_ENTER									\
 	SWITCH_DO_LAZY_FPU								\
 	__asm__ __volatile__(								\
@@ -86,6 +87,7 @@ extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 	if(!(next->tss.flags & SPARC_FLAG_KTHREAD) &&					\
 	   !(next->flags & PF_EXITING))							\
 		switch_to_context(next);						\
+	next->mm->cpu_vm_mask |= (1 << smp_processor_id());				\
 	task_pc = ((unsigned long) &&here) - 0x8;					\
 	__asm__ __volatile__(								\
 	"rd	%%psr, %%g4\n\t"							\
@@ -136,6 +138,7 @@ extern __inline__ void __cli(void)
 
 	__asm__ __volatile__("
 		rd	%%psr, %0
+		nop; nop; nop;
 		or	%0, %1, %0
 		wr	%0, 0x0, %%psr
 		nop; nop; nop
@@ -149,7 +152,8 @@ extern __inline__ void __sti(void)
 	unsigned long tmp;
 
 	__asm__ __volatile__("
-		rd	%%psr, %0
+		rd	%%psr, %0	
+		nop; nop; nop;
 		andn	%0, %1, %0
 		wr	%0, 0x0, %%psr
 		nop; nop; nop
@@ -168,23 +172,22 @@ extern __inline__ unsigned long getipl(void)
 
 extern __inline__ unsigned long swap_pil(unsigned long __new_psr)
 {
-	unsigned long retval, tmp1, tmp2;
+	unsigned long retval;
 
 	__asm__ __volatile__("
 		rd	%%psr, %0
-		and	%0, %4, %1
-		and	%3, %4, %2
-		xorcc	%1, %2, %%g0
+		nop; nop; nop;
+		and	%0, %2, %%g1
+		and	%1, %2, %%g2
+		xorcc	%%g1, %%g2, %%g0
 		be	1f
 		 nop
-		wr	%0, %4, %%psr
-		nop
-		nop
-		nop
+		wr	%0, %2, %%psr
+		nop; nop; nop;
 1:
-"		: "=r" (retval), "=r" (tmp1), "=r" (tmp2)
+"		: "=r" (retval)
 		: "r" (__new_psr), "i" (PSR_PIL)
-		: "memory", "cc");
+		: "g1", "g2", "memory", "cc");
 
 	return retval;
 }
@@ -195,6 +198,7 @@ extern __inline__ unsigned long read_psr_and_cli(void)
 
 	__asm__ __volatile__("
 		rd	%%psr, %0
+		nop; nop; nop;
 		or	%0, %1, %%g1
 		wr	%%g1, 0x0, %%psr
 		nop; nop; nop
@@ -210,6 +214,28 @@ extern __inline__ unsigned long read_psr_and_cli(void)
 #define __restore_flags(flags)	setipl((flags))
 
 #ifdef __SMP__
+
+/* This goes away after lockups have been found... */
+#ifndef DEBUG_IRQLOCK
+#define DEBUG_IRQLOCK
+#endif
+
+extern unsigned char global_irq_holder;
+
+#define save_flags(x) \
+do {	((x) = ((global_irq_holder == (unsigned char) smp_processor_id()) ? 1 : \
+		((getipl() & PSR_PIL) ? 2 : 0))); } while(0)
+
+#define save_and_cli(flags)   do { save_flags(flags); cli(); } while(0)
+
+#ifdef DEBUG_IRQLOCK
+extern void __global_cli(void);
+extern void __global_sti(void);
+extern void __global_restore_flags(unsigned long flags);
+#define cli()			__global_cli()
+#define sti()			__global_sti()
+#define restore_flags(flags)	__global_restore_flags(flags)
+#else
 
 /* Visit arch/sparc/lib/irqlock.S for all the fun details... */
 #define cli()      __asm__ __volatile__("mov	%%o7, %%g4\n\t"			\
@@ -230,12 +256,6 @@ do {	register unsigned long bits asm("g7");			\
 			       "memory", "cc");			\
 } while(0)
 
-extern unsigned char global_irq_holder;
-
-#define save_flags(x) \
-do {	((x) = ((global_irq_holder == (unsigned char) smp_processor_id()) ? 1 : \
-		((getipl() & PSR_PIL) ? 2 : 0))); } while(0)
-
 #define restore_flags(flags)						\
 do {	register unsigned long bits asm("g7");				\
 	bits = flags;							\
@@ -248,7 +268,7 @@ do {	register unsigned long bits asm("g7");				\
 			       "memory", "cc");				\
 } while(0)
 
-#define save_and_cli(flags)   do { save_flags(flags); cli(); } while(0)
+#endif /* DEBUG_IRQLOCK */
 
 #else
 
@@ -267,6 +287,12 @@ do {	register unsigned long bits asm("g7");				\
 
 extern __inline__ unsigned long xchg_u32(__volatile__ unsigned long *m, unsigned long val)
 {
+#ifdef __SMP__
+	__asm__ __volatile__("swap [%2], %0"
+			     : "=&r" (val)
+			     : "0" (val), "r" (m));
+	return val;
+#else
 	register unsigned long *ptr asm("g1");
 	register unsigned long ret asm("g2");
 
@@ -282,6 +308,7 @@ extern __inline__ unsigned long xchg_u32(__volatile__ unsigned long *m, unsigned
 	: "g3", "g4", "g7", "memory", "cc");
 
 	return ret;
+#endif
 }
 
 #define xchg(ptr,x) ((__typeof__(*(ptr)))__xchg((unsigned long)(x),(ptr),sizeof(*(ptr))))

@@ -393,6 +393,7 @@ static void exec_mmap(void)
 		*mm = *current->mm;
 		init_new_context(mm);
 		mm->def_flags = 0;	/* should future lockings be kept? */
+		mm->cpu_vm_mask = (1 << smp_processor_id());
 		mm->count = 1;
 		mm->mmap = mm->mmap_cache = NULL;
 		mm->total_vm = 0;

@@ -1,6 +1,8 @@
 /*
  * bios32.c - BIOS32, PCI BIOS functions.
  *
+ * $Id: bios32.c,v 1.11 1997/05/07 13:35:21 mj Exp $
+ *
  * Sponsored by
  *	iX Multiuser Multitasking Magazine
  *	Hannover, Germany
@@ -55,6 +57,8 @@
  * Apr 26, 1997 : Fixed case when there is BIOS32, but not PCI BIOS
  *	(mj@atrey.karlin.mff.cuni.cz)
  *
+ * May 7,  1997 : Added some missing cli()'s. [mj]
+ * 
  */
 
 #include <linux/config.h>
@@ -161,7 +165,7 @@ static unsigned long bios32_service(unsigned long service)
 	unsigned long entry;		/* %edx */
 	unsigned long flags;
 
-	save_flags(flags);
+	save_flags(flags); cli();
 	__asm__("lcall (%%edi)"
 		: "=a" (return_code),
 		  "=b" (address),
@@ -204,7 +208,7 @@ __initfunc(static int check_pcibios(void))
 	if ((pcibios_entry = bios32_service(PCI_SERVICE))) {
 		pci_indirect.address = pcibios_entry | PAGE_OFFSET;
 
-		save_flags(flags);
+		save_flags(flags); cli();
 		__asm__("lcall (%%edi)\n\t"
 			"jc 1f\n\t"
 			"xor %%ah, %%ah\n"
@@ -249,7 +253,7 @@ static int pci_bios_find_class (unsigned int class_code, unsigned short index,
 	unsigned long ret;
 	unsigned long flags;
 
-	save_flags(flags);
+	save_flags(flags); cli();
 	__asm__ ("lcall (%%edi)\n\t"
 		"jc 1f\n\t"
 		"xor %%ah, %%ah\n"
@@ -274,7 +278,7 @@ static int pci_bios_find_device (unsigned short vendor, unsigned short device_id
 	unsigned short ret;
 	unsigned long flags;
 
-	save_flags(flags);
+	save_flags(flags); cli();
 	__asm__("lcall (%%edi)\n\t"
 		"jc 1f\n\t"
 		"xor %%ah, %%ah\n"
@@ -299,7 +303,7 @@ static int pci_bios_read_config_byte(unsigned char bus,
 	unsigned long bx = (bus << 8) | device_fn;
 	unsigned long flags;
 
-	save_flags(flags);
+	save_flags(flags); cli();
 	__asm__("lcall (%%esi)\n\t"
 		"jc 1f\n\t"
 		"xor %%ah, %%ah\n"
@@ -321,7 +325,7 @@ static int pci_bios_read_config_word (unsigned char bus,
 	unsigned long bx = (bus << 8) | device_fn;
 	unsigned long flags;
 
-	save_flags(flags);
+	save_flags(flags); cli();
 	__asm__("lcall (%%esi)\n\t"
 		"jc 1f\n\t"
 		"xor %%ah, %%ah\n"
@@ -343,7 +347,7 @@ static int pci_bios_read_config_dword (unsigned char bus,
 	unsigned long bx = (bus << 8) | device_fn;
 	unsigned long flags;
 
-	save_flags(flags);
+	save_flags(flags); cli();
 	__asm__("lcall (%%esi)\n\t"
 		"jc 1f\n\t"
 		"xor %%ah, %%ah\n"
@@ -365,7 +369,7 @@ static int pci_bios_write_config_byte (unsigned char bus,
 	unsigned long bx = (bus << 8) | device_fn;
 	unsigned long flags;
 
-	save_flags(flags);
+	save_flags(flags); cli();
 	__asm__("lcall (%%esi)\n\t"
 		"jc 1f\n\t"
 		"xor %%ah, %%ah\n"
@@ -387,7 +391,7 @@ static int pci_bios_write_config_word (unsigned char bus,
 	unsigned long bx = (bus << 8) | device_fn;
 	unsigned long flags;
 
-	save_flags(flags);
+	save_flags(flags); cli();
 	__asm__("lcall (%%esi)\n\t"
 		"jc 1f\n\t"
 		"xor %%ah, %%ah\n"
@@ -409,7 +413,7 @@ static int pci_bios_write_config_dword (unsigned char bus,
 	unsigned long bx = (bus << 8) | device_fn;
 	unsigned long flags;
 
-	save_flags(flags);
+	save_flags(flags); cli();
 	__asm__("lcall (%%esi)\n\t"
 		"jc 1f\n\t"
 		"xor %%ah, %%ah\n"
@@ -480,7 +484,7 @@ static int pci_direct_find_class (unsigned int class_code, unsigned short index,
     struct pci_dev *dev;
     unsigned long flags;
 
-    save_flags(flags);
+    save_flags(flags); cli();
     for (dev = pci_devices; dev; dev = dev->next) {
 	if (dev->class == class_code) {
 	    if (curr == index) {
@@ -506,7 +510,7 @@ static int pci_conf1_read_config_byte(unsigned char bus, unsigned char device_fn
 {
     unsigned long flags;
 
-    save_flags(flags);
+    save_flags(flags); cli();
     outl(CONFIG_CMD(bus,device_fn,where), 0xCF8);
     switch (where & 3) {
 	case 0: *value = inb(0xCFC);
@@ -527,7 +531,7 @@ static int pci_conf1_read_config_word (unsigned char bus,
 {
     unsigned long flags;
 
-    save_flags(flags);
+    save_flags(flags); cli();
     outl(CONFIG_CMD(bus,device_fn,where), 0xCF8);    
     if (where & 2)
     	*value = inw(0xCFE);
@@ -542,7 +546,7 @@ static int pci_conf1_read_config_dword (unsigned char bus, unsigned char device_
 {
     unsigned long flags;
 
-    save_flags(flags);
+    save_flags(flags); cli();
     outl(CONFIG_CMD(bus,device_fn,where), 0xCF8);
     *value = inl(0xCFC);
     restore_flags(flags);
@@ -554,7 +558,7 @@ static int pci_conf1_write_config_byte (unsigned char bus, unsigned char device_
 {
     unsigned long flags;
 
-    save_flags(flags);
+    save_flags(flags); cli();
     outl(CONFIG_CMD(bus,device_fn,where), 0xCF8);    
     outb(value, 0xCFC);
     restore_flags(flags);
@@ -566,7 +570,7 @@ static int pci_conf1_write_config_word (unsigned char bus, unsigned char device_
 {
     unsigned long flags;
 
-    save_flags(flags);
+    save_flags(flags); cli();
     outl(CONFIG_CMD(bus,device_fn,where), 0xCF8);
     outw(value, 0xCFC);
     restore_flags(flags);
@@ -578,7 +582,7 @@ static int pci_conf1_write_config_dword (unsigned char bus, unsigned char device
 {
     unsigned long flags;
 
-    save_flags(flags);
+    save_flags(flags); cli();
     outl(CONFIG_CMD(bus,device_fn,where), 0xCF8);
     outl(value, 0xCFC);
     restore_flags(flags);
@@ -614,7 +618,7 @@ static int pci_conf2_read_config_byte(unsigned char bus, unsigned char device_fn
 
     if (device_fn & 0x80)
 	return PCIBIOS_DEVICE_NOT_FOUND;
-    save_flags(flags);
+    save_flags(flags); cli();
     outb (FUNC(device_fn), 0xCF8);
     outb (bus, 0xCFA);
     *value = inb(IOADDR(device_fn,where));
@@ -630,7 +634,7 @@ static int pci_conf2_read_config_word (unsigned char bus, unsigned char device_f
 
     if (device_fn & 0x80)
 	return PCIBIOS_DEVICE_NOT_FOUND;
-    save_flags(flags);
+    save_flags(flags); cli();
     outb (FUNC(device_fn), 0xCF8);
     outb (bus, 0xCFA);
     *value = inw(IOADDR(device_fn,where));
@@ -646,7 +650,7 @@ static int pci_conf2_read_config_dword (unsigned char bus, unsigned char device_
 
     if (device_fn & 0x80)
 	return PCIBIOS_DEVICE_NOT_FOUND;
-    save_flags(flags);
+    save_flags(flags); cli();
     outb (FUNC(device_fn), 0xCF8);
     outb (bus, 0xCFA);
     *value = inl (IOADDR(device_fn,where));    
@@ -660,7 +664,7 @@ static int pci_conf2_write_config_byte (unsigned char bus, unsigned char device_
 {
     unsigned long flags;
 
-    save_flags(flags);
+    save_flags(flags); cli();
     outb (FUNC(device_fn), 0xCF8);
     outb (bus, 0xCFA);
     outb (value, IOADDR(device_fn,where));
@@ -674,7 +678,7 @@ static int pci_conf2_write_config_word (unsigned char bus, unsigned char device_
 {
     unsigned long flags;
 
-    save_flags(flags);
+    save_flags(flags); cli();
     outb (FUNC(device_fn), 0xCF8);
     outb (bus, 0xCFA);
     outw (value, IOADDR(device_fn,where));
@@ -688,7 +692,7 @@ static int pci_conf2_write_config_dword (unsigned char bus, unsigned char device
 {
     unsigned long flags;
 
-    save_flags(flags);
+    save_flags(flags); cli();
     outb (FUNC(device_fn), 0xCF8);
     outb (bus, 0xCFA);
     outl (value, IOADDR(device_fn,where));    
@@ -720,7 +724,7 @@ __initfunc(static struct pci_access *check_direct_pci(void))
     unsigned int tmp;
     unsigned long flags;
 
-    save_flags(flags);
+    save_flags(flags); cli();
 
     /*
      * check if configuration type 1 works

@@ -647,7 +647,7 @@ void inode_init(void)
 	int i;
 
 	inode_cachep = kmem_cache_create("inode", sizeof(struct inode),
-					 sizeof(unsigned long) * 4,
+					 0,
 					 SLAB_HWCACHE_ALIGN, NULL, NULL);
 	if(!inode_cachep)
 		panic("Cannot create inode SLAB cache\n");

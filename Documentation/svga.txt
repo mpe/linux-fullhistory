@@ -1,5 +1,5 @@
-		       Video Mode Selection Support 2.10
-	      (c) 1995, 1996 Martin Mares, <mj@k332.feld.cvut.cz>
+		       Video Mode Selection Support 2.11
+	      (c) 1995--1997 Martin Mares, <mj@k332.feld.cvut.cz>
 --------------------------------------------------------------------------------
 
 1. Intro
@@ -14,8 +14,9 @@ DESCRIBING YOUR EXPERIENCE WITH IT. BUG REPORTS ARE ALSO WELCOME.
 
    The video mode to be used is selected by a kernel parameter which can be
 specified in the kernel Makefile (the SVGA_MODE=... line) or by the "vga=..."
-option of LILO or by the "vidmode" utility (present in standard Linux utility
-packages). You can use the following settings of this parameter:
+option of LILO (or some other boot loader you use) or by the "vidmode" utility
+(present in standard Linux utility packages). You can use the following values
+of this parameter:
 
    NORMAL_VGA - Standard 80x25 mode available on all display adapters.
 
@@ -39,8 +40,8 @@ packages). You can use the following settings of this parameter:
    The ASK_VGA mode causes the kernel to offer a video mode menu upon
 bootup. It displays a "Press <RETURN> to see video modes available, <SPACE>
 to continue or wait 30 secs" message. If you press <RETURN>, you enter the
-menu, if you press <SPACE> or wait 30 seconds, the kernel will boot up with
-the standard 80x25 mode set.
+menu, if you press <SPACE> or wait 30 seconds, the kernel will boot up in
+the standard 80x25 mode.
 
    The menu looks like:
 
@@ -51,62 +52,70 @@ Mode:    COLSxROWS:
 2  0F02  80x43
 3  0F03  80x26
 ....
-Enter mode number: <flashing-cursor-here>
+Enter mode number or `scan': <flashing-cursor-here>
 
-   <name-of-detected-video-adapter> should contain a name of your video adapter
-or the chip in it or at least whether it's an EGA or VGA or VESA VGA (VGA with
-a VESA-compliant BIOS in it). If it doesn't match your configuration, tell me
-and I'll try to fix it somehow (you know, hardware detection is a real pain
-on PC's).
+   <name-of-detected-video-adapter> tells what video adapter did Linux detect
+-- it's either a generic adapter name (MDA, CGA, HGC, EGA, VGA, VESA VGA [a VGA
+with VESA-compliant BIOS]) or a chipset name (e.g., Trident). Direct detection
+of chipsets is turned off by default (see CONFIG_VIDEO_SVGA in chapter 4 to see
+how to enable it if you really want) as it's inherently unreliable due to
+absolutely insane PC design.
 
    "0  0F00  80x25" tells that the first menu item (the menu items are numbered
 from "0" to "9" and from "a" to "z") is a 80x25 mode with ID=0x0f00 (see the
-next section for a description of the mode ID's).
+next section for a description of mode ID's).
 
    <flashing-cursor-here> encourages you to write the item number or mode ID
 you wish to set and press <RETURN>. If the computer complains something about
 "Unknown mode ID", it tries to explain you that it isn't possible to set such
-a mode. It's also possible to press only <RETURN> which forces the current
-mode to be used.
+a mode. It's also possible to press only <RETURN> which leaves the current mode.
 
-   The mode list may be a bit inaccurate on your machine (it isn't possible
-to autodetect all existing video cards and their mutations). Some of the
-modes may be unsettable, some of them might work incorrectly with Linux
-(the common case is mirroring of first few lines at the bottom of the screen
-because of BIOS bugs) or there can exist modes which are not displayed. If
-you think the list doesn't match your configuration, let me know and I'll try
-to add your configuration to the next version of the mode selector.
+   The mode list usually contains only few basic modes and some VESA modes.  In
+case your chipset has been detected, some chipset-specific modes are shown as
+well (some of these might be missing or unusable on your machine as different
+BIOSes are often shipped with the same card and the mode numbers depend purely
+on the VGA BIOS).
 
    The modes displayed on the menu are partially sorted: The list starts with
 the standard modes (80x25 and 80x50) followed by "special" modes (80x28 and
 80x43), local modes (if the local modes feature is enabled), VESA modes and
 finally SVGA modes for the auto-detected adapter.
 
-   If you enter "scan" instead of item number / mode ID, the program will try
-to scan your video modes in a slightly aggressive, but much more accurate way.
-This should reveal all video modes supported by your BIOS. During this process,
-the screen will flash wildly and strange things will appear. If you are afraid
-this could damage your monitor, don't use this functions. After scanning, the
-mode ordering is a bit different: the auto-detected SVGA modes are not listed
-at all and the modes revealed by the scan are shown before the VESA modes.
+   If you are not happy with the mode list offered (e.g., if you think your card
+is able to do more), you can enter "scan" instead of item number / mode ID.  The
+program will try to ask the BIOS for all possible video mode numbers and test
+what happens then. The screen will be probably flashing wildly for some time and
+strange noises will be heard from inside the monitor and so on and then, really
+all consistent video modes supported by your BIOS will appear (plus maybe some
+`ghost modes'). If you are afraid this could damage your monitor, don't use this
+function.
+
+   After scanning, the mode ordering is a bit different: the auto-detected SVGA
+modes are not listed at all and the modes revealed by `scan' are shown before
+all VESA modes.
 
 3. Mode ID's
 ~~~~~~~~~~~~
    Because of the complexity of all the video stuff, the video mode ID's
 used here are also a bit complex. A video mode ID is a 16-bit number usually
-expressed in a hexadecimal notation (starting with "0x"). The ID numbers
-can be divided to three regions:
+expressed in a hexadecimal notation (starting with "0x"). You can set a mode
+by entering its mode directly if you know it even if it isn't shown on the menu.
 
-   0x0000 to 0x00ff - menu item references. 0x0000 is the first item.
+The ID numbers can be divided to three regions:
+
+   0x0000 to 0x00ff - menu item references. 0x0000 is the first item. Don't use
+	outside the menu as this can change from boot to boot (especially if you
+	have used the `scan' feature).
 
    0x0100 to 0x017f - standard BIOS modes. The ID is a BIOS video mode number
-	(as presented to INT 10, function 00) increased by 0x0100. You can
-	use any mode numbers even if not shown on the menu.
+	(as presented to INT 10, function 00) increased by 0x0100.
 
    0x0200 to 0x08ff - VESA BIOS modes. The ID is a VESA mode ID increased by
 	0x0100. All VESA modes should be autodetected and shown on the menu.
 
    0x0900 to 0x09ff - Video7 special modes. Set by calling INT 0x10, AX=0x6f05.
+	(Usually 940=80x43, 941=132x25, 942=132x44, 943=80x60, 944=100x60,
+	945=132x28 for the standard Video7 BIOS)
 
    0x0f00 to 0x0fff - special modes (they are set by various tricks -- usually
 	by modifying one of the standard modes). Currently available:
@@ -123,7 +132,9 @@ can be divided to three regions:
    0x1000 to 0x7fff - modes specified by resolution. The code has a "0xRRCC"
 	form where RR is a number of rows and CC is a number of columns.
 	E.g., 0x1950 corresponds to a 80x25 mode, 0x2b84 to 132x43 etc.
-	This is the only fully portable way to refer to a non-standard mode.
+	This is the only fully portable way to refer to a non-standard mode,
+	but it relies on the mode being found and displayed on the menu
+	(remember that mode scanning is not done automatically).
 
    0xff00 to 0xffff - aliases for backward compatibility:
 	0xffff	equivalent to 0x0f00 (standard 80x25)
@@ -131,8 +142,9 @@ can be divided to three regions:
 
    If you add 0x8000 to the mode ID, the program will try to recalculate
 vertical display timing according to mode parameters, which can be used to
-eliminate some annoying bugs of certain VGA BIOS'es -- mainly extra lines at
-the end of the display.
+eliminate some annoying bugs of certain VGA BIOS'es (usually those used for
+cards with S3 chipsets and old Cirrus Logic BIOSes) -- mainly extra lines at the
+end of the display.
 
 4. Options
 ~~~~~~~~~~
@@ -140,22 +152,27 @@ the end of the display.
 All of them are simple #define's -- change them to #undef's when you want to
 switch them off. Currently supported:
 
-   CONFIG_VIDEO_SVGA - enables autodetection of SVGA cards. If your card is
-detected incorrectly, you can switch this off.
+   CONFIG_VIDEO_SVGA - enables autodetection of SVGA cards. This is switched
+off by default as it's a bit unreliable due to terribly bad PC design. If you
+really want to have the adapter autodetected (maybe in case the `scan' feature
+doesn't work on your machine), switch this on and don't cry if the results
+are not completely sane. In case you really need this feature, please drop me
+a mail as I think of removing it some day.
 
    CONFIG_VIDEO_VESA - enables autodetection of VESA modes. If it doesn't work
 on your machine (or displays a "Error: Scanning of VESA modes failed" message),
 you can switch it off and report as a bug.
 
-   CONFIG_VIDEO_COMPACT - enables compacting of the video mode list. Duplicate
-entries (those with the same screen size) are deleted except for the first one
-(see the previous section for more information on mode ordering). However,
-it's possible that the first variant doesn't work, while some of the others do
--- in this case turn this switch off to see the rest.
+   CONFIG_VIDEO_COMPACT - enables compacting of the video mode list. If there
+are more modes with the same screen size, only the first one is kept (see above
+for more info on mode ordering). However, in very strange cases it's possible
+that the first "version" of the mode doesn't work although some of the others
+do -- in this case turn this switch off to see the rest.
 
    CONFIG_VIDEO_RETAIN - enables retaining of screen contents when switching
 video modes. Works only with some boot loaders which leave enough room for the
-buffer.
+buffer. (If you have old LILO, you can adjust heap_end_ptr and loadflags
+in setup.S, but it's better to upgrade the boot loader...)
 
    CONFIG_VIDEO_LOCAL - enables inclusion of "local modes" in the list. The
 local modes are added automatically to the beginning of the list not depending
@@ -177,25 +194,7 @@ text screen resolution instead of peeking it from BIOS variables. Don't use
 unless you think you know what you're doing. To activate this setup, use
 mode number 0x0f08 (see section 3).
 
-5. Adding more cards
-~~~~~~~~~~~~~~~~~~~~
-   If you have a card not detected by the driver and you are a good programmer,
-feel free to add it to the source and send me a diff. It's very simple: You
-have to add a new entry to the svga_table consisting of a pointer to your mode
-table and a pointer to your detection routine. The order of entries in the
-svga_table defines the order of probing. Please use only reliable detection
-routines which are known to identify _only_ the card in question.
-
-   The detection routine is called with BP pointing to your mode table and
-ES containing 0xc000. If you want, you may alter BP allowing to select an
-appropriate mode table according to model ID detected. If the detection fails,
-return BP=0.
-
-   The mode table consists of lines containing a (BIOS mode number, rows,
-columns) triple and is finished by single zero byte followed by NUL-terminated
-adapter name.
-
-6. Still doesn't work?
+5. Still doesn't work?
 ~~~~~~~~~~~~~~~~~~~~~~
    When the mode detection doesn't work (e.g., the mode list is incorrect or
 the machine hangs instead of displaying the menu), try to switch off some of
@@ -207,11 +206,11 @@ happens and how do the configuration switches affect the behaviour of the bug.
 
    If you start Linux from the M$-DOS, you might also use some DOS tools for
 video mode setting. In this case, you must specify the 0x0f04 mode ("leave
-current settings") to Linux, because if you use anything other, the 80x25
-mode will be used automatically.
+current settings") to Linux, because if you don't and you use any non-standard
+mode, Linux will switch to 80x25 automatically.
 
-   If you set some SVGA mode and there's one or more extra lines on the
-bottom of the display containing already scrolled-out lines, your VGA BIOS
+   If you set some extended mode and there's one or more extra lines on the
+bottom of the display containing already scrolled-out text, your VGA BIOS
 contains the most common video BIOS bug called "incorrect vertical display
 end setting". Adding 0x8000 to the mode ID might fix the problem. Unfortunately,
 this must be done manually -- no autodetection mechanisms are available.
@@ -220,7 +219,7 @@ this must be done manually -- no autodetection mechanisms are available.
 is probably broken and you need to set the CONFIG_VIDEO_400_HACK switch to
 force setting of the correct mode.
 
-7. History
+6. History
 ~~~~~~~~~~
 1.0 (??-Nov-95)	First version supporting all adapters supported by the old
 		setup.S + Cirrus Logic 54XX. Present in some 1.3.4? kernels
@@ -266,3 +265,8 @@ force setting of the correct mode.
 		- Added the CONFIG_VIDEO_400_HACK switch.
 		- Added the CONFIG_VIDEO_GFX_HACK switch.
 		- Code cleanup.
+2.11 (03-May-97)- Yet another cleanup, now including also the documentation.
+		- Direct testing of SVGA adapters turned off by default, `scan'
+		  offered explicitly on the prompt line.
+		- Removed the doc section describing adding of new probing
+		  functions as I try to get rid of _all_ hardware probing here.

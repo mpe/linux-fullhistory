@@ -1,6 +1,5 @@
-The following parameters should be tunable but aren't, until we get sysctl
-or similar schemes. For now you'll have to dig around. Various CONFIG_xxx
-items that should be configurable using sysctl omitted.
+The following parameters should be tunable at compile time. Some of them
+exist as sysctls too.
 
 This is far from complete
 
@@ -54,8 +53,6 @@ MASQUERADE_EXPIRE_TCP_FIN	Time we keep a masquerade for after a FIN
 MASQUERADE_EXPIRE_UDP	Time we keep a UDP masquerade for (tunable)
 MAXVIFS			Maximum mrouted vifs (1-32)
 MFC_LINES		Lines in the multicast router cache (tunable)
-SK_RMEM_MAX		Max memory a socket owns for receive (tunable)
-SK_WMEM_MAX		Max memory a socket owns for send (tunable)
 
 NetROM parameters are tunable via an ioctl passing a struct
 

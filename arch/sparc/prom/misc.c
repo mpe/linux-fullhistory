@@ -1,4 +1,4 @@
-/* $Id: misc.c,v 1.14 1997/05/01 01:41:32 davem Exp $
+/* $Id: misc.c,v 1.15 1997/05/14 20:45:00 davem Exp $
  * misc.c:  Miscellaneous prom functions that don't belong
  *          anywhere else.
  *
@@ -12,6 +12,9 @@
 #include <asm/openprom.h>
 #include <asm/oplib.h>
 #include <asm/auxio.h>
+
+/* XXX Let's get rid of this thing if we can... */
+extern struct task_struct *current_set[NR_CPUS];
 
 /* Reset and reboot the machine with the command 'bcommand'. */
 void

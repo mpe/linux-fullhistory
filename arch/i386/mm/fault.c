@@ -49,7 +49,7 @@ good_area:
 	start &= PAGE_MASK;
 
 	for (;;) {
-		handle_mm_fault(vma, start, 1);
+		handle_mm_fault(current,vma, start, 1);
 		if (!size)
 			break;
 		size--;
@@ -142,7 +142,7 @@ good_area:
 			if (!(vma->vm_flags & (VM_READ | VM_EXEC)))
 				goto bad_area;
 	}
-	handle_mm_fault(vma, address, write);
+	handle_mm_fault(tsk, vma, address, write);
 	up(&mm->mmap_sem);
 	/*
 	 * Did it hit the DOS screen memory VA from vm86 mode?

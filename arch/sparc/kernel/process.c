@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.96 1997/05/01 08:53:33 davem Exp $
+/*  $Id: process.c,v 1.98 1997/05/14 20:44:54 davem Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -40,6 +40,8 @@
 #include <asm/elf.h>
 
 extern void fpsave(unsigned long *, unsigned long *, void *, unsigned long *);
+
+struct task_struct *current_set[NR_CPUS] = {&init_task, };
 
 #ifndef __SMP__
 
@@ -191,6 +193,37 @@ void show_regwindow(struct reg_window *rw)
 	       rw->ins[0], rw->ins[1], rw->ins[2], rw->ins[3],
 	       rw->ins[4], rw->ins[5], rw->ins[6], rw->ins[7]);
 }
+
+static spinlock_t sparc_backtrace_lock = SPIN_LOCK_UNLOCKED;
+
+void show_backtrace(void)
+{
+	struct reg_window *rw;
+	unsigned long flags;
+	unsigned long fp;
+	int cpu = smp_processor_id();
+
+	spin_lock_irqsave(&sparc_backtrace_lock, flags);
+	__asm__ __volatile__("mov %%i6, %0" : "=r" (fp));
+	rw = (struct reg_window *) fp;
+	while(rw) {
+		printk("CPU[%d]: ARGS[%08lx,%08lx,%08lx,%08lx,%08lx,%08lx] "
+		       "FP[%08lx] CALLER[%08lx]\n", cpu,
+		       rw->ins[0], rw->ins[1], rw->ins[2], rw->ins[3],
+		       rw->ins[4], rw->ins[5],
+		       rw->ins[6],
+		       rw->ins[7]);
+		rw = (struct reg_window *) rw->ins[6];
+	}
+	spin_unlock_irqrestore(&sparc_backtrace_lock, flags);
+}
+
+#ifdef __SMP__
+void smp_show_backtrace_all_cpus(void)
+{
+	xc0((smpfunc_t) show_backtrace);
+}
+#endif
 
 void show_stackframe(struct sparc_stackf *sf)
 {

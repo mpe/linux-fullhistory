@@ -1,4 +1,4 @@
-/* $Id: irq.h,v 1.17 1997/04/18 05:44:52 davem Exp $
+/* $Id: irq.h,v 1.19 1997/05/08 20:57:39 davem Exp $
  * irq.h: IRQ registers on the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -13,8 +13,17 @@
 
 #define NR_IRQS    15
 
+/* Get rid of this when lockups have gone away. -DaveM */
+#ifndef DEBUG_IRQLOCK
+#define DEBUG_IRQLOCK
+#endif
+
 /* IRQ handler dispatch entry and exit. */
 #ifdef __SMP__
+#ifdef DEBUG_IRQLOCK
+extern void irq_enter(int cpu, int irq, void *regs);
+extern void irq_exit(int cpu, int irq);
+#else
 extern __inline__ void irq_enter(int cpu, int irq)
 {
 	register int proc asm("g1");
@@ -40,6 +49,7 @@ extern __inline__ void irq_exit(int cpu, int irq)
 	: "0" (proc)
 	: "g1", "g2", "g3", "g4", "g5", "memory", "cc");
 }
+#endif /* DEBUG_IRQLOCK */
 #else
 #define irq_enter(cpu, irq)	(local_irq_count[cpu]++)
 #define irq_exit(cpu, irq)	(local_irq_count[cpu]--)

@@ -580,6 +580,9 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	/* Do this so that we can load the interpreter, if need be.  We will
 	   change some of these later */
 	current->mm->rss = 0;
+#ifdef __sparc_v9__
+	current->tss.flags &= ~(SPARC_FLAG_32BIT);
+#endif
 	bprm->p = setup_arg_pages(bprm->p, bprm);
 	current->mm->start_stack = bprm->p;
 

@@ -212,7 +212,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			sk->opt = opt;
 			sti();
 			if (old_opt)
-				kfree_s(old_opt, sizeof(struct optlen) + old_opt->optlen);
+				kfree_s(old_opt, sizeof(struct ip_options) + old_opt->optlen);
 			return 0;
 		}
 		case IP_RXINFO:

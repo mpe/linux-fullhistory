@@ -22,6 +22,8 @@
 
 #include <net/tcp.h>
 
+int sysctl_syn_retries = TCP_SYN_RETRIES; 
+
 static void tcp_sltimer_handler(unsigned long);
 static void tcp_syn_recv_timer(unsigned long);
 static void tcp_keepalive(unsigned long data);
@@ -178,7 +180,7 @@ static int tcp_write_timeout(struct sock *sk)
 	}
 	
 	/* Have we tried to SYN too many times (repent repent 8)) */
-	if(tp->retransmits > TCP_SYN_RETRIES && sk->state==TCP_SYN_SENT) {
+	if(tp->retransmits > sysctl_syn_retries && sk->state==TCP_SYN_SENT) {
 		if(sk->err_soft)
 			sk->err=sk->err_soft;
 		else

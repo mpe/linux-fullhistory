@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: addrconf.c,v 1.19 1997/04/29 09:38:41 mj Exp $
+ *	$Id: addrconf.c,v 1.20 1997/05/07 09:40:04 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -1274,6 +1274,7 @@ void addrconf_cleanup(void)
 		for (idev = inet6_dev_lst[i]; idev; ) {
 			struct inet6_dev *back;
 
+			addrconf_ifdown(idev->dev);	
 			back = idev;
 			idev = idev->next;
 			kfree(back);

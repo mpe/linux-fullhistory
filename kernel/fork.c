@@ -121,7 +121,7 @@ void uidcache_init(void)
 	int i;
 
 	uid_cachep = kmem_cache_create("uid_cache", sizeof(struct uid_taskcount),
-				       sizeof(unsigned long) * 2,
+				       0,
 				       SLAB_HWCACHE_ALIGN, NULL, NULL);
 	if(!uid_cachep)
 		panic("Cannot create uid taskcount SLAB cache\n");
@@ -257,6 +257,12 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 		init_new_context(mm);
 		mm->count = 1;
 		mm->def_flags = 0;
+
+		/* It has not run yet, so cannot be present in anyone's
+		 * cache or tlb.
+		 */
+		mm->cpu_vm_mask = 0;
+
 		tsk->mm = mm;
 		tsk->min_flt = tsk->maj_flt = 0;
 		tsk->cmin_flt = tsk->cmaj_flt = 0;

@@ -8,6 +8,8 @@
  * An even bigger kudos to John Grana at Performance Technologies
  * for providing me with the hardware to write this driver, you rule
  * John you really do.
+ *
+ * May, 2, 1997: Added support for QLGC,isp --jj
  */
 
 #include <linux/kernel.h>
@@ -573,6 +575,7 @@ __initfunc(int qlogicpti_detect(Scsi_Host_Template *tpnt))
 	unsigned char bsizes, bsizes_more;
 	int nqptis = 0, nqptis_in_use = 0;
 	int qpti_node;
+	int is_pti;
 
 	tpnt->proc_dir = &proc_scsi_qlogicpti;
 	qptichain = 0;
@@ -584,7 +587,8 @@ __initfunc(int qlogicpti_detect(Scsi_Host_Template *tpnt))
 
 			/* Is this a red snapper? */
 			if(strcmp(qpti_dev->prom_name, "ptisp") &&
-			   strcmp(qpti_dev->prom_name, "PTI,ptisp"))
+			   strcmp(qpti_dev->prom_name, "PTI,ptisp") &&
+			   strcmp(qpti_dev->prom_name, "QLGC,isp"))
 				continue;
 
 			/* Yep, register and allocate software state. */
@@ -618,6 +622,8 @@ __initfunc(int qlogicpti_detect(Scsi_Host_Template *tpnt))
 			prom_getstring(qpti_node, "name", qpti->prom_name,
 				       sizeof(qpti->prom_name));
 			qpti->prom_node = qpti_node;
+			
+			is_pti = strcmp (qpti->prom_name, "QLGC,isp");
 
 			/* Setup the reg property for this device. */
 			prom_apply_sbus_ranges(qpti->qdev->my_bus,
@@ -632,17 +638,19 @@ __initfunc(int qlogicpti_detect(Scsi_Host_Template *tpnt))
 					       qpti->qdev->reg_addrs[0].which_io, 0x0);
 			if(!qregs)
 				panic("PTI Qlogic/ISP registers unmappable");
-
-			/* Map this one read only. */
-			qpti->sreg = sreg = (volatile unsigned char *)
-				sparc_alloc_io((qpti->qdev->reg_addrs[0].phys_addr +
-					       (16 * PAGE_SIZE)), 0,
-					       sizeof(unsigned char),
-					       "PTI Qlogic/ISP Status Reg",
-					       qpti->qdev->reg_addrs[0].which_io, 1);
-			if(!sreg)
-				panic("PTI Qlogic/ISP status reg unmappable");
-			qpti->swsreg = 0;
+				
+			if(is_pti) {
+				/* Map this one read only. */
+				qpti->sreg = sreg = (volatile unsigned char *)
+					sparc_alloc_io((qpti->qdev->reg_addrs[0].phys_addr +
+						       (16 * PAGE_SIZE)), 0,
+						       sizeof(unsigned char),
+						       "PTI Qlogic/ISP Status Reg",
+						       qpti->qdev->reg_addrs[0].which_io, 1);
+				if(!sreg)
+					panic("PTI Qlogic/ISP status reg unmappable");
+				qpti->swsreg = 0;
+			}
 
 			qpti_host->base = (unsigned char *)qregs;
 			qpti_host->io_port = (unsigned int) qregs;
@@ -713,21 +721,32 @@ qpti_irq_acquired:
 
 			/* Set adapter and per-device default values. */
 			qlogicpti_set_hostdev_defaults(qpti);
+			
+			if (is_pti) {
+				/* Load the firmware. */
+				if(qlogicpti_load_firmware(qpti))
+					panic("PTI Qlogic/ISP firmware load failed");
 
-			/* Load the firmware. */
-			if(qlogicpti_load_firmware(qpti))
-				panic("PTI Qlogic/ISP firmware load failed");
-
-			/* Check the PTI status reg. */
-			if(qlogicpti_verify_tmon(qpti))
-				panic("PTI Qlogic/ISP tmon verification failed");
+				/* Check the PTI status reg. */
+				if(qlogicpti_verify_tmon(qpti))
+					panic("PTI Qlogic/ISP tmon verification failed");
+			}
 
 			/* Reset the ISP and init res/req queues. */
 			if(qlogicpti_reset_hardware(qpti_host))
 				panic("PTI Qlogic/ISP cannot be reset");
 
-			printk("(Firmware v%d.%d) [%s Wide, using %s interface]\n",
-			       qpti->fware_majrev, qpti->fware_minrev,
+			if (is_pti) {
+				printk("(Firmware v%d.%d)",
+				       qpti->fware_majrev, qpti->fware_minrev);
+			} else {
+				char buffer[60];
+				
+				prom_getstring (qpti_node, "isp-fcode", buffer, 60);
+				printk("(Firmware %s)", buffer);
+			}
+			
+			printk (" [%s Wide, using %s interface]\n",
 			       (qpti->ultra ? "Ultra" : "Fast"),
 			       (qpti->differential ? "differential" : "single ended"));
 
@@ -751,7 +770,9 @@ int qlogicpti_release(struct Scsi_Host *host)
 	/* Free IRQ handler and unmap Qlogic,ISP and PTI status regs. */
 	free_irq(host->irq, NULL);
 	unmapioaddr((unsigned long)qregs);
-	unmapioaddr((unsigned long)qpti->sreg);
+	/* QLGC,isp doesn't have status reg */
+	if (strcmp (qpti->prom_name, "QLGC,isp"))
+		unmapioaddr((unsigned long)qpti->sreg);
 
 	return 0;
 }

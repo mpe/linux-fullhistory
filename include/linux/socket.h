@@ -3,8 +3,8 @@
 
 #include <asm/socket.h>			/* arch-dependent defines	*/
 #include <linux/sockios.h>		/* the SIOCxxx I/O controls	*/
-#include <linux/types.h>		/* pid_t			*/
 #include <linux/uio.h>			/* iovec support		*/
+#include <linux/types.h>		/* pid_t			*/
 
 typedef unsigned short	sa_family_t;
 

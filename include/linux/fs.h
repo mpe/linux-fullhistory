@@ -611,9 +611,8 @@ extern int nr_buffer_heads;
 
 #define BUF_CLEAN	0
 #define BUF_LOCKED	1	/* Buffers scheduled for write */
-#define BUF_LOCKED1	2	/* Supers, inodes */
-#define BUF_DIRTY	3	/* Dirty buffers, not yet scheduled for write */
-#define NR_LIST		4
+#define BUF_DIRTY	2	/* Dirty buffers, not yet scheduled for write */
+#define NR_LIST		3
 
 void mark_buffer_uptodate(struct buffer_head * bh, int on);
 

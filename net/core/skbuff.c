@@ -71,8 +71,8 @@ extern atomic_t ip_frag_mem;
  *	Strings we don't want inline's duplicating
  */
  
-char *skb_push_errstr="skpush:under: %p:%d";
-char *skb_put_errstr ="skput:over: %p:%d";
+const char skb_push_errstr[]="skpush:under: %p:%d";
+const char skb_put_errstr[] ="skput:over: %p:%d";
 
 void show_net_buffers(void)
 {

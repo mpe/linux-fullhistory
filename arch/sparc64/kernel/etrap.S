@@ -1,4 +1,4 @@
-/* $Id: etrap.S,v 1.12 1997/04/28 14:57:07 davem Exp $
+/* $Id: etrap.S,v 1.13 1997/05/04 07:21:00 davem Exp $
  * etrap.S: Preparing for entry into the kernel on Sparc V9.
  *
  * Copyright (C) 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -8,6 +8,7 @@
 #include <asm/asi.h>
 #include <asm/pstate.h>
 #include <asm/ptrace.h>
+#include <asm/page.h>
 #include <asm/spitfire.h>
 #include <asm/head.h>
 
@@ -66,7 +67,10 @@ etrap_irq:
 	wrpr		%g0, 0, %canrestore
 	wrpr		%g2, 0, %otherwin
 
-	ldx		[%g1 + AOFF_task_saved_kernel_stack], %g2
+	mov		1, %g2
+	sllx		%g2, (PAGE_SHIFT + 1), %g2
+	sub		%g2, (TRACEREG_SZ + REGWIN_SZ), %g2
+	add		%g1, %g2, %g2
 1:
 	stx		%g1, [%g2 + REGWIN_SZ + PT_V9_TSTATE]
 	rdpr		%tpc, %g1
@@ -103,11 +107,10 @@ etrap_irq:
 	wrpr		%l1, (PSTATE_IE | PSTATE_AG), %pstate
 	sethi		%uhi(KERNBASE), %g4
 	or		%g4, %ulo(KERNBASE), %g4
-	sethi		%hi(current_set), %g6
-	or		%g6, %lo(current_set), %g6
+	srlx		%sp, (PAGE_SHIFT + 1), %g6
 	sllx		%g4, 32, %g4
 	jmpl		%l2 + 0x4, %g0
-	 ldx		[%g6 + %g4], %g6
+	 sllx		%g6, (PAGE_SHIFT + 1), %g6
 #ifdef __SMP__
 /* FIXME: Fix the above insn for SMP */
 #endif

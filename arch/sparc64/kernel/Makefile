@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.16 1997/04/17 20:35:37 jj Exp $
+# $Id: Makefile,v 1.17 1997/05/04 07:20:58 davem Exp $
 # Makefile for the linux kernel.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -13,7 +13,7 @@
 .S.o:
 	$(CC) -D__ASSEMBLY__ -ansi -c $< -o $*.o
 
-all: kernel.o head.o
+all: kernel.o head.o init_task.o
 
 O_TARGET := kernel.o
 O_OBJS   := etrap.o rtrap.o hack.o process.o setup.o cpu.o idprom.o \

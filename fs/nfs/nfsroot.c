@@ -228,6 +228,8 @@ root_dev_chg_route(int op, struct device *dev, __u32 dest, __u32 mask, __u32 gw)
 	unsigned long	oldfs;
 	int		err;
 
+	memset(&route, 0, sizeof(struct rtentry));	/* or else! */
+
 	route.rt_dev = dev->name;
 	route.rt_mtu = dev->mtu;
 	route.rt_flags = RTF_UP;
@@ -247,9 +249,15 @@ root_dev_chg_route(int op, struct device *dev, __u32 dest, __u32 mask, __u32 gw)
 	set_fs(KERNEL_DS);
 	err = ip_rt_ioctl(op, &route);
 	set_fs(oldfs);
-	printk(KERN_NOTICE "%s route %s %s %s: res %d\n",
-			(op == SIOCADDRT? "add" : "del"),
-			in_ntoa(dest), in_ntoa(mask), in_ntoa(gw), err);
+
+	/* in_ntoa in ipv4/utils.c uses a single static buffer, so
+	 * must make multiple printk calls, one for each in_ntoa
+	 * invocation...
+	 */
+	printk(KERN_NOTICE "%s route ", (op == SIOCADDRT ? "addr" : "del"));
+	printk("%s ", in_ntoa(dest));
+	printk("%s ", in_ntoa(mask));
+	printk("%s: res %d\n", in_ntoa(gw), err);
 
 	return err;
 }
@@ -280,8 +288,10 @@ static void root_dev_close(void)
 		nextp = openp->next;
 		openp->next = NULL;
 		if (openp->dev != root_dev) {
-			if (!(openp->old_flags & IFF_UP))
+			if (!(openp->old_flags & IFF_UP)) {
 				dev_close(openp->dev);
+			}
+
 			openp->dev->flags = openp->old_flags;
 		}
 		kfree_s(openp, sizeof(struct open_dev));
@@ -1322,6 +1332,13 @@ static int root_nfs_setup(void)
 	root_dev->pa_mask    = netmask;
 	root_dev->pa_brdaddr = root_dev->pa_addr | ~root_dev->pa_mask;
 	root_dev->pa_dstaddr = 0;
+
+	/* Sticky situation, but it has a solution.  We opened it earlier,
+	 * but before we knew what pa_addr etc. to give to it, thus the
+	 * routing code did not add a RTF_LOCAL route for it (how could
+	 * it?) so we send the pseudo device state change event now.  -DaveM
+	 */
+	ip_rt_event(NETDEV_CHANGE, root_dev);
 
 	/*
 	 * Now add a route to the server. If there is no gateway given,

@@ -1,4 +1,4 @@
-/* $Id: console.c,v 1.12 1997/05/01 01:41:30 davem Exp $
+/* $Id: console.c,v 1.14 1997/05/14 20:44:58 davem Exp $
  * console.c: Routines that deal with sending and receiving IO
  *            to/from the current console device using the PROM.
  *
@@ -13,6 +13,9 @@
 #include <asm/oplib.h>
 #include <asm/system.h>
 #include <linux/string.h>
+
+/* XXX Let's get rid of this thing if we can... */
+extern struct task_struct *current_set[NR_CPUS];
 
 /* Non blocking get character from console input device, returns -1
  * if no input was taken.  This can be used for polling.
@@ -38,6 +41,7 @@ prom_nbgetchar(void)
 		}
 		break;
 	case PROM_AP1000:
+	default:
 		i = -1;
 		break;
 	};
@@ -80,6 +84,9 @@ prom_nbputchar(char c)
 		}
 #endif
 	
+		break;
+	default:
+		i = -1;
 		break;
 	};
 	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
@@ -208,6 +215,7 @@ prom_query_output_device()
 		}
 		break;
 	case PROM_AP1000:
+	default:
 		return PROMDEV_I_UNK;
 	};
 	return PROMDEV_O_UNK;

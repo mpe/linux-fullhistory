@@ -97,7 +97,7 @@ good_area:
 		if (!(vma->vm_flags & VM_WRITE))
 			goto bad_area;
 	}
-	handle_mm_fault(vma, address, cause > 0);
+	handle_mm_fault(tsk, vma, address, cause > 0);
 	up(&mm->mmap_sem);
 	return;
 

@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *	Ian P. Morris		<I.P.Morris@soton.ac.uk>
  *
- *	$Id: ip6_input.c,v 1.4 1997/03/18 18:24:35 davem Exp $
+ *	$Id: ip6_input.c,v 1.6 1997/05/11 16:06:52 davem Exp $
  *
  *	Based in linux/net/ipv4/ip_input.c
  *
@@ -133,7 +133,7 @@ static int ip6_parse_tlv(struct tlvtype_proc *procs, struct sk_buff *skb,
 	struct tlvtype_proc *curr;
 
 	while ((hdr=(struct ipv6_tlvtype *)skb->h.raw) != lastopt) {
-		switch (hdr->type & 0x3F) {		
+		switch (hdr->type) {
 		case 0: /* TLV encoded Pad1 */
 			skb->h.raw++;
 			break;
@@ -144,7 +144,7 @@ static int ip6_parse_tlv(struct tlvtype_proc *procs, struct sk_buff *skb,
 
 		default: /* Other TLV code so scan list */
 			for (curr=procs; curr->type != 255; curr++) {
-				if (curr->type == (hdr->type & 0x3F)) {
+				if (curr->type == (hdr->type)) {
 					curr->func(skb, dev, nhptr, opt);
 					skb->h.raw += hdr->len+2;
 					break;
@@ -166,10 +166,12 @@ static int ipv6_dest_opt(struct sk_buff **skb_ptr, struct device *dev,
 	struct sk_buff *skb=*skb_ptr;
 	struct ipv6_destopt_hdr *hdr = (struct ipv6_destopt_hdr *) skb->h.raw;
 	int res = 0;
+	void *lastopt=skb->h.raw+hdr->hdrlen+sizeof(struct ipv6_destopt_hdr);
 
-	if (ip6_parse_tlv(tlvprocdestopt_lst, skb, dev, nhptr, opt,
-			  skb->h.raw+hdr->hdrlen))
+	skb->h.raw += sizeof(struct ipv6_destopt_hdr);
+	if (ip6_parse_tlv(tlvprocdestopt_lst, skb, dev, nhptr, opt, lastopt))
 		res = hdr->nexthdr;
+	skb->h.raw+=hdr->hdrlen;
 
 	return res;
 }

@@ -1,4 +1,4 @@
-/* $Id: tree.c,v 1.17 1997/05/01 01:41:33 davem Exp $
+/* $Id: tree.c,v 1.18 1997/05/14 20:45:03 davem Exp $
  * tree.c: Basic device tree traversal/scanning for the Linux
  *         prom library.
  *
@@ -15,6 +15,8 @@
 #include <asm/openprom.h>
 #include <asm/oplib.h>
 
+/* XXX Let's get rid of this thing if we can... */
+extern struct task_struct *current_set[NR_CPUS];
 
 /* Macro to restore "current" to the g6 register. */
 #define restore_current() __asm__ __volatile__("ld [%0], %%g6\n\t" : : \

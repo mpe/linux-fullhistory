@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.6 1997/04/07 18:57:07 jj Exp $
+/*  $Id: process.c,v 1.8 1997/05/14 20:45:06 davem Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -36,6 +36,8 @@
 #include <asm/pstate.h>
 #include <asm/elf.h>
 #include <asm/fpumacro.h>
+
+struct task_struct *current_set[NR_CPUS] = {&init_task, };
 
 #ifndef __SMP__
 
@@ -453,19 +455,18 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 #endif	
 
 	/* Calculate offset to stack_frame & pt_regs */
-	stack_offset = (PAGE_SIZE - TRACEREG_SZ);
+	stack_offset = ((PAGE_SIZE<<1) - TRACEREG_SZ);
 
 	if(regs->tstate & TSTATE_PRIV)
 		stack_offset -= REGWIN_SZ;
 
-	childregs = ((struct pt_regs *) (p->kernel_stack_page + stack_offset));
+	childregs = ((struct pt_regs *) (((unsigned long)p) + stack_offset));
 	*childregs = *regs;
 	new_stack = (((struct reg_window *) childregs) - 1);
 	old_stack = (((struct reg_window *) regs) - 1);
 	*new_stack = *old_stack;
 
-	p->saved_kernel_stack = ((unsigned long) new_stack);
-	p->tss.ksp = p->saved_kernel_stack - STACK_BIAS;
+	p->tss.ksp = ((unsigned long) new_stack) - STACK_BIAS;
 	p->tss.kpc = ((unsigned long) ret_from_syscall) - 0x8;
 	p->tss.kregs = childregs;
 
@@ -485,7 +486,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 		p->tss.current_ds = USER_DS;
 
 #if 0
-		if (sp != current->tss.kregs->u_regs[UREG_FP]) {
+		if (sp != regs->u_regs[UREG_FP]) {
 			struct sparc_stackf *childstack;
 			struct sparc_stackf *parentstack;
 
@@ -494,8 +495,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 			 * Set some valid stack frames to give to the child.
 			 */
 			childstack = (struct sparc_stackf *)sp;
-			parentstack = (struct sparc_stackf *)
-					current->tss.kregs->u_regs[UREG_FP];
+			parentstack = (struct sparc_stackf *)regs->u_regs[UREG_FP];
 
 #if 0
 			printk("clone: parent stack:\n");

@@ -1,4 +1,4 @@
-/* $Id: devops.c,v 1.8 1997/05/01 01:41:31 davem Exp $
+/* $Id: devops.c,v 1.10 1997/05/14 20:44:59 davem Exp $
  * devops.c:  Device operations using the PROM.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -9,6 +9,9 @@
 
 #include <asm/openprom.h>
 #include <asm/oplib.h>
+
+/* XXX Let's get rid of this thing if we can... */
+extern struct task_struct *current_set[NR_CPUS];
 
 /* Open the device described by the string 'dstr'.  Returns the handle
  * to that device used for subsequent operations on that device.
@@ -57,6 +60,7 @@ prom_devclose(int dhandle)
 		(*(romvec->pv_v2devops.v2_dev_close))(dhandle);
 		break;
         case PROM_AP1000:
+	default:
 		break;
 	};
 	__asm__ __volatile__("ld [%0], %%g6\n\t" : :
@@ -83,6 +87,7 @@ prom_seek(int dhandle, unsigned int seekhi, unsigned int seeklo)
 		(*(romvec->pv_v2devops.v2_dev_seek))(dhandle, seekhi, seeklo);
 		break;
         case PROM_AP1000:
+	default:
 		break;
 	};
 	__asm__ __volatile__("ld [%0], %%g6\n\t" : :

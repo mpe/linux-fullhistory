@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.46 1997/04/13 06:38:24 davem Exp $
+/* $Id: bitops.h,v 1.47 1997/05/14 20:47:56 davem Exp $
  * bitops.h: Bit string operations on the Sparc.
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -95,7 +95,7 @@ extern __inline__ unsigned long change_bit(unsigned long nr, void *addr)
  * all bit-ops return 0 if bit was previously clear and != 0 otherwise.
  */
 
-extern __inline__ unsigned long set_bit(unsigned long nr, __SMPVOL void *addr)
+extern __inline__ unsigned long test_and_set_bit(unsigned long nr, __SMPVOL void *addr)
 {
 	register unsigned long mask asm("g2");
 	register unsigned long *ADDR asm("g1");
@@ -112,7 +112,12 @@ extern __inline__ unsigned long set_bit(unsigned long nr, __SMPVOL void *addr)
 	return mask;
 }
 
-extern __inline__ unsigned long clear_bit(unsigned long nr, __SMPVOL void *addr)
+extern __inline__ void set_bit(unsigned long nr, __SMPVOL void *addr)
+{
+	(void) test_and_set_bit(nr, addr);
+}
+
+extern __inline__ unsigned long test_and_clear_bit(unsigned long nr, __SMPVOL void *addr)
 {
 	register unsigned long mask asm("g2");
 	register unsigned long *ADDR asm("g1");
@@ -130,7 +135,12 @@ extern __inline__ unsigned long clear_bit(unsigned long nr, __SMPVOL void *addr)
 	return mask;
 }
 
-extern __inline__ unsigned long change_bit(unsigned long nr, __SMPVOL void *addr)
+extern __inline__ unsigned long clear_bit(unsigned long nr, __SMPVOL void *addr)
+{
+	(void) test_and_clear_bit(nr, addr);
+}
+
+extern __inline__ unsigned long test_and_change_bit(unsigned long nr, __SMPVOL void *addr)
 {
 	register unsigned long mask asm("g2");
 	register unsigned long *ADDR asm("g1");
@@ -146,6 +156,11 @@ extern __inline__ unsigned long change_bit(unsigned long nr, __SMPVOL void *addr
 	: "g3", "g4", "g5", "g7", "cc");
 
 	return mask;
+}
+
+extern __inline__ unsigned long change_bit(unsigned long nr, __SMPVOL void *addr)
+{
+	(void) test_and_change_bit(nr, addr);
 }
 
 #endif /* __KERNEL__ */
@@ -369,8 +384,8 @@ found_middle:
 #define ext2_find_next_zero_bit      find_next_zero_le_bit
 
 /* Bitmap functions for the minix filesystem.  */
-#define minix_set_bit(nr,addr) set_bit(nr,addr)
-#define minix_clear_bit(nr,addr) clear_bit(nr,addr)
+#define minix_set_bit(nr,addr) test_and_set_bit(nr,addr)
+#define minix_clear_bit(nr,addr) test_and_clear_bit(nr,addr)
 #define minix_test_bit(nr,addr) test_bit(nr,addr)
 #define minix_find_first_zero_bit(addr,size) find_first_zero_bit(addr,size)
 

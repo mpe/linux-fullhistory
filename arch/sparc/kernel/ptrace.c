@@ -24,6 +24,12 @@
 
 #define MAGIC_CONSTANT 0x80000000
 
+extern void do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
+		       unsigned long address, int write_access);
+
+extern void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
+		       unsigned long address, int write_access);
+
 /*
  * This routine gets a long from any process space by following the page
  * tables. NOTE! You should check that the long isn't on a page boundary,

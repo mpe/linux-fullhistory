@@ -1242,14 +1242,14 @@ S: 00980 Helsinki
 S: Finland
 
 N: Eric Schenk
-E: schenk@cs.toronto.edu
+E: Eric.Schenk@dna.lth.se
 D: Random kernel debugging.
 D: SYSV Semaphore code rewrite.
 D: Network layer debugging.
 D: Dial on demand facility (diald).
-S: 7 Borden Street
-S: Toronto, Ontario
-S: Canada M5S 2M8
+S: Dag Hammerskjolds v. 3E
+S: S-226 64 LUND
+S: Sweden
 
 N: Peter De Schrijver
 E: stud11@cc4.kuleuven.ac.be

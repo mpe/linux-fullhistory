@@ -73,9 +73,6 @@ extern void destroy_8023_client(struct datalink_proto *);
 #include <net/sock.h>
 #endif
 
-extern char *skb_push_errstr;
-extern char *skb_put_errstr;
-
 /* Skbuff symbols. */
 EXPORT_SYMBOL(skb_push_errstr);
 EXPORT_SYMBOL(skb_put_errstr);

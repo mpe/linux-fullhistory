@@ -1,4 +1,4 @@
-/* $Id: devmap.c,v 1.4 1997/05/01 01:41:31 davem Exp $
+/* $Id: devmap.c,v 1.5 1997/05/14 20:44:59 davem Exp $
  * promdevmap.c:  Map device/IO areas to virtual addresses.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -10,6 +10,9 @@
 
 #include <asm/openprom.h>
 #include <asm/oplib.h>
+
+/* XXX Let's get rid of this thing if we can... */
+extern struct task_struct *current_set[NR_CPUS];
 
 /* Just like the routines in palloc.c, these should not be used
  * by the kernel at all.  Bootloader facility mainly.  And again,

@@ -1,4 +1,4 @@
-/* $Id: sunserial.c,v 1.39 1997/04/23 07:45:26 ecd Exp $
+/* $Id: sunserial.c,v 1.41 1997/05/14 20:46:51 davem Exp $
  * serial.c: Serial port driver for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -19,6 +19,8 @@
 #include <linux/fcntl.h>
 #include <linux/mm.h>
 #include <linux/kernel.h>
+#include <linux/keyboard.h>
+#include <linux/console.h>
 #include <linux/init.h>
 
 #include <asm/io.h>
@@ -38,8 +40,6 @@ static int num_serial = 2; /* sun4/sun4c/sun4m - Two chips on board. */
 
 #define KEYBOARD_LINE 0x2
 #define MOUSE_LINE    0x3
-
-extern struct wait_queue * keypress_wait;
 
 struct sun_zslayout **zs_chips;
 struct sun_zschannel **zs_channels;
@@ -1062,20 +1062,30 @@ static void rs_fair_output(void)
 /*
  * zs_console_print is registered for printk.
  */
-static void zs_console_print(const char *p)
+static void zs_console_print(const char *s, int count)
 {
-	char c;
+	int i;
 
-	while((c=*(p++)) != 0) {
-		if(c == '\n')
+	for (i = 0; i < count; i++, s++) {
+		if(*s == '\n')
 			rs_put_char('\r');
-		rs_put_char(c);
+		rs_put_char(*s);
 	}
 
 	/* Comment this if you want to have a strict interrupt-driven output */
 	rs_fair_output();
+}
 
-	return;
+static void zs_console_wait_key(void)
+{
+	sleep_on(&keypress_wait);
+}
+
+static int zs_console_device(void)
+{
+	extern int serial_console;
+	
+	return MKDEV(TTYAUX_MAJOR, 64 + serial_console - 1);
 }
 
 static void rs_flush_chars(struct tty_struct *tty)
@@ -1857,7 +1867,7 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 
 static void show_serial_version(void)
 {
-	char *revision = "$Revision: 1.39 $";
+	char *revision = "$Revision: 1.41 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');
@@ -2164,14 +2174,15 @@ no_options:
 	termios->c_cflag = cflag;
 }
 
-extern void register_console(void (*proc)(const char *));
-
 static inline void
 rs_cons_check(struct sun_serial *ss, int channel)
 {
 	int i, o, io;
 	static int consout_registered = 0;
 	static int msg_printed = 0;
+	static struct console console = {
+		zs_console_print, 0,
+		zs_console_wait_key, zs_console_device };
 
 	i = o = io = 0;
 
@@ -2187,10 +2198,10 @@ rs_cons_check(struct sun_serial *ss, int channel)
 		o = 1;
 		/* double whee.. */
 		if(!consout_registered) {
-			extern void serial_finish_init (void (*)(const char *));
+			extern void serial_finish_init (void (*)(const char *, int count));
 
 			serial_finish_init (zs_console_print);
-			register_console(zs_console_print);
+			register_console(&console);
 			consout_registered = 1;
 		}
 	}

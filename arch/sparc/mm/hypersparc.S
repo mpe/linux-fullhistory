@@ -1,4 +1,4 @@
-/* $Id: hypersparc.S,v 1.4 1997/04/19 04:33:39 davem Exp $
+/* $Id: hypersparc.S,v 1.7 1997/05/03 05:09:12 davem Exp $
  * hypersparc.S: High speed Hypersparc mmu/cache operations.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -79,7 +79,7 @@ hypersparc_flush_cache_mm:
 	 sta	%g0, [%o0 + %o4] ASI_M_FLUSH_USER
 hypersparc_flush_cache_mm_out:
 	retl
-	 sta	%g0, [%g0 + %g0] ASI_M_FLUSH_IWHOLE	! hyper_flush_whole_icache
+	 nop
 
 	/* The things we do for performance... */
 hypersparc_flush_cache_range:
@@ -126,7 +126,7 @@ hypersparc_flush_cache_range:
 	bne	1b
 	 sta	%g0, [%o3 + %g5] ASI_M_FLUSH_USER
 	retl
-	 sta	%g0, [%g0 + %g0] ASI_M_FLUSH_IWHOLE
+	 nop
 
 	/* Below our threshold, flush one page at a time. */
 0:
@@ -166,7 +166,7 @@ hypersparc_flush_cache_range:
 	sta	%o3, [%g7] ASI_M_MMUREGS
 hypersparc_flush_cache_range_out:
 	retl
-	 sta	%g0, [%g0 + %g0] ASI_M_FLUSH_IWHOLE
+	 nop
 
 	/* HyperSparc requires a valid mapping where we are about to flush
 	 * in order to check for a physical tag match during the flush.
@@ -221,12 +221,12 @@ hypersparc_flush_cache_page:
 	sta	%o2, [%g4] ASI_M_MMUREGS
 hypersparc_flush_cache_page_out:
 	retl
-	 sta	%g0, [%g0 + %g0] ASI_M_FLUSH_IWHOLE
+	 nop
 
 hypersparc_flush_sig_insns:
-	flush	%o2
+	flush	%o1
 	retl
-	 flush	%o2 + 4
+	 flush	%o1 + 4
 
 	/* HyperSparc is copy-back. */
 hypersparc_flush_page_to_ram:
@@ -289,7 +289,7 @@ hypersparc_flush_tlb_mm:
 	cmp	%o1, -1
 	be	hypersparc_flush_tlb_mm_out
 #endif
-	mov	0x300, %g2
+	 mov	0x300, %g2
 	sta	%o1, [%g1] ASI_M_MMUREGS
 	sta	%g0, [%g2] ASI_M_FLUSH_PROBE
 hypersparc_flush_tlb_mm_out:
@@ -304,7 +304,7 @@ hypersparc_flush_tlb_range:
 	cmp	%o3, -1
 	be	hypersparc_flush_tlb_range_out
 #endif
-	srl	%o1, SRMMU_PGDIR_SHIFT, %o1
+	 srl	%o1, SRMMU_PGDIR_SHIFT, %o1
 	sta	%o3, [%g1] ASI_M_MMUREGS
 	sll	%o1, SRMMU_PGDIR_SHIFT, %o1
 	sethi	%hi(1 << SRMMU_PGDIR_SHIFT), %o4
@@ -324,13 +324,67 @@ hypersparc_flush_tlb_page:
 	mov	SRMMU_CTX_REG, %g1
 	ld	[%o0 + AOFF_mm_context], %o3
 	andn	%o1, (PAGE_SIZE - 1), %o1
-	lda	[%g1] ASI_M_MMUREGS, %g5
 #ifndef __SMP__
 	cmp	%o3, -1
 	be	hypersparc_flush_tlb_page_out
 #endif
+	 lda	[%g1] ASI_M_MMUREGS, %g5
 	sta	%o3, [%g1] ASI_M_MMUREGS
 	sta	%g0, [%o1] ASI_M_FLUSH_PROBE
 hypersparc_flush_tlb_page_out:
 	retl
 	 sta	%g5, [%g1] ASI_M_MMUREGS
+
+	/* High speed page clear/copy. */
+	.globl	hypersparc_bzero_1page, hypersparc_copy_1page
+hypersparc_bzero_1page:
+	clr	%g1
+	mov	32, %g2
+	add	%g2, %g2, %g3
+	add	%g2, %g3, %g4
+	add	%g2, %g4, %g5
+	add	%g2, %g5, %g7
+	add	%g2, %g7, %o2
+	add	%g2, %o2, %o3
+	mov	16, %o1
+1:
+	stda	%g0, [%o0 + %g0] ASI_M_BFILL
+	stda	%g0, [%o0 + %g2] ASI_M_BFILL
+	stda	%g0, [%o0 + %g3] ASI_M_BFILL
+	stda	%g0, [%o0 + %g4] ASI_M_BFILL
+	stda	%g0, [%o0 + %g5] ASI_M_BFILL
+	stda	%g0, [%o0 + %g7] ASI_M_BFILL
+	stda	%g0, [%o0 + %o2] ASI_M_BFILL
+	stda	%g0, [%o0 + %o3] ASI_M_BFILL
+	subcc	%o1, 1, %o1
+	bne	1b
+	 add	%o0, 256, %o0
+
+	retl
+	 nop
+
+hypersparc_copy_1page:
+	sub	%o1, %o0, %o2		! difference
+	mov	16, %g1
+1:
+	sta	%o0, [%o0 + %o2] ASI_M_BCOPY
+	add	%o0, 32, %o0
+	sta	%o0, [%o0 + %o2] ASI_M_BCOPY
+	add	%o0, 32, %o0
+	sta	%o0, [%o0 + %o2] ASI_M_BCOPY
+	add	%o0, 32, %o0
+	sta	%o0, [%o0 + %o2] ASI_M_BCOPY
+	add	%o0, 32, %o0
+	sta	%o0, [%o0 + %o2] ASI_M_BCOPY
+	add	%o0, 32, %o0
+	sta	%o0, [%o0 + %o2] ASI_M_BCOPY
+	add	%o0, 32, %o0
+	sta	%o0, [%o0 + %o2] ASI_M_BCOPY
+	add	%o0, 32, %o0
+	sta	%o0, [%o0 + %o2] ASI_M_BCOPY
+	subcc	%g1, 1, %g1
+	bne	1b
+	 add	%o0, 32, %o0
+
+	retl
+	 nop

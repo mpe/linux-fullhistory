@@ -1673,6 +1673,7 @@ static inline void happy_meal_rx(struct happy_meal *hp, struct device *dev,
 		netif_rx(skb);
 
 		hp->net_stats.rx_packets++;
+		hp->net_stats.rx_bytes+=len;
 	next:
 		elem = NEXT_RX(elem);
 		this = &rxbase[elem];
@@ -1729,6 +1730,7 @@ static inline void sun4c_happy_meal_rx(struct happy_meal *hp, struct device *dev
 				skb->protocol = eth_type_trans(skb, dev);
 				netif_rx(skb);
 				hp->net_stats.rx_packets++;
+				hp->net_stats.rx_bytes+=len;
 			}
 		}
 		/* Return the buffer to the Happy Meal. */

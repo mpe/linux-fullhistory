@@ -22,14 +22,13 @@ ENTRY(__down_failed)
 	popl %eax	/* restore %eax */
 	ret
 
+/* Don't save/restore %eax, because that will be our return value */
 ENTRY(__down_failed_interruptible)
-	pushl %eax	/* save %eax */
 	pushl %edx	/* save %edx */
 	pushl %ecx	/* save %ecx (and argument) */
 	call SYMBOL_NAME(__down_interruptible)
 	popl %ecx	/* restore %ecx (count on __down_interruptible not changing it) */
 	popl %edx	/* restore %edx */
-	popl %eax	/* restore %eax */
 	ret
 
 ENTRY(__up_wakeup)

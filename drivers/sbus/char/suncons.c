@@ -1,4 +1,4 @@
-/* $Id: suncons.c,v 1.61 1997/04/17 02:29:36 miguel Exp $
+/* $Id: suncons.c,v 1.62 1997/05/02 22:32:32 davem Exp $
  *
  * suncons.c: Sun SparcStation console support.
  *
@@ -387,12 +387,12 @@ render_screen(void)
 	sun_blitc (*contents, (unsigned long) contents);
 }
 
-__initfunc(void serial_finish_init(void (*printfunc)(const char *)))
+__initfunc(void serial_finish_init(void (*printfunc)(const char *, int)))
 {
 	char buffer[2048];
 	
 	sprintf (buffer, linux_serial_image, UTS_RELEASE);
-	(*printfunc)(buffer);
+	(*printfunc)(buffer, strlen(buffer));
 }
 
 __initfunc(void con_type_init_finish(void))

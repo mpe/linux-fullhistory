@@ -379,7 +379,7 @@ static void arp_neigh_destroy(struct neighbour *neigh)
 			extern atomic_t hh_count;
 			atomic_dec(&hh_count);
 #endif
-			kfree_s(hh, sizeof(struct(struct hh_cache)));
+			kfree_s(hh, sizeof(struct hh_cache));
 		}
 	}
 }

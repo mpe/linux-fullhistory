@@ -1,4 +1,4 @@
-/* $Id: cache.h,v 1.6 1996/12/28 19:55:12 davem Exp $
+/* $Id: cache.h,v 1.7 1997/05/06 09:31:46 davem Exp $
  * cache.h:  Cache specific code for the Sparc.  These include flushing
  *           and direct tag/data line access.
  *
@@ -11,6 +11,7 @@
 #include <asm/asi.h>
 
 #define L1_CACHE_BYTES 32
+#define L1_CACHE_ALIGN(x) ((((x)+(L1_CACHE_BYTES-1))&~(L1_CACHE_BYTES-1)))
 
 /* Direct access to the instruction cache is provided through and
  * alternate address space.  The IDC bit must be off in the ICCR on

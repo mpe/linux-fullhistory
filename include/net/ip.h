@@ -65,36 +65,6 @@ extern void		ip_mc_dropsocket(struct sock *);
 extern void		ip_mc_dropdevice(struct device *dev);
 extern int		ip_mc_procinfo(char *, char **, off_t, int, int);
 
-/* Describe an IP fragment. */
-struct ipfrag 
-{
-	int		offset;		/* offset of fragment in IP datagram	*/
-	int		end;		/* last byte of data in datagram	*/
-	int		len;		/* length of this fragment		*/
-	struct sk_buff	*skb;		/* complete received fragment		*/
-	unsigned char	*ptr;		/* pointer into real fragment data	*/
-	struct ipfrag	*next;		/* linked list pointers			*/
-	struct ipfrag	*prev;
-};
-
-/*
- *	Describe an entry in the "incomplete datagrams" queue. 
- */
- 
-struct ipq	 
-{
-	unsigned char	*mac;		/* pointer to MAC header		*/
-	struct iphdr	*iph;		/* pointer to IP header			*/
-	int		len;		/* total length of original datagram	*/
-	short		ihlen;		/* length of the IP header		*/	
-	short 		maclen;		/* length of the MAC header		*/
-	struct timer_list timer;	/* when will this queue expire?		*/
-	struct ipfrag	*fragments;	/* linked list of received fragments	*/
-	struct ipq	*next;		/* linked list pointers			*/
-	struct ipq	*prev;
-	struct device	*dev;		/* Device - for icmp replies */
-};
-
 /*
  *	Functions provided by ip.c
  */

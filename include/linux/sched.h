@@ -151,6 +151,7 @@ struct mm_struct {
 	unsigned long arg_start, arg_end, env_start, env_end;
 	unsigned long rss, total_vm, locked_vm;
 	unsigned long def_flags;
+	unsigned long cpu_vm_mask;
 };
 
 #define INIT_MM {					\
@@ -161,7 +162,7 @@ struct mm_struct {
 		0, 0, 0, 0,				\
 		0, 0, 0, 0,				\
 		0, 0, 0,				\
-		0 }
+		0, 0 }
 
 struct signal_struct {
 	atomic_t		count;

@@ -51,7 +51,7 @@ do {	if(global_irq_holder == (unsigned char) cpu) {	\
 	__save_flags(flags);					\
 	__cli();						\
 	if(atomic_add_return(1, &global_irq_count) != 1 ||	\
-	   global_irq_lock) {					\
+	   *(((unsigned char *)(&global_irq_lock)))) {		\
 		atomic_dec(&global_irq_count);			\
 		__restore_flags(flags);				\
 		ret = 0;					\

@@ -39,6 +39,8 @@
  *					for sockets. May have errors at the
  *					moment.
  *		Kevin Buhr	:	Fixed the dumb errors in the above.
+ *		Andi Kleen	:	Some small cleanups, optimizations,
+ *					and fixed a copy_from_user() bug.
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -180,7 +182,7 @@ int move_addr_to_user(void *kaddr, int klen, void *uaddr, int *ulen)
 	 *	"fromlen shall refer to the value before truncation.."
 	 *			1003.1g
 	 */
- 	return put_user(klen, ulen);
+ 	return __put_user(klen, ulen);
 }
 
 /*
@@ -365,6 +367,7 @@ static long sock_read(struct inode *inode, struct file *file,
   
 	if (size==0)		/* Match SYS5 behaviour */
 		return 0;
+	/* FIXME: I think this can be removed now. */
 	if ((err=verify_area(VERIFY_WRITE,ubuf,size))<0)
 	  	return err;
 	msg.msg_name=NULL;
@@ -398,7 +401,8 @@ static long sock_write(struct inode *inode, struct file *file,
 
 	if(size==0)		/* Match SYS5 behaviour */
 		return 0;
-	
+
+	/* FIXME: I think this can be removed now */
 	if ((err=verify_area(VERIFY_READ,ubuf,size))<0)
 	  	return err;
 	
@@ -797,7 +801,6 @@ asmlinkage int sys_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_ad
   	{
 		if (!(newsock = sock_alloc())) 
 		{
-			printk(KERN_WARNING "accept: no more sockets\n");
 			err=-EMFILE;
 			goto out;
 		}
@@ -1130,6 +1133,7 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 	struct msghdr msg_sys;
 	int err= -EINVAL;
 	int total_len;
+	unsigned char *ctl_buf = ctl;
 	
 	lock_kernel();
 
@@ -1149,22 +1153,26 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 
 	if (msg_sys.msg_controllen) 
 	{
-		if (msg_sys.msg_controllen > sizeof(ctl)) 
+		/* XXX We just limit the buffer and assume that the 
+		 * skbuff accounting stops it from going too far.
+		 * I hope this is correct.
+ 		 */
+		if (msg_sys.msg_controllen > sizeof(ctl) &&
+			msg_sys.msg_controllen <= 256)
 		{
-			char *tmp = kmalloc(msg_sys.msg_controllen, GFP_KERNEL);
-			if (tmp == NULL) 
+			ctl_buf = kmalloc(msg_sys.msg_controllen, GFP_KERNEL);
+			if (ctl_buf == NULL) 
 			{
 				err = -ENOBUFS;
 				goto failed2;
 			}
-			err = copy_from_user(tmp, msg_sys.msg_control, msg_sys.msg_controllen);
-			msg_sys.msg_control = tmp;
-		} else {
-			err = copy_from_user(ctl, msg_sys.msg_control, msg_sys.msg_controllen);
-			msg_sys.msg_control = ctl;
 		}
-		if (err)
+		if (copy_from_user(ctl_buf, msg_sys.msg_control, 
+					    msg_sys.msg_controllen)) {
+			err = -EFAULT;
 			goto failed;
+		}
+		msg_sys.msg_control = ctl_buf;
 	}
 	msg_sys.msg_flags = flags;
 	if (current->files->fd[fd]->f_flags & O_NONBLOCK)
@@ -1177,8 +1185,8 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 	}
 
 failed:
-	if (msg_sys.msg_controllen && msg_sys.msg_control != ctl)
-		kfree(msg_sys.msg_control);
+	if (ctl_buf != ctl)
+		kfree_s(ctl_buf, msg_sys.msg_controllen);
 failed2:
 	if (msg_sys.msg_iov != iov)
 		kfree(msg_sys.msg_iov);
@@ -1240,7 +1248,6 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 	if (current->files->fd[fd]->f_flags&O_NONBLOCK)
 		flags |= MSG_DONTWAIT;
 
-
 	if ((sock = sockfd_lookup(fd, &err))!=NULL)
 	{
 		err=sock_recvmsg(sock, &msg_sys, total_len, flags);
@@ -1253,9 +1260,12 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 
 	if (uaddr != NULL && err>=0)
 		err = move_addr_to_user(addr, msg_sys.msg_namelen, uaddr, uaddr_len);
-	if (err>=0 && (put_user(msg_sys.msg_flags, &msg->msg_flags) || 
-		put_user((unsigned long)msg_sys.msg_control-cmsg_ptr, &msg->msg_controllen)))
-		err = -EFAULT;
+	if (err>=0) {
+		err = __put_user(msg_sys.msg_flags, &msg->msg_flags);
+		if (!err)
+			err = __put_user((unsigned long)msg_sys.msg_control-cmsg_ptr, 
+							 &msg->msg_controllen);
+	}
 out:
 	unlock_kernel();
 	if(err<0)
@@ -1280,33 +1290,33 @@ int sock_fcntl(struct file *filp, unsigned int cmd, unsigned long arg)
 	return(-EINVAL);
 }
 
+/* Argument list sizes for sys_socketcall */
+#define AL(x) ((x) * sizeof(unsigned long))
+static unsigned char nargs[18]={AL(0),AL(3),AL(3),AL(3),AL(2),AL(3),
+								AL(3),AL(3),AL(4),AL(4),AL(4),AL(6),
+								AL(6),AL(2),AL(5),AL(5),AL(3),AL(3)};
+#undef AL
 
 /*
  *	System call vectors. 
  *
  *	Argument checking cleaned up. Saved 20% in size.
+ *  This function doesn't need to set the kernel lock because
+ *  it is set by the callees. 
  */
 
 asmlinkage int sys_socketcall(int call, unsigned long *args)
 {
-	unsigned char nargs[18]={0,3,3,3,2,3,3,3,
-				 4,4,4,6,6,2,5,5,3,3};
 	unsigned long a[6];
 	unsigned long a0,a1;
-	int err = -EINVAL;
-				 
-	lock_kernel();
-	if(call<1||call>SYS_RECVMSG)
-		goto out;
-	err = -EFAULT;
+	int err;
 
-	/*
-	 *	Ideally we want to precompute the maths, but unsigned long
-	 *	isnt a fixed size....
-	 */
-	 
-	if ((copy_from_user(a, args, nargs[call] * sizeof(unsigned long))))
-		goto out;
+	if(call<1||call>SYS_RECVMSG)
+		return -EINVAL;
+
+	/* copy_from_user should be SMP safe. */
+	if (copy_from_user(a, args, nargs[call]))
+		return -EFAULT;
 		
 	a0=a[0];
 	a1=a[1];
@@ -1370,11 +1380,8 @@ asmlinkage int sys_socketcall(int call, unsigned long *args)
 			err = -EINVAL;
 			break;
 	}
-out:
-	unlock_kernel();
 	return err;
 }
-
 
 /*
  *	This function is called by a protocol handler that wants to

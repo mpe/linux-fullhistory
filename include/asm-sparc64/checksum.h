@@ -1,4 +1,4 @@
-/* $Id: checksum.h,v 1.6 1997/04/10 23:32:43 davem Exp $ */
+/* $Id: checksum.h,v 1.7 1997/05/14 07:02:44 davem Exp $ */
 #ifndef __SPARC64_CHECKSUM_H
 #define __SPARC64_CHECKSUM_H
 
@@ -54,6 +54,7 @@ csum_partial_copy_nocheck (const char *src, char *dst, int len,
 	__asm__ __volatile__ ("
 		call __csum_partial_copy_sparc_generic
 		 mov %4, %%g7
+		srl	%%o0, 0, %%o0
 	" : "=r" (ret) : "0" (ret), "r" (d), "r" (l), "r" (sum) :
 	"o1", "o2", "o3", "o4", "o5", "o7", "g1", "g2", "g3", "g5", "g7");
 	return (unsigned int)ret;
@@ -81,6 +82,7 @@ csum_partial_copy_from_user(const char *src, char *dst, int len,
 1:
 		call __csum_partial_copy_sparc_generic
 		 stx %5, [%%sp + 0x7ff + 128]
+		srl	%%o0, 0, %%o0
 		" : "=r" (ret) : "0" (ret), "r" (d), "r" (l), "r" (s), "r" (err) :
 		"o1", "o2", "o3", "o4", "o5", "o7", "g1", "g2", "g3", "g5", "g7");
 		return (unsigned int)ret;
@@ -108,6 +110,7 @@ csum_partial_copy_to_user(const char *src, char *dst, int len,
 1:
 		call __csum_partial_copy_sparc_generic
 		 stx %5, [%%sp + 0x7ff + 128]
+		srl	%%o0, 0, %%o0
 		" : "=r" (ret) : "0" (ret), "r" (d), "r" (l), "r" (s), "r" (err) :
 		"o1", "o2", "o3", "o4", "o5", "o7", "g1", "g2", "g3", "g5", "g7");
 		return (unsigned int)ret;
@@ -151,6 +154,7 @@ extern __inline__ unsigned short ip_fast_csum(__const__ unsigned char *iph,
 	srl		%%g2, 16, %0
 	addc		%0, %%g0, %0
 	xnor		%%g0, %0, %0
+	srl		%0, 0, %0
 "	: "=r" (sum), "=&r" (iph)
 	: "r" (ihl), "1" (iph)
 	: "g2", "g3", "g7", "cc");
@@ -179,11 +183,11 @@ extern __inline__ unsigned short csum_tcpudp_magic(unsigned long saddr,
 "	: "=r" (sum), "=r" (saddr)
 	: "r" (daddr), "r" ((proto<<16)+len), "0" (sum), "1" (saddr)
 	: "cc");
-	return sum;
+	return (sum & 0xffff);
 }
 
 /* Fold a partial checksum without adding pseudo headers. */
-extern __inline__ unsigned int csum_fold(unsigned int sum)
+extern __inline__ unsigned short csum_fold(unsigned int sum)
 {
 	unsigned int tmp;
 
@@ -195,7 +199,7 @@ extern __inline__ unsigned int csum_fold(unsigned int sum)
 "	: "=&r" (sum), "=r" (tmp)
 	: "0" (sum), "1" (sum<<16)
 	: "cc");
-	return sum;
+	return (sum & 0xffff);
 }
 
 #define _HAVE_ARCH_IPV6_CSUM

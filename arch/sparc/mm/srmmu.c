@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.140 1997/05/01 08:53:39 davem Exp $
+/* $Id: srmmu.c,v 1.145 1997/05/04 10:02:15 ecd Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -77,11 +77,19 @@ ctxd_t *srmmu_context_table;
 /* Don't change this without changing access to this
  * in arch/sparc/mm/viking.S
  */
-struct srmmu_trans {
+static struct srmmu_trans {
 	unsigned long vbase;
 	unsigned long pbase;
 	unsigned long size;
 } srmmu_map[SPARC_PHYS_BANKS];
+
+#define SRMMU_HASHSZ	256
+
+/* Not static, viking.S uses it. */
+struct srmmu_trans *srmmu_v2p_hash[SRMMU_HASHSZ];
+static struct srmmu_trans *srmmu_p2v_hash[SRMMU_HASHSZ];
+
+#define srmmu_ahashfn(addr)	((addr) >> 24)
 
 static int viking_mxcc_present = 0;
 
@@ -113,31 +121,26 @@ void srmmu_frob_mem_map(unsigned long start_mem)
 
 /* Physical memory can be _very_ non-contiguous on the sun4m, especially
  * the SS10/20 class machines and with the latest openprom revisions.
- * So we have to crunch the free page pool.
+ * So we have to do a quick lookup.
  */
 static inline unsigned long srmmu_v2p(unsigned long vaddr)
 {
-	int i;
+	struct srmmu_trans *tp = srmmu_v2p_hash[srmmu_ahashfn(vaddr)];
 
-	for(i=0; srmmu_map[i].size != 0; i++) {
-		if(srmmu_map[i].vbase <= vaddr &&
-		   (srmmu_map[i].vbase + srmmu_map[i].size > vaddr)) {
-			return (vaddr - srmmu_map[i].vbase) + srmmu_map[i].pbase;
-		}
-	}
-	return 0xffffffffUL;
+	if(tp)
+		return (vaddr - tp->vbase + tp->pbase);
+	else
+		return 0xffffffffUL;
 }
 
 static inline unsigned long srmmu_p2v(unsigned long paddr)
 {
-	int i;
+	struct srmmu_trans *tp = srmmu_p2v_hash[srmmu_ahashfn(paddr)];
 
-	for(i=0; srmmu_map[i].size != 0; i++) {
-		if(srmmu_map[i].pbase <= paddr &&
-		   (srmmu_map[i].pbase + srmmu_map[i].size > paddr))
-			return (paddr - srmmu_map[i].pbase) + srmmu_map[i].vbase;
-	}
-	return 0xffffffffUL;
+	if(tp)
+		return (paddr - tp->pbase + tp->vbase);
+	else
+		return 0xffffffffUL;
 }
 
 /* In general all page table modifications should use the V8 atomic
@@ -847,108 +850,19 @@ static void srmmu_free_task_struct(struct task_struct *tsk)
 	free_pages((unsigned long)tsk, 1);
 }
 
-/* Tsunami flushes.  It's page level tlb invalidation is not very
- * useful at all, you must be in the context that page exists in to
- * get a match.
- */
-static void tsunami_flush_cache_all(void)
-{
-	flush_user_windows();
-	tsunami_flush_icache();
-	tsunami_flush_dcache();
-}
-
-static void tsunami_flush_cache_mm(struct mm_struct *mm)
-{
-	FLUSH_BEGIN(mm)
-	flush_user_windows();
-	tsunami_flush_icache();
-	tsunami_flush_dcache();
-	FLUSH_END
-}
-
-static void tsunami_flush_cache_range(struct mm_struct *mm, unsigned long start, unsigned long end)
-{
-	FLUSH_BEGIN(mm)
-	flush_user_windows();
-	tsunami_flush_icache();
-	tsunami_flush_dcache();
-	FLUSH_END
-}
-
-static void tsunami_flush_cache_page(struct vm_area_struct *vma, unsigned long page)
-{
-	FLUSH_BEGIN(vma->vm_mm)
-	flush_user_windows();
-	tsunami_flush_icache();
-	tsunami_flush_dcache();
-	FLUSH_END
-}
-
-/* Tsunami does not have a Copy-back style virtual cache. */
-static void tsunami_flush_page_to_ram(unsigned long page)
-{
-}
-
-/* However, Tsunami is not IO coherent. */
-static void tsunami_flush_page_for_dma(unsigned long page)
-{
-	tsunami_flush_icache();
-	tsunami_flush_dcache();
-}
-
-/* Tsunami has harvard style split I/D caches which do not snoop each other,
- * so we have to flush on-stack sig insns.  Only the icache need be flushed
- * since the Tsunami has a write-through data cache.
- */
-static void tsunami_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr)
-{
-	tsunami_flush_icache();
-}
-
-static void tsunami_flush_chunk(unsigned long chunk)
-{
-}
-
-static void tsunami_flush_tlb_all(void)
-{
-	srmmu_flush_whole_tlb();
-	module_stats.invall++;
-}
-
-static void tsunami_flush_tlb_mm(struct mm_struct *mm)
-{
-	FLUSH_BEGIN(mm)
-	srmmu_flush_whole_tlb();
-	module_stats.invmm++;
-	FLUSH_END
-}
-
-static void tsunami_flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end)
-{
-	FLUSH_BEGIN(mm)
-	srmmu_flush_whole_tlb();
-	module_stats.invrnge++;
-	FLUSH_END
-}
-
-static void tsunami_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
-{
-	struct mm_struct *mm = vma->vm_mm;
-
-	FLUSH_BEGIN(mm)
-	__asm__ __volatile__("
-	lda	[%0] %3, %%g5
-	sta	%1, [%0] %3
-	sta	%%g0, [%2] %4
-	sta	%%g5, [%0] %3"
-	: /* no outputs */
-	: "r" (SRMMU_CTX_REG), "r" (mm->context), "r" (page & PAGE_MASK),
-	  "i" (ASI_M_MMUREGS), "i" (ASI_M_FLUSH_PROBE)
-	: "g5");
-	module_stats.invpg++;
-	FLUSH_END
-}
+/* tsunami.S */
+extern void tsunami_flush_cache_all(void);
+extern void tsunami_flush_cache_mm(struct mm_struct *mm);
+extern void tsunami_flush_cache_range(struct mm_struct *mm, unsigned long start, unsigned long end);
+extern void tsunami_flush_cache_page(struct vm_area_struct *vma, unsigned long page);
+extern void tsunami_flush_page_to_ram(unsigned long page);
+extern void tsunami_flush_page_for_dma(unsigned long page);
+extern void tsunami_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr);
+extern void tsunami_flush_chunk(unsigned long chunk);
+extern void tsunami_flush_tlb_all(void);
+extern void tsunami_flush_tlb_mm(struct mm_struct *mm);
+extern void tsunami_flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end);
+extern void tsunami_flush_tlb_page(struct vm_area_struct *vma, unsigned long page);
 
 /* Swift flushes.  It has the recommended SRMMU specification flushing
  * facilities, so we can do things in a more fine grained fashion than we
@@ -1325,6 +1239,8 @@ extern void hypersparc_flush_tlb_all(void);
 extern void hypersparc_flush_tlb_mm(struct mm_struct *mm);
 extern void hypersparc_flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end);
 extern void hypersparc_flush_tlb_page(struct vm_area_struct *vma, unsigned long page);
+extern void hypersparc_bzero_1page(void *);
+extern void hypersparc_copy_1page(void *, const void *);
 
 static void srmmu_set_pte_nocache_hyper(pte_t *ptep, pte_t pteval)
 {
@@ -2125,6 +2041,32 @@ check_and_return:
 	MKTRACE(("success\n"));
 	init_task.mm->mmap->vm_start = page_offset = low_base;
 	stack_top = page_offset - PAGE_SIZE;
+#if 1
+	for(entry = 0; srmmu_map[entry].size; entry++) {
+		printk("[%d]: v[%08lx,%08lx](%lx) p[%08lx]\n", entry,
+		       srmmu_map[entry].vbase,
+		       srmmu_map[entry].vbase + srmmu_map[entry].size,
+		       srmmu_map[entry].size,
+		       srmmu_map[entry].pbase);
+	}
+#endif
+
+	/* Now setup the p2v/v2p hash tables. */
+	for(entry = 0; entry < SRMMU_HASHSZ; entry++)
+		srmmu_v2p_hash[entry] = srmmu_p2v_hash[entry] = NULL;
+	for(entry = 0; srmmu_map[entry].size; entry++) {
+		unsigned long addr;
+
+		for(addr = srmmu_map[entry].vbase;
+		    addr < (srmmu_map[entry].vbase + srmmu_map[entry].size);
+		    addr += (1 << 24))
+			srmmu_v2p_hash[srmmu_ahashfn(addr)] = &srmmu_map[entry];
+		for(addr = srmmu_map[entry].pbase;
+		    addr < (srmmu_map[entry].pbase + srmmu_map[entry].size);
+		    addr += (1 << 24))
+			srmmu_p2v_hash[srmmu_ahashfn(addr)] = &srmmu_map[entry];
+	}
+
 	return; /* SUCCESS! */
 }
 
@@ -2431,6 +2373,11 @@ static void poke_hypersparc(void)
 	hyper_flush_whole_icache();
 	clear = srmmu_get_faddr();
 	clear = srmmu_get_fstatus();
+
+#ifdef __SMP__
+	/* Avoid unnecessary cross calls. */
+	flush_page_for_dma = local_flush_page_for_dma;
+#endif
 }
 
 __initfunc(static void init_hypersparc(void))
@@ -2463,6 +2410,14 @@ __initfunc(static void init_hypersparc(void))
 	update_mmu_cache = srmmu_vac_update_mmu_cache;
 	sparc_update_rootmmu_dir = hypersparc_update_rootmmu_dir;
 	poke_srmmu = poke_hypersparc;
+
+	/* High performance page copy/clear. */
+	{	extern void (*__copy_1page)(void *, const void *);
+		extern void (*bzero_1page)(void *);
+
+		__copy_1page = hypersparc_copy_1page;
+		bzero_1page = hypersparc_bzero_1page;
+	}
 }
 
 static void poke_cypress(void)

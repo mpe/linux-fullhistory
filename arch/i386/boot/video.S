@@ -1,12 +1,13 @@
 !
-!	Display adapter & video mode setup, version 2.10 (11-Nov-96)
+!	Display adapter & video mode setup, version 2.11 (03-May-97)
 !
-!	Copyright (C) 1995, 1996 Martin Mares <mj@k332.feld.cvut.cz>
+!	Copyright (C) 1995 -- 1997 Martin Mares <mj@k332.feld.cvut.cz>
 !	Based on the original setup.S code (C) Linus Torvalds and Mats Anderson
 !
 
-! Enable autodetection of SVGA adapters and modes
-#define CONFIG_VIDEO_SVGA
+! Enable autodetection of SVGA adapters and modes. If you really need this
+! feature, drop me a mail as I think of removing it some day...
+#undef CONFIG_VIDEO_SVGA
 
 ! Enable autodetection of VESA modes
 #define CONFIG_VIDEO_VESA
@@ -1807,11 +1808,11 @@ listhdr:	db	0x0d, 0x0a
 		.ascii	"Mode:    COLSxROWS:"
 crlft:		db	0x0d, 0x0a, 0
 prompt:		db	0x0d, 0x0a
-		.ascii	"Enter mode number: "
+		.ascii	"Enter mode number or `scan': "
 		db	0
 unknt:		.ascii	"Unknown mode ID. Try again."
 		db	0
-badmdt:		.ascii	"You passed an undefined mode number to setup."
+badmdt:		.ascii	"You passed an undefined mode number."
 		db	0x0d, 0x0a, 0
 vesaer:		.ascii	"Error: Scanning of VESA modes failed. Please "
 		.ascii	"report to <mj@k332.feld.cvut.cz>."

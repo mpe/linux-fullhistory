@@ -238,38 +238,38 @@ static long write_null(struct inode * inode, struct file * file,
  */
 static inline unsigned long read_zero_pagealigned(char * buf, unsigned long size)
 {
-	struct vm_area_struct * curr_vma;
+	struct vm_area_struct * vma;
 	unsigned long addr=(unsigned long)buf;
 
-/*
- * First we take the most obvious case: when we have one VM area to deal with,
- * and it's privately mapped.
- */
-	curr_vma = find_vma(current->mm, addr);
+	/* For private mappings, just map in zero pages. */
+	for (vma = find_vma(current->mm, addr); vma; vma = vma->vm_next) {
+		unsigned long count;
 
-	if ( !(curr_vma->vm_flags & VM_SHARED) &&
-	      (addr + size <= curr_vma->vm_end) ) {
-
-		flush_cache_range(current->mm, addr, addr + size);
-		zap_page_range(current->mm, addr, size);
-        	zeromap_page_range(addr, size, PAGE_COPY);
-        	flush_tlb_range(current->mm, addr, addr + size);
-
-		return 0;
-	}
-
-/*
- * Ooops, the shared case is hard. Lets do the conventional
- *        zeroing.
- *
- * FIXME: same for the multiple-vma case, we dont handle it
- *	  now for simplicity, although it's much easier than
- *	  the shared case. Not that it should happen often ...
- */ 
-
-	do {
-		if (clear_user(buf, PAGE_SIZE))
+		if (vma->vm_start > addr || (vma->vm_flags & VM_WRITE) == 0)
+			return size;
+		if (vma->vm_flags & VM_SHARED)
 			break;
+		count = vma->vm_end - addr;
+		if (count > size)
+			count = size;
+
+		flush_cache_range(current->mm, addr, addr + count);
+		zap_page_range(current->mm, addr, count);
+        	zeromap_page_range(addr, count, PAGE_COPY);
+        	flush_tlb_range(current->mm, addr, addr + count);
+
+		size -= count;
+		buf += count;
+		addr += count;
+		if (size == 0)
+			return 0;
+	}
+	
+	/* The shared case is hard. Lets do the conventional zeroing. */ 
+	do {
+		unsigned long unwritten = clear_user(buf, PAGE_SIZE);
+		if (unwritten)
+			return size + unwritten - PAGE_SIZE;
 		if (need_resched)
 			schedule();
 		buf += PAGE_SIZE;
@@ -282,7 +282,10 @@ static inline unsigned long read_zero_pagealigned(char * buf, unsigned long size
 static long read_zero(struct inode * node, struct file * file,
 	char * buf, unsigned long count)
 {
-	unsigned long left;
+	unsigned long left, unwritten, written = 0;
+
+	if (!count)
+		return 0;
 
 	if (!access_ok(VERIFY_WRITE, buf, count))
 		return -EFAULT;
@@ -291,21 +294,27 @@ static long read_zero(struct inode * node, struct file * file,
 
 	/* do we want to be clever? Arbitrary cut-off */
 	if (count >= PAGE_SIZE*4) {
-		unsigned long partial, unwritten;
+		unsigned long partial;
 
 		/* How much left of the page? */
 		partial = (PAGE_SIZE-1) & -(unsigned long) buf;
-		clear_user(buf, partial);
+		unwritten = clear_user(buf, partial);
+		written = partial - unwritten;
+		if (unwritten)
+			goto out;
 		left -= partial;
 		buf += partial;
 		unwritten = read_zero_pagealigned(buf, left & PAGE_MASK);
+		written += (left & PAGE_MASK) - unwritten;
+		if (unwritten)
+			goto out;
 		buf += left & PAGE_MASK;
 		left &= ~PAGE_MASK;
-		if (unwritten)
-			return count - left - unwritten;
 	}
-	clear_user(buf, left);
-	return count;
+	unwritten = clear_user(buf, left);
+	written += left - unwritten;
+out:
+	return written ? written : -EFAULT;
 }
 
 static int mmap_zero(struct inode * inode, struct file * file, struct vm_area_struct * vma)

@@ -38,6 +38,9 @@ extern int linux_num_cpus;
 
 extern void calibrate_delay(void);
 
+/* XXX Let's get rid of this thing if we can... */
+extern struct task_struct *current_set[NR_CPUS];
+
 volatile int smp_processors_ready = 0;
 
 unsigned long cpu_present_map = 0;
@@ -388,12 +391,6 @@ struct smp_funcall {
 	unsigned long processors_out[NR_CPUS]; /* Set when ipi exited. */
 } ccall_info;
 
-/* Returns failure code if for example any of the cpu's failed to respond
- * within a certain timeout period.
- */
-
-#define CCALL_TIMEOUT   5000000 /* enough for initial testing */
-
 static spinlock_t cross_call_lock = SPIN_LOCK_UNLOCKED;
 
 /* Cross calls must be serialized, at least currently. */
@@ -465,43 +462,98 @@ void smp_flush_tlb_all(void)
 
 void smp_flush_cache_mm(struct mm_struct *mm)
 { 
-	if(mm->context != NO_CONTEXT)
-		xc1((smpfunc_t) local_flush_cache_mm, (unsigned long) mm);
+	if(mm->context != NO_CONTEXT) {
+		if(mm->cpu_vm_mask == (1 << smp_processor_id()))
+			local_flush_cache_mm(mm);
+		else
+			xc1((smpfunc_t) local_flush_cache_mm, (unsigned long) mm);
+	}
 }
 
 void smp_flush_tlb_mm(struct mm_struct *mm)
 {
-	if(mm->context != NO_CONTEXT)
-		xc1((smpfunc_t) local_flush_tlb_mm, (unsigned long) mm);
+	if(mm->context != NO_CONTEXT) {
+		if(mm->cpu_vm_mask == (1 << smp_processor_id())) {
+			local_flush_tlb_mm(mm);
+		} else {
+			xc1((smpfunc_t) local_flush_tlb_mm, (unsigned long) mm);
+			if(mm->count == 1 && current->mm == mm)
+				mm->cpu_vm_mask = (1 << smp_processor_id());
+		}
+	}
 }
 
 void smp_flush_cache_range(struct mm_struct *mm, unsigned long start,
 			   unsigned long end)
 {
-	if(mm->context != NO_CONTEXT)
-		xc3((smpfunc_t) local_flush_cache_range, (unsigned long) mm,
-		    start, end);
+	if(mm->context != NO_CONTEXT) {
+		if(mm->cpu_vm_mask == (1 << smp_processor_id()))
+			local_flush_cache_range(mm, start, end);
+		else
+			xc3((smpfunc_t) local_flush_cache_range, (unsigned long) mm,
+			    start, end);
+	}
 }
 
 void smp_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 			 unsigned long end)
 {
-	if(mm->context != NO_CONTEXT)
-		xc3((smpfunc_t) local_flush_tlb_range, (unsigned long) mm,
-		    start, end);
+	if(mm->context != NO_CONTEXT) {
+		if(mm->cpu_vm_mask == (1 << smp_processor_id()))
+			local_flush_tlb_range(mm, start, end);
+		else
+			xc3((smpfunc_t) local_flush_tlb_range, (unsigned long) mm,
+			    start, end);
+	}
 }
 
 void smp_flush_cache_page(struct vm_area_struct *vma, unsigned long page)
-{ xc2((smpfunc_t) local_flush_cache_page, (unsigned long) vma, page); }
+{
+	struct mm_struct *mm = vma->vm_mm;
+
+	if(mm->context != NO_CONTEXT) {
+		if(mm->cpu_vm_mask == (1 << smp_processor_id()))
+			local_flush_cache_page(vma, page);
+		else
+			xc2((smpfunc_t) local_flush_cache_page,
+			    (unsigned long) vma, page);
+	}
+}
 
 void smp_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
-{ xc2((smpfunc_t) local_flush_tlb_page, (unsigned long) vma, page); }
+{
+	struct mm_struct *mm = vma->vm_mm;
+
+	if(mm->context != NO_CONTEXT) {
+		if(mm->cpu_vm_mask == (1 << smp_processor_id()))
+			local_flush_tlb_page(vma, page);
+		else
+			xc2((smpfunc_t) local_flush_tlb_page, (unsigned long) vma, page);
+	}
+}
 
 void smp_flush_page_to_ram(unsigned long page)
-{ xc1((smpfunc_t) local_flush_page_to_ram, page); }
+{
+	/* Current theory is that those who call this are the one's
+	 * who have just dirtied their cache with the pages contents
+	 * in kernel space, therefore we only run this on local cpu.
+	 *
+	 * XXX This experiment failed, research further... -DaveM
+	 */
+#if 1
+	xc1((smpfunc_t) local_flush_page_to_ram, page);
+#else
+	local_flush_page_to_ram(page);
+#endif
+}
 
 void smp_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr)
-{ xc2((smpfunc_t) local_flush_sig_insns, (unsigned long) mm, insn_addr); }
+{
+	if(mm->cpu_vm_mask == (1 << smp_processor_id()))
+		local_flush_sig_insns(mm, insn_addr);
+	else
+		xc2((smpfunc_t) local_flush_sig_insns, (unsigned long) mm, insn_addr);
+}
 
 /* Reschedule call back. */
 void smp_reschedule_irq(void)

@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.15 1997/04/10 23:32:49 davem Exp $ */
+/* $Id: system.h,v 1.16 1997/05/14 20:48:07 davem Exp $ */
 #ifndef __SPARC64_SYSTEM_H
 #define __SPARC64_SYSTEM_H
 
@@ -132,6 +132,7 @@ extern __inline__ void flushw_user(void)
 do {											\
 	__label__ switch_continue;							\
 	register unsigned long task_pc asm("o7");					\
+	extern struct task_struct *current_set[NR_CPUS];				\
 	SWITCH_DO_LAZY_FPU(next);							\
 	task_pc = ((unsigned long) &&switch_continue) - 0x8;				\
 	__asm__ __volatile__(								\

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: mcast.c,v 1.9 1997/04/29 09:38:46 mj Exp $
+ *	$Id: mcast.c,v 1.10 1997/05/07 09:40:22 davem Exp $
  *
  *	Based on linux/ipv4/igmp.c and linux/ipv4/ip_sockglue.c 
  *
@@ -187,7 +187,8 @@ int ipv6_dev_mc_inc(struct device *dev, struct in6_addr *addr)
 	hash = ipv6_addr_hash(addr);
 
 	for (mc = inet6_mcast_lst[hash]; mc; mc = mc->next) {
-		if (ipv6_addr_cmp(&mc->mca_addr, addr) == 0) {
+		if ((ipv6_addr_cmp(&mc->mca_addr, addr) == 0) &&
+		    (mc->dev->ifindex == dev->ifindex)) {
 			atomic_inc(&mc->mca_users);
 			return 0;
 		}

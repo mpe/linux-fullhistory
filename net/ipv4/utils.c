@@ -46,7 +46,7 @@
  *	Display an IP address in readable format. 
  */
  
-char *in_ntoa(unsigned long in)
+char *in_ntoa(__u32 in)
 {
 	static char buff[18];
 	char *p;
@@ -62,7 +62,7 @@ char *in_ntoa(unsigned long in)
  *	Convert an ASCII string to binary IP. 
  */
  
-unsigned long in_aton(const char *str)
+__u32 in_aton(const char *str)
 {
 	unsigned long l;
 	unsigned int val;

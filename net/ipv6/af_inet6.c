@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.17 1997/04/29 09:38:39 mj Exp $
+ *	$Id: af_inet6.c,v 1.18 1997/05/07 09:40:12 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -458,12 +458,26 @@ static struct proc_dir_entry proc_net_sockstat6 = {
 #endif	/* CONFIG_PROC_FS */
 
 #ifdef MODULE
+int ipv6_unload(void)
+{
+	return 0;
+}
+#endif
+
+#ifdef MODULE
 int init_module(void)
 #else
 __initfunc(void inet6_proto_init(struct net_proto *pro))
 #endif
 {
 	struct sk_buff *dummy_skb;
+
+#ifdef MODULE
+	if (!mod_member_present(&__this_module, can_unload))
+	  return -EINVAL;
+
+	__this_module.can_unload = &ipv6_unload;
+#endif
 
 	printk(KERN_INFO "IPv6 v0.2 for NET3.037\n");
 

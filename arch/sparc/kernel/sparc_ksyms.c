@@ -1,4 +1,4 @@
-/* $Id: sparc_ksyms.c,v 1.56 1997/04/18 05:44:35 davem Exp $
+/* $Id: sparc_ksyms.c,v 1.59 1997/05/08 17:45:20 davem Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -38,6 +38,7 @@
 #include <asm/dma.h>
 #endif
 #include <asm/a.out.h>
+#include <asm/spinlock.h>
 
 struct poll {
 	int fd;
@@ -50,9 +51,9 @@ extern int svr4_setcontext (svr4_ucontext_t *, struct pt_regs *);
 extern unsigned long sunos_mmap(unsigned long, unsigned long, unsigned long,
 				unsigned long, unsigned long, unsigned long);
 void _sigpause_common (unsigned int set, struct pt_regs *);
-extern void __copy_1page(void *, const void *);
+extern void (*__copy_1page)(void *, const void *);
 extern void __memmove(void *, const void *, __kernel_size_t);
-extern void *bzero_1page(void *);
+extern void (*bzero_1page)(void *);
 extern void *__bzero(void *, size_t);
 extern void *__memscan_zero(void *, size_t);
 extern void *__memscan_generic(void *, int, size_t);
@@ -87,16 +88,46 @@ EXPORT_SYMBOL(klock_info);
 EXPORT_SYMBOL_PRIVATE(_lock_kernel);
 EXPORT_SYMBOL_PRIVATE(_unlock_kernel);
 EXPORT_SYMBOL_PRIVATE(_spinlock_waitfor);
+#ifdef SPIN_LOCK_DEBUG
+EXPORT_SYMBOL(_spin_lock);
+EXPORT_SYMBOL(_spin_unlock);
+EXPORT_SYMBOL(_spin_trylock);
+EXPORT_SYMBOL(_spin_lock_irq);
+EXPORT_SYMBOL(_spin_unlock_irq);
+EXPORT_SYMBOL(_spin_lock_irqsave);
+EXPORT_SYMBOL(_spin_unlock_irqrestore);
+EXPORT_SYMBOL(_read_lock);
+EXPORT_SYMBOL(_read_unlock);
+EXPORT_SYMBOL(_read_lock_irq);
+EXPORT_SYMBOL(_read_unlock_irq);
+EXPORT_SYMBOL(_read_lock_irqsave);
+EXPORT_SYMBOL(_read_unlock_irqrestore);
+EXPORT_SYMBOL(_write_lock);
+EXPORT_SYMBOL(_write_unlock);
+EXPORT_SYMBOL(_write_lock_irq);
+EXPORT_SYMBOL(_write_unlock_irq);
+EXPORT_SYMBOL(_write_lock_irqsave);
+EXPORT_SYMBOL(_write_unlock_irqrestore);
+#else
 EXPORT_SYMBOL_PRIVATE(_rw_read_enter);
 EXPORT_SYMBOL_PRIVATE(_rw_read_exit);
 EXPORT_SYMBOL_PRIVATE(_rw_write_enter);
+#endif
 EXPORT_SYMBOL(__sparc_bh_counter);
 #ifdef __SMP__
+#ifdef DEBUG_IRQLOCK
+EXPORT_SYMBOL(irq_enter);
+EXPORT_SYMBOL(irq_exit);
+EXPORT_SYMBOL(__global_restore_flags);
+EXPORT_SYMBOL(__global_sti);
+EXPORT_SYMBOL(__global_cli);
+#else
 EXPORT_SYMBOL_PRIVATE(_irq_enter);
 EXPORT_SYMBOL_PRIVATE(_irq_exit);
 EXPORT_SYMBOL_PRIVATE(_global_restore_flags);
 EXPORT_SYMBOL_PRIVATE(_global_sti);
 EXPORT_SYMBOL_PRIVATE(_global_cli);
+#endif
 #endif
 
 EXPORT_SYMBOL(page_offset);

@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.15 1997/04/14 17:04:49 jj Exp $
+# $Id: Makefile,v 1.16 1997/05/04 07:21:08 davem Exp $
 # sparc64/Makefile
 #
 # Makefile for the architecture dependent flags and dependencies on the
@@ -29,7 +29,7 @@ CFLAGS := $(CFLAGS) -pipe \
 
 LINKFLAGS = -T arch/sparc64/vmlinux.lds
 
-HEAD := arch/sparc64/kernel/head.o
+HEAD := arch/sparc64/kernel/head.o arch/sparc64/kernel/init_task.o
 
 SUBDIRS := $(SUBDIRS) arch/sparc64/kernel arch/sparc64/lib arch/sparc64/mm \
 	arch/sparc64/prom

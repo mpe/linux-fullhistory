@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.23 1997/04/26 22:52:34 davem Exp $
+/* $Id: processor.h,v 1.24 1997/05/04 07:21:21 davem Exp $
  * include/asm-sparc64/processor.h
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -179,16 +179,13 @@ do { \
 #define release_thread(tsk)		do { } while(0)
 
 #ifdef __KERNEL__
-/* Allocation and freeing of basic task resources. */
+/* Allocation and freeing of task_struct and kernel stack. */
+#define alloc_task_struct()   ((struct task_struct *)__get_free_pages(GFP_KERNEL, 1, 0))
+#define free_task_struct(tsk) free_pages((unsigned long)(tsk),1)
 
-/* XXX FIXME For task_struct must use SLAB or something other than
- * XXX kmalloc() as FPU registers in TSS require that entire structure
- * XXX be 64-byte aligned as well.
- */
-#define alloc_kernel_stack(tsk)		__get_free_page(GFP_KERNEL)
-#define free_kernel_stack(stack)	free_page(stack)
-#define alloc_task_struct()		kmalloc(sizeof(struct task_struct), GFP_KERNEL)
-#define free_task_struct(tsk)		kfree(tsk)
+#define init_task	(init_task_union.task)
+#define init_stack	(init_task_union.stack)
+
 #endif /* __KERNEL__ */
 
 #endif /* !(__ASSEMBLY__) */

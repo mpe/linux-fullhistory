@@ -392,10 +392,12 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 
 			case SIGQUIT: case SIGILL: case SIGTRAP:
 			case SIGABRT: case SIGFPE: case SIGSEGV:
+				lock_kernel();
 				if (current->binfmt && current->binfmt->core_dump) {
 					if (current->binfmt->core_dump(signr, regs))
 						signr |= 0x80;
 				}
+				unlock_kernel();
 				/* fall through */
 			default:
 				spin_lock_irq(&current->sigmask_lock);

@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.27 1997/04/04 00:49:49 davem Exp $
+/* $Id: head.S,v 1.28 1997/05/04 07:21:02 davem Exp $
  * head.S: Initial boot code for the Sparc64 port of Linux.
  *
  * Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -262,16 +262,18 @@ sun4u_init:
 	stx     %g6, [%g2 + %g4]
 	stx     %g5, [%g3 + %g4]
 
-	sethi	%hi(init_task), %g6
-	or	%g6, %lo(init_task), %g6
+	sethi	%hi(init_task_union), %g6
+	or	%g6, %lo(init_task_union), %g6
 	add	%g6, %g4, %g6			! g6 usage is fixed as well
 	mov	%sp, %l6
 	mov	%o4, %l7
 
-	sethi	%hi(bootup_kernel_stack + 0x2000 - STACK_BIAS - REGWIN_SZ), %g5
-	or	%g5, %lo(bootup_kernel_stack + 0x2000 - STACK_BIAS - REGWIN_SZ), %g5
-	add	%g5, %g4, %sp
+	mov	1, %g5
+	sllx	%g5, (PAGE_SHIFT + 1), %g5
+	sub	%g5, (REGWIN_SZ + STACK_BIAS), %g5
+	add	%g6, %g5, %sp
 	mov	0, %fp
+
 	wrpr	%g0, 0, %wstate
 	wrpr	%g0, 0x0, %tl
 
@@ -360,6 +362,9 @@ bootup_kernel_stack:
 ! 0xfffff80000008000
 
 #include "ttable.S"
+
+	/* This is just anal retentiveness on my part... */
+	.align	16384
 
 	.data
 	.align	8

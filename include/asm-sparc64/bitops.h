@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.11 1997/04/10 23:32:42 davem Exp $
+/* $Id: bitops.h,v 1.12 1997/05/14 20:48:04 davem Exp $
  * bitops.h: Bit string operations on the V9.
  *
  * Copyright 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -19,7 +19,7 @@
  * all bit-ops return 0 if bit was previously clear and != 0 otherwise.
  */
 
-extern __inline__ unsigned long set_bit(unsigned long nr, void *addr)
+extern __inline__ unsigned long test_and_set_bit(unsigned long nr, void *addr)
 {
 	unsigned long oldbit;
 	unsigned long temp0, temp1;
@@ -42,7 +42,12 @@ extern __inline__ unsigned long set_bit(unsigned long nr, void *addr)
 	return oldbit != 0;
 }
 
-extern __inline__ unsigned long clear_bit(unsigned long nr, void *addr)
+extern __inline__ void set_bit(unsigned long nr, void *addr)
+{
+	(void) test_and_set_bit(nr, addr);
+}
+
+extern __inline__ unsigned long test_and_clear_bit(unsigned long nr, void *addr)
 {
 	unsigned long oldbit;
 	unsigned long temp0, temp1;
@@ -65,7 +70,12 @@ extern __inline__ unsigned long clear_bit(unsigned long nr, void *addr)
 	return oldbit != 0;
 }
 
-extern __inline__ unsigned long change_bit(unsigned long nr, void *addr)
+extern __inline__ void clear_bit(unsigned long nr, void *addr)
+{
+	(void) test_and_clear_bit(nr, addr);
+}
+
+extern __inline__ unsigned long test_and_change_bit(unsigned long nr, void *addr)
 {
 	unsigned long oldbit;
 	unsigned long temp0, temp1;
@@ -84,6 +94,11 @@ extern __inline__ unsigned long change_bit(unsigned long nr, void *addr)
 	: "HIr" (1UL << (nr & 31)), "r" (m)
 	: "cc");
 	return oldbit != 0;
+}
+
+extern __inline__ void change_bit(unsigned long nr, void *addr)
+{
+	(void) test_and_change_bit(nr, addr);
 }
 
 extern __inline__ unsigned long test_bit(int nr, __const__ void *addr)
@@ -266,8 +281,8 @@ found_middle:
 #define ext2_find_next_zero_bit		find_next_zero_le_bit
 
 /* Bitmap functions for the minix filesystem.  */
-#define minix_set_bit(nr,addr) set_bit(nr,addr)
-#define minix_clear_bit(nr,addr) clear_bit(nr,addr)
+#define minix_set_bit(nr,addr) test_and_set_bit(nr,addr)
+#define minix_clear_bit(nr,addr) test_and_clear_bit(nr,addr)
 #define minix_test_bit(nr,addr) test_bit(nr,addr)
 #define minix_find_first_zero_bit(addr,size) find_first_zero_bit(addr,size)
 

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.63 1997/04/29 09:38:33 mj Exp $
+ * Version:	$Id: tcp.c,v 1.65 1997/05/06 09:31:43 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1360,7 +1360,10 @@ static int tcp_close_state(struct sock *sk, int dead)
 		case TCP_CLOSE:
 		case TCP_LISTEN:
 			break;
-		case TCP_LAST_ACK:	/* Could have shutdown() then close() */
+		case TCP_LAST_ACK:	/* Could have shutdown() then close()
+					 * (but don't do send_fin again!) */
+			ns=TCP_LAST_ACK;
+			break;
 		case TCP_CLOSE_WAIT:	/* They have FIN'd us. We send our FIN and
 					   wait only for the ACK */
 			ns=TCP_LAST_ACK;
@@ -1662,7 +1665,7 @@ __initfunc(void tcp_init(void))
 {
 	tcp_openreq_cachep = kmem_cache_create("tcp_open_request",
 					       sizeof(struct open_request),
-					       sizeof(long)*8, SLAB_HWCACHE_ALIGN,
+					       0, SLAB_HWCACHE_ALIGN,
 					       NULL, NULL);
 	if(!tcp_openreq_cachep)
 		panic("tcp_init: Cannot alloc open_request cache.");

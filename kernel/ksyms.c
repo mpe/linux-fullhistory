@@ -124,8 +124,14 @@ EXPORT_SYMBOL(exit_files);
 /* internal kernel memory management */
 EXPORT_SYMBOL(__get_free_pages);
 EXPORT_SYMBOL(free_pages);
+EXPORT_SYMBOL(kmem_find_general_cachep);
+EXPORT_SYMBOL(kmem_cache_create);
+EXPORT_SYMBOL(kmem_cache_shrink);
+EXPORT_SYMBOL(kmem_cache_alloc);
+EXPORT_SYMBOL(kmem_cache_free);
 EXPORT_SYMBOL(kmalloc);
 EXPORT_SYMBOL(kfree);
+EXPORT_SYMBOL(kfree_s);
 EXPORT_SYMBOL(vmalloc);
 EXPORT_SYMBOL(vfree);
 EXPORT_SYMBOL(mem_map);
@@ -134,10 +140,6 @@ EXPORT_SYMBOL(max_mapnr);
 EXPORT_SYMBOL(num_physpages);
 EXPORT_SYMBOL(high_memory);
 EXPORT_SYMBOL(update_vm_cache);
-EXPORT_SYMBOL(kmem_cache_create);
-EXPORT_SYMBOL(kmem_cache_destroy);
-EXPORT_SYMBOL(kmem_cache_alloc);
-EXPORT_SYMBOL(kmem_cache_free);
 
 /* filesystem internal functions */
 EXPORT_SYMBOL(getname);

@@ -1,4 +1,4 @@
-/* $Id: blockops.S,v 1.5 1996/09/24 05:22:56 davem Exp $
+/* $Id: blockops.S,v 1.6 1997/05/03 02:01:54 davem Exp $
  * blockops.S: Common block zero optimized routines.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -46,25 +46,7 @@
 	.text
 	.align	4
 
-	.globl	C_LABEL(bzero_2page), C_LABEL(bzero_1page)
-C_LABEL(bzero_2page):
-	/* %o0 = buf */
-	or	%g0, %g0, %g1
-	or	%o0, %g0, %o1
-	or	%g0, 0x20, %g2
-1:
-	BLAST_BLOCK(%o0, 0x00)
-	BLAST_BLOCK(%o0, 0x40)
-	BLAST_BLOCK(%o0, 0x80)
-	BLAST_BLOCK(%o0, 0xc0)
-	subcc	%g2, 1, %g2
-	bne	1b
-	 add	%o0, 0x100, %o0
-
-	retl
-	 mov	%o1, %o0
-
-C_LABEL(bzero_1page):
+generic_bzero_1page:
 	/* %o0 = buf */
 	or	%g0, %g0, %g1
 	or	%o0, %g0, %o1
@@ -79,10 +61,9 @@ C_LABEL(bzero_1page):
 	 add	%o0, 0x100, %o0
 
 	retl
-	 mov	%o1, %o0
+	 nop
 
-	.globl	C_LABEL(__copy_1page)
-C_LABEL(__copy_1page):
+__generic_copy_1page:
 	/* %o0 = dst, %o1 = src */
 	or	%g0, 0x10, %g1
 1:
@@ -101,3 +82,9 @@ C_LABEL(__copy_1page):
 
 	retl
 	 nop
+
+	.data
+	.align 4
+	.globl	C_LABEL(bzero_1page), C_LABEL(__copy_1page)
+C_LABEL(bzero_1page):	.word	generic_bzero_1page
+C_LABEL(__copy_1page):	.word	__generic_copy_1page

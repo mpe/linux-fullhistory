@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.83 1997/04/01 02:21:49 davem Exp $
+/*  $Id: setup.c,v 1.84 1997/05/08 17:45:16 davem Exp $
  *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)
@@ -83,7 +83,8 @@ void prom_sync_me(void)
 
 #ifdef __SMP__
 	global_irq_holder = NO_PROC_ID;
-	global_irq_lock = global_bh_lock = 0;
+	*((unsigned char *)&global_irq_lock) = 0;
+	*((unsigned char *)&global_bh_lock) = 0;
 #endif
 	__save_and_cli(flags);
 	__asm__ __volatile__("rd %%tbr, %0\n\t" : "=r" (prom_tbr));

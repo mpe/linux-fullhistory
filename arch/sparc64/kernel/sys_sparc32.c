@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.9 1997/04/21 08:34:24 jj Exp $
+/* $Id: sys_sparc32.c,v 1.12 1997/05/14 14:50:58 jj Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -27,6 +27,7 @@
 #include <linux/nfs_fs.h>
 #include <linux/smb_fs.h>
 #include <linux/ncp_fs.h>
+#include <linux/quota.h>
 
 #include <asm/types.h>
 #include <asm/poll.h>
@@ -138,6 +139,10 @@ extern asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags);
 extern asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags);
 extern asmlinkage int sys_socketcall(int call, unsigned long *args);
 extern asmlinkage int sys_nfsservctl(int cmd, void *argp, void *resp);
+extern asmlinkage int sys_listen(int fd, int backlog);
+extern asmlinkage int sys_socket(int family, int type, int protocol);
+extern asmlinkage int sys_socketpair(int family, int type, int protocol, int usockvec[2]);
+extern asmlinkage int sys_shutdown(int fd, int how);
 
 asmlinkage int sys32_ioperm(u32 from, u32 num, int on)
 {
@@ -155,6 +160,17 @@ struct ipc_perm32
         __kernel_gid_t32  cgid;
         __kernel_mode_t32 mode;
         unsigned short  seq;
+};
+
+struct semid_ds32 {
+        struct ipc_perm32 sem_perm;               /* permissions .. see ipc.h */
+        __kernel_time_t32 sem_otime;              /* last semop time */
+        __kernel_time_t32 sem_ctime;              /* last change time */
+        u32 sem_base;              /* ptr to first semaphore in array */
+        u32 sem_pending;          /* pending operations to be processed */
+        u32 sem_pending_last;    /* last pending operation */
+        u32 undo;                  /* undo requests on this array */
+        unsigned short  sem_nsems;              /* no. of semaphores in array */
 };
 
 struct msqid_ds32
@@ -212,15 +228,62 @@ asmlinkage int sys32_ipc (u32 call, int first, int second, int third, u32 ptr, u
 			err = sys_semget (first, second, third);
 			goto out;
 		case SEMCTL: {
-			/* XXX union semun32 to union semun64 and back conversion */
 			union semun fourth;
+			void *pad;
+			unsigned long old_fs;
+			struct semid_ds s;
+			
 			err = -EINVAL;
 			if (!ptr)
 				goto out;
 			err = -EFAULT;
-			if(get_user(fourth.__pad, (void **)A(ptr)))
+			if(get_user(pad, (void **)A(ptr)))
 				goto out;
+			fourth.__pad = pad;
+			switch (third) {
+				case IPC_INFO:
+				case SEM_INFO:
+				case GETVAL:
+				case GETPID:
+				case GETNCNT:
+				case GETZCNT:
+				case GETALL:
+				case SETALL:
+				case IPC_RMID:
+					err = sys_semctl (first, second, third, fourth);
+					goto out;
+				case IPC_SET:
+					if (get_user (s.sem_perm.uid, &(((struct semid_ds32 *)A(pad))->sem_perm.uid)) ||
+					    __get_user (s.sem_perm.gid, &(((struct semid_ds32 *)A(pad))->sem_perm.gid)) ||
+					    __get_user (s.sem_perm.mode, &(((struct semid_ds32 *)A(pad))->sem_perm.mode))) {
+						err = -EFAULT;
+						goto out;
+					}
+					/* Fall through */
+				case SEM_STAT:
+				case IPC_STAT:
+					fourth.__pad = &s;
+					break;
+			}
+			old_fs = get_fs();
+			set_fs (KERNEL_DS);
 			err = sys_semctl (first, second, third, fourth);
+			set_fs (old_fs);
+			switch (third) {
+				case SEM_STAT:
+				case IPC_STAT:
+					if (put_user (s.sem_perm.key, &(((struct semid_ds32 *)A(pad))->sem_perm.key)) ||
+					    __put_user (s.sem_perm.uid, &(((struct semid_ds32 *)A(pad))->sem_perm.uid)) ||
+					    __put_user (s.sem_perm.gid, &(((struct semid_ds32 *)A(pad))->sem_perm.gid)) ||
+					    __put_user (s.sem_perm.cuid, &(((struct semid_ds32 *)A(pad))->sem_perm.cuid)) ||
+					    __put_user (s.sem_perm.cgid, &(((struct semid_ds32 *)A(pad))->sem_perm.cgid)) ||
+					    __put_user (s.sem_perm.mode, &(((struct semid_ds32 *)A(pad))->sem_perm.mode)) ||
+					    __put_user (s.sem_perm.seq, &(((struct semid_ds32 *)A(pad))->sem_perm.seq)) ||
+					    __put_user (s.sem_otime, &(((struct semid_ds32 *)A(pad))->sem_otime)) ||
+					    __put_user (s.sem_ctime, &(((struct semid_ds32 *)A(pad))->sem_ctime)) ||
+					    __put_user (s.sem_nsems, &(((struct semid_ds32 *)A(pad))->sem_nsems)))
+						err = -EFAULT;
+			}
 			goto out;
 			}
 		default:
@@ -534,10 +597,50 @@ asmlinkage int sys32_rename(u32 oldname, u32 newname)
 	return sys_rename((const char *)A(oldname), (const char *)A(newname));
 }
 
-/* XXX: Play with the addr, it will be ugly :(( */
+struct dqblk32 {
+    __u32 dqb_bhardlimit;
+    __u32 dqb_bsoftlimit;
+    __u32 dqb_curblocks;
+    __u32 dqb_ihardlimit;
+    __u32 dqb_isoftlimit;
+    __u32 dqb_curinodes;
+    __kernel_time_t32 dqb_btime;
+    __kernel_time_t32 dqb_itime;
+};
+                                
 asmlinkage int sys32_quotactl(int cmd, u32 special, int id, u32 addr)
 {
-	return sys_quotactl(cmd, (const char *)A(special), id, (caddr_t)A(addr));
+	int cmds = cmd >> SUBCMDSHIFT;
+	int err;
+	struct dqblk d;
+	unsigned long old_fs;
+	
+	switch (cmds) {
+	case Q_GETQUOTA:
+		break;
+	case Q_SETQUOTA:
+	case Q_SETUSE:
+	case Q_SETQLIM:
+		if (copy_from_user (&d, (struct dqblk32 *)A(addr), sizeof (struct dqblk32)))
+			return -EFAULT;
+		d.dqb_itime = ((struct dqblk32 *)&d)->dqb_itime;
+		d.dqb_btime = ((struct dqblk32 *)&d)->dqb_btime;
+		break;
+	default:
+		return sys_quotactl(cmd, (const char *)A(special), id, (caddr_t)A(addr));
+	}
+	old_fs = get_fs ();
+	set_fs (KERNEL_DS);
+	err = sys_quotactl(cmd, (const char *)A(special), id, (caddr_t)A(addr));
+	set_fs (old_fs);
+	if (cmds == Q_GETQUOTA) {
+		__kernel_time_t b = d.dqb_btime, i = d.dqb_itime;
+		((struct dqblk32 *)&d)->dqb_itime = i;
+		((struct dqblk32 *)&d)->dqb_btime = b;
+		if (copy_to_user ((struct dqblk32 *)A(addr), &d, sizeof (struct dqblk32)))
+			return -EFAULT;
+	}
+	return err;
 }
 
 static int put_statfs (u32 buf, struct statfs *s)
@@ -1599,20 +1702,224 @@ asmlinkage int sys32_getsockopt(int fd, int level, int optname, u32 optval, u32 
 	return sys_getsockopt(fd, level, optname, (char *)A(optval), (int *)A(optlen));
 }
 
-/* Continue here */
+struct msghdr32 {
+        u32               msg_name;
+        int               msg_namelen;
+        u32               msg_iov;
+        __kernel_size_t32 msg_iovlen;
+        u32               msg_control;
+        __kernel_size_t32 msg_controllen;
+        unsigned          msg_flags;
+};
+
+struct cmsghdr32 {
+        __kernel_size_t32 cmsg_len;
+        int               cmsg_level;
+        int               cmsg_type;
+        unsigned char     cmsg_data[0];
+};
+
 asmlinkage int sys32_sendmsg(int fd, u32 msg, unsigned flags)
 {
-	return sys_sendmsg(fd, (struct msghdr *)A(msg), flags);
+	struct msghdr m;
+	int count;
+	struct iovec *v;
+	struct iovec vf[UIO_FASTIOV];
+	u32 i, vector;
+	long ret;
+	unsigned long old_fs;
+	
+	if (get_user ((long)m.msg_name, &(((struct msghdr32 *)A(msg))->msg_name)) ||
+	    __get_user (m.msg_namelen, &(((struct msghdr32 *)A(msg))->msg_namelen)) ||
+	    __get_user (vector, &(((struct msghdr32 *)A(msg))->msg_iov)) ||
+	    __get_user (m.msg_iovlen, &(((struct msghdr32 *)A(msg))->msg_iovlen)) ||
+	    __get_user ((long)m.msg_control, &(((struct msghdr32 *)A(msg))->msg_control)) ||
+	    __get_user (m.msg_controllen, &(((struct msghdr32 *)A(msg))->msg_controllen)) ||
+	    __get_user (m.msg_flags, &(((struct msghdr32 *)A(msg))->msg_flags)))
+		return -EFAULT;
+	
+	count = m.msg_iovlen;
+	if (!count) return 0; if (count > UIO_MAXIOV) return -EINVAL;
+	if (count <= UIO_FASTIOV)
+		v = vf;
+	else {
+		lock_kernel ();
+		v = kmalloc (count * sizeof (struct iovec), GFP_KERNEL);
+		if (!v) {
+			ret = -ENOMEM;
+			goto out;
+		}
+	}
+
+	for (i = 0; i < count; i++) {
+		if (__get_user ((unsigned long)(v[i].iov_base), &((((struct iovec32 *)A(vector))+i)->iov_base)) ||
+		    __get_user (v[i].iov_len, &((((struct iovec32 *)A(vector))+i)->iov_len))) {
+		    	ret = -EFAULT;
+		    	goto out;
+		}
+	}
+	
+	m.msg_iov = v;
+
+	if (m.msg_controllen) {
+		/* XXX Handle msg_control stuff... Or should that go into ip_sockglue.c etc.? */
+	}
+	old_fs = get_fs();
+	set_fs (KERNEL_DS);
+	ret = sys_sendmsg(fd, &m, flags);
+	set_fs (old_fs);
+out:
+	if (count > UIO_FASTIOV) {
+		kfree (v);
+		unlock_kernel ();
+	}
+	return ret;
 }
 
 asmlinkage int sys32_recvmsg(int fd, u32 msg, unsigned int flags)
 {
-	return sys_recvmsg(fd, (struct msghdr *)A(msg), flags);
+	struct msghdr m;
+	int count;
+	struct iovec *v;
+	struct iovec vf[UIO_FASTIOV];
+	u32 i, vector;
+	long ret;
+	unsigned long old_fs;
+	
+	if (get_user ((long)m.msg_name, &(((struct msghdr32 *)A(msg))->msg_name)) ||
+	    __get_user (m.msg_namelen, &(((struct msghdr32 *)A(msg))->msg_namelen)) ||
+	    __get_user (vector, &(((struct msghdr32 *)A(msg))->msg_iov)) ||
+	    __get_user (m.msg_iovlen, &(((struct msghdr32 *)A(msg))->msg_iovlen)) ||
+	    __get_user ((long)m.msg_control, &(((struct msghdr32 *)A(msg))->msg_control)) ||
+	    __get_user (m.msg_controllen, &(((struct msghdr32 *)A(msg))->msg_controllen)) ||
+	    __get_user (m.msg_flags, &(((struct msghdr32 *)A(msg))->msg_flags)))
+		return -EFAULT;
+	
+	count = m.msg_iovlen;
+	if (!count) return 0; if (count > UIO_MAXIOV) return -EINVAL;
+	if (count <= UIO_FASTIOV)
+		v = vf;
+	else {
+		lock_kernel ();
+		v = kmalloc (count * sizeof (struct iovec), GFP_KERNEL);
+		if (!v) {
+			ret = -ENOMEM;
+			goto out;
+		}
+	}
+
+	for (i = 0; i < count; i++) {
+		if (__get_user ((unsigned long)(v[i].iov_base), &((((struct iovec32 *)A(vector))+i)->iov_base)) ||
+		    __get_user (v[i].iov_len, &((((struct iovec32 *)A(vector))+i)->iov_len))) {
+		    	ret = -EFAULT;
+		    	goto out;
+		}
+	}
+	
+	m.msg_iov = v;
+
+	if (m.msg_controllen) {
+		/* XXX Handle msg_control stuff... Or should that go into ip_sockglue.c etc.? */
+	}
+	old_fs = get_fs();
+	set_fs (KERNEL_DS);
+	ret = sys_recvmsg(fd, &m, flags);
+	set_fs (old_fs);
+	if (ret >= 0) {
+		/* XXX Handle msg_control stuff... */
+		if (put_user (m.msg_flags, &(((struct msghdr32 *)A(msg))->msg_flags)) ||
+		    __put_user (m.msg_controllen, &(((struct msghdr32 *)A(msg))->msg_controllen)))
+			return -EFAULT;
+	}
+out:
+	if (count > UIO_FASTIOV) {
+		kfree (v);
+		unlock_kernel ();
+	}
+	return ret;
 }
 
 asmlinkage int sys32_socketcall(int call, u32 args)
 {
-	return sys_socketcall(call, (unsigned long *)A(args));
+	static unsigned char nargs[18]={0,3,3,3,2,3,3,3,
+				        4,4,4,6,6,2,5,5,3,3};
+	u32 a[6];
+	u32 a0,a1;
+	int err = -EINVAL;
+	int i;
+				 
+	lock_kernel();
+	if(call<1||call>SYS_RECVMSG)
+		goto out;
+	err = -EFAULT;
+
+	for (i = 0; i < nargs[call]; i++, args += sizeof (u32))
+		if (get_user(a[i], (u32 *)A(args)))
+			goto out;
+		
+	a0=a[0];
+	a1=a[1];
+	
+	switch(call) 
+	{
+		case SYS_SOCKET:
+			err = sys_socket(a0, a1, a[2]);
+			break;
+		case SYS_BIND:
+			err = sys32_bind(a0, a1, a[2]);
+			break;
+		case SYS_CONNECT:
+			err = sys32_connect(a0, a1, a[2]);
+			break;
+		case SYS_LISTEN:
+			err = sys_listen(a0, a1);
+			break;
+		case SYS_ACCEPT:
+			err = sys32_accept(a0, a1, a[2]);
+			break;
+		case SYS_GETSOCKNAME:
+			err = sys32_getsockname(a0, a1, a[2]);
+			break;
+		case SYS_GETPEERNAME:
+			err = sys32_getpeername(a0, a1, a[2]);
+			break;
+		case SYS_SOCKETPAIR:
+			err = sys_socketpair(a0, a1, a[2], (int *)A(a[3]));
+			break;
+		case SYS_SEND:
+			err = sys32_send(a0, a1, a[2], a[3]);
+			break;
+		case SYS_SENDTO:
+			err = sys32_sendto(a0, a1, a[2], a[3], a[4], a[5]);
+			break;
+		case SYS_RECV:
+			err = sys32_recv(a0, a1, a[2], a[3]);
+			break;
+		case SYS_RECVFROM:
+			err = sys32_recvfrom(a0, a1, a[2], a[3], a[4], a[5]);
+			break;
+		case SYS_SHUTDOWN:
+			err = sys_shutdown(a0,a1);
+			break;
+		case SYS_SETSOCKOPT:
+			err = sys32_setsockopt(a0, a1, a[2], a[3], a[4]);
+			break;
+		case SYS_GETSOCKOPT:
+			err = sys32_getsockopt(a0, a1, a[2], a[3], a[4]);
+			break;
+		case SYS_SENDMSG:
+			err = sys32_sendmsg(a0, a1, a[2]);
+			break;
+		case SYS_RECVMSG:
+			err = sys32_recvmsg(a0, a1, a[2]);
+			break;
+		default:
+			err = -EINVAL;
+			break;
+	}
+out:
+	unlock_kernel();
+	return err;
 }
 
 extern void check_pending(int signum);

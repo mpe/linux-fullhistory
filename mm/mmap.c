@@ -659,14 +659,14 @@ __initfunc(void vma_init(void))
 {
 	vm_area_cachep = kmem_cache_create("vm_area_struct",
 					   sizeof(struct vm_area_struct),
-					   sizeof(long)*8, SLAB_HWCACHE_ALIGN,
+					   0, SLAB_HWCACHE_ALIGN,
 					   NULL, NULL);
 	if(!vm_area_cachep)
 		panic("vma_init: Cannot alloc vm_area_struct cache.");
 
 	mm_cachep = kmem_cache_create("mm_struct",
 				      sizeof(struct mm_struct),
-				      sizeof(long) * 4, SLAB_HWCACHE_ALIGN,
+				      0, SLAB_HWCACHE_ALIGN,
 				      NULL, NULL);
 	if(!mm_cachep)
 		panic("vma_init: Cannot alloc mm_struct cache.");

@@ -1,4 +1,4 @@
-/* $Id: elf.h,v 1.3 1997/04/04 00:50:12 davem Exp $ */
+/* $Id: elf.h,v 1.4 1997/05/04 07:21:21 davem Exp $ */
 #ifndef __ASM_SPARC64_ELF_H
 #define __ASM_SPARC64_ELF_H
 
@@ -16,11 +16,6 @@ typedef elf_greg_t elf_gregset_t[ELF_NGREG];
 typedef unsigned long elf_fpregset_t;
 
 /*
- * This is used to ensure we don't load something for the wrong architecture.
- */
-#define elf_check_arch(x) ((x) == EM_SPARC)
-
-/*
  * These are used to set parameters in the core dumps.
  */
 #ifndef ELF_ARCH
@@ -28,6 +23,11 @@ typedef unsigned long elf_fpregset_t;
 #define ELF_CLASS	ELFCLASS64
 #define ELF_DATA	ELFDATA2MSB;
 #endif
+
+/*
+ * This is used to ensure we don't load something for the wrong architecture.
+ */
+#define elf_check_arch(x) ((x) == ELF_ARCH)	/* Might be EM_SPARC64 or EM_SPARC */
 
 #define USE_ELF_CORE_DUMP
 #define ELF_EXEC_PAGESIZE	4096

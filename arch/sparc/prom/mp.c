@@ -1,4 +1,4 @@
-/* $Id: mp.c,v 1.8 1997/05/01 01:41:32 davem Exp $
+/* $Id: mp.c,v 1.9 1997/05/14 20:45:01 davem Exp $
  * mp.c:  OpenBoot Prom Multiprocessor support routines.  Don't call
  *        these on a UP or else you will halt and catch fire. ;)
  *
@@ -11,6 +11,9 @@
 
 #include <asm/openprom.h>
 #include <asm/oplib.h>
+
+/* XXX Let's get rid of this thing if we can... */
+extern struct task_struct *current_set[NR_CPUS];
 
 /* Start cpu with prom-tree node 'cpunode' using context described
  * by 'ctable_reg' in context 'ctx' at program counter 'pc'.

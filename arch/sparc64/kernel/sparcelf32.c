@@ -374,7 +374,6 @@ static unsigned long load_aout32_interp(struct exec * interp_ex,
 #define INTERPRETER_AOUT 1
 #define INTERPRETER_ELF 2
 
-
 static inline int
 do_load_elf32_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 {
@@ -577,6 +576,7 @@ do_load_elf32_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	/* Do this so that we can load the interpreter, if need be.  We will
 	   change some of these later */
 	current->mm->rss = 0;
+	current->tss.flags |= SPARC_FLAG_32BIT;
 	bprm->p = setup_arg_pages(bprm->p, bprm);
 	current->mm->start_stack = bprm->p;
 

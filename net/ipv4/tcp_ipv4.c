@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.42 1997/04/29 16:09:46 schenk Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.43 1997/05/06 09:31:44 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -888,7 +888,7 @@ static void tcp_v4_or_free(struct open_request *req)
 {
 	if(!req->sk && req->af.v4_req.opt)
 		kfree_s(req->af.v4_req.opt,
-			sizeof(struct options) + req->af.v4_req.opt->optlen);
+			sizeof(struct ip_options) + req->af.v4_req.opt->optlen);
 }
 
 static struct or_calltable or_ipv4 = {

@@ -66,7 +66,7 @@ got_some:
 void file_table_init(void)
 {
 	filp_cache = kmem_cache_create("filp", sizeof(struct file),
-				       sizeof(unsigned long) * 8,
+				       0,
 				       SLAB_HWCACHE_ALIGN, NULL, NULL);
 	if(!filp_cache)
 		panic("VFS: Cannot alloc filp SLAB cache.");

@@ -79,6 +79,8 @@ bailout:
 }
 
 #ifdef CONFIG_ROOT_NFS
+char *in_ntoa(__u32 in);
+
 int
 rpc_getport_external(struct sockaddr_in *sin, __u32 prog, __u32 vers, int prot)
 {

@@ -1,4 +1,4 @@
-/* $Id: sunlance.c,v 1.62 1997/04/16 10:27:25 jj Exp $
+/* $Id: sunlance.c,v 1.64 1997/05/14 20:46:40 davem Exp $
  * lance.c: Linux/Sparc/Lance driver
  *
  *	Written 1995, 1996 by Miguel de Icaza
@@ -673,8 +673,7 @@ static int lance_open (struct device *dev)
 
 	/* On the 4m, setup the ledma to provide the upper bits for buffers */
 	if (lp->ledma)
-		lp->ledma->regs->dma_test = ((unsigned long) lp->init_block)
-						& 0xff000000;
+		lp->ledma->regs->dma_test = ((__u32) lp->init_block_dvma) & 0xff000000;
 
 	lance_init_ring (dev);
 	load_csrs (lp);
@@ -758,8 +757,7 @@ static inline int lance_reset (struct device *dev)
 		lp->ledma->regs->cond_reg |= DMA_RST_ENET;
 		udelay (200);
 		lp->ledma->regs->cond_reg &= ~DMA_RST_ENET;
-		lp->ledma->regs->dma_test = ((unsigned long) lp->init_block)
-						& 0xff000000;
+		lp->ledma->regs->dma_test = ((__u32) lp->init_block_dvma) & 0xff000000;
 	}
 	lance_init_ring (dev);
 	load_csrs (lp);

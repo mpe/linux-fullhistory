@@ -44,13 +44,13 @@
 csum_partial_end_cruft:
 	andcc	%o1, 8, %g0			! check how much
 	be,pn	%icc, 1f			! caller asks %o1 & 0x8
-	 and	%o1, 4, %g3			! nope, check for word remaining
+	 and	%o1, 4, %g5			! nope, check for word remaining
 	ldd	[%o0], %g2			! load two
 	addcc	%g2, %o2, %o2			! add first word to sum
 	addccc	%g3, %o2, %o2			! add second word as well
 	add	%o0, 8, %o0			! advance buf ptr
 	addc	%g0, %o2, %o2			! add in final carry
-1:	brz,pn	%g3, 1f				! nope, skip this code
+1:	brz,pn	%g5, 1f				! nope, skip this code
 	 andcc	%o1, 3, %o1			! check for trailing bytes
 	ld	[%o0], %g2			! load it
 	addcc	%g2, %o2, %o2			! add to sum
@@ -98,15 +98,17 @@ csum_partial:						/* %o0=buf, %o1=len, %o2=sum */
 	srl	%o2, 16, %g3
 	addc	%g0, %g3, %g2
 	sll	%o2, 16, %o2
+	and	%o0, 0x4, %g7
 	sll	%g2, 16, %g3
 	srl	%o2, 16, %o2
 	or	%g3, %o2, %o2
 1:	brz,pn	%g7, csum_partial_fix_aligned
-	 nop
+	 andn	%o1, 0x7f, %o3
 	ld	[%o0 + 0x00], %g2
 	sub	%o1, 4, %o1
 	addcc	%g2, %o2, %o2
 	add	%o0, 4, %o0
+	andn	%o1, 0x7f, %o3
 	addc	%g0, %o2, %o2
 csum_partial_fix_aligned:
 	brz,pt	%o3, 3f					! none to do
@@ -115,9 +117,9 @@ csum_partial_fix_aligned:
 	CSUM_BIGCHUNK(%o0, 0x20, %o2, %o4, %o5, %g2, %g3, %g4, %g5)
 	CSUM_BIGCHUNK(%o0, 0x40, %o2, %o4, %o5, %g2, %g3, %g4, %g5)
 	CSUM_BIGCHUNK(%o0, 0x60, %o2, %o4, %o5, %g2, %g3, %g4, %g5)
-	sub	%o3, 128, %o3				! detract from loop iters
 	addc	%g0, %o2, %o2				! sink in final carry
-	brnz,pt	%o3, 5b					! more to do
+	subcc	%o3, 128, %o3				! detract from loop iters
+	bne,pt	%icc, 5b				! more to do
 	 add	%o0, 128, %o0				! advance buf ptr
 3:	brz,pn	%g1, cpte				! nope
 	 andcc	%o1, 0xf, %o3				! anything left at all?
@@ -125,7 +127,7 @@ csum_partial_fix_aligned:
 	srl	%g1, 1, %o4				! compute offset
 	sub	%g7, %g1, %g7				! adjust jmp ptr
 	sub	%g7, %o4, %g7				! final jmp ptr adjust
-	jmp	%g7 + (cpte - 8 - 10b)			! enter the table
+	jmp	%g7 + (11f-10b)				! enter the table
 	 add	%o0, %g1, %o0				! advance buf ptr
 cptbl:	CSUM_LASTCHUNK(%o0, 0x68, %o2, %g2, %g3, %g4, %g5)
 	CSUM_LASTCHUNK(%o0, 0x58, %o2, %g2, %g3, %g4, %g5)
@@ -134,8 +136,8 @@ cptbl:	CSUM_LASTCHUNK(%o0, 0x68, %o2, %g2, %g3, %g4, %g5)
 	CSUM_LASTCHUNK(%o0, 0x28, %o2, %g2, %g3, %g4, %g5)
 	CSUM_LASTCHUNK(%o0, 0x18, %o2, %g2, %g3, %g4, %g5)
 	CSUM_LASTCHUNK(%o0, 0x08, %o2, %g2, %g3, %g4, %g5)
-	addc	%g0, %o2, %o2				! fetch final carry
-	andcc	%o1, 0xf, %g0				! anything left at all?
+11:	addc	%g0, %o2, %o2				! fetch final carry
+	andcc	%o1, 0xf, %o3				! anything left at all?
 cpte:	brnz,pn	%o3, csum_partial_end_cruft		! yep, handle it
 	 sethi	%uhi(KERNBASE), %g4
 	mov	%o2, %o0				! return computed csum
@@ -322,13 +324,14 @@ __csum_partial_copy_sparc_generic:
 	andcc	%o0, 0x4, %g0
 	or	%g3, %g7, %g7
 1:	be,pt	%icc, 3f
-	 andn	%g1, 0x7f, %g0
+	 andn	%g1, 0x7f, %g2
 	EX(ld	[%o0 + 0x00], %g4, add %g1, 0,#)
 	sub	%g1, 4, %g1
 	EX2(st	%g4, [%o1 + 0x00],#)
 	add	%o0, 4, %o0
 	addcc	%g4, %g7, %g7
 	add	%o1, 4, %o1
+	andn	%g1, 0x7f, %g2
 	addc	%g0, %g7, %g7
 cc_dword_aligned:
 3:	brz,pn	%g2, 3f			! nope, less than one loop remains
@@ -365,7 +368,7 @@ cctbl:	CSUMCOPY_LASTCHUNK(%o0,%o1,%g7,0x68,%g2,%g3,%g4,%g5)
 	CSUMCOPY_LASTCHUNK(%o0,%o1,%g7,0x08,%g2,%g3,%g4,%g5)
 12:	EXT(cctbl, 12b, 22f,#)		! note for exception table handling
 	addc	%g0, %g7, %g7
-	andcc	%o3, 0xf, %g0		! check for low bits set
+	andcc	%g1, 0xf, %o3		! check for low bits set
 ccte:	bne,pn	%icc, cc_end_cruft	! something left, handle it out of band
 	 sethi	%uhi(KERNBASE), %g4	! restore gfp
 	mov	%g7, %o0		! give em the computed checksum

@@ -1,4 +1,4 @@
-/* $Id: viking.S,v 1.2 1997/04/20 21:21:49 ecd Exp $
+/* $Id: viking.S,v 1.3 1997/05/04 10:02:14 ecd Exp $
  * viking.S: High speed Viking cache/mmu operations
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -38,40 +38,26 @@
 
 viking_flush_page:
 viking_flush_chunk:
-	sethi	%hi(C_LABEL(srmmu_map)), %g2
-	or	%g2, %lo(C_LABEL(srmmu_map)), %g3
-	ld	[%g3 + 8], %g2
-	cmp	%g2, 0
-	be	3f
+	sethi	%hi(C_LABEL(srmmu_v2p_hash)), %g2
+	or	%g2, %lo(C_LABEL(srmmu_v2p_hash)), %g2
+	srl	%o0, 24, %o1
+	sll	%o1, 2, %o1
+
+	ld	[%g2 + %o1], %g3
+	cmp	%g3, 0
+	bne	1f
 	 and	%o0, PAGE_MASK, %o0
 
-	ld	[%g3], %o1
-1:
-	cmp	%o1, %o0
-	bgu,a	2f
-	 add	%g3, 0xc, %g3
-
-	add	%o1, %g2, %g2
-	cmp	%g2, %o0
-	bleu,a	2f
-	 add	%g3, 0xc, %g3
-
-	sub	%o0, %o1, %g2
-	ld	[%g3 + 4], %o0
-	add	%g2, %o0, %g3
-	b	4f
-	 srl	%g3, 12, %g1		! ppage >> 12
-
-2:
-	ld	[%g3 + 8], %g2
-	cmp	%g2, 0
-	bne,a	1b
-	 ld	[%g3], %o1
-3:
 	retl
 	 nop
 
-4:
+1:
+	ld	[%g3], %o1
+	sub	%o0, %o1, %g2
+	ld	[%g3 + 4], %o0
+	add	%g2, %o0, %g3
+	srl	%g3, 12, %g1		! ppage >> 12
+
 	clr	%o1			! set counter, 0 - 127
 	sethi	%hi(KERNBASE + PAGE_SIZE - 0x80000000), %o3
 	sethi	%hi(0x80000000), %o4
@@ -131,40 +117,27 @@ viking_flush_chunk:
 
 
 viking_mxcc_flush_page:
-	sethi	%hi(C_LABEL(srmmu_map)), %g2
-	or	%g2, %lo(C_LABEL(srmmu_map)), %g3
-	ld	[%g3 + 8], %g2
-	cmp	%g2, 0
-	be	3f
+	sethi	%hi(C_LABEL(srmmu_v2p_hash)), %g2
+	or	%g2, %lo(C_LABEL(srmmu_v2p_hash)), %g2
+	srl	%o0, 24, %o1
+	sll	%o1, 2, %o1
+
+	ld	[%g2 + %o1], %g3
+	cmp	%g3, 0
+	bne	1f
 	 and	%o0, PAGE_MASK, %o0
 
-	ld	[%g3], %o1
-1:
-	cmp	%o1, %o0
-	bgu,a	2f
-	 add	%g3, 0xc, %g3
-
-	add	%o1, %g2, %g2
-	cmp	%g2, %o0
-	bleu,a	2f
-	 add	%g3, 0xc, %g3
-
-	sub	%o0, %o1, %g2
-	ld	[%g3 + 4], %o0
-	add	%g2, %o0, %g3
-	sethi	%hi(PAGE_SIZE), %g4
-	b	4f
-	 add	%g3, %g4, %g3			! ppage + PAGE_SIZE
-
-2:
-	ld	[%g3 + 8], %g2
-	cmp	%g2, 0
-	bne,a	1b
-	 ld	[%g3], %o1
-3:
 	retl
 	 nop
-4:
+
+1:
+	ld	[%g3], %o1
+	sub	%o0, %o1, %g2
+	ld	[%g3 + 4], %o0
+	sethi   %hi(PAGE_SIZE), %g4
+	add	%g2, %o0, %g3
+	add	%g3, %g4, %g3			! ppage + PAGE_SIZE
+
 	mov	0x10, %g2			! set cacheable bit
 	sethi	%hi(MXCC_SRCSTREAM), %o2
 	or	%o2, %lo(MXCC_SRCSTREAM), %o2

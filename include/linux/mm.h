@@ -137,6 +137,7 @@ typedef struct page {
 #define PG_decr_after		 5
 #define PG_swap_unlock_after	 6
 #define PG_DMA			 7
+#define PG_Slab			 8
 #define PG_reserved		31
 
 /* Make it prettier to test the above... */
@@ -149,7 +150,11 @@ typedef struct page {
 #define PageDecrAfter(page)	(test_bit(PG_decr_after, &(page)->flags))
 #define PageSwapUnlockAfter(page) (test_bit(PG_swap_unlock_after, &(page)->flags))
 #define PageDMA(page)		(test_bit(PG_DMA, &(page)->flags))
+#define PageSlab(page)		(test_bit(PG_Slab, &(page)->flags))
 #define PageReserved(page)	(test_bit(PG_reserved, &(page)->flags))
+
+#define PageSetSlab(page)	(set_bit(PG_Slab, &(page)->flags))
+#define PageClearSlab(page)	(clear_bit(PG_Slab, &(page)->flags))
 
 /*
  * page->reserved denotes a page which must never be accessed (which
@@ -260,7 +265,7 @@ extern int remap_page_range(unsigned long from, unsigned long to, unsigned long 
 extern int zeromap_page_range(unsigned long from, unsigned long size, pgprot_t prot);
 
 extern void vmtruncate(struct inode * inode, unsigned long offset);
-extern void handle_mm_fault(struct vm_area_struct *vma, unsigned long address, int write_access);
+extern void handle_mm_fault(struct task_struct *tsk,struct vm_area_struct *vma, unsigned long address, int write_access);
 
 extern unsigned long paging_init(unsigned long start_mem, unsigned long end_mem);
 extern void mem_init(unsigned long start_mem, unsigned long end_mem);

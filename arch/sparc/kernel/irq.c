@@ -1,4 +1,4 @@
-/*  $Id: irq.c,v 1.72 1997/04/20 11:41:26 ecd Exp $
+/*  $Id: irq.c,v 1.75 1997/05/08 20:57:37 davem Exp $
  *  arch/sparc/kernel/irq.c:  Interrupt request handling routines. On the
  *                            Sparc the IRQ's are basically 'cast in stone'
  *                            and you are supposed to probe the prom's device
@@ -313,8 +313,180 @@ spinlock_t global_bh_lock = SPIN_LOCK_UNLOCKED;
 /* Global IRQ locking depth. */
 atomic_t global_irq_count = ATOMIC_INIT(0);
 
+#ifdef DEBUG_IRQLOCK
+
+static unsigned long previous_irqholder;
+
+#undef INIT_STUCK
+#define INIT_STUCK 100000000
+
+#undef STUCK
+#define STUCK \
+if (!--stuck) {printk("wait_on_irq CPU#%d stuck at %08lx, waiting for %08lx (local=%d, global=%d)\n", cpu, where, previous_irqholder, local_count, atomic_read(&global_irq_count)); stuck = INIT_STUCK; }
+
+static inline void wait_on_irq(int cpu, unsigned long where)
+{
+	int stuck = INIT_STUCK;
+	int local_count = local_irq_count[cpu];
+
+	/* Are we the only one in an interrupt context? */
+	while (local_count != atomic_read(&global_irq_count)) {
+		/*
+		 * No such luck. Now we need to release the lock,
+		 * _and_ release our interrupt context, because
+		 * otherwise we'd have dead-locks and live-locks
+		 * and other fun things.
+		 */
+		atomic_sub(local_count, &global_irq_count);
+		spin_unlock(&global_irq_lock);
+
+		/*
+		 * Wait for everybody else to go away and release
+		 * their things before trying to get the lock again.
+		 */
+		for (;;) {
+			STUCK;
+			if (atomic_read(&global_irq_count))
+				continue;
+			if (*((unsigned char *)&global_irq_lock))
+				continue;
+			if (spin_trylock(&global_irq_lock))
+				break;
+		}
+		atomic_add(local_count, &global_irq_count);
+	}
+}
+
+#undef INIT_STUCK
+#define INIT_STUCK 10000000
+
+#undef STUCK
+#define STUCK \
+if (!--stuck) {printk("get_irqlock stuck at %08lx, waiting for %08lx\n", where, previous_irqholder); stuck = INIT_STUCK;}
+
+static inline void get_irqlock(int cpu, unsigned long where)
+{
+	int stuck = INIT_STUCK;
+
+	if (!spin_trylock(&global_irq_lock)) {
+		/* do we already hold the lock? */
+		if ((unsigned char) cpu == global_irq_holder)
+			return;
+		/* Uhhuh.. Somebody else got it. Wait.. */
+		do {
+			do {
+				STUCK;
+				barrier();
+			} while (*((unsigned char *)&global_irq_lock));
+		} while (!spin_trylock(&global_irq_lock));
+	}
+	/*
+	 * Ok, we got the lock bit.
+	 * But that's actually just the easy part.. Now
+	 * we need to make sure that nobody else is running
+	 * in an interrupt context. 
+	 */
+	wait_on_irq(cpu, where);
+
+	/*
+	 * Finally.
+	 */
+	global_irq_holder = cpu;
+	previous_irqholder = where;
+}
+
+void __global_cli(void)
+{
+	int cpu = smp_processor_id();
+	unsigned long where;
+
+	__asm__("mov %%i7, %0" : "=r" (where));
+	__cli();
+	get_irqlock(cpu, where);
+}
+
+void __global_sti(void)
+{
+	release_irqlock(smp_processor_id());
+	__sti();
+}
+
+unsigned long __global_save_flags(void)
+{
+	return global_irq_holder == (unsigned char) smp_processor_id();
+}
+
+void __global_restore_flags(unsigned long flags)
+{
+	if(flags & 1) {
+		__global_cli();
+	} else {
+		/* release_irqlock() */
+		if(global_irq_holder == smp_processor_id()) {
+			global_irq_holder = NO_PROC_ID;
+			spin_unlock(&global_irq_lock);
+		}
+		if(!(flags & 2))
+			__sti();
+	}
+}
+
+#undef INIT_STUCK
+#define INIT_STUCK 200000000
+
+#undef STUCK
+#define STUCK \
+if (!--stuck) {printk("irq_enter stuck (irq=%d, cpu=%d, global=%d)\n",irq,cpu,global_irq_holder); stuck = INIT_STUCK;}
+
+#define VERBOSE_IRQLOCK_DEBUGGING
+
+void irq_enter(int cpu, int irq, void *_opaque)
+{
+#ifdef VERBOSE_IRQLOCK_DEBUGGING
+	extern void smp_show_backtrace_all_cpus(void);
+#endif
+	int stuck = INIT_STUCK;
+
+	hardirq_enter(cpu);
+	barrier();
+	while (*((unsigned char *)&global_irq_lock)) {
+		if ((unsigned char) cpu == global_irq_holder) {
+			struct pt_regs *regs = _opaque;
+			int sbh_cnt = atomic_read(&__sparc_bh_counter);
+			int globl_locked = *((unsigned char *)&global_irq_lock);
+			int globl_icount = atomic_read(&global_irq_count);
+			int local_count = local_irq_count[cpu];
+			unsigned long pc = regs->pc;
+
+			/* It is very important that we load the state variables
+			 * before we do the first call to printk() as printk()
+			 * could end up changing them...
+			 */
+
+			printk("CPU[%d]: BAD! Local IRQ's enabled, global disabled "
+			       "interrupt at PC[%08lx]\n", cpu, pc);
+			printk("CPU[%d]: bhcnt[%d] glocked[%d] gicnt[%d] licnt[%d]\n",
+			       cpu, sbh_cnt, globl_locked, globl_icount, local_count);
+#ifdef VERBOSE_IRQLOCK_DEBUGGING
+			printk("Performing backtrace on all cpus, write this down!\n");
+			smp_show_backtrace_all_cpus();
+#endif
+			break;
+		}
+		STUCK;
+		barrier();
+	}
+}
+
+void irq_exit(int cpu, int irq)
+{
+	hardirq_exit(cpu);
+	release_irqlock(cpu);
+}
+
+#endif /* DEBUG_IRQLOCK */
+
 /* There has to be a better way. */
-/* XXX Must write faster version in irqlock.S -DaveM */
 void synchronize_irq(void)
 {
 	int cpu = smp_processor_id();
@@ -371,7 +543,7 @@ void handler_irq(int irq, struct pt_regs * regs)
 	if(irq < 10)
 		smp_irq_rotate(cpu);
 #endif
-	irq_enter(cpu, cpu_irq);
+	irq_enter(cpu, cpu_irq, regs);
 	action = *(cpu_irq + irq_action);
 	kstat.interrupts[cpu_irq]++;
 	do {
@@ -392,7 +564,7 @@ void sparc_floppy_irq(int irq, void *dev_id, struct pt_regs *regs)
 	int cpu = smp_processor_id();
 
 	disable_pil_irq(irq);
-	irq_enter(cpu, irq);
+	irq_enter(cpu, irq, regs);
 	floppy_interrupt(irq, dev_id, regs);
 	irq_exit(cpu, irq);
 	enable_pil_irq(irq);

@@ -66,7 +66,6 @@ extern int kswapd(void *);
 extern void init_IRQ(void);
 extern void init_modules(void);
 extern long console_init(long, long);
-extern long kmalloc_init(long,long);
 extern void sock_init(void);
 extern void uidcache_init(void);
 extern unsigned long pci_init(unsigned long, unsigned long);
@@ -872,7 +871,6 @@ __initfunc(asmlinkage void start_kernel(void))
 #ifdef CONFIG_MCA
 	memory_start = mca_init(memory_start,memory_end);
 #endif
-	memory_start = kmalloc_init(memory_start,memory_end);
 	memory_start = kmem_cache_init(memory_start, memory_end);
 	sti();
 	calibrate_delay();
@@ -885,10 +883,10 @@ __initfunc(asmlinkage void start_kernel(void))
 	}
 #endif
 	mem_init(memory_start,memory_end);
+	kmem_cache_sizes_init();
 #ifdef CONFIG_PROC_FS
 	proc_root_init();
 #endif
-	kmem_cache_sizes_init();
 	uidcache_init();
 	vma_init();
 	buffer_init();

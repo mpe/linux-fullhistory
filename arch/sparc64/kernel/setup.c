@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.5 1997/04/04 00:49:52 davem Exp $
+/*  $Id: setup.c,v 1.6 1997/05/04 07:21:04 davem Exp $
  *  linux/arch/sparc64/kernel/setup.c
  *
  *  Copyright (C) 1995,1996  David S. Miller (davem@caip.rutgers.edu)
@@ -260,6 +260,8 @@ __initfunc(void setup_arch(char **cmdline_p,
 	/* Initialize PROM console and command line. */
 	*cmdline_p = prom_getbootargs();
 	strcpy(saved_command_line, *cmdline_p);
+
+	prom_printf("BOOT: args[%s] saved[%s]\n", *cmdline_p, saved_command_line);
 
 	printk("ARCH: SUN4U\n");
 
