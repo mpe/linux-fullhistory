@@ -421,10 +421,7 @@ static void create_proc_ide_drives(ide_hwif_t *hwif)
 
 static void destroy_proc_ide_device(ide_hwif_t *hwif, ide_drive_t *drive)
 {
-	ide_driver_t *driver = drive->driver;
-
 	if (drive->proc) {
-		ide_remove_proc_entries(drive->proc, driver->proc);
 		ide_remove_proc_entries(drive->proc, generic_drive_entries);
 		remove_proc_entry(drive->name, proc_ide_root);
 		remove_proc_entry(drive->name, hwif->proc);
