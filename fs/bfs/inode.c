@@ -263,7 +263,7 @@ static struct super_block * bfs_read_super(struct super_block * s,
 	struct buffer_head * bh;
 	struct bfs_super_block * bfs_sb;
 	struct inode * inode;
-	int i, imap_len;
+	int i, imap_len, bmap_len;
 
 	MOD_INC_USE_COUNT;
 	lock_super(s);
@@ -295,9 +295,11 @@ static struct super_block * bfs_read_super(struct super_block * s,
 	s->su_lasti = (bfs_sb->s_start - BFS_BSIZE)/sizeof(struct bfs_inode) 
 			+ BFS_ROOT_INO - 1;
 
-	s->su_bmap = kmalloc(sizeof(struct bfs_bmap) * s->su_lasti, GFP_KERNEL);
+	bmap_len = sizeof(struct bfs_bmap) * s->su_lasti;
+	s->su_bmap = kmalloc(bmap_len, GFP_KERNEL);
 	if (!s->su_bmap)
 		goto out;
+	memset(s->su_bmap, 0, bmap_len);
 	imap_len = s->su_lasti/8 + 1;
 	s->su_imap = kmalloc(imap_len, GFP_KERNEL);
 	if (!s->su_imap) {

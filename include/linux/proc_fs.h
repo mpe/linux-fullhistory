@@ -90,15 +90,6 @@ enum scsi_directory_inos {
 	PROC_SCSI_LAST = (PROC_SCSI_FILE + 16) /* won't ever see more than */
 };                                             /* 16 HBAs in one machine   */
 
-enum mca_directory_inos {
-	PROC_MCA_MACHINE = (PROC_SCSI_LAST+1),
-	PROC_MCA_REGISTERS,
-	PROC_MCA_VIDEO,
-	PROC_MCA_SCSI,
-	PROC_MCA_SLOT,	/* the 8 adapter slots */
-	PROC_MCA_LAST = (PROC_MCA_SLOT + 8)
-};
-
 /* Finally, the dynamically allocatable proc entries are reserved: */
 
 #define PROC_DYNAMIC_FIRST 4096
@@ -173,11 +164,8 @@ extern struct proc_dir_entry *proc_net;
 extern struct proc_dir_entry *proc_scsi;
 extern struct proc_dir_entry proc_sys;
 extern struct proc_dir_entry proc_openprom;
-extern struct proc_dir_entry proc_pid;
-extern struct proc_dir_entry proc_pid_fd;
 extern struct proc_dir_entry *proc_mca;
 extern struct proc_dir_entry *proc_bus;
-extern struct proc_dir_entry *proc_sysvipc;
 extern struct proc_dir_entry *proc_root_driver;
 extern struct proc_dir_entry proc_root_kcore;
 
@@ -272,8 +260,6 @@ extern inline int proc_driver_register(const char *module_name)
         return (p == NULL) ? -1 : 0;
 }
 
-
-
 extern struct super_block *proc_super_blocks;
 extern struct dentry_operations proc_dentry_operations;
 extern struct super_block *proc_read_super(struct super_block *,void *,int);
@@ -315,21 +301,16 @@ extern int proc_openprom_unregdev(struct openpromfs_dev *);
   
 extern struct inode_operations proc_dir_inode_operations;
 extern struct inode_operations proc_file_inode_operations;
-extern struct inode_operations proc_netdir_inode_operations;
 extern struct inode_operations proc_openprom_inode_operations;
-extern struct inode_operations proc_mem_inode_operations;
 extern struct inode_operations proc_sys_inode_operations;
 extern struct inode_operations proc_kcore_inode_operations;
 extern struct inode_operations proc_profile_inode_operations;
 extern struct inode_operations proc_kmsg_inode_operations;
-extern struct inode_operations proc_link_inode_operations;
-extern struct inode_operations proc_fd_inode_operations;
 #if CONFIG_AP1000
 extern struct inode_operations proc_ringbuf_inode_operations;
 #endif
 extern struct inode_operations proc_omirr_inode_operations;
 extern struct inode_operations proc_ppc_htab_inode_operations;
-extern struct inode_operations proc_sysvipc_inode_operations;
 
 /*
  * proc_tty.c
@@ -374,16 +355,6 @@ extern inline void proc_net_remove(const char *name)
 	remove_proc_entry(name,proc_net);
 }
 
-extern inline int proc_net_register(struct proc_dir_entry * x)
-{
-	return proc_register(proc_net, x);
-}
-
-extern inline int proc_net_unregister(int x)
-{
-	return proc_unregister(proc_net, x);
-}
-
 #else
 
 extern inline int proc_register(struct proc_dir_entry *a, struct proc_dir_entry *b) { return 0; }
@@ -391,8 +362,6 @@ extern inline int proc_unregister(struct proc_dir_entry *a, int b) { return 0; }
 extern inline struct proc_dir_entry *proc_net_create(const char *name, mode_t mode, 
 	get_info_t *get_info) {return NULL;}
 extern inline void proc_net_remove(const char *name) {}
-extern inline int proc_net_register(struct proc_dir_entry * x) { return 0; }
-extern inline int proc_net_unregister(int x) { return 0; }
 extern inline int proc_scsi_register(struct proc_dir_entry *b, struct proc_dir_entry *c) { return 0; }
 extern inline int proc_scsi_unregister(struct proc_dir_entry *a, int x) { return 0; }
 

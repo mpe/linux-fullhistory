@@ -93,8 +93,7 @@ struct proc_dir_entry proc_root = {
 	&proc_root, NULL
 };
 
-struct proc_dir_entry *proc_net, *proc_bus, *proc_sysvipc,
-		      *proc_root_fs, *proc_root_driver;
+struct proc_dir_entry *proc_net, *proc_bus, *proc_root_fs, *proc_root_driver;
 
 #ifdef CONFIG_MCA
 struct proc_dir_entry *proc_mca;
@@ -226,6 +225,73 @@ static int make_inode_number(void)
 	return PROC_DYNAMIC_FIRST + i;
 }
 
+int proc_readlink(struct dentry * dentry, char * buffer, int buflen)
+{
+	struct inode *inode = dentry->d_inode;
+	struct proc_dir_entry * de;
+	char 	*page;
+	int len = 0;
+
+	de = (struct proc_dir_entry *) inode->u.generic_ip;
+	if (!de)
+		return -ENOENT;
+	if (!(page = (char*) __get_free_page(GFP_KERNEL)))
+		return -ENOMEM;
+
+	if (de->readlink_proc)
+		len = de->readlink_proc(de, page);
+
+	if (len > buflen)
+		len = buflen;
+
+	copy_to_user(buffer, page, len);
+	free_page((unsigned long) page);
+	return len;
+}
+
+struct dentry * proc_follow_link(struct dentry * dentry, struct dentry *base, unsigned int follow)
+{
+	struct inode *inode = dentry->d_inode;
+	struct proc_dir_entry * de;
+	char 	*page;
+	struct dentry *d;
+	int len = 0;
+
+	de = (struct proc_dir_entry *) inode->u.generic_ip;
+	if (!(page = (char*) __get_free_page(GFP_KERNEL)))
+		return NULL;
+
+	if (de->readlink_proc)
+		len = de->readlink_proc(de, page);
+
+	d = lookup_dentry(page, base, follow);
+	free_page((unsigned long) page);
+	return d;
+}
+
+static struct inode_operations proc_link_inode_operations = {
+	NULL,			/* no file-ops */
+	NULL,			/* create */
+	NULL,			/* lookup */
+	NULL,			/* link */
+	NULL,			/* unlink */
+	NULL,			/* symlink */
+	NULL,			/* mkdir */
+	NULL,			/* rmdir */
+	NULL,			/* mknod */
+	NULL,			/* rename */
+	proc_readlink,		/* readlink */
+	proc_follow_link,	/* follow_link */
+	NULL,			/* get_block */
+	NULL,			/* readpage */
+	NULL,			/* writepage */
+	NULL,			/* flushpage */
+	NULL,			/* truncate */
+	NULL,			/* permission */
+	NULL,			/* smap */
+	NULL			/* revalidate */
+};
+
 int proc_register(struct proc_dir_entry * dir, struct proc_dir_entry * dp)
 {
 	int	i;
@@ -338,50 +404,6 @@ static struct dentry * proc_self_follow_link(struct dentry *dentry,
 	return lookup_dentry(tmp, base, follow);
 }	
 
-int proc_readlink(struct dentry * dentry, char * buffer, int buflen)
-{
-	struct inode *inode = dentry->d_inode;
-	struct proc_dir_entry * de;
-	char 	*page;
-	int len = 0;
-
-	de = (struct proc_dir_entry *) inode->u.generic_ip;
-	if (!de)
-		return -ENOENT;
-	if (!(page = (char*) __get_free_page(GFP_KERNEL)))
-		return -ENOMEM;
-
-	if (de->readlink_proc)
-		len = de->readlink_proc(de, page);
-
-	if (len > buflen)
-		len = buflen;
-
-	copy_to_user(buffer, page, len);
-	free_page((unsigned long) page);
-	return len;
-}
-
-struct dentry * proc_follow_link(struct dentry * dentry, struct dentry *base, unsigned int follow)
-{
-	struct inode *inode = dentry->d_inode;
-	struct proc_dir_entry * de;
-	char 	*page;
-	struct dentry *d;
-	int len = 0;
-
-	de = (struct proc_dir_entry *) inode->u.generic_ip;
-	if (!(page = (char*) __get_free_page(GFP_KERNEL)))
-		return NULL;
-
-	if (de->readlink_proc)
-		len = de->readlink_proc(de, page);
-
-	d = lookup_dentry(page, base, follow);
-	free_page((unsigned long) page);
-	return d;
-}
-
 static struct inode_operations proc_self_inode_operations = {
 	NULL,			/* no file-ops */
 	NULL,			/* create */
@@ -395,29 +417,6 @@ static struct inode_operations proc_self_inode_operations = {
 	NULL,			/* rename */
 	proc_self_readlink,	/* readlink */
 	proc_self_follow_link,	/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* flushpage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL,			/* smap */
-	NULL			/* revalidate */
-};
-
-static struct inode_operations proc_link_inode_operations = {
-	NULL,			/* no file-ops */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	proc_readlink,		/* readlink */
-	proc_follow_link,	/* follow_link */
 	NULL,			/* get_block */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
@@ -450,7 +449,7 @@ void __init proc_root_init(void)
 	proc_register(&proc_root, &proc_root_self);
 	proc_net = create_proc_entry("net", S_IFDIR, 0);
 #ifdef CONFIG_SYSVIPC
-	proc_sysvipc = create_proc_entry("sysvipc", S_IFDIR, 0);
+	create_proc_entry("sysvipc", S_IFDIR, 0);
 #endif
 #ifdef CONFIG_SYSCTL
 	proc_sys_root = create_proc_entry("sys", S_IFDIR, 0);

@@ -20,7 +20,7 @@ struct resource iomem_resource = { "PCI mem", 0x00000000, 0xFFFFFFFF, IORESOURCE
 static rwlock_t resource_lock = RW_LOCK_UNLOCKED;
 
 /*
- * This generates reports for /proc/ioports and /proc/memory
+ * This generates reports for /proc/ioports and /proc/iomem
  */
 static char * do_resource_list(struct resource *entry, const char *fmt, int offset, char *buf, char *end)
 {

@@ -1999,6 +1999,7 @@ int unregister_netdevice(struct net_device *dev)
  *
  */
 
+extern void net_device_init(void);
 extern void ip_auto_config(void);
 
 int __init net_dev_init(void)

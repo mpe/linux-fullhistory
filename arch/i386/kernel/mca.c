@@ -29,6 +29,9 @@
  *	David Weinehall March 24th, 1999
  *	- Fixed the output of 'Driver Installed' in /proc/mca/pos
  *	- Made the Integrated Video & SCSI show up even if they have id 0000
+ *
+ *	AV November 9th, 1999
+ *	- switched to regular procfs methods.
  */
 
 #include <linux/types.h>
@@ -105,52 +108,7 @@ static struct MCA_info* mca_info = NULL;
 /*--------------------------------------------------------------------*/
 
 #ifdef CONFIG_PROC_FS
-
 static void mca_do_proc_init(void);
-static int mca_default_procfn(char* buf, int slot);
-
-static ssize_t proc_mca_read(struct file*, char*, size_t, loff_t *);
-
-static struct file_operations proc_mca_operations = {
-	NULL,			/* llseek */
-	proc_mca_read,		/* read */
-	NULL,			/* write */
-	NULL,			/* readdir */
-	NULL,			/* poll */
-	NULL,			/* ioctl */
-	NULL,			/* mmap */
-	NULL,			/* open */
-	NULL,			/* flush */
-	NULL,			/* release */
-	NULL,			/* fsync */
-	NULL,			/* fascync */
-	NULL,			/* check_media_change */
-	NULL,			/* revalidate */
-	NULL			/* lock */
-};
-
-static struct inode_operations proc_mca_inode_operations = {
-	&proc_mca_operations,	/* default file-ops */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	NULL,			/* get_block */
-	NULL,			/* readpage */
-	NULL,			/* writepage */
-	NULL,			/* flushpage */
-	NULL,			/* truncate */
-	NULL,			/* permission */
-	NULL,			/* smap */
-	NULL			/* revalidate */
-};
 #endif
 
 /*--------------------------------------------------------------------*/
@@ -657,7 +615,8 @@ int mca_isenabled(int slot)
 
 #ifdef CONFIG_PROC_FS
 
-int get_mca_info(char *buf) 
+int get_mca_info(char *page, char **start, off_t off,
+				 int count, int *eof, void *data)
 {
 	int i, j, len = 0;
 
@@ -667,101 +626,45 @@ int get_mca_info(char *buf)
 
 		for(i=0; i<MCA_MAX_SLOT_NR; i++) 
 		{
-			len += sprintf(buf+len, "Slot %d: ", i+1);
+			len += sprintf(page+len, "Slot %d: ", i+1);
 			for(j=0; j<8; j++) 
-				len += sprintf(buf+len, "%02x ", mca_info->slot[i].pos[j]);
-			len += sprintf(buf+len, " %s\n", mca_info->slot[i].name);
+				len += sprintf(page+len, "%02x ", mca_info->slot[i].pos[j]);
+			len += sprintf(page+len, " %s\n", mca_info->slot[i].name);
 		}
 
 		/* Format POS registers of integrated video subsystem */
 
-		len += sprintf(buf+len, "Video : ");
+		len += sprintf(page+len, "Video : ");
 		for(j=0; j<8; j++) 
-			len += sprintf(buf+len, "%02x ", mca_info->slot[MCA_INTEGVIDEO].pos[j]);
-		len += sprintf(buf+len, " %s\n", mca_info->slot[MCA_INTEGVIDEO].name);
+			len += sprintf(page+len, "%02x ", mca_info->slot[MCA_INTEGVIDEO].pos[j]);
+		len += sprintf(page+len, " %s\n", mca_info->slot[MCA_INTEGVIDEO].name);
 
 		/* Format POS registers of integrated SCSI subsystem */
 	
-		len += sprintf(buf+len, "SCSI  : ");
+		len += sprintf(page+len, "SCSI  : ");
 		for(j=0; j<8; j++)
-			len += sprintf(buf+len, "%02x ", mca_info->slot[MCA_INTEGSCSI].pos[j]);
-		len += sprintf(buf+len, " %s\n", mca_info->slot[MCA_INTEGSCSI].name);
+			len += sprintf(page+len, "%02x ", mca_info->slot[MCA_INTEGSCSI].pos[j]);
+		len += sprintf(page+len, " %s\n", mca_info->slot[MCA_INTEGSCSI].name);
 	} else {
 		/* Leave it empty if MCA not detected - this should *never*
 		 * happen! 
 		 */
 	}
 
+	if (len <= off+count) *eof = 1;
+	*start = page + off;
+	len -= off;
+	if (len>count) len = count;
+	if (len<0) len = 0;
 	return len;
 }
 
-
 /*--------------------------------------------------------------------*/
 
-void __init mca_do_proc_init(void)
-{
-	int i;
-	struct proc_dir_entry* node = NULL;
-
-	if(mca_info == NULL) return;	/* Should never happen */
-
-	proc_register(proc_mca, &(struct proc_dir_entry) {
-		PROC_MCA_REGISTERS, 3, "pos", S_IFREG|S_IRUGO,
-		1, 0, 0, 0, &proc_mca_inode_operations,});
-
-	proc_register(proc_mca, &(struct proc_dir_entry) {
-		PROC_MCA_MACHINE, 7, "machine", S_IFREG|S_IRUGO,
-		1, 0, 0, 0, &proc_mca_inode_operations,});
-
-	/* Initialize /proc/mca entries for existing adapters */
-
-	for(i = 0; i < MCA_NUMADAPTERS; i++) {
-		mca_info->slot[i].procfn = 0;
-		mca_info->slot[i].dev = 0;
-
-		if(!mca_isadapter(i)) continue;
-
-		node = (struct proc_dir_entry *)kmalloc(sizeof(struct proc_dir_entry), GFP_KERNEL);
-
-		if(node == NULL) {
-			printk("Failed to allocate memory for MCA proc-entries!");
-			return;
-		}
-		memset(node, 0, sizeof(struct proc_dir_entry));
-
-		if(i < MCA_MAX_SLOT_NR) {
-			node->low_ino = PROC_MCA_SLOT + i;
-			node->namelen = sprintf(mca_info->slot[i].procname,
-				"slot%d", i+1);
-		} else if(i == MCA_INTEGVIDEO) {
-			node->low_ino = PROC_MCA_VIDEO;
-			node->namelen = sprintf(mca_info->slot[i].procname,
-				"video");
-		} else if(i == MCA_INTEGSCSI) {
-			node->low_ino = PROC_MCA_SCSI;
-			node->namelen = sprintf(mca_info->slot[i].procname,
-				"scsi");
-		}
-		node->name = mca_info->slot[i].procname;
-		node->mode = S_IFREG | S_IRUGO;
-		node->ops = &proc_mca_inode_operations;
-		proc_register(proc_mca, node);
-	}
-
-} /* mca_do_proc_init() */
-
-/*--------------------------------------------------------------------*/
-
-int mca_default_procfn(char* buf, int slot) 
+static int mca_default_procfn(char* buf, struct MCA_adapter *p)
 {
 	int len = 0, i;
-
-	/* This really shouldn't happen... */
-
-	if(mca_info == NULL) {
-		*buf = 0;
-		return 0;
-	}
+	int slot = p - mca_info->slot;
 
 	/* Print out the basic information */
 
@@ -772,21 +675,21 @@ int mca_default_procfn(char* buf, int slot)
 	} else if(slot == MCA_INTEGVIDEO) {
 		len += sprintf(buf+len, "Integrated Video Adapter\n");
 	}
-	if(mca_info->slot[slot].name[0]) {
+	if(p->name[0]) {
 
 		/* Drivers might register a name without /proc handler... */
 
 		len += sprintf(buf+len, "Adapter Name: %s\n",
-			mca_info->slot[slot].name);
+			p->name);
 	} else {
 		len += sprintf(buf+len, "Adapter Name: Unknown\n");
 	}
 	len += sprintf(buf+len, "Id: %02x%02x\n",
-		mca_info->slot[slot].pos[1], mca_info->slot[slot].pos[0]);
+		p->pos[1], p->pos[0]);
 	len += sprintf(buf+len, "Enabled: %s\nPOS: ",
 		mca_isenabled(slot) ? "Yes" : "No");
 	for(i=0; i<8; i++) {
-		len += sprintf(buf+len, "%02x ", mca_info->slot[slot].pos[i]);
+		len += sprintf(buf+len, "%02x ", p->pos[i]);
 	}
 	len += sprintf(buf+len, "\nDriver Installed: %s",
 		mca_is_adapter_used(slot) ? "Yes" : "No");
@@ -796,111 +699,80 @@ int mca_default_procfn(char* buf, int slot)
 	return len;
 } /* mca_default_procfn() */
 
-static int get_mca_machine_info(char* buf) 
+static int get_mca_machine_info(char* page, char **start, off_t off,
+				 int count, int *eof, void *data)
 {
 	int len = 0;
 
-	len += sprintf(buf+len, "Model Id: 0x%x\n", machine_id);
-	len += sprintf(buf+len, "Submodel Id: 0x%x\n", machine_submodel_id);
-	len += sprintf(buf+len, "BIOS Revision: 0x%x\n", BIOS_revision);
+	len += sprintf(page+len, "Model Id: 0x%x\n", machine_id);
+	len += sprintf(page+len, "Submodel Id: 0x%x\n", machine_submodel_id);
+	len += sprintf(page+len, "BIOS Revision: 0x%x\n", BIOS_revision);
 
+	if (len <= off+count) *eof = 1;
+	*start = page + off;
+	len -= off;
+	if (len>count) len = count;
+	if (len<0) len = 0;
 	return len;
 }
 
-static int mca_fill(char* page, int pid, int type, char** start,
-	loff_t *offset, int length)
+static int mca_read_proc(char *page, char **start, off_t off,
+				 int count, int *eof, void *data)
 {
+	struct MCA_adapter *p = (struct MCA_adapter *)data;
 	int len = 0;
-	int slot = 0;
-
-	switch(type) {
-		case PROC_MCA_REGISTERS:
-			return get_mca_info(page);
-		case PROC_MCA_MACHINE:
-			return get_mca_machine_info(page);
-		case PROC_MCA_VIDEO:
-			slot = MCA_INTEGVIDEO;
-			break;
-		case PROC_MCA_SCSI:
-			slot = MCA_INTEGSCSI;
-			break;
-		default:
-			if(type < PROC_MCA_SLOT || type >= PROC_MCA_LAST) {
-				return -EBADF;
-			}
-			slot = type - PROC_MCA_SLOT;
-			break;
-	}
-
-	/* If we made it here, we better have a valid slot */
 
 	/* Get the standard info */
 
-	len = mca_default_procfn(page, slot);
+	len = mca_default_procfn(page, p);
 
 	/* Do any device-specific processing, if there is any */
 
-	if(mca_info->slot[slot].procfn) {
-		len += mca_info->slot[slot].procfn(page+len, slot,
-			mca_info->slot[slot].dev);
+	if(p->procfn) {
+		len += p->procfn(page+len, p-mca_info->slot, p->dev);
 	}
-
+	if (len <= off+count) *eof = 1;
+	*start = page + off;
+	len -= off;
+	if (len>count) len = count;
+	if (len<0) len = 0;
 	return len;
-} /* mca_fill() */
+} /* mca_read_proc() */
 
-/* Blatantly stolen from fs/proc/array.c, and thus is probably overkill */ 
+/*--------------------------------------------------------------------*/
 
-#define PROC_BLOCK_SIZE	(3*1024)
-
-static ssize_t proc_mca_read(struct file* file,
-	char* buf, size_t count, loff_t *ppos)
+void __init mca_do_proc_init(void)
 {
-	unsigned long page;
-	char *start;
-	int length;
-	int end;
-	unsigned int type, pid;
-	struct proc_dir_entry *dp;
-	struct inode *inode = file->f_dentry->d_inode;
+	int i;
+	struct proc_dir_entry* node = NULL;
+	struct MCA_adapter *p;
 
-	if(count < 0)
-		return -EINVAL;
-	if(count > PROC_BLOCK_SIZE)
-		count = PROC_BLOCK_SIZE;
-	if(!(page = __get_free_page(GFP_KERNEL)))
-		return -ENOMEM;
-	type = inode->i_ino;
-	pid = type >> 16;
-	type &= 0x0000ffff;
-	start = NULL;
-	dp = (struct proc_dir_entry *) inode->u.generic_ip;
-	length = mca_fill((char *) page, pid, type,
-			  &start, ppos, count);
-	if(length < 0) {
-		free_page(page);
-		return length;
-	}
-	if(start != NULL) {
-		/* We have had block-adjusting processing! */
+	if(mca_info == NULL) return;	/* Should never happen */
 
-		copy_to_user(buf, start, length);
-		*ppos += length;
-		count = length;
-	} else {
-		/* Static 4kB (or whatever) block capacity */
+	create_proc_read_entry("pos",0,proc_mca,get_mca_info,NULL);
+	create_proc_read_entry("machine",0,proc_mca,get_mca_machine_info,NULL);
 
-		if(*ppos >= length) {
-			free_page(page);
-			return 0;
+	/* Initialize /proc/mca entries for existing adapters */
+
+	for(i = 0; i < MCA_NUMADAPTERS; i++) {
+		p = &mca_info->slot[i];
+		p->procfn = 0;
+
+		if(i < MCA_MAX_SLOT_NR) sprintf(p->procname,"slot%d", i+1);
+		else if(i == MCA_INTEGVIDEO) sprintf(p->procname,"video");
+		else if(i == MCA_INTEGSCSI) sprintf(p->procname,"scsi");
+
+		if(!mca_isadapter(i)) continue;
+
+		node = create_proc_read_entry(p->procname, 0, proc_mca,
+						mca_read_proc, (void *)p);
+
+		if(node == NULL) {
+			printk("Failed to allocate memory for MCA proc-entries!");
+			return;
 		}
-		if(count + *ppos > length)
-			count = length - *ppos;
-		end = count + *ppos;
-		copy_to_user(buf, (char *) page + *ppos, count);
-		*ppos = end;
 	}
-	free_page(page);
-	return count;
-} /* proc_mca_read() */
+
+} /* mca_do_proc_init() */
 
 #endif

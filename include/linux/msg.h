@@ -45,9 +45,9 @@ struct msginfo {
 	unsigned short  msgseg; 
 };
 
-#define MSGMNI   128   /* <= 32768 */     /* max # of msg queue identifiers */
-#define MSGMAX  4056   /* <= 4056 (?)*/   /* max size of message (bytes) */
-#define MSGMNB 16384   /* <= MAX_INT */   /* default max size of a message queue */
+#define MSGMNI   128   /* <= IPCMNI */     /* max # of msg queue identifiers */
+#define MSGMAX  8192   /* <= INT_MAX */   /* max size of message (bytes) */
+#define MSGMNB 16384   /* <= INT_MAX */   /* default max size of a message queue */
 
 /* unused */
 #define MSGPOOL (MSGMNI*MSGMNB/1024)  /* size in kilobytes of message pool */

@@ -143,7 +143,7 @@ static char *storenote(struct memelfnote *men, char *bufp)
  * store an ELF coredump header in the supplied buffer
  * - assume the memory image is the size specified
  */
-static void elf_kcore_store_hdr(char *bufp, size_t size, off_t dataoff)
+static void elf_kcore_store_hdr(char *bufp)
 {
 	struct elf_prstatus prstatus;	/* NT_PRSTATUS */
 	struct elf_prpsinfo psinfo;	/* NT_PRPSINFO */
@@ -154,65 +154,86 @@ static void elf_kcore_store_hdr(char *bufp, size_t size, off_t dataoff)
 
 	/* acquire an ELF header block from the buffer */
 	elf = (struct elfhdr *) bufp;
-	bufp += sizeof(*elf);
-	offset += sizeof(*elf);
+	bufp += sizeof(struct elfhdr);
+	offset += sizeof(struct elfhdr);
 
 	/* set up header */
 	memcpy(elf->e_ident,ELFMAG,SELFMAG);
 	elf->e_ident[EI_CLASS]	= ELF_CLASS;
 	elf->e_ident[EI_DATA]	= ELF_DATA;
 	elf->e_ident[EI_VERSION]= EV_CURRENT;
-	memset(elf->e_ident+EI_PAD,0,EI_NIDENT-EI_PAD);
+	memset(elf->e_ident+EI_PAD, 0, EI_NIDENT-EI_PAD);
 
 	elf->e_type	= ET_CORE;
 	elf->e_machine	= ELF_ARCH;
 	elf->e_version	= EV_CURRENT;
 	elf->e_entry	= 0;
-	elf->e_phoff	= sizeof(*elf);
+	elf->e_phoff	= sizeof(struct elfhdr);
 	elf->e_shoff	= 0;
 	elf->e_flags	= 0;
-	elf->e_ehsize	= sizeof(*elf);
+	elf->e_ehsize	= sizeof(struct elfhdr);
 	elf->e_phentsize= sizeof(struct elf_phdr);
-	elf->e_phnum	= 2;			/* no. of segments */
+	elf->e_phnum	= 1;	/* no. of segments  = 1 + Nmodules */
 	elf->e_shentsize= 0;
 	elf->e_shnum	= 0;
 	elf->e_shstrndx	= 0;
 
 	/* acquire an ELF program header blocks from the buffer for notes */
 	nhdr = (struct elf_phdr *) bufp;
-	bufp += sizeof(*nhdr);
-	offset += sizeof(*nhdr);
+	bufp += sizeof(struct elf_phdr);
+	offset += sizeof(struct elf_phdr);
 
 	/* store program headers for notes dump */
 	nhdr->p_type	= PT_NOTE;
 	nhdr->p_offset	= 0;
 	nhdr->p_vaddr	= 0;
 	nhdr->p_paddr	= 0;
+	nhdr->p_filesz	= 0;
 	nhdr->p_memsz	= 0;
 	nhdr->p_flags	= 0;
 	nhdr->p_align	= 0;
 
 	/* acquire an ELF program header blocks from the buffer for data */
 	dhdr = (struct elf_phdr *) bufp;
-	bufp += sizeof(*dhdr);
-	offset += sizeof(*dhdr);
+	bufp += sizeof(struct elf_phdr);
+	offset += sizeof(struct elf_phdr);
 
 	/* store program headers for data dump */
 	dhdr->p_type	= PT_LOAD;
 	dhdr->p_flags	= PF_R|PF_W|PF_X;
-	dhdr->p_offset	= dataoff;
+	dhdr->p_offset	= PAGE_SIZE;
 	dhdr->p_vaddr	= PAGE_OFFSET;
 	dhdr->p_paddr	= __pa(PAGE_OFFSET);
-	dhdr->p_filesz	= size;
-	dhdr->p_memsz	= size;
+	dhdr->p_filesz	= ((unsigned long)high_memory - PAGE_OFFSET + PAGE_SIZE);
+	dhdr->p_memsz	= ((unsigned long)high_memory - PAGE_OFFSET + PAGE_SIZE);
 	dhdr->p_align	= PAGE_SIZE;
+
+#ifdef CONFIG_MODULES
+	{
+		struct module *m;
+		for (m=module_list; m; m=m->next) {
+			dhdr = (struct elf_phdr *) bufp;
+			bufp += sizeof(struct elf_phdr);
+			offset += sizeof(struct elf_phdr);
+
+			dhdr->p_type	= PT_LOAD;
+			dhdr->p_flags	= PF_R|PF_W|PF_X;
+			dhdr->p_offset	= (unsigned long)m - PAGE_OFFSET + PAGE_SIZE;
+			dhdr->p_vaddr	= (unsigned long)m;
+			dhdr->p_paddr	= __pa(m);
+			dhdr->p_filesz	= m->size;
+			dhdr->p_memsz	= m->size;
+			dhdr->p_align	= 0;
+			elf->e_phnum++;
+		}
+	}
+#endif
 
 	/*
 	 * Set up the notes in similar form to SVR4 core dumps made
 	 * with info from their /proc.
 	 */
 	nhdr->p_offset	= offset;
-	nhdr->p_filesz	= 0;
 
 	/* set up the process status */
 	notes[0].name = "CORE";
@@ -289,7 +310,7 @@ ssize_t read_kcore(struct file *file, char *buffer, size_t buflen,
 
 		/* create a header */
 		memset(page,0,PAGE_SIZE);
-		elf_kcore_store_hdr(page,size-PAGE_SIZE,PAGE_SIZE);
+		elf_kcore_store_hdr(page);
 
 		/* copy data to the users buffer */
 		copy_to_user(buffer,page,tsz);

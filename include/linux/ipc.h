@@ -42,6 +42,8 @@ struct ipc_perm
 #define IPC_UNUSED	((void *) -1)
 #define IPC_NOID	((void *) -2)		/* being allocated/destroyed */
 
+#define IPCMNI 32768  /* <= MAX_INT limit for ipc arrays (including sysctl changes) */
+
 #endif /* __KERNEL__ */
 
 #endif /* _LINUX_IPC_H */

@@ -60,7 +60,7 @@ unsigned long get_kcore_size(void)
 	struct module * m;
 
 	if (module_list == &kernel_module)
-		return ((size_t)high_memory - PAGE_OFFSET + PAGE_SIZE);
+		return ((unsigned long)high_memory - PAGE_OFFSET + PAGE_SIZE);
 
 	/* shouldn't we have a rw spinlock for module_list? */
 	lock_kernel();
@@ -992,7 +992,7 @@ get_module_symbol(char *modname, char *symname)
 /* no MODULES so high_memory is good enough for /proc/kcore (TA) */
 unsigned long get_kcore_size(void)
 {
-	return ((size_t)high_memory - PAGE_OFFSET + PAGE_SIZE);
+	return ((unsigned long)high_memory - PAGE_OFFSET + PAGE_SIZE);
 }
 
 

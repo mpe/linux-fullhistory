@@ -34,6 +34,21 @@
  *					  exposed a problem in readdir
  *			2.1.107		code-freeze spellchecker run
  *	Aug 1998			2.1.118+ VFS changes
+ *	Sep 1998	2.1.122		another VFS change (follow_link)
+ *	Apr 1999	2.2.7		no more EBADF checking in
+ *					  lookup/readdir, use ERR_PTR
+ *	Jun 1999	2.3.6		d_alloc_root use changed
+ *			2.3.9		clean up usage of ENOENT/negative
+ *					  dentries in lookup
+ *					clean up page flags setting
+ *					  (error, uptodate, locking) in
+ *					  in readpage
+ *					use init_special_inode for
+ *					  fifos/sockets (and streamline) in
+ *					  read_inode, fix _ops table order
+ *	Aug 1999	2.3.16		__initfunc() => __init change
+ *	Oct 1999	2.3.24		page->owner hack obsoleted
+ *	Nov 1999	2.3.27		2.3.25+ page->offset => index change
  */
 
 /* todo:
@@ -404,7 +419,8 @@ romfs_readpage(struct file * file, struct page * page)
 	get_page(page);
 	buf = page_address(page);
 
-	offset = page->offset;
+	/* 32 bit warning -- but not for us :) */
+	offset = page->index << PAGE_CACHE_SHIFT;
 	if (offset < inode->i_size) {
 		avail = inode->i_size-offset;
 		readlen = min(avail, PAGE_SIZE);
