@@ -108,6 +108,11 @@ int sd_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
                 return -EACCES;
 	return revalidate_scsidisk(dev, 1);
 
+    case BLKSSZGET:
+	/* Block size of media */
+	return put_user(blksize_size[MAJOR(dev)][MINOR(dev)&0x0F],
+		(int *)arg);
+				
     RO_IOCTLS(dev, arg);
 
     default:

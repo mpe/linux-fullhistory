@@ -1,4 +1,4 @@
-/* $Id: cgsixfb.c,v 1.12 1998/11/27 00:02:04 anton Exp $
+/* $Id: cgsixfb.c,v 1.13 1999/01/28 08:19:18 ecd Exp $
  * cgsixfb.c: CGsix (GX,GXplus) frame buffer driver
  *
  * Copyright (C) 1996,1998 Jakub Jelinek (jj@ultra.linux.cz)
@@ -352,8 +352,8 @@ static void cg6_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 	do {
 		i = fbc->s;
 	} while (i & 0x10000000);
-	fbc->fg = attr_fgcol(p,*s);
-	fbc->bg = attr_bgcol(p,*s);
+	fbc->fg = attr_fgcol(p, scr_readw(s));
+	fbc->bg = attr_bgcol(p, scr_readw(s));
 	fbc->mode = 0x140000;
 	fbc->alu = 0xe880fc30;
 	fbc->pixelm = ~(0);
@@ -379,15 +379,15 @@ static void cg6_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 			fbc->x1 = (x += 4 * fontwidth(p)) - 1;
 			fbc->y0 = y;
 			if (fontheightlog(p)) {
-				fd1 = p->fontdata + ((*s++ & p->charmask) << fontheightlog(p));
-				fd2 = p->fontdata + ((*s++ & p->charmask) << fontheightlog(p));
-				fd3 = p->fontdata + ((*s++ & p->charmask) << fontheightlog(p));
-				fd4 = p->fontdata + ((*s++ & p->charmask) << fontheightlog(p));
+				fd1 = p->fontdata + ((scr_readw(s++) & p->charmask) << fontheightlog(p));
+				fd2 = p->fontdata + ((scr_readw(s++) & p->charmask) << fontheightlog(p));
+				fd3 = p->fontdata + ((scr_readw(s++) & p->charmask) << fontheightlog(p));
+				fd4 = p->fontdata + ((scr_readw(s++) & p->charmask) << fontheightlog(p));
 			} else {
-				fd1 = p->fontdata + ((*s++ & p->charmask) * fontheight(p));
-				fd2 = p->fontdata + ((*s++ & p->charmask) * fontheight(p));
-				fd3 = p->fontdata + ((*s++ & p->charmask) * fontheight(p));
-				fd4 = p->fontdata + ((*s++ & p->charmask) * fontheight(p));
+				fd1 = p->fontdata + ((scr_readw(s++) & p->charmask) * fontheight(p));
+				fd2 = p->fontdata + ((scr_readw(s++) & p->charmask) * fontheight(p));
+				fd3 = p->fontdata + ((scr_readw(s++) & p->charmask) * fontheight(p));
+				fd4 = p->fontdata + ((scr_readw(s++) & p->charmask) * fontheight(p));
 			}
 			if (fontwidth(p) == 8) {
 				for (i = 0; i < fontheight(p); i++)
@@ -408,11 +408,11 @@ static void cg6_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 			fbc->x1 = (x += 2 * fontwidth(p)) - 1;
 			fbc->y0 = y;
 			if (fontheightlog(p)) {
-				fd1 = p->fontdata + ((*s++ & p->charmask) << (fontheightlog(p) + 1));
-				fd2 = p->fontdata + ((*s++ & p->charmask) << (fontheightlog(p) + 1));
+				fd1 = p->fontdata + ((scr_readw(s++) & p->charmask) << (fontheightlog(p) + 1));
+				fd2 = p->fontdata + ((scr_readw(s++) & p->charmask) << (fontheightlog(p) + 1));
 			} else {
-				fd1 = p->fontdata + (((*s++ & p->charmask) * fontheight(p)) << 1);
-				fd2 = p->fontdata + (((*s++ & p->charmask) * fontheight(p)) << 1);
+				fd1 = p->fontdata + (((scr_readw(s++) & p->charmask) * fontheight(p)) << 1);
+				fd2 = p->fontdata + (((scr_readw(s++) & p->charmask) * fontheight(p)) << 1);
 			}
 			for (i = 0; i < fontheight(p); i++) {
 				fbc->font = ((((u32)*(u16 *)fd1) << fontwidth(p)) | ((u32)*(u16 *)fd2)) << (16 - fontwidth(p));
@@ -428,9 +428,9 @@ static void cg6_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 		fbc->x1 = (x += fontwidth(p)) - 1;
 		fbc->y0 = y;
 		if (fontheightlog(p))
-			i = ((*s++ & p->charmask) << fontheightlog(p));
+			i = ((scr_readw(s++) & p->charmask) << fontheightlog(p));
 		else
-			i = ((*s++ & p->charmask) * fontheight(p));
+			i = ((scr_readw(s++) & p->charmask) * fontheight(p));
 		if (fontwidth(p) <= 8) {
 			fd1 = p->fontdata + i;
 			for (i = 0; i < fontheight(p); i++)
@@ -535,6 +535,7 @@ static void cg6_reset (struct fb_info_sbusfb *fb)
 	struct cg6_tec *tec = fb->s.cg6.tec;
 	struct cg6_fbc *fbc = fb->s.cg6.fbc;
 	u32 mode;
+	int i;
 	
 	/* Turn off stuff in the Transform Engine. */
 	tec->tec_matrix = 0;
@@ -557,6 +558,9 @@ static void cg6_reset (struct fb_info_sbusfb *fb)
 	 * back to back store/loads on the mode register, so copy it
 	 * out instead. */
 	mode = fbc->mode;
+	do {
+		i = fbc->s;
+	} while (i & 0x10000000);
 	mode &= ~(CG6_FBC_BLIT_MASK | CG6_FBC_MODE_MASK |
 		       CG6_FBC_DRAW_MASK | CG6_FBC_BWRITE0_MASK |
 		       CG6_FBC_BWRITE1_MASK | CG6_FBC_BREAD_MASK |

@@ -4,12 +4,17 @@
 
 if [ "$CONFIG_FB" = "y" ]; then
   define_bool CONFIG_DUMMY_CONSOLE y
-  if [ "$CONFIG_APUS" = "y" ]; then
-    bool 'Permedia2 support' CONFIG_FB_PM2
-    if [ "$CONFIG_FB_PM2" = "y" ]; then
-      bool '  enable FIFO disconnect feature' CONFIG_FB_PM2_FIFO_DISCONNECT
-      if [ "$CONFIG_APUS" = "y" ]; then
-        bool '  Phase5 CVisionPPC/BVisionPPC support' CONFIG_FB_PM2_CVPPC
+  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+    if [ "$CONFIG_AMIGA" = "y" -o "$CONFIG_PCI" = "y" ]; then
+      bool 'Permedia2 support (experimental)' CONFIG_FB_PM2
+      if [ "$CONFIG_FB_PM2" = "y" ]; then
+        if [ "$CONFIG_PCI" = "y" ]; then
+          bool '  enable FIFO disconnect feature' CONFIG_FB_PM2_FIFO_DISCONNECT
+          bool '  generic Permedia2 PCI board support' CONFIG_FB_PM2_PCI
+        fi
+        if [ "$CONFIG_AMIGA" = "y" ]; then
+          bool '  Phase5 CVisionPPC/BVisionPPC support' CONFIG_FB_PM2_CVPPC
+        fi
       fi
     fi
   fi
@@ -18,6 +23,9 @@ if [ "$CONFIG_FB" = "y" ]; then
   fi
   if [ "$CONFIG_APOLLO" = "y" ]; then
     define_bool CONFIG_FB_APOLLO y
+  fi
+  if [ "$CONFIG_Q40" = "y" ]; then
+    define_bool CONFIG_FB_Q40 y
   fi
   if [ "$CONFIG_AMIGA" = "y" ]; then
     bool 'Amiga native chipset support' CONFIG_FB_AMIGA
@@ -33,6 +41,7 @@ if [ "$CONFIG_FB" = "y" ]; then
       bool 'Amiga CyberVision3D support (experimental)' CONFIG_FB_VIRGE
       tristate 'Amiga RetinaZ3 support' CONFIG_FB_RETINAZ3
       tristate 'Amiga CLgen driver' CONFIG_FB_CLGEN
+      bool 'Amiga FrameMaster II/Rainbow II support (experimental)' CONFIG_FB_FM2
     fi
   fi
   if [ "$CONFIG_ATARI" = "y" ]; then
@@ -185,6 +194,7 @@ if [ "$CONFIG_FB" = "y" ]; then
     if [ "$CONFIG_FB_ATARI" = "y" -o "$CONFIG_FB_ATY" = "y" -o \
 	 "$CONFIG_FB_MAC" = "y" -o "$CONFIG_FB_VESA" = "y" -o \
 	 "$CONFIG_FB_VIRTUAL" = "y" -o "$CONFIG_FB_TBOX" = "y" -o \
+	 "$CONFIG_FB_Q40" = "y" -o \
 	 "$CONFIG_FB_CONTROL" = "y" -o "$CONFIG_FB_CLGEN" = "y" -o \
 	 "$CONFIG_FB_VIRGE" = "y" -o "$CONFIG_FB_CYBER" = "y" -o \
 	 "$CONFIG_FB_VALKYRIE" = "y" -o "$CONFIG_FB_PLATINUM" = "y" -o \
@@ -195,6 +205,7 @@ if [ "$CONFIG_FB" = "y" ]; then
       if [ "$CONFIG_FB_ATARI" = "m" -o "$CONFIG_FB_ATY" = "m" -o \
 	   "$CONFIG_FB_MAC" = "m" -o "$CONFIG_FB_VESA" = "m" -o \
 	   "$CONFIG_FB_VIRTUAL" = "m" -o "$CONFIG_FB_TBOX" = "m" -o \
+	 "$CONFIG_FB_Q40" = "m" -o \
 	   "$CONFIG_FB_CONTROL" = "m" -o "$CONFIG_FB_CLGEN" = "m" -o \
 	   "$CONFIG_FB_VIRGE" = "m" -o "$CONFIG_FB_CYBER" = "m" -o \
  	   "$CONFIG_FB_VALKYRIE" = "m" -o "$CONFIG_FB_PLATINUM" = "m" -o \
@@ -218,7 +229,8 @@ if [ "$CONFIG_FB" = "y" ]; then
 	 "$CONFIG_FB_VESA" = "y" -o "$CONFIG_FB_VIRTUAL" = "y" -o \
 	 "$CONFIG_FB_CONTROL" = "y" -o "$CONFIG_FB_CLGEN" = "y" -o \
 	 "$CONFIG_FB_TGA" = "y" -o "$CONFIG_FB_PLATINUM" = "y" -o \
-	 "$CONFIG_FB_MATROX" = "y" -o "$CONFIG_FB_PM2" = "y" ]; then
+	 "$CONFIG_FB_MATROX" = "y" -o "$CONFIG_FB_PM2" = "y" -o \
+	 "$CONFIG_FB_FM2" = "y" ]; then
       define_bool CONFIG_FBCON_CFB32 y
     else
       if [ "$CONFIG_FB_ATARI" = "m" -o "$CONFIG_FB_ATY" = "m" -o \

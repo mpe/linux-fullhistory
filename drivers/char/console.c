@@ -203,7 +203,14 @@ static int scrollback_delta = 0;
 
 static inline unsigned short *screenpos(int currcons, int offset, int viewed)
 {
-	unsigned short *p = (unsigned short *)(visible_origin + offset);
+	unsigned short *p;
+	
+	if (!viewed)
+		p = (unsigned short *)(origin + offset);
+	else if (!sw->con_screen_pos)
+		p = (unsigned short *)(visible_origin + offset);
+	else
+		p = sw->con_screen_pos(vc_cons[currcons].d, offset);
 	return p;
 }
 
@@ -253,16 +260,16 @@ static void do_update_region(int currcons, unsigned long start, int count)
 	unsigned int xx, yy, offset;
 	u16 *p;
 
-	if (start < origin) {
-		count -= origin - start;
-		start = origin;
-	}
-	if (count <= 0)
-		return;
-	offset = (start - origin) / 2;
-	xx = offset % video_num_columns;
-	yy = offset / video_num_columns;
 	p = (u16 *) start;
+	if (!sw->con_getxy) {
+		offset = (start - origin) / 2;
+		xx = offset % video_num_columns;
+		yy = offset / video_num_columns;
+	} else {
+		int nxx, nyy;
+		start = sw->con_getxy(vc_cons[currcons].d, start, &nxx, &nyy);
+		xx = nxx; yy = nyy;
+	}
 	for(;;) {
 		u16 attrib = scr_readw(p) & 0xff00;
 		int startx = xx;
@@ -285,6 +292,10 @@ static void do_update_region(int currcons, unsigned long start, int count)
 			break;
 		xx = 0;
 		yy++;
+		if (sw->con_getxy) {
+			p = (u16 *)start;
+			start = sw->con_getxy(vc_cons[currcons].d, start, NULL, NULL);
+		}
 	}
 #endif
 }
@@ -2778,7 +2789,7 @@ void putconsxy(int currcons, char *p)
 	set_cursor(currcons);
 }
 
-u16 vcs_scr_readw(int currcons, u16 *org)
+u16 vcs_scr_readw(int currcons, const u16 *org)
 {
 	if ((unsigned long)org == pos && softcursor_original != -1)
 		return softcursor_original;

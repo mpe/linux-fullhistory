@@ -53,6 +53,13 @@
  *		This will be fixed in BETA4
  */
  
+/*
+ * bh_atomic() SMP races fixes and rewritten the locking code to be SMP safe
+ * and irq-mask friendly. NOTE: we can't use start_bh_atomic() in kick_shaper()
+ * because it's going to be recalled from an irq handler, and synchronize_bh()
+ * is a nono if called from irq context.
+ *						1999  Andrea Arcangeli
+ */
  
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -83,21 +90,17 @@ int sh_debug;		/* Debug flag */
  
 static int shaper_lock(struct shaper *sh)
 {
-	unsigned long flags;
-	save_flags(flags);
-	cli();
 	/*
-	 *	Lock in an interrupt may fail
+	 *	Lock in an interrupt must fail
 	 */
-	if(sh->locked && in_interrupt())
+	while (test_and_set_bit(0, &sh->locked))
 	{
-		restore_flags(flags);
-		return 0;
+		if (!in_interrupt())
+			sleep_on(&sh->wait_queue);
+		else
+			return 0;
+			
 	}
-	while(sh->locked)
-		sleep_on(&sh->wait_queue);
-	sh->locked=1;
-	restore_flags(flags);
 	return 1;
 }
 
@@ -105,7 +108,7 @@ static void shaper_kick(struct shaper *sh);
 
 static void shaper_unlock(struct shaper *sh)
 {
-	sh->locked=0;
+	clear_bit(0, &sh->locked);
 	wake_up(&sh->wait_queue);
 	shaper_kick(sh);
 }
@@ -240,7 +243,6 @@ static int shaper_qframe(struct shaper *shaper, struct sk_buff *skb)
  		dev_kfree_skb(ptr);
  	}
  	shaper_unlock(shaper);
- 	shaper_kick(shaper);
  	return 0;
 }
 
@@ -285,24 +287,16 @@ static void shaper_timer(unsigned long data)
 static void shaper_kick(struct shaper *shaper)
 {
 	struct sk_buff *skb;
-	unsigned long flags;
 	
-	save_flags(flags);
-	cli();
-
-	del_timer(&shaper->timer);
-
 	/*
 	 *	Shaper unlock will kick
 	 */
 	 
-	if(shaper->locked)
-	{	
+	if (test_and_set_bit(0, &shaper->locked))
+	{
 		if(sh_debug)
 			printk("Shaper locked.\n");
-		shaper->timer.expires=jiffies+1;
-		add_timer(&shaper->timer);
-		restore_flags(flags);
+		mod_timer(&shaper->timer, jiffies);
 		return;
 	}
 
@@ -320,7 +314,7 @@ static void shaper_kick(struct shaper *shaper)
 		 
 		if(sh_debug)
 			printk("Clock = %d, jiffies = %ld\n", skb->shapeclock, jiffies);
-		if(skb->shapeclock - jiffies <= SHAPER_BURST)
+		if(time_before_eq(skb->shapeclock - jiffies, SHAPER_BURST))
 		{
 			/*
 			 *	Pull the frame and get interrupts back on.
@@ -329,8 +323,6 @@ static void shaper_kick(struct shaper *shaper)
 			skb_unlink(skb);
 			if (shaper->recovery < skb->shapeclock + skb->shapelen)
 				shaper->recovery = skb->shapeclock + skb->shapelen;
-			restore_flags(flags);
-
 			/*
 			 *	Pass on to the physical target device via
 			 *	our low level packet thrower.
@@ -338,7 +330,6 @@ static void shaper_kick(struct shaper *shaper)
 			
 			skb->shapepend=0;
 			shaper_queue_xmit(shaper, skb);	/* Fire */
-			cli();
 		}
 		else
 			break;
@@ -349,17 +340,9 @@ static void shaper_kick(struct shaper *shaper)
 	 */
 	 
 	if(skb!=NULL)
-	{
-		del_timer(&shaper->timer);
-		shaper->timer.expires=skb->shapeclock;
-		add_timer(&shaper->timer);
-	}
-		
-	/*
-	 *	Interrupts on, mission complete
-	 */
-		
-	restore_flags(flags);
+		mod_timer(&shaper->timer, skb->shapeclock);
+
+	clear_bit(0, &shaper->locked);
 }
 
 
@@ -370,8 +353,14 @@ static void shaper_kick(struct shaper *shaper)
 static void shaper_flush(struct shaper *shaper)
 {
 	struct sk_buff *skb;
+ 	if(!shaper_lock(shaper))
+	{
+		printk(KERN_ERR "shaper: shaper_flush() called by an irq!\n");
+ 		return;
+	}
 	while((skb=skb_dequeue(&shaper->sendq))!=NULL)
 		dev_kfree_skb(skb);
+	shaper_unlock(shaper);
 }
 
 /*
@@ -405,7 +394,9 @@ static int shaper_close(struct device *dev)
 {
 	struct shaper *shaper=dev->priv;
 	shaper_flush(shaper);
+	start_bh_atomic();
 	del_timer(&shaper->timer);
+	end_bh_atomic();
 	MOD_DEC_USE_COUNT;
 	return 0;
 }

@@ -290,12 +290,12 @@ void fbcon_afb_putcs(struct vc_data *conp, struct display *p,
     int fg0, bg0, fg, bg;
 
     dest0 = p->screen_base+yy*fontheight(p)*p->next_line+xx;
-    fg0 = attr_fgcol(p,*s);
-    bg0 = attr_bgcol(p,*s);
+    fg0 = attr_fgcol(p, scr_readw(s));
+    bg0 = attr_bgcol(p, scr_readw(s));
 
     while (count--)
 	if (xx&3 || count < 3) {	/* Slow version */
-	    c1 = *s++ & p->charmask;
+	    c1 = scr_readw(s++) & p->charmask;
 	    dest1 = dest0++;
 	    xx++;
 
@@ -322,10 +322,10 @@ void fbcon_afb_putcs(struct vc_data *conp, struct display *p,
 		dest1 += p->next_plane;
 	    } while (--i);
 	} else {			/* Fast version */
-	    c1 = s[0] & p->charmask;
-	    c2 = s[1] & p->charmask;
-	    c3 = s[2] & p->charmask;
-	    c4 = s[3] & p->charmask;
+	    c1 = scr_readw(&s[0]) & p->charmask;
+	    c2 = scr_readw(&s[1]) & p->charmask;
+	    c3 = scr_readw(&s[2]) & p->charmask;
+	    c4 = scr_readw(&s[3]) & p->charmask;
 
 	    dest1 = dest0;
 	    cdat10 = p->fontdata+c1*fontheight(p);

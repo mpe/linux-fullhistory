@@ -244,7 +244,6 @@ void fbgen_set_disp(int con, struct fb_info_gen *info)
     memset(&fix, 0, sizeof(struct fb_fix_screeninfo));
     fbhw->encode_fix(&fix, &par, info);
 
-    display->screen_base = phys_to_virt((unsigned long)fix.smem_start);
     display->visual = fix.visual;
     display->type = fix.type;
     display->type_aux = fix.type_aux;
@@ -256,7 +255,7 @@ void fbgen_set_disp(int con, struct fb_info_gen *info)
 	display->can_soft_blank = 1;
     else
 	display->can_soft_blank = 0;
-    fbhw->set_dispsw(&par, display, info);
+    fbhw->set_disp(&par, display, info);
 #if 0 /* FIXME: generic inverse is not supported yet */
     display->inverse = (fix.visual == FB_VISUAL_MONO01 ? !inverse : inverse);
 #else

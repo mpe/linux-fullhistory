@@ -158,8 +158,8 @@ void fbcon_cfb4_putcs(struct vc_data *conp, struct display *p,
 	u32 eorx, fgx, bgx;
 
 	dest0 = p->screen_base + yy * fontheight(p) * bytes + xx * 4;
-	fgx=attr_fgcol(p,*s);
-	bgx=attr_bgcol(p,*s);
+	fgx=attr_fgcol(p,scr_readw(s));
+	bgx=attr_bgcol(p,scr_readw(s));
 	fgx |= (fgx << 4);
 	fgx |= (fgx << 8);
 	fgx |= (fgx << 16);
@@ -168,7 +168,7 @@ void fbcon_cfb4_putcs(struct vc_data *conp, struct display *p,
 	bgx |= (bgx << 16);
 	eorx = fgx ^ bgx;
 	while (count--) {
-		c = *s++ & p->charmask;
+		c = scr_readw(s++) & p->charmask;
 		cdat = p->fontdata + c * fontheight(p);
 
 		for (rows = fontheight(p), dest = dest0; rows-- ; dest += bytes) {

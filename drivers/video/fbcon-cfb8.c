@@ -163,8 +163,8 @@ void fbcon_cfb8_putcs(struct vc_data *conp, struct display *p,
     u32 eorx, fgx, bgx;
 
     dest0 = p->screen_base + yy * fontheight(p) * bytes + xx * fontwidth(p);
-    fgx=attr_fgcol(p,*s);
-    bgx=attr_bgcol(p,*s);
+    fgx=attr_fgcol(p,scr_readw(s));
+    bgx=attr_bgcol(p,scr_readw(s));
     fgx |= (fgx << 8);
     fgx |= (fgx << 16);
     bgx |= (bgx << 8);
@@ -173,7 +173,7 @@ void fbcon_cfb8_putcs(struct vc_data *conp, struct display *p,
     switch (fontwidth(p)) {
     case 4:
 	while (count--) {
-	    c = *s++ & p->charmask;
+	    c = scr_readw(s++) & p->charmask;
 	    cdat = p->fontdata + c * fontheight(p);
 
 	    for (rows = fontheight(p), dest = dest0; rows-- ; dest += bytes)
@@ -183,7 +183,7 @@ void fbcon_cfb8_putcs(struct vc_data *conp, struct display *p,
         break;
     case 8:
 	while (count--) {
-	    c = *s++ & p->charmask;
+	    c = scr_readw(s++) & p->charmask;
 	    cdat = p->fontdata + c * fontheight(p);
 
 	    for (rows = fontheight(p), dest = dest0; rows-- ; dest += bytes) {
@@ -196,7 +196,7 @@ void fbcon_cfb8_putcs(struct vc_data *conp, struct display *p,
     case 12:
     case 16:
 	while (count--) {
-	    c = *s++ & p->charmask;
+	    c = scr_readw(s++) & p->charmask;
 	    cdat = p->fontdata + (c * fontheight(p) << 1);
 
 	    for (rows = fontheight(p), dest = dest0; rows-- ; dest += bytes) {

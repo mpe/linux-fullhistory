@@ -10,7 +10,6 @@ if [ "$CONFIG_NETLINK" = "y" ]; then
   tristate 'Netlink device emulation' CONFIG_NETLINK_DEV
 fi
 bool 'Network firewalls' CONFIG_FIREWALL
-bool 'Network aliasing'  CONFIG_NET_ALIAS
 bool 'Socket Filtering'  CONFIG_FILTER
 tristate 'Unix domain sockets' CONFIG_UNIX
 bool 'TCP/IP networking' CONFIG_INET

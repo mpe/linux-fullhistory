@@ -187,11 +187,11 @@ void fbcon_cfb24_putcs(struct vc_data *conp, struct display *p,
     u32 eorx, fgx, bgx, d1, d2, d3, d4;
 
     dest0 = p->screen_base + yy * fontheight(p) * bytes + xx * fontwidth(p) * 3;
-    fgx = ((u32 *)p->dispsw_data)[attr_fgcol(p, *s)];
-    bgx = ((u32 *)p->dispsw_data)[attr_bgcol(p, *s)];
+    fgx = ((u32 *)p->dispsw_data)[attr_fgcol(p, scr_readw(s))];
+    bgx = ((u32 *)p->dispsw_data)[attr_bgcol(p, scr_readw(s))];
     eorx = fgx ^ bgx;
     while (count--) {
-	c = *s++ & p->charmask;
+	c = scr_readw(s++) & p->charmask;
 	if (fontwidth(p) <= 8)
 	    cdat = p->fontdata + c * fontheight(p);
 	  

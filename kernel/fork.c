@@ -172,8 +172,8 @@ inside:
 					if(last_pid & 0xffff8000)
 						last_pid = 300;
 					next_safe = PID_MAX;
-					goto repeat;
 				}
+				goto repeat;
 			}
 			if(p->pid > last_pid && next_safe > p->pid)
 				next_safe = p->pid;

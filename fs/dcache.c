@@ -470,7 +470,8 @@ void shrink_dcache_parent(struct dentry * parent)
  */
 void shrink_dcache_memory(int priority, unsigned int gfp_mask)
 {
-	prune_dcache(0);
+	if (gfp_mask & __GFP_IO)
+		prune_dcache(0);
 }
 
 #define NAME_ALLOC_LEN(len)	((len+16) & ~15)

@@ -81,6 +81,8 @@ struct file * get_empty_filp(void)
 		memset(f, 0, sizeof(*f));
 		f->f_count = 1;
 		f->f_version = ++event;
+		f->f_uid = current->fsuid;
+		f->f_gid = current->fsgid;
 		put_inuse(f);
 		return f;
 	}
@@ -119,6 +121,8 @@ int init_private_file(struct file *filp, struct dentry *dentry, int mode)
 	filp->f_mode   = mode;
 	filp->f_count  = 1;
 	filp->f_dentry = dentry;
+	filp->f_uid    = current->fsuid;
+	filp->f_gid    = current->fsgid;
 	filp->f_op     = dentry->d_inode->i_op->default_file_ops;
 	if (filp->f_op->open)
 		return filp->f_op->open(dentry->d_inode, filp);

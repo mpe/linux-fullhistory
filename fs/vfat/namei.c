@@ -506,10 +506,10 @@ static int vfat_find_form(struct inode *dir,char *name)
 			continue;
 		if (memcmp(de->name,name,MSDOS_NAME))
 			continue;
-		brelse(bh);
+		fat_brelse(dir->i_sb,bh);
 		return 0;
 	}
-	brelse(bh);
+	fat_brelse(dir->i_sb,bh);
 	return -ENOENT;
 }
 
@@ -1659,6 +1659,9 @@ int vfat_rename(struct inode *old_dir,struct dentry *old_dentry,
 		res = vfat_remove_entry(new_dir,&sinfo,new_inode);
 		if (res)
 			goto rename_done;
+
+		if (is_dir)
+			new_dir->i_nlink--;
 	}
 
 	/* Serious lossage here. FAT uses braindead inode numbers scheme,
@@ -1669,9 +1672,6 @@ int vfat_rename(struct inode *old_dir,struct dentry *old_dentry,
 	 * in icache and as a part of stat output. It would kill all the
 	 * 'busy' stuff on the spot. Later.
 	 */
-
-	if (is_dir)
-		new_dir->i_nlink--;
 
 	res = vfat_find(new_dir,&new_dentry->d_name,1,is_dir,&sinfo);
 

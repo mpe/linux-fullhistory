@@ -41,7 +41,7 @@ extern inline void scr_memsetw(u16 *s, u16 c, unsigned int count)
 #endif
 
 #ifndef VT_BUF_HAVE_MEMCPYW
-extern inline void scr_memcpyw(u16 *d, u16 *s, unsigned int count)
+extern inline void scr_memcpyw(u16 *d, const u16 *s, unsigned int count)
 {
 	count /= 2;
 	while (count--)
@@ -50,7 +50,7 @@ extern inline void scr_memcpyw(u16 *d, u16 *s, unsigned int count)
 #endif
 
 #ifndef VT_BUF_HAVE_MEMMOVEW
-extern inline void scr_memmovew(u16 *d, u16 *s, unsigned int count)
+extern inline void scr_memmovew(u16 *d, const u16 *s, unsigned int count)
 {
 	if (d < s)
 		scr_memcpyw(d, s, count);
@@ -65,14 +65,14 @@ extern inline void scr_memmovew(u16 *d, u16 *s, unsigned int count)
 #endif
 
 #ifndef VT_BUF_HAVE_MEMCPYF
-extern inline void scr_memcpyw_from(u16 *d, u16 *s, unsigned int count)
+extern inline void scr_memcpyw_from(u16 *d, const u16 *s, unsigned int count)
 {
 	count /= 2;
 	while (count--)
 		*d++ = scr_readw(s++);
 }
 
-extern inline void scr_memcpyw_to(u16 *d, u16 *s, unsigned int count)
+extern inline void scr_memcpyw_to(u16 *d, const u16 *s, unsigned int count)
 {
 	count /= 2;
 	while (count--)

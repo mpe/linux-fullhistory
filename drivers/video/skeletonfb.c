@@ -240,12 +240,11 @@ static int xxx_blank(int blank_mode, const struct fb_info *info)
     return 0;
 }
 
-static void xxx_set_dispsw(const void *par, struct display *disp,
-			   struct fb_info_gen *info)
+static void xxx_set_disp(const void *par, struct display *disp,
+			 struct fb_info_gen *info)
 {
-    unsigned long flags;
-
     /*
+     *  Fill in a pointer with the virtual address of the mapped frame buffer.
      *  Fill in a pointer to appropriate low level text console operations (and
      *  optionally a pointer to help data) for the video mode `par' of your
      *  video hardware. These can be generic software routines, or hardware
@@ -253,7 +252,7 @@ static void xxx_set_dispsw(const void *par, struct display *disp,
      *  If you don't have any appropriate operations, you must fill in a
      *  pointer to dummy operations, and there will be no text output.
      */
-    save_flags(flags); cli();
+    disp->screen_base = virtual_frame_buffer_address;
 #ifdef FBCON_HAS_CFB8
     if (is_cfb8) {
 	disp->dispsw = fbcon_cfb8;
@@ -278,7 +277,6 @@ static void xxx_set_dispsw(const void *par, struct display *disp,
     } else
 #endif
 	disp->dispsw = &fbcon_dummy;
-    restore_flags(flags);
 }
 
 

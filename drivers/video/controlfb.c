@@ -377,7 +377,7 @@ static int controlfb_switch(int con, struct fb_info *info)
 	control_set_hardware(p, &par);
 	control_set_dispsw(&fb_display[con], par.cmode, p);
 
-	if(fb_display[oldcon].var.yoffset != fb_display[con].var.yoffset);
+	if(fb_display[oldcon].var.yoffset != fb_display[con].var.yoffset)
 		controlfb_updatevar(con, info);
 
 	do_install_cmap(con, info);
@@ -447,21 +447,24 @@ static int controlfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 			     u_int transp, struct fb_info *info)
 {
 	struct fb_info_control *p = (struct fb_info_control *) info;
-	int i;
+	u_int i;
+	__u8 r, g, b;
 
 	if (regno > 255)
 		return 1;
-	red >>= 8;
-	green >>= 8;
-	blue >>= 8;
-	p->palette[regno].red = red;
-	p->palette[regno].green = green;
-	p->palette[regno].blue = blue;
+
+	r = red >> 8;
+	g = green >> 8;
+	b = blue >> 8;
+
+	p->palette[regno].red = r;
+	p->palette[regno].green = g;
+	p->palette[regno].blue = b;
 
 	out_8(&p->cmap_regs->addr, regno);	/* tell clut what addr to fill	*/
-	out_8(&p->cmap_regs->lut, red);		/* send one color channel at	*/
-	out_8(&p->cmap_regs->lut, green);	/* a time...			*/
-	out_8(&p->cmap_regs->lut, blue);
+	out_8(&p->cmap_regs->lut, r);		/* send one color channel at	*/
+	out_8(&p->cmap_regs->lut, g);		/* a time...			*/
+	out_8(&p->cmap_regs->lut, b);
 
 	if (regno < 16)
 		switch (p->par.cmode) {
@@ -501,8 +504,9 @@ extern struct fb_info *console_fb_info;
 
 static inline int control_vram_reqd(int video_mode, int color_mode)
 {
-	return control_reg_init[video_mode-1]->vres
-		* control_reg_init[video_mode-1]->hres << color_mode;
+	return (control_reg_init[video_mode-1]->vres
+		* control_reg_init[video_mode-1]->hres << color_mode)
+	       + control_reg_init[video_mode-1]->offset[color_mode];
 }
 
 static void set_control_clock(unsigned char *params)
@@ -557,6 +561,7 @@ __initfunc(static void init_control(struct fb_info_control *p))
 	par_set = 1;	/* Debug */
 	
 	control_par_to_var(par, &var);
+	var.activate = FB_ACTIVATE_NOW;
 	control_set_var(&var, -1, &p->info);
 	
 	p->info.flags = FBINFO_FLAG_DEFAULT;
@@ -616,11 +621,11 @@ static void control_set_hardware(struct fb_info_control *p, struct fb_par_contro
 	for (i = 0; i < 16; ++i, ++rp)
 		out_le32(&rp->r, init->regs[i]);
 	
-	out_le32(&p->control_regs->pitch.r, init->hres << cmode);
+	out_le32(&p->control_regs->pitch.r, par->vxres << cmode);
 	out_le32(&p->control_regs->mode.r, init->mode[cmode]);
 	out_le32(&p->control_regs->flags.r, flags);
 	out_le32(&p->control_regs->start_addr.r,
-	    par->yoffset * (par->vxres << par->cmode));
+	    par->yoffset * (par->vxres << cmode));
 	out_le32(&p->control_regs->reg18.r, 0x1e5);
 	out_le32(&p->control_regs->reg19.r, 0);
 
@@ -762,8 +767,6 @@ static int control_var_to_par(struct fb_var_screeninfo *var,
 	int xres = var->xres;
 	int yres = var->yres;
 	int bpp = var->bits_per_pixel;
-	
-	struct control_regvals *init;
 	struct fb_info_control *p = (struct fb_info_control *) fb_info;
 
     /*
@@ -776,7 +779,7 @@ static int control_var_to_par(struct fb_var_screeninfo *var,
      */
 	/* swiped by jonh from atyfb.c */
 	if (xres <= 512 && yres <= 384)
-		par->vmode = VMODE_512_384_60;		 /* 512x384, 60Hz */
+		par->vmode = VMODE_512_384_60;		/* 512x384, 60Hz */
 	else if (xres <= 640 && yres <= 480)
 		par->vmode = VMODE_640_480_67;		/* 640x480, 67Hz */
 	else if (xres <= 640 && yres <= 870)
@@ -844,8 +847,7 @@ static int control_var_to_par(struct fb_var_screeninfo *var,
 	}
 
 	/* Check if we know about the wanted video mode */
-	init = control_reg_init[par->vmode-1];
-	if (init == NULL) {
+	if (control_reg_init[par->vmode - 1] == NULL) {
 		printk(KERN_ERR "init is null in control_var_to_par().\n");
 		/* I'm not sure if control has any specific requirements --	*/
 		/* if we have a regvals struct, we're good to go?		*/
@@ -1010,7 +1012,7 @@ static void control_par_to_fix(struct fb_par_control *par, struct fb_fix_screeni
 
 	fix->smem_start = (void *)(p->frame_buffer_phys
 		+ control_reg_init[par->vmode-1]->offset[par->cmode]);
-	fix->smem_len = p->total_vram;
+	fix->smem_len = p->total_vram - control_reg_init[par->vmode-1]->offset[par->cmode];
 	fix->visual = (par->cmode == CMODE_8) ?
 		FB_VISUAL_PSEUDOCOLOR : FB_VISUAL_DIRECTCOLOR;
 	fix->line_length = par->vxres << par->cmode;
@@ -1046,6 +1048,70 @@ static void control_par_to_display(struct fb_par_control *par,
 	control_set_dispsw(disp, par->cmode, p);
 }
 
+static void control_cfb16_revc(struct display *p, int xx, int yy)
+{
+    u8 *dest;
+    int bytes = p->next_line, rows;
+
+    dest = p->screen_base + yy * fontheight(p) * bytes + xx * fontwidth(p)*2;
+    for (rows = fontheight(p); rows--; dest += bytes) {
+       switch (fontwidth(p)) {
+       case 16:
+           ((u32 *)dest)[6] ^= 0x3def3def; ((u32 *)dest)[7] ^= 0x3def3def;
+           /* FALL THROUGH */
+       case 12:
+           ((u32 *)dest)[4] ^= 0x3def3def; ((u32 *)dest)[5] ^= 0x3def3def;
+           /* FALL THROUGH */
+       case 8:
+           ((u32 *)dest)[2] ^= 0x3def3def; ((u32 *)dest)[3] ^= 0x3def3def;
+           /* FALL THROUGH */
+       case 4:
+           ((u32 *)dest)[0] ^= 0x3def3def; ((u32 *)dest)[1] ^= 0x3def3def;
+       }
+    }
+}
+
+static void control_cfb32_revc(struct display *p, int xx, int yy)
+{
+    u8 *dest;
+    int bytes = p->next_line, rows;
+
+    dest = p->screen_base + yy * fontheight(p) * bytes + xx * fontwidth(p) * 4;
+    for (rows = fontheight(p); rows--; dest += bytes) {
+       switch (fontwidth(p)) {
+       case 16:
+           ((u32 *)dest)[12] ^= 0x0f0f0f0f; ((u32 *)dest)[13] ^= 0x0f0f0f0f;
+           ((u32 *)dest)[14] ^= 0x0f0f0f0f; ((u32 *)dest)[15] ^= 0x0f0f0f0f;
+           /* FALL THROUGH */
+       case 12:
+           ((u32 *)dest)[8] ^= 0x0f0f0f0f; ((u32 *)dest)[9] ^= 0x0f0f0f0f;
+           ((u32 *)dest)[10] ^= 0x0f0f0f0f; ((u32 *)dest)[11] ^= 0x0f0f0f0f;
+           /* FALL THROUGH */
+       case 8:
+           ((u32 *)dest)[4] ^= 0x0f0f0f0f; ((u32 *)dest)[5] ^= 0x0f0f0f0f;
+           ((u32 *)dest)[6] ^= 0x0f0f0f0f; ((u32 *)dest)[7] ^= 0x0f0f0f0f;
+           /* FALL THROUGH */
+       case 4:
+           ((u32 *)dest)[0] ^= 0x0f0f0f0f; ((u32 *)dest)[1] ^= 0x0f0f0f0f;
+           ((u32 *)dest)[2] ^= 0x0f0f0f0f; ((u32 *)dest)[3] ^= 0x0f0f0f0f;
+           /* FALL THROUGH */
+       }
+    }
+}
+
+static struct display_switch control_cfb16 = {
+    fbcon_cfb16_setup, fbcon_cfb16_bmove, fbcon_cfb16_clear, fbcon_cfb16_putc,
+    fbcon_cfb16_putcs, control_cfb16_revc, NULL, NULL, fbcon_cfb16_clear_margins,
+    FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
+};
+
+static struct display_switch control_cfb32 = {
+    fbcon_cfb32_setup, fbcon_cfb32_bmove, fbcon_cfb32_clear, fbcon_cfb32_putc,
+    fbcon_cfb32_putcs, control_cfb32_revc, NULL, NULL, fbcon_cfb32_clear_margins,
+    FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
+};
+
+
 static void control_set_dispsw(struct display *disp, int cmode, struct fb_info_control *p)
 {
 	switch (cmode) {
@@ -1056,13 +1122,13 @@ static void control_set_dispsw(struct display *disp, int cmode, struct fb_info_c
 #endif
 #ifdef FBCON_HAS_CFB16
 		case CMODE_16:
-			disp->dispsw = &fbcon_cfb16;
+			disp->dispsw = &control_cfb16;
 			disp->dispsw_data = p->fbcon_cmap.cfb16;
 			break;
 #endif
 #ifdef FBCON_HAS_CFB32
 		case CMODE_32:
-			disp->dispsw = &fbcon_cfb32;
+			disp->dispsw = &control_cfb32;
 			disp->dispsw_data = p->fbcon_cmap.cfb32;
 			break;
 #endif

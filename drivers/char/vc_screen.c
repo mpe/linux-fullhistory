@@ -89,6 +89,7 @@ vcs_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 	long p = *ppos;
 	long viewed, attr, size, read;
 	char *buf0;
+	int col, maxcol;
 	unsigned short *org = NULL;
 
 	attr = (currcons & 128);
@@ -111,10 +112,19 @@ vcs_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 		count = size - p;
 
 	buf0 = buf;
+	maxcol = video_num_columns;
 	if (!attr) {
 		org = screen_pos(currcons, p, viewed);
-		while (count-- > 0)
+		col = p % maxcol;
+		p += maxcol - col;
+		while (count-- > 0) {
 			put_user(vcs_scr_readw(currcons, org++) & 0xff, buf++);
+			if (++col == maxcol) {
+				org = screen_pos(currcons, p, viewed);
+				col = 0;
+				p += maxcol;
+			}
+		}
 	} else {
 		if (p < HEADER_SIZE) {
 			char header[HEADER_SIZE];
@@ -124,20 +134,35 @@ vcs_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 			while (p < HEADER_SIZE && count > 0)
 			    { count--; put_user(header[p++], buf++); }
 		}
+		p -= HEADER_SIZE;
+		col = (p/2) % maxcol;
 		if (count > 0) {
-		    p -= HEADER_SIZE;
-		    org = screen_pos(currcons, p/2, viewed);
-		    if ((p & 1) && count > 0)
+			org = screen_pos(currcons, p/2, viewed);
+			if ((p & 1) && count > 0) {
+				count--;   
 #ifdef __BIG_ENDIAN
-			    { count--; put_user(vcs_scr_readw(currcons, org++) & 0xff, buf++); }
+				put_user(vcs_scr_readw(currcons, org++) & 0xff, buf++);
 #else
-			    { count--; put_user(vcs_scr_readw(currcons, org++) >> 8, buf++); }
+				put_user(vcs_scr_readw(currcons, org++) >> 8, buf++);
 #endif
+				p++;
+				if (++col == maxcol) {
+					org = screen_pos(currcons, p/2, viewed);
+					col = 0;
+				}
+			}
+			p /= 2;
+			p += maxcol - col;
 		}
 		while (count > 1) {
 			put_user(vcs_scr_readw(currcons, org++), (unsigned short *) buf);
 			buf += 2;
 			count -= 2;
+			if (++col == maxcol) {
+				org = screen_pos(currcons, p, viewed);
+				col = 0;
+				p += maxcol;
+			}
 		}
 		if (count > 0)
 #ifdef __BIG_ENDIAN
@@ -159,6 +184,7 @@ vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 	long p = *ppos;
 	long viewed, attr, size, written;
 	const char *buf0;
+	int col, maxcol;
 	u16 *org0 = NULL, *org = NULL;
 
 	attr = (currcons & 128);
@@ -181,14 +207,22 @@ vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 		count = size - p;
 
 	buf0 = buf;
+	maxcol = video_num_columns;
 	if (!attr) {
 		org0 = org = screen_pos(currcons, p, viewed);
+		col = p % maxcol;
+		p += maxcol - col;
 		while (count > 0) {
 			unsigned char c;
 			count--;
 			get_user(c, (const unsigned char*)buf++);
 			vcs_scr_writew(currcons, (vcs_scr_readw(currcons, org) & 0xff00) | c, org);
 			org++;
+			if (++col == maxcol) {
+				org = screen_pos(currcons, p, viewed);
+				col = 0;
+				p += maxcol;
+			}
 		}
 	} else {
 		if (p < HEADER_SIZE) {
@@ -199,8 +233,9 @@ vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 			if (!viewed)
 				putconsxy(currcons, header+2);
 		}
+		p -= HEADER_SIZE;
+		col = (p/2) % maxcol;
 		if (count > 0) {
-			p -= HEADER_SIZE;
 			org0 = org = screen_pos(currcons, p/2, viewed);
 			if ((p & 1) && count > 0) {
 			    char c;
@@ -214,7 +249,14 @@ vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 				     (vcs_scr_readw(currcons, org) & 0xff), org);
 #endif
 				org++;
+				p++;
+				if (++col == maxcol) {
+					org = screen_pos(currcons, p/2, viewed);
+					col = 0;
+				}
 			}
+			p /= 2;
+			p += maxcol - col;
 		}
 		while (count > 1) {
 			unsigned short w;
@@ -222,6 +264,11 @@ vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 			vcs_scr_writew(currcons, w, org++);
 			buf += 2;
 			count -= 2;
+			if (++col == maxcol) {
+				org = screen_pos(currcons, p, viewed);
+				col = 0;
+				p += maxcol;
+			}
 		}
 		if (count > 0) {
 			unsigned char c;

@@ -563,6 +563,7 @@ void scsi_sleep (int timeout)
     struct semaphore sem = MUTEX_LOCKED;
     struct timer_list timer;
 
+    init_timer(&timer);
     timer.data = (unsigned long) &sem;
     timer.expires = jiffies + timeout;
     timer.function = (void (*)(unsigned long))scsi_sleep_done;

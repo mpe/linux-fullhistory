@@ -364,6 +364,14 @@ else
   endif
 endif                                             
 
+ifeq ($(CONFIG_RADIO_TYPHOON),y)
+L_OBJS += radio-typhoon.o
+else
+  ifeq ($(CONFIG_RADIO_TYPHOON),m)
+  M_OBJS += radio-typhoon.o
+  endif
+endif                                             
+
 ifeq ($(CONFIG_RADIO_ZOLTRIX),y)
 L_OBJS += radio-zoltrix.o
 else

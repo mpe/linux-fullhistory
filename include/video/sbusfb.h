@@ -15,8 +15,12 @@ struct bt_regs {
 struct fb_info_creator {
 	struct ffb_fbc *fbc;
 	struct ffb_dac *dac;
-	int dac_rev;
 	int xy_margin;
+	int fifo_cache;
+	u64 yx_margin;
+	int fg_cache;
+	int bg_cache;
+	int dac_rev;
 };
 struct fb_info_cgsix {
 	struct bt_regs *bt;

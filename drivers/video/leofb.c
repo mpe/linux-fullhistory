@@ -265,8 +265,8 @@ static void leo_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 	do {
 		i = us->csr;
 	} while (i & 0x20000000);
-	ss->fg = attr_fgcol(p,*s) << 24;
-	ss->bg = attr_bgcol(p,*s) << 24;
+	ss->fg = attr_fgcol(p,scr_readw(s)) << 24;
+	ss->bg = attr_bgcol(p,scr_readw(s)) << 24;
 	ss->rop = 0x310040;
 	ss->planemask = 0xff000000;
 	us->fontc2 = 0xFFFFFFFE;
@@ -287,15 +287,15 @@ static void leo_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 		while (count >= 4) {
 			count -= 4;
 			if (fontheightlog(p)) {
-				fd1 = p->fontdata + ((*s++ & p->charmask) << fontheightlog(p));
-				fd2 = p->fontdata + ((*s++ & p->charmask) << fontheightlog(p));
-				fd3 = p->fontdata + ((*s++ & p->charmask) << fontheightlog(p));
-				fd4 = p->fontdata + ((*s++ & p->charmask) << fontheightlog(p));
+				fd1 = p->fontdata + ((scr_readw(s++) & p->charmask) << fontheightlog(p));
+				fd2 = p->fontdata + ((scr_readw(s++) & p->charmask) << fontheightlog(p));
+				fd3 = p->fontdata + ((scr_readw(s++) & p->charmask) << fontheightlog(p));
+				fd4 = p->fontdata + ((scr_readw(s++) & p->charmask) << fontheightlog(p));
 			} else {
-				fd1 = p->fontdata + ((*s++ & p->charmask) * fontheight(p));
-				fd2 = p->fontdata + ((*s++ & p->charmask) * fontheight(p));
-				fd3 = p->fontdata + ((*s++ & p->charmask) * fontheight(p));
-				fd4 = p->fontdata + ((*s++ & p->charmask) * fontheight(p));
+				fd1 = p->fontdata + ((scr_readw(s++) & p->charmask) * fontheight(p));
+				fd2 = p->fontdata + ((scr_readw(s++) & p->charmask) * fontheight(p));
+				fd3 = p->fontdata + ((scr_readw(s++) & p->charmask) * fontheight(p));
+				fd4 = p->fontdata + ((scr_readw(s++) & p->charmask) * fontheight(p));
 			}
 			if (fontwidth(p) == 8) {
 				for (i = 0; i < fontheight(p); i++, u += 2048)
@@ -315,11 +315,11 @@ static void leo_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 		while (count >= 2) {
 			count -= 2;
 			if (fontheightlog(p)) {
-				fd1 = p->fontdata + ((*s++ & p->charmask) << (fontheightlog(p) + 1));
-				fd2 = p->fontdata + ((*s++ & p->charmask) << (fontheightlog(p) + 1));
+				fd1 = p->fontdata + ((scr_readw(s++) & p->charmask) << (fontheightlog(p) + 1));
+				fd2 = p->fontdata + ((scr_readw(s++) & p->charmask) << (fontheightlog(p) + 1));
 			} else {
-				fd1 = p->fontdata + (((*s++ & p->charmask) * fontheight(p)) << 1);
-				fd2 = p->fontdata + (((*s++ & p->charmask) * fontheight(p)) << 1);
+				fd1 = p->fontdata + (((scr_readw(s++) & p->charmask) * fontheight(p)) << 1);
+				fd2 = p->fontdata + (((scr_readw(s++) & p->charmask) * fontheight(p)) << 1);
 			}
 			for (i = 0; i < fontheight(p); i++, u += 2048) {
 				*u = ((((u32)*(u16 *)fd1) << fontwidth(p)) | ((u32)*(u16 *)fd2)) << (16 - fontwidth(p));
@@ -333,9 +333,9 @@ static void leo_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 	while (count) {
 		count--;
 		if (fontheightlog(p))
-			i = ((*s++ & p->charmask) << fontheightlog(p));
+			i = ((scr_readw(s++) & p->charmask) << fontheightlog(p));
 		else
-			i = ((*s++ & p->charmask) * fontheight(p));
+			i = ((scr_readw(s++) & p->charmask) * fontheight(p));
 		if (fontwidth(p) <= 8) {
 			fd1 = p->fontdata + i;
 			for (i = 0; i < fontheight(p); i++, u += 2048)

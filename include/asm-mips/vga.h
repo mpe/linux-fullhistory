@@ -19,7 +19,7 @@ extern inline void scr_writew(u16 val, u16 *addr)
 		writew(val, (unsigned long) addr);
 }
 
-extern inline u16 scr_readw(u16 *addr)
+extern inline u16 scr_readw(const u16 *addr)
 {
 	if ((long) addr < 0)
 		return *addr;

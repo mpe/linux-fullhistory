@@ -89,11 +89,6 @@
 #define rl_3d(reg) \
                 (*((unsigned long volatile *)(CyberRegs + reg)))
 
-
-
-
-
-
 struct virgefb_par {
    int xres;
    int yres;
@@ -109,6 +104,11 @@ static int currcon = 0;
 static struct display disp;
 static struct fb_info fb_info;
 
+static union {
+#ifdef FBCON_HAS_CFB16
+    u16 cfb16[16];
+#endif
+} fbcon_cmap;
 
 /*
  *    Switch for Chipset Independency
@@ -132,6 +132,7 @@ static struct fb_hwswitch {
    void (*blank)(int blank);
 } *fbhw;
 
+static int blit_maybe_busy = 0;
 
 /*
  *    Frame Buffer Name
@@ -148,7 +149,7 @@ static char virgefb_name[16] = "Cybervision/3D";
 #define VIRGE8_HEIGHT 886
 #define VIRGE8_PIXCLOCK 12500    /* ++Geert: Just a guess */
 
-#if 0
+#if 1
 #define VIRGE16_WIDTH 800
 #define VIRGE16_HEIGHT 600
 #endif
@@ -167,6 +168,8 @@ static unsigned long Cyber_register_base;
 static unsigned long Cyber_vcode_switch_base;
 static unsigned char cv3d_on_zorro2;
  
+#define CYBMEM_OFFSET_8  0x800000	/* offsets from start of video - */ 
+#define CYBMEM_OFFSET_16 0x400000	/* ram to appropriate aperture */
 
 /*
  *    Predefined Video Modes
@@ -216,15 +219,43 @@ static struct fb_videomode virgefb_predefined[] __initdata = {
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
 	}
     }, {
+	"640x480-16", {		/* Cybervision 16 bpp */
+	    640, 480, 640, 480, 0, 0, 16, 0,
+	    {11, 5, 0}, {5, 6, 0}, {0, 5, 0}, {0, 0, 0},
+	    0, 0, -1, -1, FB_ACCELF_TEXT, VIRGE16_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+	}
+    }, {
 	"800x600-16", {		/* Cybervision 16 bpp */
 	    800, 600, 800, 600, 0, 0, 16, 0,
 	    {11, 5, 0}, {5, 6, 0}, {0, 5, 0}, {0, 0, 0},
-	    0, 0, -1, -1, 0, VIRGE16_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    0, 0, -1, -1, FB_ACCELF_TEXT, VIRGE16_PIXCLOCK, 64, 96, 35, 12, 112, 2,
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
 	}
     }, {
 	"1024x768-16", {         /* Cybervision 16 bpp */
 	    1024, 768, 1024, 768, 0, 0, 16, 0,
+	    {11, 5, 0}, {5, 6, 0}, {0, 5, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, VIRGE16_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+       }
+    }, {
+	"1152x886-16", {         /* Cybervision 16 bpp */
+	    1152, 886, 1152, 886, 0, 0, 16, 0,
+	    {11, 5, 0}, {5, 6, 0}, {0, 5, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, VIRGE16_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+       }
+    }, {
+	"1280x1024-16", {         /* Cybervision 16 bpp */
+	    1280, 1024, 1280, 1024, 0, 0, 16, 0,
+	    {11, 5, 0}, {5, 6, 0}, {0, 5, 0}, {0, 0, 0},
+	    0, 0, -1, -1, 0, VIRGE16_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
+       }
+    }, {
+	"1600x1200-16", {         /* Cybervision 16 bpp */
+	    1600, 1200, 1600, 1200, 0, 0, 16, 0,
 	    {11, 5, 0}, {5, 6, 0}, {0, 5, 0}, {0, 0, 0},
 	    0, 0, -1, -1, 0, VIRGE16_PIXCLOCK, 64, 96, 35, 12, 112, 2,
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
@@ -246,8 +277,8 @@ static int Cyberfb_Cyber16 = 0;       /* Use Cybervision board */
  *    Some default modes
  */
 
-#define VIRGE8_DEFMODE     (0)
-#define VIRGE16_DEFMODE    (6)
+#define VIRGE8_DEFMODE     (1)
+#define VIRGE16_DEFMODE    (7)
 
 static struct fb_var_screeninfo virgefb_default;
 
@@ -294,6 +325,9 @@ static void Cyberfb_blank(int blank, struct fb_info *info);
 static struct display_switch fbcon_virge8;
 #endif
 
+#ifdef FBCON_HAS_CFB16
+static struct display_switch fbcon_virge16;
+#endif
 
 /*
  *   Hardware Specific Routines
@@ -353,15 +387,14 @@ static int Cyber_init(void)
 	 *                (the 3D penguin might need texture memory :-) )
 	 */
 
-	memset ((char*)CyberMem, 0, 1600 * 1200);
-
-	/* Disable hardware cursor */
 	if (cv3d_on_zorro2) {
 		CyberSize = 0x00380000; /* 3.5 MB , we need some space for the registers? */
 	} else {
 		CyberSize = 0x00400000; /* 4 MB */
 	}
+	memset ((char*)CyberMem, 0, CyberSize);
 
+	/* Disable hardware cursor */
 	vgawb_3d(0x3c8, 255);
 	vgawb_3d(0x3c9, 56);
 	vgawb_3d(0x3c9, 100);
@@ -396,7 +429,18 @@ static int Cyber_encode_fix(struct fb_fix_screeninfo *fix,
 {
 	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
 	strcpy(fix->id, virgefb_name);
-	fix->smem_start = (char*) CyberMem_phys;
+	if (cv3d_on_zorro2) {
+		fix->smem_start = (char*) CyberMem_phys;
+	} else {
+		switch (par->bpp) {
+			case 8:
+				fix->smem_start = (char*) (CyberMem_phys + CYBMEM_OFFSET_8);
+				break;
+			case 16:
+				fix->smem_start = (char*) (CyberMem_phys + CYBMEM_OFFSET_16);
+				break;
+		}
+	}
 	fix->smem_len = CyberSize;
 	fix->mmio_start = (char*) CyberRegs_phys;
 	fix->mmio_len = 0x10000; /* TODO: verify this for the CV64/3D */
@@ -467,24 +511,27 @@ static int Cyber_encode_var(struct fb_var_screeninfo *var,
 	var->bits_per_pixel = par->bpp;
 	var->grayscale = 0;
 
-	if (par->bpp == 8) {
-		var->red.offset = 0;
-		var->red.length = 6;
-		var->red.msb_right = 0;
-		var->blue = var->green = var->red;
-	} else {
-		var->red.offset = 11;
-		var->red.length = 5;
-		var->red.msb_right = 0;
-		var->green.offset = 5;
-		var->green.length = 6;
-		var->green.msb_right = 0;
-		var->blue.offset = 0;
-		var->blue.length = 5;
-		var->blue.msb_right = 0;
+	switch (var->bits_per_pixel) {
+		case 8:		/* CLUT */
+			var->red.offset = 0;
+			var->red.length = 6;
+			var->red.msb_right = 0;
+			var->blue = var->green = var->red;
+			break;
+		case 16:	/* RGB 565 */
+			var->red.offset = 11;
+			var->red.length = 5;
+			var->green.offset = 5;
+			var->green.length = 6;
+			var->blue.offset = 0;
+			var->blue.length = 5;
+			var->transp.offset = 0;
+			var->transp.length = 0;
+			break;
 	}
-	var->transp.offset = 0;
-	var->transp.length = 0;
+	var->red.msb_right = 0;
+	var->green.msb_right = 0;
+	var->blue.msb_right = 0;
 	var->transp.msb_right = 0;
 
 	var->nonstd = 0;
@@ -493,8 +540,10 @@ static int Cyber_encode_var(struct fb_var_screeninfo *var,
 	var->height = -1;
 	var->width = -1;
 
-	var->accel_flags = (par->accel && par->bpp == 8) ? FB_ACCELF_TEXT : 0;
-	DPRINTK("accel CV64/3D\n");
+ 	var->accel_flags = (par->accel &&
+		((par->bpp == 8) || (par->bpp == 16))) ? FB_ACCELF_TEXT : 0;
+
+/*	printk("CV64/3D : %s\n",(var->accel_flags ? "accel" : "no accel")); */
 
 	var->vmode = FB_VMODE_NONINTERLACED;
 
@@ -525,28 +574,34 @@ static int Cyber_encode_var(struct fb_var_screeninfo *var,
 static int Cyber_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 			   u_int transp, struct fb_info *info)
 {
-	if (regno > 255)
-	{
-		return (1);
+	if (((current_par.bpp==8) && (regno>255)) ||
+		((current_par.bpp!=8) && (regno>15)))
+			return (1);
+
+	if (((current_par.bpp==8) && (regno<256)) || ((current_par.bpp==16) &&(regno<16))) {
+		Cyber_colour_table [regno][0] = red >> 10;
+		Cyber_colour_table [regno][1] = green >> 10;
+		Cyber_colour_table [regno][2] = blue >> 10;
 	}
 
-	/*
-	 * No colors on the CV3D yet.
-	 */
-
-	vgawb_3d(0x3c8, (unsigned char) regno);
-	red >>= 10;
-	green >>= 10;
-	blue >>= 10;
-
-	Cyber_colour_table [regno][0] = red;
-	Cyber_colour_table [regno][1] = green;
-	Cyber_colour_table [regno][2] = blue;
-
-	vgawb_3d(0x3c9, red);
-	vgawb_3d(0x3c9, green);
-	vgawb_3d(0x3c9, blue);
-
+	switch (current_par.bpp) {
+#ifdef FBCON_HAS_CFB8
+		case 8:
+			vgawb_3d(0x3c8, (unsigned char) regno);
+			vgawb_3d(0x3c9, ((unsigned char) (red >> 10)));
+			vgawb_3d(0x3c9, ((unsigned char) (green >> 10)));
+			vgawb_3d(0x3c9, ((unsigned char) (blue >> 10)));
+			break;
+#endif
+#ifdef FBCON_HAS_CFB16
+		case 16:
+			fbcon_cmap.cfb16[regno] =
+				((red  & 0xf800) |
+				((green & 0xfc00) >> 5) |
+				((blue  & 0xf800) >> 11));
+			break;
+#endif
+	}
 	return (0);
 }
 
@@ -561,14 +616,18 @@ static int Cyber_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
 {
 	int t;
 
-	if (regno >= 256)
+	if (regno > 255)
 		return (1);
-	t       = Cyber_colour_table [regno][0];
-	*red    = (t<<10) | (t<<4) | (t>>2);
-	t       = Cyber_colour_table [regno][1];
-	*green  = (t<<10) | (t<<4) | (t>>2);
-	t       = Cyber_colour_table [regno][2];
-	*blue   = (t<<10) | (t<<4) | (t>>2);
+
+	if (((current_par.bpp==8) && (regno<256)) || ((current_par.bpp==16) && (regno<16))) {
+
+		t = Cyber_colour_table [regno][0];
+		*red    = (t<<10) | (t<<4) | (t>>2);
+		t = Cyber_colour_table [regno][1];
+		*green  = (t<<10) | (t<<4) | (t>>2);
+		t = Cyber_colour_table [regno][2];
+		*blue   = (t<<10) | (t<<4) | (t>>2);
+	}
 	*transp = 0;
 	return (0);
 }
@@ -615,8 +674,10 @@ static inline void Cyber3D_WaitBusy(void)
 unsigned long status;
 
 	do {
+		mb();
 		status = rl_3d(0x8504);
 	} while (!(status & (1 << 13)));
+	blit_maybe_busy = 0;
 }
 
 #define S3V_BITBLT	(0x0 << 27)
@@ -666,6 +727,10 @@ static void Cyber3D_BitBLT(u_short curx, u_short cury, u_short destx,
 		desty += (height - 1);
 	}
 
+	if (blit_maybe_busy)
+		Cyber3D_WaitBusy();
+	blit_maybe_busy = 1;
+
 	wl_3d(0xa4f4, 1); /* pattern fb color */
 
 	wl_3d(0xa4e8, ~0); /* mono pat 0 */
@@ -676,8 +741,6 @@ static void Cyber3D_BitBLT(u_short curx, u_short cury, u_short destx,
 	wl_3d(0xa50c, ((destx << 16) | desty));		/* rdest_xy */
 
 	wl_3d(0xa500, blitcmd);				/* GO! */
-
-	Cyber3D_WaitBusy();
 }
 
 /*
@@ -691,6 +754,10 @@ static void Cyber3D_RectFill(u_short x, u_short y, u_short width,
 	unsigned int blitcmd = S3V_RECTFILL | S3V_DRAW | S3V_DST_8BPP |
 		S3V_BLT_CLEAR | S3V_MONO_PAT | (1 << 26) | (1 << 25);
 
+	if (blit_maybe_busy)
+		Cyber3D_WaitBusy();
+	blit_maybe_busy = 1;
+
 	tmp = color & 0xff;
 	wl_3d(0xa4f4, tmp);
 
@@ -698,19 +765,20 @@ static void Cyber3D_RectFill(u_short x, u_short y, u_short width,
 	wl_3d(0xa50c, ((x << 16) | y));			/* rdest_xy */
 
 	wl_3d(0xa500, blitcmd);				/* GO! */
-	Cyber3D_WaitBusy();
 }
 
 
 /**************************************************************
  * Move cursor to x, y
  */
+
+#if 0
 static void Cyber_MoveCursor (u_short x, u_short y)
 {
 	printk("Yuck .... MoveCursor on a 3D\n");
 	return;
 }
-
+#endif
 
 /* -------------------- Interfaces to hardware functions -------------------- */
 
@@ -868,7 +936,18 @@ static void virgefb_set_disp(int con, struct fb_info *info)
 	virgefb_get_fix(&fix, con, info);
 	if (con == -1)
 		con = 0;
-	display->screen_base = (char*) CyberMem;
+	if (cv3d_on_zorro2) {
+		display->screen_base = (char*) CyberMem;
+	} else {
+	        switch (display->var.bits_per_pixel) {
+			case 8:
+				display->screen_base = (char*) (CyberMem + CYBMEM_OFFSET_8);
+				break;
+			case 16:
+				display->screen_base = (char*) (CyberMem + CYBMEM_OFFSET_16);
+				break;
+		}
+	}
 	display->visual = fix.visual;
 	display->type = fix.type;
 	display->type_aux = fix.type_aux;
@@ -878,22 +957,26 @@ static void virgefb_set_disp(int con, struct fb_info *info)
 	display->inverse = Cyberfb_inverse;
 	switch (display->var.bits_per_pixel) {
 #ifdef FBCON_HAS_CFB8
-	    case 8:
-		if (display->var.accel_flags & FB_ACCELF_TEXT) {
-		    display->dispsw = &fbcon_virge8;
+		case 8:
+			if (display->var.accel_flags & FB_ACCELF_TEXT) {
+		   		display->dispsw = &fbcon_virge8;
 #warning FIXME: We should reinit the graphics engine here
-		} else
-		    display->dispsw = &fbcon_virge8;
-		break;
+			} else
+				display->dispsw = &fbcon_cfb8;
+			break;
 #endif
 #ifdef FBCON_HAS_CFB16
-	    case 16:
-		display->dispsw = &fbcon_cfb16;
-		break;
+		case 16:
+			if (display->var.accel_flags & FB_ACCELF_TEXT) {
+				display->dispsw = &fbcon_virge16;
+			} else
+				display->dispsw = &fbcon_cfb16;
+			display->dispsw_data = &fbcon_cmap.cfb16;
+			break;
 #endif
-	    default:
-		display->dispsw = &fbcon_dummy;
-		break;
+		default:
+			display->dispsw = &fbcon_dummy;
+			break;
 	}
 }
 
@@ -962,7 +1045,7 @@ static int virgefb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 
 	if (!fb_display[con].cmap.len) {       /* no colormap allocated? */
 		if ((err = fb_alloc_cmap(&fb_display[con].cmap,
-				 1<<fb_display[con].var.bits_per_pixel, 0)))
+				1<<fb_display[con].var.bits_per_pixel, 0)))
 			return(err);
 	}
 	if (con == currcon)		 /* current console? */
@@ -987,8 +1070,8 @@ static int virgefb_pan_display(struct fb_var_screeninfo *var, int con,
 
 
 /*
-    *	 Cybervision Frame Buffer Specific ioctls
-    */
+ *	 Cybervision Frame Buffer Specific ioctls
+ */
 
 static int virgefb_ioctl(struct inode *inode, struct file *file,
 			 u_int cmd, u_long arg, int con, struct fb_info *info)
@@ -1073,12 +1156,12 @@ __initfunc(void virgefb_init(void))
 	}
 	else
 	{
-		CyberVGARegs = ioremap(board_addr +0x0c000000, 0x00010000);
+		CyberVGARegs = (unsigned long)ioremap(board_addr +0x0c000000, 0x00010000);
 
 		CyberRegs_phys = board_addr + 0x05000000;
-		CyberMem_phys  = board_addr + 0x04800000;
+		CyberMem_phys  = board_addr + 0x04000000;	/* was 0x04800000 */
 		CyberRegs = ioremap(CyberRegs_phys, 0x00010000);
-		CyberMem = ioremap(CyberMem_phys, 0x00400000);
+		CyberMem = (unsigned long)ioremap(CyberMem_phys, 0x01000000);	/* was 0x00400000 */
 		cv3d_on_zorro2 = 0;
 		printk("CV3D detected running in Z3 mode\n");
 	}
@@ -1146,8 +1229,8 @@ static int Cyberfb_updatevar(int con, struct fb_info *info)
 
 
 /*
-    *    Blank the display.
-    */
+ *    Blank the display.
+ */
 
 static void Cyberfb_blank(int blank, struct fb_info *info)
 {
@@ -1201,13 +1284,103 @@ static void fbcon_virge8_clear(struct vc_data *conp, struct display *p, int sy,
                          (u_short)bg);
 }
 
+static void fbcon_virge8_putc(struct vc_data *conp, struct display *p, int c, int yy,
+                              int xx)
+{
+	if (blit_maybe_busy)
+		Cyber3D_WaitBusy();
+	fbcon_cfb8_putc(conp, p, c, yy, xx);
+}
+
+static void fbcon_virge8_putcs(struct vc_data *conp, struct display *p,
+                      const unsigned short *s, int count, int yy, int xx)
+{
+	if (blit_maybe_busy)
+		Cyber3D_WaitBusy();
+	fbcon_cfb8_putcs(conp, p, s, count, yy, xx);
+}
+
+static void fbcon_virge8_revc(struct display *p, int xx, int yy)
+{
+	if (blit_maybe_busy)
+		Cyber3D_WaitBusy();
+	fbcon_cfb8_revc(p, xx, yy);
+}
+
+static void fbcon_virge8_clear_margins(struct vc_data *conp, struct display *p,
+                              int bottom_only)
+{
+	if (blit_maybe_busy)
+		Cyber3D_WaitBusy();
+	fbcon_cfb8_clear_margins(conp, p, bottom_only);
+}
+
 static struct display_switch fbcon_virge8 = {
-   fbcon_cfb8_setup, fbcon_virge8_bmove, fbcon_virge8_clear, fbcon_cfb8_putc,
-   fbcon_cfb8_putcs, fbcon_cfb8_revc, NULL, NULL, fbcon_cfb8_clear_margins,
-   FONTWIDTH(8)
+   fbcon_cfb8_setup, fbcon_virge8_bmove, fbcon_virge8_clear, fbcon_virge8_putc,
+   fbcon_virge8_putcs, fbcon_virge8_revc, NULL, NULL, fbcon_virge8_clear_margins,
+   FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
 #endif
 
+#ifdef FBCON_HAS_CFB16
+static void fbcon_virge16_bmove(struct display *p, int sy, int sx, int dy,
+                               int dx, int height, int width)
+{
+        sx *= 16; dx *= 16; width *= 16;
+        Cyber3D_BitBLT((u_short)sx, (u_short)(sy*fontheight(p)), (u_short)dx,
+                       (u_short)(dy*fontheight(p)), (u_short)width,
+                       (u_short)(height*fontheight(p)));
+}
+                
+static void fbcon_virge16_clear(struct vc_data *conp, struct display *p, int sy,
+                               int sx, int height, int width)
+{
+        unsigned char bg;   
+                
+        sx *= 16; width *= 16;
+        bg = attr_bgcol_ec(p,conp);
+        Cyber3D_RectFill((u_short)sx, (u_short)(sy*fontheight(p)),
+                         (u_short)width, (u_short)(height*fontheight(p)),
+                         (u_short)bg);
+}
+   
+static void fbcon_virge16_putc(struct vc_data *conp, struct display *p, int c, int yy,
+                              int xx)
+{
+	if (blit_maybe_busy)
+		Cyber3D_WaitBusy();
+	fbcon_cfb16_putc(conp, p, c, yy, xx);
+}
+
+static void fbcon_virge16_putcs(struct vc_data *conp, struct display *p,
+                      const unsigned short *s, int count, int yy, int xx)
+{
+	if (blit_maybe_busy)
+		Cyber3D_WaitBusy();
+	fbcon_cfb16_putcs(conp, p, s, count, yy, xx);
+}
+
+static void fbcon_virge16_revc(struct display *p, int xx, int yy)
+{
+	if (blit_maybe_busy)
+		Cyber3D_WaitBusy();
+	fbcon_cfb16_revc(p, xx, yy);
+}
+
+static void fbcon_virge16_clear_margins(struct vc_data *conp, struct display *p,
+                              int bottom_only)
+{
+	if (blit_maybe_busy)
+		Cyber3D_WaitBusy();
+	fbcon_cfb16_clear_margins(conp, p, bottom_only);
+}
+
+static struct display_switch fbcon_virge16 = {
+   fbcon_cfb16_setup, fbcon_virge16_bmove, fbcon_virge16_clear, fbcon_virge16_putc,
+   fbcon_virge16_putcs, fbcon_virge16_revc, NULL, NULL, fbcon_virge16_clear_margins,
+   FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
+};
+#endif
 
 #ifdef MODULE
 int init_module(void)

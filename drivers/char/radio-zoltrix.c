@@ -11,7 +11,8 @@
  *  at a low frequency, and it is not possible (at least I have not found)
  *  to get fine volume control over the low volume range.
  *
- *  Some code derived from code by Frans Brinkman
+ *  Some code derived from code by Romolo Manfredini
+ *				   romolo@bicnet.it
  *
  * 1999-01-05 - (C. van Schaik)
  *	      - Changed tuning to 1/160Mhz accuracy
@@ -285,10 +286,10 @@ static int zol_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			if (v.flags & VIDEO_AUDIO_MUTE)
 				zol_mute(zol);
 			else
+			{
 				zol_unmute(zol);
-
-			if (v.flags & VIDEO_AUDIO_VOLUME)
 				zol_setvol(zol, v.volume / 4096);
+			}
 
 			if (v.mode & VIDEO_SOUND_STEREO)
 			{

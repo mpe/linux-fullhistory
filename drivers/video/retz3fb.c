@@ -101,8 +101,8 @@ struct display_data {
 
 struct retz3_fb_info {
 	struct fb_info info;
-	unsigned long base;
-	unsigned long fbmem;
+	unsigned char *base;
+	unsigned char *fbmem;
 	unsigned long fbsize;
 	volatile unsigned char *regs;
 	unsigned long physfbmem;
@@ -1209,7 +1209,7 @@ static void retz3fb_set_disp(int con, struct fb_info *info)
 	if (con == -1)
 		con = 0;
 
-	display->screen_base = (char *)zinfo->fbmem;
+	display->screen_base = zinfo->fbmem;
 	display->visual = fix.visual;
 	display->type = fix.type;
 	display->type_aux = fix.type_aux;
@@ -1282,7 +1282,7 @@ static int retz3fb_set_var(struct fb_var_screeninfo *var, int con,
 			struct fb_fix_screeninfo fix;
 			retz3fb_get_fix(&fix, con, info);
 
-			display->screen_base = (char *)zinfo->fbmem;
+			display->screen_base = zinfo->fbmem;
 			display->visual = fix.visual;
 			display->type = fix.type;
 			display->type_aux = fix.type_aux;
@@ -1456,7 +1456,7 @@ __initfunc(void retz3fb_init(void))
 	board_size = (unsigned long)cd->cd_BoardSize;
 
 	zinfo->base = ioremap(board_addr, board_size);
-	zinfo->regs = (unsigned char *)(zinfo->base);
+	zinfo->regs = zinfo->base;
 	zinfo->fbmem = zinfo->base + VIDEO_MEM_OFFSET;
 	/* Get memory size - for now we asume its a 4MB board */
 	zinfo->fbsize = 0x00400000; /* 4 MB */

@@ -1000,8 +1000,8 @@ void rpc_show_tasks(void)
 			wreq->wb_flags, wreq->wb_pid, wreq->wb_page,
 			wreq->wb_offset, wreq->wb_bytes);
 		printk("          name=%s/%s\n",
-			wreq->wb_dentry->d_parent->d_name.name,
-			wreq->wb_dentry->d_name.name);
+			wreq->wb_file->f_dentry->d_parent->d_name.name,
+			wreq->wb_file->f_dentry->d_name.name);
 	}
 }
 #endif

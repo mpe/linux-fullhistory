@@ -301,7 +301,7 @@ void fbcon_mac_putcs(struct vc_data *conp, struct display *p,
    u16 c;
 
    while (count--) {
-      c = *s++;
+      c = scr_readw(s++);
       fbcon_mac_putc(conp, p, c, yy, xx++);
    }
 }

@@ -21,7 +21,7 @@ extern inline void scr_writew(u16 val, u16 *addr)
 		writew(val, (unsigned long) addr);
 }
 
-extern inline u16 scr_readw(u16 *addr)
+extern inline u16 scr_readw(const u16 *addr)
 {
 	if ((long) addr < 0)
 		return *addr;
@@ -37,12 +37,12 @@ extern inline void scr_memsetw(u16 *s, u16 c, unsigned int count)
 		memsetw_io(s, c, count);
 }
 
-extern inline void scr_memcpyw_from(u16 *d, u16 *s, unsigned int count)
+extern inline void scr_memcpyw_from(u16 *d, const u16 *s, unsigned int count)
 {
 	memcpy_fromio(d, s, count);
 }
 
-extern inline void scr_memcpyw_to(u16 *d, u16 *s, unsigned int count)
+extern inline void scr_memcpyw_to(u16 *d, const u16 *s, unsigned int count)
 {
 	memcpy_toio(d, s, count);
 }

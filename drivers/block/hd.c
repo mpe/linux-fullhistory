@@ -744,11 +744,12 @@ static void hd_geninit(struct gendisk *ignored)
 		
 	*/
 
-		if ((cmos_disks = CMOS_READ(0x12)) & 0xf0)
+		if ((cmos_disks = CMOS_READ(0x12)) & 0xf0) {
 			if (cmos_disks & 0x0f)
 				NR_HD = 2;
 			else
 				NR_HD = 1;
+		}
 	}
 #endif /* __i386__ */
 	for (drive=0 ; drive < NR_HD ; drive++) {

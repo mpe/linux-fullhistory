@@ -872,6 +872,11 @@ int sr_dev_ioctl(struct cdrom_device_info *cdi,
 	read_ahead[MAJOR(cdi->dev)] = arg;
 	return 0;
 
+    case BLKSSZGET:
+	/* Block size of media */
+	return put_user(blksize_size[MAJOR(cdi->dev)][MINOR(cdi->dev)],
+		(int *)arg);
+
     RO_IOCTLS(cdi->dev,arg);
 
     case BLKFLSBUF:

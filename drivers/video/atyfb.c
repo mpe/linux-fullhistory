@@ -1,4 +1,4 @@
-/*  $Id: atyfb.c,v 1.98 1999/01/14 08:50:53 geert Exp $
+/*  $Id: atyfb.c,v 1.102 1999/01/21 22:44:42 geert Exp $
  *  linux/drivers/video/atyfb.c -- Frame buffer device for ATI Mach64
  *
  *	Copyright (C) 1997-1998  Geert Uytterhoeven
@@ -66,6 +66,8 @@
 #include <asm/prom.h>
 #include <asm/pci-bridge.h>
 #include <video/macmodes.h>
+#include <asm/adb.h>
+#include <asm/pmu.h>
 #endif
 #ifdef __sparc__
 #include <asm/pbm.h>
@@ -439,10 +441,10 @@ static struct aty_features {
 
     /* mach64CT family / mach64GT (3D RAGE) class */
     { 0x4c42, 0x4c42, "3D RAGE LT PRO (AGP)" },
-    { 0x4c42, 0x4c44, "3D RAGE LT PRO" },
-    { 0x4c42, 0x4c47, "3D RAGE LT PRO" },
-    { 0x4c42, 0x4c49, "3D RAGE LT PRO" },
-    { 0x4c42, 0x4c50, "3D RAGE LT PRO" },
+    { 0x4c44, 0x4c44, "3D RAGE LT PRO" },
+    { 0x4c47, 0x4c47, "3D RAGE LT PRO" },
+    { 0x4c49, 0x4c49, "3D RAGE LT PRO" },
+    { 0x4c50, 0x4c50, "3D RAGE LT PRO" },
     { 0x4c54, 0x4c54, "3D RAGE LT" },
     { 0x4754, 0x4754, "3D RAGE (GT)" },
     { 0x4755, 0x4755, "3D RAGE II+ (GTB)" },
@@ -1282,7 +1284,7 @@ static int aty_crtc_to_var(const struct crtc *crtc,
 	    bpp = 16;
 	    var->red.offset = 11;
 	    var->red.length = 5;
-	    var->green.offset = 6;
+	    var->green.offset = 5;
 	    var->green.length = 6;
 	    var->blue.offset = 0;
 	    var->blue.length = 5;
@@ -2353,10 +2355,10 @@ static void atyfb_save_palette(struct fb_info *fb, int enter)
 
 	for (i = 0; i < 256; i++) {
 		tmp = aty_ld_8(DAC_CNTL, info) & 0xfc;
-		if ((Gx == GT_CHIP_ID) || (Gx == GU_CHIP_ID) ||
-		    (Gx == LG_CHIP_ID) || (Gx == GB_CHIP_ID) ||
-		    (Gx == GD_CHIP_ID) || (Gx == GI_CHIP_ID) ||
-		    (Gx == GP_CHIP_ID) || (Gx == GQ_CHIP_ID))
+		if (Gx == GT_CHIP_ID || Gx == GU_CHIP_ID || Gx == GV_CHIP_ID ||
+		    Gx == GW_CHIP_ID || Gx == GZ_CHIP_ID || Gx == LG_CHIP_ID ||
+		    Gx == GB_CHIP_ID || Gx == GD_CHIP_ID || Gx == GI_CHIP_ID ||
+		    Gx == GP_CHIP_ID || Gx == GQ_CHIP_ID)
 			tmp |= 0x2;
 		aty_st_8(DAC_CNTL, tmp, info);
 		aty_st_8(DAC_MASK, 0xff, info);
@@ -3296,6 +3298,11 @@ static void atyfbcon_blank(int blank, struct fb_info *fb)
     struct fb_info_aty *info = (struct fb_info_aty *)fb;
     u8 gen_cntl;
 
+#if defined(CONFIG_PPC)
+    if ((_machine == _MACH_Pmac) && blank)
+    	pmu_enable_backlight(0);
+#endif
+
     gen_cntl = aty_ld_8(CRTC_GEN_CNTL, info);
     if (blank > 0)
 	switch (blank-1) {
@@ -3315,6 +3322,11 @@ static void atyfbcon_blank(int blank, struct fb_info *fb)
     else
 	gen_cntl &= ~(0x4c);
     aty_st_8(CRTC_GEN_CNTL, gen_cntl, info);
+
+#if defined(CONFIG_PPC)
+    if ((_machine == _MACH_Pmac) && !blank)
+    	pmu_enable_backlight(1);
+#endif
 }
 
 
@@ -3359,9 +3371,10 @@ static int atyfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
     info->palette[regno].green = green;
     info->palette[regno].blue = blue;
     i = aty_ld_8(DAC_CNTL, info) & 0xfc;
-    if ((Gx == GT_CHIP_ID) || (Gx == GU_CHIP_ID) || (Gx == LG_CHIP_ID) ||
-	(Gx == GB_CHIP_ID) || (Gx == GD_CHIP_ID) || (Gx == GI_CHIP_ID) ||
-	(Gx == GP_CHIP_ID) || (Gx == GQ_CHIP_ID))
+    if (Gx == GT_CHIP_ID || Gx == GU_CHIP_ID || Gx == GV_CHIP_ID ||
+	Gx == GW_CHIP_ID || Gx == GZ_CHIP_ID || Gx == LG_CHIP_ID ||
+	Gx == GB_CHIP_ID || Gx == GD_CHIP_ID || Gx == GI_CHIP_ID ||
+	Gx == GP_CHIP_ID || Gx == GQ_CHIP_ID)
 	i |= 0x2;	/*DAC_CNTL|0x2 turns off the extra brightness for gt*/
     aty_st_8(DAC_CNTL, i, info);
     aty_st_8(DAC_MASK, 0xff, info);

@@ -200,7 +200,7 @@ static void newport_putcs(struct vc_data *vc, const unsigned short *s, int count
 			  int ypos, int xpos)
 {
     while (count--)
-	newport_putc (vc, *s++, ypos, xpos++);
+	newport_putc (vc, scr_readw(s++), ypos, xpos++);
 }
 
 static void newport_cursor(struct vc_data *vc, int mode)

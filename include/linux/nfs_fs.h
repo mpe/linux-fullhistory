@@ -98,8 +98,7 @@ do { \
 struct nfs_wreq {
 	struct rpc_listitem	wb_list;	/* linked list of req's */
 	struct rpc_task		wb_task;	/* RPC task */
-	struct dentry *		wb_dentry;	/* dentry referenced */
-	struct inode *		wb_inode;	/* inode referenced */
+	struct file *		wb_file;	/* dentry referenced */
 	struct page *		wb_page;	/* page to be written */
 	struct wait_queue *	wb_wait;	/* wait for completion */
 	unsigned int		wb_offset;	/* offset within page */
@@ -213,7 +212,6 @@ extern int nfs_lock(struct file *, int, struct file_lock *);
  */
 extern int  nfs_writepage(struct file *, struct page *);
 extern int  nfs_check_failed_request(struct inode *);
-extern int  nfs_check_error(struct inode *);
 
 /*
  * Try to write back everything synchronously (but check the
@@ -221,8 +219,7 @@ extern int  nfs_check_error(struct inode *);
  */
 extern int  nfs_wb_all(struct inode *);
 extern int  nfs_wb_page(struct inode *, struct page *);
-extern int  nfs_wb_pid(struct inode *, pid_t);
-extern int  nfs_flush_trunc(struct inode *, unsigned long);
+extern int  nfs_wb_file(struct inode *, struct file *);
 
 /*
  * Invalidate write-backs, possibly trying to write them
@@ -252,12 +249,6 @@ nfs_revalidate_inode(struct nfs_server *server, struct dentry *dentry)
 	if (jiffies - NFS_READTIME(inode) < NFS_ATTRTIMEO(inode))
 		return 0;
 	return _nfs_revalidate_inode(server, dentry);
-}
-
-static inline int
-nfs_write_error(struct inode *inode)
-{
-	return NFS_WRITEBACK(inode) && nfs_check_error(inode);
 }
 
 /* NFS root */

@@ -1,7 +1,10 @@
-/*
+/* 
  * CVF extensions for fat-based filesystems
  *
  * written 1997,1998 by Frank Gockel <gockel@sent13.uni-duisburg.de>
+ *
+ * please do not remove the next line, dmsdos needs it for verifying patches
+ * CVF-FAT-VERSION-ID: 1.2.0
  *
  */
  
@@ -11,6 +14,10 @@
 #include<linux/msdos_fs_sb.h>
 #include<linux/string.h>
 #include<linux/fat_cvf.h>
+#include<linux/config.h>
+#ifdef CONFIG_KMOD
+#include<linux/kmod.h>
+#endif
 
 #define MAX_CVF_FORMATS 3
 
@@ -95,6 +102,24 @@ int detect_cvf(struct super_block*sb,char*force)
   int found_i=-1;
 
   if(force)
+    if(strcmp(force,"autoload")==0)
+    {
+#ifdef CONFIG_KMOD
+      request_module("cvf_autoload");
+      force=NULL;
+#else
+      printk("cannot autoload CVF modules: kmod support is not compiled into kernel\n");
+      return -1;
+#endif
+    }
+    
+#ifdef CONFIG_KMOD
+  if(force)
+    if(*force)
+      request_module(force);
+#endif
+
+  if(force)
   { if(*force)
     { for(i=0;i<MAX_CVF_FORMATS;++i)
       { if(cvf_formats[i])
@@ -102,6 +127,8 @@ int detect_cvf(struct super_block*sb,char*force)
             return i;
         }
       }
+      printk("CVF format %s unknown (module not loaded?)\n",force);
+      return -1;
     }
   }
 
@@ -115,6 +142,6 @@ int detect_cvf(struct super_block*sb,char*force)
   }
   
   if(found==1)return found_i;
-  if(found>1)printk("CVF detection ambiguous, use cvf_format=xxx option\n"); 
+  if(found>1)printk("CVF detection ambiguous, please use cvf_format=xxx option\n"); 
   return -1;
 }

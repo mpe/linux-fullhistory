@@ -185,6 +185,7 @@ extern void fdomain_setup(char *str, int *ints);
 extern void ibmmca_scsi_setup(char *str, int *ints);
 extern void in2000_setup(char *str, int *ints);
 extern void NCR53c406a_setup(char *str, int *ints);
+extern void sym53c416_setup(char *str, int *ints);
 extern void wd7000_setup(char *str, int *ints);
 extern void dc390_setup(char* str, int *ints);
 extern void scsi_luns_setup(char *str, int *ints);
@@ -689,6 +690,9 @@ static struct kernel_param cooked_params[] __initdata = {
 #ifdef CONFIG_SCSI_NCR53C406A
 	{ "ncr53c406a=", NCR53c406a_setup},
 #endif
+#ifdef CONFIG_SCSI_SYM53C416
+	{ "sym53c416=", sym53c416_setup},
+#endif
 #ifdef CONFIG_SCSI_FUTURE_DOMAIN
 	{ "fdomain=", fdomain_setup},
 #endif
@@ -961,7 +965,7 @@ void __init calibrate_delay(void)
 		ticks = jiffies - ticks;
 		if (ticks)
 			break;
-		}
+	}
 
 /* Do a binary approximation to get loops_per_second set to equal one clock
    (up to lps_precision bits) */

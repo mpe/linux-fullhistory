@@ -13,6 +13,7 @@
 
 #include <linux/config.h>
 #include <linux/console_struct.h>
+#include <linux/vt_buffer.h>
 
 
     /*                                  

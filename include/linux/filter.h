@@ -18,17 +18,31 @@
  
 struct sock_filter	/* Filter block */
 {
-        u16	code;   /* Actual filter code */
-        u8	jt;	/* Jump true */
-        u8	jf;	/* Jump false */
-        u32	k;      /* Generic multiuse field */
+        __u16	code;   /* Actual filter code */
+        __u8	jt;	/* Jump true */
+        __u8	jf;	/* Jump false */
+        __u32	k;      /* Generic multiuse field */
 };
 
 struct sock_fprog	/* Required for SO_ATTACH_FILTER. */
 {
-        unsigned short         len;	/* Number of filter blocks */
+        unsigned int         	len;	/* Number of filter blocks */
         struct sock_filter     *filter;
 };
+
+#ifdef __KERNEL__
+struct sk_filter
+{
+	atomic_t		refcnt;
+        unsigned int         	len;	/* Number of filter blocks */
+        struct sock_filter     	insns[0];
+};
+
+extern __inline__ unsigned int sk_filter_len(struct sk_filter *fp)
+{
+	return fp->len*sizeof(struct sock_filter) + sizeof(*fp);
+}
+#endif
 
 /*
  * Instruction classes
@@ -86,21 +100,40 @@ struct sock_fprog	/* Required for SO_ATTACH_FILTER. */
 #define         BPF_TAX         0x00
 #define         BPF_TXA         0x80
 
-#define BPF_MAXINSNS 512
+#ifndef BPF_MAXINSNS
+#define BPF_MAXINSNS 4096
+#endif
 
 /*
  * Macros for filter block array initializers.
  */
+#ifndef BPF_STMT
 #define BPF_STMT(code, k) { (unsigned short)(code), 0, 0, k }
+#endif
+#ifndef BPF_JUMP
 #define BPF_JUMP(code, k, jt, jf) { (unsigned short)(code), jt, jf, k }
+#endif
 
 /*
  * Number of scratch memory words for: BPF_ST and BPF_STX
  */
 #define BPF_MEMWORDS 16
 
+/* RATIONALE. Negative offsets are invalid in BPF.
+   We use them to reference ancillary data.
+   Unlike introduction new instructions, it does not break
+   existing compilers/optimizers.
+ */
+#define SKF_AD_OFF    (-0x1000)
+#define SKF_AD_PROTOCOL 0
+#define SKF_AD_PKTTYPE 	4
+#define SKF_AD_IFINDEX 	8
+#define SKF_AD_MAX 	12
+#define SKF_NET_OFF   (-0x100000)
+#define SKF_LL_OFF    (-0x200000)
+
 #ifdef __KERNEL__
-extern int sk_run_filter(unsigned char *data, int len, struct sock_filter *filter, int flen);
+extern int sk_run_filter(struct sk_buff *skb, struct sock_filter *filter, int flen);
 extern int sk_attach_filter(struct sock_fprog *fprog, struct sock *sk);
 #endif /* __KERNEL__ */
 

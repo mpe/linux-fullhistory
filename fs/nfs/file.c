@@ -97,7 +97,7 @@ nfs_file_close(struct inode *inode, struct file *file)
 
 	status = nfs_wb_all(inode);
 	if (!status)
-		status = nfs_write_error(inode);
+		status = file->f_error;
 	return status;
 }
 
@@ -161,9 +161,11 @@ nfs_fsync(struct file *file, struct dentry *dentry)
 
 	dfprintk(VFS, "nfs: fsync(%x/%ld)\n", inode->i_dev, inode->i_ino);
 
-	status = nfs_wb_pid(inode, current->pid);
-	if (!status)
-		status = nfs_write_error(inode);
+	status = nfs_wb_file(inode, file);
+	if (!status) {
+		status = file->f_error;
+		file->f_error = 0;
+	}
 	return status;
 }
 
@@ -193,10 +195,7 @@ nfs_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 	if (!count)
 		goto out;
 
-	/* Check for an error from a previous async call */
-	result = nfs_write_error(inode);
-	if (!result)
-		result = generic_file_write(file, buf, count, ppos);
+	result = generic_file_write(file, buf, count, ppos);
 out:
 	return result;
 

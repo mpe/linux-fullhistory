@@ -80,7 +80,6 @@ CONFIG_BLK_DEV_PART=y
 # CONFIG_PACKET is not set
 # CONFIG_NETLINK is not set
 # CONFIG_FIREWALL is not set
-# CONFIG_NET_ALIAS is not set
 # CONFIG_FILTER is not set
 CONFIG_UNIX=y
 CONFIG_INET=y

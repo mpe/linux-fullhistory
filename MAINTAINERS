@@ -324,7 +324,7 @@ P:	Andrew J. Robinson
 M:	arobinso@nyx.net
 L:	linux-kernel@vger.rutgers.edu
 W:	http://www.nyx.net/~arobinso
-S:	Maintainted
+S:	Maintained
 
 HFS FILESYSTEM
 P:      Adrian Sun
@@ -678,9 +678,18 @@ M:	alan@redhat.com
 S:	Supported
 
 SPARC:
+P:	David S. Miller
+M:	davem@dm.cobaltmicro.com
 P:	Eddie C. Dost
 M:	ecd@skynet.be
+P:	Jakub Jelinek
+M:	jj@sunsite.ms.mff.cuni.cz
+P:	Anton Blanchard
+M:	anton@jubilex.progsoc.uts.edu.au
 L:	sparclinux@vger.rutgers.edu
+L:	ultralinux@vger.rutgers.edu
+W:	http://ultra.linux.cz
+W:	http://www.geog.ubc.ca/s_linux.html
 S:	Maintained
 
 SPECIALIX IO8+ MULTIPORT SERIAL CARD DRIVER

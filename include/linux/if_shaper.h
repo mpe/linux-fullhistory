@@ -23,7 +23,7 @@ struct shaper
 	__u32 shapeclock;
 	__u32 recovery;		/* Time we can next clock a packet out on
 				   an empty queue */
-	char locked;
+	unsigned long locked;
 	struct device *dev;
 	int  (*hard_start_xmit) (struct sk_buff *skb,
 		struct device *dev);

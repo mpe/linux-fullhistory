@@ -17,11 +17,12 @@
  *
  *  - explicit stack instead of recursion
  *  - tail recurse on first born instead of immediate push/pop
+ *  - we gather the stuff that should not be killed into tree
+ *    and stack is just a path from root to the current pointer.
  *
  *  Future optimizations:
  *
  *  - don't just push entire root set; process in place
- *  - use linked list for internal stack
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -51,6 +52,16 @@
  *		That might be the reason of random oopses on close_fp() in
  *		unrelated processes.
  *
+ *	AV		28 Feb 1999
+ *		Kill the explicit allocation of stack. Now we keep the tree
+ *		with root in dummy + pointer (gc_current) to one of the nodes.
+ *		Stack is represented as path from gc_current to dummy. Unmark
+ *		now means "add to tree". Push == "make it a son of gc_current".
+ *		Pop == "move gc_current to parent". We keep only pointers to
+ *		parents (->gc_tree).
+ *	AV		1 Mar 1999
+ *		Damn. Added missing check for ->dead in listen queues scanning.
+ *
  */
  
 #include <linux/kernel.h>
@@ -65,7 +76,6 @@
 #include <linux/netdevice.h>
 #include <linux/file.h>
 #include <linux/proc_fs.h>
-#include <linux/vmalloc.h>
 
 #include <net/sock.h>
 #include <net/tcp.h>
@@ -74,9 +84,8 @@
 
 /* Internal data structures and random procedures: */
 
-static unix_socket **stack;	/* stack of objects to mark */
-static int in_stack = 0;	/* first free entry in stack */
-static int max_stack;		/* Top of stack */
+#define GC_HEAD ((unix_socket *)(-1))
+static unix_socket *gc_current=GC_HEAD;	/* stack of objects to mark */
 
 extern inline unix_socket *unix_get_socket(struct file *filp)
 {
@@ -122,32 +131,25 @@ void unix_notinflight(struct file *fp)
 /*
  *	Garbage Collector Support Functions
  */
- 
-extern inline void push_stack(unix_socket *x)
-{
-	if (in_stack == max_stack)
-		panic("can't push onto full stack");
-	stack[in_stack++] = x;
-}
 
 extern inline unix_socket *pop_stack(void)
 {
-	if (in_stack == 0)
-		panic("can't pop empty gc stack");
-	return stack[--in_stack];
+	unix_socket *p=gc_current;
+	gc_current = p->protinfo.af_unix.gc_tree;
+	return p;
 }
 
 extern inline int empty_stack(void)
 {
-	return in_stack == 0;
+	return gc_current == GC_HEAD;
 }
 
 extern inline void maybe_unmark_and_push(unix_socket *x)
 {
-	if (!(x->protinfo.af_unix.marksweep&MARKED))
+	if (x->protinfo.af_unix.gc_tree)
 		return;
-	x->protinfo.af_unix.marksweep&=~MARKED;
-	push_stack(x);
+	x->protinfo.af_unix.gc_tree = gc_current;
+	gc_current = x;
 }
 
 
@@ -169,23 +171,9 @@ void unix_gc(void)
 		return;
 	in_unix_gc=1;
 	
-	if(stack==NULL || max_files>max_stack)
-	{
-		if(stack)
-			vfree(stack);
-		stack=(unix_socket **)vmalloc(max_files*sizeof(struct unix_socket *));
-		if(stack==NULL)
-		{
-			printk(KERN_NOTICE "unix_gc: deferred due to low memory.\n");
-			in_unix_gc=0;
-			return;
-		}
-		max_stack=max_files;
-	}
-	
 	forall_unix_sockets(i, s)
 	{
-		s->protinfo.af_unix.marksweep|=MARKED;
+		s->protinfo.af_unix.gc_tree=NULL;
 	}
 	/*
 	 *	Everything is now marked 
@@ -262,7 +250,7 @@ tail:
 				}
 			}
 			/* We have to scan not-yet-accepted ones too */
-			if (UNIXCB(skb).attr & MSG_SYN) {
+			if ((UNIXCB(skb).attr & MSG_SYN) && !skb->sk->dead) {
 				if (f==NULL)
 					f=skb->sk;
 				else
@@ -276,9 +264,9 @@ tail:
 
 		if (f) 
 		{
-			if ((f->protinfo.af_unix.marksweep&MARKED))
+			if (!f->protinfo.af_unix.gc_tree)
 			{
-				f->protinfo.af_unix.marksweep&=~MARKED;
+				f->protinfo.af_unix.gc_tree=GC_HEAD;
 				x=f;
 				f=NULL;
 				goto tail;
@@ -290,7 +278,7 @@ tail:
 
 	forall_unix_sockets(i, s)
 	{
-		if (s->protinfo.af_unix.marksweep&MARKED)
+		if (!s->protinfo.af_unix.gc_tree)
 		{
 			struct sk_buff *nextsk;
 			skb=skb_peek(&s->receive_queue);

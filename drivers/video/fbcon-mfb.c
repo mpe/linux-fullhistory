@@ -117,12 +117,12 @@ void fbcon_mfb_putcs(struct vc_data *conp, struct display *p,
     u16 c;
 
     dest0 = p->screen_base+yy*fontheight(p)*p->next_line+xx;
-    bold = attr_bold(p,*s);
-    revs = attr_reverse(p,*s);
-    underl = attr_underline(p,*s);
+    bold = attr_bold(p,scr_readw(s));
+    revs = attr_reverse(p,scr_readw(s));
+    underl = attr_underline(p,scr_readw(s));
 
     while (count--) {
-	c = *s++ & p->charmask;
+	c = scr_readw(s++) & p->charmask;
 	dest = dest0++;
 	cdat = p->fontdata+c*fontheight(p);
 	for (rows = fontheight(p); rows--; dest += p->next_line) {

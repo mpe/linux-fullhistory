@@ -1239,6 +1239,12 @@ static int send_config_bpdu(int port_no, Config_bpdu *config_bpdu)
 	struct sk_buff *skb;
 	
 	/*
+	 *	Keep silent when disabled
+	 */
+	 
+	if(!(br_stats.flags & BR_UP))
+		return -1;
+	/*
 	 *	Create and send the message
 	 */
 	 
@@ -1270,6 +1276,14 @@ static int send_config_bpdu(int port_no, Config_bpdu *config_bpdu)
 static int send_tcn_bpdu(int port_no, Tcn_bpdu *bpdu)
 {
 	struct sk_buff *skb;
+	
+	/*
+	 *	Keep silent when disabled
+	 */
+	 
+	if(!(br_stats.flags & BR_UP))
+		return -1;
+	
  	
 	skb = alloc_bridge_skb(port_no, sizeof(Tcn_bpdu), "tcn");
 	if (skb == NULL)

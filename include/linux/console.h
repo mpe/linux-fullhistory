@@ -42,6 +42,8 @@ struct consw {
 	void	(*con_save_screen)(struct vc_data *);
 	u8	(*con_build_attr)(struct vc_data *, u8, u8, u8, u8, u8);
 	void	(*con_invert_region)(struct vc_data *, u16 *, int);
+	u16    *(*con_screen_pos)(struct vc_data *, int);
+	unsigned long (*con_getxy)(struct vc_data *, unsigned long, int *, int *);
 };
 
 extern struct consw *conswitchp;

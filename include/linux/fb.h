@@ -67,6 +67,10 @@
 #define FB_ACCEL_MATROX_MGA2164W_AGP 19	/* Matrox MGA2164W (Millenium II) */
 #define FB_ACCEL_MATROX_MGAG100	20	/* Matrox G100 (Productiva G100) */
 #define FB_ACCEL_MATROX_MGAG200	21	/* Matrox G200 (Myst, Mill, ...) */
+#define FB_ACCEL_SUN_CG14	22	/* Sun cgfourteen		 */
+#define FB_ACCEL_SUN_BWTWO	23	/* Sun bwtwo			 */
+#define FB_ACCEL_SUN_CGTHREE	24	/* Sun cgthree			 */
+#define FB_ACCEL_SUN_TCX	25	/* Sun tcx			 */
 
 struct fb_fix_screeninfo {
 	char id[16];			/* identification string eg "TT Builtin" */
@@ -340,8 +344,8 @@ struct fbgen_hwswitch {
     int (*pan_display)(const struct fb_var_screeninfo *var,
 		       struct fb_info_gen *info);
     int (*blank)(int blank_mode, struct fb_info_gen *info);
-    void (*set_dispsw)(const void *par, struct display *disp,
-		       struct fb_info_gen *info);
+    void (*set_disp)(const void *par, struct display *disp,
+		     struct fb_info_gen *info);
 };
 
 struct fb_info_gen {

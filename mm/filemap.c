@@ -1456,6 +1456,12 @@ generic_file_write(struct file *file, const char *buf,
 	if (!inode->i_op || !inode->i_op->updatepage)
 		return -EIO;
 
+	if (file->f_error) {
+		int error = file->f_error;
+		file->f_error = 0;
+		return error;
+	}
+
 	sync    = file->f_flags & O_SYNC;
 	written = 0;
 

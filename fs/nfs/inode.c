@@ -597,10 +597,8 @@ printk("nfs_notify_change: revalidate failed, error=%d\n", error);
 		sattr.gid = attr->ia_gid;
 
 	sattr.size = (u32) -1;
-	if ((attr->ia_valid & ATTR_SIZE) && S_ISREG(inode->i_mode)) {
+	if ((attr->ia_valid & ATTR_SIZE) && S_ISREG(inode->i_mode))
 		sattr.size = attr->ia_size;
-		nfs_flush_trunc(inode, sattr.size);
-	}
 
 	sattr.mtime.seconds = sattr.mtime.useconds = (u32) -1;
 	if (attr->ia_valid & ATTR_MTIME) {
@@ -613,6 +611,10 @@ printk("nfs_notify_change: revalidate failed, error=%d\n", error);
 		sattr.atime.seconds = attr->ia_atime;
 		sattr.atime.useconds = 0;
 	}
+
+	error = nfs_wb_all(inode);
+	if (error)
+		goto out;
 
 	error = nfs_proc_setattr(NFS_DSERVER(dentry), NFS_FH(dentry),
 				&sattr, &fattr);

@@ -1,4 +1,4 @@
-/* $Id: cgfourteenfb.c,v 1.3 1998/09/04 15:43:41 jj Exp $
+/* $Id: cgfourteenfb.c,v 1.4 1999/01/26 10:55:03 jj Exp $
  * cgfourteenfb.c: CGfourteen frame buffer driver
  *
  * Copyright (C) 1996,1998 Jakub Jelinek (jj@ultra.linux.cz)
@@ -355,6 +355,7 @@ __initfunc(char *cgfourteenfb_init(struct fb_info_sbusfb *fb))
 	strcpy(fb->info.modename, "CGfourteen");
 	strcpy(fix->id, "CGfourteen");
 	fix->line_length = fb->var.xres_virtual;
+	fix->accel = FB_ACCEL_SUN_CG14;
 	
 	disp->scrollmode = SCROLL_YREDRAW;
 	disp->screen_base += fix->line_length * fb->y_margin + fb->x_margin;

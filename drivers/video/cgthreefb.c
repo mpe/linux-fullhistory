@@ -1,4 +1,4 @@
-/* $Id: cgthreefb.c,v 1.3 1998/09/04 15:43:43 jj Exp $
+/* $Id: cgthreefb.c,v 1.4 1999/01/26 10:55:01 jj Exp $
  * cgthreefb.c: CGthree frame buffer driver
  *
  * Copyright (C) 1996,1998 Jakub Jelinek (jj@ultra.linux.cz)
@@ -186,6 +186,7 @@ __initfunc(char *cgthreefb_init(struct fb_info_sbusfb *fb))
 	strcpy(fb->info.modename, "CGthree");
 	strcpy(fix->id, "CGthree");
 	fix->line_length = fb->var.xres_virtual;
+	fix->accel = FB_ACCEL_SUN_CGTHREE;
 	
 	disp->scrollmode = SCROLL_YREDRAW;
 	if (!disp->screen_base)

@@ -1089,25 +1089,6 @@ CONFIG_NET
   recommended to read the NET-3-HOWTO, available via FTP (user:
   anonymous) from ftp://metalab.unc.edu/pub/Linux/docs/HOWTO.
 
-Network aliasing
-CONFIG_NET_ALIAS
-  If you say Y here, you will be able to set multiple network
-  addresses on the same low-level network device driver. This is
-  typically used for services that act differently based on the
-  address they listen on (e.g. "multihosting" or "virtual domains" or
-  "virtual hosting services" on the web server apache and the ftp
-  server wuftpd -- read the Virtual-Services-HOWTO, available via FTP
-  (user: anonymous) from ftp://metalab.unc.edu/pub/Linux/docs/HOWTO)
-  or for connecting to different logical networks through the same
-  physical interface (most commonly an Ethernet networking card). See
-  Documentation/networking/alias.txt for more info.
-
-  This is the generic part, later when configuring network protocol
-  options you will be asked for protocol-specific aliasing support,
-  and you will have to say Y to at least one of them, most likely to
-  "IP: aliasing support". If you need this feature (for any protocol,
-  like IP) say Y; if unsure, say N.
-
 Socket filtering
 CONFIG_FILTER
   The Linux Socket Filter is derived from the Berkeley Packet Filter.

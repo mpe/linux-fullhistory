@@ -4,7 +4,7 @@
  *
  * Copyright (c) 1998-1999 Ilario Nardinocchi (nardinoc@CS.UniBO.IT)
  * --------------------------------------------------------------------------
- * $Id: cvisionppc.h,v 1.1.2.1 1999/01/12 19:52:59 geert Exp $
+ * $Id: cvisionppc.h,v 1.8 1999/01/28 13:18:07 illo Exp $
  * --------------------------------------------------------------------------
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file README.legal in the main directory of this archive
@@ -21,7 +21,7 @@
 struct cvppc_par {
 	unsigned char* pci_config;
 	unsigned char* pci_bridge;
-	unsigned long user_flags;
+	u32 user_flags;
 };
 
 #define CSPPC_PCI_BRIDGE		0xfffe0000

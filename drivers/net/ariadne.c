@@ -171,6 +171,8 @@ __initfunc(int ariadne_probe(struct device *dev))
 	    init_etherdev(dev, 0);
 
 	    dev->priv = kmalloc(sizeof(struct ariadne_private), GFP_KERNEL);
+	    if (dev->priv == NULL)
+		return -ENOMEM;
 	    priv = (struct ariadne_private *)dev->priv;
 	    memset(priv, 0, sizeof(struct ariadne_private));
 

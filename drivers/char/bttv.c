@@ -1558,12 +1558,33 @@ static int bttv_open(struct video_device *dev, int flags)
 static void bttv_close(struct video_device *dev)
 {
 	struct bttv *btv=(struct bttv *)dev;
-  
+	unsigned long f;
+	
 	btv->user--;
 	audio(btv, AUDIO_INTERN);
 	btv->cap&=~3;
 	bt848_set_risc_jmps(btv);
 
+	/*
+	 *	A word of warning. At this point the chip
+	 *	is still capturing because its FIFO hasn't emptied
+	 *	and the DMA control operations are posted PCI 
+	 *	operations.
+	 */
+
+	btread(BT848_I2C); 	/* This fixes the PCI posting delay */
+	
+	/*
+	 *	This is sucky but right now I can't find a good way to
+	 *	be sure its safe to free the buffer. We wait 5-6 fields
+	 *	which is more than sufficient to be sure.
+	 */
+	 
+	schedule_timeout(HZ/10);	/* Wait 1/10th of a second */
+	
+	/*
+	 *	We have allowed it to drain.
+	 */
 	if(btv->fbuffer)
 		rvfree((void *) btv->fbuffer, 2*BTTV_MAX_FBUF);
 	btv->fbuffer=0;
@@ -3037,7 +3058,7 @@ static void bt848_set_risc_jmps(struct bttv *btv)
 	btv->risc_jmp[12]=BT848_RISC_JUMP;
 	btv->risc_jmp[13]=virt_to_bus(btv->risc_jmp);
 
-	/* enable cpaturing and DMA */
+	/* enable capturing */
 	btaor(flags, ~0x0f, BT848_CAP_CTL);
 	if (flags&0x0f)
 		bt848_dma(btv, 3);
@@ -3242,7 +3263,7 @@ static void bttv_irq(int irq, void *dev_id, struct pt_regs * regs)
 		if (astat&BT848_INT_SCERR) {
 			IDEBUG(printk ("bttv%d: IRQ_SCERR\n", btv->nr));
 			bt848_dma(btv, 0);
-			bt848_dma(btv, 1);
+			bt848_dma(btv, 3);
 			wake_up_interruptible(&btv->vbiq);
 			wake_up_interruptible(&btv->capq);
 

@@ -177,8 +177,8 @@ void fbcon_cfb16_putcs(struct vc_data *conp, struct display *p,
     u32 eorx, fgx, bgx;
 
     dest0 = p->screen_base + yy * fontheight(p) * bytes + xx * fontwidth(p) * 2;
-    fgx = ((u16 *)p->dispsw_data)[attr_fgcol(p, *s)];
-    bgx = ((u16 *)p->dispsw_data)[attr_bgcol(p, *s)];
+    fgx = ((u16 *)p->dispsw_data)[attr_fgcol(p, scr_readw(s))];
+    bgx = ((u16 *)p->dispsw_data)[attr_bgcol(p, scr_readw(s))];
     fgx |= (fgx << 16);
     bgx |= (bgx << 16);
     eorx = fgx ^ bgx;
@@ -187,7 +187,7 @@ void fbcon_cfb16_putcs(struct vc_data *conp, struct display *p,
     case 4:
     case 8:
 	while (count--) {
-	    c = *s++ & p->charmask;
+	    c = scr_readw(s++) & p->charmask;
 	    cdat = p->fontdata + c * fontheight(p);
 	    for (rows = fontheight(p), dest = dest0; rows--; dest += bytes) {
 		u8 bits = *cdat++;
@@ -204,7 +204,7 @@ void fbcon_cfb16_putcs(struct vc_data *conp, struct display *p,
     case 12:
     case 16:
 	while (count--) {
-	    c = *s++ & p->charmask;
+	    c = scr_readw(s++) & p->charmask;
 	    cdat = p->fontdata + (c * fontheight(p) << 1);
 	    for (rows = fontheight(p), dest = dest0; rows--; dest += bytes) {
 		u8 bits = *cdat++;

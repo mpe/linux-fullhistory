@@ -371,8 +371,8 @@ void fbcon_iplan2p4_putcs(struct vc_data *conp, struct display *p,
     else
 	dest0 = (p->screen_base + yy * bytes * fontheight(p) +
 		 (xx>>1)*8 + (xx & 1));
-    fgx = expand4l(attr_fgcol(p,*s));
-    bgx = expand4l(attr_bgcol(p,*s));
+    fgx = expand4l(attr_fgcol(p,scr_readw(s)));
+    bgx = expand4l(attr_bgcol(p,scr_readw(s)));
     eorx = fgx ^ bgx;
 
     while (count--) {
@@ -383,7 +383,7 @@ void fbcon_iplan2p4_putcs(struct vc_data *conp, struct display *p,
 	* cache :-(
 	*/
 
-	c = *s++ & p->charmask;
+	c = scr_readw(s++) & p->charmask;
 	if (fontheightlog(p))
 	    cdat = p->fontdata + (c << fontheightlog(p));
 	else

@@ -38,7 +38,7 @@ extern void invert_screen(int currcons, int offset, int count, int shift);
 extern void getconsxy(int currcons, char *p);
 extern void putconsxy(int currcons, char *p);
 
-extern u16 vcs_scr_readw(int currcons, u16 *org);
+extern u16 vcs_scr_readw(int currcons, const u16 *org);
 extern void vcs_scr_writew(int currcons, u16 val, u16 *org);
 
 #endif

@@ -200,6 +200,16 @@ int rt_getsigstr(struct rt_device *dev)
 	return 1;		/* signal present		*/
 }
 
+int rt_chkstereo(struct rt_device *dev)
+{
+	outb(0xd8, io);
+	sleep_delay(100000);
+	if (inb(io) & 0x0fd)
+		return VIDEO_SOUND_STEREO;	/* stereo detected */
+	else 
+		return VIDEO_SOUND_MONO;	/* mono */
+}
+
 static int rt_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 {
 	struct rt_device *rt=dev->priv;
@@ -263,6 +273,7 @@ static int rt_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			memset(&v,0, sizeof(v));
 			v.flags|=VIDEO_AUDIO_MUTABLE|VIDEO_AUDIO_VOLUME;
 			v.volume=rt->curvol * 6554;
+			v.mode=rt_chkstereo(rt);
 			v.step=6554;
 			strcpy(v.name, "Radio");
 			if(copy_to_user(arg,&v, sizeof(v)))

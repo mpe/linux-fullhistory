@@ -155,11 +155,11 @@ void fbcon_vga_putcs(struct vc_data *conp, struct display *p,
     u16 sattr;
     if (conp->vc_can_do_color)
     	while (count--)
-    	    vga_writew(*s++, dst++);
+    	    vga_writew(scr_readw(s++), dst++);
     else {
-        sattr = fbcon_vga_attr(p, *s);
+        sattr = fbcon_vga_attr(p, scr_readw(s));
         while (count--)
-	    vga_writew(sattr | ((int) (*s++) & 0xff), dst++);
+	    vga_writew(sattr | ((int) (scr_readw(s++)) & 0xff), dst++);
     }
 }
 

@@ -99,8 +99,7 @@ struct unix_opt {
 	struct semaphore	readsem;
 	struct sock *		other;
 	struct sock **		list;
-	int 			marksweep;
-#define MARKED			1
+	struct sock *		gc_tree;
 	int			inflight;
 };
 

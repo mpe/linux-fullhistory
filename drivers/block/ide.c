@@ -2068,6 +2068,12 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 				(unsigned long *) &loc->start)) return -EFAULT;
 			return 0;
 		}
+		case BLKSSZGET:
+			/* Block size of media */
+			return put_user(blksize_size[HWIF(drive)->major]
+						    [minor&PARTN_MASK],
+						    (int *)arg);
+		
 		case BLKFLSBUF:
 			if (!capable(CAP_SYS_ADMIN)) return -EACCES;
 			fsync_dev(inode->i_rdev);

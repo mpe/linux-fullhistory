@@ -30,19 +30,6 @@
  *	serialize accesses to xtime/lost_ticks).
  */
 
-/* What about the "updated NTP code" stuff in 2.0 time.c? It's not in
- * 2.1, perhaps it should be ported, too.
- *
- * What about the BUGGY_NEPTUN_TIMER stuff in do_slow_gettimeoffset()?
- * Whatever it fixes, is it also fixed in the new code from the Jumbo
- * patch, so that that code can be used instead?
- *
- * The CPU Hz should probably be displayed in check_bugs() together
- * with the CPU vendor and type. Perhaps even only in MHz, though that
- * takes away some of the fun of the new code :)
- *
- * - Michael Krause */
-
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>

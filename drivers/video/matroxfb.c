@@ -1473,7 +1473,7 @@ static void matrox_cfbX_fastputcs(u_int32_t fgx, u_int32_t bgx, struct display* 
 	mga_outl(M_FCOL, fgx);
 	mga_outl(M_BCOL, bgx);
 	while (count--) {
-		u_int32_t ar3 = ACCESS_FBINFO(fastfont.mgabase) + (*s++ & p->charmask)*charcell;
+		u_int32_t ar3 = ACCESS_FBINFO(fastfont.mgabase) + (scr_readw(s++) & p->charmask)*charcell;
 
 		mga_fifo(4);
 		mga_outl(M_FXBNDRY, ((xx + fontwidth(p) - 1) << 16) | xx);
@@ -1531,7 +1531,7 @@ static void matrox_cfbX_putcs(u_int32_t fgx, u_int32_t bgx, struct display* p, c
 	fxbndry = ((xx + fontwidth(p) - 1) << 16) | xx;
 	mmio = ACCESS_FBINFO(mmio.vbase);
 	while (count--) {
-		u_int8_t* chardata = p->fontdata + (*s++ & p->charmask)*charcell;
+		u_int8_t* chardata = p->fontdata + (scr_readw(s++) & p->charmask)*charcell;
 
 		mga_fifo(5);
 		mga_writel(mmio, M_FXBNDRY, fxbndry);
@@ -1586,8 +1586,8 @@ static void matrox_cfb8_putcs(struct vc_data* conp, struct display* p, const uns
 
 	DBG_HEAVY("matroxfb_cfb8_putcs");
 
-	fgx = attr_fgcol(p, *s);
-	bgx = attr_bgcol(p, *s);
+	fgx = attr_fgcol(p, scr_readw(s));
+	bgx = attr_bgcol(p, scr_readw(s));
 	fgx |= (fgx << 8);
 	fgx |= (fgx << 16);
 	bgx |= (bgx << 8);
@@ -1603,8 +1603,8 @@ static void matrox_cfb16_putcs(struct vc_data* conp, struct display* p, const un
 
 	DBG_HEAVY("matroxfb_cfb16_putcs");
 
-	fgx = ((u_int16_t*)p->dispsw_data)[attr_fgcol(p, *s)];
-	bgx = ((u_int16_t*)p->dispsw_data)[attr_bgcol(p, *s)];
+	fgx = ((u_int16_t*)p->dispsw_data)[attr_fgcol(p, scr_readw(s))];
+	bgx = ((u_int16_t*)p->dispsw_data)[attr_bgcol(p, scr_readw(s))];
 	fgx |= (fgx << 16);
 	bgx |= (bgx << 16);
 	ACCESS_FBINFO(curr.putcs)(fgx, bgx, p, s, count, yy, xx);
@@ -1618,8 +1618,8 @@ static void matrox_cfb32_putcs(struct vc_data* conp, struct display* p, const un
 
 	DBG_HEAVY("matroxfb_cfb32_putcs");
 
-	fgx = ((u_int32_t*)p->dispsw_data)[attr_fgcol(p, *s)];
-	bgx = ((u_int32_t*)p->dispsw_data)[attr_bgcol(p, *s)];
+	fgx = ((u_int32_t*)p->dispsw_data)[attr_fgcol(p, scr_readw(s))];
+	bgx = ((u_int32_t*)p->dispsw_data)[attr_bgcol(p, scr_readw(s))];
 	ACCESS_FBINFO(curr.putcs)(fgx, bgx, p, s, count, yy, xx);
 }
 #endif
@@ -2191,9 +2191,9 @@ static void matrox_text_putcs(struct vc_data* conp, struct display* p, const uns
 
 	step = ACCESS_FBINFO(devflags.textstep);
 	offs = yy * p->next_line + xx * step;
-	attr = attr_fgcol(p,*s) | (attr_bgcol(p,*s) << 4);
+	attr = attr_fgcol(p,scr_readw(s)) | (attr_bgcol(p,scr_readw(s)) << 4);
 	while (count-- > 0) {
-		unsigned int chr = ((*s++) & p->charmask) << 8;
+		unsigned int chr = ((scr_readw(s++)) & p->charmask) << 8;
 		if (chr & 0x10000) chr ^= 0x10008;
 		mga_writew(ACCESS_FBINFO(video.vbase), offs, ntohs(attr|chr));
 		offs += step;

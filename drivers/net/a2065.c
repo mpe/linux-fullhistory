@@ -767,6 +767,8 @@ __initfunc(int a2065_probe(struct device *dev))
 			dev->priv = kmalloc(sizeof(struct
 						   lance_private),
 					    GFP_KERNEL);
+			if (dev->priv == NULL)  
+				return -ENOMEM;
 			priv = (struct lance_private *)dev->priv;
 			memset(priv, 0, sizeof(struct lance_private));
 

@@ -170,14 +170,12 @@ static int rd_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 			break;
          	case BLKGETSIZE:   /* Return device size */
 			if (!arg)  return -EINVAL;
-			err = verify_area(VERIFY_WRITE, (long *) arg,
-					  sizeof(long));
-			if (err)
-				return err;
-			put_user(rd_length[MINOR(inode->i_rdev)] / 512, 
+			return put_user(rd_length[MINOR(inode->i_rdev)] / 512, 
 				 (long *) arg);
-			return 0;
-			
+		case BLKSSZGET:
+			/* Block size of media */
+			return put_user(rd_blocksizes[MINOR(inode->i_rdev)],
+						    (int *)arg);
 		default:
 			break;
 	};

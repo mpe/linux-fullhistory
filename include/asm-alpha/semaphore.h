@@ -5,122 +5,37 @@
  * SMP- and interrupt-safe semaphores..
  *
  * (C) Copyright 1996 Linus Torvalds
+ * (C) Copyright 1996 Richard Henderson
  */
 
 #include <asm/current.h>
 #include <asm/system.h>
 #include <asm/atomic.h>
 
-/*
- * Semaphores are recursive: we allow the holder process to recursively do
- * down() operations on a semaphore that the process already owns. In order
- * to do that, we need to keep a semaphore-local copy of the owner and the
- * "depth of ownership".
- *
- * NOTE! Nasty memory ordering rules:
- *  - "owner" and "owner_count" may only be modified once you hold the lock.
- *  - "owner_count" must be written _after_ modifying owner, and must be
- *  read _before_ reading owner. There must be appropriate write and read
- *  barriers to enforce this.
- */
-
 struct semaphore {
+	/* Careful, inline assembly knows about the position of these two.  */
 	atomic_t count;
-	atomic_t waking;
-	struct task_struct *owner;
-	long owner_depth;
-	struct wait_queue * wait;
+	atomic_t waking;		/* biased by -1 */
+	struct wait_queue *wait;
 };
 
 #define MUTEX ((struct semaphore) \
- { ATOMIC_INIT(1), ATOMIC_INIT(0), NULL, 0, NULL })
+ { ATOMIC_INIT(1), ATOMIC_INIT(-1), NULL })
 #define MUTEX_LOCKED ((struct semaphore) \
- { ATOMIC_INIT(0), ATOMIC_INIT(0), NULL, 1, NULL })
+ { ATOMIC_INIT(0), ATOMIC_INIT(-1), NULL })
 
-#define semaphore_owner(sem)	((sem)->owner)
 #define sema_init(sem, val)	atomic_set(&((sem)->count), val)
 
 extern void __down(struct semaphore * sem);
 extern int  __down_interruptible(struct semaphore * sem);
+extern int  __down_trylock(struct semaphore * sem);
 extern void __up(struct semaphore * sem);
 
-/* All three have custom assembly linkages.  */
+/* All have custom assembly linkages.  */
 extern void __down_failed(struct semaphore * sem);
 extern void __down_failed_interruptible(struct semaphore * sem);
+extern void __down_failed_trylock(struct semaphore * sem);
 extern void __up_wakeup(struct semaphore * sem);
-
-
-/*
- * These two _must_ execute atomically wrt each other.
- *
- * This is trivially done with load_locked/store_cond,
- * which we have.  Let the rest of the losers suck eggs.
- *
- * Tricky bits --
- *
- * (1) One task does two downs, no other contention
- *	initial state:
- *		count = 1, waking = 0, depth = undef;
- *	down(&sem)
- *		count = 0, waking = 0, depth = 1;
- *	down(&sem)
- *		atomic dec and test sends us to waking_non_zero via __down
- *			count = -1, waking = 0;
- *		conditional atomic dec on waking discovers no free slots
- *			count = -1, waking = 0;
- *		test for owner succeeeds and we return ok.
- *			count = -1, waking = 0, depth = 2;
- *	up(&sem)
- *		dec depth
- *			count = -1, waking = 0, depth = 1;
- *		atomic inc and test sends us to slow path
- *			count = 0, waking = 0, depth = 1;
- *		notice !(depth < 0) and don't call __up.
- *	up(&sem)
- *		dec depth
- *			count = 0, waking = 0, depth = 0;
- *		atomic inc and test succeeds.
- *			count = 1, waking = 0, depth = 0;
- */
-
-static inline void wake_one_more(struct semaphore * sem)
-{
-	atomic_inc(&sem->waking);
-}
-
-static inline int waking_non_zero(struct semaphore *sem,
-				  struct task_struct *tsk)
-{
-	long owner_depth;
-	int ret, tmp;
-
-	owner_depth = sem->owner_depth;
-	
-	/* Atomic decrement, iff the value is > 0.  */
-	__asm__ __volatile__(
-	"1:	ldl_l	%1,%2\n"
-	"	ble	%1,2f\n"
-	"	subl	%1,1,%0\n"
-	"	stl_c	%0,%2\n"
-	"	beq	%0,3f\n"
-	"2:	mb\n"
-	".section .text2,\"ax\"\n"
-	"3:	br	1b\n"
-	".previous"
-	: "=r"(ret), "=r"(tmp), "=m"(__atomic_fool_gcc(&sem->waking))
-	: "0"(0));
-
-	ret |= ((owner_depth != 0) & (sem->owner == tsk));
-	if (ret) {
-		sem->owner = tsk;
-		wmb();
-		/* Don't use the old value, which is stale in the
-		   !owner case.  */
-		sem->owner_depth++;
-	}
-
-	return ret;
-}
 
 /*
  * Whee.  Hidden out of line code is fun.  The contention cases are
@@ -140,27 +55,21 @@ extern inline void down(struct semaphore * sem)
 
 	__asm__ __volatile__ (
 		"/* semaphore down operation */\n"
-		"1:	ldl_l	$27,%3\n"
+		"1:	ldl_l	$27,%0\n"
 		"	subl	$27,1,$27\n"
 		"	mov	$27,$28\n"
 		"	stl_c	$28,%0\n"
 		"	beq	$28,2f\n"
 		"	blt	$27,3f\n"
-		/* Got the semaphore no contention.  Set owner and depth.  */
-		"	stq	$8,%1\n"
-		"	lda	$28,1\n"
-		"	wmb\n"
-		"	stq	$28,%2\n"
 		"4:	mb\n"
 		".section .text2,\"ax\"\n"
 		"2:	br	1b\n"
-		"3:	lda	$24,%3\n"
+		"3:	lda	$24,%0\n"
 		"	jsr	$28,__down_failed\n"
 		"	ldgp	$29,0($28)\n"
 		"	br	4b\n"
 		".previous"
-		: "=m"(sem->count), "=m"(sem->owner), "=m"(sem->owner_depth)
-		: "m"(sem->count)
+		: : "m"(sem->count)
 		: "$24", "$27", "$28", "memory");
 }
 
@@ -175,30 +84,75 @@ extern inline int down_interruptible(struct semaphore * sem)
 
 	__asm__ __volatile__ (
 		"/* semaphore down interruptible operation */\n"
-		"1:	ldl_l	$27,%4\n"
+		"1:	ldl_l	$27,%1\n"
 		"	subl	$27,1,$27\n"
 		"	mov	$27,$28\n"
 		"	stl_c	$28,%1\n"
 		"	beq	$28,2f\n"
 		"	blt	$27,3f\n"
-		/* Got the semaphore no contention.  Set owner and depth.  */
-		"	stq	$8,%2\n"
-		"	lda	$28,1\n"
-		"	wmb\n"
-		"	stq	$28,%3\n"
-		"	mov	$31,$24\n"
+		"	mov	$31,%0\n"
 		"4:	mb\n"
 		".section .text2,\"ax\"\n"
 		"2:	br	1b\n"
-		"3:	lda	$24,%4\n"
+		"3:	lda	$24,%1\n"
 		"	jsr	$28,__down_failed_interruptible\n"
 		"	ldgp	$29,0($28)\n"
 		"	br	4b\n"
 		".previous"
-		: "=r"(ret), "=m"(sem->count), "=m"(sem->owner),
-		  "=m"(sem->owner_depth)
+		: "=r"(ret)
 		: "m"(sem->count)
 		: "$27", "$28", "memory");
+
+	return ret;
+}
+
+/*
+ * down_trylock returns 0 on success, 1 if we failed to get the lock.
+ *
+ * We must manipulate count and waking simultaneously and atomically.
+ * Do this by using ll/sc on the pair of 32-bit words.
+ */
+
+extern inline int down_trylock(struct semaphore * sem)
+{
+	long ret, tmp, tmp2;
+
+	/* "Equivalent" C.  Note that we have to do this all without
+	   (taken) branches in order to be a valid ll/sc sequence.
+
+	   do {
+	       tmp = ldq_l;
+	       ret = 0;
+	       tmp -= 1;
+	       if ((int)tmp < 0)		// count
+	           break;
+	       if ((long)tmp < 0)		// waking
+	           break;
+	       tmp += 0xffffffff00000000;
+	       ret = 1;
+	       tmp = stq_c = tmp;
+	   } while (tmp == 0);
+	*/
+
+	__asm__ __volatile__(
+		"1:	ldq_l	%1,%3\n"
+		"	lda	%0,0\n"
+		"	subl	%1,1,%2\n"
+		"	subq	%1,1,%1\n"
+		"	blt	%2,2f\n"
+		"	blt	%1,2f\n"
+		"	ldah	%1,0x8000(%1)\n"
+		"	ldah	%1,0x8000(%1)\n"
+		"	lda	%0,1\n"
+		"	stq_c	%1,%3\n"
+		"	beq	%1,3f\n"
+		"2:	mb\n"
+		".section .text2,\"ax\"\n"
+		"3:	br	1b\n"
+		".previous"
+		: "=&r"(ret), "=&r"(tmp), "=&r"(tmp2)
+		: "m"(*sem)
+		: "memory");
 
 	return ret;
 }
@@ -216,7 +170,7 @@ extern inline void up(struct semaphore * sem)
 	__asm__ __volatile__ (
 		"/* semaphore up operation */\n"
 		"	mb\n"
-		"1:	ldl_l	$27,%1\n"
+		"1:	ldl_l	$27,%0\n"
 		"	addl	$27,1,$27\n"
 		"	mov	$27,$28\n"
 		"	stl_c	$28,%0\n"
@@ -226,14 +180,12 @@ extern inline void up(struct semaphore * sem)
 		"4:\n"
 		".section .text2,\"ax\"\n"
 		"2:	br	1b\n"
-		"3:	lda	$24,%1\n"
-		"	bgt	%2,4b\n"
+		"3:	lda	$24,%0\n"
 		"	jsr	$28,__up_wakeup\n"
 		"	ldgp	$29,0($28)\n"
 		"	br	4b\n"
 		".previous"
-		: "=m"(sem->count)
-		: "m"(sem->count), "r"(--sem->owner_depth)
+		: : "m"(sem->count)
 		: "$24", "$27", "$28", "memory");
 }
 

@@ -134,7 +134,7 @@ nlm_lookup_host(struct svc_client *clnt, struct sockaddr_in *sin,
 	host->h_addr.sin_port = 0;	/* ouch! */
 	host->h_version    = version;
 	host->h_proto      = proto;
-	host->h_authflavor = RPC_AUTH_NULL;
+	host->h_authflavor = RPC_AUTH_UNIX;
 	host->h_rpcclnt    = NULL;
 	host->h_sema	   = MUTEX;
 	host->h_nextrebind = jiffies + NLM_HOST_REBIND;

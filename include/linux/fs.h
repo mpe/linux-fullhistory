@@ -373,6 +373,7 @@ struct inode {
 
 	int			i_writecount;
 	unsigned int		i_attr_flags;
+	__u32			i_generation;
 	union {
 		struct pipe_inode_info		pipe_i;
 		struct minix_inode_info		minix_i;
@@ -424,6 +425,8 @@ struct file {
 	unsigned int 		f_count, f_flags;
 	unsigned long 		f_reada, f_ramax, f_raend, f_ralen, f_rawin;
 	struct fown_struct	f_owner;
+	unsigned int		f_uid, f_gid;
+	int			f_error;
 
 	unsigned long		f_version;
 

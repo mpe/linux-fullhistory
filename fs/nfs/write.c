@@ -50,6 +50,7 @@
 #include <linux/malloc.h>
 #include <linux/swap.h>
 #include <linux/pagemap.h>
+#include <linux/file.h>
 
 #include <linux/sunrpc/clnt.h>
 #include <linux/nfs_fs.h>
@@ -237,17 +238,6 @@ update_write_request(struct nfs_wreq *req, unsigned int first,
 	if (rqlast < first || last < rqfirst)
 		return 0;
 
-	/* Check the credentials associated with this write request.
-	 * If the buffer is owned by the same user, we can happily
-	 * add our data without risking server permission problems.
-	 * Note that I'm not messing around with RPC root override creds
-	 * here, because they're used by swap requests only which
-	 * always write out full pages. */
-	if (!rpcauth_matchcred(&req->wb_task, req->wb_task.tk_cred)) {
-		dprintk("NFS:      update failed (cred mismatch)\n");
-		return 0;
-	}
-
 	if (first < rqfirst)
 		rqfirst = first;
 	if (rqlast < last)
@@ -271,9 +261,10 @@ free_write_request(struct nfs_wreq * req)
  * Create and initialize a writeback request
  */
 static inline struct nfs_wreq *
-create_write_request(struct dentry *dentry, struct inode *inode,
-		struct page *page, unsigned int offset, unsigned int bytes)
+create_write_request(struct file * file, struct page *page, unsigned int offset, unsigned int bytes)
 {
+	struct dentry	*dentry = file->f_dentry;
+	struct inode	*inode = dentry->d_inode;
 	struct rpc_clnt	*clnt = NFS_CLIENT(inode);
 	struct nfs_wreq *wreq;
 	struct rpc_task	*task;
@@ -298,8 +289,7 @@ create_write_request(struct dentry *dentry, struct inode *inode,
 		goto out_req;
 
 	/* Put the task on inode's writeback request list. */
-	wreq->wb_dentry = dentry;
-	wreq->wb_inode  = inode;
+	wreq->wb_file = file;
 	wreq->wb_pid    = current->pid;
 	wreq->wb_page   = page;
 	wreq->wb_offset = offset;
@@ -336,7 +326,9 @@ static inline int
 schedule_write_request(struct nfs_wreq *req, int sync)
 {
 	struct rpc_task	*task = &req->wb_task;
-	struct inode	*inode = req->wb_inode;
+	struct file	*file = req->wb_file;
+	struct dentry	*dentry = file->f_dentry;
+	struct inode	*inode = dentry->d_inode;
 
 	if (NFS_CONGESTED(inode) || nr_write_requests >= NFS_WRITEBACK_MAX)
 		sync = 1;
@@ -367,7 +359,10 @@ schedule_write_request(struct nfs_wreq *req, int sync)
 static int
 wait_on_write_request(struct nfs_wreq *req)
 {
-	struct rpc_clnt		*clnt = NFS_CLIENT(req->wb_inode);
+	struct file		*file = req->wb_file;
+	struct dentry		*dentry = file->f_dentry;
+	struct inode		*inode = dentry->d_inode;
+	struct rpc_clnt		*clnt = NFS_CLIENT(inode);
 	struct wait_queue	wait = { current, NULL };
 	sigset_t		oldmask;
 	int retval;
@@ -435,7 +430,7 @@ nfs_updatepage(struct file *file, struct page *page, unsigned long offset, unsig
 	 * page and retry the update.
 	 */
 	req = find_write_request(inode, page);
-	if (req && update_write_request(req, offset, count))
+	if (req && req->wb_file == file && update_write_request(req, offset, count))
 		goto updated;
 
 	/*
@@ -446,7 +441,7 @@ nfs_updatepage(struct file *file, struct page *page, unsigned long offset, unsig
 		return nfs_writepage_sync(dentry, inode, page, offset, count);
 
 	/* Create the write request. */
-	req = create_write_request(dentry, inode, page, offset, count);
+	req = create_write_request(file, page, offset, count);
 	if (!req)
 		return -ENOBUFS;
 
@@ -455,7 +450,7 @@ nfs_updatepage(struct file *file, struct page *page, unsigned long offset, unsig
 	 * The IO completion will then free the page and the dentry.
 	 */
 	atomic_inc(&page->count);
-	dget(dentry);
+	file->f_count++;
 
 	/* Schedule request */
 	synchronous = schedule_write_request(req, sync);
@@ -571,40 +566,18 @@ nfs_wb_page(struct inode *inode, struct page *page)
 }
 
 /*
- * Write back all pending writes for one user.. 
+ * Write back all pending writes from one file descriptor..
  */
 int
-nfs_wb_pid(struct inode *inode, pid_t pid)
+nfs_wb_file(struct inode *inode, struct file *file)
 {
-	NFS_WB(inode, req->wb_pid == pid);
-}
-
-/*
- * Flush all write requests for truncation:
- * 	Simplification of the comparison has the side-effect of
- *	causing all writes in an infested page to be waited upon.
- */
-int
-nfs_flush_trunc(struct inode *inode, unsigned long from)
-{
-	from &= PAGE_MASK;
-	NFS_WB(inode, req->wb_page->offset >= from);
+	NFS_WB(inode, req->wb_file == file);
 }
 
 void
 nfs_inval(struct inode *inode)
 {
 	nfs_cancel_dirty(inode,0);
-}
-
-/*
- * Check if a previous write operation returned an error
- */
-int
-nfs_check_error(struct inode *inode)
-{
-	/* FIXME! */
-	return 0;
 }
 
 /*
@@ -618,7 +591,8 @@ nfs_wback_begin(struct rpc_task *task)
 {
 	struct nfs_wreq	*req = (struct nfs_wreq *) task->tk_calldata;
 	struct page	*page = req->wb_page;
-	struct dentry	*dentry = req->wb_dentry;
+	struct file	*file = req->wb_file;
+	struct dentry	*dentry = file->f_dentry;
 
 	dprintk("NFS: %4d nfs_wback_begin (%s/%s, status=%d flags=%x)\n",
 		task->tk_pid, dentry->d_parent->d_name.name,
@@ -645,13 +619,15 @@ static void
 nfs_wback_result(struct rpc_task *task)
 {
 	struct nfs_wreq *req = (struct nfs_wreq *) task->tk_calldata;
-	struct inode	*inode = req->wb_inode;
-	struct page	*page  = req->wb_page;
+	struct file	*file = req->wb_file;
+	struct page	*page = req->wb_page;
 	int		status = task->tk_status;
+	struct dentry	*dentry = file->f_dentry;
+	struct inode	*inode = dentry->d_inode;
 
 	dprintk("NFS: %4d nfs_wback_result (%s/%s, status=%d, flags=%x)\n",
-		task->tk_pid, req->wb_dentry->d_parent->d_name.name,
-		req->wb_dentry->d_name.name, status, req->wb_flags);
+		task->tk_pid, dentry->d_parent->d_name.name,
+		dentry->d_name.name, status, req->wb_flags);
 
 	/* Set the WRITE_COMPLETE flag, but leave WRITE_INPROGRESS set */
 	req->wb_flags |= NFS_WRITE_COMPLETE;
@@ -659,6 +635,7 @@ nfs_wback_result(struct rpc_task *task)
 
 	if (status < 0) {
 		req->wb_flags |= NFS_WRITE_INVALIDATE;
+		file->f_error = status;
 	} else if (!WB_CANCELLED(req)) {
 		struct nfs_fattr *fattr = &req->wb_fattr;
 		/* Update attributes as result of writeback. 
@@ -696,22 +673,8 @@ nfs_wback_result(struct rpc_task *task)
 	__free_page(page);
 	remove_write_request(&NFS_WRITEBACK(inode), req);
 	nr_write_requests--;
-	dput(req->wb_dentry);
+	fput(req->wb_file);
 
 	wake_up(&req->wb_wait);
-	
-	/*
-	 * FIXME!
-	 *
-	 * We should not free the request here if it has pending
-	 * error status on it. We should just leave it around, to
-	 * let the error be collected later. However, the error
-	 * collecting routines are too stupid for that right now,
-	 * so we just drop the error on the floor at this point
-	 * for any async writes.
-	 *
-	 * This should not be a major headache to fix, but I want
-	 * to validate basic operations first.
-	 */
 	free_write_request(req);
 }

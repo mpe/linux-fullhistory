@@ -976,7 +976,7 @@ static const char *Oops_code(const char *line, char ***string, int string_max)
 			"("						/*  4 */
 			  "(general protection.*)"
 			  "|(<[0-9]+>)"
-			  "|(([<(]?[0-9a-fA-F]+[>)]?[ \t]*)+)"
+			  "|(([<(]?[0-9a-fA-F]+[>)]?[ \t]+)+[<(]?[0-9a-fA-F]+[>)]?)"
 			")"
 			"(.*)$"				/* trailing garbage */
 			,

@@ -2,7 +2,7 @@
  * Permedia2 framebuffer driver definitions.
  * Copyright (c) 1998-1999 Ilario Nardinocchi (nardinoc@CS.UniBO.IT)
  * --------------------------------------------------------------------------
- * $Id: pm2fb.h,v 1.1.2.1 1999/01/12 19:53:02 geert Exp $
+ * $Id: pm2fb.h,v 1.21 1999/01/28 13:18:07 illo Exp $
  * --------------------------------------------------------------------------
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file README.legal in the main directory of this archive
@@ -16,7 +16,7 @@
 #define PM2_MAX_PIXCLOCK	230000			/* in KHz */
 #define PM2_REGS_SIZE		0x10000
 
-#define PM2TAG(r) (unsigned long )(((r)-0x8000)>>3)
+#define PM2TAG(r) (u32 )(((r)-0x8000)>>3)
 
 /*****************************************************************************
  * Permedia2 registers used in the framebuffer
@@ -128,16 +128,16 @@
 #define PM2I_RD_BLUE_KEY				0x44
 
 /* Fields and flags */
-#define PM2F_RENDER_AREASTIPPLE				(1<<0)
-#define PM2F_RENDER_FASTFILL				(1<<3)
-#define PM2F_RENDER_PRIMITIVE_MASK			(0x3<<6)
+#define PM2F_RENDER_AREASTIPPLE				(1L<<0)
+#define PM2F_RENDER_FASTFILL				(1L<<3)
+#define PM2F_RENDER_PRIMITIVE_MASK			(3L<<6)
 #define PM2F_RENDER_LINE				0
-#define PM2F_RENDER_TRAPEZOID				(1<<6)
-#define PM2F_RENDER_POINT				(2<<6)
-#define PM2F_RENDER_RECTANGLE				(3<<6)
-#define PM2F_SYNCHRONIZATION				(1<<10)
+#define PM2F_RENDER_TRAPEZOID				(1L<<6)
+#define PM2F_RENDER_POINT				(2L<<6)
+#define PM2F_RENDER_RECTANGLE				(3L<<6)
+#define PM2F_SYNCHRONIZATION				(1L<<10)
 #define PM2F_PLL_LOCKED					0x10
-#define PM2F_BEING_RESET				(1<<31)
+#define PM2F_BEING_RESET				(1L<<31)
 #define PM2F_DATATYPE_COLOR				0x8000
 #define PM2F_VGA_ENABLE					0x02
 #define PM2F_VGA_FIXED					0x04
@@ -166,13 +166,18 @@
 #define PM2F_TEXTEL_SIZE_32				0x00100000
 #define PM2F_TEXTEL_SIZE_4				0x00180000
 #define PM2F_TEXTEL_SIZE_24				0x00200000
-#define PM2F_INCREASE_X					(1<<21)
-#define PM2F_INCREASE_Y					(1<<22)
-#define PM2F_CONFIG_FB_WRITE_ENABLE			(1<<3)
-#define PM2F_CONFIG_FB_PACKED_DATA			(1<<2)
-#define PM2F_CONFIG_FB_READ_DEST_ENABLE			(1<<1)
-#define PM2F_CONFIG_FB_READ_SOURCE_ENABLE		(1<<0)
-#define PM2F_COLOR_KEY_TEST_OFF				(1<<4)
+#define PM2F_INCREASE_X					(1L<<21)
+#define PM2F_INCREASE_Y					(1L<<22)
+#define PM2F_CONFIG_FB_WRITE_ENABLE			(1L<<3)
+#define PM2F_CONFIG_FB_PACKED_DATA			(1L<<2)
+#define PM2F_CONFIG_FB_READ_DEST_ENABLE			(1L<<1)
+#define PM2F_CONFIG_FB_READ_SOURCE_ENABLE		(1L<<0)
+#define PM2F_COLOR_KEY_TEST_OFF				(1L<<4)
+#define PM2F_MEM_CONFIG_RAM_MASK			(3L<<29)
+#define PM2F_MEM_BANKS_1				0L
+#define PM2F_MEM_BANKS_2				(1L<<29)
+#define PM2F_MEM_BANKS_3				(2L<<29)
+#define PM2F_MEM_BANKS_4				(3L<<29)
 
 #endif /* PM2FB_H */
 

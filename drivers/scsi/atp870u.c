@@ -1684,7 +1684,7 @@ int atp870u_detect(Scsi_Host_Template * tpnt)
     struct Scsi_Host * shpnt = NULL;
     int count = 0;
     static unsigned short devid[7]={0x8002,0x8010,0x8020,0x8030,0x8040,0x8050,0};
-	static struct pci_dev *pdev = NULL;
+    static struct pci_dev *pdev = NULL, *acard_pdev[3];
 
     printk("aec671x_detect: \n");
     if (!pci_present())
@@ -1729,6 +1729,7 @@ int atp870u_detect(Scsi_Host_Template * tpnt)
        chip_ver[2]=0;
 	   
        /* To avoid messing with the things below...  */
+       acard_pdev[2] = pdev;
        pci_device_fn[2] =  pdev->devfn;
        pci_bus[2] = pdev->bus->number;
 
@@ -1746,15 +1747,18 @@ int atp870u_detect(Scsi_Host_Template * tpnt)
        }
        if ( pci_device_fn[2] < pci_device_fn[0] )
        {
+	  acard_pdev[1]=acard_pdev[0];
 	  pci_bus[1]=pci_bus[0];
 	  pci_device_fn[1]=pci_device_fn[0];
 	  chip_ver[1]=chip_ver[0];
+	  acard_pdev[0]=acard_pdev[2];
 	  pci_bus[0]=pci_bus[2];
 	  pci_device_fn[0]=pci_device_fn[2];
 	  chip_ver[0]=chip_ver[2];
        }
        else if ( pci_device_fn[2] < pci_device_fn[1] )
        {
+	  acard_pdev[1]=acard_pdev[2];
 	  pci_bus[1]=pci_bus[2];
 	  pci_device_fn[1]=pci_device_fn[2];
 	  chip_ver[1]=chip_ver[2];
@@ -1774,6 +1778,7 @@ nxt_devfn:
        return count;
     }
 
+    pdev = acard_pdev[h];
     pdev->devfn = pci_device_fn[h];
     pdev->bus->number = pci_bus[h];
 

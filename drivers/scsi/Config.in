@@ -66,6 +66,7 @@ if [ "$CONFIG_SCSI_GENERIC_NCR5380" != "n" ]; then
 fi
 if [ "$CONFIG_PCI" = "y" ]; then
   dep_tristate 'Initio 9100U(W) support' CONFIG_SCSI_INITIO $CONFIG_SCSI
+  dep_tristate 'Initio INI-A100U2W support' CONFIG_SCSI_INIA100 $CONFIG_SCSI
 fi
 if [ "$CONFIG_PARPORT" != "n" ]; then
   dep_tristate 'IOMEGA parallel port (ppa - older drives)' CONFIG_SCSI_PPA $CONFIG_SCSI $CONFIG_PARPORT
@@ -76,6 +77,7 @@ if [ "$CONFIG_PARPORT" != "n" ]; then
   fi
 fi
 dep_tristate 'NCR53c406a SCSI support' CONFIG_SCSI_NCR53C406A $CONFIG_SCSI
+dep_tristate 'symbios 53c416 SCSI support' CONFIG_SCSI_SYM53C416 $CONFIG_SCSI
 if [ "$CONFIG_PCI" = "y" ]; then
   dep_tristate 'NCR53c7,8xx SCSI support'  CONFIG_SCSI_NCR53C7xx $CONFIG_SCSI
   if [ "$CONFIG_SCSI_NCR53C7xx" != "n" ]; then
@@ -117,7 +119,7 @@ dep_tristate 'PSI240i support' CONFIG_SCSI_PSI240I $CONFIG_SCSI
 dep_tristate 'Qlogic FAS SCSI support' CONFIG_SCSI_QLOGIC_FAS $CONFIG_SCSI
 if [ "$CONFIG_PCI" = "y" ]; then
   dep_tristate 'Qlogic ISP SCSI support' CONFIG_SCSI_QLOGIC_ISP $CONFIG_SCSI
-# dep_tristate 'Qlogic ISP FC SCSI support' CONFIG_SCSI_QLOGIC_FC $CONFIG_SCSI
+  dep_tristate 'Qlogic ISP FC SCSI support' CONFIG_SCSI_QLOGIC_FC $CONFIG_SCSI
 fi
 dep_tristate 'Seagate ST-02 and Future Domain TMC-8xx SCSI support' CONFIG_SCSI_SEAGATE $CONFIG_SCSI
 if [ "$CONFIG_PCI" = "y" ]; then

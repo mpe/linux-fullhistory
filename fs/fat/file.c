@@ -456,6 +456,10 @@ void fat_truncate(struct inode *inode)
 	/* Why no return value?  Surely the disk could fail... */
 	if (IS_IMMUTABLE(inode))
 		return /* -EPERM */;
+	if(inode->i_sb->s_flags&MS_RDONLY) {
+		printk("FAT: fat_truncate called though fs is read-only, uhh...\n");
+		return /* -EROFS */;
+	}
 	cluster = SECTOR_SIZE*MSDOS_SB(inode->i_sb)->cluster_size;
 	(void) fat_free(inode,(inode->i_size+(cluster-1))/cluster);
 	MSDOS_I(inode)->i_attrs |= ATTR_ARCH;

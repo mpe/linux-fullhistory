@@ -254,6 +254,7 @@ static void vesafb_set_disp(int con)
 static int vesafb_set_var(struct fb_var_screeninfo *var, int con,
 			  struct fb_info *info)
 {
+	static int first = 1;
 
 	if (var->xres           != vesafb_defined.xres           ||
 	    var->yres           != vesafb_defined.yres           ||
@@ -262,8 +263,13 @@ static int vesafb_set_var(struct fb_var_screeninfo *var, int con,
 	    var->yres_virtual   <  video_height                  ||
 	    var->xoffset                                         ||
 	    var->bits_per_pixel != vesafb_defined.bits_per_pixel ||
-	    var->nonstd)
+	    var->nonstd) {
+		if (first) {
+			printk("Vesafb does not support changing the video mode\n");
+			first = 0;
+		}
 		return -EINVAL;
+	}
 
 	if ((var->activate & FB_ACTIVATE_MASK) == FB_ACTIVATE_TEST)
 		return 0;

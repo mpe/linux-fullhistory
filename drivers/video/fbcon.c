@@ -26,7 +26,7 @@
  *
  *  Hardware cursor support added by Emmanuel Marty (core@ggi-project.org)
  *  Smart redraw scrolling, arbitrary font width support, 512char font support
- *  added by 
+ *  and software scrollback added by 
  *                         Jakub Jelinek (jj@ultra.linux.cz)
  *
  *  Random hacking by Martin Mares <mj@ucw.cz>
@@ -111,6 +111,12 @@
 struct display fb_display[MAX_NR_CONSOLES];
 static int logo_lines;
 static int logo_shown = -1;
+/* Software scrollback */
+extern int fbcon_softback_size;
+static unsigned long softback_buf, softback_curr;
+static unsigned long softback_in;
+static unsigned long softback_top, softback_end;
+static int softback_lines;
 
 #define REFCOUNT(fd)	(((int *)(fd))[-1])
 #define FNTSIZE(fd)	(((int *)(fd))[-2])
@@ -118,7 +124,12 @@ static int logo_shown = -1;
 #define FNTSUM(fd)	(((int *)(fd))[-4])
 #define FONT_EXTRA_WORDS 4
 
-static void fbcon_free_font(struct display *p);
+#define CM_SOFTBACK	(8)
+
+#define advance_row(p, delta) (unsigned short *)((unsigned long)(p) + (delta) * conp->vc_size_row)
+
+static void fbcon_free_font(struct display *);
+static int fbcon_set_origin(struct vc_data *);
 
 /*
  * Emmanuel: fbcon will now use a hardware cursor if the
@@ -422,6 +433,27 @@ static void fbcon_setup(int con, int init, int logo)
     	logo = 0;
 
     p->var.xoffset = p->var.yoffset = p->yscroll = 0;  /* reset wrap/pan */
+
+    if (con == fg_console && p->type != FB_TYPE_TEXT) {   
+	if (fbcon_softback_size) {
+	    if (!softback_buf) {
+		softback_buf = (unsigned long)kmalloc(fbcon_softback_size, GFP_KERNEL);
+		if (!softback_buf) {
+    	            fbcon_softback_size = 0;
+    	            softback_top = 0;
+    		}
+    	    }
+	} else {
+	    if (softback_buf) {
+		kfree((void *)softback_buf);
+		softback_buf = 0;
+		softback_top = 0;
+	    }
+	}
+	if (softback_buf)
+	    softback_in = softback_top = softback_curr = softback_buf;
+	softback_lines = 0;
+    }
     
     for (i = 0; i < MAX_NR_CONSOLES; i++)
     	if (i != con && fb_display[i].fb_info == p->fb_info &&
@@ -579,6 +611,17 @@ static void fbcon_setup(int con, int init, int logo)
 	logo_shown = -2;
     	conp->vc_top = logo_lines;
     }
+    
+    if (con == fg_console && softback_buf) {
+    	int l = fbcon_softback_size / conp->vc_size_row;
+    	if (l > 5)
+    	    softback_end = softback_buf + l * conp->vc_size_row;
+    	else {
+    	    /* Smaller scrollback makes no sense, and 0 would screw
+    	       the operation totally */
+    	    softback_top = 0;
+    	}
+    }
 }
 
 
@@ -703,17 +746,29 @@ static void fbcon_cursor(struct vc_data *conp, int mode)
 {
     int unit = conp->vc_num;
     struct display *p = &fb_display[unit];
+    int y = conp->vc_y;
+    
+    if (mode & CM_SOFTBACK) {
+    	mode &= ~CM_SOFTBACK;
+    	if (softback_lines) {
+    	    if (y + softback_lines >= conp->vc_rows)
+    		mode = CM_ERASE;
+    	    else
+    	        y += softback_lines;
+    	}
+    } else if (softback_lines)
+        fbcon_set_origin(conp);
 
     /* do we have a hardware cursor ? */
     if (p->dispsw->cursor) {
 	p->cursor_x = conp->vc_x;
-	p->cursor_y = conp->vc_y;
+	p->cursor_y = y;
 	p->dispsw->cursor(p, mode, p->cursor_x, real_y(p, p->cursor_y));
 	return;
     }
 
     /* Avoid flickering if there's no real change. */
-    if (p->cursor_x == conp->vc_x && p->cursor_y == conp->vc_y &&
+    if (p->cursor_x == conp->vc_x && p->cursor_y == y &&
 	(mode == CM_ERASE) == !cursor_on)
 	return;
 
@@ -722,7 +777,7 @@ static void fbcon_cursor(struct vc_data *conp, int mode)
         p->dispsw->revc(p, p->cursor_x, real_y(p, p->cursor_y));
 
     p->cursor_x = conp->vc_x;
-    p->cursor_y = conp->vc_y;
+    p->cursor_y = y;
 
     switch (mode) {
         case CM_ERASE:
@@ -836,6 +891,94 @@ static __inline__ void ypan_down(int unit, struct vc_data *conp,
     scrollback_current = 0;
 }
 
+static void fbcon_redraw_softback(struct vc_data *conp, struct display *p, long delta)
+{
+    unsigned short *d, *s;
+    unsigned long n;
+    int line = 0;
+    int count = conp->vc_rows;
+    
+    d = (u16 *)softback_curr;
+    if (d == (u16 *)softback_in)
+	d = (u16 *)conp->vc_origin;
+    n = softback_curr + delta * conp->vc_size_row;
+    softback_lines -= delta;
+    if (delta < 0) {
+        if (softback_curr < softback_top && n < softback_buf) {
+            n += softback_end - softback_buf;
+	    if (n < softback_top) {
+		softback_lines -= (softback_top - n) / conp->vc_size_row;
+		n = softback_top;
+	    }
+        } else if (softback_curr >= softback_top && n < softback_top) {
+	    softback_lines -= (softback_top - n) / conp->vc_size_row;
+	    n = softback_top;
+        }
+    } else {
+    	if (softback_curr > softback_in && n >= softback_end) {
+    	    n += softback_buf - softback_end;
+	    if (n > softback_in) {
+		n = softback_in;
+		softback_lines = 0;
+	    }
+	} else if (softback_curr <= softback_in && n > softback_in) {
+	    n = softback_in;
+	    softback_lines = 0;
+	}
+    }
+    if (n == softback_curr)
+    	return;
+    softback_curr = n;
+    s = (u16 *)softback_curr;
+    if (s == (u16 *)softback_in)
+	s = (u16 *)conp->vc_origin;
+    while (count--) {
+	unsigned short *start;
+	unsigned short *le;
+	unsigned short c;
+	int x = 0;
+	unsigned short attr = 1;
+
+	start = s;
+	le = advance_row(s, 1);
+	do {
+	    c = scr_readw(s);
+	    if (attr != (c & 0xff00)) {
+		attr = c & 0xff00;
+		if (s > start) {
+		    p->dispsw->putcs(conp, p, start, s - start,
+				     real_y(p, line), x);
+		    x += s - start;
+		    start = s;
+		}
+	    }
+	    if (c == scr_readw(d)) {
+	    	if (s > start) {
+	    	    p->dispsw->putcs(conp, p, start, s - start,
+				     real_y(p, line), x);
+		    x += s - start + 1;
+		    start = s + 1;
+	    	} else {
+	    	    x++;
+	    	    start++;
+	    	}
+	    }
+	    s++;
+	    d++;
+	} while (s < le);
+	if (s > start)
+	    p->dispsw->putcs(conp, p, start, s - start, real_y(p, line), x);
+	line++;
+	if (d == (u16 *)softback_end)
+	    d = (u16 *)softback_buf;
+	if (d == (u16 *)softback_in)
+	    d = (u16 *)conp->vc_origin;
+	if (s == (u16 *)softback_end)
+	    s = (u16 *)softback_buf;
+	if (s == (u16 *)softback_in)
+	    s = (u16 *)conp->vc_origin;
+    }
+}
 
 static void fbcon_redraw(struct vc_data *conp, struct display *p, 
 			 int line, int count, int offset)
@@ -846,8 +989,7 @@ static void fbcon_redraw(struct vc_data *conp, struct display *p,
 
     while (count--) {
 	unsigned short *start = s;
-	unsigned short *le = (unsigned short *)
-	    ((unsigned long)s + conp->vc_size_row);
+	unsigned short *le = advance_row(s, 1);
 	unsigned short c;
 	int x = 0;
 	unsigned short attr = 1;
@@ -940,13 +1082,32 @@ void fbcon_redraw_bmove(struct display *p, int sy, int sx, int dy, int dx, int h
     }
 }
 
+static inline void fbcon_softback_note(struct vc_data *conp, int t, int count)
+{
+    unsigned short *p = (unsigned short *)
+    	(conp->vc_origin + t * conp->vc_size_row);
+    while (count) {
+    	scr_memcpyw((u16 *)softback_in, p, conp->vc_size_row);
+    	count--;
+    	p = advance_row(p, 1);
+    	softback_in += conp->vc_size_row;
+    	if (softback_in == softback_end)
+    	    softback_in = softback_buf;
+    	if (softback_in == softback_top) {
+    	    softback_top += conp->vc_size_row;
+    	    if (softback_top == softback_end)
+    	    	softback_top = softback_buf;
+    	}
+    }
+    softback_curr = softback_in;
+}
+
 static int fbcon_scroll(struct vc_data *conp, int t, int b, int dir,
 			int count)
 {
     int unit = conp->vc_num;
     struct display *p = &fb_display[unit];
     int scroll_partial = !(p->scrollmode & __SCROLL_YNOPARTIAL);
-    int logos_left = 0; int logos_width = conp->vc_cols;
 
     if (!p->can_soft_blank && console_blanked)
 	return 0;
@@ -955,7 +1116,7 @@ static int fbcon_scroll(struct vc_data *conp, int t, int b, int dir,
 	return 0;
 
     fbcon_cursor(conp, CM_ERASE);
-
+    
     /*
      * ++Geert: Only use ywrap/ypan if the console is in text mode
      * ++Andrew: Only use ypan on hardware text mode when scrolling the
@@ -964,34 +1125,25 @@ static int fbcon_scroll(struct vc_data *conp, int t, int b, int dir,
 
     switch (dir) {
 	case SM_UP:
-	    /* K.Garloff@ping.de, 98/10/21: If logo is diplayed, only save logo
-	     * and not the hole top region. In combination with the logo being
-	     * displayed on the right side, this allows scrollback feature
-	     * when bootlogo is displayed. */
-            if (t != 0 && logo_shown == fg_console) {
-		struct display *p = &fb_display[unit];
-		int lw = (smp_num_cpus * (LOGO_W + 8) - 7) / fontwidth(p) + 1;
-		logos_left = conp->vc_cols - lw;
-		while (logos_left < 0) logos_left += (LOGO_W + 8 - 7) / fontwidth(p);
-		logos_width = conp->vc_cols - logos_left;
-	    }
 	    if (count > conp->vc_rows)	/* Maximum realistic size */
 		count = conp->vc_rows;
+	    if (softback_top)
+	        fbcon_softback_note(conp, t, count);
+	    if (logo_shown >= 0) goto redraw_up;
 	    switch (p->scrollmode & __SCROLL_YMASK) {
 	    case __SCROLL_YMOVE:
-	        if (t > 0) p->dispsw->bmove(p, 0, logos_left, count,
-					logos_left, t, logos_width);
-	        p->dispsw->bmove(p, count, 0, 0, 0, b-count,
+		p->dispsw->bmove(p, t+count, 0, t, 0, b-t-count,
 				 conp->vc_cols);
-	        p->dispsw->clear(conp, p, b-count, 0, count,
+		p->dispsw->clear(conp, p, b-count, 0, count,
 				 conp->vc_cols);
 		break;
 
 	    case __SCROLL_YWRAP:
-		if (b-t-count > 2*conp->vc_rows/3) {
+		if (b-t-count > 3*conp->vc_rows>>2) {
 		    if (t > 0)
-			fbcon_bmove(conp, 0, logos_left, count, logos_left, t, logos_width);
-		    ywrap_up(unit, conp, p, count);
+			fbcon_bmove(conp, 0, 0, count, 0, t,
+				    conp->vc_cols);
+			ywrap_up(unit, conp, p, count);
 		    if (conp->vc_rows-b > 0)
 			fbcon_bmove(conp, b-count, 0, b, 0,
 				    conp->vc_rows-b, conp->vc_cols);
@@ -1004,11 +1156,12 @@ static int fbcon_scroll(struct vc_data *conp, int t, int b, int dir,
 		break;
 
 	    case __SCROLL_YPAN:
-		if (( !scroll_partial && (b-t == conp->vc_rows)) ||
-		    ( scroll_partial  && (b-t-count > 3*conp->vc_rows>>2))) {
+		if (( p->yscroll + count <= 2 * (p->vrows - conp->vc_rows)) &&
+		    (( !scroll_partial && (b-t == conp->vc_rows)) ||
+		     ( scroll_partial  && (b-t-count > 3*conp->vc_rows>>2)))) {
 		    if (t > 0)
-			fbcon_bmove(conp, 0, logos_left, count, logos_left, t,
-				    logos_width);
+			fbcon_bmove(conp, 0, 0, count, 0, t,
+				    conp->vc_cols);
 		    ypan_up(unit, conp, p, count);
 		    if (conp->vc_rows-b > 0)
 			fbcon_bmove(conp, b-count, 0, b, 0,
@@ -1063,8 +1216,9 @@ static int fbcon_scroll(struct vc_data *conp, int t, int b, int dir,
 		break;
 
 	    case __SCROLL_YPAN:
-		if (( !scroll_partial && (b-t == conp->vc_rows)) ||
-		    ( scroll_partial  && (b-t-count > 3*conp->vc_rows>>2))) {
+		if (( count-p->yscroll <= p->vrows-conp->vc_rows) &&
+		    (( !scroll_partial && (b-t == conp->vc_rows)) ||
+		     ( scroll_partial  && (b-t-count > 3*conp->vc_rows>>2)))) {
 		    if (conp->vc_rows-b > 0)
 			fbcon_bmove(conp, b, 0, b-count, 0,
 				    conp->vc_rows-b, conp->vc_cols);
@@ -1112,7 +1266,7 @@ static void fbcon_bmove(struct vc_data *conp, int sy, int sx, int dy, int dx,
 	  (sx <= p->cursor_x) && (p->cursor_x < sx+width)) ||
 	 ((dy <= p->cursor_y) && (p->cursor_y < dy+height) &&
 	  (dx <= p->cursor_x) && (p->cursor_x < dx+width)))
-	fbcon_cursor(conp, CM_ERASE);
+	fbcon_cursor(conp, CM_ERASE|CM_SOFTBACK);
 
     /*  Split blits that cross physical y_wrap case.
      *  Pathological case involves 4 blits, better to use recursive
@@ -1162,6 +1316,12 @@ static int fbcon_switch(struct vc_data *conp)
     struct display *p = &fb_display[unit];
     struct fb_info *info = p->fb_info;
 
+    if (softback_top) {
+	if (softback_lines)
+	    fbcon_set_origin(conp);
+        softback_top = softback_curr = softback_in = softback_buf;
+        softback_lines = 0;
+    }
     if (logo_shown >= 0) {
     	struct vc_data *conp2 = vc_cons[logo_shown].d;
     	
@@ -1227,8 +1387,22 @@ static int fbcon_blank(struct vc_data *conp, int blank)
 		    mymemset(p->screen_base,
 			     p->var.xres_virtual*p->var.yres_virtual*
 			     p->var.bits_per_pixel>>3);
-	     } else
-		 p->dispsw->clear(conp, p, 0, 0, conp->vc_rows, conp->vc_cols);
+	    } else {
+	    	unsigned short oldc;
+	    	u_int height;
+	    	u_int y_break;
+
+	    	oldc = conp->vc_video_erase_char;
+	    	conp->vc_video_erase_char &= p->charmask;
+	    	height = conp->vc_rows;
+		y_break = p->vrows-p->yscroll;
+		if (height > y_break) {
+			p->dispsw->clear(conp, p, real_y(p, 0), 0, y_break, conp->vc_cols);
+			p->dispsw->clear(conp, p, real_y(p, y_break), 0, height-y_break, conp->vc_cols);
+		} else
+			p->dispsw->clear(conp, p, real_y(p, 0), 0, height, conp->vc_cols);
+		conp->vc_video_erase_char = oldc;
+	    }
 	    return 0;
 	} else {
 	    /* Tell console.c that it has to restore the screen itself */
@@ -1320,6 +1494,9 @@ static int fbcon_do_set_font(int unit, struct console_font_op *op, u8 *data, int
 	return -ENXIO;
     }
 
+    if (CON_IS_VISIBLE(p->conp) && softback_lines)
+	fbcon_set_origin(p->conp);
+	
     resize = (w != fontwidth(p)) || (h != fontheight(p));
     if (p->userfont)
         old_data = p->fontdata;
@@ -1390,6 +1567,7 @@ static int fbcon_do_set_font(int unit, struct console_font_op *op, u8 *data, int
     fbcon_font_widths(p);
 
     if (resize) {
+    	struct vc_data *conp = p->conp;
 	/* reset wrap/pan */
 	p->var.xoffset = p->var.yoffset = p->yscroll = 0;
 	p->vrows = p->var.yres_virtual/h;
@@ -1397,6 +1575,16 @@ static int fbcon_do_set_font(int unit, struct console_font_op *op, u8 *data, int
 	    p->vrows--;
 	updatescrollmode(p);
 	vc_resize_con( p->var.yres/h, p->var.xres/w, unit );
+        if (CON_IS_VISIBLE(conp) && softback_buf) {
+	    int l = fbcon_softback_size / conp->vc_size_row;
+	    if (l > 5)
+		softback_end += l * conp->vc_size_row;
+	    else {
+		/* Smaller scrollback makes no sense, and 0 would screw
+		   the operation totally */
+		softback_top = 0;
+    	    }
+    	}
     } else if (CON_IS_VISIBLE(p->conp) && vt_cons[unit]->vc_mode == KD_TEXT) {
 	if (p->dispsw->clear_margins)
 	    p->dispsw->clear_margins(p->conp, p, 0);
@@ -1476,6 +1664,7 @@ static inline int fbcon_set_font(int unit, struct console_font_op *op)
 	}
     } else if (w <= 24) {
 	for (i = 0; i < op->charcount; i++) {
+	    int j;
 	    for (j = 0; j < h; j++) {
 	        memcpy(p, data, 3);
 		p[3] = 0;
@@ -1586,10 +1775,120 @@ static int fbcon_set_palette(struct vc_data *conp, unsigned char *table)
     return p->fb_info->fbops->fb_set_cmap(&palette_cmap, 1, unit, p->fb_info);
 }
 
+static u16 *fbcon_screen_pos(struct vc_data *conp, int offset)
+{
+    int line;
+    unsigned long p;
+
+    if (conp->vc_num != fg_console || !softback_lines)
+    	return (u16 *)(conp->vc_origin + offset);
+    line = offset / conp->vc_size_row;
+    if (line >= softback_lines)
+    	return (u16 *)(conp->vc_origin + offset - softback_lines * conp->vc_size_row);
+    p = softback_curr + offset;
+    if (p >= softback_end)
+    	p += softback_buf - softback_end;
+    return (u16 *)p;
+}
+
+static unsigned long fbcon_getxy(struct vc_data *conp, unsigned long pos, int *px, int *py)
+{
+    int x, y;
+    unsigned long ret;
+    if (pos >= conp->vc_origin && pos < conp->vc_scr_end) {
+    	unsigned long offset = (pos - conp->vc_origin) / 2;
+    	
+    	x = offset % conp->vc_cols;
+    	y = offset / conp->vc_cols;
+    	if (conp->vc_num == fg_console)
+    	    y += softback_lines;
+    	ret = pos + (conp->vc_cols - x) * 2;
+    } else if (conp->vc_num == fg_console && softback_lines) {
+    	unsigned long offset = (pos - softback_curr) / 2;
+    	
+    	x = offset % conp->vc_cols;
+    	y = offset / conp->vc_cols;
+    	if (pos < softback_curr)
+	    y += (softback_end - softback_buf) / conp->vc_size_row;
+	ret = pos + (conp->vc_cols - x) * 2;
+	if (ret == softback_end)
+	    ret = softback_buf;
+	if (ret == softback_in)
+	    ret = conp->vc_origin;
+    } else {
+    	/* Should not happen */
+    	x = y = 0;
+    	ret = conp->vc_origin;
+    }
+    if (px) *px = x;
+    if (py) *py = y;
+    return ret;
+}
+
+/* As we might be inside of softback, we may work with non-contiguous buffer,
+   that's why we have to use a separate routine. */
+static void fbcon_invert_region(struct vc_data *conp, u16 *p, int cnt)
+{
+    while (cnt--) {
+	if (!conp->vc_can_do_color)
+	    *p++ ^= 0x0800;
+	else if (conp->vc_hi_font_mask == 0x100) {
+	    u16 a = *p;
+	    a = ((a) & 0x11ff) | (((a) & 0xe000) >> 4) | (((a) & 0x0e00) << 4);
+	    *p++ = a;
+	} else {
+	    u16 a = *p;
+	    a = ((a) & 0x88ff) | (((a) & 0x7000) >> 4) | (((a) & 0x0700) << 4);
+	    *p++ = a;
+	}
+	if (p == (u16 *)softback_end)
+	    p = (u16 *)softback_buf;
+	if (p == (u16 *)softback_in)
+	    p = (u16 *)conp->vc_origin;
+    }
+}
+
 static int fbcon_scrolldelta(struct vc_data *conp, int lines)
 {
     int unit, offset, limit, scrollback_old;
     struct display *p;
+    
+    unit = fg_console;
+    p = &fb_display[unit];
+    if (softback_top) {
+    	if (conp->vc_num != unit)
+    	    return 0;
+    	if (vt_cons[unit]->vc_mode != KD_TEXT || !lines)
+    	    return 0;
+    	if (logo_shown >= 0) {
+		struct vc_data *conp2 = vc_cons[logo_shown].d;
+    	
+		if (conp2->vc_top == logo_lines && conp2->vc_bottom == conp2->vc_rows)
+    		    conp2->vc_top = 0;
+    		if (logo_shown == unit) {
+    		    unsigned long p, q;
+    		    int i;
+    		    
+    		    p = softback_in;
+    		    q = conp->vc_origin + logo_lines * conp->vc_size_row;
+    		    for (i = 0; i < logo_lines; i++) {
+    		    	if (p == softback_top) break;
+    		    	if (p == softback_buf) p = softback_end;
+    		    	p -= conp->vc_size_row;
+    		    	q -= conp->vc_size_row;
+    		    	scr_memcpyw((u16 *)q, (u16 *)p, conp->vc_size_row);
+    		    }
+    		    softback_lines -= i;
+    		    softback_in = p;
+    		    update_region(unit, conp->vc_origin, logo_lines * conp->vc_cols);
+    		}
+		logo_shown = -1;
+	}
+    	fbcon_cursor(conp, CM_ERASE|CM_SOFTBACK);
+    	fbcon_redraw_softback(conp, p, lines);
+    	fbcon_cursor(conp, CM_DRAW|CM_SOFTBACK);
+    	return 0;
+    }
 
     if (!scrollback_phys_max)
 	return -ENOSYS;
@@ -1603,8 +1902,6 @@ static int fbcon_scrolldelta(struct vc_data *conp, int lines)
     if (scrollback_current == scrollback_old)
 	return 0;
 
-    unit = fg_console;
-    p = &fb_display[unit];
     if (!p->can_soft_blank &&
 	(console_blanked || vt_cons[unit]->vc_mode != KD_TEXT || !lines))
 	return 0;
@@ -1630,6 +1927,13 @@ static int fbcon_scrolldelta(struct vc_data *conp, int lines)
     p->fb_info->updatevar(unit, p->fb_info);
     if (!scrollback_current)
 	fbcon_cursor(conp, CM_DRAW);
+    return 0;
+}
+
+static int fbcon_set_origin(struct vc_data *conp)
+{
+    if (softback_lines && !console_blanked)
+        fbcon_scrolldelta(conp, softback_lines);
     return 0;
 }
 
@@ -1705,8 +2009,8 @@ __initfunc(static int fbcon_show_logo( void ))
 	logo_depth = 1;
     }
 
-    for (x = p->var.xres - LOGO_W; x > 0 && x > (int)p->var.xres 
-        - smp_num_cpus * (LOGO_W + 8); x -= (LOGO_W + 8)) {
+    for (x = 0; x < smp_num_cpus * (LOGO_W + 8) &&
+    	 x < p->var.xres - (LOGO_W + 8); x += (LOGO_W + 8)) {
     	 
 #if defined(CONFIG_FBCON_CFB16) || defined(CONFIG_FBCON_CFB24) || \
     defined(CONFIG_FBCON_CFB32) || defined(CONFIG_FB_SBUS)
@@ -1939,10 +2243,12 @@ struct consw fb_con = {
     con_font_op:	fbcon_font_op,
     con_set_palette: 	fbcon_set_palette,
     con_scrolldelta: 	fbcon_scrolldelta,
-    con_set_origin: 	NULL,
+    con_set_origin: 	fbcon_set_origin,
     con_save_screen: 	NULL,
     con_build_attr:	NULL,
-    con_invert_region:	NULL,
+    con_invert_region:	fbcon_invert_region,
+    con_screen_pos:	fbcon_screen_pos,
+    con_getxy:		fbcon_getxy,
 };
 
 

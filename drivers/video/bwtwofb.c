@@ -1,4 +1,4 @@
-/* $Id: bwtwofb.c,v 1.6 1998/09/15 15:45:35 jj Exp $
+/* $Id: bwtwofb.c,v 1.7 1999/01/26 10:55:02 jj Exp $
  * bwtwofb.c: BWtwo frame buffer driver
  *
  * Copyright (C) 1998 Jakub Jelinek   (jj@ultra.linux.cz)
@@ -199,6 +199,7 @@ char __init *bwtwofb_init(struct fb_info_sbusfb *fb)
 	strcpy(fb->info.modename, "BWtwo");
 	strcpy(fix->id, "BWtwo");
 	fix->line_length = fb->var.xres_virtual>>3;
+	fix->accel = FB_ACCEL_SUN_BWTWO;
 	
 	disp->scrollmode = SCROLL_YREDRAW;
 	disp->inverse = 1;

@@ -165,8 +165,10 @@ int ei_open(struct device *dev)
       
       	spin_lock_irqsave(&ei_local->page_lock, flags);
 	NS8390_init(dev, 1);
-      	spin_unlock_irqrestore(&ei_local->page_lock, flags);
+	/* Set the flag before we drop the lock, That way the IRQ arrives
+	   after its set and we get no silly warnings */
 	dev->start = 1;
+      	spin_unlock_irqrestore(&ei_local->page_lock, flags);
 	ei_local->irqlock = 0;
 	return 0;
 }

@@ -1,4 +1,4 @@
-This is the main documentation for the CVF-FAT filesystem extension.  31DEC1997
+This is the main documentation for the CVF-FAT filesystem extension.  18Nov1998
 
 
 Table of Contents:
@@ -37,14 +37,9 @@ like compression and decompression silently.
   CVF filesystems cannot do bmap. It's impossible in principle. Thus
   all actions that require bmap do not work (swapping, writable mmapping).
   Read-only mmapping works because the FAT driver has a hack for this
-  situation :) Well, with some tricks writable mmapping could work,
-  (proof: they did under old dmsdos), but..... (hint: readpage/writepage
-  interface functions) ...... but the FAT driver has to support them 
-  first without bmap :-)
-
-  We'll see. If someone points me to an application that needs this, I
-  might be persuaded to implement it :). CVF-FAT is already prepared
-  for using readpage.
+  situation :) Well, writable mmapping should now work using the readpage
+  interface function which has been hacked into the FAT driver just for 
+  CVF-FAT :)
   
 - attention, DOSEmu users 
 
@@ -66,11 +61,28 @@ driver's standard options:
 
   cvf_format=xxx
     Forces the driver to use the CVF module "xxx" instead of auto-detection.
-    This is only necessary if the CVF format is not recognized correctly
+    Without this option, the CVF-FAT interface asks all currently loaded
+    CVF modules whether they recognize the CVF. Therefore, this option is
+    only necessary if the CVF format is not recognized correctly
     because of bugs or incompatibilities in the CVF modules. (It skips
     the detect_cvf call.) "xxx" may be the text "none" (without the quotes)
     to inhibit using any of the loaded CVF modules, just in case a CVF
-    module insists on mounting plain FAT filesystems by misunderstanding :)
+    module insists on mounting plain FAT filesystems by misunderstanding.
+    "xxx" may also be the text "autoload", which has a special meaning for
+    a module loader, but does not skip auto-detection.
+
+    If the kernel supports kmod, the cvf_format=xxx option also controls
+    on-demand CVF module loading. Without this option, nothing is loaded
+    on demand. With cvf_format=xxx, a module "xxx" is requested automatically
+    before mounting the compressed filesystem (unless "xxx" is "none"). In 
+    case there is a difference between the CVF format name and the module 
+    name, setup aliases in your modules configuration. If the string "xxx" 
+    is "autoload", a non-existent module "cvf_autoload" is requested which 
+    can be used together with a special modules configuration (alias and 
+    pre-install statements) in order to load more than one CVF module, let 
+    them detect automatically which kind of CVF is to be mounted, and only 
+    keep the "right" module in memory. For examples please refer to the 
+    dmsdos documentation (ftp and http addresses see below).
 
   cvf_options=yyy
     Option string passed to the CVF module. I.e. only the "yyy" is passed
@@ -80,8 +92,8 @@ driver's standard options:
     misinterpretation by the FAT driver, which would recognize the text 
     after a comma as a FAT driver option and might get confused or print 
     strange error messages. The documentation for the CVF module should 
-    offer a different separation symbol, for example the dot ".", which
-    is only valid inside the string "yyy".
+    offer a different separation symbol, for example the dot "." or the
+    plus sign "+", which is only valid inside the string "yyy".
 
 
 4. Description of the CVF-FAT interface
@@ -120,11 +132,11 @@ It contains...
       is set, mmap is set to generic_file_mmap and readpage is caught
       and redirected to the cvf_readpage function. If it is not set,
       readpage is set to generic_readpage and mmap is caught and redirected
-      to cvf_mmap.
+      to cvf_mmap. (If you want writable mmap use the readpage interface.)
   - detect_cvf:
       A function that is called to decide whether the filesystem is a CVF of
       the type the module supports. The detect_cvf function must return 0
-      for "NO, I DON'T KNOW THIS GARBAGE" or anything !=0 for "YES, THIS IS
+      for "NO, I DON'T KNOW THIS GARBAGE" or anything >0 for "YES, THIS IS
       THE KIND OF CVF I SUPPORT". The function must maintain the module
       usage counters for safety, i.e. do MOD_INC_USE_COUNT at the beginning
       and MOD_DEC_USE_COUNT at the end. The function *must not* assume that
@@ -180,11 +192,19 @@ int unregister_cvf_format(struct cvf_format*cvf_format);
   that has not been previously registered. The code uses the version id
   to distinguish the modules, so be sure to keep it unique.
 
-5. CVS Modules
+5. CVF Modules
 ------------------------------------------------------------------------------
 
 Refer to the dmsdos module (the successor of the dmsdos filesystem) for a
 sample implementation.  It can currently be found at
 
-  ftp://fb9nt.uni-duisburg.de/pub/linux/dmsdos
+  ftp://fb9nt.uni-duisburg.de/pub/linux/dmsdos/dmsdos-x.y.z.tgz
+  ftp://sunsite.unc.edu/pub/Linux/system/Filesystems/dosfs/dmsdos-x.y.z.tgz
+  ftp://ftp.uni-stuttgart.de/pub/systems/linux/local/system/dmsdos-x.y.z.tgz
 
+(where x.y.z is to be replaced with the actual version number). Full
+documentation about dmsdos is included in the dmsdos package, but can also
+be found at
+
+  http://fb9nt.uni-duisburg.de/mitarbeiter/gockel/software/dmsdos/index.html
+  http://www.yk.rim.or.jp/~takafumi/dmsdos/index.html (in Japanese).

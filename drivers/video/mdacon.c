@@ -429,7 +429,7 @@ static void mdacon_putcs(struct vc_data *c, const unsigned short *s,
 	u16 *dest = MDA_ADDR(x, y);
 
 	for (; count > 0; count--) {
-		scr_writew(mda_convert_attr(*s++), dest++);
+		scr_writew(mda_convert_attr(scr_readw(s++)), dest++);
 	}
 }
 

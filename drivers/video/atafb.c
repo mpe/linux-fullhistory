@@ -103,7 +103,7 @@ static int sttt_xres_virtual=640,sttt_yres_virtual=400;
 static int ovsc_offset=0, ovsc_addlen=0;
 
 static struct atafb_par {
-	unsigned long screen_base;
+	void *screen_base;
 	int yres_virtual;
 #if defined ATAFB_TT || defined ATAFB_STE
 	union {
@@ -167,8 +167,8 @@ static int DontCalcRes = 0;
 
 static struct fb_info fb_info;
 
-static unsigned long screen_base;	/* base address of screen */
-static unsigned long real_screen_base;	/* (only for Overscan) */
+static void *screen_base;	/* base address of screen */
+static void *real_screen_base;	/* (only for Overscan) */
 
 static int screen_len;
 
@@ -193,7 +193,7 @@ static unsigned			external_yres;
 
 static unsigned			external_depth;
 static int				external_pmode;
-static unsigned long	external_addr = 0;
+static void *external_addr = 0;
 static unsigned long	external_len;
 static unsigned long	external_vgaiobase = 0;
 static unsigned int		external_bitspercol = 6;
@@ -299,7 +299,7 @@ extern unsigned char fontdata_8x16[];
  *   Read a single color register and split it into
  *   colors/transparent. Return != 0 for invalid regno.
  *
- * void (*set_screen_base)( unsigned long s_base )
+ * void (*set_screen_base)(void *s_base)
  *   Set the base address of the displayed frame buffer. Only called
  *   if yres_virtual > yres or xres_virtual > xres.
  *
@@ -328,7 +328,7 @@ static struct fb_hwswitch {
 	int  (*setcolreg)( unsigned regno, unsigned red,
 					   unsigned green, unsigned blue,
 					   unsigned transp, struct fb_info *info );
-	void (*set_screen_base)( unsigned long s_base );
+	void (*set_screen_base)(void *s_base);
 	int  (*blank)( int blank_mode );
 	int  (*pan_display)( struct fb_var_screeninfo *var,
 						 struct atafb_par *par);
@@ -464,7 +464,7 @@ static int tt_encode_fix( struct fb_fix_screeninfo *fix,
 	int mode;
 
 	strcpy(fix->id,"Atari Builtin");
-	fix->smem_start = (char *)real_screen_base;
+	fix->smem_start = real_screen_base;
 	fix->smem_len = screen_len;
 	fix->type=FB_TYPE_INTERLEAVED_PLANES;
 	fix->type_aux=2;
@@ -797,7 +797,7 @@ static int falcon_encode_fix( struct fb_fix_screeninfo *fix,
 							  struct atafb_par *par )
 {
 	strcpy(fix->id, "Atari Builtin");
-	fix->smem_start = (char *)real_screen_base;
+	fix->smem_start = real_screen_base;
 	fix->smem_len = screen_len;
 	fix->type = FB_TYPE_INTERLEAVED_PLANES;
 	fix->type_aux = 2;
@@ -1760,7 +1760,7 @@ static int stste_encode_fix( struct fb_fix_screeninfo *fix,
 	int mode;
 
 	strcpy(fix->id,"Atari Builtin");
-	fix->smem_start = (char *)real_screen_base;
+	fix->smem_start = real_screen_base;
 	fix->smem_len = screen_len;
 	fix->type = FB_TYPE_INTERLEAVED_PLANES;
 	fix->type_aux = 2;
@@ -2024,7 +2024,7 @@ static int stste_detect( void )
 	return 1;
 }
 
-static void stste_set_screen_base(unsigned long s_base)
+static void stste_set_screen_base(void *s_base)
 {
 	unsigned long addr;
 	addr= virt_to_phys(s_base);
@@ -2104,8 +2104,8 @@ static int ext_encode_fix( struct fb_fix_screeninfo *fix,
 
 {
 	strcpy(fix->id,"Unknown Extern");
-	fix->smem_start=(char *)external_addr;
-	fix->smem_len=(external_len + PAGE_SIZE -1) & PAGE_MASK;
+	fix->smem_start=external_addr;
+	fix->smem_len = PAGE_ALIGN(external_len);
 	if (external_depth == 1) {
 		fix->type = FB_TYPE_PACKED_PIXELS;
 		/* The letters 'n' and 'i' in the "atavideo=external:" stand
@@ -2295,7 +2295,7 @@ static int ext_detect( void )
 
 /* ------ This is the same for most hardware types -------- */
 
-static void set_screen_base(unsigned long s_base)
+static void set_screen_base(void *s_base)
 {
 	unsigned long addr;
 	addr= virt_to_phys(s_base);
@@ -2804,15 +2804,13 @@ __initfunc(void atafb_init(void))
 #ifdef ATAFB_EXT
 	if (!external_addr) {
 #endif /* ATAFB_EXT */
-		mem_req = default_mem_req + ovsc_offset +
-			ovsc_addlen;
-		mem_req = ((mem_req + PAGE_SIZE - 1) & PAGE_MASK) + PAGE_SIZE;
-		screen_base = (unsigned long)atari_stram_alloc(mem_req, NULL,
-							       "atafb");
+		mem_req = default_mem_req + ovsc_offset + ovsc_addlen;
+		mem_req = PAGE_ALIGN(mem_req) + PAGE_SIZE;
+		screen_base = atari_stram_alloc(mem_req, NULL, "atafb");
 		if (!screen_base)
 			panic("Cannot allocate screen memory");
-		memset((char *) screen_base, 0, mem_req);
-		pad = ((screen_base + PAGE_SIZE-1) & PAGE_MASK) - screen_base;
+		memset(screen_base, 0, mem_req);
+		pad = -(unsigned long)screen_base & (PAGE_SIZE-1);
 		screen_base+=pad;
 		real_screen_base=screen_base+ovsc_offset;
 		screen_len = (mem_req - pad - ovsc_offset) & PAGE_MASK;
@@ -2820,9 +2818,9 @@ __initfunc(void atafb_init(void))
 		if (CPU_IS_040_OR_060) {
 			/* On a '040+, the cache mode of video RAM must be set to
 			 * write-through also for internal video hardware! */
-			cache_push( virt_to_phys(screen_base), screen_len );
-			kernel_set_cachemode( screen_base, screen_len,
-					      IOMAP_WRITETHROUGH );
+			cache_push(virt_to_phys(screen_base), screen_len);
+			kernel_set_cachemode(screen_base, screen_len,
+					     IOMAP_WRITETHROUGH);
 		}
 #ifdef ATAFB_EXT
 	}
@@ -2836,7 +2834,7 @@ __initfunc(void atafb_init(void))
 		screen_base      =
 		real_screen_base = external_addr;
 		screen_len       = external_len & PAGE_MASK;
-		memset ((char *) screen_base, 0, external_len);
+		memset (screen_base, 0, external_len);
 	}
 #endif /* ATAFB_EXT */
 
