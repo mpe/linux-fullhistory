@@ -10,6 +10,8 @@
  * Fixes:
  *		Many		:	Split from ip.c , see ip_input.c for history.
  *		Dave Gregorich	:	NULL ip_rt_put fix for multicast routing.
+ *		Jos Vos		:	Add call_out_firewall before sending,
+ *					use output device for accounting.
  */
 
 #include <linux/config.h>
@@ -340,8 +342,20 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 #ifdef CONFIG_IP_MROUTE
 			}				
 #endif			
-			ip_statistics.IpForwDatagrams++;
 		}
+#ifdef CONFIG_FIREWALL
+		if((fw_res = call_out_firewall(PF_INET, skb2, iph)) < FW_ACCEPT)
+		{
+			/* FW_ACCEPT and FW_MASQUERADE are treated equal:
+			   masquerading is only supported via forward rules */
+			if (fw_res == FW_REJECT)
+				icmp_send(skb2, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0, dev);
+			if (skb != skb2)
+				kfree_skb(skb2,FREE_WRITE);
+			return -1;
+		}
+#endif
+		ip_statistics.IpForwDatagrams++;
 
 		if (opt->optlen) 
 		{
@@ -413,7 +427,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 			 *	Count mapping we shortcut
 			 */
 			 
-			ip_fw_chk(iph,dev,ip_acct_chain,IP_FW_F_ACCEPT,1);
+			ip_fw_chk(iph,dev2,ip_acct_chain,IP_FW_F_ACCEPT,1);
 #endif			
 			
 			/*

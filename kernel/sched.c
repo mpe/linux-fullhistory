@@ -261,6 +261,11 @@ asmlinkage void schedule(void)
 		printk("Aiee: scheduling in interrupt\n");
 		return;
 	}
+	if (bh_active & bh_mask) {
+		intr_count = 1;
+		do_bottom_half();
+		intr_count = 0;
+	}
 	run_task_queue(&tq_scheduler);
 
 	need_resched = 0;
@@ -466,7 +471,7 @@ void sleep_on(struct wait_queue **p)
  * and the sorting routine counts on this..
  */
 static struct timer_list timer_head = { &timer_head, &timer_head, ~0, 0, NULL };
-#define SLOW_BUT_DEBUGGING_TIMERS 1
+#define SLOW_BUT_DEBUGGING_TIMERS 0
 
 void add_timer(struct timer_list * timer)
 {
@@ -516,18 +521,18 @@ int del_timer(struct timer_list * timer)
 			__builtin_return_address(0));
 	restore_flags(flags);
 	return 0;
-#else	
+#else
+	struct timer_list * next;
+	int ret = 0;
 	save_flags(flags);
 	cli();
-	if (timer->next) {
-		timer->next->prev = timer->prev;
-		timer->prev->next = timer->next;
+	if ((next = timer->next) != NULL) {
+		(next->prev = timer->prev)->next = next;
 		timer->next = timer->prev = NULL;
-		restore_flags(flags);
-		return 1;
+		ret = 1;
 	}
 	restore_flags(flags);
-	return 0;
+	return ret;
 #endif
 }
 

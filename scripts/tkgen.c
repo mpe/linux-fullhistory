@@ -432,7 +432,11 @@ static end_proc(int menu_num, int first, int last)
   printf("\tglobal winx; global winy\n");
   printf("\tset winx [expr [winfo x .]+30]; set winy [expr [winfo y .]+30]\n");
   printf("\twm geometry $w +$winx+$winy\n");
-  printf("\twm resizable $w no yes\n\n");
+  /*
+   *	We have a cunning plan....
+   */
+  if(access("/usr/lib/tk4.0",0)==0)
+	  printf("\twm resizable $w no yes\n\n");
   
   /*
    * Now that the whole window is in place, we need to wait for an "update"

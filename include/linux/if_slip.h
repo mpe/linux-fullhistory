@@ -15,5 +15,14 @@
 #define		SL_OPT_SIXBIT		2
 #define		SL_OPT_ADAPTIVE		8
 
+/*
+ *	VSV = ioctl for keepalive & outfill in SLIP driver 
+ */
+ 
+#define SIOCSKEEPALIVE	(SIOCDEVPRIVATE)		/* Set keepalive timeout in sec */
+#define SIOCGKEEPALIVE	(SICODEVPRIVATE+1)		/* Get keepalive timeout */
+#define SIOCSOUTFILL	(SIOCDEVPRIVATE+2)		/* Set outfill timeout */
+#define	SIOCGOUTFILL	(SIOCDEVPRIVATE+3)		/* Get outfill timeout */
+
 
 #endif

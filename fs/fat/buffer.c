@@ -1,5 +1,5 @@
 /*
- * linux/fs/msdos/buffer.c
+ * linux/fs/fat/buffer.c
  *
  *
  */

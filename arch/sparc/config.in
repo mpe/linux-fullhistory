@@ -17,6 +17,7 @@ define_bool CONFIG_SUN_CONSOLE y
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
+tristate 'Kernel support for A.OUT binaries' CONFIG_BINFMT_AOUT
 endmenu
 
 source drivers/block/Config.in

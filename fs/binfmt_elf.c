@@ -33,11 +33,6 @@
 
 #include <linux/config.h>
 
-#include <linux/unistd.h>
-typedef int (*sysfun_p)(int, ...);
-extern sysfun_p sys_call_table[];
-#define SYS(name)	(sys_call_table[__NR_##name])
-
 #define DLINFO_ITEMS 12
 
 #include <linux/elf.h>
@@ -47,19 +42,25 @@ static int load_elf_library(int fd);
 static int elf_core_dump(long signr, struct pt_regs * regs);
 extern int dump_fpu (elf_fpregset_t *);
 
-/*
- * Please do not change the default core dump format to ELF when most people
- * do not have a gdb capable of interpreting ELF core files.  Once a gdb has
- * been released that understands ELF, *THEN* switch the core dump format.
- */
-
-struct linux_binfmt elf_format = {
+static struct linux_binfmt elf_format = {
 #ifndef MODULE
 	NULL, NULL, load_elf_binary, load_elf_library, elf_core_dump
 #else
 	NULL, &mod_use_count_, load_elf_binary, load_elf_library, elf_core_dump
 #endif
 };
+
+static void set_brk(unsigned long start, unsigned long end)
+{
+	start = PAGE_ALIGN(start);
+	end = PAGE_ALIGN(end);
+	if (end <= start) 
+		return;
+	do_mmap(NULL, start, end - start,
+		PROT_READ | PROT_WRITE | PROT_EXEC,
+		MAP_FIXED | MAP_PRIVATE, 0);
+}
+
 
 /* We need to explicitly zero any fractional pages
    after the data section (i.e. bss).  This would
@@ -268,7 +269,7 @@ static unsigned int load_elf_interp(struct elfhdr * interp_elf_ex,
 	
 	/* Now use mmap to map the library into memory. */
 
-	SYS(close)(elf_exec_fileno);
+	sys_close(elf_exec_fileno);
 	if(error < 0 && error > -1024) {
 		kfree(elf_phdata);
 		return 0xffffffff;
@@ -615,7 +616,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	
 	kfree(elf_phdata);
 	
-	if(interpreter_type != INTERPRETER_AOUT) SYS(close)(elf_exec_fileno);
+	if(interpreter_type != INTERPRETER_AOUT) sys_close(elf_exec_fileno);
 	current->personality = (ibcs2_interpreter ? PER_SVR4 : PER_LINUX);
 
 	if (current->exec_domain && current->exec_domain->use_count)
@@ -655,10 +656,9 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	current->mm->end_data = end_data;
 	current->mm->start_stack = bprm->p;
 
-	/* Calling sys_brk effectively mmaps the pages that we need for the bss and break
+	/* Calling set_brk effectively mmaps the pages that we need for the bss and break
 	   sections */
-	current->mm->brk = (elf_bss + 0xfff) & 0xfffff000;
-	SYS(brk)((elf_brk + 0xfff) & 0xfffff000);
+	set_brk(elf_bss, elf_brk);
 
 	padzero(elf_bss);
 
@@ -1221,6 +1221,10 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 	return has_dumped;
 }
 
+int init_elf_binfmt(void) {
+	return register_binfmt(&elf_format);
+}
+
 #ifdef MODULE
 
 int init_module(void) {
@@ -1228,7 +1232,7 @@ int init_module(void) {
 	 * N.B. We *rely* on the table being the right size with the
 	 * right number of free slots...
 	 */
-	return register_binfmt(&elf_format);
+	return init_elf_binfmt();
 }
 
 

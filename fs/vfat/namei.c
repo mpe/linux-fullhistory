@@ -1,5 +1,5 @@
 /*
- *  linux/fs/msdos/vfat.c
+ *  linux/fs/vfat/namei.c
  *
  *  Written 1992,1993 by Werner Almesberger
  *

@@ -715,7 +715,7 @@ int ip_build_xmit(struct sock *sk,
 		}
 #endif
 #ifdef CONFIG_IP_ACCT
-		ip_fw_chk((void *)skb->data,dev,ip_acct_chain, IP_FW_F_ACCEPT,1);
+		ip_fw_chk(iph,dev,ip_acct_chain, IP_FW_F_ACCEPT,1);
 #endif		
 		if(dev->flags&IFF_UP)
 			dev_queue_xmit(skb,dev,sk->priority);

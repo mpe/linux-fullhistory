@@ -23,15 +23,16 @@
 #
 #
 
+AS86    =$(CROSS_COMPILE)as86 -0 -a
+AS386   =$(CROSS_COMPILE)as86 -3
+LD86    =$(CROSS_COMPILE)ld86 -0
+
 ifdef CONFIG_KERNEL_ELF
 
 LD=$(CROSS_COMPILE)ld -m elf_i386
 CPP=$(CC) -E -D__ELF__
 OBJDUMP =$(CROSS_COMPILE)objdump
 ENCAPS=$(CROSS_COMPILE)encaps
-AS86    =$(CROSS_COMPILE)as86 -0 -a
-AS386   =$(CROSS_COMPILE)as86 -3
-LD86    =$(CROSS_COMPILE)ld86 -0
 OBJDUMP_FLAGS=-k -q 
 ZLDFLAGS=-e startup_32 
 LDFLAGS=-e stext
@@ -51,15 +52,19 @@ endif
 CFLAGS := $(CFLAGS) -pipe
 
 ifdef CONFIG_M386
-CFLAGS := $(CFLAGS) -m386
+CFLAGS := $(CFLAGS) -m386 -DCPU=386
 endif
 
 ifdef CONFIG_M486
-CFLAGS := $(CFLAGS) -m486
+CFLAGS := $(CFLAGS) -m486 -DCPU=486
 endif
 
 ifdef CONFIG_M586
-CFLAGS := $(CFLAGS) -m486 -malign-loops=2 -malign-jumps=2 -malign-functions=2
+CFLAGS := $(CFLAGS) -m486 -malign-loops=2 -malign-jumps=2 -malign-functions=2 -DCPU=586
+endif
+
+ifdef CONFIG_M686
+CFLAGS := $(CFLAGS) -m486 -malign-loops=2 -malign-jumps=2 -malign-functions=2 -DCPU=686
 endif
 
 ifdef SMP

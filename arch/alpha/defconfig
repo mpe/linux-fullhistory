@@ -15,10 +15,10 @@ CONFIG_NATIVE=y
 # CONFIG_ALPHA_AVANTI is not set
 # CONFIG_ALPHA_JENSEN is not set
 # CONFIG_ALPHA_NONAME is not set
-CONFIG_ALPHA_CABRIOLET=y
+# CONFIG_ALPHA_CABRIOLET is not set
 # CONFIG_ALPHA_EB66 is not set
 # CONFIG_ALPHA_EB66P is not set
-# CONFIG_ALPHA_EB64P is not set
+CONFIG_ALPHA_EB64P=y
 # CONFIG_ALPHA_SRM is not set
 CONFIG_PCI=y
 CONFIG_ALPHA_APECS=y
@@ -28,10 +28,11 @@ CONFIG_ALPHA_NEED_ROUNDING_EMULATION=y
 CONFIG_PCI_OPTIMIZE=y
 CONFIG_NET=y
 CONFIG_SYSVIPC=y
+CONFIG_BINFMT_AOUT=y
 # CONFIG_BINFMT_ELF is not set
 
 #
-# block devices
+# Block devices
 #
 CONFIG_BLK_DEV_FD=y
 # CONFIG_BLK_DEV_RAM is not set
@@ -42,7 +43,9 @@ CONFIG_ST506=y
 #
 # CONFIG_BLK_DEV_HD is not set
 CONFIG_BLK_DEV_IDE=y
-# CONFIG_BLK_DEV_IDEATAPI is not set
+# CONFIG_BLK_DEV_IDECD is not set
+# CONFIG_BLK_DEV_IDETAPE is not set
+# CONFIG_BLK_DEV_CMD640 is not set
 # CONFIG_BLK_DEV_TRITON is not set
 # CONFIG_BLK_DEV_XD is not set
 
@@ -65,6 +68,10 @@ CONFIG_INET=y
 # CONFIG_TCP_NAGLE_OFF is not set
 CONFIG_IP_NOSR=y
 CONFIG_SKB_LARGE=y
+
+#
+#  
+#
 # CONFIG_IPX is not set
 # CONFIG_ATALK is not set
 # CONFIG_AX25 is not set
@@ -92,6 +99,7 @@ CONFIG_SCSI_CONSTANTS=y
 #
 # SCSI low-level drivers
 #
+# CONFIG_SCSI_ADVANSYS is not set
 # CONFIG_SCSI_AHA152X is not set
 # CONFIG_SCSI_AHA1542 is not set
 # CONFIG_SCSI_AHA1740 is not set
@@ -112,6 +120,7 @@ CONFIG_SCSI_NCR53C7xx=y
 # CONFIG_SCSI_7000FASST is not set
 # CONFIG_SCSI_EATA is not set
 # CONFIG_SCSI_NCR53C406A is not set
+# CONFIG_SCSI_AM53C974 is not set
 
 #
 # Network device support
@@ -149,17 +158,19 @@ CONFIG_DE4X5=y
 # CONFIG_EXT_FS is not set
 CONFIG_EXT2_FS=y
 # CONFIG_XIA_FS is not set
+CONFIG_FAT_FS=y
 CONFIG_MSDOS_FS=y
+# CONFIG_VFAT_FS is not set
 # CONFIG_UMSDOS_FS is not set
 CONFIG_PROC_FS=y
-# CONFIG_NFS_FS is not set
+CONFIG_NFS_FS=y
 # CONFIG_SMB_FS is not set
 CONFIG_ISO9660_FS=y
 # CONFIG_HPFS_FS is not set
 # CONFIG_SYSV_FS is not set
 
 #
-# character devices
+# Character devices
 #
 # CONFIG_CYCLADES is not set
 # CONFIG_STALDRV is not set

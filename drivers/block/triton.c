@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/triton.c	Version 1.05  Jan 11, 1996
+ *  linux/drivers/block/triton.c	Version 1.06  Feb 6, 1996
  *
  *  Copyright (c) 1995-1996  Mark Lord
  *  May be copied or modified under the terms of the GNU General Public License
@@ -319,7 +319,7 @@ static void init_triton_dma (ide_hwif_t *hwif, unsigned short base)
 	if (check_region(base, 8)) {
 		printk(" -- ERROR, PORTS ALREADY IN USE");
 	} else {
-		request_region(base, 8, hwif->name);
+		request_region(base, 8, "triton DMA");
 		hwif->dma_base = base;
 		if (!dmatable) {
 			/*
@@ -364,7 +364,6 @@ void ide_init_triton (byte bus, byte fn)
 	int dma_enabled = 0;
 	unsigned short bmiba, pcicmd;
 	unsigned int timings;
-	extern ide_hwif_t ide_hwifs[];
 
 	printk("ide: Triton BM-IDE on PCI bus %d function %d\n", bus, fn);
 	/*
@@ -409,12 +408,14 @@ void ide_init_triton (byte bus, byte fn)
 			time = timings & 0xffff;
 			if ((timings & 0x8000) == 0)	/* interface enabled? */
 				continue;
+			hwif->chipset = ide_triton;
 			if (dma_enabled)
 				init_triton_dma(hwif, bmiba);
 		} else if (hwif->io_base == 0x170) {
 			time = timings >> 16;
 			if ((timings & 0x8000) == 0)	/* interface enabled? */
 				continue;
+			hwif->chipset = ide_triton;
 			if (dma_enabled)
 				init_triton_dma(hwif, bmiba + 8);
 		} else

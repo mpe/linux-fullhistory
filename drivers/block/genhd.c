@@ -14,6 +14,8 @@
  *  /dev/hda *must* have a "DOS" type 0x51 partition in the first slot (hda1).
  *
  *  More flexible handling of extended partitions - aeb, 950831
+ *
+ *  Check partition table on IDE disks for common CHS translations
  */
 
 #include <linux/config.h>
@@ -198,7 +200,7 @@ static int msdos_partition(struct gendisk *hd, kdev_t dev, unsigned long first_s
 	unsigned char *data;
 	int mask = (1 << hd->minor_shift) - 1;
 #ifdef CONFIG_BLK_DEV_IDE
-	int tested_for_dm6 = 0;
+	int tested_for_xlate = 0;
 
 read_mbr:
 #endif
@@ -221,12 +223,12 @@ check_table:
 	p = (struct partition *) (0x1be + data);
 
 #ifdef CONFIG_BLK_DEV_IDE
-	/*
-	 *  Check for Disk Manager v6.0x (or EZ-DRIVE) with geometry translation
-	 */
-	if (!tested_for_dm6++) {	/* only check for DM6 *once* */
+	if (!tested_for_xlate++) {	/* Do this only once per disk */
+		/*
+		 * Look for various forms of IDE disk geometry translation
+		 */
 		extern int ide_xlate_1024(kdev_t, int, const char *);
-		/* check for various "disk managers" which do strange things */
+		unsigned int sig = *(unsigned short *)(data + 2);
 		if (p->sys_ind == EZD_PARTITION) {
 			/*
 			 * The remainder of the disk must be accessed using
@@ -256,20 +258,33 @@ check_table:
 				brelse(bh);
 				goto read_mbr;	/* start over with new MBR */
 			}
-		} else {
-			/* look for DM6 signature in MBR, courtesy of OnTrack */
-			unsigned int sig = *(unsigned short *)(data + 2);
-			if (sig <= 0x1ae
-			 && *(unsigned short *)(data + sig) == 0x55AA
+		} else if (sig <= 0x1ae && *(unsigned short *)(data + sig) == 0x55AA
 			 && (1 & *(unsigned char *)(data + sig + 2)) ) 
-			{
-				(void) ide_xlate_1024 (dev, 0, " [DM6:MBR]");
-			} else {
-				/* look for DM6 AUX partition type in slot 1 */
-				if (p->sys_ind == DM6_AUX1PARTITION
-				 || p->sys_ind == DM6_AUX3PARTITION)
-				{
-					(void)ide_xlate_1024(dev, 0, " [DM6:AUX]");
+		{
+			/*
+			 * DM6 signature in MBR, courtesy of OnTrack
+			 */
+			(void) ide_xlate_1024 (dev, 0, " [DM6:MBR]");
+		} else if (p->sys_ind == DM6_AUX1PARTITION || p->sys_ind == DM6_AUX3PARTITION) {
+			/*
+			 * DM6 on other than the first (boot) drive
+			 */
+			(void) ide_xlate_1024(dev, 0, " [DM6:AUX]");
+		} else {
+			/*
+			 * Examine the partition table for common translations.
+			 * This is necessary for drives for situations where
+			 * the translated geometry is unavailable from the BIOS.
+			 */
+			for (i = 0; i < 4 ; i++) {
+				struct partition *q = &p[i];
+				if (NR_SECTS(q) && q->sector == 1 && q->end_sector == 63) {
+					unsigned int heads = q->end_head + 1;
+					if (heads == 32 || heads == 64 || heads == 128) {
+
+						(void) ide_xlate_1024(dev, heads, " [PTBL]");
+						break;
+					}
 				}
 			}
 		}

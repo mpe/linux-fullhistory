@@ -88,18 +88,19 @@ struct hd_geometry {
 #define HDIO_GET_MULTCOUNT	0x0304	/* get current IDE blockmode setting */
 #define HDIO_GET_IDENTITY 	0x0307	/* get IDE identification info */
 #define HDIO_GET_KEEPSETTINGS 	0x0308	/* get keep-settings-on-reset flag */
-#define HDIO_GET_CHIPSET	0x0309	/* get current interface type setting */
+#define HDIO_GET_32BIT 		0x0309	/* get current io_32bit setting */
 #define HDIO_GET_NOWERR		0x030a	/* get ignore-write-error flag */
 #define HDIO_GET_DMA		0x030b	/* get use-dma flag */
 #define HDIO_DRIVE_CMD		0x031f	/* execute a special drive command */
 
 /* hd/ide ctl's that pass (arg) non-ptr values are numbered 0x032n/0x033n */
-#define HDIO_SET_MULTCOUNT	0x0321	/* set IDE blockmode */
+#define HDIO_SET_MULTCOUNT	0x0321	/* change IDE blockmode */
 #define HDIO_SET_UNMASKINTR	0x0322	/* permit other irqs during I/O */
 #define HDIO_SET_KEEPSETTINGS	0x0323	/* keep ioctl settings on reset */
-#define HDIO_SET_CHIPSET	0x0324	/* optimise driver for interface type */
-#define HDIO_SET_NOWERR		0x0325	/* set ignore-write-error flag */
-#define HDIO_SET_DMA		0x0326	/* set use-dma flag */
+#define HDIO_SET_32BIT		0x0324	/* change io_32bit flags */
+#define HDIO_SET_NOWERR		0x0325	/* change ignore-write-error flag */
+#define HDIO_SET_DMA		0x0326	/* change use-dma flag */
+#define HDIO_SET_PIO_MODE	0x0327	/* reconfig interface to new speed */
 
 /* structure returned by HDIO_GET_IDENTITY, as per ANSI ATA2 rev.2f spec */
 struct hd_driveid {

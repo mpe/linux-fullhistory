@@ -44,12 +44,36 @@ ifeq ($(CONFIG_BLK_DEV_IDE),y)
 L_OBJS += ide.o
 endif
 
-ifeq ($(CONFIG_BLK_DEV_TRITON),y)
-L_OBJS += triton.o
+ifeq ($(CONFIG_BLK_DEV_RZ1000),y)
+L_OBJS += rz1000.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_CMD640),y)
 L_OBJS += cmd640.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_TRITON),y)
+L_OBJS += triton.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_DTC2278),y)
+L_OBJS += dtc2278.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_HT6560B),y)
+L_OBJS += ht6560b.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_QD6580),y)
+L_OBJS += qd6580.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_UMC8672),y)
+L_OBJS += umc8672.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_ALI14XX),y)
+L_OBJS += ali14xx.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_IDECD),y)

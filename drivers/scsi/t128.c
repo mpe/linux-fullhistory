@@ -109,6 +109,7 @@
 #include <asm/system.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
+#include <asm/io.h>
 #include <linux/blk.h>
 #include "scsi.h"
 #include "hosts.h"

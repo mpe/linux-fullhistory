@@ -771,6 +771,7 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 				sk->protinfo.af_unix.other=NULL;
 				sock->state=SS_UNCONNECTED;
 				sti();
+				kfree_skb(skb, FREE_WRITE);
 				if(!sent)
 					return -ECONNRESET;
 				else
@@ -783,8 +784,8 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 			other=unix_find_other(sunaddr->sun_path, &err);
 			if(other==NULL)
 			{
-				kfree_skb(skb, FREE_WRITE);
 				sti();
+				kfree_skb(skb, FREE_WRITE);
 				if(sent)
 					return sent;
 				else

@@ -1,8 +1,10 @@
 /*
- * linux/fs/msdos/tables.c
+ * linux/fs/fat/tables.c
  *
  * ASCII / Unicode translation tables for VFAT filename handling.
  * By Gordon Chaffee.
+ *
+ * Note: This file is used by all fat-based filesystems.
  */
 
 #include <linux/kernel.h>

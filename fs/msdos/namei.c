@@ -1,5 +1,5 @@
 /*
- *  linux/fs/msdos/msdos.c
+ *  linux/fs/msdos/namei.c
  *
  *  Written 1992,1993 by Werner Almesberger
  *  Hidden files 1995 by Albert Cahalan <albert@ccs.neu.edu> <adc@coe.neu.edu>

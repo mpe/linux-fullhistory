@@ -1,5 +1,5 @@
 /*
- *  linux/fs/msdos/misc.c
+ *  linux/fs/fat/misc.c
  *
  *  Written 1992,1993 by Werner Almesberger
  */

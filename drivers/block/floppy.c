@@ -3682,7 +3682,7 @@ static char get_fdc_version(void)
 		case 0x0:
 			output_byte(FD_SAVE);
 			r = result();
-			if (r != 17) {
+			if (r != 16) {
 				printk("FDC %d init: SAVE: unexpected return of %d bytes.\n", fdc, r);
 				return FDC_UNKNOWN;
 			}

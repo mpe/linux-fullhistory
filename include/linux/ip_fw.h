@@ -16,6 +16,10 @@
  *
  * Fixes:
  *	Pauline Middelink	:	Added masquerading.
+ *	Jos Vos			:	Separate input  and output firewall
+ *					chains, new "insert" and "append"
+ *					commands to replace "add" commands,
+ *					add ICMP header to struct ip_fwpkt.
  *
  *	All the real work was done by .....
  */
@@ -59,23 +63,7 @@ struct ip_fw
 #define IP_FW_MAX_PORTS	10      		/* A reasonable maximum */
 	unsigned short fw_pts[IP_FW_MAX_PORTS]; /* Array of port numbers to match */
 	unsigned long  fw_pcnt,fw_bcnt;		/* Packet and byte counters */
-	unsigned short fw_priority;		/* Revised packet priority */
-};
-
-struct ip_fw_old
-{
-	struct ip_fw  *fw_next;			/* Next firewall on chain */
-	struct in_addr fw_src, fw_dst;		/* Source and destination IP addr */
-	struct in_addr fw_smsk, fw_dmsk;	/* Mask for src and dest IP addr */
-	struct in_addr fw_via;			/* IP address of interface "via" */
-	unsigned short fw_flg;			/* Flags word */
-	unsigned short fw_nsp, fw_ndp;          /* N'of src ports and # of dst ports */
-						/* in ports array (dst ports follow */
-    						/* src ports; max of 10 ports in all; */
-    						/* count of 0 means match all ports) */
-#define IP_FW_MAX_PORTS	10      		/* A reasonable maximum */
-	unsigned short fw_pts[IP_FW_MAX_PORTS]; /* Array of port numbers to match */
-	unsigned long  fw_pcnt,fw_bcnt;		/* Packet and byte counters */
+	unsigned char fw_tosand, fw_tosxor;	/* Revised packet priority */
 };
 
 /*
@@ -105,9 +93,8 @@ struct ip_fw_old
 #define IP_FW_F_ICMPRPL 0x100	/* Send back icmp unreachable packet  */
 #define IP_FW_F_MASQ	0x200	/* Masquerading			      */
 #define IP_FW_F_TCPACK	0x400	/* For tcp-packets match if ACK is set*/
-#define IP_FW_F_APPEND	0x800	/* Dont try to guess placement        */
 
-#define IP_FW_F_MASK	0xFFF	/* All possible flag bits mask        */
+#define IP_FW_F_MASK	0x7FF	/* All possible flag bits mask        */
 
 /*    
  *	New IP firewall options for [gs]etsockopt at the RAW IP level.
@@ -115,25 +102,54 @@ struct ip_fw_old
  *	a raw socket for this. Instead we check rights in the calls.
  */     
 
-#define IP_FW_BASE_CTL   64
+#define IP_FW_BASE_CTL  	64	/* base for firewall socket options */
 
-#define IP_FW_ADD_BLK    (IP_FW_BASE_CTL)
-#define IP_FW_ADD_FWD    (IP_FW_BASE_CTL+1)   
-#define IP_FW_CHK_BLK    (IP_FW_BASE_CTL+2)
-#define IP_FW_CHK_FWD    (IP_FW_BASE_CTL+3)
-#define IP_FW_DEL_BLK    (IP_FW_BASE_CTL+4)
-#define IP_FW_DEL_FWD    (IP_FW_BASE_CTL+5)
-#define IP_FW_FLUSH_BLK  (IP_FW_BASE_CTL+6)
-#define IP_FW_FLUSH_FWD  (IP_FW_BASE_CTL+7)
-#define IP_FW_ZERO_BLK   (IP_FW_BASE_CTL+8)
-#define IP_FW_ZERO_FWD   (IP_FW_BASE_CTL+9)
-#define IP_FW_POLICY_BLK (IP_FW_BASE_CTL+10)
-#define IP_FW_POLICY_FWD (IP_FW_BASE_CTL+11)
+#define IP_FW_COMMAND		0x00FF	/* mask for command without chain */
+#define IP_FW_TYPE		0x0300	/* mask for type (chain) */
+#define IP_FW_SHIFT		8	/* shift count for type (chain) */
 
-#define IP_ACCT_ADD      (IP_FW_BASE_CTL+16)
-#define IP_ACCT_DEL      (IP_FW_BASE_CTL+17)
-#define IP_ACCT_FLUSH    (IP_FW_BASE_CTL+18)
-#define IP_ACCT_ZERO     (IP_FW_BASE_CTL+19)
+#define IP_FW_FWD		0
+#define IP_FW_IN		1
+#define IP_FW_OUT		2
+#define IP_FW_ACCT		3
+
+#define IP_FW_INSERT		(IP_FW_BASE_CTL)
+#define IP_FW_APPEND		(IP_FW_BASE_CTL+1)
+#define IP_FW_DELETE		(IP_FW_BASE_CTL+2)
+#define IP_FW_FLUSH		(IP_FW_BASE_CTL+3)
+#define IP_FW_ZERO		(IP_FW_BASE_CTL+4)
+#define IP_FW_POLICY		(IP_FW_BASE_CTL+5)
+#define IP_FW_CHECK		(IP_FW_BASE_CTL+6)
+
+#define IP_FW_INSERT_FWD	(IP_FW_INSERT | (IP_FW_FWD << IP_FW_SHIFT))
+#define IP_FW_APPEND_FWD	(IP_FW_APPEND | (IP_FW_FWD << IP_FW_SHIFT))
+#define IP_FW_DELETE_FWD	(IP_FW_DELETE | (IP_FW_FWD << IP_FW_SHIFT))
+#define IP_FW_FLUSH_FWD		(IP_FW_FLUSH  | (IP_FW_FWD << IP_FW_SHIFT))
+#define IP_FW_ZERO_FWD		(IP_FW_ZERO   | (IP_FW_FWD << IP_FW_SHIFT))
+#define IP_FW_POLICY_FWD	(IP_FW_POLICY | (IP_FW_FWD << IP_FW_SHIFT))
+#define IP_FW_CHECK_FWD		(IP_FW_CHECK  | (IP_FW_FWD << IP_FW_SHIFT))
+
+#define IP_FW_INSERT_IN		(IP_FW_INSERT | (IP_FW_IN << IP_FW_SHIFT))
+#define IP_FW_APPEND_IN		(IP_FW_APPEND | (IP_FW_IN << IP_FW_SHIFT))
+#define IP_FW_DELETE_IN		(IP_FW_DELETE | (IP_FW_IN << IP_FW_SHIFT))
+#define IP_FW_FLUSH_IN		(IP_FW_FLUSH  | (IP_FW_IN << IP_FW_SHIFT))
+#define IP_FW_ZERO_IN		(IP_FW_ZERO   | (IP_FW_IN << IP_FW_SHIFT))
+#define IP_FW_POLICY_IN		(IP_FW_POLICY | (IP_FW_IN << IP_FW_SHIFT))
+#define IP_FW_CHECK_IN		(IP_FW_CHECK  | (IP_FW_IN << IP_FW_SHIFT))
+
+#define IP_FW_INSERT_OUT	(IP_FW_INSERT | (IP_FW_OUT << IP_FW_SHIFT))
+#define IP_FW_APPEND_OUT	(IP_FW_APPEND | (IP_FW_OUT << IP_FW_SHIFT))
+#define IP_FW_DELETE_OUT	(IP_FW_DELETE | (IP_FW_OUT << IP_FW_SHIFT))
+#define IP_FW_FLUSH_OUT		(IP_FW_FLUSH  | (IP_FW_OUT << IP_FW_SHIFT))
+#define IP_FW_ZERO_OUT		(IP_FW_ZERO   | (IP_FW_OUT << IP_FW_SHIFT))
+#define IP_FW_POLICY_OUT	(IP_FW_POLICY | (IP_FW_OUT << IP_FW_SHIFT))
+#define IP_FW_CHECK_OUT		(IP_FW_CHECK  | (IP_FW_OUT << IP_FW_SHIFT))
+
+#define IP_ACCT_INSERT		(IP_FW_INSERT | (IP_FW_ACCT << IP_FW_SHIFT))
+#define IP_ACCT_APPEND		(IP_FW_APPEND | (IP_FW_ACCT << IP_FW_SHIFT))
+#define IP_ACCT_DELETE		(IP_FW_DELETE | (IP_FW_ACCT << IP_FW_SHIFT))
+#define IP_ACCT_FLUSH		(IP_FW_FLUSH  | (IP_FW_ACCT << IP_FW_SHIFT))
+#define IP_ACCT_ZERO		(IP_FW_ZERO   | (IP_FW_ACCT << IP_FW_SHIFT))
 
 struct ip_fwpkt
 {
@@ -141,6 +157,7 @@ struct ip_fwpkt
 	union {
 		struct tcphdr fwp_tcph;		/* TCP header or */
 		struct udphdr fwp_udph;		/* UDP header */
+		struct icmphdr fwp_icmph;	/* ICMP header */
 	} fwp_protoh;
 	struct in_addr fwp_via;			/* interface address */
 };
@@ -171,9 +188,11 @@ extern void ip_fw_masquerade(struct sk_buff **, struct device *);
 extern int ip_fw_demasquerade(struct sk_buff *);
 #endif
 #ifdef CONFIG_IP_FIREWALL
-extern struct ip_fw *ip_fw_blk_chain;
+extern struct ip_fw *ip_fw_in_chain;
+extern struct ip_fw *ip_fw_out_chain;
 extern struct ip_fw *ip_fw_fwd_chain;
-extern int ip_fw_blk_policy;
+extern int ip_fw_in_policy;
+extern int ip_fw_out_policy;
 extern int ip_fw_fwd_policy;
 extern int ip_fw_ctl(int, void *, int);
 #endif

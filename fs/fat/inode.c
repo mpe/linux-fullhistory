@@ -1,5 +1,5 @@
 /*
- *  linux/fs/msdos/inode.c
+ *  linux/fs/fat/inode.c
  *
  *  Written 1992,1993 by Werner Almesberger
  *  VFAT extensions by Gordon Chaffee, merged with msdos fs by Henrik Storner

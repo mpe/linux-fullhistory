@@ -51,6 +51,8 @@
  *					which caused a "del_timer() called 
  *					from %p with timer not initialized\n"
  *					message (960131).
+ *		Christian Daudt :	removed del_timer from 
+ *					igmp_timer_expire function (960205).
  */
 
 
@@ -259,7 +261,8 @@ static void igmp_timer_expire(unsigned long data)
 {
 	struct ip_mc_list *im=(struct ip_mc_list *)data;
 	struct ip_router_info *r;
-	igmp_stop_timer(im);
+
+	im->tm_running=0;
 	r=igmp_get_mrouter_info(im->interface);
 	if(r==NULL)
 		return;

@@ -39,6 +39,7 @@ tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF y
 if [ "$CONFIG_BINFMT_ELF" = "y" ]; then
 bool 'Compile kernel as ELF - if your GCC is ELF-GCC' CONFIG_KERNEL_ELF y
 fi
+tristate 'Kernel support for A.OUT binaries' CONFIG_BINFMT_AOUT y
 #bool 'Use -mpentium flag for Pentium-specific optimizations' CONFIG_M586 n
 #if [ "$CONFIG_M586" = "n" ]; then
 #bool 'Use -m486 flag for 486-specific optimizations' CONFIG_M486 y

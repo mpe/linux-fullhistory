@@ -47,6 +47,7 @@
 #include <linux/skbuff.h>
 #include <net/sock.h>
 
+#define LOOPBACK_MTU (PAGE_SIZE*7/8)
 
 static int loopback_xmit(struct sk_buff *skb, struct device *dev)
 {
@@ -99,6 +100,9 @@ static int loopback_xmit(struct sk_buff *skb, struct device *dev)
 	skb->dev=dev;
 	save_flags(flags);
 	cli();
+#ifndef LOOPBACK_MUST_CHECKSUM
+	skb->ip_summed = CHECKSUM_UNNECESSARY;
+#endif
 	netif_rx(skb);
 	if(unlock)
 	  	skb_device_unlock(skb);
@@ -127,14 +131,8 @@ static int loopback_open(struct device *dev)
 int loopback_init(struct device *dev)
 {
 	int i;
-#if LINUS_EVER_SOLVES_THE_LARGE_ATOMIC_BUFFER_ISSUE
-	dev->mtu		= 7900;			/* MTU			*/
-#else
-/*
- *	If Alpha uses 8K pages then I guess 7K would be good for it.
- */
-	dev->mtu		= 2000;			/* Kept under 1 page    */
-#endif	
+
+	dev->mtu		= LOOPBACK_MTU;
 	dev->tbusy		= 0;
 	dev->hard_start_xmit	= loopback_xmit;
 	dev->open		= NULL;

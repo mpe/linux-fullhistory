@@ -5,6 +5,7 @@ tristate 'Dummy net driver support' CONFIG_DUMMY
 tristate 'SLIP (serial line) support' CONFIG_SLIP
 if [ "$CONFIG_SLIP" != "n" ]; then
   bool ' CSLIP compressed headers' CONFIG_SLIP_COMPRESSED
+  bool ' Keepalive and linefill' CONFIG_SLIP_SMART
 fi
 tristate 'PPP (point-to-point) support' CONFIG_PPP
 if [ ! "$CONFIG_PPP" = "n" ]; then

@@ -633,8 +633,9 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	/* (That's the Right Place to do it, IMHO.) -- MS */
 
 	if (uh->check && (
-		( skb->ip_summed && udp_check(uh, len, saddr, daddr, skb->csum ) ) ||
-		( !skb->ip_summed && udp_check(uh, len, saddr, daddr,csum_partial((char*)uh, len, 0)))
+		( (skb->ip_summed == CHECKSUM_HW) && udp_check(uh, len, saddr, daddr, skb->csum ) ) ||
+		( (skb->ip_summed == CHECKSUM_NONE) && udp_check(uh, len, saddr, daddr,csum_partial((char*)uh, len, 0)))
+			  /* skip if CHECKSUM_UNNECESSARY */
 		         )
 	   )
 	{

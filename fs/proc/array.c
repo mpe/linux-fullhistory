@@ -134,24 +134,24 @@ extern unsigned long prof_shift;
  */
 static int read_profile(struct inode *inode, struct file *file, char *buf, int count)
 {
-    unsigned long p = file->f_pos;
+	unsigned long p = file->f_pos;
 	int read;
 	char * pnt;
 	unsigned long sample_step = 1 << prof_shift;
 
 	if (count < 0)
-	    return -EINVAL;
+		return -EINVAL;
 	if (p >= (prof_len+1)*sizeof(unsigned long))
-	    return 0;
+		return 0;
 	if (count > (prof_len+1)*sizeof(unsigned long) - p)
-	    count = (prof_len+1)*sizeof(unsigned long) - p;
-    read = 0;
+		count = (prof_len+1)*sizeof(unsigned long) - p;
+	read = 0;
 
-    while (p < sizeof(unsigned long) && count > 0) {
-        put_user(*((char *)(&sample_step)+p),buf);
+	while (p < sizeof(unsigned long) && count > 0) {
+		put_user(*((char *)(&sample_step)+p),buf);
 		buf++; p++; count--; read++;
-    }
-    pnt = (char *)prof_buffer + p - sizeof(unsigned long);
+	}
+	pnt = (char *)prof_buffer + p - sizeof(unsigned long);
 	memcpy_tofs(buf,(void *)pnt,count);
 	read += count;
 	file->f_pos += read;

@@ -84,13 +84,17 @@ You can choose from two options:
     the vertical synchronization pulse (mode 1) or horizontal
     synchronization pulse (mode 2).  Mode 1 should work with most
     monitors, but the VESA spec allows mode 2, so it's included for
-    completeness.
+    completeness. You may set this blanking interval in minutes by
+    echoing the escape sequence 'ESC[9;interval]' to the terminal.
+    By default this interval is set to 10 minutes.
 
     If you use one of these modes, you can also set a second interval
-    by echoing the escape sequence ESC[10;interval] to the terminal.
+    by echoing the escape sequence 'ESC[14;interval]' to the terminal.
     The monitor will be turned off completely (mode 3) after being in
-    suspend mode for the specified interval.  The interval defaults to
-    60 minutes. An interval of 0 disables this feature.
+    suspend mode for the specified interval. An interval of 0 disables
+    this feature which is the default.
+
+    Both intervals may be set within the range of 0..60 minutes.
 
 (2) Setting vesa_blanking_mode to 3.
     If your monitor locally has an Off_Mode timer then you should not
@@ -108,6 +112,8 @@ sends the signal to enter Standby mode, you have the chance to interfere
 before the monitor powers down. Do not set a too short period, if you love
 your hardware :-)) .
 
+By default vesa_blanking_mode is set to 0, thus not using any power saving
+features.
 */
 
 #define seq_port_reg	(0x3c4)		/* Sequencer register select port */

@@ -44,7 +44,9 @@ extern int read_exec(struct inode *inode, unsigned long offset,
 	char * addr, unsigned long count, int to_kmem);
 
 extern int open_inode(struct inode * inode, int mode);
-extern int aout_core_dump(long signr, struct pt_regs * regs);
+
+extern int init_elf_binfmt(void);
+extern int init_aout_binfmt(void);
 
 extern void flush_old_exec(struct linux_binprm * bprm);
 extern unsigned long setup_arg_pages(unsigned long text_size,unsigned long * page);

@@ -13,7 +13,7 @@ See description later on below for handling BIG IDE drives with >1024 cyls.
 Major features of ide.c & ide-cd.c:
 
 NEW!	- support for IDE ATAPI *tape* drives, courtesy of Gadi Oxman
-		(run MAKEDEV.ide to create the tape device entries in /dev/)
+		(re-run MAKEDEV.ide to create the tape device entries in /dev/)
 NEW!	- support for up to *four* IDE interfaces on one or more IRQs
 NEW!	- support for any mix of up to *eight* disk and/or cdrom drives
 	- support for reading IDE ATAPI cdrom drives (NEC,MITSUMI,VERTOS,SONY)
@@ -31,28 +31,27 @@ NEW!		  (both are now probed for)
 	- can co-exist with hd.c controlling the first interface
 	- run-time selectable 32bit interface support (using hdparm-2.3)
 NEW!	- support for reliable operation of buggy RZ1000 interfaces
-		- PCI support is automatic
+		- PCI support is automatic when rz1000 support is configured
 NEW!	- support for reliable operation of buggy CMD-640 interfaces
-		- PCI support is automatic
+		- PCI support is automatic when cmd640 support is configured
 		- for VLB, use kernel command line option:   ide0=cmd640_vlb
 		- this support also enables the secondary i/f on most cards
 		- experimental interface timing parameter support
 NEW!	- experimental support for UMC 8672 interfaces
 NEW!	- support for secondary interface on the FGI/Holtek HT-6560B VLB i/f
-		- use kernel command line option:   ide1=ht6560
-NEW!	- experimental "fast" speed support for QD6580 interfaces
-		- use kernel command line option:   ide0=qd6580
-NEW!	- experimental support for DTC-2278D interfaces
-		- use kernel command line option:   ide1=dtc2278
+		- use kernel command line option:   ide0=ht6560
+NEW!	- experimental support for various IDE chipsets
+		- use appropriate kernel command line option from list below
 NEW!	- support for drives with a stuck WRERR_STAT bit
 NEW!	- support for removeable devices, including door lock/unlock
 NEW!	- transparent support for DiskManager 6.0x and "Dynamic Disk Overlay"
 	- works with Linux fdisk, LILO, loadlin, bootln, etc..
-NEW!	- mostly transparent support for EZ-Drive
+NEW!	- mostly transparent support for EZ-Drive disk translation software
 NEW!		- to use LILO with EZ, install LILO on the linux partition
 		  rather than on the master boot record, and then mark the
 		  linux partition as "bootable" or "active" using fdisk.
 		  (courtesy of Juha Laiho <jlaiho@ichaos.nullnet.fi>).
+NEW!	- auto-detect of disk translations by examining partition table
 NEW!	- ide-cd.c now compiles separate from ide.c
 NEW!	- Bus-Master DMA support for Intel PCI Triton chipset IDE interfaces
 		- for details, see comments at top of triton.c
@@ -222,36 +221,48 @@ snyder@fnald0.fnal.gov
 
 Summary of ide driver parameters for kernel "command line":
 ----------------------------------------------------------
+ "hdx="  is recognized for all "x" from "a" to "h", such as "hdc".
+ "idex=" is recognized for all "x" from "0" to "3", such as "ide1".
 
-  "hdx="  is recognized for all "x" from "a" to "h", such as "hdc".
-  "idex=" is recognized for all "x" from "0" to "3", such as "ide1".
- 
-  "hdx=noprobe"        : drive may be present, but do not probe for it
-  "hdx=nowerr"         : ignore the WRERR_STAT bit on this drive
-  "hdx=cdrom"          : drive is present, and is a cdrom drive
-  "hdx=cyl,head,sect"  : disk drive is present, with specified geometry
- 
-  "idex=noprobe"       : do not attempt to access/use this interface
-  "idex=base"          : probe for an interface at the addr specified,
-                               where "base" is usually 0x1f0 or 0x170
-                               and "ctl" is assumed to be "base"+0x206
-  "idex=base,ctl"      : specify both base and ctl
-  "idex=base,ctl,irq"  : specify base, ctl, and irq number
- 
-  The following two are valid ONLY on ide0 or ide1,
-  and the defaults for the base,ctl ports must not be altered.
- 
-  "idex=serialize"     : do not overlap operations on ide0 and ide1.
-  "idex=dtc2278"       : enables use of DTC2278 secondary i/f
-  "idex=ht6560b"       : enables use of HT6560B secondary i/f
-  "idex=cmd640_vlb"    : required for VLB cards with the CMD640 chip
-                         (not for PCI -- automatically detected)
- 
-  This option is valid ONLY on ide0, and the defaults for the base,ctl ports 
-  must not be altered.
-  
-  "ide0=qd6580"        : select "fast" interface speed on a qd6580 interface
- 
+ "hdx=noprobe"		: drive may be present, but do not probe for it
+ "hdx=nowerr"		: ignore the WRERR_STAT bit on this drive
+ "hdx=cdrom"		: drive is present, and is a cdrom drive
+ "hdx=cyl,head,sect"	: disk drive is present, with specified geometry
+ "hdx=autotune"		: driver will attempt to tune interface speed
+				to the fastest PIO mode supported,
+				if possible for this drive only.
+				Not fully supported by all chipset types,
+				and quite likely to cause trouble with
+				older/odd IDE drives.
+
+ "idex=noprobe"		: do not attempt to access/use this interface
+ "idex=base"		: probe for an interface at the addr specified,
+				where "base" is usually 0x1f0 or 0x170
+				and "ctl" is assumed to be "base"+0x206
+ "idex=base,ctl"	: specify both base and ctl
+ "idex=base,ctl,irq"	: specify base, ctl, and irq number
+ "idex=autotune"	: driver will attempt to tune interface speed
+				to the fastest PIO mode supported,
+				for all drives on this interface.
+				Not fully supported by all chipset types,
+				and quite likely to cause trouble with
+				older/odd IDE drives.
+ "idex=noautotune"	: driver will NOT attempt to tune interface speed
+				This is the default for most chipsets,
+				except the cmd640.
+
+ The following two are valid ONLY on ide0,
+ and the defaults for the base,ctl ports must not be altered.
+
+ "ide0=serialize"	: do not overlap operations on ide0 and ide1.
+ "ide0=dtc2278"		: probe/support DTC2278 interface
+ "ide0=ht6560b"		: probe/support HT6560B interface
+ "ide0=cmd640_vlb"	: *REQUIRED* for VLB cards with the CMD640 chip
+			  (not for PCI -- automatically detected)
+ "ide0=qd6580"		: probe/support qd6580 interface
+ "ide0=ali14xx"		: probe/support ali14xx chipsets (ALI M1439, M1443, M1445)
+ "ide0=umc8672"		: probe/support umc8672 chipsets
+
 Everything else is rejected with a "BAD OPTION" message.
 
 ================================================================================

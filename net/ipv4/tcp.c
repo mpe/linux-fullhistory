@@ -1988,7 +1988,7 @@ static int tcp_sendmsg(struct sock *sk, struct msghdr *msg,
 		 */
 		 
 			send_tmp = NULL;
-			if (copy < sk->mss && !(flags & MSG_OOB)) 
+			if (copy < sk->mss && !(flags & MSG_OOB) && sk->packets_out) 
 			{
 				/*
 				 *	We will release the socket in case we sleep here. 
@@ -2105,7 +2105,7 @@ static int tcp_sendmsg(struct sock *sk, struct msghdr *msg,
 			skb->free = 0;
 			sk->write_seq += copy;
 		
-			if (send_tmp != NULL && sk->packets_out) 
+			if (send_tmp != NULL) 
 			{
 				tcp_enqueue_partial(send_tmp, sk);
 				continue;
@@ -2230,32 +2230,33 @@ static void tcp_read_wakeup(struct sock *sk)
 static void cleanup_rbuf(struct sock *sk)
 {
 	unsigned long flags;
-	unsigned long left;
 	struct sk_buff *skb;
 	unsigned long rspace;
 
-	if(sk->debug)
-	  	printk("cleaning rbuf for sk=%p\n", sk);
-  
 	save_flags(flags);
 	cli();
-  
-	left = sock_rspace(sk);
- 
+
+	/*
+	 * See if we have anything to free up?
+	 */
+
+	skb = skb_peek(&sk->receive_queue);
+	if (!skb || !skb->used || skb->users) {
+		restore_flags(flags);
+		return;
+	}
+
 	/*
 	 *	We have to loop through all the buffer headers,
 	 *	and try to free up all the space we can.
 	 */
 
-	while((skb=skb_peek(&sk->receive_queue)) != NULL) 
-	{
-		if (!skb->used || skb->users) 
-			break;
+	do {
 		skb_unlink(skb);
 		skb->sk = sk;
 		kfree_skb(skb, FREE_READ);
-	}
-
+		skb = skb_peek(&sk->receive_queue);
+	} while (skb && skb->used && !skb->users);
 	restore_flags(flags);
 
 	/*
@@ -2265,22 +2266,21 @@ static void cleanup_rbuf(struct sock *sk)
 	 *	TCP_WINDOW_DIFF.
 	 */
 
+	rspace=sock_rspace(sk);
 	if(sk->debug)
-		printk("sk->rspace = %lu, was %lu\n", sock_rspace(sk),
-  					    left);
-	if ((rspace=sock_rspace(sk)) != left) 
-	{
-		/*
-		 * This area has caused the most trouble.  The current strategy
-		 * is to simply do nothing if the other end has room to send at
-		 * least 3 full packets, because the ack from those will auto-
-		 * matically update the window.  If the other end doesn't think
-		 * we have much space left, but we have room for at least 1 more
-		 * complete packet than it thinks we do, we will send an ack
-		 * immediately.  Otherwise we will wait up to .5 seconds in case
-		 * the user reads some more.
-		 */
-		sk->ack_backlog++;
+		printk("sk->rspace = %lu\n", rspace);
+	/*
+	 * This area has caused the most trouble.  The current strategy
+	 * is to simply do nothing if the other end has room to send at
+	 * least 3 full packets, because the ack from those will auto-
+	 * matically update the window.  If the other end doesn't think
+	 * we have much space left, but we have room for at least 1 more
+	 * complete packet than it thinks we do, we will send an ack
+	 * immediately.  Otherwise we will wait up to .5 seconds in case
+	 * the user reads some more.
+	 */
+	sk->ack_backlog++;
+
 	/*
 	 * It's unclear whether to use sk->mtu or sk->mss here.  They differ only
 	 * if the other end is offering a window smaller than the agreed on MSS
@@ -2290,22 +2290,21 @@ static void cleanup_rbuf(struct sock *sk)
 	 * only on the send side, so I'm putting mtu here.
 	 */
 
-		if (rspace > (sk->window - sk->bytes_rcv + sk->mtu)) 
+	if (rspace > (sk->window - sk->bytes_rcv + sk->mtu)) 
+	{
+		/* Send an ack right now. */
+		tcp_read_wakeup(sk);
+	} 
+	else 
+	{
+		/* Force it to send an ack soon. */
+		int was_active = del_timer(&sk->retransmit_timer);
+		if (!was_active || jiffies+TCP_ACK_TIME < sk->timer.expires) 
 		{
-			/* Send an ack right now. */
-			tcp_read_wakeup(sk);
+			reset_xmit_timer(sk, TIME_WRITE, TCP_ACK_TIME);
 		} 
-		else 
-		{
-			/* Force it to send an ack soon. */
-			int was_active = del_timer(&sk->retransmit_timer);
-			if (!was_active || jiffies+TCP_ACK_TIME < sk->timer.expires) 
-			{
-				reset_xmit_timer(sk, TIME_WRITE, TCP_ACK_TIME);
-			} 
-			else
-				add_timer(&sk->retransmit_timer);
-		}
+		else
+			add_timer(&sk->retransmit_timer);
 	}
 } 
 
@@ -4180,7 +4179,7 @@ static int tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
  *	room, then we will just have to discard the packet.
  */
 
-extern __inline__ int tcp_data(struct sk_buff *skb, struct sock *sk, 
+extern /* __inline__ */ int tcp_data(struct sk_buff *skb, struct sock *sk, 
 	 unsigned long saddr, unsigned short len)
 {
 	struct sk_buff *skb1, *skb2;
@@ -4798,44 +4797,14 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	return(0);
 }
 
-
 /*
- *	This functions checks to see if the tcp header is actually acceptable. 
+ * React to a out-of-window TCP sequence number in an incoming packet
  */
- 
-extern __inline__ int tcp_sequence(struct sock *sk, struct tcphdr *th, short len,
+static void bad_tcp_sequence(struct sock *sk, struct tcphdr *th, short len,
 	     struct options *opt, unsigned long saddr, struct device *dev)
 {
-	u32 next_seq;
-
-	next_seq = len - 4*th->doff;
-	if (th->fin)
-		next_seq++;
-	/* if we have a zero window, we can't have any data in the packet.. */
-	if (next_seq && !sk->window)
-		goto ignore_it;
-	next_seq += ntohl(th->seq);
-
-	/*
-	 * This isn't quite right.  sk->acked_seq could be more recent
-	 * than sk->window.  This is however close enough.  We will accept
-	 * slightly more packets than we should, but it should not cause
-	 * problems unless someone is trying to forge packets.
-	 */
-
-	/* have we already seen all of this packet? */
-	if (!after(next_seq+1, sk->acked_seq))
-		goto ignore_it;
-	/* or does it start beyond the window? */
-	if (!before(ntohl(th->seq), sk->acked_seq + sk->window + 1))
-		goto ignore_it;
-
-	/* ok, at least part of this packet would seem interesting.. */
-	return 1;
-
-ignore_it:
 	if (th->rst)
-		return 0;
+		return;
 
 	/*
 	 *	Send a reset if we get something not ours and we are
@@ -4847,12 +4816,24 @@ ignore_it:
 	if (sk->state==TCP_SYN_SENT || sk->state==TCP_SYN_RECV) 
 	{
 		tcp_reset(sk->saddr,sk->daddr,th,sk->prot,NULL,dev, sk->ip_tos,sk->ip_ttl);
-		return 1;
+		return;
 	}
 
 	/* Try to resync things. */
 	tcp_send_ack(sk->sent_seq, sk->acked_seq, sk, th, saddr);
-	return 0;
+	return;
+}
+
+/*
+ *	This functions checks to see if the tcp header is actually acceptable. 
+ */
+ 
+extern __inline__ int tcp_sequence(struct sock *sk, u32 seq, u32 end_seq)
+{
+	/* does the packet contain any unseen data AND */
+	/* does the packet start before the window? */
+	return	after(end_seq+1, sk->acked_seq) &&
+		before(seq, sk->acked_seq + sk->window + 1);
 }
 
 /*
@@ -4888,6 +4869,29 @@ static int tcp_std_reset(struct sock *sk, struct sk_buff *skb)
 }
 
 /*
+ *	Find the socket, using the last hit cache if applicable.
+ */
+static inline struct sock * get_tcp_sock(u32 saddr, u16 sport, u32 daddr, u16 dport)
+{
+	struct sock * sk;
+
+	sk = (struct sock *) th_cache_sk;
+	if (saddr != th_cache_saddr || daddr != th_cache_daddr ||
+	    sport != th_cache_sport || dport != th_cache_dport) {
+		sk = get_sock(&tcp_prot, dport, saddr, sport, daddr);
+		if (sk) {
+			th_cache_saddr=saddr;
+			th_cache_daddr=daddr;
+  			th_cache_dport=dport;
+			th_cache_sport=sport;
+			th_cache_sk=sk;
+		}
+	}
+	return sk;
+}
+
+
+/*
  *	A TCP packet has arrived.
  *		skb->h.raw is the TCP header.
  */
@@ -4900,52 +4904,21 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	struct sock *sk;
 	int syn_ok=0;
 
-	tcp_statistics.TcpInSegs++;
-	if(skb->pkt_type!=PACKET_HOST)
-	{
-	  	kfree_skb(skb,FREE_READ);
-	  	return(0);
-	}
-  
-	th = skb->h.th;
-
 	/*
-	 *	Find the socket, using the last hit cache if applicable.
+	 * "redo" is 1 if we have already seen this skb but couldn't
+	 * use it at that time (the socket was locked).  In that case
+	 * we have already done a lot of the work (looked up the socket
+	 * etc).
 	 */
-
-	if(!redo && saddr==th_cache_saddr && daddr==th_cache_daddr && th->dest==th_cache_dport && th->source==th_cache_sport)
-	{
-		sk=(struct sock *)th_cache_sk;
-		/*
-		 *	We think this is causing the bug so
-		 */
-		 if(sk!=get_sock(&tcp_prot,th->dest, saddr, th->source, daddr))
-		 	printk("Cache mismatch on TCP.\n");
-	}
-	else
-	{
-		sk = get_sock(&tcp_prot, th->dest, saddr, th->source, daddr);
-  		th_cache_saddr=saddr;
-  		th_cache_daddr=daddr;
-  		th_cache_dport=th->dest;
-  		th_cache_sport=th->source;
-  		th_cache_sk=sk;
-	}		
-
-	/*
-	 *	If this socket has got a reset it's to all intents and purposes 
-  	 *	really dead. Count closed sockets as dead.
-  	 *
-  	 *	Note: BSD appears to have a bug here. A 'closed' TCP in BSD
-  	 *	simply drops data. This seems incorrect as a 'closed' TCP doesn't
-  	 *	exist so should cause resets as if the port was unreachable.
-  	 */
-  	 
-	if (sk!=NULL && (sk->zapped || sk->state==TCP_CLOSE))
-		sk=NULL;
-
-	if (!redo) 
-	{
+	th = skb->h.th;
+	sk = skb->sk;
+	if (!redo) {
+		tcp_statistics.TcpInSegs++;
+		if (skb->pkt_type!=PACKET_HOST)
+		{
+		  	kfree_skb(skb,FREE_READ);
+		  	return(0);
+		}
 		/*
 		 *	Pull up the IP header.
 		 */
@@ -4954,8 +4927,9 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		 *	Try to use the device checksum if provided.
 		 */
 		if (
-			(skb->ip_summed && tcp_check(th, len, saddr, daddr, skb->csum ))||
-		    	(!skb->ip_summed && tcp_check(th, len, saddr, daddr, csum_partial((char *)th, len, 0)))
+			((skb->ip_summed == CHECKSUM_HW) && tcp_check(th, len, saddr, daddr, skb->csum ))||
+		    	((skb->ip_summed == CHECKSUM_NONE) && tcp_check(th, len, saddr, daddr, csum_partial((char *)th, len, 0)))
+		    /* skip if CHECKSUM_UNNECESSARY */
 		    )
 		{
 			skb->sk = NULL;
@@ -4966,25 +4940,13 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			 */
 			return(0);
 		}
-
+		sk = get_tcp_sock(saddr, th->source, daddr, th->dest);
+		if (!sk)
+			goto no_tcp_socket;
+		skb->sk = sk;
 		skb->seq = ntohl(th->seq);
 		skb->end_seq = skb->seq + th->syn + th->fin + len - th->doff*4;
 		skb->ack_seq = ntohl(th->ack_seq);
-
-		/* See if we know about the socket. */
-		if (sk == NULL) 
-		{
-			/*
-			 *	No such TCB. If th->rst is 0 send a reset (checked in tcp_reset)
-			 */
-			tcp_reset(daddr, saddr, th, &tcp_prot, opt,dev,skb->ip_hdr->tos,255);
-			skb->sk = NULL;
-			/*
-			 *	Discard frame
-			 */
-			kfree_skb(skb, FREE_READ);
-			return(0);
-		}
 
 		skb->acked = 0;
 		skb->used = 0;
@@ -5003,17 +4965,18 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		sk->inuse = 1;
 		sti();
 	}
-	else
-	{
-		if (sk==NULL) 
-		{
-			tcp_reset(daddr, saddr, th, &tcp_prot, opt,dev,skb->ip_hdr->tos,255);
-			skb->sk = NULL;
-			kfree_skb(skb, FREE_READ);
-			return(0);
-		}
-	}
 
+	/*
+	 *	If this socket has got a reset it's to all intents and purposes 
+	 *	really dead. Count closed sockets as dead.
+	 *
+	 *	Note: BSD appears to have a bug here. A 'closed' TCP in BSD
+	 *	simply drops data. This seems incorrect as a 'closed' TCP doesn't
+	 *	exist so should cause resets as if the port was unreachable.
+	 */
+
+	if (sk->zapped || sk->state==TCP_CLOSE)
+		goto no_tcp_socket;
 
 	if (!sk->prot) 
 	{
@@ -5223,8 +5186,9 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 *	I have time to test it hard and look at what gcc outputs 
 	 */
 	
-	if(!tcp_sequence(sk,th,len,opt,saddr,dev))
+	if (!tcp_sequence(sk, skb->seq, skb->end_seq))
 	{
+		bad_tcp_sequence(sk, th, len, opt, saddr, dev);
 		kfree_skb(skb, FREE_READ);
 		release_sock(sk);
 		return 0;
@@ -5343,6 +5307,18 @@ rfc_step6:		/* I'll clean this up later */
 	 */	
 	
 	release_sock(sk);
+	return 0;
+
+no_tcp_socket:
+	/*
+	 *	No such TCB. If th->rst is 0 send a reset (checked in tcp_reset)
+	 */
+	tcp_reset(daddr, saddr, th, &tcp_prot, opt,dev,skb->ip_hdr->tos,255);
+	skb->sk = NULL;
+	/*
+	 *	Discard frame
+	 */
+	kfree_skb(skb, FREE_READ);
 	return 0;
 }
 

@@ -27,6 +27,9 @@
 #define FREE_READ	1
 #define FREE_WRITE	0
 
+#define CHECKSUM_NONE 0
+#define CHECKSUM_HW 1
+#define CHECKSUM_UNNECESSARY 2
 
 struct sk_buff_head 
 {

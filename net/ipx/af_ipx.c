@@ -2162,7 +2162,7 @@ static struct proto_ops ipx_proto_ops = {
 	ipx_recvmsg
 };
 
-/* Called by ddi.c on kernel start up */
+/* Called by protocol.c on kernel start up */
 
 static struct packet_type ipx_8023_packet_type = 
 

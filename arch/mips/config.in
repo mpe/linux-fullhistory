@@ -36,6 +36,7 @@ if [ "$CONFIG_CPU_R3000" = "y" -o \
 fi
 
 define_bool CONFIG_BINFMT_ELF y
+define_bool CONFIG_BINFMT_AOUT y
 bool 'Compile the kernel into the ELF object format' CONFIG_ELF_KERNEL
 if [ "$CONFIG_ELF_KERNEL" = "y" ]; then
   bool 'Is your ELF compiler an extra compiler' CONFIG_EXTRA_ELF_COMPILER

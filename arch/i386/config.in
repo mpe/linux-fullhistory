@@ -24,6 +24,7 @@ if [ "$CONFIG_PCI" = "y" ]; then
   bool '   PCI bridge optimization (experimental)' CONFIG_PCI_OPTIMIZE
 fi
 bool 'System V IPC' CONFIG_SYSVIPC
+tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
 if [ "$CONFIG_BINFMT_ELF" = "y" ]; then
   bool 'Compile kernel as ELF - if your GCC is ELF-GCC' CONFIG_KERNEL_ELF
@@ -31,7 +32,8 @@ fi
 choice 'Processor type' \
 	"386		CONFIG_M386	\
 	 486		CONFIG_M486	\
-	 Pentium	CONFIG_M586" Pentium
+	 Pentium	CONFIG_M586	\
+	 PPro		CONFIG_M686" Pentium
 endmenu
 
 source drivers/block/Config.in

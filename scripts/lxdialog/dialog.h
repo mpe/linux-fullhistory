@@ -1,3 +1,4 @@
+
 /*
  *  dialog.h -- common declarations for all dialog modules
  *
@@ -26,7 +27,6 @@
 #include <string.h>
 
 #include CURSES_LOC
-
 
 #define ESC 27
 #define TAB 9

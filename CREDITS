@@ -562,6 +562,11 @@ S: Mr. v. Boemellaan 39
 S: NL-5237 KA 's-Hertogenbosch
 S: The Netherlands
 
+N: Savio Lam
+E: lam836@cs.cuhk.hk
+D: Author of the dialog utility, foundation
+D: for Menuconfig's lxdialog.
+
 N: Volker Lendecke
 E: lendecke@namu01.gwdg.de
 D: Kernel smbfs (to mount WfW, NT and OS/2 network drives.)
@@ -857,6 +862,14 @@ D: Instigator, FHS standard
 D: Keeper of the Jargon File and curator of the Retrocomputing Museum
 D: Author, Emacs VC and GUD modes
 
+N: William E. Roadcap
+E: roadcapw@cfw.com
+W: http://www.cfw.com/~roadcapw
+D: Author of menu based configuration tool, Menuconfig.
+S: 1407 Broad Street
+S: Waynesboro, Va  22980
+S: USA
+
 N: Florian La Roche
 E: rzsfl@rz.uni-sb.de
 E: flla@stud.uni-sb.de
@@ -1082,6 +1095,18 @@ S: Robotics and Vision Laboratory
 S: 4130 Upson Hall
 S: Ithaca NY 14850
 S: USA
+
+N: Greg Wettstein
+E: greg@wind.rmcc.com
+D: Filesystem valid flag for MINIX filesystem.
+D: Minor kernel debugging.
+D: Monitoring of development kernels for long-term stability.
+D: Early implementations of Linux in a commercial environment.
+S: Dr. Greg Wettstein, Ph.D.
+S: Oncology Research Division Computing Facility
+S: Roger Maris Cancer Center
+S: 820 4th St. N.
+S: Fargo, ND  58122
 
 N: Marco van Wieringen
 E: mvw@mercury.mcs.nl.mugnet.org

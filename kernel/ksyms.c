@@ -113,6 +113,8 @@ extern void (* iABI_hook)(struct pt_regs * regs);
 extern int dump_fpu(elf_fpregset_t *);
 #endif
 
+extern void dump_thread(struct pt_regs *, struct user *);
+
 struct symbol_table symbol_table = {
 #include <linux/symtab_begin.h>
 #ifdef MODVERSIONS
@@ -182,6 +184,7 @@ struct symbol_table symbol_table = {
 	X(namei),
 	X(lnamei),
 	X(open_namei),
+	X(sys_close),
 	X(close_fp),
 	X(check_disk_change),
 	X(invalidate_buffers),
@@ -203,7 +206,6 @@ struct symbol_table symbol_table = {
 	X(unlock_buffer),
 	X(dcache_lookup),
 	X(dcache_add),
-	X(aout_core_dump),
 	X(add_blkdev_randomness),
 	X(generic_file_read),
 	X(generic_readpage),
@@ -344,6 +346,12 @@ struct symbol_table symbol_table = {
 	/* Socket layer registration */
 	X(sock_register),
 	X(sock_unregister),
+	/* Socket layer support routines */
+	X(skb_recv_datagram),
+	X(skb_free_datagram),
+	X(skb_copy_datagram),
+	X(skb_copy_datagram_iovec),
+	X(datagram_select),
 #ifdef CONFIG_FIREWALL
 	/* Firewall registration */
 	X(register_firewall),
@@ -468,6 +476,10 @@ struct symbol_table symbol_table = {
 #ifdef CONFIG_BINFMT_ELF
 	X(dump_fpu),
 #endif
+	/* bimfm_aout */
+	X(dump_thread),
+	X(get_write_access),
+	X(put_write_access),
 
 	/********************************************************
 	 * Do not add anything below this line,

@@ -24,7 +24,7 @@ extern volatile unsigned long smp_spins_syscall_cur[];	/* count of syscall spins
 extern volatile unsigned long smp_idle_count[1+NR_CPUS];/* count idle ticks */
 extern volatile unsigned long smp_idle_map;		/* map with idle cpus */
 #else
-exern volatile unsigned long smp_spins;
+extern volatile unsigned long smp_spins;
 #endif
 
 

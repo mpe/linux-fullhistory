@@ -342,6 +342,21 @@ CONFIG_KERNEL_ELF
   kernel in ELF by saying Y here and editing the variables CC
   and LD in the toplevel Makefile.
 
+Kernel support for A.OUT binaries
+CONFIG_BINFMT_AOUT
+  A.OUT (Assembler.OUTput) format is a format for libraries and
+  executables used in the earliest versions of UNIX. Linux used this
+  format until it was replaced with the ELF format.
+  As more and more programs are converted to ELF, the use for A.OUT
+  will gradually diminish. If you disable this option it will reduce
+  your kernel by one page. This is not much and by itself does not
+  warrant removing support. However its removal is a good idea when
+  you wish to ensure that absolutely none of your programs will use
+  this older executable format. If you don't know what to answer at
+  this point then answer Y. You may answer M for module support and
+  later load the module when you find a program which needs a.out
+  format.
+
 Processor type
 CONFIG_M386
   This is the processor type of your CPU. It is used for optimizing
@@ -1116,6 +1131,11 @@ CONFIG_SLIP_COMPRESSED
   available via ftp (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO, explains how to configure
   CSLIP. This won't enlarge your kernel.
+
+Keepalive and linefill
+CONFIG_SLIP_SMART
+  Adds additional capabilities to the SLIP driver to support the RELCOM
+  line fill and keepalive monitoring. Ideal on poor quality analogue lines.
 
 PPP (point-to-point) support
 CONFIG_PPP

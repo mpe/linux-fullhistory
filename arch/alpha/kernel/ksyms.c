@@ -5,7 +5,7 @@
  * modules.
  */
 
-#include <linux/config.h>
+#include <linux/string.h>
 #include <linux/module.h>
 # include <asm/io.h>
 # include <asm/hwrpb.h>

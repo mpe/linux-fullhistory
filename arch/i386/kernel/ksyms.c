@@ -7,6 +7,7 @@ static struct symbol_table arch_symbol_table = {
 	/* platform dependent support */
 #ifdef __SMP__
 	X(apic_reg),		/* Needed internally for the I386 inlines */
+	X(cpu_data),
 #endif
 #include <linux/symtab_end.h>
 };

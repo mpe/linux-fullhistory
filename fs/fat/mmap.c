@@ -1,10 +1,10 @@
 /*
- *	fs/msdos/mmap.c
+ *	linux/fs/fat/mmap.c
  *
  *	Written by Jacques Gelinas (jacques@solucorp.qc.ca)
  *	Inspired by fs/nfs/mmap.c (Jon Tombs 15 Aug 1993)
  *
- *	msdos mmap handling
+ *	mmap handling for fat-based filesystems
  */
 
 #include <linux/stat.h>

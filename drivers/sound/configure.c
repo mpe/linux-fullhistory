@@ -678,7 +678,7 @@ ask_parameters (void)
 
 
   ask_int_choice (B (OPT_GUS), "GUS_BASE",
-		  "I/O base for Gravis UltraSound (GUS)",
+		  "I/O base for GUS",
 		  FMT_HEX,
 		  0x220,
 		  "210, 220, 230, 240, 250 or 260");

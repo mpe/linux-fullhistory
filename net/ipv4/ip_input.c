@@ -95,6 +95,7 @@
  *		Alan Cox	:	Outgoing firewall on build_xmit
  *		A.N.Kuznetsov	:	IP_OPTIONS support throughout the kernel
  *		Alan Cox	:	Multicast routing hooks
+ *		Jos Vos		:	Do accounting *before* call_in_firewall
  *
  *  
  *
@@ -286,11 +287,20 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 #endif
 
 	/*
-	 *	See if the firewall wants to dispose of the packet. 
+	 *	Account for the packet (even if the packet is
+	 *	not accepted by the firewall!).
 	 */
 
-#ifdef	CONFIG_FIREWALL
+#ifdef CONFIG_IP_ACCT
+	ip_fw_chk(iph,dev,ip_acct_chain,IP_FW_F_ACCEPT,1);
+#endif	
+
+	/*
+	 *	See if the firewall wants to dispose of the packet. 
+	 */
 	
+#ifdef	CONFIG_FIREWALL
+
 	if ((err=call_in_firewall(PF_INET, skb, iph))<FW_ACCEPT)
 	{
 		if(err==FW_REJECT)
@@ -421,14 +431,6 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			return(0);
 		}
 #endif
-
-		/*
-		 *	Account for the packet
-		 */
- 
-#ifdef CONFIG_IP_ACCT
-		ip_fw_chk(iph,dev,ip_acct_chain,IP_FW_F_ACCEPT,1);
-#endif	
 
 		/*
 		 *	Reassemble IP fragments.

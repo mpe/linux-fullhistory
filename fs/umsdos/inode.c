@@ -50,7 +50,7 @@ void UMSDOS_put_inode(struct inode *inode)
 
 void UMSDOS_put_super(struct super_block *sb)
 {
-	fat_put_super(sb);
+	msdos_put_super(sb);
 	MOD_DEC_USE_COUNT;
 }
 
@@ -400,7 +400,7 @@ struct super_block *UMSDOS_read_super(
 	*/
 	struct super_block *sb;
 	MOD_INC_USE_COUNT;
-	sb = fat_read_super(s,data,silent);
+	sb = msdos_read_super(s,data,silent);
 	printk ("UMSDOS Beta 0.6 (compatibility level %d.%d, fast msdos)\n"
 		,UMSDOS_VERSION,UMSDOS_RELEASE);
 	if (sb != NULL){

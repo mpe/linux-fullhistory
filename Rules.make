@@ -34,7 +34,8 @@ unexport MOD_LIST_NAME
 #
 # Get things started.
 #
-first_rule: sub_dirs $(O_TARGET) $(L_TARGET)
+first_rule: sub_dirs
+	$(MAKE) all_targets
 
 #
 # Common rules
@@ -48,6 +49,11 @@ first_rule: sub_dirs $(O_TARGET) $(L_TARGET)
 
 %.o: %.s
 	$(AS) $(ASFLAGS) $(EXTRA_CFLAGS) -o $@ $<
+
+#
+#
+#
+all_targets: $(O_TARGET) $(L_TARGET)
 
 #
 # Rule to compile a set of .o files into one .o file

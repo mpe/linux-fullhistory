@@ -12,8 +12,13 @@ ifeq (/usr/include/ncurses/ncurses.h, $(wildcard /usr/include/ncurses/ncurses.h)
         CFLAGS += -I/usr/include/ncurses
         CURSES =  -DCURSES_LOC="<ncurses.h>"
 else
+ifeq (/usr/include/ncurses/curses.h, $(wildcard /usr/include/ncurses/curses.h))
+        CFLAGS += -I/usr/include/ncurses
+        CURSES =  -DCURSES_LOC="<curses.h>"
+else
 ifeq (/usr/include/ncurses.h, $(wildcard /usr/include/ncurses.h))
         CURSES =  -DCURSES_LOC="<ncurses.h>"
+endif
 endif
 endif
 

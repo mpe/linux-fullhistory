@@ -35,9 +35,10 @@
 #include <asm/segment.h>
 #include <asm/io.h>
 
-#define NR_SIZES 4
-static char buffersize_index[9] = {-1,  0,  1, -1,  2, -1, -1, -1, 3};
-static short int bufferindex_size[NR_SIZES] = {512, 1024, 2048, 4096};
+#define NR_SIZES 5
+static char buffersize_index[17] =
+{-1,  0,  1, -1,  2, -1, -1, -1, 3, -1, -1, -1, -1, -1, -1, -1, 4};
+static short int bufferindex_size[NR_SIZES] = {512, 1024, 2048, 4096, 8192};
 
 #define BUFSIZE_INDEX(X) ((int) buffersize_index[(X)>>9])
 #define MAX_BUF_PER_PAGE (PAGE_SIZE / 512)
@@ -99,7 +100,7 @@ static union bdflush_param{
 				   trim back the buffers */
 	} b_un;
 	unsigned int data[N_PARAM];
-} bdf_prm = {{25, 500, 64, 256, 15, 30*HZ, 5*HZ, 1884, 2}};
+} bdf_prm = {{60, 500, 64, 256, 15, 30*HZ, 5*HZ, 1884, 2}};
 
 /* The lav constant is set for 1 minute, as long as the update process runs
    every 5 seconds.  If you change the frequency of update, the time
@@ -502,9 +503,12 @@ void set_blocksize(kdev_t dev, int size)
 	if (!blksize_size[MAJOR(dev)])
 		return;
 
+	if (size > PAGE_SIZE)
+		size = 0;
+
 	switch(size) {
 		default: panic("Invalid blocksize passed to set_blocksize");
-		case 512: case 1024: case 2048: case 4096:;
+	        case 512: case 1024: case 2048: case 4096: case 8192: ;
 	}
 
 	if (blksize_size[MAJOR(dev)][MINOR(dev)] == 0 && size == BLOCK_SIZE) {

@@ -1,5 +1,5 @@
 /*
- *  linux/fs/msdos/cache.c
+ *  linux/fs/fat/cache.c
  *
  *  Written 1992,1993 by Werner Almesberger
  */

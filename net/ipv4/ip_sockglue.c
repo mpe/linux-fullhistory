@@ -366,17 +366,26 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 		}
 #endif			
 #ifdef CONFIG_IP_FIREWALL
-		case IP_FW_ADD_BLK:
-		case IP_FW_DEL_BLK:
-		case IP_FW_ADD_FWD:
-		case IP_FW_DEL_FWD:
-		case IP_FW_CHK_BLK:
-		case IP_FW_CHK_FWD:
-		case IP_FW_FLUSH_BLK:
+		case IP_FW_INSERT_IN:
+		case IP_FW_INSERT_OUT:
+		case IP_FW_INSERT_FWD:
+		case IP_FW_APPEND_IN:
+		case IP_FW_APPEND_OUT:
+		case IP_FW_APPEND_FWD:
+		case IP_FW_DELETE_IN:
+		case IP_FW_DELETE_OUT:
+		case IP_FW_DELETE_FWD:
+		case IP_FW_CHECK_IN:
+		case IP_FW_CHECK_OUT:
+		case IP_FW_CHECK_FWD:
+		case IP_FW_FLUSH_IN:
+		case IP_FW_FLUSH_OUT:
 		case IP_FW_FLUSH_FWD:
-		case IP_FW_ZERO_BLK:
+		case IP_FW_ZERO_IN:
+		case IP_FW_ZERO_OUT:
 		case IP_FW_ZERO_FWD:
-		case IP_FW_POLICY_BLK:
+		case IP_FW_POLICY_IN:
+		case IP_FW_POLICY_OUT:
 		case IP_FW_POLICY_FWD:
 			if(!suser())
 				return -EPERM;
@@ -391,8 +400,9 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			
 #endif
 #ifdef CONFIG_IP_ACCT
-		case IP_ACCT_DEL:
-		case IP_ACCT_ADD:
+		case IP_ACCT_INSERT:
+		case IP_ACCT_APPEND:
+		case IP_ACCT_DELETE:
 		case IP_ACCT_FLUSH:
 		case IP_ACCT_ZERO:
 			if(!suser())

@@ -505,7 +505,6 @@ extern int fs_may_umount(kdev_t dev, struct inode * mount_root);
 extern int fs_may_remount_ro(kdev_t dev);
 
 extern struct file *first_file;
-extern int nr_files;
 extern struct super_block super_blocks[NR_SUPER];
 
 extern void refile_buffer(struct buffer_head * buf);

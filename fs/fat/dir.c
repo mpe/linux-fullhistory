@@ -1,6 +1,7 @@
 /*
- *  linux/fs/msdos/dir.c
- *  MS-DOS directory handling functions
+ *  linux/fs/fat/dir.c
+ *
+ *  directory handling functions for fat-based filesystems
  *
  *  Written 1992,1993 by Werner Almesberger
  *

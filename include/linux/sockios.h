@@ -71,6 +71,7 @@
 #define SIOCGIFMAP	0x8970		/* Get device parameters	*/
 #define SIOCSIFMAP	0x8971		/* Set device parameters	*/
 
+
 /* Device private ioctl calls */
 
 /*

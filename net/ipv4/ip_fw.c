@@ -26,6 +26,11 @@
  *		Alan Cox 25/8/95, based on information from bugtraq.
  *	ICMP type printk, IP_FW_F_APPEND
  *		Bernd Eckenfels 1996-01-31
+ *	Split blocking chain into input and output chains, add new "insert" and
+ *	"append" commands to replace semi-intelligent "add" command, let "delete".
+ *	only delete the first matching entry, use 0xFFFF (0xFF) as ports (ICMP
+ *	types) when counting packets being 2nd and further fragments.
+ *		Jos Vos <jos@xos.nl> 8/2/1996.
  *
  * Masquerading functionality
  *
@@ -99,7 +104,7 @@
  *	Implement IP packet firewall
  */
 
-#ifdef CONFIG_IPFIREWALL_DEBUG 
+#ifdef CONFIG_IP_FIREWALL_DEBUG 
 #define dprintf1(a)		printk(a)
 #define dprintf2(a1,a2)		printk(a1,a2)
 #define dprintf3(a1,a2,a3)	printk(a1,a2,a3)
@@ -116,25 +121,30 @@
 					      (ntohl(a)>>8)&0xFF,\
 					      (ntohl(a))&0xFF);
 
-#ifdef IPFIREWALL_DEBUG
+#ifdef CONFIG_IP_FIREWALL_DEBUG
 #define dprint_ip(a)	print_ip(a)
 #else
 #define dprint_ip(a)	
 #endif
 
-#ifdef CONFIG_IP_FIREWALL
-struct ip_fw *ip_fw_fwd_chain;
-struct ip_fw *ip_fw_blk_chain;
-int ip_fw_blk_policy=IP_FW_F_ACCEPT;
-int ip_fw_fwd_policy=IP_FW_F_ACCEPT;
-#endif
-#ifdef CONFIG_IP_ACCT
-struct ip_fw *ip_acct_chain;
-#endif
+#if defined(CONFIG_IP_ACCT) || defined(CONFIG_IP_FIREWALL)
 
-#define IP_INFO_BLK	0
-#define IP_INFO_FWD	1
-#define IP_INFO_ACCT	2
+struct ip_fw *ip_fw_fwd_chain;
+struct ip_fw *ip_fw_in_chain;
+struct ip_fw *ip_fw_out_chain;
+struct ip_fw *ip_acct_chain;
+
+static struct ip_fw **chains[] =
+	{&ip_fw_fwd_chain, &ip_fw_in_chain, &ip_fw_out_chain, &ip_acct_chain};
+
+int ip_fw_fwd_policy=IP_FW_F_ACCEPT;
+int ip_fw_in_policy=IP_FW_F_ACCEPT;
+int ip_fw_out_policy=IP_FW_F_ACCEPT;
+
+static int *policies[] =
+	{&ip_fw_fwd_policy, &ip_fw_in_policy, &ip_fw_out_policy};
+
+#endif
 
 #ifdef CONFIG_IP_MASQUERADE
 /*
@@ -195,11 +205,12 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 	struct udphdr		*udp=(struct udphdr *)((unsigned long *)ip+ip->ihl);
 	struct icmphdr		*icmp=(struct icmphdr *)((unsigned long *)ip+ip->ihl);
 	__u32			src, dst;
-	__u16			src_port=0, dst_port=0, icmp_type=0;
+	__u16			src_port=0xFFFF, dst_port=0xFFFF, icmp_type=0xFF;
 	unsigned short		f_prt=0, prt;
 	char			notcpsyn=1, notcpack=1, match;
 	unsigned short		offset;
-	int			answer, priority;
+	int			answer;
+	unsigned char		tosand, tosxor;
 
 	/*
 	 *	If the chain is empty follow policy. The BSD one
@@ -237,7 +248,7 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 		return FW_BLOCK;
 		
 	if (offset!=0 && (opt != 1) && (ip->protocol == IPPROTO_TCP ||
-			ip->protocol == IPPROTO_UDP))
+			ip->protocol == IPPROTO_UDP || ip->protocol == IPPROTO_ICMP))
 		return FW_ACCEPT;
 		
 	/*
@@ -270,7 +281,7 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 	{
 		case IPPROTO_TCP:
 			dprintf1("TCP ");
-			/* ports stay 0 if it is not the first fragment */
+			/* ports stay 0xFFFF if it is not the first fragment */
 			if (!offset) {
 				src_port=ntohs(tcp->source);
 				dst_port=ntohs(tcp->dest);
@@ -285,7 +296,7 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 			break;
 		case IPPROTO_UDP:
 			dprintf1("UDP ");
-			/* ports stay 0 if it is not the first fragment */
+			/* ports stay 0xFFFF if it is not the first fragment */
 			if (!offset) {
 				src_port=ntohs(udp->source);
 				dst_port=ntohs(udp->dest);
@@ -293,7 +304,9 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 			prt=IP_FW_F_UDP;
 			break;
 		case IPPROTO_ICMP:
-			icmp_type=(__u16)(icmp->type);
+			/* icmp_type stays 255 if it is not the first fragment */
+			if (!offset)
+				icmp_type=(__u16)(icmp->type);
 			dprintf2("ICMP:%d ",icmp_type);
 			prt=IP_FW_F_ICMP;
 			break;
@@ -306,11 +319,11 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 	dprint_ip(ip->saddr);
 	
 	if (ip->protocol==IPPROTO_TCP || ip->protocol==IPPROTO_UDP)
-		/* This will print 0 when it is not the first fragment! */
+		/* This will print 65535 when it is not the first fragment! */
 		dprintf2(":%d ", src_port);
 	dprint_ip(ip->daddr);
 	if (ip->protocol==IPPROTO_TCP || ip->protocol==IPPROTO_UDP)
-		/* This will print 0 when it is not the first fragment! */
+		/* This will print 65535 when it is not the first fragment! */
 		dprintf2(":%d ",dst_port);
 	dprintf1("\n");
 #endif	
@@ -372,28 +385,17 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 		if (f_prt!=IP_FW_F_ALL) 
 		{
 			/*
-			 * This is actually buggy as if you set SYN flag 
+			 * This is actually buggy as if you set ACK/SYN flags
 			 * on UDP or ICMP firewall it will never work,but 
 			 * actually it is a concern of software which sets
 			 * firewall entries.
 			 */
 			 
-			 if((f->fw_flg&IP_FW_F_TCPSYN) && notcpsyn)
+			if((f->fw_flg&IP_FW_F_TCPSYN) && notcpsyn)
 			 	continue;
 
-			/*
-			 * When a bidirectional rule is used we only check
-			 * for ack bits on reverse matches. This way it's
-			 * easy to set up rules which only allow connections
-			 * initiated from "normal" match adresses.
-			 */
-
 			if((f->fw_flg&IP_FW_F_TCPACK) && notcpack)
-				if(f->fw_flg&IP_FW_F_BIDIR) {
-					if(match & 0x02)
-						continue;
-				} else
-					continue;
+			 	continue;
 
 			/*
 			 *	Specific firewall - packet's protocol
@@ -422,15 +424,18 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 #ifdef CONFIG_IP_FIREWALL_VERBOSE
 		/*
 		 * VERY ugly piece of code which actually
-		 * makes kernel printf for denied packets...
+		 * makes kernel printf for matching packets...
 		 */
 
 		if (f->fw_flg & IP_FW_F_PRN)
 		{
 			if(opt != 1) {
-				if(f->fw_flg&IP_FW_F_ACCEPT)
-					printk("Accept ");
-				else if(f->fw_flg&IP_FW_F_ICMPRPL)
+				if(f->fw_flg&IP_FW_F_ACCEPT) {
+					if(f->fw_flg&IP_FW_F_MASQ)
+						printk("Masquerade ");
+					else
+						printk("Accept ");
+				} else if(f->fw_flg&IP_FW_F_ICMPRPL)
 					printk("Reject ");
 				else
 					printk("Deny ");
@@ -443,7 +448,7 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 				case IPPROTO_UDP:
 					printk("UDP ");
 				case IPPROTO_ICMP:
-					printk("ICMP:%d ",icmp_type);
+					printk("ICMP:%d ", icmp_type);
 					break;
 				default:
 					printk("p=%d ",ip->protocol);
@@ -478,10 +483,12 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 	if(f!=NULL) 
 	{
 		policy=f->fw_flg;
-		priority=f->fw_priority;
+		tosand=f->fw_tosand;
+		tosxor=f->fw_tosxor;
 	}
 	else
-		priority=0xFF00;
+		tosand=0xFF;
+		tosxor=0x00;
 
 	if(opt != 1) 
 	{
@@ -492,9 +499,9 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 				answer = FW_REJECT;
 	}
 
-	if (answer == 0) { /* Adjust priority and recompute checksum */
+	if (policy&IP_FW_F_ACCEPT) { /* Adjust priority and recompute checksum */
 		__u8 old_tos = ip->tos;
-		ip->tos = (old_tos & (priority>>8)) ^ priority;
+		ip->tos = (old_tos & tosand) ^ tosxor;
 		if (ip->tos != old_tos)
 		 	ip_send_check(ip);
 	}
@@ -1039,18 +1046,10 @@ static void free_fw_chain(struct ip_fw *volatile* chainptr)
 
 /* Volatiles to keep some of the compiler versions amused */
 
-static int add_to_chain(struct ip_fw *volatile* chainptr, struct ip_fw *frwl,int len)
+static int insert_in_chain(struct ip_fw *volatile* chainptr, struct ip_fw *frwl,int len)
 {
 	struct ip_fw *ftmp;
-	struct ip_fw *chtmp=NULL;
-	struct ip_fw *volatile chtmp_prev=NULL;
 	unsigned long flags;
-	unsigned long m_src_mask,m_dst_mask;
-	unsigned long n_sa,n_da,o_sa,o_da,o_sm,o_dm,n_sm,n_dm;
-	unsigned short n_sr,n_dr,o_sr,o_dr; 
-	unsigned short oldkind,newkind;
-	int addb4=0;
-	int n_o,n_n;
 
 	save_flags(flags);
 
@@ -1064,10 +1063,40 @@ static int add_to_chain(struct ip_fw *volatile* chainptr, struct ip_fw *frwl,int
 	}
 
 	memcpy(ftmp, frwl, len);
-	if (len == sizeof (struct ip_fw_old))
-		ftmp->fw_priority = 0xFF00; /* and_mask, xor_mask */
+	ftmp->fw_tosand |= 0x03;
+	ftmp->fw_tosxor &= 0xFC;
+	ftmp->fw_pcnt=0L;
+	ftmp->fw_bcnt=0L;
 
-	ftmp->fw_priority = (ftmp->fw_priority & 0xFFFC) | 0x0300;
+	cli();
+
+	ftmp->fw_next = *chainptr;
+       	*chainptr=ftmp;
+	restore_flags(flags);
+	return(0);
+}
+
+static int append_to_chain(struct ip_fw *volatile* chainptr, struct ip_fw *frwl,int len)
+{
+	struct ip_fw *ftmp;
+	struct ip_fw *chtmp=NULL;
+	struct ip_fw *volatile chtmp_prev=NULL;
+	unsigned long flags;
+
+	save_flags(flags);
+
+	ftmp = kmalloc( sizeof(struct ip_fw), GFP_ATOMIC );
+	if ( ftmp == NULL ) 
+	{
+#ifdef DEBUG_CONFIG_IP_FIREWALL
+		printk("ip_fw_ctl:  malloc said no\n");
+#endif
+		return( ENOMEM );
+	}
+
+	memcpy(ftmp, frwl, len);
+	ftmp->fw_tosand |= 0x03;
+	ftmp->fw_tosxor &= 0xFC;
 	ftmp->fw_pcnt=0L;
 	ftmp->fw_bcnt=0L;
 
@@ -1075,153 +1104,9 @@ static int add_to_chain(struct ip_fw *volatile* chainptr, struct ip_fw *frwl,int
 
 	cli();
 
-	if (*chainptr==NULL)
-	{
-		*chainptr=ftmp;
-	}
-	else
-	{
-		chtmp_prev=NULL;
-		for (chtmp=*chainptr;chtmp!=NULL;chtmp=chtmp->fw_next) 
-		{
-			if (ftmp->fw_flg & IP_FW_F_APPEND) {
-				chtmp_prev=chtmp;
-				continue;
-			}
-			addb4=0;
-			newkind=ftmp->fw_flg & IP_FW_F_KIND;
-			oldkind=chtmp->fw_flg & IP_FW_F_KIND;
-	
-			if (newkind!=IP_FW_F_ALL 
-				&&  oldkind!=IP_FW_F_ALL
-				&&  oldkind!=newkind) 
-			{
-				chtmp_prev=chtmp;
-				continue;
-			}
-
-			/*
-			 *	Very very *UGLY* code...
-			 *	Sorry,but i had to do this....
-			 */
-
-			n_sa=ntohl(ftmp->fw_src.s_addr);
-			n_da=ntohl(ftmp->fw_dst.s_addr);
-			n_sm=ntohl(ftmp->fw_smsk.s_addr);
-			n_dm=ntohl(ftmp->fw_dmsk.s_addr);
-
-			o_sa=ntohl(chtmp->fw_src.s_addr);
-			o_da=ntohl(chtmp->fw_dst.s_addr);
-			o_sm=ntohl(chtmp->fw_smsk.s_addr);
-			o_dm=ntohl(chtmp->fw_dmsk.s_addr);
-
-			m_src_mask = o_sm & n_sm;
-			m_dst_mask = o_dm & n_dm;
-
-			if ((o_sa & m_src_mask) == (n_sa & m_src_mask)) 
-			{
-				if (n_sm > o_sm) 
-					addb4++;
-				if (n_sm < o_sm) 
-					addb4--;
-			}
-
-			if ((o_da & m_dst_mask) == (n_da & m_dst_mask)) 
-			{
-				if (n_dm > o_dm)
-					addb4++;
-				if (n_dm < o_dm)
-					addb4--;
-			}
-
-			if (((o_da & o_dm) == (n_da & n_dm))
-               			&&((o_sa & o_sm) == (n_sa & n_sm)))
-			{
-				if (newkind!=IP_FW_F_ALL &&
-					oldkind==IP_FW_F_ALL)
-					addb4++;
-				if (newkind==oldkind && (oldkind==IP_FW_F_TCP
-					||  oldkind==IP_FW_F_UDP)) 
-				{
-
-					/*
-					 * 	Here the main idea is to check the size
-					 * 	of port range which the frwl covers
-					 * 	We actually don't check their values but
-					 *	just the wideness of range they have
-					 *	so that less wide ranges or single ports
-					 *	go first and wide ranges go later. No ports
-					 *	at all treated as a range of maximum number
-					 *	of ports.
-					 */
-
-					if (ftmp->fw_flg & IP_FW_F_SRNG) 
-						n_sr=ftmp->fw_pts[1]-ftmp->fw_pts[0];
-					else 
-						n_sr=(ftmp->fw_nsp)?
-							ftmp->fw_nsp : 0xFFFF;
-						
-					if (chtmp->fw_flg & IP_FW_F_SRNG) 
-						o_sr=chtmp->fw_pts[1]-chtmp->fw_pts[0];
-					else 
-						o_sr=(chtmp->fw_nsp)?chtmp->fw_nsp : 0xFFFF;
-
-					if (n_sr<o_sr)
-						addb4++;
-					if (n_sr>o_sr)
-						addb4--;
-					
-					n_n=ftmp->fw_nsp;
-					n_o=chtmp->fw_nsp;
-	
-					/*
-					 * Actually this cannot happen as the frwl control
-					 * procedure checks for number of ports in source and
-					 * destination range but we will try to be more safe.
-					 */
-					 
-					if ((n_n>(IP_FW_MAX_PORTS-2)) ||
-						(n_o>(IP_FW_MAX_PORTS-2)))
-						goto skip_check;
-
-					if (ftmp->fw_flg & IP_FW_F_DRNG) 
-					       n_dr=ftmp->fw_pts[n_n+1]-ftmp->fw_pts[n_n];
-					else 
-					       n_dr=(ftmp->fw_ndp)? ftmp->fw_ndp : 0xFFFF;
-
-					if (chtmp->fw_flg & IP_FW_F_DRNG) 
-						o_dr=chtmp->fw_pts[n_o+1]-chtmp->fw_pts[n_o];
-					else 
-						o_dr=(chtmp->fw_ndp)? chtmp->fw_ndp : 0xFFFF;
-					if (n_dr<o_dr)
-						addb4++;
-					if (n_dr>o_dr)
-						addb4--;
-skip_check:
-				}
-				/* finally look at the interface address */
-				if ((addb4 == 0) && ftmp->fw_via.s_addr &&
-						!(chtmp->fw_via.s_addr))
-					addb4++;
-			}
-			if (addb4>0) 
-			{
-				if (chtmp_prev) 
-				{
-					chtmp_prev->fw_next=ftmp; 
-					ftmp->fw_next=chtmp;
-				} 
-				else 
-				{
-					*chainptr=ftmp;
-					ftmp->fw_next=chtmp;
-				}
-				restore_flags(flags);
-				return 0;
-			}
-			chtmp_prev=chtmp;
-		}
-	}
+	chtmp_prev=NULL;
+	for (chtmp=*chainptr;chtmp!=NULL;chtmp=chtmp->fw_next) 
+		chtmp_prev=chtmp;
 	
 	if (chtmp_prev)
 		chtmp_prev->fw_next=ftmp;
@@ -1255,7 +1140,7 @@ static int del_from_chain(struct ip_fw *volatile*chainptr, struct ip_fw *frwl)
 	ltmp=NULL;
 	was_found=0;
 
-	while( ftmp != NULL )
+	while( !was_found && ftmp != NULL )
 	{
 		matches=1;
 	     if (ftmp->fw_src.s_addr!=frwl->fw_src.s_addr 
@@ -1310,7 +1195,7 @@ static int del_from_chain(struct ip_fw *volatile*chainptr, struct ip_fw *frwl)
 struct ip_fw *check_ipfw_struct(struct ip_fw *frwl, int len)
 {
 
-	if ( len != sizeof(struct ip_fw) && len != sizeof(struct ip_fw_old))
+	if ( len != sizeof(struct ip_fw) )
 	{
 #ifdef DEBUG_CONFIG_IP_FIREWALL
 		printk("ip_fw_ctl: len=%d, want %d\n",len, sizeof(struct ip_fw));
@@ -1382,9 +1267,8 @@ int ip_acct_ctl(int stage, void *m, int len)
 		zero_fw_chain(ip_acct_chain);
 		return(0);
 	}
-	if ( stage == IP_ACCT_ADD
-	  || stage == IP_ACCT_DEL
-	   )
+	if ( stage == IP_ACCT_INSERT || stage == IP_ACCT_APPEND ||
+	  				stage == IP_ACCT_DELETE )
 	{
 		struct ip_fw *frwl;
 
@@ -1393,9 +1277,11 @@ int ip_acct_ctl(int stage, void *m, int len)
 
 		switch (stage) 
 		{
-			case IP_ACCT_ADD:
-				return( add_to_chain(&ip_acct_chain,frwl,len));
-		    	case IP_ACCT_DEL:
+			case IP_ACCT_INSERT:
+				return( insert_in_chain(&ip_acct_chain,frwl,len));
+			case IP_ACCT_APPEND:
+				return( append_to_chain(&ip_acct_chain,frwl,len));
+		    	case IP_ACCT_DELETE:
 				return( del_from_chain(&ip_acct_chain,frwl));
 			default:
 				/*
@@ -1417,44 +1303,32 @@ int ip_acct_ctl(int stage, void *m, int len)
 #ifdef CONFIG_IP_FIREWALL
 int ip_fw_ctl(int stage, void *m, int len)
 {
-	int ret;
+	int ret, cmd, fwtype;
 
-	if ( stage == IP_FW_FLUSH_BLK )
+	cmd = stage & IP_FW_COMMAND;
+	fwtype = (stage & IP_FW_TYPE) >> IP_FW_SHIFT;
+
+	if ( cmd == IP_FW_FLUSH )
 	{
-		free_fw_chain(&ip_fw_blk_chain);
+		free_fw_chain(chains[fwtype]);
 		return(0);
 	}  
 
-	if ( stage == IP_FW_FLUSH_FWD )
+	if ( cmd == IP_FW_ZERO )
 	{
-		free_fw_chain(&ip_fw_fwd_chain);
+		zero_fw_chain(*chains[fwtype]);
 		return(0);
 	}  
 
-	if ( stage == IP_FW_ZERO_BLK )
-	{
-		zero_fw_chain(ip_fw_blk_chain);
-		return(0);
-	}  
-
-	if ( stage == IP_FW_ZERO_FWD )
-	{
-		zero_fw_chain(ip_fw_fwd_chain);
-		return(0);
-	}  
-
-	if ( stage == IP_FW_POLICY_BLK || stage == IP_FW_POLICY_FWD )
+	if ( cmd == IP_FW_POLICY )
 	{
 		int *tmp_policy_ptr;
 		tmp_policy_ptr=(int *)m;
-		if ( stage == IP_FW_POLICY_BLK )
-			ip_fw_blk_policy=*tmp_policy_ptr;
-		else
-			ip_fw_fwd_policy=*tmp_policy_ptr;
+		*policies[fwtype] = *tmp_policy_ptr;
 		return 0;
 	}
 
-	if ( stage == IP_FW_CHK_BLK || stage == IP_FW_CHK_FWD )
+	if ( cmd == IP_FW_CHECK )
 	{
 		struct device viadev;
 		struct ip_fwpkt *ipfwp;
@@ -1483,16 +1357,14 @@ int ip_fw_ctl(int stage, void *m, int len)
 
 		viadev.pa_addr = ipfwp->fwp_via.s_addr;
 
-		if ((ret = ip_fw_chk(ip, &viadev,
-			stage == IP_FW_CHK_BLK ?
-	                ip_fw_blk_chain : ip_fw_fwd_chain,
-			stage == IP_FW_CHK_BLK ?
-	                ip_fw_blk_policy : ip_fw_fwd_policy, 2 )) > 0
-		   )
+		if ((ret = ip_fw_chk(ip, &viadev, *chains[fwtype],
+				*policies[fwtype], 2)) == FW_ACCEPT)
 			return(0);
-	    	else if (ret == -1)	
+	    	else if (ret == FW_MASQUERADE)	
+			return(ECONNRESET);
+	    	else if (ret == FW_REJECT)	
 			return(ECONNREFUSED);
-		else
+		else /* ret == FW_BLOCK */
 			return(ETIMEDOUT);
 	}
 
@@ -1501,25 +1373,24 @@ int ip_fw_ctl(int stage, void *m, int len)
  *	to blocking/forwarding chains or deleting 'em
  */
 
-	if ( stage == IP_FW_ADD_BLK || stage == IP_FW_ADD_FWD
-		|| stage == IP_FW_DEL_BLK || stage == IP_FW_DEL_FWD
-		)
+	if ( cmd == IP_FW_INSERT || cmd == IP_FW_APPEND || cmd == IP_FW_DELETE )
 	{
 		struct ip_fw *frwl;
+		int fwtype;
+
 		frwl=check_ipfw_struct(m,len);
 		if (frwl==NULL)
 			return (EINVAL);
+		fwtype = (stage & IP_FW_TYPE) >> IP_FW_SHIFT;
 		
-		switch (stage) 
+		switch (cmd) 
 		{
-			case IP_FW_ADD_BLK:
-				return(add_to_chain(&ip_fw_blk_chain,frwl,len));
-			case IP_FW_ADD_FWD:
-				return(add_to_chain(&ip_fw_fwd_chain,frwl,len));
-			case IP_FW_DEL_BLK:
-				return(del_from_chain(&ip_fw_blk_chain,frwl));
-			case IP_FW_DEL_FWD: 
-				return(del_from_chain(&ip_fw_fwd_chain,frwl));
+			case IP_FW_INSERT:
+				return(insert_in_chain(chains[fwtype],frwl,len));
+			case IP_FW_APPEND:
+				return(append_to_chain(chains[fwtype],frwl,len));
+			case IP_FW_DELETE:
+				return(del_from_chain(chains[fwtype],frwl));
 			default:
 			/*
 	 		 *	Should be panic but... (Why are BSD people panic obsessed ??)
@@ -1552,19 +1423,24 @@ static int ip_chain_procinfo(int stage, char *buffer, char **start,
 	switch(stage)
 	{
 #ifdef CONFIG_IP_FIREWALL
-		case IP_INFO_BLK:
-			i = ip_fw_blk_chain;
-			len=sprintf(buffer, "IP firewall block rules, default %d\n",
-				ip_fw_blk_policy);
+		case IP_FW_IN:
+			i = ip_fw_in_chain;
+			len=sprintf(buffer, "IP firewall input rules, default %d\n",
+				ip_fw_in_policy);
 			break;
-		case IP_INFO_FWD:
+		case IP_FW_OUT:
+			i = ip_fw_out_chain;
+			len=sprintf(buffer, "IP firewall output rules, default %d\n",
+				ip_fw_out_policy);
+			break;
+		case IP_FW_FWD:
 			i = ip_fw_fwd_chain;
 			len=sprintf(buffer, "IP firewall forward rules, default %d\n",
 				ip_fw_fwd_policy);
 			break;
 #endif
 #ifdef CONFIG_IP_ACCT
-		case IP_INFO_ACCT:
+		case IP_FW_ACCT:
 			i = ip_acct_chain;
 			len=sprintf(buffer,"IP accounting rules\n");
 			break;
@@ -1589,7 +1465,7 @@ static int ip_chain_procinfo(int stage, char *buffer, char **start,
 			i->fw_nsp,i->fw_ndp, i->fw_pcnt,i->fw_bcnt);
 		for (p = 0; p < IP_FW_MAX_PORTS; p++)
 			len+=sprintf(buffer+len, " %u", i->fw_pts[p]);
-		len+=sprintf(buffer+len, " M%04X", i->fw_priority);
+		len+=sprintf(buffer+len, " A%02X X%02X", i->fw_tosand, i->fw_tosxor);
 		buffer[len++]='\n';
 		buffer[len]='\0';
 		pos=begin+len;
@@ -1622,7 +1498,7 @@ static int ip_chain_procinfo(int stage, char *buffer, char **start,
 static int ip_acct_procinfo(char *buffer, char **start, off_t offset,
 			    int length, int reset)
 {
-	return ip_chain_procinfo(IP_INFO_ACCT, buffer,start, offset,length,
+	return ip_chain_procinfo(IP_FW_ACCT, buffer,start, offset,length,
 				 reset);
 }
 
@@ -1630,17 +1506,24 @@ static int ip_acct_procinfo(char *buffer, char **start, off_t offset,
 
 #ifdef CONFIG_IP_FIREWALL
 
-static int ip_fw_blk_procinfo(char *buffer, char **start, off_t offset,
+static int ip_fw_in_procinfo(char *buffer, char **start, off_t offset,
 			      int length, int reset)
 {
-	return ip_chain_procinfo(IP_INFO_BLK, buffer,start,offset,length,
+	return ip_chain_procinfo(IP_FW_IN, buffer,start,offset,length,
+				 reset);
+}
+
+static int ip_fw_out_procinfo(char *buffer, char **start, off_t offset,
+			      int length, int reset)
+{
+	return ip_chain_procinfo(IP_FW_OUT, buffer,start,offset,length,
 				 reset);
 }
 
 static int ip_fw_fwd_procinfo(char *buffer, char **start, off_t offset,
 			      int length, int reset)
 {
-	return ip_chain_procinfo(IP_INFO_FWD, buffer,start,offset,length,
+	return ip_chain_procinfo(IP_FW_FWD, buffer,start,offset,length,
 				 reset);
 }
 #endif
@@ -1655,7 +1538,7 @@ static int ip_msqhst_procinfo(char *buffer, char **start, off_t offset,
 	unsigned long flags;
 	int len=0;
 	
-	len=sprintf(buffer,"Prc FromIP   FPrt ToIP     TPrt Masq Init-seq Delta PDelta Expires\n"); 
+	len=sprintf(buffer,"Prc FromIP   FPrt ToIP     TPrt Masq Init-seq  Delta PDelta Expires\n"); 
 	save_flags(flags);
 	cli();
 	
@@ -1665,7 +1548,7 @@ static int ip_msqhst_procinfo(char *buffer, char **start, off_t offset,
 		int timer_active = del_timer(&ms->timer);
 		if (!timer_active)
 			ms->timer.expires = jiffies;
-		len+=sprintf(buffer+len,"%s %08lX:%04X %08lX:%04X %04X %08X %5d %5d %lu\n",
+		len+=sprintf(buffer+len,"%s %08lX:%04X %08lX:%04X %04X %08X %6d %6d %lu\n",
 			strProt[ms->protocol==IPPROTO_TCP],
 			ntohl(ms->src),ntohs(ms->sport),
 			ntohl(ms->dst),ntohs(ms->dport),
@@ -1701,7 +1584,12 @@ static int ip_msqhst_procinfo(char *buffer, char **start, off_t offset,
  
 int ipfw_input_check(struct firewall_ops *this, int pf, struct sk_buff *skb, void *phdr)
 {
-	return ip_fw_chk(phdr, skb->dev, ip_fw_blk_chain, ip_fw_blk_policy, 0);
+	return ip_fw_chk(phdr, skb->dev, ip_fw_in_chain, ip_fw_in_policy, 0);
+}
+
+int ipfw_output_check(struct firewall_ops *this, int pf, struct sk_buff *skb, void *phdr)
+{
+	return ip_fw_chk(phdr, skb->dev, ip_fw_out_chain, ip_fw_out_policy, 0);
 }
 
 int ipfw_forward_check(struct firewall_ops *this, int pf, struct sk_buff *skb, void *phdr)
@@ -1714,7 +1602,7 @@ struct firewall_ops ipfw_ops=
 	NULL,
 	ipfw_forward_check,
 	ipfw_input_check,
-	ipfw_input_check,
+	ipfw_output_check,
 	PF_INET,
 	0	/* We don't even allow a fall through so we are last */
 };
@@ -1737,10 +1625,16 @@ void ip_fw_init(void)
 		panic("Unable to register IP firewall.\n");
 		
 	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_IPFWBLK, 8, "ip_block",
+		PROC_NET_IPFWIN, 8, "ip_input",
 		S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0,
 		0, &proc_net_inode_operations,
-		ip_fw_blk_procinfo
+		ip_fw_in_procinfo
+	});
+	proc_net_register(&(struct proc_dir_entry) {
+		PROC_NET_IPFWOUT, 9, "ip_output",
+		S_IFREG | S_IRUGO | S_IWUSR, 1, 0, 0,
+		0, &proc_net_inode_operations,
+		ip_fw_out_procinfo
 	});
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_IPFWFWD, 10, "ip_forward",

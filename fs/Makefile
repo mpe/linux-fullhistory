@@ -52,7 +52,7 @@ endif
 ifeq ($(CONFIG_FAT_FS),y)
 SUB_DIRS += fat
 else
-  ifeq ($(CONFIG_MSDOS_FS),m)
+  ifeq ($(CONFIG_FAT_FS),m)
   MOD_SUB_DIRS += fat
   endif
 endif
@@ -146,6 +146,14 @@ BINFMTS += binfmt_elf.o
 else
   ifeq ($(CONFIG_BINFMT_ELF),m)
   M_OBJS += binfmt_elf.o
+  endif
+endif
+
+ifeq ($(CONFIG_BINFMT_AOUT),y)
+BINFMTS += binfmt_aout.o
+else
+  ifeq ($(CONFIG_BINFMT_AOUT),m)
+  M_OBJS += binfmt_aout.o
   endif
 endif
 

@@ -1,3 +1,10 @@
+/*
+ * linux/fs/msdos/msdosfs_syms.c
+ *
+ * Exported kernel symbols for the MS-DOS filesystem.
+ * These symbols are used by umsdos.
+ */
+
 #include <linux/module.h>
 
 #include <linux/msdos_fs.h>

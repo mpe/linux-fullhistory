@@ -55,6 +55,10 @@
  *  above, mandatory locks requires lots of changes elsewhere and I am
  *  reluctant to start something so drastic for so little gain.
  *  Andy Walker (andy@keo.kvaerner.no), June 09, 1995
+ * 
+ *  Removed some race conditions in flock_lock_file(), marked other possible
+ *  races. Just grep for FIXME to see them. 
+ *  Dmitry Gorodchanin (begemot@bgm.rosprint.net), Feb 09, 1996.
  */
 
 #include <asm/segment.h>
@@ -65,6 +69,7 @@
 #include <linux/errno.h>
 #include <linux/stat.h>
 #include <linux/fcntl.h>
+
 
 #define OFFSET_MAX	((off_t)0x7fffffff)	/* FIXME: move elsewhere? */
 
@@ -88,9 +93,59 @@ static int locks_overlap(struct file_lock *fl1, struct file_lock *fl2);
 static struct file_lock *locks_alloc_lock(struct file_lock *fl);
 static void locks_insert_lock(struct file_lock **pos, struct file_lock *fl);
 static void locks_delete_lock(struct file_lock **fl, unsigned int wait);
-static void locks_insert_block(struct file_lock **block, struct file_lock *fl);
 
 static struct file_lock *file_lock_table = NULL;
+
+/* Free lock not inserted in any queue */
+static inline void locks_free_lock(struct file_lock **fl)
+{
+	kfree(*fl);
+	*fl = NULL;		       /* Just in case */
+}
+
+/* Add lock fl to the blocked list pointed to by block.
+ * We search to the end of the existing list and insert the the new
+ * struct. This ensures processes will be woken up in the order they
+ * blocked.
+ * NOTE: nowhere does the documentation insist that processes be woken
+ * up in this order, but it seems like the reasonable thing to do.
+ * If the blocked list gets long then this search could get expensive,
+ * in which case we could consider waking the processes up in reverse
+ * order, or making the blocked list a doubly linked circular list.
+ * 
+ * This functions are called only from one place (flock_lock_file)
+ * so they are inlined now. -- Dmitry Gorodchanin 02/09/96.
+ */
+
+static inline void locks_insert_block(struct file_lock **block, 
+				      struct file_lock *fl)
+{
+	struct file_lock *bfl;
+
+	while ((bfl = *block) != NULL) {
+		block = &bfl->fl_block;
+	}
+
+	*block = fl;
+	fl->fl_block = NULL;
+	
+	return;
+}
+
+static inline void locks_delete_block(struct file_lock **block,
+				      struct file_lock *fl)
+{
+	struct file_lock *bfl;
+	
+	while ((bfl = *block) != NULL) {
+		if (bfl == fl) {
+			*block = fl->fl_block;
+			fl->fl_block = NULL;
+			return;
+		}
+		block = &bfl->fl_block;
+	}
+}
 
 /* flock() system call entry point. Apply a FLOCK style locks to
  * an open file descriptor.
@@ -378,6 +433,11 @@ static int locks_overlap(struct file_lock *fl1, struct file_lock *fl2)
  * The detection scheme is recursive... we may need a test to make it exit if the
  * function gets stuck due to bad lock data. 4.4 BSD uses a maximum depth of 50
  * for this.
+ * 
+ * FIXME: 
+ * IMHO this function is dangerous, deep recursion may result in kernel stack
+ * corruption. Perhaps we need to limit depth here. 
+ *		Dmitry Gorodchanin 09/02/96
  */
 static int posix_locks_deadlock(struct task_struct *my_task,
 				struct task_struct *blocked_task)
@@ -447,19 +507,33 @@ static int flock_lock_file(struct file *filp, struct file_lock *caller,
 		
 		if (wait) {
 			if (current->signal & ~current->blocked) {
-				locks_delete_lock(&new_fl, 0);
+				/* Note: new_fl is not in any queue at this
+				 * point. So we must use locks_free_lock()
+				 * instead of locks_delete_lock()
+				 * 	Dmitry Gorodchanin 09/02/96.
+				 */
+				locks_free_lock(&new_fl);
 				return (-ERESTARTSYS);
 			}
 			locks_insert_block(&fl->fl_block, new_fl);
 			interruptible_sleep_on(&new_fl->fl_wait);
 			wake_up(&new_fl->fl_wait);
 			if (current->signal & ~current->blocked) {
-				locks_delete_lock(&new_fl, 0);
+				/* If we are here, than we were awaken
+				 * by signal, so new_fl is still in 
+				 * block queue of fl. We need remove 
+				 * new_fl and then free it. 
+				 * 	Dmitry Gorodchanin 09/02/96.
+				 */
+
+				locks_delete_block(&fl->fl_block, new_fl);
+				locks_free_lock(&new_fl);
 				return (-ERESTARTSYS);
 			}
 			goto repeat;
 		}
-		locks_delete_lock(&new_fl, 0);
+		
+		locks_free_lock(&new_fl);
 		return (-EAGAIN);
 	}
 	locks_insert_lock(&filp->f_inode->i_flock, new_fl);
@@ -516,8 +590,10 @@ repeat:
 	/* First skip FLOCK locks and locks owned by other processes.
 	 */
 	while ((fl = *before) && ((fl->fl_flags == F_FLOCK) ||
-				  (caller->fl_owner != fl->fl_owner)))
+				  (caller->fl_owner != fl->fl_owner))) {
 		before = &fl->fl_next;
+	}
+	
 
 	/* Process locks with this owner.
 	 */
@@ -596,6 +672,18 @@ repeat:
 		before = &(*before)->fl_next;
 	}
 
+	/* FIXME:
+	 * Note: We may sleep in locks_alloc_lock(), so
+	 * the 'before' pointer may be not valid any more.
+	 * This can cause random kernel memory corruption.
+	 * It seems the right way is to alloc two locks
+	 * at the begining of this func, and then free them
+	 * if they were not needed.
+	 * Another way is to change GFP_KERNEL to GFP_ATOMIC
+	 * in locks_alloc_lock() for this case.
+	 * 
+	 * Dmitry Gorodchanin 09/02/96.
+	 */ 
 	if (!added) {
 		if (caller->fl_type == F_UNLCK)
 			return (0);
@@ -691,9 +779,10 @@ static void locks_delete_lock(struct file_lock **fl_p, unsigned int wait)
 
 	if (fl->fl_prevlink != NULL)
 		fl->fl_prevlink->fl_nextlink = fl->fl_nextlink;
-	else
+	else {
 		file_lock_table = fl->fl_nextlink;
-
+	}
+	
 	while ((bfl = fl->fl_block) != NULL) {
 		fl->fl_block = bfl->fl_block;
 		bfl->fl_block = NULL;
@@ -707,27 +796,3 @@ static void locks_delete_lock(struct file_lock **fl_p, unsigned int wait)
 
 	return;
 }
-
-/* Add lock fl to the blocked list pointed to by block.
- * We search to the end of the existing list and insert the the new
- * struct. This ensures processes will be woken up in the order they
- * blocked.
- * NOTE: nowhere does the documentation insist that processes be woken
- * up in this order, but it seems like the reasonable thing to do.
- * If the blocked list gets long then this search could get expensive,
- * in which case we could consider waking the processes up in reverse
- * order, or making the blocked list a doubly linked circular list.
- */
-static void locks_insert_block(struct file_lock **block, struct file_lock *fl)
-{
-	struct file_lock *bfl;
-
-	while ((bfl = *block) != NULL)
-		block = &bfl->fl_block;
-
-	*block = fl;
-	fl->fl_block = NULL;
-
-	return;
-}
-

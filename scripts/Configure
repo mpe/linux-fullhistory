@@ -211,7 +211,7 @@ function dep_tristate () {
 	if [ "$3" != "m" ]; then
 		tristate "$1" "$2"
 	else
-           if [ "$MODULES" = "y" ]; then
+           if [ "$CONFIG_MODULES" = "y" ]; then
 	        case "$def" in
         	 "y" | "m") defprompt="M/n/?"
 		      def="m"

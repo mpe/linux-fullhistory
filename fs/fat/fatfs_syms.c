@@ -1,9 +1,17 @@
+/*
+ * linux/fs/fat/fatfs_syms.c
+ *
+ * Exported kernel symbols for the low-level FAT-based fs support.
+ *
+ */
 #include <linux/module.h>
 
 #include <linux/msdos_fs.h>
 
 #include "msbuffer.h"
 #include "tables.h"
+
+extern struct file_operations fat_dir_operations;
 
 static struct symbol_table fat_syms = {
 #include <linux/symtab_begin.h>

@@ -25,6 +25,7 @@
 #include <linux/major.h>
 
 extern void device_setup(void);
+extern void binfmt_setup(void);
 
 #ifdef CONFIG_ROOT_NFS
 extern int nfs_root_init(char *nfsname, char *nfsaddrs);
@@ -43,6 +44,8 @@ asmlinkage int sys_setup(void)
 
 	device_setup();
 
+	binfmt_setup();
+
 #ifdef CONFIG_EXT_FS
 	init_ext_fs();
 #endif
@@ -59,6 +62,10 @@ asmlinkage int sys_setup(void)
 	init_minix_fs();
 #endif
 
+#ifdef CONFIG_UMSDOS_FS
+	init_umsdos_fs();
+#endif
+
 #ifdef CONFIG_FAT_FS
 	init_fat_fs();
 #endif
@@ -69,10 +76,6 @@ asmlinkage int sys_setup(void)
 
 #ifdef CONFIG_VFAT_FS
 	init_vfat_fs();
-#endif
-
-#ifdef CONFIG_UMSDOS_FS
-	init_umsdos_fs();
 #endif
 
 #ifdef CONFIG_PROC_FS

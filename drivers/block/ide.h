@@ -34,24 +34,6 @@
 #ifndef FAKE_FDISK_FOR_EZDRIVE		/* 1 to help linux fdisk with EZDRIVE */
 #define FAKE_FDISK_FOR_EZDRIVE 	1	/* 0 to reduce kernel size */
 #endif
-#ifndef SUPPORT_RZ1000			/* 1 to support RZ1000 chipset */
-#define SUPPORT_RZ1000		1	/* 0 to reduce kernel size */
-#endif
-#ifndef SUPPORT_UMC8672			/* 1 to support UMC8672 chipset */
-#define SUPPORT_UMC8672		1	/* 0 to reduce kernel size */
-#endif
-#ifndef SUPPORT_HT6560B			/* 1 to support HT6560B chipset */
-#define SUPPORT_HT6560B		1	/* 0 to reduce kernel size */
-#endif
-#ifndef SUPPORT_QD6580			/* 1 to support QD6580 chipset */
-#define SUPPORT_QD6580		1	/* 0 to reduce kernel size */
-#endif
-#ifndef SUPPORT_DTC2278			/* 1 to support DTC2278 chipset */
-#define SUPPORT_DTC2278		1	/* 0 to reduce kernel size */
-#ifndef SET_DTC2278_MODE4
-#define SET_DTC2278_MODE4	0	/* 1 to init primary i/f for PIO mode4 */
-#endif
-#endif
 #ifndef FANCY_STATUS_DUMPS		/* 1 for human-readable drive errors */
 #define FANCY_STATUS_DUMPS	1	/* 0 to reduce kernel size */
 #endif
@@ -293,7 +275,8 @@ typedef union {
 		unsigned set_geometry	: 1;	/* respecify drive geometry */
 		unsigned recalibrate	: 1;	/* seek to cyl 0      */
 		unsigned set_multmode	: 1;	/* set multmode count */
-		unsigned reserved	: 5;	/* unused */
+		unsigned set_pio	: 1;	/* set pio mode */
+		unsigned reserved	: 4;	/* unused */
 		} b;
 	} special_t;
 
@@ -310,26 +293,26 @@ typedef union {
 
 typedef struct ide_drive_s {
 	special_t	special;	/* special action flags */
-#if FAKE_FDISK_FOR_EZDRIVE
-	unsigned ezdrive	: 1;	/* flag: partitioned with ezdrive */
-#endif /* FAKE_FDISK_FOR_EZDRIVE */
 	unsigned present	: 1;	/* drive is physically present */
 	unsigned noprobe 	: 1;	/* from:  hdx=noprobe */
 	unsigned keep_settings  : 1;	/* restore settings after drive reset */
 	unsigned busy		: 1;	/* currently doing revalidate_disk() */
-	unsigned vlb_32bit	: 1;	/* use 32bit in/out for data */
-	unsigned vlb_sync	: 1;	/* needed for some 32bit chip sets */
 	unsigned removeable	: 1;	/* 1 if need to do check_media_change */
 	unsigned using_dma	: 1;	/* disk is using dma for read/write */
+	unsigned forced_geom	: 1;	/* 1 if hdx=c,h,s was given at boot */
 	unsigned unmask		: 1;	/* flag: okay to unmask other irqs */
+	unsigned autotune	: 2;	/* 1=autotune, 2=noautotune, 0=default */
+#if FAKE_FDISK_FOR_EZDRIVE
+	unsigned remap_0_to_1	: 1;	/* flag: partitioned with ezdrive */
+#endif /* FAKE_FDISK_FOR_EZDRIVE */
 	ide_media_t	media;		/* disk, cdrom, tape */
 	select_t	select;		/* basic drive/head select reg value */
-	void		*hwif;		/* actually (ide_hwif_t *) */
 	byte		ctl;		/* "normal" value for IDE_CONTROL_REG */
 	byte		ready_stat;	/* min status value for drive ready */
 	byte		mult_count;	/* current multiple sector setting */
 	byte 		mult_req;	/* requested multiple sector setting */
-	byte		chipset;	/* interface chipset access method */
+	byte 		pio_req;	/* requested multiple sector setting */
+	byte		io_32bit;	/* 0=16-bit, 1=32-bit, 2/3=32bit+sync */
 	byte		bad_wstat;	/* used for ignoring WRERR_STAT */
 	byte		sect0;		/* offset of first sector for DM6:DDO */
 	byte 		usage;		/* current "open()" count for drive */
@@ -339,27 +322,16 @@ typedef struct ide_drive_s {
 	byte		bios_sect;	/* BIOS/fdisk/LILO sectors per track */
 	unsigned short	bios_cyl;	/* BIOS/fdisk/LILO number of cyls */
 	unsigned short	cyl;		/* "real" number of cyls */
+	void		  *hwif;	/* actually (ide_hwif_t *) */
 	struct wait_queue *wqueue;	/* used to wait for drive in open() */
 	struct hd_driveid *id;		/* drive model identification info */
 	struct hd_struct  *part;	/* drive partition table */
 	char		name[4];	/* drive name, such as "hda" */
 #ifdef CONFIG_BLK_DEV_IDECD
-	struct cdrom_info cdrom_info;	/* from ide-cd.c */
+	struct cdrom_info cdrom_info;	/* for ide-cd.c */
 #endif /* CONFIG_BLK_DEV_IDECD */
-
-#ifdef CONFIG_BLK_DEV_IDETAPE		/* ide-tape specific data */
-
-/*
- *	Most of our global data which we need to save even as we leave the
- *	driver due to an interrupt or a timer event is stored here.
- *
- *	Additional global variables which provide the link between the
- *	character device interface to this structure are defined in
- *	ide-tape.c
- */
-
-	idetape_tape_t tape;
-
+#ifdef CONFIG_BLK_DEV_IDETAPE
+	idetape_tape_t	tape;		/* for ide-tape.c */
 #endif /* CONFIG_BLK_DEV_IDETAPE */
 
 	} ide_drive_t;
@@ -378,6 +350,35 @@ typedef struct ide_drive_s {
 typedef enum {ide_dma_read = 0, ide_dma_write = 1, ide_dma_abort = 2, ide_dma_check = 3} ide_dma_action_t;
 typedef int (ide_dmaproc_t)(ide_dma_action_t, ide_drive_t *);
 
+
+/*
+ * An ide_tuneproc_t() is used to set the speed of an IDE interface
+ * to a particular PIO mode.  The "byte" parameter is used
+ * to select the PIO mode by number (0,1,2,3,4,5), and a value of 255
+ * indicates that the interface driver should "auto-tune" the PIO mode
+ * according to the drive capabilities in drive->id;
+ *
+ * Not all interface types support tuning, and not all of those
+ * support all possible PIO settings.  They may silently ignore
+ * or round values as they see fit.
+ */
+typedef void (ide_tuneproc_t)(ide_drive_t *, byte);
+
+/*
+ * This is used to provide HT6560B interface support.
+ * It will probably also be used by the DC4030VL driver.
+ */
+typedef void (ide_selectproc_t) (ide_drive_t *);
+
+/*
+ * hwif_chipset_t is used to keep track of the specific hardware
+ * chipset used by each IDE interface, if known.
+ */
+typedef enum {	ide_unknown,	ide_generic,	ide_triton,
+		ide_cmd640,	ide_dtc2278,	ide_ali14xx,
+		ide_qd6580,	ide_umc8672,	ide_ht6560b }
+	hwif_chipset_t;
+
 typedef struct hwif_s {
 	struct hwif_s	*next;		/* for linked-list in ide_hwgroup_t */
 	void		*hwgroup;	/* actually (ide_hwgroup_t *) */
@@ -385,13 +386,18 @@ typedef struct hwif_s {
 	unsigned short	ctl_port;	/* usually io_base+0x206 */
 	ide_drive_t	drives[MAX_DRIVES];	/* drive info */
 	struct gendisk	*gd;		/* gendisk structure */
+	ide_tuneproc_t	*tuneproc;	/* routine to tune PIO mode for drives */
+#ifdef CONFIG_BLK_DEV_HT6560B
+	ide_selectproc_t *selectproc;	/* tweaks hardware to select drive */
+#endif /* CONFIG_BLK_DEV_HT6560B */
 	ide_dmaproc_t	*dmaproc;	/* dma read/write/abort routine */
 	unsigned long	*dmatable;	/* dma physical region descriptor table */
 	unsigned short	dma_base;	/* base addr for dma ports (triton) */
 	byte		irq;		/* our irq number */
 	byte		major;		/* our major number */
-	byte		select;		/* pri/sec hwif select for ht6560b */
 	char 		name[5];	/* name of interface, eg. "ide0" */
+	byte		index;		/* 0 for ide0; 1 for ide1; ... */
+	hwif_chipset_t	chipset;	/* sub-module for tuning.. */
 	unsigned	noprobe : 1;	/* don't probe for this interface */
 	unsigned	present : 1;	/* this interface exists */
 	unsigned	serialized : 1;	/* valid only for ide_hwifs[0] */
@@ -421,6 +427,19 @@ typedef struct hwgroup_s {
 	struct request		wrq;	/* local copy of current write rq */
 	unsigned long		poll_timeout;	/* timeout value during long polls */
 	} ide_hwgroup_t;
+
+/*
+ * ide_hwifs[] is the master data structure used to keep track
+ * of just about everything in ide.c.  Whenever possible, routines
+ * should be using pointers to a drive (ide_drive_t *) or 
+ * pointers to a hwif (ide_hwif_t *), rather than indexing this
+ * structure directly (the allocation/layout may change!).
+ */
+#ifdef _IDE_C
+	ide_hwif_t	ide_hwifs[MAX_HWIFS];	/* master data repository */
+#else
+extern	ide_hwif_t	ide_hwifs[];
+#endif
 
 /*
  * One final include file, which references some of the data/defns from above
@@ -480,9 +499,22 @@ void ide_fixstring (byte *s, const int bytecount, const int byteswap);
 int ide_wait_stat (ide_drive_t *drive, byte good, byte bad, unsigned long timeout);
 
 /*
- * This is called from genhd.c to correct DiskManager/EZ-Drive geometries
+ * This routine is called from the partition-table code in genhd.c
+ * to "convert" a drive to a logical geometry with fewer than 1024 cyls.
+ *
+ * The second parameter, "xparm", determines exactly how the translation
+ * will be handled:
+ *		 0 = convert to CHS with fewer than 1024 cyls
+ *			using the same method as Ontrack DiskManager.
+ *		 1 = same as "0", plus offset everything by 63 sectors.
+ *		-1 = similar to "0", plus redirect sector 0 to sector 1.
+ *		>1 = convert to a CHS geometry with "xparm" heads.
+ *
+ * Returns 0 if the translation was not possible, if the device was not
+ * an IDE disk drive, or if a geometry was "forced" on the commandline.
+ * Returns 1 if the geometry translation was successful.
  */
-int ide_xlate_1024(kdev_t, int, const char *);
+int ide_xlate_1024 (kdev_t, int, const char *);
 
 /*
  * Start a reset operation for an IDE interface.
