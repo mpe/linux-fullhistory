@@ -127,17 +127,15 @@ static void fill_in_inode(struct inode *tmp_inode,
 	/* treat dos attribute of read-only as read-only mode bit e.g. 555? */
 	/* 2767 perms - indicate mandatory locking */
 		/* BB fill in uid and gid here? with help from winbind? 
-			or retrieve from NTFS stream extended attribute */
-	if(atomic_read(&cifsInfo->inUse) == 0) {
+		   or retrieve from NTFS stream extended attribute */
+	if (atomic_read(&cifsInfo->inUse) == 0) {
 		tmp_inode->i_uid = cifs_sb->mnt_uid;
 		tmp_inode->i_gid = cifs_sb->mnt_gid;
 		/* set default mode. will override for dirs below */
 		tmp_inode->i_mode = cifs_sb->mnt_file_mode;
 	}
 
-	cFYI(0,
-	     ("CIFS FFIRST: Attributes came in as 0x%x",
-	      attr));
+	cFYI(0,("CIFS FFIRST: Attributes came in as 0x%x",attr));
 	if (attr & ATTR_DIRECTORY) {
 		*pobject_type = DT_DIR;
 		/* override default perms since we do not lock dirs */
@@ -148,23 +146,23 @@ static void fill_in_inode(struct inode *tmp_inode,
 /* we no longer mark these because we could not follow them */
 /*        } else if (attr & ATTR_REPARSE) {
                 *pobject_type = DT_LNK;
-                tmp_inode->i_mode |= S_IFLNK;*/
+                tmp_inode->i_mode |= S_IFLNK; */
 	} else {
 		*pobject_type = DT_REG;
 		tmp_inode->i_mode |= S_IFREG;
-		if(attr & ATTR_READONLY)
+		if (attr & ATTR_READONLY)
 			tmp_inode->i_mode &= ~(S_IWUGO);
-	}/* could add code here - to validate if device or weird share type? */
+	} /* could add code here - to validate if device or weird share type? */
 
 	/* can not fill in nlink here as in qpathinfo version and Unx search */
-	if(atomic_read(&cifsInfo->inUse) == 0) {
-		atomic_set(&cifsInfo->inUse,1);
+	if (atomic_read(&cifsInfo->inUse) == 0) {
+		atomic_set(&cifsInfo->inUse, 1);
 	}
 
-	if(is_size_safe_to_change(cifsInfo)) {
+	if (is_size_safe_to_change(cifsInfo)) {
 		/* can not safely change the file size here if the 
 		client is writing to it due to potential races */
-		i_size_write(tmp_inode,end_of_file);
+		i_size_write(tmp_inode, end_of_file);
 
 	/* 512 bytes (2**9) is the fake blocksize that must be used */
 	/* for this calculation, even though the reported blocksize is larger */
@@ -175,7 +173,7 @@ static void fill_in_inode(struct inode *tmp_inode,
 		cFYI(1, ("Possible sparse file: allocation size less than end of file "));
 	cFYI(1,
 	     ("File Size %ld and blocks %ld and blocksize %ld",
-	      (unsigned long) tmp_inode->i_size, tmp_inode->i_blocks,
+	      (unsigned long)tmp_inode->i_size, tmp_inode->i_blocks,
 	      tmp_inode->i_blksize));
 	if (S_ISREG(tmp_inode->i_mode)) {
 		cFYI(1, (" File inode "));
@@ -245,8 +243,7 @@ static void unix_fill_in_inode(struct inode *tmp_inode,
 	tmp_inode->i_gid = le64_to_cpu(pfindData->Gid);
 	tmp_inode->i_nlink = le64_to_cpu(pfindData->Nlinks);
 
-
-	if(is_size_safe_to_change(cifsInfo)) {
+	if (is_size_safe_to_change(cifsInfo)) {
 		/* can not safely change the file size here if the 
 		client is writing to it due to potential races */
 		i_size_write(tmp_inode,end_of_file);
