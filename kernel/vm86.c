@@ -31,8 +31,8 @@
 /*
  * 8- and 16-bit register defines..
  */
-#define AL(regs)	(((unsigned char *) ((regs)->eax))[0])
-#define AH(regs)	(((unsigned char *) ((regs)->eax))[1])
+#define AL(regs)	(((unsigned char *)&((regs)->eax))[0])
+#define AH(regs)	(((unsigned char *)&((regs)->eax))[1])
 #define IP(regs)	(*(unsigned short *)&((regs)->eip))
 #define SP(regs)	(*(unsigned short *)&((regs)->esp))
 
@@ -289,9 +289,8 @@ static void do_int(struct vm86_regs *regs, int i, unsigned char * ssp, unsigned 
 	if (seg == BIOSSEG || regs->cs == BIOSSEG ||
 	    is_revectored(i, &current->vm86_info->int_revectored))
 		return_to_32bit(regs, VM86_INTx + (i << 8));
-	if (i==0x21 && is_revectored(AH(regs),&current->vm86_info->int21_revectored)) {
+	if (i==0x21 && is_revectored(AH(regs),&current->vm86_info->int21_revectored))
 		return_to_32bit(regs, VM86_INTx + (i << 8));
-	}
 	pushw(ssp, sp, get_vflags(regs));
 	pushw(ssp, sp, regs->cs);
 	pushw(ssp, sp, IP(regs));
@@ -305,7 +304,15 @@ static void do_int(struct vm86_regs *regs, int i, unsigned char * ssp, unsigned 
 
 void handle_vm86_debug(struct vm86_regs * regs, long error_code)
 {
-	do_int(regs, 3, (unsigned char *) (regs->ss << 4), SP(regs));
+#if 0
+	do_int(regs, 1, (unsigned char *) (regs->ss << 4), SP(regs));
+#else
+	if (current->flags & PF_PTRACED)
+		current->blocked &= ~(1 << (SIGTRAP-1));
+	send_sig(SIGTRAP, current, 1);
+	current->tss.trap_no = 1;
+	current->tss.error_code = error_code;
+#endif
 }
 
 void handle_vm86_fault(struct vm86_regs * regs, long error_code)

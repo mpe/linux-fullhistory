@@ -11,7 +11,6 @@
 
 typedef struct {
   int in_use;
-  struct mtget * mt_status;
   int buffer_size;
   int buffer_blocks;
   int buffer_bytes;
@@ -33,12 +32,18 @@ typedef struct {
   unsigned in_use:1;
   unsigned eof_hit:1;
   unsigned drv_buffer:3;
+  unsigned do_buffer_writes:1;
+  unsigned do_async_writes:1;
+  unsigned do_read_ahead:1;
   unsigned char density;
   ST_buffer * buffer;
   int block_size;
   int min_block;
   int max_block;
+  int write_threshold;
   int recover_count;
+  int drv_block;	/* The block where the drive head is */
+  struct mtget * mt_status;
   Scsi_Cmnd SCpnt;
 } Scsi_Tape;
 

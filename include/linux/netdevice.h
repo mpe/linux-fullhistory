@@ -11,6 +11,7 @@
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Corey Minyard <wf-rch!minyard@relay.EU.net>
  *		Donald J. Becker, <becker@super.org>
+ *		Alan Cox, <A.Cox@swansea.ac.uk>
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -34,7 +35,7 @@
 #define IS_MYADDR	1		/* address is (one of) our own	*/
 #define IS_LOOPBACK	2		/* address is for LOOPBACK	*/
 #define IS_BROADCAST	3		/* address is a valid broadcast	*/
-#define IS_INVBCAST	4		/* Wrong netmask bcast not for us */
+#define IS_INVBCAST	4		/* Wrong netmask bcast not for us (unused)*/
 
 /*
  * The DEVICE structure.
@@ -52,7 +53,7 @@ struct device
    */
   char			  *name;
 
-  /* I/O specific fields.  These will be moved to DDI soon. */
+  /* I/O specific fields.  */
   unsigned long		  rmem_end;		/* shmem "recv" end	*/
   unsigned long		  rmem_start;		/* shmem "recv" start	*/
   unsigned long		  mem_end;		/* sahared mem end	*/
@@ -65,12 +66,6 @@ struct device
                           tbusy,		/* transmitter busy	*/
                           interrupt;		/* interrupt arrived	*/
 
-  /*
-   * Another mistake.
-   * This points to the next device in the "dev" chain. It will
-   * be moved to the "invisible" part of the structure as soon as
-   * it has been cleaned up. -FvK
-   */
   struct device		  *next;
 
   /* The device initialization function. Called only once. */
@@ -135,6 +130,8 @@ struct device
   					 int num_addrs, void *addrs);
 #define HAVE_SET_MAC_ADDR  		 
   int			  (*set_mac_address)(struct device *dev, void *addr);
+#define HAVE_PRIVATE_IOCTL
+  int			  (*do_ioctl)(struct device *dev, struct ifreq *ifr);
 };
 
 

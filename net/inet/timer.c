@@ -195,7 +195,7 @@ net_timer (unsigned long data)
 	    DPRINTF ((DBG_TMR, "timer.c TIME_WRITE time-out 2\n"));
 	    sk->err = ETIMEDOUT;
 	    if (sk->state == TCP_FIN_WAIT1 || sk->state == TCP_FIN_WAIT2
-	      || sk->state == TCP_LAST_ACK) {
+	      || sk->state == TCP_CLOSING) {
 	      sk->state = TCP_TIME_WAIT;
 	      reset_timer (sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
 	    } else {

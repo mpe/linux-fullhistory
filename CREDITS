@@ -34,7 +34,7 @@ S: 76297 Stutensee
 S: Germany
 
 N: Donald Becker
-E: becker@super.org
+E: becker@cesdis.gsfc.nasa.gov
 D: General low-level networking hacker
 D: Most of the ethercard drivers
 D: Original author of the NFS server
@@ -107,6 +107,7 @@ S: Bellevue WA 98007
 S: USA
 
 N: Alan Cox
+E: A.Cox@swansea.ac.uk
 E: iiitac@pyr.swan.ac.uk
 E: gw4pts@gw4pts.ampr.org
 E: GW4PTS@GB7SWN (packet radio)
@@ -418,6 +419,14 @@ S: Dragonvagen 1 A 13
 S: FIN-00330 Helsingfors
 S: Finland
 
+N: David C. Niemi
+E: David.Niemi@oasis.gtegsc.com
+D: FSSTND, The XFree86 Project
+D: DMA memory support and future floppy driver
+S: 2364 Old Trail Drive
+S: Reston, VA 22091
+S: USA
+
 N: Kai Petzke
 E: wpp@marie.physik.tu-berlin.de
 D: Driver for Laser Magnetic Storage CD-ROM
@@ -450,6 +459,13 @@ S: Germany
 N: Robert Sanders
 E: gt8134b@prism.gatech.edu
 D: Dosemu
+
+N: Hannu Savolainen
+E: hannu@voxware.pp.fi
+D: Kernel sound drivers
+S: Pallaksentie 4 A 2
+S: 00970 Helsinki
+S: Finland
 
 N: Peter De Schrijver
 E: stud11@cc4.kuleuven.ac.be

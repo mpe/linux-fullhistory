@@ -227,7 +227,7 @@ asmlinkage int sys_setregid(gid_t rgid, gid_t egid)
 		}
 	}
 	if (rgid != (gid_t) -1 ||
-	    egid != (gid_t) -1 && egid != old_rgid)
+	    (egid != (gid_t) -1 && egid != old_rgid))
 		current->sgid = current->egid;
 	return 0;
 }
@@ -314,7 +314,7 @@ asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 		}
 	}
 	if (ruid != (uid_t) -1 ||
-	    euid != (uid_t) -1 && euid != old_ruid)
+	    (euid != (uid_t) -1 && euid != old_ruid))
 		current->suid = current->euid;
 	return 0;
 }

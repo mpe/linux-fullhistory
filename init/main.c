@@ -84,6 +84,7 @@ extern void bmouse_setup(char *str, int *ints);
 extern void eth_setup(char *str, int *ints);
 extern void xd_setup(char *str, int *ints);
 extern void mcd_setup(char *str, int *ints);
+extern void st_setup(char *str, int *ints);
 extern void st0x_setup(char *str, int *ints);
 extern void tmc8xx_setup(char *str, int *ints);
 extern void t128_setup(char *str, int *ints);
@@ -175,6 +176,9 @@ struct {
 #endif
 #ifdef CONFIG_BLK_DEV_HD
 	{ "hd=", hd_setup },
+#endif
+#ifdef CONFIG_CHR_DEV_ST
+	{ "st=", st_setup },
 #endif
 #ifdef CONFIG_BUSMOUSE
 	{ "bmouse=", bmouse_setup },

@@ -26,6 +26,7 @@ struct tcphdr {
   unsigned short	dest;
   unsigned long		seq;
   unsigned long		ack_seq;
+#if defined(__i386__)
   unsigned short	res1:4,
 			doff:4,
 			fin:1,
@@ -35,6 +36,21 @@ struct tcphdr {
 			ack:1,
 			urg:1,
 			res2:2;
+#else
+#if defined(__mc680x0__)
+  unsigned short	res2:2,
+  			urg:1,
+  			ack:1,
+  			psh:1,
+  			rst:1,
+  			syn:1,
+  			fin:1,
+  			doff:4,
+  			res1:4;
+#else
+#error	"Adjust this structure for your cpu alignment rules"
+#endif  		
+#endif	
   unsigned short	window;
   unsigned short	check;
   unsigned short	urg_ptr;
@@ -45,17 +61,14 @@ enum {
   TCP_ESTABLISHED = 1,
   TCP_SYN_SENT,
   TCP_SYN_RECV,
-#if 0
-  TCP_CLOSING, /* not a valid state, just a seperator so we can use
-		  < tcp_closing or > tcp_closing for checks. */
-#endif
   TCP_FIN_WAIT1,
   TCP_FIN_WAIT2,
   TCP_TIME_WAIT,
   TCP_CLOSE,
   TCP_CLOSE_WAIT,
   TCP_LAST_ACK,
-  TCP_LISTEN
+  TCP_LISTEN,
+  TCP_CLOSING	/* now a valid state */
 };
 
 #endif	/* _LINUX_TCP_H */

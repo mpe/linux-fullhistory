@@ -49,7 +49,7 @@ extern int check_mcd_media_change(int, int);
 static char buffersize_index[9] = {-1,  0,  1, -1,  2, -1, -1, -1, 3};
 static short int bufferindex_size[NR_SIZES] = {512, 1024, 2048, 4096};
 
-#define BUFSIZE_INDEX(X) (buffersize_index[(X)>>9])
+#define BUFSIZE_INDEX(X) ((int) buffersize_index[(X)>>9])
 
 static int grow_buffers(int pri, int size);
 static int shrink_specific_buffers(unsigned int priority, int size);

@@ -67,4 +67,21 @@
 #define SIOCGARP	0x8951		/* get ARP table entry		*/
 #define SIOCSARP	0x8952		/* set ARP table entry		*/
 
+/* RARP cache control calls. */
+#define SIOCDRARP	0x8960		/* delete RARP table entry	*/
+#define SIOCGRARP	0x8961		/* get RARP table entry		*/
+#define SIOCSRARP	0x8962		/* set RARP table entry		*/
+
+/* Device private ioctl calls */
+
+/*
+ *	These 16 ioctls are available to devices via the do_ioctl() device
+ *	vector. Each device should include this file and redefine these names
+ *	as their own. Because these are device dependant it is a good idea
+ *	_NOT_ to issue them to random objects and hope.
+ */
+ 
+#define SIOCDEVPRIVATE	0x89F0	/* to 89FF */
+
+
 #endif	/* _LINUX_SOCKIOS_H */

@@ -32,8 +32,17 @@ struct timestamp {
   unsigned char	len;
   unsigned char ptr;
   union {
+#if defined(__i386__)  
 	unsigned char	flags:4,
 			overflow:4;
+#else
+#if defined(__mc680x0__)
+	unsigned char	overflow:4,
+			flags:4;
+#else
+#error	"Adjust this structure to match your CPU"
+#endif
+#endif						
 	unsigned char	full_char;
   } x;
   unsigned long	data[9];
@@ -63,8 +72,17 @@ struct options {
 
 
 struct iphdr {
+#if defined(__i386__)
   unsigned char		ihl:4,
 			version:4;
+#else
+#if defined (__mc680x0__)
+  unsigned char		version:4,
+  			ihl:4;
+#else
+#error "Adjust this structure to match your CPU"
+#endif			
+#endif
   unsigned char		tos;
   unsigned short	tot_len;
   unsigned short	id;

@@ -21,6 +21,7 @@
  *		Michael Riepe	:	Automatic CSLIP recognition added
  *		Charles Hedrick :	CSLIP header length problem fix.
  *		Alan Cox	:	Corrected non-IP cases of the above.
+ *		Alan Cox	:	Now uses hardware type as per FvK.
  *
  *
  *	FIXME:	This driver still makes some IP'ish assumptions. It should build cleanly KISS TNC only without
@@ -56,6 +57,7 @@
 #include "tcp.h"
 #endif
 #include <linux/skbuff.h>
+#include <linux/if_arp.h>
 #include "sock.h"
 #include "slip.h"
 #ifdef CONFIG_INET
@@ -169,6 +171,7 @@ sl_initialize(struct slip *sl, struct device *dev)
   dev->rmem_start	= (unsigned long) NULL;
   dev->mem_end		= (unsigned long) NULL;
   dev->mem_start	= (unsigned long) NULL;
+  dev->type		= ARPHRD_SLIP + sl->mode;
 }
 
 
@@ -1072,15 +1075,14 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 		{
 			sl->dev->addr_len=7;	/* sizeof an AX.25 addr */
 			sl->dev->hard_header_len=17;	/* We don't do digipeaters */
-			sl->dev->type=3;		/* AF_AX25 not an AF_INET device */
 		}
 		else
 		{
 			sl->dev->addr_len=0;	/* No mac addr in slip mode */
 			sl->dev->hard_header_len=0;
-			sl->dev->type=0;
 		}
 #endif		
+		sl->dev->type=ARPHRD_SLIP+sl->mode;
 		return(0);
 	case SIOCSIFHWADDR:
 #ifdef CONFIG_AX25	

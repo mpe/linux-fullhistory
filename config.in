@@ -13,6 +13,19 @@ bool 'Limit memory to low 16MB' CONFIG_MAX_16M n
 bool 'System V IPC' CONFIG_SYSVIPC y
 bool 'Use -m486 flag for 486-specific optimizations' CONFIG_M486 y
 
+if [ "$CONFIG_INET" = "y" ]; then
+
+comment 'Networking options'
+comment '(it is safe to leave these untouched)'
+
+comment 'IP (required for now) y'
+bool 'Reverse ARP' CONFIG_INET_RARP y
+bool 'Assume subnets are local' CONFIG_INET_SNARL y
+bool 'Disable NAGLE algorithm (normally enabled)' CONFIG_TCP_NAGLE_OFF n
+#bool 'Novell IPX protocol' CONFIG_IPX n
+#bool 'Amateur Radio AX.25 Level 2' CONFIG_AX25 n
+fi
+
 comment 'Program binary formats'
 
 bool 'Elf executables' CONFIG_BINFMT_ELF y

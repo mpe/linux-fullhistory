@@ -10,5 +10,8 @@ extern int	arp_find(unsigned char *haddr, unsigned long paddr,
 		struct device *dev, unsigned long saddr, struct sk_buff *skb);
 extern int	arp_get_info(char *buffer, char **start, off_t origin, int length);
 extern int	arp_ioctl(unsigned int cmd, void *arg);
+extern void     arp_send(int type, int ptype, unsigned long dest_ip, 
+			 struct device *dev, unsigned long src_ip, 
+			 unsigned char *dest_hw, unsigned char *src_hw);
 
 #endif	/* _ARP_H */

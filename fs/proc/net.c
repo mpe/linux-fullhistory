@@ -44,6 +44,7 @@ extern int tcp_get_info(char *, char **, off_t, int);
 extern int udp_get_info(char *, char **, off_t, int);
 extern int raw_get_info(char *, char **, off_t, int);
 extern int arp_get_info(char *, char **, off_t, int);
+extern int rarp_get_info(char *, char **, off_t, int);
 extern int dev_get_info(char *, char **, off_t, int);
 extern int rt_get_info(char *, char **, off_t, int);
 #endif /* CONFIG_INET */
@@ -96,11 +97,14 @@ static struct proc_dir_entry net_dir[] = {
 	{ 131,3,"dev" },
 	{ 132,3,"raw" },
 	{ 133,3,"tcp" },
-	{ 134,3,"udp" }
+	{ 134,3,"udp" },
+#ifdef CONFIG_INET_RARP
+	{ 135,4,"rarp"}
+#endif
 #endif	/* CONFIG_INET */
 #ifdef CONFIG_IPX
-	,{ 135,9,"ipx_route" },
-	{ 136,3,"ipx" }
+	,{ 136,9,"ipx_route" },
+	{ 137,3,"ipx" }
 #endif /* CONFIG_IPX */
 };
 
@@ -212,12 +216,15 @@ static int proc_readnet(struct inode * inode, struct file * file,
 			case 134:
 				length = udp_get_info(page,&start,file->f_pos,thistime);
 				break;
+			case 135:
+				length = rarp_get_info(page,&start,file->f_pos,thistime);
+				break;
 #endif /* CONFIG_INET */
 #ifdef CONFIG_IPX
-			case 135:
+			case 136:
 				length = ipx_rt_get_info(page,&start,file->f_pos,thistime);
 				break;
-			case 136:
+			case 137:
 				length = ipx_get_info(page,&start,file->f_pos,thistime);
 				break;
 #endif /* CONFIG_IPX */

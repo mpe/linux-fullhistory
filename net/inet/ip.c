@@ -1273,7 +1273,7 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
  		 *	Set up data on packet
  		 */
 
- 		skb2->arp = skb->arp;
+ 		skb2->arp = 0;/*skb->arp;*/
  		skb2->free = skb->free;
  		skb2->len = len + hlen;
  		skb2->h.raw=(char *) skb2->data;
@@ -1549,7 +1549,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	ip_statistics.IpInReceives++;
 	
 	DPRINTF((DBG_IP, "<<\n"));
-
+	
 	/*
 	 *	Tag the ip header of this packet so we can find it
 	 */

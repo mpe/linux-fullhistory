@@ -36,6 +36,7 @@
  *		Alan Cox	:	Use ip_tos and ip_ttl
  *		Alan Cox	:	SNMP Mibs
  *		Alan Cox	:	MSG_DONTROUTE, and 0.0.0.0 support.
+ *		Matt Dillon	:	UDP length checks.
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -653,7 +654,8 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 {
   	struct sock *sk;
   	struct udphdr *uh;
-
+	unsigned short ulen;
+		
 	/*
 	 *	Get the header.
 	 */
@@ -661,7 +663,22 @@ int udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
   	
   	ip_statistics.IpInDelivers++;
 
-  	
+	/*
+	 *	Validate the packet and the UDP length.
+	 */
+	 
+	ulen = ntohs(uh->len);
+
+	if (ulen > len || len < sizeof(*uh) || ulen < sizeof(*uh)) 
+	{
+		printk("UDP: short packet: %d/%d\n", ulen, len);
+		DPRINTF((DBG_UDP, "UDP: short packet %d/%d\n", ulen, len));
+		udp_statistics.UdpInErrors++;
+		kfree_skb(skb, FREE_WRITE);
+		return(0);
+	}
+	len=ulen;
+
   	sk = get_sock(&udp_prot, uh->dest, saddr, uh->source, daddr);
 	if (sk == NULL) 
   	{

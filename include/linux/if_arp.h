@@ -30,6 +30,13 @@
 #define	ARPHRD_IEEE802	6		/* IEEE 802.2 Ethernet- huh?	*/
 #define	ARPHRD_ARCNET	7		/* ARCnet			*/
 #define	ARPHRD_APPLETLK	8		/* APPLEtalk			*/
+/* Dummy types for non ARP hardware */
+#define ARPHRD_SLIP	256
+#define ARPHRD_CSLIP	257
+#define ARPHRD_SLIP6	258
+#define ARPHRD_CSLIP6	259
+#define ARPHRD_KISS	260
+#define ARPHRD_ADAPT	264
 
 /* ARP protocol opcodes. */
 #define	ARPOP_REQUEST	1		/* ARP request			*/

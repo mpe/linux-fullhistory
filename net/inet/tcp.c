@@ -15,6 +15,7 @@
  *		Charles Hedrick, <hedrick@klinzhai.rutgers.edu>
  *		Linus Torvalds, <torvalds@cs.helsinki.fi>
  *		Alan Cox, <gw4pts@gw4pts.ampr.org>
+ *		Matthew Dillon, <dillon@apollo.west.oic.com>
  *
  * Fixes:	
  *		Alan Cox	:	Numerous verify_area() calls
@@ -67,6 +68,7 @@
  *		Linus		:	Rewrote tcp_read() and URG handling
  *					completely
  *		Gerhard Koerting:	Fixed some missing timer handling
+ *		Matthew Dillon  :	Reworked TCP machine states as per RFC
  *
  *
  * To Fix:
@@ -80,6 +82,40 @@
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or(at your option) any later version.
+ *
+ * Description of States:
+ *
+ *	TCP_SYN_SENT		sent a connection request, waiting for ack
+ *
+ *	TCP_SYN_RECV		received a connection request, sent ack,
+ *				waiting for final ack in three-way handshake.
+ *
+ *	TCP_ESTABLISHED		connection established
+ *
+ *	TCP_FIN_WAIT1		our side has shutdown, waiting to complete
+ *				transmission of remaining buffered data
+ *
+ *	TCP_FIN_WAIT2		all buffered data sent, waiting for remote
+ *				to shutdown
+ *
+ *	TCP_CLOSING		both sides have shutdown but we still have
+ *				data we have to finish sending
+ *
+ *	TCP_TIME_WAIT		timeout to catch resent junk before entering
+ *				closed, can only be entered from FIN_WAIT2
+ *				or CLOSING.  Required because the other end
+ *				may not have gotten our last ACK causing it
+ *				to retransmit the data packet (which we ignore)
+ *
+ *	TCP_CLOSE_WAIT		remote side has shutdown and is waiting for
+ *				us to finish writing our data and to shutdown
+ *				(we have to close() to move on to LAST_ACK)
+ *
+ *	TCP_LAST_ACK		out side has shutdown after remote has
+ *				shutdown.  There may still be data in our
+ *				buffer that we have to finish sending
+ *		
+ *	TCP_CLOSED		socket is finished
  */
 #include <linux/types.h>
 #include <linux/sched.h>
@@ -109,7 +145,6 @@
 unsigned long seq_offset;
 struct tcp_mib	tcp_statistics;
 
-#define SUBNETSARELOCAL
 
 static __inline__ int 
 min(unsigned int a, unsigned int b)
@@ -1498,8 +1533,7 @@ static int tcp_read(struct sock *sk, unsigned char *to,
 
  
 /*
- * Send a FIN without closing the connection.
- * Not called at interrupt time.
+ * Shutdown the sending side of a connection.
  */
 
 void tcp_shutdown(struct sock *sk, int how)
@@ -1514,22 +1548,36 @@ void tcp_shutdown(struct sock *sk, int how)
 	 * We need to grab some memory, and put together a FIN,
 	 * and then put it into the queue to be sent.
 	 * FIXME:
+	 *
 	 *	Tim MacKenzie(tym@dibbler.cs.monash.edu.au) 4 Dec '92.
 	 *	Most of this is guesswork, so maybe it will work...
 	 */
+
+	if (!(how & SEND_SHUTDOWN)) 
+		return;
 	 
 	/*
 	 *	If we've already sent a FIN, return. 
 	 */
 	 
-	if (sk->state == TCP_FIN_WAIT1 || sk->state == TCP_FIN_WAIT2) 
+	if (sk->state == TCP_FIN_WAIT1 ||
+	    sk->state == TCP_FIN_WAIT2 ||
+	    sk->state == TCP_CLOSING ||
+	    sk->state == TCP_LAST_ACK ||
+	    sk->state == TCP_TIME_WAIT
+	) {
 		return;
-	if (!(how & SEND_SHUTDOWN)) 
-		return;
+	}
 	sk->inuse = 1;
 
 	/*
-	 *	Clear out any half completed packets. 
+	 * flag that the sender has shutdown
+	 */
+
+	sk->shutdown |= SEND_SHUTDOWN;
+
+	/*
+	 *  Clear out any half completed packets. 
 	 */
 
 	if (sk->partial)
@@ -1560,13 +1608,24 @@ void tcp_shutdown(struct sock *sk, int how)
 	{
   		/*
   		 *	Finish anyway, treat this as a send that got lost. 
+  		 *
+  		 *	Enter FIN_WAIT1 on normal shutdown, which waits for
+  		 *	written data to be completely acknowledged along
+  		 *	with an acknowledge to our FIN.
+  		 *
+  		 *	Enter FIN_WAIT2 on abnormal shutdown -- close before
+  		 *	connection established.
   		 */
 	  	buff->free=1;
 		prot->wfree(sk,buff->mem_addr, buff->mem_len);
-		if(sk->state==TCP_ESTABLISHED)
-			sk->state=TCP_FIN_WAIT1;
+
+		if (sk->state == TCP_ESTABLISHED)
+			sk->state = TCP_FIN_WAIT1;
+		else if(sk->state == TCP_CLOSE_WAIT)
+			sk->state = TCP_LAST_ACK;
 		else
-			sk->state=TCP_FIN_WAIT2;
+			sk->state = TCP_FIN_WAIT2;
+
 		release_sock(sk);
 		DPRINTF((DBG_TCP, "Unable to build header for fin.\n"));
 		return;
@@ -1610,7 +1669,9 @@ void tcp_shutdown(struct sock *sk, int how)
 
 	if (sk->state == TCP_ESTABLISHED) 
 		sk->state = TCP_FIN_WAIT1;
-	else 
+	else if (sk->state == TCP_CLOSE_WAIT)
+		sk->state = TCP_LAST_ACK;
+	else
 		sk->state = TCP_FIN_WAIT2;
 
 	release_sock(sk);
@@ -1934,7 +1995,7 @@ tcp_conn_request(struct sock *sk, struct sk_buff *skb,
   if (sk->user_mss)
     newsk->mtu = sk->user_mss;
   else {
-#ifdef SUBNETSARELOCAL
+#ifdef CONFIG_INET_SNARL	/* Sub Nets ARe Local */
     if ((saddr ^ daddr) & default_mask(saddr))
 #else
     if ((saddr ^ daddr) & dev->pa_mask)
@@ -2081,7 +2142,18 @@ static void tcp_close(struct sock *sk, int timeout)
 	{
 		case TCP_FIN_WAIT1:
 		case TCP_FIN_WAIT2:
-		case TCP_LAST_ACK:
+		case TCP_CLOSING:
+			/*
+			 * These states occur when we have already closed out
+			 * our end.  If there is no timeout, we do not do
+			 * anything.  We may still be in the middle of sending
+			 * the remainder of our buffer, for example...
+			 * resetting the timer would be inappropriate.
+			 *
+			 * XXX if retransmit count reaches limit, is tcp_close()
+			 * called with timeout == 1 ? if not, we need to fix that.
+			 */
+#ifdef NOTDEF
 			/* 
 			 *	Start a timer.
 			 * original code was 4 * sk->rtt.  In converting to the
@@ -2089,11 +2161,16 @@ static void tcp_close(struct sock *sk, int timeout)
 			 * it seems to make most sense to  use the backed off value
 			 */
 			reset_timer(sk, TIME_CLOSE, 4 * sk->rto);
+#endif
 			if (timeout) 
 				tcp_time_wait(sk);
 			release_sock(sk);
 			return;	/* break causes a double release - messy */
 		case TCP_TIME_WAIT:
+		case TCP_LAST_ACK:
+			/*
+			 * A timeout from these states terminates the TCB.
+			 */
 			if (timeout) 
 			{
 		  		sk->state = TCP_CLOSE;
@@ -2140,6 +2217,12 @@ static void tcp_close(struct sock *sk, int timeout)
 			if (tmp < 0) 
 			{
 				kfree_skb(buff,FREE_WRITE);
+
+				/*
+				 * Enter FIN_WAIT1 to await completion of
+				 * written out data and ACK to our FIN.
+				 */
+
 				if(sk->state==TCP_ESTABLISHED)
 					sk->state=TCP_FIN_WAIT1;
 				else
@@ -2192,14 +2275,19 @@ static void tcp_close(struct sock *sk, int timeout)
 				skb_queue_tail(&sk->write_queue, buff);
 			}
 
-			if (sk->state == TCP_CLOSE_WAIT) 
-			{
-				sk->state = TCP_FIN_WAIT2;
-			} 
-			else 
-			{
-				sk->state = TCP_FIN_WAIT1;
-			}
+			/*
+			 * If established (normal close), enter FIN_WAIT1.
+			 * If in CLOSE_WAIT, enter LAST_ACK
+			 * If in CLOSING, remain in CLOSING
+			 * otherwise enter FIN_WAIT2
+			 */
+
+			if (sk->state == TCP_ESTABLISHED)
+			    sk->state = TCP_FIN_WAIT1;
+			else if (sk->state == TCP_CLOSE_WAIT)
+			    sk->state = TCP_LAST_ACK;
+			else if (sk->state != TCP_CLOSING)
+			    sk->state = TCP_FIN_WAIT2;
 	}
 	release_sock(sk);
 }
@@ -2276,7 +2364,10 @@ sort_send(struct sock *sk)
 }
   
 
-/* This routine deals with incoming acks, but not outgoing ones. */
+/*
+ * This routine deals with incoming acks, but not outgoing ones.
+ */
+
 static int
 tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
 {
@@ -2574,30 +2665,65 @@ tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
 	tcp_send_partial(sk);
   }
 
-  /* See if we are done. */
-  if (sk->state == TCP_TIME_WAIT) {
+  /*
+   * In the LAST_ACK case, the other end FIN'd us.  We then FIN'd them, and
+   * we are now waiting for an acknowledge to our FIN.  The other end is
+   * already in TIME_WAIT.
+   *
+   * Move to TCP_CLOSE on success.
+   */
+
+  if (sk->state == TCP_LAST_ACK) {
 	if (!sk->dead)
 		sk->state_change(sk);
+	DPRINTF((DBG_TCP, "TCP_LAST_ACK-A: %d/%d %d/%d ack/sent %d %d\n",
+	    sk->rcv_ack_seq,
+	    sk->write_seq,
+	    sk->acked_seq,
+	    sk->fin_seq,
+	    ack,
+	    sk->sent_seq
+	));
 	if (sk->rcv_ack_seq == sk->write_seq && sk->acked_seq == sk->fin_seq) {
+		DPRINTF((DBG_TCP, "tcp_ack closing socket - %X\n", sk));
 		flag |= 1;
 		sk->state = TCP_CLOSE;
 		sk->shutdown = SHUTDOWN_MASK;
 	}
   }
 
-  if (sk->state == TCP_LAST_ACK || sk->state == TCP_FIN_WAIT2) {
-	if (!sk->dead) sk->state_change(sk);
+  /*
+   * Incomming ACK to a FIN we sent in the case of our initiating the close.
+   *
+   * Move to FIN_WAIT2 to await a FIN from the other end.
+   */
+
+  if (sk->state == TCP_FIN_WAIT1) {
+	if (!sk->dead) 
+		sk->state_change(sk);
 	if (sk->rcv_ack_seq == sk->write_seq) {
 		flag |= 1;
 		if (sk->acked_seq != sk->fin_seq) {
 			tcp_time_wait(sk);
 		} else {
-			DPRINTF((DBG_TCP, "tcp_ack closing socket - %X\n", sk));
-			tcp_send_ack(sk->sent_seq, sk->acked_seq, sk,
-				     th, sk->daddr);
 			sk->shutdown = SHUTDOWN_MASK;
-			sk->state = TCP_CLOSE;
+			sk->state = TCP_FIN_WAIT2;
 		}
+	}
+  }
+
+  /*
+   * Incomming ACK to a FIN we sent in the case of a simultanious close.
+   *
+   * Move to TIME_WAIT
+   */
+
+  if (sk->state == TCP_CLOSING) {
+	if (!sk->dead) 
+		sk->state_change(sk);
+	if (sk->rcv_ack_seq == sk->write_seq) {
+		flag |= 1;
+		tcp_time_wait(sk);
 	}
   }
 
@@ -2851,6 +2977,8 @@ tcp_data(struct sk_buff *skb, struct sock *sk,
 	DPRINTF((DBG_TCP, "data received on dead socket.\n"));
   }
 
+#ifdef NOTDEF 	/* say what?  this is handled by tcp_ack() */
+
   if (sk->state == TCP_FIN_WAIT2 &&
       sk->acked_seq == sk->fin_seq && sk->rcv_ack_seq == sk->write_seq) {
 	DPRINTF((DBG_TCP, "tcp_data: entering last_ack state sk = %X\n", sk));
@@ -2860,6 +2988,7 @@ tcp_data(struct sk_buff *skb, struct sock *sk,
 	sk->state = TCP_LAST_ACK;
 	if (!sk->dead) sk->state_change(sk);
   }
+#endif
 
   return(0);
 }
@@ -2920,15 +3049,27 @@ static inline int tcp_urg(struct sock *sk, struct tcphdr *th,
 
 
 /*
- *	This deals with incoming fins. 'Linus at 9 O'clock' 8-) 
+ *  This deals with incoming fins. 'Linus at 9 O'clock' 8-) 
+ *
+ *  If we are ESTABLISHED, a received fin moves us to CLOSE-WAIT
+ *  (and thence onto LAST-ACK and finally, CLOSED, we never enter
+ *  TIME-WAIT)
+ *
+ *  If we are in FINWAIT-1, a received FIN indicates simultanious
+ *  close and we go into CLOSING (and later onto TIME-WAIT)
+ *
+ *  If we are in FINWAIT-2, a received FIN moves us to TIME-WAIT.
+ *
  */
  
-static int tcp_fin(struct sock *sk, struct tcphdr *th, 
+static int tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th, 
 	 unsigned long saddr, struct device *dev)
 {
 	DPRINTF((DBG_TCP, "tcp_fin(sk=%X, th=%X, saddr=%X, dev=%X)\n",
 					sk, th, saddr, dev));
   
+	sk->fin_seq = th->seq + skb->len + th->syn + th->fin;
+
 	if (!sk->dead) 
 	{
 		sk->state_change(sk);
@@ -2939,9 +3080,12 @@ static int tcp_fin(struct sock *sk, struct tcphdr *th,
 		case TCP_SYN_RECV:
 		case TCP_SYN_SENT:
 		case TCP_ESTABLISHED:
-			/* Contains the one that needs to be acked */
+			/*
+			 * move to CLOSE_WAIT, tcp_data() already handled
+			 * sending the ack.
+			 */
 			reset_timer(sk, TIME_CLOSE, TCP_TIMEOUT_LEN);
-			sk->fin_seq = th->seq+1;
+			/*sk->fin_seq = th->seq+1;*/
 			tcp_statistics.TcpCurrEstab--;
 			sk->state = TCP_CLOSE_WAIT;
 			if (th->rst)
@@ -2949,17 +3093,46 @@ static int tcp_fin(struct sock *sk, struct tcphdr *th,
 			break;
 
 		case TCP_CLOSE_WAIT:
-		case TCP_FIN_WAIT2:
-			break; /* we got a retransmit of the fin. */
-
-		case TCP_FIN_WAIT1:
-			/* Contains the one that needs to be acked */
-			sk->fin_seq = th->seq+1;
-			sk->state = TCP_FIN_WAIT2;
+		case TCP_CLOSING:
+			/*
+			 * received a retransmission of the FIN, do
+			 * nothing.
+			 */
 			break;
-
-		default:
 		case TCP_TIME_WAIT:
+			/*
+			 * received a retransmission of the FIN,
+			 * restart the TIME_WAIT timer.
+			 */
+			reset_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
+			return(0);
+		case TCP_FIN_WAIT1:
+			/*
+			 * This case occurs when a simultanious close
+			 * happens, we must ack the received FIN and
+			 * enter the CLOSING state.
+			 *
+			 * XXX timeout not set properly
+			 */
+
+			reset_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
+			/*sk->fin_seq = th->seq+1;*/
+			sk->state = TCP_CLOSING;
+			break;
+		case TCP_FIN_WAIT2:
+			/*
+			 * received a FIN -- send ACK and enter TIME_WAIT
+			 */
+			reset_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
+			/*sk->fin_seq = th->seq+1;*/
+			sk->state = TCP_TIME_WAIT;
+			break;
+		case TCP_CLOSE:
+			/*
+			 * already in CLOSE
+			 */
+			break;
+		default:
 			sk->state = TCP_LAST_ACK;
 	
 			/* Start the timers. */
@@ -3364,6 +3537,7 @@ if (inet_debug == DBG_SLIP) printk("\rtcp_rcv: bad checksum\n");
 
 	case TCP_ESTABLISHED:
 	case TCP_CLOSE_WAIT:
+	case TCP_CLOSING:
 	case TCP_FIN_WAIT1:
 	case TCP_FIN_WAIT2:
 	case TCP_TIME_WAIT:
@@ -3437,7 +3611,7 @@ if (inet_debug == DBG_SLIP) printk("\rtcp_rcv: bad checksum\n");
 		}
 
 		/* Moved: you must do data then fin bit */
-		if (th->fin && tcp_fin(sk, th, saddr, dev)) {
+		if (th->fin && tcp_fin(skb, sk, th, saddr, dev)) {
 			kfree_skb(skb, FREE_READ);
 			release_sock(sk);
 			return(0);
@@ -3622,7 +3796,7 @@ if (inet_debug == DBG_SLIP) printk("\rtcp_rcv: bad checksum\n");
 			if (tcp_data(skb, sk, saddr, len))
 						kfree_skb(skb, FREE_READ);
 
-			if (th->fin) tcp_fin(sk, th, saddr, dev);
+			if (th->fin) tcp_fin(skb, sk, th, saddr, dev);
 			release_sock(sk);
 			return(0);
 		}
@@ -3645,7 +3819,7 @@ if (inet_debug == DBG_SLIP) printk("\rtcp_rcv: bad checksum\n");
 			release_sock(sk);
 			return(0);
 		}
-		tcp_fin(sk, th, saddr, dev);
+		tcp_fin(skb, sk, th, saddr, dev);
 		release_sock(sk);
 		return(0);
 	}
@@ -3667,9 +3841,19 @@ static void tcp_write_wakeup(struct sock *sk)
 	if (sk->zapped)
 		return;	/* Afer a valid reset we can send no more */
 
-	if (sk -> state != TCP_ESTABLISHED && sk->state != TCP_CLOSE_WAIT &&
-		sk -> state != TCP_FIN_WAIT1 && sk->state != TCP_FIN_WAIT2)
+	/*
+	 * Write data can still be transmitted/retransmitted in the
+	 * following states.  If any other state is encountered, return.
+	 */
+
+	if (sk->state != TCP_ESTABLISHED && 
+	    sk->state != TCP_CLOSE_WAIT &&
+	    sk->state != TCP_FIN_WAIT1 && 
+	    sk->state != TCP_LAST_ACK &&
+	    sk->state != TCP_CLOSING
+	) {
 		return;
+	}
 
 	buff = sk->prot->wmalloc(sk,MAX_ACK_SIZE,1, GFP_ATOMIC);
 	if (buff == NULL) 

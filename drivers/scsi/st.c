@@ -1,42 +1,17 @@
 /*
-  SCSI Tape Driver for Linux
-
-  Version 0.02 for Linux 0.98.4 and Eric Youngdale's new scsi driver
+  SCSI Tape Driver for Linux version 1.1 and newer. See the accompanying
+  file README.st for more information.
 
   History:
   Rewritten from Dwayne Forsyth's SCSI tape driver by Kai Makisara.
-  Contribution and ideas from several people including Eric Youngdale and
-  Wolfgang Denk.
+  Contribution and ideas from several people including (in alphabetical
+  order) Klaus Ehrenfried, Wolfgang Denk, J"org Weule, and
+  Eric Youngdale.
 
-  Features:
-  - support for different block sizes and internal buffering
-  - support for fixed and variable block size (within buffer limit;
-    blocksize set to zero)
-  - *nix-style ioctl with codes from mtio.h from the QIC-02 driver by
-    Hennus Bergman (command MTSETBLK added)
-  - character device
-  - rewind and non-rewind devices
-  - capability to handle several tape drives simultaneously
-  - one buffer if one drive, two buffers if more than one drive (limits the
-    number of simultaneously open drives to two)
-  - write behind
-  - seek and tell (Tandberg compatible and SCSI-2)
-
-  Devices:
-  Autorewind devices have minor numbers equal to the tape numbers (0 > ).
-  Nonrewind device has the minor number equal to tape number + 128.
-
-  Problems:
-  The end of media detection works correctly in writing only if the drive
-  writes the buffer contents after the early-warning mark. If you want to
-  be sure that EOM is reported correctly, you should uncomment the line
-  defining ST_NO_DELAYED_WRITES. Note that when delayed writes are disabled
-  each write byte count must be an integral number of blocks.
-
-  Copyright 1992, 1993 Kai Makisara
+  Copyright 1992, 1993, 1994 Kai Makisara
 		 email makisara@vtinsx.ins.vtt.fi or Kai.Makisara@vtt.fi
 
-  Last modified: Thu Nov 25 21:49:02 1993 by root@kai.home
+  Last modified: Wed May  4 20:29:42 1994 by root@kai.home
 */
 
 #include <linux/fs.h>
@@ -57,44 +32,40 @@
 #include "st.h"
 #include "constants.h"
 
-/* Uncomment the following if you want the rewind, etc. commands return
-   before command completion. */
+/* #define DEBUG */
+
 /* #define ST_NOWAIT */
 
-/* Uncomment the following if you want the tape to be positioned correctly
-   within file after close (the tape is positioned correctly with respect
-   to the filemarks even wihout ST_IN_FILE_POS defined */
 /* #define ST_IN_FILE_POS */
 
-/* Uncomment the following if you want recovered write errors to be
-   fatal. */
 /* #define ST_RECOVERED_WRITE_FATAL */
 
-/* Uncomment the following if you want all data from a write command to
-   be written to tape before the command returns. Disables write-behind. */
-/* #define ST_NO_DELAYED_WRITES */
+#define ST_BUFFER_WRITES 1
 
-/* Number of ST_BLOCK_SIZE blocks in the buffers */
-#define ST_BUFFER_BLOCKS 64
-/* Write-behind can be disabled by setting ST_WRITE_THRESHOLD_BLOCKS equal
-   to or larger than ST_BUFFER_BLOCKS */
-#define ST_WRITE_THRESHOLD_BLOCKS 60
-#define ST_BLOCK_SIZE 512
+#define ST_ASYNC_WRITES 1
+
+#define ST_READ_AHEAD 1
+
+#define ST_BLOCK_SIZE 1024
+
+#define ST_MAX_BUFFERS 2
+
+#define ST_BUFFER_BLOCKS 32
+
+#define ST_WRITE_THRESHOLD_BLOCKS 30
+
 #define ST_BUFFER_SIZE (ST_BUFFER_BLOCKS * ST_BLOCK_SIZE)
 #define ST_WRITE_THRESHOLD (ST_WRITE_THRESHOLD_BLOCKS * ST_BLOCK_SIZE)
 
-#ifdef ST_NO_DELAYED_WRITES
-#undef ST_WRITE_THRESHOLD_BLOCKS
-#define ST_WRITE_THRESHOLD_BLOCKS ST_BUFFER_BLOCKS
-#endif
-
-/* The buffer size should fit into the 24 bits reserved for length in the
+/* The buffer size should fit into the 24 bits for length in the
    6-byte SCSI read and write commands. */
 #if ST_BUFFER_SIZE >= (2 << 24 - 1)
 #error "Buffer size should not exceed (2 << 24 - 1) bytes!"
 #endif
 
-/* #define DEBUG */
+#ifdef DEBUG
+static int debugging = 1;
+#endif
 
 #define MAX_RETRIES 0
 #define MAX_READY_RETRIES 5
@@ -104,7 +75,10 @@
 #define ST_LONG_TIMEOUT 200000
 
 static int st_nbr_buffers;
-static ST_buffer *st_buffers[2];
+static ST_buffer **st_buffers;
+static int st_buffer_size = ST_BUFFER_SIZE;
+static int st_write_threshold = ST_WRITE_THRESHOLD;
+static int st_max_buffers = ST_MAX_BUFFERS;
 
 static Scsi_Tape * scsi_tapes;
 int NR_ST=0;
@@ -128,8 +102,14 @@ st_chk_result(Scsi_Cmnd * SCpnt)
   if (!result && SCpnt->sense_buffer[0] == 0)
     return 0;
 #ifdef DEBUG
-  printk("st%d: Error: %x\n", dev, result);
-  print_sense("st", SCpnt);
+  if (debugging) {
+    printk("st%d: Error: %x, cmd: %x %x %x %x %x %x Len: %d\n", dev, result,
+	   SCpnt->cmnd[0], SCpnt->cmnd[1], SCpnt->cmnd[2],
+	   SCpnt->cmnd[3], SCpnt->cmnd[4], SCpnt->cmnd[5],
+	   SCpnt->request_bufflen);
+    if (driver_byte(result) & DRIVER_SENSE)
+      print_sense("st", SCpnt);
+  }
 #endif
 /*  if ((sense[0] & 0x70) == 0x70 &&
        ((sense[2] & 0x80) ))
@@ -142,6 +122,7 @@ st_chk_result(Scsi_Cmnd * SCpnt)
 #endif
       ) {
     scsi_tapes[dev].recover_count++;
+    scsi_tapes[dev].mt_status->mt_erreg += (1 << MT_ST_SOFTERR_SHIFT);
     if (SCpnt->cmnd[0] == READ_6)
       stp = "read";
     else if (SCpnt->cmnd[0] == WRITE_6)
@@ -192,13 +173,12 @@ st_sleep_done (Scsi_Cmnd * SCpnt)
       wake_up( &(STp->waiting) );
   }
 #ifdef DEBUG
-  else
+  else if (debugging)
     printk("st?: Illegal interrupt device %x\n", st_nbr);
 #endif
 }
 
 
-#if ST_WRITE_THRESHOLD_BLOCKS < ST_BUFFER_BLOCKS
 /* Handle the write-behind checking */
 	static void
 write_behind_check(int dev)
@@ -222,11 +202,44 @@ write_behind_check(int dev)
 	   STbuffer->b_data + STbuffer->writing,
 	   STbuffer->buffer_bytes - STbuffer->writing);
   STbuffer->buffer_bytes -= STbuffer->writing;
+  if (STp->drv_block >= 0) {
+    if (STp->block_size == 0)
+      STp->drv_block++;
+    else
+      STp->drv_block += STbuffer->writing / STp->block_size;
+  }
   STbuffer->writing = 0;
 
   return;
 }
-#endif
+
+
+/* Back over EOF if it has been inadvertently crossed (ioctl not used because
+   it messes up the block number). */
+	static int
+back_over_eof(int dev)
+{
+  Scsi_Cmnd *SCpnt;
+  Scsi_Tape *STp = &(scsi_tapes[dev]);
+  unsigned char cmd[10];
+
+  cmd[0] = SPACE;
+  cmd[1] = 0x01; /* Space FileMarks */
+  cmd[2] = cmd[3] = cmd[4] = 0xff;  /* -1 filemarks */
+  cmd[5] = 0;
+
+  SCpnt = allocate_device(NULL, (STp->device)->index, 1);
+  SCpnt->sense_buffer[0] = 0;
+  SCpnt->request.dev = dev;
+  scsi_do_cmd(SCpnt,
+	      (void *) cmd, (void *) (STp->buffer)->b_data, 0,
+	      st_sleep_done, ST_TIMEOUT, MAX_RETRIES);
+
+  if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+  SCpnt->request.dev = -1;
+
+  return (STp->buffer)->last_result_fatal;
+}
 
 
 /* Flush the write buffer (never need to write if variable blocksize). */
@@ -239,20 +252,19 @@ flush_write_buffer(int dev)
   Scsi_Cmnd *SCpnt;
   Scsi_Tape *STp = &(scsi_tapes[dev]);
 
-#if ST_WRITE_THRESHOLD_BLOCKS < ST_BUFFER_BLOCKS
   if ((STp->buffer)->writing) {
     write_behind_check(dev);
     if ((STp->buffer)->last_result_fatal) {
 #ifdef DEBUG
-      printk("st%d: Async write error %x.\n", dev,
-	     (STp->buffer)->last_result);
+      if (debugging)
+	printk("st%d: Async write error (flush) %x.\n", dev,
+	       (STp->buffer)->last_result);
 #endif
       if ((STp->buffer)->last_result == INT_MAX)
 	return (-ENOSPC);
       return (-EIO);
     }
   }
-#endif
 
   result = 0;
   if (STp->dirty == 1) {
@@ -262,7 +274,8 @@ flush_write_buffer(int dev)
     transfer = ((offset + STp->block_size - 1) /
 		STp->block_size) * STp->block_size;
 #ifdef DEBUG
-    printk("st%d: Flushing %d bytes.\n", dev, transfer);
+    if (debugging)
+      printk("st%d: Flushing %d bytes.\n", dev, transfer);
 #endif
     memset((STp->buffer)->b_data + offset, 0, transfer - offset);
 
@@ -292,8 +305,11 @@ flush_write_buffer(int dev)
       }
       else
 	result = (-EIO);
+      STp->drv_block = (-1);
     }
     else {
+      if (STp->drv_block >= 0)
+	STp->drv_block += blks;
       STp->dirty = 0;
       (STp->buffer)->buffer_bytes = 0;
     }
@@ -332,7 +348,7 @@ flush_buffer(struct inode * inode, struct file * filp, int seek_next)
   result = 0;
   if (!seek_next) {
     if ((STp->eof == ST_FM) && !STp->eof_hit) {
-      result = st_int_ioctl(inode, filp, MTBSF, 1); /* Back over the EOF hit */
+      result = back_over_eof(dev); /* Back over the EOF hit */
       if (!result) {
 	STp->eof = ST_NOEOF;
 	STp->eof_hit = 0;
@@ -400,31 +416,36 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     SCpnt->request.dev = dev;
     scsi_do_cmd(SCpnt,
                 (void *) cmd, (void *) (STp->buffer)->b_data,
-                ST_BLOCK_SIZE, st_sleep_done, ST_LONG_TIMEOUT,
+                0, st_sleep_done, ST_LONG_TIMEOUT,
 		MAX_READY_RETRIES);
 
     if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
 
     if ((SCpnt->sense_buffer[0] & 0x70) == 0x70 &&
 	(SCpnt->sense_buffer[2] & 0x0f) == UNIT_ATTENTION) { /* New media? */
+      (STp->mt_status)->mt_fileno = 0 ;
       SCpnt->sense_buffer[0]=0;
       memset ((void *) &cmd[0], 0, 10);
       cmd[0] = TEST_UNIT_READY;
       SCpnt->request.dev = dev;
       scsi_do_cmd(SCpnt,
 		  (void *) cmd, (void *) (STp->buffer)->b_data,
-		  ST_BLOCK_SIZE, st_sleep_done, ST_LONG_TIMEOUT,
+		  0, st_sleep_done, ST_LONG_TIMEOUT,
 		  MAX_READY_RETRIES);
 
       if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
+      (STp->mt_status)->mt_fileno = STp->drv_block = 0;
     }
 
     if ((STp->buffer)->last_result_fatal != 0) {
       if ((SCpnt->sense_buffer[0] & 0x70) == 0x70 &&
-	  (SCpnt->sense_buffer[2] & 0x0f) == NO_TAPE)
+	  (SCpnt->sense_buffer[2] & 0x0f) == NO_TAPE) {
+        (STp->mt_status)->mt_fileno = STp->drv_block = 0 ;
 	printk("st%d: No tape.\n", dev);
-      else
+      } else {
 	printk("st%d: Error %x.\n", dev, SCpnt->result);
+        (STp->mt_status)->mt_fileno = STp->drv_block = (-1);
+      }
       (STp->buffer)->in_use = 0;
       STp->in_use = 0;
       SCpnt->request.dev = -1;  /* Mark as not busy */
@@ -437,7 +458,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     SCpnt->request.dev = dev;
     scsi_do_cmd(SCpnt,
                 (void *) cmd, (void *) (STp->buffer)->b_data,
-                ST_BLOCK_SIZE, st_sleep_done, ST_TIMEOUT, MAX_READY_RETRIES);
+		6, st_sleep_done, ST_TIMEOUT, MAX_READY_RETRIES);
 
     if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
 
@@ -447,14 +468,16 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       STp->min_block = ((STp->buffer)->b_data[4] << 8) |
 	(STp->buffer)->b_data[5];
 #ifdef DEBUG
-      printk("st%d: Block limits %d - %d bytes.\n", dev, STp->min_block,
-	     STp->max_block);
+      if (debugging)
+	printk("st%d: Block limits %d - %d bytes.\n", dev, STp->min_block,
+	       STp->max_block);
 #endif
     }
     else {
       STp->min_block = STp->max_block = (-1);
 #ifdef DEBUG
-      printk("st%d: Can't read block limits.\n", dev);
+      if (debugging)
+	printk("st%d: Can't read block limits.\n", dev);
 #endif
     }
 
@@ -465,13 +488,14 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     SCpnt->request.dev = dev;
     scsi_do_cmd(SCpnt,
                 (void *) cmd, (void *) (STp->buffer)->b_data,
-                ST_BLOCK_SIZE, st_sleep_done, ST_TIMEOUT, MAX_READY_RETRIES);
+                12, st_sleep_done, ST_TIMEOUT, MAX_READY_RETRIES);
 
     if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
 
     if ((STp->buffer)->last_result_fatal != 0) {
 #ifdef DEBUG
-      printk("st%d: No Mode Sense.\n", dev);
+      if (debugging)
+	printk("st%d: No Mode Sense.\n", dev);
 #endif
       (STp->buffer)->b_data[2] =
       (STp->buffer)->b_data[3] = 0;
@@ -479,9 +503,10 @@ scsi_tape_open(struct inode * inode, struct file * filp)
     SCpnt->request.dev = -1;  /* Mark as not busy */
 
 #ifdef DEBUG
-    printk("st%d: Mode sense. Length %d, medium %x, WBS %x, BLL %d\n", dev,
-	   (STp->buffer)->b_data[0], (STp->buffer)->b_data[1],
-	   (STp->buffer)->b_data[2], (STp->buffer)->b_data[3]);
+    if (debugging)
+      printk("st%d: Mode sense. Length %d, medium %x, WBS %x, BLL %d\n", dev,
+	     (STp->buffer)->b_data[0], (STp->buffer)->b_data[1],
+	     (STp->buffer)->b_data[2], (STp->buffer)->b_data[3]);
 #endif
 
     if ((STp->buffer)->b_data[3] >= 8) {
@@ -490,13 +515,13 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       STp->block_size = (STp->buffer)->b_data[9] * 65536 +
 	(STp->buffer)->b_data[10] * 256 + (STp->buffer)->b_data[11];
 #ifdef DEBUG
-      printk(
-	"st%d: Density %x, tape length: %x, blocksize: %d, drv buffer: %d\n",
-	     dev, STp->density, (STp->buffer)->b_data[5] * 65536 +
-	     (STp->buffer)->b_data[6] * 256 + (STp->buffer)->b_data[7],
-	     STp->block_size, STp->drv_buffer);
+      if (debugging)
+	printk("st%d: Density %x, tape length: %x, blocksize: %d, drv buffer: %d\n",
+	       dev, STp->density, (STp->buffer)->b_data[5] * 65536 +
+	       (STp->buffer)->b_data[6] * 256 + (STp->buffer)->b_data[7],
+	       STp->block_size, STp->drv_buffer);
 #endif
-      if (STp->block_size > ST_BUFFER_SIZE) {
+      if (STp->block_size > st_buffer_size) {
 	printk("st%d: Blocksize %d too large for buffer.\n", dev,
 	       STp->block_size);
 	(STp->buffer)->in_use = 0;
@@ -506,29 +531,31 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 
     }
     else
-      STp->block_size = ST_BLOCK_SIZE;
+      STp->block_size = 512;  /* "Educated Guess" (?) */
 
     if (STp->block_size > 0) {
-      (STp->buffer)->buffer_blocks = ST_BUFFER_SIZE / STp->block_size;
+      (STp->buffer)->buffer_blocks = st_buffer_size / STp->block_size;
       (STp->buffer)->buffer_size =
 	(STp->buffer)->buffer_blocks * STp->block_size;
     }
     else {
       (STp->buffer)->buffer_blocks = 1;
-      (STp->buffer)->buffer_size = ST_BUFFER_SIZE;
+      (STp->buffer)->buffer_size = st_buffer_size;
     }
     (STp->buffer)->buffer_bytes = (STp->buffer)->read_pointer = 0;
 
 #ifdef DEBUG
-    printk("st%d: Block size: %d, buffer size: %d (%d blocks).\n", dev,
-	   STp->block_size, (STp->buffer)->buffer_size,
-	   (STp->buffer)->buffer_blocks);
+    if (debugging)
+      printk("st%d: Block size: %d, buffer size: %d (%d blocks).\n", dev,
+	     STp->block_size, (STp->buffer)->buffer_size,
+	     (STp->buffer)->buffer_blocks);
 #endif
 
     if ((STp->buffer)->b_data[2] & 0x80) {
       STp->write_prot = 1;
 #ifdef DEBUG
-      printk( "st%d: Write protected\n", dev);
+      if (debugging)
+	printk( "st%d: Write protected\n", dev);
 #endif
     }
 
@@ -557,7 +584,8 @@ scsi_tape_close(struct inode * inode, struct file * filp)
       result = flush_write_buffer(dev);
 
 #ifdef DEBUG
-      printk("st%d: File length %d bytes.\n", dev, filp->f_pos);
+      if (debugging)
+	printk("st%d: File length %ld bytes.\n", dev, filp->f_pos);
 #endif
 
       if (result == 0 || result == (-ENOSPC)) {
@@ -570,24 +598,29 @@ scsi_tape_close(struct inode * inode, struct file * filp)
 	SCpnt->request.dev = dev;
 	scsi_do_cmd( SCpnt,
 		    (void *) cmd, (void *) (STp->buffer)->b_data,
-		    ST_BLOCK_SIZE, st_sleep_done, ST_TIMEOUT, MAX_RETRIES);
+		    0, st_sleep_done, ST_TIMEOUT, MAX_RETRIES);
 
 	if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
 
 	if ((STp->buffer)->last_result_fatal != 0)
 	  printk("st%d: Error on write filemark.\n", dev);
+	else {
+          (STp->mt_status)->mt_fileno++ ;
+	  STp->drv_block = 0;
+	}
 
 	SCpnt->request.dev = -1;  /* Mark as not busy */
       }
 
 #ifdef DEBUG
-      printk("st%d: Buffer flushed, EOF written\n", dev);
+      if (debugging)
+	printk("st%d: Buffer flushed, EOF written\n", dev);
 #endif
     }
     else if (!rewind) {
 #ifndef ST_IN_FILE_POS
       if ((STp->eof == ST_FM) && !STp->eof_hit)
-	st_int_ioctl(inode, filp, MTBSF, 1); /* Back over the EOF hit */
+	back_over_eof(dev);
 #else
       flush_buffer(inode, filp, 0);
 #endif
@@ -627,7 +660,7 @@ st_write(struct inode * inode, struct file * filp, char * buf, int count)
     if (STp->write_prot)
       return (-EACCES);
 
-    if (STp->block_size == 0 && count > ST_BUFFER_SIZE)
+    if (STp->block_size == 0 && count > st_buffer_size)
       return (-EOVERFLOW);
 
     if (STp->rw == ST_READING) {
@@ -637,13 +670,13 @@ st_write(struct inode * inode, struct file * filp, char * buf, int count)
       STp->rw = ST_WRITING;
     }
 
-#if ST_WRITE_THRESHOLD_BLOCKS < ST_BUFFER_BLOCKS
     if ((STp->buffer)->writing) {
       write_behind_check(dev);
       if ((STp->buffer)->last_result_fatal) {
 #ifdef DEBUG
-	printk("st%d: Async write error %x.\n", dev,
-	       (STp->buffer)->last_result);
+	if (debugging)
+	  printk("st%d: Async write error (write) %x.\n", dev,
+		 (STp->buffer)->last_result);
 #endif
 	if ((STp->buffer)->last_result == INT_MAX) {
 	  retval = (-ENOSPC);  /* All has been written */
@@ -654,20 +687,21 @@ st_write(struct inode * inode, struct file * filp, char * buf, int count)
 	return retval;
       }
     }
-#endif
 
     if (STp->eof == ST_EOM_OK)
       return (-ENOSPC);
     else if (STp->eof == ST_EOM_ERROR)
       return (-EIO);
 
-#ifdef ST_NO_DELAYED_WRITES
-    if (STp->block_size != 0 && (count % STp->block_size) != 0)
-      return (-EIO);   /* Write must be integral number of blocks */
-    write_threshold = 1;
-#else
-    write_threshold = (STp->buffer)->buffer_size;
-#endif
+    if (!STp->do_buffer_writes) {
+      if (STp->block_size != 0 && (count % STp->block_size) != 0)
+	return (-EIO);   /* Write must be integral number of blocks */
+      write_threshold = 1;
+    }
+    else
+      write_threshold = (STp->buffer)->buffer_size;
+    if (!STp->do_async_writes)
+      write_threshold--;
 
     SCpnt = allocate_device(NULL, (STp->device)->index, 1);
 
@@ -680,16 +714,9 @@ st_write(struct inode * inode, struct file * filp, char * buf, int count)
     STp->rw = ST_WRITING;
 
     b_point = buf;
-    while(
-#if ST_WRITE_THRESHOLD_BLOCKS  < ST_BUFFER_BLOCKS
-	  STp->block_size != 0 &&
-	  ((STp->buffer)->buffer_bytes + count) >
-	  write_threshold)
-#else
-	  (STp->block_size == 0 && count > 0) ||
-	  ((STp->buffer)->buffer_bytes + count) >=
-	  write_threshold)
-#endif
+    while((STp->block_size == 0 && !STp->do_async_writes && count > 0) ||
+	  (STp->block_size != 0 &&
+	   (STp->buffer)->buffer_bytes + count > write_threshold))
     {
       if (STp->block_size == 0)
 	do_count = count;
@@ -702,25 +729,27 @@ st_write(struct inode * inode, struct file * filp, char * buf, int count)
 		    (STp->buffer)->buffer_bytes, b_point, do_count);
 
       if (STp->block_size == 0)
-        blks = do_count;
-      else
+        blks = transfer = do_count;
+      else {
 	blks = ((STp->buffer)->buffer_bytes + do_count) /
 	  STp->block_size;
+	transfer = blks * STp->block_size;
+      }
       cmd[2] = blks >> 16;
       cmd[3] = blks >> 8;
       cmd[4] = blks;
       SCpnt->sense_buffer[0] = 0;
       SCpnt->request.dev = dev;
       scsi_do_cmd (SCpnt,
-		   (void *) cmd, (STp->buffer)->b_data,
-		   (STp->buffer)->buffer_size,
+		   (void *) cmd, (STp->buffer)->b_data, transfer,
 		   st_sleep_done, ST_TIMEOUT, MAX_RETRIES);
 
       if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
 
       if ((STp->buffer)->last_result_fatal != 0) {
 #ifdef DEBUG
-	printk("st%d: Error on write:\n", dev);
+	if (debugging)
+	  printk("st%d: Error on write:\n", dev);
 #endif
 	if ((SCpnt->sense_buffer[0] & 0x70) == 0x70 &&
 	    (SCpnt->sense_buffer[2] & 0x40)) {
@@ -738,23 +767,34 @@ st_write(struct inode * inode, struct file * filp, char * buf, int count)
 	  if (transfer <= do_count) {
 	    filp->f_pos += do_count - transfer;
 	    count -= do_count - transfer;
+	    if (STp->drv_block >= 0) {
+	      if (STp->block_size == 0 && transfer < do_count)
+		STp->drv_block++;
+	      else if (STp->block_size != 0)
+		STp->drv_block += (do_count - transfer) / STp->block_size;
+	    }
 	    STp->eof = ST_EOM_OK;
 	    retval = (-ENOSPC); /* EOM within current request */
 #ifdef DEBUG
-	    printk("st%d: EOM with %d bytes unwritten.\n",
-		   dev, transfer);
+	    if (debugging)
+	      printk("st%d: EOM with %d bytes unwritten.\n",
+		     dev, transfer);
 #endif
 	  }
 	  else {
 	    STp->eof = ST_EOM_ERROR;
+	    STp->drv_block = (-1);    /* Too cautious? */
 	    retval = (-EIO); /* EOM for old data */
 #ifdef DEBUG
-	    printk("st%d: EOM with lost data.\n", dev);
+	    if (debugging)
+	      printk("st%d: EOM with lost data.\n", dev);
 #endif
 	  }
 	}
-	else
+	else {
+	  STp->drv_block = (-1);    /* Too cautious? */
 	  retval = (-EIO);
+	}
 
 	SCpnt->request.dev = -1;  /* Mark as not busy */
 	(STp->buffer)->buffer_bytes = 0;
@@ -767,6 +807,12 @@ st_write(struct inode * inode, struct file * filp, char * buf, int count)
       filp->f_pos += do_count;
       b_point += do_count;
       count -= do_count;
+      if (STp->drv_block >= 0) {
+	if (STp->block_size == 0)
+	  STp->drv_block++;
+	else
+	  STp->drv_block += blks;
+      }
       (STp->buffer)->buffer_bytes = 0;
       STp->dirty = 0;
     }
@@ -784,9 +830,9 @@ st_write(struct inode * inode, struct file * filp, char * buf, int count)
       return (STp->buffer)->last_result_fatal;
     }
 
-#if ST_WRITE_THRESHOLD_BLOCKS < ST_BUFFER_BLOCKS
-    if ((STp->buffer)->buffer_bytes >= ST_WRITE_THRESHOLD ||
-	STp->block_size == 0) {
+    if (STp->do_async_writes &&
+	((STp->buffer)->buffer_bytes >= STp->write_threshold ||
+	 STp->block_size == 0) ) {
       /* Schedule an asynchronous write */
       if (STp->block_size == 0)
 	(STp->buffer)->writing = (STp->buffer)->buffer_bytes;
@@ -811,7 +857,6 @@ st_write(struct inode * inode, struct file * filp, char * buf, int count)
 		   st_sleep_done, ST_TIMEOUT, MAX_RETRIES);
     }
     else
-#endif
       SCpnt->request.dev = -1;  /* Mark as not busy */
 
     return( total);
@@ -838,8 +883,12 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
     }
 #endif
 
-    if (STp->block_size == 0 && count > ST_BUFFER_SIZE)
+    if (STp->block_size == 0 && count > st_buffer_size)
       return (-EOVERFLOW);
+
+    if (!(STp->do_read_ahead) && STp->block_size != 0 &&
+	(count % STp->block_size) != 0)
+      return (-EIO);	/* Read must be integral number of blocks */
 
     if (STp->rw == ST_WRITING) {
       transfer = flush_buffer(inode, filp, 0);
@@ -849,7 +898,7 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
     }
 
 #ifdef DEBUG
-    if (STp->eof != ST_NOEOF)
+    if (debugging && STp->eof != ST_NOEOF)
       printk("st%d: EOF flag up. Bytes %d\n", dev,
 	     (STp->buffer)->buffer_bytes);
 #endif
@@ -872,8 +921,17 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 	if (STp->block_size == 0)
 	  blks = bytes = count;
 	else {
-	  blks = (STp->buffer)->buffer_blocks;
-	  bytes = blks * STp->block_size;
+	  if (STp->do_read_ahead) {
+	    blks = (STp->buffer)->buffer_blocks;
+	    bytes = blks * STp->block_size;
+	  }
+	  else {
+	    bytes = count;
+	    if (bytes > st_buffer_size)
+	      bytes = st_buffer_size;
+	    blks = bytes / STp->block_size;
+	    bytes = blks * STp->block_size;
+	  }
 	}
 	cmd[2] = blks >> 16;
 	cmd[3] = blks >> 8;
@@ -893,11 +951,12 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 
 	if ((STp->buffer)->last_result_fatal) {
 #ifdef DEBUG
-	  printk("st%d: Sense: %2x %2x %2x %2x %2x %2x %2x %2x\n", dev,
-		 SCpnt->sense_buffer[0], SCpnt->sense_buffer[1],
-		 SCpnt->sense_buffer[2], SCpnt->sense_buffer[3],
-		 SCpnt->sense_buffer[4], SCpnt->sense_buffer[5],
-		 SCpnt->sense_buffer[6], SCpnt->sense_buffer[7]);
+	  if (debugging)
+	    printk("st%d: Sense: %2x %2x %2x %2x %2x %2x %2x %2x\n", dev,
+		   SCpnt->sense_buffer[0], SCpnt->sense_buffer[1],
+		   SCpnt->sense_buffer[2], SCpnt->sense_buffer[3],
+		   SCpnt->sense_buffer[4], SCpnt->sense_buffer[5],
+		   SCpnt->sense_buffer[6], SCpnt->sense_buffer[7]);
 #endif
 	  if ((SCpnt->sense_buffer[0] & 0x70) == 0x70) { /* extended sense */
 
@@ -917,7 +976,7 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 		if (STp->block_size == 0) {
 		  if (transfer <= 0)
 		    transfer = 0;
-		  (STp->buffer)->buffer_bytes = count - transfer;
+		  (STp->buffer)->buffer_bytes = bytes - transfer;
 		}
 		else {
 		  printk("st%d: Incorrect block size.\n", dev);
@@ -928,14 +987,14 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 	      else if (SCpnt->sense_buffer[2] & 0x40) {
 		STp->eof = ST_EOM_OK;
 		if (STp->block_size == 0)
-		  (STp->buffer)->buffer_bytes = count - transfer;
+		  (STp->buffer)->buffer_bytes = bytes - transfer;
 		else
 		  (STp->buffer)->buffer_bytes =
-		    ((STp->buffer)->buffer_blocks - transfer) *
-		      STp->block_size;
+		    bytes - transfer * STp->block_size;
 #ifdef DEBUG
-		printk("st%d: EOM detected (%d bytes read).\n", dev,
-		       (STp->buffer)->buffer_bytes);
+		if (debugging)
+		  printk("st%d: EOM detected (%d bytes read).\n", dev,
+			 (STp->buffer)->buffer_bytes);
 #endif
 	      }
 	      else if (SCpnt->sense_buffer[2] & 0x80) {
@@ -944,20 +1003,22 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 		  (STp->buffer)->buffer_bytes = 0;
 		else
 		  (STp->buffer)->buffer_bytes =
-		    ((STp->buffer)->buffer_blocks - transfer) *
-		      STp->block_size;
+		    bytes - transfer * STp->block_size;
 #ifdef DEBUG
-		printk(
-		 "st%d: EOF detected (%d bytes read, transferred %d bytes).\n",
-		       dev, (STp->buffer)->buffer_bytes, total);
+		if (debugging)
+		  printk(
+		    "st%d: EOF detected (%d bytes read, transferred %d bytes).\n",
+			 dev, (STp->buffer)->buffer_bytes, total);
 #endif
 	      } /* end of EOF, EOM, ILI test */
 	    }
 	    else { /* nonzero sense key */
 #ifdef DEBUG
-	      printk("st%d: Tape error while reading.\n", dev);
+	      if (debugging)
+		printk("st%d: Tape error while reading.\n", dev);
 #endif
 	      SCpnt->request.dev = -1;
+	      STp->drv_block = (-1);
 	      if (total)
 		return total;
 	      else
@@ -973,12 +1034,19 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 	else /* Read successful */
 	  (STp->buffer)->buffer_bytes = bytes;
 
+	if (STp->drv_block >= 0) {
+	  if (STp->block_size == 0)
+	    STp->drv_block++;
+	  else
+	    STp->drv_block += (STp->buffer)->buffer_bytes / STp->block_size;
+	}
+
       } /* if ((STp->buffer)->buffer_bytes == 0 &&
 	   STp->eof == ST_NOEOF) */
 
       if ((STp->buffer)->buffer_bytes > 0) {
 #ifdef DEBUG
-	if (STp->eof != ST_NOEOF)
+	if (debugging && STp->eof != ST_NOEOF)
 	  printk("st%d: EOF up. Left %d, needed %d.\n", dev,
 		 (STp->buffer)->buffer_bytes, count - total);
 #endif
@@ -995,8 +1063,11 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
       else if (STp->eof != ST_NOEOF) {
 	STp->eof_hit = 1;
 	SCpnt->request.dev = -1;  /* Mark as not busy */
-	if (total == 0 && STp->eof == ST_FM)
+	if (total == 0 && STp->eof == ST_FM) {
 	  STp->eof = 0;
+	  STp->drv_block = 0;
+	  (STp->mt_status)->mt_fileno++;
+	}
 	if (total == 0 && STp->eof == ST_EOM_OK)
 	  return (-EIO);  /* ST_EOM_ERROR not used in read */
 	return total;
@@ -1012,6 +1083,49 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
     return total;
 }
 
+
+
+/* Set the driver options */
+	static int
+st_set_options(struct inode * inode, long options)
+{
+  int dev, value;
+  Scsi_Tape *STp;
+
+  dev = MINOR(inode->i_rdev) & 127;
+  STp = &(scsi_tapes[dev]);
+  if ((options & MT_ST_OPTIONS) == MT_ST_BOOLEANS) {
+    STp->do_buffer_writes = (options & MT_ST_BUFFER_WRITES) != 0;
+    STp->do_async_writes  = (options & MT_ST_ASYNC_WRITES) != 0;
+    STp->do_read_ahead    = (options & MT_ST_READ_AHEAD) != 0;
+#ifdef DEBUG
+    debugging = (options & MT_ST_DEBUGGING) != 0;
+    printk(
+"st%d: options: buffer writes: %d, async writes: %d, read ahead: %d\n",
+	   dev, STp->do_buffer_writes, STp->do_async_writes,
+	   STp->do_read_ahead);
+    printk("              debugging: %d\n", debugging);
+#endif
+  }
+  else if ((options & MT_ST_OPTIONS) == MT_ST_WRITE_THRESHOLD) {
+    value = (options & ~MT_ST_OPTIONS) * ST_BLOCK_SIZE;
+    if (value < 1 || value > st_buffer_size) {
+      printk("st: Write threshold %d too small or too large.\n",
+	     value);
+      return (-EIO);
+    }
+    STp->write_threshold = value;
+#ifdef DEBUG
+    printk("st%d: Write threshold set to %d bytes.\n", dev,
+	   STp->write_threshold);
+#endif
+  }
+  else
+    return (-EIO);
+
+  return 0;
+}
+
 
 /* Internal ioctl function */
 	static int
@@ -1025,11 +1139,15 @@ st_int_ioctl(struct inode * inode,struct file * file,
    unsigned char cmd[10];
    Scsi_Cmnd * SCpnt;
    Scsi_Tape * STp;
+   int fileno, blkno, undone, datalen;
 
    dev = dev & 127;
    STp = &(scsi_tapes[dev]);
+   fileno = (STp->mt_status)->mt_fileno ;
+   blkno = STp->drv_block;
 
    memset(cmd, 0, 10);
+   datalen = 0;
    switch (cmd_in) {
      case MTFSF:
      case MTFSFM:
@@ -1039,9 +1157,12 @@ st_int_ioctl(struct inode * inode,struct file * file,
        cmd[3] = (arg >> 8);
        cmd[4] = arg;
 #ifdef DEBUG
-       printk("st%d: Spacing tape forward over %d filemarks.\n", dev,
-	      cmd[2] * 65536 + cmd[3] * 256 + cmd[4]);
+       if (debugging)
+	 printk("st%d: Spacing tape forward over %d filemarks.\n", dev,
+		cmd[2] * 65536 + cmd[3] * 256 + cmd[4]);
 #endif
+       fileno += arg;
+       blkno = 0;
        break; 
      case MTBSF:
      case MTBSFM:
@@ -1052,11 +1173,15 @@ st_int_ioctl(struct inode * inode,struct file * file,
        cmd[3] = (ltmp >> 8);
        cmd[4] = ltmp;
 #ifdef DEBUG
-       if (cmd[2] & 0x80)
-	 ltmp = 0xff000000;
-       ltmp = ltmp | (cmd[2] << 16) | (cmd[3] << 8) | cmd[4];
-       printk("st%d: Spacing tape backward over %d filemarks.\n", dev, (-ltmp));
+       if (debugging) {
+	 if (cmd[2] & 0x80)
+	   ltmp = 0xff000000;
+	 ltmp = ltmp | (cmd[2] << 16) | (cmd[3] << 8) | cmd[4];
+	 printk("st%d: Spacing tape backward over %ld filemarks.\n", dev, (-ltmp));
+       }
 #endif
+       fileno -= arg;
+       blkno = (-1);  /* We can't know the block number */
        break; 
       case MTFSR:
        cmd[0] = SPACE;
@@ -1065,9 +1190,12 @@ st_int_ioctl(struct inode * inode,struct file * file,
        cmd[3] = (arg >> 8);
        cmd[4] = arg;
 #ifdef DEBUG
-       printk("st%d: Spacing tape forward %d blocks.\n", dev,
-	      cmd[2] * 65536 + cmd[3] * 256 + cmd[4]);
+       if (debugging)
+	 printk("st%d: Spacing tape forward %d blocks.\n", dev,
+		cmd[2] * 65536 + cmd[3] * 256 + cmd[4]);
 #endif
+       if (blkno >= 0)
+	 blkno += arg;
        break; 
      case MTBSR:
        cmd[0] = SPACE;
@@ -1077,11 +1205,15 @@ st_int_ioctl(struct inode * inode,struct file * file,
        cmd[3] = (ltmp >> 8);
        cmd[4] = ltmp;
 #ifdef DEBUG
-       if (cmd[2] & 0x80)
-	 ltmp = 0xff000000;
-       ltmp = ltmp | (cmd[2] << 16) | (cmd[3] << 8) | cmd[4];
-       printk("st%d: Spacing tape backward %d blocks.\n", dev, (-ltmp));
+       if (debugging) {
+	 if (cmd[2] & 0x80)
+	   ltmp = 0xff000000;
+	 ltmp = ltmp | (cmd[2] << 16) | (cmd[3] << 8) | cmd[4];
+	 printk("st%d: Spacing tape backward %ld blocks.\n", dev, (-ltmp));
+       }
 #endif
+       if (blkno >= 0)
+	 blkno -= arg;
        break; 
      case MTWEOF:
        if (STp->write_prot)
@@ -1092,9 +1224,12 @@ st_int_ioctl(struct inode * inode,struct file * file,
        cmd[4] = arg;
        timeout = ST_TIMEOUT;
 #ifdef DEBUG
-       printk("st%d: Writing %d filemarks.\n", dev,
-	      cmd[2] * 65536 + cmd[3] * 256 + cmd[4]);
+       if (debugging)
+	 printk("st%d: Writing %d filemarks.\n", dev,
+		cmd[2] * 65536 + cmd[3] * 256 + cmd[4]);
 #endif
+       fileno += arg;
+       blkno = 0;
        break; 
      case MTREW:
        cmd[0] = REZERO_UNIT;
@@ -1103,8 +1238,10 @@ st_int_ioctl(struct inode * inode,struct file * file,
        timeout = ST_TIMEOUT;
 #endif
 #ifdef DEBUG
-       printk("st%d: Rewinding tape.\n", dev);
+       if (debugging)
+	 printk("st%d: Rewinding tape.\n", dev);
 #endif
+       fileno = blkno = 0 ;
        break; 
      case MTOFFL:
        cmd[0] = START_STOP;
@@ -1113,12 +1250,15 @@ st_int_ioctl(struct inode * inode,struct file * file,
        timeout = ST_TIMEOUT;
 #endif
 #ifdef DEBUG
-       printk("st%d: Unloading tape.\n", dev);
+       if (debugging)
+	 printk("st%d: Unloading tape.\n", dev);
 #endif
+       fileno = blkno = 0 ;
        break; 
      case MTNOP:
 #ifdef DEBUG
-       printk("st%d: No op on tape.\n", dev);
+       if (debugging)
+	 printk("st%d: No op on tape.\n", dev);
 #endif
        return 0;  /* Should do something ? */
        break;
@@ -1130,15 +1270,26 @@ st_int_ioctl(struct inode * inode,struct file * file,
 #endif
        cmd[4] = 3;
 #ifdef DEBUG
-       printk("st%d: Retensioning tape.\n", dev);
+       if (debugging)
+	 printk("st%d: Retensioning tape.\n", dev);
 #endif
+       fileno = blkno = 0 ;
        break; 
      case MTEOM:
+       /* space to the end of tape */
+       ioctl_result = st_int_ioctl(inode, file, MTFSF, 0x3fff);
+       fileno = (STp->mt_status)->mt_fileno ;
+       /* The next lines would hide the number of spaced FileMarks
+          That's why I inserted the previous lines. I had no luck
+	  with detecting EOM with FSF, so we go now to EOM.
+          Joerg Weule */
        cmd[0] = SPACE;
        cmd[1] = 3;
 #ifdef DEBUG
-       printk("st%d: Spacing to end of recorded medium.\n", dev);
+       if (debugging)
+	 printk("st%d: Spacing to end of recorded medium.\n", dev);
 #endif
+       blkno = (-1);
        break; 
      case MTERASE:
        if (STp->write_prot)
@@ -1146,8 +1297,10 @@ st_int_ioctl(struct inode * inode,struct file * file,
        cmd[0] = ERASE;
        cmd[1] = 1;  /* To the end of tape */
 #ifdef DEBUG
-       printk("st%d: Erasing tape.\n", dev);
+       if (debugging)
+	 printk("st%d: Erasing tape.\n", dev);
 #endif
+       fileno = blkno = 0 ;
        break;
      case MTSEEK:
        if ((STp->device)->scsi_level < SCSI_2) {
@@ -1170,8 +1323,10 @@ st_int_ioctl(struct inode * inode,struct file * file,
        timeout = ST_TIMEOUT;
 #endif
 #ifdef DEBUG
-       printk("st%d: Seeking tape to block %d.\n", dev, arg);
+       if (debugging)
+	 printk("st%d: Seeking tape to block %ld.\n", dev, arg);
 #endif
+       fileno = blkno = (-1);
        break;
      case MTSETBLK:  /* Set block length */
      case MTSETDENSITY: /* Set tape density */
@@ -1181,12 +1336,12 @@ st_int_ioctl(struct inode * inode,struct file * file,
        if (cmd_in == MTSETBLK &&
 	   arg != 0 &&
 	   (arg < STp->min_block || arg > STp->max_block ||
-	    arg > ST_BUFFER_SIZE)) {
+	    arg > st_buffer_size)) {
 	 printk("st%d: Illegal block size.\n", dev);
 	 return (-EINVAL);
        }
        cmd[0] = MODE_SELECT;
-       cmd[4] = 12;
+       cmd[4] = datalen = 12;
 
        memset((STp->buffer)->b_data, 0, 12);
        if (cmd_in == MTSETDRVBUFFER)
@@ -1208,17 +1363,19 @@ st_int_ioctl(struct inode * inode,struct file * file,
        (STp->buffer)->b_data[11] = ltmp;
        timeout = ST_TIMEOUT;
 #ifdef DEBUG
-       if (cmd_in == MTSETBLK)
-	 printk("st%d: Setting block size to %d bytes.\n", dev,
-		(STp->buffer)->b_data[9] * 65536 +
-		(STp->buffer)->b_data[10] * 256 +
-		(STp->buffer)->b_data[11]);
-       else if (cmd_in == MTSETDENSITY)
-	 printk("st%d: Setting density code to %x.\n", dev,
-		(STp->buffer)->b_data[4]);
-       else
-	 printk("st%d: Setting drive buffer code to %d.\n", dev,
-		((STp->buffer)->b_data[2] >> 4) & 7);
+       if (debugging) {
+	 if (cmd_in == MTSETBLK)
+	   printk("st%d: Setting block size to %d bytes.\n", dev,
+		  (STp->buffer)->b_data[9] * 65536 +
+		  (STp->buffer)->b_data[10] * 256 +
+		  (STp->buffer)->b_data[11]);
+	 else if (cmd_in == MTSETDENSITY)
+	   printk("st%d: Setting density code to %x.\n", dev,
+		  (STp->buffer)->b_data[4]);
+	 else
+	   printk("st%d: Setting drive buffer code to %d.\n", dev,
+		  ((STp->buffer)->b_data[2] >> 4) & 7);
+       }
 #endif
        break;
      default:
@@ -1230,7 +1387,7 @@ st_int_ioctl(struct inode * inode,struct file * file,
    SCpnt->sense_buffer[0] = 0;
    SCpnt->request.dev = dev;
    scsi_do_cmd(SCpnt,
-	       (void *) cmd, (void *) (STp->buffer)->b_data, ST_BLOCK_SIZE,
+	       (void *) cmd, (void *) (STp->buffer)->b_data, datalen,
 	       st_sleep_done, timeout, MAX_RETRIES);
 
    if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
@@ -1240,6 +1397,8 @@ st_int_ioctl(struct inode * inode,struct file * file,
    SCpnt->request.dev = -1;  /* Mark as not busy */
 
    if (!ioctl_result) {
+     STp->drv_block = blkno;
+     (STp->mt_status)->mt_fileno = fileno;
      if (cmd_in == MTBSFM)
        ioctl_result = st_int_ioctl(inode, file, MTFSF, 1);
      else if (cmd_in == MTFSFM)
@@ -1248,13 +1407,13 @@ st_int_ioctl(struct inode * inode,struct file * file,
        STp->block_size = arg;
        if (arg != 0) {
 	 (STp->buffer)->buffer_blocks =
-	   ST_BUFFER_SIZE / STp->block_size;
+	   st_buffer_size / STp->block_size;
 	 (STp->buffer)->buffer_size =
 	   (STp->buffer)->buffer_blocks * STp->block_size;
        }
        else {
 	 (STp->buffer)->buffer_blocks = 1;
-	 (STp->buffer)->buffer_size = ST_BUFFER_SIZE;
+	 (STp->buffer)->buffer_size = st_buffer_size;
        }
        (STp->buffer)->buffer_bytes =
 	 (STp->buffer)->read_pointer = 0;
@@ -1263,13 +1422,40 @@ st_int_ioctl(struct inode * inode,struct file * file,
        STp->drv_buffer = arg;
      else if (cmd_in == MTSETDENSITY)
        STp->density = arg;
-     if (cmd_in == MTEOM || cmd_in == MTWEOF) {
+     else if (cmd_in == MTEOM || cmd_in == MTWEOF) {
        STp->eof = ST_EOM_OK;
        STp->eof_hit = 0;
      }
      else if (cmd_in != MTSETBLK && cmd_in != MTNOP) {
        STp->eof = ST_NOEOF;
        STp->eof_hit = 0;
+     }
+   } else {
+     if (SCpnt->sense_buffer[2] & 0x40) {
+       STp->eof = ST_EOM_OK;
+       STp->eof_hit = 0;
+       STp->drv_block = 0;
+     }
+     undone = (
+          (SCpnt->sense_buffer[3] << 24) +
+          (SCpnt->sense_buffer[4] << 16) +
+          (SCpnt->sense_buffer[5] << 8) +
+          SCpnt->sense_buffer[6] );
+     if ( (cmd_in == MTFSF) || (cmd_in == MTFSFM) )
+       (STp->mt_status)->mt_fileno = fileno - undone ;
+     else if ( (cmd_in == MTBSF) || (cmd_in == MTBSFM) )
+       (STp->mt_status)->mt_fileno = fileno + undone ;
+     else if (cmd_in == MTFSR) {
+       if (blkno >= undone)
+	 STp->drv_block = blkno - undone;
+       else
+	 STp->drv_block = (-1);
+     }
+     else if (cmd_in == MTBSR && blkno >= 0) {
+       if (blkno >= 0)
+	 STp->drv_block = blkno + undone;
+       else
+	 STp->drv_block = (-1);
      }
    }
 
@@ -1294,7 +1480,7 @@ st_ioctl(struct inode * inode,struct file * file,
    dev = dev & 127;
    STp = &(scsi_tapes[dev]);
 #ifdef DEBUG
-   if (!STp->in_use) {
+   if (debugging && !STp->in_use) {
      printk("st%d: Incorrect device.\n", dev);
      return (-EIO);
    }
@@ -1318,7 +1504,11 @@ st_ioctl(struct inode * inode,struct file * file,
      if (i < 0)
        return i;
 
-     return st_int_ioctl(inode, file, mtc.mt_op, mtc.mt_count);
+     if (mtc.mt_op == MTSETDRVBUFFER &&
+	 (mtc.mt_count & MT_ST_OPTIONS) != 0)
+       return st_set_options(inode, mtc.mt_count);
+     else
+       return st_int_ioctl(inode, file, mtc.mt_op, mtc.mt_count);
    }
    else if (cmd == (MTIOCGET & IOCCMD_MASK)) {
 
@@ -1328,13 +1518,29 @@ st_ioctl(struct inode * inode,struct file * file,
      if (i)
        return i;
 
-     memcpy_tofs((char *)arg, (char *)(STp->buffer)->mt_status,
+     (STp->mt_status)->mt_dsreg =
+       ((STp->block_size << MT_ST_BLKSIZE_SHIFT) & MT_ST_BLKSIZE_MASK) |
+       ((STp->density << MT_ST_DENSITY_SHIFT) & MT_ST_DENSITY_MASK);
+     (STp->mt_status)->mt_blkno = STp->drv_block;
+     if (STp->block_size != 0) {
+       if (STp->rw == ST_WRITING)
+	 (STp->mt_status)->mt_blkno +=
+	   (STp->buffer)->buffer_bytes / STp->block_size;
+       else if (STp->rw == ST_READING)
+	 (STp->mt_status)->mt_blkno -= ((STp->buffer)->buffer_bytes +
+	   STp->block_size - 1) / STp->block_size;
+     }
+
+     memcpy_tofs((char *)arg, (char *)(STp->mt_status),
 		 sizeof(struct mtget));
+
+     (STp->mt_status)->mt_erreg = 0;  /* Clear after read */
      return 0;
    }
    else if (cmd == (MTIOCPOS & IOCCMD_MASK)) {
 #ifdef DEBUG
-     printk("st%d: get tape position.\n", dev);
+     if (debugging)
+       printk("st%d: get tape position.\n", dev);
 #endif
      if (((cmd_in & IOCSIZE_MASK) >> IOCSIZE_SHIFT) != sizeof(struct mtpos))
        return (-EINVAL);
@@ -1363,14 +1569,15 @@ st_ioctl(struct inode * inode,struct file * file,
      SCpnt->sense_buffer[0] = 0;
      scsi_do_cmd(SCpnt,
 		 (void *) scmd, (void *) (STp->buffer)->b_data,
-		 ST_BLOCK_SIZE, st_sleep_done, ST_TIMEOUT, MAX_READY_RETRIES);
+		 20, st_sleep_done, ST_TIMEOUT, MAX_READY_RETRIES);
 
      if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
      
      if ((STp->buffer)->last_result_fatal != 0) {
        mt_pos.mt_blkno = (-1);
 #ifdef DEBUG
-       printk("st%d: Can't read tape position.\n", dev);
+       if (debugging)
+	 printk("st%d: Can't read tape position.\n", dev);
 #endif
        result = (-EIO);
      }
@@ -1397,8 +1604,25 @@ st_ioctl(struct inode * inode,struct file * file,
      return scsi_ioctl(STp->device, cmd_in, (void *) arg);
 }
 
-
 
+/* Set the boot options. Syntax: st=xxx,yyy
+   where xxx is buffer size in 512 byte blocks and yyy is write threshold
+   in 512 byte blocks. */
+	void
+st_setup(char *str, int *ints)
+{
+  if (ints[0] > 0 && ints[1] > 0)
+    st_buffer_size = ints[1] * ST_BLOCK_SIZE;
+  if (ints[0] > 1 && ints[2] > 0) {
+    st_write_threshold = ints[2] * ST_BLOCK_SIZE;
+    if (st_write_threshold > st_buffer_size)
+      st_write_threshold = st_buffer_size;
+  }
+  if (ints[0] > 2 && ints[3] > 0)
+    st_max_buffers = ints[3];
+}
+
+
 static struct file_operations st_fops = {
    NULL,            /* lseek - default */
    st_read,         /* read - general block-dev read */
@@ -1426,7 +1650,8 @@ unsigned long st_init1(unsigned long mem_start, unsigned long mem_end){
 /* Driver initialization */
 unsigned long st_init(unsigned long mem_start, unsigned long mem_end)
 {
-  int i;
+  int i, dev_nbr;
+  Scsi_Tape * STp;
 
   if (register_chrdev(MAJOR_NR,"st",&st_fops)) {
     printk("Unable to get major %d for SCSI tapes\n",MAJOR_NR);
@@ -1435,40 +1660,56 @@ unsigned long st_init(unsigned long mem_start, unsigned long mem_end)
   if (NR_ST == 0) return mem_start;
 
 #ifdef DEBUG
-  printk("st: Init tape.\n");
+  printk("st: Buffer size %d bytes, write threshold %d bytes.\n",
+	 st_buffer_size, st_write_threshold);
 #endif
 
-  for (i=0; i < NR_ST; ++i) {
-    scsi_tapes[i].capacity = 0xfffff;
-    scsi_tapes[i].dirty = 0;
-    scsi_tapes[i].rw = ST_IDLE;
-    scsi_tapes[i].eof = ST_NOEOF;
-    scsi_tapes[i].waiting = NULL;
-    scsi_tapes[i].in_use = 0;
-    scsi_tapes[i].drv_buffer = 1;  /* Try buffering if no mode sense */
-    scsi_tapes[i].density = 0;
+  for (i=0, dev_nbr=(-1); i < NR_ST; ++i) {
+    STp = &(scsi_tapes[i]);
+    STp->capacity = 0xfffff;
+    STp->dirty = 0;
+    STp->rw = ST_IDLE;
+    STp->eof = ST_NOEOF;
+    STp->waiting = NULL;
+    STp->in_use = 0;
+    STp->drv_buffer = 1;  /* Try buffering if no mode sense */
+    STp->density = 0;
+    STp->do_buffer_writes = ST_BUFFER_WRITES;
+    STp->do_async_writes = ST_ASYNC_WRITES;
+    STp->do_read_ahead = ST_READ_AHEAD;
+    STp->write_threshold = st_write_threshold;
+    STp->drv_block = 0;
+    STp->mt_status = (struct mtget *) mem_start;
+    mem_start += sizeof(struct mtget);
+    /* Initialize status */
+    memset((void *) scsi_tapes[i].mt_status, 0, sizeof(struct mtget));
+    for (dev_nbr++; dev_nbr < NR_SCSI_DEVICES; dev_nbr++)
+      if (scsi_devices[dev_nbr].type == TYPE_TAPE)
+	break;
+    if (dev_nbr >= NR_SCSI_DEVICES)
+      printk("st%d: ERROR: Not found in scsi chain.\n", i);
+    else {
+      if (scsi_devices[dev_nbr].scsi_level <= 2)
+	STp->mt_status->mt_type = MT_ISSCSI1;
+      else
+	STp->mt_status->mt_type = MT_ISSCSI2;
+    }
   }
 
-
   /* Allocate the buffers */
-  if (NR_ST == 1)
-    st_nbr_buffers = 1;
-  else
-    st_nbr_buffers = 2;
+  st_nbr_buffers = NR_ST;
+  if (st_nbr_buffers > st_max_buffers)
+    st_nbr_buffers = st_max_buffers;
+  st_buffers = (ST_buffer **)mem_start;
+  mem_start += st_nbr_buffers * sizeof(ST_buffer *);
   for (i=0; i < st_nbr_buffers; i++) {
     st_buffers[i] = (ST_buffer *) mem_start;
 #ifdef DEBUG
-    printk("st: Buffer address: %p\n", st_buffers[i]);
+/*    printk("st: Buffer address: %p\n", st_buffers[i]); */
 #endif
-    mem_start += sizeof(ST_buffer) - 1 + ST_BUFFER_BLOCKS * ST_BLOCK_SIZE;
-    st_buffers[i]->mt_status = (struct mtget *) mem_start;
-    mem_start += sizeof(struct mtget);
+    mem_start += sizeof(ST_buffer) - 1 + st_buffer_size;
     st_buffers[i]->in_use = 0;
     st_buffers[i]->writing = 0;
-
-    /* "generic" status */
-    memset((void *) st_buffers[i]->mt_status, 0, sizeof(struct mtget));
-    st_buffers[i]->mt_status->mt_type = MT_ISSCSI1;
   }
 
   return mem_start;

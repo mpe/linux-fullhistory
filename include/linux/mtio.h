@@ -88,6 +88,7 @@ struct	mtget {
 #define MT_ISDDS1		0x51	/* DDS device without partitions */
 #define MT_ISDDS2		0x52	/* DDS device with partitions */
 #define MT_ISSCSI1		0x71	/* Generic ANSI SCSI-1 tape unit */
+#define MT_ISSCSI2		0x72	/* Generic ANSI SCSI-2 tape unit */
 
 struct mt_tape_info {
 	long t_type;		/* device type id (mt_type) */
@@ -106,6 +107,7 @@ struct mt_tape_info {
 	{MT_ISWT5099EEN24,	"Wangtek 5099-een24, 60MB"}, \
 	{MT_ISEVEREX_FT40A,	"Everex FT40A, QIC-40"}, \
 	{MT_ISSCSI1,		"Generic SCSI-1 tape"}, \
+	{MT_ISSCSI2,		"Generic SCSI-2 tape"}, \
 	{0, NULL} \
 }
 
@@ -151,6 +153,23 @@ struct	mtpos {
  * files, rather than blocks. Not used. Not supported.
  * I think DDS drives are DAT drives.
  */
+
+/* SCSI-tape specific definitions */
+#define MT_ST_BLKSIZE_SHIFT	0
+#define MT_ST_BLKSIZE_MASK	0xffffff
+#define MT_ST_DENSITY_SHIFT	24
+#define MT_ST_DENSITY_MASK	0xff000000
+
+#define MT_ST_SOFTERR_SHIFT	0
+#define MT_ST_SOFTERR_MASK	0xffff
+
+#define MT_ST_OPTIONS		0xf0000000
+#define MT_ST_BOOLEANS		0x10000000
+#define MT_ST_WRITE_THRESHOLD	0x20000000
+#define MT_ST_BUFFER_WRITES	0x1
+#define MT_ST_ASYNC_WRITES	0x2
+#define MT_ST_READ_AHEAD	0x4
+#define MT_ST_DEBUGGING		0x8
 
 #endif /* _LINUX_MTIO_H */
 

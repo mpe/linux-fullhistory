@@ -52,6 +52,7 @@
  *		Alan Cox	:	Split socket option code
  *		Alan Cox	:	Callbacks
  *		Alan Cox	:	Nagle flag for Charles & Johannes stuff
+ *		Alex		:	Removed restriction on inet fioctl
  *
  * To Fix:
  *
@@ -86,6 +87,7 @@
 #include "ip.h"
 #include "protocol.h"
 #include "arp.h"
+#include "rarp.h"
 #include "route.h"
 #include "tcp.h"
 #include "udp.h"
@@ -1482,6 +1484,11 @@ inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	case SIOCSARP:
 		return(arp_ioctl(cmd,(void *) arg));
 
+	case SIOCDRARP:
+	case SIOCGRARP:
+	case SIOCSRARP:
+		return(rarp_ioctl(cmd,(void *) arg));
+
 	case SIOCGIFCONF:
 	case SIOCGIFFLAGS:
 	case SIOCSIFFLAGS:
@@ -1701,7 +1708,6 @@ inet_fioctl(struct inode *inode, struct file *file,
 
   /* Extract the minor number on which we work. */
   minor = MINOR(inode->i_rdev);
-  if (minor != 0) return(-ENODEV);
 
   /* Now dispatch on the minor device. */
   switch(minor) {
@@ -1780,7 +1786,7 @@ void inet_proto_init(struct ddi_proto *pro)
 	struct inet_protocol *p;
 	int i;
 
-	printk("Swansea University Computer Society NET3.010\n");
+	printk("Swansea University Computer Society NET3.012\n");
 	/*
 	 *	Set up our UNIX VFS major device. (compatibility)
 	 */
