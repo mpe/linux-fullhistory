@@ -298,8 +298,8 @@ extern int low_on_memory;
 /* memory.c & swap.c*/
 
 #define free_page(addr) free_pages((addr),0)
-extern void FASTCALL(free_pages(unsigned long addr, unsigned long order));
-extern void FASTCALL(__free_page(struct page *));
+extern int FASTCALL(free_pages(unsigned long addr, unsigned long order));
+extern int FASTCALL(__free_page(struct page *));
 
 extern void show_free_areas(void);
 extern unsigned long put_dirty_page(struct task_struct * tsk,unsigned long page,

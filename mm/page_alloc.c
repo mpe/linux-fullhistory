@@ -119,33 +119,33 @@ static inline void free_pages_ok(unsigned long map_nr, unsigned long order)
 	spin_unlock_irqrestore(&page_alloc_lock, flags);
 }
 
-void __free_page(struct page *page)
+int __free_page(struct page *page)
 {
 	if (!PageReserved(page) && put_page_testzero(page)) {
 		if (PageSwapCache(page))
 			PAGE_BUG(page);
 		page->flags &= ~(1 << PG_referenced);
 		free_pages_ok(page - mem_map, 0);
-		return;
+		return 1;
 	}
+	return 0;
 }
 
-void free_pages(unsigned long addr, unsigned long order)
+int free_pages(unsigned long addr, unsigned long order)
 {
 	unsigned long map_nr = MAP_NR(addr);
 
 	if (map_nr < max_mapnr) {
 		mem_map_t * map = mem_map + map_nr;
-		if (PageReserved(map))
-			return;
-		if (put_page_testzero(map)) {
+		if (!PageReserved(map) && put_page_testzero(map)) {
 			if (PageSwapCache(map))
 				PAGE_BUG(map);
 			map->flags &= ~(1 << PG_referenced);
 			free_pages_ok(map_nr, order);
-			return;
+			return 1;
 		}
 	}
+	return 0;
 }
 
 /*

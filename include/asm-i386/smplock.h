@@ -49,6 +49,8 @@ extern __inline__ void lock_kernel(void)
 
 extern __inline__ void unlock_kernel(void)
 {
+	if (current->lock_depth < 0)
+		BUG();
 	__asm__ __volatile__(
 		"decl %1\n\t"
 		"jns 9f\n\t"

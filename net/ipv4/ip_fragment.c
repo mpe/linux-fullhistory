@@ -5,7 +5,7 @@
  *
  *		The IP fragmentation functionality.
  *		
- * Version:	$Id: ip_fragment.c,v 1.41 1999/05/27 00:38:07 davem Exp $
+ * Version:	$Id: ip_fragment.c,v 1.42 1999/06/12 13:11:34 davem Exp $
  *
  * Authors:	Fred N. van Kempen <waltje@uWalt.NL.Mugnet.ORG>
  *		Alan Cox <Alan.Cox@linux.org>
@@ -218,7 +218,7 @@ static void ip_expire(unsigned long arg)
 out:
 	/* Nuke the fragment queue. */
 	ip_free(qp);
-	spin_lock(&ipfrag_lock);
+	spin_unlock(&ipfrag_lock);
 }
 
 /* Memory limiting on fragments.  Evictor trashes the oldest 

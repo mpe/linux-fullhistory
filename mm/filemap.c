@@ -158,6 +158,12 @@ repeat:
 			page->prev = NULL;
 			remove_page_from_hash_queue(page);
 			page->inode = NULL;
+
+			if (page_count(page) == 1) {
+				spin_unlock(&pagecache_lock);
+				PAGE_BUG(page);
+			}
+
 			spin_unlock(&pagecache_lock);
 
 			UnlockPage(page);
@@ -273,9 +279,6 @@ int shrink_mmap(int priority, int gfp_mask)
 
 		/* Is it a buffer page? */
 		if (page->buffers) {
-			if (buffer_under_min())
-				continue;
-
 			if (TryLockPage(page))
 				continue;
 			err = try_to_free_buffers(page);
@@ -446,15 +449,14 @@ void ___wait_on_page(struct page *page)
 	DECLARE_WAITQUEUE(wait, tsk);
 
 	add_wait_queue(&page->wait, &wait);
-repeat:
 	tsk->state = TASK_UNINTERRUPTIBLE;
 	run_task_queue(&tq_disk);
 	if (PageLocked(page)) {
-		int left;
-		left = schedule_timeout(HZ*20);
-		if (!left)
-			PAGE_BUG(page);
-		goto repeat;
+		do {
+			tsk->state = TASK_UNINTERRUPTIBLE;
+			run_task_queue(&tq_disk);
+			schedule();
+		} while (PageLocked(page));
 	}
 	tsk->state = TASK_RUNNING;
 	remove_wait_queue(&page->wait, &wait);

@@ -1139,6 +1139,7 @@ asmlinkage void __init start_kernel(void)
  * Interrupts are still disabled. Do necessary setups, then
  * enable them
  */
+	lock_kernel();
 	printk(linux_banner);
 	setup_arch(&command_line, &memory_start, &memory_end);
 	memory_start = paging_init(memory_start,memory_end);
@@ -1205,6 +1206,7 @@ asmlinkage void __init start_kernel(void)
 	 */
 	smp_init();
 	kernel_thread(init, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
+	unlock_kernel();
 	current->need_resched = 1;
  	cpu_idle(NULL);
 }
