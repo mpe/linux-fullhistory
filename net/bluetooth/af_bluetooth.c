@@ -62,7 +62,7 @@ static struct net_proto_family *bt_proto[BT_MAX_PROTO];
 
 int bt_sock_register(int proto, struct net_proto_family *ops)
 {
-	if (proto >= BT_MAX_PROTO)
+	if (proto < 0 || proto >= BT_MAX_PROTO)
 		return -EINVAL;
 
 	if (bt_proto[proto])
@@ -75,7 +75,7 @@ EXPORT_SYMBOL(bt_sock_register);
 
 int bt_sock_unregister(int proto)
 {
-	if (proto >= BT_MAX_PROTO)
+	if (proto < 0 || proto >= BT_MAX_PROTO)
 		return -EINVAL;
 
 	if (!bt_proto[proto])
@@ -90,7 +90,7 @@ static int bt_sock_create(struct socket *sock, int proto)
 {
 	int err = 0;
 
-	if (proto >= BT_MAX_PROTO)
+	if (proto < 0 || proto >= BT_MAX_PROTO)
 		return -EINVAL;
 
 #if defined(CONFIG_KMOD)
