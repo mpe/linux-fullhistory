@@ -64,9 +64,15 @@
  * work.
  */
 
+/* 1994/6/24 --bbroad-- added the floppy table entries and made
+ * minor modifications to allow 2.88 floppies to be run. 
+ */
+
+
 #define REALLY_SLOW_IO
 #define FLOPPY_IRQ 6
 #define FLOPPY_DMA 2
+#define FDC_FIFO_UNTESTED           /* -bb */
 
 #include <linux/sched.h>
 #include <linux/fs.h>
@@ -77,6 +83,7 @@
 #include <linux/errno.h>
 
 #include <asm/dma.h>
+#include <asm/irq.h>
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/segment.h>
@@ -110,13 +117,14 @@ static unsigned char running = 0;
  * Maximum disk size (in kilobytes). This default is used whenever the
  * current disk size is unknown.
  */
-#define MAX_DISK_SIZE 1440
+#define MAX_DISK_SIZE 2880 /* was 1440 -bb */
 
 /*
  * Maximum number of sectors in a track buffer. Track buffering is disabled
  * if tracks are bigger.
  */
-#define MAX_BUFFER_SECTORS 18
+#define MAX_BUFFER_SECTORS 36 /* was 18 -bb */
+
 
 /*
  * The DMA channel used by the floppy controller cannot access data at
@@ -154,6 +162,8 @@ static struct floppy_struct floppy_type[] = {
 	{  720, 9,2,40,1,0x23,0x01,0xDF,0x50,NULL },	/* 360kB in 1.2MB drive */
 	{ 1440, 9,2,80,0,0x23,0x01,0xDF,0x50,NULL },	/* 720kB in 1.2MB drive */
 	{ 2880,18,2,80,0,0x1B,0x00,0xCF,0x6C,NULL },	/* 1.44MB diskette */
+	{ 5760,36,2,80,0,0x1B,0x43,0xAF,0x54,NULL },	/* 2.88MB diskette */
+	{ 5760,36,2,80,0,0x1B,0x43,0xAF,0x54,NULL },	/* 2.88MB diskette */
 };
 
 /*
@@ -170,6 +180,10 @@ static struct floppy_struct floppy_types[] = {
 	{ 1440, 9,2,80,0,0x2A,0x02,0xDF,0x50,"720k" },	  /* 3.5" 720kB diskette */
 	{ 2880,18,2,80,0,0x1B,0x00,0xCF,0x6C,"1.44M" },	  /* 1.44MB diskette */
 	{ 1440, 9,2,80,0,0x2A,0x02,0xDF,0x50,"720k/AT" }, /* 3.5" 720kB diskette */
+	{ 5760,36,2,80,0,0x1B,0x43,0xAF,0x54,"2.88M-AMI" },   /* DUMMY */ 
+	{ 2880,18,2,80,0,0x1B,0x00,0xCF,0x6C,"1.44M-AMI" },   /* Dummy */
+	{ 5760,36,2,80,0,0x1B,0x43,0xAF,0x54,"2.88M" },   /* 2.88MB diskette */ 
+	{ 2880,18,2,80,0,0x1B,0x40,0xCF,0x6C,"1.44MX" },   /* 1.44MB diskette */ 
 };
 
 /* Auto-detection: Disk type used until the next media change occurs. */
@@ -186,13 +200,14 @@ struct floppy_struct user_params[4];
 
 static int floppy_sizes[] ={
 	MAX_DISK_SIZE, MAX_DISK_SIZE, MAX_DISK_SIZE, MAX_DISK_SIZE,
-	 360, 360 ,360, 360,
+	 360, 360, 360, 360,
 	1200,1200,1200,1200,
 	 360, 360, 360, 360,
 	 720, 720, 720, 720,
 	 360, 360, 360, 360,
 	 720, 720, 720, 720,
-	1440,1440,1440,1440
+	1440,1440,1440,1440,
+	2880,2880,2880,2880           /* -bb */
 };
 
 /*
@@ -269,6 +284,11 @@ extern char tmp_floppy_area[BLOCK_SIZE];
 extern char floppy_track_buffer[512*2*MAX_BUFFER_SECTORS];
 
 static void redo_fd_request(void);
+static void floppy_ready(void);
+static void recalibrate_floppy(void);
+
+static int floppy_grab_irq_and_dma(void);
+static void floppy_release_irq_and_dma(void);
 
 /*
  * These are global variables, as that's the easiest way to give
@@ -290,9 +310,7 @@ static unsigned char track = 0;
 static unsigned char seek_track = 0;
 static unsigned char current_track = NO_TRACK;
 static unsigned char command = 0;
-static unsigned char fdc_version = FDC_TYPE_STD;	/* FDC version code */
-
-static void floppy_ready(void);
+static unsigned char fdc_version = 0x90;	/* FDC version code */
 
 static void select_callback(unsigned long unused)
 {
@@ -794,8 +812,6 @@ static void transfer(void)
  * Special case - used after a unexpected interrupt (or reset)
  */
 
-static void recalibrate_floppy(void);
-
 static void recal_interrupt(void)
 {
 	output_byte(FD_SENSEI);
@@ -1237,7 +1253,7 @@ static struct floppy_struct *find_base(int drive,int code)
 {
 	struct floppy_struct *base;
 
-	if (code > 0 && code < 5) {
+	if (code > 0 && code < 7) {                            /* -bb*/
 		base = &floppy_types[(code-1)*2];
 		printk("fd%d is %s",drive,base->name);
 		return base;
@@ -1273,6 +1289,9 @@ static int floppy_open(struct inode * inode, struct file * filp)
 	int drive;
 	int old_dev;
 
+	if (floppy_grab_irq_and_dma()) {
+		return -EBUSY;
+	}
 	drive = inode->i_rdev & 3;
 	old_dev = fd_device[drive];
 	if (fd_ref[drive])
@@ -1295,6 +1314,7 @@ static void floppy_release(struct inode * inode, struct file * filp)
 		printk("floppy_release with fd_ref == 0");
 		fd_ref[inode->i_rdev & 3] = 0;
 	}
+        floppy_release_irq_and_dma();
 }
 
 static struct file_operations floppy_fops = {
@@ -1360,10 +1380,6 @@ void floppy_init(void)
 	timer_table[FLOPPY_TIMER].fn = floppy_shutdown;
 	timer_active &= ~(1 << FLOPPY_TIMER);
 	config_types();
-	if (irqaction(FLOPPY_IRQ,&floppy_sigaction))
-		printk("Unable to grab IRQ%d for the floppy driver\n", FLOPPY_IRQ);
-	if (request_dma(FLOPPY_DMA))
-		printk("Unable to grab DMA%d for the floppy driver\n", FLOPPY_DMA);
 	/* Try to determine the floppy controller type */
 	DEVICE_INTR = ignore_interrupt;	/* don't ask ... */
 	output_byte(FD_VERSION);	/* get FDC version code */
@@ -1382,9 +1398,31 @@ void floppy_init(void)
 	 * properly, so force a reset for the standard FDC clones,
 	 * to avoid interrupt garbage.
 	 */
-
 	if (fdc_version == FDC_TYPE_STD) {
 		initial_reset_flag = 1;
 		reset_floppy();
 	}
+}
+
+static int floppy_grab_irq_and_dma(void)
+{
+	if (irqaction(FLOPPY_IRQ,&floppy_sigaction)) {
+		printk("Unable to grab IRQ%d for the floppy driver\n", FLOPPY_IRQ);
+		return -1;
+	}
+	if (request_dma(FLOPPY_DMA)) {
+		printk("Unable to grab DMA%d for the floppy driver\n", FLOPPY_DMA);
+		free_irq(FLOPPY_IRQ);
+		return -1;
+	}
+	enable_irq(FLOPPY_IRQ);
+	return 0;
+}
+
+static void floppy_release_irq_and_dma(void)
+{
+	disable_dma(FLOPPY_DMA);
+	free_dma(FLOPPY_DMA);
+	disable_irq(FLOPPY_IRQ);
+	free_irq(FLOPPY_IRQ);
 }

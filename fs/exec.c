@@ -255,13 +255,13 @@ static int aout_core_dump(long signr, struct pt_regs * regs)
 		dump_start = dump.u_tsize << 12;
 		dump_size = dump.u_dsize << 12;
 		DUMP_WRITE(dump_start,dump_size);
-	};
+	}
 /* Now prepare to dump the stack area */
 	if (dump.u_ssize != 0) {
 		dump_start = dump.start_stack;
 		dump_size = dump.u_ssize << 12;
 		DUMP_WRITE(dump_start,dump_size);
-	};
+	}
 /* Finally dump the task struct.  Not be used by gdb, but could be useful */
 	set_fs(KERNEL_DS);
 	DUMP_WRITE(current,sizeof(*current));
@@ -854,8 +854,8 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			if (error != N_TXTADDR(ex)) {
 				sys_close(fd);
 				send_sig(SIGSEGV, current, 0);
-				return 0;
-			};
+				return -EINVAL;
+			}
 		}
 		
  		error = do_mmap(file, N_TXTADDR(ex) + ex.a_text, ex.a_data,
@@ -864,8 +864,8 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		sys_close(fd);
 		if (error != N_TXTADDR(ex) + ex.a_text) {
 			send_sig(SIGSEGV, current, 0);
-			return 0;
-		};
+			return -EINVAL;
+		}
 		current->executable = bprm->inode;
 		bprm->inode->i_count++;
 	}

@@ -1,11 +1,11 @@
-This README belongs to release 1.6 of the SoundBlaster Pro (Matsushita,
+This README belongs to release 2.0 of the SoundBlaster Pro (Matsushita,
 Kotobuki, Panasonic, CreativeLabs) CD-ROM driver for Linux.
 
 The driver is able to drive the whole family of IDE-style
 Matsushita/Kotobuki/Panasonic drives (the "double speed" versions like CR-562
 and CR-563, too), and it will work with the soundcard interfaces (SB Pro,
 SB 16, Galaxy, SoundFX, ...) and/or with the "no-sound" cards (Panasonic
-CI-101P, LaserMate, Aztech, ...).
+CI-101P, LaserMate, WDH-7001C, Aztech, ...).
 It should work too now with the "configurable" interface "Sequoia S-1000",
 which is found on the Spea Media FX sound card.
 The interface type has to get configured in /usr/include/linux/sbpcd.h, 
@@ -16,7 +16,10 @@ but it should work with "old" drives <2.01 ... >3.00 and with "new" drives
 (which count the releases around 0.75 or 1.00).
 
 Up to 4 drives are supported. CR-52x ("old") and CR-56x ("new") drives can be
-mixed, but the CR-521 ones are hard-wired to drive ID 0. 
+mixed, but the CR-521 ones are hard-wired to drive ID 0. The drives have to
+use different drive IDs, and each drive has to get a unique minor number
+(0...3), corresponding to it's drive ID. The drive IDs may be selected freely
+from 0 to 3 - they must not be in consecutive order.
 
 As Don Carroll, don@ds9.us.dell.com or FIDO 1:382/14, told me, it is possible
 to change old drives to any ID, too. He writes in this sense:
@@ -35,16 +38,19 @@ to change old drives to any ID, too. He writes in this sense:
    did not work with other values. If the values are not good,
    ID 3 behaves like ID 0."
 
-The drives have to use different drive IDs, but the same controller (it will
-be a little bit harder to support up to four interface cards -  but I plan to
-do it the day somebody wishes to connect a fifth drive).
-Each drive has to get a unique minor number (0...3), corresponding to it's
-drive ID. The drive IDs may be selected freely from 0 to 3 - they must not be
-in consecutive order.
+To use more than 4 drives (now that the single-speed CR-521's are as cheap as
+50$), you have to "duplicate" the driver. Just copy sbpcd.c into sbpcd2.c and
+change SBPCD_ISSUE accordingly.
 
 The driver supports reading of data from the CD and playing of audio tracks.
 The audio part should run with WorkMan, xcdplayer, with the "non-X11" products
 CDplayer and WorkBone - tell me if it is not compatible with other software.
+
+With the "new" drive family CR-562 and CR-563, the reading of audio frames is
+possible. This is currently implemented by an IOCTL function which reads only
+one frame of 2352 bytes at a time. The transfer rate is as slow as 32 kB/sec.
+This will get better, and the software interface may change. We have to 
+standardize it the day the SCSI driver supports it too.
 
 MultiSession is supported (even my "old" CR-521 can handle it), "ManySession"
 (not recommended, see below) alternatively.
@@ -106,6 +112,10 @@ To install:
    So, if the DOS driver tells you have drive id #3, you have to
         mknod /dev/<any_name> b 25 3
    
+   For a second interface board, you have to make nodes like
+        mknod /dev/sbpcd4 b 26 0
+   and so on. Use the MAJORs 26, 27, 28.
+
    If you further make a link like
         ln -s sbpcd /dev/cdrom
    you can use the name /dev/cdrom, too.
@@ -142,7 +152,12 @@ Those "many-session" CDs can get made by CDROM writers like Philips CDD 521.
 If you enable this feature, it is impossible to read true multisession CDs.
 
 The driver uses the "variable BLOCK_SIZE" feature. To use it, you have to
-specify "block=2048" as a mount option.
+specify "block=2048" as a mount option. Doing this will disable the direct
+execution of a binary from the CD; you have to copy it to a device with the
+standard BLOCK_SIZE (1024) before. So, do not use this if your system is
+directly "running from the CDROM" (like some of YGGDRASIL's installation
+variants). There are CDs on the market (like the german "unifix" Linux
+distribution) which MUST get handled with a block_size of 1024.
 
 
 Auto-probing at boot time:
@@ -199,6 +214,133 @@ The program CDplayer likes to talk to "/dev/mcd" only, xcdplayer wants
 them without the need of supplying parameters.
 
 
+Copying audio tracks:
+---------------------
+
+The following little program will copy track 2 of an audio CD into the file
+"track02":
+
+/*=================== begin program ========================================*/
+/*
+ * read an audio track from a CD
+ *
+ * (c) 1994 Eberhard Moenkeberg <emoenke@gwdg.de>
+ *          may be used & enhanced freely
+ *
+ * Due to non-existent sync bytes at the beginning of each audio frame,
+ * it is currently a kind of fortune if two consecutive frames fit together.
+ * Usually, they overlap, or a little piece is missing. This has to get
+ * fixed by higher-level software (reading until an overlap occurs, and then
+ * eliminate the overlapping bytes). Possibly the first read bytes of each
+ * frame must get discarded because they are read before we got synchronized.
+ * 
+ * This example program further is missing to obtain the SubChannel data
+ * which belong to each frame.
+ */
+#include <stdio.h>
+#include <sys/ioctl.h>
+#include <linux/cdrom.h>
+
+static struct cdrom_tochdr hdr;
+static struct cdrom_tocentry entry[100];
+static struct cdrom_read_audio arg;
+static u_char buffer[CD_FRAMESIZE_RAW];
+static int datafile, drive;
+static int i, j, limit, track, err;
+static char filename[32];
+
+main(int argc, char *argv[])
+{
+/*
+ * open /dev/cdrom
+ */
+  drive=open("/dev/cdrom", 0);
+  if (drive<0)
+    {
+      fprintf(stderr, "can't open drive.\n");
+      exit (-1);
+    }
+/*
+ * get TocHeader
+ */
+  fprintf(stdout, "getting TocHeader...\n");
+  err=ioctl(drive, CDROMREADTOCHDR, &hdr);
+  if (err!=0)
+    {
+      fprintf(stderr, "can't get TocHeader (error %d).\n", err);
+      exit (-1);
+    }
+  else
+    fprintf(stdout, "TocHeader: %d %d\n", hdr.cdth_trk0, hdr.cdth_trk1);
+/*
+ * get and display all TocEntries
+ */
+  fprintf(stdout, "getting TocEntries...\n");
+  for (i=1;i<=hdr.cdth_trk1;i++)
+    {
+      entry[i].cdte_track = i;
+      entry[i].cdte_format = CDROM_LBA;
+      err=ioctl(drive, CDROMREADTOCENTRY, &entry[i]);
+      if (err!=0)
+	{
+	  fprintf(stderr, "can't get TocEntry #%d (error %d).\n", i, err);
+	  exit (-1);
+	}
+      else
+	{
+	  fprintf(stdout, "TocEntry #%d: %1X %1X %06X %02X\n",
+		 entry[i].cdte_track,
+		 entry[i].cdte_adr,
+		 entry[i].cdte_ctrl,
+		 entry[i].cdte_addr.lba,
+		 entry[i].cdte_datamode);
+	}
+    }
+  fprintf(stdout, "got all TocEntries.\n");
+/*
+ * ask for track number (not implemented here)
+ */
+track=2;
+#if 0 /* just read a little piece */
+entry[track].cdte_addr.lba=170;
+entry[track+1].cdte_addr.lba=190;
+#endif
+/*
+ * read track into file
+ */
+  sprintf(filename, "track%02d\0", track);
+  datafile=creat(filename, 0755);
+  if (datafile<0)
+    {
+      fprintf(stderr, "can't open datafile %s.\n", filename);
+      exit (-1);
+    }
+  arg.addr.lba=entry[track].cdte_addr.lba;
+  arg.addr_format=CDROM_LBA; /* CDROM_MSF is still buggy, I know that */
+  arg.nframes=1;
+  arg.buf=&buffer[0];
+  limit=entry[track+1].cdte_addr.lba;
+  for (i=arg.addr.lba;i<limit;i++)
+    {
+      err=ioctl(drive, CDROMREADAUDIO, &arg);
+      if (err!=0)
+	{
+	  fprintf(stderr, "can't read frame #%d (error %d).\n", 
+		 i-entry[track].cdte_addr.lba+1, err);
+	  exit (-1);
+	}
+      j=write(datafile, &buffer[0], CD_FRAMESIZE_RAW);
+      if (j!=CD_FRAMESIZE_RAW)
+	{
+	  fprintf(stderr,"I/O error (datafile) at frame %d\n",
+		 i-entry[track].cdte_addr.lba+1);
+	}
+      arg.addr.lba++;
+    }
+}
+/*===================== end program ========================================*/
+
+
 Known problems:
 ---------------
 
@@ -211,9 +353,6 @@ drives support it), but after an unlock, locking again does not work properly.
 All attempts to read the UPC/EAN code result in a stream of zeroes. All my
 drives are telling there is no UPC/EAN code on disk or there is, but it is an
 all-zero number.
-
-My attempts to read audio tracks like data files are of no success. Contact me,
-if you have an idea, please.
 
 Bug reports, comments, wishes, donations (technical information is a donation,
 too :-) etc. to

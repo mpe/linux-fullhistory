@@ -71,6 +71,7 @@ extern char empty_zero_page[PAGE_SIZE];
 extern int vsprintf(char *,const char *,va_list);
 extern void init(void);
 extern void init_IRQ(void);
+extern void init_modules(void);
 extern long kmalloc_init (long,long);
 extern long blk_dev_init(long,long);
 extern long chr_dev_init(long,long);
@@ -399,6 +400,7 @@ asmlinkage void start_kernel(void)
 	init_IRQ();
 	sched_init();
 	parse_options(command_line);
+	init_modules();
 #ifdef CONFIG_PROFILE
 	prof_buffer = (unsigned long *) memory_start;
 	prof_len = (unsigned long) &end;

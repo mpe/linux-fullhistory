@@ -1,5 +1,7 @@
 /*
  * Dynamic loading of modules into the kernel.
+ *
+ * Modified by Bjorn Ekwall <bj0rn@blox.se>
  */
 
 #ifndef _LINUX_MODULE_H
@@ -16,9 +18,36 @@
 /* maximum length of symbol name */
 #define SYM_MAX_NAME 60
 
+struct kernel_sym { /* sent to "insmod" */
+	unsigned long value;		/* value of symbol */
+	char name[SYM_MAX_NAME];	/* name of symbol */
+};
+
+struct module_ref {
+	struct module *module;
+	struct module_ref *next;
+};
+
+struct internal_symbol {
+	void *addr;
+	char *name;
+	};
+
+struct symbol_table { /* received from "insmod" */
+	int size; /* total, including string table!!! */
+	int n_symbols;
+	int n_refs;
+	struct internal_symbol symbol[0]; /* actual size defined by n_symbols */
+	struct module_ref ref[0]; /* actual size defined by n_refs */
+};
+/*
+ * Note: The string table follows immediately after the symbol table in memory!
+ */
 
 struct module {
 	struct module *next;
+	struct module_ref *ref;	/* the list of modules that refer to me */
+	struct symbol_table *symtab;
 	char *name;
 	int size;			/* size of module in pages */
 	void* addr;			/* address of module */
@@ -26,19 +55,13 @@ struct module {
 	void (*cleanup)(void);		/* cleanup routine */
 };
 
-
 struct mod_routines {
 	int (*init)(void);		/* initialization routine */
 	void (*cleanup)(void);		/* cleanup routine */
 };
 
-
-struct kernel_sym {
-	unsigned long value;		/* value of symbol */
-	char name[SYM_MAX_NAME];	/* name of symbol */
-};
-
-extern struct module *module_list;
+/* rename_module_symbol(old_name, new_name)  WOW! */
+extern int rename_module_symbol(char *, char *);
 
 
 /*

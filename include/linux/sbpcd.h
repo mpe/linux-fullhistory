@@ -10,11 +10,25 @@
  *                                 sbpcd=0x300,LaserMate
  *                             or
  *                                 sbpcd=0x330,SPEA
- * these strings are case sensitive !!!
+ *
+ *  and, if you have a second CDROM controller board,
+ *                                 sbpcd2=0x310,LaserMate
+ *  and so on.
+ *
+ * These strings are case sensitive !!!
  */
 
-/* 
- * change this to select the type of your interface board:
+/*
+ * put your CDROM port base address into CDROM_PORT
+ * and specify the type of your interface in SBPRO.
+ *
+ * SBPRO addresses typically are 0x0230 (=0x220+0x10), 0x0250, ...
+ * LASERMATE (CI-101P) adresses typically are 0x0300, 0x0310, ...
+ * SPEA addresses are 0x320, 0x330, 0x340, 0x350
+ * there are some soundcards on the market with 0x0630, 0x0650, ...
+ *
+ * example: if your SBPRO audio address is 0x220, specify 0x230.
+ *
  *
  * set SBPRO to 1 for "true" SoundBlaster card
  * set SBPRO to 0 for "poor" (no sound) interface cards
@@ -30,26 +44,65 @@
  * (currently I do not know any "compatible" with SBPRO 1)
  * then I can include better information with the next release.
  */
-#define SBPRO     1
-
-/*
- * put your CDROM port base address here:
- * SBPRO addresses typically are 0x0230 (=0x220+0x10), 0x0250, ...
- * LASERMATE (CI-101P) adresses typically are 0x0300, 0x0310, ...
- * SPEA addresses are 0x320, 0x330, 0x340, 0x350
- * there are some soundcards on the market with 0x0630, 0x0650, ...
- *
- * example: if your SBPRO audio address is 0x220, specify 0x230.
- *
- */
+#if !(SBPCD_ISSUE-1) /* first (or if you have only one) interface board: */
 #define CDROM_PORT 0x0230
+#define SBPRO     1
+#endif
 
+/* ignore the rest if you have only one interface board & driver */
+
+#if !(SBPCD_ISSUE-2) /* second interface board: */
+#define CDROM_PORT 0x0370
+#define SBPRO     0
+#endif
+#if !(SBPCD_ISSUE-3) /* third interface board: */
+#define CDROM_PORT 0x0330
+#define SBPRO     0
+#endif
+#if !(SBPCD_ISSUE-4) /* fourth interface board: */
+#define CDROM_PORT 0x0340
+#define SBPRO     0
+#endif
 
 /*==========================================================================*/
 /*==========================================================================*/
 /*
  * nothing to change below here if you are not experimenting
  */
+#ifndef _LINUX_SBPCD_H
+
+#define _LINUX_SBPCD_H
+
+/*==========================================================================*/
+/*==========================================================================*/
+/*
+ * to fork and execute a function after some elapsed time:
+ * one "jifs" unit is 10 msec.
+ */
+#undef MY_TIMER
+#undef SET_TIMER
+#undef CLEAR_TIMER
+
+#if !(SBPCD_ISSUE-1)
+#define MY_TIMER SBPCD_TIMER
+#endif
+#if !(SBPCD_ISSUE-2)
+#define MY_TIMER SBPCD2_TIMER
+#endif
+#if !(SBPCD_ISSUE-3)
+#define MY_TIMER SBPCD3_TIMER
+#endif
+#if !(SBPCD_ISSUE-4)
+#define MY_TIMER SBPCD4_TIMER
+#endif
+
+#define SET_TIMER(func, jifs) \
+        ((timer_table[MY_TIMER].expires = jiffies + jifs), \
+        (timer_table[MY_TIMER].fn = func), \
+        (timer_active |= 1<<MY_TIMER))
+
+#define CLEAR_TIMER	timer_active &= ~(1<<MY_TIMER)
+
 /*==========================================================================*/
 /*==========================================================================*/
 /*
@@ -80,7 +133,8 @@
 #define DBG_LCK		23	/* door (un)lock info */
 #define DBG_SQ 		24	/* dump SubQ frame */
 #define DBG_AUD		25      /* "read audio" debugging */
-#define DBG_000		26      /* unnecessary information */
+#define DBG_SEQ		26      /* Sequoia interface configuration trace */
+#define DBG_000		27      /* unnecessary information */
 
 /*==========================================================================*/
 /*==========================================================================*/
@@ -207,34 +261,13 @@
 #define READ_AU  0x08 /* "audio frame": 2352 bytes per frame */
 
 /*
- * preliminary extensions to cdrom.h for transfering audio frames:
- */
-#define CDROMREADAUDIO 0xE0 /* IOCTL function (arg = &cdrom_aud) */
-
-struct cdrom_aud { u_int lba; /* frame address */
-                   u_char *buf; /* frame buffer (2352 bytes) */
-                 };
-
-/*
  * sense byte: used only if new_drive
  *                  only during cmd 09 00 xx ah al 00 00
  *
  *          values: 00
- *                  82
+ *                  82 "raw audio" mode
  *                  xx from infobuf[0] after 85 00 00 00 00 00 00
  */
-
-
-#define CD_MINS                   75  /* minutes per CD                  */
-#define CD_SECS                   60  /* seconds per minutes             */
-#define CD_FRAMES                 75  /* frames per second               */
-#define CD_FRAMESIZE            2048  /* bytes per frame, data mode      */
-#define CD_FRAMESIZE_XA         2340  /* bytes per frame, "xa" mode      */
-#define CD_FRAMESIZE_RAW        2352  /* bytes per frame, "raw" mode     */
-#define CD_FRAMESIZE_SUB          96  /* subchannel data size            */
-#define CD_BLOCK_OFFSET          150  /* offset of first logical frame   */
-#define CD_XA_HEAD                12  /* header size of XA frame         */
-#define CD_XA_TAIL               280  /* tail size of XA frame           */
 
 /* audio status (bin) */
 #define aud_00 0x00 /* Audio status byte not supported or not valid */
@@ -406,7 +439,6 @@ Read XA Parameter:
 
 /*
  * highest allowed drive number (MINOR+1)
- * currently only one controller, maybe later up to 4
  */
 #define NR_SBPCD 4
 
@@ -431,22 +463,9 @@ Read XA Parameter:
 
 /*==========================================================================*/
 /*
- * to fork and execute a function after some elapsed time:
- * one "jifs" unit is 10 msec.
- */
-#define SET_TIMER(func, jifs) \
-        ((timer_table[SBPCD_TIMER].expires = jiffies + jifs), \
-        (timer_table[SBPCD_TIMER].fn = func), \
-        (timer_active |= 1<<SBPCD_TIMER))
-
-#define CLEAR_TIMER	timer_active &= ~(1<<SBPCD_TIMER)
-
-/*==========================================================================*/
-/*
  * Creative Labs Programmers did this:
  */
 #define MAX_TRACKS	120 /* why more than 99? */
-
 
 /*==========================================================================*/
 /*
@@ -467,3 +486,4 @@ typedef union _blk
 BLK;
 
 /*==========================================================================*/
+#endif _LINUX_SBPCD_H

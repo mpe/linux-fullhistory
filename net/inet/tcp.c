@@ -2030,9 +2030,9 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	rt=ip_rt_route(saddr, NULL,NULL);
 	
 	if(rt!=NULL && (rt->rt_flags&RTF_WINDOW))
-		sk->window_clamp=rt->rt_window;
+		newsk->window_clamp = rt->rt_window;
 	else
-		sk->window_clamp=0;
+		newsk->window_clamp = 0;
 		
 	if (sk->user_mss)
 		newsk->mtu = sk->user_mss;

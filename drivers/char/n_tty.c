@@ -967,9 +967,12 @@ static int normal_select(struct tty_struct * tty, struct inode * inode,
 				return 1;
 			if (tty_hung_up_p(file))
 				return 1;
-			if (!tty->read_wait)
-				tty->minimum_to_wake = MIN_CHAR(tty) ?
-					MIN_CHAR(tty) : 1;
+			if (!tty->read_wait) {
+				if (MIN_CHAR(tty) && !TIME_CHAR(tty))
+					tty->minimum_to_wake = MIN_CHAR(tty);
+				else
+					tty->minimum_to_wake = 1;
+			}
 			select_wait(&tty->read_wait, wait);
 			return 0;
 		case SEL_OUT:

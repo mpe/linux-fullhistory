@@ -2,6 +2,9 @@
  * Herein lies all the functions/variables that are "exported" for linkage
  * with dynamically loaded kernel modules.
  *			Jon.
+ *
+ * Stacked module support and unified symbol table added by
+ * Bjorn Ekwall <bj0rn@blox.se>
  */
 
 #include <linux/autoconf.h>
@@ -16,12 +19,16 @@
 #include <linux/interrupt.h>
 #include <linux/binfmts.h>
 #include <linux/personality.h>
+#include <linux/module.h>
 #ifdef CONFIG_INET
 #include <linux/netdevice.h>
 #endif
+
+#include <asm/irq.h>
   
 extern void *sys_call_table;
 
+/* must match struct internal_symbol !!! */
 #define X(name)	{ (void *) &name, "_" #name }
 
 #ifdef CONFIG_FTAPE
@@ -53,12 +60,14 @@ extern void netif_rx(struct sk_buff *);
 extern int dev_rint(unsigned char *, long, int, struct device *);
 extern void dev_tint(struct device *);
 extern struct device *irq2dev_map[];
+extern void dev_kfree_skb(struct sk_buff *, int);
 #endif
 
-struct {
-	void *addr;
-	const char *name;
-} symbol_table[] = {
+struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
+	{
+	/* stackable module support */
+	X(rename_module_symbol),
+
 	/* system info variables */
 	X(EISA_bus),
 	X(wp_works_ok),
@@ -109,6 +118,8 @@ struct {
 	X(irqaction),
 	X(request_irq),
 	X(free_irq),
+	X(enable_irq),
+	X(disable_irq),
 	X(bh_active),
 	X(bh_mask),
 
@@ -164,7 +175,18 @@ struct {
 	X(dev_rint),
 	X(dev_tint),
 	X(irq2dev_map),
+	X(dev_kfree_skb),
 #endif
+
+	/********************************************************
+	 * Do not add anything below this line,
+	 * as the stacked modules depend on this!
+	 */
+	{ NULL, NULL } /* mark end of table */
+	},
+	{ NULL, NULL } /* no module refs */
 };
 
+/*
 int symbol_table_size = sizeof (symbol_table) / sizeof (symbol_table[0]);
+*/

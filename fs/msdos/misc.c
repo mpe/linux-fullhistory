@@ -18,6 +18,7 @@ static char bin_extensions[] =
   "EXECOMBINAPPSYSDRVOVLOVROBJLIBDLLPIF"	/* program code */
   "ARCZIPLHALZHZOOTARZ  ARJ"	/* common archivers */
   "TZ TAZTZPTPZ"		/* abbreviations of tar.Z and tar.zip */
+  "GZ TGZDEB"			/* .gz, .tar.gz and Debian packages   */
   "GIFBMPTIFGL JPGPCX"		/* graphics */
   "TFMVF GF PK PXLDVI";		/* TeX */
 

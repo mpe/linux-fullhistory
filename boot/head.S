@@ -289,7 +289,7 @@ _tmp_floppy_area:
  * data (18*2*512 bytes).
  */
 _floppy_track_buffer:
-	.fill 512*2*18,1,0
+	.fill 512*2*36,1,0
 
 /* This is the default interrupt "handler" :-) */
 int_msg:
