@@ -1,11 +1,10 @@
 /*
  *  ioctl.c
  *
- *  Copyright (C) 1995 by Volker Lendecke
+ *  Copyright (C) 1995, 1996 by Volker Lendecke
  *
  */
 
-#include <asm/uaccess.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/smb_fs.h>
@@ -13,21 +12,18 @@
 #include <linux/sched.h>
 #include <linux/mm.h>
 
-int
-smb_ioctl (struct inode * inode, struct file * filp,
-           unsigned int cmd, unsigned long arg)
-{
-	int result;
+#include <asm/uaccess.h>
 
-	switch (cmd) {
-        case SMB_IOC_GETMOUNTUID:
-                if ((result = verify_area(VERIFY_WRITE, (uid_t*) arg,
-                                          sizeof(uid_t))) != 0) {
-                        return result;
-                }
-                put_user(SMB_SERVER(inode)->m.mounted_uid, (uid_t*) arg);
-                return 0;
-        default:
+int
+smb_ioctl(struct inode *inode, struct file *filp,
+	  unsigned int cmd, unsigned long arg)
+{
+	switch (cmd)
+	{
+	case SMB_IOC_GETMOUNTUID:
+		return put_user(SMB_SERVER(inode)->m.mounted_uid, (uid_t *) arg);
+
+	default:
 		return -EINVAL;
 	}
 }

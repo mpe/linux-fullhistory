@@ -108,8 +108,7 @@ struct icmpv6hdr {
  *	constants for (set|get)sockopt
  */
 
-#define RAW_CHECKSUM			1
-#define ICMPV6_FILTER			256
+#define ICMPV6_FILTER			1
 
 /*
  *	ICMPV6 filter

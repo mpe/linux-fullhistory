@@ -82,9 +82,8 @@ struct cdrom_device_ops {
 #define CDO_CHECK_TYPE	0x10            /* check type on open for data */
 
 /* Special codes for specifying changer slots. */
-#include <limits.h>
-#define CDSL_NONE       INT_MAX-1
-#define CDSL_CURRENT    INT_MAX
+#define CDSL_NONE       ((int) (~0U>>1)-1)
+#define CDSL_CURRENT    ((int) (~0U>>1))
 
 /* Some more ioctls to control these options */
 #define CDROM_SET_OPTIONS	0x5320

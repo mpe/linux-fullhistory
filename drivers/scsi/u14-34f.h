@@ -5,12 +5,13 @@
 #define _U14_34F_H
 
 int u14_34f_detect(Scsi_Host_Template *);
+int u14_34f_release(struct Scsi_Host *);
 int u14_34f_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int u14_34f_abort(Scsi_Cmnd *);
 int u14_34f_reset(Scsi_Cmnd *, unsigned int);
 int u14_34f_biosparam(Disk *, kdev_t, int *);
 
-#define U14_34F_VERSION "2.20.00"
+#define U14_34F_VERSION "2.30.00"
 
 #define ULTRASTOR_14_34F {                                            \
 		NULL, /* Ptr for modules */                           \
@@ -19,7 +20,7 @@ int u14_34f_biosparam(Disk *, kdev_t, int *);
 		NULL,		                                      \
 		"UltraStor 14F/34F rev. " U14_34F_VERSION " ",        \
 		u14_34f_detect,                                       \
-		NULL, /* Release */                                   \
+		u14_34f_release,                                      \
 		NULL,						      \
 		NULL,                                                 \
 		u14_34f_queuecommand,                                 \

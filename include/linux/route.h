@@ -80,5 +80,6 @@ struct netlink_rtinfo
 #define RTMSG_NEWDEVICE		0x11
 #define RTMSG_DELDEVICE		0x12
 
+#define RTMSG_AR_FAILED		0x21	/* Address Resolution failed	*/
 #endif	/* _LINUX_ROUTE_H */
 

@@ -1,50 +1,55 @@
-This is version 029 of the new AX.25 and NET/ROM code for Linux. It
-incorporates many enhancements since the last release, notably the rewriting
-of the connected mode IP code and the IP over NET/ROM code. The opportunity
-has been taken to add the G8BPQ NET/ROM extensions and to add BPQ Ethernet
-support. The latter has been much eased by the use of the new variable
-length header code by Alan Cox.
+With the version of the AX.25, NET/ROM and Rose protocol stacks provided in
+the Linux kernel from 2.1.9 onwards, a change has occurred in the
+configuration of the protocols. With previous versions such changes were
+made via ioctl calls, but now use is being made of the sysctl interface.
 
-To use the BPQ Ethernet option, first up the ethernet interface in the usual
-manner, the IP address of the interface is not that important but it will
-be required for the ARP table. Next create an ARP entry in the ARP table of
-type ax25 for the interface binding it to an AX.25 callsign, this callsign
-will be the callsign of that interface. By default BPQ Ethernet uses a
-multi-cast address, this implementation does not, instead the standard
-ethernet broadcast address is used. Therefore the NET.CFG file for the
-ODI driver should look similar to this:
+Each AX.25 device will be represented in the directory /proc/sys/net/ax25,
+in the form "dev.parms"  where dev is the device name, eg ax0. In it are a
+string of numbers that represent different values for the different
+parameters, they are: 
 
------------------------------- cut here ------------------------------------
+No.	Name			Meaning				Default
+1	IP Default Mode		0=DG 1=VC			0
+2	AX.25 Default Mode	0=Normal 1=Extended		0
+3	Allow Vanilla Connects	0=No 1=Yes			1
+4	Backoff			0=Linear 1=Exponential		1
+5	Connected Mode		0=No 1=Yes			1
+6	Standard Window		1  <= N <= 7			2
+7	Extended Window		1  <= N <= 63			32
+8	T1 Timeout		1s <= N <= 30s			10s
+9	T2 Timeout		1s <= N <= 20s			3s
+10	T3 Timeout		0s <= N <= 3600s		300s
+11	Idle Timeout		0m <= N				20m
+12	N2			1  <= N <= 31			10
+13	AX.25 MTU		1  <= N <= 512			256
+14	Max Queue		1  <= N <= 20			2
+15	Digipeater Mode		0=None 1=Inband 2=XBand 3=Both	3
 
-LINK SUPPORT
+In the above list T1, T2 and T3 are given in seconds, and the Idle Timeout
+is given in minutes. But please note that the values used in the sysctl
+interface are given in internal units where the time in seconds is
+multiplied by 10, this allows resolution down to 1/10 of a second. With
+timers that are allowed to be zero, eg T3 and Idle, a zero value indicates
+that the timer is disabled. 
 
-	MAX STACKS 1
-	MAX BOARDS 1
+With NET/ROM and Rose protocol stacks, the entries in /proc/sys/net/netrom
+and /proc/sys/net/rose are more obvious. Each file in these directories has
+a name more in keeping with its function, and will not be explained in any
+greater depth here. As with the AX.25 sysctl entries, timers operate with a
+resolution of 100ms and so values should be written accordingly.
 
-LINK DRIVER E2000			; or other MLID to suit your card
+It is possible that the AX.25 sysctl interface will change in the future and
+become more user friendly.
 
-	INT 10				;
-	PORT 300			; to suit your card
+For more information about the AX.25 and NET/ROM protocol stacks, see the
+AX25-HOWTO written by Terry Dawson <terry@perf.no.itg.telstra.com.au> who is
+also the AX.25 Utilities maintainer.
 
-	FRAME ETHERNET_II
+There is an active mailing list for discussing Linux amateur radio matters
+called linux-hams. To subscribe to it, send a message to
+majordomo@vger.rutgers.edu with the words "subscribe linux-hams" in the body
+of the message, the subject field is ignored.
 
-	PROTOCOL BPQ 8FF ETHERNET_II	; required for BPQ - can change PID
+Jonathan G4KLX
 
-BPQPARMS				; optional - only needed if you want
-					; to override the default target addr
-
-	ETH_ADDR  FF:FF:FF:FF:FF:FF	; Target address
-
------------------------------ cut here -------------------------------------
-
-The above configuration assumes that only BPQ Ethernet is being used.
-
-It is not possible to run IP over AX.25 on the BPQ Ethernet port. To simply
-route IP frames to (say) eth0 would create standard ethernet IP frames and
-completely bypass the AX.25 code. However it is possible to use IP over
-NET/ROM across a BPQ Ethernet link, the performance of such a system is
-very acceptable indeed.
-
-Jonathan Naylor G4KLX
-
-g4klx@amsat.org
+jsn@cs.nott.ac.uk

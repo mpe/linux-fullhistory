@@ -27,8 +27,8 @@ if [ "$CONFIG_INET" = "y" ]; then
     fi
   fi
   tristate 'SMB filesystem support (to mount WfW shares etc..)' CONFIG_SMB_FS
-  if [ "$CONFIG_SMB_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
-    bool 'SMB long filename support (EXPERIMENTAL)' CONFIG_SMB_LONG
+  if [ "$CONFIG_SMB_FS" != "n" ]; then
+    bool 'SMB Win95 bug work-around' CONFIG_SMB_WIN95
   fi
 fi
 if [ "$CONFIG_IPX" != "n" ]; then

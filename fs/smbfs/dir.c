@@ -1,7 +1,7 @@
 /*
  *  dir.c
  *
- *  Copyright (C) 1995 by Paal-Kr. Engstad and Volker Lendecke
+ *  Copyright (C) 1995, 1996 by Paal-Kr. Engstad and Volker Lendecke
  *
  */
 
@@ -12,98 +12,70 @@
 #include <linux/malloc.h>
 #include <linux/mm.h>
 #include <linux/smb_fs.h>
-#include <asm/uaccess.h>
+#include <linux/smbno.h>
 #include <linux/errno.h>
 
-#define NAME_OFFSET(de) ((int) ((de)->d_name - (char *) (de)))
-#define ROUND_UP(x) (((x)+3) & ~3)
+#include <asm/uaccess.h>
+#include <asm/semaphore.h>
 
 static long
-smb_dir_read(struct inode *inode, struct file *filp, char *buf, unsigned long count);
-
-static int 
-smb_readdir(struct inode *inode, struct file *filp,
-            void *dirent, filldir_t filldir);
-
-static int 
-get_pname(struct inode *dir, const char *name, int len,
-          char **res_path, int *res_len);
+ smb_dir_read(struct inode *inode, struct file *filp, char *buf, unsigned long count);
 
 static int
-get_pname_static(struct inode *dir, const char *name, int len,
-                 char *path, int *res_len);
-
-static void 
-put_pname(char *path);
+ smb_readdir(struct inode *inode, struct file *filp,
+	     void *dirent, filldir_t filldir);
 
 static struct smb_inode_info *
-smb_find_inode(struct smb_server *server, const char *path);
+ smb_find_dir_inode(struct inode *parent, const char *name, int len);
 
 static int
-smb_lookup(struct inode *dir, const char *__name,
-           int len, struct inode **result);
-
-static int 
-smb_create(struct inode *dir, const char *name, int len, int mode, 
-           struct inode **result);
-
-static int 
-smb_mkdir(struct inode *dir, const char *name, int len, int mode);
-
-static int 
-smb_rmdir(struct inode *dir, const char *name, int len);
+ smb_lookup(struct inode *dir, const char *__name,
+	    int len, struct inode **result);
 
 static int
-smb_unlink(struct inode *dir, const char *name, int len);
+ smb_create(struct inode *dir, const char *name, int len, int mode,
+	    struct inode **result);
 
 static int
-smb_rename(struct inode *old_dir, const char *old_name, int old_len, 
-           struct inode *new_dir, const char *new_name, int new_len,
-           int must_be_dir);
+ smb_mkdir(struct inode *dir, const char *name, int len, int mode);
 
-static inline void str_upper(char *name)
+static int
+ smb_rmdir(struct inode *dir, const char *name, int len);
+
+static int
+ smb_unlink(struct inode *dir, const char *name, int len);
+
+static int
+ smb_rename(struct inode *old_dir, const char *old_name, int old_len,
+	    struct inode *new_dir, const char *new_name, int new_len,
+	    int must_be_dir);
+
+static struct file_operations smb_dir_operations =
 {
-	while (*name) {
-		if (*name >= 'a' && *name <= 'z')
-			*name -= ('a' - 'A');
-		name++;
-	}
-}
-
-static inline void str_lower(char *name)
-{
-	while (*name) {
-		if (*name >= 'A' && *name <= 'Z')
-			*name += ('a' - 'A');
-		name ++;
-	}
-}
-
-static struct file_operations smb_dir_operations = {
-        NULL,			/* lseek - default */
+	NULL,			/* lseek - default */
 	smb_dir_read,		/* read - bad */
 	NULL,			/* write - bad */
 	smb_readdir,		/* readdir */
 	NULL,			/* select - default */
 	smb_ioctl,		/* ioctl - default */
-	NULL,                   /* mmap */
+	NULL,			/* mmap */
 	NULL,			/* no special open code */
 	NULL,			/* no special release code */
 	NULL			/* fsync */
 };
 
-struct inode_operations smb_dir_inode_operations = 
+struct inode_operations smb_dir_inode_operations =
 {
 	&smb_dir_operations,	/* default directory file ops */
 	smb_create,		/* create */
-	smb_lookup,    		/* lookup */
+	smb_lookup,		/* lookup */
 	NULL,			/* link */
-	smb_unlink,    		/* unlink */
+	smb_unlink,		/* unlink */
 	NULL,			/* symlink */
-	smb_mkdir,     		/* mkdir */
-	smb_rmdir,     		/* rmdir */
+	smb_mkdir,		/* mkdir */
+	smb_rmdir,		/* rmdir */
 	NULL,			/* mknod */
-	smb_rename,    		/* rename */
+	smb_rename,		/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
 	NULL,			/* readpage */
@@ -111,9 +83,95 @@ struct inode_operations smb_dir_inode_operations =
 	NULL,			/* bmap */
 	NULL,			/* truncate */
 	NULL,			/* permission */
-	NULL                    /* smap */
+	NULL			/* smap */
 };
 
+static int
+strncasecmp(const char *s1, const char *s2, int len)
+{
+	int result = 0;
+
+	for (; len > 0; len -= 1)
+	{
+		char c1, c2;
+
+		c1 = (*s1 >= 'a' && *s1 <= 'z') ? *s1 - ('a' - 'A') : *s1;
+		c2 = (*s2 >= 'a' && *s2 <= 'z') ? *s2 - ('a' - 'A') : *s2;
+		s1 += 1;
+		s2 += 1;
+
+		if ((result = c1 - c2) != 0 || c1 == 0)
+		{
+			return result;
+		}
+	}
+	return result;
+}
+
+static int
+compare_filename(const struct smb_server *server,
+		 const char *s1, int len, struct smb_dirent *entry)
+{
+	if (len != entry->len)
+	{
+		return 1;
+	}
+	if (server->case_handling == CASE_DEFAULT)
+	{
+		return strncasecmp(s1, entry->name, len);
+	}
+	return strncmp(s1, entry->name, len);
+}
+
+struct smb_inode_info *
+smb_find_inode(struct smb_server *server, ino_t ino)
+{
+	struct smb_inode_info *root = &(server->root);
+	struct smb_inode_info *this = root;
+
+	do
+	{
+		if (ino == smb_info_ino(this))
+		{
+			return this;
+		}
+		this = this->next;
+	}
+	while (this != root);
+
+	return NULL;
+}
+
+static ino_t
+smb_fresh_inodes(struct smb_server *server, int no)
+{
+	static ino_t seed = 1;
+	struct smb_inode_info *root = &(server->root);
+	struct smb_inode_info *this;
+
+      retry:
+	if (seed + no <= no)
+	{
+		/* avoid inode number of 0 at wrap-around */
+		seed += no;
+	}
+	this = root;
+	do
+	{
+		/* We assume that ino_t is unsigned! */
+		if (this->finfo.f_ino - seed < no)
+		{
+			seed += no;
+			goto retry;
+		}
+		this = this->next;
+	}
+	while (this != root);
+
+	seed += no;
+
+	return seed - no;
+}
 
 static long
 smb_dir_read(struct inode *inode, struct file *filp, char *buf, unsigned long count)
@@ -121,166 +179,174 @@ smb_dir_read(struct inode *inode, struct file *filp, char *buf, unsigned long co
 	return -EISDIR;
 }
 
-/*
- * Description:
- *  smb_readdir provides a listing in the form of filling the dirent structure.
- *  Note that dirent resides in the user space. This is to support reading of a
- *  directory "stream". 
- * Notes:
- *     Since we want to reduce directory lookups we revert into a
- *     dircache. It is taken rather directly out of the nfs_readdir.
- */
 
-/* In smbfs, we have unique inodes across all mounted filesystems, for
-   all inodes that are in memory. That's why it's enough to index the
-   directory cache by the inode number. */
+static unsigned long c_ino = 0;
+static kdev_t c_dev;
+static int c_size;
+static int c_seen_eof;
+static int c_last_returned_index;
+static struct smb_dirent *c_entry = NULL;
 
-static unsigned long      c_ino = 0;
-static int                c_size;
-static int                c_seen_eof;
-static int                c_last_returned_index;
-static struct smb_dirent* c_entry = NULL;
+static struct smb_dirent *
+smb_search_in_cache(struct inode *dir, unsigned long f_pos)
+{
+	int i;
+
+	if ((dir->i_dev != c_dev) || (dir->i_ino != c_ino))
+	{
+		return NULL;
+	}
+	for (i = 0; i < c_size; i++)
+	{
+		if (f_pos == c_entry[i].f_pos)
+		{
+			c_last_returned_index = i;
+			return &(c_entry[i]);
+		}
+	}
+	return NULL;
+}
 
 static int
-smb_readdir(struct inode *inode, struct file *filp,
-            void *dirent, filldir_t filldir)
+smb_refill_dir_cache(struct smb_server *server, struct inode *dir,
+		     unsigned long f_pos)
+{
+	int result;
+	static struct semaphore sem = MUTEX;
+	int i;
+	ino_t ino;
+
+	do
+	{
+		down(&sem);
+		result = smb_proc_readdir(server, dir, f_pos,
+					  SMB_READDIR_CACHE_SIZE, c_entry);
+
+		if (result <= 0)
+		{
+			smb_invalid_dir_cache(dir->i_ino);
+			up(&sem);
+			return result;
+		}
+		c_seen_eof = (result < SMB_READDIR_CACHE_SIZE);
+		c_dev = dir->i_dev;
+		c_ino = dir->i_ino;
+		c_size = result;
+		c_last_returned_index = 0;
+
+		ino = smb_fresh_inodes(server, c_size);
+		for (i = 0; i < c_size; i++)
+		{
+			c_entry[i].f_ino = ino;
+			ino += 1;
+		}
+
+		up(&sem);
+
+	}
+	while ((c_dev != dir->i_dev) || (c_ino != dir->i_ino));
+
+	return result;
+}
+
+static int
+smb_readdir(struct inode *dir, struct file *filp,
+	    void *dirent, filldir_t filldir)
 {
 	int result, i = 0;
-        int index = 0;
 	struct smb_dirent *entry = NULL;
-        struct smb_server *server = SMB_SERVER(inode);
+	struct smb_server *server = SMB_SERVER(dir);
 
-	DDPRINTK("smb_readdir: filp->f_pos = %d\n", (int)filp->f_pos);
-	DDPRINTK("smb_readdir: inode->i_ino = %ld, c_ino = %ld\n",
-		 inode->i_ino, c_ino);
+	DPRINTK("smb_readdir: filp->f_pos = %d\n", (int) filp->f_pos);
+	DDPRINTK("smb_readdir: dir->i_ino = %ld, c_ino = %ld\n",
+		 dir->i_ino, c_ino);
 
-	if (!inode || !S_ISDIR(inode->i_mode)) {
-		printk("smb_readdir: inode is NULL or not a directory\n");
+	if ((dir == NULL) || !S_ISDIR(dir->i_mode))
+	{
+		printk("smb_readdir: dir is NULL or not a directory\n");
 		return -EBADF;
 	}
-
-	if (c_entry == NULL) 
+	if (c_entry == NULL)
 	{
-		i = sizeof (struct smb_dirent) * SMB_READDIR_CACHE_SIZE;
-		c_entry = (struct smb_dirent *) smb_kmalloc(i, GFP_KERNEL);
-		if (c_entry == NULL) {
+		i = sizeof(struct smb_dirent) * SMB_READDIR_CACHE_SIZE;
+		c_entry = (struct smb_dirent *) smb_vmalloc(i);
+		if (c_entry == NULL)
+		{
 			printk("smb_readdir: no MEMORY for cache\n");
 			return -ENOMEM;
 		}
-		for (i = 0; i < SMB_READDIR_CACHE_SIZE; i++) {
-			c_entry[i].path =
-                                (char *) smb_kmalloc(SMB_MAXNAMELEN + 1,
-                                                     GFP_KERNEL);
-                        if (c_entry[i].path == NULL) {
-                                DPRINTK("smb_readdir: could not alloc path\n");
-				while (--i>=0)
-					kfree(c_entry[i].path);
-				kfree(c_entry);
-				c_entry = NULL;
-				return -ENOMEM;
-                        }
-                }
 	}
+	if (filp->f_pos == 0)
+	{
+		c_ino = 0;
+		c_dev = 0;
+		c_seen_eof = 0;
 
-        if (filp->f_pos == 0) {
-                smb_invalid_dir_cache(inode->i_ino);
-        }
-
-	if (inode->i_ino == c_ino) {
-		for (i = 0; i < c_size; i++) {
-			if (filp->f_pos == c_entry[i].f_pos) {
-                                entry = &c_entry[i];
-                                c_last_returned_index = i;
-                                index = i;
-                                break;
-			}
+		if (filldir(dirent, ".", 1, filp->f_pos,
+			    smb_info_ino(SMB_INOP(dir))) < 0)
+		{
+			return 0;
 		}
-                if ((entry == NULL) && c_seen_eof)
-                        return 0;
+		filp->f_pos += 1;
 	}
+	if (filp->f_pos == 1)
+	{
+		if (filldir(dirent, "..", 2, filp->f_pos,
+			    smb_info_ino(SMB_INOP(dir)->dir)) < 0)
+		{
+			return 0;
+		}
+		filp->f_pos += 1;
+	}
+	entry = smb_search_in_cache(dir, filp->f_pos);
 
-	if (entry == NULL) {
-		DPRINTK("smb_readdir: Not found in cache.\n");
-		result = smb_proc_readdir(server, inode,
-                                          filp->f_pos, SMB_READDIR_CACHE_SIZE,
-                                          c_entry);
-
-		if (result < 0) {
-			c_ino = 0;
+	if (entry == NULL)
+	{
+		if (c_seen_eof)
+		{
+			/* End of directory */
+			return 0;
+		}
+		result = smb_refill_dir_cache(server, dir, filp->f_pos);
+		if (result <= 0)
+		{
 			return result;
 		}
-
-		if (result > 0) {
-                        c_seen_eof = (result < SMB_READDIR_CACHE_SIZE);
-			c_ino  = inode->i_ino;
-			c_size = result;
-			entry = c_entry;
-                        c_last_returned_index = 0;
-                        index = 0;
-                        for (i = 0; i < c_size; i++) {
-
-                                switch (server->case_handling) 
-                                {
-                                case CASE_UPPER:
-                                        str_upper(c_entry[i].path); break;
-                                case CASE_LOWER:
-                                        str_lower(c_entry[i].path); break;
-                                case CASE_DEFAULT:
-                                        break;
-                                }
-                        }
-		}
+		entry = c_entry;
 	}
+	while (entry < &(c_entry[c_size]))
+	{
+		/* We found it.  For getwd(), we have to return the
+		   correct inode in d_ino if the inode is currently in
+		   use. Otherwise the inode number does not
+		   matter. (You can argue a lot about this..) */
 
-        if (entry == NULL) {
-                /* Nothing found, even from a smb call */
-                return 0;
-        }
+		struct smb_inode_info *ino_info
+		= smb_find_dir_inode(dir, entry->name, entry->len);
 
-        while (index < c_size) {
+		ino_t ino = entry->f_ino;
 
-                /* We found it.  For getwd(), we have to return the
-                   correct inode in d_ino if the inode is currently in
-                   use. Otherwise the inode number does not
-                   matter. (You can argue a lot about this..) */ 
-
-                int path_len;
-                int len;
-                struct smb_inode_info *ino_info;
-                char complete_path[SMB_MAXPATHLEN];
-
-		len = strlen(entry->path);
-                if ((result = get_pname_static(inode, entry->path, len,
-                                               complete_path,
-                                               &path_len)) < 0)
-                        return result;
-
-                ino_info = smb_find_inode(server, complete_path);
-
-                /* Some programs seem to be confused about a zero
-                   inode number, so we set it to one.  Thanks to
-                   Gordon Chaffee for this one. */
-                if (ino_info == NULL) {
-                        ino_info = (struct smb_inode_info *) 1;
-                }
-
-		DDPRINTK("smb_readdir: entry->path = %s\n", entry->path);
+		if (ino_info != NULL)
+		{
+			ino = smb_info_ino(ino_info);
+		}
+		DDPRINTK("smb_readdir: entry->name = %s\n", entry->name);
 		DDPRINTK("smb_readdir: entry->f_pos = %ld\n", entry->f_pos);
 
-                if (filldir(dirent, entry->path, len,
-                            entry->f_pos, (ino_t)ino_info) < 0) {
-                        break;
-                }
-
-                if (   (inode->i_ino != c_ino)
-                    || (entry->f_pos != filp->f_pos)) {
-                        /* Someone has destroyed the cache while we slept
-                           in filldir */
-                        break;
-                }
-                filp->f_pos += 1;
-                index += 1;
-                entry += 1;
+		if (filldir(dirent, entry->name, strlen(entry->name),
+			    entry->f_pos, ino) < 0)
+		{
+			break;
+		}
+		if ((dir->i_dev != c_dev) || (dir->i_ino != c_ino)
+		    || (entry->f_pos != filp->f_pos))
+		{
+			/* Someone has destroyed the cache while we slept
+			   in filldir */
+			break;
+		}
+		filp->f_pos += 1;
+		entry += 1;
 	}
 	return 0;
 }
@@ -288,159 +354,30 @@ smb_readdir(struct inode *inode, struct file *filp,
 void
 smb_init_dir_cache(void)
 {
-        c_ino   = 0;
-        c_entry = NULL;
+	c_ino = 0;
+	c_dev = 0;
+	c_entry = NULL;
 }
 
 void
 smb_invalid_dir_cache(unsigned long ino)
 {
-	if (ino == c_ino) {
-                c_ino = 0;
-                c_seen_eof = 0;
-        }
+	/* TODO: check for dev as well */
+	if (ino == c_ino)
+	{
+		c_ino = 0;
+		c_seen_eof = 0;
+	}
 }
 
 void
 smb_free_dir_cache(void)
 {
-        int i;
-
-        DPRINTK("smb_free_dir_cache: enter\n");
-        
-        if (c_entry == NULL)
-                return;
-
-        for (i = 0; i < SMB_READDIR_CACHE_SIZE; i++) {
-                smb_kfree_s(c_entry[i].path, NAME_MAX + 1);
-        }
-
-        smb_kfree_s(c_entry,
-                    sizeof(struct smb_dirent) * SMB_READDIR_CACHE_SIZE);
-        c_entry = NULL;
-
-        DPRINTK("smb_free_dir_cache: exit\n");
-}
-
-
-/* get_pname_static: it expects the res_path to be a preallocated
-   string of len SMB_MAXPATHLEN. */
-
-static int
-get_pname_static(struct inode *dir, const char *name, int len,
-                 char *path, int *res_len)
-{
-        char *parentname = SMB_INOP(dir)->finfo.path;
-        int   parentlen  = SMB_INOP(dir)->finfo.len;
-
-#if 1
-        if (parentlen != strlen(parentname)) {
-                printk("get_pname: parent->finfo.len = %d instead of %d\n",
-                       parentlen, strlen(parentname));
-                parentlen = strlen(parentname);
-        }
-	
-#endif
-	DDPRINTK("get_pname_static: parentname = %s, len = %d\n",
-                 parentname, parentlen);
-	
-        if (len > SMB_MAXNAMELEN) {
-                return -ENAMETOOLONG;
-        }
-
-	/* Fast cheat for . */
-	if (len == 0 || (len == 1 && name[0] == '.')) {
-
-		memcpy(path, parentname, parentlen + 1);
-		*res_len = parentlen;
-		return 0;
-	}
-	
-	/* Hmm, what about .. ? */
-	if (len == 2 && name[0] == '.' && name[1] == '.') {
-
-		char *pos = strrchr(parentname, '\\');
-
-                if (   (pos == NULL)
-                    && (parentlen == 0)) {
-
-                        /* We're at the top */
-
-                        path[0] = '\\';
-                        path[1] = '\0';
-                        *res_len  = 2;
-                        return 0;
-                }
-                        
-                
-		if (pos == NULL) {
-			printk("smb_make_name: Bad parent SMB-name: %s",
-                               parentname);
-			return -ENODATA;
-		}
-		
-		len = pos - parentname;
-
-	        memcpy(path, parentname, len);
-		path[len] = '\0';
-	}
-	else
+	if (c_entry != NULL)
 	{
-		if (len + parentlen + 2 > SMB_MAXPATHLEN) 
-			return -ENAMETOOLONG;
-				
-		memcpy(path, parentname, parentlen);
-		path[parentlen] = '\\';
-		memcpy(path + parentlen + 1, name, len);
-		path[parentlen + 1 + len] = '\0';
-		len = parentlen + len + 1;
+		smb_vfree(c_entry);
 	}
-
-	switch (SMB_SERVER(dir)->case_handling) 
-	{
-        case CASE_UPPER: 
-                str_upper(path); 
-                break;
-        case CASE_LOWER: 
-                str_lower(path); 
-                break;
-        case CASE_DEFAULT: 
-                break;
-	}
-
-	*res_len = len;
-
-	DDPRINTK("get_pname: path = %s, *pathlen = %d\n",
-                 path, *res_len);
-	return 0;
-}
-        
-static int 
-get_pname(struct inode *dir, const char *name, int len,
-          char **res_path, int *res_len)
-{
-        char result[SMB_MAXPATHLEN];
-        int  result_len;
-        int  res;
-
-        if ((res = get_pname_static(dir,name,len,result,&result_len) != 0)) {
-                return res;
-        }
-
-        if ((*res_path = smb_kmalloc(result_len+1, GFP_KERNEL)) == NULL) {
-                printk("get_pname: Out of memory while allocating name.");
-                return -ENOMEM;
-        }
-
-        strcpy(*res_path, result);
-        *res_len = result_len;
-        return 0;
-}
-
-static void
-put_pname(char *path)
-{
-	smb_kfree_s(path, 0);
+	c_entry = NULL;
 }
 
 /* Insert a NEW smb_inode_info into the inode tree of our filesystem,
@@ -448,45 +385,35 @@ put_pname(char *path)
    assume that path is allocated for us. */
 
 static struct inode *
-smb_iget(struct inode *dir, char *path, struct smb_dirent *finfo,
-	 struct smb_inode_info *new_inode_info)
+smb_iget(struct inode *dir, struct smb_inode_info *new_inode_info)
 {
 	struct inode *inode;
-	int len;
-        struct smb_inode_info *root;
+	struct smb_inode_info *root;
 
-	if (   (dir == NULL) || (path == NULL) || (finfo == NULL)
-	    || (new_inode_info == NULL))
+	if ((dir == NULL) || (new_inode_info == NULL))
 	{
 		printk("smb_iget: parameter is NULL\n");
 		return NULL;
 	}
+	new_inode_info->state = SMB_INODE_LOOKED_UP;
+	new_inode_info->nused = 0;
+	new_inode_info->dir = SMB_INOP(dir);
 
-        len = strlen(path);
+	SMB_INOP(dir)->nused += 1;
 
-        new_inode_info->state = SMB_INODE_LOOKED_UP;
-        new_inode_info->nused = 0;
-        new_inode_info->dir   = SMB_INOP(dir);
+	/* We have to link the new inode_info into the doubly linked
+	   list of inode_infos to make a complete linear search
+	   possible. */
 
-        new_inode_info->finfo        = *finfo;
-        new_inode_info->finfo.opened = 0;
-        new_inode_info->finfo.path   = path;
-        new_inode_info->finfo.len    = len;
+	root = &(SMB_SERVER(dir)->root);
 
-        SMB_INOP(dir)->nused += 1;
+	new_inode_info->prev = root;
+	new_inode_info->next = root->next;
+	root->next->prev = new_inode_info;
+	root->next = new_inode_info;
 
-        /* We have to link the new inode_info into the doubly linked
-           list of inode_infos to make a complete linear search
-           possible. */
-
-        root = &(SMB_SERVER(dir)->root);
-
-        new_inode_info->prev = root;
-        new_inode_info->next = root->next;
-        root->next->prev = new_inode_info;
-        root->next = new_inode_info;
-        
-	if (!(inode = iget(dir->i_sb, (int)new_inode_info))) {
+	if (!(inode = iget(dir->i_sb, smb_info_ino(new_inode_info))))
+	{
 		new_inode_info->next->prev = new_inode_info->prev;
 		new_inode_info->prev->next = new_inode_info->next;
 		SMB_INOP(dir)->nused -= 1;
@@ -494,337 +421,327 @@ smb_iget(struct inode *dir, char *path, struct smb_dirent *finfo,
 		printk("smb_iget: iget failed!");
 		return NULL;
 	}
-
 	return inode;
 }
 
 void
 smb_free_inode_info(struct smb_inode_info *i)
 {
-        if (i == NULL) {
-                printk("smb_free_inode: i == NULL\n");
-                return;
-        }
+	if (i == NULL)
+	{
+		printk("smb_free_inode: i == NULL\n");
+		return;
+	}
+	i->state = SMB_INODE_CACHED;
+	while ((i->nused == 0) && (i->state == SMB_INODE_CACHED))
+	{
+		struct smb_inode_info *dir = i->dir;
 
-        i->state = SMB_INODE_CACHED;
-        while ((i->nused == 0) && (i->state == SMB_INODE_CACHED)) {
-                struct smb_inode_info *dir = i->dir;
+		i->next->prev = i->prev;
+		i->prev->next = i->next;
 
-                i->next->prev = i->prev;
-                i->prev->next = i->next;
+		smb_kfree_s(i, sizeof(struct smb_inode_info));
 
-                smb_kfree_s(i->finfo.path, i->finfo.len+1);
-                smb_kfree_s(i, sizeof(struct smb_inode_info));
-
-                if (dir == NULL) return;
-
-                (dir->nused)--;
-                i = dir;
-        }
+		if (dir == NULL)
+		{
+			return;
+		}
+		dir->nused -= 1;
+		i = dir;
+	}
 }
-        
+
 void
 smb_init_root(struct smb_server *server)
 {
-        struct smb_inode_info *root = &(server->root);
+	struct smb_inode_info *root = &(server->root);
 
-        root->finfo.path = server->m.root_path;
-        root->finfo.len  = strlen(root->finfo.path);
-        root->finfo.opened = 0;
+	root->state = SMB_INODE_LOOKED_UP;
+	root->nused = 1;
+	root->dir = NULL;
+	root->next = root->prev = root;
 
-        root->state = SMB_INODE_LOOKED_UP;
-        root->nused = 1;
-        root->dir   = NULL;
-        root->next = root->prev = root;
-        return;
-}
-
-int
-smb_stat_root(struct smb_server *server)
-{
-        struct smb_inode_info *root = &(server->root);
-        int result;
-
-        if (root->finfo.len == 0) {
-                result = smb_proc_getattr(server, "\\", 1, &(root->finfo));
-        }
-        else
-        {
-                result = smb_proc_getattr(server, 
-                                          root->finfo.path, root->finfo.len,
-                                          &(root->finfo));
-        }
-        return result;
+	return;
 }
 
 void
 smb_free_all_inodes(struct smb_server *server)
 {
-        /* Here nothing should be to do. I do not know whether it's
-           better to leave some memory allocated or be stuck in an
-           endless loop */
+	/* Here nothing should be to do. I do not know whether it's
+	   better to leave some memory allocated or be stuck in an
+	   endless loop */
 #if 1
-        struct smb_inode_info *root = &(server->root);
+	struct smb_inode_info *root = &(server->root);
 
-        if (root->next != root) {
-                printk("smb_free_all_inodes: INODES LEFT!!!\n");
-        }
+	if (root->next != root)
+	{
+		printk("smb_free_all_inodes: INODES LEFT!!!\n");
+	}
+	while (root->next != root)
+	{
+		printk("smb_free_all_inodes: freeing inode\n");
+		smb_free_inode_info(root->next);
+		/* In case we have an endless loop.. */
+		schedule();
+	}
+#endif
 
-        while (root->next != root) {
-                printk("smb_free_all_inodes: freeing inode\n");
-                smb_free_inode_info(root->next);
-                /* In case we have an endless loop.. */
-                schedule();
-        }
-#endif        
-        
-        return;
+	return;
 }
 
 /* This has to be called when a connection has gone down, so that all
    file-handles we got from the server are invalid */
-
 void
 smb_invalidate_all_inodes(struct smb_server *server)
 {
-        struct smb_inode_info *ino = &(server->root);
+	struct smb_inode_info *ino = &(server->root);
 
-        do {
-                ino->finfo.opened = 0;
-                ino = ino->next;
-        } while (ino != &(server->root));
-        
-        return;
+	do
+	{
+		ino->finfo.opened = 0;
+		ino = ino->next;
+	}
+	while (ino != &(server->root));
+
+	return;
 }
-        
 
 /* We will search the inode that belongs to this name, currently by a
    complete linear search through the inodes belonging to this
    filesystem. This has to be fixed. */
-
 static struct smb_inode_info *
-smb_find_inode(struct smb_server *server, const char *path)
+smb_find_dir_inode(struct inode *parent, const char *name, int len)
 {
-        struct smb_inode_info *result = &(server->root);
+	struct smb_server *server = SMB_SERVER(parent);
+	struct smb_inode_info *dir = SMB_INOP(parent);
+	struct smb_inode_info *result = &(server->root);
 
-        if (path == NULL)
-                return NULL;
+	if (name == NULL)
+	{
+		return NULL;
+	}
+	if ((len == 1) && (name[0] == '.'))
+	{
+		return dir;
+	}
+	if ((len == 2) && (name[0] == '.') && (name[1] == '.'))
+	{
+		return dir->dir;
+	}
+	do
+	{
+		if (result->dir == dir)
+		{
+			if (compare_filename(server, name, len,
+					     &(result->finfo)) == 0)
+			{
+				return result;
+			}
+		}
+		result = result->next;
+	}
+	while (result != &(server->root));
 
-        do {
-                if (strcmp(result->finfo.path, path) == 0)
-                        return result;
-                result = result->next;
-
-        } while (result != &(server->root));
-
-        return NULL;
+	return NULL;
 }
 
-
-static int 
-smb_lookup(struct inode *dir, const char *__name, int len,
-           struct inode **result)
+static int
+smb_lookup(struct inode *dir, const char *name, int len,
+	   struct inode **result)
 {
-	char *name = NULL;
 	struct smb_dirent finfo;
-        struct smb_inode_info *result_info;
+	struct smb_inode_info *result_info;
 	int error;
-        int found_in_cache;
+	int found_in_cache;
 
 	struct smb_inode_info *new_inode_info = NULL;
 
 	*result = NULL;
 
-	if (!dir || !S_ISDIR(dir->i_mode)) {
+	if (!dir || !S_ISDIR(dir->i_mode))
+	{
 		printk("smb_lookup: inode is NULL or not a directory.\n");
 		iput(dir);
 		return -ENOENT;
 	}
-
-        DDPRINTK("smb_lookup: %s\n", __name);
+	DDPRINTK("smb_lookup: %s\n", name);
 
 	/* Fast cheat for . */
-	if (len == 0 || (len == 1 && __name[0] == '.')) {
+	if (len == 0 || (len == 1 && name[0] == '.'))
+	{
 		*result = dir;
 		return 0;
 	}
+	/* ..and for .. */
+	if (len == 2 && name[0] == '.' && name[1] == '.')
+	{
+		struct smb_inode_info *parent = SMB_INOP(dir)->dir;
 
-	/* Now we will have to build up an SMB filename. */
-	if ((error = get_pname(dir, __name, len, &name, &len)) < 0) {
+		if (parent->state == SMB_INODE_CACHED)
+		{
+			parent->state = SMB_INODE_LOOKED_UP;
+		}
+		*result = iget(dir->i_sb, smb_info_ino(parent));
 		iput(dir);
-		return error;
+		if (*result == 0)
+		{
+			return -EACCES;
+		}
+		return 0;
 	}
+	result_info = smb_find_dir_inode(dir, name, len);
 
-        result_info = smb_find_inode(SMB_SERVER(dir), name);
-
-in_tree:
-        if (result_info != NULL) {
-                if (result_info->state == SMB_INODE_CACHED)
-                        result_info->state = SMB_INODE_LOOKED_UP;
-
-                /* Here we convert the inode_info address into an
-                   inode number */
-
-                *result = iget(dir->i_sb, (int)result_info);
+      in_tree:
+	if (result_info != NULL)
+	{
+		if (result_info->state == SMB_INODE_CACHED)
+		{
+			result_info->state = SMB_INODE_LOOKED_UP;
+		}
+		*result = iget(dir->i_sb, smb_info_ino(result_info));
+		iput(dir);
 
 		if (new_inode_info != NULL)
 		{
 			smb_kfree_s(new_inode_info,
 				    sizeof(struct smb_inode_info));
 		}
-			
-                put_pname(name);
-                iput(dir);
-
-		if (*result == NULL) {
+		if (*result == NULL)
+		{
 			return -EACCES;
 		}
 		return 0;
-        }
+	}
+	/* If the file is in the dir cache, we do not have to ask the
+	   server. */
+	found_in_cache = 0;
 
-	/* Ok, now we have made our name. We have to build a new
-           smb_inode_info struct and insert it into the tree, if it is
-           a name that exists on the server */
+	if ((dir->i_dev == c_dev) && (dir->i_ino == c_ino) && (c_size != 0))
+	{
+		int first = c_last_returned_index;
+		int i;
 
-        /* If the file is in the dir cache, we do not have to ask the
-           server. */
-
-        found_in_cache = 0;
-        
-        if (dir->i_ino == c_ino) {
-                int first = c_last_returned_index;
-                int i;
-
-                i = first;
-                do {
-                        DDPRINTK("smb_lookup: trying index: %d, name: %s\n",
-                                i, c_entry[i].path);
-                        if (strcmp(c_entry[i].path, __name) == 0) {
-                                DPRINTK("smb_lookup: found in cache!\n");
-                                finfo = c_entry[i];
-                                finfo.path = NULL; /* It's not ours! */
-                                found_in_cache = 1;
-                                break;
-                        }
-                        i = (i + 1) % c_size;
-                        DDPRINTK("smb_lookup: index %d, name %s failed\n",
-                                 i, c_entry[i].path);
-                } while (i != first);
-        }
-
-        if (found_in_cache == 0) {
-                error = smb_proc_getattr(SMB_SERVER(dir), name, len, &finfo);
-                if (error < 0) {
-                        put_pname(name);
-                        iput(dir);
-                        return error;
-                }
-        }
-
+		i = first;
+		do
+		{
+			if (compare_filename(SMB_SERVER(dir), name, len,
+					     &(c_entry[i])) == 0)
+			{
+				finfo = c_entry[i];
+				found_in_cache = 1;
+				break;
+			}
+			i = (i + 1) % c_size;
+		}
+		while (i != first);
+	}
+	if (found_in_cache == 0)
+	{
+		DPRINTK("smb_lookup: not found in cache: %s\n", name);
+		if (len > SMB_MAXNAMELEN)
+		{
+			iput(dir);
+			return -ENAMETOOLONG;
+		}
+		error = smb_proc_getattr(dir, name, len, &finfo);
+		if (error < 0)
+		{
+			iput(dir);
+			return error;
+		}
+		finfo.f_ino = smb_fresh_inodes(SMB_SERVER(dir), 1);
+	}
 	new_inode_info = smb_kmalloc(sizeof(struct smb_inode_info),
 				     GFP_KERNEL);
 
 	/* Here somebody else might have inserted the inode */
-	result_info = smb_find_inode(SMB_SERVER(dir), name);
+
+	result_info = smb_find_dir_inode(dir, name, len);
 	if (result_info != NULL)
 	{
 		goto in_tree;
 	}
+	new_inode_info->finfo = finfo;
 
-	if ((*result = smb_iget(dir, name, &finfo, new_inode_info)) == NULL)
+	DPRINTK("attr: %x\n", finfo.attr);
+
+	if ((*result = smb_iget(dir, new_inode_info)) == NULL)
 	{
 		smb_kfree_s(new_inode_info, sizeof(struct smb_inode_info));
-		put_pname(name);
 		iput(dir);
 		return -EACCES;
 	}
-
-        DDPRINTK("smb_lookup: %s => %lu\n", name, (unsigned long)result_info);
+	DDPRINTK("smb_lookup: %s => %lu\n", name, (unsigned long) result_info);
 	iput(dir);
 	return 0;
 }
 
-static int 
+static int
 smb_create(struct inode *dir, const char *name, int len, int mode,
-           struct inode **result)
+	   struct inode **result)
 {
 	int error;
-	char *path = NULL;
 	struct smb_dirent entry;
 	struct smb_inode_info *new_inode_info;
 
 	*result = NULL;
 
-	if (!dir || !S_ISDIR(dir->i_mode)) {
+	if (!dir || !S_ISDIR(dir->i_mode))
+	{
 		printk("smb_create: inode is NULL or not a directory\n");
 		iput(dir);
 		return -ENOENT;
 	}
-
-	/* Now we will have to build up an SMB filename. */
-	if ((error = get_pname(dir, name, len, &path, &len)) < 0) {
-		iput(dir);
-		return error;
-	}
-
 	new_inode_info = smb_kmalloc(sizeof(struct smb_inode_info),
 				     GFP_KERNEL);
 	if (new_inode_info == NULL)
 	{
-		put_pname(path);
 		iput(dir);
 		return -ENOMEM;
 	}
-
-        entry.attr  = 0;
-        entry.ctime = CURRENT_TIME;
-        entry.atime = CURRENT_TIME;
-        entry.mtime = CURRENT_TIME;
-        entry.size  = 0;
-
-        error = smb_proc_create(SMB_SERVER(dir), path, len, &entry);
-	if (error < 0) {
+	error = smb_proc_create(dir, name, len, 0, CURRENT_TIME);
+	if (error < 0)
+	{
 		smb_kfree_s(new_inode_info, sizeof(struct smb_inode_info));
-		put_pname(path);
 		iput(dir);
 		return error;
 	}
+	smb_invalid_dir_cache(dir->i_ino);
 
-        smb_invalid_dir_cache(dir->i_ino);
-
-	if ((*result = smb_iget(dir, path, &entry, new_inode_info)) == NULL)
+	if ((error = smb_proc_getattr(dir, name, len, &entry)) < 0)
 	{
 		smb_kfree_s(new_inode_info, sizeof(struct smb_inode_info));
-		put_pname(path);
+		iput(dir);
+		return error;
+	}
+	entry.f_ino = smb_fresh_inodes(SMB_SERVER(dir), 1);
+
+	new_inode_info->finfo = entry;
+
+	if ((*result = smb_iget(dir, new_inode_info)) == NULL)
+	{
+		smb_kfree_s(new_inode_info, sizeof(struct smb_inode_info));
 		iput(dir);
 		return error;
 	}
 	iput(dir);
-	return 0;	
+	return 0;
 }
 
 static int
 smb_mkdir(struct inode *dir, const char *name, int len, int mode)
 {
 	int error;
-	char path[SMB_MAXPATHLEN];
 
-	if (!dir || !S_ISDIR(dir->i_mode)) {
-		printk("smb_mkdir: inode is NULL or not a directory\n");
+	if (!dir || !S_ISDIR(dir->i_mode))
+	{
 		iput(dir);
-		return -ENOENT;
+		return -EINVAL;
 	}
-
-	/* Now we will have to build up an SMB filename. */
-	if ((error = get_pname_static(dir, name, len, path, &len)) < 0) {
-		iput(dir);
-		return error;
+	if ((error = smb_proc_mkdir(dir, name, len)) == 0)
+	{
+		smb_invalid_dir_cache(dir->i_ino);
 	}
-
-	if ((error = smb_proc_mkdir(SMB_SERVER(dir), path, len)) == 0) {
-                smb_invalid_dir_cache(dir->i_ino);
-        }
-
 	iput(dir);
 	return error;
 }
@@ -833,23 +750,23 @@ static int
 smb_rmdir(struct inode *dir, const char *name, int len)
 {
 	int error;
-        char path[SMB_MAXPATHLEN];
 
-	if (!dir || !S_ISDIR(dir->i_mode)) {
+	if (!dir || !S_ISDIR(dir->i_mode))
+	{
 		printk("smb_rmdir: inode is NULL or not a directory\n");
 		iput(dir);
 		return -ENOENT;
 	}
-	if ((error = get_pname_static(dir, name, len, path, &len)) < 0) {
-		iput(dir);
-		return error;
+	if (smb_find_dir_inode(dir, name, len) != NULL)
+	{
+		error = -EBUSY;
+	} else
+	{
+		if ((error = smb_proc_rmdir(dir, name, len)) == 0)
+		{
+			smb_invalid_dir_cache(dir->i_ino);
+		}
 	}
-        if (smb_find_inode(SMB_SERVER(dir), path) != NULL) {
-                error = -EBUSY;
-        } else {
-                if ((error = smb_proc_rmdir(SMB_SERVER(dir), path, len)) == 0)
-                        smb_invalid_dir_cache(dir->i_ino);
-        }
 	iput(dir);
 	return error;
 }
@@ -858,82 +775,72 @@ static int
 smb_unlink(struct inode *dir, const char *name, int len)
 {
 	int error;
-	char path[SMB_MAXPATHLEN];
 
-	if (!dir || !S_ISDIR(dir->i_mode)) {
+	if (!dir || !S_ISDIR(dir->i_mode))
+	{
 		printk("smb_unlink: inode is NULL or not a directory\n");
 		iput(dir);
 		return -ENOENT;
 	}
-	if ((error = get_pname_static(dir, name, len, path, &len)) < 0) {
-		iput(dir);
-		return error;
+	if (smb_find_dir_inode(dir, name, len) != NULL)
+	{
+		error = -EBUSY;
+	} else
+	{
+		if ((error = smb_proc_unlink(dir, name, len)) == 0)
+		{
+			smb_invalid_dir_cache(dir->i_ino);
+		}
 	}
-        if (smb_find_inode(SMB_SERVER(dir), path) != NULL) {
-                error = -EBUSY;
-        } else {
-                if ((error = smb_proc_unlink(SMB_SERVER(dir), path, len)) == 0)
-                        smb_invalid_dir_cache(dir->i_ino);
-        }
 	iput(dir);
 	return error;
 }
 
 static int
 smb_rename(struct inode *old_dir, const char *old_name, int old_len,
-           struct inode *new_dir, const char *new_name, int new_len,
-           int must_be_dir)
+	   struct inode *new_dir, const char *new_name, int new_len,
+	   int must_be_dir)
 {
 	int res;
-	char old_path[SMB_MAXPATHLEN], new_path[SMB_MAXPATHLEN];
 
-	if (!old_dir || !S_ISDIR(old_dir->i_mode)) {
+	if (!old_dir || !S_ISDIR(old_dir->i_mode))
+	{
 		printk("smb_rename: old inode is NULL or not a directory\n");
-                res = -ENOENT;
-                goto finished;
+		res = -ENOENT;
+		goto finished;
 	}
-
-	if (!new_dir || !S_ISDIR(new_dir->i_mode)) {
+	if (!new_dir || !S_ISDIR(new_dir->i_mode))
+	{
 		printk("smb_rename: new inode is NULL or not a directory\n");
-                res = -ENOENT;
-                goto finished;
+		res = -ENOENT;
+		goto finished;
 	}
-
-        res = get_pname_static(old_dir, old_name, old_len, old_path, &old_len);
-        if (res < 0) {
-                goto finished;
+	if ((smb_find_dir_inode(old_dir, old_name, old_len) != NULL)
+	    || (smb_find_dir_inode(new_dir, new_name, new_len) != NULL))
+	{
+		res = -EBUSY;
+		goto finished;
 	}
+	res = smb_proc_mv(old_dir, old_name, old_len,
+			  new_dir, new_name, new_len);
 
-        res = get_pname_static(new_dir, new_name, new_len, new_path, &new_len);
-	if (res < 0) {
-                goto finished;
-	}
-	
-        if (   (smb_find_inode(SMB_SERVER(old_dir), old_path) != NULL)
-            || (smb_find_inode(SMB_SERVER(new_dir), new_path) != NULL)) {
-                res = -EBUSY;
-                goto finished;
-        }
+	if (res == -EEXIST)
+	{
+		int res1 = smb_proc_unlink(old_dir, new_name, new_len);
 
-	res = smb_proc_mv(SMB_SERVER(old_dir), old_path, old_len,
-                          new_path, new_len);
-
-	if (res == -EEXIST) {
-		int res1;
-		res1 = smb_proc_unlink(SMB_SERVER(old_dir), new_path, new_len);
-		if (res1 == 0) {
-			res = smb_proc_mv(SMB_SERVER(old_dir), old_path,
-					  old_len, new_path, new_len);
+		if (res1 == 0)
+		{
+			res = smb_proc_mv(old_dir, old_name, old_len,
+					  new_dir, new_name, new_len);
 		}
 	}
-
-        if (res == 0) {
-                smb_invalid_dir_cache(old_dir->i_ino);
-                smb_invalid_dir_cache(new_dir->i_ino);
-        }		
-	
- finished:
-	iput(old_dir); 
+	if (res == 0)
+	{
+		smb_invalid_dir_cache(old_dir->i_ino);
+		smb_invalid_dir_cache(new_dir->i_ino);
+	}
+      finished:
+	iput(old_dir);
 	iput(new_dir);
 	return res;
 }

@@ -69,7 +69,7 @@ struct net_local
 
 extern int		wavelan_probe(device *);	/* See Space.c */
 
-static const char	*version	= "wavelan.c:v8 96/8/18\n";
+static const char	*version	= "wavelan.c:v9 96/11/17\n";
 
 /*
  * Entry point forward declarations.
@@ -881,7 +881,11 @@ wavelan_probe1(device *dev, unsigned short ioaddr)
 		||
 		psa.psa_univ_mac_addr[1] != SA_ADDR1
 		||
-		psa.psa_univ_mac_addr[2] != SA_ADDR2
+		(
+			psa.psa_univ_mac_addr[2] != SA_ADDR2
+			&&
+			psa.psa_univ_mac_addr[2] != SA_ALT_ADDR2
+		)
 	)
 	{
 		if (wavelan_debug > 0)

@@ -79,9 +79,9 @@ static void rose_link_reset_timer(struct rose_neigh *neigh)
 }
 
 /*
- *	Rose link TIMER 
+ *	Rose Link Timer
  *
- *	This routine is called every 500ms. Decrement timer by this
+ *	This routine is called every 100ms. Decrement timer by this
  *	amount - if expired then process the event.
  */
 static void rose_link_timer(unsigned long param)

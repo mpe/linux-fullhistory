@@ -55,10 +55,10 @@ included and seems to be working fine!
 Where do I discuss these drivers?
 ---------------------------------
 
-Tomasz Motylewski has been so kind as to set up a new and improved
-mailing list.  Subscribe by sending a message with the BODY "subscribe
-linux-arcnet YOUR REAL NAME" to listserv@tichy.ch.uj.edu.pl.  Then, to
-submit messages to the list, mail to linux-arcnet@tichy.ch.uj.edu.pl.
+Tomasz has been so kind as to set up a new and improved mailing list. 
+Subscribe by sending a message with the BODY "subscribe linux-arcnet YOUR
+REAL NAME" to listserv@tichy.ch.uj.edu.pl.  Then, to submit messages to the
+list, mail to linux-arcnet@tichy.ch.uj.edu.pl.
 
 There are archives of the mailing list at:
 	http://tichy.ch.uj.edu.pl/lists/linux-arcnet
@@ -97,10 +97,18 @@ access.
 Installing the Driver
 ---------------------
 
-If this driver was included as part of your Linux kernel source, all you
-will need to do in order to install it is:
+** Note: the latest version of the driver contains preliminary support for
+	ARCnet RIM I cards.  These are very old cards that don't use I/O
+	ports at all, but rather map the status and command ports into
+	shared memory.  To compile the driver in RIM I mode, you must (for
+	now) edit linux/drivers/net/arcnet.c, find the line that says:
+		#undef RIM_I_MODE
+	and change it to:
+		#define RIM_I_MODE
+
+All you will need to do in order to install the driver is:
 	make config
-		(be sure to choose ARCnet under "other ISA cards")
+		(be sure to choose ARCnet in the network devices)
 	make dep
 	make clean
 	make zImage
@@ -109,9 +117,20 @@ If you obtained this ARCnet package as an upgrade to the ARCnet driver in
 your current kernel, you will need to first copy arcnet.c over the one in
 the linux/drivers/net directory.
 
-You will know the driver is installed properly if you get a lot of ARCnet
-messages when you boot into the new Linux kernel.  (These messages can be
-disabled by taking D_INIT out of the list of debug flags in arcnet.c.)
+You will know the driver is installed properly if you get some ARCnet
+messages when you reboot into the new Linux kernel.
+
+If you use a RIM I card, you will need to give the kernel boot parameters
+specifying your card's irq, node ID, and shared memory.  For example,
+	LILO boot: linux ether=9,0x42,0xD0000,0,arc0
+if your card is node number 42h, irq 9, with shared memory at 0xD0000.
+
+NOTE that if you aren't using RIM I, the above command will still work but
+you will need to replace the node ID with an I/O port number, for example:
+	LILO boot: linux ether=9,0x300,0xD0000,0,arc0
+
+You can add the ether= parameter to /etc/lilo.conf to avoid typing this
+every time.
 
 
 Loadable Module Support
@@ -137,6 +156,9 @@ For example:
 
 You can name the device using something like "device=arc1" (for a second
 card) or "device=eth0" (for weird compatibility reasons) if you like.
+
+If you use RIM I, you don't need to specify io= but you must include node=
+for your ARCnet card's station ID.
 	
 
 Using the Driver

@@ -513,7 +513,7 @@ int n_tty_ioctl(struct tty_struct * tty, struct file * file,
 			return 0;
 		case TIOCINQ:
 			retval = verify_area(VERIFY_WRITE, (void *) arg,
-					     sizeof (unsigned long));
+					     sizeof (unsigned int));
 			if (retval)
 				return retval;
 			retval = tty->read_cnt;

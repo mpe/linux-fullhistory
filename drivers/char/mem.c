@@ -189,17 +189,52 @@ static long write_null(struct inode * inode, struct file * file,
 	return count;
 }
 
+/*
+ * For fun, somebody might look into using the MMU for this.
+ * NOTE! It's not trivial: you have to check that the mapping
+ * is a private mapping and if so you can just map in the
+ * zero page directly. But shared mappings _have_ to use the
+ * physical copy.
+ */
+static inline unsigned long read_zero_pagealigned(char * buf, unsigned long size)
+{
+	do {
+		if (clear_user(buf, PAGE_SIZE))
+			break;
+		if (need_resched)
+			schedule();
+		buf += PAGE_SIZE;
+		size -= PAGE_SIZE;
+	} while (size);
+	return size;
+}
+
 static long read_zero(struct inode * node, struct file * file,
 	char * buf, unsigned long count)
 {
-	int left;
+	unsigned long left;
 
-	for (left = count; left > 0; left--) {
-		put_user(0,buf);
-		buf++;
-		if (need_resched)
-			schedule();
+	if (!access_ok(VERIFY_WRITE, buf, count))
+		return -EFAULT;
+
+	left = count;
+
+	/* do we want to be clever? Arbitrary cut-off */
+	if (count >= PAGE_SIZE*4) {
+		unsigned long partial, unwritten;
+
+		/* How much left of the page? */
+		partial = (PAGE_SIZE-1) & -(unsigned long) buf;
+		clear_user(buf, partial);
+		left -= partial;
+		buf += partial;
+		unwritten = read_zero_pagealigned(buf, left & PAGE_MASK);
+		buf += left & PAGE_MASK;
+		left &= ~PAGE_MASK;
+		if (unwritten)
+			return count - left - unwritten;
 	}
+	clear_user(buf, left);
 	return count;
 }
 

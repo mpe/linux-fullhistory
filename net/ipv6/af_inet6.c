@@ -550,6 +550,13 @@ static int inet6_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		
 		return -EINVAL;
 
+	case SIOGIFINDEX:
+		/*
+		 *	This one will be moved to the generic device
+		 *	layer in the near future
+		 */
+		return addrconf_get_ifindex((void *) arg);
+		
 	case SIOCSIFADDR:
 		return addrconf_add_ifaddr((void *) arg);
 	case SIOCSIFDSTADDR:

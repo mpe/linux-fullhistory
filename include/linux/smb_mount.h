@@ -1,7 +1,7 @@
 /*
  *  smb_mount.h
  *
- *  Copyright (C) 1995 by Paal-Kr. Engstad and Volker Lendecke
+ *  Copyright (C) 1995, 1996 by Paal-Kr. Engstad and Volker Lendecke
  *
  */
 
@@ -11,7 +11,7 @@
 #include <linux/types.h>
 #include <linux/in.h>
 
-#define SMB_MOUNT_VERSION 4
+#define SMB_MOUNT_VERSION 5
 
 struct smb_mount_data {
 	int version;
@@ -26,6 +26,7 @@ struct smb_mount_data {
 
         char username[64];
 	char password[64];
+	char domain[64];
 
 	unsigned short max_xmit;
 

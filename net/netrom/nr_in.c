@@ -315,14 +315,8 @@ int nr_process_rx_frame(struct sock *sk, struct sk_buff *skb)
 {
 	int queued = 0, frametype;
 	
-	if (sk->protinfo.nr->state == NR_STATE_0 && sk->dead)
-		return queued;
-
-	if (sk->protinfo.nr->state != NR_STATE_1 && sk->protinfo.nr->state != NR_STATE_2 &&
-	    sk->protinfo.nr->state != NR_STATE_3) {
-		printk(KERN_ERR "nr_process_rx_frame: frame received - state: %d\n", sk->protinfo.nr->state);
-		return queued;
-	}
+	if (sk->protinfo.nr->state == NR_STATE_0)
+		return 0;
 
 	del_timer(&sk->timer);
 

@@ -322,7 +322,7 @@ struct sound_timer_operations {
 #if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
 		{"MPU401", 0, SNDCARD_MPU401,"Roland MPU-401",	attach_mpu401, probe_mpu401, unload_mpu401},
 #endif
-#if (defined(CONFIG_UART401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
+#if defined(CONFIG_UART401) && defined(CONFIG_MIDI)
 	{"UART401", 0, SNDCARD_UART401,"MPU-401 (UART)", 
 		attach_uart401, probe_uart401, unload_uart401},
 #endif

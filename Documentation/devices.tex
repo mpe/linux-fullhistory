@@ -42,7 +42,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@zytor.com$>$}
-\date{Last revised: November 13, 1996}
+\date{Last revised: November 18, 1996}
 \maketitle
 %
 \noindent
@@ -183,7 +183,7 @@ reply.
 \major{56}{}{char }{Apple Desktop Bus}
 \major{57}{}{char }{Hayes ESP serial card}
 \major{58}{}{char }{Hayes ESP serial card -- alternate devices}
-\major{59}{}{}{Unallocated}
+\major{59}{}{char }{sf firewall package}
 \major{60}{--63}{}{Local/experimental use}
 \major{64}{--119}{}{Unallocated}
 \major{120}{--127}{}{Local/experimental use}
@@ -1149,7 +1149,8 @@ Additional devices will be added to this number, all starting with
 \end{devicelist}
 
 \begin{devicelist}
-\major{59}{}{}{Unallocated}
+\major{59}{}{char }{sf firewall package}
+	\minor{0}{/dev/firewall}{Communication with sf kernel module}
 \end{devicelist}
 
 \begin{devicelist}

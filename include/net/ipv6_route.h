@@ -156,8 +156,8 @@ extern int			fib6_del_rt(struct rt6_info *rt);
 
 extern void			rt6_sndmsg(__u32 type, struct in6_addr *dst,
 					   struct in6_addr *gw, __u16 plen,
-					   __u16 metric, char *devname,
-					   __u16 flags);
+					   struct device *dev,
+					   __u16 metric, __u16 flags);
 /*
  *	ICMP interface
  */

@@ -209,6 +209,8 @@ int sr_reset(struct cdrom_device_info *cdi)
 }
 
 /* ----------------------------------------------------------------------- */
+/* this is called by the generic cdrom driver. arg is a _kernel_ pointer,  */
+/* becauce the generic cdrom driver does the user access stuff for us.     */
 
 int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 {
@@ -246,22 +248,17 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 	
     case CDROMPLAYMSF:
     {
-	struct cdrom_msf msf;
-
-	if (copy_from_user(&msf, (void *) arg, sizeof(msf))) {
-		result = -EFAULT;
-		break;
-	}
+	struct cdrom_msf* msf = (struct cdrom_msf*)arg;
 
 	sr_cmd[0] = SCMD_PLAYAUDIO_MSF;
 	sr_cmd[1] = scsi_CDs[target].device->lun << 5;
 	sr_cmd[2] = 0;
-	sr_cmd[3] = msf.cdmsf_min0;
-	sr_cmd[4] = msf.cdmsf_sec0;
-	sr_cmd[5] = msf.cdmsf_frame0;
-	sr_cmd[6] = msf.cdmsf_min1;
-	sr_cmd[7] = msf.cdmsf_sec1;
-	sr_cmd[8] = msf.cdmsf_frame1;
+	sr_cmd[3] = msf->cdmsf_min0;
+	sr_cmd[4] = msf->cdmsf_sec0;
+	sr_cmd[5] = msf->cdmsf_frame0;
+	sr_cmd[6] = msf->cdmsf_min1;
+	sr_cmd[7] = msf->cdmsf_sec1;
+	sr_cmd[8] = msf->cdmsf_frame1;
 	sr_cmd[9] = 0;
 	
 	result = sr_do_ioctl(target, sr_cmd, NULL, 255);
@@ -270,22 +267,17 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 
     case CDROMPLAYBLK:
     {
-	struct cdrom_blk blk;
-
-	if (copy_from_user(&blk, (void *) arg, sizeof(blk))) {
-		result = -EFAULT;
-		break;
-	}
+	struct cdrom_blk* blk = (struct cdrom_blk*)arg;
 
 	sr_cmd[0] = SCMD_PLAYAUDIO10;
 	sr_cmd[1] = scsi_CDs[target].device->lun << 5;
-	sr_cmd[2] = blk.from >> 24;
-	sr_cmd[3] = blk.from >> 16;
-	sr_cmd[4] = blk.from >> 8;
-	sr_cmd[5] = blk.from;
+	sr_cmd[2] = blk->from >> 24;
+	sr_cmd[3] = blk->from >> 16;
+	sr_cmd[4] = blk->from >> 8;
+	sr_cmd[5] = blk->from;
 	sr_cmd[6] = 0;
-	sr_cmd[7] = blk.len >> 8;
-	sr_cmd[8] = blk.len;
+	sr_cmd[7] = blk->len >> 8;
+	sr_cmd[8] = blk->len;
 	sr_cmd[9] = 0;
 	
 	result = sr_do_ioctl(target, sr_cmd, NULL, 255);
@@ -294,22 +286,17 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 		
     case CDROMPLAYTRKIND:
     {
-	struct cdrom_ti ti;
-
-	if (copy_from_user(&ti, (void *) arg, sizeof(ti))) {
-		result = -EFAULT;
-		break;
-	}
+	struct cdrom_ti* ti = (struct cdrom_ti*)arg;
 
 	sr_cmd[0] = SCMD_PLAYAUDIO_TI;
 	sr_cmd[1] = scsi_CDs[target].device->lun << 5;
 	sr_cmd[2] = 0;
 	sr_cmd[3] = 0;
-	sr_cmd[4] = ti.cdti_trk0;
-	sr_cmd[5] = ti.cdti_ind0;
+	sr_cmd[4] = ti->cdti_trk0;
+	sr_cmd[5] = ti->cdti_ind0;
 	sr_cmd[6] = 0;
-	sr_cmd[7] = ti.cdti_trk1;
-	sr_cmd[8] = ti.cdti_ind1;
+	sr_cmd[7] = ti->cdti_trk1;
+	sr_cmd[8] = ti->cdti_ind1;
 	sr_cmd[9] = 0;
 	
 	result = sr_do_ioctl(target, sr_cmd, NULL, 255);
@@ -318,7 +305,7 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 	
     case CDROMREADTOCHDR:
     {
-	struct cdrom_tochdr tochdr;
+	struct cdrom_tochdr* tochdr = (struct cdrom_tochdr*)arg;
 	char * buffer;
 	
 	sr_cmd[0] = SCMD_READ_TOC;
@@ -334,31 +321,23 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 	
 	result = sr_do_ioctl(target, sr_cmd, buffer, 12);
 	
-	tochdr.cdth_trk0 = buffer[2];
-	tochdr.cdth_trk1 = buffer[3];
+	tochdr->cdth_trk0 = buffer[2];
+	tochdr->cdth_trk1 = buffer[3];
 	
 	scsi_free(buffer, 512);
-
-	if (copy_to_user ((void *) arg, &tochdr, sizeof (struct cdrom_tochdr)))
-		result = -EFAULT;
         break;
     }
 	
     case CDROMREADTOCENTRY:
     {
-	struct cdrom_tocentry tocentry;
+	struct cdrom_tocentry* tocentry = (struct cdrom_tocentry*)arg;
 	unsigned char * buffer;
 	
-	if (copy_from_user (&tocentry, (void *) arg, sizeof (struct cdrom_tocentry))) {
-		result = -EFAULT;
-		break;
-	}
-
 	sr_cmd[0] = SCMD_READ_TOC;
 	sr_cmd[1] = ((scsi_CDs[target].device->lun) << 5) |
-          (tocentry.cdte_format == CDROM_MSF ? 0x02 : 0);
+          (tocentry->cdte_format == CDROM_MSF ? 0x02 : 0);
 	sr_cmd[2] = sr_cmd[3] = sr_cmd[4] = sr_cmd[5] = 0;
-	sr_cmd[6] = tocentry.cdte_track;
+	sr_cmd[6] = tocentry->cdte_track;
 	sr_cmd[7] = 0;             /* MSB of length (12)  */
 	sr_cmd[8] = 12;            /* LSB of length */
 	sr_cmd[9] = 0;
@@ -368,21 +347,18 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 	
 	result = sr_do_ioctl (target, sr_cmd, buffer, 12);
 	
-        tocentry.cdte_ctrl = buffer[5] & 0xf;	
-        tocentry.cdte_adr = buffer[5] >> 4;
-        tocentry.cdte_datamode = (tocentry.cdte_ctrl & 0x04) ? 1 : 0;
-	if (tocentry.cdte_format == CDROM_MSF) {
-	    tocentry.cdte_addr.msf.minute = buffer[9];
-	    tocentry.cdte_addr.msf.second = buffer[10];
-	    tocentry.cdte_addr.msf.frame = buffer[11];
+        tocentry->cdte_ctrl = buffer[5] & 0xf;	
+        tocentry->cdte_adr = buffer[5] >> 4;
+        tocentry->cdte_datamode = (tocentry->cdte_ctrl & 0x04) ? 1 : 0;
+	if (tocentry->cdte_format == CDROM_MSF) {
+	    tocentry->cdte_addr.msf.minute = buffer[9];
+	    tocentry->cdte_addr.msf.second = buffer[10];
+	    tocentry->cdte_addr.msf.frame = buffer[11];
 	} else
-	    tocentry.cdte_addr.lba = (((((buffer[8] << 8) + buffer[9]) << 8)
+	    tocentry->cdte_addr.lba = (((((buffer[8] << 8) + buffer[9]) << 8)
                                        + buffer[10]) << 8) + buffer[11];
 	
 	scsi_free(buffer, 512);
-
-	if (copy_to_user ((void *) arg, &tocentry, sizeof (struct cdrom_tocentry)))
-		result = -EFAULT;
         break;
     }
 	
@@ -407,13 +383,8 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
     case CDROMVOLCTRL:
     {
 	char * buffer, * mask;
-	struct cdrom_volctrl volctrl;
+	struct cdrom_volctrl* volctrl = (struct cdrom_volctrl*)arg;
 	
-	if (copy_from_user (&volctrl, (void *) arg, sizeof (struct cdrom_volctrl))) {
-		result = -EFAULT;
-		break;
-	}
-
 	/* First we get the current params so we can just twiddle the volume */
 	
 	sr_cmd[0] = MODE_SENSE;
@@ -456,10 +427,10 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 	/* Now mask and substitute our own volume and reuse the rest */
 	buffer[0] = 0;  /* Clear reserved field */
 	
-	buffer[21] = volctrl.channel0 & mask[21];
-	buffer[23] = volctrl.channel1 & mask[23];
-	buffer[25] = volctrl.channel2 & mask[25];
-	buffer[27] = volctrl.channel3 & mask[27];
+	buffer[21] = volctrl->channel0 & mask[21];
+	buffer[23] = volctrl->channel1 & mask[23];
+	buffer[25] = volctrl->channel2 & mask[25];
+	buffer[27] = volctrl->channel3 & mask[27];
 	
 	sr_cmd[0] = MODE_SELECT;
 	sr_cmd[1] = ((scsi_CDs[target].device -> lun) << 5) | 0x10;    /* Params are SCSI-2 */
@@ -476,7 +447,7 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
     case CDROMVOLREAD:
     {
 	char * buffer;
-	struct cdrom_volctrl volctrl;
+	struct cdrom_volctrl* volctrl = (struct cdrom_volctrl*)arg;
 	
 	/* Get the current params */
 	
@@ -496,21 +467,18 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
             break;
 	}
 
-	volctrl.channel0 = buffer[21];
-	volctrl.channel1 = buffer[23];
-	volctrl.channel2 = buffer[25];
-	volctrl.channel3 = buffer[27];
+	volctrl->channel0 = buffer[21];
+	volctrl->channel1 = buffer[23];
+	volctrl->channel2 = buffer[25];
+	volctrl->channel3 = buffer[27];
 
 	scsi_free(buffer, 512);
-
-	if (copy_to_user ((void *) arg, &volctrl, sizeof (struct cdrom_volctrl)))
-		result = -EFAULT;
         break;
     }
 	
     case CDROMSUBCHNL:
     {
-	struct cdrom_subchnl subchnl;
+	struct cdrom_subchnl* subchnl = (struct cdrom_subchnl*)arg;
 	char * buffer;
 	
 	sr_cmd[0] = SCMD_READ_SUBCHANNEL;
@@ -528,23 +496,20 @@ int sr_audio_ioctl(struct cdrom_device_info *cdi, unsigned int cmd, void* arg)
 	
 	result = sr_do_ioctl(target, sr_cmd, buffer, 16);
 	
-	subchnl.cdsc_audiostatus = buffer[1];
-	subchnl.cdsc_format = CDROM_MSF;
-	subchnl.cdsc_ctrl = buffer[5] & 0xf;
-	subchnl.cdsc_trk = buffer[6];
-	subchnl.cdsc_ind = buffer[7];
+	subchnl->cdsc_audiostatus = buffer[1];
+	subchnl->cdsc_format = CDROM_MSF;
+	subchnl->cdsc_ctrl = buffer[5] & 0xf;
+	subchnl->cdsc_trk = buffer[6];
+	subchnl->cdsc_ind = buffer[7];
 	
-	subchnl.cdsc_reladdr.msf.minute = buffer[13];
-	subchnl.cdsc_reladdr.msf.second = buffer[14];
-	subchnl.cdsc_reladdr.msf.frame = buffer[15];
-	subchnl.cdsc_absaddr.msf.minute = buffer[9];
-	subchnl.cdsc_absaddr.msf.second = buffer[10];
-	subchnl.cdsc_absaddr.msf.frame = buffer[11];
+	subchnl->cdsc_reladdr.msf.minute = buffer[13];
+	subchnl->cdsc_reladdr.msf.second = buffer[14];
+	subchnl->cdsc_reladdr.msf.frame = buffer[15];
+	subchnl->cdsc_absaddr.msf.minute = buffer[9];
+	subchnl->cdsc_absaddr.msf.second = buffer[10];
+	subchnl->cdsc_absaddr.msf.frame = buffer[11];
 	
 	scsi_free(buffer, 512);
-
-	if (copy_to_user ((void *) arg, &subchnl, sizeof (struct cdrom_subchnl)))
-		result = -EFAULT;
         break;
     }
     default:
@@ -573,10 +538,10 @@ int sr_dev_ioctl(struct cdrom_device_info *cdi,
     case BLKRAGET:
 	if (!arg)
 		return -EINVAL;
-	err = verify_area(VERIFY_WRITE, (int *) arg, sizeof(int));
+	err = verify_area(VERIFY_WRITE, (long *) arg, sizeof(long));
 	if (err)
 		return err;
-	put_user(read_ahead[MAJOR(cdi->dev)], (int *) arg);
+	put_user(read_ahead[MAJOR(cdi->dev)], (long *) arg);
 	return 0;
 
     case BLKRASET:

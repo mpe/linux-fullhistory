@@ -35,7 +35,7 @@ struct in6_rtmsg {
 	__u16			rtmsg_metric;
 	unsigned long		rtmsg_info;
         __u32			rtmsg_flags;
-	char			rtmsg_device[16];
+	int			rtmsg_ifindex;
 };
 
 #endif

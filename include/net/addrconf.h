@@ -51,6 +51,7 @@ extern int		        addrconf_notify(struct notifier_block *this,
 
 extern int			addrconf_add_ifaddr(void *arg);
 extern int			addrconf_set_dstaddr(void *arg);
+extern int			addrconf_get_ifindex(void *arg);
 
 extern struct inet6_ifaddr *	ipv6_chk_addr(struct in6_addr *addr);
 extern struct inet6_ifaddr *	ipv6_get_saddr(struct rt6_info *rt, 

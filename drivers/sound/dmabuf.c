@@ -581,6 +581,7 @@ DMAbuf_release (int dev, int mode)
   audio_devs[dev]->dmap_out->closing = 1;
   audio_devs[dev]->dmap_in->closing = 1;
 
+  if (!(audio_devs[dev]->dmap_in->mapping_flags & DMA_MAP_MAPPED))
   if (!((current->signal & ~current->blocked))
       && (audio_devs[dev]->dmap_out->dma_mode == DMODE_OUTPUT))
     {

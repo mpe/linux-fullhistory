@@ -790,12 +790,8 @@ int ax25_process_rx_frame(ax25_cb *ax25, struct sk_buff *skb, int type, int dama
 {
 	int queued = 0, frametype, ns, nr, pf;
 	
-	if (ax25->sk != NULL && ax25->state == AX25_STATE_0 && ax25->sk->dead)
-		return queued;
-
-	if (ax25->state != AX25_STATE_1 && ax25->state != AX25_STATE_2 &&
-	    ax25->state != AX25_STATE_3 && ax25->state != AX25_STATE_4)
-		return queued;
+	if (ax25->state == AX25_STATE_0)
+		return 0;
 
 	del_timer(&ax25->timer);
 

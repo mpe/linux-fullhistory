@@ -457,7 +457,7 @@ static int lo_ioctl(struct inode * inode, struct file * file,
 			return -ENXIO;
 		if (!arg)
 			return -EINVAL;
-		return put_user(loop_sizes[lo->lo_number] << 1, (int *) arg);
+		return put_user(loop_sizes[lo->lo_number] << 1, (long *) arg);
 	default:
 		return -EINVAL;
 	}

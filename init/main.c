@@ -9,10 +9,6 @@
  */
 
 #define __KERNEL_SYSCALLS__
-#include <stdarg.h>
-
-#include <asm/system.h>
-#include <asm/io.h>
 
 #include <linux/types.h>
 #include <linux/fcntl.h>
@@ -37,7 +33,12 @@
 #include <linux/nfs_fs.h>
 #endif
 
+#include <asm/system.h>
+#include <asm/io.h>
 #include <asm/bugs.h>
+
+#include <stdarg.h>
+
 
 /*
  * Versions of gcc older than that listed below may actually compile
@@ -91,6 +92,8 @@ extern void aha1542_setup(char *str, int *ints);
 extern void aic7xxx_setup(char *str, int *ints);
 extern void AM53C974_setup(char *str, int *ints);
 extern void BusLogic_Setup(char *str, int *ints);
+extern void eata2x_setup(char *str, int *ints);
+extern void u14_34f_setup(char *str, int *ints);
 extern void fdomain_setup(char *str, int *ints);
 extern void in2000_setup(char *str, int *ints);
 extern void NCR53c406a_setup(char *str, int *ints);
@@ -320,6 +323,12 @@ struct {
 #endif
 #ifdef CONFIG_SCSI_BUSLOGIC
 	{ "BusLogic=", BusLogic_Setup},
+#endif
+#ifdef CONFIG_SCSI_EATA
+	{ "eata=", eata2x_setup},
+#endif
+#ifdef CONFIG_SCSI_U14_34F
+	{ "u14-34f=", u14_34f_setup},
 #endif
 #ifdef CONFIG_SCSI_AM53C974
         { "AM53C974=", AM53C974_setup},

@@ -1937,12 +1937,15 @@ static int
 set_modem_info(struct cyclades_port * info, unsigned int cmd,
                           unsigned int *value)
 {
-  int card,chip,channel,index;
-  unsigned char *base_addr;
-  unsigned long flags;
-  unsigned int arg;
+    int card,chip,channel,index;
+    unsigned char *base_addr;
+    unsigned long flags;
+    unsigned int arg;
+    int error;
   
-    get_user(arg,(unsigned int *) value);
+    error = get_user(arg, value);
+    if (error)
+	return error;
 
     card = info->card;
     channel = (info->line) - (cy_card[card].first_line);
@@ -2250,31 +2253,19 @@ cy_ioctl(struct tty_struct *tty, struct file * file,
 
 /* The following commands are incompletely implemented!!! */
         case TIOCGSOFTCAR:
-            error = verify_area(VERIFY_WRITE, (void *) arg
-                                ,sizeof(unsigned int *));
-            if (error){
-                ret_val = error;
-                break;
-            }
-            put_user(C_CLOCAL(tty) ? 1 : 0,
-                        (unsigned int *) arg);
-            break;
+            ret_val = put_user(C_CLOCAL(tty) ? 1 : 0, (unsigned int *) arg);
+	    break;
         case TIOCSSOFTCAR:
-            error = verify_area(VERIFY_READ, (void *) arg
-                                 ,sizeof(unsigned long *));
-            if (error) {
-                 ret_val = error;
-                 break;
-            }
-
-            get_user(arg,(unsigned int *) arg);
+            ret_val = get_user(arg,(unsigned int *) arg);
+	    if (ret_val)
+		break;
             tty->termios->c_cflag =
                     ((tty->termios->c_cflag & ~CLOCAL) |
                      (arg ? CLOCAL : 0));
             break;
         case TIOCMGET:
             error = verify_area(VERIFY_WRITE, (void *) arg
-                                ,sizeof(unsigned int *));
+                                ,sizeof(unsigned int));
             if (error){
                 ret_val = error;
                 break;

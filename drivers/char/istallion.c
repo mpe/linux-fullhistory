@@ -1791,13 +1791,14 @@ static int stli_ioctl(struct tty_struct *tty, struct file *file, unsigned int cm
 		}
 		break;
 	case TIOCGSOFTCAR:
-		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(long))) == 0)
-			put_user(((tty->termios->c_cflag & CLOCAL) ? 1 : 0), (unsigned long *) arg);
+		rc = put_user(((tty->termios->c_cflag & CLOCAL) ? 1 : 0),
+		    (unsigned int *) arg);
 		break;
 	case TIOCSSOFTCAR:
-		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(long))) == 0) {
-			get_user(arg, (unsigned long *) arg);
-			tty->termios->c_cflag = (tty->termios->c_cflag & ~CLOCAL) | (arg ? CLOCAL : 0);
+		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(unsigned int))) == 0) {
+			unsigned int value;
+			get_user(value, (unsigned int *) arg);
+			tty->termios->c_cflag = (tty->termios->c_cflag & ~CLOCAL) | (value ? CLOCAL : 0);
 		}
 		break;
 	case TIOCMGET:
@@ -1809,23 +1810,26 @@ static int stli_ioctl(struct tty_struct *tty, struct file *file, unsigned int cm
 		}
 		break;
 	case TIOCMBIS:
-		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(long))) == 0) {
-			get_user(arg, (unsigned long *) arg);
-			stli_mkasysigs(&portp->asig, ((arg & TIOCM_DTR) ? 1 : -1), ((arg & TIOCM_RTS) ? 1 : -1));
+		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(unsigned int))) == 0) {
+			unsigned int value;
+			get_user(value, (unsigned int *) arg);
+			stli_mkasysigs(&portp->asig, ((value & TIOCM_DTR) ? 1 : -1), ((value & TIOCM_RTS) ? 1 : -1));
 			rc = stli_cmdwait(brdp, portp, A_SETSIGNALS, &portp->asig, sizeof(asysigs_t), 0);
 		}
 		break;
 	case TIOCMBIC:
-		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(long))) == 0) {
-			get_user(arg, (unsigned long *) arg);
-			stli_mkasysigs(&portp->asig, ((arg & TIOCM_DTR) ? 0 : -1), ((arg & TIOCM_RTS) ? 0 : -1));
+		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(unsigned int))) == 0) {
+			unsigned int value;
+			get_user(value, (unsigned int *) arg);
+			stli_mkasysigs(&portp->asig, ((value & TIOCM_DTR) ? 0 : -1), ((value & TIOCM_RTS) ? 0 : -1));
 			rc = stli_cmdwait(brdp, portp, A_SETSIGNALS, &portp->asig, sizeof(asysigs_t), 0);
 		}
 		break;
 	case TIOCMSET:
-		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(long))) == 0) {
-			get_user(arg, (unsigned long *) arg);
-			stli_mkasysigs(&portp->asig, ((arg & TIOCM_DTR) ? 1 : 0), ((arg & TIOCM_RTS) ? 1 : 0));
+		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(unsigned int))) == 0) {
+			unsigned int value;
+			get_user(value, (unsigned int *) arg);
+			stli_mkasysigs(&portp->asig, ((value & TIOCM_DTR) ? 1 : 0), ((value & TIOCM_RTS) ? 1 : 0));
 			rc = stli_cmdwait(brdp, portp, A_SETSIGNALS, &portp->asig, sizeof(asysigs_t), 0);
 		}
 		break;

@@ -18,8 +18,9 @@
  *	Changes:
  *
  *	Lars Fenneberg			:	fixed MTU setting on receipt
- *						of an RA. 
+ *						of an RA.
  *
+ *	Janos Farkas			:	kmalloc failure checks
  */
 
 /*
@@ -580,6 +581,7 @@ void ndisc_send_na(struct device *dev, struct neighbour *neigh,
 	if (skb == NULL)
 	{
 		printk(KERN_DEBUG "send_na: alloc skb failed\n");
+		return;
 	}
 
 	skb->free=1;
@@ -737,6 +739,7 @@ void ndisc_send_rs(struct device *dev, struct in6_addr *saddr,
 	if (skb == NULL)
 	{
 		printk(KERN_DEBUG "send_ns: alloc skb failed\n");
+		return;
 	}
 
 	skb->free=1;
@@ -1296,29 +1299,40 @@ static void ndisc_router_discovery(struct sk_buff *skb)
 	{
 		printk(KERN_DEBUG "ndisc_rdisc: new default router\n");
 
-		rt = (struct rt6_info *)kmalloc(sizeof(struct rt6_info),
-						GFP_ATOMIC);
-
-		neigh = ndisc_retrieve_neigh(skb->dev, &skb->ipv6_hdr->saddr);
-
-		if (neigh == NULL)
+		rt = (struct rt6_info *) kmalloc(sizeof(struct rt6_info),
+						 GFP_ATOMIC);
+		if (rt)
 		{
-			neigh = ndisc_new_neigh(skb->dev,
-						&skb->ipv6_hdr->saddr);
+			neigh = ndisc_retrieve_neigh(skb->dev,
+						     &skb->ipv6_hdr->saddr);
+
+			if (neigh == NULL)
+			{
+				neigh = ndisc_new_neigh(skb->dev,
+							&skb->ipv6_hdr->saddr);
+			}
+
+			if (neigh)
+			{
+				atomic_inc(&neigh->refcnt);
+				neigh->flags |= NCF_ROUTER;
+				
+				memset(rt, 0, sizeof(struct rt6_info));
+
+				ipv6_addr_copy(&rt->rt_dst,
+					       &skb->ipv6_hdr->saddr);
+				rt->rt_metric = 1;
+				rt->rt_flags = RTF_GATEWAY | RTF_DYNAMIC;
+				rt->rt_dev = skb->dev;
+				rt->rt_nexthop = neigh;
+
+				ndisc_add_dflt_router(rt);
+			}
+			else
+			{
+				kfree(rt);
+			}
 		}
-
-		atomic_inc(&neigh->refcnt);
-		neigh->flags |= NCF_ROUTER;
-
-		memset(rt, 0, sizeof(struct rt6_info));
-
-		ipv6_addr_copy(&rt->rt_dst, &skb->ipv6_hdr->saddr);
-		rt->rt_metric = 1;
-		rt->rt_flags = RTF_GATEWAY | RTF_DYNAMIC;
-		rt->rt_dev = skb->dev;
-		rt->rt_nexthop = neigh;
-
-		ndisc_add_dflt_router(rt);
 	}
 
 	if (rt)

@@ -449,7 +449,7 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
 		return 0;
 
 	if (el3_debug > 4) {
-		printk("%s: el3_start_xmit(length = %ld) called, status %4.4x.\n",
+		printk("%s: el3_start_xmit(length = %u) called, status %4.4x.\n",
 			   dev->name, skb->len, inw(ioaddr + EL3_STATUS));
 	}
 #if 0
@@ -754,37 +754,62 @@ el3_close(struct device *dev)
 }
 
 #ifdef MODULE
-static char devicename[9] = { 0, };
-static struct device dev_3c509 = {
-        devicename, /* device name is inserted by linux/drivers/net/net_init.c */
-        0, 0, 0, 0,
-        0, 0,
-        0, 0, 0, NULL, el3_probe };
+#define MAX_3C_CARDS	4	/* Max number of NE cards per module */
+#define NAMELEN		8	/* # of chars for storing dev->name */
+static char namelist[NAMELEN * MAX_3C_CARDS] = { 0, };
+static struct device dev_3c509[MAX_3C_CARDS] = {
+	{
+		NULL,		/* assign a chunk of namelist[] below */
+		0, 0, 0, 0,
+		0, 0,
+		0, 0, 0, NULL, NULL
+	},
+};
 
-static int io  = 0;
-static int irq = 0;
+static int io[MAX_3C_CARDS] = { 0, };
+static int irq[MAX_3C_CARDS]  = { 0, };
 
 int
 init_module(void)
 {
-	dev_3c509.base_addr = io;
-        dev_3c509.irq       = irq;
-        if (!EISA_bus && !io) {
-		printk("3c509: WARNING! Module load-time probing works reliably only for EISA bus!!\n");
+	int this_dev, found = 0;
+
+	for (this_dev = 0; this_dev < MAX_3C_CARDS; this_dev++) {
+		struct device *dev = &dev_3c509[this_dev];
+		dev->name = namelist+(NAMELEN*this_dev);
+		dev->irq = irq[this_dev];
+		dev->base_addr = io[this_dev];
+		dev->init = el3_probe;
+		if (io[this_dev] == 0)  {
+			if (this_dev != 0) break; /* only complain once */
+			printk("3c509: WARNING! Module load-time probing works reliably only for EISA bus!!\n");
+		}
+		if (register_netdev(dev) != 0) {
+			printk(KERN_WARNING "3c509.c: No 3c509 card found (i/o = 0x%x).\n", io[this_dev]);
+			if (found != 0) return 0;	/* Got at least one. */
+			return -ENXIO;
+		}
+		found++;
 	}
-	if (register_netdev(&dev_3c509) != 0)
-		return -EIO;
 	return 0;
 }
 
 void
 cleanup_module(void)
 {
-	unregister_netdev(&dev_3c509);
-	kfree_s(dev_3c509.priv,sizeof(struct el3_private));
-	dev_3c509.priv=NULL;
-	/* If we don't do this, we can't re-insmod it later. */
-	release_region(dev_3c509.base_addr, EL3_IO_EXTENT);
+	int this_dev;
+
+	for (this_dev = 0; this_dev < MAX_3C_CARDS; this_dev++) {
+		struct device *dev = &dev_3c509[this_dev];
+		if (dev->priv != NULL) {
+			kfree_s(dev->priv,sizeof(struct el3_private));
+			dev->priv = NULL;
+			free_irq(dev->irq, NULL);
+			irq2dev_map[dev->irq] = NULL;
+			release_region(dev->base_addr, EL3_IO_EXTENT);
+			unregister_netdev(dev);
+		}
+	}
 }
 #endif /* MODULE */
 

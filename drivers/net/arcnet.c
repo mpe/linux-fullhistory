@@ -17,114 +17,38 @@
          
 	**********************
 	
+	v2.60 ALPHA (96/11/23)
+	  - Added patch from Vojtech Pavlik <vojtech@atrey.karlin.mff.cuni.cz>
+	    and Martin Mares <mj@k332.feld.cvut.cz> to make the driver work
+	    with the new Linux 2.1.x memory management.  I modified their
+	    patch quite a bit though; bugs are my fault.  More changes should
+	    be made to get eliminate any remaining phys_to_virt calls.
+	  - Quietly ignore protocol id's 0, 1, 8, and 243.  Thanks to Jake
+	    Messinger <jake@ams.com> for reporting these codes and their
+	    meanings.
+	  - Smarter shmem probe for cards with 4k mirrors. (does it work?)
+	  - Initial support for RIM I type cards which use no I/O ports at
+	    all.  To use this option, you need to compile with RIM_I_MODE
+	    enabled.  Thanks to Kolja Waschk <kawk@yo.com> for explaining
+	    RIM I programming to me.  Now, does my RIM I code actually
+	    work?
+
 	v2.56 (96/10/18)
 	  - Turned arc0e/arc0s startup messages back on by default, as most
 	    people will probably not notice the additional devices
-	    otherwise, and experience more protocol confusion than
-	    necessary.
+	    otherwise.  This causes undue confusion.
 	  - Fixed a tiny but noticeable bug in the packet debugging routines
 	    (thanks Tomasz)
 
-	v2.55 (96/08/05)
-	  - A couple more messages moved to D_EXTRA.
-	  - SLOW_XMIT_COPY off by default.
-	  - Some tiny changes.
-	
-	v2.54 (96/07/05)
-	  - Under some situations, Stage 5 autoprobe was a little bit too
-	    picky about the TXACK flag.
-	  - D_EXTRA removed from default debugging flags.  Hey, it's stable,
-	    right?
-	  - Removed redundant "unknown protocol ID" messages and made remaining
-	    ones D_EXTRA.
-	
-	v2.53 (96/06/06)
-	  - arc0e and arc0s wouldn't initialize in newer kernels, which
-	    don't like dev->open==NULL or dev->stop==NULL.
-	
-	v2.52 (96/04/20)
-	  - Replaced more decimal node ID's with hex, for consistency.
-	  - Changed a couple of printk debug levels.
-
-	v2.51 (96/02/29)
-	  - Inserted a rather important missing "volatile" in autoprobe.
-	  - arc0e and arc0s are now options in drivers/net/Config.in.
-	
-	v2.50 (96/02/24)
-	  - Increased IRQ autoprobe delay.  Thanks to Andrew J. Kroll for
-	    noticing the problem, which seems to only affect certain cards.
-	  - Errors reserving ports and IRQ's now clean up after themselves.
-	  - We now replace the TESTvalue byte from unused shmem addresses.
-	  - You can now use "irq=" as well as "irqnum=" to set the IRQ
-	    during module autoprobe.  This doesn't seem to crash insmod
-	    anymore. (?)
-	  - You can now define the name of the ARCnet device more easily
-	    when loading the module: insmod arcnet.o device=test1
-	    A new option, CONFIG_ARCNET_ETHNAME, allows the kernel to
-	    choose one of the standard eth?-style device names
-	    automatically.  This currently only works as a module.
-	  - printk's now try to make some use of the KERN_xxx priority level
-	    macros (though they may not be perfect yet).
-	  - Packet and skb dump loops are now separate functions.
-	  - Removed D_INIT from default debug level, because I am (finally)
-	    pretty confident that autoprobe shouldn't toast anyone's
-	    computer.
-	  - This version is no longer ALPHA.
-
-	v2.41 ALPHA (96/02/10)
-	  - Incorporated changes someone made to arcnet_setup in 1.3.60.
-	  - Increased reset timeout to 3/10 of a second because some cards
-	    are too slow.
-	  - Removed a useless delay from autoprobe stage 4; I wonder
-	    how that got there!  (oops)
-	  - If FAST_IFCONFIG is defined, don't reset the card during
-	    arcnet_open; rather, do it in arcnet_close but don't delay. 
-	    This speeds up calls to ifconfig up/down.  (Thanks to Vojtech
-	    for the idea to speed this up.)
-	  - If FAST_PROBE is defined, don't bother to reset the card in
-	    autoprobe Stage 5 when there is only one io port and one shmem
-	    left in the list.  They "obviously" correspond to each other. 
-	    Another good idea from Vojtech.
-
-	v2.40 ALPHA (96/02/03)
-	  - Checked the RECON flag last in the interrupt handler (when
-	    enabled) so the flag will show up in "status" when reporting
-	    other errors.  (I had a cabling problem that was hard to notice
-	    until I saw the huge RECON count in /proc/net/dev.)
-	  - Moved "IRQ for unknown device" message to D_DURING.
-	  - "transmit timed out" and "not acknowledged" messages are
-	    now D_EXTRA, because they very commonly happen when things
-	    are working fine.  "transmit timed out" due to missed IRQ's
-	    is still D_NORMAL, because it's probably a bug.
-	  - "Transmit timed out" messages now include destination station id.
-	  - The virtual arc0e and arc0s devices can now be disabled. 
-	    Massive (but simple) code rearrangement to support this with
-	    fewer ifdef's.
-	  - SLOW_XMIT_COPY option so fast computers don't hog the bus.  It's
-	    weird, but it works.
-	  - Finally redesigned autoprobe after some discussion with Vojtech
-	    Pavlik <Vojtech.Pavlik@st.mff.cuni.cz>.  It should be much safer
-	    and more reliable now, I think.  We now probe several more io
-	    ports and many more shmem addresses.
-	  - Rearranged D_* debugging flags slightly.  Watch out!  There is
-	    now a new flag, disabled by default, that will tell you the
-	    reason a particular port or shmem is discarded from the list.
-
-	v2.30 ALPHA (96/01/10)
-	  - Abandoned support for Linux 1.2 to simplify coding and allow me
-	    to take advantage of new features in 1.3.
-	  - Updated cabling/jumpers documentation with MUCH information that
-	    people have recently (and in some cases, not so recently) sent
-	    me.  I don't mind writing documentation, but the jumpers
-	    database is REALLY starting to get dull.
-	  - Autoprobing works as a module now - but ONLY with my fix to
-	    register_netdev and unregister_netdev.  It's also much faster,
-	    and uses the "new-style" IRQ autoprobe routines.  Autoprobe is
-	    still a horrible mess and will be cleaned up further as time
-	    passes.
-	    
 	The following has been SUMMARIZED.  The complete ChangeLog is
-	available in the full Linux-ARCnet package.
+	available in the full Linux-ARCnet package at
+		http://www.foxnet.net/~apenwarr/arcnet
+		
+	v2.50 (96/02/24)
+	  - Massively improved autoprobe routines; they now work even as a
+	    module.  Thanks to Vojtech Pavlik <Vojtech.Pavlik@st.mff.cuni.cz>
+	    for his ideas and help in this area.
+	  - Changed printk's around quite a lot.
 	
 	v2.22 (95/12/08)
 	  - Major cleanups, speedups, and better code-sharing.
@@ -164,17 +88,20 @@
 	v1.00 (95/02/15)
 	  - Initial non-alpha release.
 	
-         
+	
 	TO DO: (semi-prioritized)
 	
+         - Use cleaner "architecture-independent" shared memory access.
+           This is half-done in ARCnet 2.60, but still uses some
+           undocumented i386 stuff.  (We shouldn't call phys_to_virt,
+           for example.)
          - Support "arpless" mode like NetBSD does, and as recommended
            by the (obsoleted) RFC1051.
+         - Some way to make RIM_I_MODE runtime switchable?  Yuck...
          - Smarter recovery from RECON-during-transmit conditions. (ie.
            retransmit immediately)
          - Make arcnetE_send_packet use arcnet_prepare_tx for loading the
            packet into ARCnet memory.
-         - Some cards have shared memory with 4k mirrors instead of just 2k,
-           so we (uneventfully) find the "wrong" shmem when probing.
          - Probe for multiple devices in one shot (trying to decide whether
            to do it the "ugly" way or not).
          - Add support for the new 1.3.x IP header cache, and other features.
@@ -210,7 +137,7 @@
 */
 
 static const char *version =
- "arcnet.c: v2.56 96/10/18 Avery Pennarun <apenwarr@foxnet.net>\n";
+ "arcnet.c: v2.60 96/11/23 Avery Pennarun <apenwarr@foxnet.net>\n";
 
  
 
@@ -244,6 +171,12 @@ static const char *version =
 #include <net/arp.h>
 
 /**************************************************************************/
+
+/* Define this if you have a really ancient "RIM I" ARCnet card with no I/O
+ * port at all and _only_ shared memory; this option MAY work for you.  It's
+ * untested, though, so good luck and write to me with any results!
+ */
+#undef RIM_I_MODE
 
 /* Normally, the ARCnet device needs to be assigned a name (default arc0). 
  * Ethernet devices have a function to automatically try eth0, eth1, etc
@@ -367,7 +300,7 @@ static const char *version =
 #endif
 
 #ifndef ARCNET_DEBUG
-#define ARCNET_DEBUG (D_NORMAL)
+#define ARCNET_DEBUG (D_NORMAL|D_EXTRA)
 #endif
 int arcnet_debug = ARCNET_DEBUG;
 
@@ -409,15 +342,33 @@ int arcnet_debug = ARCNET_DEBUG;
 /* The number of low I/O ports used by the ethercard. */
 #define ARCNET_TOTAL_SIZE	16
 
-
 /* Handy defines for ARCnet specific stuff */
 	/* COM 9026 controller chip --> ARCnet register addresses */
-#define INTMASK	(ioaddr+0)		/* writable */
-#define STATUS	(ioaddr+0)		/* readable */
-#define COMMAND (ioaddr+1)	/* writable, returns random vals on read (?) */
-#define RESET  (ioaddr+8)		/* software reset writable */
+#define _INTMASK (ioaddr+0)	/* writable */
+#define _STATUS  (ioaddr+0)	/* readable */
+#define _COMMAND (ioaddr+1)	/* writable, returns random vals on read (?) */
+#define _RESET  (ioaddr+8)	/* software reset (on read) */
 
-#define SETMASK outb(lp->intmask,INTMASK);
+/* RIM I (command/status is memory mapped) versus RIM III (standard I/O
+ * mapped) macros.  These make things a bit cleaner.
+ */
+#ifdef RIM_I_MODE
+  #define IOADDR	(dev->mem_start+0x800)
+  #define ARCSTATUS	readb(_STATUS)
+  #define ACOMMAND(cmd) writeb((cmd),_COMMAND)
+  #define ARCRESET	writeb(TESTvalue,ioaddr-0x800)	/* fake reset */
+  #define AINTMASK(msk)	writeb((msk),_INTMASK)
+  #define RELEASE_REGION(x,y)	/* nothing */
+#else
+  #define IOADDR	(dev->base_addr)
+  #define ARCSTATUS	inb(_STATUS)
+  #define ACOMMAND(cmd) outb((cmd),_COMMAND)
+  #define AINTMASK(msk)	outb((msk),_INTMASK)
+  #define ARCRESET	inb(_RESET)
+  #define RELEASE_REGION(x,y)	release_region((x),(y))
+#endif
+
+#define SETMASK AINTMASK(lp->intmask)
 
 	/* Time needed to reset the card - in jiffies.  This works on my SMC
 	 * PC100.  I can't find a reference that tells me just how long I
@@ -479,7 +430,7 @@ int arcnet_debug = ARCNET_DEBUG;
 
 	/* Starts receiving packets into recbuf.
 	 */
-#define EnableReceiver()	outb(RXcmd|(recbuf<<3)|RXbcasts,COMMAND)
+#define EnableReceiver()	ACOMMAND(RXcmd|(recbuf<<3)|RXbcasts)
 
 	/* RFC1201 Protocol ID's */
 #define ARC_P_IP	212		/* 0xD4 */
@@ -496,6 +447,10 @@ int arcnet_debug = ARCNET_DEBUG;
 #define ARC_P_ETHER	0xE8
 
 	/* Unsupported/indirectly supported protocols */
+#define ARC_P_DATAPOINT_BOOT	0	/* very old Datapoint equipment */
+#define ARC_P_DATAPOINT_MOUNT	1
+#define ARC_P_POWERLAN_BEACON	8	/* Probably ATA-Netbios related */
+#define ARC_P_POWERLAN_BEACON2	243
 #define ARC_P_LANSOFT	251		/* 0xFB - what is this? */
 #define ARC_P_ATALK	0xDD
 
@@ -750,7 +705,40 @@ void arcnet_dump_packet(struct device *dev,u_char *buffer,int ext,char *desc)
  * Probe and initialization                                                 *
  *                                                                          *
  ****************************************************************************/
- 
+
+#ifdef RIM_I_MODE
+
+/* We cannot probe for a RIM I card; one reason is I don't know how to reset
+ * them.  In fact, we can't even get their node ID automatically.  So, we
+ * need to be passed a specific shmem address, IRQ, and node ID (stored in
+ * dev->base_addr)
+ */
+int arcnet_probe(struct device *dev)
+{
+	BUGLVL(D_NORMAL) printk(version);
+	BUGMSG(D_NORMAL,"Compiled for ARCnet RIM I (autoprobe disabled)\n");
+	BUGMSG(D_NORMAL,"Given: node %02lXh, shmem %lXh, irq %d\n",
+		dev->base_addr,dev->mem_start,dev->irq);
+	
+	if (dev->mem_start<=0 || dev->irq<=0)
+	{
+		BUGMSG(D_NORMAL,"No autoprobe for RIM I; you "
+			"must specify the shmem and irq!\n");
+		return -ENODEV;
+	}
+	
+	if (dev->base_addr<=0 || dev->base_addr>255)
+	{
+		BUGMSG(D_NORMAL,"You need to specify your card's station "
+			"ID!\n");
+		return -ENODEV;
+	}
+	
+	return arcnet_found(dev,dev->base_addr,dev->irq,dev->mem_start);
+}
+
+#else /* not RIM_I_MODE, so use a real autoprobe */
+
 /* Check for an ARCnet network adaptor, and return '0' if one exists.
  *  If dev->base_addr == 0, probe all likely locations.
  *  If dev->base_addr == 1, always return failure.
@@ -793,13 +781,13 @@ int arcnet_probe(struct device *dev)
 		sizeof(ports)+sizeof(shmems));
 
 	
-#if 0
+#if 1
 	BUGLVL(D_EXTRA)
 	{
 		printk("arcnet: ***\n");
 		printk("arcnet: * Read arcnet.txt for important release notes!\n");
 		printk("arcnet: *\n");
-		printk("arcnet: * This is an ALPHA version!  (Last stable release: v2.22)  E-mail me if\n");
+		printk("arcnet: * This is an ALPHA version!  (Last stable release: v2.56)  E-mail me if\n");
 		printk("arcnet: * you have any questions, comments, or bug reports.\n");
 		printk("arcnet: ***\n");
 	}
@@ -852,7 +840,7 @@ int arcnet_probe(struct device *dev)
 			continue;
 		}
 		
-		if (inb(STATUS) == 0xFF)
+		if (ARCSTATUS == 0xFF)
 		{
 			BUGMSG2(D_INIT_REASONS,"(empty)\n");
 			BUGMSG(D_INIT_REASONS,"Stage 1: ");
@@ -863,7 +851,7 @@ int arcnet_probe(struct device *dev)
 			continue;
 		}
 		
-		inb(RESET);	/* begin resetting card */
+		ARCRESET;	/* begin resetting card */
 
 		BUGMSG2(D_INIT_REASONS,"\n");
 		BUGMSG(D_INIT_REASONS,"Stage 1: ");
@@ -906,8 +894,8 @@ int arcnet_probe(struct device *dev)
 	numprint=0;
 	for (shmem = &shmems[0]; shmem-shmems<numshmems; shmem++)
 	{
-		volatile u_char *cptr;
-	
+		u_long ptr;
+
 		numprint++;
 		if (numprint>8)
 		{
@@ -917,12 +905,12 @@ int arcnet_probe(struct device *dev)
 		}
 		BUGMSG2(D_INIT,"%lXh ",*shmem);
 		
-		cptr=(u_char *)(*shmem);
+		ptr=(u_long)(*shmem);
 		
-		if (*cptr != TESTvalue)
+		if (readb(ptr) != TESTvalue)
 		{
 			BUGMSG2(D_INIT_REASONS,"(mem=%02Xh, not %02Xh)\n",
-				*cptr,TESTvalue);
+				readb(ptr),TESTvalue);
 			BUGMSG(D_INIT_REASONS,"Stage 3: ");
 			BUGLVL(D_INIT_REASONS) numprint=0;
 			*shmem=shmems[numshmems-1];
@@ -936,8 +924,8 @@ int arcnet_probe(struct device *dev)
 		 * in another pass through this loop, they will be discarded
 		 * because *cptr != TESTvalue.
 		 */
-		*cptr=0x42;
-		if (*cptr != 0x42)
+		writeb(0x42,ptr);
+		if (readb(ptr) != 0x42)
 		{
 			BUGMSG2(D_INIT_REASONS,"(read only)\n");
 			BUGMSG(D_INIT_REASONS,"Stage 3: ");
@@ -999,7 +987,7 @@ int arcnet_probe(struct device *dev)
 		BUGMSG2(D_INIT,"%Xh ",*port);
 		
 		ioaddr=*port;
-		status=inb(STATUS);
+		status=ARCSTATUS;
 		
 		if ((status & 0x9D)
 			!= (NORXflag|RECONflag|TXFREEflag|RESETflag))
@@ -1013,8 +1001,8 @@ int arcnet_probe(struct device *dev)
 			continue;
 		}
 
-		outb(CFLAGScmd|RESETclear|CONFIGclear,COMMAND);
-		status=inb(STATUS);
+		ACOMMAND(CFLAGScmd|RESETclear|CONFIGclear);
+		status=ARCSTATUS;
 		if (status & RESETflag)
 		{
 			BUGMSG2(D_INIT_REASONS," (eternal reset, status=%Xh)\n",
@@ -1037,9 +1025,9 @@ int arcnet_probe(struct device *dev)
 			 * we tell it to start receiving.
 			 */
 			airqmask = probe_irq_on();
-			outb(NORXflag,INTMASK);
+			AINTMASK(NORXflag);
 			udelay(1);
-			outb(0,INTMASK);
+			AINTMASK(0);
 			airq = probe_irq_off(airqmask);
 	
 			if (airq<=0)
@@ -1070,26 +1058,26 @@ int arcnet_probe(struct device *dev)
 #ifdef FAST_PROBE
 		if (numports>1 || numshmems>1)
 		{
-			inb(RESET);
+			ARCRESET;
 			JIFFER(RESETtime);
 		}
 		else
 		{
 			/* just one shmem and port, assume they match */
-			*(u_char *)(shmems[0]) = TESTvalue;
+			writeb(TESTvalue,shmems[0]);
 		}
 #else
-		inb(RESET);
+		ARCRESET;
 		JIFFER(RESETtime);
 #endif
 
 
 		for (shmem = &shmems[0]; shmem-shmems<numshmems; shmem++)
 		{
-			u_char *cptr;
-			cptr=(u_char *)(*shmem);
+			u_long ptr;
+			ptr=(u_long)(*shmem);
 			
-			if (*cptr == TESTvalue)	/* found one */
+			if (readb(ptr) == TESTvalue)	/* found one */
 			{
 				BUGMSG2(D_INIT,"%lXh)\n", *shmem);
 				openparen=0;
@@ -1106,7 +1094,7 @@ int arcnet_probe(struct device *dev)
 			}
 			else
 			{
-				BUGMSG2(D_INIT_REASONS,"%Xh-", *cptr);
+				BUGMSG2(D_INIT_REASONS,"%Xh-", readb(ptr));
 			}
 		}
 
@@ -1128,48 +1116,67 @@ int arcnet_probe(struct device *dev)
 	/* Now put back TESTvalue on all leftover shmems.
 	 */
 	for (shmem = &shmems[0]; shmem-shmems<numshmems; shmem++)
-		*(u_char *)(*shmem) = TESTvalue;
+		writeb(TESTvalue,*shmem);
 		
 	if (retval) BUGMSG(D_NORMAL,"Stage 5: No ARCnet cards found.\n");
 	return retval;
 }
+
+#endif /* !RIM_I_MODE */
+
 
 /* Set up the struct device associated with this card.  Called after
  * probing succeeds.
  */
 int arcnet_found(struct device *dev,int port,int airq, u_long shmem)
 {
-	u_char *first_mirror,*last_mirror;
+	u_long first_mirror,last_mirror;
 	struct arcnet_local *lp;
+	int mirror_size;
 	
-	/* reserve the I/O region */
-	request_region(port,ARCNET_TOTAL_SIZE,"arcnet");
-	dev->base_addr=port;
-
 	/* reserve the irq */
 	if (request_irq(airq,&arcnet_interrupt,0,"arcnet",NULL))
 	{
 		BUGMSG(D_NORMAL,"Can't get IRQ %d!\n",airq);
-		release_region(port,ARCNET_TOTAL_SIZE);
 		return -ENODEV;
 	}
 	irq2dev_map[airq]=dev;
 	dev->irq=airq;
+
+#ifdef RIM_I_MODE
+	dev->base_addr=0;
+	writeb(TESTvalue,shmem);
+	writeb(port,shmem+1);	/* actually the node ID */
+#else
+	/* reserve the I/O region - guaranteed to work by check_region */
+	request_region(port,ARCNET_TOTAL_SIZE,"arcnet");
+	dev->base_addr=port;
+#endif
 	
 	/* find the real shared memory start/end points, including mirrors */
 	
 	#define BUFFER_SIZE (512)
 	#define MIRROR_SIZE (BUFFER_SIZE*4)
+
+	/* guess the actual size of one "memory mirror" - the number of
+	 * bytes between copies of the shared memory.  On most cards, it's
+	 * 2k (or there are no mirrors at all) but on some, it's 4k.
+	 */
+	mirror_size=MIRROR_SIZE;
+	if (readb(shmem)==TESTvalue
+	    && readb(shmem-mirror_size)!=TESTvalue
+	    && readb(shmem-2*mirror_size)==TESTvalue)
+		mirror_size*=2;
 	
-	first_mirror=last_mirror=(u_char *)shmem;
-	while (*first_mirror==TESTvalue) first_mirror-=MIRROR_SIZE;
-	first_mirror+=MIRROR_SIZE;
+	first_mirror=last_mirror=shmem;
+	while (readb(first_mirror)==TESTvalue) first_mirror-=mirror_size;
+	first_mirror+=mirror_size;
 
-	while (*last_mirror==TESTvalue) last_mirror+=MIRROR_SIZE;
-	last_mirror-=MIRROR_SIZE;
+	while (readb(last_mirror)==TESTvalue) last_mirror+=mirror_size;
+	last_mirror-=mirror_size;
 
-	dev->mem_start=(u_long)first_mirror;
-	dev->mem_end=(u_long)last_mirror+MIRROR_SIZE-1;
+	dev->mem_start=first_mirror;
+	dev->mem_end=last_mirror+MIRROR_SIZE-1;
 	dev->rmem_start=dev->mem_start+BUFFER_SIZE*0;
 	dev->rmem_end=dev->mem_start+BUFFER_SIZE*2-1;
 	 
@@ -1180,7 +1187,7 @@ int arcnet_found(struct device *dev,int port,int airq, u_long shmem)
 	{
 		irq2dev_map[airq] = NULL;
 		free_irq(airq,NULL);
-		release_region(port,ARCNET_TOTAL_SIZE);
+		RELEASE_REGION(port,ARCNET_TOTAL_SIZE);
 		return -ENOMEM;
 	}
 	memset(dev->priv,0,sizeof(struct arcnet_local));
@@ -1211,7 +1218,7 @@ int arcnet_found(struct device *dev,int port,int airq, u_long shmem)
 		sizeof(struct HardHeader));
 
 	/* get and check the station ID from offset 1 in shmem */
-	lp->stationid = first_mirror[1];
+	lp->stationid = readb(first_mirror+1);
 	if (lp->stationid==0)
 		BUGMSG(D_NORMAL,"WARNING!  Station address 00 is reserved "
 			"for broadcasts!\n");
@@ -1221,10 +1228,10 @@ int arcnet_found(struct device *dev,int port,int airq, u_long shmem)
 	dev->dev_addr[0]=lp->stationid;
 
 	BUGMSG(D_NORMAL,"ARCnet station %02Xh found at %03lXh, IRQ %d, "
-		"ShMem %lXh (%ld bytes).\n",
+		"ShMem %lXh (%ld*%d bytes).\n",
 		lp->stationid,
 		dev->base_addr,dev->irq,dev->mem_start,
-		dev->mem_end-dev->mem_start+1);
+		(dev->mem_end-dev->mem_start+1)/mirror_size,mirror_size);
 		
 	return 0;
 }
@@ -1240,30 +1247,28 @@ int arcnet_found(struct device *dev,int port,int airq, u_long shmem)
 int arcnet_reset(struct device *dev,int reset_delay)
 {
 	struct arcnet_local *lp=(struct arcnet_local *)dev->priv;
-	short ioaddr=dev->base_addr;
+	short ioaddr=IOADDR;
 	int delayval,recbuf=lp->recbuf;
-	u_char *cardmem;
 	
 	/* no IRQ's, please! */
 	lp->intmask=0;
 	SETMASK;
 	
 	BUGMSG(D_INIT,"Resetting %s (status=%Xh)\n",
-			dev->name,inb(STATUS));
+			dev->name,ARCSTATUS);
 
 	if (reset_delay)
 	{
 		/* reset the card */
-		inb(RESET);
+		ARCRESET;
 		JIFFER(RESETtime);
 	}
 
-	outb(CFLAGScmd|RESETclear, COMMAND); /* clear flags & end reset */
-	outb(CFLAGScmd|CONFIGclear,COMMAND);
+	ACOMMAND(CFLAGScmd|RESETclear); /* clear flags & end reset */
+	ACOMMAND(CFLAGScmd|CONFIGclear);
 
 	/* verify that the ARCnet signature byte is present */
-	cardmem = (u_char *) dev->mem_start;
-	if (cardmem[0] != TESTvalue)
+	if (readb(dev->mem_start) != TESTvalue)
 	{
 		BUGMSG(D_NORMAL,"reset failed: TESTvalue not present.\n");
 		return 1;
@@ -1274,12 +1279,12 @@ int arcnet_reset(struct device *dev,int reset_delay)
 	lp->txbuf=2;
 
 	/* enable extended (512-byte) packets */
-	outb(CONFIGcmd|EXTconf,COMMAND);
-	
+	ACOMMAND(CONFIGcmd|EXTconf);
+
 #ifndef SLOW_XMIT_COPY
 	/* clean out all the memory to make debugging make more sense :) */
 	BUGLVL(D_DURING)
-		memset((void *)dev->mem_start,0x42,2048);
+		memset_io(dev->mem_start,0x42,2048);
 #endif
 	
 	/* and enable receive of our first packet to the first buffer */
@@ -1346,7 +1351,7 @@ static int
 arcnet_open(struct device *dev)
 {
 	struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
-	int ioaddr=dev->base_addr;
+	int ioaddr=IOADDR;
 	
 	if (dev->metric>=1000)
 	{
@@ -1418,7 +1423,7 @@ arcnet_open(struct device *dev)
 	 * START is set to 1, it could be ignored.  So, we turn IRQ's
 	 * off, then on again to clean out the IRQ controller.
 	 */
-	outb(0,INTMASK);
+	AINTMASK(0);
 	udelay(1);	/* give it time to set the mask before
 			 * we reset it again. (may not even be
 			 * necessary)
@@ -1435,7 +1440,7 @@ arcnet_open(struct device *dev)
 static int
 arcnet_close(struct device *dev)
 {
-	int ioaddr = dev->base_addr;
+	int ioaddr=IOADDR;
 	struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
 	
 	TBUSY=1;
@@ -1443,12 +1448,12 @@ arcnet_close(struct device *dev)
 
 	/* Shut down the card */
 #ifdef FAST_IFCONFIG
-	inb(RESET);	/* reset IRQ won't run if START=0 */
+	ARCRESET;	/* reset IRQ won't run if START=0 */
 #else
 	lp->intmask=0;
 	SETMASK;	/* no IRQ's (except RESET, of course) */
-	outb(NOTXcmd,COMMAND);  /* stop transmit */
-	outb(NORXcmd,COMMAND);	/* disable receive */
+	ACOMMAND(NOTXcmd);	/* stop transmit */
+	ACOMMAND(NORXcmd);	/* disable receive */
 #endif
 
 	/* reset more flags */
@@ -1497,10 +1502,10 @@ static int
 arcnet_send_packet_bad(struct sk_buff *skb, struct device *dev)
 {
 	struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
-	int ioaddr=dev->base_addr;
+	int ioaddr=IOADDR;
 	
 	BUGMSG(D_DURING,"transmit requested (status=%Xh, inTX=%d)\n",
-			inb(STATUS),lp->intx);
+			ARCSTATUS,lp->intx);
 			
 	if (lp->in_txhandler)
 	{
@@ -1522,7 +1527,7 @@ arcnet_send_packet_bad(struct sk_buff *skb, struct device *dev)
 		   There should really be a "kick me" function call instead. */
 		int tickssofar = jiffies - dev->trans_start;
 		/*int recbuf=lp->recbuf;*/
-		int status=inb(STATUS);
+		int status=ARCSTATUS;
 		
 		if (tickssofar < TX_TIMEOUT) 
 		{
@@ -1549,7 +1554,7 @@ arcnet_send_packet_bad(struct sk_buff *skb, struct device *dev)
 			lp->stats.tx_errors++;
 			lp->stats.tx_aborted_errors++;
 
-			outb(NOTXcmd,COMMAND);
+			ACOMMAND(NOTXcmd);
 		}
 
 		if (lp->outgoing.skb)
@@ -1571,7 +1576,7 @@ arcnet_send_packet_bad(struct sk_buff *skb, struct device *dev)
 	   itself. */
 	if (skb == NULL) {
 		BUGMSG(D_NORMAL,"tx passed null skb (status=%Xh, inTX=%d, tickssofar=%ld)\n",
-			inb(STATUS),lp->intx,jiffies-dev->trans_start);
+			ARCSTATUS,lp->intx,jiffies-dev->trans_start);
 		lp->stats.tx_errors++;
 		dev_tint(dev);
 		return 0;
@@ -1580,10 +1585,10 @@ arcnet_send_packet_bad(struct sk_buff *skb, struct device *dev)
 	if (lp->txready)	/* transmit already in progress! */
 	{
 		BUGMSG(D_NORMAL,"trying to start new packet while busy! (status=%Xh)\n",
-			inb(STATUS));
+			ARCSTATUS);
 		lp->intmask &= ~TXFREEflag;
 		SETMASK;
-		outb(NOTXcmd,COMMAND); /* abort current send */
+		ACOMMAND(NOTXcmd); /* abort current send */
 		arcnet_inthandler(dev); /* fake an interrupt */
 		lp->stats.tx_errors++;
 		lp->stats.tx_fifo_errors++;
@@ -1597,7 +1602,7 @@ arcnet_send_packet_bad(struct sk_buff *skb, struct device *dev)
         if (set_bit(0, (void*)&dev->tbusy) != 0)
         {
             BUGMSG(D_NORMAL,"transmitter called with busy bit set! (status=%Xh, inTX=%d, tickssofar=%ld)\n",
-            		inb(STATUS),lp->intx,jiffies-dev->trans_start);
+            		ARCSTATUS,lp->intx,jiffies-dev->trans_start);
             lp->stats.tx_errors++;
             lp->stats.tx_fifo_errors++;
             return -EBUSY;
@@ -1613,7 +1618,7 @@ static int
 arcnetA_send_packet(struct sk_buff *skb, struct device *dev)
 {
 	struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
-	int ioaddr=dev->base_addr,bad;
+	int ioaddr=IOADDR,bad;
 	struct Outgoing *out=&(lp->outgoing);
 
 	lp->intx++;
@@ -1723,11 +1728,11 @@ arcnetA_send_packet(struct sk_buff *skb, struct device *dev)
 static void arcnetA_continue_tx(struct device *dev)
 {
 	struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
-	int ioaddr=dev->base_addr,maxsegsize=XMTU-4;
+	int ioaddr=IOADDR,maxsegsize=XMTU-4;
 	struct Outgoing *out=&(lp->outgoing);
 	
 	BUGMSG(D_DURING,"continue_tx called (status=%Xh, intx=%d, intxh=%d, intmask=%Xh\n",
-		inb(STATUS),lp->intx,lp->in_txhandler,lp->intmask);
+		ARCSTATUS,lp->intx,lp->in_txhandler,lp->intmask);
 	
 	if (lp->txready)
 	{
@@ -1773,7 +1778,7 @@ arcnetAS_prepare_tx(struct device *dev,u_char *hdr,int hdrlen,
 	struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
 	struct ClientData *arcsoft;
 	union ArcPacket *arcpacket = 
-		(union ArcPacket *)(dev->mem_start+512*(lp->txbuf^1));
+		(union ArcPacket *)phys_to_virt(dev->mem_start+512*(lp->txbuf^1));
 	int offset;
 	
 #ifdef SLOW_XMIT_COPY
@@ -1790,7 +1795,7 @@ arcnetAS_prepare_tx(struct device *dev,u_char *hdr,int hdrlen,
 #ifndef SLOW_XMIT_COPY
 	/* clean out the page to make debugging make more sense :) */
 	BUGLVL(D_DURING)
-		memset((void *)dev->mem_start+lp->txbuf*512,0x42,512);
+		memset_io(dev->mem_start+lp->txbuf*512,0x42,512);
 #endif
 
 	arcpacket->hardheader.destination=daddr;
@@ -1877,10 +1882,10 @@ static int
 arcnet_go_tx(struct device *dev,int enable_irq)
 {
 	struct arcnet_local *lp=(struct arcnet_local *)dev->priv;
-	int ioaddr=dev->base_addr;
+	int ioaddr=IOADDR;
 
 	BUGMSG(D_DURING,"go_tx: status=%Xh, intmask=%Xh, txready=%d, sending=%d\n",
-		inb(STATUS),lp->intmask,lp->txready,lp->sending);
+		ARCSTATUS,lp->intmask,lp->txready,lp->sending);
 
 	if (lp->sending || !lp->txready)
 	{
@@ -1893,7 +1898,7 @@ arcnet_go_tx(struct device *dev,int enable_irq)
 	}
 	
 	/* start sending */
-	outb(TXcmd|(lp->txready<<3),COMMAND);
+	ACOMMAND(TXcmd|(lp->txready<<3));
 
 	lp->stats.tx_packets++;
 	lp->txready=0;
@@ -1940,11 +1945,11 @@ arcnet_interrupt(int irq,void *dev_id,struct pt_regs *regs)
 	/* RESET flag was enabled - if !dev->start, we must clear it right
 	 * away (but nothing else) since inthandler() is never called.
 	 */
-	ioaddr=dev->base_addr;
+	ioaddr=IOADDR;	/* can't do this before checking dev!=NULL */
 	if (!dev->start)
 	{
-		if (inb(STATUS) & RESETflag)
-			outb(CFLAGScmd|RESETclear, COMMAND);
+		if (ARCSTATUS & RESETflag)
+			ACOMMAND(CFLAGScmd|RESETclear);
 		return;
 	}
 
@@ -1960,7 +1965,7 @@ static void
 arcnet_inthandler(struct device *dev)
 {	
 	struct arcnet_local *lp=(struct arcnet_local *)dev->priv;
-	int ioaddr=dev->base_addr, status, boguscount = 3, didsomething;
+	int ioaddr=IOADDR, status, boguscount = 3, didsomething;
 
 	if (IF_INTERRUPT)
 	{
@@ -1968,15 +1973,15 @@ arcnet_inthandler(struct device *dev)
 		return;	/* don't even try. */
 	}
 	
-	outb(0,INTMASK);
+	AINTMASK(0);
 	INTERRUPT = 1;
 
 	BUGMSG(D_DURING,"in arcnet_inthandler (status=%Xh, intmask=%Xh)\n",
-		inb(STATUS),lp->intmask);
+		ARCSTATUS,lp->intmask);
 
 	do
 	{
-		status = inb(STATUS);
+		status = ARCSTATUS;
 		didsomething=0;
 	
 
@@ -2049,7 +2054,7 @@ arcnet_inthandler(struct device *dev)
 			if (lp->intx)
 			{
 				BUGMSG(D_DURING,"TXDONE while intx! (status=%Xh, intx=%d)\n",
-					inb(STATUS),lp->intx);
+					ARCSTATUS,lp->intx);
 				lp->in_txhandler--;
 				continue;
 			}
@@ -2108,7 +2113,7 @@ arcnet_inthandler(struct device *dev)
 #ifdef DETECT_RECONFIGS
 		if (status & (lp->intmask) & RECONflag)
 		{
-			outb(CFLAGScmd|CONFIGclear,COMMAND);
+			ACOMMAND(CFLAGScmd|CONFIGclear);
 			lp->stats.tx_carrier_errors++;
 			
 			#ifdef SHOW_RECONFIGS
@@ -2179,7 +2184,7 @@ arcnet_inthandler(struct device *dev)
 	} while (--boguscount && didsomething);
 
 	BUGMSG(D_DURING,"net_interrupt complete (status=%Xh, count=%d)\n",
-			inb(STATUS),boguscount);
+			ARCSTATUS,boguscount);
 	BUGMSG(D_DURING,"\n");
 
 	SETMASK;	/* put back interrupt mask */
@@ -2203,9 +2208,9 @@ static void
 arcnet_rx(struct device *dev,int recbuf)
 {
 	struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
-	int ioaddr = dev->base_addr;
+	int ioaddr=IOADDR;
 	union ArcPacket *arcpacket=
-		(union ArcPacket *)(dev->mem_start+recbuf*512);
+		(union ArcPacket *)phys_to_virt(dev->mem_start+recbuf*512);
 	u_char *arcsoft;
 	short length,offset;
 	u_char daddr,saddr;
@@ -2219,7 +2224,7 @@ arcnet_rx(struct device *dev,int recbuf)
 	if (saddr==0)
 	{
 		BUGMSG(D_NORMAL,"discarding old packet. (status=%Xh)\n",
-			inb(STATUS));
+			ARCSTATUS);
 		lp->stats.rx_errors++;
 		return;
 	}
@@ -2263,6 +2268,12 @@ arcnet_rx(struct device *dev,int recbuf)
 		arcnetS_rx(lp->sdev,arcsoft,length,saddr,daddr);
 		break;
 #endif
+	case ARC_P_DATAPOINT_BOOT:
+	case ARC_P_DATAPOINT_MOUNT:
+		break;
+	case ARC_P_POWERLAN_BEACON:
+	case ARC_P_POWERLAN_BEACON2:
+		break;
 	case ARC_P_LANSOFT: /* don't understand.  fall through. */
 	default:
 		BUGMSG(D_EXTRA,"received unknown protocol %d (%Xh) from station %d.\n",
@@ -2585,7 +2596,7 @@ arcnet_get_stats(struct device *dev)
 	return &lp->stats;
 }
 
-#if 0
+#if 0	/* standard ARCnet cards have no promiscuous mode */
 /* Set or clear the multicast filter for this adaptor.
  * num_addrs == -1	Promiscuous mode, receive all packets
  * num_addrs == 0	Normal mode, clear multicast list
@@ -2595,15 +2606,10 @@ arcnet_get_stats(struct device *dev)
 static void
 set_multicast_list(struct device *dev)
 {
-#if 0	  /* no promiscuous mode at all on most ARCnet models */
-	struct arcnet_local *lp=(struct arcnet_local *)(dev->priv);
-
-	short ioaddr = dev->base_addr;
 	if (num_addrs) {
-		outw(69, ioaddr);		/* Enable promiscuous mode */
+		/* Enable promiscuous mode */
 	} else
-		outw(99, ioaddr);		/* Disable promiscuous mode, use normal mode */
-#endif
+		/* Disable promiscuous mode, use normal mode */
 }
 #endif
 
@@ -2809,9 +2815,9 @@ static int
 arcnetE_send_packet(struct sk_buff *skb, struct device *dev)
 {
 	struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
-	int ioaddr=dev->base_addr,bad;
+	int ioaddr=IOADDR,bad;
 	union ArcPacket *arcpacket = 
-		(union ArcPacket *)(dev->mem_start+512*(lp->txbuf^1));
+		(union ArcPacket *)phys_to_virt(dev->mem_start+512*(lp->txbuf^1));
 	u_char *arcsoft,daddr;
 	short offset,length=skb->len+1;
 
@@ -2844,7 +2850,7 @@ arcnetE_send_packet(struct sk_buff *skb, struct device *dev)
 #ifndef SLOW_XMIT_COPY
 	/* clean out the page to make debugging make more sense :) */
 	BUGLVL(D_DURING)
-		memset((void *)dev->mem_start+lp->txbuf*512,0x42,512);
+		memset_io(dev->mem_start+lp->txbuf*512,0x42,512);
 #endif
 
 	/* broadcasts have address FF:FF:FF:FF:FF:FF in etherspeak */
@@ -2989,7 +2995,7 @@ static int
 arcnetS_send_packet(struct sk_buff *skb, struct device *dev)
 {
 	struct arcnet_local *lp = (struct arcnet_local *)dev->priv;
-	int ioaddr=dev->base_addr,bad,length;
+	int ioaddr=IOADDR,bad,length;
 	struct S_ClientData *hdr=(struct S_ClientData *)skb->data;
 
 	lp->intx++;
@@ -3253,61 +3259,67 @@ static int irq=0;
 static int shmem=0;
 static char *device = NULL;	/* use eg. device="arc1" to change name */
 
-int
-init_module(void)
-{
-	if (device)
-		strcpy(thiscard.name,device);
-#ifndef CONFIG_ARCNET_ETHNAME
-	else if (!thiscard.name[0]) strcpy(thiscard.name,"arc0");
+#ifdef RIM_I_MODE
+  static int node=0;	/* you must specify the node ID for RIM I cards */
 #endif
 
-	thiscard.base_addr=io;
+int init_module(void)
+{
+	struct device *dev=&thiscard;
+	if (device)
+		strcpy(dev->name,device);
+	#ifndef CONFIG_ARCNET_ETHNAME
+	  else if (!dev->name[0]) strcpy(dev->name,"arc0");
+	#endif
+
+	#ifdef RIM_I_MODE
+	if (node) io=node;
+	#endif
+
+	dev->base_addr=io;
 	
 	if (irq) irqnum=irq;
-
-	thiscard.irq=irqnum;
-	if (thiscard.irq==2) thiscard.irq=9;
+	dev->irq=irqnum;
+	if (dev->irq==2) dev->irq=9;
 
 	if (shmem)
 	{
-		thiscard.mem_start=shmem;
-		thiscard.mem_end=thiscard.mem_start+512*4-1;
-		thiscard.rmem_start=thiscard.mem_start+512*0;
-		thiscard.rmem_end=thiscard.mem_start+512*2-1;
+		dev->mem_start=shmem;
+		dev->mem_end=thiscard.mem_start+512*4-1;
+		dev->rmem_start=thiscard.mem_start+512*0;
+		dev->rmem_end=thiscard.mem_start+512*2-1;
 	}
 
-	if (register_netdev(&thiscard) != 0)
+	if (register_netdev(dev) != 0)
 		return -EIO;
 	return 0;
 }
 
-void
-cleanup_module(void)
+void cleanup_module(void)
 {
-	int ioaddr=thiscard.base_addr;
+	struct device *dev=&thiscard;
+	int ioaddr=IOADDR;
 
-	if (thiscard.start) arcnet_close(&thiscard);
+	if (dev->start) arcnet_close(dev);
 
 	/* Flush TX and disable RX */
 	if (ioaddr)
 	{
-		outb(0,INTMASK);	/* disable IRQ's */
-		outb(NOTXcmd,COMMAND);  /* stop transmit */
-		outb(NORXcmd,COMMAND);	/* disable receive */
+		AINTMASK(0);		/* disable IRQ's */
+		ACOMMAND(NOTXcmd);	/* stop transmit */
+		ACOMMAND(NORXcmd);	/* disable receive */
 	}
 
-	if (thiscard.irq)
+	if (dev->irq)
 	{
-		irq2dev_map[thiscard.irq] = NULL;
-		free_irq(thiscard.irq,NULL);
+		irq2dev_map[dev->irq] = NULL;
+		free_irq(dev->irq,NULL);
 	}
 	
-	if (thiscard.base_addr) release_region(thiscard.base_addr,
-						ARCNET_TOTAL_SIZE);
-	unregister_netdev(&thiscard);
-	kfree(thiscard.priv);
-	thiscard.priv = NULL;
+	if (dev->base_addr) RELEASE_REGION(dev->base_addr,ARCNET_TOTAL_SIZE);
+	unregister_netdev(dev);
+	kfree(dev->priv);
+	dev->priv = NULL;
 }
 
 #endif /* MODULE */

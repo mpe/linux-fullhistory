@@ -1971,19 +1971,17 @@ static int pcxe_ioctl(struct tty_struct *tty, struct file * file,
 			return 0;
 
 		case TIOCGSOFTCAR:
-			error = verify_area(VERIFY_WRITE, (void *) arg,sizeof(long));
-			if(error)
-				return error;
-			put_fs_long(C_CLOCAL(tty) ? 1 : 0,
-				    (unsigned long *) arg);
-			return 0;
+			return put_user(C_CLOCAL(tty) ? 1 : 0,
+			    (unsigned int *) arg);
 
 		case TIOCSSOFTCAR:
-			error = verify_area(VERIFY_READ, (void *) arg,sizeof(long));
-			if(error)
+			{
+			    unsigned int value;
+			    error = get_user( value, (unsigned int *) arg);
+			    if (error)
 				return error;
-			arg = get_fs_long((unsigned long *) arg);
-			tty->termios->c_cflag =	((tty->termios->c_cflag & ~CLOCAL) | (arg ? CLOCAL : 0));
+			    tty->termios->c_cflag = ((tty->termios->c_cflag & ~CLOCAL) | (value ? CLOCAL : 0));
+			}
 			return 0;
 
 		case TIOCMODG:
@@ -2009,20 +2007,18 @@ static int pcxe_ioctl(struct tty_struct *tty, struct file * file,
 			if(mstat & ch->dcd)
 				mflag |= TIOCM_CD;
 
-			error = verify_area(VERIFY_WRITE, (void *) arg,sizeof(long));
+			error = put_user(mflag, (unsigned int *) arg);
 			if(error)
 				return error;
-			put_fs_long(mflag, (unsigned long *) arg);
 			break;
 
 		case TIOCMBIS:
 		case TIOCMBIC:
 		case TIOCMODS:
 		case TIOCMSET:
-			error = verify_area(VERIFY_READ, (void *) arg,sizeof(long));
+			error = get_user(mstat, (unsigned int *) arg);
 			if(error)
 				return error;
-			mstat = get_fs_long((unsigned long *) arg);
 
 			mflag = 0;
 			if(mstat & TIOCM_DTR)

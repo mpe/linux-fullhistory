@@ -11,7 +11,12 @@
  *      as published by the Free Software Foundation; either version
  *      2 of the License, or (at your option) any later version.
  */
-
+/*
+ *	Changes:
+ *
+ *	Janos Farkas			:	delete timer on ifdown
+ *	<chexum@bankinf.banki.hu>
+ */
 
 #include <linux/errno.h>
 #include <linux/types.h>
@@ -472,9 +477,10 @@ struct inet6_ifaddr * ipv6_chk_addr(struct in6_addr *addr)
 	return ifp;	
 }
 
-static void sit_route_add(struct device *dev)
+static void sit_route_add(struct inet6_dev *idev)
 {
-	struct in6_rtmsg rtmsg;	
+	struct in6_rtmsg rtmsg;
+	struct device *dev = idev->dev;
 	int err;
 
 	rtmsg.rtmsg_type = RTMSG_NEWROUTE;
@@ -498,7 +504,7 @@ static void sit_route_add(struct device *dev)
 		rtmsg.rtmsg_flags = RTF_NEXTHOP|RTF_UP;
 	}
 
-	strcpy(rtmsg.rtmsg_device, dev->name);
+	rtmsg.rtmsg_ifindex = idev->if_index; 
 
 	err = ipv6_route_add(&rtmsg);
 
@@ -514,7 +520,6 @@ static void init_loopback(struct device *dev)
 	struct inet6_dev  *idev;
 	struct inet6_ifaddr * ifp;
 	struct in6_rtmsg rtmsg;
-	char devname[] = "lo";
 	int err;
 
 	/* ::1 */
@@ -545,7 +550,7 @@ static void init_loopback(struct device *dev)
 
 	rtmsg.rtmsg_prefixlen = 128;
 	rtmsg.rtmsg_metric = 1;
-	strcpy(rtmsg.rtmsg_device, devname);
+	rtmsg.rtmsg_ifindex = idev->if_index;
 
 	rtmsg.rtmsg_flags = RTF_NEXTHOP|RTF_HOST|RTF_UP;
 
@@ -688,14 +693,19 @@ void addrconf_prefix_rcv(struct device *dev, u8 *opt, int len)
 	else if (pinfo->onlink && valid_lft)
 	{
 		struct in6_rtmsg rtmsg;
-
+		struct inet6_dev *idev;
+		
 		printk(KERN_DEBUG "adding on link route\n");
 		ipv6_addr_copy(&rtmsg.rtmsg_dst, &pinfo->prefix);
 		memset(&rtmsg.rtmsg_gateway, 0, sizeof(struct in6_addr));
 
 		rtmsg.rtmsg_prefixlen = pinfo->prefix_len;
 		rtmsg.rtmsg_metric = 1;
-		memcpy(rtmsg.rtmsg_device, dev->name, strlen(dev->name) + 1);
+		
+		if ((idev = ipv6_get_idev(dev)))
+		{
+			rtmsg.rtmsg_ifindex = idev->if_index;
+		}
 		rtmsg.rtmsg_flags = RTF_UP | RTF_ADDRCONF;
 		rtmsg.rtmsg_info = rt_expires;
 
@@ -818,6 +828,7 @@ static int addrconf_ifdown(struct device *dev)
 			if (ifa->idev == idev)
 			{
 				*bifa = ifa->lst_next;
+				del_timer(&ifa->timer);
 				kfree(ifa);
 				ifa = *bifa;
 				continue;
@@ -868,6 +879,40 @@ int addrconf_set_dstaddr(void *arg)
 	}
 	
 	return -EINVAL;
+}
+
+/*
+ *	Obtain if_index from device name
+ */
+int addrconf_get_ifindex(void *arg)
+{
+	struct ifreq ifr;
+	int res = -ENODEV;
+	
+	if (copy_from_user(&ifr, arg, sizeof(struct ifreq)))
+	{
+		res = -EFAULT;		
+	}
+	else
+	{
+		struct inet6_dev *idev;
+
+		for (idev = inet6_dev_lst; idev; idev=idev->next)
+		{
+			if (!strncmp(ifr.ifr_name, idev->dev->name, IFNAMSIZ))
+			{
+				res = 0;
+				ifr.ifr_ifindex = idev->if_index;
+				if (copy_to_user(arg, &ifr, sizeof(ifr)))
+				{
+					res = -EFAULT;
+				}
+				break;
+			}
+		}
+	}
+
+	return res;
 }
 
 /*
@@ -1005,7 +1050,7 @@ int addrconf_notify(struct notifier_block *this, unsigned long event,
 			 *  route.
 			 */
 
-			sit_route_add(dev);
+			sit_route_add(idev);
 			break;
 
 		case ARPHRD_LOOPBACK:
@@ -1018,7 +1063,7 @@ int addrconf_notify(struct notifier_block *this, unsigned long event,
 			addrconf_eth_config(dev);
 			break;
 		}
-		rt6_sndmsg(RTMSG_NEWDEVICE, NULL, NULL, 0, 0, dev->name, 0);
+		rt6_sndmsg(RTMSG_NEWDEVICE, NULL, NULL, 0, dev, 0, 0);
 		break;
 
 	case NETDEV_DOWN:
@@ -1029,8 +1074,7 @@ int addrconf_notify(struct notifier_block *this, unsigned long event,
 		if (addrconf_ifdown(dev) == 0)
 		{
 			rt6_ifdown(dev);
-			rt6_sndmsg(RTMSG_NEWDEVICE, NULL, NULL, 0, 0,
-				   dev->name, 0);
+			rt6_sndmsg(RTMSG_DELDEVICE, NULL, NULL, 0, dev, 0, 0);
 		}
 
 		break;
@@ -1062,7 +1106,7 @@ static void addrconf_dad_completed(struct inet6_ifaddr *ifp)
 
 		rtmsg.rtmsg_prefixlen = ifp->prefix_len;
 		rtmsg.rtmsg_metric = 1;
-		memcpy(rtmsg.rtmsg_device, dev->name, strlen(dev->name) + 1);
+		rtmsg.rtmsg_ifindex = ifp->idev->if_index;
 
 		rtmsg.rtmsg_flags = RTF_UP;
 

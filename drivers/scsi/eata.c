@@ -1,6 +1,14 @@
 /*
  *      eata.c - Low-level driver for EATA/DMA SCSI host adapters.
  *
+ *      22 Nov 1996 rev. 2.30 for linux 2.1.12 and 2.0.26
+ *          When CONFIG_PCI is defined, BIOS32 is used to include in the
+ *          list of i/o ports to be probed all the PCI SCSI controllers.
+ *          The list of i/o ports to be probed can be overwritten by the
+ *          "eata=port0, port1,...." boot command line option.
+ *          Scatter/gather lists are now allocated by a number of kmalloc
+ *          calls, in order to avoid the previous size limit of 64Kb.
+ *
  *      16 Nov 1996 rev. 2.20 for linux 2.1.10 and 2.0.25
  *          Added support for EATA 2.0C, PCI, multichannel and wide SCSI.
  *
@@ -79,6 +87,11 @@
  *
  *  Copyright (C) 1994, 1995, 1996 Dario Ballabio (dario@milano.europe.dg.com)
  *
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that redistributions of source
+ *  code retain the above copyright notice and this comment without
+ *  modification.
+ *
  */
 
 /*
@@ -103,9 +116,10 @@
  *  supported by this driver.
  *
  *  This code has been tested with up to 3 Distributed Processing Technology 
- *  PM2122A/9X (DPT SCSI BIOS v002.D1, firmware v05E.0) eisa controllers,
+ *  PM2122A/9X (DPT SCSI BIOS v002.D1, firmware v05E.0) EISA controllers,
  *  in any combination of private and shared IRQ.
- *  PCI support has been tested using a DPT PM3224W (firmware v07G.0).
+ *  PCI support has been tested using up to 2 DPT PM3224W (DPT SCSI BIOS 
+ *  v003.D0, firmware v07G.0).
  *
  *  Multiple ISA, EISA and PCI boards can be configured in the same system.
  *  It is suggested to put all the EISA boards on the same IRQ level, all
@@ -116,16 +130,32 @@
  *  be _level_ triggered (not _edge_ triggered).
  *
  *  This driver detects EATA boards by probes at fixed port addresses,
- *  so no BIOS32 or PCI BIOS support is used or required.
+ *  so no BIOS32 or PCI BIOS support is required.
  *  The suggested way to detect a generic EATA PCI board is to force on it
  *  any unused EISA address, even if there are other controllers on the EISA
  *  bus, or even if you system has no EISA bus at all.
  *  Do not force any ISA address on EATA PCI boards.
  *
+ *  If PCI bios support is configured into the kernel, BIOS32 is used to 
+ *  include in the list of i/o ports to be probed all the PCI SCSI controllers.
+ *
+ *  Due to a DPT BIOS "feature", it might not be possible to force an EISA
+ *  address on more then a single DPT PCI board, so in this case you have to
+ *  let the PCI BIOS assign the addresses.
+ *
  *  The sequence of detection probes is:
+ *
  *  - ISA 0x1F0; 
+ *  - PCI SCSI controllers (only if BIOS32 is available);
  *  - EISA/PCI 0x1C88 through 0xFC88 (corresponding to EISA slots 1 to 15);
  *  - ISA  0x170, 0x230, 0x330.
+ * 
+ *  The above list of detection probes can be totally replaced by the
+ *  boot command line option: "eata=port0, port1, port2,...", where the
+ *  port0, port1... arguments are ISA/EISA/PCI addresses to be probed.
+ *  For example using "eata=0x7410, 0x7450, 0x230", the driver probes
+ *  only the two PCI addresses 0x7410 and 0x7450 and the ISA address 0x230,
+ *  in this order; "eata=0" totally disables this driver.
  *
  *  The boards are named EATA0, EATA1,... according to the detection order.
  *
@@ -152,9 +182,11 @@
 #include "sd.h"
 #include <asm/dma.h>
 #include <asm/irq.h>
-#include "linux/in.h"
 #include "eata.h"
 #include<linux/stat.h>
+#include<linux/config.h>
+#include<linux/bios32.h>
+#include<linux/pci.h>
 
 struct proc_dir_entry proc_scsi_eata2x = {
     PROC_SCSI_EATA2X, 6, "eata2x",
@@ -172,17 +204,22 @@ struct proc_dir_entry proc_scsi_eata2x = {
 #undef  DEBUG_STATISTICS
 #undef  DEBUG_RESET
 
+#define MAX_ISA 4
+#define MAX_VESA 0 
+#define MAX_EISA 15
+#define MAX_PCI 16
+#define MAX_BOARDS (MAX_ISA + MAX_VESA + MAX_EISA + MAX_PCI)
 #define MAX_CHANNEL 4
 #define MAX_LUN 32
 #define MAX_TARGET 32
 #define MAX_IRQ 16
-#define MAX_BOARDS 18
 #define MAX_MAILBOXES 64
 #define MAX_SGLIST 64
 #define MAX_LARGE_SGLIST 252
 #define MAX_INTERNAL_RETRIES 64
 #define MAX_CMD_PER_LUN 2
 
+#define SKIP 1
 #define FALSE 0
 #define TRUE 1
 #define FREE 0
@@ -190,7 +227,6 @@ struct proc_dir_entry proc_scsi_eata2x = {
 #define LOCKED   2
 #define IN_RESET 3
 #define IGNORE   4
-#define NO_IRQ  0xff
 #define NO_DMA  0xff
 #define MAXLOOP 200000
 
@@ -205,7 +241,8 @@ struct proc_dir_entry proc_scsi_eata2x = {
 #define REG_MID         4
 #define REG_MSB         5
 #define REGION_SIZE     9
-#define EISA_RANGE      0x1000
+#define ISA_RANGE       0x0fff
+#define EISA_RANGE      0xfc88
 #define BSY_ASSERTED      0x80
 #define DRQ_ASSERTED      0x08
 #define ABSY_ASSERTED     0x01
@@ -261,13 +298,18 @@ struct eata_info {
    /* Structure extension defined in EATA 2.0B */
    unchar  isaena:1,    /* ISA i/o addressing is disabled/enabled */
 	 forcaddr:1,    /* Port address has been forced */
-		 :6;
+         large_sg:1,    /* 1 if large SG lists are supported */
+             res1:1,
+		 :4;
    unchar  max_id:5,    /* Max SCSI target ID number */
 	 max_chan:3;    /* Max SCSI channel number on this board */
 
    /* Structure extension defined in EATA 2.0C */
    unchar   max_lun;    /* Max SCSI LUN number */
-   unchar   notused[3];
+   unchar        :6,
+              pci:1,    /* This board is PCI */
+             eisa:1;    /* This board is EISA */
+   unchar   notused[2];
 
    ushort ipad[247];
    };
@@ -294,6 +336,11 @@ struct mssp {
    char mess[12];
    };
 
+struct sg_list {
+   unsigned int address;                /* Segment Address */
+   unsigned int num_bytes;              /* Segment Length */
+   };
+
 /* MailBox SCSI Command Packet */
 struct mscp {
    unchar  sreset:1,     /* SCSI Bus Reset Signal should be asserted */
@@ -317,17 +364,12 @@ struct mscp {
    unchar mess[3];       /* Massage to/from Target */
    unchar cdb[12];       /* Command Descriptor Block */
    ulong  data_len;      /* If sg=0 Data Length, if sg=1 sglist length */
-   Scsi_Cmnd *SCpnt;     /* Address to be returned is sp */
+   Scsi_Cmnd *SCpnt;     /* Address to be returned in sp */
    ulong  data_address;  /* If sg=0 Data Address, if sg=1 sglist address */
    ulong  sp_addr;       /* Address where sp is DMA'ed when cp completes */
    ulong  sense_addr;    /* Address where Sense Data is DMA'ed on error */
-
-   struct sg_list {
-      unsigned int address;     /* Segment Address */
-      unsigned int num_bytes;   /* Segment Length */
-      } sglist[MAX_SGLIST];
-
    unsigned int index;   /* cp index */
+   struct sg_list *sglist;
    };
 
 struct hostdata {
@@ -353,6 +395,26 @@ static struct Scsi_Host *sh[MAX_BOARDS + 1];
 static const char *driver_name = "EATA";
 static unsigned int irqlist[MAX_IRQ], calls[MAX_IRQ];
 
+static unsigned int io_port[MAX_BOARDS + 1] = { 
+
+   /* First ISA */
+   0x1f0,
+
+   /* Space for MAX_PCI ports possibly reported by PCI_BIOS */
+    SKIP,    SKIP,   SKIP,   SKIP,   SKIP,   SKIP,   SKIP,   SKIP,
+    SKIP,    SKIP,   SKIP,   SKIP,   SKIP,   SKIP,   SKIP,   SKIP,
+
+   /* MAX_EISA ports */
+   0x1c88, 0x2c88, 0x3c88, 0x4c88, 0x5c88, 0x6c88, 0x7c88, 0x8c88,
+   0x9c88, 0xac88, 0xbc88, 0xcc88, 0xdc88, 0xec88, 0xfc88, 
+
+   /* Other (MAX_ISA - 1) ports */
+   0x170,  0x230,  0x330,
+ 
+   /* End of list */
+   0x0
+   };
+
 #define HD(board) ((struct hostdata *) &sh[board]->hostdata)
 #define BN(board) (HD(board)->board_name)
 
@@ -363,6 +425,7 @@ static unsigned int irqlist[MAX_IRQ], calls[MAX_IRQ];
 
 static void eata2x_interrupt_handler(int, void *, struct pt_regs *);
 static int do_trace = FALSE;
+static int setup_done = FALSE;
 
 static inline int wait_on_busy(unsigned int iobase) {
    unsigned int loop = MAXLOOP;
@@ -404,11 +467,12 @@ static inline int read_pio(unsigned int iobase, ushort *start, ushort *end) {
    return FALSE;
 }
 
-static inline int port_detect(unsigned int *port_base, unsigned int j, 
+static inline int port_detect(unsigned int port_base, unsigned int j, 
 			      Scsi_Host_Template *tpnt) {
-   unsigned char irq, dma_channel, subversion, c;
+   unsigned char irq, dma_channel, subversion, i;
    unsigned char protocol_rev;
    struct eata_info info;
+   char *bus_type;
 
    /* Allowed DMA channels for ISA (0 indicates reserved) */
    unsigned char dma_channel_table[4] = { 5, 6, 7, 0 };
@@ -417,16 +481,15 @@ static inline int port_detect(unsigned int *port_base, unsigned int j,
 
    sprintf(name, "%s%d", driver_name, j);
 
-   if(check_region(*port_base, REGION_SIZE)) {
-      printk("%s: address 0x%03x in use, skipping probe.\n", 
-	     name, *port_base);
+   if(check_region(port_base, REGION_SIZE)) {
+      printk("%s: address 0x%03x in use, skipping probe.\n", name, port_base);
       return FALSE;
       }
 
-   if (do_dma(*port_base, 0, READ_CONFIG_PIO)) return FALSE;
+   if (do_dma(port_base, 0, READ_CONFIG_PIO)) return FALSE;
 
    /* Read the info structure */
-   if (read_pio(*port_base, (ushort *)&info, (ushort *)&info.ipad[0])) 
+   if (read_pio(port_base, (ushort *)&info, (ushort *)&info.ipad[0])) 
       return FALSE;
 
    /* Check the controller "EATA" signature */
@@ -446,7 +509,7 @@ static inline int port_detect(unsigned int *port_base, unsigned int j,
 
    irq = info.irq;
 
-   if (*port_base >= EISA_RANGE) {
+   if (port_base > ISA_RANGE) {
 
       if (!info.haaval || info.ata || info.drqvld) {
 	 printk("%s: unusable EISA/PCI board found (%d%d%d), detaching.\n", 
@@ -477,8 +540,8 @@ static inline int port_detect(unsigned int *port_base, unsigned int j,
 	     name, irq);
 
    /* Board detected, allocate its IRQ if not already done */
-   if ((irq >= MAX_IRQ) || ((irqlist[irq] == NO_IRQ) && request_irq
-       (irq, eata2x_interrupt_handler, SA_INTERRUPT, driver_name, NULL))) {
+   if ((irq >= MAX_IRQ) || (!irqlist[irq] && request_irq(irq,
+              eata2x_interrupt_handler, SA_INTERRUPT, driver_name, NULL))) {
       printk("%s: unable to allocate IRQ %u, detaching.\n", name, irq);
       return FALSE;
       }
@@ -499,7 +562,7 @@ static inline int port_detect(unsigned int *port_base, unsigned int j,
    config.len = (ushort) htons((ushort)510);
    config.ocena = TRUE;
 
-   if (do_dma(*port_base, (unsigned int)&config, SET_CONFIG_DMA)) {
+   if (do_dma(port_base, (unsigned int)&config, SET_CONFIG_DMA)) {
       printk("%s: busy timeout sending configuration, detaching.\n", name);
       return FALSE;
       }
@@ -511,15 +574,15 @@ static inline int port_detect(unsigned int *port_base, unsigned int j,
    if (sh[j] == NULL) {
       printk("%s: unable to register host, detaching.\n", name);
 
-      if (irqlist[irq] == NO_IRQ) free_irq(irq, NULL);
+      if (!irqlist[irq]) free_irq(irq, NULL);
 
       if (subversion == ISA) free_dma(dma_channel);
 
       return FALSE;
       }
 
-   sh[j]->io_port = *port_base;
-   sh[j]->unique_id = *port_base;
+   sh[j]->io_port = port_base;
+   sh[j]->unique_id = port_base;
    sh[j]->n_io_port = REGION_SIZE;
    sh[j]->dma_channel = dma_channel;
    sh[j]->irq = irq;
@@ -529,13 +592,13 @@ static inline int port_detect(unsigned int *port_base, unsigned int j,
    sh[j]->cmd_per_lun = MAX_CMD_PER_LUN;
 
    /* Register the I/O space that we use */
-   request_region(sh[j]->io_port, REGION_SIZE, driver_name);
+   request_region(sh[j]->io_port, sh[j]->n_io_port, driver_name);
 
    memset(HD(j), 0, sizeof(struct hostdata));
    HD(j)->subversion = subversion;
    HD(j)->protocol_rev = protocol_rev;
    HD(j)->board_number = j;
-   irqlist[irq] = j;
+   irqlist[irq]++;
 
    if (HD(j)->subversion == ESA)
       sh[j]->unchecked_isa_dma = FALSE;
@@ -548,66 +611,138 @@ static inline int port_detect(unsigned int *port_base, unsigned int j,
       enable_dma(dma_channel);
       }
 
-   if (protocol_rev != 'A' && info.max_chan > 0 && info.max_chan < MAX_CHANNEL)
-      sh[j]->max_channel = info.max_chan;
-
-   if (protocol_rev != 'A' && info.max_id > 7 && info.max_id < MAX_TARGET)
-      sh[j]->max_id = info.max_id + 1;
-
-   if (protocol_rev == 'C' && info.max_lun > 7 && info.max_lun < MAX_LUN)
-      sh[j]->max_lun = info.max_lun + 1;
-
    strcpy(BN(j), name);
-
-   printk("%s: rev. 2.0%c, PORT 0x%03x, IRQ %u, DMA %u, SG %d, "\
-	  "Mbox %d, CmdLun %d.\n", BN(j), HD(j)->protocol_rev,
-	   sh[j]->io_port, sh[j]->irq, sh[j]->dma_channel,
-	   sh[j]->sg_tablesize, sh[j]->can_queue, sh[j]->cmd_per_lun);
 
    /* DPT PM2012 does not allow to detect sg_tablesize correctly */
    if (sh[j]->sg_tablesize > MAX_SGLIST || sh[j]->sg_tablesize < 2) {
-      printk("%s: detect, forcing to use %d SG lists.\n", BN(j), MAX_SGLIST);
+      printk("%s: detect, wrong n. of SG lists %d, fixed.\n",
+             BN(j), sh[j]->sg_tablesize);
       sh[j]->sg_tablesize = MAX_SGLIST;
       }
 
    /* DPT PM2012 does not allow to detect can_queue correctly */
    if (sh[j]->can_queue > MAX_MAILBOXES || sh[j]->can_queue  < 2) {
-      printk("%s: detect, forcing to use %d Mbox.\n", BN(j), MAX_MAILBOXES);
+      printk("%s: detect, wrong n. of Mbox %d, fixed.\n",
+             BN(j), sh[j]->can_queue);
       sh[j]->can_queue = MAX_MAILBOXES;
       }
+
+   if (protocol_rev != 'A') {
+
+      if (info.max_chan > 0 && info.max_chan < MAX_CHANNEL)
+         sh[j]->max_channel = info.max_chan;
+
+      if (info.max_id > 7 && info.max_id < MAX_TARGET)
+         sh[j]->max_id = info.max_id + 1;
+
+      if (info.large_sg && sh[j]->sg_tablesize == MAX_SGLIST)
+         sh[j]->sg_tablesize = MAX_LARGE_SGLIST;
+      }
+
+   if (protocol_rev == 'C') {
+
+      if (info.max_lun > 7 && info.max_lun < MAX_LUN)
+         sh[j]->max_lun = info.max_lun + 1;
+      }
+
+   if (subversion == ESA && protocol_rev == 'C' && info.pci) bus_type = "PCI";
+   else if (sh[j]->io_port > EISA_RANGE) bus_type = "PCI";
+   else if (subversion == ESA) bus_type = "EISA";
+   else bus_type = "ISA";
+
+   for (i = 0; i < sh[j]->can_queue; i++)
+      if (! ((&HD(j)->cp[i])->sglist = kmalloc(
+            sh[j]->sg_tablesize * sizeof(struct sg_list), 
+            (sh[j]->unchecked_isa_dma ? GFP_DMA : 0) | GFP_ATOMIC))) {
+         printk("%s: kmalloc SGlist failed, mbox %d, detaching.\n", BN(j), i);
+         eata2x_release(sh[j]);
+         return FALSE;
+         }
+      
+   printk("%s: rev. 2.0%c, %s, PORT 0x%03x, IRQ %u, DMA %u, SG %d, "\
+	  "Mbox %d, CmdLun %d.\n", BN(j), HD(j)->protocol_rev, bus_type,
+	   sh[j]->io_port, sh[j]->irq, sh[j]->dma_channel,
+	   sh[j]->sg_tablesize, sh[j]->can_queue, sh[j]->cmd_per_lun);
 
    if (sh[j]->max_id > 8 || sh[j]->max_lun > 8)
       printk("%s: wide SCSI support enabled, max_id %u, max_lun %u.\n",
              BN(j), sh[j]->max_id, sh[j]->max_lun);
 
-   for (c = 0; c <= sh[j]->max_channel; c++)
+   for (i = 0; i <= sh[j]->max_channel; i++)
       printk("%s: SCSI channel %u enabled, host target ID %u.\n",
-             BN(j), c, info.host_addr[3 - c]);
+             BN(j), i, info.host_addr[3 - i]);
 
 #if defined (DEBUG_DETECT)
-   if (protocol_rev != 'A')
-      printk("%s: EATA 2.0%c, isaena %u, forcaddr %u, max_id %u,"\
-	     " max_chan %u, max_lun %u.\n", name, protocol_rev, info.isaena, 
-	     info.forcaddr, info.max_id, info.max_chan, info.max_lun);
+   printk("%s: Vers. 0x%x, ocs %u, tar %u, SYNC 0x%x, sec. %u, "\
+          "infol %ld, cpl %ld spl %ld.\n", name, info.version,
+          info.ocsena, info.tarsup, info.sync, info.second,
+          DEV2H(info.data_len), DEV2H(info.cp_len), DEV2H(info.sp_len));
 
-   printk("%s: Vers. 0x%x, SYNC 0x%x, sec. %u, infol %ld, cpl %ld spl %ld.\n", 
-	  name, info.version, info.sync, info.second, DEV2H(info.data_len), 
-	  DEV2H(info.cp_len), DEV2H(info.sp_len));
+   if (protocol_rev == 'B' || protocol_rev == 'C')
+      printk("%s: isaena %u, forcaddr %u, max_id %u, max_chan %u, "\
+             "large_sg %u, res1 %u.\n", name, info.isaena, info.forcaddr,
+             info.max_id, info.max_chan, info.large_sg, info.res1);
+
+   if (protocol_rev == 'C')
+      printk("%s: max_lun %u, pci %u, eisa %u.\n", name, 
+             info.max_lun, info.pci, info.eisa);
 #endif
 
    return TRUE;
 }
 
+void eata2x_setup(char *str, int *ints) {
+   int i, argc = ints[0];
+
+   if (argc <= 0) return;
+
+   if (argc > MAX_BOARDS) argc = MAX_BOARDS;
+
+   for (i = 0; i < argc; i++) io_port[i] = ints[i + 1]; 
+   
+   io_port[i] = 0;
+   setup_done = TRUE;
+   return;
+}
+
+static void add_pci_ports(void) {
+
+#if defined(CONFIG_PCI)
+
+   unsigned short i = 0;
+   unsigned char bus, devfn;
+   unsigned int addr, k;
+
+   if (!pcibios_present()) return;
+
+   for (k = 0; k < MAX_PCI; k++) {
+
+      if (pcibios_find_class(PCI_CLASS_STORAGE_SCSI << 8, i++, &bus, &devfn)
+             != PCIBIOS_SUCCESSFUL) break;
+
+      if (pcibios_read_config_dword(bus, devfn, PCI_BASE_ADDRESS_0, &addr)
+             != PCIBIOS_SUCCESSFUL) continue;
+
+#if defined(DEBUG_DETECT)
+      printk("%s: detect, seq. %d, bus %d, devfn 0x%x, addr 0x%x.\n",
+             driver_name, k, bus, devfn, addr);
+#endif
+
+      if ((addr & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_IO)
+             continue;
+
+      /* Reverse the returned address order */
+      io_port[MAX_PCI - k] = 
+             (addr & PCI_BASE_ADDRESS_IO_MASK) + PCI_BASE_ADDRESS_0;
+      }
+#endif
+
+   return;
+}
+
 int eata2x_detect(Scsi_Host_Template *tpnt) {
-   unsigned int j = 0, k, flags;
-
-   unsigned int io_port[] = { 
-      0x1f0,  0x1c88, 0x2c88, 0x3c88, 0x4c88, 0x5c88, 0x6c88, 0x7c88,
-      0x8c88, 0x9c88, 0xac88, 0xbc88, 0xcc88, 0xdc88, 0xec88, 0xfc88, 
-      0x170,  0x230,  0x330,  0x0
-      };
-
-   unsigned int *port_base = io_port;
+   unsigned long flags;
+   unsigned int j = 0, k;
 
    tpnt->proc_dir = &proc_scsi_eata2x;
 
@@ -615,17 +750,19 @@ int eata2x_detect(Scsi_Host_Template *tpnt) {
    cli();
 
    for (k = 0; k < MAX_IRQ; k++) {
-      irqlist[k] = NO_IRQ;
+      irqlist[k] = 0;
       calls[k] = 0;
       }
 
    for (k = 0; k < MAX_BOARDS + 1; k++) sh[k] = NULL;
 
-   while (*port_base) {
+   if (!setup_done) add_pci_ports();
 
-      if (j < MAX_BOARDS && port_detect(port_base, j, tpnt)) j++;
+   for (k = 0; io_port[k]; k++) {
 
-      port_base++;
+      if (io_port[k] == SKIP) continue;
+
+      if (j < MAX_BOARDS && port_detect(io_port[k], j, tpnt)) j++;
       }
 
    if (j > 0) 
@@ -651,7 +788,8 @@ static inline void build_sg_list(struct mscp *cpp, Scsi_Cmnd *SCpnt) {
 }
 
 int eata2x_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
-   unsigned int i, j, k, flags;
+   unsigned long flags;
+   unsigned int i, j, k;
    struct mscp *cpp;
    struct mssp *spp;
 
@@ -702,7 +840,7 @@ int eata2x_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
    /* Set pointer to control packet structure */
    cpp = &HD(j)->cp[i];
 
-   memset(cpp, 0, sizeof(struct mscp));
+   memset(cpp, 0, sizeof(struct mscp) - sizeof(struct sg_list *));
 
    /* Set pointer to status packet structure */
    spp = &HD(j)->sp[i];
@@ -766,7 +904,8 @@ int eata2x_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
 }
 
 int eata2x_abort(Scsi_Cmnd *SCarg) {
-   unsigned int i, j, flags;
+   unsigned long flags;
+   unsigned int i, j;
 
    save_flags(flags);
    cli();
@@ -805,6 +944,9 @@ int eata2x_abort(Scsi_Cmnd *SCarg) {
 	 panic("%s: abort, mbox %d, SCarg %p, cp SCpnt %p.\n",
 	       BN(j), i, SCarg, HD(j)->cp[i].SCpnt);
 
+      if (inb(sh[j]->io_port + REG_AUX_STATUS) & IRQ_ASSERTED)
+         printk("%s: abort, mbox %d, interrupt pending.\n", BN(j), i);
+
       restore_flags(flags);
       return SCSI_ABORT_SNOOZE;
       }
@@ -825,7 +967,8 @@ int eata2x_abort(Scsi_Cmnd *SCarg) {
 }
 
 int eata2x_reset(Scsi_Cmnd *SCarg, unsigned int reset_flags) {
-   unsigned int i, j, flags, time, k, c, limit = 0;
+   unsigned long flags;
+   unsigned int i, j, time, k, c, limit = 0;
    int arg_done = FALSE;
    Scsi_Cmnd *SCpnt;
 
@@ -944,14 +1087,15 @@ int eata2x_reset(Scsi_Cmnd *SCarg, unsigned int reset_flags) {
 static void eata2x_interrupt_handler(int irq, void *dev_id,
                                      struct pt_regs *regs) {
    Scsi_Cmnd *SCpnt;
-   unsigned int i, j, k, c, flags, status, tstatus, loops, total_loops = 0;
+   unsigned long flags;
+   unsigned int i, j, k, c, status, tstatus, loops, total_loops = 0;
    struct mssp *spp;
    struct mscp *cpp;
 
    save_flags(flags);
    cli();
 
-   if (irqlist[irq] == NO_IRQ) {
+   if (!irqlist[irq]) {
       printk("%s, ihdlr, irq %d, unexpected interrupt.\n", driver_name, irq);
       restore_flags(flags);
       return;
@@ -1158,6 +1302,31 @@ static void eata2x_interrupt_handler(int irq, void *dev_id,
 
    restore_flags(flags);
    return;
+}
+
+int eata2x_release(struct Scsi_Host *shpnt) {
+   unsigned long flags;
+   unsigned int i, j;
+
+   save_flags(flags);
+   cli();
+
+   for (j = 0; sh[j] != NULL && sh[j] != shpnt; j++);
+    
+   if (sh[j] == NULL) panic("%s: release, invalid Scsi_Host pointer.\n",
+                            driver_name);
+
+   for (i = 0; i < sh[j]->can_queue; i++) 
+      if ((&HD(j)->cp[i])->sglist) kfree((&HD(j)->cp[i])->sglist);
+
+   if (! --irqlist[sh[j]->irq]) free_irq(sh[j]->irq, NULL);
+
+   if (sh[j]->dma_channel != NO_DMA) free_dma(sh[j]->dma_channel);
+
+   release_region(sh[j]->io_port, sh[j]->n_io_port);
+   scsi_unregister(sh[j]);
+   restore_flags(flags);
+   return FALSE;
 }
 
 #if defined(MODULE)

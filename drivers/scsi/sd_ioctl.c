@@ -76,10 +76,10 @@ int sd_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
     case BLKRAGET:
 	if (!arg)
 		return -EINVAL;
-	error = verify_area(VERIFY_WRITE, (int *) arg, sizeof(int));
+	error = verify_area(VERIFY_WRITE, (long *) arg, sizeof(long));
 	if (error)
 	    return error;
-	put_user(read_ahead[MAJOR(inode->i_rdev)], (int *) arg);
+	put_user(read_ahead[MAJOR(inode->i_rdev)], (long *) arg);
 	return 0;
 
     case BLKFLSBUF:

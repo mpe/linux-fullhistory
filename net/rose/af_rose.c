@@ -1263,12 +1263,12 @@ static int rose_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 
 	switch (cmd) {
 		case TIOCOUTQ:
-			if ((err = verify_area(VERIFY_WRITE, (void *)arg, sizeof(unsigned long))) != 0)
+			if ((err = verify_area(VERIFY_WRITE, (void *)arg, sizeof(unsigned int))) != 0)
 				return err;
 			amount = sk->sndbuf - sk->wmem_alloc;
 			if (amount < 0)
 				amount = 0;
-			put_user(amount, (unsigned long *)arg);
+			put_user(amount, (unsigned int *)arg);
 			return 0;
 
 		case TIOCINQ: {
@@ -1276,9 +1276,9 @@ static int rose_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			/* These two are safe on a single CPU system as only user tasks fiddle here */
 			if ((skb = skb_peek(&sk->receive_queue)) != NULL)
 				amount = skb->len - 20;
-			if ((err = verify_area(VERIFY_WRITE, (void *)arg, sizeof(unsigned long))) != 0)
+			if ((err = verify_area(VERIFY_WRITE, (void *)arg, sizeof(unsigned int))) != 0)
 				return err;
-			put_user(amount, (unsigned long *)arg);
+			put_user(amount, (unsigned int *)arg);
 			return 0;
 		}
 

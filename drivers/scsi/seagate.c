@@ -345,7 +345,7 @@ int seagate_st0x_detect (Scsi_Host_Template * tpnt)
 
 	if (base_address)
 		{
-		st0x_cr_sr = base_address + (controller_type == SEAGATE ? 0x1a00 : 0x1c00)); 
+		st0x_cr_sr = base_address + (controller_type == SEAGATE ? 0x1a00 : 0x1c00); 
 		st0x_dr = st0x_cr_sr + 0x200;
 #ifdef DEBUG
 		printk("%s detected. Base address = %x, cr = %x, dr = %x\n", tpnt->name, base_address, st0x_cr_sr, st0x_dr);

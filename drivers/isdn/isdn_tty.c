@@ -1014,7 +1014,7 @@ static int isdn_tty_get_lsr_info(modem_info * info, uint * value)
 	status = info->lsr;
 	restore_flags(flags);
 	result = ((status & UART_LSR_TEMT) ? TIOCSER_TEMT : 0);
-	return put_user(result, (ulong *) value);
+	return put_user(result, value);
 }
 
 
@@ -1035,7 +1035,7 @@ static int isdn_tty_get_modem_info(modem_info * info, uint * value)
 	    | ((status & UART_MSR_RI) ? TIOCM_RNG : 0)
 	    | ((status & UART_MSR_DSR) ? TIOCM_DSR : 0)
 	    | ((status & UART_MSR_CTS) ? TIOCM_CTS : 0);
-	return put_user(result, (ulong *) value);
+	return put_user(result, value);
 }
 
 static int isdn_tty_set_modem_info(modem_info * info, uint cmd, uint * value)
@@ -1144,17 +1144,14 @@ static int isdn_tty_ioctl(struct tty_struct *tty, struct file *file,
 #ifdef ISDN_DEBUG_MODEM_IOCTL
                         printk(KERN_DEBUG "ttyI%d ioctl TIOCGSOFTCAR\n", info->line);
 #endif
-                        error = put_user(C_CLOCAL(tty) ? 1 : 0, (ulong *) arg);
-						if (error)
-							    return error;
-                        return 0;
+			return put_user(C_CLOCAL(tty) ? 1 : 0, (uint *) arg);
                 case TIOCSSOFTCAR:
 #ifdef ISDN_DEBUG_MODEM_IOCTL
                         printk(KERN_DEBUG "ttyI%d ioctl TIOCSSOFTCAR\n", info->line);
 #endif
-                        error = get_user(arg ,((ulong *) arg));
-						if (error)
-							    return error;
+                        error = get_user(arg ,((uint *) arg));
+			if (error)
+				return error;
                         tty->termios->c_cflag =
                                 ((tty->termios->c_cflag & ~CLOCAL) |
                                  (arg ? CLOCAL : 0));

@@ -1365,17 +1365,18 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 			send_break(info, arg ? arg*(HZ/10) : HZ/4);
 			return 0;
 		case TIOCGSOFTCAR:
-			error = verify_area(VERIFY_WRITE, (void *) arg,sizeof(long));
-			if (error)
-				return error;
-			put_fs_long(C_CLOCAL(tty) ? 1 : 0,
-				    (unsigned long *) arg);
-			return 0;
+			return put_user(C_CLOCAL(tty) ? 1 : 0,
+			    (unsigned int *) arg);
 		case TIOCSSOFTCAR:
-			arg = get_fs_long((unsigned long *) arg);
-			tty->termios->c_cflag =
-				((tty->termios->c_cflag & ~CLOCAL) |
-				 (arg ? CLOCAL : 0));
+			{
+			    unsigned int value;
+			    retval = get_user(value, (unsigned int *) arg);
+			    if (retval)
+				return retval;
+			    tty->termios->c_cflag =
+				    ((tty->termios->c_cflag & ~CLOCAL) |
+				     (value ? CLOCAL : 0));
+			}
 			return 0;
 		case TIOCGSERIAL:
 			error = verify_area(VERIFY_WRITE, (void *) arg,

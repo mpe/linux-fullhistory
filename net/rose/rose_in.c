@@ -303,14 +303,8 @@ int rose_process_rx_frame(struct sock *sk, struct sk_buff *skb)
 {
 	int queued = 0, frametype, ns, nr, q, d, m;
 	
-	if (sk->protinfo.rose->state == ROSE_STATE_0 && sk->dead)
-		return queued;
-
-	if (sk->protinfo.rose->state != ROSE_STATE_1 && sk->protinfo.rose->state != ROSE_STATE_2 &&
-	    sk->protinfo.rose->state != ROSE_STATE_3 && sk->protinfo.rose->state != ROSE_STATE_4) {
-		printk(KERN_ERR "rose_process_rx_frame: frame received - state: %d\n", sk->protinfo.rose->state);
-		return queued;
-	}
+	if (sk->protinfo.rose->state == ROSE_STATE_0)
+		return 0;
 
 	del_timer(&sk->timer);
 

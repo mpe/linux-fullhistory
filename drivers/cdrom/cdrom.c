@@ -350,9 +350,11 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
                 
         case CDROMEJECT:
                 if (cdo->capability & ~cdi->mask & CDC_OPEN_TRAY) {
-			if (cdi->use_count == 1)
+			if (cdi->use_count == 1) {
+			        if (cdo->capability & ~cdi->mask & CDC_LOCK)
+					cdo->lock_door(cdi, 0);
 				return cdo->tray_move(cdi, 1);
-			else
+			} else
 				return -EBUSY;
 		} else
                         return -EINVAL;

@@ -1,6 +1,12 @@
 /*
  *      u14-34f.c - Low-level driver for UltraStor 14F/34F SCSI host adapters.
  *
+ *      21 Nov 1996 rev. 2.30 for linux 2.1.11 and 2.0.25
+ *          The list of i/o ports to be probed can be overwritten by the
+ *          "u14-34f=port0, port1,...." boot command line option.
+ *          Scatter/gather lists are now allocated by a number of kmalloc
+ *          calls, in order to avoid the previous size limit of 64Kb.
+ *
  *      16 Nov 1996 rev. 2.20 for linux 2.1.10 and 2.0.25
  *          Added multichannel support.
  *
@@ -73,6 +79,11 @@
  *          Multiple U14F and/or U34F host adapters are supported.
  *
  *  Copyright (C) 1994, 1995, 1996 Dario Ballabio (dario@milano.europe.dg.com)
+ *
+ *  Redistribution and use in source and binary forms, with or without
+ *  modification, are permitted provided that redistributions of source
+ *  code retain the above copyright notice and this comment without
+ *  modification.
  *
  *      WARNING: if your 14/34F board has an old firmware revision (see below)
  *               you must change "#undef" into "#define" in the following
@@ -149,6 +160,15 @@
  *  the latest firmware prom is 28008-006. Older firmware 28008-005 has
  *  problems when using more then 16 scatter/gather lists.
  *
+ *  The list of i/o ports to be probed can be totally replaced by the
+ *  boot command line option: "u14-34f=port0, port1, port2,...", where the
+ *  port0, port1... arguments are ISA/VESA addresses to be probed.
+ *  For example using "u14-34f=0x230, 0x340", the driver probes only the two
+ *  addresses 0x230 and 0x340 in this order; "u14-34f=0" totally disables
+ *  this driver.
+ *
+ *  The boards are named Ux4F0, Ux4F1,... according to the detection order.
+ *
  *  In order to support multiple ISA boards in a reliable way,
  *  the driver sets host->wish_block = TRUE for all ISA boards.
  */
@@ -205,11 +225,15 @@ struct proc_dir_entry proc_scsi_u14_34f = {
 #undef  DEBUG_STATISTICS
 #undef  DEBUG_RESET
 
+#define MAX_ISA 3
+#define MAX_VESA 1 
+#define MAX_EISA 0
+#define MAX_PCI 0
+#define MAX_BOARDS (MAX_ISA + MAX_VESA + MAX_EISA + MAX_PCI)
 #define MAX_CHANNEL 1
 #define MAX_LUN 8
 #define MAX_TARGET 8
 #define MAX_IRQ 16
-#define MAX_BOARDS 4
 #define MAX_MAILBOXES 16
 #define MAX_SGLIST 32
 #define MAX_SAFE_SGLIST 16
@@ -223,7 +247,6 @@ struct proc_dir_entry proc_scsi_u14_34f = {
 #define LOCKED   2
 #define IN_RESET 3
 #define IGNORE   4
-#define NO_IRQ  0xff
 #define NO_DMA  0xff
 #define MAXLOOP 200000
 
@@ -251,6 +274,11 @@ struct proc_dir_entry proc_scsi_u14_34f = {
 
 #define PACKED          __attribute__((packed))
 
+struct sg_list {
+   unsigned int address;                /* Segment Address */
+   unsigned int num_bytes;              /* Segment Length */
+   };
+
 /* MailBox SCSI Command Packet */
 struct mscp {
    unsigned char opcode: 3;             /* type of command */
@@ -272,15 +300,9 @@ struct mscp {
    unsigned char adapter_status;        /* non-zero indicates HA error */
    unsigned char target_status;         /* non-zero indicates target error */
    unsigned int sense_addr PACKED;
-
    Scsi_Cmnd *SCpnt;
-
-   struct sg_list {
-      unsigned int address;             /* Segment Address */
-      unsigned int num_bytes;           /* Segment Length */
-      } sglist[MAX_SGLIST];
-
-   unsigned int index;   /* cp index */
+   unsigned int index;                  /* cp index */
+   struct sg_list *sglist;
    };
 
 struct hostdata {
@@ -309,6 +331,13 @@ static struct Scsi_Host *sh[MAX_BOARDS + 1];
 static const char *driver_name = "Ux4F";
 static unsigned int irqlist[MAX_IRQ], calls[MAX_IRQ];
 
+static unsigned int io_port[] = {
+      0x330, 0x340, 0x230, 0x240, 0x210, 0x130, 0x140,
+
+      /* End of list */
+      0x0
+      };
+
 #define HD(board) ((struct hostdata *) &sh[board]->hostdata)
 #define BN(board) (HD(board)->board_name)
 
@@ -328,6 +357,7 @@ static unsigned int irqlist[MAX_IRQ], calls[MAX_IRQ];
 
 static void u14_34f_interrupt_handler(int, void *, struct pt_regs *);
 static int do_trace = FALSE;
+static int setup_done = FALSE;
 
 static inline int wait_on_busy(unsigned int iobase) {
    unsigned int loop = MAXLOOP;
@@ -381,9 +411,9 @@ static int board_inquiry(unsigned int j) {
    return FALSE;
 }
 
-static inline int port_detect(unsigned int *port_base, unsigned int j, 
-			      Scsi_Host_Template *tpnt) {
-   unsigned char irq, dma_channel, subversion, c;
+static inline int port_detect(unsigned int port_base, unsigned int j, 
+                              Scsi_Host_Template *tpnt) {
+   unsigned char irq, dma_channel, subversion, i;
    unsigned char in_byte;
 
    /* Allowed BIOS base addresses (NULL indicates reserved) */
@@ -425,28 +455,27 @@ static inline int port_detect(unsigned int *port_base, unsigned int j,
 
    sprintf(name, "%s%d", driver_name, j);
 
-   if(check_region(*port_base, REGION_SIZE)) {
-      printk("%s: address 0x%03x in use, skipping probe.\n", 
-	     name, *port_base);
+   if(check_region(port_base, REGION_SIZE)) {
+      printk("%s: address 0x%03x in use, skipping probe.\n", name, port_base);
       return FALSE;
       }
 
-   if (inb(*port_base + REG_PRODUCT_ID1) != PRODUCT_ID1) return FALSE;
+   if (inb(port_base + REG_PRODUCT_ID1) != PRODUCT_ID1) return FALSE;
 
-   in_byte = inb(*port_base + REG_PRODUCT_ID2);
+   in_byte = inb(port_base + REG_PRODUCT_ID2);
 
    if ((in_byte & 0xf0) != PRODUCT_ID2) return FALSE;
 
-   *(char *)&config_1 = inb(*port_base + REG_CONFIG1);
-   *(char *)&config_2 = inb(*port_base + REG_CONFIG2);
+   *(char *)&config_1 = inb(port_base + REG_CONFIG1);
+   *(char *)&config_2 = inb(port_base + REG_CONFIG2);
 
    irq = interrupt_table[config_1.interrupt];
    dma_channel = dma_channel_table[config_1.dma_channel];
    subversion = (in_byte & 0x0f);
 
    /* Board detected, allocate its IRQ if not already done */
-   if ((irq >= MAX_IRQ) || ((irqlist[irq] == NO_IRQ) && request_irq
-       (irq, u14_34f_interrupt_handler, SA_INTERRUPT, driver_name, NULL))) {
+   if ((irq >= MAX_IRQ) || (!irqlist[irq] && request_irq(irq,
+              u14_34f_interrupt_handler, SA_INTERRUPT, driver_name, NULL))) {
       printk("%s: unable to allocate IRQ %u, detaching.\n", name, irq);
       return FALSE;
       }
@@ -463,15 +492,15 @@ static inline int port_detect(unsigned int *port_base, unsigned int j,
    if (sh[j] == NULL) {
       printk("%s: unable to register host, detaching.\n", name);
 
-      if (irqlist[irq] == NO_IRQ) free_irq(irq, NULL);
+      if (!irqlist[irq]) free_irq(irq, NULL);
 
       if (subversion == ISA) free_dma(dma_channel);
 
       return FALSE;
       }
 
-   sh[j]->io_port = *port_base;
-   sh[j]->unique_id = *port_base;
+   sh[j]->io_port = port_base;
+   sh[j]->unique_id = port_base;
    sh[j]->n_io_port = REGION_SIZE;
    sh[j]->base = bios_segment_table[config_1.bios_segment];
    sh[j]->irq = irq;
@@ -494,14 +523,14 @@ static inline int port_detect(unsigned int *port_base, unsigned int j,
    if (sh[j]->base == 0) outb(CMD_ENA_INTR, sh[j]->io_port + REG_SYS_MASK);
 
    /* Register the I/O space that we use */
-   request_region(sh[j]->io_port, REGION_SIZE, driver_name);
+   request_region(sh[j]->io_port, sh[j]->n_io_port, driver_name);
 
    memset(HD(j), 0, sizeof(struct hostdata));
    HD(j)->heads = mapping_table[config_2.mapping_mode].heads;
    HD(j)->sectors = mapping_table[config_2.mapping_mode].sectors;
    HD(j)->subversion = subversion;
    HD(j)->board_number = j;
-   irqlist[irq] = j;
+   irqlist[irq]++;
 
    if (HD(j)->subversion == ESA) {
 
@@ -546,6 +575,15 @@ static inline int port_detect(unsigned int *port_base, unsigned int j,
 	 }
       }
 
+   for (i = 0; i < sh[j]->can_queue; i++)
+      if (! ((&HD(j)->cp[i])->sglist = kmalloc(
+            sh[j]->sg_tablesize * sizeof(struct sg_list), 
+            (sh[j]->unchecked_isa_dma ? GFP_DMA : 0) | GFP_ATOMIC))) {
+         printk("%s: kmalloc SGlist failed, mbox %d, detaching.\n", BN(j), i);
+         u14_34f_release(sh[j]);
+         return FALSE;
+         }
+      
    printk("%s: PORT 0x%03x, BIOS 0x%05x, IRQ %u, DMA %u, SG %d, "\
 	  "Mbox %d, CmdLun %d, C%d.\n", BN(j), sh[j]->io_port, 
 	  (int)sh[j]->base, sh[j]->irq, sh[j]->dma_channel,
@@ -556,21 +594,30 @@ static inline int port_detect(unsigned int *port_base, unsigned int j,
       printk("%s: wide SCSI support enabled, max_id %u, max_lun %u.\n",
              BN(j), sh[j]->max_id, sh[j]->max_lun);
 
-   for (c = 0; c <= sh[j]->max_channel; c++)
+   for (i = 0; i <= sh[j]->max_channel; i++)
       printk("%s: SCSI channel %u enabled, host target ID %u.\n",
-             BN(j), c, sh[j]->this_id);
+             BN(j), i, sh[j]->this_id);
 
    return TRUE;
 }
 
+void u14_34f_setup(char *str, int *ints) {
+   int i, argc = ints[0];
+
+   if (argc <= 0) return;
+
+   if (argc > MAX_BOARDS) argc = MAX_BOARDS;
+
+   for (i = 0; i < argc; i++) io_port[i] = ints[i + 1]; 
+   
+   io_port[i] = 0;
+   setup_done = TRUE;
+   return;
+}
+
 int u14_34f_detect(Scsi_Host_Template *tpnt) {
-   unsigned int j = 0, k, flags;
-
-   unsigned int io_port[] = {
-      0x330, 0x340, 0x230, 0x240, 0x210, 0x130, 0x140, 0x0
-      };
-
-   unsigned int *port_base = io_port;
+   unsigned long flags;
+   unsigned int j = 0, k;
 
    tpnt->proc_dir = &proc_scsi_u14_34f;
 
@@ -578,18 +625,14 @@ int u14_34f_detect(Scsi_Host_Template *tpnt) {
    cli();
 
    for (k = 0; k < MAX_IRQ; k++) {
-      irqlist[k] = NO_IRQ;
+      irqlist[k] = 0;
       calls[k] = 0;
       }
 
    for (k = 0; k < MAX_BOARDS + 1; k++) sh[k] = NULL;
 
-   while (*port_base) {
-
-      if (j < MAX_BOARDS && port_detect(port_base, j, tpnt)) j++;
-
-      port_base++;
-      }
+   for (k = 0; io_port[k]; k++)
+      if (j < MAX_BOARDS && port_detect(io_port[k], j, tpnt)) j++;
 
    if (j > 0) 
       printk("UltraStor 14F/34F: Copyright (C) 1994, 1995, 1996 Dario Ballabio.\n");
@@ -616,7 +659,8 @@ static inline void build_sg_list(struct mscp *cpp, Scsi_Cmnd *SCpnt) {
 }
 
 int u14_34f_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
-   unsigned int i, j, k, flags;
+   unsigned long flags;
+   unsigned int i, j, k;
    struct mscp *cpp;
 
    static const unsigned char data_out_cmds[] = {
@@ -666,7 +710,7 @@ int u14_34f_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
    /* Set pointer to control packet structure */
    cpp = &HD(j)->cp[i];
 
-   memset(cpp, 0, sizeof(struct mscp));
+   memset(cpp, 0, sizeof(struct mscp) - sizeof(struct sg_list *));
    SCpnt->scsi_done = done;
    cpp->index = i;
    SCpnt->host_scribble = (unsigned char *) &cpp->index;
@@ -726,7 +770,8 @@ int u14_34f_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
 }
 
 int u14_34f_abort(Scsi_Cmnd *SCarg) {
-   unsigned int i, j, flags;
+   unsigned long flags;
+   unsigned int i, j;
 
    save_flags(flags);
    cli();
@@ -765,6 +810,9 @@ int u14_34f_abort(Scsi_Cmnd *SCarg) {
 	 panic("%s: abort, mbox %d, SCarg %p, cp SCpnt %p.\n",
 	       BN(j), i, SCarg, HD(j)->cp[i].SCpnt);
 
+      if (inb(sh[j]->io_port + REG_SYS_INTR) & IRQ_ASSERTED)
+         printk("%s: abort, mbox %d, interrupt pending.\n", BN(j), i);
+
       restore_flags(flags);
       return SCSI_ABORT_SNOOZE;
       }
@@ -785,7 +833,8 @@ int u14_34f_abort(Scsi_Cmnd *SCarg) {
 }
 
 int u14_34f_reset(Scsi_Cmnd *SCarg, unsigned int reset_flags) {
-   unsigned int i, j, flags, time, k, c, limit = 0;
+   unsigned long flags;
+   unsigned int i, j, time, k, c, limit = 0;
    int arg_done = FALSE;
    Scsi_Cmnd *SCpnt;
 
@@ -909,19 +958,20 @@ int u14_34f_biosparam(Disk *disk, kdev_t dev, int *dkinfo) {
    dkinfo[0] = HD(j)->heads;
    dkinfo[1] = HD(j)->sectors;
    dkinfo[2] = size / (HD(j)->heads * HD(j)->sectors);
-   return 0;
+   return FALSE;
 }
 
 static void u14_34f_interrupt_handler(int irq, void *dev_id,
                                       struct pt_regs *regs) {
    Scsi_Cmnd *SCpnt;
-   unsigned int i, j, k, c, flags, status, tstatus, loops, total_loops = 0;
+   unsigned long flags;
+   unsigned int i, j, k, c, status, tstatus, loops, total_loops = 0;
    struct mscp *spp;
 
    save_flags(flags);
    cli();
 
-   if (irqlist[irq] == NO_IRQ) {
+   if (!irqlist[irq]) {
       printk("%s, ihdlr, irq %d, unexpected interrupt.\n", driver_name, irq);
       restore_flags(flags);
       return;
@@ -1122,6 +1172,31 @@ static void u14_34f_interrupt_handler(int irq, void *dev_id,
 
    restore_flags(flags);
    return;
+}
+
+int u14_34f_release(struct Scsi_Host *shpnt) {
+   unsigned long flags;
+   unsigned int i, j;
+
+   save_flags(flags);
+   cli();
+
+   for (j = 0; sh[j] != NULL && sh[j] != shpnt; j++);
+    
+   if (sh[j] == NULL) panic("%s: release, invalid Scsi_Host pointer.\n",
+                            driver_name);
+
+   for (i = 0; i < sh[j]->can_queue; i++) 
+      if ((&HD(j)->cp[i])->sglist) kfree((&HD(j)->cp[i])->sglist);
+
+   if (! --irqlist[sh[j]->irq]) free_irq(sh[j]->irq, NULL);
+
+   if (sh[j]->dma_channel != NO_DMA) free_dma(sh[j]->dma_channel);
+
+   release_region(sh[j]->io_port, sh[j]->n_io_port);
+   scsi_unregister(sh[j]);
+   restore_flags(flags);
+   return FALSE;
 }
 
 #if defined(MODULE)

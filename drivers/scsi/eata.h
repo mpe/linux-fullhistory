@@ -7,11 +7,12 @@
 #include <scsi/scsicam.h>
 
 int eata2x_detect(Scsi_Host_Template *);
+int eata2x_release(struct Scsi_Host *);
 int eata2x_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int eata2x_abort(Scsi_Cmnd *);
 int eata2x_reset(Scsi_Cmnd *, unsigned int);
 
-#define EATA_VERSION "2.20.00"
+#define EATA_VERSION "2.30.00"
 
 
 #define EATA {                                                 \
@@ -21,7 +22,7 @@ int eata2x_reset(Scsi_Cmnd *, unsigned int);
 		NULL,                                          \
 		"EATA/DMA 2.0x rev. " EATA_VERSION " ",        \
 		eata2x_detect,				       \
-		NULL, /* Release */     		       \
+		eata2x_release,          		       \
 		NULL,					       \
 		NULL,    			       	       \
 		eata2x_queuecommand,			       \

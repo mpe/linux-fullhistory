@@ -5,9 +5,12 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	Source:
+ *	Sources:
  *	IPv6 Program Interfaces for BSD Systems
  *      <draft-ietf-ipngwg-bsd-api-05.txt>
+ *
+ *	Advanced Sockets API for IPv6
+ *	<draft-stevens-advanced-api-00.txt>
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -88,12 +91,20 @@ struct ipv6_mreq {
 
 #define IPV6_ADDRFORM		1
 #define IPV6_RXINFO		2
+#define IPV6_RXHOPOPTS		3
+#define IPV6_RXDSTOPTS		4
+#define IPV6_RXSRCRT		5
+#define IPV6_PKTOPTIONS		6
+#define IPV6_CHECKSUM		7
+
+/*
+ *	Alternative names
+ */
 #define IPV6_TXINFO		IPV6_RXINFO
 #define SCM_SRCINFO		IPV6_TXINFO
-#define SCM_SRCRT		4
-#define IPV6_UNICAST_HOPS	5
+#define SCM_SRCRT		IPV6_RXSRCRT
 
-
+#define IPV6_UNICAST_HOPS	16
 #define IPV6_MULTICAST_IF	17
 #define IPV6_MULTICAST_HOPS	18
 #define IPV6_MULTICAST_LOOP	19

@@ -12,7 +12,9 @@ ethernet		alan@lxorguk.ukuu.org.uk
 ipv4			alan@lxorguk.ukuu.org.uk
 ipx			alan@lxorguk.ukuu.org.uk,greg@caldera.com
 netrom			jsn@cs.nott.ac.uk
+rose			jsn@cs.nott.ac.uk
 unix			alan@lxorguk.ukuu.org.uk
+x25			jsn@cs.nott.ac.uk
 
 
 	If in doubt contact me <alan@lxorguk.ukuu.org.uk> first.

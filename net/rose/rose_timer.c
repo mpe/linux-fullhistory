@@ -78,9 +78,9 @@ static void rose_reset_timer(struct sock *sk)
 }
 
 /*
- *	Rose TIMER 
+ *	Rose Timer
  *
- *	This routine is called every 500ms. Decrement timer by this
+ *	This routine is called every 100ms. Decrement timer by this
  *	amount - if expired then process the event.
  */
 static void rose_timer(unsigned long param)

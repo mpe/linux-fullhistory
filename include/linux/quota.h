@@ -209,7 +209,7 @@ extern int sync_dquots(kdev_t dev, short type);
 
 #else
 
-#include <sys/cdefs.h>
+# /* nodep */ include <sys/cdefs.h>
 
 __BEGIN_DECLS
 int quotactl __P ((int, const char *, int, caddr_t));

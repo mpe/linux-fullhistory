@@ -101,7 +101,7 @@ struct termios {
 #define XTABS	01000000 /* Hmm.. Linux/i386 considers this part of TABDLY.. */
 
 /* c_cflag bit meaning */
-#define CBAUD	0000017
+#define CBAUD	0000037
 #define  B0	0000000		/* hang up */
 #define  B50	0000001
 #define  B75	0000002
@@ -120,7 +120,7 @@ struct termios {
 #define  B38400	0000017
 #define EXTA B19200
 #define EXTB B38400
-#define CBAUDEX 0000020
+#define CBAUDEX 0000000
 #define  B57600   00020
 #define  B115200  00021
 #define  B230400  00022

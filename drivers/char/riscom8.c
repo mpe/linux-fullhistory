@@ -1356,7 +1356,7 @@ static int rc_get_modem_info(struct riscom_port * port, unsigned int *value)
 		| ((status & MSVR_CD)  ? TIOCM_CAR : 0)
 		| ((status & MSVR_DSR) ? TIOCM_DSR : 0)
 		| ((status & MSVR_CTS) ? TIOCM_CTS : 0);
-	put_user(result,(unsigned long *) value);
+	put_user(result, value);
 	return 0;
 }
 
@@ -1368,10 +1368,9 @@ static int rc_set_modem_info(struct riscom_port * port, unsigned int cmd,
 	unsigned long flags;
 	struct riscom_board *bp = port_Board(port);
 
-	error = verify_area(VERIFY_READ, value, sizeof(int));
+	error = get_user(arg, value);
 	if (error) 
 		return error;
-	get_user(arg,(unsigned int *) value);
 	switch (cmd) {
 	 case TIOCMBIS: 
 		if (arg & TIOCM_RTS) 
@@ -1523,14 +1522,11 @@ static int rc_ioctl(struct tty_struct * tty, struct file * filp,
 		rc_send_break(port, arg ? arg*(HZ/10) : HZ/4);
 		return 0;
 	 case TIOCGSOFTCAR:
-		error = verify_area(VERIFY_WRITE, (void *) arg, sizeof(long));
-		if (error)
-			return error;
-		put_user(C_CLOCAL(tty) ? 1 : 0,
-			    (unsigned long *) arg);
-		return 0;
+		return put_user(C_CLOCAL(tty) ? 1 : 0, (unsigned int *) arg);
 	 case TIOCSSOFTCAR:
-		get_user(arg,(unsigned int *) arg);
+		retval = get_user(arg,(unsigned int *) arg);
+		if (retval)
+			return retval;
 		tty->termios->c_cflag =
 			((tty->termios->c_cflag & ~CLOCAL) |
 			(arg ? CLOCAL : 0));

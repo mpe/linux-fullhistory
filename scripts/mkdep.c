@@ -26,15 +26,20 @@ static void handle_include(int type, char *name, int len)
 	int plen;
 	struct path_struct *path = path_array+type;
 
-	if (len == 14 && !memcmp(name, "linux/config.h", len))
-		hasconfig = 1;
+	if (!type) {
+		if (memcmp(name, "linux/", 6) &&
+		    memcmp(name, "asm/", 4) &&
+		    memcmp(name, "net/", 4) &&
+		    memcmp(name, "scsi/", 5))
+			return;
+		if (len == 14 && !memcmp(name, "linux/config.h", len))
+			hasconfig = 1;
+	}
 
 	plen = path->len;
 	memcpy(path->buffer+plen, name, len);
 	len += plen;
 	path->buffer[len] = '\0';
-	if (access(path->buffer, F_OK))
-		return;
 
 	if (!hasdep) {
 		hasdep = 1;

@@ -25,7 +25,7 @@ struct smb_server {
                                               protocols. */
 	struct wait_queue *wait;
 
-	word               max_xmit;
+	__u32              max_xmit;
 	char               hostname[256];
 	word               pid;
 	word               server_uid;
@@ -38,6 +38,8 @@ struct smb_server {
 
         unsigned short     rcls; /* The error codes we received */
         unsigned short     err;
+
+	__u32              packet_size;
 	unsigned char *    packet;
 
         enum smb_conn_state state;
@@ -46,7 +48,6 @@ struct smb_server {
         /* The following are LANMAN 1.0 options transferred to us in
            SMBnegprot */
         word   secmode;
-        word   maxxmt;
         word   maxmux;
         word   maxvcs;
         word   blkmode;

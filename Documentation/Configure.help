@@ -1664,10 +1664,10 @@ CONFIG_SCSI_7000FASST
 EATA ISA/EISA/PCI (DPT and generic EATA/DMA-compliant boards) support
 CONFIG_SCSI_EATA
   This driver supports all the EATA/DMA-compliant SCSI host adapters
-  and does not need any BIOS32 or PCI BIOS service.
-  Only ISA (0x1F0, 0x170, 0x230, 0x330) and EISA (0x1C88 through 0xFC88)
-  addresses are probed. In order to detect a generic EATA PCI board you
-  can force on it any unused EISA address.
+  and does not need any BIOS32 service.
+  DPT ISA and all EISA i/o addresses are probed looking for the "EATA"
+  signature. If "PCI bios support" is enabled, the addresses of all the
+  PCI SCSI controllers reported by BIOS32 are probed as well.
   Note that there is also another driver for the same hardware:
   "EATA-DMA support". You should enable only one of them.
   You want to read the start of drivers/scsi/eata.c and the
@@ -3156,15 +3156,12 @@ CONFIG_SMB_FS
   removed from the running kernel whenever you want), say M here and
   read Documentation/modules.txt. Most people say N, however.
 
-SMB long filename support (EXPERIMENTAL)
-CONFIG_SMB_LONG
-  SMBFS was designed to support long filenames using the LanManager
-  2.0 protocol. I had to find out that the support for long filenames
-  sometimes causes problems, which can even result in kernel OOPSes. I
-  did not yet find out what the problem is, but hopefully I will find
-  this bug eventually. As many people seem to run long filenames with
-  no problems, I leave this support in the kernel as an option. The
-  careful among you should say N here.
+SMB Win95 bug work-around
+CONFIG_SMB_WIN95
+  If you want to connect to a share exported by Windows 95, you should
+  say Y here. The Windows 95 server contains a bug that makes listing
+  directories unreliable. This option slows down the listing of
+  directories. This makes the Windows 95 server a bit more stable.
 
 NCP filesystem support (to mount NetWare volumes)
 CONFIG_NCP_FS

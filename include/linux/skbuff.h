@@ -125,6 +125,8 @@ struct sk_buff
 	void 		(*destructor)(struct sk_buff *);	/* Destruct function		*/
 	__u16		redirport;		/* Redirect port				*/
 	__u16		inclone;		/* Inline clone	*/
+#define SKB_CLONE_ORIG		1
+#define SKB_CLONE_INLINE	2
 };
 
 #ifdef CONFIG_SKB_LARGE

@@ -184,6 +184,11 @@ endif
 # fs/ext.o.  (Otherwise, not all subobjects will be recompiled when
 # version information changes.)
 
+else
+
+$(TOPDIR)/include/linux/modversions.h:
+	@touch $(TOPDIR)/include/linux/modversions.h
+
 endif
 
 #

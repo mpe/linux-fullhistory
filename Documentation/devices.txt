@@ -2,7 +2,7 @@
 
 	     Maintained by H. Peter Anvin <hpa@zytor.com>
 
-		   Last revised: November 13, 1996
+		   Last revised: November 18, 1996
 
 This list is the successor to Rick Miller's Linux Device List, which
 he stopped maintaining when he got busy with other things in 1993.  It
@@ -805,7 +805,8 @@ reply.
 		  1 = /dev/cup1		Callout device corresponding to ttyP1
 		      ...
 
- 59		UNALLOCATED
+ 59 char	sf firewall package
+		  0 = /dev/firewall	Communication with sf kernel module
 
  60-63		LOCAL/EXPERIMENTAL USE
 		Allocated for local/experimental use.  For devices not

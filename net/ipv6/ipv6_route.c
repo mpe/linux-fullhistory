@@ -859,10 +859,15 @@ int ipv6_route_add(struct in6_rtmsg *rtmsg)
 {
 	struct rt6_info *rt;
 	struct device * dev = NULL;
+	struct inet6_dev *idev;
 	struct rt6_req *request;
 	int flags = rtmsg->rtmsg_flags;
 
-	dev = dev_get(rtmsg->rtmsg_device);
+	idev = ipv6_dev_by_index(rtmsg->rtmsg_ifindex);
+	if (idev)
+	{
+		dev = idev->dev; 
+	}
 	
 	rt = (struct rt6_info *) kmalloc(sizeof(struct rt6_info),
 					 GFP_ATOMIC);
@@ -979,21 +984,26 @@ int ipv6_route_del(struct in6_rtmsg *rtmsg)
 
 		if (!test)
 		{
-			/*
-			 *	This function is called from user
-			 *	context only (at the moment).
-			 *	As we don't sleep we should never see
-			 *	a lock count > 1.
-			 *
-			 *	If this assumptions becomes invalid we'll
-			 *	just have to had a del request to the
-			 *	queue in this case.
-			 */
-			res = -EBUSY;
+			struct rt6_req *request;
+			
+			request = kmalloc(sizeof(struct rt6_req), GFP_KERNEL);
+			
+			if (!request)
+			{
+				res = -ENOMEM;
+				goto out;
+			}
+			request->operation = RT_OPER_DEL;
+			request->ptr = rt;
+			request->next = request->prev = NULL;
+			rtreq_queue(request);
+			rt6_bh_mask |= RT_BH_REQUEST;
+			res = 0;
 		}
 	}
-	
+  out:
 	atomic_dec(&rt6_lock);
+	rt6_run_bh();
 	return res;
 }
 
@@ -1670,6 +1680,25 @@ static void rt6_rt_timeout(struct fib6_node *fn, void *arg)
 	}
 }
 
+static void rt6_sndrtmsg(struct in6_rtmsg *rtmsg)
+{
+	struct sk_buff *skb;
+	
+	skb = alloc_skb(sizeof(struct in6_rtmsg), GFP_ATOMIC);
+	if (skb == NULL)
+		return;
+
+	skb->free = 1;
+	
+	memcpy(skb_put(skb, sizeof(struct in6_rtmsg)), &rtmsg,
+	       sizeof(struct in6_rtmsg));
+	
+	if (netlink_post(NETLINK_ROUTE6, skb))
+	{
+		kfree_skb(skb, FREE_WRITE);
+	}
+}
+
 int ipv6_route_ioctl(unsigned int cmd, void *arg)
 {
 	struct in6_rtmsg rtmsg;
@@ -1685,8 +1714,15 @@ int ipv6_route_ioctl(unsigned int cmd, void *arg)
 					     sizeof(struct in6_rtmsg));
 			if (err)
 				return -EFAULT;
-			return (cmd == SIOCDELRT) ? ipv6_route_del(&rtmsg) : 
-				ipv6_route_add(&rtmsg);
+			
+			err = (cmd == SIOCDELRT) ? ipv6_route_del(&rtmsg) :
+			      ipv6_route_add(&rtmsg);
+
+			if (err == 0)
+			{
+				rt6_sndrtmsg(&rtmsg);
+			}
+			return err;
 	}
 
 	return -EINVAL;
@@ -1895,7 +1931,7 @@ void ipv6_route_init(void)
 {
 #ifdef 	CONFIG_PROC_FS
 	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_RT6, 6, "route6",
+		PROC_NET_RT6, 10, "ipv6_route",
 		S_IFREG | S_IRUGO, 1, 0, 0,
 		0, &proc_net_inode_operations,
 		rt6_proc_info
@@ -1965,10 +2001,11 @@ static int rt6_msgrcv(int unit, struct sk_buff *skb)
 }
 
 void rt6_sndmsg(__u32 type, struct in6_addr *dst, struct in6_addr *gw,
-		__u16 plen, __u16 metric, char *devname, __u16 flags)
+		__u16 plen, struct device *dev, __u16 metric, __u16 flags)
 {
 	struct sk_buff *skb;
 	struct in6_rtmsg *msg;
+	int ifindex = 0;
 	
 	skb = alloc_skb(sizeof(struct in6_rtmsg), GFP_ATOMIC);
 	if (skb == NULL)
@@ -1996,7 +2033,20 @@ void rt6_sndmsg(__u32 type, struct in6_addr *dst, struct in6_addr *gw,
 
 	msg->rtmsg_prefixlen = plen;
 	msg->rtmsg_metric = metric;
-	strcpy(msg->rtmsg_device, devname);
+
+	if (dev)
+	{
+		struct inet6_dev *idev;
+
+		idev = ipv6_get_idev(dev);
+		if (idev)
+		{
+			ifindex = idev->if_index;
+		}
+	}
+	
+	msg->rtmsg_ifindex = ifindex;
+
 	msg->rtmsg_flags = flags;
 
 	if (netlink_post(NETLINK_ROUTE6, skb))

@@ -12,6 +12,7 @@
 #include <linux/fs.h>
 #include <linux/in.h>
 #include <linux/types.h>
+#include <linux/vmalloc.h>
 
 #include <linux/smb_mount.h>
 #include <linux/smb_fs_sb.h>
@@ -55,27 +56,45 @@
 #include <linux/malloc.h>
 
 extern int smb_malloced;
-extern int smb_current_malloced;
+extern int smb_current_kmalloced;
+extern int smb_current_vmalloced;
 
 static inline void *
 smb_kmalloc(unsigned int size, int priority)
 {
         smb_malloced += 1;
-        smb_current_malloced += 1;
+        smb_current_kmalloced += 1;
         return kmalloc(size, priority);
 }
 
 static inline void
 smb_kfree_s(void *obj, int size)
 {
-        smb_current_malloced -= 1;
+        smb_current_kmalloced -= 1;
         kfree_s(obj, size);
+}
+
+static inline void *
+smb_vmalloc(unsigned int size)
+{
+        smb_malloced += 1;
+        smb_current_vmalloced += 1;
+        return vmalloc(size);
+}
+
+static inline void
+smb_vfree(void *obj)
+{
+        smb_current_vmalloced -= 1;
+        vfree(obj);
 }
 
 #else /* DEBUG_SMB_MALLOC */
 
 #define smb_kmalloc(s,p) kmalloc(s,p)
 #define smb_kfree_s(o,s) kfree_s(o,s)
+#define smb_vmalloc(s)   vmalloc(s)
+#define smb_vfree(o)     vfree(o)
 
 #endif /* DEBUG_SMB_MALLOC */
 
@@ -92,12 +111,27 @@ smb_kfree_s(void *obj, int size)
 #endif
 
 
+static inline ino_t
+smb_info_ino(struct smb_inode_info *info)
+{
+#if 0
+	return (ino_t) info;
+#else
+	if (info != NULL)
+	{
+		return info->finfo.f_ino;
+	}
+	return 1;
+#endif
+}
+
 /* linux/fs/smbfs/file.c */
 extern struct inode_operations smb_file_inode_operations;
 int smb_make_open(struct inode *i, int right);
 
 /* linux/fs/smbfs/dir.c */
 extern struct inode_operations smb_dir_inode_operations;
+struct smb_inode_info *smb_find_inode(struct smb_server *server, ino_t ino);
 void smb_free_inode_info(struct smb_inode_info *i);
 void smb_free_all_inodes(struct smb_server *server);
 void smb_init_root(struct smb_server *server);
@@ -122,8 +156,12 @@ int smb_conn_is_valid(struct smb_server *server);
 /* linux/fs/smbfs/proc.c */
 dword smb_len(unsigned char *packet);
 byte *smb_encode_smb_length(byte *p, dword len);
-int smb_proc_open(struct smb_server *server, const char *pathname,
-                  int len, struct smb_dirent *entry);
+__u8 *smb_setup_header(struct smb_server *server, byte command,
+		       word wct, word bcc);
+void smb_init_root_dirent(struct smb_server *server, struct smb_dirent *entry);
+int smb_proc_open(struct smb_server *server,
+		  struct smb_inode_info *dir, const char *name, int len,
+		  struct smb_dirent *entry);
 int smb_proc_close(struct smb_server *server, 
 		   __u16 fileid, __u32 mtime);
 int smb_proc_read(struct smb_server *server, struct smb_dirent *finfo, 
@@ -134,19 +172,18 @@ int smb_proc_write(struct smb_server *server, struct smb_dirent *finfo,
 		   off_t offset, int count, const char *data);
 int smb_proc_write_raw(struct smb_server *server, struct smb_dirent *finfo, 
                        off_t offset, long count, const char *data);
-int smb_proc_create(struct smb_server *server, const char *path,
-                    int len, struct smb_dirent *entry);
-int smb_proc_mv(struct smb_server *server, const char *opath, const int olen, 
-		const char *npath, const int nlen);
-int smb_proc_mkdir(struct smb_server *server, const char *path, const int len);
-int smb_proc_rmdir(struct smb_server *server, const char *path, const int len);
-int smb_proc_unlink(struct smb_server *server, const char *path,
-                    const int len);
+int smb_proc_create(struct inode *dir, const char *name, int len,
+		    word attr, time_t ctime);
+int smb_proc_mv(struct inode *odir, const char *oname, const int olen,
+		struct inode *ndir, const char *nname, const int nlen);
+int smb_proc_mkdir(struct inode *dir, const char *name, const int len);
+int smb_proc_rmdir(struct inode *dir, const char *name, const int len);
+int smb_proc_unlink(struct inode *dir, const char *name, const int len);
 int smb_proc_readdir(struct smb_server *server, struct inode *dir,
                      int fpos, int cache_size, 
 		     struct smb_dirent *entry);
-int smb_proc_getattr(struct smb_server *server, const char *path,
-                     int len, struct smb_dirent *entry);
+int smb_proc_getattr(struct inode *dir, const char *name, int len,
+		     struct smb_dirent *entry);
 int smb_proc_setattr(struct smb_server *server,
                      struct inode *ino,
                      struct smb_dirent *new_finfo);
@@ -168,9 +205,11 @@ int smb_request_write_raw(struct smb_server *server,
                           unsigned const char *source, int length);
 int smb_catch_keepalive(struct smb_server *server);
 int smb_dont_catch_keepalive(struct smb_server *server);
-int smb_trans2_request(struct smb_server *server,
-                       int *data_len, int *param_len,
-                       char **data, char **param);
+int smb_trans2_request(struct smb_server *server, __u16 trans2_command,
+		       int ldata, unsigned char *data,
+		       int lparam, unsigned char *param,
+		       int *lrdata, unsigned char **rdata,
+		       int *lrparam, unsigned char **rparam);
 
 /* linux/fs/smbfs/mmap.c */
 int smb_mmap(struct inode * inode, struct file * file, struct vm_area_struct * vma);

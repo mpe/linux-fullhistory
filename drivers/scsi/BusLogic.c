@@ -25,7 +25,7 @@
 
 
 #define BusLogic_DriverVersion		"2.0.6"
-#define BusLogic_DriverDate		"19 October 1996"
+#define BusLogic_DriverDate		"1 December 1996"
 
 
 #include <linux/module.h>
@@ -763,7 +763,7 @@ static boolean BusLogic_HardResetHostAdapter(BusLogic_HostAdapter_T
 					     *HostAdapter)
 {
   boolean TraceHardReset = (BusLogic_GlobalOptions & BusLogic_TraceHardReset);
-  int TimeoutCounter = loops_per_sec >> 2;
+  int TimeoutCounter = loops_per_sec;
   unsigned char StatusRegister = 0;
   /*
     Issue a Hard Reset Command to the Host Adapter.  The Host Adapter should
@@ -1185,7 +1185,8 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
   /*
     ISA Host Adapters require Bounce Buffers if there is more than 16MB memory.
   */
-  if (HostAdapter->BusType == BusLogic_ISA_Bus && high_memory > MAX_DMA_ADDRESS)
+  if (HostAdapter->BusType == BusLogic_ISA_Bus &&
+      high_memory > (void *) MAX_DMA_ADDRESS)
     HostAdapter->BounceBuffersRequired = true;
   /*
     BusLogic BT-445S Host Adapters prior to controller revision E have a
@@ -1198,7 +1199,7 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
   if (HostAdapter->BIOS_Address > 0 &&
       strcmp(HostAdapter->ModelName, "BT-445S") == 0 &&
       strcmp(HostAdapter->FirmwareVersion, "3.37") < 0 &&
-      high_memory > MAX_DMA_ADDRESS)
+      high_memory > (void *) MAX_DMA_ADDRESS)
     HostAdapter->BounceBuffersRequired = true;
   /*
     Determine the maximum number of Target IDs and Logical Units supported by

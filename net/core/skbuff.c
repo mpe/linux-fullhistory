@@ -735,12 +735,17 @@ void kfree_skbmem(struct sk_buff *skb)
 
 	/* don't do anything if somebody still uses us */
 	if (atomic_dec_and_test(&skb->count)) {
+
+		int free_head;
+
+		free_head = (skb->inclone != SKB_CLONE_INLINE);
+
 		/* free the skb that contains the actual data if we've clone()'d */
 		if (skb->data_skb) {
 			addr = skb;
 			__kfree_skbmem(skb->data_skb);
 		}
-		if (!skb->inclone)
+		if (free_head)
 			kfree(addr);
 		atomic_dec(&net_skbcount);
 	}
@@ -761,7 +766,8 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 	{
 		n = ((struct sk_buff *) skb->end) - 1;
 		skb->end -= sizeof(struct sk_buff);
-		inbuff = 1;
+		skb->inclone = SKB_CLONE_ORIG;
+		inbuff = SKB_CLONE_INLINE;
 	}
 	else
 	{
@@ -803,7 +809,7 @@ struct sk_buff *skb_copy(struct sk_buff *skb, int priority)
 	 
 	IS_SKB(skb);
 	
-	n=alloc_skb(skb->truesize-sizeof(struct sk_buff),priority);
+	n=alloc_skb(skb->end - skb->head, priority);
 	if(n==NULL)
 		return NULL;
 

@@ -693,6 +693,7 @@ static inline void eb66p_fixup(void)
 
 static inline void alphapc164_fixup(void)
 {
+	extern int SMCInit(void);
 	char irq_tab[7][5] = {
 	  /*
 	   *      int   intA  intB   intC   intD
@@ -708,6 +709,8 @@ static inline void alphapc164_fixup(void)
 	};
 
 	common_fixup(5, 11, 5, irq_tab, 0);
+
+	SMCInit();
 }
 
 /*
@@ -1285,4 +1288,263 @@ asmlinkage int sys_pciconfig_write(
 	}
 	return err;
 }
+
+#ifdef CONFIG_ALPHA_PC164
+
+/* device "activate" register contents */
+#define DEVICE_ON		1
+#define DEVICE_OFF		0
+
+/* configuration on/off keys */
+#define CONFIG_ON_KEY		0x55
+#define CONFIG_OFF_KEY		0xaa
+
+/* configuration space device definitions */
+#define FDC			0
+#define IDE1			1
+#define IDE2			2
+#define PARP			3
+#define SER1			4
+#define SER2			5
+#define RTCL			6
+#define KYBD			7
+#define AUXIO			8
+
+/* Chip register offsets from base */
+#define CONFIG_CONTROL		0x02
+#define INDEX_ADDRESS		0x03
+#define LOGICAL_DEVICE_NUMBER	0x07
+#define DEVICE_ID		0x20
+#define DEVICE_REV		0x21
+#define POWER_CONTROL		0x22
+#define POWER_MGMT		0x23
+#define OSC			0x24
+
+#define ACTIVATE		0x30
+#define ADDR_HI			0x60
+#define ADDR_LO			0x61
+#define INTERRUPT_SEL		0x70
+#define INTERRUPT_SEL_2		0x72 /* KYBD/MOUS only */
+#define DMA_CHANNEL_SEL		0x74 /* FDC/PARP only */
+
+#define FDD_MODE_REGISTER	0x90
+#define FDD_OPTION_REGISTER	0x91
+
+/* values that we read back that are expected ... */
+#define VALID_DEVICE_ID		2
+
+/* default device addresses */
+#define KYBD_INTERRUPT		1
+#define MOUS_INTERRUPT		12
+#define COM2_BASE		0x2f8
+#define COM2_INTERRUPT		3
+#define COM1_BASE		0x3f8
+#define COM1_INTERRUPT		4
+#define PARP_BASE		0x3bc
+#define PARP_INTERRUPT		7
+
+#define SMC_DEBUG 0
+
+unsigned long SMCConfigState( unsigned long baseAddr )
+{
+    unsigned char devId;
+    unsigned char devRev;
+
+    unsigned long configPort;
+    unsigned long indexPort;
+    unsigned long dataPort;
+
+    configPort = indexPort = baseAddr;
+    dataPort = ( unsigned long )( ( char * )configPort + 1 );
+
+    outb(CONFIG_ON_KEY, configPort);
+    outb(CONFIG_ON_KEY, configPort);
+    outb(DEVICE_ID, indexPort);
+    devId = inb(dataPort);
+    if ( devId == VALID_DEVICE_ID ) {
+        outb(DEVICE_REV, indexPort);
+        devRev = inb(dataPort);
+    }
+    else {
+        baseAddr = 0;
+    }
+    return( baseAddr );
+}
+
+void SMCRunState( unsigned long baseAddr )
+{
+    outb(CONFIG_OFF_KEY, baseAddr);
+}
+
+unsigned long SMCDetectUltraIO(void)
+{
+    unsigned long baseAddr;
+
+    baseAddr = 0x3F0;
+    if ( ( baseAddr = SMCConfigState( baseAddr ) ) == 0x3F0 ) {
+        return( baseAddr );
+    }
+    baseAddr = 0x370;
+    if ( ( baseAddr = SMCConfigState( baseAddr ) ) == 0x370 ) {
+        return( baseAddr );
+    }
+    return( ( unsigned long )0 );
+}
+
+void SMCEnableDevice( unsigned long baseAddr,
+		      unsigned long device,
+		      unsigned long portaddr,
+		      unsigned long interrupt)
+{
+    unsigned long indexPort;
+    unsigned long dataPort;
+
+    indexPort = baseAddr;
+    dataPort = ( unsigned long )( ( char * )baseAddr + 1 );
+
+    outb(LOGICAL_DEVICE_NUMBER, indexPort);
+    outb(device, dataPort);
+
+    outb(ADDR_LO, indexPort);
+    outb(( portaddr & 0xFF ), dataPort);
+
+    outb(ADDR_HI, indexPort);
+    outb(( ( portaddr >> 8 ) & 0xFF ), dataPort);
+
+    outb(INTERRUPT_SEL, indexPort);
+    outb(interrupt, dataPort);
+
+    outb(ACTIVATE, indexPort);
+    outb(DEVICE_ON, dataPort);
+}
+
+void SMCEnableKYBD( unsigned long baseAddr )
+{
+    unsigned long indexPort;
+    unsigned long dataPort;
+
+    indexPort = baseAddr;
+    dataPort = ( unsigned long )( ( char * )baseAddr + 1 );
+
+    outb(LOGICAL_DEVICE_NUMBER, indexPort);
+    outb(KYBD, dataPort);
+
+    outb(INTERRUPT_SEL, indexPort); /* Primary interrupt select */
+    outb(KYBD_INTERRUPT, dataPort);
+
+    outb(INTERRUPT_SEL_2, indexPort);/* Secondary interrupt select */
+    outb(MOUS_INTERRUPT, dataPort);
+
+    outb(ACTIVATE, indexPort);
+    outb(DEVICE_ON, dataPort);
+}
+
+void SMCEnableFDC( unsigned long baseAddr )
+{
+    unsigned long indexPort;
+    unsigned long dataPort;
+
+    unsigned char oldValue;
+
+    indexPort = baseAddr;
+    dataPort = ( unsigned long )( ( char * )baseAddr + 1 );
+
+    outb(LOGICAL_DEVICE_NUMBER, indexPort);
+    outb(FDC, dataPort);
+
+    outb(FDD_MODE_REGISTER, indexPort);
+    oldValue = inb(dataPort);
+
+    oldValue |= 0x0E;                   /* Enable burst mode */
+    outb(oldValue, dataPort);
+
+    outb(INTERRUPT_SEL, indexPort); /* Primary interrupt select */
+    outb(0x06, dataPort );
+
+    outb(DMA_CHANNEL_SEL, indexPort);  /* DMA channel select */
+    outb(0x02, dataPort);
+
+    outb(ACTIVATE, indexPort);
+    outb(DEVICE_ON, dataPort);
+}
+
+#if SMC_DEBUG
+void SMCReportDeviceStatus( unsigned long baseAddr )
+{
+    unsigned long indexPort;
+    unsigned long dataPort;
+    unsigned char currentControl;
+
+    indexPort = baseAddr;
+    dataPort = ( unsigned long )( ( char * )baseAddr + 1 );
+
+    outb(POWER_CONTROL, indexPort);
+    currentControl = inb(dataPort);
+
+    if ( currentControl & ( 1 << FDC ) )
+        printk( "\t+FDC Enabled\n" );
+    else
+        printk( "\t-FDC Disabled\n" );
+
+    if ( currentControl & ( 1 << IDE1 ) )
+        printk( "\t+IDE1 Enabled\n" );
+    else
+        printk( "\t-IDE1 Disabled\n" );
+
+    if ( currentControl & ( 1 << IDE2 ) )
+        printk( "\t+IDE2 Enabled\n" );
+    else
+        printk( "\t-IDE2 Disabled\n" );
+
+    if ( currentControl & ( 1 << PARP ) )
+        printk( "\t+PARP Enabled\n" );
+    else
+        printk( "\t-PARP Disabled\n" );
+
+    if ( currentControl & ( 1 << SER1 ) )
+        printk( "\t+SER1 Enabled\n" );
+    else
+        printk( "\t-SER1 Disabled\n" );
+
+    if ( currentControl & ( 1 << SER2 ) )
+        printk( "\t+SER2 Enabled\n" );
+    else
+        printk( "\t-SER2 Disabled\n" );
+
+    printk( "\n" );
+}
+#endif
+
+int SMCInit(void)
+{
+    unsigned long SMCUltraBase;
+
+    if ( ( SMCUltraBase = SMCDetectUltraIO( ) ) != ( unsigned long )0 ) {
+        printk( "SMC FDC37C93X Ultra I/O Controller found @ 0x%lx\n",
+		SMCUltraBase );
+#if SMC_DEBUG
+        SMCReportDeviceStatus( SMCUltraBase );
+#endif
+        SMCEnableDevice( SMCUltraBase, SER1, COM1_BASE, COM1_INTERRUPT );
+        SMCEnableDevice( SMCUltraBase, SER2, COM2_BASE, COM2_INTERRUPT );
+        SMCEnableDevice( SMCUltraBase, PARP, PARP_BASE, PARP_INTERRUPT );
+	/* on PC164, IDE on the SMC is not enabled; CMD646 (PCI) on MB */
+        SMCEnableKYBD( SMCUltraBase );
+        SMCEnableFDC( SMCUltraBase );
+#if SMC_DEBUG
+        SMCReportDeviceStatus( SMCUltraBase );
+#endif
+        SMCRunState( SMCUltraBase );
+        return( 1 );
+    }
+    else {
+#if SMC_DEBUG
+        printk( "No SMC FDC37C93X Ultra I/O Controller found\n" );
+#endif
+        return( 0 );
+    }
+}
+
+#endif /* CONFIG_ALPHA_PC164 */
+
 #endif /* CONFIG_PCI */

@@ -1122,7 +1122,6 @@ static int stl_setserial(stlport_t *portp, struct serial_struct *sp)
 static int stl_ioctl(struct tty_struct *tty, struct file *file, unsigned int cmd, unsigned long arg)
 {
 	stlport_t	*portp;
-	unsigned long	val;
 	int		rc;
 
 #if DEBUG
@@ -1152,37 +1151,42 @@ static int stl_ioctl(struct tty_struct *tty, struct file *file, unsigned int cmd
 		}
 		break;
 	case TIOCGSOFTCAR:
-		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(long))) == 0)
-			put_user(((tty->termios->c_cflag & CLOCAL) ? 1 : 0), (unsigned long *) arg);
+		rc = put_user(((tty->termios->c_cflag & CLOCAL) ? 1 : 0),
+		    (unsigned int *) arg);
 		break;
 	case TIOCSSOFTCAR:
-		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(long))) == 0) {
-			get_user(arg, (unsigned long *) arg);
-			tty->termios->c_cflag = (tty->termios->c_cflag & ~CLOCAL) | (arg ? CLOCAL : 0);
+		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(unsigned int))) == 0) {
+			unsigned int	val;
+			get_user(val, (unsigned int *) arg);
+			tty->termios->c_cflag = (tty->termios->c_cflag & ~CLOCAL) | (val ? CLOCAL : 0);
 		}
 		break;
 	case TIOCMGET:
 		if ((rc = verify_area(VERIFY_WRITE, (void *) arg, sizeof(unsigned int))) == 0) {
-			val = (unsigned long) stl_getsignals(portp);
-			put_user(val, (unsigned long *) arg);
+			unsigned int	val;
+			val = stl_getsignals(portp);
+			put_user(val, (unsigned int *) arg);
 		}
 		break;
 	case TIOCMBIS:
-		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(long))) == 0) {
-			get_user(arg, (unsigned long *) arg);
-			stl_setsignals(portp, ((arg & TIOCM_DTR) ? 1 : -1), ((arg & TIOCM_RTS) ? 1 : -1));
+		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(unsigned int))) == 0) {
+			unsigned int	val;
+			get_user(val, (unsigned int *) arg);
+			stl_setsignals(portp, ((val & TIOCM_DTR) ? 1 : -1), ((val & TIOCM_RTS) ? 1 : -1));
 		}
 		break;
 	case TIOCMBIC:
-		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(long))) == 0) {
-			get_user(arg, (unsigned long *) arg);
-			stl_setsignals(portp, ((arg & TIOCM_DTR) ? 0 : -1), ((arg & TIOCM_RTS) ? 0 : -1));
+		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(unsigned int))) == 0) {
+			unsigned int	val;
+			get_user(val, (unsigned int *) arg);
+			stl_setsignals(portp, ((val & TIOCM_DTR) ? 0 : -1), ((val & TIOCM_RTS) ? 0 : -1));
 		}
 		break;
 	case TIOCMSET:
-		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(long))) == 0) {
-			get_user(arg, (unsigned long *) arg);
-			stl_setsignals(portp, ((arg & TIOCM_DTR) ? 1 : 0), ((arg & TIOCM_RTS) ? 1 : 0));
+		if ((rc = verify_area(VERIFY_READ, (void *) arg, sizeof(unsigned int))) == 0) {
+			unsigned int	val;
+			get_user(val, (unsigned int *) arg);
+			stl_setsignals(portp, ((val & TIOCM_DTR) ? 1 : 0), ((val & TIOCM_RTS) ? 1 : 0));
 		}
 		break;
 	case TIOCGSERIAL:

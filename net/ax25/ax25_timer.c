@@ -85,7 +85,7 @@ static void ax25_reset_timer(ax25_cb *ax25)
 /*
  *	AX.25 TIMER 
  *
- *	This routine is called every 500ms. Decrement timer by this
+ *	This routine is called every 100ms. Decrement timer by this
  *	amount - if expired then process the event.
  */
 static void ax25_timer(unsigned long param)

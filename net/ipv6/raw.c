@@ -386,6 +386,9 @@ static int rawv6_setsockopt(struct sock *sk, int level, int optname,
 				return -EOPNOTSUPP;
 			return rawv6_seticmpfilter(sk, level, optname, optval,
 						   optlen);
+		case SOL_IPV6:
+			if (optname == IPV6_CHECKSUM)
+				break;
 		default:
 			return ipv6_setsockopt(sk, level, optname, optval,
 					       optlen);
@@ -398,11 +401,18 @@ static int rawv6_setsockopt(struct sock *sk, int level, int optname,
   	if(err)
   		return err;
 
-	switch (optname) 
+	switch (optname)
 	{
-		case RAW_CHECKSUM:
-			opt->checksum = 1;
-			opt->offset = val;
+		case IPV6_CHECKSUM:
+			if (val < 0)
+			{
+				opt->checksum = 0;
+			}
+			else
+			{
+				opt->checksum = 1;
+				opt->offset = val;
+			}
 
 			return 0;
 			break;

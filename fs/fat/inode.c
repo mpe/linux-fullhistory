@@ -48,13 +48,12 @@ void fat_put_inode(struct inode *inode)
 	}
 	inode->i_size = 0;
 	fat_truncate(inode);
-	clear_inode(inode);
 	if (depend) {
 		if (MSDOS_I(depend)->i_old != inode) {
 			printk("Invalid link (0x%p): expected 0x%p, got 0x%p\n",
 			    depend, inode, MSDOS_I(depend)->i_old);
 			fat_fs_panic(sb,"...");
-			return;
+			goto done;
 		}
 		MSDOS_I(depend)->i_old = NULL;
 		iput(depend);
@@ -64,11 +63,13 @@ void fat_put_inode(struct inode *inode)
 			printk("Invalid link (0x%p): expected 0x%p, got 0x%p\n",
 			    linked, inode, MSDOS_I(linked)->i_oldlink);
 			fat_fs_panic(sb,"...");
-			return;
+			goto done;
 		}
 		MSDOS_I(linked)->i_oldlink = NULL;
 		iput(linked);
 	}
+done:
+	clear_inode(inode);
 }
 
 

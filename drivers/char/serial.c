@@ -1747,10 +1747,9 @@ static int set_modem_info(struct async_struct * info, unsigned int cmd,
 	int error;
 	unsigned int arg;
 
-	error = verify_area(VERIFY_READ, value, sizeof(int));
+	error = get_user(arg, value);
 	if (error)
 		return error;
-	get_user(arg, value);
 	switch (cmd) {
 	case TIOCMBIS: 
 		if (arg & TIOCM_RTS) {
@@ -2024,16 +2023,11 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 			send_break(info, arg ? arg*(HZ/10) : HZ/4);
 			return 0;
 		case TIOCGSOFTCAR:
-			error = verify_area(VERIFY_WRITE, (void *) arg,sizeof(long));
-			if (error)
-				return error;
-			put_user(C_CLOCAL(tty) ? 1 : 0, (int *) arg);
-			return 0;
+			return put_user(C_CLOCAL(tty) ? 1 : 0, (int *) arg);
 		case TIOCSSOFTCAR:
-			error = verify_area(VERIFY_READ, (void *) arg,sizeof(long));
+			error = get_user(arg, (unsigned int *) arg);
 			if (error)
 				return error;
-			get_user(arg, (unsigned int *) arg);
 			tty->termios->c_cflag =
 				((tty->termios->c_cflag & ~CLOCAL) |
 				 (arg ? CLOCAL : 0));

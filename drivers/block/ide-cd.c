@@ -140,6 +140,9 @@
  *                     -- Fully integrated with the 2.1.X kernel.
  *                     -- Other stuff that I forgot (lots of changes)
  *
+ * 4.02  Dec 01, 1996  -- Applied patch from Gadi Oxman <gadio@netvision.net.il>
+ *                          to fix the drive door locking problems.
+ *
  *
  * MOSTLY DONE LIST:
  *  Query the drive to find what features are available
@@ -154,8 +157,12 @@
  *  Implement ide_cdrom_disc_status using the generic cdrom interface
  *  Implement ide_cdrom_select_speed using the generic cdrom interface
  *  Fix ide_cdrom_reset so that it works (it does nothing right now)
- *  -- Suggestions are welcome.  Patches that work are more welcome though.
  *
+ *  -- Suggestions are welcome.  Patches that work are more welcome though.
+ *       For those wishing to work on this driver, please be sure you download
+ *       and comply with the latest ATAPI standard.  This document can 
+ *       obtained by anonymous ftp from fission.dt.wdc.com in directory:
+ *       /pub/standards/atapi/spec/SFF8020-r2.6/PDF/8020r26.pdf
  *
  */
 
@@ -1217,7 +1224,7 @@ int cdrom_queue_packet_command (ide_drive_t *drive, struct packet_command *pc)
 		   and we think that the door is presently, lock it again.
 		   (The door was probably unlocked via an explicit
 		   CDROMEJECT ioctl.) */
-		if (CDROM_STATE_FLAGS (drive)->door_locked == 0 &&
+		if (CDROM_STATE_FLAGS (drive)->door_locked == 0 && drive->usage &&
 		    (pc->c[0] != REQUEST_SENSE &&
 		     pc->c[0] != ALLOW_MEDIUM_REMOVAL &&
 		     pc->c[0] != START_STOP)) {

@@ -80,7 +80,7 @@ static void nr_reset_timer(struct sock *sk)
 /*
  *	NET/ROM TIMER 
  *
- *	This routine is called every 500ms. Decrement timer by this
+ *	This routine is called every 100ms. Decrement timer by this
  *	amount - if expired then process the event.
  */
 static void nr_timer(unsigned long param)
