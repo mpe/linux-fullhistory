@@ -10,6 +10,8 @@
 inline unsigned long
 __generic_copy_to_user(void *to, const void *from, unsigned long n)
 {
+	if ((unsigned long) to < TASK_SIZE)
+		__check_locks(1);
 	if (access_ok(VERIFY_WRITE, to, n))
 		__copy_user(to,from,n);
 	return n;
@@ -18,6 +20,8 @@ __generic_copy_to_user(void *to, const void *from, unsigned long n)
 inline unsigned long
 __generic_copy_from_user(void *to, const void *from, unsigned long n)
 {
+	if ((unsigned long) from < TASK_SIZE)
+		__check_locks(1);
 	if (access_ok(VERIFY_READ, from, n))
 		__copy_user(to,from,n);
 	return n;
@@ -56,6 +60,7 @@ long
 __strncpy_from_user(char *dst, const char *src, long count)
 {
 	long res;
+	__check_locks(1);
 	__do_strncpy_from_user(dst, src, count, res);
 	return res;
 }
@@ -64,6 +69,7 @@ long
 strncpy_from_user(char *dst, const char *src, long count)
 {
 	long res = -EFAULT;
+	__check_locks(1);
 	if (access_ok(VERIFY_READ, src, 1))
 		__do_strncpy_from_user(dst, src, count, res);
 	return res;
@@ -96,6 +102,7 @@ strncpy_from_user(char *dst, const char *src, long count)
 unsigned long
 clear_user(void *to, unsigned long n)
 {
+	__check_locks(1);
 	if (access_ok(VERIFY_WRITE, to, n))
 		__do_clear_user(to, n);
 	return n;
@@ -104,6 +111,7 @@ clear_user(void *to, unsigned long n)
 unsigned long
 __clear_user(void *to, unsigned long n)
 {
+	__check_locks(1);
 	__do_clear_user(to, n);
 	return n;
 }
@@ -118,6 +126,7 @@ long strlen_user(const char *s)
 {
 	unsigned long res;
 
+	__check_locks(1);
 	__asm__ __volatile__(
 		"0:	repne; scasb\n"
 		"	notl %0\n"

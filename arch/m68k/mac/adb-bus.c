@@ -107,6 +107,7 @@ extern void adb_data_interrupt(int irq, void *arg, struct pt_regs *regs);
 static void adb_input(unsigned char *buf, int nb, struct pt_regs *regs);
 
 static void adb_hw_setup_IIsi(void);
+static void adb_hw_setup_cuda(void);
 
 /*
  * debug level 10 required for ADB logging (should be && debug_adb, ideally)
@@ -206,10 +207,14 @@ void adb_bus_init(void)
 			 */
 		case MAC_ADB_CUDA:
 			printk("adb: CUDA interface.\n");
+#if 0
 			/* don't know what to set up here ... */
 			adb_state = idle;
 			/* Set the lines up. We want TREQ as input TACK|TIP as output */
 		 	via_write(via1, vDirB, ((via_read(via1,vDirB)|TACK|TIP)&~TREQ));
+#endif
+			adb_hw_setup_cuda();
+			adb_state = idle;
 			request_irq(IRQ_MAC_ADB, adb_cuda_interrupt, IRQ_FLG_LOCK, 
 				    "adb CUDA interrupt", adb_cuda_interrupt);
 			break;
@@ -281,6 +286,115 @@ void adb_bus_init(void)
 	restore_flags(flags);	
 } 
 	
+void adb_hw_setup_cuda(void)
+{
+	int		x;
+	unsigned long	flags;
+
+	printk("CUDA: HW Setup:");
+
+	save_flags(flags);
+	cli();
+
+	if (console_loglevel == 10) 
+		printk("  1,");
+
+	/* Set the direction of the cuda signals, TIP+TACK are output TREQ is an input */
+	via_write( via1, vDirB, via_read( via1, vDirB ) | TIP | TACK );
+	via_write( via1, vDirB, via_read( via1, vDirB ) & ~TREQ );
+
+	if (console_loglevel == 10) 
+		printk("2,");
+
+	/* Set the clock control. Set to shift data in by external clock CB1 */
+	via_write( via1, vACR, ( via_read(via1, vACR ) | SR_EXT ) & ~SR_OUT );
+
+	if (console_loglevel == 10) 
+		printk("3,");
+
+	/* Clear any possible Cuda interrupt */
+	x = via_read( via1, vSR );
+
+	if (console_loglevel == 10) 
+		printk("4,");
+
+	/* Terminate transaction and set idle state */
+	via_write( via1, vBufB, via_read( via1, vBufB ) | TIP | TACK );
+
+	if (console_loglevel == 10) 
+		printk("5,");
+
+	/* Delay 4 mS for ADB reset to complete */
+	udelay(4000);
+
+	if (console_loglevel == 10) 
+		printk("6,");
+
+	/* Clear pending interrupts... */
+	x = via_read( via1, vSR );
+
+	if (console_loglevel == 10) 
+		printk("7,");
+	/* Issue a sync transaction, TACK asserted while TIP negated */
+	via_write( via1, vBufB, via_read( via1, vBufB ) & ~TACK );
+
+	if (console_loglevel == 10) 
+		printk("8,");
+
+	/* Wait for the sync acknowledgement, Cuda to assert TREQ */
+	while( ( via_read( via1, vBufB ) & TREQ ) != 0 )
+		barrier();
+
+	if (console_loglevel == 10) 
+		printk("9,");
+
+	/* Wait for the sync acknowledment interrupt */
+	while( ( via_read( via1, vIFR ) & SR_INT ) == 0 )
+		barrier();
+
+	if (console_loglevel == 10) 
+		printk("10,");
+
+	/* Clear pending interrupts... */
+	x = via_read( via1, vSR );
+
+	if (console_loglevel == 10) 
+		printk("11,");
+
+	/* Terminate the sync cycle by negating TACK */
+	via_write( via1, vBufB, via_read( via1, vBufB ) | TACK );
+
+	if (console_loglevel == 10) 
+		printk("12,");
+
+	/* Wait for the sync termination acknowledgement, Cuda to negate TREQ */
+	while( ( via_read( via1, vBufB ) & TREQ ) == 0 )
+		barrier();
+
+	if (console_loglevel == 10) 
+		printk("13,");
+
+	/* Wait for the sync termination acknowledment interrupt */
+	while( ( via_read( via1, vIFR ) & SR_INT ) == 0 )
+		barrier();
+
+	if (console_loglevel == 10) 
+		printk("14,");
+
+	/* Terminate transaction and set idle state, TIP+TACK negate */
+	via_write( via1, vBufB, via_read( via1, vBufB ) | TIP );
+
+	if (console_loglevel == 10) 
+		printk("15 !");
+
+	/* Clear pending interrupts... */
+	x = via_read( via1, vSR );
+
+	restore_flags(flags);
+
+	printk("\nCUDA: HW Setup done!\n");
+}
+
 void adb_hw_setup_IIsi(void)
 {
 	int dummy;

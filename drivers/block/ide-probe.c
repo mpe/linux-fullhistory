@@ -45,8 +45,8 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 	int bswap = 1;
 	struct hd_driveid *id;
 
-	id = drive->id = kmalloc (SECTOR_WORDS*4, GFP_KERNEL);
-	ide_input_data(drive, id, SECTOR_WORDS);	/* read 512 bytes of id info */
+	id = drive->id = kmalloc (SECTOR_WORDS*4, GFP_ATOMIC);	/* called with interrupts disabled! */
+	ide_input_data(drive, id, SECTOR_WORDS);		/* read 512 bytes of id info */
 	ide__sti();	/* local CPU only */
 	ide_fix_driveid(id);
 

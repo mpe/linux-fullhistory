@@ -394,7 +394,7 @@ static int exec_mmap(void)
 	struct mm_struct * mm, * old_mm;
 	int retval, nr;
 
-	if (current->mm->count == 1) {
+	if (atomic_read(&current->mm->count) == 1) {
 		flush_cache_mm(current->mm);
 		exit_mmap(current->mm);
 		clear_page_tables(current);
@@ -666,9 +666,9 @@ int prepare_binprm(struct linux_binprm *bprm)
 		/* (current->mm->count > 1 is ok, as we'll get a new mm anyway)   */
 		if (IS_NOSUID(inode)
 		    || (current->flags & PF_PTRACED)
-		    || (current->fs->count > 1)
+		    || (atomic_read(&current->fs->count) > 1)
 		    || (atomic_read(&current->sig->count) > 1)
-		    || (current->files->count > 1)) {
+		    || (atomic_read(&current->files->count) > 1)) {
  			if (id_change && !capable(CAP_SETUID))
  				return -EPERM;
  			if (cap_raised && !capable(CAP_SETPCAP))

@@ -176,6 +176,21 @@ rpc_make_runnable(struct rpc_task *task)
 	task->tk_flags |= RPC_TASK_RUNNING;
 }
 
+
+/*
+ *	For other people who may need to wake the I/O daemon
+ *	but should (for now) know nothing about its innards
+ */
+ 
+void rpciod_wake_up(void)
+{
+	if(rpciod_pid==0)
+	{
+		printk(KERN_ERR "rpciod: wot no daemon?\n");
+	}
+	wake_up(&rpciod_idle);
+}
+
 /*
  * Prepare for sleeping on a wait queue.
  * By always appending tasks to the list we ensure FIFO behavior.
@@ -795,6 +810,7 @@ rpciod(void *ptr)
 			dprintk("RPC: rpciod back to sleep\n");
 			interruptible_sleep_on(&rpciod_idle);
 			dprintk("RPC: switch to rpciod\n");
+			rpciod_tcp_dispatcher();
 			rounds = 0;
 		}
 		restore_flags(oldflags);

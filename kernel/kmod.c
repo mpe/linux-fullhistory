@@ -68,8 +68,8 @@ static int exec_modprobe(void * module_name)
 		if (current->files->fd[i]) close(i);
 	}
 
-	/* kernel_thread() -> ... -> charge_uid(current, 1) workaround */
-	charge_uid(current, -1);
+	/* Drop the "current user" thing */
+	free_uid(current);
 
 	/* Give kmod all privileges.. */
 	current->uid = current->euid = current->fsuid = 0;

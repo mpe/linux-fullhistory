@@ -1061,7 +1061,9 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 	elf_fpregset_t fpu;		/* NT_PRFPREG */
 	struct elf_prpsinfo psinfo;	/* NT_PRPSINFO */
 
-	if (!current->dumpable || limit < ELF_EXEC_PAGESIZE || current->mm->count != 1)
+	if (!current->dumpable ||
+	    limit < ELF_EXEC_PAGESIZE ||
+	    atomic_read(&current->mm->count) != 1)
 		return 0;
 	current->dumpable = 0;
 

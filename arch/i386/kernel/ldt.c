@@ -36,9 +36,7 @@ static int read_ldt(void * ptr, unsigned long bytecount)
 static int write_ldt(void * ptr, unsigned long bytecount, int oldmode)
 {
 	struct mm_struct * mm = current->mm;
-	void * ldt;
 	__u32 entry_1, entry_2, *lp;
-	__u16 selector, reg_fs, reg_gs;
 	int error;
 	struct modify_ldt_ldt_s ldt_info;
 
@@ -70,8 +68,8 @@ static int write_ldt(void * ptr, unsigned long bytecount, int oldmode)
 	 * For no good reason except historical, the GDT index of the LDT
 	 * is chosen to follow the index number in the task[] array.
 	 */
-	ldt = mm->segments;
-	if (!ldt) {
+	if (!mm->segments) {
+		void * ldt;
 		error = -ENOMEM;
 		ldt = vmalloc(LDT_ENTRIES*LDT_ENTRY_SIZE);
 		if (!ldt)
@@ -85,7 +83,7 @@ static int write_ldt(void * ptr, unsigned long bytecount, int oldmode)
 			mm->segments = ldt;
 			set_ldt_desc(gdt+(i<<1)+FIRST_LDT_ENTRY, ldt, LDT_ENTRIES);
 			load_ldt(i);
-			if (mm->count > 1)
+			if (atomic_read(&mm->count) > 1)
 				printk(KERN_WARNING
 					"LDT allocated for cloned task!\n");
 		} else {
@@ -93,19 +91,7 @@ static int write_ldt(void * ptr, unsigned long bytecount, int oldmode)
 		}
 	}
 
-	/*
-	 * Check whether the entry to be changed is currently in use.
-	 * If it is, we may need extra validation checks in case the
-	 * kernel is forced to save and restore the selector.
-	 *
-	 * Note: we check the fs and gs values as well, as these are
-	 * loaded by the signal code and during a task switch.
-	 */
-	selector = (ldt_info.entry_number << 3) | 4;
-	__asm__("movw %%fs,%0" : "=r"(reg_fs));
-	__asm__("movw %%gs,%0" : "=r"(reg_gs));
-
-	lp = (__u32 *) ((selector & ~7) + (char *) ldt);
+	lp = (__u32 *) ((ldt_info.entry_number << 3) + (char *) mm->segments);
 
    	/* Allow LDTs to be cleared by the user. */
    	if (ldt_info.base_addr == 0 && ldt_info.limit == 0) {
@@ -118,7 +104,7 @@ static int write_ldt(void * ptr, unsigned long bytecount, int oldmode)
 		     ldt_info.useable == 0 )) {
 			entry_1 = 0;
 			entry_2 = 0;
-			goto out_check;
+			goto install;
 		}
 	}
 
@@ -136,8 +122,8 @@ static int write_ldt(void * ptr, unsigned long bytecount, int oldmode)
 	if (!oldmode)
 		entry_2 |= (ldt_info.useable << 20);
 
-out_check:
-	/* OK to change the entry ...  */
+	/* Install the new entry ...  */
+install:
 	*lp	= entry_1;
 	*(lp+1)	= entry_2;
 	error = 0;

@@ -61,5 +61,6 @@ extern inline void end_bh_atomic(void)
 /* These are for the irq's testing the lock */
 #define softirq_trylock(cpu)  (local_bh_count[cpu] ? 0 : (local_bh_count[cpu]=1))
 #define softirq_endlock(cpu)  (local_bh_count[cpu] = 0)
+#define synchronize_bh()	do { } while (0)
 
 #endif

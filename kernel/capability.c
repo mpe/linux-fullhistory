@@ -14,17 +14,7 @@
 
 #include <asm/uaccess.h>
 
-static inline void cap_fromuser(kernel_cap_t *k, __u32 *u)
-{
-     copy_from_user(k, u, sizeof(*k));
-}
-
-
-static inline void cap_touser(__u32 *u, const kernel_cap_t *k)
-{
-     copy_to_user(u, k, sizeof(*k));
-}
-
+/* Note: never hold tasklist_lock while spinning for this one */
 spinlock_t task_capability_lock;
 
 /*
@@ -33,65 +23,58 @@ spinlock_t task_capability_lock;
  * uninteresting and/or not to be changed.
  */
 
-asmlinkage int sys_capget(cap_user_header_t header, cap_user_data_t data)
+asmlinkage int sys_capget(cap_user_header_t header, cap_user_data_t dataptr)
 {
-     int error = -EINVAL, pid;
+     int error, pid;
      __u32 version;
      struct task_struct *target;
+     struct __user_cap_data_struct data;
 
-     if (!access_ok(VERIFY_WRITE, &header->version, sizeof(*header))) {
-             /* not large enough for current header so indicate error */
-             if (access_ok(VERIFY_WRITE, &header->version,
-                           sizeof(header->version))) {
-                     return error;
-             }
-             goto all_done;
-     }
-
-     copy_from_user(&version, &header->version, sizeof(header->version));
+     if (get_user(version, &header->version))
+	     return -EFAULT;
+	     
+     error = -EINVAL; 
      if (version != _LINUX_CAPABILITY_VERSION) {
-             /* if enough space for kernel version, write that */
-
-     all_done:
              version = _LINUX_CAPABILITY_VERSION;
-             copy_to_user(&header->version, &version,
-                          sizeof(header->version));
+	     if (put_user(version, &header->version))
+		     error = -EFAULT; 
              return error;
      }
 
-     if (!access_ok(VERIFY_WRITE, data, sizeof(*data))) {
-             return error;
-     }
+     if (get_user(pid, &header->pid))
+	     return -EFAULT; 
 
-     copy_from_user(&pid, &header->pid, sizeof(header->pid));
-     if (pid < 0) {
-             return error;
-     }
+     if (pid < 0) 
+             return -EINVAL;
+
+     error = 0;
 
      spin_lock(&task_capability_lock);
 
      if (pid && pid != current->pid) {
-             read_lock(&tasklist_lock);
+	     read_lock(&tasklist_lock); 
              target = find_task_by_pid(pid);  /* identify target of query */
-             if (!target) {
+             if (!target) 
                      error = -ESRCH;
-                     goto out;
-             }
      } else {
              target = current;
      }
 
-     cap_touser(&data->permitted, &target->cap_permitted);
-     cap_touser(&data->inheritable, &target->cap_inheritable);
-     cap_touser(&data->effective, &target->cap_effective);
-
-     error = 0;
-
-out:
-     if (target != current) {
-             read_unlock(&tasklist_lock);
+     if (!error) { 
+	     data.permitted = target->cap_permitted.cap;
+	     data.inheritable = target->cap_inheritable.cap; 
+	     data.effective = target->cap_effective.cap;
      }
-     spin_unlock(&task_capability_lock);
+
+     if (target != current)
+	     read_unlock(&tasklist_lock); 
+     spin_unlock(&task_capacibility_lock);
+
+     if (!error) {
+	     if (copy_to_user(dataptr, &data, sizeof data))
+		     return -EFAULT; 
+     }
+
      return error;
 }
 
@@ -152,38 +135,31 @@ asmlinkage int sys_capset(cap_user_header_t header, const cap_user_data_t data)
      kernel_cap_t inheritable, permitted, effective;
      __u32 version;
      struct task_struct *target;
-     int error = -EINVAL, pid;
+     int error, pid;
 
-     if (!access_ok(VERIFY_WRITE, &header->version, sizeof(*header))) {
-             /* not large enough for current header so indicate error */
-             if (!access_ok(VERIFY_WRITE, &header->version,
-                            sizeof(header->version))) {
-                     return error;
-             }
-             goto all_done;
-     }
+     if (get_user(version, &header->version))
+	     return -EFAULT; 
 
-     copy_from_user(&version, &header->version, sizeof(header->version));
      if (version != _LINUX_CAPABILITY_VERSION) {
-
-     all_done:
              version = _LINUX_CAPABILITY_VERSION;
-             copy_to_user(&header->version, &version,
-                          sizeof(header->version));
-             return error;
-     }
-
-     if (!access_ok(VERIFY_READ, data, sizeof(*data))) {
-             return error;
+	     if (put_user(version, &header->version))
+		     return -EFAULT; 
+             return -EINVAL;
      }
 
      /* may want to set other processes at some point -- for now demand 0 */
-     copy_from_user(&pid, &header->pid, sizeof(pid));
+     if (get_user(pid, &header->pid))
+	     return -EFAULT; 
+
+     if (pid && !capable(CAP_SETPCAP))
+             return -EPERM;
+
+     if (copy_from_user(&effective, &data->effective, sizeof(effective)) ||
+	 copy_from_user(&inheritable, &data->inheritable, sizeof(inheritable)) ||
+	 copy_from_user(&permitted, &data->permitted, sizeof(permitted)))
+	     return -EFAULT; 
 
      error = -EPERM;
-     if (pid && !capable(CAP_SETPCAP))
-             return error;
-
      spin_lock(&task_capability_lock);
 
      if (pid > 0 && pid != current->pid) {
@@ -191,16 +167,12 @@ asmlinkage int sys_capset(cap_user_header_t header, const cap_user_data_t data)
              target = find_task_by_pid(pid);  /* identify target of query */
              if (!target) {
                      error = -ESRCH;
-                     goto out;
-             }
+		     goto out;
+	     }
      } else {
              target = current;
      }
 
-     /* copy from userspace */
-     cap_fromuser(&effective, &data->effective);
-     cap_fromuser(&inheritable, &data->inheritable);
-     cap_fromuser(&permitted, &data->permitted);
 
      /* verify restrictions on target's new Inheritable set */
      if (!cap_issubset(inheritable,

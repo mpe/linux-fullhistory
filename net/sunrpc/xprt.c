@@ -324,6 +324,12 @@ xprt_close(struct rpc_xprt *xprt)
 		fput(xprt->file);
 	else
 		sock_release(xprt->sock);
+	/*
+	 *	TCP doesnt require the rpciod now - other things may
+	 *	but rpciod handles that not us.
+	 */
+	if(xprt->stream)
+		rpciod_down();
 }
 
 /*
@@ -700,19 +706,17 @@ done:
  
 static struct rpc_xprt *rpc_xprt_pending = NULL;	/* Chain by rx_pending of rpc_xprt's */
 
-static struct tq_struct rpc_tcp_tqueue = { 0, 0, 0, 0 };
-
-
 /*
- *	This is protected from tcp_data_ready by the bh atomicity guarantees
+ *	This is protected from tcp_data_ready and the stack as its run
+ *	inside of the RPC I/O daemon
  */
 
-static void tcp_rpc_bh_run(void)
+void rpciod_tcp_dispatcher(void)
 {
 	struct rpc_xprt *xprt;
 	int result;
 
-	dprintk("tcp_rpc_bh_run: Queue Running\n");
+	dprintk("rpciod_tcp_dispatcher: Queue Running\n");
 	
 	/*
 	 *	Empty each pending socket
@@ -725,7 +729,7 @@ static void tcp_rpc_bh_run(void)
 		rpc_xprt_pending=xprt->rx_pending;
 		xprt->rx_pending_flag=0;
 		
-		dprintk("tcp_rpc_run_bh: Processing %p\n", xprt);
+		dprintk("rpciod_tcp_dispatcher: Processing %p\n", xprt);
 		
 		do 
 		{
@@ -750,12 +754,9 @@ static void tcp_rpc_bh_run(void)
 }
 
 
-static void tcp_rpc_bh_queue(void)
+extern inline void tcp_rpciod_queue(void)
 {
-	rpc_tcp_tqueue.routine=(void *)(void *)tcp_rpc_bh_run;
-	queue_task(&rpc_tcp_tqueue, &tq_immediate);
-	dprintk("RPC:     tcp_rpc_bh_queue: immediate op queued\n");
-	mark_bh(IMMEDIATE_BH);
+	rpciod_wake_up();
 }
 
 /*
@@ -787,7 +788,7 @@ static void tcp_data_ready(struct sock *sk, int len)
 	{
 		dprintk("RPC:     xprt queue\n");
 		if(rpc_xprt_pending==NULL)
-			tcp_rpc_bh_queue();
+			tcp_rpciod_queue();
 		xprt->rx_pending_flag=1;
 		xprt->rx_pending=rpc_xprt_pending;
 		rpc_xprt_pending=xprt;
@@ -1279,6 +1280,12 @@ xprt_setup(struct socket *sock, int proto,
 	xprt->free = xprt->slot;
 
 	dprintk("RPC:      created transport %p\n", xprt);
+	
+	/*
+	 *	TCP requires the rpc I/O daemon is present
+	 */
+	if(proto==IPPROTO_TCP)
+		rpciod_up();
 	return xprt;
 }
 

@@ -189,6 +189,12 @@ static void oss_do_nubus(int irq, void *dev_id, struct pt_regs *regs);
 void psc_irq(int irq, void *dev_id, struct pt_regs *regs);
 
 /*
+ * PSC hooks
+ */
+
+extern void psc_init(void);
+
+/*
  * console_loglevel determines NMI handler function
  */
 
@@ -241,8 +247,7 @@ void mac_init_IRQ(void)
 			/* no real VIA2, the OSS seems _very_different */	
 			via2_is_oss = 1;
 			/* IIfx has OSS, at a different base address than RBV */
-			if (macintosh_config->ident == MAC_MODEL_IIFX)
-				rbv_regp = (unsigned char *) OSS_BAS;
+			rbv_regp = (unsigned char *) OSS_BAS;
 			sys_request_irq(2, oss_irq, IRQ_FLG_LOCK, "oss", oss_irq);
 		} else {
 			/* VIA2 is part of the RBV: different base, other offsets */
@@ -318,7 +323,7 @@ void mac_init_IRQ(void)
 	param_table[0]   =  &via1_param[0];
 	mac_irqs[0]	 =  &via1_irqs[0];
 
-	if (via2_is_rbv) {
+	if (via2_is_rbv || via2_is_oss) {
 		via_table[1]     =  rbv_regp;
 		handler_table[1] =  &rbv_handler[0];
 		param_table[1]   =  &rbv_param[0];
@@ -656,10 +661,28 @@ void mac_clear_pending_irq( unsigned int irq )
 
 int  mac_irq_pending( unsigned int irq )
 {
+	int pending = 0;
+	volatile unsigned char *via;
+
 	int srcidx = ((irq & IRQ_SRC_MASK)>>3) - 1;
 	int irqidx = (irq & IRQ_IDX_MASK);
 
-	return (irq_flags[srcidx].pending & (1<<irqidx));
+	pending = irq_flags[srcidx].pending & (1<<irqidx);
+
+	via         = (volatile unsigned char *) via_table[srcidx];
+	if (!via) 
+		return (pending);
+
+	if (srcidx == SRC_VIA2 && via2_is_rbv)
+		pending |= via_read(via, rIFR)&(1<<irqidx);
+	else if (srcidx == SRC_VIA2 && via2_is_oss)
+		pending |= via_read(via, oIFR)&0x03&(1<<oss_map[irqidx]);
+	else if (srcidx >= SRC_VIA2)
+	        pending |= via_read(via, (0x100 + 0x10*srcidx))&(1<<irqidx);
+	else
+		pending |= via_read(via, vIFR)&(1<<irqidx);
+
+	return (pending);
 }
 
 int mac_get_irq_list (char *buf)
@@ -683,7 +706,7 @@ int mac_get_irq_list (char *buf)
 		 * the magic 'nothing pending' cases ...
 		 */
 		if (irqidx == 7 && mac_irqs[srcidx][irqidx]) {
-			len += sprintf(buf+len, "Level %01d: %10u (spurious) \n",
+			len += sprintf(buf+len, "Level %01d: %10lu (spurious) \n",
 				       srcidx, 
 				       mac_irqs[srcidx][irqidx]);
 			continue;
@@ -706,23 +729,23 @@ int mac_get_irq_list (char *buf)
 
 
 		if (i < VIA2_SOURCE_BASE)
-			len += sprintf(buf+len, "via1  %01d: %10u ",
+			len += sprintf(buf+len, "via1  %01d: %10lu ",
 				       irqidx,
 				       mac_irqs[srcidx][irqidx]);
 		else if (i < RBV_SOURCE_BASE)
-			len += sprintf(buf+len, "via2  %01d: %10u ",
+			len += sprintf(buf+len, "via2  %01d: %10lu ",
 				       irqidx,
 				       mac_irqs[srcidx][irqidx]);
 		else if (i < MAC_SCC_SOURCE_BASE)
-			len += sprintf(buf+len, "rbv   %01d: %10u ",
+			len += sprintf(buf+len, "rbv   %01d: %10lu ",
 				       irqidx,
 				       mac_irqs[srcidx][irqidx]);
 		else if (i < NUBUS_SOURCE_BASE)
-			len += sprintf(buf+len, "scc   %01d: %10u ",
+			len += sprintf(buf+len, "scc   %01d: %10lu ",
 				       irqidx,
 				       mac_irqs[srcidx][irqidx]);
 		else /* Nubus */
-			len += sprintf(buf+len, "nubus %01d: %10u ",
+			len += sprintf(buf+len, "nubus %01d: %10lu ",
 				       irqidx,
 				       mac_irqs[srcidx][irqidx]);
 
@@ -770,6 +793,9 @@ void mac_debug_handler(int irq, void *dev_id, struct pt_regs *regs)
 void scsi_mac_debug(void);
 void scsi_mac_polled(void);
 
+static int in_nmi = 0;
+static volatile int nmi_hold = 0;
+
 void mac_nmi_handler(int irq, void *dev_id, struct pt_regs *fp)
 {
 	int i;
@@ -777,13 +803,31 @@ void mac_nmi_handler(int irq, void *dev_id, struct pt_regs *fp)
 	 * generate debug output on NMI switch if 'debug' kernel option given
 	 * (only works with Penguin!)
 	 */
+
+	in_nmi++;
 #if 0
 	scsi_mac_debug();
 	printk("PC: %08lx\nSR: %04x  SP: %p\n", fp->pc, fp->sr, fp);
 #endif
 	for (i=0; i<100; i++)
 		udelay(1000);
+
+	if (in_nmi == 1) {
+		nmi_hold = 1;
+		printk("... pausing, press NMI to resume ...");
+	} else {
+		printk(" ok!\n");
+		nmi_hold = 0;
+	}
+
+	barrier();
+
+	while (nmi_hold == 1)
+		udelay(1000);
+
+#if 0
 	scsi_mac_polled();
+#endif
 
 	if ( console_loglevel >= 8 ) {
 #if 0
@@ -804,6 +848,7 @@ void mac_nmi_handler(int irq, void *dev_id, struct pt_regs *fp)
 		/* printk("NMI "); */
 #endif
 	}
+	in_nmi--;
 }
 
 /*
@@ -1511,8 +1556,10 @@ static void oss_do_nubus(int slot, void *via, struct pt_regs *regs)
 #endif
 
 	/* IDE hack for Quadra: uses Nubus interrupt without any slot bit set */
+#ifdef CONFIG_BLK_DEV_MAC_IDE
 	if (mac_ide_intr_hook)
 		mac_ide_intr_hook(IRQ_MAC_NUBUS, via, regs);
+#endif
 	
 	while(1)
 	{
@@ -1523,9 +1570,11 @@ static void oss_do_nubus(int slot, void *via, struct pt_regs *regs)
 		printk("nubus_irq: map %x mask %x\n", map, nubus_active);
 #endif
 		if( (map = (map&nubus_active)) ==0 ) {
+#ifdef CONFIG_BLK_DEV_MAC_IDE
 			if (!mac_ide_intr_hook)
 				printk("nubus_irq: nothing pending, map %x mask %x\n", 
 					map, nubus_active);
+#endif
 			nubus_irqs[7]++;
 			break;
 		}

@@ -1,6 +1,13 @@
 /*
  * linux/ipc/msg.c
  * Copyright (C) 1992 Krishna Balasubramanian 
+ *
+ * Removed all the remaining kerneld mess
+ * Catch the -EFAULT stuff properly
+ * Use GFP_KERNEL for messages as in 1.2
+ * Fixed up the unchecked user space derefs
+ * Copyright (C) 1998 Alan Cox & Andi Kleen
+ *
  */
 
 #include <linux/errno.h>
@@ -42,7 +49,7 @@ void __init msg_init (void)
 
 static int real_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg)
 {
-	int id, err;
+	int id;
 	struct msqid_ds *msq;
 	struct ipc_perm *ipcp;
 	struct msg *msgh;
@@ -80,12 +87,16 @@ static int real_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg
 	}
 	
 	/* allocate message header and text space*/ 
-	msgh = (struct msg *) kmalloc (sizeof(*msgh) + msgsz, GFP_ATOMIC);
+	msgh = (struct msg *) kmalloc (sizeof(*msgh) + msgsz, GFP_KERNEL);
 	if (!msgh)
 		return -ENOMEM;
 	msgh->msg_spot = (char *) (msgh + 1);
 
-	copy_from_user (msgh->msg_spot, msgp->mtext, msgsz); 
+	if (copy_from_user(msgh->msg_spot, msgp->mtext, msgsz))
+	{
+		kfree(msgh);
+		return -EFAULT;
+	}
 	
 	if (msgque[id] == IPC_UNUSED || msgque[id] == IPC_NOID
 		|| msq->msg_perm.seq != (unsigned int) msqid / MSGMNI) {
@@ -120,7 +131,7 @@ static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgty
 	struct ipc_perm *ipcp;
 	struct msg *tmsg, *leastp = NULL;
 	struct msg *nmsg = NULL;
-	int id, err;
+	int id;
 
 	if (msqid < 0 || (long) msgsz < 0)
 		return -EINVAL;

@@ -17,6 +17,7 @@
 #include <linux/mm.h>
 #include <linux/fs.h>
 #include <linux/malloc.h>
+#include <linux/slab.h>
 #include <linux/init.h>
 
 #include <asm/uaccess.h>
@@ -28,6 +29,8 @@
 extern unsigned long num_physpages, page_cache_size;
 extern int inodes_stat[];
 #define nr_inodes (inodes_stat[0])
+
+kmem_cache_t *dentry_cache; 
 
 /*
  * This is the single most critical data structure when it comes
@@ -56,8 +59,9 @@ static inline void d_free(struct dentry *dentry)
 {
 	if (dentry->d_op && dentry->d_op->d_release)
 		dentry->d_op->d_release(dentry);
-	kfree(dentry->d_name.name);
-	kfree(dentry);
+	if (dname_external(dentry)) 
+		kfree(dentry->d_name.name);
+	kmem_cache_free(dentry_cache, dentry); 
 }
 
 /*
@@ -498,15 +502,18 @@ printk("d_alloc: %d unused, pruning dcache\n", dentry_stat.nr_unused);
 		free_inode_memory(8);
 	}
 
-	dentry = kmalloc(sizeof(struct dentry), GFP_KERNEL);
+	dentry = kmem_cache_alloc(dentry_cache, GFP_KERNEL); 
 	if (!dentry)
 		return NULL;
 
-	str = kmalloc(NAME_ALLOC_LEN(name->len), GFP_KERNEL);
-	if (!str) {
-		kfree(dentry);
-		return NULL;
-	}
+	if (name->len > DNAME_INLINE_LEN-1) {
+		str = kmalloc(NAME_ALLOC_LEN(name->len), GFP_KERNEL);
+		if (!str) {
+			kmem_cache_free(dentry_cache, dentry); 
+			return NULL;
+		}
+	} else
+		str = dentry->d_iname; 
 
 	memcpy(str, name->name, name->len);
 	str[name->len] = 0;
@@ -692,6 +699,32 @@ void d_add(struct dentry * entry, struct inode * inode)
 	x = y; y = __tmp; } while (0)
 
 /*
+ * When switching names, the actual string doesn't strictly have to
+ * be preserved in the target - because we're dropping the target
+ * anyway. As such, we can just do a simple memcpy() to copy over
+ * the new name before we switch.
+ *
+ * Note that we have to be a lot more careful about getting the hash
+ * switched - we have to switch the hash value properly even if it
+ * then no longer matches the actual (corrupted) string of the target.
+ * The has value has to match the hash queue that the dentry is on..
+ */
+static inline void switch_names(struct dentry * dentry, struct dentry * target)
+{
+	const unsigned char *old_name, *new_name;
+
+	memcpy(dentry->d_iname, target->d_iname, DNAME_INLINE_LEN); 
+	old_name = target->d_name.name;
+	new_name = dentry->d_name.name;
+	if (old_name == target->d_iname)
+		old_name = dentry->d_iname;
+	if (new_name == dentry->d_iname)
+		new_name = target->d_iname;
+	target->d_name.name = new_name;
+	dentry->d_name.name = old_name;
+}
+
+/*
  * We cannibalize "target" when moving dentry on top of it,
  * because it's going to be thrown away anyway. We could be more
  * polite about it, though.
@@ -723,10 +756,12 @@ void d_move(struct dentry * dentry, struct dentry * target)
 	list_del(&target->d_child);
 
 	/* Switch the parents and the names.. */
+	switch_names(dentry, target);
 	do_switch(dentry->d_parent, target->d_parent);
-	do_switch(dentry->d_name.name, target->d_name.name);
 	do_switch(dentry->d_name.len, target->d_name.len);
 	do_switch(dentry->d_name.hash, target->d_name.hash);
+
+	/* And add them back to the (new) parent lists */
 	list_add(&target->d_child, &target->d_parent->d_subdirs);
 	list_add(&dentry->d_child, &dentry->d_parent->d_subdirs);
 }
@@ -884,6 +919,22 @@ __initfunc(void dcache_init(void))
 {
 	int i;
 	struct list_head *d = dentry_hashtable;
+
+	/* 
+	 * A constructor could be added for stable state like the lists,
+	 * but it is probably not worth it because of the cache nature
+	 * of the dcache. 
+	 * If fragmentation is too bad then the SLAB_HWCACHE_ALIGN
+	 * flag could be removed here, to hint to the allocator that
+	 * it should not try to get multiple page regions.  
+	 */
+	dentry_cache = kmem_cache_create("dentry_cache",
+					 sizeof(struct dentry),
+					 0,
+					 SLAB_HWCACHE_ALIGN,
+					 NULL, NULL);
+	if (!dentry_cache)
+		panic("Cannot create dentry cache");
 
 	i = D_HASHSIZE;
 	do {

@@ -101,7 +101,7 @@ do_aout_core_dump(long signr, struct pt_regs * regs)
 #       define START_STACK(u)   (u.start_stack)
 #endif
 
-	if (!current->dumpable || current->mm->count != 1)
+	if (!current->dumpable || atomic_read(&current->mm->count) != 1)
 		return 0;
 	current->dumpable = 0;
 

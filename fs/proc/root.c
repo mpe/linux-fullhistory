@@ -819,16 +819,14 @@ static int proc_root_lookup(struct inode * dir, struct dentry * dentry)
 	}
 	read_lock(&tasklist_lock);
 	p = find_task_by_pid(pid);
+	read_unlock(&tasklist_lock);
 	inode = NULL;
 	if (pid && p) {
 		unsigned long ino = (pid << 16) + PROC_PID_INO;
 		inode = proc_get_inode(dir->i_sb, ino, &proc_pid);
-		if (!inode) {
-			read_unlock(&tasklist_lock);
+		if (!inode)
 			return -EINVAL;
-		}
 	}
-	read_unlock(&tasklist_lock);
 
 	dentry->d_op = &proc_dentry_operations;
 	d_add(dentry, inode);
@@ -895,46 +893,68 @@ int proc_readdir(struct file * filp,
 	return 1;
 }
 
-#define NUMBUF 10
+#define PROC_NUMBUF 10
+#define PROC_MAXPIDS 20
+
+/*
+ * Get a few pid's to return for filldir - we need to hold the
+ * tasklist lock while doing this, and we must release it before
+ * we actually do the filldir itself, so we use a temp buffer..
+ */
+static int get_pid_list(unsigned int index, unsigned int *pids)
+{
+	struct task_struct *p;
+	int nr = FIRST_PROCESS_ENTRY;
+	int nr_pids = 0;
+
+	read_lock(&tasklist_lock);
+	for_each_task(p) {
+		int pid;
+		if (nr++ < index)
+			continue;
+		pid = p->pid;
+		if (!pid)
+			continue;
+		pids[nr_pids] = pid;
+		nr_pids++;
+		if (nr_pids >= PROC_MAXPIDS)
+			break;
+	}
+	read_unlock(&tasklist_lock);
+	return nr_pids;
+}
 
 static int proc_root_readdir(struct file * filp,
 	void * dirent, filldir_t filldir)
 {
-	struct task_struct *p;
-	char buf[NUMBUF];
+	unsigned int pid_array[PROC_MAXPIDS];
+	char buf[PROC_NUMBUF];
 	unsigned int nr = filp->f_pos;
+	unsigned int nr_pids, i;
 
 	if (nr < FIRST_PROCESS_ENTRY) {
 		int error = proc_readdir(filp, dirent, filldir);
 		if (error <= 0)
 			return error;
-		filp->f_pos = FIRST_PROCESS_ENTRY;
+		filp->f_pos = nr = FIRST_PROCESS_ENTRY;
 	}
-	nr = FIRST_PROCESS_ENTRY;
 
-	read_lock(&tasklist_lock);
-	for_each_task(p) {
-		unsigned int pid;
+	nr_pids = get_pid_list(nr, pid_array);
 
-		if(nr++ < filp->f_pos)
-			continue;
+	for (i = 0; i < nr_pids; i++) {
+		int pid = pid_array[i];
+		unsigned long j = PROC_NUMBUF;
 
-		if((pid = p->pid) != 0) {
-			unsigned long j = NUMBUF, i = pid;
+		do {
+			j--;
+			buf[j] = '0' + (pid % 10);
+			pid /= 10;
+		} while (pid);
 
-			do {
-				j--;
-				buf[j] = '0' + (i % 10);
-				i /= 10;
-			} while (i);
-
-			if (filldir(dirent, buf+j, NUMBUF-j,
-				    filp->f_pos, (pid << 16) + PROC_PID_INO) < 0)
-				break;
-		}
+		if (filldir(dirent, buf+j, PROC_NUMBUF-j, filp->f_pos, (pid << 16) + PROC_PID_INO) < 0)
+			break;
 		filp->f_pos++;
 	}
-	read_unlock(&tasklist_lock);
 	return 0;
 }
 

@@ -1177,7 +1177,7 @@ void __init setup_IO_APIC(void)
 		pirqs_enabled)
 	{
 		printk("ENABLING IO-APIC IRQs\n");
-		io_apic_irqs = ~((1<<2)|(1<<13));
+		io_apic_irqs = ~((1<<2)|(1<<9)|(1<<13));
 	} else {
 		if (ioapic_blacklisted())
 			printk(" blacklisted board, DISABLING IO-APIC IRQs\n");

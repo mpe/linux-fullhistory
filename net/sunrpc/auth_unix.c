@@ -178,6 +178,11 @@ unx_marshal(struct rpc_task *task, u32 *p, int ruid)
 	base = p++;
 	*p++ = htonl(jiffies/HZ);
 #ifndef DONT_FILLIN_HOSTNAME
+	/*
+	 *	Problem: The UTS name could change under us. We can't lock
+	 *	here to handle this. On the other hand we can't really
+	 *	go building a bad RPC!
+	 */
 	if ((n = strlen((char *) system_utsname.nodename)) > UNX_MAXNODENAME)
 		n = UNX_MAXNODENAME;
 	*p++ = htonl(n);

@@ -583,6 +583,10 @@ SYMBOL_NAME_LABEL(sys_call_table)
 	.long SYMBOL_NAME(sys_capget)
 	.long SYMBOL_NAME(sys_capset)           /* 185 */
 	.long SYMBOL_NAME(sys_sigaltstack)
+	.long SYMBOL_NAME(sys_sendfile)
+	.long SYMBOL_NAME(sys_ni_syscall)		/* streams1 */
+	.long SYMBOL_NAME(sys_ni_syscall)		/* streams2 */
+
 	.rept NR_syscalls-(.-SYMBOL_NAME(sys_call_table))/4
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr

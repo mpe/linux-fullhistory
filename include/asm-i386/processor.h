@@ -114,6 +114,27 @@ extern inline void cpuid(int op, int *eax, int *ebx, int *ecx, int *edx)
 }
 
 /*
+ *      Cyrix CPU configuration register indexes
+ */
+#define CX86_CCR2 0xc2
+#define CX86_CCR3 0xc3
+#define CX86_CCR4 0xe8
+#define CX86_CCR5 0xe9
+#define CX86_DIR0 0xfe
+#define CX86_DIR1 0xff
+
+/*
+ *      Cyrix CPU indexed register access macros
+ */
+
+#define getCx86(reg) ({ outb((reg), 0x22); inb(0x23); })
+
+#define setCx86(reg, data) do { \
+	outb((reg), 0x22); \
+	outb((data), 0x23); \
+} while (0)
+
+/*
  * Bus types (default is ISA, but people can check others with these..)
  */
 extern int EISA_bus;

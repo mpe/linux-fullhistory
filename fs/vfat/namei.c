@@ -1771,6 +1771,8 @@ int vfat_rename(struct inode *old_dir,struct dentry *old_dentry,
 	MSDOS_I(new_inode)->i_logstart = MSDOS_I(old_inode)->i_logstart;
 	MSDOS_I(new_inode)->i_attrs = MSDOS_I(old_inode)->i_attrs;
 
+	old_inode->i_nlink = 0;
+
 	fat_cache_inval_inode(old_inode);
 	mark_inode_dirty(new_inode);
 
@@ -1821,8 +1823,6 @@ int vfat_rename(struct inode *old_dir,struct dentry *old_dentry,
 		d_move(old_dentry, new_dentry);
 		put_new_inode = 0;
 	}
-
-	clear_inode(old_inode);
 
 rename_done:
 	if (locked)

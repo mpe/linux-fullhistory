@@ -42,12 +42,10 @@ static inline void console_verbose(void)
 #define DO_ERROR(trapnr, signr, str, name, tsk) \
 asmlinkage void do_##name(struct pt_regs * regs, long error_code) \
 { \
-	lock_kernel(); \
 	tsk->tss.error_code = error_code; \
 	tsk->tss.trap_no = trapnr; \
 	force_sig(signr, tsk); \
-	die_if_kernel(str,regs,error_code); \
-	unlock_kernel(); \
+	die_if_no_fixup(str,regs,error_code); \
 }
 
 #define DO_VM86_ERROR(trapnr, signr, str, name, tsk) \
@@ -191,6 +189,20 @@ static void die_if_kernel(const char * str, struct pt_regs * regs, long err)
 		die(str, regs, err);
 }
 
+static void die_if_no_fixup(const char * str, struct pt_regs * regs, long err)
+{
+	if (!(regs->eflags & VM_MASK) && !(3 & regs->xcs))
+	{
+		unsigned long fixup;
+		fixup = search_exception_table(regs->eip);
+		if (fixup) {
+			regs->eip = fixup;
+			return;
+		}
+		die(str, regs, err);
+	}
+}
+
 DO_VM86_ERROR( 0, SIGFPE,  "divide error", divide_error, current)
 DO_VM86_ERROR( 3, SIGTRAP, "int3", int3, current)
 DO_VM86_ERROR( 4, SIGSEGV, "overflow", overflow, current)
@@ -228,10 +240,9 @@ asmlinkage void do_general_protection(struct pt_regs * regs, long error_code)
 	if (!(regs->xcs & 3))
 		goto gp_in_kernel;
 
-	lock_kernel();
 	current->tss.error_code = error_code;
 	current->tss.trap_no = 13;
-	force_sig(SIGSEGV, current);	
+	force_sig(SIGSEGV, current);
 	return;
 
 gp_in_vm86:
@@ -453,9 +464,7 @@ __initfunc(void trap_init_f00f_bug(void))
 
 	/*
 	 * Allocate a new page in virtual address space, 
-	 * and move the IDT to have entry #7 starting at
-	 * the beginning of the page. We'll force a page
-	 * fault for IDT entries #0-#6..
+	 * move the IDT into it and write protect this page.
 	 */
 	page = (unsigned long) vmalloc(PAGE_SIZE);
 	memcpy((void *) page, idt_table, 256*8);

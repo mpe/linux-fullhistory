@@ -658,6 +658,7 @@ __initfunc(unsigned long init_smp_mappings(unsigned long memory_start))
 {
 	unsigned long apic_phys, ioapic_phys;
 
+	memory_start = PAGE_ALIGN(memory_start);
 	if (smp_found_config) {
 		apic_phys = mp_lapic_addr;
 		ioapic_phys = mp_ioapic_addr;
@@ -749,7 +750,11 @@ __initfunc(void initialize_secondary(void))
 	/*
 	 * We don't actually need to load the full TSS,
 	 * basically just the stack pointer and the eip.
+	 *
+	 * Get the scheduler lock, because we're going
+	 * to release it as part of the "reschedule" return.
 	 */
+	spin_lock(&scheduler_lock);
 	asm volatile("lldt %%ax": :"a" (p->ldt));
 	asm volatile("ltr %%ax": :"a" (p->tr));
 	asm volatile(

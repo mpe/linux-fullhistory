@@ -200,6 +200,7 @@ __generic_copy_to_user(void *to, const void *from, unsigned long n)
 	 "5:\n"
 	 ".section .fixup,\"ax\"\n"
 	 "   .even\n"
+	 "60:addql #1,%2\n"
 	 "6: lsll #2,%2\n"
 	 "   addl %4,%2\n"
 	 "   jra 5b\n"
@@ -210,9 +211,11 @@ __generic_copy_to_user(void *to, const void *from, unsigned long n)
 	 ".previous\n"
 	 ".section __ex_table,\"a\"\n"
 	 "   .align 4\n"
+	 "   .long 1b,60b\n"
 	 "   .long 22b,6b\n"
 	 "   .long 2b,6b\n"
 	 "   .long 24b,7b\n"
+	 "   .long 3b,60b\n"
 	 "   .long 4b,7b\n"
 	 "   .long 25b,8b\n"
 	 "   .long 5b,8b\n"
@@ -458,16 +461,20 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 	 "31: movesl %%d0,(%0)+\n"			\
 	 "11: subql #1,%2\n"				\
 	 "    jne 10b\n"				\
+	 "41:\n"					\
 	 ".section .fixup,\"ax\"\n"			\
 	 "   .even\n"					\
+	 "22: addql #1,%2\n"				\
 	 "12: lsll #2,%2\n"				\
 	 fixup "\n"					\
 	 "    jra 13f\n"				\
 	 ".previous\n"					\
 	 ".section __ex_table,\"a\"\n"			\
 	 "    .align 4\n"				\
+	 "    .long 10b,22b\n"				\
 	 "    .long 31b,12b\n"				\
 	 "    .long 11b,12b\n"				\
+	 "    .long 41b,22b\n"				\
 	 ".previous\n"					\
 	 copy "\n"					\
 	 "13:"						\
@@ -803,6 +810,7 @@ clear_user(void *to, unsigned long n)
 	 "5:\n"
 	 ".section .fixup,\"ax\"\n"
 	 "   .even\n"
+	 "61:addql #1,%1\n"
 	 "6: lsll #2,%1\n"
 	 "   addl %2,%1\n"
 	 "   jra 5b\n"
@@ -813,8 +821,9 @@ clear_user(void *to, unsigned long n)
 	 ".previous\n"
 	 ".section __ex_table,\"a\"\n"
 	 "   .align 4\n"
-	 "   .long 1b,6b\n"
+	 "   .long 1b,61b\n"
 	 "   .long 2b,6b\n"
+	 "   .long 3b,61b\n"
 	 "   .long 24b,7b\n"
 	 "   .long 4b,7b\n"
 	 "   .long 25b,8b\n"

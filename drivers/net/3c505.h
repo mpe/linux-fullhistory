@@ -65,7 +65,7 @@
 #define	DMA_BRST	0x01	/* DMA burst */
 
 /*
- * maximum amount of data data allowed in a PCB
+ * maximum amount of data allowed in a PCB
  */
 #define	MAX_PCB_DATA	62
 

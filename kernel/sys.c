@@ -405,10 +405,9 @@ asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 		 * cheaply with the new uid cache, so if it matters
 		 * we should be checking for it.  -DaveM
 		 */
-		charge_uid(current, -1);
+		free_uid(current);
 		current->uid = new_ruid;
-		if(new_ruid)
-			charge_uid(current, 1);
+		alloc_uid(current);
 	}
 	
 	if (!issecure(SECURE_NO_SETUID_FIXUP)) {
@@ -450,10 +449,9 @@ asmlinkage int sys_setuid(uid_t uid)
 
        if (new_ruid != old_ruid) {
 		/* See comment above about NPROC rlimit issues... */
-		charge_uid(current, -1);
+		free_uid(current);
 		current->uid = new_ruid;
-		if(new_ruid)
-			charge_uid(current, 1);
+		alloc_uid(current);
 	}
 
 	if (!issecure(SECURE_NO_SETUID_FIXUP)) {
@@ -473,7 +471,8 @@ asmlinkage int sys_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 	int old_ruid = current->uid;
 	int old_euid = current->euid;
 	int old_suid = current->suid;
-       if (!capable(CAP_SETUID)) {
+
+	if (!capable(CAP_SETUID)) {
 		if ((ruid != (uid_t) -1) && (ruid != current->uid) &&
 		    (ruid != current->euid) && (ruid != current->suid))
 			return -EPERM;
@@ -486,10 +485,9 @@ asmlinkage int sys_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 	}
 	if (ruid != (uid_t) -1) {
 		/* See above commentary about NPROC rlimit issues here. */
-		charge_uid(current, -1);
+		free_uid(current);
 		current->uid = ruid;
-		if(ruid)
-			charge_uid(current, 1);
+		alloc_uid(current);
 	}
 	if (euid != (uid_t) -1) {
 		if (euid != current->euid)

@@ -8,13 +8,20 @@
 
 extern spinlock_t kernel_flag;
 
+#ifdef __SMP__
+extern void __check_locks(unsigned int);
+#else
+#define __check_locks(x)	do { } while (0)
+#endif
+
 /*
  * Release global kernel lock and global interrupt lock
  */
 #define release_kernel_lock(task, cpu) \
 do { \
 	if (task->lock_depth >= 0) \
-		spin_unlock(&kernel_flag); \
+		__asm__ __volatile__(spin_unlock_string \
+			:"=m" (__dummy_lock(&kernel_flag))); \
 	release_irqlock(cpu); \
 	__sti(); \
 } while (0)
@@ -25,7 +32,8 @@ do { \
 #define reacquire_kernel_lock(task) \
 do { \
 	if (task->lock_depth >= 0) \
-		spin_lock(&kernel_flag); \
+		__asm__ __volatile__(spin_lock_string \
+			:"=m" (__dummy_lock(&kernel_flag))); \
 } while (0)
 
 
@@ -38,6 +46,7 @@ do { \
  */
 extern __inline__ void lock_kernel(void)
 {
+	__check_locks(1);
 	__asm__ __volatile__(
 		"incl %1\n\t"
 		"jne 9f"

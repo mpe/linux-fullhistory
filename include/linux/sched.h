@@ -127,7 +127,7 @@ asmlinkage void schedule(void);
  * Open file table structure
  */
 struct files_struct {
-	int count;
+	atomic_t count;
 	int max_fds;
 	struct file ** fd;	/* current fd array */
 	fd_set close_on_exec;
@@ -135,7 +135,7 @@ struct files_struct {
 };
 
 #define INIT_FILES { \
-	1, \
+	ATOMIC_INIT(1), \
 	NR_OPEN, \
 	&init_fd_array[0], \
 	{ { 0, } }, \
@@ -143,13 +143,13 @@ struct files_struct {
 }
 
 struct fs_struct {
-	int count;
+	atomic_t count;
 	int umask;
 	struct dentry * root, * pwd;
 };
 
 #define INIT_FS { \
-	1, \
+	ATOMIC_INIT(1), \
 	0022, \
 	NULL, NULL \
 }
@@ -160,7 +160,8 @@ struct fs_struct {
 struct mm_struct {
 	struct vm_area_struct *mmap, *mmap_cache;
 	pgd_t * pgd;
-	int count, map_count;
+	atomic_t count;
+	int map_count;
 	struct semaphore mmap_sem;
 	unsigned long context;
 	unsigned long start_code, end_code, start_data, end_data;
@@ -177,7 +178,8 @@ struct mm_struct {
 };
 
 #define INIT_MM {					\
-		&init_mmap, NULL, swapper_pg_dir, 1, 1,	\
+		&init_mmap, NULL, swapper_pg_dir, 	\
+		ATOMIC_INIT(1), 1,			\
 		MUTEX,					\
 		0,					\
 		0, 0, 0, 0,				\
@@ -197,6 +199,13 @@ struct signal_struct {
 		ATOMIC_INIT(1), \
 		{ {{0,}}, }, \
 		SPIN_LOCK_UNLOCKED }
+
+/*
+ * Some day this will be a full-fledged user tracking system..
+ * Right now it is only used to track how many processes a
+ * user has, but it has the potential to track memory usage etc.
+ */
+struct user_struct;
 
 struct task_struct {
 /* these are hardcoded - don't touch */
@@ -270,6 +279,7 @@ struct task_struct {
 	int ngroups;
 	gid_t	groups[NGROUPS];
         kernel_cap_t   cap_effective, cap_inheritable, cap_permitted;
+	struct user_struct *user;
 /* limits */
 	struct rlimit rlim[RLIM_NLIMITS];
 	unsigned short used_math;
@@ -348,6 +358,7 @@ struct task_struct {
 /* uid etc */	0,0,0,0,0,0,0,0,				\
 /* suppl grps*/ 0, {0,},					\
 /* caps */      CAP_INIT_EFF_SET,CAP_INIT_INH_SET,CAP_FULL_SET, \
+/* user */	NULL,						\
 /* rlimits */   INIT_RLIMITS, \
 /* math */	0, \
 /* comm */	"swapper", \
@@ -427,7 +438,8 @@ extern __inline__ struct task_struct *find_task_by_pid(int pid)
 }
 
 /* per-UID process charging. */
-extern int charge_uid(struct task_struct *p, int count);
+extern int alloc_uid(struct task_struct *p);
+void free_uid(struct task_struct *p);
 
 #include <asm/current.h>
 
@@ -587,7 +599,7 @@ extern inline int capable(int cap)
 extern struct mm_struct * mm_alloc(void);
 static inline void mmget(struct mm_struct * mm)
 {
-	mm->count++;
+	atomic_inc(&mm->count);
 }
 extern void mmput(struct mm_struct *);
 

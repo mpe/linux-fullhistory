@@ -13,7 +13,6 @@
 #include <asm/pgtable.h>
 #undef  __EXTERN_INLINE
 
-#include <linux/config.h>
 #include <linux/signal.h>
 #include <linux/head.h>
 #include <linux/errno.h>

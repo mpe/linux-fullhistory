@@ -281,12 +281,13 @@ __initfunc(static void check_cx686_cpuid_slop(void))
 	if (boot_cpu_data.x86_vendor == X86_VENDOR_CYRIX &&
 	    (boot_cpu_data.x86_model & 0xf0) == 0x30) {  /* 6x86(L) */
 		int dummy;
-		unsigned char ccr3, ccr5;
+		unsigned char ccr3, ccr4, ccr5;
 
 		cli();
 		ccr3 = getCx86(CX86_CCR3);
 		setCx86(CX86_CCR3, (ccr3 & 0x0f) | 0x10);      /* enable MAPEN  */
-		setCx86(CX86_CCR4, getCx86(CX86_CCR4) | 0x80); /* enable cpuid  */
+		ccr4 = getCx86(CX86_CCR4);
+		setCx86(CX86_CCR4, ccr4 | 0x80);               /* enable cpuid  */
 		ccr5 = getCx86(CX86_CCR5);
 		if (ccr5 & 2)   /* reset SLOP if needed, old BIOS do this wrong */
 			setCx86(CX86_CCR5, ccr5 & 0xfd);

@@ -378,14 +378,12 @@ fpsp_done:
 	beq	Lnotkern
 	rte
 Lnotkern:
-	tstl	SYMBOL_NAME(need_resched)
-	bne	Lmustsched
-	rte
-Lmustsched:
 	SAVE_ALL_INT
 	GET_CURRENT(%d0)
-	bral	SYMBOL_NAME(ret_from_exception)	| deliver signals, reschedule etc..
-
+	tstl	%curptr@(LTASK_NEEDRESCHED)
+	jne	SYMBOL_NAME(ret_from_exception)	| deliver signals,
+						| reschedule etc..
+	RESTORE_ALL
 
 |
 |	mem_write --- write to user or supervisor address space

@@ -41,13 +41,16 @@
 
 /*
  * NOTE! unlike strncmp, ext2_match returns 1 for success, 0 for failure.
+ *
+ * `len <= EXT2_NAME_LEN' is guaranteed by caller.
+ * `de != NULL' is guaranteed by caller.
  */
 static inline int ext2_match (int len, const char * const name,
 		       struct ext2_dir_entry_2 * de)
 {
-	if (!de || !le32_to_cpu(de->inode) || len > EXT2_NAME_LEN)
-		return 0;
 	if (len != de->name_len)
+		return 0;
+	if (!de->inode)
 		return 0;
 	return !memcmp(name, de->name, len);
 }
@@ -121,10 +124,17 @@ static struct buffer_head * ext2_find_entry (struct inode * dir,
 		de = (struct ext2_dir_entry_2 *) bh->b_data;
 		dlimit = bh->b_data + sb->s_blocksize;
 		while ((char *) de < dlimit) {
-			if (!ext2_check_dir_entry ("ext2_find_entry", dir,
-						   de, bh, offset))
-				goto failure;
-			if (ext2_match (namelen, name, de)) {
+			/* this code is executed quadratically often */
+			/* do minimal checking `by hand' */
+			int de_len;
+
+			if ((char *) de + namelen <= dlimit &&
+			    ext2_match (namelen, name, de)) {
+				/* found a match -
+				   just to be sure, do a full check */
+				if (!ext2_check_dir_entry("ext2_find_entry",
+							  dir, de, bh, offset))
+					goto failure;
 				for (i = 0; i < NAMEI_RA_SIZE; ++i) {
 					if (bh_use[i] != bh)
 						brelse (bh_use[i]);
@@ -132,9 +142,13 @@ static struct buffer_head * ext2_find_entry (struct inode * dir,
 				*res_dir = de;
 				return bh;
 			}
-			offset += le16_to_cpu(de->rec_len);
+			/* prevent looping on a bad block */
+			de_len = le16_to_cpu(de->rec_len);
+			if (de_len <= 0)
+				goto failure;
+			offset += de_len;
 			de = (struct ext2_dir_entry_2 *)
-				((char *) de + le16_to_cpu(de->rec_len));
+				((char *) de + de_len);
 		}
 
 		brelse (bh);

@@ -808,7 +808,7 @@ void net_bh(void)
 
 	while (!skb_queue_empty(&backlog)) 
 	{
-		struct sk_buff * skb = backlog.next;
+		struct sk_buff * skb;
 
 		/* Give chance to other bottom halves to run */
 		if (jiffies - start_time > 1)
@@ -817,9 +817,7 @@ void net_bh(void)
 		/*
 		 *	We have a packet. Therefore the queue has shrunk
 		 */
-		cli();
-		__skb_unlink(skb, &backlog);
-		sti();
+		skb = skb_dequeue(&backlog);
 
 #ifdef CONFIG_CPU_IS_SLOW
 		if (ave_busy > 128*16) {

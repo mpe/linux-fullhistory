@@ -262,10 +262,6 @@ struct compat_bi_Atari {
 
 #ifndef __ASSEMBLY__
 
-#define MACHW_DECLARE(name)    unsigned name : 1
-#define MACHW_SET(name)                (boot_info.bi_mac.hw_present.name = 1)
-#define MACHW_PRESENT(name)    (boot_info.bi_mac.hw_present.name)
-
 struct compat_bi_Macintosh
 {
 	unsigned long videoaddr;
@@ -290,25 +286,6 @@ struct compat_bi_Macintosh
 	unsigned long rombase;
 	unsigned long adbdelay;
 	unsigned long timedbra;
-	struct {
-		/* video hardware */
-		/* sound hardware */
-		/* disk storage interfaces */
-		MACHW_DECLARE(MAC_SCSI);        /* Directly mapped NCR5380 */
-		MACHW_DECLARE(IDE);             /* IDE Interface */
-		/* other I/O hardware */
-		MACHW_DECLARE(SCC);             /* Serial Communications Contr. */
-		/* DMA */
-		MACHW_DECLARE(SCSI_DMA);        /* DMA for the NCR5380 */
-		/* real time clocks */
-		MACHW_DECLARE(RTC_CLK);         /* clock chip */
-		/* supporting hardware */
-		MACHW_DECLARE(VIA1);            /* Versatile Interface Ad. 1 */
-		MACHW_DECLARE(VIA2);            /* Versatile Interface Ad. 2 */
-		MACHW_DECLARE(RBV);             /* Versatile Interface Ad. 2+ */
-		/* NUBUS */
-		MACHW_DECLARE(NUBUS);           /* NUBUS */
-	} hw_present;
 };
 #else
 

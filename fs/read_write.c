@@ -106,7 +106,7 @@ asmlinkage int sys_llseek(unsigned int fd, unsigned long offset_high,
 	offset = llseek(file, ((loff_t) offset_high << 32) | offset_low,
 			origin);
 
-	retval = (int)offset & INT_MAX;
+	retval = (int)offset;
 	if (offset >= 0) {
 		retval = -EFAULT;
 		if (!copy_to_user(result, &offset, sizeof(offset)))

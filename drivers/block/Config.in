@@ -32,7 +32,6 @@ else
       bool '   RZ1000 chipset bugfix/support' CONFIG_BLK_DEV_RZ1000
       bool '   Generic PCI IDE chipset support' CONFIG_BLK_DEV_IDEPCI
       if [ "$CONFIG_BLK_DEV_IDEPCI" = "y" ]; then
-	# Either the DMA code is buggy or the DMA hardware is unreliable. FIXME.
         bool '     Generic PCI bus-master DMA support' CONFIG_BLK_DEV_IDEDMA
         if [ "$CONFIG_BLK_DEV_IDEDMA" = "y" ]; then
           bool '     Use DMA by default when available' CONFIG_IDEDMA_AUTO

@@ -239,6 +239,7 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 		goto nopage;
 
 	if (gfp_mask & __GFP_WAIT) {
+		__check_locks(1);
 		if (in_interrupt()) {
 			static int count = 0;
 			if (++count < 5) {

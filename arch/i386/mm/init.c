@@ -210,15 +210,15 @@ static inline void set_in_cr4(unsigned long mask)
 /*
  * allocate page table(s) for compile-time fixed mappings
  */
-static unsigned long fixmap_init (unsigned long start_mem)
+static unsigned long __init fixmap_init(unsigned long start_mem)
 {
 	pgd_t * pg_dir;
 	unsigned int idx;
 	unsigned long address;
 
-	start_mem &= PAGE_MASK;
+	start_mem = PAGE_ALIGN(start_mem);
 
-	for (idx=1; idx < __end_of_fixed_addresses; idx += PTRS_PER_PTE)
+	for (idx=1; idx <= __end_of_fixed_addresses; idx += PTRS_PER_PTE)
 	{
 		address = fix_to_virt(__end_of_fixed_addresses-idx);
 		pg_dir = swapper_pg_dir + (address >> PGDIR_SHIFT);

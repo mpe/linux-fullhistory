@@ -179,6 +179,32 @@ void via_init_clock(void (*func)(int, void *, struct pt_regs *))
 }
 
 /*
+ * get time offset between scheduling timer ticks
+ * Code stolen from arch/m68k/atari/time.c; underflow check probably
+ * wrong.
+ */
+#define TICK_SIZE 10000
+  
+/* This is always executed with interrupts disabled.  */
+unsigned long mac_gettimeoffset (void)
+{
+  unsigned long ticks, offset = 0;
+
+  /* read VIA1 timer 2 current value */
+  ticks = via_read(via1, vT1CL) + (via_read(via1, vT1CH)<<8);
+  /* The probability of underflow is less than 2% */
+  if (ticks > MAC_CLOCK_TICK - MAC_CLOCK_TICK / 50)
+    /* Check for pending timer interrupt in VIA1 IFR */
+    if (via_read(via1, vIFR) & 0x40)
+      offset = TICK_SIZE;
+
+  ticks = MAC_CLOCK_TICK - ticks;
+  ticks = ticks * 10000L / MAC_CLOCK_TICK;
+
+  return ticks + offset;
+}
+
+/*
  *	PSC (AV Macs; level 3-6): initialize interrupt enable registers
  */
 

@@ -24,7 +24,7 @@ static __inline__ int kbd_setkeycode(unsigned int scancode,
 
 static __inline__ int kbd_getkeycode(unsigned int scancode)
 {
-    return -EOPNOTSUPP;
+    return scancode > 127 ? -EINVAL : scancode;
 }
 
 static __inline__ int kbd_pretranslate(unsigned char scancode, char raw_mode)

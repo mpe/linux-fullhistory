@@ -642,11 +642,12 @@ __initfunc(int mac_keyb_init(void))
 		ct=0; 
 		while (!autopoll_req.got_reply && ++ct<1000)
 		{
-			adb_poll();
 				udelay(10);
 		}
-		if(ct==1000)
+		if(ct==1000) {
 			printk("Keyboard timed out.\n");
+			autopoll_req.got_reply = 1;
+		}
 	}
 
 	/*
@@ -654,7 +655,7 @@ __initfunc(int mac_keyb_init(void))
 	 *	care of that for other Macs.
 	 */
 
-	printk("Configuring keyboard\n");
+	printk("Configuring keyboard:\n");
 
 	/* 
 	 * turn on all leds - the keyboard driver will turn them back off 
@@ -668,17 +669,17 @@ __initfunc(int mac_keyb_init(void))
 	 * The polling stuff should go away as soon as the ADB driver is stable
 	 */
 	ct = 0;
-	adb_poll();
 	while (!led_request.got_reply && ++ct<1000)
 	{
-		adb_poll();
 		udelay(10);
 	}
-	if(ct==1000)
-		printk("Keyboard timed out.\n");
+	if(ct==1000) {
+		printk("keyboard timed out.\n");
+		led_request.got_reply  = 1;
+	}
 
 #if 1
-	printk("Configuring coding mode ...\n");
+	printk("configuring coding mode ...\n");
 
 	/* 
 	 * get the keyboard to send separate codes for
@@ -688,14 +689,14 @@ __initfunc(int mac_keyb_init(void))
 		     ADB_WRITEREG(ADB_KEYBOARD, 3), 0, 3);
 
 	ct=0; 
-	adb_poll();
 	while (!confcod_req.got_reply && ++ct<1000)
 	{
-		adb_poll();
 		udelay(10);
 	}
-	if(ct==1000)
-		printk("Keyboard timed out.\n");
+	if(ct==1000) {
+		printk("keyboard timed out.\n");
+		confcod_req.got_reply  = 1;
+	}
 #endif
 
 #if 0	/* seems to hurt, at least Geert's Mac */
@@ -710,10 +711,8 @@ __initfunc(int mac_keyb_init(void))
 		    ADB_WRITEREG(ADB_MOUSE, 3), 0x23, 4 );
 
 	ct=0; 
-	adb_poll();
 	while (!mouse_req.got_reply && ++ct<1000)
 	{
-		adb_poll();
 		udelay(10);
 	}
 	if(ct==1000)
@@ -734,21 +733,15 @@ __initfunc(int mac_keyb_init(void))
 		     ADB_READREG(ADB_KEYBOARD, KEYB_KEYREG));
 #endif
 
-	/*
-	 * fake 'request done' for the driver if requests timed out
-	 */
-
-	autopoll_req.got_reply = 1;
-#if 0
-	/* XXX: results in race and hang with mac_kbd_leds and serial (why ?) */
-	led_request.got_reply  = 1;
-#endif
-	confcod_req.got_reply  = 1;
-
 	in_keybinit = 0;
-	printk("Keyboard init done\n");
+	printk("keyboard init done\n");
 
 	return 0;
+}
+
+/* for "kbd-reset" cmdline param */
+__initfunc(void mac_kbd_reset_setup(char *str, int *ints))
+{
 }
 
 /* for "kbd-reset" cmdline param */

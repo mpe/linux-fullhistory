@@ -52,7 +52,7 @@ static void release(struct task_struct * p)
 			} while (p->has_cpu);
 		}
 #endif
-		charge_uid(p, -1);
+		free_uid(p);
 		nr_tasks--;
 		add_free_taskslot(p->tarray_ptr);
 
@@ -196,7 +196,7 @@ static inline void __exit_files(struct task_struct *tsk)
 
 	if (files) {
 		tsk->files = NULL;
-		if (!--files->count) {
+		if (atomic_dec_and_test(&files->count)) {
 			close_files(files);
 			/*
 			 * Free the fd array as appropriate ...
@@ -221,7 +221,7 @@ static inline void __exit_fs(struct task_struct *tsk)
 
 	if (fs) {
 		tsk->fs = NULL;
-		if (!--fs->count) {
+		if (atomic_dec_and_test(&fs->count)) {
 			dput(fs->root);
 			dput(fs->pwd);
 			kfree(fs);

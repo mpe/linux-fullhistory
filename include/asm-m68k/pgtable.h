@@ -852,4 +852,7 @@ extern inline void update_mmu_cache(struct vm_area_struct * vma,
 #define module_map      vmalloc
 #define module_unmap    vfree
 
+/* Needs to be defined here and not in linux/mm.h, as it is arch dependent */
+#define PageSkip(page)		(0)
+
 #endif /* _M68K_PGTABLE_H */

@@ -178,12 +178,13 @@ static inline int restore_i387(struct _fpstate *buf)
 static int
 restore_sigcontext(struct pt_regs *regs, struct sigcontext *sc, int *peax)
 {
-	unsigned int tmp, err = 0;
+	unsigned int err = 0;
 
 #define COPY(x)		err |= __get_user(regs->x, &sc->x)
 
 #define COPY_SEG(seg)							\
-	{ err |= __get_user(tmp, &sc->seg);				\
+	{ unsigned short tmp;						\
+	   err |= __get_user(tmp, &sc->seg);				\
 	  if ((tmp & 0xfffc)		/* not a NULL selectors */	\
 	      && (tmp & 0x4) != 0x4	/* not a LDT selector */	\
 	      && (tmp & 3) != 3)	/* not a RPL3 GDT selector */	\
@@ -191,17 +192,19 @@ restore_sigcontext(struct pt_regs *regs, struct sigcontext *sc, int *peax)
 	  regs->x##seg = tmp; }
 
 #define COPY_SEG_STRICT(seg)						\
-	{ err |= __get_user(tmp, &sc->seg);				\
+	{ unsigned short tmp;						\
+	  err |= __get_user(tmp, &sc->seg);				\
 	  if ((tmp & 0xfffc) && (tmp & 3) != 3) goto badframe;		\
 	  regs->x##seg = tmp; }
 
 #define GET_SEG(seg)							\
-	{ err |= __get_user(tmp, &sc->seg);				\
+	{ unsigned short tmp;						\
+	  err |= __get_user(tmp, &sc->seg);				\
 	  if ((tmp & 0xfffc)		/* not a NULL selectors */	\
 	      && (tmp & 0x4) != 0x4	/* not a LDT selector */	\
 	      && (tmp & 3) != 3)	/* not a RPL3 GDT selector */	\
 		  goto badframe;					\
-	  __asm__ __volatile__("movl %w0,%%" #seg : : "r"(tmp)); }
+	  loadsegment(seg,tmp); }
 
 	GET_SEG(gs);
 	GET_SEG(fs);
@@ -218,16 +221,21 @@ restore_sigcontext(struct pt_regs *regs, struct sigcontext *sc, int *peax)
 	COPY_SEG_STRICT(cs);
 	COPY_SEG_STRICT(ss);
 	
-	err |= __get_user(tmp, &sc->eflags);
-	regs->eflags = (regs->eflags & ~0x40DD5) | (tmp & 0x40DD5);
-	regs->orig_eax = -1;		/* disable syscall checks */
+	{
+		unsigned int tmpflags;
+		err |= __get_user(tmpflags, &sc->eflags);
+		regs->eflags = (regs->eflags & ~0x40DD5) | (tmpflags & 0x40DD5);
+		regs->orig_eax = -1;		/* disable syscall checks */
+	}
 
-	err |= __get_user(tmp, (unsigned long *)&sc->fpstate);
-	if (tmp) {
-		struct _fpstate * buf = (struct _fpstate *) tmp;
-		if (verify_area(VERIFY_READ, buf, sizeof(*buf)))
-			goto badframe;
-		err |= restore_i387(buf);
+	{
+		struct _fpstate * buf;
+		err |= __get_user(buf, &sc->fpstate);
+		if (buf) {
+			if (verify_area(VERIFY_READ, buf, sizeof(*buf)))
+				goto badframe;
+			err |= restore_i387(buf);
+		}
 	}
 
 	err |= __get_user(*peax, &sc->eax);

@@ -1,7 +1,7 @@
 #define BLOCKMOVE
 #define	Z_WAKE
 static char rcsid[] =
-"$Revision: 2.2.1.4 $$Date: 1998/08/04 11:02:50 $";
+"$Revision: 2.2.1.5 $$Date: 1998/08/10 18:10:28 $";
 
 /*
  *  linux/drivers/char/cyclades.c
@@ -31,6 +31,9 @@ static char rcsid[] =
  *   void cleanup_module(void);
  *
  * $Log: cyclades.c,v $
+ * Revision 2.2.1.5  1998/08/10 18:10:28 ivan
+ * Fixed Cyclom-4Yo hardware detection bug.
+ *
  * Revision 2.2.1.4  1998/08/04 11:02:50 ivan
  * /proc/cyclades implementation with great collaboration of 
  * Marc Lewis <marc@blarg.net>;
@@ -583,7 +586,7 @@ static unsigned long cy_get_user(unsigned long *addr)
 #define MIN(a,b)        ((a) < (b) ? (a) : (b))
 #endif
 
-#define IS_CYC_Z(card) ((card).num_chips == 1)
+#define IS_CYC_Z(card) ((card).num_chips == -1)
 
 #define Z_FPGA_CHECK(card) \
     ((cy_readl(&((struct RUNTIME_9060 *) \
@@ -599,7 +602,7 @@ static unsigned long cy_get_user(unsigned long *addr)
 
 #define STD_COM_FLAGS (0)
 
-#define	JIFFIES_DIFF(n, j)	((n) >= (j) ? (n) - (j) : ULONG_MAX - (n) + (j))
+#define	JIFFIES_DIFF(n, j)	((n) - (j))
 
 static DECLARE_TASK_QUEUE(tq_cyclades);
 
@@ -3472,7 +3475,7 @@ get_modem_info(struct cyclades_port * info, unsigned int *value)
     } else {
 	base_addr = (unsigned char*) (cy_card[card].base_addr);
 
-        if (cy_card[card].num_chips != 1){
+        if (cy_card[card].num_chips != -1){
 	    return -EINVAL;
 	}
 
@@ -4784,7 +4787,7 @@ cy_detect_pci(void))
                 cy_card[j].irq = (int) cy_pci_irq;
                 cy_card[j].bus_index = 1;
                 cy_card[j].first_line = cy_next_channel;
-                cy_card[j].num_chips = 1;
+                cy_card[j].num_chips = -1;
                 IRQ_cards[cy_pci_irq] = &cy_card[j];
 
                 /* print message */
@@ -4867,7 +4870,7 @@ cy_detect_pci(void))
                 cy_card[j].irq = (int) cy_pci_irq;
                 cy_card[j].bus_index = 1;
                 cy_card[j].first_line = cy_next_channel;
-                cy_card[j].num_chips = 1;
+                cy_card[j].num_chips = -1;
                 IRQ_cards[cy_pci_irq] = &cy_card[j];
 
                 /* print message */
@@ -4941,7 +4944,7 @@ cyclades_get_proc_info(char *buf, char **start, off_t offset, int length,
 
 	if (info->count)
 	    size = sprintf(buf+len,
-			"%3d %8lu %10lu %8lu %10lu %8lu %9lu %6ld\n",
+			"%3d %8lu %10lu %8lu %10lu %8lu %9lu %6d\n",
 			info->line,
 			JIFFIES_DIFF(info->idle_stats.in_use, cur_jifs) / HZ,
 			info->idle_stats.xmit_bytes,
@@ -5108,7 +5111,7 @@ cy_init(void))
     /* initialize per-port data structures for each valid board found */
     for (board = 0 ; board < cy_nboard ; board++) {
             cinfo = &cy_card[board];
-            if (cinfo->num_chips == 1){ /* Cyclades-Z */
+            if (cinfo->num_chips == -1){ /* Cyclades-Z */
 		number_z_boards++;
 		mailbox = cy_readl(&((struct RUNTIME_9060 *)
 			     cy_card[board].ctl_addr)->mail_box_0);

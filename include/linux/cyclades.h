@@ -1,4 +1,4 @@
-/* $Revision: 2.5 $$Date: 1998/08/03 16:57:01 $
+/* $Revision: 2.6 $$Date: 1998/08/10 16:57:01 $
  * linux/include/linux/cyclades.h
  *
  * This file is maintained by Ivan Passos <ivan@cyclades.com>, 
@@ -492,7 +492,7 @@ struct cyclades_card {
     long base_addr;
     long ctl_addr;
     int irq;
-    int num_chips;	/* 0 if card absent, 1 if Z/PCI, else Y */
+    int num_chips;	/* 0 if card absent, -1 if Z/PCI, else Y */
     int first_line;	/* minor number of first channel on card */
     int bus_index;	/* address shift - 0 for ISA, 1 for PCI */
     int	inact_ctrl;	/* FW Inactivity control - 0 disabled, 1 enabled */

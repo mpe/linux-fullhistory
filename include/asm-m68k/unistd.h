@@ -27,7 +27,7 @@
 #define __NR_lseek		 19
 #define __NR_getpid		 20
 #define __NR_mount		 21
-#define __NR_umount		 22
+#define __NR_oldumount		 22
 #define __NR_setuid		 23
 #define __NR_getuid		 24
 #define __NR_stime		 25
@@ -57,7 +57,7 @@
 #define __NR_geteuid		 49
 #define __NR_getegid		 50
 #define __NR_acct		 51
-#define __NR_phys		 52
+#define __NR_umount		 52
 #define __NR_lock		 53
 #define __NR_ioctl		 54
 #define __NR_fcntl		 55
@@ -191,6 +191,9 @@
 #define __NR_capget		184
 #define __NR_capset		185
 #define __NR_sigaltstack	186
+#define __NR_sendfile		187
+#define __NR_streams1		188	/* some people actually want it */
+#define __NR_streams2		189	/* some people actually want it */
 
 /* user-visible error numbers are in the range -1 - -122: see
    <asm-m68k/errno.h> */

@@ -6,6 +6,7 @@
  * Based on code written by David A Rusling (david.rusling@reo.mts.dec.com).
  *
  */
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/pci.h>

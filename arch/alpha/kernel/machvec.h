@@ -6,6 +6,7 @@
  * This file has goodies to help simplify instantiation of machine vectors.
  */
 
+#include <linux/config.h>
 
 /* Whee.  TSUNAMI doesn't have an HAE.  Fix things up for the GENERIC
    kernel by defining the HAE address to be that of the cache.  Now

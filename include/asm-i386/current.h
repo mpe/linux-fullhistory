@@ -1,6 +1,8 @@
 #ifndef _I386_CURRENT_H
 #define _I386_CURRENT_H
 
+struct task_struct;
+
 static inline struct task_struct * get_current(void)
 {
 	struct task_struct *current;

@@ -2197,7 +2197,7 @@ pci_probe(struct device *dev, u_long ioaddr))
 	}
     }
 
-    if (loading_module) lastPCI = NO_MORE_PCI;
+    lastPCI = NO_MORE_PCI;
 
     return;
 }
@@ -3898,7 +3898,7 @@ de4x5_ms_delay(u32 msec)
 static int
 EISA_signature(char *name, s32 eisa_id)
 {
-    c_char *signatures[] = DE4X5_SIGNATURE;
+    static c_char *signatures[] = DE4X5_SIGNATURE;
     char ManCode[DE4X5_STRLEN];
     union {
 	s32 ID;
@@ -3933,7 +3933,7 @@ EISA_signature(char *name, s32 eisa_id)
 static int
 PCI_signature(char *name, struct bus_type *lp)
 {
-    c_char *de4x5_signatures[] = DE4X5_SIGNATURE;
+    static c_char *de4x5_signatures[] = DE4X5_SIGNATURE;
     int i, status = 0, siglen = sizeof(de4x5_signatures)/sizeof(c_char *);
     
     if (lp->chipset == DC21040) {

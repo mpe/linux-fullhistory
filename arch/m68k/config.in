@@ -235,10 +235,22 @@ if [ "$CONFIG_ATARI" = "y" ]; then
     tristate 'PAMsNet support' CONFIG_ATARI_PAMSNET
   fi
 fi
+fi
 endmenu
 
 fi
+
+source fs/Config.in
+
+if [ "$CONFIG_VME" = "n" ]; then
+  define_bool CONFIG_FB y
+  mainmenu_option next_comment
+  comment 'Console drivers'
+  source drivers/video/Config.in
+  endmenu
 fi
+
+source fs/nls/Config.in
 
 mainmenu_option next_comment
 comment 'Character devices'
@@ -254,7 +266,7 @@ if [ "$CONFIG_ATARI" = "y" ]; then
   define_bool CONFIG_NVRAM y
 fi
 
-tristate 'Parallel printer support' CONFIG_PRINTER
+tristate 'Parallel printer support' CONFIG_M68K_PRINTER
 if [ "$CONFIG_ZORRO" = "y" ]; then
   dep_tristate 'Multiface Card III parallel support' CONFIG_MULTIFACE_III_LP $CONFIG_PRINTER
 fi
@@ -334,14 +346,6 @@ if [ "$CONFIG_ATARI" = "y" ]; then
 fi
 endmenu
 
-source fs/Config.in
-
-if [ "$CONFIG_VME" = "n" ]; then
-  define_bool CONFIG_FB y
-  source drivers/video/Config.in
-fi
-
-source fs/nls/Config.in
 mainmenu_option next_comment
 comment 'Sound support'
 

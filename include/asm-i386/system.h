@@ -36,6 +36,8 @@ __asm__("str %%ax\n\t" \
 	:"=a" (n) \
 	:"0" (0),"i" (FIRST_TSS_ENTRY<<3))
 
+#ifdef __KERNEL__
+
 struct task_struct;	/* one of the stranger aspects of C forward declarations.. */
 extern void FASTCALL(__switch_to(struct task_struct *prev, struct task_struct *next));
 
@@ -109,15 +111,26 @@ static inline unsigned long _get_base(char * addr)
 
 #define get_base(ldt) _get_base( ((char *)&(ldt)) )
 
-static inline unsigned long get_limit(unsigned long segment)
-{
-	unsigned long __limit;
-	__asm__("lsll %1,%0"
-		:"=r" (__limit):"r" (segment));
-	return __limit+1;
-}
-
-#define nop() __asm__ __volatile__ ("nop")
+/*
+ * Load a segment. Fall back on loading the zero
+ * segment if something goes wrong..
+ */
+#define loadsegment(seg,value)			\
+	asm volatile("\n"			\
+		"1:\t"				\
+		"movl %0,%%" #seg "\n"		\
+		"2:\n"				\
+		".section fixup,\"ax\"\n"	\
+		"3:\t"				\
+		"pushl $0\n\t"			\
+		"popl %%" #seg "\n\t"		\
+		"jmp 2b\n"			\
+		".previous\n"			\
+		".section __ex_table,\"a\"\n\t"	\
+		".align 4\n\t"			\
+		".long 1b,3b\n"			\
+		".previous"			\
+		: :"m" (*(unsigned int *)&(value)))
 
 /*
  * Clear and set 'TS' bit respectively
@@ -132,6 +145,17 @@ __asm__ __volatile__ ( \
 	: /* no inputs */ \
 	:"ax")
 
+#endif	/* __KERNEL__ */
+
+static inline unsigned long get_limit(unsigned long segment)
+{
+	unsigned long __limit;
+	__asm__("lsll %1,%0"
+		:"=r" (__limit):"r" (segment));
+	return __limit+1;
+}
+
+#define nop() __asm__ __volatile__ ("nop")
 
 #define xchg(ptr,x) ((__typeof__(*(ptr)))__xchg((unsigned long)(x),(ptr),sizeof(*(ptr))))
 #define tas(ptr) (xchg((ptr),1))

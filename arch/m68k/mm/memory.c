@@ -82,27 +82,25 @@ pmd_t *get_pmd_slow(pgd_t *pgd, unsigned long offset)
 }
 
 
-static struct ptable_desc {
-	struct ptable_desc *prev;
-	struct ptable_desc *next;
-	unsigned long	   page;
-	unsigned char	   alloced;
-} ptable_list = { &ptable_list, &ptable_list, 0, 0xff };
+/* ++andreas: {get,free}_pointer_table rewritten to use unused fields from
+   struct page instead of separately kmalloced struct.  Stolen from
+   arch/sparc/mm/srmmu.c ... */
 
-#define PD_NONEFREE(dp) ((dp)->alloced == 0xff)
-#define PD_ALLFREE(dp) ((dp)->alloced == 0)
-#define PD_TABLEFREE(dp,i) (!((dp)->alloced & (1<<(i))))
-#define PD_MARKUSED(dp,i) ((dp)->alloced |= (1<<(i)))
-#define PD_MARKFREE(dp,i) ((dp)->alloced &= ~(1<<(i)))
+typedef struct page ptable_desc;
+static ptable_desc ptable_list = { &ptable_list, &ptable_list };
+
+#define PD_MARKBITS(dp) (*(unsigned char *)&(dp)->offset)
+#define PD_PAGE(dp) (PAGE_OFFSET + ((dp)->map_nr << PAGE_SHIFT))
+#define PAGE_PD(page) ((ptable_desc *)&mem_map[MAP_NR(page)])
 
 #define PTABLE_SIZE (PTRS_PER_PMD * sizeof(pmd_t))
 
 pmd_t *get_pointer_table (void)
 {
-	pmd_t *pmdp = NULL;
-	unsigned long flags;
-	struct ptable_desc *dp = ptable_list.next;
-	int i;
+	ptable_desc *dp = ptable_list.next;
+	unsigned char mask = PD_MARKBITS (dp);
+	unsigned char tmp;
+	unsigned int off;
 
 	/*
 	 * For a pointer table for a user process address space, a
@@ -110,103 +108,70 @@ pmd_t *get_pointer_table (void)
 	 * page can hold 8 pointer tables.  The page is remapped in
 	 * virtual address space to be noncacheable.
 	 */
-	if (PD_NONEFREE (dp)) {
+	if (mask == 0) {
+		unsigned long page;
+		ptable_desc *new;
 
-		if (!(dp = kmalloc (sizeof(struct ptable_desc),GFP_KERNEL))) {
+		if (!(page = get_free_page (GFP_KERNEL)))
 			return 0;
-		}
 
-		if (!(dp->page = get_free_page (GFP_KERNEL))) {
-			kfree (dp);
-			return 0;
-		}
+		flush_tlb_kernel_page(page);
+		nocache_page (page);
 
-		flush_tlb_kernel_page((unsigned long) dp->page);
-		nocache_page (dp->page);
-
-		dp->alloced = 0;
-		/* put at head of list */
-		save_flags(flags);
-		cli();
-		dp->next = ptable_list.next;
-		dp->prev = ptable_list.next->prev;
-		ptable_list.next->prev = dp;
-		ptable_list.next = dp;
-		restore_flags(flags);
+		new = PAGE_PD(page);
+		PD_MARKBITS(new) = 0xfe;
+		(new->prev = dp->prev)->next = new;
+		(new->next = dp)->prev = new;
+		return (pmd_t *)page;
 	}
 
-	for (i = 0; i < 8; i++)
-		if (PD_TABLEFREE (dp, i)) {
-			PD_MARKUSED (dp, i);
-			pmdp = (pmd_t *)(dp->page + PTABLE_SIZE*i);
-			break;
-		}
+	for (tmp = 1, off = 0; (mask & tmp) == 0; tmp <<= 1, off += PTABLE_SIZE);
+	PD_MARKBITS(dp) = mask & ~tmp;
+	if (!PD_MARKBITS(dp)) {
+		ptable_desc *last, *next;
 
-	if (PD_NONEFREE (dp)) {
 		/* move to end of list */
-		save_flags(flags);
-		cli();
-		dp->prev->next = dp->next;
-		dp->next->prev = dp->prev;
+		next = dp->next;
+		(next->prev = dp->prev)->next = next;
 
-		dp->next = ptable_list.next->prev;
-		dp->prev = ptable_list.prev;
-		ptable_list.prev->next = dp;
-		ptable_list.prev = dp;
-		restore_flags(flags);
+		last = ptable_list.prev;
+		(dp->next = last->next)->prev = dp;
+		(dp->prev = last)->next = dp;
 	}
-
-	memset (pmdp, 0, PTABLE_SIZE);
-
-	return pmdp;
+	return (pmd_t *) (PD_PAGE(dp) + off);
 }
 
 int free_pointer_table (pmd_t *ptable)
 {
-	struct ptable_desc *dp;
+	ptable_desc *dp, *first;
 	unsigned long page = (unsigned long)ptable & PAGE_MASK;
-	int index = ((unsigned long)ptable - page)/PTABLE_SIZE;
-	unsigned long flags;
+	unsigned char mask = 1 << (((unsigned long)ptable - page)/PTABLE_SIZE);
 
-	for (dp = ptable_list.next; dp->page && dp->page != page; dp = dp->next)
-		;
-
-	if (!dp->page)
-		panic ("unable to find desc for ptable %p on list!", ptable);
-
-	if (PD_TABLEFREE (dp, index))
+	dp = PAGE_PD(page);
+	if (PD_MARKBITS (dp) & mask)
 		panic ("table already free!");
 
-	PD_MARKFREE (dp, index);
+	PD_MARKBITS (dp) |= mask;
 
-	if (PD_ALLFREE (dp)) {
+	if (PD_MARKBITS(dp) == 0xff) {
 		/* all tables in page are free, free page */
-		save_flags(flags);
-		cli();
-		dp->prev->next = dp->next;
-		dp->next->prev = dp->prev;
-		restore_flags(flags);
-		cache_page (dp->page);
-		free_page (dp->page);
-		kfree (dp);
+		ptable_desc *next = dp->next;
+		(next->prev = dp->prev)->next = next;
+		cache_page (page);
+		free_page (page);
 		return 1;
-	} else {
+	} else if ((first = ptable_list.next) != dp) {
 		/*
 		 * move this descriptor to the front of the list, since
 		 * it has one or more free tables.
 		 */
-		save_flags(flags);
-		cli();
-		dp->prev->next = dp->next;
-		dp->next->prev = dp->prev;
+		ptable_desc *next = dp->next;
+		(next->prev = dp->prev)->next = next;
 
-		dp->next = ptable_list.next;
-		dp->prev = ptable_list.next->prev;
-		ptable_list.next->prev = dp;
-		ptable_list.next = dp;
-		restore_flags(flags);
-		return 0;
+		(dp->prev = first->prev)->next = dp;
+		(dp->next = first)->prev = dp;
 	}
+	return 0;
 }
 
 /* maximum pages used for kpointer tables */

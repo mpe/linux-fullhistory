@@ -50,9 +50,9 @@ spinlock_t taskslot_lock = SPIN_LOCK_UNLOCKED;
  */
 #define UIDHASH_SZ	(PIDHASH_SZ >> 2)
 
-static struct uid_taskcount {
-	struct uid_taskcount *next, **pprev;
-	unsigned short uid;
+static struct user_struct {
+	struct user_struct *next, **pprev;
+	unsigned int uid;
 	int task_count;
 } *uidhash[UIDHASH_SZ];
 
@@ -62,7 +62,7 @@ kmem_cache_t *uid_cachep;
 
 #define uidhashfn(uid)	(((uid >> 8) ^ uid) & (UIDHASH_SZ - 1))
 
-static inline void uid_hash_insert(struct uid_taskcount *up, unsigned int hashent)
+static inline void uid_hash_insert(struct user_struct *up, unsigned int hashent)
 {
 	spin_lock(&uidhash_lock);
 	if((up->next = uidhash[hashent]) != NULL)
@@ -72,7 +72,7 @@ static inline void uid_hash_insert(struct uid_taskcount *up, unsigned int hashen
 	spin_unlock(&uidhash_lock);
 }
 
-static inline void uid_hash_remove(struct uid_taskcount *up)
+static inline void uid_hash_remove(struct user_struct *up)
 {
 	spin_lock(&uidhash_lock);
 	if(up->next)
@@ -81,9 +81,9 @@ static inline void uid_hash_remove(struct uid_taskcount *up)
 	spin_unlock(&uidhash_lock);
 }
 
-static inline struct uid_taskcount *uid_find(unsigned short uid, unsigned int hashent)
+static inline struct user_struct *uid_find(unsigned short uid, unsigned int hashent)
 {
-	struct uid_taskcount *up;
+	struct user_struct *up;
 
 	spin_lock(&uidhash_lock);
 	for(up = uidhash[hashent]; (up && up->uid != uid); up = up->next)
@@ -92,31 +92,38 @@ static inline struct uid_taskcount *uid_find(unsigned short uid, unsigned int ha
 	return up;
 }
 
-int charge_uid(struct task_struct *p, int count)
+void free_uid(struct task_struct *p)
 {
-	unsigned int hashent = uidhashfn(p->uid);
-	struct uid_taskcount *up = uid_find(p->uid, hashent);
+	struct user_struct *up = p->user;
 
-	if(up) {
-		int limit = p->rlim[RLIMIT_NPROC].rlim_cur;
-		int newcnt = up->task_count + count;
-
-		if(newcnt > limit)
-			return -EAGAIN;
-		else if(newcnt == 0) {
+	if (up) {
+		p->user = NULL;
+		lock_kernel();
+		if (!--up->task_count) {
 			uid_hash_remove(up);
 			kmem_cache_free(uid_cachep, up);
-			return 0;
 		}
-	} else {
+		unlock_kernel();
+	}
+}
+
+int alloc_uid(struct task_struct *p)
+{
+	unsigned int hashent = uidhashfn(p->uid);
+	struct user_struct *up = uid_find(p->uid, hashent);
+
+	p->user = up;
+	if (!up) {
 		up = kmem_cache_alloc(uid_cachep, SLAB_KERNEL);
-		if(!up)
+		if (!up)
 			return -EAGAIN;
+		p->user = up;
 		up->uid = p->uid;
 		up->task_count = 0;
 		uid_hash_insert(up, hashent);
 	}
-	up->task_count += count;
+
+	up->task_count++;
 	return 0;
 }
 
@@ -124,7 +131,7 @@ __initfunc(void uidcache_init(void))
 {
 	int i;
 
-	uid_cachep = kmem_cache_create("uid_cache", sizeof(struct uid_taskcount),
+	uid_cachep = kmem_cache_create("uid_cache", sizeof(struct user_struct),
 				       0,
 				       SLAB_HWCACHE_ALIGN, NULL, NULL);
 	if(!uid_cachep)
@@ -134,22 +141,13 @@ __initfunc(void uidcache_init(void))
 		uidhash[i] = 0;
 }
 
-static inline int find_empty_process(void)
+static inline struct task_struct ** find_empty_process(void)
 {
-	struct task_struct **tslot;
+	struct task_struct **tslot = NULL;
 
-	if(current->uid) {
-		int error;
-
-		if(nr_tasks >= NR_TASKS - MIN_TASKS_LEFT_FOR_ROOT)
-			return -EAGAIN;
-		if((error = charge_uid(current, 1)) < 0)
-			return error;
-	}
-	tslot = get_free_taskslot();
-	if(tslot)
-		return tslot - &task[0];
-	return -EAGAIN;
+	if (!current->uid || (nr_tasks < NR_TASKS - MIN_TASKS_LEFT_FOR_ROOT))
+		tslot = get_free_taskslot();
+	return tslot;
 }
 
 /* Protects next_safe and last_pid. */
@@ -270,7 +268,7 @@ struct mm_struct * mm_alloc(void)
 	if (mm) {
 		*mm = *current->mm;
 		init_new_context(mm);
-		mm->count = 1;
+		atomic_set(&mm->count, 1);
 		mm->map_count = 0;
 		mm->def_flags = 0;
 		mm->mmap_sem = MUTEX_LOCKED;
@@ -293,7 +291,7 @@ struct mm_struct * mm_alloc(void)
  */
 void mmput(struct mm_struct *mm)
 {
-	if (!--mm->count) {
+	if (atomic_dec_and_test(&mm->count)) {
 		release_segments(mm);
 		exit_mmap(mm);
 		free_page_tables(mm);
@@ -347,13 +345,13 @@ fail_nomem:
 static inline int copy_fs(unsigned long clone_flags, struct task_struct * tsk)
 {
 	if (clone_flags & CLONE_FS) {
-		current->fs->count++;
+		atomic_inc(&current->fs->count);
 		return 0;
 	}
 	tsk->fs = kmalloc(sizeof(*tsk->fs), GFP_KERNEL);
 	if (!tsk->fs)
 		return -1;
-	tsk->fs->count = 1;
+	atomic_set(&tsk->fs->count, 1);
 	tsk->fs->umask = current->fs->umask;
 	tsk->fs->root = dget(current->fs->root);
 	tsk->fs->pwd = dget(current->fs->pwd);
@@ -394,7 +392,7 @@ static int copy_files(unsigned long clone_flags, struct task_struct * tsk)
 		goto out;
 
 	if (clone_flags & CLONE_FILES) {
-		oldf->count++;
+		atomic_inc(&oldf->count);
 		goto out;
 	}
 
@@ -417,7 +415,7 @@ static int copy_files(unsigned long clone_flags, struct task_struct * tsk)
 		goto out_release;
 	memset((void *) new_fds, 0, size);
 
-	newf->count = 1;
+	atomic_set(&newf->count, 1);
 	newf->max_fds = NR_OPEN;
 	newf->fd = new_fds;
 	newf->close_on_exec = oldf->close_on_exec;
@@ -479,18 +477,30 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	int retval = -ENOMEM;
 	struct task_struct *p;
 
-	down(&current->mm->mmap_sem);
-	lock_kernel();
 	p = alloc_task_struct();
 	if (!p)
-		goto bad_fork;
-
-	retval = -EAGAIN;
-	nr = find_empty_process();
-	if (nr < 0)
-		goto bad_fork_free;
+		goto fork_out;
 
 	*p = *current;
+
+	down(&current->mm->mmap_sem);
+	lock_kernel();
+
+	if (p->user) {
+		if (p->user->task_count >= p->rlim[RLIMIT_NPROC].rlim_cur)
+			goto bad_fork_free;
+	}
+
+	{
+		struct task_struct **tslot;
+		tslot = find_empty_process();
+		retval = -EAGAIN;
+		if (!tslot)
+			goto bad_fork_free;
+		p->tarray_ptr = tslot;
+		*tslot = p;
+		nr = tslot - &task[0];
+	}
 
 	if (p->exec_domain && p->exec_domain->module)
 		__MOD_INC_USE_COUNT(p->exec_domain->module);
@@ -545,8 +555,6 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 #endif
 	p->lock_depth = -1;		/* -1 = no lock */
 	p->start_time = jiffies;
-	p->tarray_ptr = &task[nr];
-	*p->tarray_ptr = p;
 
 	{
 		/* This makes it visible to the rest of the system */
@@ -558,6 +566,8 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	}
 
 	nr_tasks++;
+	if (p->user)
+		p->user->task_count++;
 
 	retval = -ENOMEM;
 	/* copy all the process information */
@@ -599,6 +609,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 bad_fork:
 	up(&current->mm->mmap_sem);
 	unlock_kernel();
+fork_out:
 	return retval;
 
 bad_fork_cleanup_sighand:
@@ -608,12 +619,10 @@ bad_fork_cleanup_fs:
 bad_fork_cleanup_files:
 	exit_files(p); /* blocking */
 bad_fork_cleanup:
-	charge_uid(current, -1);
 	if (p->exec_domain && p->exec_domain->module)
 		__MOD_DEC_USE_COUNT(p->exec_domain->module);
 	if (p->binfmt && p->binfmt->module)
 		__MOD_DEC_USE_COUNT(p->binfmt->module);
-	add_free_taskslot(p->tarray_ptr);
 
 	{
 		unsigned long flags;
@@ -623,7 +632,10 @@ bad_fork_cleanup:
 		write_unlock_irqrestore(&tasklist_lock, flags);
 	}
 
+	if (p->user)
+		p->user->task_count++;
 	nr_tasks--;
+	add_free_taskslot(p->tarray_ptr);
 bad_fork_free:
 	free_task_struct(p);
 	goto bad_fork;

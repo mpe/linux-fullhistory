@@ -152,10 +152,12 @@ typedef struct { unsigned long a[100]; } __dummy_lock_t;
 #define spin_lock(lock) \
 __asm__ __volatile__( \
 	spin_lock_string \
+"\n\tcall __getlock" \
 	:"=m" (__dummy_lock(lock)))
 
 #define spin_unlock(lock) \
 __asm__ __volatile__( \
+"call __putlock\n\t" \
 	spin_unlock_string \
 	:"=m" (__dummy_lock(lock)))
 
@@ -200,6 +202,7 @@ typedef struct {
 	asm volatile("\n1:\t" \
 		     "lock ; incl %0\n\t" \
 		     "js 2f\n" \
+"call __getlock\n" \
 		     ".section .text.lock,\"ax\"\n" \
 		     "2:\tlock ; decl %0\n" \
 		     "3:\tcmpl $0,%0\n\t" \
@@ -209,7 +212,9 @@ typedef struct {
 		     :"=m" (__dummy_lock(&(rw)->lock)))
 
 #define read_unlock(rw) \
-	asm volatile("lock ; decl %0" \
+	asm volatile( \
+"call __putlock\n" \
+		"lock ; decl %0" \
 		:"=m" (__dummy_lock(&(rw)->lock)))
 
 #define write_lock(rw) \
@@ -218,6 +223,7 @@ typedef struct {
 		     "jc 4f\n" \
 		     "2:\ttestl $0x7fffffff,%0\n\t" \
 		     "jne 3f\n" \
+"call __getlock\n" \
 		     ".section .text.lock,\"ax\"\n" \
 		     "3:\tlock ; btrl $31,%0\n" \
 		     "4:\tcmp $0,%0\n\t" \
@@ -227,7 +233,10 @@ typedef struct {
 		     :"=m" (__dummy_lock(&(rw)->lock)))
 
 #define write_unlock(rw) \
-	asm volatile("lock ; btrl $31,%0":"=m" (__dummy_lock(&(rw)->lock)))
+	asm volatile( \
+"call __putlock\n" \
+		"lock ; btrl $31,%0": \
+		"=m" (__dummy_lock(&(rw)->lock)))
 
 #define read_lock_irq(lock)	do { __cli(); read_lock(lock); } while (0)
 #define read_unlock_irq(lock)	do { read_unlock(lock); __sti(); } while (0)
