@@ -827,7 +827,7 @@ static void __devexit pd6729_pci_remove(struct pci_dev *dev)
 	kfree(socket);
 }
 
-static int pd6729_socket_suspend(struct pci_dev *dev, u32 state)
+static int pd6729_socket_suspend(struct pci_dev *dev, pm_message_t state)
 {
 	return pcmcia_socket_dev_suspend(&dev->dev, state);
 }

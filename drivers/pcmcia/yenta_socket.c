@@ -1017,7 +1017,7 @@ static int __devinit yenta_probe (struct pci_dev *dev, const struct pci_device_i
 }
 
 
-static int yenta_dev_suspend (struct pci_dev *dev, u32 state)
+static int yenta_dev_suspend (struct pci_dev *dev, pm_message_t state)
 {
 	struct yenta_socket *socket = pci_get_drvdata(dev);
 	int ret;

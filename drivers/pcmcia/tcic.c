@@ -373,7 +373,7 @@ static int __init get_tcic_id(void)
 
 /*====================================================================*/
 
-static int tcic_drv_suspend(struct device *dev, u32 state, u32 level)
+static int tcic_drv_suspend(struct device *dev, pm_message_t state, u32 level)
 {
 	int ret = 0;
 	if (level == SUSPEND_SAVE_STATE)

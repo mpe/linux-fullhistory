@@ -42,7 +42,7 @@ static struct pci_device_id i82092aa_pci_ids[] = {
 };
 MODULE_DEVICE_TABLE(pci, i82092aa_pci_ids);
 
-static int i82092aa_socket_suspend (struct pci_dev *dev, u32 state)
+static int i82092aa_socket_suspend (struct pci_dev *dev, pm_message_t state)
 {
 	return pcmcia_socket_dev_suspend(&dev->dev, state);
 }

@@ -1333,7 +1333,7 @@ static struct pccard_operations pcic_operations = {
 
 /*====================================================================*/
 
-static int i82365_suspend(struct device *dev, u32 state, u32 level)
+static int i82365_suspend(struct device *dev, pm_message_t state, u32 level)
 {
 	int ret = 0;
 	if (level == SUSPEND_SAVE_STATE)

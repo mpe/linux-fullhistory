@@ -140,7 +140,7 @@ static u8 pcmcia_used_irq[NR_IRQS];
 static int socket_resume(struct pcmcia_socket *skt);
 static int socket_suspend(struct pcmcia_socket *skt);
 
-int pcmcia_socket_dev_suspend(struct device *dev, u32 state)
+int pcmcia_socket_dev_suspend(struct device *dev, pm_message_t state)
 {
 	struct pcmcia_socket *socket;
 
