@@ -24,7 +24,7 @@
 
 typedef void (cryptfn_t)(void *, u8 *, const u8 *);
 typedef void (procfn_t)(struct crypto_tfm *, u8 *,
-                        u8*, cryptfn_t, int enc, void *);
+                        u8*, cryptfn_t, void *);
 
 static inline void xor_64(u8 *a, const u8 *b)
 {
@@ -90,7 +90,7 @@ static int crypt(struct crypto_tfm *tfm,
 		 struct scatterlist *dst,
 		 struct scatterlist *src,
                  unsigned int nbytes, cryptfn_t crfn,
-                 procfn_t prfn, int enc, void *info)
+                 procfn_t prfn, void *info)
 {
 	struct scatter_walk walk_in, walk_out;
 	const unsigned int bsize = crypto_tfm_alg_blocksize(tfm);
@@ -123,7 +123,7 @@ static int crypt(struct crypto_tfm *tfm,
 			dst_p = prepare_dst(&walk_out, bsize, tmp_dst,
 					    in_place);
 
-			prfn(tfm, dst_p, src_p, crfn, enc, info);
+			prfn(tfm, dst_p, src_p, crfn, info);
 
 			complete_src(&walk_in, bsize, src_p, in_place);
 			complete_dst(&walk_out, bsize, dst_p, in_place);
@@ -141,24 +141,28 @@ static int crypt(struct crypto_tfm *tfm,
 	}
 }
 
-static void cbc_process(struct crypto_tfm *tfm, u8 *dst, u8 *src,
-			cryptfn_t fn, int enc, void *info)
+static void cbc_process_encrypt(struct crypto_tfm *tfm, u8 *dst, u8 *src,
+				cryptfn_t fn, void *info)
 {
 	u8 *iv = info;
 
-	if (enc) {
-		tfm->crt_u.cipher.cit_xor_block(iv, src);
-		fn(crypto_tfm_ctx(tfm), dst, iv);
-		memcpy(iv, dst, crypto_tfm_alg_blocksize(tfm));
-	} else {
-		fn(crypto_tfm_ctx(tfm), dst, src);
-		tfm->crt_u.cipher.cit_xor_block(dst, iv);
-		memcpy(iv, src, crypto_tfm_alg_blocksize(tfm));
-	}
+	tfm->crt_u.cipher.cit_xor_block(iv, src);
+	fn(crypto_tfm_ctx(tfm), dst, iv);
+	memcpy(iv, dst, crypto_tfm_alg_blocksize(tfm));
+}
+
+static void cbc_process_decrypt(struct crypto_tfm *tfm, u8 *dst, u8 *src,
+				cryptfn_t fn, void *info)
+{
+	u8 *iv = info;
+
+	fn(crypto_tfm_ctx(tfm), dst, src);
+	tfm->crt_u.cipher.cit_xor_block(dst, iv);
+	memcpy(iv, src, crypto_tfm_alg_blocksize(tfm));
 }
 
 static void ecb_process(struct crypto_tfm *tfm, u8 *dst, u8 *src,
-			cryptfn_t fn, int enc, void *info)
+			cryptfn_t fn, void *info)
 {
 	fn(crypto_tfm_ctx(tfm), dst, src);
 }
@@ -181,7 +185,7 @@ static int ecb_encrypt(struct crypto_tfm *tfm,
 {
 	return crypt(tfm, dst, src, nbytes,
 	             tfm->__crt_alg->cra_cipher.cia_encrypt,
-	             ecb_process, 1, NULL);
+	             ecb_process, NULL);
 }
 
 static int ecb_decrypt(struct crypto_tfm *tfm,
@@ -191,7 +195,7 @@ static int ecb_decrypt(struct crypto_tfm *tfm,
 {
 	return crypt(tfm, dst, src, nbytes,
 	             tfm->__crt_alg->cra_cipher.cia_decrypt,
-	             ecb_process, 1, NULL);
+	             ecb_process, NULL);
 }
 
 static int cbc_encrypt(struct crypto_tfm *tfm,
@@ -201,7 +205,7 @@ static int cbc_encrypt(struct crypto_tfm *tfm,
 {
 	return crypt(tfm, dst, src, nbytes,
 	             tfm->__crt_alg->cra_cipher.cia_encrypt,
-	             cbc_process, 1, tfm->crt_cipher.cit_iv);
+	             cbc_process_encrypt, tfm->crt_cipher.cit_iv);
 }
 
 static int cbc_encrypt_iv(struct crypto_tfm *tfm,
@@ -211,7 +215,7 @@ static int cbc_encrypt_iv(struct crypto_tfm *tfm,
 {
 	return crypt(tfm, dst, src, nbytes,
 	             tfm->__crt_alg->cra_cipher.cia_encrypt,
-	             cbc_process, 1, iv);
+	             cbc_process_encrypt, iv);
 }
 
 static int cbc_decrypt(struct crypto_tfm *tfm,
@@ -221,7 +225,7 @@ static int cbc_decrypt(struct crypto_tfm *tfm,
 {
 	return crypt(tfm, dst, src, nbytes,
 	             tfm->__crt_alg->cra_cipher.cia_decrypt,
-	             cbc_process, 0, tfm->crt_cipher.cit_iv);
+	             cbc_process_decrypt, tfm->crt_cipher.cit_iv);
 }
 
 static int cbc_decrypt_iv(struct crypto_tfm *tfm,
@@ -231,7 +235,7 @@ static int cbc_decrypt_iv(struct crypto_tfm *tfm,
 {
 	return crypt(tfm, dst, src, nbytes,
 	             tfm->__crt_alg->cra_cipher.cia_decrypt,
-	             cbc_process, 0, iv);
+	             cbc_process_decrypt, iv);
 }
 
 static int nocrypt(struct crypto_tfm *tfm,
