@@ -28,16 +28,6 @@ enum km_type crypto_km_types[] = {
 	KM_SOFTIRQ1,
 };
 
-void *scatterwalk_whichbuf(struct scatter_walk *walk, unsigned int nbytes, void *scratch)
-{
-	if (nbytes <= walk->len_this_page &&
-	    (((unsigned long)walk->data) & (PAGE_CACHE_SIZE - 1)) + nbytes <=
-	    PAGE_CACHE_SIZE)
-		return walk->data;
-	else
-		return scratch;
-}
-
 static void memcpy_dir(void *buf, void *sgdata, size_t nbytes, int out)
 {
 	if (out)

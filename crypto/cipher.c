@@ -11,6 +11,7 @@
  * any later version.
  *
  */
+#include <linux/compiler.h>
 #include <linux/kernel.h>
 #include <linux/crypto.h>
 #include <linux/errno.h>
@@ -72,8 +73,15 @@ static int crypt(struct crypto_tfm *tfm,
 
 		scatterwalk_map(&walk_in, 0);
 		scatterwalk_map(&walk_out, 1);
-		src_p = scatterwalk_whichbuf(&walk_in, bsize, tmp_src);
-		dst_p = scatterwalk_whichbuf(&walk_out, bsize, tmp_dst);
+
+		src_p = walk_in.data;
+		if (unlikely(scatterwalk_across_pages(&walk_in, bsize)))
+			src_p = tmp_src;
+
+		dst_p = walk_out.data;
+		if (unlikely(scatterwalk_across_pages(&walk_out, bsize)))
+			dst_p = tmp_dst;
+
 		in_place = scatterwalk_samebuf(&walk_in, &walk_out,
 					       src_p, dst_p);
 

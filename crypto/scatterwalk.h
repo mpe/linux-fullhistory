@@ -42,7 +42,12 @@ static inline int scatterwalk_samebuf(struct scatter_walk *walk_in,
 	       walk_in->data == src_p && walk_out->data == dst_p;
 }
 
-void *scatterwalk_whichbuf(struct scatter_walk *walk, unsigned int nbytes, void *scratch);
+static inline int scatterwalk_across_pages(struct scatter_walk *walk,
+					   unsigned int nbytes)
+{
+	return nbytes > walk->len_this_page;
+}
+
 void scatterwalk_start(struct scatter_walk *walk, struct scatterlist *sg);
 int scatterwalk_copychunks(void *buf, struct scatter_walk *walk, size_t nbytes, int out);
 void scatterwalk_map(struct scatter_walk *walk, int out);
