@@ -15,7 +15,9 @@
 	A secondary advantage is that the dangerous NE*000 netcards can reserve
 	their I/O port region before the SCSI probes start.
 
-	register_netdev()/unregister_netdev() by Bjorn Ekwall <bj0rn@blox.se>
+	Modifications/additions by Bjorn Ekwall <bj0rn@blox.se>:
+		ethdev_index[MAX_ETH_CARDS]
+		register_netdev() / unregister_netdev()
 */
 
 #include <linux/config.h>
@@ -45,8 +47,9 @@
     by magic we get them, but otherwise they are un-needed and a space waste]
 */
 
-/* The next device number/name to assign: "eth0", "eth1", etc. */
-static int next_ethdev_number = 0;
+/* The list of used and available "eth" slots (for "eth0", "eth1", etc.) */
+#define MAX_ETH_CARDS 16 /* same as the number if irq's in irq2dev[] */
+static struct device *ethdev_index[MAX_ETH_CARDS];
 
 unsigned long lance_init(unsigned long mem_start, unsigned long mem_end);
 
@@ -78,11 +81,11 @@ unsigned long net_dev_init (unsigned long mem_start, unsigned long mem_end)
    long.
  */
 
-struct device *init_etherdev(struct device *dev, int sizeof_private,
-							 unsigned long *mem_startp)
+struct device *
+init_etherdev(struct device *dev, int sizeof_private, unsigned long *mem_startp)
 {
-	int i;
 	int new_device = 0;
+	int i;
 
 	if (dev == NULL) {
 		int alloc_size = sizeof(struct device) + sizeof("eth%d ")
@@ -99,31 +102,17 @@ struct device *init_etherdev(struct device *dev, int sizeof_private,
 		new_device = 1;
 	}
 
-	if (dev->name  &&  dev->name[0] == '\0')
-		sprintf(dev->name, "eth%d", next_ethdev_number++);
-
-	for (i = 0; i < DEV_NUMBUFFS; i++)
-		skb_queue_head_init(&dev->buffs[i]);
-	
-	dev->hard_header	= eth_header;
-	dev->rebuild_header	= eth_rebuild_header;
-	dev->type_trans		= eth_type_trans;
-	
-	dev->type			= ARPHRD_ETHER;
-	dev->hard_header_len = ETH_HLEN;
-	dev->mtu			= 1500; /* eth_mtu */
-	dev->addr_len		= ETH_ALEN;
-	for (i = 0; i < ETH_ALEN; i++) {
-		dev->broadcast[i]=0xff;
+	if (dev->name &&
+		((dev->name[0] == '\0') || (dev->name[0] == ' '))) {
+		for (i = 0; i < MAX_ETH_CARDS; ++i)
+			if (ethdev_index[i] == NULL) {
+				sprintf(dev->name, "eth%d", i);
+				ethdev_index[i] = dev;
+				break;
+			}
 	}
-	
-	/* New-style flags. */
-	dev->flags			= IFF_BROADCAST;
-	dev->family			= AF_INET;
-	dev->pa_addr		= 0;
-	dev->pa_brdaddr		= 0;
-	dev->pa_mask		= 0;
-	dev->pa_alen		= sizeof(unsigned long);
+
+	ether_setup(dev); /* should this be called here? */
 	
 	if (new_device) {
 		/* Append the device to the device queue. */
@@ -143,6 +132,19 @@ void ether_setup(struct device *dev)
 	   This should be in a common file instead of per-driver.  */
 	for (i = 0; i < DEV_NUMBUFFS; i++)
 		skb_queue_head_init(&dev->buffs[i]);
+
+	/* register boot-defined "eth" devices */
+	if (dev->name && (strncmp(dev->name, "eth", 3) == 0)) {
+		i = simple_strtoul(dev->name + 3, NULL, 0);
+		if (ethdev_index[i] == NULL) {
+			ethdev_index[i] = dev;
+		}
+		else if (dev != ethdev_index[i]) {
+			/* Really shouldn't happen! */
+			printk("ether_setup: Ouch! Someone else took %s\n",
+				dev->name);
+		}
+	}
 
 	dev->hard_header	= eth_header;
 	dev->rebuild_header = eth_rebuild_header;
@@ -186,24 +188,30 @@ int register_netdev(struct device *dev)
 {
 	struct device *d = dev_base;
 	unsigned long flags;
-	
+	int i;
+
 	save_flags(flags);
 	cli();
 
-	if (dev && dev->init) 
-	{
-		if (dev->init(dev) != 0)
-		{
+	if (dev && dev->init) {
+		if (dev->init(dev) != 0) {
 			restore_flags(flags);
 			return -EIO;
 		}
-		
-		if (dev->name  &&  dev->name[0] == '\0')
-			sprintf(dev->name, "eth%d", next_ethdev_number++);
+
+		if (dev->name &&
+			((dev->name[0] == '\0') || (dev->name[0] == ' '))) {
+			for (i = 0; i < MAX_ETH_CARDS; ++i)
+				if (ethdev_index[i] == NULL) {
+					sprintf(dev->name, "eth%d", i);
+					printk("device '%s' loaded\n", dev->name);
+					ethdev_index[i] = dev;
+					break;
+				}
+		}
 
 		/* Add device to end of chain */
-		if (dev_base) 
-		{
+		if (dev_base) {
 			while (d->next)
 				d = d->next;
 			d->next = dev;
@@ -220,35 +228,48 @@ void unregister_netdev(struct device *dev)
 {
 	struct device *d = dev_base;
 	unsigned long flags;
-	
+	int i;
+
 	save_flags(flags);
 	cli();
 
 	printk("unregister_netdev: device ");
-	if (dev) {
-		if (dev->start)
-			printk("'%s' busy", dev->name);
-		else {
-			if (dev_base == dev)
-				dev_base = dev->next;
-			else {
-				while (d && (d->next != dev))
-					d = d->next;
 
-				if (d && (d->next == dev)) {
-					d->next = dev->next;
-					printk("'%s' unlinked", dev->name);
-				}
-				else
-					printk("'%s' not found", dev->name);
+	if (dev == NULL) {
+		printk("was NULL\n");
+		restore_flags(flags);
+		return;
+	}
+	/* else */
+	if (dev->start)
+		printk("'%s' busy\n", dev->name);
+	else {
+		if (dev_base == dev)
+			dev_base = dev->next;
+		else {
+			while (d && (d->next != dev))
+				d = d->next;
+
+			if (d && (d->next == dev)) {
+				d->next = dev->next;
+				printk("'%s' unlinked\n", dev->name);
+			}
+			else {
+				printk("'%s' not found\n", dev->name);
+				restore_flags(flags);
+				return;
+			}
+		}
+		for (i = 0; i < MAX_ETH_CARDS; ++i) {
+			if (ethdev_index[i] == dev) {
+				ethdev_index[i] = NULL;
+				break;
 			}
 		}
 	}
-	else
-		printk("was NULL");
-	printk("\n");
 	restore_flags(flags);
 }
+
 
 
 /*

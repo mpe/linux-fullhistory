@@ -171,7 +171,7 @@ static int ip_send(struct sk_buff *skb, unsigned long daddr, int len, struct dev
 		{
 			mac = -mac;
 			skb->arp = 0;
-			skb->raddr = daddr;	/* next routing address */
+			skb->raddr = daddr;	/* next routing address */			
 		}	
 	}
 	return mac;
@@ -226,7 +226,7 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
 		 *	If the frame is from us and going off machine it MUST MUST MUST
 		 *	have the output device ip address and never the loopback
 		 */
-		if (saddr == 0x0100007FL && daddr != 0x0100007FL) 
+		if (saddr == htonl(0x7F000001L) && daddr != htonl(0x7F000001L))
 			saddr = src;/*rt->rt_dev->pa_addr;*/
 		raddr = rt->rt_gateway;
 
@@ -665,7 +665,6 @@ static void ip_free(struct ipq *qp)
  
    	/* Finally, release the queue descriptor itself. */
    	kfree_s(qp, sizeof(struct ipq));
-/*   	printk("ip_free:done\n");*/
    	sti();
  }
  
@@ -716,7 +715,7 @@ static struct ipq *ip_create(struct sk_buff *skb, struct iphdr *iph, struct devi
   	{
 		printk("IP: create: no memory left !\n");
 		return(NULL);
-   	skb->dev = qp->dev;
+	   	skb->dev = qp->dev;
   	}
  	memset(qp, 0, sizeof(struct ipq));
 
@@ -949,7 +948,7 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
    	 
    	ihl = (iph->ihl * sizeof(unsigned long));
    	end = offset + ntohs(iph->tot_len) - ihl;
- 
+
    	/*
    	 *	Point into the IP datagram 'data' part. 
    	 */
@@ -1088,6 +1087,7 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
    	struct sk_buff *skb2;
    	int left, mtu, hlen, len;
    	int offset;
+   	unsigned long flags;
  
    	/* 
    	 *	Point into the IP datagram header. 
@@ -1180,19 +1180,27 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
  		 *	Set up data on packet
  		 */
 
- 		skb2->arp = 0;/*skb->arp;*/
- 		skb2->free = skb->free;
+ 		skb2->arp = skb->arp;
+ 		if(skb->free==0)
+ 			printk("IP fragmenter: BUG free!=1 in fragmenter\n");
+ 		skb2->free = 1;
  		skb2->len = len + hlen;
  		skb2->h.raw=(char *) skb2->data;
- 		skb2->raddr = skb->raddr;	/* For rebuild_header */
 		/*
 		 *	Charge the memory for the fragment to any owner
 		 *	it might posess
 		 */
 		 
+		save_flags(flags);
  		if (sk) 
+ 		{
+ 			cli();
  			sk->wmem_alloc += skb2->mem_len;
- 
+ 			skb2->sk=sk;
+ 		}
+ 		restore_flags(flags);
+ 		skb2->raddr = skb->raddr;	/* For rebuild_header - must be here */ 
+
  		/* 
  		 *	Copy the packet header into the new buffer. 
  		 */
@@ -1227,7 +1235,7 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
  		 
  		ip_statistics.IpFragCreates++;
  		
- 		ip_queue_xmit(sk, dev, skb2, 1);
+ 		ip_queue_xmit(sk, dev, skb2, 2);
    	}
    	ip_statistics.IpFragOKs++;
 }
@@ -1236,7 +1244,7 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
 
 #ifdef CONFIG_IP_FORWARD
 
-/* 
+/* 	
  *	Forward an IP datagram to its next destination. 
  */
 
@@ -1627,7 +1635,8 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 /*
  * Queues a packet to be sent, and starts the transmitter
  * if necessary.  if free = 1 then we free the block after
- * transmit, otherwise we don't.
+ * transmit, otherwise we don't. If free==2 we not only
+ * free the block but also dont assign a new ip seq number.
  * This routine also needs to put in the total length,
  * and compute the checksum
  */
@@ -1655,7 +1664,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
   	 *	Do some book-keeping in the packet for later
   	 */
 
-  	skb->free = free;
+
   	skb->dev = dev;
   	skb->when = jiffies;
   
@@ -1672,7 +1681,17 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	iph = (struct iphdr *)ptr;
 	skb->ip_hdr = iph;
 	iph->tot_len = ntohs(skb->len-dev->hard_header_len);
-	iph->id      = htons(ip_id_count++);
+
+	/*
+	 *	No reassigning numbers to fragments...
+	 */
+	 
+	if(free!=2)
+		iph->id      = htons(ip_id_count++);
+	else
+		free=1;
+		
+  	skb->free = free;		
 
 	/*
 	 *	Do we need to fragment. Again this is inefficient. 

@@ -1,5 +1,18 @@
 This is snapshot 014
 
+Fixes added for 1.1.17
+
+o	Charles Hedrick's fixes broken fragmentation totally. Mended.
+o	Contributed 'dummy' device added. Apparently some slip people want it.
+o	Tried to kill the memory problems with fragments by setting things
+	up more carefully and guarding them.
+o	Module fixes by Bj0rn.
+o	PLIP fix by Tanabe.
+
+Fixes added for 1.1.16
+o	Charles Hedricks fixes to TCP.
+o	Small fixes all over the place.
+
 Fixes added for 1.1.15
 o	Modular PLIP and 3c501 drivers. Now you -can- have multiple 3c501's
 	(sort of).

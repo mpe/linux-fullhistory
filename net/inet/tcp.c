@@ -71,6 +71,7 @@
  *		Matthew Dillon  :	Reworked TCP machine states as per RFC
  *		Gerhard Koerting:	PC/TCP workarounds
  *		Adam Caldwell	:	Assorted timer/timing errors
+ *		Matthew Dillon	:	Fixed another RST bug
  *
  *
  * To Fix:
@@ -78,7 +79,6 @@
  *		it causes a select. Linux can - given the official select semantics I
  *		feel that _really_ its the BSD network programs that are bust (notably
  *		inetd, which hangs occasionally because of this).
- *			Protocol closedown badly messed up.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -2044,7 +2044,9 @@ static void tcp_close(struct sock *sk, int timeout)
 			printk("Clean rcv queue\n");
 		while((skb=skb_dequeue(&sk->receive_queue))!=NULL)
 		{
-			if(skb->len > 0 && after(skb->h.th->seq + skb->len + 1 , sk->copied_seq))
+			/* The +1 is not needed because the FIN takes up sequence space and
+			   is not read!!! */
+			if(skb->len > 0 && after(skb->h.th->seq + skb->len/* + 1 */ , sk->copied_seq))
 				need_reset = 1;
 			kfree_skb(skb, FREE_READ);
 		}

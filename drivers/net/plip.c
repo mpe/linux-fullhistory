@@ -45,6 +45,12 @@
  *
  ***** So we can all compare loads of different PLIP drivers for a bit I've modularised this beastie too.
  ***** In addition a seperate bidirectional plip module can be done.
+ *
+ *	WARNING: The PRE 1.1.16 plip will NOT work with this PLIP driver. We
+ *	can't avoid this due to an error in the old plip module. If you must
+ *	mix PLIP's you'll need to fix the _OLD_ one to use 0xFC 0xFC as its
+ *	MAC header not 0xFD.
+ *
  */
 
 static char *version =
@@ -703,7 +709,7 @@ plip_set_physicaladdr(struct device *dev, unsigned long ipaddr)
 {
     /*
      * set physical address to
-     *  0xfd.0xfd.ipaddr
+     *  0xfc.0xfc.ipaddr
      */
 
     unsigned char *addr = dev->dev_addr;

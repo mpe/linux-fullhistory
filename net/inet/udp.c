@@ -119,6 +119,15 @@ void udp_err(int err, unsigned char *header, unsigned long daddr,
 	}
 
 	/*
+	 *	Various people wanted BSD UDP semantics. Well they've come 
+	 *	back out because they slow down response to stuff like dead
+	 *	or unreachable name servers and they screw term users something
+	 *	chronic. Oh and it violates RFC1122. So basically fix your 
+	 *	client code people.
+	 */
+	 
+#ifdef CONFIG_I_AM_A_BROKEN_BSD_WEENIE
+	/*
 	 *	It's only fatal if we have connected to them. I'm not happy
 	 *	with this code. Some BSD comparisons need doing.
 	 */
@@ -126,10 +135,15 @@ void udp_err(int err, unsigned char *header, unsigned long daddr,
 	if (icmp_err_convert[err & 0xff].fatal && sk->state == TCP_ESTABLISHED) 
 	{
 		sk->err = icmp_err_convert[err & 0xff].errno;
-/*		sk->err=ECONNREFUSED;*/
+		sk->error_report(sk);
  	}
-	
-	sk->error_report(sk);
+#else
+	if (icmp_err_convert[err & 0xff].fatal)
+	{
+		sk->err = icmp_err_convert[err & 0xff].errno;
+		sk->error_report(sk);
+	}
+#endif
 }
 
 

@@ -73,6 +73,7 @@ if [ "$CONFIG_NETDEVICES" = "n" ]; then
 comment 'Skipping ethercard configuration options...'
 
 else
+bool 'Dummy net driver support' CONFIG_DUMMY y
 bool 'SLIP (serial line) support' CONFIG_SLIP n
 if [ "$CONFIG_SLIP" = "y" ]; then
   bool ' CSLIP compressed headers' SL_COMPRESSED y
@@ -98,7 +99,7 @@ bool 'DEPCA support' CONFIG_DEPCA n
 #bool 'NI52EE support' CONFIG_NI52 n
 #bool 'NI65EE support' CONFIG_NI65 n
 #bool 'Ansel Communications EISA 3200 support' CONFIG_AC3200 n
-#bool 'Cabletron E21xx support (not recommended)' CONFIG_E21 n
+#bool 'Cabletron E21xx support (not recommended)' CONFIG_E2100 n
 bool 'D-Link DE600 pocket adaptor support' CONFIG_DE600 n
 bool 'AT-LAN-TEC/RealTek pocket adaptor support' CONFIG_ATP n
 fi

@@ -82,6 +82,12 @@ ifdef CONFIG_3C589
 NETDRV_OBJS := $(NETDRV_OBJS) net.a(3c589.o)
 endif
 
+ifdef CONFIG_DUMMY
+NETDRV_OBJS := $(NETDRV_OBJS) net.a(dummy.o)
+dummy.o: dummy.c CONFIG
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<
+endif
+
 ifdef CONFIG_DE600
 NETDRV_OBJS := $(NETDRV_OBJS) net.a(de600.o)
 endif
