@@ -716,6 +716,7 @@ static void __init smp_boot_cpus(unsigned int max_cpus)
 		printk(KERN_NOTICE "SMP motherboard not detected.\n");
 		io_apic_irqs = 0;
 		cpu_online_map = cpumask_of_cpu(0);
+		cpu_set(0, cpu_sibling_map[0]);
 		phys_cpu_present_map = physid_mask_of_physid(0);
 		if (APIC_init_uniprocessor())
 			printk(KERN_NOTICE "Local APIC not detected."
@@ -742,6 +743,7 @@ static void __init smp_boot_cpus(unsigned int max_cpus)
 		printk(KERN_ERR "... forcing use of dummy APIC emulation. (tell your hw vendor)\n");
 		io_apic_irqs = 0;
 		cpu_online_map = cpumask_of_cpu(0);
+		cpu_set(0, cpu_sibling_map[0]);
 		phys_cpu_present_map = physid_mask_of_physid(0);
 		disable_apic = 1;
 		goto smp_done;
@@ -757,6 +759,7 @@ static void __init smp_boot_cpus(unsigned int max_cpus)
 		printk(KERN_INFO "SMP mode deactivated, forcing use of dummy APIC emulation.\n");
 		io_apic_irqs = 0;
 		cpu_online_map = cpumask_of_cpu(0);
+		cpu_set(0, cpu_sibling_map[0]);
 		phys_cpu_present_map = physid_mask_of_physid(0);
 		disable_apic = 1;
 		goto smp_done;
