@@ -21,7 +21,7 @@
 */
 
 static const char *version =
-"eepro100.c:v1.04 10/8/98 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/eepro100.html\n";
+"eepro100.c:v1.06 10/16/98 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/eepro100.html\n";
 
 /* A few user-configurable values that apply to all boards.
    First set are undocumented and spelled per Intel recommendations. */
@@ -38,7 +38,7 @@ static int rxdmacount = 0;
 static int rx_copybreak = 200;
 
 /* Maximum events (Rx packets, etc.) to handle at each interrupt. */
-static int max_interrupt_work = 20;
+static int max_interrupt_work = 200;
 
 /* Maximum number of multicast addresses to filter (vs. rx-all-multicast) */
 static int multicast_filter_limit = 64;
@@ -54,14 +54,18 @@ static int multicast_filter_limit = 64;
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
-#include <asm/bitops.h>
-#include <asm/io.h>
-
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/delay.h>
 
+#include <asm/spinlock.h>
+#include <asm/bitops.h>
+#include <asm/io.h>
+
+/*
+ * Module documentation
+ */
 MODULE_AUTHOR("Donald Becker <becker@cesdis.gsfc.nasa.gov>");
 MODULE_DESCRIPTION("Intel i82557/i82558 PCI EtherExpressPro driver");
 MODULE_PARM(debug, "i");
@@ -338,6 +342,7 @@ struct speedo_private {
 	char devname[8];			/* Used only for kernel debugging. */
 	const char *product_name;
 	struct device *next_module;
+	spinlock_t lock;
 	struct TxFD	tx_ring[TX_RING_SIZE];	/* Commands (usually CmdTxPacket). */
 	/* The saved address of a sent-in-place packet/buffer, for skfree(). */
 	struct sk_buff* tx_skbuff[TX_RING_SIZE];
@@ -355,7 +360,6 @@ struct speedo_private {
 	int mc_setup_frm_len;			 	/* The length of an allocated.. */
 	struct descriptor *mc_setup_frm; 	/* ..multicast setup frame. */
 	int mc_setup_busy;					/* Avoid double-use of setup frame. */
-	int in_interrupt;					/* Word-aligned dev->interrupt */
 	char rx_mode;						/* Current PROMISC/ALLMULTI setting. */
 	unsigned int tx_full:1;				/* The Tx queue is full. */
 	unsigned int full_duplex:1;			/* Full-duplex operation requested. */
@@ -619,8 +623,6 @@ static void speedo_found1(struct device *dev, long ioaddr, int irq,
 	}
 #endif  /* kernel_bloat */
 
-	outl(0, ioaddr + SCBPort);
-
 	/* We do a request_region() only to register /proc/ioports info. */
 	request_region(ioaddr, SPEEDO3_TOTAL_SIZE, "Intel Speedo3 Ethernet");
 
@@ -748,22 +750,21 @@ speedo_open(struct device *dev)
 
 #ifdef notdef
 	/* We could reset the chip, but should not need to. */
+	/* In fact we MUST NOT, unless we also re-do the init */
 	outl(0, ioaddr + SCBPort);
 	udelay(10);
 #endif
 
-	if (request_irq(dev->irq, &speedo_interrupt, SA_SHIRQ,
-					"Intel EtherExpress Pro 10/100 Ethernet", dev)) {
-		return -EAGAIN;
-	}
+	/* This had better be initialized before we initialize the interrupt! */
+	sp->lock = (spinlock_t) SPIN_LOCK_UNLOCKED;
+
 	if (speedo_debug > 1)
 		printk(KERN_DEBUG "%s: speedo_open() irq %d.\n", dev->name, dev->irq);
 
-	MOD_INC_USE_COUNT;
-
+#ifdef oh_no_you_dont_unless_you_honour_the_options_passed_in_to_us
 	/* Retrigger negotiation to reset previous errors. */
 	if ((sp->phy[0] & 0x8000) == 0) {
-		int phy_addr = sp->phy[0] & 0x1f;
+		int phy_addr = sp->phy[0] & 0x1f ;
 		/* Use 0x3300 for restarting NWay, other values to force xcvr:
 		   0x0000 10-HD
 		   0x0100 10-FD
@@ -776,6 +777,7 @@ speedo_open(struct device *dev)
 		mdio_write(ioaddr, phy_addr, 0, 0x3300);
 #endif
 	}
+#endif
 
 	/* Load the statistics block address. */
 	wait_for_cmd_done(ioaddr + SCBCmd);
@@ -816,7 +818,6 @@ speedo_open(struct device *dev)
 
 	dev->if_port = sp->default_port;
 
-	sp->in_interrupt = 0;
 	dev->tbusy = 0;
 	dev->interrupt = 0;
 	dev->start = 1;
@@ -838,6 +839,24 @@ speedo_open(struct device *dev)
 		printk(KERN_DEBUG "%s: Done speedo_open(), status %8.8x.\n",
 			   dev->name, inw(ioaddr + SCBStatus));
 	}
+
+	wait_for_cmd_done(ioaddr + SCBCmd);
+	outw(CU_DUMPSTATS, ioaddr + SCBCmd);
+	/* No need to wait for the command unit to accept here. */
+	if ((sp->phy[0] & 0x8000) == 0)
+		mdio_read(ioaddr, sp->phy[0] & 0x1f, 0);
+
+	/*
+	 * Request the IRQ last, after we have set up all data structures.
+	 * It would be bad to get an interrupt before we're ready.
+	 */
+	if (request_irq(dev->irq, &speedo_interrupt, SA_SHIRQ,
+					"Intel EtherExpress Pro 10/100 Ethernet", dev)) {
+		return -EAGAIN;
+	}
+
+	MOD_INC_USE_COUNT;
+
 	/* Set the timer.  The timer serves a dual purpose:
 	   1) to monitor the media interface (e.g. link beat) and perhaps switch
 	   to an alternate media type
@@ -849,8 +868,6 @@ speedo_open(struct device *dev)
 	sp->timer.function = &speedo_timer;					/* timer handler */
 	add_timer(&sp->timer);
 
-	wait_for_cmd_done(ioaddr + SCBCmd);
-	outw(CU_DUMPSTATS, ioaddr + SCBCmd);
 	return 0;
 }
 
@@ -981,8 +998,8 @@ speedo_start_xmit(struct sk_buff *skb, struct device *dev)
 	{	/* Prevent interrupts from changing the Tx ring from underneath us. */
 		unsigned long flags;
 
-		save_flags(flags);
-		cli();
+		spin_lock_irqsave(&sp->lock, flags);
+
 		/* Calculate the Tx descriptor entry. */
 		entry = sp->cur_tx++ % TX_RING_SIZE;
 
@@ -1005,10 +1022,12 @@ speedo_start_xmit(struct sk_buff *skb, struct device *dev)
 		   matter. */
 		sp->last_cmd->command &= ~(CmdSuspend | CmdIntr);
 		sp->last_cmd = (struct descriptor *)&sp->tx_ring[entry];
-		restore_flags(flags);
+
 		/* Trigger the command unit resume. */
 		wait_for_cmd_done(ioaddr + SCBCmd);
 		outw(CU_RESUME, ioaddr + SCBCmd);
+
+		spin_unlock_irqrestore(&sp->lock, flags);
 	}
 
 	/* Leave room for set_rx_mode() to fill two entries. */
@@ -1040,14 +1059,9 @@ static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 
 	ioaddr = dev->base_addr;
 	sp = (struct speedo_private *)dev->priv;
+	spin_lock(&sp->lock);
+
 #ifndef final_version
-	/* A lock to prevent simultaneous entry on SMP machines. */
-	if (test_and_set_bit(0, (void*)&sp->in_interrupt)) {
-		printk(KERN_ERR"%s: SMP simultaneous entry of an interrupt handler.\n",
-			   dev->name);
-		sp->in_interrupt = 0;	/* Avoid halting machine. */
-		return;
-	}
 	dev->interrupt = 1;
 #endif
 
@@ -1135,7 +1149,7 @@ static void speedo_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 			   dev->name, inw(ioaddr + SCBStatus));
 
 	dev->interrupt = 0;
-	clear_bit(0, (void*)&sp->in_interrupt);
+	spin_unlock(&sp->lock);
 	return;
 }
 
@@ -1153,6 +1167,8 @@ speedo_rx(struct device *dev)
 	while (sp->rx_ringp[entry] != NULL &&
 		   (status = sp->rx_ringp[entry]->status) & RxComplete) {
 
+		if (--rx_work_limit < 0)
+			break;
 		if (speedo_debug > 4)
 			printk(KERN_DEBUG "  speedo_rx() status %8.8x len %d.\n", status,
 				   sp->rx_ringp[entry]->count & 0x3fff);
@@ -1212,8 +1228,6 @@ speedo_rx(struct device *dev)
 			sp->stats.rx_packets++;
 		}
 		entry = (++sp->cur_rx) % RX_RING_SIZE;
-		if (--rx_work_limit < 0)
-			break;
 	}
 
 	/* Refill the Rx ring buffers. */
@@ -1414,12 +1428,10 @@ set_rx_mode(struct device *dev)
 	if (new_rx_mode != sp->rx_mode) {
 		u8 *config_cmd_data;
 
-		save_flags(flags);		/* Lock to protect sp->cur_tx. */
-		cli();
+		spin_lock_irqsave(&sp->lock, flags);
 		entry = sp->cur_tx++ % TX_RING_SIZE;
 		last_cmd = sp->last_cmd;
 		sp->last_cmd = (struct descriptor *)&sp->tx_ring[entry];
-		restore_flags(flags);
 
 		sp->tx_skbuff[entry] = 0;			/* Redundant. */
 		sp->tx_ring[entry].status = (CmdSuspend | CmdConfigure) << 16;
@@ -1440,8 +1452,11 @@ set_rx_mode(struct device *dev)
 		}
 		/* Trigger the command unit resume. */
 		last_cmd->command &= ~CmdSuspend;
+
 		wait_for_cmd_done(ioaddr + SCBCmd);
 		outw(CU_RESUME, ioaddr + SCBCmd);
+
+		spin_unlock_irqrestore(&sp->lock, flags);
 	}
 
 	if (new_rx_mode == 0  &&  dev->mc_count < 4) {
@@ -1450,12 +1465,10 @@ set_rx_mode(struct device *dev)
 		struct dev_mc_list *mclist;
 		u16 *setup_params, *eaddrs;
 
-		save_flags(flags);		/* Lock to protect sp->cur_tx. */
-		cli();
+		spin_lock_irqsave(&sp->lock, flags);
 		entry = sp->cur_tx++ % TX_RING_SIZE;
 		last_cmd = sp->last_cmd;
 		sp->last_cmd = (struct descriptor *)&sp->tx_ring[entry];
-		restore_flags(flags);
 
 		sp->tx_skbuff[entry] = 0;
 		sp->tx_ring[entry].status = (CmdSuspend | CmdMulticastList) << 16;
@@ -1474,9 +1487,12 @@ set_rx_mode(struct device *dev)
 		}
 
 		last_cmd->command &= ~CmdSuspend;
+
 		/* Immediately trigger the command unit resume. */
 		wait_for_cmd_done(ioaddr + SCBCmd);
 		outw(CU_RESUME, ioaddr + SCBCmd);
+
+		spin_unlock_irqrestore(&sp->lock, flags);
 	} else if (new_rx_mode == 0) {
 		struct dev_mc_list *mclist;
 		u16 *setup_params, *eaddrs;
@@ -1525,13 +1541,12 @@ set_rx_mode(struct device *dev)
 		}
 
 		/* Disable interrupts while playing with the Tx Cmd list. */
-		save_flags(flags);
-		cli();
+		spin_lock_irqsave(&sp->lock, flags);
+
 		entry = sp->cur_tx++ % TX_RING_SIZE;
 		last_cmd = sp->last_cmd;
 		sp->last_cmd = mc_setup_frm;
 		sp->mc_setup_busy++;
-		restore_flags(flags);
 
 		/* Change the command to a NoOp, pointing to the CmdMulti command. */
 		sp->tx_skbuff[entry] = 0;
@@ -1543,9 +1558,13 @@ set_rx_mode(struct device *dev)
 			virt_to_bus(&(sp->tx_ring[(entry+1) % TX_RING_SIZE]));
 
 		last_cmd->command &= ~CmdSuspend;
+
 		/* Immediately trigger the command unit resume. */
 		wait_for_cmd_done(ioaddr + SCBCmd);
 		outw(CU_RESUME, ioaddr + SCBCmd);
+
+		spin_unlock_irqrestore(&sp->lock, flags);
+
 		if (speedo_debug > 5)
 			printk(" CmdMCSetup frame length %d in entry %d.\n",
 				   dev->mc_count, entry);
