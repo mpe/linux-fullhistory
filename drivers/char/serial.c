@@ -845,7 +845,7 @@ static int startup(struct async_struct * info)
 	if (!info->xmit_buf) {
 		info->xmit_buf = (unsigned char *) get_free_page(GFP_KERNEL);
 		if (!info->xmit_buf)
-			return ENOMEM;
+			return -ENOMEM;
 	}
 
 	save_flags(flags); cli();
@@ -871,7 +871,7 @@ static int startup(struct async_struct * info)
 	 * here.
 	 */
 	if (serial_inp(info, UART_LSR) == 0xff) {
-			restore_flags(flags);
+		restore_flags(flags);
 		if (suser()) {
 			if (info->tty)
 				set_bit(TTY_IO_ERROR, &info->tty->flags);
@@ -1802,11 +1802,9 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	}
 	if (info->blocked_open) {
 		if (info->close_delay) {
-			tty->count++; /* avoid race condition */
 			current->state = TASK_INTERRUPTIBLE;
 			current->timeout = jiffies + info->close_delay;
 			schedule();
-			tty->count--;
 		}
 		wake_up_interruptible(&info->open_wait);
 	}
@@ -2156,9 +2154,15 @@ static void autoconfig(struct async_struct * info)
 	/*
 	 * Do a simple existence test first; if we fail this, there's
 	 * no point trying anything else.
+	 *
+	 * 0x80 is used as a nonsense port to prevent against false
+	 * positives due to ISA bus float.  The assumption is that
+	 * 0x80 is a non-existent port; which should be safe since
+	 * include/asm/io.h also makes this assumption.
 	 */
 	scratch = serial_inp(info, UART_IER);
 	serial_outp(info, UART_IER, 0);
+	outb(0xff, 0x080);
 	scratch2 = serial_inp(info, UART_IER);
 	serial_outp(info, UART_IER, scratch);
 	if (scratch2) {
@@ -2358,3 +2362,75 @@ long rs_init(long kmem_start)
 	return kmem_start;
 }
 
+/*
+ * register_serial and unregister_serial allows for serial ports to be
+ * configured at run-time, to support PCMCIA modems.
+ */
+int register_serial(struct serial_struct *req)
+{
+	int i;
+	unsigned long flags;
+	struct async_struct *info;
+
+	save_flags(flags);
+	cli();
+	for (i = 0; i < NR_PORTS; i++) {
+		if (rs_table[i].port == req->port)
+			break;
+	}
+	if (i == NR_PORTS) {
+		for (i = 0; i < NR_PORTS; i++)
+			if ((rs_table[i].type == PORT_UNKNOWN) &&
+			    (rs_table[i].count == 0))
+				break;
+	}
+	if (i == NR_PORTS) {
+		restore_flags(flags);
+		return -1;
+	}
+	info = &rs_table[i];
+	if (rs_table[i].count) {
+		restore_flags(flags);
+		printk("Couldn't configure serial #%d (port=%d,irq=%d): "
+		       "device already open\n", i, req->port, req->irq);
+		return -1;
+	}
+	info->irq = req->irq;
+	info->port = req->port;
+	autoconfig(info);
+	if (info->type == PORT_UNKNOWN) {
+		restore_flags(flags);
+		printk("register_serial(): autoconfig failed\n");
+		return -1;
+	}
+	printk("tty%02d at 0x%04x (irq = %d)", info->line, 
+	       info->port, info->irq);
+	switch (info->type) {
+	case PORT_8250:
+		printk(" is a 8250\n"); break;
+	case PORT_16450:
+		printk(" is a 16450\n"); break;
+	case PORT_16550:
+		printk(" is a 16550\n"); break;
+	case PORT_16550A:
+		printk(" is a 16550A\n"); break;
+	default:
+		printk("\n"); break;
+	}
+	restore_flags(flags);
+	return info->line;
+}
+
+void unregister_serial(int line)
+{
+	unsigned long flags;
+	struct async_struct *info = &rs_table[line];
+
+	save_flags(flags);
+	cli();
+	if (info->tty)
+		tty_hangup(info->tty);
+	info->type = PORT_UNKNOWN;
+	printk("tty%02d unloaded\n", info->line);
+	restore_flags(flags);
+}

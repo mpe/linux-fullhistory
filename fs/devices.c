@@ -15,19 +15,6 @@
 #include <linux/fcntl.h>
 #include <linux/errno.h>
 
-#include <linux/config.h>
-
-/*
- * Ugly. We'll fix this once all the drivers use the f_ops->check_media_change()
- * stuff instead..
- */
-#ifdef CONFIG_MCD
-extern int check_mcd_media_change(int, int);
-#endif
-#ifdef CONFIG_SBPCD
-extern int check_sbpcd_media_change(int, int);
-#endif
-
 struct device_struct {
 	const char * name;
 	struct file_operations * fops;
@@ -144,27 +131,6 @@ int check_disk_change(dev_t dev)
 		if (!fops->check_media_change(dev))
 			return 0;
 	} 
-#if 1 /* this will go soon.. */
-	else switch(MAJOR(dev)){
-
-#if defined(CONFIG_MCD)
-         case MITSUMI_CDROM_MAJOR:
-		if (!check_mcd_media_change(dev, 0))
-			return 0;
-		break;
-#endif
-
-#if defined(CONFIG_SBPCD)
-         case MATSUSHITA_CDROM_MAJOR:
-		if (!check_sbpcd_media_change(dev, 0))
-			return 0;
-		break;
-#endif
-
-         default:
-		return 0;
-	}
-#endif	/* will go away */
 
 	printk("VFS: Disk change detected on device %d/%d\n",
 					MAJOR(dev), MINOR(dev));

@@ -147,7 +147,7 @@ static int copy_mm(unsigned long clone_flags, struct task_struct * p)
 			return 1;
 		dup_mmap(p);		/* wrong.. */
 	}
-	return 0;
+	return shm_fork(current, p);
 }
 
 static void copy_fs(unsigned long clone_flags, struct task_struct * p)
@@ -243,8 +243,7 @@ asmlinkage int sys_fork(struct pt_regs regs)
 		p->tss.io_bitmap[i] = ~0;
 	if (last_task_used_math == current)
 		__asm__("clts ; fnsave %0 ; frstor %0":"=m" (p->tss.i387));
-	p->semun = NULL; p->shm = NULL;
-	if (copy_mm(clone_flags, p) || shm_fork(current, p))
+	if (copy_mm(clone_flags, p))
 		goto bad_fork_cleanup;
 	copy_files(clone_flags, p);
 	copy_fs(clone_flags, p);

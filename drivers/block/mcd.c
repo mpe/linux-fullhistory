@@ -158,8 +158,8 @@ void mcd_setup(char *str, int *ints)
 }
 
  
-int
-check_mcd_media_change(int full_dev, int flag)
+static int
+check_mcd_change(dev_t full_dev)
 {
    int retval, target;
 
@@ -175,10 +175,7 @@ check_mcd_media_change(int full_dev, int flag)
    }
 
    retval = mcdDiskChanged;
-   if (!flag)
-   {
-      mcdDiskChanged = 0;
-   }
+   mcdDiskChanged = 0;
 
    return retval;
 }
@@ -1082,7 +1079,10 @@ static struct file_operations mcd_fops = {
 	NULL,			/* mmap */
 	mcd_open,		/* open */
 	mcd_release,		/* release */
-	NULL			/* fsync */
+	NULL,			/* fsync */
+	NULL,			/* fasync */
+	check_mcd_change,	/* media change */
+	NULL			/* revalidate */
 };
 
 

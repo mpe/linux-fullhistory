@@ -375,6 +375,34 @@ static int shm_map (struct shm_desc *shmd, int remap)
 	return 0;
 }
 
+/*
+ * This is really minimal support to make the shared mem stuff
+ * ve known by the general VM manager. It should add the vm_ops
+ * field so that 'munmap()' and friends work correctly on shared
+ * memory areas..
+ */
+static int add_vm_area(unsigned long addr, unsigned long len)
+{
+	struct vm_area_struct * vma;
+
+	vma = (struct vm_area_struct * ) kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
+	if (!vma)
+		return -ENOMEM;
+	do_munmap(addr, len);
+	vma->vm_task = current;
+	vma->vm_start = addr;
+	vma->vm_end = addr + len;
+	vma->vm_page_prot = PAGE_SHARED;
+	vma->vm_flags = VM_SHM;
+	vma->vm_share = NULL;
+	vma->vm_inode = NULL;
+	vma->vm_offset = 0;
+	vma->vm_ops = NULL;
+	insert_vm_struct(current, vma);
+	merge_segments(current->mm->mmap, NULL, NULL);
+	return 0;
+}
+
 /* 
  * Fix shmaddr, allocate descriptor, map shm, add attach descriptor to lists.
  * raddr is needed to return addresses above 2Gig.
@@ -448,6 +476,11 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	shmd->end = addr + shp->shm_npages * PAGE_SIZE;
 	shmd->task = current;
 
+	if ((err = add_vm_area(shmd->start, shmd->end - shmd->start))) {
+		kfree(shmd);
+		return err;
+	}
+
 	shp->shm_nattch++;            /* prevent destruction */
 	if (addr < current->mm->end_data) {
 		iput (current->executable);
@@ -496,7 +529,7 @@ static void detach (struct shm_desc **shmdp)
  	printk("detach: shm segment (id=%d) attach list inconsistent\n",id);
 	
  found:
-	unmap_page_range (shmd->start, shp->shm_segsz); /* sleeps */
+	do_munmap(shmd->start, shp->shm_segsz);
 	kfree(shmd);
   	shp->shm_lpid = current->pid;
 	shp->shm_dtime = CURRENT_TIME;
@@ -543,6 +576,8 @@ int shm_fork (struct task_struct *p1, struct task_struct *p2)
 	struct shmid_ds *shp;
 	int id;
 
+	p2->semun = NULL;
+	p2->shm = NULL;
         if (!p1->shm)
 		return 0;
 	for (shmd = p1->shm; shmd; shmd = shmd->task_next) {

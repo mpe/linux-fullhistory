@@ -30,9 +30,6 @@ extern int check_cdu31a_media_change(int, int);
 #if defined(CONFIG_MCD)
 extern int check_mcd_media_change(int, int);
 #endif
-#if defined (CONFIG_SBPCD)
-extern int check_sbpcd_media_change(int, int);
-#endif CONFIG_SBPCD
 
 #ifdef LEAK_CHECK
 static int check_malloc = 0;

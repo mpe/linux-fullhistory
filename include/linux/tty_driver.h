@@ -56,7 +56,14 @@
  * void (*set_termios)(struct tty_struct *tty, struct termios * old);
  *
  * 	This routine allows the tty driver to be notified when
- * 	device's termios settings have changed.  
+ * 	device's termios settings have changed.  Note that a
+ * 	well-designed tty driver should be prepared to accept the case
+ * 	where old == NULL, and try to do something rational.
+ *
+ * void (*set_ldisc)(struct tty_struct *tty);
+ *
+ * 	This routine allows the tty driver to be notified when the
+ * 	device's termios settings have changed.
  * 
  * void (*throttle)(struct tty_struct * tty);
  *
@@ -131,6 +138,7 @@ struct tty_driver {
 	void (*start)(struct tty_struct *tty);
 	void (*hangup)(struct tty_struct *tty);
 	void (*flush_buffer)(struct tty_struct *tty);
+	void (*set_ldisc)(struct tty_struct *tty);
 
 	/*
 	 * linked list pointers

@@ -160,7 +160,7 @@ int tty_register_ldisc(int disc, struct tty_ldisc *new_ldisc)
 /* Set the discipline of a tty line. */
 static int tty_set_ldisc(struct tty_struct *tty, int ldisc)
 {
-	int	retval;
+	int	retval = 0;
 	struct	tty_ldisc o_ldisc;
 
 	if ((ldisc < N_TTY) || (ldisc >= NR_LDISCS) ||
@@ -178,11 +178,9 @@ static int tty_set_ldisc(struct tty_struct *tty, int ldisc)
 	/* Now set up the new line discipline. */
 	tty->ldisc = ldiscs[ldisc];
 	tty->termios->c_line = ldisc;
-	if (tty->ldisc.open) {
+	if (tty->ldisc.open)
 		retval = (tty->ldisc.open)(tty);
-		if (retval >= 0)
-			return retval;
-		
+	if (retval < 0) {
 		tty->ldisc = o_ldisc;
 		tty->termios->c_line = tty->ldisc.num;
 		if (tty->ldisc.open && (tty->ldisc.open(tty) < 0)) {
@@ -197,9 +195,10 @@ static int tty_set_ldisc(struct tty_struct *tty, int ldisc)
 					      tty_name(tty), r);
 			}
 		}
-		return retval;
 	}
-	return 0;
+	if (tty->ldisc.num != o_ldisc.num && tty->driver.set_ldisc)
+		tty->driver.set_ldisc(tty);
+	return retval;
 }
 
 /*
@@ -731,12 +730,12 @@ static int init_dev(dev_t device, struct tty_struct **ret_tty)
 	tp_loc = &driver->termios[idx];
 	ltp_loc = &driver->termios_locked[idx];
 
+repeat:
 	retval = -EAGAIN;
 	if (driver->type == TTY_DRIVER_TYPE_PTY &&
 	    driver->subtype == PTY_TYPE_MASTER &&
 	    *tty_loc && (*tty_loc)->count)
 		goto end_init;
-repeat:
 	retval = -ENOMEM;
 	if (!*tty_loc && !tty) {
 		if (!(tty = (struct tty_struct*) get_free_page(GFP_KERNEL)))
@@ -813,13 +812,18 @@ repeat:
 		tty->termios_locked = *ltp_loc;
 		*tty_loc = tty;
 		(*driver->refcount)++;
+		(*tty_loc)->count++;
 		if (tty->ldisc.open) {
 			retval = (tty->ldisc.open)(tty);
-			if (retval < 0)
+			if (retval < 0) {
+				(*tty_loc)->count--;
+				tty = NULL;
 				goto end_init;
+			}
 		}
 		tty = NULL;
-	}
+	} else
+		(*tty_loc)->count++;
 	if (driver->type == TTY_DRIVER_TYPE_PTY) {
 		if (!*o_tp_loc) {
 			*o_tp_loc = o_tp;
@@ -836,19 +840,19 @@ repeat:
 			(*driver->other->refcount)++;
 			if (o_tty->ldisc.open) {
 				retval = (o_tty->ldisc.open)(o_tty);
-				if (retval < 0)
+				if (retval < 0) {
+					(*tty_loc)->count--;
+					o_tty = NULL;
 					goto end_init;
+				}
 			}
 			o_tty = NULL;
 		}
 		(*tty_loc)->link = *o_tty_loc;
 		(*o_tty_loc)->link = *tty_loc;
+		if (driver->subtype == PTY_TYPE_MASTER)
+			(*o_tty_loc)->count++;
 	}
-	(*tty_loc)->count++;
-	(*tty_loc)->driver = *driver;
-	if (driver->type == TTY_DRIVER_TYPE_PTY &&
-	    driver->subtype == PTY_TYPE_MASTER)
-		(*o_tty_loc)->count++;
 	*ret_tty = *tty_loc;
 	retval = 0;
 end_init:

@@ -5,7 +5,7 @@
  *            and for "no-sound" interfaces like Lasermate and the
  *            Panasonic CI-101P.
  *
- *  NOTE:     This is release 2.1.
+ *  NOTE:     This is release 2.2.
  *            It works with my SbPro & drive CR-521 V2.11 from 2/92
  *            and with the new CR-562-B V0.75 on a "naked" Panasonic
  *            CI-101P interface. And vice versa. 
@@ -111,6 +111,7 @@
  *       Bigger audio frame buffer: allows reading max. 4 frames at time; but
  *       reading more than one frame at once gives poor quality.
  *
+ *  2.2  
  *
  *  TODO
  *
@@ -187,7 +188,7 @@
 
 #include "blk.h"
 
-#define VERSION "2.1 Eberhard Moenkeberg <emoenke@gwdg.de>"
+#define VERSION "2.2 Eberhard Moenkeberg <emoenke@gwdg.de>"
 
 #define SBPCD_DEBUG
 
@@ -222,52 +223,24 @@
  * currently up to 4 drivers, expandable
  */
 #if !(SBPCD_ISSUE-1)
-#define SBPCD_IOCTL_F sbpcd_ioctl
-#define SBPCD_IOCTL(a,b,c,d) sbpcd_ioctl(a,b,c,d)
 #define DO_SBPCD_REQUEST(a) do_sbpcd_request(a)
-#define SBPCD_OPEN_F sbpcd_open
-#define SBPCD_OPEN(a,b) sbpcd_open(a,b)
-#define SBPCD_RELEASE_F sbpcd_release
-#define SBPCD_RELEASE(a,b) sbpcd_release(a,b)
 #define SBPCD_SETUP(a,b) sbpcd_setup(a,b)
 #define SBPCD_INIT(a,b) sbpcd_init(a,b)
-#define SBPCD_MEDIA_CHANGE(a,b) check_sbpcd_media_change(a,b)
 #endif
 #if !(SBPCD_ISSUE-2)
-#define SBPCD_IOCTL_F sbpcd2_ioctl
-#define SBPCD_IOCTL(a,b,c,d) sbpcd2_ioctl(a,b,c,d)
 #define DO_SBPCD_REQUEST(a) do_sbpcd2_request(a)
-#define SBPCD_OPEN_F sbpcd2_open
-#define SBPCD_OPEN(a,b) sbpcd2_open(a,b)
-#define SBPCD_RELEASE_F sbpcd2_release
-#define SBPCD_RELEASE(a,b) sbpcd2_release(a,b)
 #define SBPCD_SETUP(a,b) sbpcd2_setup(a,b)
 #define SBPCD_INIT(a,b) sbpcd2_init(a,b)
-#define SBPCD_MEDIA_CHANGE(a,b) check_sbpcd2_media_change(a,b)
 #endif
 #if !(SBPCD_ISSUE-3)
-#define SBPCD_IOCTL_F sbpcd3_ioctl
-#define SBPCD_IOCTL(a,b,c,d) sbpcd3_ioctl(a,b,c,d)
 #define DO_SBPCD_REQUEST(a) do_sbpcd3_request(a)
-#define SBPCD_OPEN_F sbpcd3_open
-#define SBPCD_OPEN(a,b) sbpcd3_open(a,b)
-#define SBPCD_RELEASE_F sbpcd3_release
-#define SBPCD_RELEASE(a,b) sbpcd3_release(a,b)
 #define SBPCD_SETUP(a,b) sbpcd3_setup(a,b)
 #define SBPCD_INIT(a,b) sbpcd3_init(a,b)
-#define SBPCD_MEDIA_CHANGE(a,b) check_sbpcd3_media_change(a,b)
 #endif
 #if !(SBPCD_ISSUE-4)
-#define SBPCD_IOCTL_F sbpcd4_ioctl
-#define SBPCD_IOCTL(a,b,c,d) sbpcd4_ioctl(a,b,c,d)
 #define DO_SBPCD_REQUEST(a) do_sbpcd4_request(a)
-#define SBPCD_OPEN_F sbpcd4_open
-#define SBPCD_OPEN(a,b) sbpcd4_open(a,b)
-#define SBPCD_RELEASE_F sbpcd4_release
-#define SBPCD_RELEASE(a,b) sbpcd4_release(a,b)
 #define SBPCD_SETUP(a,b) sbpcd4_setup(a,b)
 #define SBPCD_INIT(a,b) sbpcd4_init(a,b)
-#define SBPCD_MEDIA_CHANGE(a,b) check_sbpcd4_media_change(a,b)
 #endif
 /*==========================================================================*/
 #if MANY_SESSION
@@ -335,12 +308,30 @@ static int autoprobe[] =
 
 /*==========================================================================*/
 /*
+ * the external references:
+ */
+#if !(SBPCD_ISSUE-1)
+#ifdef CONFIG_SBPCD2
+extern unsigned long sbpcd2_init(unsigned long, unsigned long);
+#endif
+#ifdef CONFIG_SBPCD3
+extern unsigned long sbpcd3_init(unsigned long, unsigned long);
+#endif
+#ifdef CONFIG_SBPCD4
+extern unsigned long sbpcd4_init(unsigned long, unsigned long);
+#endif
+#endif
+
+/*==========================================================================*/
+/*==========================================================================*/
+/*
  * the forward references:
  */
 static void sbp_read_cmd(void);
 static int sbp_data(void);
 static int cmd_out(void);
 static int DiskInfo(void);
+static int check_media_change(dev_t);
 
 /*==========================================================================*/
 
@@ -719,11 +710,17 @@ static void clr_cmdbuf(void)
   cmd_type=0;
 }
 /*==========================================================================*/
-static void mark_timeout(void)
+static void mark_timeout(unsigned long i)
 {
   timed_out=1;
-  DPRINTF((DBG_TIM,"SBPCD: timer stopped.\n"));
+  DPRINTF((DBG_TIM,"SBPCD: timer expired.\n"));
 }
+/*==========================================================================*/
+static struct timer_list delay_timer = { NULL, NULL, 0, 0, mark_timeout};
+#if 0
+static struct timer_list data_timer = { NULL, NULL, 0, 0, mark_timeout};
+static struct timer_list audio_timer = { NULL, NULL, 0, 0, mark_timeout};
+#endif
 /*==========================================================================*/
 static void flush_status(void)
 {
@@ -739,10 +736,16 @@ static void flush_status(void)
     }
 #else
   timed_out=0;
-  SET_TIMER(mark_timeout,150);
+#if 0
+  del_timer(&delay_timer);
+#endif
+  delay_timer.expires = 150;
+  add_timer(&delay_timer);
   do { }
   while (!timed_out);
-  CLEAR_TIMER;
+#if 0
+  del_timer(&delay_timer);
+#endif 0
   inb(CDi_status);
 #endif CDMKE
 }
@@ -1782,29 +1785,30 @@ static void check_datarate(void)
   int i=0;
 
   DPRINTF((DBG_IOX,"SBPCD: check_datarate entered.\n"));
-  timed_out=0;
   datarate=0;
-
 #if TEST_STI
   for (i=0;i<=1000;i++) printk(".");
 #endif
-
   /* set a timer to make (timed_out!=0) after 1.1 seconds */
-
+#if 0
+  del_timer(&delay_timer);
+#endif
+  delay_timer.expires = 110;
+  timed_out=0;
+  add_timer(&delay_timer);
   DPRINTF((DBG_TIM,"SBPCD: timer started (110).\n"));
-  SET_TIMER(mark_timeout,110);
   do
     {
       i=inb(CDi_status);
       datarate++;
-
 #if 00000
       if (datarate>0x0FFFFFFF) break;
 #endif 00000
-
     }
   while (!timed_out); /* originally looping for 1.1 seconds */
-  CLEAR_TIMER;
+#if 0
+  del_timer(&delay_timer);
+#endif 0
   DPRINTF((DBG_TIM,"SBPCD: datarate: %d\n", datarate));
   if (datarate<65536) datarate=65536;
 
@@ -2292,7 +2296,7 @@ static int xx_PlayAudioMSF(int pos_audio_start,int pos_audio_end)
 /*==========================================================================*/
 /*==========================================================================*/
 /*
- * Called from the timer to check the results of the get-status cmd.
+ * Check the results of the "get status" command.
  */
 static int sbp_status(void)
 {
@@ -2341,7 +2345,7 @@ static int sbp_status(void)
 /*
  * ioctl support, adopted from scsi/sr_ioctl.c and mcd.c
  */
-static int SBPCD_IOCTL(struct inode *inode, struct file *file, u_int cmd,
+static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		       u_long arg)
 {
   int i, st;
@@ -2612,10 +2616,7 @@ static int SBPCD_IOCTL(struct inode *inode, struct file *file, u_int cmd,
 	int status_tries;
 	int error_flag;
 
-	error_flag=0;
-
 	DPRINTF((DBG_IOC,"SBPCD: ioctl: CDROMREADAUDIO requested.\n"));
-
 #if 0
 	if (!new_drive) return (-EINVAL);
 #endif
@@ -2636,10 +2637,9 @@ static int SBPCD_IOCTL(struct inode *inode, struct file *file, u_int cmd,
 	DPRINTF((DBG_AUD,"SBPCD: read_audio: lba: %d, msf: %06X\n",
 		 block, blk2msf(block)));
 	DPRINTF((DBG_AUD,"SBPCD: read_audio: before xx_ReadStatus.\n"));
-
 	while (busy_data) sbp_sleep(10); /* wait a bit */
 	busy_audio=1;
-
+	error_flag=0;
 	for (data_tries=5; data_tries>0; data_tries--)
 	  {
 	    DPRINTF((DBG_AUD,"SBPCD: data_tries=%d ...\n", data_tries));
@@ -2717,7 +2717,6 @@ static int SBPCD_IOCTL(struct inode *inode, struct file *file, u_int cmd,
 		    break;
 		  }
 		DPRINTF((DBG_AUD,"SBPCD: read_audio: before reading data.\n"));
-		CLEAR_TIMER;
 		error_flag=0;
 		p = DriveStruct[d].aud_buf;
 		if (sbpro_type==1) OUT(CDo_sel_d_i,0x01);
@@ -3091,7 +3090,6 @@ static int sbp_data(void)
 	}
 
       SBPCD_STI;
-      CLEAR_TIMER;
       error_flag=0;
       p = DriveStruct[d].sbp_buf + frame *  CD_FRAMESIZE;
 
@@ -3181,7 +3179,7 @@ static int sbp_data(void)
 /*
  *  Open the device special file.  Check that a disk is in. Read TOC.
  */
-int SBPCD_OPEN(struct inode *ip, struct file *fp)
+static int sbpcd_open(struct inode *ip, struct file *fp)
 {
   int i;
 
@@ -3234,7 +3232,7 @@ int SBPCD_OPEN(struct inode *ip, struct file *fp)
 /*
  *  On close, we flush all sbp blocks from the buffer cache.
  */
-static void SBPCD_RELEASE(struct inode * ip, struct file * file)
+static void sbpcd_release(struct inode * ip, struct file * file)
 {
   int i;
 
@@ -3247,7 +3245,7 @@ static void SBPCD_RELEASE(struct inode * ip, struct file * file)
   switch_drive(i);
 
   DriveStruct[d].sbp_first_frame=DriveStruct[d].sbp_last_frame=-1;
-  sync_dev(ip->i_rdev);                    /* nonsense if read only device? */
+  fsync_dev(ip->i_rdev);                   /* nonsense if read only device? */
   invalidate_buffers(ip->i_rdev);
   DriveStruct[d].diskstate_flags &= ~cd_size_bit;
 
@@ -3274,17 +3272,22 @@ static struct file_operations sbpcd_fops =
   block_write,            /* write - general block-dev write */
   NULL,                   /* readdir - bad */
   NULL,                   /* select */
-  SBPCD_IOCTL_F,          /* ioctl */
+  sbpcd_ioctl,            /* ioctl */
   NULL,                   /* mmap */
-  SBPCD_OPEN_F,           /* open */
-  SBPCD_RELEASE_F,        /* release */
+  sbpcd_open,             /* open */
+  sbpcd_release,          /* release */
   NULL,                   /* fsync */
-  NULL                    /* fasync */
+  NULL,                   /* fasync */
+  check_media_change,     /* media_change */
+  NULL                    /* revalidate */
 };
 /*==========================================================================*/
 /*
  * accept "kernel command line" parameters 
  * (suggested by Peter MacDonald with SLS 1.03)
+ *
+ * This is only implemented for the first controller. Should be enough to
+ * allow installing with a "strange" distribution kernel.
  *
  * use: tell LILO:
  *                 sbpcd=0x230,SoundBlaster
@@ -3299,6 +3302,9 @@ static struct file_operations sbpcd_fops =
  * not the soundcard base address.
  *
  */
+#if (SBPCD_ISSUE-1)
+static
+#endif
 void SBPCD_SETUP(char *s, int *p)
 {
   DPRINTF((DBG_INI,"SBPCD: sbpcd_setup called with %04X,%s\n",p[1], s));
@@ -3442,7 +3448,7 @@ unsigned long SBPCD_INIT(u_long mem_start, u_long mem_end)
 #if PRINTK_BUG
       sti(); /* to avoid possible "printk" bug */
 #endif
-      return (mem_start);
+      goto init_done;
     }
 
   if (port_index>0)
@@ -3515,7 +3521,7 @@ unsigned long SBPCD_INIT(u_long mem_start, u_long mem_end)
 #if PRINTK_BUG
       sti(); /* to avoid possible "printk" bug */
 #endif
-      return (mem_start);
+      goto init_done;
     }
   blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
   read_ahead[MAJOR_NR] = SBP_BUFFER_FRAMES * (CD_FRAMESIZE / 512);
@@ -3543,7 +3549,21 @@ unsigned long SBPCD_INIT(u_long mem_start, u_long mem_end)
     }
   blksize_size[MAJOR_NR]=sbpcd_blocksizes;
 
+init_done:
+#if !(SBPCD_ISSUE-1)
+#ifdef CONFIG_SBPCD2
+  mem_start=sbpcd2_init(mem_start, mem_end);
+#endif
+#ifdef CONFIG_SBPCD3
+  mem_start=sbpcd3_init(mem_start, mem_end);
+#endif
+#ifdef CONFIG_SBPCD4
+  mem_start=sbpcd4_init(mem_start, mem_end);
+#endif
+#endif
+#if !(SBPCD_ISSUE-1)
   DPRINTF((DBG_INF,"SBPCD: init done.\n"));
+#endif
   return (mem_start);
 }
 /*==========================================================================*/
@@ -3552,7 +3572,7 @@ unsigned long SBPCD_INIT(u_long mem_start, u_long mem_end)
  * used externally (isofs/inode.c, fs/buffer.c)
  * Currently disabled (has to get "synchronized").
  */
-int SBPCD_MEDIA_CHANGE(int full_dev, int unused_minor)
+static int check_media_change(dev_t full_dev)
 {
   int st;
 

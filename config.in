@@ -101,7 +101,7 @@ if [ "$CONFIG_NET_VENDOR_3COM" = "y" ]; then
 fi
 bool 'Other ISA cards' CONFIG_NET_ISA n
 if [ "$CONFIG_NET_ISA" = "y" ]; then
-	bool 'AT1500 and NE2100 (LANCE and PCnet-ISA) support' CONFIG_LANCE y
+	bool 'AT1500 and NE2100 (LANCE and PCnet-ISA) support' CONFIG_LANCE n
 	bool 'Cabletron E21xx support (not recommended)' CONFIG_E2100 n
 	bool 'DEPCA support' CONFIG_DEPCA n
 	if [ "$CONFIG_NET_ALPHA" = "y" ]; then
@@ -109,7 +109,7 @@ if [ "$CONFIG_NET_ISA" = "y" ]; then
 		bool 'AT1700 support' CONFIG_AT1700 n
 	fi
 	bool 'HP PCLAN support' CONFIG_HPLAN n
-	bool 'NE2000/NE1000 support' CONFIG_NE2000 n
+	bool 'NE2000/NE1000 support' CONFIG_NE2000 y
 fi
 bool 'EISA and on board controllers' CONFIG_NET_EISA n
 	if [ "$CONFIG_NET_ALPHA" = "y" ]; then
@@ -133,6 +133,15 @@ comment 'CD-ROM drivers'
 bool 'Sony CDU31A/CDU33A CDROM driver support' CONFIG_CDU31A n
 bool 'Mitsumi CDROM driver support' CONFIG_MCD n
 bool 'Matsushita/Panasonic CDROM driver support' CONFIG_SBPCD n
+if [ "$CONFIG_SBPCD" = "y" ]; then
+  bool 'Matsushita/Panasonic second CDROM controller support' CONFIG_SBPCD2 n
+  if [ "$CONFIG_SBPCD2" = "y" ]; then
+    bool 'Matsushita/Panasonic third CDROM controller support' CONFIG_SBPCD3 n
+    if [ "$CONFIG_SBPCD3" = "y" ]; then
+      bool 'Matsushita/Panasonic fourth CDROM controller support' CONFIG_SBPCD4 n
+    fi
+  fi
+fi
 
 comment 'Filesystems'
 

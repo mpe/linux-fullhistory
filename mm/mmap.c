@@ -423,6 +423,7 @@ void merge_segments(struct vm_area_struct *mpnt,
 		    prev->vm_inode != mpnt->vm_inode ||
 		    prev->vm_end != mpnt->vm_start ||
 		    !mp ||
+		    prev->vm_flags != mpnt->vm_flags ||
 		    prev->vm_share != mpnt->vm_share ||		/* ?? */
 		    prev->vm_next != mpnt)			/* !!! */
 			continue;

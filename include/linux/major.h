@@ -43,8 +43,9 @@
  * 23 -                        mitsumi cdrom
  * 24 -	                       sony535 cdrom
  * 25 -                        matsushita cdrom       minors 0..3
- * 26 -
- * 27 - qic117 tape
+ * 26 -                        matsushita cdrom 2     minors 0..3
+ * 27 - qic117 tape            matsushita cdrom 3     minors 0..3
+ * 28 -                        matsushita cdrom 4     minors 0..3
  */
 
 #define UNNAMED_MAJOR	0
@@ -72,6 +73,9 @@
 #define MITSUMI_CDROM_MAJOR 23
 #define CDU535_CDROM_MAJOR 24
 #define MATSUSHITA_CDROM_MAJOR 25
+#define MATSUSHITA_CDROM2_MAJOR 26
+#define MATSUSHITA_CDROM3_MAJOR 27
+#define MATSUSHITA_CDROM4_MAJOR 28
 #define QIC117_TAPE_MAJOR 27
 
 /*

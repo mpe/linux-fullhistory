@@ -194,8 +194,32 @@ static void floppy_off(unsigned int nr);
 
 #elif (MAJOR_NR == MATSUSHITA_CDROM_MAJOR)
 
-#define DEVICE_NAME "Matsushita CD-ROM"
+#define DEVICE_NAME "Matsushita CD-ROM controller #1"
 #define DEVICE_REQUEST do_sbpcd_request
+#define DEVICE_NR(device) (MINOR(device))
+#define DEVICE_ON(device)
+#define DEVICE_OFF(device)
+
+#elif (MAJOR_NR == MATSUSHITA_CDROM2_MAJOR)
+
+#define DEVICE_NAME "Matsushita CD-ROM controller #2"
+#define DEVICE_REQUEST do_sbpcd2_request
+#define DEVICE_NR(device) (MINOR(device))
+#define DEVICE_ON(device)
+#define DEVICE_OFF(device)
+
+#elif (MAJOR_NR == MATSUSHITA_CDROM3_MAJOR)
+
+#define DEVICE_NAME "Matsushita CD-ROM controller #3"
+#define DEVICE_REQUEST do_sbpcd3_request
+#define DEVICE_NR(device) (MINOR(device))
+#define DEVICE_ON(device)
+#define DEVICE_OFF(device)
+
+#elif (MAJOR_NR == MATSUSHITA_CDROM4_MAJOR)
+
+#define DEVICE_NAME "Matsushita CD-ROM controller #4"
+#define DEVICE_REQUEST do_sbpcd4_request
 #define DEVICE_NR(device) (MINOR(device))
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)

@@ -44,6 +44,7 @@ struct vm_area_struct {
  */
 #define VM_GROWSDOWN	0x01
 #define VM_GROWSUP	0x02
+#define VM_SHM		0x04
 
 /*
  * These are the virtual MM functions - opening of an area, closing it (needed to

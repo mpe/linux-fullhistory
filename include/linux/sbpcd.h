@@ -3,17 +3,14 @@
  */
 
 /*
- * these definitions can get overridden by the kernel command line
- * ("lilo boot option"). Examples:
+ * the definitions for the first controller can get overridden by
+ * the kernel command line ("lilo boot option").
+ * Examples:
  *                                 sbpcd=0x230,SoundBlaster
  *                             or
  *                                 sbpcd=0x300,LaserMate
  *                             or
  *                                 sbpcd=0x330,SPEA
- *
- *  and, if you have a second CDROM controller board,
- *                                 sbpcd2=0x310,LaserMate
- *  and so on.
  *
  * These strings are case sensitive !!!
  */
@@ -72,36 +69,6 @@
 #ifndef _LINUX_SBPCD_H
 
 #define _LINUX_SBPCD_H
-
-/*==========================================================================*/
-/*==========================================================================*/
-/*
- * to fork and execute a function after some elapsed time:
- * one "jifs" unit is 10 msec.
- */
-#undef MY_TIMER
-#undef SET_TIMER
-#undef CLEAR_TIMER
-
-#if !(SBPCD_ISSUE-1)
-#define MY_TIMER SBPCD_TIMER
-#endif
-#if !(SBPCD_ISSUE-2)
-#define MY_TIMER SBPCD2_TIMER
-#endif
-#if !(SBPCD_ISSUE-3)
-#define MY_TIMER SBPCD3_TIMER
-#endif
-#if !(SBPCD_ISSUE-4)
-#define MY_TIMER SBPCD4_TIMER
-#endif
-
-#define SET_TIMER(func, jifs) \
-        ((timer_table[MY_TIMER].expires = jiffies + jifs), \
-        (timer_table[MY_TIMER].fn = func), \
-        (timer_active |= 1<<MY_TIMER))
-
-#define CLEAR_TIMER	timer_active &= ~(1<<MY_TIMER)
 
 /*==========================================================================*/
 /*==========================================================================*/

@@ -39,6 +39,21 @@ OBJS := $(OBJS) sbpcd.o
 SRCS := $(SRCS) sbpcd.c
 endif #CONFIG_SBPCD
 
+ifdef CONFIG_SBPCD2
+OBJS := $(OBJS) sbpcd2.o
+SRCS := $(SRCS) sbpcd2.c
+endif #CONFIG_SBPCD2
+
+ifdef CONFIG_SBPCD3
+OBJS := $(OBJS) sbpcd3.o
+SRCS := $(SRCS) sbpcd3.c
+endif #CONFIG_SBPCD3
+
+ifdef CONFIG_SBPCD4
+OBJS := $(OBJS) sbpcd4.o
+SRCS := $(SRCS) sbpcd4.c
+endif #CONFIG_SBPCD4
+
 ifdef CONFIG_BLK_DEV_HD
 OBJS := $(OBJS) hd.o
 SRCS := $(SRCS) hd.c

@@ -594,6 +594,9 @@ int is_ignored(int sig)
 
 static void n_tty_set_termios(struct tty_struct *tty, struct termios * old)
 {
+	if (!tty)
+		return;
+	
 	tty->icanon = (L_ICANON(tty) != 0);
 	if (I_ISTRIP(tty) || I_IUCLC(tty) || I_IGNCR(tty) ||
 	    I_ICRNL(tty) || I_INLCR(tty) || L_ICANON(tty) ||
@@ -661,6 +664,9 @@ static void n_tty_close(struct tty_struct *tty)
 
 static int n_tty_open(struct tty_struct *tty)
 {
+	if (!tty)
+		return -EINVAL;
+
 	if (!tty->read_buf) {
 		tty->read_buf = (unsigned char *)
 			get_free_page(intr_count ? GFP_ATOMIC : GFP_KERNEL);
