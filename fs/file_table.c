@@ -45,7 +45,7 @@ void grow_files(void)
 	struct file * file;
 	int i;
 
-	file = (struct file*) __get_free_page(GFP_BUFFER);
+	file = (struct file *) get_free_page(GFP_KERNEL);
 
 	if (!file)
 		return;

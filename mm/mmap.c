@@ -197,6 +197,8 @@ int generic_mmap(struct inode * inode, struct file * file,
 	extern struct vm_operations_struct file_mmap;
 	struct buffer_head * bh;
 
+	if (prot & PAGE_RW)	/* only PAGE_COW or read-only supported right now */
+		return -EINVAL;
 	if (off & (inode->i_sb->s_blocksize - 1))
 		return -EINVAL;
 	if (len > high_memory || off > high_memory - len) /* avoid overflow */

@@ -50,6 +50,8 @@ int nfs_mmap(struct inode * inode, struct file * file,
 {
 	struct vm_area_struct * mpnt;
 
+	if (prot & PAGE_RW)	/* only PAGE_COW or read-only supported now */
+		return -EINVAL;
 	if (off & (inode->i_sb->s_blocksize - 1))
 		return -EINVAL;
 	if (len > high_memory || off > high_memory - len) /* avoid overflow */
