@@ -157,7 +157,6 @@ struct usb_dibusb {
 #define DIBUSB_STATE_DVB        0x008
 #define DIBUSB_STATE_I2C        0x010
 #define DIBUSB_STATE_REMOTE		0x020
-#define DIBUSB_STATE_PIDLIST    0x040
 	int init_state;
 
 	int feedcount;
@@ -175,10 +174,6 @@ struct usb_dibusb {
 	/* locking */
 	struct semaphore usb_sem;
 	struct semaphore i2c_sem;
-
-	/* pid filtering */
-	spinlock_t pid_list_lock;
-	struct dibusb_pid *pid_list;
 
 	/* dvb */
 	struct dvb_adapter *adapter;
@@ -231,11 +226,6 @@ int dibusb_streaming(struct usb_dibusb *,int);
 
 int dibusb_urb_init(struct usb_dibusb *);
 int dibusb_urb_exit(struct usb_dibusb *);
-
-/* dvb-dibusb-pid.c */
-int dibusb_pid_list_init(struct usb_dibusb *dib);
-void dibusb_pid_list_exit(struct usb_dibusb *dib);
-int dibusb_ctrl_pid(struct usb_dibusb *dib, struct dvb_demux_feed *dvbdmxfeed , int onoff);
 
 /* i2c and transfer stuff */
 #define DIBUSB_I2C_TIMEOUT				5000

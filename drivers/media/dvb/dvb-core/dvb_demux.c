@@ -1226,8 +1226,10 @@ int dvb_dmx_init(struct dvb_demux *dvbdemux)
 		dvbdemux->filter[i].state = DMX_STATE_FREE;
 		dvbdemux->filter[i].index = i;
 	}
-	for (i=0; i<dvbdemux->feednum; i++)
+	for (i=0; i<dvbdemux->feednum; i++) {
 		dvbdemux->feed[i].state = DMX_STATE_FREE;
+		dvbdemux->feed[i].index = i;
+	}
 	dvbdemux->frontend_list.next=
 	  dvbdemux->frontend_list.prev=
 	    &dvbdemux->frontend_list;

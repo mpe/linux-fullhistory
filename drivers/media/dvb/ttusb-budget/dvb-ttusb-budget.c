@@ -79,9 +79,8 @@ struct ttusb {
 	struct dmxdev dmxdev;
 	struct dvb_net dvbnet;
 
-	/* our semaphore, for channel allocation/deallocation */
-	struct semaphore sem;
 	/* and one for USB access. */
+	struct semaphore semi2c;
 	struct semaphore semusb;
 
 	struct dvb_adapter *adapter;
@@ -121,18 +120,6 @@ struct ttusb {
 
 	u8 last_result[32];
 
-	struct ttusb_channel {
-		struct ttusb *ttusb;
-		struct dvb_demux_feed *dvbdmxfeed;
-
-		int active;
-		int id;
-		int pid;
-		int type;	/* 1 - TS, 2 - Filter */
-#ifdef TTUSB_HWSECTIONS
-		int filterstate[TTUSB_MAXFILTER];	/* 0: not busy, 1: busy */
-#endif
-	} channel[TTUSB_MAXCHANNEL];
 #if 0
 	devfs_handle_t stc_devfs_handle;
 #endif
@@ -258,7 +245,7 @@ static int master_xfer(struct i2c_adapter* adapter, struct i2c_msg *msg, int num
 	int i = 0;
 	int inc;
 
-	if (down_interruptible(&ttusb->sem) < 0)
+	if (down_interruptible(&ttusb->semi2c) < 0)
 		return -EAGAIN;
 
 	while (i < num) {
@@ -292,7 +279,7 @@ static int master_xfer(struct i2c_adapter* adapter, struct i2c_msg *msg, int num
 		i += inc;
 	}
 
-	up(&ttusb->sem);
+	up(&ttusb->semi2c);
 	return i;
 }
 
@@ -888,15 +875,13 @@ static int ttusb_start_iso_xfer(struct ttusb *ttusb)
 }
 
 #ifdef TTUSB_HWSECTIONS
-static void ttusb_handle_ts_data(struct ttusb_channel *channel, const u8 * data,
+static void ttusb_handle_ts_data(struct dvb_demux_feed *dvbdmxfeed, const u8 * data,
 			  int len)
 {
-	struct dvb_demux_feed *dvbdmxfeed = channel->dvbdmxfeed;
-
 	dvbdmxfeed->cb.ts(data, len, 0, 0, &dvbdmxfeed->feed.ts, 0);
 }
 
-static void ttusb_handle_sec_data(struct ttusb_channel *channel, const u8 * data,
+static void ttusb_handle_sec_data(struct dvb_demux_feed *dvbdmxfeed, const u8 * data,
 			   int len)
 {
 //      struct dvb_demux_feed *dvbdmxfeed = channel->dvbdmxfeed;
@@ -905,31 +890,10 @@ static void ttusb_handle_sec_data(struct ttusb_channel *channel, const u8 * data
 }
 #endif
 
-static struct ttusb_channel *ttusb_channel_allocate(struct ttusb *ttusb)
-{
-	int i;
-
-	if (down_interruptible(&ttusb->sem))
-		return NULL;
-
-	/* lock! */
-	for (i = 0; i < TTUSB_MAXCHANNEL; ++i) {
-		if (!ttusb->channel[i].active) {
-			ttusb->channel[i].active = 1;
-			up(&ttusb->sem);
-			return ttusb->channel + i;
-		}
-	}
-
-	up(&ttusb->sem);
-
-	return NULL;
-}
-
 static int ttusb_start_feed(struct dvb_demux_feed *dvbdmxfeed)
 {
 	struct ttusb *ttusb = (struct ttusb *) dvbdmxfeed->demux;
-	struct ttusb_channel *channel;
+	int feed_type = 1;
 
 	dprintk("ttusb_start_feed\n");
 
@@ -949,35 +913,22 @@ static int ttusb_start_feed(struct dvb_demux_feed *dvbdmxfeed)
 		case DMX_TS_PES_TELETEXT:
 		case DMX_TS_PES_PCR:
 		case DMX_TS_PES_OTHER:
-			channel = ttusb_channel_allocate(ttusb);
 			break;
 		default:
 			return -EINVAL;
 		}
-	} else {
-		channel = ttusb_channel_allocate(ttusb);
 	}
-
-	if (!channel)
-		return -EBUSY;
-
-	dvbdmxfeed->priv = channel;
-	channel->dvbdmxfeed = dvbdmxfeed;
-
-	channel->pid = dvbdmxfeed->pid;
 
 #ifdef TTUSB_HWSECTIONS
-	if (dvbdmxfeed->type == DMX_TYPE_TS) {
-		channel->type = 1;
-	} else if (dvbdmxfeed->type == DMX_TYPE_SEC) {
-		channel->type = 2;
 #error TODO: allocate filters
+	if (dvbdmxfeed->type == DMX_TYPE_TS) {
+		feed_type = 1;
+	} else if (dvbdmxfeed->type == DMX_TYPE_SEC) {
+		feed_type = 2;
 	}
-#else
-	channel->type = 1;
 #endif
 
-	ttusb_set_channel(ttusb, channel->id, channel->type, channel->pid);
+	ttusb_set_channel(ttusb, dvbdmxfeed->index, feed_type, dvbdmxfeed->pid);
 
 	if (0 == ttusb->running_feed_count++)
 		ttusb_start_iso_xfer(ttusb);
@@ -987,16 +938,12 @@ static int ttusb_start_feed(struct dvb_demux_feed *dvbdmxfeed)
 
 static int ttusb_stop_feed(struct dvb_demux_feed *dvbdmxfeed)
 {
-	struct ttusb_channel *channel =
-	    (struct ttusb_channel *) dvbdmxfeed->priv;
 	struct ttusb *ttusb = (struct ttusb *) dvbdmxfeed->demux;
 
-	ttusb_del_channel(channel->ttusb, channel->id);
+	ttusb_del_channel(ttusb, dvbdmxfeed->index);
 
 	if (--ttusb->running_feed_count == 0)
 		ttusb_stop_iso_xfer(ttusb);
-
-	channel->active = 0;
 
 	return 0;
 }
@@ -1406,7 +1353,7 @@ static int ttusb_probe(struct usb_interface *intf, const struct usb_device_id *i
 {
 	struct usb_device *udev;
 	struct ttusb *ttusb;
-	int result, channel;
+	int result;
 
 	dprintk("%s: TTUSB DVB connected\n", __FUNCTION__);
 
@@ -1419,15 +1366,10 @@ static int ttusb_probe(struct usb_interface *intf, const struct usb_device_id *i
 
 	memset(ttusb, 0, sizeof(struct ttusb));
 
-	for (channel = 0; channel < TTUSB_MAXCHANNEL; ++channel) {
-		ttusb->channel[channel].id = channel;
-		ttusb->channel[channel].ttusb = ttusb;
-	}
-
 	ttusb->dev = udev;
 	ttusb->c = 0;
 	ttusb->mux_state = 0;
-	sema_init(&ttusb->sem, 0);
+	sema_init(&ttusb->semi2c, 0);
 	sema_init(&ttusb->semusb, 1);
 
 	ttusb_setup_interfaces(ttusb);
@@ -1436,7 +1378,7 @@ static int ttusb_probe(struct usb_interface *intf, const struct usb_device_id *i
 	if (ttusb_init_controller(ttusb))
 		printk("ttusb_init_controller: error\n");
 
-	up(&ttusb->sem);
+	up(&ttusb->semi2c);
 
 	dvb_register_adapter(&ttusb->adapter, "Technotrend/Hauppauge Nova-USB", THIS_MODULE);
 	ttusb->adapter->priv = ttusb;

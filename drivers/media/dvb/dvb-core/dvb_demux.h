@@ -98,6 +98,7 @@ struct dvb_demux_feed {
         u16 peslen;
 
 	struct list_head list_head;
+		int index; /* a unique index for each feed (can be used as hardware pid filter index) */
 };
 
 struct dvb_demux {

@@ -349,7 +349,6 @@ static int dibusb_exit(struct usb_dibusb *dib)
 	dibusb_remote_exit(dib);
 	dibusb_fe_exit(dib);
 	dibusb_i2c_exit(dib);
-	dibusb_pid_list_exit(dib);
 	dibusb_dvb_exit(dib);
 	dibusb_urb_exit(dib);
 	deb_info("init_state should be zero now: %x\n",dib->init_state);
@@ -368,7 +367,6 @@ static int dibusb_init(struct usb_dibusb *dib)
 	
 	if ((ret = dibusb_urb_init(dib)) ||
 		(ret = dibusb_dvb_init(dib)) || 
-		(ret = dibusb_pid_list_init(dib)) ||
 		(ret = dibusb_i2c_init(dib))) {
 		dibusb_exit(dib);
 		return ret;

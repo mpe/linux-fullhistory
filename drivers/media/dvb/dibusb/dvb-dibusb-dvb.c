@@ -22,7 +22,6 @@ static u32 urb_compl_count;
 void dibusb_urb_complete(struct urb *urb, struct pt_regs *ptregs)
 {
 	struct usb_dibusb *dib = urb->context;
-	int ret;
 
 	deb_ts("urb complete feedcount: %d, status: %d, length: %d\n",dib->feedcount,urb->status,
 			urb->actual_length);
@@ -45,24 +44,12 @@ void dibusb_urb_complete(struct urb *urb, struct pt_regs *ptregs)
 	}
 
 	if (dib->feedcount > 0) {
-		deb_ts("URB return len: %d\n",urb->actual_length);
-		if (urb->actual_length % 188) 
-			deb_ts("TS Packets: %d, %d\n", urb->actual_length/188,urb->actual_length % 188);
-
-		/* Francois recommends to drop not full-filled packets, even if they may 
-		 * contain valid TS packets, at least for USB1.1
-		 *
-		 * if (urb->actual_length == dib->dibdev->parm->default_size && dib->dvb_is_ready) */
 		if (dib->init_state & DIBUSB_STATE_DVB)
 			dvb_dmx_swfilter(&dib->demux, (u8*) urb->transfer_buffer,urb->actual_length);
-		else
-			deb_ts("URB dropped because of the " 
-					"actual_length or !dvb_is_ready (%d).\n",dib->init_state & DIBUSB_STATE_DVB);
 	} else 
 		deb_ts("URB dropped because of feedcount.\n");
 
-	ret = usb_submit_urb(urb,GFP_ATOMIC);
-	deb_ts("urb resubmitted, (%d)\n",ret);
+	usb_submit_urb(urb,GFP_ATOMIC);
 }
 
 static int dibusb_ctrl_feed(struct dvb_demux_feed *dvbdmxfeed, int onoff) 
@@ -90,11 +77,10 @@ static int dibusb_ctrl_feed(struct dvb_demux_feed *dvbdmxfeed, int onoff)
 	
 	dib->feedcount = newfeedcount;
 
-	/* get a free pid from the list and activate it on the device
-	 * specific pid_filter
-	 */
-	if (dib->pid_parse)
-		dibusb_ctrl_pid(dib,dvbdmxfeed,onoff);
+	/* activate the pid on the device specific pid_filter */
+	deb_ts("setting pid: %5d %04x at index %d '%s'\n",dvbdmxfeed->pid,dvbdmxfeed->pid,dvbdmxfeed->index,onoff ? "on" : "off");
+	if (dib->pid_parse && dib->xfer_ops.pid_ctrl != NULL)
+		dib->xfer_ops.pid_ctrl(dib->fe,dvbdmxfeed->index,dvbdmxfeed->pid,onoff);
 
 	/* 
 	 * start the feed if this was the first pid to set and there is still a pid

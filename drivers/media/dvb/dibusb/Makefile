@@ -3,8 +3,7 @@ dvb-dibusb-objs = dvb-dibusb-core.o \
 	dvb-dibusb-fe-i2c.o \
 	dvb-dibusb-firmware.o \
 	dvb-dibusb-remote.o \
-	dvb-dibusb-usb.o \
-	dvb-dibusb-pid.o
+	dvb-dibusb-usb.o
 
 obj-$(CONFIG_DVB_DIBUSB) += dvb-dibusb.o
 
