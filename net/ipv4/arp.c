@@ -54,6 +54,10 @@
  *		Stuart Cheshire	:	Metricom and grat arp fixes
  *					*** FOR 2.1 clean this up ***
  *		Lawrence V. Stefani: (08/12/96) Added FDDI support.
+ *		Alan Cox 	:	Took the AP1000 nasty FDDI hack and
+ *					folded into the mainstream FDDI code.
+ *					Ack spit, Linus how did you allow that
+ *					one in...
  */
 
 /* RFC1122 Status:
@@ -1383,7 +1387,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
  *	is not from an IP number.  We can't currently handle this, so toss
  *	it. 
  */  
-#ifdef CONFIG_FDDI
+#if defined(CONFIG_FDDI) || defined(CONFIG_AP1000)
 	if (dev->type == ARPHRD_FDDI)
 	{
 		/*
@@ -1415,18 +1419,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	}
 #else
 	if (arp->ar_hln != dev->addr_len    || 
-#if CONFIG_AP1000
-	    /*
-	     * ARP from cafe-f was found to use ARPHDR_IEEE802 instead of
-	     * the expected ARPHDR_ETHER.
-	     */
-	    (strcmp(dev->name,"fddi") == 0 && 
-	     arp->ar_hrd != ARPHRD_ETHER && arp->ar_hrd != ARPHRD_IEEE802) ||
-	    (strcmp(dev->name,"fddi") != 0 &&
-	     dev->type != ntohs(arp->ar_hrd)) ||
-#else
 	    dev->type != ntohs(arp->ar_hrd) || 
-#endif
 		dev->flags & IFF_NOARP          ||
 	        skb->pkt_type == PACKET_OTHERHOST ||
 		arp->ar_pln != 4) {
@@ -1491,8 +1484,6 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	tha=arp_ptr;
 	arp_ptr += dev->addr_len;
 	memcpy(&tip, arp_ptr, 4);
-
-
 /* 
  *	Check for bad requests for 127.x.x.x and requests for multicast
  *	addresses.  If this is one such, delete it.

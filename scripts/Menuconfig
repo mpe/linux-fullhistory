@@ -400,7 +400,7 @@ function l_int () {
 			answer="`cat MCdialog.out`"
 			answer="${answer:-$3}"
 
-			if expr $answer : '0$\|-?[1-9][0-9]*$' >/dev/null
+			if expr $answer : '0$\|-\?[1-9][0-9]*$' >/dev/null
 			then
 				eval $2="$answer"
 			else
@@ -433,7 +433,7 @@ function l_hex () {
 			answer="${answer:-$3}"
 			answer="${answer##*[x,X]}"
 
-			if expr $answer : '[0-9a-fA-F]+$' >/dev/null
+			if expr $answer : '[0-9a-fA-F]\+$' >/dev/null
 			then
 				eval $2="$answer"
 			else

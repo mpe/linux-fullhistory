@@ -42,6 +42,10 @@ extern ctl_table bridge_table[];
 extern ctl_table ipv6_table[];
 #endif
 
+#ifdef CONFIG_TR
+extern ctl_table tr_table[];
+#endif
+
 ctl_table net_table[] = {
 	{NET_CORE,   "core",      NULL, 0, 0555, core_table},      
         {NET_UNIX,   "unix",      NULL, 0, 0555, unix_table},
@@ -63,6 +67,9 @@ ctl_table net_table[] = {
 #endif
 #ifdef CONFIG_IPV6
 	{NET_IPV6, "ipv6", NULL, 0, 0555, ipv6_table},
+#endif
+#ifdef CONFIG_TR
+	{NET_TR, "token-ring", NULL, 0, 0555, tr_table},
 #endif
 	{0}
 };

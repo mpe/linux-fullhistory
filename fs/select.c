@@ -62,25 +62,31 @@ static void free_wait(poll_table * p)
 }
 
 /*
- * Due to kernel stack usage, we use a _limited_ fd_set type here, and once
- * we really start supporting >256 file descriptors we'll probably have to
- * allocate the kernel fd_set copies dynamically.. (The kernel select routines
- * are careful to touch only the defined low bits of any fd_set pointer, this
- * is important for performance too).
+ * For the kernel fd_set we use a fixed set-size for allocation purposes.
+ * This set-size doesn't necessarily bear any relation to the size the user
+ * uses, but should preferably obviously be larger than any possible user
+ * size (NR_OPEN bits).
+ *
+ * We need 6 bitmaps (in/out/ex for both incoming and outgoing), and we
+ * allocate one page for all the bitmaps. Thus we have 8*PAGE_SIZE bits,
+ * to be divided by 6. And we'd better make sure we round to a full
+ * long-word (in fact, we'll round to 64 bytes).
  */
-typedef unsigned long limited_fd_set[NR_OPEN/(8*(sizeof(unsigned long)))];
+#define KFDS_64BLOCK ((PAGE_SIZE/(6*64))*64)
+#define KFDS_NR (KFDS_64BLOCK*8 > NR_OPEN ? NR_OPEN : KFDS_64BLOCK*8)
+typedef unsigned long kernel_fd_set[KFDS_NR/(8*sizeof(unsigned long))];
 
 typedef struct {
-	limited_fd_set in, out, ex;
-	limited_fd_set res_in, res_out, res_ex;
+	kernel_fd_set in, out, ex;
+	kernel_fd_set res_in, res_out, res_ex;
 } fd_set_buffer;
 
 #define __IN(in)	(in)
-#define __OUT(in)	(in + sizeof(limited_fd_set)/sizeof(unsigned long))
-#define __EX(in)	(in + 2*sizeof(limited_fd_set)/sizeof(unsigned long))
-#define __RES_IN(in)	(in + 3*sizeof(limited_fd_set)/sizeof(unsigned long))
-#define __RES_OUT(in)	(in + 4*sizeof(limited_fd_set)/sizeof(unsigned long))
-#define __RES_EX(in)	(in + 5*sizeof(limited_fd_set)/sizeof(unsigned long))
+#define __OUT(in)	(in + sizeof(kernel_fd_set)/sizeof(unsigned long))
+#define __EX(in)	(in + 2*sizeof(kernel_fd_set)/sizeof(unsigned long))
+#define __RES_IN(in)	(in + 3*sizeof(kernel_fd_set)/sizeof(unsigned long))
+#define __RES_OUT(in)	(in + 4*sizeof(kernel_fd_set)/sizeof(unsigned long))
+#define __RES_EX(in)	(in + 5*sizeof(kernel_fd_set)/sizeof(unsigned long))
 
 #define BITS(in)	(*__IN(in)|*__OUT(in)|*__EX(in))
 
@@ -277,17 +283,20 @@ __zero_fd_set((nr)-1, (unsigned long *) (fdp))
 asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
 {
 	int error = -EINVAL;
-	fd_set_buffer fds;
+	fd_set_buffer *fds;
 	unsigned long timeout;
 
 	lock_kernel();
+	fds = (fd_set_buffer *) __get_free_page(GFP_KERNEL);
+	if (!fds)
+		goto out;
 	if (n < 0)
 		goto out;
-	if (n > NR_OPEN)
-		n = NR_OPEN;
-	if ((error = get_fd_set(n, inp, &fds.in)) ||
-	    (error = get_fd_set(n, outp, &fds.out)) ||
-	    (error = get_fd_set(n, exp, &fds.ex))) goto out;
+	if (n > KFDS_NR)
+		n = KFDS_NR;
+	if ((error = get_fd_set(n, inp, &fds->in)) ||
+	    (error = get_fd_set(n, outp, &fds->out)) ||
+	    (error = get_fd_set(n, exp, &fds->ex))) goto out;
 	timeout = ~0UL;
 	if (tvp) {
 		error = verify_area(VERIFY_WRITE, tvp, sizeof(*tvp));
@@ -303,11 +312,11 @@ asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct 
 		if (timeout)
 			timeout += jiffies + 1;
 	}
-	zero_fd_set(n, &fds.res_in);
-	zero_fd_set(n, &fds.res_out);
-	zero_fd_set(n, &fds.res_ex);
+	zero_fd_set(n, &fds->res_in);
+	zero_fd_set(n, &fds->res_out);
+	zero_fd_set(n, &fds->res_ex);
 	current->timeout = timeout;
-	error = do_select(n, &fds);
+	error = do_select(n, fds);
 	timeout = current->timeout - jiffies - 1;
 	current->timeout = 0;
 	if ((long) timeout < 0)
@@ -326,10 +335,11 @@ asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct 
 			goto out;
 		error = 0;
 	}
-	set_fd_set(n, inp, &fds.res_in);
-	set_fd_set(n, outp, &fds.res_out);
-	set_fd_set(n, exp, &fds.res_ex);
+	set_fd_set(n, inp, &fds->res_in);
+	set_fd_set(n, outp, &fds->res_out);
+	set_fd_set(n, exp, &fds->res_ex);
 out:
+	free_page((unsigned long) fds);
 	unlock_kernel();
 	return error;
 }
@@ -376,15 +386,12 @@ static int do_poll(unsigned int nfds, struct pollfd *fds, poll_table *wait)
 
 asmlinkage int sys_poll(struct pollfd * ufds, unsigned int nfds, int timeout)
 {
-        int i, count, fdcount, err = -EINVAL;
+	int i, count, fdcount, err;
 	struct pollfd * fds, *fds1;
 	poll_table wait_table;
 	struct poll_table_entry *entry;
 
 	lock_kernel();
-	if (nfds > NR_OPEN)
-		goto out;
-
 	err = -ENOMEM;
 	entry = (struct poll_table_entry *) __get_free_page(GFP_KERNEL);
 	if (!entry)

@@ -46,14 +46,14 @@ static int seq = 0;
 #define BIF_MTU 10240
 
 static struct device *bif_device = 0;
-static struct enet_statistics *bif_stats = 0;
+static struct net_device_stats *bif_stats = 0;
 
 int bif_init(struct device *dev);
 int bif_open(struct device *dev);
 static int bif_xmit(struct sk_buff *skb, struct device *dev);
 int bif_rx(struct sk_buff *skb);
 int bif_stop(struct device *dev);
-static struct enet_statistics *bif_get_stats(struct device *dev);
+static struct net_device_stats *bif_get_stats(struct device *dev);
 
 static int bif_hard_header(struct sk_buff *skb, struct device *dev,
 			   unsigned short type, void *daddr,
@@ -128,11 +128,11 @@ int bif_init(struct device *dev)
     dev->open = bif_open;
     dev->flags = IFF_NOARP;   /* Don't use ARP on this device */
     dev->family = AF_INET;
-    dev->priv = kmalloc(sizeof(struct enet_statistics), GFP_KERNEL);
+    dev->priv = kmalloc(sizeof(struct net_device_stats), GFP_KERNEL);
     if (dev->priv == NULL)
 	return -ENOMEM;
-    memset(dev->priv, 0, sizeof(struct enet_statistics));
-    bif_stats = (struct enet_statistics *)bif_device->priv;
+    memset(dev->priv, 0, sizeof(struct net_device_stats));
+    bif_stats = (struct net_device_stats *)bif_device->priv;
 
 
     dev->stop = bif_stop;
@@ -282,8 +282,8 @@ int bif_stop(struct device *dev)
 /*
  * Return statistics of bif driver.
  */
-static struct enet_statistics *bif_get_stats(struct device *dev)
+static struct net_device_stats *bif_get_stats(struct device *dev)
 {
-    return((struct enet_statistics *)dev->priv);
+    return((struct net_device_stats *)dev->priv);
 }
     

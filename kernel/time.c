@@ -66,13 +66,13 @@ asmlinkage int sys_time(int * tloc)
 {
 	int i;
 
-	lock_kernel();
+	/* SMP: This is fairly trivial. We grab CURRENT_TIME and 
+	   stuff it to user space. No side effects */
 	i = CURRENT_TIME;
 	if (tloc) {
 		if (put_user(i,tloc))
 			i = -EFAULT;
 	}
-	unlock_kernel();
 	return i;
 }
 
@@ -82,16 +82,20 @@ asmlinkage int sys_time(int * tloc)
  * why not move it into the appropriate arch directory (for those
  * architectures that need it).
  */
+ 
 asmlinkage int sys_stime(int * tptr)
 {
-	int value = -EPERM;
+	int value;
 
-	lock_kernel();
 	if (!suser())
-		goto out;
-	value = -EFAULT;
+		return -EPERM;
 	if (get_user(value, tptr))
-		goto out;
+		return -EFAULT;
+	/*
+	 *	SMP: We need to lock out everything for the time update
+	 *	the new cli/sti semantics will let us drop this lock soon.
+	 */
+	lock_kernel();
 	cli();
 	xtime.tv_sec = value;
 	xtime.tv_usec = 0;
@@ -99,10 +103,8 @@ asmlinkage int sys_stime(int * tptr)
 	time_maxerror = MAXPHASE;
 	time_esterror = MAXPHASE;
 	sti();
-	value = 0;
-out:
 	unlock_kernel();
-	return value;
+	return 0;
 }
 
 #endif

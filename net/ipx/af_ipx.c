@@ -2103,7 +2103,7 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	ipx_interface	*intrfc;
 	struct ipxhdr *ipx;
 
-	skb->h.raw = (void *)ipx = skb->nh.ipxh;
+	ipx = skb->nh.ipxh;
 	
 	/* Too small? */
 	if(ntohs(ipx->ipx_pktsize)<sizeof(struct ipxhdr)) {

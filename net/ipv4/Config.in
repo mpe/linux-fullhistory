@@ -18,12 +18,10 @@ if [ "$CONFIG_FIREWALL" = "y" ]; then
   fi
 fi
 bool 'IP: accounting' CONFIG_IP_ACCT
-if [ "$CONFIG_IP_FORWARD" = "y" ]; then
-  bool 'IP: optimize as router not host' CONFIG_IP_ROUTER
-  tristate 'IP: tunneling' CONFIG_NET_IPIP
-  if [ "$CONFIG_IP_MULTICAST" = "y" ]; then
-    bool 'IP: multicast routing' CONFIG_IP_MROUTE
-  fi
+bool 'IP: optimize as router not host' CONFIG_IP_ROUTER
+tristate 'IP: tunneling' CONFIG_NET_IPIP
+if [ "$CONFIG_IP_MULTICAST" = "y" ]; then
+  bool 'IP: multicast routing' CONFIG_IP_MROUTE
 fi
 if [ "$CONFIG_NET_ALIAS" = "y" ]; then
 	tristate 'IP: aliasing support' CONFIG_IP_ALIAS

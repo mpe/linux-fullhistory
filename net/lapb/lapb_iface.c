@@ -14,6 +14,9 @@
  *
  *	History
  *	LAPB 001	Jonathan Naylor	Started Coding
+ *
+ *	TODO
+ *	Add FRMRs.
  */
  
 #include <linux/config.h>
@@ -104,7 +107,7 @@ static void lapb_insert_cb(lapb_cb *lapb)
  *	Convert the integer token used by the device driver into a pointer
  *	to a LAPB control structure.
  */
-lapb_cb *lapb_tokentostruct(void *token)
+static lapb_cb *lapb_tokentostruct(void *token)
 {
 	lapb_cb *lapb;
 
@@ -129,6 +132,7 @@ static lapb_cb *lapb_create_cb(void)
 
 	memset(lapb, 0x00, sizeof(*lapb));
 
+	skb_queue_head_init(&lapb->input_queue);
 	skb_queue_head_init(&lapb->write_queue);
 	skb_queue_head_init(&lapb->ack_queue);
 
@@ -323,6 +327,18 @@ int lapb_data_request(void *token, struct sk_buff *skb)
 	skb_queue_tail(&lapb->write_queue, skb);
 
 	lapb_kick(lapb);
+
+	return LAPB_OK;
+}
+
+int lapb_data_received(void *token, struct sk_buff *skb)
+{
+	lapb_cb *lapb;
+
+	if ((lapb = lapb_tokentostruct(token)) == NULL)
+		return LAPB_BADTOKEN;
+
+	skb_queue_tail(&lapb->input_queue, skb);
 
 	return LAPB_OK;
 }

@@ -49,7 +49,7 @@
 #include <linux/swap.h>
 #include <linux/ctype.h>
 
-#if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_HD)
+#if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_HD) || defined(CONFIG_BLK_DEV_IDE_MODULE) || defined(CONFIG_BLK_DEV_HD_MODULE)
 extern struct drive_info_struct drive_info;
 #endif
 
@@ -202,7 +202,7 @@ EXPORT_SYMBOL(gendisk_head);
 EXPORT_SYMBOL(resetup_one_dev);
 EXPORT_SYMBOL(unplug_device);
 
-#if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_HD)
+#if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_HD) || defined(CONFIG_BLK_DEV_IDE_MODULE) || defined(CONFIG_BLK_DEV_HD_MODULE)
 EXPORT_SYMBOL(drive_info);
 #endif
 

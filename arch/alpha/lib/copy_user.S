@@ -17,7 +17,6 @@
  *	length in $0
  *	destination address in $6
  *	source address in $7
- *	exception pointer in $8
  *	return address in $28
  *
  * Outputs:

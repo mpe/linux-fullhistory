@@ -45,6 +45,9 @@ void lapb_clear_queues(lapb_cb *lapb)
 {
 	struct sk_buff *skb;
 
+	while ((skb = skb_dequeue(&lapb->input_queue)) != NULL)
+		kfree_skb(skb, FREE_READ);
+
 	while ((skb = skb_dequeue(&lapb->write_queue)) != NULL)
 		kfree_skb(skb, FREE_WRITE);
 

@@ -126,7 +126,7 @@ u_char fddi_bitrev[256] = {
 static u_char apfddi_saddr[6] = { 0x42, 0x9a, 0x08, 0x6e, 0x11, 0x41 };
 
 struct device *apfddi_device = NULL;
-struct enet_statistics *apfddi_stats = NULL;
+struct net_device_stats *apfddi_stats = NULL;
 
 volatile struct apfddi_queue *apfddi_queue_top = NULL;
 
@@ -254,7 +254,7 @@ int apfddi_init(struct device *dev);
 static void apfddi_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int apfddi_xmit(struct sk_buff *skb, struct device *dev);
 int apfddi_rx(struct mac_buf *mbuf);
-static struct enet_statistics *apfddi_get_stats(struct device *dev);
+static struct net_device_stats *apfddi_get_stats(struct device *dev);
 #if APFDDI_DEBUG
 void dump_packet(char *action, char *buf, int len, int seq);
 #endif
@@ -496,11 +496,11 @@ int apfddi_init(struct device *dev)
     dev->stop = apfddi_stop;
     dev->hard_start_xmit = apfddi_xmit;
     dev->get_stats = apfddi_get_stats;
-    dev->priv = kmalloc(sizeof(struct enet_statistics), GFP_ATOMIC); 
+    dev->priv = kmalloc(sizeof(struct net_device_stats), GFP_ATOMIC); 
     if (dev->priv == NULL)
 	return -ENOMEM;
-    memset(dev->priv, 0, sizeof(struct enet_statistics)); 
-    apfddi_stats = (struct enet_statistics *)apfddi_device->priv;
+    memset(dev->priv, 0, sizeof(struct net_device_stats)); 
+    apfddi_stats = (struct net_device_stats *)apfddi_device->priv;
 
     /* Initialise the fddi device structure */
     for (i = 0; i < DEV_NUMBUFFS; i++)
@@ -692,9 +692,9 @@ void print_mbuf(struct mac_buf *mbuf)
 /*
  * Return statistics of fddi driver.
  */
-static struct enet_statistics *apfddi_get_stats(struct device *dev)
+static struct net_device_stats *apfddi_get_stats(struct device *dev)
 {
-    return((struct enet_statistics *)dev->priv);
+    return((struct net_device_stats *)dev->priv);
 }
 
     

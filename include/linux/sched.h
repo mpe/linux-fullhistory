@@ -127,7 +127,7 @@ struct files_struct {
 
 struct fs_struct {
 	int count;
-	unsigned short umask;
+	int umask;
 	struct inode * root, * pwd;
 };
 

@@ -23,26 +23,42 @@ unsigned int csum_partial(const unsigned char * buff, int len, unsigned int sum)
  * better 64-bit) boundary
  */
 
-unsigned int csum_partial_copy_from_user( int * err, const char *src, 
-						char *dst, int len, int sum);
+unsigned int csum_partial_copy_generic( const char *src, char *dst, int len, int sum,
+					int *src_err_ptr, int *dst_err_ptr);
 
-/*
- * I hope GCC will optimize 'dummy' away ...
- */
-
-unsigned int csum_partial_copy_nocheck_generic( int * err, const char *src, char *dst,
-						 int len, int sum);
-
-extern __inline__ unsigned int csum_partial_copy_nocheck ( const char *src, char *dst,
-                                                        int len, int sum)
+extern __inline__
+unsigned int csum_partial_copy_nocheck ( const char *src, char *dst,
+					int len, int sum)
 {
-        int dummy;
+	int *src_err_ptr=NULL, *dst_err_ptr=NULL;
 
-        return csum_partial_copy_nocheck_generic ( &dummy, src, dst, len, sum);
+	return csum_partial_copy_generic ( src, dst, len, sum, src_err_ptr, dst_err_ptr);
+}
+
+extern __inline__
+unsigned int csum_partial_copy_from_user ( const char *src, char *dst,
+						int len, int sum, int *err_ptr)
+{
+	int *dst_err_ptr=NULL;
+
+	return csum_partial_copy_generic ( src, dst, len, sum, err_ptr, dst_err_ptr);
 }
 
 /*
- * These are the 'old' way of doing checksums, a warning message will be
+ * This combination is currently not used, but possible:
+ */
+
+extern __inline__
+unsigned int csum_partial_copy_to_user ( const char *src, char *dst,
+					int len, int sum, int *err_ptr)
+{
+	int *src_err_ptr=NULL;
+
+	return csum_partial_copy_generic ( src, dst, len, sum, src_err_ptr, err_ptr);
+}
+
+/*
+ * These are the old (and unsafe) way of doing checksums, a warning message will be
  * printed if they are used and an exeption occurs.
  *
  * these functions should go away after some time.

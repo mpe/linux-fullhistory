@@ -64,7 +64,7 @@ static unsigned int net_debug = NET_DEBUG;
 
 /* Information that need to be kept for each board. */
 struct net_local {
-	struct net_driver_stats stats;
+	struct net_device_stats stats;
 	unsigned short receive_ptr;		/* What address in packet memory do we expect a recv_pkt_header? */
 	long open_time;				/* Useless example local info. */
 };
@@ -84,7 +84,7 @@ static int seeq8005_send_packet(struct sk_buff *skb, struct device *dev);
 static void seeq8005_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void seeq8005_rx(struct device *dev);
 static int seeq8005_close(struct device *dev);
-static struct net_driver_stats *seeq8005_get_stats(struct device *dev);
+static struct net_device_stats *seeq8005_get_stats(struct device *dev);
 static void set_multicast_list(struct device *dev);
 
 /* Example routines you must write ;->. */
@@ -593,7 +593,7 @@ seeq8005_close(struct device *dev)
 
 /* Get the current statistics.	This may be called with the card open or
    closed. */
-static struct net_driver_stats *seeq8005_get_stats(struct device *dev)
+static struct net_device_stats *seeq8005_get_stats(struct device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 

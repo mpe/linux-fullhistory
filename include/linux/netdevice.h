@@ -185,12 +185,6 @@ struct device
 	unsigned char		if_port;	/* Selectable AUI, TP,..*/
 	unsigned char		dma;		/* DMA channel		*/
 
-	/*
-	 *	FIXME:
-	 *	The description 'enet_statistics' is misleading. We
-	 *	should change this.
-	 */
-	 
 	struct net_device_stats* (*get_stats)(struct device *dev);
 	struct iw_statistics*	(*get_wireless_stats)(struct device *dev);
 

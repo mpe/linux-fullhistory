@@ -84,6 +84,7 @@ struct __sysctl_args {
 #define NET_IPV6	11
 #define NET_ROSE	12
 #define NET_X25		13
+#define NET_TR		14
 
 /* /proc/sys/net/core */
 
@@ -164,6 +165,12 @@ enum {
 	NET_X25_RESET_REQUEST_TIMEOUT,
 	NET_X25_CLEAR_REQUEST_TIMEOUT,
 	NET_X25_ACK_HOLD_BACK_TIMEOUT
+};
+
+/* /proc/sys/net/token-ring */
+enum
+{
+	NET_TR_RIF_TIMEOUT=1
 };
 
 /* CTL_PROC names: */

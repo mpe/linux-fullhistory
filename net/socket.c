@@ -645,7 +645,7 @@ out:
 asmlinkage int sys_socketpair(int family, int type, int protocol, int usockvec[2])
 {
 	int fd1, fd2, i;
-	struct socket *sock1, *sock2;
+	struct socket *sock1=NULL, *sock2=NULL;
 	int err;
 
 	lock_kernel();
@@ -700,6 +700,10 @@ asmlinkage int sys_socketpair(int family, int type, int protocol, int usockvec[2
 		}
 	}
 out:
+	if(sock1)
+		sockfd_put(sock1);
+	if(sock2)
+		sockfd_put(sock2);
 	unlock_kernel();
 	return err;
 }
@@ -1114,6 +1118,7 @@ asmlinkage int sys_shutdown(int fd, int how)
 		err=sock->ops->shutdown(sock, how);
 		sockfd_put(sock);
 	}
+	unlock_kernel();
 	return err;
 }
 

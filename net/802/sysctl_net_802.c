@@ -16,3 +16,11 @@
 ctl_table e802_table[] = {
 	{0}
 };
+
+#ifdef CONFIG_TR
+extern int sysctl_tr_rif_timeout;
+ctl_table tr_table[] = {
+	{NET_TR_RIF_TIMEOUT, "rif_timeout", &sysctl_tr_rif_timeout, sizeof(int),
+	 0644, NULL, &proc_dointvec},
+};
+#endif

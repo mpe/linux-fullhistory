@@ -31,14 +31,14 @@
  *	  PCI-CPU bridge or PCI-ISA bridge.
  *	- If you can't find the actual information in your hardware
  *	  booklet, try to read the references of the chip on the board.
- *	- Send all that to linux-pcisupport@cao-vlsi.ibp.fr,
+ *	- Send all that to linux-pcisupport@cck.uni-kl.de
  *	  and I'll add your device to the list as soon as possible
  *
  * BEFORE you send a mail, please check the latest linux releases
  * to be sure it has not been recently added.
  *
  *        Thanks
- *		Frederic Potter.
+ *		Jens Maurer
  */
 
 
@@ -418,6 +418,7 @@
 #define PCI_DEVICE_ID_3COM_3C595T4	0x5951
 #define PCI_DEVICE_ID_3COM_3C595MII	0x5952
 #define PCI_DEVICE_ID_3COM_3C900TPO	0x9000
+#define PCI_DEVICE_ID_3COM_3C905TX	0x9050
 
 #define PCI_VENDOR_ID_AL		0x10b9
 #define PCI_DEVICE_ID_AL_M1445		0x1445
@@ -607,9 +608,10 @@
 #define PCI_VENDOR_ID_ATRONICS		0x907f
 #define PCI_DEVICE_ID_ATRONICS_2015	0x2015
 
-#define PCI_VENDOR_ID_HER		0xedd8
-#define PCI_DEVICE_ID_HER_STING		0xa091
-#define PCI_DEVICE_ID_HER_STINGARK	0xa099
+#define PCI_VENDOR_ID_ARK		0xedd8
+#define PCI_DEVICE_ID_ARK_STING		0xa091
+#define PCI_DEVICE_ID_ARK_STINGARK	0xa099
+#define PCI_DEVICE_ID_ARK_2000MT	0xa0a1
 
 /*
  * The PCI interface treats multi-function devices as independent

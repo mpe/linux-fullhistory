@@ -960,11 +960,8 @@ S: The White House, Melbourne Street, LEEDS
 S: LS2  7PS,   UK
 
 N: Craig Metz
-E: cmetz@tjhsst.edu
-D: Some of PAS 16 mixer & PCM support
-S: 12305 Country Ridge Lane
-S: Fairfax, Virginia 22033
-S: USA
+E: cmetz@inner.net
+D: Some of PAS 16 mixer & PCM support, inet6-apps
 
 N: William (Bill) Metzenthen
 E: billm@suburbia.net
@@ -1098,6 +1095,10 @@ S: FEC 313
 S: University of New Mexico
 S: Albuquerque, NM  87131
 S: USA
+
+N: David Parsons
+E: orc@pell.chi.il.us
+D: improved memory detection code.
 
 N: Avery Pennarun
 E: apenwarr@foxnet.net
@@ -1384,9 +1385,9 @@ E: Linus.Torvalds@Helsinki.FI
 W: http://www.cs.helsinki.fi/~torvalds/
 P: 1024/A86B35C5 96 54 50 29 EC 11 44 7A  BE 67 3C 24 03 13 62 C8
 D: Original kernel hacker
-S: Kalevankatu 55 B 37
-S: 00180 Helsinki
-S: Finland
+S: 3665 Benton Street #36
+S: Santa Clara, California 95051
+S: USA
 
 N: Jeff Tranter
 E: Jeff_Tranter@Mitel.COM

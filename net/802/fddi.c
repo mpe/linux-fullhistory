@@ -52,18 +52,23 @@
 int fddi_header(struct sk_buff	*skb, struct device *dev, unsigned short type,
 		void *daddr, void *saddr, unsigned len)
 {
-	struct fddihdr *fddi = (struct fddihdr *)skb_push(skb, FDDI_K_SNAP_HLEN);
-
-	/* Fill in frame header - assume 802.2 SNAP frames for now */
-
+	int hl = FDDI_K_SNAP_HLEN;
+	struct fddihdr *fddi;
+	
+	if(type!=htons(ETH_P_IP))
+		hl=FDDI_K_8022_HLEN-3;
+	fddi = (struct fddihdr *)skb_push(skb, hl);
 	fddi->fc			 = FDDI_FC_K_ASYNC_LLC_DEF;
-	fddi->hdr.llc_snap.dsap		 = FDDI_EXTENDED_SAP;
-	fddi->hdr.llc_snap.ssap		 = FDDI_EXTENDED_SAP;
-	fddi->hdr.llc_snap.ctrl		 = FDDI_UI_CMD;
-	fddi->hdr.llc_snap.oui[0]	 = 0x00;
-	fddi->hdr.llc_snap.oui[1]	 = 0x00;
-	fddi->hdr.llc_snap.oui[2]	 = 0x00;
-	fddi->hdr.llc_snap.ethertype = htons(type);
+	if(type==htons(ETH_P_IP))
+	{
+		fddi->hdr.llc_snap.dsap		 = FDDI_EXTENDED_SAP;
+		fddi->hdr.llc_snap.ssap		 = FDDI_EXTENDED_SAP;
+		fddi->hdr.llc_snap.ctrl		 = FDDI_UI_CMD;
+		fddi->hdr.llc_snap.oui[0]	 = 0x00;
+		fddi->hdr.llc_snap.oui[1]	 = 0x00;
+		fddi->hdr.llc_snap.oui[2]	 = 0x00;
+		fddi->hdr.llc_snap.ethertype = htons(type);
+	}
 
 	/* Set the source and destination hardware addresses */
 	 
@@ -75,9 +80,9 @@ int fddi_header(struct sk_buff	*skb, struct device *dev, unsigned short type,
 	if (daddr != NULL)
 	{
 		memcpy(fddi->daddr, daddr, dev->addr_len);
-		return(FDDI_K_SNAP_HLEN);
+		return(hl);
 	}
-	return(-FDDI_K_SNAP_HLEN);
+	return(-hl);
 }
 
 
@@ -114,15 +119,26 @@ int fddi_rebuild_header(struct sk_buff	*skb)
 unsigned short fddi_type_trans(struct sk_buff *skb, struct device *dev)
 {
 	struct fddihdr *fddi = (struct fddihdr *)skb->data;
-
+	unsigned short type;
+	
 	/*
 	 * Set mac.raw field to point to FC byte, set data field to point
 	 * to start of packet data.  Assume 802.2 SNAP frames for now.
 	 */
 
 	skb->mac.raw = skb->data;			/* point to frame control (FC) */
-	skb_pull(skb, FDDI_K_SNAP_HLEN);	/* adjust for 21 byte header */
-
+	
+	if(fddi->hdr.llc_8022_1.dsap==0xe0)
+	{
+		skb_pull(skb, FDDI_K_8022_HLEN-3);
+		type=htons(ETH_P_8022);
+	}
+	else
+	{
+		skb_pull(skb, FDDI_K_SNAP_HLEN);		/* adjust for 21 byte header */
+		type=fddi->hdr.llc_snap.ethertype;
+	}
+	
 	/* Set packet type based on destination address and flag settings */
 			
 	if (*fddi->daddr & 0x01)
@@ -141,5 +157,6 @@ unsigned short fddi_type_trans(struct sk_buff *skb, struct device *dev)
 
 	/* Assume 802.2 SNAP frames, for now */
 
-	return(fddi->hdr.llc_snap.ethertype);
+	return(type);
+	
 }

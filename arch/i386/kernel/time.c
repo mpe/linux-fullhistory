@@ -41,38 +41,33 @@ static struct {
 	unsigned long high;
 } init_timer_cc, last_timer_cc;
 
-/*
- * This is more assembly than C, but it's also rather
- * timing-critical and we have to use assembler to get
- * reasonable 64-bit arithmetic
- */
+extern volatile unsigned long lost_ticks;
+
+/* change this if you have some constant time drift */
+#define USECS_PER_JIFFY (1000020/HZ)
+
 static unsigned long do_fast_gettimeoffset(void)
 {
 	register unsigned long eax asm("ax");
 	register unsigned long edx asm("dx");
-	unsigned long tmp, quotient, low_timer, missing_time;
+	unsigned long tmp, quotient, low_timer;
 
-	/* Last jiffy when do_fast_gettimeoffset() was called.. */
+	/* Last jiffy when do_fast_gettimeoffset() was called. */
 	static unsigned long last_jiffies=0;
 
-	/* Cached "clocks per usec" value.. */
+	/*
+	 * Cached "1/(clocks per usec)*2^32" value. 
+	 * It has to be recalculated once each jiffy.
+	 */
 	static unsigned long cached_quotient=0;
 
-	/* The "clocks per usec" value is calculated once each jiffy */
 	tmp = jiffies;
+
 	quotient = cached_quotient;
 	low_timer = last_timer_cc.low;
-	missing_time = 0;
+
 	if (last_jiffies != tmp) {
 		last_jiffies = tmp;
-		/*
-		 * test for hanging bottom handler (this means xtime is not 
-		 * updated yet)
-		 */
-		if (test_bit(TIMER_BH, &bh_active) )
-		{
-			missing_time = 1000020/HZ;
-		}
 
 		/* Get last timer tick in absolute kernel time */
 		eax = low_timer;
@@ -86,14 +81,16 @@ static unsigned long do_fast_gettimeoffset(void)
 		 * Divide the 64-bit time with the 32-bit jiffy counter,
 		 * getting the quotient in clocks.
 		 *
-		 * Giving quotient = "average internal clocks per usec"
+		 * Giving quotient = "1/(average internal clocks per usec)*2^32"
+		 * we do this '1/...' trick to get the 'mull' into the critical 
+		 * path. 'mull' is much faster than divl (10 vs. 41 clocks)
 		 */
 		__asm__("divl %2"
 			:"=a" (eax), "=d" (edx)
 			:"r" (tmp),
 			 "0" (eax), "1" (edx));
 
-		edx = 1000020/HZ;
+		edx = USECS_PER_JIFFY;
 		tmp = eax;
 		eax = 0;
 
@@ -114,7 +111,7 @@ static unsigned long do_fast_gettimeoffset(void)
 	eax -= low_timer;
 
 	/*
-	 * Time offset = (1000020/HZ * time_low) / quotient.
+	 * Time offset = (USECS_PER_JIFFY * time_low) * quotient.
 	 */
 
 	__asm__("mull %2"
@@ -123,15 +120,13 @@ static unsigned long do_fast_gettimeoffset(void)
 		 "0" (eax), "1" (edx));
 
 	/*
- 	 * Due to rounding errors (and jiffies inconsistencies),
-	 * we need to check the result so that we'll get a timer
-	 * that is monotonic.
+ 	 * Due to possible jiffies inconsistencies, we need to check 
+	 * the result so that we'll get a timer that is monotonic.
 	 */
-	if (edx >= 1000020/HZ)
-		edx = 1000020/HZ-1;
+	if (edx >= USECS_PER_JIFFY)
+		edx = USECS_PER_JIFFY-1;
 
-	eax = edx + missing_time;
-	return eax;
+	return edx;
 }
 #endif
 
@@ -172,8 +167,8 @@ static unsigned long do_fast_gettimeoffset(void)
 static unsigned long do_slow_gettimeoffset(void)
 {
 	int count;
-	static int count_p = 0;
-	unsigned long offset = 0;
+
+	static int count_p = LATCH;    /* for the first call after boot */
 	static unsigned long jiffies_p = 0;
 
 	/*
@@ -183,53 +178,69 @@ static unsigned long do_slow_gettimeoffset(void)
 
 	/* timer count may underflow right here */
 	outb_p(0x00, 0x43);	/* latch the count ASAP */
-	count = inb_p(0x40);	/* read the latched count */
-	count |= inb(0x40) << 8;
 
+	count = inb_p(0x40);	/* read the latched count */
+
+	/*
+	 * We do this guaranteed double memory access instead of a _p 
+	 * postfix in the previous port access. Wheee, hackady hack
+	 */
  	jiffies_t = jiffies;
+
+	count |= inb_p(0x40) << 8;
 
 	/*
 	 * avoiding timer inconsistencies (they are rare, but they happen)...
-	 * there are three kinds of problems that must be avoided here:
+	 * there are two kinds of problems that must be avoided here:
 	 *  1. the timer counter underflows
 	 *  2. hardware problem with the timer, not giving us continuous time,
 	 *     the counter does small "jumps" upwards on some Pentium systems,
-	 *     thus causes time warps
-	 *  3. we are after the timer interrupt, but the bottom half handler
-	 *     hasn't executed yet.
+	 *     (see c't 95/10 page 335 for Neptun bug.)
 	 */
-	if( count > count_p ) {
-		if( jiffies_t == jiffies_p ) {
-			if( count > LATCH-LATCH/100 )
-				offset = TICK_SIZE;
-			else
+
+/* you can safely undefine this if you dont have the Neptun chipset */
+
+#define BUGGY_NEPTUN_TIMER
+
+	if( jiffies_t == jiffies_p ) {
+		if( count > count_p ) {
+			/* the nutcase */
+
+			outb_p(0x0A, 0x20);
+
+			/* assumption about timer being IRQ1 */
+			if( inb(0x20) & 0x01 ) {
 				/*
-				 * argh, the timer is bugging we cant do nothing 
-				 * but to give the previous clock value.
+				 * We cannot detect lost timer interrupts ... 
+				 * well, thats why we call them lost, dont we? :)
+				 * [hmm, on the Pentium and Alpha we can ... sort of]
 				 */
-				count = count_p;
-		} else {
-			if( test_bit(TIMER_BH, &bh_active) ) {
-				/*
-				 * we have detected a counter underflow.
-			 	 */
-				offset = TICK_SIZE;
-				count_p = count;		
+				count -= LATCH;
 			} else {
-				count_p = count;
-				jiffies_p = jiffies_t;
+#ifdef BUGGY_NEPTUN_TIMER
+				/*
+				 * for the Neptun bug we know that the 'latch'
+				 * command doesnt latch the high and low value
+				 * of the counter atomically. Thus we have to 
+				 * substract 256 from the counter 
+				 * ... funny, isnt it? :)
+				 */
+
+				count -= 256;
+#else
+				printk("do_slow_gettimeoffset(): hardware timer problem?\n");
+#endif
 			}
 		}
-	} else {
-		count_p = count;
+	} else
 		jiffies_p = jiffies_t;
- 	}
 
+	count_p = count;
 
 	count = ((LATCH-1) - count) * TICK_SIZE;
 	count = (count + LATCH/2) / LATCH;
 
-	return offset + count;
+	return count;
 }
 
 /*
@@ -253,11 +264,20 @@ void do_gettimeofday(struct timeval *tv)
 	cli();
 	*tv = xtime;
 	tv->tv_usec += do_gettimeoffset();
+
+	/*
+	 * xtime is atomically updated in timer_bh. lost_ticks is
+	 * nonzero if the timer bottom half hasnt executed yet.
+	 */
+	if (lost_ticks)
+		tv->tv_usec += USECS_PER_JIFFY;
+
+	restore_flags(flags);
+
 	if (tv->tv_usec >= 1000000) {
 		tv->tv_usec -= 1000000;
 		tv->tv_sec++;
 	}
-	restore_flags(flags);
 }
 
 void do_settimeofday(struct timeval *tv)

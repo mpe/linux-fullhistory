@@ -44,10 +44,10 @@ $aligned:
 	mskqh	t1, a1, t3	# e0    :
 	ornot	t1, t2, t2	# .. e1 :
 	mskql	t0, a1, t0	# e0    : assemble the first output word
-	cmpbge	zero, t2, t7	# .. e1 : bits set iff null found
+	cmpbge	zero, t2, t8	# .. e1 : bits set iff null found
 	or	t0, t3, t0	# e0    :
 	beq	a2, $a_eoc	# .. e1 :
-	bne	t7, $a_eos	# .. e1 :
+	bne	t8, $a_eos	# .. e1 :
 
 	/* On entry to this basic block:
 	   t0 == a source word not containing a null.  */
@@ -58,34 +58,34 @@ $a_loop:
 	EX( ldq_u t0, 0(a1) )	# e0    :
 	addq	a1, 8, a1	# .. e1 :
 	subq	a2, 1, a2	# e0    :
-	cmpbge	zero, t0, t7	# .. e1 (stall)
+	cmpbge	zero, t0, t8	# .. e1 (stall)
 	beq	a2, $a_eoc      # e1    :
-	beq	t7, $a_loop	# e1    :
+	beq	t8, $a_loop	# e1    :
 
 	/* Take care of the final (partial) word store.  At this point
-	   the end-of-count bit is set in t7 iff it applies.
+	   the end-of-count bit is set in t8 iff it applies.
 
 	   On entry to this basic block we have:
 	   t0 == the source word containing the null
-	   t7 == the cmpbge mask that found it.  */
+	   t8 == the cmpbge mask that found it.  */
 
 $a_eos:
-	negq	t7, t8		# e0    : find low bit set
-	and	t7, t8, t8	# e1 (stall)
+	negq	t8, t12		# e0    : find low bit set
+	and	t8, t12, t12	# e1 (stall)
 
 	/* For the sake of the cache, don't read a destination word
 	   if we're not going to need it.  */
-	and	t8, 0x80, t6	# e0    :
+	and	t12, 0x80, t6	# e0    :
 	bne	t6, 1f		# .. e1 (zdb)
 
 	/* We're doing a partial word store and so need to combine
 	   our source and original destination words.  */
 	ldq_u	t1, 0(a0)	# e0    :
-	subq	t8, 1, t6	# .. e1 :
-	or	t8, t6, t7	# e0    :
+	subq	t12, 1, t6	# .. e1 :
+	or	t12, t6, t8	# e0    :
 	unop			#
-	zapnot	t0, t7, t0	# e0    : clear src bytes > null
-	zap	t1, t7, t1	# .. e1 : clear dst bytes <= null
+	zapnot	t0, t8, t0	# e0    : clear src bytes > null
+	zap	t1, t8, t1	# .. e1 : clear dst bytes <= null
 	or	t0, t1, t0	# e1    :
 
 1:	stq_u	t0, 0(a0)
@@ -93,7 +93,7 @@ $a_eos:
 
 	/* Add the end-of-count bit to the eos detection bitmask.  */
 $a_eoc:
-	or	t10, t7, t7
+	or	t10, t8, t8
 	br	$a_eos
 
 	/*** The Function Entry Point ***/
@@ -148,18 +148,18 @@ $u_head:
 	mskqh	t1, a0, t1	# e0    : mask leading garbage in src
 	or	t0, t1, t0	# e0    : first output word complete
 	or	t0, t6, t6	# e1    : mask original data for zero test
-	cmpbge	zero, t6, t7	# e0    :
+	cmpbge	zero, t6, t8	# e0    :
 	beq	a2, $u_eocfin	# .. e1 :
-	bne	t7, $u_final	# e1    :
+	bne	t8, $u_final	# e1    :
 
 	lda	t6, -1			# e1    : mask out the bits we have
 	mskql	t6, a1, t6		# e0    :   already seen
 	stq_u	t0, 0(a0)		# e0    : store first output word
 	or      t6, t2, t2		# .. e1 :
-	cmpbge	zero, t2, t7		# e0    : find nulls in second partial
+	cmpbge	zero, t2, t8		# e0    : find nulls in second partial
 	addq	a0, 8, a0		# .. e1 :
 	subq	a2, 1, a2		# e0    :
-	bne	t7, $u_late_head_exit	# .. e1 :
+	bne	t8, $u_late_head_exit	# .. e1 :
 
 	/* Finally, we've got all the stupid leading edge cases taken care
 	   of and we can set up to enter the main loop.  */
@@ -167,9 +167,9 @@ $u_head:
 	extql	t2, a1, t1	# e0    : position hi-bits of lo word
 	EX( ldq_u t2, 8(a1) )	# .. e1 : read next high-order source word
 	addq	a1, 8, a1	# e0    :
-	cmpbge	zero, t2, t7	# e1 (stall)
+	cmpbge	zero, t2, t8	# e1 (stall)
 	beq	a2, $u_eoc	# e1    :
-	bne	t7, $u_eos	# e1    :
+	bne	t8, $u_eos	# e1    :
 
 	/* Unaligned copy main loop.  In order to avoid reading too much,
 	   the loop is structured to detect zeros in aligned source words.
@@ -195,9 +195,9 @@ $u_loop:
 	stq_u	t0, -8(a0)	# e0    : save the current word
 	mov	t3, t1		# .. e1 :
 	subq	a2, 1, a2	# e0    :
-	cmpbge	zero, t2, t7	# .. e1 : test new word for eos
+	cmpbge	zero, t2, t8	# .. e1 : test new word for eos
 	beq	a2, $u_eoc	# e1    :
-	beq	t7, $u_loop	# e1    :
+	beq	t8, $u_loop	# e1    :
 
 	/* We've found a zero somewhere in the source word we just read.
 	   If it resides in the lower half, we have one (probably partial)
@@ -211,8 +211,8 @@ $u_eos:
 	extqh	t2, a1, t0	# e0    :
 	or	t0, t1, t0	# e1    : first (partial) source word complete
 
-	cmpbge	zero, t0, t7	# e0    : is the null in this first bit?
-	bne	t7, $u_final	# .. e1 (zdb)
+	cmpbge	zero, t0, t8	# e0    : is the null in this first bit?
+	bne	t8, $u_final	# .. e1 (zdb)
 
 	stq_u	t0, 0(a0)	# e0    : the null was in the high-order bits
 	addq	a0, 8, a0	# .. e1 :
@@ -220,27 +220,27 @@ $u_eos:
 
 $u_late_head_exit:
 	extql	t2, a1, t0	# .. e0 :
-	cmpbge	zero, t0, t7	# e0    :
-	or	t7, t10, t6	# e1    :
-	cmoveq	a2, t6, t7	# e0    :
+	cmpbge	zero, t0, t8	# e0    :
+	or	t8, t10, t6	# e1    :
+	cmoveq	a2, t6, t8	# e0    :
 	nop			# .. e1 :
 
 	/* Take care of a final (probably partial) result word.
 	   On entry to this basic block:
 	   t0 == assembled source word
-	   t7 == cmpbge mask that found the null.  */
+	   t8 == cmpbge mask that found the null.  */
 $u_final:
-	negq	t7, t6		# e0    : isolate low bit set
-	and	t6, t7, t8	# e1    :
+	negq	t8, t6		# e0    : isolate low bit set
+	and	t6, t8, t12	# e1    :
 
-	and	t8, 0x80, t6	# e0    : avoid dest word load if we can
+	and	t12, 0x80, t6	# e0    : avoid dest word load if we can
 	bne	t6, 1f		# .. e1 (zdb)
 
 	ldq_u	t1, 0(a0)	# e0    :
-	subq	t8, 1, t6	# .. e1 :
-	or	t6, t8, t7	# e0    :
-	zapnot	t0, t7, t0	# .. e1 : kill source bytes > null
-	zap	t1, t7, t1	# e0    : kill dest bytes <= null
+	subq	t12, 1, t6	# .. e1 :
+	or	t6, t12, t8	# e0    :
+	zapnot	t0, t8, t0	# .. e1 : kill source bytes > null
+	zap	t1, t8, t1	# e0    : kill dest bytes <= null
 	or	t0, t1, t0	# e1    :
 
 1:	stq_u	t0, 0(a0)	# e0    :
@@ -249,10 +249,10 @@ $u_final:
 $u_eoc:				# end-of-count
 	extqh	t2, a1, t0
 	or	t0, t1, t0
-	cmpbge	zero, t0, t7
+	cmpbge	zero, t0, t8
 
 $u_eocfin:			# end-of-count, final word
-	or	t10, t7, t7
+	or	t10, t8, t8
 	br	$u_final
 
 	/* Unaligned copy entry point.  */
@@ -279,19 +279,19 @@ $unaligned:
 	/* If source misalignment is larger than dest misalignment, we need
 	   extra startup checks to avoid SEGV.  */
 
-	cmplt	t4, t5, t8	# e1    :
+	cmplt	t4, t5, t12	# e1    :
 	extql	t1, a1, t1	# .. e0 : shift src into place
 	lda	t2, -1		# e0    : for creating masks later
-	beq	t8, $u_head	# e1    :
+	beq	t12, $u_head	# e1    :
 
 	mskqh	t2, t5, t2	# e0    : begin src byte validity mask
-	cmpbge	zero, t1, t7	# .. e1 : is there a zero?
+	cmpbge	zero, t1, t8	# .. e1 : is there a zero?
 	extql	t2, a1, t2	# e0    :
-	or	t7, t10, t6	# .. e1 : test for end-of-count too
+	or	t8, t10, t5	# .. e1 : test for end-of-count too
 	cmpbge	zero, t2, t3	# e0    :
-	cmoveq	a2, t6, t7	# .. e1 :
-	andnot	t7, t3, t7	# e0    :
-	beq	t7, $u_head	# .. e1 (zdb)
+	cmoveq	a2, t5, t8	# .. e1 :
+	andnot	t8, t3, t8	# e0    :
+	beq	t8, $u_head	# .. e1 (zdb)
 
 	/* At this point we've found a zero in the first partial word of
 	   the source.  We need to isolate the valid source data and mask
@@ -299,26 +299,26 @@ $unaligned:
 	   that we'll need at least one byte of that original dest word.) */
 
 	ldq_u	t0, 0(a0)	# e0    :
-	negq	t7, t6		# .. e1 : build bitmask of bytes <= zero
+	negq	t8, t6		# .. e1 : build bitmask of bytes <= zero
 	mskqh	t1, t4, t1	# e0    :
-	and	t6, t7, t8	# .. e1 :
-	subq	t8, 1, t6	# e0    :
-	or	t6, t8, t7	# e1    :
+	and	t6, t8, t12	# .. e1 :
+	subq	t12, 1, t6	# e0    :
+	or	t6, t12, t8	# e1    :
 
-	zapnot	t2, t7, t2	# e0    : prepare source word; mirror changes
-	zapnot	t1, t7, t1	# .. e1 : to source validity mask
+	zapnot	t2, t8, t2	# e0    : prepare source word; mirror changes
+	zapnot	t1, t8, t1	# .. e1 : to source validity mask
 
 	andnot	t0, t2, t0	# e0    : zero place for source to reside
 	or	t0, t1, t0	# e1    : and put it there
 	stq_u	t0, 0(a0)	# e0    :
 
 $finish_up:
-	zapnot	t0, t8, t4	# was last byte written null?
+	zapnot	t0, t12, t4	# was last byte written null?
 	cmovne	t4, 1, t4
 
-	and	t8, 0xf0, t3	# binary search for the address of the
-	and	t8, 0xcc, t2	# last byte written
-	and	t8, 0xaa, t1
+	and	t12, 0xf0, t3	# binary search for the address of the
+	and	t12, 0xcc, t2	# last byte written
+	and	t12, 0xaa, t1
 	bic	a0, 7, t0
 	cmovne	t3, 4, t3
 	cmovne	t2, 2, t2

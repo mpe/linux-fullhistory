@@ -56,11 +56,11 @@ $found:	negq    $2, $3		# clear all but least set bit
 
 	/* Worry about the null termination.  */
 
-	zapnot	$1, $22, $2	# was last byte a null?
+	zapnot	$1, $27, $2	# was last byte a null?
 	bne	$2, 0f
 	ret
 
-0:	cmplt	$22, $24, $2	# did we fill the buffer completely?
+0:	cmplt	$27, $24, $2	# did we fill the buffer completely?
 	or	$2, $18, $2
 	bne	$2, 2f
 

@@ -94,8 +94,8 @@ struct tr_statistics {
 #define TR_RII 0x80
 #define TR_RCF_DIR_BIT 0x80
 #define TR_RCF_LEN_MASK 0x1f00
-#define TR_RCF_BROADCAST 0x8000
-#define TR_RCF_LIMITED_BROADCAST 0xA000
+#define TR_RCF_BROADCAST 0x8000         /* all-routes broadcast */
+#define TR_RCF_LIMITED_BROADCAST 0xC000 /* single-route broadcast */
 #define TR_RCF_FRAME2K 0x20
 #define TR_RCF_BROADCAST_MASK 0xC000
 

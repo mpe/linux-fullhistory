@@ -24,7 +24,7 @@ else
 CFLAGS := $(CFLAGS) -pipe
 endif
 
-CFLAGS := $(CFLAGS) -mno-fp-regs
+CFLAGS := $(CFLAGS) -mno-fp-regs -ffixed-8
 
 HEAD := arch/alpha/kernel/head.o
 

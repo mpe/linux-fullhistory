@@ -138,5 +138,5 @@ void rmt_event(int st);
 void set_cf_join(int on);
 
 extern struct device *apfddi_device;
-extern struct enet_statistics *apfddi_stats;
+extern struct net_device_stats *apfddi_stats;
 

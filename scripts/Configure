@@ -288,7 +288,7 @@ function int () {
 	def=${old:-$3}
 	while :; do
 	  readln "$1 ($2) [$def] " "$def" "$old"
-	  if expr "$ans" : '0$\|-?[1-9][0-9]*$' > /dev/null; then
+	  if expr "$ans" : '0$\|-\?[1-9][0-9]*$' > /dev/null; then
 	    define_int "$2" "$ans"
 	    break
 	  else
@@ -319,7 +319,7 @@ function hex () {
 	while :; do
 	  readln "$1 ($2) [$def] " "$def" "$old"
 	  ans=${ans#*[x,X]}
-	 if expr "$ans" : '[0-9a-fA-F]+$' > /dev/null; then
+	 if expr "$ans" : '[0-9a-fA-F]\+$' > /dev/null; then
 	   define_hex "$2" "$ans"
 	   break
 	 else

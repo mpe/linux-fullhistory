@@ -185,6 +185,10 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			if(val > 65535)
 				val = 65535;
 			sk->sndbuf = val;
+			/*
+			 *	FIXME: Wake up sending tasks if we
+			 *	upped the value.
+			 */
 			break;
 
 		case SO_RCVBUF:

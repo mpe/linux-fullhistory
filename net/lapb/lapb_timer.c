@@ -67,12 +67,25 @@ void lapb_set_timer(lapb_cb *lapb)
 static void lapb_timer(unsigned long param)
 {
 	lapb_cb *lapb = (lapb_cb *)param;
+	struct sk_buff *skb;
 
-	if (lapb->state == LAPB_STATE_3 || lapb->state == LAPB_STATE_4)
+	/*
+	 *	Process all packet received since the last clock tick.
+	 */
+	while ((skb = skb_dequeue(&lapb->input_queue)) != NULL)
+		lapb_data_input(lapb, skb);
+
+	/*
+	 *	If in a data transfer state, transmit any data.
+	 */
+	if (lapb->state == LAPB_STATE_3)
 		lapb_kick(lapb);
 
+	/*
+	 *	T2 expiry code.
+	 */
 	if (lapb->t2timer > 0 && --lapb->t2timer == 0) {
-		if (lapb->state == LAPB_STATE_3 || lapb->state == LAPB_STATE_4) {
+		if (lapb->state == LAPB_STATE_3) {
 			if (lapb->condition & LAPB_ACK_PENDING_CONDITION) {
 				lapb->condition &= ~LAPB_ACK_PENDING_CONDITION;
 				lapb_timeout_response(lapb);
@@ -80,16 +93,30 @@ static void lapb_timer(unsigned long param)
 		}
 	}
 
+	/*
+	 *	If T1 isn't running, or hasn't timed out yet, keep going.
+	 */
 	if (lapb->t1timer == 0 || --lapb->t1timer > 0) {
 		lapb_set_timer(lapb);
 		return;
 	}
 
+	/*
+	 *	T1 has expired.
+	 */
 	switch (lapb->state) {
+
+		/*
+		 *	If we are a DCE, keep going DM .. DM .. DM
+		 */
 		case LAPB_STATE_0:
 			if (lapb->mode & LAPB_DCE)
 				lapb_send_control(lapb, LAPB_DM, LAPB_POLLOFF, LAPB_RESPONSE);
 			break;
+
+		/*
+		 *	Awaiting connection state, send SABM(E), up to N2 times.
+		 */
 		case LAPB_STATE_1: 
 			if (lapb->n2count == lapb->n2) {
 				lapb_clear_queues(lapb);
@@ -115,6 +142,9 @@ static void lapb_timer(unsigned long param)
 			}
 			break;
 
+		/*
+		 *	Awaiting disconnection state, send DISC, up to N2 times.
+		 */
 		case LAPB_STATE_2:
 			if (lapb->n2count == lapb->n2) {
 				lapb_clear_queues(lapb);
@@ -133,27 +163,21 @@ static void lapb_timer(unsigned long param)
 			}
 			break;
 
-		case LAPB_STATE_3: 
-			lapb->n2count = 1;
-			lapb_transmit_enquiry(lapb);
-			lapb->state   = LAPB_STATE_4;
-#if LAPB_DEBUG > 0
-			printk(KERN_DEBUG "lapb: (%p) S3 -> S4\n", lapb->token);
-#endif
-			break;
-
-		case LAPB_STATE_4:
+		/*
+		 *	Data transfer state, restransmit I frames, up to N2 times.
+		 */
+		case LAPB_STATE_3:
 			if (lapb->n2count == lapb->n2) {
 				lapb_clear_queues(lapb);
 				lapb->state   = LAPB_STATE_0;
 				lapb->t2timer = 0;
 				lapb_disconnect_indication(lapb, LAPB_TIMEDOUT);
 #if LAPB_DEBUG > 0
-				printk(KERN_DEBUG "lapb: (%p) S4 -> S0\n", lapb->token);
+				printk(KERN_DEBUG "lapb: (%p) S3 -> S0\n", lapb->token);
 #endif
 			} else {
 				lapb->n2count++;
-				lapb_transmit_enquiry(lapb);
+				lapb_requeue_frames(lapb);
 			}
 			break;
 	}

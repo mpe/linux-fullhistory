@@ -457,7 +457,7 @@ struct priv
     int        tmdlast;  /* last sent descriptor used for error handling, etc */
     void       *rmdbufs[RMDNUM]; /* pointer to the receive buffers */
     void       *tmdbufs[TMDNUM]; /* pointer to the transmit buffers */
-    struct net_driver_stats stats; /* Device driver statistics */
+    struct net_device_stats stats; /* Device driver statistics */
 };
 
 /* global variable declaration */
@@ -491,7 +491,7 @@ static void  SK_rxintr(struct device *dev);
 static void  SK_txintr(struct device *dev);
 static int   SK_close(struct device *dev);
 
-static struct net_driver_stats *SK_get_stats(struct device *dev);
+static struct net_device_stats *SK_get_stats(struct device *dev);
 
 unsigned int SK_rom_addr(void);
 
@@ -1681,14 +1681,14 @@ static int SK_close(struct device *dev)
  *                  It is called by sprintf_stats (dev.c).
  *
  * Parameters     : I : struct device *dev   - our device structure
- * Return Value   : struct net_driver_stats * - our current statistics
+ * Return Value   : struct net_device_stats * - our current statistics
  * Errors         : None
  * Side Effects   : None
  * Update History :
  *     YY/MM/DD  uid  Description
 -*/
 
-static struct net_driver_stats *SK_get_stats(struct device *dev)
+static struct net_device_stats *SK_get_stats(struct device *dev)
 {
 
     struct priv *p = (struct priv *) dev->priv;

@@ -175,19 +175,10 @@ static int	tok_open(struct device *dev);
 static int	tok_close(struct device *dev);
 static int	tok_send_packet(struct sk_buff *skb, struct device *dev);
 static struct net_device_stats * tok_get_stats(struct device *dev);
-void		tr_readlog(struct device *dev);
+void		ibmtr_readlog(struct device *dev);
+void		ibmtr_reset_timer(struct timer_list *tmr, struct device *dev);
 
-/* FIXME: Should use init_timer and friends not assume the structure
-   is constant! */
-   
-static struct timer_list tr_timer =
-{
-	NULL,
-	NULL,
-	0,
-	0L,
-	tok_open_adapter
-};
+static struct timer_list tr_timer;
 
 static unsigned int ibmtr_portlist[] = {
 	0xa20, 0xa24, 0
@@ -793,7 +784,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 							      ti->current_skb=NULL;
 						      }
 						      dev->tbusy=0;
-						      if (ti->readlog_pending) tr_readlog(dev);
+						      if (ti->readlog_pending) ibmtr_readlog(dev);
 					      }
 				      }
 				      break;
@@ -810,7 +801,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 							      ti->current_skb=NULL;
 						      }
 						      dev->tbusy=0;
-						      if (ti->readlog_pending) tr_readlog(dev);
+						      if (ti->readlog_pending) ibmtr_readlog(dev);
 					      }
 				      }
 				      break;
@@ -867,10 +858,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 							      open_ret_code);
 
 					      if (ti->open_status != FAILURE) {
-						      tr_timer.expires=jiffies+TR_RETRY_INTERVAL;
-						      tr_timer.data=(unsigned long)dev;
-						      tr_timer.next=tr_timer.prev=NULL;
-						      add_timer(&tr_timer);
+						      ibmtr_reset_timer(&tr_timer, dev);
 					      }
 
 				      }
@@ -884,10 +872,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 					if (readb(ti->srb+offsetof(struct dlc_open_sap, ret_code))) {
 						DPRINTK("open_sap failed: ret_code = %02X,retrying\n",
 							(int)readb(ti->srb+offsetof(struct dlc_open_sap, ret_code)));
-						tr_timer.expires=jiffies+TR_RETRY_INTERVAL;
-						tr_timer.data=(unsigned long)dev;
-						tr_timer.next=tr_timer.prev=NULL;
-						add_timer(&tr_timer);
+						ibmtr_reset_timer(&tr_timer, dev);
 					} else {
 						ti->exsap_station_id=
 							readw(ti->srb+offsetof(struct dlc_open_sap, station_id));
@@ -998,11 +983,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 
 						      DPRINTK("Signal loss/Lobe fault\n");
 						      DPRINTK("We try to reopen the adapter.\n");
-						      tr_timer.expires=jiffies+TR_RETRY_INTERVAL;
-						      tr_timer.data=(unsigned long)dev;
-						      tr_timer.next=tr_timer.prev=NULL;
-						      add_timer(&tr_timer);
-
+						      ibmtr_reset_timer(&tr_timer, dev);
 					      } else if (ring_status & (HARD_ERROR | XMIT_BEACON
 											| AUTO_REMOVAL | REMOVE_RECV | RING_RECOVER))
 						      DPRINTK("New ring status: %02X\n", ring_status);
@@ -1011,7 +992,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 						      if (dev->tbusy)
                                                               ti->readlog_pending = 1;
 						      else
-                                                              tr_readlog(dev);
+                                                              ibmtr_readlog(dev);
 					      }
 				      }
 				      break;
@@ -1124,7 +1105,8 @@ static void initial_tok_int(struct device *dev)
 	DPRINTK("encoded addr (%04X,%04X,%08X): ", hw_encoded_addr,
 		ntohs(hw_encoded_addr), encoded_addr);
 #else
-	DPRINTK("Initial interrupt : shared RAM located at %08x.\n", ti->sram);
+	DPRINTK("Initial interrupt : %s Mbps, shared RAM base %08x.\n",
+		(readb(ti->init_srb+offsetof(struct srb_init_response, init_status)) & 0x01) ? "16" : "4", ti->sram);
 #endif
 
 	ti->auto_ringspeedsave=readb(ti->init_srb
@@ -1342,7 +1324,7 @@ static void tr_tx(struct device *dev)
 	dev_kfree_skb(ti->current_skb,FREE_WRITE);
 	ti->current_skb=NULL;
 	mark_bh(NET_BH);
-	if (ti->readlog_pending) tr_readlog(dev);
+	if (ti->readlog_pending) ibmtr_readlog(dev);
 }
 
 static void tr_rx(struct device *dev)
@@ -1545,7 +1527,15 @@ static int tok_send_packet(struct sk_buff *skb, struct device *dev)
 	return 0;
 }
 
-void tr_readlog(struct device *dev) {
+void ibmtr_reset_timer(struct timer_list *tmr, struct device *dev) {
+	tmr->expires  = jiffies + TR_RETRY_INTERVAL;
+	tmr->data     = (unsigned long) dev;
+	tmr->function = tok_open_adapter;
+	init_timer(tmr);
+	add_timer(tmr);
+}
+
+void ibmtr_readlog(struct device *dev) {
 	 struct tok_info *ti;
 	 ti=(struct tok_info *) dev->priv;
 

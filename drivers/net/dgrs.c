@@ -509,7 +509,7 @@ again:
 	/*
 	 *	There are three modes here for doing the packet copy.
 	 *	If we have DMA, and the packet is "long", we use the
-	 *	chaining mode of DMA.  If its shorter, we use single
+	 *	chaining mode of DMA.  If it's shorter, we use single
 	 *	DMA's.  Otherwise, we use memcpy().
 	 */
 	if (priv0->use_dma && priv0->dmadesc_h && len > 64)

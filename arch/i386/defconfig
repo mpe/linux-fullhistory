@@ -68,9 +68,10 @@ CONFIG_BLK_DEV_RZ1000=y
 # CONFIG_FIREWALL is not set
 # CONFIG_NET_ALIAS is not set
 CONFIG_INET=y
-# CONFIG_IP_FORWARD is not set
 # CONFIG_IP_MULTICAST is not set
 # CONFIG_IP_ACCT is not set
+# CONFIG_IP_ROUTER is not set
+# CONFIG_NET_IPIP is not set
 
 #
 # (it is safe to leave these untouched)
@@ -116,9 +117,9 @@ CONFIG_EL3=y
 # CONFIG_PLIP is not set
 # CONFIG_PPP is not set
 # CONFIG_NET_RADIO is not set
-# CONFIG_LAPBETHER is not set
 # CONFIG_SLIP is not set
 # CONFIG_TR is not set
+# CONFIG_LAPBETHER is not set
 
 #
 # ISDN subsystem

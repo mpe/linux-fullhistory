@@ -55,6 +55,7 @@ int p8022_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	if (proto != NULL) 
 	{
 		skb->h.raw += 3;
+		skb->nh.raw += 3;
 		skb_pull(skb,3);
 		return proto->rcvfunc(skb, dev, pt);
 	}

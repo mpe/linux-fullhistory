@@ -1187,23 +1187,32 @@ static void update_process_times(unsigned long ticks, unsigned long system)
 #endif
 }
 
-static unsigned long lost_ticks = 0;
+volatile unsigned long lost_ticks = 0;
 static unsigned long lost_ticks_system = 0;
 
 static inline void update_times(void)
 {
 	unsigned long ticks;
+	unsigned long flags;
 
-	ticks = xchg(&lost_ticks, 0);
+	save_flags(flags);
+	cli();
+
+	ticks = lost_ticks;
+	lost_ticks = 0;
 
 	if (ticks) {
 		unsigned long system;
-
 		system = xchg(&lost_ticks_system, 0);
+
 		calc_load(ticks);
 		update_wall_time(ticks);
+		restore_flags(flags);
+		
 		update_process_times(ticks, system);
-	}
+
+	} else
+		restore_flags(flags);
 }
 
 static void timer_bh(void)
@@ -1349,21 +1358,21 @@ asmlinkage int sys_nice(int increment)
 {
 	unsigned long newprio;
 	int increase = 0;
-	int ret = -EPERM;
 
 	/*
-	 *	We need a lock. sys_setpriority can affect other tasks.
+	 *	Setpriority might change our priority at the same moment.
+	 *	We don't have to worry. Conceptually one call occurs first
+	 *	and we have a single winner.
 	 */
 	 
-	lock_kernel();
 	newprio = increment;
 	if (increment < 0) {
 		if (!suser())
-			goto out;
+			return -EPERM;
 		newprio = -increment;
 		increase = 1;
 	}
-	ret = 0;
+
 	if (newprio > 40)
 		newprio = 40;
 	/*
@@ -1377,15 +1386,21 @@ asmlinkage int sys_nice(int increment)
 	increment = newprio;
 	if (increase)
 		increment = -increment;
+	/*
+	 *	Current->priority can change between this point
+	 *	and the assignment. We are assigning not doing add/subs
+	 *	so thats ok. Conceptually a process might just instantaneously
+	 *	read the value we stomp over. I don't think that is an issue
+	 *	unless posix makes it one. If so we can loop on changes
+	 *	to current->priority.
+	 */
 	newprio = current->priority - increment;
 	if ((signed) newprio < 1)
 		newprio = 1;
 	if (newprio > DEF_PRIORITY*2)
 		newprio = DEF_PRIORITY*2;
 	current->priority = newprio;
-out:
-	unlock_kernel();
-	return ret;
+	return 0;
 }
 
 #endif

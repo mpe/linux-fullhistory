@@ -23,8 +23,11 @@ _stext:
 __start:
 	br	$27,1f
 1:	ldgp	$29,0($27)
-	lda	$27,start_kernel
-	jsr	$26,($27),start_kernel
+	/* We need to get current loaded up with our first task.  */
+	lda	$8,init_task
+	stq	$8,current_set
+	/* And then we can start the kernel.  */
+	jsr	$26,start_kernel
 	halt
 	.end __start
 

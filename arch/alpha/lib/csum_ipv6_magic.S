@@ -61,8 +61,8 @@ csum_ipv6_magic:
 	extwl	$0,2,$1		# e0    :
 	zapnot	$0,3,$0		# .. e1 :
 	addq	$0,$1,$0	# e0    :
-	unop			#       :
-	not	$0,$0		# e0    :
+	not	$0,$0		# e1    :
+	zapnot	$0,3,$0		# e0    :
 	ret			# .. e1 :
 
 	.end csum_ipv6_magic

@@ -32,11 +32,11 @@ asmlinkage int sys_pipe(unsigned long * fildes)
 
 	lock_kernel();
 	error = do_pipe(fd);
+	unlock_kernel();
 	if (!error) {
 		if (copy_to_user(fildes, fd, 2*sizeof(int)))
 			error = -EFAULT;
 	}
-	unlock_kernel();
 	return error;
 }
 
@@ -46,6 +46,7 @@ asmlinkage int sys_pipe(unsigned long * fildes)
  * 4 system call parameters, so these system calls used a memory
  * block for parameter passing..
  */
+
 struct mmap_arg_struct {
 	unsigned long addr;
 	unsigned long len;
@@ -87,13 +88,12 @@ struct sel_arg_struct {
 asmlinkage int old_select(struct sel_arg_struct *arg)
 {
 	struct sel_arg_struct a;
-	int ret = -EFAULT;
+	int ret;
 
-	lock_kernel();
 	if (copy_from_user(&a, arg, sizeof(a)))
-		goto out;
+		return -EFAULT;
+	lock_kernel();
 	ret = sys_select(a.n, a.inp, a.outp, a.exp, a.tvp);
-out:
 	unlock_kernel();
 	return ret;
 }

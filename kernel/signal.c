@@ -72,9 +72,8 @@ asmlinkage int sys_sgetmask(void)
 {
 	int ret;
 
-	lock_kernel();
+	/* SMP safe */
 	ret = current->blocked;
-	unlock_kernel();
 	return ret;
 }
 

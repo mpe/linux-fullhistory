@@ -55,7 +55,7 @@
 
 int rose_rx_ip(struct sk_buff *skb, struct device *dev)
 {
-	struct enet_statistics *stats = (struct enet_statistics *)dev->priv;
+	struct net_device_stats *stats = (struct net_device_stats *)dev->priv;
 
 	if (!dev->start) {
 		stats->rx_errors++;
@@ -63,6 +63,8 @@ int rose_rx_ip(struct sk_buff *skb, struct device *dev)
 	}
 
 	stats->rx_packets++;
+	stats->rx_bytes += skb->len;
+
 	skb->protocol = htons(ETH_P_IP);
 
 	/* Spoof incoming device */
@@ -96,7 +98,7 @@ static int rose_header(struct sk_buff *skb, struct device *dev, unsigned short t
 static int rose_rebuild_header(struct sk_buff *skb)
 {
 	struct device *dev = skb->dev;
-	struct enet_statistics *stats = (struct enet_statistics *)dev->priv;
+	struct net_device_stats *stats = (struct net_device_stats *)dev->priv;
 	unsigned char *bp = (unsigned char *)skb->data;
 	struct sk_buff *skbn;
 
@@ -121,6 +123,7 @@ static int rose_rebuild_header(struct sk_buff *skb)
 	}
 
 	stats->tx_packets++;
+	stats->tx_bytes += skbn->len;
 
 	return 1;
 }
@@ -160,7 +163,7 @@ static int rose_close(struct device *dev)
 
 static int rose_xmit(struct sk_buff *skb, struct device *dev)
 {
-	struct enet_statistics *stats = (struct enet_statistics *)dev->priv;
+	struct net_device_stats *stats = (struct net_device_stats *)dev->priv;
 
 	if (skb == NULL || dev == NULL)
 		return 0;
@@ -193,9 +196,9 @@ static int rose_xmit(struct sk_buff *skb, struct device *dev)
 	return 0;
 }
 
-static struct enet_statistics *rose_get_stats(struct device *dev)
+static struct net_device_stats *rose_get_stats(struct device *dev)
 {
-	return (struct enet_statistics *)dev->priv;
+	return (struct net_device_stats *)dev->priv;
 }
 
 int rose_init(struct device *dev)
@@ -222,10 +225,10 @@ int rose_init(struct device *dev)
 	dev->pa_mask		= 0;
 	dev->pa_alen		= sizeof(unsigned long);
 
-	if ((dev->priv = kmalloc(sizeof(struct enet_statistics), GFP_KERNEL)) == NULL)
+	if ((dev->priv = kmalloc(sizeof(struct net_device_stats), GFP_KERNEL)) == NULL)
 		return -ENOMEM;
 
-	memset(dev->priv, 0, sizeof(struct enet_statistics));
+	memset(dev->priv, 0, sizeof(struct net_device_stats));
 
 	dev->get_stats = rose_get_stats;
 

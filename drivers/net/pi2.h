@@ -82,7 +82,7 @@ struct pi_req  {
 
 /* Information that needs to be kept for each channel. */
 struct pi_local {
-    struct netstats stats; /* %%%dp*/
+    struct net_device_stats stats; 
     long open_time;             /* Useless example local info. */
     unsigned long xtal; 
 

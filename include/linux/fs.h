@@ -27,7 +27,7 @@
 
 /* Fixed constants first: */
 #undef NR_OPEN
-#define NR_OPEN 256
+#define NR_OPEN 1024
 
 #define NR_SUPER 64
 #define BLOCK_SIZE 1024

@@ -629,7 +629,7 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr, __u32 i
 	if (sk->ack_backlog >= sk->max_ack_backlog || 
 	    tcp_v4_syn_filter(sk, skb, saddr))
 	{
-		printk(KERN_DEBUG "droping syn ack:%d max:%d\n",
+		printk(KERN_DEBUG "dropping syn ack:%d max:%d\n",
 		       sk->ack_backlog, sk->max_ack_backlog);
 #ifdef CONFIG_IP_TCPSF
 		tcp_v4_random_drop(sk);

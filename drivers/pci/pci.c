@@ -152,6 +152,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( 3COM,		3COM_3C595T4,	"3C595 100bT4"),
 	DEVICE( 3COM,		3COM_3C595MII,	"3C595 100b-MII"),
 	DEVICE( 3COM,		3COM_3C900TPO,	"3C900 10bTPO"),
+	DEVICE( 3COM,		3COM_3C905TX,	"3C905 100bTX"),
 	DEVICE( AL,		AL_M1445,	"M1445"),
 	DEVICE( AL,		AL_M1449,	"M1449"),
 	DEVICE( AL,		AL_M1451,	"M1451"),
@@ -270,8 +271,9 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( ADAPTEC,	ADAPTEC_7883,	"AIC-7883U"),
 	DEVICE( ADAPTEC,	ADAPTEC_7884,	"AIC-7884U"),
   	DEVICE( ATRONICS,	ATRONICS_2015,	"IDE-2015PL"),
-	DEVICE( HER,		HER_STING,	"Stingray"),
-	DEVICE( HER,		HER_STINGARK,	"Stingray ARK 2000PV")
+	DEVICE( ARK,		ARK_STING,	"Stingray"),
+	DEVICE( ARK,		ARK_STINGARK,	"Stingray ARK 2000PV"),
+	DEVICE( ARK,		ARK_2000MT,	"2000MT")
 };
 
 
@@ -546,7 +548,7 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_INTEL:		return "Intel";
 	      case PCI_VENDOR_ID_ADAPTEC:	return "Adaptec";
 	      case PCI_VENDOR_ID_ATRONICS:	return "Atronics";
-	      case PCI_VENDOR_ID_HER:		return "Hercules";
+	      case PCI_VENDOR_ID_ARK:		return "ARK Logic";
 	      default:				return "Unknown vendor";
 	}
 }

@@ -167,11 +167,6 @@ void lapb_transmit_buffer(lapb_cb *lapb, struct sk_buff *skb, int type)
 		kfree_skb(skb, FREE_WRITE);
 }
 
-void lapb_nr_error_recovery(lapb_cb *lapb)
-{
-	lapb_establish_data_link(lapb);
-}
-
 void lapb_establish_data_link(lapb_cb *lapb)
 {
 	lapb->condition = 0x00;
@@ -190,19 +185,6 @@ void lapb_establish_data_link(lapb_cb *lapb)
 	}
 
 	lapb->t2timer = 0;
-	lapb->t1timer = lapb->t1;
-}
-
-void lapb_transmit_enquiry(lapb_cb *lapb)
-{
-#if LAPB_DEBUG > 1
-	printk(KERN_DEBUG "lapb: (%p) S%d TX RR(1) R%d\n", lapb->token, lapb->state, lapb->vr);
-#endif
-
-	lapb_send_control(lapb, LAPB_RR, LAPB_POLLON, LAPB_COMMAND);
-
-	lapb->condition &= ~LAPB_ACK_PENDING_CONDITION;
-
 	lapb->t1timer = lapb->t1;
 }
 
@@ -233,6 +215,7 @@ void lapb_check_iframes_acked(lapb_cb *lapb, unsigned short nr)
 	if (lapb->vs == nr) {
 		lapb_frames_acked(lapb, nr);
 		lapb->t1timer = 0;
+		lapb->n2count = 0;
 	} else {
 		if (lapb->va != nr) {
 			lapb_frames_acked(lapb, nr);

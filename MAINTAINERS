@@ -351,6 +351,11 @@ P:	Axel Boldt
 M:	boldt@math.ucsb.edu
 S:	Maintained
 
+PCI ID DATABASE
+P:	Jens Maurer
+M:	jmaurer@cck.uni-kl.de
+S:	Maintained
+
 LANCE AND LANCE32 NETWORK DRIVER
 P:	Thomas Bogendoerfer
 M:	tsbogend@bigbug.franken.de

@@ -2364,17 +2364,17 @@ CONFIG_WAN_ROUTER
   distances with data transfer rates significantly higher than those
   achievable with commonly used asynchronous modem connections.
   Usually, a quite expensive external device called `WAN router' is
-  needed to connect to WAN.
-      As an alternative, WAN router can be build into Linux kernel.
+  needed to connect to a WAN.
+      As an alternative, WAN routing can be built into the Linux kernel. 
   With relatively inexpensive WAN interface cards available on the
-  market, a perfectly usable router can be built for less than half a
+  market, a perfectly usable router can be built for less than half the
   price of an external router.  If you have one of those cards (with
   appropriate WAN Link Driver) and wish to use your Linux box as a WAN
   router, you may say 'Y' to this option.  You will also need a
   wan-tools package available via FTP (user: anonymous) from
   ftp.sangoma.com.  Read Documentation/networking/wan-router.txt for
   more information.
-      WAN router is always built as a module ( = code which can be
+      WAN routing is always built as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
   For general information about modules read Documentation/modules.txt.
 
@@ -2390,7 +2390,7 @@ CONFIG_WAN_DRIVERS
 Sangoma WANPIPE(tm) multiprotocol cards
 CONFIG_VENDOR_SANGOMA
       WANPIPE from Sangoma Technologies Inc. (http://www.sangoma.com)
-  is a family of intelligent multiprotocol WAN adapter with data
+  is a family of intelligent multiprotocol WAN adapters with data
   transfer rates up to T1 (1.544 Mbps).  They are also known as
   Synchronous Data Link Adapters (SDLA) and designated S502E(A), S503
   or S508.  If you have one of these cards, say 'Y' to this option.

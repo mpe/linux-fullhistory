@@ -198,6 +198,21 @@ DO_ERROR(11, SIGBUS,  "segment not present", segment_not_present, current)
 DO_ERROR(12, SIGBUS,  "stack segment", stack_segment, current)
 DO_ERROR(17, SIGSEGV, "alignment check", alignment_check, current)
 DO_ERROR(18, SIGSEGV, "reserved", reserved, current)
+/* I don't have documents for this but it does seem to cover the cache
+   flush from user space exception some people get. */
+DO_ERROR(19, SIGSEGV, "cache flush denied", cache_flush_denied, current)
+
+asmlinkage void cache_flush_denied(struct pt_regs * regs, long error_code)
+{
+	if (regs->eflags & VM_MASK) {
+		handle_vm86_fault((struct kernel_vm86_regs *) regs, error_code);
+		return;
+	}
+	die_if_kernel("cache flush denied",regs,error_code);
+	current->tss.error_code = error_code;
+	current->tss.trap_no = 19;
+	force_sig(SIGSEGV, current);
+}
 
 asmlinkage void do_general_protection(struct pt_regs * regs, long error_code)
 {

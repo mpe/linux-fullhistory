@@ -627,7 +627,7 @@ int udp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 			       sk->ip_tos|sk->localroute);
 	if (err)
 		return err;
-	if (rt->rt_flags&RTF_BROADCAST && !sk->broadcast) {
+	if ((rt->rt_flags&RTF_BROADCAST) && !sk->broadcast) {
 		ip_rt_put(rt);
 		return -EACCES;
 	}

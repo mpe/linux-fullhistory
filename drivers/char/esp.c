@@ -29,19 +29,17 @@
  *     by Chris Faylor.
  *
  * Most recent changes: (Andrew J. Robinson)
- *     Remove all references to tty->hw_stopped.
- *     Request a single region for multiple ports if possible.
- *     Stop a DMA transfer on a port when it is closed.
- *     Rename esp_init() to espserial_init().
- *     Improve validation of IRQ (only accept those allowed by the ESP card).
- *     Return if a signal is received while wait for a break to start.
- *     Split NEED_DMA logic into NEED_DMA_RX and NEED_DMA_TX.
+ *     Don't cause a kernel panic if memory could not be allocated or if the
+ *     device couldn't be registered.
+ *     Always set RTS when transitioning away from B0 status (since the
+ *     flow is really being handled by the ESP card).
  *
  * This module exports the following rs232 io functions:
  *
  *	int espserial_init(void);
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/signal.h>
@@ -51,7 +49,6 @@
 #include <linux/tty_flip.h>
 #include <linux/serial.h>
 #include <linux/serial_reg.h>
-#include <linux/config.h>
 #include <linux/major.h>
 #include <linux/string.h>
 #include <linux/fcntl.h>
@@ -95,7 +92,7 @@ static int dma_bytes;
 #define WAKEUP_CHARS 1024
 
 static char *serial_name = "ESP serial driver";
-static char *serial_version = "1.3";
+static char *serial_version = "1.5";
 
 DECLARE_TASK_QUEUE(tq_esp);
 
@@ -1851,9 +1848,7 @@ static void rs_set_termios(struct tty_struct *tty, struct termios *old_termios)
 	/* Handle transition away from B0 status */
 	if (!(old_termios->c_cflag & CBAUD) &&
 		(tty->termios->c_cflag & CBAUD)) {
-		info->MCR |= UART_MCR_DTR;
-		if (!(tty->termios->c_cflag & CRTSCTS))
-			info->MCR |= UART_MCR_RTS;
+		info->MCR |= (UART_MCR_DTR | UART_MCR_RTS);
 		cli();
 		serial_out(info, UART_ESI_CMD1, ESI_WRITE_UART);
 		serial_out(info, UART_ESI_CMD2, UART_MCR);
@@ -2460,14 +2455,29 @@ int espserial_init(void)
 	esp_callout_driver.subtype = SERIAL_TYPE_CALLOUT;
 
 	if (tty_register_driver(&esp_driver))
-		panic("Couldn't register serial driver\n");
+	{
+		printk(KERN_ERR "Couldn't register esp serial driver");
+		return 1;
+	}
+
 	if (tty_register_driver(&esp_callout_driver))
-		panic("Couldn't register callout driver\n");
+	{
+		printk(KERN_ERR "Couldn't register esp callout driver");
+		tty_unregister_driver(&esp_driver);
+		return 1;
+	}
 	
 	info = (struct esp_struct *)kmalloc(sizeof(struct esp_struct),
 		GFP_KERNEL);
+
 	if (!info)
-		panic("Could not allocate memory for device information\n");
+	{
+		printk(KERN_ERR "Couldn't allocate memory for esp serial device information\n");
+		tty_unregister_driver(&esp_driver);
+		tty_unregister_driver(&esp_callout_driver);
+		return 1;
+	}
+
 	memset((void *)info, 0, sizeof(struct esp_struct));
 
 	i = 0;
@@ -2515,7 +2525,13 @@ int espserial_init(void)
 		info = (struct esp_struct *)kmalloc(sizeof(struct esp_struct),
 			GFP_KERNEL);
 		if (!info)
-			panic("Could not allocate memory for device information\n");
+		{
+			printk(KERN_ERR "Couldn't allocate memory for esp serial device information\n"); 
+
+			/* allow use of the already detected ports */
+			return 0;
+		}
+
 		memset((void *)info, 0, sizeof(struct esp_struct));
 
 		if (offset == 56) {

@@ -598,6 +598,7 @@ static inline int root_send_udp(struct socket *sock, void *buf, int size)
 	iov.iov_base = buf;
 	iov.iov_len = size;
 	msg.msg_name = NULL;
+	msg.msg_namelen = 0;
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
 	msg.msg_control = NULL;
@@ -624,6 +625,7 @@ static inline int root_recv_udp(struct socket *sock, void *buf, int size)
 	iov.iov_base = buf;
 	iov.iov_len = size;
 	msg.msg_name = NULL;
+	msg.msg_namelen = 0;
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
 	msg.msg_control = NULL;

@@ -56,8 +56,8 @@ extern void wrmces (unsigned long);
 #define halt() __asm__ __volatile__ ("call_pal %0" : : "i" (PAL_halt) : "memory")
 
 #define switch_to(prev,next) do { \
-	current_set[0] = next; \
-	alpha_switch_to((unsigned long) &(next)->tss - 0xfffffc0000000000); \
+	current_set[0] = current = next; \
+	alpha_switch_to((unsigned long) &current->tss - 0xfffffc0000000000); \
 } while (0)
 
 extern void alpha_switch_to(unsigned long pctxp);

@@ -127,6 +127,7 @@ enum net_directory_inos {
 	PROC_NET_X25_LINKS,
 	PROC_NET_X25_ROUTES,
 	PROC_NET_X25,
+	PROC_NET_TR_RIF,
 	PROC_NET_LAST
 };
 

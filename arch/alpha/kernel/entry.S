@@ -127,8 +127,8 @@ entInt:
 	addq	$1,1,$1
 	stq	$1,0($0)
 /* set up the arguments to the C interrupt handler */
-	lda	$27,do_entInt
-	jsr	$26,($27),do_entInt
+	ldq	$8,current_set
+	jsr	$26,do_entInt
 /* ok, return */
 	lda	$0,intr_count
 	ldq	$1,0($0)
@@ -153,6 +153,7 @@ entMM:
 	stq	$15,48($30)
 	addq	$30,56,$19
 /* handle the fault */
+	ldq	$8,current_set
 	jsr	$26,do_page_fault
 /* reload the registers after the exception code played.  */
 	ldq	$9,0($30)
@@ -172,6 +173,9 @@ entMM:
 .ent	entArith
 entArith:
 	SAVE_ALL
+	ldq	$8,current_set
+	/* How much of a win is this clockwise?  We are, after all, messing
+	   up the call/return prefetch stack.  -- rth */
 	lda	$27,do_entArith
 	lda	$26,ret_from_sys_call
 	jsr	$31,($27),do_entArith
@@ -182,6 +186,7 @@ entArith:
 .ent	entIF
 entIF:
 	SAVE_ALL
+	ldq	$8,current_set
 	lda	$27,do_entIF
 	lda	$26,ret_from_sys_call
 	jsr	$31,($27),do_entIF
@@ -210,8 +215,7 @@ kernel_clone:
 	stq $18,40($30)
 	bis $31,2,$0	/* Register v0: syscall nr for fork() */
 	SAVE_ALL
-	lda $27,sys_clone
-	jsr $26,($27),sys_clone
+	jsr $26,sys_clone
 	stq $0,0($30)
 	br $31,ret_from_sys_call
 .end	kernel_clone
@@ -240,11 +244,13 @@ __kernel_thread:
 	ret $31,($26),1
 /* this is in child: look out as we don't have any stack here.. */
 1:	bis $9,$9,$27		/* get fn */
+	br $29,2f
+2:	ldgp $29,0($29)
 	bis $10,$10,$16		/* get arg */
+	ldq $8,current_set
 	jsr $26,($27)
 	bis $0,$0,$16
-	lda $27,sys_exit
-	jsr $26,($27),sys_exit
+	jsr $26,sys_exit
 	call_pal PAL_halt
 .end	__kernel_thread
 
@@ -382,8 +388,8 @@ entUna:
 	stq $29,232($30)
 	stq $30,240($30)
 	stq $31,248($30)
-	lda $27,do_entUna
-	jsr $26,($27),do_entUna
+	ldq $8,current_set
+	jsr $26,do_entUna
 	ldq $0,0($30)
 	ldq $1,8($30)
 	ldq $2,16($30)
@@ -431,9 +437,9 @@ entUnaUser:
 	stq $13,32($30)
 	stq $14,40($30)
 	stq $15,48($30)
-	lda $27,do_entUnaUser
 	bis $31,$30,$19
-	jsr $26,($27),do_entUnaUser
+	ldq $8,current_set
+	jsr $26,do_entUnaUser
 	ldq $9,0($30)
 	ldq $10,8($30)
 	ldq $11,16($30)
@@ -457,8 +463,7 @@ sys_fork:
 	bis $31,SIGCHLD,$16
 	bis $31,$31,$17
 	bis $30,$30,$18
-	lda $27,alpha_clone
-	jsr $26,($27),alpha_clone
+	jsr $26,alpha_clone
 	bsr $1,undo_switch_stack
 	ret $31,($26),1
 .end	sys_fork
@@ -470,8 +475,7 @@ sys_clone:
 	bsr $1,do_switch_stack
 	/* arg1 and arg2 come from the user */
 	bis $30,$30,$18
-	lda $27,alpha_clone
-	jsr $26,($27),alpha_clone
+	jsr $26,alpha_clone
 	bsr $1,undo_switch_stack
 	ret $31,($26),1
 .end	sys_clone
@@ -499,14 +503,13 @@ alpha_switch_to:
 .ent	entSys
 entSys:
 	SAVE_ALL
-	lda	$1,current_set
+	ldq	$8,current_set
 	lda	$4,NR_SYSCALLS($31)
 	stq	$16,SP_OFF+24($30)
 	lda	$5,sys_call_table
-	ldq	$2,0($1)
 	lda	$27,do_entSys
 	cmpult	$0,$4,$4
-	ldq	$3,TASK_FLAGS($2)
+	ldq	$3,TASK_FLAGS($8)
 	stq	$17,SP_OFF+32($30)
 	s8addq	$0,$5,$5
 	and     $3,PF_PTRACED,$3
@@ -539,15 +542,13 @@ ret_from_handle_bh:
 	beq	$0,restore_all
 ret_from_reschedule:
 	lda	$0,need_resched
-	lda	$1,current_set
 	ldl	$2,0($0)
 	lda	$4,init_task
-	ldq	$3,0($1)
 	bne	$2,reschedule
-	subq	$4,$3,$4
+	xor	$4,$8,$4
 	beq	$4,restore_all
-	ldq	$4,TASK_SIGNAL($3)
-	ldq	$16,TASK_BLOCKED($3)
+	ldq	$4,TASK_SIGNAL($8)
+	ldq	$16,TASK_BLOCKED($8)
 	bic	$4,$16,$4
 	bne	$4,signal_return
 restore_all:
@@ -560,8 +561,7 @@ restore_all:
 strace:
 	/* set up signal stack, call syscall_trace */
 	bsr	$1,do_switch_stack
-	lda     $27,syscall_trace
-	jsr     $26,($27),syscall_trace
+	jsr     $26,syscall_trace
 	bsr	$1,undo_switch_stack
 
 	/* get the system call number and the arguments back.. */
@@ -590,8 +590,7 @@ strace_success:
 	stq	$0,0($30)		/* save return value */
 
 	bsr	$1,do_switch_stack
-	lda     $27,syscall_trace
-	jsr     $26,($27),syscall_trace
+	jsr     $26,syscall_trace
 	bsr	$1,undo_switch_stack
 	br	$31,ret_from_sys_call
 
@@ -609,8 +608,7 @@ strace_error:
 	bsr	$1,do_switch_stack
 	bis	$19,$19,$9	/* save old syscall number */
 	bis	$20,$20,$10	/* save old a3 */
-	lda     $27,syscall_trace
-	jsr     $26,($27),syscall_trace
+	jsr     $26,syscall_trace
 	bis	$9,$9,$19
 	bis	$10,$10,$20
 	bsr	$1,undo_switch_stack
@@ -628,8 +626,7 @@ handle_bottom_half:
 	subq	$30,16,$30
 	stq	$19,0($30)	/* save syscall nr */
 	stq	$20,8($30)	/* and error indication (a3) */
-	lda	$27,do_bottom_half
-	jsr	$26,($27),do_bottom_half
+	jsr	$26,do_bottom_half
 	lda	$0,intr_count
 	ldq	$19,0($30)
 	ldq	$20,8($30)
@@ -667,8 +664,7 @@ signal_return:
 	bis	$30,$30,$17
 	br	$1,do_switch_stack
 	bis	$30,$30,$18
-	lda	$27,do_signal
-	jsr	$26,($27),do_signal
+	jsr	$26,do_signal
 	lda	$30,SWITCH_STACK_SIZE($30)
 	br	$31,restore_all
 .end entSys
@@ -679,8 +675,7 @@ reschedule:
 	subq	$30,16,$30
 	stq	$19,0($30)	/* save syscall nr */
 	stq	$20,8($30)	/* and error indication (a3) */
-	lda	$27,schedule
-	jsr	$26,($27),schedule
+	jsr	$26,schedule
 	ldq	$19,0($30)
 	ldq	$20,8($30)
 	addq	$30,16,$30
@@ -693,8 +688,7 @@ sys_sigreturn:
 	bis	$30,$30,$17
 	lda	$30,-SWITCH_STACK_SIZE($30)
 	bis	$30,$30,$18
-	lda	$27,do_sigreturn
-	jsr	$26,($27),do_sigreturn
+	jsr	$26,do_sigreturn
 	br	$1,undo_switch_stack
 	br	$31,ret_from_sys_call
 .end sys_sigreturn
@@ -705,8 +699,7 @@ sys_sigsuspend:
 	bis	$30,$30,$17
 	br	$1,do_switch_stack
 	bis	$30,$30,$18
-	lda	$27,do_sigsuspend
-	jsr	$26,($27),do_sigsuspend
+	jsr	$26,do_sigsuspend
 	lda	$30,SWITCH_STACK_SIZE($30)
 	br	$31,ret_from_sys_call
 .end sys_sigsuspend

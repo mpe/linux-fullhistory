@@ -205,18 +205,17 @@ extern asmlinkage int sys_kill(int, int);
  */
 asmlinkage int sys_reboot(int magic, int magic_too, int flag)
 {
-	int error = -EPERM;
-
-	lock_kernel();
 	if (!suser())
-		goto out;
-	error = -EINVAL;
+		return -EPERM;
 	if (magic != 0xfee1dead || 
 	    (magic_too != 672274793 && magic_too != 85072278))
-		goto out;
-	error = 0;
+		return -EINVAL;
+
+
 	if (flag == 0x01234567)
 	{
+		/* SMP: We need to lock during the shutdown still */
+		lock_kernel();
 		notifier_call_chain(&boot_notifier_list, SYS_DOWN, NULL);
 		hard_reset_now();
 	}
@@ -225,6 +224,8 @@ asmlinkage int sys_reboot(int magic, int magic_too, int flag)
 	else if (!flag)
 		C_A_D = 0;
 	else if (flag == 0xCDEF0123) {
+		/* SMP: We need to lock during the shutdown still */
+		lock_kernel();
 		printk(KERN_EMERG "System halted\n");
 #ifdef __sparc__
 		halt_now();
@@ -236,10 +237,8 @@ asmlinkage int sys_reboot(int magic, int magic_too, int flag)
 		notifier_call_chain(&boot_notifier_list, SYS_HALT, NULL);
 		do_exit(0);
 	} else
-		error = -EINVAL;
-out:
-	unlock_kernel();
-	return error;
+		return -EINVAL;
+	return 0;
 }
 
 /*
@@ -659,24 +658,21 @@ asmlinkage int sys_setfsgid(gid_t gid)
 
 asmlinkage long sys_times(struct tms * tbuf)
 {
-	int error;
-
-	lock_kernel();
-	if (tbuf) {
-		error = put_user(current->utime,&tbuf->tms_utime);
-		if (!error)
-			error = put_user(current->stime,&tbuf->tms_stime);
-		if (!error)
-			error = put_user(current->cutime,&tbuf->tms_cutime);
-		if (!error)
-			error =	put_user(current->cstime,&tbuf->tms_cstime);
-		if (error)
-			goto out;
+	/*
+	 *	In the SMP world we might just be unlucky and have one of
+	 *	the times increment as we use it. Since the value is an
+	 *	atomically safe type this is just fine. Conceptually its
+	 *	as if the syscall took an instant longer to occur.
+	 */
+	if (tbuf) 
+	{
+		if(put_user(current->utime,&tbuf->tms_utime)||
+		   put_user(current->stime,&tbuf->tms_stime) ||
+		   put_user(current->cutime,&tbuf->tms_cutime) ||
+		   put_user(current->cstime,&tbuf->tms_cstime))
+			return -EFAULT;
 	}
-	error = jiffies;
-out:
-	unlock_kernel();
-	return error;
+	return jiffies;
 }
 
 /*
@@ -691,6 +687,7 @@ out:
  * Auch. Had to add the 'did_exec' flag to conform completely to POSIX.
  * LBT 04.03.94
  */
+
 asmlinkage int sys_setpgid(pid_t pid, pid_t pgid)
 {
 	struct task_struct * p;
@@ -820,45 +817,40 @@ out:
  */
 asmlinkage int sys_getgroups(int gidsetsize, gid_t *grouplist)
 {
-	int i, err = -EINVAL;
+	int i;
+	
+	/*
+	 *	SMP: Nobody else can change our grouplist. Thus we are
+	 *	safe.
+	 */
 
-	lock_kernel();
 	if (gidsetsize < 0)
-		goto out;
+		return -EINVAL;
 	i = current->ngroups;
 	if (gidsetsize) {
-		err = -EINVAL;
 		if (i > gidsetsize)
-		        goto out;
-		err = -EFAULT;
+		        return -EINVAL;
 		if (copy_to_user(grouplist, current->groups, sizeof(gid_t)*i))
-			goto out;
+			return -EFAULT;
 	}
-	err = i;
-out:
-	unlock_kernel();
-	return err;
+	return i;
 }
 
+/*
+ *	SMP: Our groups are not shared. We can copy to/from them safely
+ *	without another task interfering.
+ */
+ 
 asmlinkage int sys_setgroups(int gidsetsize, gid_t *grouplist)
 {
-	int err = -EPERM;
-
-	lock_kernel();
 	if (!suser())
-		goto out;
-	err = -EINVAL;
+		return -EPERM;
 	if ((unsigned) gidsetsize > NGROUPS)
-		goto out;
-	err = copy_from_user(current->groups, grouplist, gidsetsize * sizeof(gid_t));
-	if (err) {
-		gidsetsize = 0;
-		err = -EFAULT;
-	} 
+		return -EINVAL;
+	if(copy_from_user(current->groups, grouplist, gidsetsize * sizeof(gid_t)))
+		return -EFAULT;
 	current->ngroups = gidsetsize;
-out:
-	unlock_kernel();
-	return err;
+	return 0;
 }
 
 int in_group_p(gid_t grp)

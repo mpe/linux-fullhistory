@@ -44,11 +44,11 @@
 #define	LAPB_ADDR_D	0x07
 
 /* Define Link State constants. */
-#define LAPB_STATE_0	0
-#define LAPB_STATE_1	1
-#define LAPB_STATE_2	2
-#define LAPB_STATE_3	3
-#define LAPB_STATE_4	4
+#define	LAPB_STATE_0	0		/* Disconnected State		*/
+#define	LAPB_STATE_1	1		/* Awaiting Connection State	*/
+#define	LAPB_STATE_2	2		/* Awaiting Disconnection State	*/
+#define	LAPB_STATE_3	3		/* Data Transfer State		*/
+#define	LAPB_STATE_4	4		/* Frame Reject State		*/
 
 #define	LAPB_DEFAULT_MODE		(LAPB_STANDARD | LAPB_SLP | LAPB_DTE)
 #define	LAPB_DEFAULT_WINDOW		7			/* Window=7 */
@@ -69,6 +69,7 @@ typedef struct lapb_cb {
 	unsigned short		n2, n2count;
 	unsigned short		t1, t2;
 	unsigned short		t1timer, t2timer;
+	struct sk_buff_head	input_queue;
 	struct sk_buff_head	write_queue;
 	struct sk_buff_head	ack_queue;
 	unsigned char		window;
@@ -77,7 +78,6 @@ typedef struct lapb_cb {
 } lapb_cb;
 
 /* lapb_iface.c */
-extern lapb_cb *lapb_tokentostruct(void *);
 extern void lapb_connect_confirmation(lapb_cb *, int);
 extern void lapb_connect_indication(lapb_cb *, int);
 extern void lapb_disconnect_confirmation(lapb_cb *, int);
@@ -86,13 +86,12 @@ extern int  lapb_data_indication(lapb_cb *, struct sk_buff *);
 extern int  lapb_data_transmit(lapb_cb *, struct sk_buff *);
 
 /* lapb_in.c */
+extern void lapb_data_input(lapb_cb *, struct sk_buff *);
 
 /* lapb_out.c */
 extern void lapb_kick(lapb_cb *);
 extern void lapb_transmit_buffer(lapb_cb *, struct sk_buff *, int);
-extern void lapb_nr_error_recovery(lapb_cb *);
 extern void lapb_establish_data_link(lapb_cb *);
-extern void lapb_transmit_enquiry(lapb_cb *);
 extern void lapb_enquiry_response(lapb_cb *);
 extern void lapb_timeout_response(lapb_cb *);
 extern void lapb_check_iframes_acked(lapb_cb *, unsigned short);

@@ -1033,8 +1033,8 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 				skb->h.th->urg_ptr = ntohs(copy);
 			}
 
-			skb->csum = csum_partial_copy_from_user(&err, from,
-					skb_put(skb, copy), copy, 0);
+			skb->csum = csum_partial_copy_from_user(from,
+					skb_put(skb, copy), copy, 0, &err);
 		
 			from += copy;
 			copied += copy;
