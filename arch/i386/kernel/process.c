@@ -107,6 +107,7 @@ asmlinkage int sys_idle(void)
 	if (current->pid != 0)
 		goto out;
 	/* endless idle loop with no priority at all */
+	current->priority = -100;
 	current->counter = -100;
 	for (;;) 
 	{
@@ -145,6 +146,7 @@ out:
 
 int cpu_idle(void *unused)
 {
+	current->priority = -100;
 	while(1)
 	{
 		if(cpu_data[smp_processor_id()].hlt_works_ok && !hlt_counter && !need_resched)
@@ -158,6 +160,8 @@ int cpu_idle(void *unused)
 			run_task_queue(&tq_scheduler);
 			unlock_kernel();
 		}
+		/* endless idle loop with no priority at all */
+		current->counter = -100;
 		schedule();
 	}
 }
@@ -474,7 +478,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	p->tss.ss = KERNEL_DS;
 	p->tss.ds = KERNEL_DS;
 	p->tss.fs = USER_DS;
-	p->tss.gs = KERNEL_DS;
+	p->tss.gs = USER_DS;
 	p->tss.ss0 = KERNEL_DS;
 	p->tss.esp0 = p->kernel_stack_page + PAGE_SIZE;
 	p->tss.tr = _TSS(nr);

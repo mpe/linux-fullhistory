@@ -172,6 +172,11 @@ int afinet_get_info(char *buffer, char **start, off_t offset, int length, int du
 		       raw_prot.inuse, raw_prot.highestinuse);
 	len += sprintf(buffer+len,"PAC: inuse %d highest %d\n",
 		       packet_prot.inuse, packet_prot.highestinuse);
+	if (offset >= len)
+	{
+		*start = buffer;
+		return 0;
+	}
 	*start = buffer + offset;
 	len -= offset;
 	if (len > length)

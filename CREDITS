@@ -133,13 +133,12 @@ E: bir7@leland.Stanford.Edu
 D: Original author of the Linux networking code
 
 N: Philip Blundell
-E: pjb27@cam.ac.uk 
-E: pb@nexus.co.uk
-E: phil@tazenda.demon.co.uk
+E: Philip.Blundell@pobox.com
 D: Device driver hacking (especially EtherExpress16/3C505 net cards)
 D: Some Linux/ARM stuff
-S: Trinity College
-S: Cambridge, UK. CB2 1TQ
+D: Co-architect of the parallel port sharing system
+S: 201 Gilbert Road
+S: Cambridge, UK. CB4 3PA
 
 N: Thomas Bogendoerfer
 E: tsbogend@alpha.franken.de
@@ -510,6 +509,7 @@ S: USA
 N: Grant Guenther
 E: grant@torque.net
 D: drivers for parallel port devices: ppa, ez, bpcd
+D: original architect of the parallel-port sharing scheme. 
 S: 906-1001 Bay St.
 S: Toronto, Ontario, M5S 3A6 
 S: Canada
@@ -696,9 +696,11 @@ S: Chapel Hill, North Carolina 27514-4818
 S: USA
 
 N: Bernhard Kaindl
+E: bkaindl@netway.at
 E: edv@bartelt.via.at
 D: Author of a menu based configuration tool, kmenu, which 
 D: is the predecessor of 'make menuconfig' and 'make xconfig'.
+D: digiboard driver update(modularisation work and 2.1.x upd)
 S: Tallak 95
 S: 8103 Rein
 S: Austria
@@ -826,7 +828,8 @@ S: Australia
 
 N: Hans Lermen
 E: lermen@elserv.ffm.fgan.de
-D: Author of the LOADLIN Linux loader
+D: Author of the LOADLIN Linux loader, hacking on boot stuff
+D: Co-ordinator of DOSEMU releases
 S: Am Muehlenweg 38
 S: D53424 Remagen
 S: Germany
@@ -888,7 +891,7 @@ D: Initial implementation of VC's, pty's and select()
 N: James B. MacLean
 E: macleajb@ednet.ns.ca
 W: http://www.ednet.ns.ca/~macleajb/dosemu.html
-D: Coordinator of DOSEMU releases
+D: Former Co-ordinator of DOSEMU releases
 D: Program in DOSEMU
 S: PO BOX 220, HFX. CENTRAL
 S: Halifax, Nova Scotia
@@ -1520,6 +1523,13 @@ S: X/OS Experts in Open Systems BV
 S: Kruislaan 419
 S: 1098 VA Amsterdam 
 S: The Netherlands
+
+N: Tim Waugh
+E: tmw20@cyberelk.demon.co.uk
+D: Co-architect of the parallel-port sharing system
+S: 51 Frensham Road
+S: Southsea
+S: Hampshire, UK. PO4 8AE
 
 N: Juergen Weigert
 E: jnweiger@immd4.informatik.uni-erlangen.de

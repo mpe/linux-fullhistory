@@ -1,0 +1,55 @@
+The `parport' code provides parallel-port support under Linux.  This
+includes the ability to share one port between multiple device
+drivers.
+
+You can pass parameters to the parport code to override its automatic
+detection of your hardware.  This is particularly useful if you want
+to use IRQs, since in general these can't be autoprobed successfully.
+
+If you load the parport code as a module, say
+
+	# insmod parport.o io=0x378,0x278 irq=7,5
+
+to tell the parport code that you want two ports, one at 0x378 using
+IRQ 7, and one at 0x278 using IRQ 5. 
+
+If you compile the parport code into the kernel, then you can use
+kernel boot parameters to get the same effect.  Add something like the
+following to your LILO command line:
+
+	parport=0x378,7 parport=0x278,5
+
+You can have many `parport=...' statements, one for each port you want
+to add.  Adding `parport=0' or just `parport=' to the command-line
+will disable parport support entirely.
+
+Once the parport code is initialised, you can attach device drivers to
+ports.  Normally this happens automatically; if the lp driver is
+loaded it will create one lp device for each port found.  You can
+override this, though, by using parameters either when you load the lp
+driver:
+
+	# insmod lp.o parport=0,2
+
+or on the LILO command line:
+
+	lp=parport0 lp=parport2
+
+Both the above examples would inform lp that you want /dev/lp0 to be
+the first parallel port, and /dev/lp1 to be the _third_ parallel port,
+with no lp device associated with the second port (parport1).  Note
+that this is different to the way older kernels worked; there used to
+be a static association between the I/O port address and the device
+name, so /dev/lp0 was always the port at 0x3bc.  This is no longer the
+case - if you only have one port, it will always be /dev/lp0,
+regardless of base address.
+
+Also:
+
+ * If you selected the device autoprobe at compile time, you can say
+`lp=auto' on the kernel command line, and lp will create devices only
+for those ports that seem to have printers attached.
+
+ * If you give PLIP the `timid' parameter, either with `plip=timid' on
+the command line, or with `insmod plip timid=1' when using modules, it
+will avoid any ports that seem to be in use by other devices.

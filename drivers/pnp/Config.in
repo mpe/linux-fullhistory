@@ -1,0 +1,16 @@
+#
+# Plug and Play configuration
+#
+
+mainmenu_option next_comment
+comment 'Plug and Play support'
+ 
+bool 'Plug and Play support' CONFIG_PNP
+
+if [ "$CONFIG_PNP" = "y" ]; then
+  if [ "$CONFIG_PNP_PARPORT" != "n" ]; then
+    bool '  Auto-probe for parallel devices' CONFIG_PNP_PARPORT_AUTOPROBE
+  fi
+fi
+
+endmenu

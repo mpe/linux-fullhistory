@@ -698,10 +698,12 @@ asmlinkage long sys_times(struct tms * tbuf)
 	 */
 	if (tbuf) 
 	{
-		if(put_user(current->utime,&tbuf->tms_utime)||
-		   put_user(current->stime,&tbuf->tms_stime) ||
-		   put_user(current->cutime,&tbuf->tms_cutime) ||
-		   put_user(current->cstime,&tbuf->tms_cstime))
+		/* ?? use copy_to_user() */
+		if(!access_ok(VERIFY_READ, tbuf, sizeof(struct tms)) ||
+		   __put_user(current->utime,&tbuf->tms_utime)||
+		   __put_user(current->stime,&tbuf->tms_stime) ||
+		   __put_user(current->cutime,&tbuf->tms_cutime) ||
+		   __put_user(current->cstime,&tbuf->tms_cstime))
 			return -EFAULT;
 	}
 	return jiffies;
@@ -943,25 +945,19 @@ asmlinkage int sys_olduname(struct oldold_utsname * name)
 	lock_kernel();
 	if (!name)
 		goto out;
-	error = copy_to_user(&name->sysname,&system_utsname.sysname,__OLD_UTS_LEN);
-	if (!error)
-		error = put_user(0,name->sysname+__OLD_UTS_LEN);
-	if (!error)
-		error = copy_to_user(&name->nodename,&system_utsname.nodename,__OLD_UTS_LEN);
-	if (!error)
-		error = put_user(0,name->nodename+__OLD_UTS_LEN);
-	if (!error)
-		error = copy_to_user(&name->release,&system_utsname.release,__OLD_UTS_LEN);
-	if (!error)
-		error = put_user(0,name->release+__OLD_UTS_LEN);
-	if (!error)
-		error = copy_to_user(&name->version,&system_utsname.version,__OLD_UTS_LEN);
-	if (!error)
-		error = put_user(0,name->version+__OLD_UTS_LEN);
-	if (!error)
-		error = copy_to_user(&name->machine,&system_utsname.machine,__OLD_UTS_LEN);
-	if (!error)
-		error = put_user(0,name->machine+__OLD_UTS_LEN);
+	if (!access_ok(VERIFY_WRITE,name,sizeof(struct oldold_utsname)))
+		goto out;
+  
+	error = __copy_to_user(&name->sysname,&system_utsname.sysname,__OLD_UTS_LEN);
+	error -= __put_user(0,name->sysname+__OLD_UTS_LEN);
+	error -= __copy_to_user(&name->nodename,&system_utsname.nodename,__OLD_UTS_LEN);
+	error -= __put_user(0,name->nodename+__OLD_UTS_LEN);
+	error -= __copy_to_user(&name->release,&system_utsname.release,__OLD_UTS_LEN);
+	error -= __put_user(0,name->release+__OLD_UTS_LEN);
+	error -= __copy_to_user(&name->version,&system_utsname.version,__OLD_UTS_LEN);
+	error -= __put_user(0,name->version+__OLD_UTS_LEN);
+	error -= __copy_to_user(&name->machine,&system_utsname.machine,__OLD_UTS_LEN);
+	error = __put_user(0,name->machine+__OLD_UTS_LEN);
 	error = error ? -EFAULT : 0;
 out:
 	unlock_kernel();

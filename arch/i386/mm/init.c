@@ -146,19 +146,19 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	pg_dir = swapper_pg_dir;
 	/* unmap the original low memory mappings */
 	pgd_val(pg_dir[0]) = 0;
+
+	/* Map whole memory from 0xC0000000 */
+
 	while (address < end_mem) {
-		/*
-		 * The following code enabled 4MB page tables for the
-		 * Intel Pentium cpu, unfortunately the SMP kernel can't
-		 * handle the 4MB page table optimizations yet
-		 */
-		/*
-		 * This will create page tables that
-		 * span up to the next 4MB virtual
-		 * memory boundary, but that's ok,
-		 * we won't use that memory anyway.
-		 */
 		if (x86_capability & 8) {
+			/*
+			 * If we're running on a Pentium CPU, we can use the 4MB
+			 * page tables. 
+			 *
+			 * The page tables we create span up to the next 4MB
+			 * virtual memory boundary, but that's OK as we won't
+			 * use that memory anyway.
+			 */
 #ifdef GAS_KNOWS_CR4
 			__asm__("movl %%cr4,%%eax\n\t"
 				"orl $16,%%eax\n\t"
@@ -176,8 +176,10 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 			address += 4*1024*1024;
 			continue;
 		}
-		/* map the memory at virtual addr 0xC0000000 */
-		/* pg_table is physical at this point */
+		/*
+		 * We're on a [34]86, use normal page tables.
+		 * pg_table is physical at this point
+		 */
 		pg_table = (pte_t *) (PAGE_MASK & pgd_val(pg_dir[768]));
 		if (!pg_table) {
 			pg_table = (pte_t *) __pa(start_mem);
@@ -273,18 +275,25 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 /* test if the WP bit is honoured in supervisor mode */
 	if (wp_works_ok < 0) {
 		unsigned char tmp_reg;
+		unsigned long old = pg0[0];
+		printk("Checking if this processor honours the WP bit even in supervisor mode... ");
 		pg0[0] = pte_val(mk_pte(PAGE_OFFSET, PAGE_READONLY));
 		local_flush_tlb();
+		current->mm->mmap->vm_start += PAGE_SIZE;
 		__asm__ __volatile__(
 			"movb %0,%1 ; movb %1,%0"
 			:"=m" (*(char *) __va(0)),
 			 "=q" (tmp_reg)
 			:/* no inputs */
 			:"memory");
-		pg0[0] = pte_val(mk_pte(PAGE_OFFSET, PAGE_KERNEL));
+		pg0[0] = old;
 		local_flush_tlb();
-		if (wp_works_ok < 0)
+		current->mm->mmap->vm_start -= PAGE_SIZE;
+		if (wp_works_ok < 0) {
 			wp_works_ok = 0;
+			printk("No.\n");
+		} else
+			printk("Ok.\n");
 	}
 	return;
 }

@@ -1,0 +1,43 @@
+Things to be done.
+
+0. Fix the bugs (see BUGS-parport).
+
+1. Write a /proc interface for parport.  As a starting point, we could
+   probably have something like this:
+
+   /proc/parport/N/hardware
+
+        Details of the port hardware - chipset, capabilities and so on.
+        Read-only.
+
+   /proc/parport/N/irq
+
+        IRQ number of the port.  Read-write.
+
+   /proc/parport/N/devices
+
+        List of devices connected to this bus, with the currently active
+        one marked in some way.  Probably you'd have the device in the
+        first column, and '*' (for the current device) or '-' (for a
+        lurker) in the second column.
+
+   NOTE: The directory structure has been coded -- but the files are
+         missing ...
+
+2. Proper documentation.
+
+3. Overhaul lp.c:
+
+   a) It's a mess, and there is a lot of code duplication.
+
+   b) ECP support would be nice.  This can only work if both the port and
+      the printer support it.
+
+   c) Errors could do with being handled better.  There's no point logging a
+      message every 10 seconds when the printer is out of paper. 
+
+   d) Handle status readback automatically.  IEEE1284 printers can post status
+      bits when they have something to say.  We should read out and deal 
+      with (maybe just log) whatever the printer wants to tell the world.
+
+4. Assimilate more drivers.

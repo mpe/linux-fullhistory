@@ -379,7 +379,7 @@ void udpv6_err(int type, int code, unsigned char *buff, __u32 info,
 	
 	uh = (struct udphdr *) buff;
 
-	sk = udp_v6_lookup(saddr, uh->source, daddr, uh->dest);
+	sk = udp_v6_lookup(daddr, uh->dest, saddr, uh->source);
    
 	if (sk == NULL) {
 		printk(KERN_DEBUG "icmp for unkown sock\n");

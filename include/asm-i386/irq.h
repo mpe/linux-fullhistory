@@ -156,6 +156,18 @@ SYMBOL_NAME_STR(x) ":\n\t" \
 	"call "SYMBOL_NAME_STR(smp_##x)"\n\t" \
 	"jmp ret_from_intr\n");
 
+#define BUILD_SMP_TIMER_INTERRUPT(x) \
+asmlinkage void x(struct pt_regs * regs); \
+__asm__( \
+"\n"__ALIGN_STR"\n" \
+SYMBOL_NAME_STR(x) ":\n\t" \
+	SAVE_MOST \
+	"movl %esp,%eax\n\t" \
+	"pushl %eax\n\t" \
+	"call "SYMBOL_NAME_STR(smp_##x)"\n\t" \
+	"addl $4,%esp\n\t" \
+	RESTORE_MOST);
+
 #endif /* __SMP__ */
 
 #define BUILD_IRQ(chip,nr,mask) \

@@ -407,6 +407,19 @@ M:	emoenke@gwdg.de
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
+PARALLEL PORT SHARING SUPPORT
+P:	Phil Blundell
+M:	Philip.Blundell@pobox.com
+P:	Tim Waugh
+M:	tmw20@cyberelk.demon.co.uk
+P:	David Campbell
+M:	campbell@tirian.che.curtin.edu.au
+L:	linux-parport@torque.net
+L:	pnp-list@redhat.com
+W:	http://www.cyberelk.demon.co.uk/parport.html
+W:	http://www.cage.curtin.edu.au/~campbell/parbus/
+S:	Maintained
+
 FPU EMULATOR
 P:	Bill Metzenthen
 M:	billm@suburbia.net
@@ -421,7 +434,7 @@ S:	Maintained
 KERNEL AUTOMOUNTER (AUTOFS)
 P:	H. Peter Anvin
 M:	hpa@zytor.com
-L:	linux-kernel@vger.rutgers.edu
+L:	autofs@linux.kernel.org
 S:	Maintained
 
 DEVICE NUMBER REGISTRY

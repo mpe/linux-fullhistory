@@ -134,9 +134,11 @@ static inline int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 		tsk->cmin_flt = tsk->cmaj_flt = 0;
 		tsk->nswap = tsk->cnswap = 0;
 		if (new_page_tables(tsk))
-			return -1;
+			goto free_mm;
 		if (dup_mmap(mm)) {
 			free_page_tables(mm);
+free_mm:
+			kfree(mm);
 			return -1;
 		}
 		return 0;

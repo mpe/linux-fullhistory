@@ -621,6 +621,7 @@ static void receive_packet(struct device *dev, int len)
 	if (set_bit(0, (void *) &adapter->dmaing))
 		printk("%s: rx blocked, DMA in progress, dir %d\n", dev->name, adapter->current_dma.direction);
 
+	skb->dev = dev;
 	adapter->current_dma.direction = 0;
 	adapter->current_dma.length = rlen;
 	adapter->current_dma.skb = skb;
@@ -698,12 +699,12 @@ static void elp_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 			} else {
 				struct sk_buff *skb = adapter->current_dma.skb;
 				if (skb) {
-				  skb->dev = dev;
 				  if (adapter->current_dma.target) {
 				    /* have already done the skb_put() */
 				    memcpy(adapter->current_dma.target, adapter->dma_buffer, adapter->current_dma.length);
 				  }
 				  skb->protocol = eth_type_trans(skb,dev);
+				  adapter->stats.rx_bytes += skb->len;
 				  netif_rx(skb);
 				}
 			}
@@ -1032,10 +1033,8 @@ static int send_packet(struct device *dev, struct sk_buff *skb)
 			printk("%s: transmit blocked\n", dev->name);
 		return FALSE;
 	}
-	adapter = dev->priv;
 
-
-	adapter->stats.tx_bytes+=nlen;
+	adapter->stats.tx_bytes += nlen;
 	
 	/*
 	 * send the adapter a transmit packet command. Ignore segment and offset

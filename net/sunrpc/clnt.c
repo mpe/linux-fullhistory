@@ -746,7 +746,7 @@ init_module(void)
 #ifdef RPC_DEBUG
 	rpc_register_sysctl();
 #endif
-	rpcstat_init();
+	rpc_proc_init();
 	return 0;
 }
 
@@ -756,6 +756,6 @@ cleanup_module(void)
 #ifdef RPC_DEBUG
 	rpc_unregister_sysctl();
 #endif
-	rpcstat_exit();
+	rpc_proc_exit();
 }
 #endif

@@ -1,0 +1,15 @@
+Currently known (or at least suspected) bugs in parport:
+
+o /proc/parport is buggy under 2.0.29 (ls /proc/parport/0 gives no such
+  file or directory).  David has suggested a fix for this.  [/proc/parport
+  has been temporarily taken out]
+
+o SCSI aborts for PPA under 2.0.29 [reported by jmr].  Under investigation.
+
+o make config (etc) allow you to select CONFIG_PNP_PARPORT=m, CONFIG_PPA=y -
+  the resulting kernel won't link.
+
+o IEEE1284 code does not do the terminating handshake after transfers, which
+  seems to upset some devices.
+
+o lp doesn't allow you to read status while printing is in progress.

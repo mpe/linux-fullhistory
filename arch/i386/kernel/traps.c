@@ -114,7 +114,7 @@ int kstack_depth_to_print = 24;
 #define VMALLOC_OFFSET (8*1024*1024)
 #define MODULE_RANGE (8*1024*1024)
 
-static void show_regs(struct pt_regs *regs)
+static void show_registers(struct pt_regs *regs)
 {
 	int i;
 	unsigned long esp;
@@ -124,8 +124,6 @@ static void show_regs(struct pt_regs *regs)
 
 	esp = (unsigned long) &regs->esp;
 	ss = KERNEL_DS;
-	if ((regs->eflags & VM_MASK) || (3 & regs->xcs) == 3)
-		return;
 	if (regs->xcs & 3) {
 		esp = regs->esp;
 		ss = regs->xss & 0xffff;
@@ -184,9 +182,11 @@ static void show_regs(struct pt_regs *regs)
 
 /*static*/ void die_if_kernel(const char * str, struct pt_regs * regs, long err)
 {
+	if ((regs->eflags & VM_MASK) || (3 & regs->xcs) == 3)
+		return;
 	console_verbose();
 	printk("%s: %04lx\n", str, err & 0xffff);
-	show_regs(regs);
+	show_registers(regs);
 	do_exit(SIGSEGV);
 }
 
@@ -236,7 +236,7 @@ out:
 
 asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 {
-	printk("NMI\n"); show_regs(regs);
+	printk("NMI\n"); show_registers(regs);
 #ifdef CONFIG_SMP_NMI_INVAL
 	smp_flush_tlb_rcv();
 #else

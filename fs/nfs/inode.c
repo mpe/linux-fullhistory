@@ -25,11 +25,12 @@
 #include <linux/locks.h>
 #include <linux/unistd.h>
 #include <linux/sunrpc/clnt.h>
+#include <linux/sunrpc/stats.h>
 #include <linux/nfs_fs.h>
 #include <linux/lockd/bind.h>
 
 #include <asm/system.h>
-# include <asm/uaccess.h>
+#include <asm/uaccess.h>
 
 #define NFSDBG_FACILITY		NFSDBG_VFS
 
@@ -50,6 +51,7 @@ static struct super_operations nfs_sops = {
 	NULL
 };
 
+struct rpc_stat			nfs_rpcstat = { &nfs_program };
 
 /*
  * The "read_inode" function doesn't actually do anything:
@@ -438,7 +440,7 @@ int
 init_nfs_fs(void)
 {
 #ifdef CONFIG_PROC_FS
-	rpcstat_register(&nfs_rpcstat);
+	rpc_proc_register(&nfs_rpcstat);
 #endif
         return register_filesystem(&nfs_fs_type);
 }
@@ -462,7 +464,7 @@ void
 cleanup_module(void)
 {
 #ifdef CONFIG_PROC_FS
-	rpcstat_unregister(&nfs_rpcstat);
+	rpc_proc_unregister("nfs");
 #endif
 	unregister_filesystem(&nfs_fs_type);
 	nfs_free_dircache();

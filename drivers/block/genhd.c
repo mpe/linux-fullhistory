@@ -765,9 +765,15 @@ static void setup_dev(struct gendisk *dev)
 void device_setup(void)
 {
 	extern void console_map_init(void);
+#ifdef CONFIG_PNP_PARPORT
+	extern int pnp_parport_init(void);
+#endif
 	struct gendisk *p;
 	int nr=0;
 
+#ifdef CONFIG_PNP_PARPORT
+	pnp_parport_init();
+#endif
 	chr_dev_init();
 	blk_dev_init();
 	sti();

@@ -13,7 +13,7 @@
 #include <linux/types.h>
 #include <linux/ioport.h>
 
-#define IOTABLE_SIZE 64
+#define IOTABLE_SIZE 128
 
 typedef struct resource_entry_t {
 	u_long from, num;

@@ -31,17 +31,6 @@ typedef struct swap_control_v5
 typedef struct swap_control_v5 swap_control_t;
 extern swap_control_t swap_control;
 
-typedef struct kswapd_control_v1
-{
-	unsigned int	maxpages;
-	unsigned int	pages_buff;
-	unsigned int	pages_shm;
-	unsigned int	pages_mmap;
-	unsigned int	pages_swap;
-} kswapd_control_v1;
-typedef kswapd_control_v1 kswapd_control_t;
-extern kswapd_control_t kswapd_ctl;
-
 typedef struct swapstat_v1
 {
 	unsigned int	wakeups;

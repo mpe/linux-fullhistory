@@ -21,6 +21,9 @@
 #
 # Please send comments / questions / bug fixes to roadcapw@cfw.com
 #
+# 070497 Bernhard Kaindl (bkaindl@netway.at) - get default values for
+# new bool, tristate and dep_tristate parameters from the defconfig file.
+# new configuration parameters are marked with '(NEW)' as in make config.
 #----------------------------------------------------------------------------
 
 
@@ -40,9 +43,21 @@ single_menu_mode=
 #
 set -h +o posix
 
+#
+# Converts "# xxx is not..." to xxx=n
+#
+parse_config () {
+	sed -e 's/# \(.*\) is not.*/\1=n/'
+}
 
-
-
+#
+# Parses the defconfig file to set the default for a new parameter.
+#
+function get_def () {
+	parse_config < arch/$ARCH/defconfig | grep "^$1=" > /tmp/conf.$$
+	. /tmp/conf.$$
+	rm /tmp/conf.$$
+}
 
 #
 # Load the functions used by the config.in files.
@@ -54,6 +69,19 @@ set -h +o posix
 # Thank the heavens bash supports nesting function definitions.
 #
 load_functions () {
+
+#
+# Macro for setting the x and info varibles. get's default from defconfig
+# file if it's a new parameter.
+#
+function set_x () {
+	eval x=\$$1
+	if [ -z "$x" ]; then
+		get_def "$1"
+		eval x=\${$1:-'n'} INFO_$1="' (NEW)'"
+	fi
+	eval info="\$INFO_$1"
+}
 
 #
 # Additional comments
@@ -75,14 +103,14 @@ function define_bool () {
 # which calls our local bool function.
 #
 function bool () {
-	eval $2=\${$2:-'n'}  x=\$$2
+	set_x "$2"
 
 	case $x in
 	y|m)	flag="*" ;;
 	n)	flag=" " ;;
 	esac
 
-	echo -ne "'$2' '[$flag] $1' " >>MCmenu
+	echo -ne "'$2' '[$flag] $1$info' " >>MCmenu
 
 	echo -e "function $2 () { l_bool '$2' \"\$1\" ;}\n" >>MCradiolists
 }
@@ -98,7 +126,7 @@ function tristate () {
 	then
 		bool "$1" "$2"
 	else
-		eval $2=\${$2:-'n'}  x=\$$2
+		set_x "$2"
 	
 		case $x in
 		y) flag="*" ;;
@@ -106,7 +134,7 @@ function tristate () {
 		*) flag=" " ;;
 		esac
 	
-		echo -ne "'$2' '<$flag> $1' " >>MCmenu
+		echo -ne "'$2' '<$flag> $1$info' " >>MCmenu
 	
 		echo -e "
 		function $2 () { l_tristate '$2' \"\$1\" ;}" >>MCradiolists
@@ -323,14 +351,14 @@ function l_bool () {
 # Same as bool() except options are (Module/No)
 #
 function mod_bool () {
-	eval $2=\${$2:-'n'}  x=\$$2
+	set_x "$2"
 
 	case $x in
 	y|m) flag='M' ;;
 	*)   flag=' ' ;;
 	esac
 
-	echo -ne "'$2' '<$flag> $1' " >>MCmenu
+	echo -ne "'$2' '<$flag> $1$info' " >>MCmenu
 
 	echo -e "function $2 () { l_mod_bool '$2' \"\$1\" ;}" >>MCradiolists
 }
@@ -882,31 +910,45 @@ save_configuration () {
 		  --infobox "Saving your kernel configuration..."  3 40
 
 	#
+	# Macro for setting the newval varible. get's default from defconfig
+	# file if it's a new parameter and it has not been shown yet.
+	#
+	function set_newval () {
+		eval newval=\$$1
+		if [ -z "$newval" ]; then
+			get_def "$1"
+			eval newval=\${$1:-'n'}
+		fi
+	}
+
+	#
 	# Now, let's redefine the configuration functions for final
 	# output to the config files.
 	#
 	# Nested function definitions, YIPEE!
 	#
 	function bool () {
-		eval define_bool "$2" "\${$2:-n}"
+		set_newval "$2"
+		eval define_bool "$2" "$newval"
 	}
 
 	function tristate () {
-		eval define_bool "$2" "\${$2:-n}"
+		set_newval "$2"
+		eval define_bool "$2" "$newval"
 	}
 
 	function dep_tristate () {
-		eval x=\${$2:-n}
+		set_newval "$2"
 
 		if eval [ "_$3" = "_m" ]
 		then
-			if [ "$x" = "y" ]
+			if [ "$newval" = "y" ]
 			then
-				x="m"
+				newval="m"
 			fi
 		fi
 
-		define_bool "$2" "$x"
+		define_bool "$2" "$newval"
 	}
 
 	function int () {

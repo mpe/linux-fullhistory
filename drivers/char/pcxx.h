@@ -49,6 +49,7 @@ struct board_info	{
 	ushort numports;
 	ushort port;
 	ulong  membase;
+	ulong  memsize;
 	ushort first_minor;
 };
 

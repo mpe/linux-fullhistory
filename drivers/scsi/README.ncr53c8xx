@@ -4,7 +4,7 @@ Written by Gerard Roudier <groudier@club-internet.fr>
 21 Rue Carnot
 95170 DEUIL LA BARRE - FRANCE
 
-27 February 1997
+6 April 1997
 ===============================================================================
 
 1.  Introduction
@@ -34,7 +34,11 @@ Written by Gerard Roudier <groudier@club-internet.fr>
 13. Control commands under linux-1.2.13
 14. Known problems
       14.1 Tagged commands with Iomega Jaz device
+      14.2 Device names change when another controller is added
 15. SCSI problem troubleshooting
+16. Synchonous transfer negotiation tables
+      16.1 Synchronous timings for 53C875 and 53C860 Ultra-SCSI controllers
+      16.2 Synchronous timings for fast SCSI-2 53C8XX controllers
 
 ===============================================================================
 
@@ -55,6 +59,18 @@ Drew Eckhardt.
 Information about new chips is available at SYMBIOS web server:
 
           http://www.symbios.com/
+
+SCSI standard documentations are available at SYMBIOS ftp server:
+
+          ftp://ftp.symbios.com/
+
+Usefull SCSI tools written by Eric Youngdale are available at tsx-11:
+
+          ftp://tsx-11.mit.edu/pub/linux/ALPHA/scsi/scsiinfo-X.Y.tar.gz
+          ftp://tsx-11.mit.edu/pub/linux/ALPHA/scsi/scsidev-X.Y.tar.gz
+
+These tools are not ALPHA but quite clean and work quite well.
+It is essential you have the 'scsiinfo' package.
 
 This short documentation only describes the features of the NCR53C8XX
 driver, configuration parameters and control commands available
@@ -186,6 +202,8 @@ General information:
   Chip NCR53C810, device id 0x1, revision id 0x2
   IO port address 0x6000, IRQ number 10
   Using memory mapped IO at virtual address 0x282c000
+  Synchronous transfer period 25, max commands per lun 4
+
 Profiling information:
   num_trans    = 18014
   num_kbytes   = 671314
@@ -554,6 +572,11 @@ IRQ mode
     irqm:1	same as initial settings (assumed BIOS settings)
     irqm:2	always totem pole
 
+Reverse probe
+    revprob:n   probe chip ids from the PCI configuration in this order:
+                810, 815, 820, 860, 875, 885, 895, 896
+    revprob:y   probe chip ids in the reverse order.
+
 Boot fail safe
     safe:y	load the following assumed fail safe initial setup
 
@@ -563,6 +586,7 @@ Boot fail safe
   special features		disabled		specf:n
   ultra scsi			disabled		ultra:n
   force sync negotiation	disabled		fsn:n
+  reverse probe			disabled		revprob:n
   verbosity level		2			verb:2
   tagged command queuing	disabled		tags:0
   synchronous negotiation	disabled		sync:255
@@ -579,8 +603,8 @@ Boot fail safe
 If the driver has been configured with default options, the equivalent 
 boot setup is:
 
-    ncr53c8xx=mpar:y,spar:y,disc:y,specf:y,fsn:n,ultra:y,fsn:n,verb:2,tags:0\
-              sync:50,debug:0,burst:7,led:0,wide:1,settle:2,diff:0,irqm:0
+   ncr53c8xx=mpar:y,spar:y,disc:y,specf:y,fsn:n,ultra:y,fsn:n,revprob:n,verb:1\
+             tags:0,sync:50,debug:0,burst:7,led:0,wide:1,settle:2,diff:0,irqm:0
 
 For an installation diskette or a safe but not fast system,
 boot setup can be:
@@ -592,8 +616,8 @@ boot setup can be:
 
 My personnal system works flawlessly with the following equivalent setup:
 
-    ncr53c8xx=mpar:y,spar:y,disc:y,specf:y,fsn:n,ultra:y,fsn:n,verb:1,tags:8\
-              sync:12,debug:0,burst:7,led:1,wide:1,settle:2,diff:0,irqm:0
+   ncr53c8xx=mpar:y,spar:y,disc:y,specf:y,fsn:n,ultra:y,fsn:n,revprob:n,verb:1\
+             tags:8,sync:12,debug:0,burst:7,led:1,wide:1,settle:2,diff:0,irqm:0
 
 The driver prints its actual setup when verbosity level is 2. You can try 
 "ncr53c8xx=verb:2" to get the "static" setup of the driver, or add "verb:2" 
@@ -712,9 +736,9 @@ Driver and common files:
 
 You must untar the distribution with the following command:
 
-	tar zxvf ncrBsd2Linux-1.18b-src.tar.gz
+	tar zxvf ncrBsd2Linux-1.18d-src.tar.gz
 
-The sub-directory ncr53c8xx-1.18b will be created. Change to this directory.
+The sub-directory ncr53c8xx-1.18d will be created. Change to this directory.
 
 
 12.2 Installation procedure
@@ -770,6 +794,23 @@ other problem that may appear is timeouts. The only way to avoid
 timeouts seems to edit linux/drivers/scsi/sd.c and to increase the
 current timeout values.
 
+14.2 Device names change when another controller is added.
+
+When you add a new NCR53C8XX chip based controller to a system that already 
+has one or more controllers of this family, it may happen that the order 
+the driver registers them to the kernel causes problems due to device 
+name changes.
+SDMS BIOS version 4 allows you to define the order the BIOS will scan the 
+scsi boards and stores this information for next reboots. Unfortunately, the 
+driver is not currently able to read this information and so may register 
+controllers in a different order.
+
+If you have such a problem, you can:
+
+- Ask the driver to probe chip ids in reverse order from the boot command
+  line: ncr53c8xx=revprob:y
+- Make appropriate changes in the fstab.
+- Use the 'scsidev' tool from Eric Youngdale.
 
 15. SCSI problem troubleshooting
 
@@ -819,6 +860,98 @@ Try to enable one feature at a time with control commands.  For example:
 Once you have found the device and the feature that cause problems, just 
 disable that feature for that device.
 
+
+16. Synchonous transfer negotiation tables
+
+Tables below have been created by calling the routine the driver uses
+for synchronisation negotiation timing calculation and chip setting.
+The first table corresponds to Ultra chips 53875 and 53C860 with 80 MHz 
+clock and 5 clock divisors.
+The second one has been calculated by setting the scsi clock to 40 Mhz 
+and using 4 clock divisors and so applies to all NCR53C8XX chips in fast 
+SCSI-2 mode.
+
+Periods are in nano-seconds and speeds are in Mega-transfers per second.
+1 Mega-transfers/second means 1 MB/s with 8 bits SCSI and 2 MB/s with 
+Wide16 SCSI.
+
+16.1 Synchronous timings for 53C875 and 53C860 Ultra-SCSI controllers
+
+ ----------------------------------------------
+ Negotiated                     NCR settings
+ Factor   Period   Speed        Period   Speed
+ ------   ------   ------       ------   ------
+ 12       50       20.000       50       20.000
+ 13       52       19.230       62       16.000
+ 14       56       17.857       62       16.000
+ 15       60       16.666       62       16.000
+ 16       64       15.625       75       13.333
+ 17       68       14.705       75       13.333
+ 18       72       13.888       75       13.333
+ 19       76       13.157       87       11.428
+ 20       80       12.500       87       11.428
+ 21       84       11.904       87       11.428
+ 22       88       11.363       93       10.666
+ 23       92       10.869       93       10.666
+ 24       96       10.416      100       10.000
+ 25      100       10.000      100       10.000
+ 26      104        9.615      112        8.888
+ 27      108        9.259      112        8.888
+ 28      112        8.928      112        8.888
+ 29      116        8.620      125        8.000
+ 30      120        8.333      125        8.000
+ 31      124        8.064      125        8.000
+ 32      128        7.812      131        7.619
+ 33      132        7.575      150        6.666
+ 34      136        7.352      150        6.666
+ 35      140        7.142      150        6.666
+ 36      144        6.944      150        6.666
+ 37      148        6.756      150        6.666
+ 38      152        6.578      175        5.714
+ 39      156        6.410      175        5.714
+ 40      160        6.250      175        5.714
+ 41      164        6.097      175        5.714
+ 42      168        5.952      175        5.714
+ 43      172        5.813      175        5.714
+ 44      176        5.681      187        5.333
+ 45      180        5.555      187        5.333
+ 46      184        5.434      187        5.333
+ 47      188        5.319      200        5.000
+ 48      192        5.208      200        5.000
+ 49      196        5.102      200        5.000
+
+
+16.2 Synchronous timings for fast SCSI-2 53C8XX controllers
+
+ ----------------------------------------------
+ Negotiated                     NCR settings
+ Factor   Period   Speed        Period   Speed
+ ------   ------   ------       ------   ------
+ 25      100       10.000      100       10.000
+ 26      104        9.615      125        8.000
+ 27      108        9.259      125        8.000
+ 28      112        8.928      125        8.000
+ 29      116        8.620      125        8.000
+ 30      120        8.333      125        8.000
+ 31      124        8.064      125        8.000
+ 32      128        7.812      131        7.619
+ 33      132        7.575      150        6.666
+ 34      136        7.352      150        6.666
+ 35      140        7.142      150        6.666
+ 36      144        6.944      150        6.666
+ 37      148        6.756      150        6.666
+ 38      152        6.578      175        5.714
+ 39      156        6.410      175        5.714
+ 40      160        6.250      175        5.714
+ 41      164        6.097      175        5.714
+ 42      168        5.952      175        5.714
+ 43      172        5.813      175        5.714
+ 44      176        5.681      187        5.333
+ 45      180        5.555      187        5.333
+ 46      184        5.434      187        5.333
+ 47      188        5.319      200        5.000
+ 48      192        5.208      200        5.000
+ 49      196        5.102      200        5.000
 ===============================================================================
 End of NCR53C8XX driver README file
 

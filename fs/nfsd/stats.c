@@ -1,18 +1,16 @@
 /*
- * nfsstat.c	procfs-based user access to knfsd statistics
+ * linux/fs/nfsd/stats.c
  *
- * /proc/net/nfssrv
+ * procfs-based user access to knfsd statistics
+ *
+ * /proc/net/rpc/nfsd
+ *
  * Format:
- *	net <packets> <udp> <tcp> <tcpconn>
- *	rpc <packets> <badfmt> <badclnt>
- *	auth <flavor> <creds> <upcalls> <badauth> <badverf> <authrej>
- *	fh  <hits> <misses> <avg_util> <stale> <cksum> <badcksum>
  *	rc <hits> <misses> <nocache>
- *	proto <version> <nrprocs>
- *	<calls> <time_msec>
- *	... (for each procedure and protocol version)
+ *			Statistsics for the reply cache
+ *	plus generic RPC stats (see net/sunrpc/stats.c)
  *
- * Copyright (C) 1995, 1996 Olaf Kirch <okir@monad.swb.de>
+ * Copyright (C) 1995, 1996, 1997 Olaf Kirch <okir@monad.swb.de>
  */
 
 #include <linux/kernel.h>
@@ -26,28 +24,13 @@
 #include <linux/nfsd/stats.h>
 
 struct nfsd_stats	nfsdstats;
-
-static int		nfsd_get_info(char *, char **, off_t, int, int);
-
-#ifndef PROC_NET_NFSSRV
-# define PROC_NET_NFSSRV	0
-#endif
-
-static struct proc_dir_entry proc_nfssrv = {
-	PROC_NET_NFSSRV, 4, "nfsd",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	6, &proc_net_inode_operations,
-	nfsd_get_info
-};
-
-struct svc_stat		nfsd_svcstats = {
-	NULL, &proc_nfssrv, &nfsd_program,
-};
+struct svc_stat		nfsd_svcstats = { &nfsd_program, };
 
 static int
-nfsd_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
+nfsd_proc_read(char *buffer, char **start, off_t offset, int count,
+				int *eof, void *data)
 {
-	int			len;
+	int	len;
 
 	len = sprintf(buffer,
 		"rc %d %d %d\n",
@@ -55,38 +38,45 @@ nfsd_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 			nfsdstats.rcmisses,
 			nfsdstats.rcnocache);
 
+	/* Assume we haven't hit EOF yet. Will be set by svc_proc_read. */
+	*eof = 0;
+
 	/*
-	 * Append generic nfsd RPC statistics
+	 * Append generic nfsd RPC statistics if there's room for it.
 	 */
-	if (offset >= len) {
-		offset -= len;
-		len = svcstat_get_info(&nfsd_svcstats, buffer, start,
-					offset, length);
-#if 0
-	} else if (len < length) {
-		len = svcstat_get_info(&nfsd_svcstats, buffer + len, start,
-					offset - len, length - len);
-#endif
+	if (len <= offset) {
+		len = svc_proc_read(buffer, start, offset - len, count,
+				eof, data);
+		return len;
+	}
+
+	if (len < count) {
+		len += svc_proc_read(buffer + len, start, 0, count - len,
+				eof, data);
 	}
 
 	if (offset >= len) {
 		*start = buffer;
 		return 0;
 	}
+
 	*start = buffer + offset;
-	if ((len -= offset) > length)
-		len = length;
+	if ((len -= offset) > count)
+		return count;
 	return len;
 }
 
 void
 nfsd_stat_init(void)
 {
-	svcstat_register(&nfsd_svcstats);
+	struct proc_dir_entry	*ent;
+
+	if ((ent = svc_proc_register(&nfsd_svcstats)) != 0)
+		ent->read_proc = nfsd_proc_read;
 }
 
 void
 nfsd_stat_shutdown(void)
 {
-	svcstat_unregister(&nfsd_svcstats);
+	svc_proc_unregister("nfsd");
 }

@@ -45,7 +45,7 @@
 /*
 **	Name and revision of the driver
 */
-#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 1.18b"
+#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 1.18d"
  
 /*
 **	If SCSI_NCR_SETUP_SPECIAL_FEATURES is defined,
@@ -273,14 +273,14 @@
 */
 
 #define SCSI_NCR_ALWAYS_SIMPLE_TAG
-#define SCSI_NCR_MAX_SCATTER	(128)
+#define SCSI_NCR_MAX_SCATTER	(127)
 #define SCSI_NCR_MAX_TARGET	(16)
 #define SCSI_NCR_MAX_HOST	(2)
 #define SCSI_NCR_TIMEOUT_ALERT	(3*HZ)
 
 #define SCSI_NCR_CAN_QUEUE	(7*SCSI_NCR_MAX_TAGS)
 #define SCSI_NCR_CMD_PER_LUN	(SCSI_NCR_MAX_TAGS)
-#define SCSI_NCR_SG_TABLESIZE	(SCSI_NCR_MAX_SCATTER-1)
+#define SCSI_NCR_SG_TABLESIZE	(SCSI_NCR_MAX_SCATTER)
 
 #define SCSI_NCR_TIMER_INTERVAL	((HZ+5-1)/5)
 
@@ -302,6 +302,7 @@
 	SCSI_NCR_SETUP_SPECIAL_FEATURES,	\
 	SCSI_NCR_SETUP_ULTRA_SCSI,		\
 	SCSI_NCR_SETUP_FORCE_SYNC_NEGO,		\
+	0,					\
 	1,					\
 	SCSI_NCR_SETUP_DEFAULT_TAGS,		\
 	SCSI_NCR_SETUP_DEFAULT_SYNC,		\
@@ -323,6 +324,7 @@
 {						\
 	0,					\
 	1,					\
+	0,					\
 	0,					\
 	0,					\
 	0,					\
@@ -552,6 +554,7 @@ struct ncr_reg {
 
 /*03*/  u_char    nc_scntl3;    /* cnf system clock dependent       */
 	#define   EWS     0x08  /* cmd: enable wide scsi         [W]*/
+	#define   ULTRA   0x80  /* cmd: ULTRA enable                */
 
 /*04*/  u_char    nc_scid;	/* cnf host adapter scsi address    */
 	#define   RRE     0x40  /* r/w:e enable response to resel.  */
@@ -643,6 +646,7 @@ struct ncr_reg {
 	#define   MPEE    0x08  /* mod: master parity error enable  */
 
 /*22*/  u_char    nc_ctest5;
+	#define   DFS     0x20  /* mod: dma fifo size               */
 /*23*/  u_char    nc_ctest6;
 
 /*24*/  u_int32    nc_dbc;	/* ### Byte count and command       */

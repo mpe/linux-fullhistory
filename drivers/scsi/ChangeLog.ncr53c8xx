@@ -1,3 +1,37 @@
+Sat Apr 5  13:00 1997 Gerard Roudier (groudier@club-internet.fr)
+	* revision 1.18d
+	- Probe NCR pci device ids in reverse order if asked by user from 
+	  the boot command line. Suggested by Richard Waltham.
+	- Make a separate function that prints out verbose information on 
+	  severe error (assumed from hardware).
+	- Add the transfer period factor and the max commands per lun value 
+	  to the proc info data. If debug flags are set or verbosity is 
+	  greater than 1, debug flags and verbosity are returned in proc  
+	  info data.
+	- Update the documentation.
+
+Thu Mar 20 23:00 1997 Gerard Roudier (groudier@club-internet.fr)
+	* revision 1.18c
+	- Add special features support for NCR53C885 and NCR53C896 chip.
+	  Quite obvious, but untested, and based on the fact that:
+	  The 885 supports same features as the 875.
+	  The 896 is a 64 bits PCI version of the 895.
+	- Improve recovery from SCSI GROSS ERRORS.
+	  I can get such errors by making the driver negotiate offset 8 with 
+	  a disk and setting the ncr chip to a lower offset value.
+	  I got bunches of errors that have been gracefully recovered by 
+	  the driver.
+	  The driver now uses its timer handler in order to wait 2 sec. for 
+	  devices to settle after SCSI reset and so does not uselessly freeze 
+	  the system with interrupt masked for seconds.
+	- Enable 'burst op code fetch' and 'read line' for 815 chips.
+	- Use a 2 commands queue depth instead of 1 for devices that does 
+          not support tagged command queuing.
+	- The ULTRA timing flag setting was based on the output resulting 
+	  period factor of the ncr and not on the negotiated one.
+	  This flag setting was wrong only for 24 ns negotiated period factor.
+	- Some other minor changes and cleanups.
+
 Thu Feb 27 23:00 1997 Gerard Roudier (groudier@club-internet.fr)
 	* ncr53c8xx.c ncr53c8xx.h revision 1.18b
 	- 'On paper' support of the NCR53C895 Ultra-2 chip.

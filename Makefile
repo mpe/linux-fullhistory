@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 1
-SUBLEVEL = 32
+SUBLEVEL = 33
 
 ARCH = i386
 
@@ -14,7 +14,7 @@ ARCH = i386
 SMP = 1
 #
 # SMP profiling options
-# SMP_PROF = 1
+SMP_PROF = 1
 
 .EXPORT_ALL_VARIABLES:
 
@@ -142,6 +142,10 @@ endif
 
 ifdef CONFIG_PCI
 DRIVERS := $(DRIVERS) drivers/pci/pci.a
+endif
+
+ifdef CONFIG_PNP
+DRIVERS := $(DRIVERS) drivers/pnp/pnp.a
 endif
 
 ifdef CONFIG_SBUS

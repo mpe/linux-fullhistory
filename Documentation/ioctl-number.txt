@@ -1,5 +1,5 @@
 Ioctl Numbers
-12 Feb 1997
+5 Apr 1997
 Michael Chastain
 <mec@shout.net>
 
@@ -89,6 +89,8 @@ Code	Seq#	Include File		Comments
 'a'	all	various, see http://lrcwww.epfl.ch/linux-atm/magic.html
 'c'	all	linux/comstats.h
 'f'	all	linux/ext2_fs.h
+'l'	00-3F	linux/tcfs_fs.h		in development:
+					<http://mikonos.dia.unisa.it/tcfs>
 'm'	all	linux/mtio.h		conflict!
 'm'	all	linux/soundcard.h	conflict!
 'n'	all	linux/ncp_fs.h
@@ -105,8 +107,10 @@ Code	Seq#	Include File		Comments
 0x89	E0-EF	linux/sockios.h		SIOCPROTOPRIVATE range
 0x89	F0-FF	linux/sockios.h		SIOCDEVPRIVATE range
 0x8B	all	linux/wireless.h
+0x8C	00-3F	WiNRADiO driver		in development:
+					<mailto:brian@proximity.com.au>
 0x90	00	linux/sbpcd.h
-0x99	00-0F	537-Addinboard driver	in development, e-mail contact:
-					b.kohl@ipn-b.comlink.apc.org
-0xA0	all	Small Device Project	in development, e-mail contact:
-					khollis@northwest.com
+0x99	00-0F	537-Addinboard driver	in development:
+					<mailto:b.kohl@ipn-b.comlink.apc.org>
+0xA0	all	Small Device Project	in development:
+					<mailto:khollis@northwest.com>

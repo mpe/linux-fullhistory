@@ -235,7 +235,7 @@ int con_set_trans_old(unsigned char * arg)
 
 	for (i=0; i<E_TABSZ ; i++) {
 		unsigned char uc;
-		get_user(uc, arg+i);
+		__get_user(uc, arg+i);
 		p[i] = UNI_DIRECT_BASE | uc;
 	}
 
@@ -255,7 +255,7 @@ int con_get_trans_old(unsigned char * arg)
 	for (i=0; i<E_TABSZ ; i++)
 	  {
 	    ch = conv_uni_to_pc(p[i]);
-	    put_user((ch & ~0xff) ? 0 : ch, arg+i);
+	    __put_user((ch & ~0xff) ? 0 : ch, arg+i);
 	  }
 	return 0;
 }
@@ -272,7 +272,7 @@ int con_set_trans_new(ushort * arg)
 
 	for (i=0; i<E_TABSZ ; i++) {
 		unsigned short us;
-		get_user(us, arg+i);
+		__get_user(us, arg+i);
 		p[i] = us;
 	}
 
@@ -291,7 +291,7 @@ int con_get_trans_new(ushort * arg)
 		return i;
 
 	for (i=0; i<E_TABSZ ; i++)
-	  put_user(p[i], arg+i);
+	  __put_user(p[i], arg+i);
 	
 	return 0;
 }
@@ -381,8 +381,8 @@ con_set_unimap(ushort ct, struct unipair *list)
   while( ct-- )
     {
       unsigned short unicode, fontpos;
-      get_user(unicode, &list->unicode);
-      get_user(fontpos, &list->fontpos);
+      __get_user(unicode, &list->unicode);
+      __get_user(fontpos, &list->fontpos);
       if ( (err1 = con_insert_unipair(unicode,fontpos)) != 0 )
 	err = err1;
       list++;
@@ -434,15 +434,15 @@ con_get_unimap(ushort ct, ushort *uct, struct unipair *list){
 		      {
 			if ( *p2 < MAX_GLYPH && ect++ < ct )
 			  {
-			    put_user((u_short)((i<<11)+(j<<6)+k),
+			    __put_user((u_short)((i<<11)+(j<<6)+k),
 				     &list->unicode);
-			    put_user((u_short) *p2, &list->fontpos);
+			    __put_user((u_short) *p2, &list->fontpos);
 			    list++;
 			  }
 			p2++;
 		      }
 	  }
-	put_user(ect, uct);
+	__put_user(ect, uct);
 	return ((ect <= ct) ? 0 : -ENOMEM);
 }
 

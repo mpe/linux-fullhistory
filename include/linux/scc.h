@@ -1,4 +1,4 @@
-/* $Id: scc.h,v 1.28 1996/10/30 20:01:15 jreuter Exp jreuter $ */
+/* $Id: scc.h,v 1.29 1997/04/02 14:56:45 jreuter Exp jreuter $ */
 
 #ifndef	_SCC_H
 #define	_SCC_H
@@ -14,55 +14,56 @@
 
 /* DEV ioctl() commands */
 
-#define SIOCSCCRESERVED (SIOCDEVPRIVATE+0)
-#define SIOCSCCCFG	(SIOCDEVPRIVATE+1)
-#define SIOCSCCINI	(SIOCDEVPRIVATE+2)
-#define SIOCSCCCHANINI	(SIOCDEVPRIVATE+3)
-#define SIOCSCCSMEM	(SIOCDEVPRIVATE+4)
-#define SIOCSCCGKISS	(SIOCDEVPRIVATE+5)
-#define SIOCSCCSKISS	(SIOCDEVPRIVATE+6)
-#define SIOCSCCGSTAT	(SIOCDEVPRIVATE+7)
+enum SCC_ioctl_cmds {
+	SIOCSCCRESERVED = SIOCDEVPRIVATE,
+	SIOCSCCCFG,
+	SIOCSCCINI,
+	SIOCSCCCHANINI,
+	SIOCSCCSMEM,
+	SIOCSCCGKISS,
+	SIOCSCCSKISS,
+	SIOCSCCGSTAT,
+	SIOCSCCCAL
+};
 
 /* magic number */
 
 #define SCC_MAGIC	0x8530		/* ;-) */
 
-/* KISS state machine */
-
-#define	KISS_IDLE	0
-#define KISS_DATA	1
-#define KISS_ESCAPE	2
-#define KISS_RXFRAME	3
-
 /* Device parameter control (from WAMPES) */
 
-#define	PARAM_TXDELAY	1
-#define	PARAM_PERSIST	2
-#define	PARAM_SLOTTIME	3
-#define	PARAM_TXTAIL	4
-#define	PARAM_FULLDUP	5
-#define PARAM_SOFTDCD	6	/* was: PARAM_HW */
-#define PARAM_MUTE	7	/* ??? */
-#define PARAM_DTR       8
-#define PARAM_RTS	9
-#define PARAM_SPEED     10
-#define PARAM_ENDDELAY	11	/* ??? */
-#define PARAM_GROUP     12
-#define PARAM_IDLE      13
-#define PARAM_MIN       14
-#define	PARAM_MAXKEY	15
-#define PARAM_WAIT      16
-#define PARAM_MAXDEFER	17
-#define PARAM_TX        18
-#define PARAM_HWEVENT	31
-#define PARAM_RETURN	255	/* reset kiss mode */
+enum L1_params {
+	PARAM_DATA,
+	PARAM_TXDELAY,
+	PARAM_PERSIST,
+	PARAM_SLOTTIME,
+	PARAM_TXTAIL,
+	PARAM_FULLDUP,
+	PARAM_SOFTDCD,		/* was: PARAM_HW */
+	PARAM_MUTE,		/* ??? */
+	PARAM_DTR,
+	PARAM_RTS,
+	PARAM_SPEED,
+	PARAM_ENDDELAY,		/* ??? */
+	PARAM_GROUP,
+	PARAM_IDLE,
+	PARAM_MIN,
+	PARAM_MAXKEY,
+	PARAM_WAIT,
+	PARAM_MAXDEFER,
+	PARAM_TX,
+	PARAM_HWEVENT = 31,
+	PARAM_RETURN = 255	/* reset kiss mode */
+};
 
 /* fulldup parameter */
 
-#define KISS_DUPLEX_HALF	0	/* normal CSMA operation */
-#define KISS_DUPLEX_FULL	1	/* fullduplex, key down trx after transmission */
-#define KISS_DUPLEX_LINK	2	/* fullduplex, key down trx after 'idletime' sec */
-#define KISS_DUPLEX_OPTIMA	3	/* fullduplex, let the protocol layer control the hw */
+enum FULLDUP_modes {
+	KISS_DUPLEX_HALF,	/* normal CSMA operation */
+	KISS_DUPLEX_FULL,	/* fullduplex, key down trx after transmission */
+	KISS_DUPLEX_LINK,	/* fullduplex, key down trx after 'idletime' sec */
+	KISS_DUPLEX_OPTIMA	/* fullduplex, let the protocol layer control the hw */
+};
 
 /* misc. parameters */
 
@@ -71,9 +72,11 @@
 
 /* HWEVENT parameter */
 
-#define HWEV_DCD_ON	0
-#define HWEV_DCD_OFF	1
-#define HWEV_ALL_SENT	2
+enum HWEVENT_opts {
+	HWEV_DCD_ON,
+	HWEV_DCD_OFF,
+	HWEV_ALL_SENT
+};
 
 /* channel grouping */
 
@@ -82,20 +85,26 @@
 
 /* Tx/Rx clock sources */
 
-#define CLK_DPLL	0	/* normal halfduplex operation */
-#define CLK_EXTERNAL	1	/* external clocking (G3RUH/DF9IC modems) */
-#define CLK_DIVIDER	2	/* Rx = DPLL, Tx = divider (fullduplex with */
-				/* modems without clock regeneration */
+enum CLOCK_sources {
+	CLK_DPLL,	/* normal halfduplex operation */
+	CLK_EXTERNAL,	/* external clocking (G3RUH/DF9IC modems) */
+	CLK_DIVIDER,	/* Rx = DPLL, Tx = divider (fullduplex with */
+			/* modems without clock regeneration */
+	CLK_BRG		/* experimental fullduplex mode with DPLL/BRG for */
+			/* MODEMs without clock recovery */
+};
 
 /* Tx state */
 
-#define TXS_IDLE	0	/* Transmitter off, no data pending */
-#define TXS_BUSY	1	/* waiting for permission to send / tailtime */
-#define TXS_ACTIVE	2	/* Transmitter on, sending data */
-#define TXS_NEWFRAME	3	/* reset CRC and send (next) frame */
-#define TXS_IDLE2	4	/* Transmitter on, no data pending */
-#define TXS_WAIT	5	/* Waiting for Mintime to expire */
-#define TXS_TIMEOUT	6	/* We had a transmission timeout */
+enum TX_state {
+	TXS_IDLE,	/* Transmitter off, no data pending */
+	TXS_BUSY,	/* waiting for permission to send / tailtime */
+	TXS_ACTIVE,	/* Transmitter on, sending data */
+	TXS_NEWFRAME,	/* reset CRC and send (next) frame */
+	TXS_IDLE2,	/* Transmitter on, no data pending */
+	TXS_WAIT,	/* Waiting for Mintime to expire */
+	TXS_TIMEOUT	/* We had a transmission timeout */
+};
 
 typedef unsigned long io_port;	/* type definition for an 'io port address' */
 
@@ -122,7 +131,6 @@ struct scc_stat {
 	unsigned int maxqueue;	/* allocated tx_buffers */
 	unsigned int bufsize;	/* used buffersize */
 };
-
 
 struct scc_modem {
 	long speed;		/* Line speed, bps */
@@ -159,11 +167,14 @@ struct scc_mem_config {
 	unsigned int bufsize;
 };
 
+struct scc_calibrate {
+	unsigned int time;
+	unsigned char pattern;
+};
 
 #ifdef __KERNEL__
 
-#define TX_ON		1	/* command for scc_key_trx() */
-#define TX_OFF		0	/* dto */
+enum {TX_OFF, TX_ON};	/* command for scc_key_trx() */
 
 /* Vector masks in RR2B */
 
@@ -172,7 +183,6 @@ struct scc_mem_config {
 #define EXINT		0x02
 #define RXINT		0x04
 #define SPINT		0x06
-
 
 #ifdef SCC_DELAY
 #define Inb(port)	inb_p(port)
@@ -210,7 +220,7 @@ struct scc_channel {
 	int init;			/* channel exists? */
 
 	struct device *dev;		/* link to device control structure */
-	struct enet_statistics dev_stat;/* device statistics */
+	struct net_device_stats dev_stat;/* device statistics */
 
 	char brand;			/* manufacturer of the board */
 	long clock;			/* used clock */

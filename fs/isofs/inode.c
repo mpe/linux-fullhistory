@@ -554,7 +554,7 @@ int isofs_bmap(struct inode * inode,int block)
 	    if( (block << ISOFS_BUFFER_BITS(inode)) >= max_legal_read_offset )
 	      {
 
-		printk("_isofs_bmap: block>= EOF(%d, %d)", block, 
+		printk("_isofs_bmap: block>= EOF(%d, %d)\n", block, 
 		       inode->i_size);
 	      }
 	    return 0;

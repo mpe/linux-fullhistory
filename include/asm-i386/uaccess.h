@@ -423,7 +423,7 @@ if (copy_from_user(to,from,n)) \
 
 #define __copy_from_user(to,from,n)			\
 	(__builtin_constant_p(n) ?			\
-	 __constant_copy_from_user_nockeck((to),(from),(n)) :	\
+	 __constant_copy_from_user_nocheck((to),(from),(n)) :	\
 	 __generic_copy_from_user_nocheck((to),(from),(n)))
 
 

@@ -187,11 +187,10 @@ bad_area:
  *
  * First we check if it was the bootup rw-test, though..
  */
-	if (wp_works_ok < 0 && !address && (error_code & 1)) {
+	if (wp_works_ok < 0 && address == 0xc0000000 && (error_code & 1)) {
 		wp_works_ok = 1;
 		pg0[0] = pte_val(mk_pte(0, PAGE_SHARED));
 		flush_tlb();
-		printk("This processor honours the WP bit even when in supervisor mode. Good.\n");
 		goto out;
 	}
 	if (address < PAGE_SIZE) {

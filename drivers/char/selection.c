@@ -118,8 +118,9 @@ int set_selection(const unsigned long arg, struct tty_struct *tty, int user)
 	int sel_mode, new_sel_start, new_sel_end, spc;
 	char *bp, *obp;
 	int i, ps, pe;
-
+	
 	do_unblank_screen();
+	poke_blanked_console();
 
 	{ unsigned short *args, xs, ys, xe, ye;
 
@@ -291,7 +292,7 @@ int paste_selection(struct tty_struct *tty)
 	
 	if (!bp || !c)
 		return 0;
-	do_unblank_screen();
+	poke_blanked_console();
 	add_wait_queue(&vt->paste_wait, &wait);
 	do {
 		current->state = TASK_INTERRUPTIBLE;

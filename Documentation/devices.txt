@@ -1,8 +1,7 @@
 		       LINUX ALLOCATED DEVICES
-
 	     Maintained by H. Peter Anvin <hpa@zytor.com>
 
-		     Last revised: March 3, 1997
+		     Last revised: April 7, 1997
 
 This list is the successor to Rick Miller's Linux Device List, which
 he stopped maintaining when he got busy with other things in 1993.  It
@@ -285,6 +284,9 @@ reply.
 		139 = /dev/openprom	SPARC OpenBoot PROM
 		140 = /dev/relay8	Berkshire Products Octal relay card
 		141 = /dev/relay16	Berkshire Products ISO-16 relay card
+		142 = /dev/msr		x86 model-specific registers
+		143 = /dev/pciconf	PCI configuration space
+		144 = /dev/nvram	Non-volatile configuration RAM
 
  11 char	Raw keyboard device
 		  0 = /dev/kbd		Raw keyboard device
@@ -409,6 +411,11 @@ reply.
 		  0 = /dev/sg0		First generic SCSI device
 		  1 = /dev/sg1		Second generic SCSI device
 		      ...
+
+		Most distributions name these /dev/sga, /dev/sgb...;
+		this sets an unnecessary limit of 26 SCSI devices in
+		the system and is counter to standard Linux
+		device-naming practice.
 
  22 char	Digiboard serial card
 		  0 = /dev/ttyD0	First Digiboard port
@@ -707,6 +714,17 @@ reply.
 		  0 = /dev/ttyI0	First virtual modem
 		      ...
 		 63 = /dev/ttyI63	64th virtual modem
+    block	Network block devices
+		  0 = /dev/nb0		First network block device
+		  1 = /dev/nb1		Second network block device
+		      ...
+
+		Network Block Device is somehow similar to loopback
+		devices: If you read from it, it sends packet accross
+		network asking server for data. If you write to it, it
+		sends packet telling server to write. It could be used
+		to mounting filesystems over the net, swapping over
+		the net, implementing block device in userland etc.
 
  44 char	isdn4linux virtual modem - alternate devices
 		  0 = /dev/cui0		Callout device corresponding to ttyI0
@@ -920,7 +938,48 @@ reply.
 		Currently for Dolphin Interconnect Solutions' PCI-SCI
 		bridge.
 
- 75-119		UNALLOCATED
+ 75 char	Specialix IO8+ serial card
+		  0 = /dev/ttyW0	First IO8+ port, first card
+		  1 = /dev/ttyW1	Second IO8+ port, first card
+		      ...
+		  8 = /dev/ttyW8	First IO8+ port, second card
+		      ...
+
+ 76 char	Specialix IO8+ serial card - alternate devices
+		  0 = /dev/cuw0		Callout device corresponding to ttyW0
+		  1 = /dev/cuw1		Callout device corresponding to ttyW1
+		      ...
+		  8 = /dev/cuw8		Callout device corresponding to ttyW8
+		      ...
+
+ 77 char	ComScire Quantum Noise Generator
+		  0 = /dev/qng		ComScire Quantum Noise Generator
+
+ 78 char	PAM Software's multimodem boards
+		  0 = /dev/ttyM0	First PAM modem
+		  1 = /dev/ttyM1	Second PAM modem
+		      ...
+
+ 79 char	PAM Software's multimodem boards - alternate devices
+		  0 = /dev/cum0		Callout device corresponding to ttyM0
+		  1 = /dev/cum1		Callout device corresponding to ttyM1
+		      ...
+
+ 80 char	Photometrics AT200 CCD camera
+		  0 = /dev/at200	Photometrics AT200 CCD camera
+
+ 81 char	Brooktree Bt848 frame grabbers
+		  0 = /dev/bttv0	First Bt848 card
+		  1 = /dev/bttv1	Second Bt848 card
+		      ...
+		 16 = /dev/bttvc0	Control for first Bt848 card
+		 17 = /dev/bttvc1	Control for second Bt848 card
+		      ...
+		 32 = /dev/bttv-vbi0	VBI data of first Bt848 card
+		 33 = /dev/bttv-vbi1	VBI data of second Bt848 card
+		      ...
+
+ 82-119		UNALLOCATED
 
 120-127		LOCAL/EXPERIMENTAL USE
 
@@ -929,9 +988,6 @@ reply.
 240-254		LOCAL/EXPERIMENTAL USE
 
 255		RESERVED
-
-
-
 
 
  ****	ADDITIONAL /dev DIRECTORY ENTRIES
@@ -1053,6 +1109,8 @@ respectively; for historical reasons, /dev/ttyS# and /dev/ttyC#
 correspond to /dev/cua# and /dev/cub#.  In the future, it should be
 expected that multiple letters will be used; all letters will be upper
 case for the "tty" device and lower case for the "cu" device.
+
+The names /dev/ttyQ# and /dev/cuq# are reserved for local use.
 
 The alternate devices provide for kernel-based exclusion and somewhat
 different defaults than the primary devices.  Their main purpose is to

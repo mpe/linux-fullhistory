@@ -1,4 +1,4 @@
-#define RCS_ID "$Id: scc.c,v 1.66 1997/01/08 22:56:06 jreuter Exp jreuter $"
+#define RCS_ID "$Id: scc.c,v 1.69 1997/04/06 19:22:45 jreuter Exp jreuter $"
 
 #define VERSION "3.0"
 #define BANNER  "Z8530 SCC driver version "VERSION".dl1bke (experimental) by DL1BKE\n"
@@ -16,7 +16,7 @@
 
    ********************************************************************
 
-	Copyright (c) 1993, 1996 Joerg Reuter DL1BKE
+	Copyright (c) 1993, 1997 Joerg Reuter DL1BKE
 
 	portions (c) 1993 Guido ten Dolle PE1NNZ
 
@@ -86,7 +86,9 @@
    		  You can use 'kissbridge' if you need a KISS TNC emulator.
 
    961213	- Fixed for Linux networking changes. (G4KLX)
-   960108	- Fixed the remaining problems.
+   970108	- Fixed the remaining problems.
+   970402	- Hopefully fixed the problems with the new *_timer()
+   		  routines, added calibration code.
 
    Thanks to all who contributed to this driver with ideas and bug
    reports!
@@ -150,8 +152,6 @@
 #include <linux/if_ether.h>
 #include <linux/if_arp.h>
 #include <linux/socket.h>
-
-#include <linux/config.h> /* for CONFIG_PROC_FS */
 
 #include <linux/scc.h>
 #include "z8530.h"
@@ -222,6 +222,9 @@ static unsigned char Driver_Initialized = 0;
 static int Nchips = 0;
 static io_port Vector_Latch = 0;
 
+MODULE_AUTHOR("Joerg Reuter <jreuter@lykos.oche.de>");
+MODULE_DESCRIPTION("Network Device Driver for Z8530 based HDLC cards for Amateur Packet Radio");
+MODULE_SUPPORTED_DEVICE("scc");
 
 /* ******************************************************************** */
 /* *			Port Access Functions			      * */
@@ -511,7 +514,7 @@ extern __inline__ void scc_exint(struct scc_channel *scc)
 		}
 		
 		or(scc,R10,ABUNDER);
-		scc_start_tx_timer(scc, t_txdelay, 1);	/* restart transmission */
+		scc_start_tx_timer(scc, t_txdelay, 0);	/* restart transmission */
 	}
 		
 	scc->status = status;
@@ -799,10 +802,10 @@ extern __inline__ void init_brg(struct scc_channel *scc)
  
 static void init_channel(struct scc_channel *scc)
 {
+	del_timer(&scc->tx_t);
+	del_timer(&scc->tx_wdog);
+
 	disable_irq(scc->irq);
-	
-	if (scc->tx_t.next)    del_timer(&scc->tx_t);
-	if (scc->tx_wdog.next) del_timer(&scc->tx_wdog);
 
 	wr(scc,R4,X1CLK|SDLC);		/* *1 clock, SDLC mode */
 	wr(scc,R1,0);			/* no W/REQ operation */
@@ -982,11 +985,11 @@ static void scc_start_tx_timer(struct scc_channel *scc, void (*handler)(unsigned
 {
 	unsigned long flags;
 	
+	
 	save_flags(flags);
 	cli();
 
-	if (scc->tx_t.next) 
-		del_timer(&scc->tx_t);
+	del_timer(&scc->tx_t);
 
 	if (when == 0)
 	{
@@ -1000,7 +1003,7 @@ static void scc_start_tx_timer(struct scc_channel *scc, void (*handler)(unsigned
 		add_timer(&scc->tx_t);
 	}
 	
-	restore_flags(flags);	
+	restore_flags(flags);
 }
 
 static void scc_start_defer(struct scc_channel *scc)
@@ -1010,8 +1013,7 @@ static void scc_start_defer(struct scc_channel *scc)
 	save_flags(flags);
 	cli();
 
-	if (scc->tx_wdog.next)
-		del_timer(&scc->tx_wdog);
+	del_timer(&scc->tx_wdog);
 	
 	if (scc->kiss.maxdefer != 0 && scc->kiss.maxdefer != TIMER_OFF)
 	{
@@ -1030,8 +1032,7 @@ static void scc_start_maxkeyup(struct scc_channel *scc)
 	save_flags(flags);
 	cli();
 
-	if (scc->tx_wdog.next)
-		del_timer(&scc->tx_wdog);
+	del_timer(&scc->tx_wdog);
 	
 	if (scc->kiss.maxkeyup != 0 && scc->kiss.maxkeyup != TIMER_OFF)
 	{
@@ -1184,9 +1185,7 @@ static void t_tail(unsigned long channel)
  	save_flags(flags);
  	cli();
  
- 	if (scc->tx_wdog.next)
- 		del_timer(&scc->tx_wdog);
- 		
+ 	del_timer(&scc->tx_wdog);	
  	scc_key_trx(scc, TX_OFF);
 
  	restore_flags(flags);
@@ -1215,16 +1214,8 @@ static void t_tail(unsigned long channel)
 static void t_busy(unsigned long channel)
 {
 	struct scc_channel *scc = (struct scc_channel *) channel;
-	unsigned long flags;
 
-	save_flags(flags);
-	cli();
-	
-	if (scc->tx_t.next)
-		del_timer(&scc->tx_t);
-
-	restore_flags(flags);
-	
+	del_timer(&scc->tx_t);
 	scc_lock_dev(scc);
 
 	scc_discard_buffers(scc);
@@ -1256,8 +1247,7 @@ static void t_maxkeyup(unsigned long channel)
 	scc_lock_dev(scc);
 	scc_discard_buffers(scc);
 
-	if (scc->tx_t.next)
-		del_timer(&scc->tx_t);
+	del_timer(&scc->tx_t);
 
 	cl(scc, R1, TxINT_ENAB);	/* force an ABORT, but don't */
 	cl(scc, R15, TxUIE);		/* count it. */
@@ -1280,16 +1270,9 @@ static void t_maxkeyup(unsigned long channel)
 static void t_idle(unsigned long channel)
 {
 	struct scc_channel *scc = (struct scc_channel *) channel;
-	unsigned long flags;
 	
-	save_flags(flags);
-	cli();
-	
-	if (scc->tx_wdog.next)
-		del_timer(&scc->tx_wdog);
+	del_timer(&scc->tx_wdog);
 
-	restore_flags(flags);
-	
 	scc_key_trx(scc, TX_OFF);
 
 	if (scc->kiss.mintime != TIMER_OFF)
@@ -1414,6 +1397,65 @@ static unsigned long scc_get_param(struct scc_channel *scc, unsigned int cmd)
 
 #undef CAST
 #undef SVAL
+
+/* ******************************************************************* */
+/* *			Send calibration pattern		     * */
+/* ******************************************************************* */
+
+static void scc_stop_calibrate(unsigned long channel)
+{
+	struct scc_channel *scc = (struct scc_channel *) channel;
+	unsigned long flags;
+	
+	save_flags(flags);
+	cli();
+
+	del_timer(&scc->tx_wdog);
+	scc_key_trx(scc, TX_OFF);
+	wr(scc, R6, 0);
+	wr(scc, R7, FLAG);
+	Outb(scc->ctrl,RES_EXT_INT);	/* reset ext/status interrupts */
+	Outb(scc->ctrl,RES_EXT_INT);
+
+	scc_unlock_dev(scc);
+	
+	restore_flags(flags);
+}
+
+
+static void
+scc_start_calibrate(struct scc_channel *scc, int duration, unsigned char pattern)
+{
+	unsigned long flags;
+	
+	save_flags(flags);
+	cli();
+
+	scc_lock_dev(scc);
+	scc_discard_buffers(scc);
+
+	del_timer(&scc->tx_wdog);
+
+	scc->tx_wdog.data = (unsigned long) scc;
+	scc->tx_wdog.function = scc_stop_calibrate;
+	scc->tx_wdog.expires = jiffies + HZ*scc->kiss.maxkeyup;
+	add_timer(&scc->tx_wdog);
+	
+	wr(scc, R6, 0);
+	wr(scc, R7, pattern);
+
+	/* 
+	 * Don't know if this works. 
+	 * Damn, where is my Z8530 programming manual...? 
+	 */
+
+	Outb(scc->ctrl,RES_EXT_INT);	/* reset ext/status interrupts */
+	Outb(scc->ctrl,RES_EXT_INT);
+
+	scc_key_trx(scc, TX_ON);
+	
+	restore_flags(flags);
+}
 
 /* ******************************************************************* */
 /* *		Init channel structures, special HW, etc...	     * */
@@ -1644,26 +1686,8 @@ static int scc_net_tx(struct sk_buff *skb, struct device *dev)
 	struct scc_channel *scc = (struct scc_channel *) dev->priv;
 	unsigned long flags;
 	char kisscmd;
-	long ticks;
 	
-	if (dev->tbusy)
-	{
-		ticks = (signed) (jiffies - dev->trans_start);
-
-		if (ticks < scc->kiss.maxdefer*HZ || scc == NULL)
-			return 1;
-
-		/* 
-		 * Throw away transmission queue. 
-		 */
-
-		if (scc->tx_wdog.next)
-			del_timer(&scc->tx_wdog);
-		t_busy((unsigned long) scc);
-                dev->trans_start = jiffies;
-        }
-        
-	if (scc == NULL || scc->magic != SCC_MAGIC)
+	if (scc == NULL || scc->magic != SCC_MAGIC || dev->tbusy)
 	{
 		dev_kfree_skb(skb, FREE_WRITE);
 		return 0;
@@ -1692,10 +1716,13 @@ static int scc_net_tx(struct sk_buff *skb, struct device *dev)
 	save_flags(flags);
 	cli();
 	
+	if (skb_queue_len(&scc->tx_queue) >= MAXQUEUE-1)
+	{
+		struct sk_buff *skb_del;
+		skb_del = __skb_dequeue(&scc->tx_queue);
+		dev_kfree_skb(skb_del, FREE_WRITE);
+	}
 	__skb_queue_tail(&scc->tx_queue, skb);
-	
-	if (skb_queue_len(&scc->tx_queue) == MAXQUEUE)
-		scc_lock_dev(scc);
 
 	dev->trans_start = jiffies;
 
@@ -1729,6 +1756,7 @@ static int scc_net_tx(struct sk_buff *skb, struct device *dev)
  * SIOCSCCGKISS		- get level 1 parameter	arg: (struct scc_kiss_cmd *) arg
  * SIOCSCCSKISS		- set level 1 parameter arg: (struct scc_kiss_cmd *) arg
  * SIOCSCCGSTAT		- get driver status	arg: (struct scc_stat *) arg
+ * SIOCSCCCAL		- send calib. pattern	arg: (struct scc_calibrate *) arg
  */
 
 static int scc_net_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
@@ -1736,6 +1764,7 @@ static int scc_net_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 	struct scc_kiss_cmd kiss_cmd;
 	struct scc_mem_config memcfg;
 	struct scc_hw_config hwcfg;
+	struct scc_calibrate cal;
 	int chan;
 	unsigned char device_name[10];
 	void *arg;
@@ -1942,6 +1971,14 @@ static int scc_net_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 			if (!arg || copy_from_user(&kiss_cmd, arg, sizeof(kiss_cmd)))
 				return -EINVAL;
 			return scc_set_param(scc, kiss_cmd.command, kiss_cmd.param);
+		
+		case SIOCSCCCAL:
+			if (!suser()) return -EPERM;
+			if (!arg || copy_from_user(&cal, arg, sizeof(cal)))
+				return -EINVAL;
+
+			scc_start_calibrate(scc, cal.time, cal.pattern);
+			return 0;
 
 		default:
 			return -ENOIOCTLCMD;
@@ -2164,7 +2201,7 @@ int init_module(void)
 	result = scc_init();
 
 	if (result == 0)
-		printk(KERN_INFO "Copyright 1993,1996 Joerg Reuter DL1BKE (jreuter@lykos.tng.oche.de)\n");
+		printk(KERN_INFO "Copyright 1993,1997 Joerg Reuter DL1BKE (jreuter@lykos.tng.oche.de)\n");
 		
 	return result;
 }

@@ -173,6 +173,7 @@ void clear_inode(struct inode * inode)
 {
 	struct wait_queue * wait;
 
+	inode->i_count++;
 	truncate_inode_pages(inode, 0);
 	wait_on_inode(inode);
 	if (IS_WRITABLE(inode)) {
@@ -182,6 +183,7 @@ void clear_inode(struct inode * inode)
 	remove_inode_hash(inode);
 	remove_inode_free(inode);
 	wait = ((volatile struct inode *) inode)->i_wait;
+	inode->i_count--;
 	if (inode->i_count)
 		nr_free_inodes++;
 	memset(inode,0,sizeof(*inode));

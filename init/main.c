@@ -79,7 +79,9 @@ extern void buff_setup(char *str, int *ints);
 extern void panic_setup(char *str, int *ints);
 extern void bmouse_setup(char *str, int *ints);
 extern void msmouse_setup(char *str, int *ints);
+#ifdef CONFIG_PRINTER
 extern void lp_setup(char *str, int *ints);
+#endif
 extern void eth_setup(char *str, int *ints);
 extern void xd_setup(char *str, int *ints);
 #ifdef CONFIG_BLK_DEV_EZ
@@ -107,7 +109,9 @@ extern void ibmmca_scsi_setup(char *str, int *ints);
 extern void in2000_setup(char *str, int *ints);
 extern void NCR53c406a_setup(char *str, int *ints);
 extern void wd7000_setup(char *str, int *ints);
+#ifdef NOTDEF
 extern void ppa_setup(char *str, int *ints);
+#endif
 extern void scsi_luns_setup(char *str, int *ints);
 extern void sound_setup(char *str, int *ints);
 extern void reboot_setup(char *str, int *ints);
@@ -200,6 +204,12 @@ extern void sm_setup(char *str, int *ints);
 #endif
 #ifdef CONFIG_WDT
 extern void wdt_setup(char *str, int *ints);
+#endif
+#ifdef CONFIG_PNP_PARPORT
+extern void parport_setup(char *str, int *ints);
+#endif
+#ifdef CONFIG_PLIP
+extern void plip_setup(char *str, int *ints);
 #endif
 
 #if defined(CONFIG_SYSVIPC) || defined(CONFIG_KERNELD)
@@ -380,7 +390,7 @@ struct {
 #ifdef CONFIG_SCSI_7000FASST
 	{ "wd7000=", wd7000_setup},
 #endif
-#ifdef CONFIG_SCSI_PPA
+#ifdef NOTDEF /* CONFIG_SCSI_PPA */
         { "ppa=", ppa_setup },
 #endif
 #ifdef CONFIG_SCSI_IBMMCA
@@ -481,6 +491,12 @@ struct {
 #endif
 #ifdef CONFIG_WDT
 	{ "wdt=", wdt_setup },
+#endif
+#ifdef CONFIG_PNP_PARPORT
+	{ "parport=", parport_setup },
+#endif
+#ifdef CONFIG_PLIP
+	{ "plip=", plip_setup },
 #endif
 	{ 0, 0 }
 };

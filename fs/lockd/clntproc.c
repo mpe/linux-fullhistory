@@ -322,7 +322,8 @@ nlmclnt_lock(struct nlm_rqst *req, struct file_lock *fl)
 	int		status;
 
 	if (!host->h_monitored && nsm_monitor(host) < 0) {
-		printk(KERN_NOTICE "lockd: failed to monitor %s", host->h_name);
+		printk(KERN_NOTICE "lockd: failed to monitor %s\n",
+					host->h_name);
 		return -ENOLCK;
 	}
 
@@ -496,10 +497,10 @@ nlmclnt_cancel_callback(struct rpc_task *task)
 		/* Everything's good */
 		break;
 	case NLM_LCK_DENIED_NOLOCKS:
-		dprintk("lockd: CANCEL failed (server has no locks)");
+		dprintk("lockd: CANCEL failed (server has no locks)\n");
 		goto retry_cancel;
 	default:
-		printk(KERN_NOTICE "lockd: weird return %d for CANCEL call",
+		printk(KERN_NOTICE "lockd: weird return %d for CANCEL call\n",
 			req->a_res.status);
 	}
 

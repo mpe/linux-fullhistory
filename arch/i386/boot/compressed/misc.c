@@ -9,8 +9,6 @@
  * High loaded stuff by Hans Lermen & Werner Almesberger, Feb. 1996
  */
 
-#include <string.h>
-
 #include <asm/segment.h>
 #include <asm/io.h>
 
@@ -97,7 +95,6 @@ static void error(char *m);
 static void gzip_mark(void **);
 static void gzip_release(void **);
  
-#ifndef STANDALONE_DEBUG
 static void puts(const char *);
   
 extern int end;
@@ -196,7 +193,7 @@ static void puts(const char *s)
 	outb_p(0xff & (pos >> 1), vidport+1);
 }
 
-__ptr_t memset(__ptr_t s, int c, size_t n)
+void* memset(void* s, int c, size_t n)
 {
 	int i;
 	char *ss = (char*)s;
@@ -204,7 +201,7 @@ __ptr_t memset(__ptr_t s, int c, size_t n)
 	for (i=0;i<n;i++) ss[i] = c;
 }
 
-__ptr_t memcpy(__ptr_t __dest, __const __ptr_t __src,
+void* memcpy(void* __dest, __const void* __src,
 			    size_t __n)
 {
 	int i;
@@ -212,7 +209,6 @@ __ptr_t memcpy(__ptr_t __dest, __const __ptr_t __src,
 
 	for (i=0;i<__n;i++) d[i] = s[i];
 }
-#endif
 
 /* ===========================================================================
  * Fill the input buffer. This is called only when the buffer is empty
@@ -292,34 +288,6 @@ struct {
 	short b;
 	} stack_start = { & user_stack [STACK_SIZE] , KERNEL_DS };
 
-#ifdef STANDALONE_DEBUG
-
-static void gzip_mark(void **ptr)
-{
-}
-
-static void gzip_release(void **ptr)
-{
-}
-
-char output_buffer[1024 * 800];
-
-int
-main(argc, argv)
-	int	argc;
-	char	**argv;
-{
-	output_data = output_buffer;
-
-	makecrc();
-	puts("Uncompressing Linux...");
-	gunzip();
-	puts("done.\n");
-	return 0;
-}
-
-#else
-
 void setup_normal_output_buffer()
 {
 #ifdef STANDARD_MEMORY_BIOS_CALL
@@ -388,8 +356,4 @@ int decompress_kernel(struct moveparams *mv)
 	if (high_loaded) close_output_buffer_if_we_run_high(mv);
 	return high_loaded;
 }
-#endif
-
-
-
 

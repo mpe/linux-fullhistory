@@ -176,6 +176,7 @@ asmlinkage int printk(const char *fmt, ...)
 	va_list args;
 	int i;
 	char *msg, *p, *buf_end;
+	int line_feed;
 	static signed char msg_level = -1;
 	long flags;
 
@@ -202,6 +203,7 @@ asmlinkage int printk(const char *fmt, ...)
 				msg += 3;
 			msg_level = p[1] - '0';
 		}
+		line_feed = 0;
 		for (; p < buf_end; p++) {
 			log_buf[(log_start+log_size) & (LOG_BUF_LEN-1)] = *p;
 			if (log_size < LOG_BUF_LEN)
@@ -211,18 +213,20 @@ asmlinkage int printk(const char *fmt, ...)
 				log_start &= LOG_BUF_LEN-1;
 			}
 			logged_chars++;
-			if (*p == '\n')
+			if (*p == '\n') {
+				line_feed = 1;
 				break;
+			}
 		}
 		if (msg_level < console_loglevel && console_drivers) {
 			struct console *c = console_drivers;
 			while(c) {
 				if (c->write)
-					c->write(msg, p - msg + 1);
+					c->write(msg, p - msg + line_feed);
 				c = c->next;
 			}
 		}
-		if (*p == '\n')
+		if (line_feed)
 			msg_level = -1;
 	}
 	__restore_flags(flags);

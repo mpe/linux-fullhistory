@@ -5,6 +5,8 @@
  *
  *  Swap reorganised 29.12.95, Stephen Tweedie.
  *  kswapd added: 7.1.96  sct
+ *  Removed kswapd_ctl limits, and swap out as many pages as needed
+ *  to bring the system back to free_pages_high: 2.4.97, Rik van Riel.
  *  Version: $Id: vmscan.c,v 1.21 1997/01/06 06:54:03 davem Exp $
  */
 
@@ -48,12 +50,6 @@ static struct wait_queue * kswapd_wait = NULL;
  * We avoid doing a reschedule if the pageout daemon is already awake;
  */
 static int kswapd_awake = 0;
-
-/*
- * sysctl-modifiable parameters to control the aggressiveness of the
- * page-searching within the kswapd page recovery daemon.
- */
-kswapd_control_t kswapd_ctl = {4, -1, -1, -1, -1};
 
 static void init_swap_timer(void);
 
@@ -409,8 +405,16 @@ int kswapd(void *unused)
 		interruptible_sleep_on(&kswapd_wait);
 		kswapd_awake = 1;
 		swapstats.wakeups++;
-		/* Do the background pageout: */
-		for (i=0; i < kswapd_ctl.maxpages; i++)
+		/* Do the background pageout: 
+		 * We now only swap out as many pages as needed.
+		 * When we are truly low on memory, we swap out
+		 * synchronously (WAIT == 1).  -- Rik.
+		 */
+		while(nr_free_pages < min_free_pages)
+			try_to_free_page(GFP_KERNEL, 0, 1);
+		while((nr_free_pages + nr_async_pages) < free_pages_low)
+			try_to_free_page(GFP_KERNEL, 0, 1);
+		while((nr_free_pages + nr_async_pages) < free_pages_high)
 			try_to_free_page(GFP_KERNEL, 0, 0);
 	}
 }
@@ -436,12 +440,16 @@ void swap_tick(void)
 		want_wakeup = 1;
 	}
 
-	if (want_wakeup) {
-		if (!kswapd_awake && kswapd_ctl.maxpages > 0) {
+	if (want_wakeup) { 
+		if (!kswapd_awake) {
 			wake_up(&kswapd_wait);
 			need_resched = 1;
 		}
-		next_swap_jiffies = jiffies + swapout_interval;
+		/* low on memory, we need to start swapping soon */
+		if(last_wakeup_low) 
+			next_swap_jiffies = jiffies;
+		else  
+			next_swap_jiffies = jiffies + swapout_interval;
 	}
 	timer_active |= (1<<SWAP_TIMER);
 }

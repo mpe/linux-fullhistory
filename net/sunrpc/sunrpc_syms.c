@@ -10,8 +10,6 @@
 #include <linux/config.h>
 #include <linux/module.h>
 
-#ifdef CONFIG_MODULES
-
 #include <linux/types.h>
 #include <linux/socket.h>
 #include <linux/sched.h>
@@ -75,12 +73,12 @@ EXPORT_SYMBOL(svc_wake_up);
 
 /* RPC statistics */
 #ifdef CONFIG_PROC_FS
-EXPORT_SYMBOL(rpcstat_register);
-EXPORT_SYMBOL(rpcstat_unregister);
-EXPORT_SYMBOL(rpcstat_get_info);
-EXPORT_SYMBOL(svcstat_register);
-EXPORT_SYMBOL(svcstat_unregister);
-EXPORT_SYMBOL(svcstat_get_info);
+EXPORT_SYMBOL(rpc_proc_register);
+EXPORT_SYMBOL(rpc_proc_unregister);
+EXPORT_SYMBOL(rpc_proc_read);
+EXPORT_SYMBOL(svc_proc_register);
+EXPORT_SYMBOL(svc_proc_unregister);
+EXPORT_SYMBOL(svc_proc_read);
 #endif
 
 /* Generic XDR */
@@ -101,5 +99,3 @@ EXPORT_SYMBOL(rpc_debug);
 EXPORT_SYMBOL(nfs_debug);
 EXPORT_SYMBOL(nfsd_debug);
 EXPORT_SYMBOL(nlm_debug);
-
-#endif /* CONFIG_MODULES */

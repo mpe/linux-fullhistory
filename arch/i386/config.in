@@ -44,7 +44,12 @@ choice 'Processor type' \
 	 Pentium	CONFIG_M586	\
 	 PPro		CONFIG_M686" Pentium
 bool 'Video mode selection support' CONFIG_VIDEO_SELECT
+
+tristate 'Parallel port support' CONFIG_PNP_PARPORT
+
 endmenu
+
+source drivers/pnp/Config.in
 
 source drivers/block/Config.in
 

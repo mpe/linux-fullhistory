@@ -318,7 +318,7 @@ int register_netdev(struct device *dev)
 	save_flags(flags);
 	cli();
 
-	if (dev && dev->init) {
+	if (dev) {
 		if (dev->name &&
 			((dev->name[0] == '\0') || (dev->name[0] == ' '))) {
 			for (i = 0; i < MAX_ETH_CARDS; ++i)
@@ -330,13 +330,15 @@ int register_netdev(struct device *dev)
 				}
 		}
 
-		sti();	/* device probes assume interrupts enabled */
-		if (dev->init(dev) != 0) {
+		if (dev->init) {
+		  sti();	/* device probes assume interrupts enabled */
+		  if (dev->init(dev) != 0) {
 		    if (i < MAX_ETH_CARDS) ethdev_index[i] = NULL;
 			restore_flags(flags);
 			return -EIO;
+		  }
+		  cli();
 		}
-		cli();
 
 		/* Add device to end of chain */
 		if (dev_base) {

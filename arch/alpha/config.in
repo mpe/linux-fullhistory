@@ -95,7 +95,13 @@ bool 'Sysctl support' CONFIG_SYSCTL
 tristate 'Kernel support for a.out (ECOFF) binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
 tristate 'Kernel support for Linux/Intel ELF binaries' CONFIG_BINFMT_EM86
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  tristate 'Kernel support for JAVA binaries' CONFIG_BINFMT_JAVA
+fi
+tristate 'Parallel port support' CONFIG_PNP_PARPORT
 endmenu
+
+source drivers/pnp/Config.in
 
 source drivers/block/Config.in
 

@@ -9,10 +9,15 @@
 
 SUB_DIRS     := block char net #streams
 MOD_SUB_DIRS := $(SUB_DIRS) sbus
-ALL_SUB_DIRS := $(SUB_DIRS) pci scsi sbus sound cdrom isdn
+ALL_SUB_DIRS := $(SUB_DIRS) pci scsi sbus sound cdrom isdn pnp
 
 ifdef CONFIG_PCI
 SUB_DIRS += pci
+endif
+
+ifdef CONFIG_PNP
+SUB_DIRS += pnp
+MOD_SUB_DIRS += pnp
 endif
 
 ifdef CONFIG_SBUS

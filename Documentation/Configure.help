@@ -835,6 +835,23 @@ CONFIG_CPU_LITTLE_ENDIAN
   be necessary to run older Mips systems, such as the Sony News and
   MIPS RC3xxx, in big endian mode.
 
+Plug and Play support
+CONFIG_PNP
+  Plug and Play support allows the kernel to automatically configure some
+  peripheral devices.  Say Y to enable PnP.
+
+Parallel-port support
+CONFIG_PNP_PARPORT
+  If you want to use devices connected to your parallel port (printer,
+  Zip driver, PLIP link, ...) then you should enable this option and
+  read Documentation/parport.txt.
+
+Autoprobe for parallel device IDs
+CONFIG_PNP_PARPORT_AUTOPROBE
+  Some IEEE-1284 conformant parallel-port devices can identify themselves
+  when requested.  If this option is enabled the kernel will probe to see
+  what devices are connected at boot time.
+
 Enable loadable module support
 CONFIG_MODULES
   Kernel modules are small pieces of compiled code which can be 
@@ -2075,6 +2092,19 @@ CONFIG_SCSI_PPA
   that you can say N here if you have the SCSI version of the ZIP
   drive: it will be supported automatically if you said Y to the
   generic "SCSI disk support", above.
+
+EPP FIFO Checking
+CONFIG_SCSI_PPA_HAVE_PEDANTIC
+  Some chipsets are slower then their motherboard. We have to control
+  the state of the FIFO now and then.  The values are 0 (don't check
+  FIFO), 1 (check FIFO every 4 bytes), 2 (check FIFO every other byte)
+  and 3 (check FIFO every time). If your EPP chipset is from the SMC
+  series, you are likely to have to set this value greater than 0.
+
+EPP Timing
+CONFIG_SCSI_PPA_EPP_TIME
+  This is the "reset time period", a delay time.  Too low a value may
+  cause all sorts of mid-level SCSI problems.
 
 Network device support?
 CONFIG_NETDEVICES
@@ -4091,24 +4121,12 @@ CONFIG_PRINTER
   sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you want to compile this
   as a module ( = code which can be inserted in and removed from the
   running kernel whenever you want), say M here and read
-  Documentation/modules.txt. The module will be called plip.o. If you
-  want to use both a parallel printer and PLIP, there are two cases:
-  1) If the printer and the PLIP cable are to use the same parallel
-  port (presumably because you have just one), it is best to compile
-  both drivers as modules and load and unload them as needed. 2) To
-  use different parallel ports for the printer and the PLIP cable, you
-  can say Y to this printer driver, specify the base address of the
-  parallel port(s) to use for the printer(s) with the "lp" kernel
-  command line option. (Try "man bootparam" or see the documentation
-  of your boot loader (lilo or loadlin) about how to pass options to
-  the kernel at boot time. The lilo procedure is also explained in the
-  SCSI-HOWTO, available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO.) The standard base addresses
-  as well as the syntax of the "lp" command line option can be found
-  in drivers/char/lp.c. You can then say Y to the PLIP driver or,
-  preferably, M in which case Documentation/networking/net-modules.txt
-  tells you how to specify the port and IRQ to be used by PLIP at
-  module load time.
+  Documentation/modules.txt.
+
+CONFIG_PRINTER_READBACK
+  If your printer conforms to IEEE 1284, it may be able to provide a status
+  indication when you read from it (for example, with `cat /dev/lp1').  To
+  use this feature, say Y here.
 
 Mouse Support (not serial mice)
 CONFIG_MOUSE

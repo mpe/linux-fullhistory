@@ -23,7 +23,8 @@
  *	Michel Lespinasse	:	Changes for 2.1 kernel map.
  *	Michael Chastain	:	Change trampoline.S to gnu as.
  *		Alan Cox	:	Dumb bug: 'B' step PPro's are fine
- *
+ *		Ingo Molnar	:	Added APIC timers, based on code
+ *					from Jose Renau
  */
 
 #include <linux/kernel.h>
@@ -45,6 +46,7 @@
 #include <asm/io.h>
 
 extern unsigned long start_kernel, _etext;
+void setup_APIC_clock (void);
 
 /*
  *	Some notes on processor bugs:
@@ -137,6 +139,10 @@ volatile unsigned long smp_spins_syscall[NR_CPUS]={0};  /* Count syscall spins  
 volatile unsigned long smp_spins_syscall_cur[NR_CPUS]={0};/* Count spins for the actual syscall                 */
 volatile unsigned long smp_spins_sys_idle[NR_CPUS]={0}; /* Count spins for sys_idle 				*/
 volatile unsigned long smp_idle_count[1+NR_CPUS]={0,};	/* Count idle ticks					*/
+
+/* Count local APIC timer ticks */
+volatile unsigned long smp_apic_timer_ticks[1+NR_CPUS]={0,};
+
 #endif
 #if defined (__SMP_PROF__)
 volatile unsigned long smp_idle_map=0;			/* Map for idle processors 				*/
@@ -621,6 +627,14 @@ void smp_callin(void)
  	l=apic_read(APIC_SPIV);
  	l|=(1<<8);		/* Enable */
  	apic_write(APIC_SPIV,l);
+
+#ifdef __SMP_PROF__
+	/*
+	 * Set up our APIC timer. 
+	 */
+	setup_APIC_clock ();
+#endif
+
  	sti();
 	/*
 	 *	Get our bogomips.
@@ -767,7 +781,14 @@ void smp_boot_cpus(void)
 	apic_write(APIC_SPIV,cfg);
 
 	udelay(10);
-			
+
+#ifdef __SMP_PROF__
+	/*
+	 * Set up our local APIC timer:
+	 */			
+	setup_APIC_clock ();
+#endif
+
 	/*
 	 *	Now scan the cpu present map and fire up the other CPUs.
 	 */
@@ -1305,3 +1326,274 @@ asmlinkage void smp_stop_cpu_interrupt(void)
 		for(;;) __asm__("hlt");
 	for  (;;) ;
 }
+
+#ifdef __SMP_PROF__
+
+extern void (*do_profile)(struct pt_regs *);
+static void (*default_do_profile)(struct pt_regs *) = NULL;
+
+/*
+ *	APIC timer interrupt
+ */
+void smp_apic_timer_interrupt(struct pt_regs * regs)
+{
+	int cpu = smp_processor_id();
+
+	if (!user_mode(regs)) {
+		unsigned long flags;
+
+		/*
+		 * local timer interrupt is not NMI yet, so
+		 * it's simple, we just aquire the global cli
+		 * lock to mess around with profiling info.
+		 *
+		 * later, in the NMI version, we have to build
+		 * our own 'current' pointer (as we could have
+		 * interrupted code that just changes "current")
+		 * and have to lock profiling info between NMI
+		 * interrupts properly.
+		 */
+		save_flags(flags);
+		cli();
+		default_do_profile(regs);
+		restore_flags(flags);
+	}
+
+	/*
+	 * this is safe outside the lock.
+	 */ 
+	smp_apic_timer_ticks[cpu]++;
+
+	apic_read (APIC_SPIV);
+	apic_write (APIC_EOI, 0);
+}
+
+/*
+ * This part sets up the APIC 32 bit clock in LVTT1, with HZ interrupts
+ * per second. We assume that the caller has already set up the local
+ * APIC at apic_addr.
+ *
+ * Later we might want to split HZ into two parts: introduce
+ * PROFILING_HZ and scheduling HZ. The APIC timer is not exactly
+ * sync with the external timer chip, it closely follows bus clocks.
+ */
+
+#define RTDSC(x)	__asm__ __volatile__ (  ".byte 0x0f,0x31" \
+				:"=a" (((unsigned long*)&x)[0]),  \
+				 "=d" (((unsigned long*)&x)[1]))
+
+/*
+ * The timer chip is already set up at HZ interrupts per second here,
+ * but we do not accept timer interrupts yet. We only allow the BP
+ * to calibrate.
+ */
+unsigned int get_8254_timer_count (void)
+{
+	unsigned int count;
+
+        outb_p(0x00, 0x43);
+	count = inb_p(0x40);
+	count |= inb_p(0x40) << 8;
+
+	return count;
+}
+
+/*
+ * This function sets up the local APIC timer, with a timeout of
+ * 'clocks' APIC bus clock. During calibration we actually call
+ * this function twice, once with a bogus timeout value, second
+ * time for real. The other (noncalibrating) CPUs call this
+ * function only once, with the real value.
+ *
+ * We are strictly in irqs off mode here, as we do not want to
+ * get an APIC interrupt go off accidentally.
+ */
+
+#define APIC_DIVISOR 16
+
+/*
+ * We do reads before writes even if unnecessary, to get around the
+ * APIC double write 'bug'.
+ */
+
+void setup_APIC_timer (unsigned int clocks)
+{
+	unsigned long lvtt1_value; 
+	unsigned int tmp_value;
+
+	/*
+	 * Unfortunately the local APIC timer cannot be set up into NMI
+	 * mode. With the IO APIC we can re-route the external timer
+	 * interrupt and broadcast it as an NMI to all CPUs, so no pain.
+	 *
+	 * NOTE: this irq vector 19 and the gate in BUILD_SMP_TIMER_INTERRUPT
+	 * should be the same ;)
+	 */
+	tmp_value = apic_read(APIC_LVTT);
+	lvtt1_value = APIC_LVT_TIMER_PERIODIC | (0x20+19);
+	apic_write(APIC_LVTT , lvtt1_value);
+
+	/*
+	 * Divide PICLK by 16
+	 */
+	tmp_value = apic_read(APIC_TDCR);
+	apic_write(APIC_TDCR , (tmp_value & ~APIC_TDR_DIV_1 )
+				 | APIC_TDR_DIV_16);
+
+	tmp_value = apic_read(APIC_TMICT);
+	apic_write(APIC_TMICT, clocks/APIC_DIVISOR);
+}
+
+void wait_8254_wraparound (void)
+{
+	unsigned int curr_count, prev_count=~0;
+	int delta;
+
+	curr_count = get_8254_timer_count();
+
+	do {
+		prev_count = curr_count;
+		curr_count = get_8254_timer_count();
+		delta = curr_count-prev_count;
+
+	/*
+	 * This limit for delta seems arbitrary, but it isnt, it's
+	 * slightly above the level of error a buggy Mercury/Neptune
+	 * chipset timer can cause.
+	 */
+
+	} while (delta<1000);
+}
+
+/*
+ * In this function we calibrate APIC bus clocks to the external
+ * timer here. Unfortunately we cannot use jiffies and
+ * the timer irq to calibrate, since some later bootup
+ * code depends on getting the first irq? Ugh.
+ *
+ * We want to do the calibration only once since we
+ * want to have local timer irqs syncron. CPUs connected
+ * by the same APIC bus have the very same bus frequency.
+ * And we want to have irqs off anyways, no accidental
+ * APIC irq that way.
+ */
+
+int calibrate_APIC_clock (void)
+{
+	unsigned long long t1,t2;
+	unsigned long tt1,tt2;
+	unsigned int prev_count, curr_count;
+	long calibration_result;
+
+	printk("calibrating APIC timer ... ");
+
+	/*
+	 * Put whatever arbitrary (but long enough) timeout
+	 * value into the APIC clock, we just want to get the
+	 * counter running for calibration.
+	 */
+	setup_APIC_timer(1000000000);
+
+	/*
+	 * The timer chip counts down to zero. Lets wait
+	 * for a wraparound to start exact measurement:
+	 * (the current tick might have been already half done)
+	 */
+
+	wait_8254_wraparound ();
+
+	/*
+	 * We wrapped around just now, lets start:
+	 */
+	RTDSC(t1);
+	tt1=apic_read(APIC_TMCCT);
+
+	/*
+	 * lets wait until we get to the next wrapround:
+	 */
+	wait_8254_wraparound ();
+
+	tt2=apic_read(APIC_TMCCT);
+	RTDSC(t2);
+
+	/*
+	 * The APIC bus clock counter is 32 bits only, it
+	 * might have overflown:
+	 */
+	if (tt2<tt1) {
+		unsigned long tmp = tt2;
+		tt2=tt1;
+		tt1=tmp;
+	}
+
+	calibration_result = (tt2-tt1)*APIC_DIVISOR;
+
+	printk("\n..... %ld CPU clocks in 1 timer chip tick.\n",
+			 (unsigned long)(t2-t1));
+
+	printk("..... %ld APIC bus clocks in 1 timer chip tick.\n",
+			 calibration_result);
+
+
+	printk("..... CPU clock speed is %ld.%ld MHz.\n", 
+		((long)(t2-t1))/(1000000/HZ),
+		((long)(t2-t1))%(1000000/HZ)  );
+
+	printk("..... APIC bus clock speed is %ld.%ld MHz.\n", 
+		calibration_result/(1000000/HZ),
+		calibration_result%(1000000/HZ)  );
+
+	return calibration_result;
+}
+
+void setup_APIC_clock (void)
+{
+	unsigned long flags; 
+
+	static volatile int calibration_lock;
+	static unsigned int calibration_result;
+
+	return;
+	save_flags(flags);
+	cli();
+
+	printk("setup_APIC_clock() called.\n");
+
+	/*
+	 * We use a private profiling function. (This is preparation
+	 * for NMI local timer interrupts.)
+	 *
+	 * [ setup_APIC_clock() is called from all CPUs, but we want
+	 *   to do this part of the setup only once ... and it fits
+	 *   here best ]
+	 */
+	if (!set_bit(0,&calibration_lock)) {
+
+		default_do_profile = do_profile;
+		do_profile = NULL;
+
+		calibration_result=calibrate_APIC_clock();
+		/*
+	 	 * Signal completion to the other CPU[s]:
+	 	 */
+		calibration_lock = 3;
+
+	} else {
+		/*
+		 * Other CPU is calibrating, wait for finish:
+		 */
+		printk("waiting for other CPU calibrating APIC timer ... ");
+		while (calibration_lock == 1);
+		printk("done, continuing.\n");
+	}
+
+	setup_APIC_timer (calibration_result);
+
+	restore_flags(flags);
+}
+
+#undef APIC_DIVISOR
+#undef RTDSC
+
+#endif
+

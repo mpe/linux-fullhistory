@@ -50,6 +50,7 @@ extern int hp_plus_probe(struct device *dev);
 extern int znet_probe(struct device *);
 extern int express_probe(struct device *);
 extern int eepro_probe(struct device *);
+extern int eepro100_probe(struct device *);
 extern int el3_probe(struct device *);
 extern int at1500_probe(struct device *);
 extern int pcnet32_probe(struct device *);
@@ -177,6 +178,9 @@ static int ethif_probe(struct device *dev)
 #endif
 #ifdef CONFIG_EEXPRESS_PRO	/* Intel EtherExpress Pro/10 */
 	&& eepro_probe(dev)
+#endif
+#ifdef CONFIG_EEXPRESS_PRO100	/* Intel EtherExpress Pro/100 */
+	&& eepro100_probe(dev)
 #endif
 #ifdef CONFIG_DEPCA		/* DEC DEPCA */
 	&& depca_probe(dev)
@@ -326,18 +330,6 @@ static struct device eth0_dev = {
 
 #   undef NEXT_DEV
 #   define NEXT_DEV	(&eth0_dev)
-
-#if defined(PLIP) || defined(CONFIG_PLIP)
-    extern int plip_init(struct device *);
-    static struct device plip2_dev = {
-	"plip2", 0, 0, 0, 0, 0x278, 2, 0, 0, 0, NEXT_DEV, plip_init, };
-    static struct device plip1_dev = {
-	"plip1", 0, 0, 0, 0, 0x378, 7, 0, 0, 0, &plip2_dev, plip_init, };
-    static struct device plip0_dev = {
-	"plip0", 0, 0, 0, 0, 0x3BC, 5, 0, 0, 0, &plip1_dev, plip_init, };
-#   undef NEXT_DEV
-#   define NEXT_DEV	(&plip0_dev)
-#endif  /* PLIP */
 
 #if defined(SLIP) || defined(CONFIG_SLIP)
 	/* To be exact, this node just hooks the initialization

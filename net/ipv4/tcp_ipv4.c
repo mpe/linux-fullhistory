@@ -654,7 +654,7 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp)
 	int code = skb->h.icmph->code;
 	struct sock *sk;
 
-	sk = tcp_v4_lookup(iph->saddr, th->source, iph->daddr, th->dest);
+	sk = tcp_v4_lookup(iph->daddr, th->dest, iph->saddr, th->source);
 
 	if (sk == NULL)
 		return;

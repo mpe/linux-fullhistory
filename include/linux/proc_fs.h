@@ -48,7 +48,8 @@ enum root_directory_inos {
 	PROC_RTC,
 	PROC_LOCKS,
 	PROC_ZORRO,
-	PROC_SLABINFO
+	PROC_SLABINFO,
+	PROC_PARPORT
 };
 
 enum pid_directory_inos {

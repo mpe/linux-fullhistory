@@ -155,7 +155,7 @@ static inline void del_from_runqueue(struct task_struct * p)
 		return;
 	}
 #endif
-	if (p == &init_task) {
+	if (!p->pid) {
 		static int nr = 0;
 		if (nr < 5) {
 			nr++;
@@ -307,6 +307,10 @@ asmlinkage void schedule(void)
 
 	need_resched = 0;
 	this_cpu = smp_processor_id();
+	if (local_irq_count[this_cpu]) {
+		printk("Scheduling in interrupt\n");
+		*(char *)0 = 0;
+	}
 	prev = current;
 	release_kernel_lock(prev, this_cpu, lock_depth);
 	if (bh_active & bh_mask)
@@ -317,8 +321,16 @@ asmlinkage void schedule(void)
 
 	/* move an exhausted RR process to be last.. */
 	if (!prev->counter && prev->policy == SCHED_RR) {
-		prev->counter = prev->priority;
-		move_last_runqueue(prev);
+		if (prev->pid) {
+			prev->counter = prev->priority;
+			move_last_runqueue(prev);
+		} else {
+			static int count = 5;
+			if (count) {
+				count--;
+				printk("Moving pid 0 last\n");
+			}
+		}
 	}
 	timeout = 0;
 	switch (prev->state) {
@@ -1240,6 +1252,27 @@ static void timer_bh(void)
 	run_timer_list();
 }
 
+/*
+ * It is up to the platform where it does the profiling: in the
+ * global timer interrupt, or in a special interrupt handler.
+ *
+ * by default it's done in the global timer interrupt.
+ */
+
+static void default_do_profile (struct pt_regs * regs)
+{
+	if (prof_buffer && current->pid) {
+		extern int _stext;
+		unsigned long ip = instruction_pointer(regs);
+		ip -= (unsigned long) &_stext;
+		ip >>= prof_shift;
+		if (ip < prof_len)
+			prof_buffer[ip]++;
+	}
+}
+
+void (*do_profile)(struct pt_regs *) = default_do_profile;
+
 void do_timer(struct pt_regs * regs)
 {
 	(*(unsigned long *)&jiffies)++;
@@ -1247,14 +1280,8 @@ void do_timer(struct pt_regs * regs)
 	mark_bh(TIMER_BH);
 	if (!user_mode(regs)) {
 		lost_ticks_system++;
-		if (prof_buffer && current->pid) {
-			extern int _stext;
-			unsigned long ip = instruction_pointer(regs);
-			ip -= (unsigned long) &_stext;
-			ip >>= prof_shift;
-			if (ip < prof_len)
-				prof_buffer[ip]++;
-		}
+		if (do_profile)
+			do_profile(regs);
 	}
 	if (tq_timer)
 		mark_bh(TQUEUE_BH);

@@ -884,10 +884,10 @@ int tioclinux(struct tty_struct *tty, unsigned long arg)
 	 * related to the kernel should not use this.
 	 */
 	 		data = shift_state;
-			return put_user(data, (char *) arg);
+			return __put_user(data, (char *) arg);
 		case 7:
 			data = mouse_reporting();
-			return put_user(data, (char *) arg);
+			return __put_user(data, (char *) arg);
 		case 10:
 			set_vesa_blanking(arg);
 			return 0;
@@ -1337,11 +1337,17 @@ static int do_con_write(struct tty_struct * tty, int from_user,
 	if (currcons == sel_cons)
 		clear_selection();
 
+	if (from_user) {
+		/* just to make sure that noone lurks at places he shouldn't see. */
+		if (verify_area(VERIFY_READ, buf, count))
+			return 0; /* ?? are error codes legal here ?? */
+	}
+
 	disable_bh(CONSOLE_BH);
 	while (!tty->stopped &&	count) {
 		enable_bh(CONSOLE_BH);
 		if (from_user)
-			get_user(c, buf);
+			__get_user(c, buf);
 		else
 			c = *buf;
 		buf++; n++; count--;

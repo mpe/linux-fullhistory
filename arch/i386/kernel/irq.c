@@ -35,6 +35,10 @@
 #include <asm/smp.h>
 #include <asm/pgtable.h>
 
+#ifdef __SMP_PROF__
+extern volatile unsigned long smp_apic_timer_ticks[1+NR_CPUS];
+#endif
+
 #define CR0_NE 32
 
 static unsigned char cache_21 = 0xff;
@@ -137,6 +141,9 @@ BUILD_IRQ(SECOND,15,0x80)
 BUILD_SMP_INTERRUPT(reschedule_interrupt)
 BUILD_SMP_INTERRUPT(invalidate_interrupt)
 BUILD_SMP_INTERRUPT(stop_cpu_interrupt)
+#ifdef __SMP_PROF__
+BUILD_SMP_TIMER_INTERRUPT(apic_timer_interrupt)
+#endif
 #endif
 
 /*
@@ -252,6 +259,7 @@ int get_smp_prof_list(char *buf) {
 	unsigned long sum_spins_syscall = 0;
 	unsigned long sum_spins_sys_idle = 0;
 	unsigned long sum_smp_idle_count = 0;
+	unsigned long sum_apic_timer_ticks = 0;
 
 	for (i=0;i<smp_num_cpus;i++) {
 		int cpunum = cpu_logical_map[i];
@@ -259,6 +267,7 @@ int get_smp_prof_list(char *buf) {
 		sum_spins_syscall+=smp_spins_syscall[cpunum];
 		sum_spins_sys_idle+=smp_spins_sys_idle[cpunum];
 		sum_smp_idle_count+=smp_idle_count[cpunum];
+		sum_apic_timer_ticks+=smp_apic_timer_ticks[cpunum];
 	}
 
 	len += sprintf(buf+len,"CPUS: %10i \n", smp_num_cpus);
@@ -314,6 +323,12 @@ int get_smp_prof_list(char *buf) {
 		len+=sprintf(buf+len," %10lu",smp_idle_count[cpu_logical_map[i]]);
 
 	len +=sprintf(buf+len,"   idle ticks\n");
+
+	len+=sprintf(buf+len,"TICK %10lu",sum_apic_timer_ticks);
+	for (i=0;i<smp_num_cpus;i++)
+		len+=sprintf(buf+len," %10lu",smp_apic_timer_ticks[cpu_logical_map[i]]);
+
+	len +=sprintf(buf+len,"   local APIC timer ticks\n");
 
 	len+=sprintf(buf+len, "IPI: %10lu   received\n",
 		ipi_count);
@@ -734,14 +749,30 @@ void init_IRQ(void)
 	outb_p(0x34,0x43);		/* binary, mode 2, LSB/MSB, ch 0 */
 	outb_p(LATCH & 0xff , 0x40);	/* LSB */
 	outb(LATCH >> 8 , 0x40);	/* MSB */
+
 	for (i = 0; i < 16 ; i++)
 		set_intr_gate(0x20+i,bad_interrupt[i]);
-	/* This bit is a hack because we don't send timer messages to all processors yet */
-	/* It has to be here .. it doesn't work if you put it down the bottom - assembler explodes 8) */
+
+	/*
+	 * This bit is a hack because we don't send timer messages to all
+	 * processors yet. It has to be here .. it doesn't work if you put
+	 * it down the bottom - assembler explodes 8)
+	 */
+
 #ifdef __SMP__	
-	set_intr_gate(0x20+i, reschedule_interrupt);	/* IRQ '16' - IPI for rescheduling */
-	set_intr_gate(0x21+i, invalidate_interrupt);	/* IRQ '17' - IPI for invalidation */
-	set_intr_gate(0x22+i, stop_cpu_interrupt);	/* IRQ '18' - IPI for CPU halt */
+	/* IRQ '16' - IPI for rescheduling */
+	set_intr_gate(0x20+i, reschedule_interrupt);
+
+	/* IRQ '17' - IPI for invalidation */
+	set_intr_gate(0x21+i, invalidate_interrupt);
+
+	/* IRQ '18' - IPI for CPU halt */
+	set_intr_gate(0x22+i, stop_cpu_interrupt);
+
+#ifdef __SMP_PROF__
+	/* IRQ '19' - self generated IPI for local APIC timer */
+	set_intr_gate(0x23+i, apic_timer_interrupt);
+#endif
 #endif	
 	request_region(0x20,0x20,"pic1");
 	request_region(0xa0,0x20,"pic2");

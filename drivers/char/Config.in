@@ -19,7 +19,7 @@ if [ "$CONFIG_SERIAL_EXTENDED" = "y" ]; then
 fi
 bool 'Non-standard serial port support' CONFIG_SERIAL_NONSTANDARD
 if [ "$CONFIG_SERIAL_NONSTANDARD" = "y" ]; then
-   bool 'Digiboard PC/Xx Support' CONFIG_DIGI
+   tristate 'Digiboard PC/Xx Support' CONFIG_DIGI
    tristate 'Cyclades async mux support' CONFIG_CYCLADES
    bool 'Stallion multiport serial support' CONFIG_STALDRV
    if [ "$CONFIG_STALDRV" = "y" ]; then
@@ -33,8 +33,12 @@ if [ "$CONFIG_SERIAL_NONSTANDARD" = "y" ]; then
      int '  FIFO trigger level' CONFIG_ESPSERIAL_TRIGGER_LEVEL 768
    fi
 fi
-tristate 'Parallel printer support' CONFIG_PRINTER
-
+if [ "$CONFIG_PNP_PARPORT" != "n" ]; then
+  dep_tristate 'Parallel printer support' CONFIG_PRINTER $CONFIG_PNP_PARPORT
+  if [ "$CONFIG_PRINTER" != "n" ]; then
+    bool '  Support IEEE1284 status readback' CONFIG_PRINTER_READBACK
+  fi
+fi
 
 bool 'Mouse Support (not serial mice)' CONFIG_MOUSE
 if [ "$CONFIG_MOUSE" = "y" ]; then

@@ -625,25 +625,3 @@ struct rpc_program	nfs_program = {
 	nfs_version,
 	&nfs_rpcstat,
 };
-
-/*
- * RPC stats support
- */
-static int
-nfs_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
-{
-	return rpcstat_get_info(&nfs_rpcstat, buffer, start, offset, length);
-}
-
-static struct proc_dir_entry	proc_nfsclnt = {
-	0, 3, "nfs",
-	S_IFREG | S_IRUGO, 1, 0, 0,
-	6, &proc_net_inode_operations,
-	nfs_get_info
-};
-
-struct rpc_stat			nfs_rpcstat = {
-	NULL,			/* next */
-	&proc_nfsclnt,		/* /proc/net directory entry */
-	&nfs_program,		/* RPC program */
-};

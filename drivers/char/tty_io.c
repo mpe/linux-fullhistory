@@ -44,6 +44,10 @@
  * 
  * Restrict vt switching via ioctl()
  *      -- grif@cs.ucr.edu, 5-Dec-95
+ *
+ * Move console and virtual terminal code to more apropriate files,
+ * implement CONFIG_VT and generalize console device interface.
+ *	-- Marko Kohtala <Marko.Kohtala@hut.fi>, March 97
  */
 
 #include <linux/config.h>

@@ -516,7 +516,7 @@ void tcp_v6_err(int type, int code, unsigned char *header, __u32 info,
 	int err;
 	int opening;
 
-	sk = tcp_v6_lookup(saddr, th->source, daddr, th->dest);
+	sk = tcp_v6_lookup(daddr, th->dest, saddr, th->source);
 
 	if (sk == NULL)
 		return;

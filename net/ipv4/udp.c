@@ -436,7 +436,7 @@ void udp_err(struct sk_buff *skb, unsigned char *dp)
 	int code = skb->h.icmph->code;
 	struct sock *sk;
 
-	sk = udp_v4_lookup(iph->saddr, uh->source, iph->daddr, uh->dest);
+	sk = udp_v4_lookup(iph->daddr, uh->dest, iph->saddr, uh->source);
 	if (sk == NULL)
 	  	return;	/* No socket for error */
 

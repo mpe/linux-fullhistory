@@ -371,6 +371,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_EEXPRESS_PRO100),y)
+L_OBJS += eepro100.o
+else
+  ifeq ($(CONFIG_EEXPRESS_PRO100),m)
+  M_OBJS += eepro100.o
+  endif
+endif
+
 ifeq ($(CONFIG_WAVELAN),y)
 L_OBJS += wavelan.o
 else

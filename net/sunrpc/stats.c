@@ -1,14 +1,15 @@
 /*
  * linux/net/sunrpc/stats.c
  *
- * procfs-based user access to RPC statistics
+ * procfs-based user access to generic RPC statistics. The stats files
+ * reside in /proc/net/rpc.
  *
- * Everything is complicated by the fact that procfs doesn't pass the
- * proc_dir_info struct in the call to get_info. We need our own 
- * inode_ops for /proc/net/rpc (we want to have a write op for zeroing
- * the current stats, anyway).
+ * The read routines assume that the buffer passed in is just big enough.
+ * If you implement an RPC service that has its own stats routine which
+ * appends the generic RPC stats, make sure you don't exceed the PAGE_SIZE
+ * limit.
  *
- * Copyright (C) 1995, 1996 Olaf Kirch <okir@monad.swb.de>
+ * Copyright (C) 1995, 1996, 1997 Olaf Kirch <okir@monad.swb.de>
  */
 
 #include <linux/kernel.h>
@@ -19,83 +20,16 @@
 
 #define RPCDBG_FACILITY	RPCDBG_MISC
 
-/*
- * Generic stats object (same for clnt and svc stats).
- * Must agree with first two fields of either.
- */
-struct stats {
-	struct stats *		next;
-	struct proc_dir_entry *	entry;
-};
-
-/* Code disabled until updated to new dynamic /proc code */
-#if 0
-
-static struct stats *		rpc_stats = NULL;
-static struct stats *		svc_stats = NULL;
-
-static struct proc_dir_entry	proc_rpc = {
-	0, 3, "rpc",
-	S_IFDIR | S_IRUGO | S_IXUGO, 1, 0, 0,
-	0, NULL,
-	NULL, NULL,
-	NULL,
-	NULL, NULL,
-};
+static struct proc_dir_entry	*proc_net_rpc = 0;
 
 /*
- * Register/unregister a stats file
+ * Get RPC client stats
  */
-static void
-stats_register(struct stats **q, struct stats *p)
-{
-	dprintk("RPC: registering /proc/net/rpc/%s\n",
-				p->entry->name);
-	/* return; */
-	if (p->entry->low_ino)
-		return;
-	p->next = *q;
-	*q = p;
-	proc_register_dynamic(&proc_rpc, p->entry);
-}
-
-static void
-stats_unregister(struct stats **q, struct stats *p)
-{
-	dprintk("RPC: unregistering /proc/net/rpc/%s\n",
-				p->entry->name);
-	/* return; */
-	if (!p->entry->low_ino)
-		return;
-	while (*q) {
-		if (*q == p) {
-			*q = p->next;
-			proc_unregister(&proc_rpc, p->entry->low_ino);
-			return;
-		}
-		q = &((*q)->next);
-	}
-}
-
-/*
- * Client stats handling
- */
-void
-rpcstat_register(struct rpc_stat *statp)
-{
-	stats_register(&rpc_stats, (struct stats *) statp);
-}
-
-void
-rpcstat_unregister(struct rpc_stat *statp)
-{
-	stats_unregister(&rpc_stats, (struct stats *) statp);
-}
-
 int
-rpcstat_get_info(struct rpc_stat *statp, char *buffer,
-			char **start, off_t offset, int length)
+rpc_proc_read(char *buffer, char **start, off_t offset, int count,
+				int *eof, void *data)
 {
+	struct rpc_stat	*statp = (struct rpc_stat *) data;
 	struct rpc_program *prog = statp->program;
 	struct rpc_version *vers;
 	int		len, i, j;
@@ -125,34 +59,24 @@ rpcstat_get_info(struct rpc_stat *statp, char *buffer,
 
 	if (offset >= len) {
 		*start = buffer;
+		*eof = 1;
 		return 0;
 	}
 	*start = buffer + offset;
-	len -= offset;
-	if (len > length)
-		len = length;
+	if ((len -= offset) > count)
+		return count;
+	*eof = 1;
 	return len;
 }
 
 /*
- * Server stats handling
+ * Get RPC server stats
  */
-void
-svcstat_register(struct svc_stat *statp)
-{
-	stats_register(&svc_stats, (struct stats *) statp);
-}
-
-void
-svcstat_unregister(struct svc_stat *statp)
-{
-	stats_unregister(&svc_stats, (struct stats *) statp);
-}
-
 int
-svcstat_get_info(struct svc_stat *statp, char *buffer,
-			char **start, off_t offset, int length)
+svc_proc_read(char *buffer, char **start, off_t offset, int count,
+				int *eof, void *data)
 {
+	struct svc_stat *statp	= (struct svc_stat *) data;
 	struct svc_program *prog = statp->program;
 	struct svc_procedure *proc;
 	struct svc_version *vers;
@@ -183,85 +107,69 @@ svcstat_get_info(struct svc_stat *statp, char *buffer,
 
 	if (offset >= len) {
 		*start = buffer;
+		*eof = 1;
 		return 0;
 	}
 	*start = buffer + offset;
-	if ((len -= offset) > length)
-		len = length;
+	if ((len -= offset) > count)
+		return count;
+	*eof = 1;
 	return len;
 }
 
 /*
- * Register /proc/net/rpc
+ * Register/unregister RPC proc files
  */
+static inline struct proc_dir_entry *
+do_register(const char *name, void *data, int issvc)
+{
+	struct proc_dir_entry	*ent;
+
+	dprintk("RPC: registering /proc/net/rpc/%s\n", name);
+	ent = create_proc_entry(name, 0, proc_net_rpc);
+	ent->read_proc = issvc? svc_proc_read : rpc_proc_read;
+	ent->data = data;
+
+	return ent;
+}
+
+struct proc_dir_entry *
+rpc_proc_register(struct rpc_stat *statp)
+{
+	return do_register(statp->program->name, statp, 0);
+}
+
 void
-rpcstat_init(void)
+rpc_proc_unregister(const char *name)
+{
+	remove_proc_entry(name, proc_net_rpc);
+}
+
+struct proc_dir_entry *
+svc_proc_register(struct svc_stat *statp)
+{
+	return do_register(statp->program->pg_name, statp, 1);
+}
+
+void
+svc_proc_unregister(const char *name)
+{
+	remove_proc_entry(name, proc_net_rpc);
+}
+
+void
+rpc_proc_init(void)
 {
 	dprintk("RPC: registering /proc/net/rpc\n");
-	proc_rpc.ops = proc_net.ops;	/* cheat */
-	proc_register_dynamic(&proc_net, &proc_rpc);
+	if (!proc_net_rpc)
+		proc_net_rpc = create_proc_entry("net/rpc", S_IFDIR, 0);
 }
 
-/*
- * Unregister /proc/net/rpc
- */
 void
-rpcstat_exit(void)
+rpc_proc_exit(void)
 {
-	while (rpc_stats)
-		stats_unregister(&rpc_stats, rpc_stats);
-	while (svc_stats)
-		stats_unregister(&svc_stats, svc_stats);
 	dprintk("RPC: unregistering /proc/net/rpc\n");
-	proc_unregister(&proc_net, proc_rpc.low_ino);
+	if (proc_net_rpc)
+		remove_proc_entry("net/rpc", 0);
+	proc_net_rpc = 0;
 }
-
-#else
-
-/* Various dummy functions */
-
-int
-rpcstat_get_info(struct rpc_stat *statp, char *buffer,
-			char **start, off_t offset, int length)
-{
-	return 0;
-}
-
-int
-svcstat_get_info(struct svc_stat *statp, char *buffer,
-			char **start, off_t offset, int length)
-{
-	return 0;
-}
-
-void
-rpcstat_register(struct rpc_stat *statp)
-{
-}
-
-void
-rpcstat_unregister(struct rpc_stat *statp)
-{
-}
-
-void
-svcstat_register(struct svc_stat *statp)
-{
-}
-
-void
-svcstat_unregister(struct svc_stat *statp)
-{
-}
-
-void
-rpcstat_init(void)
-{
-}
-
-void
-rpcstat_exit(void)
-{
-}
-
-#endif

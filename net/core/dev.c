@@ -85,6 +85,9 @@
 #ifdef CONFIG_NET_RADIO
 #include <linux/wireless.h>
 #endif	/* CONFIG_NET_RADIO */
+#ifdef CONFIG_PLIP
+extern int plip_init(void);
+#endif
 
 /*
  *	The list of devices, that are able to output.
@@ -1627,6 +1630,9 @@ int net_dev_init(void)
 #endif
 #if defined(CONFIG_LAPBETHER)
 	lapbeth_init();
+#endif
+#if defined(CONFIG_PLIP)
+	plip_init();
 #endif
 	/*
 	 *	SLHC if present needs attaching so other people see it

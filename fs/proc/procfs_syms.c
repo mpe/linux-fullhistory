@@ -14,6 +14,8 @@ extern struct inode_operations proc_scsi_inode_operations;
 
 EXPORT_SYMBOL(proc_register);
 EXPORT_SYMBOL(proc_unregister);
+EXPORT_SYMBOL(create_proc_entry);
+EXPORT_SYMBOL(remove_proc_entry);
 EXPORT_SYMBOL(proc_root);
 EXPORT_SYMBOL(proc_get_inode);
 EXPORT_SYMBOL(in_group_p);

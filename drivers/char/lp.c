@@ -8,7 +8,8 @@
  * LPCAREFUL, LPABORT, LPGETSTATUS added by Chris Metcalf, metcalf@lcs.mit.edu
  * Statistics and support for slow printers by Rob Janssen, rob@knoware.nl
  * "lp=" command line parameters added by Grant Guenther, grant@torque.net
- * lp_read (Status readback) support added by Carsten Gross, carsten@sol.wohnheim.uni-ulm.de
+ * lp_read (Status readback) support added by Carsten Gross,
+ *                                             carsten@sol.wohnheim.uni-ulm.de
  */
 
 #include <linux/module.h>
@@ -17,7 +18,6 @@
 #include <linux/kernel.h>
 #include <linux/major.h>
 #include <linux/sched.h>
-#include <linux/lp.h>
 #include <linux/malloc.h>
 #include <linux/ioport.h>
 #include <linux/fcntl.h>
@@ -26,6 +26,8 @@
 #include <asm/io.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
+#include <linux/parport.h>
+#include <linux/lp.h>
 
 /* the BIOS manuals say there can be up to 4 lpt devices
  * but I have not seen a board where the 4th address is listed
@@ -33,12 +35,19 @@
  * please let me know if you have different equipment
  * if you have more than 3 printers, remember to increase LP_NO
  */
-struct lp_struct lp_table[] = {
-	{ 0x3bc, 0, 0, LP_INIT_CHAR, LP_INIT_TIME, LP_INIT_WAIT, NULL, NULL, 0, 0, 0, {0} },
-	{ 0x378, 0, 0, LP_INIT_CHAR, LP_INIT_TIME, LP_INIT_WAIT, NULL, NULL, 0, 0, 0, {0} },
-	{ 0x278, 0, 0, LP_INIT_CHAR, LP_INIT_TIME, LP_INIT_WAIT, NULL, NULL, 0, 0, 0, {0} },
+struct lp_struct lp_table[] =
+{
+ {NULL, 0, LP_INIT_CHAR, LP_INIT_TIME, LP_INIT_WAIT, NULL, NULL, 0, 0, 0,
+  {0}},
+ {NULL, 0, LP_INIT_CHAR, LP_INIT_TIME, LP_INIT_WAIT, NULL, NULL, 0, 0, 0,
+  {0}},
+ {NULL, 0, LP_INIT_CHAR, LP_INIT_TIME, LP_INIT_WAIT, NULL, NULL, 0, 0, 0,
+  {0}}
 };
 #define LP_NO 3
+
+/* Device name */
+static char *dev_name = "lp";
 
 /* Test if printer is ready (and optionally has no error conditions) */
 #define LP_READY(minor, status) \
@@ -49,61 +58,58 @@ struct lp_struct lp_table[] = {
    (status & (LP_PBUSY|LP_POUTPA|LP_PSELECD|LP_PERRORP)) == \
       (LP_PBUSY|LP_PSELECD|LP_PERRORP)
 
-/*
- * All my debugging code assumes that you debug with only one printer at
- * a time. RWWH
- * Debug info moved into stats area, so this is no longer true (Rob Janssen)
- */
-
 #undef LP_DEBUG
+#undef LP_READ_DEBUG
 
 static int lp_reset(int minor)
 {
-	outb_p(LP_PSELECP, LP_C(minor));
+	w_ctr(minor, LP_PSELECP);
 	udelay(LP_DELAY);
-	outb_p(LP_PSELECP | LP_PINITP, LP_C(minor));
-	return LP_S(minor);
+	w_ctr(minor, LP_PSELECP | LP_PINITP);
+	return r_str(minor);
 }
 
 static inline int lp_char_polled(char lpchar, int minor)
 {
 	int status, wait = 0;
-	unsigned long count  = 0;
+	unsigned long count = 0;
 	struct lp_stats *stats;
 
 	do {
-		status = LP_S(minor);
-		count ++;
-		if(need_resched)
+		status = r_str(minor);
+		count++;
+		if (need_resched)
 			schedule();
-	} while(!LP_READY(minor,status) && count < LP_CHAR(minor));
+	} while (!LP_READY(minor, status) && count < LP_CHAR(minor));
 
 	if (count == LP_CHAR(minor)) {
 		return 0;
 		/* we timed out, and the character was /not/ printed */
 	}
-	outb_p(lpchar, LP_B(minor));
+	w_dtr(minor, lpchar);
 	stats = &LP_STAT(minor);
 	stats->chars++;
 	/* must wait before taking strobe high, and after taking strobe
 	   low, according spec.  Some printers need it, others don't. */
-	while(wait != LP_WAIT(minor)) wait++;
+	while (wait != LP_WAIT(minor))
+		wait++;
 	/* control port takes strobe high */
-	outb_p(( LP_PSELECP | LP_PINITP | LP_PSTROBE ), ( LP_C( minor )));
-	while(wait) wait--;
+	w_ctr(minor, LP_PSELECP | LP_PINITP | LP_PSTROBE);
+	while (wait)
+		wait--;
 	/* take strobe low */
-	outb_p(( LP_PSELECP | LP_PINITP ), ( LP_C( minor )));
+	w_ctr(minor, LP_PSELECP | LP_PINITP);
 	/* update waittime statistics */
 	if (count > stats->maxwait) {
 #ifdef LP_DEBUG
-	    printk(KERN_DEBUG "lp%d success after %d counts.\n",minor,count);
+		printk(KERN_DEBUG "lp%d success after %d counts.\n", minor, count);
 #endif
-	    stats->maxwait = count;
+		stats->maxwait = count;
 	}
 	count *= 256;
-	wait = (count > stats->meanwait)? count - stats->meanwait :
-					  stats->meanwait - count;
-	stats->meanwait = (255*stats->meanwait + count + 128) / 256;
+	wait = (count > stats->meanwait) ? count - stats->meanwait :
+	    stats->meanwait - count;
+	stats->meanwait = (255 * stats->meanwait + count + 128) / 256;
 	stats->mdev = ((127 * stats->mdev) + wait + 64) / 128;
 
 	return 1;
@@ -117,35 +123,37 @@ static inline int lp_char_interrupt(char lpchar, int minor)
 	struct lp_stats *stats;
 
 	do {
-	    if(need_resched)
-		schedule();
-	    if ((status = LP_S(minor)) & LP_PBUSY) {
-		if (!LP_CAREFUL_READY(minor, status))
-			return 0;
-		outb_p(lpchar, LP_B(minor));
-		stats = &LP_STAT(minor);
-		stats->chars++;
-		/* must wait before taking strobe high, and after taking strobe
-		   low, according spec.  Some printers need it, others don't. */
-		wait = 0;
-		while(wait != LP_WAIT(minor)) wait++;
-		/* control port takes strobe high */
-		outb_p(( LP_PSELECP | LP_PINITP | LP_PSTROBE ), ( LP_C( minor )));
-		while(wait) wait--;
-		/* take strobe low */
-		outb_p(( LP_PSELECP | LP_PINITP ), ( LP_C( minor )));
-		/* update waittime statistics */
-		if (count) {
-		    if (count > stats->maxwait)
-			stats->maxwait = count;
-		    count *= 256;
-		    wait = (count > stats->meanwait)? count - stats->meanwait :
-						      stats->meanwait - count;
-		    stats->meanwait = (255*stats->meanwait + count + 128) / 256;
-		    stats->mdev = ((127 * stats->mdev) + wait + 64) / 128;
+		if(need_resched)
+			schedule();
+		if ((status = r_str(minor)) & LP_PBUSY) {
+			if (!LP_CAREFUL_READY(minor, status))
+				return 0;
+			w_dtr(minor, lpchar);
+			stats = &LP_STAT(minor);
+			stats->chars++;
+			/* must wait before taking strobe high, and after taking strobe
+			   low, according spec.  Some printers need it, others don't. */
+			wait = 0;
+			while (wait != LP_WAIT(minor))
+				wait++;
+			/* control port takes strobe high */
+			w_ctr(minor, LP_PSELECP | LP_PINITP | LP_PSTROBE);
+			while (wait)
+				wait--;
+			/* take strobe low */
+			w_ctr(minor, LP_PSELECP | LP_PINITP);
+			/* update waittime statistics */
+			if (count) {
+				if (count > stats->maxwait)
+					stats->maxwait = count;
+				count *= 256;
+				wait = (count > stats->meanwait) ? count - stats->meanwait :
+				    stats->meanwait - count;
+				stats->meanwait = (255 * stats->meanwait + count + 128) / 256;
+				stats->mdev = ((127 * stats->mdev) + wait + 64) / 128;
+			}
+			return 1;
 		}
-		return 1;
-	    }
 	} while (count++ < LP_CHAR(minor));
 
 	return 0;
@@ -153,23 +161,26 @@ static inline int lp_char_interrupt(char lpchar, int minor)
 
 static void lp_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
-	struct lp_struct *lp = &lp_table[0];
+	struct parport *pb = (struct parport *) dev_id;
+	struct ppd *pd = pb->cad;
+	struct lp_struct *lp_dev = (struct lp_struct *) pd->private;
 
-	while (irq != lp->irq) {
-		if (++lp >= &lp_table[LP_NO])
-			return;
-	}
-
-	wake_up(&lp->lp_wait_q);
+	if (lp_dev->lp_wait_q)
+		wake_up(&lp_dev->lp_wait_q);
 }
 
-static inline int lp_write_interrupt(unsigned int minor, const char * buf, int count)
+static inline int lp_write_interrupt(unsigned int minor, const char *buf, int count)
 {
 	unsigned long copy_size;
 	unsigned long total_bytes_written = 0;
 	unsigned long bytes_written;
 	struct lp_struct *lp = &lp_table[minor];
 	unsigned char status;
+
+	if (minor >= LP_NO)
+		return -ENXIO;
+	if (lp_table[minor].dev == NULL)
+		return -ENXIO;
 
 	do {
 		bytes_written = 0;
@@ -184,35 +195,35 @@ static inline int lp_write_interrupt(unsigned int minor, const char * buf, int c
 			} else {
 				int rc = total_bytes_written + bytes_written;
 				if (lp_table[minor].runchars > LP_STAT(minor).maxrun)
-					 LP_STAT(minor).maxrun = lp_table[minor].runchars;
-				status = LP_S(minor);
+					LP_STAT(minor).maxrun = lp_table[minor].runchars;
+				status = r_str(minor);
 				if ((status & LP_POUTPA)) {
 					printk(KERN_INFO "lp%d out of paper\n", minor);
 					if (LP_F(minor) & LP_ABORT)
-						return rc?rc:-ENOSPC;
+						return rc ? rc : -ENOSPC;
 				} else if (!(status & LP_PSELECD)) {
 					printk(KERN_INFO "lp%d off-line\n", minor);
 					if (LP_F(minor) & LP_ABORT)
-						return rc?rc:-EIO;
+						return rc ? rc : -EIO;
 				} else if (!(status & LP_PERRORP)) {
 					printk(KERN_ERR "lp%d printer error\n", minor);
 					if (LP_F(minor) & LP_ABORT)
-						return rc?rc:-EIO;
+						return rc ? rc : -EIO;
 				}
 				LP_STAT(minor).sleeps++;
 				cli();
-				outb_p((LP_PSELECP|LP_PINITP|LP_PINTEN), (LP_C(minor)));
-				status = LP_S(minor);
+				w_ctr(minor, LP_PSELECP | LP_PINITP | LP_PINTEN);
+				status = r_str(minor);
 				if ((!(status & LP_PACK) || (status & LP_PBUSY))
-				  && LP_CAREFUL_READY(minor, status)) {
-					outb_p((LP_PSELECP|LP_PINITP), (LP_C(minor)));
+				    && LP_CAREFUL_READY(minor, status)) {
+					w_ctr(minor, LP_PSELECP | LP_PINITP);
 					sti();
 					continue;
 				}
-				lp_table[minor].runchars=0;
+				lp_table[minor].runchars = 0;
 				current->timeout = jiffies + LP_TIMEOUT_INTERRUPT;
 				interruptible_sleep_on(&lp->lp_wait_q);
-				outb_p((LP_PSELECP|LP_PINITP), (LP_C(minor)));
+				w_ctr(minor, LP_PSELECP | LP_PINITP);
 				sti();
 				if (current->signal & ~current->blocked) {
 					if (total_bytes_written + bytes_written)
@@ -232,9 +243,9 @@ static inline int lp_write_interrupt(unsigned int minor, const char * buf, int c
 	return total_bytes_written;
 }
 
-static inline int lp_write_polled(unsigned int minor, const char * buf, int count)
+static inline int lp_write_polled(unsigned int minor, const char *buf, int count)
 {
-	int  retval,status;
+	int  retval, status;
 	char c;
 	const char *temp;
 
@@ -249,7 +260,7 @@ static inline int lp_write_polled(unsigned int minor, const char * buf, int coun
 		} else { /* if printer timed out */
 			if (lp_table[minor].runchars > LP_STAT(minor).maxrun)
 				 LP_STAT(minor).maxrun = lp_table[minor].runchars;
-			status = LP_S(minor);
+			status = r_str(minor);
 
 			if (status & LP_POUTPA) {
 				printk(KERN_INFO "lp%d out of paper\n", minor);
@@ -269,7 +280,7 @@ static inline int lp_write_polled(unsigned int minor, const char * buf, int coun
 			} else
 			/* not offline or out of paper. on fire? */
 			if (!(status & LP_PERRORP)) {
-				printk(KERN_ERR "lp%d reported invalid error status (on fire, eh?)\n", minor);
+				printk(KERN_ERR "lp%d on fire\n", minor);
 				if(LP_F(minor) & LP_ABORT)
 					return temp-buf?temp-buf:-EIO;
 				current->state = TASK_INTERRUPTIBLE;
@@ -302,15 +313,27 @@ static long lp_write(struct inode * inode, struct file * file,
 	const char * buf, unsigned long count)
 {
 	unsigned int minor = MINOR(inode->i_rdev);
+	int retv;
 
 	if (jiffies-lp_table[minor].lastcall > LP_TIME(minor))
 		lp_table[minor].runchars = 0;
+
 	lp_table[minor].lastcall = jiffies;
 
-	if (LP_IRQ(minor))
-		return lp_write_interrupt(minor, buf, count);
-	else
-		return lp_write_polled(minor, buf, count);
+ 	/* Claim Parport or sleep until it becomes available
+ 	 * (see lp_wakeup() for details)
+ 	 */
+ 	if (parport_claim(lp_table[minor].dev)) {
+ 		sleep_on(&lp_table[minor].lp_wait_q);
+ 		lp_table[minor].lp_wait_q = NULL;
+ 	}
+ 	if (LP_IRQ(minor) > 0)
+ 		retv = lp_write_interrupt(minor, buf, count);
+  	else
+ 		retv = lp_write_polled(minor, buf, count);
+ 
+ 	parport_release(lp_table[minor].dev);
+ 	return retv;
 }
 
 static long long lp_lseek(struct inode * inode, struct file * file,
@@ -319,38 +342,19 @@ static long long lp_lseek(struct inode * inode, struct file * file,
 	return -ESPIPE;
 }
 
-/* Test if nibble mode for status readback is okay. 
- * returns false if not, otherwise true
- */
-static int lp_nibble_mode_ok(int minor) 
-{
-	int reply=1;
-
-	outb_p(0, LP_B(minor)); 	/* Request "nibble mode" */
-	udelay(LP_DELAY);		
-	outb((inb(LP_C(minor)) & ~8), LP_C(minor)); /* SelectIN low */
-	outb((inb(LP_C(minor)) | 2), LP_C(minor)); /* AutoFeed high */
-	udelay(LP_DELAY);
-	outb((inb(LP_C(minor)) | 1), LP_C(minor)); /* Strobe high */
-	if (( LP_S(minor) & ~0x80) != 0x38) reply=0; /* expected answer? */
-	outb((inb(LP_C(minor)) & ~1 ), LP_C(minor)); /* Strobe low */
-	outb((inb(LP_C(minor)) & ~2 ), LP_C(minor)); /* Autofeed low */
-	udelay(LP_DELAY);
-	return(reply);
-}
-
+#ifdef CONFIG_PRINTER_READBACK
 
 static int lp_read_nibble(int minor) 
 {
 	unsigned char i;
-	i=LP_S(minor)>>3;
+	i=r_str(minor)>>3;
 	i&=~8;
 	if ( ( i & 0x10) == 0) i|=8;
 	return(i & 0x0f);
 }
 
 static void lp_select_in_high(int minor) {
-	outb((inb(LP_C(minor)) | 8), LP_C(minor));
+	w_ctr(minor, (r_ctr(minor) | 8));
 }
 
 /* Status readback confirming to ieee1284 */
@@ -364,6 +368,14 @@ static long lp_read(struct inode * inode, struct file * file,
 	unsigned int i;
 	unsigned int minor=MINOR(inode->i_rdev);
 	
+ 	/* Claim Parport or sleep until it becomes available
+ 	 * (see lp_wakeup() for details)
+ 	 */
+ 	if (parport_claim(lp_table[minor].dev)) {
+ 		sleep_on(&lp_table[minor].lp_wait_q);
+ 		lp_table[minor].lp_wait_q = NULL;
+ 	}
+
 	temp=buf;	
 #ifdef LP_READ_DEBUG 
 	printk(KERN_INFO "lp%d: read mode\n", minor);
@@ -372,14 +384,19 @@ static long lp_read(struct inode * inode, struct file * file,
 	retval = verify_area(VERIFY_WRITE, buf, count);
 	if (retval)
 		return retval;
-	if (lp_nibble_mode_ok(minor)==0) {
+	if (parport_ieee1284_nibble_mode_ok(lp_table[minor].dev->port, 0)==0) {
+#ifdef LP_READ_DEBUG
+		printk(KERN_INFO "lp%d: rejected IEEE1284 negotiation.\n",
+		       minor);
+#endif
 		lp_select_in_high(minor);
+		parport_release(lp_table[minor].dev);
 		return temp-buf;          /*  End of file */
 	}
 	for (i=0; i<=(count*2); i++) {
-		outb((inb(LP_C(minor)) | 2), LP_C(minor)); /* AutoFeed high */
+		w_ctr(minor, r_ctr(minor) | 2); /* AutoFeed high */
 		do {
-			status=(LP_S(minor) & 0x40);
+			status=(r_str(minor) & 0x40);
 			udelay(50);
 			counter++;
 			if (need_resched)
@@ -389,15 +406,16 @@ static long lp_read(struct inode * inode, struct file * file,
 #ifdef LP_READ_DEBUG
 			printk(KERN_DEBUG "lp_read: (Autofeed high) timeout\n");
 #endif		
-			outb((inb(LP_C(minor)) & ~2), LP_C(minor));
+			w_ctr(minor, r_ctr(minor) & ~2);
 			lp_select_in_high(minor);
+			parport_release(lp_table[minor].dev);
 			return temp-buf; /* end the read at timeout */
 		}
 		counter=0;
 		z=lp_read_nibble(minor);
-		outb((inb(LP_C(minor)) & ~2), LP_C(minor)); /* AutoFeed low */
+		w_ctr(minor, r_ctr(minor) & ~2); /* AutoFeed low */
 		do {
-			status=(LP_S(minor) & 0x40);
+			status=(r_str(minor) & 0x40);
 			udelay(20);
 			counter++;
 			if (need_resched)
@@ -409,6 +427,7 @@ static long lp_read(struct inode * inode, struct file * file,
 #endif
 			if (current->signal & ~current->blocked) {
 				lp_select_in_high(minor);
+				parport_release(lp_table[minor].dev);
 				if (temp !=buf)
 					return temp-buf;
 				else 
@@ -426,14 +445,15 @@ static long lp_read(struct inode * inode, struct file * file,
 		} else Byte=z;
 	}
 	lp_select_in_high(minor);
+	parport_release(lp_table[minor].dev);
 	return temp-buf;	
 }
+
+#endif
 
 static int lp_open(struct inode * inode, struct file * file)
 {
 	unsigned int minor = MINOR(inode->i_rdev);
-	int ret;
-	unsigned int irq;
 
 	if (minor >= LP_NO)
 		return -ENXIO;
@@ -450,7 +470,7 @@ static int lp_open(struct inode * inode, struct file * file)
 	   a non-standard manner.  This is strictly a Linux hack, and
 	   should most likely only ever be used by the tunelp application. */
 	if ((LP_F(minor) & LP_ABORTOPEN) && !(file->f_flags & O_NONBLOCK)) {
-		int status = LP_S(minor);
+		int status = r_str(minor);
 		if (status & LP_POUTPA) {
 			printk(KERN_INFO "lp%d out of paper\n", minor);
 			MOD_DEC_USE_COUNT;
@@ -465,24 +485,13 @@ static int lp_open(struct inode * inode, struct file * file)
 			return -EIO;
 		}
 	}
-
-	if ((irq = LP_IRQ(minor))) {
+	if (LP_IRQ(minor) > 0) {
 		lp_table[minor].lp_buffer = (char *) kmalloc(LP_BUFFER_SIZE, GFP_KERNEL);
 		if (!lp_table[minor].lp_buffer) {
 			MOD_DEC_USE_COUNT;
 			return -ENOMEM;
 		}
-
-		ret = request_irq(irq, lp_interrupt, SA_INTERRUPT, "printer", NULL);
-		if (ret) {
-			kfree_s(lp_table[minor].lp_buffer, LP_BUFFER_SIZE);
-			lp_table[minor].lp_buffer = NULL;
-			printk("lp%d unable to use interrupt %d, error %d\n", minor, irq, ret);
-			MOD_DEC_USE_COUNT;
-			return ret;
-		}
 	}
-
 	LP_F(minor) |= LP_BUSY;
 	return 0;
 }
@@ -493,11 +502,9 @@ static int lp_release(struct inode * inode, struct file * file)
 	unsigned int irq;
 
 	if ((irq = LP_IRQ(minor))) {
-		free_irq(irq, NULL);
 		kfree_s(lp_table[minor].lp_buffer, LP_BUFFER_SIZE);
 		lp_table[minor].lp_buffer = NULL;
 	}
-
 	LP_F(minor) &= ~LP_BUSY;
 	MOD_DEC_USE_COUNT;
 	return 0;
@@ -545,49 +552,9 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 		case LPWAIT:
 			LP_WAIT(minor) = arg;
 			break;
-		case LPSETIRQ: {
-			int oldirq;
-			int newirq = arg;
-			struct lp_struct *lp = &lp_table[minor];
-
-			if (!suser())
-				return -EPERM;
-
-			oldirq = LP_IRQ(minor);
-
-			/* Allocate buffer now if we are going to need it */
-			if (!oldirq && newirq) {
-				lp->lp_buffer = (char *) kmalloc(LP_BUFFER_SIZE, GFP_KERNEL);
-				if (!lp->lp_buffer)
-					return -ENOMEM;
-			}
-
-			if (oldirq) {
-				free_irq(oldirq, NULL);
-			}
-			if (newirq) {
-				/* Install new irq */
-				if ((retval = request_irq(newirq, lp_interrupt, SA_INTERRUPT, "printer", NULL))) {
-					if (oldirq) {
-						/* restore old irq */
-						request_irq(oldirq, lp_interrupt, SA_INTERRUPT, "printer", NULL);
-					} else {
-						/* We don't need the buffer */
-						kfree_s(lp->lp_buffer, LP_BUFFER_SIZE);
-						lp->lp_buffer = NULL;
-					}
-					return retval;
-				}
-			}
-			if (oldirq && !newirq) {
-				/* We don't need the buffer */
-				kfree_s(lp->lp_buffer, LP_BUFFER_SIZE);
-				lp->lp_buffer = NULL;
-			}
-			LP_IRQ(minor) = newirq;
-			lp_reset(minor);
+		case LPSETIRQ: 
+			return -EINVAL;
 			break;
-		}
 		case LPGETIRQ:
 			retval = verify_area(VERIFY_WRITE, (void *) arg,
 			    sizeof(int));
@@ -601,7 +568,7 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 		    	if (retval)
 		    		return retval;
 			else {
-				int status = LP_S(minor);
+				int status = r_str(minor);
 				copy_to_user((int *) arg, &status, sizeof(int));
 			}
 			break;
@@ -638,7 +605,11 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 
 static struct file_operations lp_fops = {
 	lp_lseek,
+#ifdef CONFIG_PRINTER_READBACK
 	lp_read,
+#else
+	NULL,
+#endif
 	lp_write,
 	NULL,		/* lp_readdir */
 	NULL,		/* lp_poll */
@@ -648,130 +619,108 @@ static struct file_operations lp_fops = {
 	lp_release
 };
 
-static int lp_probe(int offset)
-{
-	int base, size;
-	unsigned int testvalue;
-
-	base = LP_B(offset);
-	if (base == 0) 
-		return -1;		/* de-configured by command line */
-	if (LP_IRQ(offset) > 15) 
-		return -1;		/* bogus interrupt value */
-	size = (base == 0x3bc)? 3 : 8;
-	if (check_region(base, size) < 0)
-		return -1;
-	/* write to port & read back to check */
-	outb_p(LP_DUMMY, base);
-	udelay(LP_DELAY);
-	testvalue = inb_p(base);
-	if (testvalue == LP_DUMMY) {
-		LP_F(offset) |= LP_EXIST;
-		lp_reset(offset);
-		printk(KERN_INFO "lp%d at 0x%04x, ", offset, base);
-		request_region(base, size, "lp");
-		if (LP_IRQ(offset))
-			printk("(irq = %d)\n", LP_IRQ(offset));
-		else
-			printk("(polling)\n");
-		return 1;
-	} else
-		return 0;
-}
-
-/* Command line parameters:
-
-   When the lp driver is built in to the kernel, you may use the
-   LILO/LOADLIN command line to set the port addresses and interrupts
-   that the driver will use.
-
-   Syntax:	lp=port0[,irq0[,port1[,irq1[,port2[,irq2]]]]]
-
-   For example:   lp=0x378,0   or   lp=0x278,5,0x378,7
-
-   Note that if this feature is used, you must specify *all* the ports
-   you want considered, there are no defaults.  You can disable a
-   built-in driver with lp=0 .
-
-*/
-
-void	lp_setup(char *str, int *ints)
-
-{	
-        LP_B(0)   = ((ints[0] > 0) ? ints[1] : 0 );
-        LP_IRQ(0) = ((ints[0] > 1) ? ints[2] : 0 );
-        LP_B(1)   = ((ints[0] > 2) ? ints[3] : 0 );
-        LP_IRQ(1) = ((ints[0] > 3) ? ints[4] : 0 );
-        LP_B(2)   = ((ints[0] > 4) ? ints[5] : 0 );
-        LP_IRQ(2) = ((ints[0] > 5) ? ints[6] : 0 );
-}
+static int parport[LP_NO] = { -1, };
 
 #ifdef MODULE
-static int io[] = {0, 0, 0};
-static int irq[] = {0, 0, 0};
-
 #define lp_init init_module
+MODULE_PARM(parport, "1-" __MODULE_STRING(LP_NO) "i");
+
+#else
+
+static int parport_ptr = 0;
+
+void lp_setup(char *str, int *ints)
+{
+	/* Ugh. */
+	if (!strncmp(str, "parport", 7)) {
+		int n = simple_strtoul(str+7, NULL, 10);
+		if (parport_ptr < LP_NO)
+			parport[parport_ptr++] = n;
+		else
+			printk(KERN_INFO "lp: too many ports, %s ignored.\n",
+			       str);
+	} else if (!strcmp(str, "auto")) {
+		parport[0] = -3;
+	} else {
+		if (ints[0] == 0 || ints[1] == 0) {
+			/* disable driver on "parport=" or "parport=0" */
+			parport[0] = -2;
+		} else {
+			printk(KERN_WARNING "warning: 'lp=0x%x' is deprecated, ignored\n", ints[1]);
+		}
+	}
+}
+
 #endif
+
+int lp_wakeup(void *ref)
+{
+	struct lp_struct *lp_dev = (struct lp_struct *) ref;
+
+	if (!lp_dev->lp_wait_q)
+		return 1;	/* Wake up whom? */
+
+	/* Claim the Parport */
+	if (parport_claim(lp_dev->dev))
+		return 1;	/* Shouldn't happen */
+
+	wake_up(&lp_dev->lp_wait_q);
+	return 0;
+}
+
+static int inline lp_searchfor(int list[], int a)
+{
+	int i;
+	for (i = 0; i < LP_NO && list[i] != -1; i++) {
+		if (list[i] == a) return 1;
+	}
+	return 0;
+}
 
 int lp_init(void)
 {
-	int offset = 0;
 	int count = 0;
-#ifdef MODULE
-	int failed = 0;
-#endif
+	struct parport *pb;
+  
+	if (register_chrdev(LP_MAJOR, "lp", &lp_fops)) {
+  		printk("lp: unable to get major %d\n", LP_MAJOR);
+  		return -EIO;
+	}
 
-	if (register_chrdev(LP_MAJOR,"lp",&lp_fops)) {
-		printk("lp: unable to get major %d\n", LP_MAJOR);
-		return -EIO;
-	}
-#ifdef MODULE
-	/* When user feeds parameters, use them */
-	for (offset=0; offset < LP_NO; offset++) {
-		int specified=0;
+	if (parport[0] == -2) return 0;
 
-		if (io[offset] != 0) {
-			LP_B(offset) = io[offset];
-			specified++;
-		}
-		if (irq[offset] != 0) {
-			LP_IRQ(offset) = irq[offset];
-			specified++;
-		}
-		if (specified) {
-			if (lp_probe(offset) <= 0) {
-				printk(KERN_INFO "lp%d: Not found\n", offset);
-				failed++;
-			} else
-				count++;
-		}
-	}
-	/* Successful specified devices increase count
-	 * Unsuccessful specified devices increase failed
-	 */
-	if (count)
-		return 0;
-	if (failed) {
-		printk(KERN_INFO "lp: No override devices found.\n");
-		unregister_chrdev(LP_MAJOR,"lp");
-		return -EIO;
-	}
-	/* Only get here if there were no specified devices. To continue 
-	 * would be silly since the above code has scribbled all over the
-	 * probe list.
-	 */
-#endif
-	/* take on all known port values */
-	for (offset = 0; offset < LP_NO; offset++) {
-		int ret = lp_probe(offset);
-		if (ret < 0)
-			continue;
-		count += ret;
-	}
-	if (count == 0)
-		printk("lp: Driver configured but no interfaces found.\n");
+	pb = parport_enumerate();
 
-	return 0;
+	while (pb) {
+		if (parport[0] == -1 || lp_searchfor(parport, count) ||
+		    (parport[0] == -3 &&
+		     pb->probe_info.class == PARPORT_CLASS_PRINTER)) {
+			lp_table[count].dev =
+			    parport_register_device(pb, dev_name, NULL, 
+					    lp_wakeup,
+					    lp_interrupt, PARPORT_DEV_TRAN,
+					    (void *) &lp_table[count]);
+			lp_table[count].flags |= LP_EXIST;
+			printk(KERN_INFO "lp%d: using %s at 0x%x, ", count,
+			       pb->name, pb->base);
+			if (pb->irq == -1)
+				printk("polling.\n");
+			else
+				printk("irq %d.\n", pb->irq);
+		}
+		if (++count == LP_NO)
+			break;
+		pb = pb->next;
+  	}
+
+  	/* Successful specified devices increase count
+  	 * Unsuccessful specified devices increase failed
+  	 */
+  	if (count)
+  		return 0;
+  
+	printk(KERN_INFO "lp: driver loaded but no devices found\n");
+	return 1;
 }
 
 #ifdef MODULE
@@ -779,13 +728,11 @@ void cleanup_module(void)
 {
 	int offset;
 
-	unregister_chrdev(LP_MAJOR,"lp");
+	unregister_chrdev(LP_MAJOR, "lp");
 	for (offset = 0; offset < LP_NO; offset++) {
-		int base, size;
-		base = LP_B(offset);
-		size = (base == 0x3bc)? 3 : 8;
-		if (LP_F(offset) & LP_EXIST)
-			release_region(LP_B(offset),size);
+		if (lp_table[offset].dev == NULL)
+			continue;
+		parport_unregister_device(lp_table[offset].dev);
 	}
 }
 #endif

@@ -46,6 +46,9 @@
 #
 # 090397 Axel Boldt (boldt@math.ucsb.edu) - avoid ? and + in regular 
 # expressions for GNU expr since version 1.15 and up use \? and \+.
+#
+# 300397 Phil Blundell (pjb27@cam.ac.uk) - added support for "limint", 
+# allow dep_tristate to take a list of dependencies rather than just one.
 
 #
 # Make sure we're really running bash.
@@ -224,22 +227,35 @@ function tristate () {
 
 #
 # dep_tristate processes a tristate argument that depends upon
-# another option.  If the option we depend upon is a module,
-# then the only allowable options are M or N.  If Y, then
+# another option or options.  If any of the options we depend upon is a
+# module, then the only allowable options are M or N.  If all are Y, then
 # this is a normal tristate.  This is used in cases where modules
 # are nested, and one module requires the presence of something
 # else in the kernel.
 #
-#	tristate question define default
+#	tristate question define default ...
 #
 function dep_tristate () {
 	old=$(eval echo "\${$2}")
 	def=${old:-'n'}
-	if [ "$3" = "n" ]; then
-		define_bool "$2" "n"
-	elif [ "$3" = "y" ]; then
-		tristate "$1" "$2"
-	else
+	ques=$1
+	var=$2
+	need_module=0
+	shift 2
+	while [ $# -gt 0 ]; do
+	  case "$1" in
+ 	    n)
+	      define_bool "$var" "n"
+	      return
+	      ;;
+	    m)
+	      need_module=1
+	      ;;
+	  esac
+	  shift
+	done
+
+	if [ $need_module = 1 ]; then
 	   if [ "$CONFIG_MODULES" = "y" ]; then
 		case "$def" in
 		 "y" | "m") defprompt="M/n/?"
@@ -249,11 +265,11 @@ function dep_tristate () {
 		      ;;
 		esac
 		while :; do
-		  readln "$1 ($2) [$defprompt] " "$def" "$old"
+		  readln "$ques ($var) [$defprompt] " "$def" "$old"
 		  case "$ans" in
-		      [nN] | [nN]o )  define_bool "$2" "n"
+		      [nN] | [nN]o )  define_bool "$var" "n"
 				      break ;;
-		      [mM] )          define_bool "$2" "m"
+		      [mM] )          define_bool "$var" "m"
 				      break ;;
 		      [yY] | [yY]es ) echo 
    echo "  This answer is not allowed, because it is not consistent with"
@@ -263,11 +279,13 @@ function dep_tristate () {
    echo "  as a module as well (with M) or leave it out altogether (N)."
 				      echo
 				      ;;
-		      * )             help "$2"
+		      * )             help "$var"
 				      ;;
 		  esac
 		done
 	   fi
+	else
+	   tristate "$ques" "$var"
 	fi
 }
 
@@ -283,23 +301,34 @@ function define_int () {
 }
 
 #
-# int processes an integer argument
+# int processes an integer argument with optional limits
 #
-#	int question define default
+#	int question define default [min max]
 #
 function int () {
 	old=$(eval echo "\${$2}")
 	def=${old:-$3}
+	if [ $# -gt 3 ]; then
+	  min=$4
+	else
+	  min=1
+	fi
+	if [ $# -gt 4 ]; then
+	  max=$5
+	else
+	  max=10000000     # !!
+	fi
 	while :; do
 	  readln "$1 ($2) [$def] " "$def" "$old"
-	  if expr "$ans" : '0$\|\(-[1-9]\|[1-9]\)[0-9]*$' > /dev/null; then
-	    define_int "$2" "$ans"
+	  if expr \( \( $ans + 0 \) \>= $min \) \& \( $ans \<= $max \) >/dev/null 2>&1 ; then
+            define_int "$2" "$ans"
 	    break
-	  else
+          else
 	    help "$2"
-	  fi
+          fi
 	done
 }
+
 #
 # define_hex sets the value of a hexadecimal argument
 #
