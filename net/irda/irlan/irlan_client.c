@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Sun Oct 31 19:44:41 1999
+ * Modified at:   Tue Dec 14 15:47:02 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       skeleton.c by Donald Becker <becker@CESDIS.gsfc.nasa.gov>
  *                slip.c by Laurence Culhane, <loz@holmes.demon.co.uk>
@@ -584,16 +584,7 @@ void irlan_client_get_value_confirm(int result, __u16 obj_id,
 					      NULL);
 			return;
 		}
-		break;
-	case IAS_STRING:
-		IRDA_DEBUG(2, __FUNCTION__ "(), got string %s\n", 
-			   value->t.string);
-		break;
-	case IAS_OCT_SEQ:
-		IRDA_DEBUG(2, __FUNCTION__ "(), OCT_SEQ not implemented\n");
-		break;
-	case IAS_MISSING:
-		IRDA_DEBUG(2, __FUNCTION__ "(), MISSING not implemented\n");
+		irias_delete_value(value);
 		break;
 	default:
 		IRDA_DEBUG(2, __FUNCTION__ "(), unknown type!\n");

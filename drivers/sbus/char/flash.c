@@ -1,4 +1,4 @@
-/* $Id: flash.c,v 1.13 1999/08/31 06:58:06 davem Exp $
+/* $Id: flash.c,v 1.15 1999/12/09 00:44:22 davem Exp $
  * flash.c: Allow mmap access to the OBP Flash, for OBP updates.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -55,13 +55,12 @@ flash_mmap(struct file *file, struct vm_area_struct *vma)
 			return -ENXIO;
 	}
 
-	if (vma->vm_pgoff > (size >> PAGE_SHIFT))
+	if ((vma->vm_pgoff << PAGE_SHIFT) > size)
 		return -ENXIO;
-	off = vma->vm_pgoff << PAGE_SHIFT;
-	addr += off;
+	addr += (vma->vm_pgoff << PAGE_SHIFT);
 
-	if (vma->vm_end - (vma->vm_start + off) > size)
-		size = vma->vm_end - (vma->vm_start + off);
+	if (vma->vm_end - (vma->vm_start + (vma->vm_pgoff << PAGE_SHIFT)) > size)
+		size = vma->vm_end - (vma->vm_start + (vma->vm_pgoff << PAGE_SHIFT));
 
 	pgprot_val(vma->vm_page_prot) &= ~(_PAGE_CACHE);
 	pgprot_val(vma->vm_page_prot) |= _PAGE_E;
@@ -153,8 +152,8 @@ int init_module(void)
 int __init flash_init(void)
 #endif
 {
-	struct linux_sbus *sbus;
-	struct linux_sbus_device *sdev = 0;
+	struct sbus_bus *sbus;
+	struct sbus_dev *sdev = 0;
 	struct linux_ebus *ebus;
 	struct linux_ebus_device *edev = 0;
 	struct linux_prom_registers regs[2];
@@ -162,8 +161,6 @@ int __init flash_init(void)
 
 	for_all_sbusdev(sdev, sbus) {
 		if (!strcmp(sdev->prom_name, "flashprom")) {
-			prom_apply_sbus_ranges(sdev->my_bus, &sdev->reg_addrs[0],
-					       sdev->num_registers, sdev);
 			if (sdev->reg_addrs[0].phys_addr == sdev->reg_addrs[1].phys_addr) {
 				flash.read_base = ((unsigned long)sdev->reg_addrs[0].phys_addr) |
 					(((unsigned long)sdev->reg_addrs[0].which_io)<<32UL);

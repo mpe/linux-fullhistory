@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Dec  9 21:18:38 1997
- * Modified at:   Tue Nov 16 02:50:37 1999
+ * Modified at:   Thu Dec 16 09:37:47 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       slip.c by Laurence Culhane,   <loz@holmes.demon.co.uk>
  *                          Fred N. van Kempen, <waltje@uwalt.nl.mugnet.org>
@@ -42,7 +42,6 @@
 #include <net/irda/irda_device.h>
 
 static hashbin_t *irtty = NULL;
-
 static struct tty_ldisc irda_ldisc;
 
 static int qos_mtt_bits = 0x03;      /* 5 ms or more */
@@ -186,7 +185,7 @@ static int irtty_open(struct tty_struct *tty)
 		tty->ldisc.flush_buffer(tty);
 	
 	self->magic = IRTTY_MAGIC;
-	self->rx_buff.state = OUTSIDE_FRAME;
+	self->mode = IRDA_IRLAP;
 
 	/* 
 	 *  Initialize QoS capabilities, we fill in all the stuff that
@@ -206,7 +205,7 @@ static int irtty_open(struct tty_struct *tty)
 	/* Specify how much memory we want */
 	self->rx_buff.truesize = 4000; 
 	self->tx_buff.truesize = 4000;
-	
+
 	/* Allocate memory if needed */
 	if (self->rx_buff.truesize > 0) {
 		self->rx_buff.head = (__u8 *) kmalloc(self->rx_buff.truesize,
@@ -225,8 +224,6 @@ static int irtty_open(struct tty_struct *tty)
 		memset(self->tx_buff.head, 0, self->tx_buff.truesize);
 	}
 	
-      	self->magic = IRTTY_MAGIC;
-
 	self->rx_buff.in_frame = FALSE;
 	self->rx_buff.state = OUTSIDE_FRAME;
 	self->tx_buff.data = self->tx_buff.head;
@@ -284,18 +281,24 @@ static void irtty_close(struct tty_struct *tty)
 	tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
 	tty->disc_data = 0;
 	
-	/* We are not using any dongle anymore! */
-	if (self->dongle)
-		irda_device_dongle_cleanup(self->dongle);
-	self->dongle = NULL;
-
 	/* Remove netdevice */
 	if (self->netdev) {
 		rtnl_lock();
 		unregister_netdevice(self->netdev);
 		rtnl_unlock();
+		/* Must free the old-style 2.2.x device */
+		kfree(self->netdev);
 	}
 	
+	/* We are not using any dongle anymore! */
+	if (self->dongle)
+		irda_device_dongle_cleanup(self->dongle);
+	self->dongle = NULL;
+
+	/* Remove speed changing task if any */
+	if (self->task)
+		irda_task_delete(self->task);
+
 	self->tty = NULL;
 	self->magic = 0;
 	
@@ -404,8 +407,14 @@ static int irtty_change_speed(struct irda_task *task)
 	IRDA_DEBUG(2, __FUNCTION__ "(), <%ld>\n", jiffies); 
 
 	self = (struct irtty_cb *) task->instance;
-
 	ASSERT(self != NULL, return -1;);
+
+	/* Check if busy */
+	if (self->task && self->task != task) {
+		IRDA_DEBUG(0, __FUNCTION__ "(), busy!\n");
+		return MSECS_TO_JIFFIES(10);
+	} else
+		self->task = task;
 
 	switch (task->state) {
 	case IRDA_TASK_INIT:
@@ -459,10 +468,12 @@ static int irtty_change_speed(struct irda_task *task)
 		__irtty_change_speed(self, speed);
 		
 		irda_task_next_state(task, IRDA_TASK_DONE);
+		self->task = NULL;
 		break;
 	default:
 		ERROR(__FUNCTION__ "(), unknown state %d\n", task->state);
 		irda_task_next_state(task, IRDA_TASK_DONE);
+		self->task = NULL;
 		ret = -1;
 		break;
 	}	
@@ -551,6 +562,11 @@ static void irtty_receive_buf(struct tty_struct *tty, const unsigned char *cp,
 {
 	struct irtty_cb *self = (struct irtty_cb *) tty->disc_data;
 
+	if (!self || !self->netdev) {
+		IRDA_DEBUG(0, __FUNCTION__ "(), not ready yet!\n");
+		return;
+	}
+
 	/* Read the characters out of the buffer */
  	while (count--) {
 		/* 
@@ -631,7 +647,7 @@ static int irtty_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 	/* Check if we need to change the speed */
 	if ((speed = irda_get_speed(skb)) != self->io.speed)
 		self->new_speed = speed;
-	
+
 	/* Init tx buffer*/
 	self->tx_buff.data = self->tx_buff.head;
 	
@@ -768,7 +784,7 @@ static int irtty_set_dtr_rts(struct net_device *dev, int dtr, int rts)
 	set_fs(get_ds());
 	
 	if (tty->driver.ioctl(tty, NULL, TIOCMSET, (unsigned long) &arg)) { 
-		ERROR(__FUNCTION__ "(), error doing ioctl!\n");
+		IRDA_DEBUG(2, __FUNCTION__ "(), error doing ioctl!\n");
 	}
 	set_fs(fs);
 
@@ -987,6 +1003,9 @@ static int irtty_net_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 		break;
 	case SIOCSDTRRTS:
 		irtty_set_dtr_rts(dev, irq->ifr_dtr, irq->ifr_rts);
+		break;
+	case SIOCSMODE:
+		irtty_set_mode(dev, irq->ifr_mode);
 		break;
 	default:
 		ret = -EOPNOTSUPP;

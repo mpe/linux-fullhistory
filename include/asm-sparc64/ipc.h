@@ -23,6 +23,9 @@ struct ipc_kludge {
 #define SHMGET		23
 #define SHMCTL		24
 
+/* Used by the DIPC package, try and avoid reusing it */
+#define DIPC            25
+
 /* We don't need to maintain backward compatibility on 64bit, we've started fresh */
 #define IPCCALL(version,op)	(op)
 

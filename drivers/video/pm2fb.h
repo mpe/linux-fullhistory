@@ -108,6 +108,11 @@
 #define PM2R_FB_SOURCE_DELTA				0x8d88
 #define PM2R_CONFIG					0x8d90
 
+/* Permedia2v */
+#define PM2VR_RD_INDEX_LOW				0x4020
+#define PM2VR_RD_INDEX_HIGH				0x4028
+#define PM2VR_RD_INDEXED_DATA				0x4030
+
 /* Permedia2 RAMDAC indexed registers */
 #define PM2I_RD_CURSOR_CONTROL				0x06
 #define PM2I_RD_COLOR_MODE				0x18
@@ -126,6 +131,28 @@
 #define PM2I_RD_RED_KEY					0x42
 #define PM2I_RD_GREEN_KEY				0x43
 #define PM2I_RD_BLUE_KEY				0x44
+
+/* Permedia2v extensions */
+#define PM2VI_RD_MISC_CONTROL				0x000
+#define PM2VI_RD_SYNC_CONTROL				0x001
+#define PM2VI_RD_DAC_CONTROL				0x002
+#define PM2VI_RD_PIXEL_SIZE				0x003
+#define PM2VI_RD_COLOR_FORMAT				0x004
+#define PM2VI_RD_CURSOR_MODE				0x005
+#define PM2VI_RD_CURSOR_X_LOW				0x007
+#define PM2VI_RD_CURSOR_X_HIGH				0x008
+#define PM2VI_RD_CURSOR_Y_LOW				0x009
+#define PM2VI_RD_CURSOR_Y_HIGH				0x00A
+#define PM2VI_RD_CURSOR_X_HOT				0x00B
+#define PM2VI_RD_CURSOR_Y_HOT				0x00C
+#define PM2VI_RD_CLK0_PRESCALE				0x201
+#define PM2VI_RD_CLK0_FEEDBACK				0x202
+#define PM2VI_RD_CLK0_POSTSCALE				0x203
+#define PM2VI_RD_CLK1_PRESCALE				0x204
+#define PM2VI_RD_CLK1_FEEDBACK				0x205
+#define PM2VI_RD_CLK1_POSTSCALE				0x206
+#define PM2VI_RD_CURSOR_PALETTE				0x303
+#define PM2VI_RD_CURSOR_PATTERN				0x400
 
 /* Fields and flags */
 #define PM2F_RENDER_AREASTIPPLE				(1L<<0)
@@ -178,6 +205,11 @@
 #define PM2F_MEM_BANKS_2				(1L<<29)
 #define PM2F_MEM_BANKS_3				(2L<<29)
 #define PM2F_MEM_BANKS_4				(3L<<29)
+
+typedef enum {
+	PM2_TYPE_PERMEDIA2,
+	PM2_TYPE_PERMEDIA2V
+} pm2type_t;
 
 #endif /* PM2FB_H */
 

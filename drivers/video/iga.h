@@ -1,4 +1,4 @@
-/* $Id: iga.h,v 1.1 1998/10/07 11:36:07 jj Exp $
+/* $Id: iga.h,v 1.2 1999/09/11 22:56:31 zaitcev Exp $
  * iga1682.h: Sparc/PCI iga1682 driver constants etc.
  *
  * Copyleft 1998 V. Roganov and G. Raiko
@@ -12,6 +12,8 @@ struct iga1682_info
     unsigned int total_vram;
 };
 
+#define IGA_ATTR_CTL			0x3C0
+#define   IGA_IDX_VGA_OVERSCAN		0x11
 #define DAC_W_INDEX                     0x03C8
 #define DAC_DATA                        0x03C9
 #define IGA_EXT_CNTRL                   0x3CE

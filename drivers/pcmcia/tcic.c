@@ -109,7 +109,7 @@ MODULE_PARM(cycle_time, "i");
 
 static void tcic_interrupt(int irq, void *dev, struct pt_regs *regs);
 static void tcic_timer(u_long data);
-static int tcic_service(u_int sock, u_int cmd, void *arg);
+static struct pccard_operations tcic_operations;
 
 typedef struct socket_info_t {
     u_short	psock;
@@ -494,7 +494,7 @@ static int __init init_tcic(void)
     /* jump start interrupt handler, if needed */
     tcic_interrupt(0, NULL, NULL);
 
-    if (register_ss_entry(sockets, &tcic_service) != 0) {
+    if (register_ss_entry(sockets, &tcic_operations) != 0) {
 	printk(KERN_NOTICE "tcic: register_ss_entry() failed\n");
 	release_region(tcic_base, 16);
 	if (cs_irq != 0)
@@ -511,7 +511,7 @@ static int __init init_tcic(void)
 static void __exit exit_tcic(void)
 {
     u_long flags;
-    unregister_ss_entry(&tcic_service);
+    unregister_ss_entry(&tcic_operations);
     save_flags(flags);
     cli();
     if (cs_irq != 0) {
@@ -930,35 +930,32 @@ static int tcic_set_mem_map(u_short lsock, struct pccard_mem_map *mem)
 
 /*====================================================================*/
 
-typedef int (*subfn_t)(u_short, void *);
-    
-static subfn_t service_table[] = {
-    (subfn_t)&tcic_register_callback,
-    (subfn_t)&tcic_inquire_socket,
-    (subfn_t)&tcic_get_status,
-    (subfn_t)&tcic_get_socket,
-    (subfn_t)&tcic_set_socket,
-    (subfn_t)&tcic_get_io_map,
-    (subfn_t)&tcic_set_io_map,
-    (subfn_t)&tcic_get_mem_map,
-    (subfn_t)&tcic_set_mem_map,
-};
-
-#define NFUNC (sizeof(service_table)/sizeof(subfn_t))
-
-static int tcic_service(u_int lsock, u_int cmd, void *arg)
+int tcic_get_bridge(u_short sock, struct cb_bridge_map *m)
 {
-    int err;
+	return -EINVAL;
+}
 
-    DEBUG(2, "tcic_service(%d, %d, 0x%p)\n", lsock, cmd, arg);
+#define tcic_set_bridge tcic_get_bridge
 
-    if (cmd < NFUNC)
-	err = service_table[cmd](lsock, arg);
-    else
-	err = -EINVAL;
+void tcic_proc_setup(u_short sock, struct proc_dir_entry *base)
+{
+	return -EINVAL;
+}
 
-    return err;
-} /* tcic_service */
+static struct pccard_operations tcic_operations = {
+	tcic_register_callback,
+	tcic_inquire_socket,
+	tcic_get_status,
+	tcic_get_socket,
+	tcic_set_socket,
+	tcic_get_io_map,
+	tcic_set_io_map,
+	tcic_get_mem_map,
+	tcic_set_mem_map,
+	tcic_get_bridge,
+	tcic_set_bridge,
+	tcic_proc_setup
+};
 
 /*====================================================================*/
 

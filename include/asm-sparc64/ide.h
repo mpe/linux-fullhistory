@@ -1,4 +1,4 @@
-/* $Id: ide.h,v 1.16 1999/08/30 10:14:42 davem Exp $
+/* $Id: ide.h,v 1.17 1999/12/15 22:18:49 davem Exp $
  * ide.h: Ultra/PCI specific IDE glue.
  *
  * Copyright (C) 1997  David S. Miller (davem@caip.rutgers.edu)
@@ -11,7 +11,7 @@
 #ifdef __KERNEL__
 
 #include <linux/config.h>
-#include <asm/pgtable.h>
+#include <asm/pgalloc.h>
 #include <asm/io.h>
 #include <asm/hdreg.h>
 

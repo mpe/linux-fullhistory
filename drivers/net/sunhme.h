@@ -1,7 +1,8 @@
-/* sunhme.h: Definitions for Sparc HME/BigMac 10/100baseT ethernet driver.
+/* $Id: sunhme.h,v 1.28 1999/09/21 14:36:34 davem Exp $
+ * sunhme.h: Definitions for Sparc HME/BigMac 10/100baseT ethernet driver.
  *           Also known as the "Happy Meal".
  *
- * Copyright (C) 1996 David S. Miller (davem@caipfs.rutgers.edu)
+ * Copyright (C) 1996, 1999 David S. Miller (davem@redhat.com)
  */
 
 #ifndef _SUNHME_H
@@ -10,13 +11,11 @@
 #include <linux/config.h>
 
 /* Happy Meal global registers. */
-struct hmeal_gregs {
-	volatile unsigned int sw_reset;      /* Software Reset  */
-	volatile unsigned int cfg;           /* Config Register */
-	volatile unsigned int _padding[62];  /* Unused          */
-	volatile unsigned int stat;          /* Status          */
-	volatile unsigned int imask;         /* Interrupt Mask  */
-};
+#define GREG_SWRESET	0x000UL	/* Software Reset  */
+#define GREG_CFG	0x004UL	/* Config Register */
+#define GREG_STAT	0x108UL	/* Status          */
+#define GREG_IMASK	0x10cUL	/* Interrupt Mask  */
+#define GREG_REG_SIZE	0x110UL
 
 /* Global reset register. */
 #define GREG_RESET_ETX         0x01
@@ -104,21 +103,20 @@ struct hmeal_gregs {
 #define GREG_IMASK_SLVPERR     0x80000000 /* PIO access got a parity error            */
 
 /* Happy Meal external transmitter registers. */
-struct hmeal_etxregs {
-	volatile unsigned int tx_pnding;     /* Transmit pending/wakeup register */
-	volatile unsigned int cfg;           /* Transmit config register         */
-	volatile unsigned int tx_ring;       /* Transmit ring pointer            */
-	volatile unsigned int tx_bbase;      /* Transmit buffer base             */
-	volatile unsigned int tx_bdisp;      /* Transmit buffer displacement     */
-	volatile unsigned int tx_fifo_wptr;  /* FIFO write ptr                   */
-	volatile unsigned int tx_fifo_swptr; /* FIFO write ptr (shadow register) */
-	volatile unsigned int tx_fifo_rptr;  /* FIFO read ptr                    */
-	volatile unsigned int tx_fifo_srptr; /* FIFO read ptr (shadow register)  */
-	volatile unsigned int tx_fifo_pcnt;  /* FIFO packet counter              */
-	volatile unsigned int smachine;      /* Transmitter state machine        */
-	volatile unsigned int tx_rsize;      /* Ring descriptor size             */
-	volatile unsigned int tx_bptr;       /* Transmit data buffer ptr         */
-};
+#define ETX_PENDING	0x00UL	/* Transmit pending/wakeup register */
+#define ETX_CFG		0x04UL	/* Transmit config register         */
+#define ETX_RING	0x08UL	/* Transmit ring pointer            */
+#define ETX_BBASE	0x0cUL	/* Transmit buffer base             */
+#define ETX_BDISP	0x10UL	/* Transmit buffer displacement     */
+#define ETX_FIFOWPTR	0x14UL	/* FIFO write ptr                   */
+#define ETX_FIFOSWPTR	0x18UL	/* FIFO write ptr (shadow register) */
+#define ETX_FIFORPTR	0x1cUL	/* FIFO read ptr                    */
+#define ETX_FIFOSRPTR	0x20UL	/* FIFO read ptr (shadow register)  */
+#define ETX_FIFOPCNT	0x24UL	/* FIFO packet counter              */
+#define ETX_SMACHINE	0x28UL	/* Transmitter state machine        */
+#define ETX_RSIZE	0x2cUL	/* Ring descriptor size             */
+#define ETX_BPTR	0x30UL	/* Transmit data buffer ptr         */
+#define ETX_REG_SIZE	0x34UL
 
 /* ETX transmit pending register. */
 #define ETX_TP_DMAWAKEUP         0x00000001 /* Restart transmit dma             */
@@ -132,16 +130,15 @@ struct hmeal_etxregs {
 #define ETX_RSIZE_SHIFT          4
 
 /* Happy Meal external receiver registers. */
-struct hmeal_erxregs {
-	volatile unsigned int cfg;           /* Receiver config register         */
-	volatile unsigned int rx_ring;       /* Receiver ring ptr                */
-	volatile unsigned int rx_bptr;       /* Receiver buffer ptr              */
-	volatile unsigned int rx_fifo_wptr;  /* FIFO write ptr                   */
-	volatile unsigned int rx_fifo_swptr; /* FIFO write ptr (shadow register) */
-	volatile unsigned int rx_fifo_rptr;  /* FIFO read ptr                    */
-	volatile unsigned int rx_fifo_srptr; /* FIFO read ptr (shadow register)  */
-	volatile unsigned int smachine;      /* Receiver state machine           */
-};
+#define ERX_CFG		0x00UL	/* Receiver config register         */
+#define ERX_RING	0x04UL	/* Receiver ring ptr                */
+#define ERX_BPTR	0x08UL	/* Receiver buffer ptr              */
+#define ERX_FIFOWPTR	0x0cUL	/* FIFO write ptr                   */
+#define ERX_FIFOSWPTR	0x10UL	/* FIFO write ptr (shadow register) */
+#define ERX_FIFORPTR	0x14UL	/* FIFO read ptr                    */
+#define ERX_FIFOSRPTR	0x18UL	/* FIFO read ptr (shadow register)  */
+#define ERX_SMACHINE	0x1cUL	/* Receiver state machine           */
+#define ERX_REG_SIZE	0x20UL
 
 /* ERX config register. */
 #define ERX_CFG_DMAENABLE    0x00000001 /* Enable receive DMA        */
@@ -156,54 +153,52 @@ struct hmeal_erxregs {
 #define ERX_CFG_CSUMSTART    0x007f0000 /* Offset of checksum start  */
 
 /* I'd like a Big Mac, small fries, small coke, and SparcLinux please. */
-struct hmeal_bigmacregs {
-	volatile unsigned int xif_cfg;          /* XIF config register                */
-	volatile unsigned int _unused[129];     /* Reserved...                        */
-	volatile unsigned int tx_swreset;       /* Transmitter software reset         */
-	volatile unsigned int tx_cfg;           /* Transmitter config register        */
-	volatile unsigned int ipkt_gap1;        /* Inter-packet gap 1                 */
-	volatile unsigned int ipkt_gap2;        /* Inter-packet gap 2                 */
-	volatile unsigned int attempt_limit;    /* Transmit attempt limit             */
-	volatile unsigned int stime;            /* Transmit slot time                 */
-	volatile unsigned int preamble_len;     /* Size of transmit preamble          */
-	volatile unsigned int preamble_pattern; /* Pattern for transmit preamble      */
-	volatile unsigned int tx_sframe_delim;  /* Transmit delimiter                 */
-	volatile unsigned int jsize;            /* Jam size                           */
-	volatile unsigned int tx_pkt_max;       /* Transmit max pkt size              */
-	volatile unsigned int tx_pkt_min;       /* Transmit min pkt size              */
-	volatile unsigned int peak_attempt;     /* Count of transmit peak attempts    */
-	volatile unsigned int dt_ctr;           /* Transmit defer timer               */
-	volatile unsigned int nc_ctr;           /* Transmit normal-collision counter  */
-	volatile unsigned int fc_ctr;           /* Transmit first-collision counter   */
-	volatile unsigned int ex_ctr;           /* Transmit excess-collision counter  */
-	volatile unsigned int lt_ctr;           /* Transmit late-collision counter    */
-	volatile unsigned int rand_seed;        /* Transmit random number seed        */
-	volatile unsigned int tx_smachine;      /* Transmit state machine             */
-	volatile unsigned int _unused2[44];     /* Reserved                           */
-	volatile unsigned int rx_swreset;       /* Receiver software reset            */
-	volatile unsigned int rx_cfg;           /* Receiver config register           */
-	volatile unsigned int rx_pkt_max;       /* Receive max pkt size               */
-	volatile unsigned int rx_pkt_min;       /* Receive min pkt size               */
-	volatile unsigned int mac_addr2;        /* Ether address register 2           */
-	volatile unsigned int mac_addr1;        /* Ether address register 1           */
-	volatile unsigned int mac_addr0;        /* Ether address register 0           */
-	volatile unsigned int fr_ctr;           /* Receive frame receive counter      */
-	volatile unsigned int gle_ctr;          /* Receive giant-length error counter */
-	volatile unsigned int unale_ctr;        /* Receive unaligned error counter    */
-	volatile unsigned int rcrce_ctr;        /* Receive CRC error counter          */
-	volatile unsigned int rx_smachine;      /* Receiver state machine             */
-	volatile unsigned int rx_cvalid;        /* Receiver code violation            */
-	volatile unsigned int _unused3;         /* Reserved...                        */
-	volatile unsigned int htable3;          /* Hash table 3                       */
-	volatile unsigned int htable2;          /* Hash table 2                       */
-	volatile unsigned int htable1;          /* Hash table 1                       */
-	volatile unsigned int htable0;          /* Hash table 0                       */
-	volatile unsigned int afilter2;         /* Address filter 2                   */
-	volatile unsigned int afilter1;         /* Address filter 1                   */
-	volatile unsigned int afilter0;         /* Address filter 0                   */
-	volatile unsigned int afilter_mask;     /* Address filter mask                */
-
-};
+#define BMAC_XIFCFG	0x0000UL	/* XIF config register                */
+	/* 0x4-->0x204, reserved */
+#define BMAC_TXSWRESET	0x208UL	/* Transmitter software reset         */
+#define BMAC_TXCFG	0x20cUL	/* Transmitter config register        */
+#define BMAC_IGAP1	0x210UL	/* Inter-packet gap 1                 */
+#define BMAC_IGAP2	0x214UL	/* Inter-packet gap 2                 */
+#define BMAC_ALIMIT	0x218UL	/* Transmit attempt limit             */
+#define BMAC_STIME	0x21cUL	/* Transmit slot time                 */
+#define BMAC_PLEN	0x220UL	/* Size of transmit preamble          */
+#define BMAC_PPAT	0x224UL	/* Pattern for transmit preamble      */
+#define BMAC_TXSDELIM	0x228UL	/* Transmit delimiter                 */
+#define BMAC_JSIZE	0x22cUL	/* Jam size                           */
+#define BMAC_TXMAX	0x230UL	/* Transmit max pkt size              */
+#define BMAC_TXMIN	0x234UL	/* Transmit min pkt size              */
+#define BMAC_PATTEMPT	0x238UL	/* Count of transmit peak attempts    */
+#define BMAC_DTCTR	0x23cUL	/* Transmit defer timer               */
+#define BMAC_NCCTR	0x240UL	/* Transmit normal-collision counter  */
+#define BMAC_FCCTR	0x244UL	/* Transmit first-collision counter   */
+#define BMAC_EXCTR	0x248UL	/* Transmit excess-collision counter  */
+#define BMAC_LTCTR	0x24cUL	/* Transmit late-collision counter    */
+#define BMAC_RSEED	0x250UL	/* Transmit random number seed        */
+#define BMAC_TXSMACHINE	0x254UL	/* Transmit state machine             */
+	/* 0x258-->0x304, reserved */
+#define BMAC_RXSWRESET	0x308UL	/* Receiver software reset            */
+#define BMAC_RXCFG	0x30cUL	/* Receiver config register           */
+#define BMAC_RXMAX	0x310UL	/* Receive max pkt size               */
+#define BMAC_RXMIN	0x314UL	/* Receive min pkt size               */
+#define BMAC_MACADDR2	0x318UL	/* Ether address register 2           */
+#define BMAC_MACADDR1	0x31cUL	/* Ether address register 1           */
+#define BMAC_MACADDR0	0x320UL	/* Ether address register 0           */
+#define BMAC_FRCTR	0x324UL	/* Receive frame receive counter      */
+#define BMAC_GLECTR	0x328UL	/* Receive giant-length error counter */
+#define BMAC_UNALECTR	0x32cUL	/* Receive unaligned error counter    */
+#define BMAC_RCRCECTR	0x330UL	/* Receive CRC error counter          */
+#define BMAC_RXSMACHINE	0x334UL	/* Receiver state machine             */
+#define BMAC_RXCVALID	0x338UL	/* Receiver code violation            */
+	/* 0x33c, reserved */
+#define BMAC_HTABLE3	0x340UL	/* Hash table 3                       */
+#define BMAC_HTABLE2	0x344UL	/* Hash table 2                       */
+#define BMAC_HTABLE1	0x348UL	/* Hash table 1                       */
+#define BMAC_HTABLE0	0x34cUL	/* Hash table 0                       */
+#define BMAC_AFILTER2	0x350UL	/* Address filter 2                   */
+#define BMAC_AFILTER1	0x354UL	/* Address filter 1                   */
+#define BMAC_AFILTER0	0x358UL	/* Address filter 0                   */
+#define BMAC_AFMASK	0x35cUL	/* Address filter mask                */
+#define BMAC_REG_SIZE	0x360UL
 
 /* BigMac XIF config register. */
 #define BIGMAC_XCFG_ODENABLE  0x00000001 /* Output driver enable         */
@@ -236,16 +231,15 @@ struct hmeal_bigmacregs {
 #define BIGMAC_RXCFG_AENABLE  0x00001000 /* Enable the address filter       */
 
 /* These are the "Management Interface" (ie. MIF) registers of the transceiver. */
-struct hmeal_tcvregs {
-	volatile unsigned int bb_clock; /* Bit bang clock register          */
-	volatile unsigned int bb_data;  /* Bit bang data register           */
-	volatile unsigned int bb_oenab; /* Bit bang output enable           */
-	volatile unsigned int frame;    /* Frame control/data register      */
-	volatile unsigned int cfg;      /* MIF config register              */
-	volatile unsigned int int_mask; /* MIF interrupt mask               */
-	volatile unsigned int status;   /* MIF status                       */
-	volatile unsigned int smachine; /* MIF state machine                */
-};
+#define TCVR_BBCLOCK	0x00UL	/* Bit bang clock register          */
+#define TCVR_BBDATA	0x04UL	/* Bit bang data register           */
+#define TCVR_BBOENAB	0x08UL	/* Bit bang output enable           */
+#define TCVR_FRAME	0x0cUL	/* Frame control/data register      */
+#define TCVR_CFG	0x10UL	/* MIF config register              */
+#define TCVR_IMASK	0x14UL	/* MIF interrupt mask               */
+#define TCVR_STATUS	0x18UL	/* MIF status                       */
+#define TCVR_SMACHINE	0x1cUL	/* MIF state machine                */
+#define TCVR_REG_SIZE	0x20UL
 
 /* Frame commands. */
 #define FRAME_WRITE           0x50020000
@@ -421,10 +415,12 @@ struct hmeal_tcvregs {
 /* Happy Meal descriptor rings and such.
  * All descriptor rings must be aligned on a 2K boundry.
  * All receive buffers must be 64 byte aligned.
+ * Always write the address first before setting the ownership
+ * bits to avoid races with the hardware scanning the ring.
  */
 struct happy_meal_rxd {
-	unsigned int rx_flags;
-	unsigned int rx_addr;
+	u32 rx_flags;
+	u32 rx_addr;
 };
 
 #define RXFLAG_OWN         0x80000000 /* 1 = hardware, 0 = software */
@@ -433,8 +429,8 @@ struct happy_meal_rxd {
 #define RXFLAG_CSUM        0x0000ffff /* HW computed checksum       */
 
 struct happy_meal_txd {
-	unsigned int tx_flags;
-	unsigned int tx_addr;
+	u32 tx_flags;
+	u32 tx_addr;
 };
 
 #define TXFLAG_OWN         0x80000000 /* 1 = hardware, 0 = software */
@@ -480,18 +476,6 @@ struct hmeal_init_block {
 #define hblock_offset(mem, elem) \
 ((__u32)((unsigned long)(&(((struct hmeal_init_block *)0)->mem[elem]))))
 
-#define SUN4C_PKT_BUF_SZ	1546
-#define SUN4C_RX_BUFF_SIZE	SUN4C_PKT_BUF_SZ
-#define SUN4C_TX_BUFF_SIZE	SUN4C_PKT_BUF_SZ
-
-struct hmeal_buffers {
-	char	tx_buf[TX_RING_SIZE][SUN4C_TX_BUFF_SIZE];
-	char	rx_buf[RX_RING_SIZE][SUN4C_RX_BUFF_SIZE];
-};
-
-#define hbuf_offset(mem, elem) \
-((__u32)((unsigned long)(&(((struct hmeal_buffers *)0)->mem[elem][0]))))
-
 /* Now software state stuff. */
 enum happy_transceiver {
 	external = 0,
@@ -511,25 +495,39 @@ struct quattro;
 
 /* Happy happy, joy joy! */
 struct happy_meal {
-	struct hmeal_gregs       *gregs;          /* Happy meal global registers       */
-	struct hmeal_etxregs     *etxregs;        /* External transmitter regs         */
-	struct hmeal_erxregs     *erxregs;        /* External receiver regs            */
-	struct hmeal_bigmacregs  *bigmacregs;     /* I said NO SOLARIS with my bigmac! */
-	struct hmeal_tcvregs     *tcvregs;        /* MIF transceiver regs              */
+	unsigned long	gregs;			/* Happy meal global registers       */
+	struct hmeal_init_block  *happy_block;	/* RX and TX descriptors (CPU addr)  */
 
-	struct hmeal_init_block  *happy_block;    /* RX and TX descriptors (CPU addr)  */
-	__u32                     hblock_dvma;    /* DVMA visible address happy block  */
+#if defined(CONFIG_SBUS) && defined(CONFIG_PCI)
+	u32 (*read_desc32)(u32 *);
+	void (*write_txd)(struct happy_meal_txd *, u32, u32);
+	void (*write_rxd)(struct happy_meal_rxd *, u32, u32);
+	u32 (*dma_map)(void *, void *, long);
+	void (*dma_unmap)(void *, u32, long);
+	void (*dma_sync)(void *, u32, long);
+#endif
+
+	/* This is either a sbus_dev or a pci_dev. */
+	void			  *happy_dev;
 
 	struct sk_buff           *rx_skbs[RX_RING_SIZE];
 	struct sk_buff           *tx_skbs[TX_RING_SIZE];
 
 	int rx_new, tx_new, rx_old, tx_old;
 
-	/* We may use this for Ultra as well, will have to see, maybe not. */
-	struct hmeal_buffers     *sun4c_buffers;  /* CPU visible address.              */
-#define	sun4d_buffers		  sun4c_buffers	  /* No need to make this a separate.  */
-	__u32                     s4c_buf_dvma;   /* DVMA visible address.             */
+	struct net_device_stats	  net_stats;      /* Statistical counters              */
 
+#if defined(CONFIG_SBUS) && defined(CONFIG_PCI)
+	u32 (*read32)(unsigned long);
+	void (*write32)(unsigned long, u32);
+#endif
+
+	unsigned long	etxregs;        /* External transmitter regs         */
+	unsigned long	erxregs;        /* External receiver regs            */
+	unsigned long	bigmacregs;     /* BIGMAC core regs		     */
+	unsigned long	tcvregs;        /* MIF transceiver regs              */
+
+	__u32                     hblock_dvma;    /* DVMA visible address happy block  */
 	unsigned int              happy_flags;    /* Driver state flags                */
 	enum happy_transceiver    tcvr_type;      /* Kind of transceiver in use        */
 	unsigned int              happy_bursts;   /* Get your mind out of the gutter   */
@@ -555,15 +553,10 @@ struct happy_meal {
 	enum happy_timer_state    timer_state;    /* State of the auto-neg timer.      */
 	unsigned int              timer_ticks;    /* Number of clicks at each state.   */
 
-	struct net_device_stats	  net_stats;      /* Statistical counters              */
-	struct linux_sbus_device *happy_sbus_dev; /* ;-)                               */
-#ifdef CONFIG_PCI
-	struct pci_dev		 *happy_pci_dev;
-#endif
-	struct net_device            *dev;            /* Backpointer                       */
-	struct quattro		 *qfe_parent;	  /* For Quattro cards                 */
-	int			  qfe_ent;	  /* Which instance on quattro         */
-	struct happy_meal        *next_module;
+	struct net_device	 *dev;		/* Backpointer                       */
+	struct quattro		 *qfe_parent;	/* For Quattro cards                 */
+	int			  qfe_ent;	/* Which instance on quattro         */
+	struct happy_meal         *next_module;
 };
 
 /* Here are the happy flags. */
@@ -586,15 +579,12 @@ struct happy_meal {
 
 /* Support for QFE/Quattro cards. */
 struct quattro {
-	volatile u32		 *irq_status[4];
-	struct net_device		 *happy_meals[4];
-	void (*handler)(int, void *, struct pt_regs *);
+	struct net_device	*happy_meals[4];
 
-	struct linux_sbus_device *quattro_sbus_dev;
-#ifdef CONFIG_PCI
-	struct pci_dev		 *quattro_pci_dev;
-#endif
-	struct quattro		 *next;
+	/* This is either a sbus_dev or a pci_dev. */
+	void			*quattro_dev;
+
+	struct quattro		*next;
 
 	/* PROM ranges, if any. */
 	struct linux_prom_ranges  ranges[8];
@@ -603,78 +593,16 @@ struct quattro {
 
 /* We use this to acquire receive skb's that we can DMA directly into. */
 #define ALIGNED_RX_SKB_ADDR(addr) \
-        ((((unsigned long)(addr) + (64 - 1)) & ~(64 - 1)) - (unsigned long)(addr))
+        ((((unsigned long)(addr) + (64UL - 1UL)) & ~(64UL - 1UL)) - (unsigned long)(addr))
 #define happy_meal_alloc_skb(__length, __gfp_flags) \
 ({	struct sk_buff *__skb; \
 	__skb = alloc_skb((__length) + 64, (__gfp_flags)); \
 	if(__skb) { \
-		int __offset = ALIGNED_RX_SKB_ADDR(__skb->data); \
+		int __offset = (int) ALIGNED_RX_SKB_ADDR(__skb->data); \
 		if(__offset) \
 			skb_reserve(__skb, __offset); \
 	} \
 	__skb; \
 })
-
-/* Register/DMA access stuff, used to cope with differences between
- * PCI and SBUS happy meals.
- */
-#if defined(CONFIG_PCI)
-#define kva_to_hva(__hp, __addr) \
-({	u32 __ret; \
-	if ((__hp)->happy_flags & HFLAG_PCI) \
-		(__ret) = (u32) virt_to_bus((volatile void *)(__addr)); \
-	else \
-		(__ret) = sbus_dvma_addr(__addr); \
-	__ret; \
-})
-#define hme_read32(__hp, __reg) \
-({	unsigned int __ret; \
-	if ((__hp)->happy_flags & HFLAG_PCI) \
-		__ret = readl((unsigned long)(__reg)); \
-	else \
-		__ret = *(__reg); \
-	__ret; \
-})
-#define hme_write32(__hp, __reg, __val) \
-do {	if ((__hp)->happy_flags & HFLAG_PCI) \
-		writel((__val), (unsigned long)(__reg)); \
-	else \
-		*(__reg) = (__val); \
-} while(0)
-#else
-#define kva_to_hva(__hp, __addr) ((u32)sbus_dvma_addr(__addr))
-#define hme_read32(__hp, __reg)	(*(__reg))
-#define hme_write32(__hp, __reg, __val)	((*(__reg)) = (__val))
-#endif
-
-#ifdef CONFIG_PCI
-#ifdef __sparc_v9__
-#define pcihme_write_rxd(__rp, __flags, __addr) \
-	__asm__ __volatile__("stwa	%3, [%0] %2\n\t" \
-			     "stwa	%4, [%1] %2" \
-			     : /* no outputs */ \
-			     : "r" (&(__rp)->rx_addr), "r" (&(__rp)->rx_flags), \
-			       "i" (ASI_PL), "r" (__addr), "r" (__flags))
-
-#define pcihme_write_txd(__tp, __flags, __addr) \
-	__asm__ __volatile__("stwa	%3, [%0] %2\n\t" \
-			     "stwa	%4, [%1] %2" \
-			     : /* no outputs */ \
-			     : "r" (&(__tp)->tx_addr), "r" (&(__tp)->tx_flags), \
-			       "i" (ASI_PL), "r" (__addr), "r" (__flags))
-#else
-
-#define pcihme_write_rxd(__rp, __flags, __addr) \
-do {	(__rp)->rx_addr = flip_dword(__addr); \
-	(__rp)->rx_flags = flip_dword(__flags); \
-} while(0)
-	
-#define pcihme_write_txd(__tp, __flags, __addr) \
-do {	(__tp)->tx_addr = flip_dword(__addr); \
-	(__tp)->tx_flags = flip_dword(__flags); \
-} while(0)
-	
-#endif  /* def __sparc_v9__ */
-#endif  /* def CONFIG_PCI */
 
 #endif /* !(_SUNHME_H) */

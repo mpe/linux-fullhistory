@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Jun  7 08:47:28 1999
- * Modified at:   Sun Jun 13 09:17:54 1999
+ * Modified at:   Mon Dec 13 11:51:59 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -99,10 +99,7 @@ int irda_param_extract(void *self, __u8 *buf, int len, pi_param_info_t *info);
 int irda_param_extract_all(void *self, __u8 *buf, int len, 
 			   pi_param_info_t *info);
 
-extern inline int irda_param_insert_byte(__u8 *buf, __u8 pi, __u8 pv)
-{
-	return irda_param_pack(buf, "bbb", pi, 1, pv);
-}
+#define irda_param_insert_byte(buf,pi,pv) irda_param_pack(buf,"bbb",pi,1,pv)
 
 #endif /* IRDA_PARAMS_H */
 

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Oct  1 22:49:50 1998
- * Modified at:   Tue Oct  5 10:45:21 1999
+ * Modified at:   Wed Dec 15 11:20:57 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -92,6 +92,7 @@ struct ias_attrib *irias_find_attrib(struct ias_object *obj, char *name);
 struct ias_value *irias_new_string_value(char *string);
 struct ias_value *irias_new_integer_value(int integer);
 struct ias_value *irias_new_octseq_value(__u8 *octseq , int len);
+struct ias_value *irias_new_missing_value(void);
 void irias_delete_value(struct ias_value *value);
 
 extern struct ias_value missing;

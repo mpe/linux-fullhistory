@@ -11,21 +11,20 @@
 
 L_TARGET := pci.a
 
-# Nasty trick as nobody references pcisyms.o, but we still want it linked.
-ifeq ($(CONFIG_MODULES),y)
-O_TARGET = pci_syms.o
-OX_OBJS  = pcisyms.o
-O_OBJS   = pci.o
-L_OBJS   := pci_syms.o
-else
-L_OBJS   := pci.o
+# Nasty trick as we need to link files with no references from the outside.
+O_TARGET := pci_core.o
+L_OBJS	 := pci_core.o
+O_OBJS   := pci.o quirks.o
+
+ifdef CONFIG_MODULES
+OX_OBJS  += pcisyms.o
 endif
 
 ifdef CONFIG_PROC_FS
-L_OBJS   += proc.o
+O_OBJS   += proc.o
 endif
 
-L_OBJS   += compat.o quirks.o names.o helper.o
+L_OBJS   += compat.o names.o helper.o
 
 ifndef CONFIG_X86
 L_OBJS   += syscall.o setup.o

@@ -1,4 +1,4 @@
-/* $Id: power.c,v 1.4 1999/08/31 18:22:05 davem Exp $
+/* $Id: power.c,v 1.5 1999/12/19 23:28:00 davem Exp $
  * power.c: Power management driver.
  *
  * Copyright (C) 1999 David S. Miller (davem@redhat.com)
@@ -90,16 +90,18 @@ void __init power_init(void)
 	return;
 
 found:
-	power_reg = edev->resource[0].start;
+	power_reg = (unsigned long)ioremap(edev->resource[0].start, 0x4);
 	printk("power: Control reg at %016lx ... ", power_reg);
 	if (kernel_thread(powerd, 0, CLONE_FS) < 0) {
 		printk("Failed to start power daemon.\n");
 		return;
 	}
 	printk("powerd running.\n");
-	if (request_irq(edev->irqs[0],
-			power_handler, SA_SHIRQ, "power",
-			(void *) power_reg) < 0)
-		printk("power: Error, cannot register IRQ handler.\n");
+	if (edev->irqs[0] != 0) {
+		if (request_irq(edev->irqs[0],
+				power_handler, SA_SHIRQ, "power",
+				(void *) power_reg) < 0)
+			printk("power: Error, cannot register IRQ handler.\n");
+	}
 }
 #endif /* CONFIG_PCI */

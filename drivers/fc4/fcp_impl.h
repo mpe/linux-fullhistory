@@ -84,7 +84,7 @@ typedef struct _fc_channel {
 	common_svc_parm		*common_svc;
 	svc_parm		*class_svcs;
 #ifdef __sparc__	
-	struct linux_sbus_device *dev;
+	struct sbus_dev		*dev;
 #endif
 	struct module		*module;
 	/* FCP SCSI stuff */

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Wed Oct 21 20:02:35 1998
- * Modified at:   Mon Oct 18 23:25:44 1999
+ * Modified at:   Fri Dec 17 09:17:45 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -70,7 +70,7 @@ static void tekram_open(dongle_t *self, struct qos_info *qos)
 	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
 	qos->baud_rate.bits &= IR_9600|IR_19200|IR_38400|IR_57600|IR_115200;
-	qos->min_turn_time.bits &= 0x01; /* Needs at least 10 ms */
+	qos->min_turn_time.bits = 0x01; /* Needs at least 10 ms */	
 	irda_qos_bits_to_value(qos);
 
 	MOD_INC_USE_COUNT;
@@ -82,6 +82,11 @@ static void tekram_close(dongle_t *self)
 
 	/* Power off dongle */
 	self->set_dtr_rts(self->dev, FALSE, FALSE);
+
+	if (self->reset_task)
+		irda_task_delete(self->reset_task);
+	if (self->speed_task)
+		irda_task_delete(self->speed_task);
 
 	MOD_DEC_USE_COUNT;
 }
@@ -113,6 +118,12 @@ static int tekram_change_speed(struct irda_task *task)
 
 	ASSERT(task != NULL, return -1;);
 
+	if (self->speed_task && self->speed_task != task) {
+		IRDA_DEBUG(0, __FUNCTION__ "(), busy!\n");
+		return MSECS_TO_JIFFIES(10);
+	} else
+		self->speed_task = task;
+
 	switch (speed) {
 	default:
 	case 9600:
@@ -128,19 +139,12 @@ static int tekram_change_speed(struct irda_task *task)
 		byte = TEKRAM_PW|TEKRAM_57600;
 		break;
 	case 115200:
-		byte = TEKRAM_PW|TEKRAM_115200;
+		byte = TEKRAM_115200;
 		break;
 	}
 
 	switch (task->state) {
 	case IRDA_TASK_INIT:
-		/* Lock dongle */
-		if (irda_lock((void *) &self->busy) == FALSE) {
-			IRDA_DEBUG(0, __FUNCTION__ "(), busy!\n");
-			return MSECS_TO_JIFFIES(100);
-		}
-		irda_task_next_state(task, IRDA_TASK_CHILD_INIT);
-		break;
 	case IRDA_TASK_CHILD_INIT:		
 		/* 
 		 * Need to reset the dongle and go to 9600 bps before
@@ -166,7 +170,7 @@ static int tekram_change_speed(struct irda_task *task)
 		self->set_dtr_rts(self->dev, TRUE, FALSE);
 	
 		/* Wait at least 7us */
-		udelay(10);
+		udelay(14);
 
 		/* Write control byte */
 		self->write(self->dev, &byte, 1);
@@ -174,19 +178,19 @@ static int tekram_change_speed(struct irda_task *task)
 		irda_task_next_state(task, IRDA_TASK_WAIT);
 
 		/* Wait at least 100 ms */
-		ret = MSECS_TO_JIFFIES(100);
+		ret = MSECS_TO_JIFFIES(150);
 		break;
 	case IRDA_TASK_WAIT:
 		/* Set DTR, Set RTS */
 		self->set_dtr_rts(self->dev, TRUE, TRUE);
 
 		irda_task_next_state(task, IRDA_TASK_DONE);
-		self->busy = 0;
+		self->speed_task = NULL;
 		break;
 	default:
 		ERROR(__FUNCTION__ "(), unknown state %d\n", task->state);
 		irda_task_next_state(task, IRDA_TASK_DONE);
-		self->busy = 0;
+		self->speed_task = NULL;
 		ret = -1;
 		break;
 	}
@@ -214,9 +218,16 @@ int tekram_reset(struct irda_task *task)
 	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
 	ASSERT(task != NULL, return -1;);
+
+	if (self->reset_task && self->reset_task != task) {
+		IRDA_DEBUG(0, __FUNCTION__ "(), busy!\n");
+		return MSECS_TO_JIFFIES(10);
+	} else
+		self->reset_task = task;
 	
 	/* Power off dongle */
-	self->set_dtr_rts(self->dev, FALSE, FALSE);
+	//self->set_dtr_rts(self->dev, FALSE, FALSE);
+	self->set_dtr_rts(self->dev, TRUE, TRUE);
 
 	switch (task->state) {
 	case IRDA_TASK_INIT:
@@ -231,21 +242,23 @@ int tekram_reset(struct irda_task *task)
 
 		irda_task_next_state(task, IRDA_TASK_WAIT2);
 		
-		/* Should sleep 1 ms, but 10 should not do any harm */
-		ret = MSECS_TO_JIFFIES(10);
+		/* Should sleep 1 ms */
+		ret = MSECS_TO_JIFFIES(1);
 		break;
 	case IRDA_TASK_WAIT2:
 		/* Set DTR, Set RTS */
 		self->set_dtr_rts(self->dev, TRUE, TRUE);
 	
-		udelay(50);
+		/* Wait at least 50 us */
+		udelay(75);
 
 		irda_task_next_state(task, IRDA_TASK_DONE);
+		self->reset_task = NULL;
 		break;
 	default:
 		ERROR(__FUNCTION__ "(), unknown state %d\n", task->state);
 		irda_task_next_state(task, IRDA_TASK_DONE);		
-
+		self->reset_task = NULL;
 		ret = -1;
 	}
 	return ret;

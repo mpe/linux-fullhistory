@@ -1,4 +1,4 @@
-/* $Id: elf.h,v 1.21 1999/08/04 07:04:23 jj Exp $ */
+/* $Id: elf.h,v 1.23 1999/12/15 14:19:06 davem Exp $ */
 #ifndef __ASM_SPARC64_ELF_H
 #define __ASM_SPARC64_ELF_H
 
@@ -48,7 +48,7 @@ typedef struct {
    that it will "exec", and that there is sufficient room for the brk.  */
 
 #ifndef ELF_ET_DYN_BASE
-#define ELF_ET_DYN_BASE         0xfffff80000000000UL
+#define ELF_ET_DYN_BASE         0x0000010000000000UL
 #endif
 
 
@@ -75,9 +75,17 @@ do {	unsigned char flags = current->thread.flags;	\
 		flags &= ~SPARC_FLAG_32BIT;		\
 	if (flags != current->thread.flags) {		\
 		unsigned long pgd_cache = 0UL;		\
-		if (flags & SPARC_FLAG_32BIT)		\
-		  pgd_cache =				\
-		    pgd_val(current->mm->pgd[0])<<11UL;	\
+		if (flags & SPARC_FLAG_32BIT) {		\
+		  pgd_t *pgd0 = &current->mm->pgd[0];	\
+		  if (pgd_none (*pgd0)) {		\
+		    pmd_t *page = get_pmd_fast();	\
+		    if (!page)				\
+		      (void) get_pmd_slow(pgd0, 0);	\
+                    else				\
+                      pgd_set(pgd0, page);		\
+		  }					\
+		  pgd_cache = pgd_val(*pgd0) << 11UL;	\
+		}					\
 		__asm__ __volatile__(			\
 			"stxa\t%0, [%1] %2"		\
 			: /* no outputs */		\

@@ -11,7 +11,7 @@
    Copyright 1992 - 1999 Kai Makisara
    email Kai.Makisara@metla.fi
 
-   Last modified: Tue Oct 19 21:39:15 1999 by makisara@kai.makisara.local
+   Last modified: Thu Dec 16 23:08:29 1999 by makisara@kai.makisara.local
    Some small formal changes - aeb, 950809
  */
 
@@ -289,10 +289,14 @@ static Scsi_Cmnd *
 	unsigned char *bp;
 
 	if (SCpnt == NULL)
-		SCpnt = scsi_allocate_device(STp->device, 1, FALSE);
+		SCpnt = scsi_allocate_device(STp->device, 1, TRUE);
 		if (SCpnt == NULL) {
-			printk(KERN_ERR "st%d: Can't get SCSI request.\n",
-                               TAPE_NR(STp->devt));
+			DEBC( printk(KERN_ERR "st%d: Can't get SCSI request.\n",
+				     TAPE_NR(STp->devt)); );
+			if (signal_pending(current))
+				(STp->buffer)->last_result_fatal = (-EINTR);
+			else
+				(STp->buffer)->last_result_fatal = (-EBUSY);
 			return NULL;
 		}
 
@@ -386,7 +390,7 @@ static int cross_eof(Scsi_Tape * STp, int forward)
 
 	SCpnt = st_do_scsi(NULL, STp, cmd, 0, STp->timeout, MAX_RETRIES, TRUE);
 	if (!SCpnt)
-		return (-EBUSY);
+		return (STp->buffer)->last_result_fatal;
 
 	scsi_release_command(SCpnt);
 	SCpnt = NULL;
@@ -444,7 +448,7 @@ static int flush_write_buffer(Scsi_Tape * STp)
 		SCpnt = st_do_scsi(NULL, STp, cmd, transfer, STp->timeout,
                                    MAX_WRITE_RETRIES, TRUE);
 		if (!SCpnt)
-			return (-EBUSY);
+			return (STp->buffer)->last_result_fatal;
 
 		STps = &(STp->ps[STp->partition]);
 		if ((STp->buffer)->last_result_fatal != 0) {
@@ -656,7 +660,7 @@ static int scsi_tape_open(struct inode *inode, struct file *filp)
 			__MOD_DEC_USE_COUNT(scsi_tapes[dev].device->host->hostt->module);
 		if (st_template.module)
 			__MOD_DEC_USE_COUNT(st_template.module);
-		return (-EBUSY);
+		return (STp->buffer)->last_result_fatal;
 	}
 
 	if ((SCpnt->sense_buffer[0] & 0x70) == 0x70 &&
@@ -905,8 +909,10 @@ static int scsi_tape_flush(struct file *filp)
 
 			SCpnt = st_do_scsi(NULL, STp, cmd, 0, STp->timeout,
                                            MAX_WRITE_RETRIES, TRUE);
-			if (!SCpnt)
+			if (!SCpnt) {
+				result = (STp->buffer)->last_result_fatal;
 				goto out;
+			}
 
 			if ((STp->buffer)->last_result_fatal != 0 &&
 			    ((SCpnt->sense_buffer[0] & 0x70) != 0x70 ||
@@ -1184,7 +1190,7 @@ static ssize_t
 		SCpnt = st_do_scsi(SCpnt, STp, cmd, transfer, STp->timeout,
 				   MAX_WRITE_RETRIES, TRUE);
 		if (!SCpnt)
-			return (-EBUSY);
+			return (STp->buffer)->last_result_fatal;
 
 		if ((STp->buffer)->last_result_fatal != 0) {
                         DEBC(printk(ST_DEB_MSG "st%d: Error on write:\n", dev));
@@ -1300,7 +1306,8 @@ static ssize_t
 		SCpnt = st_do_scsi(SCpnt, STp, cmd, (STp->buffer)->writing, STp->timeout,
 				   MAX_WRITE_RETRIES, FALSE);
 		if (SCpnt == NULL)
-			return (-EIO);
+			return (STp->buffer)->last_result_fatal;
+
 	} else if (SCpnt != NULL) {
 		scsi_release_command(SCpnt);
 		SCpnt = NULL;
@@ -1360,7 +1367,7 @@ static long read_tape(struct inode *inode, long count, Scsi_Cmnd ** aSCpnt)
 	SCpnt = st_do_scsi(SCpnt, STp, cmd, bytes, STp->timeout, MAX_RETRIES, TRUE);
 	*aSCpnt = SCpnt;
 	if (!SCpnt)
-		return (-EBUSY);
+		return (STp->buffer)->last_result_fatal;
 
 	(STp->buffer)->read_pointer = 0;
 	STps->at_sm = 0;
@@ -1838,7 +1845,8 @@ static int st_compression(Scsi_Tape * STp, int state)
 
 	SCpnt = st_do_scsi(SCpnt, STp, cmd, cmd[4], STp->timeout, 0, TRUE);
 	if (SCpnt == NULL)
-		return (-EBUSY);
+		return (STp->buffer)->last_result_fatal;
+
 	dev = TAPE_NR(SCpnt->request.rq_dev);
 
 	if ((STp->buffer)->last_result_fatal != 0) {
@@ -2210,7 +2218,7 @@ static int st_int_ioctl(struct inode *inode,
 
 	SCpnt = st_do_scsi(NULL, STp, cmd, datalen, timeout, MAX_RETRIES, TRUE);
 	if (!SCpnt)
-		return (-EBUSY);
+		return (STp->buffer)->last_result_fatal;
 
 	ioctl_result = (STp->buffer)->last_result_fatal;
 
@@ -2372,7 +2380,7 @@ static int get_location(struct inode *inode, unsigned int *block, int *partition
 	}
 	SCpnt = st_do_scsi(NULL, STp, scmd, 20, STp->timeout, MAX_READY_RETRIES, TRUE);
 	if (!SCpnt)
-		return (-EBUSY);
+		return (STp->buffer)->last_result_fatal;
 
 	if ((STp->buffer)->last_result_fatal != 0 ||
 	    (STp->device->scsi_level >= SCSI_2 &&
@@ -2478,7 +2486,7 @@ static int set_location(struct inode *inode, unsigned int block, int partition,
 
 	SCpnt = st_do_scsi(NULL, STp, scmd, 20, timeout, MAX_READY_RETRIES, TRUE);
 	if (!SCpnt)
-		return (-EBUSY);
+		return (STp->buffer)->last_result_fatal;
 
 	STps->drv_block = STps->drv_file = (-1);
 	STps->eof = ST_NOEOF;
@@ -2569,7 +2577,8 @@ static int nbr_partitions(struct inode *inode)
 
 	SCpnt = st_do_scsi(SCpnt, STp, cmd, 200, STp->timeout, MAX_READY_RETRIES, TRUE);
 	if (SCpnt == NULL)
-		return (-EBUSY);
+		return (STp->buffer)->last_result_fatal;
+
 	scsi_release_command(SCpnt);
 	SCpnt = NULL;
 
@@ -2633,7 +2642,8 @@ static int partition_tape(struct inode *inode, int size)
 	SCpnt = st_do_scsi(SCpnt, STp, cmd, cmd[4], STp->long_timeout,
 			   MAX_READY_RETRIES, TRUE);
 	if (SCpnt == NULL)
-		return (-EBUSY);
+		return (STp->buffer)->last_result_fatal;
+
 	scsi_release_command(SCpnt);
 	SCpnt = NULL;
 

@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.75 1999/09/01 08:06:08 davem Exp $ */
+/* $Id: system.h,v 1.80 1999/12/16 12:58:31 anton Exp $ */
 #include <linux/config.h>
 
 #ifndef __SPARC_SYSTEM_H
@@ -15,8 +15,6 @@
 #include <asm/ptrace.h>
 #include <asm/btfixup.h>
 
-#define EMPTY_PGT       (&empty_bad_page)
-#define EMPTY_PGE	(&empty_bad_page_table)
 #endif /* __KERNEL__ */
 
 #ifndef __ASSEMBLY__
@@ -72,17 +70,32 @@ extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 #define SWITCH_ENTER \
 	if(prev->flags & PF_USEDFPU) { \
 		put_psr(get_psr() | PSR_EF); \
-		fpsave(&prev->tss.float_regs[0], &prev->tss.fsr, \
-		       &prev->tss.fpqueue[0], &prev->tss.fpqdepth); \
+		fpsave(&prev->thread.float_regs[0], &prev->thread.fsr, \
+		       &prev->thread.fpqueue[0], &prev->thread.fpqdepth); \
 		prev->flags &= ~PF_USEDFPU; \
-		prev->tss.kregs->psr &= ~PSR_EF; \
+		prev->thread.kregs->psr &= ~PSR_EF; \
 	}
 
 #define SWITCH_DO_LAZY_FPU
 #else
 #define SWITCH_ENTER
-#define SWITCH_DO_LAZY_FPU if(last_task_used_math != next) next->tss.kregs->psr&=~PSR_EF;
+#define SWITCH_DO_LAZY_FPU if(last_task_used_math != next) next->thread.kregs->psr&=~PSR_EF;
 #endif
+
+/*
+ * Flush windows so that the VM switch which follows
+ * would not pull the stack from under us.
+ *
+ * SWITCH_ENTER and SWITH_DO_LAZY_FPU do not work yet (e.g. SMP does not work)
+ */
+#define prepare_to_switch() do { \
+	__asm__ __volatile__( \
+	".globl\tflush_patch_switch\nflush_patch_switch:\n\t" \
+	"save %sp, -0x40, %sp; save %sp, -0x40, %sp; save %sp, -0x40, %sp\n\t" \
+	"save %sp, -0x40, %sp; save %sp, -0x40, %sp; save %sp, -0x40, %sp\n\t" \
+	"save %sp, -0x40, %sp\n\t" \
+	"restore; restore; restore; restore; restore; restore; restore"); \
+} while(0)
 
 	/* Much care has gone into this code, do not touch it.
 	 *
@@ -91,6 +104,9 @@ extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 	 * holding certain values, gcc is told that they are clobbered.
 	 * Gcc needs registers for 3 values in and 1 value out, so we
 	 * clobber every non-fixed-usage register besides l2/l3/o4/o5.  -DaveM
+	 *
+	 * Hey Dave, that do not touch sign is too much of an incentive
+	 * - Anton
 	 */
 #define switch_to(prev, next, last) do {						\
 	__label__ here;									\
@@ -98,16 +114,7 @@ extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 	extern struct task_struct *current_set[NR_CPUS];				\
 	SWITCH_ENTER									\
 	SWITCH_DO_LAZY_FPU								\
-	__asm__ __volatile__(								\
-	".globl\tflush_patch_switch\nflush_patch_switch:\n\t"				\
-	"save %sp, -0x40, %sp; save %sp, -0x40, %sp; save %sp, -0x40, %sp\n\t"		\
-	"save %sp, -0x40, %sp; save %sp, -0x40, %sp; save %sp, -0x40, %sp\n\t"		\
-	"save %sp, -0x40, %sp\n\t"							\
-	"restore; restore; restore; restore; restore; restore; restore");		\
-	if(!(next->tss.flags & SPARC_FLAG_KTHREAD) &&					\
-	   !(next->flags & PF_EXITING))							\
-		switch_to_context(next);						\
-	next->mm->cpu_vm_mask |= (1 << smp_processor_id());				\
+	next->active_mm->cpu_vm_mask |= (1 << smp_processor_id());			\
 	task_pc = ((unsigned long) &&here) - 0x8;					\
 	__asm__ __volatile__(								\
 	"mov	%%g6, %%g3\n\t"								\
@@ -136,16 +143,16 @@ extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 	" mov	%%g3, %0\n\t"								\
         : "=&r" (last)									\
         : "r" (&(current_set[hard_smp_processor_id()])), "r" (next),			\
-	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.kpsr)),		\
-	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.ksp)),		\
+	  "i" ((const unsigned long)(&((struct task_struct *)0)->thread.kpsr)),		\
+	  "i" ((const unsigned long)(&((struct task_struct *)0)->thread.ksp)),		\
 	  "r" (task_pc)									\
 	: "g1", "g2", "g3", "g4", "g5", "g7", "l0", "l1",				\
 	"l4", "l5", "l6", "l7", "i0", "i1", "i2", "i3", "i4", "i5", "o0", "o1", "o2",	\
 	"o3");										\
 here:  } while(0)
 
-/* Changing the IRQ level on the Sparc.   We now avoid writing the psr
- * whenever possible.
+/*
+ * Changing the IRQ level on the Sparc.
  */
 extern __inline__ void setipl(unsigned long __orig_psr)
 {
@@ -237,6 +244,10 @@ extern __inline__ unsigned long read_psr_and_cli(void)
 #define __save_flags(flags)	((flags) = getipl())
 #define __save_and_cli(flags)	((flags) = read_psr_and_cli())
 #define __restore_flags(flags)	setipl((flags))
+#define local_irq_disable()		__cli()
+#define local_irq_enable()		__sti()
+#define local_irq_save(flags)		__save_and_cli(flags)
+#define local_irq_restore(flags)	__restore_flags(flags)
 
 #ifdef __SMP__
 

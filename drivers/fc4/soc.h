@@ -10,14 +10,11 @@
 #include "fcp.h"
 #include "fcp_impl.h"
 
-/* Hardware structures and constants first {{{ */
-
-struct soc_regs {
-	volatile u32 cfg;			/* Config Register */
-	volatile u32 sae;			/* Slave Access Error Register */
-	volatile u32 cmd;			/* Command & Status Register */
-	volatile u32 imask;			/* Interrupt Mask Register */
-};
+/* Hardware register offsets and constants first {{{ */
+#define CFG	0x00UL		/* Config Register */
+#define SAE	0x04UL		/* Slave Access Error Register */
+#define CMD	0x08UL		/* Command and Status Register */
+#define IMASK	0x0cUL		/* Interrupt Mask Register */
 
 /* Config Register */
 #define SOC_CFG_EXT_RAM_BANK_MASK	0x07000000
@@ -74,7 +71,9 @@ struct soc_regs {
 	 & s->imask)
 	 
 #define SOC_SETIMASK(s, i) \
-	(s)->imask = (i); (s)->regs->imask = (i)
+do {	(s)->imask = (i); \
+	sbus_writel((i), (s)->regs + IMASK); \
+} while(0)
 
 /* XRAM
  *
@@ -82,56 +81,61 @@ struct soc_regs {
  * That's why here are the following inline functions...
  */
  
-typedef u16 *xram_p;
+typedef unsigned long xram_p;
 
 /* Get 32bit number from XRAM */
 static inline u32 xram_get_32 (xram_p x)
 {
-	return (((u32)*x) << 16) | (x[1]);
+	return ((sbus_readw(x + 0x00UL) << 16) |
+		(sbus_readw(x + 0x02UL)));
 }
 
 /* Like the above, but when we don't care about the high 16 bits */
 static inline u32 xram_get_32low (xram_p x)
 {
-	return (u32)x[1];
+	return (u32) sbus_readw(x + 0x02UL);
 }
 
 static inline u8 xram_get_8 (xram_p x)
 {
-	if (((long)x) & 1) {
-		x = (xram_p)((long)x - 1);
-		return (u8)*x;
-	} else
-		return (u8)(*x >> 8);
+	if (x & (xram_p)0x1) {
+		x = x - 1;
+		return (u8) sbus_readw(x);
+	} else {
+		return (u8) (sbus_readw(x) >> 8);
+	}
 }
 
 static inline void xram_copy_from (void *p, xram_p x, int len)
 {
-	for (len >>= 2; len > 0; len--, x += 2) {
-		*((u32 *)p)++ = (((u32)(*x)) << 16) | (x[1]);
+	for (len >>= 2; len > 0; len--, x += sizeof(u32)) {
+		u32 val;
+
+		val = ((sbus_readw(x + 0x00UL) << 16) |
+		       (sbus_readw(x + 0x02UL)));
+		*((u32 *)p)++ = val;
 	}
 }
 
 static inline void xram_copy_to (xram_p x, void *p, int len)
 {
-	register u32 tmp;
-	for (len >>= 2; len > 0; len--, x += 2) {
-		tmp = *((u32 *)p)++;
-		*x = tmp >> 16;
-		x[1] = tmp;
+	for (len >>= 2; len > 0; len--, x += sizeof(u32)) {
+		u32 tmp = *((u32 *)p)++;
+		sbus_writew(tmp >> 16, x + 0x00UL);
+		sbus_writew(tmp, x + 0x02UL);
 	}
 }
 
 static inline void xram_bzero (xram_p x, int len)
 {
-	for (len >>= 1; len > 0; len--) *x++ = 0;
+	for (len >>= 1; len > 0; len--, x += sizeof(u16))
+		sbus_writew(0, x);
 }
 
 /* Circular Queue */
 
-/* These two are in sizeof(u16) units */
-#define SOC_CQ_REQ_OFFSET	0x100
-#define SOC_CQ_RSP_OFFSET	0x110
+#define SOC_CQ_REQ_OFFSET	(0x100 * sizeof(u16))
+#define SOC_CQ_RSP_OFFSET	(0x110 * sizeof(u16))
 
 typedef struct {
 	u32			address;
@@ -260,7 +264,7 @@ struct soc {
 	soc_cq			req[2]; /* Request CQs */
 	soc_cq			rsp[2]; /* Response CQs */
 	int			soc_no;
-	struct soc_regs		*regs;
+	unsigned long		regs;
 	xram_p			xram;
 	fc_wwn			wwn;
 	u32			imask;	/* Our copy of regs->imask */
@@ -268,6 +272,9 @@ struct soc {
 	char			serv_params[80];
 	struct soc		*next;
 	int			curr_port; /* Which port will have priority to fcp_queue_empty */
+
+	soc_req			*req_cpu;
+	u32			req_dvma;
 };
 
 /* }}} */

@@ -73,9 +73,6 @@ void __init proc_root_init(void)
 	proc_root_fs = proc_mkdir("fs", 0);
 	proc_root_driver = proc_mkdir("driver", 0);
 #if defined(CONFIG_SUN_OPENPROMFS) || defined(CONFIG_SUN_OPENPROMFS_MODULE)
-#ifdef CONFIG_SUN_OPENPROMFS
-	openpromfs_init ();
-#endif
 	/* just give it a mountpoint */
 	proc_mkdir("openprom", 0);
 #endif

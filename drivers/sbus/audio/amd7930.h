@@ -1,4 +1,4 @@
-/*
+/* $Id: amd7930.h,v 1.8 1999/09/21 14:37:10 davem Exp $
  * drivers/sbus/audio/amd7930.h
  *
  * Copyright (C) 1996 Thomas K. Dyas (tdyas@noc.rutgers.edu)
@@ -17,22 +17,18 @@
 #include <linux/version.h>
 
 /* Register interface presented to the CPU by the amd7930. */
-struct amd7930
-{
-	__volatile__ __u8 cr;		/* Command Register (W) */
-#define ir cr				/* Interrupt Register (R) */
-	__volatile__ __u8 dr;		/* Data Register (R/W) */
-	__volatile__ __u8 dsr1;		/* D-channel Status Register 1 (R) */
-	__volatile__ __u8 der;		/* D-channel Error Register (R) */
-	__volatile__ __u8 dctb;		/* D-channel Transmit Buffer (W) */
-#define dcrb dctb			/* D-channel Receive Buffer (R) */
-	__volatile__ __u8 bbtb;		/* Bb-channel Transmit Buffer (W) */
-#define bbrb bbtb			/* Bb-channel Receive Buffer (R) */
-	__volatile__ __u8 bctb;		/* Bc-channel Transmit Buffer (W) */
-#define bcrb bctb			/* Bc-channel Receive Buffer (R) */
-	__volatile__ __u8 dsr2;		/* D-channel Status Register 2 (R) */
-};
-
+#define CR	0x00UL		/* Command Register (W) */
+#define IR	CR		/* Interrupt Register (R) */
+#define DR	0x01UL		/* Data Register (R/W) */
+#define DSR1	0x02UL		/* D-channel Status Register 1 (R) */
+#define DER	0x03UL		/* D-channel Error Register (R) */
+#define DCTB	0x04UL		/* D-channel Transmit Buffer (W) */
+#define DCRB	DCTB		/* D-channel Receive Buffer (R) */
+#define BBTB	0x05UL		/* Bb-channel Transmit Buffer (W) */
+#define BBRB	BBTB		/* Bb-channel Receive Buffer (R) */
+#define BCTB	0x06UL		/* Bc-channel Transmit Buffer (W) */
+#define BCRB	BCTB		/* Bc-channel Receive Buffer (R) */
+#define DSR2	0x07UL		/* D-channel Status Register 2 (R) */
 
 /* Indirect registers in the Main Audio Processor. */
 struct amd7930_map {
@@ -270,4 +266,5 @@ struct amd7930_map {
 
 /* Give this chip a "default" sample rate */
 #define AMD7930_RATE                    (8000)
-#endif
+
+#endif /* _AMD7930_H_ */

@@ -74,6 +74,7 @@ static char *serial_revdate = "1999-11-17";
 
 #include <linux/config.h>
 #include <linux/version.h>
+#include <linux/sysrq.h>
 
 #undef SERIAL_PARANOIA_CHECK
 #define CONFIG_SERIAL_NOPAUSE_IO

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 17 20:54:32 1997
- * Modified at:   Tue Oct  5 15:20:56 1999
+ * Modified at:   Fri Dec 10 13:23:01 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -42,17 +42,14 @@
 #define LSAP_MASK     0x7f
 #define LSAP_IAS      0x00
 #define LSAP_ANY      0xff
+#define LSAP_MAX      0x6f /* 0x70-0x7f are reserved */
+#define LSAP_CONNLESS 0x70 /* Connectionless LSAP, mostly used for Ultra */
 
 #define DEV_ADDR_ANY  0xffffffff
 
-/* Predefined LSAPs used by the various servers */
-#define TSAP_IRLAN    0x05
-#define LSAP_IRLPT    0x06
-#define TSAP_IROBEX   0x07
-#define TSAP_IRCOMM   0x08
-
 #define LMP_HEADER          2    /* Dest LSAP + Source LSAP */
 #define LMP_CONTROL_HEADER  4
+#define LMP_PID_HEADER      1    /* Used by Ultra */
 #define LMP_MAX_HEADER      (LMP_CONTROL_HEADER+LAP_MAX_HEADER)
 
 #define LM_MAX_CONNECTIONS  10
@@ -101,18 +98,20 @@ struct lsap_cb {
 	queue_t queue;      /* Must be first */
 	magic_t magic;
 
-	int   connected;
-	int   persistent;
+	int  connected;
+	int  persistent;
 
-	__u8  slsap_sel;   /* Source (this) LSAP address */
-	__u8  dlsap_sel;   /* Destination LSAP address (if connected) */
-
-	struct sk_buff *tmp_skb; /* Store skb here while connecting */
+	__u8 slsap_sel;   /* Source (this) LSAP address */
+	__u8 dlsap_sel;   /* Destination LSAP address (if connected) */
+#ifdef CONFIG_IRDA_ULTRA
+	__u8 pid;         /* Used by connectionless LSAP */
+#endif /* CONFIG_IRDA_ULTRA */
+	struct sk_buff *conn_skb; /* Store skb here while connecting */
 
 	struct timer_list watchdog_timer;
 
 	IRLMP_STATE     lsap_state;  /* Connection state */
-	notify_t notify;             /* Indication/Confirm entry points */
+	notify_t        notify;      /* Indication/Confirm entry points */
 	struct qos_info qos;         /* QoS for this connection */
 
 	struct lap_cb *lap; /* Pointer to LAP connection structure */
@@ -122,15 +121,16 @@ struct lsap_cb {
  *  Information about each registred IrLAP layer
  */
 struct lap_cb {
-	queue_t queue;      /* Must be first */
+	queue_t queue; /* Must be first */
 	magic_t magic;
 
 	int reason;    /* LAP disconnect reason */
 
 	IRLMP_STATE lap_state;
 
-	struct irlap_cb *irlap;    /* Instance of IrLAP layer */
+	struct irlap_cb *irlap;   /* Instance of IrLAP layer */
 	hashbin_t *lsaps;         /* LSAP associated with this link */
+	int refcount;
 
 	__u8  caddr;  /* Connection address */
  	__u32 saddr;  /* Source device address */
@@ -185,7 +185,7 @@ struct irlmp_cb {
 /* Prototype declarations */
 int  irlmp_init(void);
 void irlmp_cleanup(void);
-struct lsap_cb *irlmp_open_lsap( __u8 slsap, notify_t *notify);
+struct lsap_cb *irlmp_open_lsap(__u8 slsap, notify_t *notify, __u8 pid);
 void irlmp_close_lsap( struct lsap_cb *self);
 
 __u16 irlmp_service_to_hint(int service);
@@ -217,10 +217,16 @@ void irlmp_discovery_request(int nslots);
 void irlmp_do_discovery(int nslots);
 discovery_t *irlmp_get_discovery_response(void);
 
-int irlmp_data_request(struct lsap_cb *, struct sk_buff *);
-inline void irlmp_udata_request(struct lsap_cb *, struct sk_buff *);
-inline void irlmp_data_indication(struct lsap_cb *, struct sk_buff *);
-inline void irlmp_udata_indication(struct lsap_cb *, struct sk_buff *);
+int  irlmp_data_request(struct lsap_cb *, struct sk_buff *);
+void irlmp_data_indication(struct lsap_cb *, struct sk_buff *);
+
+int  irlmp_udata_request(struct lsap_cb *, struct sk_buff *);
+void irlmp_udata_indication(struct lsap_cb *, struct sk_buff *);
+
+#ifdef CONFIG_IRDA_ULTRA
+int  irlmp_connless_data_request(struct lsap_cb *, struct sk_buff *);
+void irlmp_connless_data_indication(struct lsap_cb *, struct sk_buff *);
+#endif /* CONFIG_IRDA_ULTRA */
 
 void irlmp_status_request(void);
 void irlmp_status_indication(LINK_STATUS link, LOCK_STATUS lock);

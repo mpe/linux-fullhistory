@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Feb 21 18:54:38 1998
- * Modified at:   Mon Oct 18 12:35:43 1999
+ * Modified at:   Fri Dec 17 09:17:05 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, <dagb@cs.uit.no>,
@@ -68,7 +68,7 @@ void esi_cleanup(void)
 static void esi_open(dongle_t *self, struct qos_info *qos)
 {
 	qos->baud_rate.bits &= IR_9600|IR_19200|IR_115200;
-	qos->min_turn_time.bits &= 0x01; /* Needs at least 10 ms */
+	qos->min_turn_time.bits = 0x01; /* Needs at least 10 ms */
 
 	MOD_INC_USE_COUNT;
 }
@@ -93,12 +93,6 @@ static int esi_change_speed(struct irda_task *task)
 	__u32 speed = (__u32) task->param;
 	int dtr, rts;
 	
-	/* Lock dongle */
-	if (irda_lock((void *) &self->busy) == FALSE) {
-		IRDA_DEBUG(0, __FUNCTION__ "(), busy!\n");
-		return MSECS_TO_JIFFIES(100);
-	}
-
 	switch (speed) {
 	case 19200:
 		dtr = TRUE;
@@ -120,9 +114,6 @@ static int esi_change_speed(struct irda_task *task)
 
 	irda_task_next_state(task, IRDA_TASK_DONE);
 
-	/* Unlock */
-	self->busy = 0;
-	
 	return 0;
 }
 

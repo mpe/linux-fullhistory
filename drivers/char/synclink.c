@@ -1,7 +1,7 @@
 /*
  * linux/drivers/char/synclink.c
  *
- * ==FILEDATE 19991207==
+ * ==FILEDATE 19991217==
  *
  * Device driver for Microgate SyncLink ISA and PCI
  * high speed multiprotocol serial adapters.
@@ -158,6 +158,7 @@ static int baud_table[] = {
 #define SERIAL_TYPE_NORMAL	1
 #define SERIAL_TYPE_CALLOUT	2
 typedef int spinlock_t;
+#define spin_lock_init(a)
 #define spin_lock_irqsave(a,b) {save_flags((b));cli();}
 #define spin_unlock_irqrestore(a,b) {restore_flags((b));}
 #define spin_lock(a)
@@ -925,7 +926,7 @@ MODULE_PARM(maxframe,"1-" __MODULE_STRING(MAX_TOTAL_DEVICES) "i");
 #endif
 
 static char *driver_name = "SyncLink serial driver";
-static char *driver_version = "1.15";
+static char *driver_version = "1.16";
 
 static struct tty_driver serial_driver, callout_driver;
 static int serial_refcount;
@@ -4456,7 +4457,7 @@ struct mgsl_struct* mgsl_allocate_device()
 		init_waitqueue_head(&info->close_wait);
 		init_waitqueue_head(&info->status_event_wait_q);
 		init_waitqueue_head(&info->event_wait_q);
-
+		spin_lock_init(&info->irq_spinlock);
 		memcpy(&info->params,&default_params,sizeof(MGSL_PARAMS));
 		info->idle_mode = HDLC_TXIDLE_FLAGS;		
 	}

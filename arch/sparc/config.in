@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.73 1999/08/31 10:09:01 davem Exp $
+# $Id: config.in,v 1.78 1999/12/20 05:01:36 davem Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -57,21 +57,18 @@ else
    fi
 fi
 
-if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-   tristate 'Openprom tree appears in /proc/openprom (EXPERIMENTAL)' CONFIG_SUN_OPENPROMFS
-fi
+tristate 'Openprom tree appears in /proc/openprom' CONFIG_SUN_OPENPROMFS
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
 bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
 bool 'Sysctl support' CONFIG_SYSCTL
 if [ "$CONFIG_PROC_FS" = "y" ]; then
-   choice 'Kernel core (/proc/kcore) format' \
-	"ELF		CONFIG_KCORE_ELF	\
-	 A.OUT		CONFIG_KCORE_AOUT" ELF
+   define_bool CONFIG_KCORE_ELF y
 fi
 tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
+bool 'SunOS binary emulation' CONFIG_SUNOS_EMUL
 source drivers/parport/Config.in
 dep_tristate '  Parallel printer support' CONFIG_PRINTER $CONFIG_PARPORT
 endmenu
@@ -89,7 +86,7 @@ mainmenu_option next_comment
 comment 'Floppy, IDE, and other block devices'
 
 bool 'Normal floppy disk support' CONFIG_BLK_DEV_FD
-
+define_bool CONFIG_BLK_DEV_IDE n
 bool 'Multiple devices driver support' CONFIG_BLK_DEV_MD
 if [ "$CONFIG_BLK_DEV_MD" = "y" ]; then
    tristate '  Linear (append) mode' CONFIG_MD_LINEAR
@@ -173,9 +170,7 @@ if [ "$CONFIG_NET" = "y" ]; then
       fi
       tristate '  Sun LANCE support' CONFIG_SUNLANCE
       tristate '  Sun Happy Meal 10/100baseT support' CONFIG_HAPPYMEAL
-      if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-	 tristate '  Sun BigMAC 10/100baseT support (EXPERIMENTAL)' CONFIG_SUNBMAC
-      fi
+      tristate '  Sun BigMAC 10/100baseT support (EXPERIMENTAL)' CONFIG_SUNBMAC
       tristate '  Sun QuadEthernet support' CONFIG_SUNQE
       tristate '  MyriCOM Gigabit Ethernet support' CONFIG_MYRI_SBUS
 #      bool '  FDDI driver support' CONFIG_FDDI

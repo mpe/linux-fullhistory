@@ -38,6 +38,11 @@ fairly certain that the flowcharts in the phillips docs are wrong. */
 #include "vfc.h"
 #include "vfc_i2c.h"
 
+#define WRITE_S1(__val) \
+	sbus_writel(__val, &dev->regs->i2c_s1)
+#define WRITE_REG(__val) \
+	sbus_writel(__val, &dev->regs->i2c_reg)
+
 #define VFC_I2C_READ (0x1)
 #define VFC_I2C_WRITE (0x0)
      
@@ -52,20 +57,24 @@ fairly certain that the flowcharts in the phillips docs are wrong. */
 
 int vfc_pcf8584_init(struct vfc_dev *dev) 
 {
-	dev->regs->i2c_s1=RESET;        /* This will also choose
-					   register S0_OWN so we can set it*/
+	/* This will also choose register S0_OWN so we can set it. */
+	WRITE_S1(RESET);
 
-	dev->regs->i2c_reg=0x55000000;  /* the pcf8584 shifts this
-					   value left one bit and uses
-					   it as its i2c bus address */
-	dev->regs->i2c_s1=SELECT(S2);
-	dev->regs->i2c_reg=0x14000000;  /* this will set the i2c bus at
-					   the same speed sun uses,
-					   and set another magic bit */
+	/* The pcf8584 shifts this value left one bit and uses
+	 * it as its i2c bus address.
+	 */
+	WRITE_REG(0x55000000);
+
+	/* This will set the i2c bus at the same speed sun uses,
+	 * and set another magic bit.
+	 */
+	WRITE_S1(SELECT(S2));
+	WRITE_REG(0x14000000);
 	
-	dev->regs->i2c_s1=CLEAR_I2C_BUS;   /* enable the serial port,
-					   idle the i2c bus and set
-					   the data reg to s0 */
+	/* Enable the serial port, idle the i2c bus and set
+	 * the data reg to s0.
+	 */
+	WRITE_S1(CLEAR_I2C_BUS);
 	udelay(100);
 	return 0;
 }
@@ -73,11 +82,11 @@ int vfc_pcf8584_init(struct vfc_dev *dev)
 void vfc_i2c_delay_wakeup(struct vfc_dev *dev) 
 {
 	/* Used to profile code and eliminate too many delays */
-	VFC_I2C_DEBUG_PRINTK(("vfc%d: Delaying\n",dev->instance));
+	VFC_I2C_DEBUG_PRINTK(("vfc%d: Delaying\n", dev->instance));
 	wake_up(&dev->poll_wait);
 }
 
-void vfc_i2c_delay_no_busy(struct vfc_dev *dev,unsigned long usecs) 
+void vfc_i2c_delay_no_busy(struct vfc_dev *dev, unsigned long usecs) 
 {
 	dev->poll_timer.next = NULL;
 	dev->poll_timer.prev = NULL;
@@ -92,12 +101,12 @@ void vfc_i2c_delay_no_busy(struct vfc_dev *dev,unsigned long usecs)
 
 void inline vfc_i2c_delay(struct vfc_dev *dev) 
 { 
-	vfc_i2c_delay_no_busy(dev,100);
+	vfc_i2c_delay_no_busy(dev, 100);
 }
 
 int vfc_init_i2c_bus(struct vfc_dev *dev)
 {
-	dev->regs->i2c_s1= ENABLE_SERIAL | SELECT(S0) | ACK;
+	WRITE_S1(ENABLE_SERIAL | SELECT(S0) | ACK);
 	vfc_i2c_reset_bus(dev);
 	return 0;
 }
@@ -105,24 +114,28 @@ int vfc_init_i2c_bus(struct vfc_dev *dev)
 int vfc_i2c_reset_bus(struct vfc_dev *dev) 
 {
 	VFC_I2C_DEBUG_PRINTK((KERN_DEBUG "vfc%d: Resetting the i2c bus\n",
-			  dev->instance));
-	if(!dev) return -EINVAL;
-	if(!dev->regs) return -EINVAL;
-	dev->regs->i2c_s1=SEND_I2C_STOP;
-	dev->regs->i2c_s1=SEND_I2C_STOP | ACK;
+			      dev->instance));
+	if(dev == NULl)
+		return -EINVAL;
+	if(dev->regs == NULL)
+		return -EINVAL;
+	WRITE_S1(SEND_I2C_STOP);
+	WRITE_S1(SEND_I2C_STOP | ACK);
 	vfc_i2c_delay(dev);
-	dev->regs->i2c_s1=CLEAR_I2C_BUS;
+	WRITE_S1(CLEAR_I2C_BUS);
 	VFC_I2C_DEBUG_PRINTK((KERN_DEBUG "vfc%d: I2C status %x\n",
-			  dev->instance, dev->regs->i2c_s1));
+			      dev->instance,
+			      sbus_readl(&dev->regs->i2c_s1)));
 	return 0;
 }
 
 int vfc_i2c_wait_for_bus(struct vfc_dev *dev) 
 {
-	int timeout=1000; 
+	int timeout = 1000; 
 
-	while(!(dev->regs->i2c_s1 & BB)) {
-		if(!(timeout--)) return -ETIMEDOUT;
+	while(!(sbus_readl(&dev->regs->i2c_s1) & BB)) {
+		if(!(timeout--))
+			return -ETIMEDOUT;
 		vfc_i2c_delay(dev);
 	}
 	return 0;
@@ -130,15 +143,17 @@ int vfc_i2c_wait_for_bus(struct vfc_dev *dev)
 
 int vfc_i2c_wait_for_pin(struct vfc_dev *dev, int ack)
 {
-	int timeout=1000; 
+	int timeout = 1000; 
 	int s1;
 
-	while((s1=dev->regs->i2c_s1) & PIN) {
-		if(!(timeout--)) return -ETIMEDOUT;
+	while ((s1 = sbus_readl(&dev->regs->i2c_s1)) & PIN) {
+		if (!(timeout--))
+			return -ETIMEDOUT;
 		vfc_i2c_delay(dev);
 	}
-	if(ack==VFC_I2C_ACK_CHECK) {
-		if(s1 & LRB) return -EIO; 
+	if (ack == VFC_I2C_ACK_CHECK) {
+		if(s1 & LRB)
+			return -EIO; 
 	}
 	return 0;
 }
@@ -146,47 +161,50 @@ int vfc_i2c_wait_for_pin(struct vfc_dev *dev, int ack)
 #define SHIFT(a) ((a) << 24)
 int vfc_i2c_xmit_addr(struct vfc_dev *dev, unsigned char addr, char mode) 
 { 
-	int ret,raddr;
+	int ret, raddr;
 #if 1
-	dev->regs->i2c_s1=SEND_I2C_STOP | ACK;
-	dev->regs->i2c_s1=SELECT(S0) | ENABLE_SERIAL;
+	WRITE_S1(SEND_I2C_STOP | ACK);
+	WRITE_S1(SELECT(S0) | ENABLE_SERIAL);
 	vfc_i2c_delay(dev);
 #endif
 
 	switch(mode) {
 	case VFC_I2C_READ:
-		dev->regs->i2c_reg=raddr=SHIFT((unsigned int)addr | 0x1);
+		raddr = SHIFT(((unsigned int)addr | 0x1));
+		WRITE_REG(raddr);
 		VFC_I2C_DEBUG_PRINTK(("vfc%d: receiving from i2c addr 0x%x\n",
-				  dev->instance,addr | 0x1));
+				      dev->instance, addr | 0x1));
 		break;
 	case VFC_I2C_WRITE:
-		dev->regs->i2c_reg=raddr=SHIFT((unsigned int)addr & ~0x1);
+		raddr = SHIFT((unsigned int)addr & ~0x1);
+		WRITE_REG(raddr);
 		VFC_I2C_DEBUG_PRINTK(("vfc%d: sending to i2c addr 0x%x\n",
-				  dev->instance,addr & ~0x1));
+				      dev->instance, addr & ~0x1));
 		break;
 	default:
 		return -EINVAL;
-	}
-	dev->regs->i2c_s1 = SEND_I2C_START;
+	};
+
+	WRITE_S1(SEND_I2C_START);
 	vfc_i2c_delay(dev);
-	ret=vfc_i2c_wait_for_pin(dev,VFC_I2C_ACK_CHECK); /* We wait
-							    for the
-							    i2c send
-							    to finish
-							    here but
-							    Sun
-							    doesn't,
-							    hmm */
-	if(ret) {
+	ret = vfc_i2c_wait_for_pin(dev,VFC_I2C_ACK_CHECK); /* We wait
+							      for the
+							      i2c send
+							      to finish
+							      here but
+							      Sun
+							      doesn't,
+							      hmm */
+	if (ret) {
 		printk(KERN_ERR "vfc%d: VFC xmit addr timed out or no ack\n",
 		       dev->instance);
 		return ret;
-	} else if(mode == VFC_I2C_READ) {
-		if((ret=dev->regs->i2c_reg & 0xff000000) != raddr) {
+	} else if (mode == VFC_I2C_READ) {
+		if ((ret = sbus_readl(&dev->regs->i2c_reg) & 0xff000000) != raddr) {
 			printk(KERN_WARNING 
 			       "vfc%d: returned slave address "
 			       "mismatch(%x,%x)\n",
-			       dev->instance,raddr,ret);
+			       dev->instance, raddr, ret);
 		}
 	}	
 	return 0;
@@ -195,75 +213,81 @@ int vfc_i2c_xmit_addr(struct vfc_dev *dev, unsigned char addr, char mode)
 int vfc_i2c_xmit_byte(struct vfc_dev *dev,unsigned char *byte) 
 {
 	int ret;
-	dev->regs->i2c_reg=SHIFT((unsigned int)*byte);
+	u32 val = SHIFT((unsigned int)*byte);
 
-	ret=vfc_i2c_wait_for_pin(dev,VFC_I2C_ACK_CHECK); 
+	WRITE_REG(val);
+
+	ret = vfc_i2c_wait_for_pin(dev, VFC_I2C_ACK_CHECK); 
 	switch(ret) {
 	case -ETIMEDOUT: 
 		printk(KERN_ERR "vfc%d: VFC xmit byte timed out or no ack\n",
 		       dev->instance);
 		break;
 	case -EIO:
-		ret=XMIT_LAST_BYTE;
+		ret = XMIT_LAST_BYTE;
 		break;
 	default:
 		break;
-	}
+	};
+
 	return ret;
 }
 
 int vfc_i2c_recv_byte(struct vfc_dev *dev, unsigned char *byte, int last) 
 {
 	int ret;
-	if(last) {
-		dev->regs->i2c_reg=NEGATIVE_ACK;
+
+	if (last) {
+		WRITE_REG(NEGATIVE_ACK);
 		VFC_I2C_DEBUG_PRINTK(("vfc%d: sending negative ack\n",
-				  dev->instance));
+				      dev->instance));
 	} else {
-		dev->regs->i2c_s1=ACK;
+		WRITE_S1(ACK);
 	}
 
-	ret=vfc_i2c_wait_for_pin(dev,VFC_I2C_NO_ACK_CHECK);
+	ret = vfc_i2c_wait_for_pin(dev, VFC_I2C_NO_ACK_CHECK);
 	if(ret) {
 		printk(KERN_ERR "vfc%d: "
-		       "VFC recv byte timed out\n",dev->instance);
+		       "VFC recv byte timed out\n",
+		       dev->instance);
 	}
-	*byte=(dev->regs->i2c_reg) >> 24;
+	*byte = (sbus_readl(&dev->regs->i2c_reg)) >> 24;
 	return ret;
 }
 
 int vfc_i2c_recvbuf(struct vfc_dev *dev, unsigned char addr,
 		    char *buf, int count)
 {
-	int ret,last;
+	int ret, last;
 
-	if(!(count && buf && dev && dev->regs) ) return -EINVAL;
+	if(!(count && buf && dev && dev->regs) )
+		return -EINVAL;
 
-	if((ret=vfc_i2c_wait_for_bus(dev))) {
-		printk(KERN_ERR "vfc%d: VFC I2C bus busy\n",dev->instance);
+	if ((ret = vfc_i2c_wait_for_bus(dev))) {
+		printk(KERN_ERR "vfc%d: VFC I2C bus busy\n", dev->instance);
 		return ret;
 	}
 
-	if((ret=vfc_i2c_xmit_addr(dev,addr,VFC_I2C_READ))) {
-		dev->regs->i2c_s1=SEND_I2C_STOP;
+	if ((ret = vfc_i2c_xmit_addr(dev, addr, VFC_I2C_READ))) {
+		WRITE_S1(SEND_I2C_STOP);
 		vfc_i2c_delay(dev);
 		return ret;
 	}
 	
-	last=0;
-	while(count--) {
-		if(!count) last=1;
-		if((ret=vfc_i2c_recv_byte(dev,buf,last))) {
+	last = 0;
+	while (count--) {
+		if (!count)
+			last = 1;
+		if ((ret = vfc_i2c_recv_byte(dev, buf, last))) {
 			printk(KERN_ERR "vfc%d: "
 			       "VFC error while receiving byte\n",
 			       dev->instance);
-			dev->regs->i2c_s1=SEND_I2C_STOP;
-			ret=-EINVAL;
+			WRITE_S1(SEND_I2C_STOP);
+			ret = -EINVAL;
 		}
 		buf++;
 	}
-	
-	dev->regs->i2c_s1=SEND_I2C_STOP | ACK;
+	WRITE_S1(SEND_I2C_STOP | ACK);
 	vfc_i2c_delay(dev);
 	return ret;
 }
@@ -273,42 +297,43 @@ int vfc_i2c_sendbuf(struct vfc_dev *dev, unsigned char addr,
 {
 	int ret;
 	
-	if(!(buf && dev && dev->regs) ) return -EINVAL;
+	if (!(buf && dev && dev->regs))
+		return -EINVAL;
 	
-	if((ret=vfc_i2c_wait_for_bus(dev))) {
-		printk(KERN_ERR "vfc%d: VFC I2C bus busy\n",dev->instance);
+	if ((ret = vfc_i2c_wait_for_bus(dev))) {
+		printk(KERN_ERR "vfc%d: VFC I2C bus busy\n", dev->instance);
 		return ret;
 	}
 	
-	if((ret=vfc_i2c_xmit_addr(dev,addr,VFC_I2C_WRITE))) {
-		dev->regs->i2c_s1=SEND_I2C_STOP;
+	if ((ret = vfc_i2c_xmit_addr(dev, addr, VFC_I2C_WRITE))) {
+		WRITE_S1(SEND_I2C_STOP);
 		vfc_i2c_delay(dev);
 		return ret;
 	}
 	
 	while(count--) {
-		ret=vfc_i2c_xmit_byte(dev,buf);
+		ret = vfc_i2c_xmit_byte(dev, buf);
 		switch(ret) {
 		case XMIT_LAST_BYTE:
 			VFC_I2C_DEBUG_PRINTK(("vfc%d: "
-					  "Reciever ended transmission with "
-					  " %d bytes remaining\n",
-					  dev->instance,count));
-			ret=0;
+					      "Reciever ended transmission with "
+					      " %d bytes remaining\n",
+					      dev->instance, count));
+			ret = 0;
 			goto done;
 			break;
 		case 0:
 			break;
 		default:
 			printk(KERN_ERR "vfc%d: "
-			       "VFC error while sending byte\n",dev->instance);
+			       "VFC error while sending byte\n", dev->instance);
 			break;
-		}
+		};
+
 		buf++;
 	}
 done:
-	dev->regs->i2c_s1=SEND_I2C_STOP | ACK;
-	
+	WRITE_S1(SEND_I2C_STOP | ACK);
 	vfc_i2c_delay(dev);
 	return ret;
 }

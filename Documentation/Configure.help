@@ -7852,18 +7852,18 @@ CONFIG_QUOTA
 Support for USB (EXPERIMENTAL)
 CONFIG_USB
   Universal Serial Bus (USB) is a specification for a serial bus
-  system which offers higher speeds and more features than the
+  subsystem which offers higher speeds and more features than the
   traditional PC serial port. The bus supplies power to peripherals
   and allows for hot swapping. Up to 127 USB peripherals can be
-  connected to a single USB port in a tree structure; the USB port is
-  the root of the tree, the peripherals are the leafs and the inner
-  nodes are special USB devices called hubs. Many newer PC's have USB
+  connected to a single USB port in a tree structure. The USB port is
+  the root of the tree, the peripherals are the leaves, and the inner
+  nodes are special USB devices called hubs. Many newer PCs have USB
   ports and newer peripherals such as scanners, keyboards, mice,
-  modems and printers support the USB protocol and can be connected to
-  the PC via those ports.
+  modems, and printers support the USB protocol and can be connected
+  to the PC via those ports.
 
   Say Y here if your computer has a USB port and you want to
-  experiment with USB devices. You then need to say Y to at least one
+  use USB devices. You then need to say Y to at least one
   of "UHCI support" or "OHCI support" below (the type of interface
   that the USB hardware in your computer provides) and then choose
   from among the drivers for USB peripherals.
@@ -7888,17 +7888,14 @@ CONFIG_USB_UHCI
   
 OHCI-HCD (compaq and some others) support?
 CONFIG_USB_OHCI_HCD
-  The Open Host Controller Interface is a standard by Compaq for
-  accessing the USB PC hardware (also called USB host controller). If
-  your USB host controller conforms to this standard, say Y. The USB
-  host controllers on most non-Intel architectures and on several x86
-  compatibles with non-Intel chipsets conform to this standard.
+  The Open Host Controller Interface is a standard by
+  Compaq/Microsoft/National for accessing the USB PC hardware (also
+  called USB host controller). If your USB host controller conforms
+  to this standard, say Y. The USB host controllers on most
+  non-Intel architectures and on several x86 compatibles with
+  non-Intel chipsets conform to this standard.
 
   You may want to read the file drivers/usb/README.ohci_hcd.
-
-  There are currently two OHCI drivers in development. You should
-  compile at most one. The other one is "OHCI (compaq and some others)
-  support?", above.
 
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -7938,7 +7935,7 @@ CONFIG_USB_KBD
 
 USB audio parsing support
 CONFIG_USB_AUDIO
-  Say Y here if you want to connect audio equipment such as USB
+  Say Y here if you want to connect USB audio equipment such as
   speakers to your computer's USB port.
 
   This code is also available as a module ( = code which can be
@@ -7969,7 +7966,7 @@ CONFIG_USB_SERIAL
 
 USB Printer support
 CONFIG_USB_PRINTER
-  Say Y here if you want to connect a printer to your computer's USB
+  Say Y here if you want to connect a USB printer to your computer's USB
   port.
 
   This code is also available as a module ( = code which can be
@@ -8001,8 +7998,13 @@ CONFIG_USB_DC2XX
 
 USB SCSI Support
 CONFIG_USB_SCSI
-  Say Y here if you want to connect SCSI devices to your computer's
-  USB port.
+  Say Y here if you want to connect USB mass storage devices to your
+  computer's USB port.
+
+  This code is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called usb-scsi.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
 
 USB SCSI verbose debug
 CONFIG_USB_SCSI_DEBUG
@@ -8027,7 +8029,7 @@ CONFIG_USB_USS720
 
   Manual mode is not limited to printers, any parallel port
   device should work. This driver utilizes manual mode.
-  Note however that some operations are three orders of a magnitude
+  Note however that some operations are three orders of magnitude
   slower than on a PCI/ISA Parallel Port, so timing critical
   applications might not work.
 
@@ -8039,14 +8041,14 @@ CONFIG_USB_USS720
   The module will be called uss720.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
   
-USB /proc filesystem entry support (Preliminary)
+USB /proc filesystem support
 CONFIG_USB_PROC
   This reports USB drivers and devices in the /proc filesystem.
   Entries are located in /proc/bus/usb. The entries are described in
   the file Documentation/proc_usb_info.txt.
 
-  Note that you must say Y to "/proc filesystem support" below for
-  this to work.
+  Note that you must say Y to global "/proc filesystem support" under
+  Filesystems for this to work.
 
 DABUSB driver
 CONFIG_USB_DABUSB
@@ -8055,6 +8057,11 @@ CONFIG_USB_DABUSB
   This driver can be taken as an example for URB-based bulk, control, and
   isochronous transactions.
 
+  This code is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want).
+  The module will be called dabusb.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
+  
 ACPI support
 CONFIG_ACPI
   Advanced Configuration and Power Interface (ACPI) is an interface
@@ -8834,10 +8841,9 @@ CONFIG_NCPFS_OS2_NS
 Lowercase DOS filenames on LONG namespace volume
 CONFIG_NCPFS_SMALLDOS
   If you say Y here, every filename on a NetWare server volume using
-  the OS2/LONG namespace will be converted to lowercase characters.
-  (For regular NetWare file server volumes with DOS namespace, this is
-  done automatically, even if you say N here.) Saying N here will give
-  you these filenames in uppercase.
+  the OS2/LONG namespace and created under DOS or on a volume using
+  DOS namespace will be converted to lowercase characters.
+  Saying N here will give you these filenames in uppercase.
   
   This is only a cosmetic option since the OS2/LONG namespace is case
   insensitive. The only major reason for this option is backward

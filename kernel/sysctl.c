@@ -60,6 +60,7 @@ extern int sem_ctls[];
 
 #ifdef __sparc__
 extern char reboot_command [];
+extern int stop_a_enabled;
 #endif
 #ifdef __powerpc__
 extern unsigned long htab_reclaim_on, zero_paged_on, powersave_nap;
@@ -185,6 +186,8 @@ static ctl_table kern_table[] = {
 #ifdef __sparc__
 	{KERN_SPARC_REBOOT, "reboot-cmd", reboot_command,
 	 256, 0644, NULL, &proc_dostring, &sysctl_string },
+	{KERN_SPARC_STOP_A, "stop-a", &stop_a_enabled, sizeof (int),
+	 0644, NULL, &proc_dointvec},
 #endif
 #ifdef __powerpc__
 	{KERN_PPC_HTABRECLAIM, "htab-reclaim", &htab_reclaim_on, sizeof(int),

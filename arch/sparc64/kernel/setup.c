@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.47 1999/08/31 06:54:55 davem Exp $
+/*  $Id: setup.c,v 1.50 1999/12/01 10:44:45 davem Exp $
  *  linux/arch/sparc64/kernel/setup.c
  *
  *  Copyright (C) 1995,1996  David S. Miller (davem@caip.rutgers.edu)
@@ -279,7 +279,9 @@ unsigned int boot_flags = 0;
 #ifdef CONFIG_SUN_CONSOLE
 static int console_fb __initdata = 0;
 #endif
-static unsigned long memory_size = 0;
+
+/* Exported for mm/init.c:paging_init. */
+unsigned long cmdline_memory_size = 0;
 
 #ifdef PROM_DEBUG_CONSOLE
 static struct console prom_debug_console = {
@@ -398,13 +400,13 @@ static void __init boot_flags_init(char *commands)
 				 * "mem=XXX[kKmM]" overrides the PROM-reported
 				 * memory size.
 				 */
-				memory_size = simple_strtoul(commands + 4,
-							     &commands, 0);
+				cmdline_memory_size = simple_strtoul(commands + 4,
+								     &commands, 0);
 				if (*commands == 'K' || *commands == 'k') {
-					memory_size <<= 10;
+					cmdline_memory_size <<= 10;
 					commands++;
 				} else if (*commands=='M' || *commands=='m') {
-					memory_size <<= 20;
+					cmdline_memory_size <<= 20;
 					commands++;
 				}
 			}
@@ -438,12 +440,22 @@ static struct pt_regs fake_swapper_regs = { { 0, }, 0, 0, 0, 0 };
 
 extern struct consw sun_serial_con;
 
-void __init setup_arch(char **cmdline_p,
-	unsigned long * memory_start_p, unsigned long * memory_end_p)
+void register_prom_callbacks(void)
+{
+	prom_setcallback(prom_callback);
+	prom_feval(": linux-va>tte-data 2 \" va>tte-data\" $callback drop ; "
+		   "' linux-va>tte-data to va>tte-data");
+	prom_feval(": linux-.soft1 1 \" .soft1\" $callback 2drop ; "
+		   "' linux-.soft1 to .soft1");
+	prom_feval(": linux-.soft2 1 \" .soft2\" $callback 2drop ; "
+		   "' linux-.soft2 to .soft2");
+}
+
+void __init setup_arch(char **cmdline_p)
 {
 	extern int serial_console;  /* in console.c, of course */
-	unsigned long lowest_paddr, end_of_phys_memory = 0;
-	int total, i;
+	unsigned long highest_paddr;
+	int i;
 
 	/* Initialize PROM console and command line. */
 	*cmdline_p = prom_getbootargs();
@@ -464,44 +476,23 @@ void __init setup_arch(char **cmdline_p,
 	boot_flags_init(*cmdline_p);
 
 	idprom_init();
-	total = prom_probe_memory();
-
-	lowest_paddr = 0xffffffffffffffffUL;
-	for(i=0; sp_banks[i].num_bytes != 0; i++) {
-		if(sp_banks[i].base_addr < lowest_paddr)
-			lowest_paddr = sp_banks[i].base_addr;
-		end_of_phys_memory = sp_banks[i].base_addr +
-			sp_banks[i].num_bytes;
-		if (memory_size) {
-			if (end_of_phys_memory > memory_size) {
-				sp_banks[i].num_bytes -=
-					(end_of_phys_memory - memory_size);
-				end_of_phys_memory = memory_size;
-				sp_banks[++i].base_addr = 0xdeadbeef;
-				sp_banks[i].num_bytes = 0;
-			}
-		}
-	}
-	prom_setcallback(prom_callback);
-	prom_feval(": linux-va>tte-data 2 \" va>tte-data\" $callback drop ; "
-		   "' linux-va>tte-data to va>tte-data");
-	prom_feval(": linux-.soft1 1 \" .soft1\" $callback 2drop ; "
-		   "' linux-.soft1 to .soft1");
-	prom_feval(": linux-.soft2 1 \" .soft2\" $callback 2drop ; "
-		   "' linux-.soft2 to .soft2");
+	(void) prom_probe_memory();
 
 	/* In paging_init() we tip off this value to see if we need
 	 * to change init_mm.pgd to point to the real alias mapping.
 	 */
-	phys_base = lowest_paddr;
+	phys_base = 0xffffffffffffffffUL;
+	highest_paddr = 0UL;
+	for (i = 0; sp_banks[i].num_bytes != 0; i++) {
+		unsigned long top;
 
-	*memory_start_p = PAGE_ALIGN(((unsigned long) &end));
-	*memory_end_p = (end_of_phys_memory + PAGE_OFFSET);
-
-#ifdef DAVEM_DEBUGGING
-	prom_printf("phys_base[%016lx] memory_start[%016lx] memory_end[%016lx]\n",
-		    phys_base, *memory_start_p, *memory_end_p);
-#endif
+		if (sp_banks[i].base_addr < phys_base)
+			phys_base = sp_banks[i].base_addr;
+		top = sp_banks[i].base_addr +
+			sp_banks[i].num_bytes;
+		if (highest_paddr < top)
+			highest_paddr = top;
+	}
 
 	if (!root_flags)
 		root_mountflags &= ~MS_RDONLY;
@@ -512,6 +503,7 @@ void __init setup_arch(char **cmdline_p,
 	rd_doload = ((ram_flags & RAMDISK_LOAD_FLAG) != 0);	
 #endif
 #ifdef CONFIG_BLK_DEV_INITRD
+// FIXME needs to do the new bootmem alloc stuff
 	if (sparc_ramdisk_image) {
 		unsigned long start = 0;
 		
@@ -537,7 +529,7 @@ void __init setup_arch(char **cmdline_p,
 	/* Due to stack alignment restrictions and assumptions... */
 	init_mm.mmap->vm_page_prot = PAGE_SHARED;
 	init_mm.mmap->vm_start = PAGE_OFFSET;
-	init_mm.mmap->vm_end = *memory_end_p;
+	init_mm.mmap->vm_end = PAGE_OFFSET + highest_paddr;
 	init_task.thread.kregs = &fake_swapper_regs;
 
 #ifdef CONFIG_IP_PNP
@@ -642,6 +634,13 @@ int get_cpuinfo(char *buffer)
 	len += mmu_info(buffer + len);
 #ifdef __SMP__
 	len += smp_info(buffer + len);
+#endif
+#undef ZS_LOG
+#ifdef ZS_LOG
+	{
+		extern int zs_dumplog(char *);
+		len += zs_dumplog(buffer + len);
+	}
 #endif
 	return len;
 }

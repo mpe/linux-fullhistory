@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.111 1999/09/10 10:40:24 davem Exp $
+/*  $Id: setup.c,v 1.113 1999/12/16 14:37:35 anton Exp $
  *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)
@@ -124,7 +124,9 @@ unsigned int boot_flags;
 #ifdef CONFIG_SUN_CONSOLE
 static int console_fb = 0;
 #endif
-static unsigned long memory_size __initdata = 0;
+
+/* Exported for mm/init.c:paging_init. */
+unsigned long cmdline_memory_size __initdata = 0;
 
 void kernel_enter_debugger(void)
 {
@@ -238,13 +240,13 @@ static void __init boot_flags_init(char *commands)
 				 * "mem=XXX[kKmM] overrides the PROM-reported
 				 * memory size.
 				 */
-				memory_size = simple_strtoul(commands + 4,
+				cmdline_memory_size = simple_strtoul(commands + 4,
 							     &commands, 0);
 				if (*commands == 'K' || *commands == 'k') {
-					memory_size <<= 10;
+					cmdline_memory_size <<= 10;
 					commands++;
 				} else if (*commands=='M' || *commands=='m') {
-					memory_size <<= 20;
+					cmdline_memory_size <<= 20;
 					commands++;
 				}
 			}
@@ -266,7 +268,7 @@ extern char cputypval;
 extern unsigned long start, end;
 extern void panic_setup(char *, int *);
 extern void srmmu_end_memory(unsigned long, unsigned long *);
-extern unsigned long sun_serial_setup(unsigned long);
+extern void sun_serial_setup(void);
 
 extern unsigned short root_flags;
 extern unsigned short root_dev;
@@ -297,10 +299,10 @@ static struct console prom_console = {
 	"PROM", prom_cons_write, 0, 0, 0, 0, 0, CON_PRINTBUFFER, 0, 0, 0
 };
 
-void __init setup_arch(char **cmdline_p,
-	unsigned long * memory_start_p, unsigned long * memory_end_p)
+void __init setup_arch(char **cmdline_p)
 {
-	int total, i, packed;
+	int i;
+	unsigned long highest_paddr;
 
 	sparc_ttable = (struct tt_entry *) &start;
 
@@ -329,27 +331,21 @@ void __init setup_arch(char **cmdline_p,
 	strcpy(&cputypval, "ap+");
 #endif
 	printk("ARCH: ");
-	packed = 0;
 	switch(sparc_cpu_model) {
 	case sun4:
 		printk("SUN4\n");
-		packed = 0;
 		break;
 	case sun4c:
 		printk("SUN4C\n");
-		packed = 0;
 		break;
 	case sun4m:
 		printk("SUN4M\n");
-		packed = 1;
 		break;
 	case sun4d:
 		printk("SUN4D\n");
-		packed = 1;
 		break;
 	case sun4e:
 		printk("SUN4E\n");
-		packed = 0;
 		break;
 	case sun4u:
 		printk("SUN4U\n");
@@ -357,7 +353,6 @@ void __init setup_arch(char **cmdline_p,
 	case ap1000:
 		register_console(&prom_console);
 		printk("AP1000\n");
-		packed = 1;
 		break;
 	default:
 		printk("UNKNOWN!\n");
@@ -375,26 +370,20 @@ void __init setup_arch(char **cmdline_p,
 	if (ARCH_SUN4C_SUN4)
 		sun4c_probe_vac();
 	load_mmu();
-	total = prom_probe_memory();
-	*memory_start_p = PAGE_ALIGN(((unsigned long) &end));
+	(void) prom_probe_memory();
 
-	if(!packed) {
-		for(i=0; sp_banks[i].num_bytes != 0; i++) {
-			end_of_phys_memory = sp_banks[i].base_addr +
-					     sp_banks[i].num_bytes;
-			if (memory_size) {
-				if (end_of_phys_memory > memory_size) {
-					sp_banks[i].num_bytes -=
-					    (end_of_phys_memory - memory_size);
-					end_of_phys_memory = memory_size;
-					sp_banks[++i].base_addr = 0xdeadbeef;
-					sp_banks[i].num_bytes = 0;
-				}
-			}
-		}
-		*memory_end_p = (end_of_phys_memory + KERNBASE);
-	} else
-		srmmu_end_memory(memory_size, memory_end_p);
+	phys_base = 0xffffffffUL;
+	highest_paddr = 0UL;
+	for (i = 0; sp_banks[i].num_bytes != 0; i++) {
+		unsigned long top;
+
+		if (sp_banks[i].base_addr < phys_base)
+			phys_base = sp_banks[i].base_addr;
+		top = sp_banks[i].base_addr +
+			sp_banks[i].num_bytes;
+		if (highest_paddr < top)
+			highest_paddr = top;
+	}
 
 	if (!root_flags)
 		root_mountflags &= ~MS_RDONLY;
@@ -405,6 +394,7 @@ void __init setup_arch(char **cmdline_p,
 	rd_doload = ((ram_flags & RAMDISK_LOAD_FLAG) != 0);	
 #endif
 #ifdef CONFIG_BLK_DEV_INITRD
+// FIXME needs to do the new bootmem alloc stuff
 	if (sparc_ramdisk_image) {
 		initrd_start = sparc_ramdisk_image;
 		if (initrd_start < KERNBASE) initrd_start += KERNBASE;
@@ -434,7 +424,10 @@ void __init setup_arch(char **cmdline_p,
 	prom_setsync(prom_sync_me);
 
 #ifdef CONFIG_SUN_SERIAL
-	*memory_start_p = sun_serial_setup(*memory_start_p); /* set this up ASAP */
+#if 0
+	/* XXX We can't do this until the bootmem allocator is working. */
+	sun_serial_setup(); /* set this up ASAP */
+#endif
 #endif
 	{
 #if !CONFIG_SUN_SERIAL
@@ -489,11 +482,10 @@ void __init setup_arch(char **cmdline_p,
 		breakpoint();
 	}
 
-
 	/* Due to stack alignment restrictions and assumptions... */
 	init_mm.mmap->vm_page_prot = PAGE_SHARED;
-	init_mm.mmap->vm_start = KERNBASE;
-	init_mm.mmap->vm_end = *memory_end_p;
+	init_mm.mmap->vm_start = PAGE_OFFSET;
+	init_mm.mmap->vm_end = PAGE_OFFSET + highest_paddr;
 	init_mm.context = (unsigned long) NO_CONTEXT;
 	init_task.thread.kregs = &fake_swapper_regs;
 

@@ -1,4 +1,4 @@
-/* $Id: dma.h,v 1.16 1999/09/10 10:44:32 davem Exp $
+/* $Id: dma.h,v 1.18 1999/12/01 10:47:22 davem Exp $
  * include/asm-sparc64/dma.h
  *
  * Copyright 1996 (C) David S. Miller (davem@caip.rutgers.edu)
@@ -33,22 +33,17 @@ extern spinlock_t  dma_spin_lock;
 #define MAX_DMA_CHANNELS 8
 #define DMA_MODE_READ    1
 #define DMA_MODE_WRITE   2
-
-/* This is actually used. */
-extern unsigned long phys_base;
-#define MAX_DMA_ADDRESS  (phys_base + (0xfe000000UL) + PAGE_OFFSET)
+#define MAX_DMA_ADDRESS  (~0UL)
 
 /* Useful constants */
 #define SIZE_16MB      (16*1024*1024)
 #define SIZE_64K       (64*1024)
 
-/* Structure to describe the current status of DMA registers on the Sparc */
-struct sparc_dma_registers {
-  __volatile__ __u32 cond_reg;	/* DMA condition register */
-  __volatile__ __u32 st_addr;	/* Start address of this transfer */
-  __volatile__ __u32 cnt;	/* How many bytes to transfer */
-  __volatile__ __u32 dma_test;	/* DMA test register */
-};
+/* SBUS DMA controller reg offsets */
+#define DMA_CSR		0x00UL		/* rw  DMA control/status register    0x00   */
+#define DMA_ADDR	0x04UL		/* rw  DMA transfer address register  0x04   */
+#define DMA_COUNT	0x08UL		/* rw  DMA transfer count register    0x08   */
+#define DMA_TEST	0x0cUL		/* rw  DMA test/debug register        0x0c   */
 
 /* DVMA chip revisions */
 enum dvma_rev {
@@ -64,10 +59,10 @@ enum dvma_rev {
 #define DMA_HASCOUNT(rev)  ((rev)==dvmaesc1)
 
 /* Linux DMA information structure, filled during probe. */
-struct Linux_SBus_DMA {
-	struct Linux_SBus_DMA *next;
-	struct linux_sbus_device *SBus_dev;
-	struct sparc_dma_registers *regs;
+struct sbus_dma {
+	struct sbus_dma *next;
+	struct sbus_dev *sdev;
+	unsigned long regs;
 
 	/* Status, misc info */
 	int node;                /* Prom node for this DMA device */
@@ -75,7 +70,7 @@ struct Linux_SBus_DMA {
 	int allocated;           /* Are we "owned" by anyone yet? */
 
 	/* Transfer information. */
-	unsigned int addr;       /* Start address of current transfer */
+	u32 addr;                /* Start address of current transfer */
 	int nbytes;              /* Size of current transfer */
 	int realbytes;           /* For splitting up large transfers, etc. */
 
@@ -83,14 +78,14 @@ struct Linux_SBus_DMA {
 	enum dvma_rev revision;
 };
 
-extern struct Linux_SBus_DMA *dma_chain;
+extern struct sbus_dma *dma_chain;
 
 /* Broken hardware... */
 #define DMA_ISBROKEN(dma)    ((dma)->revision == dvmarev1)
 #define DMA_ISESC1(dma)      ((dma)->revision == dvmaesc1)
 
 /* Main routines in dma.c */
-extern void dvma_init(struct linux_sbus *);
+extern void dvma_init(struct sbus_bus *);
 
 /* Fields in the cond_reg register */
 /* First, the version identification bits */
@@ -124,7 +119,9 @@ extern void dvma_init(struct linux_sbus *);
 #define DMA_SCSI_DISAB   0x00020000        /* No FIFO drains during reg */
 #define DMA_DSBL_WR_INV  0x00020000        /* No EC inval. on slave writes */
 #define DMA_ADD_ENABLE   0x00040000        /* Special ESC DVMA optimization */
-#define DMA_E_BURST8	 0x00040000	   /* ENET: SBUS r/w burst size */
+#define DMA_E_BURSTS	 0x000c0000	   /* ENET: SBUS r/w burst mask */
+#define DMA_E_BURST32	 0x00040000	   /* ENET: SBUS 32 byte r/w burst */
+#define DMA_E_BURST16	 0x00000000	   /* ENET: SBUS 16 byte r/w burst */
 #define DMA_BRST_SZ      0x000c0000        /* SCSI: SBUS r/w burst size */
 #define DMA_BRST64       0x000c0000        /* SCSI: 64byte bursts (HME on UltraSparc only) */
 #define DMA_BRST32       0x00040000        /* SCSI: 32byte bursts */
@@ -156,18 +153,42 @@ extern void dvma_init(struct linux_sbus *);
 #define DMA_MAXEND(addr) (0x01000000UL-(((unsigned long)(addr))&0x00ffffffUL))
 
 /* Yes, I hack a lot of elisp in my spare time... */
-#define DMA_ERROR_P(regs)  ((((regs)->cond_reg) & DMA_HNDL_ERROR))
-#define DMA_IRQ_P(regs)    ((((regs)->cond_reg) & (DMA_HNDL_INTR | DMA_HNDL_ERROR)))
-#define DMA_WRITE_P(regs)  ((((regs)->cond_reg) & DMA_ST_WRITE))
-#define DMA_OFF(regs)      ((((regs)->cond_reg) &= (~DMA_ENABLE)))
-#define DMA_INTSOFF(regs)  ((((regs)->cond_reg) &= (~DMA_INT_ENAB)))
-#define DMA_INTSON(regs)   ((((regs)->cond_reg) |= (DMA_INT_ENAB)))
-#define DMA_PUNTFIFO(regs) ((((regs)->cond_reg) |= DMA_FIFO_INV))
-#define DMA_SETSTART(regs, addr)  ((((regs)->st_addr) = (char *) addr))
-#define DMA_BEGINDMA_W(regs) \
-        ((((regs)->cond_reg |= (DMA_ST_WRITE|DMA_ENABLE|DMA_INT_ENAB))))
-#define DMA_BEGINDMA_R(regs) \
-        ((((regs)->cond_reg |= ((DMA_ENABLE|DMA_INT_ENAB)&(~DMA_ST_WRITE)))))
+#define DMA_ERROR_P(regs)  (((sbus_readl((regs) + DMA_CSR) & DMA_HNDL_ERROR))
+#define DMA_IRQ_P(regs)    (((sbus_readl((regs) + DMA_CSR)) & (DMA_HNDL_INTR | DMA_HNDL_ERROR)))
+#define DMA_WRITE_P(regs)  (((sbus_readl((regs) + DMA_CSR) & DMA_ST_WRITE))
+#define DMA_OFF(__regs)		\
+do {	u32 tmp = sbus_readl((__regs) + DMA_CSR); \
+	tmp &= ~DMA_ENABLE; \
+	sbus_writel(tmp, (__regs) + DMA_CSR); \
+} while(0)
+#define DMA_INTSOFF(__regs)	\
+do {	u32 tmp = sbus_readl((__regs) + DMA_CSR); \
+	tmp &= ~DMA_INT_ENAB; \
+	sbus_writel(tmp, (__regs) + DMA_CSR); \
+} while(0)
+#define DMA_INTSON(__regs)	\
+do {	u32 tmp = sbus_readl((__regs) + DMA_CSR); \
+	tmp |= DMA_INT_ENAB; \
+	sbus_writel(tmp, (__regs) + DMA_CSR); \
+} while(0)
+#define DMA_PUNTFIFO(__regs)	\
+do {	u32 tmp = sbus_readl((__regs) + DMA_CSR); \
+	tmp |= DMA_FIFO_INV; \
+	sbus_writel(tmp, (__regs) + DMA_CSR); \
+} while(0)
+#define DMA_SETSTART(__regs, __addr)	\
+	sbus_writel((u32)(__addr), (__regs) + DMA_ADDR);
+#define DMA_BEGINDMA_W(__regs)	\
+do {	u32 tmp = sbus_readl((__regs) + DMA_CSR); \
+	tmp |= (DMA_ST_WRITE|DMA_ENABLE|DMA_INT_ENAB); \
+	sbus_writel(tmp, (__regs) + DMA_CSR); \
+} while(0)
+#define DMA_BEGINDMA_R(__regs)	\
+do {	u32 tmp = sbus_readl((__regs) + DMA_CSR); \
+	tmp |= (DMA_ENABLE|DMA_INT_ENAB); \
+	tmp &= ~DMA_ST_WRITE; \
+	sbus_writel(tmp, (__regs) + DMA_CSR); \
+} while(0)
 
 /* For certain DMA chips, we need to disable ints upon irq entry
  * and turn them back on when we are done.  So in any ESP interrupt

@@ -178,7 +178,6 @@ obj-$(CONFIG_SGISEEQ) += sgiseeq.o
 obj-$(CONFIG_HAPPYMEAL) += sunhme.o
 obj-$(CONFIG_SUNQE) += sunqe.o
 obj-$(CONFIG_SUNBMAC) += sunbmac.o
-obj-$(CONFIG_SUNBMAC) += sunbmac.o
 obj-$(CONFIG_MYRI_SBUS) += myri_sbus.o
 obj-$(CONFIG_AT1700) += at1700.o
 obj-$(CONFIG_FMV18X) += fmv18x.o

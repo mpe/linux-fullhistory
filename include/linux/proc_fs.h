@@ -26,11 +26,6 @@ enum {
 
 #define PROC_DYNAMIC_FIRST 4096
 #define PROC_NDYNAMIC      4096
-#define PROC_OPENPROM_FIRST (PROC_DYNAMIC_FIRST+PROC_NDYNAMIC)
-#define PROC_OPENPROM	   PROC_OPENPROM_FIRST
-#define PROC_NOPENPROM	   4096
-#define PROC_OPENPROMD_FIRST (PROC_OPENPROM_FIRST+PROC_NOPENPROM)
-#define PROC_NOPENPROMD	   4096
 
 #define PROC_SUPER_MAGIC 0x9fa0
 
@@ -117,17 +112,6 @@ extern int proc_match(int, const char *,struct proc_dir_entry *);
 extern int proc_readdir(struct file *, void *, filldir_t);
 extern struct dentry *proc_lookup(struct inode *, struct dentry *);
 
-struct openpromfs_dev {
- 	struct openpromfs_dev *next;
- 	u32 node;
- 	ino_t inode;
- 	kdev_t rdev;
- 	mode_t mode;
- 	char name[32];
-};
-extern int proc_openprom_regdev(struct openpromfs_dev *);
-extern int proc_openprom_unregdev(struct openpromfs_dev *);
-  
 extern struct inode_operations proc_sys_inode_operations;
 extern struct inode_operations proc_kcore_inode_operations;
 extern struct inode_operations proc_kmsg_inode_operations;

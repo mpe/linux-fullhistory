@@ -1,4 +1,4 @@
-/* $Id: trampoline.S,v 1.10 1999/09/10 10:40:48 davem Exp $
+/* $Id: trampoline.S,v 1.12 1999/12/15 15:45:12 davem Exp $
  * trampoline.S: Jump start slave processors on sparc64.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -14,21 +14,107 @@
 #include <asm/asm_offsets.h>
 
 	.data
-	.align		8
-	.globl		smp_trampoline
-smp_trampoline:		.skip	0x300
+	.align	8
+call_method:
+	.asciz	"call-method"
+	.align	8
+itlb_load:
+	.asciz	"SUNW,itlb-load"
+	.align	8
+dtlb_load:
+	.asciz	"SUNW,dtlb-load"
 
 	.text
 	.align		8
 	.globl		sparc64_cpu_startup, sparc64_cpu_startup_end
 sparc64_cpu_startup:
 	flushw
+
 	mov	(LSU_CONTROL_IC | LSU_CONTROL_DC | LSU_CONTROL_IM | LSU_CONTROL_DM), %g1
 	stxa	%g1, [%g0] ASI_LSU_CONTROL
 	membar	#Sync
-	wrpr	%g0, (PSTATE_PRIV | PSTATE_PEF | PSTATE_IE), %pstate
-	wr	%g0, 0, %fprs
+
 	wrpr	%g0, 15, %pil
+	wr	%g0, 0, %tick_cmpr
+
+	/* Call OBP by hand to lock KERNBASE into i/d tlbs. */
+	mov	%o0, %l0
+
+	sethi	%hi(prom_entry_lock), %g2
+1:	ldstub	[%g2 + %lo(prom_entry_lock)], %g1
+	brnz,pn	%g1, 1b
+	 membar	#StoreLoad | #StoreStore
+
+	sethi	%hi(p1275buf), %g2
+	or	%g2, %lo(p1275buf), %g2
+	ldx	[%g2 + 0x10], %l2
+	mov	%sp, %l1
+	add	%l2, -(192 + 128), %sp
+	flushw
+
+	sethi	%hi(call_method), %g2
+	or	%g2, %lo(call_method), %g2
+	stx	%g2, [%sp + 2047 + 128 + 0x00]
+	mov	5, %g2
+	stx	%g2, [%sp + 2047 + 128 + 0x08]
+	mov	1, %g2
+	stx	%g2, [%sp + 2047 + 128 + 0x10]
+	sethi	%hi(itlb_load), %g2
+	or	%g2, %lo(itlb_load), %g2
+	stx	%g2, [%sp + 2047 + 128 + 0x18]
+	sethi	%hi(mmu_ihandle_cache), %g2
+	lduw	[%g2 + %lo(mmu_ihandle_cache)], %g2
+	stx	%g2, [%sp + 2047 + 128 + 0x20]
+	sethi	%hi(KERNBASE), %g2
+	stx	%g2, [%sp + 2047 + 128 + 0x28]
+	sethi	%hi(kern_locked_tte_data), %g2
+	ldx	[%g2 + %lo(kern_locked_tte_data)], %g2
+	stx	%g2, [%sp + 2047 + 128 + 0x30]
+	mov	63, %g2
+	stx	%g2, [%sp + 2047 + 128 + 0x38]
+	sethi	%hi(p1275buf), %g2
+	or	%g2, %lo(p1275buf), %g2
+	ldx	[%g2 + 0x08], %o1
+	call	%o1
+	 add	%sp, (2047 + 128), %o0
+
+	sethi	%hi(call_method), %g2
+	or	%g2, %lo(call_method), %g2
+	stx	%g2, [%sp + 2047 + 128 + 0x00]
+	mov	5, %g2
+	stx	%g2, [%sp + 2047 + 128 + 0x08]
+	mov	1, %g2
+	stx	%g2, [%sp + 2047 + 128 + 0x10]
+	sethi	%hi(dtlb_load), %g2
+	or	%g2, %lo(dtlb_load), %g2
+	stx	%g2, [%sp + 2047 + 128 + 0x18]
+	sethi	%hi(mmu_ihandle_cache), %g2
+	lduw	[%g2 + %lo(mmu_ihandle_cache)], %g2
+	stx	%g2, [%sp + 2047 + 128 + 0x20]
+	sethi	%hi(KERNBASE), %g2
+	stx	%g2, [%sp + 2047 + 128 + 0x28]
+	sethi	%hi(kern_locked_tte_data), %g2
+	ldx	[%g2 + %lo(kern_locked_tte_data)], %g2
+	stx	%g2, [%sp + 2047 + 128 + 0x30]
+	mov	63, %g2
+	stx	%g2, [%sp + 2047 + 128 + 0x38]
+	sethi	%hi(p1275buf), %g2
+	or	%g2, %lo(p1275buf), %g2
+	ldx	[%g2 + 0x08], %o1
+	call	%o1
+	 add	%sp, (2047 + 128), %o0
+
+	sethi	%hi(prom_entry_lock), %g2
+	stb	%g0, [%g2 + %lo(prom_entry_lock)]
+	membar	#StoreStore | #StoreLoad
+
+	mov	%l1, %sp
+	flushw
+
+	mov	%l0, %o0
+
+	wrpr	%g0, (PSTATE_PRIV | PSTATE_PEF), %pstate
+	wr	%g0, 0, %fprs
 
 	sethi	%uhi(PAGE_OFFSET), %g4
 	sllx	%g4, 32, %g4
@@ -37,99 +123,6 @@ sparc64_cpu_startup:
 	srl	%o0, 0, %o0
 	ldx	[%o0], %g6
 
-	sethi	%uhi(_PAGE_VALID | _PAGE_SZ4MB), %g5
-	sllx	%g5, 32, %g5
-	or	%g5, (_PAGE_CP | _PAGE_CV | _PAGE_P | _PAGE_L | _PAGE_W | _PAGE_G), %g5
-
-	sethi	%uhi(_PAGE_PADDR), %g3
-	or	%g3, %ulo(_PAGE_PADDR), %g3
-	sllx	%g3, 32, %g3
-	sethi	%hi(_PAGE_PADDR), %g7
-	or	%g7, %lo(_PAGE_PADDR), %g7
-	or	%g3, %g7, %g3
-
-	clr	%l0
-	set	0x1fff, %l2
-	rd	%pc, %l3
-	andn	%l3, %l2, %g2
-1:	ldxa	[%l0] ASI_ITLB_TAG_READ, %g1
-	nop
-	nop
-	nop
-	andn	%g1, %l2, %g1
-	cmp	%g1, %g2
-	be,a,pn	%xcc, 2f
-	 ldxa	[%l0] ASI_ITLB_DATA_ACCESS, %g1
-	cmp	%l0, (63 << 3)
-	blu,pt	%xcc, 1b
-	 add	%l0, (1 << 3), %l0
-
-2:	nop
-	nop
-	nop
-	and	%g1, %g3, %g1
-	sub	%g1, %g2, %g1
-	or	%g5, %g1, %g5
-	clr	%l0
-	sethi	%hi(KERNBASE), %g3
-	sethi	%hi(KERNBASE<<1), %g7
-	mov	TLB_TAG_ACCESS, %l7
-1:	ldxa	[%l0] ASI_ITLB_TAG_READ, %g1
-	nop
-	nop
-	nop
-	andn	%g1, %l2, %g1
-	cmp	%g1, %g3
-	blu,pn	%xcc, 2f
-	 cmp	%g1, %g7
-	bgeu,pn	%xcc, 2f
-	 nop
-	stxa	%g0, [%l7] ASI_IMMU
-	stxa	%g0, [%l0] ASI_ITLB_DATA_ACCESS
-2:	cmp	%l0, (63 << 3)
-	blu,pt	%xcc, 1b
-	 add	%l0, (1 << 3), %l0
-
-	nop
-	nop
-	nop
-	clr	%l0
-1:	ldxa	[%l0] ASI_DTLB_TAG_READ, %g1
-	nop
-	nop
-	nop
-	andn	%g1, %l2, %g1
-	cmp	%g1, %g3
-	blu,pn	%xcc, 2f
-	 cmp	%g1, %g7
-	bgeu,pn	%xcc, 2f
-	 nop
-	stxa	%g0, [%l7] ASI_DMMU
-	stxa	%g0, [%l0] ASI_DTLB_DATA_ACCESS
-2:	cmp	%l0, (63 << 3)
-	blu,pt	%xcc, 1b
-	 add	%l0, (1 << 3), %l0
-
-	nop
-	nop
-	nop
-	sethi	%hi(KERNBASE), %g3
-	mov	(63 << 3), %g7
-	stxa	%g3, [%l7] ASI_DMMU
-	stxa	%g5, [%g7] ASI_DTLB_DATA_ACCESS
-	membar	#Sync
-	stxa	%g3, [%l7] ASI_IMMU
-	stxa	%g5, [%g7] ASI_ITLB_DATA_ACCESS
-	membar	#Sync
-	flush	%g3
-	membar	#Sync
-	b,pt	%xcc, 1f
-	 nop
-1:	set	bounce, %g2
-	jmpl	%g2 + %g0, %g0
-	 nop
-
-bounce:
 	wr	%g0, ASI_P, %asi
 
 	mov	PRIMARY_CONTEXT, %g7
@@ -137,24 +130,6 @@ bounce:
 	membar	#Sync
 	mov	SECONDARY_CONTEXT, %g7
 	stxa	%g0, [%g7] ASI_DMMU
-	membar	#Sync
-
-	mov	TLB_TAG_ACCESS, %g2
-	stxa	%g3, [%g2] ASI_IMMU
-	stxa	%g3, [%g2] ASI_DMMU
-
-	mov	(63 << 3), %g7
-	ldxa	[%g7] ASI_ITLB_DATA_ACCESS, %g1
-	andn	%g1, (_PAGE_G), %g1
-	stxa	%g1, [%g7] ASI_ITLB_DATA_ACCESS
-	membar	#Sync
-
-	ldxa	[%g7] ASI_DTLB_DATA_ACCESS, %g1
-	andn	%g1, (_PAGE_G), %g1
-	stxa	%g1, [%g7] ASI_DTLB_DATA_ACCESS
-	membar	#Sync
-
-	flush	%g3
 	membar	#Sync
 
 	mov	1, %g5
@@ -169,12 +144,12 @@ bounce:
 	/* Setup the trap globals, then we can resurface. */
 	rdpr	%pstate, %o1
 	mov	%g6, %o2
-	wrpr	%o1, (PSTATE_AG | PSTATE_IE), %pstate
+	wrpr	%o1, PSTATE_AG, %pstate
 	sethi	%hi(sparc64_ttable_tl0), %g5
 	wrpr	%g5, %tba
 	mov	%o2, %g6
 
-	wrpr	%o1, (PSTATE_MG | PSTATE_IE), %pstate
+	wrpr	%o1, PSTATE_MG, %pstate
 #define KERN_HIGHBITS		((_PAGE_VALID | _PAGE_SZ4MB) ^ 0xfffff80000000000)
 #define KERN_LOWBITS		(_PAGE_CP | _PAGE_CV | _PAGE_P | _PAGE_W)
 #ifdef THIS_IS_CHEETAH
@@ -200,7 +175,7 @@ bounce:
 #undef VPTE_BASE
 
 	/* Setup interrupt globals, we are always SMP. */
-	wrpr	%o1, (PSTATE_IG | PSTATE_IE), %pstate
+	wrpr	%o1, PSTATE_IG, %pstate
 
 	/* Get our UPA MID. */
 	lduw	[%o2 + AOFF_task_processor], %g1
@@ -210,11 +185,14 @@ bounce:
 	/* In theory this is: &(cpu_data[this_upamid].irq_worklists[0]) */
 	sllx	%g1, 7, %g1
 	add	%g5, %g1, %g1
-	add	%g1, 64, %g1
+	add	%g1, 64, %g6
 
 	wrpr	%g0, 0, %wstate
 	or	%o1, PSTATE_IE, %o1
 	wrpr	%o1, 0, %pstate
+
+	call	prom_set_trap_table
+	 sethi	%hi(sparc64_ttable_tl0), %o0
 
 	call	smp_callin
 	 nop

@@ -271,7 +271,7 @@ struct sparcaudio_driver
         int index; 
 
         /* This device */
-        struct linux_sbus_device *dev;
+        struct sbus_dev *dev;
 
 	/* Processes blocked on open() sit here. */
 	wait_queue_head_t open_wait;

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Wed Jun  9 08:58:43 1999
- * Modified at:   Tue Oct  5 09:13:50 1999
+ * Modified at:   Mon Dec 13 11:52:29 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -102,9 +102,6 @@ void ircomm_disconnect_indication(struct ircomm_cb *self, struct sk_buff *skb,
 				  struct ircomm_info *info);
 void ircomm_flow_request(struct ircomm_cb *self, LOCAL_FLOW flow);
 
-extern inline int ircomm_is_connected(struct ircomm_cb *self)
-{
-	return self->state == IRCOMM_CONN;
-}
+#define ircomm_is_connected(self) (self->state == IRCOMM_CONN)
 
 #endif

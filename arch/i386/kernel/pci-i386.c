@@ -102,7 +102,7 @@
  * Expects start=0, end=size-1, flags=resource type.
  */
 
-static int __init pcibios_assign_resource(struct pci_dev *dev, int i)
+int pci_assign_resource(struct pci_dev *dev, int i)
 {
 	struct resource *r = &dev->resource[i];
 	struct resource *pr = pci_find_parent_resource(dev, r);
@@ -272,7 +272,7 @@ static void __init pcibios_assign_resources(void)
 				 *  the BIOS forgot to do so or because we have decided the old
 				 *  address was unusable for some reason.
 				 */
-				pcibios_assign_resource(dev, idx);
+				pci_assign_resource(dev, idx);
 			}
 		}
 		if (pci_probe & PCI_ASSIGN_ROMS) {
@@ -280,7 +280,7 @@ static void __init pcibios_assign_resources(void)
 			r->end -= r->start;
 			r->start = 0;
 			if (r->end)
-				pcibios_assign_resource(dev, PCI_ROM_RESOURCE);
+				pci_assign_resource(dev, PCI_ROM_RESOURCE);
 		}
 	}
 }

@@ -9,6 +9,7 @@
 #include <asm/oplib.h>
 #include <asm/io.h>
 #include <asm/auxio.h>
+#include <asm/string.h>		/* memset(), Linux has no bzero() */
 
 /* Probe and map in the Auxiliary I/O register */
 unsigned char *auxio_register;
@@ -17,6 +18,7 @@ void __init auxio_probe(void)
 {
 	int node, auxio_nd;
 	struct linux_prom_registers auxregs[1];
+	struct resource r;
 
 	switch (sparc_cpu_model) {
 	case sun4d:
@@ -51,10 +53,11 @@ void __init auxio_probe(void)
 	prom_getproperty(auxio_nd, "reg", (char *) auxregs, sizeof(auxregs));
 	prom_apply_obio_ranges(auxregs, 0x1);
 	/* Map the register both read and write */
-	auxio_register = (unsigned char *) sparc_alloc_io(auxregs[0].phys_addr, 0,
-							  auxregs[0].reg_size,
-							  "auxiliaryIO",
-							  auxregs[0].which_io, 0x0);
+	r.flags = auxregs[0].which_io & 0xF;
+	r.start = auxregs[0].phys_addr;
+	r.end = auxregs[0].phys_addr + auxregs[0].reg_size - 1;
+	auxio_register = (unsigned char *) sbus_ioremap(&r, 0,
+	    auxregs[0].reg_size, "auxio");
 	/* Fix the address on sun4m and sun4c. */
 	if((((unsigned long) auxregs[0].phys_addr) & 3) == 3 ||
 	   sparc_cpu_model == sun4c)
@@ -72,6 +75,7 @@ void __init auxio_power_probe(void)
 {
 	struct linux_prom_registers regs;
 	int node;
+	struct resource r;
 
 	/* Attempt to find the sun4m power control node. */
 	node = prom_getchild(prom_root_node);
@@ -84,9 +88,12 @@ void __init auxio_power_probe(void)
 	/* Map the power control register. */
 	prom_getproperty(node, "reg", (char *)&regs, sizeof(regs));
 	prom_apply_obio_ranges(&regs, 1);
-	auxio_power_register = (volatile unsigned char *)
-		sparc_alloc_io(regs.phys_addr, 0, regs.reg_size,
-			       "power off control", regs.which_io, 0);
+	memset(&r, 0, sizeof(r));
+	r.flags = regs.which_io & 0xF;
+	r.start = regs.phys_addr;
+	r.end = regs.phys_addr + regs.reg_size - 1;
+	auxio_power_register = (unsigned char *) sbus_ioremap(&r, 0,
+	    regs.reg_size, "auxpower");
 
 	/* Display a quick message on the console. */
 	if (auxio_power_register)

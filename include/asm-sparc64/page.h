@@ -1,4 +1,4 @@
-/* $Id: page.h,v 1.27 1999/07/31 00:07:25 davem Exp $ */
+/* $Id: page.h,v 1.29 1999/12/09 10:32:43 davem Exp $ */
 
 #ifndef _SPARC64_PAGE_H
 #define _SPARC64_PAGE_H
@@ -21,8 +21,8 @@
 #define BUG()		__builtin_trap()
 #define PAGE_BUG(page)	BUG()
 
-extern void clear_page(unsigned long page);
-extern void copy_page(unsigned long to, unsigned long from);
+extern void clear_page(void *page);
+extern void copy_page(void *to, void *from);
 
 /* GROSS, defining this makes gcc pass these types as aggregates,
  * and thus on the stack, turn this crap off... -DaveM
@@ -103,6 +103,9 @@ register unsigned long page_offset asm("g4");
 #define __pa(x)			((unsigned long)(x) - PAGE_OFFSET)
 #define __va(x)			((void *)((unsigned long) (x) + PAGE_OFFSET))
 #define MAP_NR(addr)		(__pa(addr) >> PAGE_SHIFT)
+
+#define virt_to_phys __pa
+#define phys_to_virt __va
 
 #ifndef __ASSEMBLY__
 

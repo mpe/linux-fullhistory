@@ -12,7 +12,7 @@ if [ "$CONFIG_NET" != "n" ]; then
       comment 'IrDA protocols'
       source net/irda/irlan/Config.in
       source net/irda/ircomm/Config.in
-
+      bool '  Ultra (connectionless) protocol' CONFIG_IRDA_ULTRA
       bool '  IrDA protocol options' CONFIG_IRDA_OPTIONS
       if [ "$CONFIG_IRDA_OPTIONS" != "n" ]; then
 	 comment '  IrDA options'

@@ -47,8 +47,11 @@
 	 mov	3, %o0
 
 	.align 4
-	.global C_LABEL(__strlen_user)
+	.global C_LABEL(__strlen_user), C_LABEL(__strnlen_user)
 C_LABEL(__strlen_user):
+	sethi	%hi(32768), %o1
+C_LABEL(__strnlen_user):
+	mov	%o1, %g1
 	mov	%o0, %o1
 	andcc	%o0, 3, %g0
 	bne	10b
@@ -63,11 +66,16 @@ C_LABEL(__strlen_user):
 2:
 	sub	%o5, %o2, %o4
 	andcc	%o4, %o3, %g0
-	be	13b
+	bne	82f
 	 add	%o0, 4, %o0
+	sub	%o0, %o1, %g2
+81:	cmp	%g2, %g1
+	blu	13b
+	 mov	%o0, %o4
+	ba,a	1f
 
 	/* Check every byte. */
-	srl	%o5, 24, %g5
+82:	srl	%o5, 24, %g5
 	andcc	%g5, 0xff, %g0
 	be	1f
 	 add	%o0, -3, %o4
@@ -80,9 +88,9 @@ C_LABEL(__strlen_user):
 	be	1f
 	 add	%o4, 1, %o4
 	andcc	%o5, 0xff, %g0
-	bne,a	2b
-14:
-	 ld	[%o0], %o5
+	bne	81b
+	 sub	%o0, %o1, %g2
+
 	add	%o4, 1, %o4
 1:
 	retl
@@ -101,4 +109,3 @@ C_LABEL(__strlen_user):
 	.word	11b, 9b
 	.word	12b, 9b
 	.word	13b, 9b
-	.word	14b, 9b

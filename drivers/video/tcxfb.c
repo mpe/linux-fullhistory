@@ -1,4 +1,4 @@
-/* $Id: tcxfb.c,v 1.8 1999/08/10 15:56:26 davem Exp $
+/* $Id: tcxfb.c,v 1.11 1999/11/19 09:57:21 davem Exp $
  * tcxfb.c: TCX 24/8bit frame buffer driver
  *
  * Copyright (C) 1996,1998 Jakub Jelinek (jj@ultra.linux.cz)
@@ -23,6 +23,7 @@
 
 #include <video/sbusfb.h>
 #include <asm/io.h>
+#include <asm/sbus.h>
 
 #include <video/fbcon-cfb8.h>
 
@@ -85,118 +86,167 @@ static struct sbus_mmap_map tcx_mmap_map[] = {
 	{ 0,			0,		0		    }
 };
 
-static void tcx_set_control_plane (struct fb_info_sbusfb *fb)
+static void __tcx_set_control_plane (struct fb_info_sbusfb *fb)
 {
 	u32 *p, *pend;
         
 	p = fb->s.tcx.cplane;
-	if (!p) return;
-	for (pend = p + fb->type.fb_size; p < pend; p++)
-		*p &= 0xffffff;
+	if (p == NULL)
+		return;
+	for (pend = p + fb->type.fb_size; p < pend; p++) {
+		u32 tmp = sbus_readl(p);
+
+		tmp &= 0xffffff;
+		sbus_writel(tmp, p);
+	}
 }
                                                 
 static void tcx_switch_from_graph (struct fb_info_sbusfb *fb)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&fb->lock, flags);
+
 	/* Reset control plane to 8bit mode if necessary */
 	if (fb->open && fb->mmaped)
-		tcx_set_control_plane (fb);
+		__tcx_set_control_plane (fb);
+
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void tcx_loadcmap (struct fb_info_sbusfb *fb, struct display *p, int index, int count)
 {
 	struct bt_regs *bt = fb->s.tcx.bt;
+	unsigned long flags;
 	int i;
                 
-	bt->addr = index << 24;
+	spin_lock_irqsave(&fb->lock, flags);
+	sbus_writel(index << 24, &bt->addr);
 	for (i = index; count--; i++){
-		bt->color_map = fb->color_map CM(i,0) << 24;
-		bt->color_map = fb->color_map CM(i,1) << 24;
-		bt->color_map = fb->color_map CM(i,2) << 24;
+		sbus_writel(fb->color_map CM(i,0) << 24, &bt->color_map);
+		sbus_writel(fb->color_map CM(i,1) << 24, &bt->color_map);
+		sbus_writel(fb->color_map CM(i,2) << 24, &bt->color_map);
 	}
-	bt->addr = 0;
+	sbus_writel(0, &bt->addr);
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void tcx_restore_palette (struct fb_info_sbusfb *fb)
 {
 	struct bt_regs *bt = fb->s.tcx.bt;
+	unsigned long flags;
                 
-	bt->addr = 0;
-	bt->color_map = 0xffffffff;
-	bt->color_map = 0xffffffff;
-	bt->color_map = 0xffffffff;
+	spin_lock_irqsave(&fb->lock, flags);
+	sbus_writel(0, &bt->addr);
+	sbus_writel(0xffffffff, &bt->color_map);
+	sbus_writel(0xffffffff, &bt->color_map);
+	sbus_writel(0xffffffff, &bt->color_map);
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void tcx_setcursormap (struct fb_info_sbusfb *fb, u8 *red, u8 *green, u8 *blue)
 {
         struct bt_regs *bt = fb->s.tcx.bt;
+	unsigned long flags;
+
+	spin_lock_irqsave(&fb->lock, flags);
 
 	/* Note the 2 << 24 is different from cg6's 1 << 24 */
-	bt->addr = 2 << 24;
-	bt->cursor = red[0] << 24;
-	bt->cursor = green[0] << 24;
-	bt->cursor = blue[0] << 24;
-	bt->addr = 3 << 24;
-	bt->cursor = red[1] << 24;
-	bt->cursor = green[1] << 24;
-	bt->cursor = blue[1] << 24;
-	bt->addr = 0;
+	sbus_writel(2 << 24, &bt->addr);
+	sbus_writel(red[0] << 24, &bt->cursor);
+	sbus_writel(green[0] << 24, &bt->cursor);
+	sbus_writel(blue[0] << 24, &bt->cursor);
+	sbus_writel(3 << 24, &bt->addr);
+	sbus_writel(red[1] << 24, &bt->cursor);
+	sbus_writel(green[1] << 24, &bt->cursor);
+	sbus_writel(blue[1] << 24, &bt->cursor);
+	sbus_writel(0, &bt->addr);
+
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 /* Set cursor shape */
 static void tcx_setcurshape (struct fb_info_sbusfb *fb)
 {
 	struct tcx_thc *thc = fb->s.tcx.thc;
+	unsigned long flags;
 	int i;
 
+	spin_lock_irqsave(&fb->lock, flags);
 	for (i = 0; i < 32; i++){
-		thc->thc_cursmask [i] = fb->cursor.bits[0][i];
-		thc->thc_cursbits [i] = fb->cursor.bits[1][i];
+		sbus_writel(fb->cursor.bits[0][i], &thc->thc_cursmask[i]);
+		sbus_writel(fb->cursor.bits[1][i], &thc->thc_cursbits[i]);
 	}
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 /* Load cursor information */
 static void tcx_setcursor (struct fb_info_sbusfb *fb)
 {
-	unsigned int v;
 	struct cg_cursor *c = &fb->cursor;
+	unsigned long flags;
+	unsigned int v;
 
+	spin_lock_irqsave(&fb->lock, flags);
 	if (c->enable)
 		v = ((c->cpos.fbx - c->chot.fbx) << 16)
 		    |((c->cpos.fby - c->chot.fby) & 0xffff);
 	else
 		/* Magic constant to turn off the cursor */
 		v = ((65536-32) << 16) | (65536-32);
-	fb->s.tcx.thc->thc_cursxy = v;
+	sbus_writel(v, &fb->s.tcx.thc->thc_cursxy);
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void tcx_blank (struct fb_info_sbusfb *fb)
 {
-	fb->s.tcx.thc->thc_misc &= ~TCX_THC_MISC_VIDEO;
+	unsigned long flags;
+	u32 tmp;
+
+	spin_lock_irqsave(&fb->lock, flags);
+	tmp = sbus_readl(&fb->s.tcx.thc->thc_misc);
+	tmp &= ~TCX_THC_MISC_VIDEO;
 	/* This should put us in power-save */
-	fb->s.tcx.thc->thc_misc |= TCX_THC_MISC_VSYNC_DIS;
-        fb->s.tcx.thc->thc_misc |= TCX_THC_MISC_HSYNC_DIS;
+	tmp |= TCX_THC_MISC_VSYNC_DIS;
+        tmp |= TCX_THC_MISC_HSYNC_DIS;
+	sbus_writel(tmp, &fb->s.tcx.thc->thc_misc);
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void tcx_unblank (struct fb_info_sbusfb *fb)
 {
-	fb->s.tcx.thc->thc_misc &= ~TCX_THC_MISC_VSYNC_DIS;
-	fb->s.tcx.thc->thc_misc &= ~TCX_THC_MISC_HSYNC_DIS;
-	fb->s.tcx.thc->thc_misc |= TCX_THC_MISC_VIDEO;
+	unsigned long flags;
+	u32 tmp;
+
+	spin_lock_irqsave(&fb->lock, flags);
+	tmp = sbus_readl(&fb->s.tcx.thc->thc_misc);
+	tmp &= ~TCX_THC_MISC_VSYNC_DIS;
+	tmp &= ~TCX_THC_MISC_HSYNC_DIS;
+	tmp |= TCX_THC_MISC_VIDEO;
+	sbus_writel(tmp, &fb->s.tcx.thc->thc_misc);
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void tcx_reset (struct fb_info_sbusfb *fb)
 {
+	unsigned long flags;
+	u32 tmp;
+
+	spin_lock_irqsave(&fb->lock, flags);
 	if (fb->open && fb->mmaped)
-		tcx_set_control_plane(fb);
+		__tcx_set_control_plane(fb);
 	
 	/* Turn off stuff in the Transform Engine. */
-	fb->s.tcx.tec->tec_matrix = 0;
-	fb->s.tcx.tec->tec_clip = 0;
-	fb->s.tcx.tec->tec_vdc = 0;
+	sbus_writel(0, &fb->s.tcx.tec->tec_matrix);
+	sbus_writel(0, &fb->s.tcx.tec->tec_clip);
+	sbus_writel(0, &fb->s.tcx.tec->tec_vdc);
 
 	/* Enable cursor in Brooktree DAC. */
-	fb->s.tcx.bt->addr = 0x06 << 24;
-	fb->s.tcx.bt->control |= 0x03 << 24;
+	sbus_writel(0x06 << 24, &fb->s.tcx.bt->addr);
+	tmp = sbus_readl(&fb->s.tcx.bt->control);
+	tmp |= 0x03 << 24;
+	sbus_writel(tmp, &fb->s.tcx.bt->control);
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void tcx_margins (struct fb_info_sbusfb *fb, struct display *p, int x_margin, int y_margin)
@@ -211,7 +261,8 @@ char __init *tcxfb_init(struct fb_info_sbusfb *fb)
 	struct fb_fix_screeninfo *fix = &fb->fix;
 	struct display *disp = &fb->disp;
 	struct fbtype *type = &fb->type;
-	unsigned long phys = fb->sbdp->reg_addrs[0].phys_addr;
+	struct sbus_dev *sdev = fb->sbdp;
+	unsigned long phys = sdev->reg_addrs[0].phys_addr;
 	int lowdepth, i, j;
 
 #ifndef FBCON_HAS_CFB8
@@ -219,7 +270,7 @@ char __init *tcxfb_init(struct fb_info_sbusfb *fb)
 #endif
 
 	lowdepth = prom_getbool (fb->prom_node, "tcx-8-bit");
-	
+
 	if (lowdepth) {
 		strcpy(fb->info.modename, "TCX8");
 		strcpy(fix->id, "TCX8");
@@ -229,21 +280,27 @@ char __init *tcxfb_init(struct fb_info_sbusfb *fb)
 	}
 	fix->line_length = fb->var.xres_virtual;
 	fix->accel = FB_ACCEL_SUN_TCX;
-	
+
 	disp->scrollmode = SCROLL_YREDRAW;
-	if (!disp->screen_base)
-		disp->screen_base = (char *)sparc_alloc_io(phys, 0, 
-			type->fb_size, "tcx_ram", fb->iospace, 0);
+	if (!disp->screen_base) {
+		disp->screen_base = (char *)
+			sbus_ioremap(&sdev->resource[0], 0,
+				     type->fb_size, "tcx ram");
+	}
 	disp->screen_base += fix->line_length * fb->y_margin + fb->x_margin;
-	fb->s.tcx.tec = (struct tcx_tec *)sparc_alloc_io(fb->sbdp->reg_addrs[7].phys_addr, 0, 
-			sizeof(struct tcx_tec), "tcx_tec", fb->iospace, 0);
-	fb->s.tcx.thc = (struct tcx_thc *)sparc_alloc_io(fb->sbdp->reg_addrs[9].phys_addr, 0, 
-			sizeof(struct tcx_thc), "tcx_thc", fb->iospace, 0);
-	fb->s.tcx.bt = (struct bt_regs *)sparc_alloc_io(fb->sbdp->reg_addrs[8].phys_addr, 0, 
-			sizeof(struct bt_regs), "tcx_dac", fb->iospace, 0);
+	fb->s.tcx.tec = (struct tcx_tec *)
+		sbus_ioremap(&sdev->resource[7], 0,
+			     sizeof(struct tcx_tec), "tcx tec");
+	fb->s.tcx.thc = (struct tcx_thc *)
+		sbus_ioremap(&sdev->resource[9], 0,
+			     sizeof(struct tcx_thc), "tcx thc");
+	fb->s.tcx.bt = (struct bt_regs *)
+		sbus_ioremap(&sdev->resource[8], 0, 
+			     sizeof(struct bt_regs), "tcx dac");
 	if (!lowdepth) {
-		fb->s.tcx.cplane = (u32 *)sparc_alloc_io(fb->sbdp->reg_addrs[4].phys_addr, 0, 
-				type->fb_size*4, "tcx_cplane", fb->iospace, 0);
+		fb->s.tcx.cplane = (u32 *)
+			sbus_ioremap(&sdev->resource[4], 0, 
+				     type->fb_size * sizeof(u32), "tcx cplane");
 		type->fb_depth = 24;
 		fb->switch_from_graph = tcx_switch_from_graph;
 	} else {
@@ -284,19 +341,22 @@ char __init *tcxfb_init(struct fb_info_sbusfb *fb)
 	fb->mmap_map = tcx_mmap_map;
 
 	/* Initialize Brooktree DAC */
-	fb->s.tcx.bt->addr = 0x04 << 24;         /* color planes */
-	fb->s.tcx.bt->control = 0xff << 24;
-	fb->s.tcx.bt->addr = 0x05 << 24;
-	fb->s.tcx.bt->control = 0x00 << 24;
-	fb->s.tcx.bt->addr = 0x06 << 24;         /* overlay plane */
-	fb->s.tcx.bt->control = 0x73 << 24;
-	fb->s.tcx.bt->addr = 0x07 << 24;
-	fb->s.tcx.bt->control = 0x00 << 24;
+	sbus_writel(0x04 << 24, &fb->s.tcx.bt->addr);         /* color planes */
+	sbus_writel(0xff << 24, &fb->s.tcx.bt->control);
+	sbus_writel(0x05 << 24, &fb->s.tcx.bt->addr);
+	sbus_writel(0x00 << 24, &fb->s.tcx.bt->control);
+	sbus_writel(0x06 << 24, &fb->s.tcx.bt->addr);         /* overlay plane */
+	sbus_writel(0x73 << 24, &fb->s.tcx.bt->control);
+	sbus_writel(0x07 << 24, &fb->s.tcx.bt->addr);
+	sbus_writel(0x00 << 24, &fb->s.tcx.bt->control);
 
-	sprintf(idstring, "tcx at %x.%08lx Rev %d.%d %s", fb->iospace, phys,
-		    (fb->s.tcx.thc->thc_rev >> TCX_THC_REV_REV_SHIFT) & TCX_THC_REV_REV_MASK,
-                    (fb->s.tcx.thc->thc_rev >> TCX_THC_REV_MINREV_SHIFT) & TCX_THC_REV_MINREV_MASK,
-		    lowdepth ? "8-bit only" : "24-bit depth");
+	sprintf(idstring, "tcx at %x.%08lx Rev %d.%d %s",
+		fb->iospace, phys,
+		((sbus_readl(&fb->s.tcx.thc->thc_rev) >> TCX_THC_REV_REV_SHIFT) &
+		 TCX_THC_REV_REV_MASK),
+		((sbus_readl(&fb->s.tcx.thc->thc_rev) >> TCX_THC_REV_MINREV_SHIFT) &
+		 TCX_THC_REV_MINREV_MASK),
+		lowdepth ? "8-bit only" : "24-bit depth");
 		    
 	tcx_reset(fb);
 

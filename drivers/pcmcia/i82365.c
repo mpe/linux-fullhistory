@@ -2414,7 +2414,7 @@ static int cb_set_socket(u_short sock, socket_state_t *state)
 {
     socket_info_t *s = &socket[sock];
     u_int reg;
-    
+
     DEBUG(1, "yenta: SetSocket(%d, flags %#3.3x, Vcc %d, Vpp %d, "
 	  "io_irq %d, csc_mask %#2.2x)\n", sock, state->flags,
 	  state->Vcc, state->Vpp, state->io_irq, state->csc_mask);
@@ -2601,7 +2601,12 @@ static int proc_read_cardbus(char *buf, char **start, off_t pos,
 
 static void pcic_proc_setup(u_short sock, struct proc_dir_entry *base)
 {
+#ifdef CONFIG_PROC_FS
     socket_info_t *s = &socket[sock];
+
+    if (s->flags & IS_ALIVE)
+    	return;
+
     create_proc_read_entry("info", 0, base, proc_read_info, s);
     create_proc_read_entry("exca", 0, base, proc_read_exca, s);
 #ifdef CONFIG_PCI
@@ -2613,6 +2618,7 @@ static void pcic_proc_setup(u_short sock, struct proc_dir_entry *base)
 	create_proc_read_entry("cardbus", 0, base, proc_read_cardbus, s);
 #endif
     s->proc = base;
+#endif
 }
 
 static void pcic_proc_remove(u_short sock)
@@ -2635,31 +2641,152 @@ static void pcic_proc_remove(u_short sock)
 
 /*====================================================================*/
 
-typedef int (*subfn_t)(u_short, void *);
+/*
+ * This looks like a lot of duplication, and it is. What we should REALLY
+ * have is separate functions for the separate cases, instead of having
+ * duplicate tests in them - and then have the test in the place that sets
+ * up the ss_entry function pointer table instead!
+ *
+ * For example, the IS_CARDBUS thing is something we know _statically_,
+ * and as such it is a waste of time and space to test it dynamically.
+ *
+ * Much of this goes away by splitting off the cases. One small step at a
+ * time..
+ */
 
-static subfn_t pcic_service_table[] = {
-    (subfn_t)&pcic_register_callback,
-    (subfn_t)&pcic_inquire_socket,
-    (subfn_t)&i365_get_status,
-    (subfn_t)&i365_get_socket,
-    (subfn_t)&i365_set_socket,
-    (subfn_t)&i365_get_io_map,
-    (subfn_t)&i365_set_io_map,
-    (subfn_t)&i365_get_mem_map,
-    (subfn_t)&i365_set_mem_map,
 #ifdef CONFIG_CARDBUS
-    (subfn_t)&cb_get_bridge,
-    (subfn_t)&cb_set_bridge,
+#define is_cardbus(sock) ((socket[(sock)].flags & IS_CARDBUS) && (cb_readl((sock), CB_SOCKET_STATE) & CB_SS_32BIT))
+#endif
+
+/*
+ * The locking is rather broken. Why do we only lock for ISA, not for
+ * all other cases? If there are reasons to lock, we should lock. Not
+ * this silly conditional.
+ *
+ * Plan: make it bug-for-bug compatible with the old stuff, and clean
+ * it up when the infrastructure is done.
+ */
+#ifdef CONFIG_ISA
+#define LOCKED(x) do { \
+	if (socket[(sock)].flags & IS_CARDBUS) return x; \
+	do { \
+		int retval; \
+		unsigned long flags; \
+		spin_lock_irqsave(&isa_lock, flags); \
+		retval = x; \
+		spin_unlock_irqrestore(&isa_lock, flags); \
+		return retval; \
+	} while (0); \
+} while (0)
 #else
-    NULL, NULL,
+#define LOCKED(x) return x
 #endif
-#ifdef CONFIG_PROC_FS
-    (subfn_t)&pcic_proc_setup
+	
+
+static int pcic_get_status(u_short sock, u_int *value)
+{
+	if (socket[sock].flags & IS_ALIVE) {
+		*value = 0;
+		return -EINVAL;
+	}
+
+#ifdef CONFIG_CARDBUS
+	if (is_cardbus(sock))
+		return cb_get_status(sock, value);
 #endif
+	LOCKED(i365_get_status(sock, value));
+}
+
+static int pcic_get_socket(u_short sock, socket_state_t *state)
+{
+	if (socket[sock].flags & IS_ALIVE)
+		return -EINVAL;
+
+#ifdef CONFIG_CARDBUS
+	if (is_cardbus(sock))
+		return cb_get_socket(sock, state);
+#endif
+	LOCKED(i365_get_socket(sock, state));
+}
+
+static int pcic_set_socket(u_short sock, socket_state_t *state)
+{
+	if (socket[sock].flags & IS_ALIVE)
+		return -EINVAL;
+
+#ifdef CONFIG_CARDBUS
+	if (is_cardbus(sock))
+		return cb_set_socket(sock, state);
+#endif
+	LOCKED(i365_set_socket(sock, state));
+}
+
+static int pcic_get_io_map(u_short sock, struct pccard_io_map *io)
+{
+	if (socket[sock].flags & IS_ALIVE)
+		return -EINVAL;
+
+	LOCKED(i365_get_io_map(sock, io));
+}
+
+static int pcic_set_io_map(u_short sock, struct pccard_io_map *io)
+{
+	if (socket[sock].flags & IS_ALIVE)
+		return -EINVAL;
+
+	LOCKED(i365_set_io_map(sock, io));
+}
+
+static int pcic_get_mem_map(u_short sock, struct pccard_mem_map *mem)
+{
+	if (socket[sock].flags & IS_ALIVE)
+		return -EINVAL;
+
+	LOCKED(i365_get_mem_map(sock, mem));
+}
+
+static int pcic_set_mem_map(u_short sock, struct pccard_mem_map *mem)
+{
+	if (socket[sock].flags & IS_ALIVE)
+		return -EINVAL;
+
+	LOCKED(i365_set_mem_map(sock, mem));
+}
+
+static int pcic_get_bridge(u_short sock, struct cb_bridge_map *m)
+{
+#ifdef CONFIG_CARDBUS
+	return cb_get_bridge(sock, m);
+#else
+	return -EINVAL;
+#endif
+}
+
+static int pcic_set_bridge(u_short sock, struct cb_bridge_map *m)
+{
+#ifdef CONFIG_CARDBUS
+	return cb_set_bridge(sock, m);
+#else
+	return -EINVAL;
+#endif
+}
+
+static struct pccard_operations pcic_operations = {
+	pcic_register_callback,
+	pcic_inquire_socket,
+	pcic_get_status,
+	pcic_get_socket,
+	pcic_set_socket,
+	pcic_get_io_map,
+	pcic_set_io_map,
+	pcic_get_mem_map,
+	pcic_set_mem_map,
+	pcic_get_bridge,
+	pcic_set_bridge,
+	pcic_proc_setup
 };
 
-#define NFUNC (sizeof(pcic_service_table)/sizeof(subfn_t))
-
+#if 0	
 static int pcic_service(u_int sock, u_int cmd, void *arg)
 {
     subfn_t fn;
@@ -2697,6 +2824,7 @@ static int pcic_service(u_int sock, u_int cmd, void *arg)
     ISA_UNLOCK(sock, flags);
     return ret;
 } /* pcic_service */
+#endif
 
 /*====================================================================*/
 
@@ -2746,7 +2874,7 @@ static int __init init_i82365(void)
     }
 #endif
     
-    if (register_ss_entry(sockets, &pcic_service) != 0)
+    if (register_ss_entry(sockets, &pcic_operations) != 0)
 	printk(KERN_NOTICE "i82365: register_ss_entry() failed\n");
 
     /* Finally, schedule a polling interrupt */
@@ -2768,7 +2896,7 @@ static void __exit exit_i82365(void)
 #ifdef CONFIG_PROC_FS
     for (i = 0; i < sockets; i++) pcic_proc_remove(i);
 #endif
-    unregister_ss_entry(&pcic_service);
+    unregister_ss_entry(&pcic_operations);
     if (poll_interval != 0)
 	del_timer(&poll_timer);
 #ifdef CONFIG_ISA

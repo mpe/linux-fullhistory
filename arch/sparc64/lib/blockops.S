@@ -1,4 +1,4 @@
-/* $Id: blockops.S,v 1.18 1999/07/30 09:35:37 davem Exp $
+/* $Id: blockops.S,v 1.19 1999/11/19 05:52:45 davem Exp $
  * blockops.S: UltraSparc block zero optimized routines.
  *
  * Copyright (C) 1996,1998 David S. Miller (davem@caip.rutgers.edu)
@@ -136,19 +136,19 @@ clear_page:		/* %o0=dest */
 
 	faddd		%f0, %f2, %f12			! FPA	Group
 	fmuld		%f0, %f2, %f14			! FPM
-	rd		%asi, %g2			! LSU	Group
-	wr		%g0, ASI_BLK_P, %asi		! LSU	Group
 	membar		#StoreLoad | #StoreStore | #LoadStore	! LSU	Group
-1:	stda		%f0, [%o0 + 0x00] %asi		! Store	Group
-	stda		%f0, [%o0 + 0x40] %asi		! Store	Group
-	stda		%f0, [%o0 + 0x80] %asi		! Store	Group
-	stda		%f0, [%o0 + 0xc0] %asi		! Store	Group
+1:	stda		%f0, [%o0 + %g0] ASI_BLK_P	! Store	Group
+	add		%o0, 0x40, %o0			! IEU0
+	stda		%f0, [%o0 + %g0] ASI_BLK_P	! Store	Group
+	add		%o0, 0x40, %o0			! IEU0
+	stda		%f0, [%o0 + %g0] ASI_BLK_P	! Store	Group
 
+	add		%o0, 0x40, %o0			! IEU0	Group
+	stda		%f0, [%o0 + %g0] ASI_BLK_P	! Store	Group
 	subcc		%o1, 1, %o1			! IEU1
 	bne,pt		%icc, 1b			! CTI
-	 add		%o0, 0x100, %o0			! IEU0	Group
+	 add		%o0, 0x40, %o0			! IEU0	Group
 	membar		#Sync				! LSU	Group
-	wr		%g2, %g0, %asi			! LSU	Group
 	VISExitHalf
 
 	stxa		%g5, [%o2] ASI_DMMU

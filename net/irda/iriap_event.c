@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Aug 21 00:02:07 1997
- * Modified at:   Sun Oct 31 22:13:00 1999
+ * Modified at:   Fri Dec 17 15:59:13 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997, 1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -42,29 +42,29 @@ static void state_s_calling      (struct iriap_cb *self, IRIAP_EVENT event,
 static void state_s_outstanding  (struct iriap_cb *self, IRIAP_EVENT event, 
 				  struct sk_buff *skb);
 static void state_s_replying     (struct iriap_cb *self, IRIAP_EVENT event, 
-				   struct sk_buff *skb);
+				  struct sk_buff *skb);
 static void state_s_wait_for_call(struct iriap_cb *self, IRIAP_EVENT event, 
-				   struct sk_buff *skb);
+				  struct sk_buff *skb);
 static void state_s_wait_active  (struct iriap_cb *self, IRIAP_EVENT event, 
-				   struct sk_buff *skb);
+				  struct sk_buff *skb);
 
 static void state_r_disconnect   (struct iriap_cb *self, IRIAP_EVENT event, 
-				   struct sk_buff *skb);
+				  struct sk_buff *skb);
 static void state_r_call         (struct iriap_cb *self, IRIAP_EVENT event, 
-				   struct sk_buff *skb);
+				  struct sk_buff *skb);
 static void state_r_waiting      (struct iriap_cb *self, IRIAP_EVENT event, 
-				   struct sk_buff *skb);
+				  struct sk_buff *skb);
 static void state_r_wait_active  (struct iriap_cb *self, IRIAP_EVENT event, 
-				   struct sk_buff *skb);
+				  struct sk_buff *skb);
 static void state_r_receiving    (struct iriap_cb *self, IRIAP_EVENT event, 
-				   struct sk_buff *skb);
+				  struct sk_buff *skb);
 static void state_r_execute      (struct iriap_cb *self, IRIAP_EVENT event, 
-				   struct sk_buff *skb);
+				  struct sk_buff *skb);
 static void state_r_returning    (struct iriap_cb *self, IRIAP_EVENT event, 
-				   struct sk_buff *skb);
+				  struct sk_buff *skb);
 
 static void (*iriap_state[])(struct iriap_cb *self, IRIAP_EVENT event, 
-			      struct sk_buff *skb) = { 
+			     struct sk_buff *skb) = { 
 	/* Client FSM */
 	state_s_disconnect,
 	state_s_connecting,
@@ -141,7 +141,7 @@ void iriap_do_call_event(struct iriap_cb *self, IRIAP_EVENT event,
 }
 
 void iriap_do_server_event(struct iriap_cb *self, IRIAP_EVENT event, 
-			    struct sk_buff *skb) 
+			   struct sk_buff *skb) 
 {
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IAS_MAGIC, return;);
@@ -178,8 +178,8 @@ static void state_s_disconnect(struct iriap_cb *self, IRIAP_EVENT event,
 		iriap_next_client_state(self, S_CONNECTING);
 		self->skb = skb;
 		ret = irlmp_connect_request(self->lsap, LSAP_IAS, 
-					     self->saddr, self->daddr, 
-					     NULL, NULL);
+					    self->saddr, self->daddr, 
+					    NULL, NULL);
 		break;
 	case IAP_LM_DISCONNECT_INDICATION:
 		break;
@@ -206,7 +206,7 @@ static void state_s_connecting(struct iriap_cb *self, IRIAP_EVENT event,
 		/*
 		 *  Jump to S-Call FSM
 		 */
-		iriap_do_call_event(self, IAP_CALL_REQUEST, skb);
+		iriap_do_call_event(self, IAP_CALL_REQUEST, NULL);
 		/* iriap_call_request(self, 0,0,0); */
 		iriap_next_client_state(self, S_CALL);
 		break;
@@ -258,15 +258,16 @@ static void state_s_make_call(struct iriap_cb *self, IRIAP_EVENT event,
 
 	switch (event) {
 	case IAP_CALL_REQUEST:
-		irlmp_data_request(self->lsap, self->skb);
+		skb = self->skb;
+		self->skb = NULL;
+
+		irlmp_data_request(self->lsap, skb);
 		iriap_next_call_state(self, S_OUTSTANDING);
 		break;
 	default:
 		IRDA_DEBUG(0, __FUNCTION__ "(), Unknown event %d\n", event);
 		break;
 	}
-	if (skb)
-		dev_kfree_skb(skb);
 }
 
 /*
@@ -297,7 +298,6 @@ static void state_s_outstanding(struct iriap_cb *self, IRIAP_EVENT event,
 		iriap_send_ack(self);
 		/*LM_Idle_request(idle); */
 
-		dev_kfree_skb(skb);
 		iriap_next_call_state(self, S_WAIT_FOR_CALL);
 		break;
 	default:
@@ -324,7 +324,7 @@ static void state_s_replying(struct iriap_cb *self, IRIAP_EVENT event,
  *
  */
 static void state_s_wait_for_call(struct iriap_cb *self, IRIAP_EVENT event, 
-				   struct sk_buff *skb) 
+				  struct sk_buff *skb) 
 {
 	IRDA_DEBUG(0, __FUNCTION__ "(), Not implemented\n");
 }
@@ -400,14 +400,13 @@ static void state_r_disconnect(struct iriap_cb *self, IRIAP_EVENT event,
 static void state_r_call(struct iriap_cb *self, IRIAP_EVENT event, 
 			 struct sk_buff *skb) 
 {
-	IRDA_DEBUG(4, "state_r_call()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
 	switch (event) {
 	case IAP_LM_DISCONNECT_INDICATION:
 		/* Abort call */
 		iriap_next_server_state(self, R_DISCONNECT);
-		iriap_next_r_connect_state(self, R_WAITING);
-		
+		iriap_next_r_connect_state(self, R_WAITING);		
 		break;
 	default:
 		IRDA_DEBUG(0, __FUNCTION__ "(), unknown event!\n");
@@ -431,8 +430,8 @@ static void state_r_waiting(struct iriap_cb *self, IRIAP_EVENT event,
 	IRDA_DEBUG(0, __FUNCTION__ "(), Not implemented\n");
 }
 
-static void state_r_wait_active(struct iriap_cb *self, 
-				 IRIAP_EVENT event, struct sk_buff *skb) 
+static void state_r_wait_active(struct iriap_cb *self, IRIAP_EVENT event, 
+				struct sk_buff *skb) 
 {
 	IRDA_DEBUG(0, __FUNCTION__ "(), Not implemented\n");
 }

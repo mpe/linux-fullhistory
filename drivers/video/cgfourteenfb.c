@@ -1,4 +1,4 @@
-/* $Id: cgfourteenfb.c,v 1.5 1999/08/10 15:56:02 davem Exp $
+/* $Id: cgfourteenfb.c,v 1.7 1999/11/19 09:57:01 davem Exp $
  * cgfourteenfb.c: CGfourteen frame buffer driver
  *
  * Copyright (C) 1996,1998 Jakub Jelinek (jj@ultra.linux.cz)
@@ -153,10 +153,10 @@ struct cg14_xlut{
  * I currently use the clut instead of the Xlut
  */
 struct cg14_clut {
-	unsigned int c_clut [256];
-	unsigned int c_clutd [256];    /* i wonder what the 'd' is for */
-	unsigned int c_clut_inc [256];
-	unsigned int c_clutd_inc [256];
+	u32 c_clut [256];
+	u32 c_clutd [256];    /* i wonder what the 'd' is for */
+	u32 c_clut_inc [256];
+	u32 c_clutd_inc [256];
 };
 
 static struct sbus_mmap_map cg14_mmap_map[] __initdata = {
@@ -179,40 +179,55 @@ static struct sbus_mmap_map cg14_mmap_map[] __initdata = {
 	{ 0,			0,			0		    }
 };
 
-static void cg14_loadcmap (struct fb_info_sbusfb *fb, struct display *p, int index, int count)
+static void cg14_loadcmap (struct fb_info_sbusfb *fb, struct display *p,
+			   int index, int count)
 {
 	struct cg14_clut *clut = fb->s.cg14.clut;
+	unsigned long flags;
 	        
-	for (; count--; index++)
-		clut->c_clut[index] = 
-			(fb->color_map CM(index,2) << 16) |
-			(fb->color_map CM(index,1) << 8) |
-			(fb->color_map CM(index,0));
+	spin_lock_irqsave(&fb->lock, flags);
+	for (; count--; index++) {
+		u32 val;
+
+		val = ((fb->color_map CM(index,2) << 16) |
+		       (fb->color_map CM(index,1) << 8) |
+		       (fb->color_map CM(index,0)));
+		sbus_writel(val, &clut->c_clut[index]);
+	}
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
-static void cg14_margins (struct fb_info_sbusfb *fb, struct display *p, int x_margin, int y_margin)
+static void cg14_margins (struct fb_info_sbusfb *fb, struct display *p,
+			  int x_margin, int y_margin)
 {
-	p->screen_base += (y_margin - fb->y_margin) * p->line_length + (x_margin - fb->x_margin);
+	p->screen_base += (y_margin - fb->y_margin) *
+		p->line_length + (x_margin - fb->x_margin);
 }
 
 static void cg14_setcursormap (struct fb_info_sbusfb *fb, u8 *red, u8 *green, u8 *blue)
 {
 	struct cg14_cursor *cur = fb->s.cg14.cursor;
+	unsigned long flags;
 	
-	cur->color0 = ((red[0]) | (green[0] << 8) | (blue[0] << 16));
-	cur->color1 = ((red[1]) | (green[1] << 8) | (blue[1] << 16));
+	spin_lock_irqsave(&fb->lock, flags);
+	sbus_writel(((red[0]) | (green[0] << 8) | (blue[0] << 16)), &cur->color0);
+	sbus_writel(((red[1]) | (green[1] << 8) | (blue[1] << 16)), &cur->color1);
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 /* Set cursor shape */
 static void cg14_setcurshape (struct fb_info_sbusfb *fb)
 {
 	struct cg14_cursor *cur = fb->s.cg14.cursor;
+	unsigned long flags;
 	int i;
 
+	spin_lock_irqsave(&fb->lock, flags);
 	for (i = 0; i < 32; i++){
-		cur->cpl0 [i] = fb->cursor.bits[0][i];
-		cur->cpl1 [i] = fb->cursor.bits[1][i];
+		sbus_writel(fb->cursor.bits[0][i], &cur->cpl0[i]);
+		sbus_writel(fb->cursor.bits[1][i], &cur->cpl1[i]);
 	}
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 /* Load cursor information */
@@ -220,40 +235,67 @@ static void cg14_setcursor (struct fb_info_sbusfb *fb)
 {
 	struct cg_cursor *c = &fb->cursor;
 	struct cg14_cursor *cur = fb->s.cg14.cursor;
+	unsigned long flags;
                 
-	if (c->enable)
-		cur->ccr |= CG14_CCR_ENABLE;
-	cur->cursx = ((c->cpos.fbx - c->chot.fbx) & 0xfff);
-	cur->cursy = ((c->cpos.fby - c->chot.fby) & 0xfff);
+	spin_lock_irqsave(&fb->lock, flags);
+	if (c->enable) {
+		u8 tmp = sbus_readb(&cur->ccr);
+
+		tmp |= CG14_CCR_ENABLE;
+		sbus_writeb(tmp, &cur->ccr);
+	}
+	sbus_writew(((c->cpos.fbx - c->chot.fbx) & 0xfff), &cur->cursx);
+	sbus_writew(((c->cpos.fby - c->chot.fby) & 0xfff), &cur->cursy);
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void cg14_switch_from_graph (struct fb_info_sbusfb *fb)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&fb->lock, flags);
+
 	/* Set the 8-bpp mode */
 	if (fb->open && fb->mmaped){
 		volatile char *mcr = &fb->s.cg14.regs->mcr;
+		char tmp;
 	                                
 		fb->s.cg14.mode = 8;
-		*mcr = (*mcr & ~(CG14_MCR_PIXMODE_MASK));
+		tmp = sbus_readb(mcr);
+		tmp &= ~(CG14_MCR_PIXMODE_MASK);
+		sbus_writeb(tmp, mcr);
 	}
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void cg14_reset (struct fb_info_sbusfb *fb)
 {
 	volatile char *mcr = &fb->s.cg14.regs->mcr;
+	unsigned long flags;
+	char tmp;
 	        
-	*mcr = (*mcr & ~(CG14_MCR_PIXMODE_MASK));
+	spin_lock_irqsave(&fb->lock, flags);
+	tmp = sbus_readb(mcr);
+	tmp &= ~(CG14_MCR_PIXMODE_MASK);
+	sbus_writeb(tmp, mcr);
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static int cg14_ioctl (struct fb_info_sbusfb *fb, unsigned int cmd, unsigned long arg)
 {
 	volatile char *mcr = &fb->s.cg14.regs->mcr;
 	struct mdi_cfginfo *mdii;
-	int mode;
+	unsigned long flags;
+	int mode, ret = 0;
+	char tmp;
 	        
 	switch (cmd) {
 	case MDI_RESET:
-		*mcr = (*mcr & ~CG14_MCR_PIXMODE_MASK);
+		spin_lock_irqsave(&fb->lock, flags);
+		tmp = sbus_readb(mcr);
+		tmp &= ~CG14_MCR_PIXMODE_MASK;
+		sbus_writeb(tmp, mcr);
+		spin_unlock_irqrestore(&fb->lock, flags);
 		break;
 	case MDI_GET_CFGINFO:
 		mdii = (struct mdi_cfginfo *)arg;
@@ -266,26 +308,35 @@ static int cg14_ioctl (struct fb_info_sbusfb *fb, unsigned int cmd, unsigned lon
 		break;
 	case MDI_SET_PIXELMODE:
 		get_user_ret(mode, (int *)arg, -EFAULT);
+
+		spin_lock_irqsave(&fb->lock, flags);
+		tmp = sbus_readb(mcr);
 		switch (mode){
 		case MDI_32_PIX:
-			*mcr = (*mcr & ~CG14_MCR_PIXMODE_MASK) |
+			tmp = (tmp & ~CG14_MCR_PIXMODE_MASK) |
 				(CG14_MCR_PIXMODE_32 << CG14_MCR_PIXMODE_SHIFT);
 			break;
 		case MDI_16_PIX:
-			*mcr = (*mcr & ~CG14_MCR_PIXMODE_MASK) | 0x20;
+			tmp = (tmp & ~CG14_MCR_PIXMODE_MASK) | 0x20;
 			break;
 		case MDI_8_PIX:
-			*mcr = (*mcr & ~CG14_MCR_PIXMODE_MASK);
+			tmp = (tmp & ~CG14_MCR_PIXMODE_MASK);
 			break;
 		default:
-			return -ENOSYS;
+			ret = -ENOSYS;
+			break;
+		};
+		if (ret == 0) {
+			sbus_writeb(tmp, mcr);
+			fb->s.cg14.mode = mode;
 		}
-		fb->s.cg14.mode = mode;
+		spin_unlock_irqrestore(&fb->lock, flags);
 		break;
 	default:
-		return -EINVAL;
-	}
-	return 0;
+		ret = -EINVAL;
+	};
+
+	return ret;
 }
 
 static unsigned long __init get_phys(unsigned long addr)
@@ -372,7 +423,7 @@ char __init *cgfourteenfb_init(struct fb_info_sbusfb *fb)
 	fb->reset = cg14_reset;
 	fb->switch_from_graph = cg14_switch_from_graph;
 	fb->ioctl = cg14_ioctl;
-	
+
 	fb->s.cg14.mode = 8;
 	fb->s.cg14.ramsize = (is_8mb) ? 0x800000 : 0x400000;
 	

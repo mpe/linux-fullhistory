@@ -1,9 +1,9 @@
-/* $Id: pci_sabre.c,v 1.2 1999/09/05 04:58:06 davem Exp $
+/* $Id: pci_sabre.c,v 1.7 1999/12/19 09:17:51 davem Exp $
  * pci_sabre.c: Sabre specific PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@caipfs.rutgers.edu)
  * Copyright (C) 1998, 1999 Eddie C. Dost   (ecd@skynet.be)
- * Copyright (C) 1999 Jakub Jelinek   (jj@ultra.linux.cz)
+ * Copyright (C) 1999 Jakub Jelinek   (jakub@redhat.com)
  */
 
 #include <linux/kernel.h>
@@ -65,6 +65,14 @@
 #define  SABRE_IOMMUCTRL_LCKEN	 0x0000000000800000UL	/* IOTLB lock enable */
 #define  SABRE_IOMMUCTRL_LCKPTR	 0x0000000000780000UL	/* IOTLB lock pointer */
 #define  SABRE_IOMMUCTRL_TSBSZ	 0x0000000000070000UL	/* TSB Size */
+#define  SABRE_IOMMU_TSBSZ_1K   0x0000000000000000
+#define  SABRE_IOMMU_TSBSZ_2K   0x0000000000010000
+#define  SABRE_IOMMU_TSBSZ_4K   0x0000000000020000
+#define  SABRE_IOMMU_TSBSZ_8K   0x0000000000030000
+#define  SABRE_IOMMU_TSBSZ_16K  0x0000000000040000
+#define  SABRE_IOMMU_TSBSZ_32K  0x0000000000050000
+#define  SABRE_IOMMU_TSBSZ_64K  0x0000000000060000
+#define  SABRE_IOMMU_TSBSZ_128K 0x0000000000070000
 #define  SABRE_IOMMUCTRL_TBWSZ	 0x0000000000000004UL	/* TSB assumed page size */
 #define  SABRE_IOMMUCTRL_DENAB	 0x0000000000000002UL	/* Diagnostic Mode Enable */
 #define  SABRE_IOMMUCTRL_ENAB	 0x0000000000000001UL	/* IOMMU Enable */
@@ -601,7 +609,7 @@ static unsigned int __init sabre_irq_build(struct pci_controller_info *p,
 					   unsigned int ino)
 {
 	struct ino_bucket *bucket;
-	volatile unsigned int *imap, *iclr;
+	unsigned long imap, iclr;
 	unsigned long imap_off, iclr_off;
 	int pil, inofixup = 0;
 
@@ -620,12 +628,12 @@ static unsigned int __init sabre_irq_build(struct pci_controller_info *p,
 
 	/* Now build the IRQ bucket. */
 	pil = sabre_ino_to_pil(pdev, ino);
-	imap = (volatile unsigned int *)__va(p->controller_regs + imap_off);
-	imap += 1;
+	imap = p->controller_regs + imap_off;
+	imap += 4;
 
 	iclr_off = sabre_iclr_offset(ino);
-	iclr = (volatile unsigned int *)__va(p->controller_regs + iclr_off);
-	iclr += 1;
+	iclr = p->controller_regs + iclr_off;
+	iclr += 4;
 
 	if ((ino & 0x20) == 0)
 		inofixup = ino & 0x03;
@@ -717,13 +725,13 @@ static void sabre_check_iommu_error(struct pci_controller_info *p,
 				type_string = "Unknown";
 				break;
 			};
-			printk("SABRE%d: IOMMU TAG(%d)[error(%s)wr(%d)sz(%dK)vpg(%08lx)]\n",
-			       p->index, i, type_string,
+			printk("SABRE%d: IOMMU TAG(%d)[RAW(%016lx)error(%s)wr(%d)sz(%dK)vpg(%08lx)]\n",
+			       p->index, i, tag, type_string,
 			       ((tag & SABRE_IOMMUTAG_WRITE) ? 1 : 0),
 			       ((tag & SABRE_IOMMUTAG_SIZE) ? 64 : 8),
 			       ((tag & SABRE_IOMMUTAG_VPN) << PAGE_SHIFT));
-			printk("SABRE%d: IOMMU DATA(%d)[valid(%d)used(%d)cache(%d)ppg(%016lx)\n",
-			       p->index, i,
+			printk("SABRE%d: IOMMU DATA(%d)[RAW(%016lx)valid(%d)used(%d)cache(%d)ppg(%016lx)\n",
+			       p->index, i, data,
 			       ((data & SABRE_IOMMUDATA_VALID) ? 1 : 0),
 			       ((data & SABRE_IOMMUDATA_USED) ? 1 : 0),
 			       ((data & SABRE_IOMMUDATA_CACHE) ? 1 : 0),
@@ -814,6 +822,10 @@ static void sabre_ce_intr(int irq, void *dev_id, struct pt_regs *regs)
 		"DMA Read" :
 		((error_bits & SABRE_CEAFSR_PDWR) ?
 		 "DMA Write" : "???")));
+
+	/* XXX Use syndrome and afar to print out module string just like
+	 * XXX UDB CE trap handler does... -DaveM
+	 */
 	printk("SABRE%d: syndrome[%02lx] bytemask[%04lx] dword_offset[%lx] "
 	       "was_block(%d)\n",
 	       p->index,
@@ -1021,16 +1033,7 @@ static void __init sabre_base_address_update(struct pci_dev *pdev, int resource)
 static void __init apb_init(struct pci_controller_info *p, struct pci_bus *sabre_bus)
 {
 	struct pci_dev *pdev;
-	u32 dword;
 	u16 word;
-
-	for(pdev = pci_devices; pdev; pdev = pdev->next) {
-		if(pdev->vendor == PCI_VENDOR_ID_SUN &&
-		   pdev->device == PCI_DEVICE_ID_SUN_SABRE) {
-			sabre_write_byte(pdev, PCI_LATENCY_TIMER, 64);
-			break;
-		}
-	}
 
 	for (pdev = sabre_bus->devices; pdev; pdev = pdev->sibling) {
 		if (pdev->vendor == PCI_VENDOR_ID_SUN &&
@@ -1044,32 +1047,6 @@ static void __init apb_init(struct pci_controller_info *p, struct pci_bus *sabre
 			/* Status register bits are "write 1 to clear". */
 			sabre_write_word(pdev, PCI_STATUS, 0xffff);
 			sabre_write_word(pdev, PCI_SEC_STATUS, 0xffff);
-
-			sabre_read_word(pdev, PCI_BRIDGE_CONTROL, &word);
-			word = PCI_BRIDGE_CTL_MASTER_ABORT |
-			       PCI_BRIDGE_CTL_SERR |
-			       PCI_BRIDGE_CTL_PARITY;
-			sabre_write_word(pdev, PCI_BRIDGE_CONTROL, word);
-
-			sabre_read_dword(pdev, APB_PCI_CONTROL_HIGH, &dword);
-			dword = APB_PCI_CTL_HIGH_SERR |
-				APB_PCI_CTL_HIGH_ARBITER_EN;
-			sabre_write_dword(pdev, APB_PCI_CONTROL_HIGH, dword);
-
-			/* Systems with SIMBA are usually workstations, so
-			 * we configure to park to SIMBA not to the previous
-			 * bus owner.
-			 */
-			sabre_read_dword(pdev, APB_PCI_CONTROL_LOW, &dword);
-			dword = APB_PCI_CTL_LOW_ERRINT_EN | 0x0f;
-			sabre_write_dword(pdev, APB_PCI_CONTROL_LOW, dword);
-
-			/* Don't mess with the retry limit and PIO/DMA latency
-			 * timer settings.  But do set primary and secondary
-			 * latency timers.
-			 */
-			sabre_write_byte(pdev, PCI_LATENCY_TIMER, 64);
-			sabre_write_byte(pdev, PCI_SEC_LATENCY_TIMER, 64);
 		}
 	}
 }
@@ -1124,30 +1101,49 @@ static void __init sabre_scan_bus(struct pci_controller_info *p)
 static void __init sabre_iommu_init(struct pci_controller_info *p,
 				    int tsbsize, unsigned long dvma_offset)
 {
+#ifndef NEW_PCI_DMA_MAP
 	struct linux_mlist_p1275 *mlist;
-	unsigned long tsbbase, i, n, order;
+	unsigned long n;
 	iopte_t *iopte;
+#endif
+	unsigned long tsbbase, i, order;
 	u64 control;
 
+	/* Setup initial software IOMMU state. */
+	spin_lock_init(&p->iommu.lock);
+	p->iommu.iommu_cur_ctx = 0;
+
+	/* Register addresses. */
+	p->iommu.iommu_control  = p->controller_regs + SABRE_IOMMU_CONTROL;
+	p->iommu.iommu_tsbbase  = p->controller_regs + SABRE_IOMMU_TSBBASE;
+	p->iommu.iommu_flush    = p->controller_regs + SABRE_IOMMU_FLUSH;
+	p->iommu.write_complete_reg = p->controller_regs + SABRE_WRSYNC;
+	/* Sabre's IOMMU lacks ctx flushing. */
+	p->iommu.iommu_ctxflush = 0;
+                                        
 	/* Invalidate TLB Entries. */
 	control = sabre_read(p->controller_regs + SABRE_IOMMU_CONTROL);
-	control |= IOMMU_CTRL_DENAB;
+	control |= SABRE_IOMMUCTRL_DENAB;
 	sabre_write(p->controller_regs + SABRE_IOMMU_CONTROL, control);
 
 	for(i = 0; i < 16; i++)
 		sabre_write(p->controller_regs + SABRE_IOMMU_DATA + (i * 8UL), 0);
 
-	control &= ~(IOMMU_CTRL_DENAB);
+	control &= ~(SABRE_IOMMUCTRL_DENAB);
 	sabre_write(p->controller_regs + SABRE_IOMMU_CONTROL, control);
 
 	for(order = 0;; order++)
 		if((PAGE_SIZE << order) >= ((tsbsize * 1024) * 8))
 			break;
-	tsbbase = __get_free_pages(GFP_DMA, order);
+	tsbbase = __get_free_pages(GFP_KERNEL, order);
 	if (!tsbbase) {
 		prom_printf("SABRE_IOMMU: Error, gfp(tsb) failed.\n");
 		prom_halt();
 	}
+	p->iommu.page_table = (iopte_t *)tsbbase;
+	p->iommu.page_table_map_base = dvma_offset;
+
+#ifndef NEW_PCI_DMA_MAP
 	iopte = (iopte_t *)tsbbase;
 
 	/* Initialize to "none" settings. */
@@ -1216,27 +1212,47 @@ out:
 		prom_printf("Try booting with mem=xxxM or similar\n");
 		prom_halt();
 	}
+#endif
 
 	sabre_write(p->controller_regs + SABRE_IOMMU_TSBBASE, __pa(tsbbase));
 
 	control = sabre_read(p->controller_regs + SABRE_IOMMU_CONTROL);
-	control &= ~(IOMMU_CTRL_TSBSZ);
-	control |= (IOMMU_CTRL_TBWSZ | IOMMU_CTRL_ENAB);
+#ifndef NEW_PCI_DMA_MAP
+	control &= ~(SABRE_IOMMUCTRL_TSBSZ);
+	control |= (SABRE_IOMMUCTRL_TBWSZ | SABRE_IOMMUCTRL_ENAB);
 	switch(tsbsize) {
 	case 8:
-		control |= IOMMU_TSBSZ_8K;
+		control |= SABRE_IOMMU_TSBSZ_8K;
 		break;
 	case 16:
-		control |= IOMMU_TSBSZ_16K;
+		control |= SABRE_IOMMU_TSBSZ_16K;
 		break;
 	case 32:
-		control |= IOMMU_TSBSZ_32K;
+		control |= SABRE_IOMMU_TSBSZ_32K;
 		break;
 	default:
 		prom_printf("iommu_init: Illegal TSB size %d\n", tsbsize);
 		prom_halt();
 		break;
 	}
+#else
+	control &= ~(SABRE_IOMMUCTRL_TSBSZ | SABRE_IOMMUCTRL_TBWSZ);
+	control |= SABRE_IOMMUCTRL_ENAB;
+	switch(tsbsize) {
+	case 64:
+		control |= SABRE_IOMMU_TSBSZ_64K;
+		p->iommu.page_table_sz_bits = 16;
+		break;
+	case 128:
+		control |= SABRE_IOMMU_TSBSZ_128K;
+		p->iommu.page_table_sz_bits = 17;
+		break;
+	default:
+		prom_printf("iommu_init: Illegal TSB size %d\n", tsbsize);
+		prom_halt();
+		break;
+	}
+#endif
 	sabre_write(p->controller_regs + SABRE_IOMMU_CONTROL, control);
 }
 
@@ -1445,6 +1461,7 @@ void __init sabre_init(int pnode)
 	}
 
 	switch(vdma[1]) {
+#ifndef NEW_PCI_DMA_MAP
 		case 0x20000000:
 			tsbsize = 8;
 			break;
@@ -1454,6 +1471,15 @@ void __init sabre_init(int pnode)
 		case 0x80000000:
 			tsbsize = 32;
 			break;
+#else
+		case 0x20000000:
+			tsbsize = 64;
+			break;
+		case 0x40000000:
+		case 0x80000000:
+			tsbsize = 128;
+			break;
+#endif
 		default:
 			prom_printf("SABRE: strange virtual-dma size.\n");
 			prom_halt();

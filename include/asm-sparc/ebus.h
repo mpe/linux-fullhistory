@@ -1,4 +1,4 @@
-/* $Id: ebus.h,v 1.1 1998/09/22 05:54:41 jj Exp $
+/* $Id: ebus.h,v 1.2 1999/09/11 23:05:55 zaitcev Exp $
  * ebus.h: PCI to Ebus pseudo driver software state.
  *
  * Copyright (C) 1997 Eddie C. Dost (ecd@skynet.be) 
@@ -9,6 +9,9 @@
 #ifndef __SPARC_EBUS_H
 #define __SPARC_EBUS_H
 
+#ifndef _LINUX_IOPORT_H
+#include <linux/ioport.h>
+#endif
 #include <asm/oplib.h>
 
 struct linux_ebus_child {
@@ -17,7 +20,7 @@ struct linux_ebus_child {
 	struct linux_ebus		*bus;
 	int				 prom_node;
 	char				 prom_name[64];
-	unsigned long			 base_address[PROMREG_MAX];
+	struct resource			 resource[PROMREG_MAX];
 	int				 num_addrs;
 	unsigned int			 irqs[PROMINTR_MAX];
 	int				 num_irqs;
@@ -29,7 +32,7 @@ struct linux_ebus_device {
 	struct linux_ebus		*bus;
 	int				 prom_node;
 	char				 prom_name[64];
-	unsigned long			 base_address[PROMREG_MAX];
+	struct resource			 resource[PROMREG_MAX];
 	int				 num_addrs;
 	unsigned int			 irqs[PROMINTR_MAX];
 	int				 num_irqs;
@@ -91,11 +94,5 @@ extern void ebus_init(void);
 
 #define for_each_edevchild(dev, child)					\
         for((child) = (dev)->children; (child); (child) = (child)->next)
-
-/* P3: Actually unused in sparc */
-#define for_all_ebusdev(dev, bus)					\
-	for ((bus) = ebus_chain, ((dev) = (bus) ? (bus)->devices : 0);	\
-	     (bus); ((dev) = (dev)->next ? (dev)->next :		\
-	     ((bus) = (bus)->next, (bus) ? (bus)->devices : 0)))
 
 #endif /* !(__SPARC_EBUS_H) */

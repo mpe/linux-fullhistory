@@ -1,8 +1,8 @@
-/* $Id: iommu.c,v 1.11 1999/08/31 06:54:34 davem Exp $
+/* $Id: iommu.c,v 1.15 1999/11/19 04:11:53 davem Exp $
  * iommu.c:  IOMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
- * Copyright (C) 1995 Peter A. Zaitcev (zaitcev@ithil.mcst.ru)
+ * Copyright (C) 1995 Pete Zaitcev
  * Copyright (C) 1996 Eddie C. Dost    (ecd@skynet.be)
  * Copyright (C) 1997,1998 Jakub Jelinek    (jj@sunsite.mff.cuni.cz)
  */
@@ -12,10 +12,12 @@
 #include <linux/init.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
+#include <asm/scatterlist.h>
 #include <asm/pgtable.h>
 #include <asm/sbus.h>
 #include <asm/io.h>
 #include <asm/mxcc.h>
+#include <asm/mbus.h>
 
 /* srmmu.c */
 extern int viking_mxcc_present;
@@ -45,20 +47,23 @@ static inline void iommu_map_dvma_pages_for_iommu(struct iommu_struct *iommu)
 }
 
 void __init
-iommu_init(int iommund, struct linux_sbus *sbus)
+iommu_init(int iommund, struct sbus_bus *sbus)
 {
 	unsigned int impl, vers, ptsize;
 	unsigned long tmp;
 	struct iommu_struct *iommu;
 	struct linux_prom_registers iommu_promregs[PROMREG_MAX];
+	struct resource r;
 	int i;
 
 	iommu = kmalloc(sizeof(struct iommu_struct), GFP_ATOMIC);
 	prom_getproperty(iommund, "reg", (void *) iommu_promregs,
 			 sizeof(iommu_promregs));
+	memset(&r, 0, sizeof(r));
+	r.flags = iommu_promregs[0].which_io;
+	r.start = iommu_promregs[0].phys_addr;
 	iommu->regs = (struct iommu_regs *)
-		sparc_alloc_io(iommu_promregs[0].phys_addr, 0, (PAGE_SIZE * 3),
-			       "IOMMU registers", iommu_promregs[0].which_io, 0x0);
+		sbus_ioremap(&r, 0, PAGE_SIZE * 3, "iommu_regs");
 	if(!iommu->regs)
 		panic("Cannot map IOMMU registers.");
 	impl = (iommu->regs->control & IOMMU_CTRL_IMPL) >> 28;
@@ -137,18 +142,18 @@ iommu_init(int iommund, struct linux_sbus *sbus)
 	       impl, vers, iommu->page_table, ptsize);
 }
 
-static __u32 iommu_get_scsi_one_noflush(char *vaddr, unsigned long len, struct linux_sbus *sbus)
+static __u32 iommu_get_scsi_one_noflush(char *vaddr, unsigned long len, struct sbus_bus *sbus)
 {
 	return (__u32)vaddr;
 }
 
-static __u32 iommu_get_scsi_one_gflush(char *vaddr, unsigned long len, struct linux_sbus *sbus)
+static __u32 iommu_get_scsi_one_gflush(char *vaddr, unsigned long len, struct sbus_bus *sbus)
 {
 	flush_page_for_dma(0);
 	return (__u32)vaddr;
 }
 
-static __u32 iommu_get_scsi_one_pflush(char *vaddr, unsigned long len, struct linux_sbus *sbus)
+static __u32 iommu_get_scsi_one_pflush(char *vaddr, unsigned long len, struct sbus_bus *sbus)
 {
 	unsigned long page = ((unsigned long) vaddr) & PAGE_MASK;
 
@@ -159,81 +164,110 @@ static __u32 iommu_get_scsi_one_pflush(char *vaddr, unsigned long len, struct li
 	return (__u32)vaddr;
 }
 
-static void iommu_get_scsi_sgl_noflush(struct mmu_sglist *sg, int sz, struct linux_sbus *sbus)
+static void iommu_get_scsi_sgl_noflush(struct scatterlist *sg, int sz, struct sbus_bus *sbus)
 {
-	for (; sz >= 0; sz--)
-		sg[sz].dvma_addr = (__u32) (sg[sz].addr);
+	for (; sz >= 0; sz--) {
+		sg[sz].dvma_address = (__u32) (sg[sz].address);
+		sg[sz].dvma_length = (__u32) (sg[sz].length);
+	}
 }
 
-static void iommu_get_scsi_sgl_gflush(struct mmu_sglist *sg, int sz, struct linux_sbus *sbus)
+static void iommu_get_scsi_sgl_gflush(struct scatterlist *sg, int sz, struct sbus_bus *sbus)
 {
 	flush_page_for_dma(0);
-	for (; sz >= 0; sz--)
-		sg[sz].dvma_addr = (__u32) (sg[sz].addr);
+	for (; sz >= 0; sz--) {
+		sg[sz].dvma_address = (__u32) (sg[sz].address);
+		sg[sz].dvma_length = (__u32) (sg[sz].length);
+	}
 }
 
-static void iommu_get_scsi_sgl_pflush(struct mmu_sglist *sg, int sz, struct linux_sbus *sbus)
+static void iommu_get_scsi_sgl_pflush(struct scatterlist *sg, int sz, struct sbus_bus *sbus)
 {
 	unsigned long page, oldpage = 0;
 
 	while(sz >= 0) {
-		page = ((unsigned long) sg[sz].addr) & PAGE_MASK;
+		page = ((unsigned long) sg[sz].address) & PAGE_MASK;
 		if (oldpage == page)
 			page += PAGE_SIZE; /* We flushed that page already */
-		while(page < (unsigned long)(sg[sz].addr + sg[sz].len)) {
+		while(page < (unsigned long)(sg[sz].address + sg[sz].length)) {
 			flush_page_for_dma(page);
 			page += PAGE_SIZE;
 		}
-		sg[sz].dvma_addr = (__u32) (sg[sz].addr);
+		sg[sz].dvma_address = (__u32) (sg[sz].address);
+		sg[sz].dvma_length = (__u32) (sg[sz].length);
 		sz--;
 		oldpage = page - PAGE_SIZE;
 	}
 }
 
-static void iommu_release_scsi_one(__u32 vaddr, unsigned long len, struct linux_sbus *sbus)
+static void iommu_release_scsi_one(__u32 vaddr, unsigned long len, struct sbus_bus *sbus)
 {
 }
 
-static void iommu_release_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_sbus *sbus)
+static void iommu_release_scsi_sgl(struct scatterlist *sg, int sz, struct sbus_bus *sbus)
 {
 }
 
 #ifdef CONFIG_SBUS
-static void iommu_map_dma_area(unsigned long addr, int len)
+static void iommu_map_dma_area(unsigned long va, __u32 addr, int len)
 {
-	unsigned long page, end;
+	unsigned long page, end, ipte_cache;
 	pgprot_t dvma_prot;
-	struct iommu_struct *iommu = SBus_chain->iommu;
+	struct iommu_struct *iommu = sbus_root->iommu;
 	iopte_t *iopte = iommu->page_table;
 	iopte_t *first;
 
-	if(viking_mxcc_present)
+	if(viking_mxcc_present || srmmu_modtype == HyperSparc) {
 		dvma_prot = __pgprot(SRMMU_CACHE | SRMMU_ET_PTE | SRMMU_PRIV);
-	else
+		ipte_cache = 1;
+	} else {
 		dvma_prot = __pgprot(SRMMU_ET_PTE | SRMMU_PRIV);
+		ipte_cache = 0;
+	}
 
 	iopte += ((addr - iommu->start) >> PAGE_SHIFT);
 	first = iopte;
 	end = PAGE_ALIGN((addr + len));
 	while(addr < end) {
-		page = get_free_page(GFP_KERNEL);
-		if(!page) {
-			prom_printf("alloc_dvma: Cannot get a dvma page\n");
-			prom_halt();
-		} else {
+		page = va;
+		{
 			pgd_t *pgdp;
 			pmd_t *pmdp;
 			pte_t *ptep;
 
-			pgdp = pgd_offset(init_task.mm, addr);
+			if (viking_mxcc_present)
+				viking_mxcc_flush_page(page);
+			else if (viking_flush)
+				viking_flush_page(page);
+			else
+				flush_page_to_ram(page);
+
+			pgdp = pgd_offset(&init_mm, addr);
 			pmdp = pmd_offset(pgdp, addr);
 			ptep = pte_offset(pmdp, addr);
 
 			set_pte(ptep, pte_val(mk_pte(page, dvma_prot)));
-			iopte_val(*iopte++) = MKIOPTE(mmu_v2p(page));
+			if (ipte_cache != 0) {
+				iopte_val(*iopte++) = MKIOPTE(mmu_v2p(page));
+			} else {
+				iopte_val(*iopte++) =
+					MKIOPTE(mmu_v2p(page)) & ~IOPTE_CACHE;
+			}
 		}
 		addr += PAGE_SIZE;
+		va += PAGE_SIZE;
 	}
+	/* P3: why do we need this?
+	 *
+	 * DAVEM: Because there are several aspects, none of which
+	 *        are handled by a single interface.  Some cpus are
+	 *        completely not I/O DMA coherent, and some have
+	 *        virtually indexed caches.  The driver DMA flushing
+	 *        methods handle the former case, but here during
+	 *        IOMMU page table modifications, and usage of non-cacheable
+	 *        cpu mappings of pages potentially in the cpu caches, we have
+	 *        to handle the latter case as well.
+	 */
 	flush_cache_all();
 	if(viking_mxcc_present) {
 		unsigned long start = ((unsigned long) first) & PAGE_MASK;
@@ -252,6 +286,10 @@ static void iommu_map_dma_area(unsigned long addr, int len)
 	}
 	flush_tlb_all();
 	iommu_invalidate(iommu->regs);
+}
+
+static void iommu_unmap_dma_area(unsigned long addr, int len)
+{
 }
 #endif
 
@@ -287,5 +325,6 @@ void __init ld_mmu_iommu(void)
 
 #ifdef CONFIG_SBUS
 	BTFIXUPSET_CALL(mmu_map_dma_area, iommu_map_dma_area, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(mmu_unmap_dma_area, iommu_unmap_dma_area, BTFIXUPCALL_NORM);
 #endif
 }

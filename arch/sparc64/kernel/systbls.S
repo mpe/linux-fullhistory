@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.56 1999/07/31 00:06:17 davem Exp $
+/* $Id: systbls.S,v 1.60 1999/12/15 17:51:19 jj Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -9,6 +9,8 @@
  *
  * Copyright (C) 1995 Adrian M. Rodriguez (adrian@remus.rutgers.edu)
  */
+
+#include <linux/config.h>
 
 	.text
 	.align	1024
@@ -129,6 +131,8 @@ sys_call_table:
 /*250*/	.word sys_mremap, sys_sysctl, sys_getsid, sys_fdatasync, sys_nfsservctl
 	.word sys_aplib
 
+#if defined(CONFIG_SUNOS_EMUL) || defined(CONFIG_SOLARIS_EMUL) || \
+    defined(CONFIG_SOLARIS_EMUL_MODULE)
 	/* Now the 32-bit SunOS syscall table. */
 
 	.align 1024
@@ -221,3 +225,5 @@ sunos_sys_table:
 	.word sunos_nosys, sunos_nosys
 /*250*/	.word sunos_nosys, sunos_nosys, sunos_nosys
 	.word sunos_nosys, sunos_nosys, sys_aplib
+
+#endif

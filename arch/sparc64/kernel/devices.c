@@ -19,10 +19,9 @@ unsigned prom_cpu_nodes[64];
 int linux_num_cpus = 0;
 
 extern void cpu_probe(void);
-extern unsigned long central_probe(unsigned long);
+extern void central_probe(void);
 
-unsigned long __init
-device_scan(unsigned long mem_start)
+void __init device_scan(void)
 {
 	char node_str[128];
 	int nd, prom_node_cpu, thismid;
@@ -54,13 +53,8 @@ device_scan(unsigned long mem_start)
 				prom_getproperty(scan, "upa-portid",
 						 (char *) &thismid, sizeof(thismid));
 				linux_cpus[cpu_ctr].mid = thismid;
-#ifdef __SMP__				
-				/* Don't pollute PROM screen with these messages. If the kernel is screwed enough
-				   that console does not start up, then we don't care how many CPUs have been found,
-				   if it starts up, the user can use console=prom to see it. */
-				/* prom_printf("Found CPU %d (node=%08x,mid=%d)\n", cpu_ctr, (unsigned) scan, thismid); */
-				printk("Found CPU %d (node=%08x,mid=%d)\n", cpu_ctr, (unsigned) scan, thismid);
-#endif				       
+				printk("Found CPU %d (node=%08x,mid=%d)\n",
+				       cpu_ctr, (unsigned) scan, thismid);
 				cpu_ctr++;
 			}
 		};
@@ -68,19 +62,15 @@ device_scan(unsigned long mem_start)
 			prom_printf("No CPU nodes found, cannot continue.\n");
 			prom_halt();
 		}
-#ifdef __SMP__		
 		printk("Found %d CPU prom device tree node(s).\n", cpu_ctr);
-#endif		
-	};
+	}
 	prom_node_cpu = cpu_nds[0];
 
 	linux_num_cpus = cpu_ctr;
 	
 	prom_cpu_nodes[0] = prom_node_cpu;
 
-	mem_start = central_probe(mem_start);
+	central_probe();
 
 	cpu_probe();
-
-	return mem_start;
 }

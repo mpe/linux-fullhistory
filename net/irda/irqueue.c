@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Jun  9 13:29:31 1998
- * Modified at:   Tue Oct  5 09:02:15 1999
+ * Modified at:   Sun Dec 12 13:48:22 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (C) 1998-1999, Aage Kvalnes <aage@cs.uit.no>
@@ -88,13 +88,13 @@ int hashbin_clear( hashbin_t* hashbin, FREE_FUNC free_func)
 	/*
 	 * Free the entries in the hashbin
 	 */
-	for ( i = 0; i < HASHBIN_SIZE; i ++ ) {
-		queue = dequeue_first( (queue_t**) &hashbin->hb_queue[ i]);
-		while( queue ) {
-			if ( free_func)
-				(*free_func)( queue );
+	for (i = 0; i < HASHBIN_SIZE; i ++ ) {
+		queue = dequeue_first( (queue_t**) &hashbin->hb_queue[i]);
+		while (queue) {
+			if (free_func)
+				(*free_func)(queue);
 			queue = dequeue_first( 
-				(queue_t**) &hashbin->hb_queue[ i]);
+				(queue_t**) &hashbin->hb_queue[i]);
 		}
 	}
 	hashbin->hb_size = 0;
@@ -210,7 +210,7 @@ void hashbin_unlock(hashbin_t* hashbin, __u32 hashv, char* name,
  *    Insert an entry into the hashbin
  *
  */
-void hashbin_insert( hashbin_t* hashbin, queue_t* entry, __u32 hashv, char* name)
+void hashbin_insert(hashbin_t* hashbin, queue_t* entry, __u32 hashv, char* name)
 {
 	unsigned long flags = 0;
 	int bin;

@@ -103,7 +103,7 @@ el2_probe(struct net_device *dev)
 
     for (addr = addrs; *addr; addr++) {
 	int i;
-	unsigned int base_bits = readb(*addr);
+	unsigned int base_bits = isa_readb(*addr);
 	/* Find first set bit. */
 	for(i = 7; i >= 0; i--, base_bits >>= 1)
 	    if (base_bits & 0x1)
@@ -251,18 +251,18 @@ el2_probe1(struct net_device *dev, int ioaddr)
 	{			/* Check the card's memory. */
 	    unsigned long mem_base = dev->mem_start;
 	    unsigned int test_val = 0xbbadf00d;
-	    writel(0xba5eba5e, mem_base);
+	    isa_writel(0xba5eba5e, mem_base);
 	    for (i = sizeof(test_val); i < EL2_MEMSIZE; i+=sizeof(test_val)) {
-		writel(test_val, mem_base + i);
-		if (readl(mem_base) != 0xba5eba5e
-		    || readl(mem_base + i) != test_val) {
+		isa_writel(test_val, mem_base + i);
+		if (isa_readl(mem_base) != 0xba5eba5e
+		    || isa_readl(mem_base + i) != test_val) {
 		    printk("3c503: memory failure or memory address conflict.\n");
 		    dev->mem_start = 0;
 		    ei_status.name = "3c503-PIO";
 		    break;
 		}
 		test_val += 0x55555555;
-		writel(0, mem_base + i);
+		isa_writel(0, mem_base + i);
 	    }
 	}
 #endif  /* EL2MEMTEST */

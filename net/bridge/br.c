@@ -40,10 +40,19 @@
  *			so blame me first if its broken ;)
  *
  *	Robert Pintarelli:	fixed bug in bpdu time values
+ *
+ *      Matthew Grant:  start ports disabled.  
+ *                      auto-promiscuous mode on port enable/disable
+ *                      fleshed out interface event handling, interfaces 
+ *                        now register with bridge on module load as well as ifup
+ *                      port control ioctls with ifindex support
+ *                      brg0 logical ethernet interface
+ *                      reworked brcfg to take interface arguments
+ *                      added support for changing the hardware address
+ *                      generally made bridge a lot more usable.
  *	
  *	Todo:
- *		Don't bring up devices automatically. Start ports disabled
- *	and use a netlink notifier so a daemon can maintain the bridge
+ *	Use a netlink notifier so a daemon can maintain the bridge
  *	port group (could we also do multiple groups ????).
  *		A nice /proc file interface.
  *		Put the path costs in the port info and devices.
@@ -52,6 +61,7 @@
  *	
  */
  
+#include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -60,10 +70,13 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
+#include <linux/malloc.h>
 #include <linux/string.h>
 #include <linux/net.h>
 #include <linux/inet.h>
 #include <linux/netdevice.h>
+#include <linux/inetdevice.h>
+#include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/if_arp.h>
 #include <linux/ip.h>
@@ -71,6 +84,7 @@
 #include <linux/init.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
+#include <linux/rtnetlink.h>
 #include <net/br.h>
 #include <linux/proc_fs.h>
 
@@ -144,10 +158,19 @@ static void br_add_local_mac(unsigned char *mac);
 static int br_flood(struct sk_buff *skb, int port);
 static int br_drop(struct sk_buff *skb);
 static int br_learn(struct sk_buff *skb, int port);	/* 3.8 */
+static int br_protocol_ok(unsigned short protocol);
+static int br_find_port(int ifindex);
+static void br_get_ifnames(void);
+static int brg_rx(struct sk_buff *skb, int port);
 
 static unsigned char bridge_ula[ETH_ALEN] = { 0x01, 0x80, 0xc2, 0x00, 0x00, 0x00 };
 static Bridge_data     bridge_info;			  /* (4.5.3)	 */
 Port_data       port_info[All_ports];		  /* (4.5.5)	 */
+
+/* MAG: Maximum port registered - used to speed up flooding and to make
+ * have a large ports array more efficient
+ */
+static int max_port_used = 0; 
 
 /* JRP: fdb cache 1/port save kmalloc/kfree on every frame */
 struct fdb	*newfdb[All_ports];
@@ -189,6 +212,30 @@ static struct notifier_block br_dev_notifier={
 	0
 };
 
+
+/* 
+ * the following data is for the bridge network device
+ */
+struct brg_if {
+  struct net_device dev;
+  char name[IFNAMSIZ];
+};
+static struct brg_if brg_if;
+
+/* 
+ * Here to save linkage? problems
+ */
+
+static inline int find_port(struct net_device *dev)
+{
+	int i;
+
+	for (i = One; i <= No_of_ports; i++)
+		if (port_info[i].dev == dev)
+			return(i);
+	return(0);
+}
+
 /*
  * Implementation of Protocol specific bridging
  *
@@ -201,7 +248,7 @@ static struct notifier_block br_dev_notifier={
 
 /* Checks if that protocol type is to be bridged */
 
-int br_protocol_ok(unsigned short protocol)
+static int inline br_protocol_ok(unsigned short protocol)
 {
 	unsigned x;
 	
@@ -830,12 +877,19 @@ static int br_tree_get_info(char *buffer, char **start, off_t offset, int length
 
 	return len;
 }
+
 void __init br_init(void)
 {						  /* (4.8.1)	 */
 	int port_no;
 
-	printk(KERN_INFO "NET4: Ethernet Bridge 005 for NET4.0\n");
+	printk(KERN_INFO "NET4: Ethernet Bridge 006 for NET4.0\n");
 
+	/* Set up brg device information */
+	bridge_info.instance = 0;
+	brg_init();
+
+	max_port_used = 0;
+	
 	/*
 	 * Form initial topology change time.
 	 * The topology change timer is only used if this is the root bridge.
@@ -865,8 +919,8 @@ void __init br_init(void)
 	stop_topology_change_timer();
 	memset(newfdb, 0, sizeof(newfdb));
 	for (port_no = One; port_no <= No_of_ports; port_no++) {	/* (4.8.1.4) */
-		/* initial state = Enable */
-		user_port_state[port_no] = ~Disabled;
+		/* initial state = Disable */
+		user_port_state[port_no] = Disabled;
 		port_priority[port_no] = 128;
 		br_init_port(port_no);
 		disable_port(port_no);
@@ -1194,7 +1248,7 @@ static struct sk_buff *alloc_bridge_skb(int port_no, int pdu_size, char *pdu_nam
   	memcpy(eth->h_source, dev->dev_addr, ETH_ALEN);
  
   	if (br_stats.flags & BR_DEBUG)
- 		printk("send_%s_bpdu: port %i src %02x:%02x:%02x:%02x:%02x:%02x\n",
+ 		printk(KERN_DEBUG "send_%s_bpdu: port %i src %02x:%02x:%02x:%02x:%02x:%02x\n",
  			pdu_name,
   			port_no,
   			eth->h_source[0],
@@ -1295,6 +1349,9 @@ static int br_device_event(struct notifier_block *unused, unsigned long event, v
 	if (dev->flags & IFF_LOOPBACK)
 		return(NOTIFY_DONE);
 
+	if (dev == &brg_if.dev)
+	  return(NOTIFY_DONE);	/* Don't attach the brg device to a port! */
+	
 	switch (event) 
 	{
 		case NETDEV_DOWN:
@@ -1324,6 +1381,9 @@ static int br_device_event(struct notifier_block *unused, unsigned long event, v
 				{
 					port_info[i].dev = dev;
 					port_info[i].port_id = i;
+					dev->bridge_port_id = i;
+					if( i > max_port_used ) 
+						max_port_used = i;
 					/* set bridge addr from 1st device addr */
 					if (((htonl(bridge_info.bridge_id.BRIDGE_ID[0])&0xffff) == 0) &&
 						(bridge_info.bridge_id.BRIDGE_ID[1] == 0)) 
@@ -1333,7 +1393,10 @@ static int br_device_event(struct notifier_block *unused, unsigned long event, v
 							bridge_info.bridge_id.BRIDGE_PRIORITY = htons(32768);
 						set_bridge_priority(&bridge_info.bridge_id);
 					}
+					/* Add local MAC address */
 					br_add_local_mac(dev->dev_addr);
+					/* Save MAC address for latter change address events */
+					memcpy(port_info[i].ifmac.BRIDGE_ID_ULA, dev->dev_addr, 6);
 					if((br_stats.flags & BR_UP) &&
 				   		(user_port_state[i] != Disabled)) 
 				   	{
@@ -1351,18 +1414,115 @@ static int br_device_event(struct notifier_block *unused, unsigned long event, v
 				}
 			}
 			break;
+	        case NETDEV_REGISTER:
+		        if (br_stats.flags & BR_DEBUG) 
+				printk(KERN_DEBUG "br_device_event: NETDEV_REGISTER...\n");
+			/* printk(KERN_ERR "br_device_event: NETDEV_REGISTER...\n"); */
+			/* printk(KERN_ERR "br_device_event: dev->type: 0x%X\n", dev->type); */
+			/* Only handle ethernet ports */
+			if(dev->type!=ARPHRD_ETHER && dev->type!=ARPHRD_LOOPBACK)
+				return NOTIFY_DONE;
+			/* printk(KERN_ERR "br_device_event: Looking for port...\n"); */
+			for (i = One; i <= No_of_ports; i++) 
+			{
+				if (port_info[i].dev == NULL || port_info[i].dev == dev) 
+				{
+				        /* printk(KERN_ERR "br_device_event: Found port %d\n", i); */
+					port_info[i].dev = dev;
+					port_info[i].port_id = i;
+					dev->bridge_port_id = i;
+					if( i > max_port_used )
+						max_port_used = i;
+					/* handle local MAC address minuplations */
+					br_add_local_mac(dev->dev_addr);
+					memcpy(port_info[i].ifmac.BRIDGE_ID_ULA, dev->dev_addr, 6);
+					return NOTIFY_DONE;
+					break;
+				}
+			}
+			break;
 		case NETDEV_UNREGISTER:
 			if (br_stats.flags & BR_DEBUG)
 				printk(KERN_DEBUG "br_device_event: NETDEV_UNREGISTER...\n");
                         i = find_port(dev);
                         if (i > 0) {
 				br_avl_delete_by_port(i);
+				memset(port_info[i].ifmac.BRIDGE_ID_ULA, 0, 6);
 				port_info[i].dev = NULL;
 			}
+			break;
+		case NETDEV_CHANGEADDR:
+			if (br_stats.flags & BR_DEBUG)
+				printk(KERN_DEBUG "br_device_event: NETDEV_CHANGEADDR...\n");
+                        i = find_port(dev);
+                        if (i <= 0)  
+			  break;
+			if (memcmp(port_info[i].ifmac.BRIDGE_ID_ULA, dev->dev_addr, 6) != 0)
+			  break; /* Don't worry about a change of hardware broadcast address! */
+			if (dev->start) {
+			  printk(KERN_CRIT "br_device_event: NETDEV_CHANGEADDR on busy device %s - FIX DRIVER!\n", 
+				 dev->name);
+			/*  return NOTIFY_BAD;  It SHOULD be this, but I want to be friendly... */
+			  return NOTIFY_DONE;
+			}
+			br_avl_delete_by_port(i);
+			memset(port_info[i].ifmac.BRIDGE_ID_ULA, 0, 6);
 			break;
 	}
 	return NOTIFY_DONE;
 }
+
+/* Routine to loop over device list and register 
+ * interfaces to bridge.  Called from last part of net_dev_init just before
+ * bootp/rarp interface setup
+ */
+void br_spacedevice_register(void) 
+{
+	struct net_device *dev;
+	for( dev = dev_base; dev != NULL; dev = dev->next)
+	{
+		br_device_event(NULL, NETDEV_REGISTER, dev);
+	}
+}	
+
+
+/* This is for SPEED in the kernel in net_bh.c */
+
+int br_call_bridge(struct sk_buff *skb, unsigned short type)
+{
+	int port;
+	struct net_device *dev;
+  
+#if 0  /* Checked first in handle_bridge to save expense of function call */ 
+	if(!(br_stats.flags & BR_UP))
+		return 0;
+#endif
+  
+	dev = skb->dev;
+	port = dev->bridge_port_id;
+
+	if(!port)
+		return 0;
+
+	/* Sanity - make sure we are not leaping off into fairy space! */
+	if ( port < 0 || port > max_port_used || port_info[port].dev != dev) {
+		if (net_ratelimit())
+			printk(KERN_CRIT "br_call_bridge: device %s has invalid port ID %d!\n",
+				dev->name,
+				dev->bridge_port_id);
+		return 0;
+	}
+
+	if(user_port_state[port] == Disabled)
+		return 0;
+  
+	if (!br_protocol_ok(ntohs(type)))
+		return 0;
+
+	return 1;
+
+}
+
 
 /*
  * following routine is called when a frame is received
@@ -1375,6 +1535,7 @@ int br_receive_frame(struct sk_buff *skb)	/* 3.5 */
 	int port;
 	Port_data  *p;
 	struct ethhdr *eth;
+	struct net_device *dev;
 	
 	/* sanity */
 	if (!skb) {
@@ -1382,17 +1543,27 @@ int br_receive_frame(struct sk_buff *skb)	/* 3.5 */
 		return(1);
 	}
 
+	dev = skb->dev;
+
 	skb->pkt_bridged = IS_BRIDGED;
 
 	/* check for loopback */
-	if (skb->dev->flags & IFF_LOOPBACK)
+	if (dev->flags & IFF_LOOPBACK)
 		return 0 ;
 
-	port = find_port(skb->dev);
+#if 0
+	port = find_port(dev);
+#else
+	port = dev->bridge_port_id;
+#endif
 	
 	if(!port)
 		return 0;
 	
+	/* Hand off to brg_rx BEFORE we screw up the skb */
+	if(brg_rx(skb, port))
+	  return(1);
+
 	skb->nh.raw = skb->mac.raw;
 	eth = skb->mac.ethernet;
 	p = &port_info[port];
@@ -1501,7 +1672,7 @@ int br_tx_frame(struct sk_buff *skb)	/* 3.5 */
 	eth = skb->mac.ethernet;
 	port = 0;	/* an impossible port (locally generated) */	
 	if (br_stats.flags & BR_DEBUG)
-		printk("br_tx_fr : port %i src %02x:%02x:%02x:%02x:%02x:%02x"
+		printk(KERN_DEBUG "br_tx_fr : port %i src %02x:%02x:%02x:%02x:%02x:%02x"
 	  		" dest %02x:%02x:%02x:%02x:%02x:%02x\n", 
 			port,
 			eth->h_source[0],
@@ -1739,7 +1910,7 @@ static int br_forward(struct sk_buff *skb, int port)	/* 3.7 */
 				/* timer expired, invalidate entry */
 				f->flags &= ~FDB_ENT_VALID;
 				if (br_stats.flags & BR_DEBUG)
-					printk("fdb entry expired...\n");
+					printk(KERN_DEBUG "fdb entry expired...\n");
 				/*
 				 *	Send flood and drop original
 				 */
@@ -1781,7 +1952,7 @@ static int br_forward(struct sk_buff *skb, int port)	/* 3.7 */
 				/* timer expired, invalidate entry */
 				f->flags &= ~FDB_ENT_VALID;
 				if (br_stats.flags & BR_DEBUG)
-					printk("fdb entry expired...\n");
+					printk(KERN_DEBUG "fdb entry expired...\n");
 				++br_stats_cnt.drop_same_port_aged;
 			}
 			else ++br_stats_cnt.drop_same_port;
@@ -1808,6 +1979,9 @@ static int br_flood(struct sk_buff *skb, int port)
 	{
 		if (i == port)	/* don't send back where we got it */
 			continue;
+		if (i > max_port_used)
+			/* Don't go scanning empty port entries */
+			break;
 		if (port_info[i].state == Forwarding) 
 		{
 			nskb = skb_clone(skb, GFP_ATOMIC);
@@ -1820,22 +1994,12 @@ static int br_flood(struct sk_buff *skb, int port)
 			/* To get here we must have done ARP already,
 			   or have a received valid MAC header */
 			
-/*			printk("Flood to port %d\n",i);*/
+/*			printk(KERN_DEBUG "Flood to port %d\n",i);*/
 			nskb->nh.raw = nskb->data + ETH_HLEN;
 			nskb->priority = 1;
 			dev_queue_xmit(nskb);
 		}
 	}
-	return(0);
-}
-
-static int find_port(struct net_device *dev)
-{
-	int i;
-
-	for (i = One; i <= No_of_ports; i++)
-		if (port_info[i].dev == dev)
-			return(i);
 	return(0);
 }
 
@@ -1945,17 +2109,58 @@ struct fdb_info *get_fdb_info(int user_buf_size, int *copied,int *notcopied)
 	return fdbis;
 }
 
+
+/* Fill in interface names in port_info structure
+ */
+static void br_get_ifnames(void) {
+  int i;
+
+  for(i=One;i<=No_of_ports; i++) {
+    /* memset IS needed.  Kernel strncpy does NOT NULL terminate strings when limit
+       reached */
+    memset(port_info[i].ifname, 0, IFNAMSIZ); 
+    if( port_info[i].dev == 0 )
+      continue;
+    strncpy(port_info[i].ifname, port_info[i].dev->name, IFNAMSIZ-1);
+    /* Being paranoid */
+    port_info[i].ifname[IFNAMSIZ-1] = '\0';
+  }
+}
+
+/* Given an interface index, loop over port array to see if configured.  If
+   so, return port number, otherwise error */ 
+static int br_find_port(int ifindex) 
+{
+  int i;
+  
+  for(i=1; i <= No_of_ports; i++) {
+    if (port_info[i].dev == 0)
+      continue;
+    if (port_info[i].dev->ifindex == ifindex)
+      return(i);
+  }
+  
+  return -EUNATCH;  /* Tell me if this is incorrect error code for this case */
+} 
+
+
 int br_ioctl(unsigned int cmd, void *arg)
 {
-	int err, i;
+	int err, i, ifflags;
 	struct br_cf bcf;
 	bridge_id_t new_id;
-
+	struct net_device *dev;
+	
 	switch(cmd)
 	{
 		case SIOCGIFBR:	/* get bridging control blocks */
 			memcpy(&br_stats.bridge_data, &bridge_info, sizeof(Bridge_data));
-			memcpy(&br_stats.port_data, &port_info, sizeof(Port_data)*No_of_ports);
+
+			/* Fill in interface names in port_info*/
+			br_get_ifnames();
+			
+			br_stats.num_ports = No_of_ports;
+			memcpy(&br_stats.port_data, &port_info, sizeof(Port_data)*All_ports);
 
 			err = copy_to_user(arg, &br_stats, sizeof(struct br_stat));
 			if (err)
@@ -2021,16 +2226,28 @@ int br_ioctl(unsigned int cmd, void *arg)
 					}
 					br_stats.flags ^= BR_STP_DISABLED;
 					break;
+			        case BRCMD_IF_ENABLE:
+				        bcf.arg1 = br_find_port(bcf.arg1);
+					if (bcf.arg1 < 0)
+						return(bcf.arg1);
 				case BRCMD_PORT_ENABLE:
 					if (port_info[bcf.arg1].dev == 0)
 						return(-EINVAL);
 					if (user_port_state[bcf.arg1] != Disabled)
 						return(-EALREADY);
 					printk(KERN_DEBUG "br: enabling port %i\n",bcf.arg1);
+					dev = port_info[bcf.arg1].dev;
+					ifflags = (dev->flags&~(IFF_PROMISC|IFF_ALLMULTI))
+					  |(dev->gflags&(IFF_PROMISC|IFF_ALLMULTI)); 
+					dev_change_flags(dev, ifflags|IFF_PROMISC);
 					user_port_state[bcf.arg1] = ~Disabled;
 					if(br_stats.flags & BR_UP)
 						enable_port(bcf.arg1);
 					break;
+			        case BRCMD_IF_DISABLE:
+				        bcf.arg1 = br_find_port(bcf.arg1);
+					if (bcf.arg1 < 0)
+						return(bcf.arg1);
 				case BRCMD_PORT_DISABLE:
 					if (port_info[bcf.arg1].dev == 0)
 						return(-EINVAL);
@@ -2040,12 +2257,20 @@ int br_ioctl(unsigned int cmd, void *arg)
 					user_port_state[bcf.arg1] = Disabled;
 					if(br_stats.flags & BR_UP)
 						disable_port(bcf.arg1);
+					dev = port_info[bcf.arg1].dev;
+					ifflags = (dev->flags&~(IFF_PROMISC|IFF_ALLMULTI))
+					  |(dev->gflags&(IFF_PROMISC|IFF_ALLMULTI)); 
+					dev_change_flags(port_info[bcf.arg1].dev, ifflags & ~IFF_PROMISC);
 					break;
 				case BRCMD_SET_BRIDGE_PRIORITY:
 					new_id = bridge_info.bridge_id;
 					new_id.BRIDGE_PRIORITY = htons(bcf.arg1);
 					set_bridge_priority(&new_id);
 					break;
+			        case BRCMD_SET_IF_PRIORITY:
+				        bcf.arg1 = br_find_port(bcf.arg1);
+					if (bcf.arg1 < 0)
+						return(bcf.arg1);
 				case BRCMD_SET_PORT_PRIORITY:
 					if((port_info[bcf.arg1].dev == 0)
 					    || (bcf.arg2 & ~0xff))
@@ -2053,6 +2278,10 @@ int br_ioctl(unsigned int cmd, void *arg)
 					port_priority[bcf.arg1] = bcf.arg2;
 					set_port_priority(bcf.arg1);
 					break;
+			        case BRCMD_SET_IF_PATH_COST:
+				        bcf.arg1 = br_find_port(bcf.arg1);
+					if (bcf.arg1 < 0)
+						return(bcf.arg1);
 				case BRCMD_SET_PATH_COST:
 					if (port_info[bcf.arg1].dev == 0)
 						return(-EINVAL);
@@ -2134,3 +2363,377 @@ static int br_cmp(unsigned int *a, unsigned int *b)
 	}
 	return(0);
 }
+
+
+
+
+/* --------------------------------------------------------------------------------
+ *
+ *
+ *  Bridge network device here for future modularization - device structures
+ *  must be 'static' inside bridge instance
+ *  Modelled after sch_teql.c
+ * 
+ */
+
+
+
+/*
+ *	Index to functions.
+ */
+
+int	    brg_probe(struct net_device *dev);
+static int  brg_open(struct net_device *dev);
+static int  brg_start_xmit(struct sk_buff *skb, struct net_device *dev);
+static int  brg_close(struct net_device *dev);
+static struct net_device_stats *brg_get_stats(struct net_device *dev);
+static void brg_set_multicast_list(struct net_device *dev);
+
+/*
+ *	Board-specific info in dev->priv.
+ */
+
+struct net_local
+{
+	__u32		groups;
+	struct net_device_stats stats;
+};
+
+
+
+
+/*
+ *	To call this a probe is a bit misleading, however for real
+ *	hardware it would have to check what was present.
+ */
+ 
+int __init brg_probe(struct net_device *dev)
+{
+  unsigned int bogomips;
+  struct timeval utime;
+
+  printk(KERN_INFO "%s: network interface for Ethernet Bridge 006/NET4.0\n", dev->name);
+
+  /*
+   *	Initialize the device structure.
+   */
+  
+  dev->priv = kmalloc(sizeof(struct net_local), GFP_KERNEL);
+  if (dev->priv == NULL)
+    return -ENOMEM;
+  memset(dev->priv, 0, sizeof(struct net_local));
+
+  /* Set up MAC address based on BogoMIPs figure for first CPU and time
+   */ 
+  bogomips = (boot_cpu_data.loops_per_sec+2500)/500000 ;
+  get_fast_time(&utime);
+
+  /* Ummmm....  YES! */
+  dev->dev_addr[0] = '\xFE';
+  dev->dev_addr[1] = '\xFD';
+  dev->dev_addr[2] = (bridge_info.instance & 0x0F) << 4;
+  dev->dev_addr[2] |= ((utime.tv_sec & 0x000F0000) >> 16);
+  dev->dev_addr[3] = bogomips & 0xFF;
+  dev->dev_addr[4] = (utime.tv_sec & 0x0000FF00) >> 8;
+  dev->dev_addr[5] = (utime.tv_sec & 0x000000FF);
+  
+  printk(KERN_INFO "%s: generated MAC address %2.2X:%2.2X:%2.2X:%2.2X:%2.2X:%2.2X\n", 
+	 dev->name,
+	 dev->dev_addr[0],
+	 dev->dev_addr[1],
+	 dev->dev_addr[2],
+	 dev->dev_addr[3],
+	 dev->dev_addr[4],
+	 dev->dev_addr[5]);
+
+  
+  printk(KERN_INFO "%s: attached to bridge instance %lu\n", dev->name, dev->base_addr);
+
+  /*
+   *	The brg specific entries in the device structure.
+   */
+
+  dev->open = brg_open;
+  dev->hard_start_xmit = brg_start_xmit;
+  dev->stop = brg_close;
+  dev->get_stats = brg_get_stats;
+  dev->set_multicast_list = brg_set_multicast_list;
+
+  /*
+   *	Setup the generic properties
+   */
+
+  ether_setup(dev);
+
+  dev->tx_queue_len = 0;
+
+  return 0;
+}
+
+/*
+ *	Open/initialize the board.
+ */
+
+static int brg_open(struct net_device *dev)
+{
+        if (br_stats.flags & BR_DEBUG)
+		printk(KERN_DEBUG "%s: Doing brg_open()...", dev->name);
+
+	if (memcmp(dev->dev_addr, "\x00\x00\x00\x00\x00\x00", ETH_ALEN) == 0)
+	  return -EFAULT;
+
+	dev->start = 1;
+	dev->tbusy = 0;
+	return 0;
+}
+
+static unsigned brg_mc_hash(__u8 *dest)
+{
+	unsigned idx = 0;
+	idx ^= dest[0];
+	idx ^= dest[1];
+	idx ^= dest[2];
+	idx ^= dest[3];
+	idx ^= dest[4];
+	idx ^= dest[5];
+	return 1U << (idx&0x1F);
+}
+
+static void brg_set_multicast_list(struct net_device *dev)
+{
+	unsigned groups = ~0;
+	struct net_local *lp = (struct net_local *)dev->priv;
+
+	if (!(dev->flags&(IFF_PROMISC|IFF_ALLMULTI))) {
+		struct dev_mc_list *dmi;
+
+		groups = brg_mc_hash(dev->broadcast);
+
+		for (dmi=dev->mc_list; dmi; dmi=dmi->next) {
+			if (dmi->dmi_addrlen != 6)
+				continue;
+			groups |= brg_mc_hash(dmi->dmi_addr);
+		}
+	}
+	lp->groups = groups;
+}
+
+/*
+ *	We transmit by throwing the packet at the bridge.
+ */
+ 
+static int brg_start_xmit(struct sk_buff *skb, struct net_device *dev)
+{
+	struct net_local *lp = (struct net_local *)dev->priv;
+	struct ethhdr *eth = (struct ethhdr*)skb->data;
+	int port;
+
+	/* Deal with the bridge being disabled */
+	if(!(br_stats.flags & BR_UP)) {
+		/* Either this */
+		/* lp->stats.tx_errors++; */ /* this condition is NOT an error */
+		/* or this  (implied by RFC 2233) */
+		lp->stats.tx_dropped++;
+		dev_kfree_skb(skb);
+		return 0;
+	}
+
+	lp->stats.tx_bytes+=skb->len;
+	lp->stats.tx_packets++;
+
+#if 0
+	++br_stats_cnt.port_not_disable;
+#endif
+	skb->mac.raw = skb->nh.raw = skb->data;
+	eth = skb->mac.ethernet;
+	port = 0;	/* an impossible port (locally generated) */	
+
+	 if (br_stats.flags & BR_DEBUG)
+		printk(KERN_DEBUG "%s: brg_start_xmit - src %02x:%02x:%02x:%02x:%02x:%02x"
+	  		" dest %02x:%02x:%02x:%02x:%02x:%02x\n", 
+		       dev->name,
+		       eth->h_source[0],
+		       eth->h_source[1],
+		       eth->h_source[2],
+		       eth->h_source[3],
+		       eth->h_source[4],
+		       eth->h_source[5],
+		       eth->h_dest[0],
+		       eth->h_dest[1],
+		       eth->h_dest[2],
+		       eth->h_dest[3],
+		       eth->h_dest[4],
+		       eth->h_dest[5]);
+	
+	/* Forward the packet ! */
+	if(br_forward(skb, port))
+	  return(0);
+    
+	/* Throw packet initially */
+	dev_kfree_skb(skb);
+	return 0;
+}
+
+
+/*
+ *	The typical workload of the driver:
+ *	Handle the ether interface interrupts.
+ *
+ *	(In this case handle the packets posted from the bridge)
+ */
+
+static int brg_rx(struct sk_buff *skb, int port)
+{
+        struct net_device *dev = &brg_if.dev;
+	struct net_local *lp = (struct net_local *)dev->priv;
+	struct ethhdr *eth = (struct ethhdr*)(skb->data);
+	int len = skb->len;
+	int clone = 0;
+
+	if (br_stats.flags & BR_DEBUG)
+		printk(KERN_DEBUG "%s: brg_rx()\n", dev->name);
+
+	/* Get out of here if the bridge interface is not up
+	 */
+	if(!(dev->flags & IFF_UP))
+	  return(0);
+	
+	/* Check that the port that this thing came off is in the forwarding state 
+	 * We sould only listen to the same address scope we will transmit to.
+	 */
+	if(port_info[port].state != Forwarding)
+	  return(0);
+
+	/* Is this for us? - broadcast/mulitcast/promiscuous packets need cloning,
+         * with uni-cast we eat the packet
+	 */
+	clone = 0;
+	if (dev->flags & IFF_PROMISC) {
+	  clone = 1;
+	}
+	else if (eth->h_dest[0]&1) {
+	  if (!(dev->flags&(IFF_ALLMULTI))
+	      && !(brg_mc_hash(eth->h_dest)&lp->groups))
+	    return(0);
+	  clone = 1;
+	}
+	else if (memcmp(eth->h_dest, dev->dev_addr, ETH_ALEN) != 0) {
+	  return(0);
+	}
+
+	/* Clone things here - we want to be transparent before we check packet data 
+	 * integrity
+	 */
+	if(clone) {
+	  struct sk_buff *skb2 = skb;
+	  skb = skb_clone(skb2, GFP_ATOMIC);
+	  if (skb == NULL) {
+	    return(0);
+	  }
+	  
+	}
+
+	/* Check packet length 
+	 */
+	if (len < 16) {
+		printk(KERN_DEBUG "%s : rx len = %d\n", dev->name, len);
+		kfree_skb(skb);
+		return(!clone);
+	}
+
+	if (br_stats.flags & BR_DEBUG)
+	  printk(KERN_DEBUG "%s: brg_rx - src %02x:%02x:%02x:%02x:%02x:%02x"
+		 " dest %02x:%02x:%02x:%02x:%02x:%02x\n", 
+		 dev->name,
+		 eth->h_source[0],
+		 eth->h_source[1],
+		 eth->h_source[2],
+		 eth->h_source[3],
+		 eth->h_source[4],
+		 eth->h_source[5],
+		 eth->h_dest[0],
+		 eth->h_dest[1],
+		 eth->h_dest[2],
+		 eth->h_dest[3],
+		 eth->h_dest[4],
+		 eth->h_dest[5]);
+
+	/* Do it */
+	skb->pkt_type = PACKET_HOST;
+	skb->dev = dev;
+	skb->protocol=eth_type_trans(skb,dev);
+	memset(skb->cb, 0, sizeof(skb->cb));
+	lp->stats.rx_packets++;
+	lp->stats.rx_bytes+=len;
+	netif_rx(skb);
+	return(!clone);
+}
+
+static int brg_close(struct net_device *dev)
+{
+	if (br_stats.flags & BR_DEBUG)
+		printk(KERN_DEBUG "%s: Shutting down.\n", dev->name);
+
+	dev->tbusy = 1;
+	dev->start = 0;
+
+	return 0;
+}
+
+static struct net_device_stats *brg_get_stats(struct net_device *dev)
+{
+	struct net_local *lp = (struct net_local *)dev->priv;
+	return &lp->stats;
+}
+
+/* 
+ *      
+ */
+
+int __init brg_init(void)
+{
+        int err;
+
+	memset(&brg_if, 0, sizeof(brg_if));
+
+        rtnl_lock();
+
+	brg_if.dev.base_addr = bridge_info.instance;
+	sprintf (brg_if.name, "brg%d", bridge_info.instance);
+	brg_if.dev.name = (void*)&brg_if.name;
+        if(dev_get(brg_if.name)) {
+               printk(KERN_INFO "%s already loaded.\n", brg_if.name);
+	       return -EBUSY;
+	}
+        brg_if.dev.init = brg_probe;
+
+        err = register_netdevice(&brg_if.dev);
+        rtnl_unlock();
+        return err;
+}
+
+
+#if 0				/* Its here if we ever need it... */
+#ifdef MODULE
+
+void cleanup_module(void)
+{
+
+  /* 
+   * Unregister the device
+   */
+  rtnl_lock();
+  unregister_netdevice(&the_master.dev);
+  rtnl_unlock();
+
+  /*
+   *	Free up the private structure.
+   */
+  
+  kfree(brg_if.dev.priv);
+  brg_if.dev.priv = NULL;	/* gets re-allocated by brg_probe */
+}
+
+#endif /* MODULE */
+
+#endif

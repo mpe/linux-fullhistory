@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.22 1999/08/30 10:01:22 davem Exp $
+/* $Id: time.c,v 1.23 1999/09/21 14:35:27 davem Exp $
  * time.c: UltraSparc timer and TOD clock support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -268,7 +268,7 @@ void __init clock_probe(void)
 	int node, busnd = -1, err;
 	unsigned long flags;
 #ifdef CONFIG_PCI
-	struct linux_ebus *ebus = 0;
+	struct linux_ebus *ebus = NULL;
 #endif
 
 	__save_and_cli(flags);
@@ -282,8 +282,8 @@ void __init clock_probe(void)
 		busnd = ebus->prom_node;
 	}
 #endif
-	else {
-		busnd = SBus_chain->prom_node;
+	else if (sbus_root != NULL) {
+		busnd = sbus_root->prom_node;
 	}
 
 	if(busnd == -1) {
@@ -304,9 +304,9 @@ void __init clock_probe(void)
 		   	if (node)
 				node = prom_getsibling(node);
 #ifdef CONFIG_PCI
-			while ((node == 0) && ebus) {
+			while ((node == 0) && ebus != NULL) {
 				ebus = ebus->next;
-				if (ebus) {
+				if (ebus != NULL) {
 					busnd = ebus->prom_node;
 					node = prom_getchild(busnd);
 				}
@@ -327,17 +327,17 @@ void __init clock_probe(void)
 		}
 
 		if(central_bus) {
-			prom_apply_fhc_ranges(central_bus->child, clk_reg, 1);
-			prom_apply_central_ranges(central_bus, clk_reg, 1);
+			apply_fhc_ranges(central_bus->child, clk_reg, 1);
+			apply_central_ranges(central_bus, clk_reg, 1);
 		}
 #ifdef CONFIG_PCI
-		else if (ebus_chain) {
+		else if (ebus_chain != NULL) {
 			struct linux_ebus_device *edev;
 
 			for_each_ebusdev(edev, ebus)
 				if (edev->prom_node == node)
 					break;
-			if (!edev) {
+			if (edev == NULL) {
 				prom_printf("%s: Mostek not probed by EBUS\n",
 					    __FUNCTION__);
 				prom_halt();
@@ -349,9 +349,24 @@ void __init clock_probe(void)
 		}
 #endif
 		else {
-			prom_adjust_regs(clk_reg, 1,
-					 SBus_chain->sbus_ranges,
-					 SBus_chain->num_sbus_ranges);
+			if (sbus_root->num_sbus_ranges) {
+				int nranges = sbus_root->num_sbus_ranges;
+				int rngc;
+
+				for (rngc = 0; rngc < nranges; rngc++)
+					if (clk_reg[0].which_io ==
+					    sbus_root->sbus_ranges[rngc].ot_child_space)
+						break;
+				if (rngc == nranges) {
+					prom_printf("clock_probe: Cannot find ranges for "
+						    "clock regs.\n");
+					prom_halt();
+				}
+				clk_reg[0].which_io =
+					sbus_root->sbus_ranges[rngc].ot_parent_space;
+				clk_reg[0].phys_addr +=
+					sbus_root->sbus_ranges[rngc].ot_parent_base;
+			}
 		}
 
 		if(model[5] == '0' && model[6] == '2') {

@@ -29,8 +29,8 @@ uni_xlate=<bool> -- Translate unhandled Unicode characters to special
 		 a '?' is used when no translation is possible.  The
 		 escape character is ':' because it is otherwise
 		 illegal on the vfat filesystem.  The escape sequence
-		 that gets used, where u is the unicode character, is:
-			':', (u & 0x3f), ((u>>6) & 0x3f), (u>>12),
+		 that gets used is ':' and the four digits of hexadecimal
+		 unicode.
 posix=<bool>  -- Allow names of same letters, different case such as
                  'LongFileName' and 'longfilename' to coexist.  This has some
                  problems currently because 8.3 conflicts are not handled

@@ -1,4 +1,4 @@
-/* $Id: cgthreefb.c,v 1.5 1999/08/10 15:56:04 davem Exp $
+/* $Id: cgthreefb.c,v 1.8 1999/11/19 09:57:08 davem Exp $
  * cgthreefb.c: CGthree frame buffer driver
  *
  * Copyright (C) 1996,1998 Jakub Jelinek (jj@ultra.linux.cz)
@@ -71,8 +71,8 @@ struct cg3_regs {
 };
 
 /* Offset of interesting structures in the OBIO space */
-#define CG3_REGS_OFFSET	     0x400000
-#define CG3_RAM_OFFSET	     0x800000
+#define CG3_REGS_OFFSET	     0x400000UL
+#define CG3_RAM_OFFSET	     0x800000UL
 
 static struct sbus_mmap_map cg3_mmap_map[] = {
 	{ CG3_MMAP_OFFSET,	CG3_RAM_OFFSET,		SBUS_MMAP_FBSIZE(1) },
@@ -88,30 +88,55 @@ static struct sbus_mmap_map cg3_mmap_map[] = {
 static void cg3_loadcmap (struct fb_info_sbusfb *fb, struct display *p, int index, int count)
 {
 	struct bt_regs *bt = &fb->s.cg3.regs->cmap;
+	unsigned long flags;
 	u32 *i;
+	volatile u8 *regp;
 	int steps;
 	        
+	spin_lock_irqsave(&fb->lock, flags);
+
 	i = (((u32 *)fb->color_map) + D4M3(index));
 	steps = D4M3(index+count-1) - D4M3(index)+3;
 	                        
-	*(volatile u8 *)&bt->addr = (u8)D4M4(index);
-	while (steps--)
-		bt->color_map = *i++;
+	regp = (volatile u8 *)&bt->addr;
+	sbus_writeb(D4M4(index), regp);
+	while (steps--) {
+		u32 val = *i++;
+		sbus_writel(val, &bt->color_map);
+	}
+
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void cg3_blank (struct fb_info_sbusfb *fb)
 {
-	fb->s.cg3.regs->control &= ~CG3_CR_ENABLE_VIDEO;
+	unsigned long flags;
+	u8 tmp;
+
+	spin_lock_irqsave(&fb->lock, flags);
+	tmp = sbus_readl(&fb->s.cg3.regs->control);
+	tmp &= ~CG3_CR_ENABLE_VIDEO;
+	sbus_writel(tmp, &fb->s.cg3.regs->control);
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void cg3_unblank (struct fb_info_sbusfb *fb)
 {
-	fb->s.cg3.regs->control |= CG3_CR_ENABLE_VIDEO;
+	unsigned long flags;
+	u8 tmp;
+
+	spin_lock_irqsave(&fb->lock, flags);
+	tmp = sbus_readl(&fb->s.cg3.regs->control);
+	tmp |= CG3_CR_ENABLE_VIDEO;
+	sbus_writel(tmp, &fb->s.cg3.regs->control);
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
-static void cg3_margins (struct fb_info_sbusfb *fb, struct display *p, int x_margin, int y_margin)
+static void cg3_margins (struct fb_info_sbusfb *fb, struct display *p,
+			 int x_margin, int y_margin)
 {
-	p->screen_base += (y_margin - fb->y_margin) * p->line_length + (x_margin - fb->x_margin);
+	p->screen_base += (y_margin - fb->y_margin) *
+		p->line_length + (x_margin - fb->x_margin);
 }
 
 static u8 cg3regvals_66hz[] __initdata = {	/* 1152 x 900, 66 Hz */
@@ -150,7 +175,8 @@ char __init *cgthreefb_init(struct fb_info_sbusfb *fb)
 	struct fb_fix_screeninfo *fix = &fb->fix;
 	struct display *disp = &fb->disp;
 	struct fbtype *type = &fb->type;
-	unsigned long phys = fb->sbdp->reg_addrs[0].phys_addr;
+	struct sbus_dev *sdev = fb->sbdp;
+	unsigned long phys = sdev->reg_addrs[0].phys_addr;
 	int cgRDI = strstr(fb->sbdp->prom_name, "cgRDI") != NULL;
 
 #ifndef FBCON_HAS_CFB8
@@ -158,8 +184,9 @@ char __init *cgthreefb_init(struct fb_info_sbusfb *fb)
 #endif
 
 	if (!fb->s.cg3.regs) {
-		fb->s.cg3.regs = (struct cg3_regs *)sparc_alloc_io(phys+CG3_REGS_OFFSET, 0, 
-				sizeof(struct cg3_regs), "cg3_regs", fb->iospace, 0);
+		fb->s.cg3.regs = (struct cg3_regs *)
+			sbus_ioremap(&sdev->resource[0], CG3_REGS_OFFSET,
+				     sizeof(struct cg3_regs), "cg3 regs");
 		if (cgRDI) {
 			char buffer[40];
 			char *p;
@@ -189,9 +216,11 @@ char __init *cgthreefb_init(struct fb_info_sbusfb *fb)
 	fix->accel = FB_ACCEL_SUN_CGTHREE;
 	
 	disp->scrollmode = SCROLL_YREDRAW;
-	if (!disp->screen_base)
-		disp->screen_base = (char *)sparc_alloc_io(phys+CG3_RAM_OFFSET, 0, 
-			type->fb_size, "cg3_ram", fb->iospace, 0);
+	if (!disp->screen_base) {
+		disp->screen_base = (char *)
+			sbus_ioremap(&sdev->resource[0], CG3_RAM_OFFSET,
+				     type->fb_size, "cg3 ram");
+	}
 	disp->screen_base += fix->line_length * fb->y_margin + fb->x_margin;
 	fb->dispsw = fbcon_cfb8;
 
@@ -219,7 +248,7 @@ char __init *cgthreefb_init(struct fb_info_sbusfb *fb)
 		if (cgRDI)
 			type = CG3_RDI;
 		else {
-			u8 status = fb->s.cg3.regs->status, mon;
+			u8 status = sbus_readb(&fb->s.cg3.regs->status), mon;
 			if ((status & CG3_SR_ID_MASK) == CG3_SR_ID_COLOR) {
 				mon = status & CG3_SR_RES_MASK;
 				if (mon == CG3_SR_1152_900_76_A ||
@@ -235,12 +264,17 @@ char __init *cgthreefb_init(struct fb_info_sbusfb *fb)
 			}
 		}
 
-		for (p = cg3_regvals[type]; *p; p += 2)
-			((u8 *)fb->s.cg3.regs)[p[0]] = p[1];
-
+		for (p = cg3_regvals[type]; *p; p += 2) {
+			u8 *regp = &((u8 *)fb->s.cg3.regs)[p[0]];
+			sbus_writeb(p[1], regp);
+		}
 		for (p = cg3_dacvals; *p; p += 2) {
-			*(volatile u8 *)&fb->s.cg3.regs->cmap.addr = p[0];
-			*(volatile u8 *)&fb->s.cg3.regs->cmap.control = p[1];
+			volatile u8 *regp;
+
+			regp = (volatile u8 *)&fb->s.cg3.regs->cmap.addr;
+			sbus_writeb(p[0], regp);
+			regp = (volatile u8 *)&fb->s.cg3.regs->cmap.control;
+			sbus_writeb(p[1], regp);
 		}
 	}
 

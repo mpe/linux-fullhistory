@@ -679,10 +679,8 @@ spinlock_t sym53c8xx_lock = SPIN_LOCK_UNLOCKED;
 #endif
 
 #ifdef __sparc__
-#include <asm/irq.h>
-#  define ioremap(base, size)	((u_long) __va(base))
-#  define iounmap(vaddr)
-#  define pcivtobus(p)			((p) & pci_dvma_mask)
+#  include <asm/irq.h>
+#  define pcivtobus(p)			bus_dvma_to_mem(p)
 #  define memcpy_to_pci(a, b, c)	memcpy_toio((a), (b), (c))
 #elif defined(__alpha__)
 #  define pcivtobus(p)			((p) & 0xfffffffful)
@@ -11882,11 +11880,10 @@ sym53c8xx_pci_init(Scsi_Host_Template *tpnt, pcidev_t pdev, ncr_device *device)
 	/*
 	**    Fix-ups for sparc.
 	*/
-	base = __pa(base);
-	base_2 = __pa(base_2);
-
 	if (!cache_line_size)
 		suggested_cache_line_size = 16;
+
+	driver_setup.pci_fix_up |= 0x7;
 #endif	/* __sparc__ */
 
 #if defined(__i386__) && !defined(MODULE)

@@ -1,4 +1,4 @@
-/* $Id: ebus.c,v 1.44 1999/09/05 09:28:09 ecd Exp $
+/* $Id: ebus.c,v 1.46 1999/11/19 05:52:48 davem Exp $
  * ebus.c: PCI to EBus bridge device.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -21,9 +21,6 @@
 #include <asm/irq.h>
 
 struct linux_ebus *ebus_chain = 0;
-
-extern void prom_ebus_ranges_init(struct linux_ebus *);
-extern void prom_ebus_intmap_init(struct linux_ebus *);
 
 #ifdef CONFIG_SUN_OPENPROMIO
 extern int openprom_init(void);
@@ -49,15 +46,49 @@ static inline void *ebus_alloc(size_t size)
 	return mem;
 }
 
-void __init ebus_intmap_match(struct linux_ebus *ebus,
-			      struct linux_prom_registers *reg,
-			      int *interrupt)
+static void __init ebus_ranges_init(struct linux_ebus *ebus)
+{
+	int success;
+
+	ebus->num_ebus_ranges = 0;
+	success = prom_getproperty(ebus->prom_node, "ranges",
+				   (char *)ebus->ebus_ranges,
+				   sizeof(ebus->ebus_ranges));
+	if (success != -1)
+		ebus->num_ebus_ranges = (success/sizeof(struct linux_prom_ebus_ranges));
+}
+
+static void __init ebus_intmap_init(struct linux_ebus *ebus)
+{
+	int success;
+
+	ebus->num_ebus_intmap = 0;
+	success = prom_getproperty(ebus->prom_node, "interrupt-map",
+				   (char *)ebus->ebus_intmap,
+				   sizeof(ebus->ebus_intmap));
+	if (success == -1)
+		return;
+
+	ebus->num_ebus_intmap = (success/sizeof(struct linux_prom_ebus_intmap));
+
+	success = prom_getproperty(ebus->prom_node, "interrupt-map-mask",
+				   (char *)&ebus->ebus_intmask,
+				   sizeof(ebus->ebus_intmask));
+	if (success == -1) {
+		prom_printf("%s: can't get interrupt-map-mask\n", __FUNCTION__);
+		prom_halt();
+	}
+}
+
+int __init ebus_intmap_match(struct linux_ebus *ebus,
+			     struct linux_prom_registers *reg,
+			     int *interrupt)
 {
 	unsigned int hi, lo, irq;
 	int i;
 
 	if (!ebus->num_ebus_intmap)
-		return;
+		return 0;
 
 	hi = reg->which_io & ebus->ebus_intmask.phys_hi;
 	lo = reg->phys_addr & ebus->ebus_intmask.phys_lo;
@@ -67,13 +98,10 @@ void __init ebus_intmap_match(struct linux_ebus *ebus,
 		    (ebus->ebus_intmap[i].phys_lo == lo) &&
 		    (ebus->ebus_intmap[i].interrupt == irq)) {
 			*interrupt = ebus->ebus_intmap[i].cinterrupt;
-			return;
+			return 0;
 		}
 	}
-
-	prom_printf("ebus: IRQ [%08x.%08x.%08x] not found in interrupt-map\n",
-		    reg->which_io, reg->phys_addr, *interrupt);
-	prom_halt();
+	return -1;
 }
 
 void __init fill_ebus_child(int node, struct linux_prom_registers *preg,
@@ -139,8 +167,16 @@ void __init fill_ebus_child(int node, struct linux_prom_registers *preg,
 			struct pci_pbm_info *pbm = dev->bus->parent;
 			struct pci_controller_info *p = pbm->parent;
 
-			ebus_intmap_match(dev->bus, preg, &irqs[i]);
-			dev->irqs[i] = p->irq_build(p, dev->bus->self, irqs[i]);
+			if (ebus_intmap_match(dev->bus, preg, &irqs[i]) != -1) {
+				dev->irqs[i] = p->irq_build(p,
+							    dev->bus->self,
+							    irqs[i]);
+			} else {
+				/* If we get a bogus interrupt property, just
+				 * record the raw value instead of punting.
+				 */
+				dev->irqs[i] = irqs[i];
+			}
 		}
 	}
 }
@@ -194,8 +230,16 @@ void __init fill_ebus_device(int node, struct linux_ebus_device *dev)
 			struct pci_pbm_info *pbm = dev->bus->parent;
 			struct pci_controller_info *p = pbm->parent;
 
-			ebus_intmap_match(dev->bus, &regs[0], &irqs[i]);
-			dev->irqs[i] = p->irq_build(p, dev->bus->self, irqs[i]);
+			if (ebus_intmap_match(dev->bus, &regs[0], &irqs[i]) != -1) {
+				dev->irqs[i] = p->irq_build(p,
+							    dev->bus->self,
+							    irqs[i]);
+			} else {
+				/* If we get a bogus interrupt property, just
+				 * record the raw value instead of punting.
+				 */
+				dev->irqs[i] = irqs[i];
+			}
 		}
 	}
 
@@ -295,8 +339,8 @@ void __init ebus_init(void)
 		/* NOTE: Cache line size is in 32-bit word units. */
 		pci_write_config_byte(pdev, PCI_CACHE_LINE_SIZE, 64/sizeof(u32));
 
-		prom_ebus_ranges_init(ebus);
-		prom_ebus_intmap_init(ebus);
+		ebus_ranges_init(ebus);
+		ebus_intmap_init(ebus);
 
 		nd = prom_getchild(ebusnd);
 		if (!nd)

@@ -1,4 +1,4 @@
-/* $Id: sunserial.h,v 1.17 1997/12/19 07:33:12 ecd Exp $
+/* $Id: sunserial.h,v 1.19 1999/12/01 10:45:59 davem Exp $
  * sunserial.h: SUN serial driver infrastructure (including keyboards).
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -37,15 +37,17 @@ struct sunkbd_operations {
 extern struct sunserial_operations rs_ops;
 extern struct sunkbd_operations kbd_ops;
 
-extern void sunserial_setinitfunc(unsigned long *, int (*) (void));
-extern void sunkbd_setinitfunc(unsigned long *, int (*) (void));
+extern void sunserial_setinitfunc(int (*) (void));
+extern void sunkbd_setinitfunc(int (*) (void));
 
 extern int serial_console;
+extern int stop_a_enabled;
 extern void sunserial_console_termios(struct console *);
 
 #ifdef CONFIG_PCI
-extern void sunkbd_install_keymaps(unsigned long *, ushort **, unsigned int, char *,
-				   char **, int, int, struct kbdiacr *, unsigned int);
+extern void sunkbd_install_keymaps(ushort **, unsigned int, char *,
+				   char **, int, int, struct kbdiacr *,
+				   unsigned int);
 #endif
 
 #endif /* !(_SPARC_SUNSERIAL_H) */

@@ -1,4 +1,4 @@
-/* $Id: uaccess.h,v 1.31 1999/07/30 09:31:24 davem Exp $ */
+/* $Id: uaccess.h,v 1.32 1999/11/23 08:56:48 davem Exp $ */
 #ifndef _ASM_UACCESS_H
 #define _ASM_UACCESS_H
 
@@ -347,8 +347,10 @@ extern int __strncpy_from_user(unsigned long dest, unsigned long src, int count)
 	__strncpy_from_user((unsigned long)(dest), (unsigned long)(src), (int)(count))
 
 extern int __strlen_user(const char *);
+extern int __strnlen_user(const char *, long len);
 
 #define strlen_user __strlen_user
+#define strnlen_user __strnlen_user
 
 #endif  /* __ASSEMBLY__ */
 

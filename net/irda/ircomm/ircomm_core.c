@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Jun  6 20:37:34 1999
- * Modified at:   Sat Oct 30 12:48:14 1999
+ * Modified at:   Thu Dec 16 21:15:26 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -144,9 +144,6 @@ static int __ircomm_close(struct ircomm_cb *self)
 {
 	IRDA_DEBUG(2, __FUNCTION__"()\n");
 
-	ASSERT(self != NULL, return -EIO;);
-	ASSERT(self->magic == IRCOMM_MAGIC, return -EIO;);
-
 	/* Disconnect link if any */
 	ircomm_do_event(self, IRCOMM_DISCONNECT_REQUEST, NULL, NULL);
 
@@ -176,6 +173,11 @@ static int __ircomm_close(struct ircomm_cb *self)
 int ircomm_close(struct ircomm_cb *self)
 {
 	struct ircomm_cb *entry;
+
+	ASSERT(self != NULL, return -EIO;);
+	ASSERT(self->magic == IRCOMM_MAGIC, return -EIO;);
+
+	IRDA_DEBUG(0, __FUNCTION__ "()\n");
 
 	entry = hashbin_remove(ircomm, self->line, NULL);
 
@@ -236,14 +238,14 @@ void ircomm_connect_indication(struct ircomm_cb *self, struct sk_buff *skb,
 	 * deliver it first. The side effect is that the control channel 
 	 * will be removed from the skb
 	 */
-#if 0
-	if (clen > 0)
-		ircomm_control_indication(self, skb, clen);
-#endif
 	if (self->notify.connect_indication)
 		self->notify.connect_indication(self->notify.instance, self, 
 						info->qos, info->max_data_size,
 						info->max_header_size, skb);
+	else {
+		IRDA_DEBUG(0, __FUNCTION__ "(), missing handler\n");
+		dev_kfree_skb(skb);
+	}
 }
 
 /*
@@ -282,6 +284,10 @@ void ircomm_connect_confirm(struct ircomm_cb *self, struct sk_buff *skb,
 					     self, info->qos, 
 					     info->max_data_size,
 					     info->max_header_size, skb);
+	else {
+		IRDA_DEBUG(0, __FUNCTION__ "(), missing handler\n");
+		dev_kfree_skb(skb);
+	}
 }
 
 /*
@@ -319,6 +325,10 @@ void ircomm_data_indication(struct ircomm_cb *self, struct sk_buff *skb)
 
 	if (self->notify.data_indication)
 		self->notify.data_indication(self->notify.instance, self, skb);
+	else {
+		IRDA_DEBUG(0, __FUNCTION__ "(), missing handler\n");
+		dev_kfree_skb(skb);
+	}
 }
 
 /*
@@ -349,7 +359,8 @@ void ircomm_process_data(struct ircomm_cb *self, struct sk_buff *skb)
 	if (skb->len)
 		ircomm_data_indication(self, skb);		
 	else {
-		IRDA_DEBUG(4, __FUNCTION__ "(), data was control info only!\n");
+		IRDA_DEBUG(4, __FUNCTION__ 
+			   "(), data was control info only!\n");
 		dev_kfree_skb(skb);
 	}
 }
@@ -399,6 +410,10 @@ static void ircomm_control_indication(struct ircomm_cb *self,
 	if (self->notify.udata_indication)
 		self->notify.udata_indication(self->notify.instance, self, 
 					      ctrl_skb);
+	else {
+		IRDA_DEBUG(0, __FUNCTION__ "(), missing handler\n");
+		dev_kfree_skb(skb);
+	}
 }
 
 /*
@@ -438,6 +453,9 @@ void ircomm_disconnect_indication(struct ircomm_cb *self, struct sk_buff *skb,
 	if (self->notify.disconnect_indication) {
 		self->notify.disconnect_indication(self->notify.instance, self,
 						   info->reason, skb);
+	} else {
+		IRDA_DEBUG(0, __FUNCTION__ "(), missing handler\n");
+		dev_kfree_skb(skb);
 	}
 }
 
@@ -462,7 +480,7 @@ void ircomm_flow_request(struct ircomm_cb *self, LOCAL_FLOW flow)
 
 #ifdef CONFIG_PROC_FS
 /*
- * Function ircomm_proc_read (buf, start, offset, len)
+ * Function ircomm_proc_read (buf, start, offset, len, unused)
  *
  *    
  *

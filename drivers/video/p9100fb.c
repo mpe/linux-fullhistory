@@ -42,7 +42,7 @@ static struct sbus_mmap_map p9100_mmap_map[] = {
 { \
   struct p9100_ctrl *actual; \
   actual = (struct p9100_ctrl *)fb->s.p9100.ctrl; \
-  out = actual-> ## member ; \
+  out = sbus_readl(&actual-> ## member ); \
 }
 
 #define READCTL(member, out) \
@@ -50,8 +50,8 @@ static struct sbus_mmap_map p9100_mmap_map[] = {
   struct p9100_ctrl *enab, *actual; \
   actual = (struct p9100_ctrl *)fb->s.p9100.ctrl; \
   enab = (struct p9100_ctrl *)fb->s.p9100.fbmem; \
-  out = enab-> ## member ; \
-  out = actual-> ## member ; \
+  out = sbus_readl(&enab-> ## member ); \
+  out = sbus_readl(&actual-> ## member ); \
 }
 
 #define WRITECTL(member, val) \
@@ -60,14 +60,17 @@ static struct sbus_mmap_map p9100_mmap_map[] = {
   struct p9100_ctrl *enab, *actual; \
   actual = (struct p9100_ctrl *)fb->s.p9100.ctrl; \
   enab = (struct p9100_ctrl *)fb->s.p9100.fbmem; \
-  __writetmp = enab-> ## member ; \
-  actual-> ## member = val; \
+  __writetmp = sbus_readl(&enab-> ## member ); \
+  sbus_writel(val, &actual-> ## member ); \
 }
 
 static void p9100_loadcmap (struct fb_info_sbusfb *fb, struct display *p, int index, int count)
 {
-	int i;
+	unsigned long flags;
 	u32 tmp;
+	int i;
+
+	spin_lock_irqsave(&fb->lock, flags);
 
 	_READCTL(pwrup_cfg, tmp);
 	WRITECTL(ramdac_cmap_wridx, (index << 16));
@@ -80,22 +83,32 @@ static void p9100_loadcmap (struct fb_info_sbusfb *fb, struct display *p, int in
 		_READCTL(pwrup_cfg, tmp);
 		WRITECTL(ramdac_palette_data, (fb->color_map CM(i,2) << 16));
 	}
+
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void p9100_blank (struct fb_info_sbusfb *fb)
 {
-  u32 val;
-  READCTL(vid_screenpaint_timectl1, val);
-  val &= ~ SCREENPAINT_TIMECTL1_ENABLE_VIDEO;
-  WRITECTL(vid_screenpaint_timectl1, val);
+	unsigned long flags;
+	u32 val;
+
+	spin_lock_irqsave(&fb->lock, flags);
+	READCTL(vid_screenpaint_timectl1, val);
+	val &= ~ SCREENPAINT_TIMECTL1_ENABLE_VIDEO;
+	WRITECTL(vid_screenpaint_timectl1, val);
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void p9100_unblank (struct fb_info_sbusfb *fb)
 {
-  u32 val;
-  READCTL(vid_screenpaint_timectl1, val);
-  val |= SCREENPAINT_TIMECTL1_ENABLE_VIDEO;
-  WRITECTL(vid_screenpaint_timectl1, val);
+	unsigned long flags;
+	u32 val;
+
+	spin_lock_irqsave(&fb->lock, flags);
+	READCTL(vid_screenpaint_timectl1, val);
+	val |= SCREENPAINT_TIMECTL1_ENABLE_VIDEO;
+	WRITECTL(vid_screenpaint_timectl1, val);
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void p9100_margins (struct fb_info_sbusfb *fb, struct display *p, int x_margin, int y_margin)
@@ -111,7 +124,8 @@ char * __init p9100fb_init(struct fb_info_sbusfb *fb)
 	struct fb_fix_screeninfo *fix = &fb->fix;
 	struct display *disp = &fb->disp;
 	struct fbtype *type = &fb->type;
-	unsigned long phys = fb->sbdp->reg_addrs[2].phys_addr;
+	struct sbus_dev *sdev = fb->sbdp;
+	unsigned long phys = sdev->reg_addrs[2].phys_addr;
 	int tmp;
 
 #ifndef FBCON_HAS_CFB8
@@ -124,9 +138,9 @@ char * __init p9100fb_init(struct fb_info_sbusfb *fb)
          */
 
 	if (!fb->s.p9100.ctrl) {
-	  fb->s.p9100.ctrl = (struct p9100_ctrl *)
-	    sparc_alloc_io(fb->sbdp->reg_addrs[0].phys_addr, 0, 
-			   fb->sbdp->reg_addrs[1].reg_size, "p9100_ctrl", fb->iospace, 0);
+		fb->s.p9100.ctrl = (struct p9100_ctrl *)
+			sbus_ioremap(&sdev->resource[0], 0,
+				     sdev->reg_addrs[0].reg_size, "p9100 ctrl");
 	}
 
 	strcpy(fb->info.modename, "p9100");
@@ -136,10 +150,10 @@ char * __init p9100fb_init(struct fb_info_sbusfb *fb)
 
 	disp->scrollmode = SCROLL_YREDRAW;
 	if (!disp->screen_base)
-		disp->screen_base = 
-		  (char *)sparc_alloc_io(phys, 0, type->fb_size, "p9100_ram", 
-					 fb->iospace, 0);
-	fb->s.p9100.fbmem = disp->screen_base;
+		disp->screen_base = (char *)
+			sbus_ioremap(&sdev->resource[2], 0,
+				     type->fb_size, "p9100 ram");
+	fb->s.p9100.fbmem = (volatile u32 *)disp->screen_base;
 	disp->screen_base += fix->line_length * fb->y_margin + fb->x_margin;
 
 	READCTL(sys_config, tmp);
@@ -171,7 +185,8 @@ char * __init p9100fb_init(struct fb_info_sbusfb *fb)
 	fb->physbase = phys;
 	fb->mmap_map = p9100_mmap_map;
 	
-	sprintf(idstring, "%s at 0x%x", "p9100", disp->screen_base);
+	sprintf(idstring, "%s at 0x%x", "p9100", 
+		(unsigned int)disp->screen_base);
 
 	return idstring;
 }

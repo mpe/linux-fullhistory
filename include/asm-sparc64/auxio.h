@@ -1,4 +1,4 @@
-/* $Id: auxio.h,v 1.1 1997/03/14 21:05:27 jj Exp $
+/* $Id: auxio.h,v 1.2 1999/09/21 14:39:25 davem Exp $
  * auxio.h:  Definitions and code for the Auxiliary I/O register.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -11,7 +11,7 @@
 /* FIXME: All of this should be checked for sun4u. It has /sbus/auxio, but
    I don't know whether it is the same and don't have a floppy */
 
-extern unsigned char *auxio_register;
+extern unsigned long auxio_register;
 
 /* This register is an unsigned char in IO space.  It does two things.
  * First, it is used to control the front panel LED light on machines
@@ -33,16 +33,50 @@ extern unsigned char *auxio_register;
 #define AUXIO_FLPY_EJCT   0x02    /* Eject floppy disk.  Write only. */
 #define AUXIO_LED         0x01    /* On if set, off if unset. Read/Write */
 
-#define AUXREG   ((volatile unsigned char *)(auxio_register))
+#define AUXREG   (auxio_register)
 
 /* These are available on sun4c */
-#define TURN_ON_LED   if (AUXREG) *AUXREG = (*AUXREG | AUXIO_ORMEIN | AUXIO_LED)
-#define TURN_OFF_LED  if (AUXREG) *AUXREG = ((*AUXREG | AUXIO_ORMEIN) & (~AUXIO_LED))
-#define FLIP_LED      if (AUXREG) *AUXREG = ((*AUXREG | AUXIO_ORMEIN) ^ AUXIO_LED)
-#define FLPY_MOTORON  if (AUXREG) *AUXREG = ((*AUXREG | AUXIO_ORMEIN) | AUXIO_FLPY_DSEL)
-#define FLPY_MOTOROFF if (AUXREG) *AUXREG = ((*AUXREG | AUXIO_ORMEIN) & (~AUXIO_FLPY_DSEL))
-#define FLPY_TCNTON   if (AUXREG) *AUXREG = ((*AUXREG | AUXIO_ORMEIN) | AUXIO_FLPY_TCNT)
-#define FLPY_TCNTOFF  if (AUXREG) *AUXREG = ((*AUXREG | AUXIO_ORMEIN) & (~AUXIO_FLPY_TCNT))
+#define TURN_ON_LED   \
+do {	if (AUXREG) \
+		sbus_writeb(sbus_readb(AUXREG) | \
+			    (AUXIO_ORMEIN | AUXIO_LED), AUXREG); \
+} while(0)
+#define TURN_OFF_LED  \
+do {	if (AUXREG) \
+		sbus_writeb((sbus_readb(AUXREG) | \
+			     AUXIO_ORMEIN) & (~AUXIO_LED), \
+			    AUXREG); \
+} while(0)
+#define FLIP_LED	\
+do {	if (AUXREG)  \
+		sbus_writeb((sbus_readb(AUXREG) | \
+			     AUXIO_ORMEIN) ^ AUXIO_LEN, \
+			    AUXREG); \
+} while(0)
+#define FLPY_MOTORON	\
+do {	if (AUXREG) \
+		sbus_writeb(sbus_readb(AUXREG) | \
+			    (AUXIO_ORMEIN | AUXIO_FLPY_DSEL), \
+			    AUXREG); \
+} while(0)
+#define FLPY_MOTOROFF	\
+do {	if (AUXREG) \
+		sbus_writeb((sbus_readb(AUXREG) | \
+			     AUXIO_ORMEIN) & (~AUXIO_FLPY_DSEL), \
+			    AUXREG); \
+} while(0)
+#define FLPY_TCNTON	\
+do {	if (AUXREG) \
+		sbus_writeb((sbus_readb(AUXREG) | \
+			     AUXIO_ORMEIN) | AUXIO_FLPY_TCNT, \
+			    AUXREG); \
+} while(0)
+#define FLPY_TCNTOFF	\
+do {	if (AUXREG) \
+		sbus_writeb((sbus_readb(AUXREG) | \
+			     AUXIO_ORMEIN) & (~AUXIO_FLPY_TCNT), \
+			    AUXREG); \
+} while(0)
 
 #ifndef __ASSEMBLY__
 extern __inline__ void set_auxio(unsigned char bits_on, unsigned char bits_off)
@@ -53,8 +87,13 @@ extern __inline__ void set_auxio(unsigned char bits_on, unsigned char bits_off)
 	save_flags(flags); cli();
 
 	if(AUXREG) {
-		regval = *AUXREG;
-		*AUXREG = ((regval | bits_on) & ~bits_off) | AUXIO_ORMEIN4M;
+		unsigned char newval;
+
+		regval = sbus_readb(AUXREG);
+		newval  = regval | bits_on;
+		newval &= ~bits_off;
+		newval |= AUXIO_ORMEIN4M;
+		sbus_writeb(newval, AUXREG);
 	}
 	restore_flags(flags);
 }

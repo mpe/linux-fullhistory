@@ -14,6 +14,7 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
    tristate 'Aurora Multiboard 1600se (EXPERIMENTAL)' CONFIG_SUN_AURORA
    tristate 'Tadpole TS102 Microcontroller support (EXPERIMENTAL)' CONFIG_TADPOLE_TS102_UCTRL
 
+   tristate 'JavaStation OS Flash SIMM (EXPERIMENTAL)' CONFIG_SUN_JSFLASH
    # XXX Why don't we do "source drivers/char/Config.in" somewhere?
    if [ "$CONFIG_PCI" = "y" ]; then
       define_bool CONFIG_APM_RTC_IS_GMT y		# no shit

@@ -52,6 +52,22 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_TOSHIBA_FIR),y)
+L_OBJS += toshoboe.o
+else
+  ifeq ($(CONFIG_TOSHIBA_FIR),m)
+  M_OBJS += toshoboe.o
+  endif
+endif
+
+ifeq ($(CONFIG_TOSHIBA_FIR),y)
+L_OBJS += toshoboe.o
+else
+  ifeq ($(CONFIG_TOSHIBA_FIR),m)
+  M_OBJS += toshoboe.o
+  endif
+endif
+
 ifeq ($(CONFIG_SMC_IRCC_FIR),y)
 L_OBJS += smc-ircc.o
 LX_OBJS += irport.o
@@ -107,6 +123,14 @@ L_OBJS += airport.o
 else
   ifeq ($(CONFIG_AIRPORT_DONGLE),m)
   M_OBJS += airport.o
+  endif
+endif
+
+ifeq ($(CONFIG_OLD_BELKIN_DONGLE),y)
+L_OBJS += old_belkin.o
+else
+  ifeq ($(CONFIG_OLD_BELKIN_DONGLE),m)
+  M_OBJS += old_belkin.o
   endif
 endif
 

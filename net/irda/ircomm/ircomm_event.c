@@ -3,10 +3,10 @@
  * Filename:      ircomm_event.c
  * Version:       1.0
  * Description:   IrCOMM layer state machine
- * Status:        Experimental.
+ * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Jun  6 20:33:11 1999
- * Modified at:   Sat Oct 30 13:05:23 1999
+ * Modified at:   Sun Dec 12 13:44:32 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -109,6 +109,8 @@ static int ircomm_state_idle(struct ircomm_cb *self, IRCOMM_EVENT event,
 	default:
 		IRDA_DEBUG(4, __FUNCTION__"(), unknown event: %s\n",
 			   ircomm_event[event]);
+		if (skb)
+			dev_kfree_skb(skb);
 		return -EINVAL;
 	}
 	return ret;
@@ -139,6 +141,8 @@ static int ircomm_state_waiti(struct ircomm_cb *self, IRCOMM_EVENT event,
 	default:
 		IRDA_DEBUG(0, __FUNCTION__"(), unknown event: %s\n",
 			   ircomm_event[event]);
+		if (skb)
+			dev_kfree_skb(skb);
 		ret = -EINVAL;
 	}
 	return ret;
@@ -172,6 +176,8 @@ static int ircomm_state_waitr(struct ircomm_cb *self, IRCOMM_EVENT event,
 	default:
 		IRDA_DEBUG(0, __FUNCTION__ "(), unknown event = %s\n",
 			   ircomm_event[event]);
+		if (skb)
+			dev_kfree_skb(skb);
 		ret = -EINVAL;
 	}
 	return ret;
@@ -214,6 +220,8 @@ static int ircomm_state_conn(struct ircomm_cb *self, IRCOMM_EVENT event,
 	default:
 		IRDA_DEBUG(0, __FUNCTION__ "(), unknown event = %s\n",
 			   ircomm_event[event]);
+		if (skb)
+			dev_kfree_skb(skb);
 		ret = -EINVAL;
 	}
 	return ret;

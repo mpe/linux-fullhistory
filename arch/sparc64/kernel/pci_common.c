@@ -1,4 +1,4 @@
-/* $Id: pci_common.c,v 1.3 1999/09/04 22:26:32 ecd Exp $
+/* $Id: pci_common.c,v 1.5 1999/12/20 05:02:11 davem Exp $
  * pci_common.c: PCI controller common support.
  *
  * Copyright (C) 1999 David S. Miller (davem@redhat.com)
@@ -362,7 +362,7 @@ static void __init pdev_assign_unassigned(struct pci_pbm_info *pbm,
 
 		size = res->end - res->start;
 		align = size + 1;
-		if (allocate_resource(root, res, size + 1, min, max, align) < 0) {
+		if (allocate_resource(root, res, size + 1, min, max, align, NULL, NULL) < 0) {
 			/* uh oh */
 			prom_printf("PCI: Failed to allocate resource %d for %s\n",
 				    i, pdev->name);

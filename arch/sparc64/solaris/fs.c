@@ -1,7 +1,10 @@
-/* $Id: fs.c,v 1.13 1999/05/14 07:24:37 davem Exp $
+/* $Id: fs.c,v 1.14 1999/09/22 09:28:49 davem Exp $
  * fs.c: fs related syscall emulation for Solaris
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ *
+ * 1999-08-19 Implemented solaris F_FREESP (truncate)
+ *            fcntl, by Jason Rappleye (rappleye@ccr.buffalo.edu)
  */
 
 #include <linux/types.h>
@@ -661,7 +664,16 @@ asmlinkage int solaris_fcntl(unsigned fd, unsigned cmd, u32 arg)
 			__put_user_ret (0, &((struct sol_flock *)A(arg))->l_sysid, -EFAULT);
 			return ret;
 		}
-	}
+	case SOL_F_FREESP:
+	        { 
+		    int length;
+		    int (*sys_newftruncate)(unsigned int, unsigned long)=
+			    (int (*)(unsigned int, unsigned long))SYS(ftruncate);
+
+		    get_user_ret(length, &((struct sol_flock*)A(arg))->l_start, -EFAULT);
+		    return sys_newftruncate(fd, length);
+		}
+	};
 	return -EINVAL;
 }
 

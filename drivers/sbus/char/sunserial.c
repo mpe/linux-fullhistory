@@ -1,24 +1,29 @@
-/* $Id: sunserial.c,v 1.70 1999/09/04 20:28:17 davem Exp $
+/* $Id: sunserial.c,v 1.74 1999/12/15 22:30:23 davem Exp $
  * serial.c: Serial port driver infrastructure for the Sparc.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
  */
 
 #include <linux/config.h>
+#include <linux/kernel.h>
+#include <linux/sched.h>
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/tty.h>
 #include <linux/serial.h>
+#include <linux/serialP.h>
 #include <linux/string.h>
 #include <linux/kbd_diacr.h>
 #include <linux/version.h>
 #include <linux/init.h>
+#include <linux/bootmem.h>
 
 #include <asm/oplib.h>
 
 #include "sunserial.h"
 
 int serial_console;
+int stop_a_enabled = 1;
 
 int __init con_is_present(void)
 {
@@ -67,9 +72,9 @@ void __init rs_kgdb_hook(int channel)
 	rs_ops.rs_kgdb_hook(channel);
 }
 
-long __init serial_console_init(long kmem_start, long kmem_end)
+void __init serial_console_init(void)
 {
-	return kmem_start;
+	return;
 }
 
 void rs_change_mouse_baud(int baud)
@@ -168,14 +173,27 @@ int getkeycode (unsigned int scancode)
 	return kbd_ops.getkeycode(scancode);
 }
 
+void * __init sunserial_alloc_bootmem(unsigned long size)
+{
+	void *ret;
+
+	ret = __alloc_bootmem(size, SMP_CACHE_BYTES, 0UL);
+	if (ret != NULL)
+		memset(ret, 0, size);
+
+	return ret;
+}
+
 void
-sunserial_setinitfunc(unsigned long *memory_start, int (*init) (void))
+sunserial_setinitfunc(int (*init) (void))
 {
 	struct initfunc *rs_init;
 
-	*memory_start = (*memory_start + 7) & ~(7);
-	rs_init = (struct initfunc *) *memory_start;
-	*memory_start += sizeof(struct initfunc);
+	rs_init = sunserial_alloc_bootmem(sizeof(struct initfunc));
+	if (rs_init == NULL) {
+		prom_printf("sunserial_setinitfunc: Cannot alloc initfunc.\n");
+		prom_halt();
+	}
 
 	rs_init->init = init;
 	rs_init->next = rs_ops.rs_init;
@@ -291,13 +309,15 @@ no_options:
 }
 
 void
-sunkbd_setinitfunc(unsigned long *memory_start, int (*init) (void))
+sunkbd_setinitfunc(int (*init) (void))
 {
 	struct initfunc *kbd_init;
 
-	*memory_start = (*memory_start + 7) & ~(7);
-	kbd_init = (struct initfunc *) *memory_start;
-	*memory_start += sizeof(struct initfunc);
+	kbd_init = sunserial_alloc_bootmem(sizeof(struct initfunc));
+	if (kbd_init == NULL) {
+		prom_printf("sunkbd_setinitfunc: Cannot alloc initfunc.\n");
+		prom_halt();
+	}
 
 	kbd_init->init = init;
 	kbd_init->next = kbd_ops.kbd_init;
@@ -306,8 +326,7 @@ sunkbd_setinitfunc(unsigned long *memory_start, int (*init) (void))
 
 #ifdef CONFIG_PCI
 void
-sunkbd_install_keymaps(unsigned long *memory_start,
-		       ushort **src_key_maps, unsigned int src_keymap_count,
+sunkbd_install_keymaps(ushort **src_key_maps, unsigned int src_keymap_count,
 		       char *src_func_buf, char **src_func_table,
 		       int src_funcbufsize, int src_funcbufleft,
 		       struct kbdiacr *src_accent_table,
@@ -319,8 +338,13 @@ sunkbd_install_keymaps(unsigned long *memory_start,
 	for (i = 0; i < MAX_NR_KEYMAPS; i++) {
 		if (src_key_maps[i]) {
 			if (!key_maps[i]) {
-				key_maps[i] = (ushort *)*memory_start;
-				*memory_start += NR_KEYS * sizeof(ushort);
+				key_maps[i] = (ushort *)
+					sunserial_alloc_bootmem(NR_KEYS * sizeof(ushort));
+				if (key_maps[i] == NULL) {
+					prom_printf("sunkbd_install_keymaps: "
+						    "Cannot alloc key_map(%d).\n", i);
+					prom_halt();
+				}
 			}
 			for (j = 0; j < NR_KEYS; j++)
 				key_maps[i][j] = src_key_maps[i][j];
@@ -341,16 +365,16 @@ sunkbd_install_keymaps(unsigned long *memory_start,
 }
 #endif
 
-extern int su_probe(unsigned long *);
-extern int zs_probe(unsigned long *);
+extern int su_probe(void);
+extern int zs_probe(void);
 #ifdef CONFIG_SAB82532
-extern int sab82532_probe(unsigned long *);
+extern int sab82532_probe(void);
 #endif
 #ifdef CONFIG_PCI
-extern int ps2kbd_probe(unsigned long *);
+extern int ps2kbd_probe(void);
 #endif
 
-unsigned long __init sun_serial_setup(unsigned long memory_start)
+void __init sun_serial_setup(void)
 {
 	int ret = 1;
 	
@@ -362,16 +386,16 @@ unsigned long __init sun_serial_setup(unsigned long memory_start)
 	 * get console on MrCoffee with fine but disconnected zs.
 	 */
 	if (!serial_console)
-		ps2kbd_probe(&memory_start);
-	if (su_probe(&memory_start) == 0)
-		return memory_start;
+		ps2kbd_probe();
+	if (su_probe() == 0)
+		return;
 #endif
 
-	if (zs_probe(&memory_start) == 0)
-		return memory_start;
+	if (zs_probe() == 0)
+		return;
 		
 #ifdef CONFIG_SAB82532
-	ret = sab82532_probe(&memory_start);
+	ret = sab82532_probe();
 #endif
 
 #if defined(CONFIG_PCI) && defined(__sparc_v9__)
@@ -387,23 +411,22 @@ unsigned long __init sun_serial_setup(unsigned long memory_start)
 	 * serial console.
 	 */
 	if (!serial_console)
-		ps2kbd_probe(&memory_start);
-	if (su_probe(&memory_start) == 0)
-		return memory_start;
+		ps2kbd_probe();
+	if (su_probe() == 0)
+		return;
 #endif
 
 	if (!ret)
-		return memory_start;
+		return;
 		
 #ifdef __sparc_v9__
 	{	extern int this_is_starfire;
 		/* Hello, Starfire. Pleased to meet you :) */
 		if(this_is_starfire != 0)
-			return memory_start;
+			return;
 	}
 #endif
 
 	prom_printf("No serial devices found, bailing out.\n");
 	prom_halt();
-	return memory_start;
 }

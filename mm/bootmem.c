@@ -45,6 +45,7 @@ static unsigned long __init init_bootmem_core (bootmem_data_t *bdata,
 {
 	unsigned long mapsize = ((end - start)+7)/8;
 
+	mapsize = (mapsize + (sizeof(long) - 1UL)) & ~(sizeof(long) - 1UL);
 	bdata->node_bootmem_map = phys_to_virt(mapstart << PAGE_SHIFT);
 	bdata->node_boot_start = (start << PAGE_SHIFT);
 	bdata->node_low_pfn = end;

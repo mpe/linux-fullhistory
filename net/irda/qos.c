@@ -1,13 +1,12 @@
 /*********************************************************************
- *                
- *                
+ *                                
  * Filename:      qos.c
  * Version:       1.0
  * Description:   IrLAP QoS parameter negotiation
- * Status:        Experimental.
+ * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Sep  9 00:00:26 1997
- * Modified at:   Tue Nov 16 09:50:19 1999
+ * Modified at:   Sun Dec 12 13:47:09 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -52,17 +51,31 @@ static int irlap_param_window_size(void *instance, param_t *param, int get);
 static int irlap_param_additional_bofs(void *instance, param_t *parm, int get);
 static int irlap_param_min_turn_time(void *instance, param_t *param, int get);
 
-__u32 min_turn_time[]  = { 10000, 5000, 1000, 500, 100, 50, 10, 0 }; /* us */
-__u32 baud_rates[]     = { 2400, 9600, 19200, 38400, 57600, 115200, 576000, 
-			   1152000, 4000000, 16000000 };            /* bps */
-__u32 data_size[]      = { 64, 128, 256, 512, 1024, 2048 };         /* bytes */
-__u32 add_bofs[]       = { 48, 24, 12, 5, 3, 2, 1, 0 };             /* bytes */
-__u32 max_turn_time[]  = { 500, 250, 100, 50 };                     /* ms */
-__u32 link_disc_time[] = { 3, 8, 12, 16, 20, 25, 30, 40 };          /* secs */
+__u32 min_turn_times[]  = { 10000, 5000, 1000, 500, 100, 50, 10, 0 }; /* us */
+__u32 baud_rates[]      = { 2400, 9600, 19200, 38400, 57600, 115200, 576000, 
+			    1152000, 4000000, 16000000 };           /* bps */
+__u32 data_sizes[]      = { 64, 128, 256, 512, 1024, 2048 };        /* bytes */
+__u32 add_bofs[]        = { 48, 24, 12, 5, 3, 2, 1, 0 };            /* bytes */
+__u32 max_turn_times[]  = { 500, 250, 100, 50 };                    /* ms */
+__u32 link_disc_times[] = { 3, 8, 12, 16, 20, 25, 30, 40 };         /* secs */
 
 #ifdef CONFIG_IRDA_COMPRESSION
-__u32 compression[] = { CI_BZIP2, CI_DEFLATE, CI_DEFLATE_DRAFT };
+__u32 compressions[] = { CI_BZIP2, CI_DEFLATE, CI_DEFLATE_DRAFT };
 #endif
+
+__u32 max_line_capacities[10][4] = {
+       /* 500 ms     250 ms  100 ms  50 ms (max turn time) */
+	{    100,      0,      0,     0 }, /*     2400 bps */
+	{    400,      0,      0,     0 }, /*     9600 bps */
+	{    800,      0,      0,     0 }, /*    19200 bps */
+	{   1600,      0,      0,     0 }, /*    38400 bps */
+	{   2360,      0,      0,     0 }, /*    57600 bps */
+	{   4800,   2400,    960,   480 }, /*   115200 bps */
+	{  28800,  11520,   5760,  2880 }, /*   576000 bps */
+	{  57600,  28800,  11520,  5760 }, /*  1152000 bps */
+	{ 200000, 100000,  40000, 20000 }, /*  4000000 bps */
+	{ 800000, 400000, 160000, 80000 }, /* 16000000 bps */
+};
 
 static pi_minor_info_t pi_minor_call_table_type_0[] = {
 	{ NULL, 0 },
@@ -150,6 +163,69 @@ void irda_init_max_qos_capabilies(struct qos_info *qos)
 }
 
 /*
+ * Function irlap_adjust_qos_settings (qos)
+ *
+ *     Adjust QoS settings in case some values are not possible to use because
+ *     of other settings
+ */
+void irlap_adjust_qos_settings(struct qos_info *qos)
+{
+	__u32 line_capacity;
+	int index;
+
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
+
+	/* 
+	 * Not allowed to use a max turn time less than 500 ms if the baudrate
+	 * is less than 115200
+	 */
+	if ((qos->baud_rate.value < 115200) && 
+	    (qos->max_turn_time.value < 500))
+	{
+		IRDA_DEBUG(0, __FUNCTION__ 
+			   "(), adjusting max turn time from %d to 500 ms\n",
+			   qos->max_turn_time.value);
+		qos->max_turn_time.value = 500;
+	}
+	
+	/*
+	 * The data size must be adjusted according to the baud rate and max 
+	 * turn time
+	 */
+	index = value_index(qos->data_size.value, data_sizes);
+	line_capacity = irlap_max_line_capacity(qos->baud_rate.value, 
+						qos->max_turn_time.value);
+
+#ifdef CONFIG_IRDA_DYNAMIC_WINDOW
+	while ((qos->data_size.value > line_capacity) && (index > 0)) {
+		qos->data_size.value = data_sizes[index--];
+		IRDA_DEBUG(2, __FUNCTION__ 
+			   "(), redusing data size to %d\n",
+			   qos->data_size.value);
+	}
+#else /* Use method descibed in section 6.6.11 of IrLAP */
+	while (irlap_requested_line_capacity(qos) > line_capacity) {
+		ASSERT(index != 0, return;);
+
+		/* Must be able to send at least one frame */
+		if (qos->window_size.value > 1) {
+			qos->window_size.value--;
+			IRDA_DEBUG(2, __FUNCTION__ 
+				   "(), redusing window size to %d\n",
+				   qos->window_size.value);
+		} else if (index > 1) {
+			qos->data_size.value = data_sizes[index--];
+			IRDA_DEBUG(2, __FUNCTION__ 
+				   "(), redusing data size to %d\n",
+				   qos->data_size.value);
+		} else {
+			WARNING(__FUNCTION__ "(), nothing more we can do!\n");
+		}
+	}
+#endif CONFIG_IRDA_DYNAMIC_WINDOW
+}
+
+/*
  * Function irlap_negotiate (qos_device, qos_session, skb)
  *
  *    Negotiate QoS values, not really that much negotiation :-)
@@ -176,24 +252,26 @@ int irlap_qos_negotiate(struct irlap_cb *self, struct sk_buff *skb)
 	/* Convert the negotiated bits to values */
 	irda_qos_bits_to_value(&self->qos_tx);
 	irda_qos_bits_to_value(&self->qos_rx);
-		
+
+	irlap_adjust_qos_settings(&self->qos_tx);
+
 	IRDA_DEBUG(2, "Setting BAUD_RATE to %d bps.\n", 
-	      self->qos_tx.baud_rate.value);
+		   self->qos_tx.baud_rate.value);
 	IRDA_DEBUG(2, "Setting DATA_SIZE to %d bytes\n",
-	      self->qos_tx.data_size.value);
+		   self->qos_tx.data_size.value);
 	IRDA_DEBUG(2, "Setting WINDOW_SIZE to %d\n", 
-	      self->qos_tx.window_size.value);
+		   self->qos_tx.window_size.value);
 	IRDA_DEBUG(2, "Setting XBOFS to %d\n", 
-	      self->qos_tx.additional_bofs.value);
+		   self->qos_tx.additional_bofs.value);
 	IRDA_DEBUG(2, "Setting MAX_TURN_TIME to %d ms.\n",
-	      self->qos_tx.max_turn_time.value);
+		   self->qos_tx.max_turn_time.value);
 	IRDA_DEBUG(2, "Setting MIN_TURN_TIME to %d usecs.\n",
-	      self->qos_tx.min_turn_time.value);
+		   self->qos_tx.min_turn_time.value);
 	IRDA_DEBUG(2, "Setting LINK_DISC to %d secs.\n", 
-	      self->qos_tx.link_disc_time.value);
+		   self->qos_tx.link_disc_time.value);
 #ifdef CONFIG_IRDA_COMPRESSION
 	IRDA_DEBUG(2, "Setting COMPRESSION to %d\n", 
-	      self->qos_tx.compression.value);
+		   self->qos_tx.compression.value);
 #endif	
 	return ret;
 }
@@ -278,7 +356,8 @@ static int irlap_param_baud_rate(void *instance, param_t *param, int get)
 
 	if (get) {
 		param->pv.i = self->qos_rx.baud_rate.bits;
-		IRDA_DEBUG(2, __FUNCTION__ "(), baud rate = 0x%02x\n", param->pv.i);		
+		IRDA_DEBUG(2, __FUNCTION__ "(), baud rate = 0x%02x\n", 
+			   param->pv.i);		
 	} else {
 		/* 
 		 *  Stations must agree on baud rate, so calculate
@@ -435,6 +514,57 @@ static int irlap_param_min_turn_time(void *instance, param_t *param, int get)
 	return 0;
 }
 
+/*
+ * Function irlap_max_line_capacity (speed, max_turn_time, min_turn_time)
+ *
+ *    Calculate the maximum line capacity
+ *
+ */
+__u32 irlap_max_line_capacity(__u32 speed, __u32 max_turn_time)
+{
+	__u32 line_capacity;
+	int i,j;
+
+	IRDA_DEBUG(2, __FUNCTION__ "(), speed=%d, max_turn_time=%d\n",
+		   speed, max_turn_time);
+
+	i = value_index(speed, baud_rates);
+	j = value_index(max_turn_time, max_turn_times);
+
+	ASSERT(((i >=0) && (i <=10)), return 0;);
+	ASSERT(((j >=0) && (j <=4)), return 0;);
+
+	line_capacity = max_line_capacities[i][j];
+
+	IRDA_DEBUG(2, __FUNCTION__ "(), line capacity=%d bytes\n", 
+		   line_capacity);
+	
+	return line_capacity;
+}
+
+__u32 irlap_requested_line_capacity(struct qos_info *qos)
+{	__u32 line_capacity;
+	
+	line_capacity = qos->window_size.value * 
+		(qos->data_size.value + 6 + qos->additional_bofs.value) +
+		irlap_min_turn_time_in_bytes(qos->baud_rate.value, 
+					     qos->min_turn_time.value);
+	
+	IRDA_DEBUG(2, __FUNCTION__ "(), requested line capacity=%d\n",
+		   line_capacity);
+	
+	return line_capacity;			       		  
+}
+
+__u32 irlap_min_turn_time_in_bytes(__u32 speed, __u32 min_turn_time)
+{
+	__u32 bytes;
+	
+	bytes = speed * min_turn_time / 10000000;
+	
+	return bytes;
+}
+
 __u32 byte_value(__u8 byte, __u32 *array) 
 {
 	int index;
@@ -503,19 +633,19 @@ void irda_qos_bits_to_value(struct qos_info *qos)
 	qos->baud_rate.value = baud_rates[index];
 
 	index = msb_index(qos->data_size.bits);
-	qos->data_size.value = data_size[index];
+	qos->data_size.value = data_sizes[index];
 
 	index = msb_index(qos->window_size.bits);
 	qos->window_size.value = index+1;
 
 	index = msb_index(qos->min_turn_time.bits);
-	qos->min_turn_time.value = min_turn_time[index];
+	qos->min_turn_time.value = min_turn_times[index];
 	
 	index = msb_index(qos->max_turn_time.bits);
-	qos->max_turn_time.value = max_turn_time[index];
+	qos->max_turn_time.value = max_turn_times[index];
 
 	index = msb_index(qos->link_disc_time.bits);
-	qos->link_disc_time.value = link_disc_time[index];
+	qos->link_disc_time.value = link_disc_times[index];
 	
 	index = msb_index(qos->additional_bofs.bits);
 	qos->additional_bofs.value = add_bofs[index];
@@ -523,7 +653,7 @@ void irda_qos_bits_to_value(struct qos_info *qos)
 #ifdef CONFIG_IRDA_COMPRESSION
 	index = msb_index(qos->compression.bits);
 	if (index >= 0)
-		qos->compression.value = compression[index];
+		qos->compression.value = compressions[index];
 	else 
 		qos->compression.value = 0;
 #endif

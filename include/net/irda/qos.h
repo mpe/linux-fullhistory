@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Fri Sep 19 23:21:09 1997
- * Modified at:   Tue Oct  5 11:51:37 1999
+ * Modified at:   Thu Dec  2 13:51:54 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -87,17 +87,21 @@ struct qos_info {
 };
 
 extern __u32 baud_rates[];
-extern __u32 data_size[];
-extern __u32 min_turn_time[];
+extern __u32 data_sizes[];
+extern __u32 min_turn_times[];
 extern __u32 add_bofs[];
-extern __u32 compression[];
+extern __u32 compressions[];
 
 void irda_init_max_qos_capabilies(struct qos_info *qos);
 void irda_qos_compute_intersection(struct qos_info *, struct qos_info *);
 
+__u32 irlap_max_line_capacity(__u32 speed, __u32 max_turn_time);
+__u32 irlap_requested_line_capacity(struct qos_info *qos);
+__u32 irlap_min_turn_time_in_bytes(__u32 speed, __u32 min_turn_time);
+
 int msb_index(__u16 byte);
-__u32 byte_value(__u8 byte, __u32 *array);
 int value_index(__u32 value, __u32 *array);
+__u32 byte_value(__u8 byte, __u32 *array);
 __u32 index_value(int index, __u32 *array);
 
 void irda_qos_bits_to_value(struct qos_info *qos);

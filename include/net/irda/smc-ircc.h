@@ -83,28 +83,28 @@
 #define UART_SCE_CFGB	0x01
 #define UART_FIFO_THRESHOLD	0x02
 
-#define UART_CFGA_AUX_IR		0x01<<7
+#define UART_CFGA_AUX_IR	0x01<<7
 #define UART_CFGA_HALF_DUPLEX	0x01<<2
 #define UART_CFGA_TX_POLARITY	0x01<<1
 #define UART_CFGA_RX_POLARITY	0x01
 
 #define UART_CFGA_COM		0x00<<3
 #define UART_CFGA_IRDA_SIR_A	0x01<<3
-#define UART_CFGA_ASK_SIR		0x02<<3
+#define UART_CFGA_ASK_SIR	0x02<<3
 #define UART_CFGA_IRDA_SIR_B	0x03<<3
 #define UART_CFGA_IRDA_HDLC 	0x04<<3
 #define UART_CFGA_IRDA_4PPM 	0x05<<3
-#define UART_CFGA_CONSUMER		0x06<<3
-#define UART_CFGA_RAW_IR		0x07<<3
+#define UART_CFGA_CONSUMER	0x06<<3
+#define UART_CFGA_RAW_IR	0x07<<3
 #define UART_CFGA_OTHER		0x08<<3
 
 #define UART_IR_HDLC			0x04
 #define UART_IR_4PPM			0x01
 #define UART_IR_CONSUMER		0x02
 
-#define UART_CFGB_LOOPBACK		0x01<<5
+#define UART_CFGB_LOOPBACK      0x01<<5
 #define UART_CFGB_LPBCK_TX_CRC	0x01<<4
-#define UART_CFGB_NOWAIT		0x01<<3
+#define UART_CFGB_NOWAIT	0x01<<3
 #define UART_CFGB_STRING_MOVE	0x01<<2
 #define UART_CFGB_DMA_BURST 	0x01<<1
 #define UART_CFGB_DMA_ENABLE	0x01
@@ -112,7 +112,7 @@
 #define UART_CFGB_COM		0x00<<6
 #define UART_CFGB_IR		0x01<<6
 #define UART_CFGB_AUX		0x02<<6
-#define UART_CFGB_INACTIVE		0x03<<6
+#define UART_CFGB_INACTIVE	0x03<<6
 
 /* Register block 2 - Consumer IR - not used */
 
@@ -125,13 +125,13 @@
 #define UART_INTERFACE	0x04   /* low 4 = DMA, high 4 = IRQ */
 
 /* Register block 4 - IrDA */
-#define UART_CONTROL        0x00
-#define UART_BOF_COUNT_LO      0x01
-#define UART_BRICKWALL_CNT_LO 0x02
-#define UART_BRICKWALL_TX_CNT_HI   0x03
-#define UART_TX_SIZE_LO   0x04
-#define UART_RX_SIZE_HI   0x05
-#define UART_RX_SIZE_LO   0x06
+#define UART_CONTROL             0x00
+#define UART_BOF_COUNT_LO        0x01
+#define UART_BRICKWALL_CNT_LO    0x02
+#define UART_BRICKWALL_TX_CNT_HI 0x03
+#define UART_TX_SIZE_LO          0x04
+#define UART_RX_SIZE_HI          0x05
+#define UART_RX_SIZE_LO          0x06
 
 #define UART_1152     0x01<<7
 #define UART_CRC      0x01<<6
@@ -152,8 +152,6 @@ struct st_fifo {
 /* Private data for each instance */
 struct ircc_cb {
 	struct net_device *netdev; /* Yes! we are some kind of netdevice */
-	struct net_device_stats stats;
-	
 	struct irlap_cb    *irlap; /* The link layer we are binded to */
 	
 	struct chipio_t io;        /* IrDA controller information */
@@ -161,16 +159,15 @@ struct ircc_cb {
 	struct iobuff_t rx_buff;   /* Receive buffer */
 	struct qos_info qos;       /* QoS capabilities for this device */
 
-	struct irport_cb irport;
+	struct irport_cb *irport;
 	
+	__u32 new_speed;
 	__u32 flags;               /* Interface flags */
 
 	struct st_fifo st_fifo;
 
 	int tx_buff_offsets[10]; /* Offsets between frames in tx_buff */
 	int tx_len;              /* Number of frames in tx_buff */
-
-
 };
 
 #endif

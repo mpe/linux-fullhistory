@@ -1,4 +1,4 @@
-/* $Id: envctrl.c,v 1.12 1999/08/31 06:58:04 davem Exp $
+/* $Id: envctrl.c,v 1.13 1999/12/19 23:28:07 davem Exp $
  * envctrl.c: Temperature and Fan monitoring on Machines providing it.
  *
  * Copyright (C) 1998  Eddie C. Dost  (ecd@skynet.be)
@@ -78,6 +78,7 @@
 /* PCF8584 register offsets */
 #define I2C_DATA	0x00UL
 #define I2C_CSR		0x01UL
+#define I2C_REG_SIZE	0x02UL
 
 struct i2c_device {
 	unsigned char		addr;
@@ -1565,7 +1566,7 @@ ebus_done:
 		return -ENODEV;
 	}
 
-	i2c_regs = edev->resource[0].start;
+	i2c_regs = (unsigned long) ioremap(edev->resource[0].start, I2C_REG_SIZE);
 	writeb(CONTROL_PIN, i2c_regs + I2C_CSR);
 	writeb(PCF8584_ADDRESS >> 1, i2c_regs + I2C_DATA);
 	writeb(CONTROL_PIN | CONTROL_ES1, i2c_regs + I2C_CSR);
@@ -1625,6 +1626,7 @@ void cleanup_module(void)
 {
 	envctrl_stop();
 	i2c_free_devices();
+	iounmap(i2c_regs);
 	misc_deregister(&envctrl_dev);
 }
 #endif

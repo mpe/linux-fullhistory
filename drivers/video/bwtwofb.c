@@ -1,4 +1,4 @@
-/* $Id: bwtwofb.c,v 1.8 1999/08/26 05:13:09 shadow Exp $
+/* $Id: bwtwofb.c,v 1.11 1999/11/19 09:56:54 davem Exp $
  * bwtwofb.c: BWtwo frame buffer driver
  *
  * Copyright (C) 1998 Jakub Jelinek   (jj@ultra.linux.cz)
@@ -85,17 +85,33 @@ static struct sbus_mmap_map bw2_mmap_map[] = {
 
 static void bw2_blank (struct fb_info_sbusfb *fb)
 {
-	fb->s.bw2.regs->control &= ~BWTWO_CTL_ENABLE_VIDEO;
+	unsigned long flags;
+	u8 tmp;
+
+	spin_lock_irqsave(&fb->lock, flags);
+	tmp = sbus_readb(&fb->s.bw2.regs->control);
+	tmp &= ~BWTWO_CTL_ENABLE_VIDEO;
+	sbus_writeb(tmp, &fb->s.bw2.regs->control);
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void bw2_unblank (struct fb_info_sbusfb *fb)
 {
-	fb->s.bw2.regs->control |= BWTWO_CTL_ENABLE_VIDEO;
+	unsigned long flags;
+	u8 tmp;
+
+	spin_lock_irqsave(&fb->lock, flags);
+	tmp = sbus_readb(&fb->s.bw2.regs->control);
+	tmp |= BWTWO_CTL_ENABLE_VIDEO;
+	sbus_writeb(tmp, &fb->s.bw2.regs->control);
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
-static void bw2_margins (struct fb_info_sbusfb *fb, struct display *p, int x_margin, int y_margin)
+static void bw2_margins (struct fb_info_sbusfb *fb, struct display *p,
+			 int x_margin, int y_margin)
 {
-	p->screen_base += (y_margin - fb->y_margin) * p->line_length + ((x_margin - fb->x_margin) >> 3);
+	p->screen_base += (y_margin - fb->y_margin) *
+		p->line_length + ((x_margin - fb->x_margin) >> 3);
 }
 
 static u8 bw2regs_1600[] __initdata = {
@@ -142,17 +158,29 @@ char __init *bwtwofb_init(struct fb_info_sbusfb *fb)
 	struct fbtype *type = &fb->type;
 #ifdef CONFIG_SUN4
 	unsigned long phys = sun4_bwtwo_physaddr;
+	struct resource res;
 #else
 	unsigned long phys = fb->sbdp->reg_addrs[0].phys_addr;
 #endif
+	struct resource *resp;
+	unsigned int vaddr;
 
 #ifndef FBCON_HAS_MFB
 	return NULL;
 #endif
 
+#ifdef CONFIG_SUN4
+	res.start = phys;
+	res.end = res.start + BWTWO_REGISTER_OFFSET + sizeof(struct bw2_regs) - 1;
+	res.flags = IORESOURE_IO | (fb->iospace & 0xff);
+	resp = &res;
+#else
+	resp = &fb->sbdp->resource[0];
+#endif
 	if (!fb->s.bw2.regs) {
-		fb->s.bw2.regs = (struct bw2_regs *)sparc_alloc_io(phys+BWTWO_REGISTER_OFFSET, 0, 
-				sizeof(struct bw2_regs), "bw2_regs", fb->iospace, 0);
+		fb->s.bw2.regs = (struct bw2_regs *)
+			sbus_ioremap(resp, BWTWO_REGISTER_OFFSET,
+				     sizeof(struct bw2_regs), "bw2 regs");
 		if ((!ARCH_SUN4) && (!prom_getbool(fb->prom_node, "width"))) {
 			/* Ugh, broken PROM didn't initialize us.
 			 * Let's deal with this ourselves.
@@ -161,7 +189,7 @@ char __init *bwtwofb_init(struct fb_info_sbusfb *fb)
 			u8 *p;
 			int sizechange = 0;
 
-			status = fb->s.bw2.regs->status;
+			status = sbus_readb(&fb->s.bw2.regs->status);
 			mon = status & BWTWO_SR_RES_MASK;
 			switch (status & BWTWO_SR_ID_MASK) {
 				case BWTWO_SR_ID_MONO_ECL:
@@ -191,21 +219,24 @@ char __init *bwtwofb_init(struct fb_info_sbusfb *fb)
 					prom_halt();
 					return NULL; /* fool gcc. */
 			}
-			for ( ; *p; p += 2)
-				((u8 *)fb->s.bw2.regs)[p[0]] = p[1];
+			for ( ; *p; p += 2) {
+				u8 *regp = &((u8 *)fb->s.bw2.regs)[p[0]];
+				sbus_writeb(p[1], regp);
+			}
 		}
 	}
 
 	strcpy(fb->info.modename, "BWtwo");
 	strcpy(fix->id, "BWtwo");
-	fix->line_length = fb->var.xres_virtual>>3;
+	fix->line_length = fb->var.xres_virtual >> 3;
 	fix->accel = FB_ACCEL_SUN_BWTWO;
 	
 	disp->scrollmode = SCROLL_YREDRAW;
 	disp->inverse = 1;
-	if (!disp->screen_base)
-		disp->screen_base = (char *)sparc_alloc_io(phys, 0, 
-			type->fb_size, "bw2_ram", fb->iospace, 0);
+	if (!disp->screen_base) {
+		disp->screen_base = (char *)
+			sbus_ioremap(resp, 0, type->fb_size, "bw2 ram");
+	}
 	disp->screen_base += fix->line_length * fb->y_margin + (fb->x_margin >> 3);
 	fb->dispsw = fbcon_mfb;
 	fix->visual = FB_VISUAL_MONO01;
@@ -213,10 +244,13 @@ char __init *bwtwofb_init(struct fb_info_sbusfb *fb)
 #ifndef CONFIG_SUN4
 	fb->blank = bw2_blank;
 	fb->unblank = bw2_unblank;
+
+	prom_getproperty(fb->sbdp->prom_node, "address",
+			 (char *)&vaddr, sizeof(vaddr));
+	fb->physbase = __get_phys((unsigned long)vaddr);
+
 #endif
 	fb->margins = bw2_margins;
-	
-	fb->physbase = __get_phys(fb->sbdp->sbus_vaddrs[0]);
 	fb->mmap_map = bw2_mmap_map;
 
 #ifdef __sparc_v9__

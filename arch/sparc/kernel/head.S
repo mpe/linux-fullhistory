@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.97 1999/08/14 03:51:10 anton Exp $
+/* $Id: head.S,v 1.101 1999/12/02 08:34:56 jj Exp $
  * head.S: The initial boot code for the Sparc port of Linux.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -77,6 +77,11 @@ sun4cdm_notsup:
 sun4e_notsup:
         .asciz  "Sparc-Linux sun4e support does not exist\n\n"
 	.align 4
+
+#ifndef CONFIG_SUNOS_EMUL
+#undef SUNOS_SYSCALL_TRAP
+#define SUNOS_SYSCALL_TRAP SUNOS_NO_SYSCALL_TRAP
+#endif
 
 	/* The Sparc trap table, bootloader gives us control at _start. */
 	.text
@@ -171,7 +176,8 @@ t_bad96:BAD_TRAP(0x96) BAD_TRAP(0x97) BAD_TRAP(0x98) BAD_TRAP(0x99) BAD_TRAP(0x9
 t_bad9b:BAD_TRAP(0x9b) BAD_TRAP(0x9c) BAD_TRAP(0x9d) BAD_TRAP(0x9e) BAD_TRAP(0x9f)
 t_getcc:GETCC_TRAP                          /* Get Condition Codes           */
 t_setcc:SETCC_TRAP                          /* Set Condition Codes           */
-t_bada2:BAD_TRAP(0xa2) BAD_TRAP(0xa3) BAD_TRAP(0xa4) BAD_TRAP(0xa5) BAD_TRAP(0xa6)
+t_getpsr:GETPSR_TRAP                        /* Get PSR Register              */
+t_bada3:BAD_TRAP(0xa3) BAD_TRAP(0xa4) BAD_TRAP(0xa5) BAD_TRAP(0xa6)
 t_slowi:INDIRECT_SOLARIS_SYSCALL(156)
 t_bada8:BAD_TRAP(0xa8) BAD_TRAP(0xa9) BAD_TRAP(0xaa) BAD_TRAP(0xab)
 t_badac:BAD_TRAP(0xac) BAD_TRAP(0xad) BAD_TRAP(0xae) BAD_TRAP(0xaf) BAD_TRAP(0xb0)
@@ -247,8 +253,8 @@ C_LABEL(trapbase_cpu1):
 	LINUX_SYSCALL_TRAP BAD_TRAP(0x91) BAD_TRAP(0x92) BAD_TRAP(0x93) BAD_TRAP(0x94)
 	BAD_TRAP(0x95) BAD_TRAP(0x96) BAD_TRAP(0x97) BAD_TRAP(0x98) BAD_TRAP(0x99)
 	BAD_TRAP(0x9a) BAD_TRAP(0x9b) BAD_TRAP(0x9c) BAD_TRAP(0x9d) BAD_TRAP(0x9e)
-	BAD_TRAP(0x9f) GETCC_TRAP SETCC_TRAP
-	BAD_TRAP(0xa2) BAD_TRAP(0xa3) BAD_TRAP(0xa4) BAD_TRAP(0xa5) BAD_TRAP(0xa6)
+	BAD_TRAP(0x9f) GETCC_TRAP SETCC_TRAP GETPSR_TRAP
+	BAD_TRAP(0xa3) BAD_TRAP(0xa4) BAD_TRAP(0xa5) BAD_TRAP(0xa6)
 	INDIRECT_SOLARIS_SYSCALL(156) BAD_TRAP(0xa8) BAD_TRAP(0xa9) BAD_TRAP(0xaa) BAD_TRAP(0xab)
 	BAD_TRAP(0xac) BAD_TRAP(0xad) BAD_TRAP(0xae) BAD_TRAP(0xaf) BAD_TRAP(0xb0)
 	BAD_TRAP(0xb1) BAD_TRAP(0xb2) BAD_TRAP(0xb3) BAD_TRAP(0xb4) BAD_TRAP(0xb5)
@@ -315,8 +321,8 @@ C_LABEL(trapbase_cpu2):
 	LINUX_SYSCALL_TRAP BAD_TRAP(0x91) BAD_TRAP(0x92) BAD_TRAP(0x93) BAD_TRAP(0x94)
 	BAD_TRAP(0x95) BAD_TRAP(0x96) BAD_TRAP(0x97) BAD_TRAP(0x98) BAD_TRAP(0x99)
 	BAD_TRAP(0x9a) BAD_TRAP(0x9b) BAD_TRAP(0x9c) BAD_TRAP(0x9d) BAD_TRAP(0x9e)
-	BAD_TRAP(0x9f) GETCC_TRAP SETCC_TRAP
-	BAD_TRAP(0xa2) BAD_TRAP(0xa3) BAD_TRAP(0xa4) BAD_TRAP(0xa5) BAD_TRAP(0xa6)
+	BAD_TRAP(0x9f) GETCC_TRAP SETCC_TRAP GETPSR_TRAP
+	BAD_TRAP(0xa3) BAD_TRAP(0xa4) BAD_TRAP(0xa5) BAD_TRAP(0xa6)
 	INDIRECT_SOLARIS_SYSCALL(156) BAD_TRAP(0xa8) BAD_TRAP(0xa9) BAD_TRAP(0xaa) BAD_TRAP(0xab)
 	BAD_TRAP(0xac) BAD_TRAP(0xad) BAD_TRAP(0xae) BAD_TRAP(0xaf) BAD_TRAP(0xb0)
 	BAD_TRAP(0xb1) BAD_TRAP(0xb2) BAD_TRAP(0xb3) BAD_TRAP(0xb4) BAD_TRAP(0xb5)
@@ -383,8 +389,8 @@ C_LABEL(trapbase_cpu3):
 	LINUX_SYSCALL_TRAP BAD_TRAP(0x91) BAD_TRAP(0x92) BAD_TRAP(0x93) BAD_TRAP(0x94)
 	BAD_TRAP(0x95) BAD_TRAP(0x96) BAD_TRAP(0x97) BAD_TRAP(0x98) BAD_TRAP(0x99)
 	BAD_TRAP(0x9a) BAD_TRAP(0x9b) BAD_TRAP(0x9c) BAD_TRAP(0x9d) BAD_TRAP(0x9e)
-	BAD_TRAP(0x9f) GETCC_TRAP SETCC_TRAP
-	BAD_TRAP(0xa2) BAD_TRAP(0xa3) BAD_TRAP(0xa4) BAD_TRAP(0xa5) BAD_TRAP(0xa6)
+	BAD_TRAP(0x9f) GETCC_TRAP SETCC_TRAP GETPSR_TRAP
+	BAD_TRAP(0xa3) BAD_TRAP(0xa4) BAD_TRAP(0xa5) BAD_TRAP(0xa6)
 	INDIRECT_SOLARIS_SYSCALL(156) BAD_TRAP(0xa8) BAD_TRAP(0xa9) BAD_TRAP(0xaa) BAD_TRAP(0xab)
 	BAD_TRAP(0xac) BAD_TRAP(0xad) BAD_TRAP(0xae) BAD_TRAP(0xaf) BAD_TRAP(0xb0)
 	BAD_TRAP(0xb1) BAD_TRAP(0xb2) BAD_TRAP(0xb3) BAD_TRAP(0xb4) BAD_TRAP(0xb5)
@@ -436,7 +442,7 @@ C_LABEL(empty_zero_page):		.skip PAGE_SIZE
  */
 	.ascii	"HdrS"
 	.word	LINUX_VERSION_CODE
-	.half	0x0201		/* HdrS version */
+	.half	0x0203		/* HdrS version */
 C_LABEL(root_flags):
 	.half	1
 C_LABEL(root_dev):
@@ -448,6 +454,8 @@ C_LABEL(sparc_ramdisk_image):
 C_LABEL(sparc_ramdisk_size):
 	.word	0
 	.word	C_LABEL(reboot_command)
+	.word	0, 0, 0
+	.word	_end
 
 /* Cool, here we go. Pick up the romvec pointer in %o0 and stash it in
  * %g7 and at prom_vector_p. And also quickly check whether we are on

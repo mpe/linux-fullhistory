@@ -293,6 +293,9 @@ struct net_device
 	/* Called after last user reference disappears. */
 	void			(*destructor)(struct net_device *dev);
 
+	/* Bridge stuff */
+	int			bridge_port_id;		
+	
 	/* Pointers to interface service routines.	*/
 	int			(*open)(struct net_device *dev);
 	int			(*stop)(struct net_device *dev);

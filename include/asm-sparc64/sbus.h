@@ -1,16 +1,17 @@
-/* $Id: sbus.h,v 1.10 1998/12/16 04:33:58 davem Exp $
- * sbus.h:  Defines for the Sun SBus.
+/* $Id: sbus.h,v 1.12 1999/12/20 14:08:25 jj Exp $
+ * sbus.h: Defines for the Sun SBus.
  *
- * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1996, 1999 David S. Miller (davem@redhat.com)
  */
-
-/* XXX This needs to be mostly redone for sun5 SYSIO. */
 
 #ifndef _SPARC64_SBUS_H
 #define _SPARC64_SBUS_H
 
+#include <linux/ioport.h>
+
 #include <asm/oplib.h>
 #include <asm/iommu.h>
+#include <asm/scatterlist.h>
 
 /* We scan which devices are on the SBus using the PROM node device
  * tree.  SBus devices are described in two different ways.  You can
@@ -36,73 +37,75 @@ extern __inline__ int sbus_dev_slot(unsigned long dev_addr)
   return (int) (((dev_addr)-SUN_SBUS_BVADDR)>>28);
 }
 
-extern __inline__ unsigned long sbus_dev_offset(unsigned long dev_addr)
-{
-  return (unsigned long) (((dev_addr)-SUN_SBUS_BVADDR)&SBUS_OFF_MASK);
-}
-
-struct linux_sbus;
+struct sbus_bus;
 
 /* Linux SBUS device tables */
-struct linux_sbus_device {
-  struct linux_sbus_device *next;      /* next device on this SBus or null */
-  struct linux_sbus_device *child;     /* For ledma and espdma on sun4m */
-  struct linux_sbus *my_bus;           /* Back ptr to sbus */
-  int prom_node;                       /* PROM device tree node for this device */
-  char prom_name[32];                  /* PROM device name */
+struct sbus_dev {
+	struct sbus_bus *bus;	/* Our toplevel parent SBUS	*/
+	struct sbus_dev *next;	/* Chain of siblings		*/
+	struct sbus_dev *child;	/* Chain of children		*/
+	struct sbus_dev *parent;/* Parent device if not toplevel*/
+	int prom_node;		/* OBP node of this device	*/
+	char prom_name[64];	/* OBP device name property	*/
+	int slot;		/* SBUS slot number		*/
 
-  struct linux_prom_registers reg_addrs[PROMREG_MAX];
-  int num_registers, ranges_applied;
+	struct resource resource[PROMREG_MAX];
 
-  unsigned int irqs[4];
-  int num_irqs;
+	struct linux_prom_registers reg_addrs[PROMREG_MAX];
+	int num_registers, ranges_applied;
 
-  unsigned long sbus_addr;             /* Absolute base address for device. */
-  unsigned long sbus_vaddrs[PROMVADDR_MAX];
-  unsigned long num_vaddrs;
-  unsigned long offset;                /* Offset given by PROM */
-  int slot;
+	struct linux_prom_ranges device_ranges[PROMREG_MAX];
+	int num_device_ranges;
+
+	unsigned int irqs[4];
+	int num_irqs;
 };
 
 /* This struct describes the SBus(s) found on this machine. */
-struct linux_sbus {
-	struct linux_sbus *next;             /* next SBus, if more than one SBus */
-	struct linux_sbus_device *devices;   /* Link to devices on this SBus */
-	struct iommu_struct *iommu;          /* IOMMU for this sbus if applicable */
-	int prom_node;                       /* PROM device tree node for this SBus */
-	char prom_name[64];                  /* Usually "sbus" or "sbi" */
-	int clock_freq;
+struct sbus_bus {
+	void			*iommu;		/* Opaque IOMMU cookie	*/
+	struct sbus_dev		*devices;	/* Tree of SBUS devices	*/
+	struct sbus_bus		*next;		/* Next SBUS in system	*/
+	int			prom_node;      /* OBP node of SBUS	*/
+	char			prom_name[64];	/* Usually "sbus" or "sbi" */
+	int			clock_freq;
+
 	struct linux_prom_ranges sbus_ranges[PROMREG_MAX];
 	int num_sbus_ranges;
-	int upaid;
+
+	int portid;
 	void *starfire_cookie;
 };
 
-extern struct linux_sbus *SBus_chain;
+extern struct sbus_bus *sbus_root;
 
 /* Device probing routines could find these handy */
 #define for_each_sbus(bus) \
-        for((bus) = SBus_chain; (bus); (bus)=(bus)->next)
+        for((bus) = sbus_root; (bus); (bus)=(bus)->next)
 
 #define for_each_sbusdev(device, bus) \
         for((device) = (bus)->devices; (device); (device)=(device)->next)
         
 #define for_all_sbusdev(device, bus) \
-	for((bus) = SBus_chain, ((device) = (bus) ? (bus)->devices : 0); (bus); (device)=((device)->next ? (device)->next : ((bus) = (bus)->next, (bus) ? (bus)->devices : 0)))
+	for((bus) = sbus_root, ((device) = (bus) ? (bus)->devices : 0); (bus); (device)=((device)->next ? (device)->next : ((bus) = (bus)->next, (bus) ? (bus)->devices : 0)))
 
-extern void mmu_set_sbus64(struct linux_sbus_device *, int);
+/* Driver DVMA interfaces. */
+#define sbus_can_dma_64bit(sdev)	(1)
+#define sbus_can_burst64(sdev)		(1)
+extern void sbus_set_sbus64(struct sbus_dev *, int);
 
-/* If you did not get the buffer from mmu_get_*() or sparc_alloc_dvma()
- * then you must use this to get the 32-bit SBUS dvma address.
- * And in this case it is your responsibility to make sure the buffer
- * is GFP_DMA, ie. that it is not greater than MAX_DMA_ADDRESS.
- */
-extern unsigned long phys_base;
-#define sbus_dvma_addr(__addr)	((__u32)(__pa(__addr) - phys_base))
+/* These yield IOMMU mappings in consistant mode. */
+extern void *sbus_alloc_consistant(struct sbus_dev *, long, u32 *dma_addrp);
+extern void sbus_free_consistant(struct sbus_dev *, long, void *, u32);
 
-/* Apply promlib probed SBUS ranges to registers. */
-extern void prom_apply_sbus_ranges(struct linux_sbus *sbus, 
-				   struct linux_prom_registers *sbusregs, int nregs, 
-				   struct linux_sbus_device *sdev);
+/* All the rest use streaming mode mappings. */
+extern u32 sbus_map_single(struct sbus_dev *, void *, long);
+extern void sbus_unmap_single(struct sbus_dev *, u32, long);
+extern int sbus_map_sg(struct sbus_dev *, struct scatterlist *, int);
+extern void sbus_unmap_sg(struct sbus_dev *, struct scatterlist *, int);
+
+/* Finally, allow explicit synchronization of streamable mappings. */
+extern void sbus_dma_sync_single(struct sbus_dev *, u32, long);
+extern void sbus_dma_sync_sg(struct sbus_dev *, struct scatterlist *, int);
 
 #endif /* !(_SPARC64_SBUS_H) */

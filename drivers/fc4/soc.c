@@ -66,16 +66,18 @@ struct soc *socs = NULL;
 
 static inline void soc_disable(struct soc *s)
 {
-	s->regs->imask = 0; s->regs->cmd = SOC_CMD_SOFT_RESET;
+	sbus_writel(0, s->regs + IMASK);
+	sbus_writel(SOC_CMD_SOFT_RESET, s->regs + CMD);
 }
 
 static inline void soc_enable(struct soc *s)
 {
 	SOD(("enable %08x\n", s->cfg))
-	s->regs->sae = 0; s->regs->cfg = s->cfg;
-	s->regs->cmd = SOC_CMD_RSP_QALL; 
+	sbus_writel(0, s->regs + SAE);
+	sbus_writel(s->cfg, s->regs + CFG);
+	sbus_writel(SOC_CMD_RSP_QALL, s->regs + CMD);
 	SOC_SETIMASK(s, SOC_IMASK_RSP_QALL | SOC_IMASK_SAE);
-	SOD(("imask %08lx %08lx\n", s->imask, s->regs->imask));
+	SOD(("imask %08lx %08lx\n", s->imask, sbus_readl(s->regs + IMAK)));
 }
 
 static void soc_reset(fc_channel *fc)
@@ -114,23 +116,29 @@ static void inline soc_solicited (struct soc *s)
 	sw_cq = &s->rsp[SOC_SOLICITED_RSP_Q];
 
 	if (sw_cq->pool == NULL)
-		sw_cq->pool =
-			(soc_req *)(s->xram + (xram_get_32low ((xram_p)&sw_cq->hw_cq->address) / sizeof(u16)));
+		sw_cq->pool = (soc_req *)
+			(s->xram + xram_get_32low ((xram_p)&sw_cq->hw_cq->address));
 	sw_cq->in = xram_get_8 ((xram_p)&sw_cq->hw_cq->in);
-	SOD (("soc_solicited, %d packets arrived\n", (sw_cq->in - sw_cq->out) & sw_cq->last))
+	SOD (("soc_solicited, %d pkts arrived\n", (sw_cq->in-sw_cq->out) & sw_cq->last))
 	for (;;) {
 		hwrsp = (soc_rsp *)sw_cq->pool + sw_cq->out;
 		token = xram_get_32low ((xram_p)&hwrsp->shdr.token);
 		status = xram_get_32low ((xram_p)&hwrsp->status);
 		fc = (fc_channel *)(&s->port[(token >> 11) & 1]);
 		
-		if (status == SOC_OK)
-			fcp_receive_solicited(fc, token >> 12, token & ((1 << 11) - 1), FC_STATUS_OK, NULL);
-		else {
+		if (status == SOC_OK) {
+			fcp_receive_solicited(fc, token >> 12,
+					      token & ((1 << 11) - 1),
+					      FC_STATUS_OK, NULL);
+		} else {
 			xram_copy_from(&fchdr, (xram_p)&hwrsp->fchdr, sizeof(fchdr));
-			/* We have intentionally defined FC_STATUS_* constants to match SOC_* constants, otherwise
-			   we'd have to translate status */
-			fcp_receive_solicited(fc, token >> 12, token & ((1 << 11) - 1), status, &fchdr);
+			/* We have intentionally defined FC_STATUS_* constants
+			 * to match SOC_* constants, otherwise we'd have to
+			 * translate status.
+			 */
+			fcp_receive_solicited(fc, token >> 12,
+					      token & ((1 << 11) - 1),
+					      status, &fchdr);
 		}
 			
 		if (++sw_cq->out > sw_cq->last) {
@@ -142,9 +150,13 @@ static void inline soc_solicited (struct soc *s)
 			sw_cq->in = xram_get_8 ((xram_p)&sw_cq->hw_cq->in);
 			if (sw_cq->out == sw_cq->in) {
 				/* Tell the hardware about it */
-				s->regs->cmd = (sw_cq->out << 24) | (SOC_CMD_RSP_QALL & ~(SOC_CMD_RSP_Q0 << SOC_SOLICITED_RSP_Q));
+				sbus_writel((sw_cq->out << 24) |
+					    (SOC_CMD_RSP_QALL &
+					     ~(SOC_CMD_RSP_Q0 << SOC_SOLICITED_RSP_Q)),
+					    s->regs + CMD);
+
 				/* Read it, so that we're sure it has been updated */
-				s->regs->cmd;
+				sbus_readl(s->regs + CMD);
 				sw_cq->in = xram_get_8 ((xram_p)&sw_cq->hw_cq->in);
 				if (sw_cq->out == sw_cq->in)
 					break;
@@ -156,15 +168,18 @@ static void inline soc_solicited (struct soc *s)
 static void inline soc_request (struct soc *s, u32 cmd)
 {
 	SOC_SETIMASK(s, s->imask & ~(cmd & SOC_CMD_REQ_QALL));
-	SOD(("imask %08lx %08lx\n", s->imask, s->regs->imask));
+	SOD(("imask %08lx %08lx\n", s->imask, sbus_readl(s->regs + IMASK)));
 
-	SOD(("Queues available %08x OUT %X %X\n", cmd, xram_get_8((xram_p)&s->req[0].hw_cq->out), xram_get_8((xram_p)&s->req[0].hw_cq->out)))
+	SOD(("Queues available %08x OUT %X %X\n", cmd,
+	     xram_get_8((xram_p)&s->req[0].hw_cq->out),
+	     xram_get_8((xram_p)&s->req[0].hw_cq->out)))
 	if (s->port[s->curr_port].fc.state != FC_STATE_OFFLINE) {
 		fcp_queue_empty ((fc_channel *)&(s->port[s->curr_port]));
 		if (((s->req[1].in + 1) & s->req[1].last) != (s->req[1].out))
 			fcp_queue_empty ((fc_channel *)&(s->port[1 - s->curr_port]));
-	} else
+	} else {
 		fcp_queue_empty ((fc_channel *)&(s->port[1 - s->curr_port]));
+	}
 	if (s->port[1 - s->curr_port].fc.state != FC_STATE_OFFLINE)
 		s->curr_port ^= 1;
 }
@@ -180,8 +195,8 @@ static void inline soc_unsolicited (struct soc *s)
 
 	sw_cq = &s->rsp[SOC_UNSOLICITED_RSP_Q];
 	if (sw_cq->pool == NULL)
-		sw_cq->pool =
-			(soc_req *)(s->xram + (xram_get_32low ((xram_p)&sw_cq->hw_cq->address) / sizeof(u16)));
+		sw_cq->pool = (soc_req *)
+			(s->xram + (xram_get_32low ((xram_p)&sw_cq->hw_cq->address)));
 
 	sw_cq->in = xram_get_8 ((xram_p)&sw_cq->hw_cq->in);
 	SOD (("soc_unsolicited, %d packets arrived\n", (sw_cq->in - sw_cq->out) & sw_cq->last))
@@ -193,27 +208,34 @@ static void inline soc_unsolicited (struct soc *s)
 		flags = hwrsp->shdr.flags;
 		count = xram_get_8 ((xram_p)&hwrsp->count);
 		fc = (fc_channel *)&s->port[flags & SOC_PORT_B];
-		SOD(("FC %08lx fcp_state_change %08lx\n", (long)fc, (long)fc->fcp_state_change))
+		SOD(("FC %08lx fcp_state_change %08lx\n",
+		     (long)fc, (long)fc->fcp_state_change))
 		
 		if (count != 1) {
 			/* Ugh, continuation entries */
 			u8 in;
 
 			if (count != 2) {
-				printk("%s: Too many continuations entries %d\n", fc->name, count);
+				printk("%s: Too many continuations entries %d\n",
+				       fc->name, count);
 				goto update_out;
 			}
 			
 			in = sw_cq->in;
 			if (in < sw_cq->out) in += sw_cq->last + 1;
 			if (in < sw_cq->out + 2) {
-				/* Ask the hardware about it if they haven't arrived yet */
-				s->regs->cmd = (sw_cq->out << 24) | (SOC_CMD_RSP_QALL & ~(SOC_CMD_RSP_Q0 << SOC_UNSOLICITED_RSP_Q));
+				/* Ask the hardware if they haven't arrived yet. */
+				sbus_writel((sw_cq->out << 24) |
+					    (SOC_CMD_RSP_QALL &
+					     ~(SOC_CMD_RSP_Q0 << SOC_UNSOLICITED_RSP_Q)),
+					    s->regs + CMD);
+
 				/* Read it, so that we're sure it has been updated */
-				s->regs->cmd;
+				sbus_readl(s->regs + CMD);
 				sw_cq->in = xram_get_8 ((xram_p)&sw_cq->hw_cq->in);
 				in = sw_cq->in;
-				if (in < sw_cq->out) in += sw_cq->last + 1;
+				if (in < sw_cq->out)
+					in += sw_cq->last + 1;
 				if (in < sw_cq->out + 2) /* Nothing came, let us wait */
 					return;
 			}
@@ -236,7 +258,8 @@ static void inline soc_unsolicited (struct soc *s)
 				fcp_state_change(fc, FC_STATE_OFFLINE);
 				break;
 			default:
-				printk ("%s: Unknown STATUS no %d\n", fc->name, status);
+				printk ("%s: Unknown STATUS no %d\n",
+					fc->name, status);
 				break;
 			}
 			break;
@@ -248,29 +271,40 @@ static void inline soc_unsolicited (struct soc *s)
 				
 				if ((r_ctl & 0xf0) == R_CTL_EXTENDED_SVC) {
 					len = xram_get_32 ((xram_p)&hwrsp->shdr.bytecnt);
-					if (len < 4 || !hwrspc)
-						printk ("%s: Invalid R_CTL %02x continuation entries\n", fc->name, r_ctl);
-					else {
-						if (len > 60) len = 60;
-						xram_copy_from (buf, (xram_p)hwrspc, (len + 3) & ~3);
+					if (len < 4 || !hwrspc) {
+						printk ("%s: Invalid R_CTL %02x "
+							"continuation entries\n",
+							fc->name, r_ctl);
+					} else {
+						if (len > 60)
+							len = 60;
+						xram_copy_from (buf, (xram_p)hwrspc,
+								(len + 3) & ~3);
 						if (*(u32 *)buf == LS_DISPLAY) {
 							int i;
 							
 							for (i = 4; i < len; i++)
-								if (buf[i] == '\n') buf[i] = ' ';
+								if (buf[i] == '\n')
+									buf[i] = ' ';
 							buf[len] = 0;
-							printk ("%s message: %s\n", fc->name, buf + 4);
-						} else
-							printk ("%s: Unknown LS_CMD %02x\n", fc->name, buf[0]);
+							printk ("%s message: %s\n",
+								fc->name, buf + 4);
+						} else {
+							printk ("%s: Unknown LS_CMD "
+								"%02x\n", fc->name,
+								buf[0]);
+						}
 					}
-				} else
-					printk ("%s: Unsolicited R_CTL %02x not handled\n", fc->name, r_ctl);
+				} else {
+					printk ("%s: Unsolicited R_CTL %02x "
+						"not handled\n", fc->name, r_ctl);
+				}
 			}
 			break;
 		default:
 			printk ("%s: Unexpected flags %08x\n", fc->name, flags);
 			break;
-		}
+		};
 update_out:
 		if (++sw_cq->out > sw_cq->last) {
 			sw_cq->seqno++;
@@ -288,9 +322,13 @@ update_out:
 			sw_cq->in = xram_get_8 ((xram_p)&sw_cq->hw_cq->in);
 			if (sw_cq->out == sw_cq->in) {
 				/* Tell the hardware about it */
-				s->regs->cmd = (sw_cq->out << 24) | (SOC_CMD_RSP_QALL & ~(SOC_CMD_RSP_Q0 << SOC_UNSOLICITED_RSP_Q));
+				sbus_writel((sw_cq->out << 24) |
+					    (SOC_CMD_RSP_QALL &
+					     ~(SOC_CMD_RSP_Q0 << SOC_UNSOLICITED_RSP_Q)),
+					    s->regs + CMD);
+
 				/* Read it, so that we're sure it has been updated */
-				s->regs->cmd;
+				sbus_readl(s->regs + CMD);
 				sw_cq->in = xram_get_8 ((xram_p)&sw_cq->hw_cq->in);
 			}
 		}
@@ -304,8 +342,8 @@ static void soc_intr(int irq, void *dev_id, struct pt_regs *regs)
 	register struct soc *s = (struct soc *)dev_id;
 
 	spin_lock_irqsave(&io_request_lock, flags);
-	cmd = s->regs->cmd;
-	for (; (cmd = SOC_INTR (s, cmd)); cmd = s->regs->cmd) {
+	cmd = sbus_readl(s->regs + CMD);
+	for (; (cmd = SOC_INTR (s, cmd)); cmd = sbus_readl(s->regs + CMD)) {
 		if (cmd & SOC_CMD_RSP_Q1) soc_unsolicited (s);
 		if (cmd & SOC_CMD_RSP_Q0) soc_solicited (s);
 		if (cmd & SOC_CMD_REQ_QALL) soc_request (s, cmd);
@@ -338,11 +376,11 @@ static int soc_hw_enque (fc_channel *fc, fcp_cmnd *fcmd)
 	sw_cq = s->req + qno;
 	cq_next_in = (sw_cq->in + 1) & sw_cq->last;
 	
-	if (cq_next_in == sw_cq->out 
-		    && cq_next_in == (sw_cq->out = xram_get_8((xram_p)&sw_cq->hw_cq->out))) {
+	if (cq_next_in == sw_cq->out &&
+	    cq_next_in == (sw_cq->out = xram_get_8((xram_p)&sw_cq->hw_cq->out))) {
 		SOD(("%d IN %d OUT %d LAST %d\n", qno, sw_cq->in, sw_cq->out, sw_cq->last))
 		SOC_SETIMASK(s, s->imask | (SOC_IMASK_REQ_Q0 << qno));
-		SOD(("imask %08lx %08lx\n", s->imask, s->regs->imask));
+		SOD(("imask %08lx %08lx\n", s->imask, sbus_readl(s->regs + IMASK)));
 		/* If queue is full, just say NO */
 		return -EBUSY;
 	}
@@ -363,7 +401,8 @@ static int soc_hw_enque (fc_channel *fc, fcp_cmnd *fcmd)
 			request->shdr.bytecnt = i;
 			request->data[2].base = fcmd->data;
 			request->data[2].count = i;
-			request->type = (fc->scsi_cmd_pool[fcmd->token].fcp_cntl & FCP_CNTL_WRITE) ?
+			request->type =
+			    (fc->scsi_cmd_pool[fcmd->token].fcp_cntl & FCP_CNTL_WRITE) ?
 				SOC_CQTYPE_IO_WRITE : SOC_CQTYPE_IO_READ;
 		} else {
 			request->shdr.segcnt = 2;
@@ -374,7 +413,8 @@ static int soc_hw_enque (fc_channel *fc, fcp_cmnd *fcmd)
 		}
 		FILL_FCHDR_RCTL_DID(fch, R_CTL_COMMAND, fc->did);
 		FILL_FCHDR_SID(fch, fc->sid);
-		FILL_FCHDR_TYPE_FCTL(fch, TYPE_SCSI_FCP, F_CTL_FIRST_SEQ | F_CTL_SEQ_INITIATIVE);
+		FILL_FCHDR_TYPE_FCTL(fch, TYPE_SCSI_FCP,
+				     F_CTL_FIRST_SEQ | F_CTL_SEQ_INITIATIVE);
 		FILL_FCHDR_SEQ_DF_SEQ(fch, 0, 0, 0);
 		FILL_FCHDR_OXRX(fch, 0xffff, 0xffff);
 		fch->param = 0;
@@ -388,7 +428,8 @@ static int soc_hw_enque (fc_channel *fc, fcp_cmnd *fcmd)
 		request->type = SOC_CQTYPE_OFFLINE;
 		FILL_FCHDR_RCTL_DID(fch, R_CTL_COMMAND, fc->did);
 		FILL_FCHDR_SID(fch, fc->sid);
-		FILL_FCHDR_TYPE_FCTL(fch, TYPE_SCSI_FCP, F_CTL_FIRST_SEQ | F_CTL_SEQ_INITIATIVE);
+		FILL_FCHDR_TYPE_FCTL(fch, TYPE_SCSI_FCP,
+				     F_CTL_FIRST_SEQ | F_CTL_SEQ_INITIATIVE);
 		FILL_FCHDR_SEQ_DF_SEQ(fch, 0, 0, 0);
 		FILL_FCHDR_OXRX(fch, 0xffff, 0xffff);
 		request->shdr.flags = port->flags;
@@ -436,7 +477,9 @@ static int soc_hw_enque (fc_channel *fc, fcp_cmnd *fcmd)
 			request->data[1].base = fcmd->rsp;
 			request->data[0].count = fcmd->cmdlen;
 			request->data[1].count = fcmd->rsplen;
-			request->type = (fcmd->class == FC_CLASS_IO_READ) ? SOC_CQTYPE_IO_READ : SOC_CQTYPE_IO_WRITE;
+			request->type =
+			      (fcmd->class == FC_CLASS_IO_READ) ?
+				SOC_CQTYPE_IO_READ : SOC_CQTYPE_IO_WRITE;
 			if (fcmd->data) {
 				request->data[2].base = fcmd->data;
 				request->data[2].count = fcmd->datalen;
@@ -447,9 +490,9 @@ static int soc_hw_enque (fc_channel *fc, fcp_cmnd *fcmd)
 				request->shdr.segcnt = 2;
 			}
 			break;
-		}
+		};
 		break;
-	}
+	};
 
 	request->count = 1;
 	request->flags = 0;
@@ -462,11 +505,14 @@ static int soc_hw_enque (fc_channel *fc, fcp_cmnd *fcmd)
 		sw_cq->seqno++;
 	}
 	
-	SOD(("Putting %08x into cmd\n", SOC_CMD_RSP_QALL | (sw_cq->in << 24) | (SOC_CMD_REQ_Q0 << qno)))
+	SOD(("Putting %08x into cmd\n",
+	     SOC_CMD_RSP_QALL | (sw_cq->in << 24) | (SOC_CMD_REQ_Q0 << qno)))
 	
-	s->regs->cmd = SOC_CMD_RSP_QALL | (sw_cq->in << 24) | (SOC_CMD_REQ_Q0 << qno);
-	/* Read so that command is completed */	
-	s->regs->cmd;
+	sbus_writel(SOC_CMD_RSP_QALL | (sw_cq->in << 24) | (SOC_CMD_REQ_Q0 << qno),
+		    s->regs + CMD);
+
+	/* Read so that command is completed. */	
+	sbus_readl(s->regs + CMD);
 	
 	return 0;
 }
@@ -475,19 +521,19 @@ static inline void soc_download_fw(struct soc *s)
 {
 #ifdef HAVE_SOC_UCODE
 	xram_copy_to (s->xram, soc_ucode, sizeof(soc_ucode));
-	xram_bzero (s->xram + (sizeof(soc_ucode)/sizeof(u16)), 32768 - sizeof(soc_ucode));
+	xram_bzero (s->xram + sizeof(soc_ucode), 32768 - sizeof(soc_ucode));
 #endif
 }
 
 /* Check for what the best SBUS burst we can use happens
  * to be on this machine.
  */
-static inline void soc_init_bursts(struct soc *s, struct linux_sbus_device *sdev)
+static inline void soc_init_bursts(struct soc *s, struct sbus_dev *sdev)
 {
 	int bsizes, bsizes_more;
 
 	bsizes = (prom_getintdefault(sdev->prom_node,"burst-sizes",0xff) & 0xff);
-	bsizes_more = (prom_getintdefault(sdev->my_bus->prom_node, "burst-sizes", 0xff) & 0xff);
+	bsizes_more = (prom_getintdefault(sdev->bus->prom_node, "burst-sizes", 0xff) & 0xff);
 	bsizes &= bsizes_more;
 	if ((bsizes & 0x7f) == 0x7f)
 		s->cfg = SOC_CFG_BURST_64;
@@ -499,22 +545,24 @@ static inline void soc_init_bursts(struct soc *s, struct linux_sbus_device *sdev
 		s->cfg = SOC_CFG_BURST_4;
 }
 
-static inline void soc_init(struct linux_sbus_device *sdev, int no)
+static inline void soc_init(struct sbus_dev *sdev, int no)
 {
 	unsigned char tmp[60];
 	int propl;
 	struct soc *s;
-	static unsigned version_printed = 0;
+	static int version_printed = 0;
 	soc_hw_cq cq[8];
 	int size, i;
 	int irq;
 	
 	s = kmalloc (sizeof (struct soc), GFP_KERNEL);
-	if (!s) return;
+	if (s == NULL)
+		return;
 	memset (s, 0, sizeof(struct soc));
 	s->soc_no = no;
 
-	SOD(("socs %08lx soc_intr %08lx soc_hw_enque %08x\n", (long)socs, (long)soc_intr, (long)soc_hw_enque))	
+	SOD(("socs %08lx soc_intr %08lx soc_hw_enque %08x\n",
+	     (long)socs, (long)soc_intr, (long)soc_hw_enque))	
 	if (version_printed++ == 0)
 		printk (version);
 #ifdef MODULE
@@ -558,9 +606,9 @@ static inline void soc_init(struct linux_sbus_device *sdev, int no)
 	memcpy (&s->port[0].fc.wwn_node, &s->wwn, sizeof (fc_wwn));
 	memcpy (&s->port[1].fc.wwn_node, &s->wwn, sizeof (fc_wwn));
 	SOD(("Got wwns %08x%08x ports %08x%08x and %08x%08x\n", 
-		*(u32 *)&s->port[0].fc.wwn_nport, s->port[0].fc.wwn_nport.lo,
-		*(u32 *)&s->port[0].fc.wwn_nport, s->port[0].fc.wwn_nport.lo,
-		*(u32 *)&s->port[1].fc.wwn_nport, s->port[1].fc.wwn_nport.lo))
+	     *(u32 *)&s->port[0].fc.wwn_nport, s->port[0].fc.wwn_nport.lo,
+	     *(u32 *)&s->port[0].fc.wwn_nport, s->port[0].fc.wwn_nport.lo,
+	     *(u32 *)&s->port[1].fc.wwn_nport, s->port[1].fc.wwn_nport.lo))
 		
 	s->port[0].fc.sid = 1;
 	s->port[1].fc.sid = 17;
@@ -570,26 +618,18 @@ static inline void soc_init(struct linux_sbus_device *sdev, int no)
 	s->port[0].fc.reset = soc_reset;
 	s->port[1].fc.reset = soc_reset;
 	
-	/* Setup the reg property for this device. */
-	prom_apply_sbus_ranges(sdev->my_bus, sdev->reg_addrs, sdev->num_registers, sdev);
-                                                                                                                                               	
 	if (sdev->num_registers == 1) {
 		/* Probably SunFire onboard SOC */
-		s->xram = (xram_p)
-			sparc_alloc_io (sdev->reg_addrs [0].phys_addr, 0, 
-				sdev->reg_addrs [0].reg_size, "soc_xram",
-				sdev->reg_addrs [0].which_io, 0);
-		s->regs = (struct soc_regs *)((char *)s->xram + 0x10000);
+		s->xram = sbus_ioremap(&sdev->resource[0], 0,
+				       0x10000UL, "soc xram");
+		s->regs = sbus_ioremap(&sdev->resource[0], 0x10000UL,
+				       0x10UL, "soc regs");
 	} else {
 		/* Probably SOC sbus card */
-		s->xram = (xram_p)
-			sparc_alloc_io (sdev->reg_addrs [1].phys_addr, 0, 
-				sdev->reg_addrs [1].reg_size, "soc_xram",
-				sdev->reg_addrs [1].which_io, 0);
-		s->regs = (struct soc_regs *)
-			sparc_alloc_io (sdev->reg_addrs [2].phys_addr, 0, 
-				sdev->reg_addrs [2].reg_size, "soc_regs",
-				sdev->reg_addrs [2].which_io, 0);
+		s->xram = sbus_ioremap(&sdev->resource[1], 0,
+				       sdev->reg_addrs[1].reg_size, "soc xram");
+		s->regs = sbus_ioremap(&sdev->resource[2], 0,
+				       sdev->reg_addrs[2].reg_size, "soc regs");
 	}
 	
 	soc_init_bursts(s, sdev);
@@ -628,13 +668,15 @@ static inline void soc_init(struct linux_sbus_device *sdev, int no)
 	memset (cq, 0, sizeof(cq));
 	
 	size = (SOC_CQ_REQ0_SIZE + SOC_CQ_REQ1_SIZE) * sizeof(soc_req);
-	s->req[0].pool = (soc_req *) sparc_dvma_malloc (size, "SOC request queues", &cq[0].address);
+	s->req_cpu = sbus_alloc_consistant(sdev, size, &s->req_dvma);
+	s->req[0].pool = s->req_cpu;
+	cq[0].address = s->req_dvma;
 	s->req[1].pool = s->req[0].pool + SOC_CQ_REQ0_SIZE;
 	
 	s->req[0].hw_cq = (soc_hw_cq *)(s->xram + SOC_CQ_REQ_OFFSET);
-	s->req[1].hw_cq = (soc_hw_cq *)(s->xram + SOC_CQ_REQ_OFFSET + sizeof(soc_hw_cq) / sizeof(u16));
+	s->req[1].hw_cq = (soc_hw_cq *)(s->xram + SOC_CQ_REQ_OFFSET + sizeof(soc_hw_cq));
 	s->rsp[0].hw_cq = (soc_hw_cq *)(s->xram + SOC_CQ_RSP_OFFSET);
-	s->rsp[1].hw_cq = (soc_hw_cq *)(s->xram + SOC_CQ_RSP_OFFSET + sizeof(soc_hw_cq) / sizeof(u16));
+	s->rsp[1].hw_cq = (soc_hw_cq *)(s->xram + SOC_CQ_RSP_OFFSET + sizeof(soc_hw_cq));
 	
 	cq[1].address = cq[0].address + (SOC_CQ_REQ0_SIZE * sizeof(soc_req));
 	cq[4].address = 1;
@@ -677,13 +719,13 @@ int __init soc_probe(void)
 int init_module(void)
 #endif
 {
-	struct linux_sbus *bus;
-	struct linux_sbus_device *sdev = 0;
+	struct sbus_bus *sbus;
+	struct sbus_dev *sdev = 0;
 	struct soc *s;
 	int cards = 0;
 
-	for_each_sbus(bus) {
-		for_each_sbusdev(sdev, bus) {
+	for_each_sbus(sbus) {
+		for_each_sbusdev(sdev, sbus) {
 			if(!strcmp(sdev->prom_name, "SUNW,soc")) {
 				soc_init(sdev, cards);
 				cards++;
@@ -706,7 +748,7 @@ void cleanup_module(void)
 {
 	struct soc *s;
 	int irq;
-	struct linux_sbus_device *sdev;
+	struct sbus_dev *sdev;
 	
 	for_each_soc(s) {
 		irq = s->port[0].fc.irq;
@@ -716,13 +758,16 @@ void cleanup_module(void)
 		fcp_release(&(s->port[0].fc), 2);
 
 		sdev = s->port[0].fc.dev;
-		if (sdev->num_registers == 1)
-			sparc_free_io ((char *)s->xram, sdev->reg_addrs [0].reg_size);
-		else {
-			sparc_free_io ((char *)s->xram, sdev->reg_addrs [1].reg_size);
-			sparc_free_io ((char *)s->regs, sdev->reg_addrs [2].reg_size);
+		if (sdev->num_registers == 1) {
+			sbus_iounmap(s->xram, 0x10000UL);
+			sbus_iounmap(s->regs, 0x10UL);
+		} else {
+			sbus_iounmap(s->xram, sdev->reg_addrs[1].reg_size);
+			sbus_iounmap(s->regs, sdev->reg_addrs[2].reg_size);
 		}
-		/* FIXME: sparc_dvma_free() ??? */
+		sbus_free_consistant(sdev,
+				     (SOC_CQ_REQ0_SIZE+SOC_CQ_REQ1_SIZE)*sizeof(soc_req),
+				     s->req_cpu, s->req_dvma);
 	}
 }
 #endif

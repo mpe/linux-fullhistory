@@ -1,4 +1,4 @@
-/* $Id: irq.h,v 1.16 1999/09/06 01:17:52 davem Exp $
+/* $Id: irq.h,v 1.17 1999/09/21 14:39:41 davem Exp $
  * irq.h: IRQ registers on the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -61,12 +61,23 @@ struct ino_bucket {
 /*0x08*/void *irq_info;
 
 	/* Sun5 Interrupt Clear Register. */
-/*0x10*/volatile unsigned int *iclr;
+/*0x10*/unsigned long iclr;
 
 	/* Sun5 Interrupt Mapping Register. */
-/*0x18*/volatile unsigned int *imap;
+/*0x18*/unsigned long imap;
 
 };
+
+/* IMAP/ICLR register defines */
+#define IMAP_VALID		0x80000000	/* IRQ Enabled		*/
+#define IMAP_TID		0x7c000000	/* UPA TargetID		*/
+#define IMAP_IGN		0x000007c0	/* IRQ Group Number	*/
+#define IMAP_INO		0x0000003f	/* IRQ Number		*/
+#define IMAP_INR		0x000007ff	/* Full interrupt number*/
+
+#define ICLR_IDLE		0x00000000	/* Idle state		*/
+#define ICLR_TRANSMIT		0x00000001	/* Transmit state	*/
+#define ICLR_PENDING		0x00000003	/* Pending state	*/
 
 /* Only 8-bits are available, be careful.  -DaveM */
 #define IBF_DMA_SYNC	0x01	/* DMA synchronization behind PCI bridge needed. */
@@ -98,7 +109,7 @@ extern void disable_irq(unsigned int);
 extern void enable_irq(unsigned int);
 extern void init_timers(void (*lvl10_irq)(int, void *, struct pt_regs *),
 			unsigned long *);
-extern unsigned int build_irq(int pil, int inofixup, volatile unsigned int *iclr, volatile unsigned int *imap);
+extern unsigned int build_irq(int pil, int inofixup, unsigned long iclr, unsigned long imap);
 extern unsigned int sbus_build_irq(void *sbus, unsigned int ino);
 extern unsigned int psycho_build_irq(void *psycho, int imap_off, int ino, int need_dma_sync);
 

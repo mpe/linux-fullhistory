@@ -402,14 +402,6 @@ typedef struct mtd_bind_t {
 #ifdef __KERNEL__
 
 /*
- *  Calls to set up low-level "Socket Services" drivers
- */
-
-typedef int (*ss_entry_t)(u_int sock, u_int cmd, void *arg);
-extern int register_ss_entry(int nsock, ss_entry_t entry);
-extern void unregister_ss_entry(ss_entry_t entry);
-
-/*
  *  The main Card Services entry point
  */
 

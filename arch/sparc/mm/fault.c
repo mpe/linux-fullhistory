@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.107 1999/08/14 03:51:46 anton Exp $
+/* $Id: fault.c,v 1.111 1999/10/24 13:45:59 anton Exp $
  * fault.c:  Page fault handlers for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -146,10 +146,11 @@ static void unhandled_fault(unsigned long address, struct task_struct *tsk,
 		printk(KERN_ALERT "Unable to handle kernel paging request "
 		       "at virtual address %08lx\n", address);
 	}
-	printk(KERN_ALERT "tsk->mm->context = %08lx\n",
-	       (unsigned long) tsk->mm->context);
-	printk(KERN_ALERT "tsk->mm->pgd = %08lx\n",
-	       (unsigned long) tsk->mm->pgd);
+	printk(KERN_ALERT "tsk->{mm,active_mm}->context = %08lx\n",
+		(tsk->mm ? tsk->mm->context : tsk->active_mm->context));
+	printk(KERN_ALERT "tsk->{mm,active_mm}->pgd = %08lx\n",
+		(tsk->mm ? (unsigned long) tsk->mm->pgd :
+		 	(unsigned long) tsk->active_mm->pgd));
 	die_if_kernel("Oops", regs);
 }
 
@@ -309,8 +310,18 @@ asmlinkage void do_sun4c_fault(struct pt_regs *regs, int text_fault, int write,
 	pgd_t *pgdp;
 	pte_t *ptep;
 
-	if (text_fault)
+	if (text_fault) {
 		address = regs->pc;
+	} else if (!write &&
+		   !(regs->psr & PSR_PS)) {
+		unsigned int insn, *ip;
+
+		ip = (unsigned int *)regs->pc;
+		if (! get_user(insn, ip)) {
+			if ((insn & 0xc1680000) == 0xc0680000)
+				write = 1;
+		}
+	}
 
 	pgdp = sun4c_pgd_offset(mm, address);
 	ptep = sun4c_pte_offset((pmd_t *) pgdp, address);
@@ -319,28 +330,36 @@ asmlinkage void do_sun4c_fault(struct pt_regs *regs, int text_fault, int write,
 	    if (write) {
 		if ((pte_val(*ptep) & (_SUN4C_PAGE_WRITE|_SUN4C_PAGE_PRESENT))
 				   == (_SUN4C_PAGE_WRITE|_SUN4C_PAGE_PRESENT)) {
+			unsigned long flags;
 
 			*ptep = __pte(pte_val(*ptep) | _SUN4C_PAGE_ACCESSED |
 				      _SUN4C_PAGE_MODIFIED |
 				      _SUN4C_PAGE_VALID |
 				      _SUN4C_PAGE_DIRTY);
 
+			save_and_cli(flags);
 			if (sun4c_get_segmap(address) != invalid_segment) {
 				sun4c_put_pte(address, pte_val(*ptep));
+				restore_flags(flags);
 				return;
 			}
+			restore_flags(flags);
 		}
 	    } else {
 		if ((pte_val(*ptep) & (_SUN4C_PAGE_READ|_SUN4C_PAGE_PRESENT))
 				   == (_SUN4C_PAGE_READ|_SUN4C_PAGE_PRESENT)) {
+			unsigned long flags;
 
 			*ptep = __pte(pte_val(*ptep) | _SUN4C_PAGE_ACCESSED |
 				      _SUN4C_PAGE_VALID);
 
+			save_and_cli(flags);
 			if (sun4c_get_segmap(address) != invalid_segment) {
 				sun4c_put_pte(address, pte_val(*ptep));
+				restore_flags(flags);
 				return;
 			}
+			restore_flags(flags);
 		}
 	    }
 	}
@@ -415,31 +434,25 @@ void window_overflow_fault(void)
 {
 	unsigned long sp;
 
-	lock_kernel();
 	sp = current->thread.rwbuf_stkptrs[0];
 	if(((sp + 0x38) & PAGE_MASK) != (sp & PAGE_MASK))
 		force_user_fault(sp + 0x38, 1);
 	force_user_fault(sp, 1);
-	unlock_kernel();
 }
 
 void window_underflow_fault(unsigned long sp)
 {
-	lock_kernel();
 	if(((sp + 0x38) & PAGE_MASK) != (sp & PAGE_MASK))
 		force_user_fault(sp + 0x38, 0);
 	force_user_fault(sp, 0);
-	unlock_kernel();
 }
 
 void window_ret_fault(struct pt_regs *regs)
 {
 	unsigned long sp;
 
-	lock_kernel();
 	sp = regs->u_regs[UREG_FP];
 	if(((sp + 0x38) & PAGE_MASK) != (sp & PAGE_MASK))
 		force_user_fault(sp + 0x38, 0);
 	force_user_fault(sp, 0);
-	unlock_kernel();
 }

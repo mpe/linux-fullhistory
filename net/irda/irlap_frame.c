@@ -1,16 +1,16 @@
 /*********************************************************************
  *                
  * Filename:      irlap_frame.c
- * Version:       0.9
+ * Version:       1.0
  * Description:   Build and transmit IrLAP frames
- * Status:        Experimental.
+ * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Aug 19 10:27:26 1997
- * Modified at:   Fri Nov  5 09:45:58 1999
+ * Modified at:   Tue Dec 14 09:45:25 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
- *     All Rights Resrved.
+ *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -46,8 +46,8 @@
  * Function irlap_insert_info (self, skb)
  *
  *    Insert minimum turnaround time and speed information into the skb. We 
- *    need to do this since it's per packet relevant information.
- *
+ *    need to do this since it's per packet relevant information. Safe to
+ *    have this function inlined since it's only called from one place
  */
 static inline void irlap_insert_info(struct irlap_cb *self, 
 				     struct sk_buff *skb)
@@ -83,13 +83,6 @@ static inline void irlap_insert_info(struct irlap_cb *self,
  */
 void irlap_queue_xmit(struct irlap_cb *self, struct sk_buff *skb)
 {
-	/* Make sure data is not larger than max data size plus LAP header */
-	if (skb->len > 2050) {
-		ERROR(__FUNCTION__ "(), size=%d of sk_buff to big!\n", 
-		      (int) skb->len);
-		return;
-	}
-	
 	/* Some common init stuff */
 	skb->dev = self->netdev;
 	skb->h.raw = skb->nh.raw = skb->mac.raw = skb->data;
@@ -120,8 +113,7 @@ void irlap_send_snrm_frame(struct irlap_cb *self, struct qos_info *qos)
 	if (!skb)
 		return;
 
-	skb_put(skb, 2); 
-	frame = (struct snrm_frame *) skb->data;
+	frame = (struct snrm_frame *) skb_put(skb, 2); 
 
 	/* Insert connection address field */
 	if (qos)
@@ -216,8 +208,7 @@ void irlap_send_ua_response_frame(struct irlap_cb *self, struct qos_info *qos)
 	if (!skb)
 		return;
 
-	skb_put(skb, 10);
-	frame = (struct ua_frame *) skb->data;
+	frame = (struct ua_frame *) skb_put(skb, 10);
 	
 	/* Build UA response */
 	frame->caddr = self->caddr;
@@ -257,8 +248,7 @@ void irlap_send_dm_frame( struct irlap_cb *self)
 	if (!skb)
 		return;
 
-	skb_put( skb, 2);
-	frame = skb->data;
+	frame = skb_put( skb, 2);
 	
 	if (self->state == LAP_NDM)
 		frame[0] = CBROADCAST;
@@ -286,12 +276,11 @@ void irlap_send_disc_frame(struct irlap_cb *self)
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == LAP_MAGIC, return;);
 
-	skb = dev_alloc_skb(32);
+	skb = dev_alloc_skb(16);
 	if (!skb)
 		return;
 
-	skb_put(skb, 2);
-	frame = skb->data;
+	frame = skb_put(skb, 2);
 	
 	frame[0] = self->caddr | CMD_FRAME;
 	frame[1] = DISC_CMD | PF_BIT;
@@ -313,7 +302,8 @@ void irlap_send_discovery_xid_frame(struct irlap_cb *self, int S, __u8 s,
 	__u32 bcast = BROADCAST;
 	__u8 *info;
 
- 	IRDA_DEBUG(4, __FUNCTION__ "(), s=%d, S=%d, command=%d\n", s, S, command);
+ 	IRDA_DEBUG(4, __FUNCTION__ "(), s=%d, S=%d, command=%d\n", s, S, 
+		   command);
 
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == LAP_MAGIC, return;);
@@ -369,24 +359,23 @@ void irlap_send_discovery_xid_frame(struct irlap_cb *self, int S, __u8 s,
 	 *  EXTENSION bit is set in the first byte.
 	 */
 	if (!command || (frame->slotnr == 0xff)) {
-		int i;
+		int len;
 
-		if (discovery->hints.byte[0] & HINT_EXTENSION)
-			info = skb_put(skb, 3+discovery->name_len);
-		else
-			info = skb_put(skb, 2+discovery->name_len);
-		
-		i = 0;
-		info[i++] = discovery->hints.byte[0];
-		if (discovery->hints.byte[0] & HINT_EXTENSION)
-			info[i++] = discovery->hints.byte[1];
-		
-		info[i++] = discovery->charset;
-		
-		memcpy(&info[i++], discovery->nickname, discovery->name_len);
+		if (discovery->hints.byte[0] & HINT_EXTENSION) {
+			info = skb_put(skb, 2);		
+			info[0] = discovery->hints.byte[0];
+			info[1] = discovery->hints.byte[1];
+		} else {
+			info = skb_put(skb, 1);
+			info[0] = discovery->hints.byte[0];
+		}
+		info = skb_put(skb, 1);
+		info[0] = discovery->charset;
+
+		len = IRDA_MIN(discovery->name_len, skb_tailroom(skb));
+		info = skb_put(skb, len);
+		memcpy(info, discovery->nickname, len);
 	} 
-	ASSERT(self->netdev != NULL, return;);
-
 	irlap_queue_xmit(self, skb);
 }
 
@@ -417,13 +406,15 @@ static void irlap_recv_discovery_xid_rsp(struct irlap_cb *self,
 
 	/* Make sure frame is addressed to us */
 	if ((info->saddr != self->saddr) && (info->saddr != BROADCAST)) {
+		IRDA_DEBUG(0, __FUNCTION__ 
+			   "(), frame is not addressed to us!\n");
 		dev_kfree_skb(skb);
-		IRDA_DEBUG(0, __FUNCTION__ "(), frame is not addressed to us!\n");
 		return;
 	}
 
 	if ((discovery = kmalloc(sizeof(discovery_t), GFP_ATOMIC)) == NULL) {
 		WARNING(__FUNCTION__ "(), kmalloc failed!\n");
+		dev_kfree_skb(skb);
 		return;
 	}
 	memset(discovery, 0, sizeof(discovery_t));
@@ -483,7 +474,8 @@ static void irlap_recv_discovery_xid_cmd(struct irlap_cb *self,
 
 	/* Make sure frame is addressed to us */
 	if ((info->saddr != self->saddr) && (info->saddr != BROADCAST)) {
-		IRDA_DEBUG(0, __FUNCTION__ "(), frame is not addressed to us!\n");
+		IRDA_DEBUG(0, __FUNCTION__ 
+			   "(), frame is not addressed to us!\n");
 		dev_kfree_skb(skb);
 		return;
 	}
@@ -503,6 +495,7 @@ static void irlap_recv_discovery_xid_cmd(struct irlap_cb *self,
 		break;
 	default:
 		/* Error!! */
+		dev_kfree_skb(skb);
 		return;
 	}
 	info->s = xid->slotnr;
@@ -519,6 +512,7 @@ static void irlap_recv_discovery_xid_cmd(struct irlap_cb *self,
 		discovery = kmalloc(sizeof(discovery_t), GFP_ATOMIC);
 		if (!discovery) {
 			WARNING(__FUNCTION__ "(), unable to malloc!\n");
+			dev_kfree_skb(skb);
 			return;
 		}
 	      
@@ -562,7 +556,7 @@ void irlap_send_rr_frame(struct irlap_cb *self, int command)
 	struct sk_buff *skb;
 	__u8 *frame;
 
-	skb = dev_alloc_skb(32);
+	skb = dev_alloc_skb(16);
 	if (!skb)
 		return;
 	
@@ -608,8 +602,7 @@ void irlap_send_frmr_frame( struct irlap_cb *self, int command)
 	if (!skb)
 		return;
 
-	skb_put( skb, 2);
-	frame = skb->data;
+	frame = skb_put( skb, 2);
 	
 	frame[0] = self->caddr;
 	frame[0] |= (command) ? CMD_FRAME : 0;
@@ -620,7 +613,7 @@ void irlap_send_frmr_frame( struct irlap_cb *self, int command)
 
 	frame[2] = 0;
 
-   	IRDA_DEBUG( 4, __FUNCTION__ "(), vr=%d, %ld\n",self->vr, jiffies); 
+   	IRDA_DEBUG(4, __FUNCTION__ "(), vr=%d, %ld\n",self->vr, jiffies); 
 
 	irlap_queue_xmit(self, skb);
 }
@@ -631,20 +624,17 @@ void irlap_send_frmr_frame( struct irlap_cb *self, int command)
  *    Received RNR (Receive Not Ready) frame from peer station
  *
  */
-static void irlap_recv_rnr_frame( struct irlap_cb *self, struct sk_buff *skb, 
-				  struct irlap_info *info) 
+static void irlap_recv_rnr_frame(struct irlap_cb *self, struct sk_buff *skb, 
+				 struct irlap_info *info) 
 {
-	__u8 *frame;
+	ASSERT(skb != NULL, return;);
+	ASSERT(info != NULL, return;);
 
-	ASSERT( skb != NULL, return;);
-	ASSERT( info != NULL, return;);
+	info->nr = skb->data[1] >> 5;
 
-	frame = skb->data;
-	info->nr = frame[1] >> 5;
+	IRDA_DEBUG(4, __FUNCTION__ "(), nr=%d, %ld\n", info->nr, jiffies);
 
-	IRDA_DEBUG( 4, __FUNCTION__ "(), nr=%d, %ld\n", info->nr, jiffies);
-
-	irlap_do_event( self, RECV_RNR_FRAME, skb, info);
+	irlap_do_event(self, RECV_RNR_FRAME, skb, info);
 }
 
 /*
@@ -702,7 +692,7 @@ void irlap_send_data_primary(struct irlap_cb *self, struct sk_buff *skb)
 		irlap_send_i_frame( self, tx_skb, CMD_FRAME);
 	} else {
 		IRDA_DEBUG( 4, __FUNCTION__ "(), sending unreliable frame\n");
-		irlap_send_ui_frame(self, skb, CMD_FRAME);
+		irlap_send_ui_frame(self, skb, self->caddr, CMD_FRAME);
 		self->window -= 1;
 	}
 }
@@ -765,12 +755,12 @@ void irlap_send_data_primary_poll(struct irlap_cb *self, struct sk_buff *skb)
 		del_timer(&self->poll_timer);
 
 		if (self->ack_required) {
-			irlap_send_ui_frame(self, skb, CMD_FRAME);
+			irlap_send_ui_frame(self, skb, self->caddr, CMD_FRAME);
 			irlap_send_rr_frame(self, CMD_FRAME);
 			self->ack_required = FALSE;
 		} else {
 			skb->data[1] |= PF_BIT;
-			irlap_send_ui_frame(self, skb, CMD_FRAME);
+			irlap_send_ui_frame(self, skb, self->caddr, CMD_FRAME);
 		}
 		self->window = self->window_size;
 		irlap_start_final_timer(self, self->final_timeout);
@@ -824,12 +814,12 @@ void irlap_send_data_secondary_final(struct irlap_cb *self,
 		irlap_send_i_frame(self, tx_skb, RSP_FRAME); 
 	} else {
 		if (self->ack_required) {
-			irlap_send_ui_frame(self, skb, RSP_FRAME);
+			irlap_send_ui_frame(self, skb, self->caddr, RSP_FRAME);
 			irlap_send_rr_frame(self, RSP_FRAME);
 			self->ack_required = FALSE;
 		} else {
 			skb->data[1] |= PF_BIT;
-			irlap_send_ui_frame(self, skb, RSP_FRAME);
+			irlap_send_ui_frame(self, skb, self->caddr, RSP_FRAME);
 		}
 		self->window = self->window_size;
 
@@ -874,7 +864,7 @@ void irlap_send_data_secondary(struct irlap_cb *self, struct sk_buff *skb)
 
 		irlap_send_i_frame(self, tx_skb, RSP_FRAME); 
 	} else {
-		irlap_send_ui_frame(self, skb, RSP_FRAME);
+		irlap_send_ui_frame(self, skb, self->caddr, RSP_FRAME);
 		self->window -= 1;
 	}
 }
@@ -958,12 +948,12 @@ void irlap_resend_rejected_frames(struct irlap_cb *self, int command)
 	 */
 	return; /* Skip this for now, DB */
 
-	while (skb_queue_len( &self->tx_list) > 0) {
+	while (skb_queue_len( &self->txq) > 0) {
 		
 		IRDA_DEBUG(0, __FUNCTION__ "(), sending additional frames!\n");
-		if ((skb_queue_len( &self->tx_list) > 0) && 
+		if ((skb_queue_len( &self->txq) > 0) && 
 		    (self->window > 0)) {
-			skb = skb_dequeue( &self->tx_list); 
+			skb = skb_dequeue( &self->txq); 
 			ASSERT(skb != NULL, return;);
 
 			/*
@@ -971,7 +961,7 @@ void irlap_resend_rejected_frames(struct irlap_cb *self, int command)
 			 *  bit cleared
 			 */ 
 			if ((self->window > 1) && 
-			    skb_queue_len(&self->tx_list) > 0) 
+			    skb_queue_len(&self->txq) > 0) 
 			{
 				irlap_send_data_primary(self, skb);
 			} else {
@@ -988,21 +978,16 @@ void irlap_resend_rejected_frames(struct irlap_cb *self, int command)
  *
  */
 void irlap_send_ui_frame(struct irlap_cb *self, struct sk_buff *skb, 
-			 int command) 
+			 __u8 caddr, int command)
 {
-	__u8  *frame;
-
 	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 	
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == LAP_MAGIC, return;);
 	ASSERT(skb != NULL, return;);
 	
-	frame = skb->data;
-	
 	/* Insert connection address */
-	frame[0] = self->caddr;
-	frame[0] |= (command) ? CMD_FRAME : 0;
+	skb->data[0] = caddr | ((command) ? CMD_FRAME : 0);
 
 	irlap_queue_xmit(self, skb);
 }
@@ -1055,13 +1040,9 @@ static inline void irlap_recv_i_frame(struct irlap_cb *self,
 static void irlap_recv_ui_frame(struct irlap_cb *self, struct sk_buff *skb, 
 				struct irlap_info *info)
 {
-	__u8 *frame;
-
 	IRDA_DEBUG( 4, __FUNCTION__ "()\n");
 
-	frame = skb->data;
-
-	info->pf = frame[1] & PF_BIT;      /* Final bit */
+	info->pf = skb->data[1] & PF_BIT;      /* Final bit */
 
 	irlap_do_event(self, RECV_UI_FRAME, skb, info);
 }
@@ -1173,6 +1154,7 @@ void irlap_recv_test_frame(struct irlap_cb *self, struct sk_buff *skb,
 	
 	if (skb->len < sizeof(struct test_frame)) {
 		IRDA_DEBUG(0, __FUNCTION__ "() test frame to short!\n");
+		dev_kfree_skb(skb);
 		return;
 	}
 
@@ -1265,14 +1247,17 @@ int irlap_driver_rcv(struct sk_buff *skb, struct net_device *dev,
 			break;
 		case REJ:
 			IRDA_DEBUG( 0, "*** REJ frame received! ***\n");
+			dev_kfree_skb(skb);
 			break;
 		case SREJ:
 			IRDA_DEBUG( 0, "*** SREJ frame received! ***\n");
+			dev_kfree_skb(skb);
 			break;
 		default:
 			WARNING(__FUNCTION__ 
 				"() Unknown S-frame %02x received!\n",
 				info.control);
+			dev_kfree_skb(skb);
 			break;
 		}
 		return 0;
@@ -1293,6 +1278,7 @@ int irlap_driver_rcv(struct sk_buff *skb, struct net_device *dev,
 	case DM_RSP:
 		IRDA_DEBUG( 0, "DM rsp frame received!\n");
 		irlap_next_state(self, LAP_NDM);
+		dev_kfree_skb(skb);
 		break;
 	case DISC_CMD:
 		irlap_do_event(self, RECV_DISC_FRAME, skb, &info);
@@ -1312,7 +1298,7 @@ int irlap_driver_rcv(struct sk_buff *skb, struct net_device *dev,
 	default:
 		WARNING(__FUNCTION__ "(), Unknown frame %02x received!\n", 
 			info.control);
-		dev_kfree_skb( skb); 
+		dev_kfree_skb(skb); 
 		break;
 	}
 	return 0;

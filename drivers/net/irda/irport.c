@@ -6,7 +6,7 @@
  * Status:	  Experimental.
  * Author:	  Dag Brattli <dagb@cs.uit.no>
  * Created at:	  Sun Aug  3 13:49:59 1997
- * Modified at:   Sat Nov 13 23:25:56 1999
+ * Modified at:   Thu Dec 16 00:47:08 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:	  serial.c by Linus Torvalds 
  * 
@@ -73,16 +73,11 @@ static unsigned int qos_mtt_bits = 0x03;
 static struct irport_cb *dev_self[] = { NULL, NULL, NULL, NULL};
 static char *driver_name = "irport";
 
-static int irport_open(int i, unsigned int iobase, unsigned int irq);
-static int irport_close(struct irport_cb *self);
-
 static void irport_write_wakeup(struct irport_cb *self);
 static int  irport_write(int iobase, int fifo_size, __u8 *buf, int len);
 static void irport_receive(struct irport_cb *self);
 
 static int  irport_net_init(struct net_device *dev);
-static int  irport_net_open(struct net_device *dev);
-static int  irport_net_close(struct net_device *dev);
 static int  irport_net_ioctl(struct net_device *dev, struct ifreq *rq, 
 			     int cmd);
 static int  irport_is_receiving(struct irport_cb *self);
@@ -91,7 +86,15 @@ static int  irport_raw_write(struct net_device *dev, __u8 *buf, int len);
 static struct net_device_stats *irport_net_get_stats(struct net_device *dev);
 static int irport_change_speed_complete(struct irda_task *task);
 
+EXPORT_SYMBOL(irport_open);
+EXPORT_SYMBOL(irport_close);
+EXPORT_SYMBOL(irport_start);
+EXPORT_SYMBOL(irport_stop);
+EXPORT_SYMBOL(irport_interrupt);
+EXPORT_SYMBOL(irport_hard_xmit);
 EXPORT_SYMBOL(irport_change_speed);
+EXPORT_SYMBOL(irport_net_open);
+EXPORT_SYMBOL(irport_net_close);
 
 int __init irport_init(void)
 {
@@ -101,7 +104,7 @@ int __init irport_init(void)
  		int ioaddr = io[i];
  		if (check_region(ioaddr, IO_EXTENT))
  			continue;
- 		if (irport_open(i, io[i], irq[i]) == 0)
+ 		if (irport_open(i, io[i], irq[i]) != NULL)
  			return 0;
  	}
 	/* 
@@ -130,7 +133,8 @@ static void irport_cleanup(void)
 }
 #endif /* MODULE */
 
-static int irport_open(int i, unsigned int iobase, unsigned int irq)
+struct irport_cb *
+irport_open(int i, unsigned int iobase, unsigned int irq)
 {
 	struct net_device *dev;
 	struct irport_cb *self;
@@ -146,7 +150,7 @@ static int irport_open(int i, unsigned int iobase, unsigned int irq)
 	if (!self) {
 		ERROR(__FUNCTION__ "(), can't allocate memory for "
 		      "control block!\n");
-		return -ENOMEM;
+		return NULL;
 	}
 	memset(self, 0, sizeof(struct irport_cb));
    
@@ -154,22 +158,23 @@ static int irport_open(int i, unsigned int iobase, unsigned int irq)
 
 	/* Need to store self somewhere */
 	dev_self[i] = self;
+	self->priv = self;
 
 	/* Initialize IO */
-	self->io.iobase2   = iobase;
-        self->io.irq2      = irq;
+	self->io.iobase   = iobase;
+        self->io.irq      = irq;
         self->io.io_ext    = IO_EXTENT;
         self->io.fifo_size = 16;
 
 	/* Lock the port that we need */
-	ret = check_region(self->io.iobase2, self->io.io_ext);
+	ret = check_region(self->io.iobase, self->io.io_ext);
 	if (ret < 0) { 
 		IRDA_DEBUG(0, __FUNCTION__ "(), can't get iobase of 0x%03x\n",
-		      self->io.iobase2);
+		      self->io.iobase);
 		/* irport_cleanup(self->self);  */
-		return -ENODEV;
+		return NULL;
 	}
-	request_region(self->io.iobase2, self->io.io_ext, driver_name);
+	request_region(self->io.iobase, self->io.io_ext, driver_name);
 
 	/* Initialize QoS for this device */
 	irda_init_max_qos_capabilies(&self->qos);
@@ -191,7 +196,7 @@ static int irport_open(int i, unsigned int iobase, unsigned int irq)
 		self->rx_buff.head = (__u8 *) kmalloc(self->rx_buff.truesize,
 						      GFP_KERNEL);
 		if (self->rx_buff.head == NULL)
-			return -ENOMEM;
+			return NULL;
 		memset(self->rx_buff.head, 0, self->rx_buff.truesize);
 	}
 	if (self->tx_buff.truesize > 0) {
@@ -199,7 +204,7 @@ static int irport_open(int i, unsigned int iobase, unsigned int irq)
 						      GFP_KERNEL);
 		if (self->tx_buff.head == NULL) {
 			kfree(self->rx_buff.head);
-			return -ENOMEM;
+			return NULL;
 		}
 		memset(self->tx_buff.head, 0, self->tx_buff.truesize);
 	}	
@@ -211,11 +216,17 @@ static int irport_open(int i, unsigned int iobase, unsigned int irq)
 
 	if (!(dev = dev_alloc("irda%d", &err))) {
 		ERROR(__FUNCTION__ "(), dev_alloc() failed!\n");
-		return -ENOMEM;
+		return NULL;
 	}
+	/* dev_alloc doesn't clear the struct */
+	memset(((__u8*)dev)+sizeof(char*),0,sizeof(struct net_device)-sizeof(char*));
 
- 	dev->priv = (void *) self;
 	self->netdev = dev;
+
+	/* May be overridden by piggyback drivers */
+ 	dev->priv = (void *) self;
+	self->interrupt    = irport_interrupt;
+	self->change_speed = irport_change_speed;
 
 	/* Override the network functions we need to use */
 	dev->init            = irport_net_init;
@@ -234,14 +245,14 @@ static int irport_open(int i, unsigned int iobase, unsigned int irq)
 	rtnl_unlock();
 	if (err) {
 		ERROR(__FUNCTION__ "(), register_netdev() failed!\n");
-		return -1;
+		return NULL;
 	}
 	MESSAGE("IrDA: Registered device %s\n", dev->name);
 
-	return 0;
+	return self;
 }
 
-static int irport_close(struct irport_cb *self)
+int irport_close(struct irport_cb *self)
 {
 	ASSERT(self != NULL, return -1;);
 
@@ -255,12 +266,14 @@ static int irport_close(struct irport_cb *self)
 		rtnl_lock();
 		unregister_netdevice(self->netdev);
 		rtnl_unlock();
+		/* Must free the old-style 2.2.x device */
+		kfree(self->netdev);
 	}
 
 	/* Release the IO-port that this driver is using */
 	IRDA_DEBUG(0 , __FUNCTION__ "(), Releasing Region %03x\n", 
-		   self->io.iobase2);
-	release_region(self->io.iobase2, self->io.io_ext);
+		   self->io.iobase);
+	release_region(self->io.iobase, self->io.io_ext);
 
 	if (self->tx_buff.head)
 		kfree(self->tx_buff.head);
@@ -273,13 +286,16 @@ static int irport_close(struct irport_cb *self)
 	return 0;
 }
 
-void irport_start(struct irport_cb *self, int iobase)
+void irport_start(struct irport_cb *self)
 {
 	unsigned long flags;
+	int iobase;
+
+	iobase = self->io.iobase;
 
 	spin_lock_irqsave(&self->lock, flags);
 
-	irport_stop(self, iobase);
+	irport_stop(self);
 
 	/* Initialize UART */
 	outb(UART_LCR_WLEN8, iobase+UART_LCR);  /* Reset DLAB */
@@ -291,9 +307,12 @@ void irport_start(struct irport_cb *self, int iobase)
 	spin_unlock_irqrestore(&self->lock, flags);
 }
 
-void irport_stop(struct irport_cb *self, int iobase)
+void irport_stop(struct irport_cb *self)
 {
 	unsigned long flags;
+	int iobase;
+
+	iobase = self->io.iobase;
 
 	spin_lock_irqsave(&self->lock, flags);
 
@@ -325,8 +344,9 @@ int irport_probe(int iobase)
  *    Set speed of IrDA port to specified baudrate
  *
  */
-void __irport_change_speed(struct irport_cb *self, __u32 speed)
+void irport_change_speed(void *priv, __u32 speed)
 {
+	struct irport_cb *self = (struct irport_cb *) priv;
 	unsigned long flags;
 	int iobase; 
 	int fcr;    /* FIFO control reg */
@@ -337,7 +357,7 @@ void __irport_change_speed(struct irport_cb *self, __u32 speed)
 
 	ASSERT(self != NULL, return;);
 
-	iobase = self->io.iobase2;
+	iobase = self->io.iobase;
 	
 	/* Update accounting for new speed */
 	self->io.speed = speed;
@@ -377,12 +397,12 @@ void __irport_change_speed(struct irport_cb *self, __u32 speed)
 }
 
 /*
- * Function irport_change_speed (instance, state, param)
+ * Function __irport_change_speed (instance, state, param)
  *
  *    State machine for changing speed of the device. We do it this way since
  *    we cannot use schedule_timeout() when we are in interrupt context
  */
-int irport_change_speed(struct irda_task *task)
+int __irport_change_speed(struct irda_task *task)
 {
 	struct irport_cb *self;
 	__u32 speed = (__u32) task->param;
@@ -413,7 +433,7 @@ int irport_change_speed(struct irda_task *task)
 		break;
 	case IRDA_TASK_CHILD_INIT:
 		/* Go to default speed */
-		__irport_change_speed(self, 9600);
+		irport_change_speed(self, 9600);
 
 		/* Change speed of dongle */
 		if (irda_task_execute(self->dongle,
@@ -436,7 +456,7 @@ int irport_change_speed(struct irda_task *task)
 		break;
 	case IRDA_TASK_CHILD_DONE:
 		/* Finally we are ready to change the speed */
-		__irport_change_speed(self, speed);
+		irport_change_speed(self, speed);
 		
 		irda_task_next_state(task, IRDA_TASK_DONE);
 		break;
@@ -466,7 +486,7 @@ static void irport_write_wakeup(struct irport_cb *self)
 
 	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
-	iobase = self->io.iobase2;
+	iobase = self->io.iobase;
 
 	/* Finished with frame?  */
 	if (self->tx_buff.len > 0)  {
@@ -484,7 +504,7 @@ static void irport_write_wakeup(struct irport_cb *self)
 		 */
 		if (self->new_speed) {
 			IRDA_DEBUG(5, __FUNCTION__ "(), Changing speed!\n");
-			irda_task_execute(self, irport_change_speed, 
+			irda_task_execute(self, __irport_change_speed, 
 					  irport_change_speed_complete, 
 					  NULL, (void *) self->new_speed);
 			self->new_speed = 0;
@@ -529,7 +549,7 @@ static int irport_write(int iobase, int fifo_size, __u8 *buf, int len)
 	/* Tx FIFO should be empty! */
 	if (!(inb(iobase+UART_LSR) & UART_LSR_THRE)) {
 		IRDA_DEBUG(0, __FUNCTION__ "(), failed, fifo not empty!\n");
-		return -1;
+		return 0;
 	}
         
 	/* Fill FIFO with current frame */
@@ -589,7 +609,7 @@ int irport_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 	self = (struct irport_cb *) dev->priv;
 	ASSERT(self != NULL, return 0;);
 
-	iobase = self->io.iobase2;
+	iobase = self->io.iobase;
 
 	/* Lock transmit buffer */
 	if (irda_lock((void *) &dev->tbusy) == FALSE) {
@@ -598,8 +618,8 @@ int irport_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 			return -EBUSY;
 
 		WARNING("%s: transmit timed out\n", dev->name);
-		irport_start(self, iobase);
-		__irport_change_speed(self, self->io.speed );
+		irport_start(self);
+		irport_change_speed(self, self->io.speed );
 
 		dev->trans_start = jiffies;
 	}
@@ -643,7 +663,7 @@ static void irport_receive(struct irport_cb *self)
 
 	ASSERT(self != NULL, return;);
 
-	iobase = self->io.iobase2;
+	iobase = self->io.iobase;
 
 	/*  
 	 * Receive all characters in Rx FIFO, unwrap and unstuff them. 
@@ -684,7 +704,7 @@ void irport_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 	dev->interrupt = 1;
 
-	iobase = self->io.iobase2;
+	iobase = self->io.iobase;
 
 	iir = inb(iobase+UART_IIR) & UART_IIR_ID;
 	while (iir) {
@@ -739,7 +759,7 @@ static int irport_net_init(struct net_device *dev)
  *    Network device is taken up. Usually this is done by "ifconfig irda0 up" 
  *   
  */
-static int irport_net_open(struct net_device *dev)
+int irport_net_open(struct net_device *dev)
 {
 	struct irport_cb *self;
 	int iobase;
@@ -747,13 +767,13 @@ static int irport_net_open(struct net_device *dev)
 	ASSERT(dev != NULL, return -1;);
 	self = (struct irport_cb *) dev->priv;
 
-	iobase = self->io.iobase2;
+	iobase = self->io.iobase;
 
-	if (request_irq(self->io.irq2, irport_interrupt, 0, dev->name, 
+	if (request_irq(self->io.irq, self->interrupt, 0, dev->name, 
 			(void *) dev))
 		return -EAGAIN;
 
-	irport_start(self, iobase);
+	irport_start(self);
 
 	/* Ready to play! */
 	dev->tbusy = 0;
@@ -779,7 +799,7 @@ static int irport_net_open(struct net_device *dev)
  *    Network device is taken down. Usually this is done by 
  *    "ifconfig irda0 down" 
  */
-static int irport_net_close(struct net_device *dev)
+int irport_net_close(struct net_device *dev)
 {
 	struct irport_cb *self;
 	int iobase;
@@ -791,7 +811,7 @@ static int irport_net_close(struct net_device *dev)
 
 	ASSERT(self != NULL, return -1;);
 
-	iobase = self->io.iobase2;
+	iobase = self->io.iobase;
 
 	/* Stop device */
 	dev->tbusy = 1;
@@ -802,9 +822,9 @@ static int irport_net_close(struct net_device *dev)
 		irlap_close(self->irlap);
 	self->irlap = NULL;
 
-	irport_stop(self, iobase);
+	irport_stop(self);
 
-	free_irq(self->io.irq2, dev);
+	free_irq(self->io.irq, dev);
 
 	MOD_DEC_USE_COUNT;
 
@@ -822,7 +842,7 @@ void irport_wait_until_sent(struct irport_cb *self)
 {
 	int iobase;
 
-	iobase = self->io.iobase2;
+	iobase = self->io.iobase;
 
 	/* Wait until Tx FIFO is empty */
 	while (!(inb(iobase+UART_LSR) & UART_LSR_THRE)) {
@@ -857,7 +877,7 @@ static int irport_set_dtr_rts(struct net_device *dev, int dtr, int rts)
 
 	ASSERT(self != NULL, return -1;);
 
-	iobase = self->io.iobase2;
+	iobase = self->io.iobase;
 
 	if (dtr)
 		dtr = UART_MCR_DTR;
@@ -877,7 +897,7 @@ static int irport_raw_write(struct net_device *dev, __u8 *buf, int len)
 
 	ASSERT(self != NULL, return -1;);
 
-	iobase = self->io.iobase2;
+	iobase = self->io.iobase;
 
 	/* Tx FIFO should be empty! */
 	if (!(inb(iobase+UART_LSR) & UART_LSR_THRE)) {
@@ -923,7 +943,7 @@ static int irport_net_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	
 	switch (cmd) {
 	case SIOCSBANDWIDTH: /* Set bandwidth */
-		irda_task_execute(self, irport_change_speed, NULL, NULL, 
+		irda_task_execute(self, __irport_change_speed, NULL, NULL, 
 				  (void *) irq->ifr_baudrate);
 		break;
 	case SIOCSDONGLE: /* Set dongle */

@@ -149,6 +149,9 @@ The Topology lines can be used to generate a graphic/pictorial
 of the USB devices on a system's root hub.  (See more below
 on how to do this.)
 
+The Interface lines can be used to determine what driver is
+being used for each device.
+
 The Configuration lines could be used to list maximum power
 (in milliamps) that a system's USB devices are using.
 For example, "grep ^C: /proc/bus/usb/devices".
@@ -156,65 +159,57 @@ For example, "grep ^C: /proc/bus/usb/devices".
 
 Here's an example, from a system which has a UHCI root hub,
 an external hub connected to the root hub, and a mouse and
-a video camera connected to the external hub.  [The video
-camera is listed as (none) since it is not recognized by
-any driver.]
+a serial converter connected to the external hub.
 
-
-T:  Lev=00 Prnt=00 Port=00 Cnt=00 Dev#= -1 Spd=12  If#=  0 MxCh= 2 Driver=(root hub)
-T:  Lev=01 Prnt=00 Port=00 Cnt=01 Dev#=  1 Spd=12  If#=  0 MxCh= 4 Driver=hub
+T:  Bus=00 Lev=00 Prnt=00 Port=00 Cnt=00 Dev#=  1 Spd=12  MxCh= 2
+B:  Alloc= 28/900 us ( 3%), #Int=  2, #Iso=  0
+T:  Bus=00 Lev=01 Prnt=01 Port=00 Cnt=01 Dev#=  2 Spd=12  MxCh= 4
 D:  Ver= 1.00 Cls=09(hub  ) Sub=00 Prot=00 MxPS= 8 #Cfgs=  1
 P:  Vendor=0451 ProdID=1446 Rev= 1.00
-C:* #If= 1 Cfg#= 1 Atr=e0 MxPwr=100mA
-I:  If#= 0 Alt= 0 #EP= 1 Cls=09(hub  ) Sub=00 Prot=00
+C:* #Ifs= 1 Cfg#= 1 Atr=e0 MxPwr=100mA
+I:  If#= 0 Alt= 0 #EPs= 1 Cls=09(hub  ) Sub=00 Prot=00 Driver=hub
 E:  Ad=81(I) Atr=03(Int.) MxPS=   1 Ivl=255ms
-T:  Lev=02 Prnt=01 Port=00 Cnt=01 Dev#=  3 Spd=1.5 If#=  0 MxCh= 0 Driver=mouse
+T:  Bus=00 Lev=02 Prnt=02 Port=00 Cnt=01 Dev#=  3 Spd=1.5 MxCh= 0
 D:  Ver= 1.00 Cls=00(>ifc ) Sub=00 Prot=00 MxPS= 8 #Cfgs=  1
-P:  Vendor=0458 ProdID=0001 Rev= 0.00
-C:* #If= 1 Cfg#= 1 Atr=a0 MxPwr=100mA
-I:  If#= 0 Alt= 0 #EP= 1 Cls=03(HID  ) Sub=01 Prot=02
+P:  Vendor=04b4 ProdID=0001 Rev= 0.00
+C:* #Ifs= 1 Cfg#= 1 Atr=80 MxPwr=100mA
+I:  If#= 0 Alt= 0 #EPs= 1 Cls=03(HID  ) Sub=01 Prot=02 Driver=mouse
 E:  Ad=81(I) Atr=03(Int.) MxPS=   3 Ivl= 10ms
-T:  Lev=02 Prnt=01 Port=02 Cnt=02 Dev#=  4 Spd=12  If#=  0 MxCh= 0 Driver=(none)
+T:  Bus=00 Lev=02 Prnt=02 Port=02 Cnt=02 Dev#=  4 Spd=12  MxCh= 0
 D:  Ver= 1.00 Cls=00(>ifc ) Sub=00 Prot=00 MxPS= 8 #Cfgs=  1
-P:  Vendor=04c8 ProdID=0720 Rev= 1.01
-C:* #If= 1 Cfg#= 1 Atr=80 MxPwr=500mA
-I:  If#= 0 Alt= 0 #EP= 2 Cls=0a(unk. ) Sub=ff Prot=00
-E:  Ad=81(I) Atr=01(Isoc) MxPS=   1 Ivl=  1ms
-E:  Ad=82(I) Atr=01(Isoc) MxPS= 384 Ivl=  1ms
-I:  If#= 0 Alt= 1 #EP= 2 Cls=0a(unk. ) Sub=ff Prot=00
-E:  Ad=81(I) Atr=01(Isoc) MxPS=   1 Ivl=  1ms
-E:  Ad=82(I) Atr=01(Isoc) MxPS= 240 Ivl=  1ms
-I:  If#= 0 Alt= 2 #EP= 2 Cls=0a(unk. ) Sub=ff Prot=00
-E:  Ad=81(I) Atr=01(Isoc) MxPS=   1 Ivl=  1ms
-E:  Ad=82(I) Atr=01(Isoc) MxPS= 576 Ivl=  1ms
-I:  If#= 0 Alt= 3 #EP= 2 Cls=0a(unk. ) Sub=ff Prot=00
-E:  Ad=81(I) Atr=01(Isoc) MxPS=   1 Ivl=  1ms
-E:  Ad=82(I) Atr=01(Isoc) MxPS= 464 Ivl=  1ms
-I:  If#= 0 Alt= 4 #EP= 2 Cls=0a(unk. ) Sub=ff Prot=00
-E:  Ad=81(I) Atr=01(Isoc) MxPS=   1 Ivl=  1ms
-E:  Ad=82(I) Atr=01(Isoc) MxPS= 688 Ivl=  1ms
+P:  Vendor=0565 ProdID=0001 Rev= 1.08
+S:  Manufacturer=Peracom Networks, Inc.
+S:  Product=Peracom USB to Serial Converter
+C:* #Ifs= 1 Cfg#= 1 Atr=a0 MxPwr=100mA
+I:  If#= 0 Alt= 0 #EPs= 3 Cls=00(>ifc ) Sub=00 Prot=00 Driver=serial
+E:  Ad=81(I) Atr=02(Bulk) MxPS=  64 Ivl= 16ms
+E:  Ad=01(O) Atr=02(Bulk) MxPS=  16 Ivl= 16ms
+E:  Ad=82(I) Atr=03(Int.) MxPS=   8 Ivl=  8ms
 
 
-Selecting only the "T:" lines from this (for example, by using
-"procusb t"), we have:
+Selecting only the "T:" and "I:" lines from this (for example, by using
+"procusb ti"), we have:
 
-T:  Lev=00 Prnt=00 Port=00 Cnt=00 Dev#= -1 Spd=12  If#=  0 MxCh= 2 Driver=(root hub)
-T:  Lev=01 Prnt=00 Port=00 Cnt=01 Dev#=  1 Spd=12  If#=  0 MxCh= 4 Driver=hub
-T:  Lev=02 Prnt=01 Port=00 Cnt=01 Dev#=  3 Spd=1.5 If#=  0 MxCh= 0 Driver=mouse
-T:  Lev=02 Prnt=01 Port=02 Cnt=02 Dev#=  4 Spd=12  If#=  0 MxCh= 0 Driver=(none)
+T:  Bus=00 Lev=00 Prnt=00 Port=00 Cnt=00 Dev#=  1 Spd=12  MxCh= 2
+T:  Bus=00 Lev=01 Prnt=01 Port=00 Cnt=01 Dev#=  2 Spd=12  MxCh= 4
+I:  If#= 0 Alt= 0 #EPs= 1 Cls=09(hub  ) Sub=00 Prot=00 Driver=hub
+T:  Bus=00 Lev=02 Prnt=02 Port=00 Cnt=01 Dev#=  3 Spd=1.5 MxCh= 0
+I:  If#= 0 Alt= 0 #EPs= 1 Cls=03(HID  ) Sub=01 Prot=02 Driver=mouse
+T:  Bus=00 Lev=02 Prnt=02 Port=02 Cnt=02 Dev#=  4 Spd=12  MxCh= 0
+I:  If#= 0 Alt= 0 #EPs= 3 Cls=00(>ifc ) Sub=00 Prot=00 Driver=serial
 
 
 Physically this looks like (or could be converted to):
 
                       +------------------+
-                      |  PC/root_hub (12)|   Dev# = -1
+                      |  PC/root_hub (12)|   Dev# = 1
                       +------------------+   (nn) is Mbps.
     Level 0           |  CN.0   |  CN.1  |   [CN = connector/port #]
                       +------------------+
                           /
                          /
             +-----------------------+
-  Level 1   | Dev#1: 4-port hub (12)|
+  Level 1   | Dev#2: 4-port hub (12)|
             +-----------------------+
             |CN.0 |CN.1 |CN.2 |CN.3 |
             +-----------------------+
@@ -222,7 +217,7 @@ Physically this looks like (or could be converted to):
                  \_____                          \
                        \                          \
                +--------------------+      +--------------------+
-  Level 2      | Dev# 3: mouse (1.5)|      | Dev# 4: (none) (12)|
+  Level 2      | Dev# 3: mouse (1.5)|      | Dev# 4: serial (12)|
                +--------------------+      +--------------------+
 
 
@@ -230,11 +225,11 @@ Physically this looks like (or could be converted to):
 Or, in a more tree-like structure (ports [Connectors] without
 connections could be omitted):
 
-PC:  Dev# -1, root hub, 2 ports, 12 Mbps
-|_ CN.0:  Dev# 1, hub, 4 ports, 12 Mbps
+PC:  Dev# 1, root hub, 2 ports, 12 Mbps
+|_ CN.0:  Dev# 2, hub, 4 ports, 12 Mbps
      |_ CN.0:  Dev #3, mouse, 1.5 Mbps
      |_ CN.1:
-     |_ CN.2:  Dev #4, (none), 12 Mbps  [or use "unknown" for (none)]
+     |_ CN.2:  Dev #4, serial, 12 Mbps
      |_ CN.3:
 |_ CN.1:
 

@@ -19,6 +19,7 @@
 #include <linux/interrupt.h>
 #include <linux/malloc.h>
 #include <linux/init.h>
+#include <linux/ioport.h>
 
 #include <asm/ptrace.h>
 #include <asm/processor.h>
@@ -225,6 +226,7 @@ static void __init sun4m_init_timers(void (*counter_fn)(int, void *, struct pt_r
 	int reg_count, irq, cpu;
 	struct linux_prom_registers cnt_regs[PROMREG_MAX];
 	int obio_node, cnt_node;
+	struct resource r;
 
 	cnt_node = 0;
 	if((obio_node =
@@ -250,18 +252,19 @@ static void __init sun4m_init_timers(void (*counter_fn)(int, void *, struct pt_r
 		cnt_regs[obio_node].reg_size = cnt_regs[obio_node-1].reg_size;
 		cnt_regs[obio_node].which_io = cnt_regs[obio_node-1].which_io;
 	}
-    
+
+	memset((char*)&r, 0, sizeof(struct resource));
 	/* Map the per-cpu Counter registers. */
-	sun4m_timers = sparc_alloc_io(cnt_regs[0].phys_addr, 0,
-				      PAGE_SIZE*SUN4M_NCPUS, "counters_percpu",
-				      cnt_regs[0].which_io, 0x0);
-    
+	r.flags = cnt_regs[0].which_io;
+	r.start = cnt_regs[0].phys_addr;
+	sun4m_timers = (struct sun4m_timer_regs *) sbus_ioremap(&r, 0,
+	    PAGE_SIZE*SUN4M_NCPUS, "sun4m_cpu_cnt");
 	/* Map the system Counter register. */
-	sparc_alloc_io(cnt_regs[4].phys_addr, 0,
-		       cnt_regs[4].reg_size,
-		       "counters_system",
-		       cnt_regs[4].which_io, 0x0);
-    
+	/* XXX Here we expect consequent calls to yeld adjusent maps. */
+	r.flags = cnt_regs[4].which_io;
+	r.start = cnt_regs[4].phys_addr;
+	sbus_ioremap(&r, 0, cnt_regs[4].reg_size, "sun4m_sys_cnt");
+
 	sun4m_timers->l10_timer_limit =  (((1000000/HZ) + 1) << 10);
 	master_l10_counter = &sun4m_timers->l10_cur_count;
 	master_l10_limit = &sun4m_timers->l10_timer_limit;
@@ -308,6 +311,7 @@ void __init sun4m_init_IRQ(void)
 	int ie_node,i;
 	struct linux_prom_registers int_regs[PROMREG_MAX];
 	int num_regs;
+	struct resource r;
     
 	__cli();
 	if((ie_node = prom_searchsiblings(prom_getchild(prom_root_node), "obio")) == 0 ||
@@ -332,16 +336,18 @@ void __init sun4m_init_IRQ(void)
 		int_regs[ie_node].which_io = int_regs[ie_node-1].which_io;
 	}
 
+	memset((char *)&r, 0, sizeof(struct resource));
 	/* Map the interrupt registers for all possible cpus. */
-	sun4m_interrupts = sparc_alloc_io(int_regs[0].phys_addr, 0,
-					  PAGE_SIZE*SUN4M_NCPUS, "interrupts_percpu",
-					  int_regs[0].which_io, 0x0);
-    
+	r.flags = int_regs[0].which_io;
+	r.start = int_regs[0].phys_addr;
+	sun4m_interrupts = (struct sun4m_intregs *) sbus_ioremap(&r, 0,
+	    PAGE_SIZE*SUN4M_NCPUS, "interrupts_percpu");
+
 	/* Map the system interrupt control registers. */
-	sparc_alloc_io(int_regs[4].phys_addr, 0,
-		       int_regs[4].reg_size, "interrupts_system",
-		       int_regs[4].which_io, 0x0);
-    
+	r.flags = int_regs[4].which_io;
+	r.start = int_regs[4].phys_addr;
+	sbus_ioremap(&r, 0, int_regs[4].reg_size, "interrupts_system");
+
 	sun4m_interrupts->set = ~SUN4M_INT_MASKALL;
 	for (i=0; i<linux_num_cpus; i++)
 		sun4m_interrupts->cpu_intregs[i].clear = ~0x17fff;

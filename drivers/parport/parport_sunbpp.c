@@ -1,4 +1,4 @@
-/* $Id: parport_sunbpp.c,v 1.7 1999/09/02 11:59:31 davem Exp $
+/* $Id: parport_sunbpp.c,v 1.9 1999/10/14 05:59:43 ecd Exp $
  * Parallel-port routines for Sun architecture
  * 
  * Author: Derrick J. Brashear <shadow@dementia.org>
@@ -32,7 +32,7 @@
 
 #include <asm/io.h>
 #include <asm/oplib.h>           /* OpenProm Library */
-#include <asm/sbus.h>            /* struct linux_sbus *SBus_chain */
+#include <asm/sbus.h>
 #include <asm/dma.h>             /* BPP uses LSI 64854 for DMA */
 #include <asm/irq.h>
 #include <asm/sunbpp.h>
@@ -52,22 +52,28 @@ static void parport_sunbpp_interrupt(int irq, void *dev_id, struct pt_regs *regs
 static void parport_sunbpp_disable_irq(struct parport *p)
 {
 	struct bpp_regs *regs = (struct bpp_regs *)p->base;
+	u32 tmp;
 
-	regs->p_csr &= ~(DMA_INT_ENAB);
+	tmp = sbus_readl(&regs->p_csr);
+	tmp &= ~DMA_INT_ENAB;
+	sbus_writel(tmp, &regs->p_csr);
 }
 
 static void parport_sunbpp_enable_irq(struct parport *p)
 {
 	struct bpp_regs *regs = (struct bpp_regs *)p->base;
+	u32 tmp;
 
-	regs->p_csr |= DMA_INT_ENAB;
+	tmp = sbus_readl(&regs->p_csr);
+	tmp |= DMA_INT_ENAB;
+	sbus_writel(tmp, &regs->p_csr);
 }
 
 static void parport_sunbpp_write_data(struct parport *p, unsigned char d)
 {
 	struct bpp_regs *regs = (struct bpp_regs *)p->base;
 
-	regs->p_dr = d;
+	sbus_writeb(d, &regs->p_dr);
 	dprintk(("wrote 0x%x\n", d));
 }
 
@@ -75,14 +81,15 @@ static unsigned char parport_sunbpp_read_data(struct parport *p)
 {
 	struct bpp_regs *regs = (struct bpp_regs *)p->base;
 
-	return regs->p_dr;
+	return sbus_readb(&regs->p_dr);
 }
 
+#if 0
 static void control_pc_to_sunbpp(struct parport *p, unsigned char status)
 {
 	struct bpp_regs *regs = (struct bpp_regs *)p->base;
-	unsigned char value_tcr = regs->p_tcr;
-	unsigned char value_or = regs->p_or;
+	unsigned char value_tcr = sbus_readb(&regs->p_tcr);
+	unsigned char value_or = sbus_readb(&regs->p_or);
 
 	if (status & PARPORT_CONTROL_STROBE) 
 		value_tcr |= P_TCR_DS;
@@ -93,16 +100,17 @@ static void control_pc_to_sunbpp(struct parport *p, unsigned char status)
 	if (status & PARPORT_CONTROL_SELECT) 
 		value_or |= P_OR_SLCT_IN;
 
-	regs->p_or = value_or;
-	regs->p_tcr = value_tcr;
+	sbus_writeb(value_or, &regs->p_or);
+	sbus_writeb(value_tcr, &regs->p_tcr);
 }
+#endif
 
 static unsigned char status_sunbpp_to_pc(struct parport *p)
 {
 	struct bpp_regs *regs = (struct bpp_regs *)p->base;
 	unsigned char bits = 0;
-	unsigned char value_tcr = regs->p_tcr;
-	unsigned char value_ir = regs->p_ir;
+	unsigned char value_tcr = sbus_readb(&regs->p_tcr);
+	unsigned char value_ir = sbus_readb(&regs->p_ir);
 
 	if (!(value_ir & P_IR_ERR))
 		bits |= PARPORT_STATUS_ERROR;
@@ -124,8 +132,8 @@ static unsigned char control_sunbpp_to_pc(struct parport *p)
 {
 	struct bpp_regs *regs = (struct bpp_regs *)p->base;
 	unsigned char bits = 0;
-	unsigned char value_tcr = regs->p_tcr;
-	unsigned char value_or = regs->p_or;
+	unsigned char value_tcr = sbus_readb(&regs->p_tcr);
+	unsigned char value_or = sbus_readb(&regs->p_or);
 
 	if (!(value_tcr & P_TCR_DS))
 		bits |= PARPORT_CONTROL_STROBE;
@@ -151,8 +159,8 @@ static unsigned char parport_sunbpp_frob_control(struct parport *p,
 						 unsigned char val)
 {
 	struct bpp_regs *regs = (struct bpp_regs *)p->base;
-	unsigned char value_tcr = regs->p_tcr;
-	unsigned char value_or = regs->p_or;
+	unsigned char value_tcr = sbus_readb(&regs->p_tcr);
+	unsigned char value_or = sbus_readb(&regs->p_or);
 
 	dprintk(("frob1: tcr 0x%x or 0x%x\n", regs->p_tcr, regs->p_or));
 	if (mask & PARPORT_CONTROL_STROBE) {
@@ -184,8 +192,8 @@ static unsigned char parport_sunbpp_frob_control(struct parport *p,
 		}
 	}
 
-	regs->p_or = value_or;
-	regs->p_tcr = value_tcr;
+	sbus_writeb(value_or, &regs->p_or);
+	sbus_writeb(value_tcr, &regs->p_tcr);
 	dprintk(("frob2: tcr 0x%x or 0x%x\n", regs->p_tcr, regs->p_or));
 	return parport_sunbpp_read_control(p);
 }
@@ -208,20 +216,21 @@ static unsigned char parport_sunbpp_read_status(struct parport *p)
 static void parport_sunbpp_data_forward (struct parport *p)
 {
 	struct bpp_regs *regs = (struct bpp_regs *)p->base;
-	unsigned char value_tcr = regs->p_tcr;
+	unsigned char value_tcr = sbus_readb(&regs->p_tcr);
 
 	dprintk(("forward\n"));
-	value_tcr = regs->p_tcr;
 	value_tcr &= ~P_TCR_DIR;
-	regs->p_tcr = value_tcr;
+	sbus_writeb(value_tcr, &regs->p_tcr);
 }
 
 static void parport_sunbpp_data_reverse (struct parport *p)
 {
 	struct bpp_regs *regs = (struct bpp_regs *)p->base;
+	u8 val = sbus_readb(&regs->p_tcr);
 
 	dprintk(("reverse\n"));
-	regs->p_tcr |= P_TCR_DIR;
+	val |= P_TCR_DIR;
+	sbus_writeb(val, &regs->p_tcr);
 }
 
 static void parport_sunbpp_init_state(struct pardevice *dev, struct parport_state *s)
@@ -292,38 +301,37 @@ static struct parport_operations parport_sunbpp_ops =
         parport_ieee1284_read_byte,
 };
 
-static int __init init_one_port(struct linux_sbus_device *sdev)
+static int __init init_one_port(struct sbus_dev *sdev)
 {
 	struct parport *p;
 	/* at least in theory there may be a "we don't dma" case */
 	struct parport_operations *ops;
-	char *base;
+	unsigned long base;
 	int irq, dma, err, size;
 	struct bpp_regs *regs;
 	unsigned char value_tcr;
 
 	dprintk(("init_one_port(%p): ranges, alloc_io, ", sdev));
 	irq = sdev->irqs[0];
-	prom_apply_sbus_ranges(sdev->my_bus, sdev->reg_addrs, 1, sdev);
-	base = sparc_alloc_io(sdev->reg_addrs[0].phys_addr, 0,
-			      sdev->reg_addrs[0].reg_size, 
-			      "sunbpp", sdev->reg_addrs[0].which_io, 0);
+	base = sbus_ioremap(&sdev->resource[0], 0,
+			    sdev->reg_addrs[0].reg_size, 
+			    "sunbpp");
 	size = sdev->reg_addrs[0].reg_size;
 	dma = PARPORT_DMA_NONE;
 
 	dprintk(("alloc(ppops), "));
 	ops = kmalloc (sizeof (struct parport_operations), GFP_KERNEL);
         if (!ops) {
-		sparc_free_io(base, size);
+		sbus_iounmap(base, size);
 		return 0;
         }
 
         memcpy (ops, &parport_sunbpp_ops, sizeof (struct parport_operations));
 
 	dprintk(("register_port, "));
-	if (!(p = parport_register_port((unsigned long)base, irq, dma, ops))) {
+	if (!(p = parport_register_port(base, irq, dma, ops))) {
 		kfree(ops);
-		sparc_free_io(base, size);
+		sbus_iounmap(base, size);
 		return 0;
 	}
 
@@ -334,7 +342,7 @@ static int __init init_one_port(struct linux_sbus_device *sdev)
 		dprintk(("ERROR %d\n", err));
 		parport_unregister_port(p);
 		kfree(ops);
-		sparc_free_io(base, size);
+		sbus_iounmap(base, size);
 		return err;
 	} else {
 		dprintk(("OK\n"));
@@ -343,9 +351,9 @@ static int __init init_one_port(struct linux_sbus_device *sdev)
 
 	regs = (struct bpp_regs *)p->base;
 	dprintk(("forward\n"));
-	value_tcr = regs->p_tcr;
+	value_tcr = sbus_readb(&regs->p_tcr);
 	value_tcr &= ~P_TCR_DIR;
-	regs->p_tcr = value_tcr;
+	sbus_writeb(value_tcr, &regs->p_tcr);
 
 	printk(KERN_INFO "%s: sunbpp at 0x%lx\n", p->name, p->base);
 	parport_proc_register(p);
@@ -362,8 +370,8 @@ int init_module(void)
 int __init parport_sunbpp_init(void)
 #endif
 {
-        struct linux_sbus *sbus;
-        struct linux_sbus_device *sdev;
+        struct sbus_bus *sbus;
+        struct sbus_dev *sdev;
 	int count = 0;
 
 	for_each_sbus(sbus) {
@@ -383,21 +391,24 @@ MODULE_SUPPORTED_DEVICE("Sparc Bidirectional Parallel Port");
 void
 cleanup_module(void)
 {
-	struct parport *p = parport_enumerate(), *tmp;
+	struct parport *p = parport_enumerate();
+
 	while (p) {
-		tmp = p->next;
+		struct parport *next = p->next;
+
 		if (1/*p->modes & PARPORT_MODE_PCSPP*/) { 
-		  struct parport_operations *ops = p->ops;
-		  if (p->irq != PARPORT_IRQ_NONE) {
-		    parport_sunbpp_disable_irq(p);
-		    free_irq(p->irq, p);
-		  }
-		  sparc_free_io((char *)p->base, p->size);
-		  parport_proc_unregister(p);
-		  parport_unregister_port(p);
-		  kfree (ops);
+			struct parport_operations *ops = p->ops;
+
+			if (p->irq != PARPORT_IRQ_NONE) {
+				parport_sunbpp_disable_irq(p);
+				free_irq(p->irq, p);
+			}
+			sbus_iounmap(p->base, p->size);
+			parport_proc_unregister(p);
+			parport_unregister_port(p);
+			kfree (ops);
 		}
-		p = tmp;
+		p = next;
 	}
 }
 #endif

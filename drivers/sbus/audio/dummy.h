@@ -1,4 +1,4 @@
-/*
+/* $Id: dummy.h,v 1.3 1999/09/21 14:37:41 davem Exp $
  * drivers/sbus/audio/dummy.h
  *
  * Copyright (C) 1998 Derrick J. Brashear (shadow@dementia.org)
@@ -15,9 +15,9 @@
 /* Our structure for each chip */
 
 struct dummy_chip {
-  struct audio_info perchip_info;
-  unsigned int playlen;
-  struct tq_struct tqueue;
+	struct audio_info perchip_info;
+	unsigned int playlen;
+	struct tq_struct tqueue;
 };
 
 #define DUMMY_MIN_ATEN     (0)
@@ -38,4 +38,4 @@ struct dummy_chip {
 
 #define DUMMY_RATE   (8000)                /* default sample rate */
 
-#endif
+#endif /* _DUMMY_H_ */

@@ -97,6 +97,7 @@ drop_pte:
 	 * some real work in the future in "shrink_mmap()".
 	 */
 	if (!pte_dirty(pte)) {
+		flush_cache_page(vma, address);
 		pte_clear(page_table);
 		goto drop_pte;
 	}

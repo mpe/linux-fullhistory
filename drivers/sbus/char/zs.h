@@ -1,11 +1,11 @@
-/* $Id: zs.h,v 1.2 1999/05/12 11:15:31 davem Exp $
+/* $Id: zs.h,v 1.3 1999/09/21 14:38:18 davem Exp $
  * zs.h: Definitions for the Sparc Zilog serial driver.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1996 Eddie C. Dost   (ecd@skynet.be)
  */
-#ifndef _SPARC_SERIAL_H
-#define _SPARC_SERIAL_H
+#ifndef _ZS_H
+#define _ZS_H
 
 /* Just one channel */
 struct sun_zschannel {
@@ -411,18 +411,17 @@ struct sun_serial {
 /* Read Register 15 (value of WR 15) */
 
 /* Misc macros */
-#define ZS_CLEARERR(channel)    do { channel->control = ERR_RES; \
+#define ZS_CLEARERR(channel)    do { sbus_writeb(ERR_RES, &channel->control); \
 				     udelay(5); } while(0)
 
-#define ZS_CLEARSTAT(channel)   do { channel->control = RES_EXT_INT; \
+#define ZS_CLEARSTAT(channel)   do { sbus_writeb(RES_EXT_INT, &channel->control); \
 				     udelay(5); } while(0)
 
-#define ZS_CLEARFIFO(channel)   do { volatile unsigned char garbage; \
-				     garbage = channel->data; \
+#define ZS_CLEARFIFO(channel)   do { sbus_readb(&channel->data); \
 				     udelay(2); \
-				     garbage = channel->data; \
+				     sbus_readb(&channel->data); \
 				     udelay(2); \
-				     garbage = channel->data; \
+				     sbus_readb(&channel->data); \
 				     udelay(2); } while(0)
 
-#endif /* !(_SPARC_SERIAL_H) */
+#endif /* !(_ZS_H) */

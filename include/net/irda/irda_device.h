@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Apr 14 12:41:42 1998
- * Modified at:   Tue Nov 16 12:54:01 1999
+ * Modified at:   Mon Dec 13 12:05:31 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -86,7 +86,6 @@ struct irda_task {
 	TASK_CALLBACK function;
 	TASK_CALLBACK finished;
 
-	/* struct net_device *dev; */
 	struct irda_task *parent;
 	struct timer_list timer;
 
@@ -97,11 +96,11 @@ struct irda_task {
 /* Dongle info */
 struct dongle_reg;
 typedef struct {
-	struct dongle_reg *issue; /* Registration info */
-	struct net_device *dev;   /* Device we are attached to */
-	__u32 speed;              /* Current speed */
-	
-	int busy;
+	struct dongle_reg *issue;     /* Registration info */
+	struct net_device *dev;           /* Device we are attached to */
+	struct irda_task *speed_task; /* Task handling speed change */
+	struct irda_task *reset_task; /* Task handling reset */
+	__u32 speed;                  /* Current speed */
 
 	/* Callbacks to the IrDA device driver */
 	int (*set_mode)(struct net_device *, int mode);
@@ -112,7 +111,7 @@ typedef struct {
 
 /* Dongle registration info */
 struct dongle_reg {
-	queue_t q;        /* Must be first */
+	queue_t q;         /* Must be first */
 	IRDA_DONGLE type;
 
 	void (*open)(dongle_t *dongle, struct qos_info *qos);
@@ -175,10 +174,11 @@ int irda_device_dongle_cleanup(dongle_t *dongle);
 
 void setup_dma(int channel, char *buffer, int count, int mode);
 
+void irda_task_delete(struct irda_task *task);
 int  irda_task_kick(struct irda_task *task);
-int  irda_task_execute(void *instance, TASK_CALLBACK function, 
-		       TASK_CALLBACK finished, struct irda_task *parent, 
-		       void *param);
+struct irda_task *irda_task_execute(void *instance, TASK_CALLBACK function, 
+				    TASK_CALLBACK finished, 
+				    struct irda_task *parent, void *param);
 void irda_task_next_state(struct irda_task *task, TASK_STATE state);
 
 extern const char *infrared_mode[];
@@ -189,6 +189,14 @@ extern const char *infrared_mode[];
  *    Utility function for getting the minimum turnaround time out of 
  *    the skb, where it has been hidden in the cb field.
  */
+#define irda_get_mtt(skb) (                                                 \
+        IRDA_MIN(10000,                                                     \
+                  (((struct irda_skb_cb *) skb->cb)->magic == LAP_MAGIC) ?  \
+                          ((struct irda_skb_cb *)(skb->cb))->mtt : 10000    \
+                 )							    \
+)
+
+#if 0
 extern inline __u16 irda_get_mtt(struct sk_buff *skb)
 {
 	__u16 mtt;
@@ -202,6 +210,7 @@ extern inline __u16 irda_get_mtt(struct sk_buff *skb)
 	
 	return mtt;
 }
+#endif
 
 /*
  * Function irda_get_speed (skb)
@@ -209,6 +218,12 @@ extern inline __u16 irda_get_mtt(struct sk_buff *skb)
  *    Extact the speed this frame should be sent out with from the skb
  *
  */
+#define irda_get_speed(skb) (	                                        \
+	(((struct irda_skb_cb*) skb->cb)->magic == LAP_MAGIC) ? 	\
+                  ((struct irda_skb_cb *)(skb->cb))->speed : 9600 	\
+)
+
+#if 0
 extern inline __u32 irda_get_speed(struct sk_buff *skb)
 {
 	__u32 speed;
@@ -220,7 +235,8 @@ extern inline __u32 irda_get_speed(struct sk_buff *skb)
 
 	return speed;
 }
-
 #endif
+
+#endif /* IRDA_DEVICE_H */
 
 

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Jun  6 23:24:22 1999
- * Modified at:   Sun Oct 31 19:50:35 1999
+ * Modified at:   Sun Dec 12 15:57:38 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -48,21 +48,23 @@
  * IrCOMM TTY driver state
  */
 struct ircomm_tty_cb {
-	queue_t queue;
+	queue_t queue;            /* Must be first */
 	magic_t magic;
 
-	int state;
+	int state;                /* Connect state */
 
 	struct tty_struct *tty;
-	struct ircomm_cb *ircomm;
+	struct ircomm_cb *ircomm; /* IrCOMM layer instance */
 
-	struct sk_buff *tx_skb;
-	struct sk_buff *ctrl_skb;
+	struct sk_buff *tx_skb;   /* Transmit buffer */
+	struct sk_buff *ctrl_skb; /* Control data buffer */
 
 	/* Parameters */
-	struct ircomm_params session;
+	struct ircomm_params settings;
 
-	__u8 service_type;
+	__u8 service_type;        /* The service that we support */
+	int client;               /* True if we are a client */
+	LOCAL_FLOW flow;          /* IrTTP flow status */
 
 	int line;
 	__u32 flags;
@@ -73,11 +75,10 @@ struct ircomm_tty_cb {
 	__u32 saddr;
 	__u32 daddr;
 
-	__u32 max_data_size;
-	__u32 max_header_size;
+	__u32 max_data_size;   /* Max data we can transmit in one packet */
+	__u32 max_header_size; /* The amount of header space we must reserve */
 
-	struct iriap_cb *iriap;
-
+	struct iriap_cb *iriap; /* Instance used for querying remote IAS */
 	struct ias_object* obj;
 	int skey;
 	int ckey;
@@ -93,6 +94,7 @@ struct ircomm_tty_cb {
         unsigned short    close_delay;
         unsigned short    closing_wait; /* time to wait before closing */
 
+	long session;           /* Session of opening process */
 	long pgrp;		/* pgrp of opening process */
 	int  open_count;
 	int  blocked_open;	/* # of blocked opens */

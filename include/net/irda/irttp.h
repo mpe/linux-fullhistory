@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:31 1997
- * Modified at:   Tue Oct  5 15:17:14 1999
+ * Modified at:   Sun Dec 12 13:09:07 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -44,16 +44,16 @@
 
 #define DEFAULT_INITIAL_CREDIT 14
 
-#define LOW_THRESHOLD           4
-#define HIGH_THRESHOLD         10
+#define TTP_LOW_THRESHOLD       4
+#define TTP_HIGH_THRESHOLD     10
 #define TTP_MAX_QUEUE          14
 
 /* Some priorities for disconnect requests */
 #define P_NORMAL    0
 #define P_HIGH      1
 
-#define SAR_DISABLE 0
-#define SAR_UNBOUND 0xffffffff
+#define TTP_SAR_DISABLE 0
+#define TTP_SAR_UNBOUND 0xffffffff
 
 /* Parameters */
 #define TTP_MAX_SDU_SIZE 0x01
@@ -141,7 +141,7 @@ static __inline __u32 irttp_get_daddr(struct tsap_cb *self)
 	return irlmp_get_daddr(self->lsap);
 }
 
-static __inline __u32 irttp_get_max_seq_size(struct tsap_cb *self)
+static __inline __u32 irttp_get_max_seg_size(struct tsap_cb *self)
 {
 	return self->max_seg_size;
 }

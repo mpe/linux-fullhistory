@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Paul VanderSpek
  * Created at:    Wed Nov  4 11:46:16 1998
- * Modified at:   Mon Nov  8 10:05:48 1999
+ * Modified at:   Thu Dec 16 00:52:53 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>
@@ -22,7 +22,7 @@
  *     and at no charge.
  *     
  *     If you find bugs in this file, its very likely that the same bug
- *     will also be in pc87108.c since the implementations is quite
+ *     will also be in pc87108.c since the implementations are quite
  *     similar.
  *
  *     Notice that all functions that needs to access the chip in _any_
@@ -62,22 +62,28 @@
 #include <net/irda/w83977af.h>
 #include <net/irda/w83977af_ir.h>
 
-#define CONFIG_NETWINDER                 /* Adjust to NetWinder differences */
-#undef  CONFIG_NETWINDER_TX_DMA_PROBLEMS /* Not needed */
-#define CONFIG_NETWINDER_RX_DMA_PROBLEMS /* Must have this one! */
-#undef  CONFIG_USE_INTERNAL_TIMER        /* Just cannot make that timer work */
-#define CONFIG_USE_W977_PNP              /* Currently needed */
+#ifdef  CONFIG_ARCH_VNC            /* Adjust to NetWinder differences */
+#undef  CONFIG_VNC_TX_DMA_PROBLEMS /* Not needed */
+#define CONFIG_VNC_RX_DMA_PROBLEMS /* Must have this one! */
+#endif
+#undef  CONFIG_USE_INTERNAL_TIMER  /* Just cannot make that timer work */
+#define CONFIG_USE_W977_PNP        /* Currently needed */
 #define PIO_MAX_SPEED       115200 
 
 static char *driver_name = "w83977af_ir";
-static int  qos_mtt_bits = 0x07;           /* 1 ms or more */
+static int  qos_mtt_bits = 0x07;   /* 1 ms or more */
 
 #define CHIP_IO_EXTENT 8
 
 static unsigned int io[] = { 0x180, ~0, ~0, ~0 };
+#ifdef CONFIG_ARCH_VNC             /* Adjust to NetWinder differences */
 static unsigned int irq[] = { 6, 0, 0, 0 };
-static unsigned int dma[] = 
-{ 1, 0, 0, 0 };
+#else
+static unsigned int irq[] = { 11, 0, 0, 0 };
+#endif
+static unsigned int dma[] = { 1, 0, 0, 0 };
+static unsigned int efbase[] = { W977_EFIO_BASE, W977_EFIO2_BASE };
+static unsigned int efio = W977_EFIO_BASE;
 
 static struct w83977af_ir *dev_self[] = { NULL, NULL, NULL, NULL};
 
@@ -98,6 +104,7 @@ static int  w83977af_is_receiving(struct w83977af_ir *self);
 static int  w83977af_net_init(struct net_device *dev);
 static int  w83977af_net_open(struct net_device *dev);
 static int  w83977af_net_close(struct net_device *dev);
+static int  w83977af_net_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
 
 /*
  * Function w83977af_init ()
@@ -248,6 +255,7 @@ int w83977af_open(int i, unsigned int iobase, unsigned int irq,
 	dev->hard_start_xmit = w83977af_hard_xmit;
 	dev->open            = w83977af_net_open;
 	dev->stop            = w83977af_net_close;
+	dev->do_ioctl        = w83977af_net_ioctl;
 
 	rtnl_lock();
 	err = register_netdev(dev);
@@ -278,21 +286,23 @@ static int w83977af_close(struct w83977af_ir *self)
 
 #ifdef CONFIG_USE_W977_PNP
 	/* enter PnP configuration mode */
-	w977_efm_enter();
+	w977_efm_enter(efio);
 
-	w977_select_device(W977_DEVICE_IR);
+	w977_select_device(W977_DEVICE_IR, efio);
 
 	/* Deactivate device */
-	w977_write_reg(0x30, 0x00);
+	w977_write_reg(0x30, 0x00, efio);
 
-	w977_efm_exit();
+	w977_efm_exit(efio);
 #endif /* CONFIG_USE_W977_PNP */
 
 	/* Remove netdevice */
 	if (self->netdev) {
 		rtnl_lock();
-		unregister_netdev(self->netdev);
+		unregister_netdevice(self->netdev);
 		rtnl_unlock();
+		/* Must free the old-style 2.2.x device */
+		kfree(self->netdev);
 	}
 
 	/* Release the PORT that this driver is using */
@@ -311,100 +321,103 @@ static int w83977af_close(struct w83977af_ir *self)
 	return 0;
 }
 
-/*
- * Function w83977af_probe (iobase, irq, dma)
- *
- *    Returns non-negative on success.
- *
- */
 int w83977af_probe( int iobase, int irq, int dma)
 {
-	int version;
-	
-	IRDA_DEBUG( 0, __FUNCTION__ "()\n");
+  	int version;
+	int i;
+  	
+ 	for (i=0; i < 2; i++) {
+ 		IRDA_DEBUG( 0, __FUNCTION__ "()\n");
 #ifdef CONFIG_USE_W977_PNP
-	/* Enter PnP configuration mode */
-	w977_efm_enter();
-
-	w977_select_device(W977_DEVICE_IR);
-
-	/* Configure PnP port, IRQ, and DMA channel */
-	w977_write_reg(0x60, (iobase >> 8) & 0xff);
-	w977_write_reg(0x61, (iobase) & 0xff);
-
-	w977_write_reg(0x70, irq);
-#ifdef CONFIG_NETWINDER
-	w977_write_reg(0x74, dma+1); /* Netwinder uses 1 higher than Linux */
+ 		/* Enter PnP configuration mode */
+		w977_efm_enter(efbase[i]);
+  
+ 		w977_select_device(W977_DEVICE_IR, efbase[i]);
+  
+ 		/* Configure PnP port, IRQ, and DMA channel */
+ 		w977_write_reg(0x60, (iobase >> 8) & 0xff, efbase[i]);
+ 		w977_write_reg(0x61, (iobase) & 0xff, efbase[i]);
+  
+ 		w977_write_reg(0x70, irq, efbase[i]);
+#ifdef CONFIG_ARCH_VNC
+		/* Netwinder uses 1 higher than Linux */
+ 		w977_write_reg(0x74, dma+1, efbase[i]);
 #else
-	w977_write_reg(0x74, dma);   
-#endif
-	w977_write_reg(0x75, 0x04);  /* Disable Tx DMA */
-	
-	/* Set append hardware CRC, enable IR bank selection */	
-	w977_write_reg(0xf0, APEDCRC|ENBNKSEL);
+ 		w977_write_reg(0x74, dma, efbase[i]);   
+#endif /*CONFIG_ARCH_VNC */
+ 		w977_write_reg(0x75, 0x04, efbase[i]);  /* Disable Tx DMA */
+  	
+ 		/* Set append hardware CRC, enable IR bank selection */	
+ 		w977_write_reg(0xf0, APEDCRC|ENBNKSEL, efbase[i]);
+  
+ 		/* Activate device */
+ 		w977_write_reg(0x30, 0x01, efbase[i]);
+  
+ 		w977_efm_exit(efbase[i]);
+#endif /* CONFIG_USE_W977_PNP */
+  		/* Disable Advanced mode */
+  		switch_bank(iobase, SET2);
+  		outb(iobase+2, 0x00);  
+ 
+ 		/* Turn on UART (global) interrupts */
+ 		switch_bank(iobase, SET0);
+  		outb(HCR_EN_IRQ, iobase+HCR);
+  	
+  		/* Switch to advanced mode */
+  		switch_bank(iobase, SET2);
+  		outb(inb(iobase+ADCR1) | ADCR1_ADV_SL, iobase+ADCR1);
+  
+  		/* Set default IR-mode */
+  		switch_bank(iobase, SET0);
+  		outb(HCR_SIR, iobase+HCR);
+  
+  		/* Read the Advanced IR ID */
+  		switch_bank(iobase, SET3);
+  		version = inb(iobase+AUID);
+  	
+  		/* Should be 0x1? */
+  		if (0x10 == (version & 0xf0)) {
+ 			efio = efbase[i];
+ 
+ 			/* Set FIFO size to 32 */
+ 			switch_bank(iobase, SET2);
+ 			outb(ADCR2_RXFS32|ADCR2_TXFS32, iobase+ADCR2);	
+ 	
+ 			/* Set FIFO threshold to TX17, RX16 */
+ 			switch_bank(iobase, SET0);	
+ 			outb(UFR_RXTL|UFR_TXTL|UFR_TXF_RST|UFR_RXF_RST|
+			     UFR_EN_FIFO,iobase+UFR);
+ 
+ 			/* Receiver frame length */
+ 			switch_bank(iobase, SET4);
+			outb(2048 & 0xff, iobase+6);
+			outb((2048 >> 8) & 0x1f, iobase+7);
 
-	/* Activate device */
-	w977_write_reg(0x30, 0x01);
-
-	w977_efm_exit();
-#endif
- 	/* Disable Advanced mode */
- 	switch_bank(iobase, SET2);
- 	outb(iobase+2, 0x00);  
-
-	/* Turn on UART (global) interrupts */
-	switch_bank(iobase, SET0);
-	outb(HCR_EN_IRQ, iobase+HCR);
-	
-	/* Switch to advanced mode */
-	switch_bank(iobase, SET2);
-	outb(inb(iobase+ADCR1) | ADCR1_ADV_SL, iobase+ADCR1);
-
-	/* Set default IR-mode */
-	switch_bank(iobase, SET0);
-	outb(HCR_SIR, iobase+HCR);
-
-	/* Read the Advanced IR ID */
-	switch_bank(iobase, SET3);
-	version = inb(iobase+AUID);
-	
-	/* Should be 0x1? */
-	if (0x10 != (version & 0xf0)) {
-		IRDA_DEBUG( 0, __FUNCTION__ "(), Wrong chip version");	
-		return -1;
-	}
-	
-	/* Set FIFO size to 32 */
-	switch_bank(iobase, SET2);
-	outb(ADCR2_RXFS32|ADCR2_TXFS32, iobase+ADCR2);	
-	
-	/* Set FIFO threshold to TX17, RX16 */
-	switch_bank(iobase, SET0);	
-	outb(UFR_RXTL|UFR_TXTL|UFR_TXF_RST|UFR_RXF_RST|UFR_EN_FIFO,iobase+UFR);
-
-	/* Receiver frame length */
-	switch_bank(iobase, SET4);
-	outb(2048 & 0xff, iobase+6);
-	outb((2048 >> 8) & 0x1f, iobase+7);
-
-	/* 
-	 * Init HP HSDL-1100 transceiver. 
-	 * 
-	 * Set IRX_MSL since we have 2 * receive paths IRRX, and
-	 * IRRXH. Clear IRSL0D since we want IRSL0 * to be a input pin used
-	 * for IRRXH 
-	 *
-	 *   IRRX  pin 37 connected to receiver 
-	 *   IRTX  pin 38 connected to transmitter
-	 *   FIRRX pin 39 connected to receiver      (IRSL0) 
-	 *   CIRRX pin 40 connected to pin 37
-	 */
-	switch_bank(iobase, SET7);
-	outb(0x40, iobase+7);
-		
-	IRDA_DEBUG(0, "W83977AF (IR) driver loaded. Version: 0x%02x\n", version);
-	
-	return 0;
+			/* 
+			 * Init HP HSDL-1100 transceiver. 
+			 * 
+			 * Set IRX_MSL since we have 2 * receive paths IRRX, 
+			 * and IRRXH. Clear IRSL0D since we want IRSL0 * to 
+			 * be a input pin used for IRRXH 
+			 *
+			 *   IRRX  pin 37 connected to receiver 
+			 *   IRTX  pin 38 connected to transmitter
+			 *   FIRRX pin 39 connected to receiver      (IRSL0) 
+			 *   CIRRX pin 40 connected to pin 37
+			 */
+			switch_bank(iobase, SET7);
+			outb(0x40, iobase+7);
+			
+			MESSAGE("W83977AF (IR) driver loaded. "
+				"Version: 0x%02x\n", version);
+			
+			return 0;
+		} else {
+			/* Try next extented function register address */
+			IRDA_DEBUG( 0, __FUNCTION__ "(), Wrong chip version");
+		}
+  	}   	
+	return -1;
 }
 
 void w83977af_change_speed(struct w83977af_ir *self, __u32 speed)
@@ -576,7 +589,7 @@ int w83977af_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 static void w83977af_dma_write(struct w83977af_ir *self, int iobase)
 {
 	__u8 set;
-#ifdef CONFIG_NETWINDER_TX_DMA_PROBLEMS
+#ifdef CONFIG_VNC_TX_DMA_PROBLEMS
 	unsigned long flags;
 	__u8 hcr;
 #endif
@@ -592,7 +605,7 @@ static void w83977af_dma_write(struct w83977af_ir *self, int iobase)
 	/* Choose transmit DMA channel  */ 
 	switch_bank(iobase, SET2);
 	outb(ADCR1_D_CHSW|/*ADCR1_DMA_F|*/ADCR1_ADV_SL, iobase+ADCR1);
-#ifdef CONFIG_NETWINDER_TX_DMA_PROBLEMS
+#ifdef CONFIG_VNC_TX_DMA_PROBLEMS
 	save_flags(flags);
 	cli();
 
@@ -609,7 +622,7 @@ static void w83977af_dma_write(struct w83977af_ir *self, int iobase)
 	
 	/* Enable DMA */
  	switch_bank(iobase, SET0);
-#ifdef CONFIG_NETWINDER_TX_DMA_PROBLEMS
+#ifdef CONFIG_VNC_TX_DMA_PROBLEMS
 	hcr = inb(iobase+HCR);
 	outb(hcr | HCR_EN_DMA, iobase+HCR);
 	enable_dma(self->io.dma);
@@ -653,7 +666,7 @@ static int w83977af_pio_write(int iobase, __u8 *buf, int len, int fifo_size)
 	}
         
 	IRDA_DEBUG(4, __FUNCTION__ "(), fifo_size %d ; %d sent of %d\n", 
-	       fifo_size, actual, len);
+		   fifo_size, actual, len);
 
 	/* Restore bank */
 	outb(set, iobase+SSR);
@@ -725,7 +738,7 @@ int w83977af_dma_receive(struct w83977af_ir *self)
 {
 	int iobase;
 	__u8 set;
-#ifdef CONFIG_NETWINDER_RX_DMA_PROBLEMS
+#ifdef CONFIG_VNC_RX_DMA_PROBLEMS
 	unsigned long flags;
 	__u8 hcr;
 #endif
@@ -751,7 +764,7 @@ int w83977af_dma_receive(struct w83977af_ir *self)
 	self->io.direction = IO_RECV;
 	self->rx_buff.data = self->rx_buff.head;
 
-#ifdef CONFIG_NETWINDER_RX_DMA_PROBLEMS
+#ifdef CONFIG_VNC_RX_DMA_PROBLEMS
 	save_flags(flags);
 	cli();
 
@@ -775,7 +788,7 @@ int w83977af_dma_receive(struct w83977af_ir *self)
 	
 	/* Enable DMA */
 	switch_bank(iobase, SET0);
-#ifdef CONFIG_NETWINDER_RX_DMA_PROBLEMS
+#ifdef CONFIG_VNC_RX_DMA_PROBLEMS
 	hcr = inb(iobase+HCR);
 	outb(hcr | HCR_EN_DMA, iobase+HCR);
 	enable_dma(self->io.dma);
@@ -984,6 +997,14 @@ static __u8 w83977af_sir_interrupt(struct w83977af_ir *self, int isr)
 
 			self->netdev->tbusy = 0; /* Unlock */
 			self->stats.tx_packets++;
+
+			/* Check if we need to change the speed? */
+			if (self->new_speed) {
+				IRDA_DEBUG(2, __FUNCTION__ 
+					   "(), Changing speed!\n");
+				w83977af_change_speed(self, self->new_speed);
+				self->new_speed = 0;
+			}
 
 			/* Schedule network layer */
 		        mark_bh(NET_BH);	
@@ -1207,7 +1228,7 @@ static int w83977af_net_open(struct net_device *dev)
 	iobase = self->io.iobase;
 
 	if (request_irq(self->io.irq, w83977af_interrupt, 0, dev->name, 
-			 (void *) dev)) {
+			(void *) dev)) {
 		return -EAGAIN;
 	}
 	/*
@@ -1289,7 +1310,7 @@ static int w83977af_net_close(struct net_device *dev)
 	switch_bank(iobase, SET0);
 	outb(0, iobase+ICR); 
 
-	free_irq(self->io.irq, self);
+	free_irq(self->io.irq, dev);
 	free_dma(self->io.dma);
 
 	/* Restore bank register */
@@ -1298,6 +1319,50 @@ static int w83977af_net_close(struct net_device *dev)
 	MOD_DEC_USE_COUNT;
 
 	return 0;
+}
+
+/*
+ * Function w83977af_net_ioctl (dev, rq, cmd)
+ *
+ *    Process IOCTL commands for this device
+ *
+ */
+static int w83977af_net_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
+{
+	struct if_irda_req *irq = (struct if_irda_req *) rq;
+	struct w83977af_ir *self;
+	unsigned long flags;
+	int ret = 0;
+
+	ASSERT(dev != NULL, return -1;);
+
+	self = dev->priv;
+
+	ASSERT(self != NULL, return -1;);
+
+	IRDA_DEBUG(2, __FUNCTION__ "(), %s, (cmd=0x%X)\n", dev->name, cmd);
+	
+	/* Disable interrupts & save flags */
+	save_flags(flags);
+	cli();
+	
+	switch (cmd) {
+	case SIOCSBANDWIDTH: /* Set bandwidth */
+		w83977af_change_speed(self, irq->ifr_baudrate);
+		break;
+	case SIOCSMEDIABUSY: /* Set media busy */
+		irda_device_set_media_busy(self->netdev, TRUE);
+		break;
+	case SIOCGRECEIVING: /* Check if we are receiving right now */
+		irq->ifr_receiving = w83977af_is_receiving(self);
+		break;
+	default:
+		ret = -EOPNOTSUPP;
+	}
+	
+	restore_flags(flags);
+	
+	return ret;
 }
 
 #ifdef MODULE

@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.57 1999/08/04 03:20:05 davem Exp $
+/* $Id: processor.h,v 1.58 1999/12/15 14:19:14 davem Exp $
  * include/asm-sparc64/processor.h
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -109,10 +109,20 @@ struct thread_struct {
 /* Return saved PC of a blocked thread. */
 extern __inline__ unsigned long thread_saved_pc(struct thread_struct *t)
 {
-	unsigned long *sp = (unsigned long *)(t->ksp + STACK_BIAS);
-	unsigned long *fp = (unsigned long *)(sp[14] + STACK_BIAS);
-
-	return fp[15];
+	unsigned long ret = 0xdeadbeefUL;
+	
+	if (t->ksp) {
+		unsigned long *sp;
+		sp = (unsigned long *)(t->ksp + STACK_BIAS);
+		if (((unsigned long)sp & (sizeof(long) - 1)) == 0UL &&
+		    sp[14]) {
+			unsigned long *fp;
+			fp = (unsigned long *)(sp[14] + STACK_BIAS);
+			if (((unsigned long)fp & (sizeof(long) - 1)) == 0UL)
+				ret = fp[15];
+		}
+	}
+	return ret;
 }
 
 /* On Uniprocessor, even in RMO processes see TSO semantics */
@@ -209,7 +219,35 @@ extern pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long flags);
 #define release_segments(mm)		do { } while (0)
 #define forget_segments()		do { } while (0)
 
-unsigned long get_wchan(struct task_struct *p);
+#define get_wchan(__TSK) \
+({	extern void scheduling_functions_start_here(void); \
+	extern void scheduling_functions_end_here(void); \
+	unsigned long pc, fp, bias = 0; \
+	unsigned long task_base = (unsigned long) (__TSK); \
+	struct reg_window *rw; \
+        unsigned long __ret = 0; \
+	int count = 0; \
+	if (!(__TSK) || (__TSK) == current || \
+            (__TSK)->state == TASK_RUNNING) \
+		goto __out; \
+	bias = STACK_BIAS; \
+	fp = (__TSK)->thread.ksp + bias; \
+	do { \
+		/* Bogus frame pointer? */ \
+		if (fp < (task_base + sizeof(struct task_struct)) || \
+		    fp >= (task_base + (2 * PAGE_SIZE))) \
+			break; \
+		rw = (struct reg_window *) fp; \
+		pc = rw->ins[7]; \
+		if (pc < ((unsigned long) scheduling_functions_start_here) || \
+		    pc >= ((unsigned long) scheduling_functions_end_here)) { \
+			__ret = pc; \
+			goto __out; \
+		} \
+		fp = rw->ins[6] + bias; \
+	} while (++count < 16); \
+__out:	__ret; \
+})
 
 #define KSTK_EIP(tsk)  ((tsk)->thread.kregs->tpc)
 #define KSTK_ESP(tsk)  ((tsk)->thread.kregs->u_regs[UREG_FP])

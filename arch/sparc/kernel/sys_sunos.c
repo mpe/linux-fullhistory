@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.104 1999/08/31 12:30:50 anton Exp $
+/* $Id: sys_sunos.c,v 1.106 1999/12/16 11:57:27 anton Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -85,10 +85,17 @@ asmlinkage unsigned long sunos_mmap(unsigned long addr, unsigned long len,
 	}
 
 	retval = -ENOMEM;
-	if(!(flags & MAP_FIXED) && !addr) {
-		addr = get_unmapped_area(addr, len);
+	if(!(flags & MAP_FIXED) &&
+	   (!addr || (ARCH_SUN4C_SUN4 &&
+		      (addr >= 0x20000000 && addr < 0xe0000000)))) {
+		addr = get_unmapped_area(0, len);
 		if(!addr)
 			goto out_putf;
+		if (ARCH_SUN4C_SUN4 &&
+		    (addr >= 0x20000000 && addr < 0xe0000000)) {
+			retval = -EINVAL;
+			goto out_putf;
+		}
 	}
 	/* If this is ld.so or a shared library doing an mmap
 	 * of /dev/zero, transform it into an anonymous mapping.
@@ -110,13 +117,6 @@ asmlinkage unsigned long sunos_mmap(unsigned long addr, unsigned long len,
 	retval = -EINVAL;
 	if((len > (TASK_SIZE - PAGE_SIZE)) || (addr > (TASK_SIZE-len-PAGE_SIZE)))
 		goto out_putf;
-
-	if(ARCH_SUN4C_SUN4) {
-		if(((addr >= 0x20000000) && (addr < 0xe0000000))) {
-			retval = current->mm->brk;
-			goto out_putf;
-		}
-	}
 
 	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
 	retval = do_mmap(file, addr, len, prot, flags, off);
@@ -195,7 +195,7 @@ asmlinkage int sunos_brk(unsigned long brk)
 	 * simple, it hopefully works in most obvious cases.. Easy to
 	 * fool it, but this should catch most mistakes.
 	 */
-	freepages = atomic_read(&buffermem) >> PAGE_SHIFT;
+	freepages = atomic_read(&buffermem_pages) >> PAGE_SHIFT;
 	freepages += atomic_read(&page_cache_size);
 	freepages >>= 1;
 	freepages += nr_free_pages;

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Nov  7 21:43:15 1998
- * Modified at:   Sat Nov 13 23:54:59 1999
+ * Modified at:   Thu Dec 16 00:54:27 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>
@@ -36,7 +36,7 @@
  *         outb(bank, iobase+BSR);
  *
  *    If you find bugs in this file, its very likely that the same bug
- *    will also be in w83977af_ir.c since the implementations is quite
+ *    will also be in w83977af_ir.c since the implementations are quite
  *    similar.
  *     
  ********************************************************************/
@@ -121,6 +121,7 @@ static void pc87108_init_dongle_interface (int iobase, int dongle_id);
 static int  pc87108_net_init(struct net_device *dev);
 static int  pc87108_net_open(struct net_device *dev);
 static int  pc87108_net_close(struct net_device *dev);
+static int  pc87108_net_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
 
 /*
  * Function pc87108_init ()
@@ -267,6 +268,7 @@ static int pc87108_open(int i, unsigned int iobase, unsigned int board_addr,
 	dev->hard_start_xmit = pc87108_hard_xmit;
 	dev->open            = pc87108_net_open;
 	dev->stop            = pc87108_net_close;
+	dev->do_ioctl        = pc87108_net_ioctl;
 
 	rtnl_lock();
 	err = register_netdevice(dev);
@@ -304,12 +306,15 @@ static int pc87108_close(struct pc87108 *self)
 	/* Remove netdevice */
 	if (self->netdev) {
 		rtnl_lock();
-		unregister_netdev(self->netdev);
+		unregister_netdevice(self->netdev);
 		rtnl_unlock();
+		/* Must free the old-style 2.2.x device */
+		kfree(self->netdev);
 	}
 
 	/* Release the PORT that this driver is using */
-	IRDA_DEBUG(4, __FUNCTION__ "(), Releasing Region %03x\n", self->io.iobase);
+	IRDA_DEBUG(4, __FUNCTION__ "(), Releasing Region %03x\n", 
+		   self->io.iobase);
 	release_region(self->io.iobase, self->io.io_ext);
 
 	if (self->tx_buff.head)
@@ -389,7 +394,7 @@ static int pc87108_probe(int iobase, int board_addr, int irq, int dma)
 
 	dongle_id = pc87108_read_dongle_id(iobase);
 	IRDA_DEBUG(0, __FUNCTION__ "(), Found dongle: %s\n", 
-	      dongle_types[dongle_id]);
+		   dongle_types[dongle_id]);
 	
 	/* Set FIFO threshold to TX17, RX16, reset and enable FIFO's */
 	switch_bank(iobase, BANK0);	
@@ -550,7 +555,8 @@ static void pc87108_init_dongle_interface (int iobase, int dongle_id)
 		outb(0x62, iobase+MCR);
 		break;
 	default: 
-		IRDA_DEBUG(0, __FUNCTION__ "(), invalid dongle_id %#x", dongle_id);
+		IRDA_DEBUG(0, __FUNCTION__ "(), invalid dongle_id %#x", 
+			   dongle_id);
 	}
 	
 	/* IRCFG1: IRSL1 and 2 are set to IrDA mode */
@@ -705,7 +711,8 @@ static void pc87108_change_speed(struct pc87108 *self, __u32 speed)
 		break;
 	default:
 		mcr = MCR_FIR;
-		IRDA_DEBUG(0, __FUNCTION__ "(), unknown baud rate of %d\n", speed);
+		IRDA_DEBUG(0, __FUNCTION__ "(), unknown baud rate of %d\n", 
+			   speed);
 		break;
 	}
 
@@ -856,7 +863,7 @@ static void pc87108_dma_write(struct pc87108 *self, int iobase)
 	/* Choose transmit DMA channel  */ 
 	switch_bank(iobase, BANK2);
 	outb(inb(iobase+ECR1) | ECR1_DMASWP|ECR1_DMANF|ECR1_EXT_SL, 
-	      iobase+ECR1);
+	     iobase+ECR1);
 	
 	/* Enable DMA */
  	switch_bank(iobase, BANK0);	
@@ -885,10 +892,12 @@ static int pc87108_pio_write(int iobase, __u8 *buf, int len, int fifo_size)
 
 	switch_bank(iobase, BANK0);
 	if (!(inb_p(iobase+LSR) & LSR_TXEMP)) {
-		IRDA_DEBUG(4, __FUNCTION__ "(), warning, FIFO not empty yet!\n");
+		IRDA_DEBUG(4, __FUNCTION__ 
+			   "(), warning, FIFO not empty yet!\n");
 
 		fifo_size -= 17;
-		IRDA_DEBUG(4, __FUNCTION__ "%d bytes left in tx fifo\n", fifo_size);
+		IRDA_DEBUG(4, __FUNCTION__ "(), %d bytes left in tx fifo\n", 
+			   fifo_size);
 	}
 
 	/* Fill FIFO with current frame */
@@ -898,8 +907,8 @@ static int pc87108_pio_write(int iobase, __u8 *buf, int len, int fifo_size)
 	}
         
 	IRDA_DEBUG(4, __FUNCTION__ "(), fifo_size %d ; %d sent of %d\n", 
-	      fifo_size, actual, len);
-
+		   fifo_size, actual, len);
+	
 	/* Restore bank */
 	outb(bank, iobase+BSR);
 
@@ -1189,6 +1198,14 @@ static __u8 pc87108_sir_interrupt(struct pc87108 *self, int eir)
 		else { 
 			self->netdev->tbusy = 0; /* Unlock */
 			self->stats.tx_packets++;
+
+			/* Check if we need to change the speed? */
+			if (self->new_speed) {
+				IRDA_DEBUG(2, __FUNCTION__ 
+					   "(), Changing speed!\n");
+				pc87108_change_speed(self, self->new_speed);
+				self->new_speed = 0;
+			}
 			
 		        mark_bh(NET_BH);	
 
@@ -1420,7 +1437,8 @@ static int pc87108_net_open(struct net_device *dev)
 	iobase = self->io.iobase;
 
 	if (request_irq(self->io.irq, pc87108_interrupt, 0, dev->name, 
-			 (void *) dev)) {
+			(void *) dev)) 
+	{
 		return -EAGAIN;
 	}
 	/*
@@ -1497,7 +1515,7 @@ static int pc87108_net_close(struct net_device *dev)
 	switch_bank(iobase, BANK0);
 	outb(0, iobase+IER); 
        
-	free_irq(self->io.irq, self);
+	free_irq(self->io.irq, dev);
 	free_dma(self->io.dma);
 
 	/* Restore bank register */
@@ -1506,6 +1524,50 @@ static int pc87108_net_close(struct net_device *dev)
 	MOD_DEC_USE_COUNT;
 
 	return 0;
+}
+
+/*
+ * Function pc87108_net_ioctl (dev, rq, cmd)
+ *
+ *    Process IOCTL commands for this device
+ *
+ */
+static int pc87108_net_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
+{
+	struct if_irda_req *irq = (struct if_irda_req *) rq;
+	struct pc87108 *self;
+	unsigned long flags;
+	int ret = 0;
+
+	ASSERT(dev != NULL, return -1;);
+
+	self = dev->priv;
+
+	ASSERT(self != NULL, return -1;);
+
+	IRDA_DEBUG(2, __FUNCTION__ "(), %s, (cmd=0x%X)\n", dev->name, cmd);
+	
+	/* Disable interrupts & save flags */
+	save_flags(flags);
+	cli();
+	
+	switch (cmd) {
+	case SIOCSBANDWIDTH: /* Set bandwidth */
+		pc87108_change_speed(self, irq->ifr_baudrate);
+		break;
+	case SIOCSMEDIABUSY: /* Set media busy */
+		irda_device_set_media_busy(self->netdev, TRUE);
+		break;
+	case SIOCGRECEIVING: /* Check if we are receiving right now */
+		irq->ifr_receiving = pc87108_is_receiving(self);
+		break;
+	default:
+		ret = -EOPNOTSUPP;
+	}
+	
+	restore_flags(flags);
+	
+	return ret;
 }
 
 #ifdef MODULE

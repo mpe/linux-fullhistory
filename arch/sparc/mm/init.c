@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.69 1999/09/06 22:56:17 ecd Exp $
+/*  $Id: init.c,v 1.71 1999/12/16 12:58:33 anton Exp $
  *  linux/arch/sparc/mm/init.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -22,6 +22,8 @@
 #include <linux/blk.h>
 #endif
 #include <linux/init.h>
+#include <linux/highmem.h>
+#include <linux/bootmem.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -30,14 +32,11 @@
 #include <asm/pgtable.h>
 #include <asm/vaddrs.h>
 
-/* Turn this off if you suspect some place in some physical memory hole
-   might get into page tables (something would be broken very much). */
-   
-#define FREE_UNUSED_MEM_MAP
-
 extern void show_net_buffers(void);
 
 unsigned long *sparc_valid_addr_bitmap;
+
+unsigned long phys_base;
 
 struct sparc_phys_banks sp_banks[SPARC_PHYS_BANKS];
 unsigned long sparc_unmapped_base;
@@ -45,7 +44,9 @@ unsigned long sparc_unmapped_base;
 struct pgtable_cache_struct pgt_quicklists;
 
 /* References to section boundaries */
-extern char __init_begin, __init_end, etext;
+extern char __init_begin, __init_end, _start, _end, etext , edata;
+
+static unsigned long totalram_pages = 0;
 
 /*
  * BAD_PAGE is the page that is used for page faults when linux
@@ -62,50 +63,31 @@ extern char __init_begin, __init_end, etext;
  */
 pte_t *__bad_pagetable(void)
 {
-	memset((void *) EMPTY_PGT, 0, PAGE_SIZE);
-	return (pte_t *) EMPTY_PGT;
+	memset((void *) &empty_bad_page_table, 0, PAGE_SIZE);
+	return (pte_t *) &empty_bad_page_table;
 }
 
 pte_t __bad_page(void)
 {
-	memset((void *) EMPTY_PGE, 0, PAGE_SIZE);
-	return pte_mkdirty(mk_pte((unsigned long) EMPTY_PGE, PAGE_SHARED));
+	memset((void *) &empty_bad_page, 0, PAGE_SIZE);
+	return pte_mkdirty(mk_pte_phys((((unsigned long) &empty_bad_page) 
+					- PAGE_OFFSET + phys_base),
+				       PAGE_SHARED));
 }
 
 void show_mem(void)
 {
-	int free = 0,total = 0,reserved = 0;
-	int shared = 0, cached = 0;
-	struct page *page, *end;
-
-	printk("\nMem-info:\n");
+	printk("Mem-info:\n");
 	show_free_areas();
-	printk("Free swap:       %6dkB\n",nr_swap_pages<<(PAGE_SHIFT-10));
-	for (page = mem_map, end = mem_map + max_mapnr;
-	     page < end; page++) {
-		if (PageSkip(page)) {
-			if (page->next_hash < page)
-				break;
-			page = page->next_hash;
-		}
-		total++;
-		if (PageReserved(page))
-			reserved++;
-		else if (PageSwapCache(page))
-			cached++;
-		else if (!atomic_read(&page->count))
-			free++;
-		else
-			shared += atomic_read(&page->count) - 1;
-	}
-	printk("%d pages of RAM\n",total);
-	printk("%d free pages\n",free);
-	printk("%d reserved pages\n",reserved);
-	printk("%d pages shared\n",shared);
-	printk("%d pages swap cached\n",cached);
-	printk("%ld page tables cached\n",pgtable_cache_size);
+	printk("Free swap:       %6dkB\n",
+	       nr_swap_pages << (PAGE_SHIFT-10));
+	printk("%ld pages of RAM\n", totalram_pages);
+	printk("%d free pages\n", nr_free_pages);
+	printk("%ld pages in page table cache\n",pgtable_cache_size);
+#ifndef __SMP__
 	if (sparc_cpu_model == sun4m || sparc_cpu_model == sun4d)
-		printk("%ld page dirs cached\n", pgd_cache_size);
+		printk("%ld entries in page dir cache\n",pgd_cache_size);
+#endif	
 	show_buffers();
 #ifdef CONFIG_NET
 	show_net_buffers();
@@ -114,12 +96,12 @@ void show_mem(void)
 
 extern pgprot_t protection_map[16];
 
-unsigned long __init sparc_context_init(unsigned long start_mem, int numctx)
+void __init sparc_context_init(int numctx)
 {
 	int ctx;
 
-	ctx_list_pool = (struct ctx_list *) start_mem;
-	start_mem += (numctx * sizeof(struct ctx_list));
+	ctx_list_pool = __alloc_bootmem(numctx * sizeof(struct ctx_list), SMP_CACHE_BYTES, 0UL);
+
 	for(ctx = 0; ctx < numctx; ctx++) {
 		struct ctx_list *clist;
 
@@ -131,7 +113,98 @@ unsigned long __init sparc_context_init(unsigned long start_mem, int numctx)
 	ctx_used.next = ctx_used.prev = &ctx_used;
 	for(ctx = 0; ctx < numctx; ctx++)
 		add_to_free_ctxlist(ctx_list_pool + ctx);
-	return start_mem;
+}
+
+#undef DEBUG_BOOTMEM
+
+extern unsigned long cmdline_memory_size;
+
+unsigned long __init bootmem_init(void)
+{
+	unsigned long bootmap_size, start_pfn, end_pfn;
+	unsigned long end_of_phys_memory = 0UL;
+	int i;
+
+	/* XXX It is a bit ambiguous here, whether we should
+	 * XXX treat the user specified mem=xxx as total wanted
+	 * XXX physical memory, or as a limit to the upper
+	 * XXX physical address we allow.  For now it is the
+	 * XXX latter. -DaveM
+	 */
+#ifdef DEBUG_BOOTMEM
+	prom_printf("bootmem_init: Scan sp_banks,  ");
+#endif
+	for (i = 0; sp_banks[i].num_bytes != 0; i++) {
+		end_of_phys_memory = sp_banks[i].base_addr +
+			sp_banks[i].num_bytes;
+		if (cmdline_memory_size) {
+			if (end_of_phys_memory > cmdline_memory_size) {
+				if (cmdline_memory_size > sp_banks[i].base_addr) {
+					end_of_phys_memory =
+						sp_banks[i-1].base_addr +
+						sp_banks[i-1].num_bytes;
+					sp_banks[i].base_addr = 0xdeadbeef;
+					sp_banks[i].num_bytes = 0;
+				} else {
+					sp_banks[i].num_bytes -=
+						(end_of_phys_memory -
+						 cmdline_memory_size);
+					end_of_phys_memory = cmdline_memory_size;
+					sp_banks[++i].base_addr = 0xdeadbeef;
+					sp_banks[i].num_bytes = 0;
+				}
+				break;
+			}
+		}
+	}
+
+	/* Start with page aligned address of last symbol in kernel
+	 * image.  
+	 */
+	start_pfn  = PAGE_ALIGN((unsigned long) &_end) - PAGE_OFFSET;
+
+	/* Adjust up to the physical address where the kernel begins. */
+	start_pfn += phys_base;
+
+	/* Now shift down to get the real physical page frame number. */
+	start_pfn >>= PAGE_SHIFT;
+
+	end_pfn = end_of_phys_memory >> PAGE_SHIFT;
+
+	/* Initialize the boot-time allocator. */
+#ifdef DEBUG_BOOTMEM
+	prom_printf("init_bootmem(spfn[%lx],epfn[%lx])\n",
+		    start_pfn, end_pfn);
+#endif
+	bootmap_size = init_bootmem(start_pfn, end_pfn);
+
+	/* Now register the available physical memory with the
+	 * allocator.
+	 */
+	for (i = 0; sp_banks[i].num_bytes != 0; i++) {
+#ifdef DEBUG_BOOTMEM
+		prom_printf("free_bootmem: base[%lx] size[%lx]\n",
+			    sp_banks[i].base_addr,
+			    sp_banks[i].num_bytes);
+#endif
+		free_bootmem(sp_banks[i].base_addr,
+			     sp_banks[i].num_bytes);
+	}
+
+	/* Reserve the kernel text/data/bss and the bootmem bitmap. */
+#ifdef DEBUG_BOOTMEM
+	prom_printf("reserve_bootmem: base[%lx] size[%lx]\n",
+		    phys_base,
+		    (((start_pfn << PAGE_SHIFT) +
+		      bootmap_size) - phys_base));
+#endif
+	reserve_bootmem(phys_base, (((start_pfn << PAGE_SHIFT) +
+				     bootmap_size) - phys_base));
+
+#ifdef DEBUG_BOOTMEM
+	prom_printf("init_bootmem: return end_pfn[%lx]\n", end_pfn);
+#endif
+	return end_pfn;
 }
 
 /*
@@ -139,31 +212,32 @@ unsigned long __init sparc_context_init(unsigned long start_mem, int numctx)
  * init routine based upon the Sun model type on the Sparc.
  *
  */
-extern unsigned long sun4c_paging_init(unsigned long, unsigned long);
-extern unsigned long srmmu_paging_init(unsigned long, unsigned long);
-extern unsigned long device_scan(unsigned long);
+extern void sun4c_paging_init(void);
+extern void srmmu_paging_init(void);
+extern void device_scan(void);
 
-unsigned long __init
-paging_init(unsigned long start_mem, unsigned long end_mem)
+unsigned long last_valid_pfn;
+
+void __init paging_init(void)
 {
 	switch(sparc_cpu_model) {
 	case sun4c:
 	case sun4e:
 	case sun4:
-		start_mem = sun4c_paging_init(start_mem, end_mem);
+		sun4c_paging_init();
 		sparc_unmapped_base = 0xe0000000;
 		BTFIXUPSET_SETHI(sparc_unmapped_base, 0xe0000000);
 		break;
 	case sun4m:
 	case sun4d:
-		start_mem = srmmu_paging_init(start_mem, end_mem);
+		srmmu_paging_init();
 		sparc_unmapped_base = 0x50000000;
 		BTFIXUPSET_SETHI(sparc_unmapped_base, 0x50000000);
 		break;
 
 	case ap1000:
 #if CONFIG_AP1000
-		start_mem = apmmu_paging_init(start_mem, end_mem);
+		apmmu_paging_init();
 		sparc_unmapped_base = 0x50000000;
 		BTFIXUPSET_SETHI(sparc_unmapped_base, 0x50000000);
 		break;
@@ -194,74 +268,121 @@ paging_init(unsigned long start_mem, unsigned long end_mem)
 	protection_map[14] = PAGE_SHARED;
 	protection_map[15] = PAGE_SHARED;
 	btfixup();
-	return device_scan(start_mem);
+	device_scan();
 }
 
 struct cache_palias *sparc_aliases;
 
-extern void srmmu_frob_mem_map(unsigned long);
-
-int physmem_mapped_contig __initdata = 1;
-
-static void __init taint_real_pages(unsigned long start_mem, unsigned long end_mem)
+static void __init taint_real_pages(void)
 {
-	unsigned long addr, tmp2 = 0;
+	int i;
 
-	if(physmem_mapped_contig) {
-		for(addr = PAGE_OFFSET; addr < end_mem; addr += PAGE_SIZE) {
-			if(addr >= KERNBASE && addr < start_mem)
-				addr = start_mem;
-			for(tmp2=0; sp_banks[tmp2].num_bytes != 0; tmp2++) {
-				unsigned long phys_addr = (addr - PAGE_OFFSET);
-				unsigned long base = sp_banks[tmp2].base_addr;
-				unsigned long limit = base + sp_banks[tmp2].num_bytes;
+	for (i = 0; sp_banks[i].num_bytes; i++) {
+		unsigned long start, end;
 
-				if((phys_addr >= base) && (phys_addr < limit) &&
-				   ((phys_addr + PAGE_SIZE) < limit)) {
-					mem_map[MAP_NR(addr)].flags &= ~(1<<PG_reserved);
-					set_bit(MAP_NR(addr) >> 8, sparc_valid_addr_bitmap);
-				}
-			}
-		}
-	} else {
-		if((sparc_cpu_model == sun4m) || (sparc_cpu_model == sun4d)) {
-			srmmu_frob_mem_map(start_mem);
-		} else {
-			for(addr = start_mem; addr < end_mem; addr += PAGE_SIZE) {
-				mem_map[MAP_NR(addr)].flags &= ~(1<<PG_reserved);
-				set_bit(MAP_NR(addr) >> 8, sparc_valid_addr_bitmap);
-			}
+		start = sp_banks[i].base_addr;
+		end = start +
+			sp_banks[i].num_bytes;
+		while (start < end) {
+			set_bit (start >> 20,
+				sparc_valid_addr_bitmap);
+				start += PAGE_SIZE;
 		}
 	}
 }
 
-void __init mem_init(unsigned long start_mem, unsigned long end_mem)
+void __init free_mem_map_range(struct page *first, struct page *last)
+{
+	first = (struct page *) PAGE_ALIGN((unsigned long)first);
+	last  = (struct page *) ((unsigned long)last & PAGE_MASK);
+#ifdef DEBUG_BOOTMEM
+	prom_printf("[%p,%p] ", first, last);
+#endif
+	while (first < last) {
+		ClearPageReserved(mem_map + MAP_NR(first));
+		set_page_count(mem_map + MAP_NR(first), 1);
+		free_page((unsigned long)first);
+		totalram_pages++;
+		num_physpages++;
+
+		first = (struct page *)((unsigned long)first + PAGE_SIZE);
+	}
+}
+
+/* Walk through holes in sp_banks regions, if the mem_map array
+ * areas representing those holes consume a page or more, free
+ * up such pages.  This helps a lot on machines where physical
+ * ram is configured such that it begins at some hugh value.
+ *
+ * The sp_banks array is sorted by base address.
+ */
+void __init free_unused_mem_map(void)
+{
+	int i;
+
+#ifdef DEBUG_BOOTMEM
+	prom_printf("free_unused_mem_map: ");
+#endif
+	for (i = 0; sp_banks[i].num_bytes; i++) {
+		if (i == 0) {
+			struct page *first, *last;
+
+			first = mem_map;
+			last = &mem_map[sp_banks[i].base_addr >> PAGE_SHIFT];
+			free_mem_map_range(first, last);
+		} else {
+			struct page *first, *last;
+			unsigned long prev_end;
+
+			prev_end = sp_banks[i-1].base_addr +
+				sp_banks[i-1].num_bytes;
+			prev_end = PAGE_ALIGN(prev_end);
+			first = &mem_map[prev_end >> PAGE_SHIFT];
+			last = &mem_map[sp_banks[i].base_addr >> PAGE_SHIFT];
+
+			free_mem_map_range(first, last);
+
+			if (!sp_banks[i+1].num_bytes) {
+				prev_end = sp_banks[i].base_addr +
+					sp_banks[i].num_bytes;
+				first = &mem_map[prev_end >> PAGE_SHIFT];
+				last = &mem_map[last_valid_pfn];
+				free_mem_map_range(first, last);
+			}
+		}
+	}
+#ifdef DEBUG_BOOTMEM
+	prom_printf("\n");
+#endif
+}
+
+void __init mem_init(void)
 {
 	int codepages = 0;
 	int datapages = 0;
 	int initpages = 0; 
 	int i;
-	unsigned long addr;
-	struct page *page, *end;
+	unsigned long addr, last;
 
 	/* Saves us work later. */
 	memset((void *) ZERO_PAGE(0), 0, PAGE_SIZE);
 
-	end_mem &= PAGE_MASK;
-	max_mapnr = MAP_NR(end_mem);
-	high_memory = (void *) end_mem;
-	
-	sparc_valid_addr_bitmap = (unsigned long *)start_mem;
-	i = max_mapnr >> (8 + 5);
+	i = last_valid_pfn >> (8 + 5);
 	i += 1;
-	memset(sparc_valid_addr_bitmap, 0, i << 2);
-	start_mem += i << 2;
 
-	start_mem = PAGE_ALIGN(start_mem);
-	num_physpages = 0;
+	sparc_valid_addr_bitmap = (unsigned long *)
+		__alloc_bootmem(i << 2, SMP_CACHE_BYTES, 0UL);
+
+	if (sparc_valid_addr_bitmap == NULL) {
+		prom_printf("mem_init: Cannot alloc valid_addr_bitmap.\n");
+		prom_halt();
+	}
+	memset(sparc_valid_addr_bitmap, 0, i << 2);
 
 	addr = KERNBASE;
-	while(addr < start_mem) {
+	last = PAGE_ALIGN((unsigned long)&_end);
+	/* fix this */
+	while(addr < last) {
 #ifdef CONFIG_BLK_DEV_INITRD
 		if (initrd_below_start_ok && addr >= initrd_start && addr < initrd_end)
 			mem_map[MAP_NR(addr)].flags &= ~(1<<PG_reserved);
@@ -272,63 +393,31 @@ void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 		addr += PAGE_SIZE;
 	}
 
-	taint_real_pages(start_mem, end_mem);
-	
-#ifdef FREE_UNUSED_MEM_MAP
-	end = mem_map + max_mapnr;
-	for (page = mem_map; page < end; page++) {
-		if (PageSkip(page)) {
-			unsigned long low, high;
+	taint_real_pages();
 
-			/* See srmmu_frob_mem_map() for why this is done.  -DaveM */
-			page++;
-
-			low = PAGE_ALIGN((unsigned long)(page+1));
-			if (page->next_hash < page)
-				high = ((unsigned long)end) & PAGE_MASK;
-			else
-				high = ((unsigned long)page->next_hash) & PAGE_MASK;
-			while (low < high) {
-				mem_map[MAP_NR(low)].flags &= ~(1<<PG_reserved);
-				low += PAGE_SIZE;
-			}
-		}
-	}
+#ifdef DEBUG_BOOTMEM
+	prom_printf("mem_init: Calling free_all_bootmem().\n");
 #endif
-	
-	for (addr = PAGE_OFFSET; addr < end_mem; addr += PAGE_SIZE) {
-		if (PageSkip(mem_map + MAP_NR(addr))) {
-			unsigned long next = mem_map[MAP_NR(addr)].next_hash - mem_map;
+	num_physpages = totalram_pages = free_all_bootmem();
 
-			next = (next << PAGE_SHIFT) + PAGE_OFFSET;
-			if (next < addr || next >= end_mem)
-				break;
-			addr = next;
-		}
-		num_physpages++;
-		if(PageReserved(mem_map + MAP_NR(addr))) {
-			if ((addr < (unsigned long) &etext) && (addr >= KERNBASE))
-				codepages++;
-			else if((addr >= (unsigned long)&__init_begin && addr < (unsigned long)&__init_end))
-				initpages++;
-			else if((addr < start_mem) && (addr >= KERNBASE))
-				datapages++;
-			continue;
-		}
-		atomic_set(&mem_map[MAP_NR(addr)].count, 1);
-#ifdef CONFIG_BLK_DEV_INITRD
-		if (!initrd_start ||
-		    (addr < initrd_start || addr >= initrd_end))
-#endif
-			free_page(addr);
-	}
+	free_unused_mem_map();
+
+	max_mapnr = last_valid_pfn;
+	high_memory = __va(last_valid_pfn << PAGE_SHIFT);
+
+	codepages = (((unsigned long) &etext) - ((unsigned long)&_start));
+	codepages = PAGE_ALIGN(codepages) >> PAGE_SHIFT;
+	datapages = (((unsigned long) &edata) - ((unsigned long)&etext));
+	datapages = PAGE_ALIGN(datapages) >> PAGE_SHIFT;
+	initpages = (((unsigned long) &__init_end) - ((unsigned long) &__init_begin));
+	initpages = PAGE_ALIGN(initpages) >> PAGE_SHIFT;
 
 	printk("Memory: %dk available (%dk kernel code, %dk data, %dk init) [%08lx,%08lx]\n",
 	       nr_free_pages << (PAGE_SHIFT-10),
 	       codepages << (PAGE_SHIFT-10),
 	       datapages << (PAGE_SHIFT-10), 
 	       initpages << (PAGE_SHIFT-10),
-	       (unsigned long)PAGE_OFFSET, end_mem);
+	       (unsigned long)PAGE_OFFSET, (last_valid_pfn << PAGE_SHIFT));
 
 	/* NOTE NOTE NOTE NOTE
 	 * Please keep track of things and make sure this
@@ -347,39 +436,26 @@ void __init mem_init(unsigned long start_mem, unsigned long end_mem)
 void free_initmem (void)
 {
 	unsigned long addr;
-	
+
 	addr = (unsigned long)(&__init_begin);
 	for (; addr < (unsigned long)(&__init_end); addr += PAGE_SIZE) {
-		mem_map[MAP_NR(addr)].flags &= ~(1 << PG_reserved);
-		atomic_set(&mem_map[MAP_NR(addr)].count, 1);
+		ClearPageReserved(mem_map + MAP_NR(addr));
+		set_page_count(mem_map + MAP_NR(addr), 1);
 		free_page(addr);
+		totalram_pages++;
+		num_physpages++;
 	}
 }
 
 void si_meminfo(struct sysinfo *val)
 {
-	struct page *page, *end;
-
-	val->totalram = 0;
+	val->totalram = totalram_pages;
 	val->sharedram = 0;
-	val->freeram = nr_free_pages << PAGE_SHIFT;
-	val->bufferram = atomic_read(&buffermem);
-	for (page = mem_map, end = mem_map + max_mapnr;
-	     page < end; page++) {
-		if (PageSkip(page)) {
-			if (page->next_hash < page)
-				break;
-			page = page->next_hash;
-		}
-		if (PageReserved(page))
-			continue;
-		val->totalram++;
-		if (!atomic_read(&page->count))
-			continue;
-		val->sharedram += atomic_read(&page->count) - 1;
-	}
-	val->totalram <<= PAGE_SHIFT;
-	val->sharedram <<= PAGE_SHIFT;
-	val->totalbig = 0;
-	val->freebig = 0;
+	val->freeram = nr_free_pages;
+	val->bufferram = atomic_read(&buffermem_pages);
+
+	val->totalhigh = 0;
+	val->freehigh = nr_free_highpages;
+
+	val->mem_unit = PAGE_SIZE;
 }

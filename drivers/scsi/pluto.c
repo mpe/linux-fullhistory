@@ -287,12 +287,16 @@ int pluto_release(struct Scsi_Host *host)
 
 const char *pluto_info(struct Scsi_Host *host)
 {
-	static char buf[80];
+	static char buf[128], *p;
 	struct pluto *pluto = (struct pluto *) host->hostdata;
 
 	sprintf(buf, "SUN SparcSTORAGE Array %s fw %s serial %s %dx%d on %s",
 		pluto->rev_str, pluto->fw_rev_str, pluto->serial_str,
 		host->max_channel, host->max_id, pluto->fc->name);
+#ifdef __sparc__
+	p = strchr(buf, 0);
+	sprintf(p, " PROM node %x", pluto->fc->dev->prom_node);
+#endif	
 	return buf;
 }
 

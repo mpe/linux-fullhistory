@@ -1,4 +1,4 @@
-/* $Id: ebus.c,v 1.4 1999/08/31 06:54:19 davem Exp $
+/* $Id: ebus.c,v 1.8 1999/11/27 22:40:38 zaitcev Exp $
  * ebus.c: PCI to EBus bridge device.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -23,9 +23,8 @@
 #include <asm/bpp.h>
 
 #undef PROM_DEBUG
-#undef DEBUG_FILL_EBUS_DEV
 
-#ifdef PROM_DEBUG
+#if 0	/* separate from PROM_DEBUG for the sake of PROLL */
 #define dprintk prom_printf
 #else
 #define dprintk printk
@@ -79,7 +78,7 @@ void __init fill_ebus_child(int node, struct linux_prom_registers *preg,
 				    dev->prom_name, len, dev->parent->num_addrs);
 			panic(__FUNCTION__);
 		}
-		dev->base_address[i] = dev->parent->base_address[regs[i]];
+		dev->resource[i].start = dev->parent->resource[regs[i]].start; /* XXX resource */
 	}
 
 	/*
@@ -110,22 +109,8 @@ void __init fill_ebus_child(int node, struct linux_prom_registers *preg,
 			dev->irqs[0] = 0;
 		} else {
 			dev->irqs[0] = pcic_pin_to_irq(irqs[0], dev->prom_name);
-/* P3 remove */ printk("EBUS: dev %s irq %d from PROM\n", dev->prom_name, dev->irqs[0]);
 		}
 	}
-
-#ifdef DEBUG_FILL_EBUS_DEV
-	dprintk("child '%s': address%s\n", dev->prom_name,
-	       dev->num_addrs > 1 ? "es" : "");
-	for (i = 0; i < dev->num_addrs; i++)
-		dprintk("        %016lx\n", dev->base_address[i]);
-	if (dev->num_irqs) {
-		dprintk("        IRQ%s", dev->num_irqs > 1 ? "s" : "");
-		for (i = 0; i < dev->num_irqs; i++)
-			dprintk(" %08x", dev->irqs[i]);
-		dprintk("\n");
-	}
-#endif
 }
 
 void __init fill_ebus_device(int node, struct linux_ebus_device *dev)
@@ -135,6 +120,7 @@ void __init fill_ebus_device(int node, struct linux_ebus_device *dev)
 	int irqs[PROMINTR_MAX];
 	char lbuf[128];
 	int i, n, len;
+	unsigned long baseaddr;
 
 	dev->prom_node = node;
 	prom_getstring(node, "name", lbuf, sizeof(lbuf));
@@ -175,28 +161,20 @@ void __init fill_ebus_device(int node, struct linux_ebus_device *dev)
 			;
 		}
 
-		dev->base_address[i] = dev->bus->self->base_address[n];
-		dev->base_address[i] += regs[i].phys_addr;
-
-		if (dev->base_address[i]) {
-		    dev->base_address[i] =
-		       (unsigned long)sparc_alloc_io (dev->base_address[i], 0,
-						      regs[i].reg_size,
-						      dev->prom_name, 0, 0);
-#if 0
 /*
- * This release_region() screwes those who do sparc_alloc_io().
- * Change drivers which do check_region(). See drivers/block/floppy.c.
+ * XXX Now as we have regions, why don't we make an on-demand allocation...
  */
-		    /* Some drivers call 'check_region', so we release it */
-                    release_region(dev->base_address[i] & PAGE_MASK, PAGE_SIZE);
-#endif
-
-		    if (dev->base_address[i] == 0 ) {
-			panic("ebus: unable sparc_alloc_io for dev %s",
-			      dev->prom_name);
-		    }
+		dev->resource[i].start = 0;
+		if ((baseaddr = dev->bus->self->resource[n].start +
+		    regs[i].phys_addr) != 0) {
+			/* dev->resource[i].name = dev->prom_name; */
+			if ((baseaddr = (unsigned long) ioremap(baseaddr,
+			    regs[i].reg_size)) == 0) {
+				panic("ebus: unable to remap dev %s",
+				    dev->prom_name);
+			}
 		}
+		dev->resource[i].start = baseaddr;	/* XXX Unaligned */
 	}
 
 	len = prom_getproperty(node, "interrupts", (char *)&irqs, sizeof(irqs));
@@ -216,22 +194,9 @@ void __init fill_ebus_device(int node, struct linux_ebus_device *dev)
 			dev->irqs[0] = 0;
 		} else {
 			dev->irqs[0] = pcic_pin_to_irq(irqs[0], dev->prom_name);
-/* P3 remove */ printk("EBUS: child %s irq %d from PROM\n", dev->prom_name, dev->irqs[0]);
 		}
 	}
 
-#ifdef DEBUG_FILL_EBUS_DEV
-	dprintk("'%s': address%s\n", dev->prom_name,
-	       dev->num_addrs > 1 ? "es" : "");
-	for (i = 0; i < dev->num_addrs; i++)
-		dprintk("  %016lx\n", dev->base_address[i]);
-	if (dev->num_irqs) {
-		dprintk("  IRQ%s", dev->num_irqs > 1 ? "s" : "");
-		for (i = 0; i < dev->num_irqs; i++)
-			dprintk(" %08x", dev->irqs[i]);
-		dprintk("\n");
-	}
-#endif
 	if ((node = prom_getchild(node))) {
 		dev->children = (struct linux_ebus_child *)
 			ebus_alloc(sizeof(struct linux_ebus_child));
@@ -312,7 +277,7 @@ void __init ebus_init(void)
 		}
 		nreg = len / sizeof(struct linux_prom_pci_registers);
 
-		base = &ebus->self->base_address[0];
+		base = &ebus->self->resource[0].start;
 		for (reg = 0; reg < nreg; reg++) {
 			if (!(regs[reg].which_io & 0x03000000))
 				continue;

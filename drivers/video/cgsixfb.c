@@ -1,4 +1,4 @@
-/* $Id: cgsixfb.c,v 1.19 1999/08/10 15:56:03 davem Exp $
+/* $Id: cgsixfb.c,v 1.21 1999/11/19 09:56:57 davem Exp $
  * cgsixfb.c: CGsix (GX,GXplus) frame buffer driver
  *
  * Copyright (C) 1996,1998 Jakub Jelinek (jj@ultra.linux.cz)
@@ -31,15 +31,15 @@
  * The FBC could be the frame buffer control
  * The FHC could is the frame buffer hardware control.
  */
-#define CG6_ROM_OFFSET       0x0
-#define CG6_BROOKTREE_OFFSET 0x200000
-#define CG6_DHC_OFFSET       0x240000
-#define CG6_ALT_OFFSET       0x280000
-#define CG6_FHC_OFFSET       0x300000
-#define CG6_THC_OFFSET       0x301000
-#define CG6_FBC_OFFSET       0x700000
-#define CG6_TEC_OFFSET       0x701000
-#define CG6_RAM_OFFSET       0x800000
+#define CG6_ROM_OFFSET       0x0UL
+#define CG6_BROOKTREE_OFFSET 0x200000UL
+#define CG6_DHC_OFFSET       0x240000UL
+#define CG6_ALT_OFFSET       0x280000UL
+#define CG6_FHC_OFFSET       0x300000UL
+#define CG6_THC_OFFSET       0x301000UL
+#define CG6_FBC_OFFSET       0x700000UL
+#define CG6_TEC_OFFSET       0x701000UL
+#define CG6_RAM_OFFSET       0x800000UL
 
 /* FHC definitions */
 #define CG6_FHC_FBID_SHIFT           24
@@ -231,19 +231,21 @@ static void cg6_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 {
 	struct fb_info_sbusfb *fb = (struct fb_info_sbusfb *)p->fb_info;
 	register struct cg6_fbc *fbc = fb->s.cg6.fbc;
+	unsigned long flags;
 	int x, y, w, h;
 	int i;
 	
+	spin_lock_irqsave(&fb->lock, flags);
 	do {
-		i = fbc->s;
+		i = sbus_readl(&fbc->s);
 	} while (i & 0x10000000);
-	fbc->fg = attr_bgcol_ec(p,conp);
-	fbc->bg = attr_bgcol_ec(p,conp);
-	fbc->pixelm = ~(0);
-	fbc->alu = 0xea80ff00;
-	fbc->s = 0;
-	fbc->clip = 0;
-	fbc->pm = ~(0);
+	sbus_writel(attr_bgcol_ec(p,conp), &fbc->fg);
+	sbus_writel(attr_bgcol_ec(p,conp), &fbc->bg);
+	sbus_writel(~0, &fbc->pixelm);
+	sbus_writel(0xea80ff00, &fbc->alu);
+	sbus_writel(0, &fbc->s);
+	sbus_writel(0, &fbc->clip);
+	sbus_writel(~0, &fbc->pm);
 
         if (fontheightlog(p)) {
 		y = sy << fontheightlog(p); h = height << fontheightlog(p);
@@ -255,13 +257,14 @@ static void cg6_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 	} else {
 		x = sx * fontwidth(p); w = width * fontwidth(p);
 	}
-	fbc->arecty = y + fb->y_margin;
-	fbc->arectx = x + fb->x_margin;
-	fbc->arecty = y + fb->y_margin + h;
-	fbc->arectx = x + fb->x_margin + w;
+	sbus_writel(y + fb->y_margin, &fbc->arecty);
+	sbus_writel(x + fb->x_margin, &fbc->arectx);
+	sbus_writel(y + fb->y_margin + h, &fbc->arecty);
+	sbus_writel(x + fb->x_margin + w, &fbc->arectx);
 	do {
-		i = fbc->draw;
+		i = sbus_readl(&fbc->draw);
 	} while (i < 0 && (i & 0x20000000));
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void cg6_fill(struct fb_info_sbusfb *fb, struct display *p, int s,
@@ -269,36 +272,41 @@ static void cg6_fill(struct fb_info_sbusfb *fb, struct display *p, int s,
 {
 	int i;
 	register struct cg6_fbc *fbc = fb->s.cg6.fbc;
+	unsigned long flags;
 	
+	spin_lock_irqsave(&fb->lock, flags);
 	do {
-		i = fbc->s;
+		i = sbus_readl(&fbc->s);
 	} while (i & 0x10000000);
-	fbc->fg = attr_bgcol(p,s);
-	fbc->bg = attr_bgcol(p,s);
-	fbc->pixelm = ~(0);
-	fbc->alu = 0xea80ff00;
-	fbc->s = 0;
-	fbc->clip = 0;
-	fbc->pm = ~(0);
+	sbus_writel(attr_bgcol(p,s), &fbc->fg);
+	sbus_writel(attr_bgcol(p,s), &fbc->bg);
+	sbus_writel(~0, &fbc->pixelm);
+	sbus_writel(0xea80ff00, &fbc->alu);
+	sbus_writel(0, &fbc->s);
+	sbus_writel(0, &fbc->clip);
+	sbus_writel(~0, &fbc->pm);
 	while (count-- > 0) {
-		fbc->arecty = boxes[1];
-		fbc->arectx = boxes[0];
-		fbc->arecty = boxes[3];
-		fbc->arectx = boxes[2];
+		sbus_writel(boxes[1], &fbc->arecty);
+		sbus_writel(boxes[0], &fbc->arectx);
+		sbus_writel(boxes[3], &fbc->arecty);
+		sbus_writel(boxes[2], &fbc->arectx);
 		boxes += 4;
 		do {
-			i = fbc->draw;
+			i = sbus_readl(&fbc->draw);
 		} while (i < 0 && (i & 0x20000000));
 	}
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void cg6_putc(struct vc_data *conp, struct display *p, int c, int yy, int xx)
 {
 	struct fb_info_sbusfb *fb = (struct fb_info_sbusfb *)p->fb_info;
 	register struct cg6_fbc *fbc = fb->s.cg6.fbc;
+	unsigned long flags;
 	int i, x, y;
 	u8 *fd;
 
+	spin_lock_irqsave(&fb->lock, flags);
 	if (fontheightlog(p)) {
 		y = fb->y_margin + (yy << fontheightlog(p));
 		i = ((c & p->charmask) << fontheightlog(p));
@@ -315,30 +323,35 @@ static void cg6_putc(struct vc_data *conp, struct display *p, int c, int yy, int
 	else
 		x = fb->x_margin + (xx * fontwidth(p));
 	do {
-		i = fbc->s;
+		i = sbus_readl(&fbc->s);
 	} while (i & 0x10000000);
-	fbc->fg = attr_fgcol(p,c);
-	fbc->bg = attr_bgcol(p,c);
-	fbc->mode = 0x140000;
-	fbc->alu = 0xe880fc30;
-	fbc->pixelm = ~(0);
-	fbc->s = 0;
-	fbc->clip = 0;
-	fbc->pm = 0xff;
-	fbc->incx = 0;
-	fbc->incy = 1;
-	fbc->x0 = x;
-	fbc->x1 = x + fontwidth(p) - 1;
-	fbc->y0 = y;
+	sbus_writel(attr_fgcol(p,c), &fbc->fg);
+	sbus_writel(attr_bgcol(p,c), &fbc->bg);
+	sbus_writel(0x140000, &fbc->mode);
+	sbus_writel(0xe880fc30, &fbc->alu);
+	sbus_writel(~0, &fbc->pixelm);
+	sbus_writel(0, &fbc->s);
+	sbus_writel(0, &fbc->clip);
+	sbus_writel(0xff, &fbc->pm);
+	sbus_writel(0, &fbc->incx);
+	sbus_writel(1, &fbc->incy);
+	sbus_writel(x, &fbc->x0);
+	sbus_writel(x + fontwidth(p) - 1, &fbc->x1);
+	sbus_writel(y, &fbc->y0);
 	if (fontwidth(p) <= 8) {
-		for (i = 0; i < fontheight(p); i++)
-			fbc->font = *fd++ << 24;
+		for (i = 0; i < fontheight(p); i++) {
+			u32 val = *fd++ << 24;
+			sbus_writel(val, &fbc->font);
+		}
 	} else {
 		for (i = 0; i < fontheight(p); i++) {
-			fbc->font = *(u16 *)fd << 16;
+			u32 val = *(u16 *)fd << 16;
+
+			sbus_writel(val, &fbc->font);
 			fd += 2;
 		}
 	}
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void cg6_putcs(struct vc_data *conp, struct display *p, const unsigned short *s,
@@ -346,20 +359,22 @@ static void cg6_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 {
 	struct fb_info_sbusfb *fb = (struct fb_info_sbusfb *)p->fb_info;
 	register struct cg6_fbc *fbc = fb->s.cg6.fbc;
+	unsigned long flags;
 	int i, x, y;
 	u8 *fd1, *fd2, *fd3, *fd4;
 
+	spin_lock_irqsave(&fb->lock, flags);
 	do {
-		i = fbc->s;
+		i = sbus_readl(&fbc->s);
 	} while (i & 0x10000000);
-	fbc->fg = attr_fgcol(p, scr_readw(s));
-	fbc->bg = attr_bgcol(p, scr_readw(s));
-	fbc->mode = 0x140000;
-	fbc->alu = 0xe880fc30;
-	fbc->pixelm = ~(0);
-	fbc->s = 0;
-	fbc->clip = 0;
-	fbc->pm = 0xff;
+	sbus_writel(attr_fgcol(p, scr_readw(s)), &fbc->fg);
+	sbus_writel(attr_bgcol(p, scr_readw(s)), &fbc->bg);
+	sbus_writel(0x140000, &fbc->mode);
+	sbus_writel(0xe880fc30, &fbc->alu);
+	sbus_writel(~0, &fbc->pixelm);
+	sbus_writel(0, &fbc->s);
+	sbus_writel(0, &fbc->clip);
+	sbus_writel(0xff, &fbc->pm);
 	x = fb->x_margin;
 	y = fb->y_margin;
 	if (fontwidthlog(p))
@@ -373,11 +388,11 @@ static void cg6_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 	if (fontwidth(p) <= 8) {
 		while (count >= 4) {
 			count -= 4;
-			fbc->incx = 0;
-			fbc->incy = 1;
-			fbc->x0 = x;
-			fbc->x1 = (x += 4 * fontwidth(p)) - 1;
-			fbc->y0 = y;
+			sbus_writel(0, &fbc->incx);
+			sbus_writel(1, &fbc->incy);
+			sbus_writel(x, &fbc->x0);
+			sbus_writel((x += 4 * fontwidth(p)) - 1, &fbc->x1);
+			sbus_writel(y, &fbc->y0);
 			if (fontheightlog(p)) {
 				fd1 = p->fontdata + ((scr_readw(s++) & p->charmask) << fontheightlog(p));
 				fd2 = p->fontdata + ((scr_readw(s++) & p->charmask) << fontheightlog(p));
@@ -390,23 +405,36 @@ static void cg6_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 				fd4 = p->fontdata + ((scr_readw(s++) & p->charmask) * fontheight(p));
 			}
 			if (fontwidth(p) == 8) {
-				for (i = 0; i < fontheight(p); i++)
-					fbc->font = ((u32)*fd4++) | ((((u32)*fd3++) | ((((u32)*fd2++) | (((u32)*fd1++) 
-						<< 8)) << 8)) << 8);
+				for (i = 0; i < fontheight(p); i++) {
+					u32 val = ((u32)*fd4++) |
+						((((u32)*fd3++) |
+						  ((((u32)*fd2++) |
+						    (((u32)*fd1++)
+						     << 8)) << 8)) << 8);
+					sbus_writel(val, &fbc->font);
+				}
 			} else {
-				for (i = 0; i < fontheight(p); i++)
-					fbc->font = (((u32)*fd4++) | ((((u32)*fd3++) | ((((u32)*fd2++) | (((u32)*fd1++) 
-						<< fontwidth(p))) << fontwidth(p))) << fontwidth(p))) << (24 - 3 * fontwidth(p));
+				for (i = 0; i < fontheight(p); i++) {
+					u32 val = (((u32)*fd4++) |
+						   ((((u32)*fd3++) |
+						     ((((u32)*fd2++) |
+						       (((u32)*fd1++) 
+							<< fontwidth(p))) <<
+						      fontwidth(p))) <<
+						    fontwidth(p))) <<
+						(24 - 3 * fontwidth(p));
+					sbus_writel(val, &fbc->font);
+				}
 			}
 		}
 	} else {
 		while (count >= 2) {
 			count -= 2;
-			fbc->incx = 0;
-			fbc->incy = 1;
-			fbc->x0 = x;
-			fbc->x1 = (x += 2 * fontwidth(p)) - 1;
-			fbc->y0 = y;
+			sbus_writel(0, &fbc->incx);
+			sbus_writel(1, &fbc->incy);
+			sbus_writel(x, &fbc->x0);
+			sbus_writel((x += 2 * fontwidth(p)) - 1, &fbc->x1);
+			sbus_writel(y, &fbc->y0);
 			if (fontheightlog(p)) {
 				fd1 = p->fontdata + ((scr_readw(s++) & p->charmask) << (fontheightlog(p) + 1));
 				fd2 = p->fontdata + ((scr_readw(s++) & p->charmask) << (fontheightlog(p) + 1));
@@ -415,34 +443,40 @@ static void cg6_putcs(struct vc_data *conp, struct display *p, const unsigned sh
 				fd2 = p->fontdata + (((scr_readw(s++) & p->charmask) * fontheight(p)) << 1);
 			}
 			for (i = 0; i < fontheight(p); i++) {
-				fbc->font = ((((u32)*(u16 *)fd1) << fontwidth(p)) | ((u32)*(u16 *)fd2)) << (16 - fontwidth(p));
+				u32 val = ((((u32)*(u16 *)fd1) << fontwidth(p)) |
+					   ((u32)*(u16 *)fd2)) << (16 - fontwidth(p));
+				sbus_writel(val, &fbc->font);
 				fd1 += 2; fd2 += 2;
 			}
 		}
 	}
 	while (count) {
 		count--;
-		fbc->incx = 0;
-		fbc->incy = 1;
-		fbc->x0 = x;
-		fbc->x1 = (x += fontwidth(p)) - 1;
-		fbc->y0 = y;
+		sbus_writel(0, &fbc->incx);
+		sbus_writel(1, &fbc->incy);
+		sbus_writel(x, &fbc->x0);
+		sbus_writel((x += fontwidth(p)) - 1, &fbc->x1);
+		sbus_writel(y, &fbc->y0);
 		if (fontheightlog(p))
 			i = ((scr_readw(s++) & p->charmask) << fontheightlog(p));
 		else
 			i = ((scr_readw(s++) & p->charmask) * fontheight(p));
 		if (fontwidth(p) <= 8) {
 			fd1 = p->fontdata + i;
-			for (i = 0; i < fontheight(p); i++)
-				fbc->font = *fd1++ << 24;
+			for (i = 0; i < fontheight(p); i++) {
+				u32 val = *fd1++ << 24;
+				sbus_writel(val, &fbc->font);
+			}
 		} else {
 			fd1 = p->fontdata + (i << 1);
 			for (i = 0; i < fontheight(p); i++) {
-				fbc->font = *(u16 *)fd1 << 16;
+				u32 val = *(u16 *)fd1 << 16;
+				sbus_writel(val, &fbc->font);
 				fd1 += 2;
 			}
 		}
 	}
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void cg6_revc(struct display *p, int xx, int yy)
@@ -453,24 +487,33 @@ static void cg6_revc(struct display *p, int xx, int yy)
 static void cg6_loadcmap (struct fb_info_sbusfb *fb, struct display *p, int index, int count)
 {
 	struct bt_regs *bt = fb->s.cg6.bt;
+	unsigned long flags;
 	int i;
                 
+	spin_lock_irqsave(&fb->lock, flags);
 	bt->addr = index << 24;
 	for (i = index; count--; i++){
-		bt->color_map = fb->color_map CM(i,0) << 24;
-		bt->color_map = fb->color_map CM(i,1) << 24;
-		bt->color_map = fb->color_map CM(i,2) << 24;
+		sbus_writel(fb->color_map CM(i,0) << 24,
+			    &bt->color_map);
+		sbus_writel(fb->color_map CM(i,1) << 24,
+			    &bt->color_map);
+		sbus_writel(fb->color_map CM(i,2) << 24,
+			    &bt->color_map);
 	}
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void cg6_restore_palette (struct fb_info_sbusfb *fb)
 {
 	struct bt_regs *bt = fb->s.cg6.bt;
+	unsigned long flags;
                 
-	bt->addr = 0;
-	bt->color_map = 0xffffffff;
-	bt->color_map = 0xffffffff;
-	bt->color_map = 0xffffffff;
+	spin_lock_irqsave(&fb->lock, flags);
+	sbus_writel(0, &bt->addr);
+	sbus_writel(0xffffffff, &bt->color_map);
+	sbus_writel(0xffffffff, &bt->color_map);
+	sbus_writel(0xffffffff, &bt->color_map);
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static struct display_switch cg6_dispsw __initdata = {
@@ -481,52 +524,77 @@ static struct display_switch cg6_dispsw __initdata = {
 static void cg6_setcursormap (struct fb_info_sbusfb *fb, u8 *red, u8 *green, u8 *blue)
 {
         struct bt_regs *bt = fb->s.cg6.bt;
+	unsigned long flags;
         
-	bt->addr = 1 << 24;
-	bt->cursor = red[0] << 24;
-	bt->cursor = green[0] << 24;
-	bt->cursor = blue[0] << 24;
-	bt->addr = 3 << 24;
-	bt->cursor = red[1] << 24;
-	bt->cursor = green[1] << 24;
-	bt->cursor = blue[1] << 24;
+	spin_lock_irqsave(&fb->lock, flags);
+	sbus_writel(1 << 24, &bt->addr);
+	sbus_writel(red[0] << 24, &bt->cursor);
+	sbus_writel(green[0] << 24, &bt->cursor);
+	sbus_writel(blue[0] << 24, &bt->cursor);
+	sbus_writel(3 << 24, &bt->addr);
+	sbus_writel(red[1] << 24, &bt->cursor);
+	sbus_writel(green[1] << 24, &bt->cursor);
+	sbus_writel(blue[1] << 24, &bt->cursor);
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 /* Set cursor shape */
 static void cg6_setcurshape (struct fb_info_sbusfb *fb)
 {
 	struct cg6_thc *thc = fb->s.cg6.thc;
+	unsigned long flags;
 	int i;
 
+	spin_lock_irqsave(&fb->lock, flags);
 	for (i = 0; i < 32; i++) {
-		thc->thc_cursmask [i] = fb->cursor.bits[0][i];
-		thc->thc_cursbits [i] = fb->cursor.bits[1][i];
+		sbus_writel(fb->cursor.bits[0][i],
+			    &thc->thc_cursmask [i]);
+		sbus_writel(fb->cursor.bits[1][i],
+			    &thc->thc_cursbits [i]);
 	}
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 /* Load cursor information */
 static void cg6_setcursor (struct fb_info_sbusfb *fb)
 {
 	unsigned int v;
+	unsigned long flags;
 	struct cg_cursor *c = &fb->cursor;
 
+	spin_lock_irqsave(&fb->lock, flags);
 	if (c->enable)
 		v = ((c->cpos.fbx - c->chot.fbx) << 16)
 		    |((c->cpos.fby - c->chot.fby) & 0xffff);
 	else
 		/* Magic constant to turn off the cursor */
 		v = ((65536-32) << 16) | (65536-32);
-	fb->s.cg6.thc->thc_cursxy = v;
+	sbus_writel(v, &fb->s.cg6.thc->thc_cursxy);
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void cg6_blank (struct fb_info_sbusfb *fb)
 {
-	fb->s.cg6.thc->thc_misc &= ~CG6_THC_MISC_VIDEO;
+	unsigned long flags;
+	u32 tmp;
+
+	spin_lock_irqsave(&fb->lock, flags);
+	tmp = sbus_readl(&fb->s.cg6.thc->thc_misc);
+	tmp &= ~CG6_THC_MISC_VIDEO;
+	sbus_writel(tmp, &fb->s.cg6.thc->thc_misc);
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void cg6_unblank (struct fb_info_sbusfb *fb)
 {
-	fb->s.cg6.thc->thc_misc |= CG6_THC_MISC_VIDEO;
+	unsigned long flags;
+	u32 tmp;
+
+	spin_lock_irqsave(&fb->lock, flags);
+	tmp = sbus_readl(&fb->s.cg6.thc->thc_misc);
+	tmp |= CG6_THC_MISC_VIDEO;
+	sbus_writel(tmp, &fb->s.cg6.thc->thc_misc);
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void cg6_reset (struct fb_info_sbusfb *fb)
@@ -534,32 +602,35 @@ static void cg6_reset (struct fb_info_sbusfb *fb)
 	unsigned int rev, conf;
 	struct cg6_tec *tec = fb->s.cg6.tec;
 	struct cg6_fbc *fbc = fb->s.cg6.fbc;
-	u32 mode;
+	unsigned long flags;
+	u32 mode, tmp;
 	int i;
 	
+	spin_lock_irqsave(&fb->lock, flags);
+
 	/* Turn off stuff in the Transform Engine. */
-	tec->tec_matrix = 0;
-	tec->tec_clip = 0;
-	tec->tec_vdc = 0;
+	sbus_writel(0, &tec->tec_matrix);
+	sbus_writel(0, &tec->tec_clip);
+	sbus_writel(0, &tec->tec_vdc);
 
 	/* Take care of bugs in old revisions. */
-	rev = (*(fb->s.cg6.fhc) >> CG6_FHC_REV_SHIFT) & CG6_FHC_REV_MASK;
+	rev = (sbus_readl(fb->s.cg6.fhc) >> CG6_FHC_REV_SHIFT) & CG6_FHC_REV_MASK;
 	if (rev < 5) {
-		conf = (*(fb->s.cg6.fhc) & CG6_FHC_RES_MASK) |
+		conf = (sbus_readl(fb->s.cg6.fhc) & CG6_FHC_RES_MASK) |
 			CG6_FHC_CPU_68020 | CG6_FHC_TEST |
 			(11 << CG6_FHC_TEST_X_SHIFT) |
 			(11 << CG6_FHC_TEST_Y_SHIFT);
 		if (rev < 2)
 			conf |= CG6_FHC_DST_DISABLE;
-		*(fb->s.cg6.fhc) = conf;
+		sbus_writel(conf, fb->s.cg6.fhc);
 	}
 
 	/* Set things in the FBC. Bad things appear to happen if we do
 	 * back to back store/loads on the mode register, so copy it
 	 * out instead. */
-	mode = fbc->mode;
+	mode = sbus_readl(&fbc->mode);
 	do {
-		i = fbc->s;
+		i = sbus_readl(&fbc->s);
 	} while (i & 0x10000000);
 	mode &= ~(CG6_FBC_BLIT_MASK | CG6_FBC_MODE_MASK |
 		       CG6_FBC_DRAW_MASK | CG6_FBC_BWRITE0_MASK |
@@ -569,23 +640,29 @@ static void cg6_reset (struct fb_info_sbusfb *fb)
 		      CG6_FBC_DRAW_RENDER | CG6_FBC_BWRITE0_ENABLE |
 		      CG6_FBC_BWRITE1_DISABLE | CG6_FBC_BREAD_0 |
 		      CG6_FBC_BDISP_0);
-	fbc->mode = mode;
+	sbus_writel(mode, &fbc->mode);
 
-	fbc->clip = 0;
-	fbc->offx = 0;
-	fbc->offy = 0;
-	fbc->clipminx = 0;
-	fbc->clipminy = 0;
-	fbc->clipmaxx = fb->type.fb_width - 1;
-	fbc->clipmaxy = fb->type.fb_height - 1;
+	sbus_writel(0, &fbc->clip);
+	sbus_writel(0, &fbc->offx);
+	sbus_writel(0, &fbc->offy);
+	sbus_writel(0, &fbc->clipminx);
+	sbus_writel(0, &fbc->clipminy);
+	sbus_writel(fb->type.fb_width - 1, &fbc->clipmaxx);
+	sbus_writel(fb->type.fb_height - 1, &fbc->clipmaxy);
+
 	/* Enable cursor in Brooktree DAC. */
-	fb->s.cg6.bt->addr = 0x06 << 24;
-	fb->s.cg6.bt->control |= 0x03 << 24;
+	sbus_writel(0x06 << 24, &fb->s.cg6.bt->addr);
+	tmp = sbus_readl(&fb->s.cg6.bt->control);
+	tmp |= 0x03 << 24;
+	sbus_writel(tmp, &fb->s.cg6.bt->control);
+
+	spin_unlock_irqrestore(&fb->lock, flags);
 }
 
 static void cg6_margins (struct fb_info_sbusfb *fb, struct display *p, int x_margin, int y_margin)
 {
-	p->screen_base += (y_margin - fb->y_margin) * p->line_length + (x_margin - fb->x_margin);
+	p->screen_base += (y_margin - fb->y_margin) *
+		p->line_length + (x_margin - fb->x_margin);
 }
 
 static int __init cg6_rasterimg (struct fb_info *info, int start)
@@ -595,7 +672,7 @@ static int __init cg6_rasterimg (struct fb_info *info, int start)
 	int i;
 	
 	do {
-		i = fbc->s;
+		i = sbus_readl(&fbc->s);
 	} while (i & 0x10000000);
 	return 0;
 }
@@ -608,7 +685,8 @@ char __init *cgsixfb_init(struct fb_info_sbusfb *fb)
 	struct fb_var_screeninfo *var = &fb->var;
 	struct display *disp = &fb->disp;
 	struct fbtype *type = &fb->type;
-	unsigned long phys = fb->sbdp->reg_addrs[0].phys_addr;
+	struct sbus_dev *sdev = fb->sbdp;
+	unsigned long phys = sdev->reg_addrs[0].phys_addr;
 	u32 conf;
 	char *p;
 	char *cardtype;
@@ -616,7 +694,8 @@ char __init *cgsixfb_init(struct fb_info_sbusfb *fb)
 	struct fb_ops *fbops;
 
 	fbops = kmalloc(sizeof(*fbops), GFP_KERNEL);
-	if (!fbops) return NULL;
+	if (fbops == NULL)
+		return NULL;
 	
 	*fbops = *fb->info.fbops;
 	fbops->fb_rasterimg = cg6_rasterimg;
@@ -633,20 +712,40 @@ char __init *cgsixfb_init(struct fb_info_sbusfb *fb)
 	var->accel_flags = FB_ACCELF_TEXT;
 	
 	disp->scrollmode = SCROLL_YREDRAW;
-	if (!disp->screen_base)
-		disp->screen_base = (char *)sparc_alloc_io(phys + CG6_RAM_OFFSET, 0, 
-			type->fb_size, "cgsix_ram", fb->iospace, 0);
+	if (!disp->screen_base) {
+		disp->screen_base = (char *)
+			sbus_ioremap(&sdev->resource[0], CG6_RAM_OFFSET,
+				     type->fb_size, "cgsix ram");
+	}
 	disp->screen_base += fix->line_length * fb->y_margin + fb->x_margin;
-	fb->s.cg6.fbc = (struct cg6_fbc *)sparc_alloc_io(phys + CG6_FBC_OFFSET, 0, 
-			4096, "cgsix_fbc", fb->iospace, 0);
-	fb->s.cg6.tec = (struct cg6_tec *)sparc_alloc_io(phys + CG6_TEC_OFFSET, 0, 
-			sizeof(struct cg6_tec), "cgsix_tec", fb->iospace, 0);
-	fb->s.cg6.thc = (struct cg6_thc *)sparc_alloc_io(phys + CG6_THC_OFFSET, 0, 
-				sizeof(struct cg6_thc), "cgsix_thc", fb->iospace, 0);
-	fb->s.cg6.bt = bt = (struct bt_regs *)sparc_alloc_io(phys + CG6_BROOKTREE_OFFSET, 0, 
-				sizeof(struct bt_regs), "cgsix_dac", fb->iospace, 0);
-	fb->s.cg6.fhc = (u32 *)sparc_alloc_io(phys + CG6_FHC_OFFSET, 0, 
-				sizeof(u32), "cgsix_fhc", fb->iospace, 0);
+	fb->s.cg6.fbc = (struct cg6_fbc *)
+		sbus_ioremap(&sdev->resource[0], CG6_FBC_OFFSET,
+			     4096, "cgsix fbc");
+	fb->s.cg6.tec = (struct cg6_tec *)
+		sbus_ioremap(&sdev->resource[0], CG6_TEC_OFFSET,
+			     sizeof(struct cg6_tec), "cgsix tec");
+	fb->s.cg6.thc = (struct cg6_thc *)
+		sbus_ioremap(&sdev->resource[0], CG6_THC_OFFSET,
+			     sizeof(struct cg6_thc), "cgsix thc");
+	fb->s.cg6.bt = bt = (struct bt_regs *)
+		sbus_ioremap(&sdev->resource[0], CG6_BROOKTREE_OFFSET,
+			     sizeof(struct bt_regs), "cgsix dac");
+	fb->s.cg6.fhc = (u32 *)
+		sbus_ioremap(&sdev->resource[0], CG6_FHC_OFFSET,
+			     sizeof(u32), "cgsix fhc");
+#if 0
+	prom_printf("CG6: RES[%016lx:%016lx:%016lx]\n",
+		    sdev->resource[0].start,
+		    sdev->resource[0].end,
+		    sdev->resource[0].flags);
+	prom_printf("CG6: fbc(%p) tec(%p) thc(%p) bt(%p) fhc(%p)\n",
+		    fb->s.cg6.fbc,
+		    fb->s.cg6.tec,
+		    fb->s.cg6.thc,
+		    fb->s.cg6.bt,
+		    fb->s.cg6.fhc);
+	prom_halt();
+#endif
 	fb->dispsw = cg6_dispsw;
 
 	fb->margins = cg6_margins;
@@ -664,16 +763,16 @@ char __init *cgsixfb_init(struct fb_info_sbusfb *fb)
 	fb->mmap_map = cg6_mmap_map;
 	
 	/* Initialize Brooktree DAC */
-	bt->addr = 0x04 << 24;         /* color planes */
-	bt->control = 0xff << 24;
-	bt->addr = 0x05 << 24;
-	bt->control = 0x00 << 24;
-	bt->addr = 0x06 << 24;         /* overlay plane */
-	bt->control = 0x73 << 24;
-	bt->addr = 0x07 << 24;
-	bt->control = 0x00 << 24;
+	sbus_writel(0x04 << 24, &bt->addr);         /* color planes */
+	sbus_writel(0xff << 24, &bt->control);
+	sbus_writel(0x05 << 24, &bt->addr);
+	sbus_writel(0x00 << 24, &bt->control);
+	sbus_writel(0x06 << 24, &bt->addr);         /* overlay plane */
+	sbus_writel(0x73 << 24, &bt->control);
+	sbus_writel(0x07 << 24, &bt->addr);
+	sbus_writel(0x00 << 24, &bt->control);
 	
-	conf = *fb->s.cg6.fhc;
+	conf = sbus_readl(fb->s.cg6.fhc);
 	switch(conf & CG6_FHC_CPU_MASK) {
 	case CG6_FHC_CPU_SPARC: p = "sparc"; break;
 	case CG6_FHC_CPU_68020: p = "68020"; break;
@@ -696,12 +795,14 @@ char __init *cgsixfb_init(struct fb_info_sbusfb *fb)
 	                                                                        
 	sprintf(idstring, 
 #ifdef __sparc_v9__
-		    "cgsix at %016lx TEC Rev %x CPU %s Rev %x [%s]", phys, 
+		    "cgsix at %016lx TEC Rev %x CPU %s Rev %x [%s]", phys,
 #else	
-		    "cgsix at %x.%08lx TEC Rev %x CPU %s Rev %x [%s]", fb->iospace, phys, 
+		    "cgsix at %x.%08lx TEC Rev %x CPU %s Rev %x [%s]",
+		    fb->iospace, phys, 
 #endif
-		    (fb->s.cg6.thc->thc_misc >> CG6_THC_MISC_REV_SHIFT) & CG6_THC_MISC_REV_MASK,
-		    p, conf >> CG6_FHC_REV_SHIFT & CG6_FHC_REV_MASK, cardtype);
+		    ((sbus_readl(&fb->s.cg6.thc->thc_misc) >> CG6_THC_MISC_REV_SHIFT) &
+		     CG6_THC_MISC_REV_MASK),
+		    p, (conf >> CG6_FHC_REV_SHIFT) & CG6_FHC_REV_MASK, cardtype);
 
 	sprintf(fb->info.modename, "CGsix [%s]", cardtype);
 	sprintf(fix->id, "CGsix [%s]", cardtype);

@@ -1,4 +1,4 @@
-/* $Id: misc.c,v 1.14 1999/06/25 11:00:53 davem Exp $
+/* $Id: misc.c,v 1.19 1999/12/15 17:51:25 jj Exp $
  * misc.c: Miscelaneous syscall emulation for Solaris
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -476,8 +476,8 @@ asmlinkage int solaris_gettimeofday(u32 tim)
 #define RLIMIT_SOL_VMEM		6
 
 struct rlimit32 {
-	s32	rlim_cur;
-	s32	rlim_max;
+	u32	rlim_cur;
+	u32	rlim_max;
 };
 
 asmlinkage int solaris_getrlimit(unsigned int resource, struct rlimit32 *rlim)
@@ -747,11 +747,7 @@ struct exec_domain solaris_exec_domain = {
 	1, 1,	/* PER_SVR4 personality */
 	solaris_to_linux_signals,
 	linux_to_solaris_signals,
-#ifdef MODULE
-	&__this_module,
-#else
-	NULL,
-#endif
+	THIS_MODULE,
 	NULL
 };
 

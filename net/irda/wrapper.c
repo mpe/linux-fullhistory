@@ -3,10 +3,10 @@
  * Filename:      wrapper.c
  * Version:       1.2
  * Description:   IrDA SIR async wrapper layer
- * Status:        Experimental.
+ * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Sat Oct 30 17:24:25 1999
+ * Modified at:   Sun Dec 12 13:46:40 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Modified at:   Fri May 28  3:11 CST 1999
  * Modified by:   Horst von Brand <vonbrand@sleipnir.valparaiso.cl>
@@ -86,10 +86,23 @@ int async_wrap_skb(struct sk_buff *skb, __u8 *tx_buff, int buffsize)
 	 *  additional XBOFS
 	 */
 	if (((struct irda_skb_cb *)(skb->cb))->magic != LAP_MAGIC) {
+		/* 
+		 * This will happen for all frames sent from user-space.
+		 * Nothing to worry about, but we set the default number of 
+		 * BOF's
+		 */
 		IRDA_DEBUG(1, __FUNCTION__ "(), wrong magic in skb!\n");
 		xbofs = 10;
 	} else
 		xbofs = ((struct irda_skb_cb *)(skb->cb))->xbofs;
+
+	IRDA_DEBUG(4, __FUNCTION__ "(), xbofs=%d\n", xbofs);
+
+	/* Check that we never use more than 115 + 48 xbofs */
+	if (xbofs > 163) {
+		IRDA_DEBUG(0, __FUNCTION__ "(), too many xbofs (%d)\n", xbofs);
+		xbofs = 163;
+	}
 
 	memset(tx_buff+n, XBOF, xbofs);
 	n += xbofs;
@@ -200,7 +213,7 @@ inline void async_unwrap_char(struct net_device *dev,
 /*
  * Function state_outside_frame (dev, rx_buff, byte)
  *
- *    
+ *    Not receiving any frame (or just bogus data)
  *
  */
 static void state_outside_frame(struct net_device *dev, 
@@ -219,6 +232,7 @@ static void state_outside_frame(struct net_device *dev,
 		irda_device_set_media_busy(dev, TRUE);
 		break;
 	default:
+		irda_device_set_media_busy(dev, TRUE);
 		break;
 	}
 }
@@ -249,13 +263,12 @@ static void state_begin_frame(struct net_device *dev,
 	case EOF:
 		/* Abort frame */
 		rx_buff->state = OUTSIDE_FRAME;
-
+		IRDA_DEBUG(1, __FUNCTION__ "(), abort frame\n");
 		stats->rx_errors++;
 		stats->rx_frame_errors++;
 		break;
 	default:
 		rx_buff->data[rx_buff->len++] = byte;
-		
 		rx_buff->fcs = irda_fcs(rx_buff->fcs, byte);
 		rx_buff->state = INSIDE_FRAME;
 		break;
@@ -265,7 +278,7 @@ static void state_begin_frame(struct net_device *dev,
 /*
  * Function state_link_escape (idev, byte)
  *
- *    
+ *    Found link escape character
  *
  */
 static void state_link_escape(struct net_device *dev, 
@@ -278,7 +291,7 @@ static void state_link_escape(struct net_device *dev,
 		irda_device_set_media_busy(dev, TRUE);
 		break;
 	case CE:
-		IRDA_DEBUG(4, "WARNING: State not defined\n");
+		WARNING(__FUNCTION__ "(), state not defined\n");
 		break;
 	case EOF: /* Abort frame */
 		rx_buff->state = OUTSIDE_FRAME;
@@ -294,8 +307,7 @@ static void state_link_escape(struct net_device *dev,
 			rx_buff->fcs = irda_fcs(rx_buff->fcs, byte);
 			rx_buff->state = INSIDE_FRAME;
 		} else {
-			IRDA_DEBUG(1, __FUNCTION__ 
-			      "(), Rx buffer overflow, aborting\n");
+			IRDA_DEBUG(1, __FUNCTION__ "(), rx buffer overflow\n");
 			rx_buff->state = OUTSIDE_FRAME;
 		}
 		break;
@@ -336,6 +348,7 @@ static void state_inside_frame(struct net_device *dev,
 			/* Wrong CRC, discard frame!  */
 			irda_device_set_media_busy(dev, TRUE); 
 
+			IRDA_DEBUG(1, __FUNCTION__ "(), crc error\n");
 			stats->rx_errors++;
 			stats->rx_crc_errors++;
 		}			

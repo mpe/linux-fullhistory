@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.39 1999/08/30 10:07:09 davem Exp $
+/* $Id: fault.c,v 1.40 1999/12/01 10:44:53 davem Exp $
  * arch/sparc64/mm/fault.c: Page fault handlers for the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -113,7 +113,9 @@ static inline u32 get_user_insn(unsigned long tpc)
 	ptep = pte_offset(pmdp, tpc);
 	if(!pte_present(*ptep))
 		return 0;
-	insn = *(unsigned int *)(pte_page(*ptep) + (tpc & ~PAGE_MASK));
+	insn = *(unsigned int *)
+		((unsigned long)__va(pte_pagenr(*ptep) << PAGE_SHIFT) +
+		 (tpc & ~PAGE_MASK));
 #else
 	register unsigned long pte asm("l1");
 

@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      ircomm_ttp.c
- * Version:       
+ * Version:       1.0
  * Description:   Interface between IrCOMM and IrTTP
- * Status:        Experimental.
+ * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Jun  6 20:48:27 1999
- * Modified at:   Sat Oct 30 12:55:36 1999
+ * Modified at:   Mon Dec 13 11:35:13 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -64,7 +64,7 @@ int ircomm_open_tsap(struct ircomm_cb *self)
 	self->tsap = irttp_open_tsap(LSAP_ANY, DEFAULT_INITIAL_CREDIT,
 				     &notify);
 	if (!self->tsap) {
-		IRDA_DEBUG(0,__FUNCTION__"failed to allocate tsap\n");
+		IRDA_DEBUG(0, __FUNCTION__"failed to allocate tsap\n");
 		return -1;
 	}
 	self->slsap_sel = self->tsap->stsap_sel;
@@ -95,8 +95,8 @@ int ircomm_ttp_connect_request(struct ircomm_cb *self,
 	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
 	ret = irttp_connect_request(self->tsap, info->dlsap_sel,
-				    info->saddr, info->daddr, 
-				    NULL, SAR_DISABLE, userdata); 
+				    info->saddr, info->daddr, NULL, 
+				    TTP_SAR_DISABLE, userdata); 
 	return ret;
 }	
 
@@ -112,7 +112,7 @@ int ircomm_ttp_connect_response(struct ircomm_cb *self, struct sk_buff *skb)
 
 	IRDA_DEBUG(4, __FUNCTION__"()\n");
 	
-	ret = irttp_connect_response(self->tsap, SAR_DISABLE, skb);
+	ret = irttp_connect_response(self->tsap, TTP_SAR_DISABLE, skb);
 
 	return ret;
 }
@@ -139,7 +139,7 @@ int ircomm_ttp_data_request(struct ircomm_cb *self, struct sk_buff *skb,
 	 * Insert clen field, currently we either send data only, or control
 	 * only frames, to make things easier and avoid queueing
 	 */
-	ASSERT(skb_headroom(skb) >= 1, return -1;);
+	ASSERT(skb_headroom(skb) >= IRCOMM_HEADER_SIZE, return -1;);
 	skb_push(skb, IRCOMM_HEADER_SIZE);
 
 	skb->data[0] = clen;
@@ -191,12 +191,13 @@ void ircomm_ttp_connect_confirm(void *instance, void *sap,
 	ASSERT(skb != NULL, return;);
 	ASSERT(qos != NULL, return;);
 
-	if (max_sdu_size != SAR_DISABLE) {
+	if (max_sdu_size != TTP_SAR_DISABLE) {
 		ERROR(__FUNCTION__ "(), SAR not allowed for IrCOMM!\n");
+		dev_kfree_skb(skb);
 		return;
 	}
 
-	info.max_data_size = irttp_get_max_seq_size(self->tsap)
+	info.max_data_size = irttp_get_max_seg_size(self->tsap)
 		- IRCOMM_HEADER_SIZE;
 	info.max_header_size = max_header_size + IRCOMM_HEADER_SIZE;
 	info.qos = qos;
@@ -227,12 +228,13 @@ void ircomm_ttp_connect_indication(void *instance, void *sap,
 	ASSERT(skb != NULL, return;);
 	ASSERT(qos != NULL, return;);
 
-	if (max_sdu_size != SAR_DISABLE) {
+	if (max_sdu_size != TTP_SAR_DISABLE) {
 		ERROR(__FUNCTION__ "(), SAR not allowed for IrCOMM!\n");
+		dev_kfree_skb(skb);
 		return;
 	}
 
-	info.max_data_size = irttp_get_max_seq_size(self->tsap)
+	info.max_data_size = irttp_get_max_seg_size(self->tsap)
 		- IRCOMM_HEADER_SIZE;
 	info.max_header_size = max_header_size + IRCOMM_HEADER_SIZE;
 	info.qos = qos;
@@ -270,7 +272,7 @@ void ircomm_ttp_disconnect_indication(void *instance, void *sap,
 	struct ircomm_cb *self = (struct ircomm_cb *) instance;
 	struct ircomm_info info;
 
-	IRDA_DEBUG(4, __FUNCTION__"()\n");
+	IRDA_DEBUG(2, __FUNCTION__"()\n");
 
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IRCOMM_MAGIC, return;);

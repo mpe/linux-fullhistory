@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Dec  9 21:13:12 1997
- * Modified at:   Fri Nov  5 10:46:51 1999
+ * Modified at:   Sun Nov 21 21:19:35 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  *  
  *     Copyright (c) 1997, 1999 Dag Brattli, All Rights Reserved.
@@ -49,6 +49,7 @@ struct irtty_cb {
 	magic_t magic;
 
 	struct net_device *netdev; /* Yes! we are some kind of netdevice */
+	struct irda_task *task;
 	struct net_device_stats stats;
 
 	struct tty_struct  *tty;

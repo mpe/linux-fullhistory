@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Aug 19 10:27:26 1997
- * Modified at:   Mon Aug 23 09:38:46 1999
+ * Modified at:   Thu Dec  9 15:50:09 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997-1999 Dag Brattli <dagb@cs.uit.no>,
@@ -116,8 +116,6 @@ void irlap_send_snrm_frame(struct irlap_cb *, struct qos_info *);
 void irlap_send_test_frame(struct irlap_cb *self, __u32 daddr, 
 			   struct sk_buff *cmd);
 void irlap_send_ua_response_frame(struct irlap_cb *, struct qos_info *);
-void irlap_send_ui_frame(struct irlap_cb *self, struct sk_buff *skb,
-			 int command);
 void irlap_send_dm_frame(struct irlap_cb *);
 void irlap_send_disc_frame(struct irlap_cb *);
 void irlap_send_rr_frame(struct irlap_cb *, int command);
@@ -129,7 +127,8 @@ void irlap_send_data_secondary_final(struct irlap_cb *, struct sk_buff *);
 void irlap_resend_rejected_frames(struct irlap_cb *, int command);
 
 void irlap_send_i_frame(struct irlap_cb *, struct sk_buff *, int command);
-void irlap_send_ui_frame(struct irlap_cb *, struct sk_buff *, int command);
+void irlap_send_ui_frame(struct irlap_cb *self, struct sk_buff *skb,
+			 __u8 caddr, int command);
 
 extern int irlap_insert_qos_negotiation_params(struct irlap_cb *self, 
 					       struct sk_buff *skb);

@@ -1,4 +1,5 @@
-/* sunbmac.h: Defines for the Sun "Big MAC" 100baseT ethernet cards.
+/* $Id: sunbmac.h,v 1.5 1999/09/21 14:36:26 davem Exp $
+ * sunbmac.h: Defines for the Sun "Big MAC" 100baseT ethernet cards.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
  */
@@ -7,14 +8,13 @@
 #define _SUNBMAC_H
 
 /* QEC global registers. */
-struct qe_globreg {
-	volatile unsigned int ctrl;      /* Control                  */
-	volatile unsigned int stat;      /* Status                   */
-	volatile unsigned int psize;     /* Packet Size              */
-	volatile unsigned int msize;     /* Local-mem size (64K)     */
-	volatile unsigned int rsize;     /* Receive partition size   */
-	volatile unsigned int tsize;     /* Transmit partition size  */
-};
+#define GLOB_CTRL	0x00UL	/* Control                  */
+#define GLOB_STAT	0x04UL	/* Status                   */
+#define GLOB_PSIZE	0x08UL	/* Packet Size              */
+#define GLOB_MSIZE	0x0cUL	/* Local-mem size (64K)     */
+#define GLOB_RSIZE	0x10UL	/* Receive partition size   */
+#define GLOB_TSIZE	0x14UL	/* Transmit partition size  */
+#define GLOB_REG_SIZE	0x18UL
 
 #define GLOB_CTRL_MMODE       0x40000000 /* MACE qec mode            */
 #define GLOB_CTRL_BMODE       0x10000000 /* BigMAC qec mode          */
@@ -36,21 +36,20 @@ struct qe_globreg {
 #define GLOB_PSIZE_8192       0x11       /* 8k packet size           */
 
 /* QEC BigMAC channel registers. */
-struct qe_creg {
-	volatile unsigned int ctrl;       /* Control                     */
-	volatile unsigned int stat;       /* Status                      */
-	volatile unsigned int rxds;       /* RX descriptor ring ptr      */
-	volatile unsigned int txds;       /* TX descriptor ring ptr      */
-	volatile unsigned int rimask;     /* RX Interrupt Mask           */
-	volatile unsigned int timask;     /* TX Interrupt Mask           */
-	volatile unsigned int qmask;      /* QEC Error Interrupt Mask    */
-	volatile unsigned int bmask;      /* BigMAC Error Interrupt Mask */
-	volatile unsigned int rxwbufptr;  /* Local memory rx write ptr   */
-	volatile unsigned int rxrbufptr;  /* Local memory rx read ptr    */
-	volatile unsigned int txwbufptr;  /* Local memory tx write ptr   */
-	volatile unsigned int txrbufptr;  /* Local memory tx read ptr    */
-	volatile unsigned int ccnt;       /* Collision Counter           */
-};
+#define CREG_CTRL	0x00UL	/* Control                   */
+#define CREG_STAT	0x04UL	/* Status                    */
+#define CREG_RXDS	0x08UL	/* RX descriptor ring ptr    */
+#define CREG_TXDS	0x0cUL	/* TX descriptor ring ptr    */
+#define CREG_RIMASK	0x10UL	/* RX Interrupt Mask         */
+#define CREG_TIMASK	0x14UL	/* TX Interrupt Mask         */
+#define CREG_QMASK	0x18UL	/* QEC Error Interrupt Mask  */
+#define CREG_BMASK	0x1cUL	/* BigMAC Error Interrupt Mask*/
+#define CREG_RXWBUFPTR	0x20UL	/* Local memory rx write ptr */
+#define CREG_RXRBUFPTR	0x24UL	/* Local memory rx read ptr  */
+#define CREG_TXWBUFPTR	0x28UL	/* Local memory tx write ptr */
+#define CREG_TXRBUFPTR	0x2cUL	/* Local memory tx read ptr  */
+#define CREG_CCNT	0x30UL	/* Collision Counter         */
+#define CREG_REG_SIZE	0x34UL
 
 #define CREG_CTRL_TWAKEUP     0x00000001  /* Transmitter Wakeup, 'go'. */
 
@@ -82,56 +81,56 @@ struct qe_creg {
 #define CREG_QMASK_RXPERR     0x00000002  /* RX parity error           */
 #define CREG_QMASK_RXSERR     0x00000001  /* RX sbus error ack         */
 
-struct BIG_MAC_regs {
-	volatile unsigned int xif_cfg;		/* XIF config register                */
-	volatile unsigned int _unused[63];	/* Reserved...                        */
-	volatile unsigned int status;		/* Status register, clear on read     */
-	volatile unsigned int imask;		/* Interrupt mask register            */
-	volatile unsigned int _unused2[64];	/* Reserved...                        */
-	volatile unsigned int tx_swreset;	/* Transmitter software reset         */
-	volatile unsigned int tx_cfg;           /* Transmitter config register        */
-	volatile unsigned int ipkt_gap1;	/* Inter-packet gap 1                 */
-	volatile unsigned int ipkt_gap2;	/* Inter-packet gap 2                 */
-	volatile unsigned int attempt_limit;	/* Transmit attempt limit             */
-	volatile unsigned int stime;		/* Transmit slot time                 */
-	volatile unsigned int preamble_len;	/* Size of transmit preamble          */
-	volatile unsigned int preamble_pattern;	/* Pattern for transmit preamble      */
-	volatile unsigned int tx_sframe_delim;	/* Transmit delimiter                 */
-	volatile unsigned int jsize;		/* Toe jam...                         */
-	volatile unsigned int tx_pkt_max;	/* Transmit max pkt size              */
-	volatile unsigned int tx_pkt_min;	/* Transmit min pkt size              */
-	volatile unsigned int peak_attempt;	/* Count of transmit peak attempts    */
-	volatile unsigned int dt_ctr;		/* Transmit defer timer               */
-	volatile unsigned int nc_ctr;           /* Transmit normal-collision counter  */
-	volatile unsigned int fc_ctr;           /* Transmit first-collision counter   */
-	volatile unsigned int ex_ctr;           /* Transmit excess-collision counter  */
-	volatile unsigned int lt_ctr;           /* Transmit late-collision counter    */
-	volatile unsigned int rand_seed;        /* Transmit random number seed        */
-	volatile unsigned int tx_smachine;      /* Transmit state machine             */
-	volatile unsigned int _unused3[44];     /* Reserved                           */
-	volatile unsigned int rx_swreset;       /* Receiver software reset            */
-	volatile unsigned int rx_cfg;           /* Receiver config register           */
-	volatile unsigned int rx_pkt_max;       /* Receive max pkt size               */
-	volatile unsigned int rx_pkt_min;       /* Receive min pkt size               */
-	volatile unsigned int mac_addr2;        /* Ether address register 2           */
-	volatile unsigned int mac_addr1;        /* Ether address register 1           */
-	volatile unsigned int mac_addr0;        /* Ether address register 0           */
-	volatile unsigned int fr_ctr;           /* Receive frame receive counter      */
-	volatile unsigned int gle_ctr;          /* Receive giant-length error counter */
-	volatile unsigned int unale_ctr;        /* Receive unaligned error counter    */
-	volatile unsigned int rcrce_ctr;        /* Receive CRC error counter          */
-	volatile unsigned int rx_smachine;      /* Receiver state machine             */
-	volatile unsigned int rx_cvalid;        /* Receiver code violation            */
-	volatile unsigned int _unused4;         /* Reserved...                        */
-	volatile unsigned int htable3;          /* Hash table 3                       */
-	volatile unsigned int htable2;          /* Hash table 2                       */
-	volatile unsigned int htable1;          /* Hash table 1                       */
-	volatile unsigned int htable0;          /* Hash table 0                       */
-	volatile unsigned int afilter2;         /* Address filter 2                   */
-	volatile unsigned int afilter1;         /* Address filter 1                   */
-	volatile unsigned int afilter0;         /* Address filter 0                   */
-	volatile unsigned int afilter_mask;     /* Address filter mask                */
-};
+/* BIGMAC core registers */
+#define BMAC_XIFCFG	0x000UL	/* XIF config register                */
+	/* 0x004-->0x0fc, reserved */
+#define BMAC_STATUS	0x100UL	/* Status register, clear on read     */
+#define BMAC_IMASK	0x104UL	/* Interrupt mask register            */
+	/* 0x108-->0x204, reserved */
+#define BMAC_TXSWRESET	0x208UL	/* Transmitter software reset         */
+#define BMAC_TXCFG	0x20cUL	/* Transmitter config register        */
+#define BMAC_IGAP1	0x210UL	/* Inter-packet gap 1                 */
+#define BMAC_IGAP2	0x214UL	/* Inter-packet gap 2                 */
+#define BMAC_ALIMIT	0x218UL	/* Transmit attempt limit             */
+#define BMAC_STIME	0x21cUL	/* Transmit slot time                 */
+#define BMAC_PLEN	0x220UL	/* Size of transmit preamble          */
+#define BMAC_PPAT	0x224UL	/* Pattern for transmit preamble      */
+#define BMAC_TXDELIM	0x228UL	/* Transmit delimiter                 */
+#define BMAC_JSIZE	0x22cUL	/* Toe jam...                         */
+#define BMAC_TXPMAX	0x230UL	/* Transmit max pkt size              */
+#define BMAC_TXPMIN	0x234UL	/* Transmit min pkt size              */
+#define BMAC_PATTEMPT	0x238UL	/* Count of transmit peak attempts    */
+#define BMAC_DTCTR	0x23cUL	/* Transmit defer timer               */
+#define BMAC_NCCTR	0x240UL	/* Transmit normal-collision counter  */
+#define BMAC_FCCTR	0x244UL	/* Transmit first-collision counter   */
+#define BMAC_EXCTR	0x248UL	/* Transmit excess-collision counter  */
+#define BMAC_LTCTR	0x24cUL	/* Transmit late-collision counter    */
+#define BMAC_RSEED	0x250UL	/* Transmit random number seed        */
+#define BMAC_TXSMACHINE	0x254UL /* Transmit state machine             */
+	/* 0x258-->0x304, reserved */
+#define BMAC_RXSWRESET	0x308UL	/* Receiver software reset            */
+#define BMAC_RXCFG	0x30cUL	/* Receiver config register           */
+#define BMAC_RXPMAX	0x310UL	/* Receive max pkt size               */
+#define BMAC_RXPMIN	0x314UL	/* Receive min pkt size               */
+#define BMAC_MACADDR2	0x318UL	/* Ether address register 2           */
+#define BMAC_MACADDR1	0x31cUL	/* Ether address register 1           */
+#define BMAC_MACADDR0	0x320UL	/* Ether address register 0           */
+#define BMAC_FRCTR	0x324UL	/* Receive frame receive counter      */
+#define BMAC_GLECTR	0x328UL	/* Receive giant-length error counter */
+#define BMAC_UNALECTR	0x32cUL	/* Receive unaligned error counter    */
+#define BMAC_RCRCECTR	0x330UL	/* Receive CRC error counter          */
+#define BMAC_RXSMACHINE	0x334UL	/* Receiver state machine             */
+#define BMAC_RXCVALID	0x338UL	/* Receiver code violation            */
+	/* 0x33c, reserved */
+#define BMAC_HTABLE3	0x340UL	/* Hash table 3                       */
+#define BMAC_HTABLE2	0x344UL	/* Hash table 2                       */
+#define BMAC_HTABLE1	0x348UL	/* Hash table 1                       */
+#define BMAC_HTABLE0	0x34cUL	/* Hash table 0                       */
+#define BMAC_AFILTER2	0x350UL	/* Address filter 2                   */
+#define BMAC_AFILTER1	0x354UL	/* Address filter 1                   */
+#define BMAC_AFILTER0	0x358UL	/* Address filter 0                   */
+#define BMAC_AFMASK	0x35cUL	/* Address filter mask                */
+#define BMAC_REG_SIZE	0x360UL
 
 /* BigMac XIF config register. */
 #define BIGMAC_XCFG_ODENABLE   0x00000001 /* Output driver enable                     */
@@ -197,10 +196,9 @@ struct BIG_MAC_regs {
 /* The BigMAC PHY transceiver.  Not nearly as sophisticated as the happy meal
  * one.  But it does have the "bit banger", oh baby.
  */
-struct bmac_tcvr {
-	unsigned int	tcvr_pal;
-	unsigned int    mgmt_pal;
-};
+#define TCVR_TPAL	0x00UL
+#define TCVR_MPAL	0x04UL
+#define TCVR_REG_SIZE	0x08UL
 
 /* Frame commands. */
 #define FRAME_WRITE           0x50020000
@@ -244,8 +242,8 @@ struct bmac_tcvr {
 
 /* Ring descriptors and such, same as Quad Ethernet. */
 struct be_rxd {
-	unsigned int rx_flags;
-	unsigned int rx_addr;
+	u32 rx_flags;
+	u32 rx_addr;
 };
 
 #define RXD_OWN      0x80000000 /* Ownership.      */
@@ -253,8 +251,8 @@ struct be_rxd {
 #define RXD_LENGTH   0x000007ff /* Packet Length.  */
 
 struct be_txd {
-	unsigned int tx_flags;
-	unsigned int tx_addr;
+	u32 tx_flags;
+	u32 tx_addr;
 };
 
 #define TXD_OWN      0x80000000 /* Ownership.      */
@@ -280,13 +278,7 @@ struct be_txd {
 			    (bp)->tx_old - (bp)->tx_new - 1)
 
 
-#define SUN4C_TX_BUFFS_AVAIL(bp)                                    \
-        (((bp)->tx_old <= (bp)->tx_new) ?                           \
-	  (bp)->tx_old + (SUN4C_TX_RING_SIZE - 1) - (bp)->tx_new :  \
-	  (bp)->tx_old - (bp)->tx_new - (TX_RING_SIZE - SUN4C_TX_RING_SIZE))
-
-
-#define RX_COPY_THRESHOLD  128
+#define RX_COPY_THRESHOLD  256
 #define RX_BUF_ALLOC_SIZE  (ETH_FRAME_LEN + (64 * 3))
 
 struct bmac_init_block {
@@ -296,22 +288,6 @@ struct bmac_init_block {
 
 #define bib_offset(mem, elem) \
 ((__u32)((unsigned long)(&(((struct bmac_init_block *)0)->mem[elem]))))
-
-#define SUN4C_PKT_BUF_SZ	1546
-#define SUN4C_RX_BUFF_SIZE	SUN4C_PKT_BUF_SZ
-#define SUN4C_TX_BUFF_SIZE	SUN4C_PKT_BUF_SZ
-
-#define SUN4C_RX_RING_SIZE	16
-#define SUN4C_TX_RING_SIZE	16
-
-struct bigmac_buffers {
-	char	tx_buf[SUN4C_TX_RING_SIZE][SUN4C_TX_BUFF_SIZE];
-	char	pad[2];		/* Align rx_buf for copy_and_sum(). */
-	char	rx_buf[SUN4C_RX_RING_SIZE][SUN4C_RX_BUFF_SIZE];
-};
-
-#define bbuf_offset(mem, elem) \
-((__u32)((unsigned long)(&(((struct bigmac_buffers *)0)->mem[elem][0]))))
 
 /* Now software state stuff. */
 enum bigmac_transceiver {
@@ -327,20 +303,17 @@ enum bigmac_timer_state {
 };
 
 struct bigmac {
-	struct qe_globreg	*gregs;		/* QEC Global Registers               */
-	struct qe_creg		*creg;		/* QEC BigMAC Channel Registers       */
-	struct BIG_MAC_regs	*bregs;         /* BigMAC Registers                   */
-	struct bmac_tcvr	*tregs;         /* BigMAC Transceiver                 */
-	struct bmac_init_block	*bmac_block;	/* RX and TX descriptors              */
-	__u32			 bblock_dvma;	/* RX and TX descriptors              */
+	unsigned long	gregs;	/* QEC Global Registers               */
+	unsigned long	creg;	/* QEC BigMAC Channel Registers       */
+	unsigned long	bregs;	/* BigMAC Registers                   */
+	unsigned long	tregs;	/* BigMAC Transceiver                 */
+	struct bmac_init_block	*bmac_block;	/* RX and TX descriptors */
+	__u32			 bblock_dvma;	/* RX and TX descriptors */
 
 	struct sk_buff		*rx_skbs[RX_RING_SIZE];
 	struct sk_buff		*tx_skbs[TX_RING_SIZE];
 
 	int rx_new, tx_new, rx_old, tx_old;
-
-	struct bigmac_buffers	*sun4c_buffers;
-	__u32			 s4c_buf_dvma;
 
 	int board_rev;				/* BigMAC board revision.             */
 
@@ -353,11 +326,11 @@ struct bigmac {
 	enum bigmac_timer_state	timer_state;
 	unsigned int		timer_ticks;
 
-	struct enet_statistics		enet_stats;
-	struct linux_sbus_device	*qec_sbus_dev;
-	struct linux_sbus_device	*bigmac_sbus_dev;
-	struct net_device			*dev;
-	struct bigmac			*next_module;
+	struct enet_statistics	enet_stats;
+	struct sbus_dev		*qec_sdev;
+	struct sbus_dev		*bigmac_sdev;
+	struct net_device	*dev;
+	struct bigmac		*next_module;
 };
 
 /* We use this to acquire receive skb's that we can DMA directly into. */

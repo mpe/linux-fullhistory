@@ -1,8 +1,9 @@
-/*
+/* $Id: cs4231.h,v 1.13 1999/09/21 14:37:27 davem Exp $
  * drivers/sbus/audio/cs4231.h
  *
  * Copyright (C) 1996 Thomas K. Dyas (tdyas@noc.rutgers.edu)
  * Copyright (C) 1997 Derrick J. Brashear (shadow@dementia.org)
+ * Copyright (C) 1999 David S. Miller (davem@redhat.com)
  */
 
 #ifndef _CS4231_H_
@@ -11,78 +12,78 @@
 #include <linux/types.h>
 
 /* According to the CS4231A data provided on CS web site and sun's includes */
+#define IAR	0x00UL	/* Index Address Register */
+#define IDR	0x04UL	/* Index Data Register */
+#define STAT	0x08UL	/* Status Register */
+#define PIOD	0x0cUL	/* PIO Data Register */
+#define APCCSR	0x10UL	/* APC DMA CSR */
+#define APCCVA	0x20UL	/* APC Capture DMA Address */
+#define APCCC	0x24UL	/* APC Capture Count */
+#define APCCNVA	0x28UL	/* APC Capture DMA Next Address */
+#define APCCNC	0x2cUL	/* APC Capture Next Count */
+#define APCPVA	0x30UL	/* APC Play DMA Address */
+#define APCPC	0x34UL	/* APC Play Count */
+#define APCPNVA	0x38UL	/* APC Play DMA Next Address */
+#define APCPNC	0x3cUL	/* APC Play Next Count */
 
-struct cs4231_regs {
-  __volatile__ __u8 iar;            /* Index Address Register */
-  __volatile__ __u8 pad0[3];         
-  __volatile__ __u8 idr;            /* Indexed Data Register */
-  __volatile__ __u8 pad1[3];        
-  __volatile__ __u8 statr;          /* Status Register */
-  __volatile__ __u8 pad2[3];        
-  __volatile__ __u8 piodr;          /* PIO Data Register */
-  __volatile__ __u8 pad3[3];        
-  __volatile__ __u32 dmacsr;         /* APC CSR */
-  __volatile__ __u32 dmapad[3];        
-  __volatile__ __u32 dmacva;         /* Capture Virtual Address */
-  __volatile__ __u32 dmacc;          /* Capture Count */
-  __volatile__ __u32 dmacnva;        /* Capture Next Virtual Address */
-  __volatile__ __u32 dmacnc;         /* Capture Next Count */
-  __volatile__ __u32 dmapva;         /* Playback Virtual Address */
-  __volatile__ __u32 dmapc;          /* Playback Count */
-  __volatile__ __u32 dmapnva;        /* Playback Next Virtual Address */
-  __volatile__ __u32 dmapnc;         /* Playback Next Count */
-};
+/* EBUS DMA Registers */
+#define EBDMA_CSR	0x00UL	/* Control/Status */
+#define EBDMA_ADDR	0x04UL	/* DMA Address */
+#define EBDMA_COUNT	0x08UL	/* DMA Count */
 
 /* Our structure for each chip */
-
 struct cs4231_chip {
-  struct cs4231_regs *regs;
-  struct linux_ebus_dma *eb2c;
-  struct linux_ebus_dma *eb2p;
-  struct audio_info perchip_info;
-  unsigned int playlen, reclen;
-  int irq, irq2, nirqs;
-  unsigned long regs_size;
+	unsigned long regs;
+	unsigned long eb2c;
+	unsigned long eb2p;
+	struct audio_info perchip_info;
+	unsigned int playlen, reclen;
+	int irq, irq2, nirqs;
+	unsigned long regs_size;
   
-  /* Keep track of various info */
-  volatile unsigned int status;
+	/* Keep track of various info */
+	volatile unsigned int status;
   
-  /* Current buffer that the driver is playing. */
-  volatile __u8 * output_ptr;
-  volatile unsigned long output_size;
-  volatile __u32 output_dma_handle, output_next_dma_handle;
-  volatile unsigned long output_dma_size, output_next_dma_size;
+	/* Current buffer that the driver is playing. */
+	volatile __u8 * output_ptr;
+	volatile __u32 output_size;
+	volatile __u32 output_dma_handle, output_next_dma_handle;
+	volatile __u32 output_dma_size, output_next_dma_size;
 
-  /* Current record buffer. */
-  volatile __u8 * input_ptr;
-  volatile unsigned long input_size;
-  volatile __u32 input_dma_handle, input_next_dma_handle;
-  volatile unsigned long input_dma_size, input_next_dma_size;
+	/* Current record buffer. */
+	volatile __u8 * input_ptr;
+	volatile __u32 input_size;
+	volatile __u32 input_dma_handle, input_next_dma_handle;
+	volatile __u32 input_dma_size, input_next_dma_size;
 
-  /* Number of buffers in the pipe. */
-  volatile unsigned long playing_count;
-  volatile unsigned long recording_count;
+	/* Number of buffers in the pipe. */
+	volatile __u32 playing_count;
+	volatile __u32 recording_count;
 };
 
 #ifdef EB4231_SUPPORT
-#define CS4231_READ32(__C, __REG) \
-	(((__C)->status & CS_STATUS_IS_EBUS) ? readl((unsigned long)(__REG)) : (*(__REG)))
+#define CS4231_READ32(__C, __REG)		\
+	(((__C)->status & CS_STATUS_IS_EBUS) ?	\
+	readl((__REG)) :			\
+	sbus_readl((__REG)))
 #define CS4231_READ8(__C, __REG) \
-	(((__C)->status & CS_STATUS_IS_EBUS) ? readb((unsigned long)(__REG)) : (*(__REG)))
-#define CS4231_WRITE32(__C, __REG, __VAL) \
-	(((__C)->status & CS_STATUS_IS_EBUS) ? \
-         writel((__VAL), (unsigned long)(__REG)) : \
-         (*(__REG) = (__VAL)))
-#define CS4231_WRITE8(__C, __REG, __VAL) \
-	(((__C)->status & CS_STATUS_IS_EBUS) ? \
-         writeb((__VAL), (unsigned long)(__REG)) : \
-         (*(__REG) = (__VAL)))
+	(((__C)->status & CS_STATUS_IS_EBUS) ?	\
+	readb((__REG)) :			\
+	sbus_readb((__REG)))
+#define CS4231_WRITE32(__C, __REG, __VAL)	\
+	(((__C)->status & CS_STATUS_IS_EBUS) ?	\
+         writel((__VAL), (__REG)) :		\
+         sbus_writel((__VAL), (__REG)))
+#define CS4231_WRITE8(__C, __REG, __VAL)	\
+	(((__C)->status & CS_STATUS_IS_EBUS) ?	\
+         writeb((__VAL), (__REG)) :		\
+         sbus_writeb((__VAL), (__REG)))
 #else
 /* We can assume all is SBUS in this case. */
-#define CS4231_READ32(__C, __REG) (*(__REG))
-#define CS4231_READ8(__C, __REG) (*(__REG))
-#define CS4231_WRITE32(__C, __REG, __VAL) (*(__REG) = (__VAL))
-#define CS4231_WRITE8(__C, __REG, __VAL) (*(__REG) = (__VAL))
+#define CS4231_READ32(__C, __REG) sbus_readl((__REG))
+#define CS4231_READ8(__C, __REG) sbus_readb((__REG))
+#define CS4231_WRITE32(__C, __REG, __VAL) sbus_writel((__VAL), (__REG))
+#define CS4231_WRITE8(__C, __REG, __VAL) sbus_writeb((__VAL), (__REG))
 #endif
 
 /* Local status bits */
@@ -270,18 +271,26 @@ struct cs4231_chip {
 #define APC_CDMA_READY  0x04     /* Capture DMA Go */
 #define APC_CHIP_RESET  0x01     /* Reset the chip */
 
-#define APC_INIT_SETUP  (APC_CDMA_READY | APC_PDMA_READY | APC_XINT_ENA | APC_XINT_PLAY | APC_XINT_GENL | APC_INT_PENDING | APC_PLAY_INT | APC_CAPT_INT | APC_GENL_INT) 
+#define APC_INIT_SETUP  (APC_CDMA_READY | APC_PDMA_READY | APC_XINT_ENA | \
+			 APC_XINT_PLAY | APC_XINT_GENL | APC_INT_PENDING | \
+			 APC_PLAY_INT | APC_CAPT_INT | APC_GENL_INT) 
 
-#define APC_PLAY_SETUP  (APC_GENL_INT | APC_PLAY_INT | APC_XINT_ENA | APC_XINT_PLAY | APC_XINT_EMPT | APC_XINT_GENL | APC_XINT_PENA | APC_PDMA_READY)
+#define APC_PLAY_SETUP  (APC_GENL_INT | APC_PLAY_INT | APC_XINT_ENA | \
+			 APC_XINT_PLAY | APC_XINT_EMPT | APC_XINT_GENL | \
+			 APC_XINT_PENA | APC_PDMA_READY)
 
-#define APC_CAPT_SETUP  (APC_GENL_INT | APC_CAPT_INT | APC_XINT_ENA | APC_XINT_CAPT | APC_XINT_CEMP | APC_XINT_GENL | APC_CDMA_READY)
+#define APC_CAPT_SETUP  (APC_GENL_INT | APC_CAPT_INT | APC_XINT_ENA | \
+			 APC_XINT_CAPT | APC_XINT_CEMP | APC_XINT_GENL | \
+			 APC_CDMA_READY)
 
 /* Following are EB2 CSR register definitions for the Sparc */
 
 /* asm/ebus.h has the base settings */
 
-#define EB2_PLAY_SETUP (EBUS_DCSR_BURST_SZ_8|EBUS_DCSR_INT_EN|EBUS_DCSR_EN_DMA|EBUS_DCSR_EN_CNT|EBUS_DCSR_TC)
-#define EB2_CAPT_SETUP (EBUS_DCSR_BURST_SZ_8|EBUS_DCSR_INT_EN|EBUS_DCSR_EN_DMA|EBUS_DCSR_EN_CNT|EBUS_DCSR_TC|EBUS_DCSR_WRITE)
+#define EB2_PLAY_SETUP (EBUS_DCSR_BURST_SZ_8 | EBUS_DCSR_INT_EN | EBUS_DCSR_EN_DMA | \
+			EBUS_DCSR_EN_CNT | EBUS_DCSR_TC)
+#define EB2_CAPT_SETUP (EBUS_DCSR_BURST_SZ_8 | EBUS_DCSR_INT_EN | EBUS_DCSR_EN_DMA| \
+			EBUS_DCSR_EN_CNT | EBUS_DCSR_TC | EBUS_DCSR_WRITE)
 
 #define CS4231_MIN_ATEN     (0)
 #define CS4231_MAX_ATEN     (31)
@@ -301,4 +310,4 @@ struct cs4231_chip {
 
 #define CS4231_RATE   (8000)                /* default sample rate */
 
-#endif
+#endif /* _CS4231_H_ */

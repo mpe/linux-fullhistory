@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.107 1999/08/31 19:25:29 davem Exp $
+/* $Id: entry.S,v 1.110 1999/11/19 05:52:50 davem Exp $
  * arch/sparc64/kernel/entry.S:  Sparc64 trap low-level entry points.
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -214,8 +214,8 @@ do_fptrap:
 	.align		32
 	.globl		do_ivec
 do_ivec:
-	wr		%g0, ASI_UDB_INTR_R, %asi
-	ldxa		[%g0 + 0x40] %asi, %g3
+	mov		0x40, %g3
+	ldxa		[%g3 + %g0] ASI_UDB_INTR_R, %g3
 	sethi		%hi(KERNBASE), %g4
 	cmp		%g3, %g4
 	bgeu,pn		%xcc, do_ivec_xcall
@@ -234,22 +234,25 @@ do_ivec:
 
 	sllx		%g2, %g4, %g2
 	sllx		%g4, 2, %g4
-	lduw		[%g1 + %g4], %g5	/* g5 = irq_work(cpu, pil) */
+	lduw		[%g6 + %g4], %g5	/* g5 = irq_work(cpu, pil) */
 	stw		%g5, [%g3 + 0x00]	/* bucket->irq_chain = g5 */
-	stw		%g3, [%g1 + %g4]	/* irq_work(cpu, pil) = bucket */
+	stw		%g3, [%g6 + %g4]	/* irq_work(cpu, pil) = bucket */
 	wr		%g2, 0x0, %set_softint
 	retry
 do_ivec_xcall:
-	ldxa		[%g0 + 0x50] %asi, %g6
+	mov		0x50, %g1
 
+	ldxa		[%g1 + %g0] ASI_UDB_INTR_R, %g1
 	srl		%g3, 0, %g3
-	ldxa		[%g0 + 0x60] %asi, %g7
+	mov		0x60, %g7
+	ldxa		[%g7 + %g0] ASI_UDB_INTR_R, %g7
 	stxa		%g0, [%g0] ASI_INTR_RECEIVE
 	membar		#Sync
 	jmpl		%g3, %g0
 	 nop
+
 do_ivec_spurious:
-	stw		%g3, [%g1 + 0x00]	/* irq_work(cpu, 0) = bucket */
+	stw		%g3, [%g6 + 0x00]	/* irq_work(cpu, 0) = bucket */
 	rdpr		%pstate, %g5
 
 	wrpr		%g5, PSTATE_IG | PSTATE_AG, %pstate
@@ -260,6 +263,76 @@ do_ivec_spurious:
 	 add		%sp, STACK_BIAS + REGWIN_SZ, %o0
 	ba,pt		%xcc, rtrap
 	 clr		%l6
+
+	.globl		save_alternate_globals
+save_alternate_globals: /* %o0 = save_area */
+	rdpr		%pstate, %o5
+	andn		%o5, PSTATE_IE, %o1
+	wrpr		%o1, PSTATE_AG, %pstate
+	stx		%g0, [%o0 + 0x00]
+	stx		%g1, [%o0 + 0x08]
+	stx		%g2, [%o0 + 0x10]
+	stx		%g3, [%o0 + 0x18]
+	stx		%g4, [%o0 + 0x20]
+	stx		%g5, [%o0 + 0x28]
+	stx		%g6, [%o0 + 0x30]
+	stx		%g7, [%o0 + 0x38]
+	wrpr		%o1, PSTATE_IG, %pstate
+	stx		%g0, [%o0 + 0x40]
+	stx		%g1, [%o0 + 0x48]
+	stx		%g2, [%o0 + 0x50]
+	stx		%g3, [%o0 + 0x58]
+	stx		%g4, [%o0 + 0x60]
+	stx		%g5, [%o0 + 0x68]
+	stx		%g6, [%o0 + 0x70]
+	stx		%g7, [%o0 + 0x78]
+	wrpr		%o1, PSTATE_MG, %pstate
+	stx		%g0, [%o0 + 0x80]
+	stx		%g1, [%o0 + 0x88]
+	stx		%g2, [%o0 + 0x90]
+	stx		%g3, [%o0 + 0x98]
+	stx		%g4, [%o0 + 0xa0]
+	stx		%g5, [%o0 + 0xa8]
+	stx		%g6, [%o0 + 0xb0]
+	stx		%g7, [%o0 + 0xb8]
+	wrpr		%o5, 0x0, %pstate
+	retl
+	 nop
+
+	.globl		restore_alternate_globals
+restore_alternate_globals: /* %o0 = save_area */
+	rdpr		%pstate, %o5
+	andn		%o5, PSTATE_IE, %o1
+	wrpr		%o1, PSTATE_AG, %pstate
+	ldx		[%o0 + 0x00], %g0
+	ldx		[%o0 + 0x08], %g1
+	ldx		[%o0 + 0x10], %g2
+	ldx		[%o0 + 0x18], %g3
+	ldx		[%o0 + 0x20], %g4
+	ldx		[%o0 + 0x28], %g5
+	ldx		[%o0 + 0x30], %g6
+	ldx		[%o0 + 0x38], %g7
+	wrpr		%o1, PSTATE_IG, %pstate
+	ldx		[%o0 + 0x40], %g0
+	ldx		[%o0 + 0x48], %g1
+	ldx		[%o0 + 0x50], %g2
+	ldx		[%o0 + 0x58], %g3
+	ldx		[%o0 + 0x60], %g4
+	ldx		[%o0 + 0x68], %g5
+	ldx		[%o0 + 0x70], %g6
+	ldx		[%o0 + 0x78], %g7
+	wrpr		%o1, PSTATE_MG, %pstate
+	ldx		[%o0 + 0x80], %g0
+	ldx		[%o0 + 0x88], %g1
+	ldx		[%o0 + 0x90], %g2
+	ldx		[%o0 + 0x98], %g3
+	ldx		[%o0 + 0xa0], %g4
+	ldx		[%o0 + 0xa8], %g5
+	ldx		[%o0 + 0xb0], %g6
+	ldx		[%o0 + 0xb8], %g7
+	wrpr		%o5, 0x0, %pstate
+	retl
+	 nop
 
 	.globl		getcc, setcc
 getcc:
@@ -313,7 +386,7 @@ floppy_hardint:
 	ldx		[%g5 + %lo(pdma_size)], %g5
 
 next_byte:
-	ldub		[%g3], %g7
+	lduba		[%g3] ASI_PHYS_BYPASS_EC_E, %g7
 	andcc		%g7, 0x80, %g0
 	be,pn		%icc, floppy_fifo_emptied
 	 andcc		%g7, 0x20, %g0
@@ -322,7 +395,9 @@ next_byte:
 	be,pn		%icc, floppy_write
 	 sub		%g5, 1, %g5
 
-	ldub		[%g3 + 1], %g7
+	inc		%g3
+	lduba		[%g3] ASI_PHYS_BYPASS_EC_E, %g7
+	dec		%g3
 	orcc		%g0, %g5, %g0
 	stb		%g7, [%g4]
 	bne,pn		%xcc, next_byte
@@ -334,7 +409,9 @@ next_byte:
 floppy_write:
 	ldub		[%g4], %g7
 	orcc		%g0, %g5, %g0
-	stb		%g7, [%g3 + 1]
+	inc		%g3
+	stba		%g7, [%g3] ASI_PHYS_BYPASS_EC_E
+	dec		%g3
 	bne,pn		%xcc, next_byte
 	 add		%g4, 1, %g4
 
@@ -368,7 +445,7 @@ floppy_fifo_emptied:
 	ldx		[%g1 + (11 << 3)], %g3		! irqaction[floppy_irq]
 	ldx		[%g3 + 0x10], %g4		! action->mask == ino_bucket ptr
 	ldx		[%g4 + 0x10], %g4		! bucket->iclr
-	stw		%g0, [%g4]			! SYSIO_ICLR_IDLE
+	stwa		%g0, [%g4] ASI_PHYS_BYPASS_EC_E	! ICLR_IDLE
 	membar		#Sync				! probably not needed...
 	retry
 
@@ -652,6 +729,8 @@ breakpoint_trap:
 	ba,pt		%xcc, rtrap
 	 nop
 
+#if defined(CONFIG_SUNOS_EMUL) || defined(CONFIG_SOLARIS_EMUL) || \
+    defined(CONFIG_SOLARIS_EMUL_MODULE)
 	/* SunOS uses syscall zero as the 'indirect syscall' it looks
 	 * like indir_syscall(scall_num, arg0, arg1, arg2...);  etc.
 	 * This is complete brain damage.
@@ -705,6 +784,7 @@ sunos_getgid:
 	 stx	%o0, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I1]
 	b,pt	%xcc, ret_sys_call
 	 stx	%o0, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I0]
+#endif
 
 	/* SunOS's execv() call only specifies the argv argument, the
 	 * environment settings are the same as the calling processes.

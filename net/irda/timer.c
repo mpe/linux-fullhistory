@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Aug 16 00:59:29 1997
- * Modified at:   Thu Oct  7 12:30:19 1999
+ * Modified at:   Wed Dec  8 12:50:34 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997, 1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -210,4 +210,8 @@ void irlap_media_busy_expired(void* data)
 	ASSERT(self != NULL, return;);
 
 	irda_device_set_media_busy(self->netdev, FALSE);
+
+	/* Send any pending Ultra frames if any */
+	if (!skb_queue_empty(&self->txq_ultra))
+		irlap_do_event(self, SEND_UI_FRAME, NULL, NULL);
 }

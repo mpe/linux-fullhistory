@@ -1,14 +1,14 @@
-/* $Id: mmu_context.h,v 1.40 1999/09/10 10:44:37 davem Exp $ */
+/* $Id: mmu_context.h,v 1.41 1999/09/10 15:39:03 jj Exp $ */
 #ifndef __SPARC64_MMU_CONTEXT_H
 #define __SPARC64_MMU_CONTEXT_H
 
 /* Derived heavily from Linus's Alpha/AXP ASN code... */
 
+#ifndef __ASSEMBLY__
+
 #include <linux/spinlock.h>
 #include <asm/system.h>
 #include <asm/spitfire.h>
-
-#ifndef __ASSEMBLY__
 
 extern spinlock_t ctx_alloc_lock;
 extern unsigned long tlb_context_cache;

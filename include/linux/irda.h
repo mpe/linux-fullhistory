@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Mar  8 14:06:12 1999
- * Modified at:   Sun Oct 10 23:00:59 1999
+ * Modified at:   Sun Dec 12 12:23:11 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -19,6 +19,9 @@
  *     Neither Dag Brattli nor University of Tromsø admit liability nor
  *     provide warranty for any of this software. This material is 
  *     provided "AS-IS" and at no charge.
+ *
+ *     You probably need to include <sys/types.h> before this one if your
+ *     including this file from user-space 
  *
  ********************************************************************/
 
@@ -58,26 +61,35 @@
 
 /* These are the currently known dongles */
 typedef enum {
-	IRDA_TEKRAM_DONGLE,
-	IRDA_ESI_DONGLE,
-	IRDA_ACTISYS_DONGLE,
-	IRDA_ACTISYS_PLUS_DONGLE,
-	IRDA_GIRBIL_DONGLE,
-	IRDA_LITELINK_DONGLE,
-	IRDA_AIRPORT_DONGLE,
+	IRDA_TEKRAM_DONGLE       = 0,
+	IRDA_ESI_DONGLE          = 1,
+	IRDA_ACTISYS_DONGLE      = 2,
+	IRDA_ACTISYS_PLUS_DONGLE = 3,
+	IRDA_GIRBIL_DONGLE       = 4,
+	IRDA_LITELINK_DONGLE     = 5,
+	IRDA_AIRPORT_DONGLE      = 6,
+	IRDA_OLD_BELKIN_DONGLE   = 7,
 } IRDA_DONGLE;
+
+/* Protocol types to be used for SOCK_DGRAM */
+enum {
+	IRDAPROTO_UNITDATA = 0,
+	IRDAPROTO_ULTRA    = 1,
+	IRDAPROTO_MAX
+};
 
 #define SOL_IRLMP      266 /* Same as SOL_IRDA for now */
 #define SOL_IRTTP      266 /* Same as SOL_IRDA for now */
 
 #define IRLMP_ENUMDEVICES        1
 #define IRLMP_IAS_SET            2
-#define IRLMP_IAS_QUERY          3
-#define IRLMP_DISCOVERY_MASK_SET 4
+#define IRLMP_IAS_GET            3
+#define IRLMP_IAS_QUERY          4
+#define IRLMP_HINTS_SET          5
 
-#define IRTTP_QOS_SET            5
-#define IRTTP_QOS_GET            6
-#define IRTTP_MAX_SDU_SIZE       7
+#define IRTTP_QOS_SET            6
+#define IRTTP_QOS_GET            7
+#define IRTTP_MAX_SDU_SIZE       8
 
 #define IAS_MAX_STRING         256
 #define IAS_MAX_OCTET_STRING  1024
@@ -88,21 +100,21 @@ typedef enum {
 
 struct sockaddr_irda {
 	sa_family_t   sir_family;   /* AF_IRDA */
-	unsigned char sir_lsap_sel; /* LSAP/TSAP selector */
-	unsigned int  sir_addr;     /* Device address */
+	u_int8_t      sir_lsap_sel; /* LSAP selector */
+	u_int32_t     sir_addr;     /* Device address */
 	char          sir_name[25]; /* Usually <service>:IrDA:TinyTP */
 };
 
 struct irda_device_info {
-	unsigned int  saddr;        /* Address of remote device */
-	unsigned int  daddr;        /* Link where it was discovered */
-	char          info[22];     /* Description */
-	unsigned char charset;      /* Charset used for description */
-	unsigned char hints[2];     /* Hint bits */
+	u_int32_t     saddr;    /* Address of local interface */
+	u_int32_t     daddr;    /* Address of remote device */
+	char          info[22]; /* Description */
+	u_int8_t      charset;  /* Charset used for description */
+	u_int8_t      hints[2]; /* Hint bits */
 };
 
 struct irda_device_list {
-       unsigned int len;
+       u_int32_t len;
        struct irda_device_info dev[1];
 };
 
@@ -131,9 +143,10 @@ struct irda_ias_set {
 #define SIOCSMEDIABUSY (SIOCDEVPRIVATE + 3)
 #define SIOCGMEDIABUSY (SIOCDEVPRIVATE + 4)
 #define SIOCGRECEIVING (SIOCDEVPRIVATE + 5)
-#define SIOCSRAWMODE   (SIOCDEVPRIVATE + 6)
-#define SIOCSDTRRTS    (SIOCDEVPRIVATE + 7)
-#define SIOCGQOS       (SIOCDEVPRIVATE + 8)
+#define SIOCSMODE      (SIOCDEVPRIVATE + 6)
+#define SIOCGMODE      (SIOCDEVPRIVATE + 7)
+#define SIOCSDTRRTS    (SIOCDEVPRIVATE + 8)
+#define SIOCGQOS       (SIOCDEVPRIVATE + 9)
 
 /* No reason to include <linux/if.h> just because of this one ;-) */
 #define IRNAMSIZ 16 
@@ -167,7 +180,7 @@ struct if_irda_req {
 		struct if_irda_qos  ifru_qos;
 		unsigned short      ifru_flags;
 		unsigned int        ifru_receiving;
-		unsigned int        ifru_raw_mode;
+		unsigned int        ifru_mode;
 		unsigned int        ifru_dongle;
 	} ifr_ifru;
 };
@@ -175,7 +188,7 @@ struct if_irda_req {
 #define ifr_baudrate  ifr_ifru.ifru_qos.baudrate
 #define ifr_receiving ifr_ifru.ifru_receiving 
 #define ifr_dongle    ifr_ifru.ifru_dongle
-#define ifr_raw_mode  ifr_ifru.ifru_raw_mode
+#define ifr_mode      ifr_ifru.ifru_mode
 #define ifr_dtr       ifr_ifru.ifru_line.dtr
 #define ifr_rts       ifr_ifru.ifru_line.rts
 

@@ -1,4 +1,4 @@
-/* $Id: starfire.c,v 1.3 1999/08/30 10:01:13 davem Exp $
+/* $Id: starfire.c,v 1.4 1999/09/21 14:35:25 davem Exp $
  * starfire.c: Starfire/E10000 support.
  *
  * Copyright (C) 1998 David S. Miller (davem@dm.cobaltmicro.com)
@@ -10,6 +10,7 @@
 #include <asm/page.h>
 #include <asm/oplib.h>
 #include <asm/smp.h>
+#include <asm/upa.h>
 
 /* A few places around the kernel check this to see if
  * they need to call us to do things in a Starfire specific
@@ -43,7 +44,7 @@ void starfire_check(void)
 
 int starfire_hard_smp_processor_id(void)
 {
-	return *((volatile unsigned int *) __va(0x1fff40000d0));
+	return upa_readl(0x1fff40000d0UL);
 }
 
 /* Each Starfire board has 32 registers which perform translation
@@ -52,8 +53,8 @@ int starfire_hard_smp_processor_id(void)
  * bits than in all previous Sun5 systems.
  */
 struct starfire_irqinfo {
-	volatile unsigned int *imap_slots[32];
-	volatile unsigned int *tregs[32];
+	unsigned long imap_slots[32];
+	unsigned long tregs[32];
 	struct starfire_irqinfo *next;
 	int upaid, hwmid;
 };
@@ -79,8 +80,8 @@ void *starfire_hookup(int upaid)
 	treg_base += (hwmid << 33UL);
 	treg_base += 0x200UL;
 	for(i = 0; i < 32; i++) {
-		p->imap_slots[i] = NULL;
-		p->tregs[i] = (volatile unsigned int *)__va(treg_base + (i * 0x10));
+		p->imap_slots[i] = 0UL;
+		p->tregs[i] = treg_base + (i * 0x10UL);
 	}
 	p->upaid = upaid;
 	p->next = sflist;
@@ -89,7 +90,7 @@ void *starfire_hookup(int upaid)
 	return (void *) p;
 }
 
-unsigned int starfire_translate(volatile unsigned int *imap,
+unsigned int starfire_translate(unsigned long imap,
 				unsigned int upaid)
 {
 	struct starfire_irqinfo *p;
@@ -107,7 +108,7 @@ unsigned int starfire_translate(volatile unsigned int *imap,
 	}
 	for(i = 0; i < 32; i++) {
 		if(p->imap_slots[i] == imap ||
-		   p->imap_slots[i] == NULL)
+		   p->imap_slots[i] == 0UL)
 			break;
 	}
 	if(i == 32) {
@@ -115,7 +116,7 @@ unsigned int starfire_translate(volatile unsigned int *imap,
 		panic("Lucy in the sky....");
 	}
 	p->imap_slots[i] = imap;
-	*(p->tregs[i]) = upaid;
+	upa_writel(upaid, p->tregs[i]);
 
 	return i;
 }

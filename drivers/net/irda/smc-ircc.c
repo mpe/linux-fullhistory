@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Thomas Davis (tadavis@jps.net)
  * Created at:    
- * Modified at:   Fri Nov 12 21:08:09 1999
+ * Modified at:   Sat Dec 11 14:38:26 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Thomas Davis, All Rights Reserved.
@@ -68,12 +68,10 @@ static int  ircc_dma_receive(struct ircc_cb *self);
 static int  ircc_dma_receive_complete(struct ircc_cb *self, int iobase);
 static int  ircc_hard_xmit(struct sk_buff *skb, struct net_device *dev);
 static void ircc_dma_write(struct ircc_cb *self, int iobase);
-static void ircc_change_speed(struct ircc_cb *self, __u32 speed);
+static void ircc_change_speed(void *priv, __u32 speed);
 static void ircc_interrupt(int irq, void *dev_id, struct pt_regs *regs);
-static void ircc_wait_until_sent(struct ircc_cb *self);
 static int  ircc_is_receiving(struct ircc_cb *self);
 
-static int  ircc_net_init(struct net_device *dev);
 static int  ircc_net_open(struct net_device *dev);
 static int  ircc_net_close(struct net_device *dev);
 
@@ -149,11 +147,10 @@ static void ircc_cleanup(void)
  */
 static int ircc_open(int i, unsigned int iobase, unsigned int iobase2)
 {
-        struct net_device *dev;
 	struct ircc_cb *self;
+        struct irport_cb *irport;
 	int config;
 	int ret;
-        int err;
 
 	IRDA_DEBUG(ircc_debug, __FUNCTION__ " -->\n");
 
@@ -177,21 +174,30 @@ static int ircc_open(int i, unsigned int iobase, unsigned int iobase2)
 	/* Need to store self somewhere */
 	dev_self[i] = self;
 
+	irport = irport_open(0, iobase2, config >> 4 & 0x0f);
+	if (!irport)
+		return -ENODEV;
+
+	/* Steal the network device from irport */
+	self->netdev = irport->netdev;
+	self->irport = irport;
+	irport->priv = self;
+
 	/* Initialize IO */
 	self->io.iobase    = iobase;
         self->io.iobase2   = iobase2; /* Used by irport */
         self->io.irq       = config >> 4 & 0x0f;
 	if (ircc_irq < 255) {
-	        printk(KERN_INFO "smc: Overriding IRQ - chip says %d, using %d\n",
-		      self->io.irq, ircc_irq);
+	        MESSAGE("smc_ircc: Overriding IRQ - chip says %d, using %d\n",
+			self->io.irq, ircc_irq);
 		self->io.irq = ircc_irq;
 	}
         self->io.io_ext    = CHIP_IO_EXTENT;
         self->io.io_ext2   = 8;       /* Used by irport */
         self->io.dma       = config & 0x0f;
 	if (ircc_dma < 255) {
-	        printk(KERN_INFO "smc: Overriding DMA - chip says %d, using %d\n",
-		      self->io.dma, ircc_dma);
+	        MESSAGE("smc: Overriding DMA - chip says %d, using %d\n",
+			self->io.dma, ircc_dma);
 		self->io.dma = ircc_dma;
 	}
         self->io.fifo_size = 16;
@@ -204,15 +210,8 @@ static int ircc_open(int i, unsigned int iobase, unsigned int iobase2)
 		/* ircc_cleanup(self->self);  */
 		return -ENODEV;
 	}
-	ret = check_region(self->io.iobase2, self->io.io_ext2);
-	if (ret < 0) { 
-		IRDA_DEBUG(0, __FUNCTION__ ": can't get iobase of 0x%03x\n",
-		       self->io.iobase2);
-		/* ircc_cleanup(self->self);  */
-		return -ENODEV;
-	}
+
 	request_region(self->io.iobase, self->io.io_ext, driver_name);
-        request_region(self->io.iobase2, self->io.io_ext2, driver_name);
 
 	/* Initialize QoS for this device */
 	irda_init_max_qos_capabilies(&self->qos);
@@ -227,10 +226,10 @@ static int ircc_open(int i, unsigned int iobase, unsigned int iobase2)
 		IR_115200;
 #endif
 
-	self->qos.min_turn_time.bits = 0x07;
-	irda_qos_bits_to_value(&self->qos);
+	irport->qos.min_turn_time.bits = 0x07;
+	irda_qos_bits_to_value(&irport->qos);
 
-	self->flags = IFF_FIR|IFF_SIR|IFF_DMA|IFF_PIO;
+	irport->flags = IFF_FIR|IFF_SIR|IFF_DMA|IFF_PIO;
 	
 	/* Max DMA buffer size needed = (data_size + 6) * (window_size) + 6; */
 	self->rx_buff.truesize = 4000; 
@@ -259,31 +258,12 @@ static int ircc_open(int i, unsigned int iobase, unsigned int iobase2)
 	self->tx_buff.data = self->tx_buff.head;
 	self->rx_buff.data = self->rx_buff.head;
 	
-	if (!(dev = dev_alloc("irda%d", &err))) {
-		ERROR(__FUNCTION__ "(), dev_alloc() failed!\n");
-		return -ENOMEM;
-	}
+	/* Override the speed change function, since we must control it now */
+	irport->change_speed = &ircc_change_speed;
+	self->netdev->open  = &ircc_net_open;
+	self->netdev->stop = &ircc_net_close;
 
-	dev->priv = (void *) self;
-	self->netdev = dev;
-	
-	/* Override the network functions we need to use */
-	dev->init            = ircc_net_init;
-	dev->hard_start_xmit = ircc_hard_xmit;
-	dev->open            = ircc_net_open;
-	dev->stop            = ircc_net_close;
-
-	rtnl_lock();
-	err = register_netdevice(dev);
-	rtnl_unlock();
-	if (err) {
-		ERROR(__FUNCTION__ "(), register_netdev() failed!\n");
-		return -1;
-	}
-
-	MESSAGE("IrDA: Registered device %s\n", dev->name);
-
-	irport_start(&self->irport, iobase2);
+	irport_start(self->irport);
 
 	IRDA_DEBUG(ircc_debug, "--> " __FUNCTION__ "\n");
 	return 0;
@@ -306,14 +286,7 @@ static int ircc_close(struct ircc_cb *self)
 
         iobase = self->io.iobase;
 
-	irport_stop(&self->irport, self->io.iobase2);
-
-	/* Remove netdevice */
-	if (self->netdev) {
-		rtnl_lock();
-		unregister_netdev(self->netdev);
-		rtnl_unlock();
-	}
+	irport_close(self->irport);
 
 	register_bank(iobase, 0);
 	serial_out(iobase, UART_IER, 0);
@@ -330,12 +303,6 @@ static int ircc_close(struct ircc_cb *self)
 	       __FUNCTION__ ": releasing 0x%03x\n", self->io.iobase);
 
 	release_region(self->io.iobase, self->io.io_ext);
-
-	if (self->io.iobase2) {
-		IRDA_DEBUG(ircc_debug, __FUNCTION__ ": releasing 0x%03x\n", 
-		       self->io.iobase2);
-		release_region(self->io.iobase2, self->io.io_ext2);
-	}
 
 	if (self->tx_buff.head)
 		kfree(self->tx_buff.head);
@@ -394,14 +361,17 @@ static int ircc_probe(int iobase, int iobase2)
  *    Change the speed of the device
  *
  */
-static void ircc_change_speed(struct ircc_cb *self, __u32 speed)
+static void ircc_change_speed(void *priv, __u32 speed)
 {
 	int iobase, ir_mode, select, fast; 
+	struct ircc_cb *self = (struct ircc_cb *) priv;
+	struct net_device *dev;
 
 	IRDA_DEBUG(ircc_debug+1, __FUNCTION__ " -->\n");
 
 	ASSERT(self != NULL, return;);
 
+	dev = self->netdev;
 	iobase = self->io.iobase;
 
 	/* Update accounting for new speed */
@@ -420,8 +390,14 @@ static void ircc_change_speed(struct ircc_cb *self, __u32 speed)
 		serial_out(iobase, UART_IER, 0);
 		serial_out(iobase, UART_MASTER, UART_MASTER_RESET);
 		serial_out(iobase, UART_MASTER, UART_MASTER_INT_EN);
-		irport_start(&self->irport, self->io.iobase2);
-		__irport_change_speed(&self->irport, speed);
+
+		dev->hard_start_xmit = &irport_hard_xmit;
+
+		/* We must give the interrupt back to irport */
+		self->irport->interrupt = irport_interrupt;
+
+		irport_start(self->irport);
+		irport_change_speed(self->irport, speed);
 		return;
 		break;
 
@@ -429,22 +405,26 @@ static void ircc_change_speed(struct ircc_cb *self, __u32 speed)
 		ir_mode = UART_CFGA_IRDA_HDLC;
 		select = 0;
 		fast = 0;
-		IRDA_DEBUG(ircc_debug, __FUNCTION__ ": handling baud of 576000\n");
+		IRDA_DEBUG(ircc_debug, __FUNCTION__ 
+			   "(), handling baud of 576000\n");
 		break;
 	case 1152000:
 		ir_mode = UART_CFGA_IRDA_HDLC;
 		select = UART_1152;
 		fast = 0;
-		IRDA_DEBUG(ircc_debug, __FUNCTION__ ": handling baud of 1152000\n");
+		IRDA_DEBUG(ircc_debug, __FUNCTION__ 
+			   "(), handling baud of 1152000\n");
 		break;
 	case 4000000:
 		ir_mode = UART_CFGA_IRDA_4PPM;
 		select = 0;
 		fast = UART_LCR_A_FAST;
-		IRDA_DEBUG(ircc_debug, __FUNCTION__ ": handling baud of 4000000\n");
+		IRDA_DEBUG(ircc_debug, __FUNCTION__ 
+			   "(), handling baud of 4000000\n");
 		break;
 	default:
-		IRDA_DEBUG(0, __FUNCTION__ ": unknown baud rate of %d\n", speed);
+		IRDA_DEBUG(0, __FUNCTION__ "(), unknown baud rate of %d\n", 
+			   speed);
 		return;
 	}
 
@@ -457,9 +437,15 @@ static void ircc_change_speed(struct ircc_cb *self, __u32 speed)
 	register_bank(iobase, 0);
 	serial_out(iobase, UART_IER, 0);
 	
-       	irport_stop(&self->irport, self->io.iobase2);
+       	irport_stop(self->irport);	
 
-	self->netdev->tbusy = 0;
+	/* Install FIR transmit handler */
+	dev->hard_start_xmit = &ircc_hard_xmit;
+
+	/* Need to steal the interrupt as well */
+	self->irport->interrupt = &ircc_interrupt;
+
+	dev->tbusy = 0;
 	
 	register_bank(iobase, 1);
 
@@ -493,13 +479,15 @@ static void ircc_change_speed(struct ircc_cb *self, __u32 speed)
  */
 static int ircc_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 {
+	struct irport_cb *irport;
 	struct ircc_cb *self;
 	int iobase;
 	int mtt;
 	__u32 speed;
 
 	IRDA_DEBUG(ircc_debug+1, __FUNCTION__ " -->\n");
-	self = (struct ircc_cb *) dev->priv;
+	irport = (struct irport_cb *) dev->priv;
+	self = (struct ircc_cb *) irport->priv;
 
 	ASSERT(self != NULL, return 0;);
 
@@ -510,14 +498,7 @@ static int ircc_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	/* Check if we need to change the speed */
 	if ((speed = irda_get_speed(skb)) != self->io.speed)
-		ircc_change_speed(self, speed);
-
-	/* Use irport for SIR speeds */
-	if (self->io.speed <= 115200) {
-		IRDA_DEBUG(ircc_debug+1, __FUNCTION__ 
-			   ": calling irport_hard_xmit\n");
-		return irport_hard_xmit(skb, dev);
-	}
+		self->new_speed = speed;
 	
 	IRDA_DEBUG(ircc_debug, __FUNCTION__ ": using dma; len=%d\n", skb->len);
 
@@ -631,11 +612,17 @@ static void ircc_dma_xmit_complete(struct ircc_cb *self, int underrun)
 
 	/* Check for underrrun! */
 	if (underrun) {
-		self->stats.tx_errors++;
-		self->stats.tx_fifo_errors++;		
+		self->irport->stats.tx_errors++;
+		self->irport->stats.tx_fifo_errors++;		
 	} else {
-		self->stats.tx_packets++;
-		self->stats.tx_bytes +=  self->tx_buff.len;
+		self->irport->stats.tx_packets++;
+		self->irport->stats.tx_bytes +=  self->tx_buff.len;
+	}
+
+	if (self->new_speed) {
+		ircc_change_speed(self, self->new_speed);
+		
+		self->new_speed = 0;
 	}
 
 	/* Unlock tx_buff and request another frame */
@@ -733,7 +720,7 @@ static int ircc_dma_receive_complete(struct ircc_cb *self, int iobase)
 	skb_put(skb, len);
 
 	memcpy(skb->data, self->rx_buff.data, len);
-	self->stats.rx_packets++;
+	self->irport->stats.rx_packets++;
 
 	skb->dev = self->netdev;
 	skb->mac.raw  = skb->data;
@@ -770,12 +757,6 @@ static void ircc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	}
 	
 	self = (struct ircc_cb *) dev->priv;
-
-	if (self->io.speed <= 115200) {
-		IRDA_DEBUG(ircc_debug+1, __FUNCTION__ 
-		      ": routing interrupt to irport_interrupt\n");
-		return irport_interrupt(irq, dev_id, regs);
-	}
 
 	iobase = self->io.iobase;
 
@@ -823,23 +804,6 @@ static void ircc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 /*
- * Function ircc_wait_until_sent (self)
- *
- *    This function should put the current thread to sleep until all data 
- *    have been sent, so it is safe to change the speed.
- */
-static void ircc_wait_until_sent(struct ircc_cb *self)
-{
-	IRDA_DEBUG(ircc_debug, __FUNCTION__ " -->\n");
-
-	/* Just delay 60 ms */
-	current->state = TASK_INTERRUPTIBLE;
-	schedule_timeout(MSECS_TO_JIFFIES(60));
-
-	IRDA_DEBUG(ircc_debug, "--> " __FUNCTION__ "\n");
-}
-
-/*
  * Function ircc_is_receiving (self)
  *
  *    Return TRUE is we are currently receiving a frame
@@ -865,26 +829,6 @@ static int ircc_is_receiving(struct ircc_cb *self)
 }
 
 /*
- * Function ircc_net_init (dev)
- *
- *    Initialize network device
- *
- */
-static int ircc_net_init(struct net_device *dev)
-{
-	IRDA_DEBUG(ircc_debug, __FUNCTION__ " -->\n");
-
-	/* Setup to be a normal IrDA network device driver */
-	irda_device_setup(dev);
-
-	/* Insert overrides below this line! */
-
-	IRDA_DEBUG(ircc_debug, "--> " __FUNCTION__ "\n");
-	return 0;
-}
-
-
-/*
  * Function ircc_net_open (dev)
  *
  *    Start the device
@@ -892,22 +836,22 @@ static int ircc_net_init(struct net_device *dev)
  */
 static int ircc_net_open(struct net_device *dev)
 {
+	struct irport_cb *irport;
 	struct ircc_cb *self;
 	int iobase;
-	
+
 	IRDA_DEBUG(ircc_debug, __FUNCTION__ " -->\n");
 	
 	ASSERT(dev != NULL, return -1;);
-	self = (struct ircc_cb *) dev->priv;
-	
+	irport = (struct irport_cb *) dev->priv;
+	self = (struct ircc_cb *) irport->priv;
+
 	ASSERT(self != NULL, return 0;);
 	
 	iobase = self->io.iobase;
 
-	if (request_irq(self->io.irq, ircc_interrupt, 0, dev->name, 
-			 (void *) dev)) {
-		return -EAGAIN;
-	}
+	irport_net_open(dev);
+
 	/*
 	 * Always allocate the DMA channel after the IRQ,
 	 * and clean up on failure.
@@ -916,17 +860,6 @@ static int ircc_net_open(struct net_device *dev)
 		free_irq(self->io.irq, dev);
 		return -EAGAIN;
 	}
-		
-	/* Ready to play! */
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
-
-	/* 
-	 * Open new IrLAP layer instance, now that everything should be
-	 * initialized properly 
-	 */
-	self->irlap = irlap_open(dev, &self->qos);
 	
 	MOD_INC_USE_COUNT;
 
@@ -942,31 +875,24 @@ static int ircc_net_open(struct net_device *dev)
  */
 static int ircc_net_close(struct net_device *dev)
 {
+	struct irport_cb *irport;
 	struct ircc_cb *self;
 	int iobase;
 
 	IRDA_DEBUG(ircc_debug, __FUNCTION__ " -->\n");
 	
 	ASSERT(dev != NULL, return -1;);
-	self = (struct ircc_cb *) dev->priv;
+	irport = (struct irport_cb *) dev->priv;
+	self = (struct ircc_cb *) irport->priv;
 	
 	ASSERT(self != NULL, return 0;);
 	
 	iobase = self->io.iobase;
 
-	/* Stop device */
-	dev->tbusy = 1;
-	dev->start = 0;
-
-	/* Stop and remove instance of IrLAP */
-	if (self->irlap)
-		irlap_close(self->irlap);
-	self->irlap = NULL;
+	irport_net_close(dev);
 
 	disable_dma(self->io.dma);
 
-	/* Disable interrupts */
-	free_irq(self->io.irq, dev);
 	free_dma(self->io.dma);
 
 	MOD_DEC_USE_COUNT;

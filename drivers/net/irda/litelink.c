@@ -6,7 +6,7 @@
  * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Fri May  7 12:50:33 1999
- * Modified at:   Sat Oct 30 20:24:58 1999
+ * Modified at:   Fri Dec 17 09:16:23 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -71,7 +71,7 @@ void litelink_cleanup(void)
 static void litelink_open(dongle_t *self, struct qos_info *qos)
 {
 	qos->baud_rate.bits &= IR_9600|IR_19200|IR_38400|IR_57600|IR_115200;
-	qos->min_turn_time.bits &= 0x40; /* Needs 0.01 ms */
+	qos->min_turn_time.bits = 0x7f; /* Needs 0.01 ms */
 
 	MOD_INC_USE_COUNT;
 }

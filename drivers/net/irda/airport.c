@@ -68,7 +68,7 @@ static void airport_open(dongle_t *self, struct qos_info *qos)
 	qos->baud_rate.bits &= 
 		IR_2400|IR_9600|IR_19200|IR_38400|IR_57600|IR_115200;
 	/* May need 1ms */
-	qos->min_turn_time.bits &= 0x07;
+	qos->min_turn_time.bits = 0x07;
 
 	MOD_INC_USE_COUNT;
 }

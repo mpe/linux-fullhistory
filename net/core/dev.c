@@ -860,7 +860,11 @@ void netif_rx(struct sk_buff *skb)
 #ifdef CONFIG_BRIDGE
 static inline void handle_bridge(struct sk_buff *skb, unsigned short type)
 {
-	if (br_stats.flags & BR_UP && br_protocol_ok(ntohs(type)))
+	/* 
+	 * The br_stats.flags is checked here to save the expense of a 
+	 * function call.
+	 */
+	if ((br_stats.flags & BR_UP) && br_call_bridge(skb, type))
 	{
 		/*
 		 *	We pass the bridge a complete frame. This means
@@ -883,7 +887,6 @@ static inline void handle_bridge(struct sk_buff *skb, unsigned short type)
 	return;
 }
 #endif
-
 
 /*
  *	When we are called the queue is ready to grab, the interrupts are
@@ -2094,6 +2097,13 @@ int __init net_dev_init(void)
 
 	dst_init();
 	dev_mcast_init();
+
+#ifdef CONFIG_BRIDGE
+	/*
+	 * Register any statically linked ethernet devices with the bridge
+	 */
+	br_spacedevice_register();
+#endif
 
 	/*
 	 *	Initialise network devices

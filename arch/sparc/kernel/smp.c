@@ -163,7 +163,7 @@ void smp_flush_tlb_mm(struct mm_struct *mm)
 			local_flush_tlb_mm(mm);
 		} else {
 			xc1((smpfunc_t) BTFIXUP_CALL(local_flush_tlb_mm), (unsigned long) mm);
-			if(atomic_read(&mm->count) == 1 && current->mm == mm)
+			if(atomic_read(&mm->mm_users) == 1 && current->active_mm == mm)
 				mm->cpu_vm_mask = (1 << smp_processor_id());
 		}
 	}

@@ -9,7 +9,7 @@
  *	Al Longyear <longyear@netcom.com>, Paul Mackerras <Paul.Mackerras@cs.anu.edu.au>
  *
  * Original release 01/11/99
- * ==FILEDATE 19990901==
+ * ==FILEDATE 19991217==
  *
  * This code is released under the GNU General Public License (GPL)
  *
@@ -78,7 +78,7 @@
  */
 
 #define HDLC_MAGIC 0x239e
-#define HDLC_VERSION "1.11"
+#define HDLC_VERSION "1.13"
 
 #include <linux/version.h>
 #include <linux/config.h>
@@ -171,6 +171,7 @@ do {									  \
 #if LINUX_VERSION_CODE < VERSION(2,1,0)
 #define __init
 typedef int spinlock_t;
+#define spin_lock_init(a)
 #define spin_lock_irqsave(a,b) {save_flags((b));cli();}
 #define spin_unlock_irqrestore(a,b) {restore_flags((b));}
 #define spin_lock(a)
@@ -659,8 +660,11 @@ static void n_hdlc_tty_receive(struct tty_struct *tty,
 	/* wake up any blocked reads and perform async signalling */
 	wake_up_interruptible (&n_hdlc->read_wait);
 	if (n_hdlc->tty->fasync != NULL)
+#if LINUX_VERSION_CODE < VERSION(2,3,0) 
+		kill_fasync (n_hdlc->tty->fasync, SIGIO);
+#else
 		kill_fasync (n_hdlc->tty->fasync, SIGIO, POLL_IN);
-
+#endif
 }	/* end of n_hdlc_tty_receive() */
 
 /* n_hdlc_tty_read()
@@ -1072,7 +1076,7 @@ static struct n_hdlc *n_hdlc_alloc (void)
 void n_hdlc_buf_list_init(N_HDLC_BUF_LIST *list)
 {
 	memset(list,0,sizeof(N_HDLC_BUF_LIST));
-		
+	spin_lock_init(&list->spinlock);
 }	/* end of n_hdlc_buf_list_init() */
 
 /* n_hdlc_buf_put()

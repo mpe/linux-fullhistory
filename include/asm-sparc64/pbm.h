@@ -1,4 +1,4 @@
-/* $Id: pbm.h,v 1.18 1999/09/10 10:44:40 davem Exp $
+/* $Id: pbm.h,v 1.19 1999/12/17 12:32:13 jj Exp $
  * pbm.h: UltraSparc PCI controller software state.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@redhat.com)
@@ -25,6 +25,9 @@
  * PCI bus module controls it's own autonomous PCI bus.
  */
 
+#define PBM_LOGCLUSTERS 3
+#define PBM_NCLUSTERS (1 << PBM_LOGCLUSTERS)
+
 struct pci_controller_info;
 
 /* This contains the software state necessary to drive a PCI
@@ -40,8 +43,8 @@ struct pci_iommu {
 	unsigned int	iommu_cur_ctx;
 
 	/* IOMMU page table, a linear array of ioptes. */
-	iopte_t		*page_table;	/* The page table itself. */
-	int		page_table_sz;	/* How many pages does it map? */
+	iopte_t		*page_table;		/* The page table itself. */
+	int		page_table_sz_bits;	/* log2 of ow many pages does it map? */
 
 	/* Base PCI memory space address where IOMMU mappings
 	 * begin.
@@ -49,7 +52,6 @@ struct pci_iommu {
 	u32		page_table_map_base;
 
 	/* IOMMU Controller Registers */
-	int		iommu_has_ctx_flush;	/* Feature test. */
 	unsigned long	iommu_control;		/* IOMMU control register */
 	unsigned long	iommu_tsbbase;		/* IOMMU page table base register */
 	unsigned long	iommu_flush;		/* IOMMU page flush register */
@@ -60,12 +62,18 @@ struct pci_iommu {
 	 * completion of all previous writes into IOMMU/STC.
 	 */
 	unsigned long	write_complete_reg;
+
+	/* If PBM_NCLUSTERS is ever decreased to 4 or lower,
+	 * or if largest supported page_table_sz * 8K goes above
+	 * 2GB, you must increase the size of the type of
+	 * these counters.  You have been duly warned. -DaveM
+	 */
+	u16		lowest_free[PBM_NCLUSTERS];
 };
 
 /* This describes a PCI bus module's streaming buffer. */
 struct pci_strbuf {
 	int		strbuf_enabled;		/* Present and using it? */
-	int		strbuf_has_ctx_flush;	/* Supports context flushing? */
 
 	/* Streaming Buffer Control Registers */
 	unsigned long	strbuf_control;		/* STC control register */

@@ -99,6 +99,14 @@ void __init smp4d_callin(void)
 	local_flush_cache_all();
 	local_flush_tlb_all();
 
+	/*
+	 * Unblock the master CPU _only_ when the scheduler state
+	 * of all secondary CPUs will be up-to-date, so after
+	 * the SMP initialization the master will be just allowed
+	 * to call the scheduler code.
+	 */
+	init_idle();
+
 	/* Get our local ticker going. */
 	smp_setup_percpu_timer();
 

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Feb  6 21:02:33 1999
- * Modified at:   Sat Oct 30 20:25:22 1999
+ * Modified at:   Fri Dec 17 09:16:52 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -87,7 +87,7 @@ void girbil_cleanup(void)
 static void girbil_open(dongle_t *self, struct qos_info *qos)
 {
 	qos->baud_rate.bits &= IR_9600|IR_19200|IR_38400|IR_57600|IR_115200;
-	qos->min_turn_time.bits &= 0x03;
+	qos->min_turn_time.bits = 0x03;
 
 	MOD_INC_USE_COUNT;
 }
@@ -113,14 +113,10 @@ static int girbil_change_speed(struct irda_task *task)
 	__u8 control[2];
 	int ret = 0;
 
+	self->speed_task = task;
+
 	switch (task->state) {
 	case IRDA_TASK_INIT:
-		/* Lock dongle */
-		if (irda_lock((void *) &self->busy) == FALSE) {
-			IRDA_DEBUG(0, __FUNCTION__ "(), busy!\n");
-			return MSECS_TO_JIFFIES(100);
-		}
-
 		/* Need to reset the dongle and go to 9600 bps before
                    programming */
 		if (irda_task_execute(self, girbil_reset, NULL, task, 
@@ -170,12 +166,12 @@ static int girbil_change_speed(struct irda_task *task)
 		/* Go back to normal mode */
 		self->set_dtr_rts(self->dev, TRUE, TRUE);
 		irda_task_next_state(task, IRDA_TASK_DONE);
-		self->busy = 0;
+		self->speed_task = NULL;
 		break;
 	default:
 		ERROR(__FUNCTION__ "(), unknown state %d\n", task->state);
 		irda_task_next_state(task, IRDA_TASK_DONE);
-		self->busy = 0;
+		self->speed_task = NULL;
 		ret = -1;
 		break;
 	}
@@ -196,6 +192,8 @@ static int girbil_reset(struct irda_task *task)
 	dongle_t *self = (dongle_t *) task->instance;
 	__u8 control = GIRBIL_TXEN | GIRBIL_RXEN;
 	int ret = 0;
+
+	self->reset_task = task;
 
 	switch (task->state) {
 	case IRDA_TASK_INIT:
@@ -221,10 +219,12 @@ static int girbil_reset(struct irda_task *task)
 		/* Go back to normal mode */
 		self->set_dtr_rts(self->dev, TRUE, TRUE);
 		irda_task_next_state(task, IRDA_TASK_DONE);
+		self->reset_task = NULL;
 		break;
 	default:
 		ERROR(__FUNCTION__ "(), unknown state %d\n", task->state);
 		irda_task_next_state(task, IRDA_TASK_DONE);
+		self->reset_task = NULL;
 		ret = -1;
 		break;
 	}

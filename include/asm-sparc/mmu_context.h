@@ -3,28 +3,32 @@
 
 #include <asm/btfixup.h>
 
-/* For now I still leave the context handling in the
- * switch_to() macro, I'll do it right soon enough.
+#ifndef __ASSEMBLY__
+
+/*
+ * Initialize a new mmu context.  This is invoked when a new
+ * address space instance (unique or shared) is instantiated.
  */
-#define get_mmu_context(x) do { } while (0)
+#define init_new_context(tsk, mm) ((mm)->context = NO_CONTEXT)
 
-/* Initialize the context related info for a new mm_struct
- * instance.
- */
-BTFIXUPDEF_CALL(void, init_new_context, struct mm_struct *)
-
-#define init_new_context(mm) BTFIXUP_CALL(init_new_context)(mm)
-
-/* Destroy context related info for an mm_struct that is about
- * to be put to rest.
+/*
+ * Destroy a dead context.  This occurs when mmput drops the
+ * mm_users count to zero, the mmaps have been released, and
+ * all the page tables have been flushed.  Our job is to destroy
+ * any remaining processor-specific state.
  */
 BTFIXUPDEF_CALL(void, destroy_context, struct mm_struct *)
 
 #define destroy_context(mm) BTFIXUP_CALL(destroy_context)(mm)
 
-/* This need not do anything on Sparc32.  The switch happens
- * properly later as a side effect of calling flush_thread.
- */
-#define activate_context(tsk)	do { } while(0)
+/* Switch the current MM context. */
+BTFIXUPDEF_CALL(void, switch_mm, struct mm_struct *, struct mm_struct *, struct task_struct *, int)
+
+#define switch_mm(old_mm, mm, tsk, cpu) BTFIXUP_CALL(switch_mm)(old_mm, mm, tsk, cpu)
+
+/* Activate a new MM instance for the current task. */
+#define activate_mm(active_mm, mm) switch_mm((active_mm), (mm), NULL, smp_processor_id())
+
+#endif /* !(__ASSEMBLY__) */
 
 #endif /* !(__SPARC_MMU_CONTEXT_H) */

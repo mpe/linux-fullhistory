@@ -10,24 +10,13 @@
 #include "fcp.h"
 #include "fcp_impl.h"
 
-/* Hardware structures and constants first {{{ */
-
-union socal_rq_reg {
-	volatile u8 read[4];
-	volatile u32 write;
-};
-struct socal_regs {
-	volatile u32 cfg;		/* Config Register */
-	volatile u32 sae;		/* Slave Access Error Register */
-	volatile u32 cmd;		/* Command & Status Register */
-	volatile u32 imask;		/* Interrupt Mask Register */
-	union socal_rq_reg reqp;	/* Request Queue Index Register */
-	union socal_rq_reg resp;	/* Response Queue Index Register */
-#define reqpr reqp.read
-#define reqpw reqp.write
-#define respr resp.read
-#define respw resp.write
-};
+/* Hardware register offsets and constants first {{{ */
+#define CFG	0x00UL
+#define SAE	0x04UL
+#define CMD	0x08UL
+#define IMASK	0x0cUL
+#define REQP	0x10UL
+#define RESP	0x14UL
 
 /* Config Register */
 #define SOCAL_CFG_EXT_RAM_BANK_MASK	0x07000000
@@ -86,7 +75,9 @@ struct socal_regs {
 	 & s->imask)
 	 
 #define SOCAL_SETIMASK(s, i) \
-	(s)->imask = (i); (s)->regs->imask = (i)
+do {	(s)->imask = (i); \
+	sbus_writel((i), (s)->regs + IMASK); \
+} while (0)
 	
 #define SOCAL_MAX_EXCHANGES		1024
 
@@ -303,15 +294,18 @@ struct socal {
 	socal_cq		req[4]; /* Request CQs */
 	socal_cq		rsp[4]; /* Response CQs */
 	int			socal_no;
-	struct socal_regs	*regs;
-	u8			*xram;
-	u8			*eeprom;
+	unsigned long		regs;
+	unsigned long		xram;
+	unsigned long		eeprom;
 	fc_wwn			wwn;
 	u32			imask;	/* Our copy of regs->imask */
 	u32			cfg;	/* Our copy of regs->cfg */
 	char			serv_params[80];
 	struct socal		*next;
 	int			curr_port; /* Which port will have priority to fcp_queue_empty */
+
+	socal_req *		req_cpu;
+	u32			req_dvma;
 };
 
 /* }}} */

@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.68 1999/09/10 05:59:25 davem Exp $
+/* $Id: ioctl32.c,v 1.71 1999/12/19 23:13:13 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
@@ -1921,6 +1921,9 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case TIOCSCTTY:
 	case TIOCGPTN:
 	case TIOCSPTLCK:
+	case TIOCGSERIAL:
+	case TIOCSSERIAL:
+	case TIOCSERGETLSR:
 	
 	/* Big F */
 	case FBIOGTYPE:
@@ -2124,6 +2127,9 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case OPROMGETCONS:
 	case OPROMGETFBNAME:
 	case OPROMGETBOOTARGS:
+	case OPROMSETCUR:
+	case OPROMPCI2NODE:
+	case OPROMPATH2NODE:
 
 	/* Socket level stuff */
 	case FIOSETOWN:
@@ -2175,6 +2181,10 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case PPPIOCSNPMODE:
 	case PPPIOCGDEBUG:
 	case PPPIOCSDEBUG:
+	case PPPIOCGIDLE:
+	case PPPIOCNEWUNIT:
+	case PPPIOCATTACH:
+	case PPPIOCDETACH:
 
 	/* CDROM stuff */
 	case CDROMPAUSE:
@@ -2204,6 +2214,9 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case CDROM_DRIVE_STATUS:
 	case CDROM_DISC_STATUS:
 	case CDROM_CHANGER_NSLOTS:
+	case CDROM_LOCKDOOR:
+	case CDROM_DEBUG:
+	case CDROM_GET_CAPABILITY:
 	
 	/* Big L */
 	case LOOP_SET_FD:

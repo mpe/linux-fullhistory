@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Tue Nov 16 10:00:36 1999
+ * Modified at:   Fri Dec 10 13:21:17 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -35,6 +35,8 @@
 #include <linux/timer.h>
 
 #include <net/irda/irlap_event.h>
+
+#define CONFIG_IRDA_DYNAMIC_WINDOW 1
 
 #define LAP_RELIABLE   1
 #define LAP_UNRELIABLE 0
@@ -115,7 +117,8 @@ struct irlap_cb {
 	int final_timeout;
 	int wd_timeout;
 
-	struct sk_buff_head tx_list;  /* Frames to be transmitted */
+	struct sk_buff_head txq;  /* Frames to be transmitted */
+	struct sk_buff_head txq_ultra;
 
  	__u8    caddr;        /* Connection address */
 	__u32   saddr;        /* Source device address */
@@ -131,7 +134,7 @@ struct irlap_cb {
 #ifdef CONFIG_IRDA_FAST_RR
 	int     fast_RR_timeout;
 	int     fast_RR;      
-#endif
+#endif /* CONFIG_IRDA_FAST_RR */
 	
 	int N1; /* N1 * F-timer = Negitiated link disconnect warning threshold */
 	int N2; /* N2 * F-timer = Negitiated link disconnect time */
@@ -141,13 +144,16 @@ struct irlap_cb {
 	int     remote_busy;
 	int     xmitflag;
 
-	__u8    vs;           /* Next frame to be sent */
-	__u8    vr;           /* Next frame to be received */
-	__u8    va;           /* Last frame acked */
- 	int     window;       /* Nr of I-frames allowed to send */
-	int     window_size;  /* Current negotiated window size */
-	__u32   window_bytes; /* Number of bytes allowed to send */
-	__u32   bytes_left;   /* Number of bytes allowed to transmit */
+	__u8    vs;            /* Next frame to be sent */
+	__u8    vr;            /* Next frame to be received */
+	__u8    va;            /* Last frame acked */
+ 	int     window;        /* Nr of I-frames allowed to send */
+	int     window_size;   /* Current negotiated window size */
+
+#ifdef CONFIG_IRDA_DYNAMIC_WINDOW
+	__u32   line_capacity; /* Number of bytes allowed to send */
+	__u32   bytes_left;    /* Number of bytes still allowed to transmit */
+#endif /* CONFIG_IRDA_DYNAMIC_WINDOW */
 
 	struct sk_buff_head wx_list;
 
@@ -177,7 +183,7 @@ struct irlap_cb {
 #ifdef CONFIG_IRDA_COMPRESSION
 	struct irda_compressor compressor;
         struct irda_compressor decompressor;
-#endif
+#endif /* CONFIG_IRDA_COMPRESSION */
 };
 
 extern hashbin_t *irlap;
@@ -197,9 +203,13 @@ void irlap_connect_response(struct irlap_cb *self, struct sk_buff *skb);
 void irlap_connect_indication(struct irlap_cb *self, struct sk_buff *skb);
 void irlap_connect_confirm(struct irlap_cb *, struct sk_buff *skb);
 
-void irlap_data_indication(struct irlap_cb *, struct sk_buff *);
-void irlap_unit_data_indication(struct irlap_cb *, struct sk_buff *);
-void irlap_data_request(struct irlap_cb *, struct sk_buff *, int reliable);
+void irlap_data_indication(struct irlap_cb *, struct sk_buff *, int unreliable);
+void irlap_data_request(struct irlap_cb *, struct sk_buff *, int unreliable);
+
+#ifdef CONFIG_IRDA_ULTRA
+void irlap_unitdata_request(struct irlap_cb *, struct sk_buff *);
+void irlap_unitdata_indication(struct irlap_cb *, struct sk_buff *);
+#endif /* CONFIG_IRDA_ULTRA */
 
 void irlap_disconnect_request(struct irlap_cb *);
 void irlap_disconnect_indication(struct irlap_cb *, LAP_REASON reason);
@@ -227,10 +237,10 @@ void irlap_wait_min_turn_around(struct irlap_cb *, struct qos_info *);
 
 void irlap_init_qos_capabilities(struct irlap_cb *, struct qos_info *);
 void irlap_apply_default_connection_parameters(struct irlap_cb *self);
-void irlap_apply_connection_parameters(struct irlap_cb *, struct qos_info *);
+void irlap_apply_connection_parameters(struct irlap_cb *self);
 void irlap_set_local_busy(struct irlap_cb *self, int status);
 
 #define IRLAP_GET_HEADER_SIZE(self) 2 /* Will be different when we get VFIR */
-#define IRLAP_GET_TX_QUEUE_LEN(self) skb_queue_len(&self->tx_list)
+#define IRLAP_GET_TX_QUEUE_LEN(self) skb_queue_len(&self->txq)
 
 #endif

@@ -1,4 +1,4 @@
-/* $Id: io.h,v 1.24 1999/09/06 01:17:54 davem Exp $ */
+/* $Id: io.h,v 1.29 1999/12/20 04:58:42 davem Exp $ */
 #ifndef __SPARC64_IO_H
 #define __SPARC64_IO_H
 
@@ -13,7 +13,9 @@
 #define __SLOW_DOWN_IO	do { } while (0)
 #define SLOW_DOWN_IO	do { } while (0)
 
+#undef NEW_PCI_DMA_MAP
 
+#ifndef NEW_PCI_DMA_MAP
 #define PCI_DVMA_HASHSZ	256
 
 extern unsigned long pci_dvma_v2p_hash[PCI_DVMA_HASHSZ];
@@ -21,7 +23,7 @@ extern unsigned long pci_dvma_p2v_hash[PCI_DVMA_HASHSZ];
 
 #define pci_dvma_ahashfn(addr)	(((addr) >> 24) & 0xff)
 
-extern __inline__ unsigned long virt_to_phys(volatile void *addr)
+extern __inline__ unsigned long virt_to_bus(volatile void *addr)
 {
 	unsigned long vaddr = (unsigned long)addr;
 	unsigned long off;
@@ -34,7 +36,7 @@ extern __inline__ unsigned long virt_to_phys(volatile void *addr)
 	return vaddr + off;
 }
 
-extern __inline__ void *phys_to_virt(unsigned long addr)
+extern __inline__ void *bus_to_virt(unsigned long addr)
 {
 	unsigned long paddr = addr & 0xffffffffUL;
 	unsigned long off;
@@ -42,9 +44,12 @@ extern __inline__ void *phys_to_virt(unsigned long addr)
 	off = pci_dvma_p2v_hash[pci_dvma_ahashfn(paddr)];
 	return (void *)(paddr + off);
 }
-
-#define virt_to_bus virt_to_phys
-#define bus_to_virt phys_to_virt
+#else
+extern unsigned long virt_to_bus_not_defined_use_pci_map(volatile void *addr);
+#define virt_to_bus virt_to_bus_not_defined_use_pci_map
+extern unsigned long bus_to_virt_not_defined_use_pci_map(volatile void *addr);
+#define bus_to_virt bus_to_virt_not_defined_use_pci_map
+#endif
 
 /* Different PCI controllers we support have their PCI MEM space
  * mapped to an either 2GB (Psycho) or 4GB (Sabre) aligned area,
@@ -58,7 +63,7 @@ extern __inline__ unsigned int inb(unsigned long addr)
 {
 	unsigned int ret;
 
-	__asm__ __volatile__("lduba [%1] %2, %0"
+	__asm__ __volatile__("lduba\t[%1] %2, %0\t/* pci_inb */"
 			     : "=r" (ret)
 			     : "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
 
@@ -69,7 +74,7 @@ extern __inline__ unsigned int inw(unsigned long addr)
 {
 	unsigned int ret;
 
-	__asm__ __volatile__("lduha [%1] %2, %0"
+	__asm__ __volatile__("lduha\t[%1] %2, %0\t/* pci_inw */"
 			     : "=r" (ret)
 			     : "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
 
@@ -80,7 +85,7 @@ extern __inline__ unsigned int inl(unsigned long addr)
 {
 	unsigned int ret;
 
-	__asm__ __volatile__("lduwa [%1] %2, %0"
+	__asm__ __volatile__("lduwa\t[%1] %2, %0\t/* pci_inl */"
 			     : "=r" (ret)
 			     : "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
 
@@ -89,23 +94,23 @@ extern __inline__ unsigned int inl(unsigned long addr)
 
 extern __inline__ void outb(unsigned char b, unsigned long addr)
 {
-	__asm__ __volatile__("stba %0, [%1] %2"
+	__asm__ __volatile__("stba\t%r0, [%1] %2\t/* pci_outb */"
 			     : /* no outputs */
-			     : "r" (b), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
+			     : "Jr" (b), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
 }
 
 extern __inline__ void outw(unsigned short w, unsigned long addr)
 {
-	__asm__ __volatile__("stha %0, [%1] %2"
+	__asm__ __volatile__("stha\t%r0, [%1] %2\t/* pci_outw */"
 			     : /* no outputs */
-			     : "r" (w), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
+			     : "Jr" (w), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
 }
 
 extern __inline__ void outl(unsigned int l, unsigned long addr)
 {
-	__asm__ __volatile__("stwa %0, [%1] %2"
+	__asm__ __volatile__("stwa\t%r0, [%1] %2\t/* pci_outl */"
 			     : /* no outputs */
-			     : "r" (l), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
+			     : "Jr" (l), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
 }
 
 #define inb_p inb
@@ -123,7 +128,7 @@ extern __inline__ unsigned int _readb(unsigned long addr)
 {
 	unsigned int ret;
 
-	__asm__ __volatile__("lduba [%1] %2, %0"
+	__asm__ __volatile__("lduba\t[%1] %2, %0\t/* pci_readb */"
 			     : "=r" (ret)
 			     : "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
 
@@ -134,7 +139,7 @@ extern __inline__ unsigned int _readw(unsigned long addr)
 {
 	unsigned int ret;
 
-	__asm__ __volatile__("lduha [%1] %2, %0"
+	__asm__ __volatile__("lduha\t[%1] %2, %0\t/* pci_readw */"
 			     : "=r" (ret)
 			     : "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
 
@@ -145,7 +150,7 @@ extern __inline__ unsigned int _readl(unsigned long addr)
 {
 	unsigned int ret;
 
-	__asm__ __volatile__("lduwa [%1] %2, %0"
+	__asm__ __volatile__("lduwa\t[%1] %2, %0\t/* pci_readl */"
 			     : "=r" (ret)
 			     : "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
 
@@ -154,23 +159,23 @@ extern __inline__ unsigned int _readl(unsigned long addr)
 
 extern __inline__ void _writeb(unsigned char b, unsigned long addr)
 {
-	__asm__ __volatile__("stba %0, [%1] %2"
+	__asm__ __volatile__("stba\t%r0, [%1] %2\t/* pci_writeb */"
 			     : /* no outputs */
-			     : "r" (b), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
+			     : "Jr" (b), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
 }
 
 extern __inline__ void _writew(unsigned short w, unsigned long addr)
 {
-	__asm__ __volatile__("stha %0, [%1] %2"
+	__asm__ __volatile__("stha\t%r0, [%1] %2\t/* pci_writew */"
 			     : /* no outputs */
-			     : "r" (w), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
+			     : "Jr" (w), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
 }
 
 extern __inline__ void _writel(unsigned int l, unsigned long addr)
 {
-	__asm__ __volatile__("stwa %0, [%1] %2"
+	__asm__ __volatile__("stwa\t%r0, [%1] %2\t/* pci_writel */"
 			     : /* no outputs */
-			     : "r" (l), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
+			     : "Jr" (l), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E_L));
 }
 
 #define readb(__addr)		(_readb((unsigned long)(__addr)))
@@ -180,56 +185,126 @@ extern __inline__ void _writel(unsigned int l, unsigned long addr)
 #define writew(__w, __addr)	(_writew((__w), (unsigned long)(__addr)))
 #define writel(__l, __addr)	(_writel((__l), (unsigned long)(__addr)))
 
-#define IO_SPACE_LIMIT 0xffffffff
-
-/*
- * Memcpy to/from I/O space is just a regular memory operation on
- * Ultra as well.
+/* Valid I/O Space regions are anywhere, because each PCI bus supported
+ * can live in an arbitrary area of the physical address range.
  */
+#define IO_SPACE_LIMIT 0xffffffffffffffffUL
 
-/*
- * FIXME: Write faster routines using ASL_*L for this.
+/* Now, SBUS variants, only difference from PCI is that we do
+ * not use little-endian ASIs.
  */
+extern __inline__ unsigned int _sbus_readb(unsigned long addr)
+{
+	unsigned int ret;
+
+	__asm__ __volatile__("lduba\t[%1] %2, %0\t/* sbus_readb */"
+			     : "=r" (ret)
+			     : "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E));
+
+	return ret;
+}
+
+extern __inline__ unsigned int _sbus_readw(unsigned long addr)
+{
+	unsigned int ret;
+
+	__asm__ __volatile__("lduha\t[%1] %2, %0\t/* sbus_readw */"
+			     : "=r" (ret)
+			     : "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E));
+
+	return ret;
+}
+
+extern __inline__ unsigned int _sbus_readl(unsigned long addr)
+{
+	unsigned int ret;
+
+	__asm__ __volatile__("lduwa\t[%1] %2, %0\t/* sbus_readl */"
+			     : "=r" (ret)
+			     : "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E));
+
+	return ret;
+}
+
+extern __inline__ void _sbus_writeb(unsigned char b, unsigned long addr)
+{
+	__asm__ __volatile__("stba\t%r0, [%1] %2\t/* sbus_writeb */"
+			     : /* no outputs */
+			     : "Jr" (b), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E));
+}
+
+extern __inline__ void _sbus_writew(unsigned short w, unsigned long addr)
+{
+	__asm__ __volatile__("stha\t%r0, [%1] %2\t/* sbus_writew */"
+			     : /* no outputs */
+			     : "Jr" (w), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E));
+}
+
+extern __inline__ void _sbus_writel(unsigned int l, unsigned long addr)
+{
+	__asm__ __volatile__("stwa\t%r0, [%1] %2\t/* sbus_writel */"
+			     : /* no outputs */
+			     : "Jr" (l), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E));
+}
+
+#define sbus_readb(__addr)		(_sbus_readb((unsigned long)(__addr)))
+#define sbus_readw(__addr)		(_sbus_readw((unsigned long)(__addr)))
+#define sbus_readl(__addr)		(_sbus_readl((unsigned long)(__addr)))
+#define sbus_writeb(__b, __addr)	(_sbus_writeb((__b), (unsigned long)(__addr)))
+#define sbus_writew(__w, __addr)	(_sbus_writew((__w), (unsigned long)(__addr)))
+#define sbus_writel(__l, __addr)	(_sbus_writel((__l), (unsigned long)(__addr)))
+
+static inline void *sbus_memset_io(void *__dst, int c, __kernel_size_t n)
+{
+	unsigned long dst = (unsigned long)__dst;
+
+	while(n--) {
+		sbus_writeb(c, dst);
+		dst++;
+	}
+	return (void *) dst;
+}
+
 static inline void *
 memset_io(void *dst, int c, __kernel_size_t n)
 {
 	char *d = dst;
 
-	while (n--)
-		*d++ = c;
+	while (n--) {
+		writeb(c, d);
+		d++;
+	}
 
 	return dst;
 }
 
 static inline void *
-memcpy_fromio(void *dst, const void *src, __kernel_size_t n)
+memcpy_fromio(void *dst, unsigned long src, __kernel_size_t n)
 {
-	const char *s = src;
 	char *d = dst;
 
-	while (n--)
-		*d++ = *s++;
+	while (n--) {
+		char tmp = readb(src);
+		*d++ = tmp;
+		src++;
+	}
 
 	return dst;
 }
 
 static inline void *
-memcpy_toio(void *dst, const void *src, __kernel_size_t n)
+memcpy_toio(unsigned long dst, const void *src, __kernel_size_t n)
 {
 	const char *s = src;
-	char *d = dst;
+	unsigned long d = dst;
 
-	while (n--)
-		*d++ = *s++;
-
-	return dst;
+	while (n--) {
+		char tmp = *s++;
+		writeb(tmp, d);
+		d++;
+	}
+	return (void *)dst;
 }
-
-#if 0 /* XXX Not exactly, we need to use ASI_*L from/to the I/O end,
-       * XXX so these are disabled until we code that stuff.
-       */
-#define eth_io_copy_and_sum(a,b,c,d) eth_copy_and_sum((a),((char *)(b)),(c),(d))
-#endif
 
 static inline int check_signature(unsigned long io_addr,
 				  const unsigned char *signature,
@@ -251,27 +326,18 @@ out:
 #define ioremap(__offset, __size)	((void *)(__offset))
 #define iounmap(__addr)			do { } while(0)
 
-extern void sparc_ultra_mapioaddr(unsigned long physaddr,
-				  unsigned long virt_addr,
-				  int bus, int rdonly);
-extern void sparc_ultra_unmapioaddr(unsigned long virt_addr);
+/* Similarly for SBUS. */
+#define sbus_ioremap(__res, __offset, __size, __name) \
+({	unsigned long __ret; \
+	__ret  = (__res)->start + (((__res)->flags & 0x1ffUL) << 32UL); \
+	__ret += (unsigned long) (__offset); \
+	if (! request_region((__ret), (__size), (__name))) \
+		__ret = 0UL; \
+	__ret; \
+})
 
-extern __inline__ void mapioaddr(unsigned long physaddr,
-				 unsigned long virt_addr,
-				 int bus, int rdonly)
-{
-	sparc_ultra_mapioaddr(physaddr, virt_addr, bus, rdonly);
-}
-
-extern __inline__ void unmapioaddr(unsigned long virt_addr)
-{
-	sparc_ultra_unmapioaddr(virt_addr);
-}
-
-extern void *sparc_alloc_io(u32 pa, void *va, int sz, char *name,
-			    u32 io, int rdonly);
-extern void sparc_free_io (void *va, int sz);
-extern void *sparc_dvma_malloc (int sz, char *name, __u32 *dvma_addr);
+#define sbus_iounmap(__addr, __size)	\
+	release_region((__addr), (__size))
 
 /* Nothing to do */
 

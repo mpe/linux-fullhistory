@@ -1,4 +1,4 @@
-/*
+/*	$Id: aurora.h,v 1.5 1999/12/02 09:55:16 davem Exp $
  *	linux/drivers/sbus/char/aurora.h -- Aurora multiport driver
  *
  *	Copyright (c) 1999 by Oliver Aldulea (oli@bv.ro)
@@ -63,6 +63,7 @@
 #define __LINUX_AURORA_H
 
 #include <linux/serial.h>
+#include <linux/serialP.h>
 
 #ifdef __KERNEL__
 
@@ -88,7 +89,7 @@
 #define TYPE_1_IRQS 4
 unsigned char type_1_irq[TYPE_1_IRQS] = {
 	3, 5, 9, 13
-	};
+};
 /* I know something about another method of interrupt setting, but not enough.
  * Also, this is for another type of board, so I first have to learn how to
  * detect it.
@@ -166,15 +167,15 @@ int allirq[AURORA_ALLIRQ]={
 
 struct aurora_reg1 {
 	__volatile__ unsigned char r;
-	};
+};
 
 struct aurora_reg128 {
 	__volatile__ unsigned char r[128];
-	};
+};
 	
 struct aurora_reg4 {
 	__volatile__ unsigned char r[4];
-	};
+};
 
 struct Aurora_board {
 	unsigned long		flags;
@@ -197,7 +198,7 @@ struct Aurora_board {
 	unsigned char		MSVDTR;
 	unsigned char		MSVRTS;
 	/* Values for hardware acknowledge. */
-	unsigned char		ACK_MINT,ACK_TINT,ACK_RINT;
+	unsigned char		ACK_MINT, ACK_TINT, ACK_RINT;
 };
 
 /* Board configuration register */

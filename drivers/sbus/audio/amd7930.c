@@ -1,4 +1,4 @@
-/*
+/* $Id: amd7930.c,v 1.23 1999/11/19 09:55:58 davem Exp $
  * drivers/sbus/audio/amd7930.c
  *
  * Copyright (C) 1996,1997 Thomas K. Dyas (tdyas@eden.rutgers.edu)
@@ -132,30 +132,29 @@ static int num_drivers;
 
 struct amd7930_channel {
 	/* Channel status */
-	unsigned char channel_status;
+	u8 channel_status;
 
 	/* Current buffer that the driver is playing on channel */
 	volatile __u8 * output_ptr;
-	volatile unsigned long output_count;
-	unsigned char xmit_idle_char;
+	volatile u32 output_count;
+	u8 xmit_idle_char;
 
 	/* Callback routine (and argument) when output is done on */
-	void (*output_callback)();
+	void (*output_callback)(void *, unsigned char);
 	void * output_callback_arg;
 
 	/* Current buffer that the driver is recording on channel */
 	volatile __u8 * input_ptr;
-	volatile unsigned long input_count;
-	volatile unsigned long input_limit;
+	volatile u32 input_count;
+	volatile u32 input_limit;
 
 	/* Callback routine (and argument) when input is done on */
-	void (*input_callback)();
+	void (*input_callback)(void *, unsigned char, unsigned long);
 	void * input_callback_arg;
 
 	int input_format;
 	int output_format;
 };
-
 
 /* Private information we store for each amd7930 chip. */
 struct amd7930_info {
@@ -171,7 +170,7 @@ struct amd7930_info {
 	struct amd7930_channel *Bisdn[2];
 
 	/* Device registers information. */
-	struct amd7930 *regs;
+	unsigned long regs;
 	unsigned long regs_size;
 	struct amd7930_map map;
 
@@ -185,21 +184,20 @@ struct amd7930_info {
 	/* Format type */
 	int format_type;
 
-
 	/* Someone to signal when the ISDN LIU state changes */
 	int liu_state;
 	void (*liu_callback)(void *);
 	void *liu_callback_arg;
 };
 
-
-
 /* Output a 16-bit quantity in the order that the amd7930 expects. */
-#define amd7930_out16(regs,v) ({ regs->dr = v & 0xFF; regs->dr = (v >> 8) & 0xFF; })
+static __inline__ void amd7930_out16(unsigned long regs, u16 val)
+{
+	sbus_writeb(val & 0xff, regs + DR);
+	sbus_writeb(val >> 8, regs + DR);
+}
 
-
-/*
- * gx, gr & stg gains.  this table must contain 256 elements with
+/* gx, gr & stg gains.  this table must contain 256 elements with
  * the 0th being "infinity" (the magic value 9008).  The remaining
  * elements match sun's gain curve (but with higher resolution):
  * -18 to 0dB in .16dB steps then 0 to 12dB in .08dB steps.
@@ -265,80 +263,76 @@ static __const__ __u16 ger_coeff[] = {
 #define NR_GER_COEFFS (sizeof(ger_coeff) / sizeof(ger_coeff[0]))
 
 /* Enable amd7930 interrupts atomically. */
-static __inline__ void amd7930_enable_ints(struct amd7930_info *info)
+static void amd7930_enable_ints(struct amd7930_info *info)
 {
-	register unsigned long flags;
-
-	if (info->ints_on)
-		return;
+	unsigned long flags;
 
 	save_and_cli(flags);
-	info->regs->cr = AMR_INIT;
-	info->regs->dr = AM_INIT_ACTIVE;
+	if (!info->ints_on) {
+		sbus_writeb(AMR_INIT, info->regs + CR);
+		sbus_writeb(AM_INIT_ACTIVE, info->regs + DR);
+		info->ints_on = 1;
+	}
 	restore_flags(flags);
-
-	info->ints_on = 1;
 }
 
 /* Disable amd7930 interrupts atomically. */
 static __inline__ void amd7930_disable_ints(struct amd7930_info *info)
 {
-	register unsigned long flags;
-
-	if (!info->ints_on)
-		return;
+	unsigned long flags;
 
 	save_and_cli(flags);
-	info->regs->cr = AMR_INIT;
-	info->regs->dr = AM_INIT_ACTIVE | AM_INIT_DISABLE_INTS;
+	if (info->ints_on) {
+		sbus_writeb(AMR_INIT, info->regs + CR);
+		sbus_writeb(AM_INIT_ACTIVE | AM_INIT_DISABLE_INTS,
+			    info->regs + DR);
+		info->ints_on = 0;
+	}
 	restore_flags(flags);
 
-	info->ints_on = 0;
 }  
 
 /* Idle amd7930 (no interrupts, no audio, no data) */
 static __inline__ void amd7930_idle(struct amd7930_info *info)
 {
-	register unsigned long flags;
-
-	if (!info->ints_on)
-		return;
+	unsigned long flags;
 
 	save_and_cli(flags);
-	info->regs->cr = AMR_INIT;
-	info->regs->dr = 0;
+	if (info->ints_on) {
+		sbus_writeb(AMR_INIT, info->regs + CR);
+		sbus_writeb(0, info->regs + DR);
+		info->ints_on = 0;
+	}
 	restore_flags(flags);
-
-	info->ints_on = 0;
 }  
 
 /* Commit the local copy of the MAP registers to the amd7930. */
 static void amd7930_write_map(struct sparcaudio_driver *drv)
 {
-	struct amd7930_info *info = (struct amd7930_info *)drv->private;
-	struct amd7930      *regs = info->regs;
+	struct amd7930_info *info = (struct amd7930_info *) drv->private;
+	unsigned long        regs = info->regs;
 	struct amd7930_map  *map  = &info->map;
 	unsigned long flags;
 
 	save_and_cli(flags);
 
-	regs->cr = AMR_MAP_GX;
+	sbus_writeb(AMR_MAP_GX, regs + CR);
 	amd7930_out16(regs, map->gx);
 
-	regs->cr = AMR_MAP_GR;
+	sbus_writeb(AMR_MAP_GR, regs + CR);
 	amd7930_out16(regs, map->gr);
 
-	regs->cr = AMR_MAP_STGR;
+	sbus_writeb(AMR_MAP_STGR, regs + CR);
 	amd7930_out16(regs, map->stgr);
 
-	regs->cr = AMR_MAP_GER;
+	sbus_writeb(AMR_MAP_GER, regs + CR);
 	amd7930_out16(regs, map->ger);
 
-	regs->cr = AMR_MAP_MMR1;
-	regs->dr = map->mmr1;
+	sbus_writeb(AMR_MAP_MMR1, regs + CR);
+	sbus_writeb(map->mmr1, regs + DR);
 
-	regs->cr = AMR_MAP_MMR2;
-	regs->dr = map->mmr2;
+	sbus_writeb(AMR_MAP_MMR2, regs + CR);
+	sbus_writeb(map->mmr2, regs + DR);
 
 	restore_flags(flags);
 }
@@ -346,7 +340,7 @@ static void amd7930_write_map(struct sparcaudio_driver *drv)
 /* Update the MAP registers with new settings. */
 static void amd7930_update_map(struct sparcaudio_driver *drv)
 {
-	struct amd7930_info *info = (struct amd7930_info *)drv->private;
+	struct amd7930_info *info = (struct amd7930_info *) drv->private;
 	struct amd7930_map  *map  = &info->map;
 	int level;
 
@@ -380,14 +374,17 @@ static void amd7930_update_map(struct sparcaudio_driver *drv)
 
 #ifdef L2FRAME_DEBUG
 
-inline void debug_info(struct amd7930_info *info, char c) {
+inline void debug_info(struct amd7930_info *info, char c)
+{
 	struct IsdnCardState *cs;
 
-	if (!info || !info->D.output_callback_arg) return;
+	if (!info || !info->D.output_callback_arg)
+		return;
 
-	cs = (struct IsdnCardState *)info->D.output_callback_arg;
+	cs = (struct IsdnCardState *) info->D.output_callback_arg;
 
-	if (!cs || !cs->status_write) return;
+	if (!cs || !cs->status_write)
+		return;
 
 	if (cs->debug & L1_DEB_INTSTAT) {
 		*(cs->status_write++) = c;
@@ -402,15 +399,15 @@ inline void debug_info(struct amd7930_info *info, char c) {
 
 #endif
 
-
 static void fill_D_xmit_fifo(struct amd7930_info *info)
 {
 	/* Send next byte(s) of outgoing data. */
 	while (info->D.output_ptr && info->D.output_count > 0 &&
-               (info->regs->dsr2 & AMR_DSR2_TBE)) {
+               (sbus_readb(info->regs + DSR2) & AMR_DSR2_TBE)) {
+		u8 byte = *(info->D.output_ptr);
 
 		/* Send the next byte and advance buffer pointer. */
-		info->regs->dctb = *(info->D.output_ptr);
+		sbus_writeb(byte, info->regs + DCTB);
 		info->D.output_ptr++;
 		info->D.output_count--;
 
@@ -437,51 +434,40 @@ static void transceive_Dchannel(struct amd7930_info *info)
 		if (info->D.output_callback)
 			(*info->D.output_callback)
 				(info->D.output_callback_arg,
-				 info->regs->der);
-				 /* info->regs->der & D_XMIT_ERRORS); */
+				 sbus_readb(info->regs + DER));
+				 /* sbus_readb(info->regs + DER) & D_XMIT_ERRORS); */
 	}
 
 	/* Read the next byte(s) of incoming data. */
 
-	while (info->regs->dsr2 & AMR_DSR2_RBA) {
-
+	while (sbus_readb(info->regs + DSR2) & AMR_DSR2_RBA) {
 		if (info->D.input_ptr &&
 		    (info->D.input_count < info->D.input_limit)) {
-
 			/* Get the next byte and advance buffer pointer. */
-
-			*(info->D.input_ptr) = info->regs->dcrb;
+			*(info->D.input_ptr) = sbus_readb(info->regs + DCRB);
 			info->D.input_ptr++;
 			info->D.input_count++;
-
 		} else {
-
 			/* Overflow - should be detected by chip via RBLR
 			 * so we'll just consume data until we see LBRP
 			 */
-
-			dummy = info->regs->dcrb;
-
+			dummy = sbus_readb(info->regs + DCRB);
 		}
 
 		debug_info(info, '<');
 
-		if (info->regs->dsr2 & AMR_DSR2_LBRP) {
-
-			/* End of recv packet? Notify the midlevel driver. */
-
+		if (sbus_readb(info->regs + DSR2) & AMR_DSR2_LBRP) {
 			__u8 der;
 
+			/* End of recv packet? Notify the midlevel driver. */
 			debug_info(info, '!');
-
 			info->D.input_ptr = NULL;
-
-			der = info->regs->der & D_RECV_ERRORS;
+			der = sbus_readb(info->regs + DER) & D_RECV_ERRORS;
 
 			/* Read receive byte count - advances FIFOs */
-			info->regs->cr = AMR_DLC_DRCR;
-			dummy = info->regs->dr;
-			dummy = info->regs->dr;
+			sbus_writeb(AMR_DLC_DRCR, info->regs + CR);
+			dummy = sbus_readb(info->regs + DR);
+			dummy = sbus_readb(info->regs + DR);
 
 			if (info->D.input_callback)
 				(*info->D.input_callback)
@@ -492,26 +478,33 @@ static void transceive_Dchannel(struct amd7930_info *info)
 	}
 }
 
-long amd7930_xmit_idles=0;
+long amd7930_xmit_idles = 0;
 
 static void transceive_Bchannel(struct amd7930_channel *channel,
-	__volatile__ __u8 *io_reg)
+				unsigned long reg)
 {
 	/* Send the next byte of outgoing data. */
 	if (channel->output_ptr && channel->output_count > 0) {
+		u8 byte;
 
 		/* Send the next byte and advance buffer pointer. */
 		switch(channel->output_format) {
 		case AUDIO_ENCODING_ULAW:
 		case AUDIO_ENCODING_ALAW:
-			*io_reg = *(channel->output_ptr);
+			byte = *(channel->output_ptr);
+			sbus_writeb(byte, reg);
 			break;
 		case AUDIO_ENCODING_LINEAR8:
-			*io_reg = bilinear2mulaw(*(channel->output_ptr));
+			byte = bilinear2mulaw(*(channel->output_ptr));
+			sbus_writeb(byte, reg);
 			break;
 		case AUDIO_ENCODING_LINEAR:
 			if (channel->output_count >= 2) {
-				*io_reg = linear2mulaw(*((__u16*)(channel->output_ptr)));
+				u16 val = channel->output_ptr[0] << 8;
+
+				val |= channel->output_ptr[1];
+				byte = linear2mulaw(val);
+				sbus_writeb(byte, reg);
 				channel->output_ptr++;
 				channel->output_count--;
 			};
@@ -529,28 +522,31 @@ static void transceive_Bchannel(struct amd7930_channel *channel,
 					(channel->output_callback_arg,1);
 		}
 	} else {
-		*io_reg = channel->xmit_idle_char;
+		sbus_writeb(channel->xmit_idle_char, reg);
 		amd7930_xmit_idles++;
         }
 
 	/* Read the next byte of incoming data. */
 	if (channel->input_ptr && channel->input_count > 0) {
-
 		/* Get the next byte and advance buffer pointer. */
 		switch(channel->input_format) {
 		case AUDIO_ENCODING_ULAW:
 		case AUDIO_ENCODING_ALAW:
-			*(channel->input_ptr) = *io_reg;
+			*(channel->input_ptr) = sbus_readb(reg);
 			break;
 		case AUDIO_ENCODING_LINEAR8:
-			*(channel->input_ptr) = mulaw2bilinear(*io_reg);
+			*(channel->input_ptr) = mulaw2bilinear(sbus_readb(reg));
 			break;
 		case AUDIO_ENCODING_LINEAR:
 			if (channel->input_count >= 2) {
-				*((__u16*)(channel->input_ptr)) = mulaw2linear(*io_reg);
+				u16 val = mulaw2linear(sbus_readb(reg));
+				channel->input_ptr[0] = val >> 8;
+				channel->input_ptr[1] = val & 0xff;
 				channel->input_ptr++;
 				channel->input_count--;
-			} else *(channel->input_ptr) = 0;
+			} else {
+				*(channel->input_ptr) = 0;
+			}
 		};
 		channel->input_ptr++;
 		channel->input_count--;
@@ -561,7 +557,7 @@ static void transceive_Bchannel(struct amd7930_channel *channel,
 			channel->input_count = 0;
 			if (channel->input_callback)
 				(*channel->input_callback)
-					(channel->input_callback_arg, 1);
+					(channel->input_callback_arg, 1, 0);
 		}
 	}
 }
@@ -569,20 +565,19 @@ static void transceive_Bchannel(struct amd7930_channel *channel,
 /* Interrupt handler (The chip takes only one byte per interrupt. Grrr!) */
 static void amd7930_interrupt(int irq, void *dev_id, struct pt_regs *intr_regs)
 {
-	struct sparcaudio_driver *drv = (struct sparcaudio_driver *)dev_id;
-	struct amd7930_info *info = (struct amd7930_info *)drv->private;
-	struct amd7930 *regs = info->regs;
+	struct sparcaudio_driver *drv = (struct sparcaudio_driver *) dev_id;
+	struct amd7930_info *info = (struct amd7930_info *) drv->private;
+	unsigned long regs = info->regs;
 	__u8 ir;
-	__u8 lsr;
 
 	/* Clear the interrupt. */
-	ir = regs->ir;
+	ir = sbus_readb(regs + IR);
 
 	if (ir & AMR_IR_BBUF) {
 		if (info->Bb.channel_status == CHANNEL_INUSE)
-			transceive_Bchannel(&info->Bb, &info->regs->bbtb);
+			transceive_Bchannel(&info->Bb, info->regs + BBTB);
 		if (info->Bc.channel_status == CHANNEL_INUSE)
-			transceive_Bchannel(&info->Bc, &info->regs->bctb);
+			transceive_Bchannel(&info->Bc, info->regs + BCTB);
 	}
 
 	if (ir & (AMR_IR_DRTHRSH | AMR_IR_DTTHRSH | AMR_IR_DSRI)) {
@@ -592,21 +587,22 @@ static void amd7930_interrupt(int irq, void *dev_id, struct pt_regs *intr_regs)
 	}
 
 	if (ir & AMR_IR_LSRI) {
-		regs->cr = AMR_LIU_LSR;
-		lsr = regs->dr;
+		__u8 lsr;
 
-                info->liu_state = (lsr&0x7) + 2;
+		sbus_writeb(AMR_LIU_LSR, regs + CR);
+		lsr = sbus_readb(regs + DR);
+
+                info->liu_state = (lsr & 0x7) + 2;
 
                 if (info->liu_callback)
 			(*info->liu_callback)(info->liu_callback_arg);
         }
 }
 
-
 static int amd7930_open(struct inode * inode, struct file * file,
 			struct sparcaudio_driver *drv)
 {
-	struct amd7930_info *info = (struct amd7930_info *)drv->private;
+	struct amd7930_info *info = (struct amd7930_info *) drv->private;
 
 	switch(MINOR(inode->i_rdev) & 0xf) {
 	case SPARCAUDIO_AUDIO_MINOR:
@@ -634,31 +630,29 @@ static void amd7930_release(struct inode * inode, struct file * file,
 static void request_Baudio(struct amd7930_info *info)
 {
 	if (info->Bb.channel_status == CHANNEL_AVAILABLE) {
-
 		info->Bb.channel_status = CHANNEL_INUSE;
 		info->Baudio = &info->Bb;
 
 		/* Multiplexor map - audio (Ba) to Bb */
-		info->regs->cr = AMR_MUX_MCR1;
-		info->regs->dr = AM_MUX_CHANNEL_Ba | (AM_MUX_CHANNEL_Bb << 4);
+		sbus_writeb(AMR_MUX_MCR1, info->regs + CR);
+		sbus_writeb(AM_MUX_CHANNEL_Ba | (AM_MUX_CHANNEL_Bb << 4),
+			    info->regs + DR);
 
 		/* Enable B channel interrupts */
-		info->regs->cr = AMR_MUX_MCR4;
-		info->regs->dr = AM_MUX_MCR4_ENABLE_INTS;
-
+		sbus_writeb(AMR_MUX_MCR4, info->regs + CR);
+		sbus_writeb(AM_MUX_MCR4_ENABLE_INTS, info->regs + DR);
 	} else if (info->Bc.channel_status == CHANNEL_AVAILABLE) {
-
 		info->Bc.channel_status = CHANNEL_INUSE;
 		info->Baudio = &info->Bc;
 
 		/* Multiplexor map - audio (Ba) to Bc */
-		info->regs->cr = AMR_MUX_MCR1;
-		info->regs->dr = AM_MUX_CHANNEL_Ba | (AM_MUX_CHANNEL_Bc << 4);
+		sbus_writeb(AMR_MUX_MCR1, info->regs + CR);
+		sbus_writeb(AM_MUX_CHANNEL_Ba | (AM_MUX_CHANNEL_Bc << 4),
+			    info->regs + DR);
 
 		/* Enable B channel interrupts */
-		info->regs->cr = AMR_MUX_MCR4;
-		info->regs->dr = AM_MUX_MCR4_ENABLE_INTS;
-
+		sbus_writeb(AMR_MUX_MCR4, info->regs + CR);
+		sbus_writeb(AM_MUX_MCR4_ENABLE_INTS, info->regs + DR);
 	}
 }
 
@@ -666,16 +660,15 @@ static void release_Baudio(struct amd7930_info *info)
 {
 	if (info->Baudio) {
 		info->Baudio->channel_status = CHANNEL_AVAILABLE;
-		info->regs->cr = AMR_MUX_MCR1;
-		info->regs->dr = 0;
+		sbus_writeb(AMR_MUX_MCR1, info->regs + CR);
+		sbus_writeb(0, info->regs + DR);
 		info->Baudio = NULL;
 
 		if (info->Bb.channel_status == CHANNEL_AVAILABLE &&
 		    info->Bc.channel_status == CHANNEL_AVAILABLE) {
-
 			/* Disable B channel interrupts */
-			info->regs->cr = AMR_MUX_MCR4;
-			info->regs->dr = 0;
+			sbus_writeb(AMR_MUX_MCR4, info->regs + CR);
+			sbus_writeb(0, info->regs + DR);
 		}
 	}
 }
@@ -683,25 +676,24 @@ static void release_Baudio(struct amd7930_info *info)
 static void amd7930_start_output(struct sparcaudio_driver *drv,
 				 __u8 * buffer, unsigned long count)
 {
-	struct amd7930_info *info = (struct amd7930_info *)drv->private;
+	struct amd7930_info *info = (struct amd7930_info *) drv->private;
 
-	if (! info->Baudio) {
+	if (! info->Baudio)
 		request_Baudio(info);
-	}
 
 	if (info->Baudio) {
 		info->Baudio->output_ptr = buffer;
 		info->Baudio->output_count = count;
 		info->Baudio->output_format = info->format_type;
-       	info->Baudio->output_callback = (void *) &sparcaudio_output_done;
-        info->Baudio->output_callback_arg = (void *) drv;
+		info->Baudio->output_callback = (void *) &sparcaudio_output_done;
+		info->Baudio->output_callback_arg = (void *) drv;
 		info->Baudio->xmit_idle_char = 0;
 	}
 }
 
 static void amd7930_stop_output(struct sparcaudio_driver *drv)
 {
-	struct amd7930_info *info = (struct amd7930_info *)drv->private;
+	struct amd7930_info *info = (struct amd7930_info *) drv->private;
 
 	if (info->Baudio) {
 		info->Baudio->output_ptr = NULL;
@@ -714,11 +706,10 @@ static void amd7930_stop_output(struct sparcaudio_driver *drv)
 static void amd7930_start_input(struct sparcaudio_driver *drv,
 				__u8 * buffer, unsigned long count)
 {
-	struct amd7930_info *info = (struct amd7930_info *)drv->private;
+	struct amd7930_info *info = (struct amd7930_info *) drv->private;
 
-	if (! info->Baudio) {
+	if (! info->Baudio)
 		request_Baudio(info);
-	}
 
 	if (info->Baudio) {
 		info->Baudio->input_ptr = buffer;
@@ -731,7 +722,7 @@ static void amd7930_start_input(struct sparcaudio_driver *drv,
 
 static void amd7930_stop_input(struct sparcaudio_driver *drv)
 {
-	struct amd7930_info *info = (struct amd7930_info *)drv->private;
+	struct amd7930_info *info = (struct amd7930_info *) drv->private;
 
 	if (info->Baudio) {
 		info->Baudio->input_ptr = NULL;
@@ -772,7 +763,7 @@ static int amd7930_get_input_ports(struct sparcaudio_driver *drv)
 
 static int amd7930_set_output_volume(struct sparcaudio_driver *drv, int vol)
 {
-	struct amd7930_info *info = (struct amd7930_info *)drv->private;
+	struct amd7930_info *info = (struct amd7930_info *) drv->private;
 
 	info->pgain = vol;
 	amd7930_update_map(drv);
@@ -781,14 +772,14 @@ static int amd7930_set_output_volume(struct sparcaudio_driver *drv, int vol)
 
 static int amd7930_get_output_volume(struct sparcaudio_driver *drv)
 {
-	struct amd7930_info *info = (struct amd7930_info *)drv->private;
+	struct amd7930_info *info = (struct amd7930_info *) drv->private;
 
 	return info->pgain;
 }
 
 static int amd7930_set_input_volume(struct sparcaudio_driver *drv, int vol)
 {
-	struct amd7930_info *info = (struct amd7930_info *)drv->private;
+	struct amd7930_info *info = (struct amd7930_info *) drv->private;
 
 	info->rgain = vol;
 	amd7930_update_map(drv);
@@ -797,14 +788,14 @@ static int amd7930_set_input_volume(struct sparcaudio_driver *drv, int vol)
 
 static int amd7930_get_input_volume(struct sparcaudio_driver *drv)
 {
-	struct amd7930_info *info = (struct amd7930_info *)drv->private;
+	struct amd7930_info *info = (struct amd7930_info *) drv->private;
 
 	return info->rgain;
 }
 
 static int amd7930_set_monitor_volume(struct sparcaudio_driver *drv, int vol)
 {
-	struct amd7930_info *info = (struct amd7930_info *)drv->private;
+	struct amd7930_info *info = (struct amd7930_info *) drv->private;
 
 	info->mgain = vol;
 	amd7930_update_map(drv);
@@ -813,7 +804,7 @@ static int amd7930_set_monitor_volume(struct sparcaudio_driver *drv, int vol)
 
 static int amd7930_get_monitor_volume(struct sparcaudio_driver *drv)
 {
-      struct amd7930_info *info = (struct amd7930_info *)drv->private;
+      struct amd7930_info *info = (struct amd7930_info *) drv->private;
 
       return info->mgain;
 }
@@ -848,7 +839,7 @@ static int amd7930_get_input_channels(struct sparcaudio_driver *drv)
 static int 
 amd7930_set_input_channels(struct sparcaudio_driver *drv, int value)
 {
-  return (value == AUDIO_MIN_REC_CHANNELS) ? 0 : -EINVAL;
+	return (value == AUDIO_MIN_REC_CHANNELS) ? 0 : -EINVAL;
 }
 
 static int amd7930_get_output_precision(struct sparcaudio_driver *drv)
@@ -859,7 +850,7 @@ static int amd7930_get_output_precision(struct sparcaudio_driver *drv)
 static int 
 amd7930_set_output_precision(struct sparcaudio_driver *drv, int value)
 {
-  return (value == AUDIO_MIN_PLAY_PRECISION) ? 0 : -EINVAL;
+	return (value == AUDIO_MIN_PLAY_PRECISION) ? 0 : -EINVAL;
 }
 
 static int amd7930_get_input_precision(struct sparcaudio_driver *drv)
@@ -870,32 +861,36 @@ static int amd7930_get_input_precision(struct sparcaudio_driver *drv)
 static int 
 amd7930_set_input_precision(struct sparcaudio_driver *drv, int value)
 {
-  return (value == AUDIO_MIN_REC_PRECISION) ? 0 : -EINVAL;
+	return (value == AUDIO_MIN_REC_PRECISION) ? 0 : -EINVAL;
 }
 
 static int amd7930_get_output_port(struct sparcaudio_driver *drv)
 {
-  struct amd7930_info *info = (struct amd7930_info *)drv->private;
-  if (info->map.mmr2 & AM_MAP_MMR2_LS)
-    return AUDIO_SPEAKER; 
-  return AUDIO_HEADPHONE;
+	struct amd7930_info *info = (struct amd7930_info *) drv->private;
+
+	if (info->map.mmr2 & AM_MAP_MMR2_LS)
+		return AUDIO_SPEAKER; 
+
+	return AUDIO_HEADPHONE;
 }
 
 static int amd7930_set_output_port(struct sparcaudio_driver *drv, int value)
 {
-  struct amd7930_info *info = (struct amd7930_info *)drv->private;
-  switch (value) {
-  case AUDIO_HEADPHONE:
-    info->map.mmr2 &= ~AM_MAP_MMR2_LS;
-    break;
-  case AUDIO_SPEAKER:
-    info->map.mmr2 |= AM_MAP_MMR2_LS;
-    break;
-  default:
-    return -EINVAL;
-  }
-  amd7930_update_map(drv);
-  return 0;
+	struct amd7930_info *info = (struct amd7930_info *) drv->private;
+
+	switch (value) {
+	case AUDIO_HEADPHONE:
+		info->map.mmr2 &= ~AM_MAP_MMR2_LS;
+		break;
+	case AUDIO_SPEAKER:
+		info->map.mmr2 |= AM_MAP_MMR2_LS;
+		break;
+	default:
+		return -EINVAL;
+	};
+
+	amd7930_update_map(drv);
+	return 0;
 }
 
 /* Only a microphone here, so no troubles */
@@ -906,36 +901,37 @@ static int amd7930_get_input_port(struct sparcaudio_driver *drv)
 
 static int amd7930_get_encoding(struct sparcaudio_driver *drv)
 {
-  struct amd7930_info *info = (struct amd7930_info *)drv->private;
-  if ((info->map.mmr1 & AM_MAP_MMR1_ALAW) && 
-      (info->format_type == AUDIO_ENCODING_ALAW))
-    return AUDIO_ENCODING_ALAW;
+	struct amd7930_info *info = (struct amd7930_info *) drv->private;
 
-  return info->format_type;
+	if ((info->map.mmr1 & AM_MAP_MMR1_ALAW) && 
+	    (info->format_type == AUDIO_ENCODING_ALAW))
+		return AUDIO_ENCODING_ALAW;
+
+	return info->format_type;
 }
 
 static int 
 amd7930_set_encoding(struct sparcaudio_driver *drv, int value)
 {
-  struct amd7930_info *info = (struct amd7930_info *)drv->private;
+	struct amd7930_info *info = (struct amd7930_info *) drv->private;
 
-  switch (value) {
-  case AUDIO_ENCODING_ALAW:
-    info->map.mmr1 |= AM_MAP_MMR1_ALAW;
-    break;
-  case AUDIO_ENCODING_LINEAR8:
-  case AUDIO_ENCODING_LINEAR:
-  case AUDIO_ENCODING_ULAW:
-    info->map.mmr1 &= ~AM_MAP_MMR1_ALAW;
-    break;
-  default:
-    return -EINVAL;
-  };
+	switch (value) {
+	case AUDIO_ENCODING_ALAW:
+		info->map.mmr1 |= AM_MAP_MMR1_ALAW;
+		break;
+	case AUDIO_ENCODING_LINEAR8:
+	case AUDIO_ENCODING_LINEAR:
+	case AUDIO_ENCODING_ULAW:
+		info->map.mmr1 &= ~AM_MAP_MMR1_ALAW;
+		break;
+	default:
+		return -EINVAL;
+	};
 
-  info->format_type = value;
+	info->format_type = value;
 
-  amd7930_update_map(drv);
-  return 0;
+	amd7930_update_map(drv);
+	return 0;
 }
 
 /* This is what you get. Take it or leave it */
@@ -947,7 +943,7 @@ static int amd7930_get_output_rate(struct sparcaudio_driver *drv)
 static int 
 amd7930_set_output_rate(struct sparcaudio_driver *drv, int value)
 {
-  return (value == AMD7930_RATE) ? 0 : -EINVAL;
+	return (value == AMD7930_RATE) ? 0 : -EINVAL;
 }
 
 static int amd7930_get_input_rate(struct sparcaudio_driver *drv)
@@ -958,7 +954,7 @@ static int amd7930_get_input_rate(struct sparcaudio_driver *drv)
 static int
 amd7930_set_input_rate(struct sparcaudio_driver *drv, int value)
 {
-  return (value == AMD7930_RATE) ? 0 : -EINVAL;
+	return (value == AMD7930_RATE) ? 0 : -EINVAL;
 }
 
 static int amd7930_get_output_muted(struct sparcaudio_driver *drv)
@@ -968,31 +964,30 @@ static int amd7930_get_output_muted(struct sparcaudio_driver *drv)
 
 static void amd7930_loopback(struct sparcaudio_driver *drv, unsigned int value)
 {
-  struct amd7930_info *info = (struct amd7930_info *)drv->private;
+	struct amd7930_info *info = (struct amd7930_info *) drv->private;
 
-  if (value)
-    info->map.mmr1 |= AM_MAP_MMR1_LOOPBACK;
-  else
-    info->map.mmr1 &= ~AM_MAP_MMR1_LOOPBACK;
-  amd7930_update_map(drv);
-  return;
+	if (value)
+		info->map.mmr1 |= AM_MAP_MMR1_LOOPBACK;
+	else
+		info->map.mmr1 &= ~AM_MAP_MMR1_LOOPBACK;
+	amd7930_update_map(drv);
 }
 
 static int amd7930_ioctl(struct inode * inode, struct file * file,
                          unsigned int cmd, unsigned long arg, 
                          struct sparcaudio_driver *drv)
 {
-  int retval = 0;
+	int retval = 0;
   
-  switch (cmd) {
-  case AUDIO_DIAG_LOOPBACK:
-    amd7930_loopback(drv, (unsigned int)arg);
-    break;
-  default:
-    retval = -EINVAL;
-  }
+	switch (cmd) {
+	case AUDIO_DIAG_LOOPBACK:
+		amd7930_loopback(drv, (unsigned int)arg);
+		break;
+	default:
+		retval = -EINVAL;
+	};
 
-  return retval;
+	return retval;
 }
 
 
@@ -1141,9 +1136,8 @@ static int amd7930_get_irqnum(int dev)
 {
 	struct amd7930_info *info;
 
-	if (dev > num_drivers) {
+	if (dev > num_drivers)
 		return(0);
-	}
 
 	info = (struct amd7930_info *) drivers[dev].private;
 
@@ -1154,9 +1148,8 @@ static int amd7930_get_liu_state(int dev)
 {
 	struct amd7930_info *info;
 
-	if (dev > num_drivers) {
+	if (dev > num_drivers)
 		return(0);
-	}
 
 	info = (struct amd7930_info *) drivers[dev].private;
 
@@ -1166,11 +1159,10 @@ static int amd7930_get_liu_state(int dev)
 static void amd7930_liu_init(int dev, void (*callback)(), void *callback_arg)
 {
 	struct amd7930_info *info;
-	register unsigned long flags;
+	unsigned long flags;
 
-	if (dev > num_drivers) {
+	if (dev > num_drivers)
 		return;
-	}
 
 	info = (struct amd7930_info *) drivers[dev].private;
 
@@ -1181,19 +1173,21 @@ static void amd7930_liu_init(int dev, void (*callback)(), void *callback_arg)
 	info->liu_callback_arg = callback_arg;
 
 	/* De-activate the ISDN Line Interface Unit (LIU) */
-	info->regs->cr = AMR_LIU_LMR1;
-	info->regs->dr = 0;
+	sbus_writeb(AMR_LIU_LMR1, info->regs + CR);
+	sbus_writeb(0, info->regs + DR);
 
 	/* Request interrupt when LIU changes state from/to F3/F7/F8 */
-	info->regs->cr = AMR_LIU_LMR2;
-	info->regs->dr = AM_LIU_LMR2_EN_F3_INT |
-          AM_LIU_LMR2_EN_F7_INT | AM_LIU_LMR2_EN_F8_INT;
+	sbus_writeb(AMR_LIU_LMR2, info->regs + CR);
+	sbus_writeb(AM_LIU_LMR2_EN_F3_INT |
+		    AM_LIU_LMR2_EN_F7_INT |
+		    AM_LIU_LMR2_EN_F8_INT,
+		    info->regs + DR);
 
 	/* amd7930_enable_ints(info); */
 
 	/* Activate the ISDN Line Interface Unit (LIU) */
-	info->regs->cr = AMR_LIU_LMR1;
-	info->regs->dr = AM_LIU_LMR1_LIU_ENABL;
+	sbus_writeb(AMR_LIU_LMR1, info->regs + CR);
+	sbus_writeb(AM_LIU_LMR1_LIU_ENABL, info->regs + DR);
 
 	restore_flags(flags);
 }
@@ -1201,11 +1195,10 @@ static void amd7930_liu_init(int dev, void (*callback)(), void *callback_arg)
 static void amd7930_liu_activate(int dev, int priority)
 {
 	struct amd7930_info *info;
-	register unsigned long flags;
+	unsigned long flags;
 
-	if (dev > num_drivers) {
+	if (dev > num_drivers)
 		return;
-	}
 
 	info = (struct amd7930_info *) drivers[dev].private;
 
@@ -1218,14 +1211,13 @@ static void amd7930_liu_activate(int dev, int priority)
          *
          * Priority 0 is eight 1s; priority 1 is ten 1s; etc
          */
-
-        info->regs->cr = AMR_LIU_LPR;
-        info->regs->dr = priority & 0x0f;
+        sbus_writeb(AMR_LIU_LPR, info->regs + CR);
+        sbus_writeb(priority & 0x0f, info->regs + DR);
 
 	/* request LIU activation */
-
-	info->regs->cr = AMR_LIU_LMR1;
-	info->regs->dr = AM_LIU_LMR1_LIU_ENABL | AM_LIU_LMR1_REQ_ACTIV;
+	sbus_writeb(AMR_LIU_LMR1, info->regs + CR);
+	sbus_writeb(AM_LIU_LMR1_LIU_ENABL | AM_LIU_LMR1_REQ_ACTIV,
+		    info->regs + DR);
 
 	restore_flags(flags);
 }
@@ -1233,20 +1225,18 @@ static void amd7930_liu_activate(int dev, int priority)
 static void amd7930_liu_deactivate(int dev)
 {
 	struct amd7930_info *info;
-	register unsigned long flags;
+	unsigned long flags;
 
-	if (dev > num_drivers) {
+	if (dev > num_drivers)
 		return;
-	}
 
 	info = (struct amd7930_info *) drivers[dev].private;
 
 	save_and_cli(flags);
 
 	/* deactivate LIU */
-
-	info->regs->cr = AMR_LIU_LMR1;
-	info->regs->dr = 0;
+	sbus_writeb(AMR_LIU_LMR1, info->regs + CR);
+	sbus_writeb(0, info->regs + DR);
 
 	restore_flags(flags);
 }
@@ -1255,12 +1245,11 @@ static void amd7930_dxmit(int dev, __u8 *buffer, unsigned int count,
 			  void (*callback)(void *, int), void *callback_arg)
 {
 	struct amd7930_info *info;
-	register unsigned long flags;
+	unsigned long flags;
 	__u8 dmr1;
 
-	if (dev > num_drivers) {
+	if (dev > num_drivers)
 		return;
-	}
 
 	info = (struct amd7930_info *) drivers[dev].private;
 
@@ -1278,16 +1267,16 @@ static void amd7930_dxmit(int dev, __u8 *buffer, unsigned int count,
 	info->D.output_callback_arg = callback_arg;
 
 	/* Enable D-channel Transmit Threshold interrupt; disable addressing */
-	info->regs->cr = AMR_DLC_DMR1;
-	dmr1 = info->regs->dr;
+	sbus_writeb(AMR_DLC_DMR1, info->regs + CR);
+	dmr1 = sbus_readb(info->regs + DR);
 	dmr1 |= AMR_DLC_DMR1_DTTHRSH_INT;
 	dmr1 &= ~AMR_DLC_DMR1_EN_ADDRS;
-	info->regs->dr = dmr1;
+	sbus_writeb(dmr1, info->regs + DR);
 
 	/* Begin xmit by setting D-channel Transmit Byte Count Reg (DTCR) */
-	info->regs->cr = AMR_DLC_DTCR;
-	info->regs->dr = count & 0xff;
-	info->regs->dr = (count >> 8) & 0xff;
+	sbus_writeb(AMR_DLC_DTCR, info->regs + CR);
+	sbus_writeb(count & 0xff, info->regs + DR);
+	sbus_writeb((count >> 8) & 0xff, info->regs + DR);
 
 	/* Prime xmit FIFO */
 	/* fill_D_xmit_fifo(info); */
@@ -1301,12 +1290,11 @@ static void amd7930_drecv(int dev, __u8 *buffer, unsigned int size,
 			  void *callback_arg)
 {
 	struct amd7930_info *info;
-	register unsigned long flags;
+	unsigned long flags;
 	__u8 dmr1;
 
-	if (dev > num_drivers) {
+	if (dev > num_drivers)
 		return;
-	}
 
 	info = (struct amd7930_info *) drivers[dev].private;
 
@@ -1328,16 +1316,16 @@ static void amd7930_drecv(int dev, __u8 *buffer, unsigned int size,
 	 * Enable D-channel End of Receive Packet interrupt;
 	 * Disable address recognition
 	 */
-	info->regs->cr = AMR_DLC_DMR1;
-	dmr1 = info->regs->dr;
+	sbus_writeb(AMR_DLC_DMR1, info->regs + CR);
+	dmr1 = sbus_readb(info->regs + DR);
 	dmr1 |= AMR_DLC_DMR1_DRTHRSH_INT | AMR_DLC_DMR1_EORP_INT;
 	dmr1 &= ~AMR_DLC_DMR1_EN_ADDRS;
-	info->regs->dr = dmr1;
+	sbus_writeb(dmr1, info->regs + DR);
 
 	/* Set D-channel Receive Byte Count Limit Register */
-	info->regs->cr = AMR_DLC_DRCR;
-	info->regs->dr = size & 0xff;
-	info->regs->dr = (size >> 8) & 0xff;
+	sbus_writeb(AMR_DLC_DRCR, info->regs + CR);
+	sbus_writeb(size & 0xff, info->regs + DR);
+	sbus_writeb((size >> 8) & 0xff, info->regs + DR);
 
 	restore_flags(flags);
 }
@@ -1346,54 +1334,56 @@ static int amd7930_bopen(int dev, unsigned int chan,
                          int mode, u_char xmit_idle_char)
 {
 	struct amd7930_info *info;
-	register unsigned long flags;
+	unsigned long flags;
+	u8 tmp;
 
-	if (dev > num_drivers || chan<0 || chan>1) {
+	if (dev > num_drivers || chan<0 || chan>1)
 		return -1;
-	}
 
-         if (mode == L1_MODE_HDLC) {
-                 return -1;
-         }
+	if (mode == L1_MODE_HDLC)
+		return -1;
  
 	info = (struct amd7930_info *) drivers[dev].private;
 
 	save_and_cli(flags);
 
 	if (info->Bb.channel_status == CHANNEL_AVAILABLE) {
-
 		info->Bb.channel_status = CHANNEL_INUSE;
 		info->Bb.xmit_idle_char = xmit_idle_char;
 		info->Bisdn[chan] = &info->Bb;
 
 		/* Multiplexor map - isdn (B1/2) to Bb */
-		info->regs->cr = AMR_MUX_MCR2 + chan;
-		info->regs->dr = (AM_MUX_CHANNEL_B1 + chan) |
-				 (AM_MUX_CHANNEL_Bb << 4);
-
+		sbus_writeb(AMR_MUX_MCR2 + chan, info->regs + CR);
+		sbus_writeb((AM_MUX_CHANNEL_B1 + chan) |
+			    (AM_MUX_CHANNEL_Bb << 4),
+			    info->regs + DR);
 	} else if (info->Bc.channel_status == CHANNEL_AVAILABLE) {
-
 		info->Bc.channel_status = CHANNEL_INUSE;
 		info->Bc.xmit_idle_char = xmit_idle_char;
 		info->Bisdn[chan] = &info->Bc;
 
 		/* Multiplexor map - isdn (B1/2) to Bc */
-		info->regs->cr = AMR_MUX_MCR2 + chan;
-		info->regs->dr = (AM_MUX_CHANNEL_B1 + chan) |
-				 (AM_MUX_CHANNEL_Bc << 4);
-
+		sbus_writeb(AMR_MUX_MCR2 + chan, info->regs + CR);
+		sbus_writeb((AM_MUX_CHANNEL_B1 + chan) |
+			    (AM_MUX_CHANNEL_Bc << 4),
+			    info->regs + DR);
 	} else {
 		restore_flags(flags);
 		return (-1);
 	}
 
 	/* Enable B channel transmit */
-	info->regs->cr = AMR_LIU_LMR1;
-	info->regs->dr |= AM_LIU_LMR1_B1_ENABL + chan;
+	sbus_writeb(AMR_LIU_LMR1, info->regs + CR);
+	tmp = sbus_readb(info->regs + DR);
+	tmp |= AM_LIU_LMR1_B1_ENBL + chan;
+	sbus_writeb(tmp, info->regs + DR);
 
 	/* Enable B channel interrupts */
-	info->regs->cr = AMR_MUX_MCR4;
-	info->regs->dr = AM_MUX_MCR4_ENABLE_INTS | AM_MUX_MCR4_REVERSE_Bb | AM_MUX_MCR4_REVERSE_Bc;
+	sbus_writeb(AMR_MUX_MCR4, info->regs + CR);
+	sbus_writeb(AM_MUX_MCR4_ENABLE_INTS |
+		    AM_MUX_MCR4_REVERSE_Bb |
+		    AM_MUX_MCR4_REVERSE_Bc,
+		    info->regs + DR);
 
 	restore_flags(flags);
 	return 0;
@@ -1402,32 +1392,36 @@ static int amd7930_bopen(int dev, unsigned int chan,
 static void amd7930_bclose(int dev, unsigned int chan)
 {
 	struct amd7930_info *info;
-	register unsigned long flags;
+	unsigned long flags;
 
-	if (dev > num_drivers || chan<0 || chan>1) {
+	if (dev > num_drivers || chan<0 || chan>1)
 		return;
-	}
 
 	info = (struct amd7930_info *) drivers[dev].private;
 
 	save_and_cli(flags);
 
 	if (info->Bisdn[chan]) {
+		u8 tmp;
+
 		info->Bisdn[chan]->channel_status = CHANNEL_AVAILABLE;
-		info->regs->cr = AMR_MUX_MCR2 + chan;
-		info->regs->dr = 0;
+
+		sbus_writeb(AMR_MUX_MCR2 + chan, info->regs + CR);
+		sbus_writeb(0, info->regs + DR);
+
 		info->Bisdn[chan] = NULL;
 
 		/* Disable B channel transmit */
-		info->regs->cr = AMR_LIU_LMR1;
-		info->regs->dr &= ~(AM_LIU_LMR1_B1_ENABL + chan);
+		sbus_writeb(AMR_LIU_LMR1, info->regs + CR);
+		tmp = sbus_readb(info->regs + DR);
+		tmp &= ~(AM_LIU_LMR1_B1_ENABL + chan);
+		sbus_writeb(tmp, info->regs + DR);
 
 		if (info->Bb.channel_status == CHANNEL_AVAILABLE &&
 		    info->Bc.channel_status == CHANNEL_AVAILABLE) {
-
 			/* Disable B channel interrupts */
-			info->regs->cr = AMR_MUX_MCR4;
-			info->regs->dr = 0;
+			sbus_writeb(AMR_MUX_MCR4, info->regs + CR);
+			sbus_writeb(0, info->regs + DR);
 		}
 	}
 
@@ -1440,11 +1434,10 @@ static void amd7930_bxmit(int dev, unsigned int chan,
 {
 	struct amd7930_info *info;
 	struct amd7930_channel *Bchan;
-	register unsigned long flags;
+	unsigned long flags;
 
-	if (dev > num_drivers) {
+	if (dev > num_drivers)
 		return;
-	}
 
 	info = (struct amd7930_info *) drivers[dev].private;
 	Bchan = info->Bisdn[chan];
@@ -1469,11 +1462,10 @@ static void amd7930_brecv(int dev, unsigned int chan,
 {
 	struct amd7930_info *info;
 	struct amd7930_channel *Bchan;
-	register unsigned long flags;
+	unsigned long flags;
 
-	if (dev > num_drivers) {
+	if (dev > num_drivers)
 		return;
-	}
 
 	info = (struct amd7930_info *) drivers[dev].private;
 	Bchan = info->Bisdn[chan];
@@ -1573,16 +1565,17 @@ static struct sparcaudio_operations amd7930_ops = {
 
 /* Attach to an amd7930 chip given its PROM node. */
 static int amd7930_attach(struct sparcaudio_driver *drv, int node,
-			  struct linux_sbus *sbus, struct linux_sbus_device *sdev)
+			  struct sbus_bus *sbus, struct sbus_dev *sdev)
 {
 	struct linux_prom_registers regs;
 	struct linux_prom_irqs irq;
+	struct resource res, *resp;
 	struct amd7930_info *info;
 	int err;
 
 	/* Allocate our private information structure. */
 	drv->private = kmalloc(sizeof(struct amd7930_info), GFP_KERNEL);
-	if (!drv->private)
+	if (drv->private == NULL)
 		return -ENOMEM;
 
 	/* Point at the information structure and initialize it. */
@@ -1595,13 +1588,18 @@ static int amd7930_attach(struct sparcaudio_driver *drv, int node,
 
 	/* Map the registers into memory. */
 	prom_getproperty(node, "reg", (char *)&regs, sizeof(regs));
-	if (sbus && sdev)
-		prom_apply_sbus_ranges(sbus, &regs, 1, sdev);
+	if (sbus && sdev) {
+		resp = &sdev->resource[0];
+	} else {
+		resp = &res;
+		res.start = regs.phys_addr;
+		res.end = res.start + regs.reg_size - 1;
+		res.flags = IORESOURCE_IO | (regs.which_io & 0xff);
+	}
 	info->regs_size = regs.reg_size;
-	info->regs = sparc_alloc_io(regs.phys_addr, 0, regs.reg_size,
-					   "amd7930", regs.which_io, 0);
+	info->regs = sbus_ioremap(resp, 0, regs.reg_size, "amd7930");
 	if (!info->regs) {
-		printk(KERN_ERR "amd7930: could not allocate registers\n");
+		printk(KERN_ERR "amd7930: could not remap registers\n");
 		kfree(drv->private);
 		return -EIO;
 	}
@@ -1610,10 +1608,11 @@ static int amd7930_attach(struct sparcaudio_driver *drv, int node,
 	amd7930_idle(info);
 
 	/* Enable extended FIFO operation on D-channel */
-	info->regs->cr = AMR_DLC_EFCR;
-	info->regs->dr = AMR_DLC_EFCR_EXTEND_FIFO;
-	info->regs->cr = AMR_DLC_DMR4;
-	info->regs->dr = /* AMR_DLC_DMR4_RCV_30 | */ AMR_DLC_DMR4_XMT_14;
+	sbus_writeb(AMR_DLC_EFCR, info->regs + CR);
+	sbus_writeb(AMR_DLC_EFCR_EXTEND_FIFO, info->regs + DR);
+	sbus_writeb(AMR_DLC_DMR4, info->regs + CR);
+	sbus_writeb(/* AMR_DLC_DMR4_RCV_30 | */ AMR_DLC_DMR4_XMT_14,
+		    info->regs + DR);
 
 	/* Attach the interrupt handler to the audio interrupt. */
 	prom_getproperty(node, "intr", (char *)&irq, sizeof(irq));
@@ -1625,8 +1624,8 @@ static int amd7930_attach(struct sparcaudio_driver *drv, int node,
 
 	/* Initalize the local copy of the MAP registers. */
 	memset(&info->map, 0, sizeof(info->map));
-	info->map.mmr1 = AM_MAP_MMR1_GX | AM_MAP_MMR1_GER
-			 | AM_MAP_MMR1_GR | AM_MAP_MMR1_STG;
+	info->map.mmr1 = AM_MAP_MMR1_GX | AM_MAP_MMR1_GER |
+			 AM_MAP_MMR1_GR | AM_MAP_MMR1_STG;
         /* Start out with speaker, microphone */
         info->map.mmr2 |= (AM_MAP_MMR2_LS | AM_MAP_MMR2_AINB);
 
@@ -1647,14 +1646,14 @@ static int amd7930_attach(struct sparcaudio_driver *drv, int node,
 		printk(KERN_ERR "amd7930: unable to register\n");
 		disable_irq(info->irq);
 		free_irq(info->irq, drv);
-		sparc_free_io(info->regs, info->regs_size);
+		sbus_iounmap(info->regs, info->regs_size);
 		kfree(drv->private);
 		return -EIO;
 	}
 
 	/* Announce the hardware to the user. */
-	printk(KERN_INFO "amd7930 at 0x%lx irq %d\n",
-		(unsigned long)info->regs, info->irq);
+	printk(KERN_INFO "amd7930 at %lx irq %d\n",
+	       info->regs, info->irq);
 
 	/* Success! */
 	return 0;
@@ -1670,7 +1669,7 @@ static void amd7930_detach(struct sparcaudio_driver *drv)
 	amd7930_idle(info);
 	disable_irq(info->irq);
 	free_irq(info->irq, drv);
-	sparc_free_io(info->regs, info->regs_size);
+	sbus_iounmap(info->regs, info->regs_size);
 	kfree(drv->private);
 }
 #endif
@@ -1682,8 +1681,8 @@ int init_module(void)
 int __init amd7930_init(void)
 #endif
 {
-	struct linux_sbus *bus;
-	struct linux_sbus_device *sdev;
+	struct sbus_bus *sbus;
+	struct sbus_dev *sdev;
 	int node;
 
 	/* Try to find the sun4c "audio" node first. */
@@ -1695,7 +1694,7 @@ int __init amd7930_init(void)
 		num_drivers = 0;
 
 	/* Probe each SBUS for amd7930 chips. */
-	for_all_sbusdev(sdev,bus) {
+	for_all_sbusdev(sdev, sbus) {
 		if (!strcmp(sdev->prom_name, "audio")) {
 			/* Don't go over the max number of drivers. */
 			if (num_drivers >= MAX_DRIVERS)
@@ -1769,7 +1768,6 @@ static __u8 mulaw2bilinear(__u8 data)
 {
 	return ulaw[data];
 }
-
 
 static unsigned char linear[] = {
      0,    0,    0,    0,    0,    0,    0,    1,

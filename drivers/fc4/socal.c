@@ -61,23 +61,33 @@ static char *version =
 #define for_each_socal(s) for (s = socals; s; s = s->next)
 struct socal *socals = NULL;
 
-/* I don't think our VIS mem* routines will behave well
-   in IO... */
-static void socal_memcpy(void *d, void *s, int size)
+static void socal_copy_from_xram(void *d, unsigned long xram, long size)
 {
-	u32 *dp = (u32 *)d, *sp = (u32 *)s;
+	u32 *dp = (u32 *) d;
 	while (size) {
-		*dp++ = *sp++;
+		*dp++ = sbus_readl(xram);
+		xram += sizeof(u32);
+		size -= sizeof(u32);
+	}
+}
+
+static void socal_copy_to_xram(unsigned long xram, void *s, long size)
+{
+	u32 *sp = (u32 *) s;
+	while (size) {
+		u32 val = *sp++;
+		sbus_writel(val, xram);
+		xram += sizeof(u32);
 		size -= sizeof(u32);
 	}
 }
 
 #ifdef HAVE_SOCAL_UCODE
-static void socal_bzero(void *d, int size)
+static void socal_bzero(unsigned long xram, int size)
 {
-	u32 *dp = (u32 *)d;
 	while (size) {
-		*dp++ = 0;
+		sbus_writel(0, xram);
+		xram += sizeof(u32);
 		size -= sizeof(u32);
 	}
 }
@@ -85,16 +95,18 @@ static void socal_bzero(void *d, int size)
 
 static inline void socal_disable(struct socal *s)
 {
-	s->regs->imask = 0; s->regs->cmd = SOCAL_CMD_SOFT_RESET;
+	sbus_writel(0, s->regs + IMASK);
+	sbus_writel(SOCAL_CMD_SOFT_RESET, s->regs + CMD);
 }
 
 static inline void socal_enable(struct socal *s)
 {
 	SOD(("enable %08x\n", s->cfg))
-	s->regs->sae = 0; s->regs->cfg = s->cfg;
-	s->regs->cmd = SOCAL_CMD_RSP_QALL; 
+	sbus_writel(0, s->regs + SAE);
+	sbus_writel(s->cfg, s->regs + CFG);
+	sbus_writel(SOCAL_CMD_RSP_QALL, s->regs + CMD);
 	SOCAL_SETIMASK(s, SOCAL_IMASK_RSP_QALL | SOCAL_IMASK_SAE);
-	SOD(("imask %08x %08x\n", s->imask, s->regs->imask));
+	SOD(("imask %08x %08x\n", s->imask, sbus_readl(s->regs + IMASK)));
 }
 
 static void socal_reset(fc_channel *fc)
@@ -121,7 +133,7 @@ static void socal_reset(fc_channel *fc)
 	socal_enable(s);
 }
 
-static void inline socal_solicited (struct socal *s, int qno)
+static void inline socal_solicited(struct socal *s, unsigned long qno)
 {
 	fc_hdr fchdr;
 	socal_rsp *hwrsp;
@@ -138,8 +150,9 @@ static void inline socal_solicited (struct socal *s, int qno)
 			(socal_req *)(s->xram + (sw_cq->hw_cq->address & 0xfffe));
 	}
 	/* Finally an improvement against old SOC :) */
-	sw_cq->in = s->regs->respr[qno];
-	SOD (("socal_solicited, %d packets arrived\n", (sw_cq->in - sw_cq->out) & sw_cq->last))
+	sw_cq->in = sbus_readb(s->regs + RESP + qno);
+	SOD (("socal_solicited, %d packets arrived\n",
+	      (sw_cq->in - sw_cq->out) & sw_cq->last))
 	for (;;) {
 		hwrsp = (socal_rsp *)sw_cq->pool + sw_cq->out;
 		SOD(("hwrsp %p out %d\n", hwrsp, sw_cq->out))
@@ -147,16 +160,28 @@ static void inline socal_solicited (struct socal *s, int qno)
 #if defined(SOCALDEBUG) && 0
 		{
 		u32 *u = (u32 *)hwrsp;
-		SOD(("%08x.%08x.%08x.%08x.%08x.%08x.%08x.%08x\n", u[0],u[1],u[2],u[3],u[4],u[5],u[6],u[7]))
+		SOD(("%08x.%08x.%08x.%08x.%08x.%08x.%08x.%08x\n",
+		     u[0],u[1],u[2],u[3],u[4],u[5],u[6],u[7]))
 		u += 8;
-		SOD(("%08x.%08x.%08x.%08x.%08x.%08x.%08x.%08x\n", u[0],u[1],u[2],u[3],u[4],u[5],u[6],u[7]))
+		SOD(("%08x.%08x.%08x.%08x.%08x.%08x.%08x.%08x\n",
+		     u[0],u[1],u[2],u[3],u[4],u[5],u[6],u[7]))
 		u = (u32 *)s->xram;
 		while (u < ((u32 *)s->regs)) {
-			if (u[0] == 0x00003000 || u[0] == 0x00003801) {
-			SOD(("Found at %04lx\n", (unsigned long)u - (unsigned long)s->xram))
-			SOD(("  %08x.%08x.%08x.%08x.%08x.%08x.%08x.%08x\n", u[0],u[1],u[2],u[3],u[4],u[5],u[6],u[7]))
+			if (sbus_readl(&u[0]) == 0x00003000 ||
+			    sbus_readl(&u[0]) == 0x00003801) {
+			SOD(("Found at %04lx\n",
+			     (unsigned long)u - (unsigned long)s->xram))
+			SOD(("  %08x.%08x.%08x.%08x.%08x.%08x.%08x.%08x\n",
+			     sbus_readl(&u[0]), sbus_readl(&u[1]),
+			     sbus_readl(&u[2]), sbus_readl(&u[3]),
+			     sbus_readl(&u[4]), sbus_readl(&u[5]),
+			     sbus_readl(&u[6]), sbus_readl(&u[7])))
 			u += 8;
-			SOD(("  %08x.%08x.%08x.%08x.%08x.%08x.%08x.%08x\n", u[0],u[1],u[2],u[3],u[4],u[5],u[6],u[7]))
+			SOD(("  %08x.%08x.%08x.%08x.%08x.%08x.%08x.%08x\n",
+			     sbus_readl(&u[0]), sbus_readl(&u[1]),
+			     sbus_readl(&u[2]), sbus_readl(&u[3]),
+			     sbus_readl(&u[4]), sbus_readl(&u[5]),
+			     sbus_readl(&u[6]), sbus_readl(&u[7])))
 			u -= 8;
 			}
 			u++;
@@ -169,13 +194,18 @@ static void inline socal_solicited (struct socal *s, int qno)
 		fc = (fc_channel *)(&s->port[(token >> 11) & 1]);
 		
 		SOD(("Solicited token %08x status %08x\n", token, status))
-		if (status == SOCAL_OK)
-			fcp_receive_solicited(fc, token >> 12, token & ((1 << 11) - 1), FC_STATUS_OK, NULL);
-		else {
-			socal_memcpy(&fchdr, &hwrsp->fchdr, sizeof(fchdr));
-			/* We have intentionally defined FC_STATUS_* constants to match SOCAL_* constants, otherwise
-			   we'd have to translate status */
-			fcp_receive_solicited(fc, token >> 12, token & ((1 << 11) - 1), status, &fchdr);
+		if (status == SOCAL_OK) {
+			fcp_receive_solicited(fc, token >> 12,
+					      token & ((1 << 11) - 1),
+					      FC_STATUS_OK, NULL);
+		} else {
+			socal_copy_from_xram(&fchdr, &hwrsp->fchdr, sizeof(fchdr));
+			/* We have intentionally defined FC_STATUS_* constants
+			 * to match SOCAL_* constants, otherwise we'd have to
+			 * translate status.
+			 */
+			fcp_receive_solicited(fc, token >> 12,
+					      token & ((1 << 11) - 1), status, &fchdr);
 		}
 			
 		if (++sw_cq->out > sw_cq->last) {
@@ -184,13 +214,17 @@ static void inline socal_solicited (struct socal *s, int qno)
 		}
 		
 		if (sw_cq->out == sw_cq->in) {
-			sw_cq->in = s->regs->respr[qno];
+			sw_cq->in = sbus_readb(s->regs + RESP + qno);
 			if (sw_cq->out == sw_cq->in) {
 				/* Tell the hardware about it */
-				s->regs->cmd = (sw_cq->out << 24) | (SOCAL_CMD_RSP_QALL & ~(SOCAL_CMD_RSP_Q0 << qno));
+				sbus_writel((sw_cq->out << 24) |
+					    (SOCAL_CMD_RSP_QALL &
+					     ~(SOCAL_CMD_RSP_Q0 << qno)),
+					    s->regs + CMD);
+
 				/* Read it, so that we're sure it has been updated */
-				s->regs->cmd;
-				sw_cq->in = s->regs->respr[qno];
+				sbus_readl(s->regs + CMD);
+				sw_cq->in = sbus_readb(s->regs + RESP + qno);
 				if (sw_cq->out == sw_cq->in)
 					break;
 			}
@@ -201,20 +235,21 @@ static void inline socal_solicited (struct socal *s, int qno)
 static void inline socal_request (struct socal *s, u32 cmd)
 {
 	SOCAL_SETIMASK(s, s->imask & ~(cmd & SOCAL_CMD_REQ_QALL));
-	SOD(("imask %08x %08x\n", s->imask, s->regs->imask));
+	SOD(("imask %08x %08x\n", s->imask, sbus_readl(s->regs + IMASK)));
 
 	SOD(("Queues available %08x OUT %X\n", cmd, s->regs->reqpr[0]))
 	if (s->port[s->curr_port].fc.state != FC_STATE_OFFLINE) {
 		fcp_queue_empty ((fc_channel *)&(s->port[s->curr_port]));
 		if (((s->req[1].in + 1) & s->req[1].last) != (s->req[1].out))
 			fcp_queue_empty ((fc_channel *)&(s->port[1 - s->curr_port]));
-	} else
+	} else {
 		fcp_queue_empty ((fc_channel *)&(s->port[1 - s->curr_port]));
+	}
 	if (s->port[1 - s->curr_port].fc.state != FC_STATE_OFFLINE)
 		s->curr_port ^= 1;
 }
 
-static void inline socal_unsolicited (struct socal *s, int qno)
+static void inline socal_unsolicited (struct socal *s, unsigned long qno)
 {
 	socal_rsp *hwrsp, *hwrspc;
 	socal_cq *sw_cq;
@@ -225,13 +260,14 @@ static void inline socal_unsolicited (struct socal *s, int qno)
 
 	sw_cq = &s->rsp[qno];
 	if (sw_cq->pool == NULL) {
-		SOD(("address %08x xram %p\n", sw_cq->hw_cq->address, s->xram))
+		SOD(("address %08x xram %lx\n", sw_cq->hw_cq->address, s->xram))
 		sw_cq->pool =
 			(socal_req *)(s->xram + (sw_cq->hw_cq->address & 0xfffe));
 	}
 
-	sw_cq->in = s->regs->respr[qno];
-	SOD (("socal_unsolicited, %d packets arrived, in %d\n", (sw_cq->in - sw_cq->out) & sw_cq->last, sw_cq->in))
+	sw_cq->in = sbus_readb(s->regs + RESP + qno);
+	SOD (("socal_unsolicited, %d packets arrived, in %d\n",
+	      (sw_cq->in - sw_cq->out) & sw_cq->last, sw_cq->in))
 	while (sw_cq->in != sw_cq->out) {
 		/* ...real work per entry here... */
 		hwrsp = (socal_rsp *)sw_cq->pool + sw_cq->out;
@@ -240,9 +276,11 @@ static void inline socal_unsolicited (struct socal *s, int qno)
 #if defined(SOCALDEBUG) && 0
 		{
 		u32 *u = (u32 *)hwrsp;
-		SOD(("%08x.%08x.%08x.%08x.%08x.%08x.%08x.%08x\n", u[0],u[1],u[2],u[3],u[4],u[5],u[6],u[7]))
+		SOD(("%08x.%08x.%08x.%08x.%08x.%08x.%08x.%08x\n",
+		     u[0],u[1],u[2],u[3],u[4],u[5],u[6],u[7]))
 		u += 8;
-		SOD(("%08x.%08x.%08x.%08x.%08x.%08x.%08x.%08x\n", u[0],u[1],u[2],u[3],u[4],u[5],u[6],u[7]))
+		SOD(("%08x.%08x.%08x.%08x.%08x.%08x.%08x.%08x\n",
+		     u[0],u[1],u[2],u[3],u[4],u[5],u[6],u[7]))
 		}
 #endif
 
@@ -257,20 +295,27 @@ static void inline socal_unsolicited (struct socal *s, int qno)
 			u8 in;
 
 			if (count != 2) {
-				printk("%s: Too many continuations entries %d\n", fc->name, count);
+				printk("%s: Too many continuations entries %d\n",
+				       fc->name, count);
 				goto update_out;
 			}
 			
 			in = sw_cq->in;
-			if (in < sw_cq->out) in += sw_cq->last + 1;
+			if (in < sw_cq->out)
+				in += sw_cq->last + 1;
 			if (in < sw_cq->out + 2) {
-				/* Ask the hardware about it if they haven't arrived yet */
-				s->regs->cmd = (sw_cq->out << 24) | (SOCAL_CMD_RSP_QALL & ~(SOCAL_CMD_RSP_Q0 << qno));
+				/* Ask the hardware if they haven't arrived yet. */
+				sbus_writel((sw_cq->out << 24) |
+					    (SOCAL_CMD_RSP_QALL &
+					     ~(SOCAL_CMD_RSP_Q0 << qno)),
+					    s->regs + CMD);
+
 				/* Read it, so that we're sure it has been updated */
-				s->regs->cmd;
-				sw_cq->in = s->regs->respr[qno];
+				sbus_readl(s->regs + CMD);
+				sw_cq->in = sbus_readb(s->regs + RESP + qno);
 				in = sw_cq->in;
-				if (in < sw_cq->out) in += sw_cq->last + 1;
+				if (in < sw_cq->out)
+					in += sw_cq->last + 1;
 				if (in < sw_cq->out + 2) /* Nothing came, let us wait */
 					return;
 			}
@@ -297,9 +342,11 @@ static void inline socal_unsolicited (struct socal *s, int qno)
 				fcp_state_change(fc, FC_STATE_OFFLINE);
 				break;
 			default:
-				printk ("%s: Unknown STATUS no %d\n", fc->name, status);
+				printk ("%s: Unknown STATUS no %d\n",
+					fc->name, status);
 				break;
-			}
+			};
+
 			break;
 		case (SOCAL_UNSOLICITED|SOCAL_FC_HDR):
 			{
@@ -309,30 +356,40 @@ static void inline socal_unsolicited (struct socal *s, int qno)
 				
 				if ((r_ctl & 0xf0) == R_CTL_EXTENDED_SVC) {
 					len = hwrsp->shdr.bytecnt;
-					if (len < 4 || !hwrspc)
-						printk ("%s: Invalid R_CTL %02x continuation entries\n", fc->name, r_ctl);
-					else {
-						if (len > 60) len = 60;
-						socal_memcpy (buf, hwrspc, (len + 3) & ~3);
+					if (len < 4 || !hwrspc) {
+						printk ("%s: Invalid R_CTL %02x "
+							"continuation entries\n",
+							fc->name, r_ctl);
+					} else {
+						if (len > 60)
+							len = 60;
+						socal_copy_from_xram(buf, hwrspc,
+								     (len + 3) & ~3);
 						if (*(u32 *)buf == LS_DISPLAY) {
 							int i;
 							
 							for (i = 4; i < len; i++)
-								if (buf[i] == '\n') buf[i] = ' ';
+								if (buf[i] == '\n')
+									buf[i] = ' ';
 							buf[len] = 0;
-							printk ("%s message: %s\n", fc->name, buf + 4);
+							printk ("%s message: %s\n",
+								fc->name, buf + 4);
 						} else {
-							printk ("%s: Unknown LS_CMD %08x\n", fc->name, *(u32 *)buf);
+							printk ("%s: Unknown LS_CMD "
+								"%08x\n", fc->name,
+								*(u32 *)buf);
 						}
 					}
-				} else
-					printk ("%s: Unsolicited R_CTL %02x not handled\n", fc->name, r_ctl);
+				} else {
+					printk ("%s: Unsolicited R_CTL %02x "
+						"not handled\n", fc->name, r_ctl);
+				}
 			}
 			break;
 		default:
 			printk ("%s: Unexpected flags %08x\n", fc->name, flags);
 			break;
-		}
+		};
 update_out:
 		if (++sw_cq->out > sw_cq->last) {
 			sw_cq->seqno++;
@@ -347,13 +404,17 @@ update_out:
 		}
 		
 		if (sw_cq->out == sw_cq->in) {
-			sw_cq->in = s->regs->respr[qno];
+			sw_cq->in = sbus_readb(s->regs + RESP + qno);
 			if (sw_cq->out == sw_cq->in) {
 				/* Tell the hardware about it */
-				s->regs->cmd = (sw_cq->out << 24) | (SOCAL_CMD_RSP_QALL & ~(SOCAL_CMD_RSP_Q0 << qno));
+				sbus_writel((sw_cq->out << 24) |
+					    (SOCAL_CMD_RSP_QALL &
+					     ~(SOCAL_CMD_RSP_Q0 << qno)),
+					    s->regs + CMD);
+
 				/* Read it, so that we're sure it has been updated */
-				s->regs->cmd;
-				sw_cq->in = s->regs->respr[qno];
+				sbus_readl(s->regs + CMD);
+				sw_cq->in = sbus_readb(s->regs + RESP + qno);
 			}
 		}
 	}
@@ -366,16 +427,21 @@ static void socal_intr(int irq, void *dev_id, struct pt_regs *regs)
 	register struct socal *s = (struct socal *)dev_id;
 
 	spin_lock_irqsave(&io_request_lock, flags);
-	cmd = s->regs->cmd;
-	for (; (cmd = SOCAL_INTR (s, cmd)); cmd = s->regs->cmd) {
+	cmd = sbus_readl(s->regs + CMD);
+	for (; (cmd = SOCAL_INTR (s, cmd)); cmd = sbus_readl(s->regs + CMD)) {
 #ifdef SOCALDEBUG
 		static int cnt = 0;
-		if (cnt++ < 50) printk("soc_intr %08x\n", cmd);
+		if (cnt++ < 50)
+			printk("soc_intr %08x\n", cmd);
 #endif	
-		if (cmd & SOCAL_CMD_RSP_Q2) socal_unsolicited (s, SOCAL_UNSOLICITED_RSP_Q);
-		if (cmd & SOCAL_CMD_RSP_Q1) socal_unsolicited (s, SOCAL_SOLICITED_BAD_RSP_Q);
-		if (cmd & SOCAL_CMD_RSP_Q0) socal_solicited (s, SOCAL_SOLICITED_RSP_Q);
-		if (cmd & SOCAL_CMD_REQ_QALL) socal_request (s, cmd);
+		if (cmd & SOCAL_CMD_RSP_Q2)
+			socal_unsolicited (s, SOCAL_UNSOLICITED_RSP_Q);
+		if (cmd & SOCAL_CMD_RSP_Q1)
+			socal_unsolicited (s, SOCAL_SOLICITED_BAD_RSP_Q);
+		if (cmd & SOCAL_CMD_RSP_Q0)
+			socal_solicited (s, SOCAL_SOLICITED_RSP_Q);
+		if (cmd & SOCAL_CMD_REQ_QALL)
+			socal_request (s, cmd);
 	}
 	spin_unlock_irqrestore(&io_request_lock, flags);
 }
@@ -386,7 +452,7 @@ static int socal_hw_enque (fc_channel *fc, fcp_cmnd *fcmd)
 {
 	socal_port *port = (socal_port *)fc;
 	struct socal *s = port->s;
-	int qno;
+	unsigned long qno;
 	socal_cq *sw_cq;
 	int cq_next_in;
 	socal_req *request;
@@ -405,12 +471,15 @@ static int socal_hw_enque (fc_channel *fc, fcp_cmnd *fcmd)
 	sw_cq = s->req + qno;
 	cq_next_in = (sw_cq->in + 1) & sw_cq->last;
 	
-	if (cq_next_in == sw_cq->out 
-		    && cq_next_in == (sw_cq->out = s->regs->reqpr[qno])) {
-		SOD(("%d IN %d OUT %d LAST %d\n", qno, sw_cq->in, sw_cq->out, sw_cq->last))
+	if (cq_next_in == sw_cq->out &&
+	    cq_next_in == (sw_cq->out = sbus_readb(s->regs + REQP + qno))) {
+		SOD(("%d IN %d OUT %d LAST %d\n",
+		     qno, sw_cq->in,
+		     sw_cq->out, sw_cq->last))
 		SOCAL_SETIMASK(s, s->imask | (SOCAL_IMASK_REQ_Q0 << qno));
-		SOD(("imask %08x %08x\n", s->imask, s->regs->imask));
-		/* If queue is full, just say NO */
+		SOD(("imask %08x %08x\n", s->imask, sbus_readl(s->regs + IMASK)));
+
+		/* If queue is full, just say NO. */
 		return -EBUSY;
 	}
 	
@@ -540,9 +609,11 @@ static int socal_hw_enque (fc_channel *fc, fcp_cmnd *fcmd)
 	
 	SOD(("Putting %08x into cmd\n", SOCAL_CMD_RSP_QALL | (sw_cq->in << 24) | (SOCAL_CMD_REQ_Q0 << qno)))
 	
-	s->regs->cmd = SOCAL_CMD_RSP_QALL | (sw_cq->in << 24) | (SOCAL_CMD_REQ_Q0 << qno);
+	sbus_writel(SOCAL_CMD_RSP_QALL | (sw_cq->in << 24) | (SOCAL_CMD_REQ_Q0 << qno),
+		    s->regs + CMD);
+
 	/* Read so that command is completed */	
-	s->regs->cmd;
+	sbus_readl(s->regs + CMD);
 	
 	return 0;
 }
@@ -551,7 +622,7 @@ static inline void socal_download_fw(struct socal *s)
 {
 #ifdef HAVE_SOCAL_UCODE
 	SOD(("Loading %ld bytes from %p to %p\n", sizeof(socal_ucode), socal_ucode, s->xram))
-	socal_memcpy (s->xram, socal_ucode, sizeof(socal_ucode));
+	socal_copy_to_xram(s->xram, socal_ucode, sizeof(socal_ucode));
 	SOD(("Clearing the rest of memory\n"))
 	socal_bzero (s->xram + sizeof(socal_ucode), 65536 - sizeof(socal_ucode));
 	SOD(("Done\n"))
@@ -561,13 +632,13 @@ static inline void socal_download_fw(struct socal *s)
 /* Check for what the best SBUS burst we can use happens
  * to be on this machine.
  */
-static inline void socal_init_bursts(struct socal *s, struct linux_sbus_device *sdev)
+static inline void socal_init_bursts(struct socal *s, struct sbus_dev *sdev)
 {
 	int bsizes, bsizes_more;
 	u32 cfg;
 
 	bsizes = (prom_getintdefault(sdev->prom_node,"burst-sizes",0xff) & 0xff);
-	bsizes_more = (prom_getintdefault(sdev->my_bus->prom_node, "burst-sizes", 0xff) & 0xff);
+	bsizes_more = (prom_getintdefault(sdev->bus->prom_node, "burst-sizes", 0xff) & 0xff);
 	bsizes &= bsizes_more;
 #ifdef USE_64BIT_MODE
 #ifdef __sparc_v9__
@@ -598,7 +669,7 @@ static inline void socal_init_bursts(struct socal *s, struct linux_sbus_device *
 	s->cfg = cfg;
 }
 
-static inline void socal_init(struct linux_sbus_device *sdev, int no)
+static inline void socal_init(struct sbus_dev *sdev, int no)
 {
 	unsigned char tmp[60];
 	int propl;
@@ -613,7 +684,8 @@ static inline void socal_init(struct linux_sbus_device *sdev, int no)
 	memset (s, 0, sizeof(struct socal));
 	s->socal_no = no;
 
-	SOD(("socals %08lx socal_intr %08lx socal_hw_enque %08lx\n", (long)socals, (long)socal_intr, (long)socal_hw_enque))
+	SOD(("socals %08lx socal_intr %08lx socal_hw_enque %08lx\n",
+	     (long)socals, (long)socal_intr, (long)socal_hw_enque))
 	if (version_printed++ == 0)
 		printk (version);
 #ifdef MODULE
@@ -663,16 +735,17 @@ static inline void socal_init(struct linux_sbus_device *sdev, int no)
 			break;
 		default:
 			break;
-		}
+		};
+
 		node = prom_getsibling(node);
 	}
 
 	memcpy (&s->port[0].fc.wwn_node, &s->wwn, sizeof (fc_wwn));
 	memcpy (&s->port[1].fc.wwn_node, &s->wwn, sizeof (fc_wwn));
 	SOD(("Got wwns %08x%08x ports %08x%08x and %08x%08x\n", 
-		*(u32 *)&s->port[0].fc.wwn_node, s->port[0].fc.wwn_node.lo,
-		*(u32 *)&s->port[0].fc.wwn_nport, s->port[0].fc.wwn_nport.lo,
-		*(u32 *)&s->port[1].fc.wwn_nport, s->port[1].fc.wwn_nport.lo))
+	     *(u32 *)&s->port[0].fc.wwn_node, s->port[0].fc.wwn_node.lo,
+	     *(u32 *)&s->port[0].fc.wwn_nport, s->port[0].fc.wwn_nport.lo,
+	     *(u32 *)&s->port[1].fc.wwn_nport, s->port[1].fc.wwn_nport.lo))
 		
 	s->port[0].fc.sid = 1;
 	s->port[1].fc.sid = 17;
@@ -682,29 +755,20 @@ static inline void socal_init(struct linux_sbus_device *sdev, int no)
 	s->port[0].fc.reset = socal_reset;
 	s->port[1].fc.reset = socal_reset;
 	
-	/* Setup the reg property for this device. */
-	prom_apply_sbus_ranges(sdev->my_bus, sdev->reg_addrs, sdev->num_registers, sdev);
-                                                                                                                                               	
 	if (sdev->num_registers == 1) {
-		s->eeprom = (u8 *)
-			sparc_alloc_io (sdev->reg_addrs [0].phys_addr, 0, 
-				sdev->reg_addrs [0].reg_size, "socal_xram",
-				sdev->reg_addrs [0].which_io, 0);
-		if (sdev->reg_addrs [0].reg_size > 0x20000)
-			s->xram = s->eeprom + 0x10000;
+		s->eeprom = sbus_ioremap(&sdev->resource[0], 0,
+					 sdev->reg_addrs[0].reg_size, "socal xram");
+		if (sdev->reg_addrs[0].reg_size > 0x20000)
+			s->xram = s->eeprom + 0x10000UL;
 		else
 			s->xram = s->eeprom;
-		s->regs = (struct socal_regs *)(s->xram + 0x10000);
+		s->regs = (s->xram + 0x10000UL);
 	} else {
 		/* E.g. starfire presents 3 registers for SOCAL */
-		s->xram = (u8 *)
-			sparc_alloc_io (sdev->reg_addrs [1].phys_addr, 0, 
-				sdev->reg_addrs [1].reg_size, "socal_xram",
-				sdev->reg_addrs [1].which_io, 0);
-		s->regs = (struct socal_regs *)
-			sparc_alloc_io (sdev->reg_addrs [2].phys_addr, 0, 
-				sdev->reg_addrs [2].reg_size, "socal_regs",
-				sdev->reg_addrs [2].which_io, 0);
+		s->xram = sbus_ioremap(&sdev->resource[1], 0,
+				       sdev->reg_addrs[1].reg_size, "socal xram");
+		s->regs = sbus_ioremap(&sdev->resource[2], 0,
+				       sdev->reg_addrs[2].reg_size, "socal regs");
 	}
 	
 	socal_init_bursts(s, sdev);
@@ -742,8 +806,12 @@ static inline void socal_init(struct linux_sbus_device *sdev, int no)
 	/* Now setup xram circular queues */
 	memset (cq, 0, sizeof(cq));
 
-	size = (SOCAL_CQ_REQ0_SIZE + SOCAL_CQ_REQ1_SIZE + SOCAL_CQ_RSP0_SIZE + SOCAL_CQ_RSP1_SIZE + SOCAL_CQ_RSP2_SIZE) * sizeof(socal_req);
-	s->req[0].pool = (socal_req *) sparc_dvma_malloc (size, "SOCAL request queues", &cq[0].address);
+	size = (SOCAL_CQ_REQ0_SIZE + SOCAL_CQ_REQ1_SIZE +
+		SOCAL_CQ_RSP0_SIZE + SOCAL_CQ_RSP1_SIZE +
+		SOCAL_CQ_RSP2_SIZE) * sizeof(socal_req);
+	s->req_cpu = sbus_alloc_consistant(sdev, size, &s->req_dvma);
+	s->req[0].pool = s->req_cpu;
+	cq[0].address = s->req_dvma;
 	s->req[1].pool = s->req[0].pool + SOCAL_CQ_REQ0_SIZE;
 	s->rsp[0].pool = s->req[1].pool + SOCAL_CQ_REQ1_SIZE;
 	s->rsp[1].pool = s->rsp[0].pool + SOCAL_CQ_RSP0_SIZE;
@@ -780,12 +848,12 @@ static inline void socal_init(struct linux_sbus_device *sdev, int no)
 	s->rsp[1].seqno = 1;
 	s->rsp[2].seqno = 1;
 	
-	socal_memcpy (s->xram + SOCAL_CQ_REQ_OFFSET, cq, sizeof(cq));
+	socal_copy_to_xram(s->xram + SOCAL_CQ_REQ_OFFSET, cq, sizeof(cq));
 	
 	SOD(("Setting up params\n"))
 	
 	/* Make our sw copy of SOCAL service parameters */
-	socal_memcpy (s->serv_params, s->xram + 0x280, sizeof (s->serv_params));
+	socal_copy_from_xram(s->serv_params, s->xram + 0x280, sizeof (s->serv_params));
 	
 	s->port[0].fc.common_svc = (common_svc_parm *)s->serv_params;
 	s->port[0].fc.class_svcs = (svc_parm *)(s->serv_params + 0x20);
@@ -803,20 +871,21 @@ int __init socal_probe(void)
 int init_module(void)
 #endif
 {
-	struct linux_sbus *bus;
-	struct linux_sbus_device *sdev = 0;
+	struct sbus_bus *sbus;
+	struct sbus_dev *sdev = 0;
 	struct socal *s;
 	int cards = 0;
 
-	for_each_sbus(bus) {
-		for_each_sbusdev(sdev, bus) {
+	for_each_sbus(sbus) {
+		for_each_sbusdev(sdev, sbus) {
 			if(!strcmp(sdev->prom_name, "SUNW,socal")) {
 				socal_init(sdev, cards);
 				cards++;
 			}
 		}
 	}
-	if (!cards) return -EIO;
+	if (!cards)
+		return -EIO;
 
 	for_each_socal(s)
 		if (s->next)
@@ -833,7 +902,7 @@ void cleanup_module(void)
 {
 	struct socal *s;
 	int irq;
-	struct linux_sbus_device *sdev;
+	struct sbus_dev *sdev;
 	
 	for_each_socal(s) {
 		irq = s->port[0].fc.irq;
@@ -843,13 +912,17 @@ void cleanup_module(void)
 		fcp_release(&(s->port[0].fc), 2);
 
 		sdev = s->port[0].fc.dev;
-		if (sdev->num_registers == 1)
-			sparc_free_io (s->eeprom, sdev->reg_addrs [0].reg_size);
-		else {
-			sparc_free_io (s->xram, sdev->reg_addrs [1].reg_size);
-			sparc_free_io ((char *)s->regs, sdev->reg_addrs [2].reg_size);
+		if (sdev->num_registers == 1) {
+			sbus_iounmap(s->eeprom, sdev->reg_addrs[0].reg_size);
+		} else {
+			sbus_iounmap(s->xram, sdev->reg_addrs[1].reg_size);
+			sbus_iounmap(s->regs, sdev->reg_addrs[2].reg_size);
 		}
-		/* FIXME: sparc_dvma_free() ??? */
+		sbus_free_consistant(sdev,
+				     (SOCAL_CQ_REQ0_SIZE + SOCAL_CQ_REQ1_SIZE +
+				      SOCAL_CQ_RSP0_SIZE + SOCAL_CQ_RSP1_SIZE +
+				      SOCAL_CQ_RSP2_SIZE) * sizeof(socal_req),
+				     s->req_cpu, s->req_dvma);
 	}
 }
 #endif

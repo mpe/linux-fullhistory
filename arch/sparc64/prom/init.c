@@ -1,4 +1,4 @@
-/* $Id: init.c,v 1.9 1999/08/31 06:55:03 davem Exp $
+/* $Id: init.c,v 1.10 1999/09/21 14:35:59 davem Exp $
  * init.c:  Initialize internal variables used by the PROM
  *          library functions.
  *
@@ -28,7 +28,6 @@ int prom_chosen_node;
  */
 
 extern void prom_meminit(void);
-extern void prom_ranges_init(void);
 extern void prom_cif_init(void *, void *);
 
 void __init prom_init(void *cif_handler, void *cif_stack)
@@ -81,8 +80,6 @@ void __init prom_init(void *cif_handler, void *cif_stack)
 	printk ("PROMLIB: Sun IEEE Boot Prom %s\n", buffer + 4);
 
 	prom_meminit();
-
-	prom_ranges_init();
 
 	/* Initialization successful. */
 	return;

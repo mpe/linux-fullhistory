@@ -6,135 +6,28 @@
 #ifndef _QLOGICPTI_H
 #define _QLOGICPTI_H
 
-struct qlogicpti_regs {
-	/* SBUS control registers. */
-	volatile unsigned short  sbus_idlow;      /* SBUS ID, low bytes             */
-	volatile unsigned short  sbus_idhi;       /* SBUS ID, high bytes            */
-	volatile unsigned short  sbus_cfg0;       /* SBUS Config reg zero           */
-	volatile unsigned short  sbus_cfg1;       /* SBUS Config reg one            */
-	volatile unsigned short  sbus_ctrl;       /* SBUS Control reg               */
-	volatile unsigned short  sbus_stat;       /* SBUS Status reg                */
-	volatile unsigned short  sbus_semaphore;  /* SBUS Semaphore, p/v this...    */
-	unsigned char _unused0[18];               /* Reserved...                    */
+/* Qlogic/SBUS controller registers. */
+#define SBUS_CFG1	0x006UL
+#define SBUS_CTRL	0x008UL
+#define SBUS_STAT	0x00aUL
+#define SBUS_SEMAPHORE	0x00cUL
+#define CMD_DMA_CTRL	0x022UL
+#define DATA_DMA_CTRL	0x042UL
+#define MBOX0		0x080UL
+#define MBOX1		0x082UL
+#define MBOX2		0x084UL
+#define MBOX3		0x086UL
+#define MBOX4		0x088UL
+#define MBOX5		0x08aUL
+#define CPU_CMD		0x214UL
+#define CPU_ORIDE	0x224UL
+#define CPU_PCTRL	0x272UL
+#define CPU_PDIFF	0x276UL
+#define RISC_PSR	0x420UL
+#define RISC_MTREG	0x42EUL
+#define HCCTRL		0x440UL
 
-	/* Command DVMA control registers. */
-	volatile unsigned short  cmd_dma_cfg;     /* CMD DVMA Config reg            */
-	volatile unsigned short  cmd_dma_ctrl;    /* CMD DVMA Control reg           */
-	volatile unsigned short  cmd_dma_stat;    /* CMD DVMA Status reg            */
-	volatile unsigned short  cmd_dma_fstat;   /* CMD DVMA FIFO Status reg       */
-	volatile unsigned short  cmd_dma_cnt;     /* CMD DVMA Counter reg           */
-	unsigned short _unused1;                  /* Reserved...                    */
-	volatile unsigned short  cmd_dma_alow;    /* CMD DVMA Address low bytes     */
-	volatile unsigned short  cmd_dma_ahi;     /* CMD DVMA Address high bytes    */
-	unsigned char _unused2[16];               /* Reserved...                    */
-
-	/* Data DVMA control registers. */
-	volatile unsigned short  data_dma_cfg;    /* DATA DVMA Config reg           */
-	volatile unsigned short  data_dma_ctrl;   /* DATA DVMA Control reg          */
-	volatile unsigned short  data_dma_stat;   /* DATA DVMA Status reg           */
-	volatile unsigned short  data_dma_fstat;  /* DATA DVMA FIFO Status reg      */
-	volatile unsigned short  data_dma_clo;    /* DATA DVMA Counter low bytes    */
-	volatile unsigned short  data_dma_chi;    /* DATA DVMA Counter high bytes   */
-	volatile unsigned short  data_dma_alow;   /* DATA DVMA Address low bytes    */
-	volatile unsigned short  data_dma_ahi;    /* DATA DVMA Address high bytes   */
-	unsigned char _unused3[16];               /* Reserved...                    */
-
-	/* Data FIFO registers. */
-	volatile unsigned short  fcmd;            /* FIFO Command port              */
-	volatile unsigned short  fdata;           /* FIFO Data port                 */
-	unsigned char _unused4[28];               /* Reserved...                    */
-
-	/* Mailboxen. */
-	volatile unsigned short  mbox0;           /* MailBOX 0                      */
-	volatile unsigned short  mbox1;           /* MailBOX 1                      */
-	volatile unsigned short  mbox2;           /* MailBOX 2                      */
-	volatile unsigned short  mbox3;           /* MailBOX 3                      */
-	volatile unsigned short  mbox4;           /* MailBOX 4                      */
-	volatile unsigned short  mbox5;           /* MailBOX 5                      */
-	unsigned char _unused5[372];              /* Reserved...                    */
-
-	/* Scsi processor registers. */
-	volatile unsigned short  cpu_id;          /* PART ID                        */
-	volatile unsigned short  cpu_cfg1;        /* Config reg 1                   */
-	volatile unsigned short  cpu_cfg2;        /* Config reg 2                   */
-	volatile unsigned short  cpu_cfg3;        /* Config reg 3                   */
-	unsigned char _unused6[4];                /* Reserved...                    */
-	volatile unsigned short  cpu_pc;          /* Program Counter                */
-	unsigned short _unused7;                  /* Reserved...                    */
-	volatile unsigned short  cpu_rpc;         /* Return Program Counter         */
-	unsigned short _unused8;                  /* Reserved...                    */
-	volatile unsigned short  cpu_cmd;         /* Command                        */
-	unsigned short _unused9;                  /* Reserved...                    */
-	volatile unsigned short  cpu_irq;         /* IRQ status                     */
-	unsigned short _unused10;                 /* Reserved...                    */
-	volatile unsigned short  cpu_seq;         /* Sequence reg                   */
-	volatile unsigned short  cpu_gerr;        /* Gross Error reg (ESP lineage?) */
-	volatile unsigned short  cpu_exc;         /* Enable Exception reg           */
-	unsigned short _unused11;                 /* Reserved...                    */
-	volatile unsigned short  cpu_oride;       /* Override reg                   */
-	unsigned short _unused12;                 /* Reserved...                    */
-	volatile unsigned short  cpu_lbase;       /* Literal Base reg               */
-	unsigned short _unused13;                 /* Reserved...                    */
-	volatile unsigned short  cpu_uflags;      /* User Flags reg                 */
-	unsigned short _unused14;                 /* Reserved...                    */
-	volatile unsigned short  cpu_uexc;        /* User Exception reg             */
-	unsigned short _unused15;                 /* Reserved...                    */
-	volatile unsigned short  cpu_bkpt;        /* Breakpoint reg                 */
-	unsigned short _unused16[5];              /* Reserved...                    */
-	volatile unsigned short  cpu_sid;         /* SCSI ID reg                    */
-	volatile unsigned short  cpu_dcfg1;       /* Device Config 1                */
-	volatile unsigned short  cpu_dcfg2;       /* Device Config 2                */
-	unsigned short _unused17;                 /* Reserved...                    */
-	volatile unsigned short  cpu_pptr;        /* Phase Pointer                  */
-	unsigned short _unused18;                 /* Reserved...                    */
-	volatile unsigned short  cpu_bptr;        /* Buffer Pointer                 */
-	unsigned short _unused19;                 /* Reserved...                    */
-	volatile unsigned short  cpu_bcnt;        /* Buffer Counter                 */
-	volatile unsigned short  cpu_buf;         /* Buffer itself                  */
-	volatile unsigned short  cpu_bbyte;       /* Buffer Byte                    */
-	volatile unsigned short  cpu_bword;       /* Buffer Word                    */
-	unsigned short _unused20;                 /* Reserved...                    */
-	volatile unsigned short  cpu_fifo;        /* FIFO                           */
-	volatile unsigned short  cpu_fstat;       /* FIFO Status                    */
-	volatile unsigned short  cpu_ftop;        /* Top of FIFO                    */
-	volatile unsigned short  cpu_fbottom;     /* Bottom of FIFO                 */
-	unsigned short _unused21;                 /* Reserved...                    */
-	volatile unsigned short  cpu_treg;        /* Transfer reg                   */
-	unsigned short _unused22;                 /* Reserved...                    */
-	volatile unsigned short  cpu_clo;         /* Transfer Count low bytes       */
-	volatile unsigned short  cpu_chi;         /* Transfer Count high bytes      */
-	volatile unsigned short  cpu_cntlo;       /* Transfer Counter low bytes     */
-	volatile unsigned short  cpu_cnthi;       /* Transfer Counter low bytes     */
-	volatile unsigned short  cpu_adata;       /* Arbitration Data               */
-	volatile unsigned short  cpu_pctrl;       /* Pin Control                    */
-	volatile unsigned short  cpu_pdata;       /* Pin Data                       */
-	volatile unsigned short  cpu_pdiff;       /* Differential Pins              */
-	unsigned char _unused23[392];             /* Reserved...                    */
-
-	/* RISC processor registers. */
-	volatile unsigned short  risc_a;          /* Accumulator                    */
-	volatile unsigned short  risc_r[15];      /* General Purpose Registers      */
-	volatile unsigned short  risc_psr;        /* Processor Status Register      */
-	volatile unsigned short  risc_ivec;       /* Interrupt Vector               */
-	volatile unsigned short  risc_pcr;        /* Processor Control Register     */
-	volatile unsigned short  risc_raddr0;     /* RAM Addr reg 0                 */
-	volatile unsigned short  risc_raddr1;     /* RAM Addr reg 1                 */
-	volatile unsigned short  risc_lcr;        /* Loop Counter reg               */
-	volatile unsigned short  risc_pc;         /* Program Counter                */
-	volatile unsigned short  risc_mtreg;      /* Memory Timing reg              */
-	volatile unsigned short  risc_embreg;     /* External Memory Boundry reg    */
-	volatile unsigned short  risc_sp;         /* Stack Pointer                  */
-	volatile unsigned short  risc_hrev;       /* Hardware Revision              */
-	unsigned char _unused24[10];              /* Reserved...                    */
-
-	/* Generic control/command registers. */
-	volatile unsigned short  hcctrl;          /* Host cmd/control reg           */
-	volatile unsigned short  pbkpt0;          /* Processor Breakpoint 0         */
-	volatile unsigned short  pbkpt1;          /* Processor Breakpoint 1         */
-	volatile unsigned short  tcntrl;          /* Test Control reg               */
-	volatile unsigned short  tmreg;           /* Test Mode reg                  */
-};
-
+/* SCSI parameters for this driver. */
 #define MAX_TARGETS	16
 #define MAX_LUNS	8
 
@@ -149,8 +42,8 @@ struct qlogicpti_regs {
  * requests are queued serially and the scatter/gather limit is
  * determined for each queue request anew.
  */
-#define QLOGICISP_REQ_QUEUE_LEN	255	/* must be power of two - 1 */
-#define QLOGICISP_MAX_SG(ql)	(4 + ((ql) > 0) ? 7*((ql) - 1) : 0)
+#define QLOGICPTI_REQ_QUEUE_LEN	255	/* must be power of two - 1 */
+#define QLOGICPTI_MAX_SG(ql)	(4 + ((ql) > 0) ? 7*((ql) - 1) : 0)
 
 #ifndef NULL
 #define NULL (0)
@@ -160,6 +53,7 @@ int qlogicpti_detect(Scsi_Host_Template *);
 int qlogicpti_release(struct Scsi_Host *);
 const char * qlogicpti_info(struct Scsi_Host *);
 int qlogicpti_queuecommand(Scsi_Cmnd *, void (* done)(Scsi_Cmnd *));
+int qlogicpti_queuecommand_slow(Scsi_Cmnd *, void (* done)(Scsi_Cmnd *));
 int qlogicpti_abort(Scsi_Cmnd *);
 int qlogicpti_reset(Scsi_Cmnd *, unsigned int);
 
@@ -182,15 +76,15 @@ int qlogicpti_reset(Scsi_Cmnd *, unsigned int);
 /* Am I fucking pedantic or what? */
 struct Entry_header {
 #ifdef __BIG_ENDIAN
-	u_char	entry_cnt;
-	u_char	entry_type;
-	u_char	flags;
-	u_char	sys_def_1;
+	u8	entry_cnt;
+	u8	entry_type;
+	u8	flags;
+	u8	sys_def_1;
 #else /* __LITTLE_ENDIAN */
-	u_char	entry_type;
-	u_char	entry_cnt;
-	u_char	sys_def_1;
-	u_char	flags;
+	u8	entry_type;
+	u8	entry_cnt;
+	u8	sys_def_1;
+	u8	flags;
 #endif
 };
 
@@ -208,26 +102,26 @@ struct Entry_header {
 #define EFLAG_BAD_PAYLOAD	8
 
 struct dataseg {
-	u_int			d_base;
-	u_int			d_count;
+	u32	d_base;
+	u32	d_count;
 };
 
 struct Command_Entry {
 	struct Entry_header	hdr;
-	u_int			handle;
+	u32			handle;
 #ifdef __BIG_ENDIAN
-	u_char			target_id;
-	u_char			target_lun;
+	u8			target_id;
+	u8			target_lun;
 #else /* __LITTLE_ENDIAN */
-	u_char			target_lun;
-	u_char			target_id;
+	u8			target_lun;
+	u8			target_id;
 #endif
-	u_short			cdb_length;
-	u_short			control_flags;
-	u_short			rsvd;
-	u_short			time_out;
-	u_short			segment_cnt;
-	u_char			cdb[12];
+	u16			cdb_length;
+	u16			control_flags;
+	u16			rsvd;
+	u16			time_out;
+	u16			segment_cnt;
+	u8			cdb[12];
 	struct dataseg		dataseg[4];
 };
 
@@ -242,46 +136,46 @@ struct Command_Entry {
 
 struct Ext_Command_Entry {
 	struct Entry_header	hdr;
-	u_int			handle;
+	u32			handle;
 #ifdef __BIG_ENDIAN
-	u_char			target_id;
-	u_char			target_lun;
+	u8			target_id;
+	u8			target_lun;
 #else /* __LITTLE_ENDIAN */
-	u_char			target_lun;
-	u_char			target_id;
+	u8			target_lun;
+	u8			target_id;
 #endif
-	u_short			cdb_length;
-	u_short			control_flags;
-	u_short			rsvd;
-	u_short			time_out;
-	u_short			segment_cnt;
-	u_char			cdb[44];
+	u16			cdb_length;
+	u16			control_flags;
+	u16			rsvd;
+	u16			time_out;
+	u16			segment_cnt;
+	u8			cdb[44];
 };
 
 struct Continuation_Entry {
 	struct Entry_header	hdr;
-	u_int			reserved;
+	u32			reserved;
 	struct dataseg		dataseg[7];
 };
 
 struct Marker_Entry {
 	struct Entry_header	hdr;
-	u_int			reserved;
+	u32			reserved;
 #ifdef __BIG_ENDIAN
-	u_char			target_id;
-	u_char			target_lun;
+	u8			target_id;
+	u8			target_lun;
 #else /* __LITTLE_ENDIAN */
-	u_char			target_lun;
-	u_char			target_id;
+	u8			target_lun;
+	u8			target_id;
 #endif
 #ifdef __BIG_ENDIAN
-	u_char			rsvd;
-	u_char			modifier;
+	u8			rsvd;
+	u8			modifier;
 #else /* __LITTLE_ENDIAN */
-	u_char			modifier;
-	u_char			rsvd;
+	u8			modifier;
+	u8			rsvd;
 #endif
-	u_char			rsvds[52];
+	u8			rsvds[52];
 };
 
 /* marker entry modifier definitions */
@@ -291,16 +185,16 @@ struct Marker_Entry {
 
 struct Status_Entry {
 	struct Entry_header	hdr;
-	u_int			handle;
-	u_short			scsi_status;
-	u_short			completion_status;
-	u_short			state_flags;
-	u_short			status_flags;
-	u_short			time;
-	u_short			req_sense_len;
-	u_int			residual;
-	u_char			rsvd[8];
-	u_char			req_sense_data[32];
+	u32			handle;
+	u16			scsi_status;
+	u16			completion_status;
+	u16			state_flags;
+	u16			status_flags;
+	u16			time;
+	u16			req_sense_len;
+	u32			residual;
+	u8			rsvd[8];
+	u8			req_sense_data[32];
 };
 
 /* status entry completion status definitions */
@@ -439,9 +333,9 @@ struct dev_param {
 #define RES_QUEUE_LEN		255	/* Must be power of two - 1 */
 #define QUEUE_ENTRY_LEN		64
 
-#define NEXT_REQ_PTR(wheee)   (((wheee) + 1) & QLOGICISP_REQ_QUEUE_LEN)
+#define NEXT_REQ_PTR(wheee)   (((wheee) + 1) & QLOGICPTI_REQ_QUEUE_LEN)
 #define NEXT_RES_PTR(wheee)   (((wheee) + 1) & RES_QUEUE_LEN)
-#define PREV_REQ_PTR(wheee)   (((wheee) - 1) & QLOGICISP_REQ_QUEUE_LEN)
+#define PREV_REQ_PTR(wheee)   (((wheee) - 1) & QLOGICPTI_REQ_QUEUE_LEN)
 #define PREV_RES_PTR(wheee)   (((wheee) - 1) & RES_QUEUE_LEN)
 
 struct pti_queue_entry {
@@ -451,41 +345,43 @@ struct pti_queue_entry {
 /* Software state for the driver. */
 struct qlogicpti {
 	/* These are the hot elements in the cache, so they come first. */
-	struct qlogicpti         *next;                 /* Next active adapter        */
-	struct qlogicpti_regs    *qregs;                /* Adapter registers          */
+	spinlock_t		  lock;			/* Driver mutex		      */
+	unsigned long             qregs;                /* Adapter registers          */
 	struct pti_queue_entry   *res_cpu;              /* Ptr to RESPONSE bufs (CPU) */
 	struct pti_queue_entry   *req_cpu;              /* Ptr to REQUEST bufs (CPU)  */
 
-	__u32                     res_dvma;             /* Ptr to RESPONSE bufs (DVMA)*/
-	__u32                     req_dvma;             /* Ptr to REQUEST bufs (DVMA) */
 	u_int	                  req_in_ptr;		/* index of next request slot */
 	u_int	                  res_out_ptr;		/* index of next result slot  */
+	long	                  send_marker;		/* must we send a marker?     */
+	struct sbus_dev		 *sdev;
+	unsigned long		  __pad;
 
 	int                       cmd_count[MAX_TARGETS];
 	unsigned long             tag_ages[MAX_TARGETS];
-	long	                  send_marker;		/* must we send a marker?     */
 
 	/* The cmd->handler is only 32-bits, so that things work even on monster
 	 * Ex000 sparc64 machines with >4GB of ram we just keep track of the
 	 * scsi command pointers here.  This is essentially what Matt Jacob does. -DaveM
 	 */
-	Scsi_Cmnd                *cmd_slots[QLOGICISP_REQ_QUEUE_LEN + 1];
+	Scsi_Cmnd                *cmd_slots[QLOGICPTI_REQ_QUEUE_LEN + 1];
 
 	/* The rest of the elements are unimportant for performance. */
-	u_char	                  fware_majrev, fware_minrev;
+	struct qlogicpti         *next;
+	__u32                     res_dvma;             /* Ptr to RESPONSE bufs (DVMA)*/
+	__u32                     req_dvma;             /* Ptr to REQUEST bufs (DVMA) */
+	u_char	                  fware_majrev, fware_minrev, fware_micrev;
 	struct Scsi_Host         *qhost;
-	struct linux_sbus_device *qdev;
 	int                       qpti_id;
 	int                       scsi_id;
 	int                       prom_node;
 	char                      prom_name[64];
 	int                       irq;
-	char                      differential, ultra;
+	char                      differential, ultra, clock;
 	unsigned char             bursts;
 	struct	host_param        host_param;
 	struct	dev_param         dev_param[MAX_TARGETS];
 
-	volatile unsigned char   *sreg;
+	unsigned long             sreg;
 #define SREG_TPOWER               0x80   /* State of termpwr           */
 #define SREG_FUSE                 0x40   /* State of on board fuse     */
 #define SREG_PDISAB               0x20   /* Disable state for power on */
@@ -493,13 +389,13 @@ struct qlogicpti {
 #define SREG_IMASK                0x0c   /* Interrupt level            */
 #define SREG_SPMASK               0x03   /* Mask for switch pack       */
 	unsigned char             swsreg;
-	unsigned char             is_pti; /* Non-zero if this is a PTI board. */
+	unsigned int	
+		gotirq	:	1,	/* this instance got an irq */
+		is_pti	: 	1,	/* Non-zero if this is a PTI board. */
+		sbits	:	16;	/* syncmode known bits */
 };
 
 /* How to twiddle them bits... */
-
-/* SBUS config register zero. */
-#define SBUS_CFG0_HREVMASK      0x000f      /* To get the revision              */
 
 /* SBUS config register one. */
 #define SBUS_CFG1_EPAR          0x0100      /* Enable parity checking           */
@@ -529,84 +425,12 @@ struct qlogicpti {
 #define SBUS_SEMAPHORE_STAT     0x0002      /* Semaphore status bit             */
 #define SBUS_SEMAPHORE_LCK      0x0001      /* Semaphore lock bit               */
 
-/* DVMA config register */
-#define DMA_CFG_DVMAENAB        0x0008      /* Enable scsi cpu --> dma data     */
-#define DMA_CFG_EIRQ            0x0004      /* Enable interrupts to risc cpu    */
-#define DMA_CFG_EBURST          0x0002      /* Enable sbus dvma bursts          */
-#define DMA_CFG_DIRECTION       0x0001      /* DMA direction (0=fifo->ram)      */
-
 /* DVMA control register */
 #define DMA_CTRL_CSUSPEND       0x0010      /* DMA channel suspend              */
 #define DMA_CTRL_CCLEAR         0x0008      /* DMA channel clear and reset      */
 #define DMA_CTRL_FCLEAR         0x0004      /* DMA fifo clear                   */
 #define DMA_CTRL_CIRQ           0x0002      /* DMA irq clear                    */
 #define DMA_CTRL_DMASTART       0x0001      /* DMA transfer start               */
-
-/* DVMA status register */
-#define DMA_STAT_PFULL          0x00c0      /* Pipe full                        */
-#define DMA_STAT_PORUN          0x0080      /* Pipe overrun                     */
-#define DMA_STAT_PSTG1          0x0040      /* Pipe has stage 1 loaded          */
-#define DMA_STAT_PEMPTY         0x0000      /* Pipe is empty                    */
-#define DMA_STAT_CSUSP          0x0030      /* Channel suspended                */
-#define DMA_STAT_CTRAN          0x0020      /* Channel transfer in progress     */
-#define DMA_STAT_CACTIVE        0x0010      /* Channel active                   */
-#define DMA_STAT_CIDLE          0x0000      /* Channel idle                     */
-#define DMA_STAT_SPAR           0x0008      /* SBUS parity error                */
-#define DMA_STAT_SERR           0x0004      /* SBUS dma error                   */
-#define DMA_STAT_TCNT           0x0002      /* Terminal count expired           */
-#define DMA_STAT_IRQ            0x0001      /* DMA interrupt                    */
-
-/* DVMA FIFO status register */
-#define DMA_FSTAT_ORUN          0x0200      /* FIFO overrun                     */
-#define DMA_FSTAT_URUN          0x0100      /* FIFO underrun                    */
-#define DMA_FSTAT_CMASK         0x007f      /* FIFO count mask                  */
-
-/* SCSI processor config 1 register */
-#define CPU_CFG1_ASTIME         0xf000      /* Asynchronous setup time mask     */
-#define CPU_CFG1_STUNIT         0x0000      /* Selection time unit              */
-#define CPU_CFG1_STIMEO         0x0600      /* Selection timeout value          */
-#define CPU_CFG1_CFACT          0x00e0      /* Clock factor                     */
-#define CPU_CFG1_SID            0x000f      /* SCSI ID                          */
-
-/* SCSI processor config 2 register */
-#define CPU_CFG2_FDISAB         0x0040      /* SCSI filter disable              */
-#define CPU_CFG2_ERAPUPS        0x0020      /* Req/Ack pullup enable            */
-#define CPU_CFG2_EDPUPS         0x0010      /* Data active pullup enable        */
-#define CPU_CFG2_ECAUTO         0x0008      /* Autoload device config enable    */
-#define CPU_CFG2_ERESEL         0x0002      /* Enable reselections              */
-#define CPU_CFG2_ESEL           0x0001      /* Enable selections                */
-
-/* SCSI processor interrupt register */
-#define CPU_IRQ_PERR            0x8000      /* Parity error                     */
-#define CPU_IRQ_GERR            0x4000      /* Gross error                      */
-#define CPU_IRQ_FABORT          0x2000      /* Function abort                   */
-#define CPU_IRQ_CFAIL           0x1000      /* Condition failed                 */
-#define CPU_IRQ_FEMPTY          0x0800      /* FIFO empty                       */
-#define CPU_IRQ_BCZ             0x0400      /* Byte counter is zero             */
-#define CPU_IRQ_XZ              0x0200      /* Transfer counter is zero         */
-#define CPU_IRQ_IRQ             0x0080      /* SCSI processor interrupt pending */
-#define CPU_IRQ_CRUN            0x0040      /* Command is running               */
-#define CPU_IRQ_RCODE           0x000f      /* Return code for interrupt        */
-
-/* SCSI processor gross error register */
-#define CPU_GERR_ONZ            0x0040      /* Offset not zero                  */
-#define CPU_GERR_OUF            0x0020      /* Offset underflowed               */
-#define CPU_GERR_OOF            0x0010      /* Offset overflowed                */
-#define CPU_GERR_FUF            0x0008      /* FIFO underflowed                 */
-#define CPU_GERR_FOF            0x0004      /* FIFO overflowed                  */
-#define CPU_GERR_WERR           0x0002      /* Error on write                   */
-#define CPU_GERR_ILL            0x0001      /* Instruction was illegal          */
-
-/* SCSI processor exception register */
-#define CPU_EXC_UZERO           0x8000      /* User exception zero              */
-#define CPU_EXC_UONE            0x4000      /* User exception one               */
-#define CPU_EXC_BFREE           0x0200      /* Bus free                         */
-#define CPU_EXC_TATN            0x0100      /* ATN in target mode               */
-#define CPU_EXC_RESEL           0x0080      /* Reselect exception               */
-#define CPU_EXC_SEL             0x0040      /* Selection exception              */
-#define CPU_EXC_ARB             0x0020      /* Arbitration exception            */
-#define CPU_EXC_GERR            0x0010      /* Gross error exception            */
-#define CPU_EXC_RESET           0x0008      /* Bus reset exception              */
 
 /* SCSI processor override register */
 #define CPU_ORIDE_ETRIG         0x8000      /* External trigger enable          */
@@ -625,38 +449,6 @@ struct qlogicpti {
 
 /* SCSI processor commands */
 #define CPU_CMD_BRESET          0x300b      /* Reset SCSI bus                   */
-
-/* SCSI processor user exception register */
-#define CPU_UEXC_ONE            0x0002      /* User exception one               */
-#define CPU_UEXC_ZERO           0x0001      /* User exception zero              */
-
-/* SCSI processor SCSI id register */
-#define CPU_SID_RSEID           0x0f00      /* Who is sel/resel'ing us          */
-#define CPU_SID_SID             0x000f      /* Selection ID                     */
-
-/* SCSI processor device config 1 */
-#define CPU_DCFG1_SHOLD         0x7000      /* Sync data hold                   */
-#define CPU_DCFG1_SSETUP        0x0f00      /* Sync data setup                  */
-#define CPU_DCFG1_SOFF          0x000f      /* Sync data offset                 */
-
-/* SCSI processor device config 2 */
-#define CPU_DCFG2_FMASK         0xf000      /* Device flags                     */
-#define CPU_DCFG2_EWIDE         0x0400      /* WIDE enable                      */
-#define CPU_DCFG2_EPAR          0x0200      /* Parity enable                    */
-#define CPU_DCFG2_EBLK          0x0100      /* Block mode transfer enable       */
-#define CPU_DCFG2_AMASK         0x0007      /* Assertion period mask            */
-
-/* SCSI processor phase pointer register */
-#define CPU_PPTR_STAT           0x1000      /* Status buf offset                */
-#define CPU_PPTR_MSGIN          0x0700      /* Msg-in buf offset                */
-#define CPU_PPTR_COM            0x00f0      /* Cmd buf offset                   */
-#define CPU_PPTR_MSGOUT         0x0007      /* Msg-out buf offset               */
-
-/* SCSI processor fifo status register */
-#define CPU_FSTAT_TFULL         0x8000      /* Top residue full                 */
-#define CPU_FSTAT_ARES          0x4000      /* Odd residue for wide transfer    */
-#define CPU_FSTAT_CMSK          0x001c      /* FIFO count mask                  */
-#define CPU_FSTAT_BRES          0x0001      /* Bottom residue full              */
 
 /* SCSI processor pin control register */
 #define CPU_PCTRL_PVALID        0x8000      /* Phase bits are valid             */
@@ -724,14 +516,14 @@ struct qlogicpti {
 	detect:		qlogicpti_detect,			   \
 	release:	qlogicpti_release,			   \
 	info:		qlogicpti_info,				   \
-	queuecommand:	qlogicpti_queuecommand,			   \
+	queuecommand:	qlogicpti_queuecommand_slow,		   \
 	abort:		qlogicpti_abort,			   \
 	reset:		qlogicpti_reset,			   \
-	can_queue:	QLOGICISP_REQ_QUEUE_LEN,		   \
+	can_queue:	QLOGICPTI_REQ_QUEUE_LEN,		   \
 	this_id:	7,					   \
-	sg_tablesize:	QLOGICISP_MAX_SG(QLOGICISP_REQ_QUEUE_LEN), \
+	sg_tablesize:	QLOGICPTI_MAX_SG(QLOGICPTI_REQ_QUEUE_LEN), \
 	cmd_per_lun:	1,					   \
-	use_clustering:	DISABLE_CLUSTERING,			   \
+	use_clustering:	ENABLE_CLUSTERING,			   \
 	use_new_eh_code: 0					   \
 }
 

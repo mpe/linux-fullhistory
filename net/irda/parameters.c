@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Jun  7 10:25:11 1999
- * Modified at:   Fri Nov  5 08:20:38 1999
+ * Modified at:   Tue Dec 14 16:03:57 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -88,7 +88,7 @@ static int irda_insert_no_value(void *self, __u8 *buf, int len, __u8 pi,
 	ret = (*func)(self, &p, PV_GET);
 
 	/* Extract values anyway, since handler may need them */
-	irda_param_pack(buf, "bb", p.pi, &p.pl);
+	irda_param_pack(buf, "bb", p.pi, p.pl);
 
 	if (ret < 0)
 		return ret;

@@ -1,4 +1,4 @@
-/* $Id: pcic.h,v 1.2 1999/06/03 15:02:51 davem Exp $
+/* $Id: pcic.h,v 1.4 1999/11/17 07:34:20 zaitcev Exp $
  * pcic.h: JavaEngine 1 specific PCI definitions.
  *
  * Copyright (C) 1998 V. Roganov and G. Raiko
@@ -13,22 +13,26 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 #include <linux/pci.h>
+#include <linux/ioport.h>
 #include <asm/pbm.h>
 
 struct linux_pcic {
         unsigned long           pcic_regs;
         unsigned long           pcic_io;
-        unsigned long           pcic_io_phys;
-        unsigned long           pcic_mapped_io;
         unsigned long           pcic_config_space_addr;
         unsigned long           pcic_config_space_data;
+	struct resource		pcic_res_regs;
+	struct resource		pcic_res_io;
+	struct resource		pcic_res_cfg_addr;
+	struct resource		pcic_res_cfg_data;
         struct linux_pbm_info   pbm;
 	struct pcic_ca2irq	*pcic_imap;
 	int			pcic_imdim;
 };
 
-extern unsigned long pcic_alloc_io(unsigned long* addr);
-extern void pcic_probe(void);
+extern int pcic_probe(void);
+/* Erm... MJ redefined pcibios_present() so that it does not work early. */
+extern int pcic_present(void);
 extern void sun4m_pci_init_IRQ(void);
 
 #endif

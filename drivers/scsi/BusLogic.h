@@ -1767,8 +1767,6 @@ static int BusLogic_ResetHostAdapter(BusLogic_HostAdapter_T *,
 				     SCSI_Command_T *, unsigned int);
 static void BusLogic_Message(BusLogic_MessageLevel_T, char *,
 			     BusLogic_HostAdapter_T *, ...);
-static void BusLogic_ParseDriverOptions(char *);
-
 
 /*
   Declare the Initialization Functions.
@@ -1803,8 +1801,8 @@ static void BusLogic_InitializeHostStructure(BusLogic_HostAdapter_T *,
 int BusLogic_DetectHostAdapter(SCSI_Host_Template_T *) __init;
 int BusLogic_ReleaseHostAdapter(SCSI_Host_T *) __init;
 static boolean BusLogic_ParseKeyword(char **, char *) __init;
-static void BusLogic_ParseDriverOptions(char *) __init;
-void BusLogic_Setup(char *, int *) __init;
+static int BusLogic_ParseDriverOptions(char *) __init;
+static int BusLogic_Setup(char *) __init;
 
 
 #endif /* BusLogic_DriverVersion */

@@ -1,4 +1,4 @@
-/* $Id: ttable.S,v 1.29 1999/08/31 19:25:37 davem Exp $
+/* $Id: ttable.S,v 1.30 1999/12/01 23:52:03 davem Exp $
  * ttable.S: Sparc V9 Trap Table(s) with SpitFire extensions.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -120,7 +120,8 @@ tl0_resv11c:	TRAP_UTRAP(UT_TRAP_INSTRUCTION_28,0x11c) TRAP_UTRAP(UT_TRAP_INSTRUC
 tl0_resv11e:	TRAP_UTRAP(UT_TRAP_INSTRUCTION_30,0x11e) TRAP_UTRAP(UT_TRAP_INSTRUCTION_31,0x11f)
 tl0_getcc:	GETCC_TRAP
 tl0_setcc:	SETCC_TRAP
-tl0_resv122:	BTRAP(0x122) BTRAP(0x123) BTRAP(0x124) BTRAP(0x125) BTRAP(0x126)
+tl0_getpsr:	TRAP(do_getpsr)
+tl0_resv123:	BTRAP(0x123) BTRAP(0x124) BTRAP(0x125) BTRAP(0x126)
 tl0_solindir:	INDIRECT_SOLARIS_SYSCALL(156)
 tl0_resv128:	BTRAP(0x128) BTRAP(0x129) BTRAP(0x12a) BTRAP(0x12b) BTRAP(0x12c)
 tl0_resv12d:	BTRAP(0x12d) BTRAP(0x12e) BTRAP(0x12f) BTRAP(0x130) BTRAP(0x131)

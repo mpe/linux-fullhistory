@@ -1,4 +1,4 @@
-/* $Id: ptifddi.c,v 1.9 1999/08/20 00:31:07 davem Exp $
+/* $Id: ptifddi.c,v 1.11 1999/10/25 01:50:16 zaitcev Exp $
  * ptifddi.c: Network driver for Performance Technologies single-attach
  *            and dual-attach FDDI sbus cards.
  *
@@ -149,7 +149,7 @@ static void pti_set_multicast(struct net_device *dev)
 {
 }
 
-static inline int pti_fddi_init(struct net_device *dev, struct linux_sbus_device *sdev, int num)
+static inline int pti_fddi_init(struct net_device *dev, struct sbus_dev *sdev, int num)
 {
 	static unsigned version_printed = 0;
 	struct ptifddi *pp;
@@ -160,34 +160,25 @@ static inline int pti_fddi_init(struct net_device *dev, struct linux_sbus_device
 	if(version_printed++ == 0)
 		printk(version);
 
-	prom_apply_sbus_ranges(sdev->my_bus, &sdev->reg_addrs[0],
-			       sdev->num_registers, sdev);
-
 	/* Register 0 mapping contains DPRAM. */
-	pp->dpram = sparc_alloc_io(sdev->reg_addrs[0].phys_addr, 0,
-				   sdev->reg_addrs[0].reg_size,
-				   "PTI FDDI DPRAM",
-				   sdev->reg_addrs[0].which_io, 0);
+	pp->dpram = (struct dfddi_ram *) sbus_ioremap(
+	    &sdep->resource[0], 0, sizeof(sturct dfddi_ram), "PTI FDDI DPRAM");
 	if(!pp->dpram) {
 		printk("ptiFDDI: Cannot map DPRAM I/O area.\n");
 		return ENODEV;
 	}
 
 	/* Next, register 1 contains reset byte. */
-	pp->reset = sparc_alloc_io(sdev->reg_addrs[1].phys_addr, 0,
-				   sdev->reg_addrs[1].reg_size,
-				   "PTI FDDI RESET Byte",
-				   sdev->reg_addrs[1].which_io, 0);
+	pp->reset = (unsigned char *) sbus_ioremap(
+	    &sdep->resource[1], 0, 1, "PTI FDDI RESET Byte");
 	if(!pp->reset) {
 		printk("ptiFDDI: Cannot map RESET byte.\n");
 		return ENODEV;
 	}
 
 	/* Register 2 contains unreset byte. */
-	pp->unreset = sparc_alloc_io(sdev->reg_addrs[2].phys_addr, 0,
-				     sdev->reg_addrs[2].reg_size,
-				     "PTI FDDI UNRESET Byte",
-				     sdev->reg_addrs[2].which_io, 0);
+	pp->unreset = (unsigned char *) sbus_ioremap(
+	    &sdep->resource[2], 0, 1, "PTI FDDI UNRESET Byte");
 	if(!pp->unreset) {
 		printk("ptiFDDI: Cannot map UNRESET byte.\n");
 		return ENODEV;
@@ -215,8 +206,8 @@ static inline int pti_fddi_init(struct net_device *dev, struct linux_sbus_device
 
 int __init ptifddi_sbus_probe(struct net_device *dev)
 {
-	struct linux_sbus *bus;
-	struct linux_sbus_device *sdev = 0;
+	struct sbus_bus *bus;
+	struct sbus_dev *sdev = 0;
 	static int called = 0;
 	int cards = 0, v;
 

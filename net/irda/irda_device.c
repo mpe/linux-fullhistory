@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Oct  9 09:22:27 1999
- * Modified at:   Tue Nov 16 12:54:13 1999
+ * Modified at:   Sun Dec 12 12:24:32 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -62,6 +62,8 @@ extern int tekram_init(void);
 extern int actisys_init(void);
 extern int girbil_init(void);
 
+static void __irda_task_delete(struct irda_task *task);
+
 static hashbin_t *dongles = NULL;
 static hashbin_t *tasks = NULL;
 
@@ -94,14 +96,14 @@ int irda_device_proc_read(char *buf, char **start, off_t offset, int len,
 
 int __init irda_device_init( void)
 {
-	dongles = hashbin_new(HB_LOCAL);
+	dongles = hashbin_new(HB_GLOBAL);
 	if (dongles == NULL) {
 		printk(KERN_WARNING 
 		       "IrDA: Can't allocate dongles hashbin!\n");
 		return -ENOMEM;
 	}
 
-	tasks = hashbin_new(HB_LOCAL);
+	tasks = hashbin_new(HB_GLOBAL);
 	if (tasks == NULL) {
 		printk(KERN_WARNING 
 		       "IrDA: Can't allocate tasks hashbin!\n");
@@ -145,6 +147,9 @@ int __init irda_device_init( void)
 #ifdef CONFIG_AIRPORT_DONGLE
  	airport_init();
 #endif
+#ifdef CONFIG_OLD_BELKIN
+ 	old_belkin_init();
+#endif
 	return 0;
 }
 
@@ -152,7 +157,7 @@ void irda_device_cleanup(void)
 {
 	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
-	hashbin_delete(tasks, NULL);
+	hashbin_delete(tasks, (FREE_FUNC) __irda_task_delete);
 	hashbin_delete(dongles, NULL);
 }
 
@@ -188,7 +193,7 @@ int irda_device_set_dtr_rts(struct net_device *dev, int dtr, int rts)
 	struct if_irda_req req;
 	int ret;
 
-	IRDA_DEBUG(0, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
 	if (!dev->do_ioctl) {
 		ERROR(__FUNCTION__ "(), do_ioctl not impl. by "
@@ -209,7 +214,7 @@ int irda_device_change_speed(struct net_device *dev, __u32 speed)
 	struct if_irda_req req;
 	int ret;
 
-	IRDA_DEBUG(0, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
 	if (!dev->do_ioctl) {
 		ERROR(__FUNCTION__ "(), do_ioctl not impl. by "
@@ -257,6 +262,21 @@ void irda_task_next_state(struct irda_task *task, TASK_STATE state)
 	task->state = state;
 }
 
+static void __irda_task_delete(struct irda_task *task)
+{
+	del_timer(&task->timer);
+	
+	kfree(task);
+}
+
+void irda_task_delete(struct irda_task *task)
+{
+	/* Unregister task */
+	hashbin_remove(tasks, (int) task, NULL);
+
+	__irda_task_delete(task);
+}
+
 /*
  * Function irda_task_kick (task)
  *
@@ -267,9 +287,9 @@ void irda_task_next_state(struct irda_task *task, TASK_STATE state)
  */
 int irda_task_kick(struct irda_task *task)
 {
-	int timeout;
-	int ret = 0;
+	int finished = TRUE;
 	int count = 0;
+	int timeout;
 
 	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
@@ -281,13 +301,15 @@ int irda_task_kick(struct irda_task *task)
 		timeout = task->function(task);
 		if (count++ > 100) {
 			ERROR(__FUNCTION__ "(), error in task handler!\n");
-			return -1;
+			irda_task_delete(task);
+			return TRUE;
 		}			
 	} while ((timeout == 0) && (task->state != IRDA_TASK_DONE));
 
 	if (timeout < 0) {
 		ERROR(__FUNCTION__ "(), Error executing task!\n");
-		return -1;
+		irda_task_delete(task);
+		return TRUE;
 	}
 
 	/* Check if we are finished */
@@ -311,20 +333,18 @@ int irda_task_kick(struct irda_task *task)
 				irda_task_kick(task->parent);
 			}
 		}		
-		/* Unregister task */
-		hashbin_remove(tasks, (int) task, NULL);
-
-		kfree(task);
+		irda_task_delete(task);
 	} else if (timeout > 0) {
 		irda_start_timer(&task->timer, timeout, (void *) task, 
 				 irda_task_timer_expired);
-		ret = 1;
+		finished = FALSE;
 	} else {
-		IRDA_DEBUG(0, __FUNCTION__ "(), not finished, and no timeout!\n");
-		ret = 1;
+		IRDA_DEBUG(0, __FUNCTION__ 
+			   "(), not finished, and no timeout!\n");
+		finished = FALSE;
 	}
 
-	return ret;
+	return finished;
 }
 
 /*
@@ -335,25 +355,26 @@ int irda_task_kick(struct irda_task *task)
  *    called from interrupt context, so it's not possible to use
  *    schedule_timeout() 
  */
-int irda_task_execute(void *instance, TASK_CALLBACK function, 
-		      TASK_CALLBACK finished, struct irda_task *parent, 
-		      void *param)
+struct irda_task *irda_task_execute(void *instance, TASK_CALLBACK function, 
+				    TASK_CALLBACK finished, 
+				    struct irda_task *parent, void *param)
 {
 	struct irda_task *task;
+	int ret;
 
 	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
 	task = kmalloc(sizeof(struct irda_task), GFP_ATOMIC);
 	if (!task)
-		return -ENOMEM;
+		return NULL;
 
-	task->state = IRDA_TASK_INIT;
+	task->state    = IRDA_TASK_INIT;
 	task->instance = instance;
 	task->function = function;
 	task->finished = finished;
-	task->parent = parent;
-	task->param = param;	
-	task->magic = IRDA_TASK_MAGIC;
+	task->parent   = parent;
+	task->param    = param;	
+	task->magic    = IRDA_TASK_MAGIC;
 
 	init_timer(&task->timer);
 
@@ -361,7 +382,11 @@ int irda_task_execute(void *instance, TASK_CALLBACK function,
 	hashbin_insert(tasks, (queue_t *) task, (int) task, NULL);
 
 	/* No time to waste, so lets get going! */
-	return irda_task_kick(task);
+	ret = irda_task_kick(task);
+	if (ret)
+		return NULL;
+	else
+		return task;
 }
 
 /*
@@ -394,7 +419,7 @@ int irda_device_setup(struct net_device *dev)
         dev->hard_header_len = 0;
         dev->addr_len        = 0;
 
-	dev->new_style       = 1;
+	/* dev->new_style       = 1; */
 	/* dev->destructor      = irda_device_destructor; */
 
         dev->type            = ARPHRD_IRDA;
@@ -455,6 +480,8 @@ dongle_t *irda_device_dongle_init(struct net_device *dev, int type)
 	dongle = kmalloc(sizeof(dongle_t), GFP_KERNEL);
 	if (!dongle)
 		return NULL;
+
+	memset(dongle, 0, sizeof(dongle_t));
 
 	/* Bind the registration info to this particular instance */
 	dongle->issue = reg;
@@ -518,12 +545,13 @@ void irda_device_unregister_dongle(struct dongle_reg *dongle)
 }
 
 /*
- * Function irda_device_set_raw_mode (self, mode)
+ * Function irda_device_set_mode (self, mode)
  *
- *    
- *
+ *    Set the Infrared device driver into mode where it sends and receives
+ *    data without using IrLAP framing. Check out the particular device
+ *    driver to find out which modes it support.
  */
-int irda_device_set_raw_mode(struct net_device* dev, int mode)
+int irda_device_set_mode(struct net_device* dev, int mode)
 {	
 	struct if_irda_req req;
 	int ret;
@@ -536,9 +564,9 @@ int irda_device_set_raw_mode(struct net_device* dev, int mode)
 		return -1;
 	}
 	
-	req.ifr_raw_mode = mode;
+	req.ifr_mode = mode;
 
-	ret = dev->do_ioctl(dev, (struct ifreq *) &req, SIOCSRAWMODE);
+	ret = dev->do_ioctl(dev, (struct ifreq *) &req, SIOCSMODE);
 	
 	return ret;
 }
@@ -546,7 +574,7 @@ int irda_device_set_raw_mode(struct net_device* dev, int mode)
 /*
  * Function setup_dma (idev, buffer, count, mode)
  *
- *    Setup the DMA channel
+ *    Setup the DMA channel. Commonly used by ISA FIR drivers
  *
  */
 void setup_dma(int channel, char *buffer, int count, int mode)

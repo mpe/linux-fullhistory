@@ -1,4 +1,4 @@
-/* $Id: ranges.c,v 1.12 1999/08/31 06:54:47 davem Exp $
+/* $Id: ranges.c,v 1.14 1999/10/06 19:28:54 zaitcev Exp $
  * ranges.c: Handle ranges in newer proms for obio/sbus.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -8,6 +8,7 @@
 #include <linux/init.h>
 #include <asm/openprom.h>
 #include <asm/oplib.h>
+#include <asm/types.h>
 #include <asm/sbus.h>
 #include <asm/system.h>
 
@@ -64,24 +65,6 @@ prom_apply_obio_ranges(struct linux_prom_registers *regs, int nregs)
 		prom_adjust_regs(regs, nregs, promlib_obio_ranges, num_obio_ranges);
 }
 
-/* Apply probed sbus ranges to registers passed, if no ranges return. */
-void prom_apply_sbus_ranges(struct linux_sbus *sbus, struct linux_prom_registers *regs,
-			    int nregs, struct linux_sbus_device *sdev)
-{
-	if(sbus && sbus->num_sbus_ranges) {
-		if(sdev && (sdev->ranges_applied == 0)) {
-			sdev->ranges_applied = 1;
-			prom_adjust_regs(regs, nregs, sbus->sbus_ranges,
-					 sbus->num_sbus_ranges);
-		} else if(!sdev) {
-			printk("PROMLIB: Aieee, old SBUS driver, update it to use new "
-			       "prom_apply_sbus_ranges interface now!\n");
-			prom_adjust_regs(regs, nregs, sbus->sbus_ranges,
-					 sbus->num_sbus_ranges);
-		}
-	}
-}
-
 void __init prom_ranges_init(void)
 {
 	int node, obio_node;
@@ -105,32 +88,6 @@ void __init prom_ranges_init(void)
 		prom_printf("PROMLIB: obio_ranges %d\n", num_obio_ranges);
 
 	return;
-}
-
-void __init prom_sbus_ranges_init(int parentnd, struct linux_sbus *sbus)
-{
-	int success;
-	
-	sbus->num_sbus_ranges = 0;
-	if(sparc_cpu_model == sun4c)
-		return;
-	success = prom_getproperty(sbus->prom_node, "ranges",
-				   (char *) sbus->sbus_ranges,
-				   sizeof (sbus->sbus_ranges));
-	if (success != -1)
-		sbus->num_sbus_ranges = (success/sizeof(struct linux_prom_ranges));
-	if (sparc_cpu_model == sun4d) {
-		struct linux_prom_ranges iounit_ranges[PROMREG_MAX];
-		int num_iounit_ranges;
-		
-		success = prom_getproperty(parentnd, "ranges",
-				   	(char *) iounit_ranges,
-				   	sizeof (iounit_ranges));
-		if (success != -1) {
-			num_iounit_ranges = (success/sizeof(struct linux_prom_ranges));
-			prom_adjust_ranges (sbus->sbus_ranges, sbus->num_sbus_ranges, iounit_ranges, num_iounit_ranges);
-		}
-	}
 }
 
 void

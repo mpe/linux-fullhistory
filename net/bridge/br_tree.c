@@ -492,7 +492,8 @@ void br_avl_delete_by_port(int port)
         port_info[port].fdb = NULL;
 
         /* remove the local mac too */
-        next = br_avl_find_addr(port_info[port].dev->dev_addr);
+/*        next = br_avl_find_addr(port_info[port].dev->dev_addr); */
+        next = br_avl_find_addr(port_info[port].ifmac.BRIDGE_ID_ULA);
         if (next != NULL)
                 br_avl_remove(next);
 

@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      ircomm_lmp.c
- * Version:       
+ * Version:       1.0
  * Description:   Interface between IrCOMM and IrLMP
- * Status:        Experimental.
+ * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Jun  6 20:48:27 1999
- * Modified at:   Sat Oct 30 12:55:24 1999
+ * Modified at:   Sun Dec 12 13:44:17 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       Previous IrLPT work by Thomas Davis
  * 
@@ -60,7 +60,7 @@ int ircomm_open_lsap(struct ircomm_cb *self)
 	notify.instance = self;
 	strncpy(notify.name, "IrCOMM", NOTIFY_MAX_NAME);
 
-	self->lsap = irlmp_open_lsap(LSAP_ANY, &notify);
+	self->lsap = irlmp_open_lsap(LSAP_ANY, &notify, 0);
 	if (!self->lsap) {
 		IRDA_DEBUG(0,__FUNCTION__"failed to allocate tsap\n");
 		return -1;
@@ -128,11 +128,8 @@ int ircomm_lmp_disconnect_request(struct ircomm_cb *self,
 		if (!skb)
 			return -ENOMEM;
 		
-		/* 
-		 *  Reserve space for MUX and LAP header 
-		 */
-		skb_reserve(skb, LMP_MAX_HEADER);
-		
+		/*  Reserve space for MUX and LAP header */
+		skb_reserve(skb, LMP_MAX_HEADER);		
 		userdata = skb;
 	}
 	ret = irlmp_disconnect_request(self->lsap, userdata);
@@ -323,5 +320,3 @@ void ircomm_lmp_disconnect_indication(void *instance, void *sap,
 
 	ircomm_do_event(self, IRCOMM_LMP_DISCONNECT_INDICATION, skb, &info);
 }
-
-

@@ -2020,7 +2020,7 @@ void scsi_build_commandblocks(Scsi_Device * SDpnt)
 	spin_unlock_irqrestore(&device_request_lock, flags);
 }
 
-static ssize_t proc_scsi_gen_write(struct file * file, const char * buf,
+static int proc_scsi_gen_write(struct file * file, const char * buf,
                               unsigned long length, void *data);
 
 #ifndef MODULE			/* { */
@@ -2215,7 +2215,7 @@ stop_output:
 	return (len);
 }
 
-static ssize_t proc_scsi_gen_write(struct file * file, const char * buf,
+static int proc_scsi_gen_write(struct file * file, const char * buf,
                               unsigned long length, void *data)
 {
 	Scsi_Cmnd *SCpnt;

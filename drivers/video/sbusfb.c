@@ -965,7 +965,7 @@ void sbusfb_palette(int enter)
 extern void (*prom_palette)(int);
 
 static void __init sbusfb_init_fb(int node, int parent, int fbtype,
-				      struct linux_sbus_device *sbdp)
+				  struct sbus_dev *sbdp)
 {
 	struct fb_fix_screeninfo *fix;
 	struct fb_var_screeninfo *var;
@@ -991,6 +991,7 @@ static void __init sbusfb_init_fb(int node, int parent, int fbtype,
 	disp = &fb->disp;
 	type = &fb->type;
 	
+	spin_lock_init(&fb->lock);
 	fb->prom_node = node;
 	fb->prom_parent = parent;
 	fb->sbdp = sbdp;
@@ -1165,8 +1166,8 @@ static inline int known_card(char *name)
 int __init sbusfb_init(void)
 {
 	int type;
-	struct linux_sbus_device *sbdp;
-	struct linux_sbus *sbus;
+	struct sbus_dev *sbdp;
+	struct sbus_bus *sbus;
 	char prom_name[40];
 	extern int con_is_present(void);
 	
@@ -1198,17 +1199,19 @@ int __init sbusfb_init(void)
 		}
 	}
 #endif
-	if (!SBus_chain) return 0;
+	if (sbus_root == NULL)
+		return 0;
 	for_all_sbusdev(sbdp, sbus) {
 		type = known_card(sbdp->prom_name);
-		if (type == FBTYPE_NOTYPE) continue;
-		if (prom_getproperty(sbdp->prom_node, "emulation", prom_name, sizeof(prom_name)) > 0) {
+		if (type == FBTYPE_NOTYPE)
+			continue;
+		if (prom_getproperty(sbdp->prom_node, "emulation",
+				     prom_name, sizeof(prom_name)) > 0) {
 			type = known_card(prom_name);
-			if (type == FBTYPE_NOTYPE) type = known_card(sbdp->prom_name);
+			if (type == FBTYPE_NOTYPE)
+				type = known_card(sbdp->prom_name);
 		}
-		prom_apply_sbus_ranges(sbdp->my_bus, &sbdp->reg_addrs[0],
-				       sbdp->num_registers, sbdp);
-		sbusfb_init_fb(sbdp->prom_node, sbdp->my_bus->prom_node, type, sbdp);
+		sbusfb_init_fb(sbdp->prom_node, sbdp->bus->prom_node, type, sbdp);
 	}
 	return 0;
 }	

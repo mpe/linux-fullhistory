@@ -1,4 +1,4 @@
-/* $Id: ultra.S,v 1.34 1999/09/10 10:40:51 davem Exp $
+/* $Id: ultra.S,v 1.36 1999/12/15 15:45:18 davem Exp $
  * ultra.S: Don't expand these all over the place...
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -174,10 +174,10 @@ iflush2:stxa		%g0, [%o1 + %o2] ASI_IC_TAG
 	 *
 	 * Register usage:
 	 *   %g5	mm->context	(all tlb flushes)
-	 *   %g6	address arg 1	(tlb page and range flushes)
+	 *   %g1	address arg 1	(tlb page and range flushes)
 	 *   %g7	address arg 2	(tlb range flush only)
 	 *
-	 *   %g1	ivector table, don't touch
+	 *   %g6	ivector table, don't touch
 	 *   %g2	scratch 1
 	 *   %g3	scratch 2
 	 *   %g4	scratch 3
@@ -188,7 +188,7 @@ iflush2:stxa		%g0, [%o1 + %o2] ASI_IC_TAG
 	.globl		xcall_flush_tlb_page, xcall_flush_tlb_mm, xcall_flush_tlb_range
 xcall_flush_tlb_page:
 	mov		SECONDARY_CONTEXT, %g2
-	or		%g6, 0x10, %g4
+	or		%g1, 0x10, %g4
 	ldxa		[%g2] ASI_DMMU, %g3
 	stxa		%g5, [%g2] ASI_DMMU
 	stxa		%g0, [%g4] ASI_DMMU_DEMAP
@@ -209,11 +209,11 @@ xcall_flush_tlb_mm:
 xcall_flush_tlb_range:
 	sethi		%hi(8192 - 1), %g2
 	or		%g2, %lo(8192 - 1), %g2
-	andn		%g6, %g2, %g6
+	andn		%g1, %g2, %g1
 	andn		%g7, %g2, %g7
-	sub		%g7, %g6, %g3
+	sub		%g7, %g1, %g3
 	add		%g2, 1, %g2
-	orcc		%g6, 0x10, %g6
+	orcc		%g1, 0x10, %g1
 	srlx		%g3, 13, %g4
 
 	cmp		%g4, 96
@@ -225,8 +225,8 @@ xcall_flush_tlb_range:
 	nop
 	nop
 
-1:	stxa		%g0, [%g6 + %g3] ASI_DMMU_DEMAP
-	stxa		%g0, [%g6 + %g3] ASI_IMMU_DEMAP
+1:	stxa		%g0, [%g1 + %g3] ASI_DMMU_DEMAP
+	stxa		%g0, [%g1 + %g3] ASI_IMMU_DEMAP
 	brnz,pt		%g3, 1b
 	 sub		%g3, %g2, %g3
 	stxa		%g7, [%g4] ASI_DMMU
@@ -261,6 +261,22 @@ xcall_capture:
 	 nop
 	b,pt		%xcc, rtrap
 	 clr		%l6
+
+	.globl		xcall_promstop
+xcall_promstop:
+	rdpr		%pstate, %g2
+	wrpr		%g2, PSTATE_IG | PSTATE_AG, %pstate
+	rdpr		%pil, %g2
+	wrpr		%g0, 15, %pil
+	sethi		%hi(109f), %g7
+	b,pt		%xcc, etrap_irq
+109:	 or		%g7, %lo(109b), %g7
+	flushw
+	call		prom_stopself
+	 nop
+	/* We should not return, just spin if we do... */
+1:	b,a,pt		%xcc, 1b
+	nop
 
 	.globl		xcall_receive_signal
 xcall_receive_signal:
@@ -303,7 +319,7 @@ xcall_flush_tlb_all:
 	cmp		%g2, 63
 	ble,pt		%icc, 1b
 	 sll		%g2, 3, %g3
-	flush		%g1
+	flush		%g6
 	retry
 
 	.globl		xcall_flush_cache_all
@@ -316,6 +332,6 @@ xcall_flush_cache_all:
 	cmp		%g3, %g2
 	bleu,pt		%xcc, 1b
 	 nop
-	flush		%g1
+	flush		%g6
 	retry
 #endif /* __SMP__ */

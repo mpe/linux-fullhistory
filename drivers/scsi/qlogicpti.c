@@ -43,13 +43,14 @@
 #include <linux/module.h>
 
 #define MAX_TARGETS	16
-#define MAX_LUNS	8
+#define MAX_LUNS	8	/* 32 for 1.31 F/W */
 
-#define DEFAULT_LOOP_COUNT	1000000
+#define DEFAULT_LOOP_COUNT	10000
 
 #include "qlogicpti_asm.c"
 
-static struct qlogicpti *qptichain;
+static struct qlogicpti *qptichain = NULL;
+static spinlock_t qptichain_lock = SPIN_LOCK_UNLOCKED;
 static int qptis_running = 0;
 
 #define PACKB(a, b)			(((a)<<4)|(b))
@@ -129,420 +130,141 @@ const u_char mbox_param[] = {
 /* queue length's _must_ be power of two: */
 #define QUEUE_DEPTH(in, out, ql)	((in - out) & (ql))
 #define REQ_QUEUE_DEPTH(in, out)	QUEUE_DEPTH(in, out, 		     \
-						    QLOGICISP_REQ_QUEUE_LEN)
+						    QLOGICPTI_REQ_QUEUE_LEN)
 #define RES_QUEUE_DEPTH(in, out)	QUEUE_DEPTH(in, out, RES_QUEUE_LEN)
 
-static inline void qlogicpti_enable_irqs(struct qlogicpti_regs *qregs)
+static inline void qlogicpti_enable_irqs(struct qlogicpti *qpti)
 {
-	qregs->sbus_ctrl = SBUS_CTRL_ERIRQ | SBUS_CTRL_GENAB;
+	sbus_writew(SBUS_CTRL_ERIRQ | SBUS_CTRL_GENAB,
+		    qpti->qregs + SBUS_CTRL);
 }
 
-
-static inline void qlogicpti_disable_irqs(struct qlogicpti_regs *qregs)
+static inline void qlogicpti_disable_irqs(struct qlogicpti *qpti)
 {
-	qregs->sbus_ctrl = 0;
+	sbus_writew(0, qpti->qregs + SBUS_CTRL);
 }
 
-static inline void set_sbus_cfg1(struct qlogicpti_regs *qregs, unsigned char bursts)
+static inline void set_sbus_cfg1(struct qlogicpti *qpti)
 {
-	if(bursts & DMA_BURST32) {
-		qregs->sbus_cfg1 = (SBUS_CFG1_BENAB | SBUS_CFG1_B32);
-	} else if(bursts & DMA_BURST16) {
-		qregs->sbus_cfg1 = (SBUS_CFG1_BENAB | SBUS_CFG1_B16);
-	} else if(bursts & DMA_BURST8) {
-		qregs->sbus_cfg1 = (SBUS_CFG1_BENAB | SBUS_CFG1_B8);
+	u16 val;
+	u8 bursts = qpti->bursts;
+
+#if 0	/* It appears that at least PTI cards do not support
+	 * 64-byte bursts and that setting the B64 bit actually
+	 * is a nop and the chip ends up using the smallest burst
+	 * size. -DaveM
+	 */
+	if (sbus_can_burst64(qpti->sdev) && (bursts & DMA_BURST64)) {
+		val = (SBUS_CFG1_BENAB | SBUS_CFG1_B64);
+	} else
+#endif
+	if (bursts & DMA_BURST32) {
+		val = (SBUS_CFG1_BENAB | SBUS_CFG1_B32);
+	} else if (bursts & DMA_BURST16) {
+		val = (SBUS_CFG1_BENAB | SBUS_CFG1_B16);
+	} else if (bursts & DMA_BURST8) {
+		val = (SBUS_CFG1_BENAB | SBUS_CFG1_B8);
 	} else {
-		qregs->sbus_cfg1 = 0; /* No sbus bursts for you... */
+		val = 0; /* No sbus bursts for you... */
 	}
+	sbus_writew(val, qpti->qregs + SBUS_CFG1);
 }
 
 static int qlogicpti_mbox_command(struct qlogicpti *qpti, u_short param[], int force)
 {
-	struct qlogicpti_regs *qregs = qpti->qregs;
 	int loop_count;
+	u16 tmp;
 
-	if(mbox_param[param[0]] == 0)
+	if (mbox_param[param[0]] == 0)
 		return 1;
 
+	/* Set SBUS semaphore. */
+	tmp = sbus_readw(qpti->qregs + SBUS_SEMAPHORE);
+	tmp |= SBUS_SEMAPHORE_LCK;
+	sbus_writew(tmp, qpti->qregs + SBUS_SEMAPHORE);
+
+	/* Wait for host IRQ bit to clear. */
 	loop_count = DEFAULT_LOOP_COUNT;
-	while(--loop_count && (qregs->hcctrl & HCCTRL_HIRQ))
+	while (--loop_count && (sbus_readw(qpti->qregs + HCCTRL) & HCCTRL_HIRQ))
 		barrier();
-	if(!loop_count)
+	if (!loop_count)
 		printk(KERN_EMERG "qlogicpti: mbox_command loop timeout #1\n");
 
-	switch(mbox_param[param[0]] >> 4) {
-	case 6: qregs->mbox5 = param[5];
-	case 5: qregs->mbox4 = param[4];
-	case 4: qregs->mbox3 = param[3];
-	case 3: qregs->mbox2 = param[2];
-	case 2: qregs->mbox1 = param[1];
-	case 1: qregs->mbox0 = param[0];
+	/* Write mailbox command registers. */
+	switch (mbox_param[param[0]] >> 4) {
+	case 6: sbus_writew(param[5], qpti->qregs + MBOX5);
+	case 5: sbus_writew(param[4], qpti->qregs + MBOX4);
+	case 4: sbus_writew(param[3], qpti->qregs + MBOX3);
+	case 3: sbus_writew(param[2], qpti->qregs + MBOX2);
+	case 2: sbus_writew(param[1], qpti->qregs + MBOX1);
+	case 1: sbus_writew(param[0], qpti->qregs + MBOX0);
 	}
 
-	qregs->hcctrl |= HCCTRL_SHIRQ;
+	/* Clear RISC interrupt. */
+	tmp = sbus_readw(qpti->qregs + HCCTRL);
+	tmp |= HCCTRL_CRIRQ;
+	sbus_writew(tmp, qpti->qregs + HCCTRL);
 
+	/* Clear SBUS semaphore. */
+	sbus_writew(0, qpti->qregs + SBUS_SEMAPHORE);
+
+	/* Set HOST interrupt. */
+	tmp = sbus_readw(qpti->qregs + HCCTRL);
+	tmp |= HCCTRL_SHIRQ;
+	sbus_writew(tmp, qpti->qregs + HCCTRL);
+
+	/* Wait for HOST interrupt clears. */
 	loop_count = DEFAULT_LOOP_COUNT;
-	while(--loop_count && !(qregs->sbus_semaphore & SBUS_SEMAPHORE_LCK))
+	while (--loop_count &&
+	       (sbus_readw(qpti->qregs + HCCTRL) & HCCTRL_CRIRQ))
 		udelay(20);
-	if(!loop_count)
-		printk(KERN_EMERG "qlogicpti: mbox_command loop timeout #2\n");
+	if (!loop_count)
+		printk(KERN_EMERG "qlogicpti: mbox_command[%04x] loop timeout #2\n",
+		       param[0]);
 
+	/* Wait for SBUS semaphore to get set. */
 	loop_count = DEFAULT_LOOP_COUNT;
-	while(--loop_count && (qregs->mbox0 == 0x04))
+	while (--loop_count &&
+	       !(sbus_readw(qpti->qregs + SBUS_SEMAPHORE) & SBUS_SEMAPHORE_LCK)) {
 		udelay(20);
-	if(!loop_count)
-		printk(KERN_EMERG "qlogicpti: mbox_command loop timeout #3\n");
 
-	if(force) {
-		qregs->hcctrl = HCCTRL_CRIRQ;
-	} else {
-		if((qregs->mbox5 - qpti->res_out_ptr) == 0)
-			qregs->hcctrl = HCCTRL_CRIRQ;
+		/* Workaround for some buggy chips. */
+		if (sbus_readw(qpti->qregs + MBOX0) & 0x4000)
+			break;
 	}
+	if (!loop_count)
+		printk(KERN_EMERG "qlogicpti: mbox_command[%04x] loop timeout #3\n",
+		       param[0]);
 
-	switch(mbox_param[param[0]] & 0xf) {
-	case 6: param[5] = qregs->mbox5;
-	case 5: param[4] = qregs->mbox4;
-	case 4: param[3] = qregs->mbox3;
-	case 3: param[2] = qregs->mbox2;
-	case 2: param[1] = qregs->mbox1;
-	case 1: param[0] = qregs->mbox0;
-	}
-
-	qregs->sbus_semaphore &= ~(SBUS_SEMAPHORE_LCK);
-	return 0;
-}
-
-static int qlogicpti_reset_hardware(struct Scsi_Host *host)
-{
-	struct qlogicpti *qpti = (struct qlogicpti *) host->hostdata;
-	struct qlogicpti_regs *qregs = qpti->qregs;
-	u_short param[6];
-	unsigned short risc_code_addr;
-	int loop_count, i;
-	unsigned long flags;
-
-	if(qpti->is_pti != 0)
-		risc_code_addr = pti_risc_code_addr01;
-	else
-		risc_code_addr = sbus_risc_code_addr01;
-
-	save_flags(flags); cli();
-
-	qregs->hcctrl = HCCTRL_PAUSE;
-
-	/* Only reset the scsi bus if it is not free. */
-	if(qregs->cpu_pctrl & CPU_PCTRL_BSY) {
-		qregs->cpu_oride = CPU_ORIDE_RMOD;
-		qregs->cpu_cmd = CPU_CMD_BRESET;
-		udelay(400);
-	}
-
-	qregs->sbus_ctrl = SBUS_CTRL_RESET;
-	qregs->cmd_dma_ctrl = (DMA_CTRL_CCLEAR | DMA_CTRL_CIRQ);
-	qregs->data_dma_ctrl = (DMA_CTRL_CCLEAR | DMA_CTRL_CIRQ);
-
+	/* Wait for MBOX busy condition to go away. */
 	loop_count = DEFAULT_LOOP_COUNT;
-	while(--loop_count && ((qregs->mbox0 & 0xff) == 0x04))
+	while (--loop_count && (sbus_readw(qpti->qregs + MBOX0) == 0x04))
 		udelay(20);
-	if(!loop_count)
-		printk(KERN_EMERG "qlogicpti: reset_hardware loop timeout\n");
+	if (!loop_count)
+		printk(KERN_EMERG "qlogicpti: mbox_command[%04x] loop timeout #4\n",
+		       param[0]);
 
-	qregs->hcctrl = HCCTRL_PAUSE;
-	set_sbus_cfg1(qregs, qpti->bursts);
-	qlogicpti_enable_irqs(qregs);
-
-	if(qregs->risc_psr & RISC_PSR_ULTRA) {
-		qpti->ultra = 1;
-		qregs->risc_mtreg = (RISC_MTREG_P0ULTRA | RISC_MTREG_P1ULTRA);
-	} else {
-		qpti->ultra = 0;
-		qregs->risc_mtreg = (RISC_MTREG_P0DFLT | RISC_MTREG_P1DFLT);
+	/* Read back output parameters. */
+	switch (mbox_param[param[0]] & 0xf) {
+	case 6: param[5] = sbus_readw(qpti->qregs + MBOX5);
+	case 5: param[4] = sbus_readw(qpti->qregs + MBOX4);
+	case 4: param[3] = sbus_readw(qpti->qregs + MBOX3);
+	case 3: param[2] = sbus_readw(qpti->qregs + MBOX2);
+	case 2: param[1] = sbus_readw(qpti->qregs + MBOX1);
+	case 1: param[0] = sbus_readw(qpti->qregs + MBOX0);
 	}
 
-	/* Release the RISC processor. */
-	qregs->hcctrl = HCCTRL_REL;
+	/* Clear RISC interrupt. */
+	tmp = sbus_readw(qpti->qregs + HCCTRL);
+	tmp |= HCCTRL_CRIRQ;
+	sbus_writew(tmp, qpti->qregs + HCCTRL);
 
-	/* Get RISC to start executing the firmware code. */
-	param[0] = MBOX_EXEC_FIRMWARE;
-	param[1] = risc_code_addr;
-	if(qlogicpti_mbox_command(qpti, param, 1)) {
-		printk(KERN_EMERG "qlogicpti%d: Cannot execute ISP firmware.\n",
-		       qpti->qpti_id);
-		restore_flags(flags);
-		return 1;
-	}
+	/* Release SBUS semaphore. */
+	tmp = sbus_readw(qpti->qregs + SBUS_SEMAPHORE);
+	tmp &= ~(SBUS_SEMAPHORE_LCK);
+	sbus_writew(tmp, qpti->qregs + SBUS_SEMAPHORE);
 
-	/* Set initiator scsi ID. */
-	param[0] = MBOX_SET_INIT_SCSI_ID;
-	param[1] = qpti->host_param.initiator_scsi_id;
-	if(qlogicpti_mbox_command(qpti, param, 1) ||
-	   (param[0] != MBOX_COMMAND_COMPLETE)) {
-		printk(KERN_EMERG "qlogicpti%d: Cannot set initiator SCSI ID.\n",
-		       qpti->qpti_id);
-		restore_flags(flags);
-		return 1;
-	}
-
-	/* Initialize state of the queues, both hw and sw. */
-	qpti->req_in_ptr = qpti->res_out_ptr = 0;
-
-	param[0] = MBOX_INIT_RES_QUEUE;
-	param[1] = RES_QUEUE_LEN + 1;
-	param[2] = (u_short) (qpti->res_dvma >> 16);
-	param[3] = (u_short) (qpti->res_dvma & 0xffff);
-	param[4] = param[5] = 0;
-	if(qlogicpti_mbox_command(qpti, param, 1)) {
-		printk(KERN_EMERG "qlogicpti%d: Cannot init response queue.\n",
-		       qpti->qpti_id);
-		restore_flags(flags);
-		return 1;
-	}
-
-	param[0] = MBOX_INIT_REQ_QUEUE;
-	param[1] = QLOGICISP_REQ_QUEUE_LEN + 1;
-	param[2] = (u_short) (qpti->req_dvma >> 16);
-	param[3] = (u_short) (qpti->req_dvma & 0xffff);
-	param[4] = param[5] = 0;
-	if(qlogicpti_mbox_command(qpti, param, 1)) {
-		printk(KERN_EMERG "qlogicpti%d: Cannot init request queue.\n",
-		       qpti->qpti_id);
-		restore_flags(flags);
-		return 1;
-	}
-
-	param[0] = MBOX_SET_RETRY_COUNT;
-	param[1] = qpti->host_param.retry_count;
-	param[2] = qpti->host_param.retry_delay;
-	qlogicpti_mbox_command(qpti, param, 0);
-
-	param[0] = MBOX_SET_TAG_AGE_LIMIT;
-	param[1] = qpti->host_param.tag_aging;
-	qlogicpti_mbox_command(qpti, param, 0);
-
-	for(i = 0; i < MAX_TARGETS; i++) {
-		param[0] = MBOX_GET_DEV_QUEUE_PARAMS;
-		param[1] = (i << 8);
-		qlogicpti_mbox_command(qpti, param, 0);
-	}
-
-	param[0] = MBOX_GET_FIRMWARE_STATUS;
-	qlogicpti_mbox_command(qpti, param, 0);
-
-	param[0] = MBOX_SET_SELECT_TIMEOUT;
-	param[1] = qpti->host_param.selection_timeout;
-	qlogicpti_mbox_command(qpti, param, 0);
-
-	for(i = 0; i < MAX_TARGETS; i++) {
-		param[0] = MBOX_SET_TARGET_PARAMS;
-		param[1] = (i << 8);
-		param[2] = (qpti->dev_param[i].device_flags << 8);
-		param[3] = (qpti->dev_param[i].synchronous_offset << 8) |
-			qpti->dev_param[i].synchronous_period;
-		qlogicpti_mbox_command(qpti, param, 0);
-	}
-
-	restore_flags(flags);
-	return 0;
-}
-
-#define PTI_RESET_LIMIT 400
-
-static int __init qlogicpti_load_firmware(struct qlogicpti *qpti)
-{
-	struct qlogicpti_regs *qregs = qpti->qregs;
-	unsigned short csum = 0;
-	unsigned short param[6];
-	unsigned short *risc_code, risc_code_addr, risc_code_length;
-	unsigned long flags;
-#if !defined(MODULE) && !defined(__sparc_v9__)
-	unsigned long dvma_addr;
-#endif
-	int i, timeout;
-
-	if(qpti->is_pti != 0) {
-		risc_code = &pti_risc_code01[0];
-		risc_code_addr = pti_risc_code_addr01;
-		risc_code_length = pti_risc_code_length01;
-	} else {
-		risc_code = &sbus_risc_code01[0];
-		risc_code_addr = sbus_risc_code_addr01;
-		risc_code_length = sbus_risc_code_length01;
-	}
-
-	save_flags(flags); cli();
-
-	/* Verify the checksum twice, one before loading it, and once
-	 * afterwards via the mailbox commands.
-	 */
-	for(i = 0; i < risc_code_length; i++)
-		csum += risc_code[i];
-	if(csum) {
-		printk(KERN_EMERG "qlogicpti%d: Aieee, firmware checksum failed!",
-		       qpti->qpti_id);
-		return 1;
-	}		
-	qregs->sbus_ctrl = SBUS_CTRL_RESET;
-	qregs->cmd_dma_ctrl = (DMA_CTRL_CCLEAR | DMA_CTRL_CIRQ);
-	qregs->data_dma_ctrl = (DMA_CTRL_CCLEAR | DMA_CTRL_CIRQ);
-	timeout = PTI_RESET_LIMIT;
-	while(--timeout && (qregs->sbus_ctrl & SBUS_CTRL_RESET))
-		udelay(20);
-	if(!timeout) {
-		printk(KERN_EMERG "qlogicpti%d: Cannot reset the ISP.", qpti->qpti_id);
-		return 1;
-	}
-
-	qregs->hcctrl = HCCTRL_RESET;
-	mdelay(1);
-
-	qregs->sbus_ctrl = (SBUS_CTRL_GENAB | SBUS_CTRL_ERIRQ);
-	set_sbus_cfg1(qregs, qpti->bursts);
-	qregs->sbus_semaphore = 0;
-
-	if(qregs->risc_psr & RISC_PSR_ULTRA) {
-		qpti->ultra = 1;
-		qregs->risc_mtreg = (RISC_MTREG_P0ULTRA | RISC_MTREG_P1ULTRA);
-	} else {
-		qpti->ultra = 0;
-		qregs->risc_mtreg = (RISC_MTREG_P0DFLT | RISC_MTREG_P1DFLT);
-	}
-
-	qregs->hcctrl = HCCTRL_REL;
-
-	/* Pin lines are only stable while RISC is paused. */
-	qregs->hcctrl = HCCTRL_PAUSE;
-	if(qregs->cpu_pdiff & CPU_PDIFF_MODE)
-		qpti->differential = 1;
-	else
-		qpti->differential = 0;
-	qregs->hcctrl = HCCTRL_REL;
-
-	param[0] = MBOX_STOP_FIRMWARE;
-	param[1] = param[2] = param[3] = param[4] = param[5] = 0;
-	if(qlogicpti_mbox_command(qpti, param, 1)) {
-		printk(KERN_EMERG "qlogicpti%d: Cannot stop firmware for reload.\n",
-		       qpti->qpti_id);
-		restore_flags(flags);
-		return 1;
-	}		
-
-	/* Load the firmware. */
-#if !defined(MODULE) && !defined(__sparc_v9__)
-	if (sparc_cpu_model != sun4d) {
-		dvma_addr = (unsigned long) mmu_lockarea((char *)&risc_code[0],
-							 (sizeof(u_short) * risc_code_length));
-		param[0] = MBOX_LOAD_RAM;
-		param[1] = risc_code_addr;
-		param[2] = (dvma_addr >> 16);
-		param[3] = (dvma_addr & 0xffff);
-		param[4] = (sizeof(u_short) * risc_code_length);
-		if(qlogicpti_mbox_command(qpti, param, 1) ||
-		   (param[0] != MBOX_COMMAND_COMPLETE)) {
-			printk(KERN_EMERG "qlogicpti%d: Firmware dload failed, I'm bolixed!\n",
-			       qpti->qpti_id);
-			restore_flags(flags);
-			return 1;
-		}
-		mmu_unlockarea((char *)dvma_addr, (sizeof(u_short) * risc_code_length));
-	} else
-#endif
-	/* We need to do it this slow way always on Ultra, SS[12]000. */
-		for(i = 0; i < risc_code_length; i++) {
-			param[0] = MBOX_WRITE_RAM_WORD;
-			param[1] = risc_code_addr + i;
-			param[2] = risc_code[i];
-			if(qlogicpti_mbox_command(qpti, param, 1) ||
-			   param[0] != MBOX_COMMAND_COMPLETE) {
-				printk("qlogicpti%d: Firmware dload failed, I'm bolixed!\n",
-				       qpti->qpti_id);
-				restore_flags(flags);
-				return 1;
-			}
-		}
-
-	/* Reset the ISP again. */
-	qregs->hcctrl = HCCTRL_RESET;
-	mdelay(1);
-
-	qlogicpti_enable_irqs(qregs);
-	qregs->sbus_semaphore = 0;
-	qregs->hcctrl = HCCTRL_REL;
-
-	/* Ask ISP to verify the checksum of the new code. */
-	param[0] = MBOX_VERIFY_CHECKSUM;
-	param[1] = risc_code_addr;
-	if(qlogicpti_mbox_command(qpti, param, 1) ||
-	   (param[0] != MBOX_COMMAND_COMPLETE)) {
-		printk(KERN_EMERG "qlogicpti%d: New firmware csum failure!\n",
-		       qpti->qpti_id);
-		restore_flags(flags);
-		return 1;
-	}
-
-	/* Start using newly downloaded firmware. */
-	param[0] = MBOX_EXEC_FIRMWARE;
-	param[1] = risc_code_addr;
-	qlogicpti_mbox_command(qpti, param, 1);
-
-	param[0] = MBOX_ABOUT_FIRMWARE;
-	if(qlogicpti_mbox_command(qpti, param, 1) ||
-	   (param[0] != MBOX_COMMAND_COMPLETE)) {
-		printk(KERN_EMERG "qlogicpti%d: AboutFirmware cmd fails.\n",
-		       qpti->qpti_id);
-		restore_flags(flags);
-		return 1;
-	}
-
-	/* Snag the major and minor revisions from the result. */
-	qpti->fware_majrev = param[1];
-	qpti->fware_minrev = param[2];
-
-	if(qpti->is_pti != 0) {
-		/* Load scsi initiator ID and interrupt level into sbus static ram. */
-		param[0] = MBOX_WRITE_RAM_WORD;
-		param[1] = 0xff80;
-		param[2] = (unsigned short) qpti->scsi_id;
-		qlogicpti_mbox_command(qpti, param, 1);
-
-		param[0] = MBOX_WRITE_RAM_WORD;
-		param[1] = 0xff00;
-		param[2] = (unsigned short) 3;
-		qlogicpti_mbox_command(qpti, param, 1);
-	}
-
-	restore_flags(flags);
-	return 0;
-}
-
-static int qlogicpti_verify_tmon(struct qlogicpti *qpti)
-{
-	int curstat = *qpti->sreg;
-
-	curstat &= 0xf0;
-	if(!(curstat & SREG_FUSE) && (qpti->swsreg & SREG_FUSE))
-		printk("qlogicpti%d: Fuse returned to normal state.\n", qpti->qpti_id);
-	if(!(curstat & SREG_TPOWER) && (qpti->swsreg & SREG_TPOWER))
-		printk("qlogicpti%d: termpwr back to normal state.\n", qpti->qpti_id);
-	if(curstat != qpti->swsreg) {
-		int error = 0;
-		if(curstat & SREG_FUSE) {
-			error++;
-			printk("qlogicpti%d: Fuse is open!\n", qpti->qpti_id);
-		}
-		if(curstat & SREG_TPOWER) {
-			error++;
-			printk("qlogicpti%d: termpwr failure\n", qpti->qpti_id);
-		}
-		if(qpti->differential &&
-		   (curstat & SREG_DSENSE) != SREG_DSENSE) {
-			error++;
-			printk("qlogicpti%d: You have a single ended device on a "
-			       "differential bus!  Please fix!\n", qpti->qpti_id);
-		}
-		qpti->swsreg = curstat;
-		return error;
-	}
+	/* We're done. */
 	return 0;
 }
 
@@ -564,52 +286,548 @@ static inline void qlogicpti_set_hostdev_defaults(struct qlogicpti *qpti)
 	qpti->host_param.max_queue_depth = 256;
 
 	for(i = 0; i < MAX_TARGETS; i++) {
-		qpti->dev_param[i].device_flags = 0xf9;
+		/*
+		 * disconnect, parity, arq, reneg on reset, and, oddly enough
+		 * tags...the midlayer's notion of tagged support has to match
+		 * our device settings, and since we base whether we enable a
+		 * tag on a  per-cmnd basis upon what the midlayer sez, we
+		 * actually enable the capability here.
+		 */
+		qpti->dev_param[i].device_flags = 0xcd;
 		qpti->dev_param[i].execution_throttle = 16;
-		qpti->dev_param[i].synchronous_period = 16;
-		qpti->dev_param[i].synchronous_offset = 12;
+		if (qpti->ultra) {
+			qpti->dev_param[i].synchronous_period = 12;
+			qpti->dev_param[i].synchronous_offset = 8;
+		} else {
+			qpti->dev_param[i].synchronous_period = 25;
+			qpti->dev_param[i].synchronous_offset = 12;
+		}
 		qpti->dev_param[i].device_enable = 1;
 	}
+	/* this is very important to set! */
+	qpti->sbits = 1 << qpti->scsi_id;
 }
 
-static void do_qlogicpti_intr_handler(int irq, void *dev_id, struct pt_regs *regs);
-#ifndef __sparc_v9__
-static void do_qlogicpti_intr_handler_sun4m(int irq, void *dev_id, struct pt_regs *regs);
-#endif
+static int qlogicpti_reset_hardware(struct Scsi_Host *host)
+{
+	struct qlogicpti *qpti = (struct qlogicpti *) host->hostdata;
+	u_short param[6];
+	unsigned short risc_code_addr;
+	int loop_count, i;
+	unsigned long flags;
+
+	risc_code_addr = 0x1000;	/* all load addresses are at 0x1000 */
+
+	save_flags(flags); cli();
+
+	sbus_writew(HCCTRL_PAUSE, qpti->qregs + HCCTRL);
+
+	/* Only reset the scsi bus if it is not free. */
+	if (sbus_readw(qpti->qregs + CPU_PCTRL) & CPU_PCTRL_BSY) {
+		sbus_writew(CPU_ORIDE_RMOD, qpti->qregs + CPU_ORIDE);
+		sbus_writew(CPU_CMD_BRESET, qpti->qregs + CPU_CMD);
+		udelay(400);
+	}
+
+	sbus_writew(SBUS_CTRL_RESET, qpti->qregs + SBUS_CTRL);
+	sbus_writew((DMA_CTRL_CCLEAR | DMA_CTRL_CIRQ), qpti->qregs + CMD_DMA_CTRL);
+	sbus_writew((DMA_CTRL_CCLEAR | DMA_CTRL_CIRQ), qpti->qregs + DATA_DMA_CTRL);
+
+	loop_count = DEFAULT_LOOP_COUNT;
+	while (--loop_count && ((sbus_readw(qpti->qregs + MBOX0) & 0xff) == 0x04))
+		udelay(20);
+	if (!loop_count)
+		printk(KERN_EMERG "qlogicpti: reset_hardware loop timeout\n");
+
+	sbus_writew(HCCTRL_PAUSE, qpti->qregs + HCCTRL);
+	set_sbus_cfg1(qpti);
+	qlogicpti_enable_irqs(qpti);
+
+	if (sbus_readw(qpti->qregs + RISC_PSR) & RISC_PSR_ULTRA) {
+		qpti->ultra = 1;
+		sbus_writew((RISC_MTREG_P0ULTRA | RISC_MTREG_P1ULTRA),
+			    qpti->qregs + RISC_MTREG);
+	} else {
+		qpti->ultra = 0;
+		sbus_writew((RISC_MTREG_P0DFLT | RISC_MTREG_P1DFLT),
+			    qpti->qregs + RISC_MTREG);
+	}
+
+	/* reset adapter and per-device default values. */
+	/* do it after finding out whether we're ultra mode capable */
+	qlogicpti_set_hostdev_defaults(qpti);
+
+	/* Release the RISC processor. */
+	sbus_writew(HCCTRL_REL, qpti->qregs + HCCTRL);
+
+	/* Get RISC to start executing the firmware code. */
+	param[0] = MBOX_EXEC_FIRMWARE;
+	param[1] = risc_code_addr;
+	if (qlogicpti_mbox_command(qpti, param, 1)) {
+		printk(KERN_EMERG "qlogicpti%d: Cannot execute ISP firmware.\n",
+		       qpti->qpti_id);
+		restore_flags(flags);
+		return 1;
+	}
+
+	/* Set initiator scsi ID. */
+	param[0] = MBOX_SET_INIT_SCSI_ID;
+	param[1] = qpti->host_param.initiator_scsi_id;
+	if (qlogicpti_mbox_command(qpti, param, 1) ||
+	   (param[0] != MBOX_COMMAND_COMPLETE)) {
+		printk(KERN_EMERG "qlogicpti%d: Cannot set initiator SCSI ID.\n",
+		       qpti->qpti_id);
+		restore_flags(flags);
+		return 1;
+	}
+
+	/* Initialize state of the queues, both hw and sw. */
+	qpti->req_in_ptr = qpti->res_out_ptr = 0;
+
+	param[0] = MBOX_INIT_RES_QUEUE;
+	param[1] = RES_QUEUE_LEN + 1;
+	param[2] = (u_short) (qpti->res_dvma >> 16);
+	param[3] = (u_short) (qpti->res_dvma & 0xffff);
+	param[4] = param[5] = 0;
+	if (qlogicpti_mbox_command(qpti, param, 1)) {
+		printk(KERN_EMERG "qlogicpti%d: Cannot init response queue.\n",
+		       qpti->qpti_id);
+		restore_flags(flags);
+		return 1;
+	}
+
+	param[0] = MBOX_INIT_REQ_QUEUE;
+	param[1] = QLOGICPTI_REQ_QUEUE_LEN + 1;
+	param[2] = (u_short) (qpti->req_dvma >> 16);
+	param[3] = (u_short) (qpti->req_dvma & 0xffff);
+	param[4] = param[5] = 0;
+	if (qlogicpti_mbox_command(qpti, param, 1)) {
+		printk(KERN_EMERG "qlogicpti%d: Cannot init request queue.\n",
+		       qpti->qpti_id);
+		restore_flags(flags);
+		return 1;
+	}
+
+	param[0] = MBOX_SET_RETRY_COUNT;
+	param[1] = qpti->host_param.retry_count;
+	param[2] = qpti->host_param.retry_delay;
+	qlogicpti_mbox_command(qpti, param, 0);
+
+	param[0] = MBOX_SET_TAG_AGE_LIMIT;
+	param[1] = qpti->host_param.tag_aging;
+	qlogicpti_mbox_command(qpti, param, 0);
+
+	for (i = 0; i < MAX_TARGETS; i++) {
+		param[0] = MBOX_GET_DEV_QUEUE_PARAMS;
+		param[1] = (i << 8);
+		qlogicpti_mbox_command(qpti, param, 0);
+	}
+
+	param[0] = MBOX_GET_FIRMWARE_STATUS;
+	qlogicpti_mbox_command(qpti, param, 0);
+
+	param[0] = MBOX_SET_SELECT_TIMEOUT;
+	param[1] = qpti->host_param.selection_timeout;
+	qlogicpti_mbox_command(qpti, param, 0);
+
+	for (i = 0; i < MAX_TARGETS; i++) {
+		param[0] = MBOX_SET_TARGET_PARAMS;
+		param[1] = (i << 8);
+		param[2] = (qpti->dev_param[i].device_flags << 8);
+		/*
+		 * Since we're now loading 1.31 f/w, force narrow/async.
+		 */
+		param[2] |= 0xc0;
+		param[3] = 0;	/* no offset, we do not have sync mode yet */
+		qlogicpti_mbox_command(qpti, param, 0);
+	}
+
+	/*
+	 * Always (sigh) do an initial bus reset (kicks f/w).
+	 */
+	param[0] = MBOX_BUS_RESET;
+	param[1] = qpti->host_param.bus_reset_delay;
+	qlogicpti_mbox_command(qpti, param, 0);
+	qpti->send_marker = 1;
+
+	restore_flags(flags);
+	return 0;
+}
+
+#define PTI_RESET_LIMIT 400
+
+static int __init qlogicpti_load_firmware(struct qlogicpti *qpti)
+{
+	unsigned short csum = 0;
+	unsigned short param[6];
+	unsigned short *risc_code, risc_code_addr, risc_code_length;
+	unsigned long flags;
+	int i, timeout;
+
+	risc_code = &sbus_risc_code01[0];
+	risc_code_addr = 0x1000;	/* all f/w modules load at 0x1000 */
+	risc_code_length = sbus_risc_code_length01;
+
+	save_flags(flags); cli();
+
+	/* Verify the checksum twice, one before loading it, and once
+	 * afterwards via the mailbox commands.
+	 */
+	for (i = 0; i < risc_code_length; i++)
+		csum += risc_code[i];
+	if (csum) {
+		restore_flags(flags);
+		printk(KERN_EMERG "qlogicpti%d: Aieee, firmware checksum failed!",
+		       qpti->qpti_id);
+		return 1;
+	}		
+	sbus_writew(SBUS_CTRL_RESET, qpti->qregs + SBUS_CTRL);
+	sbus_writew((DMA_CTRL_CCLEAR | DMA_CTRL_CIRQ), qpti->qregs + CMD_DMA_CTRL);
+	sbus_writew((DMA_CTRL_CCLEAR | DMA_CTRL_CIRQ), qpti->qregs + DATA_DMA_CTRL);
+	timeout = PTI_RESET_LIMIT;
+	while (--timeout && (sbus_readw(qpti->qregs + SBUS_CTRL) & SBUS_CTRL_RESET))
+		udelay(20);
+	if (!timeout) {
+		restore_flags(flags);
+		printk(KERN_EMERG "qlogicpti%d: Cannot reset the ISP.", qpti->qpti_id);
+		return 1;
+	}
+
+	sbus_writew(HCCTRL_RESET, qpti->qregs + HCCTRL);
+	mdelay(1);
+
+	sbus_writew((SBUS_CTRL_GENAB | SBUS_CTRL_ERIRQ), qpti->qregs + SBUS_CTRL);
+	set_sbus_cfg1(qpti);
+	sbus_writew(0, qpti->qregs + SBUS_SEMAPHORE);
+
+	if (sbus_readw(qpti->qregs + RISC_PSR) & RISC_PSR_ULTRA) {
+		qpti->ultra = 1;
+		sbus_writew((RISC_MTREG_P0ULTRA | RISC_MTREG_P1ULTRA),
+			    qpti->qregs + RISC_MTREG);
+	} else {
+		qpti->ultra = 0;
+		sbus_writew((RISC_MTREG_P0DFLT | RISC_MTREG_P1DFLT),
+			    qpti->qregs + RISC_MTREG);
+	}
+
+	sbus_writew(HCCTRL_REL, qpti->qregs + HCCTRL);
+
+	/* Pin lines are only stable while RISC is paused. */
+	sbus_writew(HCCTRL_PAUSE, qpti->qregs + HCCTRL);
+	if (sbus_readw(qpti->qregs + CPU_PDIFF) & CPU_PDIFF_MODE)
+		qpti->differential = 1;
+	else
+		qpti->differential = 0;
+	sbus_writew(HCCTRL_REL, qpti->qregs + HCCTRL);
+
+	/* This shouldn't be necessary- we've reset things so we should be
+	   running from the ROM now.. */
+
+	param[0] = MBOX_STOP_FIRMWARE;
+	param[1] = param[2] = param[3] = param[4] = param[5] = 0;
+	if (qlogicpti_mbox_command(qpti, param, 1)) {
+		printk(KERN_EMERG "qlogicpti%d: Cannot stop firmware for reload.\n",
+		       qpti->qpti_id);
+		restore_flags(flags);
+		return 1;
+	}		
+
+	/* Load it up.. */
+	for (i = 0; i < risc_code_length; i++) {
+		param[0] = MBOX_WRITE_RAM_WORD;
+		param[1] = risc_code_addr + i;
+		param[2] = risc_code[i];
+		if (qlogicpti_mbox_command(qpti, param, 1) ||
+		    param[0] != MBOX_COMMAND_COMPLETE) {
+			printk("qlogicpti%d: Firmware dload failed, I'm bolixed!\n",
+			       qpti->qpti_id);
+			restore_flags(flags);
+			return 1;
+		}
+	}
+
+	/* Reset the ISP again. */
+	sbus_writew(HCCTRL_RESET, qpti->qregs + HCCTRL);
+	mdelay(1);
+
+	qlogicpti_enable_irqs(qpti);
+	sbus_writew(0, qpti->qregs + SBUS_SEMAPHORE);
+	sbus_writew(HCCTRL_REL, qpti->qregs + HCCTRL);
+
+	/* Ask ISP to verify the checksum of the new code. */
+	param[0] = MBOX_VERIFY_CHECKSUM;
+	param[1] = risc_code_addr;
+	if (qlogicpti_mbox_command(qpti, param, 1) ||
+	    (param[0] != MBOX_COMMAND_COMPLETE)) {
+		printk(KERN_EMERG "qlogicpti%d: New firmware csum failure!\n",
+		       qpti->qpti_id);
+		restore_flags(flags);
+		return 1;
+	}
+
+	/* Start using newly downloaded firmware. */
+	param[0] = MBOX_EXEC_FIRMWARE;
+	param[1] = risc_code_addr;
+	qlogicpti_mbox_command(qpti, param, 1);
+
+	param[0] = MBOX_ABOUT_FIRMWARE;
+	if (qlogicpti_mbox_command(qpti, param, 1) ||
+	    (param[0] != MBOX_COMMAND_COMPLETE)) {
+		printk(KERN_EMERG "qlogicpti%d: AboutFirmware cmd fails.\n",
+		       qpti->qpti_id);
+		restore_flags(flags);
+		return 1;
+	}
+
+	/* Snag the major and minor revisions from the result. */
+	qpti->fware_majrev = param[1];
+	qpti->fware_minrev = param[2];
+	qpti->fware_micrev = param[3];
+
+	/* Set the clock rate */
+	param[0] = MBOX_SET_CLOCK_RATE;
+	param[1] = qpti->clock;
+	if (qlogicpti_mbox_command(qpti, param, 1) ||
+	    (param[0] != MBOX_COMMAND_COMPLETE)) {
+		printk(KERN_EMERG "qlogicpti%d: could not set clock rate.\n",
+		       qpti->qpti_id);
+		restore_flags(flags);
+		return 1;
+	}
+
+	if (qpti->is_pti != 0) {
+		/* Load scsi initiator ID and interrupt level into sbus static ram. */
+		param[0] = MBOX_WRITE_RAM_WORD;
+		param[1] = 0xff80;
+		param[2] = (unsigned short) qpti->scsi_id;
+		qlogicpti_mbox_command(qpti, param, 1);
+
+		param[0] = MBOX_WRITE_RAM_WORD;
+		param[1] = 0xff00;
+		param[2] = (unsigned short) 3;
+		qlogicpti_mbox_command(qpti, param, 1);
+	}
+
+	restore_flags(flags);
+	return 0;
+}
+
+static int qlogicpti_verify_tmon(struct qlogicpti *qpti)
+{
+	int curstat = sbus_readb(qpti->sreg);
+
+	curstat &= 0xf0;
+	if (!(curstat & SREG_FUSE) && (qpti->swsreg & SREG_FUSE))
+		printk("qlogicpti%d: Fuse returned to normal state.\n", qpti->qpti_id);
+	if (!(curstat & SREG_TPOWER) && (qpti->swsreg & SREG_TPOWER))
+		printk("qlogicpti%d: termpwr back to normal state.\n", qpti->qpti_id);
+	if (curstat != qpti->swsreg) {
+		int error = 0;
+		if (curstat & SREG_FUSE) {
+			error++;
+			printk("qlogicpti%d: Fuse is open!\n", qpti->qpti_id);
+		}
+		if (curstat & SREG_TPOWER) {
+			error++;
+			printk("qlogicpti%d: termpwr failure\n", qpti->qpti_id);
+		}
+		if (qpti->differential &&
+		    (curstat & SREG_DSENSE) != SREG_DSENSE) {
+			error++;
+			printk("qlogicpti%d: You have a single ended device on a "
+			       "differential bus!  Please fix!\n", qpti->qpti_id);
+		}
+		qpti->swsreg = curstat;
+		return error;
+	}
+	return 0;
+}
+
+static void qpti_intr(int irq, void *dev_id, struct pt_regs *regs);
+
+static void __init qpti_chain_add(struct qlogicpti *qpti)
+{
+	spin_lock_irq(&qptichain_lock);
+	if (qptichain != NULL) {
+		struct qlogicpti *qlink = qptichain;
+
+		while(qlink->next)
+			qlink = qlink->next;
+		qlink->next = qpti;
+	} else {
+		qptichain = qpti;
+	}
+	qpti->next = NULL;
+	spin_unlock_irq(&qptichain_lock);
+}
+
+static void __init qpti_chain_del(struct qlogicpti *qpti)
+{
+	spin_lock_irq(&qptichain_lock);
+	if (qptichain == qpti) {
+		qptichain = qpti->next;
+	} else {
+		struct qlogicpti *qlink = qptichain;
+		while(qlink->next != qpti)
+			qlink = qlink->next;
+		qlink->next = qpti->next;
+	}
+	qpti->next = NULL;
+	spin_unlock_irq(&qptichain_lock);
+}
+
+static int __init qpti_map_regs(struct qlogicpti *qpti)
+{
+	struct sbus_dev *sdev = qpti->sdev;
+
+	qpti->qregs = sbus_ioremap(&sdev->resource[0], 0,
+				   sdev->reg_addrs[0].reg_size,
+				   "PTI Qlogic/ISP");
+	if (!qpti->qregs) {
+		printk("PTI: Qlogic/ISP registers are unmappable\n");
+		return -1;
+	}
+	if (qpti->is_pti) {
+		qpti->sreg = sbus_ioremap(&sdev->resource[0], (16 * 4096),
+					  sizeof(unsigned char),
+					  "PTI Qlogic/ISP statreg");
+		if (!qpti->sreg) {
+			printk("PTI: Qlogic/ISP status register is unmappable\n");
+			return -1;
+		}
+	}
+	return 0;
+}
+
+static int __init qpti_register_irq(struct qlogicpti *qpti)
+{
+	struct sbus_dev *sdev = qpti->sdev;
+
+	qpti->qhost->irq = qpti->irq = sdev->irqs[0];
+
+	/* We used to try various overly-clever things to
+	 * reduce the interrupt processing overhead on
+	 * sun4c/sun4m when multiple PTI's shared the
+	 * same IRQ.  It was too complex and messy to
+	 * sanely maintain.
+	 */
+	if (request_irq(qpti->irq, qpti_intr,
+			SA_SHIRQ, "Qlogic/PTI", qpti))
+		goto fail;
+
+	printk("qpti%d: IRQ %s ", qpti->qpti_id, __irq_itoa(qpti->irq));
+
+	return 0;
+
+fail:
+	printk("qpti%d: Cannot acquire irq line\n", qpti->qpti_id);
+	return -1;
+}
+
+static void __init qpti_get_scsi_id(struct qlogicpti *qpti)
+{
+	qpti->scsi_id = prom_getintdefault(qpti->prom_node,
+					   "initiator-id",
+					   -1);
+	if (qpti->scsi_id == -1)
+		qpti->scsi_id = prom_getintdefault(qpti->prom_node,
+						   "scsi-initiator-id",
+						   -1);
+	if (qpti->scsi_id == -1)
+		qpti->scsi_id =
+			prom_getintdefault(qpti->sdev->bus->prom_node,
+					   "scsi-initiator-id", 7);
+	qpti->qhost->this_id = qpti->scsi_id;
+
+	printk("SCSI ID %d ", qpti->scsi_id);
+}
+
+static void qpti_get_bursts(struct qlogicpti *qpti)
+{
+	struct sbus_dev *sdev = qpti->sdev;
+	u8 bursts, bmask;
+
+	bursts = prom_getintdefault(qpti->prom_node, "burst-sizes", 0xff);
+	bmask = prom_getintdefault(sdev->bus->prom_node,
+				   "burst-sizes", 0xff);
+	if (bmask != 0xff)
+		bursts &= bmask;
+	if (bursts == 0xff ||
+	    (bursts & DMA_BURST16) == 0 ||
+	    (bursts & DMA_BURST32) == 0)
+		bursts = (DMA_BURST32 - 1);
+
+	qpti->bursts = bursts;
+}
+
+static void qpti_get_clock(struct qlogicpti *qpti)
+{
+	unsigned int cfreq;
+
+	/* Check for what the clock input to this card is.
+	 * Default to 40Mhz.
+	 */
+	cfreq = prom_getintdefault(qpti->prom_node,"clock-frequency",40000000);
+	qpti->clock = (cfreq + 500000)/1000000;
+	if (qpti->clock == 0) /* bullshit */
+		qpti->clock = 40;
+}
+
+/* The request and response queues must each be aligned
+ * on a page boundry.
+ */
+static int __init qpti_map_queues(struct qlogicpti *qpti)
+{
+	struct sbus_dev *sdev = qpti->sdev;
+
+#define QSIZE(entries)	(((entries) + 1) * QUEUE_ENTRY_LEN)
+	qpti->res_cpu = sbus_alloc_consistant(sdev,
+					      QSIZE(RES_QUEUE_LEN),
+					      &qpti->res_dvma);
+	if (qpti->res_cpu == NULL ||
+	    qpti->res_dvma == 0) {
+		printk("QPTI: Cannot map response queue.\n");
+		return -1;
+	}
+
+	qpti->req_cpu = sbus_alloc_consistant(sdev,
+					      QSIZE(QLOGICPTI_REQ_QUEUE_LEN),
+					      &qpti->req_dvma);
+	if (qpti->req_cpu == NULL ||
+	    qpti->req_dvma == 0) {
+		sbus_free_consistant(sdev, QSIZE(RES_QUEUE_LEN),
+				     qpti->res_cpu, qpti->res_dvma);
+		printk("QPTI: Cannot map request queue.\n");
+		return -1;
+	}
+	memset(qpti->res_cpu, 0, QSIZE(RES_QUEUE_LEN));
+	memset(qpti->req_cpu, 0, QSIZE(QLOGICPTI_REQ_QUEUE_LEN));
+	return 0;
+}
 
 /* Detect all PTI Qlogic ISP's in the machine. */
 int __init qlogicpti_detect(Scsi_Host_Template *tpnt)
 {
-	struct qlogicpti *qpti, *qlink;
+	struct qlogicpti *qpti;
 	struct Scsi_Host *qpti_host;
-	struct linux_sbus *sbus;
-	struct linux_sbus_device *qpti_dev, *sbdev_iter;
-	struct qlogicpti_regs *qregs;
-	volatile unsigned char *sreg;
-	unsigned char bsizes, bsizes_more;
+	struct sbus_bus *sbus;
+	struct sbus_dev *sdev;
 	int nqptis = 0, nqptis_in_use = 0;
-	int qpti_node;
-	int is_pti;
 
 	tpnt->proc_name = "qlogicpti";
-	qptichain = 0;
-	if(!SBus_chain)
-		return 0;
 	for_each_sbus(sbus) {
-		for_each_sbusdev(sbdev_iter, sbus) {
-			qpti_dev = sbdev_iter;
-
+		for_each_sbusdev(sdev, sbus) {
 			/* Is this a red snapper? */
-			if(strcmp(qpti_dev->prom_name, "ptisp") &&
-			   strcmp(qpti_dev->prom_name, "PTI,ptisp") &&
-			   strcmp(qpti_dev->prom_name, "QLGC,isp"))
+			if (strcmp(sdev->prom_name, "ptisp") &&
+			    strcmp(sdev->prom_name, "PTI,ptisp") &&
+			    strcmp(sdev->prom_name, "QLGC,isp"))
 				continue;
 
 			/* Sometimes Antares cards come up not completely
 			 * setup, and we get a report of a zero IRQ.
 			 * Skip over them in such cases so we survive.
 			 */
-			if(qpti_dev->irqs[0] == 0) {
+			if (sdev->irqs[0] == 0) {
 				printk("qpti%d: Adapter reports no interrupt, "
 				       "skipping over this card.", nqptis);
 				continue;
@@ -617,179 +835,76 @@ int __init qlogicpti_detect(Scsi_Host_Template *tpnt)
 
 			/* Yep, register and allocate software state. */
 			qpti_host = scsi_register(tpnt, sizeof(struct qlogicpti));
-			if(!qpti_host)
-				panic("Cannot register PTI Qlogic ISP SCSI host");
+			if (!qpti_host) {
+				printk("QPTI: Cannot register PTI Qlogic ISP SCSI host");
+				continue;
+			}
 			qpti = (struct qlogicpti *) qpti_host->hostdata;
-			if(!qpti)
-				panic("No qpti in hostdata");
+
+			spin_lock_init(&qpti->lock);
 
 			/* We are wide capable, 16 targets. */
 			qpti_host->max_id = MAX_TARGETS;
 
-#ifdef __sparc_v9__
-			qpti_host->unchecked_isa_dma = 1;
-#endif
-
 			/* Setup back pointers and misc. state. */
 			qpti->qhost = qpti_host;
-			qpti->qdev = qpti_dev;
+			qpti->sdev = sdev;
 			qpti->qpti_id = nqptis++;
-
-			/* Insert this one into the global interrupt service chain. */
-			if(qptichain) {
-				qlink = qptichain;
-				while(qlink->next) qlink = qlink->next;
-				qlink->next = qpti;
-			} else {
-				qptichain = qpti;
-			}
-			qpti->next = 0;
-
-			/* More misc. prom information. */
-			qpti_node = qpti_dev->prom_node;
-			prom_getstring(qpti_node, "name", qpti->prom_name,
+			qpti->prom_node = sdev->prom_node;
+			prom_getstring(qpti->prom_node, "name",
+				       qpti->prom_name,
 				       sizeof(qpti->prom_name));
-			qpti->prom_node = qpti_node;
-			
-			qpti->is_pti = is_pti =
-				(strcmp (qpti->prom_name, "QLGC,isp") != 0);
 
-			/* Setup the reg property for this device. */
-			prom_apply_sbus_ranges(qpti->qdev->my_bus,
-					       qpti->qdev->reg_addrs,
-					       1, qpti->qdev);
-
-			/* Map in Qlogic,ISP regs and the PTI status reg. */
-			qpti->qregs = qregs = (struct qlogicpti_regs *)
-				sparc_alloc_io(qpti->qdev->reg_addrs[0].phys_addr, 0,
-					       qpti->qdev->reg_addrs[0].reg_size,
-					       "PTI Qlogic/ISP Registers",
-					       qpti->qdev->reg_addrs[0].which_io, 0x0);
-			if(!qregs)
-				panic("PTI Qlogic/ISP registers unmappable");
-				
-			if(is_pti) {
-				/* Map this one read only. */
-				qpti->sreg = sreg = (volatile unsigned char *)
-					sparc_alloc_io((qpti->qdev->reg_addrs[0].phys_addr +
-						       (16 * 4096)), 0,
-						       sizeof(unsigned char),
-						       "PTI Qlogic/ISP Status Reg",
-						       qpti->qdev->reg_addrs[0].which_io, 1);
-				if(!sreg)
-					panic("PTI Qlogic/ISP status reg unmappable");
-				qpti->swsreg = 0;
-			}
-
-			qpti_host->base = (unsigned char *)qregs;
-			qpti_host->io_port = (unsigned int) ((unsigned long)qregs);
-			qpti_host->n_io_port = (unsigned char)
-				qpti->qdev->reg_addrs[0].reg_size;
-
-			qpti_host->irq = qpti->irq = qpti->qdev->irqs[0];
-
-			/* On Ultra and S{S1,C2}000 we must always call request_irq for each
-			 * qpti, so that imap registers get setup etc.
-			 * But irq values are different in that case anyway...
-			 * Otherwise allocate the irq only if necessary.
+			/* This is not correct, actually. There's a switch
+			 * on the PTI cards that put them into "emulation"
+			 * mode- i.e., report themselves as QLGC,isp
+			 * instead of PTI,ptisp. The only real substantive
+			 * difference between non-pti and pti cards is
+			 * the tmon register. Which is possibly even
+			 * there for Qlogic cards, but non-functional.
 			 */
-			for_each_qlogicpti(qlink) {
-				if((qlink != qpti) && (qpti->irq == qlink->irq)) {
-					goto qpti_irq_acquired; /* BASIC rulez */
-				}
-			}
-			if(request_irq(qpti->qhost->irq, 
-#ifndef __sparc_v9__			
-				       (sparc_cpu_model == sun4m || sparc_cpu_model == sun4c) ?
-				           do_qlogicpti_intr_handler_sun4m :
-#endif
-				           do_qlogicpti_intr_handler,
-				       SA_SHIRQ, "PTI Qlogic/ISP SCSI", qpti)) {
-				printk("Cannot acquire PTI Qlogic/ISP irq line\n");
-				/* XXX Unmap regs, unregister scsi host, free things. */
-				continue;
-			}
-qpti_irq_acquired:
-			printk("qpti%d: IRQ %s ",
-			       qpti->qpti_id, __irq_itoa(qpti->qhost->irq));
+			qpti->is_pti = (strcmp (qpti->prom_name, "QLGC,isp") != 0);
 
-			/* Figure out our scsi ID on the bus */
-			qpti->scsi_id = prom_getintdefault(qpti->prom_node,
-							   "initiator-id",
-							   -1);
-			if(qpti->scsi_id == -1)
-				qpti->scsi_id = prom_getintdefault(qpti->prom_node,
-								   "scsi-initiator-id",
-								   -1);
-			if(qpti->scsi_id == -1)
-				qpti->scsi_id =
-					prom_getintdefault(qpti->qdev->my_bus->prom_node,
-							   "scsi-initiator-id", 7);
-			qpti->qhost->this_id = qpti->scsi_id;
-			printk("SCSI ID %d ", qpti->scsi_id);
+			qpti_chain_add(qpti);
+			if (qpti_map_regs(qpti) < 0)
+				goto fail_unlink;
 
-			/* Check for what the best SBUS burst we can use happens
-			 * to be on this machine.
-			 */
-			bsizes = prom_getintdefault(qpti->prom_node,"burst-sizes",0xff);
-			bsizes &= 0xff;
-			bsizes_more = prom_getintdefault(qpti->qdev->my_bus->prom_node,
-							 "burst-sizes", 0xff);
-			if(bsizes_more != 0xff)
-				bsizes &= bsizes_more;
-			if(bsizes == 0xff || (bsizes & DMA_BURST16)==0 ||
-			   (bsizes & DMA_BURST32) == 0)
-				bsizes = (DMA_BURST32 - 1);
-			qpti->bursts = bsizes;
+			if (qpti_register_irq(qpti) < 0)
+				goto fail_unmap_regs;
+
+			qpti_get_scsi_id(qpti);
+			qpti_get_bursts(qpti);
+			qpti_get_clock(qpti);
 
 			/* Clear out Scsi_Cmnd array. */
 			memset(qpti->cmd_slots, 0, sizeof(qpti->cmd_slots));
 
-			/* The request and response queues must each be aligned
-			 * on a page boundry.
-			 */
+			if (qpti_map_queues(qpti) < 0)
+				goto fail_free_irq;
 
-#define QSIZE(entries)	(((entries) + 1) * QUEUE_ENTRY_LEN)
-
-			qpti->res_cpu = sparc_dvma_malloc(QSIZE(RES_QUEUE_LEN),
-							  "PTISP Response Queue",
-							  &qpti->res_dvma);
-			qpti->req_cpu = sparc_dvma_malloc(QSIZE(QLOGICISP_REQ_QUEUE_LEN),
-							  "PTISP Request Queue",
-							  &qpti->req_dvma);
-
-#undef QSIZE
-
-
-			/* Set adapter and per-device default values. */
-			qlogicpti_set_hostdev_defaults(qpti);
-			
 			/* Load the firmware. */
-			/* XXX Find out where is it possible to download
-			   our sbus_risc_code on non-PTI ISP1000. */
-			if(is_pti && qlogicpti_load_firmware(qpti))
-				panic("SBUS Qlogic/ISP firmware load failed");
-
-			if (is_pti) {
+			if (qlogicpti_load_firmware(qpti))
+				goto fail_unmap_queues;
+			if (qpti->is_pti) {
 				/* Check the PTI status reg. */
-				if(qlogicpti_verify_tmon(qpti))
-					panic("PTI Qlogic/ISP tmon verification failed");
+				if (qlogicpti_verify_tmon(qpti))
+					goto fail_unmap_queues;
 			}
 
 			/* Reset the ISP and init res/req queues. */
-			if(qlogicpti_reset_hardware(qpti_host))
-				panic("PTI Qlogic/ISP cannot be reset");
+			if (qlogicpti_reset_hardware(qpti_host))
+				goto fail_unmap_queues;
 
-			if (is_pti) {
-				printk("(Firmware v%d.%d)",
-				       qpti->fware_majrev, qpti->fware_minrev);
-			} else {
+			printk("(Firmware v%d.%d.%d)", qpti->fware_majrev,
+			    qpti->fware_minrev, qpti->fware_micrev);
+			{
 				char buffer[60];
 				
-				prom_getstring (qpti_node, "isp-fcode", buffer, 60);
+				prom_getstring (qpti->prom_node,
+						"isp-fcode", buffer, 60);
 				if (buffer[0])
 					printk("(Firmware %s)", buffer);
-				if (prom_getbool(qpti_node, "differential"))
+				if (prom_getbool(qpti->prom_node, "differential"))
 					qpti->differential = 1;
 			}
 			
@@ -798,6 +913,28 @@ qpti_irq_acquired:
 			       (qpti->differential ? "differential" : "single ended"));
 
 			nqptis_in_use++;
+			continue;
+
+		fail_unmap_queues:
+#define QSIZE(entries)	(((entries) + 1) * QUEUE_ENTRY_LEN)
+			sbus_free_consistant(qpti->sdev,
+					     QSIZE(RES_QUEUE_LEN),
+					     qpti->res_cpu, qpti->res_dvma);
+			sbus_free_consistant(qpti->sdev,
+					     QSIZE(QLOGICPTI_REQ_QUEUE_LEN),
+					     qpti->req_cpu, qpti->req_dvma);
+#undef QSIZE
+		fail_free_irq:
+			free_irq(qpti->irq, qpti);
+
+		fail_unmap_regs:
+			sbus_iounmap(qpti->qregs,
+				     qpti->sdev->reg_addrs[0].reg_size);
+			if (qpti->is_pti)
+				sbus_iounmap(qpti->sreg, sizeof(unsigned char));
+		fail_unlink:
+			qpti_chain_del(qpti);
+			scsi_unregister(qpti->qhost);
 		}
 	}
 	if (nqptis)
@@ -810,17 +947,28 @@ qpti_irq_acquired:
 int qlogicpti_release(struct Scsi_Host *host)
 {
 	struct qlogicpti *qpti = (struct qlogicpti *) host->hostdata;
-	struct qlogicpti_regs *qregs = qpti->qregs;
+
+	/* Remove visibility from IRQ handlers. */
+	qpti_chain_del(qpti);
 
 	/* Shut up the card. */
-	qregs->sbus_ctrl = 0;
+	sbus_writew(0, qpti->qregs + SBUS_CTRL);
 
 	/* Free IRQ handler and unmap Qlogic,ISP and PTI status regs. */
-	free_irq(host->irq, NULL);
-	unmapioaddr((unsigned long)qregs);
-	/* QLGC,isp doesn't have status reg */
-	if (strcmp (qpti->prom_name, "QLGC,isp"))
-		unmapioaddr((unsigned long)qpti->sreg);
+	free_irq(qpti->irq, qpti);
+
+#define QSIZE(entries)	(((entries) + 1) * QUEUE_ENTRY_LEN)
+	sbus_free_consistant(qpti->sdev,
+			     QSIZE(RES_QUEUE_LEN),
+			     qpti->res_cpu, qpti->res_dvma);
+	sbus_free_consistant(qpti->sdev,
+			     QSIZE(QLOGICPTI_REQ_QUEUE_LEN),
+			     qpti->req_cpu, qpti->req_dvma);
+#undef QSIZE
+
+	sbus_iounmap(qpti->qregs, qpti->sdev->reg_addrs[0].reg_size);
+	if (qpti->is_pti)
+		sbus_iounmap(qpti->sreg, sizeof(unsigned char));
 
 	return 0;
 }
@@ -830,8 +978,8 @@ const char *qlogicpti_info(struct Scsi_Host *host)
 	static char buf[80];
 	struct qlogicpti *qpti = (struct qlogicpti *) host->hostdata;
 
-	sprintf(buf, "PTI Qlogic,ISP SBUS SCSI irq %s regs at %08lx",
-		__irq_itoa(qpti->qhost->irq), (unsigned long) qpti->qregs);
+	sprintf(buf, "PTI Qlogic,ISP SBUS SCSI irq %s regs at %lx",
+		__irq_itoa(qpti->qhost->irq), qpti->qregs);
 	return buf;
 }
 
@@ -857,18 +1005,18 @@ static inline void cmd_frob(struct Command_Entry *cmd, Scsi_Cmnd *Cmnd,
 	cmd->target_lun = Cmnd->lun;
 	cmd->cdb_length = Cmnd->cmd_len;
 	cmd->control_flags = 0;
-	if(Cmnd->device->tagged_supported) {
-		if(qpti->cmd_count[Cmnd->target] == 0)
+	if (Cmnd->device->tagged_supported) {
+		if (qpti->cmd_count[Cmnd->target] == 0)
 			qpti->tag_ages[Cmnd->target] = jiffies;
-		if((jiffies - qpti->tag_ages[Cmnd->target]) > (5*HZ)) {
+		if ((jiffies - qpti->tag_ages[Cmnd->target]) > (5*HZ)) {
 			cmd->control_flags = CFLAG_ORDERED_TAG;
 			qpti->tag_ages[Cmnd->target] = jiffies;
 		} else
 			cmd->control_flags = CFLAG_SIMPLE_TAG;
 	}
-	if((Cmnd->cmnd[0] == WRITE_6) ||
-	   (Cmnd->cmnd[0] == WRITE_10) ||
-	   (Cmnd->cmnd[0] == WRITE_12))
+	if ((Cmnd->cmnd[0] == WRITE_6) ||
+	    (Cmnd->cmnd[0] == WRITE_10) ||
+	    (Cmnd->cmnd[0] == WRITE_12))
 		cmd->control_flags |= CFLAG_WRITE;
 	else
 		cmd->control_flags |= CFLAG_READ;
@@ -877,42 +1025,40 @@ static inline void cmd_frob(struct Command_Entry *cmd, Scsi_Cmnd *Cmnd,
 }
 
 /* Do it to it baby. */
-static inline u_int load_cmd(Scsi_Cmnd *Cmnd, struct Command_Entry *cmd,
-			     struct qlogicpti *qpti, struct qlogicpti_regs *qregs,
-			     u_int in_ptr, u_int out_ptr)
+static inline int load_cmd(Scsi_Cmnd *Cmnd, struct Command_Entry *cmd,
+			   struct qlogicpti *qpti, u_int in_ptr, u_int out_ptr)
 {
-	struct dataseg * ds;
+	struct dataseg *ds;
 	struct scatterlist *sg;
-	int sg_count = Cmnd->use_sg;
 	int i, n;
 
-	if(sg_count) {
-		mmu_get_scsi_sgl((struct mmu_sglist *)Cmnd->buffer, (Cmnd->use_sg - 1),
-				 qpti->qdev->my_bus);
+	if (Cmnd->use_sg) {
+		int sg_count;
 
-		cmd->segment_cnt = sg_count;
-		sg = (struct scatterlist *) Cmnd->request_buffer;
+		sg = (struct scatterlist *) Cmnd->buffer;
+		sg_count = sbus_map_sg(qpti->sdev, sg, Cmnd->use_sg);
+
 		ds = cmd->dataseg;
+		cmd->segment_cnt = sg_count;
 
 		/* Fill in first four sg entries: */
 		n = sg_count;
-		if(n > 4)
+		if (n > 4)
 			n = 4;
-		for(i = 0; i < n; i++, sg++) {
-			ds[i].d_base = (u_int) sg->dvma_address;
-			ds[i].d_count = (u_int) sg->length;
+		for (i = 0; i < n; i++, sg++) {
+			ds[i].d_base = sg->dvma_address;
+			ds[i].d_count = sg->dvma_length;
 		}
 		sg_count -= 4;
-		while(sg_count > 0) {
+		while (sg_count > 0) {
 			struct Continuation_Entry *cont;
 
 			++cmd->hdr.entry_cnt;
 			cont = (struct Continuation_Entry *) &qpti->req_cpu[in_ptr];
 			in_ptr = NEXT_REQ_PTR(in_ptr);
-			if(in_ptr == out_ptr) {
-				printk(KERN_EMERG "qlogicpti: Unexpected request queue overflow\n");
+			if (in_ptr == out_ptr)
 				return -1;
-			}
+
 			cont->hdr.entry_type = ENTRY_CONTINUATION;
 			cont->hdr.entry_cnt = 0;
 			cont->hdr.sys_def_1 = 0;
@@ -920,24 +1066,21 @@ static inline u_int load_cmd(Scsi_Cmnd *Cmnd, struct Command_Entry *cmd,
 			cont->reserved = 0;
 			ds = cont->dataseg;
 			n = sg_count;
-			if(n > 7)
+			if (n > 7)
 				n = 7;
-			for(i = 0; i < n; i++, sg++) {
-				ds[i].d_base = (u_int) sg->dvma_address;
-				ds[i].d_count = (u_int) sg->length;
+			for (i = 0; i < n; i++, sg++) {
+				ds[i].d_base = sg->dvma_address;
+				ds[i].d_count = sg->dvma_length;
 			}
 			sg_count -= n;
 		}
 	} else {
-		/* XXX Casts are extremely gross, but with 64-bit cpu addresses
-		 * XXX and 32-bit SBUS DVMA addresses what am I to do? -DaveM
-		 */
-		Cmnd->SCp.ptr = (char *)((unsigned long)
-					 mmu_get_scsi_one((char *)Cmnd->request_buffer,
-							  Cmnd->request_bufflen,
-							  qpti->qdev->my_bus));
+		Cmnd->SCp.ptr = (char *)(unsigned long)
+			sbus_map_single(qpti->sdev,
+					Cmnd->request_buffer,
+					Cmnd->request_bufflen);
 
-		cmd->dataseg[0].d_base = (u_int) ((unsigned long)Cmnd->SCp.ptr);
+		cmd->dataseg[0].d_base = (u32) ((unsigned long)Cmnd->SCp.ptr);
 		cmd->dataseg[0].d_count = Cmnd->request_bufflen;
 		cmd->segment_cnt = 1;
 	}
@@ -947,7 +1090,7 @@ static inline u_int load_cmd(Scsi_Cmnd *Cmnd, struct Command_Entry *cmd,
 	qpti->cmd_slots[in_ptr] = Cmnd;
 
 	qpti->cmd_count[Cmnd->target]++;
-	qregs->mbox4 = in_ptr;
+	sbus_writew(in_ptr, qpti->qregs + MBOX4);
 	qpti->req_in_ptr = in_ptr;
 
 	return in_ptr;
@@ -957,9 +1100,126 @@ static inline void update_can_queue(struct Scsi_Host *host, u_int in_ptr, u_int 
 {
 	/* Temporary workaround until bug is found and fixed (one bug has been found
 	   already, but fixing it makes things even worse) -jj */
-	int num_free = QLOGICISP_REQ_QUEUE_LEN - REQ_QUEUE_DEPTH(in_ptr, out_ptr) - 64;
+	int num_free = QLOGICPTI_REQ_QUEUE_LEN - REQ_QUEUE_DEPTH(in_ptr, out_ptr) - 64;
 	host->can_queue = host->host_busy + num_free;
-	host->sg_tablesize = QLOGICISP_MAX_SG(num_free);
+	host->sg_tablesize = QLOGICPTI_MAX_SG(num_free);
+}
+
+/*
+ * Until we scan the entire bus with inquiries, go throught this fella...
+ */
+static void ourdone(Scsi_Cmnd *Cmnd)
+{
+	struct qlogicpti *qpti = (struct qlogicpti *) Cmnd->host->hostdata;
+	int tgt = Cmnd->target;
+	void (*done) (Scsi_Cmnd *);
+
+	/* This grot added by DaveM, blame him for ugliness.
+	 * The issue is that in the 2.3.x driver we use the
+	 * host_scribble portion of the scsi command as a
+	 * completion linked list at interrupt service time,
+	 * so we have to store the done function pointer elsewhere.
+	 */
+	done = (void (*)(Scsi_Cmnd *))
+		(((unsigned long) Cmnd->SCp.Message)
+#ifdef __sparc_v9__
+		 | ((unsigned long) Cmnd->SCp.Status << 32UL)
+#endif
+		 );
+
+	if ((qpti->sbits & (1 << tgt)) == 0) {
+		int ok = host_byte(Cmnd->result) == DID_OK;
+		if (Cmnd->cmnd[0] == 0x12 && ok) {
+			unsigned char *iqd;
+			if (Cmnd->use_sg == 0) {
+				iqd = ((unsigned char *)Cmnd->buffer);
+			} else {
+				iqd = ((struct scatterlist *) Cmnd->request_buffer)->address;
+			}
+			/* tags handled in midlayer */
+			/* enable sync mode? */
+			if (iqd[7] & 0x10) {
+				qpti->dev_param[tgt].device_flags |= 0x10;
+			} else {
+				qpti->dev_param[tgt].synchronous_offset = 0;
+				qpti->dev_param[tgt].synchronous_period = 0;
+			}
+			/* are we wide capable? */
+			if (iqd[7] & 0x20) {
+				qpti->dev_param[tgt].device_flags |= 0x20;
+			}
+			qpti->sbits |= (1 << tgt);
+		} else if (!ok) {
+			qpti->sbits |= (1 << tgt);
+		}
+	}
+	done(Cmnd);
+}
+
+int qlogicpti_queuecommand_slow(Scsi_Cmnd *Cmnd, void (*done)(Scsi_Cmnd *))
+{
+	unsigned long flags;
+	struct qlogicpti *qpti = (struct qlogicpti *) Cmnd->host->hostdata;
+
+	/*
+	 * done checking this host adapter?
+	 * If not, then rewrite the command
+	 * to finish through ourdone so we
+	 * can peek at Inquiry data results.
+	 */
+	if (qpti->sbits && qpti->sbits != 0xffff) {
+		/* See above about in ourdone this ugliness... */
+		Cmnd->SCp.Message = ((unsigned long)done) & 0xffffffff;
+#ifdef __sparc_v9__
+		Cmnd->SCp.Status = ((unsigned long)done >> 32UL) & 0xffffffff;
+#endif
+		return qlogicpti_queuecommand(Cmnd, ourdone);
+	}
+	save_flags(flags); cli();
+
+	/*
+	 * We've peeked at all targets for this bus- time
+	 * to set parameters for devices for real now.
+	 */
+	if (qpti->sbits == 0xffff) {
+		int i;
+		for(i = 0; i < MAX_TARGETS; i++) {
+			u_short param[6];
+			param[0] = MBOX_SET_TARGET_PARAMS;
+			param[1] = (i << 8);
+			param[2] = (qpti->dev_param[i].device_flags << 8);
+			if (qpti->dev_param[i].device_flags & 0x10) {
+				param[3] = (qpti->dev_param[i].synchronous_offset << 8) |
+					qpti->dev_param[i].synchronous_period;
+			} else {
+				param[3] = 0;
+			}
+			(void) qlogicpti_mbox_command(qpti, param, 0);
+		}
+		/*
+		 * set to zero so any traverse through ourdone
+		 * doesn't start the whole process again,
+		 */
+		qpti->sbits = 0;
+	}
+
+	/* check to see if we're done with all adapters... */
+	for (qpti = qptichain; qpti != NULL; qpti = qpti->next) {
+		if (qpti->sbits) {
+			break;
+		}
+	}
+
+	/*
+	 * if we hit the end of the chain w/o finding adapters still
+	 * capability-configuring, then we're done with all adapters
+	 * and can rock on..
+	 */
+	if (qpti == NULL)
+		Cmnd->host->hostt->queuecommand = qlogicpti_queuecommand;
+
+	restore_flags(flags);
+	return qlogicpti_queuecommand(Cmnd, done);
 }
 
 /*
@@ -974,63 +1234,62 @@ int qlogicpti_queuecommand(Scsi_Cmnd *Cmnd, void (*done)(Scsi_Cmnd *))
 {
 	struct Scsi_Host *host = Cmnd->host;
 	struct qlogicpti *qpti = (struct qlogicpti *) host->hostdata;
-	struct qlogicpti_regs *qregs = qpti->qregs;
-	u_int in_ptr = qpti->req_in_ptr;
-	u_int out_ptr = qregs->mbox4;
-	struct Command_Entry *cmd = (struct Command_Entry *) &qpti->req_cpu[in_ptr];
+	struct Command_Entry *cmd;
+	unsigned long flags;
+	u_int out_ptr;
+	int in_ptr;
 
 	Cmnd->scsi_done = done;
-	in_ptr = NEXT_REQ_PTR(in_ptr);
-	if(in_ptr == out_ptr) {
-		printk(KERN_EMERG "qlogicpti%d: request queue overflow\n",qpti->qpti_id);
 
-		/* Unfortunately, unless you use the new EH code, which
-		 * we don't, the midlayer will ignore the return value,
-		 * which is insane.  We pick up the pieces like this.
-		 */
-		Cmnd->result = DID_BUS_BUSY;
-		done(Cmnd);
-		return 1;
-	}
-	if(qpti->send_marker) {
+	spin_lock_irqsave(&qpti->lock, flags);
+
+	in_ptr = qpti->req_in_ptr;
+	cmd = (struct Command_Entry *) &qpti->req_cpu[in_ptr];
+	out_ptr = sbus_readw(qpti->qregs + MBOX4);
+	in_ptr = NEXT_REQ_PTR(in_ptr);
+	if (in_ptr == out_ptr)
+		goto toss_command;
+
+	if (qpti->send_marker) {
 		marker_frob(cmd);
 		qpti->send_marker = 0;
-		if(NEXT_REQ_PTR(in_ptr) == out_ptr) {
-			qregs->mbox4 = in_ptr;
+		if (NEXT_REQ_PTR(in_ptr) == out_ptr) {
+			sbus_writew(in_ptr, qpti->qregs + MBOX4);
 			qpti->req_in_ptr = in_ptr;
-			printk(KERN_EMERG "qlogicpti%d: request queue overflow\n",
-			       qpti->qpti_id);
-
-			/* Unfortunately, unless you use the new EH code, which
-			 * we don't, the midlayer will ignore the return value,
-			 * which is insane.  We pick up the pieces like this.
-			 */
-			Cmnd->result = DID_BUS_BUSY;
-			done(Cmnd);
-			return 1;
+			goto toss_command;
 		}
 		cmd = (struct Command_Entry *) &qpti->req_cpu[in_ptr];
 		in_ptr = NEXT_REQ_PTR(in_ptr);
 	}
 	cmd_frob(cmd, Cmnd, qpti);
-	if((in_ptr = load_cmd(Cmnd, cmd, qpti, qregs, in_ptr, out_ptr)) == -1) {
-		/* Unfortunately, unless you use the new EH code, which
-		 * we don't, the midlayer will ignore the return value,
-		 * which is insane.  We pick up the pieces like this.
-		 */
-		Cmnd->result = DID_BUS_BUSY;
-		done(Cmnd);
-		return 1;
-	}
+	if ((in_ptr = load_cmd(Cmnd, cmd, qpti, in_ptr, out_ptr)) == -1)
+		goto toss_command;
+
 	update_can_queue(host, in_ptr, out_ptr);
+
+	spin_unlock_irqrestore(&qpti->lock, flags);
 	return 0;
+
+toss_command:
+	printk(KERN_EMERG "qlogicpti%d: request queue overflow\n",
+	       qpti->qpti_id);
+
+	spin_unlock_irqrestore(&qpti->lock, flags);
+
+	/* Unfortunately, unless you use the new EH code, which
+	 * we don't, the midlayer will ignore the return value,
+	 * which is insane.  We pick up the pieces like this.
+	 */
+	Cmnd->result = DID_BUS_BUSY;
+	done(Cmnd);
+	return 1;
 }
 
-static int qlogicpti_return_status(struct Status_Entry *sts)
+static int qlogicpti_return_status(struct Status_Entry *sts, int id)
 {
 	int host_status = DID_ERROR;
 
-	switch(sts->completion_status) {
+	switch (sts->completion_status) {
 	      case CS_COMPLETE:
 		host_status = DID_OK;
 		break;
@@ -1081,8 +1340,8 @@ static int qlogicpti_return_status(struct Status_Entry *sts)
 		host_status = DID_OK;
 		break;
 	      default:
-		printk(KERN_EMERG "qlogicpti : unknown completion status 0x%04x\n",
-		       sts->completion_status);
+		printk(KERN_EMERG "qpti%d: unknown completion status 0x%04x\n",
+		       id, sts->completion_status);
 		host_status = DID_ERROR;
 		break;
 	}
@@ -1090,22 +1349,19 @@ static int qlogicpti_return_status(struct Status_Entry *sts)
 	return (sts->scsi_status & STATUS_MASK) | (host_status << 16);
 }
 
-static __inline__ int qlogicpti_intr_handler(struct qlogicpti *qpti)
+static Scsi_Cmnd *qlogicpti_intr_handler(struct qlogicpti *qpti)
 {
-	Scsi_Cmnd *Cmnd;
+	Scsi_Cmnd *Cmnd, *done_queue = NULL;
 	struct Status_Entry *sts;
 	u_int in_ptr, out_ptr;
-	struct qlogicpti_regs *qregs;
 
-	if(!(qpti->qregs->sbus_stat & SBUS_STAT_RINT))
-		return 0;
+	if (!(sbus_readw(qpti->qregs + SBUS_STAT) & SBUS_STAT_RINT))
+		return NULL;
 		
-	qregs = qpti->qregs;
-
-	in_ptr = qregs->mbox5;
-	qregs->hcctrl = HCCTRL_CRIRQ;
-	if(qregs->sbus_semaphore & SBUS_SEMAPHORE_LCK) {
-		switch(qregs->mbox0) {
+	in_ptr = sbus_readw(qpti->qregs + MBOX5);
+	sbus_writew(HCCTRL_CRIRQ, qpti->qregs + HCCTRL);
+	if (sbus_readw(qpti->qregs + SBUS_SEMAPHORE) & SBUS_SEMAPHORE_LCK) {
+		switch (sbus_readw(qpti->qregs + MBOX0)) {
 		case ASYNC_SCSI_BUS_RESET:
 		case EXECUTION_TIMEOUT_RESET:
 			qpti->send_marker = 1;
@@ -1115,13 +1371,13 @@ static __inline__ int qlogicpti_intr_handler(struct qlogicpti *qpti)
 		case COMMAND_ERROR:
 		case COMMAND_PARAM_ERROR:
 			break;
-		}
-		qregs->sbus_semaphore = 0;
+		};
+		sbus_writew(0, qpti->qregs + SBUS_SEMAPHORE);
 	}
 
 	/* This looks like a network driver! */
 	out_ptr = qpti->res_out_ptr;
-	while(out_ptr != in_ptr) {
+	while (out_ptr != in_ptr) {
 		u_int cmd_slot;
 
 		sts = (struct Status_Entry *) &qpti->res_cpu[out_ptr];
@@ -1135,64 +1391,62 @@ static __inline__ int qlogicpti_intr_handler(struct qlogicpti *qpti)
 		Cmnd = qpti->cmd_slots[cmd_slot];
 		qpti->cmd_slots[cmd_slot] = NULL;
 
-		if(sts->completion_status == CS_RESET_OCCURRED ||
-		   sts->completion_status == CS_ABORTED ||
-		   (sts->status_flags & STF_BUS_RESET))
+		if (sts->completion_status == CS_RESET_OCCURRED ||
+		    sts->completion_status == CS_ABORTED ||
+		    (sts->status_flags & STF_BUS_RESET))
 			qpti->send_marker = 1;
 
-		if(sts->state_flags & SF_GOT_SENSE)
+		if (sts->state_flags & SF_GOT_SENSE)
 			memcpy(Cmnd->sense_buffer, sts->req_sense_data,
 			       sizeof(Cmnd->sense_buffer));
 
-		if(sts->hdr.entry_type == ENTRY_STATUS)
-			Cmnd->result = qlogicpti_return_status(sts);
+		if (sts->hdr.entry_type == ENTRY_STATUS)
+			Cmnd->result =
+			    qlogicpti_return_status(sts, qpti->qpti_id);
 		else
 			Cmnd->result = DID_ERROR << 16;
 
-		if(Cmnd->use_sg)
-			mmu_release_scsi_sgl((struct mmu_sglist *)
-					     Cmnd->buffer,
-					     Cmnd->use_sg - 1,
-					     qpti->qdev->my_bus);
-		else
-			mmu_release_scsi_one((__u32)((unsigned long)Cmnd->SCp.ptr),
-					     Cmnd->request_bufflen,
-					     qpti->qdev->my_bus);
-
+		if (Cmnd->use_sg) {
+			sbus_unmap_sg(qpti->sdev,
+				      (struct scatterlist *)Cmnd->buffer,
+				      Cmnd->use_sg);
+		} else {
+			sbus_unmap_single(qpti->sdev,
+					  (__u32)((unsigned long)Cmnd->SCp.ptr),
+					  Cmnd->request_bufflen);
+		}
 		qpti->cmd_count[Cmnd->target]--;
-		qregs->mbox5 = out_ptr;
-		Cmnd->scsi_done(Cmnd);
+		sbus_writew(out_ptr, qpti->qregs + MBOX5);
+		Cmnd->host_scribble = (unsigned char *) done_queue;
+		done_queue = Cmnd;
 	}
 	qpti->res_out_ptr = out_ptr;
-	return 1;
+
+	return done_queue;
 }
 
-#ifndef __sparc_v9__
-
-static void do_qlogicpti_intr_handler_sun4m(int irq, void *dev_id, struct pt_regs *regs)
+static void qpti_intr(int irq, void *dev_id, struct pt_regs *regs)
 {
+	struct qlogicpti *qpti = dev_id;
 	unsigned long flags;
-	struct qlogicpti *qpti;
-	int again;
+	Scsi_Cmnd *dq;
 
-	spin_lock_irqsave(&io_request_lock, flags);
-	do {
-		again = 0;
-		for_each_qlogicpti(qpti)
-			again |= qlogicpti_intr_handler(qpti);
-	} while (again);
-	spin_unlock_irqrestore(&io_request_lock, flags);
-}
+	spin_lock_irqsave(&qpti->lock, flags);
+	dq = qlogicpti_intr_handler(qpti);
+	spin_unlock(&qpti->lock);
 
-#endif
+	if (dq != NULL) {
+		spin_lock(&io_request_lock);
+		do {
+			Scsi_Cmnd *next;
 
-static void do_qlogicpti_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
-{
-	unsigned long flags;
-
-	spin_lock_irqsave(&io_request_lock, flags);
-	qlogicpti_intr_handler((struct qlogicpti *)dev_id);
-	spin_unlock_irqrestore(&io_request_lock, flags);
+			next = (Scsi_Cmnd *) dq->host_scribble;
+			dq->scsi_done(dq);
+			dq = next;
+		} while (dq != NULL);
+		spin_unlock(&io_request_lock);
+	}
+	__restore_flags(flags);
 }
 
 int qlogicpti_abort(Scsi_Cmnd *Cmnd)
@@ -1201,20 +1455,39 @@ int qlogicpti_abort(Scsi_Cmnd *Cmnd)
 	struct Scsi_Host *host = Cmnd->host;
 	struct qlogicpti *qpti = (struct qlogicpti *) host->hostdata;
 	int return_status = SCSI_ABORT_SUCCESS;
+	unsigned long flags;
+	u32 cmd_cookie;
+	int i;
 
 	printk(KERN_WARNING "qlogicpti : Aborting cmd for tgt[%d] lun[%d]\n",
 	       (int)Cmnd->target, (int)Cmnd->lun);
-	qlogicpti_disable_irqs(qpti->qregs);
+
+	spin_lock_irqsave(&qpti->lock, flags);
+
+	qlogicpti_disable_irqs(qpti);
+
+	/* Find the 32-bit cookie we gave to the firmware for
+	 * this command.
+	 */
+	for (i = 0; i < QLOGICPTI_REQ_QUEUE_LEN + 1; i++)
+		if (qpti->cmd_slots[i] == Cmnd)
+			break;
+	cmd_cookie = i;
+
 	param[0] = MBOX_ABORT;
 	param[1] = (((u_short) Cmnd->target) << 8) | Cmnd->lun;
-	param[2] = ((unsigned int)((unsigned long)Cmnd)) >> 16;
-	param[3] = ((unsigned int)((unsigned long)Cmnd)) & 0xffff;
-	if(qlogicpti_mbox_command(qpti, param, 0) ||
-	   (param[0] != MBOX_COMMAND_COMPLETE)) {
+	param[2] = cmd_cookie >> 16;
+	param[3] = cmd_cookie & 0xffff;
+	if (qlogicpti_mbox_command(qpti, param, 0) ||
+	    (param[0] != MBOX_COMMAND_COMPLETE)) {
 		printk(KERN_EMERG "qlogicpti : scsi abort failure: %x\n", param[0]);
 		return_status = SCSI_ABORT_ERROR;
 	}
-	qlogicpti_enable_irqs(qpti->qregs);
+
+	qlogicpti_enable_irqs(qpti);
+
+	spin_unlock_irqrestore(&qpti->lock, flags);
+
 	return return_status;
 }
 
@@ -1224,17 +1497,26 @@ int qlogicpti_reset(Scsi_Cmnd *Cmnd, unsigned int reset_flags)
 	struct Scsi_Host *host = Cmnd->host;
 	struct qlogicpti *qpti = (struct qlogicpti *) host->hostdata;
 	int return_status = SCSI_RESET_SUCCESS;
+	unsigned long flags;
 
 	printk(KERN_WARNING "qlogicpti : Resetting SCSI bus!\n");
-	qlogicpti_disable_irqs(qpti->qregs);
+
+	spin_lock_irqsave(&qpti->lock, flags);
+
+	qlogicpti_disable_irqs(qpti);
+
 	param[0] = MBOX_BUS_RESET;
 	param[1] = qpti->host_param.bus_reset_delay;
-	if(qlogicpti_mbox_command(qpti, param, 0) ||
+	if (qlogicpti_mbox_command(qpti, param, 0) ||
 	   (param[0] != MBOX_COMMAND_COMPLETE)) {
 		printk(KERN_EMERG "qlogicisp : scsi bus reset failure: %x\n", param[0]);
 		return_status = SCSI_RESET_ERROR;
 	}
-	qlogicpti_enable_irqs(qpti->qregs);
+
+	qlogicpti_enable_irqs(qpti);
+
+	spin_unlock_irqrestore(&qpti->lock, flags);
+
 	return return_status;
 }
 

@@ -1,4 +1,4 @@
-/* $Id: head.h,v 1.36 1999/04/20 13:22:42 anton Exp $ */
+/* $Id: head.h,v 1.38 1999/12/01 23:52:04 davem Exp $ */
 #ifndef __SPARC_HEAD_H
 #define __SPARC_HEAD_H
 
@@ -53,6 +53,12 @@
         b linux_sparc_syscall; \
         or %l7, %lo(C_LABEL(sunos_sys_table)), %l7;
 
+#define SUNOS_NO_SYSCALL_TRAP \
+        b sunos_syscall; \
+        rd %psr, %l0; \
+        nop; \
+        nop;
+
 /* Software trap for Slowaris system calls. */
 #define SOLARIS_SYSCALL_TRAP \
         b solaris_syscall; \
@@ -86,6 +92,10 @@
 /* The Set Condition Codes software trap for userland. */
 #define SETCC_TRAP \
         b setcc_trap_handler; mov %psr, %l0; nop; nop;
+
+/* The Get PSR software trap for userland. */
+#define GETPSR_TRAP \
+	mov %psr, %o0; jmpl %l2, %g0; rett %l2 + 4; nop;
 
 /* This is for hard interrupts from level 1-14, 15 is non-maskable (nmi) and
  * gets handled with another macro.

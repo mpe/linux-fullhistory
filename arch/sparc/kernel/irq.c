@@ -1,4 +1,4 @@
-/*  $Id: irq.c,v 1.97 1999/09/10 10:40:21 davem Exp $
+/*  $Id: irq.c,v 1.98 1999/11/17 07:34:05 zaitcev Exp $
  *  arch/sparc/kernel/irq.c:  Interrupt request handling routines. On the
  *                            Sparc the IRQ's are basically 'cast in stone'
  *                            and you are supposed to probe the prom's device
@@ -726,7 +726,7 @@ void __init init_IRQ(void)
 	case sun4m:
 #ifdef CONFIG_PCI
 		pcic_probe();
-		if (pci_present()) {
+		if (pcic_present()) {
 			sun4m_pci_init_IRQ();
 			break;
 		}

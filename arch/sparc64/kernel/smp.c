@@ -94,7 +94,8 @@ void __init smp_store_cpu_info(int id)
 	cpu_data[id].udelay_val			= loops_per_sec;
 
 	cpu_data[id].pgcache_size		= 0;
-	cpu_data[id].pte_cache			= NULL;
+	cpu_data[id].pte_cache[0]		= NULL;
+	cpu_data[id].pte_cache[1]		= NULL;
 	cpu_data[id].pgdcache_size		= 0;
 	cpu_data[id].pgd_cache			= NULL;
 	cpu_data[id].idle_volume		= 1;
@@ -184,7 +185,7 @@ void cpu_panic(void)
 
 extern struct prom_cpuinfo linux_cpus[64];
 
-extern unsigned long smp_trampoline;
+extern unsigned long sparc64_cpu_startup;
 
 /* The OBP cpu startup callback truncates the 3rd arg cookie to
  * 32-bits (I think) so to be safe we have it read the pointer
@@ -210,15 +211,13 @@ void __init smp_boot_cpus(void)
 			continue;
 
 		if(cpu_present_map & (1UL << i)) {
-			unsigned long entry = (unsigned long)(&smp_trampoline);
+			unsigned long entry = (unsigned long)(&sparc64_cpu_startup);
 			unsigned long cookie = (unsigned long)(&cpu_new_task);
 			struct task_struct *p;
 			int timeout;
 			int no;
-			extern unsigned long phys_base;
 
-			entry += phys_base - KERNBASE;
-			cookie += phys_base - KERNBASE;
+			prom_printf("Starting CPU %d... ", i);
 			kernel_thread(start_secondary, NULL, CLONE_PID);
 			cpucount++;
 
@@ -247,9 +246,11 @@ void __init smp_boot_cpus(void)
 				cpu_number_map[i] = cpucount;
 				__cpu_logical_map[cpucount] = i;
 				prom_cpu_nodes[i] = linux_cpus[no].prom_node;
+				prom_printf("OK\n");
 			} else {
 				cpucount--;
 				printk("Processor %d is stuck.\n", i);
+				prom_printf("FAILED\n");
 			}
 		}
 		if(!callin_flag) {
@@ -537,14 +538,31 @@ void smp_release(void)
 /* Imprisoned penguins run with %pil == 15, but PSTATE_IE set, so they
  * can service tlb flush xcalls...
  */
+extern void prom_world(int);
+extern void save_alternate_globals(unsigned long *);
+extern void restore_alternate_globals(unsigned long *);
 void smp_penguin_jailcell(void)
 {
-	flushw_user();
+	unsigned long global_save[24];
+
+	__asm__ __volatile__("flushw");
+	save_alternate_globals(global_save);
+	prom_world(1);
 	atomic_inc(&smp_capture_registry);
 	membar("#StoreLoad | #StoreStore");
 	while(penguins_are_doing_time)
 		membar("#LoadLoad");
+	restore_alternate_globals(global_save);
 	atomic_dec(&smp_capture_registry);
+	prom_world(0);
+}
+
+extern unsigned long xcall_promstop;
+
+void smp_promstop_others(void)
+{
+	if (smp_processors_ready)
+		smp_cross_call(&xcall_promstop, 0, 0, 0);
 }
 
 static inline void sparc64_do_profile(unsigned long pc, unsigned long g3)
@@ -701,14 +719,13 @@ static inline unsigned long find_flush_base(unsigned long size)
 		/* Failure. */
 		if(p >= (mem_map + max_mapnr))
 			return 0UL;
-		if(PageSkip(p)) {
-			p = p->next_hash;
-			base = page_address(p);
+		if(PageReserved(p)) {
 			found = size;
+			base = page_address(p);
 		} else {
 			found -= PAGE_SIZE;
-			p++;
 		}
+		p++;
 	}
 	return base;
 }
@@ -718,7 +735,7 @@ cycles_t cacheflush_time;
 static void __init smp_tune_scheduling (void)
 {
 	unsigned long flush_base, flags, *p;
-	unsigned int ecache_size;
+	unsigned int ecache_size, order;
 	cycles_t tick1, tick2, raw;
 
 	/* Approximate heuristic for SMP scheduling.  It is an
@@ -733,18 +750,22 @@ static void __init smp_tune_scheduling (void)
 	 */
 	printk("SMP: Calibrating ecache flush... ");
 	ecache_size = prom_getintdefault(linux_cpus[0].prom_node,
-					 "ecache-size", (512 *1024));
-	flush_base = find_flush_base(ecache_size << 1);
+					 "ecache-size", (512 * 1024));
+	if (ecache_size > (4 * 1024 * 1024))
+		ecache_size = (4 * 1024 * 1024);
+	for (order = 0UL; (PAGE_SIZE << order) < ecache_size; order++)
+		;
+	flush_base = __get_free_pages(GFP_KERNEL, order);
 
-	if(flush_base != 0UL) {
+	if (flush_base != 0UL) {
 		__save_and_cli(flags);
 
 		/* Scan twice the size once just to get the TLB entries
 		 * loaded and make sure the second scan measures pure misses.
 		 */
-		for(p = (unsigned long *)flush_base;
-		    ((unsigned long)p) < (flush_base + (ecache_size<<1));
-		    p += (64 / sizeof(unsigned long)))
+		for (p = (unsigned long *)flush_base;
+		     ((unsigned long)p) < (flush_base + (ecache_size<<1));
+		     p += (64 / sizeof(unsigned long)))
 			*((volatile unsigned long *)p);
 
 		/* Now the real measurement. */
@@ -775,9 +796,12 @@ static void __init smp_tune_scheduling (void)
 		 * sharing the cache and fitting.
 		 */
 		cacheflush_time = (raw - (raw >> 2));
-	} else
+
+		free_pages(flush_base, order);
+	} else {
 		cacheflush_time = ((ecache_size << 2) +
 				   (ecache_size << 1));
+	}
 
 	printk("Using heuristic of %d cycles.\n",
 	       (int) cacheflush_time);

@@ -1,4 +1,4 @@
-/* $Id: ttable.h,v 1.13 1999/08/31 19:25:50 davem Exp $ */
+/* $Id: ttable.h,v 1.14 1999/10/13 11:48:58 jj Exp $ */
 #ifndef _SPARC64_TTABLE_H
 #define _SPARC64_TTABLE_H
 
@@ -107,7 +107,11 @@
 	ba,pt	%xcc, utrap_ill;					\
 	 mov	lvl, %o1;
 
+#ifdef CONFIG_SUNOS_EMUL
 #define SUNOS_SYSCALL_TRAP SYSCALL_TRAP(linux_sparc_syscall32, sunos_sys_table)
+#else
+#define SUNOS_SYSCALL_TRAP TRAP(sunos_syscall)
+#endif
 #define	LINUX_32BIT_SYSCALL_TRAP SYSCALL_TRAP(linux_sparc_syscall32, sys_call_table32)
 #define LINUX_64BIT_SYSCALL_TRAP SYSCALL_TRAP(linux_sparc_syscall, sys_call_table64)
 #define GETCC_TRAP TRAP(getcc)
@@ -159,6 +163,20 @@
 	        
 /* Before touching these macros, you owe it to yourself to go and
  * see how arch/sparc64/kernel/winfixup.S works... -DaveM
+ *
+ * For the user cases we used to use the %asi register, but
+ * it turns out that the "wr xxx, %asi" costs ~5 cycles, so
+ * now we use immediate ASI loads and stores instead.  Kudos
+ * to Greg Onufer for pointing out this performance anomaly.
+ *
+ * Further note that we cannot use the g2, g4, g5, and g7 alternate
+ * globals in the spill routines, check out the save instruction in
+ * arch/sparc64/kernel/etrap.S to see what I mean about g2, and
+ * g4/g5 are the globals which are preserved by etrap processing
+ * for the caller of it.  The g7 register is the return pc for
+ * etrap.  Finally, g6 is the current thread register so we cannot
+ * us it in the spill handlers either.  Most of these rules do not
+ * apply to fill processing, only g6 is not usable.
  */
 
 /* Normal kernel spill */
@@ -183,52 +201,67 @@
 	nop; nop; nop; nop; nop; nop; nop; nop;
 
 /* Normal 64bit spill */
-#define SPILL_1_GENERIC(xxx)				\
-	wr	%g0, xxx, %asi;				\
-	stxa	%l0, [%sp + STACK_BIAS + 0x00] %asi;	\
-	stxa	%l1, [%sp + STACK_BIAS + 0x08] %asi;	\
-	stxa	%l2, [%sp + STACK_BIAS + 0x10] %asi;	\
-	stxa	%l3, [%sp + STACK_BIAS + 0x18] %asi;	\
-	stxa	%l4, [%sp + STACK_BIAS + 0x20] %asi;	\
-	stxa	%l5, [%sp + STACK_BIAS + 0x28] %asi;	\
-	stxa	%l6, [%sp + STACK_BIAS + 0x30] %asi;	\
-	stxa	%l7, [%sp + STACK_BIAS + 0x38] %asi;	\
-	stxa	%i0, [%sp + STACK_BIAS + 0x40] %asi;	\
-	stxa	%i1, [%sp + STACK_BIAS + 0x48] %asi;	\
-	stxa	%i2, [%sp + STACK_BIAS + 0x50] %asi;	\
-	stxa	%i3, [%sp + STACK_BIAS + 0x58] %asi;	\
-	stxa	%i4, [%sp + STACK_BIAS + 0x60] %asi;	\
-	stxa	%i5, [%sp + STACK_BIAS + 0x68] %asi;	\
-	stxa	%i6, [%sp + STACK_BIAS + 0x70] %asi;	\
-	stxa	%i7, [%sp + STACK_BIAS + 0x78] %asi;	\
-	saved; retry; nop; nop; nop; nop; nop; nop;	\
-	nop; nop; nop; nop;				\
+#define SPILL_1_GENERIC(ASI)				\
+	add	%sp, STACK_BIAS + 0x00, %g1;		\
+	stxa	%l0, [%g1 + %g0] ASI;			\
+	mov	0x08, %g3;				\
+	stxa	%l1, [%g1 + %g3] ASI;			\
+	add	%g1, 0x10, %g1;				\
+	stxa	%l2, [%g1 + %g0] ASI;			\
+	stxa	%l3, [%g1 + %g3] ASI;			\
+	add	%g1, 0x10, %g1;				\
+	stxa	%l4, [%g1 + %g0] ASI;			\
+	stxa	%l5, [%g1 + %g3] ASI;			\
+	add	%g1, 0x10, %g1;				\
+	stxa	%l6, [%g1 + %g0] ASI;			\
+	stxa	%l7, [%g1 + %g3] ASI;			\
+	add	%g1, 0x10, %g1;				\
+	stxa	%i0, [%g1 + %g0] ASI;			\
+	stxa	%i1, [%g1 + %g3] ASI;			\
+	add	%g1, 0x10, %g1;				\
+	stxa	%i2, [%g1 + %g0] ASI;			\
+	stxa	%i3, [%g1 + %g3] ASI;			\
+	add	%g1, 0x10, %g1;				\
+	stxa	%i4, [%g1 + %g0] ASI;			\
+	stxa	%i5, [%g1 + %g3] ASI;			\
+	add	%g1, 0x10, %g1;				\
+	stxa	%i6, [%g1 + %g0] ASI;			\
+	stxa	%i7, [%g1 + %g3] ASI;			\
+	saved;						\
+	retry; nop; nop;				\
 	b,a,pt	%xcc, spill_fixup_dax;			\
 	b,a,pt	%xcc, spill_fixup_mna;			\
 	b,a,pt	%xcc, spill_fixup;
 
 /* Normal 32bit spill */
-#define SPILL_2_GENERIC(xxx)				\
-	wr	%g0, xxx, %asi;				\
+#define SPILL_2_GENERIC(ASI)				\
 	srl	%sp, 0, %sp;				\
-	stwa	%l0, [%sp + 0x00] %asi;			\
-	stwa	%l1, [%sp + 0x04] %asi;			\
-	stwa	%l2, [%sp + 0x08] %asi;			\
-	stwa	%l3, [%sp + 0x0c] %asi;			\
-	stwa	%l4, [%sp + 0x10] %asi;			\
-	stwa	%l5, [%sp + 0x14] %asi;			\
-	stwa	%l6, [%sp + 0x18] %asi;			\
-	stwa	%l7, [%sp + 0x1c] %asi;			\
-	stwa	%i0, [%sp + 0x20] %asi;			\
-	stwa	%i1, [%sp + 0x24] %asi;			\
-	stwa	%i2, [%sp + 0x28] %asi;			\
-	stwa	%i3, [%sp + 0x2c] %asi;			\
-	stwa	%i4, [%sp + 0x30] %asi;			\
-	stwa	%i5, [%sp + 0x34] %asi;			\
-	stwa	%i6, [%sp + 0x38] %asi;			\
-	stwa	%i7, [%sp + 0x3c] %asi;			\
-	saved; retry; nop; nop; nop; nop;		\
-	nop; nop; nop; nop; nop;			\
+	stwa	%l0, [%sp + %g0] ASI;			\
+	mov	0x04, %g3;				\
+	stwa	%l1, [%sp + %g3] ASI;			\
+	add	%sp, 0x08, %g1;				\
+	stwa	%l2, [%g1 + %g0] ASI;			\
+	stwa	%l3, [%g1 + %g3] ASI;			\
+	add	%g1, 0x08, %g1;				\
+	stwa	%l4, [%g1 + %g0] ASI;			\
+	stwa	%l5, [%g1 + %g3] ASI;			\
+	add	%g1, 0x08, %g1;				\
+	stwa	%l6, [%g1 + %g0] ASI;			\
+	stwa	%l7, [%g1 + %g3] ASI;			\
+	add	%g1, 0x08, %g1;				\
+	stwa	%i0, [%g1 + %g0] ASI;			\
+	stwa	%i1, [%g1 + %g3] ASI;			\
+	add	%g1, 0x08, %g1;				\
+	stwa	%i2, [%g1 + %g0] ASI;			\
+	stwa	%i3, [%g1 + %g3] ASI;			\
+	add	%g1, 0x08, %g1;				\
+	stwa	%i4, [%g1 + %g0] ASI;			\
+	stwa	%i5, [%g1 + %g3] ASI;			\
+	add	%g1, 0x08, %g1;				\
+	stwa	%i6, [%g1 + %g0] ASI;			\
+	stwa	%i7, [%g1 + %g3] ASI;			\
+	saved;						\
+        retry; nop; nop;				\
 	b,a,pt	%xcc, spill_fixup_dax;			\
 	b,a,pt	%xcc, spill_fixup_mna;			\
 	b,a,pt	%xcc, spill_fixup;
@@ -272,52 +305,63 @@
 	nop; nop; nop; nop; nop; nop; nop; nop;
 
 /* Normal 64bit fill */
-#define FILL_1_GENERIC(xxx)				\
-	wr	%g0, xxx, %asi;				\
-	ldxa	[%sp + STACK_BIAS + 0x00] %asi, %l0;	\
-	ldxa	[%sp + STACK_BIAS + 0x08] %asi, %l1;	\
-	ldxa	[%sp + STACK_BIAS + 0x10] %asi, %l2;	\
-	ldxa	[%sp + STACK_BIAS + 0x18] %asi, %l3;	\
-	ldxa	[%sp + STACK_BIAS + 0x20] %asi, %l4;	\
-	ldxa	[%sp + STACK_BIAS + 0x28] %asi, %l5;	\
-	ldxa	[%sp + STACK_BIAS + 0x30] %asi, %l6;	\
-	ldxa	[%sp + STACK_BIAS + 0x38] %asi, %l7;	\
-	ldxa	[%sp + STACK_BIAS + 0x40] %asi, %i0;	\
-	ldxa	[%sp + STACK_BIAS + 0x48] %asi, %i1;	\
-	ldxa	[%sp + STACK_BIAS + 0x50] %asi, %i2;	\
-	ldxa	[%sp + STACK_BIAS + 0x58] %asi, %i3;	\
-	ldxa	[%sp + STACK_BIAS + 0x60] %asi, %i4;	\
-	ldxa	[%sp + STACK_BIAS + 0x68] %asi, %i5;	\
-	ldxa	[%sp + STACK_BIAS + 0x70] %asi, %i6;	\
-	ldxa	[%sp + STACK_BIAS + 0x78] %asi, %i7;	\
-	restored; retry; nop; nop; nop; nop; nop; nop;	\
-	nop; nop; nop; nop;				\
+#define FILL_1_GENERIC(ASI)				\
+	add	%sp, STACK_BIAS + 0x00, %g1;		\
+	ldxa	[%g1 + %g0] ASI, %l0;			\
+	mov	0x08, %g2;				\
+	mov	0x10, %g3;				\
+	ldxa	[%g1 + %g2] ASI, %l1;			\
+	mov	0x18, %g5;				\
+	ldxa	[%g1 + %g3] ASI, %l2;			\
+	ldxa	[%g1 + %g5] ASI, %l3;			\
+	add	%g1, 0x20, %g1;				\
+	ldxa	[%g1 + %g0] ASI, %l4;			\
+	ldxa	[%g1 + %g2] ASI, %l5;			\
+	ldxa	[%g1 + %g3] ASI, %l6;			\
+	ldxa	[%g1 + %g5] ASI, %l7;			\
+	add	%g1, 0x20, %g1;				\
+	ldxa	[%g1 + %g0] ASI, %i0;			\
+	ldxa	[%g1 + %g2] ASI, %i1;			\
+	ldxa	[%g1 + %g3] ASI, %i2;			\
+	ldxa	[%g1 + %g5] ASI, %i3;			\
+	add	%g1, 0x20, %g1;				\
+	ldxa	[%g1 + %g0] ASI, %i4;			\
+	ldxa	[%g1 + %g2] ASI, %i5;			\
+	ldxa	[%g1 + %g3] ASI, %i6;			\
+	ldxa	[%g1 + %g5] ASI, %i7;			\
+	restored;					\
+	retry; nop; nop; nop; nop;			\
 	b,a,pt	%xcc, fill_fixup_dax;			\
 	b,a,pt	%xcc, fill_fixup_mna;			\
 	b,a,pt	%xcc, fill_fixup;
 
 /* Normal 32bit fill */
-#define FILL_2_GENERIC(xxx)				\
-	wr	%g0, xxx, %asi;				\
+#define FILL_2_GENERIC(ASI)				\
 	srl	%sp, 0, %sp;				\
-	lduwa	[%sp + 0x00] %asi, %l0;			\
-	lduwa	[%sp + 0x04] %asi, %l1;			\
-	lduwa	[%sp + 0x08] %asi, %l2;			\
-	lduwa	[%sp + 0x0c] %asi, %l3;			\
-	lduwa	[%sp + 0x10] %asi, %l4;			\
-	lduwa	[%sp + 0x14] %asi, %l5;			\
-	lduwa	[%sp + 0x18] %asi, %l6;			\
-	lduwa	[%sp + 0x1c] %asi, %l7;			\
-	lduwa	[%sp + 0x20] %asi, %i0;			\
-	lduwa	[%sp + 0x24] %asi, %i1;			\
-	lduwa	[%sp + 0x28] %asi, %i2;			\
-	lduwa	[%sp + 0x2c] %asi, %i3;			\
-	lduwa	[%sp + 0x30] %asi, %i4;			\
-	lduwa	[%sp + 0x34] %asi, %i5;			\
-	lduwa	[%sp + 0x38] %asi, %i6;			\
-	lduwa	[%sp + 0x3c] %asi, %i7;			\
-	restored; retry; nop; nop; nop; nop;		\
-	nop; nop; nop; nop; nop;			\
+	lduwa	[%sp + %g0] ASI, %l0;			\
+	mov	0x04, %g2;				\
+	mov	0x08, %g3;				\
+	lduwa	[%sp + %g2] ASI, %l1;			\
+	mov	0x0c, %g5;				\
+	lduwa	[%sp + %g3] ASI, %l2;			\
+	lduwa	[%sp + %g5] ASI, %l3;			\
+	add	%sp, 0x10, %g1;				\
+	lduwa	[%g1 + %g0] ASI, %l4;			\
+	lduwa	[%g1 + %g2] ASI, %l5;			\
+	lduwa	[%g1 + %g3] ASI, %l6;			\
+	lduwa	[%g1 + %g5] ASI, %l7;			\
+	add	%g1, 0x10, %g1;				\
+	lduwa	[%g1 + %g0] ASI, %i0;			\
+	lduwa	[%g1 + %g2] ASI, %i1;			\
+	lduwa	[%g1 + %g3] ASI, %i2;			\
+	lduwa	[%g1 + %g5] ASI, %i3;			\
+	add	%g1, 0x10, %g1;				\
+	lduwa	[%g1 + %g0] ASI, %i4;			\
+	lduwa	[%g1 + %g2] ASI, %i5;			\
+	lduwa	[%g1 + %g3] ASI, %i6;			\
+	lduwa	[%g1 + %g5] ASI, %i7;			\
+	restored;					\
+	retry; nop; nop; nop; nop;			\
 	b,a,pt	%xcc, fill_fixup_dax;			\
 	b,a,pt	%xcc, fill_fixup_mna;			\
 	b,a,pt	%xcc, fill_fixup;

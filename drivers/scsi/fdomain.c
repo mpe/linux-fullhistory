@@ -280,6 +280,7 @@
 #undef MODULE
 #endif
 
+#include <linux/init.h>
 #include <linux/sched.h>
 #include <asm/io.h>
 #include <linux/blk.h>
@@ -427,8 +428,8 @@ extern void              do_fdomain_16x0_intr( int irq, void *dev_id,
                                    parameters.  For example:
 				   insmod fdomain fdomain=0x140,11
 				*/
-static int               fdomain[]={ 0, 0, 0 };
-MODULE_PARM(fdomain, "2-3i");
+static char * fdomain = NULL;
+MODULE_PARM(fdomain, "s");
 #endif
 
 static unsigned long addresses[] = {
@@ -563,20 +564,29 @@ static void print_banner( struct Scsi_Host *shpnt )
    printk( "\n" );
 }
 
-void fdomain_setup( char *str, int *ints )
+static int __init fdomain_setup( char *str )
 {
-   if (setup_called++ || ints[0] < 2 || ints[0] > 3) {
-      printk( "scsi: <fdomain>"
-	      " Usage: fdomain=<PORT_BASE>,<IRQ>[,<ADAPTER_ID>]\n" );
-      printk( "scsi: <fdomain> Bad LILO/INSMOD parameters?\n" );
-   }
+	int ints[4];
 
-   port_base       = ints[0] >= 1 ? ints[1] : 0;
-   interrupt_level = ints[0] >= 2 ? ints[2] : 0;
-   this_id         = ints[0] >= 3 ? ints[3] : 0;
+	(void)get_options(str, ARRAY_SIZE(ints), ints);
+
+	if (setup_called++ || ints[0] < 2 || ints[0] > 3) {
+		printk( "scsi: <fdomain>"
+		" Usage: fdomain=<PORT_BASE>,<IRQ>[,<ADAPTER_ID>]\n" );
+		printk( "scsi: <fdomain> Bad LILO/INSMOD parameters?\n" );
+		return 0;
+	}
+
+	port_base       = ints[0] >= 1 ? ints[1] : 0;
+	interrupt_level = ints[0] >= 2 ? ints[2] : 0;
+	this_id         = ints[0] >= 3 ? ints[3] : 0;
    
-   bios_major = bios_minor = -1; /* Use geometry for BIOS version >= 3.4 */
+	bios_major = bios_minor = -1; /* Use geometry for BIOS version >= 3.4 */
+	++setup_called;
+	return 1;
 }
+
+__setup("fdomain=", fdomain_setup);
 
 
 static void do_pause( unsigned amount )	/* Pause for amount*10 milliseconds */
@@ -693,6 +703,7 @@ static int fdomain_isa_detect( int *irq, int *iobase )
 #if DEBUG_DETECT
    printk( "scsi: <fdomain> fdomain_isa_detect:" );
 #endif
+
 
    for (i = 0; !bios_base && i < ADDRESS_COUNT; i++) {
 #if DEBUG_DETECT
@@ -880,13 +891,8 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
    tpnt->proc_name = "fdomain";
 
 #ifdef MODULE
-   if (fdomain[0] || fdomain[1] || fdomain[2]) {
-      port_base       = fdomain[0];
-      interrupt_level = fdomain[1];
-      this_id         = fdomain[2];
-      bios_major = bios_minor = -1;
-      ++setup_called;
-   }
+	if (fdomain)
+		fdomain_setup(fdomain);
 #endif
    
    if (setup_called) {

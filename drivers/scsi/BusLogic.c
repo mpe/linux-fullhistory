@@ -75,13 +75,13 @@ static BusLogic_DriverOptions_T
 
 
 /*
-  BusLogic_Options can be assigned a string by the Loadable Kernel Module
-  Installation Facility to be parsed for BusLogic Driver Options
-  specifications.
+  BusLogic can be assigned a string by insmod.
 */
 
-static char
-  *BusLogic_Options =				NULL;
+#ifdef MODULE
+static char *BusLogic =	NULL;
+MODULE_PARM(BusLogic, "s");
+#endif
 
 
 /*
@@ -2724,8 +2724,10 @@ int BusLogic_DetectHostAdapter(SCSI_Host_Template_T *HostTemplate)
       return 0;
     }
   memset(PrototypeHostAdapter, 0, sizeof(BusLogic_HostAdapter_T));
-  if (BusLogic_Options != NULL)
-    BusLogic_ParseDriverOptions(BusLogic_Options);
+#ifdef MODULE
+  if (BusLogic != NULL)
+    BusLogic_Setup(BusLogic);
+#endif
   BusLogic_InitializeProbeInfoList(PrototypeHostAdapter);
   for (ProbeIndex = 0; ProbeIndex < BusLogic_ProbeInfoCount; ProbeIndex++)
     {
@@ -4655,14 +4657,14 @@ static boolean BusLogic_ParseKeyword(char **StringPointer, char *Keyword)
   INSMOD Loadable Kernel Module Installation Facility:
 
     insmod BusLogic.o \
-	'BusLogic_Options="QueueDepth:[,7,15];QueueDepth:31,BusSettleTime:30"'
+	'BusLogic="QueueDepth:[,7,15];QueueDepth:31,BusSettleTime:30"'
 
   NOTE: Module Utilities 2.1.71 or later is required for correct parsing
 	of driver options containing commas.
 
 */
 
-static void BusLogic_ParseDriverOptions(char *OptionsString)
+static int __init BusLogic_ParseDriverOptions(char *OptionsString)
 {
   while (true)
     {
@@ -4705,7 +4707,7 @@ static void BusLogic_ParseDriverOptions(char *OptionsString)
 		  BusLogic_Error("BusLogic: Invalid Driver Options "
 				 "(illegal I/O Address 0x%X)\n",
 				 NULL, IO_Address);
-		  return;
+		  return 0;
 		}
 	    }
 	  else if (BusLogic_ParseKeyword(&OptionsString, "NoProbeISA"))
@@ -4735,7 +4737,7 @@ static void BusLogic_ParseDriverOptions(char *OptionsString)
 		      BusLogic_Error("BusLogic: Invalid Driver Options "
 				     "(illegal Queue Depth %d)\n",
 				     NULL, QueueDepth);
-		      return;
+		      return 0;
 		    }
 		  DriverOptions->QueueDepth[TargetID] = QueueDepth;
 		  if (*OptionsString == ',')
@@ -4747,7 +4749,7 @@ static void BusLogic_ParseDriverOptions(char *OptionsString)
 		      BusLogic_Error("BusLogic: Invalid Driver Options "
 				     "(',' or ']' expected at '%s')\n",
 				     NULL, OptionsString);
-		      return;
+		      return 0;
 		    }
 		}
 	      if (*OptionsString != ']')
@@ -4755,7 +4757,7 @@ static void BusLogic_ParseDriverOptions(char *OptionsString)
 		  BusLogic_Error("BusLogic: Invalid Driver Options "
 				 "(']' expected at '%s')\n",
 				 NULL, OptionsString);
-		  return;
+		  return 0;
 		}
 	      else OptionsString++;
 	    }
@@ -4769,7 +4771,7 @@ static void BusLogic_ParseDriverOptions(char *OptionsString)
 		  BusLogic_Error("BusLogic: Invalid Driver Options "
 				 "(illegal Queue Depth %d)\n",
 				 NULL, QueueDepth);
-		  return;
+		  return 0;
 		}
 	      DriverOptions->CommonQueueDepth = QueueDepth;
 	      for (TargetID = 0;
@@ -4887,7 +4889,7 @@ static void BusLogic_ParseDriverOptions(char *OptionsString)
 		  BusLogic_Error("BusLogic: Invalid Driver Options "
 				 "(illegal Bus Settle Time %d)\n",
 				 NULL, BusSettleTime);
-		  return;
+		  return 0;
 		}
 	      DriverOptions->BusSettleTime = BusSettleTime;
 	    }
@@ -4925,7 +4927,7 @@ static void BusLogic_ParseDriverOptions(char *OptionsString)
 	{
 	  BusLogic_Error("BusLogic: Invalid Driver Options "
 			 "(all or no I/O Addresses must be specified)\n", NULL);
-	  return;
+	  return 0;
 	}
       /*
 	Tagged Queuing is disabled when the Queue Depth is 1 since queuing
@@ -4939,8 +4941,9 @@ static void BusLogic_ParseDriverOptions(char *OptionsString)
 	    DriverOptions->TaggedQueuingPermittedMask |= TargetBit;
 	  }
       if (*OptionsString == ';') OptionsString++;
-      if (*OptionsString == '\0') return;
+      if (*OptionsString == '\0') return 0;
     }
+    return 1;
 }
 
 
@@ -4948,26 +4951,30 @@ static void BusLogic_ParseDriverOptions(char *OptionsString)
   BusLogic_Setup handles processing of Kernel Command Line Arguments.
 */
 
-void BusLogic_Setup(char *CommandLineString, int *CommandLineIntegers)
+static int __init 
+BusLogic_Setup(char *str)
 {
-  if (CommandLineIntegers[0] != 0)
-    {
-      BusLogic_Error("BusLogic: Obsolete Command Line Entry "
-		     "Format Ignored\n", NULL);
-      return;
-    }
-  if (CommandLineString == NULL || *CommandLineString == '\0') return;
-  BusLogic_ParseDriverOptions(CommandLineString);
+	int ints[3];
+
+	(void)get_options(str, ARRAY_SIZE(ints), ints);
+
+	if (ints[0] != 0) {
+		BusLogic_Error("BusLogic: Obsolete Command Line Entry "
+				"Format Ignored\n", NULL);
+		return 0;
+	}
+	if (str == NULL || *str == '\0')
+		return 0;
+	return BusLogic_ParseDriverOptions(str);
 }
 
+__setup("BusLogic=", BusLogic_Setup);
 
 /*
   Include Module support if requested.
 */
 
 #ifdef MODULE
-
-MODULE_PARM(BusLogic_Options, "s");
 
 SCSI_Host_Template_T driver_template = BUSLOGIC;
 

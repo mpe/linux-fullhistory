@@ -203,7 +203,7 @@ int cb_setup_cis_mem(socket_info_t *s, int space)
     pci_writeb(s->cap.cardbus, 0, PCI_COMMAND, PCI_COMMAND_MEMORY);
     m->map = 0; m->flags = MAP_ACTIVE;
     m->start = base; m->stop = base+sz-1;
-    s->ss_entry(s->sock, SS_SetBridge, m);
+    s->ss_entry->set_bridge(s->sock, m);
     if ((space == 7) && (check_rom(s->cb_cis_virt, sz) == 0)) {
 	printk(KERN_NOTICE "cs: no valid ROM images found!\n");
 	return CS_READ_FAILURE;
@@ -227,7 +227,7 @@ void cb_release_cis_mem(socket_info_t *s)
 	br = (s->cb_cis_space == 7) ?
 	    CB_ROM_BASE : CB_BAR(s->cb_cis_space-1);
 	m->map = 0; m->flags = 0;
-	s->ss_entry(s->sock, SS_SetBridge, m);
+	s->ss_entry->set_bridge(s->sock, m);
 	pci_writeb(s->cap.cardbus, 0, PCI_COMMAND, 0);
 	pci_writel(s->cap.cardbus, 0, br, 0);
 	release_mem_region(m->start, m->stop - m->start + 1);
@@ -584,7 +584,7 @@ void cb_enable(socket_info_t *s)
 	DEBUG(0, "  bridge %s map %d (flags 0x%x): 0x%x-0x%x\n",
 	      (m.flags & MAP_IOSPACE) ? "io" : "mem",
 	      m.map, m.flags, m.start, m.stop);
-	s->ss_entry(s->sock, SS_SetBridge, &m);
+	s->ss_entry->set_bridge(s->sock, &m);
     }
 
     /* Set up base address registers */
@@ -609,7 +609,7 @@ void cb_enable(socket_info_t *s)
 	    pci_writeb(bus, i, PCI_INTERRUPT_LINE,
 		       s->irq.AssignedIRQ);
 	s->socket.io_irq = s->irq.AssignedIRQ;
-	s->ss_entry(s->sock, SS_SetSocket, &s->socket);
+	s->ss_entry->set_socket(s->sock, &s->socket);
     }
 }
 
@@ -638,6 +638,6 @@ void cb_disable(socket_info_t *s)
 	case B_M1: m.map = m.flags = 0; break;
 	case B_M2: m.map = 1; m.flags = 0; break;
 	}
-	s->ss_entry(s->sock, SS_SetBridge, &m);
+	s->ss_entry->set_bridge(s->sock, &m);
     }
 }

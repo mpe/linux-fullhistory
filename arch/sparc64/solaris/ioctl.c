@@ -1,4 +1,4 @@
-/* $Id: ioctl.c,v 1.13 1999/08/20 00:27:15 davem Exp $
+/* $Id: ioctl.c,v 1.14 1999/09/22 09:28:50 davem Exp $
  * ioctl.c: Solaris ioctl emulation.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -7,6 +7,9 @@
  * Streams & timod emulation based on code
  * Copyright (C) 1995, 1996 Mike Jagdis (jaggy@purplet.demon.co.uk)
  *
+ * 1999-08-19 Implemented solaris 'm' (mag tape) and
+ *            'O' (openprom) ioctls, by Jason Rappleye
+ *             (rappleye@ccr.buffalo.edu)
  */
 
 #include <linux/types.h>
@@ -18,9 +21,12 @@
 #include <linux/fs.h>
 #include <linux/file.h>
 #include <linux/netdevice.h>
+#include <linux/mtio.h>
+#include <linux/time.h>
 
 #include <asm/uaccess.h>
 #include <asm/termios.h>
+#include <asm/openpromio.h>
 
 #include "conv.h"
 #include "socksys.h"
@@ -678,6 +684,90 @@ static inline int solaris_i(unsigned int fd, unsigned int cmd, u32 arg)
 	return -ENOSYS;
 }
 
+static int solaris_m(unsigned int fd, unsigned int cmd, u32 arg)
+{
+	int ret;
+
+	switch (cmd & 0xff) {
+	case 1: /* MTIOCTOP */
+		ret = sys_ioctl(fd, MTIOCTOP, (unsigned long)&arg);
+		break;
+	case 2: /* MTIOCGET */
+		ret = sys_ioctl(fd, MTIOCGET, (unsigned long)&arg);
+		break;
+	case 3: /* MTIOCGETDRIVETYPE */
+	case 4: /* MTIOCPERSISTENT */
+	case 5: /* MTIOCPERSISTENTSTATUS */
+	case 6: /* MTIOCLRERR */
+	case 7: /* MTIOCGUARANTEEDORDER */
+	case 8: /* MTIOCRESERVE */
+	case 9: /* MTIOCRELEASE */
+	case 10: /* MTIOCFORCERESERVE */
+	case 13: /* MTIOCSTATE */
+	case 14: /* MTIOCREADIGNOREILI */
+	case 15: /* MTIOCREADIGNOREEOFS */
+	case 16: /* MTIOCSHORTFMK */
+	default:
+		ret = -ENOSYS; /* linux doesn't support these */
+		break;
+	};
+
+	return ret;
+}
+
+static int solaris_O(unsigned int fd, unsigned int cmd, u32 arg)
+{
+	int ret = -EINVAL;
+
+	switch (cmd & 0xff) {
+	case 1: /* OPROMGETOPT */
+		ret = sys_ioctl(fd, OPROMGETOPT, arg);
+		break;
+	case 2: /* OPROMSETOPT */
+		ret = sys_ioctl(fd, OPROMSETOPT, arg);
+		break;
+	case 3: /* OPROMNXTOPT */
+		ret = sys_ioctl(fd, OPROMNXTOPT, arg);
+		break;
+	case 4: /* OPROMSETOPT2 */
+		ret = sys_ioctl(fd, OPROMSETOPT2, arg);
+		break;
+	case 5: /* OPROMNEXT */
+		ret = sys_ioctl(fd, OPROMNEXT, arg);
+		break;
+	case 6: /* OPROMCHILD */
+		ret = sys_ioctl(fd, OPROMCHILD, arg);
+		break;
+	case 7: /* OPROMGETPROP */
+		ret = sys_ioctl(fd, OPROMGETPROP, arg);
+		break;
+	case 8: /* OPROMNXTPROP */
+		ret = sys_ioctl(fd, OPROMNXTPROP, arg);
+		break;
+	case 9: /* OPROMU2P */
+		ret = sys_ioctl(fd, OPROMU2P, arg);
+		break;
+	case 10: /* OPROMGETCONS */
+		ret = sys_ioctl(fd, OPROMGETCONS, arg);
+		break;
+	case 11: /* OPROMGETFBNAME */
+		ret = sys_ioctl(fd, OPROMGETFBNAME, arg);
+		break;
+	case 12: /* OPROMGETBOOTARGS */
+		ret = sys_ioctl(fd, OPROMGETBOOTARGS, arg);
+		break;
+	case 13: /* OPROMGETVERSION */
+	case 14: /* OPROMPATH2DRV */
+	case 15: /* OPROMDEV2PROMNAME */
+	case 16: /* OPROMPROM2DEVNAME */
+	case 17: /* OPROMGETPROPLEN */
+	default:
+		ret = -EINVAL;
+		break;
+	};
+	return ret;
+}
+
 /* }}} */
 
 asmlinkage int solaris_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
@@ -699,6 +789,8 @@ asmlinkage int solaris_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	case 's': error = solaris_s(fd, cmd, arg); break;
 	case 't': error = solaris_t(fd, cmd, arg); break;
 	case 'f': error = sys_ioctl(fd, cmd, arg); break;
+	case 'm': error = solaris_m(fd, cmd, arg); break;
+	case 'O': error = solaris_O(fd, cmd, arg); break;
 	default:
 		error = -ENOSYS;
 		break;

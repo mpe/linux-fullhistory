@@ -1,4 +1,4 @@
-/* $Id: uaccess.h,v 1.19 1999/08/14 03:52:11 anton Exp $
+/* $Id: uaccess.h,v 1.20 1999/11/23 08:56:45 davem Exp $
  * uaccess.h: User space memore access functions.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -384,6 +384,7 @@ __sfu_res = __strncpy_from_user((unsigned long) (dest), __sfu_src, __sfu_count);
 } __sfu_res; })
 
 extern int __strlen_user(const char *);
+extern int __strnlen_user(const char *, long len);
 
 extern __inline__ int strlen_user(const char *str)
 {
@@ -391,6 +392,14 @@ extern __inline__ int strlen_user(const char *str)
 		return 0;
 	else
 		return __strlen_user(str);
+}
+
+extern __inline__ int strnlen_user(const char *str, long len)
+{
+	if(!access_ok(VERIFY_READ, str, 0))
+		return 0;
+	else
+		return __strnlen_user(str, len);
 }
 
 #endif  /* __ASSEMBLY__ */

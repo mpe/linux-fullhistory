@@ -1,4 +1,4 @@
-/* $Id: pci.c,v 1.6 1999/09/08 03:40:41 davem Exp $
+/* $Id: pci.c,v 1.11 1999/12/20 05:02:07 davem Exp $
  * pci.c: UltraSparc PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@redhat.com)
@@ -20,8 +20,11 @@
 #include <asm/irq.h>
 #include <asm/ebus.h>
 
+#ifndef NEW_PCI_DMA_MAP
 unsigned long pci_dvma_v2p_hash[PCI_DVMA_HASHSZ];
 unsigned long pci_dvma_p2v_hash[PCI_DVMA_HASHSZ];
+#endif
+
 unsigned long pci_memspace_mask = 0xffffffffUL;
 
 #ifndef CONFIG_PCI
@@ -199,6 +202,30 @@ struct pci_fixup pcibios_fixups[] = {
 };
 
 void pcibios_fixup_bus(struct pci_bus *pbus)
+{
+}
+
+void pcibios_update_resource(struct pci_dev *pdev, struct resource *res1,
+			     struct resource *res2, int index)
+{
+}
+
+void pcibios_update_irq(struct pci_dev *pdev, int irq)
+{
+}
+
+unsigned long resource_fixup(struct pci_dev *pdev, struct resource *res,
+			     unsigned long start, unsigned long size)
+{
+	return start;
+}
+
+void pcibios_fixup_pbus_ranges(struct pci_bus *pbus,
+			       struct pbus_set_ranges_data *pranges)
+{
+}
+
+void pcibios_align_resource(void *data, struct resource *res, unsigned long size)
 {
 }
 

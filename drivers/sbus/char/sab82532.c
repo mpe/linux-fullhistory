@@ -1,4 +1,4 @@
-/* $Id: sab82532.c,v 1.35 1999/09/01 08:09:29 davem Exp $
+/* $Id: sab82532.c,v 1.40 1999/12/19 23:28:08 davem Exp $
  * sab82532.c: ASYNC Driver for the SIEMENS SAB82532 DUSCC.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -15,6 +15,7 @@
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
 #include <linux/serial.h>
+#include <linux/serialP.h>
 #include <linux/serial_reg.h>
 #include <linux/console.h>
 #include <linux/major.h>
@@ -35,6 +36,12 @@
 #include "sunserial.h"
 
 static DECLARE_TASK_QUEUE(tq_serial);
+
+/* This is (one of many) a special gross hack to allow SU and
+ * SAB serials to co-exist on the same machine. -DaveM
+ */
+#undef SERIAL_BH
+#define SERIAL_BH	AURORA_BH
 
 static struct tty_driver serial_driver, callout_driver;
 static int sab82532_refcount;
@@ -251,6 +258,9 @@ static void sab82532_start(struct tty_struct *tty)
 static void batten_down_hatches(struct sab82532 *info)
 {
 	unsigned char saved_rfc, tmp;
+
+	if (!stop_a_enabled)
+		return;
 
 	/* If we are doing kadb, we call the debugger
 	 * else we just drop into the boot monitor.
@@ -2129,7 +2139,7 @@ ebus_done:
 		}
 		memset(sab, 0, sizeof(struct sab82532));
 
-		sab->regs = (union sab82532_async_regs *)(regs + offset);
+		sab->regs = ioremap(regs + offset, sizeof(union sab82532_async_regs));
 		sab->irq = edev->irqs[0];
 		sab->line = 1 - i;
 		sab->xmit_fifo_size = 32;
@@ -2153,7 +2163,7 @@ static void __init sab82532_kgdb_hook(int line)
 
 static inline void __init show_serial_version(void)
 {
-	char *revision = "$Revision: 1.35 $";
+	char *revision = "$Revision: 1.40 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');
@@ -2162,6 +2172,8 @@ static inline void __init show_serial_version(void)
 	*p = '\0';
 	printk("SAB82532 serial driver version %s\n", serial_version);
 }
+
+extern int su_num_ports;
 
 /*
  * The serial driver boot-time initialization code!
@@ -2186,7 +2198,7 @@ int __init sab82532_init(void)
 	serial_driver.driver_name = "serial";
 	serial_driver.name = "ttyS";
 	serial_driver.major = TTY_MAJOR;
-	serial_driver.minor_start = 64;
+	serial_driver.minor_start = 64 + su_num_ports;
 	serial_driver.num = NR_PORTS;
 	serial_driver.type = TTY_DRIVER_TYPE_SERIAL;
 	serial_driver.subtype = SERIAL_TYPE_NORMAL;
@@ -2284,7 +2296,7 @@ int __init sab82532_init(void)
 	
 		printk(KERN_INFO
 		       "ttyS%02d at 0x%lx (irq = %s) is a SAB82532 %s\n",
-		       info->line, (unsigned long)info->regs,
+		       info->line + su_num_ports, (unsigned long)info->regs,
 		       __irq_itoa(info->irq), sab82532_version[info->type]);
 	}
 
@@ -2294,7 +2306,7 @@ int __init sab82532_init(void)
 	return 0;
 }
 
-int __init sab82532_probe(unsigned long *memory_start)
+int __init sab82532_probe(void)
 {
 	int node, enode, snode;
 	char model[32];
@@ -2338,9 +2350,9 @@ int __init sab82532_probe(unsigned long *memory_start)
 
 found:
 #ifdef CONFIG_SERIAL_CONSOLE
-	sunserial_setinitfunc(memory_start, sab82532_console_init);
+	sunserial_setinitfunc(sab82532_console_init);
 #endif
-	sunserial_setinitfunc(memory_start, sab82532_init);
+	sunserial_setinitfunc(sab82532_init);
 	rs_ops.rs_kgdb_hook = sab82532_kgdb_hook;
 	return 0;
 }
@@ -2356,6 +2368,7 @@ int init_module(void)
 
 void cleanup_module(void) 
 {
+	struct sab82532 *sab;
 	unsigned long flags;
 	int e1, e2;
 
@@ -2378,6 +2391,8 @@ void cleanup_module(void)
 		free_page((unsigned long) tmp_buf);
 		tmp_buf = NULL;
 	}
+	for (sab = sab82532_chain; sab; sab = sab->next)
+		iounmap(sab->regs);
 }
 #endif /* MODULE */
 
@@ -2575,8 +2590,9 @@ static struct console sab82532_console = {
 int __init sab82532_console_init(void)
 {
 	extern int con_is_present(void);
+	extern int su_console_registered;
 
-	if (con_is_present())
+	if (con_is_present() || su_console_registered)
 		return 0;
 
 	if (!sab82532_chain) {

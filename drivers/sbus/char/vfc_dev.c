@@ -43,17 +43,20 @@
 
 struct vfc_dev **vfc_dev_lst;
 static char vfcstr[]="vfc";
-static unsigned char saa9051_init_array[VFC_SAA9051_NR]=
-{ 0x00, 0x64, 0x72, 0x52,
-  0x36, 0x18, 0xff, 0x20,
-  0xfc, 0x77, 0xe3, 0x50,
-  0x3e};
+static unsigned char saa9051_init_array[VFC_SAA9051_NR] = {
+	0x00, 0x64, 0x72, 0x52,
+	0x36, 0x18, 0xff, 0x20,
+	0xfc, 0x77, 0xe3, 0x50,
+	0x3e
+};
 
-void vfc_lock_device(struct vfc_dev *dev) {
+void vfc_lock_device(struct vfc_dev *dev)
+{
 	down(&dev->device_lock_sem);
 }
 
-void vfc_unlock_device(struct vfc_dev *dev) {
+void vfc_unlock_device(struct vfc_dev *dev)
+{
 	up(&dev->device_lock_sem);
 }
 
@@ -61,41 +64,39 @@ void vfc_unlock_device(struct vfc_dev *dev) {
 void vfc_captstat_reset(struct vfc_dev *dev) 
 {
 	dev->control_reg |= VFC_CONTROL_CAPTRESET;
-	dev->regs->control=dev->control_reg;
+	sbus_writel(dev->control_reg, &dev->regs->control);
 	dev->control_reg &= ~VFC_CONTROL_CAPTRESET;
-	dev->regs->control=dev->control_reg;
+	sbus_writel(dev->control_reg, &dev->regs->control);
 	dev->control_reg |= VFC_CONTROL_CAPTRESET;
-	dev->regs->control=dev->control_reg;
-	return;
+	sbus_writel(dev->control_reg, &dev->regs->control);
 }
 
 void vfc_memptr_reset(struct vfc_dev *dev) 
 {
 	dev->control_reg |= VFC_CONTROL_MEMPTR;
-	dev->regs->control = dev->control_reg; 
+	sbus_writel(dev->control_reg, &dev->regs->control);
 	dev->control_reg &= ~VFC_CONTROL_MEMPTR;
-	dev->regs->control = dev->control_reg; 
+	sbus_writel(dev->control_reg, &dev->regs->control);
 	dev->control_reg |= VFC_CONTROL_MEMPTR; 
-	dev->regs->control = dev->control_reg; 
-	return;
+	sbus_writel(dev->control_reg, &dev->regs->control);
 }
 
 int vfc_csr_init(struct vfc_dev *dev)
 {
 	dev->control_reg = 0x80000000;
-	dev->regs->control = dev->control_reg;
+	sbus_writel(dev->control_reg, &dev->regs->control);
 	udelay(200); 
 	dev->control_reg &= ~0x80000000;
-	dev->regs->control = dev->control_reg;
+	sbus_writel(dev->control_reg, &dev->regs->control);
 	udelay(100); 
-	dev->regs->i2c_magic2 = 0x0f000000; 
+	sbus_writel(0x0f000000, &dev->regs->i2c_magic2);
 
 	vfc_memptr_reset(dev);
 
 	dev->control_reg &= ~VFC_CONTROL_DIAGMODE;
 	dev->control_reg &= ~VFC_CONTROL_CAPTURE;
 	dev->control_reg |= 0x40000000;
-	dev->regs->control=dev->control_reg; 
+	sbus_writel(dev->control_reg, &dev->regs->control);
 
 	vfc_captstat_reset(dev);
 
@@ -105,9 +106,10 @@ int vfc_csr_init(struct vfc_dev *dev)
 int vfc_saa9051_init(struct vfc_dev *dev)
 {
 	int i;
-	for(i=0;i<VFC_SAA9051_NR;i++) {
-		dev->saa9051_state_array[i]=saa9051_init_array[i];
-	}
+
+	for (i = 0; i < VFC_SAA9051_NR; i++)
+		dev->saa9051_state_array[i] = saa9051_init_array[i];
+
 	vfc_i2c_sendbuf(dev,VFC_SAA9051_ADDR,
 			dev->saa9051_state_array, VFC_SAA9051_NR);
 	return 0;
@@ -136,27 +138,29 @@ int init_vfc_devstruct(struct vfc_dev *dev, int instance)
 	return 0;
 }
 
-int init_vfc_device(struct linux_sbus_device *sdev,struct vfc_dev *dev,
-		    int instance) {
-	if(!dev) {
+int init_vfc_device(struct sbus_dev *sdev,struct vfc_dev *dev, int instance)
+{
+	if(dev == NULL) {
 		printk(KERN_ERR "VFC: Bogus pointer passed\n");
 		return -ENOMEM;
 	}
 	printk("Initializing vfc%d\n",instance);
-	dev->regs=NULL;
-	prom_apply_sbus_ranges(sdev->my_bus, &sdev->reg_addrs[0], sdev->num_registers, sdev);
-	dev->regs=sparc_alloc_io(sdev->reg_addrs[0].phys_addr, 0,
-				 sizeof(struct vfc_regs), vfcstr, 
-				 sdev->reg_addrs[0].which_io, 0x0);
-	dev->which_io=sdev->reg_addrs[0].which_io;
-	dev->phys_regs=(struct vfc_regs *)sdev->reg_addrs[0].phys_addr;
-	if(!dev->regs) return -EIO;
+	dev->regs = NULL;
+	dev->regs = (volatile struct vfc_regs *)
+		sbus_ioremap(&sdev->resource[0], 0,
+			     sizeof(struct vfc_regs), vfcstr);
+	dev->which_io = sdev->reg_addrs[0].which_io;
+	dev->phys_regs = (struct vfc_regs *) sdev->reg_addrs[0].phys_addr;
+	if (dev->regs == NULL)
+		return -EIO;
 
 	printk("vfc%d: registers mapped at phys_addr: 0x%lx\n    virt_addr: 0x%lx\n",
 	       instance,(unsigned long)sdev->reg_addrs[0].phys_addr,(unsigned long)dev->regs);
 
-	if(init_vfc_devstruct(dev,instance)) return -EINVAL;
-	if(init_vfc_hw(dev)) return -EIO;
+	if (init_vfc_devstruct(dev, instance))
+		return -EINVAL;
+	if (init_vfc_hw(dev))
+		return -EIO;
 
 	return 0;
 }
@@ -170,10 +174,14 @@ struct vfc_dev *vfc_get_dev_ptr(int instance)
 static int vfc_open(struct inode *inode, struct file *file) 
 {
 	struct vfc_dev *dev;
-	dev=vfc_get_dev_ptr(MINOR(inode->i_rdev));
-	if(!dev) return -ENODEV;
-	if(dev->busy) return -EBUSY;
-	dev->busy=1;
+
+	dev = vfc_get_dev_ptr(MINOR(inode->i_rdev));
+	if (dev == NULL)
+		return -ENODEV;
+	if (dev->busy)
+		return -EBUSY;
+
+	dev->busy = 1;
 	MOD_INC_USE_COUNT;
 	vfc_lock_device(dev);
 	
@@ -191,12 +199,14 @@ static int vfc_open(struct inode *inode, struct file *file)
 static void vfc_release(struct inode *inode,struct file *file) 
 {
 	struct vfc_dev *dev;
-	dev=vfc_get_dev_ptr(MINOR(inode->i_rdev));
-	if(!dev) return;
-	if(!dev->busy) return;
-	dev->busy=0;
+
+	dev = vfc_get_dev_ptr(MINOR(inode->i_rdev));
+	if (dev == NULL)
+		return;
+	if (!dev->busy)
+		return;
+	dev->busy = 0;
 	MOD_DEC_USE_COUNT;
-	return;
 }
 
 static int vfc_debug(struct vfc_dev *dev, int cmd, unsigned long arg) 
@@ -204,21 +214,21 @@ static int vfc_debug(struct vfc_dev *dev, int cmd, unsigned long arg)
 	struct vfc_debug_inout inout;
 	unsigned char *buffer;
 
-	if(!capable(CAP_SYS_ADMIN)) return -EPERM;
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
 
 	switch(cmd) {
 	case VFC_I2C_SEND:
-		if(copy_from_user(&inout, (void *)arg, sizeof(inout))) {
+		if(copy_from_user(&inout, (void *)arg, sizeof(inout)))
 			return -EFAULT;
-		}
 
 		buffer = kmalloc(inout.len*sizeof(char), GFP_KERNEL);
-		if (!buffer)
+		if (buffer == NULL)
 			return -ENOMEM;
 
 		if(copy_from_user(buffer, inout.buffer, 
 				  inout.len*sizeof(char))) {
-			kfree_s(buffer,inout.len*sizeof(char));
+			kfree_s(buffer, inout.len * sizeof(char));
 			return -EFAULT;
 		}
 		
@@ -236,13 +246,13 @@ static int vfc_debug(struct vfc_dev *dev, int cmd, unsigned long arg)
 
 		break;
 	case VFC_I2C_RECV:
-		if (copy_from_user(&inout, (void *)arg, sizeof(inout))) {
+		if (copy_from_user(&inout, (void *)arg, sizeof(inout)))
 			return -EFAULT;
-		}
 
 		buffer = kmalloc(inout.len, GFP_KERNEL);
-		if (!buffer)
+		if (buffer == NULL)
 			return -ENOMEM;
+
 		memset(buffer,0,inout.len*sizeof(char));
 		vfc_lock_device(dev);
 		inout.ret=
@@ -262,14 +272,15 @@ static int vfc_debug(struct vfc_dev *dev, int cmd, unsigned long arg)
 		break;
 	default:
 		return -EINVAL;
-	}
+	};
+
 	return 0;
 }
 
 int vfc_capture_start(struct vfc_dev *dev) 
 {
 	vfc_captstat_reset(dev);
-	dev->control_reg=dev->regs->control;
+	dev->control_reg = sbus_readl(&dev->regs->control);
 	if((dev->control_reg & VFC_STATUS_CAPTURE)) {
 		printk(KERN_ERR "vfc%d: vfc capture status not reset\n",
 		       dev->instance);
@@ -278,11 +289,11 @@ int vfc_capture_start(struct vfc_dev *dev)
 
 	vfc_lock_device(dev);
 	dev->control_reg &= ~VFC_CONTROL_CAPTURE;
-	dev->regs->control=dev->control_reg;
+	sbus_writel(dev->control_reg, &dev->regs->control);
 	dev->control_reg |= VFC_CONTROL_CAPTURE;
-	dev->regs->control=dev->control_reg;
+	sbus_writel(dev->control_reg, &dev->regs->control);
 	dev->control_reg &= ~VFC_CONTROL_CAPTURE;
-	dev->regs->control=dev->control_reg;
+	sbus_writel(dev->control_reg, &dev->regs->control);
 	vfc_unlock_device(dev);
 
 	return 0;
@@ -290,13 +301,16 @@ int vfc_capture_start(struct vfc_dev *dev)
 
 int vfc_capture_poll(struct vfc_dev *dev) 
 {
-	int timeout=1000;
-	while(!timeout--) {
-		if((dev->regs->control & VFC_STATUS_CAPTURE)) break;
-		vfc_i2c_delay_no_busy(dev,100);
+	int timeout = 1000;
+
+	while (!timeout--) {
+		if (dev->regs->control & VFC_STATUS_CAPTURE)
+			break;
+		vfc_i2c_delay_no_busy(dev, 100);
 	}
 	if(!timeout) {
-		printk(KERN_WARNING "vfc%d: capture timed out\n", dev->instance);
+		printk(KERN_WARNING "vfc%d: capture timed out\n",
+		       dev->instance);
 		return -ETIMEDOUT;
 	}
 	return 0;
@@ -307,11 +321,14 @@ int vfc_capture_poll(struct vfc_dev *dev)
 static int vfc_set_control_ioctl(struct inode *inode, struct file *file, 
 			  struct vfc_dev *dev, unsigned long arg) 
 {
-	int setcmd,ret=0;
+	int setcmd, ret = 0;
+
 	if (copy_from_user(&setcmd,(void *)arg,sizeof(unsigned int)))
 		return -EFAULT;
+
 	VFC_IOCTL_DEBUG_PRINTK(("vfc%d: IOCTL(VFCSCTRL) arg=0x%x\n",
 				dev->instance,setcmd));
+
 	switch(setcmd) {
 	case MEMPRST:
 		vfc_lock_device(dev);
@@ -327,29 +344,33 @@ static int vfc_set_control_ioctl(struct inode *inode, struct file *file,
 		if(suser()) {
 			vfc_lock_device(dev);
 			dev->control_reg |= VFC_CONTROL_DIAGMODE;
-			dev->regs->control = dev->control_reg;
+			sbus_writel(dev->control_reg, &dev->regs->control);
 			vfc_unlock_device(dev);
-			ret=0;
-		} else ret=-EPERM; 
+			ret = 0;
+		} else {
+			ret = -EPERM; 
+		}
 		break;
 	case NORMMODE:
 		vfc_lock_device(dev);
 		dev->control_reg &= ~VFC_CONTROL_DIAGMODE;
-		dev->regs->control = dev->control_reg;
+		sbus_writel(dev->control_reg, &dev->regs->control);
 		vfc_unlock_device(dev);
-		ret=0;
+		ret = 0;
 		break;
 	case CAPTRSTR:
 		vfc_capture_start(dev);
-		ret=0;
+		ret = 0;
 		break;
 	case CAPTRWAIT:
 		vfc_capture_poll(dev);
-		ret=0;
+		ret = 0;
 		break;
 	default:
-		ret=-EINVAL;
-	}
+		ret = -EINVAL;
+		break;
+	};
+
 	return ret;
 }
 
@@ -357,17 +378,18 @@ static int vfc_set_control_ioctl(struct inode *inode, struct file *file,
 int vfc_port_change_ioctl(struct inode *inode, struct file *file, 
 			  struct vfc_dev *dev, unsigned long arg) 
 {
-	int ret=0;
+	int ret = 0;
 	int cmd;
 
 	if(copy_from_user(&cmd, (void *)arg, sizeof(unsigned int))) {
 		VFC_IOCTL_DEBUG_PRINTK(("vfc%d: User passed bogus pointer to "
-				  "vfc_port_change_ioctl\n",dev->instance));
+					"vfc_port_change_ioctl\n",
+					dev->instance));
 		return -EFAULT;
 	}
 	
 	VFC_IOCTL_DEBUG_PRINTK(("vfc%d: IOCTL(VFCPORTCHG) arg=0x%x\n",
-			  dev->instance,cmd));
+				dev->instance, cmd));
 
 	switch(cmd) {
 	case 1:
@@ -385,29 +407,33 @@ int vfc_port_change_ioctl(struct inode *inode, struct file *file,
 		VFC_SAA9051_SA(dev,VFC_SAA9051_HSY_STOP) = 0x17;
 		VFC_SAA9051_SA(dev,VFC_SAA9051_HC_START) = 0xfa;
 		VFC_SAA9051_SA(dev,VFC_SAA9051_HC_STOP) = 0xde;
-		VFC_SAA9051_SA(dev,VFC_SAA9051_HORIZ_PEAK) = VFC_SAA9051_BY | VFC_SAA9051_PF | VFC_SAA9051_BP2;
+		VFC_SAA9051_SA(dev,VFC_SAA9051_HORIZ_PEAK) =
+			VFC_SAA9051_BY | VFC_SAA9051_PF | VFC_SAA9051_BP2;
 		VFC_SAA9051_SA(dev,VFC_SAA9051_C3) = VFC_SAA9051_YC;
 		VFC_SAA9051_SA(dev,VFC_SAA9051_SECAM_DELAY) = 0;
-		VFC_SAA9051_SA(dev,VFC_SAA9051_C2) &= ~(VFC_SAA9051_SS0 | VFC_SAA9051_SS1);
+		VFC_SAA9051_SA(dev,VFC_SAA9051_C2) &=
+			~(VFC_SAA9051_SS0 | VFC_SAA9051_SS1);
 		break;
 	default:
-		ret=-EINVAL;
+		ret = -EINVAL;
 		return ret;
 		break;
 	}
 
 	switch(cmd) {
 	case 1:
-		VFC_SAA9051_SA(dev,VFC_SAA9051_C2) |= VFC_SAA9051_SS0 | VFC_SAA9051_SS1;
+		VFC_SAA9051_SA(dev,VFC_SAA9051_C2) |=
+			(VFC_SAA9051_SS0 | VFC_SAA9051_SS1);
 		break;
 	case 2:
-		VFC_SAA9051_SA(dev,VFC_SAA9051_C2) &= ~(VFC_SAA9051_SS0 | VFC_SAA9051_SS1);
+		VFC_SAA9051_SA(dev,VFC_SAA9051_C2) &=
+			~(VFC_SAA9051_SS0 | VFC_SAA9051_SS1);
 		VFC_SAA9051_SA(dev,VFC_SAA9051_C2) |= VFC_SAA9051_SS0; 
 		break;
 	case 3:
 		break;
 	default:
-		ret=-EINVAL;
+		ret = -EINVAL;
 		return ret;
 		break;
 	}
@@ -422,23 +448,24 @@ int vfc_port_change_ioctl(struct inode *inode, struct file *file,
 int vfc_set_video_ioctl(struct inode *inode, struct file *file, 
 			struct vfc_dev *dev, unsigned long arg) 
 {
-	int ret=0;
+	int ret = 0;
 	int cmd;
+
 	if(copy_from_user(&cmd, (void *)arg, sizeof(unsigned int))) {
 		VFC_IOCTL_DEBUG_PRINTK(("vfc%d: User passed bogus pointer to "
-				  "vfc_set_video_ioctl\n",dev->instance));
+					"vfc_set_video_ioctl\n",
+					dev->instance));
 		return ret;
 	}
 	
 	VFC_IOCTL_DEBUG_PRINTK(("vfc%d: IOCTL(VFCSVID) arg=0x%x\n",
-			  dev->instance,cmd));
+				dev->instance, cmd));
 	switch(cmd) {
-
 	case STD_NTSC:
 		VFC_SAA9051_SA(dev,VFC_SAA9051_C1) &= ~VFC_SAA9051_ALT;
 		VFC_SAA9051_SA(dev,VFC_SAA9051_C1) |= VFC_SAA9051_YPN | 
 			VFC_SAA9051_CCFR0 | VFC_SAA9051_CCFR1 | VFC_SAA9051_FS;
-		ret=vfc_update_saa9051(dev);
+		ret = vfc_update_saa9051(dev);
 		break;
 	case STD_PAL:
 		VFC_SAA9051_SA(dev,VFC_SAA9051_C1) &= ~(VFC_SAA9051_YPN | 
@@ -446,35 +473,39 @@ int vfc_set_video_ioctl(struct inode *inode, struct file *file,
 							VFC_SAA9051_CCFR0 |
 							VFC_SAA9051_FS);
 		VFC_SAA9051_SA(dev,VFC_SAA9051_C1) |= VFC_SAA9051_ALT;
-		ret=vfc_update_saa9051(dev);
+		ret = vfc_update_saa9051(dev);
 		break;
 
 	case COLOR_ON:
 		VFC_SAA9051_SA(dev,VFC_SAA9051_C1) |= VFC_SAA9051_CO;
-		VFC_SAA9051_SA(dev,VFC_SAA9051_HORIZ_PEAK) &= ~(VFC_SAA9051_BY | VFC_SAA9051_PF);
-		ret=vfc_update_saa9051(dev);
+		VFC_SAA9051_SA(dev,VFC_SAA9051_HORIZ_PEAK) &=
+			~(VFC_SAA9051_BY | VFC_SAA9051_PF);
+		ret = vfc_update_saa9051(dev);
 		break;
 	case MONO:
 		VFC_SAA9051_SA(dev,VFC_SAA9051_C1) &= ~(VFC_SAA9051_CO);
-		VFC_SAA9051_SA(dev,VFC_SAA9051_HORIZ_PEAK) |= VFC_SAA9051_BY | VFC_SAA9051_PF;
-		ret=vfc_update_saa9051(dev);
+		VFC_SAA9051_SA(dev,VFC_SAA9051_HORIZ_PEAK) |=
+			(VFC_SAA9051_BY | VFC_SAA9051_PF);
+		ret = vfc_update_saa9051(dev);
 		break;
 	default:
-		ret=-EINVAL;
+		ret = -EINVAL;
 		break;
-	}
+	};
+
 	return ret;
 }
 
 int vfc_get_video_ioctl(struct inode *inode, struct file *file, 
 			struct vfc_dev *dev, unsigned long arg) 
 {
-	int ret=0;
-	unsigned int status=NO_LOCK;
+	int ret = 0;
+	unsigned int status = NO_LOCK;
 	unsigned char buf[1];
 
-	if(vfc_i2c_recvbuf(dev,VFC_SAA9051_ADDR,buf,1)) {
-		printk(KERN_ERR "vfc%d: Unable to get status\n",dev->instance);
+	if(vfc_i2c_recvbuf(dev, VFC_SAA9051_ADDR, buf, 1)) {
+		printk(KERN_ERR "vfc%d: Unable to get status\n",
+		       dev->instance);
 		return -EIO;
 	}
 
@@ -482,20 +513,22 @@ int vfc_get_video_ioctl(struct inode *inode, struct file *file,
 		status = NO_LOCK;
 	} else if(buf[0] & VFC_SAA9051_FD) {
 		if(buf[0] & VFC_SAA9051_CD)
-			status=NTSC_COLOR;
+			status = NTSC_COLOR;
 		else
-			status=NTSC_NOCOLOR;
+			status = NTSC_NOCOLOR;
 	} else {
 		if(buf[0] & VFC_SAA9051_CD)
-			status=PAL_COLOR;
+			status = PAL_COLOR;
 		else
-			status=PAL_NOCOLOR;
+			status = PAL_NOCOLOR;
 	}
-	VFC_IOCTL_DEBUG_PRINTK(("vfc%d: IOCTL(VFCGVID) returning status 0x%x; buf[0]=%x\n",dev->instance,
-			  status,buf[0]));
+	VFC_IOCTL_DEBUG_PRINTK(("vfc%d: IOCTL(VFCGVID) returning status 0x%x; "
+				"buf[0]=%x\n", dev->instance, status, buf[0]));
+
 	if (copy_to_user((void *)arg,&status,sizeof(unsigned int))) {
 		VFC_IOCTL_DEBUG_PRINTK(("vfc%d: User passed bogus pointer to "
-				 "vfc_get_video_ioctl\n",dev->instance));
+					"vfc_get_video_ioctl\n",
+					dev->instance));
 		return ret;
 	}
 	return ret;
@@ -504,77 +537,81 @@ int vfc_get_video_ioctl(struct inode *inode, struct file *file,
 static int vfc_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 	      unsigned long arg) 
 {
-	int ret=0;
+	int ret = 0;
 	unsigned int tmp;
 	struct vfc_dev *dev;
 
-	dev=vfc_get_dev_ptr(MINOR(inode->i_rdev));
-	if(!dev) return -ENODEV;
+	dev = vfc_get_dev_ptr(MINOR(inode->i_rdev));
+	if(dev == NULL)
+		return -ENODEV;
 	
 	switch(cmd & 0x0000ffff) {
 	case VFCGCTRL:
 #if 0
-		VFC_IOCTL_DEBUG_PRINTK(("vfc%d: IOCTL(VFCGCTRL)\n",dev->instance));
+		VFC_IOCTL_DEBUG_PRINTK(("vfc%d: IOCTL(VFCGCTRL)\n", dev->instance));
 #endif
-		tmp=dev->regs->control;
-		if(copy_to_user((void *)arg,&tmp, sizeof(unsigned int))) {
-			ret=-EFAULT;
+		tmp = sbus_readl(&dev->regs->control);
+		if(copy_to_user((void *)arg, &tmp, sizeof(unsigned int))) {
+			ret = -EFAULT;
 			break;
 		}
-		ret=0;
+		ret = 0;
 		break;
 	case VFCSCTRL:
-		ret=vfc_set_control_ioctl(inode, file, dev, arg);
+		ret = vfc_set_control_ioctl(inode, file, dev, arg);
 		break;
 	case VFCGVID:
-		ret=vfc_get_video_ioctl(inode,file,dev,arg);
+		ret = vfc_get_video_ioctl(inode, file, dev, arg);
 		break;
 	case VFCSVID:
-		ret=vfc_set_video_ioctl(inode,file,dev,arg);
+		ret = vfc_set_video_ioctl(inode, file, dev, arg);
 		break;
 	case VFCHUE:
-		VFC_IOCTL_DEBUG_PRINTK(("vfc%d: IOCTL(VFCHUE)\n",dev->instance));
+		VFC_IOCTL_DEBUG_PRINTK(("vfc%d: IOCTL(VFCHUE)\n", dev->instance));
 		if(copy_from_user(&tmp,(void *)arg,sizeof(unsigned int))) {
 			VFC_IOCTL_DEBUG_PRINTK(("vfc%d: User passed bogus pointer "
-					  "to IOCTL(VFCHUE)",dev->instance));
-			ret=-EFAULT;
+						"to IOCTL(VFCHUE)", dev->instance));
+			ret = -EFAULT;
 		} else {
-			VFC_SAA9051_SA(dev,VFC_SAA9051_HUE)=tmp;
+			VFC_SAA9051_SA(dev,VFC_SAA9051_HUE) = tmp;
 			vfc_update_saa9051(dev);
-			ret=0;
+			ret = 0;
 		}
 		break;
 	case VFCPORTCHG:
-		ret=vfc_port_change_ioctl(inode, file, dev, arg);
+		ret = vfc_port_change_ioctl(inode, file, dev, arg);
 		break;
 	case VFCRDINFO:
-		ret=-EINVAL;
-		VFC_IOCTL_DEBUG_PRINTK(("vfc%d: IOCTL(VFCRDINFO)\n",dev->instance));
+		ret = -EINVAL;
+		VFC_IOCTL_DEBUG_PRINTK(("vfc%d: IOCTL(VFCRDINFO)\n", dev->instance));
 		break;
 	default:
-		ret=vfc_debug(vfc_get_dev_ptr(MINOR(inode->i_rdev)),
-			      cmd,arg);
+		ret = vfc_debug(vfc_get_dev_ptr(MINOR(inode->i_rdev)),
+				cmd, arg);
 		break;
-	}
+	};
+
 	return ret;
 }
 
 static int vfc_mmap(struct inode *inode, struct file *file, 
-	     struct vm_area_struct *vma) 
+		    struct vm_area_struct *vma) 
 {
-	unsigned int map_size,ret,map_offset;
+	unsigned int map_size, ret, map_offset;
 	struct vfc_dev *dev;
 	
-	dev=vfc_get_dev_ptr(MINOR(inode->i_rdev));
-	if(!dev) return -ENODEV;
+	dev = vfc_get_dev_ptr(MINOR(inode->i_rdev));
+	if(dev == NULL)
+		return -ENODEV;
 	
-	map_size=vma->vm_end - vma->vm_start;
+	map_size = vma->vm_end - vma->vm_start;
 	if(map_size > sizeof(struct vfc_regs)) 
-		map_size=sizeof(struct vfc_regs);
+		map_size = sizeof(struct vfc_regs);
 
-	vma->vm_flags |= VM_SHM | VM_LOCKED | VM_IO | VM_MAYREAD | VM_MAYWRITE | VM_MAYSHARE;
-	map_offset=(unsigned int)dev->phys_regs;
-	ret = io_remap_page_range(vma->vm_start,map_offset,map_size, 
+	vma->vm_flags |=
+		(VM_SHM | VM_LOCKED | VM_IO | VM_MAYREAD | VM_MAYWRITE | VM_MAYSHARE);
+	map_offset = (unsigned int) (long)dev->phys_regs;
+	ret = io_remap_page_range(vma->vm_start, map_offset, map_size, 
 				  vma->vm_page_prot, dev->which_io);
 	if(ret)
 		return -EAGAIN;
@@ -584,13 +621,13 @@ static int vfc_mmap(struct inode *inode, struct file *file,
 
 
 static int vfc_lseek(struct inode *inode, struct file *file, 
-	      off_t offset, int origin) 
+		     off_t offset, int origin) 
 {
 	return -ESPIPE;
 }
 
 static struct file_operations vfc_fops = {
-	vfc_lseek,        /* vfc_lseek */
+	vfc_lseek,   /* vfc_lseek */
 	NULL,        /* vfc_write */
 	NULL,        /* vfc_read */
 	NULL,        /* vfc_readdir */
@@ -598,19 +635,19 @@ static struct file_operations vfc_fops = {
 	vfc_ioctl,   
 	vfc_mmap, 
 	vfc_open,
-	NULL,		/* flush */
+	NULL,	     /* flush */
 	vfc_release,
 };
 
 static int vfc_probe(void)
 {
-	struct linux_sbus *bus;
-	struct linux_sbus_device *sdev = NULL;
+	struct sbus_bus *sbus;
+	struct sbus_dev *sdev = NULL;
 	int ret;
-	int instance=0,cards=0;
+	int instance = 0, cards = 0;
 
-	for_all_sbusdev(sdev,bus) {
-		if (strcmp(sdev->prom_name,"vfc") == 0) {
+	for_all_sbusdev(sdev, sbus) {
+		if (strcmp(sdev->prom_name, "vfc") == 0) {
 			cards++;
 			continue;
 		}
@@ -619,33 +656,35 @@ static int vfc_probe(void)
 	if (!cards)
 		return -ENODEV;
 
-	vfc_dev_lst=(struct vfc_dev **)kmalloc(sizeof(struct vfc_dev *)*
-					       (cards+1),
-					       GFP_KERNEL);
-	if(!vfc_dev_lst)
+	vfc_dev_lst = (struct vfc_dev **)kmalloc(sizeof(struct vfc_dev *) *
+						 (cards+1),
+						 GFP_KERNEL);
+	if (vfc_dev_lst == NULL)
 		return -ENOMEM;
-	memset(vfc_dev_lst,0,sizeof(struct vfc_dev *)*(cards+1));
-	vfc_dev_lst[cards]=NULL;
+	memset(vfc_dev_lst, 0, sizeof(struct vfc_dev *) * (cards + 1));
+	vfc_dev_lst[cards] = NULL;
 
-	ret=register_chrdev(VFC_MAJOR,vfcstr,&vfc_fops);
+	ret = register_chrdev(VFC_MAJOR, vfcstr, &vfc_fops);
 	if(ret) {
-		printk(KERN_ERR "Unable to get major number %d\n",VFC_MAJOR);
+		printk(KERN_ERR "Unable to get major number %d\n", VFC_MAJOR);
 		kfree(vfc_dev_lst);
 		return -EIO;
 	}
 
-	instance=0;
-	for_all_sbusdev(sdev,bus) {
-		if (strcmp(sdev->prom_name,"vfc") == 0) {
+	instance = 0;
+	for_all_sbusdev(sdev, sbus) {
+		if (strcmp(sdev->prom_name, "vfc") == 0) {
 			vfc_dev_lst[instance]=(struct vfc_dev *)
 				kmalloc(sizeof(struct vfc_dev), GFP_KERNEL);
-			if(vfc_dev_lst[instance] == NULL) return -ENOMEM;
-			ret=init_vfc_device(sdev,
-					    vfc_dev_lst[instance],
-					    instance);
+			if (vfc_dev_lst[instance] == NULL)
+				return -ENOMEM;
+			ret = init_vfc_device(sdev,
+					      vfc_dev_lst[instance],
+					      instance);
 			if(ret) {
 				printk(KERN_ERR "Unable to initialize"
-				       " vfc%d device\n",instance);
+				       " vfc%d device\n",
+				       instance);
 			} else {
 			}
 		
@@ -669,18 +708,21 @@ int vfc_init(void)
 #ifdef MODULE
 static void deinit_vfc_device(struct vfc_dev *dev)
 {
-	if(!dev) return;
-	sparc_free_io((void *)dev->regs,sizeof(struct vfc_regs));
+	if(dev == NULL)
+		return;
+	sbus_iounmap((unsigned long)dev->regs, sizeof(struct vfc_regs));
 	kfree(dev);
 }
 
 void cleanup_module(void)
 {
 	struct vfc_dev **devp;
+
 	unregister_chrdev(VFC_MAJOR,vfcstr);
-	for(devp=vfc_dev_lst;*devp;devp++) {
+
+	for (devp = vfc_dev_lst; *devp; devp++)
 		deinit_vfc_device(*devp);
-	}
+
 	kfree(vfc_dev_lst);
 	return;
 }

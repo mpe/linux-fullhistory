@@ -3,10 +3,10 @@
  * Filename:      irttp.c
  * Version:       1.2
  * Description:   Tiny Transport Protocol (TTP) implementation
- * Status:        Experimental.
+ * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:31 1997
- * Modified at:   Tue Oct 19 21:40:00 1999
+ * Modified at:   Thu Dec 16 23:00:03 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -166,7 +166,7 @@ struct tsap_cb *irttp_open_tsap(__u8 stsap_sel, int credit, notify_t *notify)
 	/*
 	 *  Create LSAP at IrLMP layer
 	 */
-	lsap = irlmp_open_lsap(stsap_sel, &ttp_notify);
+	lsap = irlmp_open_lsap(stsap_sel, &ttp_notify, 0);
 	if (lsap == NULL) {
 		WARNING(__FUNCTION__ "(), unable to allocate LSAP!!\n");
 		return NULL;
@@ -326,7 +326,7 @@ int irttp_data_request(struct tsap_cb *self, struct sk_buff *skb)
 	 *  TxMaxSduSize 
 	 */
 	if ((self->tx_max_sdu_size != 0) && 
-	    (self->tx_max_sdu_size != SAR_UNBOUND) && 
+	    (self->tx_max_sdu_size != TTP_SAR_UNBOUND) && 
 	    (skb->len > self->tx_max_sdu_size))
 	{
 		ERROR(__FUNCTION__ "(), SAR enabled, "
@@ -365,7 +365,7 @@ int irttp_data_request(struct tsap_cb *self, struct sk_buff *skb)
 
 	/* Check if we can accept more data from client */
 	if ((!self->tx_sdu_busy) && 
-	    (skb_queue_len(&self->tx_queue) > HIGH_THRESHOLD)) {
+	    (skb_queue_len(&self->tx_queue) > TTP_HIGH_THRESHOLD)) {
 		
 		/* Tx queue filling up, so stop client */
 		self->tx_sdu_busy = TRUE;
@@ -446,7 +446,7 @@ static void irttp_run_tx_queue(struct tsap_cb *self)
 
 		/* Check if we can accept more frames from client */
 		if ((self->tx_sdu_busy) && 
-		    (skb_queue_len(&self->tx_queue) < LOW_THRESHOLD)) 
+		    (skb_queue_len(&self->tx_queue) < TTP_LOW_THRESHOLD)) 
 		{
 			self->tx_sdu_busy = FALSE;
 			
@@ -477,7 +477,7 @@ void irttp_give_credit(struct tsap_cb *self)
 	ASSERT(self->magic == TTP_TSAP_MAGIC, return;);	
 
 	IRDA_DEBUG(4, __FUNCTION__ "() send=%d,avail=%d,remote=%d\n", 
-	       self->send_credit, self->avail_credit, self->remote_credit);
+		   self->send_credit, self->avail_credit, self->remote_credit);
 	
 	/* Give credit to peer */
 	tx_skb = dev_alloc_skb(64);
@@ -533,9 +533,11 @@ static int irttp_udata_indication(void *instance, void *sap,
 	ASSERT(skb != NULL, return -1;);
 
 	/* Just pass data to layer above */
-	if (self->notify.udata_indication) {
-		self->notify.udata_indication(self->notify.instance, self, skb);
-	}
+	if (self->notify.udata_indication)
+		self->notify.udata_indication(self->notify.instance, self,skb);
+	else
+		dev_kfree_skb(skb);
+
 	self->stats.rx_packets++;
 
 	return 0;
@@ -573,8 +575,10 @@ static int irttp_data_indication(void *instance, void *sap,
 		 *  more bit, so the defragment routing knows what to do
 		 */
 		skb_queue_tail(&self->rx_queue, skb);
-	} else
+	} else {
 		self->send_credit += n;	/* Dataless flowdata TTP-PDU */
+		dev_kfree_skb(skb);
+	}
 
 	irttp_run_rx_queue(self);
 
@@ -582,7 +586,7 @@ static int irttp_data_indication(void *instance, void *sap,
 	 *  Give avay some credits to peer? 
 	 */
 	if ((skb_queue_empty(&self->tx_queue)) && 
-	    (self->remote_credit < LOW_THRESHOLD) && 
+	    (self->remote_credit < TTP_LOW_THRESHOLD) && 
 	    (self->avail_credit > 0)) 
 	{
 		/* Schedule to start immediately after this thread */
@@ -830,7 +834,7 @@ void irttp_connect_indication(void *instance, void *sap, struct qos_info *qos,
 
 	lsap = (struct lsap_cb *) sap;
 
-	self->max_seg_size = max_seg_size;
+	self->max_seg_size = max_seg_size - TTP_HEADER;;
 	self->max_header_size = max_header_size+TTP_HEADER;
 
 	IRDA_DEBUG(4, __FUNCTION__ "(), TSAP sel=%02x\n", self->stsap_sel);
@@ -873,7 +877,8 @@ void irttp_connect_indication(void *instance, void *sap, struct qos_info *qos,
 		self->notify.connect_indication(self->notify.instance, self, 
 						qos, self->tx_max_sdu_size, 
 						self->max_header_size, skb);
-	}
+	} else
+		dev_kfree_skb(skb);
 }
 
 /*
@@ -895,7 +900,7 @@ int irttp_connect_response(struct tsap_cb *self, __u32 max_sdu_size,
 	ASSERT(self->magic == TTP_TSAP_MAGIC, return -1;);
 
 	IRDA_DEBUG(4, __FUNCTION__ "(), Source TSAP selector=%02x\n", 
-	      self->stsap_sel);
+		   self->stsap_sel);
 	
 	/* Any userdata supplied? */
 	if (userdata == NULL) {
@@ -1093,7 +1098,7 @@ int irttp_disconnect_request(struct tsap_cb *self, struct sk_buff *userdata,
  *
  */
 void irttp_disconnect_indication(void *instance, void *sap, LM_REASON reason, 
-				 struct sk_buff *userdata) 
+				 struct sk_buff *skb) 
 {
 	struct tsap_cb *self;
 
@@ -1106,11 +1111,13 @@ void irttp_disconnect_indication(void *instance, void *sap, LM_REASON reason,
 	
 	self->connected = FALSE;
 	
-	if (!self->notify.disconnect_indication)
-		return;
-
-	self->notify.disconnect_indication(self->notify.instance, self, reason,
-					   userdata);
+	if (self->notify.disconnect_indication)
+		self->notify.disconnect_indication(self->notify.instance, 
+						   self, reason, skb);
+	else {
+		if (skb)
+			dev_kfree_skb(skb);
+	}
 }
 
 /*
@@ -1157,8 +1164,8 @@ void irttp_run_rx_queue(struct tsap_cb *self)
 	struct sk_buff *skb;
 	int more = 0;
 
-	IRDA_DEBUG(4, __FUNCTION__ "() send=%d,avail=%d,remote=%d\n", 
-	       self->send_credit, self->avail_credit, self->remote_credit);
+	IRDA_DEBUG(2, __FUNCTION__ "() send=%d,avail=%d,remote=%d\n", 
+		   self->send_credit, self->avail_credit, self->remote_credit);
 
 	if (irda_lock(&self->rx_queue_lock) == FALSE)
 		return;
@@ -1183,7 +1190,7 @@ void irttp_run_rx_queue(struct tsap_cb *self)
 		 * immediately. This can be requested by clients that
 		 * implements byte streams without any message boundaries
 		 */
-		if (self->rx_max_sdu_size == SAR_DISABLE) {
+		if (self->rx_max_sdu_size == TTP_SAR_DISABLE) {
 			irttp_do_data_indication(self, skb);
 			self->rx_sdu_size = 0;
 
@@ -1209,7 +1216,7 @@ void irttp_run_rx_queue(struct tsap_cb *self)
 		 *  This is the last fragment, so time to reassemble!
 		 */
 		if ((self->rx_sdu_size <= self->rx_max_sdu_size) ||
-		    (self->rx_max_sdu_size == SAR_UNBOUND)) 
+		    (self->rx_max_sdu_size == TTP_SAR_UNBOUND)) 
 		{
 			/* 
 			 * A little optimizing. Only queue the fragment if
@@ -1285,10 +1292,10 @@ static struct sk_buff *irttp_reassemble_skb(struct tsap_cb *self)
       	ASSERT(self != NULL, return NULL;);
 	ASSERT(self->magic == TTP_TSAP_MAGIC, return NULL;);
 
-	IRDA_DEBUG(4, __FUNCTION__ "(), self->rx_sdu_size=%d\n", 
-	      self->rx_sdu_size);
+	IRDA_DEBUG(2, __FUNCTION__ "(), self->rx_sdu_size=%d\n", 
+		   self->rx_sdu_size);
 
-	skb = dev_alloc_skb(self->rx_sdu_size);
+	skb = dev_alloc_skb(TTP_HEADER + self->rx_sdu_size);
 	if (!skb)
 		return NULL;
 
@@ -1308,11 +1315,12 @@ static struct sk_buff *irttp_reassemble_skb(struct tsap_cb *self)
 		
 		dev_kfree_skb(frag);
 	}
-	IRDA_DEBUG(4, __FUNCTION__ "(), frame len=%d\n", n);
-	/* Set the new length */
+	IRDA_DEBUG(2, __FUNCTION__ "(), frame len=%d\n", n);
 
-	IRDA_DEBUG(4, __FUNCTION__ "(), rx_sdu_size=%d\n", self->rx_sdu_size);
+	IRDA_DEBUG(2, __FUNCTION__ "(), rx_sdu_size=%d\n", self->rx_sdu_size);
 	ASSERT(n <= self->rx_sdu_size, return NULL;);
+
+	/* Set the new length */
 	skb_trim(skb, n);
 
 	self->rx_sdu_size = 0;
@@ -1331,7 +1339,7 @@ static void irttp_fragment_skb(struct tsap_cb *self, struct sk_buff *skb)
 	struct sk_buff *frag;
 	__u8 *frame;
 
-	IRDA_DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == TTP_TSAP_MAGIC, return;);
@@ -1340,22 +1348,9 @@ static void irttp_fragment_skb(struct tsap_cb *self, struct sk_buff *skb)
 	/*
 	 *  Split frame into a number of segments
 	 */
-	while (skb->len > 0) {
-		/*
-		 *  Instead of making the last segment, we just
-		 *  queue what is left of the original skb
-		 */
-		if (skb->len < self->max_seg_size) {
-			IRDA_DEBUG(4, __FUNCTION__ 
-			       "(), queuing last segment\n");
+	while (skb->len > self->max_seg_size) {
+		IRDA_DEBUG(2, __FUNCTION__  "(), fragmenting ...\n");
 
-			frame = skb_push(skb, TTP_HEADER);
-			frame[0] = 0x00; /* Clear more bit */
-			skb_queue_tail(&self->tx_queue, skb);
-			
-			return;
-		}
-		
 		/* Make new segment */
 		frag = dev_alloc_skb(self->max_seg_size+self->max_header_size);
 		if (!frag)
@@ -1363,19 +1358,28 @@ static void irttp_fragment_skb(struct tsap_cb *self, struct sk_buff *skb)
 
 		skb_reserve(frag, self->max_header_size);
 
-		/*
-		 *  Copy data from the original skb into this fragment. We
-		 *  first insert the TTP header with the more bit set
-		 */
-		frame = skb_put(frag, self->max_seg_size+TTP_HEADER);
+		/* Copy data from the original skb into this fragment. */
+		memcpy(skb_put(frag, self->max_seg_size), skb->data, 
+		       self->max_seg_size);
+
+		/* Insert TTP header, with the more bit set */
+		frame = skb_push(frag, TTP_HEADER);
 		frame[0] = TTP_MORE;
-		memcpy(frag->data+1, skb->data, self->max_seg_size);
 		
 		/* Hide the copied data from the original skb */
 		skb_pull(skb, self->max_seg_size);
-		
+
+		/* Queue fragment */
 		skb_queue_tail(&self->tx_queue, frag);
 	}
+	/* Queue what is left of the original skb */
+	IRDA_DEBUG(2, __FUNCTION__  "(), queuing last segment\n");
+	
+	frame = skb_push(skb, TTP_HEADER);
+	frame[0] = 0x00; /* Clear more bit */
+
+	/* Queue fragment */
+	skb_queue_tail(&self->tx_queue, skb);
 }
 
 /*
@@ -1422,7 +1426,7 @@ static void irttp_todo_expired(unsigned long data)
 	irttp_run_tx_queue(self);
 		
 	/*  Give avay some credits to peer?  */
-	if ((self->remote_credit < LOW_THRESHOLD) && 
+	if ((self->remote_credit < TTP_LOW_THRESHOLD) && 
 	    (self->avail_credit > 0) && (skb_queue_empty(&self->tx_queue)))
 	{
 		irttp_give_credit(self);
@@ -1477,7 +1481,7 @@ static void irttp_start_todo_timer(struct tsap_cb *self, int timeout)
 
 #ifdef CONFIG_PROC_FS
 /*
- * Function irttp_proc_read (buf, start, offset, len)
+ * Function irttp_proc_read (buf, start, offset, len, unused)
  *
  *    Give some info to the /proc file system
  */

@@ -286,6 +286,7 @@ static int sun_floppy_init(void)
 {
 	char state[128];
 	int tnode, fd_node, num_regs;
+	struct resource r;
 
 	use_virtual_dma = 1;
 	
@@ -322,12 +323,11 @@ static int sun_floppy_init(void)
 	num_regs = prom_getproperty(fd_node, "reg", (char *) fd_regs, sizeof(fd_regs));
 	num_regs = (num_regs / sizeof(fd_regs[0]));
 	prom_apply_obio_ranges(fd_regs, num_regs);
-	sun_fdc = (struct sun_flpy_controller *) sparc_alloc_io(fd_regs[0].phys_addr,
-								0x0,
-								fd_regs[0].reg_size,
-								"floppy",
-								fd_regs[0].which_io,
-								0x0);
+	memset(&r, 0, sizeof(r));
+	r.flags = fd_regs[0].which_io;
+	r.start = fd_regs[0].phys_addr;
+	sun_fdc = (struct sun_flpy_controller *)
+	    sbus_ioremap(&r, 0, fd_regs[0].reg_size, "floppy");
 
 	/* Last minute sanity check... */
 	if(sun_fdc->status_82072 == 0xff) {

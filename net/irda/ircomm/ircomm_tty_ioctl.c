@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Jun 10 14:39:09 1999
- * Modified at:   Sat Oct 30 12:50:41 1999
+ * Modified at:   Tue Dec 14 18:08:09 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -59,6 +59,8 @@ void ircomm_tty_change_speed(struct ircomm_tty_cb *self)
 	unsigned cflag, cval;
 	int baud;
 
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
+
 	if (!self->tty || !self->tty->termios || !self->ircomm)
 		return;
 
@@ -85,13 +87,13 @@ void ircomm_tty_change_speed(struct ircomm_tty_cb *self)
 	if (!baud)
 		baud = 9600;	/* B0 transition handled in rs_set_termios */
 
-	self->session.data_rate = baud;
+	self->settings.data_rate = baud;
 	ircomm_param_request(self, IRCOMM_DATA_RATE, FALSE);
 	
 	/* CTS flow control flag and modem status interrupts */
 	if (cflag & CRTSCTS) {
 		self->flags |= ASYNC_CTS_FLOW;
-		self->session.flow_control |= IRCOMM_RTS_CTS_IN;
+		/* self->settings.flow_control |= IRCOMM_RTS_CTS_IN; */
 	} else
 		self->flags &= ~ASYNC_CTS_FLOW;
 	
@@ -126,7 +128,7 @@ void ircomm_tty_change_speed(struct ircomm_tty_cb *self)
 			self->ignore_status_mask |= LSR_OE;
 	}
 #endif
-	self->session.data_format = cval;
+	self->settings.data_format = cval;
 
 	ircomm_param_request(self, IRCOMM_DATA_FORMAT, FALSE);
  	ircomm_param_request(self, IRCOMM_FLOW_CONTROL, TRUE);
@@ -146,6 +148,8 @@ void ircomm_tty_set_termios(struct tty_struct *tty,
 	struct ircomm_tty_cb *self = (struct ircomm_tty_cb *) tty->driver_data;
 	unsigned int cflag = tty->termios->c_cflag;
 
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
+
 	if ((cflag == old_termios->c_cflag) && 
 	    (RELEVANT_IFLAG(tty->termios->c_iflag) == 
 	     RELEVANT_IFLAG(old_termios->c_iflag)))
@@ -158,17 +162,17 @@ void ircomm_tty_set_termios(struct tty_struct *tty,
 	/* Handle transition to B0 status */
 	if ((old_termios->c_cflag & CBAUD) &&
 	    !(cflag & CBAUD)) {
-		self->session.dte &= ~(IRCOMM_DTR|IRCOMM_RTS);
+		self->settings.dte &= ~(IRCOMM_DTR|IRCOMM_RTS);
 		ircomm_param_request(self, IRCOMM_DTE, TRUE);
 	}
 	
 	/* Handle transition away from B0 status */
 	if (!(old_termios->c_cflag & CBAUD) &&
 	    (cflag & CBAUD)) {
-		self->session.dte |= IRCOMM_DTR;
+		self->settings.dte |= IRCOMM_DTR;
 		if (!(tty->termios->c_cflag & CRTSCTS) || 
 		    !test_bit(TTY_THROTTLED, &tty->flags)) {
-			self->session.dte |= IRCOMM_RTS;
+			self->settings.dte |= IRCOMM_RTS;
 		}
 		ircomm_param_request(self, IRCOMM_DTE, TRUE);
 	}
@@ -193,14 +197,14 @@ static int ircomm_tty_get_modem_info(struct ircomm_tty_cb *self,
 {
 	unsigned int result;
 
-	IRDA_DEBUG(1, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
-	result =  ((self->session.dte & IRCOMM_RTS) ? TIOCM_RTS : 0)
-		| ((self->session.dte & IRCOMM_DTR) ? TIOCM_DTR : 0)
-		| ((self->session.dce & IRCOMM_CD)  ? TIOCM_CAR : 0)
-		| ((self->session.dce & IRCOMM_RI)  ? TIOCM_RNG : 0)
-		| ((self->session.dce & IRCOMM_DSR) ? TIOCM_DSR : 0)
-		| ((self->session.dce & IRCOMM_CTS) ? TIOCM_CTS : 0);
+	result =  ((self->settings.dte & IRCOMM_RTS) ? TIOCM_RTS : 0)
+		| ((self->settings.dte & IRCOMM_DTR) ? TIOCM_DTR : 0)
+		| ((self->settings.dce & IRCOMM_CD)  ? TIOCM_CAR : 0)
+		| ((self->settings.dce & IRCOMM_RI)  ? TIOCM_RNG : 0)
+		| ((self->settings.dce & IRCOMM_DSR) ? TIOCM_DSR : 0)
+		| ((self->settings.dce & IRCOMM_CTS) ? TIOCM_CTS : 0);
 
 	return put_user(result, value);
 }
@@ -227,27 +231,27 @@ static int ircomm_tty_set_modem_info(struct ircomm_tty_cb *self,
 	if (error)
 		return error;
 
-	old_rts = self->session.dte & IRCOMM_RTS;
-	old_dtr = self->session.dte & IRCOMM_DTR;
+	old_rts = self->settings.dte & IRCOMM_RTS;
+	old_dtr = self->settings.dte & IRCOMM_DTR;
 
 	switch (cmd) {
 	case TIOCMBIS: 
 		if (arg & TIOCM_RTS) 
-			self->session.dte |= IRCOMM_RTS;
+			self->settings.dte |= IRCOMM_RTS;
 		if (arg & TIOCM_DTR)
-			self->session.dte |= IRCOMM_DTR;
+			self->settings.dte |= IRCOMM_DTR;
 		break;
 		
 	case TIOCMBIC:
 		if (arg & TIOCM_RTS)
-			self->session.dte &= ~IRCOMM_RTS;
+			self->settings.dte &= ~IRCOMM_RTS;
 		if (arg & TIOCM_DTR)
- 			self->session.dte &= ~IRCOMM_DTR;
+ 			self->settings.dte &= ~IRCOMM_DTR;
  		break;
 		
 	case TIOCMSET:
- 		self->session.dte = 
-			((self->session.dte & ~(IRCOMM_RTS | IRCOMM_DTR))
+ 		self->settings.dte = 
+			((self->settings.dte & ~(IRCOMM_RTS | IRCOMM_DTR))
 			 | ((arg & TIOCM_RTS) ? IRCOMM_RTS : 0)
 			 | ((arg & TIOCM_DTR) ? IRCOMM_DTR : 0));
 		break;
@@ -256,11 +260,11 @@ static int ircomm_tty_set_modem_info(struct ircomm_tty_cb *self,
 		return -EINVAL;
 	}
 	
-	if ((self->session.dte & IRCOMM_RTS) != old_rts)
-		self->session.dte |= IRCOMM_DELTA_RTS;
+	if ((self->settings.dte & IRCOMM_RTS) != old_rts)
+		self->settings.dte |= IRCOMM_DELTA_RTS;
 
-	if ((self->session.dte & IRCOMM_DTR) != old_dtr)
-		self->session.dte |= IRCOMM_DELTA_DTR;
+	if ((self->settings.dte & IRCOMM_DTR) != old_dtr)
+		self->settings.dte |= IRCOMM_DELTA_DTR;
 
 	ircomm_param_request(self, IRCOMM_DTE, TRUE);
 	
@@ -281,12 +285,12 @@ static int ircomm_tty_get_serial_info(struct ircomm_tty_cb *self,
 	if (!retinfo)
 		return -EFAULT;
 
-	IRDA_DEBUG(1, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
 	memset(&info, 0, sizeof(info));
 	info.line = self->line;
 	info.flags = self->flags;
-	info.baud_base = self->session.data_rate;
+	info.baud_base = self->settings.data_rate;
 	info.close_delay = self->close_delay;
 	info.closing_wait = self->closing_wait;
 
@@ -310,29 +314,33 @@ static int ircomm_tty_get_serial_info(struct ircomm_tty_cb *self,
  *    
  *
  */
-static int ircomm_tty_set_serial_info(struct ircomm_tty_cb *tty,
+static int ircomm_tty_set_serial_info(struct ircomm_tty_cb *self,
 				      struct serial_struct *new_info)
 {
 #if 0
 	struct serial_struct new_serial;
-	struct ircomm_tty_cb old_driver;
+	struct ircomm_tty_cb old_state, *state;
 
-	IRDA_DEBUG(2, __FUNCTION__ "()\n");
+	IRDA_DEBUG(0, __FUNCTION__ "()\n");
 
 	if (copy_from_user(&new_serial,new_info,sizeof(new_serial)))
 		return -EFAULT;
 
-	old_driver = *driver;
+
+	state = self
+	old_state = *self;
   
 	if (!capable(CAP_SYS_ADMIN)) {
-		if ((new_serial.baud_base != driver->comm->data_rate) ||
-		    (new_serial.close_delay != driver->close_delay) ||
+		if ((new_serial.baud_base != state->settings.data_rate) ||
+		    (new_serial.close_delay != state->close_delay) ||
 		    ((new_serial.flags & ~ASYNC_USR_MASK) !=
-		     (driver->flags & ~ASYNC_USR_MASK)))
+		     (self->flags & ~ASYNC_USR_MASK)))
 			return -EPERM;
-		driver->flags = ((driver->flags & ~ASYNC_USR_MASK) |
+		state->flags = ((state->flags & ~ASYNC_USR_MASK) |
 				 (new_serial.flags & ASYNC_USR_MASK));
-		driver->custom_divisor = new_serial.custom_divisor;
+		self->flags = ((self->flags & ~ASYNC_USR_MASK) |
+			       (new_serial.flags & ASYNC_USR_MASK));
+		/* self->custom_divisor = new_serial.custom_divisor; */
 		goto check_and_exit;
 	}
 
@@ -341,15 +349,14 @@ static int ircomm_tty_set_serial_info(struct ircomm_tty_cb *tty,
 	 * At this point, we start making changes.....
 	 */
 
-	if (self->session.data_rate != new_serial.baud_base) {
-		self->session.data_rate.data_rate = new_serial.baud_base;
-		if (driver->comm->state == IRCOMM_CONN)
-			ircomm_control_request(driver->comm, DATA_RATE);
+	if (self->settings.data_rate != new_serial.baud_base) {
+		self->settings.data_rate = new_serial.baud_base;
+		ircomm_param_request(self, IRCOMM_DATA_RATE, TRUE);
 	}
 
-	driver->close_delay = new_serial.close_delay * HZ/100;
-	driver->closing_wait = new_serial.closing_wait * HZ/100;
-	driver->custom_divisor = new_serial.custom_divisor;
+	self->close_delay = new_serial.close_delay * HZ/100;
+	self->closing_wait = new_serial.closing_wait * HZ/100;
+	/* self->custom_divisor = new_serial.custom_divisor; */
 
 	self->flags = ((self->flags & ~ASYNC_FLAGS) |
 		       (new_serial.flags & ASYNC_FLAGS));
@@ -358,7 +365,7 @@ static int ircomm_tty_set_serial_info(struct ircomm_tty_cb *tty,
  check_and_exit:
 
 	if (self->flags & ASYNC_INITIALIZED) {
-		if (((old_driver.flags & ASYNC_SPD_MASK) !=
+		if (((old_state.flags & ASYNC_SPD_MASK) !=
 		     (self->flags & ASYNC_SPD_MASK)) ||
 		    (old_driver.custom_divisor != driver->custom_divisor)) {
 			if ((driver->flags & ASYNC_SPD_MASK) == ASYNC_SPD_HI)
@@ -387,6 +394,8 @@ int ircomm_tty_ioctl(struct tty_struct *tty, struct file *file,
 {
 	struct ircomm_tty_cb *self = (struct ircomm_tty_cb *) tty->driver_data;
 	int ret = 0;
+
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
 	if ((cmd != TIOCGSERIAL) && (cmd != TIOCSSERIAL) &&
 	    (cmd != TIOCSERCONFIG) && (cmd != TIOCSERGSTRUCT) &&

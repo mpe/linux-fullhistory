@@ -11,17 +11,17 @@
 #define _P9100_H_
 
 /* P9100 control registers */
-#define P9100_SYSCTL_OFF 0x0
-#define P9100_VIDEOCTL_OFF 0x100
-#define P9100_VRAMCTL_OFF 0x180
-#define P9100_RAMDAC_OFF 0x200
-#define P9100_VIDEOCOPROC_OFF 0x400
+#define P9100_SYSCTL_OFF	0x0UL
+#define P9100_VIDEOCTL_OFF	0x100UL
+#define P9100_VRAMCTL_OFF 	0x180UL
+#define P9100_RAMDAC_OFF 	0x200UL
+#define P9100_VIDEOCOPROC_OFF 	0x400UL
 
 /* P9100 command registers */
-#define P9100_CMD_OFF 0x0
+#define P9100_CMD_OFF 0x0UL
 
 /* P9100 framebuffer memory */
-#define P9100_FB_OFF 0x0
+#define P9100_FB_OFF 0x0UL
 
 
 /* 3 bits: 2=8bpp 3=16bpp 5=32bpp 7=24bpp */

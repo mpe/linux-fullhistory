@@ -1,4 +1,4 @@
-/* $Id: ashrdi3.S,v 1.3 1996/09/07 23:18:10 davem Exp $
+/* $Id: ashrdi3.S,v 1.4 1999/11/19 04:11:49 davem Exp $
  * ashrdi3.S:	The filesystem code creates all kinds of references to
  *              this little routine on the sparc with gcc.
  *
@@ -7,7 +7,9 @@
 
 #include <asm/cprefix.h>
 
-		.globl C_LABEL(__ashrdi3)
+	.text
+	.align	4
+	.globl C_LABEL(__ashrdi3)
 C_LABEL(__ashrdi3):
 	tst	%o2
 	be	3f

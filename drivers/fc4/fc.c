@@ -54,29 +54,29 @@
 #endif
 
 #ifdef __sparc__
-static inline void *fc_dma_alloc(long size, char *name, dma_handle *dma)
+static inline void *fc_dma_alloc(long size, dma_handle *dma, fc_channel *fc)
 {
-	return (void *) sparc_dvma_malloc (size, name, dma);
+	return sbus_alloc_consistant(fc->dev, size, dma);
 }
 
-static inline dma_handle fc_sync_dma_entry(void *buf, int len, fc_channel *fc)
+static inline dma_handle fc_sync_dma_entry(void *buf, long len, fc_channel *fc)
 {
-	return mmu_get_scsi_one (buf, len, fc->dev->my_bus);
+	return sbus_map_single(fc->dev, buf, len);
 }
 
 static inline void fc_sync_dma_exit(dma_handle dmh, long size, fc_channel *fc)
 {
-	mmu_release_scsi_one (dmh, size, fc->dev->my_bus);
+	sbus_unmap_single(fc->dev, dmh, size);
 }
 
 static inline void fc_sync_dma_entry_sg(struct scatterlist *list, int count, fc_channel *fc)
 {
-	mmu_get_scsi_sgl((struct mmu_sglist *)list, count - 1, fc->dev->my_bus);
+	sbus_map_sg(fc->dev, list, count);
 }
 
 static inline void fc_sync_dma_exit_sg(struct scatterlist *list, int count, fc_channel *fc)
 {
-	mmu_release_scsi_sgl ((struct mmu_sglist *)list, count - 1, fc->dev->my_bus);
+	sbus_unmap_sg(fc->dev, list, count);
 }
 #else
 #error Port this
@@ -352,7 +352,7 @@ void fcp_register(fc_channel *fc, u8 type, int unregister)
 		if (!unregister) {
 			fc->scsi_cmd_pool = 
 				(fcp_cmd *) fc_dma_alloc (slots * (sizeof (fcp_cmd) + fc->rsp_size), 
-							  "FCP SCSI cmd & rsp queues", &fc->dma_scsi_cmd);
+							  &fc->dma_scsi_cmd, fc);
 			fc->scsi_rsp_pool = (char *)(fc->scsi_cmd_pool + slots);
 			fc->dma_scsi_rsp = fc->dma_scsi_cmd + slots * sizeof (fcp_cmd);
 			fc->scsi_bitmap_end = (slots + 63) & ~63;
@@ -555,7 +555,7 @@ int fcp_initialize(fc_channel *fcchain, int count)
 	l->timer.function = fcp_login_timeout;
 	l->timer.data = (unsigned long)l;
 	atomic_set (&l->todo, count);
-	l->logi = kmalloc (count * 3 * sizeof(logi), GFP_DMA);
+	l->logi = kmalloc (count * 3 * sizeof(logi), GFP_KERNEL);
 	l->fcmds = kmalloc (count * sizeof(fcp_cmnd), GFP_KERNEL);
 	if (!l->logi || !l->fcmds) {
 		if (l->logi) kfree (l->logi);
@@ -821,7 +821,7 @@ static int fcp_scsi_queue_it(fc_channel *fc, Scsi_Cmnd *SCpnt, fcp_cmnd *fcmd, i
 				if (SCpnt->use_sg > 1) printk ("%s: SG for use_sg > 1 not handled yet\n", fc->name);
 				fc_sync_dma_entry_sg (sg, SCpnt->use_sg, fc);
 				fcmd->data = sg->dvma_address;
-				cmd->fcp_data_len = sg->length;
+				cmd->fcp_data_len = sg->dvma_length;
 			}
 		}
 		memcpy (cmd->fcp_cdb, SCpnt->cmnd, SCpnt->cmd_len);
@@ -1103,7 +1103,7 @@ int fc_do_plogi(fc_channel *fc, unsigned char alpa, fc_wwn *node, fc_wwn *nport)
 	logi *l;
 	int status;
 
-	l = (logi *)kmalloc(2 * sizeof(logi), GFP_DMA);
+	l = (logi *)kmalloc(2 * sizeof(logi), GFP_KERNEL);
 	if (!l) return -ENOMEM;
 	memset(l, 0, 2 * sizeof(logi));
 	l->code = LS_PLOGI;
@@ -1138,7 +1138,7 @@ int fc_do_prli(fc_channel *fc, unsigned char alpa)
 	prli *p;
 	int status;
 
-	p = (prli *)kmalloc(2 * sizeof(prli), GFP_DMA);
+	p = (prli *)kmalloc(2 * sizeof(prli), GFP_KERNEL);
 	if (!p) return -ENOMEM;
 	memset(p, 0, 2 * sizeof(prli));
 	p->code = LS_PRLI;

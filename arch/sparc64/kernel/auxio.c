@@ -20,22 +20,21 @@
 #include <asm/fhc.h>
 
 /* Probe and map in the Auxiliary I/O register */
-unsigned char *auxio_register;
+unsigned long auxio_register = 0;
 
 void __init auxio_probe(void)
 {
-        struct linux_sbus *bus;
-        struct linux_sbus_device *sdev = 0;
-	struct linux_prom_registers auxregs[1];
+        struct sbus_bus *sbus;
+        struct sbus_dev *sdev = 0;
 
-        for_each_sbus(bus) {
-                for_each_sbusdev(sdev, bus) {
-                        if(!strcmp(sdev->prom_name, "auxio")) {
-				break;
-                        }
+        for_each_sbus(sbus) {
+                for_each_sbusdev(sdev, sbus) {
+                        if(!strcmp(sdev->prom_name, "auxio"))
+				goto found_sdev;
                 }
         }
 
+found_sdev:
 	if (!sdev) {
 #ifdef CONFIG_PCI
 		struct linux_ebus *ebus;
@@ -57,19 +56,15 @@ void __init auxio_probe(void)
 		}
 #endif
 		if(central_bus) {
-			auxio_register = NULL;
+			auxio_register = 0UL;
 			return;
 		}
 		prom_printf("Cannot find auxio node, cannot continue...\n");
 		prom_halt();
 	}
 
-	prom_getproperty(sdev->prom_node, "reg", (char *) auxregs, sizeof(auxregs));
-	prom_apply_sbus_ranges(sdev->my_bus, auxregs, 0x1, sdev);
 	/* Map the register both read and write */
-	auxio_register = (unsigned char *) sparc_alloc_io(auxregs[0].phys_addr, 0,
-							  auxregs[0].reg_size,
-							  "auxiliaryIO",
-							  auxregs[0].which_io, 0x0);
+	auxio_register = sbus_ioremap(&sdev->resource[0], 0,
+				      sdev->reg_addrs[0].reg_size, "auxiliaryIO");
 	TURN_ON_LED;
 }

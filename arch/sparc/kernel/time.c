@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.46 1999/08/31 13:11:26 anton Exp $
+/* $Id: time.c,v 1.49 1999/11/17 07:34:07 zaitcev Exp $
  * linux/arch/sparc/kernel/time.c
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -26,6 +26,7 @@
 #include <linux/timex.h>
 #include <linux/init.h>
 #include <linux/pci.h>
+#include <linux/ioport.h>
 
 #include <asm/oplib.h>
 #include <asm/segment.h>
@@ -38,6 +39,7 @@
 #include <asm/machines.h>
 #include <asm/sun4paddr.h>
 #include <asm/page.h>
+#include <asm/pcic.h>
 
 extern rwlock_t xtime_lock;
 
@@ -207,13 +209,14 @@ static __inline__ void sun4_clock_probe(void)
 {
 #ifdef CONFIG_SUN4
 	int temp;
+	struct resource r;
 
+	memset(&r, 0, sizeof(r));
 	if( idprom->id_machtype == (SM_SUN4 | SM_4_330) ) {
 		sp_clock_typ = MSTK48T02;
-		mstk48t02_regs = (unsigned long) 
-				sparc_alloc_io(sun4_clock_physaddr, 0,
-				       sizeof(struct mostek48t02),
-				       "clock", 0x0, 0x0);
+		r.start = sun4_clock_physaddr;
+		mstk48t02_regs = sbus_ioremap(&r, 0,
+				       sizeof(struct mostek48t02), 0);
 		mstk48t08_regs = 0;  /* To catch weirdness */
 		intersil_clock = 0;  /* just in case */
 
@@ -224,10 +227,9 @@ static __inline__ void sun4_clock_probe(void)
 		/* intersil setup code */
 		printk("Clock: INTERSIL at %8x ",sun4_clock_physaddr);
 		sp_clock_typ = INTERSIL;
+		r.start = sun4_clock_physaddr;
 		intersil_clock = (struct intersil *) 
-			sparc_alloc_io(sun4_clock_physaddr, 0,
-				       sizeof(*intersil_clock),
-			       	       "clock", 0x0, 0x0);
+		    sparc_ioremap(&r, 0, sizeof(*intersil_clock), "intersil");
 		mstk48t02_regs = 0;  /* just be sure */
 		mstk48t08_regs = 0;  /* ditto */
 		/* initialise the clock */
@@ -256,8 +258,10 @@ static __inline__ void clock_probe(void)
 	struct linux_prom_registers clk_reg[2];
 	char model[128];
 	register int node, cpuunit, bootbus;
+	struct resource r;
 
 	cpuunit = bootbus = 0;
+	memset(&r, 0, sizeof(r));
 
 	/* Determine the correct starting PROM node for the probe. */
 	node = prom_getchild(prom_root_node);
@@ -297,10 +301,10 @@ static __inline__ void clock_probe(void)
 		else
 			prom_apply_obio_ranges(clk_reg, 1);
 		/* Map the clock register io area read-only */
-		mstk48t02_regs = (unsigned long) 
-			sparc_alloc_io(clk_reg[0].phys_addr,
-				       (void *) 0, sizeof(struct mostek48t02),
-				       "clock", clk_reg[0].which_io, 0x0);
+		r.flags = clk_reg[0].which_io;
+		r.start = clk_reg[0].phys_addr;
+		mstk48t02_regs = sbus_ioremap(&r, 0,
+		    sizeof(struct mostek48t02), "mk48t02");
 		mstk48t08_regs = 0;  /* To catch weirdness */
 	} else if (strcmp(model, "mk48t08") == 0) {
 		sp_clock_typ = MSTK48T08;
@@ -314,10 +318,11 @@ static __inline__ void clock_probe(void)
 		else
 			prom_apply_obio_ranges(clk_reg, 1);
 		/* Map the clock register io area read-only */
-		mstk48t08_regs = (struct mostek48t08 *)
-			sparc_alloc_io(clk_reg[0].phys_addr,
-				       (void *) 0, sizeof(*mstk48t08_regs),
-				       "clock", clk_reg[0].which_io, 0x0);
+		/* XXX r/o attribute is somewhere in r.flags */
+		r.flags = clk_reg[0].which_io;
+		r.start = clk_reg[0].phys_addr;
+		mstk48t08_regs = (struct mostek48t08 *) sbus_ioremap(&r, 0,
+		    sizeof(struct mostek48t08), "mk48t08");
 
 		mstk48t02_regs = (unsigned long)&mstk48t08_regs->regs;
 	} else {
@@ -420,7 +425,7 @@ void __init time_init(void)
 {
 #ifdef CONFIG_PCI
 	extern void pci_time_init(void);
-	if (pci_present()) {
+	if (pcic_present()) {
 		pci_time_init();
 		return;
 	}

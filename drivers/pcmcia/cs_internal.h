@@ -120,7 +120,7 @@ typedef struct config_t {
 
 typedef struct socket_info_t {
     spinlock_t			lock;
-    ss_entry_t			ss_entry;
+    struct pccard_operations *	ss_entry;
     u_int			sock;
     socket_state_t		socket;
     socket_cap_t		cap;

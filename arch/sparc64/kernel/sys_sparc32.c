@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.118 1999/08/30 10:01:15 davem Exp $
+/* $Id: sys_sparc32.c,v 1.125 1999/12/20 05:02:15 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -12,6 +12,7 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/fs.h> 
+#include <linux/mm.h> 
 #include <linux/file.h> 
 #include <linux/signal.h>
 #include <linux/utime.h>
@@ -40,6 +41,8 @@
 #include <linux/poll.h>
 #include <linux/personality.h>
 #include <linux/stat.h>
+#include <linux/filter.h>
+#include <linux/highmem.h>
 
 #include <asm/types.h>
 #include <asm/ipc.h>
@@ -1125,8 +1128,10 @@ asmlinkage int sys32_select(int n, u32 *inp, u32 *outp, u32 *exp, u32 tvp_x)
 	}
 
 	ret = -EINVAL;
-	if (n < 0 || n > KFDS_NR)
+	if (n < 0)
 		goto out_nofds;
+	if (n > current->files->max_fdset)
+		n = current->files->max_fdset;
 
 	/*
 	 * We need 6 bitmaps (in/out/ex for both incoming and outgoing),
@@ -1186,84 +1191,157 @@ out_nofds:
 	return ret;
 }
 
-static inline int putstat(struct stat32 *ubuf, struct stat *kbuf)
+static int cp_new_stat32(struct inode *inode, struct stat32 *statbuf)
 {
+	unsigned long ino, blksize, blocks;
+	kdev_t dev, rdev;
+	umode_t mode;
+	nlink_t nlink;
+	uid_t uid;
+	gid_t gid;
+	off_t size;
+	time_t atime, mtime, ctime;
 	int err;
-	
-	err = put_user (kbuf->st_dev, &ubuf->st_dev);
-	err |= __put_user (kbuf->st_ino, &ubuf->st_ino);
-	err |= __put_user (kbuf->st_mode, &ubuf->st_mode);
-	err |= __put_user (kbuf->st_nlink, &ubuf->st_nlink);
-	err |= __put_user (kbuf->st_uid, &ubuf->st_uid);
-	err |= __put_user (kbuf->st_gid, &ubuf->st_gid);
-	err |= __put_user (kbuf->st_rdev, &ubuf->st_rdev);
-	err |= __put_user (kbuf->st_size, &ubuf->st_size);
-	err |= __put_user (kbuf->st_atime, &ubuf->st_atime);
-	err |= __put_user (kbuf->st_mtime, &ubuf->st_mtime);
-	err |= __put_user (kbuf->st_ctime, &ubuf->st_ctime);
-	err |= __put_user (kbuf->st_blksize, &ubuf->st_blksize);
-	err |= __put_user (kbuf->st_blocks, &ubuf->st_blocks);
+
+	/* Stream the loads of inode data into the load buffer,
+	 * then we push it all into the store buffer below.  This
+	 * should give optimal cache performance.
+	 */
+	ino = inode->i_ino;
+	dev = inode->i_dev;
+	mode = inode->i_mode;
+	nlink = inode->i_nlink;
+	uid = inode->i_uid;
+	gid = inode->i_gid;
+	rdev = inode->i_rdev;
+	size = inode->i_size;
+	atime = inode->i_atime;
+	mtime = inode->i_mtime;
+	ctime = inode->i_ctime;
+	blksize = inode->i_blksize;
+	blocks = inode->i_blocks;
+
+	err  = put_user(kdev_t_to_nr(dev), &statbuf->st_dev);
+	err |= put_user(ino, &statbuf->st_ino);
+	err |= put_user(mode, &statbuf->st_mode);
+	err |= put_user(nlink, &statbuf->st_nlink);
+	err |= put_user(uid, &statbuf->st_uid);
+	err |= put_user(gid, &statbuf->st_gid);
+	err |= put_user(kdev_t_to_nr(rdev), &statbuf->st_rdev);
+	err |= put_user(size, &statbuf->st_size);
+	err |= put_user(atime, &statbuf->st_atime);
+	err |= put_user(0, &statbuf->__unused1);
+	err |= put_user(mtime, &statbuf->st_mtime);
+	err |= put_user(0, &statbuf->__unused2);
+	err |= put_user(ctime, &statbuf->st_ctime);
+	err |= put_user(0, &statbuf->__unused3);
+	if (blksize) {
+		err |= put_user(blksize, &statbuf->st_blksize);
+		err |= put_user(blocks, &statbuf->st_blocks);
+	} else {
+		unsigned int tmp_blocks;
+
+#define D_B   7
+#define I_B   (BLOCK_SIZE / sizeof(unsigned short))
+		tmp_blocks = (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+		if (tmp_blocks > D_B) {
+			unsigned int indirect;
+
+			indirect = (tmp_blocks - D_B + I_B - 1) / I_B;
+			tmp_blocks += indirect;
+			if (indirect > 1) {
+				indirect = (indirect - 1 + I_B - 1) / I_B;
+				tmp_blocks += indirect;
+				if (indirect > 1)
+					tmp_blocks++;
+			}
+		}
+		err |= put_user(BLOCK_SIZE, &statbuf->st_blksize);
+		err |= put_user((BLOCK_SIZE / 512) * tmp_blocks, &statbuf->st_blocks);
+#undef D_B
+#undef I_B
+	}
+	err |= put_user(0, &statbuf->__unused4[0]);
+	err |= put_user(0, &statbuf->__unused4[1]);
+
 	return err;
 }
 
-extern asmlinkage int sys_newstat(char * filename, struct stat * statbuf);
-
 asmlinkage int sys32_newstat(char * filename, struct stat32 *statbuf)
 {
-	int ret;
-	struct stat s;
-	char *filenam;
-	mm_segment_t old_fs = get_fs();
-	
-	filenam = getname32 (filename);
-	ret = PTR_ERR(filenam);
-	if (!IS_ERR(filenam)) {
-		set_fs (KERNEL_DS);
-		ret = sys_newstat(filenam, &s);
-		set_fs (old_fs);
-		putname (filenam);
-		if (putstat (statbuf, &s))
-			return -EFAULT;
-	}
-	return ret;
-}
+	struct dentry *dentry;
+	int error;
 
-extern asmlinkage int sys_newlstat(char * filename, struct stat * statbuf);
+	lock_kernel();
+	dentry = namei(filename);
+
+	error = PTR_ERR(dentry);
+	if (!IS_ERR(dentry)) {
+		struct inode *inode = dentry->d_inode;
+
+		if (inode->i_op &&
+		    inode->i_op->revalidate)
+			error = inode->i_op->revalidate(dentry);
+		else
+			error = 0;
+		if (!error)
+			error = cp_new_stat32(inode, statbuf);
+
+		dput(dentry);
+	}
+	unlock_kernel();
+	return error;
+}
 
 asmlinkage int sys32_newlstat(char * filename, struct stat32 *statbuf)
 {
-	int ret;
-	struct stat s;
-	char *filenam;
-	mm_segment_t old_fs = get_fs();
-	
-	filenam = getname32 (filename);
-	ret = PTR_ERR(filenam);
-	if (!IS_ERR(filenam)) {
-		set_fs (KERNEL_DS);
-		ret = sys_newlstat(filenam, &s);
-		set_fs (old_fs);
-		putname (filenam);
-		if (putstat (statbuf, &s))
-			return -EFAULT;
-	}
-	return ret;
-}
+	struct dentry *dentry;
+	int error;
 
-extern asmlinkage int sys_newfstat(unsigned int fd, struct stat * statbuf);
+	lock_kernel();
+	dentry = lnamei(filename);
+
+	error = PTR_ERR(dentry);
+	if (!IS_ERR(dentry)) {
+		struct inode *inode = dentry->d_inode;
+
+		if (inode->i_op &&
+		    inode->i_op->revalidate)
+			error = inode->i_op->revalidate(dentry);
+		else
+			error = 0;
+		if (!error)
+			error = cp_new_stat32(inode, statbuf);
+
+		dput(dentry);
+	}
+	unlock_kernel();
+	return error;
+}
 
 asmlinkage int sys32_newfstat(unsigned int fd, struct stat32 *statbuf)
 {
-	int ret;
-	struct stat s;
-	mm_segment_t old_fs = get_fs();
-	
-	set_fs (KERNEL_DS);
-	ret = sys_newfstat(fd, &s);
-	set_fs (old_fs);
-	if (putstat (statbuf, &s))
-		return -EFAULT;
-	return ret;
+	struct file *f;
+	int err = -EBADF;
+
+	lock_kernel();
+	f = fget(fd);
+	if (f) {
+		struct dentry *dentry = f->f_dentry;
+		struct inode *inode = dentry->d_inode;
+
+		if (inode->i_op &&
+		    inode->i_op->revalidate)
+			err = inode->i_op->revalidate(dentry);
+		else
+			err = 0;
+		if (!err)
+			err = cp_new_stat32(inode, statbuf);
+
+		fput(f);
+	}
+	unlock_kernel();
+	return err;
 }
 
 extern asmlinkage int sys_sysfs(int option, unsigned long arg1, unsigned long arg2);
@@ -1912,8 +1990,8 @@ asmlinkage int sys32_setgroups(int gidsetsize, __kernel_gid_t32 *grouplist)
 #define RESOURCE32(x) ((x > RLIM_INFINITY32) ? RLIM_INFINITY32 : x)
 
 struct rlimit32 {
-	s32	rlim_cur;
-	s32	rlim_max;
+	u32	rlim_cur;
+	u32	rlim_max;
 };
 
 extern asmlinkage int sys_getrlimit(unsigned int resource, struct rlimit *rlim);
@@ -2523,6 +2601,48 @@ out:
 	return len;
 }
 
+extern asmlinkage int sys_setsockopt(int fd, int level, int optname,
+				     char *optval, int optlen);
+
+asmlinkage int sys32_setsockopt(int fd, int level, int optname,
+				char *optval, int optlen)
+{
+	if (optname == SO_ATTACH_FILTER) {
+		struct sock_fprog32 {
+			__u16 len;
+			__u32 filter;
+		} *fprog32 = (struct sock_fprog32 *)optval;
+		struct sock_fprog kfprog;
+		struct sock_filter *kfilter;
+		unsigned int fsize;
+		mm_segment_t old_fs;
+		__u32 uptr;
+		int ret;
+
+		if (get_user(kfprog.len, &fprog32->len) ||
+		    __get_user(uptr, &fprog32->filter))
+			return -EFAULT;
+		kfprog.filter = (struct sock_filter *)A(uptr);
+		fsize = kfprog.len * sizeof(struct sock_filter);
+		kfilter = (struct sock_filter *)kmalloc(fsize, GFP_KERNEL);
+		if (kfilter == NULL)
+			return -ENOMEM;
+		if (copy_from_user(kfilter, kfprog.filter, fsize)) {
+			kfree(kfilter);
+			return -EFAULT;
+		}
+		kfprog.filter = kfilter;
+		old_fs = get_fs();
+		set_fs(KERNEL_DS);
+		ret = sys_setsockopt(fd, level, optname,
+				     (char *)&kfprog, sizeof(kfprog));
+		set_fs(old_fs);
+		kfree(kfilter);
+		return ret;
+	}
+	return sys_setsockopt(fd, level, optname, optval, optlen);
+}
+
 /* Argument list sizes for sys_socketcall */
 #define AL(x) ((x) * sizeof(u32))
 static unsigned char nargs[18]={AL(0),AL(3),AL(3),AL(3),AL(2),AL(3),
@@ -2541,8 +2661,6 @@ extern asmlinkage int sys32_sendto(int fd, u32 buff, __kernel_size_t32 len,
 extern asmlinkage int sys_recv(int fd, void *ubuf, size_t size, unsigned flags);
 extern asmlinkage int sys32_recvfrom(int fd, u32 ubuf, __kernel_size_t32 size,
 				     unsigned flags, u32 addr, u32 addr_len);
-extern asmlinkage int sys_setsockopt(int fd, int level, int optname,
-				     char *optval, int optlen);
 extern asmlinkage int sys32_getsockopt(int fd, int level, int optname,
 				       u32 optval, u32 optlen);
 
@@ -2593,7 +2711,7 @@ asmlinkage int sys32_socketcall(int call, u32 *args)
 		case SYS_SHUTDOWN:
 			return sys_shutdown(a0,a1);
 		case SYS_SETSOCKOPT:
-			return sys_setsockopt(a0, a1, a[2], (char *)A(a[3]), a[4]);
+			return sys32_setsockopt(a0, a1, a[2], (char *)A(a[3]), a[4]);
 		case SYS_GETSOCKOPT:
 			return sys32_getsockopt(a0, a1, a[2], a[3], a[4]);
 		case SYS_SENDMSG:
@@ -2727,8 +2845,9 @@ static int copy_strings32(int argc, u32 * argv, struct linux_binprm *bprm)
 
 		if (get_user(str, argv + argc) ||
 		    !str ||
-		    !(len = strlen_user((char *)A(str))))
+		    !(len = strnlen_user((char *)A(str), bprm->p)))
 			return -EFAULT;
+
 		if (bprm->p < len)
 			return -E2BIG;
 
@@ -2736,20 +2855,38 @@ static int copy_strings32(int argc, u32 * argv, struct linux_binprm *bprm)
 
 		pos = bprm->p;
 		while (len) {
-			char *pag;
-			int offset, bytes_to_copy;
+			char *kaddr;
+			struct page *page;
+			int offset, bytes_to_copy, new, err;
 
 			offset = pos % PAGE_SIZE;
-			if (!(pag = (char *) bprm->page[pos/PAGE_SIZE]) &&
-			    !(pag = (char *) bprm->page[pos/PAGE_SIZE] =
-			      (unsigned long *) get_free_page(GFP_USER)))
-				return -ENOMEM;
+			page = bprm->page[pos / PAGE_SIZE];
+			new = 0;
+			if (!page) {
+				page = alloc_page(GFP_USER);
+				bprm->page[pos / PAGE_SIZE] = page;
+				if (!page)
+					return -ENOMEM;
+				new = 1;
+			}
+			kaddr = (char *)kmap(page);
 
+			if (new && offset)
+				memset(kaddr, 0, offset);
 			bytes_to_copy = PAGE_SIZE - offset;
-			if (bytes_to_copy > len)
+			if (bytes_to_copy > len) {
 				bytes_to_copy = len;
+				if (new)
+					memset(kaddr+offset+len, 0,
+					       PAGE_SIZE-offset-len);
+			}
 
-			if (copy_from_user(pag + offset, (char *)A(str), bytes_to_copy))
+			err = copy_from_user(kaddr + offset, (char *)A(str),
+					     bytes_to_copy);
+			flush_page_to_ram(page);
+			kunmap((unsigned long)kaddr);
+
+			if (err)
 				return -EFAULT;
 
 			pos += bytes_to_copy;
@@ -2772,8 +2909,7 @@ do_execve32(char * filename, u32 * argv, u32 * envp, struct pt_regs * regs)
 	int i;
 
 	bprm.p = PAGE_SIZE*MAX_ARG_PAGES-sizeof(void *);
-	for (i=0 ; i<MAX_ARG_PAGES ; i++)	/* clear page-table */
-		bprm.page[i] = 0;
+	memset(bprm.page, 0, MAX_ARG_PAGES * sizeof(bprm.page[0]));
 
 	dentry = open_namei(filename, 0, 0);
 	retval = PTR_ERR(dentry);
@@ -2822,7 +2958,8 @@ out:
 		dput(bprm.dentry);
 
 	for (i=0 ; i<MAX_ARG_PAGES ; i++)
-		free_page(bprm.page[i]);
+		if (bprm.page[i])
+			__free_page(bprm.page[i]);
 
 	return retval;
 }

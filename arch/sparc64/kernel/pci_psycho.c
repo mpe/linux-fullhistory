@@ -1,9 +1,9 @@
-/* $Id: pci_psycho.c,v 1.4 1999/09/05 09:33:36 ecd Exp $
+/* $Id: pci_psycho.c,v 1.7 1999/12/17 12:31:57 jj Exp $
  * pci_psycho.c: PSYCHO/U2P specific PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@caipfs.rutgers.edu)
  * Copyright (C) 1998, 1999 Eddie C. Dost   (ecd@skynet.be)
- * Copyright (C) 1999 Jakub Jelinek   (jj@ultra.linux.cz)
+ * Copyright (C) 1999 Jakub Jelinek   (jakub@redhat.com)
  */
 
 #include <linux/kernel.h>
@@ -380,7 +380,7 @@ static unsigned int __init psycho_irq_build(struct pci_controller_info *p,
 					    unsigned int ino)
 {
 	struct ino_bucket *bucket;
-	volatile unsigned int *imap, *iclr;
+	unsigned long imap, iclr;
 	unsigned long imap_off, iclr_off;
 	int pil, inofixup = 0;
 
@@ -399,12 +399,12 @@ static unsigned int __init psycho_irq_build(struct pci_controller_info *p,
 
 	/* Now build the IRQ bucket. */
 	pil = psycho_ino_to_pil(pdev, ino);
-	imap = (volatile unsigned int *)__va(p->controller_regs + imap_off);
-	imap += 1;
+	imap = p->controller_regs + imap_off;
+	imap += 4;
 
 	iclr_off = psycho_iclr_offset(ino);
-	iclr = (volatile unsigned int *)__va(p->controller_regs + iclr_off);
-	iclr += 1;
+	iclr = p->controller_regs + iclr_off;
+	iclr += 4;
 
 	if ((ino & 0x20) == 0)
 		inofixup = ino & 0x03;
@@ -838,6 +838,10 @@ static void psycho_ce_intr(int irq, void *dev_id, struct pt_regs *regs)
 		  "DMA Read" :
 		  ((error_bits & PSYCHO_CEAFSR_PDWR) ?
 		   "DMA Write" : "???")))));
+
+	/* XXX Use syndrome and afar to print out module string just like
+	 * XXX UDB CE trap handler does... -DaveM
+	 */
 	printk("PSYCHO%d: syndrome[%02lx] bytemask[%04lx] dword_offset[%lx] "
 	       "UPA_MID[%02lx] was_block(%d)\n",
 	       p->index,
@@ -1213,26 +1217,28 @@ static void __init psycho_scan_bus(struct pci_controller_info *p)
 	psycho_register_error_handlers(p);
 }
 
-static void __init psycho_iommu_init(struct pci_controller_info *p, int tsbsize)
+static void __init psycho_iommu_init(struct pci_controller_info *p)
 {
+#ifndef NEW_PCI_DMA_MAP
+	struct linux_mlist_p1275 *mlist;
+	unsigned long n;
+	iopte_t *iopte;
+	int tsbsize = 32;
+#endif
 	extern int this_is_starfire;
 	extern void *starfire_hookup(int);
-	struct linux_mlist_p1275 *mlist;
-	unsigned long tsbbase, i, n, order;
-	iopte_t *iopte;
+	unsigned long tsbbase, i;
 	u64 control;
 
 	/* Setup initial software IOMMU state. */
 	spin_lock_init(&p->iommu.lock);
 	p->iommu.iommu_cur_ctx = 0;
 
-	/* PSYCHO's IOMMU lacks ctx flushing. */
-	p->iommu.iommu_has_ctx_flush = 0;
-
 	/* Register addresses. */
 	p->iommu.iommu_control  = p->controller_regs + PSYCHO_IOMMU_CONTROL;
 	p->iommu.iommu_tsbbase  = p->controller_regs + PSYCHO_IOMMU_TSBBASE;
 	p->iommu.iommu_flush    = p->controller_regs + PSYCHO_IOMMU_FLUSH;
+	/* PSYCHO's IOMMU lacks ctx flushing. */
 	p->iommu.iommu_ctxflush = 0;
 
 	/* We use the main control register of PSYCHO as the write
@@ -1252,18 +1258,29 @@ static void __init psycho_iommu_init(struct pci_controller_info *p, int tsbsize)
 	control &= ~(PSYCHO_IOMMU_CTRL_DENAB);
 	psycho_write(p->controller_regs + PSYCHO_IOMMU_CONTROL, control);
 
-	for(order = 0;; order++)
-		if((PAGE_SIZE << order) >= ((tsbsize * 1024) * 8))
-			break;
-
-	tsbbase = __get_free_pages(GFP_DMA, order);
+#ifndef NEW_PCI_DMA_MAP
+	/* Using assumed page size 64K with 32K entries we need 256KB iommu page
+	 * table (32K ioptes * 8 bytes per iopte).  This is
+	 * page order 5 on UltraSparc.
+	 */
+	tsbbase = __get_free_pages(GFP_KERNEL, 5);
+#else
+	/* Using assumed page size 8K with 128K entries we need 1MB iommu page
+	 * table (128K ioptes * 8 bytes per iopte).  This is
+	 * page order 7 on UltraSparc.
+	 */
+	tsbbase = __get_free_pages(GFP_KERNEL, 7);
+#endif	
 	if (!tsbbase) {
 		prom_printf("PSYCHO_IOMMU: Error, gfp(tsb) failed.\n");
 		prom_halt();
 	}
-	p->iommu.page_table = iopte = (iopte_t *)tsbbase;
-	p->iommu.page_table_sz = (tsbsize * 1024);
+	p->iommu.page_table = (iopte_t *)tsbbase;
+	p->iommu.page_table_sz_bits = 17;
+	p->iommu.page_table_map_base = 0xc0000000;
 
+#ifndef NEW_PCI_DMA_MAP
+	iopte = (iopte_t *)tsbbase;
 	/* Initialize to "none" settings. */
 	for(i = 0; i < PCI_DVMA_HASHSZ; i++) {
 		pci_dvma_v2p_hash[i] = PCI_DVMA_HASH_NONE;
@@ -1329,10 +1346,11 @@ out:
 		prom_printf("Try booting with mem=xxxM or similar\n");
 		prom_halt();
 	}
-
+#endif
 	psycho_write(p->controller_regs + PSYCHO_IOMMU_TSBBASE, __pa(tsbbase));
 
 	control = psycho_read(p->controller_regs + PSYCHO_IOMMU_CONTROL);
+#ifndef NEW_PCI_DMA_MAP
 	control &= ~(PSYCHO_IOMMU_CTRL_TSBSZ);
 	control |= (PSYCHO_IOMMU_CTRL_TBWSZ | PSYCHO_IOMMU_CTRL_ENAB);
 	switch(tsbsize) {
@@ -1353,6 +1371,10 @@ out:
 		prom_halt();
 		break;
 	}
+#else
+	control &= ~(PSYCHO_IOMMU_CTRL_TSBSZ | PSYCHO_IOMMU_CTRL_TBWSZ);
+	control |= (PSYCHO_IOMMU_TSBSZ_128K | PSYCHO_IOMMU_CTRL_ENAB);
+#endif
 	psycho_write(p->controller_regs + PSYCHO_IOMMU_CONTROL, control);
 
 	/* If necessary, hook us up for starfire IRQ translations. */
@@ -1426,9 +1448,6 @@ static void psycho_pbm_strbuf_init(struct pci_controller_info *p,
 	/* Currently we don't even use it. */
 	pbm->stc.strbuf_enabled = 0;
 
-	/* PSYCHO's streaming buffer lacks ctx flushing. */
-	pbm->stc.strbuf_has_ctx_flush = 0;
-
 	if (is_pbm_a) {
 		pbm->stc.strbuf_control  = base + PSYCHO_STRBUF_CONTROL_A;
 		pbm->stc.strbuf_pflush   = base + PSYCHO_STRBUF_FLUSH_A;
@@ -1438,6 +1457,7 @@ static void psycho_pbm_strbuf_init(struct pci_controller_info *p,
 		pbm->stc.strbuf_pflush   = base + PSYCHO_STRBUF_FLUSH_B;
 		pbm->stc.strbuf_fsync    = base + PSYCHO_STRBUF_FSYNC_B;
 	}
+	/* PSYCHO's streaming buffer lacks ctx flushing. */
 	pbm->stc.strbuf_ctxflush      = 0;
 	pbm->stc.strbuf_ctxmatch_base = 0;
 
@@ -1599,7 +1619,7 @@ void __init psycho_init(int node)
 
 	psycho_controller_hwinit(p);
 
-	psycho_iommu_init(p, 32);
+	psycho_iommu_init(p);
 
 	is_pbm_a = ((pr_regs[0].phys_addr & 0x6000) == 0x2000);
 	psycho_pbm_init(p, node, is_pbm_a);

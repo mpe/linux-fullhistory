@@ -18,7 +18,7 @@ O_OBJS    = open.o read_write.o devices.o file_table.o buffer.o \
 MOD_LIST_NAME := FS_MODULES
 ALL_SUB_DIRS = coda minix ext2 fat msdos vfat proc isofs nfs umsdos ntfs \
 		hpfs sysv smbfs ncpfs ufs efs affs romfs autofs hfs lockd \
-		nfsd nls devpts adfs partitions qnx4 udf bfs
+		nfsd nls devpts adfs partitions qnx4 udf bfs openpromfs
 
 SUB_DIRS := partitions
 
@@ -78,10 +78,6 @@ endif
 
 ifdef CONFIG_PROC_FS
 SUB_DIRS += proc
-ifeq ($(CONFIG_SUN_OPENPROMFS),m)
-MOD_IN_SUB_DIRS += proc
-MOD_TO_LIST += openpromfs.o
-endif
 endif
 
 ifeq ($(CONFIG_BFS_FS),y)
@@ -262,6 +258,14 @@ SUB_DIRS += devpts
 else
   ifeq ($(CONFIG_DEVPTS_FS),m)
   MOD_SUB_DIRS += devpts
+  endif
+endif
+
+ifeq ($(CONFIG_SUN_OPENPROMFS),y)
+SUB_DIRS += openpromfs
+else
+  ifeq ($(CONFIG_SUN_OPENPROMFS),m)
+  MOD_SUB_DIRS += openpromfs
   endif
 endif
 

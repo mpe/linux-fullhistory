@@ -31,6 +31,7 @@
 
 #define PROMLIB_INTERNAL
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -43,7 +44,10 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <asm/openpromio.h>
-
+#ifdef CONFIG_PCI
+#include <linux/pci.h>
+#include <asm/pbm.h>
+#endif
 
 /* Private data kept by the driver for each descriptor. */
 typedef struct openprom_private_data
@@ -71,8 +75,14 @@ static int copyin(struct openpromio *info, struct openpromio **opp_p)
 
 	get_user_ret(bufsize, &info->oprom_size, -EFAULT);
 
-	if (bufsize == 0 || bufsize > OPROMMAXPARAM)
+	if (bufsize == 0)
 		return -EINVAL;
+
+	/* If the bufsize is too large, just limit it.
+	 * Fix from Jason Rappleye.
+	 */
+	if (bufsize > OPROMMAXPARAM)
+		bufsize = OPROMMAXPARAM;
 
 	if (!(*opp_p = kmalloc(sizeof(int) + bufsize + 1, GFP_KERNEL)))
 		return -ENOMEM;
@@ -138,6 +148,7 @@ static int openprom_sunos_ioctl(struct inode * inode, struct file * file,
 	unsigned long flags;
 	int bufsize, len, error = 0;
 	extern char saved_command_line[];
+	static int cnt;
 
 	if (cmd == OPROMSETOPT)
 		bufsize = getstrings((void *)arg, &opp);
@@ -194,20 +205,18 @@ static int openprom_sunos_ioctl(struct inode * inode, struct file * file,
 		buf = opp->oprom_array + strlen(opp->oprom_array) + 1;
 		len = opp->oprom_array + bufsize - buf;
 
-		printk(KERN_DEBUG "OPROMSETOPT%s %s='%s'\n",
-		       (cmd == OPROMSETOPT) ? "" : "2", opp->oprom_array, buf);
-
 		save_and_cli(flags);
 		error = prom_setprop(options_node, opp->oprom_array,
 				     buf, len);
 		restore_flags(flags);
 
-		if (error <= 0)
+		if (error < 0)
 			error = -EINVAL;
 		break;
 
 	case OPROMNEXT:
 	case OPROMCHILD:
+	case OPROMSETCUR:
 		if (bufsize < sizeof(int)) {
 			error = -EINVAL;
 			break;
@@ -216,12 +225,46 @@ static int openprom_sunos_ioctl(struct inode * inode, struct file * file,
 		node = *((int *) opp->oprom_array);
 
 		save_and_cli(flags);
-		if (cmd == OPROMNEXT)
-			node = __prom_getsibling(node);
-		else
-			node = __prom_getchild(node);
+		switch (cmd) {
+		case OPROMNEXT: node = __prom_getsibling(node); break;
+		case OPROMCHILD: node = __prom_getchild(node); break;
+		case OPROMSETCUR: break;
+		}
 		restore_flags(flags);
 
+		data->current_node = node;
+		*((int *)opp->oprom_array) = node;
+		opp->oprom_size = sizeof(int);
+
+		error = copyout((void *)arg, opp, bufsize + sizeof(int));
+		break;
+
+	case OPROMPCI2NODE:
+		error = -EINVAL;
+
+		if (bufsize >= 2*sizeof(int)) {
+#ifdef CONFIG_PCI
+			struct pci_dev *pdev;
+			struct pcidev_cookie *pcp;
+			pdev = pci_find_slot (((int *) opp->oprom_array)[0],
+					      ((int *) opp->oprom_array)[1]);
+
+			pcp = pdev->sysdata;
+			if (pcp != NULL && pcp->prom_node != -1 && pcp->prom_node) {
+				node = pcp->prom_node;
+				data->current_node = node;
+				*((int *)opp->oprom_array) = node;
+				opp->oprom_size = sizeof(int);
+				error = copyout((void *)arg, opp, bufsize + sizeof(int));
+			}
+#endif
+		}
+		break;
+
+	case OPROMPATH2NODE:
+		save_and_cli(flags);
+		node = prom_finddevice(opp->oprom_array);
+		restore_flags(flags);
 		data->current_node = node;
 		*((int *)opp->oprom_array) = node;
 		opp->oprom_size = sizeof(int);
@@ -248,11 +291,13 @@ static int openprom_sunos_ioctl(struct inode * inode, struct file * file,
 	case OPROMU2P:
 	case OPROMGETCONS:
 	case OPROMGETFBNAME:
-		printk(KERN_INFO "openprom_sunos_ioctl: unimplemented ioctl\n");
+		if (cnt++ < 10)
+			printk(KERN_INFO "openprom_sunos_ioctl: unimplemented ioctl\n");
 		error = -EINVAL;
 		break;
 	default:
-		printk(KERN_INFO "openprom_sunos_ioctl: cmd 0x%X, arg 0x%lX\n", cmd, arg);
+		if (cnt++ < 10)
+			printk(KERN_INFO "openprom_sunos_ioctl: cmd 0x%X, arg 0x%lX\n", cmd, arg);
 		error = -EINVAL;
 		break;
 	}
@@ -315,6 +360,7 @@ static int openprom_bsd_ioctl(struct inode * inode, struct file * file,
 	int error, node, len;
 	char *str, *tmp;
 	char buffer[64];
+	static int cnt;
 
 	switch (cmd) {
 	case OPIOCGET:
@@ -459,7 +505,8 @@ static int openprom_bsd_ioctl(struct inode * inode, struct file * file,
 		return 0;
 
 	default:
-		printk(KERN_INFO "openprom_bsd_ioctl: cmd 0x%X\n", cmd);
+		if (cnt++ < 10)
+			printk(KERN_INFO "openprom_bsd_ioctl: cmd 0x%X\n", cmd);
 		return -EINVAL;
 
 	}
@@ -473,6 +520,7 @@ static int openprom_ioctl(struct inode * inode, struct file * file,
 			  unsigned int cmd, unsigned long arg)
 {
 	DATA *data = (DATA *) file->private_data;
+	static int cnt;
 
 	switch (cmd) {
 	case OPROMGETOPT:
@@ -502,6 +550,9 @@ static int openprom_ioctl(struct inode * inode, struct file * file,
 	case OPROMGETCONS:
 	case OPROMGETFBNAME:
 	case OPROMGETBOOTARGS:
+	case OPROMSETCUR:
+	case OPROMPCI2NODE:
+	case OPROMPATH2NODE:
 		if ((file->f_mode & FMODE_READ) == 0)
 			return -EPERM;
 		return openprom_sunos_ioctl(inode, file, cmd, arg, 0);
@@ -521,7 +572,8 @@ static int openprom_ioctl(struct inode * inode, struct file * file,
 		return openprom_bsd_ioctl(inode,file,cmd,arg);
 
 	default:
-		printk("openprom_ioctl: cmd 0x%X, arg 0x%lX\n", cmd, arg);
+		if (cnt++ < 10)
+			printk("openprom_ioctl: cmd 0x%X, arg 0x%lX\n", cmd, arg);
 		return -EINVAL;
 	}
 }

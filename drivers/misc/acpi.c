@@ -643,7 +643,7 @@ static void acpi_idle_handler(void)
 {
 	static int sleep_level = 1;
 	u32 pm1_cnt, timer, pm2_cnt, bm_active;
-	unsigned long time, usec;
+	unsigned long time;
 
 	// return to C0 on bus master request (necessary for C3 only)
 	pm1_cnt = acpi_read_pm1_control(acpi_facp);
@@ -663,12 +663,9 @@ static void acpi_idle_handler(void)
 	// clear bus master activity flag
 	acpi_write_pm1_status(acpi_facp, ACPI_BM);
 
-	// get current time (fallback to CPU cycles if no PM timer)
+	// get current time
 	timer = acpi_facp->pm_tmr;
-	if (timer)
-		time = inl(timer);
-	else
-		time = get_cycles();
+	time = inl(timer);
 
 	// sleep
 	switch (sleep_level) {
@@ -695,11 +692,8 @@ static void acpi_idle_handler(void)
 		break;
 	}
 
-	// calculate time spent sleeping (fallback to CPU cycles)
-	if (timer)
-		time = (inl(timer) - time) & ACPI_TMR_MASK;
-	else
-		time = ACPI_CPU_TO_TMR_TICKS(get_cycles() - time);
+	// calculate time spent sleeping
+	time = (inl(timer) - time) & ACPI_TMR_MASK;
 
 	// check for bus master activity
 	bm_active = (acpi_read_pm1_status(acpi_facp) & ACPI_BM);
@@ -718,10 +712,9 @@ static void acpi_idle_handler(void)
 	// C-state latencies, and bus master activity
 	sleep_level = 1;
 	if (acpi_p_blk) {
-		usec = ACPI_TMR_TICKS_TO_uS(time);
-		if (usec > acpi_p_lvl3_lat && !bm_active)
+		if (time > acpi_p_lvl3_lat && !bm_active)
 			sleep_level = 3;
-		else if (usec > acpi_p_lvl2_lat)
+		else if (time > acpi_p_lvl2_lat)
 			sleep_level = 2;
 	}
 }
@@ -1114,6 +1107,15 @@ static int __init acpi_init(void)
 		return -ENODEV;
 	}
 
+    	/*
+    	 * Are the latencies in uS or in ticks in the tables? 
+    	 * Maybe this should do ACPI_uS_TO_TMR_TICKS?
+    	 *
+    	 * Whatever. Internally we always keep them in timer
+    	 * ticks, which is simpler and more consistent (what is
+    	 * an uS to us?). Besides, that gives people more
+    	 * control in the /proc interfaces.
+    	 */
 	if (acpi_facp->p_lvl2_lat
 	    && acpi_facp->p_lvl2_lat <= ACPI_MAX_P_LVL2_LAT) {
 		acpi_p_lvl2_lat = acpi_facp->p_lvl2_lat;
@@ -1154,7 +1156,8 @@ static int __init acpi_init(void)
 		return 0;
 #endif
 
-	acpi_idle = acpi_idle_handler;
+	if (acpi_facp->pm_tmr)
+		acpi_idle = acpi_idle_handler;
 
 	return 0;
 }

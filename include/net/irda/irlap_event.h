@@ -7,7 +7,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Aug 16 00:59:29 1997
- * Modified at:   Mon Aug 16 10:16:12 1999
+ * Modified at:   Wed Dec  8 10:49:17 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -70,6 +70,7 @@ typedef enum {
 
 	/* Send events */
 	SEND_I_CMD,
+	SEND_UI_FRAME,
 
 	/* Receive events */
 	RECV_DISCOVERY_XID_CMD,

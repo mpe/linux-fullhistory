@@ -218,7 +218,7 @@ int fcal_proc_info (char *buffer, char **start, off_t offset, int length, int ho
 	fc = fcal->fc;
 
 #ifdef __sparc__
-	SPRINTF ("Sun Enterprise Network Array (A5000 or E?500) on %s\n", fc->name);
+	SPRINTF ("Sun Enterprise Network Array (A5000 or E?500) on %s PROM node %x\n", fc->name, fc->dev->prom_node);
 #else
 	SPRINTF ("Fibre Channel Arbitrated Loop on %s\n", fc->name);
 #endif

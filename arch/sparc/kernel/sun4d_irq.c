@@ -1,4 +1,4 @@
-/*  $Id: sun4d_irq.c,v 1.20 1999/09/10 10:40:30 davem Exp $
+/*  $Id: sun4d_irq.c,v 1.23 1999/10/19 04:33:26 zaitcev Exp $
  *  arch/sparc/kernel/sun4d_irq.c:
  *			SS1000/SC2000 interrupt handling.
  *
@@ -237,12 +237,12 @@ void sun4d_handler_irq(int irq, struct pt_regs * regs)
 	irq_exit(cpu, irq);
 }
 
-unsigned int sun4d_build_irq(struct linux_sbus_device *sdev, int irq)
+unsigned int sun4d_build_irq(struct sbus_dev *sdev, int irq)
 {
 	int sbusl = pil_to_sbus[irq];
-	
+
 	if (sbusl)
-		return ((sdev->my_bus->board + 1) << 5) + (sbusl << 2) + sdev->slot;
+		return ((sdev->bus->board + 1) << 5) + (sbusl << 2) + sdev->slot;
 	else
 		return irq;
 }
@@ -369,7 +369,7 @@ static void sun4d_set_udt(int cpu)
 void __init sun4d_distribute_irqs(void)
 {
 #ifdef DISTRIBUTE_IRQS
-	struct linux_sbus *sbus;
+	struct sbus_bus *sbus;
 	unsigned long sbus_serving_map;
 
 	sbus_serving_map = cpu_present_map;
@@ -401,7 +401,7 @@ void __init sun4d_distribute_irqs(void)
 		set_sbi_tid(sbus->devid, sbus_tid[sbus->board] << 3);
 	}
 #else
-	struct linux_sbus *sbus;
+	struct sbus_bus *sbus;
 	int cpuid = cpu_logical_map(1);
 
 	if (cpuid == -1)
@@ -436,16 +436,19 @@ static void __init sun4d_init_timers(void (*counter_fn)(int, void *, struct pt_r
 	int irq;
 	extern struct prom_cpuinfo linux_cpus[NR_CPUS];
 	int cpu;
+	struct resource r;
 
 	/* Map the User Timer registers. */
+	memset(&r, 0, sizeof(r));
 #ifdef __SMP__
-	sun4d_timers = sparc_alloc_io(CSR_BASE(boot_cpu_id)+BW_TIMER_LIMIT, 0,
-				      PAGE_SIZE, "user timer", 0xf, 0x0);
+	r.start = CSR_BASE(boot_cpu_id)+BW_TIMER_LIMIT;
 #else
-	sun4d_timers = sparc_alloc_io(CSR_BASE(0)+BW_TIMER_LIMIT, 0,
-				      PAGE_SIZE, "user timer", 0xf, 0x0);
+	r.start = CSR_BASE(0)+BW_TIMER_LIMIT;
 #endif
-    
+	r.flags = 0xf;
+	sun4d_timers = (struct sun4d_timer_regs *) sbus_ioremap(&r, 0,
+	    PAGE_SIZE, "user timer");
+
 	sun4d_timers->l10_timer_limit =  (((1000000/HZ) + 1) << 10);
 	master_l10_counter = &sun4d_timers->l10_cur_count;
 	master_l10_limit = &sun4d_timers->l10_timer_limit;
@@ -494,7 +497,7 @@ static void __init sun4d_init_timers(void (*counter_fn)(int, void *, struct pt_r
 
 void __init sun4d_init_sbi_irq(void)
 {
-	struct linux_sbus *sbus;
+	struct sbus_bus *sbus;
 	unsigned mask;
 
 	nsbi = 0;

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Wed Jun  9 15:55:18 1999
- * Modified at:   Thu Sep  2 10:29:30 1999
+ * Modified at:   Fri Dec 10 21:04:55 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -90,4 +90,7 @@ void ircomm_tty_connect_indication(void *instance, void *sap,
 				   __u32 max_sdu_size,
 				   __u8 max_header_size, 
 				   struct sk_buff *skb);
-#endif
+int ircomm_tty_send_initial_parameters(struct ircomm_tty_cb *self);
+void ircomm_tty_link_established(struct ircomm_tty_cb *self);
+
+#endif /* IRCOMM_TTY_ATTACH_H */

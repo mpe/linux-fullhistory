@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Oct  1 22:50:04 1998
- * Modified at:   Sat Oct  9 17:11:16 1999
+ * Modified at:   Wed Dec 15 11:23:16 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -34,7 +34,7 @@ hashbin_t *objects = NULL;
 /*
  *  Used when a missing value needs to be returned
  */
-struct ias_value missing = { IAS_MISSING, 0, 0,	{0}};
+struct ias_value missing = { IAS_MISSING, 0, 0, {0}};
 
 /*
  * Function strdup (str)
@@ -72,8 +72,8 @@ struct ias_object *irias_new_object( char *name, int id)
 	
 	IRDA_DEBUG( 4, __FUNCTION__ "()\n");
 
-	obj = (struct ias_object *) kmalloc( sizeof( struct ias_object), 
-					     GFP_ATOMIC);
+	obj = (struct ias_object *) kmalloc(sizeof(struct ias_object), 
+					    GFP_ATOMIC);
 	if (obj == NULL) {
 		IRDA_DEBUG(0, __FUNCTION__ "(), Unable to allocate object!\n");
 		return NULL;
@@ -364,7 +364,7 @@ struct ias_value *irias_new_integer_value(int integer)
 {
 	struct ias_value *value;
 
-	value = kmalloc(sizeof( struct ias_value), GFP_ATOMIC);
+	value = kmalloc(sizeof(struct ias_value), GFP_ATOMIC);
 	if (value == NULL) {
 		WARNING(__FUNCTION__ "(), Unable to kmalloc!\n");
 		return NULL;
@@ -419,7 +419,7 @@ struct ias_value *irias_new_octseq_value(__u8 *octseq , int len)
 		WARNING(__FUNCTION__ "(), Unable to kmalloc!\n");
 		return NULL;
 	}
-	memset(value, 0, sizeof( struct ias_value));
+	memset(value, 0, sizeof(struct ias_value));
 
 	value->type = IAS_OCT_SEQ;
 	value->len = len;
@@ -430,6 +430,23 @@ struct ias_value *irias_new_octseq_value(__u8 *octseq , int len)
 		return NULL;
 	}
 	memcpy(value->t.oct_seq, octseq , len);
+	return value;
+}
+
+struct ias_value *irias_new_missing_value(void)
+{
+	struct ias_value *value;
+
+	value = kmalloc(sizeof(struct ias_value), GFP_ATOMIC);
+	if (value == NULL) {
+		WARNING(__FUNCTION__ "(), Unable to kmalloc!\n");
+		return NULL;
+	}
+	memset(value, 0, sizeof(struct ias_value));
+
+	value->type = IAS_MISSING;
+	value->len = 0;
+
 	return value;
 }
 

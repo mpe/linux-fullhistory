@@ -416,19 +416,18 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 	if (fb->fb_mmap)
 		return fb->fb_mmap(info, file, vma);
 
-#if defined(__sparc__)
+#if defined(__sparc__) && !defined(__sparc_v9__)
 	/* Should never get here, all fb drivers should have their own
 	   mmap routines */
 	return -EINVAL;
 #else
-	/* non-SPARC... */
+	/* !sparc32... */
 
 	fb->fb_get_fix(&fix, PROC_CONSOLE(info), info);
 
 	/* frame buffer memory */
 	start = fix.smem_start;
 	len = (start & ~PAGE_MASK)+fix.smem_len;
-	start &= PAGE_MASK;
 	len = (len+~PAGE_MASK) & PAGE_MASK;		/* someone's on crack. */
 	if (off >= len) {
 		/* memory mapped io */
@@ -438,13 +437,36 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 			return -EINVAL;
 		start = fix.mmio_start;
 		len = (start & ~PAGE_MASK)+fix.mmio_len;
-		start &= PAGE_MASK;
 		len = (len+~PAGE_MASK) & PAGE_MASK;
 	}
+	start &= PAGE_MASK;
 	if ((vma->vm_end - vma->vm_start + off) > len)
 		return -EINVAL;
 	off += start;
 	vma->vm_pgoff = off >> PAGE_SHIFT;
+#if defined(__sparc_v9__)
+	vma->vm_flags |= (VM_SHM | VM_LOCKED);
+	{
+		unsigned long align, j;
+		for (align = 0x400000; align > PAGE_SIZE; align >>= 3)
+			if (len >= align && !((start & ~PAGE_MASK) & (align - 1)))
+				break;
+		if (align > PAGE_SIZE && vma->vm_start & (align - 1)) {
+			/* align as much as possible */
+			struct vm_area_struct *vmm;
+			j = (-vma->vm_start) & (align - 1);
+			vmm = find_vma(current->mm, vma->vm_start);
+			if (!vmm || vmm->vm_start >= vma->vm_end + j) {
+				vma->vm_start += j;
+				vma->vm_end += j;
+			}
+		}
+	}
+	if (io_remap_page_range(vma->vm_start, off,
+				vma->vm_end - vma->vm_start, vma->vm_page_prot, 0))
+		return -EAGAIN;
+	vma->vm_flags |= VM_IO;
+#else
 #if defined(__mc68000__)
 	if (CPU_IS_020_OR_030)
 		pgprot_val(vma->vm_page_prot) |= _PAGE_NOCACHE030;
@@ -476,9 +498,9 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 	if (io_remap_page_range(vma->vm_start, off,
 			     vma->vm_end - vma->vm_start, vma->vm_page_prot))
 		return -EAGAIN;
+#endif /* !__sparc_v9__ */
 	return 0;
-
-#endif /* defined(__sparc__) */
+#endif /* !sparc32 */
 }
 
 static int

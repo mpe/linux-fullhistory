@@ -1,4 +1,4 @@
-/* $Id: floppy.h,v 1.22 1999/08/31 07:02:12 davem Exp $
+/* $Id: floppy.h,v 1.23 1999/09/21 14:39:34 davem Exp $
  * asm-sparc64/floppy.h: Sparc specific parts of the Floppy driver.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -50,8 +50,8 @@ struct sun_flpy_controller {
 
 /* You'll only ever find one controller on an Ultra anyways. */
 static struct sun_flpy_controller *sun_fdc = (struct sun_flpy_controller *)-1;
-volatile unsigned char *fdc_status;
-static struct linux_sbus_device *floppy_sdev = NULL;
+unsigned long fdc_status;
+static struct sbus_dev *floppy_sdev = NULL;
 
 struct sun_floppy_ops {
 	unsigned char	(*fd_inb) (unsigned long port);
@@ -120,12 +120,12 @@ static unsigned char sun_82077_fd_inb(unsigned long port)
 		printk("floppy: Asked to read unknown port %lx\n", port);
 		panic("floppy: Port bolixed.");
 	case 4: /* FD_STATUS */
-		return sun_fdc->status_82077 & ~STATUS_DMA;
+		return sbus_readb(&sun_fdc->status_82077) & ~STATUS_DMA;
 	case 5: /* FD_DATA */
-		return sun_fdc->data_82077;
+		return sbus_readb(&sun_fdc->data_82077);
 	case 7: /* FD_DIR */
 		/* XXX: Is DCL on 0x80 in sun4m? */
-		return sun_fdc->dir_82077;
+		return sbus_readb(&sun_fdc->dir_82077);
 	};
 	panic("sun_82072_fd_inb: How did I get here?");
 }
@@ -139,16 +139,16 @@ static void sun_82077_fd_outb(unsigned char value, unsigned long port)
 		panic("floppy: Port bolixed.");
 	case 2: /* FD_DOR */
 		/* Happily, the 82077 has a real DOR register. */
-		sun_fdc->dor_82077 = value;
+		sbus_writeb(value, &sun_fdc->dor_82077);
 		break;
 	case 5: /* FD_DATA */
-		sun_fdc->data_82077 = value;
+		sbus_writeb(value, &sun_fdc->data_82077);
 		break;
 	case 7: /* FD_DCR */
-		sun_fdc->dcr_82077 = value;
+		sbus_writeb(value, &sun_fdc->dcr_82077);
 		break;
 	case 4: /* FD_STATUS */
-		sun_fdc->status_82077 = value;
+		sbus_writeb(value, &sun_fdc->status_82077);
 		break;
 	};
 	return;
@@ -553,8 +553,8 @@ static unsigned long __init sun_floppy_init(void)
 {
 	char state[128];
 	int fd_node, num_regs;
-	struct linux_sbus *bus;
-	struct linux_sbus_device *sdev = NULL;
+	struct sbus_bus *bus;
+	struct sbus_dev *sdev = NULL;
 	static int initialized = 0;
 
 	if (initialized)
@@ -622,7 +622,7 @@ static unsigned long __init sun_floppy_init(void)
 
 		sun_fdops.fd_eject = sun_pci_fd_eject;
 
-        	fdc_status = &sun_fdc->status_82077;
+        	fdc_status = (unsigned long) &sun_fdc->status_82077;
 		FLOPPY_MOTOR_MASK = 0xf0;
 
 		/*
@@ -715,17 +715,17 @@ static unsigned long __init sun_floppy_init(void)
 	num_regs = prom_getproperty(fd_node, "reg", (char *) fd_regs,
 				    sizeof(fd_regs));
 	num_regs = (num_regs / sizeof(fd_regs[0]));
-	prom_apply_sbus_ranges(sdev->my_bus, fd_regs, num_regs, sdev);
+
 	/*
 	 * We cannot do sparc_alloc_io here: it does request_region,
 	 * which the generic floppy driver tries to do once again.
 	 */
 	sun_fdc = (struct sun_flpy_controller *)
-				(PAGE_OFFSET + fd_regs[0].phys_addr + 
-				 (((unsigned long)fd_regs[0].which_io) << 32));
+		(PAGE_OFFSET + fd_regs[0].phys_addr + 
+		 (((unsigned long)fd_regs[0].which_io) << 32));
 
 	/* Last minute sanity check... */
-	if(sun_fdc->status1_82077 == 0xff) {
+	if(sbus_readb(&sun_fdc->status1_82077) == 0xff) {
 		sun_fdc = (struct sun_flpy_controller *)-1;
 		return 0;
 	}
@@ -748,7 +748,7 @@ static unsigned long __init sun_floppy_init(void)
 
 	sun_fdops.fd_eject = sun_fd_eject;
 
-        fdc_status = &sun_fdc->status_82077;
+        fdc_status = (unsigned long) &sun_fdc->status_82077;
 
 	/* Success... */
 	allowed_drive_mask = 0x01;

@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.78 1999/09/06 01:17:28 davem Exp $
+# $Id: config.in,v 1.85 1999/12/20 05:01:56 davem Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -41,17 +41,13 @@ source drivers/pci/Config.in
 source drivers/sbus/char/Config.in
 source drivers/sbus/audio/Config.in
 
-if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-   tristate 'Openprom tree appears in /proc/openprom (EXPERIMENTAL)' CONFIG_SUN_OPENPROMFS
-fi
+tristate 'Openprom tree appears in /proc/openprom' CONFIG_SUN_OPENPROMFS
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
 bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
 bool 'Sysctl support' CONFIG_SYSCTL
 if [ "$CONFIG_PROC_FS" = "y" ]; then
-   choice 'Kernel core (/proc/kcore) format' \
-	"ELF		CONFIG_KCORE_ELF	\
-	 A.OUT		CONFIG_KCORE_AOUT" ELF
+   define_bool CONFIG_KCORE_ELF y
 fi
 bool 'Kernel support for Linux/Sparc 32bit binary compatibility' CONFIG_SPARC32_COMPAT
 if [ "$CONFIG_SPARC32_COMPAT" != "n" ]; then
@@ -60,6 +56,7 @@ if [ "$CONFIG_SPARC32_COMPAT" != "n" ]; then
 fi
 tristate 'Kernel support for 64-bit ELF binaries' CONFIG_BINFMT_ELF
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
+bool 'SunOS binary emulation' CONFIG_SUNOS_EMUL
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
    tristate 'Solaris binary emulation (EXPERIMENTAL)' CONFIG_SOLARIS_EMUL
 fi
@@ -159,8 +156,8 @@ if [ "$CONFIG_SCSI" != "n" ]; then
   	 bool '  Collect statistics to report in /proc' CONFIG_AIC7XXX_PROC_STATS N
 	 int  '  Delay in seconds after SCSI bus reset' CONFIG_AIC7XXX_RESET_DELAY 5
       fi
-      dep_tristate 'NCR53C8XX SCSI support' CONFIG_SCSI_NCR53C8XX $CONFIG_SCSI
-      if [ "$CONFIG_SCSI_NCR53C8XX" != "n" ]; then
+      dep_tristate 'SYM53C8XX SCSI support' CONFIG_SCSI_SYM53C8XX $CONFIG_SCSI
+      if [ "$CONFIG_SCSI_SYM53C8XX" != "n" ]; then
 	 int 'default tagged command queue depth' CONFIG_SCSI_NCR53C8XX_DEFAULT_TAGS 8
 	 int 'maximum number of queued commands' CONFIG_SCSI_NCR53C8XX_MAX_TAGS 32
 	 int 'synchronous transfers frequency in MHz' CONFIG_SCSI_NCR53C8XX_SYNC 10
@@ -190,7 +187,10 @@ if [ "$CONFIG_NET" = "y" ]; then
       tristate '  Dummy net driver support' CONFIG_DUMMY
       tristate '  PPP (point-to-point) support' CONFIG_PPP
       if [ ! "$CONFIG_PPP" = "n" ]; then
-	 comment '    CCP compressors for PPP are only built as modules.'
+         dep_tristate '  PPP support for async serial ports' CONFIG_PPP_ASYNC $CONFIG_PPP
+         dep_tristate '  PPP support for sync tty ports' CONFIG_PPP_SYNC_TTY $CONFIG_PPP
+         dep_tristate '  PPP Deflate compression' CONFIG_PPP_DEFLATE $CONFIG_PPP
+         dep_tristate '  PPP BSD-Compress compression' CONFIG_PPP_BSDCOMP m
       fi
       tristate '  SLIP (serial line) support' CONFIG_SLIP
       if [ "$CONFIG_SLIP" != "n" ]; then

@@ -119,7 +119,7 @@ struct memelfnote
 
 extern char saved_command_line[];
 
-static size_t get_kcore_size(int *num_vma, int *elf_buflen)
+static size_t get_kcore_size(int *num_vma, size_t *elf_buflen)
 {
 	size_t try, size = 0;
 	struct vm_struct *m;

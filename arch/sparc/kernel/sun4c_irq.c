@@ -35,6 +35,11 @@
 #include <asm/idprom.h>
 #include <asm/machines.h>
 
+#if 0
+static struct resource sun4c_timer_eb = { "sun4c_timer" };
+static struct resource sun4c_intr_eb = { "sun4c_intr" };
+#endif
+
 /* Pointer to the interrupt enable byte
  *
  * Dave Redman (djhr@tadpole.co.uk)
@@ -150,10 +155,9 @@ static void __init sun4c_init_timers(void (*counter_fn)(int, void *, struct pt_r
 		sun4c_timers = &sun4_timer;
 	else
 #endif
-	sun4c_timers = sparc_alloc_io (SUN_TIMER_PHYSADDR, 0,
-				       sizeof(struct sun4c_timer_info),
-				       "timer", 0x0, 0x0);
-    
+	sun4c_timers = ioremap(SUN_TIMER_PHYSADDR,
+	    sizeof(struct sun4c_timer_info));
+
 	/* Have the level 10 timer tick at 100HZ.  We don't touch the
 	 * level 14 timer limit since we are letting the prom handle
 	 * them until we have a real console driver so L1-A works.
@@ -190,13 +194,11 @@ void __init sun4c_init_IRQ(void)
 	int ie_node;
 
 	if (ARCH_SUN4) {
-		interrupt_enable =
-			(char *) sparc_alloc_io(sun4_ie_physaddr, 0,
-					   	PAGE_SIZE,
-					   	"sun4c_interrupts",
-					   	0x0, 0x0);
+		interrupt_enable = (char *)
+		    ioremap(sun4_ie_physaddr, PAGE_SIZE);
 	} else {
-    
+		struct resource phyres;
+
 		ie_node = prom_searchsiblings (prom_getchild(prom_root_node),
 				       	"interrupt-enable");
 		if(ie_node == 0)
@@ -204,11 +206,11 @@ void __init sun4c_init_IRQ(void)
 
 		/* Depending on the "address" property is bad news... */
 		prom_getproperty(ie_node, "reg", (char *) int_regs, sizeof(int_regs));
-		interrupt_enable =
-			(char *) sparc_alloc_io(int_regs[0].phys_addr, 0,
-					   	int_regs[0].reg_size,
-					   	"sun4c_interrupts",
-					   	int_regs[0].which_io, 0x0);
+		memset(&phyres, 0, sizeof(struct resource));
+		phyres.flags = int_regs[0].which_io;
+		phyres.start = int_regs[0].phys_addr;
+		interrupt_enable = (char *) sbus_ioremap(&phyres, 0,
+		    int_regs[0].reg_size, "sun4c_intr");
 	}
 
 	BTFIXUPSET_CALL(enable_irq, sun4c_enable_irq, BTFIXUPCALL_NORM);

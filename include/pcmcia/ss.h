@@ -120,11 +120,28 @@ typedef struct cb_bridge_map {
     u_int	start, stop;
 } cb_bridge_map;
 
-enum ss_service {
-    SS_RegisterCallback, SS_InquireSocket,
-    SS_GetStatus, SS_GetSocket, SS_SetSocket,
-    SS_GetIOMap, SS_SetIOMap, SS_GetMemMap, SS_SetMemMap,
-    SS_GetBridge, SS_SetBridge, SS_ProcSetup
+/*
+ * Socket operations.
+ */
+struct pccard_operations {
+	int (*register_callback)(u_short sock, ss_callback_t *call);
+	int (*inquire_socket)(u_short sock, socket_cap_t *cap);
+	int (*get_status)(u_short sock, u_int *value);
+	int (*get_socket)(u_short sock, socket_state_t *state);
+	int (*set_socket)(u_short sock, socket_state_t *state);
+	int (*get_io_map)(u_short sock, struct pccard_io_map *io);
+	int (*set_io_map)(u_short sock, struct pccard_io_map *io);
+	int (*get_mem_map)(u_short sock, struct pccard_mem_map *mem);
+	int (*set_mem_map)(u_short sock, struct pccard_mem_map *mem);
+	int (*get_bridge)(u_short sock, struct cb_bridge_map *m);
+	int (*set_bridge)(u_short sock, struct cb_bridge_map *m);
+	void (*proc_setup)(u_short sock, struct proc_dir_entry *base);
 };
+
+/*
+ *  Calls to set up low-level "Socket Services" drivers
+ */
+extern int register_ss_entry(int nsock, struct pccard_operations *ops);
+extern void unregister_ss_entry(struct pccard_operations *ops);
 
 #endif /* _LINUX_SS_H */

@@ -1,4 +1,4 @@
-/* $Id: io-unit.c,v 1.15 1999/09/10 10:40:38 davem Exp $
+/* $Id: io-unit.c,v 1.17 1999/10/18 01:46:54 zaitcev Exp $
  * io-unit.c:  IO-UNIT specific routines for memory management.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek    (jj@sunsite.mff.cuni.cz)
@@ -9,6 +9,7 @@
 #include <linux/init.h>
 #include <linux/malloc.h>
 #include <linux/spinlock.h>
+#include <asm/scatterlist.h>
 #include <asm/pgtable.h>
 #include <asm/sbus.h>
 #include <asm/io.h>
@@ -27,14 +28,15 @@
 #define MKIOPTE(phys) __iopte((((phys)>>4) & IOUPTE_PAGE) | IOPERM)
 
 void __init
-iounit_init(int sbi_node, int io_node, struct linux_sbus *sbus)
+iounit_init(int sbi_node, int io_node, struct sbus_bus *sbus)
 {
 	iopte_t *xpt, *xptend;
 	struct iounit_struct *iounit;
 	struct linux_prom_registers iommu_promregs[PROMREG_MAX];
-	
+	struct resource r;
+
 	iounit = kmalloc(sizeof(struct iounit_struct), GFP_ATOMIC);
-	
+
 	memset(iounit, 0, sizeof(*iounit));
 	iounit->limit[0] = IOUNIT_BMAP1_START;
 	iounit->limit[1] = IOUNIT_BMAP2_START;
@@ -42,13 +44,14 @@ iounit_init(int sbi_node, int io_node, struct linux_sbus *sbus)
 	iounit->limit[3] = IOUNIT_BMAPM_END;
 	iounit->rotor[1] = IOUNIT_BMAP2_START;
 	iounit->rotor[2] = IOUNIT_BMAPM_START;
-	
+
 	prom_getproperty(sbi_node, "reg", (void *) iommu_promregs,
 			 sizeof(iommu_promregs));
 	prom_apply_generic_ranges(io_node, 0, iommu_promregs, 3);
-	xpt = (iopte_t *)
-		sparc_alloc_io(iommu_promregs[2].phys_addr, 0, (PAGE_SIZE * 16),
-			       "XPT", iommu_promregs[2].which_io, 0x0);
+	memset(&r, 0, sizeof(r));
+	r.flags = iommu_promregs[2].which_io;
+	r.start = iommu_promregs[2].phys_addr;
+	xpt = (iopte_t *) sbus_ioremap(&r, 0, PAGE_SIZE * 16, "XPT");
 	if(!xpt) panic("Cannot map External Page Table.");
 	
 	sbus->iommu = (struct iommu_struct *)iounit;
@@ -108,7 +111,7 @@ nexti:	scan = find_next_zero_bit(iounit->bmap, limit, scan);
 	return vaddr;
 }
 
-static __u32 iounit_get_scsi_one(char *vaddr, unsigned long len, struct linux_sbus *sbus)
+static __u32 iounit_get_scsi_one(char *vaddr, unsigned long len, struct sbus_bus *sbus)
 {
 	unsigned long ret, flags;
 	struct iounit_struct *iounit = (struct iounit_struct *)sbus->iommu;
@@ -119,7 +122,7 @@ static __u32 iounit_get_scsi_one(char *vaddr, unsigned long len, struct linux_sb
 	return ret;
 }
 
-static void iounit_get_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_sbus *sbus)
+static void iounit_get_scsi_sgl(struct scatterlist *sg, int sz, struct sbus_bus *sbus)
 {
 	unsigned long flags;
 	struct iounit_struct *iounit = (struct iounit_struct *)sbus->iommu;
@@ -127,12 +130,13 @@ static void iounit_get_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_sbus
 	/* FIXME: Cache some resolved pages - often several sg entries are to the same page */
 	spin_lock_irqsave(&iounit->lock, flags);
 	for (; sz >= 0; sz--) {
-		sg[sz].dvma_addr = iounit_get_area(iounit, (unsigned long)sg[sz].addr, sg[sz].len);
+		sg[sz].dvma_address = iounit_get_area(iounit, (unsigned long)sg[sz].address, sg[sz].length);
+		sg[sz].dvma_length = sg[sz].length;
 	}
 	spin_unlock_irqrestore(&iounit->lock, flags);
 }
 
-static void iounit_release_scsi_one(__u32 vaddr, unsigned long len, struct linux_sbus *sbus)
+static void iounit_release_scsi_one(__u32 vaddr, unsigned long len, struct sbus_bus *sbus)
 {
 	unsigned long flags;
 	struct iounit_struct *iounit = (struct iounit_struct *)sbus->iommu;
@@ -146,16 +150,16 @@ static void iounit_release_scsi_one(__u32 vaddr, unsigned long len, struct linux
 	spin_unlock_irqrestore(&iounit->lock, flags);
 }
 
-static void iounit_release_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_sbus *sbus)
+static void iounit_release_scsi_sgl(struct scatterlist *sg, int sz, struct sbus_bus *sbus)
 {
 	unsigned long flags;
 	unsigned long vaddr, len;
 	struct iounit_struct *iounit = (struct iounit_struct *)sbus->iommu;
-	
+
 	spin_lock_irqsave(&iounit->lock, flags);
 	for (; sz >= 0; sz--) {
-		len = ((sg[sz].dvma_addr & ~PAGE_MASK) + sg[sz].len + (PAGE_SIZE-1)) >> PAGE_SHIFT;
-		vaddr = (sg[sz].dvma_addr - IOUNIT_DMA_BASE) >> PAGE_SHIFT;
+		len = ((sg[sz].dvma_address & ~PAGE_MASK) + sg[sz].length + (PAGE_SIZE-1)) >> PAGE_SHIFT;
+		vaddr = (sg[sz].dvma_address - IOUNIT_DMA_BASE) >> PAGE_SHIFT;
 		IOD(("iounit_release %08lx-%08lx\n", (long)vaddr, (long)len+vaddr));
 		for (len += vaddr; vaddr < len; vaddr++)
 			clear_bit(vaddr, iounit->bmap);
@@ -164,21 +168,18 @@ static void iounit_release_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_
 }
 
 #ifdef CONFIG_SBUS
-static void iounit_map_dma_area(unsigned long addr, int len)
+static void iounit_map_dma_area(unsigned long va, __u32 addr, int len)
 {
 	unsigned long page, end;
 	pgprot_t dvma_prot;
 	iopte_t *iopte;
-	struct linux_sbus *sbus;
+	struct sbus_bus *sbus;
 
 	dvma_prot = __pgprot(SRMMU_CACHE | SRMMU_ET_PTE | SRMMU_PRIV);
 	end = PAGE_ALIGN((addr + len));
 	while(addr < end) {
-		page = get_free_page(GFP_KERNEL);
-		if(!page) {
-			prom_printf("alloc_dvma: Cannot get a dvma page\n");
-			prom_halt();
-		} else {
+		page = va;
+		{
 			pgd_t *pgdp;
 			pmd_t *pmdp;
 			pte_t *ptep;
@@ -200,9 +201,14 @@ static void iounit_map_dma_area(unsigned long addr, int len)
 			}
 		}
 		addr += PAGE_SIZE;
+		va += PAGE_SIZE;
 	}
 	flush_cache_all();
 	flush_tlb_all();
+}
+
+static void iounit_unmap_dma_area(unsigned long addr, int len)
+{
 }
 #endif
 
@@ -229,10 +235,11 @@ void __init ld_mmu_iounit(void)
 
 #ifdef CONFIG_SBUS
 	BTFIXUPSET_CALL(mmu_map_dma_area, iounit_map_dma_area, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(mmu_unmap_dma_area, iounit_unmap_dma_area, BTFIXUPCALL_NORM);
 #endif
 }
 
-__u32 iounit_map_dma_init(struct linux_sbus *sbus, int size)
+__u32 iounit_map_dma_init(struct sbus_bus *sbus, int size)
 {
 	int i, j, k, npages;
 	unsigned long rotor, scan, limit;
@@ -271,7 +278,7 @@ nexti:	scan = find_next_zero_bit(iounit->bmap, limit, scan);
 	return ret;
 }
 
-__u32 iounit_map_dma_page(__u32 vaddr, void *addr, struct linux_sbus *sbus)
+__u32 iounit_map_dma_page(__u32 vaddr, void *addr, struct sbus_bus *sbus)
 {
 	int scan = (vaddr - IOUNIT_DMA_BASE) >> PAGE_SHIFT;
 	struct iounit_struct *iounit = (struct iounit_struct *)sbus->iommu;

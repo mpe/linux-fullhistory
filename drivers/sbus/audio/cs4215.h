@@ -1,4 +1,4 @@
-/*
+/* $Id: cs4215.h,v 1.7 1999/09/21 14:37:19 davem Exp $
  * drivers/sbus/audio/cs4215.h
  *
  * Copyright (C) 1997 Rudolf Koenig (rfkoenig@immd4.informatik.uni-erlangen.de)
@@ -117,4 +117,4 @@ static struct {
 #define CS4215_RG(v)	v	/* Right Gain Setting 0xf: 22.5 dB */
 #define CS4215_MA(v)	(v<<4)	/* Monitor Path Attenuation 0xf: mute */
 
-#endif
+#endif /* _CS4215_H_ */

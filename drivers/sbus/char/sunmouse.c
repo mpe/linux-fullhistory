@@ -81,7 +81,7 @@ struct sun_mouse {
 	unsigned int tail;
 	union {
 		char stream [STREAM_SIZE];
-		Firm_event ev [0];
+		Firm_event ev [EV_SIZE];
 	} queue;
 };
 
@@ -142,8 +142,6 @@ push_char (char c)
 }
 
 /* Auto baud rate "detection".  ;-) */
-static int mouse_bogon_bytes = 0;
-static int mouse_baud_changing = 0;	/* For reporting things to the user. */
 static int mouse_baud = 4800;		/* Initial rate set by zilog driver. */
 
 /* Change the baud rate after receiving too many "bogon bytes". */
@@ -161,81 +159,112 @@ void sun_mouse_change_baud(void)
 		mouse_baud = 1200;
 
 	rs_change_mouse_baud(mouse_baud);
-	mouse_baud_changing = 1;
 }
 
-void mouse_baud_detection(unsigned char c)
+/* This tries to monitor the mouse state so that it
+ * can automatically adjust to the correct baud rate.
+ * The mouse spits out BRKs when the baud rate is
+ * incorrect.
+ *
+ * It returns non-zero if we should ignore this byte.
+ */
+int mouse_baud_detection(unsigned char c, int is_break)
 {
-	static int wait_for_synchron = 1;
+	static int mouse_got_break = 0;
 	static int ctr = 0;
 
-	if(wait_for_synchron) {
-		if((c & ~0x0f) != 0x80)
-			mouse_bogon_bytes++;
-		else {
-		        if (c & 8) {
-				ctr = 2;
-				wait_for_synchron = 0;
-			} else {
-				ctr = 0;
-				wait_for_synchron = 0;
-			}
-		}
-	} else {
-		ctr++;
-		if(ctr >= 4) {
-			ctr = 0;
-			wait_for_synchron = 1;
-			if(mouse_baud_changing == 1) {
-				printk(KERN_DEBUG "sunmouse: Successfully adjusted to %d baud.\n",
-				       mouse_baud);
-				mouse_baud_changing = 0;
-			}
-		}
-	}
-	if(mouse_bogon_bytes > 12) {
+	if (is_break) {
+		/* Let a few normal bytes go by before
+		 * we jump the gun and say we need to
+		 * try another baud rate.
+		 */
+		if (mouse_got_break && ctr < 8)
+			return 1;
+
+		/* OK, we need to try another baud rate. */
 		sun_mouse_change_baud();
-		mouse_bogon_bytes = 0;
-		wait_for_synchron = 1;
+		ctr = 0;
+		mouse_got_break = 1;
+		return 1;
 	}
+	if (mouse_got_break) {
+		ctr++;
+		if (c == 0x87) {
+			printk(KERN_INFO "sunmouse: Successfully "
+			       "adjusted to %d baud.\n", mouse_baud);
+			mouse_got_break = 0;
+		}
+		return 1;
+	}
+
+	return 0;
 }
 
-/* The following is called from the zs driver when bytes are received on
- * the Mouse zs8530 channel.
+/* You ask me, why does this cap the lower bound at -127 and not
+ * -128?  Because the xf86 mouse code is crap and treats -128
+ * as an illegal value and resets it's protocol state machine
+ * when it sees this value.
+ */
+#define CLIP(__X)	(((__X) > 127) ? 127 : (((__X) < -127) ? -127 : (__X)))
+
+/* The following is called from the serial driver when bytes/breaks
+ * are received on the Mouse line.
  */
 void
-sun_mouse_inbyte(unsigned char byte)
+sun_mouse_inbyte(unsigned char byte, int is_break)
 {
 	signed char mvalue;
 	int d, pushed = 0;
 	Firm_event ev;
 
 	add_mouse_randomness (byte);
+#if 0
+	{
+		static int xxx = 0;
+		printk("mouse(%02x:%d) ",
+		       byte, is_break);
+		if (byte == 0x87) {
+			xxx = 0;
+			printk("\n");
+		}
+	}
+#endif
+	if (mouse_baud_detection(byte, is_break))
+		return;
+
 	if(!sunmouse.active)
 		return;
 
-	mouse_baud_detection(byte);
+	/* Ignore this if it is garbage. */
+	if (sunmouse.byte == 69) {
+		if (byte != 0x87)
+			return;
 
-	if (!gen_events){
-		if (((byte & ~0x0f) == 0x80) && (byte & 0x8)) {
-			/* Push dummy 4th and 5th byte for last txn */
-			push_char(0x0);
-			push_char(0x0);
-		}
-		push_char (byte);
-		return;
+		/* Ok, we've begun the state machine. */
+		sunmouse.byte = 0;
 	}
-
+#if 0
 	/* If the mouse sends us a byte from 0x80 to 0x87
 	 * we are starting at byte zero in the transaction
 	 * protocol.
 	 */
 	if((byte & ~0x0f) == 0x80) 
 		sunmouse.byte = 0;
+#endif
 
 	mvalue = (signed char) byte;
 	switch(sunmouse.byte) {
 	case 0:
+		/* If we get a bogus button byte, just skip it.
+		 * When we get here the baud detection code has
+		 * passed, so the only other things which can
+		 * cause this are dropped serial characters and
+		 * confused mouse.  We check this because otherwise
+		 * begin posting erroneous mouse events.
+		 */
+		if ((byte & 0xf0) != 0x80)
+			return;
+
 		/* Button state */
 		sunmouse.button_state = (~byte) & 0x7;
 #ifdef SMOUSE_DEBUG
@@ -274,6 +303,7 @@ sun_mouse_inbyte(unsigned char byte)
 		printk("DX2<%d>", mvalue);
 #endif
 		sunmouse.delta_x += mvalue;
+		sunmouse.delta_x = CLIP(sunmouse.delta_x);
 		sunmouse.byte++;
 		return;
 	case 4:
@@ -282,7 +312,8 @@ sun_mouse_inbyte(unsigned char byte)
 		printk("DY2<%d>", mvalue);
 #endif
 		sunmouse.delta_y += mvalue;
-		sunmouse.byte = 69;  /* Some ridiculous value */
+		sunmouse.delta_y = CLIP(sunmouse.delta_y);
+		sunmouse.byte = 0;  /* Back to button state */
 		break;
 	case 69:
 		/* Until we get the (0x80 -> 0x87) value we aren't
@@ -295,6 +326,12 @@ sun_mouse_inbyte(unsigned char byte)
 		sunmouse.byte = 69;  /* What could cause this? */
 		return;
 	};
+	if (!gen_events){
+		push_char (~sunmouse.button_state & 0x87);
+		push_char (sunmouse.delta_x);
+		push_char (sunmouse.delta_y);
+		return;
+	}
 	d = bstate ^ pstate;
 	pstate = bstate;
 	if (d){
@@ -405,6 +442,10 @@ sun_mouse_read(struct file *file, char *buffer,
 			if (current->thread.flags & SPARC_FLAG_32BIT) {
 				Firm_event *q = get_from_queue();
 				
+				if ((end - p) <
+				    ((sizeof(Firm_event) - sizeof(struct timeval) +
+				      (sizeof(u32) * 2))))
+					break;
 				copy_to_user_ret((Firm_event *)p, q, 
 						 sizeof(Firm_event)-sizeof(struct timeval),
 						 -EFAULT);
@@ -416,6 +457,8 @@ sun_mouse_read(struct file *file, char *buffer,
 			} else
 #endif	
 			{	
+				if ((end - p) < sizeof(Firm_event))
+					break;
 				copy_to_user_ret((Firm_event *)p, get_from_queue(),
 				     		 sizeof(Firm_event), -EFAULT);
 				p += sizeof (Firm_event);
@@ -425,16 +468,25 @@ sun_mouse_read(struct file *file, char *buffer,
 		file->f_dentry->d_inode->i_atime = CURRENT_TIME;
 		return p-buffer;
 	} else {
-		int c;
-		
-		for (c = count; !queue_empty() && c; c--){
-			put_user_ret(sunmouse.queue.stream[sunmouse.tail], buffer, -EFAULT);
+		int c, limit = 3;
+
+		if (count < limit)
+			limit = count;
+		for (c = 0; c < limit; c++) {
+			put_user(sunmouse.queue.stream[sunmouse.tail], buffer);
 			buffer++;
 			sunmouse.tail = (sunmouse.tail + 1) % STREAM_SIZE;
 		}
+		while (c < count) {
+			if (c >= 5)
+				break;
+			put_user(0, buffer);
+			buffer++;
+			c++;
+		}
 		sunmouse.ready = !queue_empty();
 		file->f_dentry->d_inode->i_atime = CURRENT_TIME;
-		return count-c;
+		return c;
 	}
 	/* Only called if nothing was sent */
 	if (signal_pending(current))

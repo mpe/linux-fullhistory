@@ -91,8 +91,8 @@ static int proc_scsi_read(char *buffer, char **start, off_t offset,
 				      * use some slack for overruns 
 				      */
 
-static ssize_t proc_scsi_write(struct file * file, const char * buf,
-                              unsigned long count, void *data)
+static int proc_scsi_write(struct file * file, const char * buf,
+                           unsigned long count, void *data)
 {
 	struct Scsi_Host *hpnt = data;
 	ssize_t ret = 0;

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Oct 15 08:37:58 1998
- * Modified at:   Sat Oct 30 12:58:30 1999
+ * Modified at:   Thu Dec 16 21:21:53 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       skeleton.c by Donald Becker <becker@CESDIS.gsfc.nasa.gov>
  *                slip.c by Laurence Culhane,   <loz@holmes.demon.co.uk>
@@ -348,6 +348,7 @@ void irlan_eth_send_gratuitous_arp(struct net_device *dev)
 		return;
 	read_lock(&in_dev->lock);
 	if (in_dev->ifa_list)
+		
 	arp_send(ARPOP_REQUEST, ETH_P_ARP, 
 		 in_dev->ifa_list->ifa_address,
 		 dev, 

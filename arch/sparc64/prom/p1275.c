@@ -1,4 +1,4 @@
-/* $Id: p1275.c,v 1.18 1999/09/10 10:40:53 davem Exp $
+/* $Id: p1275.c,v 1.20 1999/11/23 23:47:56 davem Exp $
  * p1275.c: Sun IEEE 1275 PROM low level interface routines
  *
  * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -252,11 +252,7 @@ void prom_cif_callback(void)
  * the counter is needed.  -DaveM
  */
 static int prom_entry_depth = 0;
-static spinlock_t prom_entry_lock = SPIN_LOCK_UNLOCKED;
-#ifdef __SMP__
-extern void smp_capture(void);
-extern void smp_release(void);
-#endif
+spinlock_t prom_entry_lock = SPIN_LOCK_UNLOCKED;
 
 static __inline__ unsigned long prom_get_lock(void)
 {
@@ -270,9 +266,6 @@ static __inline__ unsigned long prom_get_lock(void)
 		if (prom_entry_depth != 0)
 			panic("prom_get_lock");
 #endif
-#ifdef __SMP__
-		smp_capture();
-#endif
 	}
 	prom_entry_depth++;
 
@@ -281,12 +274,9 @@ static __inline__ unsigned long prom_get_lock(void)
 
 static __inline__ void prom_release_lock(unsigned long flags)
 {
-	if (--prom_entry_depth == 0) {
-#ifdef __SMP__
-		smp_release();
-#endif
+	if (--prom_entry_depth == 0)
 		spin_unlock(&prom_entry_lock);
-	}
+
 	__restore_flags(flags);
 }
 

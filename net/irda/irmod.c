@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Dec 15 13:55:39 1997
- * Modified at:   Sun Nov 14 08:57:52 1999
+ * Modified at:   Thu Dec 16 21:46:38 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997, 1999 Dag Brattli, All Rights Reserved.
@@ -140,6 +140,7 @@ EXPORT_SYMBOL(irias_add_string_attrib);
 EXPORT_SYMBOL(irias_insert_object);
 EXPORT_SYMBOL(irias_new_object);
 EXPORT_SYMBOL(irias_delete_object);
+EXPORT_SYMBOL(irias_delete_value);
 EXPORT_SYMBOL(irias_find_object);
 EXPORT_SYMBOL(irias_find_attrib);
 EXPORT_SYMBOL(irias_new_integer_value);
@@ -194,6 +195,7 @@ EXPORT_SYMBOL(irda_device_unregister_dongle);
 EXPORT_SYMBOL(irda_task_execute);
 EXPORT_SYMBOL(irda_task_kick);
 EXPORT_SYMBOL(irda_task_next_state);
+EXPORT_SYMBOL(irda_task_delete);
 
 EXPORT_SYMBOL(async_wrap_skb);
 EXPORT_SYMBOL(async_unwrap_char);
@@ -210,7 +212,7 @@ EXPORT_SYMBOL(irtty_set_packet_mode);
 
 int __init irda_init(void)
 {
-	MESSAGE("IrDA (tm) Protocols for Linux-2.3 (Dag Brattli)\n");
+	MESSAGE("IrDA (tm) Protocols for Linux-2.2 (Dag Brattli)\n");
 	
  	irlmp_init();
 	irlap_init();
@@ -523,6 +525,24 @@ void irda_mod_dec_use_count(void)
 #ifdef MODULE
 	MOD_DEC_USE_COUNT;
 #endif
+}
+
+/*
+ * Function irda_proc_modcount (inode, fill)
+ *
+ *    Use by the proc file system functions to prevent the irda module
+ *    being removed while the use is standing in the net/irda directory
+ */
+void irda_proc_modcount(struct inode *inode, int fill)
+{
+#ifdef MODULE
+#ifdef CONFIG_PROC_FS
+	if (fill)
+		MOD_INC_USE_COUNT;
+	else
+		MOD_DEC_USE_COUNT;
+#endif /* CONFIG_PROC_FS */
+#endif /* MODULE */
 }
 
 #ifdef MODULE

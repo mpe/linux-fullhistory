@@ -1,165 +1,153 @@
-/* $Id: io.h,v 1.20 1999/06/03 15:02:50 davem Exp $ */
+/*
+ * $Id: io.h,v 1.24 1999/12/20 04:58:40 davem Exp $
+ */
 #ifndef __SPARC_IO_H
 #define __SPARC_IO_H
 
 #include <linux/kernel.h>
 #include <linux/types.h>
+#include <linux/ioport.h>  /* struct resource */
 
 #include <asm/page.h>      /* IO address mapping routines need this */
 #include <asm/system.h>
 
-/*
- * Defines for io operations on the Sparc. Whether a memory access is going
- * to i/o sparc is encoded in the pte. The type bits determine whether this
- * is i/o sparc, on board memory, or VME space for VME cards. I think VME
- * space only works on sun4's
- */
-
 #define virt_to_bus virt_to_phys
 
+
 extern __inline__ unsigned  flip_dword (unsigned d) {
-        return ((d&0xff)<<24) | (((d>>8)&0xff)<<16) | (((d>>16)&0xff)<<8)| ((d>>24)&0xff);
+	return ((d&0xff)<<24) | (((d>>8)&0xff)<<16) | (((d>>16)&0xff)<<8)| ((d>>24)&0xff);
 }
 
 extern __inline__ unsigned short flip_word (unsigned short d) {
-        return ((d&0xff) << 8) | ((d>>8)&0xff);
+	return ((d&0xff) << 8) | ((d>>8)&0xff);
 }
 
-extern __inline__ unsigned long readb(unsigned long addr)
-{
-       return *(volatile unsigned char*)addr;
+/*
+ * Memory mapped I/O to PCI
+ */
+extern __inline__ unsigned long readb(unsigned long addr) {
+	return *(volatile unsigned char*)addr;
 }
 
-extern __inline__ unsigned long readw(unsigned long addr)
-{
-       return flip_word(*(volatile unsigned short*)addr);
+extern __inline__ unsigned long readw(unsigned long addr) {
+	return flip_word(*(volatile unsigned short*)addr);
 }
 
-extern __inline__ unsigned long readl(unsigned long addr)
-{
-       return flip_dword(*(volatile unsigned long*)addr);
+extern __inline__ unsigned long readl(unsigned long addr) {
+	return flip_dword(*(volatile unsigned long*)addr);
 }
 
-extern __inline__ void writeb(unsigned short b, unsigned long addr)
-{
-       *(volatile unsigned char*)addr = b;
+extern __inline__ void writeb(unsigned char b, unsigned long addr) {
+	*(volatile unsigned char*)addr = b;
 }
 
-extern __inline__ void writew(unsigned short b, unsigned long addr)
-{
-       *(volatile unsigned short*)addr = flip_word(b);
+extern __inline__ void writew(unsigned short b, unsigned long addr) {
+	*(volatile unsigned short*)addr = flip_word(b);
 }
 
-extern __inline__ void writel(unsigned int b, unsigned long addr)
-{
-        *(volatile unsigned long*)addr = flip_dword(b);
+extern __inline__ void writel(unsigned int b, unsigned long addr) {
+	*(volatile unsigned long*)addr = flip_dword(b);
 }
 
-extern __inline__ unsigned long inb_local(unsigned long addr)
-{
-       return readb(addr);
-}
+/*
+ * I/O space operations
+ *
+ * Arrangement on a Sun is somewhat complicated.
+ *
+ * First of all, we want to use standard Linux drivers
+ * for keyboard, PC serial, etc. These drivers think
+ * they access I/O space and use inb/outb.
+ * On the other hand, EBus bridge accepts PCI *memory*
+ * cycles and converts them into ISA *I/O* cycles.
+ * Ergo, we want inb & outb to generate PCI memory cycles.
+ *
+ * If we want to issue PCI *I/O* cycles, we do this
+ * with a low 64K fixed window in PCIC. This window gets
+ * mapped somewhere into virtual kernel space and we
+ * can use inb/outb again.
+ */
+#define inb_local(addr)		readb(addr)
+#define inb(addr)		readb(addr)
+#define inw(addr)		readw(addr)
+#define inl(addr)		readl(addr)
+#define inb_p(addr)		readb(addr)
 
-extern __inline__ void outb_local(unsigned char b, unsigned long addr)
-{
-       return writeb(b,addr);
-}
-
-extern __inline__ unsigned long inb(unsigned long addr)
-{
-       return readb(addr);
-}
-
-extern __inline__ unsigned long inw(unsigned long addr)
-{
-       return readw(addr);
-}
-
-extern __inline__ unsigned long inl(unsigned long addr)
-{
-       return readl(addr);
-}
-
-extern __inline__ void outb(unsigned char b, unsigned long addr)
-{
-       return writeb(b,addr);
-}
-
-extern __inline__ void outw(unsigned short b, unsigned long addr)
-{
-       return writew(b,addr);
-}
-
-extern __inline__ void outl(unsigned int b, unsigned long addr)
-{
-       return writel(b,addr);
-}
-
-#define inb_p inb
-#define outb_p outb
+#define outb_local(b, addr)	writeb(b, addr)
+#define outb(b, addr)		writeb(b, addr)
+#define outw(b, addr)		writew(b, addr)
+#define outl(b, addr)		writel(b, addr)
+#define outb_p(b, addr)		writeb(b, addr)
 
 #define IO_SPACE_LIMIT 0xffffffff
 
-extern void sun4c_mapioaddr(unsigned long, unsigned long, int bus_type, int rdonly);
-extern void srmmu_mapioaddr(unsigned long, unsigned long, int bus_type, int rdonly);
-
-extern __inline__ void mapioaddr(unsigned long physaddr, unsigned long virt_addr,
-				 int bus, int rdonly)
-{
-	switch(sparc_cpu_model) {
-	case sun4c:
-	case sun4:
-		sun4c_mapioaddr(physaddr, virt_addr, bus, rdonly);
-		break;
-	case sun4m:
-	case sun4d:
-	case sun4e:
-		srmmu_mapioaddr(physaddr, virt_addr, bus, rdonly);
-		break;
-	default:
-		printk("mapioaddr: Trying to map IO space for unsupported machine.\n");
-		printk("mapioaddr: sparc_cpu_model = %d\n", sparc_cpu_model);
-		printk("mapioaddr: Halting...\n");
-		halt();
-	};
-	return;
-}
-
-extern void srmmu_unmapioaddr(unsigned long virt);
-extern void sun4c_unmapioaddr(unsigned long virt);
-
-extern __inline__ void unmapioaddr(unsigned long virt_addr)
-{
-	switch(sparc_cpu_model) {
-	case sun4c:
-	case sun4:
-		sun4c_unmapioaddr(virt_addr);
-		break;
-	case sun4m:
-	case sun4d:
-	case sun4e:
-		srmmu_unmapioaddr(virt_addr);
-		break;
-	default:
-		printk("unmapioaddr: sparc_cpu_model = %d, halt...\n", sparc_cpu_model);
-		halt();
-	};
-	return;
-}
-
-extern void *sparc_alloc_io (u32 pa, void *va, int sz, char *name, u32 io, int rdonly);
-extern void sparc_free_io (void *vaddr, int sz);
-extern void *_sparc_dvma_malloc (int sz, char *name);
-
-/* Returns CPU visible address, dvmaaddr_p is a pointer to where
- * the DVMA visible (ie. SBUS/PSYCO+PCI) address should be stored.
+/*
+ * SBus accessors.
+ *
+ * SBus has only one, memory mapped, I/O space.
+ * We do not need to flip bytes for SBus of course.
  */
-static __inline__ void *sparc_dvma_malloc(int size, char *name, __u32 *dvmaaddr_p)
-{
-	void *cpuaddr = _sparc_dvma_malloc(size, name);
-	*dvmaaddr_p = (__u32) cpuaddr;
-	return cpuaddr;
+extern __inline__ unsigned int _sbus_readb(unsigned long addr) {
+	return *(volatile unsigned char*)addr;
 }
+
+extern __inline__ unsigned int _sbus_readw(unsigned long addr) {
+	return *(volatile unsigned short*)addr;
+}
+
+extern __inline__ unsigned int _sbus_readl(unsigned long addr) {
+	return *(volatile unsigned long*)addr;
+}
+
+extern __inline__ void _sbus_writeb(unsigned char b, unsigned long addr) {
+	*(volatile unsigned char*)addr = b;
+}
+
+extern __inline__ void _sbus_writew(unsigned short b, unsigned long addr) {
+	*(volatile unsigned short*)addr = b;
+}
+
+extern __inline__ void _sbus_writel(unsigned int b, unsigned long addr) {
+	*(volatile unsigned long*)addr = b;
+}
+
+/*
+ * The only reason for #define's is to hide casts to unsigned long.
+ * XXX Rewrite drivers without structures for registers.
+ */
+#define sbus_readb(a)	_sbus_readb((unsigned long)(a))
+#define sbus_readw(a)	_sbus_readw((unsigned long)(a))
+#define sbus_readl(a)	_sbus_readl((unsigned long)(a))
+#define sbus_writeb(v, a)	_sbus_writeb(v, (unsigned long)(a))
+#define sbus_writew(v, a)	_sbus_writew(v, (unsigned long)(a))
+#define sbus_writel(v, a)	_sbus_writel(v, (unsigned long)(a))
+
+static inline void *sbus_memset_io(void *__dst, int c, __kernel_size_t n)
+{
+	unsigned long dst = (unsigned long)__dst;
+
+	while(n--) {
+		sbus_writeb(c, dst);
+		dst++;
+	}
+	return (void *) dst;
+}
+
+/*
+ * Bus number may be embedded in the higher bits of the physical address.
+ * This is why we have no bus number argument to ioremap().
+ */
+extern void *ioremap(unsigned long offset, unsigned long size);
+extern void iounmap(void *addr);
+
+/* P3: talk davem into dropping "name" argument in favor of res->name */
+/*
+ * Bus number may be in res->flags... somewhere.
+ */
+extern unsigned long sbus_ioremap(struct resource *res, unsigned long offset,
+    unsigned long size, char *name);
+/* XXX Partial deallocations? I think not! */
+extern void sbus_iounmap(unsigned long vaddr, unsigned long size);
+
 
 #define virt_to_phys(x) __pa((unsigned long)(x))
 #define phys_to_virt(x) __va((unsigned long)(x))
@@ -169,11 +157,11 @@ static __inline__ void *sparc_dvma_malloc(int size, char *name, __u32 *dvmaaddr_
  * so rtc_port is static in it. This should not change unless a new
  * hardware pops up.
  */
-
 #define RTC_PORT(x)   (rtc_port + (x))
 #define RTC_ALWAYS_BCD  0
 
 /* Nothing to do */
+/* P3: Only IDE DMA may need these. */
 
 #define dma_cache_inv(_start,_size)		do { } while (0)
 #define dma_cache_wback(_start,_size)		do { } while (0)

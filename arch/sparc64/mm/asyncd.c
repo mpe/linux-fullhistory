@@ -1,4 +1,4 @@
-/*  $Id: asyncd.c,v 1.9 1999/07/30 09:35:43 davem Exp $
+/*  $Id: asyncd.c,v 1.10 1999/12/15 22:25:02 davem Exp $
  *  The asyncd kernel daemon. This handles paging on behalf of 
  *  processes that receive page faults due to remote (async) memory
  *  accesses. 
@@ -25,6 +25,7 @@
 #include <asm/system.h> /* for cli()/sti() */
 #include <asm/segment.h> /* for memcpy_to/fromfs */
 #include <asm/bitops.h>
+#include <asm/pgalloc.h>
 #include <asm/pgtable.h>
 
 #define DEBUG 0

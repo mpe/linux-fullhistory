@@ -101,7 +101,7 @@ void read_cis_mem(socket_info_t *s, int attr, u_int addr,
     mem->card_start = addr & ~(s->cap.map_size-1);
 
     for (; len > 0; sys = s->cis_virt) {
-	s->ss_entry(s->sock, SS_SetMemMap, mem);
+	s->ss_entry->set_mem_map(s->sock, mem);
 	DEBUG(3,  "cs:  %#2.2x %#2.2x %#2.2x %#2.2x %#2.2x ...\n",
 	      bus_readb(s->cap.bus, sys),
 	      bus_readb(s->cap.bus, sys+inc),
@@ -131,7 +131,7 @@ void write_cis_mem(socket_info_t *s, int attr, u_int addr,
     mem->card_start = addr & ~(s->cap.map_size-1);
     
     for (; len > 0; sys = s->cis_virt) {
-	s->ss_entry(s->sock, SS_SetMemMap, mem);
+	s->ss_entry->set_mem_map(s->sock, mem);
 	for ( ; len > 0; len--, ((u_char *)ptr)++, sys += inc) {
 	    if (sys == s->cis_virt+s->cap.map_size) break;
 	    bus_writeb(s->cap.bus, *(u_char *)ptr, sys);
@@ -181,7 +181,7 @@ static int checksum(u_long base)
     vs->cis_virt = bus_ioremap(vs->cap.bus, base, vs->cap.map_size);
     vs->cis_mem.card_start = 0;
     vs->cis_mem.flags = MAP_ACTIVE;
-    vs->ss_entry(vs->sock, SS_SetMemMap, &vs->cis_mem);
+    vs->ss_entry->set_mem_map(vs->sock, &vs->cis_mem);
     /* Don't bother checking every word... */
     a = 0; b = -1;
     for (i = 0; i < vs->cap.map_size; i += 44) {
@@ -223,7 +223,7 @@ void release_cis_mem(socket_info_t *s)
 {
     if (s->cis_mem.sys_start != 0) {
 	s->cis_mem.flags &= ~MAP_ACTIVE;
-	s->ss_entry(s->sock, SS_SetMemMap, &s->cis_mem);
+	s->ss_entry->set_mem_map(s->sock, &s->cis_mem);
 	release_mem_region(s->cis_mem.sys_start, s->cap.map_size);
 	bus_iounmap(s->cap.bus, s->cis_virt);
 	s->cis_mem.sys_start = 0;

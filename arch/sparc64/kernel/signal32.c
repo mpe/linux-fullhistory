@@ -1,4 +1,4 @@
-/*  $Id: signal32.c,v 1.50 1999/07/30 09:35:25 davem Exp $
+/*  $Id: signal32.c,v 1.56 1999/12/20 01:16:16 davem Exp $
  *  arch/sparc64/kernel/signal32.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -663,7 +663,8 @@ static inline void new_setup_frame32(struct k_sigaction *ka, struct pt_regs *reg
 			goto sigsegv;
 
 		if(pte_present(*ptep)) {
-			unsigned long page = pte_page(*ptep);
+			unsigned long page = (unsigned long)
+				__va(pte_pagenr(*ptep) << PAGE_SHIFT);
 
 			__asm__ __volatile__("
 			membar	#StoreStore
@@ -1033,6 +1034,26 @@ static inline void setup_rt_frame32(struct k_sigaction *ka, struct pt_regs *regs
 		err |= __put_user(0, &sf->fpu_save);
 	}
 
+	/* Update the siginfo structure.  Is this good?  */
+	if (info->si_code == 0) {
+		info->si_signo = signr;
+		info->si_errno = 0;
+
+		switch (signr) {
+		case SIGSEGV:
+		case SIGILL:
+		case SIGFPE:
+		case SIGBUS:
+		case SIGEMT:
+			info->si_code = current->thread.sig_desc;
+			info->si_addr = (void *)current->thread.sig_address;
+			info->si_trapno = 0;
+			break;
+		default:
+			break;
+		}
+	}
+
 	err = __put_user (info->si_signo, &sf->info.si_signo);
 	err |= __put_user (info->si_errno, &sf->info.si_errno);
 	err |= __put_user (info->si_code, &sf->info.si_code);
@@ -1084,7 +1105,7 @@ static inline void setup_rt_frame32(struct k_sigaction *ka, struct pt_regs *regs
 	case 1: seta.sig[1] = (oldset->sig[0] >> 32);
 		seta.sig[0] = oldset->sig[0];
 	}
-	err |= __copy_to_user(&sf->mask, &seta, sizeof(sigset_t));
+	err |= __copy_to_user(&sf->mask, &seta, sizeof(sigset_t32));
 
 	err |= copy_in_user((u32 *)sf,
 			    (u32 *)(regs->u_regs[UREG_FP]),
@@ -1122,7 +1143,8 @@ static inline void setup_rt_frame32(struct k_sigaction *ka, struct pt_regs *regs
 			goto sigsegv;
 
 		if(pte_present(*ptep)) {
-			unsigned long page = pte_page(*ptep);
+			unsigned long page = (unsigned long)
+				__va(pte_pagenr(*ptep) << PAGE_SHIFT);
 
 			__asm__ __volatile__("
 			membar	#StoreStore
@@ -1326,7 +1348,8 @@ asmlinkage int do_signal32(sigset_t *oldset, struct pt_regs * regs,
 				continue;
 
 			case SIGQUIT: case SIGILL: case SIGTRAP:
-			case SIGABRT: case SIGFPE: case SIGSEGV: case SIGBUS:
+			case SIGABRT: case SIGFPE: case SIGSEGV:
+			case SIGBUS: case SIGSYS: case SIGXCPU: case SIGXFSZ:
 				if (do_coredump(signr, regs))
 					exit_code |= 0x80;
 #ifdef DEBUG_SIGNALS

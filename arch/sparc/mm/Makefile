@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.34 1999/08/14 03:51:42 anton Exp $
+# $Id: Makefile,v 1.35 1999/10/09 05:32:01 zaitcev Exp $
 # Makefile for the linux Sparc-specific parts of the memory manager.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -15,7 +15,7 @@ endif
 ifeq ($(CONFIG_SUN4),y)
 O_OBJS	 += nosrmmu.o
 else
-O_OBJS	 += srmmu.o iommu.o io-unit.o hypersparc.o viking.o tsunami.o
+O_OBJS	 += srmmu.o iommu.o io-unit.o hypersparc.o viking.o tsunami.o swift.o
 endif
 ifdef CONFIG_SMP
 O_OBJS   += nosun4c.o
@@ -33,3 +33,6 @@ viking.o: viking.S
 
 tsunami.o: tsunami.S
 	$(CC) -D__ASSEMBLY__ $(AFLAGS) -ansi -c -o tsunami.o tsunami.S
+
+swift.o: swift.S
+	$(CC) -D__ASSEMBLY__ $(AFLAGS) -ansi -c -o swift.o swift.S

@@ -7,6 +7,8 @@
  * Status:        Experimental.
  * Author:        James McKenzie <james@fishsoup.dhs.org>
  * Created at:    Sat May 8  12:35:27 1999
+ * Modified:      Paul Bristow <paul.bristow@technologist.com>
+ * Modified:      Mon Nov 11 19:10:05 1999
  * 
  *     Copyright (c) 1999 James McKenzie, All Rights Reserved.
  *      
@@ -28,7 +30,7 @@
 /* an olivetti notebook which doesn't have FIR, a toshiba libretto, and */
 /* an hp printer, this works fine at 4MBPS with my HP printer */
 
-static char *rcsid = "$Id: toshoboe.c,v 1.9 1999/06/29 14:21:06 root Exp $";
+static char *rcsid = "$Id: toshoboe.c,v 1.91 1999/06/29 14:21:06 root Exp $";
 
 /* 
  * $Log: toshoboe.c,v $
@@ -65,7 +67,7 @@ static char *rcsid = "$Id: toshoboe.c,v 1.9 1999/06/29 14:21:06 root Exp $";
 /* Toshiba's drivers do this, but it disables back to back tansfers */
 /* I think that the chip may have some problems certainly, I have */
 /* seen it jump over tasks in the taskfile->xmit with this turned on */
-#define ONETASK
+#define ONETASK 
 
 /* To adjust the number of tasks in use edit toshoboe.h */
 
@@ -84,7 +86,6 @@ static char *rcsid = "$Id: toshoboe.c,v 1.9 1999/06/29 14:21:06 root Exp $";
 
 /* No user servicable parts below here */
 
-#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/kernel.h>
@@ -147,7 +148,7 @@ toshoboe_setbaud (struct toshoboe_cb *self, int baud)
   unsigned long flags;
   IRDA_DEBUG (4, __FUNCTION__ "()\n");
 
-  printk (KERN_WARNING "ToshOboe: seting baud to %d\n", baud);
+  printk (KERN_WARNING "ToshOboe: setting baud to %d\n", baud);
 
   save_flags (flags);
   cli ();
@@ -206,6 +207,7 @@ toshoboe_setbaud (struct toshoboe_cb *self, int baud)
   outb_p (0x80, OBOE_RST);
   outb_p (0x01, OBOE_REG_9);
 
+  self->io.speed = baud;
 }
 
 /* Wake the chip up and get it looking at the taskfile */
@@ -407,6 +409,7 @@ toshoboe_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 
       if (self->new_speed) {
 	      toshoboe_setbaud(self, self->new_speed);
+
 	      self->new_speed = 0;
       }
       self->netdev->tbusy = 0; /* Unlock */
@@ -450,8 +453,6 @@ toshoboe_interrupt (int irq, void *dev_id, struct pt_regs *regs)
                       "(), memory squeeze, dropping frame.\n");
             }
 
-
-
           self->taskfile->recv[self->rxs].control = 0x83;
           self->taskfile->recv[self->rxs].len = 0x0;
 
@@ -484,16 +485,6 @@ toshoboe_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 
 
 }
-
-static int
-toshoboe_is_receiving (struct toshoboe_cb *self)
-{
-  IRDA_DEBUG (4, __FUNCTION__ "()\n");
-
-/*FIXME Can't tell! */
-  return (FALSE);
-}
-
 
 static int
 toshoboe_net_init (struct net_device *dev)
@@ -625,7 +616,51 @@ toshoboe_net_close (struct net_device *dev)
 
 }
 
+/*
+ * Function toshoboe_net_ioctl (dev, rq, cmd)
+ *
+ *    Process IOCTL commands for this device
+ *
+ */
+static int toshoboe_net_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
+{
+	struct if_irda_req *irq = (struct if_irda_req *) rq;
+	struct toshoboe_cb *self;
+	unsigned long flags;
+	int ret = 0;
 
+	ASSERT(dev != NULL, return -1;);
+
+	self = dev->priv;
+
+	ASSERT(self != NULL, return -1;);
+
+	IRDA_DEBUG(2, __FUNCTION__ "(), %s, (cmd=0x%X)\n", dev->name, cmd);
+	
+	/* Disable interrupts & save flags */
+	save_flags(flags);
+	cli();
+	
+	switch (cmd) {
+	case SIOCSBANDWIDTH: /* Set bandwidth */
+		/* toshoboe_setbaud(self, irq->ifr_baudrate); */
+                /* Just change speed once - inserted by Paul Bristow */
+	        self->new_speed = irq->ifr_baudrate;
+		break;
+	case SIOCSMEDIABUSY: /* Set media busy */
+		irda_device_set_media_busy(self->netdev, TRUE);
+		break;
+	case SIOCGRECEIVING: /* Check if we are receiving right now */
+		irq->ifr_receiving = 0; /* Can't tell */
+		break;
+	default:
+		ret = -EOPNOTSUPP;
+	}
+	
+	restore_flags(flags);
+	
+	return ret;
+}
 
 #ifdef MODULE
 
@@ -667,6 +702,8 @@ toshoboe_close (struct toshoboe_cb *self)
 	  rtnl_lock();
 	  unregister_netdevice(self->netdev);
 	  rtnl_unlock();
+	  /* Must free the old-style 2.2.x device */
+	  kfree(self->netdev);
   }
 
   kfree (self->taskfilebuf);
@@ -847,6 +884,7 @@ toshoboe_open (struct pci_dev *pci_dev)
   dev->hard_start_xmit = toshoboe_hard_xmit;
   dev->open = toshoboe_net_open;
   dev->stop = toshoboe_net_close;
+  dev->do_ioctl = toshoboe_net_ioctl;
 
   rtnl_lock();
   err = register_netdevice(dev);

@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.29 1999/08/04 07:04:10 jj Exp $
+/* $Id: sys_sparc.c,v 1.30 1999/10/13 11:48:07 jj Exp $
  * linux/arch/sparc64/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -274,6 +274,21 @@ asmlinkage int solaris_syscall(struct pt_regs *regs)
 	unlock_kernel();
 	return -ENOSYS;
 }
+
+#ifndef CONFIG_SUNOS_EMUL
+asmlinkage int sunos_syscall(struct pt_regs *regs)
+{
+	static int count = 0;
+	lock_kernel();
+	regs->tpc = regs->tnpc;
+	regs->tnpc += 4;
+	if(++count <= 20)
+		printk ("SunOS binary emulation not compiled in\n");
+	force_sig(SIGSEGV, current);
+	unlock_kernel();
+	return -ENOSYS;
+}
+#endif
 
 asmlinkage int sys_utrap_install(utrap_entry_t type, utrap_handler_t new_p,
 				 utrap_handler_t new_d,

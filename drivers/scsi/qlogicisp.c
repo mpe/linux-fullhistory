@@ -1241,8 +1241,6 @@ static int isp1020_init(struct Scsi_Host *sh)
 	}
 
 #ifdef __sparc__
-	if (mem_base)
-		mem_base = __pa(mem_base);
 	command |= (PCI_COMMAND_MASTER|PCI_COMMAND_IO|PCI_COMMAND_MEMORY|
 		    PCI_COMMAND_INVALIDATE|PCI_COMMAND_SERR);
 	pci_write_config_word(pdev, PCI_COMMAND, command);
