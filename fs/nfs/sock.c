@@ -90,7 +90,7 @@ static int do_nfs_rpc_call(struct nfs_server *server, int *start, int *end)
 					goto re_select;
 #endif
 				current->timeout = 0;
-				result = -EINTR;
+				result = -ERESTARTSYS;
 				break;
 			}
 			if (!current->timeout) {

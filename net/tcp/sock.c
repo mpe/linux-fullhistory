@@ -19,8 +19,20 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: sock.c,v 0.8.4.12 1992/12/12 19:25:04 bir7 Exp $ */
+/* $Id: sock.c,v 0.8.4.16 1993/01/26 22:04:00 bir7 Exp $ */
 /* $Log: sock.c,v $
+ * Revision 0.8.4.16  1993/01/26  22:04:00  bir7
+ * Added support for proc fs.
+ *
+ * Revision 0.8.4.15  1993/01/23  18:00:11  bir7
+ * Added volatile keyword
+ *
+ * Revision 0.8.4.14  1993/01/22  23:21:38  bir7
+ * Merged with 99 pl4
+ *
+ * Revision 0.8.4.13  1993/01/22  22:58:08  bir7
+ * *** empty log message ***
+ *
  * Revision 0.8.4.12  1992/12/12  19:25:04  bir7
  * Made memory leak checking more leanent.
  *
@@ -70,6 +82,7 @@
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/string.h>
+#include <linux/config.h>
 #include <linux/sock_ioctl.h>
 #include "../kern_sock.h"
 #include "timer.h"
@@ -152,7 +165,6 @@ static int ip_proto_getsockopt (struct socket *sock, int level, int optname,
 static int ip_proto_fcntl (struct socket *sock, unsigned int cmd,
 			   unsigned long arg);
 
-
 struct proto_ops inet_proto_ops = 
 {
   ip_proto_init,
@@ -176,49 +188,50 @@ struct proto_ops inet_proto_ops =
   ip_proto_shutdown,
   ip_proto_setsockopt,
   ip_proto_getsockopt,
-  ip_proto_fcntl
+  ip_proto_fcntl,
 };
 
 void
 print_sk (volatile struct sock *sk)
 {
   if (!sk) {
-    PRINTK (("  print_sk(NULL)\n"));
+    printk ("  print_sk(NULL)\n");
     return;
   }
-  PRINTK (("  wmem_alloc = %d\n", sk->wmem_alloc));
-  PRINTK (("  rmem_alloc = %d\n", sk->rmem_alloc));
-  PRINTK (("  send_head = %X\n", sk->send_head));
-  PRINTK (("  state = %d\n",sk->state));
-  PRINTK (("  wback = %X, rqueue = %X\n", sk->wback, sk->rqueue));
-  PRINTK (("  wfront = %X\n", sk->wfront));
-  PRINTK (("  daddr = %X, saddr = %X\n", sk->daddr,sk->saddr));
-  PRINTK (("  num = %d", sk->num));
-  PRINTK ((" next = %X\n", sk->next));
-  PRINTK (("  send_seq = %d, acked_seq = %d, copied_seq = %d\n",
-	  sk->send_seq, sk->acked_seq, sk->copied_seq));
-  PRINTK (("  rcv_ack_seq = %d, window_seq = %d, fin_seq = %d\n",
-	  sk->rcv_ack_seq, sk->window_seq, sk->fin_seq));
-  PRINTK (("  prot = %X\n", sk->prot));
-  PRINTK (("  pair = %X, back_log = %X\n", sk->pair,sk->back_log));
-  PRINTK (("  inuse = %d , blog = %d\n", sk->inuse, sk->blog));
-  PRINTK (("  dead = %d delay_acks=%d\n", sk->dead, sk->delay_acks));
-  PRINTK (("  retransmits = %d, timeout = %d\n", sk->retransmits, sk->timeout));
-  PRINTK (("  cong_window = %d, packets_out = %d\n", sk->cong_window,
-	  sk->packets_out));
+  printk ("  wmem_alloc = %d\n", sk->wmem_alloc);
+  printk ("  rmem_alloc = %d\n", sk->rmem_alloc);
+  printk ("  send_head = %X\n", sk->send_head);
+  printk ("  state = %d\n",sk->state);
+  printk ("  wback = %X, rqueue = %X\n", sk->wback, sk->rqueue);
+  printk ("  wfront = %X\n", sk->wfront);
+  printk ("  daddr = %X, saddr = %X\n", sk->daddr,sk->saddr);
+  printk ("  num = %d", sk->num);
+  printk (" next = %X\n", sk->next);
+  printk ("  send_seq = %d, acked_seq = %d, copied_seq = %d\n",
+	  sk->send_seq, sk->acked_seq, sk->copied_seq);
+  printk ("  rcv_ack_seq = %d, window_seq = %d, fin_seq = %d\n",
+	  sk->rcv_ack_seq, sk->window_seq, sk->fin_seq);
+  printk ("  prot = %X\n", sk->prot);
+  printk ("  pair = %X, back_log = %X\n", sk->pair,sk->back_log);
+  printk ("  inuse = %d , blog = %d\n", sk->inuse, sk->blog);
+  printk ("  dead = %d delay_acks=%d\n", sk->dead, sk->delay_acks);
+  printk ("  retransmits = %d, timeout = %d\n", sk->retransmits, sk->timeout);
+  printk ("  cong_window = %d, packets_out = %d\n", sk->cong_window,
+	  sk->packets_out);
+  printk ("  urg = %d shutdown=%d\n", sk->urg, sk->shutdown);
 }
 
 void
 print_skb(struct sk_buff *skb)
 {
   if (!skb) {
-    PRINTK (("  print_skb(NULL)\n"));
+    printk ("  print_skb(NULL)\n");
     return;
   }
-  PRINTK (("  prev = %X, next = %X\n", skb->prev, skb->next));
-  PRINTK (("  sk = %X link3 = %X\n", skb->sk, skb->link3));
-  PRINTK (("  mem_addr = %X, mem_len = %d\n", skb->mem_addr, skb->mem_len));
-  PRINTK (("  used = %d free = %d\n", skb->used,skb->free));
+  printk ("  prev = %X, next = %X\n", skb->prev, skb->next);
+  printk ("  sk = %X link3 = %X\n", skb->sk, skb->link3);
+  printk ("  mem_addr = %X, mem_len = %d\n", skb->mem_addr, skb->mem_len);
+  printk ("  used = %d free = %d\n", skb->used,skb->free);
 }
 
 /* just used to reference some pointers to keep gcc from over optimizing
@@ -472,7 +485,7 @@ destroy_sock(volatile struct sock *sk)
   for (skb = sk->wfront; skb != NULL; )
     {
       struct sk_buff *skb2;
-      skb2=skb->next;
+      skb2=(struct sk_buff *)skb->next;
       if (skb->magic != TCP_WRITE_QUEUE_MAGIC)
 	{
 	  printk ("sock.c:destroy_sock write queue with bad magic (%X)\n",
@@ -491,7 +504,7 @@ destroy_sock(volatile struct sock *sk)
        skb = sk->rqueue;
        do {
 	  struct sk_buff *skb2;
-	  skb2=skb->next;
+	  skb2=(struct sk_buff *)skb->next;
 
 	  /* this will take care of closing sockets that were
 	     listening and didn't accept everything. */
@@ -521,7 +534,7 @@ destroy_sock(volatile struct sock *sk)
 
       if (skb->next != NULL)
 	{
-	  extern struct sk_buff *arp_q;
+	  extern volatile struct sk_buff *arp_q;
 	  int i;
 	   if (skb->next != skb)
 	     {
@@ -597,7 +610,7 @@ destroy_sock(volatile struct sock *sk)
 	}
       skb->dev = NULL;
       sti();
-      skb2=skb->link3;
+      skb2=(struct sk_buff *)skb->link3;
       kfree_skb(skb, FREE_WRITE);
       skb=skb2;
     }
@@ -611,10 +624,10 @@ destroy_sock(volatile struct sock *sk)
        /* this should never happen. */
        printk ("cleaning back_log. \n");
        cli();
-       skb = sk->back_log;
+       skb = (struct sk_buff *)sk->back_log;
        do {
 	  struct sk_buff *skb2;
-	  skb2=skb->next;
+	  skb2=(struct sk_buff *)skb->next;
 	  kfree_skb(skb, FREE_READ);
 	  skb=skb2;
        } while (skb != sk->back_log);
@@ -642,7 +655,6 @@ destroy_sock(volatile struct sock *sk)
        /* this should never happen. */
        /* actually it can if an ack has just been sent. */
        PRINTK (("possible memory leak in socket = %X\n", sk));
-       print_sk (sk);
        sk->destroy = 1;
        sk->ack_backlog = 0;
        sk->inuse = 0;
@@ -650,9 +662,7 @@ destroy_sock(volatile struct sock *sk)
        sk->timeout = TIME_DESTROY;
        reset_timer ((struct timer *)&sk->time_wait);
     }
-
   PRINTK (("leaving destroy_sock\n"));
-  
 }
 
 
@@ -660,6 +670,7 @@ static int
 ip_proto_fcntl (struct socket *sock, unsigned int cmd, unsigned long arg)
 {
    volatile struct sock *sk;
+
    sk=sock->data;
    if (sk == NULL)
      {
@@ -670,8 +681,19 @@ ip_proto_fcntl (struct socket *sock, unsigned int cmd, unsigned long arg)
    switch (cmd)
      {
        case F_SETOWN:
-	sk->proc = arg;
-	return (0);
+
+       /* this is a little restrictive, but it's the only way to make
+	  sure that you can't send a sigurg to another process. */
+       if (!suser() && current->pgrp != -arg && current->pid != arg)
+	 return (-EPERM);
+
+       sk->proc = arg;
+       return (0);
+
+
+       
+       sk->proc = arg;
+       return (0);
 
        case F_GETOWN:
 	return (sk->proc);
@@ -869,7 +891,7 @@ static int ip_proto_init(void)
     {
        struct ip_protocol *tmp;
        /* add all the protocols. */
-       tmp = p->next;
+       tmp = (struct ip_protocol *) p->next;
        add_ip_protocol (p);
        p = tmp;
     }
@@ -997,6 +1019,7 @@ ip_proto_create (struct socket *sock, int protocol)
   sk->urginline = 0;
   sk->intr = 0;
   sk->linger = 0;
+  sk->rtt = 0;
   sk->destroy = 0;
   sk->reuse = 0;
   sk->priority = 1;
@@ -1156,12 +1179,18 @@ ip_proto_bind (struct socket *sock, struct sockaddr *uaddr,
 
 /*  verify_area (uaddr, addr_len);*/
   memcpy_fromfs (&addr, uaddr, min (sizeof (addr), addr_len));
+
+#if 0
   if (addr.sin_family && addr.sin_family != AF_INET)
-    return (-EINVAL); /* this needs to be changed. */
+    {
+      /* this is really a bug in BSD which we need to emulate because
+	 ftp expects it. */
+      return (-EINVAL);
+    }
+#endif
 
   snum = net16(addr.sin_port);
   PRINTK (("bind sk =%X to port = %d\n", sk, snum));
-  print_sk (sk);
   sk = sock->data;
 
   /* we can't just leave the socket bound wherever it is, it might be bound
@@ -1182,7 +1211,6 @@ ip_proto_bind (struct socket *sock, struct sockaddr *uaddr,
 
   PRINTK (("sock_array[%d] = %X:\n", snum & (SOCK_ARRAY_SIZE -1),
 	  sk->prot->sock_array[snum & (SOCK_ARRAY_SIZE -1)]));
-  print_sk (sk->prot->sock_array[snum & (SOCK_ARRAY_SIZE -1)]);
 
   /* make sure we are allowed to bind here. */
   for (sk2 = sk->prot->sock_array[snum & (SOCK_ARRAY_SIZE -1)];
@@ -1245,11 +1273,8 @@ ip_proto_connect (struct socket *sock, struct sockaddr * uaddr,
   if (sk->prot->connect == NULL)
     return (-EOPNOTSUPP);
 
-  if (sk->intr == 0)
-    {
-      err = sk->prot->connect (sk, (struct sockaddr_in *)uaddr, addr_len);
-      if (err < 0) return (err);
-    }
+  err = sk->prot->connect (sk, (struct sockaddr_in *)uaddr, addr_len);
+  if (err < 0) return (err);
 
   sock->state = SS_CONNECTING;
   if (sk->state != TCP_ESTABLISHED && (flags & O_NONBLOCK))
@@ -1263,14 +1288,12 @@ ip_proto_connect (struct socket *sock, struct sockaddr * uaddr,
       if (current->signal & ~current->blocked)
 	{
 	   sti();
-	   sk->intr = 1;
-	   sock->state = SS_UNCONNECTED;
 	   return (-ERESTARTSYS);
 	}
     }
   sti();
   sock->state = SS_CONNECTED;
-  sk->intr = 0;
+
   if (sk->state != TCP_ESTABLISHED && sk->err)
     {
       sock->state = SS_UNCONNECTED;
@@ -1298,6 +1321,7 @@ ip_proto_accept (struct socket *sock, struct socket *newsock, int flags)
 
   /* we've been passed an extra socket. We need to free it up because
    the tcp module creates it's own when it accepts one. */
+
   if (newsock->data)
     kfree_s (newsock->data, sizeof (struct sock));
 
@@ -1383,7 +1407,10 @@ ip_proto_getname(struct socket *sock, struct sockaddr *uaddr,
   else
     {
       sin.sin_port = sk->dummy_th.source;
-      sin.sin_addr.s_addr = sk->saddr;
+      if (sk->saddr == 0)
+	sin.sin_addr.s_addr = MY_IP_ADDR;
+      else
+	sin.sin_addr.s_addr = sk->saddr;
     }
   len = sizeof (sin);
   verify_area (uaddr, len);
@@ -1625,6 +1652,19 @@ ip_proto_ioctl (struct socket *sock, unsigned int cmd,
 	 return (-EPERM);
        return (ip_set_dev((struct ip_config *)arg));
 
+     case SIOCSARP:
+       if (!suser())
+         return (-EPERM);
+       return (arp_ioctl_set((struct arpreq *)arg));
+
+     case SIOCGARP:
+       return (arp_ioctl_get((struct arpreq *)arg));
+
+     case SIOCDARP:
+       if (!suser())
+         return (-EPERM);
+       return (arp_ioctl_del((struct arpreq *)arg));
+
      case FIOSETOWN:
      case SIOCSPGRP:
         {
@@ -1812,9 +1852,8 @@ void release_sock (volatile struct sock *sk)
     {
       struct sk_buff *skb;
       sk->blog = 1;
-      skb = sk->back_log;
+      skb = (struct sk_buff *)sk->back_log;
       PRINTK (("release_sock: skb = %X:\n",skb));
-      print_skb(skb);
       if (skb->next != skb)
 	{
 	  sk->back_log = skb->next;

@@ -263,11 +263,11 @@ int unmap_page_range(unsigned long from, unsigned long size)
 		}
 		for (pc = pcnt; pc--; page_table++) {
 			if ((page = *page_table) != 0) {
-				--current->rss;
 				*page_table = 0;
-				if (1 & page)
+				if (1 & page) {
+					--current->rss;
 					free_page(0xfffff000 & page);
-				else
+				} else
 					swap_free(page >> 1);
 			}
 		}
@@ -394,15 +394,12 @@ static unsigned long put_page(struct task_struct * tsk,unsigned long page,unsign
 		return 0;
 	}
 	page_table = (unsigned long *) (tsk->tss.cr3 + ((address>>20) & 0xffc));
-	if ((*page_table)&1)
+	if ((*page_table) & PAGE_PRESENT)
 		page_table = (unsigned long *) (0xfffff000 & *page_table);
 	else {
-		tmp = get_free_page(GFP_KERNEL);
-		if (!tmp) {
-			oom(tsk);
-			tmp = BAD_PAGETABLE;
-		}
-		*page_table = tmp | PAGE_ACCESSED | 7;
+		printk("put_page: bad page directory entry\n");
+		oom(tsk);
+		*page_table = BAD_PAGETABLE | PAGE_ACCESSED | 7;
 		return 0;
 	}
 	page_table += (address >> PAGE_SHIFT) & 0x3ff;
@@ -771,6 +768,7 @@ void do_page_fault(unsigned long *esp, unsigned long error_code)
 {
 	unsigned long address;
 	unsigned long user_esp = 0;
+	unsigned long stack_limit;
 	unsigned int bit;
 	extern void die_if_kernel();
 
@@ -789,6 +787,16 @@ void do_page_fault(unsigned long *esp, unsigned long error_code)
 			do_wp_page(error_code, address, current, user_esp);
 		else
 			do_no_page(error_code, address, current, user_esp);
+		if (!user_esp)
+			return;
+		stack_limit = current->rlim[RLIMIT_STACK].rlim_cur;
+		if (stack_limit >= RLIM_INFINITY)
+			return;
+		if (stack_limit >= current->start_stack)
+			return;
+		stack_limit = current->start_stack - stack_limit;
+		if (user_esp < stack_limit)
+			send_sig(SIGSEGV, current, 1);
 		return;
 	}
 	printk("Unable to handle kernel paging request at address %08x\n",address);

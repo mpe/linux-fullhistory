@@ -37,6 +37,10 @@ struct socket {
 	void *dummy;
 };
 
+#define SOCK_INODE(S) ((struct inode *)(S)->dummy)
+extern struct socket sockets[NSOCKETS];
+#define last_socket (sockets + NSOCKETS - 1)
+
 struct proto_ops {
 	int (*init)(void);
 	int (*create)(struct socket *sock, int protocol);
@@ -69,7 +73,7 @@ struct proto_ops {
 	int (*getsockopt)(struct socket *sock, int level, int optname,
 			  char *optval, int *optlen);
 	int (*fcntl) (struct socket *sock, unsigned int cmd,
-		      unsigned long arg);
+		      unsigned long arg);	
 };
 
 extern int sock_awaitconn(struct socket *mysock, struct socket *servsock);

@@ -221,7 +221,7 @@ void exception(int n)
 {
   int i, int_type;
 
-  int_type = 0;
+  int_type = 0;         /* Needed only to stop compiler warnings */
   if ( n & EX_INTERNAL )
     {
       int_type = n - EX_INTERNAL;

@@ -49,8 +49,9 @@ static inline unsigned char CMOS_READ(unsigned char addr)
 
 #define	HD_DELAY	0
 
-/* Max read/write errors/sector */
-#define MAX_ERRORS	7
+#define MAX_ERRORS     16	/* Max read/write errors/sector */
+#define RESET_FREQ      8	/* Reset controller every 8th retry */
+#define RECAL_FREQ      4	/* Recalibrate every 4th retry */
 #define MAX_HD		2
 
 static void recal_intr(void);
@@ -62,6 +63,7 @@ static char busy[MAX_HD] = {0, };
 static struct wait_queue * busy_wait = NULL;
 
 static int reset = 0;
+static int hd_error = 0;
 
 #if (HD_DELAY > 0)
 unsigned long last_req, read_timer();
@@ -111,12 +113,14 @@ static int win_result(void)
 	int i=inb_p(HD_STATUS);
 
 	if ((i & (BUSY_STAT | READY_STAT | WRERR_STAT | SEEK_STAT | ERR_STAT))
-		== (READY_STAT | SEEK_STAT))
+		== (READY_STAT | SEEK_STAT)) {
+	        hd_error = 0;
 		return 0; /* ok */
+	}
 	printk("HD: win_result: status = 0x%02x\n",i);
 	if (i&1) {
-		i=inb(HD_ERROR);
-		printk("HD: win_result: error = 0x%02x\n",i);
+		hd_error = inb(HD_ERROR);
+		printk("HD: win_result: error = 0x%02x\n",hd_error);
 	}	
 	return 1;
 }
@@ -219,8 +223,8 @@ static void reset_controller(void)
 	outb(hd_info[0].ctl & 0x0f ,HD_CMD);
 	if (drive_busy())
 		printk("HD-controller still busy\n\r");
-	if ((i = inb(HD_ERROR)) != 1)
-		printk("HD-controller reset failed: %02x\n\r",i);
+	if ((hd_error = inb(HD_ERROR)) != 1)
+		printk("HD-controller reset failed: %02x\n\r",hd_error);
 }
 
 static void reset_hd(void)
@@ -259,19 +263,26 @@ void unexpected_hd_interrupt(void)
 	SET_TIMER;
 }
 
+/*
+ * bad_rw_intr() now tries to be a bit smarter and does things
+ * according to the error returned by the controller.
+ * -Mika Liljeberg (liljeber@cs.Helsinki.FI)
+ */
 static void bad_rw_intr(void)
 {
-	int i;
+	int dev;
 
 	if (!CURRENT)
 		return;
-	if (++CURRENT->errors >= MAX_ERRORS)
+	dev = MINOR(CURRENT->dev) >> 6;
+	if (++CURRENT->errors >= MAX_ERRORS || (hd_error & BBD_ERR)) {
 		end_request(0);
-	else if (CURRENT->errors > MAX_ERRORS/2)
+		recalibrate[dev] = 1;
+	} else if (CURRENT->errors % RESET_FREQ == 0)
 		reset = 1;
-	else
-		for (i=0; i < NR_HD; i++)
-			recalibrate[i] = 1;
+	else if ((hd_error & TRK0_ERR) || CURRENT->errors % RECAL_FREQ == 0)
+		recalibrate[dev] = 1;
+	/* Otherwise just retry */
 }
 
 static inline int wait_DRQ(void)
@@ -302,8 +313,8 @@ static void read_intr(void)
 	sti();
 	printk("HD: read_intr: status = 0x%02x\n",i);
 	if (i & ERR_STAT) {
-		i = (unsigned) inb(HD_ERROR);
-		printk("HD: read_intr: error = 0x%02x\n",i);
+		hd_error = (unsigned) inb(HD_ERROR);
+		printk("HD: read_intr: error = 0x%02x\n",hd_error);
 	}
 	bad_rw_intr();
 	cli();
@@ -351,8 +362,8 @@ static void write_intr(void)
 	sti();
 	printk("HD: write_intr: status = 0x%02x\n",i);
 	if (i & ERR_STAT) {
-		i = (unsigned) inb(HD_ERROR);
-		printk("HD: write_intr: error = 0x%02x\n",i);
+		hd_error = (unsigned) inb(HD_ERROR);
+		printk("HD: write_intr: error = 0x%02x\n",hd_error);
 	}
 	bad_rw_intr();
 	cli();

@@ -129,11 +129,11 @@ static void read_inode(struct inode * inode)
  * NFS uses this to get the authentication correct.  -- jrs
  */
 
-int notify_change(struct inode * inode)
+int notify_change(int flags, struct inode * inode)
 {
 	if (inode->i_sb && inode->i_sb->s_op  &&
 	    inode->i_sb->s_op->notify_change)
-		return inode->i_sb->s_op->notify_change(inode);
+		return inode->i_sb->s_op->notify_change(flags, inode);
 	return 0;
 }
 

@@ -89,8 +89,8 @@ int proc_match(int len,const char * name,struct proc_dir_entry * de)
 static int proc_lookupbase(struct inode * dir,const char * name, int len,
 	struct inode ** result)
 {
-	unsigned int pid;
-	int i, ino;
+	unsigned int pid, ino;
+	int i;
 
 	*result = NULL;
 	if (!dir)

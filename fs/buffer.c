@@ -45,6 +45,7 @@ static struct wait_queue * buffer_wait = NULL;
 int nr_buffers = 0;
 int buffermem = 0;
 int nr_buffer_heads = 0;
+static int min_free_pages = 20;	/* nr free pages needed before buffer grows */
 
 /*
  * Rewrote the wait-routines to use the "new" wait-queue functionality,
@@ -305,6 +306,7 @@ struct buffer_head * getblk(dev_t dev, int block, int size)
 {
 	struct buffer_head * bh, * tmp;
 	int buffers;
+	static int grow_size = 0;
 
 repeat:
 	bh = get_hash_table(dev, block, size);
@@ -313,10 +315,13 @@ repeat:
 			put_last_free(bh);
 		return bh;
 	}
-
-	if (nr_free_pages > 30 && buffermem < 6*1024*1024)
+	grow_size -= size;
+	if (nr_free_pages > min_free_pages &&
+	    buffermem < 6*1024*1024 &&
+	    grow_size <= 0) {
 		grow_buffers(size);
-
+		grow_size = 4096;
+	}
 	buffers = nr_buffers;
 	bh = NULL;
 
@@ -431,8 +436,8 @@ void bread_page(unsigned long address, dev_t dev, int b[4])
 		} else
 			bh[i] = NULL;
 
-	if(bhnum)
-	  ll_rw_block(READ, bhnum, bhr);
+	if (bhnum)
+		ll_rw_block(READ, bhnum, bhr);
 
 	for (i=0 ; i<4 ; i++,address += BLOCK_SIZE)
 		if (bh[i]) {
@@ -664,6 +669,10 @@ void buffer_init(void)
 {
 	int i;
 
+	if (high_memory >= 4*1024*1024)
+		min_free_pages = 200;
+	else
+		min_free_pages = 20;
 	for (i = 0 ; i < NR_HASH ; i++)
 		hash_table[i] = NULL;
 	free_list = 0;

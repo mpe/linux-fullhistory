@@ -127,6 +127,13 @@ extern unsigned long inode_init(unsigned long start, unsigned long end);
 #define FIBMAP	   1	/* bmap access */
 #define FIGETBSZ   2	/* get the block size used for bmap */
 
+/* these flags tell notify_change what is being changed */
+
+#define NOTIFY_SIZE	1
+#define NOTIFY_MODE	2
+#define NOTIFY_TIME	4
+#define NOTIFY_UIDGID	8
+
 typedef char buffer_block[BLOCK_SIZE];
 
 struct buffer_head {
@@ -275,7 +282,7 @@ struct inode_operations {
 
 struct super_operations {
 	void (*read_inode) (struct inode *);
-	int (*notify_change) (struct inode *);
+	int (*notify_change) (int flags, struct inode *);
 	void (*write_inode) (struct inode *);
 	void (*put_inode) (struct inode *);
 	void (*put_super) (struct super_block *);
@@ -318,7 +325,7 @@ extern void sync_inodes(dev_t dev);
 extern void sync_dev(dev_t dev);
 extern void sync_supers(dev_t dev);
 extern int bmap(struct inode * inode,int block);
-extern int notify_change(struct inode * inode);
+extern int notify_change(int flags, struct inode * inode);
 extern int namei(const char * pathname, struct inode ** res_inode);
 extern int lnamei(const char * pathname, struct inode ** res_inode);
 extern int permission(struct inode * inode,int mask);

@@ -102,7 +102,7 @@ int minix_new_block(struct super_block * sb)
 	int i,j;
 
 	if (!sb) {
-		printk("trying to get new block from nonexistant device\n");
+		printk("trying to get new block from nonexistent device\n");
 		return 0;
 	}
 repeat:
@@ -124,10 +124,6 @@ repeat:
 		return 0;
 	if (!(bh = getblk(sb->s_dev,j,BLOCK_SIZE))) {
 		printk("new_block: cannot get block");
-		return 0;
-	}
-	if (bh->b_count != 1) {
-		printk("new block: count is != 1");
 		return 0;
 	}
 	clear_block(bh->b_data);

@@ -249,6 +249,23 @@ void start_kernel(void)
 	floppy_init();
 	sock_init();
 	sti();
+	/*
+	 * check if exception 16 works correctly.. This is truly evil
+	 * code: it disables the high 8 interrupts to make sure that
+	 * the irq13 doesn't happen. But as this will lead to a lockup
+	 * if no exception16 arrives, it depends on the fact that the
+	 * high 8 interrupts will be re-enabled by the next timer tick.
+	 * So the irq13 will happen eventually, but the exception 16
+	 * should get there first..
+	 */
+	if (hard_math) {
+		unsigned short control_word;
+		__asm__("fninit ; fnstcw %0 ; fwait":"=m" (*&control_word));
+		control_word &= 0xffc0;
+		__asm__("fldcw %0 ; fwait"::"m" (*&control_word));
+		outb_p(inb_p(0x21) | (1 << 2), 0x21);
+		__asm__("fldz ; fld1 ; fdiv %st,%st(1) ; fwait");
+	}
 	move_to_user_mode();
 	if (!fork())		/* we count on this going ok */
 		init();
@@ -288,6 +305,7 @@ void init(void)
 	printf(linux_banner);
 	execve("/etc/init",argv_init,envp_init);
 	execve("/bin/init",argv_init,envp_init);
+	execve("/sbin/init",argv_init,envp_init);
 	/* if this fails, fall through to original stuff */
 
 	if (!(pid=fork())) {

@@ -19,13 +19,19 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: ip.h,v 0.8.4.1 1992/11/10 00:17:18 bir7 Exp $ */
+/* $Id: ip.h,v 0.8.4.2 1993/01/23 18:00:11 bir7 Exp $ */
 /* $Log: ip.h,v $
+ * Revision 0.8.4.2  1993/01/23  18:00:11  bir7
+ * added volatile keyword to many variables.
+ *
  * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
  * version change only.
  *
  * Revision 0.8.3.2  1992/11/10  00:14:47  bir7
  * Changed malloc to kmalloc and added $iId$ and $Log: ip.h,v $
+ * Revision 0.8.4.2  1993/01/23  18:00:11  bir7
+ * added volatile keyword to many variables.
+ *
  * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
  * version change only.
  *.
@@ -135,18 +141,19 @@ struct ip_protocol
 		   int redo, struct ip_protocol *protocol);
    void (*err_handler) (int err, unsigned char *buff, unsigned long daddr,
 			unsigned long saddr, struct ip_protocol *ipprot);
-   struct ip_protocol *next;
+   volatile struct ip_protocol *next;
    unsigned char protocol;
    unsigned char copy:1;
    void *data;
 };
 
 extern struct ip_protocol *ip_protocol_base;
-extern struct ip_protocol *ip_protos[MAX_IP_PROTOS];
+extern volatile struct ip_protocol *ip_protos[MAX_IP_PROTOS];
 
 #define MAX_IP_ADDRES 5
 extern unsigned long ip_addr[MAX_IP_ADDRES];
-#define MY_IP_ADDR ip_addr[0];
+extern int ip_ads;
+#define MY_IP_ADDR ip_addr[0]
 int my_ip_addr(unsigned long);
 
 #include "eth.h"

@@ -436,10 +436,11 @@ noevrx:	lea	si,idgenoa		! Check Genoa 'clues'
 l1:	inc	si
 	inc	di
 	mov	al,(si)
+	test	al,al
+	jz	l2
 	seg es
-	and	al,(di)
-	cmp	al,(si)
-	loope 	l1
+	cmp	al,(di)
+l2:	loope 	l1
 	cmp	cx,#0x00
 	jne	nogen
 	lea	si,dscgenoa
@@ -697,7 +698,7 @@ msg3:		.ascii	"Choose mode by pressing the corresponding number."
 		
 idati:		.ascii	"761295520"
 idcandt:	.byte	0xa5
-idgenoa:	.byte	0x77, 0x00, 0x66, 0x99
+idgenoa:	.byte	0x77, 0x00, 0x99, 0x66
 idparadise:	.ascii	"VGA="
 idoakvga:	.ascii  "OAK VGA "
 idf1280:	.ascii	"Orchid Technology Fahrenheit 1280"

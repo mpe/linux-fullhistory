@@ -26,9 +26,8 @@
 
 #include <netinet/in.h>
 
-static int proc_debug = 0;
-
 #ifdef NFS_PROC_DEBUG
+static int proc_debug = 0;
 #define PRINTK if (proc_debug) printk
 #else
 #define PRINTK if (0) printk
@@ -70,11 +69,13 @@ static inline int *xdr_encode_string(int *p, char *string)
 	return p;
 }
 
-static inline int *xdr_decode_string(int *p, char *string)
+static inline int *xdr_decode_string(int *p, char *string, int maxlen)
 {
-	int len;
+	unsigned int len;
 
 	len = ntohl(*p++);
+	if (len > maxlen)
+		return NULL;
 	memcpy(string, (char *) p, len);
 	string[len] = '\0';
 	p += (len + 3) >> 2;
@@ -93,11 +94,13 @@ static inline int *xdr_encode_data(int *p, char *data, int len)
 	return p;
 }
 
-static inline int *xdr_decode_data(int *p, char *data, int *lenp)
+static inline int *xdr_decode_data(int *p, char *data, int *lenp, int maxlen)
 {
-	int len;
+	unsigned int len;
 
 	len = *lenp = ntohl(*p++);
+	if (len > maxlen)
+		return NULL;
 	memcpy(data, (char *) p, len);
 	data[len] = '\0';
 	p += (len + 3) >> 2;
@@ -142,7 +145,8 @@ static int *xdr_encode_sattr(int *p, struct nfs_sattr *sattr)
 static int *xdr_decode_entry(int *p, struct nfs_entry *entry)
 {
 	entry->fileid = ntohl(*p++);
-	p = xdr_decode_string(p, entry->name);
+	if (!(p = xdr_decode_string(p, entry->name, NFS_MAXNAMLEN)))
+		return NULL;
 	entry->cookie = ntohl(*p++);
 	entry->eof = 0;
 	return p;
@@ -178,6 +182,8 @@ int nfs_proc_getattr(struct nfs_server *server, struct nfs_fh *fhandle,
 		p = xdr_decode_fattr(p, fattr);
 		PRINTK("NFS reply getattr\n");
 	}
+	else
+		PRINTK("NFS reply getattr failed = %d\n", status);
 	free_page((long) p0);
 	return -nfs_stat_to_errno(status);
 }
@@ -203,6 +209,8 @@ int nfs_proc_setattr(struct nfs_server *server, struct nfs_fh *fhandle,
 		p = xdr_decode_fattr(p, fattr);
 		PRINTK("NFS reply setattr\n");
 	}
+	else
+		PRINTK("NFS reply setattr failed = %d\n", status);
 	free_page((long) p0);
 	return -nfs_stat_to_errno(status);
 }
@@ -233,6 +241,8 @@ int nfs_proc_lookup(struct nfs_server *server, struct nfs_fh *dir, char *name,
 		p = xdr_decode_fattr(p, fattr);
 		PRINTK("NFS reply lookup\n");
 	}
+	else
+		PRINTK("NFS reply lookup failed = %d\n", status);
 	free_page((long) p0);
 	return -nfs_stat_to_errno(status);
 }
@@ -254,9 +264,15 @@ int nfs_proc_readlink(struct nfs_server *server, struct nfs_fh *fhandle,
 	if (!(p = nfs_rpc_verify(p0)))
 		status = NFSERR_IO;
 	else if ((status = ntohl(*p++)) == NFS_OK) {
-		p = xdr_decode_string(p, res);
-		PRINTK("NFS reply readlink %s\n", res);
+		if (!(p = xdr_decode_string(p, res, NFS_MAXPATHLEN))) {
+			printk("nfs_proc_readlink: giant pathname\n");
+			status = NFSERR_IO;
+		}
+		else
+			PRINTK("NFS reply readlink %s\n", res);
 	}
+	else
+		PRINTK("NFS reply readlink failed = %d\n", status);
 	free_page((long) p0);
 	return -nfs_stat_to_errno(status);
 }
@@ -283,9 +299,15 @@ int nfs_proc_read(struct nfs_server *server, struct nfs_fh *fhandle,
 		status = NFSERR_IO;
 	else if ((status = ntohl(*p++)) == NFS_OK) {
 		p = xdr_decode_fattr(p, fattr);
-		p = xdr_decode_data(p, data, &len);
-		PRINTK("NFS reply read %d\n", len);
+		if (!(p = xdr_decode_data(p, data, &len, count))) {
+			printk("nfs_proc_read: giant data size\n"); 
+			status = NFSERR_IO;
+		}
+		else
+			PRINTK("NFS reply read %d\n", len);
 	}
+	else
+		PRINTK("NFS reply read failed = %d\n", status);
 	free_page((long) p0);
 	return (status == NFS_OK) ? len : -nfs_stat_to_errno(status);
 }
@@ -314,6 +336,8 @@ int nfs_proc_write(struct nfs_server *server, struct nfs_fh *fhandle,
 		p = xdr_decode_fattr(p, fattr);
 		PRINTK("NFS reply write\n");
 	}
+	else
+		PRINTK("NFS reply write failed = %d\n", status);
 	free_page((long) p0);
 	return -nfs_stat_to_errno(status);
 }
@@ -342,6 +366,8 @@ int nfs_proc_create(struct nfs_server *server, struct nfs_fh *dir,
 		p = xdr_decode_fattr(p, fattr);
 		PRINTK("NFS reply create\n");
 	}
+	else
+		PRINTK("NFS reply create failed = %d\n", status);
 	free_page((long) p0);
 	return -nfs_stat_to_errno(status);
 }
@@ -365,6 +391,8 @@ int nfs_proc_remove(struct nfs_server *server, struct nfs_fh *dir, char *name)
 	else if ((status = ntohl(*p++)) == NFS_OK) {
 		PRINTK("NFS reply remove\n");
 	}
+	else
+		PRINTK("NFS reply remove failed = %d\n", status);
 	free_page((long) p0);
 	return -nfs_stat_to_errno(status);
 }
@@ -392,6 +420,8 @@ int nfs_proc_rename(struct nfs_server *server,
 	else if ((status = ntohl(*p++)) == NFS_OK) {
 		PRINTK("NFS reply rename\n");
 	}
+	else
+		PRINTK("NFS reply rename failed = %d\n", status);
 	free_page((long) p0);
 	return -nfs_stat_to_errno(status);
 }
@@ -417,6 +447,8 @@ int nfs_proc_link(struct nfs_server *server, struct nfs_fh *fhandle,
 	else if ((status = ntohl(*p++)) == NFS_OK) {
 		PRINTK("NFS reply link\n");
 	}
+	else
+		PRINTK("NFS reply link failed = %d\n", status);
 	free_page((long) p0);
 	return -nfs_stat_to_errno(status);
 }
@@ -443,6 +475,8 @@ int nfs_proc_symlink(struct nfs_server *server, struct nfs_fh *dir,
 	else if ((status = ntohl(*p++)) == NFS_OK) {
 		PRINTK("NFS reply symlink\n");
 	}
+	else
+		PRINTK("NFS reply symlink failed = %d\n", status);
 	free_page((long) p0);
 	return -nfs_stat_to_errno(status);
 }
@@ -471,6 +505,8 @@ int nfs_proc_mkdir(struct nfs_server *server, struct nfs_fh *dir,
 		p = xdr_decode_fattr(p, fattr);
 		PRINTK("NFS reply mkdir\n");
 	}
+	else
+		PRINTK("NFS reply mkdir failed = %d\n", status);
 	free_page((long) p0);
 	return -nfs_stat_to_errno(status);
 }
@@ -494,6 +530,8 @@ int nfs_proc_rmdir(struct nfs_server *server, struct nfs_fh *dir, char *name)
 	else if ((status = ntohl(*p++)) == NFS_OK) {
 		PRINTK("NFS reply rmdir\n");
 	}
+	else
+		PRINTK("NFS reply rmdir failed = %d\n", status);
 	free_page((long) p0);
 	return -nfs_stat_to_errno(status);
 }
@@ -521,13 +559,25 @@ int nfs_proc_readdir(struct nfs_server *server, struct nfs_fh *fhandle,
 	if (!(p = nfs_rpc_verify(p0)))
 		status = NFSERR_IO;
 	else if ((status = ntohl(*p++)) == NFS_OK) {
-		for (i = 0; i < count && *p++; i++)
-			p = xdr_decode_entry(p, entry++);
-		eof = (i == count && !*p++ && *p++) || (i < count && *p++);
-		if (eof && i)
-			entry[-1].eof = 1;
-		PRINTK("NFS reply readdir %d %s\n", i, eof ? "eof" : "");
+		for (i = 0; i < count && *p++; i++) {
+			if (!(p = xdr_decode_entry(p, entry++)))
+				break;
+		}
+		if (!p) {
+			printk("nfs_proc_readdir: giant filename\n");
+			status = NFSERR_IO;
+		}
+		else {
+			eof = (i == count && !*p++ && *p++)
+			      || (i < count && *p++);
+			if (eof && i)
+				entry[-1].eof = 1;
+			PRINTK("NFS reply readdir %d %s\n", i,
+			       eof ? "eof" : "");
+		}
 	}
+	else
+		PRINTK("NFS reply readdir failed = %d\n", status);
 	free_page((long) p0);
 	return (status == NFS_OK) ? i : -nfs_stat_to_errno(status);
 }
@@ -552,6 +602,8 @@ int nfs_proc_statfs(struct nfs_server *server, struct nfs_fh *fhandle,
 		p = xdr_decode_fsinfo(p, res);
 		PRINTK("NFS reply statfs\n");
 	}
+	else
+		PRINTK("NFS reply statfs failed = %d\n", status);
 	free_page((long) p0);
 	return -nfs_stat_to_errno(status);
 }
@@ -595,27 +647,32 @@ static int *nfs_rpc_header(int *p, int procedure)
 
 static int *nfs_rpc_verify(int *p)
 {
-	int n;
+	unsigned int n;
 
 	p++;
 	if ((n = ntohl(*p++)) != RPC_REPLY) {
 		printk("nfs_rpc_verify: not an RPC reply: %d\n", n);
-		return 0;
+		return NULL;
 	}
 	if ((n = ntohl(*p++)) != RPC_MSG_ACCEPTED) {
 		printk("nfs_rpc_verify: RPC call rejected: %d\n", n);
-		return 0;
+		return NULL;
 	}
-	if ((n = ntohl(*p++)) != RPC_AUTH_NULL && n != RPC_AUTH_UNIX) {
-		printk("nfs_rpc_verify: bad RPC authentication type: %d\n",
-			n);
-		return 0;
+	switch (n = ntohl(*p++)) {
+	case RPC_AUTH_NULL: case RPC_AUTH_UNIX: case RPC_AUTH_SHORT:
+		break;
+	default:
+		printk("nfs_rpc_verify: bad RPC authentication type: %d\n", n);
+		return NULL;
 	}
-	n = ntohl(*p++);
+	if ((n = ntohl(*p++)) > 400) {
+		printk("nfs_rpc_verify: giant auth size\n");
+		return NULL;
+	}
 	p += (n + 3) >> 2;
 	if ((n = ntohl(*p++)) != RPC_SUCCESS) {
 		printk("nfs_rpc_verify: RPC call failed: %d\n", n);
-		return 0;
+		return NULL;
 	}
 	return p;
 }

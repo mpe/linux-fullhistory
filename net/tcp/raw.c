@@ -19,8 +19,17 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: raw.c,v 0.8.4.9 1992/12/12 19:25:04 bir7 Exp $ */
+/* $Id: raw.c,v 0.8.4.12 1993/01/26 22:04:00 bir7 Exp $ */
 /* $Log: raw.c,v $
+ * Revision 0.8.4.12  1993/01/26  22:04:00  bir7
+ * Added support for proc fs.
+ *
+ * Revision 0.8.4.11  1993/01/23  18:00:11  bir7
+ * Added volatile keyword
+ *
+ * Revision 0.8.4.10  1993/01/22  23:21:38  bir7
+ * Merged with 99 pl4
+ *
  * Revision 0.8.4.9  1992/12/12  19:25:04  bir7
  * Cleaned up Log messages.
  *
@@ -264,7 +273,6 @@ raw_sendto (volatile struct sock *sk, unsigned char *from, int len,
 	 {
 	   int tmp;
 	   PRINTK (("raw_sendto: write buffer full?\n"));
-	   print_sk (sk);
 	   if (noblock) return (-EAGAIN);
 	   tmp = sk->wmem_alloc;
 	   release_sock (sk);
@@ -408,7 +416,7 @@ raw_recvfrom (volatile struct sock *sk, unsigned char *to, int len,
 		    }
 		  else
 		    {
-			    sk->rqueue = sk->rqueue ->next;
+			    sk->rqueue = (struct sk_buff *)sk->rqueue ->next;
 			    skb->prev->next = skb->next;
 			    skb->next->prev = skb->prev;
 		    }
@@ -476,5 +484,6 @@ struct proto raw_prot =
   NULL,
   128,
   0,
-  {NULL,}
+  {NULL,},
+  "RAW"
 };

@@ -66,6 +66,7 @@ static unsigned char	video_page;		/* Initial video page		*/
 static unsigned short	video_port_reg;		/* Video register select port	*/
 static unsigned short	video_port_val;		/* Video register value port	*/
 static int can_do_color = 0;
+static int printable = 0;
 
 static struct {
 	unsigned short	vc_video_erase_char;	/* Background erase character */
@@ -1239,7 +1240,6 @@ return s;
 long con_init(long kmem_start)
 {
 	char *display_desc = "????";
-	char *display_ptr;
 	int currcons = 0;
 	long base;
 	int orig_x = ORIG_X;
@@ -1268,7 +1268,7 @@ long con_init(long kmem_start)
 		{
 			video_type = VIDEO_TYPE_EGAM;
 			video_mem_term = 0xb8000;
-			display_desc = "EGAm";
+			display_desc = "EGA+";
 		}
 		else
 		{
@@ -1287,7 +1287,7 @@ long con_init(long kmem_start)
 		{
 			video_type = VIDEO_TYPE_EGAC;
 			video_mem_term = 0xc0000;
-			display_desc = "EGAc";
+			display_desc = "EGA+";
 		}
 		else
 		{
@@ -1297,15 +1297,6 @@ long con_init(long kmem_start)
 		}
 	}
 	
-	/* Let the user know what kind of display driver we are using */
-	
-	display_ptr = ((char *)video_mem_base) + video_size_row - 8;
-	while (*display_desc)
-	{
-		*display_ptr++ = *display_desc++;
-		display_ptr++;
-	}
-
 	/* Initialize the variables used for scrolling (mostly EGA/VGA)	*/
 
 	base = (long)vc_scrmembuf;
@@ -1337,6 +1328,12 @@ long con_init(long kmem_start)
 	save_cur(currcons);
 	gotoxy(currcons,orig_x,orig_y);
 	update_screen(fg_console);
+	printable = 1;
+	printk("Console: %s %s %dx%d, %d virtual consoles\n",
+		can_do_color?"colour":"mono",
+		display_desc,
+		video_num_columns,video_num_lines,
+		NR_CONSOLES);
 	return kmem_start;
 }
 
@@ -1456,8 +1453,8 @@ void console_print(const char * b)
 	int currcons = fg_console;
 	char c;
 
-	if (currcons<0 || currcons>=NR_CONSOLES)
-		currcons = 0;
+	if (!printable || currcons<0 || currcons>=NR_CONSOLES)
+		return;
 	while ((c = *(b++)) != 0) {
 		if (c == 10 || c == 13 || need_wrap) {
 			if (c != 13)

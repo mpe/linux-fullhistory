@@ -20,6 +20,14 @@
  * between the high-level tty routines (tty_io.c and tty_ioctl.c) and
  * the low-level tty routines (serial.c, pty.c, console.c).  This
  * makes for cleaner and more compact code.  -TYT, 9/17/92 
+ *
+ * Modified by Fred N. van Kempen, 01/29/93, to add line disciplines
+ * which can be dynamically activated and de-activated by the line
+ * discipline handling modules (like SLIP).
+ *
+ * NOTE: pay no attention to the line discpline code (yet); its
+ * interface is still subject to change in this version...
+ * -- TYT, 1/31/92
  */
 
 #include <linux/types.h>
@@ -41,9 +49,13 @@
 
 #include "vt_kern.h"
 
-struct tty_struct *tty_table[256];
-struct termios *tty_termios[256]; /* We need to keep the termios state */
+#define MAX_TTYS 256
+
+struct tty_struct *tty_table[MAX_TTYS];
+struct termios *tty_termios[MAX_TTYS]; /* We need to keep the termios state */
 				  /* around, even when a tty is closed */
+struct tty_ldisc ldiscs[NR_LDISCS];	/* line disc dispatch table	*/
+int tty_check_write[MAX_TTYS/32];	/* bitfield for the bh handler */
 
 /*
  * fg_console is the current virtual console,
@@ -62,6 +74,20 @@ static int tty_write(struct inode *, struct file *, char *, int);
 static int tty_select(struct inode *, struct file *, int, select_table *);
 static int tty_open(struct inode *, struct file *);
 static void tty_release(struct inode *, struct file *);
+
+int tty_register_ldisc(int disc, struct tty_ldisc *new)
+{
+	if (disc < N_TTY || disc >= NR_LDISCS)
+		return -EINVAL;
+	
+	if (new) {
+		ldiscs[disc] = *new;
+		ldiscs[disc].flags |= LDISC_FLAG_DEFINED;
+	} else
+		memset(&ldiscs[disc], 0, sizeof(struct tty_ldisc));
+	
+	return 0;
+}
 
 void put_tty_queue(char c, struct tty_queue * queue)
 {
@@ -91,6 +117,33 @@ int get_tty_queue(struct tty_queue * queue)
 	return result;
 }
 
+/*
+ * This routine copies out a maximum of buflen characters from the
+ * read_q; it is a convenience for line disciplins so they can grab a
+ * large block of data without calling get_tty_char directly.  It
+ * returns the number of characters actually read.
+ */
+int tty_read_raw_data(struct tty_struct *tty, unsigned char *bufp, int buflen)
+{
+	int	result = 0;
+	unsigned char	*p = bufp;
+	unsigned long flags;
+	int head, tail;
+	
+	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
+	tail = tty->read_q.tail;
+	head = tty->read_q.head;
+	while ((result < buflen) && (tail!=head)) {
+		*p++ =  tty->read_q.buf[tail++];
+		tail &= TTY_BUF_SIZE-1;
+		result++;
+	}
+	tty->read_q.tail = tail;
+	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+	return result;
+}
+
+
 void tty_write_flush(struct tty_struct * tty)
 {
 	if (!tty->write || EMPTY(&tty->write_q))
@@ -108,7 +161,7 @@ void tty_read_flush(struct tty_struct * tty)
 		return;
 	if (set_bit(TTY_READ_BUSY, &tty->flags))
 		return;
-	copy_to_cooked(tty);
+	ldiscs[tty->disc].handler(tty);
 	if (clear_bit(TTY_READ_BUSY, &tty->flags))
 		printk("tty_read_flush: bit already cleared\n");
 }
@@ -180,6 +233,11 @@ void tty_hangup(struct tty_struct * tty)
 	wake_up_interruptible(&tty->write_q.proc_list);
 	if (tty->session > 0)
 		kill_sl(tty->session,SIGHUP,1);
+}
+
+void tty_unhangup(struct file *filp)
+{
+	filp->f_op = &tty_fops;
 }
 
 static inline int hung_up(struct file * filp)
@@ -364,7 +422,7 @@ void change_console(unsigned int new_console)
 
 void wait_for_keypress(void)
 {
-	interruptible_sleep_on(&keypress_wait);
+	sleep_on(&keypress_wait);
 }
 
 void copy_to_cooked(struct tty_struct * tty)
@@ -754,7 +812,7 @@ static int tty_read(struct inode * inode, struct file * file, char * buf, int co
 
 	dev = file->f_rdev;
 	if (MAJOR(dev) != 4) {
-		printk("tty_read: pseudo-major != 4\n");
+		printk("tty_read: bad pseudo-major nr #%d\n", MAJOR(dev));
 		return -EINVAL;
 	}
 	dev = MINOR(dev);
@@ -770,7 +828,10 @@ static int tty_read(struct inode * inode, struct file * file, char * buf, int co
 			(void) kill_pg(current->pgrp, SIGTTIN, 1);
 			return -ERESTARTSYS;
 		}
-	i = read_chan(tty,file,buf,count);
+	if (ldiscs[tty->disc].read)
+		i = (ldiscs[tty->disc].read)(tty,file,buf,count);
+	else
+		i = -EIO;
 	if (i > 0)
 		inode->i_atime = CURRENT_TIME;
 	return i;
@@ -803,7 +864,10 @@ static int tty_write(struct inode * inode, struct file * file, char * buf, int c
 			return -ERESTARTSYS;
 		}
 	}
-	i = write_chan(tty,file,buf,count);
+	if (ldiscs[tty->disc].write)
+		i = (ldiscs[tty->disc].write)(tty,file,buf,count);
+	else
+		i = -EIO;
 	if (i > 0)
 		inode->i_mtime = CURRENT_TIME;
 	return i;
@@ -936,7 +1000,8 @@ static void release_dev(int dev, struct file * filp)
 			return;
 		}
 	}
-	if (tty->count < 2 && tty->close)
+	tty->write_data_cnt = 0; /* Clear out pending trash */
+	if (tty->close)
 		tty->close(tty, filp);
 	if (IS_A_PTY_MASTER(dev)) {
 		if (--tty->link->count < 0) {
@@ -952,6 +1017,10 @@ static void release_dev(int dev, struct file * filp)
 	}
 	if (tty->count)
 		return;
+
+	if (ldiscs[tty->disc].close != NULL)
+		ldiscs[tty->disc].close(tty);
+
 	if (o_tty) {
 		if (o_tty->count)
 			return;
@@ -981,6 +1050,7 @@ static void release_dev(int dev, struct file * filp)
  *
  * Open-counting is needed for pty masters, as well as for keeping
  * track of serial lines: DTR is dropped when the last close happens.
+ * (This is not done solely through tty->count, now.  - Ted 1/27/92)
  *
  * The termios state of a pty is reset on first open so that
  * settings don't persist across reuse.
@@ -988,23 +1058,44 @@ static void release_dev(int dev, struct file * filp)
 static int tty_open(struct inode * inode, struct file * filp)
 {
 	struct tty_struct *tty;
-	int dev, retval;
+	int major, minor;
+	int noctty, retval;
 
-	dev = inode->i_rdev;
-	if (MAJOR(dev) == 5)
-		dev = current->tty;
-	else
-		dev = MINOR(dev);
-	if (dev < 0)
+	minor = MINOR(inode->i_rdev);
+	major = MAJOR(inode->i_rdev);
+	noctty = filp->f_flags & O_NOCTTY;
+	if (major == 5) {
+		if (!minor) {
+			major = 4;
+			minor = current->tty;
+		}
+		noctty = 1;
+	} else if (major == 4) {
+		if (!minor) {
+			minor = fg_console + 1;
+			noctty = 1;
+		}
+	} else {
+		printk("Bad major #%d in tty_open\n", MAJOR(inode->i_rdev));
+		return -ENODEV;
+	}
+	if (minor <= 0)
 		return -ENXIO;
-	if (!dev)
-		dev = fg_console + 1;
-	filp->f_rdev = 0x0400 | dev;
-	retval = init_dev(dev);
+	if (IS_A_PTY_MASTER(minor))
+		noctty = 1;
+	filp->f_rdev = (major << 8) | minor;
+	retval = init_dev(minor);
 	if (retval)
 		return retval;
-	tty = tty_table[dev];
+	tty = tty_table[minor];
+
 	/* clean up the packet stuff. */
+	/*
+	 *  Why is this not done in init_dev?  Right here, if another 
+	 * process opens up a tty in packet mode, all the packet 
+	 * variables get cleared.  Come to think of it, is anything 
+	 * using the packet mode at all???  - Ted, 1/27/93
+	 */
 	tty->status_changed = 0;
 	tty->ctrl_status = 0;
 	tty->packet = 0;
@@ -1015,17 +1106,18 @@ static int tty_open(struct inode * inode, struct file * filp)
 		retval = -ENODEV;
 	}
 	if (retval) {
-		release_dev(dev, filp);
+		release_dev(minor, filp);
 		return retval;
 	}
-	if (!(filp->f_flags & O_NOCTTY) &&
+	if (!noctty &&
 	    current->leader &&
 	    current->tty<0 &&
 	    tty->session==0) {
-		current->tty = dev;
+		current->tty = minor;
 		tty->session = current->session;
 		tty->pgrp = current->pgrp;
 	}
+	filp->f_rdev = 0x0400 | minor; /* Set it to something normal */
 	return 0;
 }
 
@@ -1139,6 +1231,104 @@ void do_SAK( struct tty_struct *tty)
 }
 
 /*
+ * This routine allows a kernel routine to send a large chunk of data
+ * to a particular tty; if all of the data can be queued up for ouput
+ * immediately, tty_write_data() will return 0.  If, however, not all
+ * of the data can be immediately queued for delivery, the number of
+ * bytes left to be queued up will be returned, and the rest of the
+ * data will be queued up when there is room.  The callback function
+ * will be called (with the argument callarg) when the last of the
+ * data is finally in the queue.
+ *
+ * Note that the callback routine will _not_ be called if all of the
+ * data could be queued immediately.  This is to avoid a problem with
+ * the kernel stack getting too deep, which might happen if the
+ * callback routine calls tty_write_data with itself as an argument.
+ */
+int tty_write_data(struct tty_struct *tty, char *bufp, int buflen,
+		    void (*callback)(void * data), void * callarg)
+{
+	int head, tail, count;
+	unsigned long flags;
+	char *p;
+
+#define VLEFT ((tail-head-1)&(TTY_BUF_SIZE-1))
+
+	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
+	if (tty->write_data_cnt) {
+		__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+		return -EBUSY;
+	}
+
+	head = tty->write_q.head;
+	tail = tty->write_q.tail;
+	count = buflen;
+	p = bufp;
+
+	while (count && VLEFT > 0) {
+		tty->write_q.buf[head++] = *p++;
+		head &= TTY_BUF_SIZE-1;
+	}
+	tty->write_q.head = head;
+	if (count) {
+		tty->write_data_cnt = count;
+		tty->write_data_ptr = p;
+		tty->write_data_callback = callback;
+		tty->write_data_arg = callarg;
+	}
+	__asm__ __volatile__("pushl %0 ; popfl"::"r" (flags));
+	return count;
+}
+
+/*
+ * This routine routine is called after an interrupt has drained a
+ * tty's write queue, so that there is more space for data waiting to
+ * be sent in tty->write_data_ptr.
+ *
+ * tty_check_write[8] is a bitstring which indicates which ttys
+ * needs to be processed.
+ */
+void tty_bh_routine()
+{
+	int	i, j, line, mask;
+	int	head, tail, count;
+	unsigned char * p;
+	struct tty_struct * tty;
+
+	for (i = 0, line = 0; i < MAX_TTYS / 32; i++) {
+		if (!tty_check_write[i]) {
+			line += 32;
+			continue;
+		}
+		for (j=0, mask=0; j < 32; j++, line++, mask <<= 1) {
+			if (!clear_bit(j, &tty_check_write[i])) {
+				tty = tty_table[line];
+				if (!tty || !tty->write_data_cnt)
+					continue;
+				cli();
+				head = tty->write_q.head;
+				tail = tty->write_q.tail;
+				count = tty->write_data_cnt;
+				p = tty->write_data_ptr;
+
+				while (count && VLEFT > 0) {
+					tty->write_q.buf[head++] = *p++;
+					head &= TTY_BUF_SIZE-1;
+				}
+				tty->write_q.head = head;
+				tty->write_data_ptr = p;
+				tty->write_data_cnt = count;
+				sti();
+				if (!count)
+					(tty->write_data_callback)
+						(tty->write_data_arg);
+			}
+		}
+	}
+	
+}
+
+/*
  * This subroutine initializes a tty structure.  We have to set up
  * things correctly for each different type of tty.
  */
@@ -1146,6 +1336,7 @@ static void initialize_tty_struct(int line, struct tty_struct *tty)
 {
 	memset(tty, 0, sizeof(struct tty_struct));
 	tty->line = line;
+	tty->disc = N_TTY;
 	tty->pgrp = -1;
 	tty->winsize.ws_row = 24;
 	tty->winsize.ws_col = 80;
@@ -1171,7 +1362,7 @@ static void initialize_termios(int line, struct termios * tp)
 		tp->c_lflag = ISIG | ICANON | ECHO |
 			ECHOCTL | ECHOKE;
 	} else if (IS_A_SERIAL(line)) {
-		tp->c_cflag = B2400 | CS8 | CREAD | HUPCL;
+		tp->c_cflag = B2400 | CS8 | CREAD | HUPCL | CLOCAL;
 	} else if (IS_A_PTY_MASTER(line)) {
 		tp->c_cflag = B9600 | CS8 | CREAD;
 	} else if (IS_A_PTY_SLAVE(line)) {
@@ -1182,20 +1373,40 @@ static void initialize_termios(int line, struct termios * tp)
 			ECHOCTL | ECHOKE;
 	}
 }
+
+static struct tty_ldisc tty_ldisc_N_TTY = {
+	0,			/* flags */
+	NULL,			/* open */
+	NULL,			/* close */
+	read_chan,		/* read */
+	write_chan,		/* write */
+	NULL,			/* ioctl */
+	copy_to_cooked		/* handler */
+};
+
 	
 long tty_init(long kmem_start)
 {
 	int i;
 
+	if (sizeof(struct tty_struct) > 4096)
+		panic("size of tty structure > 4096!");
+	
 	chrdev_fops[4] = &tty_fops;
 	chrdev_fops[5] = &tty_fops;
-	for (i=0 ; i<256 ; i++) {
+	for (i=0 ; i< MAX_TTYS ; i++) {
 		tty_table[i] =  0;
 		tty_termios[i] = 0;
 	}
+	memset(tty_check_write, 0, sizeof(tty_check_write));
+	bh_base[TTY_BH].routine = tty_bh_routine;
+
+	/* Setup the default TTY line discipline. */
+	memset(ldiscs, 0, sizeof(ldiscs));
+	(void) tty_register_ldisc(N_TTY, &tty_ldisc_N_TTY);
+
 	kmem_start = kbd_init(kmem_start);
 	kmem_start = con_init(kmem_start);
 	kmem_start = rs_init(kmem_start);
-	printk("%d virtual consoles\n\r",NR_CONSOLES);
 	return kmem_start;
 }

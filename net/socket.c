@@ -70,10 +70,7 @@ static struct file_operations socket_file_ops = {
 	sock_close
 };
 
-#define SOCK_INODE(S) ((struct inode *)(S)->dummy)
-
-static struct socket sockets[NSOCKETS];
-#define last_socket (sockets + NSOCKETS - 1)
+struct socket sockets[NSOCKETS];
 static struct wait_queue *socket_wait_free = NULL;
 
 /*
@@ -177,8 +174,11 @@ sock_alloc(int wait)
 					return NULL;
 				}
 				SOCK_INODE(sock)->i_mode = S_IFSOCK;
+				SOCK_INODE(sock)->i_uid = current->euid;
+				SOCK_INODE(sock)->i_gid = current->egid;
+
 				sock->wait = &SOCK_INODE(sock)->i_wait;
-				PRINTK(("sock_alloc: socket 0x%x, inode 0x%x\n",
+				PRINTK(("sock_alloc: socket 0x%x,inode 0x%x\n",
 				       sock, SOCK_INODE(sock)));
 				return sock;
 			}
@@ -951,11 +951,10 @@ sock_init(void)
 	for (sock = sockets; sock <= last_socket; ++sock)
 		sock->state = SS_FREE;
 	for (i = ok = 0; i < NPROTO; ++i) {
-		printk("sock_init: initializing family %d (%s)\n",
-		       proto_table[i].family, proto_table[i].name);
 		if ((*proto_table[i].ops->init)() < 0) {
-			printk("sock_init: init failed.\n",
-			       proto_table[i].family);
+			printk("sock_init: init failed family %d (%s)\n",
+			       proto_table[i].family,
+			       proto_table[i].name);
 			proto_table[i].family = -1;
 		}
 		else

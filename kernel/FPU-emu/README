@@ -20,9 +20,6 @@
  +---------------------------------------------------------------------------+
 
 
-***NOTE***       THIS SHOULD BE REGARDED AS AN ALPHA TEST VERSION
-                 (although the beta version may be identical)
-
 
 wm-FPU-emu is an FPU emulator for Linux. It is derived from wm-emu387
 which is my 80387 emulator for djgpp (gcc under msdos); wm-emu387 was
@@ -47,6 +44,14 @@ Please report bugs, etc to me at:
 
 --Bill Metzenthen
   Oct 1992
+
+
+[ note:  I have advanced the version number from alpha numbers
+         to beta numbers. This is not meant to indicate any major
+         changes but rather the fact that the emulator has been a
+         standard part of the Linux distribution for some months
+         and is currently reasonably stable.          WM Jan 1993  ]
+
 
 ----------------------- Internals of wm-FPU-emu -----------------------
 
@@ -84,7 +89,7 @@ is confined to five files:
 ----------------------- Limitations of wm-FPU-emu -----------------------
 
 There are a number of differences between the current wm-FPU-emu
-(version ALPHA 0.7) and the 80486 FPU (apart from bugs). Some of the
+(version beta 1.0) and the 80486 FPU (apart from bugs). Some of the
 more important differences are listed below:
 
 Internal computations do not use de-normal numbers (but External

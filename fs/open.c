@@ -89,7 +89,7 @@ int sys_truncate(const char * path, unsigned int length)
 		inode->i_op->truncate(inode);
 	inode->i_atime = inode->i_mtime = CURRENT_TIME;
 	inode->i_dirt = 1;
-	error = notify_change(inode);
+	error = notify_change(NOTIFY_SIZE, inode);
 	iput(inode);
 	return error;
 }
@@ -110,7 +110,7 @@ int sys_ftruncate(unsigned int fd, unsigned int length)
 		inode->i_op->truncate(inode);
 	inode->i_atime = inode->i_mtime = CURRENT_TIME;
 	inode->i_dirt = 1;
-	return notify_change(inode);
+	return notify_change(NOTIFY_SIZE, inode);
 }
 
 /* If times==NULL, set access and modification to current time,
@@ -149,7 +149,7 @@ int sys_utime(char * filename, struct utimbuf * times)
 	inode->i_mtime = modtime;
 	inode->i_ctime = CURRENT_TIME;
 	inode->i_dirt = 1;
-	error = notify_change(inode);
+	error = notify_change(NOTIFY_TIME, inode);
 	iput(inode);
 	return error;
 }
@@ -247,7 +247,7 @@ int sys_fchmod(unsigned int fd, mode_t mode)
 		inode->i_mode &= ~S_ISGID;
 	inode->i_ctime = CURRENT_TIME;
 	inode->i_dirt = 1;
-	return notify_change(inode);
+	return notify_change(NOTIFY_MODE, inode);
 }
 
 int sys_chmod(const char * filename, mode_t mode)
@@ -271,7 +271,7 @@ int sys_chmod(const char * filename, mode_t mode)
 		inode->i_mode &= ~S_ISGID;
 	inode->i_ctime = CURRENT_TIME;
 	inode->i_dirt = 1;
-	error = notify_change(inode);
+	error = notify_change(NOTIFY_MODE, inode);
 	iput(inode);
 	return error;
 }
@@ -298,7 +298,7 @@ int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 		inode->i_gid = group;
 		inode->i_ctime = CURRENT_TIME;
 		inode->i_dirt = 1;
-		return notify_change(inode);
+		return notify_change(NOTIFY_UIDGID, inode);
 	}
 	return -EPERM;
 }
@@ -326,7 +326,7 @@ int sys_chown(const char * filename, uid_t user, gid_t group)
 		inode->i_gid = group;
 		inode->i_ctime = CURRENT_TIME;
 		inode->i_dirt = 1;
-		error = notify_change(inode);
+		error = notify_change(NOTIFY_UIDGID, inode);
 		iput(inode);
 		return error;
 	}
@@ -380,7 +380,7 @@ int sys_open(const char * filename,int flag,int mode)
 		inode->i_size = 0;
 		if (inode->i_op && inode->i_op->truncate)
 			inode->i_op->truncate(inode);
-		if ((i = notify_change(inode))) {
+		if ((i = notify_change(NOTIFY_SIZE, inode))) {
 			iput(inode);
 			current->filp[fd] = NULL;
 			f->f_count--;

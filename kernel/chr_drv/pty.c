@@ -16,13 +16,14 @@
 #include <linux/sched.h>
 #include <linux/tty.h>
 #include <linux/fcntl.h>
+#include <linux/interrupt.h>
 
 #include <asm/system.h>
-#include <asm/io.h>
+#include <asm/bitops.h>
 
 static void pty_close(struct tty_struct * tty, struct file * filp)
 {
-	if (!tty)
+	if (!tty || (tty->count > 1))
 		return;
 	wake_up_interruptible(&tty->read_q.proc_list);
 	if (!tty->link)
@@ -50,6 +51,10 @@ static inline void pty_copy(struct tty_struct * from, struct tty_struct * to)
 	}
 	TTY_READ_FLUSH(to);
 	wake_up_interruptible(&from->write_q.proc_list);
+	if (from->write_data_cnt) {
+		set_bit(from->line, &tty_check_write);
+		mark_bh(TTY_BH);
+	}
 }
 
 /*

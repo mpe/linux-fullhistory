@@ -35,7 +35,7 @@ Adaptec AHA1740 support
 CONFIG_SCSI_AHA1740 y/n y
 Future Domain SCSI support
 CONFIG_SCSI_FUTURE_DOMAIN y/n y
-Seagate ST-02 SCSI support
+Seagate ST-02 and Future Domain TMC-8xx SCSI support
 CONFIG_SCSI_SEAGATE y/n y
 UltraStor SCSI support
 CONFIG_SCSI_ULTRASTOR y/n y
@@ -49,7 +49,7 @@ CONFIG_MINIX_FS y/n y
 Extended fs support
 CONFIG_EXT_FS y/n n
 msdos fs support
-CONFIG_MSDOS_FS y/n n
+CONFIG_MSDOS_FS y/n y
 /proc filesystem support
 CONFIG_PROC_FS y/n y
 NFS filesystem support

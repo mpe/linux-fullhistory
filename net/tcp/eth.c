@@ -19,8 +19,11 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: eth.c,v 0.8.4.3 1992/12/12 19:25:04 bir7 Exp $ */
+/* $Id: eth.c,v 0.8.4.4 1993/01/22 23:21:38 bir7 Exp $ */
 /* $Log: eth.c,v $
+ * Revision 0.8.4.4  1993/01/22  23:21:38  bir7
+ * Merged with 99 pl4
+ *
  * Revision 0.8.4.3  1992/12/12  19:25:04  bir7
  * Cleaned up Log messages.
  *

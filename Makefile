@@ -1,6 +1,8 @@
 
 all:	Version Image
 
+.EXPORT_ALL_VARIABLES:
+
 #
 # Make "config" the default target if there is no configuration file or
 # "depend" the target if there is no top-level dependency information.
@@ -145,7 +147,7 @@ tools/./version.h: tools/version.h
 
 tools/version.h: $(CONFIGURE) Makefile
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.99.pl4-`cat .version`\" > tools/version.h
+	@echo \#define UTS_RELEASE \"0.99.pl5-`cat .version`\" > tools/version.h
 	@echo \#define UTS_VERSION \"`date +%D`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h

@@ -43,7 +43,16 @@ static int get_loadavg(char * buffer)
 
 static int get_uptime(char * buffer)
 {
-	return sprintf(buffer,"%d\n",(jiffies+jiffies_offset)/HZ);
+	unsigned long uptime;
+	unsigned long idle;
+
+	uptime = jiffies + jiffies_offset;
+	idle = task[0]->utime + task[0]->stime;
+	return sprintf(buffer,"%d.%02d %d.%02d\n",
+		uptime / HZ,
+		uptime % HZ,
+		idle / HZ,
+		idle % HZ);
 }
 
 static int get_meminfo(char * buffer)
@@ -284,7 +293,7 @@ static int array_read(struct inode * inode, struct file * file,char * buf, int c
 	char * page;
 	int length;
 	int end;
-	int type, pid;
+	unsigned int type, pid;
 
 	if (count < 0)
 		return -EINVAL;

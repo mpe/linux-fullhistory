@@ -23,8 +23,14 @@
     The author of this file may be reached at rth@sparta.com or Sparta, Inc.
     7926 Jones Branch Dr. Suite 900, McLean Va 22102.
 */
-/* $Id: icmp.c,v 0.8.4.7 1992/12/12 19:25:04 bir7 Exp $ */
+/* $Id: icmp.c,v 0.8.4.9 1993/01/23 18:00:11 bir7 Exp $ */
 /* $Log: icmp.c,v $
+ * Revision 0.8.4.9  1993/01/23  18:00:11  bir7
+ * added volatile keyword to many variables.
+ *
+ * Revision 0.8.4.8  1993/01/22  23:21:38  bir7
+ * Merged with 99 pl4
+ *
  * Revision 0.8.4.7  1992/12/12  19:25:04  bir7
  * Cleaned up Log messages.
  *
@@ -227,10 +233,11 @@ icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 	   hash = iph->protocol & (MAX_IP_PROTOS -1 );
 
 	   /* this can change while we are doing it. */
-	   for (ipprot = ip_protos[hash]; ipprot != NULL; )
+	   for (ipprot = (struct ip_protocol *)ip_protos[hash];
+		ipprot != NULL; )
 	     {
 	       struct ip_protocol *nextip;
-	       nextip = ipprot->next;
+	       nextip = (struct ip_protocol *)ipprot->next;
 	       /* pass it off to everyone who wants it. */
 	       if (iph->protocol == ipprot->protocol && ipprot->err_handler)
 		 ipprot->err_handler (err, (unsigned char *)(icmph+1),

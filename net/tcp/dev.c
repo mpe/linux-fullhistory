@@ -19,8 +19,17 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: dev.c,v 0.8.4.10 1992/12/12 19:25:04 bir7 Exp $ */
+/* $Id: dev.c,v 0.8.4.13 1993/01/23 18:00:11 bir7 Exp $ */
 /* $Log: dev.c,v $
+ * Revision 0.8.4.13  1993/01/23  18:00:11  bir7
+ * Fixed problems from merging.
+ *
+ * Revision 0.8.4.12  1993/01/22  23:21:38  bir7
+ * Merged with 99 pl4
+ *
+ * Revision 0.8.4.11  1993/01/22  22:58:08  bir7
+ * Changed so transmitting takes place in bottom half of interrupt routine.
+ *
  * Revision 0.8.4.10  1992/12/12  19:25:04  bir7
  * Cleaned up Log messages.
  *
@@ -157,6 +166,9 @@ void
 dev_queue_xmit (struct sk_buff *skb, struct device *dev, int pri)
 {
   struct sk_buff *skb2;
+  int where=0; /* used to say if the packet should go at the
+		  front or the back of the queue. */
+
   PRINTK (("dev_queue_xmit (skb=%X, dev=%X, pri = %d)\n", skb, dev, pri));
 
   if (dev == NULL)
@@ -173,7 +185,13 @@ dev_queue_xmit (struct sk_buff *skb, struct device *dev, int pri)
        return;
     }
 
-  if (pri < 0 || pri >= DEV_NUMBUFFS)
+  if (pri < 0)
+    {
+      pri = -pri-1;
+      where = 1;
+    }
+
+  if ( pri >= DEV_NUMBUFFS)
     {
        printk ("bad priority in dev_queue_xmit.\n");
        pri = 1;
@@ -196,11 +214,22 @@ dev_queue_xmit (struct sk_buff *skb, struct device *dev, int pri)
     }
   else
     {
-      skb2=dev->buffs[pri];
-      skb->next = skb2;
-      skb->prev = skb2->prev;
-      skb->next->prev = skb;
-      skb->prev->next = skb;
+      if (where)
+	{
+	  skb->next = (struct sk_buff *)dev->buffs[pri];
+	  skb->prev = (struct sk_buff *)dev->buffs[pri]->prev;
+	  skb->prev->next = skb;
+	  skb->next->prev = skb;
+	  dev->buffs[pri] = skb;
+	}
+      else
+	{
+	  skb2= (struct sk_buff *)dev->buffs[pri];
+	  skb->next = skb2;
+	  skb->prev = skb2->prev;
+	  skb->next->prev = skb;
+	  skb->prev->next = skb;
+	}
     }
   skb->magic = DEV_QUEUE_MAGIC;
   sti();
@@ -227,7 +256,7 @@ int
 dev_rint(unsigned char *buff, long len, int flags,
 	 struct device * dev)
 {
-   volatile struct sk_buff *skb=NULL;
+   struct sk_buff *skb=NULL;
    unsigned char *to;
    int amount;
 
@@ -272,16 +301,16 @@ dev_rint(unsigned char *buff, long len, int flags,
    cli();
    if (backlog == NULL)
      {
-       skb->prev = (struct sk_buff *)skb;
-       skb->next = (struct sk_buff *)skb;
+       skb->prev = skb;
+       skb->next = skb;
        backlog = skb;
      }
    else
      {
-       skb->prev = backlog->prev;
+       skb->prev = (struct sk_buff *)backlog->prev;
        skb->next = (struct sk_buff *)backlog;
-       skb->next->prev = (struct sk_buff *)skb;
-       skb->prev->next = (struct sk_buff *)skb;
+       skb->next->prev = skb;
+       skb->prev->next = skb;
      }
    sti();
    
@@ -292,9 +321,23 @@ dev_rint(unsigned char *buff, long len, int flags,
 }
 
 void
+dev_transmit(void)
+{
+  struct device *dev;
+
+  for (dev = dev_base; dev != NULL; dev=dev->next)
+    {
+      if (!dev->tbusy)
+	{
+	  dev_tint (dev);
+	}
+    }
+}
+
+void
 inet_bh(void *tmp)
 {
-  volatile struct sk_buff *skb;
+  struct sk_buff *skb;
   struct packet_type *ptype;
   unsigned short type;
   unsigned char flag =0;
@@ -307,13 +350,15 @@ inet_bh(void *tmp)
       return;
     }
   in_bh=1;
-  
+  sti();
+
+  dev_transmit();
   /* anything left to process? */
   
+  cli();
   while (backlog != NULL)
      {
-       cli();
-       skb= backlog;
+       skb= (struct sk_buff *)backlog;
        if (skb->next == skb)
 	 {
 	   backlog = NULL;
@@ -345,7 +390,7 @@ inet_bh(void *tmp)
 		 {
 		   skb2 = kmalloc (skb->mem_len, GFP_ATOMIC);
 		   if (skb2 == NULL) continue;
-		   memcpy (skb2, skb, skb->mem_len);
+		   memcpy (skb2, (const void *) skb, skb->mem_len);
 		   skb2->mem_addr = skb2;
 		   skb2->lock = 0;
 		   skb2->h.raw = (void *)((unsigned long)skb2
@@ -368,6 +413,8 @@ inet_bh(void *tmp)
 	   PRINTK (("discarding packet type = %X\n", type));
 	   kfree_skb ((struct sk_buff *)skb, FREE_READ);
 	 }
+       dev_transmit();
+       cli();
      }
   in_bh = 0;
   sti();
@@ -379,18 +426,19 @@ inet_bh(void *tmp)
    length of zero is interrpreted to mean the transmit buffers
    are empty, and the transmitter should be shut down. */
 
-unsigned long
-dev_tint(unsigned char *buff,  struct device *dev)
+/* now the packet is passed on via the other call. */
+
+void
+dev_tint( struct device *dev)
 {
   int i;
-  int tmp;
   struct sk_buff *skb;
   for (i=0; i < DEV_NUMBUFFS; i++)
     {
       while (dev->buffs[i]!=NULL)
 	{
 	  cli();
-	  skb=dev->buffs[i];
+	  skb=(struct sk_buff *)dev->buffs[i];
 	  if (skb->magic != DEV_QUEUE_MAGIC)
 	    {
 	      printk ("dev.c skb with bad magic-%X: squashing queue\n",
@@ -430,50 +478,9 @@ dev_tint(unsigned char *buff,  struct device *dev)
 	    }
 	  skb->next = NULL;
 	  skb->prev = NULL;
-
-	  if (!skb->arp)
-	    {
-	       if (dev->rebuild_header (skb+1, dev))
-		 {
-		   skb->dev = dev;
-		   sti();
-		   arp_queue (skb);
-		   continue;
-		 }
-	    }
-	     
-	  tmp = skb->len;
-	  if (tmp <= dev->mtu)
-	    {
-	       if (dev->send_packet != NULL)
-		 {
-		    dev->send_packet(skb, dev);
-		 }
-	       if (buff != NULL)
-		 memcpy (buff, skb + 1, tmp);
-
-	       PRINTK ((">>\n"));
-	       print_eth ((struct enet_header *)(skb+1));
-	    }
-	  else
-	    {
-	       printk ("dev.c:**** bug len bigger than mtu, "
-		       "squashing queue. \n");
-	       cli();
-	       dev->buffs[i] = NULL;
-	       continue;
-
-	    }
 	  sti();
-	  if (skb->free)
-	    {
-		  kfree_skb(skb, FREE_WRITE);
-	    }
-
-	  if (tmp != 0)
-	    return (tmp);
+	  /* this will send it through the process again. */
+	  dev->queue_xmit (skb, dev, -i-1);
 	}
     }
-  PRINTK (("dev_tint returning 0 \n"));
-  return (0);
 }

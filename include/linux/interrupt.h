@@ -17,6 +17,7 @@ enum {
 	TIMER_BH = 0,
 	CONSOLE_BH,
 	SERIAL_BH,
+	TTY_BH,
 	INET_BH,
 	KEYBOARD_BH
 };

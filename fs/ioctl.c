@@ -40,9 +40,10 @@ static int file_ioctl(struct file *filp,unsigned int cmd,unsigned long arg)
 			put_fs_long(filp->f_inode->i_size - filp->f_pos,
 			    (long *) arg);
 			return 0;
-		default:
-			return -EINVAL;
 	}
+	if (filp->f_op && filp->f_op->ioctl)
+		return filp->f_op->ioctl(filp->f_inode, filp, cmd,arg);
+	return -EINVAL;
 }
 
 

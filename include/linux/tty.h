@@ -10,6 +10,7 @@
 #include <asm/system.h>
 
 #define NR_CONSOLES	8
+#define NR_LDISCS	16
 
 /*
  * These are set up by the setup-routine at boot-time:
@@ -104,7 +105,9 @@ struct serial_struct {
 #define ASYNC_FLAGS	0x0036	/* Possible legal async flags */
 
 /* Internal flags used only by kernel/chr_drv/serial.c */
-#define ASYNC_NO_IRQ	0x80000000 /* No IRQ was initialized */
+#define ASYNC_INITIALIZED	0x80000000 /* Serial port was initialized */
+#define ASYNC_CALLOUT_ACTIVE	0x40000000 /* Call out device is active */
+#define ASYNC_NORMAL_ACTIVE	0x20000000 /* Normal device is active */
 
 #define IS_A_CONSOLE(min)	(((min) & 0xC0) == 0x00)
 #define IS_A_SERIAL(min)	(((min) & 0xC0) == 0x40)
@@ -188,6 +191,7 @@ struct tty_struct {
 	unsigned char stopped:1, status_changed:1, packet:1;
 	unsigned char ctrl_status;
 	short line;
+	int disc;
 	int flags;
 	int count;
 	struct winsize winsize;
@@ -197,11 +201,37 @@ struct tty_struct {
 	int  (*ioctl)(struct tty_struct *tty, struct file * file,
 		    unsigned int cmd, unsigned int arg);
 	void (*throttle)(struct tty_struct * tty, int status);
+	void (*set_termios)(struct tty_struct *tty, struct termios * old);
 	struct tty_struct *link;
+	unsigned char *write_data_ptr;
+	int write_data_cnt;
+	void (*write_data_callback)(void * data);
+	void * write_data_arg;
 	struct tty_queue read_q;
 	struct tty_queue write_q;
 	struct tty_queue secondary;
 	};
+
+struct tty_ldisc {
+	int	flags;
+	/*
+	 * The following routines are called from above.
+	 */
+	int	(*open)(struct tty_struct *);
+	void	(*close)(struct tty_struct *);
+	int	(*read)(struct tty_struct * tty, struct file * file,
+			char * buf, int nr);
+	int	(*write)(struct tty_struct * tty, struct file * file,
+			 char * buf, int nr);	
+	int	(*ioctl)(struct tty_struct * tty, struct file * file,
+			 unsigned int cmd, unsigned int arg);
+	/*
+	 * The following routines are called from below.
+	 */
+	void	(*handler)(struct tty_struct *);
+};
+
+#define LDISC_FLAG_DEFINED	0x00000001
 
 /*
  * These are the different types of thottle status which can be sent
@@ -256,7 +286,9 @@ extern void tty_write_flush(struct tty_struct *);
 extern void tty_read_flush(struct tty_struct *);
 
 extern struct tty_struct *tty_table[];
+extern int tty_check_write[];
 extern struct tty_struct * redirect;
+extern struct tty_ldisc ldiscs[];
 extern int fg_console;
 extern unsigned long video_num_columns;
 extern unsigned long video_num_lines;
@@ -282,6 +314,7 @@ extern void flush_input(struct tty_struct * tty);
 extern void flush_output(struct tty_struct * tty);
 extern void wait_until_sent(struct tty_struct * tty);
 extern void copy_to_cooked(struct tty_struct * tty);
+extern int tty_register_ldisc(int disc, struct tty_ldisc *new);
 
 extern int tty_ioctl(struct inode *, struct file *, unsigned int, unsigned int);
 extern int is_orphaned_pgrp(int pgrp);
@@ -290,6 +323,7 @@ extern int tty_signal(int sig, struct tty_struct *tty);
 extern int kill_pg(int pgrp, int sig, int priv);
 extern int kill_sl(int sess, int sig, int priv);
 extern void tty_hangup(struct tty_struct * tty);
+extern void tty_unhangup(struct file *filp);
 extern void do_SAK(struct tty_struct *tty);
 
 /* tty write functions */
@@ -300,7 +334,6 @@ extern void con_write(struct tty_struct * tty);
 /* serial.c */
 
 extern int  rs_open(struct tty_struct * tty, struct file * filp);
-extern void change_speed(unsigned int line);
 
 /* pty.c */
 

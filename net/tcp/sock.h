@@ -19,8 +19,14 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: sock.h,v 0.8.4.5 1992/12/12 01:50:49 bir7 Exp $ */
+/* $Id: sock.h,v 0.8.4.7 1993/01/26 22:04:00 bir7 Exp $ */
 /* $Log: sock.h,v $
+ * Revision 0.8.4.7  1993/01/26  22:04:00  bir7
+ * Added support for proc fs.
+ *
+ * Revision 0.8.4.6  1993/01/23  18:00:11  bir7
+ * Added volatile keyword
+ *
  * Revision 0.8.4.5  1992/12/12  01:50:49  bir7
  * Fixed support for half duplex connections.
  *
@@ -51,15 +57,17 @@
 struct sock 
 {
   struct options *opt;
-  unsigned long wmem_alloc;
-  unsigned long rmem_alloc;
+  volatile unsigned long wmem_alloc;
+  volatile unsigned long rmem_alloc;
   unsigned long send_seq;
   unsigned long acked_seq;
   unsigned long copied_seq;
   unsigned long rcv_ack_seq;
   unsigned long window_seq;
   unsigned long fin_seq;
-  unsigned long inuse:1, dead:1, urginline:1,
+  /* not all are volatile, but some are, so we might as
+     well say they all are. */
+  volatile unsigned long  inuse:1, dead:1, urginline:1,
                 intr:1, blog:1, done:1, reuse:1, keepopen:1, linger:1,
                 delay_acks:1, timeout:3, destroy:1, ack_timed:1, no_check:1,
                 exp_growth:1;
@@ -68,7 +76,7 @@ struct sock
   volatile struct sock *pair;
   struct sk_buff *send_tail;
   struct sk_buff *send_head;
-  struct sk_buff *back_log;
+  volatile struct sk_buff * volatile back_log;
   struct sk_buff *send_tmp;
   long retransmits;
   struct sk_buff *wback, *wfront, *rqueue;
@@ -81,20 +89,20 @@ struct sock
   unsigned short bytes_rcv;
   unsigned short mtu;
   unsigned short num;
-  unsigned short cong_window;
-  unsigned short packets_out;
-  unsigned short urg;
-  unsigned short shutdown;
+  volatile unsigned short cong_window;
+  volatile unsigned short packets_out;
+  volatile unsigned short urg;
+  volatile unsigned short shutdown;
   unsigned short mss;
-  short rtt;
-  short err;
+  volatile short rtt;
+  volatile short err;
   unsigned char protocol;
-  unsigned char state;
-  unsigned char ack_backlog;
+  volatile unsigned char state;
+  volatile unsigned char ack_backlog;
   unsigned char max_ack_backlog;
   unsigned char priority;
   struct tcp_header dummy_th; /* I may be able to get rid of this. */
-  struct timer time_wait;
+  volatile struct timer time_wait;
 };
 
 struct proto 
@@ -139,6 +147,7 @@ struct proto
   unsigned short max_header;
   unsigned long retransmits;
   volatile struct sock *sock_array[SOCK_ARRAY_SIZE];
+  char name[80];
 };
 
 #define TIME_WRITE 1
@@ -154,11 +163,11 @@ struct proto
 
 struct sk_buff
 {
-  struct sk_buff *next;
-  struct sk_buff *prev;
-  struct sk_buff *link3;
+  volatile struct sk_buff *next;
+  volatile struct sk_buff *prev;
+  volatile struct sk_buff *link3;
   volatile struct sock *sk;
-  unsigned long when; /* used to compute rtt's. */
+  volatile unsigned long when; /* used to compute rtt's. */
   struct device *dev;
   void *mem_addr;
   union
@@ -176,7 +185,7 @@ struct sk_buff
   unsigned long saddr;
   unsigned long daddr;
   int magic;
-  unsigned long acked:1,used:1,free:1,arp:1, urg_used:1, lock:1;
+  volatile unsigned long acked:1,used:1,free:1,arp:1, urg_used:1, lock:1;
 };
 
 #define PROT_SOCK 1024

@@ -19,13 +19,19 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: timer.h,v 0.8.4.1 1992/11/10 00:17:18 bir7 Exp $ */
+/* $Id: timer.h,v 0.8.4.2 1993/01/23 18:00:11 bir7 Exp $ */
 /* $Log: timer.h,v $
+ * Revision 0.8.4.2  1993/01/23  18:00:11  bir7
+ * added volatile keyword.
+ *
  * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
  * version change only.
  *
  * Revision 0.8.3.2  1992/11/10  00:14:47  bir7
  * Changed malloc to kmalloc and added $iId$ and $Log: timer.h,v $
+ * Revision 0.8.4.2  1993/01/23  18:00:11  bir7
+ * added volatile keyword.
+ *
  * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
  * version change only.
  *.
@@ -39,7 +45,7 @@ struct timer
   unsigned long len;
   volatile struct sock *sk;
   unsigned long when;
-  struct timer *next;
+  volatile struct timer *next;
 };
 
 

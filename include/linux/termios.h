@@ -38,6 +38,8 @@
 #define TIOCPKT		0x5420
 #define FIONBIO		0x5421
 #define TIOCNOTTY	0x5422
+#define TIOCSETD	0x5423
+#define TIOCGETD	0x5424
 #define FIONCLEX	0x5450  /* these numbers need to be adjusted. */
 #define FIOCLEX		0x5451
 #define FIOASYNC	0x5452
@@ -224,5 +226,10 @@ struct termios {
 #define	TCSANOW		0
 #define	TCSADRAIN	1
 #define	TCSAFLUSH	2
+
+/* line disciplines */
+#define N_TTY		0
+#define N_SLIP		1
+#define N_MOUSE		2
 
 #endif

@@ -264,6 +264,7 @@ extern unsigned long startup_time;
 extern int jiffies_offset;
 extern int need_resched;
 extern int hard_math;
+extern int ignore_irq13;
 
 #define CURRENT_TIME (startup_time+(jiffies+jiffies_offset)/HZ)
 

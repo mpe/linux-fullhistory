@@ -19,8 +19,14 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: packet.c,v 0.8.4.5 1992/12/12 19:25:04 bir7 Exp $ */
+/* $Id: packet.c,v 0.8.4.7 1993/01/26 22:04:00 bir7 Exp $ */
 /* $Log: packet.c,v $
+ * Revision 0.8.4.7  1993/01/26  22:04:00  bir7
+ * Added support for proc fs.
+ *
+ * Revision 0.8.4.6  1993/01/23  18:00:11  bir7
+ * Added volatile keyword
+ *
  * Revision 0.8.4.5  1992/12/12  19:25:04  bir7
  * Cleaned up Log messages.
  *
@@ -147,18 +153,17 @@ packet_sendto (volatile struct sock *sk, unsigned char *from, int len,
    else
      return (-EINVAL);
 
-   skb = sk->prot->wmalloc (sk, len+sizeof (*skb) + sk->prot->max_header, 0,
-			    GFP_KERNEL);
+   skb = sk->prot->wmalloc (sk, len+sizeof (*skb), 0, GFP_KERNEL);
+
    /* this shouldn't happen, but it could. */
    if (skb == NULL)
      {
 	PRINTK ("packet_sendto: write buffer full?\n");
-	print_sk (sk);
 	return (-EAGAIN);
      }
    skb->lock = 0;
    skb->mem_addr = skb;
-   skb->mem_len = len + sizeof (*skb) +sk->prot->max_header;
+   skb->mem_len = len + sizeof (*skb);
    skb->sk = sk;
    skb->free = 1;
    saddr.sa_data[13] = 0;
@@ -193,6 +198,7 @@ packet_close (volatile struct sock *sk, int timeout)
    sk->state = TCP_CLOSE;
    dev_remove_pack ((struct packet_type *)sk->pair);
    kfree_s ((void *)sk->pair, sizeof (struct packet_type));
+   sk->pair = NULL;
    release_sock (sk);
 }
 
@@ -256,6 +262,7 @@ packet_recvfrom (volatile struct sock *sk, unsigned char *to, int len,
 		       return (-ERESTARTSYS);
 		    }
 	       }
+	     sk->inuse = 1;
 	     sti();
 	  }
 	skb = sk->rqueue;
@@ -268,7 +275,7 @@ packet_recvfrom (volatile struct sock *sk, unsigned char *to, int len,
 		    }
 		  else
 		    {
-			    sk->rqueue = sk->rqueue ->next;
+			    sk->rqueue = (struct sk_buff *)sk->rqueue ->next;
 			    skb->prev->next = skb->next;
 			    skb->next->prev = skb->prev;
 		    }
@@ -337,5 +344,6 @@ struct proto packet_prot =
   NULL,
   128,
   0,
-  {NULL,}
+  {NULL,},
+  "PACKET"
 };

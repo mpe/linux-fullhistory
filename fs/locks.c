@@ -191,7 +191,8 @@ static int copy_flock(struct file *filp, struct file_lock *fl, struct flock *l)
 		return 0;
 	if (!S_ISREG(filp->f_inode->i_mode))
 		return 0;
-	if (l->l_type != F_UNLCK && l->l_type != F_RDLCK && l->l_type != F_WRLCK)
+	if (l->l_type != F_UNLCK && l->l_type != F_RDLCK && l->l_type != F_WRLCK
+	 && l->l_type != F_SHLCK && l->l_type != F_EXLCK)
 		return 0;
 	switch (l->l_whence) {
 	case 0 /*SEEK_SET*/ : start = 0; break;

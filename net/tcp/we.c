@@ -44,8 +44,14 @@
 /* Note:  My driver was full of bugs.  Basically if it works, credit
    Bob Harris.  If it's broken blame me.  -RAB */
 
-/* $Id: we.c,v 0.8.4.8 1992/12/12 19:25:04 bir7 Exp $ */
+/* $Id: we.c,v 0.8.4.10 1993/01/23 18:00:11 bir7 Exp $ */
 /* $Log: we.c,v $
+ * Revision 0.8.4.10  1993/01/23  18:00:11  bir7
+ * Added volatile keyword and converted entry points.
+ *
+ * Revision 0.8.4.9  1993/01/22  22:58:08  bir7
+ * Check in for merge with previous .99 pl 4.
+ *
  * Revision 0.8.4.8  1992/12/12  19:25:04  bir7
  * cleaned up Log messages.
  *
@@ -89,6 +95,7 @@
 #include <errno.h>
 #include <linux/fcntl.h>
 #include <netinet/in.h>
+#include <linux/interrupt.h>
 
 #include "dev.h"
 #include "eth.h"
@@ -101,22 +108,6 @@
 #include "wereg.h"
 
 static unsigned char interrupt_mask;
-/* format of status byte. 
-   bit 
-    0	start
-    1	open
-    2   transmitter in use */
-
-#define START 1
-#define OPEN  2
-#define TRS_BUSY 0x400
-#define IN_INT 8
-
-/* We need to get rid of all these statics and move them into the
-   device structure that way we can have more than one wd8003 board
-   in the system at once. */
-
-static volatile unsigned int status;
 
 static struct enet_statistics stats;	/* Statistics collection */
 static unsigned char max_pages;		/* Board memory/256 */
@@ -145,7 +136,7 @@ wd_start(struct device *dev)
   outb_p(cmd, WD_COMM);
   outb_p(interrupt_mask,WD_IMR);
   sti();
-  status |= START;
+  dev->start = 1;
 }
 
 int
@@ -198,7 +189,6 @@ wd8003_open(struct device *dev)
   cmd|= 4<<CRDMA_SHIFT;
   outb_p(cmd, WD_COMM);
   outb_p(WD_RCONFIG,WD_RCC);
-  status = OPEN;
   wd_start(dev); 
   return (0);
 }
@@ -227,7 +217,7 @@ wd8003_start_xmit(struct sk_buff *skb, struct device *dev)
   int len;
 
   cli();
-  if (status & TRS_BUSY)
+  if (dev->tbusy)
     {
        /* put in a time out. */
        if (jiffies - dev->trans_start < 30)
@@ -237,7 +227,7 @@ wd8003_start_xmit(struct sk_buff *skb, struct device *dev)
 
        printk ("wd8003 transmit timed out. \n");
     }
-  status |= TRS_BUSY;
+  dev->tbusy = 1;
 
   if (skb == NULL)
     {
@@ -264,7 +254,7 @@ wd8003_start_xmit(struct sk_buff *skb, struct device *dev)
 	      arp_queue (skb);
 	    }
 	   cli (); /* arp_queue turns them back on. */
-	   status &= ~TRS_BUSY;
+ 	  dev->tbusy = 0;
 	   sti();
 	   return (0);
 	}
@@ -285,7 +275,7 @@ wd8003_start_xmit(struct sk_buff *skb, struct device *dev)
   outb_p(cmd, WD_COMM);
 
   interrupt_mask |= TRANS_MASK;
-  if (!(status & IN_INT))
+  if (!(dev->interrupt))
     outb (interrupt_mask, WD_IMR);
 
   outb_p(len&0xff,WD_TB0);
@@ -400,9 +390,6 @@ wd_rcv( struct device *dev )
 		  stats.rx_packets++; /* count all receives */
 		  done = wdget( ring, dev ); /* get the packet */
 		  
-		  /* see if we need to process this packet again. */
-		  if (done == -1) continue;
-
 		  /* Calculate next packet location */
 		  pkt = ring->next;
 		  
@@ -478,8 +465,7 @@ wd_rx_over( struct device *dev )
 static  void
 wd_trs( struct device *dev )
 {
-	unsigned char cmd, errors;
-	int len;
+	unsigned char errors;
 
 	if( wd_debug )
 		printk("\nwd_trs() - TX complete, status = x%x", inb_p(TSR));
@@ -489,7 +475,10 @@ wd_trs( struct device *dev )
 			stats.tx_packets++;
 			tx_aborted = 0;
 		}
+		dev->tbusy = 0;
+		mark_bh (INET_BH);
 		
+#if 0		
 		/* attempt to start a new transmission. */
 		len = dev_tint( (unsigned char *)dev->mem_start, dev );
 		if( len != 0 ){
@@ -503,11 +492,12 @@ wd_trs( struct device *dev )
 		}
 		else
 		{
-			status &= ~TRS_BUSY;
+			dev->tbusy = 0
 			interrupt_mask &= ~TRANS_MASK;
 			return;
 		}
-	}
+#endif
+      }
 	else{ /* TX error occurred! - H/W will reschedule */
 		if( errors & CRS ){
 			stats.tx_carrier_errors++;
@@ -555,7 +545,7 @@ wd8003_interrupt(int reg_ptr)
 	if (wd_debug)
 		printk("\nwd8013 - interrupt isr = x%x", inb_p( ISR ) );
 
-	status |= IN_INT;
+	dev->interrupt = 1;
 
 	do{ /* find out who called */ 
 	  sti();
@@ -632,7 +622,7 @@ wd8003_interrupt(int reg_ptr)
 		cli();
 	} while( inb_p( ISR ) != 0 );
 
-	status &= ~IN_INT;
+	dev->interrupt = 0;
 }
 
 
@@ -659,7 +649,6 @@ wd8003_init(struct device *dev)
       printk ("Warning WD8013 board not found at i/o = %X.\n",dev->base_addr);
 
       /* make sure no one can attempt to open the device. */
-      status = OPEN;
       return (1);
     }
   printk("wd8013");
@@ -709,7 +698,7 @@ wd8003_init(struct device *dev)
 	  if( (i - dev->mem_start) > 4096 )
 	  	break;
 	  else
-	  	status = OPEN;
+	  	return (1);
 	}
     }
   /* Calculate how many pages of memory on board */
@@ -734,7 +723,8 @@ wd8003_init(struct device *dev)
 	((char *)&stats)[i] = 0;
 
   printk ("\n");
-  status = 0;
+  dev->tbusy = 0;
+  dev->interrupt = 0;
 
   if (irqaction (dev->irq, &wd8003_sigaction))
     {

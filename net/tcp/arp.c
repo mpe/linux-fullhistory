@@ -19,8 +19,14 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: arp.c,v 0.8.4.5 1992/12/12 19:25:04 bir7 Exp $ */
+/* $Id: arp.c,v 0.8.4.8 1993/01/23 18:00:11 bir7 Exp $ */
 /* $Log: arp.c,v $
+ * Revision 0.8.4.8  1993/01/23  18:00:11  bir7
+ * Added ioctls as supplied by R.P. Bellis <rpb@psy.ox.ac.uk>
+ *
+ * Revision 0.8.4.7  1993/01/22  23:21:38  bir7
+ * Merged with 99 pl4
+ *
  * Revision 0.8.4.5  1992/12/12  19:25:04  bir7
  * Cleaned up Log messages.
  *
@@ -50,6 +56,9 @@
 
 #include <linux/socket.h>
 #include <netinet/in.h>
+#include <linux/sock_ioctl.h>
+#include <linux/errno.h>
+#include <asm/segment.h>
 #include <asm/system.h>
 
 #include "timer.h"
@@ -66,8 +75,8 @@
 #define PRINTK(x) /**/
 #endif
 
-static struct arp_table *arp_table[ARP_TABLE_SIZE] ={NULL, };
-struct sk_buff *arp_q=NULL;
+static volatile struct arp_table *arp_table[ARP_TABLE_SIZE] ={NULL, };
+volatile struct sk_buff *arp_q=NULL;
 
 /* this will try to retransmit everything on the queue. */
 static void
@@ -77,7 +86,7 @@ send_arp_q(void)
    struct sk_buff *next;
 
    cli();
-   next = arp_q;
+   next = (struct sk_buff *)arp_q;
    arp_q = NULL;
    sti();
    while ((skb = next) != NULL) {
@@ -98,7 +107,7 @@ send_arp_q(void)
        }
 
      /* first remove skb from the queue. */
-     next = skb->next;
+     next = (struct sk_buff *)skb->next;
      if (next == skb)
        {
 	 next = NULL;
@@ -289,7 +298,9 @@ arp_lookup (unsigned long paddr)
   if (my_ip_addr(paddr)) return (NULL);
   hash = net32(paddr) & (ARP_TABLE_SIZE - 1);
   cli();
-  for (apt = arp_table[hash]; apt != NULL; apt = apt->next)
+  for (apt = (struct arp_table *)arp_table[hash];
+       apt != NULL;
+       apt = (struct arp_table *)apt->next)
     {
       if (apt->ip == paddr)
 	{
@@ -319,7 +330,7 @@ arp_destroy(unsigned long paddr)
   /* check the first one. */
   if (arp_table[hash]->ip == paddr)
     {
-      apt = arp_table[hash];
+      apt = (struct arp_table *)arp_table[hash];
       arp_table[hash] = arp_table[hash]->next;
       arp_free (apt, sizeof (*apt));
       sti();
@@ -327,8 +338,10 @@ arp_destroy(unsigned long paddr)
     }
 
   /* now deal with it any where else in the chain. */
-  lapt = arp_table[hash];
-  for (apt = arp_table[hash]->next; apt != NULL; apt = apt->next)
+  lapt = (struct arp_table *)arp_table[hash];
+  for (apt = (struct arp_table *)arp_table[hash]->next;
+       apt != NULL;
+       apt = (struct arp_table *)apt->next)
     {
       if (apt->ip == paddr) 
 	{
@@ -557,4 +570,67 @@ arp_queue(struct sk_buff *skb)
      }
   skb->magic = ARP_QUEUE_MAGIC;
    sti();
+}
+
+static int arpreq_check(struct arpreq *req)
+{
+	/* Check protocol familys */
+	if (req->arp_pa.sa_family != AF_INET) return -1;
+
+	if (req->arp_ha.sa_family != AF_UNSPEC) return -1;
+
+	return 0;
+}
+
+int arp_ioctl_set(struct arpreq *req)
+{
+	struct arpreq		r;
+	struct arp_table	*apt;
+
+	memcpy_fromfs(&r, req, sizeof(r));
+	if (arpreq_check(&r) != 0) return -EPFNOSUPPORT;
+
+	apt = arp_lookup(*(unsigned long *)r.arp_pa.sa_data);
+	if (apt) {
+		apt->last_used = timer_seq;
+		memcpy(apt->hard, r.arp_ha.sa_data , 6);
+	} else {
+		if (!create_arp(*(unsigned long *)r.arp_pa.sa_data,
+				r.arp_ha.sa_data, 6)) {
+			return -ENOMEM;
+		}
+	}
+
+	return 0;
+}
+
+int arp_ioctl_get(struct arpreq *req)
+{
+	struct arpreq		r;
+	struct arp_table	*apt;
+
+	memcpy_fromfs(&r, req, sizeof(r));
+	if (arpreq_check(&r) != 0) return -EPFNOSUPPORT;
+	apt = arp_lookup(*(unsigned long *)r.arp_pa.sa_data);
+	if (apt) {
+		memcpy(r.arp_ha.sa_data, apt->hard, apt->hlen);
+	} else {
+		return -ENXIO;
+	}
+
+	/* Copy the information back */
+	memcpy_tofs(req, &r, sizeof(r));
+	return 0;
+}
+
+int arp_ioctl_del(struct arpreq *req)
+{
+	struct arpreq		r;
+
+	memcpy_fromfs(&r, req, sizeof(r));
+	if (arpreq_check(&r) != 0) return -EPFNOSUPPORT;
+
+	arp_destroy(*(unsigned long *)r.arp_pa.sa_data);
+
+	return 0;
 }

@@ -48,7 +48,7 @@ _reg_div:
 
 	movb	SIGN(%esi),%cl
 	cmpb	%cl,SIGN(%ebx)
-	setneb	(%edi)		// Set the sign, requires neg=1, pos=0
+	setne	(%edi)	      // Set the sign, requires SIGN_NEG=1, SIGN_POS=0
 
 	add	$SIGL_OFFSET,%ebx
 	add	$SIGL_OFFSET,%esi

@@ -20,7 +20,7 @@
 
 extern int close_fp(struct file *filp);
 
-static int nfs_notify_change(struct inode *);
+static int nfs_notify_change(int, struct inode *);
 static void nfs_put_super(struct super_block *);
 static void nfs_statfs(struct super_block *, struct statfs *);
 
@@ -125,8 +125,7 @@ void nfs_statfs(struct super_block *sb, struct statfs *buf)
 	error = nfs_proc_statfs(&sb->u.nfs_sb.s_server, &sb->u.nfs_sb.s_root,
 		&res);
 	if (error) {
-		if (error != -EINTR)
-			printk("nfs_statfs: statfs error = %d\n", -error);
+		printk("nfs_statfs: statfs error = %d\n", -error);
 		res.bsize = res.blocks = res.bfree = res.bavail = 0;
 	}
 	put_fs_long(res.bsize, &buf->f_bsize);
@@ -181,20 +180,36 @@ struct inode *nfs_fhget(struct super_block *sb, struct nfs_fh *fhandle,
 	return inode;
 }
 
-int nfs_notify_change(struct inode *inode)
+int nfs_notify_change(int flags, struct inode *inode)
 {
 	struct nfs_sattr sattr;
 	struct nfs_fattr fattr;
 	int error;
 
-	sattr.mode = inode->i_mode;
-	sattr.uid = inode->i_uid;
-	sattr.gid = inode->i_gid;
-	sattr.size = S_ISREG(inode->i_mode) ? inode->i_size : -1;
-	sattr.mtime.seconds = inode->i_mtime;
-	sattr.mtime.useconds = 0;
-	sattr.atime.seconds = inode->i_atime;
-	sattr.atime.useconds = 0;
+	if (flags & NOTIFY_MODE)
+		sattr.mode = inode->i_mode;
+	else
+		sattr.mode = -1;
+	if (flags & NOTIFY_UIDGID) {
+		sattr.uid = inode->i_uid;
+		sattr.gid = inode->i_gid;
+	}
+	else
+		sattr.uid = sattr.gid = -1;
+	if (flags & NOTIFY_SIZE)
+		sattr.size = S_ISREG(inode->i_mode) ? inode->i_size : -1;
+	else
+		sattr.size = -1;
+	if (flags & NOTIFY_TIME) {
+		sattr.mtime.seconds = inode->i_mtime;
+		sattr.mtime.useconds = 0;
+		sattr.atime.seconds = inode->i_atime;
+		sattr.atime.useconds = 0;
+	}
+	else {
+		sattr.mtime.seconds = sattr.mtime.useconds = -1;
+		sattr.atime.seconds = sattr.atime.useconds = -1;
+	}
 	error = nfs_proc_setattr(NFS_SERVER(inode), NFS_FH(inode),
 		&sattr, &fattr);
 	if (!error)

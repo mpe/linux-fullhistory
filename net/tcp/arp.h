@@ -19,8 +19,11 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: arp.h,v 0.8.4.3 1992/12/03 19:54:12 bir7 Exp $ */
+/* $Id: arp.h,v 0.8.4.4 1993/01/23 18:00:11 bir7 Exp $ */
 /* $Log: arp.h,v $
+ * Revision 0.8.4.4  1993/01/23  18:00:11  bir7
+ * Added ioctls as supplied by R.P. Bellis <rpb@psy.ox.ac.uk>
+ *
  * Revision 0.8.4.3  1992/12/03  19:54:12  bir7
  * Added paranoid queue checking.
  *
@@ -32,6 +35,9 @@
  *
  * Revision 0.8.3.2  1992/11/10  00:14:47  bir7
  * Changed malloc to kmalloc and added $iId$ and $Log: arp.h,v $
+ * Revision 0.8.4.4  1993/01/23  18:00:11  bir7
+ * Added ioctls as supplied by R.P. Bellis <rpb@psy.ox.ac.uk>
+ *
  * Revision 0.8.4.3  1992/12/03  19:54:12  bir7
  * Added paranoid queue checking.
  *
@@ -58,14 +64,14 @@ struct arp
 
 struct arp_table
 {
-  struct arp_table *next;
-  unsigned long last_used;
+  volatile struct arp_table *next;
+  volatile unsigned long last_used;
   unsigned long ip;
   unsigned char hlen;
   unsigned char hard[MAX_ADDR_LEN];
 };
 
-struct sk_buff *arp_q;
+volatile struct sk_buff *arp_q;
 
 int arp_rcv(struct sk_buff *, struct device *, struct packet_type *);
 void arp_snd (unsigned long, struct device *, unsigned long);
@@ -75,6 +81,10 @@ void arp_add_broad (unsigned long, struct device *dev);
 void arp_destroy (unsigned long);
 void arp_add (unsigned long addr, unsigned char *haddr, struct device *dev);
 void arp_queue (struct sk_buff *skb);
+
+int arp_ioctl_set(struct arpreq *req);
+int arp_ioctl_get(struct arpreq *req);
+int arp_ioctl_del(struct arpreq *req);
 
 #define ARP_TABLE_SIZE 16
 #define ARP_IP_PROT ETHERTYPE_IP

@@ -30,6 +30,7 @@
 
 int need_resched = 0;
 int hard_math = 0;		/* set by boot/head.S */
+int ignore_irq13 = 0;		/* set if exception 16 works */
 
 unsigned long * prof_buffer = NULL;
 unsigned long prof_len = 0;
@@ -316,9 +317,11 @@ static struct timer_list * next_timer = NULL;
 void add_timer(long jiffies, void (*fn)(void))
 {
 	struct timer_list * p;
+	unsigned long flags;
 
 	if (!fn)
 		return;
+	save_flags(flags);
 	cli();
 	if (jiffies <= 0)
 		(fn)();
@@ -342,8 +345,10 @@ void add_timer(long jiffies, void (*fn)(void))
 			p->next->jiffies = jiffies;
 			p = p->next;
 		}
+		if (p->next)
+			p->next->jiffies -= p->jiffies;
 	}
-	sti();
+	restore_flags(flags);
 }
 
 unsigned long timer_active = 0;

@@ -19,8 +19,14 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: ip.c,v 0.8.4.8 1992/12/12 19:25:04 bir7 Exp $ */
+/* $Id: ip.c,v 0.8.4.10 1993/01/23 18:00:11 bir7 Exp $ */
 /* $Log: ip.c,v $
+ * Revision 0.8.4.10  1993/01/23  18:00:11  bir7
+ * added volatile keyword to many variables.
+ *
+ * Revision 0.8.4.9  1993/01/22  23:21:38  bir7
+ * Merged with 99 pl4
+ *
  * Revision 0.8.4.8  1992/12/12  19:25:04  bir7
  * Cleaned up Log messages.
  *
@@ -67,17 +73,34 @@
 
 unsigned long ip_addr[MAX_IP_ADDRES]={0,0,0};
 
+#ifdef PRINTK
+#undef PRINTK
+#endif
+
 #undef IP_DEBUG
 
 #ifdef IP_DEBUG
-#define PRINTK(X) printk X
+#define PRINTK(x) printk x
 #else
-#define PRINTK(X) /**/
+#define PRINTK(x) /**/
 #endif
 
 static struct rtable *rt_base=NULL; /* used to base all the routing data. */
 
-struct ip_protocol *ip_protos[MAX_IP_PROTOS] = { NULL, };
+volatile struct ip_protocol *ip_protos[MAX_IP_PROTOS] = { NULL, };
+int ip_ads = 0;
+
+static char *in_ntoa(unsigned long addr)
+{
+	static char buf[100];
+
+	sprintf(buf,"%d.%d.%d.%d",
+		(addr & 0xff),
+		((addr >> 8) & 0xff),
+		((addr >> 16) & 0xff),
+		((addr >> 24) & 0xff));
+	return buf;
+}
 
 #if 0
 static  struct ip_protocol *
@@ -108,7 +131,9 @@ add_ip_protocol (struct ip_protocol *prot)
    ip_protos[hash] = prot;
    prot->copy = 0;
    /* set the copy bit if we need to. */
-   for (p2 = prot->next; p2 != NULL; p2=p2->next)
+   for (p2 = (struct ip_protocol *)prot->next;
+	p2 != NULL;
+	p2= (struct ip_protocol *)p2->next)
      {
 	if (p2->protocol == prot->protocol)
 	  {
@@ -130,11 +155,13 @@ delete_ip_protocol (struct ip_protocol *prot)
    hash = prot->protocol & (MAX_IP_PROTOS -1);
    if (prot == ip_protos[hash])
      {
-        ip_protos[hash]=ip_protos[hash]->next;
+        ip_protos[hash]=(struct ip_protocol *)ip_protos[hash]->next;
 	return (0);
      }
 
-   for (p = ip_protos[hash]; p != NULL; p = p->next)
+   for (p = (struct ip_protocol *)ip_protos[hash];
+	p != NULL;
+	p = (struct ip_protocol *) p->next)
      {
 	/* we have to worry if the protocol being deleted is the
 	   last one on the list, then we may need to reset someones
@@ -208,8 +235,12 @@ loose_route(struct ip_header *iph, struct options *opt)
 void
 print_rt(struct rtable *rt)
 {
-  PRINTK (("net = %08X router = %08X\n",rt->net, rt->router));
-  PRINTK (("dev = %X, next = %X\n",rt->dev, rt->next));
+#ifdef IP_DEBUG
+  printk("RT: %06lx NXT=%06lx DEV=%06lx(%s) NET=%s ",
+	(long) rt, (long) rt->next, (long) rt->dev,
+			rt->dev->name, in_ntoa(rt->net));
+  printk("ROUTER=%s\n", in_ntoa(rt->router));
+#endif
 }
 
 void
@@ -239,13 +270,45 @@ ip_route(struct options *opt, unsigned long daddr, unsigned long *raddr)
   return (NULL);
 };
 
+/* Remove all routing table entries for a device. */
+void
+del_devroute (struct device *dev)
+{
+  struct rtable *r, *x, *p;
+
+  if ((r = rt_base) == NULL) return;	/* nothing to remove! */
+  PRINTK (("IFACE DOWN: clearing routing table for dev 0x%08lx (%s)\n",
+						(long) dev, dev->name));
+  p = NULL;
+  while(r != NULL)
+    {
+	PRINTK ((">> R=%06lx N=%06lx P=%06lx DEV=%06lx(%s) A=%s\n",
+		(long) r, (long) r->next, (long) p, (long) r->dev,
+					r->dev->name, in_ntoa(r->net)));
+	if (r->dev == dev)
+	  {
+		PRINTK ((">>> MATCH: removing rt=%08lx\n", (long) r));
+		if (p == NULL) rt_base = r->next;
+		  else p->next = r->next;
+		x = r->next;
+		kfree_s(r, sizeof(*r));
+		r = x;
+	  }
+	else
+	  {
+		p = r;
+		r = r->next;
+	  }
+    }
+}
+
 void
 add_route (struct rtable *rt)
 {
   int mask;
   struct rtable *r;
   struct rtable *r1;
-  PRINTK (("add_route (rt=%X):\n",rt));
+
   print_rt(rt);
 
   if (rt_base == NULL)
@@ -316,16 +379,23 @@ ip_set_dev (struct ip_config *u_ipc)
   struct rtable *rt;
   struct device *dev;
   struct ip_config ipc;
-  static int ip_ads = 0;
 
-  if (ip_ads >= MAX_IP_ADDRES) return (-EINVAL);
+
 
 /*  verify_area (u_ipc, sizeof (ipc));*/
   memcpy_fromfs(&ipc, u_ipc, sizeof (ipc));
   ipc.name[MAX_IP_NAME-1] = 0;
   dev = get_dev (ipc.name);
 
+#if 1 /* making this a 0 will let you remove an ip address from
+	 the list, which is useful under SLIP.  But it may not
+	 be compatible with older configs. */
+  ipc.destroy = 0;
+#endif
+
   if (dev == NULL) return (-EINVAL);
+  if (ip_ads >= MAX_IP_ADDRES && !ipc.destroy && ipc.paddr != -1)
+    return (-EINVAL);
 
   /* see if we need to add a broadcast address. */
   if (ipc.net != -1)
@@ -363,11 +433,39 @@ ip_set_dev (struct ip_config *u_ipc)
        add_route (rt);
     }
 
-
-  if (!my_ip_addr (ipc.paddr))
+  if (ipc.destroy)
     {
-       PRINTK (("new identity: %08X\n", ipc.paddr));
-       ip_addr[ip_ads++] = ipc.paddr;
+      int i;
+      for (i = 0; i <MAX_IP_ADDRES; i++)
+	{
+	  if (ip_addr[i] == ipc.paddr)
+	    {
+	      break;
+	    }
+	}
+      if (i != MAX_IP_ADDRES)
+	{
+	  PRINTK (("ip.c: Destroying Identity %8X, entry %d\n", ipc.paddr, i));
+	  i++;
+	  ip_ads--;
+	  while (i < MAX_IP_ADDRES)
+	    {
+	      ip_addr[i-1] = ip_addr[i];
+	      i++;
+	    }
+	  ip_addr[MAX_IP_ADDRES-1] = 0;
+	}
+    }
+
+  /* FIX per FvK 92/11/15 */
+  /* When "downing" an interface, this must be done with paddr = -1L. */
+  if (ipc.paddr != -1L && !ipc.destroy)
+    {
+      if (!my_ip_addr (ipc.paddr))
+	{
+	  PRINTK (("new identity: %08X\n", ipc.paddr));
+	  ip_addr[ip_ads++] = ipc.paddr;
+	}
     }
 
   dev->up = ipc.up;
@@ -380,6 +478,7 @@ ip_set_dev (struct ip_config *u_ipc)
     {
        if (dev->stop)
 	 dev->stop(dev);
+	del_devroute(dev);		/* clear routing table for dev	*/
     }
 
   return (0);
@@ -732,7 +831,11 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
   /* for now we will only deal with packets meant for us. */
   if (!my_ip_addr(iph->daddr))
     {
-       PRINTK (("packet meant for someone else.\n"));
+	PRINTK(("\nIP: *** datagram routing not yet implemented ***\n"));
+	PRINTK(("    SRC = %s   ", in_ntoa(iph->saddr)));
+	PRINTK(("    DST = %s (ignored)\n", in_ntoa(iph->daddr)));
+        icmp_reply (skb, ICMP_DEST_UNREACH, ICMP_PROT_UNREACH, dev);
+
        skb->sk = NULL;
        kfree_skb(skb, 0);
        return (0);
@@ -740,8 +843,11 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
   /* deal with fragments.  or don't for now.*/
   if ((iph->frag_off & 32) || (net16(iph->frag_off)&0x1fff))
-    {
-       printk ("packet fragmented. \n");
+    {	/* FIXME: this ^^^ used to be 64, as per bugfix */
+	printk("\nIP: *** datagram fragmentation not yet implemented ***\n");
+	printk("    SRC = %s   ", in_ntoa(iph->saddr));
+	printk("    DST = %s (ignored)\n", in_ntoa(iph->daddr));
+       icmp_reply (skb, ICMP_DEST_UNREACH, ICMP_PROT_UNREACH, dev);
        skb->sk = NULL;
        kfree_skb(skb, 0);
        return(0);
@@ -750,7 +856,9 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
   skb->h.raw += iph->ihl*4;
 
   hash = iph->protocol & (MAX_IP_PROTOS -1);
-  for (ipprot = ip_protos[hash]; ipprot != NULL; ipprot=ipprot->next)
+  for (ipprot = (struct ip_protocol *)ip_protos[hash];
+       ipprot != NULL;
+       ipprot=(struct ip_protocol *)ipprot->next)
     {
        struct sk_buff *skb2;
        if (ipprot->protocol != iph->protocol) continue;
@@ -891,7 +999,7 @@ ip_retransmit (volatile struct sock *sk, int all)
 	  if (dev->rebuild_header ((struct enet_header *)(skb+1),dev))
 	    {
 	       if (!all) break;
-	       skb=skb->link3;
+	       skb=(struct sk_buff *)skb->link3;
 	       continue;
 	    }
        }
@@ -911,7 +1019,7 @@ ip_retransmit (volatile struct sock *sk, int all)
       /* this should cut it off before we send too
 	 many packets. */
       if (sk->retransmits > sk->cong_window) break;
-      skb=skb->link3;
+      skb=(struct sk_buff *)skb->link3;
     }
   /* double the rtt time every time we retransmit. 
      This will cause exponential back off on how
@@ -936,59 +1044,3 @@ print_iph (struct ip_header *ip)
   PRINTK ((" frag_off=%d\n", ip->frag_off));
   PRINTK (("  saddr = %X, daddr = %X\n",ip->saddr, ip->daddr));
 }
-
-#if 0
-int
-ip_handoff (volatile struct sock *sk)
-{
-   struct ip_protocol *p;
-   struct sk_buff *skb;
-   p = get_protocol (sk->protocol);
-
-   if (p == NULL)
-     {
-	/* this can never happen. */
-	printk ("sock_ioctl: protocol not found. \n");
-	/* what else can I do, I suppose I could send a sigkill. */
-	return (-EIO);
-     }
-
-   while (p->handler != sk->prot->rcv)
-     {
-	p=p->next;
-	if (p == NULL)
-	  {
-	     /* this can never happen. */
-	     printk ("sock_ioctl: protocol not found. \n");
-	     /* what else can I do, I suppose I could send a sigkill. */
-	     return (-EIO);
-	  }
-     }
-   p = p-> next;
-   sk->inuse = 1;
-   
-   /* now we have to remove the top sock buff.  If there are none, then
-      we return. */
-   if (sk->rqueue == NULL) return (0);
-   skb = sk->rqueue;
-   if (skb->next == skb)
-     {
-	sk->rqueue = NULL;
-     }
-   else
-     {
-	sk->rqueue = skb->next;
-	skb->next->prev = skb->prev;
-	skb->prev->next = skb->next;
-     }
-   if (p != NULL)
-     {
-	p->handler ((unsigned char *)(skb+1), skb->dev, NULL, skb->saddr,
-		    skb->len, skb->daddr, p->protocol, 0);
-     }
-   kfree_skb (skb, FREE_READ);
-   release_sock (sk);
-   return (0);
-}
-
-#endif

@@ -48,12 +48,13 @@ static void mouse_interrupt(int unused)
 	buttons = inb(MSE_DATA_PORT);
 	dy |= (buttons & 0xf) << 4;
 	buttons = ((buttons >> 5) & 0x07);
-	mouse.buttons = buttons;
-	mouse.latch_buttons |= buttons;
-	mouse.dx += dx;
-	mouse.dy += dy;
-	mouse.ready = 1;
-	wake_up_interruptible(&mouse.wait);
+	if (dx != 0 || dy != 0 || buttons != mouse.buttons) {
+	  mouse.buttons = buttons;
+	  mouse.dx += dx;
+	  mouse.dy += dy;
+	  mouse.ready = 1;
+	  wake_up_interruptible(&mouse.wait);
+	}
 	MSE_INT_ON();
 }
 
@@ -75,7 +76,7 @@ static int open_mouse(struct inode * inode, struct file * file)
 	mouse.ready = 0;
 	mouse.dx = 0;
 	mouse.dy = 0;
-	mouse.buttons = mouse.latch_buttons = 0x80;
+	mouse.buttons = 0x87;
 	if (request_irq(MOUSE_IRQ, mouse_interrupt)) {
 		mouse.active = 0;
 		return -EBUSY;
@@ -99,7 +100,7 @@ static int read_mouse(struct inode * inode, struct file * file, char * buffer, i
 	if (!mouse.ready)
 		return -EAGAIN;
 	MSE_INT_OFF();
-	put_fs_byte(mouse.latch_buttons | 0x80, buffer);
+	put_fs_byte(mouse.buttons | 0x80, buffer);
 	if (mouse.dx < -127)
 		mouse.dx = -127;
 	if (mouse.dx > 127)
@@ -114,7 +115,6 @@ static int read_mouse(struct inode * inode, struct file * file, char * buffer, i
 		put_fs_byte(0x00, buffer + i);
 	mouse.dx = 0;
 	mouse.dy = 0;
-	mouse.latch_buttons = mouse.buttons;
 	mouse.ready = 0;
 	MSE_INT_ON();
 	return i;
@@ -159,7 +159,7 @@ unsigned long bus_mouse_init(unsigned long kmem_start)
 	mouse.present = 1;
 	mouse.active = 0;
 	mouse.ready = 0;
-	mouse.buttons = mouse.latch_buttons = 0x80;
+	mouse.buttons = 0x87;
 	mouse.dx = 0;
 	mouse.dy = 0;
 	mouse.wait = NULL;

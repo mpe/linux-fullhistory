@@ -48,8 +48,10 @@ void ext_free_block(struct super_block * sb, int block)
 	struct buffer_head * bh;
 	struct ext_free_block * efb;
 
-	if (!sb)
-		panic("trying to free block on nonexistent device");
+	if (!sb) {
+		printk("trying to free block on non-existent device\n");
+		return;
+	}
 	lock_super (sb);
 	if (block < sb->u.ext_sb.s_firstdatazone ||
 	    block >= sb->u.ext_sb.s_nzones) {
@@ -91,8 +93,10 @@ int ext_new_block(struct super_block * sb)
 	struct ext_free_block * efb;
 	int j;
 
-	if (!sb)
-		panic("trying to get new block from nonexistant device");
+	if (!sb) {
+		printk("trying to get new block from non-existent device\n");
+		return 0;
+	}
 	if (!sb->u.ext_sb.s_firstfreeblock)
 		return 0;
 	lock_super (sb);
@@ -118,15 +122,16 @@ printk("ext_new_block: block empty, skipping to %d\n", efb->next);
 	}
 	if (j < sb->u.ext_sb.s_firstdatazone || j > sb->u.ext_sb.s_nzones) {
 		printk ("ext_new_block: blk = %d\n", j);
-		panic ("allocating block not in data zone\n");
+		printk("allocating block not in data zone\n");
+		return 0;
 	}
 	sb->u.ext_sb.s_freeblockscount --;
 	sb->s_dirt = 1;
 
-	if (!(bh=getblk(sb->s_dev, j, sb->s_blocksize)))
-		panic("new_block: cannot get block");
-	if (bh->b_count != 1)
-		panic("new block: count is != 1");
+	if (!(bh=getblk(sb->s_dev, j, sb->s_blocksize))) {
+		printk("new_block: cannot get block");
+		return 0;
+	}
 	clear_block(bh->b_data);
 	bh->b_uptodate = 1;
 	bh->b_dirt = 1;
@@ -194,12 +199,12 @@ void ext_free_inode(struct inode * inode)
 		return;
 	}
 	if (!inode->i_sb) {
-		printk("free_inode: inode on nonexistent device\n");
+		printk("free_inode: inode on non-existent device\n");
 		return;
 	}
 	lock_super (inode->i_sb);
 	if (inode->i_ino < 1 || inode->i_ino > inode->i_sb->u.ext_sb.s_ninodes) {
-		printk("free_inode: inode 0 or nonexistent inode\n");
+		printk("free_inode: inode 0 or non-existent inode\n");
 		unlock_super (inode->i_sb);
 		return;
 	}

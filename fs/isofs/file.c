@@ -214,11 +214,7 @@ static int isofs_file_read(struct inode * inode, struct file * filp, char * buf,
 		  if (*bhe) {/* test for valid buffer */
 		    wait_on_buffer(*bhe);
 		    if (!(*bhe)->b_uptodate) {
-		      do {
-			brelse(*bhe);
-			if (++bhe == &buflist[NBUF])
-			  bhe = buflist;
-		      } while (bhe != bhb);
+		      left = 0;
 		      break;
 		    }
 		  }

@@ -2,6 +2,10 @@
  *  linux/kernel/chr_drv/tty_ioctl.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
+ *
+ * Modified by Fred N. van Kempen, 01/29/93, to add line disciplines
+ * which can be dynamically activated and de-activated by the line
+ * discipline handling modules (like SLIP).
  */
 
 #include <linux/types.h>
@@ -15,6 +19,13 @@
 #include <asm/io.h>
 #include <asm/segment.h>
 #include <asm/system.h>
+
+#undef	DEBUG
+#ifdef DEBUG
+# define	PRINTK(x)	printk (x)
+#else
+# define	PRINTK(x)	/**/
+#endif
 
 extern int session_of_pgrp(int pgrp);
 extern int do_screendump(int arg);
@@ -119,33 +130,42 @@ static int get_termios(struct tty_struct * tty, struct termios * termios)
 	return 0;
 }
 
+static int check_change(struct tty_struct * tty, int channel)
+{
+	/* If we try to set the state of terminal and we're not in the
+	   foreground, send a SIGTTOU.  If the signal is blocked or
+	   ignored, go ahead and perform the operation.  POSIX 7.2) */
+	if (current->tty != channel)
+		return 0;
+	if (tty->pgrp <= 0 || tty->pgrp == current->pgrp)
+		return 0;
+	if (is_orphaned_pgrp(current->pgrp))
+		return -EIO;
+	if (is_ignored(SIGTTOU))
+		return 0;
+	(void) kill_pg(current->pgrp,SIGTTOU,1);
+	return -ERESTARTSYS;
+}
+
 static int set_termios(struct tty_struct * tty, struct termios * termios,
 			int channel)
 {
 	int i;
-	unsigned short old_cflag = tty->termios->c_cflag;
+	struct termios old_termios = *tty->termios;
 
-	/* If we try to set the state of terminal and we're not in the
-	   foreground, send a SIGTTOU.  If the signal is blocked or
-	   ignored, go ahead and perform the operation.  POSIX 7.2) */
-	if ((current->tty == channel) &&
-	     (tty->pgrp != current->pgrp)) {
-		if (is_orphaned_pgrp(current->pgrp))
-			return -EIO;
-		if (!is_ignored(SIGTTOU)) {
-			(void) kill_pg(current->pgrp,SIGTTOU,1);
-			return -ERESTARTSYS;
-		}
-	}
+	i = check_change(tty, channel);
+	if (i)
+		return i;
 	for (i=0 ; i< (sizeof (*termios)) ; i++)
 		((char *)tty->termios)[i]=get_fs_byte(i+(char *)termios);
-	if (IS_A_SERIAL(channel) && tty->termios->c_cflag != old_cflag)
-		change_speed(channel-64);
 
 	/* puting mpty's into echo mode is very bad, and I think under
 	   some situations can cause the kernel to do nothing but
 	   copy characters back and forth. -RAB */
 	if (IS_A_PTY_MASTER(channel)) tty->termios->c_lflag &= ~ECHO;
+
+	if (tty->set_termios)
+		(*tty->set_termios)(tty, &old_termios);
 
 	return 0;
 }
@@ -176,18 +196,11 @@ static int set_termio(struct tty_struct * tty, struct termio * termio,
 {
 	int i;
 	struct termio tmp_termio;
-	unsigned short old_cflag = tty->termios->c_cflag;
+	struct termios old_termios = *tty->termios;
 
-	if ((current->tty == channel) &&
-	    (tty->pgrp > 0) &&
-	    (tty->pgrp != current->pgrp)) {
-		if (is_orphaned_pgrp(current->pgrp))
-			return -EIO;
-		if (!is_ignored(SIGTTOU)) {
-			(void) kill_pg(current->pgrp,SIGTTOU,1);
-			return -ERESTARTSYS;
-		}
-	}
+	i = check_change(tty, channel);
+	if (i)
+		return i;
 	for (i=0 ; i< (sizeof (*termio)) ; i++)
 		((char *)&tmp_termio)[i]=get_fs_byte(i+(char *)termio);
 
@@ -213,8 +226,10 @@ static int set_termio(struct tty_struct * tty, struct termio * termio,
 	tty->termios->c_line = tmp_termio.c_line;
 	for(i=0 ; i < NCC ; i++)
 		tty->termios->c_cc[i] = tmp_termio.c_cc[i];
-	if (IS_A_SERIAL(channel) && tty->termios->c_cflag != old_cflag)
-		change_speed(channel-64);
+
+	if (tty->set_termios)
+		(*tty->set_termios)(tty, &old_termios);
+
 	return 0;
 }
 
@@ -253,6 +268,31 @@ static int get_window_size(struct tty_struct * tty, struct winsize * ws)
 	return 0;
 }
 
+/* Set the discipline of a tty line. */
+static int tty_set_ldisc(struct tty_struct *tty, int ldisc)
+{
+	if ((ldisc < N_TTY) || (ldisc >= NR_LDISCS) ||
+	    !(ldiscs[ldisc].flags & LDISC_FLAG_DEFINED))
+		return -EINVAL;
+
+	if (tty->disc == ldisc)
+		return 0;	/* We are already in the desired discipline */
+
+	/* Shutdown the current discipline. */
+	wait_until_sent(tty);
+	flush_input(tty);
+	if (ldiscs[tty->disc].close)
+		ldiscs[tty->disc].close(tty);
+
+	/* Now set up the new line discipline. */
+	tty->disc = ldisc;
+	if (ldiscs[tty->disc].open)
+		return(ldiscs[tty->disc].open(tty));
+	else
+		return 0;
+}
+
+
 int tty_ioctl(struct inode * inode, struct file * file,
 	unsigned int cmd, unsigned int arg)
 {
@@ -262,6 +302,7 @@ int tty_ioctl(struct inode * inode, struct file * file,
 	int pgrp;
 	int dev;
 	int termios_dev;
+	int retval;
 
 	if (MAJOR(file->f_rdev) != 4) {
 		printk("tty_ioctl: tty pseudo-major != 4\n");
@@ -434,7 +475,13 @@ int tty_ioctl(struct inode * inode, struct file * file,
 				tty->session = 0;
 			}
 			return 0;
-
+		case TIOCGETD:
+			verify_area((void *) arg,4);
+			put_fs_long(tty->disc, (unsigned long *) arg);
+			return 0;
+		case TIOCSETD:
+			arg = get_fs_long((unsigned long *) arg);
+			return tty_set_ldisc(tty, arg);
 	       case TIOCPKT:
 			{
 			   int on;
@@ -450,9 +497,16 @@ int tty_ioctl(struct inode * inode, struct file * file,
 			}
 
 		default:
-			if (tty->ioctl)
-				return (tty->ioctl)(tty, file, cmd, arg);
-			else
-				return -EINVAL;
+			if (tty->ioctl) {
+				retval = (tty->ioctl)(tty, file, cmd, arg);
+				if (retval != -EINVAL)
+					return retval;
+			}
+			if (ldiscs[tty->disc].ioctl) {
+				retval = (ldiscs[tty->disc].ioctl)
+					(tty, file, cmd, arg);
+				return retval;
+			}
+			return -EINVAL;
 	}
 }

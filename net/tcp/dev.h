@@ -19,8 +19,14 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: dev.h,v 0.8.4.5 1992/12/08 20:49:15 bir7 Exp $ */
+/* $Id: dev.h,v 0.8.4.7 1993/01/23 18:00:11 bir7 Exp $ */
 /* $Log: dev.h,v $
+ * Revision 0.8.4.7  1993/01/23  18:00:11  bir7
+ * Fixed problems from merging.
+ *
+ * Revision 0.8.4.6  1993/01/22  22:58:08  bir7
+ * Changed so transmitting takes place in bottom half of interrupt routine.
+ *
  * Revision 0.8.4.5  1992/12/08  20:49:15  bir7
  * Edited ctrl-h's out of log messages.
  *
@@ -58,15 +64,15 @@ struct device
   unsigned long mem_start;
   unsigned short base_addr;
   unsigned char irq;
-  unsigned char start:1,
-                tbusy:1,
-                loopback:1,
-                interrupt:1,
-                up:1;
+  volatile unsigned char start:1,
+                         tbusy:1,
+                         loopback:1,
+                         interrupt:1,
+                         up:1;
   struct device *next;
   int (*init)(struct device *dev);
   unsigned long trans_start;
-  struct sk_buff *buffs[DEV_NUMBUFFS];
+  volatile struct sk_buff  * volatile buffs[DEV_NUMBUFFS];
   struct sk_buff *backlog; /* no longer used. */
   int  (*open)(struct device *dev);
   int  (*stop)(struct device *dev);
@@ -79,7 +85,8 @@ struct device
   void (*queue_xmit)(struct sk_buff *skb, struct device *dev, int pri);
   int (*rebuild_header)(void *eth, struct device *dev);
   unsigned short (*type_trans) (struct sk_buff *skb, struct device *dev);
-  void (*send_packet)(struct sk_buff *skb, struct device *dev);
+  void (*send_packet)(struct sk_buff *skb, struct device *dev); /* no longer
+								   used */
   void *private;
 
   unsigned short type;
@@ -110,7 +117,7 @@ struct packet_type
 extern struct packet_type *ptype_base;
 void dev_queue_xmit (struct sk_buff *skb, struct device *dev, int pri);
 int dev_rint (unsigned char *buff, long len, int flags, struct device *dev);
-unsigned long dev_tint (unsigned char *buff, struct device *dev);
+void dev_tint ( struct device *dev);
 void dev_add_pack (struct packet_type *pt);
 void dev_remove_pack (struct packet_type *pt);
 struct device *get_dev (char *name);

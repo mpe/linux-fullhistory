@@ -414,7 +414,13 @@ int sys_times(struct tms * tbuf)
 
 int sys_brk(unsigned long end_data_seg)
 {
+	unsigned long rlim;
+
+	rlim = current->rlim[RLIMIT_DATA].rlim_cur;
+	if (rlim >= RLIM_INFINITY)
+		rlim = 0xffffffff;
 	if (end_data_seg >= current->end_code &&
+	    end_data_seg-current->end_code <= rlim &&
 	    end_data_seg < current->start_stack - 16384)
 		current->brk = end_data_seg;
 	return current->brk;
@@ -657,10 +663,11 @@ int sys_getrusage(int who, struct rusage *ru)
 int sys_gettimeofday(struct timeval *tv, struct timezone *tz)
 {
 	if (tv) {
+		unsigned long nowtime = jiffies+jiffies_offset;
 		verify_area(tv, sizeof *tv);
-		put_fs_long(startup_time + CT_TO_SECS(jiffies+jiffies_offset),
+		put_fs_long(startup_time + CT_TO_SECS(nowtime),
 			    (unsigned long *) tv);
-		put_fs_long(CT_TO_USECS(jiffies+jiffies_offset), 
+		put_fs_long(CT_TO_USECS(nowtime), 
 			    ((unsigned long *) tv)+1);
 	}
 	if (tz) {

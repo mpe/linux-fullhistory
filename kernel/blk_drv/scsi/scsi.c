@@ -206,8 +206,8 @@ static void scan_scsis (void)
 		      ((SCmd.sense_buffer[0] & 0x70) >> 4) == 7) {
 		    if (SCmd.sense_buffer[2] &0xe0)
 		      continue; /* No devices here... */
-		    if((SCmd.sense_buffer[2] & 0xf != NOT_READY) &&
-		       (SCmd.sense_buffer[2] & 0xf != UNIT_ATTENTION))
+		    if(((SCmd.sense_buffer[2] & 0xf) != NOT_READY) &&
+		       ((SCmd.sense_buffer[2] & 0xf) != UNIT_ATTENTION))
 		      continue;
 		  }
 		  else

@@ -46,10 +46,8 @@ static void extended_partition(struct gendisk *hd, int dev)
 	while (1) {
 		if ((current_minor & mask) >= (4 + hd->max_p))
 			return;
-		if (!(bh = bread(dev,0,1024))) {
-			printk("Unable to read partition table of device %04x\n",dev);
+		if (!(bh = bread(dev,0,1024)))
 			return;
-		}
 	  /*
 	   * This block is from a device that we're about to stomp on.
 	   * So make sure nobody thinks this block is usable.
@@ -66,11 +64,9 @@ static void extended_partition(struct gendisk *hd, int dev)
 			    !(hd->part[current_minor].nr_sects = p->nr_sects))
 				goto done;  /* shouldn't happen */
 			hd->part[current_minor].start_sect = this_sector + p->start_sect;
-			printk("  Logical part %d start %d size %d end %d\n\r", 
-			       mask & current_minor, hd->part[current_minor].start_sect, 
-			       hd->part[current_minor].nr_sects,
-			       hd->part[current_minor].start_sect + 
-			       hd->part[current_minor].nr_sects - 1);
+			printk(" %s%c%d", hd->major_name,
+				'a'+(current_minor >> hd->minor_shift),
+				mask & current_minor);
 			current_minor++;
 			p++;
 		/*
@@ -96,19 +92,22 @@ done:
 
 static void check_partition(struct gendisk *hd, unsigned int dev)
 {
+	static int first_time = 1;
 	int i, minor = current_minor;
 	struct buffer_head *bh;
 	struct partition *p;
 	unsigned long first_sector;
 	int mask = (1 << hd->minor_shift) - 1;
 
+	if (first_time)
+		printk("Partition check:\n");
+	first_time = 0;
 	first_sector = hd->part[MINOR(dev)].start_sect;
-
 	if (!(bh = bread(dev,0,1024))) {
-		printk("Unable to read partition table of device %04x\n",dev);
+		printk("  unable to read partition table of device %04x\n",dev);
 		return;
 	}
-	printk("%s%c :\n\r", hd->major_name, 'a'+(minor >> hd->minor_shift));
+	printk("  %s%c:", hd->major_name, 'a'+(minor >> hd->minor_shift));
 	current_minor += 4;  /* first "extra" minor */
 	if (*(unsigned short *) (bh->b_data+510) == 0xAA55) {
 		p = 0x1BE + (void *)bh->b_data;
@@ -116,13 +115,13 @@ static void check_partition(struct gendisk *hd, unsigned int dev)
 			if (!(hd->part[minor].nr_sects = p->nr_sects))
 				continue;
 			hd->part[minor].start_sect = first_sector + p->start_sect;
-			printk(" part %d start %d size %d end %d \n\r", i, 
-			       hd->part[minor].start_sect, hd->part[minor].nr_sects, 
-			       hd->part[minor].start_sect + hd->part[minor].nr_sects - 1);
+			printk(" %s%c%d", hd->major_name,'a'+(minor >> hd->minor_shift), i);
 			if ((current_minor & 0x3f) >= 60)
 				continue;
 			if (p->sys_ind == EXTENDED_PARTITION) {
+				printk(" <");
 				extended_partition(hd, (hd->major << 8) | minor);
+				printk(" >");
 			}
 		}
 		/*
@@ -138,16 +137,14 @@ static void check_partition(struct gendisk *hd, unsigned int dev)
 					continue;
 				hd->part[current_minor].start_sect = p->start_sect;
 				hd->part[current_minor].nr_sects = p->nr_sects;
-				printk(" DM part %d start %d size %d end %d\n\r",
-				       current_minor & mask,
-				       hd->part[current_minor].start_sect, 
-				       hd->part[current_minor].nr_sects,
-				       hd->part[current_minor].start_sect + 
-				       hd->part[current_minor].nr_sects - 1);
+				printk(" %s%c%d", hd->major_name,
+					'a'+(current_minor >> hd->minor_shift),
+					current_minor & mask);
 			}
 		}
 	} else
-		printk("Bad partition table on dev %04x\n",dev);
+		printk(" bad partition table");
+	printk("\n");
 	brelse(bh);
 }
 
@@ -212,9 +209,6 @@ int sys_setup(void * BIOS)
 		nr += p->nr_real;
 	}
 		
-	if (nr)
-		printk("Partition table%s ok.\n\r",(nr>1)?"s":"");
-
 	if (ramdisk_size)
 		rd_load();
 	mount_root();

@@ -20,8 +20,17 @@
   C/O Department of Mathematics; Stanford University; Stanford, CA 94305
   */
 
-/* $Id: timer.c,v 0.8.4.5 1992/12/12 19:25:04 bir7 Exp $ */
+/* $Id: timer.c,v 0.8.4.8 1993/01/23 18:00:11 bir7 Exp $ */
 /* $Log: timer.c,v $
+ * Revision 0.8.4.8  1993/01/23  18:00:11  bir7
+ * added volatile keyword.
+ *
+ * Revision 0.8.4.7  1993/01/22  23:21:38  bir7
+ * Merged with 99 pl4
+ *
+ * Revision 0.8.4.6  1993/01/22  22:58:08  bir7
+ * Check in for merge with previous .99 pl 4.
+ *
  * Revision 0.8.4.5  1992/12/12  19:25:04  bir7
  * cleaned up Log messages.
  *
@@ -68,7 +77,7 @@
 #define PRINTK(x) /**/
 #endif
 
-static struct timer *timer_base=NULL;
+static volatile struct timer *timer_base=NULL;
 unsigned long seq_offset;
 
 void
@@ -93,7 +102,9 @@ delete_timer (struct timer *t)
 	sti();
 	return;
      }
-   for (tm = timer_base;tm->next != NULL ;tm=tm->next)
+   for (tm = (struct timer *)timer_base;
+	tm->next != NULL ;
+	tm=(struct timer *)tm->next)
      {
 	if (tm->next == t)
 	  {
@@ -139,7 +150,7 @@ reset_timer (struct timer *t)
 	sti();
 	return;
      }
-   for (tm = timer_base; ; tm=tm->next)
+   for (tm = (struct timer *)timer_base; ; tm=(struct timer *)tm->next)
      {
 	if (tm->next == NULL || before (t->when,tm->next->when))
 	  {
@@ -179,12 +190,12 @@ net_timer (void)
 	  {
 	     sk->time_wait.len = TCP_TIMEOUT_LEN;
 	     sk->timeout = TIME_KEEPOPEN;
-	     reset_timer (timer_base);
+	     reset_timer ((struct timer *)timer_base);
 	  }
 	else
 	  {
 	     sk->timeout = 0;
-	     delete_timer(timer_base);
+	     delete_timer((struct timer *)timer_base);
 	  }
 	
 	/* always see if we need to send an ack. */
@@ -213,7 +224,6 @@ net_timer (void)
 				  socket to be freed.  We need to
 				  print an error message. */
 	     PRINTK (("possible memory leak.  sk = %X\n", sk));
-	     print_sk (sk);
 	     reset_timer ((struct timer *)&sk->time_wait);
 	     sk->inuse = 0;
 	     break;

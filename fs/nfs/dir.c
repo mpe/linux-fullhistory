@@ -577,8 +577,10 @@ static int nfs_rename(struct inode *old_dir, const char *old_name, int old_len,
 	error = nfs_proc_rename(NFS_SERVER(old_dir),
 		NFS_FH(old_dir), old_filename,
 		NFS_FH(new_dir), new_filename);
-	if (!error)
+	if (!error) {
 		nfs_lookup_cache_remove(old_dir, NULL, old_filename);
+		nfs_lookup_cache_remove(new_dir, NULL, new_filename);
+	}
 	iput(old_dir);
 	iput(new_dir);
 	return error;

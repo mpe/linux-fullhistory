@@ -1,8 +1,14 @@
 /* Space.c */
 
 /* Holds initial configuration information for devices. */
-/* $Id: Space.c,v 0.8.4.5 1992/12/12 19:25:04 bir7 Exp $ */
+/* $Id: Space.c,v 0.8.4.7 1993/01/22 23:21:38 bir7 Exp $ */
 /* $Log: Space.c,v $
+ * Revision 0.8.4.7  1993/01/22  23:21:38  bir7
+ * Merged with 99 pl4
+ *
+ * Revision 0.8.4.6  1993/01/22  22:58:08  bir7
+ * *** empty log message ***
+ *
  * Revision 0.8.4.5  1992/12/12  19:25:04  bir7
  * Cleaned up Log messages.
  *

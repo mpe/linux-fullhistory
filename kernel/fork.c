@@ -20,7 +20,7 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 
-#define MAX_TASKS_PER_USER ((NR_TASKS/4)*3)
+#define MAX_TASKS_PER_USER (NR_TASKS/2)
 
 long last_pid=0;
 
@@ -41,11 +41,12 @@ void verify_area(void * addr,int size)
 static int find_empty_process(void)
 {
 	int i, task_nr;
-	int this_user_tasks = 0;
+	int this_user_tasks;
 
 repeat:
-	if ((++last_pid) & 0xffff0000)
+	if ((++last_pid) & 0xffff8000)
 		last_pid=1;
+	this_user_tasks = 0;
 	for(i=0 ; i < NR_TASKS ; i++) {
 		if (!task[i])
 			continue;

@@ -19,8 +19,17 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: udp.c,v 0.8.4.9 1992/12/12 19:25:04 bir7 Exp $ */
+/* $Id: udp.c,v 0.8.4.12 1993/01/26 22:04:00 bir7 Exp $ */
 /* $Log: udp.c,v $
+ * Revision 0.8.4.12  1993/01/26  22:04:00  bir7
+ * Added support for proc fs.
+ *
+ * Revision 0.8.4.11  1993/01/23  18:00:11  bir7
+ * added volatile keyword.
+ *
+ * Revision 0.8.4.10  1993/01/22  23:21:38  bir7
+ * Merged with 99 pl4
+ *
  * Revision 0.8.4.9  1992/12/12  19:25:04  bir7
  * cleaned up Log messages.
  *
@@ -373,8 +382,6 @@ udp_sendto (volatile struct sock *sk, unsigned char *from, int len,
 
 		  if (skb == NULL)
 		    {
-		       printk ("udp_sendto: write buffer full?\n");
-		       print_sk(sk);
 		       tmp = sk->wmem_alloc;
 		       release_sock (sk);
 		       if (copied) return (copied);
@@ -555,6 +562,7 @@ udp_recvfrom (volatile struct sock *sk, unsigned char *to, int len,
 		       return (-ERESTARTSYS);
 		    }
 	       }
+  	     sk->inuse = 1;
 	     sti();
 	  }
 	skb = sk->rqueue;
@@ -567,7 +575,7 @@ udp_recvfrom (volatile struct sock *sk, unsigned char *to, int len,
 		    }
 		  else
 		    {
-			    sk->rqueue = sk->rqueue ->next;
+			    sk->rqueue = (struct sk_buff *)sk->rqueue ->next;
 			    skb->prev->next = skb->next;
 			    skb->next->prev = skb->prev;
 		    }
@@ -714,7 +722,6 @@ udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 
 	/* At this point we should print the thing out. */
 	PRINTK (("<< \n"));
-	print_sk (sk);
 
 	/* now add it to the data chain and wake things up. */
 	if (sk->rqueue == NULL)
@@ -769,6 +776,7 @@ struct proto udp_prot =
   NULL,
   128,
   0,
-  {NULL,}
+  {NULL,},
+  "UDP"
 };
 

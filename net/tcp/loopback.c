@@ -19,8 +19,17 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: loopback.c,v 0.8.4.5 1992/12/12 19:25:04 bir7 Exp $ */
+/* $Id: loopback.c,v 0.8.4.8 1993/01/23 18:00:11 bir7 Exp $ */
 /* $Log: loopback.c,v $
+ * Revision 0.8.4.8  1993/01/23  18:00:11  bir7
+ * Fixed problems introduced by merge.
+ *
+ * Revision 0.8.4.7  1993/01/22  23:21:38  bir7
+ * Merged with 99 pl4
+ *
+ * Revision 0.8.4.6  1993/01/22  22:58:08  bir7
+ * Changed so transmitting takes place in bottom half of interrupt routine.
+ *
  * Revision 0.8.4.5  1992/12/12  19:25:04  bir7
  * Cleaned up Log messages.
  *
@@ -76,56 +85,29 @@
 static int
 loopback_xmit(struct sk_buff *skb, struct device *dev)
 {
-  static int inuse=0;
-  struct enet_header *eth;
-  int i;
   int done;
-  static unsigned char buff[2048];
-  unsigned char *tmp;
-
   PRINTK (("loopback_xmit (dev = %X)\n", dev));
   cli();
-  if (inuse)
+  if (dev->tbusy != 0)
     {
        sti();
        return (1);
     }
-  inuse = 1;
+  dev->tbusy = 1;
   sti();
 
-  done = -1;
-  while (done == -1)
-    done = dev_rint ((unsigned char *)(skb+1), skb->len, 0, dev);
+  done = dev_rint ((unsigned char *)(skb+1), skb->len, 0, dev);
 
   if (skb->free)
     kfree_skb (skb, FREE_WRITE);
 
-  tmp = NULL;
-  i = 0;
   while (done != 1)
 	 {
-	    if (done != -1 && (i = dev_tint (buff,dev)) != 0)
-	      {
-		 /* print out the buffer. */
-		 PRINTK (("loopback xmit: \n"));
-		 eth = (struct enet_header *)buff;
-		 print_eth (eth);
-		 tmp = buff;
-		 done = dev_rint (buff, i, 0, dev);
-		 if (done != -1)
-		   {
-		     tmp = NULL;
-		     i = 0;
-		   }
-	      }
-	    else
-	      {
-		if (i == 0) tmp = NULL;
-		 done = dev_rint (tmp, i, 0, dev);
-	      }
-	    
+	   done = dev_rint (NULL, 0, 0, dev);
 	 }
-  inuse = 0;
+
+  dev->tbusy = 0;
+
   return (0);
 }
 
@@ -135,6 +117,7 @@ loopback_init(struct device *dev)
    printk ("Loopback device init\n");
   /* initialize the rest of the device structure. */
   dev->mtu = 2000; /* mtu */
+  dev->tbusy = 0;
   dev->hard_start_xmit = loopback_xmit;
   dev->open = NULL;
   dev->hard_header = eth_hard_header;

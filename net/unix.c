@@ -8,7 +8,8 @@
 #include <linux/un.h>
 #include <linux/fcntl.h>
 #include <linux/termios.h>
-
+#include <linux/mm.h>
+#include <linux/config.h>
 #include <asm/system.h>
 #include <asm/segment.h>
 
@@ -100,8 +101,15 @@ struct proto_ops unix_proto_ops = {
  	unix_proto_shutdown,
  	unix_proto_setsockopt,
  	unix_proto_getsockopt,
- 	NULL /* unix_proto_fcntl. */
+ 	NULL, /* unix_proto_fcntl. */
 };
+
+static inline int
+min (int a, int b)
+{
+  if (a < b) return (a);
+  return (b);
+}
 
 #ifdef SOCK_DEBUG
 void
@@ -121,7 +129,7 @@ sockaddr_un_printk(struct sockaddr_un *sockun, int sockaddr_len)
 		       sockaddr_len + UN_PATH_OFFSET);
 	}
 }
-#endif
+#endif /* SOCK_DEBUG */
   
 /* don't have to do anything. */
 static int

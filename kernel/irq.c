@@ -239,8 +239,6 @@ void free_irq(unsigned int irq)
 	restore_flags(flags);
 }
 
-extern void do_coprocessor_error(long,long);
-
 /*
  * Note that on a 486, we don't want to do a SIGFPE on a irq13
  * as the irq is unreliable, and exception 16 works correctly
@@ -251,12 +249,10 @@ extern void do_coprocessor_error(long,long);
 static void math_error_irq(int cpl)
 {
 	outb(0,0xF0);
-	do_coprocessor_error(0,0);
-}
-
-static void math_error_irq_486(int cpl)
-{
-	outb(0,0xF0);	/* even this is probably not needed.. */
+	if (ignore_irq13)
+		return;
+	send_sig(SIGFPE, last_task_used_math, 1);
+	__asm__("fninit");
 }
 
 static void no_action(int cpl) { }
@@ -271,18 +267,12 @@ static struct sigaction ignore_IRQ = {
 void init_IRQ(void)
 {
 	int i;
-	unsigned long cr0;
 
 	for (i = 0; i < 16 ; i++)
 		set_intr_gate(0x20+i,bad_interrupt[i]);
 	if (irqaction(2,&ignore_IRQ))
 		printk("Unable to get IRQ2 for cascade\n");
-	__asm__("movl %%cr0,%%eax":"=a" (cr0));
-	if (cr0 & CR0_NE)
-		i = request_irq(13,math_error_irq_486);
-	else
-		i = request_irq(13,math_error_irq);
-	if (i)
+	if (request_irq(13,math_error_irq))
 		printk("Unable to get IRQ13 for math-error handler\n");
 
 	/* intialize the bottom half routines. */
