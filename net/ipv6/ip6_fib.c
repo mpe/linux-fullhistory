@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_fib.c,v 1.7 1997/04/12 04:32:46 davem Exp $
+ *	$Id: ip6_fib.c,v 1.9 1997/09/20 20:48:27 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -28,7 +28,6 @@
 #include <net/ipv6.h>
 #include <net/ndisc.h>
 #include <net/addrconf.h>
-#include <net/netlink.h>
 
 #include <net/ip6_fib.h>
 #include <net/ip6_route.h>

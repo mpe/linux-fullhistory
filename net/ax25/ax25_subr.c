@@ -252,7 +252,6 @@ void ax25_return_dm(struct device *dev, ax25_address *src, ax25_address *dest, a
 	dptr += ax25_addr_build(dptr, dest, src, &retdigi, AX25_RESPONSE, AX25_MODULUS);
 
 	skb->dev      = dev;
-	skb->priority = SOPRI_NORMAL;
 
 	ax25_queue_xmit(skb);
 }

@@ -249,14 +249,6 @@ int nr_init(struct device *dev)
 
 	/* New-style flags. */
 	dev->flags		= 0;
-	dev->family		= AF_INET;
-
-#ifdef CONFIG_INET
-	dev->pa_addr		= in_aton("192.168.0.1");
-	dev->pa_brdaddr		= in_aton("192.168.0.255");
-	dev->pa_mask		= in_aton("255.255.255.0");
-	dev->pa_alen		= 4;
-#endif
 
 	if ((dev->priv = kmalloc(sizeof(struct net_device_stats), GFP_KERNEL)) == NULL)
 		return -ENOMEM;

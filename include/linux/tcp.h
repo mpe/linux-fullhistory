@@ -68,4 +68,18 @@ enum {
   TCP_CLOSING	/* now a valid state */
 };
 
+enum {
+  TCPF_ESTABLISHED = (1 << 1),
+  TCPF_SYN_SENT  = (1 << 2),
+  TCPF_SYN_RECV  = (1 << 3),
+  TCPF_FIN_WAIT1 = (1 << 4),
+  TCPF_FIN_WAIT2 = (1 << 5),
+  TCPF_TIME_WAIT = (1 << 6),
+  TCPF_CLOSE     = (1 << 7),
+  TCPF_CLOSE_WAIT = (1 << 8),
+  TCPF_LAST_ACK  = (1 << 9),
+  TCPF_LISTEN    = (1 << 10),
+  TCPF_CLOSING   = (1 << 11) 
+};
+
 #endif	/* _LINUX_TCP_H */

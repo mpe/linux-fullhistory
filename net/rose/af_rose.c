@@ -548,14 +548,14 @@ static int rose_create(struct socket *sock, int protocol)
 
 	sock_init_data(sock, sk);
 	
+	skb_queue_head_init(&rose->ack_queue);
+
 	sock->ops    = &rose_proto_ops;
 	sk->protocol = protocol;
 	sk->mtu      = ROSE_MTU;	/* 253 */
 
 	init_timer(&rose->timer);
 	init_timer(&rose->idletimer);
-
-	skb_queue_head_init(&rose->frag_queue);
 
 	rose->t1   = sysctl_rose_call_request_timeout;
 	rose->t2   = sysctl_rose_reset_request_timeout;
@@ -583,6 +583,8 @@ static struct sock *rose_make_new(struct sock *osk)
 
 	sock_init_data(NULL, sk);
 
+	skb_queue_head_init(&rose->ack_queue);
+
 	sk->type     = osk->type;
 	sk->socket   = osk->socket;
 	sk->priority = osk->priority;
@@ -597,8 +599,6 @@ static struct sock *rose_make_new(struct sock *osk)
 
 	init_timer(&rose->timer);
 	init_timer(&rose->idletimer);
-
-	skb_queue_head_init(&rose->frag_queue);
 
 	rose->t1      = osk->protinfo.rose->t1;
 	rose->t2      = osk->protinfo.rose->t2;
@@ -1068,7 +1068,9 @@ static int rose_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		return -ENOTCONN;
 	}
 
-	rose_output(sk, skb);	/* Shove it onto the queue */
+	skb_queue_tail(&sk->write_queue, skb);	/* Shove it onto the queue */
+
+	rose_kick(sk);
 
 	return len;
 }
@@ -1210,7 +1212,7 @@ static int rose_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			return 0;
 		}
 
-		case SIOCRSL2CALL:
+		case SIOCRSSL2CALL:
 			if (!suser()) return -EPERM;
 			if (ax25cmp(&rose_callsign, &null_ax25_address) != 0)
 				ax25_listen_release(&rose_callsign, NULL);
@@ -1218,6 +1220,11 @@ static int rose_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 				return -EFAULT;
 			if (ax25cmp(&rose_callsign, &null_ax25_address) != 0)
 				ax25_listen_register(&rose_callsign, NULL);
+			return 0;
+
+		case SIOCRSGL2CALL:
+			if (copy_to_user((void *)arg, &rose_callsign, sizeof(ax25_address)))
+				return -EFAULT;
 			return 0;
 
 		case SIOCRSACCEPT:

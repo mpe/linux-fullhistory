@@ -19,6 +19,7 @@
  *	ROSE 001	Jonathan(G4KLX)	Cloned from nr_in.c
  *	ROSE 002	Jonathan(G4KLX)	Return cause and diagnostic codes from Clear Requests.
  *	ROSE 003	Jonathan(G4KLX)	New timer architecture.
+ *					Removed M bit processing.
  */
 
 #include <linux/config.h>
@@ -45,43 +46,6 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 #include <net/rose.h>
-
-static int rose_queue_rx_frame(struct sock *sk, struct sk_buff *skb, int more)
-{
-	struct sk_buff *skbo, *skbn = skb;
-
-	rose_start_idletimer(sk);
-
-	if (more) {
-		sk->protinfo.rose->fraglen += skb->len;
-		skb_queue_tail(&sk->protinfo.rose->frag_queue, skb);
-		return 0;
-	}
-
-	if (!more && sk->protinfo.rose->fraglen > 0) {	/* End of fragment */
-		sk->protinfo.rose->fraglen += skb->len;
-		skb_queue_tail(&sk->protinfo.rose->frag_queue, skb);
-
-		if ((skbn = alloc_skb(sk->protinfo.rose->fraglen, GFP_ATOMIC)) == NULL)
-			return 1;
-
-		skbn->h.raw = skbn->data;
-
-		skbo = skb_dequeue(&sk->protinfo.rose->frag_queue);
-		memcpy(skb_put(skbn, skbo->len), skbo->data, skbo->len);
-		kfree_skb(skbo, FREE_READ);
-
-		while ((skbo = skb_dequeue(&sk->protinfo.rose->frag_queue)) != NULL) {
-			skb_pull(skbo, ROSE_MIN_LEN);
-			memcpy(skb_put(skbn, skbo->len), skbo->data, skbo->len);
-			kfree_skb(skbo, FREE_READ);
-		}
-
-		sk->protinfo.rose->fraglen = 0;		
-	}
-
-	return sock_queue_rcv_skb(sk, skbn);
-}
 
 /*
  * State machine for state 1, Awaiting Call Accepted State.
@@ -166,6 +130,7 @@ static int rose_state3_machine(struct sock *sk, struct sk_buff *skb, int framety
 			sk->protinfo.rose->vr        = 0;
 			sk->protinfo.rose->va        = 0;
 			sk->protinfo.rose->vl        = 0;
+			rose_requeue_frames(sk);
 			break;
 
 		case ROSE_CLEAR_REQUEST:
@@ -191,11 +156,9 @@ static int rose_state3_machine(struct sock *sk, struct sk_buff *skb, int framety
 				rose_start_t2timer(sk);
 				rose_stop_idletimer(sk);
 			} else {
-				if (sk->protinfo.rose->condition & ROSE_COND_PEER_RX_BUSY) {
-					sk->protinfo.rose->va = nr;
-				} else {
-					rose_check_iframes_acked(sk, nr);
-				}
+				rose_frames_acked(sk, nr);
+				if (frametype == ROSE_RNR)
+					rose_requeue_frames(sk);
 			}
 			break;
 
@@ -213,15 +176,12 @@ static int rose_state3_machine(struct sock *sk, struct sk_buff *skb, int framety
 				rose_stop_idletimer(sk);
 				break;
 			}
-			if (sk->protinfo.rose->condition & ROSE_COND_PEER_RX_BUSY) {
-				sk->protinfo.rose->va = nr;
-			} else {
-				rose_check_iframes_acked(sk, nr);
-			}
+			rose_frames_acked(sk, nr);
 			if (sk->protinfo.rose->condition & ROSE_COND_OWN_RX_BUSY)
 				break;
 			if (ns == sk->protinfo.rose->vr) {
-				if (rose_queue_rx_frame(sk, skb, m) == 0) {
+				rose_start_idletimer(sk);
+				if (sock_queue_rcv_skb(sk, skb) == 0) {
 					sk->protinfo.rose->vr = (sk->protinfo.rose->vr + 1) % ROSE_MODULUS;
 					queued = 1;
 				} else {
@@ -270,6 +230,7 @@ static int rose_state4_machine(struct sock *sk, struct sk_buff *skb, int framety
 			sk->protinfo.rose->vs        = 0;
 			sk->protinfo.rose->vl        = 0;
 			sk->protinfo.rose->state     = ROSE_STATE_3;
+			rose_requeue_frames(sk);
 			break;
 
 		case ROSE_CLEAR_REQUEST:

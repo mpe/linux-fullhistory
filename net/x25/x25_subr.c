@@ -50,6 +50,9 @@ void x25_clear_queues(struct sock *sk)
 	while ((skb = skb_dequeue(&sk->write_queue)) != NULL)
 		kfree_skb(skb, FREE_WRITE);
 
+	while ((skb = skb_dequeue(&sk->protinfo.x25->ack_queue)) != NULL)
+		kfree_skb(skb, FREE_WRITE);
+
 	while ((skb = skb_dequeue(&sk->protinfo.x25->interrupt_in_queue)) != NULL)
 		kfree_skb(skb, FREE_READ);
 
@@ -58,6 +61,49 @@ void x25_clear_queues(struct sock *sk)
 
 	while ((skb = skb_dequeue(&sk->protinfo.x25->fragment_queue)) != NULL)
 		kfree_skb(skb, FREE_READ);
+}
+
+
+/*
+ * This routine purges the input queue of those frames that have been
+ * acknowledged. This replaces the boxes labelled "V(a) <- N(r)" on the
+ * SDL diagram.
+*/
+void x25_frames_acked(struct sock *sk, unsigned short nr)
+{
+	struct sk_buff *skb;
+	int modulus;
+
+	modulus = (sk->protinfo.x25->neighbour->extended) ? X25_EMODULUS : X25_SMODULUS;
+
+	/*
+	 * Remove all the ack-ed frames from the ack queue.
+	 */
+	if (sk->protinfo.x25->va != nr) {
+		while (skb_peek(&sk->protinfo.x25->ack_queue) != NULL && sk->protinfo.x25->va != nr) {
+			skb = skb_dequeue(&sk->protinfo.x25->ack_queue);
+			kfree_skb(skb, FREE_WRITE);
+			sk->protinfo.x25->va = (sk->protinfo.x25->va + 1) % modulus;
+		}
+	}
+}
+
+void x25_requeue_frames(struct sock *sk)
+{
+	struct sk_buff *skb, *skb_prev = NULL;
+
+	/*
+	 * Requeue all the un-ack-ed frames on the output queue to be picked
+	 * up by x25_kick. This arrangement handles the possibility of an empty
+	 * output queue.
+	 */
+	while ((skb = skb_dequeue(&sk->protinfo.x25->ack_queue)) != NULL) {
+		if (skb_prev == NULL)
+			skb_queue_head(&sk->write_queue, skb);
+		else
+			skb_append(skb_prev, skb);
+		skb_prev = skb;
+	}
 }
 
 /*

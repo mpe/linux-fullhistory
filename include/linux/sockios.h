@@ -53,18 +53,19 @@
 #define SIOCSIFSLAVE	0x8930
 #define SIOCADDMULTI	0x8931		/* Multicast address lists	*/
 #define SIOCDELMULTI	0x8932
-#define SIOGIFINDEX	0x8933		/* name -> if_index mapping	*/
-#define SIOGIFNAME	0x8934		/* if_index -> name mapping	*/
-#define SIOCGIFCOUNT	0x8935		/* get number of interfaces	*/
+#define SIOCGIFINDEX	0x8933		/* name -> if_index mapping	*/
+#define SIOGIFINDEX	SIOCGIFINDEX	/* misprint compatibility :-)	*/
+#define SIOCSIFPFLAGS	0x8934		/* set/get extended flags set	*/
+#define SIOCGIFPFLAGS	0x8935
 #define SIOCDIFADDR	0x8936		/* delete PA address		*/
+#define	SIOCSIFHWBROADCAST	0x8937	/* set hardware broadcast addr	*/
+#define SIOCGIFCOUNT	0x8938		/* get number of devices */
 
 #define SIOCGIFBR	0x8940		/* Bridging support		*/
 #define SIOCSIFBR	0x8941		/* Set bridging options 	*/
 
 /* ARP cache control calls. */
-#define OLD_SIOCDARP	0x8950		/* old delete ARP table entry	*/
-#define OLD_SIOCGARP	0x8951		/* old get ARP table entry	*/
-#define OLD_SIOCSARP	0x8952		/* old set ARP table entry	*/
+		    /*  0x8950 - 0x8952  * obsolete calls, don't re-use */
 #define SIOCDARP	0x8953		/* delete ARP table entry	*/
 #define SIOCGARP	0x8954		/* get ARP table entry		*/
 #define SIOCSARP	0x8955		/* set ARP table entry		*/

@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) output module.
  *
- * Version:	@(#)ip.c	1.0.16b	9/1/93
+ * Version:	$Id: ip_output.c,v 1.40 1997/10/12 17:01:48 kuznet Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -67,7 +67,7 @@
 #include <linux/ip_fw.h>
 #include <linux/firewall.h>
 #include <linux/mroute.h>
-#include <net/netlink.h>
+#include <linux/netlink.h>
 #include <linux/ipsec.h>
 
 static void __inline__ ip_ll_header_reserve(struct sk_buff *skb)
@@ -92,7 +92,7 @@ int ip_build_pkt(struct sk_buff *skb, struct sock *sk, u32 saddr, u32 daddr,
 		daddr = opt->faddr;
 
 	err = ip_route_output(&rt, daddr, saddr, RT_TOS(sk->ip_tos) |
-			      (sk->localroute||0), NULL);
+			      (sk->localroute||0), sk->bound_dev_if);
 	if (err)
 	{
 		ip_statistics.IpOutNoRoutes++;
@@ -130,7 +130,7 @@ int ip_build_pkt(struct sk_buff *skb, struct sock *sk, u32 saddr, u32 daddr,
 	iph->tos      = sk->ip_tos;
 	iph->frag_off = 0;
 	if (sk->ip_pmtudisc == IP_PMTUDISC_WANT && 
-		!(rt->rt_flags & RTF_NOPMTUDISC))
+		!(rt->rt_flags & RTCF_NOPMTUDISC))
 		iph->frag_off |= htons(IP_DF);
 	iph->ttl      = sk->ip_ttl;
 	iph->daddr    = rt->rt_dst;
@@ -143,8 +143,7 @@ int ip_build_pkt(struct sk_buff *skb, struct sock *sk, u32 saddr, u32 daddr,
 	{
 		iph->ihl += opt->optlen>>2;
 		skb->h.raw += opt->optlen;
-		ip_options_build(skb, opt, final_daddr,
-				 rt->u.dst.dev->pa_addr, 0);
+		ip_options_build(skb, opt, final_daddr, rt, 0);
 	}
 	
 	ip_rt_put(rt);
@@ -170,9 +169,10 @@ int ip_build_header(struct sk_buff *skb, struct sock *sk)
 	rt = (struct rtable*)sk->dst_cache;
 
 	if (!rt || rt->u.dst.obsolete) {
+		sk->dst_cache = NULL;
 		ip_rt_put(rt);
 		err = ip_route_output(&rt, daddr, sk->saddr, RT_TOS(sk->ip_tos) |
-				      (sk->localroute||0), NULL);
+				      (sk->localroute||0), sk->bound_dev_if);
 		if (err)
 			return err;
 		sk->dst_cache = &rt->u.dst;
@@ -210,7 +210,7 @@ int ip_build_header(struct sk_buff *skb, struct sock *sk)
 	iph->tos      = sk->ip_tos;
 	iph->frag_off = 0;
 	if (sk->ip_pmtudisc == IP_PMTUDISC_WANT &&
-		!(rt->rt_flags & RTF_NOPMTUDISC))
+		!(rt->rt_flags & RTCF_NOPMTUDISC))
 		iph->frag_off |= htons(IP_DF);
 	iph->ttl      = sk->ip_ttl;
 	iph->daddr    = rt->rt_dst;
@@ -223,7 +223,7 @@ int ip_build_header(struct sk_buff *skb, struct sock *sk)
 		return 0;
 	iph->ihl += opt->optlen>>2;
 	skb->h.raw += opt->optlen;
-	ip_options_build(skb, opt, final_daddr, rt->u.dst.dev->pa_addr, 0);
+	ip_options_build(skb, opt, final_daddr, rt, 0);
 
 	return 0;
 }
@@ -242,17 +242,35 @@ int ip_mc_output(struct sk_buff *skb)
 #ifdef CONFIG_IP_ACCT
 	ip_fw_chk(skb->nh.iph, skb->dev,NULL,ip_acct_chain,0,IP_FW_MODE_ACCT_OUT);
 #endif
-
+#ifdef CONFIG_IP_ROUTE_NAT
 	if (rt->rt_flags & RTCF_NAT)
 		ip_do_nat(skb);
+#endif
 
 	/*
 	 *	Multicasts are looped back for other local users
 	 */
-	 
-	if (rt->rt_flags&RTF_MULTICAST && !(dev->flags&IFF_LOOPBACK)) {
-		if (sk==NULL || sk->ip_mc_loop)
-			dev_loopback_xmit(skb);
+
+	if (rt->rt_flags&RTCF_MULTICAST && (!sk || sk->ip_mc_loop)) {
+#ifndef CONFIG_IP_MROUTE
+#if 1
+		/* It should never occur. Delete it eventually. --ANK */
+		if (!(rt->rt_flags&RTCF_LOCAL) || (dev->flags&IFF_LOOPBACK))
+			printk(KERN_DEBUG "ip_mc_output (mc): it should never occur\n");
+		else
+#endif
+#else
+		/* Small optimization: do not loopback not local frames,
+		   which returned after forwarding; they will be  dropped
+		   by ip_mr_input in any case.
+		   Note, that local frames are looped back to be delivered
+		   to local recipients.
+
+		   This check is duplicated in ip_mr_input at the moment.
+		 */
+		if ((rt->rt_flags&RTCF_LOCAL) || !(IPCB(skb)->flags&IPSKB_FORWARDED))
+#endif
+		dev_loopback_xmit(skb);
 
 		/* Multicasts with ttl 0 must not go beyond the host */
 		
@@ -262,9 +280,15 @@ int ip_mc_output(struct sk_buff *skb)
 		}
 	}
 
-	if ((rt->rt_flags&(RTF_LOCAL|RTF_BROADCAST)) == (RTF_LOCAL|RTF_BROADCAST) &&
-	    !(dev->flags&IFF_LOOPBACK))
+	if (rt->rt_flags&RTCF_BROADCAST) {
+#if 1
+		/* It should never occur. Delete it eventually. --ANK */
+		if (!(rt->rt_flags&RTCF_LOCAL) || (dev->flags&IFF_LOOPBACK))
+			printk(KERN_DEBUG "ip_mc_output (brd): it should never occur!\n");
+		else
+#endif
 		dev_loopback_xmit(skb);
+	}
 
 	if (dev->flags & IFF_UP) {
 		dev_queue_xmit(skb);
@@ -291,8 +315,10 @@ int ip_output(struct sk_buff *skb)
 	ip_fw_chk(skb->nh.iph, skb->dev,NULL,ip_acct_chain,0,IP_FW_MODE_ACCT_OUT);
 #endif
 
+#ifdef CONFIG_IP_ROUTE_NAT
 	if (rt->rt_flags&RTCF_NAT)
 		ip_do_nat(skb);
+#endif
 
 	if (dev->flags & IFF_UP) {
 		dev_queue_xmit(skb);
@@ -431,8 +457,7 @@ check_route:
 	 */
 	{
 		struct rtable *nrt;
-		if (ip_route_output(&nrt, rt->key.dst, rt->key.src,
-				    rt->key.tos, NULL)) {
+		if (ip_route_output(&nrt, rt->key.dst, rt->key.src, rt->key.tos, sk?sk->bound_dev_if:0)) {
 			kfree_skb(skb, 0);
 			return;
 		}
@@ -500,14 +525,13 @@ int ip_build_xmit(struct sock *sk,
 	int hh_len = rt->u.dst.dev->hard_header_len;
 	int nfrags=0;
 	struct ip_options *opt = ipc->opt;
-	struct device *dev = rt->u.dst.dev;
 	int df = htons(IP_DF);
 #ifdef CONFIG_NET_SECURITY
 	int fw_res;
 #endif	
 
 	if (sk->ip_pmtudisc == IP_PMTUDISC_DONT ||
-	     rt->rt_flags&RTF_NOPMTUDISC)
+	     rt->rt_flags&RTCF_NOPMTUDISC)
 		df = 0;
 
 	 
@@ -546,7 +570,7 @@ int ip_build_xmit(struct sock *sk,
 			iph->id=htons(ip_id_count++);
 			iph->frag_off = df;
 			iph->ttl=sk->ip_mc_ttl;
-			if (!(rt->rt_flags&RTF_MULTICAST))
+			if (rt->rt_type != RTN_MULTICAST)
 				iph->ttl=sk->ip_ttl;
 			iph->protocol=sk->protocol;
 			iph->saddr=rt->rt_src;
@@ -695,14 +719,14 @@ int ip_build_xmit(struct sock *sk,
 			if (opt) {
 				iph->ihl += opt->optlen>>2;
 				ip_options_build(skb, opt,
-						 ipc->addr, dev->pa_addr, offset);
+						 ipc->addr, rt, offset);
 			}
 			iph->tos = sk->ip_tos;
 			iph->tot_len = htons(fraglen - fragheaderlen + iph->ihl*4);
 			iph->id = id;
 			iph->frag_off = htons(offset>>3);
 			iph->frag_off |= mf|df;
-			if (rt->rt_flags&RTF_MULTICAST)
+			if (rt->rt_type == RTN_MULTICAST)
 				iph->ttl = sk->ip_mc_ttl;
 			else
 				iph->ttl = sk->ip_ttl;
@@ -966,7 +990,7 @@ struct sk_buff * ip_reply(struct sk_buff *skb, int payload)
 	if (ipc.opt->srr)
 		daddr = replyopts.opt.faddr;
 
-	if (ip_route_output(&rt, daddr, rt->rt_spec_dst, RT_TOS(skb->nh.iph->tos), NULL))
+	if (ip_route_output(&rt, daddr, rt->rt_spec_dst, RT_TOS(skb->nh.iph->tos), 0))
 		return NULL;
 
 	iphlen = sizeof(struct iphdr) + replyopts.opt.optlen;
@@ -1000,7 +1024,7 @@ struct sk_buff * ip_reply(struct sk_buff *skb, int payload)
 	iph->saddr    = rt->rt_src;
 	iph->protocol = skb->nh.iph->protocol;
 	
-	ip_options_build(reply, &replyopts.opt, daddr, rt->u.dst.dev->pa_addr, 0);
+	ip_options_build(reply, &replyopts.opt, daddr, rt, 0);
 
 	return reply;
 }
@@ -1019,43 +1043,16 @@ static struct packet_type ip_packet_type =
 };
 
 
-/*
- *	Device notifier
- */
- 
-static int ip_netdev_event(struct notifier_block *this, unsigned long event, void *ptr)
-{
-	struct device *dev=ptr;
-
-	if (dev->family != AF_INET)
-		return NOTIFY_DONE;
-
-	if(event==NETDEV_UP) 
-	{
-		/*
-		 *	Join the initial group if multicast.
-		 */		
-		ip_mc_allhost(dev);
-	}
-	if(event==NETDEV_DOWN)
-		ip_mc_drop_device(dev);
-		
-	return ip_rt_event(event, dev);
-}
-
-struct notifier_block ip_netdev_notifier={
-	ip_netdev_event,
-	NULL,
-	0
-};
 
 #ifdef CONFIG_PROC_FS
+#ifdef CONFIG_IP_MULTICAST
 static struct proc_dir_entry proc_net_igmp = {
 	PROC_NET_IGMP, 4, "igmp",
 	S_IFREG | S_IRUGO, 1, 0, 0,
 	0, &proc_net_inode_operations,
 	ip_mc_procinfo
 };
+#endif
 #endif	
 
 /*
@@ -1068,11 +1065,10 @@ __initfunc(void ip_init(void))
 
 	ip_rt_init();
 
-	/* So we flush routes and multicast lists when a device is downed */
-	register_netdevice_notifier(&ip_netdev_notifier);
-
 #ifdef CONFIG_PROC_FS
+#ifdef CONFIG_IP_MULTICAST
 	proc_net_register(&proc_net_igmp);
+#endif
 #endif	
 }
 

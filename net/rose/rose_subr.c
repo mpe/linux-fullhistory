@@ -49,8 +49,47 @@ void rose_clear_queues(struct sock *sk)
 	while ((skb = skb_dequeue(&sk->write_queue)) != NULL)
 		kfree_skb(skb, FREE_WRITE);
 
-	while ((skb = skb_dequeue(&sk->protinfo.rose->frag_queue)) != NULL)
-		kfree_skb(skb, FREE_READ);
+	while ((skb = skb_dequeue(&sk->protinfo.rose->ack_queue)) != NULL)
+		kfree_skb(skb, FREE_WRITE);
+}
+
+/*
+ * This routine purges the input queue of those frames that have been
+ * acknowledged. This replaces the boxes labelled "V(a) <- N(r)" on the
+ * SDL diagram.
+ */
+void rose_frames_acked(struct sock *sk, unsigned short nr)
+{
+	struct sk_buff *skb;
+
+	/*
+	 * Remove all the ack-ed frames from the ack queue.
+	 */
+	if (sk->protinfo.rose->va != nr) {
+		while (skb_peek(&sk->protinfo.rose->ack_queue) != NULL && sk->protinfo.rose->va != nr) {
+			skb = skb_dequeue(&sk->protinfo.rose->ack_queue);
+			kfree_skb(skb, FREE_WRITE);
+			sk->protinfo.rose->va = (sk->protinfo.rose->va + 1) % ROSE_MODULUS;
+		}
+	}
+}
+
+void rose_requeue_frames(struct sock *sk)
+{
+	struct sk_buff *skb, *skb_prev = NULL;
+
+	/*
+	 * Requeue all the un-ack-ed frames on the output queue to be picked
+	 * up by rose_kick. This arrangement handles the possibility of an
+	 * empty output queue.
+	 */
+	while ((skb = skb_dequeue(&sk->protinfo.rose->ack_queue)) != NULL) {
+		if (skb_prev == NULL)
+			skb_queue_head(&sk->write_queue, skb);
+		else
+			skb_append(skb_prev, skb);
+		skb_prev = skb;
+	}
 }
 
 /*

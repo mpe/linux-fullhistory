@@ -28,7 +28,7 @@ extern int			inet_sendmsg(struct socket *sock,
 					     struct msghdr *msg, 
 					     int size, struct scm_cookie *scm);
 extern int			inet_shutdown(struct socket *sock, int how);
-extern unsigned int		inet_poll(struct socket *sock, poll_table *wait);
+extern unsigned int		inet_poll(struct socket *sock, struct poll_table_struct *wait);
 extern int			inet_setsockopt(struct socket *sock, int level,
 						int optname, char *optval, 
 						int optlen);

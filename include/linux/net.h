@@ -18,11 +18,11 @@
 #ifndef _LINUX_NET_H
 #define _LINUX_NET_H
 
-
-#include <linux/wait.h>
 #include <linux/socket.h>
 
-#define NPROTO		16		/* should be enough for now..	*/
+struct poll_table_struct;
+
+#define NPROTO		32		/* should be enough for now..	*/
 
 
 #define SYS_SOCKET	1		/* sys_socket(2)		*/
@@ -93,7 +93,7 @@ struct proto_ops {
 			 int flags);
   int	(*getname)	(struct socket *sock, struct sockaddr *uaddr,
 			 int *usockaddr_len, int peer);
-  unsigned int (*poll)	(struct socket *sock, poll_table *wait);
+  unsigned int (*poll)	(struct socket *sock, struct poll_table_struct *wait);
   int	(*ioctl)	(struct socket *sock, unsigned int cmd,
 			 unsigned long arg);
   int	(*listen)	(struct socket *sock, int len);

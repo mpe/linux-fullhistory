@@ -73,7 +73,8 @@
 #define ABRT_ERR	0x04	/* Command aborted */
 #define ID_ERR		0x10	/* ID field not found */
 #define ECC_ERR		0x40	/* Uncorrectable ECC error */
-#define	BBD_ERR		0x80	/* block marked bad */
+#define	BBD_ERR		0x80	/* pre-EIDE meaning:  block marked bad */
+#define	ICRC_ERR	0x80	/* new meaning:  CRC error during transfer */
 
 struct hd_geometry {
       unsigned char heads;
@@ -149,11 +150,28 @@ struct hd_driveid {
 	unsigned short  eide_dma_time;	/* recommended mword dma cycle time (ns) */
 	unsigned short  eide_pio;       /* min cycle time (ns), no IORDY  */
 	unsigned short  eide_pio_iordy; /* min cycle time (ns), with IORDY */
-	unsigned short  reserved69;	/* reserved (word 69) */
-	unsigned short  reserved70;	/* reserved (word 70) */
-	/* unsigned short reservedxx[57];*/	/* reserved (words 71-127) */
-	/* unsigned short vendor7  [32];*/	/* vendor unique (words 128-159) */
-	/* unsigned short reservedyy[96];*/	/* reserved (words 160-255) */
+	unsigned short  word69;
+	unsigned short  word70;
+	/* HDIO_GET_IDENTITY currently returns only words 0 through 70 */
+	unsigned short  word71;
+	unsigned short  word72;
+	unsigned short  word73;
+	unsigned short  word74;
+	unsigned short  word75;
+	unsigned short  word76;
+	unsigned short  word77;
+	unsigned short  word78;
+	unsigned short  word79;
+	unsigned short  word80;
+	unsigned short  word81;
+	unsigned short  word82;
+	unsigned short  word83;
+	unsigned short  word84;
+	unsigned short  word85;
+	unsigned short  word86;
+	unsigned short  word87;
+	unsigned short  dma_ultra;
+	unsigned short  reserved[167];
 };
 
 /*

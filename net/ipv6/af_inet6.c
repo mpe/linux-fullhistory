@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.21 1997/08/20 11:25:00 alan Exp $
+ *	$Id: af_inet6.c,v 1.23 1997/10/29 20:27:52 kuznet Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -44,7 +44,7 @@
 #include <net/ipv6.h>
 #include <net/udp.h>
 #include <net/tcp.h>
-#include <net/sit.h>
+#include <net/ipip.h>
 #include <net/protocol.h>
 #include <net/inet_common.h>
 #include <net/transp_v6.h>
@@ -200,7 +200,7 @@ static int inet6_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	/* Check if the address belongs to the host. */
 	if (addr_type == IPV6_ADDR_MAPPED) {
 		v4addr = addr->sin6_addr.s6_addr32[3];
-		if (__ip_chk_addr(v4addr) != IS_MYADDR)
+		if (inet_addr_type(v4addr) != RTN_LOCAL)
 			return(-EADDRNOTAVAIL);
 	} else {
 		if (addr_type != IPV6_ADDR_ANY) {
@@ -354,8 +354,8 @@ static int inet6_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	case SIOCGIFMAP:
 	case SIOCSIFSLAVE:
 	case SIOCGIFSLAVE:
-	case SIOGIFINDEX:
-	case SIOGIFNAME:
+	case SIOCGIFINDEX:
+	case SIOCGIFNAME:
 	case SIOCGIFCOUNT:
 		return(dev_ioctl(cmd,(void *) arg));		
 		

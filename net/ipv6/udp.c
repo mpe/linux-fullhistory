@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.17 1997/04/29 09:38:55 mj Exp $
+ *	$Id: udp.c,v 1.18 1997/09/14 08:32:24 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -601,8 +601,9 @@ static int udpv6_getfrag(const void *data, struct in6_addr *addr,
 		clen -= sizeof(struct udphdr);
 	}
 
-	udh->wcheck = csum_partial_copy_fromiovecend(dst, udh->iov, offset,
-						     clen, udh->wcheck);
+	if (csum_partial_copy_fromiovecend(dst, udh->iov, offset,
+						     clen, &udh->wcheck))
+		return -EFAULT;
 
 	if (final) {
 		struct in6_addr *daddr;

@@ -4065,7 +4065,7 @@ static int floppy_grab_irq_and_dma(void)
 		if (FDCS->address != -1){
 			if (check_region(FDCS->address, 6) < 0 ||
 			    check_region(FDCS->address+7, 1) < 0) {
-				DPRINT("Floppy io-port 0x%04x in use\n", FDCS->address);
+				DPRINT("Floppy io-port 0x%04lx in use\n", FDCS->address);
 				fd_free_irq();
 				fd_free_dma();
 				while(--fdc >= 0) {

@@ -3,6 +3,8 @@
  *	
  *		Alan Cox, <alan@cymru.net>
  *
+ *	Version: $Id: icmp.c,v 1.35 1997/10/19 18:17:13 freitag Exp $
+ *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
  *	as published by the Free Software Foundation; either version
@@ -41,6 +43,10 @@
  *		Andi Kleen	:	Check all packet lengths properly
  *					and moved all kfree_skb() up to
  *					icmp_rcv.
+ *		Andi Kleen	:	Move the rate limit bookkeeping
+ *					into the dest entry and use a tocken
+ *					bucket filter (thanks to ANK). Make
+ *					the rates sysctl configurable.
  *
  * RFC1122 (Host Requirements -- Comm. Layer) Status:
  * (boy, are there a lot of rules for ICMP)
@@ -77,7 +83,7 @@
  *   	[Solaris 2.X seems to assert EPROTO when this occurs] -- AC
  * 3.2.2.6 (Echo Request/Reply)
  *   MUST reply to ECHO_REQUEST, and give app to do ECHO stuff (OK, OK)
- *   MAY discard broadcast ECHO_REQUESTs. (We don't, but that's OK.)
+ *   MAY discard broadcast ECHO_REQUESTs. (Configurable with a sysctl.)
  *   MUST reply using same source address as the request was sent to.
  *     We're OK for unicast ECHOs, and it doesn't say anything about
  *     how to handle broadcast ones, since it's optional.
@@ -293,39 +299,9 @@ struct icmp_err icmp_err_convert[] = {
   { EHOSTUNREACH,	1 }	/*	ICMP_PREC_CUTOFF	*/
 };
 
-/*
- *	A spare long used to speed up statistics updating
- */
- 
-unsigned long dummy;
-
-/*
- *	ICMP transmit rate limit control structures. We use a relatively simple
- *	approach to the problem: For each type of ICMP message with rate limit
- *	we count the number of messages sent during some time quantum. If this
- *	count exceeds given maximal value, we ignore all messages not separated
- *	from the last message sent at least by specified time.
- */
-
-#define XRLIM_CACHE_SIZE 16		/* How many destination hosts do we cache */
-
-struct icmp_xrl_cache			/* One entry of the ICMP rate cache */
-{
-	__u32 daddr;			/* Destination address */
-	unsigned long counter;		/* Message counter */
-	unsigned long next_reset;	/* Time of next reset of the counter */
-	unsigned long last_access;	/* Time of last access to this entry (LRU) */
-	unsigned int restricted;	/* Set if we're in restricted mode */
-	unsigned long next_packet;	/* When we'll allow a next packet if restricted */
-};
-
-struct icmp_xrlim
-{
-	unsigned long timeout;		/* Time quantum for rate measuring */
-	unsigned long limit;		/* Maximal number of messages per time quantum allowed */
-	unsigned long delay;		/* How long we wait between packets when restricting */
-	struct icmp_xrl_cache cache[XRLIM_CACHE_SIZE];	/* Rate cache */
-};
+/* Control parameters for ECHO relies. */
+int sysctl_icmp_echo_ignore_all = 0;
+int sysctl_icmp_echo_ignore_broadcasts = 0;
 
 /*
  *	ICMP control array. This specifies what to do with each ICMP.
@@ -336,8 +312,8 @@ struct icmp_control
 	unsigned long *output;		/* Address to increment on output */
 	unsigned long *input;		/* Address to increment on input */
 	void (*handler)(struct icmphdr *icmph, struct sk_buff *skb, int len);
-	unsigned long error;		/* This ICMP is classed as an error message */
-	struct icmp_xrlim *xrlim;	/* Transmit rate limit control structure or NULL for no limits */
+	short	error;		/* This ICMP is classed as an error message */
+	int *timeout; /* Rate limit */
 };
 
 static struct icmp_control icmp_pointers[NR_ICMP_TYPES+1];
@@ -369,99 +345,46 @@ struct socket *icmp_socket=&icmp_inode.u.socket_i;
  *	Send an ICMP frame.
  */
 
-
-/*
- *	Initialize the transmit rate limitation mechanism.
- */
-
-#ifndef CONFIG_NO_ICMP_LIMIT
-
-__initfunc(static void xrlim_init(void))
-{
-	int type, entry;
-	struct icmp_xrlim *xr;
-
-	for (type=0; type<=NR_ICMP_TYPES; type++) {
-		xr = icmp_pointers[type].xrlim;
-		if (xr) {
-			for (entry=0; entry<XRLIM_CACHE_SIZE; entry++)
-				xr->cache[entry].daddr = INADDR_NONE;
-		}
-	}
-}
-
 /*
  *	Check transmit rate limitation for given message.
+ *	The rate information is held in the destination cache now.
+ *	This function is generic and could be used for other purposes
+ *	too. It uses a Token bucket filter as suggested by Alexey Kuznetsov.
  *
  *	RFC 1812: 4.3.2.8 SHOULD be able to limit error message rate
- *			  SHOULD allow setting of rate limits (we allow 
- *			  in the source)
+ *			  SHOULD allow setting of rate limits 
+ *
+ * 	Shared between ICMPv4 and ICMPv6.
  */
-
-static int xrlim_allow(int type, __u32 addr)
+#define XRLIM_BURST_FACTOR 6
+int xrlim_allow(struct dst_entry *dst, int timeout)
 {
-	struct icmp_xrlim *r;
-	struct icmp_xrl_cache *c;
 	unsigned long now;
 
-	if (type > NR_ICMP_TYPES)		/* No time limit present */
-		return 1;
-	r = icmp_pointers[type].xrlim;
-	if (!r)
-		return 1;
-
-	for (c = r->cache; c < &r->cache[XRLIM_CACHE_SIZE]; c++)	
-	  /* Cache lookup */
-		if (c->daddr == addr)
-			break;
-
-	now = jiffies;		/* Cache current time (saves accesses to volatile variable) */
-
-	if (c == &r->cache[XRLIM_CACHE_SIZE]) {		/* Cache miss */
-		unsigned long oldest = now;		/* Find the oldest entry to replace */
-		struct icmp_xrl_cache *d;
-		c = r->cache;
-		for (d = r->cache; d < &r->cache[XRLIM_CACHE_SIZE]; d++)
-			if (!d->daddr) {		/* Unused entry */
-				c = d;
-				break;
-			} else if (d->last_access < oldest) {
-				oldest = d->last_access;
-				c = d;
-			}
-		c->last_access = now;			/* Fill the entry with new data */
-		c->daddr = addr;
-		c->counter = 1;
-		c->next_reset = now + r->timeout;
-		c->restricted = 0;
+	now = jiffies;
+	dst->rate_tokens += now - dst->rate_last;
+	if (dst->rate_tokens > 6*timeout)
+		dst->rate_tokens = XRLIM_BURST_FACTOR*timeout;
+	if (dst->rate_tokens >= timeout) {
+		dst->rate_tokens -= timeout;
 		return 1;
 	}
-
-	c->last_access = now;
-	if (c->next_reset > now) {			/* Let's increment the counter */
-		c->counter++;
-		if (c->counter == r->limit) {		/* Limit exceeded, start restrictions */
-			c->restricted = 1;
-			c->next_packet = now + r->delay;
-			return 0;
-		}
-		if (c->restricted) {			/* Any restrictions pending? */
-			if (c->next_packet > now)
-				return 0;
-			c->next_packet = now + r->delay;
-			return 1;
-		}
-	} else {					/* Reset the counter */
-		if (c->counter < r->limit)		/* Switch off all restrictions */
-			c->restricted = 0;
-		c->next_reset = now + r->timeout;
-		c->counter = 0;
-	}
-
-	return 1;					/* Send the packet */
+	return 0; 
 }
 
-#endif /* CONFIG_NO_ICMP_LIMIT */
+static inline int icmpv4_xrlim_allow(struct rtable *rt, int type, int code)
+{
+	struct dst_entry *dst = &rt->u.dst; 
+
+	if (type > NR_ICMP_TYPES || !icmp_pointers[type].timeout)
+		return 1;
+
+	/* Don't limit PMTU discovery. */
+	if (type == ICMP_DEST_UNREACH && code == ICMP_FRAG_NEEDED)
+		return 1;
+
+	return xrlim_allow(dst, *(icmp_pointers[type].timeout));
+}
 
 /*
  *	Maintain the counters used in the SNMP statistics for outgoing ICMP
@@ -530,7 +453,7 @@ static void icmp_reply(struct icmp_bxm *icmp_param, struct sk_buff *skb)
 	ipc.opt = &icmp_param->replyopts;
 	if (ipc.opt->srr)
 		daddr = icmp_param->replyopts.faddr;
-	if (ip_route_output(&rt, daddr, rt->rt_spec_dst, RT_TOS(skb->nh.iph->tos), NULL))
+	if (ip_route_output(&rt, daddr, rt->rt_spec_dst, RT_TOS(skb->nh.iph->tos), 0))
 		return;
 	ip_build_xmit(sk, icmp_glue_bits, icmp_param, 
 		icmp_param->data_len+sizeof(struct icmphdr),
@@ -578,7 +501,7 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info)
 	 */
 	if (!rt)
 		return;
-	if (rt->rt_flags&(RTF_BROADCAST|RTF_MULTICAST))
+	if (rt->rt_flags&(RTCF_BROADCAST|RTCF_MULTICAST))
 		return;
 	 
 		
@@ -610,34 +533,30 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info)
 		}
 	}
 
-	/*
-	 *	Check the rate limit
-	 */
-
-#ifndef CONFIG_NO_ICMP_LIMIT
-	if (!xrlim_allow(type, iph->saddr))
-		return;
-#endif
 
 	/*
 	 *	Construct source address and options.
 	 */
 	
 	saddr = iph->daddr;
-	if (!(rt->rt_flags&RTF_LOCAL))
+	if (!(rt->rt_flags&RTCF_LOCAL))
 		saddr = 0;
 
 	tos = icmp_pointers[type].error ?
 		((iph->tos & IPTOS_TOS_MASK) | IPTOS_PREC_INTERNETCONTROL) :
 			iph->tos;
 
-	if (ip_route_output(&rt, iph->saddr, saddr, RT_TOS(tos), NULL))
+	/* XXX: use a more aggressive expire for routes created by 
+	 * this call (not longer than the rate limit timeout). 
+	 * It could be also worthwhile to not put them into ipv4
+	 * fast routing cache at first.
+	 */
+	if (ip_route_output(&rt, iph->saddr, saddr, RT_TOS(tos), 0))
 		return;
 	
-	if (ip_options_echo(&icmp_param.replyopts, skb_in)) {
-		ip_rt_put(rt);
-		return;
-	}
+	if (ip_options_echo(&icmp_param.replyopts, skb_in)) 
+		goto ende;
+
 
 	/*
 	 *	Prepare data for ICMP header.
@@ -655,9 +574,12 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info)
 	ipc.opt = &icmp_param.replyopts;
 	if (icmp_param.replyopts.srr) {
 		ip_rt_put(rt);
-		if (ip_route_output(&rt, icmp_param.replyopts.faddr, saddr, RT_TOS(tos), NULL))
+		if (ip_route_output(&rt, icmp_param.replyopts.faddr, saddr, RT_TOS(tos), 0))
 			return;
 	}
+
+	if (!icmpv4_xrlim_allow(rt, type, code))
+		goto ende;
 
 	/* RFC says return as much as we can without exceeding 576 bytes. */
 
@@ -674,6 +596,7 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info)
 		icmp_param.data_len+sizeof(struct icmphdr),
 		&ipc, rt, MSG_DONTWAIT);
 
+ende:
 	ip_rt_put(rt);
 }
 
@@ -753,7 +676,7 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, int len)
 	 *	get the other vendor to fix their kit.
 	 */
 	 
-	if(__ip_chk_addr(iph->daddr)==IS_BROADCAST)
+	if (inet_addr_type(iph->daddr) == RTN_BROADCAST)
 	{
 		if (net_ratelimit())
 			printk("%s sent an invalid ICMP error to a broadcast.\n",
@@ -770,12 +693,12 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, int len)
 	hash = iph->protocol & (MAX_INET_PROTOS - 1);
 	if ((raw_sk = raw_v4_htable[hash]) != NULL) 
 	{
-		raw_sk = raw_v4_lookup(raw_sk, iph->protocol, iph->saddr, iph->daddr);
+		raw_sk = raw_v4_lookup(raw_sk, iph->protocol, iph->saddr, iph->daddr, skb->dev->ifindex);
 		while (raw_sk) 
 		{
 			raw_err(raw_sk, skb);
 			raw_sk = raw_v4_lookup(raw_sk->next, iph->protocol,
-					       iph->saddr, iph->daddr);
+					       iph->saddr, iph->daddr, skb->dev->ifindex);
 		}
 	}
 
@@ -797,7 +720,7 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, int len)
 		/* appropriate protocol layer (MUST), as per 3.2.2. */
 
 		if (iph->protocol == ipprot->protocol && ipprot->err_handler)
- 			ipprot->err_handler(skb, dp);
+ 			ipprot->err_handler(skb, dp, len);
 
 		ipprot = nextip;
   	}
@@ -850,18 +773,18 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb, int len)
  *	RFC 1812: 4.3.3.6 SHOULD have a config option for silently ignoring echo requests, MUST have default=NOT.
  *	See also WRT handling of options once they are done and working.
  */
- 
+
 static void icmp_echo(struct icmphdr *icmph, struct sk_buff *skb, int len)
 {
-#ifndef CONFIG_IP_IGNORE_ECHO_REQUESTS
-	struct icmp_bxm icmp_param;
+	if (!sysctl_icmp_echo_ignore_all) {
+		struct icmp_bxm icmp_param;
 
-	icmp_param.icmph=*icmph;
-	icmp_param.icmph.type=ICMP_ECHOREPLY;
-	icmp_param.data_ptr=(icmph+1);
-	icmp_param.data_len=len;
-	icmp_reply(&icmp_param, skb);
-#endif
+		icmp_param.icmph=*icmph;
+		icmp_param.icmph.type=ICMP_ECHOREPLY;
+		icmp_param.data_ptr=(icmph+1);
+		icmp_param.data_len=len;
+		icmp_reply(&icmp_param, skb);
+	}
 }
 
 /*
@@ -928,32 +851,16 @@ static void icmp_timestamp(struct icmphdr *icmph, struct sk_buff *skb, int len)
  * Gratuitous mask announcements suffer from the same problem.
  * RFC1812 explains it, but still allows to use ADDRMASK,
  * that is pretty silly. --ANK
+ *
+ * All these rules are so bizarre, that I removed kernel addrmask
+ * support at all. It is wrong, it is obsolete, nobody uses it in
+ * any case. --ANK
  */
- 
+
 static void icmp_address(struct icmphdr *icmph, struct sk_buff *skb, int len)
 {
-	struct icmp_bxm icmp_param;
-	struct rtable *rt = (struct rtable*)skb->dst;
-	struct device *dev = skb->dev;
-
-	if (!ipv4_config.addrmask_agent ||
-	    len < 4 ||
-	    ZERONET(rt->rt_src) ||
-	    rt->rt_src_dev != rt->u.dst.dev ||
-	    !(rt->rt_flags&RTCF_DIRECTSRC) ||
-	    (rt->rt_flags&RTF_GATEWAY) ||
-	    !(dev->ip_flags&IFF_IP_ADDR_OK) ||
-	    !(dev->ip_flags&IFF_IP_MASK_OK)) {
-		icmp_statistics.IcmpInErrors++;
-		return;
-	}
-
-	icmp_param.icmph.type=ICMP_ADDRESSREPLY;
-	icmp_param.icmph.code=0;
-	icmp_param.icmph.un.echo = icmph->un.echo;
-	icmp_param.data_ptr=&dev->pa_mask;
-	icmp_param.data_len=4;
-	icmp_reply(&icmp_param, skb);
+	if (net_ratelimit())
+		printk(KERN_DEBUG "a guy asks for address mask. Who is it?\n");
 }
 
 /*
@@ -965,27 +872,29 @@ static void icmp_address_reply(struct icmphdr *icmph, struct sk_buff *skb, int l
 {
 	struct rtable *rt = (struct rtable*)skb->dst;
 	struct device *dev = skb->dev;
+	struct in_device *in_dev = dev->ip_ptr;
+	struct in_ifaddr *ifa;
 	u32 mask;
 
 	if (!ipv4_config.log_martians ||
+	    !IS_ROUTER ||
+	    !in_dev || !in_dev->ifa_list ||
 	    len < 4 ||
-	    !(rt->rt_flags&RTCF_DIRECTSRC) ||
-	    (rt->rt_flags&RTF_GATEWAY) ||
-	    !(dev->ip_flags&IFF_IP_ADDR_OK) ||
-	    !(dev->ip_flags&IFF_IP_MASK_OK)) {
-		icmp_statistics.IcmpInErrors++;
+	    !(rt->rt_flags&RTCF_DIRECTSRC))
 		return;
-	}
 
 	mask = *(u32*)&icmph[1];
-	if (mask != dev->pa_mask && net_ratelimit())
+	for (ifa=in_dev->ifa_list; ifa; ifa = ifa->ifa_next) {
+		if (mask == ifa->ifa_mask && inet_ifa_match(rt->rt_src, ifa))
+			return;
+	}
+	if (net_ratelimit())
 		printk(KERN_INFO "Wrong address mask %08lX from %08lX/%s\n",
 		       ntohl(mask), ntohl(rt->rt_src), dev->name);
 }
 
 static void icmp_discard(struct icmphdr *icmph, struct sk_buff *skb, int len)
 {
-	return; 
 }
 
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
@@ -1000,8 +909,8 @@ static void icmp_discard(struct icmphdr *icmph, struct sk_buff *skb, int len)
  */
 
 /* This should work with the new hashes now. -DaveM */
-extern struct sock *tcp_v4_lookup(u32 saddr, u16 sport, u32 daddr, u16 dport);
-extern struct sock *udp_v4_lookup(u32 saddr, u16 sport, u32 daddr, u16 dport);
+extern struct sock *tcp_v4_lookup(u32 saddr, u16 sport, u32 daddr, u16 dport, int dif);
+extern struct sock *udp_v4_lookup(u32 saddr, u16 sport, u32 daddr, u16 dport, int dif);
 
 int icmp_chkaddr(struct sk_buff *skb)
 {
@@ -1017,7 +926,7 @@ int icmp_chkaddr(struct sk_buff *skb)
 			{
 			struct tcphdr *th = (struct tcphdr *)(((unsigned char *)iph)+(iph->ihl<<2));
 
-			sk = tcp_v4_lookup(iph->daddr, th->dest, iph->saddr, th->source);
+			sk = tcp_v4_lookup(iph->daddr, th->dest, iph->saddr, th->source, skb->dev->ifindex);
 			if (!sk) return 0;
 			if (sk->saddr != iph->saddr) return 0;
 			if (sk->daddr != iph->daddr) return 0;
@@ -1031,9 +940,9 @@ int icmp_chkaddr(struct sk_buff *skb)
 			{
 			struct udphdr *uh = (struct udphdr *)(((unsigned char *)iph)+(iph->ihl<<2));
 
-			sk = udp_v4_lookup(iph->daddr, uh->dest, iph->saddr, uh->source);
+			sk = udp_v4_lookup(iph->daddr, uh->dest, iph->saddr, uh->source, skb->dev->ifindex);
 			if (!sk) return 0;
-			if (sk->saddr != iph->saddr && __ip_chk_addr(iph->saddr) != IS_MYADDR)
+			if (sk->saddr != iph->saddr && inet_addr_type(iph->saddr) != RTN_LOCAL)
 				return 0;
 			/*
 			 * This packet may have come from us.
@@ -1067,46 +976,59 @@ int icmp_rcv(struct sk_buff *skb, unsigned short len)
 	if(len < sizeof(struct icmphdr) ||
 	   ip_compute_csum((unsigned char *) icmph, len) ||
 	   icmph->type > NR_ICMP_TYPES)
-	{
-		icmp_statistics.IcmpInErrors++;
-		kfree_skb(skb, FREE_READ);
-		return 0;
-	}
+		goto error;
 	 
 	/*
 	 *	Parse the ICMP message 
 	 */
 
-	if (rt->rt_flags&(RTF_BROADCAST|RTF_MULTICAST)) {
+ 	if (rt->rt_flags&(RTCF_BROADCAST|RTCF_MULTICAST)) {
 		/*
-		 *	RFC 1122: 3.2.2.6 An ICMP_ECHO to broadcast MAY be silently ignored (we don't as it is used
-		 *	by some network mapping tools).
-		 *	RFC 1122: 3.2.2.8 An ICMP_TIMESTAMP MAY be silently discarded if to broadcast/multicast.
+		 *	RFC 1122: 3.2.2.6 An ICMP_ECHO to broadcast MAY be
+		 *	  silently ignored (we let user decide with a sysctl).
+		 *	RFC 1122: 3.2.2.8 An ICMP_TIMESTAMP MAY be silently
+		 *	  discarded if to broadcast/multicast.
 		 */
+		if (icmph->type == ICMP_ECHO &&
+		    sysctl_icmp_echo_ignore_broadcasts) {
+			goto error;
+		}
 		if (icmph->type != ICMP_ECHO &&
 		    icmph->type != ICMP_TIMESTAMP &&
 		    icmph->type != ICMP_ADDRESS &&
 		    icmph->type != ICMP_ADDRESSREPLY) {
-			icmp_statistics.IcmpInErrors++;
-			kfree_skb(skb, FREE_READ);
-			return(0);
+			goto error;
   		}
 	}
 
 	len -= sizeof(struct icmphdr);
 	(*icmp_pointers[icmph->type].input)++;
 	(icmp_pointers[icmph->type].handler)(icmph, skb, len);
+
+drop:
 	kfree_skb(skb, FREE_READ); 
 	return 0;
+error:
+	icmp_statistics.IcmpInErrors++;
+	goto drop;
 }
 
 /*
- *	This table defined limits of ICMP sending rate for various ICMP messages.
+ *	A spare long used to speed up statistics updating
  */
+ 
+static unsigned long dummy;
 
-static struct icmp_xrlim
-	xrl_unreach = { 4*HZ, 80, HZ/4 },		/* Host Unreachable */
-	xrl_generic = { 3*HZ, 30, HZ/4 };		/* All other errors */
+/* 
+ * 	Configurable rate limits.
+ *	Send at most one packets per time.
+ *	Someone should check if these default values are correct.
+ */
+int sysctl_icmp_sourcequench_time = 1*HZ; 
+int sysctl_icmp_destunreach_time = 1*HZ;
+int sysctl_icmp_timeexceed_time = 1*HZ;
+int sysctl_icmp_paramprob_time = 1*HZ;
+int sysctl_icmp_echoreply_time = 0; /* don't limit it per default. */
 
 /*
  *	This table is the definition of how we handle ICMP.
@@ -1114,38 +1036,38 @@ static struct icmp_xrlim
  
 static struct icmp_control icmp_pointers[NR_ICMP_TYPES+1] = {
 /* ECHO REPLY (0) */
- { &icmp_statistics.IcmpOutEchoReps, &icmp_statistics.IcmpInEchoReps, icmp_discard, 0, NULL },
- { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, NULL },
- { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, NULL },
+ { &icmp_statistics.IcmpOutEchoReps, &icmp_statistics.IcmpInEchoReps, icmp_discard, 0, &sysctl_icmp_echoreply_time},
+ { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, },
+ { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, },
 /* DEST UNREACH (3) */
- { &icmp_statistics.IcmpOutDestUnreachs, &icmp_statistics.IcmpInDestUnreachs, icmp_unreach, 1, &xrl_unreach },
+ { &icmp_statistics.IcmpOutDestUnreachs, &icmp_statistics.IcmpInDestUnreachs, icmp_unreach, 1, &sysctl_icmp_destunreach_time },
 /* SOURCE QUENCH (4) */
- { &icmp_statistics.IcmpOutSrcQuenchs, &icmp_statistics.IcmpInSrcQuenchs, icmp_unreach, 1, NULL },
+ { &icmp_statistics.IcmpOutSrcQuenchs, &icmp_statistics.IcmpInSrcQuenchs, icmp_unreach, 1, &sysctl_icmp_sourcequench_time },
 /* REDIRECT (5) */
- { &icmp_statistics.IcmpOutRedirects, &icmp_statistics.IcmpInRedirects, icmp_redirect, 1, NULL },
- { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, NULL },
- { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, NULL },
+ { &icmp_statistics.IcmpOutRedirects, &icmp_statistics.IcmpInRedirects, icmp_redirect, 1, },
+ { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, },
+ { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, },
 /* ECHO (8) */
- { &icmp_statistics.IcmpOutEchos, &icmp_statistics.IcmpInEchos, icmp_echo, 0, NULL },
- { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, NULL },
- { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, NULL },
+ { &icmp_statistics.IcmpOutEchos, &icmp_statistics.IcmpInEchos, icmp_echo, 0, },
+ { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, },
+ { &dummy, &icmp_statistics.IcmpInErrors, icmp_discard, 1, },
 /* TIME EXCEEDED (11) */
- { &icmp_statistics.IcmpOutTimeExcds, &icmp_statistics.IcmpInTimeExcds, icmp_unreach, 1, &xrl_generic },
+ { &icmp_statistics.IcmpOutTimeExcds, &icmp_statistics.IcmpInTimeExcds, icmp_unreach, 1, &sysctl_icmp_timeexceed_time },
 /* PARAMETER PROBLEM (12) */
 /* FIXME: RFC1122 3.2.2.5 - MUST pass PARAM_PROB messages to transport layer */
- { &icmp_statistics.IcmpOutParmProbs, &icmp_statistics.IcmpInParmProbs, icmp_discard, 1, &xrl_generic },
+ { &icmp_statistics.IcmpOutParmProbs, &icmp_statistics.IcmpInParmProbs, icmp_discard, 1, &sysctl_icmp_paramprob_time },
 /* TIMESTAMP (13) */
- { &icmp_statistics.IcmpOutTimestamps, &icmp_statistics.IcmpInTimestamps, icmp_timestamp, 0, NULL },
+ { &icmp_statistics.IcmpOutTimestamps, &icmp_statistics.IcmpInTimestamps, icmp_timestamp, 0,  },
 /* TIMESTAMP REPLY (14) */
- { &icmp_statistics.IcmpOutTimestampReps, &icmp_statistics.IcmpInTimestampReps, icmp_discard, 0, NULL },
+ { &icmp_statistics.IcmpOutTimestampReps, &icmp_statistics.IcmpInTimestampReps, icmp_discard, 0, },
 /* INFO (15) */
- { &dummy, &dummy, icmp_discard, 0, NULL },
+ { &dummy, &dummy, icmp_discard, 0, },
 /* INFO REPLY (16) */
- { &dummy, &dummy, icmp_discard, 0, NULL },
+ { &dummy, &dummy, icmp_discard, 0, },
 /* ADDR MASK (17) */
- { &icmp_statistics.IcmpOutAddrMasks, &icmp_statistics.IcmpInAddrMasks, icmp_address, 0, NULL },
+ { &icmp_statistics.IcmpOutAddrMasks, &icmp_statistics.IcmpInAddrMasks, icmp_address, 0,  },
 /* ADDR MASK REPLY (18) */
- { &icmp_statistics.IcmpOutAddrMaskReps, &icmp_statistics.IcmpInAddrMaskReps, icmp_address_reply, 0, NULL }
+ { &icmp_statistics.IcmpOutAddrMaskReps, &icmp_statistics.IcmpInAddrMaskReps, icmp_address_reply, 0, }
 };
 
 __initfunc(void icmp_init(struct net_proto_family *ops))
@@ -1166,8 +1088,4 @@ __initfunc(void icmp_init(struct net_proto_family *ops))
 	icmp_socket->sk->allocation=GFP_ATOMIC;
 	icmp_socket->sk->num = 256;		/* Don't receive any data */
 	icmp_socket->sk->ip_ttl = MAXTTL;
-#ifndef CONFIG_NO_ICMP_LIMIT
-	xrlim_init();
-#endif
 }
-

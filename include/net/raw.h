@@ -32,6 +32,7 @@ extern struct sock *raw_v4_htable[RAWV4_HTABLE_SIZE];
 
 
 extern struct sock *raw_v4_lookup(struct sock *sk, unsigned short num,
-				  unsigned long raddr, unsigned long laddr);
+				  unsigned long raddr, unsigned long laddr,
+				  int dif);
 
 #endif	/* _RAW_H */

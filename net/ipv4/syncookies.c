@@ -9,7 +9,7 @@
  *      as published by the Free Software Foundation; either version
  *      2 of the License, or (at your option) any later version.
  * 
- *  $Id: syncookies.c,v 1.2 1997/08/22 19:15:08 freitag Exp $
+ *  $Id: syncookies.c,v 1.3 1997/09/16 17:16:21 freitag Exp $
  *
  *  Missing: IPv6 support. 
  *           Some counter so that the Administrator can see when the machine
@@ -200,9 +200,11 @@ cookie_v4_check(struct sock *sk, struct sk_buff *skb, struct ip_options *opt)
 	 * no easy way to do this. 
 	 */
 	if (ip_route_output(&rt,
-			    opt && opt->srr ? opt->faddr : 
-			    req->af.v4_req.rmt_addr,req->af.v4_req.loc_addr,
-			    sk->ip_tos, NULL)) {
+			    opt && 
+			    opt->srr ? opt->faddr : req->af.v4_req.rmt_addr,
+			    req->af.v4_req.loc_addr,
+			    sk->ip_tos, 
+			    0)) { 
 	    tcp_openreq_free(req);
 	    return NULL; 
 	}

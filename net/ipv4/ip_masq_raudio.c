@@ -2,7 +2,7 @@
  *		IP_MASQ_RAUDIO  - Real Audio masquerading module
  *
  *
- * Version:	@(#)$Id: ip_masq_raudio.c,v 1.6 1997/04/29 09:38:26 mj Exp $
+ * Version:	@(#)$Id: ip_masq_raudio.c,v 1.7 1997/09/16 18:43:40 kuznet Exp $
  *
  * Author:	Nigel Metheringham
  *		[strongly based on ftp module by Juan Jose Ciarlante & Wouter Gadeyne]
@@ -88,7 +88,7 @@ masq_raudio_done_1 (struct ip_masq_app *mapp, struct ip_masq *ms)
 }
 
 int
-masq_raudio_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb_p, struct device *dev)
+masq_raudio_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb_p, __u32 maddr)
 {
         struct sk_buff *skb;
 	struct iphdr *iph;
@@ -154,7 +154,7 @@ masq_raudio_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **
 		if (ntohs(msg_id) == 1) {
 			/* This is a message detailing the UDP port to be used */
 			memcpy(&udp_port, p, 2);
-			n_ms = ip_masq_new(dev, IPPROTO_UDP,
+			n_ms = ip_masq_new(maddr, IPPROTO_UDP,
 					   ms->saddr, udp_port,
 					   ms->daddr, 0,
 					   IP_MASQ_F_NO_DPORT);

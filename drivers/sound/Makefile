@@ -34,7 +34,7 @@ kernelconfig:
 else
 
 ifeq (.defines,$(wildcard .defines))
-#include .defines
+include .defines
 include .objects
 endif
 

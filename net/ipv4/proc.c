@@ -7,7 +7,7 @@
  *		PROC file system.  It is mainly used for debugging and
  *		statistics.
  *
- * Version:	@(#)proc.c	1.0.5	05/27/93
+ * Version:	$Id: proc.c,v 1.23 1997/10/30 23:52:20 davem Exp $
  *
  * Authors:	Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Gerald J. Heim, <heim@peanuts.informatik.uni-tuebingen.de>
@@ -221,7 +221,6 @@ int afinet_get_info(char *buffer, char **start, off_t offset, int length, int du
 {
 	/* From  net/socket.c  */
 	extern int socket_get_info(char *, char **, off_t, int);
-	extern struct proto packet_prot;
 
 	int len  = socket_get_info(buffer,start,offset,length);
 
@@ -231,8 +230,6 @@ int afinet_get_info(char *buffer, char **start, off_t offset, int length, int du
 		       udp_prot.inuse, udp_prot.highestinuse);
 	len += sprintf(buffer+len,"RAW: inuse %d highest %d\n",
 		       raw_prot.inuse, raw_prot.highestinuse);
-	len += sprintf(buffer+len,"PAC: inuse %d highest %d\n",
-		       packet_prot.inuse, packet_prot.highestinuse);
 	if (offset >= len)
 	{
 		*start = buffer;
@@ -291,14 +288,15 @@ int snmp_get_info(char *buffer, char **start, off_t offset, int length, int dumm
 		    icmp_statistics.IcmpOutAddrMasks, icmp_statistics.IcmpOutAddrMaskReps);
 	
 	len += sprintf (buffer + len,
-		"Tcp: RtoAlgorithm RtoMin RtoMax MaxConn ActiveOpens PassiveOpens AttemptFails EstabResets CurrEstab InSegs OutSegs RetransSegs\n"
-		"Tcp: %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu\n",
+		"Tcp: RtoAlgorithm RtoMin RtoMax MaxConn ActiveOpens PassiveOpens AttemptFails EstabResets CurrEstab InSegs OutSegs RetransSegs InErrs OutRsts\n"
+		"Tcp: %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu\n",
 		    tcp_statistics.TcpRtoAlgorithm, tcp_statistics.TcpRtoMin,
 		    tcp_statistics.TcpRtoMax, tcp_statistics.TcpMaxConn,
 		    tcp_statistics.TcpActiveOpens, tcp_statistics.TcpPassiveOpens,
 		    tcp_statistics.TcpAttemptFails, tcp_statistics.TcpEstabResets,
 		    tcp_statistics.TcpCurrEstab, tcp_statistics.TcpInSegs,
-		    tcp_statistics.TcpOutSegs, tcp_statistics.TcpRetransSegs);
+		    tcp_statistics.TcpOutSegs, tcp_statistics.TcpRetransSegs,
+		    tcp_statistics.TcpInErrs, tcp_statistics.TcpOutRsts);
 		
 	len += sprintf (buffer + len,
 		"Udp: InDatagrams NoPorts InErrors OutDatagrams\nUdp: %lu %lu %lu %lu\n",

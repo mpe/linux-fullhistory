@@ -5,6 +5,8 @@
  *
  *		The options processing module for ip.c
  *
+ * Version:	$Id: ip_options.c,v 1.12 1997/10/10 22:41:08 davem Exp $
+ *
  * Authors:	A.N.Kuznetsov
  *		
  */
@@ -15,10 +17,10 @@
 #include <linux/ip.h>
 #include <linux/icmp.h>
 #include <linux/netdevice.h>
+#include <linux/rtnetlink.h>
 #include <net/sock.h>
 #include <net/ip.h>
 #include <net/icmp.h>
-#include <linux/net_alias.h>
 
 /* 
  * Write options to IP header, record destination address to
@@ -32,7 +34,7 @@
  */
 
 void ip_options_build(struct sk_buff * skb, struct ip_options * opt,
-			    u32 daddr, u32 saddr, int is_frag) 
+			    u32 daddr, struct rtable *rt, int is_frag) 
 {
 	unsigned char * iph = skb->nh.raw;
 
@@ -46,9 +48,9 @@ void ip_options_build(struct sk_buff * skb, struct ip_options * opt,
 
 	if (!is_frag) {
 		if (opt->rr_needaddr)
-			memcpy(iph+opt->rr+iph[opt->rr+2]-5, &saddr, 4);
+			ip_rt_get_source(iph+opt->rr+iph[opt->rr+2]-5, rt);
 		if (opt->ts_needaddr)
-			memcpy(iph+opt->ts+iph[opt->ts+2]-9, &saddr, 4);
+			ip_rt_get_source(iph+opt->ts+iph[opt->ts+2]-9, rt);
 		if (opt->ts_needtime) {
 			struct timeval tv;
 			__u32 midtime;
@@ -147,7 +149,7 @@ int ip_options_echo(struct ip_options * dopt, struct sk_buff * skb)
 			if (((struct timestamp*)(dptr+1))->flags == IPOPT_TS_PRESPEC) {
 				__u32 addr;
 				memcpy(&addr, sptr+soffset-9, 4);
-				if (__ip_chk_addr(addr) == 0) {
+				if (inet_addr_type(addr) == RTN_UNICAST) {
 					dopt->ts_needtime = 0;
 					dopt->ts_needaddr = 0;
 					soffset -= 8;
@@ -248,6 +250,7 @@ int ip_options_compile(struct ip_options * opt, struct sk_buff * skb)
 	unsigned char * optptr;
 	int optlen;
 	unsigned char * pp_ptr = NULL;
+	struct rtable *rt = skb ? (struct rtable*)skb->dst : NULL;
 
 	if (!opt) {
 		opt = &(IPCB(skb)->opt);
@@ -328,7 +331,7 @@ int ip_options_compile(struct ip_options * opt, struct sk_buff * skb)
 					goto error;
 				}
 				if (skb) {
-					memcpy(&optptr[optptr[2]-1], &skb->dev->pa_addr, 4);
+					memcpy(&optptr[optptr[2]-1], &rt->rt_spec_dst, 4);
 					opt->is_changed = 1;
 				}
 				optptr[2] += 4;
@@ -371,7 +374,7 @@ int ip_options_compile(struct ip_options * opt, struct sk_buff * skb)
 					}
 					opt->ts = optptr - iph;
 					if (skb) {
-						memcpy(&optptr[ts->ptr-1], &skb->dev->pa_addr, 4);
+						memcpy(&optptr[ts->ptr-1], &rt->rt_spec_dst, 4);
 						timeptr = (__u32*)&optptr[ts->ptr+3];
 					}
 					opt->ts_needaddr = 1;
@@ -387,7 +390,7 @@ int ip_options_compile(struct ip_options * opt, struct sk_buff * skb)
 					{
 						u32 addr;
 						memcpy(&addr, &optptr[ts->ptr-1], 4);
-						if (__ip_chk_addr(addr) == 0)
+						if (inet_addr_type(addr) == RTN_UNICAST)
 							break;
 						if (skb)
 							timeptr = (__u32*)&optptr[ts->ptr+3];
@@ -521,7 +524,7 @@ void ip_forward_options(struct sk_buff *skb)
 
 	if (opt->rr_needaddr) {
 		optptr = (unsigned char *)raw + opt->rr;
-		memcpy(&optptr[optptr[2]-5], &rt->u.dst.dev->pa_addr, 4);
+		ip_rt_get_source(&optptr[optptr[2]-5], rt);
 		opt->is_changed = 1;
 	}
 	if (opt->srr_is_hit) {
@@ -540,20 +543,20 @@ void ip_forward_options(struct sk_buff *skb)
 		}
 		if (srrptr + 3 <= srrspace) {
 			opt->is_changed = 1;
-			memcpy(&optptr[srrptr-1], &rt->u.dst.dev->pa_addr, 4);
+			ip_rt_get_source(&optptr[srrptr-1], rt);
 			skb->nh.iph->daddr = rt->rt_dst;
 			optptr[2] = srrptr+4;
 		} else
 			printk(KERN_CRIT "ip_forward(): Argh! Destination lost!\n");
 		if (opt->ts_needaddr) {
 			optptr = raw + opt->ts;
-			memcpy(&optptr[optptr[2]-9], &rt->u.dst.dev->pa_addr, 4);
+			ip_rt_get_source(&optptr[optptr[2]-9], rt);
 			opt->is_changed = 1;
 		}
-		if (opt->is_changed) {
-			opt->is_changed = 0;
-			ip_send_check(skb->nh.iph);
-		}
+	}
+	if (opt->is_changed) {
+		opt->is_changed = 0;
+		ip_send_check(skb->nh.iph);
 	}
 }
 
@@ -571,16 +574,16 @@ int ip_options_rcv_srr(struct sk_buff *skb)
 	if (!opt->srr)
 		return 0;
 
-	if (rt->rt_flags&(RTF_BROADCAST|RTF_MULTICAST|RTF_NAT)
-	    || skb->pkt_type != PACKET_HOST)
+	if (skb->pkt_type != PACKET_HOST)
 		return -EINVAL;
-
-	if (!(rt->rt_flags & RTF_LOCAL)) {
+	if (rt->rt_type == RTN_UNICAST) {
 		if (!opt->is_strictroute)
 			return 0;
 		icmp_send(skb, ICMP_PARAMETERPROB, 0, 16);
 		return -EINVAL;
 	}
+	if (rt->rt_type != RTN_LOCAL)
+		return -EINVAL;
 
 	for (srrptr=optptr[2], srrspace = optptr[1]; srrptr <= srrspace; srrptr += 4) {
 		if (srrptr + 3 > srrspace) {
@@ -591,16 +594,15 @@ int ip_options_rcv_srr(struct sk_buff *skb)
 
 		rt = (struct rtable*)skb->dst;
 		skb->dst = NULL;
-		err = ip_route_input(skb, nexthop, iph->saddr, iph->tos,
-				     net_alias_main_dev(skb->dev));
+		err = ip_route_input(skb, nexthop, iph->saddr, iph->tos, skb->dev);
 		rt2 = (struct rtable*)skb->dst;
-		if (err || rt2->rt_flags&(RTF_BROADCAST|RTF_MULTICAST|RTF_NAT)) {
+		if (err || (rt2->rt_type != RTN_UNICAST && rt2->rt_type != RTN_LOCAL)) {
 			ip_rt_put(rt2);
 			skb->dst = &rt->u.dst;
 			return -EINVAL;
 		}
 		ip_rt_put(rt);
-		if (!(rt2->rt_flags&RTF_LOCAL))
+		if (rt2->rt_type != RTN_LOCAL)
 			break;
 		/* Superfast 8) loopback forward */
 		memcpy(&iph->daddr, &optptr[srrptr-1], 4);

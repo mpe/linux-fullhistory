@@ -63,7 +63,7 @@ static void rose_remove_neigh(struct rose_neigh *);
  */
 static int rose_add_node(struct rose_route_struct *rose_route, struct device *dev)
 {
-	struct rose_node  *rose_node, *rose_tmpn, *rose_tmpp;
+	struct rose_node  *rose_node;
 	struct rose_neigh *rose_neigh;
 	unsigned long flags;
 	int i;
@@ -116,55 +116,18 @@ static int rose_add_node(struct rose_route_struct *rose_route, struct device *de
 		restore_flags(flags);
 	}
 
-	/*
-	 * This is a new node to be inserted into the list. Find where it needs
-	 * to be inserted into the list, and insert it. We want to be sure
-	 * to order the list in descending order of mask size to ensure that
-	 * later when we are searching this list the first match will be the
-	 * best match.
-	 */
 	if (rose_node == NULL) {
-		rose_tmpn = rose_node_list;
-		rose_tmpp = NULL;
-
-		while (rose_tmpn != NULL) {
-			if (rose_tmpn->mask > rose_route->mask) {
-				rose_tmpp = rose_tmpn;
-				rose_tmpn = rose_tmpn->next;
-			} else {
-				break;
-			}
-		}
-
-		/* create new node */
 		if ((rose_node = kmalloc(sizeof(*rose_node), GFP_ATOMIC)) == NULL)
 			return -ENOMEM;
 
-		rose_node->address = rose_route->address;
-		rose_node->mask    = rose_route->mask;
-		rose_node->count   = 1;
+		rose_node->address      = rose_route->address;
+		rose_node->mask         = rose_route->mask;
+		rose_node->count        = 1;
 		rose_node->neighbour[0] = rose_neigh;
 
 		save_flags(flags); cli();
-
-		if (rose_tmpn == NULL) {
-			if (rose_tmpp == NULL) {	/* Empty list */
-				rose_node_list  = rose_node;
-				rose_node->next = NULL;
-			} else {
-				rose_tmpp->next = rose_node;
-				rose_node->next = NULL;
-			}
-		} else {
-			if (rose_tmpp == NULL) {	/* 1st node */
-				rose_node->next = rose_node_list;
-				rose_node_list  = rose_node;
-			} else {
-				rose_tmpp->next = rose_node;
-				rose_node->next = rose_tmpn;
-			}
-		}
-
+		rose_node->next = rose_node_list;
+		rose_node_list  = rose_node;
 		restore_flags(flags);
 
 		rose_neigh->count++;
@@ -487,19 +450,28 @@ struct rose_route *rose_route_free_lci(unsigned int lci, struct rose_neigh *neig
 struct rose_neigh *rose_get_neigh(rose_address *addr, unsigned char *cause, unsigned char *diagnostic)
 {
 	struct rose_node *node;
+	struct rose_neigh *neigh;
 	int failed = 0;
+	int mask   = 0;
 	int i;
 
-	for (node = rose_node_list; node != NULL; node = node->next) {
+	for (neigh = NULL, node = rose_node_list; node != NULL; node = node->next) {
 		if (rosecmpm(addr, &node->address, node->mask) == 0) {
-			for (i = 0; i < node->count; i++) {
-				if (!rose_ftimer_running(node->neighbour[i]))
-					return node->neighbour[i];
-				else
-					failed = 1;
+			if (node->mask > mask) {
+				mask = node->mask;
+
+				for (i = 0; i < node->count; i++) {
+					if (!rose_ftimer_running(node->neighbour[i]))
+						neigh = node->neighbour[i];
+					else
+						failed = 1;
+				}
 			}
 		}
 	}
+
+	if (neigh != NULL)
+		return neigh;
 
 	if (failed) {
 		*cause      = ROSE_OUT_OF_ORDER;

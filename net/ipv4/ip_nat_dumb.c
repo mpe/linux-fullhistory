@@ -5,6 +5,8 @@
  *
  *		Dumb Network Address Translation.
  *
+ * Version:	$Id: ip_nat_dumb.c,v 1.2 1997/10/10 22:41:05 davem Exp $
+ *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
  *		This program is free software; you can redistribute it and/or

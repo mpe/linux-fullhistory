@@ -23,7 +23,7 @@
  *  specific encoding system used.
  */
 
-typedef u16	comp_t;
+typedef __u16	comp_t;
 
 /*
  *   accounting file record
@@ -41,10 +41,10 @@ struct acct
  *	No binary format break with 2.0 - but when we hit 32bit uid we'll
  *	have to bite one
  */
-	u16		ac_uid;			/* Accounting Real User ID */
-	u16		ac_gid;			/* Accounting Real Group ID */
-	u16		ac_tty;			/* Accounting Control Terminal */
-	u32		ac_btime;		/* Accounting Process Creation Time */
+	__u16		ac_uid;			/* Accounting Real User ID */
+	__u16		ac_gid;			/* Accounting Real Group ID */
+	__u16		ac_tty;			/* Accounting Control Terminal */
+	__u32		ac_btime;		/* Accounting Process Creation Time */
 	comp_t		ac_utime;		/* Accounting User Time */
 	comp_t		ac_stime;		/* Accounting System Time */
 	comp_t		ac_etime;		/* Accounting Elapsed Time */
@@ -54,7 +54,7 @@ struct acct
 	comp_t		ac_minflt;		/* Accounting Minor Pagefaults */
 	comp_t		ac_majflt;		/* Accounting Major Pagefaults */
 	comp_t		ac_swaps;		/* Accounting Number of Swaps */
-	u32		ac_exitcode;		/* Accounting Exitcode */
+	__u32		ac_exitcode;		/* Accounting Exitcode */
 	char		ac_comm[ACCT_COMM + 1];	/* Accounting Command Name */
 	char		ac_pad[10];		/* Accounting Padding Bytes */
 };

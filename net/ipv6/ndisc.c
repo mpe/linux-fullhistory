@@ -6,8 +6,6 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *	Mike Shaver		<shaver@ingenia.com>
  *
- *	$Id: ndisc.c,v 1.15 1997/04/29 09:38:48 mj Exp $
- *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
  *      as published by the Free Software Foundation; either version
@@ -24,7 +22,7 @@
  */
 
 /* Set to 3 to get tracing... */
-#define ND_DEBUG 2
+#define ND_DEBUG 1
 
 #if ND_DEBUG >= 3
 #define NDBG(x) printk x
@@ -396,7 +394,10 @@ int ndisc_eth_resolv(unsigned char *h_dest, struct sk_buff *skb)
 		struct in6_addr *daddr;
 
 		daddr = &skb->nh.ipv6h->daddr;
-		ipv6_mc_map(daddr, h_dest);
+		if (skb->dev->type == ARPHRD_ETHER)
+			ipv6_mc_map(daddr, h_dest);
+		else
+			memcpy(h_dest, skb->dev->broadcast, skb->dev->addr_len);
 		return 0;
 	}
 
@@ -433,6 +434,54 @@ int ndisc_eth_resolv(unsigned char *h_dest, struct sk_buff *skb)
 	dev_kfree_skb(skb, FREE_WRITE);
 	return 1;
 }
+
+static int
+ndisc_build_ll_hdr(struct sk_buff *skb, struct device *dev,
+		   struct in6_addr *daddr, struct neighbour *neigh, int len)
+{
+	unsigned char ha[MAX_ADDR_LEN];
+	unsigned char *h_dest = NULL;
+
+	skb->arp = 1;
+	if (dev->hard_header_len) {
+		skb_reserve(skb, (dev->hard_header_len + 15) & ~15);
+
+		if (dev->hard_header) {
+			if (ipv6_addr_type(daddr) & IPV6_ADDR_MULTICAST) {
+				nd_stats.snt_probes_mcast++;
+				if (dev->type == ARPHRD_ETHER)
+					ipv6_mc_map(daddr, ha);
+				else
+					memcpy(ha, dev->broadcast, dev->addr_len);
+				h_dest = ha;
+			} else if (neigh) {
+				h_dest = neigh->ha;
+				nd_stats.snt_probes_ucast++;
+			} else {
+				struct nd_neigh *ndn;
+
+				neigh_table_lock(&nd_tbl);
+
+				neigh = neigh_lookup(&nd_tbl, (void *) daddr,
+						     sizeof(struct in6_addr), dev);
+				if (neigh) {
+					ndn = (struct nd_neigh*)neigh;
+					if (ndn->ndn_flags&NTF_COMPLETE) {
+						memcpy(ha, ndn->ndn_ha, dev->addr_len);
+						h_dest = ha;
+					}
+				}
+				neigh_table_unlock(&nd_tbl);
+			}
+
+			if (dev->hard_header(skb, dev, ETH_P_IPV6, h_dest, NULL, len) < 0)
+				skb->arp = 0;
+		}
+	}
+
+	return skb->arp;
+}
+
 
 /*
  *	Send a Neighbour Advertisement
@@ -486,17 +535,10 @@ void ndisc_send_na(struct device *dev, struct nd_neigh *ndn,
 		printk(KERN_DEBUG "send_na: alloc skb failed\n");
 		return;
 	}
-	/*
-	 *	build the MAC header
-	 */
-	
-	if (dev->hard_header_len) {
-		skb_reserve(skb, (dev->hard_header_len + 15) & ~15);
-		if (dev->hard_header) {
-			dev->hard_header(skb, dev, ETH_P_IPV6, ndn->ndn_ha,
-					 NULL, len);
-			skb->arp = 1;
-		}
+
+	if (ndisc_build_ll_hdr(skb, dev, daddr, (struct neighbour*)ndn, len) == 0) {
+		kfree_skb(skb, FREE_WRITE);
+		return;
 	}
 
 	ip6_nd_hdr(sk, skb, dev, solicited_addr, daddr, IPPROTO_ICMPV6, len);
@@ -540,12 +582,10 @@ void ndisc_send_ns(struct device *dev, struct neighbour *neigh,
 		   struct in6_addr *solicit,
 		   struct in6_addr *daddr, struct in6_addr *saddr) 
 {
-	unsigned char ha[MAX_ADDR_LEN];
         struct sock *sk = ndisc_socket->sk;
         struct sk_buff *skb;
         struct nd_msg *msg;
         int len, opt_len;	
-	void *h_dest;
 	int err;
 
 	NDBG(("ndisc_send_ns(%s,%p): ", (dev ? dev->name : "[NULL]"), neigh));
@@ -581,7 +621,11 @@ void ndisc_send_ns(struct device *dev, struct neighbour *neigh,
 		return;
 	}
 
+#if 0
+	/* Why Pedro did it? Is it remnant of early
+	   attempts to avoid looping back? I have no idea. --ANK */
 	skb->pkt_type = PACKET_NDISC;
+#endif
 
 	if (saddr == NULL) {
 		struct inet6_ifaddr *ifa;
@@ -593,29 +637,9 @@ void ndisc_send_ns(struct device *dev, struct neighbour *neigh,
 			saddr = &ifa->addr;
 	}
 
-	if ((ipv6_addr_type(daddr) & IPV6_ADDR_MULTICAST)) {
-		nd_stats.snt_probes_mcast++;
-		ipv6_mc_map(daddr, ha);
-		h_dest = ha;
-	} else {
-		if (neigh == NULL) {
-#if ND_DEBUG >= 1
-			printk(KERN_DEBUG "send_ns: ucast destination "
-			       "with null neighbour\n");
-#endif
-			return;
-		}
-		h_dest = neigh->ha;
-		nd_stats.snt_probes_ucast++;
-	}
-
-	if (dev->hard_header_len) {
-		skb_reserve(skb, (dev->hard_header_len + 15) & ~15);
-		if (dev->hard_header) {
-			dev->hard_header(skb, dev, ETH_P_IPV6, h_dest, NULL,
-					 len);
-			skb->arp = 1;
-		}
+	if (ndisc_build_ll_hdr(skb, dev, daddr, neigh, len) == 0) {
+		kfree_skb(skb, FREE_WRITE);
+		return;
 	}
 
 	ip6_nd_hdr(sk, skb, dev, saddr, daddr, IPPROTO_ICMPV6, len);
@@ -684,15 +708,9 @@ void ndisc_send_rs(struct device *dev, struct in6_addr *saddr,
 		return;
 	}
 
-	if (dev->hard_header_len) {
-		skb_reserve(skb, (dev->hard_header_len + 15) & ~15);
-		if (dev->hard_header) {
-			unsigned char ha[MAX_ADDR_LEN];
-
-			ipv6_mc_map(daddr, ha);
-			dev->hard_header(skb, dev, ETH_P_IPV6, ha, NULL, len);
-			skb->arp = 1;
-		}
+	if (ndisc_build_ll_hdr(skb, dev, daddr, NULL, len) == 0) {
+		kfree_skb(skb, FREE_WRITE);
+		return;
 	}
 
 	ip6_nd_hdr(sk, skb, dev, saddr, daddr, IPPROTO_ICMPV6, len);
@@ -783,15 +801,19 @@ static void ndisc_timer_handler(unsigned long arg)
 					ntimer = min(ntimer, time);
 			}
 			ndn = (struct nd_neigh *) ndn->neigh.next;
-
 		} while (ndn != head);
 	}
 
 	if (ntimer != (~0UL)) {
-		ndisc_timer.expires = now + ntimer;
+		unsigned long tval = jiffies + ntimer;
+		if (del_timer(&ndisc_timer)) {
+			if (ndisc_timer.expires - tval < 0)
+				tval = ndisc_timer.expires;
+		}
+		ndisc_timer.expires = tval;
 		add_timer(&ndisc_timer);
 	}
-	
+
 	neigh_table_unlock(&nd_tbl);
 }
 
@@ -1238,14 +1260,12 @@ static void ndisc_redirect_rcv(struct sk_buff *skb)
 	NDBG(("ndisc_redirect_rcv(%p)\n", skb));
 
 	if (skb->nh.ipv6h->hop_limit != 255) {
-		printk(KERN_WARNING
-		       "NDISC: fake ICMP redirect received\n");
+		printk(KERN_WARNING "NDISC: fake ICMP redirect received\n");
 		return;
 	}
 
 	if (!(ipv6_addr_type(&skb->nh.ipv6h->saddr) & IPV6_ADDR_LINKLOCAL)) {
-		printk(KERN_WARNING
-		       "ICMP redirect: source address is not linklocal\n");
+		printk(KERN_WARNING "ICMP redirect: source address is not linklocal\n");
 		return;
 	}
 
@@ -1269,19 +1289,15 @@ static void ndisc_redirect_rcv(struct sk_buff *skb)
 	if (ipv6_addr_cmp(dest, target) == 0) {
 		on_link = 1;
 	} else if (!(ipv6_addr_type(target) & IPV6_ADDR_LINKLOCAL)) {
-		printk(KERN_WARNING
-		       "ICMP redirect: target address is not linklocal\n");
+		printk(KERN_WARNING "ICMP redirect: target address is not linklocal\n");
 		return;
 	}
 
 	/* passed validation tests */
-	rt = rt6_redirect(dest, &skb->nh.ipv6h->saddr, target, skb->dev,
-			  on_link);
+	rt = rt6_redirect(dest, &skb->nh.ipv6h->saddr, target, skb->dev, on_link);
 
-	if (rt == NULL) {
-		printk(KERN_WARNING "ICMP redirect: no route to host\n");
+	if (rt == NULL)
 		return;
-	}
 
 	ndn = (struct nd_neigh *) rt->rt6i_nexthop;
 
@@ -1365,13 +1381,9 @@ void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 	
 	hlen = 0;
 
-	if (dev->hard_header_len) {
-		skb_reserve(buff, (dev->hard_header_len + 15) & ~15);
-		if (dev->hard_header) {
-			dev->hard_header(buff, dev, ETH_P_IPV6, ndn->ndn_ha,
-					 NULL, len);
-			buff->arp = 1;
-		}
+	if (ndisc_build_ll_hdr(buff, dev, &skb->nh.ipv6h->saddr, NULL, len) == 0) {
+		kfree_skb(buff, FREE_WRITE);
+		return;
 	}
 	
 	ip6_nd_hdr(sk, buff, dev, &ifp->addr, &skb->nh.ipv6h->saddr,
@@ -1471,25 +1483,32 @@ int ndisc_rcv(struct sk_buff *skb, struct device *dev,
 	switch (msg->icmph.icmp6_type) {
 	case NDISC_NEIGHBOUR_SOLICITATION:
 		NDBG(("NS "));
-		if ((ifp = ipv6_chk_addr(&msg->target))) {
-			int addr_type;
+		if ((ifp = ipv6_chk_addr(&msg->target)) != NULL) {
+			int addr_type = ipv6_addr_type(saddr);
 
 			if (ifp->flags & DAD_INCOMPLETE) {
-				/*
-				 *	DAD failed
+				/* Address is tentative. If the source
+				   is unspecified address, it is someone
+				   does DAD, otherwise we ignore solicitations
+				   until DAD timer expires.
 				 */
-
-				/* XXX Check if this came in over same interface
-				 * XXX we just sent an NS from!  That is valid! -DaveM
-				 */
-
-				printk(KERN_DEBUG "%s: duplicate address\n",
-				       ifp->idev->dev->name);
-				del_timer(&ifp->timer);
+				if (addr_type == IPV6_ADDR_ANY) {
+					printk(KERN_INFO "%s: duplicate address detected!\n",
+					       ifp->idev->dev->name);
+					del_timer(&ifp->timer);
+				}
 				return 0;
 			}
 
-			addr_type = ipv6_addr_type(saddr);
+			if (addr_type == IPV6_ADDR_ANY) {
+				struct in6_addr maddr;
+
+				ipv6_addr_all_nodes(&maddr);
+				ndisc_send_na(dev, NULL, &maddr, &ifp->addr, 
+					      ifp->idev->router, 0, 1, 1);
+				return 0;
+			}
+
 			if (addr_type & IPV6_ADDR_UNICAST) {
 				int inc;
 
@@ -1512,7 +1531,6 @@ int ndisc_rcv(struct sk_buff *skb, struct device *dev,
 					      ifp->idev->router, 1, inc, inc);
 			} else {
 #if ND_DEBUG >= 1
-				/* FIXME */
 				printk(KERN_DEBUG "ns: non unicast saddr\n");
 #endif
 			}
@@ -1521,6 +1539,28 @@ int ndisc_rcv(struct sk_buff *skb, struct device *dev,
 
 	case NDISC_NEIGHBOUR_ADVERTISEMENT:
 		NDBG(("NA "));
+		if ((ipv6_addr_type(saddr)&IPV6_ADDR_MULTICAST) &&
+		    msg->icmph.icmp6_solicited) {
+			printk(KERN_DEBUG "NDISC: solicited NA is multicasted\n");
+			return 0;
+		}
+		if ((ifp = ipv6_chk_addr(&msg->target))) {
+			if (ifp->flags & DAD_INCOMPLETE) {
+				/* Address is duplicate. */
+				printk(KERN_INFO "%s: duplicate address detected!\n",
+				       ifp->idev->dev->name);
+				del_timer(&ifp->timer);
+				return 0;
+			}
+			/* What should we make now? The advertisement
+			   is invalid, but ndisc specs say nothing
+			   about it. It could be misconfiguration, or
+			   an smart proxy agent tries to help us :-)
+			 */
+			printk(KERN_DEBUG "%s: someone avertise our address!\n",
+			       ifp->idev->dev->name);
+			return 0;
+		}
 		neigh_table_lock(&nd_tbl);	       
 		ndn = (struct nd_neigh *) 
 			neigh_lookup(&nd_tbl, (void *) &msg->target,

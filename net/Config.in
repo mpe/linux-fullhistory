@@ -3,9 +3,11 @@
 #
 mainmenu_option next_comment
 comment 'Networking options'
-bool 'Kernel/User network link driver' CONFIG_NETLINK
+tristate 'Packet socket' CONFIG_PACKET
+bool 'Kernel/User netlink socket' CONFIG_NETLINK
 if [ "$CONFIG_NETLINK" = "y" ]; then
   bool 'Routing messages' CONFIG_RTNETLINK
+  tristate 'Netlink device emulation' CONFIG_NETLINK_DEV
 fi
 bool 'Network firewalls' CONFIG_FIREWALL
 if [ "$CONFIG_FIREWALL" = "y" ]; then
@@ -14,11 +16,15 @@ if [ "$CONFIG_FIREWALL" = "y" ]; then
   fi
 fi
 bool 'Network aliasing'  CONFIG_NET_ALIAS
+tristate 'BSD Unix domain sockets' CONFIG_UNIX
 bool 'TCP/IP networking' CONFIG_INET
 if [ "$CONFIG_INET" = "y" ]; then
   source net/ipv4/Config.in
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
     tristate 'The IPv6 protocol (EXPERIMENTAL)' CONFIG_IPV6
+    if [ "$CONFIG_IPV6" != "n" ]; then
+	    source net/ipv6/Config.in	
+    fi
   fi
 fi
 
@@ -48,5 +54,17 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 #   bool 'Netbeui (EXPERIMENTAL)' CONFIG_NETBEUI
 #  fi
   tristate 'WAN router' CONFIG_WAN_ROUTER
+  bool 'CPU is too slow to handle full bandwidth' CONFIG_CPU_IS_SLOW
+  bool 'QoS and/or fair queueing' CONFIG_NET_SCHED
+  if [ "$CONFIG_NET_SCHED" = "y" ]; then
+    tristate 'CBQ packet scheduler' CONFIG_NET_SCH_CBQ
+    tristate 'CSZ packet scheduler' CONFIG_NET_SCH_CSZ
+    tristate 'HFQ packet scheduler' CONFIG_NET_SCH_HFQ
+    tristate 'RED queueing discipline' CONFIG_NET_SCH_RED
+    tristate 'SFQ queueing discipline' CONFIG_NET_SCH_SFQ
+    tristate 'auxiliary TBF queue' CONFIG_NET_SCH_TBF
+    tristate 'auxiliary FIFO queue' CONFIG_NET_SCH_PFIFO
+    tristate 'auxiliary PRIO queue' CONFIG_NET_SCH_PRIO
+  fi
 fi
 endmenu

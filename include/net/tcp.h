@@ -226,6 +226,7 @@ struct open_request;
 struct or_calltable {
 	void (*rtx_syn_ack)	(struct sock *sk, struct open_request *req);
 	void (*destructor)	(struct open_request *req);
+	void (*send_reset)	(struct sk_buff *skb);
 };
 
 struct tcp_v4_open_req {
@@ -306,11 +307,6 @@ struct tcp_func {
 							 struct open_request *req,
 							 struct dst_entry *dst);
 	
-#if 0
-	__u32			(*init_sequence)	(struct sock *sk,
-							 struct sk_buff *skb);
-#endif
-
 	struct sock *		(*get_sock)		(struct sk_buff *skb,
 							 struct tcphdr *th);
 
@@ -329,15 +325,6 @@ struct tcp_func {
 
 	void			(*addr2sockaddr)	(struct sock *sk,
 							 struct sockaddr *);
-
-	void			(*send_reset)		(struct sk_buff *skb);
-
-	struct open_request *   (*search_open_req)	(struct tcp_opt *, void *, 
-							 struct tcphdr *,
-							 struct open_request **);
-
-	struct sock *		(*cookie_check)		(struct sock *, struct sk_buff *,
-							 void *);
 
 	int sockaddr_len;
 };
@@ -371,7 +358,7 @@ extern struct tcp_mib tcp_statistics;
 extern unsigned short		tcp_good_socknum(void);
 
 extern void			tcp_v4_err(struct sk_buff *skb,
-					   unsigned char *);
+					   unsigned char *, int);
 
 extern void			tcp_shutdown (struct sock *sk, int how);
 
@@ -399,7 +386,7 @@ extern int			tcp_rcv_established(struct sock *sk,
 extern void			tcp_close(struct sock *sk, 
 					  unsigned long timeout);
 extern struct sock *		tcp_accept(struct sock *sk, int flags);
-extern unsigned int		tcp_poll(struct socket *sock, poll_table *wait);
+extern unsigned int		tcp_poll(struct socket *sock, struct poll_table_struct *wait);
 extern int			tcp_getsockopt(struct sock *sk, int level, 
 					       int optname, char *optval, 
 					       int *optlen);
@@ -485,8 +472,7 @@ extern void tcp_delack_timer(unsigned long);
 extern void tcp_probe_timer(unsigned long);
 
 extern struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb, 
-				  void *);
-
+				  struct open_request *req);
 
 /*
  *	TCP slow timer
@@ -546,9 +532,9 @@ extern unsigned short	tcp_select_window(struct sock *sk);
 
 extern __inline const int tcp_connected(const int state)
 {
-  return(state == TCP_ESTABLISHED || state == TCP_CLOSE_WAIT ||
-	 state == TCP_FIN_WAIT1   || state == TCP_FIN_WAIT2 ||
-	 state == TCP_SYN_RECV);
+	return ((1 << state) &
+	       	(TCPF_ESTABLISHED|TCPF_CLOSE_WAIT|TCPF_FIN_WAIT1|
+		 TCPF_FIN_WAIT2|TCPF_SYN_RECV));
 }
 
 /*

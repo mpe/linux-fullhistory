@@ -40,7 +40,7 @@ extern unsigned short udp_good_socknum(void);
 extern struct proto udp_prot;
 
 
-extern void	udp_err(struct sk_buff *, unsigned char *);
+extern void	udp_err(struct sk_buff *, unsigned char *, int);
 extern int	udp_connect(struct sock *sk,
 			    struct sockaddr *usin, int addr_len);
 

@@ -1,7 +1,7 @@
 /*
- *  linux/drivers/block/ide-disk.c	Version 1.01  Nov  25, 1996
+ *  linux/drivers/block/ide-disk.c	Version 1.02  Nov  29, 1997
  *
- *  Copyright (C) 1994-1996  Linus Torvalds & authors (see below)
+ *  Copyright (C) 1994-1998  Linus Torvalds & authors (see below)
  */
 
 /*
@@ -39,6 +39,7 @@
  * Version 1.00		move disk only code from ide.c to ide-disk.c
  *			support optional byte-swapping of all data
  * Version 1.01		fix previous byte-swapping code
+ * Verions 1.02		remove ", LBA" from drive identification msgs
  */
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */
@@ -308,23 +309,23 @@ static void recal_intr (ide_drive_t *drive)
  */
 static void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned long block)
 {
-#ifdef CONFIG_BLK_DEV_PROMISE
+#ifdef CONFIG_BLK_DEV_PDC4030
 	ide_hwif_t *hwif = HWIF(drive);
-	int use_promise_io = 0;
-#endif /* CONFIG_BLK_DEV_PROMISE */
+	int use_pdc4030_io = 0;
+#endif /* CONFIG_BLK_DEV_PDC4030 */
 
 	OUT_BYTE(drive->ctl,IDE_CONTROL_REG);
 	OUT_BYTE(rq->nr_sectors,IDE_NSECTOR_REG);
-#ifdef CONFIG_BLK_DEV_PROMISE
-	if (IS_PROMISE_DRIVE) {
-		if (hwif->is_promise2 || rq->cmd == READ) {
-			use_promise_io = 1;
+#ifdef CONFIG_BLK_DEV_PDC4030
+	if (IS_PDC4030_DRIVE) {
+		if (hwif->is_pdc4030_2 || rq->cmd == READ) {
+			use_pdc4030_io = 1;
 		}
 	}
-	if (drive->select.b.lba || use_promise_io) {
-#else /* !CONFIG_BLK_DEV_PROMISE */
+	if (drive->select.b.lba || use_pdc4030_io) {
+#else /* !CONFIG_BLK_DEV_PDC4030 */
 	if (drive->select.b.lba) {
-#endif /* CONFIG_BLK_DEV_PROMISE */
+#endif /* CONFIG_BLK_DEV_PDC4030 */
 #ifdef DEBUG
 		printk("%s: %sing: LBAsect=%ld, sectors=%ld, buffer=0x%08lx\n",
 			drive->name, (rq->cmd==READ)?"read":"writ",
@@ -350,26 +351,27 @@ static void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned long bl
 			head, sect, rq->nr_sectors, (unsigned long) rq->buffer);
 #endif
 	}
-#ifdef CONFIG_BLK_DEV_PROMISE
-	if (use_promise_io) {
-		do_promise_io (drive, rq);
+#ifdef CONFIG_BLK_DEV_PDC4030
+	if (use_pdc4030_io) {
+		extern void do_pdc4030_io(ide_drive_t *, struct request *);
+		do_pdc4030_io (drive, rq);
 		return;
 	}
-#endif /* CONFIG_BLK_DEV_PROMISE */
+#endif /* CONFIG_BLK_DEV_PDC4030 */
 	if (rq->cmd == READ) {
-#ifdef CONFIG_BLK_DEV_TRITON
+#ifdef CONFIG_BLK_DEV_IDEDMA
 		if (drive->using_dma && !(HWIF(drive)->dmaproc(ide_dma_read, drive)))
 			return;
-#endif /* CONFIG_BLK_DEV_TRITON */
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 		ide_set_handler(drive, &read_intr, WAIT_CMD);
 		OUT_BYTE(drive->mult_count ? WIN_MULTREAD : WIN_READ, IDE_COMMAND_REG);
 		return;
 	}
 	if (rq->cmd == WRITE) {
-#ifdef CONFIG_BLK_DEV_TRITON
+#ifdef CONFIG_BLK_DEV_IDEDMA
 		if (drive->using_dma && !(HWIF(drive)->dmaproc(ide_dma_write, drive)))
 			return;
-#endif /* CONFIG_BLK_DEV_TRITON */
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 		OUT_BYTE(drive->mult_count ? WIN_MULTWRITE : WIN_WRITE, IDE_COMMAND_REG);
 		if (ide_wait_stat(drive, DATA_READY, drive->bad_wstat, WAIT_DRQ)) {
 			printk(KERN_ERR "%s: no DRQ after issuing %s\n", drive->name,
@@ -459,17 +461,17 @@ static void idedisk_special (ide_drive_t *drive)
 		OUT_BYTE(drive->cyl,IDE_LCYL_REG);
 		OUT_BYTE(drive->cyl>>8,IDE_HCYL_REG);
 		OUT_BYTE(((drive->head-1)|drive->select.all)&0xBF,IDE_SELECT_REG);
-		if (!IS_PROMISE_DRIVE)
+		if (!IS_PDC4030_DRIVE)
 			ide_cmd(drive, WIN_SPECIFY, drive->sect, &set_geometry_intr);
 	} else if (s->b.recalibrate) {
 		s->b.recalibrate = 0;
-		if (!IS_PROMISE_DRIVE)
+		if (!IS_PDC4030_DRIVE)
 			ide_cmd(drive, WIN_RESTORE, drive->sect, &recal_intr);
 	} else if (s->b.set_multmode) {
 		s->b.set_multmode = 0;
 		if (drive->id && drive->mult_req > drive->id->max_multsect)
 			drive->mult_req = drive->id->max_multsect;
-		if (!IS_PROMISE_DRIVE)
+		if (!IS_PDC4030_DRIVE)
 			ide_cmd(drive, WIN_SETMULT, drive->mult_req, &set_multmode_intr);
 	} else if (s->all) {
 		int special = s->all;
@@ -602,12 +604,16 @@ static void idedisk_setup (ide_drive_t *drive)
 
 	(void) idedisk_capacity (drive); /* initialize LBA selection */
 
-	printk (KERN_INFO "%s: %.40s, %ldMB w/%dkB Cache, %sCHS=%d/%d/%d%s\n",
+	printk (KERN_INFO "%s: %.40s, %ldMB w/%dkB Cache, CHS=%d/%d/%d",
 	 drive->name, id->model, idedisk_capacity(drive)/2048L, id->buf_size/2,
-	 drive->select.b.lba ? "LBA, " : "",
-	 drive->bios_cyl, drive->bios_head, drive->bios_sect,
-	 drive->using_dma ? ", DMA" : "");
-
+	 drive->bios_cyl, drive->bios_head, drive->bios_sect);
+	if (drive->using_dma) {
+		if ((id->field_valid & 4) && (id->dma_ultra & (id->dma_ultra >> 8) & 7))
+			printk(", UDMA");
+		else
+			printk(", DMA");
+	}
+	printk("\n");
 	drive->mult_count = 0;
 	if (id->max_multsect) {
 		drive->mult_req = INITIAL_MULT_COUNT;

@@ -5,7 +5,7 @@
  *
  *		RAW - implementation of IP "raw" sockets.
  *
- * Version:	@(#)raw.c	1.0.4	05/25/93
+ * Version:	$Id: raw.c,v 1.32 1997/10/24 17:16:00 kuznet Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -126,7 +126,7 @@ static void raw_v4_rehash(struct sock *sk)
 
 /* Grumble... icmp and ip_input want to get at this... */
 struct sock *raw_v4_lookup(struct sock *sk, unsigned short num,
-			   unsigned long raddr, unsigned long laddr)
+			   unsigned long raddr, unsigned long laddr, int dif)
 {
 	struct sock *s = sk;
 
@@ -135,7 +135,8 @@ struct sock *raw_v4_lookup(struct sock *sk, unsigned short num,
 		if((s->num == num) 				&&
 		   !(s->dead && (s->state == TCP_CLOSE))	&&
 		   !(s->daddr && s->daddr != raddr) 		&&
-		   !(s->rcv_saddr && s->rcv_saddr != laddr))
+		   !(s->rcv_saddr && s->rcv_saddr != laddr)	&&
+		   !(s->bound_dev_if && s->bound_dev_if != dif))
 			break; /* gotcha */
 	}
 	SOCKHASH_UNLOCK();
@@ -203,7 +204,7 @@ int raw_rcv(struct sock *sk, struct sk_buff *skb)
 
 struct rawfakehdr 
 {
-	const unsigned char *from;
+	struct  iovec *iov;
 	u32	saddr;
 };
 
@@ -218,7 +219,7 @@ struct rawfakehdr
 static int raw_getfrag(const void *p, char *to, unsigned int offset, unsigned int fraglen)
 {
 	struct rawfakehdr *rfh = (struct rawfakehdr *) p;
-	return copy_from_user(to, rfh->from + offset, fraglen);
+	return memcpy_fromiovecend(to, rfh->iov, offset, fraglen);
 }
 
 /*
@@ -229,8 +230,9 @@ static int raw_getrawfrag(const void *p, char *to, unsigned int offset, unsigned
 {
 	struct rawfakehdr *rfh = (struct rawfakehdr *) p;
 
-	if (copy_from_user(to, rfh->from + offset, fraglen))
+	if (memcpy_fromiovecend(to, rfh->iov, offset, fraglen))
 		return -EFAULT;
+
 	if (offset==0) {
 		struct iphdr *iph = (struct iphdr *)to;
 		if (!iph->saddr)
@@ -249,10 +251,8 @@ static int raw_getrawfrag(const void *p, char *to, unsigned int offset, unsigned
 	return 0;
 }
 
-static int raw_sendto(struct sock *sk, const unsigned char *from, 
-		      int len, struct msghdr *msg)
+static int raw_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 {
-	struct device *dev = NULL;
 	struct ipcm_cookie ipc;
 	struct rawfakehdr rfh;
 	struct rtable *rt;
@@ -302,9 +302,10 @@ static int raw_sendto(struct sock *sk, const unsigned char *from,
 
 	ipc.addr = sk->saddr;
 	ipc.opt = NULL;
+	ipc.oif = sk->bound_dev_if;
 
 	if (msg->msg_controllen) {
-		int tmp = ip_cmsg_send(msg, &ipc, &dev);
+		int tmp = ip_cmsg_send(msg, &ipc);
 		if (tmp)
 			return tmp;
 		if (ipc.opt && sk->ip_hdrincl) {
@@ -327,23 +328,27 @@ static int raw_sendto(struct sock *sk, const unsigned char *from,
 	}
 	tos = RT_TOS(sk->ip_tos) | (sk->localroute || (msg->msg_flags&MSG_DONTROUTE));
 
-	if (MULTICAST(daddr) && sk->ip_mc_index && dev==NULL)
-		err = ip_route_output_dev(&rt, daddr, rfh.saddr, tos, sk->ip_mc_index);
-	else
-		err = ip_route_output(&rt, daddr, rfh.saddr, tos, dev);
+	if (MULTICAST(daddr)) {
+		if (!ipc.oif)
+			ipc.oif = sk->ip_mc_index;
+		if (!rfh.saddr)
+			rfh.saddr = sk->ip_mc_addr;
+	}
+
+	err = ip_route_output(&rt, daddr, rfh.saddr, tos, ipc.oif);
 
 	if (err) {
 		if (free) kfree(ipc.opt);
 		return err;
 	}
 
-	if (rt->rt_flags&RTF_BROADCAST && !sk->broadcast) {
+	if (rt->rt_flags&RTCF_BROADCAST && !sk->broadcast) {
 		if (free) kfree(ipc.opt);
 		ip_rt_put(rt);
 		return -EACCES;
 	}
 
-	rfh.from = from;
+	rfh.iov = msg->msg_iov;
 	rfh.saddr = rt->rt_src;
 	if (!ipc.addr)
 		ipc.addr = rt->rt_dst;
@@ -363,56 +368,10 @@ static int raw_sendto(struct sock *sk, const unsigned char *from,
 	return err<0 ? err : len;
 }
 
-/*
- *	Temporary
- */
- 
-static int raw_sendmsg(struct sock *sk, struct msghdr *msg, int len)
-{
-	if (msg->msg_iovlen==1)
-		return raw_sendto(sk, msg->msg_iov[0].iov_base,len, msg);
-	else {
-		/*
-		 *	For awkward cases we linearise the buffer first. In theory this is only frames
-		 *	whose iovec's don't split on 4 byte boundaries, and soon encrypted stuff (to keep
-		 *	skip happy). We are a bit more general about it.
-		 */
-		 
-		unsigned char *buf;
-		int err;
-		if(len>65515)
-			return -EMSGSIZE;
-		buf=kmalloc(len, GFP_KERNEL);
-		if(buf==NULL)
-			return -ENOBUFS;
-		err = memcpy_fromiovec(buf, msg->msg_iov, len);
-		if (!err)
-		{
-			unsigned long fs;
-			fs=get_fs();
-			set_fs(get_ds());
-			err=raw_sendto(sk,buf,len, msg);
-			set_fs(fs);
-		}
-		else
-			err = -EFAULT;
-		
-		kfree_s(buf,len);
-		return err;
-	}
-}
-
 static void raw_close(struct sock *sk, unsigned long timeout)
 {
 	sk->state = TCP_CLOSE;
-#ifdef CONFIG_IP_MROUTE	
-	if(sk==mroute_socket)
-	{
-		ipv4_config.multicast_route = 0;
-		mroute_close(sk);
-		mroute_socket=NULL;
-	}
-#endif	
+	ip_ra_control(sk, 0, NULL);
 	sk->dead=1;
 	destroy_sock(sk);
 }
@@ -425,17 +384,17 @@ static int raw_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 
 	if((sk->state != TCP_CLOSE) || (addr_len < sizeof(struct sockaddr_in)))
 		return -EINVAL;
-	chk_addr_ret = __ip_chk_addr(addr->sin_addr.s_addr);
-	if(addr->sin_addr.s_addr != 0 && chk_addr_ret != IS_MYADDR &&
-	   chk_addr_ret != IS_MULTICAST && chk_addr_ret != IS_BROADCAST) {
+	chk_addr_ret = inet_addr_type(addr->sin_addr.s_addr);
+	if(addr->sin_addr.s_addr != 0 && chk_addr_ret != RTN_LOCAL &&
+	   chk_addr_ret != RTN_MULTICAST && chk_addr_ret != RTN_BROADCAST) {
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 		/* Superuser may bind to any address to allow transparent proxying. */
-		if(!suser())
+		if(chk_addr_ret != RTN_UNICAST || !suser())
 #endif
 			return -EADDRNOTAVAIL;
 	}
 	sk->rcv_saddr = sk->saddr = addr->sin_addr.s_addr;
-	if(chk_addr_ret == IS_MULTICAST || chk_addr_ret == IS_BROADCAST)
+	if(chk_addr_ret == RTN_MULTICAST || chk_addr_ret == RTN_BROADCAST)
 		sk->saddr = 0;  /* Use device */
 	dst_release(sk->dst_cache);
 	sk->dst_cache = NULL;
@@ -448,7 +407,7 @@ static int raw_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len)
  */
 
 int raw_recvmsg(struct sock *sk, struct msghdr *msg, int len,
-     int noblock, int flags,int *addr_len)
+		int noblock, int flags,int *addr_len)
 {
 	int copied=0;
 	struct sk_buff *skb;
@@ -500,6 +459,75 @@ int raw_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	return err ? err : (copied);
 }
 
+static int raw_init(struct sock *sk)
+{
+	struct raw_opt *tp = &(sk->tp_pinfo.tp_raw4);
+	if (sk->num == IPPROTO_ICMP) {
+		memset(&tp->filter, 0, sizeof(tp->filter));
+
+		/* By default block ECHO and TIMESTAMP requests */
+
+		set_bit(ICMP_ECHO, &tp->filter);
+		set_bit(ICMP_TIMESTAMP, &tp->filter);
+	}
+	return 0;
+}
+
+static int raw_seticmpfilter(struct sock *sk, char *optval, int optlen)
+{
+	if (optlen > sizeof(struct icmp_filter))
+		optlen = sizeof(struct icmp_filter);
+	if (copy_from_user(&sk->tp_pinfo.tp_raw4.filter, optval, optlen))
+		return -EFAULT;
+	return 0;
+}
+
+static int raw_geticmpfilter(struct sock *sk, char *optval, int *optlen)
+{
+	int len;
+
+	if (get_user(len,optlen))
+		return -EFAULT;
+	if (len > sizeof(struct icmp_filter))
+		len = sizeof(struct icmp_filter);
+	if (put_user(len, optlen))
+		return -EFAULT;
+	if (copy_to_user(optval, &sk->tp_pinfo.tp_raw4.filter, len))
+		return -EFAULT;
+	return 0;
+}
+
+static int raw_setsockopt(struct sock *sk, int level, int optname, 
+			  char *optval, int optlen)
+{
+	if (level != SOL_RAW)
+		return ip_setsockopt(sk, level, optname, optval, optlen);
+
+	switch (optname) {
+	case ICMP_FILTER:
+		if (sk->num != IPPROTO_ICMP)
+			return -EOPNOTSUPP;
+		return raw_seticmpfilter(sk, optval, optlen);
+	};
+
+	return -ENOPROTOOPT;
+}
+
+static int raw_getsockopt(struct sock *sk, int level, int optname, 
+			  char *optval, int *optlen)
+{
+	if (level != SOL_RAW)
+		return ip_getsockopt(sk, level, optname, optval, optlen);
+
+	switch (optname) {
+	case ICMP_FILTER:
+		if (sk->num != IPPROTO_ICMP)
+			return -EOPNOTSUPP;
+		return raw_geticmpfilter(sk, optval, optlen);
+	};
+
+	return -ENOPROTOOPT;
+}
 
 struct proto raw_prot = {
 	(struct sock *)&raw_prot,	/* sklist_next */
@@ -516,11 +544,11 @@ struct proto raw_prot = {
 #else
 	NULL,				/* ioctl */
 #endif
-	NULL,				/* init */
+	raw_init,			/* init */
 	NULL,				/* destroy */
 	NULL,				/* shutdown */
-	ip_setsockopt,			/* setsockopt */
-	ip_getsockopt,			/* getsockopt */
+	raw_setsockopt,			/* setsockopt */
+	raw_getsockopt,			/* getsockopt */
 	raw_sendmsg,			/* sendmsg */
 	raw_recvmsg,			/* recvmsg */
 	raw_bind,			/* bind */

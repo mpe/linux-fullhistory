@@ -38,8 +38,8 @@
 #include <linux/trdevice.h>
 #include <linux/if_arp.h>
 #include <linux/fddidevice.h>
-#include <linux/net_alias.h>
 #include <linux/if_ltalk.h>
+#include <linux/rtnetlink.h>
 
 /* The network devices currently exist only in the socket namespace, so these
    entries are unused.  The only ones that make sense are
@@ -112,7 +112,7 @@ init_etherdev(struct device *dev, int sizeof_priv)
 		new_device = 1;
 	}
 
-	found:						/* From the double loop above. */
+found:						/* From the double loop above. */
 
 	if (dev->name &&
 		((dev->name[0] == '\0') || (dev->name[0] == ' '))) {
@@ -126,14 +126,9 @@ init_etherdev(struct device *dev, int sizeof_priv)
 
 	ether_setup(dev); 	/* Hmmm, should this be called here? */
 	
-	if (new_device) {
-		/* Append the device to the device queue. */
-		struct device **old_devp = &dev_base;
-		while ((*old_devp)->next)
-			old_devp = & (*old_devp)->next;
-		(*old_devp)->next = dev;
-		dev->next = 0;
-	}
+	if (new_device)
+		register_netdevice(dev);
+
 	return dev;
 }
 
@@ -173,8 +168,6 @@ void ether_setup(struct device *dev)
 	int i;
 	/* Fill in the fields of the device structure with ethernet-generic values.
 	   This should be in a common file instead of per-driver.  */
-
-	dev_init_buffers(dev);
 	
 	/* register boot-defined "eth" devices */
 	if (dev->name && (strncmp(dev->name, "eth", 3) == 0)) {
@@ -195,6 +188,7 @@ void ether_setup(struct device *dev)
 	dev->set_mac_address 	= eth_mac_addr;
 	dev->hard_header_cache	= eth_header_cache;
 	dev->header_cache_update= eth_header_cache_update;
+	dev->hard_header_parse	= eth_header_parse;
 
 	dev->type		= ARPHRD_ETHER;
 	dev->hard_header_len 	= ETH_HLEN;
@@ -206,11 +200,8 @@ void ether_setup(struct device *dev)
 
 	/* New-style flags. */
 	dev->flags		= IFF_BROADCAST|IFF_MULTICAST;
-	dev->family		= AF_INET;
-	dev->pa_addr	= 0;
-	dev->pa_brdaddr = 0;
-	dev->pa_mask	= 0;
-	dev->pa_alen	= 4;
+
+	dev_init_buffers(dev);
 }
 
 #ifdef CONFIG_FDDI
@@ -221,8 +212,6 @@ void fddi_setup(struct device *dev)
 	 * Fill in the fields of the device structure with FDDI-generic values.
 	 * This should be in a common file instead of per-driver.
 	 */
-	
-	dev_init_buffers(dev);
 	
 	dev->change_mtu			= fddi_change_mtu;
 	dev->hard_header		= fddi_header;
@@ -238,11 +227,9 @@ void fddi_setup(struct device *dev)
 
 	/* New-style flags */
 	dev->flags		= IFF_BROADCAST | IFF_MULTICAST;
-	dev->family		= AF_INET;
-	dev->pa_addr	= 0;
-	dev->pa_brdaddr = 0;
-	dev->pa_mask	= 0;
-	dev->pa_alen	= 4;
+
+	dev_init_buffers(dev);
+	
 	return;
 }
 
@@ -264,8 +251,6 @@ static int ltalk_mac_addr(struct device *dev, void *addr)
 void ltalk_setup(struct device *dev)
 {
 	/* Fill in the fields of the device structure with localtalk-generic values. */
-
-	dev_init_buffers(dev);
 	
 	dev->change_mtu		= ltalk_change_mtu;
 	dev->hard_header	= NULL;
@@ -283,11 +268,8 @@ void ltalk_setup(struct device *dev)
 	dev->broadcast[0]	= 0xFF;
 
 	dev->flags		= IFF_BROADCAST|IFF_MULTICAST|IFF_NOARP;
-	dev->family		= AF_APPLETALK;
-	dev->pa_addr		= 0;
-	dev->pa_brdaddr 	= 0;
-	dev->pa_mask		= 0;
-	dev->pa_alen		= 1;
+
+	dev_init_buffers(dev);
 }
 
 #endif
@@ -309,133 +291,60 @@ int ether_config(struct device *dev, struct ifmap *map)
 	return 0;
 }
 
-int register_netdev(struct device *dev)
+static int etherdev_get_index(struct device *dev)
 {
-	struct device *d = dev_base;
-	unsigned long flags;
 	int i=MAX_ETH_CARDS;
 
-	save_flags(flags);
-	cli();
-
-	if (dev) {
-		if (dev->name &&
-			((dev->name[0] == '\0') || (dev->name[0] == ' '))) {
-			for (i = 0; i < MAX_ETH_CARDS; ++i)
-				if (ethdev_index[i] == NULL) {
-					sprintf(dev->name, "eth%d", i);
-					printk("loading device '%s'...\n", dev->name);
-					ethdev_index[i] = dev;
-					break;
-				}
+	for (i = 0; i < MAX_ETH_CARDS; ++i)	{
+		if (ethdev_index[i] == NULL) {
+			sprintf(dev->name, "eth%d", i);
+			printk("loading device '%s'...\n", dev->name);
+			ethdev_index[i] = dev;
+			return i;
 		}
-
-		if (dev->init) {
-		  sti();	/* device probes assume interrupts enabled */
-		  if (dev->init(dev) != 0) {
-		    if (i < MAX_ETH_CARDS) ethdev_index[i] = NULL;
-			restore_flags(flags);
-			return -EIO;
-		  }
-		  cli();
-		}
-
-		/* Add device to end of chain */
-		if (dev_base) {
-			while (d->next)
-				d = d->next;
-			d->next = dev;
-		}
-		else
-			dev_base = dev;
-		dev->next = NULL;
-		dev->ifindex = dev_new_index();
 	}
-	restore_flags(flags);
+	return -1;
+}
+
+static void etherdev_put_index(struct device *dev)
+{
+	int i;
+	for (i = 0; i < MAX_ETH_CARDS; ++i) {
+		if (ethdev_index[i] == dev) {
+			ethdev_index[i] = NULL;
+			break;
+		}
+	}
+}
+
+int register_netdev(struct device *dev)
+{
+	int i=-1;
+
+	rtnl_lock();
+
+	if (dev->name &&
+	    (dev->name[0] == '\0' || dev->name[0] == ' '))
+		i = etherdev_get_index(dev);
+
+	if (register_netdevice(dev)) {
+		if (i >= 0)
+			etherdev_put_index(dev);
+		rtnl_unlock();
+		return -EIO;
+	}
+	rtnl_unlock();
 	return 0;
 }
 
 void unregister_netdev(struct device *dev)
 {
-	struct device *d = dev_base;
-	unsigned long flags;
-	int i;
-
-	save_flags(flags);
-	cli();
-
-	if (dev == NULL) 
-	{
-		printk("was NULL\n");
-		restore_flags(flags);
-		return;
-	}
-	/* else */
-	if (dev->start)
-		printk("ERROR '%s' busy and not MOD_IN_USE.\n", dev->name);
-
-	/*
-	 * 	must jump over main_device+aliases
-	 * 	avoid alias devices unregistration so that only
-	 * 	net_alias module manages them
-	 */
-#ifdef CONFIG_NET_ALIAS		
-	if (dev_base == dev)
-		dev_base = net_alias_nextdev(dev);
-	else
-	{
-		while(d && (net_alias_nextdev(d) != dev)) /* skip aliases */
-			d = net_alias_nextdev(d);
-	  
-		if (d && (net_alias_nextdev(d) == dev))
-		{
-			/*
-			 * 	Critical: Bypass by consider devices as blocks (maindev+aliases)
-			 */
-			net_alias_nextdev_set(d, net_alias_nextdev(dev)); 
-		}
-#else
-	if (dev_base == dev)
-		dev_base = dev->next;
-	else 
-	{
-		while (d && (d->next != dev))
-			d = d->next;
-		
-		if (d && (d->next == dev)) 
-		{
-			d->next = dev->next;
-		}
-#endif
-		else 
-		{
-			printk("unregister_netdev: '%s' not found\n", dev->name);
-			restore_flags(flags);
-			return;
-		}
-	}
-	for (i = 0; i < MAX_ETH_CARDS; ++i) 
-	{
-		if (ethdev_index[i] == dev) 
-		{
-			ethdev_index[i] = NULL;
-			break;
-		}
-	}
-
-	restore_flags(flags);
-
-	/*
-	 *	You can i.e use a interfaces in a route though it is not up.
-	 *	We call close_dev (which is changed: it will down a device even if
-	 *	dev->flags==0 (but it will not call dev->stop if IFF_UP
-	 *	is not set).
-	 *	This will call notifier_call_chain(&netdev_chain, NETDEV_DOWN, dev),
-	 *	dev_mc_discard(dev), ....
-	 */
-	 
-	dev_close(dev);
+	rtnl_lock();
+	unregister_netdevice(dev);
+	etherdev_put_index(dev);
+	rtnl_unlock();
 }
+
 
 #ifdef CONFIG_TR
 /* The list of used and available "tr" slots */
@@ -488,15 +397,6 @@ trfound:						/* From the double loop above. */
 			break;
 		}
 
-	if (new_device) {
-		/* Append the device to the device queue. */
-		struct device **old_devp = &dev_base;
-
-		while ((*old_devp)->next)
-			old_devp = & (*old_devp)->next;
-		(*old_devp)->next = dev;
-		dev->next = 0;
-	}
 
 	dev->hard_header	 = tr_header;
 	dev->rebuild_header  = tr_rebuild_header;
@@ -511,11 +411,9 @@ trfound:						/* From the double loop above. */
 
 	/* New-style flags. */
 	dev->flags		= IFF_BROADCAST;
-	dev->family		= AF_INET;
-	dev->pa_addr	= 0;
-	dev->pa_brdaddr = 0;
-	dev->pa_mask	= 0;
-	dev->pa_alen	= 4;
+
+	if (new_device)
+		register_netdevice(dev);
 
 	return dev;
 }
@@ -553,99 +451,21 @@ void tr_freedev(struct device *dev)
 
 int register_trdev(struct device *dev)
 {
-	unsigned long flags;
-	
 	dev_init_buffers(dev);
 	
-	save_flags(flags);
-
-	if (dev && dev->init) {
-		sti();	/* device probes assume interrupts enabled */
-		if (dev->init(dev) != 0) {
-		    unregister_trdev(dev);
-			restore_flags(flags);
-			return -EIO;
-		}
-		cli();
-
+	if (dev->init && dev->init(dev) != 0) {
+		unregister_trdev(dev);
+		return -EIO;
 	}
-	restore_flags(flags);
 	return 0;
 }
 
 void unregister_trdev(struct device *dev)
 {
-	struct device *d = dev_base;
-	unsigned long flags;
-
-	save_flags(flags);
-	cli();
-
-	if (dev == NULL) 
-	{
-		printk("was NULL\n");
-		restore_flags(flags);
-		return;
-	}
-	/* else */
-	if (dev->start)
-		printk("ERROR '%s' busy and not MOD_IN_USE.\n", dev->name);
-
-	/*
-	 * 	must jump over main_device+aliases
-	 * 	avoid alias devices unregistration so that only
-	 * 	net_alias module manages them
-	 */
-#ifdef CONFIG_NET_ALIAS		
-	if (dev_base == dev)
-		dev_base = net_alias_nextdev(dev);
-	else
-	{
-		while(d && (net_alias_nextdev(d) != dev)) /* skip aliases */
-			d = net_alias_nextdev(d);
-	  
-		if (d && (net_alias_nextdev(d) == dev))
-		{
-			/*
-			 * 	Critical: Bypass by consider devices as blocks (maindev+aliases)
-			 */
-			net_alias_nextdev_set(d, net_alias_nextdev(dev)); 
-		}
-#else
-	if (dev_base == dev)
-		dev_base = dev->next;
-	else 
-	{
-		while (d && (d->next != dev))
-			d = d->next;
-		
-		if (d && (d->next == dev)) 
-		{
-			d->next = dev->next;
-		}
-#endif
-		else 
-		{
-			printk("unregister_trdev: '%s' not found\n", dev->name);
-			restore_flags(flags);
-			return;
-		}
-	}
-
+	rtnl_lock();
+	unregister_netdevice(dev);
+	rtnl_unlock();
 	tr_freedev(dev);
-
-	restore_flags(flags);
-
-	/*
-	 *	You can i.e use a interfaces in a route though it is not up.
-	 *	We call close_dev (which is changed: it will down a device even if
-	 *	dev->flags==0 (but it will not call dev->stop if IFF_UP
-	 *	is not set).
-	 *	This will call notifier_call_chain(&netdev_chain, NETDEV_DOWN, dev),
-	 *	dev_mc_discard(dev), ....
-	 */
-	 
-	dev_close(dev);
 }
 #endif
 
@@ -655,6 +475,5 @@ void unregister_trdev(struct device *dev)
  *  compile-command: "gcc -D__KERNEL__ -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O6 -m486 -c net_init.c"
  *  version-control: t
  *  kept-new-versions: 5
- *  tab-width: 4
  * End:
  */

@@ -26,34 +26,42 @@
 #include <linux/pci.h>
 #include "ide.h"
 
-static void ide_pci_access_error (int rc)
+static void init_rz1000 (byte bus, byte fn, const char *name)
 {
-	printk("ide: pcibios access failed - %s\n", pcibios_strerror(rc));
+	unsigned short reg, h;
+
+	printk("%s: buggy IDE controller: ", name);
+	if (!pcibios_read_config_word (bus, fn, PCI_COMMAND, &reg) && !(reg & 1)) {
+		printk("disabled (BIOS)\n");
+		return;
+	}
+	if (!pcibios_read_config_word (bus, fn, 0x40, &reg)
+	 && !pcibios_write_config_word(bus, fn, 0x40, reg & 0xdfff))
+	{
+		printk("disabled read-ahead\n");
+	} else {
+		printk("\n");
+		for (h = 0; h < MAX_HWIFS; ++h) {
+			ide_hwif_t *hwif = &ide_hwifs[h];
+			if ((hwif->io_ports[IDE_DATA_OFFSET] == 0x1f0 || hwif->io_ports[IDE_DATA_OFFSET] == 0x170)
+			 && (hwif->chipset == ide_unknown || hwif->chipset == ide_generic))
+			{
+				hwif->chipset = ide_rz1000;
+				hwif->serialized = 1;
+				hwif->drives[0].no_unmask = 1;
+				hwif->drives[1].no_unmask = 1;
+				printk("  %s: serialized, disabled unmasking\n", hwif->name);
+			}
+		}
+	}
 }
 
-void init_rz1000 (byte bus, byte fn)
+void ide_probe_for_rz100x (void)
 {
-	int rc;
-	unsigned short reg;
+	byte index, bus, fn;
 
-	printk("ide0: buggy RZ1000 interface: ");
-	if ((rc = pcibios_read_config_word (bus, fn, PCI_COMMAND, &reg))) {
-		ide_pci_access_error (rc);
-	} else if (!(reg & 1)) {
-		printk("not enabled\n");
-	} else {
-		if ((rc = pcibios_read_config_word(bus, fn, 0x40, &reg))
-		 || (rc =  pcibios_write_config_word(bus, fn, 0x40, reg & 0xdfff)))
-		{
-			ide_hwifs[0].drives[0].no_unmask = 1;
-			ide_hwifs[0].drives[1].no_unmask = 1;
-			ide_hwifs[1].drives[0].no_unmask = 1;
-			ide_hwifs[1].drives[1].no_unmask = 1;
-			ide_hwifs[0].serialized = 1;
-			ide_hwifs[1].serialized = 1;
-			ide_pci_access_error (rc);
-			printk("serialized, disabled unmasking\n");
-		} else
-			printk("disabled read-ahead\n");
-	}
+	for (index = 0; !pcibios_find_device (PCI_VENDOR_ID_PCTECH, PCI_DEVICE_ID_PCTECH_RZ1000, index, &bus, &fn); ++index)
+		init_rz1000 (bus, fn, "RZ1000");
+	for (index = 0; !pcibios_find_device (PCI_VENDOR_ID_PCTECH, PCI_DEVICE_ID_PCTECH_RZ1001, index, &bus, &fn); ++index)
+		init_rz1000 (bus, fn, "RZ1001");
 }

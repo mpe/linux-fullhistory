@@ -9,6 +9,7 @@
 
 O_TARGET := unix.o
 O_OBJS	 := af_unix.o garbage.o
+M_OBJS   := $(O_TARGET)
 
 ifeq ($(CONFIG_SYSCTL),y)
 O_OBJS += sysctl_net_unix.o

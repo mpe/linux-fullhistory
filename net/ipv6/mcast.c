@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: mcast.c,v 1.10 1997/05/07 09:40:22 davem Exp $
+ *	$Id: mcast.c,v 1.11 1997/10/29 20:27:50 kuznet Exp $
  *
  *	Based on linux/ipv4/igmp.c and linux/ipv4/ip_sockglue.c 
  *
@@ -417,7 +417,10 @@ void igmp6_send(struct in6_addr *addr, struct device *dev, int type)
 		skb_reserve(skb, (dev->hard_header_len + 15) & ~15);
 		if (dev->hard_header) {
 			unsigned char ha[MAX_ADDR_LEN];
-			ipv6_mc_map(addr, ha);
+			if (dev->type == ARPHRD_ETHER)
+				ipv6_mc_map(addr, ha);
+			else
+				memcpy(ha, dev->broadcast, dev->addr_len);
 			dev->hard_header(skb, dev, ETH_P_IPV6, ha, NULL, plen);
 			skb->arp = 1;
 		}

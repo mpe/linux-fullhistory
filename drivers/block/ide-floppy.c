@@ -532,7 +532,7 @@ static void idefloppy_output_buffers (ide_drive_t *drive, idefloppy_pc_t *pc, un
 	}
 }
 
-#ifdef CONFIG_BLK_DEV_TRITON
+#ifdef CONFIG_BLK_DEV_IDEDMA
 static void idefloppy_update_buffers (ide_drive_t *drive, idefloppy_pc_t *pc)
 {
 	struct request *rq = pc->rq;
@@ -541,7 +541,7 @@ static void idefloppy_update_buffers (ide_drive_t *drive, idefloppy_pc_t *pc)
 	while ((bh = rq->bh) != NULL)
 		idefloppy_end_request (1, HWGROUP(drive));
 }
-#endif /* CONFIG_BLK_DEV_TRITON */
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 
 /*
  *	idefloppy_queue_pc_head generates a new packet command request in front
@@ -681,7 +681,7 @@ static void idefloppy_pc_intr (ide_drive_t *drive)
 	printk (KERN_INFO "ide-floppy: Reached idefloppy_pc_intr interrupt handler\n");
 #endif /* IDEFLOPPY_DEBUG_LOG */	
 
-#ifdef CONFIG_BLK_DEV_TRITON
+#ifdef CONFIG_BLK_DEV_IDEDMA
 	if (test_bit (PC_DMA_IN_PROGRESS, &pc->flags)) {
 		if (HWIF(drive)->dmaproc(ide_dma_status_bad, drive)) {
 			set_bit (PC_DMA_ERROR, &pc->flags);
@@ -694,7 +694,7 @@ static void idefloppy_pc_intr (ide_drive_t *drive)
 		printk (KERN_INFO "ide-floppy: DMA finished\n");
 #endif /* IDEFLOPPY_DEBUG_LOG */
 	}
-#endif /* CONFIG_BLK_DEV_TRITON */
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 
 	status.all = GET_STAT();					/* Clear the interrupt */
 
@@ -725,7 +725,7 @@ static void idefloppy_pc_intr (ide_drive_t *drive)
 		pc->callback(drive);			/* Command finished - Call the callback function */
 		return;
 	}
-#ifdef CONFIG_BLK_DEV_TRITON
+#ifdef CONFIG_BLK_DEV_IDEDMA
 	if (test_and_clear_bit (PC_DMA_IN_PROGRESS, &pc->flags)) {
 		printk (KERN_ERR "ide-floppy: The floppy wants to issue more interrupts in DMA mode\n");
 		printk (KERN_ERR "ide-floppy: DMA disabled, reverting to PIO\n");
@@ -733,7 +733,7 @@ static void idefloppy_pc_intr (ide_drive_t *drive)
 		ide_do_reset (drive);
 		return;
 	}
-#endif /* CONFIG_BLK_DEV_TRITON */
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 	bcount.b.high=IN_BYTE (IDE_BCOUNTH_REG);			/* Get the number of bytes to transfer */
 	bcount.b.low=IN_BYTE (IDE_BCOUNTL_REG);			/* on this interrupt */
 	ireason.all=IN_BYTE (IDE_IREASON_REG);
@@ -841,14 +841,14 @@ static void idefloppy_issue_pc (ide_drive_t *drive, idefloppy_pc_t *pc)
 	pc->current_position=pc->buffer;
 	bcount.all=pc->request_transfer;				/* Request to transfer the entire buffer at once */
 
-#ifdef CONFIG_BLK_DEV_TRITON
+#ifdef CONFIG_BLK_DEV_IDEDMA
 	if (test_and_clear_bit (PC_DMA_ERROR, &pc->flags)) {
 		printk (KERN_WARNING "ide-floppy: DMA disabled, reverting to PIO\n");
 		HWIF(drive)->dmaproc(ide_dma_off, drive);
 	}
 	if (test_bit (PC_DMA_RECOMMENDED, &pc->flags) && drive->using_dma)
 		dma_ok=!HWIF(drive)->dmaproc(test_bit (PC_WRITING, &pc->flags) ? ide_dma_write : ide_dma_read, drive);
-#endif /* CONFIG_BLK_DEV_TRITON */
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 
 	OUT_BYTE (drive->ctl,IDE_CONTROL_REG);
 	OUT_BYTE (dma_ok ? 1:0,IDE_FEATURE_REG);			/* Use PIO/DMA */
@@ -856,12 +856,12 @@ static void idefloppy_issue_pc (ide_drive_t *drive, idefloppy_pc_t *pc)
 	OUT_BYTE (bcount.b.low,IDE_BCOUNTL_REG);
 	OUT_BYTE (drive->select.all,IDE_SELECT_REG);
 
-#ifdef CONFIG_BLK_DEV_TRITON
+#ifdef CONFIG_BLK_DEV_IDEDMA
 	if (dma_ok) {							/* Begin DMA, if necessary */
 		set_bit (PC_DMA_IN_PROGRESS, &pc->flags);
 		(void) (HWIF(drive)->dmaproc(ide_dma_begin, drive));
 	}
-#endif /* CONFIG_BLK_DEV_TRITON */
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 
 	if (test_bit (IDEFLOPPY_DRQ_INTERRUPT, &floppy->flags)) {
 		ide_set_handler (drive, &idefloppy_transfer_pc, WAIT_CMD);

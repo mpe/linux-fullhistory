@@ -1,5 +1,3 @@
-#warning "will not compile until the networking is merged"
-#if 0
 /*
  * Copyright 1996 The Board of Trustees of The Leland Stanford
  * Junior University. All Rights Reserved.
@@ -2782,4 +2780,3 @@ void cleanup_module(void)
     printk(KERN_INFO "STRIP: Module Unloaded\n");
 }
 #endif /* MODULE */
-#endif

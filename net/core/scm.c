@@ -205,25 +205,25 @@ error:
 	return err;
 }
 
-void put_cmsg(struct msghdr * msg, int level, int type, int len, void *data)
+int put_cmsg(struct msghdr * msg, int level, int type, int len, void *data)
 {
 	struct cmsghdr *cm = (struct cmsghdr*)msg->msg_control;
+	struct cmsghdr cmhdr;
 	int cmlen = CMSG_LEN(len);
 	int err;
 
 	if (cm==NULL || msg->msg_controllen < sizeof(*cm)) {
 		msg->msg_flags |= MSG_CTRUNC;
-		return;
+		return 0; /* XXX: return error? check spec. */
 	}
 	if (msg->msg_controllen < cmlen) {
 		msg->msg_flags |= MSG_CTRUNC;
 		cmlen = msg->msg_controllen;
 	}
-	err = put_user(level, &cm->cmsg_level);
-	if (!err)
-		err = put_user(type, &cm->cmsg_type);
-	if (!err)
-		err = put_user(cmlen, &cm->cmsg_len);
+	cmhdr.cmsg_level = level;
+	cmhdr.cmsg_type = type;
+	cmhdr.cmsg_len = cmlen;
+	err = copy_to_user(cm, &cmhdr, sizeof cmhdr); 
 	if (!err)
 		err = copy_to_user(CMSG_DATA(cm), data, cmlen - sizeof(struct cmsghdr));
 	if (!err) {
@@ -231,6 +231,7 @@ void put_cmsg(struct msghdr * msg, int level, int type, int len, void *data)
 		msg->msg_control += cmlen;
 		msg->msg_controllen -= cmlen;
 	}
+	return err;
 }
 
 void scm_detach_fds(struct msghdr *msg, struct scm_cookie *scm)

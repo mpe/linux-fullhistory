@@ -1412,7 +1412,6 @@ static int ax25_sendmsg(struct socket *sock, struct msghdr *msg, int len, struct
 
 		/* Datagram frames go straight out of the door as UI */
 		skb->dev      = sk->protinfo.ax25->ax25_dev->dev;
-		skb->priority = SOPRI_NORMAL;
 
 		ax25_queue_xmit(skb);
 

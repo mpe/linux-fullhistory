@@ -112,8 +112,8 @@
  *	int		int32		long		32 bits
  */
 
-typedef unsigned char byte_t;
-typedef unsigned long int32;
+typedef __u8 byte_t;
+typedef __u32 int32;
 
 /*
  * "state" data for each active tcp conversation on the wire.  This is

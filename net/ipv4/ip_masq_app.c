@@ -306,7 +306,7 @@ static __inline__ void masq_seq_update(struct ip_masq *ms, struct ip_masq_seq *m
  *	returns (new - old) skb->len diff.
  */
 
-int ip_masq_app_pkt_out(struct ip_masq *ms, struct sk_buff **skb_p, struct device *dev)
+int ip_masq_app_pkt_out(struct ip_masq *ms, struct sk_buff **skb_p, __u32 maddr)
 {
         struct ip_masq_app * mapp;
         struct iphdr *iph;
@@ -351,7 +351,7 @@ int ip_masq_app_pkt_out(struct ip_masq *ms, struct sk_buff **skb_p, struct devic
         if ( mapp->pkt_out == NULL )
                 return 0;
 
-        diff = mapp->pkt_out(mapp, ms, skb_p, dev);
+        diff = mapp->pkt_out(mapp, ms, skb_p, maddr);
 
         /*
          *	Update ip_masq seq stuff if len has changed.
@@ -369,7 +369,7 @@ int ip_masq_app_pkt_out(struct ip_masq *ms, struct sk_buff **skb_p, struct devic
  *	returns (new - old) skb->len diff.
  */
 
-int ip_masq_app_pkt_in(struct ip_masq *ms, struct sk_buff **skb_p, struct device *dev)
+int ip_masq_app_pkt_in(struct ip_masq *ms, struct sk_buff **skb_p)
 {
         struct ip_masq_app * mapp;
         struct iphdr *iph;
@@ -414,7 +414,7 @@ int ip_masq_app_pkt_in(struct ip_masq *ms, struct sk_buff **skb_p, struct device
         if ( mapp->pkt_in == NULL )
                 return 0;
 
-        diff = mapp->pkt_in(mapp, ms, skb_p, dev);
+        diff = mapp->pkt_in(mapp, ms, skb_p);
 
         /*
          *	Update ip_masq seq stuff if len has changed.

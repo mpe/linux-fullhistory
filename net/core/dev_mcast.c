@@ -42,7 +42,6 @@
 #include <linux/skbuff.h>
 #include <net/sock.h>
 #include <net/arp.h>
-#include <linux/net_alias.h>
 
 
 /*
@@ -70,19 +69,6 @@ void dev_mc_upload(struct device *dev)
 		return;
 
 	/*
-	 *	An aliased device should end up with the combined
-	 *	multicast list of all its aliases. 
-	 *	Really, multicasting with logical interfaces is very
-	 *	subtle question. Now we DO forward multicast packets
-	 *	to logical interfcases, that doubles multicast
-	 *	traffic but allows mrouted to work.
-	 *	Alas, mrouted does not understand aliases even
-	 *	in 4.4BSD --ANK
-	 */
-	 
-	dev = net_alias_main_dev(dev);
-		
-	/*
 	 *	Devices with no set multicast don't get set 
 	 */
 	 
@@ -99,7 +85,6 @@ void dev_mc_upload(struct device *dev)
 void dev_mc_delete(struct device *dev, void *addr, int alen, int all)
 {
 	struct dev_mc_list **dmi;
-	dev = net_alias_main_dev(dev);
 
 	for(dmi=&dev->mc_list;*dmi!=NULL;dmi=&(*dmi)->next)
 	{
@@ -136,8 +121,6 @@ void dev_mc_add(struct device *dev, void *addr, int alen, int newonly)
 {
 	struct dev_mc_list *dmi;
 
-	dev = net_alias_main_dev(dev);
-
 	for(dmi=dev->mc_list;dmi!=NULL;dmi=dmi->next)
 	{
 		if(memcmp(dmi->dmi_addr,addr,dmi->dmi_addrlen)==0 && dmi->dmi_addrlen==alen)
@@ -165,12 +148,12 @@ void dev_mc_add(struct device *dev, void *addr, int alen, int newonly)
 
 void dev_mc_discard(struct device *dev)
 {
-	if (net_alias_is(dev))
-		return;
 	while(dev->mc_list!=NULL)
 	{
 		struct dev_mc_list *tmp=dev->mc_list;
 		dev->mc_list=dev->mc_list->next;
+		if (tmp->dmi_users)
+			printk("dev_mc_discard: multicast leakage! dmi_users=%d\n", tmp->dmi_users);
 		kfree_s(tmp,sizeof(*tmp));
 	}
 	dev->mc_count=0;

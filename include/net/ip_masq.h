@@ -88,14 +88,14 @@ extern int ip_masq_init(void);
 /*
  *	functions called from ip layer
  */
-extern int ip_fw_masquerade(struct sk_buff **, struct device *);
-extern int ip_fw_masq_icmp(struct sk_buff **, struct device *);
-extern int ip_fw_demasquerade(struct sk_buff **, struct device *);
+extern int ip_fw_masquerade(struct sk_buff **, __u32 maddr);
+extern int ip_fw_masq_icmp(struct sk_buff **);
+extern int ip_fw_demasquerade(struct sk_buff **);
 
 /*
  *	ip_masq obj creation/deletion functions.
  */
-extern struct ip_masq *ip_masq_new(struct device *dev, int proto, __u32 saddr, __u16 sport, __u32 daddr, __u16 dport, unsigned flags);
+extern struct ip_masq *ip_masq_new(__u32 maddr, int proto, __u32 saddr, __u16 sport, __u32 daddr, __u16 dport, unsigned flags);
 extern void ip_masq_set_expire(struct ip_masq *ms, unsigned long tout);
 
 
@@ -116,9 +116,9 @@ struct ip_masq_app
         int (*masq_done_1)      /* ip_masq fin. */
                 (struct ip_masq_app *, struct ip_masq *);
         int (*pkt_out)          /* output (masquerading) hook */
-                (struct ip_masq_app *, struct ip_masq *, struct sk_buff **, struct device *);
+                (struct ip_masq_app *, struct ip_masq *, struct sk_buff **, __u32);
         int (*pkt_in)           /* input (demasq) hook */
-                (struct ip_masq_app *, struct ip_masq *, struct sk_buff **, struct device *);
+                (struct ip_masq_app *, struct ip_masq *, struct sk_buff **);
 };
 
 /*
@@ -147,8 +147,8 @@ extern int ip_masq_unbind_app(struct ip_masq *ms);
  *	output and input app. masquerading hooks.
  *	
  */
-extern int ip_masq_app_pkt_out(struct ip_masq *, struct sk_buff **skb_p, struct device *dev);
-extern int ip_masq_app_pkt_in(struct ip_masq *, struct sk_buff **skb_p, struct device *dev);
+extern int ip_masq_app_pkt_out(struct ip_masq *, struct sk_buff **skb_p, __u32 maddr);
+extern int ip_masq_app_pkt_in(struct ip_masq *, struct sk_buff **skb_p);
 
 /*
  *	service routine(s).

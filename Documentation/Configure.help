@@ -304,13 +304,12 @@ CONFIG_BLK_DEV_RZ1000
   things will operate 100% reliably. If unsure, say Y.
 
 Intel 82371 PIIX (Triton I/II), VIA VP-1 DMA support
-CONFIG_BLK_DEV_TRITON
-  If your PCI system uses an IDE harddrive (as opposed to SCSI, say)
-  and includes the Intel Triton I/II IDE interface chipset (i82371FB,
-  i82371SB or i82371AB), or the VIA VP-1 IDE interface chipset 
-  (VT82C586), you will want to enable this option to allow use of 
+CONFIG_BLK_DEV_IDEDMA
+  If your PCI system uses IDE drive(s) (as opposed to SCSI, say)
+  and is capable of bus-master DMA operation (most Pentium PCI
+  systems), you will want to enable this option to allow use of 
   bus-mastering DMA data transfers. Read the comments at the
-  beginning of drivers/block/triton.c and Documentation/ide.txt.
+  beginning of drivers/block/idedma.c and Documentation/ide.txt.
   You can get the latest version of the hdparm utility via 
   ftp (user: anonymous) from
   sunsite.unc.edu/pub/Linux/kernel/patches/diskdrives/; it is
@@ -343,18 +342,19 @@ CONFIG_BLK_DEV_HT6560B
   See the Documentation/ide.txt and ht6560b.c files for more info.
 
 PROMISE DC4030 support (EXPERIMENTAL)
-CONFIG_BLK_DEV_PROMISE
+CONFIG_BLK_DEV_PDC4030
   This driver provides support for the secondary IDE interface and
   cache of Promise IDE chipsets, e.g. DC4030 and DC5030.  This driver
   is known to incur timeouts/retries during heavy I/O to drives
   attached to the secondary interface.  CDROM and TAPE devices are not
   supported yet.  This driver is enabled at runtime using the
   "ide0=dc4030" kernel boot parameter.  See the Documentation/ide.txt
-  and drivers/block/promise.c files for more info.
+  and drivers/block/pdc4030.c files for more info.
 
 OPTi 82C621     support (EXPERIMENTAL)
 CONFIG_BLK_DEV_OPTI621
-  This is a driver for the OPTi 82C621 EIDE controller.
+  This driver allows use of hdparm to change the PIO timings
+  for drives attached to an OPTi MIDE controller.
   Please read the comments at the top of drivers/block/opti621.c.
 
 QDI QD6580 support

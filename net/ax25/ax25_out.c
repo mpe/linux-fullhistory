@@ -58,8 +58,16 @@ ax25_cb *ax25_send_frame(struct sk_buff *skb, int paclen, ax25_address *src, ax2
 	ax25_dev *ax25_dev;
 	ax25_cb *ax25;
 
-	if (skb == NULL)
-		return 0;
+	/*
+	 * Take the default packet length for the device if zero is
+	 * specified.
+	 */
+	if (paclen == 0) {
+		if ((ax25_dev = ax25_dev_ax25dev(dev)) == NULL)
+			return NULL;
+
+		paclen = ax25_dev->values[AX25_VALUES_PACLEN];
+	}
 
 	/*
 	 * Look for an existing connection.
@@ -339,7 +347,6 @@ void ax25_transmit_buffer(ax25_cb *ax25, struct sk_buff *skb, int type)
 	ax25_addr_build(ptr, &ax25->source_addr, &ax25->dest_addr, ax25->digipeat, type, ax25->modulus);
 
 	skb->dev      = ax25->ax25_dev->dev;
-	skb->priority = SOPRI_NORMAL;
 
 	ax25_queue_xmit(skb);
 }

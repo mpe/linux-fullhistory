@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/raw.c
  *
- *	$Id: raw.c,v 1.12 1997/04/01 02:23:34 davem Exp $
+ *	$Id: raw.c,v 1.13 1997/09/14 08:32:14 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -156,7 +156,7 @@ static int rawv6_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	/* Check if the address belongs to the host. */
 	if (addr_type == IPV6_ADDR_MAPPED) {
 		v4addr = addr->sin6_addr.s6_addr32[3];
-		if (__ip_chk_addr(v4addr) != IS_MYADDR)
+		if (inet_addr_type(v4addr) != RTN_LOCAL)
 			return(-EADDRNOTAVAIL);
 	} else {
 		if (addr_type != IPV6_ADDR_ANY) {
@@ -307,8 +307,9 @@ static int rawv6_frag_cksum(const void *data, struct in6_addr *addr,
 {
 	struct rawv6_fakehdr *hdr = (struct rawv6_fakehdr *) data;
 	
-	hdr->cksum = csum_partial_copy_fromiovecend(buff, hdr->iov, offset, 
-						    len, hdr->cksum);
+	if (csum_partial_copy_fromiovecend(buff, hdr->iov, offset, 
+						    len, &hdr->cksum))
+		return -EFAULT;
 	
 	if (offset == 0) {
 		struct sock *sk;
@@ -461,28 +462,49 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 static int rawv6_seticmpfilter(struct sock *sk, int level, int optname, 
 			       char *optval, int optlen)
 {
-	struct raw6_opt *opt = &sk->tp_pinfo.tp_raw;
-	int err = 0;
-
 	switch (optname) {
-		case ICMPV6_FILTER:
-			err = copy_from_user(&opt->filter, optval,
-				       sizeof(struct icmp6_filter));
-			if (err)
-				err = -EFAULT;
-			break;
-		default:
-			err = -ENOPROTOOPT;
+	case ICMPV6_FILTER:
+		if (optlen > sizeof(struct icmp6_filter))
+			optlen = sizeof(struct icmp6_filter);
+		if (copy_from_user(&sk->tp_pinfo.tp_raw.filter, optval, optlen))
+			return -EFAULT;
+		return 0;
+	default:
+		return -ENOPROTOOPT;
 	};
 
-	return err;
+	return 0;
 }
+
+static int rawv6_geticmpfilter(struct sock *sk, int level, int optname, 
+			       char *optval, int *optlen)
+{
+	int len;
+
+	switch (optname) {
+	case ICMPV6_FILTER:
+		if (get_user(len, optlen))
+			return -EFAULT;
+		if (len > sizeof(struct icmp6_filter))
+			len = sizeof(struct icmp6_filter);
+		if (put_user(len, optlen))
+			return -EFAULT;
+		if (copy_to_user(optval, &sk->tp_pinfo.tp_raw.filter, len))
+			return -EFAULT;
+		return 0;
+	default:
+		return -ENOPROTOOPT;
+	};
+
+	return 0;
+}
+
 
 static int rawv6_setsockopt(struct sock *sk, int level, int optname, 
 			    char *optval, int optlen)
 {
 	struct raw6_opt *opt = &sk->tp_pinfo.tp_raw;
-	int val, err;
+	int val;
 
 	switch(level) {
 		case SOL_RAW:
@@ -501,12 +523,8 @@ static int rawv6_setsockopt(struct sock *sk, int level, int optname,
 					       optlen);
 	};
 
-  	if (optval == NULL)
-  		return(-EINVAL);
-
-  	err = get_user(val, (int *)optval);
-  	if(err)
-  		return err;
+  	if (get_user(val, (int *)optval))
+		return -EFAULT;
 
 	switch (optname) {
 		case IPV6_CHECKSUM:
@@ -524,6 +542,53 @@ static int rawv6_setsockopt(struct sock *sk, int level, int optname,
 			return(-ENOPROTOOPT);
 	}
 }
+
+static int rawv6_getsockopt(struct sock *sk, int level, int optname, 
+			    char *optval, int *optlen)
+{
+	struct raw6_opt *opt = &sk->tp_pinfo.tp_raw;
+	int val, len;
+
+	switch(level) {
+		case SOL_RAW:
+			break;
+
+		case SOL_ICMPV6:
+			if (sk->num != IPPROTO_ICMPV6)
+				return -EOPNOTSUPP;
+			return rawv6_geticmpfilter(sk, level, optname, optval,
+						   optlen);
+		case SOL_IPV6:
+			if (optname == IPV6_CHECKSUM)
+				break;
+		default:
+			return ipv6_getsockopt(sk, level, optname, optval,
+					       optlen);
+	};
+
+	if (get_user(len,optlen))
+		return -EFAULT;
+
+	switch (optname) {
+	case IPV6_CHECKSUM:
+		if (opt->checksum == 0)
+			val = -1;
+		else
+			val = opt->offset;
+
+	default:
+		return -ENOPROTOOPT;
+	}
+
+	len=min(sizeof(int),len);
+
+	if (put_user(len, optlen))
+		return -EFAULT;
+	if (copy_to_user(optval,&val,len))
+		return -EFAULT;
+	return 0;
+}
+
 
 static void rawv6_close(struct sock *sk, unsigned long timeout)
 {
@@ -558,7 +623,7 @@ struct proto rawv6_prot = {
 	NULL,				/* destroy */
 	NULL,				/* shutdown */
 	rawv6_setsockopt,		/* setsockopt */
-	ipv6_getsockopt,		/* getsockopt - FIXME */
+	rawv6_getsockopt,		/* getsockopt */
 	rawv6_sendmsg,			/* sendmsg */
 	rawv6_recvmsg,			/* recvmsg */
 	rawv6_bind,			/* bind */

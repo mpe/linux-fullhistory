@@ -74,18 +74,16 @@
 #include <linux/firewall.h>
 #include <linux/wanrouter.h>
 #include <linux/init.h>
+#include <linux/poll.h>
 
 #if defined(CONFIG_KERNELD) && defined(CONFIG_NET)
 #include <linux/kerneld.h>
 #endif
 
-#include <net/netlink.h>
-
 #include <asm/system.h>
 #include <asm/uaccess.h>
 
 #include <linux/inet.h>
-#include <linux/netdevice.h>
 #include <net/ip.h>
 #include <net/protocol.h>
 #include <net/rarp.h>
@@ -103,7 +101,8 @@ static ssize_t sock_write(struct file *file, const char *buf,
 			  size_t size, loff_t *ppos);
 
 static int sock_close(struct inode *inode, struct file *file);
-static unsigned int sock_poll(struct file *file, poll_table *wait);
+static unsigned int sock_poll(struct file *file,
+			      struct poll_table_struct *wait);
 static int sock_ioctl(struct inode *inode, struct file *file,
 		      unsigned int cmd, unsigned long arg);
 static int sock_fasync(struct file *filp, int on);
@@ -1158,8 +1157,11 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 		 * skbuff accounting stops it from going too far.
 		 * I hope this is correct.
  		 */
-		if (msg_sys.msg_controllen > sizeof(ctl) &&
-			msg_sys.msg_controllen <= 256)
+		if (msg_sys.msg_controllen > 256) {
+			err = -EINVAL;
+			goto failed2;
+		}
+		if (msg_sys.msg_controllen > sizeof(ctl))
 		{
 			ctl_buf = kmalloc(msg_sys.msg_controllen, GFP_KERNEL);
 			if (ctl_buf == NULL) 
@@ -1176,11 +1178,11 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 		msg_sys.msg_control = ctl_buf;
 	}
 	msg_sys.msg_flags = flags;
-	if (current->files->fd[fd]->f_flags & O_NONBLOCK)
-		msg_sys.msg_flags |= MSG_DONTWAIT;
 
 	if ((sock = sockfd_lookup(fd,&err))!=NULL)
 	{
+		if (current->files->fd[fd]->f_flags & O_NONBLOCK)
+			msg_sys.msg_flags |= MSG_DONTWAIT;
 		err = sock_sendmsg(sock, &msg_sys, total_len);
 		sockfd_put(sock);
 	}
@@ -1246,11 +1248,10 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 	cmsg_ptr = (unsigned long)msg_sys.msg_control;
 	msg_sys.msg_flags = 0;
 	
-	if (current->files->fd[fd]->f_flags&O_NONBLOCK)
-		flags |= MSG_DONTWAIT;
-
 	if ((sock = sockfd_lookup(fd, &err))!=NULL)
 	{
+		if (current->files->fd[fd]->f_flags&O_NONBLOCK)
+			flags |= MSG_DONTWAIT;
 		err=sock_recvmsg(sock, &msg_sys, total_len, flags);
 		if(err>=0)
 			len=err;
@@ -1392,9 +1393,10 @@ asmlinkage int sys_socketcall(int call, unsigned long *args)
  
 int sock_register(struct net_proto_family *ops)
 {
-	if (ops->family < 0 || ops->family >= NPROTO)
-		return -1;
-
+	if (ops->family >= NPROTO) {
+		printk(KERN_CRIT "protocol %d >= NPROTO(%d)\n", ops->family, NPROTO);
+		return -ENOBUFS;
+	}
 	net_families[ops->family]=ops;
 	return 0;
 }
@@ -1450,13 +1452,6 @@ __initfunc(void sock_init(void))
 	 
 	sk_init();
 	
-	/*
-	 *	The netlink device handler may be needed early.
-	 */
-
-#ifdef CONFIG_NETLINK
-	init_netlink();
-#endif
 
 	/*
 	 *	Wan router layer. 
@@ -1479,6 +1474,17 @@ __initfunc(void sock_init(void))
 	 */
 
 	proto_init();
+
+	/*
+	 *	The netlink device handler may be needed early.
+	 */
+
+#ifdef  CONFIG_RTNETLINK
+	rtnetlink_init();
+#endif
+#ifdef CONFIG_NETLINK_DEV
+	init_netlink();
+#endif
 }
 
 int socket_get_info(char *buffer, char **start, off_t offset, int length)

@@ -128,7 +128,7 @@ static inline int lp_char(char lpchar, int minor, int use_polling)
 	do {
 		status = r_str(minor);
 		count++;
-		if (resched_needed())
+		if (need_resched)
 			lp_schedule (minor);
 	} while (((use_polling && !LP_READY(minor, status)) || 
 		 (!use_polling && !(status & LP_PBUSY))) &&
@@ -356,7 +356,7 @@ static ssize_t lp_read(struct file * file, char * buf,
 			status=(r_str(minor) & 0x40);
 			udelay(50);
 			counter++;
-			if (resched_needed())
+			if (need_resched)
 				schedule ();
 		} while ( (status == 0x40) && (counter < 20) );
 		if ( counter == 20 ) { /* Timeout */
@@ -375,7 +375,7 @@ static ssize_t lp_read(struct file * file, char * buf,
 			status=(r_str(minor) & 0x40);
 			udelay(20);
 			counter++;
-			if (resched_needed())
+			if (need_resched)
 				schedule ();
 		} while ( (status == 0) && (counter < 20) );
 		if (counter == 20) { /* Timeout */

@@ -50,7 +50,7 @@ masq_ftp_done_1 (struct ip_masq_app *mapp, struct ip_masq *ms)
 }
 
 int
-masq_ftp_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb_p, struct device *dev)
+masq_ftp_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb_p, __u32 maddr)
 {
         struct sk_buff *skb;
 	struct iphdr *iph;
@@ -118,7 +118,7 @@ masq_ftp_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
 			ip_masq_set_expire(n_ms,0);
 		}
 		else {
-			n_ms = ip_masq_new(dev, IPPROTO_TCP,
+			n_ms = ip_masq_new(maddr, IPPROTO_TCP,
 					   htonl(from), htons(port),
 					   iph->daddr, 0,
 					   IP_MASQ_F_NO_DPORT);

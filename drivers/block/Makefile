@@ -96,8 +96,8 @@ ifeq ($(CONFIG_BLK_DEV_CMD640),y)
 L_OBJS += cmd640.o
 endif
 
-ifeq ($(CONFIG_BLK_DEV_TRITON),y)
-L_OBJS += triton.o
+ifeq ($(CONFIG_BLK_DEV_IDEDMA),y)
+L_OBJS += ide-dma.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_PS2),y)
@@ -125,8 +125,8 @@ ifeq ($(CONFIG_BLK_DEV_ALI14XX),y)
 L_OBJS += ali14xx.o
 endif
 
-ifeq ($(CONFIG_BLK_DEV_PROMISE),y)
-L_OBJS += promise.o
+ifeq ($(CONFIG_BLK_DEV_PDC4030),y)
+L_OBJS += pdc4030.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_OPTI621),y)

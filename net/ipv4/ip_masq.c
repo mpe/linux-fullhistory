@@ -339,7 +339,7 @@ static void masq_expire(unsigned long data)
  * 	given boundaries MASQ_BEGIN and MASQ_END.
  */
 
-struct ip_masq * ip_masq_new(struct device *dev, int proto, __u32 saddr, __u16 sport, __u32 daddr, __u16 dport, unsigned mflags)
+struct ip_masq * ip_masq_new(__u32 maddr, int proto, __u32 saddr, __u16 sport, __u32 daddr, __u16 dport, unsigned mflags)
 {
         struct ip_masq *ms, *mst;
         int ports_tried, *free_ports_p;
@@ -377,7 +377,7 @@ struct ip_masq * ip_masq_new(struct device *dev, int proto, __u32 saddr, __u16 s
                 ms->flags |= IP_MASQ_F_NO_DADDR;
 
         /* get masq address from rif */
-        ms->maddr	   = dev->pa_addr;
+        ms->maddr	   = maddr;
 
         for (ports_tried = 0; ports_tried < *free_ports_p; ports_tried++){
                 save_flags(flags);
@@ -449,7 +449,7 @@ static void recalc_check(struct udphdr *uh, __u32 saddr,
 		uh->check=0xFFFF;
 }
 
-int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
+int ip_fw_masquerade(struct sk_buff **skb_ptr, __u32 maddr)
 {
 	struct sk_buff  *skb=*skb_ptr;
 	struct iphdr	*iph = skb->nh.iph;
@@ -489,7 +489,7 @@ int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
 
 	if (ms==NULL)
 	{
-                ms = ip_masq_new(dev, iph->protocol,
+                ms = ip_masq_new(maddr, iph->protocol,
                                  iph->saddr, portptr[0],
                                  iph->daddr, portptr[1],
                                  0);
@@ -512,7 +512,7 @@ int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
  	 *	Attempt ip_masq_app call.
          *	will fix ip_masq and iph seq stuff
  	 */
-        if (ip_masq_app_pkt_out(ms, skb_ptr, dev) != 0)
+        if (ip_masq_app_pkt_out(ms, skb_ptr, maddr) != 0)
 	{
                 /*
                  *	skb has possibly changed, update pointers.
@@ -572,7 +572,7 @@ int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
  	ip_send_check(iph);
 
  #ifdef DEBUG_CONFIG_IP_MASQUERADE
- 	printk("O-routed from %lX:%X over %s\n",ntohl(ms->maddr),ntohs(ms->mport),dev->name);
+ 	printk("O-routed from %lX:%X via %lX\n",ntohl(ms->maddr),ntohs(ms->mport),ntohl(maddr));
  #endif
 
 	return 0;
@@ -586,7 +586,7 @@ int ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
  *	Currently handles error types - unreachable, quench, ttl exceeded
  */
 
-int ip_fw_masq_icmp(struct sk_buff **skb_p, struct device *dev)
+int ip_fw_masq_icmp(struct sk_buff **skb_p)
 {
         struct sk_buff 	*skb   = *skb_p;
  	struct iphdr	*iph   = skb->nh.iph;
@@ -685,7 +685,7 @@ int ip_fw_masq_icmp(struct sk_buff **skb_p, struct device *dev)
  *	Currently handles error types - unreachable, quench, ttl exceeded
  */
 
-int ip_fw_demasq_icmp(struct sk_buff **skb_p, struct device *dev)
+int ip_fw_demasq_icmp(struct sk_buff **skb_p)
 {
         struct sk_buff 	*skb   = *skb_p;
  	struct iphdr	*iph   = skb->nh.iph;
@@ -778,7 +778,7 @@ int ip_fw_demasq_icmp(struct sk_buff **skb_p, struct device *dev)
   *	this function.
   */
 
-int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
+int ip_fw_demasquerade(struct sk_buff **skb_p)
 {
         struct sk_buff 	*skb = *skb_p;
  	struct iphdr	*iph = skb->nh.iph;
@@ -789,7 +789,7 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
 
 	switch (iph->protocol) {
 	case IPPROTO_ICMP:
-		return(ip_fw_demasq_icmp(skb_p, dev));
+		return(ip_fw_demasq_icmp(skb_p));
 	case IPPROTO_TCP:
 	case IPPROTO_UDP:
 		/* Make sure packet is in the masq range */
@@ -869,7 +869,7 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
                  *	will fix ip_masq and iph ack_seq stuff
                  */
 
-                if (ip_masq_app_pkt_in(ms, skb_p, dev) != 0)
+                if (ip_masq_app_pkt_in(ms, skb_p) != 0)
                 {
                         /*
                          *	skb has changed, update pointers.
@@ -937,6 +937,7 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
  	return 0;
 }
 
+#ifdef CONFIG_PROC_FS
 /*
  *	/proc/net entry
  */
@@ -999,7 +1000,6 @@ done:
 	return len;
 }
 
-#ifdef CONFIG_PROC_FS
 static struct proc_dir_entry proc_net_ipmsqhst = {
 	PROC_NET_IPMSQHST, 13, "ip_masquerade",
 	S_IFREG | S_IRUGO, 1, 0, 0,

@@ -19,6 +19,7 @@
 #ifdef CONFIG_INET
 #include <linux/ip.h>
 #include <linux/etherdevice.h>
+#include <linux/fddidevice.h>
 #include <net/protocol.h>
 #include <net/arp.h>
 #include <net/ip.h>
@@ -28,8 +29,8 @@
 #include <net/route.h>
 #include <net/scm.h>
 #include <net/inet_common.h>
+#include <net/pkt_sched.h>
 #include <linux/inet.h>
-#include <linux/net_alias.h>
 #include <linux/mroute.h>
 
 extern struct net_proto_family inet_family_ops;
@@ -43,13 +44,7 @@ extern struct net_proto_family inet_family_ops;
 
 #endif
 
-#ifdef CONFIG_NETLINK
-#include <net/netlink.h>
-#endif
-
-#ifdef CONFIG_NET_ALIAS
-#include <linux/net_alias.h>
-#endif
+#include <linux/rtnetlink.h>
 
 #include <net/scm.h>
 
@@ -121,6 +116,7 @@ EXPORT_SYMBOL(skb_copy_datagram_iovec);
 EXPORT_SYMBOL(skb_realloc_headroom);
 EXPORT_SYMBOL(datagram_poll);
 EXPORT_SYMBOL(put_cmsg);
+EXPORT_SYMBOL(net_families);
 
 EXPORT_SYMBOL(neigh_table_init);
 /* Declared in <net/neighbour.h> but not defined?
@@ -144,6 +140,12 @@ EXPORT_SYMBOL(dst_total);
 EXPORT_SYMBOL(__scm_destroy);
 EXPORT_SYMBOL(__scm_send);
 
+/* Needed by unix.o */
+EXPORT_SYMBOL(scm_fp_dup);
+EXPORT_SYMBOL(max_files);
+EXPORT_SYMBOL(do_mknod);
+EXPORT_SYMBOL(memcpy_toiovec);
+
 #ifdef CONFIG_IPX_MODULE
 EXPORT_SYMBOL(make_8023_client);
 EXPORT_SYMBOL(destroy_8023_client);
@@ -153,6 +155,9 @@ EXPORT_SYMBOL(destroy_EII_client);
 
 #ifdef CONFIG_ATALK_MODULE
 EXPORT_SYMBOL(sklist_destroy_socket);
+#endif
+
+#if defined(CONFIG_ATALK_MODULE) || defined(CONFIG_PACKET_MODULE)
 EXPORT_SYMBOL(sklist_insert_socket);
 #endif
 
@@ -169,15 +174,14 @@ EXPORT_SYMBOL(init_etherdev);
 EXPORT_SYMBOL(ip_route_output);
 EXPORT_SYMBOL(icmp_send);
 EXPORT_SYMBOL(ip_options_compile);
-EXPORT_SYMBOL(ip_rt_put);
 EXPORT_SYMBOL(arp_send);
 EXPORT_SYMBOL(ip_id_count);
 EXPORT_SYMBOL(ip_send_check);
 EXPORT_SYMBOL(ip_fragment);
-EXPORT_SYMBOL(ip_dev_find_tunnel);
 EXPORT_SYMBOL(inet_family_ops);
 EXPORT_SYMBOL(in_aton);
 EXPORT_SYMBOL(in_ntoa);
+EXPORT_SYMBOL(net_ratelimit);
 
 #ifdef CONFIG_IPV6_MODULE
 /* inet functions common to v4 and v6 */
@@ -206,7 +210,6 @@ EXPORT_SYMBOL(udp_hash);
 EXPORT_SYMBOL(destroy_sock);
 EXPORT_SYMBOL(ip_queue_xmit);
 EXPORT_SYMBOL(csum_partial);
-EXPORT_SYMBOL(dev_lockct);
 EXPORT_SYMBOL(memcpy_fromiovecend);
 EXPORT_SYMBOL(csum_partial_copy_fromiovecend);
 EXPORT_SYMBOL(__release_sock);
@@ -231,7 +234,6 @@ EXPORT_SYMBOL(tcp_getsockopt);
 EXPORT_SYMBOL(tcp_recvmsg);
 EXPORT_SYMBOL(tcp_send_synack);
 EXPORT_SYMBOL(tcp_check_req);
-EXPORT_SYMBOL(sock_wmalloc);
 EXPORT_SYMBOL(tcp_reset_xmit_timer);
 EXPORT_SYMBOL(tcp_parse_options);
 EXPORT_SYMBOL(tcp_rcv_established);
@@ -249,13 +251,35 @@ EXPORT_SYMBOL(tcp_v4_conn_request);
 EXPORT_SYMBOL(tcp_v4_syn_recv_sock);
 EXPORT_SYMBOL(tcp_v4_do_rcv);
 EXPORT_SYMBOL(tcp_v4_connect);
-EXPORT_SYMBOL(__ip_chk_addr);
+EXPORT_SYMBOL(inet_addr_type);
 EXPORT_SYMBOL(net_reset_timer);
 EXPORT_SYMBOL(net_delete_timer);
 EXPORT_SYMBOL(udp_prot);
 EXPORT_SYMBOL(tcp_prot);
 EXPORT_SYMBOL(tcp_openreq_cachep);
 EXPORT_SYMBOL(ipv4_specific);
+EXPORT_SYMBOL(tcp_simple_retransmit);
+
+EXPORT_SYMBOL(xrlim_allow);
+#endif
+
+#ifdef CONFIG_PACKET_MODULE
+EXPORT_SYMBOL(memcpy_toiovec);
+EXPORT_SYMBOL(dev_set_allmulti);
+EXPORT_SYMBOL(dev_set_promiscuity);
+EXPORT_SYMBOL(dev_mc_delete);
+EXPORT_SYMBOL(sklist_remove_socket);
+EXPORT_SYMBOL(rtnl_wait);
+EXPORT_SYMBOL(rtnl_rlockct);
+#ifdef CONFIG_RTNETLINK
+EXPORT_SYMBOL(rtnl);
+EXPORT_SYMBOL(rtnl_wlockct);
+#endif
+#endif
+
+#if defined(CONFIG_IPV6_MODULE) || defined(CONFIG_PACKET_MODULE)
+EXPORT_SYMBOL(dev_lockct);
+EXPORT_SYMBOL(sock_wmalloc);
 #endif
 
 #if	defined(CONFIG_ULTRA)	||	defined(CONFIG_WD80x3)		|| \
@@ -282,15 +306,9 @@ EXPORT_SYMBOL(tr_freedev);
 EXPORT_SYMBOL(tr_reformat);
 #endif
                   
-#ifdef CONFIG_NET_ALIAS
-#include <linux/net_alias.h>
-#endif
-
 /* Used by at least ipip.c.  */
 EXPORT_SYMBOL(ipv4_config);
-#ifdef CONFIG_IP_MROUTE
-EXPORT_SYMBOL(ip_mr_find_tunnel);
-#endif
+EXPORT_SYMBOL(dev_open);
 
 #endif  /* CONFIG_INET */
 
@@ -298,19 +316,19 @@ EXPORT_SYMBOL(ip_mr_find_tunnel);
 EXPORT_SYMBOL(register_netdevice_notifier);
 EXPORT_SYMBOL(unregister_netdevice_notifier);
 
-#ifdef CONFIG_NET_ALIAS
-EXPORT_SYMBOL(register_net_alias_type);
-EXPORT_SYMBOL(unregister_net_alias_type);
-#endif
-
 /* support for loadable net drivers */
 #ifdef CONFIG_NET
+EXPORT_SYMBOL(register_netdevice);
+EXPORT_SYMBOL(unregister_netdevice);
 EXPORT_SYMBOL(register_netdev);
 EXPORT_SYMBOL(unregister_netdev);
 EXPORT_SYMBOL(ether_setup);
 EXPORT_SYMBOL(dev_new_index);
 EXPORT_SYMBOL(dev_get_by_index);
 EXPORT_SYMBOL(eth_type_trans);
+#ifdef CONFIG_FDDI
+EXPORT_SYMBOL(fddi_type_trans);
+#endif /* CONFIG_FDDI */
 EXPORT_SYMBOL(eth_copy_and_sum);
 EXPORT_SYMBOL(alloc_skb);
 EXPORT_SYMBOL(__kfree_skb);
@@ -318,7 +336,6 @@ EXPORT_SYMBOL(skb_clone);
 EXPORT_SYMBOL(skb_copy);
 EXPORT_SYMBOL(dev_alloc_skb);
 EXPORT_SYMBOL(netif_rx);
-EXPORT_SYMBOL(dev_tint);
 EXPORT_SYMBOL(dev_add_pack);
 EXPORT_SYMBOL(dev_remove_pack);
 EXPORT_SYMBOL(dev_get);
@@ -340,6 +357,9 @@ EXPORT_SYMBOL(kill_fasync);
 EXPORT_SYMBOL(ip_rcv);
 EXPORT_SYMBOL(arp_rcv);
 
+EXPORT_SYMBOL(rtnl_lock);
+EXPORT_SYMBOL(rtnl_unlock);
+
 EXPORT_SYMBOL(if_port_text);
 
 #if defined(CONFIG_ATALK) || defined(CONFIG_ATALK_MODULE) 
@@ -352,11 +372,13 @@ extern int (*dlci_ioctl_hook)(unsigned int, void *);
 EXPORT_SYMBOL(dlci_ioctl_hook);
 #endif
 
-#endif  /* CONFIG_NET */
+/* Packet scheduler modules want these. */
+EXPORT_SYMBOL(qdisc_destroy);
+EXPORT_SYMBOL(qdisc_reset);
+EXPORT_SYMBOL(qdisc_restart);
+EXPORT_SYMBOL(qdisc_head);
+EXPORT_SYMBOL(register_qdisc);
+EXPORT_SYMBOL(unregister_qdisc);
+EXPORT_SYMBOL(noop_qdisc);
 
-#ifdef CONFIG_NETLINK
-EXPORT_SYMBOL(netlink_attach);
-EXPORT_SYMBOL(netlink_detach);
-EXPORT_SYMBOL(netlink_donothing);
-EXPORT_SYMBOL(netlink_post);
-#endif /* CONFIG_NETLINK */
+#endif  /* CONFIG_NET */

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	@(#)tcp.c	1.0.16	05/25/93
+ * Version:	$Id: tcp_timer.c,v 1.31 1997/11/05 08:14:01 freitag Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -212,7 +212,7 @@ static int tcp_write_timeout(struct sock *sk)
 		tcp_clear_xmit_timers(sk);
 
 		/* Time wait the socket. */
-		if (sk->state == TCP_FIN_WAIT1 || sk->state == TCP_FIN_WAIT2 || sk->state == TCP_CLOSING) {
+		if ((1<<sk->state) & (TCPF_FIN_WAIT1|TCPF_FIN_WAIT2|TCPF_CLOSING)) {
 			tcp_set_state(sk,TCP_TIME_WAIT);
 			tcp_reset_msl_timer (sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
 		} else {
@@ -263,8 +263,7 @@ void tcp_probe_timer(unsigned long data) {
 		sk->error_report(sk);
 
 		/* Time wait the socket. */
-		if (sk->state == TCP_FIN_WAIT1 || sk->state == TCP_FIN_WAIT2 
-		    || sk->state == TCP_CLOSING) {
+		if ((1<<sk->state) & (TCPF_FIN_WAIT1|TCPF_FIN_WAIT2|TCPF_CLOSING)) {
 			tcp_set_state(sk, TCP_TIME_WAIT);
 			tcp_reset_msl_timer (sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
 		} else {
@@ -280,8 +279,7 @@ static __inline__ int tcp_keepopen_proc(struct sock *sk)
 {
 	int res = 0;
 
-	if (sk->state == TCP_ESTABLISHED || sk->state == TCP_CLOSE_WAIT ||
-	    sk->state == TCP_FIN_WAIT2) {
+	if ((1<<sk->state) & (TCPF_ESTABLISHED|TCPF_CLOSE_WAIT|TCPF_FIN_WAIT2)) {
 		struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 		__u32 elapsed = jiffies - tp->rcv_tstamp;
 
@@ -382,6 +380,11 @@ void tcp_retransmit_timer(unsigned long data)
 		return;
 	}
 
+	if (sk->sock_readers) {
+		/* Try again in a second. */
+		tcp_reset_xmit_timer(sk, TIME_RETRANS, HZ);
+		return;
+	}
 	lock_sock(sk);
 
 	/* Clear delay ack timer. */

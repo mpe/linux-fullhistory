@@ -90,15 +90,10 @@ struct sk_buff
 			arp;			/* Has IP/ARP resolution finished		*/
 	unsigned char	tries,			/* Times tried					*/
   			inclone,		/* Inline clone					*/
-  			priority,
   			pkt_type,		/* Packet class					*/
   			pkt_bridged,		/* Tracker for bridging 			*/
   			ip_summed;		/* Driver fed us an IP checksum			*/
-#define PACKET_HOST		0		/* To us					*/
-#define PACKET_BROADCAST	1		/* To all					*/
-#define PACKET_MULTICAST	2		/* To group					*/
-#define PACKET_OTHERHOST	3		/* To someone else 				*/
-#define PACKET_NDISC		17		/* Outgoing NDISC packet			*/
+	__u32		priority;
 	atomic_t	users;			/* User count - see datagram.c,tcp.c 		*/
 	unsigned short	protocol;		/* Packet protocol from driver. 		*/
 	unsigned short	security;		/* Security level of packet			*/
@@ -447,13 +442,17 @@ here:          ;
 	return skb->data;
 }
 
-extern __inline__ unsigned char * skb_pull(struct sk_buff *skb, unsigned int len)
+extern __inline__ char *__skb_pull(struct sk_buff *skb, unsigned int len)
 {
+	skb->len-=len;
+	return 	skb->data+=len;
+}
+
+extern __inline__ unsigned char * skb_pull(struct sk_buff *skb, unsigned int len)
+{	
 	if (len > skb->len)
 		return NULL;
-	skb->data+=len;
-	skb->len-=len;
-	return skb->data;
+	return __skb_pull(skb,len);
 }
 
 extern __inline__ int skb_headroom(struct sk_buff *skb)
@@ -472,11 +471,16 @@ extern __inline__ void skb_reserve(struct sk_buff *skb, unsigned int len)
 	skb->tail+=len;
 }
 
+extern __inline__ void __skb_trim(struct sk_buff *skb, unsigned int len)
+{
+	skb->len = len;
+	skb->tail = skb->data+len;
+}
+
 extern __inline__ void skb_trim(struct sk_buff *skb, unsigned int len)
 {
 	if (skb->len > len) {
-		skb->len = len;
-		skb->tail = skb->data+len;
+		__skb_trim(skb, len);
 	}
 }
 
@@ -515,8 +519,15 @@ extern __inline__ void skb_orphan(struct sk_buff *skb)
 	skb->sk = NULL;
 }
 
+extern __inline__ void skb_queue_purge(struct sk_buff_head *list)
+{
+	struct sk_buff *skb;
+	while ((skb=skb_dequeue(list))!=NULL)
+		kfree_skb(skb,0);
+}
+
 extern struct sk_buff *		skb_recv_datagram(struct sock *sk,unsigned flags,int noblock, int *err);
-extern unsigned int		datagram_poll(struct socket *sock, poll_table *wait);
+extern unsigned int		datagram_poll(struct socket *sock, struct poll_table_struct *wait);
 extern int			skb_copy_datagram(struct sk_buff *from, int offset, char *to,int size);
 extern int			skb_copy_datagram_iovec(struct sk_buff *from, int offset, struct iovec *to,int size);
 extern void			skb_free_datagram(struct sock * sk, struct sk_buff *skb);

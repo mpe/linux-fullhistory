@@ -5,7 +5,7 @@
  *
  *		The IP fragmentation functionality.
  *		
- * Version:	$Id: ip_fragment.c,v 1.26 1997/09/04 22:35:00 davem Exp $
+ * Version:	$Id: ip_fragment.c,v 1.29 1997/11/22 12:31:05 freitag Exp $
  *
  * Authors:	Fred N. van Kempen <waltje@uWalt.NL.Mugnet.ORG>
  *		Alan Cox <Alan.Cox@linux.org>
@@ -130,7 +130,7 @@ static struct ipfrag *ip_frag_create(int offset, int end,
 /* Find the correct entry in the "incomplete datagrams" queue for
  * this IP datagram, and return the queue entry address if found.
  */
-static inline struct ipq *ip_find(struct iphdr *iph)
+static inline struct ipq *ip_find(struct iphdr *iph, struct dst_entry *dst)
 {
 	__u16 id = iph->id;
 	__u32 saddr = iph->saddr;
@@ -314,7 +314,8 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 	len = qp->ihlen + qp->len;
 	
 	if(len>65535) {
-		printk(KERN_INFO "Oversized IP packet from %d.%d.%d.%d.\n", NIPQUAD(qp->iph->saddr));
+		if (net_ratelimit())
+			printk(KERN_INFO "Oversized IP packet from %d.%d.%d.%d.\n", NIPQUAD(qp->iph->saddr));
 		ip_statistics.IpReasmFails++;
 		ip_free(qp);
 		return NULL;
@@ -322,7 +323,7 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 	
 	if ((skb = dev_alloc_skb(len)) == NULL) {
 		ip_statistics.IpReasmFails++;
-		NETDEBUG(printk(KERN_ERR "IP: queue_glue: no memory for gluing queue %p\n", qp));
+ 		NETDEBUG(printk(KERN_ERR "IP: queue_glue: no memory for gluing queue %p\n", qp));
 		ip_free(qp);
 		return NULL;
 	}
@@ -390,7 +391,7 @@ struct sk_buff *ip_defrag(struct sk_buff *skb)
 		ip_evictor();
 
 	/* Find the entry of this IP datagram in the "incomplete datagrams" queue. */
-	qp = ip_find(iph);
+	qp = ip_find(iph, skb->dst);
 
 	/* Is this a non-fragmented datagram? */
 	offset = ntohs(iph->frag_off);
@@ -435,7 +436,8 @@ struct sk_buff *ip_defrag(struct sk_buff *skb)
 	
 	/* Attempt to construct an oversize packet. */
 	if(ntohs(iph->tot_len)+(int)offset>65535) {
-		printk(KERN_INFO "Oversized packet received from %d.%d.%d.%d\n", NIPQUAD(iph->saddr));
+		if (net_ratelimit())
+			printk(KERN_INFO "Oversized packet received from %d.%d.%d.%d\n", NIPQUAD(iph->saddr));
 		frag_kfree_skb(skb, FREE_READ);
 		ip_statistics.IpReasmFails++;
 		return NULL;

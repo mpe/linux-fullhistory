@@ -73,7 +73,7 @@ masq_quake_done_1 (struct ip_masq_app *mapp, struct ip_masq *ms)
 }
 
 int
-masq_quake_in (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb_p, struct device *dev)
+masq_quake_in (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb_p)
 {
 	struct sk_buff *skb;
 	struct iphdr *iph;
@@ -158,7 +158,7 @@ masq_quake_in (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **sk
 }
 
 int
-masq_quake_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb_p, struct device *dev)
+masq_quake_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb_p, __u32 maddr)
 {
 	struct sk_buff *skb;
 	struct iphdr *iph;
@@ -234,7 +234,7 @@ masq_quake_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **s
 
 	  memcpy(&udp_port, data, 2);
 	  
-	  n_ms = ip_masq_new(dev, IPPROTO_UDP,
+	  n_ms = ip_masq_new(maddr, IPPROTO_UDP,
 			     ms->saddr, htons(udp_port),
 			     ms->daddr, ms->dport,
 			     0);

@@ -12,6 +12,7 @@
  *	History
  *	ROSE 001	Jonathan(G4KLX)	Cloned from nr_out.c
  *	ROSE 003	Jonathan(G4KLX)	New timer architecture.
+ *					Removed M bit processing.
  */
 
 #include <linux/config.h>
@@ -38,52 +39,6 @@
 #include <linux/interrupt.h>
 #include <net/rose.h>
 
-/*
- *	This is where all ROSE frames pass;
- */
-void rose_output(struct sock *sk, struct sk_buff *skb)
-{
-	struct sk_buff *skbn;
-	unsigned char header[ROSE_MIN_LEN];
-	int err, frontlen, len;
-
-	if (skb->len - ROSE_MIN_LEN > ROSE_MAX_PACKET_SIZE) {
-		/* Save a copy of the Header */
-		memcpy(header, skb->data, ROSE_MIN_LEN);
-		skb_pull(skb, ROSE_MIN_LEN);
-
-		frontlen = skb_headroom(skb);
-
-		while (skb->len > 0) {
-			if ((skbn = sock_alloc_send_skb(sk, frontlen + ROSE_MAX_PACKET_SIZE, 0, 0, &err)) == NULL)
-				return;
-
-			skb_reserve(skbn, frontlen);
-
-			len = (ROSE_MAX_PACKET_SIZE > skb->len) ? skb->len : ROSE_MAX_PACKET_SIZE;
-
-			/* Copy the user data */
-			memcpy(skb_put(skbn, len), skb->data, len);
-			skb_pull(skb, len);
-
-			/* Duplicate the Header */
-			skb_push(skbn, ROSE_MIN_LEN);
-			memcpy(skbn->data, header, ROSE_MIN_LEN);
-
-			if (skb->len > 0)
-				skbn->data[2] |= ROSE_M_BIT;
-
-			skb_queue_tail(&sk->write_queue, skbn); /* Throw it on the queue */
-		}
-
-		kfree_skb(skb, FREE_WRITE);
-	} else {
-		skb_queue_tail(&sk->write_queue, skb);		/* Throw it on the queue */
-	}
-
-	rose_kick(sk);
-}
-
 /* 
  *	This procedure is passed a buffer descriptor for an iframe. It builds
  *	the rest of the control part of the frame and then writes it out.
@@ -103,8 +58,8 @@ static void rose_send_iframe(struct sock *sk, struct sk_buff *skb)
 
 void rose_kick(struct sock *sk)
 {
-	struct sk_buff *skb;
-	unsigned short end;
+	struct sk_buff *skb, *skbn;
+	unsigned short start, end;
 
 	if (sk->protinfo.rose->state != ROSE_STATE_3)
 		return;
@@ -115,10 +70,13 @@ void rose_kick(struct sock *sk)
 	if (skb_peek(&sk->write_queue) == NULL)
 		return;
 
-	end = (sk->protinfo.rose->va + sysctl_rose_window_size) % ROSE_MODULUS;
+	start = (skb_peek(&sk->protinfo.rose->ack_queue) == NULL) ? sk->protinfo.rose->va : sk->protinfo.rose->vs;
+	end   = (sk->protinfo.rose->va + sysctl_rose_window_size) % ROSE_MODULUS;
 
-	if (sk->protinfo.rose->vs == end)
+	if (start == end)
 		return;
+
+	sk->protinfo.rose->vs = start;
 
 	/*
 	 * Transmit data until either we're out of data to send or
@@ -128,12 +86,24 @@ void rose_kick(struct sock *sk)
 	skb  = skb_dequeue(&sk->write_queue);
 
 	do {
+		if ((skbn = skb_clone(skb, GFP_ATOMIC)) == NULL) {
+			skb_queue_head(&sk->write_queue, skb);
+			break;
+		}
+
+		skb_set_owner_w(skbn, sk);
+
 		/*
-		 * Transmit the frame.
+		 * Transmit the frame copy.
 		 */
-		rose_send_iframe(sk, skb);
+		rose_send_iframe(sk, skbn);
 
 		sk->protinfo.rose->vs = (sk->protinfo.rose->vs + 1) % ROSE_MODULUS;
+
+		/*
+		 * Requeue the original data frame.
+		 */
+		skb_queue_tail(&sk->protinfo.rose->ack_queue, skb);
 
 	} while (sk->protinfo.rose->vs != end && (skb = skb_dequeue(&sk->write_queue)) != NULL);
 
@@ -159,16 +129,6 @@ void rose_enquiry_response(struct sock *sk)
 	sk->protinfo.rose->condition &= ~ROSE_COND_ACK_PENDING;
 
 	rose_stop_timer(sk);
-}
-
-void rose_check_iframes_acked(struct sock *sk, unsigned short nr)
-{
-	if (sk->protinfo.rose->vs == nr) {
-		sk->protinfo.rose->va = nr;
-	} else {
-		if (sk->protinfo.rose->va != nr)
-			sk->protinfo.rose->va = nr;
-	}
 }
 
 #endif

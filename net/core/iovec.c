@@ -192,69 +192,78 @@ int memcpy_fromiovecend(unsigned char *kdata, struct iovec *iov, int offset,
  *
  *	ip_build_xmit must ensure that when fragmenting only the last
  *	call to this function will be unaligned also.
- *
- *	FIXME: add an error handling path when a copy/checksum from
- *	user space failed because of a invalid pointer.
  */
 
-unsigned int csum_partial_copy_fromiovecend(unsigned char *kdata, 
-					    struct iovec *iov, int offset, 
-					    int len, int csum)
+int csum_partial_copy_fromiovecend(unsigned char *kdata, 
+				   struct iovec *iov, int offset, 
+				   int len, int *csump)
 {
-	__u32	partial;
-	__u32	partial_cnt = 0;
+	int partial_cnt = 0;
+	int err = 0;
+	int csum;
 
-	while(offset>0)
-	{
-		if (offset > iov->iov_len)
-		{
-			offset -= iov->iov_len;
+	do {
+		int copy = iov->iov_len - offset;
 
-		}
-		else
-		{
-			u8 *base;
-			int copy;
+		if (copy >= 0) {
+			u8 *base = iov->iov_base + offset;
 
-			base = iov->iov_base + offset;
-			copy = min(len, iov->iov_len - offset);
-			offset = 0;
-
-			partial_cnt = copy % 4;
-			if (partial_cnt)
-			{
-				copy -= partial_cnt;
-				copy_from_user(&partial, base + copy,
-					       partial_cnt);
+			/* Normal case (single iov component) is fastly detected */
+			if (len <= copy) {
+				*csump = csum_partial_copy_from_user(base, kdata, 
+								     len, *csump, &err);
+				return err;
 			}
 
-			/*	
-			 *	FIXME: add exception handling to the
-			 *	csum functions and set *err when an
-			 *	exception occurs.
-			 */
-			csum = csum_partial_copy_fromuser(base, kdata, 
-							  copy, csum);
+			partial_cnt = copy % 4;
+			if (partial_cnt) {
+				copy -= partial_cnt;
+				err |= copy_from_user(kdata+copy, base+copy, partial_cnt);
+			}
+
+			*csump = csum_partial_copy_from_user(base, kdata, 
+							     copy, *csump, &err);
 
 			len   -= copy + partial_cnt;
 			kdata += copy + partial_cnt;
+			iov++;
+			break;
 		}
-		iov++;	
-	}
+		iov++;
+		offset = -copy;
+	} while (offset > 0);
+
+	csum = *csump;
 
 	while (len>0)
 	{
 		u8 *base = iov->iov_base;
-		int copy=min(len, iov->iov_len);
+		int copy = min(len, iov->iov_len);
 		
+		/* There is a remnant from previous iov. */
 		if (partial_cnt)
 		{
 			int par_len = 4 - partial_cnt;
 
-			copy_from_user(&partial, base + partial_cnt, par_len);
-			csum = csum_partial((u8*) &partial, 4, csum);
+			/* iov component is too short ... */
+			if (par_len > copy) {
+				err |= copy_from_user(kdata, base, copy);
+				base += copy;
+				partial_cnt += copy;
+				kdata += copy;
+				len -= copy;
+				iov++;
+				if (len)
+					continue;
+				*csump = csum_partial(kdata-partial_cnt, partial_cnt, csum);
+				return err;
+			}
+			err |= copy_from_user(kdata, base, par_len);
+			csum = csum_partial(kdata-partial_cnt, 4, csum);
 			base += par_len;
 			copy -= par_len;
+			len -= par_len;
+			kdata += par_len;
 			partial_cnt = 0;
 		}
 
@@ -264,16 +273,15 @@ unsigned int csum_partial_copy_fromiovecend(unsigned char *kdata,
 			if (partial_cnt)
 			{
 				copy -= partial_cnt;
-				copy_from_user(&partial, base + copy,
-					       partial_cnt);
+				err |= copy_from_user(kdata+copy, base + copy, partial_cnt);
 			}
 		}
 
-		csum = csum_partial_copy_fromuser(base, kdata, copy, csum);
+		csum = csum_partial_copy_from_user(base, kdata, copy, csum, &err);
 		len   -= copy + partial_cnt;
 		kdata += copy + partial_cnt;
 		iov++;
 	}
-
-	return csum;
+        *csump = csum;
+	return err;
 }

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.37 1997/08/22 19:15:40 freitag Exp $
+ *	$Id: tcp_ipv6.c,v 1.43 1997/10/30 23:52:34 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -42,22 +42,23 @@
 
 #include <asm/uaccess.h>
 
+#define ICMP_PARANOIA
+
 extern int sysctl_tcp_sack;
 extern int sysctl_tcp_timestamps;
 extern int sysctl_tcp_window_scaling;
 
-static void	tcp_v6_send_reset(struct in6_addr *saddr,
-				  struct in6_addr *daddr,
-				  struct tcphdr *th, struct proto *prot,
-				  struct ipv6_options *opt,
-				  struct device *dev, int pri, int hop_limit);
-
+static void	tcp_v6_send_reset(struct sk_buff *skb);
 static void	tcp_v6_send_check(struct sock *sk, struct tcphdr *th, int len, 
 				  struct sk_buff *skb);
 
 static int	tcp_v6_backlog_rcv(struct sock *sk, struct sk_buff *skb);
 static int	tcp_v6_build_header(struct sock *sk, struct sk_buff *skb);
 static void	tcp_v6_xmit(struct sk_buff *skb);
+static struct open_request *tcp_v6_search_req(struct tcp_opt *tp,
+					      struct ipv6hdr *ip6h,
+					      struct tcphdr *th,
+					      struct open_request **prevp);
 
 static struct tcp_func ipv6_mapped;
 static struct tcp_func ipv6_specific;
@@ -536,7 +537,6 @@ out:
 	return retval;
 }
 
-/* XXX: this functions needs to be updated like tcp_v4_err. */
 void tcp_v6_err(int type, int code, unsigned char *header, __u32 info,
 		struct in6_addr *saddr, struct in6_addr *daddr,
 		struct inet6_protocol *protocol)
@@ -546,14 +546,34 @@ void tcp_v6_err(int type, int code, unsigned char *header, __u32 info,
 	struct sock *sk;
 	int err;
 	int opening;
+	struct tcp_opt *tp; 
+#ifdef ICMP_PARANOIA
+	__u32 seq; 
+#endif
+
+	/* XXX: length check for tcphdr missing here */
 
 	sk = tcp_v6_lookup(daddr, th->dest, saddr, th->source);
 
-	if (sk == NULL)
+	if (sk == NULL) {
+		/* XXX: Update ICMP error count */
 		return;
+	}
+
+	tp = &sk->tp_pinfo.af_tcp;
+#ifdef ICMP_PARANOIA
+	seq = ntohl(th->seq); 
+	if (sk->state != TCP_LISTEN && !between(seq, tp->snd_una, tp->snd_nxt)) {
+		if (net_ratelimit()) 
+			printk(KERN_DEBUG "icmp packet outside the tcp window:"
+					  " s:%d %u,%u,%u\n",
+			       (int)sk->state, seq, tp->snd_una, tp->snd_nxt); 
+		return; 
+	}
+#endif
+
 
 	np = &sk->net_pinfo.af_inet6;
-
 	if (type == ICMPV6_PKT_TOOBIG && sk->state != TCP_LISTEN) {
 		/* icmp should have updated the destination cache entry */
 
@@ -580,12 +600,52 @@ void tcp_v6_err(int type, int code, unsigned char *header, __u32 info,
 		else
 			sk->mtu = np->dst->pmtu;
 
-		release_sock(sk);
+		if (sk->sock_readers) { /* remove later */
+			printk(KERN_DEBUG "tcp_v6_err: pmtu disc: socket locked.\n");
+			return;
+		}
+		tcp_simple_retransmit(sk);
 		return;
 	}
 
-	/* FIXME: This is wrong. Need to check for open_requests here. */
-	opening = (sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV);
+	opening = 0; 
+	/* Might be for an open_request */
+	switch (sk->state) {
+		struct open_request *req, *prev;
+		struct ipv6hdr hd;
+	case TCP_LISTEN:
+		if (sk->sock_readers)
+			return;
+
+		/* Grrrr - fix this later. */
+		ipv6_addr_copy(&hd.saddr, saddr);
+		ipv6_addr_copy(&hd.daddr, daddr); 
+		req = tcp_v6_search_req(tp, &hd,th, &prev);
+		if (!req)
+			return;
+#ifdef ICMP_PARANOIA
+		if (seq != req->snt_isn) {
+			if (net_ratelimit())
+				printk(KERN_DEBUG "icmp packet for openreq "
+				       "with wrong seq number:%d:%d\n",
+				       seq, req->snt_isn);
+			return;
+		}
+#endif		
+		if (req->sk) {
+			sk = req->sk; /* report error in accept */
+		} else {
+			tcp_synq_unlink(tp, req, prev);
+			req->class->destructor(req);
+			tcp_openreq_free(req);
+		}
+		/* FALL THROUGH */ 
+	case TCP_SYN_SENT:
+	case TCP_SYN_RECV: 
+		opening = 1;
+		break; 
+	}
+
 	if (icmpv6_err_convert(type, code, &err) || opening) {
 		sk->err = err;
 
@@ -692,7 +752,8 @@ static void tcp_v6_or_free(struct open_request *req)
 
 static struct or_calltable or_ipv6 = {
 	tcp_v6_send_synack,
-	tcp_v6_or_free
+	tcp_v6_or_free,
+	tcp_v6_send_reset
 };
 
 /* FIXME: this is substantially similar to the ipv4 code.
@@ -864,8 +925,6 @@ static struct sock * tcp_v6_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	atomic_set(&newsk->rmem_alloc, 0);
 	newsk->localroute = sk->localroute;
 
-	newsk->max_unacked = MAX_WINDOW - TCP_WINDOW_DIFF;
-
 	newsk->err = 0;
 	newsk->shutdown = 0;
 	newsk->ack_backlog = 0;
@@ -957,17 +1016,10 @@ static struct sock * tcp_v6_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
 	return newsk;
 }
 
-static void tcp_v6_reply_reset(struct sk_buff *skb)
+static void tcp_v6_send_reset(struct sk_buff *skb)
 {
-}
-
-static void tcp_v6_send_reset(struct in6_addr *saddr, struct in6_addr *daddr, 
-			      struct tcphdr *th, struct proto *prot, 
-			      struct ipv6_options *opt,
-			      struct device *dev, int pri, int hop_limit)
-{
+	struct tcphdr *th = skb->h.th, *t1; 
 	struct sk_buff *buff;
-	struct tcphdr *t1;
 	struct flowi fl;
 
 	if(th->rst)
@@ -982,7 +1034,7 @@ static void tcp_v6_send_reset(struct in6_addr *saddr, struct in6_addr *daddr,
 	if (buff == NULL) 
 	  	return;
 
-	buff->dev = dev;
+	buff->dev = skb->dev;
 
 	tcp_v6_build_header(NULL, buff);
 
@@ -1009,29 +1061,32 @@ static void tcp_v6_send_reset(struct in6_addr *saddr, struct in6_addr *daddr,
 	}
 
 	buff->csum = csum_partial((char *)t1, sizeof(*t1), 0);
-	
-	t1->check = csum_ipv6_magic(saddr, daddr, sizeof(*t1), IPPROTO_TCP,
+
+	fl.nl_u.ip6_u.daddr = &skb->nh.ipv6h->daddr;
+	fl.nl_u.ip6_u.saddr = &skb->nh.ipv6h->saddr;
+
+	t1->check = csum_ipv6_magic(fl.nl_u.ip6_u.saddr,
+				    fl.nl_u.ip6_u.daddr, 
+				    sizeof(*t1), IPPROTO_TCP,
 				    buff->csum);
 
 	fl.proto = IPPROTO_TCP;
-	fl.nl_u.ip6_u.daddr = daddr;
-	fl.nl_u.ip6_u.saddr = saddr;
-	fl.dev = dev;
+	fl.dev = skb->dev;
 	fl.uli_u.ports.dport = th->dest;
 	fl.uli_u.ports.sport = th->source;
 
 	ip6_xmit(NULL, buff, &fl, NULL);
 	tcp_statistics.TcpOutSegs++;
+	tcp_statistics.TcpOutRsts++;
 }
 
 static struct open_request *tcp_v6_search_req(struct tcp_opt *tp,
-					      void *header, 
+					      struct ipv6hdr *ip6h,
 					      struct tcphdr *th,
 					      struct open_request **prevp)
 {
-	struct ipv6hdr *ip6h = header; 
 	struct open_request *req, *prev; 
-	__u16 rport = th->source; 
+	__u16 rport = th->source;
 
 	/*	assumption: the socket is not in use.
 	 *	as we checked the user count on tcp_rcv and we're
@@ -1048,6 +1103,22 @@ static struct open_request *tcp_v6_search_req(struct tcp_opt *tp,
 		prev = req; 
 	}
 	return NULL; 
+}
+
+static void tcp_v6_rst_req(struct sock *sk, struct sk_buff *skb)
+{
+	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
+	struct open_request *req, *prev;
+
+	req = tcp_v6_search_req(tp,skb->nh.ipv6h,skb->h.th,&prev);
+	if (!req)
+		return;
+	/* Sequence number check required by RFC793 */
+	if (before(skb->seq, req->snt_isn) || after(skb->seq, req->snt_isn+1))
+		return;
+	tcp_synq_unlink(tp, req, prev);
+	req->class->destructor(req);
+	tcp_openreq_free(req); 
 }
 
 int tcp_v6_rcv(struct sk_buff *skb, struct device *dev,
@@ -1077,7 +1148,13 @@ int tcp_v6_rcv(struct sk_buff *skb, struct device *dev,
 		 *	Pull up the IP header.
 		 */
 
-		skb_pull(skb, skb->h.raw - skb->data);
+		__skb_pull(skb, skb->h.raw - skb->data);
+
+		/*
+		 *	Count it even if it's bad.
+		 */
+
+		tcp_statistics.TcpInSegs++;
 
 		/*
 		 *	Try to use the device checksum if provided.
@@ -1089,13 +1166,12 @@ int tcp_v6_rcv(struct sk_buff *skb, struct device *dev,
 		case CHECKSUM_HW:
 			if (tcp_v6_check(th,len,saddr,daddr,skb->csum)) {
 				printk(KERN_DEBUG "tcp csum failed\n");
+				tcp_statistics.TcpInErrs++;
 				goto discard_it;
 			}
 		default:
 			/* CHECKSUM_UNNECESSARY */
 		};
-
-		tcp_statistics.TcpInSegs++;
 
 		sk = __tcp_v6_lookup(th, saddr, th->source, daddr, th->dest);
 
@@ -1137,28 +1213,35 @@ int tcp_v6_rcv(struct sk_buff *skb, struct device *dev,
 		}
 	}
 
-	if (!sk->prot) {
-		printk(KERN_DEBUG "tcp_rcv: sk->prot == NULL\n");
-		return(0);
-	}
-
 	skb_set_owner_r(skb, sk);
 
-	/* I don't understand why lock_sock()/release_sock() is not  
-	 * called here. IPv4 does this. It looks like a bug to me. -AK
-	 */
 	if (sk->state == TCP_ESTABLISHED) {
 		if (tcp_rcv_established(sk, skb, th, len))
 			goto no_tcp_socket;
 		return 0;
 	}
 
+	if (sk->state == TCP_LISTEN) { 
+		__u32 flg = ((u32 *)th)[3]; 
 
-	if (sk->state == TCP_LISTEN && 
-	    ((u32 *)th)[3] & __constant_htonl(0x00120000)) {
-		sk = tcp_check_req(sk, skb, opt); 
-		if (sk == NULL)
-			goto discard_it;
+		/* Check for RST */
+		if (flg & __constant_htonl(0x00040000)) {
+			tcp_v6_rst_req(sk, skb); 
+		}
+		
+		/* Check SYN|ACK */
+		if (flg & __constant_htonl(0x00120000)) {
+			struct open_request *req, *prev;
+			struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+			
+			req = tcp_v6_search_req(tp, skb->nh.ipv6h,th,&prev); 
+			if (req) {
+				sk = tcp_check_req(sk, skb, req); 
+			}
+			/* else do syncookies (add them here) */
+			if (sk == NULL)
+				goto discard_it;
+		}
 	}
 
 	if (tcp_rcv_state_process(sk, skb, th, opt, len) == 0)
@@ -1168,11 +1251,10 @@ no_tcp_socket:
 
 	/*
 	 *	No such TCB. If th->rst is 0 send a reset
-	 *	(checked in tcp_send_reset)
+	 *	(checked in tcp_v6_send_reset)
 	 */
 
-	tcp_v6_send_reset(daddr, saddr, th, &tcpv6_prot, opt, dev,
-			  skb->nh.ipv6h->priority, 255);
+	tcp_v6_send_reset(skb);
 
 discard_it:
 
@@ -1285,12 +1367,6 @@ static void v6_addr2sockaddr(struct sock *sk, struct sockaddr * uaddr)
 	sin6->sin6_port	= sk->dummy_th.dest;
 }
 
-static struct sock *cookie_v6_check(struct sock *sk, struct sk_buff *skb,
-				    void *opt)
-{
-	return sk;  /* dummy */
-}
-
 static struct tcp_func ipv6_specific = {
 	tcp_v6_build_header,
 	tcp_v6_xmit,
@@ -1302,9 +1378,6 @@ static struct tcp_func ipv6_specific = {
 	ipv6_setsockopt,
 	ipv6_getsockopt,
 	v6_addr2sockaddr,
-	tcp_v6_reply_reset,
-	tcp_v6_search_req,
-	/* not implemented yet: */ cookie_v6_check,
 	sizeof(struct sockaddr_in6)
 };
 
@@ -1323,9 +1396,6 @@ static struct tcp_func ipv6_mapped = {
 	ipv6_setsockopt,
 	ipv6_getsockopt,
 	v6_addr2sockaddr,
-	tcp_v6_reply_reset,
-	tcp_v6_search_req,
-	cookie_v6_check, /* not implemented yet. */
 	sizeof(struct sockaddr_in6)
 };
 
@@ -1364,8 +1434,6 @@ static int tcp_v6_init_sock(struct sock *sk)
 	sk->priority = 1;
 	sk->state = TCP_CLOSE;
 
-	/* this is how many unacked bytes we will accept for this socket.  */
-	sk->max_unacked = 2048; /* needs to be at most 2 full packets. */
 	sk->max_ack_backlog = SOMAXCONN;
 
 	sk->mtu = 576;

@@ -12,8 +12,7 @@ typedef unsigned short	sa_family_t;
  *	1003.1g requires sa_family_t and that sa_data is char.
  */
  
-struct sockaddr 
-{
+struct sockaddr {
 	sa_family_t	sa_family;	/* address family, AF_xxx	*/
 	char		sa_data[14];	/* 14 bytes of protocol address	*/
 };
@@ -29,8 +28,7 @@ struct linger {
  *	belong in an obscure libc emulation or the bin.
  */
  
-struct msghdr 
-{
+struct msghdr {
 	void	*	msg_name;	/* Socket name			*/
 	int		msg_namelen;	/* Length of name		*/
 	struct iovec *	msg_iov;	/* Data blocks			*/
@@ -57,7 +55,8 @@ struct cmsghdr {
  *	Table 5-14 of POSIX 1003.1g
  */
 
-#define CMSG_NXTHDR(mhdr, cmsg) cmsg_nxthdr(mhdr, cmsg)
+#define __CMSG_NXTHDR(ctl, len, cmsg) __cmsg_nxthdr((ctl),(len),(cmsg))
+#define CMSG_NXTHDR(mhdr, cmsg) cmsg_nxthdr((mhdr), (cmsg))
 
 #define CMSG_ALIGN(len) ( ((len)+sizeof(long)-1) & ~(sizeof(long)-1) )
 
@@ -65,18 +64,19 @@ struct cmsghdr {
 #define CMSG_SPACE(len) (CMSG_ALIGN(sizeof(struct cmsghdr)) + CMSG_ALIGN(len))
 #define CMSG_LEN(len) (CMSG_ALIGN(sizeof(struct cmsghdr)) + (len))
 
-#define	CMSG_FIRSTHDR(msg)	((msg)->msg_controllen >= sizeof(struct cmsghdr) ? \
-				 (struct cmsghdr *)(msg)->msg_control : \
-				 (struct cmsghdr *)NULL)
+#define __CMSG_FIRSTHDR(ctl,len) ((len) >= sizeof(struct cmsghdr) ? \
+				  (struct cmsghdr *)(ctl) : \
+				  (struct cmsghdr *)NULL)
+#define CMSG_FIRSTHDR(msg)	__CMSG_FIRSTHDR((msg)->msg_control, (msg)->msg_controllen)
 
 /*
  *	This mess will go away with glibc
  */
  
 #ifdef __KERNEL__
-#define KINLINE extern __inline__
+#define __KINLINE extern __inline__
 #else
-#define KINLINE static
+#define __KINLINE static
 #endif
 
 
@@ -84,20 +84,23 @@ struct cmsghdr {
  *	Get the next cmsg header
  */
  
-KINLINE struct cmsghdr * cmsg_nxthdr(struct msghdr *mhdr,
-					       struct cmsghdr *cmsg)
+__KINLINE struct cmsghdr * __cmsg_nxthdr(void *__ctl, __kernel_size_t __size,
+					       struct cmsghdr *__cmsg)
 {
-	unsigned char * ptr;
+	unsigned char * __ptr;
 
-	if (cmsg->cmsg_len < sizeof(struct cmsghdr))
-	{
+	if (__cmsg->cmsg_len < sizeof(struct cmsghdr))
 		return NULL;
-	}
-	ptr = ((unsigned char *) cmsg) +  CMSG_ALIGN(cmsg->cmsg_len);
-	if (ptr >= (unsigned char *) mhdr->msg_control + mhdr->msg_controllen)
+	__ptr = ((unsigned char *) __cmsg) +  CMSG_ALIGN(__cmsg->cmsg_len);
+	if (__ptr >= (unsigned char *) __ctl + __size)
 		return NULL;
 
-	return (struct cmsghdr *) ptr;
+	return (struct cmsghdr *) __ptr;
+}
+
+__KINLINE struct cmsghdr * cmsg_nxthdr (struct msghdr *__msg, struct cmsghdr *__cmsg)
+{
+	return __cmsg_nxthdr(__msg->msg_control, __msg->msg_controllen, __cmsg);
 }
 
 /* "Socket"-level control message types: */
@@ -106,8 +109,7 @@ KINLINE struct cmsghdr * cmsg_nxthdr(struct msghdr *mhdr,
 #define SCM_CREDENTIALS 0x02		/* rw: struct ucred		*/
 #define SCM_CONNECT	0x03		/* rw: struct scm_connect	*/
 
-struct ucred
-{
+struct ucred {
 	__kernel_pid_t	pid;
 	__kernel_uid_t	uid;
 	__kernel_gid_t	gid;
@@ -144,6 +146,9 @@ struct ucred
 #define AF_NETBEUI	13	/* Reserved for 802.2LLC project*/
 #define AF_SECURITY	14	/* Security callback pseudo AF */
 #define pseudo_AF_KEY   15      /* PF_KEY key management API */
+#define AF_NETLINK	16
+#define AF_ROUTE	AF_NETLINK /* Alias to emulate 4.4BSD */
+#define AF_PACKET	17	/* Packet family		*/
 #define AF_MAX		32	/* For now.. */
 
 /* Protocol families, same as address families. */
@@ -164,6 +169,9 @@ struct ucred
 #define PF_NETBEUI	AF_NETBEUI
 #define PF_SECURITY	AF_SECURITY
 #define PF_KEY          pseudo_AF_KEY
+#define PF_NETLINK	AF_NETLINK
+#define PF_ROUTE	AF_ROUTE
+#define PF_PACKET	AF_PACKET
 
 #define PF_MAX		AF_MAX
 
@@ -196,6 +204,9 @@ struct ucred
 
 /* Setsockoptions(2) level. Thanks to BSD these must match IPPROTO_xxx */
 #define SOL_IP		0
+/* #define SOL_ICMP	1	No-no-no! Due to Linux :-) we cannot use SOL_ICMP=1 */
+#define SOL_TCP		6
+#define SOL_UDP		17
 #define SOL_IPV6	41
 #define SOL_ICMPV6	58
 #define SOL_RAW		255
@@ -206,8 +217,7 @@ struct ucred
 #define SOL_ROSE	260
 #define SOL_DECNET	261
 #define	SOL_X25		262
-#define SOL_TCP		6
-#define SOL_UDP		17
+#define SOL_PACKET	263
 
 /* IPX options */
 #define IPX_TYPE	1
@@ -216,24 +226,19 @@ struct ucred
 #define TCP_NODELAY	1
 #define TCP_MAXSEG	2
 
-/* The various priorities. */
-#define SOPRI_INTERACTIVE	0
-#define SOPRI_NORMAL		1
-#define SOPRI_BACKGROUND	2
-
 #ifdef __KERNEL__
 extern int memcpy_fromiovec(unsigned char *kdata, struct iovec *iov, int len);
 extern int memcpy_fromiovecend(unsigned char *kdata, struct iovec *iov, 
 				int offset, int len);
-extern unsigned int csum_partial_copy_fromiovecend(unsigned char *kdata, 
-						   struct iovec *iov, 
-						   int offset, 
-						   int len, int csum);
+extern int csum_partial_copy_fromiovecend(unsigned char *kdata, 
+					  struct iovec *iov, 
+					  int offset, 
+					  int len, int *csump);
 
 extern int verify_iovec(struct msghdr *m, struct iovec *iov, char *address, int mode);
 extern int memcpy_toiovec(struct iovec *v, unsigned char *kdata, int len);
 extern int move_addr_to_user(void *kaddr, int klen, void *uaddr, int *ulen);
 extern int move_addr_to_kernel(void *uaddr, int ulen, void *kaddr);
-extern void put_cmsg(struct msghdr*, int level, int type, int len, void *data);
+extern int put_cmsg(struct msghdr*, int level, int type, int len, void *data);
 #endif
 #endif /* _LINUX_SOCKET_H */

@@ -24,7 +24,11 @@ extern ctl_table ipv4_table[];
 extern ctl_table ipx_table[];
 #endif
 
-extern ctl_table core_table[], unix_table[];
+extern ctl_table core_table[];
+
+#ifdef CONFIG_UNIX
+extern ctl_table unix_table[];
+#endif
 
 #ifdef CONFIG_NET
 extern ctl_table ether_table[], e802_table[];
@@ -44,7 +48,9 @@ extern ctl_table tr_table[];
 
 ctl_table net_table[] = {
 	{NET_CORE,   "core",      NULL, 0, 0555, core_table},      
+#ifdef CONFIG_UNIX
         {NET_UNIX,   "unix",      NULL, 0, 0555, unix_table},
+#endif
 #ifdef CONFIG_NET
 	{NET_802,    "802",       NULL, 0, 0555, e802_table},
 	{NET_ETHER,  "ethernet",  NULL, 0, 0555, ether_table},

@@ -1,7 +1,7 @@
 /*  -*- linux-c -*-
- *  linux/drivers/block/promise.c	Version 0.07  Mar 26, 1996
+ *  linux/drivers/block/pdc4030.c	Version 0.08  Nov 30, 1997
  *
- *  Copyright (C) 1995-1996  Linus Torvalds & authors (see below)
+ *  Copyright (C) 1995-1998  Linus Torvalds & authors (see below)
  */
 
 /*
@@ -28,6 +28,7 @@
  *  Version 0.06	Ooops. Add hwgroup to direct call of ide_intr() -ml
  *  Version 0.07	Added support for DC4030 variants
  *			Secondary interface autodetection
+ *  Version 0.08	Renamed to pdc4030.c
  */
 
 /*
@@ -56,7 +57,7 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 #include "ide.h"
-#include "promise.h"
+#include "pdc4030.h"
 
 /* This is needed as the controller may not interrupt if the required data is
 available in the cache. We have to simulate an interrupt. Ugh! */
@@ -73,15 +74,15 @@ static void promise_selectproc (ide_drive_t *drive)
 
 	OUT_BYTE(drive->select.all,IDE_SELECT_REG);
 	udelay(1);	/* paranoia */
-	number = ((HWIF(drive)->is_promise2)<<1) + drive->select.b.unit;
+	number = ((HWIF(drive)->is_pdc4030_2)<<1) + drive->select.b.unit;
 	OUT_BYTE(number,IDE_FEATURE_REG);
 }
 
 /*
- * promise_cmd handles the set of vendor specific commands that are initiated
+ * pdc4030_cmd handles the set of vendor specific commands that are initiated
  * by command F0. They all have the same success/failure notification.
  */
-int promise_cmd(ide_drive_t *drive, byte cmd)
+int pdc4030_cmd(ide_drive_t *drive, byte cmd)
 {
 	unsigned long timeout, timer;
 	byte status_val;
@@ -111,17 +112,17 @@ int promise_cmd(ide_drive_t *drive, byte cmd)
 
 ide_hwif_t *hwif_required = NULL;
 
-void setup_dc4030 (ide_hwif_t *hwif)
+void setup_pdc4030 (ide_hwif_t *hwif)
 {
     hwif_required = hwif;
 }
 
 /*
-init_dc4030: Test for presence of a Promise caching controller card.
+init_pdc4030: Test for presence of a Promise caching controller card.
 Returns: 0 if no Promise card present at this io_base
 	 1 if Promise card found
 */
-int init_dc4030 (void)
+int init_pdc4030 (void)
 {
 	ide_hwif_t *hwif = hwif_required;
         ide_drive_t *drive;
@@ -133,7 +134,7 @@ int init_dc4030 (void)
 
 	drive = &hwif->drives[0];
 	second_hwif = &ide_hwifs[hwif->index+1];
-	if(hwif->is_promise2) /* we've already been found ! */
+	if(hwif->is_pdc4030_2) /* we've already been found ! */
 	    return 1;
 
 	if(IN_BYTE(IDE_NSECTOR_REG) == 0xFF || IN_BYTE(IDE_SECTOR_REG) == 0xFF)
@@ -141,7 +142,7 @@ int init_dc4030 (void)
 	    return 0;
 	}
 	OUT_BYTE(0x08,IDE_CONTROL_REG);
-	if(promise_cmd(drive,PROMISE_GET_CONFIG)) {
+	if(pdc4030_cmd(drive,PROMISE_GET_CONFIG)) {
 	    return 0;
 	}
 	if(ide_wait_stat(drive,DATA_READY,BAD_W_STAT,WAIT_DRQ)) {
@@ -168,7 +169,7 @@ int init_dc4030 (void)
             default:   hwif->irq = 15; break;
 	}
 	printk("on IRQ %d\n",hwif->irq);
-	hwif->chipset    = second_hwif->chipset    = ide_promise;
+	hwif->chipset    = second_hwif->chipset    = ide_pdc4030;
 	hwif->selectproc = second_hwif->selectproc = &promise_selectproc;
 /* Shift the remaining interfaces down by one */
 	for (i=MAX_HWIFS-1 ; i > hwif->index+1 ; i--) {
@@ -179,7 +180,7 @@ int init_dc4030 (void)
 		h->io_ports[IDE_CONTROL_OFFSET] = (h-1)->io_ports[IDE_CONTROL_OFFSET];
 		h->noprobe = (h-1)->noprobe;
 	}
-	second_hwif->is_promise2 = 1;
+	second_hwif->is_pdc4030_2 = 1;
 	ide_init_hwif_ports(second_hwif->io_ports, hwif->io_ports[IDE_DATA_OFFSET], NULL);
 	second_hwif->io_ports[IDE_CONTROL_OFFSET] = hwif->io_ports[IDE_CONTROL_OFFSET];
 	second_hwif->irq = hwif->irq;
@@ -304,11 +305,11 @@ static void promise_write (ide_drive_t *drive)
 }
 
 /*
- * do_promise_io() is called from do_rw_disk, having had the block number
+ * do_pdc4030_io() is called from do_rw_disk, having had the block number
  * already set up. It issues a READ or WRITE command to the Promise
  * controller, assuming LBA has been used to set up the block number.
  */
-void do_promise_io (ide_drive_t *drive, struct request *rq)
+void do_pdc4030_io (ide_drive_t *drive, struct request *rq)
 {
 	unsigned long timeout;
 	byte stat;

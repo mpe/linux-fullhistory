@@ -4,8 +4,9 @@
  *
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
+ *	Alexey Kuznetsov	<kuznet@ms2.inr.ac.ru>
  *
- *	$Id: sit.c,v 1.14 1997/04/29 09:38:52 mj Exp $
+ *	$Id: sit.c,v 1.23 1997/11/08 18:15:49 kuznet Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -13,6 +14,9 @@
  *      2 of the License, or (at your option) any later version.
  */
 
+#include <linux/config.h>
+#define __NO_VERSION__
+#include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -23,6 +27,7 @@
 #include <linux/netdevice.h>
 #include <linux/if_arp.h>
 #include <linux/icmp.h>
+#include <asm/uaccess.h>
 #include <linux/init.h>
 
 #include <net/sock.h>
@@ -31,385 +36,363 @@
 #include <net/ipv6.h>
 #include <net/protocol.h>
 #include <net/transp_v6.h>
+#include <net/ip6_fib.h>
+#include <net/ip6_route.h>
 #include <net/ndisc.h>
 #include <net/addrconf.h>
 #include <net/ip.h>
 #include <net/udp.h>
-#include <net/sit.h>
+#include <net/icmp.h>
+#include <net/ipip.h>
 
+/*
+   This version of net/ipv6/sit.c is cloned of net/ipv4/ip_gre.c
 
-static int sit_init_dev(struct device *dev);
+   For comments look at net/ipv4/ip_gre.c --ANK
+ */
 
-static struct device sit_device = {
-	"sit0",
-	0, 0, 0, 0,
-	0x0, 0,
-	0, 0, 0, NULL, sit_init_dev
+#define HASH_SIZE  16
+#define HASH(addr) ((addr^(addr>>4))&0xF)
+
+static int ipip6_fb_tunnel_init(struct device *dev);
+static int ipip6_tunnel_init(struct device *dev);
+
+static struct device ipip6_fb_tunnel_dev = {
+	NULL, 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NULL, ipip6_fb_tunnel_init,
 };
 
-static unsigned long		sit_gc_last_run;
-static void			sit_mtu_cache_gc(void);
-
-static int			sit_xmit(struct sk_buff *skb, 
-					 struct device *dev);
-static int			sit_rcv(struct sk_buff *skb, unsigned short len);
-static void 			sit_err(struct sk_buff *skb, unsigned char *dp);
-
-static int			sit_open(struct device *dev);
-static int			sit_close(struct device *dev);
-
-static struct net_device_stats *sit_get_stats(struct device *dev);
-
-extern void	udp_err(struct sk_buff *, unsigned char *);
-
-static struct inet_protocol sit_protocol = {
-	sit_rcv,
-	sit_err,
-	0,
-	IPPROTO_IPV6,
-	0,
-	NULL,
-	"IPv6"
+static struct ip_tunnel ipip6_fb_tunnel = {
+	NULL, &ipip6_fb_tunnel_dev, {0, }, 0, 0, 0, 0, 0, 0, 0, {"sit0", }
 };
 
-#define SIT_NUM_BUCKETS	16
+static struct ip_tunnel *tunnels_r_l[HASH_SIZE];
+static struct ip_tunnel *tunnels_r[HASH_SIZE];
+static struct ip_tunnel *tunnels_l[HASH_SIZE];
+static struct ip_tunnel *tunnels_wc[1];
+static struct ip_tunnel **tunnels[4] = { tunnels_wc, tunnels_l, tunnels_r, tunnels_r_l };
 
-struct sit_mtu_info *sit_mtu_cache[SIT_NUM_BUCKETS];
-
-static int		vif_num = 0;
-static struct sit_vif	*vif_list = NULL;
-
-static __inline__ __u32 sit_addr_hash(__u32 addr)
+static struct ip_tunnel * ipip6_tunnel_lookup(u32 remote, u32 local)
 {
-        
-        __u32 hash_val;
-        
-        hash_val = addr;
+	unsigned h0 = HASH(remote);
+	unsigned h1 = HASH(local);
+	struct ip_tunnel *t;
 
-        hash_val ^= hash_val >> 16;
-	hash_val ^= hash_val >> 8;
-        
-        return (hash_val & (SIT_NUM_BUCKETS - 1));
+	for (t = tunnels_r_l[h0^h1]; t; t = t->next) {
+		if (local == t->parms.iph.saddr &&
+		    remote == t->parms.iph.daddr && (t->dev->flags&IFF_UP))
+			return t;
+	}
+	for (t = tunnels_r[h0]; t; t = t->next) {
+		if (remote == t->parms.iph.daddr && (t->dev->flags&IFF_UP))
+			return t;
+	}
+	for (t = tunnels_l[h1]; t; t = t->next) {
+		if (local == t->parms.iph.saddr && (t->dev->flags&IFF_UP))
+			return t;
+	}
+	if ((t = tunnels_wc[0]) != NULL && (t->dev->flags&IFF_UP))
+		return t;
+	return NULL;
 }
 
-static void sit_cache_insert(__u32 addr, int mtu)
+struct ip_tunnel * ipip6_tunnel_locate(struct ip_tunnel_parm *parms, int create)
 {
-	struct sit_mtu_info *minfo;
-	int hash;
-	
-	minfo = kmalloc(sizeof(struct sit_mtu_info), GFP_ATOMIC);
-	
-	if (minfo == NULL)
+	u32 remote = parms->iph.daddr;
+	u32 local = parms->iph.saddr;
+	struct ip_tunnel *t, **tp, *nt;
+	struct device *dev;
+	unsigned h = 0;
+	int prio = 0;
+
+	if (remote) {
+		prio |= 2;
+		h ^= HASH(remote);
+	}
+	if (local) {
+		prio |= 1;
+		h ^= HASH(local);
+	}
+	for (tp = &tunnels[prio][h]; (t = *tp) != NULL; tp = &t->next) {
+		if (local == t->parms.iph.saddr && remote == t->parms.iph.daddr)
+			return t;
+	}
+	if (!create)
+		return NULL;
+
+	MOD_INC_USE_COUNT;
+	dev = kmalloc(sizeof(*dev) + sizeof(*t), GFP_KERNEL);
+	if (dev == NULL) {
+		MOD_DEC_USE_COUNT;
+		return NULL;
+	}
+	memset(dev, 0, sizeof(*dev) + sizeof(*t));
+	dev->priv = (void*)(dev+1);
+	nt = (struct ip_tunnel*)dev->priv;
+	nt->dev = dev;
+	dev->name = nt->parms.name;
+	dev->init = ipip6_tunnel_init;
+	memcpy(&nt->parms, parms, sizeof(*parms));
+	if (dev->name[0] == 0) {
+		int i;
+		for (i=1; i<100; i++) {
+			sprintf(dev->name, "sit%d", i);
+			if (dev_get(dev->name) == NULL)
+				break;
+		}
+		if (i==100)
+			goto failed;
+		memcpy(parms->name, dev->name, IFNAMSIZ);
+	}
+	if (register_netdevice(dev) < 0)
+		goto failed;
+
+	start_bh_atomic();
+	nt->next = t;
+	*tp = nt;
+	end_bh_atomic();
+	/* Do not decrement MOD_USE_COUNT here. */
+	return nt;
+
+failed:
+	kfree(dev);
+	MOD_DEC_USE_COUNT;
+	return NULL;
+}
+
+static void ipip6_tunnel_destroy(struct device *dev)
+{
+	struct ip_tunnel *t, **tp;
+	struct ip_tunnel *t0 = (struct ip_tunnel*)dev->priv;
+	u32 remote = t0->parms.iph.daddr;
+	u32 local = t0->parms.iph.saddr;
+	unsigned h = 0;
+	int prio = 0;
+
+	if (dev == &ipip6_fb_tunnel_dev) {
+		tunnels_wc[0] = NULL;
 		return;
+	}
 
-	minfo->addr = addr;
-	minfo->tstamp = jiffies;
-	minfo->mtu = mtu;
-
-	hash = sit_addr_hash(addr);
-
-	minfo->next = sit_mtu_cache[hash];
-	sit_mtu_cache[hash] = minfo;
-}
-
-static struct sit_mtu_info * sit_mtu_lookup(__u32 addr)
-{
-	struct sit_mtu_info *iter;
-	int hash;
-
-	hash = sit_addr_hash(addr);
-
-	for(iter = sit_mtu_cache[hash]; iter; iter=iter->next) {
-		if (iter->addr == addr) {
-			iter->tstamp = jiffies;
+	if (remote) {
+		prio |= 2;
+		h ^= HASH(remote);
+	}
+	if (local) {
+		prio |= 1;
+		h ^= HASH(local);
+	}
+	for (tp = &tunnels[prio][h]; (t = *tp) != NULL; tp = &t->next) {
+		if (t == t0) {
+			*tp = t->next;
+			kfree(dev);
+			MOD_DEC_USE_COUNT;
 			break;
 		}
 	}
-
-	/*
-	 *	run garbage collector
-	 */
-
-	if (jiffies - sit_gc_last_run > SIT_GC_FREQUENCY) {
-		sit_mtu_cache_gc();
-		sit_gc_last_run = jiffies;
-	}
-
-	return iter;
 }
 
-static void sit_mtu_cache_gc(void)
+
+void ipip6_err(struct sk_buff *skb, unsigned char *dp, int len)
 {
-	struct sit_mtu_info *iter, *back;
-	unsigned long now = jiffies;
-	int i;
+#ifndef I_WISH_WORLD_WERE_PERFECT
 
-	for (i=0; i < SIT_NUM_BUCKETS; i++) {
-		back = NULL;
-		for (iter = sit_mtu_cache[i]; iter;) {
-			if (now - iter->tstamp > SIT_GC_TIMEOUT) {
-				struct sit_mtu_info *old;
-
-				old = iter;
-				iter = iter->next;
-
-				if (back)
-					back->next = iter;
-				else
-					sit_mtu_cache[i] = iter;
-
-				kfree(old);
-				continue;
-			}
-			back = iter;
-			iter = iter->next;
-		}
-	}
-}
-
-static int sit_init_dev(struct device *dev)
-{
-	int i;
-
-	dev->open	= sit_open;
-	dev->stop	= sit_close;
-
-	dev->hard_start_xmit	= sit_xmit;
-	dev->get_stats		= sit_get_stats;
-
-	dev->priv = kmalloc(sizeof(struct net_device_stats), GFP_KERNEL);
-
-	if (dev->priv == NULL)
-		return -ENOMEM;
-
-	memset(dev->priv, 0, sizeof(struct net_device_stats));
-
-
-	for (i = 0; i < DEV_NUMBUFFS; i++)
-		skb_queue_head_init(&dev->buffs[i]);
-
-	dev->hard_header	= NULL;
-	dev->rebuild_header 	= NULL;
-	dev->set_mac_address 	= NULL;
-	dev->hard_header_cache 	= NULL;
-	dev->header_cache_update= NULL;
-
-	dev->type		= ARPHRD_SIT;
-
-	dev->hard_header_len 	= MAX_HEADER;
-	dev->mtu		= 1500 - sizeof(struct iphdr);
-	dev->addr_len		= 0;
-	dev->tx_queue_len	= 0;
-
-	memset(dev->broadcast, 0, MAX_ADDR_LEN);
-	memset(dev->dev_addr,  0, MAX_ADDR_LEN);
-
-	dev->flags		= IFF_NOARP;	
-
-	dev->family		= AF_INET6;
-	dev->pa_addr		= 0;
-	dev->pa_brdaddr 	= 0;
-	dev->pa_dstaddr		= 0;
-	dev->pa_mask		= 0;
-	dev->pa_alen		= 4;
-
-	return 0;
-}
-
-static int sit_init_vif(struct device *dev)
-{
-	int i;
-
-	dev->flags = IFF_NOARP|IFF_POINTOPOINT|IFF_MULTICAST;
-	dev->priv = kmalloc(sizeof(struct net_device_stats), GFP_KERNEL);
-
-	if (dev->priv == NULL)
-		return -ENOMEM;
-
-	memset(dev->priv, 0, sizeof(struct net_device_stats));
-
-	for (i = 0; i < DEV_NUMBUFFS; i++)
-		skb_queue_head_init(&dev->buffs[i]);
-		
-	return 0;
-}
-
-static int sit_open(struct device *dev)
-{
-	return 0;
-}
-
-static int sit_close(struct device *dev)
-{
-	return 0;
-}
-
-__initfunc(int sit_init(void))
-{
-	int i;
-
-	/* register device */
-
-	if (register_netdev(&sit_device) != 0)
-		return -EIO;
-
-	inet_add_protocol(&sit_protocol);
-
-	for (i=0; i < SIT_NUM_BUCKETS; i++)
-		sit_mtu_cache[i] = NULL;
-
-	sit_gc_last_run = jiffies;
-
-	return 0;
-}
-
-struct device *sit_add_tunnel(__u32 dstaddr)
-{
-	struct sit_vif *vif;
-	struct device *dev;
-
-	if ((sit_device.flags & IFF_UP) == 0)
-		return NULL;
-	
-	vif = kmalloc(sizeof(struct sit_vif), GFP_KERNEL);
-	if (vif == NULL)
-		return NULL;
-	
-	/*
-	 *	Create PtoP configured tunnel
-	 */
-	
-	dev = kmalloc(sizeof(struct device), GFP_KERNEL);
-	if (dev == NULL)
-		return NULL;
-
-	memcpy(dev, &sit_device, sizeof(struct device));
-	dev->init = sit_init_vif;
-	dev->pa_dstaddr = dstaddr;
-
-	dev->name = vif->name;
-	sprintf(vif->name, "sit%d", ++vif_num);
-
-	register_netdev(dev);
-
-	vif->dev = dev;
-	vif->next = vif_list;
-	vif_list = vif;
-
-	return dev;
-}
-
-void sit_cleanup(void)
-{
-	struct sit_vif *vif;
-
-	for (vif = vif_list; vif;) {
-		struct device *dev = vif->dev;
-		struct sit_vif *cur;
-
-		unregister_netdev(dev);
-		kfree(dev->priv);
-		kfree(dev);
-		
-		cur = vif;
-		vif = vif->next;
-	}
-
-	vif_list = NULL;
-
-	unregister_netdev(&sit_device);
-	inet_del_protocol(&sit_protocol);
-	
-}
-
-/*
- *	receive IPv4 ICMP messages
+/* It is not :-( All the routers (except for Linux) return only
+   8 bytes of packet payload. It means, that precise relaying of
+   ICMP in the real Internet is absolutely infeasible.
  */
-
-static void sit_err(struct sk_buff *skb, unsigned char *dp)
-{
 	struct iphdr *iph = (struct iphdr*)dp;
 	int type = skb->h.icmph->type;
 	int code = skb->h.icmph->code;
+	struct ip_tunnel *t;
 
-	if (type == ICMP_DEST_UNREACH && code == ICMP_FRAG_NEEDED) {
-		struct sit_mtu_info *minfo;
-		unsigned short info = skb->h.icmph->un.frag.mtu - sizeof(struct iphdr);
+	if (len < sizeof(struct iphdr))
+		return;
 
-		minfo = sit_mtu_lookup(iph->daddr);
+	switch (type) {
+	default:
+	case ICMP_PARAMETERPROB:
+		return;
 
-		printk(KERN_DEBUG "sit: %08lx pmtu = %ul\n", ntohl(iph->saddr),
-		       info);
-
-		if (minfo == NULL) {
-			minfo = kmalloc(sizeof(struct sit_mtu_info),
-					GFP_ATOMIC);
-
-			if (minfo == NULL)
-				return;
-
-			start_bh_atomic();
-			sit_cache_insert(iph->daddr, info);
-			end_bh_atomic();
-		} else {
-			minfo->mtu = info;
-		}
-	}
-}
-
-static int sit_rcv(struct sk_buff *skb, unsigned short len)
-{
-	struct net_device_stats *stats;
-	struct device *dev = NULL;
-	struct sit_vif *vif;	
-	__u32  saddr = skb->nh.iph->saddr;
-       
-	skb->h.raw = skb->nh.raw = skb_pull(skb, skb->h.raw - skb->data);
-
-	skb->protocol = __constant_htons(ETH_P_IPV6);
-
-	for (vif = vif_list; vif; vif = vif->next) {
-		if (saddr == vif->dev->pa_dstaddr) {
-			dev = vif->dev;
+	case ICMP_DEST_UNREACH:
+		switch (code) {
+		case ICMP_SR_FAILED:
+		case ICMP_PORT_UNREACH:
+			/* Impossible event. */
+			return;
+		case ICMP_FRAG_NEEDED:
+			/* Soft state for pmtu is maintained by IP core. */
+			return;
+		default:
+			/* All others are translated to HOST_UNREACH.
+			   rfc2003 contains "deep thoughts" about NET_UNREACH,
+			   I believe they are just ether pollution. --ANK
+			 */
 			break;
 		}
+		break;
+	case ICMP_TIME_EXCEEDED:
+		if (code != ICMP_EXC_TTL)
+			return;
+		break;
 	}
 
-	if (dev == NULL)
-		dev = &sit_device;
+	t = ipip6_tunnel_lookup(iph->daddr, iph->saddr);
+	if (t == NULL || t->parms.iph.daddr == 0)
+		return;
+	if (t->parms.iph.ttl == 0 && type == ICMP_TIME_EXCEEDED)
+		return;
 
-	skb->dev = dev;
-	skb->ip_summed = CHECKSUM_NONE;
+	if (jiffies - t->err_time < IPTUNNEL_ERR_TIMEO)
+		t->err_count++;
+	else
+		t->err_count = 1;
+	t->err_time = jiffies;
+	return;
+#else
+	struct iphdr *iph = (struct iphdr*)dp;
+	int hlen = iph->ihl<<2;
+	struct ipv6hdr *iph6;
+	int type = skb->h.icmph->type;
+	int code = skb->h.icmph->code;
+	int rel_type = 0;
+	int rel_code = 0;
+	int rel_info = 0;
+	struct sk_buff *skb2;
+	struct rt6_info *rt6i;
 
-	stats = (struct net_device_stats *)dev->priv;
-	stats->rx_bytes += len;
-	stats->rx_packets++;
+	if (len < hlen + sizeof(struct ipv6hdr))
+		return;
+	iph6 = (struct ipv6hdr*)(dp + hlen);
 
-	ipv6_rcv(skb, dev, NULL);
+	switch (type) {
+	default:
+		return;
+	case ICMP_PARAMETERPROB:
+		if (skb->h.icmph->un.gateway < hlen)
+			return;
+
+		/* So... This guy found something strange INSIDE encapsulated
+		   packet. Well, he is fool, but what can we do ?
+		 */
+		rel_type = ICMPV6_PARAMPROB;
+		rel_info = skb->h.icmph->un.gateway - hlen;
+		break;
+
+	case ICMP_DEST_UNREACH:
+		switch (code) {
+		case ICMP_SR_FAILED:
+		case ICMP_PORT_UNREACH:
+			/* Impossible event. */
+			return;
+		case ICMP_FRAG_NEEDED:
+			/* Too complicated case ... */
+			return;
+		default:
+			/* All others are translated to HOST_UNREACH.
+			   rfc2003 contains "deep thoughts" about NET_UNREACH,
+			   I believe, it is just ether pollution. --ANK
+			 */
+			rel_type = ICMPV6_DEST_UNREACH;
+			rel_code = ICMPV6_ADDR_UNREACH;
+			break;
+		}
+		break;
+	case ICMP_TIME_EXCEEDED:
+		if (code != ICMP_EXC_TTL)
+			return;
+		rel_type = ICMPV6_TIME_EXCEED;
+		rel_code = ICMPV6_EXC_HOPLIMIT;
+		break;
+	}
+
+	/* Prepare fake skb to feed it to icmpv6_send */
+	skb2 = skb_clone(skb, GFP_ATOMIC);
+	if (skb2 == NULL)
+		return;
+	dst_release(skb2->dst);
+	skb2->dst = NULL;
+	skb_pull(skb2, skb->data - (u8*)iph6);
+	skb2->nh.raw = skb2->data;
+
+	/* Try to guess incoming interface */
+	rt6i = rt6_lookup(&iph6->saddr, NULL, NULL, 0);
+	if (rt6i && rt6i->rt6i_dev) {
+		skb2->dev = rt6i->rt6i_dev;
+
+		rt6i = rt6_lookup(&iph6->daddr, &iph6->saddr, NULL, 0);
+
+		if (rt6i && rt6i->rt6i_dev && rt6i->rt6i_dev->type == ARPHRD_SIT) {
+			struct ip_tunnel * t = (struct ip_tunnel*)rt6i->rt6i_dev->priv;
+			if (rel_type == ICMPV6_TIME_EXCEED && t->parms.iph.ttl) {
+				rel_type = ICMPV6_DEST_UNREACH;
+				rel_code = ICMPV6_ADDR_UNREACH;
+			}
+			icmpv6_send(skb2, rel_type, rel_code, rel_info, skb2->dev);
+		}
+	}
+	kfree_skb(skb2, FREE_WRITE);
+	return;
+#endif
+}
+
+int ipip6_rcv(struct sk_buff *skb, unsigned short len)
+{
+	struct iphdr *iph;
+	struct ip_tunnel *tunnel;
+
+	iph = skb->nh.iph;
+
+	if ((tunnel = ipip6_tunnel_lookup(iph->saddr, iph->daddr)) != NULL) {
+		skb->mac.raw = skb->nh.raw;
+		skb->nh.raw = skb_pull(skb, skb->h.raw - skb->data);
+		memset(&(IPCB(skb)->opt), 0, sizeof(struct ip_options));
+		skb->protocol = __constant_htons(ETH_P_IPV6);
+		skb->ip_summed = 0;
+		skb->pkt_type = PACKET_HOST;
+		tunnel->stat.rx_packets++;
+		tunnel->stat.rx_bytes += skb->len;
+		skb->dev = tunnel->dev;
+		dst_release(skb->dst);
+		skb->dst = NULL;
+		netif_rx(skb);
+		return 0;
+	}
+
+	icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PROT_UNREACH, 0);
+	kfree_skb(skb, FREE_READ);
 	return 0;
 }
 
-static int sit_xmit(struct sk_buff *skb, struct device *dev)
+/*
+ *	This function assumes it is being called from dev_queue_xmit()
+ *	and that skb is filled properly by that function.
+ */
+
+static int ipip6_tunnel_xmit(struct sk_buff *skb, struct device *dev)
 {
-	struct net_device_stats *stats;
-	struct sit_mtu_info *minfo;
+	struct ip_tunnel *tunnel = (struct ip_tunnel*)dev->priv;
+	struct net_device_stats *stats = &tunnel->stat;
+	struct iphdr  *tiph = &tunnel->parms.iph;
+	struct ipv6hdr *iph6 = skb->nh.ipv6h;
+	u8     tos = tunnel->parms.iph.tos;
+	struct rtable *rt;     			/* Route to the other host */
+	struct device *tdev;			/* Device to other host */
+	struct iphdr  *iph;			/* Our new IP header */
+	int    max_headroom;			/* The extra header space needed */
+	u32    dst = tiph->daddr;
+	int    mtu;
 	struct in6_addr *addr6;	
-	struct rtable *rt;
-	struct iphdr *iph;
-	__u32 saddr;
-	__u32 daddr;
 	int addr_type;
-	int mtu;
-	int headroom;
 
-	/* 
-	 *	Make sure we are not busy (check lock variable) 
-	 */
+	if (tunnel->recursion++) {
+		tunnel->stat.collisions++;
+		goto tx_error;
+	}
 
-	stats = (struct net_device_stats *)dev->priv;
+	if (skb->protocol != __constant_htons(ETH_P_IPV6))
+		goto tx_error;
 
-	daddr = dev->pa_dstaddr;
-	if (daddr == 0) {
+	if (!dst) {
 		struct nd_neigh *neigh = NULL;
 
 		if (skb->dst)
@@ -417,9 +400,9 @@ static int sit_xmit(struct sk_buff *skb, struct device *dev)
 
 		if (neigh == NULL) {
 			printk(KERN_DEBUG "sit: nexthop == NULL\n");
-			goto on_error;
+			goto tx_error;
 		}
-		
+
 		addr6 = &neigh->ndn_addr;
 		addr_type = ipv6_addr_type(addr6);
 
@@ -428,88 +411,329 @@ static int sit_xmit(struct sk_buff *skb, struct device *dev)
 			addr_type = ipv6_addr_type(addr6);
 		}
 
-		if ((addr_type & IPV6_ADDR_COMPATv4) == 0) {
-			printk(KERN_DEBUG "sit_xmit: non v4 address\n");
-			goto on_error;
-		}
-		daddr = addr6->s6_addr32[3];
+		if ((addr_type & IPV6_ADDR_COMPATv4) == 0)
+			goto tx_error_icmp;
+
+		dst = addr6->s6_addr32[3];
 	}
 
-	if (ip_route_output(&rt, daddr, 0, 0, NULL)) {
-		printk(KERN_DEBUG "sit: no route to host\n");
-		goto on_error;
+	if (ip_route_output(&rt, dst, tiph->saddr, RT_TOS(tos), tunnel->parms.link)) {
+		tunnel->stat.tx_carrier_errors++;
+		goto tx_error_icmp;
 	}
+	tdev = rt->u.dst.dev;
 
-	minfo = sit_mtu_lookup(daddr);
-
-	/* IP should calculate pmtu correctly,
-	 * let's check it...
-	 */
-#if 0
-	if (minfo)
-		mtu = minfo->mtu;
-	else
-#endif
-		mtu = rt->u.dst.pmtu;
-
-	if (mtu > 576 && skb->tail - (skb->data + sizeof(struct ipv6hdr)) > mtu) {
-		icmpv6_send(skb, ICMPV6_PKT_TOOBIG, 0, mtu, dev);
+	if (tdev == dev) {
 		ip_rt_put(rt);
-		goto on_error;
+		tunnel->stat.collisions++;
+		goto tx_error;
 	}
 
-	headroom = ((rt->u.dst.dev->hard_header_len+15)&~15)+sizeof(struct iphdr);
+	mtu = rt->u.dst.pmtu - sizeof(struct iphdr);
+	if (mtu < 68) {
+		tunnel->stat.collisions++;
+		ip_rt_put(rt);
+		goto tx_error;
+	}
+	if (mtu >= 576) {
+		if (skb->dst && mtu < skb->dst->pmtu) {
+			struct rt6_info *rt6 = (struct rt6_info*)skb->dst;
+			if (mtu < rt6->u.dst.pmtu) {
+				if (tunnel->parms.iph.daddr || rt6->rt6i_dst.plen == 128) {
+					rt6->rt6i_flags |= RTF_MODIFIED;
+					rt6->u.dst.pmtu = mtu;
+				}
+			}
+		}
+		if (skb->len > mtu) {
+			icmpv6_send(skb, ICMPV6_PKT_TOOBIG, 0, mtu, dev);
+			ip_rt_put(rt);
+			goto tx_error;
+		}
+	}
 
-	if (skb_headroom(skb) < headroom || skb_shared(skb)) {
-		struct sk_buff *new_skb = skb_realloc_headroom(skb, headroom);
+	if (tunnel->err_count > 0) {
+		if (jiffies - tunnel->err_time < IPTUNNEL_ERR_TIMEO) {
+			tunnel->err_count--;
+			icmpv6_send(skb, ICMPV6_DEST_UNREACH, ICMPV6_ADDR_UNREACH, 0, skb->dev);
+		} else
+			tunnel->err_count = 0;
+	}
+
+	skb->h.raw = skb->nh.raw;
+
+	/*
+	 * Okay, now see if we can stuff it in the buffer as-is.
+	 */
+	max_headroom = (((tdev->hard_header_len+15)&~15)+sizeof(struct iphdr));
+
+	if (skb_headroom(skb) < max_headroom || skb_cloned(skb) || skb_shared(skb)) {
+		struct sk_buff *new_skb = skb_realloc_headroom(skb, max_headroom);
 		if (!new_skb) {
 			ip_rt_put(rt);
-			goto on_error;
+  			stats->tx_dropped++;
+			dev_kfree_skb(skb, FREE_WRITE);
+			tunnel->recursion--;
+			return 0;
 		}
 		dev_kfree_skb(skb, FREE_WRITE);
 		skb = new_skb;
 	}
-		
+
+	skb->nh.raw = skb_push(skb, sizeof(struct iphdr));
 	memset(&(IPCB(skb)->opt), 0, sizeof(IPCB(skb)->opt));
-
-	iph = (struct iphdr *) skb_push(skb, sizeof(struct iphdr));
-	skb->nh.iph   = iph;
-
-	saddr = rt->rt_src;
 	dst_release(skb->dst);
 	skb->dst = &rt->u.dst;
 
-	iph->version  = 4;
-	iph->ihl      = 5;
-	iph->tos      = 0;				/* tos set to 0... */
+	/*
+	 *	Push down and install the IPIP header.
+	 */
 
+	iph 			=	skb->nh.iph;
+	iph->version		=	4;
+	iph->ihl		=	sizeof(struct iphdr)>>2;
 	if (mtu > 576)
-		iph->frag_off = htons(IP_DF);
+		iph->frag_off	=	__constant_htons(IP_DF);
 	else
-		iph->frag_off = 0;
+		iph->frag_off	=	0;
 
-	iph->ttl      = 64;
-	iph->saddr    = saddr;
-	iph->daddr    = daddr;
-	iph->protocol = IPPROTO_IPV6;
-	iph->tot_len  =	htons(skb->len);
-	iph->id	      =	htons(ip_id_count++);
+	iph->protocol		=	IPPROTO_IPV6;
+	iph->tos		=	tos;
+	iph->daddr		=	rt->rt_dst;
+	iph->saddr		=	rt->rt_src;
+
+	if ((iph->ttl = tiph->ttl) == 0)
+		iph->ttl	=	iph6->hop_limit;
+
+	iph->tot_len		=	htons(skb->len);
+	iph->id			=	htons(ip_id_count++);
 	ip_send_check(iph);
-
-	ip_send(skb);
 
 	stats->tx_bytes += skb->len;
 	stats->tx_packets++;
+	ip_send(skb);
 
+	tunnel->recursion--;
 	return 0;
 
-on_error:
-	dev_kfree_skb(skb, FREE_WRITE);
+tx_error_icmp:
+	icmpv6_send(skb, ICMPV6_DEST_UNREACH, ICMPV6_ADDR_UNREACH, 0, dev);
+tx_error:
 	stats->tx_errors++;
-	return 0;	
+	dev_kfree_skb(skb, FREE_WRITE);
+	tunnel->recursion--;
+	return 0;
 }
 
-static struct net_device_stats *sit_get_stats(struct device *dev)
+static int
+ipip6_tunnel_ioctl (struct device *dev, struct ifreq *ifr, int cmd)
 {
-	return((struct net_device_stats *) dev->priv);
+	int err = 0;
+	struct ip_tunnel_parm p;
+	struct ip_tunnel *t;
+
+	MOD_INC_USE_COUNT;
+
+	switch (cmd) {
+	case SIOCGETTUNNEL:
+		t = NULL;
+		if (dev == &ipip6_fb_tunnel_dev) {
+			if (copy_from_user(&p, ifr->ifr_ifru.ifru_data, sizeof(p))) {
+				err = -EFAULT;
+				break;
+			}
+			t = ipip6_tunnel_locate(&p, 0);
+		}
+		if (t == NULL)
+			t = (struct ip_tunnel*)dev->priv;
+		memcpy(&p, &t->parms, sizeof(p));
+		if (copy_to_user(ifr->ifr_ifru.ifru_data, &p, sizeof(p)))
+			err = -EFAULT;
+		break;
+
+	case SIOCADDTUNNEL:
+	case SIOCCHGTUNNEL:
+		err = -EFAULT;
+		if (copy_from_user(&p, ifr->ifr_ifru.ifru_data, sizeof(p)))
+			goto done;
+
+		err = -EINVAL;
+		if (p.iph.version != 4 || p.iph.protocol != IPPROTO_IPV6 ||
+		    p.iph.ihl != 5 || (p.iph.frag_off&__constant_htons(~IP_DF)))
+			goto done;
+		if (p.iph.ttl)
+			p.iph.frag_off |= __constant_htons(IP_DF);
+
+		t = ipip6_tunnel_locate(&p, cmd == SIOCADDTUNNEL);
+
+		if (t) {
+			err = 0;
+			if (cmd == SIOCCHGTUNNEL) {
+				t->parms.iph.ttl = p.iph.ttl;
+				t->parms.iph.tos = p.iph.tos;
+			}
+			if (copy_to_user(ifr->ifr_ifru.ifru_data, &t->parms, sizeof(p)))
+				err = -EFAULT;
+		} else
+			err = (cmd == SIOCADDTUNNEL ? -ENOBUFS : -ENOENT);
+		break;
+
+	case SIOCDELTUNNEL:
+		if (dev == &ipip6_fb_tunnel_dev) {
+			err = -EFAULT;
+			if (copy_from_user(&p, ifr->ifr_ifru.ifru_data, sizeof(p)))
+				goto done;
+			err = -ENOENT;
+			if ((t = ipip6_tunnel_locate(&p, 0)) == NULL)
+				goto done;
+			err = -EPERM;
+			if (t == &ipip6_fb_tunnel)
+				goto done;
+		}
+		err = unregister_netdevice(dev);
+		break;
+
+	default:
+		err = -EINVAL;
+	}
+
+done:
+	MOD_DEC_USE_COUNT;
+	return err;
+}
+
+static struct net_device_stats *ipip6_tunnel_get_stats(struct device *dev)
+{
+	return &(((struct ip_tunnel*)dev->priv)->stat);
+}
+
+static int ipip6_tunnel_change_mtu(struct device *dev, int new_mtu)
+{
+	if (new_mtu < 576 || new_mtu > 0xFFF8 - sizeof(struct iphdr))
+		return -EINVAL;
+	dev->mtu = new_mtu;
+	return 0;
+}
+
+static void ipip6_tunnel_init_gen(struct device *dev)
+{
+	struct ip_tunnel *t = (struct ip_tunnel*)dev->priv;
+
+	dev->destructor		= ipip6_tunnel_destroy;
+	dev->hard_start_xmit	= ipip6_tunnel_xmit;
+	dev->get_stats		= ipip6_tunnel_get_stats;
+	dev->do_ioctl		= ipip6_tunnel_ioctl;
+	dev->change_mtu		= ipip6_tunnel_change_mtu;
+
+	dev_init_buffers(dev);
+
+	dev->type		= ARPHRD_SIT;
+	dev->hard_header_len 	= LL_MAX_HEADER + sizeof(struct iphdr);
+	dev->mtu		= 1500 - sizeof(struct iphdr);
+	dev->flags		= IFF_NOARP;
+	dev->iflink		= 0;
+	dev->addr_len		= 4;
+	memcpy(dev->dev_addr, &t->parms.iph.saddr, 4);
+	memcpy(dev->broadcast, &t->parms.iph.daddr, 4);
+}
+
+static int ipip6_tunnel_init(struct device *dev)
+{
+	struct device *tdev = NULL;
+	struct ip_tunnel *tunnel;
+	struct iphdr *iph;
+
+	tunnel = (struct ip_tunnel*)dev->priv;
+	iph = &tunnel->parms.iph;
+
+	ipip6_tunnel_init_gen(dev);
+
+	if (iph->daddr) {
+		struct rtable *rt;
+		if (!ip_route_output(&rt, iph->daddr, iph->saddr, RT_TOS(iph->tos), tunnel->parms.link)) {
+			tdev = rt->u.dst.dev;
+			ip_rt_put(rt);
+		}
+		dev->flags |= IFF_POINTOPOINT;
+	}
+
+	if (!tdev && tunnel->parms.link)
+		tdev = dev_get_by_index(tunnel->parms.link);
+
+	if (tdev) {
+		dev->hard_header_len = tdev->hard_header_len + sizeof(struct iphdr);
+		dev->mtu = tdev->mtu - sizeof(struct iphdr);
+		if (dev->mtu < 576)
+			dev->mtu = 576;
+	}
+	dev->iflink = tunnel->parms.link;
+
+	return 0;
+}
+
+#ifdef MODULE
+static int ipip6_fb_tunnel_open(struct device *dev)
+{
+	MOD_INC_USE_COUNT;
+	return 0;
+}
+
+static int ipip6_fb_tunnel_close(struct device *dev)
+{
+	MOD_DEC_USE_COUNT;
+	return 0;
+}
+#endif
+
+__initfunc(int ipip6_fb_tunnel_init(struct device *dev))
+{
+	struct iphdr *iph;
+
+	ipip6_tunnel_init_gen(dev);
+#ifdef MODULE
+	dev->open		= ipip6_fb_tunnel_open;
+	dev->stop		= ipip6_fb_tunnel_close;
+#endif
+
+	iph = &ipip6_fb_tunnel.parms.iph;
+	iph->version		= 4;
+	iph->protocol		= IPPROTO_IPV6;
+	iph->ihl		= 5;
+	iph->ttl		= 64;
+
+	tunnels_wc[0]		= &ipip6_fb_tunnel;
+	return 0;
+}
+
+static struct inet_protocol sit_protocol = {
+	ipip6_rcv,
+	ipip6_err,
+	0,
+	IPPROTO_IPV6,
+	0,
+	NULL,
+	"IPv6"
+};
+
+#ifdef MODULE
+void sit_cleanup(void)
+{
+	inet_del_protocol(&sit_protocol);
+	unregister_netdevice(&ipip6_fb_tunnel_dev);
+}
+#endif
+
+__initfunc(int sit_init(void))
+{
+	printk(KERN_INFO "IPv6 over IPv4 tunneling driver\n");
+
+	ipip6_fb_tunnel_dev.priv = (void*)&ipip6_fb_tunnel;
+	ipip6_fb_tunnel_dev.name = ipip6_fb_tunnel.parms.name;
+#ifdef MODULE
+	register_netdev(&ipip6_fb_tunnel_dev);
+#else
+	register_netdevice(&ipip6_fb_tunnel_dev);
+#endif
+	inet_add_protocol(&sit_protocol);
+	return 0;
 }

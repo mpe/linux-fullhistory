@@ -40,6 +40,9 @@ struct dst_entry
 	unsigned		window;
 	unsigned		pmtu;
 	unsigned		rtt;
+	unsigned long		rate_last;	/* rate limiting for ICMP */
+	unsigned long		rate_tokens;
+
 	int			error;
 
 	struct neighbour	*neighbour;
@@ -49,7 +52,7 @@ struct dst_entry
 	int			(*output)(struct sk_buff*);
 
 	struct  dst_ops	        *ops;
-	
+		
 	char			info[0];
 };
 
@@ -57,11 +60,13 @@ struct dst_entry
 struct dst_ops
 {
 	unsigned short		family;
-	struct dst_entry *	(*check)(struct dst_entry *, u32 cookie);
+	struct dst_entry *	(*check)(struct dst_entry *, __u32 cookie);
 	struct dst_entry *	(*reroute)(struct dst_entry *,
 					   struct sk_buff *);
 	void			(*destroy)(struct dst_entry *);
 };
+
+#ifdef __KERNEL__
 
 extern struct dst_entry * dst_garbage_list;
 extern atomic_t	dst_total;
@@ -122,5 +127,6 @@ void dst_free(struct dst_entry * dst)
 	}
 	__dst_free(dst);
 }
+#endif
 
 #endif /* _NET_DST_H */

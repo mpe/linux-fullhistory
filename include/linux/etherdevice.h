@@ -38,6 +38,8 @@ extern void		eth_header_cache_update(struct hh_cache *hh, struct device *dev,
 extern int		eth_header_cache(struct dst_entry *dst,
 					 struct neighbour *neigh,
 					 struct hh_cache *hh);
+extern int		eth_header_parse(struct sk_buff *skb,
+					 unsigned char *haddr);
 extern struct device	* init_etherdev(struct device *, int);
 
 #ifdef CONFIG_IP_ROUTER

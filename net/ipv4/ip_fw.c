@@ -6,6 +6,8 @@
  *	license in recognition of the original copyright. 
  *				-- Alan Cox.
  *
+ *	$Id: ip_fw.c,v 1.29 1997/10/10 22:41:01 davem Exp $
+ *
  *	Ported from BSD to Linux,
  *		Alan Cox 22/Nov/1994.
  *	Zeroing /proc and other additions
@@ -104,7 +106,7 @@
 #include <net/udp.h>
 #include <net/sock.h>
 #include <net/icmp.h>
-#include <net/netlink.h>
+#include <linux/netlink.h>
 #include <linux/firewall.h>
 #include <linux/ip_fw.h>
 #include <linux/init.h>
@@ -163,6 +165,10 @@ int ip_fw_out_policy=IP_FW_F_ACCEPT;
 static int *policies[] =
 	{&ip_fw_fwd_policy, &ip_fw_in_policy, &ip_fw_out_policy};
 
+#endif
+
+#ifdef CONFIG_IP_FIREWALL_NETLINK
+struct sock *ipfwsk;
 #endif
 
 /*
@@ -374,15 +380,6 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, __u16 *redirport, struct ip_
 
 		if (!match)
 			continue;
-
-		/*
-		 *	Look for a VIA address match 
-		 */
-		if(f->fw_via.s_addr && rif)
-		{
-			if(rif->pa_addr!=f->fw_via.s_addr)
-				continue;	/* Mismatch */
-		}
 
 		/*
 		 *	Look for a VIA device match 
@@ -651,6 +648,11 @@ static int insert_in_chain(struct ip_fw *volatile* chainptr, struct ip_fw *frwl,
 	if ((ftmp->fw_vianame)[0]) {
 		if (!(ftmp->fw_viadev = dev_get(ftmp->fw_vianame)))
 			ftmp->fw_viadev = (struct device *) -1;
+	} else if (ftmp->fw_via.s_addr) {
+		if (!(ftmp->fw_viadev = ip_dev_find(ftmp->fw_via.s_addr)))
+			ftmp->fw_viadev = (struct device *) -1;
+		else
+			memcpy(ftmp->fw_vianame, ftmp->fw_viadev->name, IFNAMSIZ);
 	} else
 		ftmp->fw_viadev = NULL;
 
@@ -695,6 +697,11 @@ static int append_to_chain(struct ip_fw *volatile* chainptr, struct ip_fw *frwl,
 	if ((ftmp->fw_vianame)[0]) {
 		if (!(ftmp->fw_viadev = dev_get(ftmp->fw_vianame)))
 			ftmp->fw_viadev = (struct device *) -1;
+	} else if (ftmp->fw_via.s_addr) {
+		if (!(ftmp->fw_viadev = ip_dev_find(ftmp->fw_via.s_addr)))
+			ftmp->fw_viadev = (struct device *) -1;
+		else
+			memcpy(ftmp->fw_vianame, ftmp->fw_viadev->name, IFNAMSIZ);
 	} else
 		ftmp->fw_viadev = NULL;
 
@@ -957,12 +964,6 @@ int ip_fw_ctl(int stage, void *m, int len)
 			printk("ip_fw_ctl: invalid device \"%s\"\n", ipfwp->fwp_vianame);
 #endif
 			return(EINVAL);
-		} else if ( viadev->pa_addr != ipfwp->fwp_via.s_addr ) {
-#ifdef DEBUG_IP_FIREWALL
-			printk("ip_fw_ctl: device \"%s\" has another IP address\n",
-				ipfwp->fwp_vianame);
-#endif
-			return(EINVAL);
 		} else if ( ip->ihl != sizeof(struct iphdr) / sizeof(int)) {
 #ifdef DEBUG_IP_FIREWALL
 			printk("ip_fw_ctl: ip->ihl=%d, want %d\n",ip->ihl,
@@ -1066,6 +1067,7 @@ int ip_fw_ctl(int stage, void *m, int len)
 }
 #endif /* CONFIG_IP_FIREWALL */
 
+#ifdef CONFIG_PROC_FS
 #if defined(CONFIG_IP_FIREWALL) || defined(CONFIG_IP_ACCT)
 
 static int ip_chain_procinfo(int stage, char *buffer, char **start,
@@ -1120,9 +1122,9 @@ static int ip_chain_procinfo(int stage, char *buffer, char **start,
 			ntohl(i->fw_dst.s_addr),ntohl(i->fw_dmsk.s_addr),
 			(i->fw_vianame)[0] ? i->fw_vianame : "-",
 			ntohl(i->fw_via.s_addr),i->fw_flg);
-		/* 9 is enough for a 32 bit box but the counters are 64bit on
+		/* 10 is enough for a 32 bit box but the counters are 64bit on
 		   the Alpha and Ultrapenguin */
-		len+=sprintf(buffer+len,"%u %u %-19lu %-19lu",
+		len+=sprintf(buffer+len,"%u %u %-20lu %-20lu",
 			i->fw_nsp,i->fw_ndp, i->fw_pcnt,i->fw_bcnt);
 		for (p = 0; p < IP_FW_MAX_PORTS; p++)
 			len+=sprintf(buffer+len, " %u", i->fw_pts[p]);
@@ -1191,6 +1193,7 @@ static int ip_fw_fwd_procinfo(char *buffer, char **start, off_t offset,
 	return ip_chain_procinfo(IP_FW_FWD, buffer,start,offset,length,
 				 reset);
 }
+#endif
 #endif
 
 
@@ -1323,8 +1326,7 @@ __initfunc(void ip_fw_init(void))
 	/* Register for device up/down reports */
 	register_netdevice_notifier(&ipfw_dev_notifier);
 #endif
-
 #ifdef CONFIG_IP_FIREWALL_NETLINK
-   netlink_attach(NETLINK_FIREWALL, netlink_donothing); /* XXX */
-#endif /* CONFIG_IP_FIREWALL_NETLINK */
+	ipfwsk = netlink_kernel_create(NETLINK_FIREWALL, NULL);
+#endif
 }

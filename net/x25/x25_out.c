@@ -126,8 +126,8 @@ static void x25_send_iframe(struct sock *sk, struct sk_buff *skb)
 
 void x25_kick(struct sock *sk)
 {
-	struct sk_buff *skb;
-	unsigned short end;
+	struct sk_buff *skb, *skbn;
+	unsigned short start, end;
 	int modulus;
 
 	if (sk->protinfo.x25->state != X25_STATE_3)
@@ -149,10 +149,14 @@ void x25_kick(struct sock *sk)
 		return;
 
 	modulus = (sk->protinfo.x25->neighbour->extended) ? X25_EMODULUS : X25_SMODULUS;
+
+	start   = (skb_peek(&sk->protinfo.x25->ack_queue) == NULL) ? sk->protinfo.x25->va : sk->protinfo.x25->vs;
 	end     = (sk->protinfo.x25->va + sk->protinfo.x25->facilities.winsize_out) % modulus;
 
-	if (sk->protinfo.x25->vs == end)
+	if (start == end)
 		return;
+
+	sk->protinfo.x25->vs = start;
 
 	/*
 	 * Transmit data until either we're out of data to send or
@@ -162,12 +166,24 @@ void x25_kick(struct sock *sk)
 	skb = skb_dequeue(&sk->write_queue);
 
 	do {
+		if ((skbn = skb_clone(skb, GFP_ATOMIC)) == NULL) {
+			skb_queue_head(&sk->write_queue, skb);
+			break;
+		}
+
+		skb_set_owner_w(skbn, sk);
+
 		/*
-		 * Transmit the frame.
+		 * Transmit the frame copy.
 		 */
-		x25_send_iframe(sk, skb);
+		x25_send_iframe(sk, skbn);
 
 		sk->protinfo.x25->vs = (sk->protinfo.x25->vs + 1) % modulus;
+
+		/*
+		 * Requeue the original data frame.
+		 */
+		skb_queue_tail(&sk->protinfo.x25->ack_queue, skb);
 
 	} while (sk->protinfo.x25->vs != end && (skb = skb_dequeue(&sk->write_queue)) != NULL);
 
@@ -193,17 +209,6 @@ void x25_enquiry_response(struct sock *sk)
 	sk->protinfo.x25->condition &= ~X25_COND_ACK_PENDING;
 
 	x25_stop_timer(sk);
-}
-
-void x25_check_iframes_acked(struct sock *sk, unsigned short nr)
-{
-	if (sk->protinfo.x25->vs == nr) {
-		sk->protinfo.x25->va = nr;
-	} else {
-		if (sk->protinfo.x25->va != nr) {
-			sk->protinfo.x25->va = nr;
-		}
-	}
 }
 
 #endif

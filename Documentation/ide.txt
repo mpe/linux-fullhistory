@@ -1,4 +1,4 @@
-ide.txt -- Information regarding the Enhanced IDE drive in Linux 2.1.xx
+ide.txt -- Information regarding the Enhanced IDE drive in Linux 2.1.68+
 ===============================================================================
 Supported by:
 	Mark Lord    <mlord@pobox.com>		-- disks, interfaces, probing
@@ -56,17 +56,19 @@ NEW!	- support for IDE ATAPI *floppy* drives
 		  (courtesy of Juha Laiho <jlaiho@ichaos.nullnet.fi>).
 	- auto-detect of disk translations by examining partition table
 	- ide-cd.c now compiles separate from ide.c
-	- Bus-Master DMA support for Intel PCI Triton chipset IDE interfaces
-		- for details, see comments at top of triton.c
 	- ide-cd.c now supports door locking and auto-loading.
 		- Also preliminary support for multisession
 		  and direct reads of audio data.
 	- experimental support for Promise DC4030VL caching interface card
 		- email thanks/problems to: peterd@pnd-pc.demon.co.uk
 	- the hdparm-3.1 package can be used to set PIO modes for some chipsets.
-NEW!	- support for the OPTi 82C621 chipset, courtesy of Jaromir Koutek.
+NEW!	- support for setting PIO modes with the OPTi 82C621, courtesy of Jaromir Koutek.
 NEW!	- support for loadable modules
 NEW!	- optional SCSI host adapter emulation for ATAPI devices
+NEW!	- generic PCI Bus-Master DMA support
+NEW!		- works with most Pentium PCI systems, chipsets, add-on cards
+NEW!		- works with regular DMA as well as Ultra DMA
+NEW!		- automatically probes for all PCI IDE interfaces
 
 
 For work in progress, see the comments in ide.c, ide-cd.c, triton.c, ...

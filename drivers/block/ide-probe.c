@@ -114,13 +114,13 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 	if (cmd == WIN_PIDENTIFY) {
 		byte type = (id->config >> 8) & 0x1f;
 		printk("ATAPI ");
-#ifdef CONFIG_BLK_DEV_PROMISE
-		if (HWIF(drive)->is_promise2) {
+#ifdef CONFIG_BLK_DEV_PDC4030
+		if (HWIF(drive)->is_pdc4030_2) {
 			printk(" -- not supported on 2nd Promise port\n");
 			drive->present = 0;
 			return;
 		}
-#endif /* CONFIG_BLK_DEV_PROMISE */
+#endif /* CONFIG_BLK_DEV_PDC4030 */
 		switch (type) {
 			case ide_floppy:
 				if (!strstr(id->model, "oppy") && !strstr(id->model, "poyp") && !strstr(id->model, "ZIP"))
@@ -192,15 +192,16 @@ static int try_to_identify (ide_drive_t *drive, byte cmd)
 	} else
 		hd_status = IDE_ALTSTATUS_REG;	/* use non-intrusive polling */
 
-#if CONFIG_BLK_DEV_PROMISE
-	if (IS_PROMISE_DRIVE) {
-		if (promise_cmd(drive,PROMISE_IDENTIFY)) {
+#if CONFIG_BLK_DEV_PDC4030
+	if (IS_PDC4030_DRIVE) {
+		extern int pdc4030_cmd(ide_drive_t *, byte);
+		if (pdc4030_cmd(drive,PROMISE_IDENTIFY)) {
 			if (irqs)
 				(void) probe_irq_off(irqs);
 			return 1;
 		}
 	} else
-#endif /* CONFIG_BLK_DEV_PROMISE */
+#endif /* CONFIG_BLK_DEV_PDC4030 */
 		OUT_BYTE(cmd,IDE_COMMAND_REG);		/* ask drive for ID */
 	timeout = ((cmd == WIN_IDENTIFY) ? WAIT_WORSTCASE : WAIT_PIDENTIFY) / 2;
 	timeout += jiffies;
@@ -363,10 +364,10 @@ static void probe_cmos_for_drives (ide_hwif_t *hwif)
 	byte cmos_disks, *BIOS = (byte *) &drive_info;
 	int unit;
 
-#ifdef CONFIG_BLK_DEV_PROMISE
-	if (hwif->is_promise2)
+#ifdef CONFIG_BLK_DEV_PDC4030
+	if (hwif->is_pdc4030_2)
 		return;
-#endif /* CONFIG_BLK_DEV_PROMISE */
+#endif /* CONFIG_BLK_DEV_PDC4030 */
 	outb_p(0x12,0x70);		/* specify CMOS address 0x12 */
 	cmos_disks = inb_p(0x71);	/* read the data from 0x12 */
 	/* Extract drive geometry from CMOS+BIOS if not already setup */
@@ -397,12 +398,12 @@ static void probe_hwif (ide_hwif_t *hwif)
 		return;
 	if (hwif->io_ports[IDE_DATA_OFFSET] == HD_DATA)
 		probe_cmos_for_drives (hwif);
-#if CONFIG_BLK_DEV_PROMISE
-	if (!hwif->is_promise2 &&
+#if CONFIG_BLK_DEV_PDC4030
+	if (!hwif->is_pdc4030_2 &&
 	   (ide_check_region(hwif->io_ports[IDE_DATA_OFFSET],8) || ide_check_region(hwif->io_ports[IDE_CONTROL_OFFSET],1))) {
 #else
 	if (ide_check_region(hwif->io_ports[IDE_DATA_OFFSET],8) || ide_check_region(hwif->io_ports[IDE_CONTROL_OFFSET],1)) {
-#endif /* CONFIG_BLK_DEV_PROMISE */
+#endif /* CONFIG_BLK_DEV_PDC4030 */
 		int msgout = 0;
 		for (unit = 0; unit < MAX_DRIVES; ++unit) {
 			ide_drive_t *drive = &hwif->drives[unit];

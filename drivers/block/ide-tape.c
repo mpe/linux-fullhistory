@@ -170,13 +170,13 @@
  *                        unit, making performance almost independent of the
  *                        chosen user block size.
  *                       Some improvements in error recovery.
- *                       By cooperating with triton.c, bus mastering DMA can
+ *                       By cooperating with ide-dma.c, bus mastering DMA can
  *                        now sometimes be used with IDE tape drives as well.
  *                        Bus mastering DMA has the potential to dramatically
  *                        reduce the CPU's overhead when accessing the device,
  *                        and can be enabled by using hdparm -d1 on the tape's
  *                        block device interface. For more info, read the
- *                        comments in triton.c.
+ *                        comments in ide-dma.c.
  * Ver 1.4   Mar 13 96   Fixed serialize support.
  * Ver 1.5   Apr 12 96   Fixed shared interface operation, broken in 1.3.85.
  *                       Fixed pipelined read mode inefficiency.
@@ -1093,7 +1093,7 @@ static void idetape_output_buffers (ide_drive_t *drive, idetape_pc_t *pc, unsign
 	}
 }
 
-#ifdef CONFIG_BLK_DEV_TRITON
+#ifdef CONFIG_BLK_DEV_IDEDMA
 static void idetape_update_buffers (idetape_pc_t *pc)
 {
 	struct buffer_head *bh = pc->bh;
@@ -1116,7 +1116,7 @@ static void idetape_update_buffers (idetape_pc_t *pc)
 	}
 	pc->bh = bh;
 }
-#endif /* CONFIG_BLK_DEV_TRITON */
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 
 /*
  *	idetape_postpone_request postpones the current request so that
@@ -1610,7 +1610,7 @@ static void idetape_analyze_error (ide_drive_t *drive,idetape_request_sense_resu
 	printk (KERN_INFO "ide-tape: pc = %x, sense key = %x, asc = %x, ascq = %x\n",pc->c[0],result->sense_key,result->asc,result->ascq);
 #endif /* IDETAPE_DEBUG_LOG */
 
-#ifdef CONFIG_BLK_DEV_TRITON
+#ifdef CONFIG_BLK_DEV_IDEDMA
 
 	/*
 	 *	Correct pc->actually_transferred by asking the tape.
@@ -1619,7 +1619,7 @@ static void idetape_analyze_error (ide_drive_t *drive,idetape_request_sense_resu
 		pc->actually_transferred = pc->request_transfer - tape->tape_block_size * ntohl (get_unaligned (&result->information));
 		idetape_update_buffers (pc);
 	}
-#endif /* CONFIG_BLK_DEV_TRITON */
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 	if (pc->c[0] == IDETAPE_READ_CMD && result->filemark) {
 		pc->error = IDETAPE_ERROR_FILEMARK;
 		set_bit (PC_ABORT, &pc->flags);
@@ -1721,7 +1721,7 @@ static void idetape_pc_intr (ide_drive_t *drive)
 	printk (KERN_INFO "ide-tape: Reached idetape_pc_intr interrupt handler\n");
 #endif /* IDETAPE_DEBUG_LOG */	
 
-#ifdef CONFIG_BLK_DEV_TRITON
+#ifdef CONFIG_BLK_DEV_IDEDMA
 	if (test_bit (PC_DMA_IN_PROGRESS, &pc->flags)) {
 		if (HWIF(drive)->dmaproc(ide_dma_status_bad, drive)) {
 			set_bit (PC_DMA_ERROR, &pc->flags);
@@ -1739,7 +1739,7 @@ static void idetape_pc_intr (ide_drive_t *drive)
 		printk (KERN_INFO "ide-tape: DMA finished\n");
 #endif /* IDETAPE_DEBUG_LOG */
 	}
-#endif /* CONFIG_BLK_DEV_TRITON */
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 
 	status.all = GET_STAT();					/* Clear the interrupt */
 
@@ -1776,7 +1776,7 @@ static void idetape_pc_intr (ide_drive_t *drive)
 		pc->callback(drive);			/* Command finished - Call the callback function */
 		return;
 	}
-#ifdef CONFIG_BLK_DEV_TRITON
+#ifdef CONFIG_BLK_DEV_IDEDMA
 	if (test_and_clear_bit (PC_DMA_IN_PROGRESS, &pc->flags)) {
 		printk (KERN_ERR "ide-tape: The tape wants to issue more interrupts in DMA mode\n");
 		printk (KERN_ERR "ide-tape: DMA disabled, reverting to PIO\n");
@@ -1784,7 +1784,7 @@ static void idetape_pc_intr (ide_drive_t *drive)
 		ide_do_reset (drive);
 		return;
 	}
-#endif /* CONFIG_BLK_DEV_TRITON */
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 	bcount.b.high=IN_BYTE (IDE_BCOUNTH_REG);			/* Get the number of bytes to transfer */
 	bcount.b.low=IN_BYTE (IDE_BCOUNTL_REG);				/* on this interrupt */
 	ireason.all=IN_BYTE (IDE_IREASON_REG);
@@ -1915,14 +1915,14 @@ static void idetape_issue_packet_command (ide_drive_t *drive, idetape_pc_t *pc)
 	pc->current_position=pc->buffer;
 	bcount.all=pc->request_transfer;				/* Request to transfer the entire buffer at once */
 
-#ifdef CONFIG_BLK_DEV_TRITON
+#ifdef CONFIG_BLK_DEV_IDEDMA
 	if (test_and_clear_bit (PC_DMA_ERROR, &pc->flags)) {
 		printk (KERN_WARNING "ide-tape: DMA disabled, reverting to PIO\n");
 		HWIF(drive)->dmaproc(ide_dma_off, drive);
 	}
 	if (test_bit (PC_DMA_RECOMMENDED, &pc->flags) && drive->using_dma)
 		dma_ok=!HWIF(drive)->dmaproc(test_bit (PC_WRITING, &pc->flags) ? ide_dma_write : ide_dma_read, drive);
-#endif /* CONFIG_BLK_DEV_TRITON */
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 
 	OUT_BYTE (drive->ctl,IDE_CONTROL_REG);
 	OUT_BYTE (dma_ok ? 1:0,IDE_FEATURE_REG);			/* Use PIO/DMA */
@@ -1952,12 +1952,12 @@ static void idetape_issue_packet_command (ide_drive_t *drive, idetape_pc_t *pc)
 		return;
 	}
 	atapi_output_bytes (drive,pc->c,12);			/* Send the actual packet */
-#ifdef CONFIG_BLK_DEV_TRITON
+#ifdef CONFIG_BLK_DEV_IDEDMA
 	if (dma_ok) {						/* Begin DMA, if necessary */
 		set_bit (PC_DMA_IN_PROGRESS, &pc->flags);
 		(void) (HWIF(drive)->dmaproc(ide_dma_begin, drive));
 	}
-#endif /* CONFIG_BLK_DEV_TRITON */
+#endif /* CONFIG_BLK_DEV_IDEDMA */
 }
 
 static void idetape_media_access_finished (ide_drive_t *drive)

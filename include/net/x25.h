@@ -123,6 +123,7 @@ typedef struct {
 	unsigned short		vs, vr, va, vl;
 	unsigned long		t2, t21, t22, t23;
 	unsigned short		fraglen;
+	struct sk_buff_head	ack_queue;
 	struct sk_buff_head	fragment_queue;
 	struct sk_buff_head	interrupt_in_queue;
 	struct sk_buff_head	interrupt_out_queue;
@@ -183,7 +184,6 @@ extern void x25_link_free(void);
 extern void x25_output(struct sock *, struct sk_buff *);
 extern void x25_kick(struct sock *);
 extern void x25_enquiry_response(struct sock *);
-extern void x25_check_iframes_acked(struct sock *, unsigned short);
 
 /* x25_route.c */
 extern struct device *x25_get_route(x25_address *);
@@ -195,6 +195,8 @@ extern void x25_route_free(void);
 
 /* x25_subr.c */
 extern void x25_clear_queues(struct sock *);
+extern void x25_frames_acked(struct sock *, unsigned short);
+extern void x25_requeue_frames(struct sock *);
 extern int  x25_validate_nr(struct sock *, unsigned short);
 extern void x25_write_internal(struct sock *, int);
 extern int  x25_decode(struct sock *, struct sk_buff *, int *, int *, int *, int *, int *);

@@ -249,7 +249,7 @@ int videodev_init(void)
 	return 0;
 }
 
-		
+#ifdef MODULE		
 int init_module(void)
 {
 	return videodev_init();
@@ -259,6 +259,8 @@ void cleanup_module(void)
 {
 	unregister_chrdev(VIDEO_MAJOR, "video_capture");
 }
+
+#endif
 
 EXPORT_SYMBOL(video_register_device);
 EXPORT_SYMBOL(video_unregister_device);

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.46 1997/08/24 16:22:28 freitag Exp $
+ * Version:	$Id: tcp_output.c,v 1.50 1997/10/15 19:13:02 freitag Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -74,9 +74,12 @@ static __inline__ int tcp_snd_test(struct sock *sk, struct sk_buff *skb)
 	 *	   (part of SWS is done on packetization)
 	 *	c) We are retransmiting [Nagle]
 	 *	d) We have too many packets 'in flight'
+	 *
+	 * 	Don't use the nagle rule for urgent data.
 	 */
 	len = skb->end_seq - skb->seq;
-	if (!sk->nonagle && len < (sk->mss >> 1) && tp->packets_out)
+	if (!sk->nonagle && len < (sk->mss >> 1) && tp->packets_out && 
+	    !skb->h.th->urg)
 		nagle_check = 0;
 
 	return (nagle_check && tp->packets_out < tp->snd_cwnd &&
@@ -471,8 +474,12 @@ unsigned short tcp_select_window(struct sock *sk)
 	if (tp->window_clamp) {
 		free_space = min(tp->window_clamp, free_space);
 		mss = min(tp->window_clamp, mss);
-	} else
+	} 
+#ifdef NO_ANK_FIX
+	/* I am tired of this message */
+	  else
 		printk(KERN_DEBUG "Clamp failure. Water leaking.\n");
+#endif
 
 	if (mss < 1) {
 		mss = 1;
@@ -487,8 +494,11 @@ unsigned short tcp_select_window(struct sock *sk)
 
 	if (cur_win < 0) {
 		cur_win = 0;
+#ifdef NO_ANK_FIX
+	/* And this too. */
 		printk(KERN_DEBUG "TSW: win < 0 w=%d 1=%u 2=%u\n",
 		       tp->rcv_wnd, tp->rcv_nxt, tp->rcv_wup);
+#endif
 	}
 
 	if (free_space < sk->rcvbuf/4 && free_space < mss/2)
@@ -610,9 +620,8 @@ static int tcp_retrans_try_collapse(struct sock *sk, struct sk_buff *skb)
 		th1->urg = 1;
 		th1->urg_ptr = th2->urg_ptr + size1;
 	}
-	if (th2->fin) {
+	if (th2->fin)
 		th1->fin = 1;
-	}
 
 	/* ... and off you go. */
 	kfree_skb(buff, FREE_WRITE);
@@ -1007,11 +1016,8 @@ void tcp_write_wakeup(struct sock *sk)
 	 *	following states.  If any other state is encountered, return.
 	 *	[listen/close will never occur here anyway]
 	 */
-	if (sk->state != TCP_ESTABLISHED && 
-	    sk->state != TCP_CLOSE_WAIT &&
-	    sk->state != TCP_FIN_WAIT1 && 
-	    sk->state != TCP_LAST_ACK &&
-	    sk->state != TCP_CLOSING)
+	if ((1 << sk->state) &
+	    ~(TCPF_ESTABLISHED|TCPF_CLOSE_WAIT|TCPF_FIN_WAIT1|TCPF_LAST_ACK|TCPF_CLOSING))
 		return;
 
 	if (before(tp->snd_nxt, tp->snd_una + tp->snd_wnd) && (skb=tp->send_head)) {

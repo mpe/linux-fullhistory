@@ -10,6 +10,9 @@
  *
  *	See the mrouted code for the original history.
  *
+ *      Protocol Independent Multicast (PIM) data structures included
+ *      Carlos Picoto (cap@di.fc.ul.pt)
+ *
  */
 
 #define MRT_BASE	200
@@ -57,16 +60,9 @@ struct vifctl {
 	struct in_addr vifc_rmt_addr;	/* IPIP tunnel addr */
 };
 
-#define VIFF_TUNNEL	0x1		/* IPIP tunnel */
-#define VIFF_SRCRT	0x2		/* NI */
-
-
-/* PIM Vif Flags */
-#define VIFF_DR                 0x0010          /* designated router    */
-#define VIFF_NOMRT              0x0020          /* no neighbor on vif   */
-#define VIFF_DOWN               0x0040          /* interface is down    */
-#define VIFF_DISABLED           0x0080          /* disabled interafce   */
-#define VIFF_REGISTER           0x00A0          /* MIssing cap@di.fc.ul.pt */
+#define VIFF_TUNNEL	0x1	/* IPIP tunnel */
+#define VIFF_SRCRT	0x2	/* NI */
+#define VIFF_REGISTER	0x4	/* register vif	*/
 
 /*
  *	Cache manipulation structures for mrouted and PIMd
@@ -111,23 +107,13 @@ struct sioc_vif_req
 };
 
 /*
- *	To get RPF from unicast routing table (PIM: cap@di.fc.ul.pt)
- */
-struct sioc_rpf_req
-{
-	unsigned long	source;	       /* Source address */
-	unsigned long   rpfneighbor;   /* RPF */
-        vifi_t	 iif;		       /* Incoming Interface */
-};
-
-/*
  *	This is the format the mroute daemon expects to see IGMP control
  *	data. Magically happens to be like an IP packet as per the original
  */
  
 struct igmpmsg
 {
-	unsigned long unused1,unused2;
+	__u32 unused1,unused2;
 	unsigned char im_msgtype;		/* What is this */
 	unsigned char im_mbz;			/* Must be zero */
 	unsigned char im_vif;			/* Interface (this ought to be a vifi_t!) */
@@ -147,22 +133,19 @@ extern int ipmr_ioctl(struct sock *sk, int cmd, unsigned long arg);
 extern void mroute_close(struct sock *sk);
 extern void ipmr_forward(struct sk_buff *skb, int is_frag);
 extern int ip_mr_find_tunnel(__u32, __u32);
+extern void ip_mr_init(void);
 
 
 struct vif_device
 {
-	union
-	{
-		struct device 	*dev;		/* Device we are using */
-		struct rtable	*rt;		/* Route for tunnel    */
-	} u;
+	struct device 	*dev;			/* Device we are using */
 	unsigned long	bytes_in,bytes_out;
 	unsigned long	pkt_in,pkt_out;		/* Statistics 			*/
 	unsigned long	rate_limit;		/* Traffic shaping (NI) 	*/
 	unsigned char	threshold;		/* TTL threshold 		*/
 	unsigned short	flags;			/* Control flags 		*/
-	unsigned long	local,remote;		/* Addresses(remote for tunnels)*/
-	unsigned long	uptime;
+	__u32		local,remote;		/* Addresses(remote for tunnels)*/
+	int		link;			/* Physical interface index	*/
 };
 
 struct mfc_cache 
@@ -175,11 +158,9 @@ struct mfc_cache
 	int mfc_flags;				/* Flags on line		*/
 	struct sk_buff_head mfc_unresolved;	/* Unresolved buffers		*/
 	int mfc_queuelen;			/* Unresolved buffer counter	*/
-	unsigned mfc_last_assert;
+	unsigned long mfc_last_assert;
 	int mfc_minvif;
 	int mfc_maxvif;
-	unsigned long uptime;
-	unsigned long expire;
 	unsigned long mfc_bytes;
 	unsigned long mfc_pkt;
 	unsigned long mfc_wrong_if;
@@ -188,6 +169,7 @@ struct mfc_cache
 
 #define MFC_QUEUED		1
 #define MFC_RESOLVED		2
+#define MFC_NOTIFY		4
 
 
 #define MFC_LINES		64
@@ -210,5 +192,32 @@ struct mfc_cache
 #define IGMPMSG_NOCACHE		1		/* Kern cache fill request to mrouted */
 #define IGMPMSG_WRONGVIF	2		/* For PIM assert processing (unused) */
 #define IGMPMSG_WHOLEPKT	3		/* For PIM Register processing */
+
+#ifdef __KERNEL__
+
+#define PIM_V1_VERSION		__constant_htonl(0x10000000)
+#define PIM_V1_REGISTER		1
+
+#define PIM_VERSION		2
+#define PIM_REGISTER		1
+
+#define PIM_NULL_REGISTER	__constant_htonl(0x40000000)
+
+/* PIMv2 register message header layout (ietf-draft-idmr-pimvsm-v2-00.ps */
+
+struct pimreghdr
+{
+	__u8	type;
+	__u8	reserved;
+	__u16	csum;
+	__u32	flags;
+};
+
+extern int pim_rcv(struct sk_buff * , unsigned short);
+extern int pim_rcv_v1(struct sk_buff * , unsigned short len);
+
+struct rtmsg;
+extern int ipmr_get_route(struct sk_buff *skb, struct rtmsg *rtm);
+#endif
 
 #endif

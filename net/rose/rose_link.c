@@ -113,7 +113,7 @@ static int rose_send_frame(struct sk_buff *skb, struct rose_neigh *neigh)
 	else
 		rose_call = &rose_callsign;
 
-	neigh->ax25 = ax25_send_frame(skb, 256, rose_call, &neigh->callsign, neigh->digipeat, neigh->dev);
+	neigh->ax25 = ax25_send_frame(skb, 0, rose_call, &neigh->callsign, neigh->digipeat, neigh->dev);
 
 	return (neigh->ax25 != NULL);
 }

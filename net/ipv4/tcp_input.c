@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.56 1997/08/31 08:24:54 freitag Exp $
+ * Version:	$Id: tcp_input.c,v 1.64 1997/10/30 23:52:24 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -63,6 +63,8 @@ static void tcp_cong_avoid_vegas(struct sock *sk, u32 seq, u32 ack,
 #else
 #define SYNC_INIT 1
 #endif
+
+extern int sysctl_tcp_fin_timeout;
 
 int sysctl_tcp_cong_avoidance;
 int sysctl_tcp_hoe_retransmits;
@@ -249,7 +251,7 @@ extern __inline__ int tcp_sequence(struct tcp_opt *tp, u32 seq, u32 end_seq)
  *	really.
  */
 
-static int tcp_reset(struct sock *sk, struct sk_buff *skb)
+static void tcp_reset(struct sock *sk, struct sk_buff *skb)
 {
 	sk->zapped = 1;
 
@@ -285,8 +287,6 @@ static int tcp_reset(struct sock *sk, struct sk_buff *skb)
 #endif	
 	if (!sk->dead) 
 		sk->state_change(sk);
-
-	return(0);
 }
 
 /*
@@ -345,15 +345,16 @@ void tcp_parse_options(struct tcphdr *th, struct tcp_opt *tp, int no_fancy)
 							/* Cheaper to set again then to
 							 * test syn. Optimize this?
 							 */
-							if (sysctl_tcp_timestamps && !no_fancy)
+							if (sysctl_tcp_timestamps && !no_fancy) {
 								tp->tstamp_ok = 1;
-							tp->saw_tstamp = 1;
-							tp->rcv_tsval = ntohl(*(__u32 *)ptr);
-							tp->rcv_tsecr = ntohl(*(__u32 *)(ptr+4));
+								tp->saw_tstamp = 1;
+								tp->rcv_tsval = ntohl(*(__u32 *)ptr);
+								tp->rcv_tsecr = ntohl(*(__u32 *)(ptr+4));
+							}
 						}
 						break;
 					case TCPOPT_SACK:
-						if (no_fancy) 
+						if (no_fancy || !sysctl_tcp_sack) 
 							break; 
 						tp->sacks = (opsize-2)>>3;
 						if (tp->sacks<<3 == opsize-2) {
@@ -486,8 +487,10 @@ static void tcp_fast_retrans(struct sock *sk, u32 ack, int not_dup)
 #define FLAG_WIN_UPDATE		0x02
 #define FLAG_DATA_ACKED		0x04
 
-static __inline__ void clear_fast_retransmit(struct sock *sk) {
+static __inline__ void clear_fast_retransmit(struct sock *sk)
+{
 	struct tcp_opt *tp=&(sk->tp_pinfo.af_tcp);
+
 	if (tp->dup_acks > 3) {
 		tp->retrans_head = NULL;
 		tp->snd_cwnd = max(tp->snd_ssthresh, 1);
@@ -857,8 +860,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th,
 		tcp_ack_probe(sk, ack);
 
 	/* See if we can take anything off of the retransmit queue. */
-	if (tcp_clean_rtx_queue(sk, ack, &seq, &seq_rtt))
-		flag |= FLAG_DATA_ACKED;
+	flag |= tcp_clean_rtx_queue(sk, ack, &seq, &seq_rtt);
 
 	/* If we have a timestamp, we always do rtt estimates. */
 	if (tp->saw_tstamp) {
@@ -879,7 +881,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th,
 			}
 		} else {
 			tcp_set_rto(tp);
-			if (flag && FLAG_DATA_ACKED)
+			if (flag & FLAG_DATA_ACKED)
 				(*tcp_sys_cong_ctl_f)(sk, seq, ack, seq_rtt);
 		}
 		/* NOTE: safe here so long as cong_ctl doesn't use rto */
@@ -973,6 +975,11 @@ static int tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 
+	if(sk->state == TCP_SYN_SENT) {
+		/* RFC793 says to drop the segment and return. */
+		return 1;
+	}
+
 	/* XXX This fin_seq thing should disappear... -DaveM */
 	tp->fin_seq = skb->end_seq;
 
@@ -985,7 +992,6 @@ static int tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 
 	switch(sk->state) {
 		case TCP_SYN_RECV:
-		case TCP_SYN_SENT:
 		case TCP_ESTABLISHED:
 			/* Move to CLOSE_WAIT */
 			tcp_set_state(sk, TCP_CLOSE_WAIT);
@@ -999,12 +1005,16 @@ static int tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 			 * nothing.
 			 */
 			break;
+		case TCP_LAST_ACK:
+			/* RFC793: Remain in the LAST-ACK state. */
+			break;
 		case TCP_TIME_WAIT:
 			/* Received a retransmission of the FIN,
 			 * restart the TIME_WAIT timer.
 			 */
 			tcp_reset_msl_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
-			return(0);
+			break;
+
 		case TCP_FIN_WAIT1:
 			/* This case occurs when a simultaneous close
 			 * happens, we must ack the received FIN and
@@ -1028,15 +1038,13 @@ static int tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 			/* Already in CLOSE. */
 			break;
 		default:
-			/* FIXME: Document whats happening in this case. -DaveM */
-			tcp_set_state(sk,TCP_LAST_ACK);
-	
-			/* Start the timers. */
-			tcp_reset_msl_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
-			return(0);
+			/* Only TCP_LISTEN is left, in that case we should never
+			 * reach this piece of code.
+			 */
+			printk("tcp_fin: Impossible, sk->state=%d\n", sk->state);
+			break;
 	};
-
-	return(0);
+	return 0;
 }
 
 /* This one checks to see if we can put data from the
@@ -1337,8 +1345,6 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 	 *	We do checksum and copy also but from device to kernel.
 	 */
 
-	tp = &(sk->tp_pinfo.af_tcp); 
-
 	/*
 	 * RFC1323: H1. Apply PAWS check first.
 	 */
@@ -1373,6 +1379,7 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 				tcp_data_snd_check(sk);
 			}
 
+			tcp_statistics.TcpInErrs++;
 			kfree_skb(skb, FREE_READ);
 			return 0;
 		} else if (skb->ack_seq == tp->snd_una) {
@@ -1409,6 +1416,7 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 
 	if(th->syn && skb->seq != sk->syn_seq) {
 		SOCK_DEBUG(sk, "syn in established state\n");
+		tcp_statistics.TcpInErrs++;
 		tcp_reset(sk, skb);
 		return 1;
 	}
@@ -1430,7 +1438,7 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 
 	/* step 8: check the FIN bit */
 	if (th->fin)
-		tcp_fin(skb, sk, th);
+		(void) tcp_fin(skb, sk, th);
 
 	tcp_data_snd_check(sk);
 	tcp_ack_snd_check(sk);
@@ -1449,80 +1457,65 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 
 /* Shared between IPv4 and IPv6 now. */
 struct sock *
-tcp_check_req(struct sock *sk, struct sk_buff *skb, void *opt)
+tcp_check_req(struct sock *sk, struct sk_buff *skb, struct open_request *req)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-	struct open_request *dummy, *req; 
 
 	/*	assumption: the socket is not in use.
 	 *	as we checked the user count on tcp_rcv and we're
 	 *	running from a soft interrupt.
 	 */
-	req = tp->af_specific->search_open_req(tp, (void *)skb->nh.raw, skb->h.th, 
-					       &dummy); 
-	if (req) {
-		if (req->sk) {
-			/*	socket already created but not
-			 *	yet accepted()...
-			 */
-			sk = req->sk;
-		} else {
-			u32 flg; 
 
-			/* Check for syn retransmission */
-			flg = *(((u32 *)skb->h.th) + 3);
+	if (req->sk) {
+		/*	socket already created but not
+		 *	yet accepted()...
+		 */
+		sk = req->sk;
+	} else {
+		u32 flg;
 
-			flg &= __constant_htonl(0x00170000); 
-			if ((flg == __constant_htonl(0x00020000)) &&
-			    (!after(skb->seq, req->rcv_isn))) {
+		/* Check for syn retransmission */
+		flg = *(((u32 *)skb->h.th) + 3);
+		
+		flg &= __constant_htonl(0x00170000);
+		/* Only SYN set? */
+		if (flg == __constant_htonl(0x00020000)) {
+			if (!after(skb->seq, req->rcv_isn)) {
 				/*	retransmited syn.
 				 */
 				req->class->rtx_syn_ack(sk, req); 
 				return NULL;
+			} else {
+				return sk; /* New SYN */
 			}
-		      
-			/* In theory the packet could be for a cookie, but
-			 * TIME_WAIT should guard us against this. 
-			 * XXX: Nevertheless check for cookies?
-			 */ 
-			if (skb->ack_seq != req->snt_isn+1) {
-				tp->af_specific->send_reset(skb);
-				return NULL; 
-			}
-
-			sk = tp->af_specific->syn_recv_sock(sk, skb, req, NULL);
-			tcp_dec_slow_timer(TCP_SLT_SYNACK);
-			if (sk == NULL)
-				return NULL;
-
-			req->expires = 0UL;
-			req->sk = sk;
 		}
-	} 
-#ifdef CONFIG_SYNCOOKIES
-	else {
-		sk = tp->af_specific->cookie_check(sk, skb, opt); 
+
+		/* We know it's an ACK here */
+		/* In theory the packet could be for a cookie, but
+		 * TIME_WAIT should guard us against this. 
+		 * XXX: Nevertheless check for cookies?
+		 * This sequence number check is done again later,
+		 * but we do it here to prevent syn flood attackers
+		 * from creating big SYN_RECV sockets.
+		 */ 
+		if (!between(skb->ack_seq, req->snt_isn, req->snt_isn+1) ||
+		    !between(skb->seq, req->rcv_isn, 
+			     req->rcv_isn+1+req->rcv_wnd)) {
+			req->class->send_reset(skb);
+			return NULL;
+		}
+	
+		sk = tp->af_specific->syn_recv_sock(sk, skb, req, NULL);
+		tcp_dec_slow_timer(TCP_SLT_SYNACK);
 		if (sk == NULL)
-			return NULL; 
+			return NULL;
+		
+		req->expires = 0UL;
+		req->sk = sk;
 	}
-#endif
 	skb_orphan(skb); 
 	skb_set_owner_r(skb, sk);
 	return sk; 
-}
-
-
-static void tcp_rst_req(struct tcp_opt *tp, struct sk_buff *skb)
-{
-	struct open_request *req, *prev;
-
-	req = tp->af_specific->search_open_req(tp,skb->nh.iph,skb->h.th,&prev);
-	if (!req)
-		return;
-	/* Sequence number check required by RFC793 */
-	if (before(skb->seq, req->snt_isn) || after(skb->seq, req->snt_isn+1))
-		return;
-	tcp_synq_unlink(tp, req, prev);
 }
 
 /*
@@ -1540,16 +1533,11 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 	/* state == CLOSED, hash lookup always fails, so no worries. -DaveM */
 	switch (sk->state) {
 	case TCP_LISTEN:
-		if (th->rst) {
-			tcp_rst_req(tp, skb);  
-			goto discard;
-		}
-
 		/* These use the socket TOS.. 
 		 * might want to be the received TOS 
 		 */
-		if(th->ack)  
-			return 1; 
+		if(th->ack)
+			return 1;
 		
 		if(th->syn) {
 			if(tp->af_specific->conn_request(sk, skb, opt, 0) < 0)
@@ -1812,6 +1800,8 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 				tcp_set_state(sk, TCP_FIN_WAIT2);
 				if (!sk->dead)
 					sk->state_change(sk);
+				else
+					tcp_reset_msl_timer(sk, TIME_CLOSE, sysctl_tcp_fin_timeout);
 			}
 			break;
 
@@ -1870,8 +1860,10 @@ step6:
 	}
 
 	/* step 8: check the FIN bit */
-	if (th->fin)
-		tcp_fin(skb, sk, th);
+	if (th->fin) {
+		if(tcp_fin(skb, sk, th) != 0)
+			goto discard;
+	}
 
 	tcp_data_snd_check(sk);
 	tcp_ack_snd_check(sk);

@@ -7,7 +7,7 @@
  *
  *	Based on linux/net/ipv4/ip_sockglue.c
  *
- *	$Id: ipv6_sockglue.c,v 1.13 1997/05/15 18:55:10 davem Exp $
+ *	$Id: ipv6_sockglue.c,v 1.15 1997/10/29 20:27:54 kuznet Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -43,7 +43,6 @@
 #include <net/ip6_route.h>
 #include <net/addrconf.h>
 #include <net/inet_common.h>
-#include <net/sit.h>
 #include <net/tcp.h>
 #include <net/udp.h>
 
@@ -111,6 +110,7 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 				sk->prot = &tcp_prot;
 				tp->af_specific = &ipv4_specific;
 				sk->socket->ops = &inet_stream_ops;
+				sk->family = AF_INET;
 			} else {
 				sk->prot = &udp_prot;
 				sk->socket->ops = &inet_dgram_ops;

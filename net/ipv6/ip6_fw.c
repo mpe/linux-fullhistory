@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_fw.c,v 1.5 1997/04/29 09:38:44 mj Exp $
+ *	$Id: ip6_fw.c,v 1.7 1997/10/06 23:09:54 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -13,6 +13,7 @@
  *      2 of the License, or (at your option) any later version.
  */
 
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -368,12 +369,16 @@ static void ip6_fw_destroy(struct flow_rule *rl)
 
 __initfunc(void ip6_fw_init(void))
 {
+#ifdef CONFIG_NETLINK
 	netlink_attach(NETLINK_IP6_FW, ip6_fw_msgrcv);
+#endif
 }
 
 #ifdef MODULE
 void module_cleanup(void)
 {
+#ifdef CONFIG_NETLINK
 	netlink_detach(NETLINK_IP6_FW);
+#endif
 }
 #endif

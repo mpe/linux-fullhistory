@@ -5,7 +5,7 @@
  *
  *		AF_INET protocol family socket handler.
  *
- * Version:	@(#)af_inet.c	(from sock.c) 1.0.17	06/02/93
+ * Version:	$Id: af_inet.c,v 1.58 1997/10/29 20:27:21 kuznet Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -77,6 +77,7 @@
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #include <linux/init.h>
+#include <linux/poll.h>
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -94,13 +95,14 @@
 #include <net/sock.h>
 #include <net/raw.h>
 #include <net/icmp.h>
+#include <net/ipip.h>
 #include <net/inet_common.h>
 #include <linux/ip_fw.h>
+#ifdef CONFIG_IP_MROUTE
+#include <linux/mroute.h>
+#endif
 #ifdef CONFIG_IP_MASQUERADE
 #include <net/ip_masq.h>
-#endif
-#ifdef CONFIG_IP_ALIAS
-#include <net/ip_alias.h>
 #endif
 #ifdef CONFIG_BRIDGE
 #include <net/br.h>
@@ -115,13 +117,13 @@
 #define min(a,b)	((a)<(b)?(a):(b))
 
 extern int sysctl_core_destroy_delay;
-extern struct proto packet_prot;
+
 extern int raw_get_info(char *, char **, off_t, int, int);
 extern int snmp_get_info(char *, char **, off_t, int, int);
 extern int afinet_get_info(char *, char **, off_t, int, int);
 extern int tcp_get_info(char *, char **, off_t, int, int);
 extern int udp_get_info(char *, char **, off_t, int, int);
-
+extern void ip_mc_drop_socket(struct sock *sk);
 
 #ifdef CONFIG_DLCI
 extern int dlci_ioctl(unsigned int, void*);
@@ -165,9 +167,8 @@ static __inline__ void kill_sk_now(struct sock *sk)
 	/* No longer exists. */
 	del_from_prot_sklist(sk);
 
-	/* This is gross, but needed for SOCK_PACKET -DaveM */
-	if(sk->prot->unhash)
-		sk->prot->unhash(sk);
+	/* Remove from protocol hash chains. */
+	sk->prot->unhash(sk);
 
 	if(sk->opt)
 		kfree(sk->opt);
@@ -321,13 +322,24 @@ static int inet_create(struct socket *sock, int protocol)
 	struct sock *sk;
 	struct proto *prot;
 
+	/* Compatibility */
+	if (sock->type == SOCK_PACKET) {
+		static int warned; 
+		if (net_families[AF_PACKET]==NULL)
+			return -ESOCKTNOSUPPORT;
+		if (!warned++)
+			printk(KERN_INFO "%s uses obsolete (AF_INET,SOCK_PACKET)\n", current->comm);
+		return net_families[AF_PACKET]->create(sock, protocol);
+	}
+
 	sock->state = SS_UNCONNECTED;
 	sk = sk_alloc(AF_INET, GFP_KERNEL);
 	if (sk == NULL) 
 		goto do_oom;
 
-	/* Note for tcp that also wiped the dummy_th block for us. */
-	if(sock->type == SOCK_STREAM || sock->type == SOCK_SEQPACKET) {
+	switch (sock->type) {
+	case SOCK_STREAM:
+		/* Note for tcp that also wiped the dummy_th block for us. */
 		if (protocol && protocol != IPPROTO_TCP)
 			goto free_and_noproto;
 		protocol = IPPROTO_TCP;
@@ -338,7 +350,10 @@ static int inet_create(struct socket *sock, int protocol)
 			sk->ip_pmtudisc = IP_PMTUDISC_WANT;
 		prot = &tcp_prot;
 		sock->ops = &inet_stream_ops;
-	} else if(sock->type == SOCK_DGRAM) {
+		break;
+	case SOCK_SEQPACKET:
+		goto free_and_badtype;
+	case SOCK_DGRAM:
 		if (protocol && protocol != IPPROTO_UDP)
 			goto free_and_noproto;
 		protocol = IPPROTO_UDP;
@@ -346,21 +361,26 @@ static int inet_create(struct socket *sock, int protocol)
 		sk->ip_pmtudisc = IP_PMTUDISC_DONT;
 		prot=&udp_prot;
 		sock->ops = &inet_dgram_ops;
-	} else if(sock->type == SOCK_RAW || sock->type == SOCK_PACKET) {
+		break;
+	case SOCK_RAW:
 		if (!suser())
 			goto free_and_badperm;
 		if (!protocol)
 			goto free_and_noproto;
-		prot = (sock->type == SOCK_RAW) ? &raw_prot : &packet_prot;
+		prot = &raw_prot;
 		sk->reuse = 1;
 		sk->ip_pmtudisc = IP_PMTUDISC_DONT;
 		sk->num = protocol;
 		sock->ops = &inet_dgram_ops;
-	} else {
+		if (protocol == IPPROTO_RAW)
+			sk->ip_hdrincl = 1;
+		break;
+	default:
 		goto free_and_badtype;
 	}
 
 	sock_init_data(sock,sk);
+	
 	sk->destruct = NULL;
 
 	sk->zapped=0;
@@ -378,11 +398,6 @@ static int inet_create(struct socket *sock, int protocol)
 
 	sk->ip_ttl=ip_statistics.IpDefaultTTL;
 
-	if(sk->type==SOCK_RAW && protocol==IPPROTO_RAW)
-		sk->ip_hdrincl=1;
-	else
-		sk->ip_hdrincl=0;
-
 	sk->ip_mc_loop=1;
 	sk->ip_mc_ttl=1;
 	sk->ip_mc_index=0;
@@ -398,11 +413,10 @@ static int inet_create(struct socket *sock, int protocol)
 		 * creation time automatically
 		 * shares.
 		 */
-		sk->dummy_th.source = ntohs(sk->num);
+		sk->dummy_th.source = htons(sk->num);
 
-		/* This is gross, but needed for SOCK_PACKET -DaveM */
-		if(sk->prot->hash)
-			sk->prot->hash(sk);
+		/* Add to protocol hash chains. */
+		sk->prot->hash(sk);
 		add_to_prot_sklist(sk);
 	}
 
@@ -482,7 +496,7 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	unsigned short snum;
 	int chk_addr_ret;
 
-	/* If the socket has its own bind function then use it. (RAW and PACKET) */
+	/* If the socket has its own bind function then use it. (RAW) */
 	if(sk->prot->bind)
 		return sk->prot->bind(sk, uaddr, addr_len);
 		
@@ -503,12 +517,12 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	if (snum < PROT_SOCK && !suser())
 		return(-EACCES);
 	
-	chk_addr_ret = __ip_chk_addr(addr->sin_addr.s_addr);
-	if (addr->sin_addr.s_addr != 0 && chk_addr_ret != IS_MYADDR &&
-	    chk_addr_ret != IS_MULTICAST && chk_addr_ret != IS_BROADCAST) {
+	chk_addr_ret = inet_addr_type(addr->sin_addr.s_addr);
+	if (addr->sin_addr.s_addr != 0 && chk_addr_ret != RTN_LOCAL &&
+	    chk_addr_ret != RTN_MULTICAST && chk_addr_ret != RTN_BROADCAST) {
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 		/* Superuser may bind to any address to allow transparent proxying. */
-		if(!suser())
+		if(chk_addr_ret != RTN_UNICAST || !suser())
 #endif
 			return -EADDRNOTAVAIL;	/* Source address MUST be ours! */
 	}
@@ -521,7 +535,7 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	 *      which case the sending device address is used.
 	 */
 	sk->rcv_saddr = sk->saddr = addr->sin_addr.s_addr;
-	if(chk_addr_ret == IS_MULTICAST || chk_addr_ret == IS_BROADCAST)
+	if(chk_addr_ret == RTN_MULTICAST || chk_addr_ret == RTN_BROADCAST)
 		sk->saddr = 0;  /* Use device */
 
 	/* Make sure we are allowed to bind here. */
@@ -529,7 +543,7 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 		return -EADDRINUSE;
 
 	sk->num = snum;
-	sk->dummy_th.source = ntohs(snum);
+	sk->dummy_th.source = htons(snum);
 	sk->daddr = 0;
 	sk->dummy_th.dest = 0;
 	sk->prot->rehash(sk);
@@ -868,9 +882,6 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCDARP:
 		case SIOCGARP:
 		case SIOCSARP:
-		case OLD_SIOCDARP:
-		case OLD_SIOCGARP:
-		case OLD_SIOCSARP:
 			return(arp_ioctl(cmd,(void *) arg));
 		case SIOCDRARP:
 		case SIOCGRARP:
@@ -889,10 +900,12 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCSIFNETMASK:
 		case SIOCGIFDSTADDR:
 		case SIOCSIFDSTADDR:
+		case SIOCSIFPFLAGS:	
+		case SIOCGIFPFLAGS:	
+		case SIOCSIFFLAGS:
 			return(devinet_ioctl(cmd,(void *) arg));
 		case SIOCGIFCONF:
 		case SIOCGIFFLAGS:
-		case SIOCSIFFLAGS:
 		case SIOCADDMULTI:
 		case SIOCDELMULTI:
 		case SIOCGIFMETRIC:
@@ -908,9 +921,10 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCGIFMAP:
 		case SIOCSIFSLAVE:
 		case SIOCGIFSLAVE:
-		case SIOGIFINDEX:
-		case SIOGIFNAME:
-		case SIOCGIFCOUNT:
+		case SIOCGIFINDEX:
+ 		case SIOCGIFNAME:
+ 		case SIOCGIFCOUNT:
+		case SIOCSIFHWBROADCAST:
 			return(dev_ioctl(cmd,(void *) arg));
 
 		case SIOCGIFBR:
@@ -1105,6 +1119,16 @@ __initfunc(void inet_proto_init(struct net_proto *pro))
 
 	icmp_init(&inet_family_ops);
 
+	/* I wish inet_add_protocol had no constructor hook...
+	   I had to move IPIP from net/ipv4/protocol.c :-( --ANK
+	 */
+#ifdef CONFIG_NET_IPIP
+	ipip_init();
+#endif
+#ifdef CONFIG_NET_IPGRE
+	ipgre_init();
+#endif
+
 	/*
 	 *	Set the firewalling up
 	 */
@@ -1114,20 +1138,12 @@ __initfunc(void inet_proto_init(struct net_proto *pro))
 #ifdef CONFIG_IP_MASQUERADE
 	ip_masq_init();
 #endif
-
+	
 	/*
 	 *	Initialise the multicast router
 	 */
 #if defined(CONFIG_IP_MROUTE)
 	ip_mr_init();
-#endif
-	
-	/*
-	 *  Initialise AF_INET alias type (register net_alias_type)
-	 */
-
-#if defined(CONFIG_IP_ALIAS)
-	ip_alias_init();
 #endif
 
 #ifdef CONFIG_INET_RARP

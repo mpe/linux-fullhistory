@@ -129,10 +129,9 @@ typedef struct {
 	unsigned char		cause, diagnostic;
 	unsigned short		vs, vr, va, vl;
 	unsigned long		t1, t2, t3, hb, idle;
-	unsigned short		fraglen;
+	struct sk_buff_head	ack_queue;
 	struct timer_list	timer;
 	struct timer_list	idletimer;
-	struct sk_buff_head	frag_queue;
 	struct sock		*sk;		/* Backlink to socket */
 } rose_cb;
 
@@ -181,10 +180,8 @@ extern void rose_transmit_clear_request(struct rose_neigh *, unsigned int, unsig
 extern void rose_transmit_link(struct sk_buff *, struct rose_neigh *);
 
 /* rose_out.c */
-extern void rose_output(struct sock *, struct sk_buff *);
 extern void rose_kick(struct sock *);
 extern void rose_enquiry_response(struct sock *);
-extern void rose_check_iframes_acked(struct sock *, unsigned short);
 
 /* rose_route.c */
 extern void rose_rt_device_down(struct device *);
@@ -204,6 +201,8 @@ extern void rose_rt_free(void);
 
 /* rose_subr.c */
 extern void rose_clear_queues(struct sock *);
+extern void rose_frames_acked(struct sock *, unsigned short);
+extern void rose_requeue_frames(struct sock *);
 extern int  rose_validate_nr(struct sock *, unsigned short);
 extern void rose_write_internal(struct sock *, int);
 extern int  rose_decode(struct sk_buff *, int *, int *, int *, int *, int *);

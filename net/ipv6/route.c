@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: route.c,v 1.13 1997/07/19 11:11:35 davem Exp $
+ *	$Id: route.c,v 1.18 1997/10/17 00:15:05 freitag Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -23,6 +23,8 @@
 #include <linux/netdevice.h>
 #include <linux/in6.h>
 #include <linux/init.h>
+#include <linux/netlink.h>
+#include <linux/if_arp.h>
 
 #ifdef 	CONFIG_PROC_FS
 #include <linux/proc_fs.h>
@@ -34,7 +36,7 @@
 #include <net/ip6_route.h>
 #include <net/ndisc.h>
 #include <net/addrconf.h>
-#include <net/netlink.h>
+#include <linux/netlink.h>
 
 #include <asm/uaccess.h>
 
@@ -64,7 +66,7 @@ struct dst_ops ip6_dst_ops = {
 
 struct rt6_info ip6_null_entry = {
 	{{NULL, ATOMIC_INIT(0), ATOMIC_INIT(0), NULL,
-	  0, 0, 0, 0, 0, 0, 0, 0, -ENETUNREACH, NULL, NULL,
+	  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -ENETUNREACH, NULL, NULL,
 	  ip6_pkt_discard, ip6_pkt_discard, &ip6_dst_ops}},
 	NULL, {{{0}}}, 256, RTF_REJECT|RTF_NONEXTHOP, ~0UL,
 	0, {NULL}, {{{{0}}}, 128}, {{{{0}}}, 128}
@@ -297,7 +299,7 @@ struct rt6_info *rt6_lookup(struct in6_addr *daddr, struct in6_addr *saddr,
 	rt6_lock();
 	fn = fib6_lookup(&ip6_routing_table, daddr, saddr);
 
-	rt = rt6_device_match(fn->leaf, dev, 0);
+	rt = rt6_device_match(fn->leaf, dev, flags&RTF_LINKRT);
 	rt6_unlock();
 	return rt;
 }
@@ -314,6 +316,9 @@ static struct rt6_info *rt6_cow(struct rt6_info *rt, struct in6_addr *daddr,
 	if (rt) {
 		ipv6_addr_copy(&rt->rt6i_dst.addr, daddr);
 
+		if (!(rt->rt6i_flags&RTF_GATEWAY))
+			ipv6_addr_copy(&rt->rt6i_gateway, daddr);
+
 		rt->rt6i_dst.plen = 128;
 		rt->rt6i_flags |= RTF_CACHE;
 
@@ -322,7 +327,7 @@ static struct rt6_info *rt6_cow(struct rt6_info *rt, struct in6_addr *daddr,
 			rt->rt6i_src.plen = 128;
 		}
 
-		rt->rt6i_nexthop = ndisc_get_neigh(rt->rt6i_dev, daddr);
+		rt->rt6i_nexthop = ndisc_get_neigh(rt->rt6i_dev, &rt->rt6i_gateway);
 
 		rtreq_add(rt, RT_OPER_ADD);
 	} else {
@@ -556,6 +561,23 @@ struct dst_entry *ip6_dst_reroute(struct dst_entry *dst, struct sk_buff *skb)
 	return NULL;
 }
 
+/* Clean host part of a prefix. Not necessary in radix tree,
+   but results in cleaner routing tables.
+
+   Remove it only when all the things will work!
+ */
+
+static void ipv6_wash_prefix(struct in6_addr *pfx, int plen)
+{
+	int b = plen&0x7;
+	int o = (plen + 7)>>3;
+
+	if (o < 16)
+		memset(pfx->s6_addr + o, 0, 16 - o);
+	if (b != 0)
+		pfx->s6_addr[plen>>3] &= (0xFF<<(8-b));
+}
+
 /*
  *
  */
@@ -566,7 +588,11 @@ struct rt6_info *ip6_route_add(struct in6_rtmsg *rtmsg, int *err)
 	struct device *dev = NULL;
 	int addr_type;
 	
-	RDBG(("ip6_route_add(%p)[%p] ", rtmsg, __builtin_return_address(0)));
+	if (rtmsg->rtmsg_dst_len > 128 || rtmsg->rtmsg_src_len > 128) {
+		*err = -EINVAL;
+		return NULL;
+	}
+
 	*err = 0;
 	
 	rt = dst_alloc(sizeof(struct rt6_info), &ip6_dst_ops);
@@ -577,29 +603,6 @@ struct rt6_info *ip6_route_add(struct in6_rtmsg *rtmsg, int *err)
 		goto out;
 	}
 
-	/*
-	 *	default... this should be chosen according to route flags
-	 */
-
-#if RT6_DEBUG >= 3
-	{
-		struct in6_addr *addr = &rtmsg->rtmsg_dst;
-		int i;
-
-		RDBG(("daddr["));
-		for(i = 0; i < 8; i++) {
-			RDBG(("%04x%c", addr->s6_addr16[i],
-			      i == 7 ? ']' : ':'));
-		}
-		addr = &rtmsg->rtmsg_src;
-		RDBG(("saddr["));
-		for(i = 0; i < 8; i++) {
-			RDBG(("%04x%c", addr->s6_addr16[i],
-			      i == 7 ? ']' : ':'));
-		}
-	}
-#endif
-
 	addr_type = ipv6_addr_type(&rtmsg->rtmsg_dst);
 	
 	if (addr_type & IPV6_ADDR_MULTICAST) {
@@ -609,71 +612,58 @@ struct rt6_info *ip6_route_add(struct in6_rtmsg *rtmsg, int *err)
 		RDBG(("!MCAST "));
 		rt->u.dst.input = ip6_forward;
 	}
-	
+
 	rt->u.dst.output = dev_queue_xmit;
-	
-	if (rtmsg->rtmsg_ifindex)
+
+	if (rtmsg->rtmsg_ifindex) {
 		dev = dev_get_by_index(rtmsg->rtmsg_ifindex);
-	if(dev)
-		RDBG(("d[%s] ", dev->name));
+		if (dev == NULL) {
+			*err = -ENODEV;
+			goto out;
+		}
+	}
 
 	ipv6_addr_copy(&rt->rt6i_dst.addr, &rtmsg->rtmsg_dst);
 	rt->rt6i_dst.plen = rtmsg->rtmsg_dst_len;
+	ipv6_wash_prefix(&rt->rt6i_dst.addr, rt->rt6i_dst.plen);
 
-	/* XXX Figure out what really is supposed to be happening here -DaveM */
 	ipv6_addr_copy(&rt->rt6i_src.addr, &rtmsg->rtmsg_src);
 	rt->rt6i_src.plen = rtmsg->rtmsg_src_len;
-	
-	if ((rt->rt6i_src.plen = rtmsg->rtmsg_src_len)) {
-		RDBG(("splen, "));
-		ipv6_addr_copy(&rt->rt6i_src.addr, &rtmsg->rtmsg_src);
-	} else {
-		RDBG(("!splen, "));
-	}
-	/* XXX */
+	ipv6_wash_prefix(&rt->rt6i_src.addr, rt->rt6i_src.plen);
 
-	if (rtmsg->rtmsg_flags & (RTF_GATEWAY | RTF_NONEXTHOP)) {
-		struct rt6_info *grt;
+	if (rtmsg->rtmsg_flags & RTF_GATEWAY) {
 		struct in6_addr *gw_addr;
-		u32 flags = 0;
-
-		RDBG(("RTF_GATEWAY, "));
-		/*
-		 *	1. gateway route lookup
-		 *	2. ndisc_get_neigh
-		 */
+		int gwa_type;
 
 		gw_addr = &rtmsg->rtmsg_gateway;
+		ipv6_addr_copy(&rt->rt6i_gateway, &rtmsg->rtmsg_gateway);
+		gwa_type = ipv6_addr_type(gw_addr);
 
-#if RT6_DEBUG >= 3
-		{
-			struct in6_addr *addr = gw_addr;
-			int i;
+		if (gwa_type != (IPV6_ADDR_LINKLOCAL|IPV6_ADDR_UNICAST)) {
+			struct rt6_info *grt;
 
-			RDBG(("gwaddr["));
-			for(i = 0; i < 8; i++) {
-				RDBG(("%04x%c", addr->s6_addr16[i],
-				      i == 7 ? ']' : ':'));
+			/* IPv6 strictly inhibits using not link-local
+			   addresses as nexthop address.
+			   It is very good, but in some (rare!) curcumstances
+			   (SIT, NBMA NOARP links) it is handy to allow
+			   some exceptions.
+			 */
+			if (!(gwa_type&IPV6_ADDR_UNICAST)) {
+				*err = -EINVAL;
+				goto out;
 			}
-		}
-#endif
 
-		if ((rtmsg->rtmsg_flags & RTF_GATEWAY) &&
-		    (rtmsg->rtmsg_flags & RTF_ADDRCONF) == 0) {
-			RDBG(("RTF_GATEWAY && !RTF_ADDRCONF, "));
-			if (dev)
-				flags |= RTF_LINKRT;
+			grt = rt6_lookup(gw_addr, NULL, dev, RTF_LINKRT);
 
-			grt = rt6_lookup(gw_addr, NULL, dev, flags);
-
-			if (grt == NULL)
-			{
-				RDBG(("!grt, "));
+			if (grt == NULL || (grt->rt6i_flags&RTF_GATEWAY)) {
 				*err = -EHOSTUNREACH;
 				goto out;
 			}
 			dev = grt->rt6i_dev;
-			RDBG(("grt(d=%s), ", dev ? dev->name : "NULL"));
+		}
+		if (dev == NULL) {
+			*err = -EINVAL;
+			goto out;
 		}
 
 		rt->rt6i_nexthop = ndisc_get_neigh(dev, gw_addr);
@@ -739,20 +729,26 @@ int ip6_route_del(struct in6_rtmsg *rtmsg)
 	/*
 	 *	Find device
 	 */
-	if(rtmsg->rtmsg_ifindex)
+	if(rtmsg->rtmsg_ifindex) {
 		dev=dev_get_by_index(rtmsg->rtmsg_ifindex);
+		if (dev == NULL)
+			return -ENODEV;
+	}
 	/*
 	 *	Find route
 	 */
-	rt=rt6_lookup(&rtmsg->rtmsg_dst, &rtmsg->rtmsg_src, dev, rtmsg->rtmsg_flags);
-	
+	rt=rt6_lookup(&rtmsg->rtmsg_dst, &rtmsg->rtmsg_src, dev, dev ? RTF_LINKRT : 0);
+
 	/*
 	 *	Blow it away
 	 */
-	if(rt)
+	if(rt && rt->rt6i_dst.plen == rtmsg->rtmsg_dst_len &&
+	   rt->rt6i_src.plen == rtmsg->rtmsg_src_len) {
 		ip6_del_rt(rt);
+		return 0;
+	}
 
-	return 0;
+	return -ESRCH;
 }
 
 
@@ -777,6 +773,7 @@ void __rt6_run_bh(void)
 	rt6_bh_mask = 0;
 }
 
+#ifdef CONFIG_NETLINK
 /*
  *	NETLINK interface
  *	routing socket moral equivalent
@@ -815,6 +812,7 @@ out:
 	kfree_skb(skb, FREE_READ);	
 	return count;
 }
+#endif /* CONFIG_NETLINK */
 
 static void rt6_sndrtmsg(struct in6_rtmsg *rtmsg)
 {
@@ -827,7 +825,9 @@ static void rt6_sndrtmsg(struct in6_rtmsg *rtmsg)
 	memcpy(skb_put(skb, sizeof(struct in6_rtmsg)), &rtmsg,
 	       sizeof(struct in6_rtmsg));
 	
+#ifdef CONFIG_NETLINK
 	if (netlink_post(NETLINK_ROUTE6, skb))
+#endif
 		kfree_skb(skb, FREE_WRITE);
 }
 
@@ -867,7 +867,9 @@ void rt6_sndmsg(int type, struct in6_addr *dst, struct in6_addr *src,
 
 	msg->rtmsg_flags = flags;
 
+#ifdef CONFIG_NETLINK
 	if (netlink_post(NETLINK_ROUTE6, skb))
+#endif
 		kfree_skb(skb, FREE_WRITE);
 }
 
@@ -878,54 +880,28 @@ struct rt6_info *rt6_redirect(struct in6_addr *dest, struct in6_addr *saddr,
 			      struct in6_addr *target, struct device *dev,
 			      int on_link)
 {
-	struct rt6_info *rt, *tgtr, *nrt;
+	struct rt6_info *rt, *nrt;
 
-	RDBG(("rt6_redirect(%s)[%p]: ",
-	      dev ? dev->name : "NULL",
-	      __builtin_return_address(0)));
+	/* Locate old route to this destination. */
 	rt = rt6_lookup(dest, NULL, dev, 0);
 
-	if (rt == NULL || rt->u.dst.error) {
-		RDBG(("!rt\n"));
-		printk(KERN_DEBUG "rt6_redirect: no route to destination\n");
+	if (rt == NULL || rt->u.dst.error)
 		return NULL;
-	}
 
-	if (rt->rt6i_flags & RTF_GATEWAY) {
-		/*
-		 *	This can happen due to misconfiguration
-		 *	if we are dealing with an "on link" redirect.
-		 */
-		RDBG(("RTF_GATEWAY\n"));
-		printk(KERN_DEBUG "rt6_redirect: destination not directly "
-		       "connected\n");
+	/* Duplicate redirect: silently ignore. */
+	if (ipv6_addr_cmp(target, &rt->rt6i_gateway) == 0)
 		return NULL;
-	}
-	RDBG(("tgt_lkup, "));
-	tgtr = rt6_lookup(target, NULL, dev, 0);
 
-	if (tgtr == NULL || tgtr->u.dst.error) {
-		/*
-		 *	duh?! no route to redirect target.
-		 *	How where we talking to it in the first place ?
-		 */
-		RDBG(("!tgtr||dsterr\n"));
-		printk(KERN_DEBUG "rt6_redirect: no route to target\n");
+	/* Current route is on-link; redirect is always invalid. */
+	if (!(rt->rt6i_flags&RTF_GATEWAY))
 		return NULL;
-	}
 
-	if ((tgtr->rt6i_flags & RTF_GATEWAY) &&
-	    ipv6_addr_cmp(dest, &tgtr->rt6i_gateway) == 0) {
-		RDBG(("tgt RTF_GATEWAY && dstmatch, dup\n"));
-		/*
-		 *	Check if we already have the right route.
-		 */
-#if RT6_DEBUG >= 1
-		printk(KERN_DEBUG "rt6_redirect: duplicate\n");
-#endif
-		return NULL;
-	}
-
+#if !defined(CONFIG_IPV6_EUI64) || defined(CONFIG_IPV6_NO_PB)
+	/*
+	 *	During transition gateways have more than
+	 *	one link local address. Certainly, it is violation
+	 *	of basic principles, but it is temparary.
+	 */
 	/*
 	 *	RFC 1970 specifies that redirects should only be
 	 *	accepted if they come from the nexthop to the target.
@@ -934,61 +910,56 @@ struct rt6_info *rt6_redirect(struct in6_addr *dest, struct in6_addr *saddr,
 	 *	routers.
 	 */
 
-	if (ipv6_addr_cmp(saddr, &tgtr->rt6i_gateway)) {
-		RDBG(("saddr/tgt->gway match, "));
-		if (tgtr->rt6i_flags & RTF_DEFAULT) {
-			tgtr = ip6_routing_table.leaf;
+	if (ipv6_addr_cmp(saddr, &rt->rt6i_gateway)) {
+		if (rt->rt6i_flags & RTF_DEFAULT) {
+			rt = ip6_routing_table.leaf;
 
-			for (; tgtr; tgtr = tgtr->u.next) {
-				if (!ipv6_addr_cmp(saddr, &tgtr->rt6i_gateway)) {
-					RDBG(("found srcok, "));
+			for (; rt; rt = rt->u.next) {
+				if (!ipv6_addr_cmp(saddr, &rt->rt6i_gateway))
 					goto source_ok;
-				}
 			}
 		}
-		RDBG(("!dflt||!srcok, "));
 		printk(KERN_DEBUG "rt6_redirect: source isn't a valid nexthop "
-		       "for redirect target\n");
+			       "for redirect target\n");
+		return NULL;
 	}
 
 source_ok:
+#endif
 
 	/*
 	 *	We have finally decided to accept it.
 	 */
-	RDBG(("srcok: "));
-	if ((tgtr->rt6i_flags & RTF_HOST)) {
+	if (rt->rt6i_dst.plen == 128) {
 		/*
 		 *	Already a host route.
 		 *
 		 */
-		RDBG(("hralready, "));
-		if (tgtr->rt6i_nexthop) {
-			RDBG(("nrel(nxthop) "));
-			neigh_release(tgtr->rt6i_nexthop);
-		}
+		if (rt->rt6i_nexthop)
+			neigh_release(rt->rt6i_nexthop);
 		/*
 		 *	purge hh_cache
 		 */
-		tgtr->rt6i_flags |= RTF_MODIFIED | RTF_CACHE;
-		ipv6_addr_copy(&tgtr->rt6i_gateway, dest);
-		tgtr->rt6i_nexthop = ndisc_get_neigh(tgtr->rt6i_dev, dest);
-		RDBG(("hhpurge, getnewneigh, ret(%p)\n", tgtr));
-		return tgtr;
+		rt->rt6i_flags |= RTF_MODIFIED | RTF_CACHE;
+		if (on_link)
+			rt->rt6i_flags &= ~RTF_GATEWAY;
+		ipv6_addr_copy(&rt->rt6i_gateway, target);
+		rt->rt6i_nexthop = ndisc_get_neigh(rt->rt6i_dev, target);
+		return rt;
 	}
 
-	nrt = ip6_rt_copy(tgtr);
-	nrt->rt6i_flags = RTF_GATEWAY|RTF_HOST|RTF_UP|RTF_DYNAMIC|RTF_CACHE;
+	nrt = ip6_rt_copy(rt);
+	nrt->rt6i_flags = RTF_GATEWAY|RTF_UP|RTF_DYNAMIC|RTF_CACHE;
+	if (on_link)
+		nrt->rt6i_flags &= ~RTF_GATEWAY;
 
-	ipv6_addr_copy(&nrt->rt6i_dst.addr, target);
+	ipv6_addr_copy(&nrt->rt6i_dst.addr, dest);
 	nrt->rt6i_dst.plen = 128;
 
-	ipv6_addr_copy(&nrt->rt6i_gateway, dest);
-	nrt->rt6i_nexthop = ndisc_get_neigh(nrt->rt6i_dev, dest);
+	ipv6_addr_copy(&nrt->rt6i_gateway, target);
+	nrt->rt6i_nexthop = ndisc_get_neigh(nrt->rt6i_dev, target);
 	nrt->rt6i_dev = dev;
 	nrt->u.dst.pmtu = dev->mtu;
-
-	RDBG(("rt6_ins(%p)\n", nrt));
 
 	rt6_lock();
 	rt6_ins(nrt);
@@ -1023,7 +994,15 @@ void rt6_pmtu_discovery(struct in6_addr *addr, struct device *dev, int pmtu)
 		return;
 	}
 
-	if (rt->rt6i_flags & RTF_HOST) {
+	/* It is wrong, but I plugged the hole here.
+	   On-link routes are cloned differently,
+	   look at rt6_redirect --ANK
+	 */
+	if (!(rt->rt6i_flags&RTF_GATEWAY)) {
+		return;
+	}
+
+	if (rt->rt6i_dst.plen == 128) {
 		/*
 		 *	host route
 		 */
@@ -1037,7 +1016,7 @@ void rt6_pmtu_discovery(struct in6_addr *addr, struct device *dev, int pmtu)
 	ipv6_addr_copy(&rt->rt6i_dst.addr, addr);
 	rt->rt6i_dst.plen = 128;
 
-	rt->rt6i_flags |= (RTF_HOST | RTF_DYNAMIC | RTF_CACHE);
+	rt->rt6i_flags |= (RTF_DYNAMIC | RTF_CACHE);
 
 	rt6_lock();
 	rt6_ins(rt);
@@ -1065,7 +1044,7 @@ struct rt6_info * ip6_rt_copy(struct rt6_info *ort)
 		rt->rt6i_keylen = ort->rt6i_keylen;
 		rt->rt6i_flags = ort->rt6i_flags;
 		rt->rt6i_metric = ort->rt6i_metric;
-		
+
 		memcpy(&rt->rt6i_dst, &ort->rt6i_dst, sizeof(struct rt6key));
 		memcpy(&rt->rt6i_src, &ort->rt6i_src, sizeof(struct rt6key));
 	}
@@ -1257,7 +1236,7 @@ int ip6_rt_addr_add(struct in6_addr *addr, struct device *dev)
 	rt->rt6i_dev = dev_get("lo");
 	rt->u.dst.pmtu = rt->rt6i_dev->mtu;
 
-	rt->rt6i_flags = RTF_HOST | RTF_LOCAL | RTF_UP | RTF_NONEXTHOP;
+	rt->rt6i_flags = RTF_UP | RTF_NONEXTHOP;
 	
 	ipv6_addr_copy(&rt->rt6i_dst.addr, addr);
 	rt->rt6i_dst.plen = 128;
@@ -1600,7 +1579,9 @@ __initfunc(void ip6_route_init(void))
 	proc_net_register(&proc_rt6_stats);
 	proc_net_register(&proc_rt6_tree);
 #endif
+#ifdef CONFIG_NETLINK
 	netlink_attach(NETLINK_ROUTE6, rt6_msgrcv);
+#endif
 }
 
 #ifdef MODULE
@@ -1611,7 +1592,9 @@ void ip6_route_cleanup(void)
 	proc_net_unregister(PROC_NET_RT6_TREE);
 	proc_net_unregister(PROC_NET_RT6_STATS);
 #endif
+#ifdef CONFIG_NETLINK
 	netlink_detach(NETLINK_ROUTE6);
+#endif
 #if 0
 	fib6_flush();
 #endif

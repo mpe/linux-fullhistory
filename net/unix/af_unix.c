@@ -26,6 +26,7 @@
  *		Alan Cox	:	Started POSIXisms
  *		Andreas Schwab	:	Replace inode by dentry for proper
  *					reference counting
+ *		Kirk Petersen	:	Made this a module
  *
  * Known differences from reference BSD that was tested:
  *
@@ -57,6 +58,7 @@
  *		  with BSD names.
  */
 
+#include <linux/module.h>
 #include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/major.h>
@@ -310,6 +312,9 @@ static void unix_destroy_socket(unix_socket *sk)
 		sk->dead=1;
 		unix_delayed_delete(sk);	/* Try every so often until buffers are all freed */
 	}
+
+	/* socket destroyed, decrement count */
+	MOD_DEC_USE_COUNT;
 }
 
 static int unix_listen(struct socket *sock, int backlog)
@@ -373,6 +378,10 @@ static int unix_create(struct socket *sock, int protocol)
 	sk->mtu=4096;
 	sk->protinfo.af_unix.list=&unix_sockets_unbound;
 	unix_insert_socket(sk);
+
+	/* socket created, increment count */
+	MOD_INC_USE_COUNT;
+
 	return 0;
 }
 
@@ -1465,7 +1474,14 @@ struct net_proto_family unix_family_ops = {
 	unix_create
 };
 
+#ifdef MODULE
+extern void unix_sysctl_register(void);
+extern void unix_sysctl_unregister(void);
+
+int init_module(void)
+#else
 __initfunc(void unix_proto_init(struct net_proto *pro))
+#endif
 {
 	struct sk_buff *dummy_skb;
 	struct proc_dir_entry *ent;
@@ -1474,14 +1490,33 @@ __initfunc(void unix_proto_init(struct net_proto *pro))
 	if (sizeof(struct unix_skb_parms) > sizeof(dummy_skb->cb))
 	{
 		printk(KERN_CRIT "unix_proto_init: panic\n");
+#ifdef MODULE
+		return -1;
+#else
 		return;
+#endif
 	}
 	sock_register(&unix_family_ops);
 #ifdef CONFIG_PROC_FS
 	ent = create_proc_entry("net/unix", 0, 0);
 	ent->read_proc = unix_read_proc;
 #endif
+
+#ifdef MODULE
+	unix_sysctl_register();
+
+	return 0;
+#endif
 }
+
+#ifdef MODULE
+void cleanup_module(void)
+{
+	sock_unregister(AF_UNIX);
+	unix_sysctl_unregister();
+}
+#endif
+
 /*
  * Local variables:
  *  compile-command: "gcc -g -D__KERNEL__ -Wall -O6 -I/usr/src/linux/include -c af_unix.c"

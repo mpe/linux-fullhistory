@@ -177,7 +177,6 @@ int ax25_rebuild_header(struct sk_buff *skb)
 	}
 
 	skb->dev      = dev;
-	skb->priority = SOPRI_NORMAL;
 
 	ax25_queue_xmit(skb);
 

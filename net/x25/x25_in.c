@@ -174,6 +174,7 @@ static int x25_state3_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 			sk->protinfo.x25->vr        = 0;
 			sk->protinfo.x25->va        = 0;
 			sk->protinfo.x25->vl        = 0;
+			x25_requeue_frames(sk);
 			break;
 
 		case X25_CLEAR_REQUEST:
@@ -199,11 +200,9 @@ static int x25_state3_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 				sk->protinfo.x25->vl        = 0;
 				sk->protinfo.x25->state     = X25_STATE_4;
 			} else {
-				if (sk->protinfo.x25->condition & X25_COND_PEER_RX_BUSY) {
-					sk->protinfo.x25->va = nr;
-				} else {
-					x25_check_iframes_acked(sk, nr);
-				}
+				x25_frames_acked(sk, nr);
+				if (frametype == X25_RNR)
+					x25_requeue_frames(sk);
 			}
 			break;
 
@@ -221,11 +220,7 @@ static int x25_state3_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 				sk->protinfo.x25->state     = X25_STATE_4;
 				break;
 			}
-			if (sk->protinfo.x25->condition & X25_COND_PEER_RX_BUSY) {
-				sk->protinfo.x25->va = nr;
-			} else {
-				x25_check_iframes_acked(sk, nr);
-			}
+			x25_frames_acked(sk, nr);
 			if (sk->protinfo.x25->condition & X25_COND_OWN_RX_BUSY)
 				break;
 			if (ns == sk->protinfo.x25->vr) {
@@ -298,6 +293,7 @@ static int x25_state4_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 			sk->protinfo.x25->vs        = 0;
 			sk->protinfo.x25->vl        = 0;
 			sk->protinfo.x25->state     = X25_STATE_3;
+			x25_requeue_frames(sk);
 			break;
 
 		case X25_CLEAR_REQUEST:

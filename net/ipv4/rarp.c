@@ -3,6 +3,8 @@
  * Copyright (C) 1994 by Ross Martin
  * Based on linux/net/inet/arp.c, Copyright (C) 1994 by Florian La Roche
  *
+ * $Id: rarp.c,v 1.21 1997/10/27 09:13:16 geert Exp $
+ *
  * This module implements the Reverse Address Resolution Protocol 
  * (RARP, RFC 903), which is used to convert low level addresses such
  * as ethernet addresses into high level addresses such as IP addresses.
@@ -119,20 +121,20 @@ static void rarp_destroy(unsigned long ip_addr)
 	struct rarp_table *entry;
 	struct rarp_table **pentry;
   
-	cli();
+	start_bh_atomic();
 	pentry = &rarp_tables;
 	while ((entry = *pentry) != NULL)
 	{
 		if (entry->ip == ip_addr)
 		{
 			*pentry = entry->next;
-			sti();
+			end_bh_atomic();
 			rarp_release_entry(entry);
 			return;
 		}
 		pentry = &entry->next;
 	}
-	sti();
+	end_bh_atomic();
 }
 
 /*
@@ -144,7 +146,7 @@ static void rarp_destroy_dev(struct device *dev)
 	struct rarp_table *entry;
 	struct rarp_table **pentry;
   
-	cli();
+	start_bh_atomic();
 	pentry = &rarp_tables;
 	while ((entry = *pentry) != NULL)
 	{
@@ -156,7 +158,7 @@ static void rarp_destroy_dev(struct device *dev)
 		else
 			pentry = &entry->next;
 	}
-	sti();
+	end_bh_atomic();
 }
 
 static int rarp_device_event(struct notifier_block *this, unsigned long event, void *ptr)
@@ -176,6 +178,8 @@ static struct notifier_block rarp_dev_notifier={
 	NULL,
 	0
 };
+
+static int rarp_pkt_inited=0;
  
 static void rarp_init_pkt (void)
 {
@@ -183,7 +187,18 @@ static void rarp_init_pkt (void)
 	rarp_packet_type.type=htons(ETH_P_RARP);
 	dev_add_pack(&rarp_packet_type);
 	register_netdevice_notifier(&rarp_dev_notifier);
+	rarp_pkt_inited=1;
 }
+
+static void rarp_end_pkt(void)
+{
+	if(!rarp_pkt_inited)
+		return;
+	dev_remove_pack(&rarp_packet_type);
+	unregister_netdevice_notifier(&rarp_dev_notifier);
+	rarp_pkt_inited=0;
+}
+
 
 /*
  *	Receive an arp request by the device layer.  Maybe it should be 
@@ -199,6 +214,7 @@ static int rarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 	struct arphdr *rarp = (struct arphdr *) skb->data;
 	unsigned char *rarp_ptr = skb_pull(skb,sizeof(struct arphdr));
 	struct rarp_table *entry;
+	struct in_device *in_dev = dev->ip_ptr;
 	long sip,tip;
 	unsigned char *sha,*tha;            /* s for "source", t for "target" */
 	
@@ -207,7 +223,7 @@ static int rarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
  */
 
 	if (rarp->ar_hln != dev->addr_len || dev->type != ntohs(rarp->ar_hrd) 
-		|| dev->flags&IFF_NOARP)
+		|| dev->flags&IFF_NOARP || !in_dev || !in_dev->ifa_list)
 	{
 		kfree_skb(skb, FREE_READ);
 		return 0;
@@ -256,7 +272,6 @@ static int rarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
  *	Process entry. Use tha for table lookup according to RFC903.
  */
   
-	cli();
 	for (entry = rarp_tables; entry != NULL; entry = entry->next)
 		if (!memcmp(entry->ha, tha, rarp->ar_hln))
 			break;
@@ -264,13 +279,10 @@ static int rarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 	if (entry != NULL)
 	{
 		sip=entry->ip;
-		sti();
 
-		arp_send(ARPOP_RREPLY, ETH_P_RARP, sip, dev, dev->pa_addr, sha, 
+		arp_send(ARPOP_RREPLY, ETH_P_RARP, sip, dev, in_dev->ifa_list->ifa_address, sha, 
 			dev->dev_addr, sha);
 	}
-	else
-		sti();
 
 	kfree_skb(skb, FREE_READ);
 	return 0;
@@ -331,10 +343,10 @@ static int rarp_req_set(struct arpreq *req)
  *	Is it reachable directly ?
  */
   
-	err = ip_route_output(&rt, ip, 0, 1, NULL);
+	err = ip_route_output(&rt, ip, 0, 1, 0);
 	if (err)
 		return err;
-	if (rt->rt_flags&(RTF_LOCAL|RTF_BROADCAST|RTF_MULTICAST|RTF_NAT)) {
+	if (rt->rt_flags&(RTCF_LOCAL|RTCF_BROADCAST|RTCF_MULTICAST|RTCF_DNAT)) {
 		ip_rt_put(rt);
 		return -EINVAL;
 	}
@@ -344,7 +356,6 @@ static int rarp_req_set(struct arpreq *req)
  *	Is there an existing entry for this address?  Find out...
  */
   
-	cli();
 	for (entry = rarp_tables; entry != NULL; entry = entry->next)
 		if (entry->ip == ip)
 			break;
@@ -359,7 +370,6 @@ static int rarp_req_set(struct arpreq *req)
 				    GFP_ATOMIC);
 		if (entry == NULL)
 		{
-			sti();
 			return -ENOMEM;
 		}
 		if (initflag)
@@ -368,20 +378,22 @@ static int rarp_req_set(struct arpreq *req)
 			initflag=0;
 		}
 
+		/* Block interrupts until table modification is finished */
+
+		cli();
 		entry->next = rarp_tables;
 		rarp_tables = entry;
 	}
-
+	cli();
 	entry->ip = ip;
 	entry->hlen = hlen;
 	entry->htype = htype;
 	memcpy(&entry->ha, &r.arp_ha.sa_data, hlen);
 	entry->dev = dev;
+	sti();
 
 	/* Don't unlink if we have entries to serve. */
 	MOD_INC_USE_COUNT;
-
-	sti();  
 
 	return 0;
 }
@@ -417,14 +429,12 @@ static int rarp_req_get(struct arpreq *req)
 	si = (struct sockaddr_in *) &r.arp_pa;
 	ip = si->sin_addr.s_addr;
 
-	cli();
 	for (entry = rarp_tables; entry != NULL; entry = entry->next)
 		if (entry->ip == ip)
 			break;
 
 	if (entry == NULL)
 	{
-		sti();
 		return -ENXIO;
 	}
 
@@ -434,7 +444,6 @@ static int rarp_req_get(struct arpreq *req)
         
 	memcpy(r.arp_ha.sa_data, &entry->ha, entry->hlen);
 	r.arp_ha.sa_family = entry->htype;
-	sti();
   
 /*
  *        Copy the information back
@@ -483,6 +492,7 @@ int rarp_ioctl(unsigned int cmd, void *arg)
 	return 0;
 }
 
+#ifdef CONFIG_PROC_FS
 int rarp_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	int len=0;
@@ -505,7 +515,6 @@ int rarp_get_info(char *buffer, char **start, off_t offset, int length, int dumm
 		pos+=size;
 		len+=size;
       
-		cli();
 		for(entry=rarp_tables; entry!=NULL; entry=entry->next)
 		{
 			netip=htonl(entry->ip);          /* switch to network order */
@@ -537,7 +546,6 @@ int rarp_get_info(char *buffer, char **start, off_t offset, int length, int dumm
 			if(pos>offset+length)
 				break;
 		}
-		sti();
 	}      
 
 	*start = buffer+(offset-begin);	/* Start of wanted data */
@@ -553,11 +561,14 @@ struct proc_dir_entry proc_net_rarp = {
 	0, &proc_net_inode_operations,
 	rarp_get_info
 };
+#endif
 
 __initfunc(void
 rarp_init(void))
 {
+#ifdef CONFIG_PROC_FS
 	proc_net_register(&proc_net_rarp);
+#endif
 	rarp_ioctl_hook = rarp_ioctl;
 }
 
@@ -572,7 +583,9 @@ int init_module(void)
 void cleanup_module(void)
 {
 	struct rarp_table *rt, *rt_next;
+#ifdef CONFIG_PROC_FS
 	proc_net_unregister(PROC_NET_RARP);
+#endif
 	rarp_ioctl_hook = NULL;
 	cli();
 	/* Destroy the RARP-table */
@@ -584,5 +597,6 @@ void cleanup_module(void)
 		rt_next = rt->next;
 		rarp_release_entry(rt);
 	}
+	rarp_end_pkt();
 }
 #endif

@@ -154,7 +154,6 @@ static void ax25_kiss_cmd(ax25_dev *ax25_dev, unsigned char cmd, unsigned char p
 
 	skb->arp      = 1;
 	skb->dev      = ax25_dev->dev;
-	skb->priority = SOPRI_NORMAL;
 	skb->protocol = htons(ETH_P_AX25);
 
 	dev_queue_xmit(skb);

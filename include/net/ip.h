@@ -25,6 +25,8 @@
 #include <linux/socket.h>
 #include <linux/ip.h>
 #include <linux/netdevice.h>
+#include <linux/inetdevice.h>
+#include <linux/in_route.h>
 #include <net/route.h>
 
 #ifndef _SNMP_H
@@ -38,20 +40,29 @@ struct inet_skb_parm
 	struct ip_options	opt;		/* Compiled IP options		*/
 	u16			redirport;	/* Redirect port		*/
 	unsigned char		flags;
-	char			vif;
 
 #define IPSKB_MASQUERADED	1
 #define IPSKB_TRANSLATED	2
-#define IPSKB_TUNNELED		4
+#define IPSKB_FORWARDED		4
 };
 
 struct ipcm_cookie
 {
 	u32			addr;
+	int			oif;
 	struct ip_options	*opt;
 };
 
 #define IPCB(skb) ((struct inet_skb_parm*)((skb)->cb))
+
+struct ip_ra_chain
+{
+	struct ip_ra_chain	*next;
+	struct sock		*sk;
+	void			(*destructor)(struct sock *);
+};
+
+extern struct ip_ra_chain *ip_ra_chain;
 
 /* IP flags. */
 #define IP_CE		0x8000		/* Flag: "Congestion"		*/
@@ -134,19 +145,22 @@ struct ipv4_config
 	int	secure_redirects;
 	int	rfc1620_redirects;
 	int	rfc1812_filter;
-	int	addrmask_agent;
+	int	send_redirects;
 	int	log_martians;
 	int	source_route;
 	int	multicast_route;
-	int	bootp_agent;
+	int	proxy_arp;
 	int	bootp_relay;
-	int	fib_model;
+	int	autoconfig;
 	int	no_pmtu_disc;
 };
 
 extern struct ipv4_config ipv4_config;
+extern int sysctl_local_port_range[2];
 
 #define IS_ROUTER	(ip_statistics.IpForwarding == 1)
+
+extern int	ip_call_ra_chain(struct sk_buff *skb);
 
 /*
  *	Functions provided by ip_fragment.o
@@ -165,7 +179,7 @@ extern int ip_net_unreachable(struct sk_buff *skb);
  *	Functions provided by ip_options.c
  */
  
-extern void ip_options_build(struct sk_buff *skb, struct ip_options *opt, u32 daddr, u32 saddr, int is_frag);
+extern void ip_options_build(struct sk_buff *skb, struct ip_options *opt, u32 daddr, struct rtable *rt, int is_frag);
 extern int ip_options_echo(struct ip_options *dopt, struct sk_buff *skb);
 extern void ip_options_fragment(struct sk_buff *skb);
 extern int ip_options_compile(struct ip_options *opt, struct sk_buff *skb);
@@ -179,9 +193,12 @@ extern int ip_options_rcv_srr(struct sk_buff *skb);
  */
 
 extern void	ip_cmsg_recv(struct msghdr *msg, struct sk_buff *skb);
-extern int	ip_cmsg_send(struct msghdr *msg, struct ipcm_cookie *ipc, struct device **devp);
+extern int	ip_cmsg_send(struct msghdr *msg, struct ipcm_cookie *ipc);
 extern int	ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int optlen);
 extern int	ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *optlen);
+extern int	ip_ra_control(struct sock *sk, unsigned char on, void (*destructor)(struct sock *));
 
 extern int		ipv4_backlog_rcv(struct sock *sk, struct sk_buff *skb);  
+
+
 #endif	/* _IP_H */

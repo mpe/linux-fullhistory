@@ -1,7 +1,7 @@
 /*
- *  linux/drivers/block/ide.c	Version 6.03  June 4, 1997
+ *  linux/drivers/block/ide.c	Version 6.05  November 30, 1997
  *
- *  Copyright (C) 1994-1997  Linus Torvalds & authors (see below)
+ *  Copyright (C) 1994-1998  Linus Torvalds & authors (see below)
  */
 #define _IDE_C		/* needed by <linux/blk.h> */
 
@@ -65,197 +65,6 @@
  *  Version 1.4 BETA	added auto probing for irq(s)
  *  Version 1.5 BETA	added ALPHA (untested) support for IDE cd-roms,
  *  ...
- *  Version 3.5		correct the bios_cyl field if it's too small
- *  (linux 1.1.76)	 (to help fdisk with brain-dead BIOSs)
- *  Version 3.6		cosmetic corrections to comments and stuff
- *  (linux 1.1.77)	reorganise probing code to make it understandable
- *			added halfway retry to probing for drive identification
- *			added "hdx=noprobe" command line option
- *			allow setting multmode even when identification fails
- *  Version 3.7		move set_geometry=1 from do_identify() to ide_init()
- *			increase DRQ_WAIT to eliminate nuisance messages
- *			wait for DRQ_STAT instead of DATA_READY during probing
- *			  (courtesy of Gary Thomas gary@efland.UU.NET)
- *  Version 3.8		fixed byte-swapping for confused Mitsumi cdrom drives
- *			update of ide-cd.c from Scott, allows blocksize=1024
- *			cdrom probe fixes, inspired by jprang@uni-duisburg.de
- *  Version 3.9		don't use LBA if lba_capacity looks funny
- *			correct the drive capacity calculations
- *			fix probing for old Seagates without IDE_ALTSTATUS_REG
- *			fix byte-ordering for some NEC cdrom drives
- *  Version 3.10	disable multiple mode by default; was causing trouble
- *  Version 3.11	fix mis-identification of old WD disks as cdroms
- *  Version 3,12	simplify logic for selecting initial mult_count
- *			  (fixes problems with buggy WD drives)
- *  Version 3.13	remove excess "multiple mode disabled" messages
- *  Version 3.14	fix ide_error() handling of BUSY_STAT
- *			fix byte-swapped cdrom strings (again.. arghh!)
- *			ignore INDEX bit when checking the ALTSTATUS reg
- *  Version 3.15	add SINGLE_THREADED flag for use with dual-CMD i/f
- *			ignore WRERR_STAT for non-write operations
- *			added vlb_sync support for DC-2000A & others,
- *			 (incl. some Promise chips), courtesy of Frank Gockel
- *  Version 3.16	convert vlb_32bit and vlb_sync into runtime flags
- *			add ioctls to get/set VLB flags (HDIO_[SG]ET_CHIPSET)
- *			rename SINGLE_THREADED to SUPPORT_SERIALIZE,
- *			add boot flag to "serialize" operation for CMD i/f
- *			add optional support for DTC2278 interfaces,
- *			 courtesy of andy@cercle.cts.com (Dyan Wile).
- *			add boot flag to enable "dtc2278" probe
- *			add probe to avoid EATA (SCSI) interfaces,
- *			 courtesy of neuffer@goofy.zdv.uni-mainz.de.
- *  Version 4.00	tidy up verify_area() calls - heiko@colossus.escape.de
- *			add flag to ignore WRERR_STAT for some drives
- *			 courtesy of David.H.West@um.cc.umich.edu
- *			assembly syntax tweak to vlb_sync
- *			removable drive support from scuba@cs.tu-berlin.de
- *			add transparent support for DiskManager-6.0x "Dynamic
- *			 Disk Overlay" (DDO), most of this is in genhd.c
- *			eliminate "multiple mode turned off" message at boot
- *  Version 4.10	fix bug in ioctl for "hdparm -c3"
- *			fix DM6:DDO support -- now works with LILO, fdisk, ...
- *			don't treat some naughty WD drives as removable
- *  Version 4.11	updated DM6 support using info provided by OnTrack
- *  Version 5.00	major overhaul, multmode setting fixed, vlb_sync fixed
- *			added support for 3rd/4th/alternative IDE ports
- *			created ide.h; ide-cd.c now compiles separate from ide.c
- *			hopefully fixed infinite "unexpected_intr" from cdroms
- *			zillions of other changes and restructuring
- *			somehow reduced overall memory usage by several kB
- *			probably slowed things down slightly, but worth it
- *  Version 5.01	AT LAST!!  Finally understood why "unexpected_intr"
- *			 was happening at various times/places:  whenever the
- *			 ide-interface's ctl_port was used to "mask" the irq,
- *			 it also would trigger an edge in the process of masking
- *			 which would result in a self-inflicted interrupt!!
- *			 (such a stupid way to build a hardware interrupt mask).
- *			 This is now fixed (after a year of head-scratching).
- *  Version 5.02	got rid of need for {enable,disable}_irq_list()
- *  Version 5.03	tune-ups, comments, remove "busy wait" from drive resets
- *			removed PROBE_FOR_IRQS option -- no longer needed
- *			OOOPS!  fixed "bad access" bug for 2nd drive on an i/f
- *  Version 5.04	changed "ira %d" to "irq %d" in DEBUG message
- *			added more comments, cleaned up unexpected_intr()
- *			OOOPS!  fixed null pointer problem in ide reset code
- *			added autodetect for Triton chipset -- no effect yet
- *  Version 5.05	OOOPS!  fixed bug in revalidate_disk()
- *			OOOPS!  fixed bug in ide_do_request()
- *			added ATAPI reset sequence for cdroms
- *  Version 5.10	added Bus-Mastered DMA support for Triton Chipset
- *			some (mostly) cosmetic changes
- *  Version 5.11	added ht6560b support by malafoss@snakemail.hut.fi
- *			reworked PCI scanning code
- *			added automatic RZ1000 detection/support
- *			added automatic PCI CMD640 detection/support
- *			added option for VLB CMD640 support
- *			tweaked probe to find cdrom on hdb with disks on hda,hdc
- *  Version 5.12	some performance tuning
- *			added message to alert user to bad /dev/hd[cd] entries
- *			OOOPS!  fixed bug in atapi reset
- *			driver now forces "serialize" again for all cmd640 chips
- *			noticed REALLY_SLOW_IO had no effect, moved it to ide.c
- *			made do_drive_cmd() into public ide_do_drive_cmd()
- *  Version 5.13	fixed typo ('B'), thanks to houston@boyd.geog.mcgill.ca
- *			fixed ht6560b support
- *  Version 5.13b (sss)	fix problem in calling ide_cdrom_setup()
- *			don't bother invalidating nonexistent partitions
- *  Version 5.14	fixes to cmd640 support.. maybe it works now(?)
- *			added & tested full EZ-DRIVE support -- don't use LILO!
- *			don't enable 2nd CMD640 PCI port during init - conflict
- *  Version 5.15	bug fix in init_cmd640_vlb()
- *			bug fix in interrupt sharing code
- *  Version 5.16	ugh.. fix "serialize" support, broken in 5.15
- *			remove "Huh?" from cmd640 code
- *			added qd6580 interface speed select from Colten Edwards
- *  Version 5.17	kludge around bug in BIOS32 on Intel triton motherboards
- *  Version 5.18	new CMD640 code, moved to cmd640.c, #include'd for now
- *			new UMC8672 code, moved to umc8672.c, #include'd for now
- *			disallow turning on DMA when h/w not capable of DMA
- *  Version 5.19	fix potential infinite timeout on resets
- *			extend reset poll into a general purpose polling scheme
- *			add atapi tape drive support from Gadi Oxman
- *			simplify exit from _intr routines -- no IDE_DO_REQUEST
- *  Version 5.20	leave current rq on blkdev request list during I/O
- *			generalized ide_do_drive_cmd() for tape/cdrom driver use
- *  Version 5.21	fix nasty cdrom/tape bug (ide_preempt was messed up)
- *  Version 5.22	fix ide_xlate_1024() to work with/without drive->id
- *  Version 5.23	miscellaneous touch-ups
- *  Version 5.24	fix #if's for SUPPORT_CMD640
- *  Version 5.25	more touch-ups, fix cdrom resets, ...
- *			cmd640.c now configs/compiles separate from ide.c
- *  Version 5.26	keep_settings now maintains the using_dma flag
- *			fix [EZD] remap message to only output at boot time
- *			fix "bad /dev/ entry" message to say hdc, not hdc0
- *			fix ide_xlate_1024() to respect user specified CHS
- *			use CHS from partn table if it looks translated
- *			re-merged flags chipset,vlb_32bit,vlb_sync into io_32bit
- *			keep track of interface chipset type, when known
- *			add generic PIO mode "tuneproc" mechanism
- *			fix cmd640_vlb option
- *			fix ht6560b support (was completely broken)
- *			umc8672.c now configures/compiles separate from ide.c
- *			move dtc2278 support to dtc2278.c
- *			move ht6560b support to ht6560b.c
- *			move qd6580  support to qd6580.c
- *			add  ali14xx support in ali14xx.c
- * Version 5.27		add [no]autotune parameters to help cmd640
- *			move rz1000  support to rz1000.c
- * Version 5.28		#include "ide_modes.h"
- *			fix disallow_unmask: now per-interface "no_unmask" bit
- *			force io_32bit to be the same on drive pairs of dtc2278
- *			improved IDE tape error handling, and tape DMA support
- *			bugfix in ide_do_drive_cmd() for cdroms + serialize
- * Version 5.29		fixed non-IDE check for too many physical heads
- *			don't use LBA if capacity is smaller than CHS
- * Version 5.30		remove real_devices kludge, formerly used by genhd.c
- * Version 5.32		change "KB" to "kB"
- *			fix serialize (was broken in kernel 1.3.72)
- *			add support for "hdparm -I"
- *			use common code for disk/tape/cdrom IDE_DRIVE_CMDs
- *			add support for Promise DC4030VL caching card
- *			improved serialize support
- *			put partition check back into alphabetical order
- *			add config option for PCMCIA baggage
- *			try to make PCMCIA support safer to use
- *			improve security on ioctls(): all are suser() only
- * Version 5.33		improve handling of HDIO_DRIVE_CMDs that read data
- * Version 5.34		fix irq-sharing problem from 5.33
- *			fix cdrom ioctl problem from 5.33
- * Version 5.35		cosmetic changes
- *			fix cli() problem in try_to_identify()
- * Version 5.36		fixes to optional PCMCIA support
- * Version 5.37		don't use DMA when "noautotune" is specified
- * Version 5.37a (go)	fix shared irq probing (was broken in kernel 1.3.72)
- *			call unplug_device() from ide_do_drive_cmd()
- * Version 5.38		add "hdx=none" option, courtesy of Joel Maslak
- *			mask drive irq after use, if sharing with another hwif
- *			add code to help debug weird cmd640 problems
- * Version 5.39		fix horrible error in earlier irq sharing "fix"
- * Version 5.40		fix serialization -- was broken in 5.39
- *			help sharing by masking device irq after probing
- * Version 5.41		more fixes to irq sharing/serialize detection
- *			disable io_32bit by default on drive reset
- * Version 5.42		simplify irq-masking after probe
- *			fix NULL pointer deref in save_match()
- * Version 5.43		Ugh.. unexpected_intr is back: try to exterminate it
- * Version 5.44		Fix for "irq probe failed" on cmd640
- *			change path on message regarding MAKEDEV.ide
- *			add a throttle to the unexpected_intr() messages
- * Version 5.45		fix ugly parameter parsing bugs (thanks Derek)
- *			include Gadi's magic fix for cmd640 unexpected_intr
- *			include mc68000 patches from Geert Uytterhoeven
- *			add Gadi's fix for PCMCIA cdroms
- * Version 5.46		remove the mc68000 #ifdefs for 2.0.x
- * Version 5.47		fix set_tune race condition
- *			fix bug in earlier PCMCIA cdrom update
- * Version 5.48		if def'd, invoke CMD640_DUMP_REGS when irq probe fails
- *			lengthen the do_reset1() pulse, for laptops
- *			add idebus=xx parameter for cmd640 and ali chipsets
- *			no_unmask flag now per-drive instead of per-hwif
- *			fix tune_req so that it gets done immediately
- *			fix missing restore_flags() in ide_ioctl
- *			prevent use of io_32bit on cmd640 with no prefetch
- * Version 5.49		fix minor quirks in probing routines
  * Version 5.50		allow values as small as 20 for idebus=
  * Version 5.51		force non io_32bit in drive_cmd_intr()
  *			change delay_10ms() to delay_50ms() to fix problems
@@ -281,6 +90,11 @@
  * Version 6.02		fix ide_ack_intr() call
  *			check partition table on floppies
  * Version 6.03		handle bad status bit sequencing in ide_wait_stat()
+ * Version 6.10		deleted old entries from this list of updates
+ *			replaced triton.c with ide-dma.c generic PCI DMA
+ *			added support for BIOS-enabled UltraDMA
+ *			rename all "promise" things to "pdc4030"
+ *			fix EZ-DRIVE handling on small disks
  *
  *  Some additional driver compile-time options are in ide.h
  *
@@ -867,14 +681,14 @@ byte ide_dump_status (ide_drive_t *drive, const char *msg, byte stat)
 #if FANCY_STATUS_DUMPS
 		if (drive->media == ide_disk) {
 			printk(" { ");
-			if (err & BBD_ERR)	printk("BadSector ");
+			if (err & ABRT_ERR)	printk("DriveStatusError ");
+			if (err & ICRC_ERR)	printk((err & ABRT_ERR) ? "BadCRC " : "BadSector ");
 			if (err & ECC_ERR)	printk("UncorrectableError ");
 			if (err & ID_ERR)	printk("SectorIdNotFound ");
-			if (err & ABRT_ERR)	printk("DriveStatusError ");
 			if (err & TRK0_ERR)	printk("TrackZeroNotFound ");
 			if (err & MARK_ERR)	printk("AddrMarkNotFound ");
 			printk("}");
-			if (err & (BBD_ERR|ECC_ERR|ID_ERR|MARK_ERR)) {
+			if ((err & (BBD_ERR | ABRT_ERR)) == BBD_ERR || (err & (ECC_ERR|ID_ERR|MARK_ERR))) {
 				byte cur = IN_BYTE(IDE_SELECT_REG);
 				if (cur & 0x40) {	/* using LBA? */
 					printk(", LBAsect=%ld", (unsigned long)
@@ -922,7 +736,7 @@ static void try_to_flush_leftover_data (ide_drive_t *drive)
 }
 
 /*
- * ide_error() takes action based on the error returned by the controller.
+ * ide_error() takes action based on the error returned by the drive.
  */
 void ide_error (ide_drive_t *drive, const char *msg, byte stat)
 {
@@ -943,7 +757,12 @@ void ide_error (ide_drive_t *drive, const char *msg, byte stat)
 	} else {
 		if (drive->media == ide_disk && (stat & ERR_STAT)) {
 			/* err has different meaning on cdrom and tape */
-			if (err & (BBD_ERR | ECC_ERR))	/* retries won't help these */
+			if (err == ABRT_ERR) {
+				if (drive->select.b.lba && IN_BYTE(IDE_COMMAND_REG) == WIN_SPECIFY)
+					return;	/* some newer drives don't support WIN_SPECIFY */
+			} else if ((err & (ABRT_ERR | ICRC_ERR)) == (ABRT_ERR | ICRC_ERR))
+				; /* UDMA crc error -- just retry the operation */
+			else if (err & (BBD_ERR | ECC_ERR))	/* retries won't help these */
 				rq->errors = ERROR_MAX;
 			else if (err & TRK0_ERR)	/* help it find track zero */
 				rq->errors |= ERROR_RECAL;
@@ -1545,7 +1364,7 @@ int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t actio
 	struct request *cur_rq;
 	struct semaphore sem = MUTEX_LOCKED;
 
-	if (IS_PROMISE_DRIVE && rq->buffer != NULL)
+	if (IS_PDC4030_DRIVE && rq->buffer != NULL)
 		return -ENOSYS;  /* special drive cmds not supported */
 	rq->errors = 0;
 	rq->rq_status = RQ_ACTIVE;
@@ -1931,8 +1750,13 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 				return -EINVAL;
 			if (drive->id == NULL)
 				return -ENOMSG;
+#if 0
 			if (copy_to_user((char *)arg, (char *)drive->id, sizeof(*drive->id)))
 				return -EFAULT;
+#else
+			if (copy_to_user((char *)arg, (char *)drive->id, 142))
+				return -EFAULT;
+#endif
 			return 0;
 
 		case HDIO_GET_NOWERR:
@@ -2379,13 +2203,14 @@ __initfunc(void ide_setup (char *s))
 			case -12: /* "reset" */
 				hwif->reset = 1;
 				goto done;
-#ifdef CONFIG_BLK_DEV_PROMISE
+#ifdef CONFIG_BLK_DEV_PDC4030
 			case -11: /* "dc4030" */
 			{
-				setup_dc4030(hwif);
+				extern void setup_pdc4030(ide_hwif_t *);
+				setup_pdc4030(hwif);
 				goto done;
 			}
-#endif /* CONFIG_BLK_DEV_PROMISE */
+#endif /* CONFIG_BLK_DEV_PDC4030 */
 #ifdef CONFIG_BLK_DEV_ALI14XX
 			case -10: /* "ali14xx" */
 			{
@@ -2510,6 +2335,9 @@ int ide_xlate_1024 (kdev_t i_rdev, int xparm, const char *msg)
 
 	printk("%s ", msg);
 
+	if (xparm == -1 && drive->bios_cyl < 1024)
+		return 0;		/* small disk: no translation needed */
+
 	if (drive->id) {
 		drive->cyl  = drive->id->cyls;
 		drive->head = drive->id->heads;
@@ -2550,32 +2378,6 @@ int ide_xlate_1024 (kdev_t i_rdev, int xparm, const char *msg)
 	return 1;
 }
 
-#ifdef CONFIG_PCI
-#if defined(CONFIG_BLK_DEV_RZ1000) || defined(CONFIG_BLK_DEV_TRITON) || defined(CONFIG_BLK_DEV_OPTI621)
-
-typedef void (ide_pci_init_proc_t)(byte, byte);
-
-/*
- * ide_probe_pci() scans PCI for a specific vendor/device function,
- * and invokes the supplied init routine for each instance detected.
- */
-__initfunc(static void ide_probe_pci (unsigned short vendor, unsigned short device, ide_pci_init_proc_t *init, int func_adj))
-{
-	unsigned long flags;
-	unsigned index;
-	byte fn, bus;
-
-	save_flags(flags);
-	cli();
-	for (index = 0; !pcibios_find_device (vendor, device, index, &bus, &fn); ++index) {
-		init (bus, fn + func_adj);
-	}
-	restore_flags(flags);
-}
-
-#endif /* defined(CONFIG_BLK_DEV_RZ1000) || defined(CONFIG_BLK_DEV_TRITON) || defined(CONFIG_BLK_DEV_OPTI621) */
-#endif /* CONFIG_PCI */
-
 /*
  * probe_for_hwifs() finds/initializes "known" IDE interfaces
  *
@@ -2588,50 +2390,43 @@ __initfunc(static void probe_for_hwifs (void))
 	/*
 	 * Find/initialize PCI IDE interfaces
 	 */
-	if (pcibios_present()) {
+	if (pcibios_present())
+	{
+#ifdef CONFIG_BLK_DEV_IDEDMA
+		{
+			extern void ide_scan_pcibus(void);
+			ide_scan_pcibus();
+		}
+#endif
 #ifdef CONFIG_BLK_DEV_RZ1000
-		ide_pci_init_proc_t init_rz1000;
-		ide_probe_pci (PCI_VENDOR_ID_PCTECH, PCI_DEVICE_ID_PCTECH_RZ1000, &init_rz1000, 0);
-		ide_probe_pci (PCI_VENDOR_ID_PCTECH, PCI_DEVICE_ID_PCTECH_RZ1001, &init_rz1000, 0);
-#endif /* CONFIG_BLK_DEV_RZ1000 */
-#ifdef CONFIG_BLK_DEV_TRITON
-		/*
-		 * Apparently the BIOS32 services on Intel motherboards are
-		 * buggy and won't find the PCI_DEVICE_ID_INTEL_82371_1 for us.
-		 * So instead, we search for PCI_DEVICE_ID_INTEL_82371_0,
-		 * and then add 1.
-		 */
-		ide_probe_pci (PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371_0, &ide_init_triton, 1);
-		ide_probe_pci (PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371SB_1, &ide_init_triton, 0);
-		ide_probe_pci (PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371AB, &ide_init_triton, 0);
-		ide_probe_pci (PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_82C586_1, &ide_init_triton, 0);
-#endif /* CONFIG_BLK_DEV_TRITON */
-#ifdef CONFIG_BLK_DEV_OPTI621
-		ide_probe_pci (PCI_VENDOR_ID_OPTI, PCI_DEVICE_ID_OPTI_82C621, &ide_init_opti621, 0);
-#endif /* CONFIG_BLK_DEV_OPTI621 */
+		{
+			extern void ide_probe_for_rz100x(void);
+			ide_probe_for_rz100x();
+		}
+#endif
 	}
 #endif /* CONFIG_PCI */
 #ifdef CONFIG_BLK_DEV_CMD640
 	{
-		extern void ide_probe_for_cmd640x (void);
+		extern void ide_probe_for_cmd640x(void);
 		ide_probe_for_cmd640x();
 	}
 #endif
-#ifdef CONFIG_BLK_DEV_PROMISE
-	init_dc4030();
+#ifdef CONFIG_BLK_DEV_PDC4030
+	{
+		extern int init_pdc4030(void);
+		(void) init_pdc4030();
+	}
 #endif
 }
 
 __initfunc(void ide_init_builtin_drivers (void))
 {
 	/*
-	 * Probe for special "known" interface chipsets
+	 * Probe for special PCI and other "known" interface chipsets
 	 */
 	probe_for_hwifs ();
 
-	/*
-	 * Probe for devices
-	 */
 #ifdef CONFIG_BLK_DEV_IDE
 #ifdef __mc68000__
 	if (ide_hwifs[0].io_ports[IDE_DATA_OFFSET]) {

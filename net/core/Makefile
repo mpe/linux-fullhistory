@@ -1,5 +1,5 @@
 #
-# Makefile for the Linux TCP/IP (INET) layer.
+# Makefile for the Linux networking core.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
 # removes any old dependencies. DON'T put your own dependencies here
@@ -10,7 +10,7 @@
 O_TARGET := core.o
 
 O_OBJS	:= sock.o skbuff.o iovec.o datagram.o dst.o scm.o \
-	neighbour.o
+	neighbour.o rtnetlink.o
 
 ifeq ($(CONFIG_SYSCTL),y)
 O_OBJS += sysctl_net_core.o
@@ -22,10 +22,6 @@ O_OBJS	+= dev.o dev_mcast.o
 
 ifdef CONFIG_FIREWALL
 OX_OBJS += firewall.o
-endif
-
-ifdef CONFIG_NET_ALIAS
-O_OBJS += net_alias.o
 endif
 
 endif

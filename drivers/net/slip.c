@@ -68,6 +68,7 @@
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+#include <linux/rtnetlink.h>
 #include <linux/if_arp.h>
 #include <linux/if_slip.h>
 #include <linux/init.h>
@@ -733,6 +734,7 @@ slip_close(struct tty_struct *tty)
 		return;
 	}
 
+	rtnl_lock();
 	if (sl->dev->flags & IFF_UP)
 	{
 		/* STRONG layering violation! --ANK */
@@ -749,6 +751,8 @@ slip_close(struct tty_struct *tty)
 		(void)del_timer (&sl->outfill_timer);
 #endif
 	sl_free(sl);
+	unregister_netdevice(sl->dev);
+	rtnl_unlock();
 	MOD_DEC_USE_COUNT;
 }
 

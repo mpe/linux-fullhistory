@@ -694,7 +694,6 @@ static int ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 	/*
 	 *	Send it out 
 	 */
-	skb->priority = SOPRI_NORMAL; 
 	dev_queue_xmit(skb);
 	return 0;
 }

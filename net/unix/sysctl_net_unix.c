@@ -29,4 +29,31 @@ ctl_table unix_table[] = {
 	 &proc_dointvec_jiffies},
 	{0}
 };
-#endif
+
+#ifdef MODULE
+static struct ctl_table_header * unix_sysctl_header;
+static struct ctl_table unix_root_table[];
+static struct ctl_table unix_net_table[];
+
+ctl_table unix_root_table[] = {
+	{CTL_NET, "net", NULL, 0, 0555, unix_net_table},
+	{0}
+};
+
+ctl_table unix_net_table[] = {
+	{NET_UNIX, "unix", NULL, 0, 0555, unix_table},
+	{0}
+};
+
+void unix_sysctl_register(void)
+{
+	unix_sysctl_header = register_sysctl_table(unix_root_table, 0);
+}
+
+void unix_sysctl_unregister(void)
+{
+	unregister_sysctl_table(unix_sysctl_header);
+}
+#endif	/* MODULE */
+
+#endif	/* CONFIG_SYSCTL */

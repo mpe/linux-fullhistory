@@ -440,6 +440,7 @@ static struct sock *x25_alloc_socket(void)
 
 	sock_init_data(NULL, sk);
 
+	skb_queue_head_init(&x25->ack_queue);
 	skb_queue_head_init(&x25->fragment_queue);
 	skb_queue_head_init(&x25->interrupt_in_queue);
 	skb_queue_head_init(&x25->interrupt_out_queue);

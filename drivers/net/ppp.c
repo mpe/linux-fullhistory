@@ -83,6 +83,7 @@
 #include <linux/if_ether.h>
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
+#include <linux/rtnetlink.h>
 #include <linux/inet.h>
 #include <linux/ioctl.h>
 #include <linux/init.h>
@@ -682,10 +683,12 @@ ppp_release (struct ppp *ppp)
 	if (tty != NULL && tty->disc_data == ppp)
 		tty->disc_data = NULL;	/* Break the tty->ppp link */
 
+	rtnl_lock();
 	/* Strong layering violation. */
-	if (dev && dev->flags & IFF_UP) {
-		dev_close (dev); /* close the device properly */
-	}
+ 	if (dev && dev->flags & IFF_UP) {
+ 		dev_close (dev); /* close the device properly */
+ 	}
+	rtnl_unlock();
 
 	ppp_free_buf (ppp->rbuf);
 	ppp_free_buf (ppp->wbuf);
@@ -3017,8 +3020,8 @@ ppp_dev_xmit (sk_buff *skb, struct device *dev)
  */
 	if (!ppp->inuse) {
 		dev_kfree_skb (skb, FREE_WRITE);
-		printk("I am dying to know, are you still alive?\n");
-#ifdef main_got_it_is_something
+		printk(KERN_WARNING "ppp: I am dying to know, are you still alive?\n");
+#if 0
 		dev_close (dev);
 #endif
 		return 0;

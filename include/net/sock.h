@@ -44,8 +44,10 @@
 #include <net/if_inet6.h>	/* struct ipv6_mc_socklist */
 #endif
 
+#if defined(CONFIG_INET) || defined (CONFIG_INET_MODULE)
+#include <linux/icmp.h>
+#endif
 #include <linux/tcp.h>		/* struct tcphdr */
-#include <linux/config.h>
 
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>	/* struct sk_buff */
@@ -75,8 +77,6 @@
 #include <net/dn.h>
 #endif
 
-#include <linux/igmp.h>
-
 #include <asm/atomic.h>
 
 /*
@@ -98,18 +98,20 @@ struct unix_opt
 	int			inflight;
 };
 
-/*
- *	IP packet socket options
- */
+#ifdef CONFIG_NETLINK
+struct netlink_callback;
 
-struct inet_packet_opt
+struct netlink_opt
 {
-	struct notifier_block	notifier;		/* Used when bound */
-	struct device		*bound_dev;
-	unsigned long		dev_stamp;
-	struct packet_type	*prot_hook;
-	char			device_name[15];
+	pid_t			pid;
+	unsigned		groups;
+	pid_t			dst_pid;
+	unsigned		dst_groups;
+	int			(*handler)(int unit, struct sk_buff *skb);
+	atomic_t		locks;
+	struct netlink_callback	*cb;
 };
+#endif
 
 /*
  *	Once the IPX ncpd patches are in these are going into protinfo
@@ -183,6 +185,12 @@ struct raw6_opt {
 };
 
 #endif /* IPV6 */
+
+#if defined(CONFIG_INET) || defined(CONFIG_INET_MODULE)
+struct raw_opt {
+	struct icmp_filter	filter;
+};
+#endif
 
 
 struct tcp_opt
@@ -374,6 +382,7 @@ struct sock
 				broadcast,
 				nonagle,
 				bsdism;
+	int			bound_dev_if;
 	unsigned long	        lingertime;
 	int			proc;
 
@@ -401,9 +410,6 @@ struct sock
 	__u32			rcv_saddr;	/* Bound address */
 
 	struct dst_entry	*dst_cache;
-
-	unsigned short		max_unacked;
-
 /*
  *	mss is min(mtu, max_window) 
  */
@@ -422,6 +428,9 @@ struct sock
 
 	union {
 		struct tcp_opt		af_tcp;
+#if defined(CONFIG_INET) || defined (CONFIG_INET_MODULE)
+		struct raw_opt		tp_raw4;
+#endif
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
 		struct raw6_opt		tp_raw;
 #endif
@@ -435,8 +444,8 @@ struct sock
 	volatile unsigned char	state;
 	unsigned short		ack_backlog;
 	unsigned short		max_ack_backlog;
-	unsigned char		priority;
 	unsigned char		debug;
+	__u32			priority;
 	int			rcvbuf;
 	int			sndbuf;
 	unsigned short		type;
@@ -462,8 +471,10 @@ struct sock
 #if defined(CONFIG_IPX) || defined(CONFIG_IPX_MODULE)
 		struct ipx_opt		af_ipx;
 #endif
+#if defined (CONFIG_PACKET) || defined(CONFIG_PACKET_MODULE)
+		struct packet_opt	*af_packet;
+#endif
 #ifdef CONFIG_INET
-		struct inet_packet_opt  af_packet;
 #ifdef CONFIG_NUTCP		
 		struct tcp_opt		af_tcp;
 #endif		
@@ -482,6 +493,9 @@ struct sock
 #endif
 #if defined(CONFIG_DECNET) || defined(CONFIG_DECNET_MODULE)
 	        dn_cb                    *dn;
+#endif
+#ifdef CONFIG_NETLINK
+		struct netlink_opt	af_netlink;
 #endif
 	} protinfo;  		
 
@@ -560,7 +574,8 @@ struct proto
 	void			(*write_wakeup)(struct sock *sk);
 	void			(*read_wakeup)(struct sock *sk);
 
-	unsigned int		(*poll)(struct socket *sock, poll_table *wait);
+	unsigned int		(*poll)(struct socket *sock,
+					struct poll_table_struct *wait);
 
 	int			(*ioctl)(struct sock *sk, int cmd,
 					 unsigned long arg);
@@ -783,7 +798,7 @@ extern int                      sock_no_accept(struct socket *,
 extern int                      sock_no_getname(struct socket *,
 						struct sockaddr *, int *, int);
 extern unsigned int             sock_no_poll(struct socket *,
-					     poll_table *);
+					     struct poll_table_struct *);
 extern int                      sock_no_ioctl(struct socket *, unsigned int,
 					      unsigned long);
 extern int			sock_no_listen(struct socket *, int);

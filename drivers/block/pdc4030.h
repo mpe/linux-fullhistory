@@ -1,7 +1,7 @@
 /*
- *  linux/drivers/block/promise.h
+ *  linux/drivers/block/pdc4030.h
  *
- *  Copyright (C) 1995-6  Linus Torvalds & authors
+ *  Copyright (C) 1995-1998  Linus Torvalds & authors
  */
 
 /*
@@ -40,13 +40,5 @@ struct dc_ident {
 	struct translation_mode current_tm[4];
 	u8	pad[SECTOR_WORDS*4 - 32];
 };
-
-/*
- * Routines exported to ide.c:
- */
-void do_promise_io (ide_drive_t *, struct request *);
-int promise_cmd(ide_drive_t *, byte);
-void setup_dc4030 (ide_hwif_t *);
-int init_dc4030 (void);
 
 #endif IDE_PROMISE_H

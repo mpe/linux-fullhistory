@@ -37,7 +37,7 @@
 struct inet_protocol 
 {
 	int			(*handler)(struct sk_buff *skb, unsigned short len);
-	void			(*err_handler)(struct sk_buff *skb, unsigned char *dp);
+	void			(*err_handler)(struct sk_buff *skb, unsigned char *dp, int len);
 	struct inet_protocol	*next;
 	unsigned char		protocol;
 	unsigned char		copy:1;

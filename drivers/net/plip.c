@@ -1,5 +1,3 @@
-#warning This wont work until we merge the networking changes
-#if 0
 /* $Id: plip.c,v 1.3.6.2 1997/04/16 15:07:56 phil Exp $ */
 /* PLIP: A parallel port "network" driver for Linux. */
 /* This driver is for parallel port with 5-bit cable (LapLink (R) cable). */
@@ -1238,4 +1236,3 @@ plip_init(void))
  * compile-command: "gcc -DMODULE -DMODVERSIONS -D__KERNEL__ -Wall -Wstrict-prototypes -O2 -g -fomit-frame-pointer -pipe -m486 -c plip.c"
  * End:
  */
-#endif

@@ -176,7 +176,7 @@ struct sk_buff *alloc_skb(unsigned int size,int priority)
 	skb->dst = NULL;
 	skb->destructor = NULL;
 	memset(skb->cb, 0, sizeof(skb->cb));
-	skb->priority = SOPRI_NORMAL;
+	skb->priority = 0;
 	atomic_inc(&net_skbcount);
 	atomic_set(&skb->users, 1);
 

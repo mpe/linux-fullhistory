@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) module.
  *
- * Version:	@(#)ip.c	1.0.16b	9/1/93
+ * Version:	$Id: ip_input.c,v 1.24 1997/10/24 17:15:58 kuznet Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -153,8 +153,7 @@
 #endif
 #include <linux/firewall.h>
 #include <linux/mroute.h>
-#include <net/netlink.h>
-#include <linux/net_alias.h>
+#include <linux/netlink.h>
 #include <linux/ipsec.h>
 
 /*
@@ -184,13 +183,55 @@ int ip_ioctl(struct sock *sk, int cmd, unsigned long arg)
 #define CONFIG_IP_ALWAYS_DEFRAG 1
 #endif
 
+/*
+ *	0 - deliver
+ *	1 - block
+ */
+static __inline__ int icmp_filter(struct sock *sk, struct sk_buff *skb)
+{
+	int    type;
+
+	type = skb->h.icmph->type;
+	if (type < 32)
+		return test_bit(type, &sk->tp_pinfo.tp_raw4.filter);
+
+	/* Do not block unknown ICMP types */
+	return 0;
+}
+
+int ip_call_ra_chain(struct sk_buff *skb)
+{
+	struct ip_ra_chain *ra;
+	u8 protocol = skb->nh.iph->protocol;
+	struct sock *last = NULL;
+
+	for (ra = ip_ra_chain; ra; ra = ra->next) {
+		struct sock *sk = ra->sk;
+		if (sk && sk->num == protocol) {
+			if (skb->nh.iph->frag_off & htons(IP_MF|IP_OFFSET)) {
+				skb = ip_defrag(skb);
+				if (skb == NULL)
+					return 1;
+			}
+			if (last) {
+				struct sk_buff *skb2 = skb_clone(skb, GFP_ATOMIC);
+				if (skb2)
+					raw_rcv(last, skb2);
+			}
+			last = sk;
+		}
+	}
+
+	if (last) {
+		raw_rcv(last, skb);
+		return 1;
+	}
+	return 0;
+}
 
 int ip_local_deliver(struct sk_buff *skb)
 {
 	struct iphdr *iph = skb->nh.iph;
-#ifdef CONFIG_IP_MASQUERADE
-	struct device *dev = skb->dev;
-#endif
 	struct inet_protocol *ipprot;
 	struct sock *raw_sk=NULL;
 	unsigned char hash;
@@ -214,7 +255,7 @@ int ip_local_deliver(struct sk_buff *skb)
 	 * Do we need to de-masquerade this packet?
 	 */
         {
-		int ret = ip_fw_demasquerade(&skb, dev);
+		int ret = ip_fw_demasquerade(&skb);
 		if (ret < 0) {
 			kfree_skb(skb, FREE_WRITE);
 			return 0;
@@ -256,22 +297,23 @@ int ip_local_deliver(struct sk_buff *skb)
 	if((raw_sk = raw_v4_htable[hash]) != NULL) {
 		struct sock *sknext = NULL;
 		struct sk_buff *skb1;
-		raw_sk = raw_v4_lookup(raw_sk, iph->protocol, iph->saddr, iph->daddr);
+		raw_sk = raw_v4_lookup(raw_sk, iph->protocol, iph->saddr, iph->daddr, skb->dev->ifindex);
 		if(raw_sk) {	/* Any raw sockets */
 			do {
 				/* Find the next */
 				sknext = raw_v4_lookup(raw_sk->next, iph->protocol,
-						       iph->saddr, iph->daddr);
-				if(sknext)
+						       iph->saddr, iph->daddr, skb->dev->ifindex);
+				if (iph->protocol != IPPROTO_ICMP || !icmp_filter(raw_sk, skb)) {
+					if (sknext == NULL)
+						break;
 					skb1 = skb_clone(skb, GFP_ATOMIC);
-				else
-					break;	/* One pending raw socket left */
-				if(skb1)
-				{
-					if(ipsec_sk_policy(raw_sk,skb1))	
-						raw_rcv(raw_sk, skb1);
-					else
-						kfree_skb(skb1, FREE_WRITE);
+					if(skb1)
+					{
+						if(ipsec_sk_policy(raw_sk,skb1))	
+							raw_rcv(raw_sk, skb1);
+						else
+							kfree_skb(skb1, FREE_WRITE);
+					}
 				}
 				raw_sk = sknext;
 			} while(raw_sk!=NULL);
@@ -350,15 +392,6 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	struct ip_options * opt = NULL;
 	int err;
 
-#ifdef CONFIG_NET_IPV6
-	/* 
-	 *	Intercept IPv6 frames. We dump ST-II and invalid types just below..
-	 */
-	 
-	if(iph->version == 6)
-		return ipv6_rcv(skb,dev,pt);
-#endif
-
 	/*
 	 * When interface is in promisc. mode, drop all the crap
 	 * that it receives, do not truing to analyse it.
@@ -398,13 +431,18 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	 *	is IP we can trim to the true length of the frame.
 	 *	Note this now means skb->len holds ntohs(iph->tot_len).
 	 */
-
-	skb_trim(skb, ntohs(iph->tot_len));
+	__skb_trim(skb, ntohs(iph->tot_len));
 
 	if (skb->dst == NULL) {
 		err = ip_route_input(skb, iph->daddr, iph->saddr, iph->tos, dev);
 		if (err)
 			goto drop;
+#ifdef CONFIG_CPU_IS_SLOW
+		if (net_cpu_congestion > 10 && !(iph->tos&IPTOS_RELIABILITY) &&
+		    IPTOS_PREC(iph->tos) < IPTOS_PREC_INTERNETCONTROL) {
+			goto drop;
+		}
+#endif
 	}
 
 #ifdef CONFIG_IP_ALWAYS_DEFRAG
@@ -425,12 +463,12 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		opt = &(IPCB(skb)->opt);
 		if (opt->srr) {
 			if (!ipv4_config.source_route) {
-				if (ipv4_config.log_martians)
+				if (ipv4_config.log_martians && net_ratelimit())
 					printk(KERN_INFO "source route option %08lx -> %08lx\n",
 					       ntohl(iph->saddr), ntohl(iph->daddr));
 				goto drop;
 			}
-			if (RT_LOCALADDR(((struct rtable*)skb->dst)->rt_flags) &&
+			if (((struct rtable*)skb->dst)->rt_type == RTN_LOCAL &&
 			    ip_options_rcv_srr(skb))
 				goto drop;
 		}

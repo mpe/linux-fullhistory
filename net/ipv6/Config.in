@@ -1,0 +1,7 @@
+#
+# IPv6 configuration
+# 
+bool 'IPv6: enable EUI-64 token format' CONFIG_IPV6_EUI64
+bool 'IPv6: disable provided based addresses' CONFIG_IPV6_NO_PB
+#bool 'IPv6: flow policy support' CONFIG_RT6_POLICY
+#bool 'IPv6: firewall support' CONFIG_IPV6_FIREWALL

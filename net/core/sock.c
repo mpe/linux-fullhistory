@@ -101,6 +101,7 @@
 #include <linux/mm.h>
 #include <linux/slab.h>
 #include <linux/interrupt.h>
+#include <linux/poll.h>
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -143,6 +144,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 	int valbool;
 	int err;
 	struct linger ling;
+	struct ifreq req;
 	int ret = 0;
 	
 	/*
@@ -241,7 +243,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			break;
 
 		case SO_PRIORITY:
-			if (val >= 0 && val < DEV_NUMBUFFS) 
+			if (val >= 0 && val <= 7) 
 				sk->priority = val;
 			else
 				return(-EINVAL);
@@ -317,6 +319,46 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 				return -EINVAL;
 			break;
 #endif
+		case SO_BINDTODEVICE:
+			/* Bind this socket to a particular device like "eth0",
+			 * as specified in an ifreq structure. If the device
+			 * is "", socket is NOT bound to a device.
+			 */
+
+			if (!valbool) {
+				sk->bound_dev_if = 0;
+			}
+			else {
+				if (copy_from_user(&req, optval, sizeof(req)) < 0)
+					return -EFAULT;
+
+				/* Remove any cached route for this socket. */
+				if (sk->dst_cache) {
+					ip_rt_put((struct rtable*)sk->dst_cache);
+					sk->dst_cache = NULL;
+				}
+
+				if (req.ifr_ifrn.ifrn_name[0] == '\0') {
+					sk->bound_dev_if = 0;
+				}
+				else {
+					struct device *dev = dev_get(req.ifr_ifrn.ifrn_name);
+					if (!dev)
+						return -EINVAL;
+					sk->bound_dev_if = dev->ifindex;
+					if (sk->daddr) {
+						int ret;
+						ret = ip_route_output((struct rtable**)&sk->dst_cache,
+								     sk->daddr, sk->saddr,
+								     sk->ip_tos, sk->bound_dev_if);
+						if (ret)
+							return ret;
+					}
+				}
+			}
+			return 0;
+
+
 		/* We implement the SO_SNDLOWAT etc to
 		   not be settable (1003.1g 5.3) */
 		default:
@@ -627,7 +669,7 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigne
 			   produce annoying no free page messages still.... */
 			skb = sock_wmalloc(sk, size, 0 , GFP_BUFFER);
 			if(!skb)
-				skb=sock_wmalloc(sk, fallback, 0, GFP_KERNEL);
+				skb=sock_wmalloc(sk, fallback, 0, sk->allocation);
 		}
 		
 		/*
@@ -669,7 +711,7 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigne
 			 *	In any case I'd delete this check at all, or
 			 *	change it to:
 			 */
-			if (atomic_read(&sk->wmem_alloc) + size >= sk->sndbuf) 
+			if (atomic_read(&sk->wmem_alloc) >= sk->sndbuf) 
 #endif
 			{
 				sk->socket->flags &= ~SO_NOSPACE;
@@ -967,7 +1009,6 @@ void sock_init_data(struct socket *sock, struct sock *sk)
 	sk->allocation	=	GFP_KERNEL;
 	sk->rcvbuf	=	sysctl_rmem_default*2;
 	sk->sndbuf	=	sysctl_wmem_default*2;
-	sk->priority	=	SOPRI_NORMAL;
 	sk->state 	= 	TCP_CLOSE;
 	sk->zapped	=	1;
 	sk->socket	=	sock;

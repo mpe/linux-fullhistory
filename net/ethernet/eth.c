@@ -232,6 +232,13 @@ unsigned short eth_type_trans(struct sk_buff *skb, struct device *dev)
 	return htons(ETH_P_802_2);
 }
 
+int eth_header_parse(struct sk_buff *skb, unsigned char *haddr)
+{
+	struct ethhdr *eth = skb->mac.ethernet;
+	memcpy(haddr, eth->h_source, ETH_ALEN);
+	return ETH_ALEN;
+}
+
 int eth_header_cache(struct dst_entry *dst, struct neighbour *neigh,
 		     struct hh_cache *hh)
 {

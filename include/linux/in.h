@@ -31,8 +31,12 @@ enum {
   IPPROTO_PUP = 12,		/* PUP protocol				*/
   IPPROTO_UDP = 17,		/* User Datagram Protocol		*/
   IPPROTO_IDP = 22,		/* XNS IDP protocol			*/
+  IPPROTO_RSVP = 46,		/* RSVP protocol			*/
+  IPPROTO_GRE = 47,		/* Cisco GRE tunnels (rfc 1701,1702)	*/
 
   IPPROTO_IPV6	 = 41,		/* IPv6-in-IPv4 tunnelling		*/
+
+  IPPROTO_PIM    = 103,		/* Protocol Independent Multicast	*/
 
   IPPROTO_RAW	 = 255,		/* Raw IP packets			*/
   IPPROTO_MAX
@@ -48,15 +52,15 @@ struct in_addr {
 #define IP_TTL		2
 #define IP_HDRINCL	3
 #define IP_OPTIONS	4
-#define IP_LOCALADDR	5	/* Cannot remove; a lot of apps still use it. ANK */
+#define IP_ROUTER_ALERT	5
 #define IP_RECVOPTS	6
 #define IP_RETOPTS	7
-#define IP_RXINFO	8
-#define IP_TXINFO	IP_RXINFO
-/* Gated uses it. Remove later or preserve for 4.4BSD compatibility??? */
-#define IP_RECVDSTADDR  9
+#define IP_PKTINFO	8
+#define IP_PKTOPTIONS	9
 #define IP_PMTUDISC	10
 #define IP_RECVERR	11
+#define IP_RECVTTL	12
+#define	IP_RECVTOS	13
 
 /* BSD compatibility */
 #define IP_RECVRETOPTS	IP_RETOPTS
@@ -71,9 +75,6 @@ struct in_addr {
 #define IP_MULTICAST_LOOP 		34
 #define IP_ADD_MEMBERSHIP		35
 #define IP_DROP_MEMBERSHIP		36
-#define IP_MULTICAST_IFN		37
-#define IP_ADD_MEMBERSHIPN		38
-#define IP_DROP_MEMBERSHIPN		39
 
 /* These need to appear somewhere around here */
 #define IP_DEFAULT_MULTICAST_TTL        1

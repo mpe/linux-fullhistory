@@ -5,6 +5,8 @@
  *
  *		The IP to API glue.
  *		
+ * Version:	$Id: ip_sockglue.c,v 1.28 1997/11/17 17:36:08 kuznet Exp $
+ *
  * Authors:	see ip.c
  *
  * Fixes:
@@ -27,6 +29,7 @@
 #include <net/icmp.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
+#include <linux/igmp.h>
 #include <linux/firewall.h>
 #include <linux/ip_fw.h>
 #include <net/checksum.h>
@@ -36,34 +39,47 @@
 
 #include <asm/uaccess.h>
 
+#define IP_CMSG_PKTINFO		1
+#define IP_CMSG_TTL		2
+#define IP_CMSG_TOS		4
+#define IP_CMSG_RECVOPTS	8
+#define IP_CMSG_RETOPTS		16
+
 /*
  *	SOL_IP control messages.
  */
 
-static void ip_cmsg_recv_rxinfo(struct msghdr *msg, struct sk_buff *skb)
+static void ip_cmsg_recv_pktinfo(struct msghdr *msg, struct sk_buff *skb)
 {
 	struct in_pktinfo info;
 	struct rtable *rt = (struct rtable *)skb->dst;
 
-	info.ipi_ifindex = skb->dev->ifindex;
 	info.ipi_addr.s_addr = skb->nh.iph->daddr;
-	info.ipi_spec_dst.s_addr = rt->rt_spec_dst;
+	if (rt) {
+		info.ipi_ifindex = rt->rt_iif;
+		info.ipi_spec_dst.s_addr = rt->rt_spec_dst;
+	} else {
+		info.ipi_ifindex = 0;
+		info.ipi_spec_dst.s_addr = 0;
+	}
 
-	put_cmsg(msg, SOL_IP, IP_RXINFO, sizeof(info), &info);
+	put_cmsg(msg, SOL_IP, IP_PKTINFO, sizeof(info), &info);
 }
 
-static void ip_cmsg_recv_localaddr(struct msghdr *msg, struct sk_buff *skb, int local)
+static void ip_cmsg_recv_ttl(struct msghdr *msg, struct sk_buff *skb)
 {
-	struct in_addr addr;
+	if (IPCB(skb)->opt.optlen == 0)
+		return;
 
-	addr.s_addr = skb->nh.iph->daddr;
+	put_cmsg(msg, SOL_IP, IP_TTL, 1, &skb->nh.iph->ttl);
+}
 
-	if (local) {
-		struct rtable *rt = (struct rtable *)skb->dst;
-		addr.s_addr = rt->rt_spec_dst;
-	}
-	put_cmsg(msg, SOL_IP, local ? IP_LOCALADDR : IP_RECVDSTADDR,
-		 sizeof(addr), &addr);
+static void ip_cmsg_recv_tos(struct msghdr *msg, struct sk_buff *skb)
+{
+	if (IPCB(skb)->opt.optlen == 0)
+		return;
+
+	put_cmsg(msg, SOL_IP, IP_TOS, 1, &skb->nh.iph->tos);
 }
 
 static void ip_cmsg_recv_opts(struct msghdr *msg, struct sk_buff *skb)
@@ -99,26 +115,30 @@ void ip_cmsg_recv(struct msghdr *msg, struct sk_buff *skb)
 
 	/* Ordered by supposed usage frequency */
 	if (flags & 1)
-		ip_cmsg_recv_rxinfo(msg, skb);
+		ip_cmsg_recv_pktinfo(msg, skb);
 	if ((flags>>=1) == 0)
 		return;
+
 	if (flags & 1)
-		ip_cmsg_recv_localaddr(msg, skb, 1);
+		ip_cmsg_recv_ttl(msg, skb);
 	if ((flags>>=1) == 0)
 		return;
+
+	if (flags & 1)
+		ip_cmsg_recv_tos(msg, skb);
+	if ((flags>>=1) == 0)
+		return;
+
 	if (flags & 1)
 		ip_cmsg_recv_opts(msg, skb);
 	if ((flags>>=1) == 0)
 		return;
+
 	if (flags & 1)
 		ip_cmsg_recv_retopts(msg, skb);
-	if ((flags>>=1) == 0)
-		return;
-	if (flags & 1)
-		ip_cmsg_recv_localaddr(msg, skb, 0);
 }
 
-int ip_cmsg_send(struct msghdr *msg, struct ipcm_cookie *ipc, struct device **devp)
+int ip_cmsg_send(struct msghdr *msg, struct ipcm_cookie *ipc)
 {
 	int err;
 	struct cmsghdr *cmsg;
@@ -127,27 +147,19 @@ int ip_cmsg_send(struct msghdr *msg, struct ipcm_cookie *ipc, struct device **de
 		if (cmsg->cmsg_level != SOL_IP)
 			continue;
 		switch (cmsg->cmsg_type) {
-		case IP_LOCALADDR:
-			if (cmsg->cmsg_len != CMSG_LEN(sizeof(struct in_addr)))
-				return -EINVAL;
-			memcpy(&ipc->addr, CMSG_DATA(cmsg), sizeof(struct in_addr));
-			break;
 		case IP_RETOPTS:
 			err = cmsg->cmsg_len - CMSG_ALIGN(sizeof(struct cmsghdr));
 			err = ip_options_get(&ipc->opt, CMSG_DATA(cmsg), err < 40 ? err : 40, 0);
 			if (err)
 				return err;
 			break;
-		case IP_TXINFO:
+		case IP_PKTINFO:
 		{
 			struct in_pktinfo *info;
 			if (cmsg->cmsg_len != CMSG_LEN(sizeof(struct in_pktinfo)))
 				return -EINVAL;
 			info = (struct in_pktinfo *)CMSG_DATA(cmsg);
-			if (info->ipi_ifindex && !devp)
-				return -EINVAL;
-			if ((*devp = dev_get_by_index(info->ipi_ifindex)) == NULL)
-				return -ENODEV;
+			ipc->oif = info->ipi_ifindex;
 			ipc->addr = info->ipi_spec_dst.s_addr;
 			break;
 		}
@@ -155,6 +167,53 @@ int ip_cmsg_send(struct msghdr *msg, struct ipcm_cookie *ipc, struct device **de
 			return -EINVAL;
 		}
 	}
+	return 0;
+}
+
+
+/* Special input handler for packets catched by router alert option.
+   They are selected only by protocol field, and then processed likely
+   local ones; but only if someone wants them! Otherwise, router
+   not running rsvpd will kill RSVP.
+
+   It is user level problem, what it will make with them.
+   I have no idea, how it will masquearde or NAT them (it is joke, joke :-)),
+   but receiver should be enough clever f.e. to forward mtrace requests,
+   sent to multicast group to reach destination designated router.
+ */
+struct ip_ra_chain *ip_ra_chain;
+
+int ip_ra_control(struct sock *sk, unsigned char on, void (*destructor)(struct sock *))
+{
+	struct ip_ra_chain *ra, *new_ra, **rap;
+
+	if (sk->type != SOCK_RAW || sk->num == IPPROTO_RAW)
+		return -EINVAL;
+
+	new_ra = on ? kmalloc(sizeof(*new_ra), GFP_KERNEL) : NULL;
+
+	for (rap = &ip_ra_chain; (ra=*rap) != NULL; rap = &ra->next) {
+		if (ra->sk == sk) {
+			if (on) {
+				if (new_ra)
+					kfree(new_ra);
+				return -EADDRINUSE;
+			}
+			*rap = ra->next;
+			if (ra->destructor)
+				ra->destructor(sk);
+			kfree(ra);
+			return 0;
+		}
+	}
+	if (new_ra == NULL)
+		return -ENOBUFS;
+	new_ra->sk = sk;
+	new_ra->destructor = destructor;
+	start_bh_atomic();
+	new_ra->next = ra;
+	*rap = new_ra;
+	end_bh_atomic();
 	return 0;
 }
 
@@ -168,7 +227,6 @@ int ip_cmsg_send(struct msghdr *msg, struct ipcm_cookie *ipc, struct device **de
 int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int optlen)
 {
 	int val=0,err;
-	unsigned char ucval = 0;
 #if defined(CONFIG_IP_FIREWALL) || defined(CONFIG_IP_ACCT)
 	struct ip_fw tmp_fw;
 #endif	
@@ -177,9 +235,12 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 		if(get_user(val, (int *) optval))
 			return -EFAULT;
 	} else if(optlen>=sizeof(char)) {
+		unsigned char ucval;
 		if(get_user(ucval, (unsigned char *) optval))
 			return -EFAULT;
+		val = (int)ucval;
 	}
+	/* If optlen==0, it is equivalent to val == 0 */
 	
 	if(level!=SOL_IP)
 		return -ENOPROTOOPT;
@@ -213,50 +274,38 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 				kfree_s(old_opt, sizeof(struct ip_options) + old_opt->optlen);
 			return 0;
 		}
-		case IP_RXINFO:
-			if (optlen<4)
-				return -EINVAL;
+		case IP_PKTINFO:
 			if (val)
-				sk->ip_cmsg_flags |= 1;
+				sk->ip_cmsg_flags |= IP_CMSG_PKTINFO;
 			else
-				sk->ip_cmsg_flags &= ~1;
+				sk->ip_cmsg_flags &= ~IP_CMSG_PKTINFO;
 			return 0;
-		case IP_LOCALADDR:
-			if (optlen<4)
-				return -EINVAL;
+		case IP_RECVTTL:
 			if (val)
-				sk->ip_cmsg_flags |= 2;
+				sk->ip_cmsg_flags |=  IP_CMSG_TTL;
 			else
-				sk->ip_cmsg_flags &= ~2;
+				sk->ip_cmsg_flags &= ~IP_CMSG_TTL;
+			return 0;
+		case IP_RECVTOS:
+			if (val)
+				sk->ip_cmsg_flags |=  IP_CMSG_TOS;
+			else
+				sk->ip_cmsg_flags &= ~IP_CMSG_TOS;
 			return 0;
 		case IP_RECVOPTS:
-			if (optlen<4)
-				return -EINVAL;
 			if (val)
-				sk->ip_cmsg_flags |= 4;
+				sk->ip_cmsg_flags |=  IP_CMSG_RECVOPTS;
 			else
-				sk->ip_cmsg_flags &= ~4;
+				sk->ip_cmsg_flags &= ~IP_CMSG_RECVOPTS;
 			return 0;
 		case IP_RETOPTS:
-			if (optlen<4)
-				return -EINVAL;
 			if (val)
-				sk->ip_cmsg_flags |= 8;
+				sk->ip_cmsg_flags |= IP_CMSG_RETOPTS;
 			else
-				sk->ip_cmsg_flags &= ~8;
-			return 0;
-		case IP_RECVDSTADDR:
-			if (optlen<4)
-				return -EINVAL;
-			if (val)
-				sk->ip_cmsg_flags |= 0x10;
-			else
-				sk->ip_cmsg_flags &= ~0x10;
+				sk->ip_cmsg_flags &= ~IP_CMSG_RETOPTS;
 			return 0;
 		case IP_TOS:	/* This sets both TOS and Precedence */
 			  /* Reject setting of unused bits */
-			if (optlen<4)
-				return -EINVAL;
 			if (val & ~(IPTOS_TOS_MASK|IPTOS_PREC_MASK))
 				return -EINVAL;
 			if (IPTOS_PREC(val) >= IPTOS_PREC_CRITIC_ECP && !suser())
@@ -274,29 +323,25 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			sk->priority = rt_tos2priority(val);
 			return 0;
 		case IP_TTL:
-			if (optlen<4)
+			if (optlen<1)
 				return -EINVAL;
+			if(val==-1)
+				val = ip_statistics.IpDefaultTTL;
 			if(val<1||val>255)
 				return -EINVAL;
 			sk->ip_ttl=val;
 			return 0;
 		case IP_HDRINCL:
-			if (optlen<4)
-				return -EINVAL;
 			if(sk->type!=SOCK_RAW)
 				return -ENOPROTOOPT;
 			sk->ip_hdrincl=val?1:0;
 			return 0;
 		case IP_PMTUDISC:
-			if (optlen<4)
-				return -EINVAL;
 			if (val<0 || val>2)
 				return -EINVAL;
 			sk->ip_pmtudisc = val;
 			return 0;
 		case IP_RECVERR:
-			if (optlen<4)
-				return -EINVAL;
 			if (sk->type==SOCK_STREAM)
 				return -ENOPROTOOPT;
 			lock_sock(sk);
@@ -312,211 +357,81 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 		case IP_MULTICAST_TTL: 
 			if (optlen<1)
 				return -EINVAL;
-			sk->ip_mc_ttl=(int)ucval;
+			if (val==-1)
+				val = 1;
+			if (val < 0 || val > 255)
+				return -EINVAL;
+			sk->ip_mc_ttl=val;
 	                return 0;
 		case IP_MULTICAST_LOOP: 
 			if (optlen<1)
 				return -EINVAL;
-			if(ucval!=0 && ucval!=1)
-				 return -EINVAL;
-			sk->ip_mc_loop=(int)ucval;
+			sk->ip_mc_loop = val ? 1 : 0;
 			return 0;
 		case IP_MULTICAST_IF: 
 		{
-			struct in_addr addr;
+			struct ip_mreqn mreq;
 			struct device *dev = NULL;
 			
 			/*
 			 *	Check the arguments are allowable
 			 */
 
-			if(optlen<sizeof(addr))
-				return -EINVAL;
-				
-			if(copy_from_user(&addr,optval,sizeof(addr)))
-				return -EFAULT; 
-
-			
-			
-			/*
-			 *	What address has been requested
-			 */
-			
-			if (addr.s_addr==INADDR_ANY)	/* Default */
-			{
-				sk->ip_mc_index = 0;
-				return 0;
+			if (optlen >= sizeof(struct ip_mreqn)) {
+				if (copy_from_user(&mreq,optval,sizeof(mreq)))
+					return -EFAULT;
+			} else {
+				memset(&mreq, 0, sizeof(mreq));
+				if (optlen >= sizeof(struct in_addr) &&
+				    copy_from_user(&mreq.imr_address,optval,sizeof(struct in_addr)))
+					return -EFAULT;
 			}
-			
-			/*
-			 *	Find the device
-			 */
-			 
-			dev=ip_dev_find(addr.s_addr, NULL);
-						
-			/*
-			 *	Did we find one
-			 */
-			 
-			if(dev) 
-			{
-				sk->ip_mc_index = dev->ifindex;
-				return 0;
-			}
-			return -EADDRNOTAVAIL;
-		}
-
-		
-		case IP_ADD_MEMBERSHIP: 
-		{
-		
-/*
- *	FIXME: Add/Del membership should have a semaphore protecting them from re-entry
- */
-			struct ip_mreq mreq;
-			struct rtable *rt;
-			struct device *dev=NULL;
-			
-			/*
-			 *	Check the arguments.
-			 */
-			 
-			if(optlen<sizeof(mreq))
-				return -EINVAL;
-			if(copy_from_user(&mreq,optval,sizeof(mreq)))
-				return -EFAULT; 
-
-			/* 
-			 *	Get device for use later
-			 */
-
-			if (mreq.imr_interface.s_addr==INADDR_ANY) {
-				err = ip_route_output(&rt, mreq.imr_multiaddr.s_addr, 0, 1, NULL);
-				if (err)
-					return err;
-				dev = rt->u.dst.dev;
-				ip_rt_put(rt);
-			} else
-				dev = ip_dev_find(mreq.imr_interface.s_addr, NULL);
-			
-			/*
-			 *	No device, no cookies.
-			 */
-			 
-			if(!dev)
-				return -ENODEV;
-				
-			/*
-			 *	Join group.
-			 */
-			 
-			return ip_mc_join_group(sk,dev,mreq.imr_multiaddr.s_addr);
-		}
-		
-		case IP_DROP_MEMBERSHIP: 
-		{
-			struct ip_mreq mreq;
-			struct rtable *rt;
-			struct device *dev=NULL;
-
-			/*
-			 *	Check the arguments
-			 */
-			 
-			if(optlen<sizeof(mreq))
-				return -EINVAL;
-			if(copy_from_user(&mreq,optval,sizeof(mreq)))
-				return -EFAULT; 
-
-			/*
-			 *	Get device for use later 
-			 */
- 
-			if (mreq.imr_interface.s_addr==INADDR_ANY) {
-				err = ip_route_output(&rt, mreq.imr_multiaddr.s_addr, 0, 1, NULL);
-				if (err)
-					return err;
-				dev = rt->u.dst.dev;
-				ip_rt_put(rt);
-			} else
-				dev = ip_dev_find(mreq.imr_interface.s_addr, NULL);
-			
-			/*
-			 *	Did we find a suitable device.
-			 */
-			 
-			if(!dev)
-				return -ENODEV;
-				
-			/*
-			 *	Leave group
-			 */
-			 
-			return ip_mc_leave_group(sk,dev,mreq.imr_multiaddr.s_addr);
-		}
-
-		case IP_MULTICAST_IFN:
-		{
-			struct ip_mreqn mreq;
-			struct device *dev = NULL;
-			
-			if(optlen<sizeof(mreq))
-				return -EINVAL;
-			if(copy_from_user(&mreq,optval,sizeof(mreq)))
-				return -EFAULT;
 
 			if (!mreq.imr_ifindex) {
-				if (!mreq.imr_address.s_addr) {
+				if (!mreq.imr_address.s_addr == INADDR_ANY) {
 					sk->ip_mc_index = 0;
 					sk->ip_mc_addr  = 0;
 					return 0;
 				}
-				dev = ip_dev_find(mreq.imr_address.s_addr, NULL);
+				dev = ip_dev_find(mreq.imr_address.s_addr);
 			} else
 				dev = dev_get_by_index(mreq.imr_ifindex);
 
 			if (!dev)
-				return -ENODEV;
+				return -EADDRNOTAVAIL;
+
+			if (sk->bound_dev_if && dev->ifindex != sk->bound_dev_if)
+				return -EINVAL;
 
 			sk->ip_mc_index = mreq.imr_ifindex;
 			sk->ip_mc_addr  = mreq.imr_address.s_addr;
 			return 0;
 		}
-		case IP_ADD_MEMBERSHIPN:
+
+		case IP_ADD_MEMBERSHIP:
+		case IP_DROP_MEMBERSHIP: 
 		{
 			struct ip_mreqn mreq;
-			struct device *dev = NULL;
+			
+			if (optlen < sizeof(struct ip_mreq))
+				return -EINVAL;
+			if (optlen >= sizeof(struct ip_mreqn)) {
+				if(copy_from_user(&mreq,optval,sizeof(mreq)))
+					return -EFAULT;
+			} else {
+				memset(&mreq, 0, sizeof(mreq));
+				if (copy_from_user(&mreq,optval,sizeof(struct ip_mreq)))
+					return -EFAULT; 
+			}
 
-			if(optlen<sizeof(mreq))
-				return -EINVAL;			
-			if(copy_from_user(&mreq,optval,sizeof(mreq)))
-				return -EFAULT; 
-			dev = dev_get_by_index(mreq.imr_ifindex);
-			if (!dev)
-				return -ENODEV;
-			return ip_mc_join_group(sk,dev,mreq.imr_multiaddr.s_addr);
+			if (optname == IP_ADD_MEMBERSHIP)
+				return ip_mc_join_group(sk,&mreq);
+			else
+				return ip_mc_leave_group(sk,&mreq);
 		}
+		case IP_ROUTER_ALERT:	
+			return ip_ra_control(sk, val ? 1 : 0, NULL);
 		
-		case IP_DROP_MEMBERSHIPN: 
-		{
-			struct ip_mreqn mreq;
-			struct device *dev=NULL;
-
-			/*
-			 *	Check the arguments
-			 */
-
-			if(optlen<sizeof(mreq))
-				return -EINVAL;			 
-			if(copy_from_user(&mreq,optval,sizeof(mreq)))
-				return -EFAULT; 
-
-			dev=dev_get_by_index(mreq.imr_ifindex);
-			if(!dev)
-				return -ENODEV;
-			 
-			return ip_mc_leave_group(sk,dev,mreq.imr_multiaddr.s_addr);
-		}
 #ifdef CONFIG_IP_FIREWALL
 		case IP_FW_INSERT_IN:
 		case IP_FW_INSERT_OUT:
@@ -616,21 +531,21 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 					    return -EFAULT;
 				return 0;
 			}
-		case IP_RXINFO:
-			val = (sk->ip_cmsg_flags & 1) != 0;
-			return 0;
-		case IP_LOCALADDR:
-			val = (sk->ip_cmsg_flags & 2) != 0;
-			return 0;
+		case IP_PKTINFO:
+			val = (sk->ip_cmsg_flags & IP_CMSG_PKTINFO) != 0;
+			break;
+		case IP_RECVTTL:
+			val = (sk->ip_cmsg_flags & IP_CMSG_TTL) != 0;
+			break;
+		case IP_RECVTOS:
+			val = (sk->ip_cmsg_flags & IP_CMSG_TOS) != 0;
+			break;
 		case IP_RECVOPTS:
-			val = (sk->ip_cmsg_flags & 4) != 0;
-			return 0;
+			val = (sk->ip_cmsg_flags & IP_CMSG_RECVOPTS) != 0;
+			break;
 		case IP_RETOPTS:
-			val = (sk->ip_cmsg_flags & 8) != 0;
-			return 0;
-		case IP_RECVDSTADDR:
-			val = (sk->ip_cmsg_flags & 0x10) != 0;
-			return 0;
+			val = (sk->ip_cmsg_flags & IP_CMSG_RETOPTS) != 0;
+			break;
 		case IP_TOS:
 			val=sk->ip_tos;
 			break;
@@ -642,17 +557,18 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 			break;
 		case IP_PMTUDISC:
 			val=sk->ip_pmtudisc;
-			return 0;
+			break;
 		case IP_RECVERR:
 			val=sk->ip_recverr;
-			return 0;
+			break;
 		case IP_MULTICAST_TTL:
 			val=sk->ip_mc_ttl;
 			break;
 		case IP_MULTICAST_LOOP:
 			val=sk->ip_mc_loop;
 			break;
-		case IP_MULTICAST_IFN:
+#if 0
+		case IP_MULTICAST_IF:
 		{
 			struct ip_mreqn mreq;
 			len = min(len,sizeof(struct ip_mreqn));
@@ -665,9 +581,13 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 				return -EFAULT;
 			return 0;
 		}
+#endif
 		case IP_MULTICAST_IF:
 		{
 			struct device *dev = dev_get_by_index(sk->ip_mc_index);
+
+			printk(KERN_INFO "application %s uses old get IP_MULTICAST_IF. Please, report!\n", current->comm);
+
 			if (dev == NULL) 
 			{
 				len = 0;
@@ -689,11 +609,19 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 			return(-ENOPROTOOPT);
 	}
 	
-	len=min(sizeof(int),len);
-	
-	if(put_user(len, optlen))
-		return -EFAULT;
-	if(copy_to_user(optval,&val,len))
-		return -EFAULT;
+	if (len < sizeof(int) && len > 0 && val>=0 && val<255) {
+		unsigned char ucval = (unsigned char)val;
+		len = 1;
+		if(put_user(len, optlen))
+			return -EFAULT;
+		if(copy_to_user(optval,&ucval,1))
+			return -EFAULT;
+	} else {
+		len=min(sizeof(int),len);
+		if(put_user(len, optlen))
+			return -EFAULT;
+		if(copy_to_user(optval,&val,len))
+			return -EFAULT;
+	}
 	return 0;
 }

@@ -5,6 +5,8 @@
  *
  *		The IP forwarding functionality.
  *		
+ * Version:	$Id: ip_forward.c,v 1.32 1997/10/24 17:16:06 kuznet Exp $
+ *
  * Authors:	see ip.c
  *
  * Fixes:
@@ -76,10 +78,13 @@ int ip_forward(struct sk_buff *skb)
 	int fw_res = 0;
 #endif
 
-	if (skb->pkt_type != PACKET_HOST) {
-		kfree_skb(skb,FREE_WRITE);
-		return 0;
+	if (IPCB(skb)->opt.router_alert) {
+		if (ip_call_ra_chain(skb))
+			return 0;
 	}
+
+	if (skb->pkt_type != PACKET_HOST)
+		goto drop;
 	
 	/*
 	 *	According to the RFC, we must first decrease the TTL field. If
@@ -90,27 +95,25 @@ int ip_forward(struct sk_buff *skb)
 	iph = skb->nh.iph;
 	rt = (struct rtable*)skb->dst;
 
-#ifdef CONFIG_TRANSPARENT_PROXY
-	if (ip_chk_sock(skb))
-		return ip_local_deliver(skb);
+#ifdef CONFIG_CPU_IS_SLOW
+	if (net_cpu_congestion > 1 && !(iph->tos&IPTOS_RELIABILITY) &&
+	    IPTOS_PREC(iph->tos) < IPTOS_PREC_INTERNETCONTROL) {
+		if (((xtime.tv_usec&0xF)<<net_cpu_congestion) > 0x1C)
+			goto drop;
+	}
 #endif
 
-	if (ip_decrease_ttl(iph) <= 0) {
-		/* Tell the sender its packet died... */
-		icmp_send(skb, ICMP_TIME_EXCEEDED, ICMP_EXC_TTL, 0);
-		kfree_skb(skb, FREE_WRITE);
-		return -1;
-	}
 
-	if (opt->is_strictroute && (rt->rt_flags&RTF_GATEWAY)) {
-		/*
-		 *	Strict routing permits no gatewaying
-		 */
-		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_SR_FAILED, 0);
-		kfree_skb(skb, FREE_WRITE);
-		return -1;
-	}
+#ifdef CONFIG_TRANSPARENT_PROXY
+	if (ip_chk_sock(skb))
+                goto local_pkt;
+#endif
 
+	if (ip_decrease_ttl(iph) <= 0)
+                goto too_many_hops;
+
+	if (opt->is_strictroute && (rt->rt_flags&RTF_GATEWAY))
+                goto sr_failed;
 
 	/*
 	 *	Having picked a route we can now send the frame out
@@ -139,19 +142,23 @@ int ip_forward(struct sk_buff *skb)
 	 */
 
 	if (dev2->flags & IFF_UP) {
-		if (skb->len > mtu && (ntohs(iph->frag_off) & IP_DF)) {
-			ip_statistics.IpFragFails++;
-			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED, htonl(mtu));
-			kfree_skb(skb, FREE_WRITE);
-			return -1;
-		}
+		if (skb->len > mtu && (ntohs(iph->frag_off) & IP_DF))
+			goto frag_needed;
 
-		if (rt->rt_flags&RTCF_NAT) {
+#ifdef CONFIG_IP_ROUTE_NAT
+		if (rt->rt_flags & RTCF_NAT) {
+			if (skb_headroom(skb) < dev2->hard_header_len || skb_cloned(skb)) {
+				struct sk_buff *skb2;
+				skb2 = skb_realloc_headroom(skb, (dev2->hard_header_len + 15)&~15);
+				kfree_skb(skb, FREE_WRITE);
+				skb = skb2;
+			}
 			if (ip_do_nat(skb)) {
 				kfree_skb(skb, FREE_WRITE);
 				return -1;
 			}
 		}
+#endif
 
 #ifdef CONFIG_IP_MASQUERADE
 		if(!(IPCB(skb)->flags&IPSKB_MASQUERADED)) {
@@ -168,7 +175,7 @@ int ip_forward(struct sk_buff *skb)
 			 *	and skip the firewall checks
 			 */
 			if (iph->protocol == IPPROTO_ICMP) {
-				if ((fw_res = ip_fw_masq_icmp(&skb, dev2)) < 0) {
+				if ((fw_res = ip_fw_masq_icmp(&skb)) < 0) {
 					kfree_skb(skb, FREE_READ);
 					return -1;
 				}
@@ -179,7 +186,8 @@ int ip_forward(struct sk_buff *skb)
 			}
 			if (rt->rt_flags&RTCF_MASQ)
 				goto skip_call_fw_firewall;
-#endif
+#endif /* CONFIG_IP_MASQUERADE */
+
 #ifdef CONFIG_FIREWALL
 		fw_res=call_fw_firewall(PF_INET, dev2, iph, NULL, &skb);
 		switch (fw_res) {
@@ -205,7 +213,16 @@ skip_call_fw_firewall:
 		 */
 		if (!(IPCB(skb)->flags&IPSKB_MASQUERADED) &&
 		    (fw_res==FW_MASQUERADE || rt->rt_flags&RTCF_MASQ)) {
-			if (ip_fw_masquerade(&skb, dev2) < 0) {
+			u32 maddr;
+
+#ifdef CONFIG_IP_ROUTE_NAT
+			maddr = (rt->rt_flags&RTCF_MASQ) ? rt->rt_src_map : 0;
+
+			if (maddr == 0)
+#endif
+			maddr = inet_select_addr(dev2, rt->rt_gateway, RT_SCOPE_UNIVERSE);
+
+			if (ip_fw_masquerade(&skb, maddr) < 0) {
 				kfree_skb(skb, FREE_READ);
 				return -1;
 			}
@@ -238,10 +255,36 @@ skip_call_fw_firewall:
 
 		ip_statistics.IpForwDatagrams++;
 
-		if (opt->optlen)
-			ip_forward_options(skb);
-
+		if (opt->optlen == 0) {
+			ip_send(skb);
+			return 0;
+		}
+	        ip_forward_options(skb);
 		ip_send(skb);
 	}
 	return 0;
+
+#ifdef CONFIG_TRANSPARENT_PROXY
+local_pkt:
+#endif
+	return ip_local_deliver(skb);
+
+frag_needed:
+	ip_statistics.IpFragFails++;
+	icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED, htonl(mtu));
+        goto drop;
+
+sr_failed:
+        /*
+	 *	Strict routing permits no gatewaying
+	 */
+         icmp_send(skb, ICMP_DEST_UNREACH, ICMP_SR_FAILED, 0);
+         goto drop;
+
+too_many_hops:
+        /* Tell the sender its packet died... */
+        icmp_send(skb, ICMP_TIME_EXCEEDED, ICMP_EXC_TTL, 0);
+drop:
+	kfree_skb(skb,FREE_WRITE);
+	return -1;
 }

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_output.c,v 1.3 1997/03/18 18:24:37 davem Exp $
+ *	$Id: ip6_output.c,v 1.5 1997/09/21 18:33:14 kuznet Exp $
  *
  *	Based on linux/net/ipv4/ip_output.c
  *
@@ -540,6 +540,11 @@ int ip6_forward(struct sk_buff *skb)
 	struct ipv6hdr *hdr = skb->nh.ipv6h;
 	int size;
 	
+	if (ipv6_config.forwarding == 0) {
+		kfree_skb(skb, FREE_READ);
+		return -EINVAL;
+	}
+
 	/*
 	 *	check hop-by-hop options present
 	 */

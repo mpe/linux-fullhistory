@@ -8,16 +8,24 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := ipv4.o
-IPV4_OBJS := utils.o route.o proc.o timer.o protocol.o packet.o \
+IPV4_OBJS := utils.o route.o proc.o timer.o protocol.o \
 	     ip_input.o ip_fragment.o ip_forward.o ip_options.o \
 	     ip_output.o ip_sockglue.o \
 	     tcp.o tcp_input.o tcp_output.o tcp_timer.o tcp_ipv4.o\
 	     raw.o udp.o arp.o icmp.o devinet.o af_inet.o igmp.o ip_fw.o \
-	     sysctl_net_ipv4.o fib.o ip_nat_dumb.o
+	     sysctl_net_ipv4.o fib_frontend.o fib_semantics.o fib_hash.o
 IPV4X_OBJS :=
 
 MOD_LIST_NAME := IPV4_MODULES
 M_OBJS :=
+
+ifeq ($(CONFIG_IP_MULTIPLE_TABLES),y)
+IPV4_OBJS += fib_rules.o
+endif
+
+ifeq ($(CONFIG_IP_ROUTE_NAT),y)
+IPV4_OBJS += ip_nat_dumb.o
+endif
 
 ifeq ($(CONFIG_IP_MROUTE),y)
 IPV4_OBJS += ipmr.o
@@ -32,10 +40,18 @@ else
 endif
 
 ifeq ($(CONFIG_NET_IPIP),y)
-IPV4_OBJS += ipip.o
+IPV4X_OBJS += ipip.o
 else
   ifeq ($(CONFIG_NET_IPIP),m)
-  M_OBJS += ipip.o
+  MX_OBJS += ipip.o
+  endif
+endif
+
+ifeq ($(CONFIG_NET_IPGRE),y)
+IPV4X_OBJS += ip_gre.o
+else
+  ifeq ($(CONFIG_NET_IPGRE),m)
+  MX_OBJS += ip_gre.o
   endif
 endif
 
@@ -44,17 +60,13 @@ IPV4X_OBJS += ip_masq.o ip_masq_app.o
 M_OBJS += ip_masq_ftp.o ip_masq_irc.o ip_masq_raudio.o ip_masq_quake.o
 endif
 
-ifeq ($(CONFIG_IP_ALIAS),y)
-IPV4_OBJS += ip_alias.o
-else
-  ifeq ($(CONFIG_IP_ALIAS),m)
-  M_OBJS += ip_alias.o
-  endif
-endif
-
 ifeq ($(CONFIG_SYN_COOKIES),y)
 IPV4_OBJS += syncookies.o
 # module not supported, because it would be too messy.
+endif
+
+ifeq ($(CONFIG_IP_PNP),y)
+IPV4_OBJS += ipconfig.o
 endif
 
 ifdef CONFIG_INET

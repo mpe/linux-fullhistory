@@ -1,7 +1,7 @@
 /*
- *  linux/drivers/block/opti621.c       Version 0.1  Oct 26, 1996
+ *  linux/drivers/block/opti621.c       Version 0.3  Nov 29, 1997
  *
- *  Copyright (C) 1996  Linus Torvalds & author (see below)
+ *  Copyright (C) 1996-1998  Linus Torvalds & author (see below)
  */
 
 /*
@@ -33,8 +33,8 @@
  * PIO 3 and slave PIO 0, driver have to set some timings of
  * master for PIO 0. Second problem is that opti621_tune_drive
  * got only one drive to set, but have to set both drives.
- * This is solved in opti621_compute_pios. If you don't set
- * the second drive, opti621_compute_pios use ide_get_best_pio_mode
+ * This is solved in compute_pios. If you don't set
+ * the second drive, compute_pios use ide_get_best_pio_mode
  * for autoselect mode (you can change it to PIO 0, if you want).
  * If you then set the second drive to another PIO, the old value
  * (automatically selected) will be overrided by yours.
@@ -48,7 +48,7 @@
  * settings of jumpers on the card and I have to boot Linux with
  * Loadlin except LILO, cause I have to run the setupvic.exe program
  * already or I get disk errors (my test: rpm -Vf
- * /usr/X11R6/bin/XF86_SVGA - or any big file). 
+ * /usr/X11R6/bin/XF86_SVGA - or any big file).
  * Some numbers from hdparm -t /dev/hda:
  * Timing buffer-cache reads:   32 MB in  3.02 seconds =10.60 MB/sec
  * Timing buffered disk reads:  16 MB in  5.52 seconds = 2.90 MB/sec
@@ -84,7 +84,7 @@
  *  address: 25 ns, data: 25 ns, recovery: 50 ns;
  * on 20MHz PCI bus (pulse 50 ns):
  *  address: 50 ns, data: 50 ns, recovery: 100 ns.
- */ 
+ */
 
 /* #define READ_PREFETCH 0 */
 /* Uncommnent for disable read prefetch.
@@ -103,58 +103,35 @@
 #define MISC_REG 6	/* index of Miscellaneous register */
 #define CNTRL_REG 3	/* index of Control register */
 int reg_base;
-int opti621_primary_base, opti621_secondary_base;
 
 #define PIO_NOT_EXIST 254
 #define PIO_DONT_KNOW 255
-int opti621_drive_pio_modes[4];
+
 /* there are stored pio numbers from other calls of opti621_tune_drive */
 
-void opti621_compute_pios(ide_hwif_t *drv, int second_contr, int slave_drive, byte pio)
-/* Store values into opti621_drive_pio_modes:
+static void compute_pios(ide_drive_t *drive, byte pio)
+/* Store values into drive->timing_data
  *	second_contr - 0 for primary controller, 1 for secondary
  *	slave_drive - 0 -> pio is for master, 1 -> pio is for slave
- *	pio - PIO mode for selected drive (for other we don't know)	
- */	 
+ *	pio - PIO mode for selected drive (for other we don't know)
+ */
 {
-	ide_drive_t *p1, *p2, *drive;
-	int i;
-	
-	i = 2*second_contr;
-	p1 = &drv->drives[0];
-	p2 = &drv->drives[1];
-	drive = &drv->drives[slave_drive]; 
-	pio = ide_get_best_pio_mode(drive, pio, OPTI621_MAX_PIO, NULL);
-	opti621_drive_pio_modes[i+slave_drive]=pio;
+	int d;
+	ide_hwif_t *hwif = HWIF(drive);
 
-	if (p1->present) {
-		if (opti621_drive_pio_modes[i]==PIO_DONT_KNOW)
-			opti621_drive_pio_modes[i]=ide_get_best_pio_mode(p1,
-				255, OPTI621_MAX_PIO, NULL);
-		/* we don't know the selected PIO mode, so we have to autoselect */
-	} else
-		opti621_drive_pio_modes[i]=PIO_NOT_EXIST;
-	if (p2->present) {
-		if (opti621_drive_pio_modes[i+1]==PIO_DONT_KNOW)
-			opti621_drive_pio_modes[i+1]=ide_get_best_pio_mode(p2,
-				255, OPTI621_MAX_PIO, NULL);
-		/* we don't know the selected PIO mode, so we have to autoselect */
-	} else
-		opti621_drive_pio_modes[i+1]=PIO_NOT_EXIST;
-	/* in opti621_drive_pio_modes[i] and [i+1] are valid PIO modes (or PIO_NOT_EXIST,
-		if drive is not connected), we can continue */
+	drive->timing_data = ide_get_best_pio_mode(drive, pio, OPTI621_MAX_PIO, NULL);
+	for (d = 0; d < 2; ++d) {
+		drive = &hwif->drives[d];
+		if (drive->present) {
+			if (drive->timing_data == PIO_DONT_KNOW)
+				drive->timing_data = ide_get_best_pio_mode(drive, 255, OPTI621_MAX_PIO, NULL);
 #ifdef OPTI621_DEBUG
-	printk("%s: (master): ", p1->name);
-	if (p1->present)
-		printk("PIO mode %d\n", opti621_drive_pio_modes[i]);
-	else
-		printk("not present\n");
-	printk("%s: (slave): ", p2->name);
-	if (p2->present)
-		printk("PIO mode %d\n", opti621_drive_pio_modes[i+1]);
-	else
-		printk("not present\n");
+			printk("%s: Selected PIO mode %d\n", drive->name, drive->timing_data);
 #endif
+		} else {
+			drive->timing_data = PIO_NOT_EXIST;
+		}
+	}
 }
 
 int cmpt_clk(int time, int bus_speed)
@@ -169,7 +146,7 @@ int cmpt_clk(int time, int bus_speed)
 	return ((time*bus_speed+999)/1000);
 }
 
-void write_reg(byte value, int reg)
+static void write_reg(byte value, int reg)
 /* Write value to register reg, base of register
  * is at reg_base (0x1f0 primary, 0x170 secondary,
  * if not changed by PCI configuration).
@@ -180,12 +157,12 @@ void write_reg(byte value, int reg)
 	inw(reg_base+1);
 	outb(3, reg_base+2);
 	outb(value, reg_base+reg);
-	outb(0x83, reg_base+2);	
+	outb(0x83, reg_base+2);
 }
 
-byte read_reg(int reg)
+static byte read_reg(int reg)
 /* Read value from register reg, base of register
- * is at reg_base (0x1f0 primary, 0x170 secondary, 
+ * is at reg_base (0x1f0 primary, 0x170 secondary,
  * if not changed by PCI configuration).
  * This is from setupvic.exe program.
  */
@@ -195,7 +172,7 @@ byte read_reg(int reg)
 	inw(reg_base+1);
 	outb(3, reg_base+2);
 	ret=inb(reg_base+reg);
-	outb(0x83, reg_base+2);	
+	outb(0x83, reg_base+2);
 	return ret;
 }
 
@@ -205,9 +182,9 @@ typedef struct pio_clocks_s {
 	int	recovery_time;	/* Recovery time (clocks) */
 } pio_clocks_t;
 
-void compute_clocks(int pio, pio_clocks_t *clks)
+static void compute_clocks(int pio, pio_clocks_t *clks)
 {
-        if (pio!=PIO_NOT_EXIST) {
+        if (pio != PIO_NOT_EXIST) {
         	int adr_setup, data_pls, bus_speed;
         	bus_speed = ide_system_bus_speed();
  	       	adr_setup = ide_pio_timings[pio].setup_time;
@@ -230,108 +207,80 @@ void compute_clocks(int pio, pio_clocks_t *clks)
 	}
 }
 
-static void opti621_tune_drive (ide_drive_t *drive, byte pio)
 /* Main tune procedure, hooked by tuneproc. */
+static void opti621_tune_drive (ide_drive_t *drive, byte pio)
 {
-	/* primary and secondary drives share some (but not same) registers,
-	so we have to program both drives */
+	/* primary and secondary drives share some registers,
+	 * so we have to program both drives
+	 */
 	unsigned long flags;
 	byte pio1, pio2;
-	int second_contr, slave_drive;
 	pio_clocks_t first, second;
 	int ax, drdy;
 	byte cycle1, cycle2, misc;
-		
-	second_contr=HWIF(drive)->index;
-	if ((second_contr!=0) && (second_contr!=1))
-		return; /* invalid controller number */
-	if (((second_contr==0) && (opti621_primary_base==0)) ||
-		((second_contr==1) && (opti621_secondary_base==0)))
-		return; /* controller is unaccessible/not exist */
-	slave_drive = drive->select.b.unit;
-	/* set opti621_drive_pio_modes[] */
-	opti621_compute_pios(HWIF(drive), second_contr, slave_drive, pio);
-	
-     	reg_base = second_contr ? opti621_primary_base : opti621_secondary_base;
+	ide_hwif_t *hwif = HWIF(drive);
 
- 	pio1 = opti621_drive_pio_modes[second_contr*2];
- 	pio2 = opti621_drive_pio_modes[second_contr*2+1];
- 	
+	/* set drive->timing_data for both drives */
+	compute_pios(drive, pio);
+ 	pio1 = hwif->drives[0].timing_data;
+ 	pio2 = hwif->drives[1].timing_data;
+
 	compute_clocks(pio1, &first);
 	compute_clocks(pio2, &second);
-	
-	ax = (first.address_time<second.address_time) ?
-		(second.address_time) : (first.address_time); /* in ax is max(a1,a2) */
+
+	/* ax = max(a1,a2) */
+	ax = (first.address_time < second.address_time) ? second.address_time : first.address_time;
+
 	drdy = 2; /* DRDY is default 2 (by OPTi Databook) */
 
 	cycle1 = ((first.data_time-1)<<4) | (first.recovery_time-2);
 	cycle2 = ((second.data_time-1)<<4) | (second.recovery_time-2);
 	misc = READ_PREFETCH | ((ax-1)<<4) | ((drdy-2)<<1);
-	
+
 #ifdef OPTI621_DEBUG
 	printk("%s: master: address: %d, data: %d, recovery: %d, drdy: %d [clk]\n",
-		HWIF(drive)->name, ax, first.data_time, first.recovery_time, drdy);
+		hwif->name, ax, first.data_time, first.recovery_time, drdy);
 	printk("%s: slave:  address: %d, data: %d, recovery: %d, drdy: %d [clk]\n",
-		HWIF(drive)->name, ax, second.data_time, second.recovery_time, drdy);
+		hwif->name, ax, second.data_time, second.recovery_time, drdy);
 #endif
 
 	save_flags(flags);
 	cli();
-	
+
+     	reg_base = hwif->io_ports[IDE_DATA_OFFSET];
 	outb(0xc0, reg_base+CNTRL_REG);	/* allow Register-B */
 	outb(0xff, reg_base+5);		/* hmm, setupvic.exe does this ;-) */
 	inb(reg_base+CNTRL_REG); 	/* if reads 0xff, adapter not exist? */
 	read_reg(CNTRL_REG);		/* if reads 0xc0, no interface exist? */
 	read_reg(5);			/* read version, probably 0 */
-	
-	/* programming primary drive - 0 or 2 */
-	write_reg(0, MISC_REG);		/* select Index-0 for Register-A */
+
+	/* program primary drive */
+	write_reg(0,      MISC_REG);	/* select Index-0 for Register-A */
 	write_reg(cycle1, READ_REG);	/* set read cycle timings */
 	write_reg(cycle1, WRITE_REG);	/* set write cycle timings */
 
-	/* programming secondary drive - 1 or 3 */
-	write_reg(1, MISC_REG); /* select Index-1 for Register-B */
-	write_reg(cycle2, READ_REG); /* set read cycle timings */
-	write_reg(cycle2, WRITE_REG); /* set write cycle timings */
-	
-	write_reg(0x85, CNTRL_REG); /* use Register-A for drive 0 (or 2) and
-		Register-B for drive 1 (or 3) */ 
-		
- 	write_reg(misc, MISC_REG); /* set address setup, DRDY timings
- 		and read prefetch for both drives */
-		
+	/* program secondary drive */
+	write_reg(1,      MISC_REG);	/* select Index-1 for Register-B */
+	write_reg(cycle2, READ_REG);	/* set read cycle timings */
+	write_reg(cycle2, WRITE_REG);	/* set write cycle timings */
+
+	write_reg(0x85, CNTRL_REG);	/* use Register-A for drive 0 */
+					/* use Register-B for drive 1 */
+
+ 	write_reg(misc, MISC_REG);	/* set address setup, DRDY timings,   */
+ 					/*  and read prefetch for both drives */
+
 	restore_flags(flags);
 }
 
-void ide_init_opti621 (byte bus, byte fn)
-/* Init controller. Called on kernel boot. */
+/*
+ * ide_init_opti621() is Called from idedma.c once for each hwif found at boot.
+ */
+void ide_init_opti621 (byte bus, byte fn, ide_hwif_t *hwifs)
 {
-	int rc, i;
-	unsigned char sreg;
-	unsigned short reg;
-	unsigned int dreg;
-	unsigned char revision;
-	for (i=0; i<4; i++)
-		opti621_drive_pio_modes[i] = PIO_DONT_KNOW;
-	printk("ide: OPTi 82C621 on PCI bus %d function %d\n", bus, fn);
-	if ((rc = pcibios_read_config_byte (bus, fn, 0x08, &sreg)))
-		goto quit;
-	revision = sreg;
-	if ((rc = pcibios_read_config_dword (bus, fn, 0x10, &dreg)))
-		goto quit;
-	opti621_primary_base = ((dreg==0) || (dreg>0xffff)) ? 0 : dreg-1;
-	if ((rc = pcibios_read_config_dword (bus, fn, 0x18, &dreg)))
-		goto quit;
-	opti621_secondary_base = ((dreg==0) || (dreg>0xffff)) ? 0 : dreg-1;
-	printk("ide: revision %d, primary: 0x%04x, secondary: 0x%04x\n",
-		revision, opti621_primary_base, opti621_secondary_base);
-	if ((rc = pcibios_read_config_word (bus, fn, PCI_COMMAND, &reg)))
-		goto quit;
-	if (!(reg & 1)) {
-		printk("ide: ports are not enabled (BIOS)\n");
-	} else {
-		ide_hwifs[0].tuneproc = &opti621_tune_drive;
-		ide_hwifs[1].tuneproc = &opti621_tune_drive;
-  	}
-  quit: if (rc) printk("ide: pcibios access failed - %s\n", pcibios_strerror(rc));
+	if (hwif->io_ports[IDE_DATA_OFFSET]) {
+		hwif->drives[0].timing_data = PIO_DONT_KNOW;
+		hwif->drives[1].timing_data = PIO_DONT_KNOW;
+		hwif->tuneproc = &opti621_tune_drive;
+	}
 }

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.71 1997/09/06 05:11:45 davem Exp $
+ * Version:	$Id: tcp.c,v 1.75 1997/10/16 02:57:34 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -437,8 +437,8 @@ static struct open_request *tcp_find_established(struct tcp_opt *tp,
 	struct open_request *prev = (struct open_request *)&tp->syn_wait_queue; 
 	while(req) {
 		if (req->sk && 
-		    (req->sk->state == TCP_ESTABLISHED ||
-		     req->sk->state >= TCP_FIN_WAIT1))
+		    ((1 << req->sk->state) &
+		     ~(TCPF_SYN_SENT|TCPF_SYN_RECV)))
 			break;
 		prev = req; 
 		req = req->dl_next;
@@ -603,7 +603,7 @@ unsigned int tcp_poll(struct socket *sock, poll_table *wait)
 	if (sk->err)
 		mask = POLLERR;
 	/* Connected? */
-	if (sk->state != TCP_SYN_SENT && sk->state != TCP_SYN_RECV) {
+	if ((1 << sk->state) & ~(TCPF_SYN_SENT|TCPF_SYN_RECV)) {
 		if (sk->shutdown & RCV_SHUTDOWN)
 			mask |= POLLHUP;
 
@@ -653,7 +653,8 @@ int tcp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 		{
 			unsigned long amount;
 
-			if (sk->state == TCP_LISTEN) return(-EINVAL);
+			if (sk->state == TCP_LISTEN)
+				return(-EINVAL);
 			amount = sock_wspace(sk);
 			return put_user(amount, (int *)arg);
 		}
@@ -701,7 +702,8 @@ static void wait_for_tcp_connect(struct sock * sk)
 {
 	release_sock(sk);
 	cli();
-	if (sk->state != TCP_ESTABLISHED && sk->state != TCP_CLOSE_WAIT && sk->err == 0)
+	if (((1 << sk->state) & ~(TCPF_ESTABLISHED|TCPF_CLOSE_WAIT)) &&
+	    sk->err == 0)
 		interruptible_sleep_on(sk->sleep);
 	sti();
 	lock_sock(sk);
@@ -779,11 +781,11 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 	struct tcp_opt *tp=&(sk->tp_pinfo.af_tcp);
 
 	/* Wait for a connection to finish. */
-	while (sk->state != TCP_ESTABLISHED && sk->state != TCP_CLOSE_WAIT) {
+	while ((1 << sk->state) & ~(TCPF_ESTABLISHED | TCPF_CLOSE_WAIT)) {
 		if (sk->err)
 			return sock_error(sk);
 
-		if (sk->state != TCP_SYN_SENT && sk->state != TCP_SYN_RECV) {
+		if ((1 << sk->state) & ~(TCPF_SYN_SENT | TCPF_SYN_RECV)) {
 			if (sk->keepopen)
 				send_sig(SIGPIPE, current, 0);
 			return -EPIPE;
@@ -982,7 +984,7 @@ void tcp_read_wakeup(struct sock *sk)
 	/* If we're closed, don't send an ack, or we'll get a RST
 	 * from the closed destination.
 	 */
-	if ((sk->state == TCP_CLOSE) || (sk->state == TCP_TIME_WAIT))
+	if ((1 << sk->state) & (TCPF_CLOSE|TCPF_TIME_WAIT))
 		return;
 
 	tcp_send_ack(sk);
@@ -1400,10 +1402,8 @@ void tcp_shutdown(struct sock *sk, int how)
 		return;
 
 	/* If we've already sent a FIN, or it's a closed state, skip this. */
-	if (sk->state == TCP_ESTABLISHED	||
-	    sk->state == TCP_SYN_SENT		||
-	    sk->state == TCP_SYN_RECV		||
-	    sk->state == TCP_CLOSE_WAIT) {
+	if ((1 << sk->state) &
+	    (TCPF_ESTABLISHED|TCPF_SYN_SENT|TCPF_SYN_RECV|TCPF_CLOSE_WAIT)) {
 		lock_sock(sk);
 
 		/* Flag that the sender has shutdown. */
@@ -1424,9 +1424,7 @@ void tcp_shutdown(struct sock *sk, int how)
 
 static inline int closing(struct sock * sk)
 {
-	return ((1 << sk->state) & ((1 << TCP_FIN_WAIT1)|
-				    (1 << TCP_CLOSING)|
-				    (1 << TCP_LAST_ACK)));
+	return ((1 << sk->state) & (TCPF_FIN_WAIT1|TCPF_CLOSING|TCPF_LAST_ACK));
 }
 
 

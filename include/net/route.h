@@ -22,9 +22,10 @@
 #ifndef _ROUTE_H
 #define _ROUTE_H
 
-#include <net/ip_fib.h>
+#include <linux/config.h>
 #include <net/dst.h>
-
+#include <linux/in_route.h>
+#include <linux/rtnetlink.h>
 
 #define RT_HASH_DIVISOR	    	256
 #define RT_CACHE_MAX_SIZE    	256
@@ -37,12 +38,12 @@
 /*
  * Cache invalidations can be delayed by:
  */
-#define RT_FLUSH_DELAY (2*HZ)
+#define RT_FLUSH_DELAY (5*HZ)
 
 #define RT_REDIRECT_NUMBER		9
 #define RT_REDIRECT_LOAD		(HZ/50)	/* 20 msec */
 #define RT_REDIRECT_SILENCE		(RT_REDIRECT_LOAD<<(RT_REDIRECT_NUMBER+1))
-                                                /* 20sec */
+/* 20sec */
 
 #define RT_ERROR_LOAD			(1*HZ)
 
@@ -55,7 +56,17 @@
 
 #include <linux/route.h>
 
-struct rtable 
+struct rt_key
+{
+	__u32			dst;
+	__u32			src;
+	int			iif;
+	int			oif;
+	__u8			tos;
+	__u8			scope;
+};
+
+struct rtable
 {
 	union
 	{
@@ -64,92 +75,76 @@ struct rtable
 	} u;
 
 	unsigned		rt_flags;
+	unsigned		rt_type;
 
-	u32			rt_dst;		/* Path destination	*/
-	u32			rt_src;		/* Path source		*/
-	struct device		*rt_src_dev;	/* Path source device	*/
+	__u32			rt_dst;	/* Path destination	*/
+	__u32			rt_src;	/* Path source		*/
+	int			rt_iif;
 
 	/* Info on neighbour */
-	u32			rt_gateway;
+	__u32			rt_gateway;
 
 	/* Cache lookup keys */
-	struct
-	{
-		u32			dst;
-		u32			src;
-		struct device		*src_dev;
-		struct device		*dst_dev;
-		u8			tos;
-	} key;
+	struct rt_key		key;
 
 	/* Miscellaneous cached information */
-	u32			rt_spec_dst;	/* RFC1122 specific destination */
-	u32			rt_src_map;
-	u32			rt_dst_map;
+	__u32			rt_spec_dst; /* RFC1122 specific destination */
+
+#ifdef CONFIG_IP_ROUTE_NAT
+	__u32			rt_src_map;
+	__u32			rt_dst_map;
+#endif
 
 	/* ICMP statistics */
 	unsigned long		last_error;
 	unsigned long		errors;
 };
 
-
-#define RTF_IFBRD	(RTF_UP|RTF_MAGIC|RTF_LOCAL|RTF_BROADCAST)
-#define RTF_IFLOCAL	(RTF_UP|RTF_MAGIC|RTF_LOCAL|RTF_INTERFACE)
-#define RTF_IFPREFIX	(RTF_UP|RTF_MAGIC|RTF_INTERFACE)
-
-/*
- *	Flags not visible at user level.
- */
-#define RTF_INTERNAL	0xFFFF8000	/* to get RTF_MAGIC as well... */
-
-/*
- *	Flags saved in FIB.
- */
-#define RTF_FIB		(RTF_UP|RTF_GATEWAY|RTF_REJECT|RTF_THROW|RTF_STATIC|\
-			 RTF_XRESOLVE|RTF_NOPMTUDISC|RTF_NOFORWARD|RTF_INTERNAL)
-
+#ifdef __KERNEL__
 extern void		ip_rt_init(void);
 extern void		ip_rt_redirect(u32 old_gw, u32 dst, u32 new_gw,
 				       u32 src, u8 tos, struct device *dev);
 extern void		ip_rt_check_expire(void);
 extern void		ip_rt_advice(struct rtable **rp, int advice);
 extern void		rt_cache_flush(int how);
-extern int		ip_route_output(struct rtable **, u32 dst, u32 src, u8 tos, struct device *devout);
-extern int		ip_route_output_dev(struct rtable **, u32 dst, u32 src, u8 tos, int);
+extern int		ip_route_output(struct rtable **, u32 dst, u32 src, u8 tos, int oif);
 extern int		ip_route_input(struct sk_buff*, u32 dst, u32 src, u8 tos, struct device *devin);
 extern unsigned short	ip_rt_frag_needed(struct iphdr *iph, unsigned short new_mtu);
 extern void		ip_rt_send_redirect(struct sk_buff *skb);
 
-static __inline__ void ip_rt_put(struct rtable * rt)
+extern unsigned		inet_addr_type(u32 addr);
+extern void		ip_rt_multicast_event(struct in_device *);
+extern int		ip_rt_ioctl(unsigned int cmd, void *arg);
+extern void		ip_rt_get_source(u8 *src, struct rtable *rt);
+
+
+extern __inline__ void ip_rt_put(struct rtable * rt)
 {
 	if (rt)
 		dst_release(&rt->u.dst);
 }
 
-static __inline__ char rt_tos2priority(u8 tos)
+extern __u8 ip_tos2prio[16];
+
+extern __inline__ char rt_tos2priority(u8 tos)
 {
-	if (tos & IPTOS_LOWDELAY)
-		return SOPRI_INTERACTIVE;
-	if (tos & (IPTOS_THROUGHPUT|IPTOS_MINCOST))
-		return SOPRI_BACKGROUND;
-	return SOPRI_NORMAL;
+	return ip_tos2prio[IPTOS_TOS(tos)>>1];
 }
 
-
-static __inline__ int ip_route_connect(struct rtable **rp, u32 dst, u32 src, u32 tos)
+extern __inline__ int ip_route_connect(struct rtable **rp, u32 dst, u32 src, u32 tos, int oif)
 {
 	int err;
-	err = ip_route_output(rp, dst, src, tos, NULL);
+	err = ip_route_output(rp, dst, src, tos, oif);
 	if (err || (dst && src))
 		return err;
 	dst = (*rp)->rt_dst;
 	src = (*rp)->rt_src;
 	ip_rt_put(*rp);
 	*rp = NULL;
-	return ip_route_output(rp, dst, src, tos, NULL);
+	return ip_route_output(rp, dst, src, tos, oif);
 }
 
-static __inline__ void ip_ll_header(struct sk_buff *skb)
+extern __inline__ void ip_ll_header(struct sk_buff *skb)
 {
 	struct rtable *rt = (struct rtable*)skb->dst;
 	struct device *dev = rt->u.dst.dev;
@@ -169,6 +164,7 @@ static __inline__ void ip_ll_header(struct sk_buff *skb)
 		
 	skb->mac.raw = skb->data;
 }
+#endif
 
 
 #endif	/* _ROUTE_H */

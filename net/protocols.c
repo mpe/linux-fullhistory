@@ -10,8 +10,6 @@
 #include <linux/net.h>
 #include <linux/fs.h>
 
-#define CONFIG_UNIX		/* always present...	*/
-
 #ifdef	CONFIG_UNIX
 #include <linux/un.h>
 #include <net/af_unix.h>
@@ -23,6 +21,14 @@
 extern void inet6_proto_init(struct net_proto *pro);
 #endif
 #endif	/* INET */
+
+#ifdef CONFIG_NETLINK
+extern void netlink_proto_init(struct net_proto *pro);
+#endif
+
+#ifdef CONFIG_PACKET
+extern void packet_proto_init(struct net_proto *pro);
+#endif
 
 #if defined(CONFIG_IPX) || defined(CONFIG_IPX_MODULE)
 #define NEED_802
@@ -61,6 +67,10 @@ extern void inet6_proto_init(struct net_proto *pro);
 #include <net/netbeuicall.h>
 #endif
 
+#if defined(CONFIG_LLC)
+#define NEED_LLC
+#endif
+
 #include <net/psnapcall.h>
 
 #ifdef CONFIG_TR
@@ -84,6 +94,14 @@ extern void rif_init(struct net_proto *);
  */
  
 struct net_proto protocols[] = {
+#ifdef  CONFIG_NETLINK
+  { "NETLINK",	netlink_proto_init	},
+#endif
+
+#ifdef  CONFIG_PACKET
+  { "PACKET",	packet_proto_init	},
+#endif
+
 #ifdef	CONFIG_UNIX
   { "UNIX",	unix_proto_init	},			/* Unix domain socket family 	*/
 #endif

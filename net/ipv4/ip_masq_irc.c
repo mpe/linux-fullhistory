@@ -51,7 +51,7 @@ masq_irc_done_1 (struct ip_masq_app *mapp, struct ip_masq *ms)
 }
 
 int
-masq_irc_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb_p, struct device *dev)
+masq_irc_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb_p, __u32 maddr)
 {
         struct sk_buff *skb;
 	struct iphdr *iph;
@@ -167,7 +167,7 @@ masq_irc_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
                  *	connection is requested by another client.
 		 */
 
-		n_ms = ip_masq_new(dev, IPPROTO_TCP,
+		n_ms = ip_masq_new(maddr, IPPROTO_TCP,
                                    htonl(s_addr),htons(s_port),
                                    0, 0,
                                    IP_MASQ_F_NO_DPORT|IP_MASQ_F_NO_DADDR

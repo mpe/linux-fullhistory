@@ -1,6 +1,8 @@
 /*
  * sysctl_net_ipv4.c: sysctl interface to net IPV4 subsystem.
  *
+ * $Id: sysctl_net_ipv4.c,v 1.21 1997/10/17 01:21:18 davem Exp $
+ *
  * Begun April 1, 1996, Mike Shaver.
  * Added /proc/sys/net/ipv4 directory entry (empty =) ). [MS]
  */
@@ -36,15 +38,14 @@ extern int sysctl_arp_confirm_interval;
 extern int sysctl_arp_confirm_timeout;
 extern int sysctl_arp_max_pings;
 
+/* From icmp.c */
+extern int sysctl_icmp_echo_ignore_all;
+extern int sysctl_icmp_echo_ignore_broadcasts;
+
 /* From ip_fragment.c */
 extern int sysctl_ipfrag_low_thresh;
 extern int sysctl_ipfrag_high_thresh; 
 extern int sysctl_ipfrag_time;
-
-/* From igmp.c */
-extern int sysctl_igmp_max_host_report_delay;
-extern int sysctl_igmp_timer_scale;
-extern int sysctl_igmp_age_threshold;
 
 extern int sysctl_tcp_cong_avoidance;
 extern int sysctl_tcp_hoe_retransmits;
@@ -65,6 +66,13 @@ extern int sysctl_tcp_stdurg;
 extern int sysctl_tcp_syn_taildrop; 
 extern int sysctl_max_syn_backlog; 
 
+/* From icmp.c */
+extern int sysctl_icmp_sourcequench_time; 
+extern int sysctl_icmp_destunreach_time;
+extern int sysctl_icmp_timeexceed_time;
+extern int sysctl_icmp_paramprob_time;
+extern int sysctl_icmp_echoreply_time;
+
 int tcp_retr1_max = 255; 
 
 extern int tcp_sysctl_congavoid(ctl_table *ctl, int write, struct file * filp,
@@ -77,6 +85,7 @@ struct ipv4_config ipv4_config = { 1, 1, 1, 0, };
 struct ipv4_config ipv4_def_router_config = { 0, 1, 1, 1, 1, 1, 1, };
 struct ipv4_config ipv4_def_host_config = { 1, 1, 1, 0, };
 
+static
 int ipv4_sysctl_forwarding(ctl_table *ctl, int write, struct file * filp,
 			   void *buffer, size_t *lenp)
 {
@@ -93,6 +102,15 @@ int ipv4_sysctl_forwarding(ctl_table *ctl, int write, struct file * filp,
 		rt_cache_flush(0);
         }
         return ret;
+}
+
+static
+int ipv4_sysctl_rtcache_flush(ctl_table *ctl, int write, struct file * filp,
+			      void *buffer, size_t *lenp)
+{
+	if (write)
+		rt_cache_flush(0);
+	return 0;
 }
 
 ctl_table ipv4_table[] = {
@@ -147,17 +165,17 @@ ctl_table ipv4_table[] = {
         {NET_IPV4_SOURCE_ROUTE, "ip_source_route",
          &ipv4_config.source_route, sizeof(int), 0644, NULL,
          &proc_dointvec},
-        {NET_IPV4_ADDRMASK_AGENT, "ip_addrmask_agent",
-         &ipv4_config.addrmask_agent, sizeof(int), 0644, NULL,
+        {NET_IPV4_SEND_REDIRECTS, "ip_send_redirects",
+         &ipv4_config.send_redirects, sizeof(int), 0644, NULL,
          &proc_dointvec},
-        {NET_IPV4_BOOTP_AGENT, "ip_bootp_agent",
-         &ipv4_config.bootp_agent, sizeof(int), 0644, NULL,
+        {NET_IPV4_AUTOCONFIG, "ip_autoconfig",
+         &ipv4_config.autoconfig, sizeof(int), 0644, NULL,
          &proc_dointvec},
         {NET_IPV4_BOOTP_RELAY, "ip_bootp_relay",
          &ipv4_config.bootp_relay, sizeof(int), 0644, NULL,
          &proc_dointvec},
-        {NET_IPV4_FIB_MODEL, "ip_fib_model",
-         &ipv4_config.fib_model, sizeof(int), 0644, NULL,
+        {NET_IPV4_PROXY_ARP, "ip_proxy_arp",
+         &ipv4_config.proxy_arp, sizeof(int), 0644, NULL,
          &proc_dointvec},
         {NET_IPV4_NO_PMTU_DISC, "ip_no_pmtu_disc",
          &ipv4_config.no_pmtu_disc, sizeof(int), 0644, NULL,
@@ -171,6 +189,9 @@ ctl_table ipv4_table[] = {
         {NET_IPV4_RFC1620_REDIRECTS, "ip_rfc1620_redirects",
          &ipv4_config.rfc1620_redirects, sizeof(int), 0644, NULL,
          &proc_dointvec},
+        {NET_IPV4_RTCACHE_FLUSH, "ip_rtcache_flush",
+         NULL, sizeof(int), 0644, NULL,
+         &ipv4_sysctl_rtcache_flush},
 	{NET_IPV4_TCP_SYN_RETRIES, "tcp_syn_retries",
 	 &sysctl_tcp_syn_retries, sizeof(int), 0644, NULL, &proc_dointvec},
 	{NET_IPV4_IPFRAG_HIGH_THRESH, "ipfrag_high_thresh",
@@ -197,17 +218,6 @@ ctl_table ipv4_table[] = {
 	{NET_IPV4_TCP_FIN_TIMEOUT, "tcp_fin_timeout",
 	 &sysctl_tcp_fin_timeout, sizeof(int), 0644, NULL, 
 	 &proc_dointvec_jiffies},
-	{NET_IPV4_IGMP_MAX_HOST_REPORT_DELAY, "igmp_max_host_report_delay",
-	 &sysctl_igmp_max_host_report_delay, sizeof(int), 0644, NULL, 
-	 &proc_dointvec},
-	{NET_IPV4_IGMP_TIMER_SCALE, "igmp_timer_scale",
-	 &sysctl_igmp_timer_scale, sizeof(int), 0644, NULL, &proc_dointvec},
-#if 0
-	/* This one shouldn't be exposed to the user (too implementation
-	   specific): */
-	{NET_IPV4_IGMP_AGE_THRESHOLD, "igmp_age_threshold",
-	 &sysctl_igmp_age_threshold, sizeof(int), 0644, NULL, &proc_dointvec},
-#endif
 #ifdef CONFIG_SYN_COOKIES
 	{NET_TCP_SYNCOOKIES, "tcp_syncookies",
 	 &sysctl_tcp_syncookies, sizeof(int), 0644, NULL, &proc_dointvec},
@@ -218,6 +228,25 @@ ctl_table ipv4_table[] = {
 	 sizeof(int), 0644, NULL, &proc_dointvec},
 	{NET_TCP_MAX_SYN_BACKLOG, "tcp_max_syn_backlog", &sysctl_max_syn_backlog,
 	 sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_IPV4_LOCAL_PORT_RANGE, "ip_local_port_range",
+	 &sysctl_local_port_range, sizeof(sysctl_local_port_range), 0644, 
+	 NULL, &proc_dointvec},
+	{NET_IPV4_ICMP_ECHO_IGNORE_ALL, "icmp_echo_ignore_all",
+	 &sysctl_icmp_echo_ignore_all, sizeof(int), 0644, NULL,
+	 &proc_dointvec},
+	{NET_IPV4_ICMP_ECHO_IGNORE_BROADCASTS, "icmp_echo_ignore_broadcasts",
+	 &sysctl_icmp_echo_ignore_broadcasts, sizeof(int), 0644, NULL,
+	 &proc_dointvec},
+	{NET_IPV4_ICMP_SOURCEQUENCH_RATE, "icmp_sourcequench_rate",
+	 &sysctl_icmp_sourcequench_time, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_IPV4_ICMP_DESTUNREACH_RATE, "icmp_destunreach_rate",
+	 &sysctl_icmp_destunreach_time, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_IPV4_ICMP_TIMEEXCEED_RATE, "icmp_timeexceed_rate",
+	 &sysctl_icmp_timeexceed_time, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_IPV4_ICMP_PARAMPROB_RATE, "icmp_paramprob_rate",
+	 &sysctl_icmp_paramprob_time, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_IPV4_ICMP_ECHOREPLY_RATE, "icmp_echoreply_rate",
+	 &sysctl_icmp_echoreply_time, sizeof(int), 0644, NULL, &proc_dointvec},
 	{0}
 };
 
