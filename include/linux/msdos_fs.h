@@ -219,7 +219,7 @@ extern struct file_operations fat_dir_operations;
 extern int fat_readdirx(struct inode *inode, struct file *filp, void *dirent,
 			fat_filldir_t fat_filldir, filldir_t filldir,
 			int shortnames, int longnames, int both);
-extern int fat_readdir(struct inode *inode, struct file *filp,
+extern int fat_readdir(struct file *filp,
 		       void *dirent, filldir_t);
 extern int fat_dir_ioctl(struct inode * inode, struct file * filp,
 			 unsigned int cmd, unsigned long arg);

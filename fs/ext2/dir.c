@@ -32,7 +32,7 @@ static long ext2_dir_read (struct inode * inode, struct file * filp,
 	return -EISDIR;
 }
 
-static int ext2_readdir (struct inode *, struct file *, void *, filldir_t);
+static int ext2_readdir(struct file *, void *, filldir_t);
 
 static struct file_operations ext2_dir_operations = {
 	NULL,			/* lseek - default */
@@ -101,7 +101,7 @@ int ext2_check_dir_entry (const char * function, struct inode * dir,
 	return error_msg == NULL ? 1 : 0;
 }
 
-static int ext2_readdir (struct inode * inode, struct file * filp,
+static int ext2_readdir(struct file * filp,
 			 void * dirent, filldir_t filldir)
 {
 	int error = 0;
@@ -111,6 +111,7 @@ static int ext2_readdir (struct inode * inode, struct file * filp,
 	struct ext2_dir_entry * de;
 	struct super_block * sb;
 	int err;
+	struct inode *inode = filp->f_dentry->d_inode;
 
 	if (!inode || !S_ISDIR(inode->i_mode))
 		return -EBADF;

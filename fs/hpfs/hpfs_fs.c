@@ -189,7 +189,7 @@ static const struct inode_operations hpfs_file_iops =
 
 static long hpfs_dir_read(struct inode *inode, struct file *filp,
 			  char *buf, unsigned long count);
-static int hpfs_readdir(struct inode *inode, struct file *filp,
+static int hpfs_readdir(struct file *filp,
 			void *dirent, filldir_t filldir);
 static int hpfs_lookup(struct inode *, struct dentry *);
 
@@ -1362,7 +1362,7 @@ static void translate_hpfs_name(const unsigned char * from, int len, char * to, 
 	}
 }
 
-static int hpfs_readdir(struct inode *inode, struct file *filp, void * dirent,
+static int hpfs_readdir(struct file *filp, void * dirent,
 	filldir_t filldir)
 {
 	struct quad_buffer_head qbh;
@@ -1371,6 +1371,7 @@ static int hpfs_readdir(struct inode *inode, struct file *filp, void * dirent,
 	ino_t ino;
 	char * tempname;
 	long old_pos;
+	struct inode *inode = filp->f_dentry->d_inode;
 
 	if (inode == 0
 	    || inode->i_sb == 0

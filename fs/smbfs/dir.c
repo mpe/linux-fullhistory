@@ -24,8 +24,7 @@ smb_dir_read(struct inode *inode, struct file *filp,
 	     char *buf, unsigned long count);
 
 static int
-smb_readdir(struct inode *inode, struct file *filp,
-	    void *dirent, filldir_t filldir);
+smb_readdir(struct file *filp, void *dirent, filldir_t filldir);
 
 static int smb_lookup(struct inode *, struct dentry *);
 static int smb_create(struct inode *, struct dentry *, int);
@@ -105,9 +104,10 @@ smb_search_in_cache(struct inode *dir, unsigned long f_pos)
 }
 
 static int
-smb_refill_dir_cache(struct inode *dir, unsigned long f_pos)
+smb_refill_dir_cache(struct dentry *dentry, unsigned long f_pos)
 {
 	int result;
+	struct inode *dir = dentry->d_inode;
 	static struct semaphore sem = MUTEX;
 	int i;
 	ino_t ino;
@@ -115,7 +115,7 @@ smb_refill_dir_cache(struct inode *dir, unsigned long f_pos)
 	do
 	{
 		down(&sem);
-		result = smb_proc_readdir(dir, f_pos,
+		result = smb_proc_readdir(dentry, f_pos,
 					  SMB_READDIR_CACHE_SIZE, c_entry);
 
 		if (result <= 0)
@@ -142,10 +142,11 @@ smb_refill_dir_cache(struct inode *dir, unsigned long f_pos)
 	return result;
 }
 
-static int
-smb_readdir(struct inode *dir, struct file *filp,
+static int smb_readdir(struct file *filp,
 	    void *dirent, filldir_t filldir)
 {
+	struct dentry *dentry = filp->f_dentry;
+	struct inode *dir = dentry->d_inode;
 	int result, i = 0;
 	struct smb_dirent *entry = NULL;
 
@@ -194,7 +195,7 @@ smb_readdir(struct inode *dir, struct file *filp,
 			/* End of directory */
 			return 0;
 		}
-		result = smb_refill_dir_cache(dir, filp->f_pos);
+		result = smb_refill_dir_cache(dentry, filp->f_pos);
 		if (result <= 0)
 		{
 			return result;
@@ -266,7 +267,7 @@ smb_lookup(struct inode *dir, struct dentry *d_entry)
 	if (len > SMB_MAXNAMELEN)
 		return -ENAMETOOLONG;
 
-	error = smb_proc_getattr(dir, &(d_entry->d_name), &finfo);
+	error = smb_proc_getattr(d_entry, &(d_entry->d_name), &finfo);
 
 	inode = NULL;
 	if (!error) {
@@ -297,7 +298,7 @@ static int smb_create(struct inode *dir, struct dentry *dentry, int mode)
 	if (dentry->d_name.len > SMB_MAXNAMELEN)
 		return -ENAMETOOLONG;
 
-	error = smb_proc_create(dir, &(dentry->d_name), 0, CURRENT_TIME);
+	error = smb_proc_create(dentry, &(dentry->d_name), 0, CURRENT_TIME);
 	if (error < 0)
 		return error;
 
@@ -307,7 +308,7 @@ static int smb_create(struct inode *dir, struct dentry *dentry, int mode)
          * state. Currently we close it directly again, although this
 	 * is not necessary anymore. */
 
-	error = smb_proc_getattr(dir, &(dentry->d_name), &fattr);
+	error = smb_proc_getattr(dentry, &(dentry->d_name), &fattr);
 	if (error < 0)
 		return error;
 
@@ -337,13 +338,13 @@ smb_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	if (dentry->d_name.len > SMB_MAXNAMELEN)
 		return -ENAMETOOLONG;
 
-	error = smb_proc_mkdir(dir, &(dentry->d_name));
+	error = smb_proc_mkdir(dentry, &(dentry->d_name));
 	if (error)
 		return error;
 
 	smb_invalid_dir_cache(dir->i_ino);
 
-	error = smb_proc_getattr(dir, &(dentry->d_name), &fattr);
+	error = smb_proc_getattr(dentry, &(dentry->d_name), &fattr);
 	if (error < 0)
 		return error;
 
@@ -371,7 +372,7 @@ smb_rmdir(struct inode *dir, struct dentry *dentry)
 	if (dentry->d_name.len > NFS_MAXNAMLEN)
 		return -ENAMETOOLONG;
 
-	error = smb_proc_rmdir(dir, &(dentry->d_name));
+	error = smb_proc_rmdir(dentry, &(dentry->d_name));
 	if (error)
 		return error;
 
@@ -393,7 +394,7 @@ smb_unlink(struct inode *dir, struct dentry *dentry)
 	if (dentry->d_name.len > SMB_MAXNAMELEN)
 		return -ENAMETOOLONG;
 
-	error = smb_proc_unlink(dir, &(dentry->d_name));
+	error = smb_proc_unlink(dentry, &(dentry->d_name));
 	if (error)
 		return error;
 
@@ -424,18 +425,18 @@ static int smb_rename(struct inode *old_dir, struct dentry *old_dentry,
 	    new_dentry->d_name.len > SMB_MAXNAMELEN)
 		return -ENAMETOOLONG;
 
-	error = smb_proc_mv(old_dir, &(old_dentry->d_name),
-			    new_dir, &(new_dentry->d_name));
+	error = smb_proc_mv(old_dentry, &(old_dentry->d_name),
+			    new_dentry, &(new_dentry->d_name));
 
 	if (error == -EEXIST)
 	{
-		error = smb_proc_unlink(old_dir, &(new_dentry->d_name));
+		error = smb_proc_unlink(old_dentry, &(new_dentry->d_name));
 					
 		if (error)
 			return error;
 
-		error = smb_proc_mv(old_dir, &(old_dentry->d_name),
-				    new_dir, &(new_dentry->d_name));
+		error = smb_proc_mv(old_dentry, &(old_dentry->d_name),
+				    new_dentry, &(new_dentry->d_name));
 	}
 
 	if (error)

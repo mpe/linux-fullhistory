@@ -85,7 +85,7 @@ extern void update_one_process( struct task_struct *p,
  *	5AP.	Remote read is never used
  *	9AP.	XXX NEED TO CHECK WE HANDLE THIS XXX
  *	10AP.	XXX NEED TO CHECK WE HANDLE THIS XXX
- *	11AP.	Linux read the APIC between writes to avoid this, as per
+ *	11AP.	Linux reads the APIC between writes to avoid this, as per
  *		the documentation. Make sure you preserve this as it affects
  *		the C stepping chips too.
  *
@@ -887,10 +887,14 @@ __initfunc(void smp_boot_cpus(void))
 
 	/*
 	 *	Initialize the logical to physical cpu number mapping
+	 *	and the per-CPU profiling counter/multiplier
 	 */
 
-	for (i = 0; i < NR_CPUS; i++)
+	for (i = 0; i < NR_CPUS; i++) {
 		cpu_number_map[i] = -1;
+		prof_counter[i] = 1;
+		prof_multiplier[i] = 1;
+	}
 
 	/*
 	 *	Setup boot CPU information
@@ -917,15 +921,8 @@ __initfunc(void smp_boot_cpus(void))
 	 *	of here now!
 	 */
 
-	if (!smp_found_config) {
-		/*
-		 * For SMP-simulation on one CPU to work, we must initialize these 
-		 * values for the single CPU here:
-                 */
-	        prof_counter[0] = prof_multiplier[0] = 1;
-
+	if (!smp_found_config)
 		return;
-        }
 
 	/*
 	 *	Map the local APIC into kernel space
@@ -1625,7 +1622,6 @@ static unsigned int calibration_result;
 
 __initfunc(void setup_APIC_clock (void))
 {
-	int cpu = smp_processor_id();
 	unsigned long flags;
 
 	static volatile int calibration_lock;
@@ -1658,11 +1654,10 @@ __initfunc(void setup_APIC_clock (void))
 	}
 
 /*
- * Now set up the timer for real. Profiling multiplier is 1.
+ * Now set up the timer for real.
  */
-	setup_APIC_timer (calibration_result);
 
-	prof_counter[cpu] = prof_multiplier[cpu] = 1;
+	setup_APIC_timer (calibration_result);
 
 	/*
 	 * We ACK the APIC, just in case there is something pending.

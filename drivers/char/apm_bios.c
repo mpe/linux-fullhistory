@@ -40,6 +40,10 @@
  *         is only incorrect by 30-60mS (vs. 1S previously) (Gabor J. Toth
  *         <jtoth@princeton.edu>); improve interaction between
  *         screen-blanking and gpm (Stephen Rothwell); Linux 1.99.4
+ *    1.2a:Simple change to stop mysterious bug reports with SMP also added
+ *	   levels to the printk calls. APM is not defined for SMP machines.
+ *         The new replacment for it is, but Linux doesn't yet support this.
+ *         Alan Cox Linux 2.1.55
  *
  * Reference:
  *
@@ -492,9 +496,9 @@ static void apm_error(char *str, int err)
 	for (i = 0; i < ERROR_COUNT; i++)
 		if (error_table[i].key == err) break;
 	if (i < ERROR_COUNT)
-		printk("apm_bios: %s: %s\n", str, error_table[i].msg);
+		printk(KERN_NOTICE "apm_bios: %s: %s\n", str, error_table[i].msg);
 	else
-		printk("apm_bios: %s: unknown error code %#2.2x\n", str, err);
+		printk(KERN_NOTICE "apm_bios: %s: unknown error code %#2.2x\n", str, err);
 }
 
 /* Called from console driver -- must make sure apm_enabled. */
@@ -725,10 +729,10 @@ static void check_events(void)
 		}
 #ifdef APM_DEBUG
 		if (event <= NR_APM_EVENT_NAME)
-			printk("APM BIOS received %s notify\n",
+			printk(KERN_DEBUG "APM BIOS received %s notify\n",
 			       apm_event_name[event - 1]);
 		else
-			printk("APM BIOS received unknown event 0x%02x\n",
+			printk(KERN_DEBUG "APM BIOS received unknown event 0x%02x\n",
 			       event);
 #endif
 	}
@@ -802,7 +806,7 @@ void apm_do_busy(void)
 static int check_apm_bios_struct(struct apm_bios_struct *as, const char *func)
 {
 	if ((as == NULL) || (as->magic != APM_BIOS_MAGIC)) {
-		printk("apm_bios: %s passed bad filp", func);
+		printk(KERN_ERR "apm_bios: %s passed bad filp", func);
 		return 1;
 	}
 	return 0;
@@ -940,7 +944,7 @@ static int do_release(struct inode * inode, struct file * filp)
 		     as1 = as1->next)
 			;
 		if (as1 == NULL)
-			printk("apm_bios: filp not in user list");
+			printk(KERN_ERR "apm_bios: filp not in user list");
 		else
 			as1->next = as->next;
 	}
@@ -954,7 +958,7 @@ static int do_open(struct inode * inode, struct file * filp)
 
 	as = (struct apm_bios_struct *)kmalloc(sizeof(*as), GFP_KERNEL);
 	if (as == NULL) {
-		printk("apm_bios: cannot allocate struct of size %d bytes",
+		printk(KERN_ERR "apm_bios: cannot allocate struct of size %d bytes",
 		       sizeof(*as));
 		return -ENOMEM;
 	}
@@ -1070,17 +1074,21 @@ __initfunc(void apm_bios_init(void))
 	char *		bat_stat;
 	static struct proc_dir_entry *ent;
 
+#ifdef __SMP__
+	printk(KERN_NOTICE "APM disabled: APM is not SMP safe.\n");
+	return;
+#endif
 	if (apm_bios_info.version == 0) {
-		printk("APM BIOS not found.\n");
+		printk(KERN_INFO "APM BIOS not found.\n");
 		return;
 	}
-	printk("APM BIOS version %c.%c Flags 0x%02x (Driver version %s)\n",
+	printk(KERN_INFO "APM BIOS version %c.%c Flags 0x%02x (Driver version %s)\n",
 	       ((apm_bios_info.version >> 8) & 0xff) + '0',
 	       (apm_bios_info.version & 0xff) + '0',
 	       apm_bios_info.flags,
 	       driver_version);
 	if ((apm_bios_info.flags & APM_32_BIT_SUPPORT) == 0) {
-		printk("    No 32 bit BIOS support\n");
+		printk(KERN_INFO "    No 32 bit BIOS support\n");
 		return;
 	}
 
@@ -1091,7 +1099,7 @@ __initfunc(void apm_bios_init(void))
 	if (apm_bios_info.version == 0x001)
 		apm_bios_info.version = 0x100;
 
-	printk("    Entry %x:%lx cseg16 %x dseg %x",
+	printk(KERN_INFO "    Entry %x:%lx cseg16 %x dseg %x",
 	       apm_bios_info.cseg, apm_bios_info.offset,
 	       apm_bios_info.cseg_16, apm_bios_info.dseg);
 	if (apm_bios_info.version > 0x100)
@@ -1139,7 +1147,7 @@ __initfunc(void apm_bios_init(void))
 
 	error = apm_get_power_status(&bx, &cx, &dx);
 	if (error)
-		printk("    Power status not available\n");
+		printk(KERN_INFO "    Power status not available\n");
 	else {
 		switch ((bx >> 8) & 0xff) {
 		case 0: power_stat = "off line"; break;
@@ -1154,7 +1162,7 @@ __initfunc(void apm_bios_init(void))
 		case 3: bat_stat = "charging"; break;
 		default: bat_stat = "unknown"; break;
 		}
-		printk("    AC %s, battery status %s, battery life ",
+		printk(KERN_INFO "    AC %s, battery status %s, battery life ",
 		       power_stat, bat_stat);
 		if ((cx & 0xff) == 0xff)
 			printk("unknown\n");

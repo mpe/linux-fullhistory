@@ -257,14 +257,13 @@ done:
 static int trunc_all(struct inode * inode)
 {
 	struct super_block * sb;
-	char * res;
+	char dirty;
 
 	sb = inode->i_sb;
-	res = (char *)test_bit(I_DIRTY,&inode->i_state);
 	return trunc_direct(inode)
-	     | trunc_indirect(inode,sb->sv_ind0_size,&inode->u.sysv_i.i_data[10],0,res)
-	     | trunc_dindirect(inode,sb->sv_ind1_size,&inode->u.sysv_i.i_data[11],0,res)
-	     | trunc_tindirect(inode,sb->sv_ind2_size,&inode->u.sysv_i.i_data[12],0,res);
+	     | trunc_indirect(inode,sb->sv_ind0_size,&inode->u.sysv_i.i_data[10],0,&dirty)
+	     | trunc_dindirect(inode,sb->sv_ind1_size,&inode->u.sysv_i.i_data[11],0,&dirty)
+	     | trunc_tindirect(inode,sb->sv_ind2_size,&inode->u.sysv_i.i_data[12],0,&dirty);
 }
 
 

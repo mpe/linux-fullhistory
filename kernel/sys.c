@@ -158,45 +158,6 @@ asmlinkage int sys_getpriority(int which, int who)
 	return max_prio;
 }
 
-#ifndef __alpha__
-
-/*
- * Why do these exist?  Binary compatibility with some other standard?
- * If so, maybe they should be moved into the appropriate arch
- * directory.
- */
-
-asmlinkage int sys_profil(void)
-{
-	return -ENOSYS;
-}
-
-asmlinkage int sys_ftime(void)
-{
-	return -ENOSYS;
-}
-
-asmlinkage int sys_break(void)
-{
-	return -ENOSYS;
-}
-
-asmlinkage int sys_stty(void)
-{
-	return -ENOSYS;
-}
-
-asmlinkage int sys_gtty(void)
-{
-	return -ENOSYS;
-}
-
-asmlinkage int sys_prof(void)
-{
-	return -ENOSYS;
-}
-
-#endif
 
 extern asmlinkage int sys_kill(int, int);
 
@@ -480,40 +441,6 @@ out:
 	return error;
 }
 
-#ifndef __alpha__
-
-/*
- * Why do these exist?  Binary compatibility with some other standard?
- * If so, maybe they should be moved into the appropriate arch
- * directory.
- */
-
-asmlinkage int sys_phys(void)
-{
-	return -ENOSYS;
-}
-
-asmlinkage int sys_lock(void)
-{
-	return -ENOSYS;
-}
-
-asmlinkage int sys_mpx(void)
-{
-	return -ENOSYS;
-}
-
-asmlinkage int sys_ulimit(void)
-{
-	return -ENOSYS;
-}
-
-asmlinkage int sys_old_syscall(void)
-{
-	return -ENOSYS;
-}
-
-#endif
 
 /*
  * Unprivileged users may change the real uid to the effective uid
@@ -937,48 +864,6 @@ asmlinkage int sys_newuname(struct new_utsname * name)
 		return -EFAULT;
 	return 0;
 }
-
-#ifndef __alpha__
-
-/*
- * Move these to arch dependent dir since they are for
- * backward compatibility only?
- */
-
-#ifndef __sparc__
-asmlinkage int sys_uname(struct old_utsname * name)
-{
-	if (name && !copy_to_user(name, &system_utsname, sizeof (*name)))
-		return 0;
-	return -EFAULT;
-}
-#endif
-
-asmlinkage int sys_olduname(struct oldold_utsname * name)
-{
-	int error;
-
-	if (!name)
-		return -EFAULT;
-	if (!access_ok(VERIFY_WRITE,name,sizeof(struct oldold_utsname)))
-		return -EFAULT;
-  
-	error = __copy_to_user(&name->sysname,&system_utsname.sysname,__OLD_UTS_LEN);
-	error -= __put_user(0,name->sysname+__OLD_UTS_LEN);
-	error -= __copy_to_user(&name->nodename,&system_utsname.nodename,__OLD_UTS_LEN);
-	error -= __put_user(0,name->nodename+__OLD_UTS_LEN);
-	error -= __copy_to_user(&name->release,&system_utsname.release,__OLD_UTS_LEN);
-	error -= __put_user(0,name->release+__OLD_UTS_LEN);
-	error -= __copy_to_user(&name->version,&system_utsname.version,__OLD_UTS_LEN);
-	error -= __put_user(0,name->version+__OLD_UTS_LEN);
-	error -= __copy_to_user(&name->machine,&system_utsname.machine,__OLD_UTS_LEN);
-	error = __put_user(0,name->machine+__OLD_UTS_LEN);
-	error = error ? -EFAULT : 0;
-
-	return error;
-}
-
-#endif
 
 asmlinkage int sys_sethostname(char *name, int len)
 {

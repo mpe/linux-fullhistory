@@ -87,7 +87,7 @@ asmlinkage int old_readdir(unsigned int fd, void * dirent, unsigned int count)
 	if (!file->f_op || !file->f_op->readdir)
 		goto out;
 
-	error = file->f_op->readdir(inode, file, &buf, fillonedir);
+	error = file->f_op->readdir(file, &buf, fillonedir);
 	if (error < 0)
 		goto out;
 	error = buf.count;
@@ -173,7 +173,7 @@ asmlinkage int sys_getdents(unsigned int fd, void * dirent, unsigned int count)
 	if (!file->f_op || !file->f_op->readdir)
 		goto out;
 
-	error = file->f_op->readdir(inode, file, &buf, filldir);
+	error = file->f_op->readdir(file, &buf, filldir);
 	if (error < 0)
 		goto out;
 	lastdirent = buf.previous;

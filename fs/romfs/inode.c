@@ -261,8 +261,9 @@ romfs_copyfrom(struct inode *i, void *dest, unsigned long offset, unsigned long 
 }
 
 static int
-romfs_readdir(struct inode *i, struct file *filp, void *dirent, filldir_t filldir)
+romfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 {
+	struct inode *i = filp->f_dentry->d_inode;
 	struct romfs_inode ri;
 	unsigned long offset, maxoff;
 	int j, ino, nextfh;

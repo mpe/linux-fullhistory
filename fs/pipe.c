@@ -402,7 +402,7 @@ static struct inode * get_pipe_inode(void)
 			 * list because "mark_inode_dirty()" will think
 			 * that it already _is_ on the dirty list.
 			 */
-			inode->i_state = 1 << I_DIRTY;
+			inode->i_state = I_DIRTY;
 			inode->i_mode = S_IFIFO | S_IRUSR | S_IWUSR;
 			inode->i_uid = current->fsuid;
 			inode->i_gid = current->fsgid;

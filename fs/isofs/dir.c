@@ -23,7 +23,7 @@
 
 #include <asm/uaccess.h>
 
-static int isofs_readdir(struct inode *, struct file *, void *, filldir_t);
+static int isofs_readdir(struct file *, void *, filldir_t);
 
 static struct file_operations isofs_dir_operations =
 {
@@ -241,12 +241,13 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
  * handling split directory entries.. The real work is done by
  * "do_isofs_readdir()".
  */
-static int isofs_readdir(struct inode *inode, struct file *filp,
+static int isofs_readdir(struct file *filp,
 		void *dirent, filldir_t filldir)
 {
 	int result;
 	char * tmpname;
 	struct iso_directory_record * tmpde;
+	struct inode *inode = filp->f_dentry->d_inode;
 
 	if (!inode || !S_ISDIR(inode->i_mode))
 		return -EBADF;

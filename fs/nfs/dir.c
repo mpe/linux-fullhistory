@@ -48,7 +48,7 @@ struct nfs_dirent {
 
 static int nfs_dir_open(struct inode * inode, struct file * file);
 static long nfs_dir_read(struct inode *, struct file *, char *, unsigned long);
-static int nfs_readdir(struct inode *, struct file *, void *, filldir_t);
+static int nfs_readdir(struct file *, void *, filldir_t);
 static int nfs_lookup(struct inode *, struct dentry *);
 static int nfs_create(struct inode *, struct dentry *, int);
 static int nfs_mkdir(struct inode *, struct dentry *, int);
@@ -121,9 +121,7 @@ static struct nfs_dirent	dircache[NFS_MAX_DIRCACHE];
  * page cache (may require some fiddling for rsize < PAGE_SIZE).
  */
 
-static int
-nfs_readdir(struct inode *inode, struct file *filp, void *dirent,
-						filldir_t filldir)
+static int nfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 {
 	static struct wait_queue *readdir_wait = NULL;
 	struct wait_queue	**waitp = NULL;
@@ -133,6 +131,7 @@ nfs_readdir(struct inode *inode, struct file *filp, void *dirent,
 	u32			cookie;
 	int			ismydir, result;
 	int			i, j, index = 0;
+	struct inode 		*inode = filp->f_dentry->d_inode;
 
 	dfprintk(VFS, "NFS: nfs_readdir(%x/%ld)\n", inode->i_dev, inode->i_ino);
 	if (!inode || !S_ISDIR(inode->i_mode)) {

@@ -27,7 +27,7 @@ static long sysv_dir_read(struct inode * inode, struct file * filp,
 	return -EISDIR;
 }
 
-static int sysv_readdir(struct inode *, struct file *, void *, filldir_t);
+static int sysv_readdir(struct file *, void *, filldir_t);
 
 static struct file_operations sysv_dir_operations = {
 	NULL,			/* lseek - default */
@@ -65,9 +65,9 @@ struct inode_operations sysv_dir_inode_operations = {
 	NULL			/* permission */
 };
 
-static int sysv_readdir(struct inode * inode, struct file * filp,
-	void * dirent, filldir_t filldir)
+static int sysv_readdir(struct file * filp, void * dirent, filldir_t filldir)
 {
+	struct inode *inode = filp->f_dentry->d_inode;
 	struct super_block * sb;
 	unsigned int offset,i;
 	struct buffer_head * bh;

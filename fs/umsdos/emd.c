@@ -29,7 +29,7 @@ long umsdos_file_read_kmem (struct inode *inode,
 	unsigned long count)
 {
 	int ret;
-	int old_fs = get_fs();	
+	unsigned long old_fs = get_fs();	
 	set_fs (KERNEL_DS);
 	ret = fat_file_read(inode,filp,buf,count);
 	set_fs (old_fs);
@@ -44,7 +44,7 @@ long umsdos_file_write_kmem (struct inode *inode,
 	unsigned long count)
 {
 	int ret;
-	int old_fs = get_fs();
+	unsigned long old_fs = get_fs();
 	set_fs (KERNEL_DS);
 	ret = fat_file_write(inode,filp,buf,count);
 	set_fs (old_fs);

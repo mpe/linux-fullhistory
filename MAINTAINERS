@@ -138,9 +138,9 @@ L:	linux-net@vger.rutgers.edu
 S:	Maintained
 
 APPLETALK NETWORK LAYER
-P:	Alan Cox & University Of Michigan
-M:	net-patches@lxorguk.ukuu.org.uk
-L:	netatalk@umich.edu
+P:	Jay Schulist
+M:	Jay.Schulist@spacs.k12.wi.us
+L:	linux-atalk@netspace.org
 S:	Maintained
 
 DECnet NETWORK LAYER

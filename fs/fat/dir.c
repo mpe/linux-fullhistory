@@ -316,11 +316,11 @@ static int fat_filldir(
 }
 
 int fat_readdir(
-	struct inode *inode,
 	struct file *filp,
 	void *dirent,
 	filldir_t filldir)
 {
+	struct inode *inode = filp->f_dentry->d_inode;
 	return fat_readdirx(inode, filp, dirent, fat_filldir, filldir,
 			    0, 1, 0);
 }

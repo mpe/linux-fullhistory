@@ -325,7 +325,7 @@ extern int proc_match(int, const char *,struct proc_dir_entry *);
  * The /proc root directory has extended versions to take care
  * of the /proc/<pid> subdirectories.
  */
-extern int proc_readdir(struct inode *, struct file *, void *, filldir_t);
+extern int proc_readdir(struct file *, void *, filldir_t);
 extern int proc_lookup(struct inode *, struct dentry *);
 
 struct openpromfs_dev {

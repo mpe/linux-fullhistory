@@ -104,8 +104,8 @@ __u8 *smb_setup_header(struct smb_sb_info *server, __u8 command,
 		       __u16 wct, __u16 bcc);
 int smb_offerconn(struct smb_sb_info *server);
 int smb_newconn(struct smb_sb_info *server, struct smb_conn_opt *opt);
-int smb_close(struct inode *);
-int smb_open(struct inode *, int);
+int smb_close(struct dentry *);
+int smb_open(struct dentry *, int);
 static inline int
 smb_is_open(struct inode *i)
 {
@@ -114,18 +114,16 @@ smb_is_open(struct inode *i)
 
 int smb_proc_read(struct inode *, off_t, long, char *);
 int smb_proc_write(struct inode *, off_t, int, const char *);
-int smb_proc_create(struct inode *, struct qstr *, __u16, time_t);
-int smb_proc_mv(struct inode *, struct qstr *, struct inode *, struct qstr *);
-int smb_proc_mkdir(struct inode *, struct qstr *);
-int smb_proc_rmdir(struct inode *, struct qstr *);
-int smb_proc_unlink(struct inode *dir, struct qstr *);
-int smb_proc_readdir(struct inode *dir,
-                     int fpos, int cache_size, 
-		     struct smb_dirent *entry);
-int smb_proc_getattr(struct inode *dir, struct qstr *name,
+int smb_proc_create(struct dentry *, struct qstr *, __u16, time_t);
+int smb_proc_mv(struct dentry *, struct qstr *, struct dentry *, struct qstr *);
+int smb_proc_mkdir(struct dentry *, struct qstr *);
+int smb_proc_rmdir(struct dentry *, struct qstr *);
+int smb_proc_unlink(struct dentry *dir, struct qstr *);
+int smb_proc_readdir(struct dentry *dir, int fpos, int cache_size, struct smb_dirent *entry);
+int smb_proc_getattr(struct dentry *dir, struct qstr *name,
 		     struct smb_fattr *entry);
 int smb_proc_setattr(struct smb_sb_info *server,
-                     struct inode *ino,
+                     struct dentry *dir,
                      struct smb_fattr *new_finfo);
 int smb_proc_dskattr(struct super_block *sb, struct statfs *attr);
 int smb_proc_reconnect(struct smb_sb_info *server);

@@ -17,9 +17,9 @@
  * This is blatantly stolen from ext2fs
  */
 static int
-ufs_readdir (struct inode * inode, struct file * filp, void * dirent,
-	     filldir_t filldir)
+ufs_readdir (struct file * filp, void * dirent, filldir_t filldir)
 {
+	struct inode *inode = filp->f_dentry->d_inode;
 	int error = 0;
 	unsigned long offset, lblk, blk;
 	int i, stored;

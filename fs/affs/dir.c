@@ -23,7 +23,7 @@
 #include <linux/mm.h>
 #include <linux/amigaffs.h>
 
-static int affs_readdir(struct inode *, struct file *, void *, filldir_t);
+static int affs_readdir(struct file *, void *, filldir_t);
 static long affs_dir_read(struct inode * inode, struct file * filp, char * buf,
 			  unsigned long count);
 
@@ -69,7 +69,7 @@ affs_dir_read(struct inode *inode, struct file *filp, char *buf, unsigned long c
 }
 
 static int
-affs_readdir(struct inode *inode, struct file *filp, void *dirent, filldir_t filldir)
+affs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 {
 	int			 j, namelen;
 	s32			 i;
@@ -82,6 +82,7 @@ affs_readdir(struct inode *inode, struct file *filp, void *dirent, filldir_t fil
 	struct buffer_head	 *dir_bh;
 	struct buffer_head	 *fh_bh;
 	struct inode		 *dir;
+	struct inode 		 *inode = file->f_dentry->d_inode;
 
 	pr_debug("AFFS: readdir(ino=%ld,f_pos=%lu)\n",inode->i_ino,filp->f_pos);
 

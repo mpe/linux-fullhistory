@@ -15,7 +15,7 @@
 #include <linux/param.h>
 #include "autofs_i.h"
 
-static int autofs_root_readdir(struct inode *,struct file *,void *,filldir_t);
+static int autofs_root_readdir(struct file *,void *,filldir_t);
 static int autofs_root_lookup(struct inode *,struct dentry *);
 static int autofs_root_symlink(struct inode *,struct dentry *,const char *);
 static int autofs_root_unlink(struct inode *,struct dentry *);
@@ -63,11 +63,11 @@ struct inode_operations autofs_root_inode_operations = {
 	NULL			/* revalidate */
 };
 
-static int autofs_root_readdir(struct inode *inode, struct file *filp,
-			       void *dirent, filldir_t filldir)
+static int autofs_root_readdir(struct file *filp, void *dirent, filldir_t filldir)
 {
 	struct autofs_dir_ent *ent;
 	struct autofs_dirhash *dirhash;
+	struct inode * inode = filp->f_dentry->d_inode;
 	off_t onr, nr;
 
 	if (!inode || !S_ISDIR(inode->i_mode))

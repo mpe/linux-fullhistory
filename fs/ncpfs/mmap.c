@@ -38,7 +38,7 @@ static unsigned long ncp_file_mmap_nopage(struct vm_area_struct *area,
 	unsigned long tmp;
 	int bufsize;
 	int pos;
-	unsigned short fs;
+	unsigned long fs;
 
 	page = __get_free_page(GFP_KERNEL);
 	if (!page)

@@ -12,6 +12,7 @@
  */
 
 #include <linux/config.h>
+#include <asm/processor.h>
 
 #define CONFIG_BUGi386
 
@@ -41,10 +42,11 @@ __initfunc(static void copro_timeout(void))
 	outb_p(0,0xf0);
 }
 
+static double __initdata x = 4195835.0;
+static double __initdata y = 3145727.0;
+
 __initfunc(static void check_fpu(void))
 {
-	static double x = 4195835.0;
-	static double y = 3145727.0;
 	unsigned short control_word;
 
 	if (!hard_math) {
@@ -91,12 +93,10 @@ __initfunc(static void check_fpu(void))
 		"fninit"
 		: "=m" (*&fdiv_bug)
 		: "m" (*&x), "m" (*&y));
-	if (!fdiv_bug) {
+	if (!fdiv_bug)
 		printk("Ok, fpu using exception 16 error reporting.\n");
-		return;
-
-	}
-	printk("Hmm, FDIV bug i%c86 system\n", '0'+x86);
+	else
+		printk("Hmm, fpu using exception 16 error reporting with FDIV bug.\n");
 }
 
 __initfunc(static void check_hlt(void))
@@ -125,10 +125,53 @@ __initfunc(static void check_tlb(void))
 #endif
 }
 
+/*
+ *	Most 386 processors have a bug where a POPAD can lock the 
+ *	machine even from user space.
+ */
+ 
+__initfunc(static void check_popad(void))
+{
+#ifdef CONFIG_M386
+	int res, inp = (int) &res;
+
+	printk(KERN_INFO "Checking for popad bug... ");
+	__asm__ __volatile__( 
+	  "movl $12345678,%%eax; movl $0,%%edi; pusha; popa; movl (%%edx,%%edi),%%ecx "
+	  : "=eax" (res)
+	  : "edx" (inp)
+	  : "eax", "ecx", "edx", "edi" );
+	/* If this fails, it means that any user program may lock CPU hard. Too bad. */
+	if (res != 12345678) printk( "Bad.\n" );
+		        else printk( "Ok.\n" );
+#endif
+}
+
+/*
+ *	B step AMD K6 before B 9729AIJW have hardware bugs that can cause
+ *	misexecution of code under Linux. Owners of such processors should
+ *	contact AMD for precise details and a CPU swap.
+ *
+ *	See	http://www.creaweb.fr/bpc/k6bug_faq.html
+ *		http://www.amd.com/K6/k6docs/revgd.html
+ */
+ 
+__initfunc(static void check_amd_k6(void))
+{
+	/* B Step AMD K6 */
+	if(x86_model==6 && x86_mask==1 && memcmp(x86_vendor_id, "AuthenticAMD", 12)==0)
+	{
+		printk(KERN_INFO "AMD K6 stepping B detected - system stability may be impaired. Please see.\n");
+		printk(KERN_INFO "http://www.creaweb.fr/bpc/k6bug_faq.html");
+	}
+}
+
 __initfunc(static void check_bugs(void))
 {
 	check_tlb();
 	check_fpu();
 	check_hlt();
+	check_popad();
+	check_amd_k6();
 	system_utsname.machine[1] = '0' + x86;
 }

@@ -492,20 +492,6 @@ scheduling_in_interrupt:
 	*(int *)0 = 0;
 }
 
-#ifndef __alpha__
-
-/*
- * For backwards compatibility?  This can be done in libc so Alpha
- * and all newer ports shouldn't need it.
- */
-asmlinkage int sys_pause(void)
-{
-	current->state = TASK_INTERRUPTIBLE;
-	schedule();
-	return -ERESTARTNOHAND;
-}
-
-#endif
 
 rwlock_t waitqueue_lock = RW_LOCK_UNLOCKED;
 

@@ -104,7 +104,9 @@ if [ "$CONFIG_WATCHDOG" != "n" ]; then
   tristate '   Acquire SBC Watchdog Timer' CONFIG_ACQUIRE_WDT
 fi
 bool 'Enhanced Real Time Clock Support' CONFIG_RTC
-bool 'Tadpole ANA H8 Support'  CONFIG_H8
+if [ "$CONFIG_PPC" == "y" ]; then
+  bool 'Tadpole ANA H8 Support'  CONFIG_H8
+fi
 tristate '/dev/nvram support' CONFIG_NVRAM
 tristate 'PC joystick support' CONFIG_JOYSTICK
 endmenu

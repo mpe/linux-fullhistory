@@ -13,7 +13,7 @@
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 
-static int proc_readfd(struct inode *, struct file *, void *, filldir_t);
+static int proc_readfd(struct file *, void *, filldir_t);
 static int proc_lookupfd(struct inode *, struct dentry *);
 
 static struct file_operations proc_fd_operations = {
@@ -124,13 +124,14 @@ static int proc_lookupfd(struct inode * dir, struct dentry * dentry)
 
 #define NUMBUF 10
 
-static int proc_readfd(struct inode * inode, struct file * filp,
+static int proc_readfd(struct file * filp,
 	void * dirent, filldir_t filldir)
 {
 	char buf[NUMBUF];
 	struct task_struct * p, **tarrayp;
 	unsigned int fd, pid, ino;
 	unsigned long i,j;
+	struct inode *inode = filp->f_dentry->d_inode;
 
 	if (!inode || !S_ISDIR(inode->i_mode))
 		return -EBADF;

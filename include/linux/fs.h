@@ -356,14 +356,14 @@ struct inode {
 };
 
 /* Inode state bits.. */
-#define I_DIRTY		0
-#define I_LOCK		1
-#define I_FREEING	2
+#define I_DIRTY		1
+#define I_LOCK		2
+#define I_FREEING	4
 
 extern void __mark_inode_dirty(struct inode *);
 static inline void mark_inode_dirty(struct inode *inode)
 {
-	if (!test_and_set_bit(I_DIRTY, &inode->i_state))
+	if (!(inode->i_state & I_DIRTY))
 		__mark_inode_dirty(inode);
 }
 
@@ -532,7 +532,7 @@ struct file_operations {
 	long long (*llseek) (struct inode *, struct file *, long long, int);
 	long (*read) (struct inode *, struct file *, char *, unsigned long);
 	long (*write) (struct inode *, struct file *, const char *, unsigned long);
-	int (*readdir) (struct inode *, struct file *, void *, filldir_t);
+	int (*readdir) (struct file *, void *, filldir_t);
 	unsigned int (*poll) (struct file *, poll_table *);
 	int (*ioctl) (struct inode *, struct file *, unsigned int, unsigned long);
 	int (*mmap) (struct inode *, struct file *, struct vm_area_struct *);

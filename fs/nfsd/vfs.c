@@ -476,7 +476,7 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 #endif
 		}
 
-		if (test_bit(I_DIRTY, &inode->i_state)) {
+		if (inode->i_state & I_DIRTY) {
 			dprintk("nfsd: write sync %d\n", current->pid);
 			nfsd_sync(inode, &file);
 			write_inode_now(inode);
@@ -928,8 +928,7 @@ nfsd_readdir(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 			file.f_inode->i_dev, file.f_inode->i_ino,
 			(int) file.f_pos, (int) oldlen, (int) cd.buflen);
 		 */
-		err = file.f_op->readdir(inode, &file,
-					 &cd, (filldir_t) func);
+		err = file.f_op->readdir(&file, &cd, (filldir_t) func);
 
 		if (err < 0) {
 			nfsd_close(&file);

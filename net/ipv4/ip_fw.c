@@ -1120,7 +1120,9 @@ static int ip_chain_procinfo(int stage, char *buffer, char **start,
 			ntohl(i->fw_dst.s_addr),ntohl(i->fw_dmsk.s_addr),
 			(i->fw_vianame)[0] ? i->fw_vianame : "-",
 			ntohl(i->fw_via.s_addr),i->fw_flg);
-		len+=sprintf(buffer+len,"%u %u %-9lu %-9lu",
+		/* 9 is enough for a 32 bit box but the counters are 64bit on
+		   the Alpha and Ultrapenguin */
+		len+=sprintf(buffer+len,"%u %u %-19lu %-19lu",
 			i->fw_nsp,i->fw_ndp, i->fw_pcnt,i->fw_bcnt);
 		for (p = 0; p < IP_FW_MAX_PORTS; p++)
 			len+=sprintf(buffer+len, " %u", i->fw_pts[p]);

@@ -43,7 +43,10 @@ static LIST_HEAD(inode_unused);
 static struct list_head inode_hashtable[HASH_SIZE];
 
 /*
- * A simple spinlock to protect the list manipulations
+ * A simple spinlock to protect the list manipulations.
+ *
+ * NOTE! You also have to own the lock if you change
+ * the i_state of an inode while it is in use..
  */
 spinlock_t inode_lock = SPIN_LOCK_UNLOCKED;
 
@@ -67,16 +70,16 @@ void __mark_inode_dirty(struct inode *inode)
 
 	if (sb) {
 		spin_lock(&inode_lock);
-		list_del(&inode->i_list);
-		list_add(&inode->i_list, &sb->s_dirty);
+		if (!(inode->i_state & I_DIRTY)) {
+			inode->i_state |= I_DIRTY;
+			/* Only add valid (ie hashed) inodes to the dirty list */
+			if (!list_empty(&inode->i_hash)) {
+				list_del(&inode->i_list);
+				list_add(&inode->i_list, &sb->s_dirty);
+			}
+		}
 		spin_unlock(&inode_lock);
 	}
-}
-
-static inline void unlock_inode(struct inode *inode)
-{
-	clear_bit(I_LOCK, &inode->i_state);
-	wake_up(&inode->i_wait);
 }
 
 static void __wait_on_inode(struct inode * inode)
@@ -86,7 +89,7 @@ static void __wait_on_inode(struct inode * inode)
 	add_wait_queue(&inode->i_wait, &wait);
 repeat:
 	current->state = TASK_UNINTERRUPTIBLE;
-	if (test_bit(I_LOCK, &inode->i_state)) {
+	if (inode->i_state & I_LOCK) {
 		schedule();
 		goto repeat;
 	}
@@ -96,7 +99,7 @@ repeat:
 
 static inline void wait_on_inode(struct inode *inode)
 {
-	if (test_bit(I_LOCK, &inode->i_state))
+	if (inode->i_state & I_LOCK)
 		__wait_on_inode(inode);
 }
 
@@ -146,31 +149,34 @@ static inline void write_inode(struct inode *inode)
 		inode->i_sb->s_op->write_inode(inode);
 }
 
-static inline void sync_one(struct list_head *head, struct list_head *clean,
-			    struct list_head *placement, struct inode *inode)
+static inline void sync_one(struct inode *inode)
 {
-	list_del(placement);
-	if (test_bit(I_LOCK, &inode->i_state)) {
-		list_add(placement, head);
+	if (inode->i_state & I_LOCK) {
 		spin_unlock(&inode_lock);
 		__wait_on_inode(inode);
+		spin_lock(&inode_lock);
 	} else {
-		list_add(placement, clean);
-		clear_bit(I_DIRTY, &inode->i_state);
-		set_bit(I_LOCK, &inode->i_state);
+		list_del(&inode->i_list);
+		list_add(&inode->i_list, &inode_in_use);
+
+		/* Set I_LOCK, reset I_DIRTY */
+		inode->i_state ^= I_DIRTY | I_LOCK;
 		spin_unlock(&inode_lock);
+
 		write_inode(inode);
-		unlock_inode(inode);
+
+		spin_lock(&inode_lock);
+		inode->i_state &= ~I_LOCK;
+		wake_up(&inode->i_wait);
 	}
-	spin_lock(&inode_lock);
 }
 
-static inline void sync_list(struct list_head *head, struct list_head *clean)
+static inline void sync_list(struct list_head *head)
 {
 	struct list_head * tmp;
 
 	while ((tmp = head->prev) != head)
-		sync_one(head, clean, tmp, list_entry(tmp, struct inode, i_list));
+		sync_one(list_entry(tmp, struct inode, i_list));
 }
 
 /*
@@ -192,7 +198,7 @@ void sync_inodes(kdev_t dev)
 		if (dev && sb->s_dev != dev)
 			continue;
 
-		sync_list(&sb->s_dirty, &inode_in_use);
+		sync_list(&sb->s_dirty);
 		if (dev)
 			break;
 	}
@@ -208,9 +214,8 @@ void write_inode_now(struct inode *inode)
 
 	if (sb) {
 		spin_lock(&inode_lock);
-		if (test_bit(I_DIRTY, &inode->i_state))
-			sync_one(&sb->s_dirty, &inode_in_use, &inode->i_list,
-				 inode);
+		if (inode->i_state & I_DIRTY)
+			sync_one(inode);
 		spin_unlock(&inode_lock);
 	}
 	else
@@ -393,7 +398,6 @@ void clean_inode(struct inode *inode)
 static inline void read_inode(struct inode *inode, struct super_block *sb)
 {
 	sb->s_op->read_inode(inode);
-	unlock_inode(inode);
 }
 
 struct inode * get_empty_inode(void)
@@ -451,10 +455,24 @@ add_new_inode:
 		inode->i_ino = ino;
 		inode->i_flags = sb->s_flags;
 		inode->i_count = 1;
-		inode->i_state = 1 << I_LOCK;
+		inode->i_state = I_LOCK;
 		spin_unlock(&inode_lock);
+
 		clean_inode(inode);
 		read_inode(inode, sb);
+
+		/*
+		 * This is special!  We do not need the spinlock
+		 * when clearing I_LOCK, because we're guaranteed
+		 * that nobody else tries to do anything about the
+		 * state of the inode when it is locked, as we
+		 * just created it (so there can be no old holders
+		 * that haven't tested I_LOCK).
+		 *
+		 * Verify this some day!
+		 */
+		inode->i_state &= ~I_LOCK;
+
 		return inode;
 	}
 

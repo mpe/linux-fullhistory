@@ -347,7 +347,7 @@ void ext2_truncate (struct inode * inode)
 		retry |= trunc_tindirect (inode);
 		if (!retry)
 			break;
-		if (IS_SYNC(inode) && test_bit(I_DIRTY, &inode->i_state))
+		if (IS_SYNC(inode) && (inode->i_state & I_DIRTY))
 			ext2_sync_inode (inode);
 		current->counter = 0;
 		schedule ();

@@ -23,7 +23,7 @@
  */
 #define FIRST_PROCESS_ENTRY 256
 
-static int proc_root_readdir(struct inode *, struct file *, void *, filldir_t);
+static int proc_root_readdir(struct file *, void *, filldir_t);
 static int proc_root_lookup(struct inode *,struct dentry *);
 
 static unsigned char proc_alloc_map[PROC_NDYNAMIC / 8] = {0};
@@ -734,12 +734,13 @@ static int proc_root_lookup(struct inode * dir, struct dentry * dentry)
  * value of the readdir() call, as long as it's non-negative
  * for success..
  */
-int proc_readdir(struct inode * inode, struct file * filp,
+int proc_readdir(struct file * filp,
 	void * dirent, filldir_t filldir)
 {
 	struct proc_dir_entry * de;
 	unsigned int ino;
 	int i;
+	struct inode *inode = filp->f_dentry->d_inode;
 
 	if (!inode || !S_ISDIR(inode->i_mode))
 		return -ENOTDIR;
@@ -786,7 +787,7 @@ int proc_readdir(struct inode * inode, struct file * filp,
 
 #define NUMBUF 10
 
-static int proc_root_readdir(struct inode * inode, struct file * filp,
+static int proc_root_readdir(struct file * filp,
 	void * dirent, filldir_t filldir)
 {
 	struct task_struct *p;
@@ -794,7 +795,7 @@ static int proc_root_readdir(struct inode * inode, struct file * filp,
 	unsigned int nr = filp->f_pos;
 
 	if (nr < FIRST_PROCESS_ENTRY) {
-		int error = proc_readdir(inode, filp, dirent, filldir);
+		int error = proc_readdir(filp, dirent, filldir);
 		if (error <= 0)
 			return error;
 		filp->f_pos = FIRST_PROCESS_ENTRY;

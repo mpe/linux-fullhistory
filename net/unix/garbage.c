@@ -29,6 +29,8 @@
  *	2 of the License, or (at your option) any later version.
  *
  *  Fixes:
+ *	Alan Cox	07 Sept	1997	Vmalloc internal stack as needed.
+ *					Cope with changing max_files.
  *
  */
  
@@ -49,6 +51,8 @@
 #include <linux/in.h>
 #include <linux/fs.h>
 #include <linux/malloc.h>
+#include <linux/vmalloc.h>
+
 #include <asm/uaccess.h>
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
@@ -60,10 +64,9 @@
 
 /* Internal data structures and random procedures: */
 
-#define MAX_STACK 1000		/* Maximum depth of tree (about 1 page) */
 static unix_socket **stack;	/* stack of objects to mark */
 static int in_stack = 0;	/* first free entry in stack */
-
+static int max_stack;		/* Top of stack */
 
 extern inline unix_socket *unix_get_socket(struct file *filp)
 {
@@ -112,7 +115,7 @@ void unix_notinflight(struct file *fp)
  
 extern inline void push_stack(unix_socket *x)
 {
-	if (in_stack == MAX_STACK)
+	if (in_stack == max_stack)
 		panic("can't push onto full stack");
 	stack[in_stack++] = x;
 }
@@ -155,7 +158,19 @@ void unix_gc(void)
 		return;
 	in_unix_gc=1;
 	
-	stack=(unix_socket **)get_free_page(GFP_KERNEL);
+	if(stack==NULL || max_files>max_stack)
+	{
+		if(stack)
+			vfree(stack);
+		stack=(unix_socket **)vmalloc(max_files*sizeof(struct unix_socket *));
+		if(stack==NULL)
+		{
+			printk(KERN_NOTICE "unix_gc: deferred due to low memory.\n");
+			in_unix_gc=0;
+			return;
+		}
+		max_stack=max_files;
+	}
 	
 	/*
 	 *	Assume everything is now unmarked 

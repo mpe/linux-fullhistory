@@ -86,7 +86,7 @@ smb_data_callback(struct sock *sk, int len)
 	{
 		unsigned char peek_buf[4];
 		int result;
-		unsigned short fs;
+		unsigned long fs;
 
 		fs = get_fs();
 		set_fs(get_ds());
@@ -276,7 +276,7 @@ smb_get_length(struct socket *sock, unsigned char *header)
 {
 	int result;
 	unsigned char peek_buf[4];
-	unsigned short fs;
+	unsigned long fs;
 
       re_recv:
 	fs = get_fs();
@@ -500,7 +500,7 @@ int
 smb_request(struct smb_sb_info *server)
 {
 	unsigned long old_mask;
-	unsigned short fs;
+	unsigned long fs;
 	int len, result;
 
 	unsigned char *buffer = (server == NULL) ? NULL : server->packet;
@@ -649,7 +649,7 @@ smb_trans2_request(struct smb_sb_info *server, __u16 trans2_command,
 		   int *lrparam, unsigned char **rparam)
 {
 	unsigned long old_mask;
-	unsigned short fs;
+	unsigned long fs;
 	int result;
 
 	pr_debug("smb_trans2_request: com=%d, ld=%d, lp=%d\n",

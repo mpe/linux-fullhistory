@@ -31,7 +31,7 @@ static long
  ncp_dir_read(struct inode *inode, struct file *filp, char *buf, unsigned long count);
 
 static int
- ncp_readdir(struct inode *inode, struct file *filp,
+ ncp_readdir(struct file *filp,
 	     void *dirent, filldir_t filldir);
 
 static int
@@ -210,12 +210,13 @@ static inline void ncp_unlock_dircache(void)
 	wake_up(&c_wait);
 }
 
-static int ncp_readdir(struct inode *inode, struct file *filp,
+static int ncp_readdir(struct file *filp,
 		       void *dirent, filldir_t filldir)
 {
 	int result = 0;
 	int i = 0;
 	int index = 0;
+	struct inode *inode = file->f_dentry->d_inode;
 	struct ncp_dirent *entry = NULL;
 	struct ncp_server *server = NCP_SERVER(inode);
 	struct ncp_inode_info *dir = NCP_INOP(inode);

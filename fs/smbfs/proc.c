@@ -98,12 +98,12 @@ static int smb_d_path(struct dentry * entry, char * buf)
 }
 
 static char *smb_encode_path(struct smb_sb_info *server, char *buf,
-			     struct inode *dir, struct qstr *name)
+			     struct dentry *dir, struct qstr *name)
 {
 	char *start = buf;
 
 	if (dir != NULL)
-		buf += smb_d_path(i_dentry(dir), buf);
+		buf += smb_d_path(dir, buf);
 
 	if (name != NULL) {
 		*buf++ = '\\';
@@ -510,8 +510,9 @@ smb_setup_bcc(struct smb_sb_info *server, __u8 * p)
  */
 
 static int
-smb_proc_open(struct inode *ino)
+smb_proc_open(struct dentry *dir)
 {
+	struct inode *ino = dir->d_inode;
 	struct smb_sb_info *server = SMB_SERVER(ino);
 	int error;
 	char *p;
@@ -521,7 +522,7 @@ smb_proc_open(struct inode *ino)
 	WSET(server->packet, smb_vwv0, 0x42);	/* read/write */
 	WSET(server->packet, smb_vwv1, aSYSTEM | aHIDDEN | aDIR);
 	*p++ = 4;
-	p = smb_encode_path(server, p, ino, NULL);
+	p = smb_encode_path(server, p, dir, NULL);
 	smb_setup_bcc(server, p);
 
 	if ((error = smb_request_ok(server, SMBopen, 7, 0)) != 0)
@@ -537,7 +538,7 @@ smb_proc_open(struct inode *ino)
 		WSET(server->packet, smb_vwv0, 0x40);	/* read only */
 		WSET(server->packet, smb_vwv1, aSYSTEM | aHIDDEN | aDIR);
 		*p++ = 4;
-		p = smb_encode_path(server, p, ino, NULL);
+		p = smb_encode_path(server, p, dir, NULL);
 		smb_setup_bcc(server, p);
 
 		if ((error = smb_request_ok(server, SMBopen, 7, 0)) != 0)
@@ -562,15 +563,16 @@ smb_proc_open(struct inode *ino)
 }
 
 int
-smb_open(struct inode *i, int wish)
+smb_open(struct dentry *dir, int wish)
 {
+	struct inode *i=dir->d_inode;
 	struct smb_sb_info *server = SMB_SERVER(i);
 	int result = -EACCES;
 
 	smb_lock_server(server);
 
 	if (!smb_is_open(i)) {
-		int error = smb_proc_open(i);
+		int error = smb_proc_open(dir);
 		if (error) {
 			smb_unlock_server(server);
 			return error;
@@ -600,8 +602,9 @@ static int smb_proc_close(struct smb_sb_info *server,
 }
 	
 
-int smb_close(struct inode *ino)
+int smb_close(struct dentry *dir)
 {
+	struct inode *ino = dir->d_inode;
 	struct smb_sb_info *server = SMB_SERVER(ino);
 	int result;
 
@@ -691,12 +694,13 @@ smb_proc_write(struct inode *ino, off_t offset, int count, const char *data)
 }
 
 int
-smb_proc_create(struct inode *dir, struct qstr *name,
+smb_proc_create(struct dentry *dir, struct qstr *name,
 		__u16 attr, time_t ctime)
 {
 	int error;
 	char *p;
-	struct smb_sb_info *server = SMB_SERVER(dir);
+	struct inode *i=dir->d_inode;
+	struct smb_sb_info *server = SMB_SERVER(i);
 	char *buf;
 
 	smb_lock_server(server);
@@ -725,11 +729,11 @@ smb_proc_create(struct inode *dir, struct qstr *name,
 }
 
 int
-smb_proc_mv(struct inode *odir, struct qstr *oname,
-	    struct inode *ndir, struct qstr *nname)
+smb_proc_mv(struct dentry *odir, struct qstr *oname,
+	    struct dentry *ndir, struct qstr *nname)
 {
 	char *p;
-	struct smb_sb_info *server = SMB_SERVER(odir);
+	struct smb_sb_info *server = SMB_SERVER(odir->d_inode);
 	int result;
 
 	smb_lock_server(server);
@@ -755,11 +759,11 @@ smb_proc_mv(struct inode *odir, struct qstr *oname,
 }
 
 int
-smb_proc_mkdir(struct inode *dir, struct qstr *name)
+smb_proc_mkdir(struct dentry *dir, struct qstr *name)
 {
 	char *p;
 	int result;
-	struct smb_sb_info *server = SMB_SERVER(dir);
+	struct smb_sb_info *server = SMB_SERVER(dir->d_inode);
 
 	smb_lock_server(server);
 
@@ -781,11 +785,11 @@ smb_proc_mkdir(struct inode *dir, struct qstr *name)
 }
 
 int
-smb_proc_rmdir(struct inode *dir, struct qstr *name)
+smb_proc_rmdir(struct dentry *dir, struct qstr *name)
 {
 	char *p;
 	int result;
-	struct smb_sb_info *server = SMB_SERVER(dir);
+	struct smb_sb_info *server = SMB_SERVER(dir->d_inode);
 
 	smb_lock_server(server);
 
@@ -807,10 +811,10 @@ smb_proc_rmdir(struct inode *dir, struct qstr *name)
 }
 
 int
-smb_proc_unlink(struct inode *dir, struct qstr *name)
+smb_proc_unlink(struct dentry *dir, struct qstr *name)
 {
 	char *p;
-	struct smb_sb_info *server = SMB_SERVER(dir);
+	struct smb_sb_info *server = SMB_SERVER(dir->d_inode);
 	int result;
 
 	smb_lock_server(server);
@@ -956,7 +960,7 @@ smb_decode_dirent(struct smb_sb_info *server, __u8 *p,
    SMB_PROTOCOL_LANMAN2 */
 
 static int
-smb_proc_readdir_short(struct smb_sb_info *server, struct inode *dir, int fpos,
+smb_proc_readdir_short(struct smb_sb_info *server, struct dentry *dir, int fpos,
 		       int cache_size, struct smb_dirent *entry)
 {
 	char *p;
@@ -1135,7 +1139,7 @@ smb_decode_long_dirent(struct smb_sb_info *server, char *p,
 }
 
 static int
-smb_proc_readdir_long(struct smb_sb_info *server, struct inode *dir, int fpos,
+smb_proc_readdir_long(struct smb_sb_info *server, struct dentry *dir, int fpos,
 		      int cache_size, struct smb_dirent *cache)
 {
 	/* NT uses 260, OS/2 uses 2. Both accept 1. */
@@ -1335,10 +1339,10 @@ smb_proc_readdir_long(struct smb_sb_info *server, struct inode *dir, int fpos,
 }
 
 int
-smb_proc_readdir(struct inode *dir, int fpos,
+smb_proc_readdir(struct dentry *dir, int fpos,
 		 int cache_size, struct smb_dirent *entry)
 {
-	struct smb_sb_info *server = SMB_SERVER(dir);
+	struct smb_sb_info *server = SMB_SERVER(dir->d_inode);
 
 	if (server->opt.protocol >= SMB_PROTOCOL_LANMAN2)
 		return smb_proc_readdir_long(server, dir, fpos, cache_size,
@@ -1349,12 +1353,12 @@ smb_proc_readdir(struct inode *dir, int fpos,
 }
 
 static int
-smb_proc_getattr_core(struct inode *dir, struct qstr *name,
+smb_proc_getattr_core(struct dentry *dir, struct qstr *name,
 		      struct smb_fattr *attr)
 {
 	int result;
 	char *p;
-	struct smb_sb_info *server = SMB_SERVER(dir);
+	struct smb_sb_info *server = SMB_SERVER(dir->d_inode);
 	char *buf;
 
 	smb_lock_server(server);
@@ -1385,10 +1389,10 @@ smb_proc_getattr_core(struct inode *dir, struct qstr *name,
 }
 
 static int
-smb_proc_getattr_trans2(struct inode *dir, struct qstr *name,
+smb_proc_getattr_trans2(struct dentry *dir, struct qstr *name,
 			struct smb_fattr *attr)
 {
-	struct smb_sb_info *server = SMB_SERVER(dir);
+	struct smb_sb_info *server = SMB_SERVER(dir->d_inode);
 	char param[SMB_MAXPATHLEN + 20];
 	char *p;
 	int result;
@@ -1441,10 +1445,10 @@ smb_proc_getattr_trans2(struct inode *dir, struct qstr *name,
 	return 0;
 }
 
-int smb_proc_getattr(struct inode *dir, struct qstr *name,
+int smb_proc_getattr(struct dentry *dir, struct qstr *name,
 		     struct smb_fattr *fattr)
 {
-	struct smb_sb_info *server = SMB_SERVER(dir);
+	struct smb_sb_info *server = SMB_SERVER(dir->d_inode);
 	int result = 0;
 
 	smb_init_dirent(server, fattr);
@@ -1465,7 +1469,7 @@ int smb_proc_getattr(struct inode *dir, struct qstr *name,
    entry->f_mtime, to make touch work. */
 static int
 smb_proc_setattr_core(struct smb_sb_info *server,
-		      struct inode *i, struct smb_fattr *fattr)
+		      struct dentry *dir, struct smb_fattr *fattr)
 {
 	char *p;
 	char *buf;
@@ -1479,7 +1483,7 @@ smb_proc_setattr_core(struct smb_sb_info *server,
 	WSET(buf, smb_vwv0, fattr->attr);
 	DSET(buf, smb_vwv1, utc2local(fattr->f_mtime));
 	*p++ = 4;
-	p = smb_encode_path(server, p, i, NULL);
+	p = smb_encode_path(server, p, dir, NULL);
 	*p++ = 4;
 	*p++ = 0;
 
@@ -1494,7 +1498,7 @@ smb_proc_setattr_core(struct smb_sb_info *server,
 
 static int
 smb_proc_setattr_trans2(struct smb_sb_info *server,
-			struct inode *i, struct smb_fattr *fattr)
+			struct dentry *dir, struct smb_fattr *fattr)
 {
 	char param[SMB_MAXPATHLEN + 20];
 	char data[26];
@@ -1508,7 +1512,7 @@ smb_proc_setattr_trans2(struct smb_sb_info *server,
 
 	WSET(param, 0, 1);	/* Info level SMB_INFO_STANDARD */
 	DSET(param, 2, 0);
-	p = smb_encode_path(server, param + 6, i, NULL);
+	p = smb_encode_path(server, param + 6, dir, NULL);
 
 	date_unix2dos(fattr->f_ctime, &(data[0]), &(data[2]));
 	date_unix2dos(fattr->f_atime, &(data[4]), &(data[6]));
@@ -1539,16 +1543,16 @@ smb_proc_setattr_trans2(struct smb_sb_info *server,
 }
 
 int
-smb_proc_setattr(struct smb_sb_info *server, struct inode *inode,
+smb_proc_setattr(struct smb_sb_info *server, struct dentry *dir,
 		 struct smb_fattr *fattr)
 {
 	int result;
 
 	if (server->opt.protocol >= SMB_PROTOCOL_LANMAN2)
-		result = smb_proc_setattr_trans2(server, inode, fattr);
+		result = smb_proc_setattr_trans2(server, dir, fattr);
 
 	if ((server->opt.protocol < SMB_PROTOCOL_LANMAN2) || (result < 0))
-		result = smb_proc_setattr_core(server, inode, fattr);
+		result = smb_proc_setattr_core(server, dir, fattr);
 
 	return result;
 }

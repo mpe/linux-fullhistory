@@ -65,15 +65,15 @@ struct ip_fw
 	struct in_addr fw_smsk, fw_dmsk;	/* Mask for src and dest IP addr */
 	struct in_addr fw_via;			/* IP address of interface "via" */
 	struct device *fw_viadev;		/* device of interface "via" */
-	unsigned short fw_flg;			/* Flags word */
-	unsigned short fw_nsp, fw_ndp;          /* N'of src ports and # of dst ports */
+	__u16	fw_flg;				/* Flags word */
+	__u16 	fw_nsp, fw_ndp;			/* N'of src ports and # of dst ports */
 						/* in ports array (dst ports follow */
     						/* src ports; max of 10 ports in all; */
     						/* count of 0 means match all ports) */
 #define IP_FW_MAX_PORTS	10      		/* A reasonable maximum */
-	unsigned short fw_pts[IP_FW_MAX_PORTS]; /* Array of port numbers to match */
+	__u16	fw_pts[IP_FW_MAX_PORTS];	/* Array of port numbers to match */
 	unsigned long  fw_pcnt,fw_bcnt;		/* Packet and byte counters */
-	unsigned char  fw_tosand, fw_tosxor;	/* Revised packet priority */
+	__u8	fw_tosand, fw_tosxor;		/* Revised packet priority */
 	char           fw_vianame[IFNAMSIZ];	/* name of interface "via" */
 };
 

@@ -20,7 +20,7 @@ static long minix_dir_read(struct inode * inode, struct file * filp,
 	return -EISDIR;
 }
 
-static int minix_readdir(struct inode *, struct file *, void *, filldir_t);
+static int minix_readdir(struct file *, void *, filldir_t);
 
 static struct file_operations minix_dir_operations = {
 	NULL,			/* lseek - default */
@@ -58,13 +58,14 @@ struct inode_operations minix_dir_inode_operations = {
 	NULL			/* permission */
 };
 
-static int minix_readdir(struct inode * inode, struct file * filp,
+static int minix_readdir(struct file * filp,
 	void * dirent, filldir_t filldir)
 {
 	unsigned int offset;
 	struct buffer_head * bh;
 	struct minix_dir_entry * de;
 	struct minix_sb_info * info;
+	struct inode *inode = filp->f_dentry->d_inode;
 
 	if (!inode || !inode->i_sb || !S_ISDIR(inode->i_mode))
 		return -EBADF;
