@@ -298,8 +298,6 @@ void remove_proc_entry(const char *name, struct proc_dir_entry *parent)
 	}
 
 	if (de) {
-printk("remove_proc_entry: parent nlink=%d, file nlink=%d\n",
-parent->nlink, de->nlink);
 		proc_unregister(parent, de->low_ino);
 		de->nlink = 0;
 		de->deleted = 1;

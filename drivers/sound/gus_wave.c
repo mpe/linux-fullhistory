@@ -2863,8 +2863,7 @@ int gus_default_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 				vol = 100;
 			gus_mic_vol = vol;
 			set_input_volumes();
-			vol |= (vol << 8);
-			val = vol;
+			val = vol | (vol << 8);
 			break;
 				
 		case SOUND_MIXER_LINE:
@@ -2875,8 +2874,7 @@ int gus_default_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 				vol = 100;
 			gus_line_vol = vol;
 			set_input_volumes();
-			vol |= (vol << 8);
-			val = vol;
+			val = vol | (vol << 8);
 			break;
 
 		case SOUND_MIXER_PCM:
@@ -2886,8 +2884,7 @@ int gus_default_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 			if (gus_pcm_volume > 100)
 				gus_pcm_volume = 100;
 			gus_audio_update_volume();
-			gus_pcm_volume |= (gus_pcm_volume << 8);
-			val = gus_pcm_volume;
+			val = gus_pcm_volume | (gus_pcm_volume << 8);
 			break;
 
 		case SOUND_MIXER_SYNTH:
@@ -2901,8 +2898,7 @@ int gus_default_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 				for (voice = 0; voice < nr_voices; voice++)
 					dynamic_volume_change(voice);	/* Apply the new vol */
 			}
-			gus_wave_volume |= (gus_wave_volume << 8);
-			val = gus_wave_volume;
+			val = gus_wave_volume | (gus_wave_volume << 8);
 			break;
 
 		default:
