@@ -1267,7 +1267,7 @@ static __u16 ipx_set_checksum(ipx_packet *packet,int length)
  *	Route an outgoing frame from a socket.
  */
 
-static int ipxrtr_route_packet(ipx_socket *sk, struct sockaddr_ipx *usipx, struct iovec *iov, int len)
+static int ipxrtr_route_packet(ipx_socket *sk, struct sockaddr_ipx *usipx, struct iovec *iov, int len, int noblock)
 {
 	struct sk_buff *skb;
 	ipx_interface *intrfc;
@@ -1296,7 +1296,7 @@ static int ipxrtr_route_packet(ipx_socket *sk, struct sockaddr_ipx *usipx, struc
 	size=sizeof(ipx_packet)+len;
 	size += ipx_offset;
 
-	skb=sock_alloc_send_skb(sk, size, 0, 0, &err);
+	skb=sock_alloc_send_skb(sk, size, 0, noblock, &err);
 	if(skb==NULL)
 		return err;
 
@@ -2133,7 +2133,7 @@ static int ipx_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nob
 		memcpy(usipx->sipx_node,sk->protinfo.af_ipx.dest_addr.node,IPX_NODE_LEN);
 	}
 	
-	retval = ipxrtr_route_packet(sk, usipx, msg->msg_iov, len);
+	retval = ipxrtr_route_packet(sk, usipx, msg->msg_iov, len, noblock);
 	if (retval < 0) 
 		return retval;
 

@@ -71,14 +71,17 @@ static inline void revalidate_dir(struct nfs_server * server, struct inode * dir
 {
 	struct nfs_fattr fattr;
 
-	if (jiffies - NFS_READTIME(dir) < server->acdirmax)
+	if (jiffies - NFS_READTIME(dir) < NFS_ATTRTIMEO(dir))
 		return;
 
 	NFS_READTIME(dir) = jiffies;
 	if (nfs_proc_getattr(server, NFS_FH(dir), &fattr) == 0) {
 		nfs_refresh_inode(dir, &fattr);
-		if (fattr.mtime.seconds == NFS_OLDMTIME(dir))
+		if (fattr.mtime.seconds == NFS_OLDMTIME(dir)) {
+			if ((NFS_ATTRTIMEO(dir) <<= 1) > server->acdirmax)
+				NFS_ATTRTIMEO(dir) = server->acdirmax;
 			return;
+		}
 		NFS_OLDMTIME(dir) = fattr.mtime.seconds;
 	}
 	/* invalidate directory cache here when we _really_ start caching */
@@ -697,6 +700,8 @@ void nfs_refresh_inode(struct inode *inode, struct nfs_fattr *fattr)
 	/* Size changed from outside: invalidate caches on next read */
 	if (inode->i_size != fattr->size)
 		NFS_CACHEINV(inode);
+	if (NFS_OLDMTIME(inode) != fattr->mtime.seconds)
+		NFS_ATTRTIMEO(inode) = NFS_MINATTRTIMEO(inode);
 	inode->i_size = fattr->size;
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
 		inode->i_rdev = to_kdev_t(fattr->rdev);

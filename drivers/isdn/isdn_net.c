@@ -1,4 +1,4 @@
-/* $Id: isdn_net.c,v 1.17 1996/06/25 18:37:37 fritz Exp $
+/* $Id: isdn_net.c,v 1.18 1996/07/03 13:48:51 hipp Exp $
  *
  * Linux ISDN subsystem, network interfaces and related functions (linklevel).
  *
@@ -21,6 +21,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn_net.c,v $
+ * Revision 1.18  1996/07/03 13:48:51  hipp
+ * bugfix: Call dev_purge_queues() only for master device
+ *
  * Revision 1.17  1996/06/25 18:37:37  fritz
  * Fixed return count for empty return string in isdn_net_getphones().
  *
@@ -121,7 +124,7 @@ static int isdn_net_xmit(struct device *, isdn_net_local *, struct sk_buff *);
  
 extern void dev_purge_queues(struct device *dev);	/* move this to net/core/dev.c */
 
-char *isdn_net_revision = "$Revision: 1.17 $";
+char *isdn_net_revision = "$Revision: 1.18 $";
 
  /*
   * Code for raw-networking over ISDN
@@ -202,7 +205,8 @@ isdn_net_unbind_channel(isdn_net_local * lp)
                 dev_kfree_skb(lp->sav_skb,FREE_WRITE);
 		lp->sav_skb = NULL;
 	}
-	dev_purge_queues(&lp->netdev->dev);
+	if(!lp->master) /* purge only for master device */
+		dev_purge_queues(&lp->netdev->dev);
 	lp->dialstate = 0;
 	dev->rx_netdev[isdn_dc2minor(lp->isdn_device,lp->isdn_channel)] = NULL;
 	dev->st_netdev[isdn_dc2minor(lp->isdn_device,lp->isdn_channel)] = NULL;

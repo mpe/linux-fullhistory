@@ -24,8 +24,8 @@
 */
 
 
-#define BusLogic_DriverVersion		"2.0.5"
-#define BusLogic_DriverDate		"7 July 1996"
+#define BusLogic_DriverVersion		"2.0.6"
+#define BusLogic_DriverDate		"17 July 1996"
 
 
 #include <linux/module.h>
@@ -162,7 +162,7 @@ static void BusLogic_AnnounceDriver(void)
 
 
 /*
-  BusLogic_DriverInfo returns the Board Name to identify this SCSI Driver
+  BusLogic_DriverInfo returns the Controller Name to identify this SCSI Driver
   and Host Adapter.
 */
 
@@ -170,7 +170,7 @@ const char *BusLogic_DriverInfo(SCSI_Host_T *Host)
 {
   BusLogic_HostAdapter_T *HostAdapter =
     (BusLogic_HostAdapter_T *) Host->hostdata;
-  return HostAdapter->BoardName;
+  return HostAdapter->ControllerName;
 }
 
 
@@ -387,12 +387,12 @@ static void BusLogic_DeallocateCCB(BusLogic_CCB_T *CCB)
   the Host Adapter (including any discarded data); on failure, it returns
   -1 if the command was invalid, or -2 if a timeout occurred.
 
-  This function is only called during board detection and initialization, so
-  performance and latency are not critical, and exclusive access to the Host
-  Adapter hardware is assumed.  Once the board and driver are initialized, the
-  only Host Adapter command that is issued is the single byte Execute Mailbox
-  Command operation code , which does not require waiting for the Host Adapter
-  Ready bit to be set in the Status Register.
+  This function is only called during controller detection and initialization,
+  so performance and latency are not critical, and exclusive access to the Host
+  Adapter hardware is assumed.  Once the controller and driver are initialized,
+  the only Host Adapter command that is issued is the single byte Execute
+  Mailbox Command operation code, which does not require waiting for the Host
+  Adapter Ready bit to be set in the Status Register.
 */
 
 static int BusLogic_Command(BusLogic_HostAdapter_T *HostAdapter,
@@ -478,7 +478,7 @@ static int BusLogic_Command(BusLogic_HostAdapter_T *HostAdapter,
     {
     case BusLogic_InquireInstalledDevicesID0to7:
     case BusLogic_InquireInstalledDevicesID8to15:
-    case BusLogic_InquireDevices:
+    case BusLogic_InquireTargetDevices:
       /* Approximately 60 seconds. */
       TimeoutCounter = loops_per_sec << 2;
       break;
@@ -737,10 +737,10 @@ static boolean BusLogic_ProbeHostAdapter(BusLogic_HostAdapter_T *HostAdapter)
     rejected later when the Inquire Extended Setup Information command is
     issued in BusLogic_CheckHostAdapter.  The AMI FastDisk Host Adapter is a
     BusLogic clone that implements the same interface as earlier BusLogic
-    boards, including the undocumented commands, and is therefore supported by
-    this driver.  However, the AMI FastDisk always returns 0x00 upon reading
-    the Geometry Register, so the extended translation option should always be
-    left disabled on the AMI FastDisk.
+    controllers, including the undocumented commands, and is therefore
+    supported by this driver.  However, the AMI FastDisk always returns 0x00
+    upon reading the Geometry Register, so the extended translation option
+    should always be left disabled on the AMI FastDisk.
   */
   GeometryRegister = BusLogic_ReadGeometryRegister(HostAdapter);
   if (TraceProbe)
@@ -889,7 +889,7 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
   BusLogic_Configuration_T Configuration;
   BusLogic_SetupInformation_T SetupInformation;
   BusLogic_ExtendedSetupInformation_T ExtendedSetupInformation;
-  BusLogic_BoardModelNumber_T BoardModelNumber;
+  BusLogic_ControllerModelNumber_T ControllerModelNumber;
   BusLogic_FirmwareVersion3rdDigit_T FirmwareVersion3rdDigit;
   BusLogic_FirmwareVersionLetter_T FirmwareVersionLetter;
   BusLogic_GenericIOPortInformation_T GenericIOPortInformation;
@@ -934,24 +934,25 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
       != sizeof(ExtendedSetupInformation))
     return BusLogic_Failure(HostAdapter, "INQUIRE EXTENDED SETUP INFORMATION");
   /*
-    Issue the Inquire Board Model Number command.
+    Issue the Inquire Controller Model Number command.
   */
   if (ExtendedSetupInformation.BusType == 'A' &&
       BoardID.FirmwareVersion1stDigit == '2')
     /* BusLogic BT-542B ISA 2.xx */
-    strcpy(BoardModelNumber, "542B");
+    strcpy(ControllerModelNumber, "542B");
   else if (ExtendedSetupInformation.BusType == 'E' &&
 	   BoardID.FirmwareVersion1stDigit == '0')
     /* AMI FastDisk EISA Series 441 0.x */
-    strcpy(BoardModelNumber, "747A");
+    strcpy(ControllerModelNumber, "747A");
   else
     {
-      RequestedReplyLength = sizeof(BoardModelNumber);
-      if (BusLogic_Command(HostAdapter, BusLogic_InquireBoardModelNumber,
+      RequestedReplyLength = sizeof(ControllerModelNumber);
+      if (BusLogic_Command(HostAdapter, BusLogic_InquireControllerModelNumber,
 			   &RequestedReplyLength, sizeof(RequestedReplyLength),
-			   &BoardModelNumber, sizeof(BoardModelNumber))
-	  != sizeof(BoardModelNumber))
-	return BusLogic_Failure(HostAdapter, "INQUIRE BOARD MODEL NUMBER");
+			   &ControllerModelNumber,
+			   sizeof(ControllerModelNumber))
+	  != sizeof(ControllerModelNumber))
+	return BusLogic_Failure(HostAdapter, "INQUIRE CONTROLLER MODEL NUMBER");
     }
   /*
     Issue the Inquire Firmware Version 3rd Digit command.
@@ -979,22 +980,22 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
     0.xx	AMI FastDisk VLB/EISA BusLogic Clone Host Adapter
   */
   /*
-    Save the Model Name and Board Name in the Host Adapter structure.
+    Save the Model Name and Controller Name in the Host Adapter structure.
   */
   TargetPointer = HostAdapter->ModelName;
   *TargetPointer++ = 'B';
   *TargetPointer++ = 'T';
   *TargetPointer++ = '-';
-  for (i = 0; i < sizeof(BoardModelNumber); i++)
+  for (i = 0; i < sizeof(ControllerModelNumber); i++)
     {
-      Character = BoardModelNumber[i];
+      Character = ControllerModelNumber[i];
       if (Character == ' ' || Character == '\0') break;
       *TargetPointer++ = Character;
     }
   *TargetPointer++ = '\0';
-  strcpy(HostAdapter->BoardName, "BusLogic ");
-  strcat(HostAdapter->BoardName, HostAdapter->ModelName);
-  strcpy(HostAdapter->InterruptLabel, HostAdapter->BoardName);
+  strcpy(HostAdapter->ControllerName, "BusLogic ");
+  strcat(HostAdapter->ControllerName, HostAdapter->ModelName);
+  strcpy(HostAdapter->InterruptLabel, HostAdapter->ControllerName);
   /*
     Save the Firmware Version in the Host Adapter structure.
   */
@@ -1141,8 +1142,8 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
   /*
     Save the Disconnect/Reconnect Permitted flag bits in the Host Adapter
     structure.  The Disconnect Permitted information is only valid on "W" and
-    "C" Series boards, but Disconnect/Reconnect is always permitted on "S" and
-    "A" Series boards.
+    "C" Series controllers, but Disconnect/Reconnect is always permitted on "S"
+    and "A" Series controllers.
   */
   if (HostAdapter->FirmwareVersion[0] >= '4')
     HostAdapter->DisconnectPermitted =
@@ -1169,6 +1170,13 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
     ExtendedSetupInformation.HostAutomaticConfiguration;
   HostAdapter->HostUltraSCSI = ExtendedSetupInformation.HostUltraSCSI;
   /*
+    Determine whether 64 LUN Format CCBs are supported and save the information
+    in the Host Adapter structure.
+  */
+  if (HostAdapter->FirmwareVersion[0] == '5' ||
+      (HostAdapter->FirmwareVersion[0] == '4' && HostAdapter->HostWideSCSI))
+    HostAdapter->Host64LUNSupport = true;
+  /*
     Determine the Host Adapter BIOS Address if the BIOS is enabled and
     save it in the Host Adapter structure.  The BIOS is disabled if the
     BIOS_Address is 0.
@@ -1180,12 +1188,12 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
   if (HostAdapter->BusType == BusLogic_ISA_Bus && high_memory > MAX_DMA_ADDRESS)
     HostAdapter->BounceBuffersRequired = true;
   /*
-    BusLogic BT-445S Host Adapters prior to board revision E have a hardware
-    bug whereby when the BIOS is enabled, transfers to/from the same address
-    range the BIOS occupies modulo 16MB are handled incorrectly.  Only properly
-    functioning BT-445S boards have firmware version 3.37, so we require that
-    ISA Bounce Buffers be used for the buggy BT-445S models if there is more
-    than 16MB memory.
+    BusLogic BT-445S Host Adapters prior to controller revision E have a
+    hardware bug whereby when the BIOS is enabled, transfers to/from the same
+    address range the BIOS occupies modulo 16MB are handled incorrectly.  Only
+    properly functioning BT-445S controllers have firmware version 3.37, so we
+    require that ISA Bounce Buffers be used for the buggy BT-445S models if
+    there is more than 16MB memory.
   */
   if (HostAdapter->BIOS_Address > 0 &&
       strcmp(HostAdapter->ModelName, "BT-445S") == 0 &&
@@ -1196,16 +1204,8 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
     Determine the maximum number of Target IDs and Logical Units supported by
     this driver for Wide and Narrow Host Adapters.
   */
-  if (HostAdapter->HostWideSCSI)
-    {
-      HostAdapter->MaxTargetDevices = 16;
-      HostAdapter->MaxLogicalUnits = 64;
-    }
-  else
-    {
-      HostAdapter->MaxTargetDevices = 8;
-      HostAdapter->MaxLogicalUnits = 8;
-    }
+  HostAdapter->MaxTargetDevices = (HostAdapter->HostWideSCSI ? 16 : 8);
+  HostAdapter->MaxLogicalUnits = (HostAdapter->Host64LUNSupport ? 64 : 8);
   /*
     Select appropriate values for the Mailbox Count, Initial CCBs, and
     Incremental CCBs variables based on whether or not Strict Round Robin Mode
@@ -1231,14 +1231,14 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
   */
   if (strcmp(HostAdapter->FirmwareVersion, "3.31") >= 0)
     {
-      HostAdapter->StrictRoundRobinModeSupported = true;
+      HostAdapter->StrictRoundRobinModeSupport = true;
       HostAdapter->MailboxCount = 255;
       HostAdapter->InitialCCBs = 64;
       HostAdapter->IncrementalCCBs = 32;
     }
   else
     {
-      HostAdapter->StrictRoundRobinModeSupported = false;
+      HostAdapter->StrictRoundRobinModeSupport = false;
       HostAdapter->MailboxCount = 32;
       HostAdapter->InitialCCBs = 32;
       HostAdapter->IncrementalCCBs = 4;
@@ -1293,10 +1293,10 @@ static boolean BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T
 	      sizeof(HostAdapter->ErrorRecoveryStrategy));
   /*
     Tagged Queuing support is available and operates properly on all "W" Series
-    boards, on "C" Series boards with firmware version 4.22 and above, and on
-    "S" Series boards with firmware version 3.35 and above.  Tagged Queuing is
-    disabled by default when the Tagged Queue Depth is 1 since queuing multiple
-    commands is not possible.
+    controllers, on "C" Series controllers with firmware version 4.22 and
+    above, and on "S" Series controllers with firmware version 3.35 and above.
+    Tagged Queuing is disabled by default when the Tagged Queue Depth is 1
+    since queuing multiple commands is not possible.
   */
   TaggedQueuingPermittedDefault = 0;
   if (HostAdapter->TaggedQueueDepth != 1)
@@ -1479,7 +1479,8 @@ static boolean BusLogic_AcquireResources(BusLogic_HostAdapter_T *HostAdapter)
   */
   if (HostAdapter->DMA_Channel > 0)
     {
-      if (request_dma(HostAdapter->DMA_Channel, HostAdapter->BoardName) < 0)
+      if (request_dma(HostAdapter->DMA_Channel,
+		      HostAdapter->ControllerName) < 0)
 	{
 	  printk("scsi%d: UNABLE TO ACQUIRE DMA CHANNEL %d - DETACHING\n",
 		 HostAdapter->HostNumber, HostAdapter->DMA_Channel);
@@ -1576,7 +1577,7 @@ static boolean BusLogic_InitializeHostAdapter(BusLogic_HostAdapter_T
 {
   BusLogic_ExtendedMailboxRequest_T ExtendedMailboxRequest;
   BusLogic_RoundRobinModeRequest_T RoundRobinModeRequest;
-  BusLogic_WideModeCCBRequest_T WideModeCCBRequest;
+  BusLogic_SetCCBFormatRequest_T SetCCBFormatRequest;
   BusLogic_ModifyIOAddressRequest_T ModifyIOAddressRequest;
   int TargetID;
   /*
@@ -1623,7 +1624,7 @@ static boolean BusLogic_InitializeHostAdapter(BusLogic_HostAdapter_T
     Outgoing Mailboxes to find any that have new commands in them.  Strict
     Round Robin Mode is significantly more efficient.
   */
-  if (HostAdapter->StrictRoundRobinModeSupported)
+  if (HostAdapter->StrictRoundRobinModeSupport)
     {
       RoundRobinModeRequest = BusLogic_StrictRoundRobinMode;
       if (BusLogic_Command(HostAdapter, BusLogic_EnableStrictRoundRobinMode,
@@ -1632,16 +1633,16 @@ static boolean BusLogic_InitializeHostAdapter(BusLogic_HostAdapter_T
 	return BusLogic_Failure(HostAdapter, "ENABLE STRICT ROUND ROBIN MODE");
     }
   /*
-    For Wide SCSI Host Adapters, issue the Enable Wide Mode CCB command to
-    allow more than 8 Logical Units per Target Device to be supported.
+    For Host Adapters that support 64 LUN Format CCBs, issue the Set CCB Format
+    command to allow 64 Logical Units per Target Device.
   */
-  if (HostAdapter->HostWideSCSI)
+  if (HostAdapter->Host64LUNSupport)
     {
-      WideModeCCBRequest = BusLogic_WideModeCCB;
-      if (BusLogic_Command(HostAdapter, BusLogic_EnableWideModeCCB,
-			   &WideModeCCBRequest,
-			   sizeof(WideModeCCBRequest), NULL, 0) < 0)
-	return BusLogic_Failure(HostAdapter, "ENABLE WIDE MODE CCB");
+      SetCCBFormatRequest = BusLogic_64LUNFormatCCB;
+      if (BusLogic_Command(HostAdapter, BusLogic_SetCCBFormat,
+			   &SetCCBFormatRequest, sizeof(SetCCBFormatRequest),
+			   NULL, 0) < 0)
+	return BusLogic_Failure(HostAdapter, "SET CCB FORMAT");
     }
   /*
     For PCI Host Adapters being accessed through the PCI compliant I/O
@@ -1667,7 +1668,7 @@ static boolean BusLogic_InitializeHostAdapter(BusLogic_HostAdapter_T
     Announce Successful Initialization.
   */
   printk("scsi%d: *** %s Initialized Successfully ***\n",
-	 HostAdapter->HostNumber, HostAdapter->BoardName);
+	 HostAdapter->HostNumber, HostAdapter->ControllerName);
   /*
     Indicate the Host Adapter Initialization completed successfully.
   */
@@ -1676,12 +1677,12 @@ static boolean BusLogic_InitializeHostAdapter(BusLogic_HostAdapter_T
 
 
 /*
-  BusLogic_InquireTargetDevices inquires about the Target Devices accessible
+  BusLogic_TargetDeviceInquiry inquires about the Target Devices accessible
   through Host Adapter and reports on the results.
 */
 
-static boolean BusLogic_InquireTargetDevices(BusLogic_HostAdapter_T
-					     *HostAdapter)
+static boolean BusLogic_TargetDeviceInquiry(BusLogic_HostAdapter_T
+					    *HostAdapter)
 {
   BusLogic_InstalledDevices_T InstalledDevices;
   BusLogic_InstalledDevices8_T InstalledDevicesID0to7;
@@ -1705,20 +1706,20 @@ static boolean BusLogic_InquireTargetDevices(BusLogic_HostAdapter_T
       return true;
     }
   /*
-    Issue the Inquire Devices command for boards with firmware version 4.25 or
-    later, or the Inquire Installed Devices ID 0 to 7 command for older boards.
-    This is necessary to force Synchronous Transfer Negotiation so that the
-    Inquire Setup Information and Inquire Synchronous Period commands will
-    return valid data.  The Inquire Devices command is preferable to Inquire
-    Installed Devices ID 0 to 7 since it only probes Logical Unit 0 of each
-    Target Device.
+    Issue the Inquire Target Devices command for controllers with firmware
+    version 4.25 or later, or the Inquire Installed Devices ID 0 to 7 command
+    for older controllers.  This is necessary to force Synchronous Transfer
+    Negotiation so that the Inquire Setup Information and Inquire Synchronous
+    Period commands will return valid data.  The Inquire Target Devices command
+    is preferable to Inquire Installed Devices ID 0 to 7 since it only probes
+    Logical Unit 0 of each Target Device.
   */
   if (strcmp(HostAdapter->FirmwareVersion, "4.25") >= 0)
     {
-      if (BusLogic_Command(HostAdapter, BusLogic_InquireDevices, NULL, 0,
+      if (BusLogic_Command(HostAdapter, BusLogic_InquireTargetDevices, NULL, 0,
 			   &InstalledDevices, sizeof(InstalledDevices))
 	  != sizeof(InstalledDevices))
-	return BusLogic_Failure(HostAdapter, "INQUIRE DEVICES");
+	return BusLogic_Failure(HostAdapter, "INQUIRE TARGET DEVICES");
     }
   else
     {
@@ -1987,8 +1988,7 @@ int BusLogic_DetectHostAdapter(SCSI_Host_Template_T *HostTemplate)
 	Read the Host Adapter Configuration, Acquire the System Resources
 	necessary to use Host Adapter and initialize the fields in the SCSI
 	Host structure, then Test Interrupts, Create the Mailboxes and CCBs,
-	Initialize the Host Adapter, and finally Inquire about the Target
-	Devices.
+	Initialize the Host Adapter, and finally perform Target Device Inquiry.
       */
       if (BusLogic_ReadHostAdapterConfiguration(HostAdapter) &&
 	  BusLogic_AcquireResources(HostAdapter) &&
@@ -1996,7 +1996,7 @@ int BusLogic_DetectHostAdapter(SCSI_Host_Template_T *HostTemplate)
 	  BusLogic_CreateMailboxes(HostAdapter) &&
 	  BusLogic_CreateCCBs(HostAdapter) &&
 	  BusLogic_InitializeHostAdapter(HostAdapter) &&
-	  BusLogic_InquireTargetDevices(HostAdapter))
+	  BusLogic_TargetDeviceInquiry(HostAdapter))
 	{
 	  /*
 	    Initialization has been completed successfully.  Release and
@@ -2006,7 +2006,7 @@ int BusLogic_DetectHostAdapter(SCSI_Host_Template_T *HostTemplate)
 	  */
 	  release_region(HostAdapter->IO_Address, BusLogic_IO_PortCount);
 	  request_region(HostAdapter->IO_Address, BusLogic_IO_PortCount,
-			 HostAdapter->BoardName);
+			 HostAdapter->ControllerName);
 	  BusLogic_InitializeHostStructure(HostAdapter, Host);
 	  BusLogicHostAdapterCount++;
 	}
@@ -2108,7 +2108,7 @@ static int BusLogic_ComputeResultCode(BusLogic_HostAdapterStatus_T
       HostStatus = DID_RESET;
       break;
     default:
-      printk("BusLogic: unknown Host Adapter Status 0x%02X\n",
+      printk("BusLogic: Unknown Host Adapter Status 0x%02X\n",
 	     HostAdapterStatus);
       HostStatus = DID_ERROR;
       break;
@@ -2512,14 +2512,14 @@ int BusLogic_QueueCommand(SCSI_Command_T *Command,
   CCB->TargetID = TargetID;
   CCB->LogicalUnit = LogicalUnit;
   /*
-    For Wide SCSI Host Adapters, Wide Mode CCBs are used to support more than
-    8 Logical Units per Target, and this requires setting the overloaded
+    For Host Adapters that support it, 64 LUN Format CCBs are used to allow
+    64 Logical Units per Target, and this requires setting the overloaded
     TagEnable field to Logical Unit bit 5.
   */
-  if (HostAdapter->HostWideSCSI)
+  if (HostAdapter->Host64LUNSupport)
     {
       CCB->TagEnable = LogicalUnit >> 5;
-      CCB->WideModeTagEnable = false;
+      CCB->TagEnable64LUN = false;
     }
   else CCB->TagEnable = false;
   /*
@@ -2527,14 +2527,19 @@ int BusLogic_QueueCommand(SCSI_Command_T *Command,
     are sent to a Target Device be sent in a non Tagged Queue fashion so that
     the Host Adapter and Target Device can establish Synchronous and Wide
     Transfer before Queue Tag messages can interfere with the Synchronous and
-    Wide Negotiation message.  By waiting to enable Tagged Queuing until after
-    the first 2*BusLogic_PreferredQueueDepth commands have been sent, it is
-    assured that after a Reset any pending commands are resent before Tagged
+    Wide Negotiation messages.  By waiting to enable Tagged Queuing until after
+    the first BusLogic_MaxTaggedQueueDepth commands have been queued, it is
+    assured that after a Reset any pending commands are requeued before Tagged
     Queuing is enabled and that the Tagged Queuing message will not occur while
-    the partition table is being printed.
+    the partition table is being printed.  In addition, some devices do not
+    properly handle the transition from non-tagged to tagged commands, so it is
+    necessary to wait until there are no pending commands for a target device
+    before queuing tagged commands.
   */
-  if (HostAdapter->TotalCommandCount[TargetID]++ ==
-        2*BusLogic_PreferredTaggedQueueDepth &&
+  if (HostAdapter->TotalCommandCount[TargetID]++ >=
+        BusLogic_MaxTaggedQueueDepth &&
+      !HostAdapter->TaggedQueuingActive[TargetID] &&
+      HostAdapter->ActiveCommandCount[TargetID] == 0 &&
       (HostAdapter->TaggedQueuingPermitted & (1 << TargetID)) &&
       Command->device->tagged_supported)
     {
@@ -2552,11 +2557,11 @@ int BusLogic_QueueCommand(SCSI_Command_T *Command,
 	write nearer the head position continue to arrive without interruption.
 	Therefore, for each Target Device this driver keeps track of the last
 	time either the queue was empty or an Ordered Queue Tag was issued.  If
-	more than 5 seconds (half the 10 second disk timeout) have elapsed
-	since this last sequence point, this command will be issued with an
-	Ordered Queue Tag rather than a Simple Queue Tag, which forces the
-	Target Device to complete all previously queued commands before this
-	command may be executed.
+	more than 5 seconds (one third of the 15 second disk timeout) have
+	elapsed since this last sequence point, this command will be issued
+	with an Ordered Queue Tag rather than a Simple Queue Tag, which forces
+	the Target Device to complete all previously queued commands before
+	this command may be executed.
       */
       if (HostAdapter->ActiveCommandCount[TargetID] == 0)
 	HostAdapter->LastSequencePoint[TargetID] = jiffies;
@@ -2565,10 +2570,10 @@ int BusLogic_QueueCommand(SCSI_Command_T *Command,
 	  HostAdapter->LastSequencePoint[TargetID] = jiffies;
 	  QueueTag = BusLogic_OrderedQueueTag;
 	}
-      if (HostAdapter->HostWideSCSI)
+      if (HostAdapter->Host64LUNSupport)
 	{
-	  CCB->WideModeTagEnable = true;
-	  CCB->WideModeQueueTag = QueueTag;
+	  CCB->TagEnable64LUN = true;
+	  CCB->QueueTag64LUN = QueueTag;
 	}
       else
 	{
@@ -2765,9 +2770,10 @@ static int BusLogic_ResetHostAdapter(BusLogic_HostAdapter_T *HostAdapter,
     }
   if (Command == NULL)
     printk("scsi%d: Resetting %s due to SCSI Reset State Interrupt\n",
-	   HostAdapter->HostNumber, HostAdapter->BoardName);
+	   HostAdapter->HostNumber, HostAdapter->ControllerName);
   else printk("scsi%d: Resetting %s due to Target %d\n",
-	      HostAdapter->HostNumber, HostAdapter->BoardName, Command->target);
+	      HostAdapter->HostNumber, HostAdapter->ControllerName,
+	      Command->target);
   /*
     Attempt to Reset and Reinitialize the Host Adapter.
   */
@@ -2775,7 +2781,7 @@ static int BusLogic_ResetHostAdapter(BusLogic_HostAdapter_T *HostAdapter,
 	BusLogic_InitializeHostAdapter(HostAdapter)))
     {
       printk("scsi%d: Resetting %s Failed\n",
-	      HostAdapter->HostNumber, HostAdapter->BoardName);
+	      HostAdapter->HostNumber, HostAdapter->ControllerName);
       Result = SCSI_RESET_ERROR;
       goto Done;
     }
@@ -3047,18 +3053,18 @@ int BusLogic_ResetCommand(SCSI_Command_T *Command, unsigned int ResetFlags)
 
 /*
   BusLogic_BIOSDiskParameters returns the Heads/Sectors/Cylinders BIOS Disk
-  Parameters for Disk.  The default disk geometry is 64 heads, 32 sectors,
-  and the appropriate number of cylinders so as not to exceed drive capacity.
-  In order for disks equal to or larger than 1 GB to be addressable by the
-  BIOS without exceeding the BIOS limitation of 1024 cylinders, Extended
-  Translation may be enabled in AutoSCSI on "W" and "C" Series boards or by a
-  dip switch setting on older boards.  With Extended Translation enabled,
-  drives between 1 GB inclusive and 2 GB exclusive are given a disk geometry
-  of 128 heads and 32 sectors, and drives above 2 GB inclusive are given a
-  disk geometry of 255 heads and 63 sectors.  However, if the BIOS detects
-  that the Extended Translation setting does not match the geometry in the
-  partition table, then the translation inferred from the partition table
-  will be used by the BIOS, and a warning may be displayed.
+  Parameters for Disk.  The default disk geometry is 64 heads, 32 sectors, and
+  the appropriate number of cylinders so as not to exceed drive capacity.  In
+  order for disks equal to or larger than 1 GB to be addressable by the BIOS
+  without exceeding the BIOS limitation of 1024 cylinders, Extended Translation
+  may be enabled in AutoSCSI on "W" and "C" Series controllers or by a dip
+  switch setting on older controllers.  With Extended Translation enabled,
+  drives between 1 GB inclusive and 2 GB exclusive are given a disk geometry of
+  128 heads and 32 sectors, and drives above 2 GB inclusive are given a disk
+  geometry of 255 heads and 63 sectors.  However, if the BIOS detects that the
+  Extended Translation setting does not match the geometry in the partition
+  table, then the translation inferred from the partition table will be used by
+  the BIOS, and a warning may be displayed.
 */
 
 int BusLogic_BIOSDiskParameters(SCSI_Disk_T *Disk, KernelDevice_T Device,

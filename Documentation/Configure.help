@@ -238,34 +238,35 @@ CONFIG_BLK_DEV_DTC2278
   This driver is enabled at runtime using the "ide0=dtc2278" kernel
   boot parameter.  It enables support for the secondary IDE interface
   of the DTC-2278 card, and permits faster I/O speeds to be set as
-  well.  See the README.ide and dtc2278.c files for more info.
+  well.  See the Documentation/ide.txt and dtc2278.c files for more
+  info.
 
 Holtek HT6560B support
 CONFIG_BLK_DEV_HT6560B
   This driver is enabled at runtime using the "ide0=ht6560b" kernel
   boot parameter.  It enables support for the secondary IDE interface
   of the Holtek card, and permits faster I/O speeds to be set as well.
-  See the README.ide and ht6560b.c files for more info.
+  See the Documentation/ide.txt and ht6560b.c files for more info.
 
 QDI QD6580 support
 CONFIG_BLK_DEV_QD6580
   This driver is enabled at runtime using the "ide0=qd6580" kernel
-  boot parameter.  It permits faster I/O speeds to be set.
-  See the README.ide and qd6580.c files for more info.
+  boot parameter.  It permits faster I/O speeds to be set.  See the
+  Documentation/ide.txt and qd6580.c files for more info.
 
 UMC 8672 support
 CONFIG_BLK_DEV_UMC8672
   This driver is enabled at runtime using the "ide0=umc8672" kernel
   boot parameter.  It enables support for the secondary IDE interface
   of the UMC-8672, and permits faster I/O speeds to be set as well.
-  See the README.ide and umc8672.c files for more info.
+  See the Documentation/ide.txt and umc8672.c files for more info.
 
 ALI M1439/M1445 support
 CONFIG_BLK_DEV_ALI14XX
   This driver is enabled at runtime using the "ide0=ali14xx" kernel
   boot parameter.  It enables support for the secondary IDE interface
   of the chipset, and permits faster I/O speeds to be set as well.
-  See the README.ide and ali14xx.c files for more info.
+  See the Documentation/ide.txt and ali14xx.c files for more info.
 
 PROMISE DC4030 support (EXPERIMENTAL)
 CONFIG_BLK_DEV_PROMISE
@@ -273,9 +274,9 @@ CONFIG_BLK_DEV_PROMISE
   boot parameter.  It enables support for the secondary IDE interface
   of the chipset, and takes advantage of the caching features of the
   card.  This driver is known to incur timeouts/retries during heavy
-  I/O to drives attached to the secondary interface.  CDROM and
-  TAPE devices are not supported yet.
-  See the README.ide and promise.c files for more info.
+  I/O to drives attached to the secondary interface.  CDROM and TAPE
+  devices are not supported yet.  See the Documentation/ide.txt and
+  promise.c files for more info.
 
 XT harddisk support
 CONFIG_BLK_DEV_XD
@@ -823,17 +824,19 @@ CONFIG_IP_FIREWALL
   about 2kB. You may need to read the FIREWALL-HOWTO, available via
   ftp (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. Also, you will need the
-  ipfwadm tool to allow selective blocking of internet traffic based
+  ipfwadm tool (available via ftp (user: anonymous) from ftp.xos.nl) 
+  to allow selective blocking of internet traffic based
   on type, origin and destination.  You need to enable IP firewalling
   in order to be able to use IP masquerading (i.e. local computers can
   chat with an outside host, but that outside host is made to think
   that it is talking to the firewall box. Makes the local network
   completely invisible and avoids the need to allocate valid IP host
-  addresses for the machines on the local net) or to use the ip packet
+  addresses for the machines on the local net) or to use the IP packet
   accounting to see what is using all your network bandwidth.
   This option is also needed when you want to enable the transparent
-  proxying support (via which non-local connections can be redirected
-  to local proxy servers).
+  proxying support (makes the computers on the local network think
+  they're talking to a remote computer, while in reality the traffic
+  is redirected by your Linux firewall to a local proxy server).
 
 IP: accounting
 CONFIG_IP_ACCT
@@ -853,10 +856,12 @@ CONFIG_NET_IPIP
   encapsulating protocol. This particular tunneling driver implements
   encapsulation of IP within IP, which sounds kind of pointless, but
   can be useful if you want to make your (or some other) machine
-  appear on a different network than it physically is, or to use the 
-  mobile IP facilities (which effectively are doing that). Enabling this
-  option will produce two modules ( = code which can be inserted in
-  and removed from the running kernel whenever you want), one
+  appear on a different network than it physically is, or to use
+  mobile-IP facilities (allowing laptops to seamlessly move between
+  networks without changing their IP addresses; check out
+  http://anchor.cs.binghamton.edu/~mobileip/LJ/index.html). Enabling
+  this option will produce two modules ( = code which can be inserted
+  in and removed from the running kernel whenever you want), one
   encapsulator and one decapsulator. You can read details in
   drivers/net/README.tunnel. Most people can say N.
   
@@ -868,10 +873,14 @@ CONFIG_IP_FIREWALL_VERBOSE
 
 IP: transparent proxying (EXPERIMENTAL)
 CONFIG_IP_TRANSPARENT_PROXY
-  This enables you to redirect any network traffic to a local server,
-  acting as a "transparent proxy server".  Redirection is activated
-  by defining special input firewall rules (using the ipfwadm utility)
-  and/or by doing an appropriate bind() system call.
+  This enables your Linux firewall to transparently redirect any
+  network traffic originating from the local network and destined
+  for a remote host to a local server, called a "transparent proxy
+  server".  This makes the local computers think they are talking to
+  the remote end, while in fact they are connected to the local
+  proxy. Redirection is activated by defining special input firewall
+  rules (using the ipfwadm utility) and/or by doing an appropriate
+  bind() system call.
 
 IP: masquerading (EXPERIMENTAL)
 CONFIG_IP_MASQUERADE
@@ -889,28 +898,31 @@ CONFIG_IP_MASQUERADE
   last problem can also be solved by connecting the Linux box to the
   Internet using SLiRP [SLiRP is a SLIP/PPP emulator that works if you
   have a regular dial up shell account on some UNIX computer; get it
-  from ftp://sunsite.unc.edu/pub/Linux/system/Network/serial/
+  from ftp://sunsite.unc.edu/pub/Linux/system/Network/serial/].)
   Details on how to set things up are contained in the
   IP Masquerading FAQ, available at http://www.indyramp.com/masq/
   This is EXPERIMENTAL code, which means that it need not be completely
   stable. If you want this, say Y.
 
-IP: always defragment
-CONFIG_IP_ALWAYS_DEFRAG
-   This option means that all incoming fragments will be reassembled
-   (defragmented) before being processed, even if those packets
-   should be forwarded.  This option is highly recommended if you
-   have enabled CONFIG_IP_MASQUERADE, because these facilities requires
-   that second and further fragments can be related to TCP or UDP port
-   numbers, which are only stored in the first fragment.  When using
-   CONFIG_IP_FIREWALL, you might also want to enable this option, to
-   have a more reliable firewall (otherwise second and further fragments
-   will always be accepted by the firewall).  When using transparent
-   proxying (CONFIG_IP_TRANSPARENT_PROXY), this option is implicit,
-   although it is safe to say Y here. Do not say Y to this option except
-   when running either a firewall that is the sole link to your network or
-   a transparent proxy. Never ever say Y to this for a normal router or
-   host.
+IP: always defragment 
+CONFIG_IP_ALWAYS_DEFRAG 
+  This option means that all incoming fragments (= parts of IP packets
+  that arose when some host between origin and destination decided
+  that the IP packets were too large and cut them in pieces) will be
+  reassembled (defragmented) before being processed, even if they are
+  about to be forwarded.  This option is highly recommended if you
+  have enabled the masquerading support (CONFIG_IP_MASQUERADE),
+  because this facility requires that second and further fragments can
+  be related to TCP or UDP port numbers, which are only stored in the
+  first fragment.  When using IP firewall support
+  (CONFIG_IP_FIREWALL), you might also want to enable this option, to
+  have a more reliable firewall (otherwise second and further
+  fragments will always be accepted by the firewall).  When using
+  transparent proxying (CONFIG_IP_TRANSPARENT_PROXY), this option is
+  implicit, although it is safe to say Y here. Do not say Y to this
+  option except when running either a firewall that is the sole link
+  to your network or a transparent proxy. Never ever say Y to this for
+  a normal router or host.
 
 IP: aliasing support
 CONFIG_IP_ALIAS
@@ -1252,13 +1264,14 @@ CONFIG_SCSI_ADVANSYS
 
 Adaptec AHA152X/2825 support
 CONFIG_SCSI_AHA152X
-  This is support for a SCSI host adaptor. It is explained in section
-  3.3 of the SCSI-HOWTO, available via ftp (user: anonymous) at
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it doesn't work out of the
-  box, you may have to change some settings in drivers/scsi/aha152x.h.
-  This driver is also available as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you
-  want). If you want to compile it as a module, say M here and read
+  This is support for the AHA-1510, AHA-1520, AHA-1522, and AHA-2825
+  SCSI host adaptors. It is explained in section 3.3 of the
+  SCSI-HOWTO, available via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. You might also want to read
+  the comments at the top of drivers/scsi/aha152x.c. This driver is
+  also available as a module ( = code which can be inserted in and
+  removed from the running kernel whenever you want). If you want to
+  compile it as a module, say M here and read
   Documentation/modules.txt.
 
 Adaptec AHA1542 support
@@ -1322,26 +1335,27 @@ CONFIG_SCSI_DTC3280
 
 EATA-DMA (DPT, NEC, AT&T, SNI, AST, Olivetti, Alphatronix) support
 CONFIG_SCSI_EATA_DMA
-  This is support for the EATA-DMA protocol compliant SCSI Host Adaptors
-  like the SmartCache III/IV, SmartRAID controller families and the DPT 
-  PM2011B and PM2012B controllers.  
-  Please read the SCSI-HOWTO, available via ftp (user: anonymous) at
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. 
-  This driver is also available as a module (= code which can be inserted 
-  in and removed from the running kernel whenever you want). If you want 
-  to compile it as a module, say M here and read Documentation/modules.txt.
+  This is support for the EATA-DMA protocol compliant SCSI Host
+  Adaptors like the SmartCache III/IV, SmartRAID controller families
+  and the DPT PM2011B and PM2012B controllers.  Please read the
+  SCSI-HOWTO, available via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  This driver is also
+  available as a module (= code which can be inserted in and removed
+  from the running kernel whenever you want). If you want to compile
+  it as a module, say M here and read Documentation/modules.txt.
 
 EATA-PIO (old DPT PM2001, PM2012A) support
 CONFIG_SCSI_EATA_PIO
-  This driver supports all EATA-PIO protocol compliant SCSI Host Adaptors
-  like the DPT PM2001 and the PM2012A. EATA-DMA compliant HBAs can also use 
-  this driver but are discouraged from doing so, since this driver only 
-  supports harddisks and lacks numerous features.
-  You might want to have a look at the SCSI-HOWTO, available via ftp 
-  (user: anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO.  
-  If you want to compile this as a module ( = code which can be inserted 
-  in and removed from the running kernel whenever you want), say M here 
-  and read Documentation/modules.txt.
+  This driver supports all EATA-PIO protocol compliant SCSI Host
+  Adaptors like the DPT PM2001 and the PM2012A. EATA-DMA compliant
+  HBAs can also use this driver but are discouraged from doing so,
+  since this driver only supports harddisks and lacks numerous
+  features.  You might want to have a look at the SCSI-HOWTO,
+  available via ftp (user: anonymous) at
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you want to compile this
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt.
 
 UltraStor 14F/34F support
 CONFIG_SCSI_U14_34F
@@ -1424,91 +1438,94 @@ CONFIG_SCSI_NCR53C7xx_FAST
  
 allow DISCONNECT
 CONFIG_SCSI_NCR53C7xx_DISCONNECT
-  This enables the disconnect/reconnect feature of the NCR SCSI controller.
-  When this is enabled, a slow SCSI device will not lock the SCSI bus
-  while processing a request, allowing simultaneous use of e.g. a SCSI
-  hard disk and SCSI tape or CD-ROM drive, and providing much better 
-  performance when using slow and fast SCSI devices at the same time. Some 
-  devices, however, do not operate properly with this option enabled, and 
-  will cause your SCSI system to hang, which might cause a system crash. 
-  The safe answer therefore is to say N.
+  This enables the disconnect/reconnect feature of the NCR SCSI
+  controller.  When this is enabled, a slow SCSI device will not lock
+  the SCSI bus while processing a request, allowing simultaneous use
+  of e.g. a SCSI hard disk and SCSI tape or CD-ROM drive, and
+  providing much better performance when using slow and fast SCSI
+  devices at the same time. Some devices, however, do not operate
+  properly with this option enabled, and will cause your SCSI system
+  to hang, which might cause a system crash.  The safe answer
+  therefore is to say N.
 
 NCR53C8XX SCSI support
 CONFIG_SCSI_NCR53C8XX
-  This is the BSD ncr driver adapted to linux for NCR53C8XX family of PCI-SCSI 
-  controllers. This driver supports parity checking, tagged command queueing,
-  fast scsi II transfer up to 10 MB/s with narrow scsi devices and 20 MB/s
-  with wide scsi devices.
-  This driver has been tested ok with linux/i386  and is currently untested
-  under linux/Alpha. If you intend to use this driver under linux/Alpha, just 
-  try it first with read-only or mounted read-only devices.
-  Memory mapped io are currently not supported under linux/Alpha.
+  This is the BSD ncr driver adapted to linux for the NCR53C8XX family
+  of PCI-SCSI controllers. This driver supports parity checking,
+  tagged command queuing, fast scsi II transfer up to 10 MB/s with
+  narrow scsi devices and 20 MB/s with wide scsi devices.
+  This driver has been tested OK with linux/i386 and is currently
+  untested under linux/Alpha. If you intend to use this driver under
+  linux/Alpha, just try it first with read-only or mounted read-only
+  devices.  Memory mapped io is currently not supported under
+  linux/Alpha. Please read drivers/scsi/README.ncr53c8xx for more
+  information. 
 
 force normal IO
 CONFIG_SCSI_NCR53C8XX_IOMAPPED
-  Under linux/Alpha only normal io are currently supported.
-  Under linux/i386, this option allow to force the driver to use normal IO.
-  Memory mapped IO have less latency than normal IO.
-  During initialisation phase, the driver first tries to use memory mapped io.
-  If nothing seems wrong, it will use memory mapped io.
-  If a flaw is detected,  it will use normal io.
-  However, it's possible that memory mapped does not work properly for you and 
-  the driver has not detected the problem.
-  The normal answer therefore is N.
+  Under linux/Alpha only normal io is currently supported.
+  Under linux/i386, this option allows you to force the driver to use
+  normal IO.  Memory mapped IO has less latency than normal IO.
+  During the initialization phase, the driver first tries to use
+  memory mapped io.  If nothing seems wrong, it will use memory mapped
+  io.  If a flaw is detected, it will use normal io.  However, it's
+  possible that memory mapped does not work properly for you and the
+  driver has not detected the problem; then you would want to say Y
+  here.  The normal answer therefore is N.
 
 not allow targets to disconnect
 CONFIG_SCSI_NCR53C8XX_NO_DISCONNECT
-  This option is only provided for safe if you suspect some scsi device 
-  of yours to not support properly this feature.
-  To not allow targets to disconnect is not reasonnable if there is more 
-  than 1 device on a scsi bus.
-  The normal answer therefore is N.
+  This option is only provided for safety if you suspect some scsi
+  device of yours to not support properly this feature. In that case,
+  you would say Y here. In general however, to not allow targets to
+  disconnect is not reasonable if there is more than 1 device on a
+  scsi bus.  The normal answer therefore is N.
 
-enable tagged command queueing
+enable tagged command queuing
 CONFIG_SCSI_NCR53C8XX_TAGGED_QUEUE
-  This option allow to enable tagged command queuing support at linux start-up.
-  Some scsi devices do not support properly this feature.
-  The suggested method may be to not validate this option in the configuration 
-  but to use the "settags" control command after boot-up to enable this feature.
+  This option allows you to enable tagged command queuing support at
+  linux start-up.  Some scsi devices do not properly support this
+  feature.  The suggested method is to say N here and to use the
+  "settags" control command after boot-up to enable this feature:
       echo "settags 2 4" >/proc/scsi/ncr53c8xx/0
-  Ask the driver to use up to 4 concurrent tagged commands for target 2 of 
-  controller 0.
-  See the README.ncr53c8xx file for more information.
-  WARNING! tagged queue support requires to allow targets to disconnect.
+  asks the driver to use up to 4 concurrent tagged commands for target
+  2 of controller 0.
+  See the file drivers/scsi/README.ncr53c8xx for more information.
+  WARNING! tagged queue support requires to allow targets to
+  disconnect (see above).
   The safe answer therefore is N.
   The normal answer therefore is Y.
 
 force asynchronous transfer mode
 CONFIG_SCSI_NCR53C8XX_FORCE_ASYNCHRONOUS
-  This option allow to force asynchronous transfer mode for all devices at 
-  linux startup. You can enable synchronous negotiation with the "setsync" 
-  control command after boot-up, for example:
+  This option allows you to force asynchronous transfer mode for all
+  devices at linux startup. You can enable synchronous negotiation
+  with the "setsync" control command after boot-up, for example:
      echo "setsync 2 25" >/proc/scsi/ncr53c8xx/0
-  Ask the driver to set the period to 25 ns (10MB/sec) for target 2 of 
-  controller 0.
-  The safe answer therefore is Y.
-  The normal answer therefore is N.
+  asks the driver to set the period to 25 ns (10MB/sec) for target 2
+  of controller 0 (please read drivers/scsi/README.ncr53c8xx for more
+  information). The safe answer therefore is Y.  The normal answer
+  therefore is N.
  
 force synchronous negotiation
 CONFIG_SCSI_NCR53C8XX_FORCE_SYNC_NEGO
-  Some scsi-2 devices support synchronous negotiations but do not report 
-  this feature in byte 7 of inquiry data.
+  Some scsi-2 devices support synchronous negotiations but do not
+  report this feature in byte 7 of inquiry data.
   Answer Y only if you suspect some device to be so humble.
   The normal answer therefore is N.
  
 disable master parity checking
 CONFIG_SCSI_NCR53C8XX_DISABLE_MPARITY_CHECK
-  Some hardware may have problems with parity during master cycles on PCI bus.
-  Only seen once. Answer Y if you suspect such problem.
-  The normal answer therefore is N.
+  Some hardware may have problems with parity during master cycles on
+  PCI bus.  Only seen once. Answer Y if you suspect such problem.  The
+  normal answer therefore is N.
 
 disable scsi parity checking
 CONFIG_SCSI_NCR53C8XX_DISABLE_PARITY_CHECK
-  Parity on scsi bus is a system option. If one device checks parity, then 
-  all devices on the scsi bus must generate parity.
-  However, the parity can be ignored by the scsi devices.
-  Answer Y only if you know what you are doing.
-  The normal answer therefore is N.
+  Parity on scsi bus is a system option. If one device checks parity,
+  then all devices on the scsi bus must generate parity.  However, the
+  parity can be ignored by the scsi devices.  Answer Y only if you
+  know what you are doing.  The normal answer therefore is N.
 
 Always IN2000 SCSI support
 CONFIG_SCSI_IN2000
@@ -2637,7 +2654,7 @@ CONFIG_MCDX
   FX-001 or FX-001D CDROM drive. In addition, this driver uses much less
   kernel memory than the old one, if that is a concern. This driver is
   able to support more than one drive, but each drive needs a separate
-  interface card.
+  interface card. Check out Documentation/cdrom/mcdx.
 
 Matsushita/Panasonic/Creative, Longshine, TEAC CDROM support
 CONFIG_SBPCD
@@ -2698,7 +2715,11 @@ CONFIG_CM206
 
 Optics Storage DOLPHIN 8000AT CDROM support
 CONFIG_OPTCD
-  If this is your CDROM drive, say Y here.
+  This is the driver for the 'DOLPHIN' drive with a 34-pin Sony
+  compatible interface. It also works with the Lasermate CR328A. If
+  you have one of those, say Y. This driver does not work for the
+  Optics Storage 8001 drive; use the IDE-ATAPI CDROM driver for this
+  one. 
 
 Sanyo CDR-H94A CDROM support
 CONFIG_SJCD
@@ -3116,17 +3137,18 @@ CONFIG_SERIAL
   serial ports.  People who might say N here are those that are
   setting up dedicated ethernet WWW/ftp servers, or users that have
   one of the various bus mice instead of a serial mouse.  (Note that
-  the Cyclades and Stallion drivers do not need this driver built in
-  for them to work. They are completely independent of each other.)
-  If you want to compile this driver as a module, say M here and read
-  Documentation/modules.txt.  [WARNING: Do not compile this driver as
-  a module if you are using non-standard serial ports, since the
-  configuration information will be lost when kerneld automatically
-  unloads the driver.  This limitation may be lifted in the future.]
-  Most people will say Y or M here, so that they can use serial mice,
-  modems and similar devices connecting to the standard serial ports.
+  the Cyclades and Stallion multi serial port drivers do not need this
+  driver built in for them to work. They are completely independent of
+  each other.)  If you want to compile this driver as a module, say M
+  here and read Documentation/modules.txt.  [WARNING: Do not compile
+  this driver as a module if you are using non-standard serial ports,
+  since the configuration information will be lost when kerneld
+  automatically unloads the driver.  This limitation may be lifted in
+  the future.]  Most people will say Y or M here, so that they can use
+  serial mice, modems and similar devices connecting to the standard
+  serial ports.
 
-Digiboard PC/X Support
+Digiboard PC/Xx Support
 CONFIG_DIGI
   This is a driver for the Digiboard PC/Xe, PC/Xi, and PC/Xeve cards
   that give you many serial ports. You would need something like this
@@ -3207,6 +3229,22 @@ CONFIG_PRINTER
   tells you how to specify the port and IRQ to be used by PLIP at
   module load time.
 
+
+Mouse Support (not serial mice)
+CONFIG_MOUSE
+  This is for machines with a bus mouse or a PS/2 mouse as opposed to
+  a serial mouse. Most people have a regular serial MouseSystem or
+  Microsoft mouse (made by Logitech) that plugs into a COM port
+  (rectangular with 9 or 25 pins). These people say N here. If you
+  have something else, read the Busmouse-HOWTO, available via ftp
+  (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO and say Y
+  here. If you have a laptop, you either have to check the
+  documentation or experiment a bit to find out whether the trackball
+  is a serial mouse or not; it's best to say Y here for you. Note that
+  the answer to this question won't directly affect the kernel: saying
+  N will just cause this configure script to skip all the questions
+  about non-serial mice.  If unsure, say Y.
+
 Logitech busmouse support
 CONFIG_BUSMOUSE
   Logitech mouse connected to a proprietary interface card. It's
@@ -3218,10 +3256,7 @@ CONFIG_BUSMOUSE
   as a module ( = code which can be inserted in and removed from the
   running kernel whenever you want), say M here and read
   Documentation/modules.txt. If you are unsure, say N and read the
-  HOWTO nevertheless: it will tell you what you have. Chances are that
-  you have a regular serial MouseSystem or Microsoft mouse (made by
-  Logitech) plugging in a COM port (rectangular with 9 or 25 pins)
-  which is supported automatically.
+  HOWTO nevertheless: it will tell you what you have. 
 
 PS/2 mouse (aka "auxiliary device") support
 CONFIG_PSMOUSE
@@ -3230,16 +3265,15 @@ CONFIG_PSMOUSE
   the mouse does not use any serial ports. This port can also be used
   for other input devices like light pens, tablets, keypads. Compaq,
   AST and IBM all use this as their mouse port on currently shipping
-  machines. The trackballs of some laptops are PS/2 mice
-  also. Although this is not a busmouse, it is explained in detail in
-  the Busmouse-HOWTO, available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you want to compile this
-  as a module ( = code which can be inserted in and removed from the
-  running kernel whenever you want), say M here and read
-  Documentation/modules.txt. If you are unsure, say N and read the
-  HOWTO nevertheless: it will tell you what you have. Chances are that
-  you have a regular serial MouseSystem or Microsoft mouse plugging in
-  a COM port (9 or 25 pins) which is supported automatically.
+  machines. The trackballs of some laptops are PS/2 mice also. In
+  particular, the C&T 82C710 mouse on TI Travelmates is a PS/2
+  mouse. Although PS/2 mice are not technically bus mice, they are
+  explained in detail in the Busmouse-HOWTO, available via ftp (user:
+  anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you want to
+  compile this as a module ( = code which can be inserted in and
+  removed from the running kernel whenever you want), say M here and
+  read Documentation/modules.txt. If you are unsure, say N and read
+  the HOWTO nevertheless: it will tell you what you have.
 
 C&T 82C710 mouse port support (as on TI Travelmate)
 CONFIG_82C710_MOUSE
@@ -3257,11 +3291,9 @@ CONFIG_MS_BUSMOUSE
   want to compile this as a module ( = code which can be inserted in
   and removed from the running kernel whenever you want), say M here
   and read Documentation/modules.txt. If you are unsure, say N and
-  read the HOWTO nevertheless: it will tell you what you have. Chances
-  are that you have a regular serial MouseSystem or Microsoft mouse
-  plugging in a COM port which is supported automatically. Also be aware
-  several vendors talk about 'Microsoft busmouse' and actually mean PS/2
-  busmouse - so count the pins on the connector.
+  read the HOWTO nevertheless: it will tell you what you have. Also be
+  aware that several vendors talk about 'Microsoft busmouse' and
+  actually mean PS/2 busmouse - so count the pins on the connector.
 
 ATIXL busmouse support
 CONFIG_ATIXL_BUSMOUSE
@@ -3272,10 +3304,7 @@ CONFIG_ATIXL_BUSMOUSE
   compile this as a module ( = code which can be inserted in and
   removed from the running kernel whenever you want), say M here and
   read Documentation/modules.txt. If you are unsure, say N and read
-  the HOWTO nevertheless: it will tell you what you have. Chances are
-  that you have a regular serial MouseSystem or Microsoft mouse
-  plugging in a COM port (9 or 25 pins) which is supported
-  automatically.
+  the HOWTO nevertheless: it will tell you what you have. 
 
 Support for user miscellaneous modules
 CONFIG_UMISC
@@ -3681,7 +3710,8 @@ CONFIG_ISDN_AUDIO
   with the ISDN utility package for example), you will be able
   to use your Linux box as an ISDN-answering machine. Of course, this
   must be supported by the lowlevel driver also. Currently, the Teles
-  driver is the only voice-supporting one.
+  driver is the only voice-supporting one. See
+  Documentation/isdn/README.audio for more information.
 
 ICN 2B and 4B support
 CONFIG_ISDN_DRV_ICN
@@ -3790,9 +3820,18 @@ CONFIG_AP1000
 # LocalWords:  rtc SMP lp Digi Intl RightSwitch DGRS dgrs AFFS Amiga UFS SDL AP
 # LocalWords:  Solaris RISCom riscom syncPPP PCBIT pcbit sparc anu au artoo ufs
 # LocalWords:  hitchcock Crynwr cnam pktdrvr NCSA's CyDROM CyCDROM FreeBSD NeXT
-# LocalWords:  NeXTstep disklabel disklabels SMD FFS tm AmigaOS diskfiles Un
+# LocalWords:  NeXTstep disklabel disklabels SMD FFS tm AmigaOS diskfiles Un IQ
 # LocalWords:  Bernd informatik rwth aachen uae affs multihosting bytecode java
 # LocalWords:  applets applet JDK ncsa cabi SNI Alphatronix readme LANs scarab
-# LocalWords:  winsock RNIS caltech OSPF honour Honouring Mbit Localtalk
+# LocalWords:  winsock RNIS caltech OSPF honour Honouring Mbit Localtalk DEFRAG
 # LocalWords:  localtalk download Packetwin Baycom baycom interwork ascii JNT
-# LocalWords:  Camtec
+# LocalWords:  Camtec proxying indyramp defragment defragmented UDP FAS FASXX
+# LocalWords:  FastSCSI SIO FDC qlogicfas QLogic qlogicisp setbaycom ife ee LJ
+# LocalWords:  ethz ch Travelmates ProAudioSpectrum ProAudio SoundMan SB SBPro
+# LocalWords:  Thunderboard SM OPL FM ADLIB TSR Gravis MPU PSS ADI SW DSP codec
+# LocalWords:  ADSP ESC ASIC daughtercard GUSMAX MSS NX AdLib Excell Ensoniq YM
+# LocalWords:  SoundScape Spea MediaTriX AudioTriX WSS OTI ThunderBoard VoxWare
+# LocalWords:  Soundscape SSCAPE TRIX MediaTrix PnP Maui dsp midixx EIA getty
+# LocalWords:  mgetty sendfax gert greenie muc lowlevel Lasermate LanManager io
+# LocalWords:  OOPSes trackball binghamton mobileip ncr IOMAPPED settags ns ser
+# LocalWords:  setsync NEGO MPARITY

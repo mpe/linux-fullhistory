@@ -116,6 +116,12 @@ struct ncp_file_info {
 	__u16   update_time;
 };
 
+/* Defines for Name Spaces */
+#define NW_NS_DOS     0
+#define NW_NS_MAC     1
+#define NW_NS_NFS     2
+#define NW_NS_FTAM    3
+#define NW_NS_OS2     4
 
 /*  Defines for ReturnInformationMask */
 #define RIM_NAME	      (0x0001L)

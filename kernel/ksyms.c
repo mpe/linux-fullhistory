@@ -45,6 +45,7 @@
 #include <linux/skbuff.h>
 #include <linux/genhd.h>
 #include <linux/swap.h>
+#include <linux/ctype.h>
 
 extern unsigned char aux_device_present, kbd_read_mask;
 
@@ -297,6 +298,7 @@ struct symbol_table symbol_table = {
 	X(system_utsname),
 	X(sys_call_table),
 	X(hard_reset_now),
+	X(_ctype),
 
 	/* Signal interfaces */
 	X(send_sig),

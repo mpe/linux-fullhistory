@@ -190,25 +190,6 @@ ncp_get_volume_info_with_number(struct ncp_server *server, int n,
 }
 
 int
-ncp_get_volume_number(struct ncp_server *server, const char *name, int *target)
-{
-	int result;
-
-	ncp_init_request_s(server, 5);
-	ncp_add_pstring(server, name);
-
-	if ((result = ncp_request(server, 22)) != 0)
-	{
-		ncp_unlock_server(server);
-		return result;
-	}
-
-	*target = ncp_reply_byte(server, 0);
-	ncp_unlock_server(server);
-	return 0;
-}
-
-int
 ncp_close_file(struct ncp_server *server, const char *file_id)
 {
 	int result;
@@ -278,8 +259,8 @@ ncp_obtain_info(struct ncp_server *server,
 
 	ncp_init_request(server);
 	ncp_add_byte(server, 6); /* subfunction */
-	ncp_add_byte(server, 0); /* dos name space */
-	ncp_add_byte(server, 0); /* dos name space as dest */
+	ncp_add_byte(server, server->name_space[vol_num]);
+	ncp_add_byte(server, server->name_space[vol_num]);
 	ncp_add_word(server, 0xff); /* get all */
 	ncp_add_dword(server, RIM_ALL);
 	ncp_add_handle_path(server, vol_num, dir_base, 1, path);
@@ -295,20 +276,57 @@ ncp_obtain_info(struct ncp_server *server,
 	return 0;
 }
 
+static inline int
+ncp_has_os2_namespace(struct ncp_server *server, __u8 volume)
+{
+	int result;
+	__u8 *namespace;
+	__u16 no_namespaces;
+
+	ncp_init_request(server);
+	ncp_add_byte(server, 24); /* Subfunction: Get Name Spaces Loaded */
+	ncp_add_word(server, 0);
+	ncp_add_byte(server, volume);
+
+	if ((result = ncp_request(server, 87)) != 0)
+	{
+		ncp_unlock_server(server);
+		return 0;
+	}
+
+	no_namespaces = ncp_reply_word(server, 0);
+	namespace = ncp_reply_data(server, 2);
+
+	while (no_namespaces > 0)
+	{
+		DPRINTK("get_namespaces: found %d on %d\n", *namespace,volume);
+
+		if (*namespace == 4)
+		{
+			DPRINTK("get_namespaces: found OS2\n");
+			ncp_unlock_server(server);
+			return 1;
+		}
+		namespace += 1;
+		no_namespaces -= 1;
+	}
+	ncp_unlock_server(server);
+	return 0;
+}
+
 int
 ncp_lookup_volume(struct ncp_server *server,
 		  char *volname,
 		  struct nw_info_struct *target)
 {
 	int result;
-	__u8  vol_num;
-	__u32 dir_base;
+	int volnum;
 
 	DPRINTK("ncp_lookup_volume: looking up vol %s\n", volname);
 
 	ncp_init_request(server);
 	ncp_add_byte(server, 22); /* Subfunction: Generate dir handle */
-	ncp_add_byte(server, 0); /* DOS name space */
+	ncp_add_byte(server, 0); /* DOS namespace */
 	ncp_add_byte(server, 0); /* reserved */
 	ncp_add_byte(server, 0); /* reserved */
 	ncp_add_byte(server, 0); /* reserved */
@@ -325,20 +343,19 @@ ncp_lookup_volume(struct ncp_server *server,
 		return result;
 	}
 
-	dir_base = ncp_reply_dword(server, 4);
-	vol_num  = ncp_reply_byte(server, 8);
+	memset(target, 0, sizeof(*target));
+	target->DosDirNum = target->dirEntNum = ncp_reply_dword(server, 4);
+	target->volNumber = volnum = ncp_reply_byte(server, 8);
 	ncp_unlock_server(server);
 
-	if ((result = ncp_obtain_info(server, vol_num, dir_base, NULL,
-				      target)) != 0)
-	{
-		return result;
-	}
+	server->name_space[volnum] = ncp_has_os2_namespace(server,volnum)?4:0;
 
-	DPRINTK("ncp_lookup_volume: attribs = %X\n", target->attributes);
+	DPRINTK("lookup_vol: namespace[%d] = %d\n",
+		volnum, server->name_space[volnum]);
 
 	target->nameLen = strlen(volname);
 	strcpy(target->entryName, volname);
+	target->attributes = aDIR;
 	return 0;
 }
 
@@ -352,14 +369,14 @@ ncp_modify_file_or_subdir_dos_info(struct ncp_server *server,
 
 	ncp_init_request(server);
 	ncp_add_byte(server, 7); /* subfunction */
-	ncp_add_byte(server, 0); /* dos name space */
+	ncp_add_byte(server, server->name_space[file->volNumber]);
 	ncp_add_byte(server, 0); /* reserved */
 	ncp_add_word(server, 0x8006); /* search attribs: all */
 
 	ncp_add_dword(server, info_mask);
 	ncp_add_mem(server, info, sizeof(*info));
 	ncp_add_handle_path(server, file->volNumber,
-			    file->DosDirNum, 1, NULL);
+			    file->dirEntNum, 1, NULL);
 
 	result = ncp_request(server, 87);
 	ncp_unlock_server(server);
@@ -374,11 +391,11 @@ ncp_del_file_or_subdir(struct ncp_server *server,
 
 	ncp_init_request(server);
 	ncp_add_byte(server, 8); /* subfunction */
-	ncp_add_byte(server, 0); /* dos name space */
+	ncp_add_byte(server, server->name_space[dir->volNumber]);
 	ncp_add_byte(server, 0); /* reserved */
 	ncp_add_word(server, 0x8006); /* search attribs: all */
 	ncp_add_handle_path(server, dir->volNumber,
-			    dir->DosDirNum, 1, name);
+			    dir->dirEntNum, 1, name);
 	
 	result = ncp_request(server, 87);
 	ncp_unlock_server(server);
@@ -406,15 +423,16 @@ ncp_open_create_file_or_subdir(struct ncp_server *server,
 {
 	int result;
 	__u16 search_attribs = 0x0006;
+	__u8 volume = (dir != NULL) ? dir->volNumber : target->i.volNumber;
 
 	if ((create_attributes & aDIR) != 0)
 	{
-		search_attribs |= 0x8000;
-	}
+		search_attribs |= 0x8000;	
+}
 
 	ncp_init_request(server);
 	ncp_add_byte(server, 1); /* subfunction */
-	ncp_add_byte(server, 0); /* dos name space */
+	ncp_add_byte(server, server->name_space[volume]);
 	ncp_add_byte(server, open_create_mode);
 	ncp_add_word(server, search_attribs);
 	ncp_add_dword(server, RIM_ALL);
@@ -425,13 +443,11 @@ ncp_open_create_file_or_subdir(struct ncp_server *server,
 
 	if (dir != NULL)
 	{
-		ncp_add_handle_path(server, dir->volNumber,
-				    dir->DosDirNum, 1, name);
+		ncp_add_handle_path(server, volume, dir->dirEntNum, 1, name);
 	}
 	else
 	{
-		ncp_add_handle_path(server,
-				    target->i.volNumber, target->i.DosDirNum,
+		ncp_add_handle_path(server, volume, target->i.dirEntNum,
 				    1, NULL);
 	}	
 
@@ -467,9 +483,9 @@ ncp_initialize_search(struct ncp_server *server,
 
 	ncp_init_request(server);
 	ncp_add_byte(server, 2); /* subfunction */
-	ncp_add_byte(server, 0); /* dos name space */
+	ncp_add_byte(server, server->name_space[dir->volNumber]);
 	ncp_add_byte(server, 0); /* reserved */
-	ncp_add_handle_path(server, dir->volNumber, dir->DosDirNum, 1, NULL);
+	ncp_add_handle_path(server, dir->volNumber, dir->dirEntNum, 1, NULL);
 	
 	if ((result = ncp_request(server, 87)) != 0)
 	{
@@ -493,7 +509,7 @@ ncp_search_for_file_or_subdir(struct ncp_server *server,
 
 	ncp_init_request(server);
 	ncp_add_byte(server, 3); /* subfunction */
-	ncp_add_byte(server, 0); /* dos name space */
+	ncp_add_byte(server, server->name_space[seq->volNumber]);
 	ncp_add_byte(server, 0); /* data stream (???) */
 	ncp_add_word(server, 0xffff); /* Search attribs */
 	ncp_add_dword(server, RIM_ALL);	/* return info mask */
@@ -528,19 +544,19 @@ ncp_ren_or_mov_file_or_subdir(struct ncp_server *server,
 	
 	ncp_init_request(server);
 	ncp_add_byte(server, 4); /* subfunction */
-	ncp_add_byte(server, 0); /* dos name space */
+	ncp_add_byte(server, server->name_space[old_dir->volNumber]);
 	ncp_add_byte(server, 1); /* rename flag */
 	ncp_add_word(server, 0x8006); /* search attributes */
 
 	/* source Handle Path */
 	ncp_add_byte(server, old_dir->volNumber);
-	ncp_add_dword(server, old_dir->DosDirNum);
+	ncp_add_dword(server, old_dir->dirEntNum);
 	ncp_add_byte(server, 1);
 	ncp_add_byte(server, 1); /* 1 source component */
 
 	/* dest Handle Path */
 	ncp_add_byte(server, new_dir->volNumber);
-	ncp_add_dword(server, new_dir->DosDirNum);
+	ncp_add_dword(server, new_dir->dirEntNum);
 	ncp_add_byte(server, 1);
 	ncp_add_byte(server, 1); /* 1 destination component */
 

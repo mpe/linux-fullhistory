@@ -77,7 +77,7 @@
 #define AD1848_DEVS (B(OPT_GUS16)|B(OPT_MSS)|B(OPT_PSS)|B(OPT_GUSMAX)|\
 		     B(OPT_SSCAPE)|B(OPT_TRIX)|B(OPT_MAD16)|B(OPT_CS4232)|\
 		     B(OPT_SPNP))
-#define SBDSP_DEVS (B(OPT_SB)|B(OPT_SPNP)|B(OPT_MAD16))
+#define SBDSP_DEVS (B(OPT_SB)|B(OPT_SPNP)|B(OPT_MAD16)|B(OPT_TRIX))
 #define SEQUENCER_DEVS (OPT_MIDI|OPT_YM3812|OPT_ADLIB|OPT_GUS|OPT_MAUI|MIDI_CARDS)
 /*
  * Options that have been disabled for some reason (incompletely implemented

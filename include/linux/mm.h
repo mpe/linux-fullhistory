@@ -112,20 +112,19 @@ struct vm_operations_struct {
  * here (16 bytes or greater).  This ordering should be particularly
  * beneficial on 32-bit processors.
  *
- * The first line is data used in linear searches (eg. clock algorithm
- * scans).  The second line is data used in page searches through the
- * page-cache.  -- sct 
+ * The first line is data used in page cache lookup, the second line
+ * is used for linear searches (eg. clock algorithm scans). 
  */
 typedef struct page {
+	struct inode *inode;
+	unsigned long offset;
+	struct page *next_hash;
 	atomic_t count;
+	unsigned flags;	/* atomic flags, some possibly updated asynchronously */
 	unsigned dirty:16,
 		 age:8;
-	unsigned flags;	/* atomic flags, some possibly updated asynchronously */
 	struct wait_queue *wait;
 	struct page *next;
-	struct page *next_hash;
-	unsigned long offset;
-	struct inode *inode;
 	struct page *prev;
 	struct page *prev_hash;
 	struct buffer_head * buffers;

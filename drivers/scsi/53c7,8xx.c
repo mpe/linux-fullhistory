@@ -3546,6 +3546,7 @@ create_cmd (Scsi_Cmnd *cmd) {
     case MODE_SELECT: 
     case WRITE_6:
     case WRITE_10:
+    case START_STOP: /* also SCAN, which may do DATA OUT */
 #if 0
 	printk("scsi%d : command is ", host->host_no);
 	print_command(cmd->cmnd);
@@ -3564,7 +3565,6 @@ create_cmd (Scsi_Cmnd *cmd) {
      * These commands do no data transfer, we should force an
      * interrupt if a data phase is attempted on them.
      */
-    case START_STOP:
     case TEST_UNIT_READY:
     	datain = dataout = 0;
 	break;

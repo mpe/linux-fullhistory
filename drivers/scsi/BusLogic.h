@@ -141,19 +141,19 @@ int BusLogic_BIOSDiskParameters(SCSI_Disk_T *, KernelDevice_T, int *);
 
 
 /*
-  Define the possible Local Options.
-*/
-
-#define BusLogic_InhibitTargetInquiry		1
-
-
-/*
   Define the possible Probe Options.
 */
 
 #define BusLogic_NoProbe			1
 #define BusLogic_NoProbeISA			2
 #define BusLogic_NoSortPCI			4
+
+
+/*
+  Define the possible Local Options.
+*/
+
+#define BusLogic_InhibitTargetInquiry		1
 
 
 /*
@@ -209,7 +209,7 @@ typedef unsigned int bus_address_t;
 #define BusLogic_CommandParameterRegister	1	/* WO register */
 #define BusLogic_DataInRegister			1	/* RO register */
 #define BusLogic_InterruptRegister		2	/* RO register */
-#define BusLogic_GeometryRegister		3	/* RO, undocumented */
+#define BusLogic_GeometryRegister		3	/* RO register */
 
 
 /*
@@ -250,7 +250,7 @@ typedef unsigned int bus_address_t;
 
 
 /*
-  Define the bits in the undocumented read-only Geometry Register.
+  Define the bits in the read-only Geometry Register.
 */
 
 #define BusLogic_Drive0Geometry			0x03
@@ -265,40 +265,50 @@ typedef unsigned int bus_address_t;
 
 typedef enum
 {
-  BusLogic_TestCommandCompleteInterrupt =	0x00,	/* documented */
-  BusLogic_InitializeMailbox =			0x01,	/* documented */
-  BusLogic_ExecuteMailboxCommand =		0x02,	/* documented */
-  BusLogic_ExecuteBIOSCommand =			0x03,	/* documented */
-  BusLogic_InquireBoardID =			0x04,	/* documented */
-  BusLogic_EnableOutgoingMailboxAvailableInt =	0x05,	/* documented */
-  BusLogic_SetSCSISelectionTimeout =		0x06,	/* documented */
-  BusLogic_SetPreemptTimeOnBus =		0x07,	/* documented */
-  BusLogic_SetTimeOffBus =			0x08,	/* ISA Bus only */
-  BusLogic_SetBusTransferRate =			0x09,	/* ISA Bus only */
-  BusLogic_InquireInstalledDevicesID0to7 =	0x0A,	/* documented */
-  BusLogic_InquireConfiguration =		0x0B,	/* documented */
-  BusLogic_SetTargetMode =			0x0C,	/* now undocumented */
-  BusLogic_InquireSetupInformation =		0x0D,	/* documented */
-  BusLogic_WriteAdapterLocalRAM =		0x1A,	/* documented */
-  BusLogic_ReadAdapterLocalRAM =		0x1B,	/* documented */
-  BusLogic_WriteBusMasterChipFIFO =		0x1C,	/* documented */
-  BusLogic_ReadBusMasterChipFIFO =		0x1D,	/* documented */
-  BusLogic_EchoCommandData =			0x1F,	/* documented */
-  BusLogic_HostAdapterDiagnostic =		0x20,	/* documented */
-  BusLogic_SetAdapterOptions =			0x21,	/* documented */
-  BusLogic_InquireInstalledDevicesID8to15 =	0x23,	/* Wide only */
-  BusLogic_InquireDevices =			0x24,	/* "W" and "C" only */
-  BusLogic_InitializeExtendedMailbox =		0x81,	/* documented */
-  BusLogic_InquireFirmwareVersion3rdDigit =	0x84,	/* undocumented */
-  BusLogic_InquireFirmwareVersionLetter =	0x85,	/* undocumented */
-  BusLogic_InquireGenericIOPortInformation =	0x86,	/* PCI only */
-  BusLogic_InquireBoardModelNumber	 =	0x8B,	/* undocumented */
-  BusLogic_InquireSynchronousPeriod =		0x8C,	/* undocumented */
-  BusLogic_InquireExtendedSetupInformation =	0x8D,	/* documented */
-  BusLogic_EnableStrictRoundRobinMode =		0x8F,	/* documented */
-  BusLogic_FetchHostAdapterLocalRAM =		0x91,	/* undocumented */
-  BusLogic_ModifyIOAddress =			0x95,	/* PCI only */
-  BusLogic_EnableWideModeCCB =			0x96	/* Wide only */
+  BusLogic_TestCommandCompleteInterrupt =	0x00,
+  BusLogic_InitializeMailbox =			0x01,
+  BusLogic_ExecuteMailboxCommand =		0x02,
+  BusLogic_ExecuteBIOSCommand =			0x03,
+  BusLogic_InquireBoardID =			0x04,
+  BusLogic_EnableOutgoingMailboxAvailableInt =	0x05,
+  BusLogic_SetSCSISelectionTimeout =		0x06,
+  BusLogic_SetPreemptTimeOnBus =		0x07,
+  BusLogic_SetTimeOffBus =			0x08,
+  BusLogic_SetBusTransferRate =			0x09,
+  BusLogic_InquireInstalledDevicesID0to7 =	0x0A,
+  BusLogic_InquireConfiguration =		0x0B,
+  BusLogic_EnableTargetMode =			0x0C,
+  BusLogic_InquireSetupInformation =		0x0D,
+  BusLogic_WriteAdapterLocalRAM =		0x1A,
+  BusLogic_ReadAdapterLocalRAM =		0x1B,
+  BusLogic_WriteBusMasterChipFIFO =		0x1C,
+  BusLogic_ReadBusMasterChipFIFO =		0x1D,
+  BusLogic_EchoCommandData =			0x1F,
+  BusLogic_HostAdapterDiagnostic =		0x20,
+  BusLogic_SetAdapterOptions =			0x21,
+  BusLogic_InquireInstalledDevicesID8to15 =	0x23,
+  BusLogic_InquireTargetDevices =		0x24,
+  BusLogic_DisableHostAdapterInterrupt =	0x25,
+  BusLogic_InitializeExtendedMailbox =		0x81,
+  BusLogic_ExecuteSCSICommand =			0x83,
+  BusLogic_InquireFirmwareVersion3rdDigit =	0x84,
+  BusLogic_InquireFirmwareVersionLetter =	0x85,
+  BusLogic_InquireGenericIOPortInformation =	0x86,
+  BusLogic_InquireControllerModelNumber =	0x8B,
+  BusLogic_InquireSynchronousPeriod =		0x8C,
+  BusLogic_InquireExtendedSetupInformation =	0x8D,
+  BusLogic_EnableStrictRoundRobinMode =		0x8F,
+  BusLogic_StoreHostAdapterLocalRAM =		0x90,
+  BusLogic_FetchHostAdapterLocalRAM =		0x91,
+  BusLogic_StoreLocalDataInEEPROM =		0x92,
+  BusLogic_UploadAutoSCSICode =			0x94,
+  BusLogic_ModifyIOAddress =			0x95,
+  BusLogic_SetCCBFormat =			0x96,
+  BusLogic_WriteInquiryBuffer =			0x9A,
+  BusLogic_ReadInquiryBuffer =			0x9B,
+  BusLogic_FlashROMUploadDownload =		0xA7,
+  BusLogic_ReadSCAMData =			0xA8,
+  BusLogic_WriteSCAMData =			0xA9
 }
 BusLogic_OperationCode_T;
 
@@ -328,10 +338,10 @@ typedef unsigned char BusLogic_InstalledDevices8_T[8];
 
 
 /*
-  Define the Inquire Devices reply type.  Inquire Devices only tests Logical
-  Unit 0 of each Target Device unlike Inquire Installed Devices which tests
-  Logical Units 0 - 7.  Two bytes are returned, where bit 0 set indicates
-  that Target Device 0 exists, and so on.
+  Define the Inquire Target Devices reply type.  Inquire Target Devices only
+  tests Logical Unit 0 of each Target Device unlike the Inquire Installed
+  Devices commands which test Logical Units 0 - 7.  Two bytes are returned,
+  where bit 0 set indicates that Target Device 0 exists, and so on.
 */
 
 typedef unsigned short BusLogic_InstalledDevices_T;
@@ -393,7 +403,7 @@ typedef struct BusLogic_SetupInformation
   unsigned char DisconnectPermittedID0to7;		/* Byte 16 */
   unsigned char Signature;				/* Byte 17 */
   unsigned char CharacterD;				/* Byte 18 */
-  unsigned char BusLetter;				/* Byte 19 */
+  unsigned char HostBusType;				/* Byte 19 */
   unsigned char :8;					/* Byte 20 */
   unsigned char :8;					/* Byte 21 */
   BusLogic_SynchronousValues8_T SynchronousValuesID8to15; /* Bytes 22-29 */
@@ -449,10 +459,10 @@ BusLogic_GenericIOPortInformation_T;
 
 
 /*
-  Define the Inquire Board Model Number reply type.
+  Define the Inquire Controller Model Number reply type.
 */
 
-typedef unsigned char BusLogic_BoardModelNumber_T[5];
+typedef unsigned char BusLogic_ControllerModelNumber_T[5];
 
 
 /*
@@ -483,7 +493,8 @@ typedef struct BusLogic_ExtendedSetupInformation
   boolean HostDifferentialSCSI:1;			/* Byte 13 Bit 1 */
   boolean HostAutomaticConfiguration:1;			/* Byte 13 Bit 2 */
   boolean HostUltraSCSI:1;				/* Byte 13 Bit 3 */
-  unsigned char :4;					/* Byte 13 Bits 4-7 */
+  boolean HostSmartTermination:1;			/* Byte 13 Bit 4 */
+  unsigned char :3;					/* Byte 13 Bits 5-7 */
 }
 BusLogic_ExtendedSetupInformation_T;
 
@@ -559,20 +570,21 @@ typedef unsigned char BusLogic_ModifyIOAddressRequest_T;
 
 
 /*
-  Define the Enable Wide Mode SCSI CCB request type.  Wide Mode CCBs are
-  necessary to support more than 8 Logical Units per Target Device.
+  Define the Set CCB Format request type.  64 LUN Format CCBs are necessary to
+  support 64 Logical Units per Target Device.  8 LUN Format CCBs only support 8
+  Logical Units per Target Device.
 */
 
-#define BusLogic_NormalModeCCB			0x00
-#define BusLogic_WideModeCCB			0x01
+#define BusLogic_8LUNFormatCCB			0x00
+#define BusLogic_64LUNFormatCCB			0x01
 
-typedef unsigned char BusLogic_WideModeCCBRequest_T;
+typedef unsigned char BusLogic_SetCCBFormatRequest_T;
 
 
 /*
   Define the Requested Reply Length type used by the Inquire Setup Information,
-  Inquire Board Model Number, Inquire Synchronous Period, and Inquire Extended
-  Setup Information commands.
+  Inquire Controller Model Number, Inquire Synchronous Period, and Inquire
+  Extended Setup Information commands.
 */
 
 typedef unsigned char BusLogic_RequestedReplyLength_T;
@@ -732,13 +744,13 @@ BusLogic_ScatterGatherSegment_T;
 /*
   Define the 32 Bit Mode Command Control Block (CCB) structure.  The first 40
   bytes are defined by the Host Adapter Firmware Interface.  The remaining
-  components are defined by the Linux BusLogic Driver.  Wide Mode CCBs differ
-  from standard 32 Bit Mode CCBs only in having the TagEnable and QueueTag
-  fields moved from byte 17 to byte 1, and the Logical Unit field in byte 17
-  expanded to 6 bits; unfortunately, using a union of structs containing
-  enumeration type bitfields to provide both definitions leads to packing
-  problems, so the following definition is used which requires setting
-  TagEnable to Logical Unit bit 5 in Wide Mode CCBs.
+  components are defined by the Linux BusLogic Driver.  64 LUN Format CCBs
+  differ from standard 8 LUN Format 32 Bit Mode CCBs only in having the
+  TagEnable and QueueTag fields moved from byte 17 to byte 1, and the Logical
+  Unit field in byte 17 expanded to 6 bits; unfortunately, using a union of
+  structs containing enumeration type bitfields to provide both definitions
+  leads to packing problems, so the following definition is used which requires
+  setting TagEnable to Logical Unit bit 5 in 64 LUN Format CCBs.
 */
 
 typedef struct BusLogic_CCB
@@ -749,8 +761,8 @@ typedef struct BusLogic_CCB
   BusLogic_CCB_Opcode_T Opcode:8;			/* Byte 0 */
   unsigned char :3;					/* Byte 1 Bits 0-2 */
   BusLogic_DataDirection_T DataDirection:2;		/* Byte 1 Bits 3-4 */
-  boolean WideModeTagEnable:1;				/* Byte 1 Bit 5 */
-  BusLogic_QueueTag_T WideModeQueueTag:2;		/* Byte 1 Bits 6-7 */
+  boolean TagEnable64LUN:1;				/* Byte 1 Bit 5 */
+  BusLogic_QueueTag_T QueueTag64LUN:2;			/* Byte 1 Bits 6-7 */
   unsigned char CDB_Length;				/* Byte 2 */
   unsigned char SenseDataLength;			/* Byte 3 */
   unsigned int DataLength;				/* Bytes 4-7 */
@@ -863,7 +875,7 @@ typedef struct BusLogic_HostAdapter
   unsigned char HostNumber;
   unsigned char ModelName[9];
   unsigned char FirmwareVersion[6];
-  unsigned char BoardName[18];
+  unsigned char ControllerName[18];
   unsigned char InterruptLabel[62];
   unsigned char IRQ_Channel;
   unsigned char DMA_Channel;
@@ -883,7 +895,8 @@ typedef struct BusLogic_HostAdapter
   boolean LowByteTerminated:1;
   boolean HighByteTerminated:1;
   boolean BounceBuffersRequired:1;
-  boolean StrictRoundRobinModeSupported:1;
+  boolean StrictRoundRobinModeSupport:1;
+  boolean Host64LUNSupport:1;
   boolean HostAdapterResetRequested:1;
   volatile boolean HostAdapterCommandCompleted:1;
   unsigned short HostAdapterScatterGatherLimit;
@@ -1057,7 +1070,7 @@ static inline void BusLogic_Delay(int Seconds)
   unsigned long ProcessorFlags;
   save_flags(ProcessorFlags);
   sti();
-  while (jiffies < TimeoutJiffies) ;
+  while (jiffies < TimeoutJiffies) barrier();
   restore_flags(ProcessorFlags);
 }
 

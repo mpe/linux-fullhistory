@@ -46,6 +46,10 @@
 #define NFS_RENAMED_DIR(inode)		((inode)->u.nfs_i.silly_rename_dir)
 #define NFS_READTIME(inode)		((inode)->u.nfs_i.read_cache_jiffies)
 #define NFS_OLDMTIME(inode)		((inode)->u.nfs_i.read_cache_mtime)
+#define NFS_ATTRTIMEO(inode)		((inode)->u.nfs_i.attrtimeo)
+#define NFS_MINATTRTIMEO(inode)		(S_ISREG((inode)->i_mode)?	\
+						NFS_SERVER(inode)->acregmin : \
+						NFS_SERVER(inode)->acdirmin)
 #define NFS_CACHEINV(inode) \
 do { \
 	NFS_READTIME(inode) = jiffies - 1000000; \

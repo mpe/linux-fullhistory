@@ -21,6 +21,8 @@ struct ncp_server {
 				    interest for us later, so we store
 				    it completely. */
 
+	__u8 name_space[NCP_NUMBER_OF_VOLUMES];
+
 	struct file *ncp_filp;	/* File pointer to ncp socket */
 	struct file *wdog_filp;	/* File pointer to wdog socket */
 	struct file *msg_filp;	/* File pointer to message socket */

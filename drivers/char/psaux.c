@@ -25,6 +25,10 @@
  * Rearranged SIGIO support to use code from tty_io.  9Sept95 ctm@ardi.com
  *
  * Modularised 8-Sep-95 Philip Blundell <pjb27@cam.ac.uk>
+ *
+ * Fixed keyboard lockups at open time (intervening kbd interrupts), handle
+ * RESEND replies, better error checking
+ * 3-Jul-96 Roman Hodek <Roman.Hodek@informatik.uni-erlangen.de>
  */
 
 /* Uncomment the following line if your mouse needs initialization. */
@@ -57,8 +61,10 @@
 #define AUX_STATUS	0x64		/* Aux device status reg */
 
 /* aux controller status bits */
+#define AUX_KOBUF_FULL	0x01		/* output buffer (from controller) full */
 #define AUX_OBUF_FULL	0x21		/* output buffer (from device) full */
 #define AUX_IBUF_FULL	0x02		/* input buffer (to device) full */
+#define AUX_TIMEOUT	0x40		/* controller reports timeout */
 
 /* aux controller commands */
 #define AUX_CMD_WRITE	0x60		/* value to write to controller */
@@ -80,6 +86,14 @@
 #define AUX_ENABLE_DEV	0xf4		/* enable aux device */
 #define AUX_DISABLE_DEV	0xf5		/* disable aux device */
 #define AUX_RESET	0xff		/* reset aux device */
+
+/* kbd controller commands */
+#define KBD_DISABLE	0xad
+#define KBD_ENABLE	0xae
+
+/* replies */
+#define AUX_ACK		0xfa
+#define AUX_RESEND	0xfe
 
 #define MAX_RETRIES	60		/* some aux operations take long time*/
 #if defined(__alpha__) && !defined(CONFIG_PCI)
@@ -121,7 +135,6 @@ static int aux_ready = 0;
 static int aux_count = 0;
 static int aux_present = 0;
 static int poll_aux_status(void);
-static int poll_aux_status_nosleep(void);
 static int fasync_aux(struct inode *inode, struct file *filp, int on);
 
 #ifdef CONFIG_82C710_MOUSE
@@ -136,49 +149,70 @@ static int probe_qp(void);
 
 
 /*
- * Write to aux device
+ * Write a byte to the kbd controller and wait for it being processed
  */
 
-static void aux_write_dev(int val)
+static int aux_write_byte(int val,int port)
 {
-	poll_aux_status();
-	outb_p(AUX_MAGIC_WRITE,AUX_COMMAND);	/* write magic cookie */
-	poll_aux_status();
-	outb_p(val,AUX_OUTPUT_PORT);		/* write data */
+	outb_p(val, port);
+	return poll_aux_status();
 }
 
 /*
- * Write to device & handle returned ack
+ * Write to device, handle returned resend requests and wait for ack
  */
-#if defined INITIALIZE_DEVICE
 static int aux_write_ack(int val)
 {
-	int retries = 0;
+	int rv, retries = 0, stat;
 
-	poll_aux_status_nosleep();
-	outb_p(AUX_MAGIC_WRITE,AUX_COMMAND);
-	poll_aux_status_nosleep();
-	outb_p(val,AUX_OUTPUT_PORT);
-	poll_aux_status_nosleep();
+  repeat:
+	if (poll_aux_status() < 0)
+		return -1;
+	outb_p(AUX_MAGIC_WRITE, AUX_COMMAND);
+	if (poll_aux_status() < 0)
+		return -1;
+	outb_p(val, AUX_OUTPUT_PORT);
 
-	if ((inb(AUX_STATUS) & AUX_OBUF_FULL) == AUX_OBUF_FULL)
-	{
-		return (inb(AUX_INPUT_PORT));
+	if ((rv = poll_aux_status()) < 0)
+		/* timeout */
+		return -1;
+	else if (rv == AUX_RESEND)
+	    /* controller needs last byte again... */
+		goto repeat;
+	else if (rv == AUX_ACK)
+	    /* already got ACK */
+		return 0;
+	else {
+		/* wait for ACK from controller */
+		while (retries < MAX_RETRIES) {
+			stat = inb_p(AUX_STATUS);
+			if ((stat & AUX_OBUF_FULL) == AUX_OBUF_FULL &&
+				inb_p(AUX_INPUT_PORT) == AUX_ACK)
+				return 0;
+			current->state = TASK_INTERRUPTIBLE;
+			current->timeout = jiffies + (5*HZ + 99) / 100;
+			schedule();
+			retries++;
+		}
+		return -1;
 	}
-	return 0;
 }
-#endif /* INITIALIZE_DEVICE */
 
 /*
  * Write aux device command
  */
 
-static void aux_write_cmd(int val)
+static int aux_write_cmd(int val)
 {
-	poll_aux_status();
-	outb_p(AUX_CMD_WRITE,AUX_COMMAND);
-	poll_aux_status();
-	outb_p(val,AUX_OUTPUT_PORT);
+	if (poll_aux_status() < 0)
+		return -1;
+	outb_p(AUX_CMD_WRITE, AUX_COMMAND);
+	if (poll_aux_status() < 0)
+		return -1;
+	outb_p(val, AUX_OUTPUT_PORT);
+	if (poll_aux_status() < 0)
+		return -1;
+	return 0;
 }
 
 
@@ -258,10 +292,19 @@ static void release_aux(struct inode * inode, struct file * file)
 	fasync_aux(inode, file, 0);
 	if (--aux_count)
 		return;
-	aux_write_cmd(AUX_INTS_OFF);		/* disable controller ints */
+	/* disable keyboard to avoid clashes with multi-byte command sequences */
 	poll_aux_status();
-	outb_p(AUX_DISABLE,AUX_COMMAND);      	/* Disable Aux device */
-	poll_aux_status();
+	if (aux_write_byte(KBD_DISABLE, AUX_COMMAND) < 0)
+		printk(KERN_ERR "psaux: controller timeout\n");
+	/* disable controller ints */
+	if (aux_write_cmd(AUX_INTS_OFF) < 0)
+		printk(KERN_ERR "psaux: controller timeout\n");
+	/* Disable Aux device */
+	if (aux_write_byte(AUX_DISABLE, AUX_COMMAND) < 0)
+		printk(KERN_ERR "psaux: controller timeout\n");
+	/* re-enable keyboard */
+	if (aux_write_byte(KBD_ENABLE, AUX_COMMAND) < 0)
+		printk(KERN_ERR "psaux: controller timeout\n");
 	free_irq(AUX_IRQ, NULL);
 	MOD_DEC_USE_COUNT;
 }
@@ -306,7 +349,7 @@ static int open_aux(struct inode * inode, struct file * file)
 		return -ENODEV;
 	if (aux_count++)
 		return 0;
-	if (!poll_aux_status()) {
+	if (poll_aux_status() < 0) {
 		aux_count--;
 		return -EBUSY;
 	}
@@ -317,12 +360,27 @@ static int open_aux(struct inode * inode, struct file * file)
 	}
 	MOD_INC_USE_COUNT;
 	poll_aux_status();
-	outb_p(AUX_ENABLE,AUX_COMMAND);		/* Enable Aux */
-	aux_write_dev(AUX_ENABLE_DEV);		/* enable aux device */
-	aux_write_cmd(AUX_INTS_ON);		/* enable controller ints */
-	poll_aux_status();
+	/* disable keyboard to avoid clashes with multi-byte command sequences */
+	if (aux_write_byte(KBD_DISABLE, AUX_COMMAND) < 0)
+		goto open_error;
+	/* Enable Aux in kbd controller */
+	if (aux_write_byte(AUX_ENABLE, AUX_COMMAND) < 0)
+		goto open_error;
+	/* enable aux device */
+	if (aux_write_ack(AUX_ENABLE_DEV) < 0)
+		goto open_error;
+	/* enable controller ints */
+	if (aux_write_cmd(AUX_INTS_ON) < 0)
+		goto open_error;
+	/* re-enable keyboard */
+	if (aux_write_byte(KBD_ENABLE, AUX_COMMAND) < 0)
+		goto open_error;
+
 	aux_ready = 0;
 	return 0;
+  open_error:
+	printk( KERN_ERR "psaux: controller timeout\n" );
+	return -EIO;
 }
 
 #ifdef CONFIG_82C710_MOUSE
@@ -378,17 +436,31 @@ static int open_qp(struct inode * inode, struct file * file)
 static int write_aux(struct inode * inode, struct file * file, const char * buffer, int count)
 {
 	int i = count;
+	int rv = 0;
+	
+	/* temporary disable keyboard to avoid clashes with multi-byte command
+	 * sequence */
+	if (aux_write_byte(KBD_DISABLE, AUX_COMMAND) < 0)
+		return -EIO;
 
 	while (i--) {
-		if (!poll_aux_status())
-			return -EIO;
+		if (poll_aux_status() < 0) {
+			rv = -EIO;
+			break;
+		}
 		outb_p(AUX_MAGIC_WRITE,AUX_COMMAND);
-		if (!poll_aux_status())
-			return -EIO;
+		if (poll_aux_status() < 0) {
+			rv = -EIO;
+			break;
+		}
 		outb_p(get_user(buffer++),AUX_OUTPUT_PORT);
 	}
+	/* reenable keyboard */
+	if (poll_aux_status() < 0 || aux_write_byte(KBD_ENABLE, AUX_COMMAND) < 0)
+		rv = -EIO;
+
 	inode->i_mtime = CURRENT_TIME;
-	return count;
+	return rv ? rv : count;
 }
 
 
@@ -519,13 +591,11 @@ int psaux_init(void)
 		aux_write_ack(AUX_SET_RES);
 		aux_write_ack(3);			/* 8 counts per mm */
 		aux_write_ack(AUX_SET_SCALE21);		/* 2:1 scaling */
-		poll_aux_status_nosleep();
 #endif /* INITIALIZE_DEVICE */
-		outb_p(AUX_DISABLE,AUX_COMMAND);   /* Disable Aux device */
-		poll_aux_status_nosleep();
-		outb_p(AUX_CMD_WRITE,AUX_COMMAND);
-		poll_aux_status_nosleep();             /* Disable interrupts */
-		outb_p(AUX_INTS_OFF, AUX_OUTPUT_PORT); /*  on the controller */
+		/* Disable Aux device and its interrupts on the controller */
+		if (aux_write_byte(AUX_DISABLE, AUX_COMMAND) < 0 ||
+		    aux_write_cmd(AUX_INTS_OFF) < 0)
+		    printk(KERN_ERR "psaux: controller timeout\n");
 	}
 	return 0;
 }
@@ -533,7 +603,7 @@ int psaux_init(void)
 #ifdef MODULE
 int init_module(void)
 {
-	return psaux_init(); /*?? Bjorn */
+	return psaux_init();
 }
 
 void cleanup_module(void)
@@ -545,28 +615,18 @@ void cleanup_module(void)
 static int poll_aux_status(void)
 {
 	int retries=0;
+	int reply=0;
 
-	while ((inb(AUX_STATUS)&0x03) && retries < MAX_RETRIES) {
+	while ((inb(AUX_STATUS) & (AUX_KOBUF_FULL|AUX_IBUF_FULL)) &&
+	       retries < MAX_RETRIES) {
  		if ((inb_p(AUX_STATUS) & AUX_OBUF_FULL) == AUX_OBUF_FULL)
-			inb_p(AUX_INPUT_PORT);
+			reply = inb_p(AUX_INPUT_PORT);
 		current->state = TASK_INTERRUPTIBLE;
 		current->timeout = jiffies + (5*HZ + 99) / 100;
 		schedule();
 		retries++;
 	}
-	return !(retries==MAX_RETRIES);
-}
-
-static int poll_aux_status_nosleep(void)
-{
-	int retries = 0;
-
-	while ((inb(AUX_STATUS)&0x03) && retries < 1000000) {
- 		if ((inb_p(AUX_STATUS) & AUX_OBUF_FULL) == AUX_OBUF_FULL)
-			inb_p(AUX_INPUT_PORT);
-		retries++;
-	}
-	return !(retries == 1000000);
+	return (retries==MAX_RETRIES) ? -1 : reply;
 }
 
 #ifdef CONFIG_82C710_MOUSE

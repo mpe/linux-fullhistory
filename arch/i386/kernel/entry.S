@@ -381,22 +381,21 @@ error_code:
 	push %es
 	push %ds
 	pushl %eax
+	xorl %eax,%eax
 	pushl %ebp
 	pushl %edi
 	pushl %esi
 	pushl %edx
+	decl %eax			# eax = -1
 	pushl %ecx
 	pushl %ebx
-	movl $0,%eax
-	movl %eax,%db7			# disable hardware debugging...
 	cld
-	movl $-1, %eax
-	xchgl %eax, ORIG_EAX(%esp)	# orig_eax (get the error code. )
 	xorl %ebx,%ebx			# zero ebx
+	xchgl %eax, ORIG_EAX(%esp)	# orig_eax (get the error code. )
 	mov %gs,%bx			# get the lower order bits of gs
+	movl %esp,%edx
 	xchgl %ebx, GS(%esp)		# get the address and save gs.
 	pushl %eax			# push the error code
-	lea 4(%esp),%edx
 	pushl %edx
 	movl $(KERNEL_DS),%edx
 	mov %dx,%ds
@@ -405,9 +404,6 @@ error_code:
 	mov %dx,%fs
 #ifdef __SMP__
 	ENTER_KERNEL
-#endif
-	pushl %eax
-#ifdef __SMP__
 	GET_PROCESSOR_OFFSET(%eax)
 	movl SYMBOL_NAME(current_set)(,%eax), %eax
 #else
@@ -415,7 +411,6 @@ error_code:
 #endif
 	movl %db6,%edx
 	movl %edx,dbgreg6(%eax)  # save current hardware debugging status
-	popl %eax
 	call *%ebx
 	addl $8,%esp
 	jmp ret_from_sys_call

@@ -39,7 +39,7 @@
 #include <net/checksum.h>
 #include <linux/route.h>
 #include <net/route.h>
- 
+
 #ifdef CONFIG_IP_FORWARD
 #ifdef CONFIG_IP_MROUTE
 
@@ -57,8 +57,11 @@ static void ip_encap(struct sk_buff *skb, int len, struct device *out, __u32 dad
 	 *	Firstly push down and install the IPIP header.
 	 */
 	struct iphdr *iph=(struct iphdr *)skb_push(skb,sizeof(struct iphdr));
+
 	if(len>65515)
 		len=65515;
+
+
 	iph->version	= 	4;
 	iph->tos	=	skb->ip_hdr->tos;
 	iph->ttl	=	skb->ip_hdr->ttl;
@@ -67,17 +70,26 @@ static void ip_encap(struct sk_buff *skb, int len, struct device *out, __u32 dad
 	iph->saddr	=	out->pa_addr;
 	iph->protocol	=	IPPROTO_IPIP;
 	iph->ihl	=	5;
-	iph->tot_len	=	htons(skb->len);
+	iph->tot_len	=	htons(skb->len + len);  /* Anand, ernet */
 	iph->id		=	htons(ip_id_count++);
 	ip_send_check(iph);
 
 	skb->dev = out;
 	skb->arp = 1;
-	skb->raddr=daddr;
+	skb->raddr=daddr;  /* Router address is not destination address. The
+			    * correct value is given eventually. I have not
+			    * removed this statement. But could have. 
+			    * Anand, ernet.
+			    */ 
 	/*
 	 *	Now add the physical header (driver will push it down).
 	 */
-	if (out->hard_header && out->hard_header(skb, out, ETH_P_IP, NULL, NULL, len)<0)
+
+	/* The last parameter of out->hard_header() needed skb->len + len.
+ 	 * Anand, ernet.
+	 */
+	if (out->hard_header && out->hard_header(skb, out, ETH_P_IP, NULL, NULL, 
+	skb->len + len)<0)
 			skb->arp=0;
 	/*
 	 *	Read to queue for transmission.
@@ -121,18 +133,22 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 	 */
 
 	iph = skb->h.iph;
-	iph->ttl--;
+	if (!(is_frag&IPFWD_NOTTLDEC))
+	{
+		unsigned long checksum = iph->check;
+		iph->ttl--;
 
 	/*
 	 *	Re-compute the IP header checksum.
-	 *	This is inefficient. We know what has happened to the header
-	 *	and could thus adjust the checksum as Phil Karn does in KA9Q
+	 *	This is efficient. We know what has happened to the header
+	 *	and can thus adjust the checksum as Phil Karn does in KA9Q
+	 *	except we do this in "network byte order".
 	 */
-
-	iph->check = ntohs(iph->check) + 0x0100;
-	if ((iph->check & 0xFF00) == 0)
-		iph->check++;		/* carry overflow */
-	iph->check = htons(iph->check);
+		checksum += htons(0x0100);
+		/* carry overflow? */
+		checksum += checksum >> 16;
+		iph->check = checksum;
+	}
 
 	if (iph->ttl <= 0)
 	{
@@ -141,8 +157,14 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 		return -1;
 	}
 
+	/* If IPFWD_MULTITUNNEL flag is set, then we have to perform routing
+	 * decision so as to reach the other end of the tunnel. This condition
+	 * also means that we are dealing with a unicast IP packet "in a way". 
+	 * Anand, ernet.
+	 */
+
 #ifdef CONFIG_IP_MROUTE
-	if(!(is_frag&IPFWD_MULTICASTING))
+	if(!(is_frag&IPFWD_MULTICASTING) || (is_frag&IPFWD_MULTITUNNEL))
 	{
 #endif	
 		/*
@@ -205,6 +227,12 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 				icmp_send(skb, ICMP_REDIRECT, ICMP_REDIR_HOST, raddr, dev);
 #endif
 #ifdef CONFIG_IP_MROUTE
+
+		/* This is for ip encap. Anand, ernet.*/
+
+		if (is_frag&IPFWD_MULTITUNNEL) {
+			encap=20;
+				}
 	}
 	else
 	{
@@ -327,7 +355,20 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 			if(is_frag&IPFWD_MULTITUNNEL)
 			{
 				skb_reserve(skb2,(encap+dev2->hard_header_len+15)&~15);	/* 16 byte aligned IP headers are good */
-				ip_encap(skb2,skb->len, dev2, raddr);
+
+/* We need to pass on IP information of the incoming packet to ip_encap() 
+ * to fillin ttl, and tos fields.The destination should be target_addr. 
+ *  Anand, ernet. 
+ */
+
+				skb2->ip_hdr = skb->ip_hdr; 
+
+				ip_encap(skb2,skb->len, dev2, target_addr);
+
+/*  The router address is got earlier that to take us to the remote tunnel
+ *  Anand, ernet.
+ */
+				skb2->raddr = rt->rt_gateway;
 			}
 			else
 #endif			
@@ -341,7 +382,6 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 			ptr = skb_put(skb2,skb->len);
 			skb2->free = 1;
 			skb2->h.raw = ptr;
-
 			/*
 			 *	Copy the packet data into the new buffer.
 			 */
@@ -517,3 +557,6 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 
 
 #endif
+
+
+

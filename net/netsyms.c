@@ -159,6 +159,7 @@ static struct symbol_table net_syms = {
 	X(skb_clone),
 	X(dev_alloc_skb),
 	X(dev_kfree_skb),
+	X(skb_device_unlock),
 	X(netif_rx),
 	X(dev_tint),
 	X(irq2dev_map),

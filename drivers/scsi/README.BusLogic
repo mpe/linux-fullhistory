@@ -1,9 +1,9 @@
 		  BusLogic MultiMaster SCSI Driver for Linux
 
-		       Version 1.2.5 for Linux 1.2.13
-		       Version 2.0.5 for Linux 2.0.4
+		       Version 1.2.6 for Linux 1.2.13
+		       Version 2.0.6 for Linux 2.0.4
 
-				  7 July 1996
+				 17 July 1996
 
 			       Leonard N. Zubkoff
 			       Dandelion Digital
@@ -296,9 +296,9 @@ file "BusLogic.c".  The following examples may be useful as a starting point:
     during installation on a system with a flaky SCSI configuration.  In cases
     of a marginal SCSI configuration it may also be beneficial to disable fast
     transfers and/or synchronous negotiation using AutoSCSI on "W" and "C"
-    series boards.  Disconnect/reconnect may also be disabled for fast devices
-    such as disk drives, but should not be disabled for tape drives or other
-    devices where a single command may take over a second to execute.
+    series controllers.  Disconnect/reconnect may also be disabled for fast
+    devices such as disk drives, but should not be disabled for tape drives or
+    other devices where a single command may take over a second to execute.
 
   "BusLogic=0,0,30"
 
@@ -326,7 +326,7 @@ substantially impact performance.
 				 INSTALLATION
 
 This distribution was prepared for Linux kernel version 1.2.13
-(BusLogic-1.2.5.tar.gz) or Linux kernel version 2.0.4 (BusLogic-2.0.5.tar.gz).
+(BusLogic-1.2.6.tar.gz) or Linux kernel version 2.0.4 (BusLogic-2.0.6.tar.gz).
 Installation in later versions will probably be successful as well, though
 BusLogic.patch may not be required.  Installation in earlier versions is not
 recommended.
@@ -336,7 +336,7 @@ replacing "/usr/src" with wherever you keep your Linux kernel source tree
 (substitute "1.2" or "2.0" for "x.y" in the tar command as appropriate):
 
   cd /usr/src
-  tar -xvzf BusLogic-x.y.5.tar.gz
+  tar -xvzf BusLogic-x.y.6.tar.gz
   mv README.* BusLogic.[ch] linux/drivers/scsi
   patch -p < BusLogic.patch	    (on Linux 1.2.13 only)
   patch -p < BusLogic.elf_patch	    (on Linux 1.2.13 ELF systems only)

@@ -1,5 +1,5 @@
 /*
- *	IP multicast routing support for mrouted 3.6
+ *	IP multicast routing support for mrouted 3.6/3.8
  *
  *		(c) 1995 Alan Cox, <alan@cymru.net>
  *	  Linux Consultancy and Custom Driver Development
@@ -12,8 +12,11 @@
  *
  *	Fixes:
  *	Michael Chastain	:	Incorrect size of copying.
- *	Alan Cox		:	Added the cache manager code
+ *	Alan Cox		:	Added the cache manager code.
  *	Alan Cox		:	Fixed the clone/copy bug and device race.
+ *	Malcolm Beattie		:	Buffer handling fixes.
+ *	Alexey Kuznetsov	:	Double buffer free and other fixes.
+ *	SVR Anand		:	Fixed several multicast bugs and problems.
  *
  *	Status:
  *		Cache manager under test. Forwarding in vague test mode
@@ -736,7 +739,14 @@ void ipmr_forward(struct sk_buff *skb, int is_frag)
 		kfree_skb(skb, FREE_WRITE);
 		return;
 	}
+
+	/*
+	 *	Without the following addition, skb->h.iph points to something
+	 *	different that is not the ip header.
+	 */
 	
+	skb->h.iph = skb->ip_hdr;  /* Anand, ernet.  */
+
 	vif_table[vif].pkt_in++;
 	vif_table[vif].bytes_in+=skb->len;
 	
@@ -909,7 +919,7 @@ done:
  
 void ip_mr_init(void)
 {
-	printk(KERN_INFO "Linux IP multicast router 0.05.\n");
+	printk(KERN_INFO "Linux IP multicast router 0.06.\n");
 	register_netdevice_notifier(&ip_mr_notifier);
 #ifdef CONFIG_PROC_FS	
 	proc_net_register(&(struct proc_dir_entry) {

@@ -729,9 +729,9 @@ static void requeue_sd_request (Scsi_Cmnd * SCpnt)
 	   ((unsigned int) SCpnt->request.bh->b_data-1) == ISA_DMA_THRESHOLD) count--;
 #endif
 	SCpnt->use_sg = count;  /* Number of chains */
-	count = 512;/* scsi_malloc can only allocate in chunks of 512 bytes */
-	while( count < (SCpnt->use_sg * sizeof(struct scatterlist))) 
-	    count = count << 1;
+	/* scsi_malloc can only allocate in chunks of 512 bytes */
+	count  = (SCpnt->use_sg * sizeof(struct scatterlist) + 511) & ~511;
+
 	SCpnt->sglist_len = count;
 	max_sg = count / sizeof(struct scatterlist);
 	if(SCpnt->host->sg_tablesize < max_sg) 

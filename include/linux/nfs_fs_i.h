@@ -28,6 +28,10 @@ struct nfs_inode_info {
 	 * NFS FH, but that requires a kmalloc.
 	 */
 	struct inode *silly_rename_dir;
+	/*
+	 * attrtimeo defines for how long the cached attributes are valid
+	 */
+	unsigned long attrtimeo;
 };
 
 #endif

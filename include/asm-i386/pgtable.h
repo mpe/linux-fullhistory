@@ -293,14 +293,14 @@ do { \
 		__asm__ __volatile__("movl %0,%%cr3": :"r" (pgdir)); \
 } while (0)
 
-extern inline int pte_none(pte_t pte)		{ return !pte_val(pte); }
-extern inline int pte_present(pte_t pte)	{ return pte_val(pte) & _PAGE_PRESENT; }
-extern inline void pte_clear(pte_t *ptep)	{ pte_val(*ptep) = 0; }
+#define pte_none(x)	(!pte_val(x))
+#define pte_present(x)	(pte_val(x) & _PAGE_PRESENT)
+#define pte_clear(xp)	do { pte_val(*(xp)) = 0; } while (0)
 
-extern inline int pmd_none(pmd_t pmd)		{ return !pmd_val(pmd); }
-extern inline int pmd_bad(pmd_t pmd)		{ return (pmd_val(pmd) & ~PAGE_MASK) != _PAGE_TABLE || pmd_val(pmd) > high_memory; }
-extern inline int pmd_present(pmd_t pmd)	{ return pmd_val(pmd) & _PAGE_PRESENT; }
-extern inline void pmd_clear(pmd_t * pmdp)	{ pmd_val(*pmdp) = 0; }
+#define pmd_none(x)	(!pmd_val(x))
+#define	pmd_bad(x)	((pmd_val(x) & ~PAGE_MASK) != _PAGE_TABLE)
+#define pmd_present(x)	(pmd_val(x) & _PAGE_PRESENT)
+#define pmd_clear(xp)	do { pmd_val(*(xp)) = 0; } while (0)
 
 /*
  * The "pgd_xxx()" functions here are trivial for a folded two-level
@@ -421,25 +421,35 @@ extern inline void pte_free(pte_t * pte)
 
 extern inline pte_t * pte_alloc(pmd_t * pmd, unsigned long address)
 {
-	address = (address >> PAGE_SHIFT) & (PTRS_PER_PTE - 1);
-	if (pmd_none(*pmd)) {
-		pte_t * page = (pte_t *) get_free_page(GFP_KERNEL);
-		if (pmd_none(*pmd)) {
-			if (page) {
-				pmd_val(*pmd) = _PAGE_TABLE | (unsigned long) page;
-				return page + address;
-			}
-			pmd_val(*pmd) = _PAGE_TABLE | (unsigned long) BAD_PAGETABLE;
-			return NULL;
-		}
-		free_page((unsigned long) page);
-	}
-	if (pmd_bad(*pmd)) {
-		printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
-		pmd_val(*pmd) = _PAGE_TABLE | (unsigned long) BAD_PAGETABLE;
-		return NULL;
-	}
-	return (pte_t *) pmd_page(*pmd) + address;
+	address = (address >> (PAGE_SHIFT-2)) & 4*(PTRS_PER_PTE - 1);
+
+repeat:
+	if (pmd_none(*pmd))
+		goto getnew;
+	if (pmd_bad(*pmd))
+		goto fix;
+	return (pte_t *) (pmd_page(*pmd) + address);
+	
+getnew:
+{
+	unsigned long page = __get_free_page(GFP_KERNEL);
+	if (!pmd_none(*pmd))
+		goto freenew;
+	if (!page)
+		goto oom;
+	memset((void *) page, 0, PAGE_SIZE);
+	pmd_val(*pmd) = _PAGE_TABLE | page;
+	return (pte_t *) (page + address);
+freenew:
+	free_page(page);
+	goto repeat;
+}
+
+fix:
+	printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
+oom:
+	pmd_val(*pmd) = _PAGE_TABLE | (unsigned long) BAD_PAGETABLE;
+	return NULL;
 }
 
 /*

@@ -233,8 +233,9 @@ printk("Room left at head: %d\n", skb_headroom(skb));
 printk("Room left at tail: %d\n", skb_tailroom(skb));
 printk("Required room: %d, Tunnel hlen: %d\n", max_headroom, TUNL_HLEN);
 #endif
-	if (skb_headroom(skb) >= max_headroom) {
+	if (skb_headroom(skb) >= max_headroom && skb->free) {
 		skb->h.iph = (struct iphdr *) skb_push(skb, tunnel_hlen);
+		skb_device_unlock(skb);
 	} else {
 		struct sk_buff *new_skb;
 
@@ -289,7 +290,7 @@ printk("Required room: %d, Tunnel hlen: %d\n", max_headroom, TUNL_HLEN);
 	iph->tot_len		=	htons(skb->len);
 	iph->id			=	htons(ip_id_count++);	/* Race condition here? */
 	ip_send_check(iph);
-	skb->ip_hdr 		= skb->h.iph;
+	skb->ip_hdr 		=	skb->h.iph;
 	skb->protocol		=	htons(ETH_P_IP);
 #ifdef TUNNEL_DEBUG
 	printk("New IP Header....\n");
@@ -303,7 +304,7 @@ printk("Required room: %d, Tunnel hlen: %d\n", max_headroom, TUNL_HLEN);
 	 */
 
 #ifdef CONFIG_IP_FORWARD
-	if (ip_forward(skb, dev, 0, target))
+	if (ip_forward(skb, dev, IPFWD_NOTTLDEC, target))
 #endif
 		kfree_skb(skb, FREE_WRITE);
 

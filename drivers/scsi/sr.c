@@ -822,9 +822,9 @@ void requeue_sr_request (Scsi_Cmnd * SCpnt)
 	    };
 	};
 	SCpnt->use_sg = count;  /* Number of chains */
-	count = 512;/* scsi_malloc can only allocate in chunks of 512 bytes*/
-	while( count < (SCpnt->use_sg * sizeof(struct scatterlist))) 
-	    count = count << 1;
+	/* scsi_malloc can only allocate in chunks of 512 bytes */
+	count  = (SCpnt->use_sg * sizeof(struct scatterlist) + 511) & ~511;
+
 	SCpnt->sglist_len = count;
 	sgpnt = (struct scatterlist * ) scsi_malloc(count);
 	if (!sgpnt) {

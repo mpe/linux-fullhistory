@@ -1685,7 +1685,7 @@ static ide_drive_t *get_info_ptr (kdev_t i_rdev)
 					return drive;
 			} else if (major == IDE0_MAJOR && unit < 4) {
 				printk("ide: probable bad entry for /dev/hd%c\n", 'a'+unit);
-				printk("ide: to fix it, run:  /usr/src/linux/drivers/block/MAKEDEV.ide\n");
+				printk("ide: to fix it, run:  /usr/src/linux/scripts/MAKEDEV.ide\n");
 			}
 			break;
 		}

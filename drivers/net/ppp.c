@@ -60,7 +60,6 @@
  */
 
 #include <linux/module.h>
-#include <endian.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>

@@ -1307,7 +1307,7 @@ int br_forward(struct sk_buff *skb, int port)	/* 3.7 */
 		/*
 		 *	Sending
 		 */
-		if (port_info[f->port].state == Forwarding) {
+		if (f->port!=port && port_info[f->port].state == Forwarding) {
 			/* has entry expired? */
 			if (f->timer + fdb_aging_time < CURRENT_TIME) {
 				/* timer expired, invalidate entry */

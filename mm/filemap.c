@@ -782,7 +782,8 @@ found_page:
 	 * Ok, found a page in the page cache, now we need to check
 	 * that it's up-to-date
 	 */
-	wait_on_page(page);
+	if (PageLocked(page))
+		goto page_locked_wait;
 	if (!PageUptodate(page))
 		goto page_read_error;
 
@@ -849,6 +850,11 @@ no_cached_page:
 		new_page = try_to_read_ahead(inode, offset + PAGE_SIZE, 0);
 	goto found_page;
 
+page_locked_wait:
+	__wait_on_page(page);
+	if (PageUptodate(page))
+		goto success;
+	
 page_read_error:
 	/*
 	 * Umm, take care of errors if the page isn't up-to-date.

@@ -855,28 +855,6 @@ void vmtruncate(struct inode * inode, unsigned long offset)
 	} while ((mpnt = mpnt->vm_next_share) != inode->i_mmap);
 }
 
-/*
- * fill in an empty page-table if none exists.
- */
-static inline pte_t * get_empty_pgtable(struct task_struct * tsk,unsigned long address)
-{
-	pgd_t *pgd;
-	pmd_t *pmd;
-	pte_t *pte;
-
-	pgd = pgd_offset(tsk->mm, address);
-	pmd = pmd_alloc(pgd, address);
-	if (!pmd) {
-		oom(tsk);
-		return NULL;
-	}
-	pte = pte_alloc(pmd, address);
-	if (!pte) {
-		oom(tsk);
-		return NULL;
-	}
-	return pte;
-}
 
 static inline void do_swap_page(struct task_struct * tsk, 
 	struct vm_area_struct * vma, unsigned long address,
@@ -912,41 +890,38 @@ static inline void do_swap_page(struct task_struct * tsk,
 void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	unsigned long address, int write_access)
 {
+	pgd_t * pgd;
+	pmd_t * pmd;
 	pte_t * page_table;
 	pte_t entry;
 	unsigned long page;
 
-	page_table = get_empty_pgtable(tsk, address);
+	pgd = pgd_offset(tsk->mm, address);
+	pmd = pmd_alloc(pgd, address);
+	if (!pmd)
+		goto no_memory;
+	page_table = pte_alloc(pmd, address);
 	if (!page_table)
-		return;
+		goto no_memory;
 	entry = *page_table;
 	if (pte_present(entry))
-		return;
-	if (!pte_none(entry)) {
-		do_swap_page(tsk, vma, address, page_table, entry, write_access);
-		return;
-	}
+		goto is_present;
+	if (!pte_none(entry))
+		goto swap_page;
 	address &= PAGE_MASK;
-	if (!vma->vm_ops || !vma->vm_ops->nopage) {
-		flush_cache_page(vma, address);
-		get_empty_page(tsk, vma, page_table, write_access);
-		return;
-	}
-	++tsk->maj_flt;
-	++vma->vm_mm->rss;
+	if (!vma->vm_ops || !vma->vm_ops->nopage)
+		goto anonymous_page;
 	/*
 	 * The third argument is "no_share", which tells the low-level code
 	 * to copy, not share the page even if sharing is possible.  It's
 	 * essentially an early COW detection 
 	 */
-	page = vma->vm_ops->nopage(vma, address, write_access && !(vma->vm_flags & VM_SHARED));
-	if (!page) {
-		force_sig(SIGBUS, current);
-		flush_cache_page(vma, address);
-		put_page(page_table, BAD_PAGE);
-		/* no need to invalidate, wasn't present */
-		return;
-	}
+	page = vma->vm_ops->nopage(vma, address, 
+		(vma->vm_flags & VM_SHARED)?0:write_access);
+	if (!page)
+		goto sigbus;
+	++tsk->maj_flt;
+	++vma->vm_mm->rss;
 	/*
 	 * This silly early PAGE_DIRTY setting removes a race
 	 * due to the bad i386 page protection. But it's valid
@@ -966,6 +941,28 @@ void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	flush_cache_page(vma, address);
 	put_page(page_table, entry);
 	/* no need to invalidate: a not-present page shouldn't be cached */
+	return;
+
+sigbus:
+	force_sig(SIGBUS, current);
+	flush_cache_page(vma, address);
+	put_page(page_table, BAD_PAGE);
+	/* no need to invalidate, wasn't present */
+	return;
+
+anonymous_page:
+	flush_cache_page(vma, address);
+	get_empty_page(tsk, vma, page_table, write_access);
+	return;
+
+swap_page:
+	do_swap_page(tsk, vma, address, page_table, entry, write_access);
+	return;
+
+no_memory:
+	oom(tsk);
+is_present:
+	return;
 }
 
 /*

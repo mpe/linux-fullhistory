@@ -610,6 +610,8 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 	struct sk_buff *skb2;
 	int left, mtu, hlen, len;
 	int offset;
+	
+	unsigned short true_hard_header_len;
 
 	/*
 	 *	Point into the IP datagram header.
@@ -624,12 +626,18 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 #endif
 
 	/*
+	 * Calculate the length of the link-layer header appended to
+	 * the IP-packet.
+	 */
+	true_hard_header_len = ((unsigned char *)iph) - raw;
+
+	/*
 	 *	Setup starting values.
 	 */
 
 	hlen = iph->ihl * 4;
 	left = ntohs(iph->tot_len) - hlen;	/* Space per frame */
-	hlen += dev->hard_header_len;		/* Total header size */
+	hlen += true_hard_header_len;
 	mtu = (dev->mtu - hlen);		/* Size of data space */
 	ptr = (raw + hlen);			/* Where to start from */
 
@@ -706,8 +714,11 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 		 */
 
 		skb2->arp = skb->arp;
+		skb2->protocol = htons(ETH_P_IP); /* Atleast PPP needs this */
+#if 0		
 		if(skb->free==0)
 			printk(KERN_ERR "IP fragmenter: BUG free!=1 in fragmenter\n");
+#endif			
 		skb2->free = 1;
 		skb_put(skb2,len + hlen);
 		skb2->h.raw=(char *) skb2->data;
@@ -735,7 +746,7 @@ void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev, int i
 		memcpy(skb2->h.raw + hlen, ptr, len);
 		left -= len;
 
-		skb2->h.raw+=dev->hard_header_len;
+		skb2->h.raw+=true_hard_header_len;
 
 		/*
 		 *	Fill in the new header fields.

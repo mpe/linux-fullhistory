@@ -155,6 +155,7 @@ struct old_floppy_raw_cmd {
 #include <linux/delay.h>
 #include <linux/mc146818rtc.h> /* CMOS defines */
 #include <linux/ioport.h>
+#include <linux/interrupt.h>
 
 #include <asm/dma.h>
 #include <asm/irq.h>
@@ -1039,6 +1040,7 @@ static void setup_DMA(void)
 	INT_OFF;
 	fd_disable_dma();
 	fd_clear_dma_ff();
+	fd_cacheflush(raw_cmd->kernel_data, raw_cmd->length);
 	fd_set_dma_mode((raw_cmd->flags & FD_RAW_READ)?
 			DMA_MODE_READ : DMA_MODE_WRITE);
 	fd_set_dma_addr(virt_to_bus(raw_cmd->kernel_data));
@@ -1685,9 +1687,15 @@ void floppy_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 		} while ((ST0 & 0x83) != UNIT(current_drive) && inr == 2);
 	}
 	if (handler) {
-		/* expected interrupt */
-		floppy_tq.routine = (void *)(void *) handler;
-		queue_task_irq(&floppy_tq, &tq_timer);
+		if(intr_count >= 2)
+			{
+				/* expected interrupt */
+				floppy_tq.routine = (void *)(void *) handler;
+				queue_task_irq(&floppy_tq, &tq_immediate);
+				mark_bh(IMMEDIATE_BH);
+			}
+		else
+			handler();
 	} else
 		FDCS->reset = 1;
 	is_alive("normal interrupt end");
@@ -1925,8 +1933,8 @@ static int wait_til_done(void (*handler)(void), int interruptible)
 	unsigned long flags;
 
 	floppy_tq.routine = (void *)(void *) handler;
-	queue_task(&floppy_tq, &tq_timer);
-
+	queue_task(&floppy_tq, &tq_immediate);
+	mark_bh(IMMEDIATE_BH);
 	INT_OFF;
 	while(command_status < 2 && NO_SIGNAL){
 		is_alive("wait_til_done");
@@ -2385,13 +2393,10 @@ static void copy_buffer(int ssize, int max_sector, int max_sector_2)
 		if (((unsigned long)buffer) % 512)
 			DPRINT("%p buffer not aligned\n", buffer);
 #endif
-		if (CT(COMMAND) == FD_READ) {
-			fd_cacheflush(dma_buffer, size);
+		if (CT(COMMAND) == FD_READ)
 			memcpy(buffer, dma_buffer, size);
-		} else {
+		else
 			memcpy(dma_buffer, buffer, size);
-			fd_cacheflush(dma_buffer, size);
-		}
 		remaining -= size;
 		if (!remaining)
 			break;
@@ -2708,6 +2713,7 @@ static void redo_fd_request(void)
 		raw_cmd = & default_raw_cmd;
 		raw_cmd->flags = 0;
 		if (start_motor(redo_fd_request)) return;
+		disk_change(current_drive);
 		if (test_bit(current_drive, &fake_change) ||
 		   TESTF(FD_DISK_CHANGED)){
 			DPRINT("disk absent or changed during operation\n");
@@ -2736,7 +2742,8 @@ static void redo_fd_request(void)
 		if (TESTF(FD_NEED_TWADDLE))
 			twaddle();
 		floppy_tq.routine = (void *)(void *) floppy_start;
-		queue_task(&floppy_tq, &tq_timer);
+		queue_task(&floppy_tq, &tq_immediate);
+		mark_bh(IMMEDIATE_BH);
 #ifdef DEBUGT
 		debugt("queue fd request");
 #endif
@@ -2757,11 +2764,13 @@ static struct tq_struct request_tq =
 static void process_fd_request(void)
 {
 	cont = &rw_cont;
-	queue_task(&request_tq, &tq_timer);
+	queue_task(&request_tq, &tq_immediate);
+	mark_bh(IMMEDIATE_BH);
 }
 
 static void do_fd_request(void)
 {
+	sti();
 	if (fdc_busy){
 		/* fdc busy, this new request will be treated when the
 		   current one is done */
@@ -2839,9 +2848,6 @@ static int fd_copyout(void *param, const void *address, int size)
 	int ret;
 
 	ECALL(verify_area(VERIFY_WRITE,param,size));
-	fd_cacheflush(address, size); /* is this necessary ??? */
-	/* Ralf: Yes; only the l2 cache is completely chipset
-	   controlled */
 	memcpy_tofs(param,(void *) address, size);
 	return 0;
 }
@@ -2883,7 +2889,7 @@ static void raw_cmd_done(int flag)
 	int i;
 
 	if (!flag) {
-		raw_cmd->flags = FD_RAW_FAILURE;
+		raw_cmd->flags |= FD_RAW_FAILURE;
 		raw_cmd->flags |= FD_RAW_HARDFAILURE;
 	} else {
 		raw_cmd->reply_count = inr;

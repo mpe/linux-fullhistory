@@ -750,9 +750,13 @@ vortex_start_xmit(struct sk_buff *skb, struct device *dev)
 	   we actually have room for this packet.
 	   */
 
+#if 0
+	/* unstable optimization */
 	if (inw(ioaddr + TxFree) > skb->len) /* We actually have free room. */
 	  dev->tbusy = 0;			/* Fake out the check below. */
-	else if (dev->tbusy) {
+	else
+#endif
+	if (dev->tbusy) {
 		/* Transmitter timeout, serious problems. */
 		int tickssofar = jiffies - dev->trans_start;
 		int i;

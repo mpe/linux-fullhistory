@@ -442,7 +442,9 @@ unload_trix_mpu (struct address_info *hw_config)
 void
 unload_trix_sb (struct address_info *hw_config)
 {
+#ifdef CONFIG_SBDSP
   unload_sb (hw_config);
+#endif
 }
 
 

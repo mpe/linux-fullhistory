@@ -17,7 +17,7 @@ static inline unsigned long page_address(struct page * page)
 	return PAGE_OFFSET + PAGE_SIZE * page->map_nr;
 }
 
-#define PAGE_HASH_BITS 10
+#define PAGE_HASH_BITS 11
 #define PAGE_HASH_SIZE (1 << PAGE_HASH_BITS)
 
 #define PAGE_AGE_VALUE 16
@@ -48,16 +48,22 @@ static inline struct page * find_page(struct inode * inode, unsigned long offset
 {
 	struct page *page;
 
-	for (page = page_hash(inode, offset); page ; page = page->next_hash) {
+	page = page_hash(inode, offset);
+	goto inside;
+	for (;;) {
+		page = page->next_hash;
+inside:
+		if (!page)
+			goto not_found;
 		if (page->inode != inode)
 			continue;
-		if (page->offset != offset)
-			continue;
-		/* Found the page. */
-		atomic_inc(&page->count);
-		set_bit(PG_referenced, &page->flags);
-		break;
+		if (page->offset == offset)
+			break;
 	}
+	/* Found the page. */
+	atomic_inc(&page->count);
+	set_bit(PG_referenced, &page->flags);
+not_found:
 	return page;
 }
 

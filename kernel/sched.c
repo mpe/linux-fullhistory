@@ -1117,7 +1117,7 @@ asmlinkage int sys_nice(int increment)
 	if (increase)
 		increment = -increment;
 	newprio = current->priority - increment;
-	if (newprio < 1)
+	if ((signed) newprio < 1)
 		newprio = 1;
 	if (newprio > DEF_PRIORITY*2)
 		newprio = DEF_PRIORITY*2;
