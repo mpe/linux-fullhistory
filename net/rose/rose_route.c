@@ -556,7 +556,7 @@ int rose_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 	dest_addr = (rose_address *)(skb->data + 4);
 
 	for (rose_neigh = rose_neigh_list; rose_neigh != NULL; rose_neigh = rose_neigh->next)
-		if (ax25cmp(&ax25->dest_addr, &rose_neigh->callsign) == 0 && ax25->device == rose_neigh->dev)
+		if (ax25cmp(&ax25->dest_addr, &rose_neigh->callsign) == 0 && ax25->ax25_dev->dev == rose_neigh->dev)
 			break;
 
 	if (rose_neigh == NULL)

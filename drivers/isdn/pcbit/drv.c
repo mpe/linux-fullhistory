@@ -37,7 +37,6 @@
 #include <linux/isdnif.h>
 #include <asm/string.h>
 #include <asm/io.h>
-#include <asm/uaccess.h>
 
 #include "pcbit.h"
 #include "edss1.h"
@@ -227,7 +226,6 @@ int pcbit_command(isdn_ctrl* ctl)
 	struct pcbit_dev  *dev;
 	struct pcbit_chan *chan;
 	struct callb_data info;
-	char *cp;
 
 	dev = finddev(ctl->driver);
 
@@ -246,14 +244,7 @@ int pcbit_command(isdn_ctrl* ctl)
 		break;
 	case ISDN_CMD_DIAL:
 		info.type = EV_USR_SETUP_REQ;
-		info.data.setup.CalledPN = (char *) &ctl->num;
-		cp = strchr(info.data.setup.CalledPN, ',');
-		if (cp)
-			*cp = 0;
-		else {
-			printk(KERN_DEBUG "DIAL: error in CalledPN\n");
-			return -1;
-		}		
+		info.data.setup.CalledPN = (char *) &ctl->parm.setup.phone;
 		pcbit_fsm_event(dev, chan, EV_USR_SETUP_REQ, &info);
 		break;
 	case ISDN_CMD_ACCEPTD:
@@ -281,7 +272,7 @@ int pcbit_command(isdn_ctrl* ctl)
 		pcbit_clear_msn(dev);
 		break;
 	case ISDN_CMD_SETEAZ:
-		pcbit_set_msn(dev, ctl->num);
+		pcbit_set_msn(dev, ctl->parm.num);
 		break;
 	case ISDN_CMD_SETL3:
 		if ((ctl->arg >> 8) != ISDN_PROTO_L3_TRANS)
@@ -429,8 +420,7 @@ int pcbit_writecmd(const u_char* buf, int len, int user, int driver, int channel
 		{
 			u_char cbuf[1024];
 
-			if (copy_from_user(cbuf, buf, len))
-				return -EFAULT;
+			copy_from_user(cbuf, buf, len);
 			for (i=0; i<len; i++)
 				writeb(cbuf[i], dev->sh_mem + i);
 		}
@@ -448,11 +438,7 @@ int pcbit_writecmd(const u_char* buf, int len, int user, int driver, int channel
 			/* get it into kernel space */
 			if ((ptr = kmalloc(len, GFP_KERNEL))==NULL)
 				return -ENOMEM;
-			if (copy_from_user(ptr, buf, len))
-			{
-				kfree(ptr);
-				return -EFAULT;
-			}
+			copy_from_user(ptr, buf, len);
 			loadbuf = ptr;
 		}
 		else
@@ -751,7 +737,7 @@ void pcbit_l3_receive(struct pcbit_dev * dev, ulong msg,
 #endif
 	}
 
-	skb->free = 1;
+	SET_SKB_FREE(skb);
 
 	kfree_skb(skb, FREE_READ);
 
@@ -767,12 +753,12 @@ static int stat_st = 0;
 static int stat_end = 0;
 
 
-extern inline int memcpy_to_COND(int flag, void *d, void *s, int len)
-{
+static __inline void
+memcpy_to_COND(int flag, char *d, const char *s, int len) {
 	if (flag)
-		return copy_to_user(d, s, len);
-	memcpy(d, s, len);
-	return 0;
+		copy_to_user(d, s, len);
+	else
+		memcpy(d, s, len);
 }
 
 
@@ -790,27 +776,24 @@ int pcbit_stat(u_char* buf, int len, int user, int driver, int channel)
 
 	if (stat_st < stat_end)
 	{
-		if (memcpy_to_COND(user, buf, statbuf + stat_st, len))
-			return -EFAULT;
+		memcpy_to_COND(user, buf, statbuf + stat_st, len);
 		stat_st += len;	   
 	}
 	else
 	{
 		if (len > STATBUF_LEN - stat_st)
 		{
-			if (memcpy_to_COND(user, buf, statbuf + stat_st, 
-				       STATBUF_LEN - stat_st))
-			       	return -EFAULT;
-			if (memcpy_to_COND(user, buf, statbuf, 
-				       len - (STATBUF_LEN - stat_st)))
-				return -EFAULT;
+			memcpy_to_COND(user, buf, statbuf + stat_st, 
+				       STATBUF_LEN - stat_st);
+			memcpy_to_COND(user, buf, statbuf, 
+				       len - (STATBUF_LEN - stat_st));
+
 			stat_st = len - (STATBUF_LEN - stat_st);
 		}
 		else
 		{
-			if (memcpy_to_COND(user, buf, statbuf + stat_st,
-				       len))
-			       return -EFAULT;
+			memcpy_to_COND(user, buf, statbuf + stat_st, 
+				       len);
 
 			stat_st += len;
 			
@@ -953,7 +936,7 @@ static int pcbit_ioctl(isdn_ctrl* ctl)
 		return -ENODEV;
 	}
 
-	cmd = (struct pcbit_ioctl *) ctl->num;
+	cmd = (struct pcbit_ioctl *) ctl->parm.num;
 
 	switch(ctl->arg) {
 	case PCBIT_IOCTL_GETSTAT:

@@ -180,6 +180,24 @@ static void lapb_timer(unsigned long param)
 				lapb_requeue_frames(lapb);
 			}
 			break;
+
+		/*
+		 *	Frame reject state, restransmit FRMR frames, up to N2 times.
+		 */
+		case LAPB_STATE_4:
+			if (lapb->n2count == lapb->n2) {
+				lapb_clear_queues(lapb);
+				lapb->state   = LAPB_STATE_0;
+				lapb->t2timer = 0;
+				lapb_disconnect_indication(lapb, LAPB_TIMEDOUT);
+#if LAPB_DEBUG > 0
+				printk(KERN_DEBUG "lapb: (%p) S4 -> S0\n", lapb->token);
+#endif
+			} else {
+				lapb->n2count++;
+				lapb_transmit_frmr(lapb);
+			}
+			break;
 	}
 
 	lapb->t1timer = lapb->t1;

@@ -106,6 +106,7 @@ static int rose_state1_machine(struct sock *sk, struct sk_buff *skb, int framety
 
 		case ROSE_CLEAR_REQUEST:
 			rose_clear_queues(sk);
+			rose_write_internal(sk, ROSE_CLEAR_CONFIRMATION);
 			sk->protinfo.rose->state = ROSE_STATE_0;
 			sk->state                = TCP_CLOSE;
 			sk->err                  = ECONNREFUSED;
@@ -133,7 +134,9 @@ static int rose_state2_machine(struct sock *sk, struct sk_buff *skb, int framety
 	switch (frametype) {
 
 		case ROSE_CLEAR_REQUEST:
+			rose_write_internal(sk, ROSE_CLEAR_CONFIRMATION);
 		case ROSE_CLEAR_CONFIRMATION:
+			rose_clear_queues(sk);
 			sk->protinfo.rose->state = ROSE_STATE_0;
 			sk->state                = TCP_CLOSE;
 			sk->err                  = 0;
@@ -163,7 +166,6 @@ static int rose_state3_machine(struct sock *sk, struct sk_buff *skb, int framety
 	switch (frametype) {
 
 		case ROSE_RESET_REQUEST:
-			rose_clear_queues(sk);
 			rose_write_internal(sk, ROSE_RESET_CONFIRMATION);
 			sk->protinfo.rose->condition = 0x00;
 			sk->protinfo.rose->timer     = 0;
@@ -270,8 +272,9 @@ static int rose_state4_machine(struct sock *sk, struct sk_buff *skb, int framety
 {
 	switch (frametype) {
 
-		case ROSE_RESET_CONFIRMATION:
 		case ROSE_RESET_REQUEST:
+			rose_write_internal(sk, ROSE_RESET_CONFIRMATION);
+		case ROSE_RESET_CONFIRMATION:
 			sk->protinfo.rose->timer     = 0;
 			sk->protinfo.rose->condition = 0x00;
 			sk->protinfo.rose->va        = 0;

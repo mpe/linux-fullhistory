@@ -1,6 +1,12 @@
-/* $Id: mod.c,v 1.1 1996/04/13 10:27:02 fritz Exp $
+/* $Id: mod.c,v 1.3 1997/02/14 12:23:31 fritz Exp $
  *
  * $Log: mod.c,v $
+ * Revision 1.3  1997/02/14 12:23:31  fritz
+ * Added support for new insmod parameter handling.
+ *
+ * Revision 1.2  1997/02/10 11:45:14  fritz
+ * More changes for Kernel 2.1.X compatibility.
+ *
  * Revision 1.1  1996/04/13 10:27:02  fritz
  * Initial revision
  *
@@ -14,7 +20,7 @@ extern char   *teles_id;
 int             nrcards;
 
 typedef struct {
-	unsigned int	membase;
+	byte           *membase;
 	int             interrupt;
 	unsigned int    iobase;
 	unsigned int    protocol;
@@ -40,6 +46,13 @@ io_type         io[] =
 	{0, 0, 0, 0},
 };
 
+#ifdef MODULE
+#if (LINUX_VERSION_CODE > 0x020111)
+MODULE_PARM(io, "1-64i");
+MODULE_PARM(teles_id, "s");
+#endif
+#endif
+
 void
 teles_mod_dec_use_count(void)
 {
@@ -53,7 +66,6 @@ teles_mod_inc_use_count(void)
 }
 
 #ifdef MODULE
-EXPORT_NO_SYMBOLS;
 #define teles_init init_module
 #else
 void teles_setup(char *str, int *ints)
@@ -74,7 +86,7 @@ void teles_setup(char *str, int *ints)
                         j++; argc--;
                 }
                 if (argc) {
-                        io[i].membase   = ints[j];
+                        io[i].membase   = (byte *)ints[j];
                         j++; argc--;
                 }
                 if (argc) {
@@ -116,7 +128,14 @@ teles_init(void)
                 CallcNew();
                 ll_init();
 
+		/* No symbols to export, hide all symbols */
+
 #ifdef MODULE
+#if (LINUX_VERSION_CODE < 0x020111)
+			register_symtab(NULL);
+#else
+			EXPORT_NO_SYMBOLS;
+#endif
                 printk(KERN_NOTICE "Teles module installed\n");
 #endif
                 return (0);

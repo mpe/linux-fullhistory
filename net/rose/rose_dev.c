@@ -19,6 +19,8 @@
 
 #include <linux/config.h>
 #if defined(CONFIG_ROSE) || defined(CONFIG_ROSE_MODULE)
+#define __NO_VERSION__
+#include <linux/module.h>
 #include <linux/proc_fs.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -143,6 +145,7 @@ static int rose_set_mac_address(struct device *dev, void *addr)
 
 static int rose_open(struct device *dev)
 {
+	MOD_INC_USE_COUNT;
 	dev->tbusy = 0;
 	dev->start = 1;
 
@@ -153,6 +156,7 @@ static int rose_open(struct device *dev)
 
 static int rose_close(struct device *dev)
 {
+	MOD_DEC_USE_COUNT;
 	dev->tbusy = 1;
 	dev->start = 0;
 

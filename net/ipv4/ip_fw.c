@@ -571,7 +571,7 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, __u16 *redirport, struct ip_
 			answer = FW_BLOCK;
 
 #ifdef CONFIG_IP_FIREWALL_NETLINK
-		if(answer == FW_REJECT || answer == FW_BLOCK)
+		if((policy&IP_FW_F_PRN) && (answer == FW_REJECT || answer == FW_BLOCK))
 		{
 			struct sk_buff *skb=alloc_skb(128, GFP_ATOMIC);
 			if(skb)
@@ -1320,4 +1320,8 @@ void ip_fw_init(void)
 	/* Register for device up/down reports */
 	register_netdevice_notifier(&ipfw_dev_notifier);
 #endif
+
+#ifdef CONFIG_IP_FIREWALL_NETLINK
+   netlink_attach(NETLINK_FIREWALL, netlink_donothing); /* XXX */
+#endif /* CONFIG_IP_FIREWALL_NETLINK */
 }

@@ -830,6 +830,15 @@ static void set_multicast_list(struct device *dev)
 	/* Actually netatalk needs fixing! */
 }
 
+static int ltpc_hard_header (struct sk_buff *skb, struct device *dev, 
+	unsigned short type, void *daddr, void *saddr, unsigned len)
+{
+	if(debug&DEBUG_VERBOSE)
+		printk("ltpc_hard_header called for device %s\n",
+			dev->name);
+	return 0;
+}
+
 static int ltpc_init(struct device *dev)
 {
 	/* Initialize the device structure. */
@@ -837,6 +846,7 @@ static int ltpc_init(struct device *dev)
 	/* Fill in the fields of the device structure with ethernet-generic values. */
 	ltalk_setup(dev);
 	dev->hard_start_xmit = ltpc_xmit;
+	dev->hard_header = ltpc_hard_header;
 
 	dev->priv = kmalloc(sizeof(struct net_device_stats), GFP_KERNEL);
 	if(!dev->priv)
@@ -855,6 +865,8 @@ static int ltpc_init(struct device *dev)
 	dev->do_ioctl = &ltpc_ioctl;
 
 	dev->set_multicast_list = &set_multicast_list;
+	dev->mc_list = NULL;
+
 	return 0;
 }
 
@@ -874,22 +886,22 @@ static void ltpc_poll(unsigned long l)
 		ltpc_poll_counter--;
 	}
   
-	if (!dev) return;  /* we've been downed */
+	if (!dev)
+		return;  /* we've been downed */
 
-	if (dev->irq) {
+	if (dev->irq) 
+	{
 		/* we're set up for interrupts */
 		if (0xf8 != inb_p(dev->base_addr+7)) {
 			/* trigger an interrupt */
 			(void) inb_p(dev->base_addr+6);
 		}
-		ltpc_timer.expires = 100;
+		ltpc_timer.expires = jiffies+100;
 	} else {
 		/* we're strictly polling mode */
 		idle(dev);
-		ltpc_timer.expires = 5;
+		ltpc_timer.expires = jiffies+5;
 	}
-
-	ltpc_timer.expires += jiffies;  /* 1.2 to 1.3 change... */
 
 	add_timer(&ltpc_timer);
 }
@@ -1188,6 +1200,8 @@ int ltpc_probe(struct device *dev)
 		ltpc_timer.expires = 5;
 		  /* polled mode -- 20 times per second */
 	}
+
+	ltpc_timer.expires += jiffies;  /* 1.2 to 1.3 change... */
 
 	add_timer(&ltpc_timer);
 

@@ -700,7 +700,11 @@ extern struct sk_buff 		*sock_alloc_send_skb(struct sock *sk,
 						     int noblock,
 						     int *errcode);
 extern int 			sock_no_fcntl(struct socket *, unsigned int, unsigned long);
-
+extern int			sock_no_getsockopt(struct socket *, int , int,
+						   char *, int *);
+extern int			sock_no_setsockopt(struct socket *, int, int,
+						   char *, int);
+extern int			sock_no_listen(struct socket *, int);
 /*
  *	Default socket callbacks and setup code
  */

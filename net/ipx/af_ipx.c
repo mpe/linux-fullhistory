@@ -1721,7 +1721,7 @@ static int ipx_setsockopt(struct socket *sock, int level, int optname, char *opt
 
 	sk=sock->sk;
 
-	if (optval==NULL)
+	if (optlen!=sizeof(int))
 		return(-EINVAL);
 
 	err = get_user(opt, (unsigned int *)optval);
@@ -1737,12 +1737,12 @@ static int ipx_setsockopt(struct socket *sock, int level, int optname, char *opt
 					sk->protinfo.af_ipx.type=opt;
 					return 0;
 				default:
-					return -EOPNOTSUPP;
+					return -ENOPROTOOPT;
 			}
 			break;
 
 		default:
-			return -EOPNOTSUPP;
+			return -ENOPROTOOPT;
 	}
 }
 
@@ -1751,7 +1751,7 @@ static int ipx_getsockopt(struct socket *sock, int level, int optname,
 {
 	struct sock *sk;
 	int val=0;
-	int err;
+	int len;
 
 	sk=sock->sk;
 
@@ -1770,17 +1770,16 @@ static int ipx_getsockopt(struct socket *sock, int level, int optname,
 			break;
 
 		default:
-			return -EOPNOTSUPP;
+			return -ENOPROTOOPT;
 	}
-	err = put_user(sizeof(int), optlen);
-	if (!err)
-		err = put_user(val, (int *)optval);
-	return err;
-}
-
-static int ipx_listen(struct socket *sock, int backlog)
-{
-	return -EOPNOTSUPP;
+	if(get_user(len,optlen))
+		return -EFAULT;
+	len=min(len,sizeof(int));
+	if(put_user(len, optlen))
+		return -EFAULT;
+	if(copy_to_user(optval,&val,len))
+		return -EFAULT;
+	return 0;
 }
 
 static int ipx_create(struct socket *sock, int protocol)
@@ -2334,7 +2333,7 @@ static struct proto_ops ipx_dgram_ops = {
 	ipx_getname,
 	datagram_poll,
 	ipx_ioctl,
-	ipx_listen,
+	sock_no_listen,
 	ipx_shutdown,
 	ipx_setsockopt,
 	ipx_getsockopt,

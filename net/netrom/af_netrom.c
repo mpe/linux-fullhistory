@@ -308,7 +308,7 @@ void nr_destroy_socket(struct sock *sk)	/* Not static as it's used by the timer 
 		kfree_skb(skb, FREE_READ);
 	}
 
-	if (sk->wmem_alloc > 0 || sk->rmem_alloc > 0) {	/* Defer: outstanding buffers */
+	if (sk->wmem_alloc != 0 || sk->rmem_alloc != 0) {	/* Defer: outstanding buffers */
 		init_timer(&sk->timer);
 		sk->timer.expires  = jiffies + 10 * HZ;
 		sk->timer.function = nr_destroy_timer;
@@ -421,17 +421,16 @@ static int nr_setsockopt(struct socket *sock, int level, int optname,
 	int err, opt;
 
 	if (level != SOL_NETROM)
-		return -EOPNOTSUPP;
+		return -ENOPROTOOPT;
 
-	if (optval == NULL)
+	if(optlen<sizeof(int))
 		return -EINVAL;
+		
+	if(get_user(opt, (int *)optval))
+		return -EFAULT;
 
-	if ((err = verify_area(VERIFY_READ, optval, sizeof(int))) != 0)
-		return err;
-
-	get_user(opt, (int *)optval);
-
-	switch (optname) {
+	switch (optname) 
+	{
 		case NETROM_T1:
 			if (opt < 1)
 				return -EINVAL;
@@ -476,10 +475,13 @@ static int nr_getsockopt(struct socket *sock, int level, int optname,
 {
 	struct sock *sk = sock->sk;
 	int val = 0;
-	int err; 
+	int len; 
 
 	if (level != SOL_NETROM)
-		return -EOPNOTSUPP;
+		return -ENOPROTOOPT;
+	
+	if(get_user(len,optlen))
+		return -EFAULT;
 
 	switch (optname) {
 		case NETROM_T1:
@@ -510,16 +512,11 @@ static int nr_getsockopt(struct socket *sock, int level, int optname,
 			return -ENOPROTOOPT;
 	}
 
-	if ((err = verify_area(VERIFY_WRITE, optlen, sizeof(int))) != 0)
-		return err;
-
-	put_user(sizeof(int), optlen);
-
-	if ((err = verify_area(VERIFY_WRITE, optval, sizeof(int))) != 0)
-		return err;
-
-	put_user(val, (int *)optval);
-
+	len=min(len,sizeof(int));
+	if(put_user(len, optlen))
+		return -EFAULT;
+	if(copy_to_user(optval,&val,len))
+		return -EFAULT;
 	return 0;
 }
 

@@ -296,7 +296,7 @@ int dlci_config(struct device *dev, struct dlci_conf *conf, int get)
 	if (!get)
 	{
 		if(copy_from_user(&config, conf, sizeof(struct dlci_conf)))
-			return -FAULT;
+			return -EFAULT;
 		if (config.flags & ~DLCI_VALID_FLAGS)
 			return(-EINVAL);
 		memcpy(&dlp->config, &config, sizeof(struct dlci_conf));

@@ -46,6 +46,8 @@ pgprot_t protection_map[16] = {
 /* SLAB cache for vm_area_struct's. */
 kmem_cache_t *vm_area_cachep;
 
+int sysctl_overcommit_memory;
+
 /*
  * Check that a process has enough memory to allocate a
  * new virtual mapping.
@@ -58,6 +60,11 @@ static inline int vm_enough_memory(long pages)
 	 * fool it, but this should catch most mistakes.
 	 */
 	long freepages;
+	
+        /* sometimes we want to use more memory than we have. */
+	if (sysctl_overcommit_memory)
+	    return 1;
+
 	freepages = buffermem >> PAGE_SHIFT;
 	freepages += page_cache_size;
 	freepages >>= 1;

@@ -1,4 +1,4 @@
-/* $Id: q931.c,v 1.5 1996/06/03 20:03:40 fritz Exp $
+/* $Id: q931.c,v 1.6 1996/09/23 01:53:53 fritz Exp $
  *
  * q931.c               code to decode ITU Q.931 call control messages
  * 
@@ -14,6 +14,9 @@
  *
  * 
  * $Log: q931.c,v $
+ * Revision 1.6  1996/09/23 01:53:53  fritz
+ * Bugfix: discard unknown frames (non-EDSS1 and non-1TR6).
+ *
  * Revision 1.5  1996/06/03 20:03:40  fritz
  * Fixed typos.
  *
@@ -35,6 +38,7 @@
 
 #define __NO_VERSION__
 #include "teles.h"
+#include "proto.h"
 #include "l3_1TR6.h"
 
 byte           *
@@ -1083,7 +1087,7 @@ dlogframe(struct IsdnCardState *sp, byte * buf, int size, char *comment) {
 			}
 			buf += buf[1] + 2;
 		}
-	} else {	/* EURO */
+	} else if (buf[0]==PROTO_EURO) {	/* EURO */
 		/* locate message type */
 		for (i = 0; i < MTSIZE; i++)
 			if (mtlist[i].nr == buf[3])
@@ -1144,6 +1148,8 @@ dlogframe(struct IsdnCardState *sp, byte * buf, int size, char *comment) {
 			buf += buf[1] + 2;
 		}
 	}
+	else dp += sprintf(dp,"Unnown frame type %.2x, ignored\n",buf[0]);
+
 	dp += sprintf(dp, "\n");
 	teles_putstatus(sp->dlogspace);
 }

@@ -227,10 +227,11 @@ extern __inline unsigned long apic_read(unsigned long reg)
  *	cpu id from the config and set up a fake apic_reg pointer so that before we activate
  *	the apic we get the right answer). Hopefully other processors are more sensible 8)
  */
- 
+
 extern __inline int smp_processor_id(void)
 {
-	return GET_APIC_ID(apic_read(APIC_ID));
+	/* we don't want to mark this access volatile - bad code generation */
+	return GET_APIC_ID(*(unsigned long *)(apic_reg+APIC_ID));
 }
 
 /* These read/change the "processes available" counter in the scheduler. */

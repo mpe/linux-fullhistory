@@ -7,6 +7,10 @@
 # are difficult for users to deal with.
 include CONFIG
 
+SUB_DIRS     := 
+MOD_SUB_DIRS := $(SUB_DIRS)
+ALL_SUB_DIRS := $(SUB_DIRS)
+
 L_TARGET := net.a
 L_OBJS   := auto_irq.o
 M_OBJS   :=
@@ -649,12 +653,14 @@ else
 endif
 
 ifeq ($(CONFIG_SOUNDMODEM),y)
-L_OBJS += soundmodem.o
+ALL_SUB_DIRS += soundmodem
+SUB_DIRS += soundmodem
 CONFIG_HDLCDRV_BUILTIN = y
 else
   ifeq ($(CONFIG_SOUNDMODEM),m)
   CONFIG_HDLCDRV_MODULE = y
-  M_OBJS += soundmodem.o
+  ALL_SUB_DIRS += soundmodem
+  MOD_SUB_DIRS += soundmodem
   endif
 endif
 
@@ -667,7 +673,6 @@ else
   MX_OBJS += hdlcdrv.o
   endif
 endif
-
 
 ifeq ($(CONFIG_VENDOR_SANGOMA),y)
   M_OBJS += sdladrv.o

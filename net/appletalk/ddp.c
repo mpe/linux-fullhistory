@@ -23,6 +23,7 @@
  *		Alan Cox		:	Hooks for PPP (based on the
  *						localtalk hook).
  *		Alan Cox		:	Posix bits
+ *		Alan Cox/Mike Freeman	:	Possible fix to NBP problems
  *		Bradford Johnson	:	IP-over-DDP (experimental)
  *
  *		This program is free software; you can redistribute it and/or
@@ -126,7 +127,8 @@ static struct sock *atalk_search_socket(struct sockaddr_at *to, struct atalk_ifa
 
 	    	if ( to->sat_addr.s_net == s->protinfo.af_at.src_net &&
 		    (to->sat_addr.s_node == s->protinfo.af_at.src_node
-		     ||to->sat_addr.s_node == ATADDR_BCAST ))
+		     ||to->sat_addr.s_node == ATADDR_BCAST
+			||to->sat_addr.s_node == ATADDR_ANYNODE ))
 		{
 			break;
 	   	}
@@ -428,8 +430,10 @@ static struct atalk_iface *atalk_find_interface(int net, int node)
 	struct atalk_iface *iface;
 	for(iface=atalk_iface_list;iface!=NULL;iface=iface->next)
 	{
-		if((node==ATADDR_BCAST || iface->address.s_node==node)
-			&& iface->address.s_net==net && !(iface->status&ATIF_PROBE))
+		if((node==ATADDR_BCAST || node==ATADDR_ANYNODE 
+			|| iface->address.s_node==node)
+			&& iface->address.s_net==net 
+			&& !(iface->status&ATIF_PROBE))
 			return iface;
 	}
 	return NULL;
@@ -913,36 +917,6 @@ unsigned short atalk_checksum(struct ddpehdr *ddp, int len)
 	if(sum)
 		return htons((unsigned short)sum);
 	return 0xFFFF;		/* Use 0xFFFF for 0. 0 itself means none */
-}
-
-/*
- *	Set 'magic' options for appletalk. If we don't have any this is fine
- *	as it is.
- */
-
-static int atalk_setsockopt(struct socket *sock, int level, int optname, char *optval, int optlen)
-{
-	return -EOPNOTSUPP;
-}
-
-
-/*
- *	Get any magic options. Comment above applies.
- */
-
-static int atalk_getsockopt(struct socket *sock, int level, int optname,
-	char *optval, int *optlen)
-{
-	return -ENOPROTOOPT;
-}
-
-/*
- *	Only for connection oriented sockets - ignore
- */
-
-static int atalk_listen(struct socket *sock, int backlog)
-{
-	return -EOPNOTSUPP;
 }
 
 /*
@@ -2004,10 +1978,10 @@ static struct proto_ops atalk_dgram_ops = {
 	atalk_getname,
 	datagram_poll,
 	atalk_ioctl,
-	atalk_listen,
+	sock_no_listen,
 	atalk_shutdown,
-	atalk_setsockopt,
-	atalk_getsockopt,
+	sock_no_setsockopt,
+	sock_no_getsockopt,
 	sock_no_fcntl,
 	atalk_sendmsg,
 	atalk_recvmsg

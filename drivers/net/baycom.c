@@ -73,7 +73,6 @@
 /*****************************************************************************/
 
 #include <linux/module.h>
-
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>
@@ -85,12 +84,53 @@
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
-#include <asm/uaccess.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/netdevice.h>
 #include <linux/hdlcdrv.h>
 #include <linux/baycom.h>
+
+/* --------------------------------------------------------------------- */
+
+/*
+ * currently this module is supposed to support both module styles, i.e.
+ * the old one present up to about 2.1.9, and the new one functioning
+ * starting with 2.1.21. The reason is I have a kit allowing to compile
+ * this module also under 2.0.x which was requested by several people.
+ * This will go in 2.2
+ */
+#include <linux/version.h>
+
+#if LINUX_VERSION_CODE >= 0x20100
+#include <asm/uaccess.h>
+#else
+#include <asm/segment.h>
+#include <linux/mm.h>
+
+#undef put_user
+#undef get_user
+
+#define put_user(x,ptr) ({ __put_user((unsigned long)(x),(ptr),sizeof(*(ptr))); 0; })
+#define get_user(x,ptr) ({ x = ((__typeof__(*(ptr)))__get_user((ptr),sizeof(*(ptr)))); 0; })
+
+extern inline int copy_from_user(void *to, const void *from, unsigned long n)
+{
+        int i = verify_area(VERIFY_READ, from, n);
+        if (i)
+                return i;
+        memcpy_fromfs(to, from, n);
+        return 0;
+}
+
+extern inline int copy_to_user(void *to, const void *from, unsigned long n)
+{
+        int i = verify_area(VERIFY_WRITE, to, n);
+        if (i)
+                return i;
+        memcpy_tofs(to, from, n);
+        return 0;
+}
+#endif
 
 /* --------------------------------------------------------------------- */
 
@@ -100,7 +140,6 @@
  * modem options; bit mask
  */
 #define BAYCOM_OPTIONS_SOFTDCD  1
-
 
 /* --------------------------------------------------------------------- */
 
@@ -897,9 +936,6 @@ static int baycom_ioctl(struct device *dev, struct ifreq *ifr,
 
 /* --------------------------------------------------------------------- */
 
-#ifdef MODULE
-static
-#endif /* MODULE */
 int baycom_init(void)
 {
 	int i, j, found = 0;
@@ -946,12 +982,23 @@ int baycom_init(void)
 /*
  * command line settable parameters
  */
-char *mode = NULL;
-int iobase = 0x3f8;
-int irq = 4;
+static char *mode = NULL;
+static int iobase = 0x3f8;
+static int irq = 4;
+
+#if LINUX_VERSION_CODE >= 0x20115
+
 MODULE_PARM(mode, "s");
+MODULE_PARM_DESC(mode, "baycom operating mode; eg. ser12* or par96");
 MODULE_PARM(iobase, "i");
+MODULE_PARM_DESC(iobase, "baycom io base address");
 MODULE_PARM(irq, "i");
+MODULE_PARM_DESC(irq, "baycom irq number");
+
+MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
+MODULE_DESCRIPTION("Baycom ser12, par96 and picpar amateur radio modem driver");
+
+#endif
 
 int init_module(void)
 {
@@ -996,7 +1043,7 @@ void baycom_setup(char *str, int *ints)
 	int i;
 
 	for (i = 0; (i < NR_PORTS) && (baycom_ports[i].mode); i++);
-	if ((i >= NR_PORTS) || (ints[0] < 3)) {
+	if ((i >= NR_PORTS) || (ints[0] < 2)) {
 		printk(KERN_INFO "%s: too many or invalid interface "
 		       "specifications\n", bc_drvname);
 		return;

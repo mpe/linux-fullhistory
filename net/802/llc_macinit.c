@@ -51,6 +51,8 @@ int llc_mac_data_indicate(llcptr lp, struct sk_buff *skb, struct device *dev, st
 	frameptr fr;
 	int free=1;
 
+	lp->inc_skb=NULL;
+	
 	/*
 	 *	Truncate buffer to true 802.3 length
 	 *	[FIXME: move to 802.2 demux]
@@ -87,6 +89,7 @@ int llc_mac_data_indicate(llcptr lp, struct sk_buff *skb, struct device *dev, st
 			case TEST_RSP:
 				lp->llc_callbacks|=LLC_TEST_INDICATION;
 				lp->inc_skb=skb;
+				free=0;
 				break;
 			case XID_CMD:
 				/*
@@ -110,12 +113,14 @@ int llc_mac_data_indicate(llcptr lp, struct sk_buff *skb, struct device *dev, st
 				}
 				lp->llc_callbacks|=LLC_XID_INDICATION;
 				lp->inc_skb=skb;
+				free=0;
 				break;
 
 			case UI_CMD:
 				lp->llc_callbacks|=LLC_UI_DATA;
 				skb_pull(skb,3);
 				lp->inc_skb=skb;
+				free=0;
 				break;
 
 			default:

@@ -8,6 +8,7 @@
  * LPCAREFUL, LPABORT, LPGETSTATUS added by Chris Metcalf, metcalf@lcs.mit.edu
  * Statistics and support for slow printers by Rob Janssen, rob@knoware.nl
  * "lp=" command line parameters added by Grant Guenther, grant@torque.net
+ * lp_read (Status readback) support added by Carsten Gross, carsten@sol.wohnheim.uni-ulm.de
  */
 
 #include <linux/module.h>
@@ -316,6 +317,116 @@ static long long lp_lseek(struct inode * inode, struct file * file,
 	return -ESPIPE;
 }
 
+/* Test if nibble mode for status readback is okay. 
+ * returns false if not, otherwise true
+ */
+static int lp_nibble_mode_ok(int minor) 
+{
+	int reply=1;
+
+	outb_p(0, LP_B(minor)); 	/* Request "nibble mode" */
+	udelay(LP_DELAY);		
+	outb((inb(LP_C(minor)) & ~8), LP_C(minor)); /* SelectIN low */
+	outb((inb(LP_C(minor)) | 2), LP_C(minor)); /* AutoFeed high */
+	udelay(LP_DELAY);
+	outb((inb(LP_C(minor)) | 1), LP_C(minor)); /* Strobe high */
+	if (( LP_S(minor) & ~0x80) != 0x38) reply=0; /* expected answer? */
+	outb((inb(LP_C(minor)) & ~1 ), LP_C(minor)); /* Strobe low */
+	outb((inb(LP_C(minor)) & ~2 ), LP_C(minor)); /* Autofeed low */
+	udelay(LP_DELAY);
+	return(reply);
+}
+
+
+static int lp_read_nibble(int minor) 
+{
+	unsigned char i;
+	i=LP_S(minor)>>3;
+	i&=~8;
+	if ( ( i & 0x10) == 0) i|=8;
+	return(i & 0x0f);
+}
+
+static void lp_select_in_high(int minor) {
+	outb((inb(LP_C(minor)) | 8), LP_C(minor));
+}
+
+/* Status readback confirming to ieee1284 */
+static long lp_read(struct inode * inode, struct file * file, 
+		   char * buf, unsigned long count)
+{
+	unsigned char z=0, Byte=0, status;
+	char *temp;
+	int retval;
+	unsigned int counter=0;
+	unsigned int i;
+	unsigned int minor=MINOR(inode->i_rdev);
+	
+	temp=buf;	
+#ifdef LP_READ_DEBUG 
+	printk(KERN_INFO "lp%d: read mode\n", minor);
+#endif
+
+	retval = verify_area(VERIFY_WRITE, buf, count);
+	if (retval)
+		return retval;
+	if (lp_nibble_mode_ok(minor)==0) {
+		lp_select_in_high(minor);
+		return temp-buf;          /*  End of file */
+	}
+	for (i=0; i<=(count*2); i++) {
+		outb((inb(LP_C(minor)) | 2), LP_C(minor)); /* AutoFeed high */
+		do {
+			status=(LP_S(minor) & 0x40);
+			udelay(50);
+			counter++;
+			if (need_resched)
+				schedule();
+		} while ( (status == 0x40) && (counter < 20) );
+		if ( counter == 20 ) { /* Timeout */
+#ifdef LP_READ_DEBUG
+			printk(KERN_DEBUG "lp_read: (Autofeed high) timeout\n");
+#endif		
+			outb((inb(LP_C(minor)) & ~2), LP_C(minor));
+			lp_select_in_high(minor);
+			return temp-buf; /* end the read at timeout */
+		}
+		counter=0;
+		z=lp_read_nibble(minor);
+		outb((inb(LP_C(minor)) & ~2), LP_C(minor)); /* AutoFeed low */
+		do {
+			status=(LP_S(minor) & 0x40);
+			udelay(20);
+			counter++;
+			if (need_resched)
+				schedule();
+		} while ( (status == 0) && (counter < 20) );
+		if (counter == 20) { /* Timeout */
+#ifdef LP_READ_DEBUG
+			printk(KERN_DEBUG "lp_read: (Autofeed low) timeout\n");
+#endif
+			if (current->signal & ~current->blocked) {
+				lp_select_in_high(minor);
+				if (temp !=buf)
+					return temp-buf;
+				else 
+					return -EINTR;
+			}
+			current->state=TASK_INTERRUPTIBLE;
+			current->timeout=jiffies + LP_TIME(minor);
+			schedule();
+		}
+		counter=0;
+		if (( i & 1) != 0) {
+			Byte= (Byte | z<<4);
+			put_user(Byte, temp);
+			temp++;
+		} else Byte=z;
+	}
+	lp_select_in_high(minor);
+	return temp-buf;	
+}
+
 static int lp_open(struct inode * inode, struct file * file)
 {
 	unsigned int minor = MINOR(inode->i_rdev);
@@ -524,7 +635,7 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 
 static struct file_operations lp_fops = {
 	lp_lseek,
-	NULL,		/* lp_read */
+	lp_read,
 	lp_write,
 	NULL,		/* lp_readdir */
 	NULL,		/* lp_poll */

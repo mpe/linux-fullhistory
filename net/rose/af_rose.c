@@ -357,7 +357,7 @@ void rose_destroy_socket(struct sock *sk)	/* Not static as it's used by the time
 		kfree_skb(skb, FREE_READ);
 	}
 
-	if (sk->wmem_alloc > 0 || sk->rmem_alloc > 0) {	/* Defer: outstanding buffers */
+	if (sk->wmem_alloc != 0 || sk->rmem_alloc != 0) {	/* Defer: outstanding buffers */
 		init_timer(&sk->timer);
 		sk->timer.expires  = jiffies + 10 * HZ;
 		sk->timer.function = rose_destroy_timer;
@@ -464,20 +464,18 @@ static int rose_setsockopt(struct socket *sock, int level, int optname,
 	char *optval, int optlen)
 {
 	struct sock *sk = sock->sk;
-	int err, opt;
+	int opt;
 
 	if (level != SOL_ROSE)
-		return -EOPNOTSUPP;
+		return -ENOPROTOOPT;
 
-	if (optval == NULL)
+	if(optlen<sizeof(int))
 		return -EINVAL;
+	if(get_user(opt, (int *)optval))
+		return -EFAULT;
 
-	if ((err = verify_area(VERIFY_READ, optval, sizeof(int))) != 0)
-		return err;
-
-	get_user(opt, (int *)optval);
-
-	switch (optname) {
+	switch (optname) 
+	{
 		case ROSE_T1:
 			if (opt < 1)
 				return -EINVAL;
@@ -522,10 +520,13 @@ static int rose_getsockopt(struct socket *sock, int level, int optname,
 {
 	struct sock *sk = sock->sk;
 	int val = 0;
-	int err; 
+	int len;
 
 	if (level != SOL_ROSE)
-		return -EOPNOTSUPP;
+		return -ENOPROTOOPT;
+		
+	if(get_user(len,optlen))
+		return -EFAULT;
 	
 	switch (optname) {
 		case ROSE_T1:
@@ -556,16 +557,11 @@ static int rose_getsockopt(struct socket *sock, int level, int optname,
 			return -ENOPROTOOPT;
 	}
 
-	if ((err = verify_area(VERIFY_WRITE, optlen, sizeof(int))) != 0)
-		return err;
-
-	put_user(sizeof(int), (unsigned long *)optlen);
-
-	if ((err = verify_area(VERIFY_WRITE, optval, sizeof(int))) != 0)
-		return err;
-
-	put_user(val, (unsigned long *)optval);
-
+	len=min(len,sizeof(int));
+	if(put_user(len,optlen))
+		return -EFAULT;
+	if(copy_to_user(optval,&val,len))
+		return -EFAULT;
 	return 0;
 }
 
@@ -685,15 +681,6 @@ static int rose_release(struct socket *sock, struct socket *peer)
 			rose_destroy_socket(sk);
 			break;
 
-		case ROSE_STATE_1:
-			sk->protinfo.rose->state = ROSE_STATE_0;
-			sk->state                = TCP_CLOSE;
-			sk->shutdown            |= SEND_SHUTDOWN;
-			sk->state_change(sk);
-			sk->dead                 = 1;
-			rose_destroy_socket(sk);
-			break;
-
 		case ROSE_STATE_2:
 			sk->protinfo.rose->state = ROSE_STATE_0;
 			sk->state                = TCP_CLOSE;
@@ -703,6 +690,7 @@ static int rose_release(struct socket *sock, struct socket *peer)
 			rose_destroy_socket(sk);
 			break;			
 
+		case ROSE_STATE_1:
 		case ROSE_STATE_3:
 		case ROSE_STATE_4:
 			rose_clear_queues(sk);

@@ -1,6 +1,9 @@
-/* $Id: teles.h,v 1.2 1996/04/30 21:52:04 isdn4dev Exp $
+/* $Id: teles.h,v 1.3 1997/02/11 01:40:36 keil Exp $
  *
  * $Log: teles.h,v $
+ * Revision 1.3  1997/02/11 01:40:36  keil
+ * New Param structure
+ *
  * Revision 1.2  1996/04/30 21:52:04  isdn4dev
  * SPV for 1TR6 - Karsten
  *
@@ -14,6 +17,8 @@
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/major.h>
+#include <asm/segment.h>
+#include <asm/io.h>
 #include <linux/delay.h>
 #include <linux/kernel.h>
 #include <linux/signal.h>
@@ -25,9 +30,6 @@
 #include <linux/wait.h>
 #include <linux/isdnif.h>
 #include <linux/tty.h>
-
-#include <asm/uaccess.h>
-#include <asm/io.h>
 
 #define PH_ACTIVATE   1
 #define PH_DATA       2
@@ -284,11 +286,7 @@ struct Param {
 	int             cause;
 	int             bchannel;
 	int             callref;     /* TEI-Number                      */
-	int             itc;
-	int             info;	     /* Service-Indicator               */
-	int             info2;	     /* Service-Indicator, second octet */
-	char            calling[40]; /* Called Id                       */
-	char            called[40];  /* Caller Id                       */
+	setup_parm      setup;       /* from isdnif.h numbers and Serviceindicator */
 	int             chargeinfo;  /* Charge Info - only for 1tr6 in
 				      * the moment 
 				      */
@@ -307,7 +305,7 @@ struct PStack {
 };
 
 struct HscxState {
-	unsigned int	membase;
+	byte           *membase;
 	int             iobase;
 	int             inuse, init, active;
 	struct BufPool  sbufpool, rbufpool, smallpool;
@@ -330,7 +328,7 @@ struct IsdnCardState {
 #ifdef DEBUG_MAGIC
 	int             magic;
 #endif
-	unsigned int	membase;
+	byte           *membase;
 	int             iobase;
 	struct BufPool  sbufpool, rbufpool, smallpool;
 	struct PStack  *stlist;
@@ -352,7 +350,7 @@ struct IsdnCardState {
 };
 
 struct IsdnCard {
-	unsigned int	membase;
+	byte           *membase;
 	int             interrupt;
 	unsigned int    iobase;
 	int             protocol;	/* EDSS1 or 1TR6 */

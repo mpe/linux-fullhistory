@@ -1,7 +1,7 @@
 /*****************************************************************************/
 
 /*
- *	soundmodem.c  -- soundcard radio modem driver.
+ *	sm.c  -- soundcard radio modem driver.
  *
  *	Copyright (C) 1996  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
@@ -26,9 +26,7 @@
  *
  *  Command line options (insmod command line)
  *
- *  hardware hardware type; 0=sbc, 1=wss, any other value invalid
- *  mode     mode type; 0=1200 baud AFSK, 1=9600 baud FSK, any other
- *           value invalid
+ *  mode     mode string; eg. "wss:afsk1200"
  *  iobase   base address of the soundcard; common values are 0x220 for sbc,
  *           0x530 for wss
  *  irq      interrupt number; common values are 7 or 5 for sbc, 11 for wss
@@ -38,43 +36,137 @@
  *  History:
  *   0.1  21.09.96  Started
  *        18.10.96  Changed to new user space access routines (copy_{to,from}_user)
+ *   0.4  21.01.97  Separately compileable soundcard/modem modules
  */
 
 /*****************************************************************************/
 
-#include <linux/module.h>
-
 #include <linux/config.h>
+#include <linux/module.h>
 #include <linux/ptrace.h>
 #include <linux/types.h>
 #include <linux/fcntl.h>
-#include <linux/interrupt.h>
 #include <linux/ioport.h>
 #include <linux/net.h>
 #include <linux/in.h>
 #include <linux/string.h>
 #include <asm/system.h>
-#include <asm/bitops.h>
 #include <asm/io.h>
-#include <asm/dma.h>
-#include <asm/uaccess.h>
+#include <asm/bitops.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
-#include <limits.h>
-#include <linux/hdlcdrv.h>
-#include <linux/soundmodem.h>
+#include "sm.h"
+
+/* --------------------------------------------------------------------- */
+
+/*
+ * currently this module is supposed to support both module styles, i.e.
+ * the old one present up to about 2.1.9, and the new one functioning
+ * starting with 2.1.21. The reason is I have a kit allowing to compile
+ * this module also under 2.0.x which was requested by several people.
+ * This will go in 2.2
+ */
+#include <linux/version.h>
+
+#if LINUX_VERSION_CODE >= 0x20100
+#include <asm/uaccess.h>
+#else
+#include <asm/segment.h>
+#include <linux/mm.h>
+
+#undef put_user
+#undef get_user
+
+#define put_user(x,ptr) ({ __put_user((unsigned long)(x),(ptr),sizeof(*(ptr))); 0; })
+#define get_user(x,ptr) ({ x = ((__typeof__(*(ptr)))__get_user((ptr),sizeof(*(ptr)))); 0; })
+
+extern inline int copy_from_user(void *to, const void *from, unsigned long n)
+{
+        int i = verify_area(VERIFY_READ, from, n);
+        if (i)
+                return i;
+        memcpy_fromfs(to, from, n);
+        return 0;
+}
+
+extern inline int copy_to_user(void *to, const void *from, unsigned long n)
+{
+        int i = verify_area(VERIFY_WRITE, to, n);
+        if (i)
+                return i;
+        memcpy_tofs(to, from, n);
+        return 0;
+}
+#endif
 
 /* --------------------------------------------------------------------- */
 
 static const char sm_drvname[] = "soundmodem";
 static const char sm_drvinfo[] = KERN_INFO "soundmodem: (C) 1996 Thomas Sailer, HB9JNX/AE4WA\n"
-KERN_INFO "soundmodem: version 0.3 compiled " __TIME__ " " __DATE__ "\n";           ;
+KERN_INFO "soundmodem: version 0.4 compiled " __TIME__ " " __DATE__ "\n";
+
+/* --------------------------------------------------------------------- */
+
+static const struct modem_tx_info *sm_modem_tx_table[] = {
+#ifdef CONFIG_SOUNDMODEM_AFSK1200
+	&sm_afsk1200_tx,
+#endif /* CONFIG_SOUNDMODEM_AFSK1200 */
+#ifdef CONFIG_SOUNDMODEM_AFSK2666
+	&sm_afsk2666_tx,
+#endif /* CONFIG_SOUNDMODEM_AFSK2666 */
+#ifdef CONFIG_SOUNDMODEM_PSK4800
+	&sm_psk4800_tx,
+#endif /* CONFIG_SOUNDMODEM_PSK4800 */
+#ifdef CONFIG_SOUNDMODEM_HAPN4800
+	&sm_hapn4800_8_tx,
+	&sm_hapn4800_10_tx,
+	&sm_hapn4800_pm8_tx,
+	&sm_hapn4800_pm10_tx,
+#endif /* CONFIG_SOUNDMODEM_HAPN4800 */
+#ifdef CONFIG_SOUNDMODEM_FSK9600
+	&sm_fsk9600_4_tx,
+	&sm_fsk9600_5_tx,
+#endif /* CONFIG_SOUNDMODEM_FSK9600 */
+	NULL
+};
+
+static const struct modem_rx_info *sm_modem_rx_table[] = {
+#ifdef CONFIG_SOUNDMODEM_AFSK1200
+	&sm_afsk1200_rx,
+#endif /* CONFIG_SOUNDMODEM_AFSK1200 */
+#ifdef CONFIG_SOUNDMODEM_AFSK2666
+	&sm_afsk2666_rx,
+#endif /* CONFIG_SOUNDMODEM_AFSK2666 */
+#ifdef CONFIG_SOUNDMODEM_PSK4800
+	&sm_psk4800_rx,
+#endif /* CONFIG_SOUNDMODEM_PSK4800 */
+#ifdef CONFIG_SOUNDMODEM_HAPN4800
+	&sm_hapn4800_8_rx,
+	&sm_hapn4800_10_rx,
+	&sm_hapn4800_pm8_rx,
+	&sm_hapn4800_pm10_rx,
+#endif /* CONFIG_SOUNDMODEM_HAPN4800 */
+#ifdef CONFIG_SOUNDMODEM_FSK9600
+	&sm_fsk9600_4_rx,
+	&sm_fsk9600_5_rx,
+#endif /* CONFIG_SOUNDMODEM_FSK9600 */
+	NULL
+};
+
+static const struct hardware_info *sm_hardware_table[] = {
+#ifdef CONFIG_SOUNDMODEM_SBC
+	&sm_hw_sbc,
+#endif /* CONFIG_SOUNDMODEM_SBC */
+#ifdef CONFIG_SOUNDMODEM_WSS
+	&sm_hw_wss,
+	&sm_hw_wssfdx,
+#endif /* CONFIG_SOUNDMODEM_WSS */
+	NULL
+};
 
 /* --------------------------------------------------------------------- */
 
 #define NR_PORTS 4
-
-#define SM_DEBUG
 
 /* --------------------------------------------------------------------- */
 
@@ -86,10 +178,6 @@ static struct {
 } sm_ports[NR_PORTS] = {
 	{ NULL, -1, 0, 0, 0, -1, -1, -1 },
 };
-
-/* --------------------------------------------------------------------- */
-
-#define DMA_MODE_AUTOINIT      0x10
 
 /* --------------------------------------------------------------------- */
 
@@ -135,136 +223,6 @@ static struct {
 #define SP_SER  1
 #define SP_PAR  2
 #define SP_MIDI 4
-
-/* ---------------------------------------------------------------------- */
-/*
- * Information that need to be kept for each board.
- */
-
-struct sm_state {
-	struct hdlcdrv_state hdrv;
-
-	const struct modem_tx_info *mode_tx;
-	const struct modem_rx_info *mode_rx;
-
-	const struct hardware_info *hwdrv;
-
-	/*
-	 * Hardware (soundcard) access routines state
-	 */
-	union {
-		long hw[32/sizeof(long)];
-	} hw;
-
-	/*
-	 * state of the modem code
-	 */
-	union {
-		long m[32/sizeof(long)];
-	} m;
-	union {
-		long d[256/sizeof(long)];
-	} d;
-
-#define DIAGDATALEN 64
-	struct diag_data {
-		unsigned int mode;
-		unsigned int flags;
-		volatile int ptr;
-		short data[DIAGDATALEN];
-	} diag;
-
-
-#ifdef SM_DEBUG
-	struct debug_vals {
-		unsigned long last_jiffies;
-		unsigned cur_intcnt;
-		unsigned last_intcnt;
-		unsigned mod_cyc;
-		unsigned demod_cyc;
-		unsigned dma_residue;
-	} debug_vals;
-#endif /* SM_DEBUG */
-};
-
-/* ---------------------------------------------------------------------- */
-/*
- * Mode definition structure
- */
-
-struct modem_tx_info {
-	const struct modem_tx_info *next;
-	const char *name;
-	unsigned int loc_storage;
-	int srate;
-	int bitrate;
-	unsigned int dmabuflenmodulo;
-	void (*modulator)(struct sm_state *, unsigned char *, int);
-	void (*init)(struct sm_state *);
-};
-#define NEXT_TX_INFO NULL
-
-extern const struct modem_tx_info *modem_tx_base;
-
-struct modem_rx_info {
-	const struct modem_rx_info *next;
-	const char *name;
-	unsigned int loc_storage;
-	int srate;
-	int bitrate;
-	unsigned int dmabuflenmodulo;
-	unsigned int sperbit;
-	void (*demodulator)(struct sm_state *, unsigned char *, int);
-	void (*init)(struct sm_state *);
-};
-#define NEXT_RX_INFO NULL
-
-extern const struct modem_rx_info *modem_rx_base;
-
-/* ---------------------------------------------------------------------- */
-/*
- * Soundcard driver definition structure
- */
-
-struct hardware_info {
-	const struct hardware_info *next;
-	char *hw_name; /* used for request_{region,irq,dma} */
-	unsigned int loc_storage;
-	/*
-	 * mode specific open/close
-	 */
-	int (*open)(struct device *, struct sm_state *);
-	int (*close)(struct device *, struct sm_state *);
-	int (*ioctl)(struct device *, struct sm_state *, struct ifreq *,
-		     struct hdlcdrv_ioctl *, int);
-	int (*sethw)(struct device *, struct sm_state *, char *);
-};
-#define NEXT_HW_INFO NULL
-
-extern const struct hardware_info *hardware_base;
-
-/* --------------------------------------------------------------------- */
-
-#define min(a, b) (((a) < (b)) ? (a) : (b))
-#define max(a, b) (((a) > (b)) ? (a) : (b))
-
-/* --------------------------------------------------------------------- */
-
-static void inline sm_int_freq(struct sm_state *sm)
-{
-#ifdef SM_DEBUG
-	unsigned long cur_jiffies = jiffies;
-	/*
-	 * measure the interrupt frequency
-	 */
-	sm->debug_vals.cur_intcnt++;
-	if ((cur_jiffies - sm->debug_vals.last_jiffies) >= HZ) {
-		sm->debug_vals.last_jiffies = cur_jiffies;
-		sm->debug_vals.last_intcnt = sm->debug_vals.cur_intcnt;
-		sm->debug_vals.cur_intcnt = 0;
-	}
-#endif /* SM_DEBUG */
-}
 
 /* --------------------------------------------------------------------- */
 /*
@@ -368,7 +326,7 @@ static int check_midi(unsigned int iobase)
 
 /* --------------------------------------------------------------------- */
 
-extern void inline output_status(struct sm_state *sm)
+void sm_output_status(struct sm_state *sm)
 {
 	int invert_dcd = 0;
 	int invert_ptt = 0;
@@ -390,7 +348,7 @@ extern void inline output_status(struct sm_state *sm)
 
 /* --------------------------------------------------------------------- */
 
-static void output_open(struct sm_state *sm)
+static void sm_output_open(struct sm_state *sm)
 {
 	enum uart u = c_uart_unknown;
 
@@ -420,7 +378,7 @@ static void output_open(struct sm_state *sm)
 		request_region(sm->hdrv.ptt_out.midiiobase, MIDI_EXTENT,
 			       "sm midi ptt");
 	}
-	output_status(sm);
+	sm_output_status(sm);
 
 	printk(KERN_INFO "%s: ptt output:", sm_drvname);
 	if (sm->hdrv.ptt_out.flags & SP_SER)
@@ -437,11 +395,11 @@ static void output_open(struct sm_state *sm)
 
 /* --------------------------------------------------------------------- */
 
-static void output_close(struct sm_state *sm)
+static void sm_output_close(struct sm_state *sm)
 {
 	/* release regions used for PTT output */
 	sm->hdrv.hdlctx.ptt = sm->hdrv.hdlctx.calibrate = 0;
-	output_status(sm);
+	sm_output_status(sm);
 	if (sm->hdrv.ptt_out.flags & SP_SER)
 		release_region(sm->hdrv.ptt_out.seriobase, SER_EXTENT);
        	if (sm->hdrv.ptt_out.flags & SP_PAR)
@@ -452,182 +410,6 @@ static void output_close(struct sm_state *sm)
 }
 
 /* --------------------------------------------------------------------- */
-/*
- * ===================== diagnostics stuff ===============================
- */
-
-extern inline void diag_trigger(struct sm_state *sm)
-{
-	if (sm->diag.ptr < 0)
-		if (!(sm->diag.flags & SM_DIAGFLAG_DCDGATE) || sm->hdrv.hdlcrx.dcd)
-			sm->diag.ptr = 0;
-}
-
-/* --------------------------------------------------------------------- */
-
-extern inline void diag_add(struct sm_state *sm, int valinp, int valdemod)
-{
-	int val;
-
-	if ((sm->diag.mode != SM_DIAGMODE_INPUT &&
-	     sm->diag.mode != SM_DIAGMODE_DEMOD) ||
-	    sm->diag.ptr >= DIAGDATALEN || sm->diag.ptr < 0)
-		return;
-	val = (sm->diag.mode == SM_DIAGMODE_DEMOD) ? valdemod : valinp;
-	/* clip */
-	if (val > SHRT_MAX)
-		val = SHRT_MAX;
-	if (val < SHRT_MIN)
-		val = SHRT_MIN;
-	sm->diag.data[sm->diag.ptr++] = val;
-}
-
-/* --------------------------------------------------------------------- */
-
-extern inline void diag_add_one(struct sm_state *sm, int val)
-{
-	if ((sm->diag.mode != SM_DIAGMODE_INPUT &&
-	     sm->diag.mode != SM_DIAGMODE_DEMOD) ||
-	    sm->diag.ptr >= DIAGDATALEN || sm->diag.ptr < 0)
-		return;
-	/* clip */
-	if (val > SHRT_MAX)
-		val = SHRT_MAX;
-	if (val < SHRT_MIN)
-		val = SHRT_MIN;
-	sm->diag.data[sm->diag.ptr++] = val;
-}
-
-/* --------------------------------------------------------------------- */
-
-static inline void diag_add_constellation(struct sm_state *sm, int vali, int valq)
-{
-	if ((sm->diag.mode != SM_DIAGMODE_CONSTELLATION) ||
-	    sm->diag.ptr >= DIAGDATALEN-1 || sm->diag.ptr < 0)
-		return;
-	/* clip */
-	if (vali > SHRT_MAX)
-		vali = SHRT_MAX;
-	if (vali < SHRT_MIN)
-		vali = SHRT_MIN;
-	if (valq > SHRT_MAX)
-		valq = SHRT_MAX;
-	if (valq < SHRT_MIN)
-		valq = SHRT_MIN;
-	sm->diag.data[sm->diag.ptr++] = vali;
-	sm->diag.data[sm->diag.ptr++] = valq;
-}
-
-/* --------------------------------------------------------------------- */
-/*
- * ===================== utility functions ===============================
- */
-
-extern inline unsigned int hweight32(unsigned int w)
-	__attribute__ ((unused));
-extern inline unsigned int hweight16(unsigned short w)
-	__attribute__ ((unused));
-extern inline unsigned int hweight8(unsigned char w)
-        __attribute__ ((unused));
-
-extern inline unsigned int hweight32(unsigned int w)
-{
-        unsigned int res = (w & 0x55555555) + ((w >> 1) & 0x55555555);
-        res = (res & 0x33333333) + ((res >> 2) & 0x33333333);
-        res = (res & 0x0F0F0F0F) + ((res >> 4) & 0x0F0F0F0F);
-        res = (res & 0x00FF00FF) + ((res >> 8) & 0x00FF00FF);
-        return (res & 0x0000FFFF) + ((res >> 16) & 0x0000FFFF);
-}
-
-extern inline unsigned int hweight16(unsigned short w)
-{
-        unsigned short res = (w & 0x5555) + ((w >> 1) & 0x5555);
-        res = (res & 0x3333) + ((res >> 2) & 0x3333);
-        res = (res & 0x0F0F) + ((res >> 4) & 0x0F0F);
-        return (res & 0x00FF) + ((res >> 8) & 0x00FF);
-}
-
-extern inline unsigned int hweight8(unsigned char w)
-{
-        unsigned short res = (w & 0x55) + ((w >> 1) & 0x55);
-        res = (res & 0x33) + ((res >> 2) & 0x33);
-        return (res & 0x0F) + ((res >> 4) & 0x0F);
-}
-
-extern inline unsigned int gcd(unsigned int x, unsigned int y)
-	__attribute__ ((unused));
-extern inline unsigned int lcm(unsigned int x, unsigned int y)
-	__attribute__ ((unused));
-
-extern inline unsigned int gcd(unsigned int x, unsigned int y)
-{
-	for (;;) {
-		if (!x)
-			return y;
-		if (!y)
-			return x;
-		if (x > y)
-			x %= y;
-		else
-			y %= x;
-	}
-}
-
-extern inline unsigned int lcm(unsigned int x, unsigned int y)
-{
-	return x * y / gcd(x, y);
-}
-
-/* --------------------------------------------------------------------- */
-/*
- * ===================== profiling =======================================
- */
-
-
-#if defined(SM_DEBUG) && (defined(CONFIG_M586) || defined(CONFIG_M686))
-
-/*
- * only do 32bit cycle counter arithmetic; we hope we won't overflow :-)
- * in fact, overflowing modems would require over 2THz clock speeds :-)
- */
-
-#define time_exec(var,cmd)                                      \
-({                                                              \
-	unsigned int cnt1, cnt2, cnt3;                          \
-	__asm__(".byte 0x0f,0x31" : "=a" (cnt1), "=d" (cnt3));  \
-	cmd;                                                    \
-	__asm__(".byte 0x0f,0x31" : "=a" (cnt2), "=d" (cnt3));  \
-	var = cnt2-cnt1;                                        \
-})
-#else /* defined(SM_DEBUG) && (defined(CONFIG_M586) || defined(CONFIG_M686)) */
-
-#define time_exec(var,cmd) cmd
-
-#endif /* defined(SM_DEBUG) && (defined(CONFIG_M586) || defined(CONFIG_M686)) */
-
-/* --------------------------------------------------------------------- */
-
-#ifdef CONFIG_SOUNDMODEM_WSS
-#include "sm_wss.h"
-#endif /* CONFIG_SOUNDMODEM_WSS */
-#ifdef CONFIG_SOUNDMODEM_SBC
-#include "sm_sbc.h"
-#endif /* CONFIG_SOUNDMODEM_SBC */
-
-#ifdef CONFIG_SOUNDMODEM_AFSK1200
-#include "sm_afsk1200.h"
-#endif /* CONFIG_SOUNDMODEM_AFSK1200 */
-#ifdef CONFIG_SOUNDMODEM_FSK9600
-#include "sm_fsk9600.h"
-#endif /* CONFIG_SOUNDMODEM_FSK9600 */
-#ifdef CONFIG_SOUNDMODEM_AFSK2666
-#include "sm_afsk2666.h"
-#endif /* CONFIG_SOUNDMODEM_AFSK2666 */
-#ifdef CONFIG_SOUNDMODEM_PSK4800
-#include "sm_psk4800.h"
-#endif /* CONFIG_SOUNDMODEM_PSK4800 */
-
-/* --------------------------------------------------------------------- */
 
 static int sm_open(struct device *dev);
 static int sm_close(struct device *dev);
@@ -635,10 +417,6 @@ static int sm_ioctl(struct device *dev, struct ifreq *ifr,
 		    struct hdlcdrv_ioctl *hi, int cmd);
 
 /* --------------------------------------------------------------------- */
-
-const struct modem_tx_info *modem_tx_base = NEXT_TX_INFO;
-const struct modem_rx_info *modem_rx_base = NEXT_RX_INFO;
-const struct hardware_info *hardware_base = NEXT_HW_INFO;
 
 static const struct hdlcdrv_ops sm_ops = {
 	sm_drvname, sm_drvinfo, sm_open, sm_close, sm_ioctl
@@ -664,7 +442,7 @@ static int sm_open(struct device *dev)
 	err = sm->hwdrv->open(dev, sm);
 	if (err)
 		return err;
-	output_open(sm);
+	sm_output_open(sm);
 	MOD_INC_USE_COUNT;
 	printk(KERN_INFO "%s: %s mode %s.%s at iobase 0x%lx irq %u dma %u\n",
 	       sm_drvname, sm->hwdrv->hw_name, sm->mode_tx->name,
@@ -689,7 +467,7 @@ static int sm_close(struct device *dev)
 
 	if (sm->hwdrv && sm->hwdrv->close)
 		err = sm->hwdrv && sm->hwdrv->close(dev, sm);
-	output_close(sm);
+	sm_output_close(sm);
 	MOD_DEC_USE_COUNT;
 	printk(KERN_INFO "%s: close %s at iobase 0x%lx irq %u dma %u\n",
 	       sm_drvname, sm->hwdrv->hw_name, dev->base_addr, dev->irq, dev->dma);
@@ -701,22 +479,22 @@ static int sm_close(struct device *dev)
 static int sethw(struct device *dev, struct sm_state *sm, char *mode)
 {
 	char *cp = strchr(mode, ':');
-	const struct hardware_info *hwp = hardware_base;
+	const struct hardware_info **hwp = sm_hardware_table;
 
 	if (!cp)
 		cp = mode;
 	else {
 		*cp++ = '\0';
-		while (hwp && hwp->hw_name && strcmp(hwp->hw_name, mode))
-			hwp = hwp->next;
-		if (!hwp || !hwp->hw_name)
+		while (hwp && (*hwp) && (*hwp)->hw_name && strcmp((*hwp)->hw_name, mode))
+			hwp++;
+		if (!hwp || !*hwp || !(*hwp)->hw_name)
 			return -EINVAL;
-		if (hwp->loc_storage > sizeof(sm->hw)) {
+		if ((*hwp)->loc_storage > sizeof(sm->hw)) {
 			printk(KERN_ERR "%s: insufficient storage for hw driver %s (%d)\n",
-			       sm_drvname, hwp->hw_name, hwp->loc_storage);
+			       sm_drvname, (*hwp)->hw_name, (*hwp)->loc_storage);
 			return -EINVAL;
 		}
-		sm->hwdrv = hwp;
+		sm->hwdrv = *hwp;
 	}
 	if (!*cp)
 		return 0;
@@ -736,9 +514,9 @@ static int sm_ioctl(struct device *dev, struct ifreq *ifr,
 	unsigned int newdiagmode;
 	unsigned int newdiagflags;
 	char *cp;
-	const struct modem_tx_info *mtp = modem_tx_base;
-	const struct modem_rx_info *mrp = modem_rx_base;
-	const struct hardware_info *hwp = hardware_base;
+	const struct modem_tx_info **mtp = sm_modem_tx_table;
+	const struct modem_rx_info **mrp = sm_modem_rx_table;
+	const struct hardware_info **hwp = sm_hardware_table;
 
 	if (!dev || !dev->priv ||
 	    ((struct sm_state *)dev->priv)->hdrv.magic != HDLCDRV_MAGIC) {
@@ -787,20 +565,20 @@ static int sm_ioctl(struct device *dev, struct ifreq *ifr,
 
 	case HDLCDRVCTL_MODELIST:
 		cp = hi->data.modename;
-		while (hwp) {
-			if (hwp->hw_name)
-				cp += sprintf("%s:,", hwp->hw_name);
-			hwp = hwp->next;
+		while (*hwp) {
+			if ((*hwp)->hw_name)
+				cp += sprintf("%s:,", (*hwp)->hw_name);
+			hwp++;
 		}
-		while (mtp) {
-			if (mtp->name)
-				cp += sprintf(">%s,", mtp->name);
-			mtp = mtp->next;
+		while (*mtp) {
+			if ((*mtp)->name)
+				cp += sprintf(">%s,", (*mtp)->name);
+			mtp++;
 		}
-		while (mrp) {
-			if (mrp->name)
-				cp += sprintf("<%s,", mrp->name);
-			mrp = mrp->next;
+		while (*mrp) {
+			if ((*mrp)->name)
+				cp += sprintf("<%s,", (*mrp)->name);
+			mrp++;
 		}
 		cp[-1] = '\0';
 		if (copy_to_user(ifr->ifr_data, hi, sizeof(*hi)))
@@ -924,23 +702,38 @@ int sm_init(void)
 /*
  * command line settable parameters
  */
-char *mode = NULL;
-int iobase = -1;
-int irq = -1;
-int dma = -1;
-int dma2 = -1;
-int serio = 0;
-int pario = 0;
-int midiio = 0;
+static char *mode = NULL;
+static int iobase = -1;
+static int irq = -1;
+static int dma = -1;
+static int dma2 = -1;
+static int serio = 0;
+static int pario = 0;
+static int midiio = 0;
+
+#if LINUX_VERSION_CODE >= 0x20115
 
 MODULE_PARM(mode, "s");
+MODULE_PARM_DESC(mode, "soundmodem operating mode; eg. sbc:afsk1200 or wss:fsk9600");
 MODULE_PARM(iobase, "i");
+MODULE_PARM_DESC(iobase, "soundmodem base address");
 MODULE_PARM(irq, "i");
+MODULE_PARM_DESC(irq, "soundmodem interrupt");
 MODULE_PARM(dma, "i");
+MODULE_PARM_DESC(dma, "soundmodem dma channel");
 MODULE_PARM(dma2, "i");
+MODULE_PARM_DESC(dma2, "soundmodem 2nd dma channel; full duplex only");
 MODULE_PARM(serio, "i");
+MODULE_PARM_DESC(serio, "soundmodem PTT output on serial port");
 MODULE_PARM(pario, "i");
+MODULE_PARM_DESC(pario, "soundmodem PTT output on parallel port");
 MODULE_PARM(midiio, "i");
+MODULE_PARM_DESC(midiio, "soundmodem PTT output on midi port");
+
+MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
+MODULE_DESCRIPTION("Soundcard amateur radio modem driver");
+
+#endif
 
 int init_module(void)
 {
@@ -1001,7 +794,7 @@ void sm_setup(char *str, int *ints)
 	int i;
 
 	for (i = 0; (i < NR_PORTS) && (sm_ports[i].mode); i++);
-	if ((i >= NR_PORTS) || (ints[0] < 4)) {
+	if ((i >= NR_PORTS) || (ints[0] < 3)) {
 		printk(KERN_INFO "%s: too many or invalid interface "
 		       "specifications\n", sm_drvname);
 		return;
@@ -1010,10 +803,10 @@ void sm_setup(char *str, int *ints)
 	sm_ports[i].iobase = ints[1];
 	sm_ports[i].irq = ints[2];
 	sm_ports[i].dma = ints[3];
-	sm_ports[i].dma2 = (ints[0] >= 5) ? ints[4] : 0;
-	sm_ports[i].seriobase = (ints[0] >= 6) ? ints[5] : 0;
-	sm_ports[i].pariobase = (ints[0] >= 7) ? ints[6] : 0;
-	sm_ports[i].midiiobase = (ints[0] >= 8) ? ints[7] : 0;
+	sm_ports[i].dma2 = (ints[0] >= 4) ? ints[4] : 0;
+	sm_ports[i].seriobase = (ints[0] >= 5) ? ints[5] : 0;
+	sm_ports[i].pariobase = (ints[0] >= 6) ? ints[6] : 0;
+	sm_ports[i].midiiobase = (ints[0] >= 7) ? ints[7] : 0;
 	if (i < NR_PORTS-1)
 		sm_ports[i+1].mode = NULL;
 }

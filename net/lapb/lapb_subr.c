@@ -122,11 +122,9 @@ int lapb_validate_nr(lapb_cb *lapb, unsigned short nr)
  *	This routine is the centralised routine for parsing the control
  *	information for the different frame formats.
  */
-int lapb_decode(lapb_cb *lapb, struct sk_buff *skb, int *ns, int *nr, int *pf, int *type)
+void lapb_decode(lapb_cb *lapb, struct sk_buff *skb, struct lapb_frame *frame)
 {
-	int frametype = LAPB_ILLEGAL;
-
-	*ns = *nr = *pf = *type = 0;
+	frame->type = LAPB_ILLEGAL;
 
 #if LAPB_DEBUG > 2
 	printk(KERN_DEBUG "lapb: (%p) S%d RX %02X %02X %02X\n", lapb->token, lapb->state, skb->data[0], skb->data[1], skb->data[2]);
@@ -135,26 +133,26 @@ int lapb_decode(lapb_cb *lapb, struct sk_buff *skb, int *ns, int *nr, int *pf, i
 	if (lapb->mode & LAPB_MLP) {
 		if (lapb->mode & LAPB_DCE) {
 			if (skb->data[0] == LAPB_ADDR_D)
-				*type = LAPB_COMMAND;
+				frame->cr = LAPB_COMMAND;
 			if (skb->data[0] == LAPB_ADDR_C)
-				*type = LAPB_RESPONSE;
+				frame->cr = LAPB_RESPONSE;
 		} else {
 			if (skb->data[0] == LAPB_ADDR_C)
-				*type = LAPB_COMMAND;
+				frame->cr = LAPB_COMMAND;
 			if (skb->data[0] == LAPB_ADDR_D)
-				*type = LAPB_RESPONSE;
+				frame->cr = LAPB_RESPONSE;
 		}
 	} else {
 		if (lapb->mode & LAPB_DCE) {
 			if (skb->data[0] == LAPB_ADDR_B)
-				*type = LAPB_COMMAND;
+				frame->cr = LAPB_COMMAND;
 			if (skb->data[0] == LAPB_ADDR_A)
-				*type = LAPB_RESPONSE;
+				frame->cr = LAPB_RESPONSE;
 		} else {
 			if (skb->data[0] == LAPB_ADDR_A)
-				*type = LAPB_COMMAND;
+				frame->cr = LAPB_COMMAND;
 			if (skb->data[0] == LAPB_ADDR_B)
-				*type = LAPB_RESPONSE;
+				frame->cr = LAPB_RESPONSE;
 		}
 	}
 		
@@ -162,46 +160,53 @@ int lapb_decode(lapb_cb *lapb, struct sk_buff *skb, int *ns, int *nr, int *pf, i
 
 	if (lapb->mode & LAPB_EXTENDED) {
 		if ((skb->data[0] & LAPB_S) == 0) {
-			frametype = LAPB_I;			/* I frame - carries NR/NS/PF */
-			*ns = (skb->data[0] >> 1) & 0x7F;
-			*nr = (skb->data[1] >> 1) & 0x7F;
-			*pf = skb->data[1] & LAPB_EPF;
+			frame->type       = LAPB_I;			/* I frame - carries NR/NS/PF */
+			frame->ns         = (skb->data[0] >> 1) & 0x7F;
+			frame->nr         = (skb->data[1] >> 1) & 0x7F;
+			frame->pf         = skb->data[1] & LAPB_EPF;
+			frame->control[0] = skb->data[0];
+			frame->control[1] = skb->data[1];
 			skb_pull(skb, 2);
 		} else if ((skb->data[0] & LAPB_U) == 1) { 	/* S frame - take out PF/NR */
-			frametype = skb->data[0] & 0x0F;
-			*nr = (skb->data[1] >> 1) & 0x7F;
-			*pf = skb->data[1] & LAPB_EPF;
+			frame->type       = skb->data[0] & 0x0F;
+			frame->nr         = (skb->data[1] >> 1) & 0x7F;
+			frame->pf         = skb->data[1] & LAPB_EPF;
+			frame->control[0] = skb->data[0];
+			frame->control[1] = skb->data[1];
 			skb_pull(skb, 2);
 		} else if ((skb->data[0] & LAPB_U) == 3) { 	/* U frame - take out PF */
-			frametype = skb->data[0] & ~LAPB_SPF;
-			*pf = skb->data[0] & LAPB_SPF;
+			frame->type       = skb->data[0] & ~LAPB_SPF;
+			frame->pf         = skb->data[0] & LAPB_SPF;
+			frame->control[0] = skb->data[0];
+			frame->control[1] = 0x00;
 			skb_pull(skb, 1);
 		}
 	} else {
 		if ((skb->data[0] & LAPB_S) == 0) {
-			frametype = LAPB_I;			/* I frame - carries NR/NS/PF */
-			*ns = (skb->data[0] >> 1) & 0x07;
-			*nr = (skb->data[0] >> 5) & 0x07;
-			*pf = skb->data[0] & LAPB_SPF;
+			frame->type = LAPB_I;			/* I frame - carries NR/NS/PF */
+			frame->ns   = (skb->data[0] >> 1) & 0x07;
+			frame->nr   = (skb->data[0] >> 5) & 0x07;
+			frame->pf   = skb->data[0] & LAPB_SPF;
 		} else if ((skb->data[0] & LAPB_U) == 1) { 	/* S frame - take out PF/NR */
-			frametype = skb->data[0] & 0x0F;
-			*nr = (skb->data[0] >> 5) & 0x07;
-			*pf = skb->data[0] & LAPB_SPF;
+			frame->type = skb->data[0] & 0x0F;
+			frame->nr   = (skb->data[0] >> 5) & 0x07;
+			frame->pf   = skb->data[0] & LAPB_SPF;
 		} else if ((skb->data[0] & LAPB_U) == 3) { 	/* U frame - take out PF */
-			frametype = skb->data[0] & ~LAPB_SPF;
-			*pf = skb->data[0] & LAPB_SPF;
+			frame->type = skb->data[0] & ~LAPB_SPF;
+			frame->pf   = skb->data[0] & LAPB_SPF;
 		}
+
+		frame->control[0] = skb->data[0];
 
 		skb_pull(skb, 1);
 	}
-
-	return frametype;
 }
 
 /* 
  *	This routine is called when the HDLC layer internally  generates a
  *	command or  response  for  the remote machine ( eg. RR, UA etc. ). 
- *	Only supervisory or unnumbered frames are processed.
+ *	Only supervisory or unnumbered frames are processed, FRMRs are handled
+ *	by lapb_transmit_frmr below.
  */
 void lapb_send_control(lapb_cb *lapb, int frametype, int poll_bit, int type)
 {
@@ -213,27 +218,74 @@ void lapb_send_control(lapb_cb *lapb, int frametype, int poll_bit, int type)
 
 	skb_reserve(skb, LAPB_HEADER_LEN + 1);
 
-	/* Assume a response - address structure for DTE */
 	if (lapb->mode & LAPB_EXTENDED) {
 		if ((frametype & LAPB_U) == LAPB_U) {
-			dptr = skb_put(skb, 1);
-			*dptr = frametype;
+			dptr   = skb_put(skb, 1);
+			*dptr  = frametype;
 			*dptr |= (poll_bit) ? LAPB_SPF : 0;
 		} else {
-			dptr = skb_put(skb, 2);
-			dptr[0] = frametype;
-			dptr[1] = (lapb->vr << 1);
+			dptr     = skb_put(skb, 2);
+			dptr[0]  = frametype;
+			dptr[1]  = (lapb->vr << 1);
 			dptr[1] |= (poll_bit) ? LAPB_EPF : 0;
 		}
 	} else {
-		dptr = skb_put(skb, 1);
-		*dptr = frametype;
+		dptr   = skb_put(skb, 1);
+		*dptr  = frametype;
 		*dptr |= (poll_bit) ? LAPB_SPF : 0;
 		if ((frametype & LAPB_U) == LAPB_S)		/* S frames carry NR */
 			*dptr |= (lapb->vr << 5);
 	}
 
 	lapb_transmit_buffer(lapb, skb, type);
+}
+
+/* 
+ *	This routine generates FRMRs based on information previously stored in
+ *	the LAPB control block.
+ */
+void lapb_transmit_frmr(lapb_cb *lapb)
+{
+	struct sk_buff *skb;
+	unsigned char  *dptr;
+
+	if ((skb = alloc_skb(LAPB_HEADER_LEN + 7, GFP_ATOMIC)) == NULL)
+		return;
+
+	skb_reserve(skb, LAPB_HEADER_LEN + 1);
+
+	if (lapb->mode & LAPB_EXTENDED) {
+		dptr    = skb_put(skb, 6);
+		*dptr++ = LAPB_FRMR;
+		*dptr++ = lapb->frmr_data.control[0];
+		*dptr++ = lapb->frmr_data.control[1];
+		*dptr++ = (lapb->vs << 1) & 0xFE;
+		*dptr   = (lapb->vr << 1) & 0xFE;
+		if (lapb->frmr_data.cr == LAPB_RESPONSE)
+			*dptr |= 0x01;
+		dptr++;
+		*dptr++ = lapb->frmr_type;
+
+#if LAPB_DEBUG > 1
+	printk(KERN_DEBUG "lapb: (%p) S%d TX FRMR %02X %02X %02X %02X %02X\n", lapb->token, lapb->state, skb->data[1], skb->data[2], skb->data[3], skb->data[4], skb->data[5]);
+#endif
+	} else {
+		dptr    = skb_put(skb, 4);
+		*dptr++ = LAPB_FRMR;
+		*dptr++ = lapb->frmr_data.control[0];
+		*dptr   = (lapb->vs << 1) & 0x0E;
+		*dptr  |= (lapb->vr << 5) & 0xE0;
+		if (lapb->frmr_data.cr == LAPB_RESPONSE)
+			*dptr |= 0x10;
+		dptr++;
+		*dptr++ = lapb->frmr_type;
+
+#if LAPB_DEBUG > 1
+	printk(KERN_DEBUG "lapb: (%p) S%d TX FRMR %02X %02X %02X\n", lapb->token, lapb->state, skb->data[1], skb->data[2], skb->data[3]);
+#endif
+	}
+
+	lapb_transmit_buffer(lapb, skb, LAPB_RESPONSE);
 }
 
 #endif

@@ -137,12 +137,11 @@ if [ "$CONFIG_NET_RADIO" != "n" ]; then
       bool 'Soundmodem support for Soundblaster and compatible cards' CONFIG_SOUNDMODEM_SBC
       bool 'Soundmodem support for WSS and Crystal cards' CONFIG_SOUNDMODEM_WSS
       bool 'Soundmodem support for 1200 baud AFSK modulation' CONFIG_SOUNDMODEM_AFSK1200
-      if [ "$CONFIG_M586" = "y" -o "$CONFIG_M686" = "y" ]; then
-        if [ "$CONFIG_SOUNDMODEM_AFSK1200" != "n" ]; then
-          bool 'Soundmodem 1200 baud AFSK using floating point' CONFIG_SOUNDMODEM_AFSK1200_FP
-        fi
-      fi
+      bool 'Soundmodem support for 4800 baud HAPN-1 modulation' CONFIG_SOUNDMODEM_HAPN4800
       bool 'Soundmodem support for 9600 baud FSK G3RUH modulation' CONFIG_SOUNDMODEM_FSK9600
+      if [ "$CONFIG_M586" = "y" -o "$CONFIG_M686" = "y" ]; then
+        bool 'Soundmodem using floating point' CONFIG_SOUNDMODEM_FLOAT
+      fi
     fi
   fi
   tristate 'STRIP (Metricom starmode radio IP)' CONFIG_STRIP

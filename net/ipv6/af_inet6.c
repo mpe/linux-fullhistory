@@ -751,7 +751,7 @@ struct proto_ops inet6_dgram_ops = {
 	inet6_getname, 
 	datagram_poll,			/* ok		*/
 	inet6_ioctl,			/* must change  */
-	inet_listen,			/* ok		*/
+	sock_no_listen,			/* ok		*/
 	inet_shutdown,			/* ok		*/
 	inet_setsockopt,		/* ok		*/
 	inet_getsockopt,		/* ok		*/

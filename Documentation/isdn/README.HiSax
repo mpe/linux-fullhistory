@@ -1,0 +1,343 @@
+HiSax is a Linux hardware level driver for passive ISDN cards with Siemens
+chipset (ISAC_S 2085/2086/2186 HSCX SAB 82525). It is based on the Teles
+driver from Jan den Ouden.
+It is meant to be used with isdn4linux, an ISDN Link-level module for Linux 
+written by Fritz Elfert.
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+
+Supported Cards
+---------------
+
+Teles 8.0/16.0/16.3 and compatible
+Teles S0/PCMCIA
+Creatix PnP S0 
+AVM A1 (Fritz)
+ELSA Microlink PCC-16 PCF PCF-Pro PCC-8
+ELSA Quickstep 1000
+ITK ix1-micro Rev.2
+
+Note: PCF PCF-Pro only the ISDN part is supported yet
+      PCC-8 not tested yet
+      Teles PCMCIA is EXPERIMENTAL
+
+If you know other passive cards with the Siemens chipset, please let me know.
+To use the PNP cards you need the isapnptools.
+
+
+Configuring the Driver
+----------------------
+
+The driver can be build direct into the kernel or as module.
+The HiSax driver can be configured using the command line feature
+while loading the kernel with LILO or LOADLIN or, if built as a module,
+using insmod/modprobe with parameters.
+Please note: All PnP cards need config with isapnp and will work only as
+module.
+
+As Module
+---------
+
+insmod/modprobe  hisax.o \
+  io=iobase irq=IRQ mem=membase type=card_type \
+  protocol=D_channel_protocol id=idstring
+
+or, if several cards are installed:
+
+insmod/modprobe hisax.o \
+  io=iobase1,iobase2,... mem=membase1,membase2,... \
+  type=card_type1,card_type2,... \
+  protocol=D_channel_protocol1,D_channel_protocol2,... \
+  id=idstring1%idstring2 ...
+
+where iobaseN = io base address of the Nth card, membaseN = memory
+base address of the Nth card, etc.
+The reason for the delimiter "%" in the idstrings is that "," won't
+work with the current modules package. 
+
+The parameters can be specified in any order. For example, the io
+parameter can precede the irq parameter, or vice versa. If several
+cards are installed the ordering within the comma separated parameter
+lists must be consistent, of course.
+
+Only parameters applicable to the card type need be specified. For
+example, the Teles 16.3 card is not memory mapped, so the mem
+parameter may be omitted for a Teles 16.3. Sometimes it is necessary
+to specify a dummy parameter, however. This is the case when there is
+a card of a different type later in the list that needs a parameter
+which the preceding card does not. For instance, if a Teles 16.0 card
+is listed after a Teles 16.3 card, a dummy mem=0 parameter must be
+specified for the 16.3. Instead of a dummy value, the parameter can
+also be skipped by simply omitting the value. For example:
+mem=,0xd0000. See example 6 below.
+The protocol parameter for the D-channel may be omittedprotocol may be 
+omitted, if you select the correct one during kernel config.
+Valid values are 1 for german 1TR6, 2 for DSS1 (EURO) and 3 for leased lines
+(no D-channel).
+
+The Creatix/Teles PnP cards uses io1= and io2= instead of io= for specifying 
+the I/O addresses of the ISAC and HSCX chips, respectively.
+
+Card types:
+
+    Type                Required parameters (in addition to type and protocol)
+
+    1   Teles 16.0               irq, mem, io
+    2   Teles  8.0               irq, mem
+    3   Teles 16.3 (non PnP)     irq, io
+    4   Creatix/Teles PnP        irq, io0 (ISAC), io1 (HSCX)
+    5   AVM A1 (Fritz)           irq, io
+    6   ELSA PCC/PCF cards       io or nothing for autodetect (the iobase is
+                                 only required, if you have more than one ELSA
+                                 card in your PC)
+    7   ELSA Quickstep 1000	 irq, io  (from isapnp setup)
+    8   Teles 16.3 PCMCIA     	 irq, io
+    9   ITK ix1-micro Rev.2      irq, io
+        
+At the moment IRQ sharing is not possible. Please make sure that your IRQ
+is free and enabled for ISA use.
+
+Examples for module loading
+
+1. Teles 16.3, Euro ISDN, I/O base 280 hex, IRQ 10
+   modprobe hisax type=3 protocol=2 io=0x280 irq=10
+
+2. Teles 16.0, 1TR6 ISDN, I/O base d80 hex, IRQ 5, Memory d0000 hex
+   modprobe hisax protocol=1 type=1 io=0xd80 mem=0xd0000 irq=5
+
+3. Fritzcard, Euro ISDN, I/O base 340 hex, IRQ 10 and ELSA PCF, Euro ISDN
+   modprobe hisax type=5,6 protocol=2,2 io=0x340 irq=10 id=Fritz%Elsa
+
+4. Any ELSA  PCC/PCF card  Euro ISDN
+   modprobe hisax type=6 protocol=2
+
+5. Teles 16.3 PnP, Euro ISDN, with isapnp configured 
+   isapnp config:  (INT 0 (IRQ 10 (MODE +E)))
+ 		   (IO 0 (BASE 0x0580))
+                   (IO 1 (BASE 0x0180))
+   modprobe hisax type=4 protocol=2 io0=0x580 io1=0x180
+
+6. Teles 16.3, Euro ISDN, I/O base 280 hex, IRQ 12 and
+   Teles 16.0, 1TR6, IRQ 5, Memory d0000 hex
+   modprobe hisax type=3,1 protocol=2,1 io=0x280 mem=0,0xd0000
+
+   Please note the dummy 0 memory address for the Teles 16.3 in the last 
+   example as placeholder.
+
+7. Teles PCMCIA EURO 180 hex IRQ 15 (default values)
+   modprobe hisax type=8 protocol=2 io=0x180 irq=15
+
+
+LILO/LOADLIN with driver compiled direct into the kernel:
+
+hisax=typ1,dp1,pa_1,pb_1,pc_1[,typ2,dp2,pa_2 ... \
+      typn,dpn,pa_n,pb_n,pc_n][,idstring1[,idstring2,...,idstringn]]
+
+where
+     typ1 = Cardtype of 1st card. (default: depends on kernel settings)
+     dp1  = D-channel protocol of 1st card. 1=1TR6, 2=EDSS1, 3=leased
+     pa_1 = 1. parameter (depend on the cardtype)
+     pb_1 = 2. parameter (depend on the cardtype)
+     pc_1 = 3. parameter (depend on the cardtype)
+
+     typ2,dp2,pa_2,pb_2,pc_2 = Parameters of second card   (defaults: none)
+     typn,dpn,pa_n,pb_n,pc_n = Parameters of n'th card (up to 16 cards are supported)
+
+     idstring = Driver-Id for accessing with utilities and identification
+                when using a Line-monitor. (default: HiSax)
+                idstring must start with a character!
+
+Card types:
+       
+   typ  
+    1 	Teles 16.0     		pa=irq	pb=membase	pc=iobase
+    2 	Teles  8.0      	pa=irq	pb=membase
+    3 	Teles 16.3      	pa=irq	pb=iobase
+    4 	Creatix/Teles PNP     	ONLY WORK AS MODULE !
+    5 	AVM A1 (Fritz)  	pa=irq	pb=iobase
+    6 	ELSA PCC/PCF cards      pa=iobase or nothing for autodetect 
+    7   ELSA Quickstep 1000	ONLY WORK AS MODULE !
+    8   Teles S0 PCMCIA    	pa=irq  pb=iobase
+    9   ITK ix1-micro Rev.2     pa=irq  pb=iobase
+
+
+Running
+-------
+
+When you insmod isdn.o and hisax.o (or with the kernel-version, during 
+boottime) a few lines should appear in your syslog. Look for something like:
+
+Oct 13 20:46:39 kke01 kernel: ISDN subsystem Rev: 1.23/1.21/1.18/1.13/none loaded
+Oct 13 20:46:41 kke01 kernel: HiSax: Driver for Siemens Chipset ISDN cards
+Oct 13 20:46:41 kke01 kernel: HiSax: Revision (1.3)
+Oct 13 20:46:41 kke01 kernel: HiSax: Total 1 card defined
+Oct 13 20:46:41 kke01 kernel: HiSax: Card 1 Protocol EDSS1
+...
+Oct 13 20:46:41 kke01 kernel: Elsa: PCC16 found at 0x360 Rev.:B IRQ 9
+...
+Oct 13 20:46:41 kke01 kernel: HiSax: 2 channels available
+Oct 13 20:46:41 kke01 kernel: HiSax: module installed
+
+This means that the card is ready for use.
+Cabling problems or line downs are not detected, ELSA can detect the
+S0 power.
+
+Remember, that according to the new strategy for accessing Low-level-drivers
+from within isdn4linux you should also define a driver-id while doing
+insmod: Simply append hisax_id=<SomeString> to the insmod-commandline. This
+string MUST NOT start with a digit or a small 'x'!
+
+At this point you can run a 'cat /dev/isdnctrl0' and view debugging 
+messages. 
+In the moment debugging messages are enabled with the telesctrl tool : 
+
+    telesctrl <DriverId> DebugCmd <debugging_flags>  
+
+<DriverId> default is HiSax, if you didn't specified one.
+
+DebugCmd is 1   for generic Debug
+            11  for Layer 1 development Debug
+            13  for Layer 3 development Debug
+
+where <debugging_flags> is the integer sum of the following debugging
+options you wish enabled:
+
+With DebugCmd 1 is
+
+        1   Link-level <--> Hardware-level communication
+        2   Top state machine 
+        4   D channel Q.931 (call control messages)
+        8   D channel Q.921 
+        16  B channel X.75
+        32  D channel l2
+        64  B channel l2
+       128  D-Channel link state debug
+       256  B-Channel link state debug
+       512  Tei debug
+      1024  LOCK debug in callc.c
+
+With DebugCmd 11 is
+
+         1  Warnings (default on)
+         2  Irq Status
+         4  Isac
+         8  Isac fifo
+        16  Hscx
+        32  Hscx fifo (attention full B-channel output)
+        64  D-channel LAPD frame types
+
+With DebugCmd 13 is
+
+         1  Warnings (default on)
+         2  l3 protocol discriptor errors
+         4  l3 stat machine
+         8  charge info debug (1TR6)
+
+For example 'telesctrl HiSax 1 0x3ff' enables full generic debugging.
+
+
+
+Warning
+-------
+HiSax is a work in progress and may crash your machine. It has not been
+certified and therefore operation on your PTT's ISDN network is probably
+illegal.
+
+Limitations
+-----------
+HiSax only works on Euro ISDN lines and german 1TR6-lines.(in this time)
+
+Bugs 
+----
+If you find any please let me know. 
+
+Thanks
+------
+Special thanks to:
+
+        Emil Stephan for the name HiSax which is a mix of HSCX and ISAC.
+
+        Fritz Elfert, Jan den Ouden, Michael Hipp, Michael Wein, 
+        Andreas Kool, Pekka Sarnila, Sim Yskes, Johan Myrre'en,
+	Klaus-Peter Nischke (ITK AG), Christof Petig, Werner Fehn (Elsa GmbH),
+	Volker Schmidt
+        and more people, who are hunting bugs (If I forgot somebody, please
+	send me a mail). 
+
+        Firma ELSA GmbH
+        
+        My girl friend and partner in life Ute for her patience with me
+
+
+Enjoy,
+
+Karsten Keil   
+keil@temic-ech.spacenet.de
+
+Appendix: PCMCIA driver
+-----------------------
+
+Up to now, the Teles PCMCIA driver is a complete hack. I had no
+documentation about the card - it might destroy your hardware (though mine
+at last works fine).
+
+Second I'm working on a module for linux pcmcia services, this version
+clearly assumes some (unrealistic) facts about your hardware:
+  - you MUST have an i82365
+  - Teles PCMCIA MUST be in slot 0 (the upper one) and the ONLY card
+    (since you can't use cardmgr, there's no use for a second one)
+  - ports 0x180-0x1e0 must be free, it uses IRQ 15
+
+The following program will initialize the PCMCIA chip to the values I probed
+inside Windows95 (native Teles driver).
+
+------------------telesinit.c-----------------------------------------
+/* telesinit.c, compile with
+ *   gcc -O -o telesinit telesinit.c
+ */
+#include <asm/io.h>
+#define inportb(x) inb(x)
+#define outportb(x,v) outb(v,x)
+#define BASE 0x180
+#define NUM 97
+#define CARD 0x3e0
+#define i365(x) ( outportb(CARD,x), inportb(CARD+1) )
+#define i365w(x,y) ( outportb(CARD,x), outportb(CARD+1,y) )
+
+void main(int argc,char **argv)
+{  int i;
+   static unsigned char i365_cont[]=
+   { 0x83,0x7f,0xf5,0x6f, 0x00,0x08,0x60,0x00, 
+     0x80,0x01,0xe0,0x01, 0xff,0xff,0xff,0xff,
+     0xd0,0x00,0xd0,0x00, 0x30,0x7f,0x00,0x0f,
+     0xff,0x07,0xff,0x07, 0x00,0x00,0x00,0xff
+   };
+
+   ioperm(BASE,NUM,1); ioperm(CARD,2,1);
+   for (i=0;i<32;i++)
+   {  if (i365_cont[i]==i365(i)) continue;
+      outportb(CARD+1,i365_cont[i]);
+   }
+
+   outportb(BASE+0x18,0x41); 
+   /* enable the teles card and its IRQ */
+   /* this was found by brute force */
+}
+------------------------------------------------------------------------
+
+If you want to wait for the PCMCIA services driver ... I finish my diploma
+about end of February 1997 ... please be patient with me 
+    Christof Petig (ea0141@uni-wuppertal.de)

@@ -36,8 +36,12 @@ static char *version = "3c59x.c:v0.25 5/17/96 becker@cesdis.gsfc.nasa.gov\n";
 #include <linux/ioport.h>
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
+
+#ifdef CONFIG_PCI
 #include <linux/pci.h>
 #include <linux/bios32.h>
+#endif
+
 #include <linux/timer.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -79,7 +83,10 @@ int vortex_debug = VORTEX_DEBUG;
 int vortex_debug = 1;
 #endif
 
+#ifdef CONFIG_PCI
 static int product_ids[] = {0x5900, 0x5950, 0x5951, 0x5952, 0, 0};
+#endif
+
 static const char *product_names[] = {
 	"3c590 Vortex 10Mbps",
 	"3c595 Vortex 100baseTX",
@@ -336,6 +343,7 @@ static int vortex_scan(struct device *dev)
 {
 	int cards_found = 0;
 
+#ifdef CONFIG_PCI
 	if (pcibios_present()) {
 		static int pci_index = 0;
 		static int board_index = 0;
@@ -388,6 +396,7 @@ static int vortex_scan(struct device *dev)
 			}
 		}
 	}
+#endif /* CONFIG_PCI */
 
 	/* Now check all slots of the EISA bus. */
 	if (EISA_bus) {

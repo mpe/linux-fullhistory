@@ -26,7 +26,7 @@ HTML-ized shopping list.
 http://www.datanet.hu/generations/linux/Changes2.html is an
 English-language HTML version.
 
-Last updated: January 29, 1997.
+Last updated: February 11, 1997.
 Current Author: Chris Ricker (gt1355b@prism.gatech.edu).
 
 Current Minimal Requirements
@@ -47,6 +47,7 @@ encountered a bug!
 - Net-tools              1.32-alpha
 - Kbd                    0.91
 - Loadlin                1.6a
+- Sh-utils               1.16
 
 Upgrade notes
 *************
@@ -136,6 +137,13 @@ Loadlin
    Linux 2.1.22 and later releases use a new method of memory size
 detection, requiring loadlin users to upgrade to loadlin-1.6a.
 
+Sh-utils
+========
+
+   As of Linux-2.1.26, the Configure script ("make config") has been
+updated to be POSIX-compliant.  As a result, your expr needs to be
+updated.  Use sh-utils 1.16 or later.
+
 How to know the version of the installed programs
 *************************************************
 
@@ -155,6 +163,7 @@ Procps: ps --version
 SysVinit: strings `egrep -li INIT_VERSION=sysvinit- /proc/*/environ | head
 -1` | egrep -i INIT_VERSION=sysvinit-
 RPM:  rpm --version
+Sh-utils:  expr --v
 
 Where to get the files
 **********************
@@ -253,6 +262,13 @@ Loadlin
 The 1.6a release:
 ftp://ftp.suse.com/pub/loadlin/update-1.6a/loadlin.exe.gz
 ftp://elserv.ffm.fgan.de/pub/linux/loadlin-1.6/update-1.6a/loadlin.exe.gz
+
+Sh-utils
+========
+
+The 1.16 release
+ftp://sunsite.unc.edu/pub/gnu/sh-utils-1.16.tar.gz
+ftp://prep.ai.mit.edu/pub/gnu/sh-utils-1.16.tar.gz
 
 Other Info
 ==========

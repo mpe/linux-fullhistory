@@ -25,6 +25,56 @@
  *
  */
 
+#include <linux/ptrace.h>
+#include <linux/interrupt.h>
+#include <asm/io.h>
+#include <asm/dma.h>
+#include <linux/ioport.h>
+#include <linux/soundmodem.h>
+#include "sm.h"
+
+/* --------------------------------------------------------------------- */
+
+/*
+ * currently this module is supposed to support both module styles, i.e.
+ * the old one present up to about 2.1.9, and the new one functioning
+ * starting with 2.1.21. The reason is I have a kit allowing to compile
+ * this module also under 2.0.x which was requested by several people.
+ * This will go in 2.2
+ */
+#include <linux/version.h>
+
+#if LINUX_VERSION_CODE >= 0x20100
+#include <asm/uaccess.h>
+#else
+#include <asm/segment.h>
+#include <linux/mm.h>
+
+#undef put_user
+#undef get_user
+
+#define put_user(x,ptr) ({ __put_user((unsigned long)(x),(ptr),sizeof(*(ptr))); 0; })
+#define get_user(x,ptr) ({ x = ((__typeof__(*(ptr)))__get_user((ptr),sizeof(*(ptr)))); 0; })
+
+extern inline int copy_from_user(void *to, const void *from, unsigned long n)
+{
+        int i = verify_area(VERIFY_READ, from, n);
+        if (i)
+                return i;
+        memcpy_fromfs(to, from, n);
+        return 0;
+}
+
+extern inline int copy_to_user(void *to, const void *from, unsigned long n)
+{
+        int i = verify_area(VERIFY_WRITE, to, n);
+        if (i)
+                return i;
+        memcpy_tofs(to, from, n);
+        return 0;
+}
+#endif
+
 /* --------------------------------------------------------------------- */
 
 struct sc_state_sbc {
@@ -235,7 +285,7 @@ static void sbc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
         }
         if (new_ptt)
                 SCSTATE->ptt = 2;
-	output_status(sm);
+	sm_output_status(sm);
 	hdlcdrv_transmitter(dev, &sm->hdrv);
 	hdlcdrv_receiver(dev, &sm->hdrv);
 }
@@ -329,8 +379,8 @@ static int sbc_close(struct device *dev, struct sm_state *sm)
 static int sbc_sethw(struct device *dev, struct sm_state *sm, char *mode)
 {
 	char *cp = strchr(mode, '.');
-	const struct modem_tx_info *mtp = modem_tx_base;
-	const struct modem_rx_info *mrp;
+	const struct modem_tx_info **mtp = sm_modem_tx_table;
+	const struct modem_rx_info **mrp;
 	int dv;
 
 	if (!strcmp(mode, "off")) {
@@ -342,38 +392,35 @@ static int sbc_sethw(struct device *dev, struct sm_state *sm, char *mode)
 		*cp++ = '\0';
 	else
 		cp = mode;
-	for (; mtp; mtp = mtp->next) {
-		if (mtp->loc_storage > sizeof(sm->m)) {
+	for (; *mtp; mtp++) {
+		if ((*mtp)->loc_storage > sizeof(sm->m)) {
 			printk(KERN_ERR "%s: insufficient storage for modulator %s (%d)\n",
-			       sm_drvname, mtp->name, mtp->loc_storage);
+			       sm_drvname, (*mtp)->name, (*mtp)->loc_storage);
 			continue;
 		}
-		if (!mtp->name || strcmp(mtp->name, mode))
+		if (!(*mtp)->name || strcmp((*mtp)->name, mode))
 			continue;
-		if (mtp->srate < 5000 || mtp->srate > 44100)
+		if ((*mtp)->srate < 5000 || (*mtp)->srate > 44100)
 			continue;
-		for (mrp = modem_rx_base; mrp; mrp = mrp->next) {
-			if (mrp->loc_storage > sizeof(sm->d)) {
+		for (mrp = sm_modem_rx_table; *mrp; mrp++) {
+			if ((*mrp)->loc_storage > sizeof(sm->d)) {
 				printk(KERN_ERR "%s: insufficient storage for demodulator %s (%d)\n",
-				       sm_drvname, mrp->name, mrp->loc_storage);
+				       sm_drvname, (*mrp)->name, (*mrp)->loc_storage);
 				continue;
 			}
-			if (mrp->name && !strcmp(mrp->name, cp) &&
-			    mrp->srate >= 5000 && mrp->srate <= 44100) {
-				sm->mode_tx = mtp;
-				sm->mode_rx = mrp;
-				SCSTATE->fmt[0] = 256-((1000000L+mtp->srate/2)/
-							 mrp->srate);
-				SCSTATE->fmt[1] = 256-((1000000L+mtp->srate/2)/
-							 mtp->srate);
+			if ((*mrp)->name && !strcmp((*mrp)->name, cp) &&
+			    (*mrp)->srate >= 5000 && (*mrp)->srate <= 44100) {
+				sm->mode_tx = *mtp;
+				sm->mode_rx = *mrp;
+				SCSTATE->fmt[0] = 256-((1000000L+sm->mode_rx->srate/2)/
+							 sm->mode_rx->srate);
+				SCSTATE->fmt[1] = 256-((1000000L+sm->mode_tx->srate/2)/
+							 sm->mode_tx->srate);
 				dv = lcm(sm->mode_tx->dmabuflenmodulo, 
 					 sm->mode_rx->dmabuflenmodulo);
 				SCSTATE->dmabuflen = sm->mode_rx->srate/100+dv-1;
 				SCSTATE->dmabuflen /= dv;
 				SCSTATE->dmabuflen *= 2*dv; /* make sure DMA buf is even */
-	    printk(KERN_DEBUG "sm sbc: modtx %u modrx %u srt %u buflen %u srate %u div %u srate %u div %u\n",
-		   sm->mode_tx->dmabuflenmodulo, sm->mode_rx->dmabuflenmodulo,
-		   sm->mode_rx->srate, SCSTATE->dmabuflen, mrp->srate, SCSTATE->fmt[0], mtp->srate, SCSTATE->fmt[1]);
 				return 0;
 			}
 		}
@@ -470,13 +517,9 @@ static int sbc_ioctl(struct device *dev, struct sm_state *sm, struct ifreq *ifr,
 
 /* --------------------------------------------------------------------- */
 
-struct hardware_info hw_sbc = {
-	NEXT_HW_INFO, "sbc", sizeof(struct sc_state_sbc), 
+const struct hardware_info sm_hw_sbc = {
+	"sbc", sizeof(struct sc_state_sbc), 
 	sbc_open, sbc_close, sbc_ioctl, sbc_sethw
 };
-#undef NEXT_HW_INFO
-#define NEXT_HW_INFO (&hw_sbc)
 
 /* --------------------------------------------------------------------- */
-
-#undef SCSTATE

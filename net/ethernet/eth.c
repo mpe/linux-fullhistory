@@ -182,6 +182,7 @@ int eth_rebuild_header(struct sk_buff *skb)
 		if (ndisc_eth_hook)
 			return (ndisc_eth_hook(eth->h_dest, dev, skb));
 #endif
+		break;
 #endif	
 	default:
 		printk(KERN_DEBUG 

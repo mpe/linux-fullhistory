@@ -432,7 +432,7 @@ static int sdla_cmd(struct device *dev, int cmd, short dlci, short flags,
 	cmd_buf->flags = flags;
 
 	if (inbuf)
-		amemcpy(cmd_buf->data, inbuf, inlen);
+		memcpy(cmd_buf->data, inbuf, inlen);
 
 	cmd_buf->length = inlen;
 
@@ -1103,7 +1103,7 @@ static int sdla_config(struct device *dev, struct frad_conf *conf, int get)
 {
 	struct frad_local *flp;
 	struct conf_data  data;
-	int               i, err;
+	int               i;
 	short             size;
 
 	if (dev->type == 0xFFFF)

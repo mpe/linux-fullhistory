@@ -1,53 +1,14 @@
-With the version of the AX.25, NET/ROM and Rose protocol stacks provided in
-the Linux kernel from 2.1.9 onwards, a change has occurred in the
-configuration of the protocols. With previous versions such changes were
-made via ioctl calls, but now use is being made of the sysctl interface.
+To use the amateur radio protocols within Linux you will need to get a
+suitable copy of the AX.25 Utilities. More detailed information about these
+and associated programs can be found on http://www.cs.nott.ac.uk/~jsn/.
 
-Each AX.25 device will be represented in the directory /proc/sys/net/ax25,
-in the form "dev.parms"  where dev is the device name, eg ax0. In it are a
-string of numbers that represent different values for the different
-parameters, they are: 
-
-No.	Name			Meaning				Default
-1	IP Default Mode		0=DG 1=VC			0
-2	AX.25 Default Mode	0=Normal 1=Extended		0
-3	Allow Vanilla Connects	0=No 1=Yes			1
-4	Backoff			0=None 1=Linear 2=Exponential	1
-5	Connected Mode		0=No 1=Yes			1
-6	Standard Window		1  <= N <= 7			2
-7	Extended Window		1  <= N <= 63			32
-8	T1 Timeout		1s <= N <= 30s			10s
-9	T2 Timeout		1s <= N <= 20s			3s
-10	T3 Timeout		0s <= N <= 3600s		300s
-11	Idle Timeout		0m <= N				20m
-12	N2			1  <= N <= 31			10
-13	AX.25 MTU		1  <= N <= 512			256
-14	Max Queue		1  <= N <= 20			2
-15	Digipeater Mode		0=None 1=Inband 2=XBand 3=Both	3
-
-In the above list T1, T2 and T3 are given in seconds, and the Idle Timeout
-is given in minutes. But please note that the values used in the sysctl
-interface are given in internal units where the time in seconds is
-multiplied by 10, this allows resolution down to 1/10 of a second. With
-timers that are allowed to be zero, eg T3 and Idle, a zero value indicates
-that the timer is disabled. 
-
-With NET/ROM and Rose protocol stacks, the entries in /proc/sys/net/netrom
-and /proc/sys/net/rose are more obvious. Each file in these directories has
-a name more in keeping with its function, and will not be explained in any
-greater depth here. As with the AX.25 sysctl entries, timers operate with a
-resolution of 100ms and so values should be written accordingly.
-
-It is possible that the AX.25 sysctl interface will change in the future and
-become more user friendly.
-
-For more information about the AX.25 and NET/ROM protocol stacks, see the
-AX25-HOWTO written by Terry Dawson <terry@perf.no.itg.telstra.com.au> who is
-also the AX.25 Utilities maintainer.
+For more information about the AX.25, NET/ROM and ROSE protocol stacks, see
+the AX25-HOWTO written by Terry Dawson <terry@perf.no.itg.telstra.com.au>
+who is also the AX.25 Utilities maintainer.
 
 There is an active mailing list for discussing Linux amateur radio matters
 called linux-hams. To subscribe to it, send a message to
-majordomo@vger.rutgers.edu with the words "subscribe linux-hams" in the body
+Majordomo@vger.rutgers.edu with the words "subscribe linux-hams" in the body
 of the message, the subject field is ignored.
 
 Jonathan G4KLX

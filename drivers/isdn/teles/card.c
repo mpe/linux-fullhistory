@@ -1,4 +1,4 @@
-/* $Id: card.c,v 1.13 1996/07/18 11:21:24 jdenoud Exp $
+/* $Id: card.c,v 1.16 1996/10/22 23:14:16 fritz Exp $
  *
  * card.c     low level stuff for the Teles S0 isdn card
  * 
@@ -7,6 +7,15 @@
  * Beat Doebeli         log all D channel traffic
  * 
  * $Log: card.c,v $
+ * Revision 1.16  1996/10/22 23:14:16  fritz
+ * Changes for compatibility to 2.0.X and 2.1.X kernels.
+ *
+ * Revision 1.15  1996/09/29 19:41:56  fritz
+ * Bugfix: ignore unknown frames.
+ *
+ * Revision 1.14  1996/09/23 01:53:49  fritz
+ * Bugfix: discard unknown frames (non-EDSS1 and non-1TR6).
+ *
  * Revision 1.13  1996/07/18 11:21:24  jdenoud
  * Use small buffers for incoming audio data
  *
@@ -59,12 +68,11 @@
 
 #define __NO_VERSION__
 #include "teles.h"
+#include "proto.h"
 
 #define INCLUDE_INLINE_FUNCS
 #include <linux/tqueue.h>
 #include <linux/interrupt.h>
-
-#include <asm/io.h>
 
 #undef DCHAN_VERBOSE
 
@@ -77,7 +85,7 @@ extern int      nrcards;
 #define bytein(addr) inb_p(addr)
 
 static inline   byte
-readisac_0(unsigned int cardm, byte offset)
+readisac_0(byte * cardm, byte offset)
 {
 	return readb(cardm + 0x100 + ((offset & 1) ? 0x1ff : 0) + offset);
 }
@@ -92,7 +100,7 @@ readisac_3(int iobase, byte offset)
         ((mbase)?readisac_0(mbase,ofs):readisac_3(ibase,ofs))
 
 static inline void
-writeisac_0(unsigned int cardm, byte offset, byte value)
+writeisac_0(byte * cardm, byte offset, byte value)
 {
 	writeb(value, cardm + 0x100 + ((offset & 1) ? 0x1ff : 0) + offset);
 }
@@ -119,7 +127,7 @@ writeisac_s(int iobase, byte offset, byte * src, int count)
 }
 
 static inline   byte
-readhscx_0(unsigned int base, byte hscx, byte offset)
+readhscx_0(byte * base, byte hscx, byte offset)
 {
 	return readb(base + 0x180 + ((offset & 1) ? 0x1FF : 0) +
 			  ((hscx & 1) ? 0x40 : 0) + offset);
@@ -135,7 +143,7 @@ readhscx_3(int iobase, byte hscx, byte offset)
         ((mbase)?readhscx_0(mbase,hscx,ofs):readhscx_3(ibase,hscx,ofs))
 
 static inline void
-writehscx_0(unsigned int base, byte hscx, byte offset, byte data)
+writehscx_0(byte * base, byte hscx, byte offset, byte data)
 {
 	writeb(data, base + 0x180 + ((offset & 1) ? 0x1FF : 0) +
 		   ((hscx & 1) ? 0x40 : 0) + offset);
@@ -201,7 +209,7 @@ writehscx_s(int iobase, byte hscx, byte offset, byte * src, int count)
 #define HSCX_MASK 0x20
 
 static inline void
-waitforCEC_0(unsigned int base, byte hscx)
+waitforCEC_0(byte * base, byte hscx)
 {
 	long            to = 10;
 
@@ -227,7 +235,7 @@ waitforCEC_3(int iobase, byte hscx)
 }
 
 static inline void
-waitforXFW_0(unsigned int base, byte hscx)
+waitforXFW_0(byte * base, byte hscx)
 {
 	long            to = 20;
 
@@ -253,7 +261,7 @@ waitforXFW_3(int iobase, byte hscx)
 }
 
 static inline void
-writehscxCMDR_0(unsigned int base, byte hscx, byte data)
+writehscxCMDR_0(byte * base, byte hscx, byte data)
 {
 	long            flags;
 
@@ -1061,7 +1069,7 @@ restart_ph(struct IsdnCardState *sp)
 }
 
 static void
-initisac(unsigned int cardmem, int iobase)
+initisac(byte * cardmem, int iobase)
 {
         if (cardmem) {
                 writeisac_0(cardmem, ISAC_MASK, 0xff);
@@ -1095,17 +1103,17 @@ checkcard(int cardnr)
 	struct IsdnCard *card = cards + cardnr;
 
         if (card->membase)
-                if (card->membase < 0x10000) {
-                        card->membase <<= 4;
+                if ((unsigned long)card->membase < 0x10000) {
+                        (unsigned long)card->membase <<= 4;
                         printk(KERN_INFO
-                               "Teles membase configured DOSish, assuming 0x%x\n",
-                               card->membase);
+                               "Teles membase configured DOSish, assuming 0x%lx\n",
+                               (unsigned long)card->membase);
                 }
         if (!card->iobase) {
                 if (card->membase) {
                         printk(KERN_NOTICE
-                               "Teles 8 assumed, mem: %x irq: %d proto: %s\n",
-                               card->membase, card->interrupt,
+                               "Teles 8 assumed, mem: %lx irq: %d proto: %s\n",
+                               (long) card->membase, card->interrupt,
                                (card->protocol == ISDN_PTYPE_1TR6) ?
                                "1TR6" : "EDSS1");
                         printk(KERN_INFO "HSCX version A:%x B:%x\n",
@@ -1188,7 +1196,7 @@ checkcard(int cardnr)
                         break;
                 }
                 if (card->membase) {
-                        cfval |= (card->membase >> 9) & 0xF0;
+                        cfval |= (((unsigned int) card->membase >> 9) & 0xF0);
                 }   
                 if (bytein(card->iobase + 0) != 0x51) {
                         printk(KERN_INFO "XXX Byte at %x is %x\n",
@@ -1234,8 +1242,8 @@ checkcard(int cardnr)
                 
                 if (card->membase)
                         printk(KERN_NOTICE
-                               "Teles 16.0 found, io: %x mem: %x irq: %d proto: %s\n",
-                               card->iobase, card->membase,
+                               "Teles 16.0 found, io: %x mem: %lx irq: %d proto: %s\n",
+                               card->iobase, (long) card->membase,
                                card->interrupt,
                                (card->protocol == ISDN_PTYPE_1TR6) ?
                                "1TR6" : "EDSS1");

@@ -1,6 +1,9 @@
-/* $Id: isdnl2.c,v 1.2 1996/05/17 03:46:15 fritz Exp $
+/* $Id: isdnl2.c,v 1.3 1996/11/23 11:32:57 keil Exp $
  *
  * $Log: isdnl2.c,v $
+ * Revision 1.3  1996/11/23 11:32:57  keil
+ * X.75 bugfixies; Thanks to Martin Maurer
+ *
  * Revision 1.2  1996/05/17 03:46:15  fritz
  * General cleanup.
  *
@@ -319,7 +322,7 @@ l2s12(struct FsmInst *fi, int event, void *arg)
 
 	if (BufPoolGet(&ibh, st->l1.smallpool, GFP_ATOMIC, (void *) st, 10))
 		return;
-	i = sethdraddr(&(st->l2), ibh, 0);
+	i = sethdraddr(&(st->l2), ibh, !0);
 	ptr = DATAPTR(ibh);
 	ptr += i;
 	*ptr = 0x73;
@@ -565,7 +568,7 @@ l2s8(struct FsmInst *fi, int event, void *arg)
 			goto noRR;
 
 		if (!BufPoolGet(&ibh2, st->l1.smallpool, GFP_ATOMIC, (void *) st, 13)) {
-			i = sethdraddr(&(st->l2), ibh2, p);
+			i = sethdraddr(&(st->l2), ibh2, !0);
 			ptr = DATAPTR(ibh2);
 			ptr += i;
 
@@ -847,7 +850,7 @@ l2s22(struct FsmInst *fi, int event, void *arg)
 		*ptr++ = (l2->vr << 1) | 0x1;
 		l2->vs = (l2->vs + 1) % 128;
 	} else {
-		*ptr++ = (l2->vr << 5) | (l2->vs << 1) | 0x10;
+		*ptr++ = (l2->vr << 5) | (l2->vs << 1);
 		l2->vs = (l2->vs + 1) % 8;
 	}
 

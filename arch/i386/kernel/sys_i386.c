@@ -88,14 +88,11 @@ struct sel_arg_struct {
 asmlinkage int old_select(struct sel_arg_struct *arg)
 {
 	struct sel_arg_struct a;
-	int ret;
 
 	if (copy_from_user(&a, arg, sizeof(a)))
 		return -EFAULT;
-	lock_kernel();
-	ret = sys_select(a.n, a.inp, a.outp, a.exp, a.tvp);
-	unlock_kernel();
-	return ret;
+	/* sys_select() does the appropriate kernel locking */
+	return sys_select(a.n, a.inp, a.outp, a.exp, a.tvp);
 }
 
 /*

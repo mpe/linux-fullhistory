@@ -26,8 +26,8 @@ CONFIG_BINFMT_AOUT=y
 CONFIG_BINFMT_ELF=y
 # CONFIG_M386 is not set
 # CONFIG_M486 is not set
-CONFIG_M586=y
-# CONFIG_M686 is not set
+# CONFIG_M586 is not set
+CONFIG_M686=y
 # CONFIG_VIDEO_SELECT is not set
 
 #
@@ -48,7 +48,7 @@ CONFIG_BLK_DEV_IDECD=y
 CONFIG_BLK_DEV_CMD640=y
 # CONFIG_BLK_DEV_CMD640_ENHANCED is not set
 CONFIG_BLK_DEV_RZ1000=y
-# CONFIG_BLK_DEV_TRITON is not set
+CONFIG_BLK_DEV_TRITON=y
 # CONFIG_IDE_CHIPSETS is not set
 
 #
@@ -92,7 +92,51 @@ CONFIG_SKB_LARGE=y
 #
 # SCSI support
 #
-# CONFIG_SCSI is not set
+CONFIG_SCSI=y
+
+#
+# SCSI support type (disk, tape, CD-ROM)
+#
+CONFIG_BLK_DEV_SD=y
+# CONFIG_CHR_DEV_ST is not set
+# CONFIG_BLK_DEV_SR is not set
+# CONFIG_CHR_DEV_SG is not set
+
+#
+# Some SCSI devices (e.g. CD jukebox) support multiple LUNs
+#
+CONFIG_SCSI_MULTI_LUN=y
+CONFIG_SCSI_CONSTANTS=y
+
+#
+# SCSI low-level drivers
+#
+# CONFIG_SCSI_7000FASST is not set
+# CONFIG_SCSI_AHA152X is not set
+# CONFIG_SCSI_AHA1542 is not set
+# CONFIG_SCSI_AHA1740 is not set
+# CONFIG_SCSI_AIC7XXX is not set
+# CONFIG_SCSI_ADVANSYS is not set
+# CONFIG_SCSI_IN2000 is not set
+# CONFIG_SCSI_AM53C974 is not set
+CONFIG_SCSI_BUSLOGIC=y
+# CONFIG_SCSI_DTC3280 is not set
+# CONFIG_SCSI_EATA_DMA is not set
+# CONFIG_SCSI_EATA_PIO is not set
+# CONFIG_SCSI_EATA is not set
+# CONFIG_SCSI_FUTURE_DOMAIN is not set
+# CONFIG_SCSI_GENERIC_NCR5380 is not set
+# CONFIG_SCSI_NCR53C406A is not set
+# CONFIG_SCSI_NCR53C7xx is not set
+# CONFIG_SCSI_NCR53C8XX is not set
+# CONFIG_SCSI_PPA is not set
+# CONFIG_SCSI_PAS16 is not set
+# CONFIG_SCSI_QLOGIC_FAS is not set
+# CONFIG_SCSI_QLOGIC_ISP is not set
+# CONFIG_SCSI_SEAGATE is not set
+# CONFIG_SCSI_T128 is not set
+# CONFIG_SCSI_U14_34F is not set
+# CONFIG_SCSI_ULTRASTOR is not set
 
 #
 # Network device support
@@ -102,15 +146,16 @@ CONFIG_NETDEVICES=y
 CONFIG_DUMMY=m
 # CONFIG_EQUALIZER is not set
 CONFIG_NET_ETHERNET=y
-CONFIG_NET_VENDOR_3COM=y
-# CONFIG_EL1 is not set
-# CONFIG_EL2 is not set
-CONFIG_EL3=y
-# CONFIG_VORTEX is not set
+# CONFIG_NET_VENDOR_3COM is not set
 # CONFIG_LANCE is not set
 # CONFIG_NET_VENDOR_SMC is not set
 # CONFIG_NET_ISA is not set
-# CONFIG_NET_EISA is not set
+CONFIG_NET_EISA=y
+# CONFIG_APRICOT is not set
+# CONFIG_CS89x0 is not set
+CONFIG_DE4X5=y
+# CONFIG_DEC_ELCP is not set
+# CONFIG_DGRS is not set
 # CONFIG_NET_POCKET is not set
 # CONFIG_FDDI is not set
 # CONFIG_DLCI is not set
@@ -139,7 +184,7 @@ CONFIG_MINIX_FS=y
 CONFIG_EXT2_FS=y
 CONFIG_FAT_FS=y
 CONFIG_MSDOS_FS=y
-# CONFIG_VFAT_FS is not set
+CONFIG_VFAT_FS=y
 # CONFIG_UMSDOS_FS is not set
 CONFIG_PROC_FS=y
 CONFIG_NFS_FS=y
@@ -162,7 +207,12 @@ CONFIG_SERIAL=y
 # CONFIG_RISCOM8 is not set
 # CONFIG_ESPSERIAL is not set
 # CONFIG_PRINTER is not set
-# CONFIG_MOUSE is not set
+CONFIG_MOUSE=y
+# CONFIG_ATIXL_BUSMOUSE is not set
+# CONFIG_BUSMOUSE is not set
+# CONFIG_MS_BUSMOUSE is not set
+CONFIG_PSMOUSE=y
+CONFIG_82C710_MOUSE=y
 # CONFIG_UMISC is not set
 # CONFIG_QIC02_TAPE is not set
 # CONFIG_FTAPE is not set

@@ -1,13 +1,13 @@
 /*
  * Copyright (C) 1996 Universidade de Lisboa
- * 
+ *
  * Written by Pedro Roque Marques (roque@di.fc.ul.pt)
  *
- * This software may be used and distributed according to the terms of 
+ * This software may be used and distributed according to the terms of
  * the GNU Public License, incorporated herein by reference.
  */
 
-/*        
+/*
  *        PCBIT-D low-layer interface
  */
 
@@ -19,7 +19,7 @@
 /*
  *        TODO: better handling of errors
  *              re-write/remove debug printks
- */ 
+ */
 
 #define __NO_VERSION__
 
@@ -57,7 +57,7 @@
 
 /*
  *  task queue struct
- */ 
+ */
 
 
 
@@ -66,16 +66,16 @@
  *  drv.c
  */
 
-extern void pcbit_l3_receive(struct pcbit_dev * dev, ulong msg, 
-			     struct sk_buff * skb,
+extern void pcbit_l3_receive(struct pcbit_dev *dev, ulong msg,
+			     struct sk_buff *skb,
 			     ushort hdr_len, ushort refnum);
 
 /*
  *  Prototypes
  */
 
-void pcbit_deliver(void * data);
-static void pcbit_transmit(struct pcbit_dev * dev);
+void pcbit_deliver(void *data);
+static void pcbit_transmit(struct pcbit_dev *dev);
 
 static void pcbit_recv_ack(struct pcbit_dev *dev, unsigned char ack);
 
@@ -83,9 +83,10 @@ static void pcbit_l2_error(struct pcbit_dev *dev);
 static void pcbit_l2_active_conf(struct pcbit_dev *dev, u_char info);
 static void pcbit_l2_err_recover(unsigned long data);
 
-static void pcbit_firmware_bug(struct pcbit_dev * dev);
+static void pcbit_firmware_bug(struct pcbit_dev *dev);
 
-static __inline__ void pcbit_sched_delivery(struct pcbit_dev *dev)
+static __inline__ void
+pcbit_sched_delivery(struct pcbit_dev *dev)
 {
 	queue_task(&dev->qdelivery, &tq_immediate);
 	mark_bh(IMMEDIATE_BH);
@@ -96,71 +97,67 @@ static __inline__ void pcbit_sched_delivery(struct pcbit_dev *dev)
  *  Called from layer3
  */
 
-int pcbit_l2_write(struct pcbit_dev * dev, ulong msg, ushort refnum, 
-		   struct sk_buff *skb, unsigned short hdr_len)
-        
+int
+pcbit_l2_write(struct pcbit_dev *dev, ulong msg, ushort refnum,
+	       struct sk_buff *skb, unsigned short hdr_len)
 {
-        struct frame_buf * frame, * ptr;
-        unsigned long flags;
+	struct frame_buf *frame,
+	*ptr;
+	unsigned long flags;
 
-        if (dev->l2_state != L2_RUNNING && dev->l2_state != L2_LOADING) {
-                dev_kfree_skb(skb, FREE_WRITE);
-                return -1;
-        }
-
-        if ( (frame = (struct frame_buf *) kmalloc(sizeof(struct frame_buf), 
-						   GFP_ATOMIC)) == NULL ) {
-                printk(KERN_WARNING "pcbit_2_write: kmalloc failed\n");
+	if (dev->l2_state != L2_RUNNING && dev->l2_state != L2_LOADING) {
 		dev_kfree_skb(skb, FREE_WRITE);
-                return -1;
-        }
+		return -1;
+	}
+	if ((frame = (struct frame_buf *) kmalloc(sizeof(struct frame_buf),
+						  GFP_ATOMIC)) == NULL) {
+		printk(KERN_WARNING "pcbit_2_write: kmalloc failed\n");
+		dev_kfree_skb(skb, FREE_WRITE);
+		return -1;
+	}
+	frame->msg = msg;
+	frame->refnum = refnum;
+	frame->copied = 0;
+	frame->hdr_len = hdr_len;
 
-        frame->msg = msg;
-        frame->refnum = refnum;
-        frame->copied = 0;        
-        frame->hdr_len = hdr_len;
+	if (skb)
+		frame->dt_len = skb->len - hdr_len;
+	else
+		frame->dt_len = 0;
 
-        if (skb) {
-                frame->dt_len = skb->len - hdr_len;
-		if (frame->dt_len == 0)
-                        skb->lock++;
-        }
-        else
-                frame->dt_len = 0;
+	frame->skb = skb;
 
-        frame->skb = skb;
+	frame->next = NULL;
 
-        frame->next = NULL;
+	save_flags(flags);
+	cli();
 
-        save_flags(flags);
-        cli();
-
-        if (dev->write_queue == NULL) {
-                dev->write_queue = frame;
+	if (dev->write_queue == NULL) {
+		dev->write_queue = frame;
 		restore_flags(flags);
-                pcbit_transmit(dev);
-        }
-        else {        
-                for(ptr=dev->write_queue; ptr->next; ptr=ptr->next);
-                ptr->next = frame;
-                
-                restore_flags(flags);
-        }
-        return 0;
+		pcbit_transmit(dev);
+	} else {
+		for (ptr = dev->write_queue; ptr->next; ptr = ptr->next);
+		ptr->next = frame;
+
+		restore_flags(flags);
+	}
+	return 0;
 }
 
-static __inline__ void pcbit_tx_update(struct pcbit_dev *dev, ushort len)
+static __inline__ void
+pcbit_tx_update(struct pcbit_dev *dev, ushort len)
 {
-        u_char info;
+	u_char info;
 
-        dev->send_seq = (dev->send_seq + 1) % 8;
+	dev->send_seq = (dev->send_seq + 1) % 8;
 
-        dev->fsize[dev->send_seq] = len;
-        info = 0;
-        info |= dev->rcv_seq  << 3;
-        info |= dev->send_seq;
+	dev->fsize[dev->send_seq] = len;
+	info = 0;
+	info |= dev->rcv_seq << 3;
+	info |= dev->send_seq;
 
-        writeb(info, dev->sh_mem + BANK4);
+	writeb(info, dev->sh_mem + BANK4);
 
 }
 
@@ -168,46 +165,47 @@ static __inline__ void pcbit_tx_update(struct pcbit_dev *dev, ushort len)
  * called by interrupt service routine or by write_2
  */
 
-static void pcbit_transmit(struct pcbit_dev * dev)
+static void
+pcbit_transmit(struct pcbit_dev *dev)
 {
-        struct frame_buf * frame = NULL;
-        unsigned char unacked;
-        int flen;           /* fragment frame length including all headers */
-	int totlen;         /* non-fragmented frame length */
-        int free;
-	int count, cp_len;
-        unsigned long flags;
+	struct frame_buf *frame = NULL;
+	unsigned char unacked;
+	int flen;               /* fragment frame length including all headers */
+	int totlen;             /* non-fragmented frame length */
+	int free;
+	int count,
+	 cp_len;
+	unsigned long flags;
 	unsigned short tt;
 
-        if (dev->l2_state != L2_RUNNING && dev->l2_state != L2_LOADING)
-                return;
+	if (dev->l2_state != L2_RUNNING && dev->l2_state != L2_LOADING)
+		return;
 
-        unacked = (dev->send_seq + (8 - dev->unack_seq) ) & 0x07;
+	unacked = (dev->send_seq + (8 - dev->unack_seq)) & 0x07;
 
 	save_flags(flags);
 	cli();
 
-        if (dev->free > 16 && dev->write_queue && unacked < 7) {
+	if (dev->free > 16 && dev->write_queue && unacked < 7) {
 
-                if (!dev->w_busy)
-                        dev->w_busy = 1;
-                else
-                {
-                        restore_flags(flags);
-                        return;
-                }
+		if (!dev->w_busy)
+			dev->w_busy = 1;
+		else {
+			restore_flags(flags);
+			return;
+		}
 
 
-                frame = dev->write_queue;
-                free = dev->free;
+		frame = dev->write_queue;
+		free = dev->free;
 
-                restore_flags(flags);
+		restore_flags(flags);
 
 		if (frame->copied == 0) {
 
-                        /* Type 0 frame */
+			/* Type 0 frame */
 
-                        struct msg_fmt * msg;
+			struct msg_fmt *msg;
 
 			if (frame->skb)
 				totlen = FRAME_HDR_LEN + PREHDR_LEN + frame->skb->len;
@@ -216,67 +214,65 @@ static void pcbit_transmit(struct pcbit_dev * dev)
 
 			flen = MIN(totlen, free);
 
-                        msg = (struct msg_fmt *) &(frame->msg);
+			msg = (struct msg_fmt *) &(frame->msg);
 
-                        /*
-                         *  Board level 2 header 
-                         */
+			/*
+			 *  Board level 2 header
+			 */
 
-                        pcbit_writew(dev, flen - FRAME_HDR_LEN);
+			pcbit_writew(dev, flen - FRAME_HDR_LEN);
 
-                        pcbit_writeb(dev, msg->cpu);
+			pcbit_writeb(dev, msg->cpu);
 
-                        pcbit_writeb(dev, msg->proc);
+			pcbit_writeb(dev, msg->proc);
 
-                        /* TH */
-                        pcbit_writew(dev, frame->hdr_len + PREHDR_LEN);
+			/* TH */
+			pcbit_writew(dev, frame->hdr_len + PREHDR_LEN);
 
-                        /* TD */
-                        pcbit_writew(dev, frame->dt_len);
+			/* TD */
+			pcbit_writew(dev, frame->dt_len);
 
 
-                        /*
-                         *  Board level 3 fixed-header 
-                         */
-	
-                        /* LEN = TH */
-                        pcbit_writew(dev, frame->hdr_len + PREHDR_LEN);
-	
-                        /* XX */
-                        pcbit_writew(dev, 0);
+			/*
+			 *  Board level 3 fixed-header
+			 */
 
-                        /* C + S */
-                        pcbit_writeb(dev, msg->cmd);
-                        pcbit_writeb(dev, msg->scmd);
+			/* LEN = TH */
+			pcbit_writew(dev, frame->hdr_len + PREHDR_LEN);
 
-                        /* NUM */
-                        pcbit_writew(dev, frame->refnum);
-			
+			/* XX */
+			pcbit_writew(dev, 0);
+
+			/* C + S */
+			pcbit_writeb(dev, msg->cmd);
+			pcbit_writeb(dev, msg->scmd);
+
+			/* NUM */
+			pcbit_writew(dev, frame->refnum);
+
 			count = FRAME_HDR_LEN + PREHDR_LEN;
-		}
-		else {
+		} else {
 			/* Type 1 frame */
 
-                        totlen = 2 + (frame->skb->len - frame->copied);
-	  
+			totlen = 2 + (frame->skb->len - frame->copied);
+
 			flen = MIN(totlen, free);
 
-                        /* TT */
-                        tt = ((ushort) (flen - 2)) | 0x8000U; /* Type 1 */
-                        pcbit_writew(dev, tt);
+			/* TT */
+			tt = ((ushort) (flen - 2)) | 0x8000U;	/* Type 1 */
+			pcbit_writew(dev, tt);
 
 			count = 2;
 		}
 
 		if (frame->skb) {
-			cp_len = MIN(frame->skb->len - frame->copied, 
-                                     flen - count);
-		
-			memcpy_topcbit(dev, frame->skb->data + frame->copied, 
-                                       cp_len);
+			cp_len = MIN(frame->skb->len - frame->copied,
+				     flen - count);
+
+			memcpy_topcbit(dev, frame->skb->data + frame->copied,
+				       cp_len);
 			frame->copied += cp_len;
 		}
-
 		/* bookkeeping */
 		dev->free -= flen;
 		pcbit_tx_update(dev, flen);
@@ -285,28 +281,24 @@ static void pcbit_transmit(struct pcbit_dev * dev)
 		cli();
 
 
-                if (frame->skb == NULL || frame->copied == frame->skb->len) {
+		if (frame->skb == NULL || frame->copied == frame->skb->len) {
 
-                        dev->write_queue = frame->next;
+			dev->write_queue = frame->next;
 
-                        if (frame->skb != NULL) {
-                                /* free frame */
-                                dev_kfree_skb(frame->skb, FREE_WRITE);
-                        }
-
-                        kfree(frame);
-                }
-
+			if (frame->skb != NULL) {
+				/* free frame */
+				dev_kfree_skb(frame->skb, FREE_WRITE);
+			}
+			kfree(frame);
+		}
 		dev->w_busy = 0;
-		restore_flags(flags);				
-        }
-        else
-	{
 		restore_flags(flags);
-#ifdef DEBUG		
-                printk(KERN_DEBUG "unacked %d free %d write_queue %s\n",
-                       unacked, dev->free, dev->write_queue ? "not empty" : 
-		       "empty");	
+	} else {
+		restore_flags(flags);
+#ifdef DEBUG
+		printk(KERN_DEBUG "unacked %d free %d write_queue %s\n",
+		     unacked, dev->free, dev->write_queue ? "not empty" :
+		       "empty");
 #endif
 	}
 }
@@ -316,18 +308,18 @@ static void pcbit_transmit(struct pcbit_dev * dev)
  *  deliver a queued frame to the upper layer
  */
 
-void pcbit_deliver(void * data)
-{ 
-        struct frame_buf *frame;
-        unsigned long flags;
+void
+pcbit_deliver(void *data)
+{
+	struct frame_buf *frame;
+	unsigned long flags;
 	struct msg_fmt msg;
-        struct pcbit_dev *dev = (struct pcbit_dev *) data;
+	struct pcbit_dev *dev = (struct pcbit_dev *) data;
 
 	save_flags(flags);
-        cli();
+	cli();
 
-	while((frame=dev->read_queue))
-	{
+	while ((frame = dev->read_queue)) {
 		dev->read_queue = frame->next;
 		restore_flags(flags);
 
@@ -336,12 +328,12 @@ void pcbit_deliver(void * data)
 		msg.cmd = frame->skb->data[2];
 		msg.scmd = frame->skb->data[3];
 
-		frame->refnum = *((ushort*) frame->skb->data + 4);
-		frame->msg = *((ulong*) &msg);
-		
+		frame->refnum = *((ushort *) frame->skb->data + 4);
+		frame->msg = *((ulong *) & msg);
+
 		skb_pull(frame->skb, 6);
 
-		pcbit_l3_receive(dev, frame->msg, frame->skb, frame->hdr_len, 
+		pcbit_l3_receive(dev, frame->msg, frame->skb, frame->hdr_len,
 				 frame->refnum);
 
 		kfree(frame);
@@ -354,110 +346,104 @@ void pcbit_deliver(void * data)
 }
 
 /*
- * Reads BANK 2 & Reassembles 
+ * Reads BANK 2 & Reassembles
  */
 
-static void pcbit_receive(struct pcbit_dev * dev)
+static void
+pcbit_receive(struct pcbit_dev *dev)
 {
-        unsigned short tt;
-	u_char cpu, proc;
-        struct frame_buf * frame = NULL;
-        unsigned long flags;
-        u_char type1;
+	unsigned short tt;
+	u_char cpu,
+	 proc;
+	struct frame_buf *frame = NULL;
+	unsigned long flags;
+	u_char type1;
 
-        if (dev->l2_state != L2_RUNNING && dev->l2_state != L2_LOADING)
-                return;
+	if (dev->l2_state != L2_RUNNING && dev->l2_state != L2_LOADING)
+		return;
 
-        tt = pcbit_readw(dev);
+	tt = pcbit_readw(dev);
 
-        if ((tt & 0x7fffU) > 511) {
-                printk(KERN_INFO "pcbit: invalid frame length -> TT=%04x\n", 
+	if ((tt & 0x7fffU) > 511) {
+		printk(KERN_INFO "pcbit: invalid frame length -> TT=%04x\n",
 		       tt);
-                pcbit_l2_error(dev);
-                return;
-        }
+		pcbit_l2_error(dev);
+		return;
+	}
+	if (!(tt & 0x8000U)) {  /* Type 0 */
+		type1 = 0;
 
-        if (!(tt & 0x8000U))
-        {                       /* Type 0 */
-                type1 = 0;
-
-                if (dev->read_frame) {
-                        printk(KERN_DEBUG "pcbit_receive: Type 0 frame and read_frame != NULL\n");
+		if (dev->read_frame) {
+			printk(KERN_DEBUG "pcbit_receive: Type 0 frame and read_frame != NULL\n");
 #if 0
-                        pcbit_l2_error(dev);
-                        return;
+			pcbit_l2_error(dev);
+			return;
 #else
 			/* discard previous queued frame */
 			if (dev->read_frame->skb) {
-				dev->read_frame->skb->free = 1;
+				SET_SKB_FREE(dev->read_frame->skb);
 				kfree_skb(dev->read_frame->skb, FREE_READ);
 			}
 			kfree(dev->read_frame);
 			dev->read_frame = NULL;
 #endif
-                }
+		}
+		frame = kmalloc(sizeof(struct frame_buf), GFP_ATOMIC);
 
-                frame = kmalloc(sizeof(struct frame_buf), GFP_ATOMIC);
-      
-                if (frame == NULL) {
-                        printk(KERN_WARNING "kmalloc failed\n");
-                        return;
-                }
-                memset(frame, 0, sizeof(struct frame_buf));
-      
-                cpu = pcbit_readb(dev);
-                proc = pcbit_readb(dev);
+		if (frame == NULL) {
+			printk(KERN_WARNING "kmalloc failed\n");
+			return;
+		}
+		memset(frame, 0, sizeof(struct frame_buf));
+
+		cpu = pcbit_readb(dev);
+		proc = pcbit_readb(dev);
 
 
-                if (cpu != 0x06 && cpu != 0x02)
-                {
-                        printk (KERN_DEBUG "pcbit: invalid cpu value\n");
+		if (cpu != 0x06 && cpu != 0x02) {
+			printk(KERN_DEBUG "pcbit: invalid cpu value\n");
 			kfree(frame);
 			pcbit_l2_error(dev);
-                        return;
-                }
+			return;
+		}
+		/*
+		 * we discard cpu & proc on receiving
+		 * but we read it to update the pointer
+		 */
 
-                /*
-                 * we discard cpu & proc on receiving
-                 * but we read it to update the pointer
-                 */
-      
-                frame->hdr_len = pcbit_readw(dev);
-                frame->dt_len = pcbit_readw(dev);
+		frame->hdr_len = pcbit_readw(dev);
+		frame->dt_len = pcbit_readw(dev);
 
-		/* 
-                 * 0 sized packet 
-                 * I don't know if they are an error or not...
-                 * But they are very frequent
-                 * Not documented
-                 */
+		/*
+		   * 0 sized packet
+		   * I don't know if they are an error or not...
+		   * But they are very frequent
+		   * Not documented
+		 */
 
 		if (frame->hdr_len == 0) {
-                        kfree(frame);
+			kfree(frame);
 #ifdef DEBUG
-                        printk(KERN_DEBUG "0 sized frame\n");
+			printk(KERN_DEBUG "0 sized frame\n");
 #endif
 			pcbit_firmware_bug(dev);
-                        return;
+			return;
 		}
-		
-                /* sanity check the length values */
-                if (frame->hdr_len > 1024 || frame->dt_len > 2048)
-                {
+		/* sanity check the length values */
+		if (frame->hdr_len > 1024 || frame->dt_len > 2048) {
 #ifdef DEBUG
-                        printk(KERN_DEBUG "length problem: ");
-                        printk(KERN_DEBUG "TH=%04x TD=%04x\n", 
-			       frame->hdr_len, 
-                               frame->dt_len);
+			printk(KERN_DEBUG "length problem: ");
+			printk(KERN_DEBUG "TH=%04x TD=%04x\n",
+			       frame->hdr_len,
+			       frame->dt_len);
 #endif
 			pcbit_l2_error(dev);
 			kfree(frame);
-                        return;
-                }
+			return;
+		}
+		/* minimum frame read */
 
-                /* minimum frame read */
-
-		frame->skb = dev_alloc_skb(frame->hdr_len + frame->dt_len + 
+		frame->skb = dev_alloc_skb(frame->hdr_len + frame->dt_len +
 					   ((frame->hdr_len + 15) & ~15));
 
 		if (!frame->skb) {
@@ -465,62 +451,57 @@ static void pcbit_receive(struct pcbit_dev * dev)
 			kfree(frame);
 			return;
 		}
-
-                /* 16 byte alignment for IP */		       
+		/* 16 byte alignment for IP */
 		if (frame->dt_len)
-                        skb_reserve(frame->skb, (frame->hdr_len + 15) & ~15);
+			skb_reserve(frame->skb, (frame->hdr_len + 15) & ~15);
 
-        }
-        else {
+	} else {
 		/* Type 1 */
-                type1 = 1;
-                tt &= 0x7fffU;
+		type1 = 1;
+		tt &= 0x7fffU;
 
-                if (!(frame = dev->read_frame)) {                
-                        printk("Type 1 frame and no frame queued\n");
+		if (!(frame = dev->read_frame)) {
+			printk("Type 1 frame and no frame queued\n");
 #if 1
 			/* usually after an error: toss frame */
 			dev->readptr += tt;
 			if (dev->readptr > dev->sh_mem + BANK2 + BANKLEN)
 				dev->readptr -= BANKLEN;
 #else
-                        pcbit_l2_error(dev);
+			pcbit_l2_error(dev);
 #endif
-                        return;
+			return;
 
-                }
-        }
+		}
+	}
 
 	memcpy_frompcbit(dev, skb_put(frame->skb, tt), tt);
 
 	frame->copied += tt;
 
-        if (frame->copied == frame->hdr_len + frame->dt_len) {
-           
-                save_flags(flags);
-                cli();
-      
-                if (type1) {
-                        dev->read_frame = NULL;
-                }
-      
-                if (dev->read_queue) {
-                        struct frame_buf *ptr;
-                        for(ptr=dev->read_queue;ptr->next;ptr=ptr->next);
-                        ptr->next = frame;
-                }
-                else
-                        dev->read_queue = frame;
-                
-                restore_flags(flags);
+	if (frame->copied == frame->hdr_len + frame->dt_len) {
 
-        }
-        else {        
-                save_flags(flags);
-                cli();
-                dev->read_frame = frame;
-                restore_flags(flags);
-        }
+		save_flags(flags);
+		cli();
+
+		if (type1) {
+			dev->read_frame = NULL;
+		}
+		if (dev->read_queue) {
+			struct frame_buf *ptr;
+			for (ptr = dev->read_queue; ptr->next; ptr = ptr->next);
+			ptr->next = frame;
+		} else
+			dev->read_queue = frame;
+
+		restore_flags(flags);
+
+	} else {
+		save_flags(flags);
+		cli();
+		dev->read_frame = frame;
+		restore_flags(flags);
+	}
 }
 
 /*
@@ -529,194 +510,173 @@ static void pcbit_receive(struct pcbit_dev * dev)
  *  gotta send a fake acknowledgment to the upper layer somehow
  */
 
-static __inline__ void pcbit_fake_conf(struct pcbit_dev *dev, struct pcbit_chan * chan)
+static __inline__ void
+pcbit_fake_conf(struct pcbit_dev *dev, struct pcbit_chan *chan)
 {
-     isdn_ctrl ictl;
+	isdn_ctrl ictl;
 
-     if (chan->queued) {
-	     chan->queued--;
-	     
-	     ictl.driver = dev->id;
-	     ictl.command = ISDN_STAT_BSENT;
-	     ictl.arg = chan->id;
-	     dev->dev_if->statcallb(&ictl);     
-     }
+	if (chan->queued) {
+		chan->queued--;
+
+		ictl.driver = dev->id;
+		ictl.command = ISDN_STAT_BSENT;
+		ictl.arg = chan->id;
+		dev->dev_if->statcallb(&ictl);
+	}
 }
 
-static void pcbit_firmware_bug(struct pcbit_dev * dev) 
+static void
+pcbit_firmware_bug(struct pcbit_dev *dev)
 {
-        struct pcbit_chan *chan;
-        
-        chan = dev->b1;
+	struct pcbit_chan *chan;
 
-        if (chan->fsm_state == ST_ACTIVE) {
-	    pcbit_fake_conf(dev, chan);
-        }
+	chan = dev->b1;
 
-        chan = dev->b2;
+	if (chan->fsm_state == ST_ACTIVE) {
+		pcbit_fake_conf(dev, chan);
+	}
+	chan = dev->b2;
 
-        if (chan->fsm_state == ST_ACTIVE) {
-	    pcbit_fake_conf(dev, chan);
-        }
- 
+	if (chan->fsm_state == ST_ACTIVE) {
+		pcbit_fake_conf(dev, chan);
+	}
 }
 
-void pcbit_irq_handler(int interrupt, void * devptr, struct pt_regs *regs)
+void
+pcbit_irq_handler(int interrupt, void *devptr, struct pt_regs *regs)
 {
-        struct pcbit_dev * dev;
-        u_char info, ack_seq, read_seq;
+	struct pcbit_dev *dev;
+	u_char info,
+	 ack_seq,
+	 read_seq;
 
 	dev = (struct pcbit_dev *) devptr;
 
-        if (!dev)
-        {
-                printk(KERN_WARNING "pcbit_irq_handler: wrong device\n");
-                return;
-        }
-
-	if (dev->interrupt) {
-	        printk(KERN_DEBUG "pcbit: reentering interrupt hander\n");
+	if (!dev) {
+		printk(KERN_WARNING "pcbit_irq_handler: wrong device\n");
 		return;
 	}
-
+	if (dev->interrupt) {
+		printk(KERN_DEBUG "pcbit: reentering interrupt hander\n");
+		return;
+	}
 	dev->interrupt = 1;
 
-        info = readb(dev->sh_mem + BANK3);
+	info = readb(dev->sh_mem + BANK3);
 
-        if (dev->l2_state == L2_STARTING || dev->l2_state == L2_ERROR)
-        {
-                pcbit_l2_active_conf(dev, info);
+	if (dev->l2_state == L2_STARTING || dev->l2_state == L2_ERROR) {
+		pcbit_l2_active_conf(dev, info);
 		dev->interrupt = 0;
-                return;
-        }
-
-        if (info & 0x40U)       /* E bit set */
-        {
+		return;
+	}
+	if (info & 0x40U) {     /* E bit set */
 #ifdef DEBUG
 		printk(KERN_DEBUG "pcbit_irq_handler: E bit on\n");
 #endif
-                pcbit_l2_error(dev);
+		pcbit_l2_error(dev);
 		dev->interrupt = 0;
-                return;
-        }
-
-        if (dev->l2_state != L2_RUNNING && dev->l2_state != L2_LOADING) 
-	{
-	        dev->interrupt = 0;
-                return;
+		return;
 	}
+	if (dev->l2_state != L2_RUNNING && dev->l2_state != L2_LOADING) {
+		dev->interrupt = 0;
+		return;
+	}
+	ack_seq = (info >> 3) & 0x07U;
+	read_seq = (info & 0x07U);
 
-        ack_seq =  (info >> 3) & 0x07U;
-        read_seq = (info & 0x07U); 
-        
 	dev->interrupt = 0;
 
-        if (read_seq != dev->rcv_seq)
-        {
-		while (read_seq != dev->rcv_seq)
-		{
+	if (read_seq != dev->rcv_seq) {
+		while (read_seq != dev->rcv_seq) {
 			pcbit_receive(dev);
 			dev->rcv_seq = (dev->rcv_seq + 1) % 8;
 		}
 		pcbit_sched_delivery(dev);
-        }
-
-	if (ack_seq != dev->unack_seq)
-        {
-                pcbit_recv_ack(dev, ack_seq);
-        }
-
-
+	}
+	if (ack_seq != dev->unack_seq) {
+		pcbit_recv_ack(dev, ack_seq);
+	}
 	info = dev->rcv_seq << 3;
 	info |= dev->send_seq;
-    
-	writeb(info, dev->sh_mem + BANK4);  
+
+	writeb(info, dev->sh_mem + BANK4);
 }
 
 
-static void pcbit_l2_active_conf(struct pcbit_dev *dev, u_char info)
+static void
+pcbit_l2_active_conf(struct pcbit_dev *dev, u_char info)
 {
-        u_char state;
+	u_char state;
 
-        state = dev->l2_state;
+	state = dev->l2_state;
 
 #ifdef DEBUG
-        printk(KERN_DEBUG "layer2_active_confirm\n");
+	printk(KERN_DEBUG "layer2_active_confirm\n");
 #endif
-        
 
-        if (info & 0x80U ) {
-                dev->rcv_seq = info & 0x07U;
-                dev->l2_state = L2_RUNNING;
-        }
-        else
-                dev->l2_state = L2_DOWN;
-                
+
+	if (info & 0x80U) {
+		dev->rcv_seq = info & 0x07U;
+		dev->l2_state = L2_RUNNING;
+	} else
+		dev->l2_state = L2_DOWN;
+
 	if (state == L2_STARTING)
-                wake_up_interruptible(&dev->set_running_wq);
+		wake_up_interruptible(&dev->set_running_wq);
 
-        if (state == L2_ERROR && dev->l2_state == L2_RUNNING) {
-                pcbit_transmit(dev);
-        }
-
+	if (state == L2_ERROR && dev->l2_state == L2_RUNNING) {
+		pcbit_transmit(dev);
+	}
 }
 
-static void pcbit_l2_err_recover(unsigned long data) 
+static void
+pcbit_l2_err_recover(unsigned long data)
 {
 
-        struct pcbit_dev * dev;
-        struct frame_buf *frame;
+	struct pcbit_dev *dev;
+	struct frame_buf *frame;
 
-        dev = (struct pcbit_dev *) data;
+	dev = (struct pcbit_dev *) data;
 
-        del_timer(&dev->error_recover_timer);
-	if (dev->w_busy || dev->r_busy)
-	{
+	del_timer(&dev->error_recover_timer);
+	if (dev->w_busy || dev->r_busy) {
 		init_timer(&dev->error_recover_timer);
 		dev->error_recover_timer.expires = jiffies + ERRTIME;
 		add_timer(&dev->error_recover_timer);
 		return;
 	}
-
 	dev->w_busy = dev->r_busy = 1;
 
-        if (dev->read_frame)
-	{
-                if (dev->read_frame->skb)
-		{
-			dev->read_frame->skb->free = 1; 
-                        kfree_skb(dev->read_frame->skb, FREE_READ);
+	if (dev->read_frame) {
+		if (dev->read_frame->skb) {
+			SET_SKB_FREE(dev->read_frame->skb);
+			kfree_skb(dev->read_frame->skb, FREE_READ);
 		}
-                kfree(dev->read_frame);
-                dev->read_frame = NULL;
-        }
-
-
-        if (dev->write_queue)
-	{
-                frame = dev->write_queue;
+		kfree(dev->read_frame);
+		dev->read_frame = NULL;
+	}
+	if (dev->write_queue) {
+		frame = dev->write_queue;
 #ifdef FREE_ON_ERROR
-                dev->write_queue = dev->write_queue->next;
+		dev->write_queue = dev->write_queue->next;
 
 		if (frame->skb) {
-                        dev_kfree_skb(frame->skb, FREE_WRITE);
+			dev_kfree_skb(frame->skb, FREE_WRITE);
 		}
-		
-                kfree(frame);
-#else		
-                frame->copied = 0;
+		kfree(frame);
+#else
+		frame->copied = 0;
 #endif
-        }
-
-        dev->rcv_seq = dev->send_seq = dev->unack_seq = 0;
-        dev->free = 511;
-        dev->l2_state = L2_ERROR;
+	}
+	dev->rcv_seq = dev->send_seq = dev->unack_seq = 0;
+	dev->free = 511;
+	dev->l2_state = L2_ERROR;
 
 	/* this is an hack... */
 	pcbit_firmware_bug(dev);
 
-        dev->writeptr = dev->sh_mem;
-        dev->readptr = dev->sh_mem + BANK2;
+	dev->writeptr = dev->sh_mem;
+	dev->readptr = dev->sh_mem + BANK2;
 
 	writeb((0x80U | ((dev->rcv_seq & 0x07) << 3) | (dev->send_seq & 0x07)),
 	       dev->sh_mem + BANK4);
@@ -724,24 +684,25 @@ static void pcbit_l2_err_recover(unsigned long data)
 
 }
 
-static void pcbit_l2_error(struct pcbit_dev *dev)
+static void
+pcbit_l2_error(struct pcbit_dev *dev)
 {
-        if (dev->l2_state == L2_RUNNING) {
+	if (dev->l2_state == L2_RUNNING) {
 
-                printk(KERN_INFO "pcbit: layer 2 error\n");
+		printk(KERN_INFO "pcbit: layer 2 error\n");
 
 #ifdef DEBUG
-                log_state(dev);
+		log_state(dev);
 #endif
-                
-                dev->l2_state = L2_DOWN;
 
-                init_timer(&dev->error_recover_timer);
-                dev->error_recover_timer.function = &pcbit_l2_err_recover;
-                dev->error_recover_timer.data = (ulong) dev;
-                dev->error_recover_timer.expires = jiffies + ERRTIME;
-                add_timer(&dev->error_recover_timer);
-        }
+		dev->l2_state = L2_DOWN;
+
+		init_timer(&dev->error_recover_timer);
+		dev->error_recover_timer.function = &pcbit_l2_err_recover;
+		dev->error_recover_timer.data = (ulong) dev;
+		dev->error_recover_timer.expires = jiffies + ERRTIME;
+		add_timer(&dev->error_recover_timer);
+	}
 }
 
 /*
@@ -751,58 +712,52 @@ static void pcbit_l2_error(struct pcbit_dev *dev)
  *   call pcbit_transmit to write possible queued frames
  */
 
-static void  pcbit_recv_ack(struct pcbit_dev *dev, unsigned char ack)
+static void
+pcbit_recv_ack(struct pcbit_dev *dev, unsigned char ack)
 {
-        int i, count;
-        int unacked;
+	int i,
+	 count;
+	int unacked;
 
-        unacked = (dev->send_seq + (8 - dev->unack_seq) ) & 0x07;
+	unacked = (dev->send_seq + (8 - dev->unack_seq)) & 0x07;
 
-        /* dev->unack_seq < ack <= dev->send_seq; */
+	/* dev->unack_seq < ack <= dev->send_seq; */
 
-        if (unacked) 
-	{
+	if (unacked) {
 
 		if (dev->send_seq > dev->unack_seq)
-                        if (ack <= dev->unack_seq || ack > dev->send_seq)
-			{
-                                printk(KERN_DEBUG
-				       "layer 2 ack unacceptable - dev %d",
+			if (ack <= dev->unack_seq || ack > dev->send_seq) {
+				printk(KERN_DEBUG
+				     "layer 2 ack unacceptable - dev %d",
 				       dev->id);
 
-                                pcbit_l2_error(dev);
-                        }
-                        else
-                                if (ack > dev->send_seq && ack <= dev->unack_seq)
-				{
-					printk(KERN_DEBUG
-					       "layer 2 ack unacceptable - dev %d",
-					       dev->id);
-                                        pcbit_l2_error(dev);
-                                }
-
-                /* ack is acceptable */
+				pcbit_l2_error(dev);
+			} else if (ack > dev->send_seq && ack <= dev->unack_seq) {
+				printk(KERN_DEBUG
+				     "layer 2 ack unacceptable - dev %d",
+				       dev->id);
+				pcbit_l2_error(dev);
+			}
+		/* ack is acceptable */
 
 
-                i = dev->unack_seq;
+		i = dev->unack_seq;
 
-                do {
-                        dev->unack_seq = i = (i + 1) % 8;
-                        dev->free += dev->fsize[i];
-                } while (i != ack);
+		do {
+			dev->unack_seq = i = (i + 1) % 8;
+			dev->free += dev->fsize[i];
+		} while (i != ack);
 
-                count = 0;
-                while (count < 7 && dev->write_queue) 
-		{
+		count = 0;
+		while (count < 7 && dev->write_queue) {
 			u8 lsend_seq = dev->send_seq;
 
-                        pcbit_transmit(dev);
+			pcbit_transmit(dev);
 
 			if (dev->send_seq == lsend_seq)
 				break;
-                        count++;
-                }    
-        }
-        else
-                printk(KERN_DEBUG "recv_ack: unacked = 0\n");
+			count++;
+		}
+	} else
+		printk(KERN_DEBUG "recv_ack: unacked = 0\n");
 }

@@ -1,4 +1,4 @@
-/* $Id: isdn.h,v 1.16 1996/08/12 16:20:56 hipp Exp $
+/* $Id: isdn.h,v 1.23 1997/02/10 22:07:13 fritz Exp $
  *
  * Main header for the Linux ISDN subsystem (linklevel).
  *
@@ -21,6 +21,29 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdn.h,v $
+ * Revision 1.23  1997/02/10 22:07:13  fritz
+ * Added 2 modem registers for numbering plan and screening info.
+ *
+ * Revision 1.22  1997/02/03 23:42:08  fritz
+ * Added ISDN_TIMER_RINGING
+ * Misc. changes for Kernel 2.1.X compatibility
+ *
+ * Revision 1.21  1997/01/17 01:19:10  fritz
+ * Applied chargeint patch.
+ *
+ * Revision 1.20  1997/01/17 00:41:19  fritz
+ * Increased TTY_DV.
+ *
+ * Revision 1.19  1997/01/14 01:41:07  fritz
+ * Added ATI2 related variables.
+ * Added variables for audio support in skbuffs.
+ *
+ * Revision 1.18  1996/11/06 17:37:50  keil
+ * more changes for 2.1.X
+ *
+ * Revision 1.17  1996/09/07 12:53:57  hipp
+ * moved a few isdn_ppp.c specific defines to drives/isdn/isdn_ppp.h
+ *
  * Revision 1.16  1996/08/12 16:20:56  hipp
  * renamed ppp_minor to ppp_slot
  *
@@ -153,7 +176,7 @@
 #define ISDN_USAGE_EXCLUSIVE 64 /* This bit is set, if channel is exclusive */
 #define ISDN_USAGE_OUTGOING 128 /* This bit is set, if channel is outgoing  */
 
-#define ISDN_MODEM_ANZREG    21        /* Number of Modem-Registers        */
+#define ISDN_MODEM_ANZREG    22        /* Number of Modem-Registers        */
 #define ISDN_MSNLEN          20
 
 typedef struct {
@@ -173,8 +196,8 @@ typedef struct {
   int  outgoing;
 } isdn_net_ioctl_phone;
 
-#define NET_DV 0x01 /* Data version for net_cfg     */
-#define TTY_DV 0x01 /* Data version for iprofd etc. */
+#define NET_DV 0x02 /* Data version for net_cfg     */
+#define TTY_DV 0x03 /* Data version for iprofd etc. */
 
 typedef struct {
   char name[10];     /* Name of interface                     */
@@ -197,6 +220,7 @@ typedef struct {
   int  callback;     /* Flag: Callback                        */
   int  cbhup;        /* Flag: Reject Call before Callback     */
   int  pppbind;      /* ippp device for bindings              */
+  int  chargeint;    /* Use fixed charge interval length      */
 } isdn_net_ioctl_cfg;
 
 #ifdef __KERNEL__
@@ -212,7 +236,6 @@ typedef struct {
 #include <linux/kernel.h>
 #include <linux/signal.h>
 #include <linux/malloc.h>
-#include <linux/mm.h>
 #include <linux/timer.h>
 #include <linux/wait.h>
 #include <linux/tty.h>
@@ -274,6 +297,7 @@ typedef struct {
 #define ISDN_TIMER_RES       3                     /* Main Timer-Resolution  */
 #define ISDN_TIMER_02SEC     (HZ/(ISDN_TIMER_RES+1)/5) /* Slow-Timer1 .2 sec */
 #define ISDN_TIMER_1SEC      (HZ/(ISDN_TIMER_RES+1)) /* Slow-Timer2 1 sec   */
+#define ISDN_TIMER_RINGING   5 /* tty RINGs = ISDN_TIMER_1SEC * this factor */
 #define ISDN_TIMER_MODEMREAD 1
 #define ISDN_TIMER_MODEMPLUS 2
 #define ISDN_TIMER_MODEMRING 4
@@ -356,6 +380,7 @@ typedef struct isdn_net_local_s {
 				       /* bit0: chargeint is invalid       */
 				       /* bit1: Getting charge-interval    */
                                        /* bit2: Do charge-unit-hangup      */
+                                       /* bit3: Do hangup even on incoming */
   int                    outgoing;     /* Flag: outgoing call              */
   int                    onhtime;      /* Time to keep link up             */
   int                    chargeint;    /* Interval between charge-infos    */
@@ -377,11 +402,21 @@ typedef struct isdn_net_local_s {
   struct isdn_net_dev_s  *netdev;      /* Ptr to netdev                    */
   struct sk_buff         *first_skb;   /* Ptr to skb that triggers dialing */
   struct sk_buff         *sav_skb;     /* Ptr to skb, rejected by LL-driver*/
+#if (LINUX_VERSION_CODE < 0x02010F)
                                        /* Ptr to orig. header_cache_bind   */
-  void                   (*org_hcb)(struct hh_cache **, struct device *,
-                                    unsigned short, __u32);
+  void                   (*org_hcb)(struct hh_cache **,
+				    struct device *,
+                                    unsigned short, 
+				    __u32);
+#else
+                                       /* Ptr to orig. hard_header_cache   */
+  int                    (*org_hhc)(struct dst_entry *dst,
+				    struct dst_entry *neigh,
+				    struct hh_cache *hh);
+#endif
                                        /* Ptr to orig. header_cache_update */
-  void                   (*org_hcu)(struct hh_cache *, struct device *,
+  void                   (*org_hcu)(struct hh_cache *,
+				    struct device *,
                                     unsigned char *);
   int  pppbind;                        /* ippp device for bindings         */
 } isdn_net_local;
@@ -430,6 +465,20 @@ typedef struct isdn_net_dev_s {
 #define ISDN_SERIAL_TYPE_NORMAL            1
 #define ISDN_SERIAL_TYPE_CALLOUT           2
 
+/* For using sk_buffs with audio we need some private variables
+ * within each sk_buff. For this purpose, we declare a struct here,
+ * and put it always at skb->head. A few macros help accessing the
+ * variables. Of course, we need to check skb_headroom prior to
+ * any access.
+ */
+typedef struct isdn_audio_skb {
+  unsigned short dle_count;
+  unsigned char  lock;
+} isdn_audio_skb;
+
+#define ISDN_AUDIO_SKB_DLECOUNT(skb) (((isdn_audio_skb*)skb->head)->dle_count)
+#define ISDN_AUDIO_SKB_LOCK(skb) (((isdn_audio_skb*)skb->head)->lock)
+
 /* Private data of AT-command-interpreter */
 typedef struct atemu {
   u_char              profile[ISDN_MODEM_ANZREG]; /* Modem-Regs. Profile 0 */
@@ -465,6 +514,12 @@ typedef struct modem_info {
   int                   isdn_channel;    /* Index to isdn-channel          */
   int                   drv_index;       /* Index to dev->usage            */
   int                   ncarrier;        /* Flag: schedule NO CARRIER      */
+  unsigned char         last_cause[8];   /* Last cause message             */
+  unsigned char         last_num[20];    /* Last phone-number              */
+  unsigned char         last_l2;         /* Last layer-2 protocol          */
+  unsigned char         last_si;         /* Last service                   */
+  unsigned char         last_lhup;       /* Last hangup local?             */
+  unsigned char         last_dir;        /* Last direction (in or out)     */
   struct timer_list     nc_timer;        /* Timer for delayed NO CARRIER   */
   int                   send_outstanding;/* # of outstanding send-requests */
   int                   xmit_size;       /* max. # of chars in xmit_buf    */
@@ -503,11 +558,6 @@ typedef struct {
 
 #define NUM_RCV_BUFFS     64
 #define PPP_HARD_HDR_LEN 4
-
-#define IPPP_OPEN        0x1
-#define IPPP_CONNECT     0x2
-#define IPPP_CLOSEWAIT   0x4
-#define IPPP_NOBLOCK     0x8
 
 #ifdef CONFIG_ISDN_PPP
 

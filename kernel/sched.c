@@ -99,7 +99,12 @@ struct task_struct init_task = INIT_TASK;
 
 unsigned long volatile jiffies=0;
 
-struct task_struct *current_set[NR_CPUS];
+/*
+ *	Init task must be ok at boot for the ix86 as we will check its signals
+ *	via the SMP irq return path.
+ */
+ 
+struct task_struct *current_set[NR_CPUS] = {&init_task, };
 struct task_struct *last_task_used_math = NULL;
 
 struct task_struct * task[NR_TASKS] = {&init_task, };

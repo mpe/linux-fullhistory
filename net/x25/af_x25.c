@@ -328,7 +328,7 @@ void x25_destroy_socket(struct sock *sk)	/* Not static as it's used by the timer
 		kfree_skb(skb, FREE_READ);
 	}
 
-	if (sk->wmem_alloc || sk->rmem_alloc) {	/* Defer: outstanding buffers */
+	if (sk->wmem_alloc != 0 || sk->rmem_alloc != 0) {	/* Defer: outstanding buffers */
 		init_timer(&sk->timer);
 		sk->timer.expires  = jiffies + 10 * HZ;
 		sk->timer.function = x25_destroy_timer;
@@ -355,21 +355,18 @@ static int x25_setsockopt(struct socket *sock, int level, int optname,
 	int err, opt;
 
 	if (level != SOL_X25)
-		return -EOPNOTSUPP;
+		return -ENOPROTOOPT;
 
-	if (optval == NULL)
-		return -EINVAL;
+	if(optlen<sizeof(int))
+		return-EINVAL;
+	if(get_user(opt, (int *)optval))
+		return -EFAULT;
 
-	if ((err = verify_area(VERIFY_READ, optval, sizeof(int))) != 0)
-		return err;
-
-	get_user(opt, (int *)optval);
-
-	switch (optname) {
+	switch (optname) 
+	{
 		case X25_QBITINCL:
 			sk->protinfo.x25->qbitincl = opt ? 1 : 0;
 			return 0;
-
 		default:
 			return -ENOPROTOOPT;
 	}
@@ -380,12 +377,16 @@ static int x25_getsockopt(struct socket *sock, int level, int optname,
 {
 	struct sock *sk = sock->sk;
 	int val = 0;
-	int err; 
-
+	int len; 
+	
 	if (level != SOL_X25)
-		return -EOPNOTSUPP;
+		return -ENOPROTOOPT;
 
-	switch (optname) {
+	if(get_user(len,optlen))
+		return -EFAULT;
+		
+	switch (optname) 
+	{
 		case X25_QBITINCL:
 			val = sk->protinfo.x25->qbitincl;
 			break;
@@ -394,16 +395,11 @@ static int x25_getsockopt(struct socket *sock, int level, int optname,
 			return -ENOPROTOOPT;
 	}
 
-	if ((err = verify_area(VERIFY_WRITE, optlen, sizeof(int))) != 0)
-		return err;
-
-	put_user(sizeof(int), (unsigned long *)optlen);
-
-	if ((err = verify_area(VERIFY_WRITE, optval, sizeof(int))) != 0)
-		return err;
-
-	put_user(val, (unsigned long *)optval);
-
+	len=min(len,sizeof(int));
+	if(put_user(len, optlen))
+		return -EFAULT;
+	if(copy_to_user(optval,&val,len))
+		return -EFAULT;
 	return 0;
 }
 
@@ -548,15 +544,6 @@ static int x25_release(struct socket *sock, struct socket *peer)
 			x25_destroy_socket(sk);
 			break;
 
-		case X25_STATE_1:
-			sk->protinfo.x25->state = X25_STATE_0;
-			sk->state               = TCP_CLOSE;
-			sk->shutdown           |= SEND_SHUTDOWN;
-			sk->state_change(sk);
-			sk->dead                = 1;
-			x25_destroy_socket(sk);
-			break;
-
 		case X25_STATE_2:
 			sk->protinfo.x25->state = X25_STATE_0;
 			sk->state               = TCP_CLOSE;
@@ -566,6 +553,7 @@ static int x25_release(struct socket *sock, struct socket *peer)
 			x25_destroy_socket(sk);
 			break;			
 
+		case X25_STATE_1:
 		case X25_STATE_3:
 		case X25_STATE_4:
 			x25_clear_queues(sk);

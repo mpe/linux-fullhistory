@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 035
+ *	AX.25 release 036
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -47,6 +47,7 @@
 #include <linux/inet.h>
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
+#include <linux/firewall.h>
 #include <net/sock.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
@@ -54,32 +55,94 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 
+int ax25_send_frame(struct sk_buff *skb, int paclen, ax25_address *src, ax25_address *dest, ax25_digi *digi, struct device *dev)
+{
+	ax25_dev *ax25_dev;
+	ax25_cb *ax25;
+
+	if (skb == NULL)
+		return 0;
+
+	/*
+	 * Look for an existing connection.
+	 */
+	if ((ax25 = ax25_find_cb(src, dest, digi, dev)) != NULL) {
+		ax25_output(ax25, paclen, skb);
+		ax25->idletimer = ax25->idle;
+		return 1;		/* It already existed */
+	}
+
+	if ((ax25_dev = ax25_dev_ax25dev(dev)) == NULL)
+		return 0;
+
+	if ((ax25 = ax25_create_cb()) == NULL)
+		return 0;
+
+	ax25_fillin_cb(ax25, ax25_dev);
+
+	ax25->source_addr = *src;
+	ax25->dest_addr   = *dest;
+
+	if (digi != NULL) {
+		if ((ax25->digipeat = kmalloc(sizeof(ax25_digi), GFP_ATOMIC)) == NULL) {
+			ax25_free_cb(ax25);
+			return 0;
+		}
+		*ax25->digipeat = *digi;
+	} else {
+		ax25_rt_build_path(ax25, dest, dev);
+	}
+
+	switch (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL]) {
+		case AX25_PROTO_STD:
+			ax25_std_establish_data_link(ax25);
+			break;
+#ifdef AX25_CONFIG_DAMA_SLAVE
+		case AX25_PROTO_DAMA_SLAVE:
+			ax25_ds_establish_data_link(ax25);
+			break;
+#endif
+	}
+
+	/* idle timeouts only for mode vc connections */
+
+	ax25->idletimer = ax25->idle;
+
+	ax25_insert_socket(ax25);
+
+	ax25->state = AX25_STATE_1;
+
+	ax25_set_timer(ax25);
+
+	ax25_output(ax25, paclen, skb);
+
+	return 1;			/* We had to create it */
+}
+
 /*
  *	All outgoing AX.25 I frames pass via this routine. Therefore this is
  *	where the fragmentation of frames takes place. If fragment is set to
  *	zero then we are not allowed to do fragmentation, even if the frame
  *	is too large.
  */
-void ax25_output(ax25_cb *ax25, int fragment, struct sk_buff *skb)
+void ax25_output(ax25_cb *ax25, int paclen, struct sk_buff *skb)
 {
 	struct sk_buff *skbn;
 	unsigned char *p;
-	int frontlen, mtu, len, fragno, ka9qfrag, first = 1;
+	int frontlen, len, fragno, ka9qfrag, first = 1;
 	long flags;
 
-	mtu = ax25->paclen;
-
-	if ((skb->len - 1) > mtu && fragment) {
+	if ((skb->len - 1) > paclen) {
 		if (*skb->data == AX25_P_TEXT) {
 			skb_pull(skb, 1); /* skip PID */
 			ka9qfrag = 0;
 		} else {
-			mtu -= 2;	/* Allow for fragment control info */
+			paclen -= 2;	/* Allow for fragment control info */
 			ka9qfrag = 1;
 		}
 
-		fragno = skb->len / mtu;
-		if (skb->len % mtu == 0) fragno--;
+		fragno = skb->len / paclen;
+		if (skb->len % paclen == 0) fragno--;
 
 		frontlen = skb_headroom(skb);	/* Address space + CTRL */
 
@@ -87,7 +150,7 @@ void ax25_output(ax25_cb *ax25, int fragment, struct sk_buff *skb)
 			save_flags(flags); 
 			cli();
 
-			if ((skbn = alloc_skb(mtu + 2 + frontlen, GFP_ATOMIC)) == NULL) {
+			if ((skbn = alloc_skb(paclen + 2 + frontlen, GFP_ATOMIC)) == NULL) {
 				restore_flags(flags);
 				printk(KERN_DEBUG "ax25_output: alloc_skb returned NULL\n");
 				return;
@@ -98,7 +161,7 @@ void ax25_output(ax25_cb *ax25, int fragment, struct sk_buff *skb)
 			
 			restore_flags(flags);
 			
-			len = (mtu > skb->len) ? skb->len : mtu;
+			len = (paclen > skb->len) ? skb->len : paclen;
 
 			if (ka9qfrag == 1) {
 				skb_reserve(skbn, frontlen + 2);
@@ -129,9 +192,9 @@ void ax25_output(ax25_cb *ax25, int fragment, struct sk_buff *skb)
 		skb_queue_tail(&ax25->write_queue, skb);	  /* Throw it on the queue */
 	}
 
-	if (ax25->state == AX25_STATE_3 || ax25->state == AX25_STATE_4) {
-		if (!ax25->dama_slave)		/* bke 960114: we aren't allowed to transmit */
-			ax25_kick(ax25);	/* in DAMA mode unless we received a Poll */
+	if (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL] == AX25_PROTO_STD) {
+		if (ax25->state == AX25_STATE_3 || ax25->state == AX25_STATE_4)
+			ax25_kick(ax25);
 	}
 }
 
@@ -210,7 +273,16 @@ void ax25_kick(ax25_cb *ax25)
 			 * bke 960114: do not set the Poll bit on the last frame
 			 * in DAMA mode.
 			 */
-			ax25_send_iframe(ax25, skbn, (last && !ax25->dama_slave) ? AX25_POLLON : AX25_POLLOFF);
+			switch (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL]) {
+				case AX25_PROTO_STD:
+					ax25_send_iframe(ax25, skbn, (last) ? AX25_POLLON : AX25_POLLOFF);
+					break;
+#ifdef CONFIG_AX25_DAMA_SLAVE
+				case AX25_PROTO_DAMA_SLAVE:
+					ax25_send_iframe(ax25, skbn, AX25_POLLOFF);
+					break;
+#endif
+			}
 
 			ax25->vs = next;
 
@@ -236,7 +308,7 @@ void ax25_transmit_buffer(ax25_cb *ax25, struct sk_buff *skb, int type)
 {
 	unsigned char *ptr;
 
-	if (ax25->device == NULL) {
+	if (ax25->ax25_dev == NULL) {
 		if (ax25->sk != NULL) {
 			ax25->sk->state     = TCP_CLOSE;
 			ax25->sk->err       = ENETUNREACH;
@@ -248,76 +320,44 @@ void ax25_transmit_buffer(ax25_cb *ax25, struct sk_buff *skb, int type)
 		return;
 	}
 
-	if (skb_headroom(skb) < size_ax25_addr(ax25->digipeat)) {
+	if (skb_headroom(skb) < ax25_addr_size(ax25->digipeat)) {
 		printk(KERN_CRIT "ax25_transmit_buffer: not enough room for digi-peaters\n");
 		kfree_skb(skb, FREE_WRITE);
 		return;
 	}
 
-	ptr = skb_push(skb, size_ax25_addr(ax25->digipeat));
-	build_ax25_addr(ptr, &ax25->source_addr, &ax25->dest_addr, ax25->digipeat, type, ax25->modulus);
+	ptr = skb_push(skb, ax25_addr_size(ax25->digipeat));
+	ax25_addr_build(ptr, &ax25->source_addr, &ax25->dest_addr, ax25->digipeat, type, ax25->modulus);
 
-	skb->dev      = ax25->device;
+	skb->dev      = ax25->ax25_dev->dev;
 	skb->priority = SOPRI_NORMAL;
 
 	ax25_queue_xmit(skb);
 }
 
 /*
- * The following routines are taken from page 170 of the 7th ARRL Computer
- * Networking Conference paper, as is the whole state machine.
+ *	A small shim to dev_queue_xmit to add the KISS control byte, and do
+ *	any packet forwarding in operation.
  */
-
-void ax25_nr_error_recovery(ax25_cb *ax25)
+void ax25_queue_xmit(struct sk_buff *skb)
 {
-	ax25_establish_data_link(ax25);
-}
+	unsigned char *ptr;
 
-void ax25_establish_data_link(ax25_cb *ax25)
-{
-	ax25->condition = 0x00;
-	ax25->n2count   = 0;
+#ifdef CONFIG_FIREWALL
+	if (call_out_firewall(PF_AX25, skb->dev, skb->data, NULL) != FW_ACCEPT) {
+		dev_kfree_skb(skb, FREE_WRITE);
+		return;
+	}
+#endif
 
-	if (ax25->modulus == AX25_MODULUS)
-		ax25_send_control(ax25, AX25_SABM, AX25_POLLON, AX25_COMMAND);
-	else
-		ax25_send_control(ax25, AX25_SABME, AX25_POLLON, AX25_COMMAND);
+	skb->protocol = htons(ETH_P_AX25);
+	skb->dev      = ax25_fwd_dev(skb->dev);
+	skb->arp      = 1;
 
-	ax25->t3timer = 0;
-	ax25->t2timer = 0;
-	ax25->t1timer = ax25->t1 = ax25_calculate_t1(ax25);
-}
+	ptr  = skb_push(skb, 1);
+	*ptr = 0x00;			/* KISS */
 
-void ax25_transmit_enquiry(ax25_cb *ax25)
-{
-	if (ax25->condition & AX25_COND_OWN_RX_BUSY)
-		ax25_send_control(ax25, AX25_RNR, AX25_POLLON, AX25_COMMAND);
-	else
-		ax25_send_control(ax25, AX25_RR, AX25_POLLON, AX25_COMMAND);
-
-	ax25->condition &= ~AX25_COND_ACK_PENDING;
-
-	ax25->t1timer = ax25->t1 = ax25_calculate_t1(ax25);
-}
- 	
-void ax25_enquiry_response(ax25_cb *ax25)
-{
-	if (ax25->condition & AX25_COND_OWN_RX_BUSY)
-		ax25_send_control(ax25, AX25_RNR, AX25_POLLON, AX25_RESPONSE);
-	else
-		ax25_send_control(ax25, AX25_RR, AX25_POLLON, AX25_RESPONSE);
-
-	ax25->condition &= ~AX25_COND_ACK_PENDING;
-}
-
-void ax25_timeout_response(ax25_cb *ax25)
-{
-	if (ax25->condition & AX25_COND_OWN_RX_BUSY)
-		ax25_send_control(ax25, AX25_RNR, AX25_POLLOFF, AX25_RESPONSE);
-	else
-		ax25_send_control(ax25, AX25_RR, AX25_POLLOFF, AX25_RESPONSE);
-
-	ax25->condition &= ~AX25_COND_ACK_PENDING;
+	dev_queue_xmit(skb);
 }
 
 void ax25_check_iframes_acked(ax25_cb *ax25, unsigned short nr)
@@ -333,97 +373,6 @@ void ax25_check_iframes_acked(ax25_cb *ax25, unsigned short nr)
 			ax25->t1timer = ax25->t1 = ax25_calculate_t1(ax25);
 		}
 	}
-}
-
-/*
- *	dl1bke 960114: shouldn't ax25/dama_check_need_response reside as
- *                static inline void ...() in ax25.h, should it? ;-)
- */
-void ax25_check_need_response(ax25_cb *ax25, int type, int pf)
-{
-	if (!ax25->dama_slave && type == AX25_COMMAND && pf)
-		ax25_enquiry_response(ax25);
-}
-
-/*
- *	dl1bke 960114: transmit I frames on DAMA poll
- */
-void dama_enquiry_response(ax25_cb *ax25)
-{
-	ax25_cb *ax25o;
-
-	if (!(ax25->condition & AX25_COND_PEER_RX_BUSY)) {
-		ax25_requeue_frames(ax25);
-		ax25_kick(ax25);
-	}
-
-	if (ax25->state == AX25_STATE_1 || ax25->state == AX25_STATE_2 || skb_peek(&ax25->ack_queue) != NULL)
-		ax25_t1_timeout(ax25);
-	else
-		ax25->n2count = 0;
-
-	ax25->t3timer = ax25->t3;
-
-	/* The FLEXNET DAMA master implementation refuses to send us ANY */
-	/* I frame for this connection if we send a REJ here, probably   */
-	/* due to its frame collector scheme? A simple RR or  RNR will   */
-	/* invoke the retransmission, and in fact REJs are superfluous   */
-	/* in DAMA mode anyway...					 */
-
-#if 0
-	if (ax25->condition & AX25_COND_REJECT)
-		ax25_send_control(ax25, AX25_REJ, AX25_POLLOFF, AX25_RESPONSE);
-	else
-#endif
-		ax25_enquiry_response(ax25);
-
-	/* Note that above response to the poll could be sent behind the  */
-	/* transmissions of the other channels as well... This version    */	
-	/* gives better performance on FLEXNET nodes. (Why, Gunter?)	  */
-
-	for (ax25o = ax25_list; ax25o != NULL; ax25o = ax25o->next) {
-		if (ax25o == ax25)
-			continue;
-
-		if (ax25o->device != ax25->device)
-			continue;
-
-		if (ax25o->state == AX25_STATE_1 || ax25o->state == AX25_STATE_2) {
-			ax25_t1_timeout(ax25o);
-			continue;
-		}
-
-		if (!ax25o->dama_slave)
-			continue;
-
-		if (!(ax25o->condition & AX25_COND_PEER_RX_BUSY) && 
-		    (ax25o->state == AX25_STATE_3 || 
-		    (ax25o->state == AX25_STATE_4 && ax25o->t1timer == 0))) {
-			ax25_requeue_frames(ax25o);
-			ax25_kick(ax25o);
-		}
-
-		if (ax25o->state == AX25_STATE_1 || ax25o->state == AX25_STATE_2 || skb_peek(&ax25o->ack_queue) != NULL)
-			ax25_t1_timeout(ax25o);
-
-		ax25o->t3timer = ax25o->t3;
-	}
-}
-
-void dama_check_need_response(ax25_cb *ax25, int type, int pf)
-{
-	if (ax25->dama_slave && type == AX25_COMMAND && pf)
-		dama_enquiry_response(ax25);
-}
-
-void dama_establish_data_link(ax25_cb *ax25)
-{
-	ax25->condition = 0x00;
-	ax25->n2count   = 0;
-
-	ax25->t3timer = ax25->t3;
-	ax25->t2timer = 0;
-	ax25->t1timer = ax25->t1 = ax25_calculate_t1(ax25);
 }
 
 #endif

@@ -434,10 +434,10 @@ int handle_vm86_trap(struct kernel_vm86_regs * regs, long error_code, int trapno
 		if ( (trapno==3) || (trapno==1) )
 			return_to_32bit(regs, VM86_TRAP + (trapno << 8));
 		do_int(regs, trapno, (unsigned char *) (regs->ss << 4), SP(regs));
-		return  1;
+		return 0;
 	}
 	if (trapno !=1)
-		return 0; /* we let this handle by the calling routine */
+		return 1; /* we let this handle by the calling routine */
 	if (current->flags & PF_PTRACED)
 		current->blocked &= ~(1 << (SIGTRAP-1));
 	send_sig(SIGTRAP, current, 1);

@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 1
-SUBLEVEL = 26
+SUBLEVEL = 27
 
 ARCH = i386
 
@@ -11,7 +11,7 @@ ARCH = i386
 #
 # NOTE! SMP is experimental. See the file Documentation/SMP.txt
 #
-# SMP = 1
+SMP = 1
 #
 # SMP profiling options
 # SMP_PROF = 1
@@ -330,6 +330,9 @@ mrproper: clean
 	rm -f drivers/sound/local.h drivers/sound/.defines
 	rm -f drivers/scsi/aic7xxx_asm drivers/scsi/aic7xxx_seq.h
 	rm -f drivers/char/uni_hash.tbl drivers/char/conmakehash
+	rm -f drivers/net/soundmodem/sm_tbl_{afsk1200,afsk2666,fsk9600}.h
+	rm -f drivers/net/soundmodem/sm_tbl_{hapn4800,psk4800}.h
+	rm -f drivers/net/soundmodem/gentbl
 	rm -f .version .config* config.in config.old
 	rm -f scripts/tkparse scripts/kconfig.tk scripts/kconfig.tmp
 	rm -f scripts/lxdialog/*.o scripts/lxdialog/lxdialog

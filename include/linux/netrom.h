@@ -14,7 +14,6 @@
 #define NETROM_T2	2
 #define NETROM_N2	3
 #define	NETROM_HDRINCL	4
-#define	NETROM_PACLEN	5
 #define	NETROM_T4	6
 #define	NETROM_IDLE	7
 

@@ -103,7 +103,7 @@ static int rose_send_frame(struct sk_buff *skb, struct rose_neigh *neigh)
 	else
 		rose_call = &rose_callsign;
 
-	return ax25_send_frame(skb, 0, rose_call, &neigh->callsign, neigh->digipeat, neigh->dev);
+	return ax25_send_frame(skb, 256, rose_call, &neigh->callsign, neigh->digipeat, neigh->dev);
 }
 
 /*
@@ -120,7 +120,7 @@ static int rose_link_up(struct rose_neigh *neigh)
 	else
 		rose_call = &rose_callsign;
 
-	return ax25_link_up(rose_call, &neigh->callsign, neigh->dev);
+	return ax25_link_up(rose_call, &neigh->callsign, neigh->digipeat, neigh->dev);
 }
 
 /*

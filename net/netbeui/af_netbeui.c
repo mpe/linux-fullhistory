@@ -100,45 +100,7 @@ static void netbeui_destroy_socket(netbeui_socket *sk)
 
 int netbeui_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
-	netbeui_socket *s;
-	int len=0;
-	off_t pos=0;
-	off_t begin=0;
-
-	/*
-	 *	Output the netbeui data for the /proc virtual fs.
-	 */
-
-	len += sprintf (buffer,"Type local_addr  remote_addr tx_queue rx_queue st uid\n");
-	for (s = netbeui_socket_list; s != NULL; s = s->next)
-	{
-		len += sprintf (buffer+len,"%02X   ", s->type);
-		len += sprintf (buffer+len,"%s  ",
-			s->af_nb.src_name->text);
-		len += sprintf (buffer+len,"%s  ",
-			s->af_nb.dst_name->text);
-		len += sprintf (buffer+len,"%08X:%08X ", s->wmem_alloc, s->rmem_alloc);
-		len += sprintf (buffer+len,"%02X %d\n", s->state, SOCK_INODE(s->socket)->i_uid);
-
-		/* Are we still dumping unwanted data then discard the record */
-		pos=begin+len;
-
-		if(pos<offset)
-		{
-			len=0;			/* Keep dumping into the buffer start */
-			begin=pos;
-		}
-		if(pos>offset+length)		/* We have dumped enough */
-			break;
-	}
-
-	/* The data in question runs from begin to begin+len */
-	*start=buffer+(offset-begin);	/* Start of wanted data */
-	len-=(offset-begin);		/* Remove unwanted header data from length */
-	if(len>length)
-		len=length;		/* Remove unwanted tail data from length */
-
-	return len;
+	return 0;
 }
 
 /*
@@ -161,78 +123,6 @@ static int nb_device_event(struct notifier_block *this, unsigned long event, voi
 *	      Handling for system calls applied via the various interfaces to a netbeui socket object		    *
 *														    *
 \*******************************************************************************************************************/
-
-/*
- *	Set 'magic' options for netbeui. If we don't have any this is fine
- *	as it is.
- */
-
-static int netbeui_setsockopt(struct socket *sock, int level, int optname, char *optval, int optlen)
-{
-	netbeui_socket *sk;
-	int err,opt;
-
-	sk=(netbeui_socket *)sock->data;
-
-	if(optval==NULL)
-		return(-EINVAL);
-
-	err = get_user(opt, (int *)optval);
-	if (err)
-		return err;
-
-	switch(level)
-	{
-		case SOL_NETBEUI:
-			switch(optname)
-			{
-				default:
-					return -EOPNOTSUPP;
-			}
-			break;
-
-		default:
-			return -EOPNOTSUPP;
-	}
-}
-
-
-/*
- *	Get any magic options. Comment above applies.
- */
-
-static int netbeui_getsockopt(struct socket *sock, int level, int optname,
-	char *optval, int *optlen)
-{
-	netbeui_socket *sk;
-	int val=0;
-	int err;
-
-	sk=(netbeui_socket *)sock->data;
-
-	switch(level)
-	{
-
-		case SOL_NETBEUI:
-			switch(optname)
-			{
-				default:
-					return -ENOPROTOOPT;
-			}
-			break;
-
-		default:
-			return -EOPNOTSUPP;
-	}
-	err = put_user(sizeof(int),optlen);
-	if (!err)
-		err = put_user(val, (int *) optval);
-	return err;
-}
-
-/*
- *	Only for connection oriented sockets - ignore
- */
 
 static int netbeui_listen(struct socket *sock, int backlog)
 {
@@ -459,17 +349,16 @@ static int netbeui_getname(struct socket *sock, struct sockaddr *uaddr,
 
 static int netbeui_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 {
-	netbeui_socket *sock;
+	return nb_llc_rcv(skb);
 }
 
 static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nonblock, int flags)
 {
 	netbeui_socket *sk=(netbeui_socket *)sock->data;
-	struct sockaddr_at *usat=(struct sockaddr_at *)msg->msg_name;
-	struct sockaddr_at local_snetbeui, gsat;
+	struct sockaddr_nb *usnb=(struct sockaddr_nb *)msg->msg_name;
 	struct sk_buff *skb;
 	struct device *dev;
-	struct ddpehdr *ddp;
+	struct nbhdr *nbp;
 	int size;
 	struct netbeui_route *rt;
 	int loopback=0;
@@ -478,10 +367,10 @@ static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int
 	if(flags)
 		return -EINVAL;
 
-	if(len>587)
+	if(len>1500)	/* - headers!! */
 		return -EMSGSIZE;
 
-	if(usat)
+	if(usnb)
 	{
 		if(sk->zapped)
 		{
@@ -489,47 +378,23 @@ static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int
 				return -EBUSY;
 		}
 
-		if(msg->msg_namelen <sizeof(*usat))
+		if(msg->msg_namelen <sizeof(*usnb))
 			return(-EINVAL);
-		if(usat->sat_family != AF_NETBEUI)
+		if(usnb->snb_family != AF_NETBEUI)
 			return -EINVAL;
-#if 0 	/* netnetbeui doesn't implement this check */
-		if(usat->sat_addr.s_node==ATADDR_BCAST && !sk->broadcast)
-			return -EPERM;
-#endif
+		/* Check broadcast */
 	}
 	else
 	{
 		if(sk->state!=TCP_ESTABLISHED)
 			return -ENOTCONN;
-		usat=&local_snetbeui;
-		usat->sat_family=AF_NETBEUI;
-		usat->sat_port=sk->protinfo.af_at.dest_port;
-		usat->sat_addr.s_node=sk->protinfo.af_at.dest_node;
-		usat->sat_addr.s_net=sk->protinfo.af_at.dest_net;
+		/* Connected .. */
 	}
 
 	/* Build a packet */
 	SOCK_DEBUG(sk, "SK %p: Got address.\n",sk);
-	size=sizeof(struct ddpehdr)+len+nb_dl->header_length;	/* For headers */
+	size=sizeof(struct nbhdr)+len+nb_dl->header_length;	/* For headers */
 
-	if(usat->sat_addr.s_net!=0 || usat->sat_addr.s_node == ATADDR_ANYNODE)
-	{
-		rt=atrtr_find(&usat->sat_addr);
-		if(rt==NULL)
-			return -ENETUNREACH;
-		dev=rt->dev;
-	}
-	else
-	{
-		struct at_addr at_hint;
-		at_hint.s_node=0;
-		at_hint.s_net=sk->protinfo.af_at.src_net;
-		rt=atrtr_find(&at_hint);
-		if(rt==NULL)
-			return -ENETUNREACH;
-		dev=rt->dev;
-	}
 	SOCK_DEBUG(sk, "SK %p: Size needed %d, device %s\n", sk, size, dev->name);
 	size += dev->hard_header_len;
 	skb = sock_alloc_send_skb(sk, size, 0, 0 , &err);
@@ -543,23 +408,7 @@ static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int
 	skb_reserve(skb,dev->hard_header_len);
 	skb->dev=dev;
 	SOCK_DEBUG(sk, "SK %p: Begin build.\n", sk);
-	ddp=(struct ddpehdr *)skb_put(skb,sizeof(struct ddpehdr));
-	ddp->deh_pad=0;
-	ddp->deh_hops=0;
-	ddp->deh_len=len+sizeof(*ddp);
-	/*
-	 *	Fix up the length field	[Ok this is horrible but otherwise
-	 *	I end up with unions of bit fields and messy bit field order
-	 *	compiler/endian dependencies..
-	 */
-	*((__u16 *)ddp)=ntohs(*((__u16 *)ddp));
-
-	ddp->deh_dnet=usat->sat_addr.s_net;
-	ddp->deh_snet=sk->protinfo.af_at.src_net;
-	ddp->deh_dnode=usat->sat_addr.s_node;
-	ddp->deh_snode=sk->protinfo.af_at.src_node;
-	ddp->deh_dport=usat->sat_port;
-	ddp->deh_sport=sk->protinfo.af_at.src_port;
+	nbp=(struct nbhdr *)skb_put(skb,sizeof(struct nbhdr));
 	SOCK_DEBUG(sk, "SK %p: Copy user data (%d bytes).\n", sk, len);
 	err = memcpy_fromiovec(skb_put(skb,len),msg->msg_iov,len);
 	if (err)
@@ -568,14 +417,9 @@ static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int
 		return -EFAULT;
 	}
 
-	if(sk->no_check==1)
-		ddp->deh_sum=0;
-	else
-		ddp->deh_sum=netbeui_checksum(ddp, len+sizeof(*ddp));
-
 #ifdef CONFIG_FIREWALL
 
-	if(call_out_firewall(AF_NETBEUI, skb->dev, ddp, NULL)!=FW_ACCEPT)
+	if(call_out_firewall(AF_NETBEUI, skb->dev, nbp, NULL)!=FW_ACCEPT)
 	{
 		kfree_skb(skb, FREE_WRITE);
 		return -EPERM;
@@ -583,52 +427,8 @@ static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int
 
 #endif
 
-	/*
-	 *	Loopback broadcast packets to non gateway targets (ie routes
-	 *	to group we are in)
-	 */
-
-	if(ddp->deh_dnode==ATADDR_BCAST)
-	{
-		if((!(rt->flags&RTF_GATEWAY))&&(!(dev->flags&IFF_LOOPBACK)))
-		{
-			struct sk_buff *skb2=skb_clone(skb, GFP_KERNEL);
-			if(skb2)
-			{
-				loopback=1;
-				SOCK_DEBUG(sk, "SK %p: send out(copy).\n", sk);
-				if(aarp_send_ddp(dev,skb2,&usat->sat_addr, NULL)==-1)
-					kfree_skb(skb2, FREE_WRITE);
-				/* else queued/sent above in the aarp queue */
-			}
-		}
-	}
-
-	if((dev->flags&IFF_LOOPBACK) || loopback)
-	{
-		SOCK_DEBUG(sk, "SK %p: Loop back.\n", sk);
-		/* loop back */
-		atomic_sub(skb->truesize, &sk->wmem_alloc);
-		nb_dl->datalink_header(nb_dl, skb, dev->dev_addr);
-		skb->sk = NULL;
-		skb->mac.raw=skb->data;
-		skb->h.raw = skb->data + nb_dl->header_length + dev->hard_header_len;
-		skb_pull(skb,dev->hard_header_len);
-		skb_pull(skb,nb_dl->header_length);
-		netbeui_rcv(skb,dev,NULL);
-	}
-	else
-	{
-		SOCK_DEBUG(sk, "SK %p: send out.\n", sk);
-		if ( rt->flags & RTF_GATEWAY ) {
-		    gsat.sat_addr = rt->gateway;
-		    usat = &gsat;
-		}
-
-		if(nb_send_low(dev,skb,&usat->sat_addr, NULL)==-1)
-			kfree_skb(skb, FREE_WRITE);
-		/* else queued/sent above in the aarp queue */
-	}
+	if(nb_send_low(dev,skb,&usat->sat_addr, NULL)==-1)
+		kfree_skb(skb, FREE_WRITE);
 	SOCK_DEBUG(sk, "SK %p: Done write (%d).\n", sk, len);
 	return len;
 }
@@ -637,23 +437,23 @@ static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int
 static int netbeui_recvmsg(struct socket *sock, struct msghdr *msg, int size, int noblock, int flags, int *addr_len)
 {
 	netbeui_socket *sk=(netbeui_socket *)sock->data;
-	struct sockaddr_at *sat=(struct sockaddr_at *)msg->msg_name;
-	struct ddpehdr	*ddp = NULL;
+	struct sockaddr_nb *snb=(struct sockaddr_nb *)msg->msg_name;
+	struct nbphdr	*nbp = NULL;
 	int copied = 0;
 	struct sk_buff *skb;
 	int er = 0;
 
 	if(addr_len)
-		*addr_len=sizeof(*sat);
+		*addr_len=sizeof(*snb);
 
 	skb=skb_recv_datagram(sk,flags,noblock,&er);
 	if(skb==NULL)
 		return er;
 
-	ddp = (struct ddpehdr *)(skb->h.raw);
+	snb = (struct nbphdr *)(skb->h.raw);
 	if(sk->type==SOCK_RAW)
 	{
-		copied=ddp->deh_len;
+		copied=skb->len
 		if(copied > size)
 		{
 			copied=size;
@@ -665,22 +465,20 @@ static int netbeui_recvmsg(struct socket *sock, struct msghdr *msg, int size, in
 	}
 	else
 	{
-		copied=ddp->deh_len - sizeof(*ddp);
+		copied=skb->len - sizeof(*nbp);
 		if (copied > size)
 		{
 			copied = size;
 			msg->msg_flags|=MSG_TRUNC;
 		}
-		er = skb_copy_datagram_iovec(skb,sizeof(*ddp),msg->msg_iov,copied);
+		er = skb_copy_datagram_iovec(skb,sizeof(*nbp),msg->msg_iov,copied);
 		if (er)
 			goto out;
 	}
-	if(sat)
+	if(snb)
 	{
 		sat->sat_family=AF_NETBEUI;
-		sat->sat_port=ddp->deh_sport;
-		sat->sat_addr.s_node=ddp->deh_snode;
-		sat->sat_addr.s_net=ddp->deh_snet;
+		/* Copy name over */
 	}
 out:
 	skb_free_datagram(sk, skb);
@@ -742,14 +540,14 @@ static int netbeui_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg
 		case SIOCDELRT:
 			if(!suser())
 				return -EPERM;
-			return(atrtr_ioctl(cmd,(void *)arg));
+			return(nbrtr_ioctl(cmd,(void *)arg));
 		/*
 		 *	Interface
 		 */
 		case SIOCGIFADDR:
 		case SIOCSIFADDR:
 		case SIOCGIFBRDADDR:
-			return atif_ioctl(cmd,(void *)arg);
+			return nbif_ioctl(cmd,(void *)arg);
 		/*
 		 *	Physical layer ioctl calls
 		 */
@@ -796,8 +594,8 @@ static struct proto_ops netbeui_proto_ops = {
 	netbeui_ioctl,
 	netbeui_listen,
 	netbeui_shutdown,
-	netbeui_setsockopt,
-	netbeui_getsockopt,
+	sock_no_setsockopt,
+	sock_no_getsockopt,
 	sock_no_fcntl,
 	netbeui_sendmsg,
 	netbeui_recvmsg
@@ -825,9 +623,8 @@ static struct proc_dir_entry proc_netbeui = {
 void netbeui_proto_init(struct net_proto *pro)
 {
 	(void) sock_register(netbeui_proto_ops.family, &netbeui_proto_ops);
-/* ddp?  isn't it atalk too? 8) */
-	if ((nb_dl = register_snap_client(nb_snap_id, netbeui_rcv)) == NULL)
-		printk(KERN_CRIT "Unable to register DDP with SNAP.\n");
+	if ((nb_dl = register_8022_client(nb_8022_id, netbeui_rcv)) == NULL)
+		printk(KERN_CRIT "Unable to register Netbeui with 802.2.\n");
 
 	register_netdevice_notifier(&nb_notifier);
 
@@ -835,7 +632,7 @@ void netbeui_proto_init(struct net_proto *pro)
 	proc_net_register(&proc_netbeui);
 #endif
 
-	printk(KERN_INFO "NetBEUI 0.02 for Linux NET3.037\n");
+	printk(KERN_INFO "NetBEUI 0.03 for Linux NET3.037\n");
 }
 
 #ifdef MODULE

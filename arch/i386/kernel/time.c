@@ -33,6 +33,10 @@
 #include <linux/config.h>
 
 extern int setup_x86_irq(int, struct irqaction *);
+extern volatile unsigned long lost_ticks;
+
+/* change this if you have some constant time drift */
+#define USECS_PER_JIFFY (1000020/HZ)
 
 #ifndef	CONFIG_APM	/* cycle counter may be unreliable */
 /* Cycle counter value at the previous timer interrupt.. */
@@ -40,11 +44,6 @@ static struct {
 	unsigned long low;
 	unsigned long high;
 } init_timer_cc, last_timer_cc;
-
-extern volatile unsigned long lost_ticks;
-
-/* change this if you have some constant time drift */
-#define USECS_PER_JIFFY (1000020/HZ)
 
 static unsigned long do_fast_gettimeoffset(void)
 {

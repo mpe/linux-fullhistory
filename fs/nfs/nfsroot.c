@@ -1351,6 +1351,7 @@ static int root_nfs_setup(void)
 			root_dev->pa_addr | ~root_dev->pa_mask;
 		devinet_ioctl(SIOCSIFBRDADDR, &ifr);
 	}
+	netmask.sin_addr.s_addr = root_dev->pa_mask;
 	set_fs(fs);
 
 	/*

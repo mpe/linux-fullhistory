@@ -698,7 +698,7 @@ int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 
 	if (ax25 != NULL)
 		nr_add_node(nr_src, "", &ax25->dest_addr, ax25->digipeat,
-			    ax25->device, 0, sysctl_netrom_obsolescence_count_initialiser);
+			    ax25->ax25_dev->dev, 0, sysctl_netrom_obsolescence_count_initialiser);
 
 	if ((dev = nr_dev_get(nr_dest)) != NULL)	/* Its for me */
 		return nr_rx_frame(skb, dev);
@@ -730,7 +730,7 @@ int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 	dptr  = skb_push(skb, 1);
 	*dptr = AX25_P_NETROM;
 
-	return ax25_send_frame(skb, 0, (ax25_address *)dev->dev_addr, &nr_neigh->callsign, nr_neigh->digipeat, nr_neigh->dev);
+	return ax25_send_frame(skb, 256, (ax25_address *)dev->dev_addr, &nr_neigh->callsign, nr_neigh->digipeat, nr_neigh->dev);
 }
 
 int nr_nodes_get_info(char *buffer, char **start, off_t offset,

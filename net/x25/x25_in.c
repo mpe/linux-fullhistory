@@ -117,6 +117,7 @@ static int x25_state1_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 
 		case X25_CLEAR_REQUEST:
 			x25_clear_queues(sk);
+			x25_write_internal(sk, X25_CLEAR_CONFIRMATION);
 			sk->protinfo.x25->state = X25_STATE_0;
 			sk->state               = TCP_CLOSE;
 			sk->err                 = ECONNREFUSED;
@@ -144,7 +145,9 @@ static int x25_state2_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 	switch (frametype) {
 
 		case X25_CLEAR_REQUEST:
+			x25_write_internal(sk, X25_CLEAR_CONFIRMATION);
 		case X25_CLEAR_CONFIRMATION:
+			x25_clear_queues(sk);
 			sk->protinfo.x25->state = X25_STATE_0;
 			sk->state               = TCP_CLOSE;
 			sk->err                 = 0;
@@ -177,7 +180,6 @@ static int x25_state3_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 	switch (frametype) {
 
 		case X25_RESET_REQUEST:
-			x25_clear_queues(sk);
 			x25_write_internal(sk, X25_RESET_CONFIRMATION);
 			sk->protinfo.x25->condition = 0x00;
 			sk->protinfo.x25->timer     = 0;
@@ -306,8 +308,9 @@ static int x25_state4_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 {
 	switch (frametype) {
 
-		case X25_RESET_CONFIRMATION:
 		case X25_RESET_REQUEST:
+			x25_write_internal(sk, X25_RESET_CONFIRMATION);
+		case X25_RESET_CONFIRMATION:
 			sk->protinfo.x25->timer     = 0;
 			sk->protinfo.x25->condition = 0x00;
 			sk->protinfo.x25->va        = 0;

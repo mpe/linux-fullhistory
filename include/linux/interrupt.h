@@ -4,6 +4,7 @@
 
 #include <linux/kernel.h>
 #include <asm/bitops.h>
+#include <asm/atomic.h>
 
 struct irqaction {
 	void (*handler)(int, void *, struct pt_regs *);
@@ -14,7 +15,7 @@ struct irqaction {
 	struct irqaction *next;
 };
 
-extern unsigned long intr_count;
+extern atomic_t intr_count;
 
 extern int bh_mask_count[32];
 extern unsigned long bh_active;
@@ -75,14 +76,14 @@ extern inline void enable_bh(int nr)
  */
 extern inline void start_bh_atomic(void)
 {
-	intr_count++;
+	atomic_inc(&intr_count);
 	barrier();
 }
 
 extern inline void end_bh_atomic(void)
 {
 	barrier();
-	intr_count--;
+	atomic_dec(&intr_count);
 }
 
 /*

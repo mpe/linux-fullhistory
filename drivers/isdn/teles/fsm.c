@@ -1,6 +1,9 @@
-/* $Id: fsm.c,v 1.2 1996/04/29 22:49:57 fritz Exp $
+/* $Id: fsm.c,v 1.3 1997/02/16 01:04:12 fritz Exp $
  *
  * $Log: fsm.c,v $
+ * Revision 1.3  1997/02/16 01:04:12  fritz
+ * Bugfix: Changed timer handling caused hang with 2.1.X
+ *
  * Revision 1.2  1996/04/29 22:49:57  fritz
  * Removed compatibility-macros.
  *
@@ -91,8 +94,6 @@ FsmInitTimer(struct FsmInst *fi, struct FsmTimer *ft)
 void
 FsmDelTimer(struct FsmTimer *ft, int where)
 {
-	long            flags;
-
 #if 0
 	if (ft->fi->debug) {
 		sprintf(str, "FsmDelTimer %lx %d", ft, where);
@@ -100,11 +101,7 @@ FsmDelTimer(struct FsmTimer *ft, int where)
 	}
 #endif
 
-	save_flags(flags);
-	cli();
-	if (ft->tl.next)
-		del_timer(&ft->tl);
-	restore_flags(flags);
+	del_timer(&ft->tl);
 }
 
 int
@@ -119,7 +116,7 @@ FsmAddTimer(struct FsmTimer *ft,
 	}
 #endif
 
-	if (ft->tl.next) {
+	if (ft->tl.next || ft->tl.prev) {
 		printk(KERN_WARNING "FsmAddTimer: timer already active!\n");
 		return -1;
 	}

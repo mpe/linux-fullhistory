@@ -27,7 +27,14 @@ README for the ISDN-subsystem
    subscribe isdn4linux <your_email_address>
 
    To write to the mailing-list, write to isdn4linux@hub-wue.franken.de
+
+   This mailinglist is bidirectionally gated to the newsgroup
+
+     de.alt.comm.isdn4linux
    
+  There is also a well maintained FAQ (both english and german) available
+  at ftp.franken.de in /pub/isdn4linux/FAQ/
+  This FAQ is also available at http://www.lrz-muenchen.de/~ui161ab/www/isdn/
 
   1.1 Technical details
 
@@ -89,6 +96,7 @@ README for the ISDN-subsystem
 	       ATI      Return "ISDN for Linux...".
                ATI0        "
                ATI1        "
+			   ATI2 Report of last connection.
                ATO      On line (data mode).
                ATQ0     Enable result codes (default).
                ATQ1     Disable result codes (default).
@@ -173,6 +181,10 @@ README for the ISDN-subsystem
                                       1 = T.70 protocol (Only for BTX!) on
                             Bit 2:    0 = Don't hangup on DTR low.
                                       1 = Hangup on DTR low.
+			    Bit 3:    0 = Standard response messages
+				      1 = Extended response messages
+                            Bit 4:    0 = CALLER NUMBER before every RING.
+                                      1 = CALLER NUMBER after first RING.
 	     14   0         Layer-2 protocol:
 				      0 = X75/LAPB with I-frames
 				      1 = X75/LAPB with UI-frames
@@ -201,6 +213,14 @@ README for the ISDN-subsystem
              20   0         Bit coded register (readonly)
                             Service-Octet-1 of last call.
                             Bit mapping is the same like register 18
+             21   0         Bit coded register (readonly)
+                            Set on incoming call (during RING) to
+                            octet 3 of calling party number IE (Numbering plan)
+                            See section 4.5.10 of ITU Q.931
+             22   0         Bit coded register (readonly)
+                            Set on incoming call (during RING) to
+                            octet 3a of calling party number IE (Screening info)
+                            See section 4.5.10 of ITU Q.931
 
   Last but not least a (at the moment fairly primitive) device to request
   the line-status (/dev/isdninfo) is made available.
@@ -243,16 +263,11 @@ README for the ISDN-subsystem
 
 2 System prerequisites:
 
-  ATTENTION! The program "insmod" from the Package "modules-1.2.8" (It's
-             on nearly all newer distributions) has a bug, which makes
-             it impossible to set both driver-Id's when loading the
-             icn-module for the Double-ICN-Card. A patch is supplied
-             in the utility-package called "insmod-1.2.8.patch". Change into
-             the source-directory of insmod, and type
-             "patch < insmod-1.2.8.patch". Then recompile it. This will fix
-             the bug.
-             This bug does NOT occur when using insmod with the Teles-driver
-             or a single ICN-card.
+  ATTENTION!
+
+  Always use the latest module utilities. The current version is
+  named in Documentation/Changes. Some old versions of insmod
+  are not capable of setting the driver-Ids correctly.
  
 3. Lowlevel-driver configuration.
 

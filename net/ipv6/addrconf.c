@@ -27,6 +27,7 @@
 #include <linux/in6.h>
 #include <linux/netdevice.h>
 #include <linux/if_arp.h>
+#include <linux/route.h>
 
 #include <linux/proc_fs.h>
 #include <net/sock.h>

@@ -23,9 +23,6 @@
  *					Modified to use llc_ names
  *					Changed callbacks
  *
- *			Note: TST/XID stuff is broken at the moment. The
- *			buffer is freed before being passed up.
- *
  *	This file must be processed by sed before it can be compiled.
  */
 

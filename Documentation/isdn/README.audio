@@ -1,4 +1,4 @@
-$Id: README.audio,v 1.3 1996/06/05 02:19:36 fritz Exp $
+$Id: README.audio,v 1.4 1997/02/03 23:43:47 fritz Exp $
 
 ISDN subsystem for Linux.
   Description of audio mode.
@@ -86,8 +86,11 @@ General behavior and description of data formats/protocol.
     starts sending audio data to the application. There are several
     escape sequences defined, all using DLE (0x10) as Escape char:
 
-    <DLE><ETX>              End of audio data. Emulator stops
+    <DLE><ETX>              End of audio data. (i.e. caused by a
+                            hangup of the remote side) Emulator stops
                             recording, responding with VCON.
+	<DLE><DC4>				Abort recording, (send by appl.) Emulator
+							stops recording, sends DLE,ETX.
     <DLE><DLE>              Escape sequence for DLE in data stream.
     <DLE>0                  Touchtone "0" received.
          ...
@@ -107,13 +110,16 @@ General behavior and description of data formats/protocol.
     <DLE>s                  silence. Silence detected from the
                             start of recording.
 
-    Any character sent by the application, except XON (0x11) or XOFF (0x13)
-    immediately stops recording.
-
   Audio playback.
 
     When sending audio data, upon AT+VTX command, emulator responds with
     CONNECT, and starts transferring data from application to the phone line.
     The same DLE sequences apply to this mode.
 
+  Full-Duplex-Audio:
+
+    When _both_ commands for recording and playback are given in _one_
+    AT-command-line (i.e.: "AT+VTX+VRX"), full-duplex-mode is selected.
+	In this mode, the only way to stop recording is sending <DLE><DC4>
+    and the only way to stop playback is to send <DLE><ETX>.
 

@@ -21,6 +21,7 @@
  *	Changes
  *		Alan Cox	:	Chainsawed into Linux format
  *					Modified to use llc_ names
+ *					Changed callbacks
  *
  *	This file must be processed by sed before it can be compiled.
  */

@@ -256,6 +256,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( INTEL,		INTEL_82371SB_2,"82371SB Natoma/Triton II PIIX3"),
 	DEVICE( INTEL,		INTEL_82437VX,	"82437VX Triton II"),
 	DEVICE( INTEL,		INTEL_P6,	"Orion P6"),
+	DEVICE(	KTI,		KTI_ET32P2,	"ET32P2"),
 	DEVICE( ADAPTEC,	ADAPTEC_7850,	"AIC-7850"),
 	DEVICE( ADAPTEC,	ADAPTEC_7855,	"AIC-7855"),
 	DEVICE( ADAPTEC,	ADAPTEC_7860,	"AIC-7860"),
@@ -546,6 +547,7 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_AVANCE:	return "Avance";
 	      case PCI_VENDOR_ID_S3:		return "S3 Inc.";
 	      case PCI_VENDOR_ID_INTEL:		return "Intel";
+	      case PCI_VENDOR_ID_KTI:		return "KTI";
 	      case PCI_VENDOR_ID_ADAPTEC:	return "Adaptec";
 	      case PCI_VENDOR_ID_ATRONICS:	return "Atronics";
 	      case PCI_VENDOR_ID_ARK:		return "ARK Logic";

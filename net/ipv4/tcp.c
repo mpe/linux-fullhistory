@@ -1777,13 +1777,11 @@ int tcp_setsockopt(struct sock *sk, int level, int optname, char *optval,
 	int val;
 
 	if (level != SOL_TCP)
-	{
 		return tp->af_specific->setsockopt(sk, level, optname, 
 						   optval, optlen);
-	}
-
-  	if (optval == NULL)
-  		return(-EINVAL);
+	
+	if(optlen<sizeof(int))
+		return -EINVAL;
 
   	if (get_user(val, (int *)optval))
 		return -EFAULT;
@@ -1812,13 +1810,19 @@ int tcp_getsockopt(struct sock *sk, int level, int optname, char *optval,
 		   int *optlen)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
-	int val,err;
+	int val;
+	int len;
 
 	if(level != SOL_TCP)
 	{
 		return tp->af_specific->getsockopt(sk, level, optname,
 						   optval, optlen);
 	}
+	
+	if(get_user(len,optlen))
+		return -EFAULT;
+		
+	len=min(len,sizeof(int));
 
 	switch(optname)
 	{
@@ -1832,11 +1836,11 @@ int tcp_getsockopt(struct sock *sk, int level, int optname, char *optval,
 			return(-ENOPROTOOPT);
 	}
 
-  	err = put_user(sizeof(int),(int *) optlen);
-	if (!err)
-		err = put_user(val,(int *)optval);
-
-  	return err;
+  	if(put_user(len, optlen))
+  		return -EFAULT;
+	if(copy_to_user(optval, &val,len))
+		return -EFAULT;
+  	return 0;
 }
 
 void tcp_set_keepalive(struct sock *sk, int val)

@@ -102,6 +102,7 @@ static int do_securelevel_strategy (ctl_table *, int *, int, void *, size_t *,
 				    void *, size_t, void **);
 
 extern char binfmt_java_interpreter[], binfmt_java_appletviewer[];
+extern int sysctl_overcommit_memory;
 
 #ifdef __sparc__
 extern char reboot_command [];
@@ -172,6 +173,8 @@ static ctl_table vm_table[] = {
 	{VM_BDFLUSH, "bdflush", &bdf_prm, 9*sizeof(int), 0600, NULL,
 	 &proc_dointvec_minmax, &sysctl_intvec, NULL,
 	 &bdflush_min, &bdflush_max},
+	{VM_OVERCOMMIT_MEMORY, "overcommit_memory", &sysctl_overcommit_memory,
+	 sizeof(sysctl_overcommit_memory), 0644, NULL, &proc_dointvec},
 	{0}
 };
 

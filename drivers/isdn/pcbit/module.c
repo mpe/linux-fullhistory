@@ -1,13 +1,13 @@
 /*
  * Copyright (C) 1996 Universidade de Lisboa
- *
+ * 
  * Written by Pedro Roque Marques (roque@di.fc.ul.pt)
  *
- * This software may be used and distributed according to the terms of
+ * This software may be used and distributed according to the terms of 
  * the GNU Public License, incorporated herein by reference.
  */
 
-/*
+/*        
  *        PCBIT-D module support
  */
 
@@ -35,7 +35,10 @@ extern void pcbit_terminate(int board);
 extern int pcbit_init_dev(int board, int mem_base, int irq);
 
 #ifdef MODULE
-EXPORT_NO_SYMBOLS;
+#if (LINUX_VERSION_CODE > 0x020111)
+MODULE_PARM(mem, "1-" __MODULE_STRING(MAX_PCBIT_CARDS) "i");
+MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_PCBIT_CARDS) "i");
+#endif
 #define pcbit_init init_module
 #endif
 
@@ -45,11 +48,11 @@ int pcbit_init(void)
 
 	num_boards = 0;
 
-	printk(KERN_INFO
+	printk(KERN_INFO 
 	       "PCBIT-D device driver v 0.5 - "
 	       "Copyright (C) 1996 Universidade de Lisboa\n");
 
-	if (mem[0] || irq[0])
+	if (mem[0] || irq[0]) 
 	{
 		for (board=0; board < MAX_PCBIT_CARDS && mem[board] && irq[board]; board++)
 		{
@@ -57,14 +60,14 @@ int pcbit_init(void)
 				mem[board] = 0xD0000;
 			if (!irq[board])
 				irq[board] = 5;
-
+			
 			if (pcbit_init_dev(board, mem[board], irq[board]) == 0)
 				num_boards++;
-
-			else
+		
+			else 
 			{
-				printk(KERN_WARNING
-				       "pcbit_init failed for dev %d",
+				printk(KERN_WARNING 
+				       "pcbit_init failed for dev %d", 
 				       board + 1);
 				return -EIO;
 			}
@@ -75,13 +78,20 @@ int pcbit_init(void)
 
 	if (!num_boards)
 	{
-		printk(KERN_INFO
+		printk(KERN_INFO 
 		       "Trying to detect board using default settings\n");
 		if (pcbit_init_dev(0, 0xD0000, 5) == 0)
 			num_boards++;
 		else
 			return -EIO;
 	}
+
+	/* No symbols to export, hide all symbols */
+#if (LINUX_VERSION_CODE < 0x020111)
+	register_symtab(NULL);
+#else
+	EXPORT_NO_SYMBOLS;
+#endif
 
 	return 0;
 }
@@ -93,7 +103,7 @@ void cleanup_module(void)
 
 	for (board = 0; board < num_boards; board++)
 		pcbit_terminate(board);
-	printk(KERN_INFO
+	printk(KERN_INFO 
 	       "PCBIT-D module unloaded\n");
 }
 
@@ -112,7 +122,7 @@ void pcbit_setup(char *str, int *ints)
 			mem[i]	= ints[j];
 			j++; argc--;
 		}
-
+		
 		if (argc) {
 			irq[i]	= ints[j];
 			j++; argc--;
@@ -122,3 +132,6 @@ void pcbit_setup(char *str, int *ints)
 	}
 }
 #endif
+
+
+

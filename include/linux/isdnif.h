@@ -1,4 +1,4 @@
-/* $Id: isdnif.h,v 1.9 1996/06/06 21:24:24 fritz Exp $
+/* $Id: isdnif.h,v 1.17 1997/02/10 21:12:53 fritz Exp $
  *
  * Linux ISDN subsystem
  *
@@ -22,6 +22,30 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdnif.h,v $
+ * Revision 1.17  1997/02/10 21:12:53  fritz
+ * More setup-interface changes.
+ *
+ * Revision 1.16  1997/02/10 19:42:57  fritz
+ * New interface for reporting incoming calls.
+ *
+ * Revision 1.15  1997/02/09 00:18:42  keil
+ * leased line support
+ *
+ * Revision 1.14  1997/02/03 23:43:00  fritz
+ * Misc changes for Kernel 2.1.X compatibility.
+ *
+ * Revision 1.13  1996/11/13 02:39:59  fritz
+ * More compatibility changes.
+ *
+ * Revision 1.12  1996/11/06 17:38:48  keil
+ * more changes for 2.1.X
+ *
+ * Revision 1.11  1996/10/23 11:59:42  fritz
+ * More compatibility changes.
+ *
+ * Revision 1.10  1996/10/22 23:14:19  fritz
+ * Changes for compatibility to 2.0.X and 2.1.X kernels.
+ *
  * Revision 1.9  1996/06/06 21:24:24  fritz
  * Started adding support for suspend/resume.
  *
@@ -64,6 +88,7 @@
 #define ISDN_PTYPE_UNKNOWN   0   /* Protocol undefined   */
 #define ISDN_PTYPE_1TR6      1   /* german 1TR6-protocol */
 #define ISDN_PTYPE_EURO      2   /* EDSS1-protocol       */
+#define ISDN_PTYPE_LEASED    3   /* for leased lines     */
 
 /*
  * Values for Layer-2-protocol-selection
@@ -145,6 +170,15 @@
 #define ISDN_FEATURE_P_1TR6     (0x1000 << ISDN_PTYPE_1TR6)
 #define ISDN_FEATURE_P_EURO     (0x1000 << ISDN_PTYPE_EURO)
 
+typedef struct setup_parm {
+    char phone[32];         /* Remote Phone-Number */
+    char eazmsn[32];        /* Local EAZ or MSN    */
+    unsigned char si1;      /* Service Indicator 1 */
+    unsigned char si2;      /* Service Indicator 2 */
+    unsigned char plan;     /* Numbering plan      */
+    unsigned char screen;   /* Screening info      */
+} setup_parm;
+
 /*
  * Structure for exchanging above infos
  *
@@ -153,7 +187,10 @@ typedef struct {
   int   driver;                  /* Lowlevel-Driver-ID                    */
   int   command;                 /* Command or Status (see above)         */
   ulong arg;                     /* Additional Data                       */
-  char  num[50];                 /* Additional Data                       */
+  union {
+	char  num[50];               /* Additional Data                       */
+	setup_parm setup;
+  } parm;
 } isdn_ctrl;
 
 /*
@@ -302,6 +339,35 @@ typedef struct {
  */
 extern int register_isdn(isdn_if*);
 
+/* Compatibility Linux-2.0.X <-> Linux-2.1.X */
+
+#ifndef LINUX_VERSION_CODE
+#include <linux/version.h>
+#endif
+#if (LINUX_VERSION_CODE < 0x020100)
+#include <linux/mm.h>
+#define copy_from_user memcpy_fromfs
+#define copy_to_user memcpy_tofs
+#define GET_USER(x, addr) ( x = get_user(addr) )
+#define RWTYPE int
+#define LSTYPE int
+#define RWARG int
+#define LSARG off_t
+#define SET_SKB_FREE(x) ( x->free = 1 )
+#else
+#include <asm/uaccess.h>
+#define GET_USER get_user
+#define PUT_USER put_user
+#define RWTYPE long
+#define LSTYPE long long
+#define RWARG unsigned long
+#define LSARG long long
+#if (LINUX_VERSION_CODE < 0x02010F)
+#define SET_SKB_FREE(x) ( x->free = 1 )
+#else
+#define SET_SKB_FREE(x)
+#endif
+#endif
+
 #endif /* __KERNEL__ */
 #endif /* isdnif_h */
-

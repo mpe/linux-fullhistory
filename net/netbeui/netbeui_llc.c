@@ -70,6 +70,11 @@ static void netbeui_event(llcptr llc)
 	 *	See what has occured
 	 */
 	 
+
+	/*
+	 *	Connect completion confirmation
+	 */
+	 
 	if(llc->llc_callbacks&LLC_CONN_CONFIRM)
 	{
 		/*
@@ -93,7 +98,13 @@ static void netbeui_event(llcptr llc)
 	 */
 
 	if(llc->llc_callbacks&LLC_DATA_INDIC)
+	{
 		netbeu_rcv_stream(llc,llc->inc_skb);
+		/*
+		 *	Frame free is controlled by our stream processor
+		 */
+		return;
+	}
 
 	/*
 	 *	We got disconnected
@@ -113,6 +124,10 @@ static void netbeui_event(llcptr llc)
 		}
 	}
 	
+	/*
+	 *	Miscellaneous burps
+	 */
+	
 	if(llc->llc_callbacks&(LLC_RESET_INDIC_LOC|LLC_RESET_INDIC_REM|
 					LLC_RST_CONFIRM))
 	{
@@ -124,6 +139,10 @@ static void netbeui_event(llcptr llc)
 		 */
 	}
 
+	/*
+	 *	Track link busy status
+	 */
+	 
 	if(llc->llc_callbacks&LLC_REMOTE_BUSY)
 		nb->busy=1;	/* Send no more for a bit */
 	if(llc->llc_callbacks&LLC_REMOTE_NOTBUSY)
@@ -136,10 +155,15 @@ static void netbeui_event(llcptr llc)
 	 *	UI frames are passed to the upper netbeui layer.
 	 */
 	if(llc->llc_callbacks&LLC_UI_DATA)
+	{
 		netbeui_rcv_dgram(llc,llc->inc_skb);
+		return;
+	}
 
 	/* We ignore TST, XID, FRMR stuff */
 	/* FIXME: We need to free frames here once I fix the callback! */
+	if(llc->inc_skb)
+		kfree_skb(skb, FREE_READ);
 }
 
 /*

@@ -19,7 +19,6 @@
 #define	AX25_HDRINCL	8
 #define AX25_IDLE	9
 #define AX25_PACLEN	10
-#define AX25_MAXQUEUE	11
 #define AX25_IAMDIGI	12
 
 #define AX25_KILL	99

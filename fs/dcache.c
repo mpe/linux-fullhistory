@@ -21,6 +21,8 @@
 #include <linux/fs.h>
 #include <linux/string.h>
 
+#include <asm/unaligned.h>
+
 /*
  * Don't bother caching long names.. They just take up space in the cache, and
  * for a name cache you just want to cache the "normal" names anyway which tend
@@ -28,6 +30,7 @@
  */
 #define DCACHE_NAME_LEN	15
 #define DCACHE_SIZE 1024
+#define DCACHE_HASH_QUEUES 256
 
 struct hash_list {
 	struct dir_cache_entry * next;
@@ -69,7 +72,6 @@ static struct dir_cache_entry * level2_head;
  * The hash-queues are also doubly-linked circular lists, but the head is
  * itself on the doubly-linked list, not just a pointer to the first entry.
  */
-#define DCACHE_HASH_QUEUES 32
 #define hash_fn(dev,dir,namehash) ((HASHDEV(dev) ^ (dir) ^ (namehash)) % DCACHE_HASH_QUEUES)
 
 static struct hash_list hash_table[DCACHE_HASH_QUEUES];
@@ -109,6 +111,10 @@ static inline void update_lru(struct dir_cache_entry * de)
  */
 static inline unsigned long namehash(const char * name, int len)
 {
+	if (len >= sizeof(unsigned long))
+		return len +
+			get_unaligned((unsigned long *) name) +
+			get_unaligned((unsigned long *) (name + len - sizeof(unsigned long)));
 	return len +
 		((const unsigned char *) name)[0]+
 		((const unsigned char *) name)[len-1];
@@ -143,16 +149,22 @@ static inline void add_hash(struct dir_cache_entry * de, struct hash_list * hash
  */
 static inline struct dir_cache_entry * find_entry(struct inode * dir, const char * name, int len, struct hash_list * hash)
 {
-	struct dir_cache_entry * de = hash->next;
+	struct dir_cache_entry * nextde = hash->next;
 
-	for (de = hash->next ; de != (struct dir_cache_entry *) hash ; de = de->h.next) {
+	for (;;) {
+		struct dir_cache_entry * de;
+
+		if (nextde == (struct dir_cache_entry *) hash)
+			break;
+		de = nextde;
+		nextde = nextde->h.next;
+		if (de->name_len != (unsigned char) len)
+			continue;
 		if (de->dc_dev != dir->i_dev)
 			continue;
 		if (de->dir != dir->i_ino)
 			continue;
 		if (de->version != dir->i_version)
-			continue;
-		if (de->name_len != len)
 			continue;
 		if (memcmp(de->name, name, len))
 			continue;

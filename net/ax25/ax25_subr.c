@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 035
+ *	AX.25 release 036
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -95,17 +95,10 @@ void ax25_frames_acked(ax25_cb *ax25, unsigned short nr)
 		        skb = skb_dequeue(&ax25->ack_queue);
 			kfree_skb(skb, FREE_WRITE);
 			ax25->va = (ax25->va + 1) % ax25->modulus;
-			if (ax25->dama_slave)
-				ax25->n2count = 0;
 		}
 	}
 }
 
-/*
- * Maybe this should be your ax25_invoke_retransmission(), which appears
- * to be used but not do anything.  ax25_invoke_retransmission() used to
- * be in AX 0.29, but has now gone in 0.30.
- */
 void ax25_requeue_frames(ax25_cb *ax25)
 {
         struct sk_buff *skb, *skb_prev = NULL;
@@ -200,15 +193,11 @@ void ax25_send_control(ax25_cb *ax25, int frametype, int poll_bit, int type)
 {
 	struct sk_buff *skb;
 	unsigned char  *dptr;
-	struct device *dev;
 
-	if ((dev = ax25->device) == NULL)
-		return;	/* Route died */
-
-	if ((skb = alloc_skb(AX25_BPQ_HEADER_LEN + size_ax25_addr(ax25->digipeat) + 2, GFP_ATOMIC)) == NULL)
+	if ((skb = alloc_skb(AX25_BPQ_HEADER_LEN + ax25_addr_size(ax25->digipeat) + 2, GFP_ATOMIC)) == NULL)
 		return;
 
-	skb_reserve(skb, AX25_BPQ_HEADER_LEN + size_ax25_addr(ax25->digipeat));
+	skb_reserve(skb, AX25_BPQ_HEADER_LEN + ax25_addr_size(ax25->digipeat));
 
 	/* Assume a response - address structure for DTE */
 	if (ax25->modulus == AX25_MODULUS) {
@@ -247,10 +236,10 @@ void ax25_return_dm(struct device *dev, ax25_address *src, ax25_address *dest, a
 	if (dev == NULL)
 		return;
 
-	if ((skb = alloc_skb(AX25_BPQ_HEADER_LEN + size_ax25_addr(digi) + 1, GFP_ATOMIC)) == NULL)
+	if ((skb = alloc_skb(AX25_BPQ_HEADER_LEN + ax25_addr_size(digi) + 1, GFP_ATOMIC)) == NULL)
 		return;	/* Next SABM will get DM'd */
 
-	skb_reserve(skb, AX25_BPQ_HEADER_LEN + size_ax25_addr(digi));
+	skb_reserve(skb, AX25_BPQ_HEADER_LEN + ax25_addr_size(digi));
 
 	ax25_digi_invert(digi, &retdigi);
 
@@ -261,8 +250,8 @@ void ax25_return_dm(struct device *dev, ax25_address *src, ax25_address *dest, a
 	/*
 	 *	Do the address ourselves
 	 */
-	dptr  = skb_push(skb, size_ax25_addr(digi));
-	dptr += build_ax25_addr(dptr, dest, src, &retdigi, AX25_RESPONSE, AX25_MODULUS);
+	dptr  = skb_push(skb, ax25_addr_size(digi));
+	dptr += ax25_addr_build(dptr, dest, src, &retdigi, AX25_RESPONSE, AX25_MODULUS);
 
 	skb->dev      = dev;
 	skb->priority = SOPRI_NORMAL;
@@ -308,249 +297,6 @@ void ax25_calculate_rtt(ax25_cb *ax25)
 
 	if (ax25->rtt > AX25_T1CLAMPHI)
 		ax25->rtt = AX25_T1CLAMPHI;
-}
-
-/*
- *	Digipeated address processing
- */
-
-
-/*
- *	Given an AX.25 address pull of to, from, digi list, command/response and the start of data
- *
- */
-unsigned char *ax25_parse_addr(unsigned char *buf, int len, ax25_address *src, ax25_address *dest, ax25_digi *digi, int *flags, int *dama)
-{
-	int d = 0;
-
-	if (len < 14) return NULL;
-
-	if (flags != NULL) {
-		*flags = 0;
-
-		if (buf[6] & AX25_CBIT)
-			*flags = AX25_COMMAND;
-		if (buf[13] & AX25_CBIT)
-			*flags = AX25_RESPONSE;
-	}
-
-	if (dama != NULL) 
-		*dama = ~buf[13] & AX25_DAMA_FLAG;
-
-	/* Copy to, from */
-	if (dest != NULL) 
-		memcpy(dest, buf + 0, AX25_ADDR_LEN);
-
-	if (src != NULL)  
-		memcpy(src,  buf + 7, AX25_ADDR_LEN);
-
-	buf += 2 * AX25_ADDR_LEN;
-	len -= 2 * AX25_ADDR_LEN;
-	digi->lastrepeat = -1;
-	digi->ndigi      = 0;
-
-	while (!(buf[-1] & AX25_EBIT)) {
-		if (d >= AX25_MAX_DIGIS)  return NULL;	/* Max of 6 digis */
-		if (len < 7) return NULL;	/* Short packet */
-
-		if (digi != NULL) {
-			memcpy(&digi->calls[d], buf, AX25_ADDR_LEN);
-			digi->ndigi = d + 1;
-			if (buf[6] & AX25_HBIT) {
-				digi->repeated[d] = 1;
-				digi->lastrepeat  = d;
-			} else {
-				digi->repeated[d] = 0;
-			}
-		}
-
-		buf += AX25_ADDR_LEN;
-		len -= AX25_ADDR_LEN;
-		d++;
-	}
-
-	return buf;
-}
-
-/*
- *	Assemble an AX.25 header from the bits
- */
-int build_ax25_addr(unsigned char *buf, ax25_address *src, ax25_address *dest, ax25_digi *d, int flag, int modulus)
-{
-	int len = 0;
-	int ct  = 0;
-
-	memcpy(buf, dest, AX25_ADDR_LEN);
-	buf[6] &= ~(AX25_EBIT | AX25_CBIT);
-	buf[6] |= AX25_SSSID_SPARE;
-
-	if (flag == AX25_COMMAND) buf[6] |= AX25_CBIT;
-
-	buf += AX25_ADDR_LEN;
-	len += AX25_ADDR_LEN;
-
-	memcpy(buf, src, AX25_ADDR_LEN);
-	buf[6] &= ~(AX25_EBIT | AX25_CBIT);
-	buf[6] &= ~AX25_SSSID_SPARE;
-
-	if (modulus == AX25_MODULUS)
-		buf[6] |= AX25_SSSID_SPARE;
-	else
-		buf[6] |= AX25_ESSID_SPARE;
-
-	if (flag == AX25_RESPONSE) buf[6] |= AX25_CBIT;
-
-	/*
-	 *	Fast path the normal digiless path
-	 */
-	if (d == NULL || d->ndigi == 0) {
-		buf[6] |= AX25_EBIT;
-		return 2 * AX25_ADDR_LEN;
-	}	
-
-	buf += AX25_ADDR_LEN;
-	len += AX25_ADDR_LEN;
-
-	while (ct < d->ndigi) {
-		memcpy(buf, &d->calls[ct], AX25_ADDR_LEN);
-
-		if (d->repeated[ct])
-			buf[6] |= AX25_HBIT;
-		else
-			buf[6] &= ~AX25_HBIT;
-
-		buf[6] &= ~AX25_EBIT;
-		buf[6] |= AX25_SSSID_SPARE;
-
-		buf += AX25_ADDR_LEN;
-		len += AX25_ADDR_LEN;
-		ct++;
-	}
-
-	buf[-1] |= AX25_EBIT;
-
-	return len;
-}
-
-int size_ax25_addr(ax25_digi *dp)
-{
-	if (dp == NULL)
-		return 2 * AX25_ADDR_LEN;
-
-	return AX25_ADDR_LEN * (2 + dp->ndigi);
-}
-
-/* 
- *	Reverse Digipeat List. May not pass both parameters as same struct
- */
-void ax25_digi_invert(ax25_digi *in, ax25_digi *out)
-{
-	int ct = 0;
-
-	out->ndigi      = in->ndigi;
-	out->lastrepeat = in->ndigi - in->lastrepeat - 2;
-
-	/* Invert the digipeaters */
-
-	while (ct < in->ndigi) {
-		out->calls[ct]    = in->calls[in->ndigi - ct - 1];
-		if (ct <= out->lastrepeat) {
-			out->calls[ct].ax25_call[6] |= AX25_HBIT;
-			out->repeated[ct]            = 1;
-		} else {
-			out->calls[ct].ax25_call[6] &= ~AX25_HBIT;
-			out->repeated[ct]            = 0;
-		}
-		ct++;
-	}
-}
-
-/*
- *	count the number of buffers on a list belonging to the same
- *	socket as skb
- */
-static int ax25_list_length(struct sk_buff_head *list, struct sk_buff *skb)
-{
-	int count = 0;
-	long flags;
-	struct sk_buff *skbq;
-
-	save_flags(flags);
-	cli();
-
-	if (list == NULL) {
-		restore_flags(flags);
-                return 0;
-        }
-
-	for (skbq = list->next; skbq != (struct sk_buff *)list; skbq = skbq->next)
-		if (skb->sk == skbq->sk)
-			count++;
-
-        restore_flags(flags);
-
-        return count;
-}
-
-/*
- *	count the number of buffers of one socket on the write/ack-queue
- */
-int ax25_queue_length(ax25_cb *ax25, struct sk_buff *skb)
-{
-	return ax25_list_length(&ax25->write_queue, skb) + ax25_list_length(&ax25->ack_queue, skb);
-}
-
-/*
- *	:::FIXME:::
- *	This is ****NOT**** the right approach. Not all drivers do kiss. We
- *	need a driver level request to switch duplex mode, that does either
- *	SCC changing, PI config or KISS as required.
- *
- *	Not to mention this request isn't currently reliable.
- */
-void ax25_kiss_cmd(ax25_cb *ax25, unsigned char cmd, unsigned char param)
-{
-	struct sk_buff *skb;
-	unsigned char *p;
-
-	if (ax25->device == NULL)
-		return;
-
-	if ((skb = alloc_skb(2, GFP_ATOMIC)) == NULL)
-		return;
-
-	p = skb_put(skb, 2);
-
-	*p++ = cmd;
-	*p++ = param;
-
-	skb->arp      = 1;
-	skb->dev      = ax25->device;
-	skb->priority = SOPRI_NORMAL;
-	skb->protocol = htons(ETH_P_AX25);
-
-	dev_queue_xmit(skb);
-}
-
-void ax25_dama_on(ax25_cb *ax25)
-{
-	if (ax25_dev_is_dama_slave(ax25->device) == 0) {
-		SOCK_DEBUG(ax25->sk, "ax25_dama_on: DAMA on\n");
-		ax25_kiss_cmd(ax25, 5, 1);
-	}
-}
-
-void ax25_dama_off(ax25_cb *ax25)
-{
-	if (ax25->dama_slave == 0)
-		return;
-
-	ax25->dama_slave = 0;
-
-	if (ax25_dev_is_dama_slave(ax25->device) == 0) {
-		SOCK_DEBUG(ax25->sk, "ax25_dama_off: DAMA off\n");
-		ax25_kiss_cmd(ax25, 5, 0);
-	}
 }
 
 #endif

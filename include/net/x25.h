@@ -52,17 +52,20 @@
 #define	X25_COND_PEER_RX_BUSY	0x04
 
 /* Define Link State constants. */
+enum {
+	X25_STATE_0,		/* Ready */
+	X25_STATE_1,		/* Awaiting Call Accepted */
+	X25_STATE_2,		/* Awaiting Clear Confirmation */
+	X25_STATE_3,		/* Data Transfer */
+	X25_STATE_4		/* Awaiting Reset Confirmation */
+};
 
-#define X25_STATE_0		0		/* Ready */
-#define X25_STATE_1		1		/* Awaiting Call Accepted */
-#define X25_STATE_2		2		/* Awaiting Clear Confirmation */
-#define X25_STATE_3		3		/* Data Transfer */
-#define	X25_STATE_4		4		/* Awaiting Reset Confirmation */
-
-#define	X25_LINK_STATE_0	0
-#define	X25_LINK_STATE_1	1
-#define	X25_LINK_STATE_2	2
-#define	X25_LINK_STATE_3	3
+enum {
+	X25_LINK_STATE_0,
+	X25_LINK_STATE_1,
+	X25_LINK_STATE_2,
+	X25_LINK_STATE_3
+};
 
 #define X25_DEFAULT_T20		(180 * X25_SLOWHZ)	/* Default T20 value */
 #define X25_DEFAULT_T21		(200 * X25_SLOWHZ)	/* Default T21 value */

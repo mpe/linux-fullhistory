@@ -972,12 +972,16 @@ static int ip_netdev_event(struct notifier_block *this, unsigned long event, voi
 	if (dev->family != AF_INET)
 		return NOTIFY_DONE;
 
-	if(event==NETDEV_UP) {
-/*
- *	Join the initial group if multicast.
- */		
+	if(event==NETDEV_UP) 
+	{
+		/*
+		 *	Join the initial group if multicast.
+		 */		
 		ip_mc_allhost(dev);
 	}
+	if(event==NETDEV_DOWN)
+		ip_mc_drop_device(dev);
+		
 	return ip_rt_event(event, dev);
 }
 

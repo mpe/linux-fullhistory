@@ -163,7 +163,7 @@ ret_from_smpfork:
 
 	ALIGN
 handle_bottom_half:
-	pushl $9f
+	pushl $2f
 	jmp SYMBOL_NAME(do_bottom_half)
 
 	ALIGN
@@ -183,14 +183,20 @@ ENTRY(system_call)
 	movl %eax,EAX(%esp)		# save the return value
 	ALIGN
 	.globl ret_from_sys_call
+	.globl ret_from_intr
+ret_from_intr:
 ret_from_sys_call:
 	GET_CURRENT(%ebx)
 	cmpl $0,SYMBOL_NAME(intr_count)
+#ifdef __SMP__
+	jne 2f
+#else
 	jne 1f
+#endif
 9:	movl SYMBOL_NAME(bh_mask),%eax
 	andl SYMBOL_NAME(bh_active),%eax
 	jne handle_bottom_half
-	movl EFLAGS(%esp),%eax		# mix EFLAGS and CS
+2:	movl EFLAGS(%esp),%eax		# mix EFLAGS and CS
 	movb CS(%esp),%al
 	testl $(VM_MASK | 3),%eax	# return to VM86 mode or non-supervisor?
 	je 1f
@@ -201,7 +207,8 @@ ret_from_sys_call:
 	notl %eax
 	andl signal(%ebx),%eax
 	jne signal_return
-1:	RESTORE_ALL
+1:	
+	RESTORE_ALL
 	ALIGN
 signal_return:
 	testl $(VM_MASK),EFLAGS(%esp)

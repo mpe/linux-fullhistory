@@ -27,42 +27,41 @@
  * This call isn't used by all ports, in particular, the Alpha
  * uses osf_sigprocmask instead.  Maybe it should be moved into
  * arch-dependent dir?
+ *
+ * We don't need to get the kernel lock - this is all local to this
+ * particular thread.. (and that's good, because this is _heavily_
+ * used by various programs)
  */
 asmlinkage int sys_sigprocmask(int how, sigset_t *set, sigset_t *oset)
 {
-	sigset_t new_set, old_set = current->blocked;
-	int error;
+	sigset_t old_set = current->blocked;
 
-	lock_kernel();
 	if (set) {
-		error = get_user(new_set, set);
+		sigset_t new_set;
+		int error = get_user(new_set, set);
 		if (error)
-			goto out;
+			return error;
 		new_set &= _BLOCKABLE;
 		switch (how) {
+		default:
+			return -EINVAL;
 		case SIG_BLOCK:
-			current->blocked |= new_set;
+			new_set |= old_set;
 			break;
 		case SIG_UNBLOCK:
-			current->blocked &= ~new_set;
+			new_set = old_set & ~new_set;
 			break;
 		case SIG_SETMASK:
-			current->blocked = new_set;
 			break;
-		default:
-			error = -EINVAL;
-			goto out;
 		}
+		current->blocked = new_set;
 	}
 	if (oset) {
-		error = put_user(old_set, oset);
+		int error = put_user(old_set, oset);
 		if (error)
-			goto out;
+			return error;
 	}
-	error = 0;
-out:
-	unlock_kernel();
-	return error;
+	return 0;
 }
 
 /*

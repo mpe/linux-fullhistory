@@ -164,7 +164,7 @@ sizeof(nop_cmd) = 8;
 #define DELAY_18(); { __delay( (loops_per_sec>>18)+1 ); }
 
 /* wait for command with timeout: */
-#define WAIT_4_SCB_CMD() 
+#define WAIT_4_SCB_CMD() \
 { int i; \
   for(i=0;i<16384;i++) { \
     if(!p->scb->cmd_cuc) break; \

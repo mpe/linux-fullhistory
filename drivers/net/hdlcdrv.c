@@ -44,19 +44,77 @@
 #include <linux/malloc.h>
 #include <linux/errno.h>
 #include <asm/bitops.h>
-#include <asm/uaccess.h>
+
 #include <linux/netdevice.h>
 #include <linux/if_arp.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/hdlcdrv.h>
-#include <net/ax25.h>
+#ifdef CONFIG_AX25
+/* prototypes for ax25_encapsulate and ax25_rebuild_header */
+#include <net/ax25.h> 
+#endif /* CONFIG_AX25 */
 
 /* make genksyms happy */
 #include <linux/ip.h>
 #include <linux/udp.h>
 #include <linux/tcp.h>
 #include <linux/net_alias.h>
+
+/* --------------------------------------------------------------------- */
+
+/*
+ * currently this module is supposed to support both module styles, i.e.
+ * the old one present up to about 2.1.9, and the new one functioning
+ * starting with 2.1.21. The reason is I have a kit allowing to compile
+ * this module also under 2.0.x which was requested by several people.
+ * This will go in 2.2
+ */
+#include <linux/version.h>
+
+#if LINUX_VERSION_CODE >= 0x20100
+#include <asm/uaccess.h>
+#else
+#include <asm/segment.h>
+#include <linux/mm.h>
+
+#undef put_user
+#undef get_user
+
+#define put_user(x,ptr) ({ __put_user((unsigned long)(x),(ptr),sizeof(*(ptr))); 0; })
+#define get_user(x,ptr) ({ x = ((__typeof__(*(ptr)))__get_user((ptr),sizeof(*(ptr)))); 0; })
+
+extern inline int copy_from_user(void *to, const void *from, unsigned long n)
+{
+        int i = verify_area(VERIFY_READ, from, n);
+        if (i)
+                return i;
+        memcpy_fromfs(to, from, n);
+        return 0;
+}
+
+extern inline int copy_to_user(void *to, const void *from, unsigned long n)
+{
+        int i = verify_area(VERIFY_WRITE, to, n);
+        if (i)
+                return i;
+        memcpy_tofs(to, from, n);
+        return 0;
+}
+#endif
+
+/* --------------------------------------------------------------------- */
+
+#if LINUX_VERSION_CODE < 0x20115
+extern __inline__ void dev_init_buffers(struct device *dev)
+{
+        int i;
+        for(i=0;i<DEV_NUMBUFFS;i++)
+        {
+                skb_queue_head_init(&dev->buffs[i]);
+        }
+}
+#endif
 
 /* --------------------------------------------------------------------- */
 
@@ -518,7 +576,11 @@ static int hdlcdrv_set_mac_address(struct device *dev, void *addr)
 
 /* --------------------------------------------------------------------- */
 
+#if LINUX_VERSION_CODE >= 0x20119
 static struct net_device_stats *hdlcdrv_get_stats(struct device *dev)
+#else
+static struct enet_statistics *hdlcdrv_get_stats(struct device *dev)
+#endif
 {
 	struct hdlcdrv_state *sm;
 
@@ -743,7 +805,9 @@ static int hdlcdrv_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
  */
 static int hdlcdrv_probe(struct device *dev)
 {
-	struct hdlcdrv_channel_params dflt_ch_params = { 20, 2, 10, 40, 0 };
+	const struct hdlcdrv_channel_params dflt_ch_params = { 
+		20, 2, 10, 40, 0 
+	};
 	struct hdlcdrv_state *s;
 
 	if (!dev)
@@ -887,21 +951,49 @@ int hdlcdrv_unregister_hdlcdrv(struct device *dev)
 
 /* --------------------------------------------------------------------- */
 
+#if LINUX_VERSION_CODE >= 0x20115
+
 EXPORT_SYMBOL(hdlcdrv_receiver);
 EXPORT_SYMBOL(hdlcdrv_transmitter);
 EXPORT_SYMBOL(hdlcdrv_arbitrate);
 EXPORT_SYMBOL(hdlcdrv_register_hdlcdrv);
 EXPORT_SYMBOL(hdlcdrv_unregister_hdlcdrv);
 
+#else
+
+static struct symbol_table hdlcdrv_syms = {
+#include <linux/symtab_begin.h>
+        X(hdlcdrv_receiver),
+        X(hdlcdrv_transmitter),
+        X(hdlcdrv_arbitrate),
+        X(hdlcdrv_register_hdlcdrv),
+        X(hdlcdrv_unregister_hdlcdrv),
+#include <linux/symtab_end.h>
+};
+
+#endif
+
 /* --------------------------------------------------------------------- */
 
 #ifdef MODULE
+
+#if LINUX_VERSION_CODE >= 0x20115
+
+MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
+MODULE_DESCRIPTION("Packet Radio network interface HDLC encoder/decoder");
+
+#endif
+
+/* --------------------------------------------------------------------- */
 
 int init_module(void)
 {
 	printk(KERN_INFO "hdlcdrv: (C) 1996 Thomas Sailer HB9JNX/AE4WA\n");
 	printk(KERN_INFO "hdlcdrv: version 0.2 compiled %s %s\n", 
 	       __TIME__, __DATE__);
+#if LINUX_VERSION_CODE < 0x20115
+        register_symtab(&hdlcdrv_syms);
+#endif
 	return 0;
 }
 

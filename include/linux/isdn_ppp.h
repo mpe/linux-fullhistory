@@ -4,18 +4,20 @@
 extern int isdn_ppp_dial_slave(char *);
 extern int isdn_ppp_hangup_slave(char *);
 
-struct pppinfo
+#define CALLTYPE_INCOMING 0x1
+#define CALLTYPE_OUTGOING 0x2
+#define CALLTYPE_CALLBACK 0x4
+
+struct pppcallinfo
 {
-  int type; /* set by user */
-  union {
-    char clid[32]; /* calling ID */
-    int  bundles;
-    int  linknumber;
-  } info;
+	int calltype;
+	unsigned char local_num[64];
+	unsigned char remote_num[64];
+	int charge_units;
 };
 
  
-#define PPPIOCLINKINFO _IOWR('t',128,struct pppinfo)
+#define PPPIOCGCALLINFO _IOWR('t',128,struct pppcallinfo)
 #define PPPIOCBUNDLE   _IOW('t',129,int)
 #define PPPIOCGMPFLAGS _IOR('t',130,int)
 #define PPPIOCSMPFLAGS _IOW('t',131,int)

@@ -145,7 +145,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 	}
 #endif	
 		
-  	if (optval == NULL) 
+  	if(optlen<sizeof(int))
   		return(-EINVAL);
   	
 	err = get_user(val, (int *)optval);
@@ -159,7 +159,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 		case SO_DEBUG:	
 			if(val && !suser())
 			{
-				ret = -EPERM;
+				ret = -EACCES;
 			}
 			else
 				sk->debug=valbool;
@@ -186,9 +186,10 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 				val = 65535;
 			sk->sndbuf = val;
 			/*
-			 *	FIXME: Wake up sending tasks if we
+			 *	Wake up sending tasks if we
 			 *	upped the value.
 			 */
+			sk->write_space(sk);
 			break;
 
 		case SO_RCVBUF:
@@ -221,17 +222,15 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 
 		case SO_PRIORITY:
 			if (val >= 0 && val < DEV_NUMBUFFS) 
-			{
 				sk->priority = val;
-			} 
 			else
-			{
 				return(-EINVAL);
-			}
 			break;
 
 
 		case SO_LINGER:
+			if(optlen<sizeof(ling))
+				return -EINVAL;	/* 1003.1g */
 			err = copy_from_user(&ling,optval,sizeof(ling));
 			if (err)
 			{
@@ -255,7 +254,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			sock->passcred = valbool;
 			break;
 
-		/* We implementation the SO_SNDLOWAT etc to
+		/* We implement the SO_SNDLOWAT etc to
 		   not be settable (1003.1g 5.3) */
 		default:
 		  	return(-ENOPROTOOPT);
@@ -269,8 +268,11 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
 {
 	struct sock *sk = sock->sk;
   	int val;
-  	int err;
   	struct linger ling;
+  	int len;
+  	
+  	if(get_user(len,optlen))
+  		return -EFAULT;
 
   	switch(optname) 
   	{
@@ -325,15 +327,19 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
 			break;
 		
 		case SO_LINGER:	
-			err = put_user(sizeof(ling), optlen);
+		  {
+		        int err;
+			len=min(len,sizeof(ling));
+			if (put_user(len, optlen)) 
 			if (!err) {
 				ling.l_onoff=sk->linger;
 				ling.l_linger=sk->lingertime;
-				err = copy_to_user(optval,&ling,sizeof(ling));
+				err = copy_to_user(optval,&ling,len);
 				if (err)
 				    err = -EFAULT;
 			}
 			return err;
+		  }
 		
 		case SO_BSDCOMPAT:
 			val = sk->bsdism;
@@ -343,8 +349,10 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
 		case SO_SNDTIMEO:
 		{
 			static struct timeval tm={0,0};
-			int err=copy_to_user(optval,&tm,sizeof(tm));
-			if(err!=sizeof(struct timeval))
+			len=min(len, sizeof(struct timeval));
+			if(put_user(len,optlen))
+				return -EFAULT;
+			if(copy_to_user(optval,&tm,len))
 				return -EFAULT;
 			return 0;
 		}
@@ -357,19 +365,22 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
 			break;
 
 		case SO_PEERCRED:
-			err = put_user(sizeof(sk->peercred), optlen);
-			if (!err)
-				err = copy_to_user((void*)optval, &sk->peercred, sizeof(struct ucred));
-			return err;
-
+			len=min(len, sizeof(sk->peercred));
+			if(put_user(len, optlen))
+				return -EFAULT;
+			if(copy_to_user((void*)optval, &sk->peercred, len))
+				return -EFAULT;
+			return 0;
 		default:
 			return(-ENOPROTOOPT);
 	}
-  	err = put_user(sizeof(int), optlen);
-	if (!err)
-		err = put_user(val,(unsigned int *)optval);
+	len=min(len,sizeof(int));
+  	if(put_user(len, optlen))
+  		return -EFAULT;
+	if(copy_to_user(optval,&val,len))
+		return -EFAULT;
 
-  	return err;
+  	return 0;
 }
 
 static kmem_cache_t *sk_cachep;
@@ -743,6 +754,27 @@ int sock_no_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		default:
 			return(-EINVAL);
 	}
+}
+
+/*
+ *	Default socket getsockopt / setsockopt
+ */
+ 
+int sock_no_setsockopt(struct socket *sock, int level, int optname,
+		    char *optval, int optlen)
+{
+	return -EOPNOTSUPP;
+}
+
+int sock_no_getsockopt(struct socket *sock, int level, int optname,
+		    char *optval, int *optlen)
+{
+	return -EOPNOTSUPP;
+}
+
+int sock_no_listen(struct socket *sock, int backlog)
+{
+	return -EOPNOTSUPP;
 }
 
 /*

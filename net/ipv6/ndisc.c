@@ -35,6 +35,7 @@
 #include <linux/sched.h>
 #include <linux/net.h>
 #include <linux/in6.h>
+#include <linux/route.h>
 
 #include <net/neighbour.h>
 #include <linux/if_arp.h>
@@ -1847,6 +1848,9 @@ void ndisc_init(struct net_proto_family *ops)
 #else
 	proc_net_register(&ndisc_proc_entry);
 #endif
+#endif
+#ifdef CONFIG_IPV6_MODULE
+	ndisc_eth_hook = ndisc_eth_resolv;
 #endif
 }
 

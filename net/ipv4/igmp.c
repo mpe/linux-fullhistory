@@ -64,6 +64,7 @@
  *		Alexey Kuznetsov:	Wrong group leaving behaviour, backport
  *					fix from pending 2.1.x patches.
  *		Alan Cox:		Forget to enable FDDI support earlier.
+ *		Alexey Kuznetsov:	Fixed leaving groups on device down.
  */
 
 
@@ -553,12 +554,16 @@ void ip_mc_drop_device(struct device *dev)
 {
 	struct ip_mc_list *i;
 	struct ip_mc_list *j;
+	start_bh_atomic();
 	for(i=dev->ip_mc_list;i!=NULL;i=j)
 	{
 		j=i->next;
+		if(i->tm_running)
+			del_timer(&i->timer);
 		kfree_s(i,sizeof(*i));
 	}
 	dev->ip_mc_list=NULL;
+	end_bh_atomic();
 }
 
 /*

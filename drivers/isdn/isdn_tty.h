@@ -1,10 +1,10 @@
-/* $Id: isdn_tty.h,v 1.5 1996/05/17 03:52:31 fritz Exp $
- *
+/* $Id: isdn_tty.h,v 1.8 1997/02/10 20:12:50 fritz Exp $
+
  * header for Linux ISDN subsystem, tty related functions (linklevel).
  *
  * Copyright 1994,95,96 by Fritz Elfert (fritz@wuemaus.franken.de)
  * Copyright 1995,96    by Thinking Objects Software GmbH Wuerzburg
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2, or (at your option)
@@ -17,9 +17,18 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
+ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_tty.h,v $
+ * Revision 1.8  1997/02/10 20:12:50  fritz
+ * Changed interface for reporting incoming calls.
+ *
+ * Revision 1.7  1997/02/03 23:06:10  fritz
+ * Reformatted according CodingStyle
+ *
+ * Revision 1.6  1997/01/14 01:35:19  fritz
+ * Changed prototype of isdn_tty_modem_hup.
+ *
  * Revision 1.5  1996/05/17 03:52:31  fritz
  * Changed DLE handling for audio receive.
  *
@@ -37,15 +46,15 @@
  *
  */
 
-extern void  isdn_tty_modem_result(int, modem_info *);
-extern void  isdn_tty_modem_escape(void);
-extern void  isdn_tty_modem_ring(void);
-extern void  isdn_tty_modem_xmit(void);
-extern void  isdn_tty_modem_hup(modem_info *);
-extern int   isdn_tty_modem_init(void);
-extern void  isdn_tty_readmodem(void);
-extern int   isdn_tty_try_read(modem_info *, struct sk_buff *);
-extern int   isdn_tty_find_icall(int, int, char *);
-extern int   isdn_tty_countDLE(unsigned char *, int);
-extern void  isdn_tty_bsent(int, int);
-extern void  isdn_tty_cleanup_xmit(modem_info *);
+extern void isdn_tty_modem_result(int, modem_info *);
+extern void isdn_tty_modem_escape(void);
+extern void isdn_tty_modem_ring(void);
+extern void isdn_tty_modem_xmit(void);
+extern void isdn_tty_modem_hup(modem_info *, int);
+extern int isdn_tty_modem_init(void);
+extern void isdn_tty_readmodem(void);
+extern int isdn_tty_try_read(modem_info *, struct sk_buff *);
+extern int isdn_tty_find_icall(int, int, setup_parm);
+extern int isdn_tty_countDLE(unsigned char *, int);
+extern void isdn_tty_bsent(int, int);
+extern void isdn_tty_cleanup_xmit(modem_info *);

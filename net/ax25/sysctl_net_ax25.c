@@ -9,17 +9,27 @@
 #include <linux/sysctl.h>
 #include <net/ax25.h>
 
-static int min_ax25[] = {0, 0, 0, 0, 0, 1,  1,                1,                1,
-	                 0,                   0,  1,   1,  1, 0x00};
-static int max_ax25[] = {1, 1, 1, 2, 1, 7, 63, 30 * AX25_SLOWHZ, 20 * AX25_SLOWHZ,
-	3600 * AX25_SLOWHZ, 65535 * AX25_SLOWHZ, 31, 512, 20, 0x03};
+static int min_ipdefmode[] = {0},	max_ipdefmode[] = {1};
+static int min_axdefmode[] = {0},	max_axdefmode[] = {1};
+static int min_backoff[] = {0},		max_backoff[] = {2};
+static int min_conmode[] = {0},		max_conmode[] = {2};
+static int min_window[] = {1},		max_window[] = {7};
+static int min_ewindow[] = {1},		max_ewindow[] = {63};
+static int min_t1[] = {1},		max_t1[] = {30 * AX25_SLOWHZ};
+static int min_t2[] = {1},		max_t2[] = {20 * AX25_SLOWHZ};
+static int min_t3[] = {0},		max_t3[] = {3600 * AX25_SLOWHZ};
+static int min_idle[] = {0},		max_idle[] = {65535 * AX25_SLOWHZ};
+static int min_n2[] = {1},		max_n2[] = {31};
+static int min_paclen[] = {1},		max_paclen[] = {512};
+static int min_proto[] = {0},		max_proto[] = {2};
 
 static struct ctl_table_header *ax25_table_header;
 
-static ctl_table ax25_table[AX25_MAX_DEVICES + 1];
+static ctl_table *ax25_table = NULL;
+static int ax25_table_size   = 0;
 
 static ctl_table ax25_dir_table[] = {
-	{NET_AX25, "ax25", NULL, 0, 0555, ax25_table},
+	{NET_AX25, "ax25", NULL, 0, 0555, NULL},
 	{0}
 };
 
@@ -28,28 +38,95 @@ static ctl_table ax25_root_table[] = {
 	{0}
 };
 
+static const ctl_table ax25_param_table[] = {
+	{NET_AX25_IP_DEFAULT_MODE, "ip_default_mode",
+	 NULL, sizeof(int), 0644, NULL,
+	 &proc_dointvec_minmax, &sysctl_intvec, NULL,
+	 &min_ipdefmode, &max_ipdefmode},
+	{NET_AX25_DEFAULT_MODE, "ax25_default_mode",
+	 NULL, sizeof(int), 0644, NULL,
+	 &proc_dointvec_minmax, &sysctl_intvec, NULL,
+	 &min_axdefmode, &max_axdefmode},
+	{NET_AX25_BACKOFF_TYPE, "backoff_type",
+	 NULL, sizeof(int), 0644, NULL,
+	 &proc_dointvec_minmax, &sysctl_intvec, NULL,
+	 &min_backoff, &max_backoff},
+	{NET_AX25_CONNECT_MODE, "connect_mode",
+	 NULL, sizeof(int), 0644, NULL,
+	 &proc_dointvec_minmax, &sysctl_intvec, NULL,
+	 &min_conmode, &max_conmode},
+	{NET_AX25_STANDARD_WINDOW, "standard_window_size",
+	 NULL, sizeof(int), 0644, NULL,
+	 &proc_dointvec_minmax, &sysctl_intvec, NULL,
+	 &min_window, &max_window},
+	{NET_AX25_EXTENDED_WINDOW, "extended_window_size",
+	 NULL, sizeof(int), 0644, NULL,
+	 &proc_dointvec_minmax, &sysctl_intvec, NULL,
+	 &min_ewindow, &max_ewindow},
+	{NET_AX25_T1_TIMEOUT, "t1_timeout",
+	 NULL, sizeof(int), 0644, NULL,
+	 &proc_dointvec_minmax, &sysctl_intvec, NULL,
+	 &min_t1, &max_t1},
+	{NET_AX25_T2_TIMEOUT, "t2_timeout",
+	 NULL, sizeof(int), 0644, NULL,
+	 &proc_dointvec_minmax, &sysctl_intvec, NULL,
+	 &min_t2, &max_t2},
+	{NET_AX25_T3_TIMEOUT, "t3_timeout",
+	 NULL, sizeof(int), 0644, NULL,
+	 &proc_dointvec_minmax, &sysctl_intvec, NULL,
+	 &min_t3, &max_t3},
+	{NET_AX25_IDLE_TIMEOUT, "idle_timeout",
+	 NULL, sizeof(int), 0644, NULL,
+	 &proc_dointvec_minmax, &sysctl_intvec, NULL,
+	 &min_idle, &max_idle},
+	{NET_AX25_N2, "maximum_retry_count",
+	 NULL, sizeof(int), 0644, NULL,
+	 &proc_dointvec_minmax, &sysctl_intvec, NULL,
+	 &min_n2, &max_n2},
+	{NET_AX25_PACLEN, "maximum_packet_length",
+	 NULL, sizeof(int), 0644, NULL,
+	 &proc_dointvec_minmax, &sysctl_intvec, NULL,
+	 &min_paclen, &max_paclen},
+	{NET_AX25_PROTOCOL, "protocol",
+	 NULL, sizeof(int), 0644, NULL,
+	 &proc_dointvec_minmax, &sysctl_intvec, NULL,
+	 &min_proto, &max_proto},
+	{0}	/* that's all, folks! */
+};
+
 void ax25_register_sysctl(void)
 {
-	int i, n;
+	ax25_dev *ax25_dev;
+	int n, k;
 
-	memset(ax25_table, 0x00, (AX25_MAX_DEVICES + 1) * sizeof(ctl_table));
+	for (ax25_table_size = sizeof(ctl_table), ax25_dev = ax25_dev_list; ax25_dev != NULL; ax25_dev = ax25_dev->next)
+		ax25_table_size += sizeof(ctl_table);
 
-	for (n = 0, i = 0; i < AX25_MAX_DEVICES; i++) {
-		if (ax25_device[i].dev != NULL) {
-			ax25_table[n].ctl_name     = n + 1;
-			ax25_table[n].procname     = ax25_device[i].name;
-			ax25_table[n].data         = &ax25_device[i].values;
-			ax25_table[n].maxlen       = AX25_MAX_VALUES * sizeof(int);
-			ax25_table[n].mode         = 0644;
-			ax25_table[n].child        = NULL;
-			ax25_table[n].proc_handler = &proc_dointvec_minmax;
-			ax25_table[n].strategy     = &sysctl_intvec;
-			ax25_table[n].de           = NULL;
-			ax25_table[n].extra1       = &min_ax25;
-			ax25_table[n].extra2       = &max_ax25;
-			n++;
-		}
+	if ((ax25_table = kmalloc(ax25_table_size, GFP_ATOMIC)) == NULL)
+		return;
+
+	memset(ax25_table, 0x00, ax25_table_size);
+
+	for (n = 0, ax25_dev = ax25_dev_list; ax25_dev != NULL; ax25_dev = ax25_dev->next) {
+		ax25_table[n].ctl_name     = n + 1;
+		ax25_table[n].procname     = ax25_dev->dev->name;
+		ax25_table[n].data         = NULL;
+		ax25_table[n].maxlen       = 0;
+		ax25_table[n].mode         = 0555;
+		ax25_table[n].child        = ax25_dev->systable;
+		ax25_table[n].proc_handler = NULL;
+
+		memcpy(ax25_dev->systable, ax25_param_table, sizeof(ax25_dev->systable));
+
+		ax25_dev->systable[AX25_MAX_VALUES].ctl_name = 0;	/* just in case... */
+
+		for (k = 0; k < AX25_MAX_VALUES; k++)
+			ax25_dev->systable[k].data = &ax25_dev->values[k];
+
+		n++;
 	}
+
+	ax25_dir_table[0].child = ax25_table;
 
 	ax25_table_header = register_sysctl_table(ax25_root_table, 1);
 }
@@ -57,4 +134,8 @@ void ax25_register_sysctl(void)
 void ax25_unregister_sysctl(void)
 {
 	unregister_sysctl_table(ax25_table_header);
+
+	kfree_s(ax25_table, ax25_table_size);
+
+	ax25_dir_table[0].child = NULL;
 }

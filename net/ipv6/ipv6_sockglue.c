@@ -13,6 +13,12 @@
  *      modify it under the terms of the GNU General Public License
  *      as published by the Free Software Foundation; either version
  *      2 of the License, or (at your option) any later version.
+ *
+ *	FIXME: Make the setsockopt code POSIX compliant: That is
+ *
+ *	o	Return -EINVAL for setsockopt of short lengths
+ *	o	Truncate getsockopt returns
+ *	o	Return an optlen of the truncated length if need be
  */
 
 #include <linux/errno.h>
@@ -67,7 +73,7 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 {
 	struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
 	int val, err;
-	int retv = -EOPNOTSUPP;
+	int retv = -ENOPROTOOPT;
 
 	if(level!=SOL_IPV6)
 		goto out;

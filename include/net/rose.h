@@ -40,11 +40,13 @@
 
 /* Define Link State constants. */
 
-#define ROSE_STATE_0			0		/* Ready */
-#define ROSE_STATE_1			1		/* Awaiting Call Accepted */
-#define ROSE_STATE_2			2		/* Awaiting Clear Confirmation */
-#define ROSE_STATE_3			3		/* Data Transfer */
-#define	ROSE_STATE_4			4		/* Awaiting Reset Confirmation */
+enum {
+	ROSE_STATE_0,			/* Ready */
+	ROSE_STATE_1,			/* Awaiting Call Accepted */
+	ROSE_STATE_2,			/* Awaiting Clear Confirmation */
+	ROSE_STATE_3,			/* Data Transfer */
+	ROSE_STATE_4			/* Awaiting Reset Confirmation */
+};
 
 #define ROSE_DEFAULT_T0			(180 * ROSE_SLOWHZ)	/* Default T10 T20 value */
 #define ROSE_DEFAULT_T1			(200 * ROSE_SLOWHZ)	/* Default T11 T21 value */

@@ -37,6 +37,7 @@
 #include <linux/inet.h>
 #include <linux/netdevice.h>
 #include <linux/fddidevice.h>
+#include <linux/if_ether.h>
 #include <linux/skbuff.h>
 #include <linux/errno.h>
 #include <net/arp.h>

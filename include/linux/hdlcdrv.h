@@ -8,7 +8,10 @@
 #define _HDLCDRV_H
 
 #include <linux/sockios.h>
+#include <linux/version.h>
+#if LINUX_VERSION_CODE < 0x20119
 #include <linux/if_ether.h>
+#endif
 #include <linux/netdevice.h>
 
 /* -------------------------------------------------------------------- */
@@ -39,7 +42,11 @@ struct hdlcdrv_channel_state {
 	int ptt;
 	int dcd;
 	int ptt_keyed;
+#if LINUX_VERSION_CODE < 0x20119
 	struct enet_statistics stats;
+#else
+	struct net_device_stats stats;
+#endif
 };
 
 struct hdlcdrv_ioctl {
@@ -231,7 +238,11 @@ struct hdlcdrv_state {
 	struct hdlcdrv_bitbuffer bitbuf_hdlc;
 #endif /* HDLCDRV_DEBUG */
 
+#if LINUX_VERSION_CODE < 0x20119
 	struct enet_statistics stats;
+#else
+	struct net_device_stats stats;
+#endif
 	int ptt_keyed;
 
 	struct sk_buff_head send_queue;  /* Packets awaiting transmission */

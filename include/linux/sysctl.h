@@ -69,6 +69,7 @@ struct __sysctl_args {
 #define VM_FREEPG	3	/* struct: Set free page thresholds */
 #define VM_BDFLUSH	4	/* struct: Control buffer cache flushing */
 #define VM_MAXID	5
+#define VM_OVERCOMMIT_MEMORY 7	/* Turn off the virtual memory safety limit */
 
 /* CTL_NET names: */
 #define NET_CORE        1
@@ -144,7 +145,21 @@ enum {
 };
 
 /* /proc/sys/net/ax25 */
-/* Values are generated dynamically */
+enum {
+	NET_AX25_IP_DEFAULT_MODE = 1,
+	NET_AX25_DEFAULT_MODE,
+	NET_AX25_BACKOFF_TYPE,
+	NET_AX25_CONNECT_MODE,
+	NET_AX25_STANDARD_WINDOW,
+	NET_AX25_EXTENDED_WINDOW,
+	NET_AX25_T1_TIMEOUT,
+	NET_AX25_T2_TIMEOUT,
+	NET_AX25_T3_TIMEOUT,
+	NET_AX25_IDLE_TIMEOUT,
+	NET_AX25_N2,
+	NET_AX25_PACLEN,
+	NET_AX25_PROTOCOL
+};
 
 /* /proc/sys/net/rose */
 enum {

@@ -1612,7 +1612,7 @@ struct proto_ops inet_dgram_ops = {
 	inet_getname, 
 	datagram_poll,
 	inet_ioctl,
-	NULL,
+	sock_no_listen,
 	inet_shutdown,
 	inet_setsockopt,
 	inet_getsockopt,

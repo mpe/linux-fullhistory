@@ -123,7 +123,7 @@ entInt:
 	SAVE_ALL
 /* start atomic operation with respect to software interrupts */
 	lda	$0,intr_count
-	ldq	$1,0($0)
+	ldl	$1,0($0)
 	addq	$1,1,$1
 	stq	$1,0($0)
 /* set up the arguments to the C interrupt handler */
@@ -131,7 +131,7 @@ entInt:
 	jsr	$26,do_entInt
 /* ok, return */
 	lda	$0,intr_count
-	ldq	$1,0($0)
+	ldl	$1,0($0)
 	subq	$1,1,$1
 	stq	$1,0($0)
 	br	$31,ret_from_sys_call
@@ -527,7 +527,7 @@ ret_from_sys_call:
 	cmovne	$26,0,$19		/* $19 = 0 => non-restartable */
 	/* check bottom half interrupts */
 	lda	$0,intr_count
-	ldq	$1,0($0)
+	ldl	$1,0($0)
 	bne	$1,ret_from_handle_bh
 	lda	$2,bh_active
 	ldq	$3,0($2)
@@ -622,7 +622,7 @@ handle_bottom_half:
 	 * We're called with $0 containing the address of
 	 * 'intr_count' and $1 containing 'intr_count+1'
 	 */
-	stq	$1,0($0)	/* intr_count = 1 */
+	stl	$1,0($0)	/* intr_count = 1 */
 	subq	$30,16,$30
 	stq	$19,0($30)	/* save syscall nr */
 	stq	$20,8($30)	/* and error indication (a3) */
@@ -631,7 +631,7 @@ handle_bottom_half:
 	ldq	$19,0($30)
 	ldq	$20,8($30)
 	addq	$30,16,$30
-	stq	$31,0($0)	/* intr_count = 0 */
+	stl	$31,0($0)	/* intr_count = 0 */
 	br	$31,ret_from_handle_bh
 
 	.align 3

@@ -35,6 +35,7 @@
 
 
 /* These are some defined Ethernet Protocol ID's. */
+/* FIXME: should use the definitions in if_ether.h!!! */
 #define ETH_P_IP	0x0800		/* Internet Protocol packet	*/
 #define ETH_P_ARP	0x0806		/* Address Resolution packet	*/
 #define ETH_P_RARP      0x8035		/* Reverse Addr Res packet	*/

@@ -1,6 +1,15 @@
-/* $Id: l3_1TR6.c,v 1.4 1996/06/06 14:22:28 fritz Exp $
+/* $Id: l3_1TR6.c,v 1.7 1997/02/11 01:38:55 keil Exp $
  *
  * $Log: l3_1TR6.c,v $
+ * Revision 1.7  1997/02/11 01:38:55  keil
+ * Changed setup-interface (incoming and outgoing)
+ *
+ * Revision 1.6  1996/09/25 18:34:57  keil
+ * missing states in 1TR6 Statemachine added
+ *
+ * Revision 1.5  1996/09/23 01:53:51  fritz
+ * Bugfix: discard unknown frames (non-EDSS1 and non-1TR6).
+ *
  * Revision 1.4  1996/06/06 14:22:28  fritz
  * Changed level of "non-digital call..." message, since
  * with audio support, this is quite normal.
@@ -18,6 +27,8 @@
  *
  *
  */
+
+#include	"proto.h"
 
 static void
 l3_1TR6_message(struct PStack *st, int mt, int pd)
@@ -55,37 +66,37 @@ l3_1tr6_setup(struct PStack *st, byte pr, void *arg)
 	*p++ = st->l3.callref;
 	*p++ = MT_N1_SETUP;
 
-	if ('S' == (st->pa->called[0] & 0x5f)) {	/* SPV ??? */
+	if ('S' == (st->pa->setup.phone[0] & 0x5f)) {	/* SPV ??? */
 		/* NSF SPV */
 		*p++ = WE0_netSpecFac;
 		*p++ = 4;	/* Laenge */
 		*p++ = 0;
 		*p++ = FAC_SPV;	/* SPV */
-		*p++ = st->pa->info; /* 0 for all Services */
-		*p++ = st->pa->info2; /* 0 for all Services */
+		*p++ = st->pa->setup.si1; /* 0 for all Services */
+		*p++ = st->pa->setup.si2; /* 0 for all Services */
 		*p++ = WE0_netSpecFac;
 		*p++ = 4;	/* Laenge */
 		*p++ = 0;
 		*p++ = FAC_Activate;	/* aktiviere SPV (default) */
-		*p++ = st->pa->info; /* 0 for all Services */
-		*p++ = st->pa->info2; /* 0 for all Services */
+		*p++ = st->pa->setup.si1; /* 0 for all Services */
+		*p++ = st->pa->setup.si2; /* 0 for all Services */
 	}
-	if (st->pa->calling[0] != '\0') {
+	if (st->pa->setup.eazmsn[0]) {
 		*p++ = WE0_origAddr;
-		*p++ = strlen(st->pa->calling) + 1;
+		*p++ = strlen(st->pa->setup.eazmsn) + 1;
 		/* Classify as AnyPref. */
 		*p++ = 0x81;	/* Ext = '1'B, Type = '000'B, Plan = '0001'B. */
-		teln = st->pa->calling;
+		teln = st->pa->setup.eazmsn;
 		while (*teln)
 			*p++ = *teln++ & 0x7f;
 	}
 	*p++ = WE0_destAddr;
-	teln = st->pa->called;
-	if ('S' != (st->pa->called[0] & 0x5f)) {	/* Keine SPV ??? */
-		*p++ = strlen(st->pa->called) + 1;
+	teln = st->pa->setup.phone;
+	if ('S' != (st->pa->setup.phone[0] & 0x5f)) {	/* Keine SPV ??? */
+		*p++ = strlen(st->pa->setup.phone) + 1;
 		st->pa->spv = 0;
 	} else {		/* SPV */
-		*p++ = strlen(st->pa->called);
+		*p++ = strlen(st->pa->setup.phone);
 		teln++;		/* skip S */
 		st->pa->spv = 1;
 	}
@@ -98,8 +109,8 @@ l3_1tr6_setup(struct PStack *st, byte pr, void *arg)
 	/* Codesatz 6 fuer Service */
 	*p++ = WE6_serviceInd;
 	*p++ = 2;		/* len=2 info,info2 */
-	*p++ = st->pa->info;
-	*p++ = st->pa->info2;
+	*p++ = st->pa->setup.si1;
+	*p++ = st->pa->setup.si2;
 
 	dibh->datasize = p - DATAPTR(dibh);
 
@@ -130,24 +141,24 @@ l3_1tr6_tu_setup(struct PStack *st, byte pr, void *arg)
 	p = DATAPTR(ibh);
 
 	if ((p = findie(p + st->l2.uihsize, ibh->datasize - st->l2.uihsize, WE6_serviceInd, 6))) {
-		st->pa->info = p[2];
-		st->pa->info2 = p[3];
+		st->pa->setup.si1 = p[2];
+		st->pa->setup.si2 = p[3];
 	} else
 		printk(KERN_INFO "l3s12(1TR6): ServiceIndicator not found\n");
 
 	p = DATAPTR(ibh);
 	if ((p = findie(p + st->l2.uihsize, ibh->datasize - st->l2.uihsize,
 			WE0_destAddr, 0)))
-		iecpy(st->pa->called, p, 1);
+		iecpy(st->pa->setup.eazmsn, p, 1);
 	else
-		strcpy(st->pa->called, "");
+		strcpy(st->pa->setup.eazmsn, "");
 
 	p = DATAPTR(ibh);
 	if ((p = findie(p + st->l2.uihsize, ibh->datasize - st->l2.uihsize,
 			WE0_origAddr, 0))) {
-		iecpy(st->pa->calling, p, 1);
+		iecpy(st->pa->setup.phone, p, 1);
 	} else
-		strcpy(st->pa->calling, "");
+		strcpy(st->pa->setup.phone, "");
 
 	p = DATAPTR(ibh);
 	st->pa->spv = 0;
@@ -159,10 +170,10 @@ l3_1tr6_tu_setup(struct PStack *st, byte pr, void *arg)
 	BufPoolRelease(ibh);
 
         /* Signal all services, linklevel takes care of Service-Indicator */
-	if (st->pa->info != 7) {
+	if (st->pa->setup.si1 != 7) {
                 printk(KERN_DEBUG "non-digital call: %s -> %s\n",
-                       st->pa->calling,
-                       st->pa->called);
+                       st->pa->setup.phone,
+                       st->pa->setup.eazmsn);
 	}
         newl3state(st, 6);
         st->l3.l3l4(st, CC_SETUP_IND, NULL);
@@ -387,14 +398,14 @@ l3_1tr6_conn(struct PStack *st, byte pr,
 		*p++ = 4;	/* Laenge */
 		*p++ = 0;
 		*p++ = FAC_SPV;	/* SPV */
-		*p++ = st->pa->info;
-		*p++ = st->pa->info2;
+		*p++ = st->pa->setup.si1;
+		*p++ = st->pa->setup.si2;
 		*p++ = WE0_netSpecFac;
 		*p++ = 4;	/* Laenge */
 		*p++ = 0;
 		*p++ = FAC_Activate;	/* aktiviere SPV */
-		*p++ = st->pa->info;
-		*p++ = st->pa->info2;
+		*p++ = st->pa->setup.si1;
+		*p++ = st->pa->setup.si2;
 	}
 	dibh->datasize = p - DATAPTR(dibh);
 
@@ -404,7 +415,7 @@ l3_1tr6_conn(struct PStack *st, byte pr,
 }
 
 static void
-l3_1tr6_ignore(struct PStack *st, byte pr, void *arg)
+l3_1tr6_reset(struct PStack *st, byte pr, void *arg)
 {
 	newl3state(st, 0);
 }
@@ -453,16 +464,36 @@ l3_1tr6_rel_req(struct PStack *st, byte pr, void *arg)
 static struct stateentry downstatelist_1tr6t[] =
 {
 	{0, CC_SETUP_REQ, l3_1tr6_setup},
+	{1, CC_DISCONNECT_REQ, l3_1tr6_disconn_req},
+	{1, CC_RELEASE_REQ, l3_1tr6_rel_req},
+        {1, CC_DLRL, l3_1tr6_reset},
+	{2, CC_DISCONNECT_REQ, l3_1tr6_disconn_req},
+	{2, CC_RELEASE_REQ, l3_1tr6_rel_req},
+        {2, CC_DLRL, l3_1tr6_reset},
+	{3, CC_DISCONNECT_REQ, l3_1tr6_disconn_req},
+	{3, CC_RELEASE_REQ, l3_1tr6_rel_req},
+        {3, CC_DLRL, l3_1tr6_reset},
 	{4, CC_DISCONNECT_REQ, l3_1tr6_disconn_req},
-	{6, CC_REJECT_REQ, l3_1tr6_ignore},
+	{4, CC_RELEASE_REQ, l3_1tr6_rel_req},
+        {4, CC_DLRL, l3_1tr6_reset},
+	{6, CC_REJECT_REQ, l3_1tr6_reset},
+	{6, CC_RELEASE_REQ, l3_1tr6_rel_req},
 	{6, CC_SETUP_RSP, l3_1tr6_conn},
 	{6, CC_ALERTING_REQ, l3_1tr6_alert},
+        {6, CC_DLRL, l3_1tr6_reset},
 	{7, CC_SETUP_RSP, l3_1tr6_conn},
+	{7, CC_RELEASE_REQ, l3_1tr6_rel_req},
 	{7, CC_DISCONNECT_REQ, l3_1tr6_disconn_req},
-        {7, CC_DLRL, l3_1tr6_disconn_req},
+        {7, CC_DLRL, l3_1tr6_reset},
 	{8, CC_DISCONNECT_REQ, l3_1tr6_disconn_req},
+	{8, CC_RELEASE_REQ, l3_1tr6_rel_req},
+        {8, CC_DLRL, l3_1tr6_reset},
 	{10, CC_DISCONNECT_REQ, l3_1tr6_disconn_req},
-	{12, CC_RELEASE_REQ, l3_1tr6_rel_req}
+	{10, CC_RELEASE_REQ, l3_1tr6_rel_req},
+        {10, CC_DLRL, l3_1tr6_reset},
+	{12, CC_RELEASE_REQ, l3_1tr6_rel_req},
+        {12, CC_DLRL, l3_1tr6_reset},
+        {19, CC_DLRL, l3_1tr6_reset},
 };
 
 static int      downsl_1tr6t_len = sizeof(downstatelist_1tr6t) /

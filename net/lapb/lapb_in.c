@@ -43,26 +43,26 @@
  *	State machine for state 0, Disconnected State.
  *	The handling of the timer(s) is in file lapb_timer.c.
  */
-static void lapb_state0_machine(lapb_cb *lapb, struct sk_buff *skb, int frametype, int pf)
+static void lapb_state0_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_frame *frame)
 {
-	switch (frametype) {
+	switch (frame->type) {
 		case LAPB_SABM:
 #if LAPB_DEBUG > 1
-			printk(KERN_DEBUG "lapb: (%p) S0 RX SABM(%d)\n", lapb->token, pf);
+			printk(KERN_DEBUG "lapb: (%p) S0 RX SABM(%d)\n", lapb->token, frame->pf);
 #endif
 			if (lapb->mode & LAPB_EXTENDED) {
 #if LAPB_DEBUG > 1
-				printk(KERN_DEBUG "lapb: (%p) S0 TX DM(%d)\n", lapb->token, pf);
+				printk(KERN_DEBUG "lapb: (%p) S0 TX DM(%d)\n", lapb->token, frame->pf);
 #endif
-				lapb_send_control(lapb, LAPB_DM, pf, LAPB_RESPONSE);
+				lapb_send_control(lapb, LAPB_DM, frame->pf, LAPB_RESPONSE);
 			} else {
 #if LAPB_DEBUG > 1
-				printk(KERN_DEBUG "lapb: (%p) S0 TX UA(%d)\n", lapb->token, pf);
+				printk(KERN_DEBUG "lapb: (%p) S0 TX UA(%d)\n", lapb->token, frame->pf);
 #endif
 #if LAPB_DEBUG > 0
 				printk(KERN_DEBUG "lapb: (%p) S0 -> S3\n", lapb->token);
 #endif
-				lapb_send_control(lapb, LAPB_UA, pf, LAPB_RESPONSE);
+				lapb_send_control(lapb, LAPB_UA, frame->pf, LAPB_RESPONSE);
 				lapb->state     = LAPB_STATE_3;
 				lapb->condition = 0x00;
 				lapb->t1timer   = 0;
@@ -77,16 +77,16 @@ static void lapb_state0_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 
 		case LAPB_SABME:
 #if LAPB_DEBUG > 1
-			printk(KERN_DEBUG "lapb: (%p) S0 RX SABME(%d)\n", lapb->token, pf);
+			printk(KERN_DEBUG "lapb: (%p) S0 RX SABME(%d)\n", lapb->token, frame->pf);
 #endif
 			if (lapb->mode & LAPB_EXTENDED) {
 #if LAPB_DEBUG > 1
-				printk(KERN_DEBUG "lapb: (%p) S0 TX UA(%d)\n", lapb->token, pf);
+				printk(KERN_DEBUG "lapb: (%p) S0 TX UA(%d)\n", lapb->token, frame->pf);
 #endif
 #if LAPB_DEBUG > 0
 				printk(KERN_DEBUG "lapb: (%p) S0 -> S3\n", lapb->token);
 #endif
-				lapb_send_control(lapb, LAPB_UA, pf, LAPB_RESPONSE);
+				lapb_send_control(lapb, LAPB_UA, frame->pf, LAPB_RESPONSE);
 				lapb->state     = LAPB_STATE_3;
 				lapb->condition = 0x00;
 				lapb->t1timer   = 0;
@@ -98,18 +98,18 @@ static void lapb_state0_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 				lapb_connect_indication(lapb, LAPB_OK);
 			} else {
 #if LAPB_DEBUG > 1
-				printk(KERN_DEBUG "lapb: (%p) S0 TX DM(%d)\n", lapb->token, pf);
+				printk(KERN_DEBUG "lapb: (%p) S0 TX DM(%d)\n", lapb->token, frame->pf);
 #endif
-				lapb_send_control(lapb, LAPB_DM, pf, LAPB_RESPONSE);
+				lapb_send_control(lapb, LAPB_DM, frame->pf, LAPB_RESPONSE);
 			}
 			break;
 
 		case LAPB_DISC:
 #if LAPB_DEBUG > 1
-			printk(KERN_DEBUG "lapb: (%p) S0 RX DISC(%d)\n", lapb->token, pf);
-			printk(KERN_DEBUG "lapb: (%p) S0 TX UA(%d)\n", lapb->token, pf);
+			printk(KERN_DEBUG "lapb: (%p) S0 RX DISC(%d)\n", lapb->token, frame->pf);
+			printk(KERN_DEBUG "lapb: (%p) S0 TX UA(%d)\n", lapb->token, frame->pf);
 #endif
-			lapb_send_control(lapb, LAPB_UA, pf, LAPB_RESPONSE);
+			lapb_send_control(lapb, LAPB_UA, frame->pf, LAPB_RESPONSE);
 			break;
 
 		default:
@@ -123,56 +123,56 @@ static void lapb_state0_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
  *	State machine for state 1, Awaiting Connection State.
  *	The handling of the timer(s) is in file lapb_timer.c.
  */
-static void lapb_state1_machine(lapb_cb *lapb, struct sk_buff *skb, int frametype, int pf)
+static void lapb_state1_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_frame *frame)
 {
-	switch (frametype) {
+	switch (frame->type) {
 		case LAPB_SABM:
 #if LAPB_DEBUG > 1
-			printk(KERN_DEBUG "lapb: (%p) S1 RX SABM(%d)\n", lapb->token, pf);
+			printk(KERN_DEBUG "lapb: (%p) S1 RX SABM(%d)\n", lapb->token, frame->pf);
 #endif
 			if (lapb->mode & LAPB_EXTENDED) {
 #if LAPB_DEBUG > 1
-				printk(KERN_DEBUG "lapb: (%p) S1 TX DM(%d)\n", lapb->token, pf);
+				printk(KERN_DEBUG "lapb: (%p) S1 TX DM(%d)\n", lapb->token, frame->pf);
 #endif
-				lapb_send_control(lapb, LAPB_DM, pf, LAPB_RESPONSE);
+				lapb_send_control(lapb, LAPB_DM, frame->pf, LAPB_RESPONSE);
 			} else {
 #if LAPB_DEBUG > 1
-				printk(KERN_DEBUG "lapb: (%p) S1 TX UA(%d)\n", lapb->token, pf);
+				printk(KERN_DEBUG "lapb: (%p) S1 TX UA(%d)\n", lapb->token, frame->pf);
 #endif
-				lapb_send_control(lapb, LAPB_UA, pf, LAPB_RESPONSE);
+				lapb_send_control(lapb, LAPB_UA, frame->pf, LAPB_RESPONSE);
 			}
 			break;
 
 		case LAPB_SABME:
 #if LAPB_DEBUG > 1
-			printk(KERN_DEBUG "lapb: (%p) S1 RX SABME(%d)\n", lapb->token, pf);
+			printk(KERN_DEBUG "lapb: (%p) S1 RX SABME(%d)\n", lapb->token, frame->pf);
 #endif
 			if (lapb->mode & LAPB_EXTENDED) {
 #if LAPB_DEBUG > 1
-				printk(KERN_DEBUG "lapb: (%p) S1 TX UA(%d)\n", lapb->token, pf);
+				printk(KERN_DEBUG "lapb: (%p) S1 TX UA(%d)\n", lapb->token, frame->pf);
 #endif
-				lapb_send_control(lapb, LAPB_UA, pf, LAPB_RESPONSE);
+				lapb_send_control(lapb, LAPB_UA, frame->pf, LAPB_RESPONSE);
 			} else {
 #if LAPB_DEBUG > 1
-				printk(KERN_DEBUG "lapb: (%p) S1 TX DM(%d)\n", lapb->token, pf);
+				printk(KERN_DEBUG "lapb: (%p) S1 TX DM(%d)\n", lapb->token, frame->pf);
 #endif
-				lapb_send_control(lapb, LAPB_DM, pf, LAPB_RESPONSE);
+				lapb_send_control(lapb, LAPB_DM, frame->pf, LAPB_RESPONSE);
 			}
 			break;
 
 		case LAPB_DISC:
 #if LAPB_DEBUG > 1
-			printk(KERN_DEBUG "lapb: (%p) S1 RX DISC(%d)\n", lapb->token, pf);
-			printk(KERN_DEBUG "lapb: (%p) S1 TX DM(%d)\n", lapb->token, pf);
+			printk(KERN_DEBUG "lapb: (%p) S1 RX DISC(%d)\n", lapb->token, frame->pf);
+			printk(KERN_DEBUG "lapb: (%p) S1 TX DM(%d)\n", lapb->token, frame->pf);
 #endif
-			lapb_send_control(lapb, LAPB_DM, pf, LAPB_RESPONSE);
+			lapb_send_control(lapb, LAPB_DM, frame->pf, LAPB_RESPONSE);
 			break;
 
 		case LAPB_UA:
 #if LAPB_DEBUG > 1
-			printk(KERN_DEBUG "lapb: (%p) S1 RX UA(%d)\n", lapb->token, pf);
+			printk(KERN_DEBUG "lapb: (%p) S1 RX UA(%d)\n", lapb->token, frame->pf);
 #endif
-			if (pf) {
+			if (frame->pf) {
 #if LAPB_DEBUG > 0
 				printk(KERN_DEBUG "lapb: (%p) S1 -> S3\n", lapb->token);
 #endif
@@ -190,9 +190,9 @@ static void lapb_state1_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 
 		case LAPB_DM:
 #if LAPB_DEBUG > 1
-			printk(KERN_DEBUG "lapb: (%p) S1 RX DM(%d)\n", lapb->token, pf);
+			printk(KERN_DEBUG "lapb: (%p) S1 RX DM(%d)\n", lapb->token, frame->pf);
 #endif
-			if (pf) {
+			if (frame->pf) {
 #if LAPB_DEBUG > 0
 				printk(KERN_DEBUG "lapb: (%p) S1 -> S0\n", lapb->token);
 #endif
@@ -215,31 +215,31 @@ static void lapb_state1_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
  *	State machine for state 2, Awaiting Release State.
  *	The handling of the timer(s) is in file lapb_timer.c
  */
-static void lapb_state2_machine(lapb_cb *lapb, struct sk_buff *skb, int frametype, int pf)
+static void lapb_state2_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_frame *frame)
 {
-	switch (frametype) {
+	switch (frame->type) {
 		case LAPB_SABM:
 		case LAPB_SABME:
 #if LAPB_DEBUG > 1
-			printk(KERN_DEBUG "lapb: (%p) S2 RX {SABM,SABME}(%d)\n", lapb->token, pf);
-			printk(KERN_DEBUG "lapb: (%p) S2 TX DM(%d)\n", lapb->token, pf);
+			printk(KERN_DEBUG "lapb: (%p) S2 RX {SABM,SABME}(%d)\n", lapb->token, frame->pf);
+			printk(KERN_DEBUG "lapb: (%p) S2 TX DM(%d)\n", lapb->token, frame->pf);
 #endif
-			lapb_send_control(lapb, LAPB_DM, pf, LAPB_RESPONSE);
+			lapb_send_control(lapb, LAPB_DM, frame->pf, LAPB_RESPONSE);
 			break;
 
 		case LAPB_DISC:
 #if LAPB_DEBUG > 1
-			printk(KERN_DEBUG "lapb: (%p) S2 RX DISC(%d)\n", lapb->token, pf);
-			printk(KERN_DEBUG "lapb: (%p) S2 TX UA(%d)\n", lapb->token, pf);
+			printk(KERN_DEBUG "lapb: (%p) S2 RX DISC(%d)\n", lapb->token, frame->pf);
+			printk(KERN_DEBUG "lapb: (%p) S2 TX UA(%d)\n", lapb->token, frame->pf);
 #endif
-			lapb_send_control(lapb, LAPB_UA, pf, LAPB_RESPONSE);
+			lapb_send_control(lapb, LAPB_UA, frame->pf, LAPB_RESPONSE);
 			break;
 
 		case LAPB_UA:
 #if LAPB_DEBUG > 1
-			printk(KERN_DEBUG "lapb: (%p) S2 RX UA(%d)\n", lapb->token, pf);
+			printk(KERN_DEBUG "lapb: (%p) S2 RX UA(%d)\n", lapb->token, frame->pf);
 #endif
-			if (pf) {
+			if (frame->pf) {
 #if LAPB_DEBUG > 0
 				printk(KERN_DEBUG "lapb: (%p) S2 -> S0\n", lapb->token);
 #endif
@@ -252,9 +252,9 @@ static void lapb_state2_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 
 		case LAPB_DM:
 #if LAPB_DEBUG > 1
-			printk(KERN_DEBUG "lapb: (%p) S2 RX DM(%d)\n", lapb->token, pf);
+			printk(KERN_DEBUG "lapb: (%p) S2 RX DM(%d)\n", lapb->token, frame->pf);
 #endif
-			if (pf) {
+			if (frame->pf) {
 #if LAPB_DEBUG > 0
 				printk(KERN_DEBUG "lapb: (%p) S2 -> S0\n", lapb->token);
 #endif
@@ -270,10 +270,10 @@ static void lapb_state2_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 		case LAPB_RNR:
 		case LAPB_RR:
 #if LAPB_DEBUG > 1
-			printk(KERN_DEBUG "lapb: (%p) S2 RX {I,REJ,RNR,RR}(%d)\n", lapb->token, pf);
-			printk(KERN_DEBUG "lapb: (%p) S2 RX DM(%d)\n", lapb->token, pf);
+			printk(KERN_DEBUG "lapb: (%p) S2 RX {I,REJ,RNR,RR}(%d)\n", lapb->token, frame->pf);
+			printk(KERN_DEBUG "lapb: (%p) S2 RX DM(%d)\n", lapb->token, frame->pf);
 #endif
-			if (pf) lapb_send_control(lapb, LAPB_DM, pf, LAPB_RESPONSE);
+			if (frame->pf) lapb_send_control(lapb, LAPB_DM, frame->pf, LAPB_RESPONSE);
 			break;
 				
 		default:
@@ -287,28 +287,28 @@ static void lapb_state2_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
  *	State machine for state 3, Connected State.
  *	The handling of the timer(s) is in file lapb_timer.c
  */
-static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, int frametype, int ns, int nr, int pf, int type)
+static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_frame *frame)
 {
 	int queued = 0;
 	int modulus;
 	
 	modulus = (lapb->mode & LAPB_EXTENDED) ? LAPB_EMODULUS : LAPB_SMODULUS;
 
-	switch (frametype) {
+	switch (frame->type) {
 		case LAPB_SABM:
 #if LAPB_DEBUG > 1
-			printk(KERN_DEBUG "lapb: (%p) S3 RX SABM(%d)\n", lapb->token, pf);
+			printk(KERN_DEBUG "lapb: (%p) S3 RX SABM(%d)\n", lapb->token, frame->pf);
 #endif
 			if (lapb->mode & LAPB_EXTENDED) {
 #if LAPB_DEBUG > 1
-				printk(KERN_DEBUG "lapb: (%p) S3 TX DM(%d)\n", lapb->token, pf);
+				printk(KERN_DEBUG "lapb: (%p) S3 TX DM(%d)\n", lapb->token, frame->pf);
 #endif
-				lapb_send_control(lapb, LAPB_DM, pf, LAPB_RESPONSE);
+				lapb_send_control(lapb, LAPB_DM, frame->pf, LAPB_RESPONSE);
 			} else {
 #if LAPB_DEBUG > 1
-				printk(KERN_DEBUG "lapb: (%p) S3 TX UA(%d)\n", lapb->token, pf);
+				printk(KERN_DEBUG "lapb: (%p) S3 TX UA(%d)\n", lapb->token, frame->pf);
 #endif
-				lapb_send_control(lapb, LAPB_UA, pf, LAPB_RESPONSE);
+				lapb_send_control(lapb, LAPB_UA, frame->pf, LAPB_RESPONSE);
 				lapb->condition = 0x00;
 				lapb->t1timer   = 0;
 				lapb->t2timer   = 0;
@@ -322,13 +322,13 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 
 		case LAPB_SABME:
 #if LAPB_DEBUG > 1
-			printk(KERN_DEBUG "lapb: (%p) S3 RX SABME(%d)\n", lapb->token, pf);
+			printk(KERN_DEBUG "lapb: (%p) S3 RX SABME(%d)\n", lapb->token, frame->pf);
 #endif
 			if (lapb->mode & LAPB_EXTENDED) {
 #if LAPB_DEBUG > 1
-				printk(KERN_DEBUG "lapb: (%p) S3 TX UA(%d)\n", lapb->token, pf);
+				printk(KERN_DEBUG "lapb: (%p) S3 TX UA(%d)\n", lapb->token, frame->pf);
 #endif
-				lapb_send_control(lapb, LAPB_UA, pf, LAPB_RESPONSE);
+				lapb_send_control(lapb, LAPB_UA, frame->pf, LAPB_RESPONSE);
 				lapb->condition = 0x00;
 				lapb->t1timer   = 0;
 				lapb->t2timer   = 0;
@@ -339,21 +339,21 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 				lapb_requeue_frames(lapb);
 			} else {
 #if LAPB_DEBUG > 1
-				printk(KERN_DEBUG "lapb: (%p) S3 TX DM(%d)\n", lapb->token, pf);
+				printk(KERN_DEBUG "lapb: (%p) S3 TX DM(%d)\n", lapb->token, frame->pf);
 #endif
-				lapb_send_control(lapb, LAPB_DM, pf, LAPB_RESPONSE);
+				lapb_send_control(lapb, LAPB_DM, frame->pf, LAPB_RESPONSE);
 			}
 			break;
 
 		case LAPB_DISC:
 #if LAPB_DEBUG > 1
-			printk(KERN_DEBUG "lapb: (%p) S3 RX DISC(%d)\n", lapb->token, pf);
+			printk(KERN_DEBUG "lapb: (%p) S3 RX DISC(%d)\n", lapb->token, frame->pf);
 #endif
 #if LAPB_DEBUG > 0
 			printk(KERN_DEBUG "lapb: (%p) S3 -> S0\n", lapb->token);
 #endif
 			lapb_clear_queues(lapb);
-			lapb_send_control(lapb, LAPB_UA, pf, LAPB_RESPONSE);
+			lapb_send_control(lapb, LAPB_UA, frame->pf, LAPB_RESPONSE);
 			lapb->state   = LAPB_STATE_0;
 			lapb->t1timer = lapb->t1;
 			lapb->t2timer = 0;
@@ -362,7 +362,7 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 
 		case LAPB_DM:
 #if LAPB_DEBUG > 1
-			printk(KERN_DEBUG "lapb: (%p) S3 RX DM(%d)\n", lapb->token, pf);
+			printk(KERN_DEBUG "lapb: (%p) S3 RX DM(%d)\n", lapb->token, frame->pf);
 #endif
 #if LAPB_DEBUG > 0
 			printk(KERN_DEBUG "lapb: (%p) S3 -> S0\n", lapb->token);
@@ -376,80 +376,100 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 
 		case LAPB_RNR:
 #if LAPB_DEBUG > 1
-			printk(KERN_DEBUG "lapb: (%p) S3 RX RNR(%d) R%d\n", lapb->token, pf, nr);
+			printk(KERN_DEBUG "lapb: (%p) S3 RX RNR(%d) R%d\n", lapb->token, frame->pf, frame->nr);
 #endif
 			lapb->condition |= LAPB_PEER_RX_BUSY_CONDITION;
-			lapb_check_need_response(lapb, type, pf);
-			if (lapb_validate_nr(lapb, nr)) {
-				lapb_check_iframes_acked(lapb, nr);
+			lapb_check_need_response(lapb, frame->cr, frame->pf);
+			if (lapb_validate_nr(lapb, frame->nr)) {
+				lapb_check_iframes_acked(lapb, frame->nr);
 			} else {
+				lapb->frmr_data = *frame;
+				lapb->frmr_type = LAPB_FRMR_Z;
+				lapb_transmit_frmr(lapb);
 #if LAPB_DEBUG > 0
-				printk(KERN_DEBUG "lapb: (%p) S3 -> S1\n", lapb->token);
+				printk(KERN_DEBUG "lapb: (%p) S3 -> S4\n", lapb->token);
 #endif
-				lapb_establish_data_link(lapb);
-				lapb->state = LAPB_STATE_1;
+				lapb->state     = LAPB_STATE_4;
+				lapb->t1timer   = lapb->t1;
+				lapb->t2timer   = 0;
+				lapb->n2count   = 0;
 			}
 			break;
 
 		case LAPB_RR:
 #if LAPB_DEBUG > 1
-			printk(KERN_DEBUG "lapb: (%p) S3 RX RR(%d) R%d\n", lapb->token, pf, nr);
+			printk(KERN_DEBUG "lapb: (%p) S3 RX RR(%d) R%d\n", lapb->token, frame->pf, frame->nr);
 #endif
 			lapb->condition &= ~LAPB_PEER_RX_BUSY_CONDITION;
-			lapb_check_need_response(lapb, type, pf);
-			if (lapb_validate_nr(lapb, nr)) {
-				lapb_check_iframes_acked(lapb, nr);
+			lapb_check_need_response(lapb, frame->cr, frame->pf);
+			if (lapb_validate_nr(lapb, frame->nr)) {
+				lapb_check_iframes_acked(lapb, frame->nr);
 			} else {
+				lapb->frmr_data = *frame;
+				lapb->frmr_type = LAPB_FRMR_Z;
+				lapb_transmit_frmr(lapb);
 #if LAPB_DEBUG > 0
-				printk(KERN_DEBUG "lapb: (%p) S3 -> S1\n", lapb->token);
+				printk(KERN_DEBUG "lapb: (%p) S3 -> S4\n", lapb->token);
 #endif
-				lapb_establish_data_link(lapb);
-				lapb->state = LAPB_STATE_1;
+				lapb->state     = LAPB_STATE_4;
+				lapb->t1timer   = lapb->t1;
+				lapb->t2timer   = 0;
+				lapb->n2count   = 0;
 			}
 			break;
 
 		case LAPB_REJ:
 #if LAPB_DEBUG > 1
-			printk(KERN_DEBUG "lapb: (%p) S3 RX REJ(%d) R%d\n", lapb->token, pf, nr);
+			printk(KERN_DEBUG "lapb: (%p) S3 RX REJ(%d) R%d\n", lapb->token, frame->pf, frame->nr);
 #endif
 			lapb->condition &= ~LAPB_PEER_RX_BUSY_CONDITION;
-			lapb_check_need_response(lapb, type, pf);
-			if (lapb_validate_nr(lapb, nr)) {
-				lapb_frames_acked(lapb, nr);
+			lapb_check_need_response(lapb, frame->cr, frame->pf);
+			if (lapb_validate_nr(lapb, frame->nr)) {
+				lapb_frames_acked(lapb, frame->nr);
 				lapb->t1timer = 0;
 				lapb->n2count = 0;
 				lapb_requeue_frames(lapb);
 			} else {
+				lapb->frmr_data = *frame;
+				lapb->frmr_type = LAPB_FRMR_Z;
+				lapb_transmit_frmr(lapb);
 #if LAPB_DEBUG > 0
-				printk(KERN_DEBUG "lapb: (%p) S3 -> S1\n", lapb->token);
+				printk(KERN_DEBUG "lapb: (%p) S3 -> S4\n", lapb->token);
 #endif
-				lapb_establish_data_link(lapb);
-				lapb->state = LAPB_STATE_1;
+				lapb->state     = LAPB_STATE_4;
+				lapb->t1timer   = lapb->t1;
+				lapb->t2timer   = 0;
+				lapb->n2count   = 0;
 			}
 			break;
 
 		case LAPB_I:
 #if LAPB_DEBUG > 1
-			printk(KERN_DEBUG "lapb: (%p) S3 RX I(%d) S%d R%d\n", lapb->token, pf, ns, nr);
+			printk(KERN_DEBUG "lapb: (%p) S3 RX I(%d) S%d R%d\n", lapb->token, frame->pf, frame->ns, frame->nr);
 #endif
-			if (!lapb_validate_nr(lapb, nr)) {
+			if (!lapb_validate_nr(lapb, frame->nr)) {
+				lapb->frmr_data = *frame;
+				lapb->frmr_type = LAPB_FRMR_Z;
+				lapb_transmit_frmr(lapb);
 #if LAPB_DEBUG > 0
-				printk(KERN_DEBUG "lapb: (%p) S3 -> S1\n", lapb->token);
+				printk(KERN_DEBUG "lapb: (%p) S3 -> S4\n", lapb->token);
 #endif
-				lapb_establish_data_link(lapb);
-				lapb->state = LAPB_STATE_1;
+				lapb->state     = LAPB_STATE_4;
+				lapb->t1timer   = lapb->t1;
+				lapb->t2timer   = 0;
+				lapb->n2count   = 0;
 				break;
 			}
 			if (lapb->condition & LAPB_PEER_RX_BUSY_CONDITION) {
-				lapb_frames_acked(lapb, nr);
+				lapb_frames_acked(lapb, frame->nr);
 			} else {
-				lapb_check_iframes_acked(lapb, nr);
+				lapb_check_iframes_acked(lapb, frame->nr);
 			}
-			if (ns == lapb->vr) {
+			if (frame->ns == lapb->vr) {
 				lapb->vr = (lapb->vr + 1) % modulus;
 				queued = lapb_data_indication(lapb, skb);
 				lapb->condition &= ~LAPB_REJECT_CONDITION;
-				if (pf) {
+				if (frame->pf) {
 					lapb_enquiry_response(lapb);
 				} else {
 					if (!(lapb->condition & LAPB_ACK_PENDING_CONDITION)) {
@@ -459,29 +479,45 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 				}
 			} else {
 				if (lapb->condition & LAPB_REJECT_CONDITION) {
-					if (pf)
+					if (frame->pf)
 						lapb_enquiry_response(lapb);
 				} else {
 #if LAPB_DEBUG > 1
-					printk(KERN_DEBUG "lapb: (%p) S3 TX REJ(%d) R%d\n", lapb->token, pf, lapb->vr);
+					printk(KERN_DEBUG "lapb: (%p) S3 TX REJ(%d) R%d\n", lapb->token, frame->pf, lapb->vr);
 #endif
 					lapb->condition |= LAPB_REJECT_CONDITION;
-					lapb_send_control(lapb, LAPB_REJ, pf, LAPB_RESPONSE);
+					lapb_send_control(lapb, LAPB_REJ, frame->pf, LAPB_RESPONSE);
 					lapb->condition &= ~LAPB_ACK_PENDING_CONDITION;
 				}
 			}
 			break;
 
 		case LAPB_FRMR:
-		case LAPB_ILLEGAL:
 #if LAPB_DEBUG > 1
-			printk(KERN_DEBUG "lapb: (%p) S3 RX {FRMR,ILLEGAL}(%d)\n", lapb->token, pf);
+			printk(KERN_DEBUG "lapb: (%p) S3 RX FRMR(%d) %02X %02X %02X %02X %02X\n", lapb->token, frame->pf, skb->data[0], skb->data[1], skb->data[2], skb->data[3], skb->data[4]);
 #endif
+			lapb_establish_data_link(lapb);
 #if LAPB_DEBUG > 0
 			printk(KERN_DEBUG "lapb: (%p) S3 -> S1\n", lapb->token);
 #endif
-			lapb_establish_data_link(lapb);
+			lapb_requeue_frames(lapb);
 			lapb->state = LAPB_STATE_1;
+			break;
+
+		case LAPB_ILLEGAL:
+#if LAPB_DEBUG > 1
+			printk(KERN_DEBUG "lapb: (%p) S3 RX ILLEGAL(%d)\n", lapb->token, frame->pf);
+#endif
+			lapb->frmr_data = *frame;
+			lapb->frmr_type = LAPB_FRMR_W;
+			lapb_transmit_frmr(lapb);
+#if LAPB_DEBUG > 0
+			printk(KERN_DEBUG "lapb: (%p) S3 -> S4\n", lapb->token);
+#endif
+			lapb->state     = LAPB_STATE_4;
+			lapb->t1timer   = lapb->t1;
+			lapb->t2timer   = 0;
+			lapb->n2count   = 0;
 			break;
 
 		default:
@@ -493,32 +529,103 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 }
 
 /*
+ *	State machine for state 4, Frame Reject State.
+ *	The handling of the timer(s) is in file lapb_timer.c.
+ */
+static void lapb_state4_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_frame *frame)
+{
+	switch (frame->type) {
+		case LAPB_SABM:
+#if LAPB_DEBUG > 1
+			printk(KERN_DEBUG "lapb: (%p) S4 RX SABM(%d)\n", lapb->token, frame->pf);
+#endif
+			if (lapb->mode & LAPB_EXTENDED) {
+#if LAPB_DEBUG > 1
+				printk(KERN_DEBUG "lapb: (%p) S4 TX DM(%d)\n", lapb->token, frame->pf);
+#endif
+				lapb_send_control(lapb, LAPB_DM, frame->pf, LAPB_RESPONSE);
+			} else {
+#if LAPB_DEBUG > 1
+				printk(KERN_DEBUG "lapb: (%p) S4 TX UA(%d)\n", lapb->token, frame->pf);
+#endif
+#if LAPB_DEBUG > 0
+				printk(KERN_DEBUG "lapb: (%p) S4 -> S3\n", lapb->token);
+#endif
+				lapb_send_control(lapb, LAPB_UA, frame->pf, LAPB_RESPONSE);
+				lapb->state     = LAPB_STATE_3;
+				lapb->condition = 0x00;
+				lapb->t1timer   = 0;
+				lapb->t2timer   = 0;
+				lapb->n2count   = 0;
+				lapb->vs        = 0;
+				lapb->vr        = 0;
+				lapb->va        = 0;
+				lapb_connect_indication(lapb, LAPB_OK);
+			}
+			break;
+
+		case LAPB_SABME:
+#if LAPB_DEBUG > 1
+			printk(KERN_DEBUG "lapb: (%p) S4 RX SABME(%d)\n", lapb->token, frame->pf);
+#endif
+			if (lapb->mode & LAPB_EXTENDED) {
+#if LAPB_DEBUG > 1
+				printk(KERN_DEBUG "lapb: (%p) S4 TX UA(%d)\n", lapb->token, frame->pf);
+#endif
+#if LAPB_DEBUG > 0
+				printk(KERN_DEBUG "lapb: (%p) S4 -> S3\n", lapb->token);
+#endif
+				lapb_send_control(lapb, LAPB_UA, frame->pf, LAPB_RESPONSE);
+				lapb->state     = LAPB_STATE_3;
+				lapb->condition = 0x00;
+				lapb->t1timer   = 0;
+				lapb->t2timer   = 0;
+				lapb->n2count   = 0;
+				lapb->vs        = 0;
+				lapb->vr        = 0;
+				lapb->va        = 0;
+				lapb_connect_indication(lapb, LAPB_OK);
+			} else {
+#if LAPB_DEBUG > 1
+				printk(KERN_DEBUG "lapb: (%p) S4 TX DM(%d)\n", lapb->token, frame->pf);
+#endif
+				lapb_send_control(lapb, LAPB_DM, frame->pf, LAPB_RESPONSE);
+			}
+			break;
+
+		default:
+			break;
+	}
+
+	kfree_skb(skb, FREE_READ);
+}
+
+/*
  *	Process an incoming LAPB frame
  */
 void lapb_data_input(lapb_cb *lapb, struct sk_buff *skb)
 {
-	int frametype, ns, nr, pf, type;
+	struct lapb_frame frame;
 
-	del_timer(&lapb->timer);
-
-	frametype = lapb_decode(lapb, skb, &ns, &nr, &pf, &type);
+	lapb_decode(lapb, skb, &frame);
 
 	switch (lapb->state) {
 		case LAPB_STATE_0:
-			lapb_state0_machine(lapb, skb, frametype, pf);
+			lapb_state0_machine(lapb, skb, &frame);
 			break;
 		case LAPB_STATE_1:
-			lapb_state1_machine(lapb, skb, frametype, pf);
+			lapb_state1_machine(lapb, skb, &frame);
 			break;
 		case LAPB_STATE_2:
-			lapb_state2_machine(lapb, skb, frametype, pf);
+			lapb_state2_machine(lapb, skb, &frame);
 			break;
 		case LAPB_STATE_3:
-			lapb_state3_machine(lapb, skb, frametype, ns, nr, pf, type);
+			lapb_state3_machine(lapb, skb, &frame);
+			break;
+		case LAPB_STATE_4:
+			lapb_state4_machine(lapb, skb, &frame);
 			break;
 	}
-
-	lapb_set_timer(lapb);
 }
 
 #endif

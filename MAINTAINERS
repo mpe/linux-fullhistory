@@ -81,6 +81,7 @@ P:	Paul Gortmaker
 M	gpg109@rsphy1.anu.edu.au
 L:	linux-net@vger.rutgers.edu
 S:	Maintained
+W:	http://rsphy1.anu.edu.au/~gpg109/ne2000.html
 
 ETHEREXPRESS-16 NETWORK DRIVER
 P:	Philip Blundell

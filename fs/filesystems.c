@@ -54,6 +54,10 @@ asmlinkage int sys_setup(void)
 	init_minix_fs();
 #endif
 
+#ifdef CONFIG_ROMFS_FS
+	init_romfs_fs();
+#endif
+
 #ifdef CONFIG_UMSDOS_FS
 	init_umsdos_fs();
 #endif
@@ -104,10 +108,6 @@ asmlinkage int sys_setup(void)
 
 #ifdef CONFIG_UFS_FS
 	init_ufs_fs();
-#endif
-
-#ifdef CONFIG_ROMFS_FS
-	init_romfs_fs();
 #endif
 
 	mount_root();

@@ -14,9 +14,6 @@
  *
  *	History
  *	LAPB 001	Jonathan Naylor	Started Coding
- *
- *	TODO
- *	Add FRMRs.
  */
  
 #include <linux/config.h>

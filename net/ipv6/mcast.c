@@ -22,6 +22,7 @@
 #include <linux/in6.h>
 #include <linux/netdevice.h>
 #include <linux/if_arp.h>
+#include <linux/route.h>
 
 #include <net/sock.h>
 #include <net/snmp.h>

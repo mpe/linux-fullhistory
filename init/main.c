@@ -166,6 +166,12 @@ extern void icn_setup(char *str, int *ints);
 #ifdef CONFIG_ISDN_DRV_TELES
 extern void teles_setup(char *str, int *ints);
 #endif
+#ifdef CONFIG_ISDN_DRV_HISAX
+extern void HiSax_setup(char *str, int *ints);
+#endif
+#ifdef CONFIG_ISDN_DRV_PCBIT
+extern void pcbit_setup(char *str, int *ints);
+#endif
 
 #ifdef CONFIG_ATARIMOUSE
 extern void atari_mouse_setup (char *str, int *ints);
@@ -181,9 +187,6 @@ extern void gvp11_setup (char *str, int *ints);
 
 #ifdef CONFIG_DIGI
 extern void pcxx_setup(char *str, int *ints);
-#endif
-#ifdef CONFIG_ISDN_DRV_PCBIT
-extern void pcbit_setup(char *str, int *ints);
 #endif
 #ifdef CONFIG_RISCOM8
 extern void riscom8_setup(char *str, int *ints);
@@ -437,6 +440,10 @@ struct {
 #endif
 #ifdef CONFIG_ISDN_DRV_TELES
 	{ "teles=", teles_setup },
+#endif
+#ifdef CONFIG_ISDN_DRV_HISAX
+       { "hisax=", HiSax_setup },
+       { "HiSax=", HiSax_setup },
 #endif
 #ifdef CONFIG_ISDN_DRV_PCBIT
 	{ "pcbit=", pcbit_setup },

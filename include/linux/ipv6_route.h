@@ -13,8 +13,6 @@
 #ifndef _LINUX_IPV6_ROUTE_H
 #define _LINUX_IPV6_ROUTE_H
 
-#include <linux/route.h>
-
 #define RTI_DEVRT	0x00010000	/* route lookup, dev must match	*/
 #define RTI_ALLONLINK	0x00020000	/* all destinations on link	*/
 #define RTI_DCACHE	RTF_DCACHE	/* rt6_info is a dcache entry	*/

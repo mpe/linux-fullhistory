@@ -28,11 +28,12 @@
 #define	NR_MORE_FLAG			0x20
 
 /* Define Link State constants. */
-
-#define NR_STATE_0			0
-#define NR_STATE_1			1
-#define NR_STATE_2			2
-#define NR_STATE_3			3
+enum {
+	NR_STATE_0,
+	NR_STATE_1,
+	NR_STATE_2,
+	NR_STATE_3
+};
 
 #define	NR_COND_ACK_PENDING		0x01
 #define	NR_COND_REJECT			0x02

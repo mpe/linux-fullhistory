@@ -585,7 +585,7 @@ void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buf)
 		for (; j < 8 && i < nb; j++, i++, buf += buffersize)
 		{
 		        rdev = dev;
-			rsector = (b[i] * buffersize) >> 9;
+			rsector = b[i] * (buffersize >> 9);
 #ifdef CONFIG_BLK_DEV_MD
 			if (major==MD_MAJOR &&
 			    md_map (MINOR(dev), &rdev,

@@ -169,27 +169,22 @@ int ip_cmsg_send(struct msghdr *msg, struct ipcm_cookie *ipc, struct device **de
 
 int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int optlen)
 {
-	int val,err;
+	int val=0,err;
 	unsigned char ucval = 0;
+	int len;
 #if defined(CONFIG_IP_FIREWALL) || defined(CONFIG_IP_ACCT)
 	struct ip_fw tmp_fw;
 #endif	
-	if (optval == NULL)
-	{
-		val=0;
-		ucval=0;
-	}
-	else
-	{
-		err = get_user(val, (int *) optval);
-		if (!err)
-			err = get_user(ucval, (unsigned char *) optval);
-		if (err)
-			return err; 
-	}
+
+	if(get_user(len, optval))
+		return -EFAULT;
+	if(len>=sizeof(int) && get_user(val, (int *) optval))
+		return -EFAULT;
+	if(len>=sizeof(char) && get_user(ucval, (unsigned char *) optval))
+		return -EFAULT;
 	
 	if(level!=SOL_IP)
-		return -EOPNOTSUPP;
+		return -ENOPROTOOPT;
 #ifdef CONFIG_IP_MROUTE
 	if(optname>=MRT_BASE && optname <=MRT_BASE+10)
 	{
@@ -200,51 +195,61 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 	switch(optname)
 	{
 		case IP_OPTIONS:
-	          {
-			  struct ip_options * opt = NULL;
-			  struct ip_options * old_opt;
-			  if (optlen > 40 || optlen < 0)
-			  	return -EINVAL;
-			  err = ip_options_get(&opt, optval, optlen, 1);
-			  if (err)
-			  	return err;
-			  /*
-			   * ANK: I'm afraid that receive handler may change
-			   * options from under us.
-			   */
-			  cli();
-			  old_opt = sk->opt;
-			  sk->opt = opt;
-			  sti();
-			  if (old_opt)
-			  	kfree_s(old_opt, sizeof(struct optlen) + old_opt->optlen);
-			  return 0;
-		  }
+		{
+			struct ip_options * opt = NULL;
+			struct ip_options * old_opt;
+			if (optlen > 40 || optlen < 0)
+				return -EINVAL;
+			err = ip_options_get(&opt, optval, optlen, 1);
+			if (err)
+				return err;
+			/*
+			 * ANK: I'm afraid that receive handler may change
+			 * options from under us.
+			 */
+			cli();
+			old_opt = sk->opt;
+			sk->opt = opt;
+			sti();
+			if (old_opt)
+				kfree_s(old_opt, sizeof(struct optlen) + old_opt->optlen);
+			return 0;
+		}
 		case IP_RXINFO:
+			if (optlen<4)
+				return -EINVAL;
 			if (val)
 				sk->ip_cmsg_flags |= 1;
 			else
 				sk->ip_cmsg_flags &= ~1;
 			return 0;
 		case IP_LOCALADDR:
+			if (optlen<4)
+				return -EINVAL;
 			if (val)
 				sk->ip_cmsg_flags |= 2;
 			else
 				sk->ip_cmsg_flags &= ~2;
 			return 0;
 		case IP_RECVOPTS:
+			if (optlen<4)
+				return -EINVAL;
 			if (val)
 				sk->ip_cmsg_flags |= 4;
 			else
 				sk->ip_cmsg_flags &= ~4;
 			return 0;
 		case IP_RETOPTS:
+			if (optlen<4)
+				return -EINVAL;
 			if (val)
 				sk->ip_cmsg_flags |= 8;
 			else
 				sk->ip_cmsg_flags &= ~8;
 			return 0;
 		case IP_RECVDSTADDR:
+			if (optlen<4)
+				return -EINVAL;
 			if (val)
 				sk->ip_cmsg_flags |= 0x10;
 			else
@@ -252,6 +257,8 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			return 0;
 		case IP_TOS:	/* This sets both TOS and Precedence */
 			  /* Reject setting of unused bits */
+			if (optlen<4)
+				return -EINVAL;
 			if (val & ~(IPTOS_TOS_MASK|IPTOS_PREC_MASK))
 				return -EINVAL;
 			if (IPTOS_PREC(val) >= IPTOS_PREC_CRITIC_ECP && !suser())
@@ -260,21 +267,29 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			sk->priority = rt_tos2priority(val);
 			return 0;
 		case IP_TTL:
+			if (optlen<4)
+				return -EINVAL;
 			if(val<1||val>255)
 				return -EINVAL;
 			sk->ip_ttl=val;
 			return 0;
 		case IP_HDRINCL:
+			if (optlen<4)
+				return -EINVAL;
 			if(sk->type!=SOCK_RAW)
 				return -ENOPROTOOPT;
 			sk->ip_hdrincl=val?1:0;
 			return 0;
 		case IP_PMTUDISC:
+			if (optlen<4)
+				return -EINVAL;
 			if (val<0 || val>2)
 				return -EINVAL;
 			sk->ip_pmtudisc = val;
 			return 0;
 		case IP_RECVERR:
+			if (optlen<4)
+				return -EINVAL;
 			if (sk->type==SOCK_STREAM)
 				return -ENOPROTOOPT;
 			lock_sock(sk);
@@ -290,9 +305,13 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			release_sock(sk);
 			return 0;
 		case IP_MULTICAST_TTL: 
+			if (optlen<1)
+				return -EINVAL;
 			sk->ip_mc_ttl=(int)ucval;
 	                return 0;
 		case IP_MULTICAST_LOOP: 
+			if (optlen<1)
+				return -EINVAL;
 			if(ucval!=0 && ucval!=1)
 				 return -EINVAL;
 			sk->ip_mc_loop=(int)ucval;
@@ -306,8 +325,10 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			 *	Check the arguments are allowable
 			 */
 
-			err = copy_from_user(&addr,optval,sizeof(addr));
-			if (err)
+			if(optlen<sizeof(addr))
+				return -EINVAL;
+				
+			if(copy_from_user(&addr,optval,sizeof(addr)))
 				return -EFAULT; 
 
 			
@@ -354,9 +375,10 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			/*
 			 *	Check the arguments.
 			 */
-
-			err = copy_from_user(&mreq,optval,sizeof(mreq));
-			if (err)
+			 
+			if(optlen<sizeof(mreq))
+				return -EINVAL;
+			if(copy_from_user(&mreq,optval,sizeof(mreq)))
 				return -EFAULT; 
 
 			/* 
@@ -396,8 +418,9 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			 *	Check the arguments
 			 */
 			 
-			err = copy_from_user(&mreq,optval,sizeof(mreq));
-			if (err)
+			if(optlen<sizeof(mreq))
+				return -EINVAL;
+			if(copy_from_user(&mreq,optval,sizeof(mreq)))
 				return -EFAULT; 
 
 			/*
@@ -432,8 +455,9 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			struct ip_mreqn mreq;
 			struct device *dev = NULL;
 			
-			err = copy_from_user(&mreq,optval,sizeof(mreq));
-			if (err)
+			if(optlen<sizeof(mreq))
+				return -EINVAL;
+			if(copy_from_user(&mreq,optval,sizeof(mreq)))
 				return -EFAULT;
 
 			if (!mreq.imr_ifindex) {
@@ -457,9 +481,10 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 		{
 			struct ip_mreqn mreq;
 			struct device *dev = NULL;
-			
-			err = copy_from_user(&mreq,optval,sizeof(mreq));
-			if (err)
+
+			if(optlen<sizeof(mreq))
+				return -EINVAL;			
+			if(copy_from_user(&mreq,optval,sizeof(mreq)))
 				return -EFAULT; 
 			dev = dev_get_by_index(mreq.imr_ifindex);
 			if (!dev)
@@ -475,9 +500,10 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			/*
 			 *	Check the arguments
 			 */
-			 
-			err = copy_from_user(&mreq,optval,sizeof(mreq));
-			if (err)
+
+			if(optlen<sizeof(mreq))
+				return -EINVAL;			 
+			if(copy_from_user(&mreq,optval,sizeof(mreq)))
 				return -EFAULT; 
 
 			dev=dev_get_by_index(mreq.imr_ifindex);
@@ -510,12 +536,11 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 		case IP_FW_POLICY_FWD:
 		case IP_FW_MASQ_TIMEOUTS:
 			if(!suser())
-				return -EPERM;
+				return -EACCES;
 			if(optlen>sizeof(tmp_fw) || optlen<1)
 				return -EINVAL;
-			err = copy_from_user(&tmp_fw,optval,optlen);
-			if (err)
-				return -EFAULT; 
+			if(copy_from_user(&tmp_fw,optval,optlen))
+				return -EFAULT;
 			err=ip_fw_ctl(optname, &tmp_fw,optlen);
 			return -err;	/* -0 is 0 after all */
 			
@@ -527,11 +552,10 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 		case IP_ACCT_FLUSH:
 		case IP_ACCT_ZERO:
 			if(!suser())
-				return -EPERM;
+				return -EACCES;
 			if(optlen>sizeof(tmp_fw) || optlen<1)
 				return -EINVAL;
-			err = copy_from_user(&tmp_fw, optval,optlen);
-			if (err)
+			if(copy_from_user(&tmp_fw, optval,optlen))
 				return -EFAULT; 
 			err=ip_acct_ctl(optname, &tmp_fw,optlen);
 			return -err;	/* -0 is 0 after all */
@@ -561,6 +585,9 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 	}
 #endif
 
+	if(get_user(len,optlen))
+		return -EFAULT;
+
 	switch(optname)
 	{
 		case IP_OPTIONS:
@@ -577,15 +604,13 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 
 				ip_options_undo(opt);
 
-				err = put_user(opt->optlen, optlen);
-				if (!err) 
-				{
-					if(copy_to_user(optval, opt->__data, opt->optlen))
-					    err = -EFAULT;
-				}
-				return err; 
+				len=min(len, opt->optlen);
+				if(put_user(len, optlen))
+					return -EFAULT;
+				if(copy_to_user(optval, opt->__data, len))
+					    return -EFAULT;
+				return 0;
 			}
-			return 0;
 		case IP_RXINFO:
 			val = (sk->ip_cmsg_flags & 1) != 0;
 			return 0;
@@ -625,33 +650,32 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 		case IP_MULTICAST_IFN:
 		{
 			struct ip_mreqn mreq;
-			len = sizeof(struct ip_mreqn);
-  			err = put_user(len, optlen);
+			len = min(len,sizeof(struct ip_mreqn));
+  			if(put_user(len, optlen))
+  				return -EFAULT;
 			mreq.imr_ifindex = sk->ip_mc_index;
 			mreq.imr_address.s_addr = sk->ip_mc_addr;
 			mreq.imr_multiaddr.s_addr = 0;
-			if (!err) {
-				err = copy_to_user((void *)optval, &mreq, len);
-				if (err)
-					err = -EFAULT;
-			}
-			return err;
+			if(copy_to_user((void *)optval, &mreq, len))
+				return -EFAULT;
+			return 0;
 		}
 		case IP_MULTICAST_IF:
 		{
 			struct device *dev = dev_get_by_index(sk->ip_mc_index);
-			if (dev == NULL) {
+			if (dev == NULL) 
+			{
 				len = 0;
 				return put_user(len, optlen);
 			}
 			dev_lock_list();
-  			len = strlen(dev->name);
+  			len = min(len,strlen(dev->name));
   			err = put_user(len, optlen);
 			if (!err)
 			{
 				err = copy_to_user((void *)optval,dev->name, len);
-				if (err)
-				    err = -EFAULT;
+				if(err)
+					err=-EFAULT;
 			}
 			dev_unlock_list();
 			return err;
@@ -659,10 +683,12 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 		default:
 			return(-ENOPROTOOPT);
 	}
-	err = put_user(sizeof(int), optlen);
-	if (err) 
-		return err; 
-	return put_user(val,(int *) optval);
-
-	return(0);
+	
+	len=min(sizeof(int),len);
+	
+	if(put_user(len, optlen))
+		return -EFAULT;
+	if(copy_to_user(optval,&val,len))
+		return -EFAULT;
+	return 0;
 }

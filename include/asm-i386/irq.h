@@ -164,7 +164,7 @@ SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
 	"addl $8,%esp\n\t" \
 	"cli\n\t" \
 	UNBLK_##chip(mask) \
-	"jmp ret_from_sys_call\n" \
+	"jmp ret_from_intr\n" \
 "\n"__ALIGN_STR"\n" \
 SYMBOL_NAME_STR(fast_IRQ) #nr "_interrupt:\n\t" \
 	SAVE_MOST \
@@ -195,7 +195,7 @@ SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
 	"call "SYMBOL_NAME_STR(smp_reschedule_irq)"\n\t" \
 	"addl $8,%esp\n\t" \
 	"cli\n\t" \
-	"jmp ret_from_sys_call\n");
+	"jmp ret_from_intr\n");
 
 #endif /* __SMP__ */
 
@@ -217,7 +217,7 @@ SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
 	"addl $8,%esp\n\t" \
 	"cli\n\t" \
 	UNBLK_##chip(mask) \
-	"jmp ret_from_sys_call\n" \
+	"jmp ret_from_intr\n" \
 "\n"__ALIGN_STR"\n" \
 SYMBOL_NAME_STR(fast_IRQ) #nr "_interrupt:\n\t" \
 	SAVE_MOST \
@@ -253,6 +253,6 @@ SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
 	"addl $8,%esp\n\t" \
 	"cli\n\t" \
 	UNBLK_##chip(mask) \
-	"jmp ret_from_sys_call\n");
+	"jmp ret_from_intr\n");
 
 #endif /* _ASM_IRQ_H */

@@ -1621,7 +1621,7 @@ static unsigned char *strip_make_packet(unsigned char *ptr, struct strip *strip_
      */
     if (haddr.c[0] == 0xFF)
     {
-	    memcpy(haddr.c, dev->broadcast, sizeof(haddr));
+	    memcpy(haddr.c, strip_info->dev.broadcast, sizeof(haddr));
 	    if (haddr.c[0] == 0xFF)
 	    {
 		    strip_info->tx_dropped++;

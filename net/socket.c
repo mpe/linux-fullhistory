@@ -38,6 +38,7 @@
  *		Alan Cox	:	Added thread locking to sys_* calls
  *					for sockets. May have errors at the
  *					moment.
+ *		Kevin Buhr	:	Fixed the dumb errors in the above.
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -1222,7 +1223,7 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 	}
 	if (msg_sys.msg_iovlen>UIO_MAXIOV)
 	{
-		err=-EFAULT;
+		err=-EINVAL;
 		goto out;
 	}
 	

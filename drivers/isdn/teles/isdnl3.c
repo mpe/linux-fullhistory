@@ -1,6 +1,18 @@
-/* $Id: isdnl3.c,v 1.9 1996/06/06 14:22:27 fritz Exp $
+/* $Id: isdnl3.c,v 1.13 1997/02/16 12:12:51 fritz Exp $
  *
  * $Log: isdnl3.c,v $
+ * Revision 1.13  1997/02/16 12:12:51  fritz
+ * Bugfix: SI2 was nont initialized on incoming calls.
+ *
+ * Revision 1.12  1997/02/11 01:39:20  keil
+ * Changed setup-interface (incoming and outgoing)
+ *
+ * Revision 1.11  1996/09/29 19:41:58  fritz
+ * Bugfix: ignore unknown frames.
+ *
+ * Revision 1.10  1996/09/25 18:32:43  keil
+ * response for STATUS_ENQ message added
+ *
  * Revision 1.9  1996/06/06 14:22:27  fritz
  * Changed level of "non-digital call..." message, since
  * with audio support, this is quite normal.
@@ -129,7 +141,7 @@ l3s5(struct PStack *st, byte pr,
 	/*
          * Set Bearer Capability, Map info from 1TR6-convention to EDSS1
          */
-	switch (st->pa->info) {
+	switch (st->pa->setup.si1) {
 	  case 1:		/* Telephony                               */
 		  *p++ = 0x4;	/* BC-IE-code                              */
 		  *p++ = 0x3;	/* Length                                  */
@@ -149,21 +161,21 @@ l3s5(struct PStack *st, byte pr,
 	/*
 	 * What about info2? Mapping to High-Layer-Compatibility?
 	 */
-	if (st->pa->calling[0] != '\0') {
+	if (st->pa->setup.eazmsn[0] != '\0') {
 		*p++ = 0x6c;
-		*p++ = strlen(st->pa->calling) + 1;
+		*p++ = strlen(st->pa->setup.eazmsn) + 1;
 		/* Classify as AnyPref. */
 		*p++ = 0x81;	/* Ext = '1'B, Type = '000'B, Plan = '0001'B. */
-		teln = st->pa->calling;
+		teln = st->pa->setup.eazmsn;
 		while (*teln)
 			*p++ = *teln++ & 0x7f;
 	}
 	*p++ = 0x70;
-	*p++ = strlen(st->pa->called) + 1;
+	*p++ = strlen(st->pa->setup.phone) + 1;
 	/* Classify as AnyPref. */
 	*p++ = 0x81;		/* Ext = '1'B, Type = '000'B, Plan = '0001'B. */
 
-	teln = st->pa->called;
+	teln = st->pa->setup.phone;
 	while (*teln)
 		*p++ = *teln++ & 0x7f;
 
@@ -249,8 +261,8 @@ l3s12(struct PStack *st, byte pr, void *arg)
 	p = DATAPTR(ibh);
 	if (st->protocol == ISDN_PTYPE_1TR6) {
 		if ((p = findie(p + st->l2.uihsize, ibh->datasize - st->l2.uihsize, 0x01, 6))) {
-			st->pa->info = p[2];
-			st->pa->info2 = p[3];
+			st->pa->setup.si1 = p[2];
+			st->pa->setup.si2 = p[3];
 		} else
 			printk(KERN_WARNING "l3s12(1TR6): ServiceIndicator not found\n");
 	} else {
@@ -258,31 +270,32 @@ l3s12(struct PStack *st, byte pr, void *arg)
                  * Bearer Capabilities
                  */
 		if ((p = findie(p + st->l2.uihsize, ibh->datasize - st->l2.uihsize, 0x04, 0))) {
+			st->pa->setup.si2 = 0;
 			switch (p[2] & 0x1f) {
 			  case 0x00:
                                   /* Speech */
 			  case 0x10:
                                   /* 3.1 Khz audio */
-				  st->pa->info = 1;
+				  st->pa->setup.si1 = 1;
 				  break;
 			  case 0x08:
                                   /* Unrestricted digital information */
-				  st->pa->info = 7;
+				  st->pa->setup.si1 = 7;
 				  break;
 			  case 0x09:
                                   /* Restricted digital information */
-				  st->pa->info = 2;
+				  st->pa->setup.si1 = 2;
 				  break;
 			  case 0x11:
                                   /* Unrestr. digital information  with tones/announcements */
-				  st->pa->info = 3;
+				  st->pa->setup.si1 = 3;
 				  break;
 			  case 0x18:
                                   /* Video */
-				  st->pa->info = 4;
+				  st->pa->setup.si1 = 4;
 				  break;
 			  default:
-				  st->pa->info = 0;
+				  st->pa->setup.si1 = 0;
 			}
 		} else
 			printk(KERN_WARNING "l3s12: Bearer capabilities not found\n");
@@ -291,26 +304,29 @@ l3s12(struct PStack *st, byte pr, void *arg)
 	p = DATAPTR(ibh);
 	if ((p = findie(p + st->l2.uihsize, ibh->datasize - st->l2.uihsize,
 			0x70, 0)))
-		iecpy(st->pa->called, p, 1);
+		iecpy(st->pa->setup.eazmsn, p, 1);
 	else
-		strcpy(st->pa->called, "");
+		strcpy(st->pa->setup.eazmsn, "");
 
 	p = DATAPTR(ibh);
 	if ((p = findie(p + st->l2.uihsize, ibh->datasize - st->l2.uihsize,
 			0x6c, 0))) {
-		if (st->protocol == ISDN_PTYPE_1TR6)
-			iecpy(st->pa->calling, p, 1);
-		else
-			iecpy(st->pa->calling, p, 2);
+		st->pa->setup.plan = p[2];
+		if (st->protocol == ISDN_PTYPE_1TR6) {
+			iecpy(st->pa->setup.phone, p, 1);
+		} else {
+			st->pa->setup.screen = p[3];
+			iecpy(st->pa->setup.phone, p, 2);
+		}
 	} else
-		strcpy(st->pa->calling, "");
+		strcpy(st->pa->setup.phone, "");
 	BufPoolRelease(ibh);
 
         if (bcfound) {
-                if (st->pa->info != 7) {
+                if (st->pa->setup.si1 != 7) {
                         printk(KERN_DEBUG "non-digital call: %s -> %s\n",
-                               st->pa->calling,
-                               st->pa->called);
+                               st->pa->setup.phone,
+                               st->pa->setup.eazmsn);
                 }
                 newl3state(st, 6);
                 st->l3.l3l4(st, CC_SETUP_IND, NULL);
@@ -391,6 +407,42 @@ l3s20(struct PStack *st, byte pr,
 	newl3state(st, 7);
 }
 
+static void
+l3s21(struct PStack *st, byte pr, void *arg)
+{
+	struct BufHeader *dibh=arg;
+	byte           *p;
+	int             size;
+
+	BufPoolRelease(dibh);
+	
+	BufPoolGet(&dibh, st->l1.sbufpool, GFP_ATOMIC, (void *) st, 20);
+	p = DATAPTR(dibh);
+	p += st->l2.ihsize;
+	size = st->l2.ihsize;
+
+	*p++ = 0x8;
+	*p++ = 0x1;
+	*p++ = st->l3.callref;
+	*p++ = MT_STATUS;
+	size += 4;
+
+	*p++ = IE_CAUSE;
+	*p++ = 0x2;
+	*p++ = 0x80;
+	*p++ = 0x9E; /* answer status enquire */
+	size += 4;
+
+	*p++ = 0x14; /* CallState */
+	*p++ = 0x1;
+	*p++ = st->l3.state & 0x3f; /* ISO L3 CallState */
+	size += 3;
+
+	dibh->datasize = size;
+	i_down(st, dibh);
+
+}
+
 struct stateentry {
 	int             state;
 	byte            primitive;
@@ -432,34 +484,44 @@ sizeof(struct stateentry);
 
 static struct stateentry datastatelist[] =
 {
+        {0,MT_STATUS_ENQUIRY,l3s21},
         {0,MT_SETUP,l3s12},
+        {1,MT_STATUS_ENQUIRY,l3s21},
         {1,MT_CALL_PROCEEDING,l3s6},
         {1,MT_SETUP_ACKNOWLEDGE,l3s6},
         {1,MT_RELEASE_COMPLETE,l3s4},
         {1,MT_RELEASE,l3s19},
         {1,MT_DISCONNECT,l3s7},
+        {3,MT_STATUS_ENQUIRY,l3s21},
         {3,MT_DISCONNECT,l3s7},
         {3,MT_CONNECT,l3s8},
         {3,MT_ALERTING,l3s11},
         {3,MT_RELEASE,l3s19},
         {3,MT_RELEASE_COMPLETE,l3s4},
+        {4,MT_STATUS_ENQUIRY,l3s21},
         {4,MT_CONNECT,l3s8},
         {4,MT_DISCONNECT,l3s7},
         {4,MT_RELEASE,l3s19},
         {4,MT_RELEASE_COMPLETE,l3s4},
+        {8,MT_STATUS_ENQUIRY,l3s21},
         {6,MT_SETUP,l3s12},
+        {8,MT_STATUS_ENQUIRY,l3s21},
         {7,MT_RELEASE,l3s19},
         {7,MT_RELEASE_COMPLETE,l3s4_1},
         {7,MT_DISCONNECT,l3s7},
+        {8,MT_STATUS_ENQUIRY,l3s21},
         {8,MT_RELEASE,l3s19},
         {8,MT_CONNECT_ACKNOWLEDGE,l3s17},
         {8,MT_DISCONNECT,l3s7},
         {8,MT_RELEASE_COMPLETE,l3s4_1},
+        {10,MT_STATUS_ENQUIRY,l3s21},
         {10,MT_DISCONNECT,l3s7},
         {10,MT_RELEASE,l3s19},
         {10,MT_RELEASE_COMPLETE,l3s4_1},
+        {11,MT_STATUS_ENQUIRY,l3s21},
         {11,MT_RELEASE,l3s19},
         {11,MT_RELEASE_COMPLETE,l3s4},
+        {19,MT_STATUS_ENQUIRY,l3s21},
         {19,MT_RELEASE_COMPLETE,l3s4},
 };
 
@@ -502,7 +564,7 @@ l3up(struct PStack *st,
 				  datastatelist_1tr6t[i].rout(st, pr, ibh);
 			  break;
 #endif
-		  default:	/* E-DSS1 */
+		  case PROTO_EURO:	/* E-DSS1 */
 			  for (i = 0; i < datasllen; i++)
 				  if ((st->l3.state == datastatelist[i].state) &&
 				      (mt == datastatelist[i].primitive))
@@ -514,6 +576,10 @@ l3up(struct PStack *st,
 				 		st->l3.state, mt);
 			  } else
 				  datastatelist[i].rout(st, pr, ibh);
+			  break;
+		  default:
+		          BufPoolRelease(ibh);
+			  break;
 		}
 	} else if (pr == DL_UNIT_DATA) {
 		ptr = DATAPTR(ibh);
@@ -540,7 +606,7 @@ l3up(struct PStack *st,
 				  datastatelist_1tr6t[i].rout(st, pr, ibh);
 			  break;
 #endif
-		  default:	/* E-DSS1 */
+		  case PROTO_EURO:	/* E-DSS1 */
 			  for (i = 0; i < datasllen; i++)
 				  if ((st->l3.state == datastatelist[i].state) &&
 				      (mt == datastatelist[i].primitive))
@@ -552,6 +618,10 @@ l3up(struct PStack *st,
 				 		st->l3.state, mt);
 			  } else
 				  datastatelist[i].rout(st, pr, ibh);
+			  break;
+		  default:
+		          BufPoolRelease(ibh);
+			  break;
 		}
 	}
 }

@@ -19,6 +19,7 @@
 #include <linux/sockios.h>
 #include <linux/in6.h>
 #include <linux/ipv6.h>
+#include <linux/route.h>
 
 #include <net/ipv6.h>
 #include <net/ndisc.h>

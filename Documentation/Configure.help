@@ -1217,8 +1217,8 @@ CONFIG_ATALK
 IP-over-DDP support
 CONFIG_IPDDP
   This allows IP networking for users who only have Appletalk
-  networking available.  It doesn't work yet in 2.1.xx, so you
-  should say N.
+  networking available.  This feature is experimental. Please see
+  http://www.maths.unm.edu/~bradford/ltpc.html
 
 LocalTalk PC card support
 CONFIG_LTPC
@@ -1229,7 +1229,8 @@ CONFIG_LTPC
   This driver is experimental, which means that it may not work.
   In particular the module support is not yet working for the 2.1.xx
   kernels, so choose Y or N, but not M for now.
-  See README.ltpc in the drivers/net directory.
+  See README.ltpc in the drivers/net directory, and the web site
+  http://www.math.unm.edu/~bradford/ltpc.html
 
 Amateur Radio AX.25 Level 2
 CONFIG_AX25
@@ -2214,26 +2215,12 @@ CONFIG_SOUNDMODEM_AFSK1200
   compatible to popular modems using TCM3105 or AM7911. The demodulator
   requires about 12% of the CPU power of a Pentium 75 CPU per channel.
 
-Soundmodem 1200 baud AFSK using floating point
-CONFIG_SOUNDMODEM_AFSK1200_FP
-  This option enables floating point calculations to be used for the
-  AFSK1200 baud modem. The Intel Pentium is a perverted chip because
-  integer multiplications are, although easier to implement in silicon,
-  an order of magnitude slower than floating point calculations.
-  Enabling this option uses a highly optimized assembler routine for
-  correlations, modeled after the one published by Phil Karn, KA9Q.
-  This reduces the computing power needed on Intel Pentium chips to
-  about 50%. On the other hand, Pentium clones with faster integer
-  multiply and slower floating point multiply will probably take
-  longer with this option turned on. As a rule of thumb, enable it for
-  Intel Pentium and Pentium Pro processors, and disable it for
-  anything else.
-  I (sailer@ife.ee.ethz.ch) am very interested in figures. If you are
-  willing to give me a feedback, please compile the driver once with
-  this option enabled and once with it disabled, and send me the cycle
-  counter numbers obtained with both compilations, and your exact
-  chip. The cycle counter numbers can be obtained with a recent
-  sethdlc utility.
+Soundcard modem support for 4800 baud HAPN-1 modulation
+CONFIG_SOUNDMODEM_HAPN4800
+  This option enables the soundmodem driver 4800 baud HAPN-1 compatible
+  modem. This modulation seems to be widely used 'down under' and in
+  the netherlands. Here, nobody uses it, so I could not test if it works.
+  It is compatible to itself, however :-)
 
 Soundcard modem support for 9600 baud FSK G3RUH modulation
 CONFIG_SOUNDMODEM_FSK9600
@@ -2243,6 +2230,25 @@ CONFIG_SOUNDMODEM_FSK9600
   both 1200 baud AFSK and 9600 baud FSK if you want (but obviously you
   can only use one protocol at a time, depending on what the other end
   can understand).
+
+Soundcard modem support using floating point arithmetic
+CONFIG_SOUNDMODEM_FLOAT
+  This option enables floating point calculations to be used for the
+  AFSK1200 baud modem. The Intel Pentium is a perverted chip because
+  integer multiplications are, altough easier to implement in silicon,
+  an order of a magnitude slower than floating point calculations.
+  Enabling this option uses a highly optimized assembler routine for
+  correlations, modelled after the one published by Phil Karn, KA9Q.
+  This reduces the computing power needed on Intel Pentium chips to about
+  50%. On the other hand, Pentium clones with faster integer multiply and
+  slower floating point multiply will probably take longer with this
+  option turned on. As a rule of thumb, enable it for Intel Pentium and
+  Pentium Pro processors, and disable it for anything else.
+  I (sailer@ife.ee.ethz.ch) am very interested in figures. If you are
+  willing to give me a feedback, please compile the driver once with this
+  option enabled and once with it disabled, and send me the cycle counter
+  numbers obtained with both compilations, and your exact chip. The cycle
+  counter numbers can be optained by a recent sethdlc utility.
 
 Serial port KISS driver for AX.25
 CONFIG_MKISS
@@ -4473,8 +4479,8 @@ CONFIG_ISDN_AUDIO
   (mgetty+sendfax by gert@greenie.muc.de with an extension, available
   with the ISDN utility package for example), you will be able to use
   your Linux box as an ISDN-answering machine. Of course, this must be
-  supported by the lowlevel driver also. Currently, the Teles driver
-  is the only voice-supporting one. See
+  supported by the lowlevel driver also. Currently, the Teles and HiSax
+  drivers are the only voice-supporting drivers. See
   Documentation/isdn/README.audio for more information.
 
 ICN 2B and 4B support
@@ -4493,14 +4499,77 @@ CONFIG_ISDN_DRV_ICN
 Teles, NICCY1016PC, Creatix support
 CONFIG_ISDN_DRV_TELES
   This enables support for the Teles ISDN-cards S0-16.0, S0-16.3, S0-8
-  and many compatibles. By default, the driver is configured to
-  support a 16.0-type using EDSS1-protocol. See
-  Documentation/isdn/README on how to configure it using 16.3, a
-  different D-channel protocol, or non-standard irq/port/shmem
-  settings. If you want to compile this as a module ( = code which can
-  be inserted in and removed from the running kernel whenever you
-  want), say M here and read Documentation/modules.txt. The module
-  will be called teles.o.
+  and many compatibles.
+  There is a new, heavily improved driver called HiSax which can be
+  enabled in the next section. This driver will be removed soon. Please
+  use this driver only if you cannot get the HiSax driver working.
+  By default, the driver is configured to support a 16.0-type using
+  EDSS1-protocol. See Documentation/isdn/README on how to configure
+  it using 16.3, a different D-channel protocol, or non-standard
+  irq/port/shmem settings.
+
+HiSax SiemensChipSet driver support
+CONFIG_ISDN_DRV_HISAX
+  This is an alternative driver supporting the Siemens chipset on
+  various ISDN-cards (like AVM A1, Elsa ISDN cards, Teles S0-16.0, 
+  Teles S0-16.3, Teles S0-8, Teles/Creatix PnP, ITK micro ix1 and 
+  many compatibles). It's a complete rewrite of the original Teles 
+  driver.  So you either say M or Y here and N in the above Teles 
+  section.
+  See Documentation/isdn/README.HiSax for further informations on
+  using this driver.
+
+HiSax Support for Teles 16.0/8.0
+CONFIG_HISAX_16_0
+  This enables HiSax support for the Teles ISDN-cards S0-16.0,
+  S0-8 and many compatibles.
+  See Documentation/isdn/README.HiSax on how to configure it 
+  using the different cards, a different D-channel protocol, or
+  non-standard irq/port/shmem settings.
+
+HiSax Support for Teles 16.3 or PNP or PCMCIA
+CONFIG_HISAX_16_3
+  This enables HiSax support for the Teles ISDN-cards S0-16.3
+  the Teles/Creatix PnP and the Teles PCMCIA.
+  See Documentation/isdn/README.HiSax on how to configure it 
+  using the different cards, a different D-channel protocol, or
+  non-standard irq/port/shmem settings.
+
+HiSax Support for AVM A1 (Fritz)
+CONFIG_HISAX_AVM_A1
+  This enables HiSax support for the AVM A1 (aka "Fritz").
+  See Documentation/isdn/README.HiSax on how to configure it
+  using the different cards, a different D-channel protocol, or
+  non-standard irq/port/shmem settings.
+
+HiSax Support for Elsa cards
+CONFIG_HISAX_ELSA_PCC
+  This enables HiSax support for the Elsa Mircolink cards and
+  for the Elsa Quickstep series cards.
+  See Documentation/isdn/README.HiSax on how to configure it 
+  using the different cards, a different D-channel protocol, or
+  non-standard irq/port/shmem settings.
+
+HiSax Support for ITK ix1-micro Revision 2
+CONFIG_HISAX_IX1MICROR2
+  This enables HiSax support for the ITK ix1-micro Revision 2 card.
+  See Documentation/isdn/README.HiSax on how to configure it 
+  using the different cards, a different D-channel protocol, or
+  non-standard irq/port/shmem settings.
+
+HiSax Support for EURO/DSS1
+CONFIG_HISAX_EURO
+  You should choose your D-channel protocol your local
+  telephone service provider uses here by saying Y or N.
+  NOTE: This is mutually exclusive with HiSax Support for
+  german 1TR6 if you have only one ISDN card installed.
+
+HiSax Support for german 1TR6
+CONFIG_HISAX_1TR6
+  You should choose your D-channel protocol your local
+  telephone service provider uses here by saying Y or N.
+  NOTE: This is mutually exclusive with HiSax Support for
+  EURO/DSS1 if you have only one ISDN card installed.
 
 PCBIT-D support
 CONFIG_ISDN_DRV_PCBIT
@@ -4513,6 +4582,13 @@ CONFIG_ISDN_DRV_PCBIT
   which can be inserted in and removed from the running kernel
   whenever you want), say M here and read
   Documentation/modules.txt. The module will be called pcbit.o.
+
+Spellcaster support (EXPERIMENTAL)
+CONFIG_ISDN_DRV_SC
+  This enables support for the Spellcaster BRI boards. This driver
+  currently builds in a modularized version only.
+  See Documentation/isdn/README.sc and http://www.spellcast.com
+  for more information.
 
 Support for AP1000 multicomputer
 CONFIG_AP1000

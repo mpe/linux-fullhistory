@@ -1,7 +1,7 @@
 /*****************************************************************************/
 
 /*
- *	sm_wss.h  -- soundcard radio modem driver, WSS (half duplex) driver
+ *	sm_wss.c  -- soundcard radio modem driver, WSS (half duplex) driver
  *
  *	Copyright (C) 1996  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
@@ -24,6 +24,56 @@
  *  authority of your country.
  *
  */
+
+#include <linux/ptrace.h>
+#include <linux/interrupt.h>
+#include <asm/io.h>
+#include <asm/dma.h>
+#include <linux/ioport.h>
+#include <linux/soundmodem.h>
+#include "sm.h"
+
+/* --------------------------------------------------------------------- */
+
+/*
+ * currently this module is supposed to support both module styles, i.e.
+ * the old one present up to about 2.1.9, and the new one functioning
+ * starting with 2.1.21. The reason is I have a kit allowing to compile
+ * this module also under 2.0.x which was requested by several people.
+ * This will go in 2.2
+ */
+#include <linux/version.h>
+
+#if LINUX_VERSION_CODE >= 0x20100
+#include <asm/uaccess.h>
+#else
+#include <asm/segment.h>
+#include <linux/mm.h>
+
+#undef put_user
+#undef get_user
+
+#define put_user(x,ptr) ({ __put_user((unsigned long)(x),(ptr),sizeof(*(ptr))); 0; })
+#define get_user(x,ptr) ({ x = ((__typeof__(*(ptr)))__get_user((ptr),sizeof(*(ptr)))); 0; })
+
+extern inline int copy_from_user(void *to, const void *from, unsigned long n)
+{
+        int i = verify_area(VERIFY_READ, from, n);
+        if (i)
+                return i;
+        memcpy_fromfs(to, from, n);
+        return 0;
+}
+
+extern inline int copy_to_user(void *to, const void *from, unsigned long n)
+{
+        int i = verify_area(VERIFY_WRITE, to, n);
+        if (i)
+                return i;
+        memcpy_tofs(to, from, n);
+        return 0;
+}
+#endif
 
 /* --------------------------------------------------------------------- */
 
@@ -340,8 +390,6 @@ static void setup_dma_wss(struct device *dev, struct sm_state *sm, int send)
 	}
 	write_codec(dev, 9, codecmode[send]);
         restore_flags(flags);
-	printk("sm: wss: %cx fmt: 0x%02x ifc: 0x%02x\n", "rt"[send],
-	       read_codec(dev, 0x8), read_codec(dev, 0x9));
 }
 
 /* --------------------------------------------------------------------- */
@@ -418,7 +466,7 @@ static void wss_interrupt(int irq, void *dev_id, struct pt_regs *regs)
         }
         if (new_ptt)
                 SCSTATE->ptt = 2;
-	output_status(sm);
+	sm_output_status(sm);
 	hdlcdrv_transmitter(dev, &sm->hdrv);
 	hdlcdrv_receiver(dev, &sm->hdrv);
 }
@@ -496,8 +544,8 @@ static int wss_close(struct device *dev, struct sm_state *sm)
 static int wss_sethw(struct device *dev, struct sm_state *sm, char *mode)
 {
 	char *cp = strchr(mode, '.');
-	const struct modem_tx_info *mtp = modem_tx_base;
-	const struct modem_rx_info *mrp;
+	const struct modem_tx_info **mtp = sm_modem_tx_table;
+	const struct modem_rx_info **mrp;
 	int i, j, dv;
 
 	if (!strcmp(mode, "off")) {
@@ -509,26 +557,26 @@ static int wss_sethw(struct device *dev, struct sm_state *sm, char *mode)
 		*cp++ = '\0';
 	else
 		cp = mode;
-	for (; mtp; mtp = mtp->next) {
-		if (mtp->loc_storage > sizeof(sm->m)) {
+	for (; *mtp; mtp++) {
+		if ((*mtp)->loc_storage > sizeof(sm->m)) {
 			printk(KERN_ERR "%s: insufficient storage for modulator %s (%d)\n",
-			       sm_drvname, mtp->name, mtp->loc_storage);
+			       sm_drvname, (*mtp)->name, (*mtp)->loc_storage);
 			continue;
 		}
-		if (!mtp->name || strcmp(mtp->name, mode))
+		if (!(*mtp)->name || strcmp((*mtp)->name, mode))
 			continue;
-		if ((i = wss_srate_index(mtp->srate)) < 0) 
+		if ((i = wss_srate_index((*mtp)->srate)) < 0) 
 			continue;
-		for (mrp = modem_rx_base; mrp; mrp = mrp->next) {
-			if (mrp->loc_storage > sizeof(sm->d)) {
+		for (mrp = sm_modem_rx_table; *mrp; mrp++) {
+			if ((*mrp)->loc_storage > sizeof(sm->d)) {
 				printk(KERN_ERR "%s: insufficient storage for demodulator %s (%d)\n",
-				       sm_drvname, mrp->name, mrp->loc_storage);
+				       sm_drvname, (*mrp)->name, (*mrp)->loc_storage);
 				continue;
 			}
-			if (mrp->name && !strcmp(mrp->name, cp) &&
-			    ((j = wss_srate_index(mrp->srate)) >= 0)) {
-				sm->mode_tx = mtp;
-				sm->mode_rx = mrp;
+			if ((*mrp)->name && !strcmp((*mrp)->name, cp) &&
+			    ((j = wss_srate_index((*mrp)->srate)) >= 0)) {
+				sm->mode_tx = *mtp;
+				sm->mode_rx = *mrp;
 				SCSTATE->fmt[0] = j;
 				SCSTATE->fmt[1] = i;
 				dv = lcm(sm->mode_tx->dmabuflenmodulo, 
@@ -536,9 +584,6 @@ static int wss_sethw(struct device *dev, struct sm_state *sm, char *mode)
 				SCSTATE->dmabuflen = sm->mode_rx->srate/100+dv-1;
 				SCSTATE->dmabuflen /= dv;
 				SCSTATE->dmabuflen *= 2*dv; /* make sure DMA buf is even */
-	    printk(KERN_DEBUG "sm wss: modtx %u modrx %u srt %u buflen %u\n",
-		   sm->mode_tx->dmabuflenmodulo, sm->mode_rx->dmabuflenmodulo,
-		   sm->mode_rx->srate, SCSTATE->dmabuflen);
 				return 0;
 			}
 		}
@@ -606,12 +651,10 @@ static int wss_ioctl(struct device *dev, struct sm_state *sm, struct ifreq *ifr,
 
 /* --------------------------------------------------------------------- */
 
-struct hardware_info hw_wss = {
-	NEXT_HW_INFO, "wss", sizeof(struct sc_state_wss), 
+const struct hardware_info sm_hw_wss = {
+	"wss", sizeof(struct sc_state_wss), 
 	wss_open, wss_close, wss_ioctl, wss_sethw
 };
-#undef NEXT_HW_INFO
-#define NEXT_HW_INFO (&hw_wss)
 
 /* --------------------------------------------------------------------- */
 
@@ -742,7 +785,7 @@ static void wssfdx_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	time_exec(sm->debug_vals.demod_cyc, 
 		  sm->mode_rx->demodulator(sm, buf2, SCSTATE->dmabuflen/2));
 	hdlcdrv_arbitrate(dev, &sm->hdrv);
-	output_status(sm);
+	sm_output_status(sm);
 	hdlcdrv_transmitter(dev, &sm->hdrv);
 	hdlcdrv_receiver(dev, &sm->hdrv);
 }
@@ -830,8 +873,8 @@ static int wssfdx_close(struct device *dev, struct sm_state *sm)
 static int wssfdx_sethw(struct device *dev, struct sm_state *sm, char *mode)
 {
 	char *cp = strchr(mode, '.');
-	const struct modem_tx_info *mtp = modem_tx_base;
-	const struct modem_rx_info *mrp;
+	const struct modem_tx_info **mtp = sm_modem_tx_table;
+	const struct modem_rx_info **mrp;
 	int i, dv;
 
 	if (!strcmp(mode, "off")) {
@@ -843,35 +886,32 @@ static int wssfdx_sethw(struct device *dev, struct sm_state *sm, char *mode)
 		*cp++ = '\0';
 	else
 		cp = mode;
-	for (; mtp; mtp = mtp->next) {
-		if (mtp->loc_storage > sizeof(sm->m)) {
+	for (; *mtp; mtp++) {
+		if ((*mtp)->loc_storage > sizeof(sm->m)) {
 			printk(KERN_ERR "%s: insufficient storage for modulator %s (%d)\n",
-			       sm_drvname, mtp->name, mtp->loc_storage);
+			       sm_drvname, (*mtp)->name, (*mtp)->loc_storage);
 			continue;
 		}
-		if (!mtp->name || strcmp(mtp->name, mode))
+		if (!(*mtp)->name || strcmp((*mtp)->name, mode))
 			continue;
-		if ((i = wss_srate_index(mtp->srate)) < 0) 
+		if ((i = wss_srate_index((*mtp)->srate)) < 0) 
 			continue;
-		for (mrp = modem_rx_base; mrp; mrp = mrp->next) {
-			if (mrp->loc_storage > sizeof(sm->d)) {
+		for (mrp = sm_modem_rx_table; *mrp; mrp++) {
+			if ((*mrp)->loc_storage > sizeof(sm->d)) {
 				printk(KERN_ERR "%s: insufficient storage for demodulator %s (%d)\n",
-				       sm_drvname, mrp->name, mrp->loc_storage);
+				       sm_drvname, (*mrp)->name, (*mrp)->loc_storage);
 				continue;
 			}
-			if (mrp->name && !strcmp(mrp->name, cp) &&
-			    mtp->srate == mrp->srate) {
-				sm->mode_tx = mtp;
-				sm->mode_rx = mrp;
+			if ((*mrp)->name && !strcmp((*mrp)->name, cp) &&
+			    (*mtp)->srate == (*mrp)->srate) {
+				sm->mode_tx = *mtp;
+				sm->mode_rx = *mrp;
 				SCSTATE->fmt[0] = SCSTATE->fmt[1] = i;
 				dv = lcm(sm->mode_tx->dmabuflenmodulo, 
 					 sm->mode_rx->dmabuflenmodulo);
 				SCSTATE->dmabuflen = sm->mode_rx->srate/100+dv-1;
 				SCSTATE->dmabuflen /= dv;
 				SCSTATE->dmabuflen *= 2*dv; /* make sure DMA buf is even */
-	    printk(KERN_DEBUG "sm wssfdx: modtx %u modrx %u srt %u buflen %u\n",
-		   sm->mode_tx->dmabuflenmodulo, sm->mode_rx->dmabuflenmodulo,
-		   sm->mode_rx->srate, SCSTATE->dmabuflen);
 				return 0;
 			}
 		}
@@ -898,12 +938,10 @@ static int wssfdx_ioctl(struct device *dev, struct sm_state *sm, struct ifreq *i
 
 /* --------------------------------------------------------------------- */
 
-struct hardware_info hw_wssfdx = {
-	NEXT_HW_INFO, "wssfdx", sizeof(struct sc_state_wss), 
+const struct hardware_info sm_hw_wssfdx = {
+	"wssfdx", sizeof(struct sc_state_wss), 
 	wssfdx_open, wssfdx_close, wssfdx_ioctl, wssfdx_sethw
 };
-#undef NEXT_HW_INFO
-#define NEXT_HW_INFO (&hw_wssfdx)
 
 /* --------------------------------------------------------------------- */
 

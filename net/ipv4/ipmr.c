@@ -550,6 +550,8 @@ int ip_mroute_setsockopt(struct sock *sk,int optname,char *optval,int optlen)
 		 */
 		case MRT_ADD_MFC:
 		case MRT_DEL_MFC:
+			if(optlen!=sizeof(mfc))
+				return -EINVAL;
 			err = copy_from_user(&mfc,optval, sizeof(mfc));
 			return err ? -EFAULT : ipmr_mfc_modify(optname, &mfc);
 		/*
@@ -558,9 +560,6 @@ int ip_mroute_setsockopt(struct sock *sk,int optname,char *optval,int optlen)
 		case MRT_ASSERT:
 		{
 			int v;
-			if(optlen!=sizeof(int))
-				return -EINVAL;
-			
 			if(get_user(v,(int *)optval))
 				return -EFAULT;
 			mroute_do_pim=(v)?1:0;
@@ -571,7 +570,7 @@ int ip_mroute_setsockopt(struct sock *sk,int optname,char *optval,int optlen)
 		 *	set.
 		 */
 		default:
-			return -EOPNOTSUPP;
+			return -ENOPROTOOPT;
 	}
 }
 
@@ -582,26 +581,26 @@ int ip_mroute_setsockopt(struct sock *sk,int optname,char *optval,int optlen)
 int ip_mroute_getsockopt(struct sock *sk,int optname,char *optval,int *optlen)
 {
 	int olr;
-	int err;
+	int val;
 
 	if(sk!=mroute_socket)
 		return -EACCES;
 	if(optname!=MRT_VERSION && optname!=MRT_ASSERT)
-		return -EOPNOTSUPP;
+		return -ENOPROTOOPT;
 	
-	err = get_user(olr, optlen);
-	if (err)
-		return err; 
-	if(olr!=sizeof(int))
-		return -EINVAL;
-	err = put_user(sizeof(int),optlen);
-	if (err)
-		return err; 
+	if(get_user(olr, optlen))
+		return -EFAULT;
+
+	olr=min(olr,sizeof(int));
+	if(put_user(olr,optlen))
+		return -EFAULT;
 	if(optname==MRT_VERSION)
-		err = put_user(0x0305,(int *)optval);
+		val=0x0305;
 	else
-		err = put_user(mroute_do_pim,(int *)optval);
-	return err;
+		val=mroute_do_pim;
+	if(copy_to_user(optval,&val,olr))
+		return -EFAULT;
+	return 0;
 }
 
 /*

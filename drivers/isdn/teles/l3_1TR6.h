@@ -1,6 +1,9 @@
-/* $Id: l3_1TR6.h,v 1.3 1996/04/30 21:53:48 isdn4dev Exp $
+/* $Id: l3_1TR6.h,v 1.4 1996/09/23 01:53:52 fritz Exp $
  *
  * $Log: l3_1TR6.h,v $
+ * Revision 1.4  1996/09/23 01:53:52  fritz
+ * Bugfix: discard unknown frames (non-EDSS1 and non-1TR6).
+ *
  * Revision 1.3  1996/04/30 21:53:48  isdn4dev
  * Bugs, SPV, Logging in q931.c  Karsten Keil
  *
@@ -11,9 +14,6 @@
  */
 #ifndef l3_1TR6
 #define l3_1TR6
-
-#define PROTO_DIS_N0 0x40
-#define PROTO_DIS_N1 0x41
 
 /*
  * MsgType N0
