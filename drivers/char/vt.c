@@ -63,7 +63,8 @@ extern void do_unblank_screen(void);
 extern unsigned int keymap_count;
 
 /*
- * routines to load custom translation table and EGA/VGA font from console.c
+ * routines to load custom translation table, EGA/VGA font and
+ * VGA colour palette from console.c
  */
 extern int con_set_trans_old(char * table);
 extern int con_get_trans_old(char * table);
@@ -74,10 +75,14 @@ extern int con_set_unimap(ushort ct, struct unipair *list);
 extern int con_get_unimap(ushort ct, ushort *uct, struct unipair *list);
 extern int con_set_font(char * fontmap, int ch512);
 extern int con_get_font(char * fontmap);
+extern int con_set_cmap(unsigned char *cmap);
+extern int con_get_cmap(unsigned char *cmap);
+extern void reset_palette(int currcons);
 extern int con_adjust_height(unsigned long fontheight);
 
 extern int video_mode_512ch;
 extern unsigned long video_font_height;
+extern unsigned long video_scan_lines;
 
 /*
  * these are the valid i/o ports we're allowed to change. they map all the
@@ -95,13 +100,13 @@ extern unsigned long video_font_height;
  * tty.
  */
 
-static void
+static int
 kd_size_changed(int row, int col)
 {
   struct task_struct *p;
   int i;
 
-  if ( !row && !col ) return;
+  if ( !row && !col ) return 0;
 
   for ( i = 0 ; i < MAX_NR_CONSOLES ; i++ )
     {
@@ -120,6 +125,8 @@ kd_size_changed(int row, int col)
 	  send_sig(SIGWINCH, p, 1);
 	}
     }
+
+  return 0;
 }
 
 /*
@@ -864,7 +871,61 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 			return i;
 		ll = get_fs_word(&vtsizes->v_rows);
 		cc = get_fs_word(&vtsizes->v_cols);
-		return vc_resize(ll, cc);
+		i = vc_resize(ll, cc);
+		return i ? i : 	kd_size_changed(ll, cc);
+	}
+
+	case VT_RESIZEX:
+	{
+		struct vt_consize *vtconsize = (struct vt_consize *) arg;
+		ushort ll,cc,vlin,clin,vcol,ccol;
+		if (!perm)
+			return -EPERM;
+		i = verify_area(VERIFY_READ, (void *)vtconsize, sizeof(struct vt_consize));
+		if (i)
+			return i;
+		ll = get_fs_word(&vtconsize->v_rows);
+		cc = get_fs_word(&vtconsize->v_cols);
+		vlin = get_fs_word(&vtconsize->v_vlin);
+		clin = get_fs_word(&vtconsize->v_clin);
+		vcol = get_fs_word(&vtconsize->v_vcol);
+		ccol = get_fs_word(&vtconsize->v_ccol);
+		vlin = vlin ? vlin : video_scan_lines;
+		if ( clin )
+		  {
+		    if ( ll )
+		      {
+			if ( ll != vlin/clin )
+			  return EINVAL; /* Parameters don't add up */
+		      }
+		    else 
+		      ll = vlin/clin;
+		  }
+		if ( vcol && ccol )
+		  {
+		    if ( cc )
+		      {
+			if ( cc != vcol/ccol )
+			  return EINVAL;
+		      }
+		    else
+		      cc = vcol/ccol;
+		  }
+
+		if ( clin > 32 )
+		  return EINVAL;
+		    
+		if ( vlin )
+		  video_scan_lines = vlin;
+		if ( clin )
+		  video_font_height = clin;
+		
+		i = vc_resize(ll, cc);
+		if (i)
+			return i;
+
+		kd_size_changed(ll, cc);
+		return 0;
 	}
 
 	case PIO_FONT:
@@ -881,6 +942,16 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 			return -EINVAL;
 		return con_get_font((char *)arg);
 		/* con_get_font() defined in console.c */
+
+	case PIO_CMAP:
+                if (!perm)
+			return -EPERM;
+                return con_set_cmap((char *)arg);
+                /* con_set_cmap() defined in console.c */
+
+	case GIO_CMAP:
+                return con_get_cmap((char *)arg);
+                /* con_get_cmap() defined in console.c */
 
 	case PIO_FONTX:
 	{
@@ -903,9 +974,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 			if (i)
 				return i;
 			i = con_adjust_height(cfdarg.charheight);
-			if (i <= 0) return i;
-			kd_size_changed(i, 0);
-			return 0;
+			return (i <= 0) ? i : kd_size_changed(i, 0);
 		} else
 			return -EINVAL;
 	}

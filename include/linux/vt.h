@@ -39,4 +39,14 @@ struct vt_sizes {
 };
 #define VT_RESIZE	0x5609	/* set kernel's idea of screensize */
 
+struct vt_consize {
+        ushort v_rows;		/* number of rows */
+	ushort v_cols;		/* number of columns */
+	ushort v_vlin;		/* number of pixel rows on screen */
+	ushort v_clin;		/* number of pixel rows per character */
+	ushort v_vcol;		/* number of pixel columns on screen */
+	ushort v_ccol;		/* number of pixel columns per character */
+};
+#define VT_RESIZEX      0x560A  /* set kernel's idea of screensize + more */
+
 #endif /* _LINUX_VT_H */

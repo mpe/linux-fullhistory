@@ -16,9 +16,9 @@
   This is not a complete driver, it must be combined with board-specific
   code such as ne.c, wd.c, 3c503.c, etc.
 
-  13/04/95 -- Don't blindly swallow ENISR_RDC interrupts for non-shared
-  memory cards. We need to follow these closely for neX000 cards.
-  Plus other minor cleanups.   -- Paul Gortmaker
+  Changelog:
+
+  Paul Gortmaker	: remove set_bit lock, other cleanups.
 
   */
 
@@ -129,7 +129,6 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
     int e8390_base = dev->base_addr;
     struct ei_device *ei_local = (struct ei_device *) dev->priv;
     int length, send_length;
-    unsigned long flags;
     
 /*
  *  We normally shouldn't be called if dev->tbusy is set, but the
@@ -177,22 +176,14 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
     if (skb->len <= 0)
 		return 0;
 
-    save_flags(flags);
-    cli();
-
-    /* Block a timer-based transmit from overlapping. */
-    if ((set_bit(0, (void*)&dev->tbusy) != 0) || ei_local->irqlock) {
-	printk("%s: Tx access conflict. irq=%d lock=%d tx1=%d tx2=%d last=%d\n",
-		dev->name, dev->interrupt, ei_local->irqlock, ei_local->tx1,
-		ei_local->tx2, ei_local->lasttx);
-	restore_flags(flags);
-	return 1;
-    }
-
     /* Mask interrupts from the ethercard. */
     outb_p(0x00, e8390_base + EN0_IMR);
+    if (dev->interrupt) {
+	printk("%s: Tx request while isr active.\n",dev->name);
+	outb_p(ENISR_ALL, e8390_base + EN0_IMR);
+	return 1;
+    }
     ei_local->irqlock = 1;
-    restore_flags(flags);
 
     send_length = ETH_ZLEN < length ? length : ETH_ZLEN;
 
@@ -314,17 +305,17 @@ void ei_interrupt(int irq, struct pt_regs * regs)
 			outb_p(ENISR_TX_ERR, e8390_base + EN0_ISR); /* Ack intr. */
 		}
 
+		/* Ignore any RDC interrupts that make it back to here. */
 		if (interrupts & ENISR_RDC) {
-			if (dev->mem_start)
 				outb_p(ENISR_RDC, e8390_base + EN0_ISR);
 		}
 
 		outb_p(E8390_NODMA+E8390_PAGE0+E8390_START, e8390_base + E8390_CMD);
     }
     
-    if ((interrupts & ~ENISR_RDC) && ei_debug) {
+    if (interrupts && ei_debug) {
 		outb_p(E8390_NODMA+E8390_PAGE0+E8390_START, e8390_base + E8390_CMD);
-		if (nr_serviced == MAX_SERVICE) {
+		if (nr_serviced >= MAX_SERVICE) {
 			printk("%s: Too much work at interrupt, status %#2.2x\n",
 				   dev->name, interrupts);
 			outb_p(ENISR_ALL, e8390_base + EN0_ISR); /* Ack. most intrs. */
@@ -501,7 +492,7 @@ static void ei_receive(struct device *dev)
 		ei_local->current_page = next_frame;
 		outb_p(next_frame-1, e8390_base+EN0_BOUNDARY);
     }
-    /* If any worth-while packets have been received, dev_rint()
+    /* If any worth-while packets have been received, netif_rx()
        has done a mark_bh(NET_BH) for us and will work on them
        when we get to the bottom-half routine. */
 

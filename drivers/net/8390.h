@@ -45,12 +45,12 @@ struct ei_device {
   unsigned word16:1;  /* We have the 16-bit (vs 8-bit) version of the card. */
   unsigned txing:1;		/* Transmit Active */
   unsigned irqlock:1;		/* 8390's intrs disabled when '1'. */
+  unsigned dmaing:1;		/* Remote DMA Active */
   unsigned pingpong:1;		/* Using the ping-pong driver */
   unsigned char tx_start_page, rx_start_page, stop_page;
   unsigned char current_page;	/* Read pointer in buffer  */
   unsigned char interface_num;	/* Net port (AUI, 10bT.) to use. */
   unsigned char txqueue;	/* Tx Packet buffer queue length. */
-  unsigned char dmaing;		/* Remote DMA (Tx/Rx/Active) */
   short tx1, tx2;		/* Packet lengths for ping-pong tx. */
   short lasttx;			/* Alpha version consistency check. */
   unsigned char reg0;		/* Register '0' in a WD8013 */

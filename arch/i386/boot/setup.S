@@ -160,10 +160,12 @@ good_sig:
 	int	0x10
 	mov	bx,ax
 	mov	ax,#0x5019
+	movb	[15],#0		! by default, no VGA
 	cmp	bl,#0x1a	! 1a means VGA, anything else EGA or lower
-	jne	novga	
+	jne	novga
+	movb	[15],#1		! we've detected a VGA
 	call	chsvga
-novga:	mov	[14],ax
+novga:	mov	[14],al
 	mov	ah,#0x03	! read cursor pos
 	xor	bh,bh		! clear bh
 	int	0x10		! save it in known place, con_init fetches

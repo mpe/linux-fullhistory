@@ -17,6 +17,8 @@ lib.a: $(OBJS)
 
 dep:
 
+modules:
+
 #
 # include a dependency file if one exists
 #

@@ -44,6 +44,7 @@ struct screen_info {
 	unsigned short orig_video_ega_bx;
 	unsigned short orig_video_ega_cx;
 	unsigned char  orig_video_lines;
+	unsigned char  orig_video_isVGA;
 	unsigned short orig_video_points;
 };
 
@@ -58,12 +59,14 @@ extern struct screen_info screen_info;
 #define ORIG_VIDEO_EGA_BX	(screen_info.orig_video_ega_bx)
 #define ORIG_VIDEO_EGA_CX	(screen_info.orig_video_ega_cx)
 #define ORIG_VIDEO_LINES	(screen_info.orig_video_lines)
+#define ORIG_VIDEO_ISVGA	(screen_info.orig_video_isVGA)
 #define ORIG_VIDEO_POINTS       (screen_info.orig_video_points)
 
 #define VIDEO_TYPE_MDA		0x10	/* Monochrome Text Display	*/
 #define VIDEO_TYPE_CGA		0x11	/* CGA Display 			*/
 #define VIDEO_TYPE_EGAM		0x20	/* EGA/VGA in Monochrome Mode	*/
-#define VIDEO_TYPE_EGAC		0x21	/* EGA/VGA in Color Mode	*/
+#define VIDEO_TYPE_EGAC		0x21	/* EGA in Color Mode		*/
+#define VIDEO_TYPE_VGAC		0x22	/* VGA+ in Color Mode		*/
 
 /*
  * This character is the same as _POSIX_VDISABLE: it cannot be used as

@@ -16,12 +16,10 @@
     boards.  Currently it supports the NE1000, NE2000, many clones,
     and some Cabletron products.
 
-    13/04/95 -- Change in philosophy. We now monitor ENISR_RDC for
-    handshaking the Tx PIO xfers. If we don't get a RDC within a
-    reasonable period of time, we know the 8390 has gone south, and we
-    kick the board before it locks the system. Also use set_bit() to
-    create atomic locks on the PIO xfers, and added some defines
-    that the end user can play with to save memory.	-- Paul Gortmaker
+    Changelog:
+
+    Paul Gortmaker	: use ENISR_RDC to monitor Tx PIO uploads, made
+			  sanity checks and bad clone support optional.
 
 */
 
@@ -335,6 +333,7 @@ ne_reset_8390(struct device *dev)
 
     if (ei_debug > 1) printk("resetting the 8390 t=%ld...", jiffies);
     ei_status.txing = 0;
+    ei_status.dmaing = 0;
 
     outb_p(tmp, NE_BASE + NE_RESET);
     /* This check _should_not_ be necessary, omit eventually. */
@@ -343,10 +342,11 @@ ne_reset_8390(struct device *dev)
 	    printk("%s: ne_reset_8390() did not complete.\n", dev->name);
 	    break;
 	}
+    outb_p(ENISR_RESET, NE_BASE + NE_RESET);	/* Ack intr. */
 }
 
 /* Block input and output, similar to the Crynwr packet driver.  If you
-   porting to a new ethercard look at the packet driver source for hints.
+   are porting to a new ethercard, look at the packet driver source for hints.
    The NEx000 doesn't share it on-board packet memory -- you have to put
    the packet out through the "remote DMA" dataport using outb. */
 
@@ -359,7 +359,7 @@ ne_block_input(struct device *dev, int count, char *buf, int ring_offset)
     int nic_base = dev->base_addr;
 
     /* This *shouldn't* happen. If it does, it's the last thing you'll see */
-    if (set_bit(0,(void*)&ei_status.dmaing)) {
+    if (ei_status.dmaing) {
 	if (ei_debug > 0)
 	    printk("%s: DMAing conflict in ne_block_input "
 		   "[DMAstat:%d][irqlock:%d][intr:%d].\n",
@@ -367,7 +367,7 @@ ne_block_input(struct device *dev, int count, char *buf, int ring_offset)
 		   dev->interrupt);
 	return 0;
     }
-    ei_status.dmaing |= 0x02;
+    ei_status.dmaing |= 0x01;
     outb_p(E8390_NODMA+E8390_PAGE0+E8390_START, nic_base+ NE_CMD);
     outb_p(count & 0xff, nic_base + EN0_RCNTLO);
     outb_p(count >> 8, nic_base + EN0_RCNTHI);
@@ -409,7 +409,7 @@ ne_block_input(struct device *dev, int count, char *buf, int ring_offset)
     }
 #endif
     outb_p(ENISR_RDC, nic_base + EN0_ISR);	/* Ack intr. */
-    ei_status.dmaing &= ~0x03;
+    ei_status.dmaing &= ~0x01;
     return ring_offset + count;
 }
 
@@ -430,7 +430,7 @@ ne_block_output(struct device *dev, int count,
       count++;
 
     /* This *shouldn't* happen. If it does, it's the last thing you'll see */
-    if (set_bit(0,(void*)&ei_status.dmaing)) {
+    if (ei_status.dmaing) {
 	if (ei_debug > 0)
 	    printk("%s: DMAing conflict in ne_block_output."
 		   "[DMAstat:%d][irqlock:%d][intr:%d]\n",
@@ -438,7 +438,7 @@ ne_block_output(struct device *dev, int count,
 		   dev->interrupt);
 	return;
     }
-    ei_status.dmaing |= 0x04;
+    ei_status.dmaing |= 0x01;
     /* We should already be in page 0, but to be safe... */
     outb_p(E8390_PAGE0+E8390_START+E8390_NODMA, nic_base + NE_CMD);
 
@@ -510,7 +510,7 @@ ne_block_output(struct device *dev, int count,
 	}
 
     outb_p(ENISR_RDC, nic_base + EN0_ISR);	/* Ack intr. */
-    ei_status.dmaing &= ~0x05;
+    ei_status.dmaing &= ~0x01;
     return;
 }
 

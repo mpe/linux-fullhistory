@@ -15,6 +15,9 @@ struct consolefontdesc {
 	char *chardata;		/* font data in expanded form */
 };
 
+#define GIO_CMAP	0x4B70	/* gets colour palette on VGA+ */
+#define PIO_CMAP	0x4B71	/* sets colour palette on VGA+ */
+
 #define KIOCSOUND	0x4B2F	/* start sound generation (0 for off) */
 #define KDMKTONE	0x4B30	/* generate tone */
 
@@ -129,6 +132,6 @@ struct kbkeycode {
 
 /* note: 0x4B00-0x4B4E all have had a value at some time;
    don't reuse for the time being */
-/* note: 0x4B60-0x4B6C used above */
+/* note: 0x4B60-0x4B6C, 0x4B70, 0x4B71 used above */
 
 #endif /* _LINUX_KD_H */

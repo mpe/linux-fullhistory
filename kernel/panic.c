@@ -30,3 +30,12 @@ NORET_TYPE void panic(const char * fmt, ...)
 		sys_sync();
 	for(;;);
 }
+
+/*
+ * GCC 2.5.8 doesn't always optimize correctly; see include/asm/segment.h
+ */
+
+int bad_user_access_length(void)
+{
+        panic("bad_user_access_length executed (not cool, dude)");
+}

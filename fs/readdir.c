@@ -45,11 +45,11 @@ static int fillonedir(void * __buf, char * name, int namlen, off_t offset, ino_t
 		return -EINVAL;
 	buf->count++;
 	dirent = buf->dirent;
-	put_fs_long(ino, &dirent->d_ino);
-	put_fs_long(offset, &dirent->d_offset);
-	put_fs_word(namlen, &dirent->d_namlen);
+	put_user(ino, &dirent->d_ino);
+	put_user(offset, &dirent->d_offset);
+	put_user(namlen, &dirent->d_namlen);
 	memcpy_tofs(dirent->d_name, name, namlen);
-	put_fs_byte(0, dirent->d_name + namlen);
+	put_user(0, dirent->d_name + namlen);
 	return 0;
 }
 
@@ -106,10 +106,10 @@ static int filldir(void * __buf, char * name, int namlen, off_t offset, ino_t in
 		put_user(offset, &dirent->d_off);
 	dirent = buf->current;
 	buf->previous = dirent;
-	put_fs_long(ino, &dirent->d_ino);
-	put_fs_word(reclen, &dirent->d_reclen);
+	put_user(ino, &dirent->d_ino);
+	put_user(reclen, &dirent->d_reclen);
 	memcpy_tofs(dirent->d_name, name, namlen);
-	put_fs_byte(0, dirent->d_name + namlen);
+	put_user(0, dirent->d_name + namlen);
 	((char *) dirent) += reclen;
 	buf->current = dirent;
 	buf->count -= reclen;

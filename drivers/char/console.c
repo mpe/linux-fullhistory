@@ -37,6 +37,12 @@
  *     'int con_set_font(char *data, int ch512)'
  *     'int con_adjust_height(int fontheight)'
  *
+ *     'int con_get_cmap(char *)'
+ *     'int con_set_cmap(char *)'
+ *
+ *     'int reset_palette(int currcons)'
+ *     'void set_palette(void)'
+ *
  *     'void mouse_report(struct tty_struct * tty, int butt, int mrx, int mry)'
  *     'int mouse_reporting(void)'
  *
@@ -67,10 +73,14 @@
  *
  * Improved loadable font/UTF-8 support by H. Peter Anvin, Feb 1995
  *
+ * improved scrollback, plus colour palette handling, by Simon Tatham
+ * 17-Jun-95 <sgt20@cam.ac.uk>
+ *
  */
 
 #define BLANK 0x0020
 #define CAN_LOAD_EGA_FONTS    /* undefine if the user must not do this */
+#define CAN_LOAD_PALETTE      /* undefine if the user must not do this */
 
 /* A bitmap for codes <32. A bit of 1 indicates that the code
  * corresponding to that bit number invokes some special action
@@ -145,6 +155,8 @@ extern void vesa_blank(void);
 extern void vesa_unblank(void);
 extern void compute_shiftstate(void);
 extern int conv_uni_to_pc(long ucs);
+extern void reset_palette (int currcons) ;
+extern void set_palette (void) ;
 
 /* Description of the hardware situation */
 static unsigned char	video_type;		/* Type of display being used	*/
@@ -164,7 +176,7 @@ static int printable = 0;			/* Is console ready for printing? */
 	/* these two also used in in vt.c */
        int		video_mode_512ch = 0;	/* 512-character mode */
        unsigned long	video_font_height;	/* Height of current screen font */
-static unsigned long	video_scan_lines;	/* Number of scan lines on screen */
+       unsigned long	video_scan_lines;	/* Number of scan lines on screen */
 static unsigned short console_charmask = 0x0ff;
 
 static unsigned short *vc_scrbuf[MAX_NR_CONSOLES];
@@ -224,6 +236,7 @@ struct vc_data {
 	unsigned char	vc_utf_count;
 	         long	vc_utf_char;
 	unsigned long	vc_tab_stop[5];		/* Tab stops. 160 columns. */
+	unsigned char   vc_palette[16*3];       /* Colour palette for VGA+ */
 	unsigned short * vc_translate;
 	unsigned char 	vc_G0_charset;
 	unsigned char 	vc_G1_charset;
@@ -296,6 +309,7 @@ static struct vc {
 #define	ulcolor		(vc_cons[currcons].d->vc_ulcolor)
 #define	halfcolor	(vc_cons[currcons].d->vc_halfcolor)
 #define tab_stop	(vc_cons[currcons].d->vc_tab_stop)
+#define palette		(vc_cons[currcons].d->vc_palette)
 
 #define vcmode		(vt_cons[currcons]->vc_mode)
 #define structsize	(sizeof(struct vc_data) + sizeof(struct vt_struct))
@@ -490,6 +504,14 @@ void vc_disallocate(unsigned int currcons)
 static unsigned char color_table[] = { 0, 4, 2, 6, 1, 5, 3, 7,
 				       8,12,10,14, 9,13,11,15 };
 
+/* the default colour table, for VGA+ colour systems */
+static int default_red[] = {0x00,0xaa,0x00,0xaa,0x00,0xaa,0x00,0xaa,
+    0x55,0xff,0x55,0xff,0x55,0xff,0x55,0xff};
+static int default_grn[] = {0x00,0x00,0xaa,0x55,0x00,0x00,0xaa,0xaa,
+    0x55,0x55,0xff,0xff,0x55,0x55,0xff,0xff};
+static int default_blu[] = {0x00,0x00,0x00,0x00,0xaa,0xaa,0xaa,0xaa,
+    0x55,0x55,0x55,0x55,0xff,0xff,0xff,0xff};
+
 /*
  * gotoxy() must verify all boundaries, because the arguments
  * might also be negative. If the given position is out of
@@ -523,10 +545,14 @@ static void gotoxy(int currcons, int new_x, int new_y)
 }
 
 /*
- * *Very* limited hardware scrollback support..
+ * Hardware scrollback support
  */
 static unsigned short __real_origin;
-static unsigned short __origin;		/* offset of currently displayed screen */
+static unsigned short __origin;	   /* offset of currently displayed screen */
+#define last_lpos (((video_mem_term-video_mem_base)/video_num_columns/2)-video_num_lines+1)
+#define last_origin_rel ( last_lpos * video_num_columns )
+#define last_origin ( video_mem_base + last_origin_rel * 2 )
+static unsigned short __scrollback_mode;   /* 1 means scrollback can wrap */
 
 static inline void __set_origin(unsigned short offset)
 {
@@ -549,8 +575,27 @@ void scrollback(int lines)
 		lines = video_num_lines/2;
 	lines *= video_num_columns;
 	lines = __origin - lines;
-	if (lines < 0)
-		lines = 0;
+	if (__scrollback_mode == 0) {
+		if (lines < 0)
+			lines = 0;
+	} else {
+		int s_top = __real_origin+video_num_lines*video_num_columns ;
+		if (lines < 0) {
+			int count ;
+			unsigned short * d = (unsigned short *) video_mem_base;
+			unsigned short * s = (unsigned short *) last_origin;
+			
+			lines += last_origin_rel;
+			/* in case the top part of the screen has been modified since
+			 * the scroll wrapped, copy the top bit back to the bottom */
+			count = (video_num_lines-1)*video_num_columns;
+			while (count) {
+				count--;
+				scr_writew(scr_readw(d++),s++);
+			}
+		} else if (__origin > __real_origin && lines < s_top)
+			lines = s_top ;
+	}
 	__set_origin(lines);
 }
 
@@ -559,15 +604,26 @@ void scrollfront(int lines)
 	if (!lines)
 		lines = video_num_lines/2;
 	lines *= video_num_columns;
-	lines = __origin + lines;
-	if (lines > __real_origin)
-		lines = __real_origin;
+	if (__origin > __real_origin) {
+		/* assume __scrollback_mode == 1 */
+		lines += __origin;
+		if (lines >= last_origin_rel) {
+			lines -= last_origin_rel ;
+			if (lines > __real_origin)
+				lines = __real_origin;
+		}
+	} else {
+		lines += __origin;
+		if (lines > __real_origin)
+			lines = __real_origin;
+	}
 	__set_origin(lines);
 }
 
 static void set_origin(int currcons)
 {
-	if (video_type != VIDEO_TYPE_EGAC && video_type != VIDEO_TYPE_EGAM)
+	if (video_type != VIDEO_TYPE_EGAC && video_type != VIDEO_TYPE_VGAC
+	    && video_type != VIDEO_TYPE_EGAM)
 		return;
 	if (currcons != fg_console || console_blanked || vcmode == KD_GRAPHICS)
 		return;
@@ -614,7 +670,8 @@ static void scrup(int currcons, unsigned int t, unsigned int b)
 
 	if (b > video_num_lines || t >= b)
 		return;
-	if (video_type != VIDEO_TYPE_EGAC && video_type != VIDEO_TYPE_EGAM)
+	if (video_type != VIDEO_TYPE_EGAC && video_type != VIDEO_TYPE_VGAC
+	    && video_type != VIDEO_TYPE_EGAM)
 		hardscroll = 0;
 	else if (t || b != video_num_lines)
 		hardscroll = 0;
@@ -622,7 +679,7 @@ static void scrup(int currcons, unsigned int t, unsigned int b)
 		origin += video_size_row;
 		pos += video_size_row;
 		scr_end += video_size_row;
-		if (scr_end > video_mem_end) {
+		if (origin >= last_origin) {
 			unsigned short * d = (unsigned short *) video_mem_start;
 			unsigned short * s = (unsigned short *) origin;
 			unsigned int count;
@@ -641,6 +698,8 @@ static void scrup(int currcons, unsigned int t, unsigned int b)
 			pos -= origin-video_mem_start;
 			origin = video_mem_start;
 			has_scrolled = 1;
+			if (currcons == fg_console)
+				__scrollback_mode = 1;
 		} else {
 			unsigned short * d;
 			unsigned int count;
@@ -651,6 +710,8 @@ static void scrup(int currcons, unsigned int t, unsigned int b)
 				count--;
 				scr_writew(video_erase_char, d++);
 			}
+                        if (scr_end > last_origin)   /* we've wrapped into kept region */
+				__scrollback_mode = 0;
 		}
 		set_origin(currcons);
 	} else {
@@ -1266,7 +1327,8 @@ static void restore_cur(int currcons)
 }
 
 enum { ESnormal, ESesc, ESsquare, ESgetpars, ESgotpars, ESfunckey, 
-	EShash, ESsetG0, ESsetG1, ESpercent, ESignore };
+	EShash, ESsetG0, ESsetG1, ESpercent, ESignore, ESnonstd,
+	ESpalette };
 
 static void reset_terminal(int currcons, int do_clear)
 {
@@ -1515,6 +1577,9 @@ static int con_write(struct tty_struct * tty, int from_user,
 				  case '[':
 					vc_state = ESsquare;
 					continue;
+				  case ']':
+					vc_state = ESnonstd;
+					continue;
 				  case '%':
 					vc_state = ESpercent;
 					continue;
@@ -1559,6 +1624,36 @@ static int con_write(struct tty_struct * tty, int from_user,
 					set_kbd(kbdapplic);
 				 	continue;
 				}	
+				continue;
+			case ESnonstd:
+				if (c=='P') {   /* palette escape sequence */
+					for (npar=0; npar<NPAR; npar++)
+						par[npar] = 0 ;
+					npar = 0 ;
+					vc_state = ESpalette;
+					continue;
+				} else if (c=='R') {   /* reset palette */
+					reset_palette (currcons);
+					vc_state = ESnormal;
+				} else
+					vc_state = ESnormal;
+				continue;
+			case ESpalette:
+				if ( (c>='0'&&c<='9') || (c>='A'&&c<='F') || (c>='a'&&c<='f') ) {
+					par[npar++] = (c>'9' ? (c&0xDF)-'A'+10 : c-'0') ;
+					if (npar==7) {
+						int i = par[0]*3, j = 1;
+						palette[i] = 16*par[j++];
+						palette[i++] += par[j++];
+						palette[i] = 16*par[j++];
+						palette[i++] += par[j++];
+						palette[i] = 16*par[j++];
+						palette[i] += par[j];
+						set_palette() ;
+						vc_state = ESnormal;
+					}
+				} else
+					vc_state = ESnormal;
 				continue;
 			case ESsquare:
 				for(npar = 0 ; npar < NPAR ; npar++)
@@ -1853,6 +1948,7 @@ static void con_unthrottle(struct tty_struct *tty)
 static void vc_init(unsigned int currcons, unsigned long rows, unsigned long cols, int do_clear)
 {
 	long base = (long) vc_scrbuf[currcons];
+	int j, k ;
 
 	video_num_columns = cols;
 	video_num_lines = rows;
@@ -1863,6 +1959,11 @@ static void vc_init(unsigned int currcons, unsigned long rows, unsigned long col
 	scr_end = base + video_screen_size;
 	video_mem_end = base + video_screen_size;
 	reset_vc(currcons);
+	for (j=k=0; j<16; j++) {
+		vc_cons[currcons].d->vc_palette[k++] = default_red[j] ;
+		vc_cons[currcons].d->vc_palette[k++] = default_grn[j] ;
+		vc_cons[currcons].d->vc_palette[k++] = default_blu[j] ;
+	}
 	def_color       = 0x07;   /* white */
 	ulcolor		= 0x0f;   /* bold white */
 	halfcolor       = 0x08;   /* grey */
@@ -1925,6 +2026,7 @@ long con_init(long kmem_start)
 	
 	con_setsize(ORIG_VIDEO_LINES, ORIG_VIDEO_COLS);
 	video_page = ORIG_VIDEO_PAGE; 			/* never used */
+	__scrollback_mode = 0 ;
 
 	timer_table[BLANK_TIMER].fn = blank_screen;
 	timer_table[BLANK_TIMER].expires = 0;
@@ -1943,16 +2045,14 @@ long con_init(long kmem_start)
 			video_type = VIDEO_TYPE_EGAM;
 			video_mem_term = 0xb8000;
 			display_desc = "EGA+";
-			request_region(0x3b4,2,"ega+");
+			request_region(0x3b0,16,"ega");
 		}
 		else
 		{
 			video_type = VIDEO_TYPE_MDA;
 			video_mem_term = 0xb2000;
 			display_desc = "*MDA";
-			request_region(0x3b4,2,"mda");
-			request_region(0x3b8,1,"mda");
-			request_region(0x3bf,1,"mda");
+			request_region(0x3b0,16,"mda");
 		}
 	}
 	else				/* If not, it is color. */
@@ -1963,10 +2063,44 @@ long con_init(long kmem_start)
 		video_port_val	= 0x3d5;
 		if ((ORIG_VIDEO_EGA_BX & 0xff) != 0x10)
 		{
-			video_type = VIDEO_TYPE_EGAC;
-			video_mem_term = 0xc0000;
-			display_desc = "EGA+";
-			request_region(0x3d4,2,"ega+");
+                        int i ;
+
+                        video_mem_term = 0xc0000;
+
+                        if (!ORIG_VIDEO_ISVGA) {
+                                video_type = VIDEO_TYPE_EGAC;
+                                display_desc = "EGA";
+                                request_region(0x3c0,32,"ega");
+                        } else {
+                                video_type = VIDEO_TYPE_VGAC;
+                                display_desc = "VGA+";
+                                request_region(0x3c0,32,"vga+");
+
+                                /* get 64K rather than 32K of video RAM */
+                                video_mem_base = 0xa0000 ;
+                                video_mem_term = 0xb0000 ;
+                                outb_p (6, 0x3ce) ;
+                                outb_p (6, 0x3cf) ;
+
+                                /* normalise the palette registers, to point the                                 * 16 screen colours to the first 16 DAC entries */
+
+                                for (i=0; i<16; i++) {
+                                        inb_p (0x3da) ;
+                                        outb_p (i, 0x3c0) ;
+                                        outb_p (i, 0x3c0) ;
+                                }
+                                outb_p (0x20, 0x3c0) ;
+
+                                /* now set the DAC registers back to their default
+                                 * values */
+
+                                for (i=0; i<16; i++) {
+					outb_p (color_table[i], 0x3c8) ;
+                                        outb_p (default_red[i], 0x3c9) ;
+                                        outb_p (default_grn[i], 0x3c9) ;
+                                        outb_p (default_blu[i], 0x3c9) ;
+                                }
+                        }
 		}
 		else
 		{
@@ -1982,6 +2116,8 @@ long con_init(long kmem_start)
 	/* Due to kmalloc roundup allocating statically is more efficient -
 	   so provide MIN_NR_CONSOLES for people with very little memory */
 	for (currcons = 0; currcons < MIN_NR_CONSOLES; currcons++) {
+		int j, k ;
+
 		vc_cons[currcons].d = (struct vc_data *) kmem_start;
 		kmem_start += sizeof(struct vc_data);
 		vt_cons[currcons] = (struct vt_struct *) kmem_start;
@@ -1990,7 +2126,12 @@ long con_init(long kmem_start)
 		kmem_start += video_screen_size;
 		kmalloced = 0;
 		screenbuf_size = video_screen_size;
-		vc_init(currcons, video_num_lines, video_num_columns, currcons);
+       		vc_init(currcons, video_num_lines, video_num_columns, currcons);
+		for (j=k=0; j<16; j++) {
+			vc_cons[currcons].d->vc_palette[k++] = default_red[j] ;
+			vc_cons[currcons].d->vc_palette[k++] = default_grn[j] ;
+			vc_cons[currcons].d->vc_palette[k++] = default_blu[j] ;
+		}
 	}
 
 	currcons = fg_console = 0;
@@ -2008,7 +2149,8 @@ long con_init(long kmem_start)
 	   can figure out the appropriate screen size should we load
 	   a different font */
 
-	if ( video_type == VIDEO_TYPE_EGAC || video_type == VIDEO_TYPE_EGAM )
+	if ( video_type == VIDEO_TYPE_VGAC || video_type == VIDEO_TYPE_EGAC
+	    || video_type == VIDEO_TYPE_EGAM )
 	{
 		video_font_height = ORIG_VIDEO_POINTS;
 		/* This may be suboptimal but is a safe bet - go with it */
@@ -2031,6 +2173,7 @@ static void get_scrmem(int currcons)
 {
 	memcpyw((unsigned short *)vc_scrbuf[currcons],
 		(unsigned short *)origin, video_screen_size);
+	__scrollback_mode = 0 ;
 	origin = video_mem_start = (unsigned long)vc_scrbuf[currcons];
 	scr_end = video_mem_end = video_mem_start + video_screen_size;
 	pos = origin + y*video_size_row + (x<<1);
@@ -2098,7 +2241,8 @@ void do_blank_screen(int nopowersave)
 	set_origin(fg_console);
 	get_scrmem(fg_console);
 	unblank_origin = origin;
-	memsetw((void *)blank_origin, BLANK, video_mem_term-blank_origin);
+	memsetw((void *)blank_origin, BLANK,
+		2*video_num_lines*video_num_columns);
 	hide_cursor();
 	console_blanked = fg_console + 1;
 
@@ -2247,9 +2391,9 @@ static int set_get_font(char * arg, int set, int ch512)
 
 	/* no use to "load" CGA... */
 
-	if (video_type == VIDEO_TYPE_EGAC) {
+	if (video_type == VIDEO_TYPE_EGAC || video_type == VIDEO_TYPE_VGAC) {
 		charmap = colourmap;
-		beg = 0x0e;
+		beg = (video_type == VIDEO_TYPE_VGAC ? 0x06 : 0x0e) ;
 	} else if (video_type == VIDEO_TYPE_EGAM) {
 		charmap = blackwmap;
 		beg = 0x0a;
@@ -2344,6 +2488,94 @@ static int set_get_font(char * arg, int set, int ch512)
 #endif
 }
 
+#define dac_reg (0x3c8)
+#define dac_val (0x3c9)
+
+static int set_get_cmap(unsigned char * arg, int set) {
+#ifdef CAN_LOAD_PALETTE
+        int i;
+
+        /* no use to set colourmaps in less than colour VGA */
+
+        if (video_type != VIDEO_TYPE_VGAC)
+		return -EINVAL;
+
+        i = verify_area(set ? VERIFY_READ : VERIFY_WRITE, (void *)arg, 16*3);
+        if (i)
+		return i;
+
+        for (i=0; i<16; i++) {
+                if (set) {
+			default_red[i] = get_user(arg++) ;
+			default_grn[i] = get_user(arg++) ;
+			default_blu[i] = get_user(arg++) ;
+		} else {
+			put_user (default_red[i], arg++) ;
+                        put_user (default_grn[i], arg++) ;
+                        put_user (default_blu[i], arg++) ;
+                }
+        }
+	if (set) {
+		for (i=0; i<MAX_NR_CONSOLES; i++)
+			if (vc_cons_allocated(i)) {
+				int j, k ;
+				for (j=k=0; j<16; j++) {
+					vc_cons[i].d->vc_palette[k++] = default_red[j];
+					vc_cons[i].d->vc_palette[k++] = default_grn[j];
+					vc_cons[i].d->vc_palette[k++] = default_blu[j];
+				}
+			}
+		set_palette() ;
+	}
+
+        return 0;
+#else
+        return -EINVAL;
+#endif
+}
+
+/*
+ * Load palette into the EGA/VGA DAC registers. arg points to a colour
+ * map, 3 bytes per colour, 16 colours, range from 0 to 255.
+ */
+
+int con_set_cmap (unsigned char *arg)
+{
+        return set_get_cmap (arg,1);
+}
+
+int con_get_cmap (unsigned char *arg)
+{
+        return set_get_cmap (arg,0);
+}
+
+void reset_palette (int currcons)
+{
+	int j, k ;
+	for (j=k=0; j<16; j++) {
+		palette[k++] = default_red[j];
+		palette[k++] = default_grn[j];
+		palette[k++] = default_blu[j];
+	}
+	set_palette() ;
+}
+
+void set_palette (void)
+{
+	int i, j ;
+
+	if (video_type != VIDEO_TYPE_VGAC || console_blanked ||
+	    vt_cons[fg_console]->vc_mode == KD_GRAPHICS)
+		return ;
+
+        for (i=j=0; i<16; i++) {
+		outb_p (color_table[i], dac_reg) ;
+		outb_p (vc_cons[fg_console].d->vc_palette[j++]>>2, dac_val) ;
+		outb_p (vc_cons[fg_console].d->vc_palette[j++]>>2, dac_val) ;
+		outb_p (vc_cons[fg_console].d->vc_palette[j++]>>2, dac_val) ;
+        }
+}
+
 /*
  * Load font into the EGA/VGA character generator. arg points to a 8192
  * byte map, 32 bytes per character. Only first H of them are used for
@@ -2379,9 +2611,9 @@ int con_adjust_height(unsigned long fontheight)
 	int rows, maxscan;
 	unsigned char ovr, vde, fsr, curs, cure;
 
-	if (fontheight > 32 ||
-	     (video_type != VIDEO_TYPE_EGAC && video_type != VIDEO_TYPE_EGAM))
-		return -EINVAL;
+	if (fontheight > 32 || (video_type != VIDEO_TYPE_VGAC &&
+	    video_type != VIDEO_TYPE_EGAC && video_type != VIDEO_TYPE_EGAM))
+	        return -EINVAL;
 
 	if ( fontheight == video_font_height || fontheight == 0 )
 		return 0;

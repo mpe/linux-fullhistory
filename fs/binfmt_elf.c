@@ -78,7 +78,7 @@ static void padzero(unsigned long elf_bss)
 	}
 }
 
-unsigned long * create_elf_tables(char * p,int argc,int envc,struct elfhdr * exec, unsigned int load_addr, int ibcs)
+unsigned long * create_elf_tables(char * p,int argc,int envc,struct elfhdr * exec, unsigned int load_addr, unsigned int interp_load_addr, int ibcs)
 {
 	unsigned long *argv,*envp, *dlinfo;
 	unsigned long * sp;
@@ -129,11 +129,11 @@ unsigned long * create_elf_tables(char * p,int argc,int envc,struct elfhdr * exe
 	  put_fs_long(4,dlinfo++); put_fs_long(sizeof(struct elf_phdr),dlinfo++);
 	  put_fs_long(5,dlinfo++); put_fs_long(exec->e_phnum,dlinfo++);
 	  put_fs_long(9,dlinfo++); put_fs_long((unsigned long) exec->e_entry,dlinfo++);
-	  put_fs_long(7,dlinfo++); put_fs_long(SHM_RANGE_START,dlinfo++);
+	  put_fs_long(7,dlinfo++); put_fs_long(interp_load_addr,dlinfo++);
 	  put_fs_long(8,dlinfo++); put_fs_long(0,dlinfo++);
 	  put_fs_long(6,dlinfo++); put_fs_long(PAGE_SIZE,dlinfo++);
 	  put_fs_long(0,dlinfo++); put_fs_long(0,dlinfo++);
-	};
+	}
 
 	put_fs_long((unsigned long)argc,--sp);
 	current->mm->arg_start = (unsigned long) p;
@@ -159,7 +159,7 @@ unsigned long * create_elf_tables(char * p,int argc,int envc,struct elfhdr * exe
    an ELF header */
 
 static unsigned int load_elf_interp(struct elfhdr * interp_elf_ex,
-			     struct inode * interpreter_inode)
+			     struct inode * interpreter_inode, unsigned int *interp_load_addr)
 {
         struct file * file;
 	struct elf_phdr *elf_phdata  =  NULL;
@@ -184,7 +184,7 @@ static unsigned int load_elf_interp(struct elfhdr * interp_elf_ex,
 	   (!interpreter_inode->i_op ||
 	    !interpreter_inode->i_op->default_file_ops->mmap)){
 		return 0xffffffff;
-	};
+	}
 	
 	/* Now read in all of the header information */
 	
@@ -202,51 +202,31 @@ static unsigned int load_elf_interp(struct elfhdr * interp_elf_ex,
 	if (elf_exec_fileno < 0) return 0xffffffff;
 	file = current->files->fd[elf_exec_fileno];
 
-	/*
-	 * First calculate the maximum range of VMA that we need to
-	 * use, and then allocate the entire thing.  Then unmap
-	 * and remap the individual portions of the file to the
-	 * correct address.
-	 */
-	if( interp_elf_ex->e_type == ET_DYN )
-	  {
-	    int maxvma = 0;
-	    eppnt = elf_phdata;
-	    for(i=0; i<interp_elf_ex->e_phnum; i++, eppnt++)
-	      if(eppnt->p_type == PT_LOAD) {
-		if( maxvma < eppnt->p_vaddr + eppnt->p_memsz)
-		  maxvma = eppnt->p_vaddr + eppnt->p_memsz;
-	      }
-	    
-	    error = do_mmap(file, 0, maxvma, PROT_READ,
-			    MAP_PRIVATE | MAP_DENYWRITE, 0);
-	    if(error < 0 && error > -1024) goto oops;  /* Real error */
-	    load_addr = error;
-	    SYS(munmap)(load_addr, maxvma);
-	  }
-	else
-	  {
-	    /*
-	     * For normal executables, we do not use this offset,
-	     * since the vaddr field contains an absolute address.
-	     */
-	    load_addr = 0;
-	  }
-
 	eppnt = elf_phdata;
 	for(i=0; i<interp_elf_ex->e_phnum; i++, eppnt++)
 	  if(eppnt->p_type == PT_LOAD) {
-	    int elf_prot = (eppnt->p_flags & PF_R) ? PROT_READ : 0;
+	    int elf_type = MAP_PRIVATE | MAP_DENYWRITE;
+	    int elf_prot = 0;
+	    unsigned long vaddr = 0;
+	    if (eppnt->p_flags & PF_R) elf_prot =  PROT_READ;
 	    if (eppnt->p_flags & PF_W) elf_prot |= PROT_WRITE;
 	    if (eppnt->p_flags & PF_X) elf_prot |= PROT_EXEC;
+	    if (interp_elf_ex->e_type == ET_EXEC) {
+	    	elf_type |= MAP_FIXED;
+	    	vaddr = eppnt->p_vaddr;
+	    }
+	    
 	    error = do_mmap(file, 
-			    load_addr + (eppnt->p_vaddr & 0xfffff000),
-			    eppnt->p_filesz + (eppnt->p_vaddr & 0xfff),
+			    vaddr & 0xfffff000,
+			    eppnt->p_filesz + (vaddr & 0xfff),
 			    elf_prot,
-			    MAP_PRIVATE | MAP_DENYWRITE | MAP_FIXED,
+			    elf_type,
 			    eppnt->p_offset & 0xfffff000);
 	    
 	    if(error < 0 && error > -1024) break;  /* Real error */
+
+	    if(!load_addr && interp_elf_ex->e_type == ET_DYN)
+	      load_addr = error;
 
 	    /*
 	     * Find the end of the file  mapping for this phdr, and keep
@@ -265,7 +245,6 @@ static unsigned int load_elf_interp(struct elfhdr * interp_elf_ex,
 	
 	/* Now use mmap to map the library into memory. */
 
-oops:	
 	SYS(close)(elf_exec_fileno);
 	if(error < 0 && error > -1024) {
 	        kfree(elf_phdata);
@@ -288,6 +267,7 @@ oops:
 		  MAP_FIXED|MAP_PRIVATE, 0);
 	kfree(elf_phdata);
 
+	*interp_load_addr = load_addr;
 	return ((unsigned int) interp_elf_ex->e_entry) + load_addr;
 }
 
@@ -358,7 +338,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	unsigned int elf_bss, k, elf_brk;
 	int retval;
 	char * elf_interpreter;
-	unsigned int elf_entry;
+	unsigned int elf_entry, interp_load_addr = 0;
 	int status;
 	unsigned int start_code, end_code, end_data;
 	unsigned int elf_stack;
@@ -385,7 +365,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	    !bprm->inode->i_op->default_file_ops->mmap)){
 		MOD_DEC_USE_COUNT;
 		return -ENOEXEC;
-	};
+	}
 	
 	/* Now read in all of the header information */
 	
@@ -440,25 +420,30 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 #if 0
 			printk("Using ELF interpreter %s\n", elf_interpreter);
 #endif
-			if(retval >= 0)
+			if(retval >= 0) {
+				old_fs = get_fs(); /* This could probably be optimized */
+				set_fs(get_ds());
 				retval = namei(elf_interpreter, &interpreter_inode);
+				set_fs(old_fs);
+			}
+
 			if(retval >= 0)
 				retval = read_exec(interpreter_inode,0,bprm->buf,128, 1);
 			
-			if(retval >= 0){
+			if(retval >= 0) {
 				interp_ex = *((struct exec *) bprm->buf);		/* exec-header */
 				interp_elf_ex = *((struct elfhdr *) bprm->buf);	  /* exec-header */
 				
-			};
+			}
 			if(retval < 0) {
-			  kfree (elf_phdata);
-			  kfree(elf_interpreter);
-			  MOD_DEC_USE_COUNT;
-			  return retval;
-			};
-		};
+				kfree (elf_phdata);
+				kfree(elf_interpreter);
+				MOD_DEC_USE_COUNT;
+				return retval;
+			}
+		}
 		elf_ppnt++;
-	};
+	}
 	
 	/* Some simple consistency checks for the interpreter */
 	if(elf_interpreter){
@@ -468,7 +453,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			kfree(elf_phdata);
 			MOD_DEC_USE_COUNT;
 			return -ELIBACC;
-		};
+		}
 		/* Now figure out which format our binary is */
 		if((N_MAGIC(interp_ex) != OMAGIC) && 
 		   (N_MAGIC(interp_ex) != ZMAGIC) &&
@@ -485,7 +470,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		    kfree(elf_phdata);
 		    MOD_DEC_USE_COUNT;
 		    return -ELIBBAD;
-		  };
+		  }
 	}
 	
 	/* OK, we are done with that, now set up the arg stuff,
@@ -501,8 +486,8 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		  if(elf_interpreter) {
 		    bprm->p = copy_strings(1,&passed_p,bprm->page,bprm->p,2);
 		    bprm->argc++;
-		  };
-		};
+		  }
+		}
 		if (!bprm->p) {
 		        if(elf_interpreter) {
 			      kfree(elf_interpreter);
@@ -548,7 +533,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		    load_aout_interp(&interp_ex, interpreter_inode);
 
 		  if(interpreter_type & 2) elf_entry = 
-		    load_elf_interp(&interp_elf_ex, interpreter_inode);
+		    load_elf_interp(&interp_elf_ex, interpreter_inode, &interp_load_addr);
 
 		  old_fs = get_fs();
 		  set_fs(get_ds());
@@ -562,8 +547,8 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		    send_sig(SIGSEGV, current, 0);
 		    MOD_DEC_USE_COUNT;
 		    return 0;
-		  };
-		};
+		  }
+		}
 		
 		
 		if(elf_ppnt->p_type == PT_LOAD) {
@@ -593,9 +578,9 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			if(end_data < k) end_data = k; 
 			k = elf_ppnt->p_vaddr + elf_ppnt->p_memsz;
 			if(k > elf_brk) elf_brk = k;		     
-		      };
+		      }
 		elf_ppnt++;
-	};
+	}
 	set_fs(old_fs);
 	
 	kfree(elf_phdata);
@@ -627,7 +612,8 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			bprm->argc,
 			bprm->envc,
 			(interpreter_type == INTERPRETER_ELF ? &elf_ex : NULL),
-			load_addr,    
+			load_addr,
+			interp_load_addr,
 			(interpreter_type == INTERPRETER_AOUT ? 0 : 1));
 	if(interpreter_type == INTERPRETER_AOUT)
 	  current->mm->arg_start += strlen(passed_fileno) + 1;
@@ -714,7 +700,7 @@ load_elf_library(int fd){
 	   (!inode->i_op || !inode->i_op->default_file_ops->mmap)){
 		MOD_DEC_USE_COUNT;
 		return -ENOEXEC;
-	};
+	}
 	
 	/* Now read in all of the header information */
 	
@@ -737,7 +723,7 @@ load_elf_library(int fd){
 		kfree(elf_phdata);
 		MOD_DEC_USE_COUNT;
 		return -ENOEXEC;
-	};
+	}
 	
 	while(elf_phdata->p_type != PT_LOAD) elf_phdata++;
 	

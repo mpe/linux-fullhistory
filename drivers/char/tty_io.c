@@ -102,6 +102,9 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 		     unsigned int cmd, unsigned long arg);
 static int tty_fasync(struct inode * inode, struct file * filp, int on);
 
+extern void reset_palette(int currcons) ;
+extern void set_palette(void) ;
+
 #ifndef MIN
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
 #endif
@@ -497,6 +500,7 @@ void reset_vc(unsigned int new_console)
 	vt_cons[new_console]->vt_mode.frsig = 0;
 	vt_cons[new_console]->vt_pid = -1;
 	vt_cons[new_console]->vt_newvt = -1;
+	reset_palette (new_console) ;
 }
 
 /*
@@ -561,6 +565,10 @@ void complete_change_console(unsigned int new_console)
 			do_blank_screen(1);
 	}
 
+	/* Set the colour palette for this VT */
+	if (vt_cons[new_console]->vc_mode == KD_TEXT)
+		set_palette() ;
+	
 	/*
 	 * Wake anyone waiting for their VT to activate
 	 */

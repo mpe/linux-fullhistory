@@ -831,10 +831,6 @@ static int try_to_share(unsigned long to_address, struct vm_area_struct * to_are
 	if (pte_dirty(from)) {
 		if (!(from_area->vm_flags & VM_SHARED))
 			return 0;
-		if (pte_write(from)) {
-			printk("nonwritable, but dirty, shared page\n");
-			return 0;
-		}
 	}
 /* is the page reasonable at all? */
 	if (pte_page(from) >= high_memory)
@@ -869,10 +865,6 @@ static int try_to_share(unsigned long to_address, struct vm_area_struct * to_are
 		if (in_swap_cache(pte_page(from))) {
 			if (!(from_area->vm_flags & VM_SHARED))
 				return 0;
-			if (!pte_write(from)) {
-				printk("nonwritable, but dirty, shared page\n");
-				return 0;
-			}
 		}
 		copy_page(pte_page(from), newpage);
 		*to_table = mk_pte(newpage, to_area->vm_page_prot);

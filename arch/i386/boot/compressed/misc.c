@@ -28,6 +28,7 @@ struct screen_info {
 	unsigned short orig_video_ega_bx;
 	unsigned short orig_video_ega_cx;
 	unsigned char  orig_video_lines;
+	unsigned char  orig_video_isVGA;
 };
 
 /*
