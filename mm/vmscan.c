@@ -442,7 +442,7 @@ static inline int do_try_to_free_page(int gfp_mask)
 	int stop;
 
 	/* Let the dcache know we're looking for memory ... */
-	shrink_dcache_memory();
+	shrink_dcache();
 
 	/* Always trim SLAB caches when memory gets low. */
 	kmem_cache_reap(gfp_mask);
@@ -547,6 +547,9 @@ int kswapd(void *unused)
 		run_task_queue(&tq_disk);
 		schedule();
 		swapstats.wakeups++;
+
+		/* This will gently shrink the dcache.. */
+		shrink_dcache_memory();
 	
 		/*
 		 * Do the background pageout: be

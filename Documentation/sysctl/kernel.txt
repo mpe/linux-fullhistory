@@ -25,7 +25,6 @@ Currently, these files are in /proc/sys/kernel:
 - inode-max
 - inode-nr
 - inode-state
-- kmod_unload_delay           ==> Documentation/kmod.txt
 - modprobe                    ==> Documentation/kmod.txt
 - osrelease
 - ostype

@@ -72,7 +72,6 @@ enum
 	KERN_STATINODE,
 	KERN_DENTRY,		/* dentry statistics */
 	KERN_MODPROBE,
-	KERN_KMOD_UNLOAD_DELAY
 };
 
 

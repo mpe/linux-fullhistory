@@ -426,42 +426,16 @@ void shrink_dcache_parent(struct dentry * parent)
 }
 
 /*
- * This is called from do_try_to_free_page() to indicate
- * that we should reduce the dcache and inode cache memory.
+ * This is called from kswapd when we think we need some
+ * more memory, but aren't really sure how much. So we
+ * carefully try to free a _bit_ of our dcache, but not
+ * too much.
  */
-void shrink_dcache_memory()
+void shrink_dcache_memory(void)
 {
-	dentry_stat.want_pages++;
-}
-
-/*
- * This carries out the request received by the above routine.
- */
-void check_dcache_memory()
-{
-	if (dentry_stat.want_pages) {
-		unsigned int count, goal = 0;
-		/*
-		 * Set the page goal.  We don't necessarily need to trim
-		 * the dcache just because the system needs memory ...
-		 */
-		if (page_cache_size > (num_physpages >> 1))
-			goal = (dentry_stat.want_pages * page_cache_size)
-				/ num_physpages;
-		dentry_stat.want_pages = 0;
-		if (goal) {
-			if (goal > 50)
-				goal = 50;
-			count = select_dcache(32, goal);
-#ifdef DCACHE_DEBUG
-printk(KERN_DEBUG "check_dcache_memory: goal=%d, count=%d\n", goal, count);
-#endif
-			if (count) {
-				prune_dcache(count);
-				free_inode_memory(count);
-			}
-		}
-	}
+	int count = select_dcache(32, 8);
+	if (count)
+		prune_dcache(count);
 }
 
 #define NAME_ALLOC_LEN(len)	((len+16) & ~15)

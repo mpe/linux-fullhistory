@@ -18,6 +18,10 @@
 
 	**********************
 
+	v3.01 (98/04/17)
+	  - Interrupt handler now also checks dev->[se]dev are non-NULL
+	    to avoid crashes in interrupts during card init. [dw]
+
 	v3.00 (97/11/09)
 	  - Minor cleanup of debugging messages. [mj]
 
@@ -41,10 +45,10 @@
 
 	v2.80 ALPHA (97/08/01)
 	  - Split source into multiple files; generic arcnet support and
-	    individual chipset drivers. <dwmw2@cam.ac.uk>
+	    individual chipset drivers. <Dave@imladris.demon.co.uk>
 
-	v2.61 ALPHA (97/07/30)    by David Woodhouse (dwmw2@cam.ac.uk) for
-	                            Nortel (Northern Telecom).
+	v2.61 ALPHA (97/07/30)  by David Woodhouse (Dave@imladris.demon.co.uk)
+	                            for Nortel (Northern Telecom).
           - Added support for IO-mapped modes and for SMC COM20020 chipset.
 	  - Fixed (avoided) race condition in send_packet routines which was
             discovered when the buffer copy routines got slow (?).
@@ -170,7 +174,7 @@
 */
 
 static const char *version =
- "arcnet.c: v3.00 97/11/09 Avery Pennarun <apenwarr@bond.net> et al.\n";
+ "arcnet.c: v3.01 98/04/24 Avery Pennarun <apenwarr@bond.net> et al.\n";
 
 #include <linux/module.h>
 #include <linux/config.h>
@@ -956,20 +960,24 @@ arcnet_interrupt(int irq,void *dev_id,struct pt_regs *regs)
 	    return;	/* don't even try. */
 	  }
 #ifdef CONFIG_ARCNET_1051
-	lp->sdev->interrupt=1;
+	if (lp->sdev)
+	  lp->sdev->interrupt=1;
 #endif
 #ifdef CONFIG_ARCNET_ETH
-	lp->edev->interrupt=1;
+	if (lp->edev)
+	  lp->edev->interrupt=1;
 #endif
 
 	/* Call the "real" interrupt handler. */
 	(*lp->inthandler)(dev);
 
 #ifdef CONFIG_ARCNET_ETH
-	lp->edev->interrupt=0;
+	if (lp->edev)
+	  lp->edev->interrupt=0;
 #endif
 #ifdef CONFIG_ARCNET_1051
-	lp->sdev->interrupt=0;
+	if (lp->sdev)
+	  lp->sdev->interrupt=0;
 #endif
 	if (!test_and_clear_bit(0, (int *)&dev->interrupt))
 	  BUGMSG(D_NORMAL, "Someone cleared our dev->interrupt flag!\n");

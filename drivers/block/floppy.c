@@ -4211,7 +4211,6 @@ static int floppy_grab_irq_and_dma(void)
 		if (FDCS->address != -1)
 			fd_outb(FDCS->dor, FD_DOR);
 	fdc = 0;
-	fd_enable_irq();
 	return 0;
 }
 
@@ -4235,7 +4234,6 @@ static void floppy_release_irq_and_dma(void)
 	INT_ON;
 	fd_disable_dma();
 	fd_free_dma();
-	fd_disable_irq();
 	fd_free_irq();
 
 	set_dor(0, ~0, 8);

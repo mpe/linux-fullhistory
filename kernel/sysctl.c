@@ -43,7 +43,6 @@ extern char binfmt_java_interpreter[], binfmt_java_appletviewer[];
 extern int sysctl_overcommit_memory;
 #ifdef CONFIG_KMOD
 extern char modprobe_path[];
-extern int kmod_unload_delay;
 #endif
 #ifdef CONFIG_CHR_DEV_SG
 extern int sg_big_buff;
@@ -180,8 +179,6 @@ static ctl_table kern_table[] = {
 #ifdef CONFIG_KMOD
 	{KERN_MODPROBE, "modprobe", &modprobe_path, 256,
 	 0644, NULL, &proc_dostring, &sysctl_string },
-	{KERN_KMOD_UNLOAD_DELAY, "kmod_unload_delay", &kmod_unload_delay,
-	sizeof(int), 0644, NULL, &proc_dointvec},
 #endif
 #ifdef CONFIG_CHR_DEV_SG
 	{KERN_NRFILE, "sg-big-buff", &sg_big_buff, sizeof (int),

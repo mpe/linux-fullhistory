@@ -70,9 +70,6 @@ spinlock_t irq_controller_lock;
 
 static unsigned int irq_events [NR_IRQS] = { -1, };
 static int disabled_irq [NR_IRQS] = { 0, };
-#ifdef __SMP__
-static int ipi_pending [NR_IRQS] = { 0, };
-#endif
 
 /*
  * Not all IRQs can be routed through the IO-APIC, eg. on certain (older)
@@ -651,18 +648,6 @@ static int handle_IRQ_event(unsigned int irq, struct pt_regs * regs)
 	return status;
 }
 
-
-void disable_irq(unsigned int irq)
-{
-	unsigned long flags;
-
-	spin_lock_irqsave(&irq_controller_lock, flags);
-	irq_handles[irq]->disable(irq);
-	spin_unlock_irqrestore(&irq_controller_lock, flags);
-
-	synchronize_irq();
-}
-
 /*
  * disable/enable_irq() wait for all irq contexts to finish
  * executing. Also it's recursive.
@@ -673,55 +658,10 @@ static void disable_8259A_irq(unsigned int irq)
 	set_8259A_irq_mask(irq);
 }
 
-#ifdef __SMP__
-static void disable_ioapic_irq(unsigned int irq)
-{
-	disabled_irq[irq] = 1;
-	/*
-	 * We do not disable IO-APIC irqs in hardware ...
-	 */
-}
-#endif
-
 void enable_8259A_irq (unsigned int irq)
 {
-	unsigned long flags;
-	spin_lock_irqsave(&irq_controller_lock, flags);
 	cached_irq_mask &= ~(1 << irq);
 	set_8259A_irq_mask(irq);
-	spin_unlock_irqrestore(&irq_controller_lock, flags);
-}
-
-#ifdef __SMP__
-void enable_ioapic_irq (unsigned int irq)
-{
-	unsigned long flags, should_handle_irq;
-	int cpu = smp_processor_id();
-
-	spin_lock_irqsave(&irq_controller_lock, flags);
-	disabled_irq[irq] = 0;
-
-	/*
-	 * In the SMP+IOAPIC case it might happen that there are an unspecified
-	 * number of pending IRQ events unhandled. These cases are very rare,
-	 * so we 'resend' these IRQs via IPIs, to the same CPU. It's much
-	 * better to do it this way as thus we dont have to be aware of
-	 * 'pending' interrupts in the IRQ path, except at this point.
-	 */
-	if (irq_events[irq]) {
-		if (!ipi_pending[irq]) {
-			ipi_pending[irq] = 1;
-			--irq_events[irq];
-			send_IPI(cpu,IO_APIC_VECTOR(irq));
-		}
-	}
-	spin_unlock_irqrestore(&irq_controller_lock, flags);
-}
-#endif
-
-void enable_irq(unsigned int irq)
-{
-	irq_handles[irq]->enable(irq);
 }
 
 void make_8259A_irq (unsigned int irq)
@@ -771,40 +711,106 @@ static void do_8259A_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 }
 
 #ifdef __SMP__
+
+static int ipi_pending [NR_IRQS] = { 0, };
+
+/*
+ * In the SMP+IOAPIC case it might happen that there are an unspecified
+ * number of pending IRQ events unhandled. These cases are very rare,
+ * so we 'resend' these IRQs via IPIs, to the same CPU. It's much
+ * better to do it this way as thus we dont have to be aware of
+ * 'pending' interrupts in the IRQ path, except at this point.
+ */
+static inline void trigger_pending_irqs(unsigned int irq)
+{
+	if (irq_events[irq] && !ipi_pending[irq]) {
+		ipi_pending[irq] = 1;
+		send_IPI(smp_processor_id(), IO_APIC_VECTOR(irq));
+	}
+}
+
+void enable_ioapic_irq (unsigned int irq)
+{
+	disabled_irq[irq] = 0;
+	trigger_pending_irqs(irq);
+}
+
+/*
+ * We do not actually disable IO-APIC irqs in hardware ...
+ */
+static void disable_ioapic_irq(unsigned int irq)
+{
+	disabled_irq[irq] = 1;
+}
+
 static void do_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 {
-	int should_handle_irq = 0;
-
-	ack_APIC_irq();
-
 	spin_lock(&irq_controller_lock);
-	if (ipi_pending[irq])
-		ipi_pending[irq] = 0;
 
-	if (!irq_events[irq]++ && !disabled_irq[irq])
-		should_handle_irq = 1;
+	/* Ack the irq inside the lock! */
+	ack_APIC_irq();
+	ipi_pending[irq] = 0;
+
+	/* If the irq is disabled, just set a flag and return */
+	if (disabled_irq[irq]) {
+		irq_events[irq] = 1;
+		spin_unlock(&irq_controller_lock);
+		return;
+	}
+
+	disabled_irq[irq] = 1;
+	irq_events[irq] = 0;
 	hardirq_enter(cpu);
 	spin_unlock(&irq_controller_lock);
 
-	if (should_handle_irq) {
-		while (test_bit(0,&global_irq_lock)) mb();
-again:
+	while (test_bit(0,&global_irq_lock)) barrier();
+
+	for (;;) {
+		int pending;
+
 		handle_IRQ_event(irq, regs);
 
 		spin_lock(&irq_controller_lock);
-		should_handle_irq=0;
-		if (--irq_events[irq] && !disabled_irq[irq])
-			should_handle_irq=1;
+		pending = irq_events[irq];
+		irq_events[irq] = 0;
+		disabled_irq[irq] = pending;
 		spin_unlock(&irq_controller_lock);
 
-		if (should_handle_irq)
-			goto again;
+		if (!pending)
+			break;
 	}
 
 	hardirq_exit(cpu);
 	release_irqlock(cpu);
 }
+
 #endif
+
+
+/*
+ * Generic enable/disable code: this just calls
+ * down into the PIC-specific version after having
+ * gotten the irq controller lock.
+ */
+void disable_irq(unsigned int irq)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&irq_controller_lock, flags);
+	irq_handles[irq]->disable(irq);
+	spin_unlock_irqrestore(&irq_controller_lock, flags);
+
+	synchronize_irq();
+}
+
+void enable_irq(unsigned int irq)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&irq_controller_lock, flags);
+	irq_handles[irq]->enable(irq);
+	spin_unlock_irqrestore(&irq_controller_lock, flags);
+}
 
 /*
  * do_IRQ handles all normal device IRQ's (the special

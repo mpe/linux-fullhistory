@@ -454,7 +454,6 @@ struct dentry * __namei(const char *pathname, int follow_link)
 	char *name;
 	struct dentry *dentry;
 
-	check_dcache_memory();
 	name = getname(pathname);
 	dentry = (struct dentry *) name;
 	if (!IS_ERR(name)) {
@@ -528,7 +527,6 @@ struct dentry * open_namei(const char * pathname, int flag, int mode)
 	struct inode *inode;
 	struct dentry *dentry;
 
-	check_dcache_memory();
 	mode &= S_IALLUGO & ~current->fs->umask;
 	mode |= S_IFREG;
 

@@ -4,19 +4,19 @@ Kirk Petersen
 Kmod is a simple replacement for kerneld.  It consists of a 
 request_module() replacement and a kernel thread called kmod.  When the
 kernel requests a module, the kmod wakes up and execve()s modprobe,
-passing it the name that was requested.  After a configurable period of
-time, kmod will have delete_module() remove any unused modules.
+passing it the name that was requested.
 
-Kmod is configurable through two entries in /proc/sys/kernel.  You can
-set the path of modprobe (where the kernel looks for it) by doing:
+If you have the /proc filesystem mounted, you can set the path of
+modprobe (where the kernel looks for it) by doing:
 
 	echo "/sbin/modprobe" > /proc/sys/kernel/modprobe
 
-To tell kmod when to unload unused modules, do something like:
+To periodically unload unused modules, put something like the following
+in root's crontab entry:
 
-	echo "120" > /proc/sys/kernel/kmod_unload_delay
+	0-59/5 * * * * /sbin/rmmod -a
 
-Kmod only loads and unloads modules.  Kerneld could do more (although
+Kmod only loads modules.  Kerneld could do more (although
 nothing in the standard kernel used its other features).  If you
 require features such as request_route, we suggest that you take
 a similar approach.  A simple request_route function could be called,

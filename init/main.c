@@ -1162,13 +1162,6 @@ static int init(void * unused)
 	smp_begin();
 #endif	
 
-#ifdef CONFIG_KMOD
-	{
-		extern int kmod_init(void);
-		kmod_init();
-	}
-#endif
-
 #ifdef CONFIG_UMSDOS_FS
 	{
 		/*

@@ -90,7 +90,6 @@ void show_mem(void)
 			shared += atomic_read(&mem_map[i].count) - 1;
 	}
 	printk("%d pages of RAM\n",total);
-	printk("%d free pages\n",free);
 	printk("%d reserved pages\n",reserved);
 	printk("%d pages shared\n",shared);
 	printk("%d pages swap cached\n",cached);

@@ -1532,7 +1532,6 @@ static inline
 void BusLogic_AcquireHostAdapterLockIH(BusLogic_HostAdapter_T *HostAdapter,
 				       ProcessorFlags_T *ProcessorFlags)
 {
-  extern spinlock_t io_request_lock;
   spin_lock_irqsave(&io_request_lock, *ProcessorFlags);
 }
 
@@ -1546,7 +1545,6 @@ static inline
 void BusLogic_ReleaseHostAdapterLockIH(BusLogic_HostAdapter_T *HostAdapter,
 				       ProcessorFlags_T *ProcessorFlags)
 {
-  extern spinlock_t io_request_lock;
   spin_unlock_irqrestore(&io_request_lock, *ProcessorFlags);
 }
 

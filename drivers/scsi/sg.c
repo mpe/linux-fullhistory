@@ -97,6 +97,13 @@ static int sg_ioctl(struct inode * inode,struct file * file,
 	return scsi_generics[dev].timeout;
     case SG_EMULATED_HOST:
     	return put_user(scsi_generics[dev].device->host->hostt->emulated, (int *) arg);
+    case SCSI_IOCTL_SEND_COMMAND:
+	/*
+	  Allow SCSI_IOCTL_SEND_COMMAND without checking suser() since the
+	  user already has read/write access to the generic device and so
+	  can execute arbitrary SCSI commands.
+	*/
+	return scsi_ioctl_send_command(scsi_generics[dev].device, (void *) arg);
     default:
 	return scsi_ioctl(scsi_generics[dev].device, cmd_in, (void *) arg);
     }

@@ -286,16 +286,17 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 		}
 	}
 
-repeat:
-	spin_lock_irqsave(&page_alloc_lock, flags);
-	RMQUEUE(order, maxorder, (gfp_mask & GFP_DMA));
-	spin_unlock_irqrestore(&page_alloc_lock, flags);
-	if (gfp_mask & __GFP_WAIT) {
-		int freed = try_to_free_pages(gfp_mask,SWAP_CLUSTER_MAX);
+	for (;;) {
+		spin_lock_irqsave(&page_alloc_lock, flags);
+		RMQUEUE(order, maxorder, (gfp_mask & GFP_DMA));
+		spin_unlock_irqrestore(&page_alloc_lock, flags);
+		if (!(gfp_mask & __GFP_WAIT))
+			break;
+		shrink_dcache();
+		if (!try_to_free_pages(gfp_mask, SWAP_CLUSTER_MAX))
+			break;
 		gfp_mask &= ~__GFP_WAIT;	/* go through this only once */
 		maxorder = NR_MEM_LISTS;	/* Allow anything this time */
-		if (freed)
-			goto repeat;
 	}
 nopage:
 	return 0;

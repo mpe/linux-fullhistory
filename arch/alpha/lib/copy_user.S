@@ -27,11 +27,18 @@
  */
 
 /* Allow an exception for an insn; exit if we get one.  */
-#define EX(x,y...)			\
+#define EXI(x,y...)			\
 	99: x,##y;			\
 	.section __ex_table,"a";	\
 	.gprel32 99b;			\
-	lda $31, $exit-99b($31);	\
+	lda $31, $exitin-99b($31);	\
+	.previous
+
+#define EXO(x,y...)			\
+	99: x,##y;			\
+	.section __ex_table,"a";	\
+	.gprel32 99b;			\
+	lda $31, $exitout-99b($31);	\
 	.previous
 
 	.set noat
@@ -45,14 +52,14 @@ __copy_user:
 	subq $3,8,$3
 	.align 5
 $37:
-	EX( ldq_u $1,0($7) )
-	EX( ldq_u $2,0($6) )
+	EXI( ldq_u $1,0($7) )
+	EXO( ldq_u $2,0($6) )
 	extbl $1,$7,$1
 	mskbl $2,$6,$2
 	insbl $1,$6,$1
 	addq $3,1,$3
 	bis $1,$2,$1
-	EX( stq_u $1,0($6) )
+	EXO( stq_u $1,0($6) )
 	subq $0,1,$0
 	addq $6,1,$6
 	addq $7,1,$7
@@ -63,10 +70,10 @@ $36:
 	bic $0,7,$4
 	beq $1,$43
 	beq $4,$48
-	EX( ldq_u $3,0($7) )
+	EXI( ldq_u $3,0($7) )
 	.align 5
 $50:
-	EX( ldq_u $2,8($7) )
+	EXI( ldq_u $2,8($7) )
 	subq $4,8,$4
 	extql $3,$7,$3
 	extqh $2,$7,$1
@@ -81,13 +88,13 @@ $48:
 	beq $0,$41
 	.align 5
 $57:
-	EX( ldq_u $1,0($7) )
-	EX( ldq_u $2,0($6) )
+	EXI( ldq_u $1,0($7) )
+	EXO( ldq_u $2,0($6) )
 	extbl $1,$7,$1
 	mskbl $2,$6,$2
 	insbl $1,$6,$1
 	bis $1,$2,$1
-	EX( stq_u $1,0($6) )
+	EXO( stq_u $1,0($6) )
 	subq $0,1,$0
 	addq $6,1,$6
 	addq $7,1,$7
@@ -98,7 +105,7 @@ $43:
 	beq $4,$65
 	.align 5
 $66:
-	EX( ldq $1,0($7) )
+	EXI( ldq $1,0($7) )
 	subq $4,8,$4
 	stq $1,0($6)
 	addq $7,8,$7
@@ -107,15 +114,31 @@ $66:
 	bne $4,$66
 $65:
 	beq $0,$41
-	EX( ldq $2,0($7) )
-	EX( ldq $1,0($6) )
+	EXI( ldq $2,0($7) )
+	EXO( ldq $1,0($6) )
 	mskql $2,$0,$2
 	mskqh $1,$0,$1
 	bis $2,$1,$2
-	EX( stq $2,0($6) )
+	EXO( stq $2,0($6) )
 	bis $31,$31,$0
 $41:
 $35:
-$exit:
+$exitout:
 	ret $31,($28),1
+
+$exitin:
+	/* A stupid byte-by-byte zeroing of the rest of the output
+	   buffer.  This cures security holes by never leaving 
+	   random kernel data around to be copied elsewhere.  */
+
+	mov $0,$1
+$101:
+	EXO ( ldq_u $2,0($6) )
+	subq $1,1,$1
+	mskbl $2,$6,$2
+	EXO ( stq_u $2,0($6) )
+	addq $6,1,$6
+	bgt $1,$101
+	ret $31,($28),1
+
 	.end __copy_user

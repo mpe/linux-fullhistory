@@ -15,9 +15,6 @@
 
 #ifdef __KERNEL__
 
-extern int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
-extern int kernel_scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
-
 /*
  * Structures used for scsi_ioctl et al.
  */
@@ -32,6 +29,11 @@ typedef struct scsi_idlun {
 	__u32 dev_id;
 	__u32 host_unique_id;
 } Scsi_Idlun;
+
+extern int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
+extern int kernel_scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
+extern int scsi_ioctl_send_command(Scsi_Device *dev,
+				   Scsi_Ioctl_Command *arg);
 
 #endif
 

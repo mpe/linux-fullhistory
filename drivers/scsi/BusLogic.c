@@ -34,6 +34,7 @@
 #include <linux/module.h>
 #include <linux/config.h>
 #include <linux/types.h>
+#include <linux/blk.h>
 #include <linux/blkdev.h>
 #include <linux/delay.h>
 #include <linux/ioport.h>
@@ -1204,10 +1205,13 @@ static boolean BusLogic_Failure(BusLogic_HostAdapter_T *HostAdapter,
 {
   BusLogic_AnnounceDriver(HostAdapter);
   if (HostAdapter->HostAdapterBusType == BusLogic_PCI_Bus)
-    BusLogic_Error("While configuring BusLogic PCI Host Adapter at\n"
-		   "Bus %d Device %d I/O Address 0x%X PCI Address 0x%X:\n",
-		   HostAdapter, HostAdapter->Bus, HostAdapter->Device,
-		   HostAdapter->IO_Address, HostAdapter->PCI_Address);
+    {
+      BusLogic_Error("While configuring BusLogic PCI Host Adapter at\n",
+		     HostAdapter);
+      BusLogic_Error("Bus %d Device %d I/O Address 0x%X PCI Address 0x%X:\n",
+		     HostAdapter, HostAdapter->Bus, HostAdapter->Device,
+		     HostAdapter->IO_Address, HostAdapter->PCI_Address);
+    }
   else BusLogic_Error("While configuring BusLogic Host Adapter at "
 		      "I/O Address 0x%X:\n", HostAdapter,
 		      HostAdapter->IO_Address);

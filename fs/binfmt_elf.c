@@ -517,9 +517,10 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			retval = PTR_ERR(interpreter_dentry);
 			if (IS_ERR(interpreter_dentry))
 				goto out_free_interp;
-
-			retval = read_exec(interpreter_dentry, 0, bprm->buf, 
-						128, 1);
+			retval = permission(interpreter_dentry->d_inode, MAY_EXEC);
+			if (retval < 0)
+				goto out_free_dentry;
+			retval = read_exec(interpreter_dentry, 0, bprm->buf, 128, 1);
 			if (retval < 0)
 				goto out_free_dentry;
 
