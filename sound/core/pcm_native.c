@@ -113,10 +113,18 @@ int snd_pcm_info(snd_pcm_substream_t * substream, snd_pcm_info_t *info)
 
 int snd_pcm_info_user(snd_pcm_substream_t * substream, snd_pcm_info_t __user * _info)
 {
-	snd_pcm_info_t info;
-	int err = snd_pcm_info(substream, &info);
-	if (copy_to_user(_info, &info, sizeof(info)))
-		return -EFAULT;
+	snd_pcm_info_t *info;
+	int err;
+
+	info = kmalloc(sizeof(*info), GFP_KERNEL);
+	if (! info)
+		return -ENOMEM;
+	err = snd_pcm_info(substream, info);
+	if (err >= 0) {
+		if (copy_to_user(_info, info, sizeof(*info)))
+			err = -EFAULT;
+	}
+	kfree(info);
 	return err;
 }
 

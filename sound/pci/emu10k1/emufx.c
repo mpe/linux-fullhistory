@@ -634,7 +634,8 @@ static int snd_emu10k1_verify_controls(emu10k1_t *emu, emu10k1_fx8010_code_t *ic
 	snd_ctl_elem_id_t __user *_id;
 	snd_ctl_elem_id_t id;
 	emu10k1_fx8010_control_gpr_t __user *_gctl;
-	emu10k1_fx8010_control_gpr_t gctl;
+	emu10k1_fx8010_control_gpr_t *gctl;
+	int err;
 	
 	for (i = 0, _id = icode->gpr_del_controls;
 	     i < icode->gpr_del_control_count; i++, _id++) {
@@ -643,29 +644,42 @@ static int snd_emu10k1_verify_controls(emu10k1_t *emu, emu10k1_fx8010_code_t *ic
 		if (snd_emu10k1_look_for_ctl(emu, &id) == NULL)
 			return -ENOENT;
 	}
+	gctl = kmalloc(sizeof(*gctl), GFP_KERNEL);
+	if (! gctl)
+		return -ENOMEM;
+	err = 0;
 	for (i = 0, _gctl = icode->gpr_add_controls;
 	     i < icode->gpr_add_control_count; i++, _gctl++) {
-		if (copy_from_user(&gctl, _gctl, sizeof(gctl)))
-			return -EFAULT;
-		if (snd_emu10k1_look_for_ctl(emu, &gctl.id))
+		if (copy_from_user(gctl, _gctl, sizeof(*gctl))) {
+			err = -EFAULT;
+			goto __error;
+		}
+		if (snd_emu10k1_look_for_ctl(emu, &gctl->id))
 			continue;
 		down_read(&emu->card->controls_rwsem);
-		if (snd_ctl_find_id(emu->card, &gctl.id) != NULL) {
+		if (snd_ctl_find_id(emu->card, &gctl->id) != NULL) {
 			up_read(&emu->card->controls_rwsem);
-			return -EEXIST;
+			err = -EEXIST;
+			goto __error;
 		}
 		up_read(&emu->card->controls_rwsem);
-		if (gctl.id.iface != SNDRV_CTL_ELEM_IFACE_MIXER &&
-		    gctl.id.iface != SNDRV_CTL_ELEM_IFACE_PCM)
-			return -EINVAL;
+		if (gctl->id.iface != SNDRV_CTL_ELEM_IFACE_MIXER &&
+		    gctl->id.iface != SNDRV_CTL_ELEM_IFACE_PCM) {
+			err = -EINVAL;
+			goto __error;
+		}
 	}
 	for (i = 0, _gctl = icode->gpr_list_controls;
 	     i < icode->gpr_list_control_count; i++, _gctl++) {
 	     	/* FIXME: we need to check the WRITE access */
-		if (copy_from_user(&gctl, _gctl, sizeof(gctl)))
-			return -EFAULT;
+		if (copy_from_user(gctl, _gctl, sizeof(*gctl))) {
+			err = -EFAULT;
+			goto __error;
+		}
 	}
-	return 0;
+ __error:
+	kfree(gctl);
+	return err;
 }
 
 static void snd_emu10k1_ctl_private_free(snd_kcontrol_t *kctl)
@@ -682,46 +696,51 @@ static int snd_emu10k1_add_controls(emu10k1_t *emu, emu10k1_fx8010_code_t *icode
 {
 	unsigned int i, j;
 	emu10k1_fx8010_control_gpr_t __user *_gctl;
-	emu10k1_fx8010_control_gpr_t gctl;
-	snd_emu10k1_fx8010_ctl_t *ctl, nctl;
+	emu10k1_fx8010_control_gpr_t *gctl = NULL;
+	snd_emu10k1_fx8010_ctl_t *ctl, *nctl = NULL;
 	snd_kcontrol_new_t knew;
 	snd_kcontrol_t *kctl;
 	snd_ctl_elem_value_t *val;
 	int err = 0;
 
 	val = (snd_ctl_elem_value_t *)kmalloc(sizeof(*val), GFP_KERNEL);
-	if (!val)
-		return -ENOMEM;
+	gctl = kmalloc(sizeof(*gctl), GFP_KERNEL);
+	nctl = kmalloc(sizeof(*nctl), GFP_KERNEL);
+	if (!val || !gctl || !nctl) {
+		err = -ENOMEM;
+		goto __error;
+	}
+
 	for (i = 0, _gctl = icode->gpr_add_controls;
 	     i < icode->gpr_add_control_count; i++, _gctl++) {
-		if (copy_from_user(&gctl, _gctl, sizeof(gctl))) {
+		if (copy_from_user(gctl, _gctl, sizeof(*gctl))) {
 			err = -EFAULT;
 			goto __error;
 		}
-		snd_runtime_check(gctl.id.iface == SNDRV_CTL_ELEM_IFACE_MIXER ||
-		                  gctl.id.iface == SNDRV_CTL_ELEM_IFACE_PCM, err = -EINVAL; goto __error);
-		snd_runtime_check(gctl.id.name[0] != '\0', err = -EINVAL; goto __error);
-		ctl = snd_emu10k1_look_for_ctl(emu, &gctl.id);
+		snd_runtime_check(gctl->id.iface == SNDRV_CTL_ELEM_IFACE_MIXER ||
+		                  gctl->id.iface == SNDRV_CTL_ELEM_IFACE_PCM, err = -EINVAL; goto __error);
+		snd_runtime_check(gctl->id.name[0] != '\0', err = -EINVAL; goto __error);
+		ctl = snd_emu10k1_look_for_ctl(emu, &gctl->id);
 		memset(&knew, 0, sizeof(knew));
-		knew.iface = gctl.id.iface;
-		knew.name = gctl.id.name;
-		knew.index = gctl.id.index;
-		knew.device = gctl.id.device;
-		knew.subdevice = gctl.id.subdevice;
+		knew.iface = gctl->id.iface;
+		knew.name = gctl->id.name;
+		knew.index = gctl->id.index;
+		knew.device = gctl->id.device;
+		knew.subdevice = gctl->id.subdevice;
 		knew.info = snd_emu10k1_gpr_ctl_info;
 		knew.get = snd_emu10k1_gpr_ctl_get;
 		knew.put = snd_emu10k1_gpr_ctl_put;
-		memset(&nctl, 0, sizeof(nctl));
-		nctl.vcount = gctl.vcount;
-		nctl.count = gctl.count;
+		memset(nctl, 0, sizeof(*nctl));
+		nctl->vcount = gctl->vcount;
+		nctl->count = gctl->count;
 		for (j = 0; j < 32; j++) {
-			nctl.gpr[j] = gctl.gpr[j];
-			nctl.value[j] = ~gctl.value[j];	/* inverted, we want to write new value in gpr_ctl_put() */
-			val->value.integer.value[j] = gctl.value[j];
+			nctl->gpr[j] = gctl->gpr[j];
+			nctl->value[j] = ~gctl->value[j];	/* inverted, we want to write new value in gpr_ctl_put() */
+			val->value.integer.value[j] = gctl->value[j];
 		}
-		nctl.min = gctl.min;
-		nctl.max = gctl.max;
-		nctl.translation = gctl.translation;
+		nctl->min = gctl->min;
+		nctl->max = gctl->max;
+		nctl->translation = gctl->translation;
 		if (ctl == NULL) {
 			ctl = (snd_emu10k1_fx8010_ctl_t *)kmalloc(sizeof(*ctl), GFP_KERNEL);
 			if (ctl == NULL)
@@ -737,8 +756,8 @@ static int snd_emu10k1_add_controls(emu10k1_t *emu, emu10k1_fx8010_code_t *icode
 			list_add_tail(&ctl->list, &emu->fx8010.gpr_ctl);
 		} else {
 			/* overwrite */
-			nctl.list = ctl->list;
-			nctl.kcontrol = ctl->kcontrol;
+			nctl->list = ctl->list;
+			nctl->kcontrol = ctl->kcontrol;
 			memcpy(ctl, &nctl, sizeof(nctl));
 			snd_ctl_notify(emu->card, SNDRV_CTL_EVENT_MASK_VALUE |
 			                          SNDRV_CTL_EVENT_MASK_INFO, &ctl->kcontrol->id);
@@ -746,6 +765,8 @@ static int snd_emu10k1_add_controls(emu10k1_t *emu, emu10k1_fx8010_code_t *icode
 		snd_emu10k1_gpr_ctl_put(ctl->kcontrol, val);
 	}
       __error:
+	kfree(nctl);
+	kfree(gctl);
 	kfree(val);
 	return err;
 }
@@ -774,40 +795,47 @@ static int snd_emu10k1_list_controls(emu10k1_t *emu, emu10k1_fx8010_code_t *icod
 {
 	unsigned int i = 0, j;
 	unsigned int total = 0;
-	emu10k1_fx8010_control_gpr_t gctl;
+	emu10k1_fx8010_control_gpr_t *gctl;
 	emu10k1_fx8010_control_gpr_t __user *_gctl;
 	snd_emu10k1_fx8010_ctl_t *ctl;
 	snd_ctl_elem_id_t *id;
 	struct list_head *list;
+
+	gctl = kmalloc(sizeof(*gctl), GFP_KERNEL);
+	if (! gctl)
+		return -ENOMEM;
 
 	_gctl = icode->gpr_list_controls;	
 	list_for_each(list, &emu->fx8010.gpr_ctl) {
 		ctl = emu10k1_gpr_ctl(list);
 		total++;
 		if (_gctl && i < icode->gpr_list_control_count) {
-			memset(&gctl, 0, sizeof(gctl));
+			memset(gctl, 0, sizeof(*gctl));
 			id = &ctl->kcontrol->id;
-			gctl.id.iface = id->iface;
-			strlcpy(gctl.id.name, id->name, sizeof(gctl.id.name));
-			gctl.id.index = id->index;
-			gctl.id.device = id->device;
-			gctl.id.subdevice = id->subdevice;
-			gctl.vcount = ctl->vcount;
-			gctl.count = ctl->count;
+			gctl->id.iface = id->iface;
+			strlcpy(gctl->id.name, id->name, sizeof(gctl->id.name));
+			gctl->id.index = id->index;
+			gctl->id.device = id->device;
+			gctl->id.subdevice = id->subdevice;
+			gctl->vcount = ctl->vcount;
+			gctl->count = ctl->count;
 			for (j = 0; j < 32; j++) {
-				gctl.gpr[j] = ctl->gpr[j];
-				gctl.value[j] = ctl->value[j];
+				gctl->gpr[j] = ctl->gpr[j];
+				gctl->value[j] = ctl->value[j];
 			}
-			gctl.min = ctl->min;
-			gctl.max = ctl->max;
-			gctl.translation = ctl->translation;
-			if (copy_to_user(_gctl, &gctl, sizeof(gctl)))
+			gctl->min = ctl->min;
+			gctl->max = ctl->max;
+			gctl->translation = ctl->translation;
+			if (copy_to_user(_gctl, gctl, sizeof(*gctl))) {
+				kfree(gctl);
 				return -EFAULT;
+			}
 			_gctl++;
 			i++;
 		}
 	}
 	icode->gpr_list_control_total = total;
+	kfree(gctl);
 	return 0;
 }
 
