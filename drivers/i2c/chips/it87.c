@@ -889,9 +889,9 @@ int it87_detect(struct i2c_adapter *adapter, int address, int kind)
 	}
 
 	if (data->type == it8712) {
+		data->vrm = i2c_which_vrm();
 		device_create_file_vrm(new_client);
 		device_create_file_vid(new_client);
-		data->vrm = i2c_which_vrm();
 	}
 
 	return 0;
