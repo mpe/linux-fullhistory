@@ -35,9 +35,6 @@ static DEFINE_SPINLOCK(skb_list_lock);
 static int nr_skbs;
 static struct sk_buff *skbs;
 
-static DEFINE_SPINLOCK(rx_list_lock);
-static LIST_HEAD(rx_list);
-
 static atomic_t trapped;
 static DEFINE_SPINLOCK(netpoll_poll_lock);
 
@@ -84,13 +81,13 @@ static void poll_napi(struct netpoll *np)
 	queue = &__get_cpu_var(softnet_data);
 	if (test_bit(__LINK_STATE_RX_SCHED, &np->dev->state) &&
 	    !list_empty(&queue->poll_list)) {
-		np->dev->netpoll_rx |= NETPOLL_RX_DROP;
+		np->rx_flags |= NETPOLL_RX_DROP;
 		atomic_inc(&trapped);
 
 		np->dev->poll(np->dev, &budget);
 
 		atomic_dec(&trapped);
-		np->dev->netpoll_rx &= ~NETPOLL_RX_DROP;
+		np->rx_flags &= ~NETPOLL_RX_DROP;
 	}
 	spin_unlock_irqrestore(&netpoll_poll_lock, flags);
 }
@@ -279,18 +276,7 @@ static void arp_reply(struct sk_buff *skb)
 	int size, type = ARPOP_REPLY, ptype = ETH_P_ARP;
 	u32 sip, tip;
 	struct sk_buff *send_skb;
-	unsigned long flags;
-	struct list_head *p;
-	struct netpoll *np = NULL;
-
-	spin_lock_irqsave(&rx_list_lock, flags);
-	list_for_each(p, &rx_list) {
-		np = list_entry(p, struct netpoll, rx_list);
-		if ( np->dev == skb->dev )
-			break;
-		np = NULL;
-	}
-	spin_unlock_irqrestore(&rx_list_lock, flags);
+	struct netpoll *np = skb->dev->np;
 
 	if (!np) return;
 
@@ -373,10 +359,10 @@ int __netpoll_rx(struct sk_buff *skb)
 	int proto, len, ulen;
 	struct iphdr *iph;
 	struct udphdr *uh;
-	struct netpoll *np;
-	struct list_head *p;
-	unsigned long flags;
+	struct netpoll *np = skb->dev->np;
 
+	if (!np->rx_hook)
+		goto out;
 	if (skb->dev->type != ARPHRD_ETHER)
 		goto out;
 
@@ -420,30 +406,19 @@ int __netpoll_rx(struct sk_buff *skb)
 		goto out;
 	if (checksum_udp(skb, uh, ulen, iph->saddr, iph->daddr) < 0)
 		goto out;
+	if (np->local_ip && np->local_ip != ntohl(iph->daddr))
+		goto out;
+	if (np->remote_ip && np->remote_ip != ntohl(iph->saddr))
+		goto out;
+	if (np->local_port && np->local_port != ntohs(uh->dest))
+		goto out;
 
-	spin_lock_irqsave(&rx_list_lock, flags);
-	list_for_each(p, &rx_list) {
-		np = list_entry(p, struct netpoll, rx_list);
-		if (np->dev && np->dev != skb->dev)
-			continue;
-		if (np->local_ip && np->local_ip != ntohl(iph->daddr))
-			continue;
-		if (np->remote_ip && np->remote_ip != ntohl(iph->saddr))
-			continue;
-		if (np->local_port && np->local_port != ntohs(uh->dest))
-			continue;
+	np->rx_hook(np, ntohs(uh->source),
+		    (char *)(uh+1),
+		    ulen - sizeof(struct udphdr));
 
-		spin_unlock_irqrestore(&rx_list_lock, flags);
-
-		if (np->rx_hook)
-			np->rx_hook(np, ntohs(uh->source),
-				    (char *)(uh+1),
-				    ulen - sizeof(struct udphdr));
-
-		kfree_skb(skb);
-		return 1;
-	}
-	spin_unlock_irqrestore(&rx_list_lock, flags);
+	kfree_skb(skb);
+	return 1;
 
 out:
 	if (atomic_read(&trapped)) {
@@ -574,6 +549,10 @@ int netpoll_setup(struct netpoll *np)
 		       np->name, np->dev_name);
 		return -1;
 	}
+
+	np->dev = ndev;
+	ndev->np = np;
+
 	if (!ndev->poll_controller) {
 		printk(KERN_ERR "%s: %s doesn't support polling, aborting.\n",
 		       np->name, np->dev_name);
@@ -639,36 +618,22 @@ int netpoll_setup(struct netpoll *np)
 		       np->name, HIPQUAD(np->local_ip));
 	}
 
-	np->dev = ndev;
-
-	if(np->rx_hook) {
-		unsigned long flags;
-
-		np->dev->netpoll_rx = NETPOLL_RX_ENABLED;
-
-		spin_lock_irqsave(&rx_list_lock, flags);
-		list_add(&np->rx_list, &rx_list);
-		spin_unlock_irqrestore(&rx_list_lock, flags);
-	}
+	if(np->rx_hook)
+		np->rx_flags = NETPOLL_RX_ENABLED;
 
 	return 0;
+
  release:
+	ndev->np = NULL;
+	np->dev = NULL;
 	dev_put(ndev);
 	return -1;
 }
 
 void netpoll_cleanup(struct netpoll *np)
 {
-	if (np->rx_hook) {
-		unsigned long flags;
-
-		spin_lock_irqsave(&rx_list_lock, flags);
-		list_del(&np->rx_list);
-		spin_unlock_irqrestore(&rx_list_lock, flags);
-	}
-
 	if (np->dev)
-		np->dev->netpoll_rx = 0;
+		np->dev->np = NULL;
 	dev_put(np->dev);
 	np->dev = NULL;
 }

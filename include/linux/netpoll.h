@@ -16,11 +16,11 @@ struct netpoll;
 struct netpoll {
 	struct net_device *dev;
 	char dev_name[16], *name;
+	int rx_flags;
 	void (*rx_hook)(struct netpoll *, int, char *, int);
 	u32 local_ip, remote_ip;
 	u16 local_port, remote_port;
 	unsigned char local_mac[6], remote_mac[6];
-	struct list_head rx_list;
 };
 
 void netpoll_poll(struct netpoll *np);
@@ -35,7 +35,7 @@ int __netpoll_rx(struct sk_buff *skb);
 #ifdef CONFIG_NETPOLL
 static inline int netpoll_rx(struct sk_buff *skb)
 {
-	return skb->dev->netpoll_rx && __netpoll_rx(skb);
+	return skb->dev->np && skb->dev->np->rx_flags && __netpoll_rx(skb);
 }
 #else
 #define netpoll_rx(a) 0
