@@ -25,8 +25,13 @@
 
 void show_task(int nr,struct task_struct * p)
 {
+	int i,j = 4096-sizeof(struct task_struct);
+
 	printk("%d: pid=%d, state=%d, ",nr,p->pid,p->state);
-	printk("eip=%04x:%08x\n\r",p->tss.cs&0xffff,p->tss.eip);
+	i=0;
+	while (i<j && !((char *)(p+1))[i])
+		i++;
+	printk("%d (of %d) chars free in kernel stack\n\r",i,j);
 }
 
 void show_stat(void)
@@ -73,16 +78,17 @@ void math_state_restore()
 {
 	if (last_task_used_math == current)
 		return;
+	__asm__("fwait");
 	if (last_task_used_math) {
 		__asm__("fnsave %0"::"m" (last_task_used_math->tss.i387));
 	}
+	last_task_used_math=current;
 	if (current->used_math) {
 		__asm__("frstor %0"::"m" (current->tss.i387));
 	} else {
 		__asm__("fninit"::);
 		current->used_math=1;
 	}
-	last_task_used_math=current;
 }
 
 /*
@@ -196,46 +202,28 @@ static struct task_struct * wait_motor[4] = {NULL,NULL,NULL,NULL};
 static int  mon_timer[4]={0,0,0,0};
 static int moff_timer[4]={0,0,0,0};
 unsigned char current_DOR = 0x0C;
-unsigned char selected = 0;
-struct task_struct * wait_on_floppy_select = NULL;
-
-void floppy_select(unsigned int nr)
-{
-	if (nr>3)
-		printk("floppy_select: nr>3\n\r");
-	cli();
-	while (selected)
-		sleep_on(&wait_on_floppy_select);
-	current_DOR &= 0xFC;
-	current_DOR |= nr;
-	outb(current_DOR,FD_DOR);
-	sti();
-}
-
-void floppy_deselect(unsigned int nr)
-{
-	if (nr != (current_DOR & 3))
-		printk("floppy_deselect: drive not selected\n\r");
-	selected = 0;
-	wake_up(&wait_on_floppy_select);
-}
 
 int ticks_to_floppy_on(unsigned int nr)
 {
-	unsigned char mask = 1<<(nr+4);
+	extern unsigned char selected;
+	unsigned char mask = 0x10 << nr;
 
 	if (nr>3)
 		panic("floppy_on: nr>3");
 	moff_timer[nr]=10000;		/* 100 s = very big :-) */
 	cli();				/* use floppy_off to turn it off */
-	if (!(mask & current_DOR)) {
-		current_DOR |= mask;
-		if (!selected) {
-			current_DOR &= 0xFC;
-			current_DOR |= nr;
-		}
-		outb(current_DOR,FD_DOR);
-		mon_timer[nr] = HZ;
+	mask |= current_DOR;
+	if (!selected) {
+		mask &= 0xFC;
+		mask |= nr;
+	}
+	if (mask != current_DOR) {
+		outb(mask,FD_DOR);
+		if ((mask ^ current_DOR) & 0xf0)
+			mon_timer[nr] = HZ/2;
+		else if (mon_timer[nr] < 2)
+			mon_timer[nr] = 2;
+		current_DOR = mask;
 	}
 	sti();
 	return mon_timer[nr];
@@ -316,10 +304,18 @@ void add_timer(long jiffies, void (*fn)(void))
 
 void do_timer(long cpl)
 {
+	extern int beepcount;
+	extern void sysbeepstop(void);
+
+	if (beepcount)
+		if (!--beepcount)
+			sysbeepstop();
+
 	if (cpl)
 		current->utime++;
 	else
 		current->stime++;
+
 	if (next_timer) {
 		next_timer->jiffies--;
 		while (next_timer && next_timer->jiffies <= 0) {
@@ -403,6 +399,8 @@ void sched_init(void)
 		p->a=p->b=0;
 		p++;
 	}
+/* Clear NT, so that we won't have troubles with that later on */
+	__asm__("pushfl ; andl $0xffffbfff,(%esp) ; popfl");
 	ltr(0);
 	lldt(0);
 	outb_p(0x36,0x43);		/* binary, mode 3, LSB/MSB, ch 0 */

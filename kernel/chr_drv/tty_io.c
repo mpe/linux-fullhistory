@@ -6,8 +6,9 @@
 
 /*
  * 'tty_io.c' gives an orthogonal feeling to tty's, be they consoles
- * or rs-channels. It also implements echoing, cooked mode etc (well,
- * not currently, but ...)
+ * or rs-channels. It also implements echoing, cooked mode etc.
+ *
+ * Kill-line thanks to John T Kohl.
  */
 #include <ctype.h>
 #include <errno.h>
@@ -49,10 +50,10 @@
 
 struct tty_struct tty_table[] = {
 	{
-		{ICRNL,
+		{ICRNL,		/* change incoming CR to NL */
 		OPOST|ONLCR,	/* change outgoing NL to CRNL */
 		0,
-		ICANON | ECHO | ECHOCTL | ECHOKE,
+		ISIG | ICANON | ECHO | ECHOCTL | ECHOKE,
 		0,		/* console termio */
 		INIT_C_CC},
 		0,			/* initial pgrp */
@@ -62,8 +63,8 @@ struct tty_struct tty_table[] = {
 		{0,0,0,0,""},		/* console write-queue */
 		{0,0,0,0,""}		/* console secondary queue */
 	},{
-		{0, /*IGNCR*/
-		OPOST | ONLRET,		/* change outgoing NL to CR */
+		{0, /* no translation */
+		0,  /* no translation */
 		B2400 | CS8,
 		0,
 		0,
@@ -75,8 +76,8 @@ struct tty_struct tty_table[] = {
 		{0x3f8,0,0,0,""},
 		{0,0,0,0,""}
 	},{
-		{0, /*IGNCR*/
-		OPOST | ONLRET,		/* change outgoing NL to CR */
+		{0, /* no translation */
+		0,  /* no translation */
 		B2400 | CS8,
 		0,
 		0,
@@ -158,6 +159,21 @@ void copy_to_cooked(struct tty_struct * tty)
 		if (I_UCLC(tty))
 			c=tolower(c);
 		if (L_CANON(tty)) {
+			if (c==KILL_CHAR(tty)) {
+				/* deal with killing the input line */
+				while(!(EMPTY(tty->secondary) ||
+				        (c=LAST(tty->secondary))==10 ||
+				        c==EOF_CHAR(tty))) {
+					if (L_ECHO(tty)) {
+						if (c<32)
+							PUTCH(127,tty->write_q);
+						PUTCH(127,tty->write_q);
+						tty->write(tty);
+					}
+					DEC(tty->secondary.head);
+				}
+				continue;
+			}
 			if (c==ERASE_CHAR(tty)) {
 				if (EMPTY(tty->secondary) ||
 				   (c=LAST(tty->secondary))==10 ||
@@ -181,13 +197,13 @@ void copy_to_cooked(struct tty_struct * tty)
 				continue;
 			}
 		}
-		if (!L_ISIG(tty)) {
+		if (L_ISIG(tty)) {
 			if (c==INTR_CHAR(tty)) {
 				tty_intr(tty,INTMASK);
 				continue;
 			}
-			if (c==KILL_CHAR(tty)) {
-				tty_intr(tty,KILLMASK);
+			if (c==QUIT_CHAR(tty)) {
+				tty_intr(tty,QUITMASK);
 				continue;
 			}
 		}
@@ -221,8 +237,8 @@ int tty_read(unsigned channel, char * buf, int nr)
 	if (channel>2 || nr<0) return -1;
 	tty = &tty_table[channel];
 	oldalarm = current->alarm;
-	time = (unsigned) 10*tty->termios.c_cc[VTIME];
-	minimum = (unsigned) tty->termios.c_cc[VMIN];
+	time = 10L*tty->termios.c_cc[VTIME];
+	minimum = tty->termios.c_cc[VMIN];
 	if (time && !minimum) {
 		minimum=1;
 		if (flag=(!oldalarm || time+jiffies<oldalarm))

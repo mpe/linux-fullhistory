@@ -97,10 +97,8 @@ int rw_char(int rw,int dev, char * buf, int count, off_t * pos)
 	crw_ptr call_addr;
 
 	if (MAJOR(dev)>=NRDEVS)
-		panic("rw_char: dev>NRDEV");
-	if (!(call_addr=crw_table[MAJOR(dev)])) {
-		printk("dev: %04x\n",dev);
-		panic("Trying to r/w from/to nonexistent character device");
-	}
+		return -ENODEV;
+	if (!(call_addr=crw_table[MAJOR(dev)]))
+		return -ENODEV;
 	return call_addr(rw,MINOR(dev),buf,count,pos);
 }

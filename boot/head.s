@@ -41,14 +41,28 @@ startup_32:
  * int 16 for math errors.
  */
 	movl %cr0,%eax		# check math chip
-	andl $0x80000011,%eax	# Save PG,ET,PE
+	andl $0x80000011,%eax	# Save PG,PE,ET
 /* "orl $0x10020,%eax" here for 486 might be good */
 	orl $2,%eax		# set MP
-	testl $0x10,%eax
-	jne 1f			# ET is set - 387 is present
-	xorl $6,%eax		# else reset MP and set EM
-1:	movl %eax,%cr0
+	movl %eax,%cr0
+	call check_x87
 	jmp after_page_tables
+
+/*
+ * We depend on ET to be correct. This checks for 287/387.
+ */
+check_x87:
+	fninit
+	fstsw %ax
+	cmpb $0,%al
+	je 1f			/* no coprocessor: have to set bits */
+	movl %cr0,%eax
+	xorl $6,%eax		/* reset MP, set EM */
+	movl %eax,%cr0
+	ret
+.align 2
+1:	.byte 0xDB,0xE4		/* fsetpm for 287, ignored by 387 */
+	ret
 
 /*
  *  setup_idt

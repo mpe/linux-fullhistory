@@ -4,6 +4,19 @@
  *  (C) 1991  Linus Torvalds
  */
 
+/*
+ * #!-checking implemented by tytso.
+ */
+
+/*
+ * Demand-loading implemented 01.12.91 - no need to read anything but
+ * the header into memory. The inode of the executable is put into
+ * "current->executable", and page faults do the actual loading. Clean.
+ *
+ * Once more I can proudly say that linux stood up to being changed: it
+ * was less than 2 hours work to get demand-loading completely implemented.
+ */
+
 #include <errno.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -24,96 +37,6 @@ extern int sys_close(int fd);
  * a maximum env+arg of 128kB !
  */
 #define MAX_ARG_PAGES 32
-
-#define cp_block(from,to) \
-__asm__("pushl $0x10\n\t" \
-	"pushl $0x17\n\t" \
-	"pop %%es\n\t" \
-	"cld\n\t" \
-	"rep\n\t" \
-	"movsl\n\t" \
-	"pop %%es" \
-	::"c" (BLOCK_SIZE/4),"S" (from),"D" (to) \
-	:"cx","di","si")
-
-/*
- * read_head() reads blocks 1-6 (not 0). Block 0 has already been
- * read for header information.
- */
-int read_head(struct m_inode * inode,int blocks)
-{
-	struct buffer_head * bh;
-	int count;
-
-	if (blocks>6)
-		blocks=6;
-	for(count = 0 ; count<blocks ; count++) {
-		if (!inode->i_zone[count+1])
-			continue;
-		if (!(bh=bread(inode->i_dev,inode->i_zone[count+1])))
-			return -1;
-		cp_block(bh->b_data,count*BLOCK_SIZE);
-		brelse(bh);
-	}
-	return 0;
-}
-
-int read_ind(int dev,int ind,long size,unsigned long offset)
-{
-	struct buffer_head * ih, * bh;
-	unsigned short * table,block;
-
-	if (size<=0)
-		panic("size<=0 in read_ind");
-	if (size>512*BLOCK_SIZE)
-		size=512*BLOCK_SIZE;
-	if (!ind)
-		return 0;
-	if (!(ih=bread(dev,ind)))
-		return -1;
-	table = (unsigned short *) ih->b_data;
-	while (size>0) {
-		if (block=*(table++))
-			if (!(bh=bread(dev,block))) {
-				brelse(ih);
-				return -1;
-			} else {
-				cp_block(bh->b_data,offset);
-				brelse(bh);
-			}
-		size -= BLOCK_SIZE;
-		offset += BLOCK_SIZE;
-	}
-	brelse(ih);
-	return 0;
-}
-
-/*
- * read_area() reads an area into %fs:mem.
- */
-int read_area(struct m_inode * inode,long size)
-{
-	struct buffer_head * dind;
-	unsigned short * table;
-	int i,count;
-
-	if ((i=read_head(inode,(size+BLOCK_SIZE-1)/BLOCK_SIZE)) ||
-	    (size -= BLOCK_SIZE*6)<=0)
-		return i;
-	if ((i=read_ind(inode->i_dev,inode->i_zone[7],size,BLOCK_SIZE*6)) ||
-	    (size -= BLOCK_SIZE*512)<=0)
-		return i;
-	if (!(i=inode->i_zone[8]))
-		return 0;
-	if (!(dind = bread(inode->i_dev,i)))
-		return -1;
-	table = (unsigned short *) dind->b_data;
-	for(count=0 ; count<512 ; count++)
-		if ((i=read_ind(inode->i_dev,*(table++),size,
-		    BLOCK_SIZE*(518+count))) || (size -= BLOCK_SIZE*512)<=0)
-			return i;
-	panic("Impossibly long executable");
-}
 
 /*
  * create_tables() parses the env- and arg-strings in new user
@@ -267,7 +190,6 @@ int do_execve(unsigned long * eip,long tmp,char * filename,
 	int e_uid, e_gid;
 	int retval;
 	int sh_bang = 0;
-	char	*buf = 0;
 	unsigned long p=PAGE_SIZE*MAX_ARG_PAGES-4;
 
 	if ((0xffff & eip[1]) != 0x000f)
@@ -307,11 +229,9 @@ restart_interp:
 		 * Sorta complicated, but hopefully it will work.  -TYT
 		 */
 
-		char *cp, *interp, *i_name, *i_arg;
+		char buf[1023], *cp, *interp, *i_name, *i_arg;
 		unsigned long old_fs;
 
-		if (!buf)
-			buf = malloc(1024);
 		strncpy(buf, bh->b_data+2, 1022);
 		brelse(bh);
 		iput(inode);
@@ -396,8 +316,9 @@ restart_interp:
 		}
 	}
 /* OK, This is the point of no return */
-	if (buf)
-		free_s(buf, 1024);
+	if (current->executable)
+		iput(current->executable);
+	current->executable = inode;
 	for (i=0 ; i<32 ; i++)
 		current->sigaction[i].sa_handler = NULL;
 	for (i=0 ; i<NR_OPEN ; i++)
@@ -417,10 +338,6 @@ restart_interp:
 	current->start_stack = p & 0xfffff000;
 	current->euid = e_uid;
 	current->egid = e_gid;
-	i = read_area(inode,ex.a_text+ex.a_data);
-	iput(inode);
-	if (i<0)
-		sys_exit(-1);
 	i = ex.a_text+ex.a_data;
 	while (i&0xfff)
 		put_fs_byte(0,(char *) (i++));
@@ -430,8 +347,6 @@ restart_interp:
 exec_error2:
 	iput(inode);
 exec_error1:
-	if (buf)
-		free(buf);
 	for (i=0 ; i<MAX_ARG_PAGES ; i++)
 		free_page(page[i]);
 	return(retval);

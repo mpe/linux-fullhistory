@@ -6,9 +6,17 @@
  * root-device by changing the line ROOT_DEV = XXX in boot/bootsect.s
  */
 
-/* define your keyboard here - US (KBD_US) or Finnish (KBD_FINNISH) */
-#define KBD_US
-/* #define KBD_FINNISH */
+/*
+ * define your keyboard here -
+ * KBD_FINNISH for Finnish keyboards
+ * KBD_US for US-type
+ * KBD_GR for German keyboards
+ * KBD_FR for Frech keyboard
+ */
+/*#define KBD_US */
+/*#define KBD_GR */
+/*#define KBD_FR */
+#define KBD_FINNISH
 
 /*
  * Normally, Linux can get the drive parameters from the BIOS at
@@ -34,7 +42,7 @@
  with more than 8 heads.
 
  If you want the BIOS to tell what kind of drive you have, just
- leave HD_TYPE undefined.
+ leave HD_TYPE undefined. This is the normal thing to do.
 */
 
 #endif

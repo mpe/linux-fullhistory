@@ -58,7 +58,7 @@ sa_mask = 4
 sa_flags = 8
 sa_restorer = 12
 
-nr_system_calls = 70
+nr_system_calls = 72
 
 /*
  * Ok, I get parallel printer interrupts while using the floppy for some
@@ -66,6 +66,7 @@ nr_system_calls = 70
  */
 .globl _system_call,_sys_fork,_timer_interrupt,_sys_execve
 .globl _hd_interrupt,_floppy_interrupt,_parallel_interrupt
+.globl _device_not_available, _coprocessor_error
 
 .align 2
 bad_sys_call:
@@ -127,6 +128,51 @@ ret_from_sys_call:
 	iret
 
 .align 2
+_coprocessor_error:
+	push %ds
+	push %es
+	push %fs
+	pushl %edx
+	pushl %ecx
+	pushl %ebx
+	pushl %eax
+	movl $0x10,%eax
+	mov %ax,%ds
+	mov %ax,%es
+	movl $0x17,%eax
+	mov %ax,%fs
+	pushl $ret_from_sys_call
+	jmp _math_error
+
+.align 2
+_device_not_available:
+	push %ds
+	push %es
+	push %fs
+	pushl %edx
+	pushl %ecx
+	pushl %ebx
+	pushl %eax
+	movl $0x10,%eax
+	mov %ax,%ds
+	mov %ax,%es
+	movl $0x17,%eax
+	mov %ax,%fs
+	pushl $ret_from_sys_call
+	clts				# clear TS so that we can use math
+	movl %cr0,%eax
+	testl $0x4,%eax			# EM (math emulation bit)
+	je _math_state_restore
+	pushl %ebp
+	pushl %esi
+	pushl %edi
+	call _math_emulate
+	popl %edi
+	popl %esi
+	popl %ebp
+	ret
+
+.align 2
 _timer_interrupt:
 	push %ds		# save ds,es and put kernel data space
 	push %es		# into them. %fs is used by _system_call
@@ -182,17 +228,19 @@ _hd_interrupt:
 	movl $0x10,%eax
 	mov %ax,%ds
 	mov %ax,%es
+	movl $0x17,%eax
 	mov %ax,%fs
 	movb $0x20,%al
-	outb %al,$0x20		# EOI to interrupt controller #1
+	outb %al,$0xA0		# EOI to interrupt controller #1
 	jmp 1f			# give port chance to breathe
 1:	jmp 1f
-1:	outb %al,$0xA0		# same to controller #2
-	movl _do_hd,%eax
-	testl %eax,%eax
+1:	xorl %edx,%edx
+	xchgl _do_hd,%edx
+	testl %edx,%edx
 	jne 1f
-	movl $_unexpected_hd_interrupt,%eax
-1:	call *%eax		# "interesting" way of handling intr.
+	movl $_unexpected_hd_interrupt,%edx
+1:	outb %al,$0x20
+	call *%edx		# "interesting" way of handling intr.
 	pop %fs
 	pop %es
 	pop %ds
@@ -211,10 +259,12 @@ _floppy_interrupt:
 	movl $0x10,%eax
 	mov %ax,%ds
 	mov %ax,%es
+	movl $0x17,%eax
 	mov %ax,%fs
 	movb $0x20,%al
 	outb %al,$0x20		# EOI to interrupt controller #1
-	movl _do_floppy,%eax
+	xorl %eax,%eax
+	xchgl _do_floppy,%eax
 	testl %eax,%eax
 	jne 1f
 	movl $_unexpected_floppy_interrupt,%eax

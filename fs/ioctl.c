@@ -39,7 +39,7 @@ int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 		return -EINVAL;
 	dev = filp->f_inode->i_zone[0];
 	if (MAJOR(dev) >= NRDEVS)
-		panic("unknown device for ioctl");
+		return -ENODEV;
 	if (!ioctl_table[MAJOR(dev)])
 		return -ENOTTY;
 	return ioctl_table[MAJOR(dev)](dev,cmd,arg);

@@ -37,6 +37,7 @@ clean:
 	for i in *.c;do rm -f `basename $$i .c`.s;done
 	(cd chr_drv; make clean)
 	(cd blk_drv; make clean)
+	(cd math; make clean)
 
 dep:
 	sed '/\#\#\# Dependencies/q' < Makefile > tmp_make

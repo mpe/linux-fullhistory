@@ -24,7 +24,8 @@ CPP	=gcc -E -nostdinc -I../../include
 	$(CC) $(CFLAGS) \
 	-c -o $*.o $<
 
-OBJS  = tty_io.o console.o keyboard.o serial.o rs_io.o
+OBJS  = tty_io.o console.o keyboard.o serial.o rs_io.o \
+	tty_ioctl.o
 
 chr_drv.a: $(OBJS)
 	$(AR) rcs chr_drv.a $(OBJS)
@@ -59,3 +60,9 @@ tty_io.s tty_io.o : tty_io.c ../../include/ctype.h ../../include/errno.h \
   ../../include/linux/fs.h ../../include/linux/mm.h ../../include/linux/tty.h \
   ../../include/termios.h ../../include/asm/segment.h \
   ../../include/asm/system.h 
+tty_ioctl.s tty_ioctl.o : tty_ioctl.c ../../include/errno.h ../../include/termios.h \
+  ../../include/linux/sched.h ../../include/linux/head.h \
+  ../../include/linux/fs.h ../../include/sys/types.h ../../include/linux/mm.h \
+  ../../include/signal.h ../../include/linux/kernel.h \
+  ../../include/linux/tty.h ../../include/asm/io.h \
+  ../../include/asm/segment.h ../../include/asm/system.h 

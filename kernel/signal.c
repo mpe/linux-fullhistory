@@ -84,13 +84,13 @@ void do_signal(long signr,long eax, long ebx, long ecx, long edx,
 	long eip, long cs, long eflags,
 	unsigned long * esp, long ss)
 {
-	long sa_handler;
+	unsigned long sa_handler;
 	long old_eip=eip;
 	struct sigaction * sa = current->sigaction + signr - 1;
 	int longs;
 	unsigned long * tmp_esp;
 
-	sa_handler = (long) sa->sa_handler;
+	sa_handler = (unsigned long) sa->sa_handler;
 	if (sa_handler==1)
 		return;
 	if (!sa_handler) {

@@ -2,7 +2,17 @@
 #define _BLK_H
 
 #define NR_BLK_DEV	7
-#define NR_REQUEST	64
+/*
+ * NR_REQUEST is the number of entries in the request-queue.
+ * NOTE that writes may use only the low 2/3 of these: reads
+ * take precedence.
+ *
+ * 32 seems to be a reasonable number: enough to get some benefit
+ * from the elevator-mechanism, but not so much as to lock a lot of
+ * buffers when they are in the queue. 64 seems to be too many (easily
+ * long pauses in reading when heavy writing/syncing is going on)
+ */
+#define NR_REQUEST	32
 
 /*
  * Ok, this is an expanded form so that we can use the same
@@ -22,9 +32,15 @@ struct request {
 	struct request * next;
 };
 
+/*
+ * This is used in the elevator algorithm: Note that
+ * reads always go before writes. This is natural: reads
+ * are much more time-critical than writes.
+ */
 #define IN_ORDER(s1,s2) \
+((s1)->cmd<(s2)->cmd || (s1)->cmd==(s2)->cmd && \
 ((s1)->dev < (s2)->dev || ((s1)->dev == (s2)->dev && \
-(s1)->sector < (s2)->sector))
+(s1)->sector < (s2)->sector)))
 
 struct blk_dev_struct {
 	void (*request_fn)(void);
@@ -41,7 +57,16 @@ extern struct task_struct * wait_for_request;
  * Add entries as needed. Currently the only block devices
  * supported are hard-disks and floppies.
  */
-#if (MAJOR_NR == 2)
+
+#if (MAJOR_NR == 1)
+/* ram disk */
+#define DEVICE_NAME "ramdisk"
+#define DEVICE_REQUEST do_rd_request
+#define DEVICE_NR(device) ((device) & 7)
+#define DEVICE_ON(device) 
+#define DEVICE_OFF(device)
+
+#elif (MAJOR_NR == 2)
 /* floppy */
 #define DEVICE_NAME "floppy"
 #define DEVICE_INTR do_floppy
@@ -68,7 +93,9 @@ extern struct task_struct * wait_for_request;
 #define CURRENT (blk_dev[MAJOR_NR].current_request)
 #define CURRENT_DEV DEVICE_NR(CURRENT->dev)
 
+#ifdef DEVICE_INTR
 void (*DEVICE_INTR)(void) = NULL;
+#endif
 static void (DEVICE_REQUEST)(void);
 
 extern inline void unlock_buffer(struct buffer_head * bh)
@@ -103,13 +130,10 @@ repeat: \
 		return; \
 	if (MAJOR(CURRENT->dev) != MAJOR_NR) \
 		panic(DEVICE_NAME ": request list destroyed"); \
-	if (CURRENT->bh) \
+	if (CURRENT->bh) { \
 		if (!CURRENT->bh->b_lock) \
 			panic(DEVICE_NAME ": block not locked"); \
-		else { \
-			CURRENT->bh->b_dirt = 0; \
-			CURRENT->bh->b_uptodate = 0; \
-		}
+	}
 
 #endif
 

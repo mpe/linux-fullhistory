@@ -24,7 +24,7 @@ CPP	=gcc -E -nostdinc -I../../include
 	$(CC) $(CFLAGS) \
 	-c -o $*.o $<
 
-OBJS  = ll_rw_blk.o floppy.o hd.o
+OBJS  = ll_rw_blk.o floppy.o hd.o ramdisk.o
 
 blk_drv.a: $(OBJS)
 	$(AR) rcs blk_drv.a $(OBJS)

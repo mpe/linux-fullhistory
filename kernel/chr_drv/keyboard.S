@@ -6,6 +6,8 @@
 
 /*
  *	Thanks to Alfred Leung for US keyboard patches
+ *		Wolfgang Thiel for German keyboard patches
+ *		Marc Corsini for the French keyboard
  */
 
 #include <linux/config.h>
@@ -26,7 +28,6 @@ buf = 16
 mode:	.byte 0		/* caps, alt, ctrl and shift mode */
 leds:	.byte 2		/* num-lock, caps, scroll-lock mode (nom-lock on) */
 e0:	.byte 0
-flags:	.byte 0		/* 0x1 - map caps lock to ctrl */
 
 /*
  *  con_int is the real interrupt routine that reads the
@@ -138,9 +139,7 @@ unrshift:
 	andb $0xfd,mode
 	ret
 
-caps:	testb $0x1,flags
-	je ctrl
-	testb $0x80,mode
+caps:	testb $0x80,mode
 	jne 1f
 	xorb $4,leds
 	xorb $0x40,mode
@@ -153,9 +152,7 @@ set_leds:
 	movb leds,%al
 	outb %al,$0x60
 	ret
-uncaps:	testb $0x1,flags
-	je unctrl
-	andb $0x7f,mode
+uncaps:	andb $0x7f,mode
 	ret
 scroll:
 	xorb $1,leds
@@ -197,8 +194,13 @@ ok_cur:	shll $16,%eax
 	xorl %ebx,%ebx
 	jmp put_queue
 
+#if defined(KBD_FR)
+num_table:
+	.ascii "789 456 1230."
+#else
 num_table:
 	.ascii "789 456 1230,"
+#endif
 cur_table:
 	.ascii "HA5 DGC YB623"
 
@@ -339,6 +341,108 @@ alt_map:
 	.byte '|
 	.fill 10,1,0
 
+#elif defined(KBD_GR)
+
+key_map:
+	.byte 0,27
+	.ascii "1234567890\\'"
+	.byte 127,9
+	.ascii "qwertzuiop@+"
+	.byte 13,0
+	.ascii "asdfghjkl[]^"
+	.byte 0,'#
+	.ascii "yxcvbnm,.-"
+	.byte 0,'*,0,32		/* 36-39 */
+	.fill 16,1,0		/* 3A-49 */
+	.byte '-,0,0,0,'+	/* 4A-4E */
+	.byte 0,0,0,0,0,0,0	/* 4F-55 */
+	.byte '<
+	.fill 10,1,0
+
+
+shift_map:
+	.byte 0,27
+	.ascii "!\"#$%&/()=?`"
+	.byte 127,9
+	.ascii "QWERTZUIOP\\*"
+	.byte 13,0
+	.ascii "ASDFGHJKL{}~"
+	.byte 0,''
+	.ascii "YXCVBNM;:_"
+	.byte 0,'*,0,32		/* 36-39 */
+	.fill 16,1,0		/* 3A-49 */
+	.byte '-,0,0,0,'+	/* 4A-4E */
+	.byte 0,0,0,0,0,0,0	/* 4F-55 */
+	.byte '>
+	.fill 10,1,0
+
+alt_map:
+	.byte 0,0
+	.ascii "\0@\0$\0\0{[]}\\\0"
+	.byte 0,0
+	.byte '@,0,0,0,0,0,0,0,0,0,0
+	.byte '~,13,0
+	.byte 0,0,0,0,0,0,0,0,0,0,0
+	.byte 0,0
+	.byte 0,0,0,0,0,0,0,0,0,0,0
+	.byte 0,0,0,0		/* 36-39 */
+	.fill 16,1,0		/* 3A-49 */
+	.byte 0,0,0,0,0		/* 4A-4E */
+	.byte 0,0,0,0,0,0,0	/* 4F-55 */
+	.byte '|
+	.fill 10,1,0
+
+
+#elif defined(KBD_FR)
+
+key_map:
+	.byte 0,27
+	.ascii "&{\"'(-}_/@)="
+	.byte 127,9
+	.ascii "azertyuiop^$"
+	.byte 13,0
+	.ascii "qsdfghjklm|"
+	.byte '`,0,42		/* coin sup gauche, don't know, [*|mu] */
+	.ascii "wxcvbn,;:!"
+	.byte 0,'*,0,32		/* 36-39 */
+	.fill 16,1,0		/* 3A-49 */
+	.byte '-,0,0,0,'+	/* 4A-4E */
+	.byte 0,0,0,0,0,0,0	/* 4F-55 */
+	.byte '<
+	.fill 10,1,0
+
+shift_map:
+	.byte 0,27
+	.ascii "1234567890]+"
+	.byte 127,9
+	.ascii "AZERTYUIOP<>"
+	.byte 13,0
+	.ascii "QSDFGHJKLM%"
+	.byte '~,0,'#
+	.ascii "WXCVBN?./\\"
+	.byte 0,'*,0,32		/* 36-39 */
+	.fill 16,1,0		/* 3A-49 */
+	.byte '-,0,0,0,'+	/* 4A-4E */
+	.byte 0,0,0,0,0,0,0	/* 4F-55 */
+	.byte '>
+	.fill 10,1,0
+
+alt_map:
+	.byte 0,0
+	.ascii "\0~#{[|`\\^@]}"
+	.byte 0,0
+	.byte '@,0,0,0,0,0,0,0,0,0,0
+	.byte '~,13,0
+	.byte 0,0,0,0,0,0,0,0,0,0,0
+	.byte 0,0
+	.byte 0,0,0,0,0,0,0,0,0,0,0
+	.byte 0,0,0,0		/* 36-39 */
+	.fill 16,1,0		/* 3A-49 */
+	.byte 0,0,0,0,0		/* 4A-4E */
+	.byte 0,0,0,0,0,0,0	/* 4F-55 */
+	.byte '|
+	.fill 10,1,0
+
 #else
 #error "KBD-type not defined"
 #endif
@@ -389,19 +493,6 @@ minus:	cmpb $1,e0
 	movl $'/,%eax
 	xorl %ebx,%ebx
 	jmp put_queue
-/*
- * do_space handles ctrl-space as an ASCII NUL.  Old habits die hard.
- */
-do_space:
-	testb $0x04,mode		/* ctrl */
-	je do_self
-	testb $0x03,mode		/* shift */
-	jne 1f
-	xorb $0x01, flags		/* toggle caps lock flag */
-	ret
-1f:	movl $0,%al			/* ASCII NUL */
-	xorl %ebx,%ebx
-	jmp put_queue
 
 /*
  * This table decides which routine to call when a scan-code has been
@@ -423,7 +514,7 @@ key_table:
 	.long do_self,do_self,do_self,do_self	/* 2C-2F z x c v */
 	.long do_self,do_self,do_self,do_self	/* 30-33 b n m , */
 	.long do_self,minus,rshift,do_self	/* 34-37 . - rshift * */
-	.long alt,do_space,caps,func		/* 38-3B alt sp caps f1 */
+	.long alt,do_self,caps,func		/* 38-3B alt sp caps f1 */
 	.long func,func,func,func		/* 3C-3F f2 f3 f4 f5 */
 	.long func,func,func,func		/* 40-43 f6 f7 f8 f9 */
 	.long func,num,scroll,cursor		/* 44-47 f10 num scr home */

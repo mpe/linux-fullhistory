@@ -6,10 +6,10 @@ volatile void panic(const char * str);
 int printf(const char * fmt, ...);
 int printk(const char * fmt, ...);
 int tty_write(unsigned ch,char * buf,int count);
-void *malloc(unsigned int len);
-void free_s(void *obj, int size);
+void * malloc(unsigned int size);
+void free_s(void * obj, int size);
 
-#define free(x)  free_s((x), 0)
+#define free(x) free_s((x), 0)
 
 /*
  * This is defined as a macro, but at some point this might become a
@@ -19,3 +19,4 @@ void free_s(void *obj, int size);
  * permissions checks first, and check suser() last.
  */
 #define suser() (current->euid == 0)
+

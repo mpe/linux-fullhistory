@@ -25,7 +25,7 @@ CPP	=gcc -E -nostdinc -I../include
 	-c -o $*.o $<
 
 OBJS  = ctype.o _exit.o open.o close.o errno.o write.o dup.o setsid.o \
-	execve.o wait.o string.o
+	execve.o wait.o string.o malloc.o
 
 lib.a: $(OBJS)
 	$(AR) rcs lib.a $(OBJS)
@@ -56,6 +56,8 @@ errno.s errno.o : errno.c
 execve.s execve.o : execve.c ../include/unistd.h ../include/sys/stat.h \
   ../include/sys/types.h ../include/sys/times.h ../include/sys/utsname.h \
   ../include/utime.h 
+malloc.s malloc.o : malloc.c ../include/linux/kernel.h ../include/linux/mm.h \
+  ../include/asm/system.h 
 open.s open.o : open.c ../include/unistd.h ../include/sys/stat.h \
   ../include/sys/types.h ../include/sys/times.h ../include/sys/utsname.h \
   ../include/utime.h ../include/stdarg.h 

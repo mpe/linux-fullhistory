@@ -12,7 +12,7 @@
  */
 
 .globl _divide_error,_debug,_nmi,_int3,_overflow,_bounds,_invalid_op
-.globl _device_not_available,_double_fault,_coprocessor_segment_overrun
+.globl _double_fault,_coprocessor_segment_overrun
 .globl _invalid_TSS,_segment_not_present,_stack_segment
 .globl _general_protection,_coprocessor_error,_irq13,_reserved
 
@@ -74,28 +74,6 @@ _invalid_op:
 	pushl $_do_invalid_op
 	jmp no_error_code
 
-math_emulate:
-	popl %eax
-	pushl $_do_device_not_available
-	jmp no_error_code
-_device_not_available:
-	pushl %eax
-	movl %cr0,%eax
-	testl $0x4,%eax			# EM (math emulation bit)
-	jne math_emulate
-	clts				# clear TS so that we can use math
-	pushl %ecx
-	pushl %edx
-	push %ds
-	movl $0x10,%eax
-	mov %ax,%ds
-	call _math_state_restore
-	pop %ds
-	popl %edx
-	popl %ecx
-	popl %eax
-	iret
-
 _coprocessor_segment_overrun:
 	pushl $_do_coprocessor_segment_overrun
 	jmp no_error_code
@@ -114,10 +92,7 @@ _irq13:
 1:	jmp 1f
 1:	outb %al,$0xA0
 	popl %eax
-_coprocessor_error:
-	fnclex
-	pushl $_do_coprocessor_error
-	jmp no_error_code
+	jmp _coprocessor_error
 
 _double_fault:
 	pushl $_do_double_fault

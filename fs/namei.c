@@ -4,6 +4,10 @@
  *  (C) 1991  Linus Torvalds
  */
 
+/*
+ * Some corrections by tytso.
+ */
+
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <asm/segment.h>
@@ -76,7 +80,7 @@ static int match(int len,const char * name,struct dir_entry * de)
 /*
  *	find_entry()
  *
- * finds and entry in the specified directory with the wanted name. It
+ * finds an entry in the specified directory with the wanted name. It
  * returns the cache buffer in which the entry was found, and the entry
  * itself (as a parameter - res_dir). It does NOT read the inode of the
  * entry - you'll have to do that yourself if you want to.
@@ -596,18 +600,30 @@ int sys_rmdir(const char * name)
 		iput(dir);
 		return -ENOENT;
 	}
+	if (!permission(dir,MAY_WRITE)) {
+		iput(dir);
+		return -EPERM;
+	}
 	bh = find_entry(&dir,basename,namelen,&de);
 	if (!bh) {
 		iput(dir);
 		return -ENOENT;
 	}
-	if (!permission(dir,MAY_WRITE)) {
+	if (!(inode = iget(dir->i_dev, de->inode))) {
 		iput(dir);
 		brelse(bh);
 		return -EPERM;
 	}
-	if (!(inode = iget(dir->i_dev, de->inode))) {
+	if ((dir->i_mode & S_ISVTX) && current->euid &&
+	    inode->i_uid != current->euid) {
 		iput(dir);
+		iput(inode);
+		brelse(bh);
+		return -EPERM;
+	}
+	if (inode->i_dev != dir->i_dev || inode->i_count>1) {
+		iput(dir);
+		iput(inode);
 		brelse(bh);
 		return -EPERM;
 	}
@@ -667,12 +683,18 @@ int sys_unlink(const char * name)
 		iput(dir);
 		return -ENOENT;
 	}
-	inode = iget(dir->i_dev, de->inode);
-	if (!inode) {
-		printk("iget failed in delete (%04x:%d)",dir->i_dev,de->inode);
+	if (!(inode = iget(dir->i_dev, de->inode))) {
 		iput(dir);
 		brelse(bh);
 		return -ENOENT;
+	}
+	if ((dir->i_mode & S_ISVTX) && !suser() &&
+	    current->euid != inode->i_uid &&
+	    current->euid != dir->i_uid) {
+		iput(dir);
+		iput(inode);
+		brelse(bh);
+		return -EPERM;
 	}
 	if (S_ISDIR(inode->i_mode)) {
 		iput(inode);
@@ -680,19 +702,6 @@ int sys_unlink(const char * name)
 		brelse(bh);
 		return -EPERM;
 	}
-	/*
-	 * If the directory has the sticky bit, the user must either
-	 * own the file or own the directory or be the superuser to 
-	 * delete a file in that directory.  This is typically used 
-	 * for /tmp and /usr/tmp.
-	 */
-	if ((dir->i_mode & S_ISVTX) && (current->euid != inode->i_uid) &&
-	    (current->euid != dir->i_uid) && !suser()) {
-		iput(inode);
-		iput(dir);
-		brelse(bh);
-		return -EPERM;
-	}		
 	if (!inode->i_nlinks) {
 		printk("Deleting nonexistent file (%04x:%d), %d\n",
 			inode->i_dev,inode->i_num,inode->i_nlinks);

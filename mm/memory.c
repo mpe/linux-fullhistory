@@ -4,13 +4,37 @@
  *  (C) 1991  Linus Torvalds
  */
 
+/*
+ * demand-loading started 01.12.91 - seems it is high on the list of
+ * things wanted, and it should be easy to implement. - Linus
+ */
+
+/*
+ * Ok, demand-loading was easy, shared pages a little bit tricker. Shared
+ * pages started 02.12.91, seems to work. - Linus.
+ *
+ * Tested sharing by executing about 30 /bin/sh: under the old kernel it
+ * would have taken more than the 6M I have free, but it worked well as
+ * far as I could see.
+ *
+ * Also corrected some "invalidate()"s - I wasn't doing enough of them.
+ */
+
 #include <signal.h>
 
-#include <linux/head.h>
-#include <linux/kernel.h>
 #include <asm/system.h>
 
-int do_exit(long code);
+#include <linux/sched.h>
+#include <linux/head.h>
+#include <linux/kernel.h>
+
+volatile void do_exit(long code);
+
+static inline volatile void oom(void)
+{
+	printk("out of memory\n\r");
+	do_exit(SIGSEGV);
+}
 
 #define invalidate() \
 __asm__("movl %%eax,%%cr3"::"a" (0))
@@ -21,6 +45,9 @@ __asm__("movl %%eax,%%cr3"::"a" (0))
 #define PAGING_PAGES (PAGING_MEMORY>>12)
 #define MAP_NR(addr) (((addr)-LOW_MEM)>>12)
 #define USED 100
+
+#define CODE_SPACE(addr) ((((addr)+4095)&~4095) < \
+current->start_code + current->end_code)
 
 static long HIGH_MEMORY = 0;
 
@@ -62,7 +89,7 @@ return __res;
 void free_page(unsigned long addr)
 {
 	if (addr < LOW_MEM) return;
-	if (addr > HIGH_MEMORY)
+	if (addr >= HIGH_MEMORY)
 		panic("trying to free nonexistent page");
 	addr -= LOW_MEM;
 	addr >>= 12;
@@ -173,7 +200,7 @@ unsigned long put_page(unsigned long page,unsigned long address)
 
 /* NOTE !!! This uses the fact that _pg_dir=0 */
 
-	if (page < LOW_MEM || page > HIGH_MEMORY)
+	if (page < LOW_MEM || page >= HIGH_MEMORY)
 		printk("Trying to put page %p at %p\n",page,address);
 	if (mem_map[(page-LOW_MEM)>>12] != 1)
 		printk("mem_map disagrees with %p at %p\n",page,address);
@@ -187,6 +214,7 @@ unsigned long put_page(unsigned long page,unsigned long address)
 		page_table = (unsigned long *) tmp;
 	}
 	page_table[(address>>12) & 0x3ff] = page | 7;
+/* no need for invalidate */
 	return page;
 }
 
@@ -197,13 +225,15 @@ void un_wp_page(unsigned long * table_entry)
 	old_page = 0xfffff000 & *table_entry;
 	if (old_page >= LOW_MEM && mem_map[MAP_NR(old_page)]==1) {
 		*table_entry |= 2;
+		invalidate();
 		return;
 	}
 	if (!(new_page=get_free_page()))
-		do_exit(SIGSEGV);
+		oom();
 	if (old_page >= LOW_MEM)
 		mem_map[MAP_NR(old_page)]--;
 	*table_entry = new_page | 7;
+	invalidate();
 	copy_page(old_page,new_page);
 }	
 
@@ -211,9 +241,17 @@ void un_wp_page(unsigned long * table_entry)
  * This routine handles present pages, when users try to write
  * to a shared page. It is done by copying the page to a new address
  * and decrementing the shared-page counter for the old page.
+ *
+ * If it's in code space we exit with a segment error.
  */
 void do_wp_page(unsigned long error_code,unsigned long address)
 {
+#if 0
+/* we cannot do this yet: the estdio library writes to code space */
+/* stupid, stupid. I really want the libc.a from GNU */
+	if (CODE_SPACE(address))
+		do_exit(SIGSEGV);
+#endif
 	un_wp_page((unsigned long *)
 		(((address>>10) & 0xffc) + (0xfffff000 &
 		*((unsigned long *) ((address>>20) &0xffc)))));
@@ -233,14 +271,129 @@ void write_verify(unsigned long address)
 	return;
 }
 
-void do_no_page(unsigned long error_code,unsigned long address)
+void get_empty_page(unsigned long address)
 {
 	unsigned long tmp;
 
-	if (tmp=get_free_page())
-		if (put_page(tmp,address))
-			return;
-	do_exit(SIGSEGV);
+	if (!(tmp=get_free_page()) || !put_page(tmp,address)) {
+		free_page(tmp);		/* 0 is ok - ignored */
+		oom();
+	}
+}
+
+/*
+ * try_to_share() checks the page at address "address" in the task "p",
+ * to see if it exists, and if it is clean. If so, share it with the current
+ * task.
+ *
+ * NOTE! This assumes we have checked that p != current, and that they
+ * share the same executable.
+ */
+static int try_to_share(unsigned long address, struct task_struct * p)
+{
+	unsigned long from;
+	unsigned long to;
+	unsigned long from_page;
+	unsigned long to_page;
+	unsigned long phys_addr;
+
+	from_page = to_page = ((address>>20) & 0xffc);
+	from_page += ((p->start_code>>20) & 0xffc);
+	to_page += ((current->start_code>>20) & 0xffc);
+/* is there a page-directory at from? */
+	from = *(unsigned long *) from_page;
+	if (!(from & 1))
+		return 0;
+	from &= 0xfffff000;
+	from_page = from + ((address>>10) & 0xffc);
+	phys_addr = *(unsigned long *) from_page;
+/* is the page clean and present? */
+	if ((phys_addr & 0x41) != 0x01)
+		return 0;
+	phys_addr &= 0xfffff000;
+	if (phys_addr >= HIGH_MEMORY || phys_addr < LOW_MEM)
+		return 0;
+	to = *(unsigned long *) to_page;
+	if (!(to & 1))
+		if (to = get_free_page())
+			*(unsigned long *) to_page = to | 7;
+		else
+			oom();
+	to &= 0xfffff000;
+	to_page = to + ((address>>10) & 0xffc);
+	if (1 & *(unsigned long *) to_page)
+		panic("try_to_share: to_page already exists");
+/* share them: write-protect */
+	*(unsigned long *) from_page &= ~2;
+	*(unsigned long *) to_page = *(unsigned long *) from_page;
+	invalidate();
+	phys_addr -= LOW_MEM;
+	phys_addr >>= 12;
+	mem_map[phys_addr]++;
+	return 1;
+}
+
+/*
+ * share_page() tries to find a process that could share a page with
+ * the current one. Address is the address of the wanted page relative
+ * to the current data space.
+ *
+ * We first check if it is at all feasible by checking executable->i_count.
+ * It should be >1 if there are other tasks sharing this inode.
+ */
+static int share_page(unsigned long address)
+{
+	struct task_struct ** p;
+
+	if (!current->executable)
+		return 0;
+	if (current->executable->i_count < 2)
+		return 0;
+	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
+		if (!*p)
+			continue;
+		if (current == *p)
+			continue;
+		if ((*p)->executable != current->executable)
+			continue;
+		if (try_to_share(address,*p))
+			return 1;
+	}
+	return 0;
+}
+
+void do_no_page(unsigned long error_code,unsigned long address)
+{
+	int nr[4];
+	unsigned long tmp;
+	unsigned long page;
+	int block,i;
+
+	address &= 0xfffff000;
+	tmp = address - current->start_code;
+	if (!current->executable || tmp >= current->end_data) {
+		get_empty_page(address);
+		return;
+	}
+	if (share_page(tmp))
+		return;
+	if (!(page = get_free_page()))
+		oom();
+/* remember that 1 block is used for header */
+	block = 1 + tmp/BLOCK_SIZE;
+	for (i=0 ; i<4 ; block++,i++)
+		nr[i] = bmap(current->executable,block);
+	bread_page(page,current->executable->i_dev,nr);
+	i = tmp + 4096 - current->end_data;
+	tmp = page + 4096;
+	while (i-- > 0) {
+		tmp--;
+		*(char *)tmp = 0;
+	}
+	if (put_page(page,address))
+		return;
+	free_page(page);
+	oom();
 }
 
 void mem_init(long start_mem, long end_mem)

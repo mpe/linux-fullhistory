@@ -94,6 +94,8 @@ static void tell_father(int pid)
 			return;
 		}
 /* if we don't find any fathers, we just release ourselves */
+/* This is not really OK. Must change it to make father 1 */
+	printk("BAD BAD - no father found\n\r");
 	release(current);
 }
 
@@ -104,8 +106,12 @@ int do_exit(long code)
 	free_page_tables(get_base(current->ldt[1]),get_limit(0x0f));
 	free_page_tables(get_base(current->ldt[2]),get_limit(0x17));
 	for (i=0 ; i<NR_TASKS ; i++)
-		if (task[i] && task[i]->father == current->pid)
-			task[i]->father = 0;
+		if (task[i] && task[i]->father == current->pid) {
+			task[i]->father = 1;
+			if (task[i]->state == TASK_ZOMBIE)
+				/* assumption task[1] is always init */
+				(void) send_sig(SIGCHLD, task[1], 1);
+		}
 	for (i=0 ; i<NR_OPEN ; i++)
 		if (current->filp[i])
 			sys_close(i);
@@ -113,6 +119,8 @@ int do_exit(long code)
 	current->pwd=NULL;
 	iput(current->root);
 	current->root=NULL;
+	iput(current->executable);
+	current->executable=NULL;
 	if (current->leader && current->tty >= 0)
 		tty_table[current->tty].pgrp = 0;
 	if (last_task_used_math == current)
@@ -133,7 +141,7 @@ int sys_exit(int error_code)
 
 int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options)
 {
-	int flag;
+	int flag, code;
 	struct task_struct ** p;
 
 	verify_area(stat_addr,4);
@@ -164,8 +172,9 @@ repeat:
 				current->cutime += (*p)->utime;
 				current->cstime += (*p)->stime;
 				flag = (*p)->pid;
-				put_fs_long((*p)->exit_code,stat_addr);
+				code = (*p)->exit_code;
 				release(*p);
+				put_fs_long(code,stat_addr);
 				return flag;
 			default:
 				flag=1;

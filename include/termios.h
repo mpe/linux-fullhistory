@@ -31,6 +31,7 @@
 #define TIOCMSET	0x5418
 #define TIOCGSOFTCAR	0x5419
 #define TIOCSSOFTCAR	0x541A
+#define TIOCINQ		0x541B
 
 struct winsize {
 	unsigned short ws_row;
@@ -145,6 +146,8 @@ struct termios {
 #define  B9600	0000015
 #define  B19200	0000016
 #define  B38400	0000017
+#define EXTA B19200
+#define EXTB B38400
 #define CSIZE	0000060
 #define   CS5	0000000
 #define   CS6	0000020
@@ -158,6 +161,9 @@ struct termios {
 #define CLOCAL	0004000
 #define CIBAUD	03600000		/* input baud rate (not used) */
 #define CRTSCTS	020000000000		/* flow control */
+
+#define PARENB CPARENB
+#define PARODD CPARODD
 
 /* c_lflag bits */
 #define ISIG	0000001

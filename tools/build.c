@@ -16,6 +16,10 @@
  * the right amount. It also writes some system data to stderr.
  */
 
+/*
+ * Changes by tytso to allow root device specification
+ */
+
 #include <stdio.h>	/* fprintf */
 #include <string.h>
 #include <stdlib.h>	/* contains exit */
@@ -27,6 +31,8 @@
 
 #define MINIX_HEADER 32
 #define GCC_HEADER 1024
+
+#define SYS_SIZE 0x2000
 
 #define DEFAULT_MAJOR_ROOT 3
 #define DEFAULT_MINOR_ROOT 6
@@ -45,7 +51,7 @@ void die(char * str)
 
 void usage(void)
 {
-	die("Usage: build bootsect setup system [> image]");
+	die("Usage: build bootsect setup system [rootdev] [> image]");
 }
 
 int main(int argc, char ** argv)
@@ -156,5 +162,7 @@ int main(int argc, char ** argv)
 			die("Write call failed");
 	close(id);
 	fprintf(stderr,"System is %d bytes.\n",i);
+	if (i > SYS_SIZE*16)
+		die("System is too big");
 	return(0);
 }

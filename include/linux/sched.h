@@ -27,7 +27,7 @@
 #endif
 
 extern int copy_page_tables(unsigned long from, unsigned long to, long size);
-extern int free_page_tables(unsigned long from, long size);
+extern int free_page_tables(unsigned long from, unsigned long size);
 
 extern void sched_init(void);
 extern void schedule(void);
@@ -85,7 +85,7 @@ struct task_struct {
 	long blocked;	/* bitmap of masked signals */
 /* various fields */
 	int exit_code;
-	unsigned long end_code,end_data,brk,start_stack;
+	unsigned long start_code,end_code,end_data,brk,start_stack;
 	long pid,father,pgrp,session,leader;
 	unsigned short uid,euid,suid;
 	unsigned short gid,egid,sgid;
@@ -97,6 +97,7 @@ struct task_struct {
 	unsigned short umask;
 	struct m_inode * pwd;
 	struct m_inode * root;
+	struct m_inode * executable;
 	unsigned long close_on_exec;
 	struct file * filp[NR_OPEN];
 /* ldt for this task 0 - zero 1 - cs 2 - ds&ss */
@@ -112,12 +113,12 @@ struct task_struct {
 #define INIT_TASK \
 /* state etc */	{ 0,15,15, \
 /* signals */	0,{{},},0, \
-/* ec,brk... */	0,0,0,0,0, \
+/* ec,brk... */	0,0,0,0,0,0, \
 /* pid etc.. */	0,-1,0,0,0, \
 /* uid etc */	0,0,0,0,0,0, \
 /* alarm */	0,0,0,0,0,0, \
 /* math */	0, \
-/* fs info */	-1,0022,NULL,NULL,0, \
+/* fs info */	-1,0022,NULL,NULL,NULL,0, \
 /* filp */	{NULL,}, \
 	{ \
 		{0,0}, \

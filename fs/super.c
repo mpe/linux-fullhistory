@@ -74,6 +74,7 @@ struct super_block * get_super(int dev)
 void put_super(int dev)
 {
 	struct super_block * sb;
+	struct m_inode * inode;
 	int i;
 
 	if (dev == ROOT_DEV) {
@@ -183,9 +184,9 @@ int sys_umount(char * dev_name)
 		return -ENOENT;
 	if (!sb->s_imount->i_mount)
 		printk("Mounted inode has i_mount=0\n");
-	for(inode=inode_table+0 ; inode<inode_table+NR_INODE ; inode++)
+	for (inode=inode_table+0 ; inode<inode_table+NR_INODE ; inode++)
 		if (inode->i_dev==dev && inode->i_count)
-			return -EBUSY;
+				return -EBUSY;
 	sb->s_imount->i_mount=0;
 	iput(sb->s_imount);
 	sb->s_imount = NULL;
