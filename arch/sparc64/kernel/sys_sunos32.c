@@ -1,4 +1,4 @@
-/* $Id: sys_sunos32.c,v 1.41 2000/03/13 21:57:31 davem Exp $
+/* $Id: sys_sunos32.c,v 1.42 2000/03/15 02:43:35 davem Exp $
  * sys_sunos32.c: SunOS binary compatability layer on sparc64.
  *
  * Copyright (C) 1995, 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -222,33 +222,6 @@ asmlinkage void sunos_vadvise(u32 strategy)
 	printk("%s: Advises us to use %s paging strategy\n",
 	       current->comm,
 	       strategy <= 3 ? vstrings[strategy] : "BOGUS");
-	unlock_kernel();
-}
-
-/* Same as vadvise, and just as bogus, but for a range of virtual
- * process address space.
- */
-#define MADV_NORMAL      0 /* Nothing special... */
-#define MADV_RANDOM      1 /* I am emacs... */
-#define MADV_SEQUENTIAL  2 /* I am researcher code... */
-#define MADV_WILLNEED    3 /* Pages in this range will be needed */
-#define MADV_DONTNEED    4 /* Pages in this range won't be needed */
-
-static char *mstrings[] = {
-	"MADV_NORMAL",
-	"MADV_RANDOM",
-	"MADV_SEQUENTIAL",
-	"MADV_WILLNEED",
-	"MADV_DONTNEED",
-};
-
-asmlinkage void sunos_madvise(u32 address, u32 len, u32 strategy)
-{
-	/* I wanna see who uses this... */
-	lock_kernel();
-	printk("%s: Advises us to use %s paging strategy for addr<%08x> len<%08x>\n",
-	       current->comm, strategy <= 4 ? mstrings[strategy] : "BOGUS",
-	       address, len);
 	unlock_kernel();
 }
 

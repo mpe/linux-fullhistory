@@ -71,6 +71,7 @@ struct shmid_kernel /* private to the kernel */
 	unsigned long		shm_npages; /* size of segment (pages) */
 	pte_t			**shm_dir;  /* ptr to arr of ptrs to frames */ 
 	int			id;
+	int			destroyed; /* set if the final detach kills */
 	union permap {
 		struct shmem {
 			time_t			atime;
@@ -115,6 +116,7 @@ static int newseg (key_t key, const char *name, int namelen, int shmflg, size_t 
 static void killseg_core(struct shmid_kernel *shp, int doacc);
 static void shm_open (struct vm_area_struct *shmd);
 static void shm_close (struct vm_area_struct *shmd);
+static void shm_remove_name(int id);
 static struct page * shm_nopage(struct vm_area_struct *, unsigned long, int);
 static int shm_swapout(struct page *, struct file *);
 #ifdef CONFIG_PROC_FS
@@ -308,6 +310,20 @@ static int shm_remount_fs (struct super_block *sb, int *flags, char *data)
 	if (shm_parse_options (data))
 		return -EINVAL;
 	return 0;
+}
+
+static struct fs_struct *shm_push_root(void)
+{
+	struct fs_struct *old,*new;
+	new=init_task_union.task.fs;
+	old=current->fs;
+	current->fs=new;
+	return old;	
+}
+
+static void shm_pop_root(struct fs_struct *saved)
+{
+	current->fs=saved;
 }
 
 static void shm_put_super(struct super_block *sb)
@@ -881,9 +897,8 @@ char * shm_getname(int id)
 {
 	char *result;
 
-	result = __getname ();
-	if (IS_ERR(result))
-		return result;
+	if (!(result = __getname ()))
+		return ERR_PTR(-ENOMEM);
 
 	sprintf (result, "%s/" SHM_FMT, shm_path, id); 
 	return result;
@@ -1018,18 +1033,36 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 	}
 	case IPC_RMID:
 	{
-		char *name;
+		/*
+		 *	We cannot simply remove the file. The SVID states
+		 *	that the block remains until the last person
+		 *	detaches from it, then is deleted. A shmat() on
+		 *	an RMID segment is legal in older Linux and if 
+		 *	we change it apps break...
+		 *
+		 *	Instead we set a destroyed flag, and then blow
+		 *	the name away when the usage hits zero.
+		 */
 		if ((shmid % SEQ_MULTIPLIER)== zero_id)
 			return -EINVAL;
-		name = shm_getname(shmid);
-		if (IS_ERR(name))
-			return PTR_ERR(name);
 		lock_kernel();
-		err = do_unlink (name);
+		shp = shm_lock(shmid);
+		if(shp==NULL)
+		{
+			unlock_kernel();
+			return -EINVAL;
+		}
+		err=-EIDRM;
+		if(shm_checkid(shp,shmid)==0)
+		{
+			if(shp->shm_nattch==0)
+				shm_remove_name(shmid);
+			else
+				shp->destroyed=1;
+			err=0;
+		}			
+		shm_unlock(shmid);
 		unlock_kernel();
-		putname (name);
-		if (err == -ENOENT)
-			err = -EINVAL;
 		return err;
 	}
 
@@ -1109,6 +1142,7 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	int    err;
 	int    flags;
 	char   *name;
+	struct fs_struct *saved;
 
 	if (!shm_sb || (shmid % SEQ_MULTIPLIER) == zero_id)
 		return -EINVAL;
@@ -1130,12 +1164,14 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 		return PTR_ERR (name);
 
 	lock_kernel();
+	saved=shm_push_root();
 	file = filp_open (name, O_RDWR, 0);
+	shm_pop_root(saved);
+
 	putname (name);
-	if (IS_ERR (file)) {
-		unlock_kernel();
+	if (IS_ERR (file))
 		goto bad_file;
-	}
+
 	*raddr = do_mmap (file, addr, file->f_dentry->d_inode->i_size,
 			  (shmflg & SHM_RDONLY ? PROT_READ :
 			   PROT_READ | PROT_WRITE), flags, 0);
@@ -1148,6 +1184,7 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	return err;
 
 bad_file:
+	unlock_kernel();
 	if ((err = PTR_ERR(file)) == -ENOENT)
 		return -EINVAL;
 	return err;
@@ -1157,6 +1194,23 @@ bad_file:
 static void shm_open (struct vm_area_struct *shmd)
 {
 	shm_inc (shmd->vm_file->f_dentry->d_inode->i_ino);
+}
+
+/*
+ *	Remove a name. Must be called with lock_kernel
+ */
+ 
+static void shm_remove_name(int id)
+{
+	char *name = shm_getname(id);
+	if (!IS_ERR(name))
+	{
+		struct fs_struct *saved;
+		saved=shm_push_root();
+		do_unlink (name);
+		shm_pop_root(saved);
+		putname (name);
+	}
 }
 
 /*
@@ -1176,7 +1230,14 @@ static void shm_close (struct vm_area_struct *shmd)
 	shp->shm_lprid = current->pid;
 	shp->shm_dtim = CURRENT_TIME;
 	shp->shm_nattch--;
-	shm_unlock(id);
+	if(shp->shm_nattch==0 && shp->destroyed)
+	{
+		shp->destroyed=0;
+		shm_remove_name(id);
+		shm_unlock(id);
+	}
+	else		
+		shm_unlock(id);
 }
 
 /*
@@ -1214,13 +1275,13 @@ static int shm_swapout(struct page * page, struct file *file)
 /*
  * page not present ... go through shm_dir
  */
-static struct page * shm_nopage_core(struct shmid_kernel *shp, unsigned int idx, int *swp, int *rss)
+static struct page * shm_nopage_core(struct shmid_kernel *shp, unsigned int idx, int *swp, int *rss, unsigned long address)
 {
 	pte_t pte;
 	struct page * page;
 
 	if (idx >= shp->shm_npages)
-		goto sigbus;
+		return NOPAGE_SIGBUS;
 
 	pte = SHM_ENTRY(shp,idx);
 	if (!pte_present(pte)) {
@@ -1232,7 +1293,7 @@ static struct page * shm_nopage_core(struct shmid_kernel *shp, unsigned int idx,
 			page = alloc_page(GFP_HIGHUSER);
 			if (!page)
 				goto oom;
-			clear_highpage(page);
+			clear_user_highpage(page, address);
 			if ((shp != shm_lock(shp->id)) && (shp->id != zero_id))
 				BUG();
 		} else {
@@ -1267,9 +1328,8 @@ static struct page * shm_nopage_core(struct shmid_kernel *shp, unsigned int idx,
 	return pte_page(pte);
 
 oom:
+	shm_lock(shp->id);
 	return NOPAGE_OOM;
-sigbus:
-	return NOPAGE_SIGBUS;
 }
 
 static struct page * shm_nopage(struct vm_area_struct * shmd, unsigned long address, int no_share)
@@ -1285,7 +1345,7 @@ static struct page * shm_nopage(struct vm_area_struct * shmd, unsigned long addr
 	down(&inode->i_sem);
 	if(!(shp = shm_lock(inode->i_ino)))
 		BUG();
-	page = shm_nopage_core(shp, idx, &shm_swp, &shm_rss);
+	page = shm_nopage_core(shp, idx, &shm_swp, &shm_rss, address);
 	shm_unlock(inode->i_ino);
 	up(&inode->i_sem);
 	return(page);
@@ -1657,7 +1717,7 @@ static struct page * shmzero_nopage(struct vm_area_struct * shmd, unsigned long 
 	shp = VMA_TO_SHP(shmd);
 	down(&shp->zsem);
 	shm_lock(zero_id);
-	page = shm_nopage_core(shp, idx, &dummy, &zshm_rss);
+	page = shm_nopage_core(shp, idx, &dummy, &zshm_rss, address);
 	shm_unlock(zero_id);
 	up(&shp->zsem);
 	return(page);

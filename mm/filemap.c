@@ -1413,7 +1413,7 @@ success:
 		struct page *new_page = page_cache_alloc();
 
 		if (new_page) {
-			copy_highpage(new_page, old_page);
+			copy_user_highpage(new_page, old_page, address);
 			flush_page_to_ram(new_page);
 		} else
 			new_page = NOPAGE_OOM;

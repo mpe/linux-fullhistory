@@ -1,4 +1,4 @@
-/* $Id: sunhme.c,v 1.93 2000/03/12 04:02:14 davem Exp $
+/* $Id: sunhme.c,v 1.94 2000/03/15 06:47:04 davem Exp $
  * sunhme.c: Sparc HME/BigMac 10/100baseT half/full duplex auto switching,
  *           auto carrier detecting ethernet driver.  Also known as the
  *           "Happy Meal Ethernet" found on SunSwift SBUS cards.
@@ -2953,7 +2953,7 @@ static int __init happy_meal_probe(void)
 }
 
 
-static void __exit cleanup_module(void)
+static void __exit happy_meal_cleanup_module(void)
 {
 #ifdef MODULE
 	/* No need to check MOD_IN_USE, as sys_delete_module() checks. */

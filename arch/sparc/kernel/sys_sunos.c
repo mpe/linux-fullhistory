@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.115 2000/03/13 21:57:23 davem Exp $
+/* $Id: sys_sunos.c,v 1.117 2000/03/15 02:43:32 davem Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -264,35 +264,6 @@ asmlinkage void sunos_vadvise(unsigned long strategy)
 	printk("%s: Advises us to use %s paging strategy\n",
 	       current->comm,
 	       strategy <= 3 ? vstrings[strategy] : "BOGUS");
-	unlock_kernel();
-}
-
-/* Same as vadvise, and just as bogus, but for a range of virtual
- * process address space.
- */
-#define MADV_NORMAL      0 /* Nothing special... */
-#define MADV_RANDOM      1 /* I am emacs... */
-#define MADV_SEQUENTIAL  2 /* I am researcher code... */
-#define MADV_WILLNEED    3 /* Pages in this range will be needed */
-#define MADV_DONTNEED    4 /* Pages in this range won't be needed */
-
-static char *mstrings[] = {
-	"MADV_NORMAL",
-	"MADV_RANDOM",
-	"MADV_SEQUENTIAL",
-	"MADV_WILLNEED",
-	"MADV_DONTNEED",
-};
-
-asmlinkage void sunos_madvise(unsigned long address, unsigned long len,
-			      unsigned long strategy)
-{
-	/* I wanna see who uses this... */
-	lock_kernel();
-	printk("%s: Advises us to use %s paging strategy for addr<%08lx> len<%08lx>\n",
-	       current->comm,
-	       strategy <= 4 ? mstrings[strategy] : "BOGUS",
-	       address, len);
 	unlock_kernel();
 }
 
@@ -733,7 +704,6 @@ static int get_default (int value, int def_value)
 
 asmlinkage int sunos_nfs_mount(char *dir_name, int linux_flags, void *data)
 {
-	int  ret = -ENODEV;
 	int  server_fd;
 	char *the_name;
 	struct nfs_mount_data linux_nfs_mount;

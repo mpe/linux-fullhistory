@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.88 2000/03/13 03:40:27 davem Exp $
+# $Id: config.in,v 1.89 2000/03/14 07:31:19 jj Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -74,7 +74,7 @@ fi
 endmenu
 
 mainmenu_option next_comment
-comment 'Floppy and other block devices'
+comment 'Block devices'
 
 bool 'Normal floppy disk support' CONFIG_BLK_DEV_FD
 bool 'Multiple devices driver support' CONFIG_BLK_DEV_MD

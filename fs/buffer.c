@@ -147,13 +147,13 @@ void __wait_on_buffer(struct buffer_head * bh)
 
 	atomic_inc(&bh->b_count);
 	add_wait_queue(&bh->b_wait, &wait);
-repeat:
-	run_task_queue(&tq_disk);
-	set_task_state(tsk, TASK_UNINTERRUPTIBLE);
-	if (buffer_locked(bh)) {
+	do {
+		run_task_queue(&tq_disk);
+		set_task_state(tsk, TASK_UNINTERRUPTIBLE);
+		if (!buffer_locked(bh))
+			break;
 		schedule();
-		goto repeat;
-	}
+	} while (buffer_locked(bh));
 	tsk->state = TASK_RUNNING;
 	remove_wait_queue(&bh->b_wait, &wait);
 	atomic_dec(&bh->b_count);

@@ -1,4 +1,4 @@
-/* $Id: parport.h,v 1.7 2000/01/28 13:43:14 jj Exp $
+/* $Id: parport.h,v 1.8 2000/03/14 04:37:53 davem Exp $
  * parport.h: sparc64 specific parport initialization and dma.
  *
  * Copyright (C) 1999  Eddie C. Dost  (ecd@skynet.be)
@@ -7,7 +7,6 @@
 #ifndef _ASM_SPARC64_PARPORT_H
 #define _ASM_SPARC64_PARPORT_H 1
 
-#include <linux/config.h>
 #include <asm/ebus.h>
 #include <asm/ns87303.h>
 

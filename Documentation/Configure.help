@@ -320,6 +320,24 @@ CONFIG_BLK_DEV_NBD
 
   If unsure, say N.
 
+ATA/IDE/MFM/RLL support
+CONFIG_IDE
+  If you say Y here, your kernel will be able to manage low cost mass storage
+  units such as ATA,IDE and ATAPI units.
+  ATA is.
+  Integrated Disk Electronics (IDE) is a subset of the ATA interface. Quite a
+  number of disks use IDE interface.  State of the art disks use SCSI
+  interface.
+  ATAPI is a protocol used by IDE tape and CDROM drives, similar in many
+  respects to the SCSI protocol.
+
+  If you want to compile this driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called ide.o.
+
+  If unsure, say Y.
+
 Enhanced IDE/MFM/RLL disk/cdrom/tape/floppy support
 CONFIG_BLK_DEV_IDE
   If you say Y here, you will use the full-featured IDE driver to
@@ -5793,6 +5811,26 @@ CONFIG_NETDEVICES
   Guide", to be found in ftp://metalab.unc.edu/pub/Linux/docs/LDP . If
   unsure, say Y.
 
+Bonding driver support
+CONFIG_BONDING
+  Say 'Y' or 'M' if you wish to be able to 'bond' multiple Ethernet
+  Channels together.  This is called 'Etherchannel' by Cisco, 'Trunking'
+  by Sun, and 'Bonding' in Linux.
+
+  If you have two ethernet connections to some other computer, you can
+  make them behave like one double speed connection using this driver.
+  Naturally, this has to be supported at the other end as well, either
+  with a similar Bonding Linux driver, a Cisco 5500 switch or a
+  SunTrunking SunSoft driver.
+
+  This is similar to the EQL driver, but it merge etherner segments instead
+  of serial lines.
+
+  If you want to compile this as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called bonding.o.
+
 Dummy net driver support
 CONFIG_DUMMY
   This is essentially a bit-bucket device (i.e. traffic you send to
@@ -7085,11 +7123,12 @@ CONFIG_NE2K_PCI
   module, say M here and read Documentation/modules.txt as well as
   Documentation/networking/net-modules.txt.
 
-PCI DM9102 support
+PCI DM9102(A)/DM9132/DM9801 support 
 CONFIG_DM9102
   This driver is for DM9102 compatible PCI cards from Davicom 
-  (http://www.davicom.com.tw) 
-  If you have a PCI DM9102 network (Ethernet) card, say Y.
+  (http://www.davicom.com.tw) including models DM9132 & DM9801.
+  If you have a PCI DM9102, DM9132 or DM9801 network (Ethernet)
+  card, say Y.
 
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
@@ -8220,6 +8259,14 @@ CONFIG_SKFP
   inserted in and removed from the running kernel whenever you want),
   say M here and read Documentation/modules.txt. This is recommended.
   The module will be called skfp.o.
+
+Linux telephony support
+CONFIG_PHONE
+  This option enable the kernel to manage telephony cards.
+
+  There is very few supported cards at this moment.
+
+  If unsure, say N.
 
 HIgh Performance Parallel Interface support (EXPERIMENTAL)
 CONFIG_HIPPI
@@ -9454,7 +9501,7 @@ CONFIG_ROMFS_FS
   answer N.
 
 QNX4 file system support (read only) (EXPERIMENTAL)
-CONFIG_QNX4FS_FS  
+CONFIG_QNX4FS_FS
   This is the file system used by the operating system QNX 4. Say Y if
   you intend to mount QNX hard disks or floppies. Unless you say Y to
   "QNX4FS write support" below, you will only be able to read
@@ -11076,6 +11123,16 @@ CONFIG_APPLICOM
   applicom.o.
 
   If unsure, say N.
+
+Power Management support
+CONFIG_PM
+  This enable the kernel to lower the requested computer power by making some
+  devices enter in lower power levels (standy, sleep, ... modes).
+  Basically, this let you save power.
+  Two majors interfaces exist between the hardware and the OS, the older
+  Advanced Power Management (APM) and the newer Advanced Configuration and
+  Power Interface (ACPI).
+  Both are supported by the Linux Kernel.
 
 Enter S1 for sleep (EXPERIMENTAL)
 CONFIG_ACPI_S1_SLEEP

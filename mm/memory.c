@@ -61,10 +61,10 @@ struct page *highmem_start_page;
 static inline void copy_cow_page(struct page * from, struct page * to, unsigned long address)
 {
 	if (from == ZERO_PAGE(address)) {
-		clear_highpage(to);
+		clear_user_highpage(to, address);
 		return;
 	}
-	copy_highpage(to, from);
+	copy_user_highpage(to, from, address);
 }
 
 mem_map_t * mem_map = NULL;
@@ -1073,7 +1073,7 @@ static int do_anonymous_page(struct task_struct * tsk, struct vm_area_struct * v
 			return -1;
 		if (PageHighMem(page))
 			high = 1;
-		clear_highpage(page);
+		clear_user_highpage(page, addr);
 		entry = pte_mkwrite(pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
 		vma->vm_mm->rss++;
 		tsk->min_flt++;

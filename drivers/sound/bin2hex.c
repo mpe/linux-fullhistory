@@ -33,6 +33,6 @@ int main( int argc, const char * argv [] )
 	i++;
     }
 
-    printf( "};\n#define %sLen %d\n", varname, i );
+    printf( "};\nstatic int %sLen =  %d;\n", varname, i );
     return 0;
 }

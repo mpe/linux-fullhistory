@@ -546,7 +546,7 @@ static int __init init_smb_fs(void)
 	smb_current_vmalloced = 0;
 #endif
 
-	return init_smb_fs();
+	return register_filesystem(&smb_fs_type);
 }
 
 static void __exit exit_smb_fs(void)

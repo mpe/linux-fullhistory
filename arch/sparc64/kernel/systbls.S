@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.69 2000/03/13 21:57:28 davem Exp $
+/* $Id: systbls.S,v 1.71 2000/03/15 02:43:36 davem Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -34,7 +34,7 @@ sys_call_table32:
 /*60*/	.word sys_umask, sys_chroot, sys32_newfstat, sys_fstat64, sys_getpagesize
 	.word sys_msync, sys_vfork, sys32_pread, sys32_pwrite, sys_geteuid
 /*70*/	.word sys_getegid, sys32_mmap, sys_setreuid, sys_munmap, sys_mprotect
-	.word sys_nis_syscall, sys_vhangup, sys32_truncate64, sys32_mincore, sys32_getgroups16
+	.word sys_madvise, sys_vhangup, sys32_truncate64, sys_mincore, sys32_getgroups16
 /*80*/	.word sys32_setgroups16, sys_getpgrp, sys_setgroups, sys32_setitimer, sys32_ftruncate64
 	.word sys_swapon, sys32_getitimer, sys_setuid, sys_sethostname, sys_setgid
 /*90*/	.word sys_dup2, sys_setfsuid, sys32_fcntl, sys32_select, sys_setfsgid
@@ -93,7 +93,7 @@ sys_call_table:
 /*60*/	.word sys_umask, sys_chroot, sys_newfstat, sys_nis_syscall, sys_getpagesize
 	.word sys_msync, sys_vfork, sys_pread, sys_pwrite, sys_nis_syscall
 /*70*/	.word sys_nis_syscall, sys_mmap, sys_nis_syscall, sys64_munmap, sys_mprotect
-	.word sys_nis_syscall, sys_vhangup, sys_nis_syscall, sys_mincore, sys_getgroups
+	.word sys_madvise, sys_vhangup, sys_nis_syscall, sys_mincore, sys_getgroups
 /*80*/	.word sys_setgroups, sys_getpgrp, sys_nis_syscall, sys_setitimer, sys_nis_syscall
 	.word sys_swapon, sys_getitimer, sys_nis_syscall, sys_sethostname, sys_nis_syscall
 /*90*/	.word sys_dup2, sys_nis_syscall, sys_fcntl, sys_select, sys_nis_syscall
@@ -163,8 +163,8 @@ sunos_sys_table:
 	.word sys_msync, sys_vfork, sunos_nosys
 	.word sunos_nosys, sunos_sbrk, sunos_sstk
 	.word sunos_mmap, sunos_vadvise, sys_munmap
-	.word sys_mprotect, sunos_madvise, sys_vhangup
-	.word sunos_nosys, sys32_mincore, sys32_getgroups16
+	.word sys_mprotect, sys_madvise, sys_vhangup
+	.word sunos_nosys, sys_mincore, sys32_getgroups16
 	.word sys32_setgroups16, sys_getpgrp, sunos_setpgrp
 	.word sys32_setitimer, sunos_nosys, sys_swapon
 	.word sys32_getitimer, sys_gethostname, sys_sethostname

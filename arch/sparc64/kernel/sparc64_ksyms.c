@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.75 2000/02/21 15:50:08 davem Exp $
+/* $Id: sparc64_ksyms.c,v 1.76 2000/03/14 08:29:29 davem Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -109,10 +109,10 @@ extern unsigned long phys_base;
  */
 
 #define EXPORT_SYMBOL_PRIVATE(sym)				\
-extern int __sparc_priv_ ## sym (int) __asm__("__" ## #sym);	\
+extern int __sparc_priv_ ## sym (int) __asm__("__" #sym);	\
 const struct module_symbol __export_priv_##sym			\
 __attribute__((section("__ksymtab"))) =				\
-{ (unsigned long) &__sparc_priv_ ## sym, "__" ## #sym }
+{ (unsigned long) &__sparc_priv_ ## sym, "__" #sym }
 
 /* used by various drivers */
 #ifdef __SMP__
@@ -288,6 +288,9 @@ EXPORT_SYMBOL(move_addr_to_user);
 EXPORT_SYMBOL(__memcpy);
 EXPORT_SYMBOL(__memset);
 EXPORT_SYMBOL(clear_page);
+EXPORT_SYMBOL(copy_page);
+EXPORT_SYMBOL(clear_user_page);
+EXPORT_SYMBOL(copy_user_page);
 EXPORT_SYMBOL(__bzero);
 EXPORT_SYMBOL(__memscan_zero);
 EXPORT_SYMBOL(__memscan_generic);

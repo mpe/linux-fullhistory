@@ -62,7 +62,7 @@ running, the suggested command should tell you.
 - Bash                   1.14.7                  ; bash -version
 - Ncpfs                  2.2.0                   ; ncpmount -v
 - Pcmcia-cs              3.1.2                   ; cardmgr -V
-- PPP                    2.3.9                   ; pppd --version
+- PPP                    2.3.11                  ; pppd --version
 - Util-linux             2.9i                    ; chsh -v
 - isdn4k-utils           v3.1beta7               ; isdnctrl 2>&1|grep version
 
@@ -390,7 +390,7 @@ PPP
 
    Due to changes in the PPP driver and routing code, those of you
 using PPP networking will need to upgrade your pppd to at least
-version 2.3.9. See ftp://cs.anu.edu.au/pub/software/ppp/ for newest
+version 2.3.11. See ftp://cs.anu.edu.au/pub/software/ppp/ for newest
 versions.
 
    You must make sure that the special device file /dev/ppp exists.
@@ -715,8 +715,8 @@ ftp://metalab.unc.edu/pub/Linux/system/serial/setserial-2.15.tar.gz
 PPP
 ===
 
-The 2.3.9 release:
-ftp://cs.anu.edu.au/pub/software/ppp/ppp-2.3.9.tar.gz
+The 2.3.11 release:
+ftp://cs.anu.edu.au/pub/software/ppp/ppp-2.3.11.tar.gz
 
 IP Chains
 =========

@@ -892,8 +892,8 @@ static int lvm_blk_ioctl(struct inode *inode, struct file *file,
 		       "%s -- lvm_blk_ioctl -- BLKGETSIZE: %u\n",
 		       lvm_name, lv_ptr->lv_size);
 #endif
-		copy_to_user((long *) arg, &lv_ptr->lv_size,
-			     sizeof(lv_ptr->lv_size));
+		if (put_user(lv_ptr->lv_size, (long *)arg))
+			return -EFAULT;
 		break;
 
 
@@ -931,8 +931,8 @@ static int lvm_blk_ioctl(struct inode *inode, struct file *file,
 		printk(KERN_DEBUG
 		       "%s -- lvm_blk_ioctl -- BLKRAGET\n", lvm_name);
 #endif
-		copy_to_user((long *) arg, &lv_ptr->lv_read_ahead,
-			     sizeof(lv_ptr->lv_read_ahead));
+		if (put_user(lv->lv_read_ahead, (long *)arg))
+			return -EFAULT;
 		break;
 
 

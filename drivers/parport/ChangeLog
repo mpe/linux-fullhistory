@@ -1,3 +1,8 @@
+2000-03-15  Tim Waugh  <twaugh@redhat.com>
+
+	* parport_pc.c (cleanup_module): Don't call pci_unregister_driver
+	if we didn't call pci_register_driver first.
+
 2000-03-13    <twaugh@redhat.com>
 
 	* parport_pc.c (parport_pc_init): Moved from asm/parport.h.

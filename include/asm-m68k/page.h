@@ -76,6 +76,9 @@ static inline void clear_page(void *page)
 #define copy_page(to,from)	memcpy((to), (from), PAGE_SIZE)
 #endif
 
+#define clear_user_page(page, vaddr)	clear_page(page)
+#define copy_user_page(to, from, vaddr)	copy_page(to, from)
+
 /*
  * These are used to make use of C type-checking..
  */

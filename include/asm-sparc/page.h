@@ -1,4 +1,4 @@
-/* $Id: page.h,v 1.48 2000/02/16 07:34:51 davem Exp $
+/* $Id: page.h,v 1.51 2000/03/15 07:19:25 davem Exp $
  * page.h:  Various defines and such for MMU operations on the Sparc for
  *          the Linux kernel.
  *
@@ -14,7 +14,12 @@
 #else
 #define PAGE_SHIFT   12
 #endif
+#ifndef __ASSEMBLY__
+/* I have my suspicions... -DaveM */
+#define PAGE_SIZE    (1UL << PAGE_SHIFT)
+#else
 #define PAGE_SIZE    (1 << PAGE_SHIFT)
+#endif
 #define PAGE_MASK    (~(PAGE_SIZE-1))
 
 #ifdef __KERNEL__
@@ -33,8 +38,10 @@
 	BUG(); \
 } while (0)
 
-#define clear_page(page)	memset((void *)(page), 0, PAGE_SIZE)
-#define copy_page(to,from)	memcpy((void *)(to), (void *)(from), PAGE_SIZE)
+#define clear_page(page)	 memset((void *)(page), 0, PAGE_SIZE)
+#define copy_page(to,from) 	memcpy((void *)(to), (void *)(from), PAGE_SIZE)
+#define clear_user_page(page, vaddr)	clear_page(page)
+#define copy_user_page(to, from, vaddr)	copy_page(to, from)
 
 /* The following structure is used to hold the physical
  * memory configuration of the machine.  This is filled in

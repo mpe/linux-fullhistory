@@ -87,7 +87,7 @@ static struct fasync_struct *rtc_async_queue;
 
 static DECLARE_WAIT_QUEUE_HEAD(rtc_wait);
 
-static spinlock_t rtc_lock = SPIN_LOCK_UNLOCKED;
+extern spinlock_t rtc_lock;
 
 static struct timer_list rtc_irq_timer;
 
@@ -141,8 +141,11 @@ static const unsigned char days_in_mo[] =
 #ifndef __alpha__
 /*
  *	A very tiny interrupt handler. It runs with SA_INTERRUPT set,
- *	so that there is no possibility of conflicting with the
- *	set_rtc_mmss() call that happens during some timer interrupts.
+ *	but there is possibility of conflicting with the set_rtc_mmss()
+ *	call (the rtc irq and the timer irq can easily run at the same
+ *	time in two different CPUs). So we need to serializes
+ *	accesses to the chip with the rtc_lock spinlock that each
+ *	architecture should implement in the timer code.
  *	(See ./arch/XXXX/kernel/time.c for the set_rtc_mmss() function.)
  */
 

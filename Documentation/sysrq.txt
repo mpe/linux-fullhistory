@@ -1,6 +1,7 @@
-                      MAGIC SYSRQ KEY DOCUMENTATION v1.2
+
+                      MAGIC SYSRQ KEY DOCUMENTATION v1.31
                      ------------------------------------
-                        [Sat May 16 01:09:21 EDT 1998]
+                        [Mon Mar 13 21:45:48 EST 2000]
 
 *  What is the magic SysRQ key?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -11,7 +12,10 @@ regardless of whatever else it is doing, unless it is completely locked up.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 You need to say "yes" to 'Magic SysRq key (CONFIG_MAGIC_SYSRQ)' when
 configuring the kernel. This option is only available in 2.1.x or later
-kernels.
+kernels. Once you boot the new kernel, you need to enable it manually 
+using following command:
+
+	 echo "1" > /proc/sys/kernel/sysrq
 
 *  How do I use the magic SysRQ key?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -28,7 +32,8 @@ On other - If you know of the key combos for other architectures, please
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 'r'     - Turns off keyboard raw mode and sets it to XLATE.
 
-'k'     - Kills all programs on the current virtual console.
+'k'     - Secure Access Key (SAK) Kills all programs on the current virtual 
+	  console. NOTE: See important comments below in SAK section.
 
 'b'     - Will immediately reboot the system without syncing or unmounting
           your disks.
@@ -58,12 +63,23 @@ On other - If you know of the key combos for other architectures, please
 'l'     - Send a SIGKILL to all processes, INCLUDING init. (Your system
           will be non-functional after this.)
 
+'h'	- Will display help ( actually any other key than those listed
+	  above will display help. but 'h' is easy to remember :-)
+
 *  Okay, so what can I use them for?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Well, un'R'aw is very handy when your X server or a svgalib program crashes.
 
-sa'K' (system attention key) is useful when you want to exit a program
-that will not let you switch consoles. (For example, X or a svgalib program.)
+sa'K' (Secure Access Key) is usefull when you want to be sure there are no
+trojan program is running at console and which could grab your password
+when you would try to login. It will kill all programs on given console
+and thus letting you make sure that the login prompt you see is actually
+the one from init, not some trojan program.
+IMPORTANT:In its true form it is not a true SAK like the one in   :IMPORTANT
+IMPORTATN:c2 compliant systems, and it should be mistook as such. :IMPORTANT
+	It seems other find it usefull as (System Attention Key) which is
+useful when you want to exit a program that will not let you switch consoles.
+(For example, X or a svgalib program.)
 
 re'B'oot is good when you're unable to shut down. But you should also 'S'ync
 and 'U'mount first.
@@ -108,6 +124,10 @@ you exit 'showkey' by not typing anything for ten seconds.
 *  I have more questions, who can I ask?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 You may feel free to send email to myrdraal@deathsdoor.com, and I will
-respond as soon as possible. If that email address does not work, use
-myrdraal@jackalz.dyn.ml.org.
+respond as soon as possible. 
  -Myrdraal
+
+*  Credits
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Written by Mydraal <myrdraal@deathsdoor.com>
+Updated by Adam Sulmicki <adam@cfar.umd.edu>

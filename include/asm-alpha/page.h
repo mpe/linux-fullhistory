@@ -38,6 +38,8 @@ static inline void clear_page(void * page)
 	} while (count);
 }
 
+#define clear_user_page(page, vaddr)	clear_page(page)
+
 static inline void copy_page(void * _to, void * _from)
 {
 	unsigned long count = PAGE_SIZE/64;
@@ -67,6 +69,8 @@ static inline void copy_page(void * _to, void * _from)
 		to += 8;
 	} while (count);
 }
+
+#define copy_user_page(to, from, vaddr)	copy_page(to, from)
 
 #ifdef STRICT_MM_TYPECHECKS
 /*

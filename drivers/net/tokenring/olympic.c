@@ -27,6 +27,8 @@
  *            the pci resource.
  *  1/11/00 - Added spinlocks for smp
  *  2/23/00 - Updated to dev_kfree_irq 
+ *  3/10/00 - Fixed FDX enable which triggered other bugs also 
+ *            squashed.
  *
  *  To Do:
  *
@@ -83,11 +85,11 @@
  * Version Number = a.b.c.d  where a.b.c is the level of code and d is the latest author.
  * So 0.0.1.pds = Peter, 0.0.1.mlp = Mike
  * 
- * Official releases will only have an a.b.c version number format.
+ * Official releases will only have an a.b.c version number format. 
  */
 
 static char *version = 
-"Olympic.c v0.3.2 2/23/00 - Peter De Schrijver & Mike Phillips" ; 
+"Olympic.c v0.5.0 3/10/00 - Peter De Schrijver & Mike Phillips" ; 
 
 static char *open_maj_error[]  = {"No error", "Lobe Media Test", "Physical Insertion",
 				   "Address Verification", "Neighbor Notification (Ring Poll)",
@@ -319,6 +321,14 @@ static int __init olympic_init(struct net_device *dev)
 		return -1;
 	}
 
+	if (olympic_priv->olympic_message_level) {
+		if ( readb(init_srb +2) & 0x40) { 
+			printk(KERN_INFO "Olympic: Adapter is FDX capable.\n") ;
+		} else { 
+			printk(KERN_INFO "Olympic: Adapter cannot do FDX.\n");
+		}
+	}
+  
 	uaa_addr=ntohs(readw(init_srb+8));
 
 #if OLYMPIC_DEBUG
@@ -401,7 +411,7 @@ static int olympic_open(struct net_device *dev)
 #if OLYMPIC_NETWORK_MONITOR
 		writew(ntohs(OPEN_ADAPTER_ENABLE_FDX | OPEN_ADAPTER_PASS_ADC_MAC | OPEN_ADAPTER_PASS_ATT_MAC | OPEN_ADAPTER_PASS_BEACON),init_srb+8);
 #else
-		writew(OPEN_ADAPTER_ENABLE_FDX,init_srb+8);
+		writew(ntohs(OPEN_ADAPTER_ENABLE_FDX),init_srb+8);
 #endif		
 
 		if (olympic_priv->olympic_laa[0]) {
@@ -941,9 +951,9 @@ static void olympic_set_rx_mode(struct net_device *dev)
 	options = olympic_priv->olympic_copy_all_options; 
 
 	if (dev->flags&IFF_PROMISC)  
-		options |= (3<<5) ; /* All LLC and MAC frames, all through the main rx channel */  
+		options |= 0x61 ;
 	else
-		options &= ~(3<<5) ; 
+		options &= ~0x61 ; 
 
 	/* Only issue the srb if there is a change in options */
 
@@ -1182,7 +1192,7 @@ static void olympic_arb_cmd(struct net_device *dev)
 	__u16 lan_status = 0, lan_status_diff  ; /* Initialize to stop compiler warning */
 	__u8 fdx_prot_error ; 
 	__u16 next_ptr;
-
+	int i ; 
 #if OLYMPIC_NETWORK_MONITOR
 	struct trh_hdr *mac_hdr ; 
 #endif
@@ -1242,7 +1252,7 @@ static void olympic_arb_cmd(struct net_device *dev)
 
 		/* Is the ASB free ? */ 	
 		
-		if (!(readl(olympic_priv->olympic_mmio + SISR) & SISR_ASB_FREE)) {
+		if (readb(asb_block + 2) != 0xff) { 
 			olympic_priv->asb_queued = 1 ; 
 			writel(LISR_ASB_FREE_REQ,olympic_priv->olympic_mmio+LISR_SUM); 
 			return ; 	
@@ -1261,7 +1271,7 @@ static void olympic_arb_cmd(struct net_device *dev)
 		return ; 	
 		
 	} else if (readb(arb_block) == ARB_LAN_CHANGE_STATUS) { /* Lan.change.status */
-		lan_status = readw(arb_block+6);
+		lan_status = ntohs(readw(arb_block+6));
 		fdx_prot_error = readb(arb_block+8) ; 
 		
 		/* Issue ARB Free */
@@ -1288,10 +1298,19 @@ static void olympic_arb_cmd(struct net_device *dev)
 			writel(readl(olympic_mmio+BCTL)&~(3<<13),olympic_mmio+BCTL);
 			netif_stop_queue(dev);
 			olympic_priv->srb = readw(olympic_priv->olympic_lap + LAPWWO) ; 
+			
+			olympic_priv->rx_status_last_received++;
+			olympic_priv->rx_status_last_received&=OLYMPIC_RX_RING_SIZE-1;
+			for(i=0;i<OLYMPIC_RX_RING_SIZE;i++) {
+				dev_kfree_skb(olympic_priv->rx_ring_skb[olympic_priv->rx_status_last_received]);
+				olympic_priv->rx_status_last_received++;
+				olympic_priv->rx_status_last_received&=OLYMPIC_RX_RING_SIZE-1;
+			}
+
 			free_irq(dev->irq,dev);
 			
 			printk(KERN_WARNING "%s: Adapter has been closed \n", dev->name) ; 
-	
+			MOD_DEC_USE_COUNT ; 
 		} /* If serious error */
 		
 		if (olympic_priv->olympic_message_level) { 

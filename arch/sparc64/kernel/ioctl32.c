@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.82 2000/03/13 21:57:27 davem Exp $
+/* $Id: ioctl32.c,v 1.83 2000/03/14 07:31:25 jj Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997-2000  Jakub Jelinek  (jakub@redhat.com)
@@ -8,6 +8,7 @@
  * ioctls.
  */
 
+#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -44,6 +45,14 @@
 #include <linux/raw.h>
 #include <linux/smb_fs.h>
 #include <linux/blkpg.h>
+#include <linux/blk.h>
+#include <linux/elevator.h>
+#if defined(CONFIG_BLK_DEV_LVM) || defined(CONFIG_BLK_DEV_LVM_MODULE)
+/* Ugh. This header really is not clean */
+#define min min
+#define max max
+#include <linux/lvm.h>
+#endif /* LVM */
 
 #include <scsi/scsi.h>
 /* Ugly hack. */
@@ -1980,6 +1989,353 @@ static int do_atm_ioctl(unsigned int fd, unsigned int cmd32, unsigned long arg)
         return -EINVAL;
 }
 
+#if defined(CONFIG_BLK_DEV_LVM) || defined(CONFIG_BLK_DEV_LVM_MODULE)
+/* Ugh, LVM. Pitty it was not cleaned up before accepted :((. */
+typedef struct {
+	uint8_t vg_name[NAME_LEN];
+	uint32_t vg_number;
+	uint32_t vg_access;
+	uint32_t vg_status;
+	uint32_t lv_max;
+	uint32_t lv_cur;
+	uint32_t lv_open;
+	uint32_t pv_max;
+	uint32_t pv_cur;
+	uint32_t pv_act;
+	uint32_t dummy;
+	uint32_t vgda;
+	uint32_t pe_size;
+	uint32_t pe_total;
+	uint32_t pe_allocated;
+	uint32_t pvg_total;
+	u32 proc;
+	u32 pv[ABS_MAX_PV + 1];
+	u32 lv[ABS_MAX_LV + 1];
+} vg32_t;
+
+typedef struct {
+	uint8_t id[2];
+	uint16_t version;
+	lvm_disk_data_t pv_on_disk;
+	lvm_disk_data_t vg_on_disk;
+	lvm_disk_data_t pv_namelist_on_disk;
+	lvm_disk_data_t lv_on_disk;
+	lvm_disk_data_t pe_on_disk;
+	uint8_t pv_name[NAME_LEN];
+	uint8_t vg_name[NAME_LEN];
+	uint8_t system_id[NAME_LEN];
+	kdev_t pv_dev;
+	uint32_t pv_number;
+	uint32_t pv_status;
+	uint32_t pv_allocatable;
+	uint32_t pv_size;
+	uint32_t lv_cur;
+	uint32_t pe_size;
+	uint32_t pe_total;
+	uint32_t pe_allocated;
+	uint32_t pe_stale;
+	u32 pe;
+	u32 inode;
+} pv32_t;
+
+typedef struct {
+	char lv_name[NAME_LEN];
+	u32 lv;
+} lv_req32_t;
+
+typedef struct {
+	u32 lv_index;
+	u32 lv;
+} lv_status_byindex_req32_t;
+
+typedef struct {
+	uint8_t lv_name[NAME_LEN];
+	kdev_t old_dev;
+	kdev_t new_dev;
+	u32 old_pe;
+	u32 new_pe;
+} le_remap_req32_t;
+
+typedef struct {
+	char pv_name[NAME_LEN];
+	u32 pv;
+} pv_status_req32_t;
+
+typedef struct {
+	uint8_t lv_name[NAME_LEN];
+	uint8_t vg_name[NAME_LEN];
+	uint32_t lv_access;
+	uint32_t lv_status;
+	uint32_t lv_open;
+	kdev_t lv_dev;
+	uint32_t lv_number;
+	uint32_t lv_mirror_copies;
+	uint32_t lv_recovery;
+	uint32_t lv_schedule;
+	uint32_t lv_size;
+	u32 lv_current_pe;
+	uint32_t lv_current_le;
+	uint32_t lv_allocated_le;
+	uint32_t lv_stripes;
+	uint32_t lv_stripesize;
+	uint32_t lv_badblock;
+	uint32_t lv_allocation;
+	uint32_t lv_io_timeout;
+	uint32_t lv_read_ahead;
+	/* delta to version 1 starts here */
+	u32 lv_snapshot_org;
+	u32 lv_snapshot_prev;
+	u32 lv_snapshot_next;
+	u32 lv_block_exception;
+	uint32_t lv_remap_ptr;
+	uint32_t lv_remap_end;
+	uint32_t lv_chunk_size;
+	uint32_t lv_snapshot_minor;
+	char dummy[200];
+} lv32_t;
+
+typedef struct {
+	u32 hash[2];
+	u32 rsector_org;
+	kdev_t rdev_org;
+	u32 rsector_new;
+	kdev_t rdev_new;
+} lv_block_exception32_t;
+
+static void put_lv_t(lv_t *l)
+{
+	if (l->lv_current_pe) vfree(l->lv_current_pe);
+	if (l->lv_block_exception) vfree(l->lv_block_exception);
+	kfree(l);
+}
+
+static lv_t *get_lv_t(u32 p, int *errp)
+{
+	int err, i;
+	u32 ptr1, ptr2;
+	size_t size;
+	lv_block_exception32_t *lbe32;
+	lv_block_exception_t *lbe;
+	lv32_t *ul = (lv32_t *)A(p);
+	lv_t *l = (lv_t *)kmalloc(sizeof(lv_t), GFP_KERNEL);
+	if (!l) {
+		*errp = -ENOMEM;
+		return NULL;
+	}
+	memset(l, 0, sizeof(lv_t));
+	err = copy_from_user(l, ul, (long)&((lv32_t *)0)->lv_current_pe);
+	err |= __copy_from_user(&l->lv_current_le, &ul->lv_current_le,
+				((long)&ul->lv_snapshot_org) - ((long)&ul->lv_current_le));
+	err |= __copy_from_user(&l->lv_remap_ptr, &ul->lv_remap_ptr,
+				((long)&ul->dummy[0]) - ((long)&ul->lv_remap_ptr));
+	err |= __get_user(ptr1, &ul->lv_current_pe);
+	err |= __get_user(ptr2, &ul->lv_block_exception);
+	if (err) {
+		kfree(l);
+		*errp = -EFAULT;
+		return NULL;
+	}
+	if (ptr1) {
+		size = l->lv_allocated_le * sizeof(pe_t);
+		l->lv_current_pe = vmalloc(size);
+		if (l->lv_current_pe)
+			err = copy_from_user(l->lv_current_pe, (void *)A(ptr1), size);
+	}
+	if (!err && ptr2) {
+		size = l->lv_remap_end * sizeof(lv_block_exception_t);
+		l->lv_block_exception = lbe = vmalloc(size);
+		if (l->lv_block_exception) {
+			lbe32 = (lv_block_exception32_t *)A(ptr2);
+			memset(lbe, 0, size);
+			for (i = 0; i < l->lv_remap_end; i++, lbe++, lbe32++) {
+				err |= get_user(lbe->rsector_org, &lbe32->rsector_org);
+				err |= __get_user(lbe->rdev_org, &lbe32->rdev_org);
+				err |= __get_user(lbe->rsector_new, &lbe32->rsector_new);
+				err |= __get_user(lbe->rdev_new, &lbe32->rdev_new);
+			}
+		}
+	}
+	if (err || (ptr1 && !l->lv_current_pe) || (ptr2 && !l->lv_block_exception)) {
+		if (!err)
+			*errp = -ENOMEM;
+		else
+			*errp = -EFAULT;
+		put_lv_t(l);
+		return NULL;
+	}
+	return l;
+}
+
+static int copy_lv_t(u32 ptr, lv_t *l)
+{
+	int err;
+	lv32_t *ul = (lv32_t *)A(ptr);
+	u32 ptr1;
+	size_t size;
+
+	err = get_user(ptr1, &ul->lv_current_pe);
+	if (err)
+		return -EFAULT;
+	err = copy_to_user(ul, l, (long)&((lv32_t *)0)->lv_current_pe);
+	err |= __copy_to_user(&ul->lv_current_le, &l->lv_current_le,
+				((long)&ul->lv_snapshot_org) - ((long)&ul->lv_current_le));
+	err |= __copy_to_user(&ul->lv_remap_ptr, &l->lv_remap_ptr,
+				((long)&ul->dummy[0]) - ((long)&ul->lv_remap_ptr));
+	size = l->lv_allocated_le * sizeof(pe_t);
+	err |= __copy_to_user((void *)A(ptr1), l->lv_current_pe, size);
+	return -EFAULT;
+}
+
+static int do_lvm_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
+{
+	vg_t *v;
+	union {
+		lv_req_t lv_req;
+		le_remap_req_t le_remap;
+		lv_status_byindex_req_t lv_byindex;
+		pv_status_req32_t pv_status;
+	} u;
+	pv_t p;
+	int err;
+	u32 ptr = 0;
+	int i;
+	mm_segment_t old_fs;
+	void *karg = &u;
+
+	switch (cmd) {
+	case VG_STATUS:
+		v = kmalloc(sizeof(vg_t), GFP_KERNEL);
+		if (!v) return -ENOMEM;
+		karg = v;
+		break;
+	case VG_CREATE:
+		v = kmalloc(sizeof(vg_t), GFP_KERNEL);
+		if (!v) return -ENOMEM;
+		if (copy_from_user(v, (void *)arg, (long)&((vg32_t *)0)->proc) ||
+		    __get_user(v->proc, &((vg32_t *)arg)->proc)) {
+			kfree(v);
+			return -EFAULT;
+		}
+		karg = v;
+		memset(v->pv, 0, sizeof(v->pv) + sizeof(v->lv));
+		if (v->pv_max > ABS_MAX_PV || v->lv_max == ABS_MAX_LV) return -EPERM;
+		for (i = 0; i < v->pv_max; i++) {
+			err = __get_user(ptr, &((vg32_t *)arg)->pv[i]);
+			if (err) break;
+			if (ptr) {
+				v->pv[i] = kmalloc(sizeof(pv_t), GFP_KERNEL);
+				if (!v->pv[i]) {
+					err = -ENOMEM;
+					break;
+				}
+				err = copy_from_user(v->pv[i], (void *)A(ptr), sizeof(pv32_t) - 8);
+				if (err) {
+					err = -EFAULT;
+					break;
+				}
+				v->pv[i]->pe = NULL; v->pv[i]->inode = NULL;
+			}
+		}
+		if (!err) {
+			for (i = 0; i < v->lv_max; i++) {
+				err = __get_user(ptr, &((vg32_t *)arg)->lv[i]);
+				if (err) break;
+				if (ptr) {
+					v->lv[i] = get_lv_t(ptr, &err);
+					if (err) break;
+				}
+			}
+		}
+		break;
+	case LV_CREATE:
+	case LV_EXTEND:
+	case LV_REDUCE:
+	case LV_REMOVE:
+	case LV_STATUS_BYNAME:
+		err = copy_from_user(&u.pv_status, arg, sizeof(u.pv_status.pv_name));
+		if (err) return -EFAULT;
+		if (cmd != LV_REMOVE) {
+			err = __get_user(ptr, &((lv_req32_t *)arg)->lv);
+			if (err) return err;
+			u.lv_req.lv = get_lv_t(ptr, &err);
+		} else
+			u.lv_req.lv = NULL;
+		break;
+	case LV_STATUS_BYINDEX:
+		err = get_user(u.lv_byindex.lv_index, &((lv_status_byindex_req32_t *)arg)->lv_index);
+		err |= __get_user(ptr, &((lv_status_byindex_req32_t *)arg)->lv);
+		if (err) return err;
+		u.lv_byindex.lv = get_lv_t(ptr, &err);
+		break;
+	case VG_EXTEND:
+		err = copy_from_user(&p, (void *)arg, sizeof(pv32_t) - 8);
+		if (err) return -EFAULT;
+		p.pe = NULL; p.inode = NULL;
+		karg = &p;
+		break;
+	case LE_REMAP:
+		err = copy_from_user(&u.le_remap, (void *)arg, sizeof(le_remap_req32_t));
+		if (err) return -EFAULT;
+		u.le_remap.new_pe = ((le_remap_req32_t *)&u.le_remap)->new_pe;
+		u.le_remap.old_pe = ((le_remap_req32_t *)&u.le_remap)->old_pe;
+		break;
+	case PV_CHANGE:
+	case PV_STATUS:
+		err = copy_from_user(&u.pv_status, arg, sizeof(u.lv_req.lv_name));
+		if (err) return -EFAULT;
+		err = __get_user(ptr, &((pv_status_req32_t *)arg)->pv);
+		if (err) return err;
+		u.pv_status.pv = &p;
+		if (cmd == PV_CHANGE) {
+			err = copy_from_user(&p, (void *)A(ptr), sizeof(pv32_t) - 8);
+			if (err) return -EFAULT;
+			p.pe = NULL; p.inode = NULL;
+		}
+		break;
+	}
+        old_fs = get_fs(); set_fs (KERNEL_DS);
+        err = sys_ioctl (fd, cmd, (unsigned long)karg);
+        set_fs (old_fs);
+	switch (cmd) {
+	case VG_STATUS:
+		if (!err) {
+			if (copy_to_user((void *)arg, v, (long)&((vg32_t *)0)->proc) ||
+			    clear_user(&((vg32_t *)arg)->proc, sizeof(vg32_t) - (long)&((vg32_t *)0)->proc))
+				err = -EFAULT;
+		}
+		kfree(v);
+		break;
+	case VG_CREATE:
+		for (i = 0; i < v->pv_max; i++)
+			if (v->pv[i]) kfree(v->pv[i]);
+		for (i = 0; i < v->lv_max; i++)
+			if (v->lv[i]) put_lv_t(v->lv[i]);
+		kfree(v);
+		break;
+	case LV_STATUS_BYNAME:
+		if (!err && u.lv_req.lv) err = copy_lv_t(ptr, u.lv_req.lv);
+		/* Fall through */
+        case LV_CREATE:
+	case LV_EXTEND:
+	case LV_REDUCE:
+		if (u.lv_req.lv) put_lv_t(u.lv_req.lv);
+		break;
+	case LV_STATUS_BYINDEX:
+		if (u.lv_byindex.lv) {
+			if (!err) err = copy_lv_t(ptr, u.lv_byindex.lv);
+			put_lv_t(u.lv_byindex.lv);
+		}
+	case PV_STATUS:
+		if (!err) {
+			err = copy_to_user((void *)A(ptr), &p, sizeof(pv32_t) - 8);
+			if (err) return -EFAULT;		
+		}
+		break;
+	}
+	return err;
+}
+#endif
+
 static int ret_einval(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	return -EINVAL;
@@ -2024,6 +2380,39 @@ static int blkpg_ioctl_trans(unsigned int fd, unsigned int cmd, struct blkpg_ioc
 	default:
 		return -EINVAL;
 	}                                        
+	return err;
+}
+
+typedef struct blkelv_ioctl32_arg_s {
+	u32 queue_ID;
+	int read_latency;
+	int write_latency;
+	int max_bomb_segments;
+} blkelv_ioctl32_arg_t;
+
+static int do_blkelv_ioctl(unsigned int fd, unsigned int cmd, blkelv_ioctl32_arg_t *arg)
+{
+	blkelv_ioctl_arg_t b;
+	int err;
+	mm_segment_t old_fs = get_fs();
+
+	if (cmd == BLKELVSET) {	
+		err = get_user((long)b.queue_ID, &arg->queue_ID);
+		err |= __get_user(b.read_latency, &arg->read_latency);
+		err |= __get_user(b.write_latency, &arg->write_latency);
+		err |= __get_user(b.max_bomb_segments, &arg->max_bomb_segments);
+		if (err) return err;
+	}
+	set_fs (KERNEL_DS);
+	err = sys_ioctl(fd, cmd, (unsigned long)&b);
+	set_fs (old_fs);
+	if (cmd == BLKELVGET && !err) {
+		err = put_user((long)b.queue_ID, &arg->queue_ID);
+		err |= __put_user(b.read_latency, &arg->read_latency);
+		err |= __put_user(b.write_latency, &arg->write_latency);
+		err |= __put_user(b.max_bomb_segments, &arg->max_bomb_segments);
+		if (err) return err;
+	}
 	return err;
 }
 
@@ -2548,6 +2937,24 @@ COMPATIBLE_IOCTL(ATMTCP_CREATE)
 COMPATIBLE_IOCTL(ATMTCP_REMOVE)
 COMPATIBLE_IOCTL(ATMMPC_CTRL)
 COMPATIBLE_IOCTL(ATMMPC_DATA)
+#if defined(CONFIG_BLK_DEV_LVM) || defined(CONFIG_BLK_DEV_LVM_MODULE)
+/* 0xfe - lvm */
+COMPATIBLE_IOCTL(VG_SET_EXTENDABLE)
+COMPATIBLE_IOCTL(VG_STATUS_GET_COUNT)
+COMPATIBLE_IOCTL(VG_STATUS_GET_NAMELIST)
+COMPATIBLE_IOCTL(VG_REMOVE)
+COMPATIBLE_IOCTL(VG_REDUCE)
+COMPATIBLE_IOCTL(PE_LOCK_UNLOCK)
+COMPATIBLE_IOCTL(PV_FLUSH)
+COMPATIBLE_IOCTL(LVM_LOCK_LVM)
+COMPATIBLE_IOCTL(LVM_GET_IOP_VERSION)
+#ifdef LVM_TOTAL_RESET
+COMPATIBLE_IOCTL(LVM_RESET)
+#endif
+COMPATIBLE_IOCTL(LV_SET_ACCESS)
+COMPATIBLE_IOCTL(LV_SET_STATUS)
+COMPATIBLE_IOCTL(LV_SET_ALLOCATION)
+#endif /* LVM */
 /* And these ioctls need translation */
 HANDLE_IOCTL(SIOCGIFNAME, dev_ifname32)
 HANDLE_IOCTL(SIOCGIFCONF, dev_ifconf)
@@ -2594,6 +3001,8 @@ HANDLE_IOCTL(0x1260, broken_blkgetsize)
 HANDLE_IOCTL(BLKFRAGET, w_long)
 HANDLE_IOCTL(BLKSECTGET, w_long)
 HANDLE_IOCTL(BLKPG, blkpg_ioctl_trans)
+HANDLE_IOCTL(BLKELVGET, do_blkelv_ioctl)
+HANDLE_IOCTL(BLKELVSET, do_blkelv_ioctl)
 HANDLE_IOCTL(FBIOPUTCMAP32, fbiogetputcmap)
 HANDLE_IOCTL(FBIOGETCMAP32, fbiogetputcmap)
 HANDLE_IOCTL(FBIOSCURSOR32, fbiogscursor)
@@ -2677,6 +3086,20 @@ HANDLE_IOCTL(SONET_CLRDIAG, do_atm_ioctl)
 HANDLE_IOCTL(SONET_SETFRAMING, do_atm_ioctl)
 HANDLE_IOCTL(SONET_GETFRAMING, do_atm_ioctl)
 HANDLE_IOCTL(SONET_GETFRSENSE, do_atm_ioctl)
+#if defined(CONFIG_BLK_DEV_LVM) || defined(CONFIG_BLK_DEV_LVM_MODULE)
+HANDLE_IOCTL(VG_STATUS, do_lvm_ioctl)
+HANDLE_IOCTL(VG_CREATE, do_lvm_ioctl)
+HANDLE_IOCTL(VG_EXTEND, do_lvm_ioctl)
+HANDLE_IOCTL(LV_CREATE, do_lvm_ioctl)
+HANDLE_IOCTL(LV_REMOVE, do_lvm_ioctl)
+HANDLE_IOCTL(LV_EXTEND, do_lvm_ioctl)
+HANDLE_IOCTL(LV_REDUCE, do_lvm_ioctl)
+HANDLE_IOCTL(LV_STATUS_BYNAME, do_lvm_ioctl)
+HANDLE_IOCTL(LV_STATUS_BYINDEX, do_lvm_ioctl)
+HANDLE_IOCTL(LE_REMAP, do_lvm_ioctl)
+HANDLE_IOCTL(PV_CHANGE, do_lvm_ioctl)
+HANDLE_IOCTL(PV_STATUS, do_lvm_ioctl)
+#endif /* LVM */
 IOCTL_TABLE_END
 
 unsigned int ioctl32_hash_table[1024];

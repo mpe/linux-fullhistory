@@ -66,6 +66,7 @@
  *                               1999/06/18 Jordi Murgo <savage@apostols.org>
  */
  
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>

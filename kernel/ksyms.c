@@ -360,6 +360,7 @@ EXPORT_SYMBOL(free_kiovec);
 EXPORT_SYMBOL(expand_kiobuf);
 
 EXPORT_SYMBOL(map_user_kiobuf);
+EXPORT_SYMBOL(unmap_kiobuf);
 EXPORT_SYMBOL(lock_kiovec);
 EXPORT_SYMBOL(unlock_kiovec);
 EXPORT_SYMBOL(brw_kiovec);

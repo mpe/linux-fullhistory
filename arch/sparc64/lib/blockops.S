@@ -1,8 +1,8 @@
-/* $Id: blockops.S,v 1.20 2000/03/03 23:48:38 davem Exp $
+/* $Id: blockops.S,v 1.22 2000/03/15 07:18:55 davem Exp $
  * blockops.S: UltraSparc block zero optimized routines.
  *
- * Copyright (C) 1996,1998 David S. Miller (davem@caip.rutgers.edu)
- * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1996, 1998, 1999, 2000 David S. Miller (davem@redhat.com)
+ * Copyright (C) 1997 Jakub Jelinek (jakub@redhat.com)
  */
 
 #include "VIS.h"
@@ -24,23 +24,63 @@
 #define TLBTEMP_ENTSZ	(1 << 3)
 
 	.text
+
 	.align		32
 	.globl		copy_page
 	.type		copy_page,@function
 copy_page: /* %o0=dest, %o1=src */
 	VISEntry
-	ldx		[%g6 + AOFF_task_active_mm], %o2
+	membar		#LoadStore | #StoreStore | #StoreLoad
+	ldda		[%o1] ASI_BLK_P, %f0
+	add		%o1, 0x40, %o1
+	ldda		[%o1] ASI_BLK_P, %f16
+	add		%o1, 0x40, %o1
+	sethi		%hi(8192), %o2
+1:	TOUCH(f0, f2, f4, f6, f8, f10, f12, f14)
+	ldda		[%o1] ASI_BLK_P, %f32
+	add		%o1, 0x40, %o1
+	sub		%o2, 0x40, %o2
+	stda		%f48, [%o0] ASI_BLK_P
+	add		%o0, 0x40, %o0
+	TOUCH(f16, f18, f20, f22, f24, f26, f28, f30)
+	ldda		[%o1] ASI_BLK_P, %f0
+	add		%o1, 0x40, %o1
+	sub		%o2, 0x40, %o2
+	stda		%f48, [%o0] ASI_BLK_P
+	add		%o0, 0x40, %o0
+	TOUCH(f32, f34, f36, f38, f40, f42, f44, f46)
+	ldda		[%o1] ASI_BLK_P, %f16
+	add		%o1, 0x40, %o1
+	sub		%o2, 0x40, %o2
+	stda		%f48, [%o0] ASI_BLK_P
+	cmp		%o2, 0x80
+	bne,pt		%xcc, 1b
+	 add		%o0, 0x40, %o0
+	membar		#Sync
+	stda		%f0, [%o0] ASI_BLK_P
+	add		%o0, 0x40, %o0
+	stda		%f16, [%o0] ASI_BLK_P
+	membar		#Sync
+	VISExit
+	retl
+	 nop
+
+	.globl		copy_user_page
+	.type		copy_user_page,@function
+copy_user_page: /* %o0=dest, %o1=src, %o2=vaddr */
+	VISEntry
+	sethi		%hi(PAGE_SIZE), %g3
 	sub		%o0, %g4, %g1
+	and		%o2, %g3, %o0
+	sethi		%hi(TLBTEMP_BASE), %o3
 	sethi		%uhi(_PAGE_VALID), %g3
 	sub		%o1, %g4, %g2
 	sllx		%g3, 32, %g3
-	ldx		[%o2 + AOFF_mm_segments], %o0
+	mov		TLB_TAG_ACCESS, %o2
 	or		%g3, (_PAGE_CP | _PAGE_CV | _PAGE_P | _PAGE_L | _PAGE_W), %g3
+	sethi		%hi(DCACHE_SIZE), %o1
 	or		%g1, %g3, %g1
 	or		%g2, %g3, %g2
-	mov		TLB_TAG_ACCESS, %o2
-	sethi		%hi(TLBTEMP_BASE), %o3
-	sethi		%hi(DCACHE_SIZE), %o1
 	add		%o0, %o3, %o0
 	add		%o0, %o1, %o1
 	sethi		%hi(TLBTEMP_ENT1), %o3
@@ -129,17 +169,25 @@ copy_page: /* %o0=dest, %o1=src */
 	.align		32
 	.globl		clear_page
 	.type		clear_page,@function
-clear_page:		/* %o0=dest */
+clear_page:	/* %o0=dest */
 	VISEntryHalf
-	ldx		[%g6 + AOFF_task_active_mm], %o2
+	ba,pt		%xcc, clear_page_common
+	 clr		%o4
+
+	.align		32
+	.globl		clear_user_page
+	.type		clear_user_page,@function
+clear_user_page:	/* %o0=dest, %o1=vaddr */
+	VISEntryHalf
+	sethi		%hi(PAGE_SIZE), %g3
 	sub		%o0, %g4, %g1
+	and		%o1, %g3, %o0
+	mov		TLB_TAG_ACCESS, %o2
 	sethi		%uhi(_PAGE_VALID), %g3
+	sethi		%hi(TLBTEMP_BASE), %o3
 	sllx		%g3, 32, %g3
 	or		%g3, (_PAGE_CP | _PAGE_CV | _PAGE_P | _PAGE_L | _PAGE_W), %g3
-	ldx		[%o2 + AOFF_mm_segments], %o0
 	or		%g1, %g3, %g1
-	mov		TLB_TAG_ACCESS, %o2
-	sethi		%hi(TLBTEMP_BASE), %o3
 	add		%o0, %o3, %o0
 	sethi		%hi(TLBTEMP_ENT2), %o3
 	rdpr		%pstate, %g3
@@ -162,6 +210,9 @@ clear_page:		/* %o0=dest */
 	stxa		%g1, [%o3] ASI_DTLB_DATA_ACCESS
 	membar		#Sync
 
+	mov		1, %o4
+
+clear_page_common:
 	fzero		%f0				! FPA	Group
 	mov		32, %o1				! IEU0
 	fzero		%f2				! FPA	Group
@@ -187,7 +238,13 @@ clear_page:		/* %o0=dest */
 	membar		#Sync				! LSU	Group
 	VISExitHalf
 
-	stxa		%g5, [%o2] ASI_DMMU
+	brnz,pt		%o4, 1f
+	 nop
+
+	retl
+	 nop
+
+1:	stxa		%g5, [%o2] ASI_DMMU
 	stxa		%g7, [%o3] ASI_DTLB_DATA_ACCESS
 	membar		#Sync
 	jmpl		%o7 + 0x8, %g0

@@ -1,4 +1,4 @@
-/* $Id: mman.h,v 1.8 1996/10/27 08:55:28 davem Exp $ */
+/* $Id: mman.h,v 1.9 2000/03/15 02:44:23 davem Exp $ */
 #ifndef __SPARC_MMAN_H__
 #define __SPARC_MMAN_H__
 
@@ -41,6 +41,13 @@
 #define MC_UNLOCK       3  /* Unlock pages locked via previous mctl() with MC_LOCK arg */
 #define MC_LOCKAS       5  /* Lock an entire address space of the calling process */
 #define MC_UNLOCKAS     6  /* Unlock entire address space of calling process */
+
+#define MADV_NORMAL	0x0		/* default page-in behavior */
+#define MADV_RANDOM	0x1		/* page-in minimum required */
+#define MADV_SEQUENTIAL	0x2		/* read-ahead aggressively */
+#define MADV_WILLNEED	0x3		/* pre-fault pages */
+#define MADV_DONTNEED	0x4		/* discard these pages */
+#define MADV_FREE	0x5		/* (Solaris) contents can be freed */
 
 /* compatibility flags */
 #define MAP_ANON	MAP_ANONYMOUS

@@ -282,7 +282,7 @@ struct olympic_parameters_table {
 	
 	__u8  phys_addr[4] ; 
 	__u8  up_node_addr[6] ; 
-	__u8  up_phys_addr[6] ; 
+	__u8  up_phys_addr[4] ; 
 	__u8  poll_addr[6] ; 
 	__u16 reserved ; 
 	__u16 acc_priority ; 

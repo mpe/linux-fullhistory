@@ -578,8 +578,8 @@ extern inline void pci_set_master(struct pci_dev *dev) { }
 extern inline int pci_enable_device(struct pci_dev *dev) { return -EIO; }
 extern inline int pci_module_init(struct pci_driver *drv) { return -ENODEV; }
 extern inline int pci_assign_resource(struct pci_dev *dev, int i) { return -EBUSY;}
-extern inline int pci_register_driver(struct pci_driver *) { return 0;}
-extern inline void pci_unregister_driver(struct pci_driver *) { }
+extern inline int pci_register_driver(struct pci_driver *drv) { return 0;}
+extern inline void pci_unregister_driver(struct pci_driver *drv) { }
 
 #else
 

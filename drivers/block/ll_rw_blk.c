@@ -319,9 +319,9 @@ static struct request * __get_request_wait(int n, kdev_t dev)
 	DECLARE_WAITQUEUE(wait, current);
 	unsigned long flags;
 
-	add_wait_queue(&wait_for_request, &wait);
+	add_wait_queue_exclusive(&wait_for_request, &wait);
 	for (;;) {
-		current->state = TASK_UNINTERRUPTIBLE;
+		__set_current_state(TASK_UNINTERRUPTIBLE|TASK_EXCLUSIVE);
 		spin_lock_irqsave(&io_request_lock,flags);
 		req = get_request(n, dev);
 		spin_unlock_irqrestore(&io_request_lock,flags);

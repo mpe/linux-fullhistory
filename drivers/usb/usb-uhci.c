@@ -28,6 +28,7 @@
 #include <linux/unistd.h>
 #include <linux/interrupt.h>	/* for in_interrupt() */
 #include <linux/init.h>
+#include <linux/version.h>
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2,3,44)
 #include <linux/pm.h>
 #endif

@@ -79,6 +79,9 @@ static unsigned long last_tsc_low; /* lsb 32 bits of Time Stamp Counter */
 unsigned long fast_gettimeoffset_quotient=0;
 
 extern rwlock_t xtime_lock;
+extern volatile unsigned long lost_ticks;
+
+spinlock_t rtc_lock = SPIN_LOCK_UNLOCKED;
 
 static inline unsigned long do_fast_gettimeoffset(void)
 {
@@ -112,6 +115,8 @@ static inline unsigned long do_fast_gettimeoffset(void)
 #define TICK_SIZE tick
 
 #ifndef CONFIG_X86_TSC
+
+spinlock_t i8253_lock = SPIN_LOCK_UNLOCKED;
 
 /* This function must be called with interrupts disabled 
  * It was inspired by Steve McCanne's microtime-i386 for BSD.  -- jrs
@@ -157,6 +162,8 @@ static unsigned long do_slow_gettimeoffset(void)
 	 */
 	unsigned long jiffies_t;
 
+	/* gets recalled with irq locally disabled */
+	spin_lock(&i8253_lock);
 	/* timer count may underflow right here */
 	outb_p(0x00, 0x43);	/* latch the count ASAP */
 
@@ -215,6 +222,7 @@ static unsigned long do_slow_gettimeoffset(void)
 		}
 	} else
 		jiffies_p = jiffies_t;
+	spin_unlock(&i8253_lock);
 
 	count_p = count;
 
@@ -238,7 +246,6 @@ static unsigned long (*do_gettimeoffset)(void) = do_slow_gettimeoffset;
  */
 void do_gettimeofday(struct timeval *tv)
 {
-	extern volatile unsigned long lost_ticks;
 	unsigned long flags;
 	unsigned long usec, sec;
 
@@ -272,6 +279,7 @@ void do_settimeofday(struct timeval *tv)
 	 * would have done, and then undo it!
 	 */
 	tv->tv_usec -= do_gettimeoffset();
+	tv->tv_usec -= lost_ticks * (1000000 / HZ);
 
 	while (tv->tv_usec < 0) {
 		tv->tv_usec += 1000000;
@@ -302,6 +310,8 @@ static int set_rtc_mmss(unsigned long nowtime)
 	int real_seconds, real_minutes, cmos_minutes;
 	unsigned char save_control, save_freq_select;
 
+	/* gets recalled with irq locally disabled */
+	spin_lock(&rtc_lock);
 	save_control = CMOS_READ(RTC_CONTROL); /* tell the clock it's being set */
 	CMOS_WRITE((save_control|RTC_SET), RTC_CONTROL);
 
@@ -347,6 +357,7 @@ static int set_rtc_mmss(unsigned long nowtime)
 	 */
 	CMOS_WRITE(save_control, RTC_CONTROL);
 	CMOS_WRITE(save_freq_select, RTC_FREQ_SELECT);
+	spin_unlock(&rtc_lock);
 
 	return retval;
 }
@@ -448,10 +459,19 @@ static void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 
 		rdtscl(last_tsc_low);
 
+#if 0 /*
+       * SUBTLE: this is not necessary from here because it's implicit in the
+       * write xtime_lock.
+       */
+		spin_lock(&i8253_lock);
+#endif
 		outb_p(0x00, 0x43);     /* latch the count ASAP */
 
 		count = inb_p(0x40);    /* read the latched count */
 		count |= inb(0x40) << 8;
+#if 0
+		spin_unlock(&i8253_lock);
+#endif
 
 		count = ((LATCH-1) - count) * TICK_SIZE;
 		delay_at_last_interrupt = (count + LATCH/2) / LATCH;

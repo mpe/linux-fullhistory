@@ -25,7 +25,8 @@
  * and have fun!
  *
  * This should also work for a number of other digital (non-Kodak) cameras,
- * by adding the vendor and product IDs to the table below.
+ * by adding the vendor and product IDs to the table below.  They'll need
+ * to be the sort using USB just as a fast bulk data channel.
  */
 
 /*
@@ -100,7 +101,8 @@ static const struct camera {
 //  { 0x03f0, 0xffff },		// HP PhotoSmart C500
 
 	/* Other USB devices may well work here too, so long as they
-	 * just stick to half duplex bulk packet exchanges.
+	 * just stick to half duplex bulk packet exchanges.  That
+	 * means, among other things, no iso or interrupt endpoints.
 	 */
 };
 
@@ -162,7 +164,7 @@ static ssize_t camera_read (struct file *file,
 			  usb_rcvbulkpipe (camera->dev, camera->inEP),
 			  camera->buf, len, &count, HZ*10);
 
-		dbg ("read (%d) - 0x%x %ld", len, result, count);
+		dbg ("read (%d) - 0x%x %d", len, result, count);
 
 		if (!result) {
 			if (copy_to_user (buf, camera->buf, count))
@@ -382,7 +384,7 @@ static void * camera_probe(struct usb_device *dev, unsigned int ifnum)
 		err ("no memory!");
 		return NULL;
 	}
-	camera->dev = dev;
+	camera->info = camera_info;
 	camera->subminor = i;
 	camera->isActive = 0;
 	camera->buf = NULL;
@@ -413,19 +415,22 @@ static void * camera_probe(struct usb_device *dev, unsigned int ifnum)
 			|| endpoint [1].bmAttributes != USB_ENDPOINT_XFER_BULK
 			) {
 		dbg ("Bogus endpoints");
-		camera->dev = NULL;
-		return NULL;
+		goto error;
 	}
 
 
 	if (usb_set_configuration (dev, dev->config[0].bConfigurationValue)) {
 		err ("Failed usb_set_configuration");
-		camera->dev = NULL;
-		return NULL;
+		goto error;
 	}
 
-	camera->info = camera_info;
+	camera->dev = dev;
 	return camera;
+
+error:
+	minor_data [camera->subminor] = NULL;
+	kfree (camera);
+	return NULL;
 }
 
 static void camera_disconnect(struct usb_device *dev, void *ptr)

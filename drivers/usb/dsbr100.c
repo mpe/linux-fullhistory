@@ -48,12 +48,6 @@
 
 
 #include <linux/kernel.h>
-
-#if CONFIG_MODVERSIONS==1
-#define MODVERSIONS
-#include <linux/modversions.h>
-#endif
-
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/malloc.h>

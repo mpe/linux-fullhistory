@@ -1,4 +1,4 @@
-/* $Id: sparc_ksyms.c,v 1.94 2000/02/28 04:00:53 anton Exp $
+/* $Id: sparc_ksyms.c,v 1.95 2000/03/14 08:29:26 davem Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -85,10 +85,10 @@ extern int __sparc_dot_ ## sym (int) __asm__("." #sym);		\
 __EXPORT_SYMBOL(__sparc_dot_ ## sym, "." #sym)
 
 #define EXPORT_SYMBOL_PRIVATE(sym)				\
-extern int __sparc_priv_ ## sym (int) __asm__("__" ## #sym);	\
+extern int __sparc_priv_ ## sym (int) __asm__("__" #sym);	\
 const struct module_symbol __export_priv_##sym			\
 __attribute__((section("__ksymtab"))) =				\
-{ (unsigned long) &__sparc_priv_ ## sym, "__" ## #sym }
+{ (unsigned long) &__sparc_priv_ ## sym, "__" #sym }
 
 /* used by various drivers */
 EXPORT_SYMBOL(sparc_cpu_model);

@@ -78,6 +78,8 @@ typedef unsigned long pgprot_t;
 
 extern void clear_page(void *page);
 extern void copy_page(void *to, void *from);
+#define clear_user_page(page, vaddr)	clear_page(page)
+#define copy_user_page(to, from, vaddr)	copy_page(to, from)
 
 /* map phys->virtual and virtual->phys for RAM pages */
 static inline unsigned long ___pa(unsigned long v)

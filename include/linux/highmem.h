@@ -29,6 +29,15 @@ extern inline unsigned int nr_free_highpages(void) { return 0; }
 #endif /* CONFIG_HIGHMEM */
 
 /* when CONFIG_HIGHMEM is not set these will be plain clear/copy_page */
+extern inline void clear_user_highpage(struct page *page, unsigned long vaddr)
+{
+	unsigned long kaddr;
+
+	kaddr = kmap(page);
+	clear_user_page((void *)kaddr, vaddr);
+	kunmap(page);
+}
+
 extern inline void clear_highpage(struct page *page)
 {
 	unsigned long kaddr;
@@ -62,6 +71,17 @@ extern inline void memclear_highpage_flush(struct page *page, unsigned int offse
 	memset((void *)(kaddr + offset), 0, size);
 	flush_page_to_ram(page);
 	kunmap(page);
+}
+
+extern inline void copy_user_highpage(struct page *to, struct page *from, unsigned long vaddr)
+{
+	unsigned long vfrom, vto;
+
+	vfrom = kmap(from);
+	vto = kmap(to);
+	copy_user_page((void *)vto, (void *)vfrom, vaddr);
+	kunmap(from);
+	kunmap(to);
 }
 
 extern inline void copy_highpage(struct page *to, struct page *from)

@@ -2248,6 +2248,13 @@ S: 22 Irvington Cres.
 S: Willowdale, Ontario
 S: Canada M2N 2Z1
 
+N: Adam Sulmicki
+E: adam@cfar.umd.edu
+W: http://www.eax.com
+D: core networking fixes
+D: patch-kernel enhancements
+D: misc kernel fixes and updates
+
 N: Adrian Sun
 E: asun@cobaltnet.com
 D: hfs support

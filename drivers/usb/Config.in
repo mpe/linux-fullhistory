@@ -8,7 +8,9 @@ tristate 'Support for USB' CONFIG_USB
 if [ ! "$CONFIG_USB" = "n" ]; then
 
 comment 'USB Controllers'
-   dep_tristate '  UHCI (Intel PIIX4, VIA, ...) support' CONFIG_USB_UHCI $CONFIG_USB
+   if [ "$CONFIG_USB_UHCI_ALT" != "y" ]; then
+      dep_tristate '  UHCI (Intel PIIX4, VIA, ...) support' CONFIG_USB_UHCI $CONFIG_USB
+   fi
    if [ "$CONFIG_USB_UHCI" != "y" ]; then
       dep_tristate '  UHCI Alternate Driver (JE) support' CONFIG_USB_UHCI_ALT $CONFIG_USB
       if [ "$CONFIG_USB_UHCI_ALT" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
@@ -39,7 +41,7 @@ comment 'USB Devices'
    dep_tristate '  USB IBM (Xirlink) C-it Camera support' CONFIG_USB_IBMCAM $CONFIG_USB
    dep_tristate '  USB OV511 Camera support' CONFIG_USB_OV511 $CONFIG_USB
    dep_tristate '  USB Kodak DC-2xx Camera support' CONFIG_USB_DC2XX $CONFIG_USB
-   dep_tristate '  USB Mass Storage support' CONFIG_USB_STORAGE $CONFIG_USB
+   dep_tristate '  USB Mass Storage support' CONFIG_USB_STORAGE $CONFIG_USB m
    if [ "$CONFIG_USB_STORAGE" != "n" ]; then
       bool '    USB Mass Storage verbose debug' CONFIG_USB_STORAGE_DEBUG
    fi

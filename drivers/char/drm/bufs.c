@@ -29,6 +29,7 @@
  */
 
 #define __NO_VERSION__
+#include <linux/config.h>
 #include "drmP.h"
 #include "linux/un.h"
 

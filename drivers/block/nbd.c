@@ -299,7 +299,7 @@ void nbd_clear_que(struct nbd_device *lo)
 static void do_nbd_request(request_queue_t * q)
 {
 	struct request *req;
-	int dev;
+	int dev = 0;
 	struct nbd_device *lo;
 
 	while (!QUEUE_EMPTY) {

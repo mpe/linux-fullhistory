@@ -2487,7 +2487,10 @@ int init_module(void)
 void cleanup_module(void)
 {
 	struct parport *p = parport_enumerate(), *tmp;
-	pci_unregister_driver (&parport_pc_pci_driver);
+
+	if (!user_specified)
+		pci_unregister_driver (&parport_pc_pci_driver);
+
 	while (p) {
 		tmp = p->next;
 		if (p->modes & PARPORT_MODE_PCSPP) { 

@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.136 2000/03/13 21:57:29 davem Exp $
+/* $Id: sys_sparc32.c,v 1.137 2000/03/14 07:31:22 jj Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -1746,70 +1746,58 @@ static int copy_mount_stuff_to_kernel(const void *user, unsigned long *kernel)
 	return 0;
 }
 
-extern asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
-				unsigned long new_flags, void *data);
+extern long do_sys_mount(char * dev_name, char * dir_name, unsigned long type_page,
+			 unsigned long new_flags, unsigned long data_page);
 
 #define SMBFS_NAME	"smbfs"
 #define NCPFS_NAME	"ncpfs"
 
 asmlinkage int sys32_mount(char *dev_name, char *dir_name, char *type, unsigned long new_flags, u32 data)
 {
-	unsigned long type_page;
+	unsigned long type_page = 0;
+	unsigned long data_page = 0;
 	int err, is_smb, is_ncp;
 
-	if(!capable(CAP_SYS_ADMIN))
-		return -EPERM;
 	is_smb = is_ncp = 0;
+
+	lock_kernel();
 	err = copy_mount_stuff_to_kernel((const void *)type, &type_page);
-	if(err)
-		return err;
-	if(type_page) {
-		is_smb = !strcmp((char *)type_page, SMBFS_NAME);
-		is_ncp = !strcmp((char *)type_page, NCPFS_NAME);
+	if (err)
+		goto out;
+
+	if (!type_page) {
+		err = -EINVAL;
+		goto out;
 	}
-	if(!is_smb && !is_ncp) {
-		if(type_page)
-			free_page(type_page);
-		return sys_mount(dev_name, dir_name, type, new_flags, (void *)AA(data));
+
+	is_smb = !strcmp((char *)type_page, SMBFS_NAME);
+	is_ncp = !strcmp((char *)type_page, NCPFS_NAME);
+
+	err = copy_mount_stuff_to_kernel((const void *)AA(data), &data_page);
+	if (err)
+		goto type_out;
+
+	if (!is_smb && !is_ncp) {
+		err = do_sys_mount(dev_name, dir_name, type_page, new_flags,
+				   data_page);
 	} else {
-		unsigned long dev_page, dir_page, data_page;
-		mm_segment_t old_fs;
-
-		err = copy_mount_stuff_to_kernel((const void *)dev_name, &dev_page);
-		if(err)
-			goto out;
-		err = copy_mount_stuff_to_kernel((const void *)dir_name, &dir_page);
-		if(err)
-			goto dev_out;
-		err = copy_mount_stuff_to_kernel((const void *)AA(data), &data_page);
-		if(err)
-			goto dir_out;
-		if(is_ncp)
+		if (is_ncp)
 			do_ncp_super_data_conv((void *)data_page);
-		else if(is_smb)
-			do_smb_super_data_conv((void *)data_page);
 		else
-			panic("The problem is here...");
-		old_fs = get_fs();
-		set_fs(KERNEL_DS);
-		err = sys_mount((char *)dev_page, (char *)dir_page,
-				(char *)type_page, new_flags,
-				(void *)data_page);
-		set_fs(old_fs);
+			do_smb_super_data_conv((void *)data_page);
 
-		if(data_page)
-			free_page(data_page);
-	dir_out:
-		if(dir_page)
-			free_page(dir_page);
-	dev_out:
-		if(dev_page)
-			free_page(dev_page);
-	out:
-		if(type_page)
-			free_page(type_page);
-		return err;
+		err = do_sys_mount(dev_name, dir_name, type_page, new_flags,
+				   data_page);
 	}
+
+	free_page(data_page);
+
+type_out:
+	free_page(type_page);
+
+out:
+	unlock_kernel();
+	return err;
 }
 
 struct rusage32 {
@@ -4217,13 +4205,4 @@ out_sem:
 	up(&current->mm->mmap_sem);
 out:
 	return ret;       
-}
-
-extern asmlinkage long sys_mincore(unsigned long start, size_t len, unsigned char *vec);
-
-asmlinkage long sys32_mincore(unsigned long start, u32 __len, unsigned char *vec)
-{
-	size_t len = (size_t) __len;
-
-	return sys_mincore(start, len, vec);
 }

@@ -4375,60 +4375,12 @@ static void __init parse_floppy_cfg_string(char *cfg)
 	}
 }
 
-static void __init mod_setup(char *pattern, int (*setup)(char *))
-{
-	unsigned long i;
-	char c;
-	int j;
-	int match;
-	char buffer[100];
-	int length = strlen(pattern)+1;
-
-	match=0;
-	j=1;
-
-	for (i=current->mm->env_start; i< current->mm->env_end; i ++){
-		get_user(c, (char *)i);
-		if (match){
-			if (j==99)
-				c='\0';
-			buffer[j] = c;
-			if (!c || c == ' ' || c == '\t'){
-				if (j){
-					buffer[j] = '\0';
-					setup(buffer);
-				}
-				j=0;
-			} else
-				j++;
-			if (!c)
-				break;
-			continue;
-		}
-		if ((!j && !c) || (j && c == pattern[j-1]))
-			j++;
-		else
-			j=0;
-		if (j==length){
-			match=1;
-			j=0;
-		}
-	}
-}
-
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 int init_module(void)
 {
 	printk(KERN_INFO "inserting floppy driver for " UTS_RELEASE "\n");
 		
 	if(floppy)
 		parse_floppy_cfg_string(floppy);
-	else
-		mod_setup("floppy=", floppy_setup);
-		
 	return floppy_init();
 }
 
@@ -4449,10 +4401,6 @@ MODULE_PARM(FLOPPY_IRQ,"i");
 MODULE_PARM(FLOPPY_DMA,"i");
 MODULE_AUTHOR("Alain L. Knaff");
 MODULE_SUPPORTED_DEVICE("fd");
-
-#ifdef __cplusplus
-}
-#endif
 
 #else
 

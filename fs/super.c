@@ -1093,8 +1093,8 @@ static int copy_mount_options (const void * data, unsigned long *where)
  * aren't used, as the syscall assumes we are talking to an older
  * version that didn't understand them.
  */
-asmlinkage long sys_mount(char * dev_name, char * dir_name, char * type,
-			  unsigned long new_flags, void * data)
+long do_sys_mount(char * dev_name, char * dir_name, unsigned long type_page,
+		  unsigned long new_flags, unsigned long data_page)
 {
 	struct file_system_type * fstype;
 	struct dentry * dentry = NULL;
@@ -1102,28 +1102,19 @@ asmlinkage long sys_mount(char * dev_name, char * dir_name, char * type,
 	struct block_device *bdev = NULL;
 	int retval;
 	unsigned long flags = 0;
-	unsigned long page = 0;
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
-	lock_kernel();
+
 	if ((new_flags &
 	     (MS_MGC_MSK | MS_REMOUNT)) == (MS_MGC_VAL | MS_REMOUNT)) {
-		retval = copy_mount_options (data, &page);
-		if (retval < 0)
-			goto out;
 		retval = do_remount(dir_name,
 				    new_flags & ~MS_MGC_MSK & ~MS_REMOUNT,
-				    (char *) page);
-		free_page(page);
+				    (char *) data_page);
 		goto out;
 	}
 
-	retval = copy_mount_options (type, &page);
-	if (retval < 0)
-		goto out;
-	fstype = get_fs_type((char *) page);
-	free_page(page);
+	fstype = get_fs_type((char *) type_page);
 	retval = -ENODEV;
 	if (!fstype)		
 		goto out;
@@ -1150,21 +1141,49 @@ asmlinkage long sys_mount(char * dev_name, char * dir_name, char * type,
 		if (bdops) bdev->bd_op = bdops;
 	}
 
-	page = 0;
-	if ((new_flags & MS_MGC_MSK) == MS_MGC_VAL) {
+	if ((new_flags & MS_MGC_MSK) == MS_MGC_VAL)
 		flags = new_flags & ~MS_MGC_MSK;
-		retval = copy_mount_options(data, &page);
-		if (retval < 0)
-			goto dput_and_out;
-	}
+
 	retval = do_mount(bdev, dev_name, dir_name, fstype->name, flags,
-				(void *) page);
-	free_page(page);
+				(void *) data_page);
 
 dput_and_out:
 	dput(dentry);
 fs_out:
 	put_filesystem(fstype);
+out:
+	return retval;
+}
+
+asmlinkage long sys_mount(char * dev_name, char * dir_name, char * type,
+			  unsigned long new_flags, void * data)
+{
+	int retval;
+	unsigned long data_page = 0;
+	unsigned long type_page = 0;
+
+	lock_kernel();
+	retval = copy_mount_options (type, &type_page);
+	if (retval < 0)
+		goto out;
+
+	/* copy_mount_options allows a NULL user pointer,
+	 * and just returns zero in that case.  But if we
+	 * allow the type to be NULL we will crash.
+	 * Previously we did not check this case.
+	 */
+	if (type_page == 0) {
+		retval = -EINVAL;
+		goto out;
+	}
+
+	retval = copy_mount_options (data, &data_page);
+	if (retval >= 0) {
+		retval = do_sys_mount(dev_name, dir_name, type_page,
+				      new_flags, data_page);
+		free_page(data_page);
+	}
+	free_page(type_page);
 out:
 	unlock_kernel();
 	return retval;

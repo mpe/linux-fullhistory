@@ -1,4 +1,4 @@
-/* $Id: sbus.c,v 1.83 1999/10/18 01:47:01 zaitcev Exp $
+/* $Id: sbus.c,v 1.84 2000/03/15 01:51:16 davem Exp $
  * sbus.c:  SBus support routines.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -205,6 +205,7 @@ static void __init sbus_do_child_siblings(int start_node,
 			this_dev->child = kmalloc(sizeof(struct sbus_dev),
 						  GFP_ATOMIC);
 			this_dev->child->bus = sbus;
+			this_dev->child->next = 0;
 			fill_sbus_device(prom_getchild(this_node), this_dev->child);
 			sbus_do_child_siblings(prom_getchild(this_node),
 					       this_dev->child, this_dev, sbus);
@@ -424,6 +425,7 @@ void __init sbus_init(void)
 						  GFP_ATOMIC);
 			/* Fill it */
 			this_dev->child->bus = sbus;
+			this_dev->child->next = 0;
 			fill_sbus_device(prom_getchild(sbus_devs),
 					 this_dev->child);
 			sbus_do_child_siblings(prom_getchild(sbus_devs),
@@ -453,6 +455,7 @@ void __init sbus_init(void)
 							  GFP_ATOMIC);
 				/* Fill it */
 				this_dev->child->bus = sbus;
+				this_dev->child->next = 0;
 				fill_sbus_device(prom_getchild(sbus_devs),
 						 this_dev->child);
 				sbus_do_child_siblings(prom_getchild(sbus_devs),

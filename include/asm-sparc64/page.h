@@ -1,4 +1,4 @@
-/* $Id: page.h,v 1.30 2000/02/16 07:34:54 davem Exp $ */
+/* $Id: page.h,v 1.32 2000/03/15 07:19:28 davem Exp $ */
 
 #ifndef _SPARC64_PAGE_H
 #define _SPARC64_PAGE_H
@@ -23,6 +23,8 @@
 
 extern void clear_page(void *page);
 extern void copy_page(void *to, void *from);
+extern void clear_user_page(void *page, unsigned long vaddr);
+extern void copy_user_page(void *to, void *from, unsigned long vaddr);
 
 /* GROSS, defining this makes gcc pass these types as aggregates,
  * and thus on the stack, turn this crap off... -DaveM

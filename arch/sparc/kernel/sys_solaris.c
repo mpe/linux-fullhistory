@@ -14,6 +14,7 @@
 #include <linux/mm.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <linux/module.h>
 
 /* CHECKME: this stuff looks rather bogus */
 asmlinkage int

@@ -25,6 +25,7 @@
 
 extern void dump_thread(struct pt_regs *, struct user *);
 extern int dump_fpu(elf_fpregset_t *);
+extern spinlock_t rtc_lock;
 
 #ifdef CONFIG_SMP
 extern void FASTCALL( __write_lock_failed(rwlock_t *rw));
@@ -131,3 +132,5 @@ EXPORT_SYMBOL(screen_info);
 EXPORT_SYMBOL(get_wchan);
 
 EXPORT_SYMBOL(irq_stat);
+
+EXPORT_SYMBOL(rtc_lock);

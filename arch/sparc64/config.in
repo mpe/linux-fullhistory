@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.101 2000/03/13 05:49:55 jj Exp $
+# $Id: config.in,v 1.102 2000/03/14 07:31:35 jj Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -31,16 +31,6 @@ define_bool CONFIG_SUN_AUXIO y
 define_bool CONFIG_SUN_IO y
 bool 'PCI support' CONFIG_PCI
 source drivers/pci/Config.in
-
-mainmenu_option next_comment
-comment 'Console drivers'
-bool 'PROM console' CONFIG_PROM_CONSOLE
-bool 'Support Frame buffer devices' CONFIG_FB
-source drivers/video/Config.in
-endmenu
-
-source drivers/sbus/char/Config.in
-source drivers/sbus/audio/Config.in
 
 tristate 'Openprom tree appears in /proc/openprom' CONFIG_SUN_OPENPROMFS
 bool 'Networking support' CONFIG_NET
@@ -78,7 +68,17 @@ fi
 endmenu
 
 mainmenu_option next_comment
-comment 'Floppy, IDE, and other block devices'
+comment 'Console drivers'
+bool 'PROM console' CONFIG_PROM_CONSOLE
+bool 'Support Frame buffer devices' CONFIG_FB
+source drivers/video/Config.in
+endmenu
+
+source drivers/sbus/char/Config.in
+source drivers/sbus/audio/Config.in
+
+mainmenu_option next_comment
+comment 'Block devices'
 
 bool 'Normal floppy disk support' CONFIG_BLK_DEV_FD
 
@@ -97,6 +97,8 @@ fi
 
 tristate 'Loopback device support' CONFIG_BLK_DEV_LOOP
 tristate 'Network block device support' CONFIG_BLK_DEV_NBD
+
+endmenu
 
 if [ "$CONFIG_NET" = "y" ]; then
    source net/Config.in
