@@ -62,8 +62,7 @@ static force_inline void timeval_normalize(struct timeval * tv)
 	time_t __sec;
 
 	__sec = tv->tv_usec / 1000000;
-	if (__sec)
-	{
+	if (__sec) {
 		tv->tv_usec %= 1000000;
 		tv->tv_sec += __sec;
 	}
@@ -84,10 +83,11 @@ static force_inline void do_vgettimeofday(struct timeval * tv)
 		if (__vxtime.mode == VXTIME_TSC) {
 			sync_core();
 			rdtscll(t);
-			if (t < __vxtime.last_tsc) t = __vxtime.last_tsc;
+			if (t < __vxtime.last_tsc)
+				t = __vxtime.last_tsc;
 			usec += ((t - __vxtime.last_tsc) *
 				 __vxtime.tsc_quot) >> 32;
-			/* See comment in x86_64 do_gettimeofday. */ 
+			/* See comment in x86_64 do_gettimeofday. */
 		} else {
 			usec += ((readl((void *)fix_to_virt(VSYSCALL_HPET) + 0xf0) -
 				  __vxtime.last) * __vxtime.quot) >> 32;
@@ -101,14 +101,13 @@ static force_inline void do_vgettimeofday(struct timeval * tv)
 /* RED-PEN may want to readd seq locking, but then the variable should be write-once. */
 static force_inline void do_get_tz(struct timezone * tz)
 {
-		*tz = __sys_tz;
+	*tz = __sys_tz;
 }
-
 
 static force_inline int gettimeofday(struct timeval *tv, struct timezone *tz)
 {
 	int ret;
-	asm volatile("syscall" 
+	asm volatile("syscall"
 		: "=a" (ret)
 		: "0" (__NR_gettimeofday),"D" (tv),"S" (tz) : __syscall_clobber );
 	return ret;
@@ -117,7 +116,7 @@ static force_inline int gettimeofday(struct timeval *tv, struct timezone *tz)
 static force_inline long time_syscall(long *t)
 {
 	long secs;
-	asm volatile("syscall" 
+	asm volatile("syscall"
 		: "=a" (secs)
 		: "0" (__NR_time),"D" (t) : __syscall_clobber);
 	return secs;
@@ -126,7 +125,7 @@ static force_inline long time_syscall(long *t)
 static int __vsyscall(0) vgettimeofday(struct timeval * tv, struct timezone * tz)
 {
 	if (unlikely(!__sysctl_vsyscall))
-	return gettimeofday(tv,tz); 
+		return gettimeofday(tv,tz);
 	if (tv)
 		do_vgettimeofday(tv);
 	if (tz)
@@ -153,7 +152,6 @@ static long __vsyscall(2) venosys_0(void)
 static long __vsyscall(3) venosys_1(void)
 {
 	return -ENOSYS;
-
 }
 
 static void __init map_vsyscall(void)
@@ -166,12 +164,12 @@ static void __init map_vsyscall(void)
 
 static int __init vsyscall_init(void)
 {
-        BUG_ON(((unsigned long) &vgettimeofday != 
-		      VSYSCALL_ADDR(__NR_vgettimeofday)));
+	BUG_ON(((unsigned long) &vgettimeofday !=
+			VSYSCALL_ADDR(__NR_vgettimeofday)));
 	BUG_ON((unsigned long) &vtime != VSYSCALL_ADDR(__NR_vtime));
 	BUG_ON((VSYSCALL_ADDR(0) != __fix_to_virt(VSYSCALL_FIRST_PAGE)));
 	map_vsyscall();
-	sysctl_vsyscall = 1; 
+	sysctl_vsyscall = 1;
 
 	return 0;
 }
