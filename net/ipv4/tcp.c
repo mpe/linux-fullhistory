@@ -1205,18 +1205,13 @@ out:
 	
 
 /*
- *	Send an ack if one is backlogged at this point. Ought to merge
- *	this with tcp_send_ack().
+ *	Send an ack if one is backlogged at this point. 
+ *
  *      This is called for delayed acks also.
  */
  
 void tcp_read_wakeup(struct sock *sk)
 {
-	int tmp;
-	struct device *dev = NULL;
-	struct tcphdr *t1;
-	struct sk_buff *buff;
-
 	if (!sk->ack_backlog) 
 		return;
 
@@ -1227,57 +1222,7 @@ void tcp_read_wakeup(struct sock *sk)
 	if ((sk->state == TCP_CLOSE) || (sk->state == TCP_TIME_WAIT))
 		return; 
 
-	/*
-	 * FIXME: we need to put code here to prevent this routine from
-	 * being called.  Being called once in a while is ok, so only check
-	 * if this is the second time in a row.
- 	 */
-
-	/*
-	 * We need to grab some memory, and put together an ack,
-	 * and then put it into the queue to be sent.
-	 */
-
-	buff = sock_wmalloc(sk,MAX_ACK_SIZE,1, GFP_ATOMIC);
-	if (buff == NULL) 
-	{
-		/* Try again real soon. */
-		tcp_reset_xmit_timer(sk, TIME_WRITE, HZ);
-		return;
- 	}
-
-	buff->sk = sk;
-	buff->localroute = sk->localroute;
-	buff->csum = 0;
-	
-	/*
-	 *	Put in the IP header and routing stuff. 
-	 */
-
-	tmp = sk->prot->build_header(buff, sk->saddr, sk->daddr, &dev,
-			       IPPROTO_TCP, sk->opt, MAX_ACK_SIZE,sk->ip_tos,sk->ip_ttl,&sk->ip_route_cache);
-	if (tmp < 0) 
-	{
-  		buff->free = 1;
-		sock_wfree(sk, buff);
-		return;
-	}
-
-	t1 =(struct tcphdr *)skb_put(buff,sizeof(struct tcphdr));
-
-	memcpy(t1,(void *) &sk->dummy_th, sizeof(*t1));
-	t1->seq = htonl(sk->sent_seq);
-
-	sk->ack_backlog = 0;
-	sk->bytes_rcv = 0;
-
-	sk->window = tcp_select_window(sk);
-	t1->window = htons(sk->window);
-	t1->ack_seq = htonl(sk->acked_seq);
-	t1->doff = sizeof(*t1)/4;
-	tcp_send_check(t1, sk->saddr, sk->daddr, sizeof(*t1), buff);
-	sk->prot->queue_xmit(sk, dev, buff, 1);
-	tcp_statistics.TcpOutSegs++;
+	tcp_send_ack(sk);
 }
 
 

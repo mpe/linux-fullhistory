@@ -12,6 +12,7 @@ if [ ! "$CONFIG_PPP" = "n" ]; then
   comment 'CCP compressors for PPP are only built as modules.'
 fi
 tristate 'STRIP (Metricom starmode radio IP)' CONFIG_STRIP
+tristate 'WIC (Radio IP bridge)' CONFIG_WIC
 tristate 'Z8530 SCC kiss emulation driver for AX.25' CONFIG_SCC
 tristate 'PLIP (parallel port) support' CONFIG_PLIP
 tristate 'EQL (serial line load balancing) support' CONFIG_EQUALIZER

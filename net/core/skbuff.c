@@ -679,6 +679,7 @@ struct sk_buff *alloc_skb(unsigned int size,int priority)
 	skb->free = 2;	/* Invalid so we pick up forgetful users */
 	skb->lock = 0;
 	skb->pkt_type = PACKET_HOST;	/* Default type */
+	skb->pkt_bridged = 0;		/* Not bridged */
 	skb->prev = skb->next = skb->link3 = NULL;
 	skb->list = NULL;
 	skb->sk = NULL;

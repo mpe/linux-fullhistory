@@ -85,9 +85,9 @@ static inline void __generic_memcpy_tofs(void * to, const void * from, unsigned 
     __asm__ volatile
 	("	cld
 		push %%es
-		movw %%fs,%%cx
-		movw %%cx,%%es
+		push %%fs
 		cmpl $3,%0
+		pop %%es
 		jbe 1f
 		movl %%edi,%%ecx
 		negl %%ecx

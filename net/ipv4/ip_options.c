@@ -210,7 +210,7 @@ void ip_options_fragment(struct sk_buff * skb)
 			continue;
 		}
 		optlen = optptr[1];
-		if (l<2 || optlen>l)
+		if (optlen<2 || optlen>l)
 		  return;
 		if (!(*optptr & 0x80))
 			memset(optptr, IPOPT_NOOP, optlen);
@@ -274,7 +274,7 @@ int ip_options_compile(struct options * opt, struct sk_buff * skb)
 			continue;
 		}
 		optlen = optptr[1];
-		if (l<2 || optlen>l || !optlen)
+		if (optlen<2 || optlen>l)
 		{
 			pp_ptr = optptr;
 			break;

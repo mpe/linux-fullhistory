@@ -5,7 +5,7 @@
  *		interfaces.  Requires 'dlcicfg' program to create usable 
  *		interfaces, the initial one, 'dlci' is for IOCTL use only.
  *
- * Version:	@(#)dlci.c	0.10	23 Mar 1996
+ * Version:	@(#)dlci.c	0.15	31 Mar 1996
  *
  * Author:	Mike McLagan <mike.mclagan@linux.org>
  *
@@ -41,7 +41,7 @@
 #include <net/sock.h>
 
 static const char *devname = "dlci";
-static const char *version = "DLCI driver v0.10, 23 Mar 1996, mike.mclagan@linux.org";
+static const char *version = "DLCI driver v0.15, 31 Mar 1996, mike.mclagan@linux.org";
 
 static struct device *open_dev[CONFIG_DLCI_COUNT];
 
@@ -68,9 +68,13 @@ int register_frad(const char *name)
    }
 
    if (i == sizeof(basename) / sizeof(char *))
+      return(-EMLINK);
+
+   basename[i] = kmalloc(strlen(name) + 1, GFP_KERNEL);
+   if (!basename[i])
       return(-ENOMEM);
 
-   basename[i] = (char *) name;
+   strcpy(basename[i], name);
 
    return(0);
 }
@@ -89,22 +93,23 @@ int unregister_frad(const char *name)
    if (i == sizeof(basename) / sizeof(char *))
       return(-EINVAL);
 
+   kfree(basename[i]);
    basename[i] = NULL;
 
    return(0);
 }
 
 /* 
-   these encapsulate the RFC 1490 requirements as well as 
-   deal with packet transmission and reception, working with
-   the upper network layers 
+ * these encapsulate the RFC 1490 requirements as well as 
+ * deal with packet transmission and reception, working with
+ * the upper network layers 
  */
 
 static int dlci_header(struct sk_buff *skb, struct device *dev, 
                            unsigned short type, void *daddr, void *saddr, 
                            unsigned len)
 {
-   struct fradhdr    hdr;
+   struct frhdr      hdr;
    struct dlci_local *dlp;
    unsigned          hlen;
    char              *dest;
@@ -115,8 +120,8 @@ static int dlci_header(struct sk_buff *skb, struct device *dev,
    switch(type)
    {
       case ETH_P_IP:
-         hdr.pad = FRAD_P_IP;
-         hlen = sizeof(hdr.control) + sizeof(hdr.pad);
+         hdr.IP_NLPID = FRAD_P_IP;
+         hlen = sizeof(hdr.control) + sizeof(hdr.IP_NLPID);
          break;
 
       /* feel free to add other types, if necessary */
@@ -142,11 +147,11 @@ static int dlci_header(struct sk_buff *skb, struct device *dev,
 static void dlci_receive(struct sk_buff *skb, struct device *dev)
 {
    struct dlci_local *dlp;
-   struct fradhdr    *hdr;
+   struct frhdr      *hdr;
    int               process, header;
 
    dlp = dev->priv;
-   hdr = (struct fradhdr *) skb->data;
+   hdr = (struct frhdr *) skb->data;
    process = 0;
    header = 0;
    skb->dev = dev;
@@ -157,7 +162,7 @@ static void dlci_receive(struct sk_buff *skb, struct device *dev)
       dlp->stats.rx_errors++;
    }
    else
-      switch(hdr->pad)
+      switch(hdr->IP_NLPID)
       {
          case FRAD_P_PADDING:
             if (hdr->NLPID != FRAD_P_SNAP)
@@ -175,13 +180,13 @@ static void dlci_receive(struct sk_buff *skb, struct device *dev)
             }
 
             /* at this point, it's an EtherType frame */
-            header = sizeof(struct fradhdr);
+            header = sizeof(struct frhdr);
             skb->protocol = htons(hdr->PID);
             process = 1;
             break;
 
          case FRAD_P_IP:
-            header = sizeof(hdr->control) + sizeof(hdr->pad);
+            header = sizeof(hdr->control) + sizeof(hdr->IP_NLPID);
             skb->protocol = htons(ETH_P_IP);
             process = 1;
             break;
@@ -230,14 +235,25 @@ static int dlci_transmit(struct sk_buff *skb, struct device *dev)
       printk(KERN_WARNING "%s: transmitter access conflict.\n", dev->name);
    else
    {
-      ret = dlp->slave->hard_start_xmit(skb, dlp->slave); 
-      if (ret)
-         dlp->stats.tx_errors++;
-      else 
-         dlp->stats.tx_packets++;
+      ret = dlp->slave->hard_start_xmit(skb, dlp->slave);
+      switch (ret)
+      {
+         case DLCI_RET_OK:
+            dlp->stats.tx_packets++;
+            break;
 
-      /* per Alan Cox, always return 0, let the slave free the packet */
+         case DLCI_RET_ERR:
+            dlp->stats.tx_errors++;
+            break;
+
+         case DLCI_RET_DROP:
+            dlp->stats.tx_dropped++;
+            break;
+      }
+
+      /* Alan Cox recommends always returning 0, and always freeing the packet */
       ret = 0;
+      dev_kfree_skb(skb, FREE_WRITE);
       dev->tbusy = 0;
    }
 
@@ -254,6 +270,10 @@ int dlci_add(struct dlci_add *new)
    char                buf[10];
 
    err = verify_area(VERIFY_READ, new, sizeof(*new));
+   if (err)
+      return(err);
+
+   err = verify_area(VERIFY_WRITE, new, sizeof(*new));
    if (err)
       return(err);
 
@@ -293,7 +313,7 @@ int dlci_add(struct dlci_add *new)
       return(-ENOMEM);
 
    memset(master, 0, sizeof(*master));
-   master->name = kmalloc(strlen(buf), GFP_KERNEL);
+   master->name = kmalloc(strlen(buf) + 1, GFP_KERNEL);
 
    if (!master->name)
    {
@@ -502,6 +522,7 @@ static int dlci_close(struct device *dev)
    err = (*flp->deactivate)(dlp->slave, dev);
 
    dev->start = 0;
+   dev->tbusy = 1;
 
    return 0;
 }
@@ -540,13 +561,24 @@ int dlci_init(struct device *dev)
 
    dev->type            = ARPHRD_DLCI;
    dev->family          = AF_INET;
-   dev->hard_header_len = sizeof(struct fradhdr);
+   dev->hard_header_len = sizeof(struct frhdr);
    dev->pa_alen         = sizeof(unsigned long);
-
+   dev->addr_len        = sizeof(short);
    memset(dev->dev_addr, 0, sizeof(dev->dev_addr));
+
+   dev->pa_addr         = 0;
+   dev->pa_dstaddr      = 0;
+   dev->pa_brdaddr      = 0;
+   dev->pa_mask         = 0;
 
    for (i = 0; i < DEV_NUMBUFFS; i++) 
       skb_queue_head_init(&dev->buffs[i]);
+
+   if (strcmp(dev->name, devname) == 0)
+   {
+      dev->type = 0xFFFF;
+      dev->family = AF_UNSPEC;
+   }
 
    return(0);
 }
@@ -567,7 +599,7 @@ int dlci_setup(void)
 }
 
 #ifdef MODULE
-static struct device dlci = {"dlci", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, dlci_init, };
+static struct device dlci = {devname, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, dlci_init, };
 
 int init_module(void)
 {
@@ -577,32 +609,7 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-   struct dlci_local   *dlp;
-   struct frad_local   *flp;
-   int                 i;
-
    unregister_netdev(&dlci);
-
-   for(i=0;i<CONFIG_DLCI_COUNT;i++)
-      if (open_dev[i])
-      {
-         dlp = open_dev[i]->priv;
-         flp = open_dev[i]->slave->priv;
-
-         if (open_dev[i]->start)
-         {
-            if (flp->deactivate)
-               (*flp->deactivate)(open_dev[i]->slave, open_dev[i]);
-            open_dev[i]->start = 0;
-         }
-
-         (*flp->deassoc)(open_dev[i]->slave, open_dev[i]);
-         kfree(open_dev[i]->priv);
-         kfree(open_dev[i]->name);
-         kfree(open_dev[i]);
-         open_dev[i] = NULL;
-      }
-
    if (dlci.priv)
       kfree(dlci.priv);
 }

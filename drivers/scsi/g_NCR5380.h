@@ -47,6 +47,8 @@ int generic_NCR5380_detect(Scsi_Host_Template *);
 int generic_NCR5380_release_resources(struct Scsi_Host *);
 int generic_NCR5380_queue_command(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int generic_NCR5380_reset(Scsi_Cmnd *);
+int notyet_generic_proc_info (char *buffer ,char **start, off_t offset,
+                     int length, int hostno, int inout);
 const char* generic_NCR5380_info(struct Scsi_Host *);
 #ifdef BIOSPARAM
 int generic_NCR5380_biosparam(Disk *, kdev_t, int *);
@@ -72,7 +74,7 @@ int generic_NCR5380_proc_info(char* buffer, char** start, off_t offset, int leng
 	generic_NCR5380_proc_info,					\
 	"Generic NCR5380/NCR53C400 Scsi Driver", 			\
 	generic_NCR5380_detect, generic_NCR5380_release_resources,	\
-	generic_NCR5380_info, NULL,					\
+	(void *)generic_NCR5380_info, NULL,				\
 	generic_NCR5380_queue_command, generic_NCR5380_abort, 		\
 	generic_NCR5380_reset, NULL,					\
 	NCR5380_BIOSPARAM,						\
@@ -151,6 +153,7 @@ int generic_NCR5380_proc_info(char* buffer, char** start, off_t offset, int leng
 #define NCR5380_reset generic_NCR5380_reset
 #define NCR5380_pread generic_NCR5380_pread
 #define NCR5380_pwrite generic_NCR5380_pwrite
+#define NCR5380_proc_info notyet_generic_proc_info
 
 #define BOARD_NCR5380	0
 #define BOARD_NCR53C400	1

@@ -1,5 +1,5 @@
 !
-!	Display adapter & video mode setup, version 2.6 (25-Mar-96)
+!	Display adapter & video mode setup, version 2.7 (09-Apr-96)
 !
 !	Copyright (C) 1995, 1996 Martin Mares <mj@k332.feld.cvut.cz>
 !	Based on the original setup.S code (C) Linus Torvalds
@@ -32,6 +32,8 @@
 #define VIDEO_FIRST_BIOS 0x0100
 ! VESA BIOS video modes (VESA number + 0x0200)
 #define VIDEO_FIRST_VESA 0x0200
+! Video7 special modes (BIOS number + 0x0900)
+#define VIDEO_FIRST_V7 0x0900
 ! Special video modes
 #define VIDEO_FIRST_SPECIAL 0x0f00
 #define VIDEO_80x25 0x0f00
@@ -39,7 +41,10 @@
 #define VIDEO_80x43 0x0f02
 #define VIDEO_80x28 0x0f03
 #define VIDEO_CURRENT_MODE 0x0f04
-#define VIDEO_LAST_SPECIAL 0x0f05
+#define VIDEO_80x30 0x0f05
+#define VIDEO_80x34 0x0f06
+#define VIDEO_80x60 0x0f07
+#define VIDEO_LAST_SPECIAL 0x0f08
 ! Video modes given by resolution
 #define VIDEO_FIRST_RESOLUTION 0x1000
 
@@ -152,20 +157,22 @@ mopar0:	seg	gs			! Font size
 	seg	fs
 	mov	[PARAM_FONT_POINTS],ax	! (valid only on EGA/VGA)
 
-	cmpb	[def_mode],#0	! Default mode -- force sane values
+	mov	ax,[force_size]	! Forced size?
+	or	ax,ax
 	jz	mopar1
 	seg	fs
-	movb	[PARAM_VIDEO_COLS],#80
-mopar2:	seg	fs
-	movb	[PARAM_VIDEO_LINES],#25
+	mov	[PARAM_VIDEO_COLS],ah
+	seg	fs
+	mov	[PARAM_VIDEO_LINES],al
 	ret
 
-mopar1:	cmpb	[adapter],#0	! If we are on CGA/MDA/HGA, the screen must
+mopar1:	mov	al,#25
+	cmpb	[adapter],#0	! If we are on CGA/MDA/HGA, the screen must
 	jz	mopar2		! have 25 lines.
 	seg	gs		! On EGA/VGA, use the EGA+ BIOS variable
 	mov	al,[0x484]	! containing maximal line number.
 	inc	al
-	seg	fs
+mopar2:	seg	fs
 	movb	[PARAM_VIDEO_LINES],al
 	ret
 
@@ -317,6 +324,18 @@ lmscan:	cmpb	[adapter],#0	! Scanning supported only on EGA/VGA
 lmdef:	ret
 
 !
+! Additional parts of mode_set... (relative jumps, you know)
+!
+
+setv7:				! Video7 extended modes
+	DO_STORE
+	sub	bh,#VIDEO_FIRST_V7>>8
+	mov	ax,#0x6f05
+	int	0x10
+	stc
+	ret
+
+!
 ! Aliases for backward compatibility.
 !
 
@@ -344,6 +363,8 @@ mode_set:
 	jnc	setres
 	cmp	ah,#VIDEO_FIRST_SPECIAL>>8
 	jz	setspc
+	cmp	ah,#VIDEO_FIRST_V7>>8
+	jz	setv7
 	cmp	ah,#VIDEO_FIRST_VESA>>8
 	jnc	setvesa
 	or	ah,ah
@@ -453,13 +474,16 @@ spec_inits:
 	.word	set_80x43
 	.word	set_80x28
 	.word	set_current
+	.word	set_80x30
+	.word	set_80x34
+	.word	set_80x60
 
 !
 ! Set the 80x25 mode. If already set, do nothing.
 !
 
 set_80x25:
-	incb	[def_mode]	! Signal "we use default mode"
+	mov	[force_size],#0x5019	! Override possibly broken BIOS vars
 use_80x25:
 	mov	ah,#0x0f	! Get current mode ID
 	int	0x10
@@ -513,7 +537,7 @@ set_current:
 set_80x28:
 	DO_STORE
 	call	use_80x25	! The base is 80x25
-	mov	ax,#0x1111	! Use 9x14 font
+set14:	mov	ax,#0x1111	! Use 9x14 font
 	xor	bl,bl
 	int	0x10
 	mov	ah,#0x01	! Define cursor (scan lines 11 to 12)
@@ -536,6 +560,69 @@ set_80x43:
 	int	0x10
 	jmp	set_8pt		! Use 8-pixel font
 
+!
+! Set the 80x30 mode (all VGA's). 480 scanlines, 16-pixel font.
+!
+
+set_80x30:
+	call	use_80x25	! Start with real 80x25
+	DO_STORE
+	mov	dx,#0x3cc	! Get CRTC port
+	in	al,dx
+	mov	dl,#0xd4
+	ror	al,#1		! Mono or color?
+	jc	set48a
+	mov	dl,#0xb4
+set48a:	mov	ax,#0x0c11	! Vertical sync end (also unlocks CR0-7)
+ 	call	outidx
+	mov	ax,#0x0b06	! Vertical total
+ 	call	outidx
+	mov	ax,#0x3e07	! (Vertical) overflow
+ 	call	outidx
+	mov	ax,#0xea10	! Vertical sync start
+ 	call	outidx
+	mov	ax,#0xdf12	! Vertical display end
+	call	outidx
+	mov	ax,#0xe715	! Vertical blank start
+ 	call	outidx
+	mov	ax,#0x0416	! Vertical blank end
+ 	call	outidx
+	push	dx
+	mov	dl,#0xcc	! Misc output register (read)
+ 	in	al,dx
+ 	mov	dl,#0xc2	! (write)
+ 	and	al,#0x0d	! Preserve clock select bits and color bit
+ 	or	al,#0xe2	! Set correct sync polarity
+ 	out	dx,al
+	pop	dx
+	mov	[force_size],#0x501e
+	stc			! That's all.
+	ret
+
+!
+! Set the 80x34 mode (all VGA's). 480 scans, 14-pixel font.
+!
+
+set_80x34:
+	call	set_80x30	! Set 480 scans
+	call	set14		! And 14-pt font
+	mov	ax,#0xdb12	! VGA vertical display end
+	mov	[force_size],#0x5022
+setvde:	call	outidx
+	stc
+	ret
+
+!
+! Set the 80x60 mode (all VGA's). 480 scans, 8-pixel font.
+!
+
+set_80x60:
+	call	set_80x30	! Set 480 scans
+	call	set_8pt		! And 8-pt font
+	mov	ax,#0xdf12	! VGA vertial display end
+	mov	[force_size],#0x503c
+	jmp	setvde
+
 #ifdef CONFIG_VIDEO_RETAIN
 
 !
@@ -549,12 +636,10 @@ store_screen:
 	jz	stsr
 	push	ax
 	push	bx
-	mov	al,[def_mode]		! "Default mode" flag overriden
-	push	ax
-	movb	[def_mode],#0
+	push	[force_size]		! Don't force specific size
+	mov	[force_size],#0
 	call	mode_params		! Obtain params of current mode
-	pop	ax
-	mov	[def_mode],al
+	pop	[force_size]
 
 	seg	fs
 	mov	ah,[PARAM_VIDEO_LINES]
@@ -564,7 +649,7 @@ store_screen:
 	mul	ah
 	mov	cx,ax			! CX=number of characters to store
 	add	ax,ax			! Calculate image size
-	add	ax,modelist+1024+4
+	add	ax,#modelist+1024+4
 	cmp	ax,[heap_end_ptr]
 	jnc	sts1			! Unfortunately, out of memory
 
@@ -681,12 +766,10 @@ mode_table:
 	jmp	mtabe
 mtab1x:	jmp	mtab1
 
-mtabv:	mov	eax,#VIDEO_8POINT + 0x50320000	! The 80x50 mode (VGA only)
-	stosd
-	mov	eax,#VIDEO_80x43 + 0x502b0000	! The 80x43 mode (VGA only)
-	stosd
-	mov	eax,#VIDEO_80x28 + 0x501c0000	! The 80x28 mode (VGA only)
-	stosd
+mtabv:	lea	si,vga_modes			! All modes for std VGA
+	mov	cx,#12
+	rep
+	movsw
 
 	cmpb	[scanning],#0			! Mode scan requested?
 	jz	mscan1
@@ -737,6 +820,22 @@ cmt2:
 mtab1:	lea	si,modelist	! Returning: SI=mode list, DI=list end
 ret0:	ret
 
+! Modes usable on all standard VGAs
+
+vga_modes:
+	.word	VIDEO_8POINT
+	.word	0x5032		! 80x50
+	.word	VIDEO_80x43
+	.word	0x502b		! 80x43
+	.word	VIDEO_80x28
+	.word	0x501c		! 80x28
+	.word	VIDEO_80x30
+	.word	0x501e		! 80x30
+	.word	VIDEO_80x34
+	.word	0x5022		! 80x34
+	.word	VIDEO_80x60
+	.word	0x503c		! 80x60
+
 !
 ! Detect VESA modes.
 !
@@ -768,8 +867,8 @@ vesa1:	seg	gs		! Get next mode in the list
 	cmp	ax,#0x0080	! Check validity of mode ID
 	jc	vesa2
 	or	ah,ah		! Valid ID's are 0x0000-0x007f
-	jz	vesae		! and 0x0100-0x02ff.
-	cmp	ax,#0x0300
+	jz	vesae		! and 0x0100-0x07ff.
+	cmp	ax,#0x0800
 	jnc	vesae
 vesa2:	push	cx
 	mov	cx,ax		! Get mode information structure
@@ -901,7 +1000,7 @@ dosvga:	lodsw
 	or	bp,bp
 	jz	dosvga
 	mov	si,bp		! Found, copy the modes
-	mov	ah,#0x01
+	mov	ah,[svga_prefix]
 cpsvga:	lodsb
 	or	al,al
 	jz	didsv
@@ -920,20 +1019,21 @@ didsv1:	ret
 !
 
 svga_table:
-	.word	s3_md, s3_test
 	.word	ati_md, ati_test
+	.word	oak_md, oak_test
+	.word	paradise_md, paradise_test
+	.word	realtek_md, realtek_test
+	.word	s3_md, s3_test
 	.word	chips_md, chips_test
+	.word	video7_md, video7_test
 	.word	cirrus5_md, cirrus5_test
 	.word	cirrus6_md, cirrus6_test
 	.word	cirrus1_md, cirrus1_test
 	.word	ahead_md, ahead_test
 	.word	everex_md, everex_test
 	.word	genoa_md, genoa_test
-	.word	oak_md, oak_test
-	.word	paradise_md, paradise_test
 	.word	trident_md, trident_test
 	.word	tseng_md, tseng_test
-	.word	video7_md, video7_test
 	.word	0
 
 !
@@ -1426,7 +1526,7 @@ tseng_test:
 	out	dx,al
 	cmp	ah,#0x55
  	je	istsen
-	xor	bp,bp
+isnot:	xor	bp,bp
 istsen:	ret
 
 tseng_md:
@@ -1472,9 +1572,9 @@ even7:	mov	al,#0x0c
 	mov	al,#0x55
 	xor	al,#0xea
 	cmp	al,bh
-	je	isvid7
-	xor	bp,bp
-isvid7:	ret
+	jne	isnot
+	movb	[svga_prefix],#VIDEO_FIRST_V7>>8	! Use special mode switching
+	ret
 
 video7_md:
 	.byte	0x40, 0x2b, 0x50
@@ -1485,6 +1585,30 @@ video7_md:
 	.byte	0x45, 0x1c, 0x84
 	.byte	0
 	.ascii	"Video 7"
+	.byte	0
+
+! Realtek VGA
+
+realtek_test:
+	lea	si,idrtvga
+	mov	di,#0x45
+	mov	cx,#0x0b
+	repe
+	cmpsb
+	je	isrt
+	xor	bp,bp
+isrt:	ret
+
+idrtvga:	.ascii	"REALTEK VGA"
+
+realtek_md:
+	.byte	0x1a, 0x3c, 0x50
+	.byte	0x1b, 0x19, 0x84
+	.byte	0x1c, 0x1e, 0x84
+	.byte	0x1d, 0x2b, 0x84
+	.byte	0x1e, 0x3c, 0x84
+	.byte	0
+	.ascii	"REALTEK"
 	.byte	0
 
 #endif	/* CONFIG_VIDEO_SVGA */
@@ -1606,13 +1730,14 @@ skip10:	mov	al,ah
 ! Variables:
 
 adapter:	.byte	0	! Video adapter: 0=CGA/MDA/HGA,1=EGA,2=VGA
-def_mode:	.byte	0	! "Default mode selected" flag
 mt_end:		.word	0	! End of video mode table if built
 edit_buf:	.space	6	! Line editor buffer
 card_name:	.word	0	! Pointer to adapter name
 scanning:	.byte	0	! Performing mode scan
 do_restore:	.byte	0	! Screen contents altered during mode change
+svga_prefix:	.byte	VIDEO_FIRST_BIOS>>8	! Default prefix for BIOS modes
 video_segment:	.word	0xb800	! Video memory segment
+force_size:	.word	0	! Use this size instead of the one in BIOS vars
 
 ! Messages:
 

@@ -385,6 +385,13 @@ int open_namei(const char * pathname, int flag, int mode,
 		iput(dir);
 		return error;
 	}
+	/* SunOS, Solaris 2.x and HPUX all deny open() on
+	 * an existing file with mandatory locks.
+	 */
+	if ((error = locks_verify_locked(inode)) != 0) {
+		iput(inode);
+		return error;
+	}
 	error = follow_link(dir,inode,flag,mode,&inode);
 	if (error)
 		return error;
@@ -430,6 +437,17 @@ int open_namei(const char * pathname, int flag, int mode,
 			iput(inode);
 			return error;
 		}
+#if 0
+		/*
+		 * In my opinion the mandatory lock check should really be
+		 * here. Only O_TRUNC calls can modify the file contents -
+		 * but none of the commercial OS'es seem to do it this way.
+		 */
+		if ((error = locks_verify_locked(inode)) != 0) {
+			iput(inode);
+			return error;
+		}
+#endif
 		if (inode->i_sb && inode->i_sb->dq_op)
 			inode->i_sb->dq_op->initialize(inode, -1);
 			

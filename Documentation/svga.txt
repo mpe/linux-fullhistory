@@ -1,4 +1,4 @@
-			Video Mode Selection Support 2.6
+			Video Mode Selection Support 2.7
 	      (c) 1995, 1996 Martin Mares, <mj@k332.feld.cvut.cz>
 --------------------------------------------------------------------------------
 
@@ -103,8 +103,10 @@ can be divided to three regions:
 	(as presented to INT 10, function 00) increased by 0x0100. You can
 	use any mode numbers even if not shown on the menu.
 
-   0x0200 to 0x04ff - VESA BIOS modes. The ID is a VESA mode ID increased by
-	0x0200. All VESA modes should be autodetected and shown on the menu.
+   0x0200 to 0x08ff - VESA BIOS modes. The ID is a VESA mode ID increased by
+	0x0100. All VESA modes should be autodetected and shown on the menu.
+
+   0x0900 to 0x09ff - Video7 special modes. Set by calling INT 0x10, AX=0x6f05.
 
    0x0f00 to 0x0fff - special modes (they are set by various tricks -- usually
 	by modifying one of the standard modes). Currently available:
@@ -113,6 +115,9 @@ can be divided to three regions:
 	0x0f02	VGA 80x43 (VGA switched to 350 scanlines with a 8-point font)
 	0x0f03	VGA 80x28 (standard VGA scans, but 14-point font)
 	0x0f04	leave current video mode
+	0x0f05	VGA 80x30 (480 scans, 16-point font)
+	0x0f06	VGA 80x34 (480 scans, 14-point font)
+	0x0f07	VGA 80x60 (480 scans, 8-point font)
 
    0x1000 to 0x7fff - modes specified by resolution. The code has a "0xRRCC"
 	form where RR is a number of rows and CC is a number of columns.
@@ -148,7 +153,7 @@ it's possible that the first variant doesn't work, while some of the others do
 -- in this case turn this switch off to see the rest.
 
    CONFIG_VIDEO_RETAIN - enables retaining of screen contents when switching
-video modes. Works only with some boot loaders leaving enough room for the
+video modes. Works only with some boot loaders which leave enough room for the
 buffer.
 
    CONFIG_VIDEO_LOCAL - enables inclusion of "local modes" in the list. The
@@ -225,3 +230,14 @@ this must be done manually -- no autodetection mechanisms are available.
 2.5 (19-Mar-96)	Fixed a VESA mode scanning bug introduced in 2.4.
 2.6 (25-Mar-96)	Some VESA BIOS errors not reported -- it fixes error reports on
 		several cards with broken VESA code (e.g., ATI VGA).
+2.7 (09-Apr-96)	- Accepted all VESA modes in range 0x100 to 0x7ff, because some
+		  cards use very strange mode numbers.
+		- Added Realtek VGA modes (thanks to Gonzalo Tornaria).
+		- Hardware testing order slightly changed, tests based on ROM
+		  contents done as first.
+		- Added support for special Video7 mode switching functions
+		  (thanks to Tom Vander Aa).
+		- Added 480-scanline modes (especially useful for notebooks,
+		  original version written by hhanemaa@cs.ruu.nl, patched by
+		  Jeff Chua, rewritten by me).
+		- Screen store/restore fixed.

@@ -105,6 +105,10 @@
 #include "t128.h"
 #endif
 
+#ifdef CONFIG_SCSI_DTC3280
+#include "dtc.h"
+#endif
+
 #ifdef CONFIG_SCSI_NCR53C7xx
 #include "53c7,8xx.h"
 #endif
@@ -136,6 +140,7 @@
 #ifdef CONFIG_SCSI_DEBUG
 #include "scsi_debug.h"
 #endif
+
 
 /*
 static const char RCSid[] = "$Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/hosts.c,v 1.3 1993/09/24 12:21:00 drew Exp drew $";
@@ -218,6 +223,9 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_T128
     TRANTOR_T128,
+#endif
+#ifdef CONFIG_SCSI_DTC3280
+        DTC3x80,
 #endif
 #ifdef CONFIG_SCSI_NCR53C7xx
     NCR53c7xx,

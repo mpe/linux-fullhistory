@@ -447,6 +447,15 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 				return 0;
 			skb->dev = dev;
 			iph=skb->h.iph;
+#ifdef CONFIG_IP_MASQUERADE
+			if (ip_fw_demasquerade(&skb,dev))
+			{
+				struct iphdr *iph=skb->h.iph;
+				if (ip_forward(skb, dev, IPFWD_MASQUERADED, iph->daddr))
+					kfree_skb(skb, FREE_WRITE);
+				return 0;
+			}
+#endif
 		}
 
 		/*

@@ -582,10 +582,14 @@ asmlinkage int sys_umount(char * name)
 		iput(inode);
 		return -ENXIO;
 	}
-	if (!(retval = do_umount(dev,0)) && dev != ROOT_DEV) {
-		blkdev_release (inode);
-		if (MAJOR(dev) == UNNAMED_MAJOR)
-			put_unnamed_dev(dev);
+	retval = do_umount(dev,0);
+	if (!retval) {
+		fsync_dev(dev);
+		if (dev != ROOT_DEV) {
+			blkdev_release (inode);
+			if (MAJOR(dev) == UNNAMED_MAJOR)
+				put_unnamed_dev(dev);
+		}
 	}
 	if (inode != &dummy_inode)
 		iput(inode);

@@ -126,6 +126,9 @@ struct proc_dir_entry proc_scsi_pas16 = {
     PROC_SCSI_PAS16, 5, "pas16",
     S_IFDIR | S_IRUGO | S_IXUGO, 2
 };
+static int pas_maxi = 0;
+static int pas_wmaxi = 0;
+ 
 
 int scsi_irq_translate[] =
 	{ 0,  0,  1,  2,  3,  4,  5,  6, 0,  0,  7,  8,  9,  0, 10, 11 };
@@ -180,7 +183,22 @@ unsigned short  pas16_offset[ 8 ] =
 		    * START_DMA_INITIATOR_RECEIVE_REG wo
 		    */
     };
-
+/*----------------------------------------------------------------*/
+/* the following will set the monitor border color (useful to find
+ where something crashed or gets stuck at */
+/* 1 = blue
+ 2 = green
+ 3 = cyan
+ 4 = red
+ 5 = magenta
+ 6 = yellow
+ 7 = white
+*/
+#if 1
+#define rtrc(i) {inb(0x3da); outb(0x31, 0x3c0); outb((i), 0x3c0);}
+#else
+#define rtrc(i) {}
+#endif
 
 
 /*
@@ -357,6 +375,7 @@ int pas16_detect(Scsi_Host_Template * tpnt) {
     int  count;
 
     tpnt->proc_dir = &proc_scsi_pas16;
+    tpnt->proc_info = &pas16_proc_info;
 
     for (count = 0; current_override < NO_OVERRIDES; ++current_override) {
 	io_port = 0;
@@ -400,6 +419,7 @@ int pas16_detect(Scsi_Host_Template * tpnt) {
 	else 
 	    instance->irq = NCR5380_probe_irq(instance, PAS16_IRQS);
 
+                instance->irq = IRQ_NONE;  /*****temp****/
 	if (instance->irq != IRQ_NONE) 
 	    if (request_irq(instance->irq, pas16_intr, SA_INTERRUPT, "pas16", NULL)) {
 		printk("scsi%d : IRQ%d not free, interrupts disabled\n", 
@@ -492,8 +512,10 @@ static inline int NCR5380_pread (struct Scsi_Host *instance, unsigned char *dst,
     register unsigned short reg = (unsigned short) (instance->io_port + 
 	P_DATA_REG_OFFSET);
     register i = len;
+    int ii = 0;
 
-    while ( !(inb(instance->io_port + P_STATUS_REG_OFFSET) & P_ST_RDY) );
+    while ( !(inb(instance->io_port + P_STATUS_REG_OFFSET) & P_ST_RDY) )
+	 ++ii;
 
     insb( reg, d, i );
 
@@ -502,8 +524,10 @@ static inline int NCR5380_pread (struct Scsi_Host *instance, unsigned char *dst,
 	printk("scsi%d : watchdog timer fired in NCR5380_pread()\n",
 	    instance->host_no);
 	return -1;
-    } else
-	return 0;
+    }
+   if (ii > pas_maxi)
+      pas_maxi = ii;
+    return 0;
 }
 
 /*
@@ -524,8 +548,10 @@ static inline int NCR5380_pwrite (struct Scsi_Host *instance, unsigned char *src
     register unsigned char *s = src;
     register unsigned short reg = (instance->io_port + P_DATA_REG_OFFSET);
     register i = len;
+    int ii = 0;
 
-    while ( !((inb(instance->io_port + P_STATUS_REG_OFFSET)) & P_ST_RDY) );
+    while ( !((inb(instance->io_port + P_STATUS_REG_OFFSET)) & P_ST_RDY) )
+	 ++ii;
  
     outsb( reg, s, i );
 
@@ -534,8 +560,10 @@ static inline int NCR5380_pwrite (struct Scsi_Host *instance, unsigned char *src
 	printk("scsi%d : watchdog timer fired in NCR5380_pwrite()\n",
 	    instance->host_no);
 	return -1;
-    } else 
-	return 0;
+    }
+    if (ii > pas_maxi)
+	 pas_wmaxi = ii;
+    return 0;
 }
 
 #include "NCR5380.c"

@@ -387,6 +387,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 		case IP_FW_POLICY_IN:
 		case IP_FW_POLICY_OUT:
 		case IP_FW_POLICY_FWD:
+		case IP_FW_MASQ_TIMEOUTS:
 			if(!suser())
 				return -EPERM;
 			if(optlen>sizeof(tmp_fw) || optlen<1)

@@ -447,7 +447,7 @@ void ax25_destroy_socket(ax25_cb *ax25)	/* Not static as its used by the timer *
 				ax25->digipeat = NULL;
 			}
 		
-			kfree_s(ax25->sk, sizeof(*ax25->sk));
+			sk_free(ax25->sk);
 			kfree_s(ax25, sizeof(*ax25));
 		}
 	} else {
@@ -1105,25 +1105,12 @@ static int ax25_create(struct socket *sock, int protocol)
 	sk->socket        = sock;
 	sk->type          = sock->type;
 	sk->protocol      = protocol;
-	sk->dead          = 0;
 	sk->next          = NULL;
-	sk->broadcast     = 0;
 	sk->allocation	  = GFP_KERNEL;
 	sk->rcvbuf        = SK_RMEM_MAX;
 	sk->sndbuf        = SK_WMEM_MAX;
-	sk->wmem_alloc    = 0;
-	sk->rmem_alloc    = 0;
-	sk->users         = 0;
-	sk->debug         = 0;
-	sk->destroy       = 0;
-	sk->prot          = NULL;	/* So we use default free mechanisms */
-	sk->err           = 0;
-	sk->localroute    = 0;
-	sk->send_head     = NULL;
 	sk->state         = TCP_CLOSE;
-	sk->shutdown      = 0;
 	sk->priority      = SOPRI_NORMAL;
-	sk->ack_backlog   = 0;
 	sk->mtu           = AX25_MTU;	/* 256 */
 	sk->zapped        = 1;
 
@@ -1176,26 +1163,14 @@ static struct sock *ax25_make_new(struct sock *osk, struct device *dev)
 	skb_queue_head_init(&sk->write_queue);
 	skb_queue_head_init(&sk->back_log);
 
-	sk->dead        = 0;
 	sk->next        = NULL;
 	sk->priority    = osk->priority;
-	sk->broadcast   = 0;
 	sk->protocol    = osk->protocol;
 	sk->rcvbuf      = osk->rcvbuf;
 	sk->sndbuf      = osk->sndbuf;
-	sk->wmem_alloc  = 0;
-	sk->rmem_alloc  = 0;
-	sk->users       = 0;
-	sk->ack_backlog = 0;
-	sk->destroy     = 0;
-	sk->prot        = NULL;	/* So we use default free mechanisms */
-	sk->err         = 0;
-	sk->localroute  = 0;
-	sk->send_head   = NULL;
 	sk->debug       = osk->debug;
 	sk->state       = TCP_ESTABLISHED;
 	sk->window      = osk->window;
-	sk->shutdown    = 0;
 	sk->mtu         = osk->mtu;
 	sk->sleep       = osk->sleep;
 	sk->zapped      = osk->zapped;

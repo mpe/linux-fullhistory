@@ -750,9 +750,7 @@ void tcp_send_synack(struct sock * newsk, struct sock * sk, struct sk_buff * skb
  *	This routine sends an ack and also updates the window. 
  */
  
-void tcp_send_ack(u32 sequence, u32 ack,
-	     struct sock *sk,
-	     struct tcphdr *th, u32 daddr)
+void tcp_send_ack(struct sock *sk)
 {
 	struct sk_buff *buff;
 	struct tcphdr *t1;
@@ -762,6 +760,26 @@ void tcp_send_ack(u32 sequence, u32 ack,
 	if(sk->zapped)
 		return;		/* We have been reset, we may not send again */
 		
+	/*
+	 *	If we have nothing queued for transmit and the transmit timer
+	 *	is on we are just doing an ACK timeout and need to switch
+	 *	to a keepalive.
+	 */
+	 
+	sk->ack_backlog = 0;
+	sk->bytes_rcv = 0;
+	sk->ack_timed = 0;
+
+	if (sk->send_head == NULL
+	    && skb_queue_empty(&sk->write_queue)
+	    && sk->ip_xmit_timeout == TIME_WRITE)
+	{
+		if(sk->keepopen)
+			tcp_reset_xmit_timer(sk,TIME_KEEPOPEN,TCP_TIMEOUT_LEN);
+		else
+			delete_timer(sk);
+	}
+
 	/*
 	 * We need to grab some memory, and put together an ack,
 	 * and then put it into the queue to be sent.
@@ -797,7 +815,7 @@ void tcp_send_ack(u32 sequence, u32 ack,
 	 *	Put in the IP header and routing stuff. 
 	 */
 	 
-	tmp = sk->prot->build_header(buff, sk->saddr, daddr, &dev,
+	tmp = sk->prot->build_header(buff, sk->saddr, sk->daddr, &dev,
 				IPPROTO_TCP, sk->opt, MAX_ACK_SIZE,sk->ip_tos,sk->ip_ttl,&sk->ip_route_cache);
 	if (tmp < 0) 
 	{
@@ -807,45 +825,20 @@ void tcp_send_ack(u32 sequence, u32 ack,
 	}
 	t1 =(struct tcphdr *)skb_put(buff,sizeof(struct tcphdr));
 
-	memcpy(t1, &sk->dummy_th, sizeof(*t1));
-
-	/*
-	 *	Swap the send and the receive. 
-	 */
-	 
-	t1->dest = th->source;
-	t1->source = th->dest;
-	t1->seq = ntohl(sequence);
-	sk->window = tcp_select_window(sk);
-	t1->window = ntohs(sk->window);
-	
-	/*
-	 *	If we have nothing queued for transmit and the transmit timer
-	 *	is on we are just doing an ACK timeout and need to switch
-	 *	to a keepalive.
-	 */
-	 
-	if (ack == sk->acked_seq) {	       	  
-		sk->ack_backlog = 0;
-		sk->bytes_rcv = 0;
-		sk->ack_timed = 0;
-
-		if (sk->send_head == NULL && skb_peek(&sk->write_queue) == NULL
-		    && sk->ip_xmit_timeout == TIME_WRITE) 	
-		  if(sk->keepopen) 
-		    tcp_reset_xmit_timer(sk,TIME_KEEPOPEN,TCP_TIMEOUT_LEN);
-		  else 
-		    delete_timer(sk);	         		
-	}
-
   	/*
   	 *	Fill in the packet and send it
   	 */
   	 
-  	t1->ack_seq = htonl(ack);
-  	tcp_send_check(t1, sk->saddr, daddr, sizeof(*t1), buff);
+	sk->window = tcp_select_window(sk);
+
+	memcpy(t1, &sk->dummy_th, sizeof(*t1));
+	t1->seq     = htonl(sk->sent_seq);
+  	t1->ack_seq = htonl(sk->acked_seq);
+	t1->window  = htons(sk->window);
+
+  	tcp_send_check(t1, sk->saddr, sk->daddr, sizeof(*t1), buff);
   	if (sk->debug)
-  		 printk("\rtcp_ack: seq %x ack %x\n", sequence, ack);
+  		 printk("\rtcp_ack: seq %x ack %x\n", sk->sent_seq, sk->acked_seq);
   	sk->prot->queue_xmit(sk, dev, buff, 1);
   	tcp_statistics.TcpOutSegs++;
 }

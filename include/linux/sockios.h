@@ -50,10 +50,11 @@
 #define SIOCGIFHWADDR	0x8927		/* Get hardware address		*/
 #define SIOCGIFSLAVE	0x8929		/* Driver slaving support	*/
 #define SIOCSIFSLAVE	0x8930
-/* begin multicast support change */
-#define SIOCADDMULTI  0x8931
-#define SIOCDELMULTI  0x8932
-/* end multicast support change */
+#define SIOCADDMULTI	0x8931		/* Multicast address lists	*/
+#define SIOCDELMULTI	0x8932
+
+#define SIOCGIFBR	0x8940		/* Bridging support		*/
+#define SIOCSIFBR	0x8941		/* Set bridging options 	*/
 
 /* ARP cache control calls. */
 #define OLD_SIOCDARP	0x8950		/* old delete ARP table entry	*/

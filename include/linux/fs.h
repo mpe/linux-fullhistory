@@ -354,19 +354,29 @@ extern void locks_remove_locks(struct task_struct *task, struct file *filp);
 #define FLOCK_VERIFY_READ  1
 #define FLOCK_VERIFY_WRITE 2
 
-extern int locks_locked_mandatory(int read_write, struct inode *inode,
-				  struct file *filp, unsigned int offset,
-				  unsigned int count);
-extern inline int locks_verify(int read_write, struct inode *inode,
-			       struct file *filp, unsigned int offset,
-			       unsigned int count)
+extern int locks_mandatory_locked(struct inode *inode);
+extern inline int locks_verify_locked(struct inode *inode)
 {
 	/* Candidates for mandatory locking have the setgid bit set
 	 * but no group execute bit -  an otherwise meaningless combination.
 	 */
 	if ((inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
-		return (locks_locked_mandatory(read_write, inode, filp,
-					       offset, count));
+		return (locks_mandatory_locked(inode));
+	return (0);
+}
+extern int locks_mandatory_area(int read_write, struct inode *inode,
+				struct file *filp, unsigned int offset,
+				unsigned int count);
+extern inline int locks_verify_area(int read_write, struct inode *inode,
+				    struct file *filp, unsigned int offset,
+				    unsigned int count)
+{
+	/* Candidates for mandatory locking have the setgid bit set
+	 * but no group execute bit -  an otherwise meaningless combination.
+	 */
+	if ((inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
+		return (locks_mandatory_area(read_write, inode, filp, offset,
+					     count));
 	return (0);
 }
 

@@ -6,7 +6,7 @@
  *		code, including it's RFC1490 encapsulation along side the current
  *		implementation for the Sangoma cards.
  *
- * Version:	@(#)if_ifrad.h	0.10	23 Mar 96
+ * Version:	@(#)if_ifrad.h	0.15	31 Mar 96
  *
  * Author:	Mike McLagan <mike.mclagan@linux.org>
  *
@@ -33,7 +33,11 @@ struct dlci_add
 #define DLCI_GET_CONF	(SIOCDEVPRIVATE + 2)
 #define DLCI_SET_CONF	(SIOCDEVPRIVATE + 3)
 
-/* These are related to the Sangoma FRAD */
+/* 
+ * These are related to the Sangoma SDLA and should remain in order. 
+ * Code within the SDLA module is based on the specifics of this 
+ * structure.  Change at your own peril.
+ */
 struct dlci_conf {
    short flags;
    short CIR_fwd;
@@ -48,6 +52,8 @@ struct dlci_conf {
    short Tc_bwd;
    short Tf_max;
    short Tb_max;
+
+/* add any new fields here above is a mirror of sdla_dlci_conf */
 };
 
 #define DLCI_GET_SLAVE	(SIOCDEVPRIVATE + 4)
@@ -59,6 +65,10 @@ struct dlci_conf {
 
 #define DLCI_VALID_FLAGS	0x000B
 
+/* FRAD driver uses these to indicate what it did with packet */
+#define DLCI_RET_OK		0x00
+#define DLCI_RET_ERR		0x01
+#define DLCI_RET_DROP		0x02
 
 /* defines for the actual Frame Relay hardware */
 #define FRAD_GET_CONF	(SIOCDEVPRIVATE)
@@ -66,6 +76,11 @@ struct dlci_conf {
 
 #define FRAD_LAST_IOCTL	FRAD_SET_CONF
 
+/*
+ * Based on the setup for the Sangoma SDLA.  If changes are 
+ * necessary to this structure, a routine will need to be 
+ * added to that module to copy fields.
+ */
 struct frad_conf 
 {
    short station;
@@ -85,7 +100,7 @@ struct frad_conf
    short Bc_bwd;
    short Be_bwd;
 
-/* Add new fields here, above is a mirror of the sangoma_conf */
+/* Add new fields here, above is a mirror of the sdla_conf */
 
 };
 
@@ -106,14 +121,19 @@ struct frad_conf
 
 #ifdef __KERNEL__
 
-struct fradhdr
+/* these are the fields of an RFC 1490 header */
+struct frhdr
 {
-   /* these are the fields of an RFC 1490 header               */
-   unsigned char  control;
-   unsigned char  pad;		/* for IP packets, this can be the NLPID */
-   unsigned char  NLPID;
-   unsigned char  OUI[3];
-   unsigned short PID;
+   unsigned char  control	__attribute__((packed));
+
+   /* for IP packets, this can be the NLPID */
+   unsigned char  pad		__attribute__((packed)); 
+
+   unsigned char  NLPID		__attribute__((packed));
+   unsigned char  OUI[3]	__attribute__((packed));
+   unsigned short PID		__attribute__((packed));
+
+#define IP_NLPID pad 
 };
 
 /* see RFC 1490 for the definition of the following */
@@ -139,11 +159,14 @@ struct dlci_local
 struct frad_local
 {
    struct enet_statistics stats;
-   struct timer_list timer;
 
    /* devices which this FRAD is slaved to */
    struct device     *master[CONFIG_DLCI_MAX];
    short             dlci[CONFIG_DLCI_MAX];
+
+   struct frad_conf  config;
+   int               configured;	/* has this device been configured */
+   int               initialized;	/* mem_start, port, irq set ? */
 
    /* callback functions */
    int               (*activate)(struct device *, struct device *);
@@ -152,12 +175,11 @@ struct frad_local
    int               (*deassoc)(struct device *, struct device *);
    int               (*dlci_conf)(struct device *, struct device *, int get);
 
-   int               initialized;	/* mem_start, port, irq set ? */
-   int               configured;	/* has this device been configured */
+   /* fields that are used by the Sangoma SDLA cards */
+   struct timer_list timer;
    int               type;		/* adapter type */
    int               state;		/* state of the S502/8 control latch */
    int               buffer;		/* current buffer for S508 firmware */
-   struct frad_conf  config;
 };
 
 int register_frad(const char *name);

@@ -72,6 +72,7 @@ static struct symbol_table ip_masq_syms = {
 	X(ip_masq_new),
         X(ip_masq_set_expire),
         X(ip_masq_free_ports),
+	X(ip_masq_expire),
 #include <linux/symtab_end.h>
 };
 
@@ -81,6 +82,18 @@ static struct symbol_table ip_masq_syms = {
 
 struct ip_masq *ip_masq_m_tab[IP_MASQ_TAB_SIZE];
 struct ip_masq *ip_masq_s_tab[IP_MASQ_TAB_SIZE];
+
+/*
+ * timeouts
+ */
+
+static struct ip_fw_masq ip_masq_dummy = {
+	MASQUERADE_EXPIRE_TCP,
+	MASQUERADE_EXPIRE_TCP_FIN,
+	MASQUERADE_EXPIRE_UDP
+};
+
+struct ip_fw_masq *ip_masq_expire = &ip_masq_dummy;
 
 /*
  *	Returns hash value
@@ -409,7 +422,7 @@ void ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
 
 	if (iph->protocol!=IPPROTO_UDP && iph->protocol!=IPPROTO_TCP)
 		return;
- 
+
 	/*
 	 *	Now hunt the list to see if we have an old entry
 	 */
@@ -472,7 +485,7 @@ void ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
  	 
  	if (iph->protocol==IPPROTO_UDP) 
  	{
-                timeout = MASQUERADE_EXPIRE_UDP;
+                timeout = ip_masq_expire->udp_timeout;
  		recalc_check((struct udphdr *)portptr,iph->saddr,iph->daddr,size);
  	}
  	else 
@@ -485,10 +498,10 @@ void ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
  		 */
  		if (ms->flags & IP_MASQ_F_SAW_FIN || th->fin)
                 {
-                        timeout = MASQUERADE_EXPIRE_TCP_FIN;
+                        timeout = ip_masq_expire->tcp_fin_timeout;
  			ms->flags |= IP_MASQ_F_SAW_FIN;
  		}
- 		else timeout = MASQUERADE_EXPIRE_TCP;
+ 		else timeout = ip_masq_expire->tcp_timeout;
  
 		skb->csum = csum_partial((void *)(th + 1), size - sizeof(*th), 0);
  		tcp_send_check(th,iph->saddr,iph->daddr,size,skb);
@@ -516,10 +529,22 @@ int ip_fw_demasquerade(struct sk_buff **skb_p, struct device *dev)
  	struct iphdr	*iph = skb->h.iph;
  	__u16	*portptr;
  	struct ip_masq	*ms;
+	unsigned short  frag;
  
  	if (iph->protocol!=IPPROTO_UDP && iph->protocol!=IPPROTO_TCP)
  		return 0;
  
+	/*
+   	 * Toss fragments, since we handle them in ip_rcv()
+	 */
+
+	frag = ntohs(iph->frag_off);
+
+	if ((frag & IP_MF) != 0 || (frag & IP_OFFSET) != 0)
+	{
+		return 0;
+	}
+
  	portptr = (__u16 *)&(((char *)iph)[iph->ihl*4]);
  	if (ntohs(portptr[1]) < PORT_MASQ_BEGIN ||
  	    ntohs(portptr[1]) > PORT_MASQ_END)

@@ -16,7 +16,7 @@ ifdef CONFIG_NET
 O_OBJS	+= dev.o dev_mcast.o
 
 ifdef CONFIG_FIREWALL
-O_OBJS += firewall.o
+OX_OBJS += firewall.o
 endif
 
 ifdef CONFIG_NET_ALIAS

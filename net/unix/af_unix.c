@@ -309,28 +309,11 @@ static int unix_create(struct socket *sock, int protocol)
 	sk->protinfo.af_unix.inode=NULL;
 	sk->protinfo.af_unix.locks=1;		/* Us */
 	sk->protinfo.af_unix.readsem=MUTEX;	/* single task reading lock */
-	sk->protinfo.af_unix.name=NULL;
-	sk->protinfo.af_unix.other=NULL;
-	sk->protocol=0;
-	sk->rmem_alloc=0;
-	sk->wmem_alloc=0;
-	sk->dead=0;
-	sk->next=NULL;
-	sk->broadcast=0;
 	sk->rcvbuf=SK_RMEM_MAX;
 	sk->sndbuf=SK_WMEM_MAX;
 	sk->allocation=GFP_KERNEL;
-	sk->users=0;
-	sk->bsdism=0;
-	sk->debug=0;
-	sk->prot=NULL;
-	sk->err=0;
-	sk->localroute=0;
-	sk->send_head=NULL;
 	sk->state=TCP_CLOSE;
 	sk->priority=SOPRI_NORMAL;
-	sk->ack_backlog=0;
-	sk->shutdown=0;
 	sk->state_change=def_callback1;
 	sk->data_ready=def_callback2;
 	sk->write_space=def_callback3;
@@ -339,7 +322,6 @@ static int unix_create(struct socket *sock, int protocol)
 	sk->socket=sock;
 	sock->data=(void *)sk;
 	sk->sleep=sock->wait;
-	sk->zapped=0;
 	unix_insert_socket(sk);
 	return 0;
 }

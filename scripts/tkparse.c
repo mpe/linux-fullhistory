@@ -135,7 +135,7 @@ static struct condition * parse_if(char * pnt)
 	pnt++;
 	while(*pnt && *pnt != '`') *pnt1++ = *pnt++;
 	*pnt1++ = '\0';
-	cpnt->variable = strdup(varname);
+	cpnt->variable.str = strdup(varname);
 	if( *pnt == '`' ) pnt++;
 	if( *pnt == '"' ) pnt++;
 	continue;
@@ -147,7 +147,7 @@ static struct condition * parse_if(char * pnt)
 	pnt++;
 	while(*pnt && *pnt != '"') *pnt1++ = *pnt++;
 	*pnt1++ = '\0';
-	cpnt->variable = strdup(varname);
+	cpnt->variable.str = strdup(varname);
 	if( *pnt == '"' ) pnt++;
 	continue;
       }
@@ -156,7 +156,7 @@ static struct condition * parse_if(char * pnt)
     pnt1 = varname;
     while(*pnt && *pnt != '"') *pnt1++ = *pnt++;
     *pnt1++ = '\0';
-    cpnt->variable = strdup(varname);
+    cpnt->variable.str = strdup(varname);
     if( *pnt == '"' ) pnt++;
     continue;
   }

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 5.36  Mar 30, 1996
+ *  linux/drivers/block/ide.c	Version 5.37  Apr 6, 1996
  *
  *  Copyright (C) 1994-1996  Linus Torvalds & authors (see below)
  */
@@ -224,6 +224,7 @@
  * Version 5.35		cosmetic changes
  *			fix cli() problem in try_to_identify()
  * Version 5.36		fixes to optional PCMCIA support
+ * Version 5.37		don't use DMA when "noautotune" is specified
  *
  *  Some additional driver compile-time options are in ide.h
  *
@@ -2207,9 +2208,10 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 					drive->media = ide_tape;
 					drive->present = 1;
 					drive->removeable = 1;
-					if (HWIF(drive)->dmaproc != NULL &&
-					    !HWIF(drive)->dmaproc(ide_dma_check, drive))
-						printk(", DMA");
+					if (drive->autotune != 2 && HWIF(drive)->dmaproc != NULL) {
+						if (!HWIF(drive)->dmaproc(ide_dma_check, drive))
+							printk(", DMA");
+					}
 					printk("\n");
 				}
 				else {
@@ -2309,7 +2311,7 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 		if (drive->mult_req || ((id->multsect_valid & 1) && id->multsect))
 			drive->special.b.set_multmode = 1;
 	}
-	if (HWIF(drive)->dmaproc != NULL) {	/* hwif supports DMA? */
+	if (drive->autotune != 2 && HWIF(drive)->dmaproc != NULL) {
 		if (!(HWIF(drive)->dmaproc(ide_dma_check, drive)))
 			printk(", DMA");
 	}

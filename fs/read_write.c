@@ -114,7 +114,7 @@ asmlinkage int sys_read(unsigned int fd,char * buf,unsigned int count)
 		return -EINVAL;
 	if (!count)
 		return 0;
-	error = locks_verify(FLOCK_VERIFY_READ,inode,file,file->f_pos,count);
+	error = locks_verify_area(FLOCK_VERIFY_READ,inode,file,file->f_pos,count);
 	if (error)
 		return error;
 	error = verify_area(VERIFY_WRITE,buf,count);
@@ -138,7 +138,7 @@ asmlinkage int sys_write(unsigned int fd,char * buf,unsigned int count)
 		return -EINVAL;
 	if (!count)
 		return 0;
-	error = locks_verify(FLOCK_VERIFY_WRITE,inode,file,file->f_pos,count);
+	error = locks_verify_area(FLOCK_VERIFY_WRITE,inode,file,file->f_pos,count);
 	if (error)
 		return error;
 	error = verify_area(VERIFY_READ,buf,count);
@@ -227,8 +227,8 @@ static int do_readv_writev(int type, struct inode * inode, struct file * file,
 			return retval;
 	}
 
-	retval = locks_verify(type == VERIFY_READ ? FLOCK_VERIFY_READ : FLOCK_VERIFY_WRITE,
-			      inode, file, file->f_pos, tot_len);
+	retval = locks_verify_area(type == VERIFY_READ ? FLOCK_VERIFY_READ : FLOCK_VERIFY_WRITE,
+				   inode, file, file->f_pos, tot_len);
 	if (retval)
 		return retval;
 

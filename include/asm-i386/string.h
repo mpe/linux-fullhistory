@@ -406,6 +406,24 @@ extern inline void * __constant_memcpy(void * to, const void * from, size_t n)
 			*(unsigned long *)to = *(const unsigned long *)from;
 			*(1+(unsigned long *)to) = *(1+(const unsigned long *)from);
 			return to;
+		case 12:
+			*(unsigned long *)to = *(const unsigned long *)from;
+			*(1+(unsigned long *)to) = *(1+(const unsigned long *)from);
+			*(2+(unsigned long *)to) = *(2+(const unsigned long *)from);
+			return to;
+		case 16:
+			*(unsigned long *)to = *(const unsigned long *)from;
+			*(1+(unsigned long *)to) = *(1+(const unsigned long *)from);
+			*(2+(unsigned long *)to) = *(2+(const unsigned long *)from);
+			*(3+(unsigned long *)to) = *(3+(const unsigned long *)from);
+			return to;
+		case 20:
+			*(unsigned long *)to = *(const unsigned long *)from;
+			*(1+(unsigned long *)to) = *(1+(const unsigned long *)from);
+			*(2+(unsigned long *)to) = *(2+(const unsigned long *)from);
+			*(3+(unsigned long *)to) = *(3+(const unsigned long *)from);
+			*(4+(unsigned long *)to) = *(4+(const unsigned long *)from);
+			return to;
 	}
 #define COMMON(x) \
 __asm__("cld\n\t" \

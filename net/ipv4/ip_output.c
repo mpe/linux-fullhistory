@@ -21,6 +21,8 @@
  *	Fixes:
  *		Alan Cox	:	Missing nonblock feature in ip_build_xmit.
  *		Mike Kilburn	:	htons() missing in ip_build_xmit.
+ *		Bradford Johnson:	Fix faulty handling of some frames when 
+ *					no route is found.
  */
 
 #include <asm/segment.h>
@@ -168,7 +170,7 @@ static int ip_send_room(struct rtable * rt, struct sk_buff *skb, __u32 daddr, in
 #endif
 			skb->arp = 0;
 			skb->raddr = daddr;
-			return -dev->hard_header_len;
+			return dev->hard_header_len;
 		}
 		mac = dev->hard_header(skb, dev, ETH_P_IP, NULL, NULL, len);
 		if (mac < 0)
@@ -265,7 +267,7 @@ int ip_build_header(struct sk_buff *skb, __u32 saddr, __u32 daddr,
 
 	skb->dev = *dev;
 	skb->saddr = saddr;
-
+	
 	/*
 	 *	Now build the IP header.
 	 */

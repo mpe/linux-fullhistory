@@ -96,6 +96,9 @@
 #ifdef CONFIG_IP_ALIAS
 #include <net/ip_alias.h>
 #endif
+#ifdef CONFIG_BRIDGE
+#include <net/br.h>
+#endif
 #ifdef CONFIG_KERNELD
 #include <linux/kerneld.h>
 #endif
@@ -1276,6 +1279,14 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCGIFSLAVE:
 			return(dev_ioctl(cmd,(void *) arg));
 
+		case SIOCGIFBR:
+		case SIOCSIFBR:
+#ifdef CONFIG_BRIDGE		
+			return(br_ioctl(cmd,(void *) arg));
+#else
+			return -ENOPKG;
+#endif						
+			
 		default:
 			if ((cmd >= SIOCDEVPRIVATE) &&
 			   (cmd <= (SIOCDEVPRIVATE + 15)))

@@ -31,6 +31,12 @@
 
 /*
  * $Log: NCR5380.c,v $
+ * Revision 1.7  1996/3/2	Ray Van Tassle (rayvt@comm.mot.com)
+ * added proc_info
+ * added support needed for DTC 3180/3280
+ * fixed a couple of bugs
+ *
+
  * Revision 1.5  1994/01/19  09:14:57  drew
  * Fixed udelay() hack that was being used on DATAOUT phases
  * instead of a proper wait for the final handshake.
@@ -203,6 +209,9 @@
  * DIFFERENTIAL - if defined, NCR53c81 chips will use external differential
  * 	transceivers. 
  *
+ * DONT_USE_INTR - if defined, never use interrupts, even if we probe or
+ *	override-configure an IRQ.
+ *
  * LIMIT_TRANSFERSIZE - if defined, limit the pseudo-dma transfers to 512
  *	bytes at a time.  Since interrupts are disabled by default during
  *	these transfers, we might need this to give reasonable interrupt
@@ -242,8 +251,8 @@
  * USLEEP_POLL - amount of time, in jiffies, to poll
  *
  * These macros MUST be defined :
- * NCR5380_local_declare() - declare any local variables needed for your transfer
- *	routines.
+ * NCR5380_local_declare() - declare any local variables needed for your
+ * 	transfer routines.
  *
  * NCR5380_setup(instance) - initialize any local variables needed from a given
  *	instance of the host adapter for NCR5380_{read,write,pread,pwrite}
@@ -279,6 +288,7 @@
  * NCR5380_queue_command
  * NCR5380_reset
  * NCR5380_abort
+ * NCR5380_proc_info
  *
  * to be the global entry points into the specific driver, ie 
  * #define NCR5380_queue_command t128_queue_command.
@@ -724,10 +734,9 @@ static void NCR5380_print_options (struct Scsi_Host *instance) {
  */
 
 static void NCR5380_print_status (struct Scsi_Host *instance) {
-    struct NCR5380_hostdata *hostdata = (struct NCR5380_hostdata *) 
-	instance->hostdata;
-    Scsi_Cmnd *ptr;
-
+   char pr_bfr[256];
+   char *start;
+   int len;
 
     printk("NCR5380 : coroutine is%s running.\n",
 	main_running ? "" : "n't");
@@ -737,27 +746,144 @@ static void NCR5380_print_status (struct Scsi_Host *instance) {
     NCR5380_print_phase (instance);
 #endif
 
+   len = NCR5380_proc_info(pr_bfr, &start, 0, sizeof(pr_bfr),
+			instance->host_no, 0);
+   pr_bfr[len] = 0;
+   printk("\n%s\n", pr_bfr);
+  }
+
+/******************************************/
+/*
+ * /proc/scsi/[dtc pas16 t128 generic]/[0-ASC_NUM_BOARD_SUPPORTED]
+ *
+ * *buffer: I/O buffer
+ * **start: if inout == FALSE pointer into buffer where user read should start
+ * offset: current offset
+ * length: length of buffer
+ * hostno: Scsi_Host host_no
+ * inout: TRUE - user is writing; FALSE - user is reading
+ *
+ * Return the number of bytes read from or written
+*/
+
+#undef SPRINTF
+#define SPRINTF(args...) do { if(pos < buffer + length) pos += sprintf(pos, ## args); } while(0)
+static
+char *lprint_Scsi_Cmnd (Scsi_Cmnd *cmd, char *pos, char *buffer, int length);
+static
+char *lprint_command (unsigned char *cmd, char *pos, char *buffer, int len);
+static
+char *lprint_opcode(int opcode, char *pos, char *buffer, int length);
+
+#ifndef NCR5380_proc_info
+static
+#endif
+int NCR5380_proc_info (
+     char *buffer, char **start,off_t offset,
+     int length,int hostno,int inout)
+{
+   char *pos = buffer;
+   struct Scsi_Host *instance;
+   struct NCR5380_hostdata *hostdata;
+   Scsi_Cmnd *ptr;
+
+   for (instance = first_instance; instance &&
+        instance->host_no != hostno; instance=instance->next)
+        ;
+   if (!instance)
+      return(-ESRCH);
+   hostdata = (struct NCR5380_hostdata *)instance->hostdata;
+
+   if (inout) { /* Has data been written to the file ? */
+#ifdef DTC_PUBLIC_RELEASE
+        dtc_wmaxi = dtc_maxi = 0;
+#endif
+#ifdef PAS16_PUBLIC_RELEASE
+        pas_wmaxi = pas_maxi = 0;
+#endif
+      return(-ENOSYS);  /* Currently this is a no-op */
+   }
+   SPRINTF("NCR5380 core release=%d.   ", NCR5380_PUBLIC_RELEASE);
+   if (((struct NCR5380_hostdata *)instance->hostdata)->flags & FLAG_NCR53C400)
+        SPRINTF("ncr53c400 release=%d.  ", NCR53C400_PUBLIC_RELEASE);
+#ifdef DTC_PUBLIC_RELEASE
+   SPRINTF("DTC 3180/3280 release %d", DTC_PUBLIC_RELEASE);
+#endif
+#ifdef T128_PUBLIC_RELEASE
+   SPRINTF("T128 release %d", T128_PUBLIC_RELEASE);
+#endif
+#ifdef GENERIC_NCR5380_PUBLIC_RELEASE
+   SPRINTF("Generic5380 release %d", GENERIC_NCR5380_PUBLIC_RELEASE);
+#endif
+#ifdef PAS16_PUBLIC_RELEASE
+SPRINTF("PAS16 release=%d", PAS16_PUBLIC_RELEASE);
+#endif
+
+   SPRINTF("\nBase Addr: 0x%05X    ", (int)instance->base);
+   SPRINTF("io_port: %04x      ", (int)instance->io_port);
+   if (instance->irq == IRQ_NONE)
+      SPRINTF("IRQ: None.\n");
+   else
+      SPRINTF("IRQ: %d.\n", instance->irq);
+
+#ifdef DTC_PUBLIC_RELEASE
+   SPRINTF("Highwater I/O busy_spin_counts -- write: %d  read: %d\n",
+        dtc_wmaxi, dtc_maxi);
+#endif
+#ifdef PAS16_PUBLIC_RELEASE
+   SPRINTF("Highwater I/O busy_spin_counts -- write: %d  read: %d\n",
+        pas_wmaxi, pas_maxi);
+#endif
     cli();
-    if (!hostdata->connected) {
-	printk ("scsi%d: no currently connected command\n",
-	    instance->host_no);
-    } else {
-	print_Scsi_Cmnd ((Scsi_Cmnd *) hostdata->connected);
-    }
+    SPRINTF("NCR5380 : coroutine is%s running.\n", main_running ? "" : "n't");
+    if (!hostdata->connected)
+      SPRINTF("scsi%d: no currently connected command\n", instance->host_no);
+   else
+      pos = lprint_Scsi_Cmnd ((Scsi_Cmnd *) hostdata->connected,
+        pos, buffer, length);
+   SPRINTF("scsi%d: issue_queue\n", instance->host_no);
+   for (ptr = (Scsi_Cmnd *) hostdata->issue_queue; ptr;
+        ptr = (Scsi_Cmnd *) ptr->host_scribble)
+        pos = lprint_Scsi_Cmnd (ptr, pos, buffer, length);
 
-    printk ("scsi%d: issue_queue\n", instance->host_no);
+   SPRINTF("scsi%d: disconnected_queue\n", instance->host_no);
+   for (ptr = (Scsi_Cmnd *) hostdata->disconnected_queue; ptr;
+        ptr = (Scsi_Cmnd *) ptr->host_scribble)
+        pos = lprint_Scsi_Cmnd (ptr, pos, buffer, length);
 
-    for (ptr = (Scsi_Cmnd *) hostdata->issue_queue; ptr; 
-	ptr = (Scsi_Cmnd *) ptr->host_scribble) 
-	print_Scsi_Cmnd (ptr);
+   sti();
+   *start=buffer;
+  if (pos - buffer < offset)
+    return 0;
+  else if (pos - buffer - offset < length)
+    return pos - buffer - offset;
+  return length;
+}
 
-    printk ("scsi%d: disconnected_queue\n", instance->host_no);
+static 
+char *lprint_Scsi_Cmnd (Scsi_Cmnd *cmd, char *pos, char *buffer, int length) {
+   SPRINTF("scsi%d : destination target %d, lun %d\n",
+        cmd->host->host_no, cmd->target, cmd->lun);
+   SPRINTF("        command = ");
+   pos = lprint_command (cmd->cmnd, pos, buffer, length);
+   return (pos);
+}
 
-    for (ptr = (Scsi_Cmnd *) hostdata->disconnected_queue; ptr; 
-	ptr = (Scsi_Cmnd *) ptr->host_scribble) 
-	print_Scsi_Cmnd (ptr);
-    
-    sti();
+static 
+char *lprint_command (unsigned char *command,
+     char *pos, char *buffer, int length) {
+   int i, s;
+   pos = lprint_opcode(command[0], pos, buffer, length);
+   for ( i = 1, s = COMMAND_SIZE(command[0]); i < s; ++i)
+      SPRINTF("%02x ", command[i]);
+   SPRINTF("\n");
+   return(pos);
+}
+
+static 
+char *lprint_opcode(int opcode, char *pos, char *buffer, int length) {
+   SPRINTF("%2d (0x%02x)", opcode, opcode);
+   return(pos);
 }
 
 
@@ -926,7 +1052,6 @@ int NCR5380_queue_command (Scsi_Cmnd *cmd, void (*done)(Scsi_Cmnd *)) {
 
 #if (NDEBUG & NDEBUG_NO_WRITE)
     switch (cmd->cmnd[0]) {
-    case WRITE:
     case WRITE_6:
     case WRITE_10:
 	printk("scsi%d : WRITE attempted with NO_WRITE debugging flag set\n",
@@ -1152,6 +1277,7 @@ static void NCR5380_main (void) {
     main_running = 0;
 }
 
+#ifndef DONT_USE_INTR
 /*
  * Function : void NCR5380_intr (int irq)
  * 
@@ -1263,6 +1389,7 @@ static void NCR5380_intr (int irq, void *dev_id, struct pt_regs * regs) {
 	    } /* if (instance->irq == irq) */
     } while (!done);
 }
+#endif
 
 #ifdef NCR5380_STATS
 static void collect_stats(struct NCR5380_hostdata* hostdata, Scsi_Cmnd* cmd)
@@ -2071,6 +2198,9 @@ static int NCR5380_transfer_dma (struct Scsi_Host *instance,
     return 0;
 #else /* defined(REAL_DMA_POLL) */
     if (p & SR_IO) {
+#ifdef DMA_WORKS_RIGHT
+        foo = NCR5380_pread(instance, d, c);
+#else
 	int diff = 1;
 	if (hostdata->flags & FLAG_NCR53C400) {
 	    diff=0;
@@ -2106,8 +2236,12 @@ static int NCR5380_transfer_dma (struct Scsi_Host *instance,
 		d[c - 1] = NCR5380_read(INPUT_DATA_REG);
 	    }
 	}
+#endif
     } else {
-	int timeout;
+#ifdef DMA_WORKS_RIGHT
+        foo = NCR5380_pwrite(instance, d, c);
+#else
+        int timeout;
 #if (NDEBUG & NDEBUG_C400_PWRITE)
 	printk("About to pwrite %d bytes\n", c);
 #endif
@@ -2164,6 +2298,7 @@ static int NCR5380_transfer_dma (struct Scsi_Host *instance,
 	    udelay (5);
 #endif
 	}
+#endif
     }
 
     NCR5380_write(MODE_REG, MR_BASE);
@@ -2316,6 +2451,10 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance) {
 		    !(hostdata->flags & FLAG_NO_PSEUDO_DMA) &&
 		    cmd->SCp.this_residual && !(cmd->SCp.this_residual % 
 		    transfersize)) {
+                    /* Limit transfers to 32K, for xx400 & xx406
+                     * pseudoDMA that transfers in 128 bytes blocks. */
+                    if (transfersize > 32*1024)
+                         transfersize = 32*1024;
 #endif
 		    len = transfersize;
 		    if (NCR5380_transfer_dma(instance, &phase,

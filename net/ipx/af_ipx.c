@@ -2201,11 +2201,11 @@ static int ipx_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 				return -EPERM;
 			return(ipxrtr_ioctl(cmd,(void *)arg));
 		case SIOCSIFADDR:
-		case SIOCGIFADDR:
 		case SIOCAIPXITFCRT:
 		case SIOCAIPXPRISLT:
 			if(!suser())
 				return -EPERM;
+		case SIOCGIFADDR:
 			return(ipxitf_ioctl(cmd,(void *)arg));
 		case SIOCIPXCFGDATA: 
 		{
@@ -2378,6 +2378,9 @@ ipx_proto_finito(void)
 
 	unregister_snap_client(ipx_snap_id);
 	pSNAP_datalink = NULL;
+
+	unregister_8022tr_client(ipx_8022_type);
+	p8022tr_datalink = NULL;
 
 	unregister_8022_client(ipx_8022_type);
 	p8022_datalink = NULL;

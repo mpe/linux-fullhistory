@@ -107,9 +107,9 @@ asmlinkage int sys_truncate(const char * path, unsigned long length)
 		iput(inode);
 		return error;
 	}
-	error = locks_verify(FLOCK_VERIFY_WRITE, inode, NULL,
-			     length < inode->i_size ? length : inode->i_size,
-			     abs(inode->i_size - length));
+	error = locks_verify_area(FLOCK_VERIFY_WRITE, inode, NULL,
+				  length < inode->i_size ? length : inode->i_size,
+				  abs(inode->i_size - length));
 	if (error)
 		return error;
 	error = do_truncate(inode, length);
@@ -132,9 +132,9 @@ asmlinkage int sys_ftruncate(unsigned int fd, unsigned long length)
 		return -EACCES;
 	if (IS_IMMUTABLE(inode) || IS_APPEND(inode))
 		return -EPERM;
-	error = locks_verify(FLOCK_VERIFY_WRITE, inode, file,
-			     length < inode->i_size ? length : inode->i_size,
-			     abs(inode->i_size - length));
+	error = locks_verify_area(FLOCK_VERIFY_WRITE, inode, file,
+				  length < inode->i_size ? length : inode->i_size,
+				  abs(inode->i_size - length));
 	if (error)
 		return error;
 	return do_truncate(inode, length);

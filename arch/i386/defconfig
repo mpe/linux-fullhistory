@@ -74,6 +74,7 @@ CONFIG_SKB_LARGE=y
 # CONFIG_IPX is not set
 # CONFIG_ATALK is not set
 # CONFIG_AX25 is not set
+# CONFIG_BRIDGE is not set
 # CONFIG_NETLINK is not set
 
 #
@@ -89,6 +90,7 @@ CONFIG_DUMMY=m
 # CONFIG_SLIP is not set
 # CONFIG_PPP is not set
 # CONFIG_STRIP is not set
+# CONFIG_WIC is not set
 # CONFIG_SCC is not set
 # CONFIG_PLIP is not set
 # CONFIG_EQUALIZER is not set

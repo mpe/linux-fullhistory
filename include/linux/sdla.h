@@ -5,7 +5,7 @@
  *
  *		Global definitions for the Frame relay interface.
  *
- * Version:	@(#)if_ifrad.h	0.10	23 Mar 96
+ * Version:	@(#)if_ifrad.h	0.15	31 Mar 96
  *
  * Author:	Mike McLagan <mike.mclagan@linux.org>
  *
@@ -64,12 +64,15 @@ struct sdla_mem {
 #define SDLA_CONF_ADDR			0x0010
 #define SDLA_S502A_NMIADDR		0x0066
 #define SDLA_CODE_BASEADDR		0x0100
+#define SDLA_WINDOW_SIZE		0x2000
+#define SDLA_ADDR_MASK			0x1FFF
 
 /* largest handlable block of data */
 #define SDLA_MAX_DATA			4080
 #define SDLA_MAX_MTU			4072	/* MAX_DATA - sizeof(fradhdr) */
 #define SDLA_MAX_DLCI			24
 
+/* this should be the same as frad_conf */
 struct sdla_conf {
    short station;
    short config;
@@ -89,7 +92,8 @@ struct sdla_conf {
    short Be_bwd;
 };
 
-struct sdla_dlci {
+/* this should be the same as dlci_conf */
+struct sdla_dlci_conf {
    short config;
    short CIR_fwd;
    short Bc_fwd;
@@ -97,8 +101,6 @@ struct sdla_dlci {
    short CIR_bwd;
    short Bc_bwd;
    short Be_bwd; 
-
-/* these are part of the status READ */
    short Tc_fwd;
    short Tc_bwd;
    short Tf_max;
@@ -203,7 +205,7 @@ void sdla(void *cfg_info, char *dev, struct frad_conf *conf, int quiet);
 #define SDLA_RET_NO_DATA		0x05
 #define SDLA_RET_BUF_OVERSIZE		0x06
 #define SDLA_RET_CIR_OVERFLOW		0x07
-#define SDLA_RET_NO_BUFF		0x08
+#define SDLA_RET_NO_BUFS		0x08
 #define SDLA_RET_TIMEOUT		0x0A
 #define SDLA_RET_MODEM			0x10
 #define SDLA_RET_CHANNEL_OFF		0x11

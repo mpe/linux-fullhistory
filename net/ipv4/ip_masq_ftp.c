@@ -112,7 +112,7 @@ masq_ftp_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
 		if (n_ms==NULL)
 			return 0;
 
-                ip_masq_set_expire(n_ms, MASQUERADE_EXPIRE_TCP_FIN);
+                ip_masq_set_expire(n_ms, ip_masq_expire->tcp_fin_timeout);
                 
 		/*
 		 * Replace the old PORT with the new one

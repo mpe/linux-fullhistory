@@ -5,7 +5,8 @@
  *	Authors:	Dave Bonn (for IP)
  *	much hacked by:	Alan Cox
  */
- 
+
+#include <linux/module.h> 
 #include <linux/skbuff.h>
 #include <linux/firewall.h>
 
@@ -145,9 +146,20 @@ int call_out_firewall(int pf, struct device *dev, void *phdr)
 	return firewall_policy[pf];
 }
 
+static struct symbol_table firewall_syms = {
+#include <linux/symtab_begin.h>
+	X(register_firewall),
+	X(unregister_firewall),
+	X(call_in_firewall),
+	X(call_out_firewall),
+	X(call_fw_firewall),
+#include <linux/symtab_end.h>
+};
+
 void fwchain_init(void)
 {
 	int i;
 	for(i=0;i<NPROTO;i++)
 		firewall_policy[i]=FW_ACCEPT;
+	register_symtab(&firewall_syms);
 }

@@ -7,7 +7,7 @@
  * 	drew@colorado.edu
  *      +1 (303) 666-5836
  *
- * DISTRIBUTION RELEASE 6
+ * DISTRIBUTION RELEASE 7
  *
  * For more information, please consult 
  *
@@ -28,7 +28,7 @@
 #ifndef NCR5380_H
 #define NCR5380_H
 
-#define NCR5380_PUBLIC_RELEASE 6
+#define NCR5380_PUBLIC_RELEASE 7
 #define NCR53C400_PUBLIC_RELEASE 2
 
 #define NDEBUG_ARBITRATION	0x1
@@ -284,7 +284,9 @@ static int NCR5380_probe_irq (struct Scsi_Host *instance, int possible);
 #endif
 static void NCR5380_init (struct Scsi_Host *instance, int flags);
 static void NCR5380_information_transfer (struct Scsi_Host *instance);
+#ifndef DONT_USE_INTR
 static void NCR5380_intr (int irq, void *dev_id, struct pt_regs * regs);
+#endif
 static void NCR5380_main (void);
 static void NCR5380_print_options (struct Scsi_Host *instance);
 static void NCR5380_print_phase (struct Scsi_Host *instance);

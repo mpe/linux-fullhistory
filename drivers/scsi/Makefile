@@ -251,6 +251,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_DTC3280),y)
+L_OBJS += dtc.o
+else
+  ifeq ($(CONFIG_SCSI_DTC3280),m)
+  M_OBJS += dtc.o
+  endif
+endif
+
 ifeq ($(CONFIG_SCSI_ULTRASTOR),y)
 L_OBJS += ultrastor.o
 else

@@ -1,8 +1,8 @@
 /* eepro.c: Intel EtherExpress Pro/10 device driver for Linux. */
 /*
-	Written 1994, 1995 by Bao C. Ha.
+	Written 1994, 1995,1996 by Bao C. Ha.
 
-	Copyright (C) 1994, 1995 by Bao C. Ha.
+	Copyright (C) 1994, 1995,1996 by Bao C. Ha.
 
 	This software may be used and distributed
 	according to the terms of the GNU Public License,
@@ -24,8 +24,12 @@
 	If you have a problem of not detecting the 82595 during a
 	reboot (warm reset), disable the FLASH memory should fix it.
 	This is a compatibility hardware problem.
-	
+
 	Versions:
+
+	0.08	Implement 32-bit I/O for the 82595TX and 82595FX
+		based lan cards.  Disable full-duplex mode if TPE
+		is not used.  (BCH, 4/8/96)
 
 	0.07a	Fix a stat report which counts every packet as a
 		heart-beat failure. (BCH, 6/3/95)
@@ -52,7 +56,7 @@
 */
 
 static const char *version =
-	"eepro.c: v0.07a 6/5/95 Bao C. Ha (bao@saigon.async.com)\n";
+	"eepro.c: v0.08 4/8/96 Bao C. Ha (bao.ha@srs.gov)\n";
 
 #include <linux/module.h>
 
@@ -69,8 +73,9 @@ static const char *version =
 	provided by Donald Becker.  I also borrowed the EEPROM routine from
 	Donald Becker's 82586 driver.
 
-	Datasheet for the Intel 82595. It provides just enough info that 
-	the casual reader might think that it documents the i82595.
+	Datasheet for the Intel 82595 (including the TX and FX version). It 
+	provides just enough info that the casual reader might think that it 
+	documents the i82595.
 
 	The User Manual for the 82595.  It provides a lot of the missing
 	information.
@@ -112,6 +117,11 @@ static unsigned int net_debug = NET_DEBUG;
 /* The number of low I/O ports used by the ethercard. */
 #define EEPRO_IO_EXTENT	16
 
+/* Different 82595 chips */
+#define	LAN595		0
+#define	LAN595TX	1
+#define	LAN595FX	2
+
 /* Information that need to be kept for each board. */
 struct eepro_local {
 	struct enet_statistics stats;
@@ -121,6 +131,9 @@ struct eepro_local {
 	unsigned tx_end;   /* end of the transmit chain (plus 1) */
 	int eepro;	/* a flag, TRUE=1 for the EtherExpress Pro/10,
 			   FALSE = 0 for other 82595-based lan cards. */
+	int version;	/* a flag to indicate if this is a TX or FX
+				   version of the 82595 chip. */
+	int stepping;
 };
 
 /* The station (ethernet) address prefix, used for IDing the board. */
@@ -219,11 +232,13 @@ allowing up to 8K worth of packets to be queued.
 #define	TX_MASK		0x04
 #define	EXEC_MASK	0x08
 #define	ALL_MASK	0x0f
+#define	IO_32_BIT	0x10
 #define	RCV_BAR		0x04	/* The following are word (16-bit) registers */
 #define	RCV_STOP	0x06
 #define	XMT_BAR		0x0a
 #define	HOST_ADDRESS_REG	0x0c
 #define	IO_PORT		0x0e
+#define	IO_PORT_32_BIT	0x0c
 
 /* Bank 1 registers */
 #define	REG1	0x01
@@ -245,6 +260,9 @@ allowing up to 8K worth of packets to be queued.
 #define	REG3		0x03
 #define	TPE_BIT		0x04
 #define	BNC_BIT		0x20
+#define	REG13		0x0d
+#define	FDX		0x00
+#define	A_N_ENABLE	0x02
 	
 #define	I_ADD_REG0	0x04
 #define	I_ADD_REG1	0x05
@@ -497,7 +515,7 @@ static int	eepro_grab_irq(struct device *dev)
 static int
 eepro_open(struct device *dev)
 {
-	unsigned short temp_reg;
+	unsigned short temp_reg, old8, old9;
 	int i, ioaddr = dev->base_addr;
 	struct eepro_local *lp = (struct eepro_local *)dev->priv;
 
@@ -524,6 +542,12 @@ eepro_open(struct device *dev)
 
 	outb(BANK2_SELECT, ioaddr); /* be CAREFUL, BANK 2 now */
 	temp_reg = inb(ioaddr + EEPROM_REG);
+
+	lp->stepping = temp_reg >> 5;	/* Get the stepping number of the 595 */
+	
+	if (net_debug > 3)
+		printk("The stepping of the 82595 is %d\n", lp->stepping);
+
 	if (temp_reg & 0x10) /* Check the TurnOff Enable bit */
 		outb(temp_reg & 0xef, ioaddr + EEPROM_REG);
 	for (i=0; i < 6; i++) 
@@ -569,6 +593,40 @@ eepro_open(struct device *dev)
 
 	/* Initialize XMT */
 	outw(XMT_LOWER_LIMIT << 8, ioaddr + XMT_BAR); 
+
+	/* Check for the i82595TX and i82595FX */
+	old8 = inb(ioaddr + 8);
+	outb(~old8, ioaddr + 8);
+	if ((temp_reg = inb(ioaddr + 8)) == old8) {
+		if (net_debug > 3)
+			printk("i82595 detected!\n");
+		lp->version = LAN595;
+	}
+	else {
+		lp->version = LAN595TX;
+		outb(old8, ioaddr + 8);
+		old9 = inb(ioaddr + 9);
+		outb(~old9, ioaddr + 9);
+		if ((temp_reg = inb(ioaddr + 9)) == ~old9) {
+			enum iftype { AUI=0, BNC=1, TPE=2 };
+			if (net_debug > 3)
+				printk("i82595FX detected!\n");
+			lp->version = LAN595FX;
+			outb(old9, ioaddr + 9);
+			if (dev->if_port != TPE) {	/* Hopefully, this will fix the
+							problem of using Pentiums and
+							pro/10 w/ BNC. */
+				outb(BANK2_SELECT, ioaddr); /* be CAREFUL, BANK 2 now */
+				temp_reg = inb(ioaddr + REG13);
+				/* disable the full duplex mode since it is not
+				applicable with the 10Base2 cable. */
+				outb(temp_reg & ~(FDX | A_N_ENABLE), REG13);
+				outb(BANK0_SELECT, ioaddr); /* be CAREFUL, BANK 0 now */
+			}
+		}
+		else if (net_debug > 3)
+			printk("i82595TX detected!\n");
+	}
 	
 	outb(SEL_RESET_CMD, ioaddr);
 	/* We are supposed to wait for 2 us after a SEL_RESET */
@@ -954,19 +1012,19 @@ hardware_send_packet(struct device *dev, void *buf, short length)
 		   service routines. */
 		outb(ALL_MASK, ioaddr + INT_MASK_REG);
 
-		if (((((length + 1) >> 1) << 1) + 2*XMT_HEADER) 
+		if (((((length + 3) >> 1) << 1) + 2*XMT_HEADER) 
 			>= tx_available)   /* No space available ??? */
 			continue;
 
 		last = lp->tx_end;
-		end = last + (((length + 1) >> 1) << 1) + XMT_HEADER;
+		end = last + (((length + 3) >> 1) << 1) + XMT_HEADER;
 
 		if (end >= RAM_SIZE) { /* the transmit buffer is wrapped around */
 			if ((RAM_SIZE - last) <= XMT_HEADER) {	
 			/* Arrrr!!!, must keep the xmt header together,
 			  several days were lost to chase this one down. */
 				last = RCV_RAM;
-				end = last + (((length + 1) >> 1) << 1) + XMT_HEADER;
+				end = last + (((length + 3) >> 1) << 1) + XMT_HEADER;
 			}	
 			else end = RCV_RAM + (end - RAM_SIZE);
 		}
@@ -976,7 +1034,15 @@ hardware_send_packet(struct device *dev, void *buf, short length)
 		outw(0, ioaddr + IO_PORT);
 		outw(end, ioaddr + IO_PORT);
 		outw(length, ioaddr + IO_PORT);
-		outsw(ioaddr + IO_PORT, buf, (length + 1) >> 1);
+
+		if (lp->version == LAN595)
+			outsw(ioaddr + IO_PORT, buf, (length + 3) >> 1);
+		else {	/* LAN595TX or LAN595FX, capable of 32-bit I/O processing */
+			unsigned short temp = inb(ioaddr + INT_MASK_REG);
+			outb(temp | IO_32_BIT, ioaddr + INT_MASK_REG);
+			outsl(ioaddr + IO_PORT_32_BIT, buf, (length + 3) >> 2);
+			outb(temp & ~(IO_32_BIT), ioaddr + INT_MASK_REG);
+		}
 
 		if (lp->tx_start != lp->tx_end) { 
 			/* update the next address and the chain bit in the 
@@ -1046,7 +1112,7 @@ eepro_rx(struct device *dev)
 			struct sk_buff *skb;
 
 			rcv_size &= 0x3fff;
-			skb = dev_alloc_skb(rcv_size+2);
+			skb = dev_alloc_skb(rcv_size+5);
 			if (skb == NULL) {
 				printk("%s: Memory squeeze, dropping packet.\n", dev->name);
 				lp->stats.rx_dropped++;
@@ -1055,7 +1121,15 @@ eepro_rx(struct device *dev)
 			skb->dev = dev;
 			skb_reserve(skb,2);
 
-			insw(ioaddr+IO_PORT, skb_put(skb,rcv_size), (rcv_size + 1) >> 1);
+			if (lp->version == LAN595)
+				insw(ioaddr+IO_PORT, skb_put(skb,rcv_size), (rcv_size + 3) >> 1);
+			else {	/* LAN595TX or LAN595FX, capable of 32-bit I/O processing */
+				unsigned short temp = inb(ioaddr + INT_MASK_REG);
+				outb(temp | IO_32_BIT, ioaddr + INT_MASK_REG);
+				insl(ioaddr+IO_PORT_32_BIT, skb_put(skb,rcv_size), (rcv_size + 3) >> 2);
+				outb(temp & ~(IO_32_BIT), ioaddr + INT_MASK_REG);
+			}
+
 	
 			skb->protocol = eth_type_trans(skb,dev);	
 			netif_rx(skb);

@@ -124,6 +124,7 @@ struct ip_fw
 #define IP_FW_ZERO		(IP_FW_BASE_CTL+4)
 #define IP_FW_POLICY		(IP_FW_BASE_CTL+5)
 #define IP_FW_CHECK		(IP_FW_BASE_CTL+6)
+#define IP_FW_MASQ_TIMEOUTS	(IP_FW_BASE_CTL+7)
 
 #define IP_FW_INSERT_FWD	(IP_FW_INSERT | (IP_FW_FWD << IP_FW_SHIFT))
 #define IP_FW_APPEND_FWD	(IP_FW_APPEND | (IP_FW_FWD << IP_FW_SHIFT))
@@ -166,6 +167,12 @@ struct ip_fwpkt
 	struct in_addr fwp_via;			/* interface address */
 	char           fwp_vianame[IFNAMSIZ];	/* interface name */
 };
+
+/*
+ * timeouts for ip masquerading
+ */
+
+struct ip_fw_masq;
 
 /*
  *	Main firewall chains definitions and global var's definitions.

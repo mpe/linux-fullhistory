@@ -109,5 +109,4 @@ struct iphdr {
 	/*The options start here. */
 };
 
-
 #endif	/* _LINUX_IP_H */

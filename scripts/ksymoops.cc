@@ -95,7 +95,7 @@ class NameList
   private:
     // Caution: Fixed Allocation!
     // This should suffice for awhile since 1.1.86 has only 2482 symbols.
-    KSym ksyms_0_[4096];
+    KSym ksyms_0_[8000];
     int cardinality_;
 
   public:

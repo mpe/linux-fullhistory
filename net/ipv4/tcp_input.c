@@ -184,7 +184,7 @@ static void bad_tcp_sequence(struct sock *sk, struct tcphdr *th, short len,
 	 *
 	 *	We also should be spotting triple bad sequences.
 	 */
-	tcp_send_ack(sk->sent_seq, sk->acked_seq, sk, th, saddr);
+	tcp_send_ack(sk);
 	return;
 }
 
@@ -733,7 +733,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 		 *	Was it a usable window open ?
 		 */
 		 
-  		if (skb_peek(&sk->write_queue) != NULL &&   /* should always be non-null */
+  		if (!skb_queue_empty(&sk->write_queue) &&   /* should always be true */
 		    ! before (sk->window_seq, sk->write_queue.next->end_seq)) 
 		{
 			sk->backoff = 0;
@@ -1204,8 +1204,7 @@ static inline u32 tcp_queue_ack(struct sk_buff * skb, struct sock * sk)
 	return skb->end_seq;
 }	
 
-static void tcp_queue(struct sk_buff * skb, struct sock * sk,
-	struct tcphdr *th, unsigned long saddr)
+static void tcp_queue(struct sk_buff * skb, struct sock * sk, struct tcphdr *th)
 {
 	u32 ack_seq;
 
@@ -1249,7 +1248,7 @@ static void tcp_queue(struct sk_buff * skb, struct sock * sk,
 		 * side, so we only have to worry about the first two.
 		 */
 		if (!sk->delay_acks || th->fin) {
-			tcp_send_ack(sk->sent_seq, sk->acked_seq, sk, th, saddr);
+			tcp_send_ack(sk);
 		}
 		else
 		{
@@ -1299,7 +1298,7 @@ static int tcp_data(struct sk_buff *skb, struct sock *sk,
 		 *	(someone sent us dataless, boring frame)
 		 */
 		if (!th->ack)
-			tcp_send_ack(sk->sent_seq, sk->acked_seq,sk, th, saddr);
+			tcp_send_ack(sk);
 		kfree_skb(skb, FREE_READ);
 		return(0);
 	}
@@ -1361,7 +1360,7 @@ static int tcp_data(struct sk_buff *skb, struct sock *sk,
 
 #endif
 
-	tcp_queue(skb, sk, th, saddr);
+	tcp_queue(skb, sk, th);
 
 	/*
 	 *	If we've missed a packet, send an ack.
@@ -1370,7 +1369,7 @@ static int tcp_data(struct sk_buff *skb, struct sock *sk,
 	 
 	if (!skb->acked) 
 	{
-		tcp_send_ack(sk->sent_seq, sk->acked_seq, sk, th, saddr);
+		tcp_send_ack(sk);
 		sk->ack_backlog++;
 		tcp_reset_xmit_timer(sk, TIME_WRITE, min(sk->ato, HZ/2));
 	}
@@ -1715,7 +1714,7 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 				sk->acked_seq = skb->seq+1;
 				sk->lastwin_seq = skb->seq+1;
 				sk->fin_seq = skb->seq;
-				tcp_send_ack(sk->sent_seq,sk->acked_seq,sk,th,sk->daddr);
+				tcp_send_ack(sk);
 				tcp_set_state(sk, TCP_ESTABLISHED);
 				tcp_options(sk,th);
 				sk->dummy_th.dest=th->source;

@@ -1157,18 +1157,26 @@ static int sd_init_onedisk(int i)
 	}
     {
 	/*
-	 * The msdos fs need to know the hardware sector size
+	 * The msdos fs needs to know the hardware sector size
 	 * So I have created this table. See ll_rw_blk.c
 	 * Jacques Gelinas (Jacques@solucorp.qc.ca)
 	 */
-	int m;
+	int m, mb;
+        int sz_quot, sz_rem;
 	int hard_sector = rscsi_disks[i].sector_size;
-	/* There is 16 minor allocated for each devices */
+	/* There are 16 minors allocated for each major device */
 	for (m=i<<4; m<((i+1)<<4); m++){
 	    sd_hardsizes[m] = hard_sector;
 	}
-	printk ("SCSI Hardware sector size is %d bytes on device sd%c\n",
-		hard_sector,i+'a');
+        mb = (hard_sector * rscsi_disks[i].capacity) / (1024*1024);
+        /* sz = div(m/100, 10);  this seems to not be in the libr */
+        m = (mb + 50) / 100;
+        sz_quot = m / 10;
+        sz_rem = m - (10 * sz_quot);
+	printk ("SCSI device sd%c: hdwr sector= %d bytes."
+               " Sectors= %d [%d MB] [%d.%1d GB]\n",
+		i+'a', hard_sector, rscsi_disks[i].capacity, 
+                mb, sz_quot, sz_rem);
     }
 	if(rscsi_disks[i].sector_size == 1024)
 	    rscsi_disks[i].capacity <<= 1;  /* Change into 512 byte sectors */

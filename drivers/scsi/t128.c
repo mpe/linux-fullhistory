@@ -204,6 +204,7 @@ int t128_detect(Scsi_Host_Template * tpnt) {
     int sig, count;
 
     tpnt->proc_dir = &proc_scsi_t128;
+    tpnt->proc_info = &t128_proc_info;
 
     for (count = 0; current_override < NO_OVERRIDES; ++current_override) {
 	base = NULL;

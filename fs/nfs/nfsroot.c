@@ -834,7 +834,8 @@ static void root_bootp_recv(void)
 
 	/* Extract basic fields */
 	myaddr.sin_addr.s_addr = recv_bootp->your_ip;
-	server.sin_addr.s_addr = recv_bootp->server_ip;
+	if (server.sin_addr.s_addr==INADDR_NONE)
+		server.sin_addr.s_addr = recv_bootp->server_ip;
 
 	/* Parse extensions */
 	if (recv_bootp->vendor_area[0] == 99 &&	/* Check magic cookie */

@@ -496,7 +496,7 @@ static int ax25_list_length(struct sk_buff_head *list, struct sk_buff *skb)
 
 	skbq = (struct sk_buff *) list->next;
 
-	while (skbq != list) {
+	while (skbq != (struct sk_buff *)list) {
 		if (skb->sk == skbq->sk)
 			count++;
 		skbq = skbq->next;

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/triton.c	Version 1.09  Mar 31, 1996
+ *  linux/drivers/block/triton.c	Version 1.10  Apr 3, 1996
  *
  *  Copyright (c) 1995-1996  Mark Lord
  *  May be copied or modified under the terms of the GNU General Public License
@@ -86,7 +86,8 @@
  *	  cannot improve slow media.  Both DMA and PIO peak around 3.5MB/sec.
  *
  *   Maxtor 71260AT (1204Meg w/256kB buffer), DMA mword0/sword2, PIO mode3.
- *	- works with DMA, giving 3-4MB/sec performance, about the same as mode3.
+ *	- works with DMA, on some systems (but not always on others, eg. Dell),
+ *	giving 3-4MB/sec performance, about the same as mode3.
  *
  * If you have any drive models to add, email your results to:  mlord@pobox.com
  * Keep an eye on /var/adm/messages for "DMA disabled" messages.
@@ -121,7 +122,6 @@
  * known to work fine with this interface under Linux.
  */
 const char *good_dma_drives[] = {"Micropolis 2112A",
-				 /* "Maxtor 71260 AT", known-bad! */
 				 "CONNER CTMA 4000"};
 
 /*
@@ -379,8 +379,8 @@ void ide_init_triton (byte bus, byte fn)
 {
 	int rc = 0, h;
 	int dma_enabled = 0;
-	unsigned short bmiba, pcicmd;
-	unsigned int timings;
+	unsigned short pcicmd;
+	unsigned int bmiba, timings;
 
 	printk("ide: 430FX (Triton) on PCI bus %d function %d\n", bus, fn);
 	/*
@@ -400,20 +400,24 @@ void ide_init_triton (byte bus, byte fn)
 		 */
 		int try_again = 1;
 		do {
-			if ((rc = pcibios_read_config_word(bus, fn, 0x20, &bmiba)))
+			if ((rc = pcibios_read_config_dword(bus, fn, 0x20, &bmiba)))
 				goto quit;
 			bmiba &= 0xfff0;	/* extract port base address */
 			if (bmiba) {
 				dma_enabled = 1;
+				break;
 			} else {
-				printk("ide: BM-DMA base register is invalid (BIOS problem)\n");
-				if (inb(DEFAULT_BMIBA) == 0xff) {
-					printk("ide: setting BM-DMA base register to 0x%04x\n", DEFAULT_BMIBA);
-					if ((rc = pcibios_write_config_word(bus, fn, 0x20, DEFAULT_BMIBA)))
-						goto quit;
-				}
+				printk("ide: BM-DMA base register is invalid (0x%04x, PnP BIOS problem)\n", bmiba);
+				if (inb(DEFAULT_BMIBA) != 0xff || !try_again)
+					break;
+				printk("ide: setting BM-DMA base register to 0x%04x\n", DEFAULT_BMIBA);
+				if ((rc = pcibios_write_config_word(bus, fn, 0x04, pcicmd&~1)))
+					goto quit;
+				rc = pcibios_write_config_dword(bus, fn, 0x20, DEFAULT_BMIBA|1);
+				if (pcibios_write_config_word(bus, fn, 0x04, pcicmd|5) || rc)
+					goto quit;
 			}
-		} while (!dma_enabled && try_again--);
+		} while (try_again--);
 	}
 
 	/*

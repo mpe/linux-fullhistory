@@ -422,6 +422,12 @@ CONFIG_ALPHA_AVANTI
 ### Add info about Platform2000, EB164
 ###
 
+Is it really a true XL
+CONFIG_ALPHA_XL
+  If your Avanti Machine is of type XL (a.k.a. "Windows NT Dream
+  Machine") (as opposed to Mustang (AS200), M3 (AS250) or Avanti
+  (AS400)), say Y, otherwise N.
+
 Limit memory to low 16MB
 CONFIG_MAX_16M
   This is for some buggy motherboards which cannot properly deal with
@@ -710,13 +716,18 @@ CONFIG_IP_FORWARD
   traffic from one of the local computers and destined for an outside
   host is changed by your box so that it appears to come from you),
   you'll have to say Y here and also to IP firewalling and IP
-  masquerading below. You should say Y here also if you want to
+  masquerading below. You should also say Y here if you want to
   configure your box as a SLIP (the protocol for sending internet
   traffic over telephone lines) or PPP (a better SLIP) server for
   other people to dial into and your box is connected to a local
   network at the same time. You would then most likely use proxy-ARP
   (Address Resolution Protocol), explained in the Proxy-Arp mini howto
-  on sunsite in /pub/Linux/docs/HOWTO/mini. If unsure, say N.
+  on sunsite in /pub/Linux/docs/HOWTO/mini. You also need to say Y
+  here if you want to run mrouted in order to do multicast routing as
+  used on the MBONE (a high bandwidth network on top of the internet
+  which carries audio and video broadcasts) for example. In this case,
+  say Y to "IP: multicasting" and "IP: multicast routing" as well. If
+  unsure, say N.
 
 IP: multicasting
 CONFIG_IP_MULTICAST
@@ -842,9 +853,12 @@ CONFIG_IP_ALIAS
 IP: multicast routing(in progress)
 CONFIG_IP_MROUTE
   This is used if you want your machine to act as a router for IP
-  packets that have several destination addresses. Information about
-  the multicast capabilities of the various network cards is contained
-  in drivers/net/README.multicast. If you haven't heard about it, you
+  packets that have several destination addresses. It is needed on the
+  MBONE, a high bandwidth network on top of the internet which carries
+  audio and video broadcasts. In order to do that, you would most
+  likely run the program mrouted. Information about the multicast
+  capabilities of the various network cards is contained in
+  drivers/net/README.multicast. If you haven't heard about it, you
   don't need it.
 
 PC/TCP compatibility mode
@@ -1032,6 +1046,13 @@ CONFIG_BPQETHER
   useful if some other computer on your local network has a direct
   amateur radio connection.
 
+Bridging (test)
+CONFIG_BRIDGE
+  Enables bridge mode support in the box. This allows you to use a Linux
+  box (suitably configured) as an ethernet bridge including 802.1 spanning
+  tree support. This is in test. There are a small batch of changes before
+  final release but it should work nicely.
+
 Kernel/User network link driver(ALPHA)
 CONFIG_NETLINK
   This driver allows for two-way communication between certain parts
@@ -1132,6 +1153,9 @@ CONFIG_SCSI_AUTO_BIOSP
   determine the mapping used under the other operating systems (e.g.
   DOS), and set these parameters to the determined values, or if the
   disk has no valid partition table, to an optimal value.
+###
+### What are the advantages/disadvantages? What is a safe value?
+###
 
 AdvanSys SCSI support
 CONFIG_SCSI_ADVANSYS
@@ -1197,6 +1221,11 @@ CONFIG_SCSI_BUSLOGIC
   You might also want to read the SCSI-HOWTO, available via anonymous
   ftp from sunsite.unc.edu:/pub/Linux/docs/HOWTO.
  
+DTC3180/3280 SCSI support
+CONFIG_SCSI_DTC3280
+  This is support for DTC 3180/3280 SCSI Host Adaptors.  It does not
+  use IRQ's.  It does not support parity on the SCSI bus.
+
 EATA-DMA (DPT,NEC&ATT for ISA,EISA,PCI) support
 CONFIG_SCSI_EATA_DMA
   This is support for a SCSI host adaptor. Please read the
@@ -1284,6 +1313,18 @@ CONFIG_SCSI_NCR53C7xx
   = code which can be inserted in and removed from the running kernel
   whenever you want). If you want to compile it as a module, say M
   here and read Documentation/modules.txt.
+
+always negotiate synchronous transfers
+CONFIG_SCSI_NCR53C7xx_sync
+  In general, this is good; however, it is a bit dangerous since there
+  are some broken SCSI devices out there. Take your chances. Safe bet
+  is N.
+
+allow FAST-SCSI [10MHz]
+CONFIG_SCSI_NCR53C7xx_FAST
+  This will enable 10MHz FAST-SCSI transfers with your host
+  adaptor. Some systems have problems with that speed, so it's safest
+  to say N here.
  
 Always IN2000 SCSI support (test release)
 CONFIG_SCSI_IN2000
@@ -1606,10 +1647,10 @@ CONFIG_DLCI
   that has one of the programs lynx, netscape or Mosaic.) To use frame
   relay, you need supporting hardware (FRAD) and certain programs from
   the net-tools package as explained in
-  Documentation/framerelay.txt. This driver is also available as a
-  module ( = code which can be inserted in and removed from the
-  running kernel whenever you want). If you want to compile it as a
-  module, say M here and read Documentation/modules.txt.
+  Documentation/networking/framerelay.txt. This driver is also
+  available as a module ( = code which can be inserted in and removed
+  from the running kernel whenever you want). If you want to compile
+  it as a module, say M here and read Documentation/modules.txt.
 
 Max open DLCI
 CONFIG_DLCI_COUNT 
@@ -2579,20 +2620,17 @@ CONFIG_NFS_FS
   about 27 kB. This filesystem is also available as a module ( = code
   which can be inserted in and removed from the running kernel
   whenever you want). If you want to compile it as a module, say M
-  here and read Documentation/modules.txt. If you don't know what all
-  this is about, say N.
+  here and read Documentation/modules.txt. If you configure a diskless
+  machine which will mount its root filesystem over nfs, you cannot
+  compile this driver as a module. If you don't know what all this is
+  about, say N.
 
 Root file system on NFS
 CONFIG_ROOT_NFS
   If you want your Linux box to mount its whole root filesystem from
   some other computer over the net via NFS (presumably because your
-  box doesn't have a harddisk), say Y here. You will then have to
-  specify the directory that should be remotely mounted with the
-  "root" kernel command line option at boot time. See the
-  documentation of your boot loader (lilo or loadlin) about how to
-  pass options to the kernel. The lilo procedure is also explained in
-  the SCSI-HOWTO, available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO.) Most people say N here.
+  box doesn't have a harddisk), say Y. Read Documentation/nfsroot.txt
+  for details. Most people say N here.
 
 BOOTP support
 CONFIG_RNFS_BOOTP
@@ -2604,7 +2642,8 @@ CONFIG_RNFS_BOOTP
   booting Linux and does BOOTP itself, providing all necessary
   information on the kernel command line, you can say N here.
   If unsure, say Y. Note that in case you want to use BOOTP, a BOOTP
-  server must be operating on your network.
+  server must be operating on your network. Read
+  Documentation/nfsroot.txt for details.
 
 RARP support
 CONFIG_RNFS_RARP
@@ -2613,7 +2652,8 @@ CONFIG_RNFS_RARP
   of your computer to be discovered automatically using the RARP
   protocol (an older protocol which is being obsoleted by BOOTP), say
   Y here. Note that in case you want to use RARP, a RARP server must be
-  operating on your network.
+  operating on your network. Read Documentation/nfsroot.txt for
+  details. 
 
 ISO9660 cdrom filesystem support
 CONFIG_ISO9660_FS
@@ -2712,6 +2752,14 @@ CONFIG_SERIAL
   other. Most people will say Y here however, so that they can use
   serial mice, modems and similar devices connecting to the standard
   serial ports.
+
+Digiboard PC/X Support
+CONFIG_DIGI
+  This is a driver for the Digiboard PC/Xe, PC/Xi, and PC/Xeve cards
+  that give you many serial ports. You would need something like this
+  to connect more than two modems to your linux box, for instance in
+  order to become a BBS. If you have a card like that, say Y here and
+  read the file Documentation/digiboard.txt.
 
 Cyclades async mux support
 CONFIG_CYCLADES
@@ -2898,7 +2946,7 @@ CONFIG_APM_IGNORE_USER_SUSPEND
   compliant APM BIOS, you want to say N.  However, on the NEC Versa M
   series notebooks, it is necessary to say Y because of a BIOS bug.
 
-Enable APM features
+Enable APM at boot time
 CONFIG_APM_DO_ENABLE
   Enable APM features at boot time.  From page 36 of the APM BIOS
   specification: "When disabled, the APM BIOS does not automatically
@@ -3139,4 +3187,6 @@ CONFIG_ISDN_DRV_TELES
 # LocalWords:  ibp md ARCnet ether encap NDIS arcether ODI Amigas AmiTCP NetBSD
 # LocalWords:  initrd tue util DES funet des OnNet BIOSP smc Travan Iomega CMS
 # LocalWords:  FC DC dc PPA IOMEGA's ppa RNFS FMV Fujitsu ARPD arpd loran layes
-# LocalWords:  FRAD indiana framerelay DLCI DCLIs Sangoma SDLA
+# LocalWords:  FRAD indiana framerelay DLCI DCLIs Sangoma SDLA mrouted sync sec
+# LocalWords:  Starmode Metricom MosquitoNet mosquitonet kbit nfsroot Digiboard
+# LocalWords:  DIGI Xe Xeve digiboard UMISC touchscreens

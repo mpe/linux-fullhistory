@@ -1143,40 +1143,19 @@ static int atalk_create(struct socket *sock, int protocol)
 
 	MOD_INC_USE_COUNT;
 
-	sk->dead=0;
-	sk->next=NULL;
-	sk->broadcast=0;
 	sk->no_check=0;		/* Checksums on by default */
 	sk->allocation=GFP_KERNEL;
 	sk->rcvbuf=SK_RMEM_MAX;
 	sk->sndbuf=SK_WMEM_MAX;
 	sk->pair=NULL;
-	sk->wmem_alloc=0;
-	sk->rmem_alloc=0;
-	sk->users=0;
-	sk->proc=0;
 	sk->priority=1;
-	sk->shutdown=0;
-	sk->prot=NULL;	/* So we use default free mechanisms */
-	sk->broadcast=0;
-	sk->err=0;
 	skb_queue_head_init(&sk->receive_queue);
 	skb_queue_head_init(&sk->write_queue);
-	sk->send_head=NULL;
 	skb_queue_head_init(&sk->back_log);
 	sk->state=TCP_CLOSE;
 	sk->socket=sock;
 	sk->type=sock->type;
-	sk->debug=0;
 	
-	sk->protinfo.af_at.src_net=0;
-	sk->protinfo.af_at.src_node=0;
-	sk->protinfo.af_at.src_port=0;
-	
-	sk->protinfo.af_at.dest_net=0;
-	sk->protinfo.af_at.dest_node=0;
-	sk->protinfo.af_at.dest_port=0;
-
 	sk->mtu=DDP_MAXSZ;
 	
 	if(sock!=NULL)

@@ -219,7 +219,8 @@ MAD16 and Mozart based cards
 Audio Excell DSP16 
 	Support for this card was written by Riccardo Faccetti
 	(riccardo@cdc8g5.cdc.polimi.it). See aedsp16.c for more info.
-	(This driver is not functional in version 3.5 of this driver).
+	(This driver is not functional in version 3.5 of this driver. A
+	patch should be made available during April 96 (sunsite.unc.edu)).
 	
 Crystal CS4232 based cards such as AcerMagic S23, TB Tropez _Plus_ and 
 	many PC motherboards (Compaq, HP, Intel, ...)
@@ -835,6 +836,7 @@ them so read the card's manual carefully.
 ESS ES1688 and ES688 'AudioDrive' based cards
 ---------------------------------------------
 
+Support for these two ESS chips is embedded in the SB Pro driver.
 Configure these cards just like SB Pro. Enable the 'SB MPU401 MIDI port'
 if you want to use MIDI features of ES1688. ES688 doesn't have MPU mode
 so you don't need to enable it (the driver uses normal SB MIDI automaticly
@@ -887,6 +889,12 @@ willing to maintain a database of supported cards (just like in XF86)?).
 
 Cards not supported yet
 =======================
+
+Please check which version of sound driver you are using before 
+complaining that your card is not supported. It's possible that you are 
+using a driver version which was released months before your card was
+introduced. Driver's release date is listed after it's version number
+in "cat /dev/sndstat" printout and in file linux/drivers/sound/soundvers.h.
 
 First of all. There is an easy way to make most soundcards to work
 with Linux. Just use the DOS based driver to initialize the card

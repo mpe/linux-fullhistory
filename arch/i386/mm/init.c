@@ -153,8 +153,13 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	pg_dir = swapper_pg_dir;
 	while (address < end_mem) {
 #ifdef USE_PENTIUM_MM
-		if (address + 4*1024*1024 <= end_mem &&
-		    (x86_capability & 8)) {
+		/*
+		 * This will create page tables that
+		 * span up to the next 4MB virtual
+		 * memory boundary, but that's ok,
+		 * we won't use that memory anyway.
+		 */
+		if (x86_capability & 8) {
 #ifdef GAS_KNOWS_CR4
 			__asm__("movl %%cr4,%%eax\n\t"
 				"orl $16,%%eax\n\t"

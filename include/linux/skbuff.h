@@ -94,6 +94,7 @@ struct sk_buff
   			lock,			/* Are we locked ?				*/
   			localroute,		/* Local routing asserted for this frame	*/
   			pkt_type,		/* Packet class					*/
+  			pkt_bridged,		/* Tracker for bridging 			*/
   			ip_summed;		/* Driver fed us an IP checksum			*/
 #define PACKET_HOST		0		/* To us					*/
 #define PACKET_BROADCAST	1		/* To all					*/

@@ -58,15 +58,16 @@
  *  once we've checked for blocking and deadlocking.
  *  Andy Walker (andy@lysaker.kvaerner.no), April 03, 1996.
  *
- *  NOTE:
- *  Starting to look at mandatory locks - using SunOS as a model.
- *  Probably a configuration option because mandatory locking can cause
- *  all sorts  of chaos with runaway processes.
- *
  *  Initial implementation of mandatory locks. SunOS turned out to be
  *  a rotten model, so I implemented the "obvious" semantics.
  *  See 'linux/Documentation/mandatory.txt' for details.
  *  Andy Walker (andy@lysaker.kvaerner.no), April 06, 1996.
+ *
+ *  Don't allow mandatory locks on mmap()'ed files. Added simple functions to
+ *  check if a file has mandatory locks, used by mmap(), open() and creat() to
+ *  see if system call should be rejected. Ref. HP-UX/SunOS/Solaris Reference
+ *  Manual, Section 2.
+ *  Andy Walker (andy@lysaker.kvaerner.no), April 09, 1996.
  */
 
 #include <linux/malloc.h>
@@ -195,7 +196,7 @@ int fcntl_getlk(unsigned int fd, struct flock *l)
 	    (flock.l_type == F_SHLCK))
 		return (-EINVAL);
 
-	if (!posix_make_lock(filp, &file_lock, &flock))
+	if (!filp->f_inode || !posix_make_lock(filp, &file_lock, &flock))
 		return (-EINVAL);
 
 	for (fl = filp->f_inode->i_flock; fl != NULL; fl = fl->fl_next) {
@@ -227,6 +228,7 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	struct file *filp;
 	struct file_lock file_lock;
 	struct flock flock;
+	struct inode *inode;
 
 	/*
 	 * Get arguments and validate them ...
@@ -239,6 +241,21 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	if (error)
 		return (error);
 	
+	if (!(inode = filp->f_inode))
+		return (-EINVAL);
+	
+	/* Don't allow mandatory locks on files that may be memory mapped
+	 * and shared.
+	 */
+	if ((inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID && inode->i_mmap) {
+		struct vm_area_struct *vma = inode->i_mmap;
+		do {
+			if (vma->vm_flags & VM_MAYSHARE)
+				return (-EAGAIN);
+			vma = vma->vm_next_share;
+		} while (vma != inode->i_mmap);
+	}
+
 	memcpy_fromfs(&flock, l, sizeof(flock));
 	if (!posix_make_lock(filp, &file_lock, &flock))
 		return (-EINVAL);
@@ -246,16 +263,16 @@ int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l)
 	switch (flock.l_type) {
 	case F_RDLCK :
 		if (!(filp->f_mode & 1))
-			return -EBADF;
+			return (-EBADF);
 		break;
 	case F_WRLCK :
 		if (!(filp->f_mode & 2))
-			return -EBADF;
+			return (-EBADF);
 		break;
 	case F_SHLCK :
 	case F_EXLCK :
 		if (!(filp->f_mode & 3))
-			return -EBADF;
+			return (-EBADF);
 		break;
 	case F_UNLCK :
 		break;
@@ -288,21 +305,44 @@ void locks_remove_locks(struct task_struct *task, struct file *filp)
 	return;
 }
 
-int locks_verify(int read_write, struct inode *inode, struct file *filp,
-		 unsigned int offset, unsigned int count)
+int locks_verify_locked(struct inode *inode)
 {
 	/* Candidates for mandatory locking have the setgid bit set
 	 * but no group execute bit -  an otherwise meaningless combination.
 	 */
 	if ((inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
-		return (locks_locked_mandatory(read_write, inode, filp,
-					       offset, count));
+		return (locks_mandatory_locked(inode));
+	return (0);
+}
+
+int locks_mandatory_locked(struct inode *inode)
+{
+	struct file_lock *fl;
+
+	/* Search the lock list for this inode for any POSIX locks.
+	 */
+	for (fl = inode->i_flock; fl != NULL; fl = fl->fl_next) {
+		if (fl->fl_flags == F_POSIX && fl->fl_owner != current)
+			return (-EAGAIN);
+	}
+	return (0);
+}
+
+int locks_verify_area(int read_write, struct inode *inode, struct file *filp,
+		      unsigned int offset, unsigned int count)
+{
+	/* Candidates for mandatory locking have the setgid bit set
+	 * but no group execute bit -  an otherwise meaningless combination.
+	 */
+	if ((inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
+		return (locks_mandatory_area(read_write, inode, filp, offset,
+					     count));
 	return (0);
 }
 	
-int locks_locked_mandatory(int read_write, struct inode *inode,
-			   struct file *filp, unsigned int offset,
-			   unsigned int count)
+int locks_mandatory_area(int read_write, struct inode *inode,
+			 struct file *filp, unsigned int offset,
+			 unsigned int count)
 {
 	struct file_lock *fl;
 
@@ -352,9 +392,6 @@ static int posix_make_lock(struct file *filp, struct file_lock *fl,
 			   struct flock *l)
 {
 	off_t start;
-
-	if (!filp->f_inode)	/* just in case */
-		return (0);
 
 	switch (l->l_type) {
 	case F_RDLCK :

@@ -1,5 +1,5 @@
 #
-# Makefile for the Linux 802.x protocol layers.
+# Makefile for the Linux TCP/IP (INET) layer.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
 # removes any old dependencies. DON'T put your own dependencies here
@@ -7,22 +7,9 @@
 #
 # Note 2! The CFLAGS definition is now in the main makefile...
 
-O_TARGET := 802.o
-O_OBJS	  = p8023.o sysctl_net_802.o
-
-ifdef CONFIG_TR
-O_OBJS += tr.o
-endif
-
-ifdef CONFIG_IPX
-OX_OBJS += p8022.o psnap.o p8022tr.o
-endif
-
-ifdef CONFIG_ATALK
-ifndef CONFIG_IPX
-OX_OBJS += p8022.o psnap.o p8022tr.o
-endif
-endif
+O_TARGET := bridge.o
+O_OBJS	 := br.o br_tree.o
+M_OBJS   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make
 

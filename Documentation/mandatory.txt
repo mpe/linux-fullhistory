@@ -60,25 +60,39 @@ to run mandatory lock candidates with setgid privileges.
 Available implementations
 -------------------------
 
-I originally intended to base my implementation on SunOS, only to find out that
-the implementation in SunOS 4.1.1 (the latest version that will work on my Sun
-3/80 at home) is completely hopeless.
+I have considered the implementations of mandatory locking available with
+SunOS 4.1.x, Solaris 2.x and HP-UX 9.x.
 
-For one thing, calls to open() for a file fail with EAGAIN if another process
-holds a mandatory lock on the file. However, processes already holding open
-file descriptors can carry on using them. Wierd!
+Generally I have tried to make the most sense out of the behaviour exhibited
+by these three reference systems. There are many anomalies.
 
-In addition, SunOS doesn't seem to honour the O_NONBLOCK (O_NDELAY) flag for
+Originally I wrote (about SunOS):
+ "For one thing, calls to open() for a file fail with EAGAIN if another
+  process holds a mandatory lock on the file. However, processes already
+  holding open file descriptors can carry on using them. Wierd!"
+
+Well, all my reference systems do it, so I decided to go with the flow.
+My gut feeling is that only calls to open() and creat() with O_TRUNC should be
+rejected, as these are the only ones that try to modify the file contents as
+part of the open() call.
+
+HP-UX even disallows open() with O_TRUNC for a file with advisory locks, not
+just mandatory locks. That to me contravenes POSIX.1.
+
+mmap() is another interesting case. All the operating systems mentioned
+prevent mandatory locks from being applied to an mmap()'ed file, but  HP-UX
+also disallows advisory locks for such a file.
+
+My opinion is that only MAP_SHARED mappings should be immune from locking, and
+then only from mandatory locks - that is what is currently implemented.
+
+SunOS is so hopeless that it doesn't even honour the O_NONBLOCK flag for
 mandatory locks, so reads and writes to locked files always block when they
-should probably return EAGAIN.
+should return EAGAIN.
 
-I found some test code online, which I think comes from one of Stevens' UNIX
-programming books, that confirmed what I considered to be be the "obvious"
-semantics, described below. I shall attempt to run my test programs on other
-platforms to verify my implementation.
-
-Personally I feel that this is such an esoteric area that these semantics are
-just as valid as any others, so long as the main points seem to agree.
+I'm afraid that this is such an esoteric area that the semantics described
+below are just as valid as any others, so long as the main points seem to
+agree. 
 
 Semantics
 ---------
@@ -99,13 +113,24 @@ Semantics
    unless a process has opened the file with the O_NONBLOCK flag in which case
    the system call will return immediately with the error status EAGAIN.
 
+4. Calls to open() or creat() on a file that has any mandatory locks owned
+   by other processes will be rejected with the error status EAGAIN.
+
+5. Attempts to apply a mandatory lock to a file that is memory mapped and
+   shared (via mmap() with MAP_SHARED) will be rejected with the error status
+   EAGAIN.
+
+6. Attempts to create a shared memory map of a file (via mmap() with MAP_SHARED)
+   that has any mandatory locks in effect will be rejected with the error status
+   EAGAIN.
+
 Which system calls are affected?
 --------------------------------
 
 Those which modify a file's contents, not just the inode. That gives read(),
-write(), readv(), writev(), truncate() and ftruncate(). truncate() and
-ftruncate() are considered to be "write" actions for the purposes of mandatory
-locking.
+write(), readv(), writev(), open(), creat(), mmap(), truncate() and
+ftruncate(). truncate() and ftruncate() are considered to be "write" actions
+for the purposes of mandatory locking.
 
 The affected region is usually defined as stretching from the current position
 for the total number of bytes read or written. For the truncate calls it is
@@ -124,3 +149,4 @@ Not even root can override a mandatory lock, so runaway process can wreak
 havoc if they lock crucial files. The way around it is to change the file
 permissions (remove the setgid bit) before trying to read or wite to it.
 Of course, that might be a bit tricky if the system is hung :-(
+

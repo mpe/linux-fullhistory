@@ -899,6 +899,44 @@ int ip_fw_ctl(int stage, void *m, int len)
 			return(ETIMEDOUT);
 	}
 
+	if ( cmd == IP_FW_MASQ_TIMEOUTS )
+	{
+#ifdef CONFIG_IP_MASQUERADE
+		struct ip_fw_masq *masq;
+
+		if ( len != sizeof(struct ip_fw_masq) )
+		{
+#ifdef DEBUG_CONFIG_IP_FIREWALL
+			printk("ip_fw_ctl (masq): length %d, expected %d\n",
+				len, sizeof(struct ip_fw_masq));
+
+#endif
+			return( EINVAL );
+		}
+
+		masq = (struct ip_fw_masq *) m;
+
+		if (masq->tcp_timeout)
+		{
+			ip_masq_expire->tcp_timeout = masq->tcp_timeout;
+		}
+
+		if (masq->tcp_fin_timeout)
+		{
+			ip_masq_expire->tcp_fin_timeout = masq->tcp_fin_timeout;
+		}
+
+		if (masq->udp_timeout)
+		{
+			ip_masq_expire->udp_timeout = masq->udp_timeout;
+		}
+
+		return 0;
+#else
+		return( EINVAL );
+#endif
+	}
+
 /*
  *	Here we really working hard-adding new elements
  *	to blocking/forwarding chains or deleting 'em

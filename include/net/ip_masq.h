@@ -56,6 +56,18 @@ struct ip_masq {
 };
 
 /*
+ *	timeout values
+ */
+
+struct ip_fw_masq {
+        int tcp_timeout;
+        int tcp_fin_timeout;
+        int udp_timeout;
+};
+
+extern struct ip_fw_masq *ip_masq_expire;
+
+/*
  *	[0]: UDP free_ports
  *	[1]: TCP free_ports
  */

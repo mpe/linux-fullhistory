@@ -75,6 +75,7 @@
 #include <net/slhc.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+#include <net/br.h>
 #ifdef CONFIG_NET_ALIAS
 #include <linux/net_alias.h>
 #endif
@@ -216,15 +217,15 @@ struct device *dev_get(const char *name)
 
 extern __inline__ void dev_load(const char *name)
 {
-        if(!dev_get(name)) {
+	if(!dev_get(name)) {
 #ifdef CONFIG_NET_ALIAS
-	        const char *sptr;
+		const char *sptr;
  
-                for (sptr=name ; *sptr ; sptr++) if(*sptr==':') break;
-                if (!(*sptr && *(sptr+1)))
+		for (sptr=name ; *sptr ; sptr++) if(*sptr==':') break;
+		if (!(*sptr && *(sptr+1)))
 #endif
-                        request_module(name);
-        }
+		request_module(name);
+	}
 }
 
 #endif
@@ -391,6 +392,20 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	if (net_alias_is(dev))
 	  	skb->dev = dev = net_alias_main_dev(dev);
 #endif
+
+	/*
+	 *	If we are bridging and this is directly generated output
+	 *	pass the frame via the bridge.
+	 */
+
+#ifdef CONFIG_BRIDGE
+	if(skb->pkt_bridged!=IS_BRIDGED && br_stats.flags & BR_UP)
+	{
+		if(br_tx_frame(skb))
+			return;
+	}
+#endif
+
 	list = dev->buffs + pri;
 
 	save_flags(flags);
@@ -502,11 +517,7 @@ void netif_rx(struct sk_buff *skb)
 	 *	hardware interrupt returns.
 	 */
 
-#ifdef CONFIG_NET_RUNONIRQ	/* Dont enable yet, needs some driver mods */
-	net_bh();
-#else
 	mark_bh(NET_BH);
-#endif
 	return;
 }
 
@@ -584,12 +595,29 @@ void net_bh(void)
   		backlog_size--;
 		sti();
 		
-	       /*
-		*	Bump the pointer to the next structure.
-		*
-		*	On entry to the protocol layer. skb->data and
-		*	skb->h.raw point to the MAC and encapsulated data
-		*/
+
+#ifdef CONFIG_BRIDGE
+
+		/*
+		 *	If we are bridging then pass the frame up to the
+		 *	bridging code. If it is bridged then move on
+		 */
+		 
+		if (br_stats.flags & BR_UP)
+		{
+			cli();
+			if(br_receive_frame(skb))
+				continue;
+			sti();
+		}
+#endif
+		
+		/*
+	 	 *	Bump the pointer to the next structure.
+		 * 
+		 *	On entry to the protocol layer. skb->data and
+		 *	skb->h.raw point to the MAC and encapsulated data
+		 */
 
 		skb->h.raw = skb->data;
 
@@ -604,6 +632,7 @@ void net_bh(void)
 		 * 	list. There are two lists. The ptype_all list of taps (normally empty)
 		 *	and the main protocol list which is hashed perfectly for normal protocols.
 		 */
+		
 		pt_prev = NULL;
 		for (ptype = ptype_all; ptype!=NULL; ptype=ptype->next)
 		{
@@ -775,8 +804,8 @@ static int dev_ifconf(char *arg)
 
 	for (dev = dev_base; dev != NULL; dev = dev->next) 
 	{
-        	if(!(dev->flags & IFF_UP))	/* Downed devices don't count */
-	        	continue;
+		if(!(dev->flags & IFF_UP))	/* Downed devices don't count */
+			continue;
 		/*
 		 *	Have we run out of space here ?
 		 */
@@ -1005,7 +1034,7 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 				 */				
 
 				dev_mc_upload(dev);
-	        	}
+			}
 			break;
 		
 		case SIOCGIFADDR:	/* Get interface address (and family) */
@@ -1142,10 +1171,10 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 			if(ifr.ifr_mtu<68)
 				return -EINVAL;
 
-                        if (dev->change_mtu)
+			if (dev->change_mtu)
 				ret = (*dev->change_mtu)(dev, ifr.ifr_mtu);
-                        else
-                        {
+			else
+			{
 				dev->mtu = ifr.ifr_mtu;
 				ret = 0;
 			}
@@ -1319,15 +1348,23 @@ int net_dev_init(void)
 	skb_queue_head_init(&backlog);
 	
 	/*
-	 * This is VeryUgly(tm).
+	 *	The bridge has to be up before the devices
+	 */
+
+#ifdef CONFIG_BRIDGE	 
+	br_init();
+#endif	
+	
+	/*
+	 * This is Very Ugly(tm).
 	 *
-	 * Some devices want to be initialized eary..
+	 * Some devices want to be initialized early..
 	 */
 #if defined(CONFIG_LANCE)
 	lance_init();
 #endif
 #if defined(CONFIG_NI65)
-        ni65_init();
+	ni65_init();
 #endif
 #if defined(CONFIG_PI)
 	pi_init();
@@ -1336,10 +1373,10 @@ int net_dev_init(void)
 	pt_init();
 #endif
 #if defined(CONFIG_DLCI)
-        dlci_setup();
+	dlci_setup();
 #endif
 #if defined(CONFIG_SDLA)
-        sdla_setup();
+	sdla_setup();
 #endif
 	/*
 	 *	SLHC if present needs attaching so other people see it

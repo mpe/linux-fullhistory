@@ -495,7 +495,9 @@ static void icmp_redirect(struct icmphdr *icmph, struct sk_buff *skb, struct dev
 	/*
 	 *	We are a router. Routers should not respond to ICMP_REDIRECT messages.
 	 */
-	printk(KERN_INFO "icmp: ICMP redirect from %s on %s ignored.\n", in_ntoa(source), dev->name);
+	printk(KERN_INFO "icmp: ICMP redirect ignored. dest = %s, "
+	       "orig gw = %s, \"new\" gw = %s, device = %s.\n", in_ntoa(ip),
+		in_ntoa(source), in_ntoa(icmph->un.gateway), dev->name);
 #else	
 	switch(icmph->code & 7) 
 	{

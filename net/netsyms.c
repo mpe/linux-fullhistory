@@ -11,7 +11,6 @@
 #include <linux/in.h>
 #include <linux/net.h>
 #include <linux/netdevice.h>
-#include <linux/firewall.h>
 #include <linux/trdevice.h>
 #include <linux/ioport.h>
 
@@ -81,12 +80,6 @@ static struct symbol_table net_syms = {
 	X(destroy_EII_client),
 #endif
 
-#ifdef CONFIG_FIREWALL
-	/* Firewall registration */
-	X(register_firewall),
-	X(unregister_firewall),
-#endif
-
 #ifdef CONFIG_INET
 	/* Internet layer registration */
 	X(inet_add_protocol),
@@ -148,6 +141,7 @@ static struct symbol_table net_syms = {
 	X(ether_setup),
 	X(eth_type_trans),
 	X(eth_copy_and_sum),
+	X(arp_query),
 	X(alloc_skb),
 	X(kfree_skb),
 	X(skb_clone),
@@ -169,11 +163,6 @@ static struct symbol_table net_syms = {
 	X(tty_register_ldisc),
 	X(kill_fasync),
 	X(arp_query),
-#ifdef CONFIG_FIREWALL
-	X(call_in_firewall),
-	X(call_out_firewall),
-	X(call_fw_firewall),
-#endif
 #endif  /* CONFIG_INET */
 
 #include <linux/symtab_end.h>

@@ -425,6 +425,7 @@ read_page:
 	if (read) {
 		error = read;
 
+#ifdef WE_SHOULD_DO_SOME_EXTRA_CHECKS
 		/*
 		 * Start some extra read-ahead if we haven't already
 		 * read ahead enough..
@@ -434,6 +435,7 @@ read_page:
 			ra_pos += PAGE_SIZE;
 		}
 		run_task_queue(&tq_disk);
+#endif
 
 		filp->f_pos = pos;
 		filp->f_reada = ra_pos;

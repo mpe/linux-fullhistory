@@ -487,14 +487,26 @@ int ip_masq_app_init(void)
 
 static struct sk_buff * skb_replace(struct sk_buff *skb, int pri, char *o_buf, int o_len, char *n_buf, int n_len)
 {
-        int diff, o_offset;
+        int maxsize, diff, o_offset;
         struct sk_buff *n_skb;
+
+	maxsize = skb->truesize - sizeof(struct sk_buff);
 
         diff = n_len - o_len;
         o_offset = o_buf - (char*) skb->data;
 
-        if (diff != 0)  {
-                
+	if (maxsize <= n_len) {
+	    if (diff != 0) {
+		memcpy(skb->data + o_offset + n_len,o_buf + o_len,
+		       skb->len - (o_offset + o_len));
+	    }
+
+	    memcpy(skb->data + o_offset, n_buf, n_len);
+
+	    n_skb    = skb;
+	    skb->len = n_len;
+	    skb->end = skb->head+n_len;
+	} else {
                 /*
                  * 	Sizes differ, make a copy
                  */
@@ -526,14 +538,6 @@ static struct sk_buff * skb_replace(struct sk_buff *skb, int pri, char *o_buf, i
                  */
                 
                 kfree_skb(skb, FREE_WRITE);
-                
-        } else {
-                
-                /*
-                 *	Same len, just copy
-                 */
-                n_skb = skb;
-                memcpy(n_skb->data + o_offset, n_buf, n_len);
         }
         return n_skb;
 }

@@ -73,6 +73,11 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		case MAP_SHARED:
 			if ((prot & PROT_WRITE) && !(file->f_mode & 2))
 				return -EACCES;
+			/*
+			 * make sure there are no mandatory locks on the file.
+			 */
+			if (locks_verify_locked(file->f_inode))
+				return -EAGAIN;
 			/* fall through */
 		case MAP_PRIVATE:
 			if (!(file->f_mode & 1))
