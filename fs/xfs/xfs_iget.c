@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2003 Silicon Graphics, Inc.  All Rights Reserved.
+ * Copyright (c) 2000-2005 Silicon Graphics, Inc.  All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of version 2 of the GNU General Public License as
@@ -61,7 +61,8 @@
  * Initialize the inode hash table for the newly mounted file system.
  * Choose an initial table size based on user specified value, else
  * use a simple algorithm using the maximum number of inodes as an
- * indicator for table size, and cap it at 16 pages (gettin' big).
+ * indicator for table size, and clamp it between one and some large
+ * number of pages.
  */
 void
 xfs_ihash_init(xfs_mount_t *mp)
@@ -72,8 +73,10 @@ xfs_ihash_init(xfs_mount_t *mp)
 	if (!mp->m_ihsize) {
 		icount = mp->m_maxicount ? mp->m_maxicount :
 			 (mp->m_sb.sb_dblocks << mp->m_sb.sb_inopblog);
-		mp->m_ihsize = 1 << max_t(uint, xfs_highbit64(icount) / 3, 8);
-		mp->m_ihsize = min_t(uint, mp->m_ihsize, 16 * PAGE_SIZE);
+		mp->m_ihsize = 1 << max_t(uint, 8,
+					(xfs_highbit64(icount) + 1) / 2);
+		mp->m_ihsize = min_t(uint, mp->m_ihsize,
+					(64 * NBPP) / sizeof(xfs_ihash_t));
 	}
 
 	while (!(mp->m_ihash = (xfs_ihash_t *)kmem_zalloc(mp->m_ihsize *
