@@ -81,11 +81,11 @@ static unsigned int netlink_poll(struct file *file, poll_table * wait)
  *	Write a message to the kernel side of a communication link
  */
  
-static long netlink_write(struct inode * inode, struct file * file,
-			  const char * buf, unsigned long count)
+static ssize_t netlink_write(struct file * file, const char * buf,
+			size_t count,loff_t *ppos)
 {
 	int err; 
-	unsigned int minor = MINOR(inode->i_rdev);
+	unsigned int minor = MINOR(file->f_dentry->d_inode->i_rdev);
 	struct sk_buff *skb;
 	skb=alloc_skb(count, GFP_KERNEL);
 	err = copy_from_user(skb_put(skb,count),buf, count);
@@ -96,11 +96,11 @@ static long netlink_write(struct inode * inode, struct file * file,
  *	Read a message from the kernel side of the communication link
  */
 
-static long netlink_read(struct inode * inode, struct file * file, char * buf,
-			 unsigned long count)
+static ssize_t  netlink_read(struct file * file, char * buf,
+			 size_t count,loff_t *ppos)
 {
 	int err; 
-	unsigned int minor = MINOR(inode->i_rdev);
+	unsigned int minor = MINOR(file->f_dentry->d_inode->i_rdev);
 	struct sk_buff *skb;
 	cli();
 	while((skb=skb_dequeue(&skb_queue_rd[minor]))==NULL)

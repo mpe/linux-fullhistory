@@ -76,11 +76,6 @@ if [ "$CONFIG_QIC02_TAPE" != "n" ]; then
   fi
 fi
 
-tristate 'Ftape (QIC-80/Travan) support' CONFIG_FTAPE
-if [ "$CONFIG_FTAPE" != "n" ]; then
-  comment 'Set IObase/IRQ/DMA for ftape in ./drivers/char/ftape/Makefile'
-fi
-
 bool 'Advanced Power Management BIOS support' CONFIG_APM
 if [ "$CONFIG_APM" = "y" ]; then
   bool '   Ignore USER SUSPEND' CONFIG_APM_IGNORE_USER_SUSPEND
@@ -116,4 +111,13 @@ if [ "$CONFIG_MISC_RADIO" != "n" ]; then
     hex '    RadioTrack i/o port (0x20f or 0x30f)' CONFIG_RADIO_RTRACK_PORT 0x20f
   fi
 fi
+
+mainmenu_option next_comment
+comment 'Ftape, the floppy tape device driver'
+tristate 'Ftape (QIC-80/Travan) support' CONFIG_FTAPE
+if [ "$CONFIG_FTAPE" != "n" ]; then
+  source drivers/char/ftape/Config.in
+fi
+endmenu
+
 endmenu

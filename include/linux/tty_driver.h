@@ -92,6 +92,18 @@
  * 	This routine notifies the tty driver that it should hangup the
  * 	tty device.
  *
+ * void (*break_ctl)(struct tty_stuct *tty, int state);
+ *
+ * 	This optional routine requests the tty driver to turn on or
+ * 	off BREAK status on the RS-232 port.  If state is -1,
+ * 	then the BREAK status should be turned on; if state is 0, then
+ * 	BREAK should be turned off.
+ *
+ * 	If this routine is implemented, the high-level tty driver will
+ * 	handle the following ioctls: TCSBRK, TCSBRKP, TIOCSBRK,
+ * 	TIOCCBRK.  Otherwise, these ioctls will be passed down to the
+ * 	driver to handle.
+ *
  * void (*wait_until_sent)(struct tty_struct *tty, int timeout);
  * 
  * 	This routine waits until the device has written out all of the
@@ -148,6 +160,7 @@ struct tty_driver {
 	void (*stop)(struct tty_struct *tty);
 	void (*start)(struct tty_struct *tty);
 	void (*hangup)(struct tty_struct *tty);
+	void (*break_ctl)(struct tty_struct *tty, int state);
 	void (*flush_buffer)(struct tty_struct *tty);
 	void (*set_ldisc)(struct tty_struct *tty);
 	void (*wait_until_sent)(struct tty_struct *tty, int timeout);

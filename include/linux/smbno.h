@@ -2,12 +2,12 @@
 #define _SMBNO_H_
 
 /* these define the attribute byte as seen by DOS */
-#define aRONLY (1L<<0)
-#define aHIDDEN (1L<<1)
-#define aSYSTEM (1L<<2)
-#define aVOLID (1L<<3)
-#define aDIR (1L<<4)
-#define aARCH (1L<<5)
+#define aRONLY	(1L<<0)
+#define aHIDDEN	(1L<<1)
+#define aSYSTEM	(1L<<2)
+#define aVOLID	(1L<<3)
+#define aDIR	(1L<<4)
+#define aARCH	(1L<<5)
 
 /* error classes */
 #define SUCCESS 0  /* The request was successful. */
@@ -100,6 +100,14 @@
 #define ERRFCBunavail 35
 #define ERRsharebufexc 36       /* share buffer exceeded */
 #define ERRdiskfull 39
+
+/*
+ * Access modes when opening a file
+ */
+#define SMB_ACCMASK	0x0003
+#define SMB_O_RDONLY	0x0000
+#define SMB_O_WRONLY	0x0001
+#define SMB_O_RDWR	0x0002
 
 /* offsets into message for common items */
 #define smb_com 8

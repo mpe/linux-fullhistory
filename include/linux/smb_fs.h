@@ -65,6 +65,18 @@ smb_vfree(void *obj)
 
 #endif /* DEBUG_SMB_MALLOC */
 
+/*
+ * Flags for the in-memory inode
+ */
+#define SMB_F_CACHEVALID	0x01	/* directory cache valid */
+#define SMB_F_LOCALWRITE	0x02	/* file modified locally */
+
+/*
+ * Bug fix flags
+ */
+#define SMB_FIX_WIN95	0x0001	/* Win 95 server */
+#define SMB_FIX_OLDATTR	0x0002	/* Use core getattr (Win 95 speedup) */
+
 /* linux/fs/smbfs/mmap.c */
 int smb_mmap(struct file *, struct vm_area_struct *);
 
@@ -80,35 +92,29 @@ int smb_ioctl (struct inode *, struct file *, unsigned int, unsigned long);
 
 /* linux/fs/smbfs/inode.c */
 struct super_block *smb_read_super(struct super_block *, void *, int);
-extern int init_smb_fs(void);
+void smb_get_inode_attr(struct inode *, struct smb_fattr *);
 void smb_invalidate_inodes(struct smb_sb_info *);
 int  smb_revalidate_inode(struct inode *);
 int  smb_refresh_inode(struct inode *);
 int  smb_notify_change(struct inode *, struct iattr *);
-void smb_invalidate_connection(struct smb_sb_info *);
-int  smb_conn_is_valid(struct smb_sb_info *);
 unsigned long smb_invent_inos(unsigned long);
 struct inode *smb_iget(struct super_block *, struct smb_fattr *);
 
 /* linux/fs/smbfs/proc.c */
-__u32 smb_len(unsigned char *packet);
-__u8 *smb_encode_smb_length(__u8 *p, __u32 len);
-__u8 *smb_setup_header(struct smb_sb_info *server, __u8 command,
-		       __u16 wct, __u16 bcc);
-int smb_offerconn(struct smb_sb_info *server);
-int smb_newconn(struct smb_sb_info *server, struct smb_conn_opt *opt);
+__u32 smb_len(unsigned char *);
+__u8 *smb_encode_smb_length(__u8 *, __u32);
+__u8 *smb_setup_header(struct smb_sb_info *, __u8, __u16, __u16);
+int smb_get_rsize(struct smb_sb_info *);
+int smb_get_wsize(struct smb_sb_info *);
+int smb_offerconn(struct smb_sb_info *);
+int smb_newconn(struct smb_sb_info *, struct smb_conn_opt *);
 int smb_close(struct inode *);
 void smb_close_dentry(struct dentry *);
+int smb_close_fileid(struct dentry *, __u16);
 int smb_open(struct dentry *, int);
-static inline int
-smb_is_open(struct inode *i)
-{
-	return (i->u.smbfs_i.open == SMB_SERVER(i)->generation);
-}
-
 int smb_proc_read(struct inode *, off_t, int, char *);
 int smb_proc_write(struct inode *, off_t, int, const char *);
-int smb_proc_create(struct dentry *, struct qstr *, __u16, time_t);
+int smb_proc_create(struct dentry *, struct qstr *, __u16, time_t, __u16 *);
 int smb_proc_mv(struct dentry *, struct qstr *, struct dentry *, struct qstr *);
 int smb_proc_mkdir(struct dentry *, struct qstr *);
 int smb_proc_rmdir(struct dentry *, struct qstr *);
@@ -121,7 +127,13 @@ int smb_proc_reconnect(struct smb_sb_info *);
 int smb_proc_connect(struct smb_sb_info *);
 int smb_proc_disconnect(struct smb_sb_info *);
 int smb_proc_trunc(struct smb_sb_info *, __u16, __u32);
-void smb_init_root_dirent(struct smb_sb_info *server, struct smb_fattr *);
+void smb_init_root_dirent(struct smb_sb_info *, struct smb_fattr *);
+
+static inline int
+smb_is_open(struct inode *i)
+{
+	return (i->u.smbfs_i.open == SMB_SERVER(i)->generation);
+}
 
 /* linux/fs/smbfs/sock.c */
 int smb_round_length(int);

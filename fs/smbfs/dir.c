@@ -9,6 +9,7 @@
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
+
 #include <linux/smb_fs.h>
 #include <linux/smbno.h>
 
@@ -62,7 +63,9 @@ struct inode_operations smb_dir_inode_operations =
 	NULL,			/* bmap */
 	NULL,			/* truncate */
 	NULL,			/* permission */
-	NULL			/* smap */
+	NULL,			/* smap */
+	NULL,			/* updatepage */
+	smb_revalidate_inode,	/* revalidate */
 };
 
 static ssize_t
@@ -72,42 +75,25 @@ smb_dir_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
 }
 
 /*
- * Compute the hash for a qstr.
- * N.B. Move to include/linux/dcache.h?
+ * Check whether a dentry already exists for the given name,
+ * and return the inode number if it has an inode.  This is
+ * needed to keep getcwd() working.
  */
-static unsigned int 
-hash_it(const char * name, unsigned int len)
+static ino_t
+find_inode_number(struct dentry *dir, struct qstr *name)
 {
-	unsigned long hash = init_name_hash();
-	while (len--)
-		hash = partial_name_hash(*name++, hash);
-	return end_name_hash(hash);
-}
+	struct dentry * dentry;
+	ino_t ino = 0;
 
-/*
- * If a dentry already exists, we have to give the cache entry
- * the correct inode number.  This is needed for getcwd().
- */
-static void
-smb_find_ino(struct dentry *dentry, struct cache_dirent *entry)
-{
-	struct dentry * new_dentry;
-	struct qstr qname;
-
-	/* N.B. Make cache_dirent name a qstr! */
-	qname.name = entry->name;
-	qname.len  = entry->len;
-	qname.hash = hash_it(qname.name, qname.len);
-	new_dentry = d_lookup(dentry, &qname);
-	if (new_dentry)
+	name->hash = full_name_hash(name->name, name->len);
+	dentry = d_lookup(dir, name);
+	if (dentry)
 	{
-		struct inode * inode = new_dentry->d_inode;
-		if (inode)
-			entry->ino = inode->i_ino;
-		dput(new_dentry);
+		if (dentry->d_inode)
+			ino = dentry->d_inode->i_ino;
+		dput(dentry);
 	}
-	if (!entry->ino)
-		entry->ino = smb_invent_inos(1);
+	return ino;
 }
 
 static int 
@@ -168,8 +154,15 @@ dentry->d_parent->d_name.name, dentry->d_name.name, (int) filp->f_pos);
 		/*
 		 * Check whether to look up the inode number.
 		 */
-		if (!entry->ino)
-			smb_find_ino(dentry, entry);
+		if (!entry->ino) {
+			struct qstr qname;
+			/* N.B. Make cache_dirent name a qstr! */
+			qname.name = entry->name;
+			qname.len  = entry->len;
+			entry->ino = find_inode_number(dentry, &qname);
+			if (!entry->ino)
+				entry->ino = smb_invent_inos(1);
+		}
 
 		if (filldir(dirent, entry->name, entry->len, 
 				    filp->f_pos, entry->ino) < 0)
@@ -324,9 +317,9 @@ dentry->d_parent->d_name.name, dentry->d_name.name, error);
 		goto add_entry;
 	if (!error)
 	{
+		error = -EACCES;
 		finfo.f_ino = smb_invent_inos(1);
 		inode = smb_iget(dir->i_sb, &finfo);
-		error = -EACCES;
 		if (inode)
 		{
 			/* cache the dentry pointer */
@@ -346,38 +339,58 @@ out:
  * This code is common to all routines creating a new inode.
  */
 static int
-smb_instantiate(struct dentry *dentry)
+smb_instantiate(struct dentry *dentry, __u16 fileid, int have_id)
 {
+	struct smb_sb_info *server = server_from_dentry(dentry);
+	struct inode *inode;
 	struct smb_fattr fattr;
 	int error;
 
-	error = smb_proc_getattr(dentry->d_parent, &(dentry->d_name), &fattr);
-	if (!error)
-	{
-		struct inode *inode;
-		error = -EACCES;
-		fattr.f_ino = smb_invent_inos(1);
-		inode = smb_iget(dentry->d_sb, &fattr);
-		if (inode)
-		{
-			/* cache the dentry pointer */
-			inode->u.smbfs_i.dentry = dentry;
-			d_instantiate(dentry, inode);
-			smb_renew_times(dentry);
-			error = 0;
-		}
-	}
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_instantiate: file %s/%s, error=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, error);
+printk("smb_instantiate: file %s/%s, fileid=%u\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, fileid);
 #endif
+	error = smb_proc_getattr(dentry->d_parent, &(dentry->d_name), &fattr);
+	if (error)
+		goto out_close;
+
+	smb_renew_times(dentry);
+	fattr.f_ino = smb_invent_inos(1);
+	inode = smb_iget(dentry->d_sb, &fattr);
+	if (!inode)
+		goto out_no_inode;
+
+	if (have_id)
+	{
+		inode->u.smbfs_i.fileid = fileid;
+		inode->u.smbfs_i.access = SMB_O_RDWR;
+		inode->u.smbfs_i.open = server->generation;
+	}
+	/* cache the dentry pointer */
+	inode->u.smbfs_i.dentry = dentry;
+	d_instantiate(dentry, inode);
+out:
 	return error;
+
+out_no_inode:
+	error = -EACCES;
+out_close:
+	if (have_id)
+	{
+#ifdef SMBFS_PARANOIA
+printk("smb_instantiate: %s/%s failed, error=%d, closing %u\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, error, fileid);
+#endif
+		smb_close_fileid(dentry, fileid);
+	}
+	goto out;
 }
 
-/* N.B. Should the mode argument be put into the fattr? */
+/* N.B. How should the mode argument be used? */
 static int
 smb_create(struct inode *dir, struct dentry *dentry, int mode)
 {
+	__u16 fileid;
 	int error;
 
 #ifdef SMBFS_DEBUG_VERBOSE
@@ -388,22 +401,23 @@ dentry->d_parent->d_name.name, dentry->d_name.name, mode);
 	if (dentry->d_name.len > SMB_MAXNAMELEN)
 		goto out;
 
-	/* FIXME: In the CIFS create call we get the file in open
-         * state. Currently we close it directly again, although this
-	 * is not necessary anymore. */
-
 	smb_invalid_dir_cache(dir);
 	error = smb_proc_create(dentry->d_parent, &(dentry->d_name), 
-				0, CURRENT_TIME);
-	if (!error)
+				0, CURRENT_TIME, &fileid);
+	if (!error) {
+		error = smb_instantiate(dentry, fileid, 1);
+	} else
 	{
-		error = smb_instantiate(dentry);
+#ifdef SMBFS_PARANOIA
+printk("smb_create: %s/%s failed, error=%d\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, error);
+#endif
 	}
 out:
 	return error;
 }
 
-/* N.B. Should the mode argument be put into the fattr? */
+/* N.B. How should the mode argument be used? */
 static int
 smb_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 {
@@ -417,7 +431,7 @@ smb_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	error = smb_proc_mkdir(dentry->d_parent, &(dentry->d_name));
 	if (!error)
 	{
-		error = smb_instantiate(dentry);
+		error = smb_instantiate(dentry, 0, 0);
 	}
 out:
 	return error;
@@ -436,8 +450,17 @@ smb_rmdir(struct inode *dir, struct dentry *dentry)
 	 * Since the dentry is holding an inode, the file
 	 * is in use, so we have to close it first.
 	 */
-	if (dentry->d_inode)
-		smb_close(dentry->d_inode);
+	smb_close(dentry->d_inode);
+
+	/*
+	 * Prune any child dentries so this dentry can become negative.
+	 */
+	if (dentry->d_count > 1) {
+		shrink_dcache_parent(dentry);
+		error = -EBUSY;
+		if (dentry->d_count > 1)
+			goto out;
+ 	}
 
 	smb_invalid_dir_cache(dir);
 	error = smb_proc_rmdir(dentry->d_parent, &(dentry->d_name));
@@ -463,8 +486,7 @@ smb_unlink(struct inode *dir, struct dentry *dentry)
 	 * Since the dentry is holding an inode, the file
 	 * is in use, so we have to close it first.
 	 */
-	if (dentry->d_inode)
-		smb_close(dentry->d_inode);
+	smb_close(dentry->d_inode);
 
 	smb_invalid_dir_cache(dir);
 	error = smb_proc_unlink(dentry->d_parent, &(dentry->d_name));

@@ -1,3 +1,47 @@
+Mon Nov 24 10:37:49 1997  Theodore Ts'o  <tytso@rsts-11.mit.edu>
+
+	* serial.c, esp.c, rocket.c: Change drivers to take advantage of
+	 	tty_get_baud_rate().
+	
+	* tty_io.c (tty_get_baud_rate): New function which computes the
+		correct baud rate for the tty.  More factoring out of
+		common code out of the serial driver to the high-level tty
+		functions....
+
+Sat Nov 22 07:53:36 1997  Theodore Ts'o  <tytso@rsts-11.mit.edu>
+
+	* serial.c, esp.c, rocket.c: Add tty->driver.break() routine, and
+ 		allow high-level tty code to handle the break and soft
+ 		carrier ioctls.
+	
+	* tty_ioctl.c (n_tty_ioctl): Support TIOCGSOFTCAR and
+ 		TIOCSSOFTCAR, so that device drivers don't have to support
+ 		it.
+
+	* serial.c (autoconfig): Change 16750 test to hopefully eliminate
+		false results by people with strange 16550A's being
+		detected as 16750's.  Hopefully 16750's will still be
+		detected as 16750, and other wierd UART's won't get poorly
+		autodetected.  If this doesn't work, I'll have to disable
+		the auto identification for the 16750....
+
+	* tty_io.c (tty_hangup): Now do actually do the tty hangup
+		processing during the timer processing, and disable
+		interrupts while doing the hangup processing.  This avoids
+		several nasty race conditions which happened when the
+		hangup processing was done asynchronously.
+		(tty_ioctl): Do break handling in the tty driver if
+		driver's break function is supported.  
+		(tty_flip_buffer_push): New exported function which should
+		be used by drivers to push characters in the flip buffer
+		to the tty handler.  This may either be done using a task
+		queue function for better CPU efficiency, or directly for
+		low latency operation.
+
+	* serial.c (rs_set_termios): Fix bug rs_set_termios when
+		transitioning away from B0, submitted by Stanislav
+		Voronyi. 
+
 Thu Jun 19 20:05:58 1997  Theodore Ts'o  <tytso@rsts-11.mit.edu>
 
 	* serial.c (begin_break, end_break, rs_ioctl): Applied patch

@@ -1,3 +1,392 @@
+Hey, Emacs, we're -*-Text-*- mode!
+
+===== Release notes for ftape-3.04d 25/11/97 =====
+- The correct pre-processor statement for "else if" is "#elif" not
+  "elsif".
+- Need to call zft_reset_position() when overwriting cartridges
+  previously written with ftape-2.x, sftape, or ancient
+  (pre-ftape-3.x) versions of zftape.
+
+===== Release notes for ftape-3.04c 16/11/97 =====
+- fdc_probe() was calling DUMPREGS with a result length of "1" which
+  was just fine. Undo previous change.
+
+===== Release notes for ftape-3.04b 14/11/97 =====
+
+- patches/2.x.x/floppy.c.diff was somewhat broken, releasing i/o
+  regions it never had allocated.
+- fdc_probe() was calling DUMPREGS with a result length of "1" instead
+  of "10"
+- Writing deleted data marks if the first segents on track zero are
+  should work now.
+- ftformat should now be able to handle those cases where the tape
+  drive sets the read only status bit (QIC-40/80 cartridges with
+  QIC-3010/3020 tape drives) because the header segment is damaged.
+- the MTIOCFTCMD ioctl may now be issued by the superuser ONLY.
+
+===== Release notes for ftape-3.04a 12/11/97 =====
+- Fix an "infinite loop can't be killed by signal" bug in
+  ftape_get_drive_status(). Only relevant when trying to access
+  buggy/misconfigured hardware
+- Try to compensate a bug in the HP Colorado T3000's firmware: it
+  doesn't set the write protect bit for QIC80/QIC40 cartridges.
+
+===== Release notes for ftape-3.04 06/11/97 =====
+- If positioning with fast seeking fails fall back to a slow seek
+  before giving up.
+- (nearly) no retries on "no data errors" when verifying after
+  formatting. Improved tuning of the bad sector map after formatting.
+- the directory layout has changed again to allow for easier kernel
+  integration
+- Module parameter "ftape_tracing" now is called "ft_tracing" because
+  the "ftape_tracing" variable has the version checksum attached to it.
+- `/proc/ftape' interface for 2.0.* kernels. `/proc/ftape' no longer
+  is a directory but a file that contains all the information formerly
+  provided in separate files under the `/proc/ftape/' directory.
+- Most of the configuration options have been prefixed by "CONFIG_FT_"
+  in preparation of the kernel inclusion. The Makefiles under
+  "./ftape/" should be directly usable by the kernel.
+- The MODVERSIONS stuff is now auto-detected.
+- Broke backslashed multi line options in MCONFIG into separate lines
+  using GNU-make's "+=" feature.
+- The html and dvi version of the manual is now installed under
+  '/usr/doc/ftape` with 'make install`
+- New SMP define in MCONFIG. ftape works with SMP if this is defined.
+- attempt to cope with "excessive overrun errors" by gradually
+  increasing FDC FIFO threshold. But this doesn't seem to have too
+  much an effect.
+- New load time configuration parameter "ft_fdc_rate_limit". If you
+  encounter too many overrun errors with a 2Mb controller then you
+  might want to set this to 1000.
+- overrun errors on the last sector in a segment sometimes result in
+  a zero DMA residue. Dunno why, but compensate for it.
+- there were still fdc_read() timeout errors. I think I have fixed it
+  now, please FIXME.
+- Sometimes ftape_write() failed to re-start the tape drive when a
+  segment without a good sector was reached ("wait for empty segment
+  failed"). This is fixed. Especially important for > QIC-3010.
+- sftape (aka ftape-2.x) has vanished. I didn't work on it for
+  ages. It is probably still possible to use the old code with
+  ftape-3.04, if one really needs it (BUT RECOMPILE IT)
+- zftape no longer alters the contents of already existing volume
+  table entries, which makes it possible to fill in missing fields,
+  like time stamps using some user space program.
+- ./contrib/vtblc/ contains such a program.
+- new perl script ./contrib/scripts/listtape that list the contents of a
+  floppy tape cartridge parsing the output of "mt volinfo" + "mt fsf"
+- the MTWEOF implementation has changed a little bit (after I had a
+  look at amanda). Calling MTWEOF while the tape is still held open
+  after writing something to the tape now will terminate the current
+  volume, and start a new one at the current position.
+- the volume table maintained by zftape now is a doubly linked list
+  that grows dynamically as needed.
+
+  formatting floppy tape cartridges
+  ---------------------------------
+  * there is a new user space formatting program that does most of the
+    dirty work in user space (auto-detect, computing the sector
+    coordinates, adjusting time stamps and statistics). It has a
+    simple command line interface.
+  * ftape-format.o has vanished, it has been folded into the low level
+    ftape.o module, and the ioctl interface into zftape.o. Most of the
+    complicated stuff has been moved to user space, so there was no
+    need for a separate module anymore.
+  * there is a new ioctl MTIOCFTCMD that sends a bare QIC-117 command
+    to the tape drive.
+  * there is a new mmap() feature to map the dma buffers into user
+    space to be used by the user level formatting program.
+  * Formatting of yet unformatted or totally degaussed cartridges
+    should be possible now. FIXME.
+
+===== Release notes for ftape-3.03b, <forgot the exact date> ====
+
+ftape-3.03b was released as a beta release only. Its main new feature
+was support of the DITTO-2GB drive. This was made possible by reverse
+engineering done by <fill in his name> after Iomega failed to support
+ftape. Although they had promised to do so (this makes me feel a bit
+sad and uncomfortable about Iomega).
+
+===== Release notes for ftape-3.03a, 22/05/97 ====
+
+- Finally fixed auto-un-loading of modules for kernels > 2.1.18
+- Add an "uninstall" target to the Makefile
+- removed the kdtime hack
+- texi2www didn't properly set the back-reference from a footnote back
+  to the regular text.
+
+  zftape specific
+  ---------------
+  * hide the old compression map volume. Taper doesn't accept the
+    presence of non-Taper volumes and Taper-written volume on the same
+    tape.
+  * EOD (End Of Data) handling was still broken: the expected behavior
+    is to return a zero byte count at the first attempt to read past
+    EOD, return a zero byte count at the second attempt to read past
+    EOD and THEN return -EIO.
+  
+  ftape-format specific
+  ---------------------
+  * Detection of QIC-40 cartridges in select_tape_format() was broken
+    and made it impossible to format QIC-3010/3020 cartridges.
+  * There are strange "TR-1 Extra" cartridges out there which weren't
+    detected properly because the don't strictly conform to the
+    QIC-80, Rev. N, spec.
+
+===== Release notes for ftape-3.03, 30/04/97 =====
+
+- Removed kernel integration code from the package. I plan to provide
+  a package that can be integrated into the stock kernel separately
+  (hopefully soon).
+  As a result, a simple `make' command now will build everything.
+- ALL compile time configuration options have been moved to the file
+  `MCONFIG'.
+- Quite a few `low level' changes to allow formatting of cartridges.
+- formatting is implemented as a separate module `ftape-format.o'. The
+  modified `mt' program contains sample code that shows how to use it.
+- The VFS interface has been moved from the `ftape.o' module to the
+  high level modules `zftape.o' resp. `sftape.o'. `ftape.o' contains
+  the hardware support only.
+- A bit of /proc support for kernels > 2.1.28
+- Moved documentation to Doc subdir. INSTALL now contains some real
+  installation notes.
+- `install' target in Makefile.
+
+zftape specific:
+----------------
+
+- zftape works for large cartridges now ( > 2^31 bytes)
+- MTIOCVOLINFO and MTIOCGETSIZE now return the size in KILOBYTES,
+  NO LONGER in bytes.
+
+- permissions for write access to a cartridge have changed:
+  * zftape now also takes the file access mode into account
+  * zftape no longer allows writing in the middle of the recorded
+    media. The tape has to be positioned at BOT or EOD for write
+    access.
+
+- MTBSF has changed. It used to position at the beginning of the
+  previous file when called with count 1. This was different from the
+  expected behavior for other Un*x tape drivers (i.e. SCSI). MTBSF
+  with count 1 should merely position at the beginning of the current
+  volume. Fixed. As a result, `tar --verify' now produces the desired
+  result: it verifies the last written volume, not the pre-last
+  written volume.
+
+- The compression map has vanished --> no need for `mt erase' any
+  more. Fast seeking in a compressed volume is still be possible, but
+  takes slightly longer. As a side effect, you may experience an
+  additional volume showing up in front of all others for old
+  cartridges. This is the tape volume that holds the compression map.
+
+- The compression support for zftape has been moved to a separate
+  module `zft-compressor'. DON'T forget to load it before trying to
+  read back compressed volumes. The stock `zftape.o' module probes for
+  the module `zft-compressor' using the kerneld message channel; you
+  have to install `zft-compressor.o' in a place where modprobe can
+  find it if you want to use this.
+
+- New experimental feature that tries to get the broken down GMT time
+  from user space via a kernel daemon message channel. You need to
+  compile and start the `kdtime' daemon contained in the contrib
+  directory to use it. Needed (?) for time stamps in the header
+  segments and the volume table.
+
+- variable block size mode via MTSETBLK 0
+
+- keep modules locked in memory after the block size has been changed
+
+sftape specific:
+----------------
+
+- end of tape handling should be fixed, i.e. multi volume archives
+  written with `afio' can be read back now.
+
+
+===== Release notes for ftape-3.02a, 09/01/97 =====
+
+No big news:
+- call zft_init() resp. sft_init() when compiling the entire stuff
+  into the kernel image.
+- fix bug in ftape-setup.c when NO_TRACE_AT_ALL was defined.
+- fix bug in sftape-eof.c/zftape-eof.c for old kernels (1.2.*)
+- add support for new module interface for recent kernels
+
+===== Release notes for ftape-3.02, 16/12/96 =====
+- Fixed the `FDC unlock command failed' bug in fdc-io.c. When the FIFO
+  was already locked when ftape was loaded, ftape failed to unlock it.
+- Fixed compilation of `contrib/gnumt'. It now finds `mtio.h' even if
+  ftape is NOT included into the kernel source tree.
+- fc-10.c: include <asm/io.h> for inb() and outb().
+- ftape/sftape/zftape: all global variable now have either a `ftape_',
+  a `ft_', `sft_', `zft_' or `qic_' prefix to prevent name clashes
+  with other parts of the kernel when including ftape into the kernel
+  source tree.
+- Kerneld support has changed. `ftape' now searches for a module
+  `ftape-frontend' when none of the frontend (`sftape' or `zftape') is
+  loaded. Please refer to the `Installation/Loading ftape' section of
+  the TeXinfo manual.
+- Add load resp. boot-time configuration of ftape. There are now
+  variables ft_fdc_base, ft_fdc_dma and ft_fdc_irq corresponding to
+  the former FDC_BASE etc. compile time definitions. One can also use
+  the kernel command line parameters to configure the driver if it is
+  compiled into the kernel. Also, the FC-10/FC-20 support is load-time
+  configurable now as well as the MACH-II hack (ft_probe_fc10,
+  resp. ft_mach2). Please refer to the section `Installation/Configure
+  ftape' of the TeXinfo manual.
+- I removed the MODVERSIONS option from `Makefile.module'. Let me alone
+  with ftape and MODVERSIONS unless you include the ftape sources into
+  the kernel source tree.
+- new vendors in `vendors.h':
+  * HP Colorado T3000 
+  * ComByte DoublePlay (including a bug fix for their broken
+    formatting software, thanks to whraven@njackn.com)
+  * Iomega DITTO 2GIG. NOTE: this drive cannot work with ftape because
+    the logical data layout of the cartridges used by this drive does
+    NOT conform to the QIC standards, it is a special Iomega specific
+    format. I've sent mail to Iomega but didn't receive an answer
+    yet. If you want this drive to be supported by ftape, ask Iomega
+    to give me information about it.
+- zftape:
+  * re-introduced the MTIOC_ZFTAPE_GETBLKSZ ioctl for compatibility
+    with zftape 1.06a and earlier. Please don't use it when writing
+    new software, use the MTIOCVOLINFO ioctl instead.
+  * Major overhaul of the code that updates the header segments. Never
+    change the tape label unless erasing the tape. Thus we almost
+    never need to write the header segments, unless we would modify
+    the bad sector map which isn't done yet. Updating of volume table
+    and compression map more secure now although it takes a bit
+    longer.
+  * Fixed bug when aborting a write operation with a signal: zftape
+    now finishes the current volume (i.e. writes an eof marker) at the
+    current position. It didn't before which led to somehow *strange*
+    behavior in this cases.
+  * Keep module locked in memory when using it with  the non-rewinding
+    devices and the tape is not logical at BOT. Needed for kerneld
+    support.
+- sftape:
+  * Keep module locked in memory when using it with  the non-rewinding
+    devices and the tape is not logical at BOT. Needed for kerneld
+    support.
+
+===== Release notes for ftape-3.01, 14/11/96 =====
+
+- Fixed silly bugs in ftape-3.00:
+  * MAKEDEV.ftape: major device number must be 27, not 23 
+  * sftape/sftape-read.c: sftape_read_header_segments() called 
+    itself recursively instead of calling ftape_read_header_segment()
+  * zftape/qic-vtbl.h: conversion of ftape's file marks to zftape's
+    internal volume table was broken.
+  * patches/2.x.x/linux-2.0.21.dif: my RCS (resp. CVS) system replaced
+    the `$Revison:' etc. macros in the `ftape.h' concerning part of the
+    patch :-( Fixed.
+  * info/ftape.info: Fixed misspellings (`cp' <-> `cp -r' etc.)
+  * when ftape/sftape or ftape/zftape was compiled into the kernel the
+    variable ftape_status was declared twice. Fixed.
+  * removed reference to undeclared variable kernel_version when not
+    compiling as module
+  * fixed a bug introduced by the use of bit-fields for some flags
+    (i.e. write_protected, no_cartridge, formatted)
+  * flag `header_read' is now reset correctly to zero when tape is
+    removed.
+- fixed a bug in sftape/sftape-eof.c that was already in the original
+  ftape code. MTFSF/BSF was not handled correctly when positioned
+  right before the file mark (think of tar)
+- Changed TRACE macros (following a suggestion of Marcin Dalecki) to use
+  the predefined __FUNCTION__ macro of GCC. Spares about 4k of code.
+- added new vendor id for Iomega DITTO 2GIG
+- fixed a bug already present in zftape-1.06 when aborting a write
+  with a signal: we now finish the current volume at that
+  position. Header segments remain NOT up to date until an explicit call
+  to MTREW or MTOFFL is done.  
+
+===== Release notes for ftape-3.00, 14/10/96 =====
+
+- Merged ftape with zftape. There are three modules now:
+  ftape for the hardware support, sftape for the implementation of the
+  original ftape eof mark stuff and zftape that implements zftape's way
+  of handling things (compression, volume table, tape blocks of
+  constant length)
+- Documentation in TeXinfo format in the `info' subdirectory.
+- New ioctls for zftape. See zftape/zftape.h
+- Dummy formatting ioctl for ftape. See ftape.h
+- Kernel patch files for the 2.*.* series to include ftape-3.00 in the
+  kernel source tree. These includes a kernel compatible Config.in
+  script and fairly large online information for the kernel configure
+  script.
+- Support for compiling with Linux-1.2.13. 
+- Modified GNU mt from their cpio package that can handle the new
+  ioctls.
+- ftape/sftape/zftape is kerneld save now!
+
+Notes on sftape:
+- sftape implements the eof handling code of the original ftape. If
+  you like to stick with the original ftape stuff, you have to use
+  this module, not zftape.
+- sftape is kerneld save, unlike the original ftape.
+- we keep the entire header segment now in memory, so no need to read
+  it before updating the header segments. Additional memory
+  consumption: 256 bytes. 
+
+Notes for zftape:
+- zftape has support for tapes with format code 6 now, which use a
+  slightly different volume table format compared with other floppy
+  tapes.
+- new ioctls for zftape. Have a look at zftape/zftape.h
+- The internal volume table representation has changed for zftape. Old
+  cartridges are converted automatically.
+- zftape no longer uses compression map segments, which have vanished
+  from the QIC specs, but creates volume table entry that reserves
+  enough space for the compression map. 
+- zftape is kerneld save now.
+- we keep the entire header segment now in memory, so no need to read
+  it before updating the header segments. Additional memory
+  consumption: 256 bytes. 
+
+Notes for contrib/gnumt:
+- modified mt from the GNU cpio package that supports all the new
+  ioctls of zftape.
+Notes for contrib/swapout:
+- This contains the swapout.c program that was written by Kai
+  Harrekilde-Pederson. I simply added a Makefile.
+
+===== Release notes for ftape-2.10, 14/10/96 =====
+
+The ftape maintainer has changed. 
+Kai Harrekilde-Petersen <khp@dolphinics.no>
+has resigned from maintaining ftape, and I,
+Claus-Justus Heine <claus@momo.math.rwth-aachen.de>,
+have taken over.
+
+- Added support for tapes with `format code 6', i.e. QIC-3020 tapes
+  with more than 2^16 segments.
+- merged changes made by Bas Laarhoven with ftape-2.09. Refer
+  to his release notes below. I've included them into this
+  file unchanged for your reference.
+- disabled call stack back trace for now. This new feature
+  introduced by the interim release 2.0.x still seems to
+  be buggy.
+- Tried to minimize differences between the ftape version
+  to be included into the kernel source tree and the standalone
+  module version.
+- Reintroduced support for Linux-1.2.13. Please refer to the
+  Install-guide. 
+
+===== Release notes for ftape-2.09, 16/06/96 =====
+
+There aren't any really big news in this release, mostly just that I
+(the maintainer) have changed my email address (due to a new job).  My
+new address is <khp@dolphinics.no>
+
+- The CLK_48MHZ and FDC_82078SL options has gone (all 2Mbps cards seem
+  to use a 48MHz oscillator anyway and I haven't heard of an 'SL
+  chip out there).
+- The S82078B has been `downgraded' to i82077AA compability.
+- TESTING option revived.  Right now, it'll enable the (seriously broken)
+  2Mbps code.  If you enable it, you'll experience a tape drive that's
+  *really* out to lunch!
+- Some (bold) changes in the init code.  Please notify me if they
+  break things for you.
+
 ===== Release notes for ftape-2.08, 14/03/96 =====
 
 If you correct a problem with ftape, please send your patch to
@@ -567,3 +956,13 @@ Have fun,
 
 Bas.
 ----
+ LocalWords:  ftape MCONFIG mt VFS zftape resp sftape proc subdir MTIOCVOLINFO
+ LocalWords:  MTIOCGETSIZE BOT EOD MTBSF zft kerneld modprobe kdtime contrib TR
+ LocalWords:  MTSETBLK afio uninstall texi www EIO QIC init sft eof aka dma GB
+ LocalWords:  SIGKILL MTIOCFTCMD mmap Iomega FDC fdc io gnumt mtio fc asm inb
+ LocalWords:  outb ft qic frontend TeXinfo irq mach MODVERSIONS CONFIG html dvi
+ LocalWords:  usr doc SMP Mb Dunno FIXME vtblc perl listtape volinfo fsf MTWEOF
+ LocalWords:  amanda degaussed ComByte DoublePlay whraven njackn com MTIOC vtbl
+ LocalWords:  GETBLKSZ MAKEDEV zftape's linux dif CVS Revison cp MTREW MTOFFL
+ LocalWords:  MTFSF BSF Marcin Dalecki GCC Config cpio swapout Kai Harrekilde
+ LocalWords:  Pederson khp dolphinics Justus claus momo rwth aachen Laarhoven

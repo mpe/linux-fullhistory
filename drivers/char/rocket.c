@@ -622,10 +622,12 @@ static void init_r_port(int board, int aiop, int chan)
 	rp_table[line] = info;
 }
 
+#if (LINUX_VERSION_CODE < 131393) /* Linux 2.1.65 */
 static int baud_table[] = {
 	0, 50, 75, 110, 134, 150, 200, 300,
 	600, 1200, 1800, 2400, 4800, 9600, 19200,
 	38400, 57600, 115200, 230400, 460800, 0 };
+#endif
 
 /*
  * This routine configures a rocketport port so according to its
@@ -671,6 +673,7 @@ static void configure_r_port(struct r_port *info)
 	}
 	
 	/* baud rate */
+#if (LINUX_VERSION_CODE < 131393) /* Linux 2.1.65 */
 	i = cflag & CBAUD;
 	if (i & CBAUDEX) {
 		i &= ~CBAUDEX;
@@ -690,6 +693,11 @@ static void configure_r_port(struct r_port *info)
 			i += 4;
 	}
 	baud = baud_table[i] ? baud_table[i] : 9600;
+#else
+	baud = tty_get_baud_rate(info->tty);
+	if (!baud)
+		baud = 9600;
+#endif
 	info->cps = baud / bits;
 	sSetBaud(cp, (rp_baud_base/baud) - 1);
 	
@@ -1182,7 +1190,7 @@ static void rp_set_termios(struct tty_struct *tty, struct termios *old_termios)
 /*
  * Here are the routines used by rp_ioctl
  */
-
+#if (LINUX_VERSION_CODE < 131393) /* Linux 2.1.65 */
 static void send_break(	struct r_port * info, int duration)
 {
 	current->state = TASK_INTERRUPTIBLE;
@@ -1193,6 +1201,24 @@ static void send_break(	struct r_port * info, int duration)
 	sClrBreak(&info->channel);
 	sti();
 }
+#else
+static void rp_break(struct tty_struct *tty, int break_state)
+{
+	struct r_port * info = (struct r_port *)tty->driver_data;
+	unsigned long flags;
+	
+	if (rocket_paranoia_check(info, tty->device, "rp_break"))
+		return;
+
+	save_flags(flags); cli();
+	if (break_state == -1) {
+		sSendBreak(&info->channel);
+	} else {
+		sClrBreak(&info->channel);
+	}
+	restore_flags(flags);
+}
+#endif
 
 static int get_modem_info(struct r_port * info, unsigned int *value)
 {
@@ -1289,8 +1315,19 @@ static int set_config(struct r_port * info, struct rocket_config * new_info)
 			(new_serial.flags & ROCKET_FLAGS));
 	info->close_delay = new_serial.close_delay;
 	info->closing_wait = new_serial.closing_wait;
-	configure_r_port(info);
+
+#if (LINUX_VERSION_CODE >= 131393) /* Linux 2.1.65 */
+	if ((info->flags & ROCKET_SPD_MASK) == ROCKET_SPD_HI)
+		info->tty->alt_speed = 57600;
+	if ((info->flags & ROCKET_SPD_MASK) == ROCKET_SPD_VHI)
+		info->tty->alt_speed = 115200;
+	if ((info->flags & ROCKET_SPD_MASK) == ROCKET_SPD_SHI)
+		info->tty->alt_speed = 230400;
+	if ((info->flags & ROCKET_SPD_MASK) == ROCKET_SPD_WARP)
+		info->tty->alt_speed = 460800;
+#endif
 	
+	configure_r_port(info);
 	return 0;
 }
 
@@ -1319,15 +1356,17 @@ static int get_ports(struct r_port * info, struct rocket_ports * retports)
 static int rp_ioctl(struct tty_struct *tty, struct file * file,
 		    unsigned int cmd, unsigned long arg)
 {
-	int tmp;
 	struct r_port * info = (struct r_port *)tty->driver_data;
-	int retval;
+#if (LINUX_VERSION_CODE < 131393) /* Linux 2.1.65 */
+	int retval, tmp;
+#endif
 
 	if (cmd != RCKP_GET_PORTS &&
 	    rocket_paranoia_check(info, tty->device, "rp_ioctl"))
 		return -ENODEV;
 
 	switch (cmd) {
+#if (LINUX_VERSION_CODE < 131393) /* Linux 2.1.65 */
 		case TCSBRK:	/* SVID version: non-zero arg --> no break */
 			retval = tty_check_change(tty);
 			if (retval)
@@ -1365,6 +1404,7 @@ static int rp_ioctl(struct tty_struct *tty, struct file * file,
 				((tty->termios->c_cflag & ~CLOCAL) |
 				 (tmp ? CLOCAL : 0));
 			return 0;
+#endif
 		case TIOCMGET:
 			return get_modem_info(info, (unsigned int *) arg);
 		case TIOCMBIS:
@@ -2093,6 +2133,9 @@ __initfunc(int rp_init(void))
 	rocket_driver.stop = rp_stop;
 	rocket_driver.start = rp_start;
 	rocket_driver.hangup = rp_hangup;
+#if (LINUX_VERSION_CODE >= 131393) /* Linux 2.1.65 */
+	rocket_driver.break_ctl = rp_break;
+#endif
 #if (LINUX_VERSION_CODE >= 131343)
 	rocket_driver.send_xchar = rp_send_xchar;
 	rocket_driver.wait_until_sent = rp_wait_until_sent;

@@ -36,6 +36,8 @@ ez.txt
 	- documentation for the SyQuest parallel port EZ drive support.
 filesystems/
 	- directory with info on the various filesystems that Linux supports.
+ftape.txt
+	- notes about the floppy tape device driver
 ide.txt
 	- important info for users of ATA devices (IDE/EIDE disks and CD-ROMS)
 initrd.txt

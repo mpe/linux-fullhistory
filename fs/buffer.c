@@ -196,7 +196,7 @@ repeat:
 			 */
 			if (wait && buffer_req(bh) && !buffer_locked(bh) &&
 			    !buffer_dirty(bh) && !buffer_uptodate(bh)) {
-				err = 1;
+				err = -EIO;
 				continue;
 			}
 
@@ -288,7 +288,22 @@ asmlinkage int sys_sync(void)
  
 int file_fsync(struct file *filp, struct dentry *dentry)
 {
-	return fsync_dev(dentry->d_inode->i_dev);
+	struct inode * inode = dentry->d_inode;
+	struct super_block * sb;
+	kdev_t dev;
+
+	/* sync the inode to buffers */
+	write_inode_now(inode);
+
+	/* sync the superblock to buffers */
+	sb = inode->i_sb;
+	wait_on_super(sb);
+	if (sb->s_op && sb->s_op->write_super)
+		sb->s_op->write_super(sb);
+
+	/* .. finally sync the buffers to disk */
+	dev = inode->i_dev;
+	return sync_buffers(dev, 1);
 }
 
 asmlinkage int sys_fsync(unsigned int fd)

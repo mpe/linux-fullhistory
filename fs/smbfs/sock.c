@@ -420,8 +420,8 @@ printk("smb_receive: receive error: %d\n", result);
 #endif
 		goto out;
 	}
-	server->rcls = *(packet+9);
-	server->err = WVAL(packet, 11);
+	server->rcls = *(packet + smb_rcls);
+	server->err  = WVAL(packet, smb_err);
 
 #ifdef SMBFS_DEBUG_VERBOSE
 if (server->rcls != 0)

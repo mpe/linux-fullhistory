@@ -42,18 +42,22 @@ static unsigned long nfsd_next_expire = 0;
 
 static int add_to_fhcache(struct dentry *, int);
 static int nfsd_d_validate(struct dentry *);
+struct dentry * lookup_inode(dev_t, ino_t, ino_t);
 
 static LIST_HEAD(fixup_head);
 static LIST_HEAD(path_inuse);
+static int nfsd_nr_fixups = 0;
 static int nfsd_nr_paths = 0;
 #define NFSD_MAX_PATHS 500
+#define NFSD_MAX_FIXUPAGE 60*HZ
 
 struct nfsd_fixup {
 	struct list_head lru;
-	struct dentry *dentry;
-	unsigned long reftime;
+	ino_t	dir;
 	ino_t	ino;
 	dev_t	dev;
+	struct dentry *dentry;
+	unsigned long reftime;
 };
 
 struct nfsd_path {
@@ -64,6 +68,65 @@ struct nfsd_path {
 	dev_t	dev;
 	char	name[1];
 };
+
+static struct nfsd_fixup * find_cached_lookup(dev_t dev, ino_t dir, ino_t ino)
+{
+	struct list_head *tmp = fixup_head.next;
+
+	for (; tmp != &fixup_head; tmp = tmp->next) {
+		struct nfsd_fixup *fp;
+
+		fp = list_entry(tmp, struct nfsd_fixup, lru);
+		if (fp->ino != ino)
+			continue;
+		if (fp->dir != dir)
+			continue;
+		if (fp->dev != dev)
+			continue;
+		list_del(tmp);
+		list_add(tmp, &fixup_head);
+		fp->reftime = jiffies;
+		return fp;
+	}
+	return NULL;
+}
+
+/*
+ * Save the dentry pointer from a successful lookup.
+ */
+static void add_to_lookup_cache(struct dentry *dentry, struct knfs_fh *fh)
+{
+	struct nfsd_fixup *fp;
+
+	fp = find_cached_lookup(fh->fh_dev, fh->fh_dirino, fh->fh_ino);
+	if (fp) {
+		fp->dentry = dentry;
+		return;
+	}
+
+	/*
+	 * Add a new entry. The small race here is unimportant:
+	 * if another task adds the same lookup, both entries
+	 * will be consistent.
+	 */
+	fp = kmalloc(sizeof(struct nfsd_fixup), GFP_KERNEL);
+	if (fp) {
+		fp->dir = fh->fh_dirino;
+		fp->ino = fh->fh_ino;
+		fp->dev = fh->fh_dev;
+		fp->dentry = dentry;
+		fp->reftime = jiffies;
+		list_add(&fp->lru, &fixup_head);
+		nfsd_nr_fixups++;
+	}
+}
+
+static void free_fixup_entry(struct nfsd_fixup *fp)
+{
+	list_del(&fp->lru);
+	kfree(fp);
+	nfsd_nr_fixups--;
+}
 
 /*
  * Copy a dentry's path into the specified buffer.
@@ -210,98 +273,203 @@ static void free_path_entry(struct nfsd_path *pe)
 
 struct nfsd_getdents_callback {
 	struct nfsd_dirent *dirent;
-	int found;
-	int checked;
+	ino_t dirino;		/* parent inode number */
+	int found;		/* dirent inode matched? */
+	int sequence;		/* sequence counter */
 };
 
 struct nfsd_dirent {
-	ino_t ino;
+	ino_t ino;		/* preset to desired entry */
 	int len;
 	char name[256];
 };
 
 /*
- * A custom filldir function to search for the specified inode.
+ * A rather strange filldir function to capture the inode number
+ * for the second entry (the parent inode) and the name matching
+ * the specified inode number.
  */
-static int filldir_ino(void * __buf, const char * name, int len, 
+static int filldir_one(void * __buf, const char * name, int len, 
 			off_t pos, ino_t ino)
 {
 	struct nfsd_getdents_callback *buf = __buf;
 	struct nfsd_dirent *dirent = buf->dirent;
 	int result = 0;
 
-	buf->checked++;
-	if (ino == dirent->ino) {
-		buf->found = 1;
+	buf->sequence++;
+#ifdef NFSD_DEBUG_VERBOSE
+printk("filldir_one: seq=%d, ino=%ld, name=%s\n", buf->sequence, ino, name);
+#endif
+	if (buf->sequence == 2) {
+		buf->dirino = ino;
+		goto out;
+	}
+	if (dirent->ino == ino) {
 		dirent->len = len;
 		memcpy(dirent->name, name, len);
 		dirent->name[len] = 0;
+		buf->found = 1;
 		result = -1;
 	}
+out:
 	return result;
 }
 
 /*
- * Search a directory for the specified inode number.
+ * Read a directory and return the parent inode number and the name
+ * of the specified entry. The dirent must be initialized with the
+ * inode number of the desired entry.
  */
-static int search_dir(struct dentry *parent, ino_t ino,
-			struct nfsd_dirent *dirent)
+static int get_parent_ino(struct dentry *dentry, struct nfsd_dirent *dirent)
 {
-	struct inode *inode = parent->d_inode;
+	struct inode *dir = dentry->d_inode;
 	int error;
 	struct file file;
 	struct nfsd_getdents_callback buffer;
 
 	error = -ENOTDIR;
-	if (!inode || !S_ISDIR(inode->i_mode))
+	if (!dir || !S_ISDIR(dir->i_mode))
 		goto out;
 	error = -EINVAL;
-	if (!inode->i_op || !inode->i_op->default_file_ops)
+	if (!dir->i_op || !dir->i_op->default_file_ops)
 		goto out;
-
 	/*
 	 * Open the directory ...
 	 */
-	error = init_private_file(&file, parent, FMODE_READ);
+	error = init_private_file(&file, dentry, FMODE_READ);
 	if (error)
 		goto out;
 	error = -EINVAL;
 	if (!file.f_op->readdir)
 		goto out_close;
 
-	/*
-	 * Initialize the callback buffer.
-	 */
-	dirent->ino = ino;
 	buffer.dirent = dirent;
+	buffer.dirino = 0;
 	buffer.found = 0;
-
+	buffer.sequence = 0;
 	while (1) {
-		buffer.checked = 0;
-		error = file.f_op->readdir(&file, &buffer, filldir_ino);
+		int old_seq = buffer.sequence;
+		down(&dir->i_sem);
+		error = file.f_op->readdir(&file, &buffer, filldir_one);
+		up(&dir->i_sem);
 		if (error < 0)
 			break;
 
 		error = 0;
-		if (buffer.found) {
-#ifdef NFSD_DEBUG_VERBOSE
-printk("search_dir: found %s\n", dirent->name);
-#endif
+		if (buffer.found)
 			break;
-		}
 		error = -ENOENT;
-		if (!buffer.checked)
+		if (old_seq == buffer.sequence)
 			break;
 	}
+	dirent->ino = buffer.dirino;
 
 out_close:
 	if (file.f_op->release)
-		file.f_op->release(inode, &file);
+		file.f_op->release(dir, &file);
 out:
 	return error;
-
 }
-	
+
+/*
+ * Look up a dentry given inode and parent inode numbers.
+ *
+ * This relies on the ability of a unix-like filesystem to return
+ * the parent inode of a directory as the ".." (second) entry.
+ *
+ * This could be further optimized if we had an efficient way of
+ * searching for a dentry given the inode: as we walk up the tree,
+ * it's likely that a dentry exists before we reach the root.
+ */
+struct dentry * lookup_inode(dev_t dev, ino_t dirino, ino_t ino)
+{
+	struct super_block *sb;
+	struct dentry *root, *dentry, *result;
+	struct inode *dir;
+	char *name;
+	unsigned long page;
+	int error;
+	struct nfsd_dirent dirent;
+
+	result = ERR_PTR(-ENOMEM);
+	page = __get_free_page(GFP_KERNEL);
+	if (!page)
+		goto out;
+
+	/*
+	 * Get the root dentry for the device.
+	 */
+	result = ERR_PTR(-ENOENT);
+	sb = get_super(dev);
+	if (!sb)
+		goto out_page;
+	root = dget(sb->s_root);
+
+	name = (char *) page + PAGE_SIZE;
+	*(--name) = 0;
+
+	/*
+	 * Walk up the tree building the name string as we go.
+	 * When we reach the root (ino == 2), get the dentry
+	 * relative to the root dentry.
+	 */
+	while (1) {
+		if (ino == 2) {
+			if (*name == '/')
+				name++;
+			/*
+			 * Note: this dput()s the root dentry.
+			 */
+			result = lookup_dentry(name, root, 0);
+			goto out_page;
+		}
+
+		result = ERR_PTR(-ENOENT);
+		dir = iget(sb, dirino);
+		if (!dir)
+			goto out_root;
+		dentry = d_alloc_root(dir, NULL);
+		if (!dentry)
+			goto out_iput;
+
+		/*
+		 * Get the name for this inode and the next parent inode.
+		 */
+		dirent.ino = ino;
+		error = get_parent_ino(dentry, &dirent);
+		result = ERR_PTR(error);
+		dput(dentry);
+		if (error)
+			goto out_root;
+		/*
+		 * Prepend the name to the buffer.
+		 */
+		name -= dirent.len;
+		memcpy(name, dirent.name, dirent.len);
+		*(--name) = '/';
+
+		/*
+		 * Make sure we can't get caught in a loop ...
+		 */
+		result = ERR_PTR(-EINVAL);
+		if (dirino == dirent.ino && dirino != 2) {
+printk("lookup_inode: loop detected, dirino=%ld, path=%s\n", dirino, name);	
+			goto out_root;
+		}
+		ino = dirino;
+		dirino = dirent.ino;
+	}
+
+out_iput:
+	iput(dir);
+out_root:
+	dput(root);
+out_page:
+	free_page(page);
+out:
+	return result;
+}
+
 /*
  * Find an entry in the cache matching the given dentry pointer.
  */
@@ -338,7 +506,8 @@ dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count,empty->ino);
 #endif
 	empty->dentry = NULL;	/* no dentry */
 	/*
-	 * Add the parent to the dir cache before releasing the dentry.
+	 * Add the parent to the dir cache before releasing the dentry,
+	 * and check whether to save a copy of the dentry's path.
 	 */
 	if (dentry != dentry->d_parent) {
 		struct dentry *parent = dget(dentry->d_parent);
@@ -346,12 +515,12 @@ dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count,empty->ino);
 			nfsd_nr_verified++;
 		else
 			dput(parent);
-	}
-	/*
-	 * If we're expiring a directory, copy its path.
-	 */
-	if (cache == NFSD_DIR_CACHE) {
-		add_to_path_cache(dentry);
+		/*
+		 * If we're expiring a directory, copy its path.
+		 */
+		if (cache == NFSD_DIR_CACHE) {
+			add_to_path_cache(dentry);
+		}
 	}
 	dput(dentry);
 	nfsd_nr_put++;
@@ -387,6 +556,7 @@ out:
  */
 static void expire_old(int cache, int age)
 {
+	struct list_head *tmp;
 	struct fh_entry *fhe;
 	int i;
 
@@ -400,6 +570,17 @@ printk("expire_old: expiring %s older than %d\n",
 			continue;
 		if ((jiffies - fhe->reftime) > age)
 			expire_fhe(fhe, cache);
+	}
+
+	/*
+	 * Remove old entries from the patch-up cache.
+	 */
+	while ((tmp = fixup_head.prev) != &fixup_head) {
+		struct nfsd_fixup *fp;
+		fp = list_entry(tmp, struct nfsd_fixup, lru);
+		if ((jiffies - fp->reftime) < NFSD_MAX_FIXUPAGE)
+			break;
+		free_fixup_entry(fp);
 	}
 
 	/*
@@ -484,6 +665,31 @@ static struct dentry *find_dentry_by_ino(dev_t dev, ino_t ino)
 #ifdef NFSD_DEBUG_VERBOSE
 printk("find_dentry_by_ino: looking for inode %ld\n", ino);
 #endif
+	/*
+	 * Special case: inode number 2 is the root inode,
+	 * so we can use the root dentry for the device.
+	 */
+	if (ino == 2) {
+		struct super_block *sb = get_super(dev);
+		if (sb) {
+#ifdef NFSD_PARANOIA
+printk("find_dentry_by_ino: getting root dentry for %s\n", kdevname(dev));
+#endif
+			if (sb->s_root) {
+				dentry = dget(sb->s_root);
+				goto out;
+			} else {
+#ifdef NFSD_PARANOIA
+				printk("find_dentry_by_ino: %s has no root??\n",
+					kdevname(dev));
+#endif
+			}
+		}
+	}
+
+	/*
+	 * Search the dentry cache ...
+	 */
 	fhe = find_fhe_by_ino(dev, ino);
 	if (fhe) {
 		dentry = dget(fhe->dentry);
@@ -545,13 +751,9 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 #endif
 			goto out;
 		}
-		if (inode->i_ino != fh->fh_ino || inode->i_dev != fh->fh_dev) {
-#ifdef NFSD_PARANOIA
-printk("find_dentry_in_fhcache: %s/%s mismatch, ino=%ld, fh_ino=%ld\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, inode->i_ino, fh->fh_ino);
-#endif
+		if (inode->i_ino != fh->fh_ino || inode->i_dev != fh->fh_dev)
 			goto out;
-		}
+
 		fhe->dentry = NULL;
 		fhe->ino = 0;
 		fhe->dev = 0;
@@ -583,13 +785,17 @@ static struct dentry *lookup_by_inode(struct dentry *parent, ino_t ino)
 	/*
 	 * Search the directory for the inode number.
 	 */
-	error = search_dir(parent, ino, &dirent);
+	dirent.ino = ino;
+	error = get_parent_ino(parent, &dirent);
 	if (error) {
 #ifdef NFSD_PARANOIA
 printk("lookup_by_inode: ino %ld not found in %s\n", ino, parent->d_name.name);
 #endif
 		goto no_entry;
 	}
+#ifdef NFSD_PARANOIA
+printk("lookup_by_inode: found %s\n", dirent.name);
+#endif
 
 	dentry = lookup_dentry(dirent.name, dget(parent), 0);
 	if (!IS_ERR(dentry)) {
@@ -611,6 +817,20 @@ no_entry:
 	dentry = NULL;
 out:
 	return dentry;
+
+}
+
+/*
+ * Search the fix-up list for a dentry from a prior lookup.
+ */
+static struct dentry *nfsd_cached_lookup(struct knfs_fh *fh)
+{
+	struct nfsd_fixup *fp;
+
+	fp = find_cached_lookup(fh->fh_dev, fh->fh_dirino, fh->fh_ino);
+	if (fp)
+		return fp->dentry;
+	return NULL;
 }
 
 /*
@@ -633,62 +853,74 @@ static struct dentry *
 find_fh_dentry(struct knfs_fh *fh)
 {
 	struct dentry *dentry, *parent;
+	int looked_up = 0, retry = 0;
 
 	/*
 	 * Stage 1: Look for the dentry in the short-term fhcache.
 	 */
 	dentry = find_dentry_in_fhcache(fh);
-	if (dentry) {
-#ifdef NFSD_DEBUG_VERBOSE
-printk("find_fh_dentry: found %s/%s, d_count=%d, ino=%ld\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count,fh->fh_ino);
-#endif
+	if (dentry)
 		goto out;
-	}
 
 	/*
 	 * Stage 2: Attempt to validate the dentry in the filehandle.
 	 */
 	dentry = fh->fh_dcookie;
+recheck:
 	if (nfsd_d_validate(dentry)) {
 		struct inode * dir = dentry->d_parent->d_inode;
 
 		if (dir->i_ino == fh->fh_dirino && dir->i_dev == fh->fh_dev) {
 			struct inode * inode = dentry->d_inode;
-
 			/*
 			 * NFS filehandles must always have an inode,
 			 * so we won't accept a negative dentry.
 			 */
-			if (!inode) {
-#ifdef NFSD_PARANOIA
-printk("find_fh_dentry: %s/%s negative, can't match %ld\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, fh->fh_ino);
-#endif
-			} else if (inode->i_ino == fh->fh_ino &&
-				   inode->i_dev == fh->fh_dev) {
+			if (inode && inode->i_ino == fh->fh_ino) {
 				dget(dentry);
 #ifdef NFSD_DEBUG_VERBOSE
 printk("find_fh_dentry: validated %s/%s, ino=%ld\n",
 dentry->d_parent->d_name.name, dentry->d_name.name, inode->i_ino);
+if (retry)
+printk("find_fh_dentry: retried validation successful\n");
 #endif
 				goto out;
-			} else {
-#ifdef NFSD_PARANOIA
-printk("find_fh_dentry: %s/%s mismatch, ino=%ld, fh_ino=%ld\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, inode->i_ino, fh->fh_ino);
-#endif
 			}
-		} else {
-#ifdef NFSD_PARANOIA
-printk("find_fh_dentry: %s/%s mismatch, parent ino=%ld, dirino=%ld\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, dir->i_ino, fh->fh_dirino);
-#endif
 		}
 	}
 
 	/*
-	 * Stage 3: Look for the parent dentry in the fhcache ...
+	 * Before proceeding to a lookup, check whether we cached a
+	 * prior lookup. If so, try to validate that dentry ...
+	 */
+	if (!retry && (dentry = nfsd_cached_lookup(fh)) != NULL) {
+		retry = 1;
+		goto recheck;
+	}
+
+	/*
+	 * Stage 3: Look up the dentry based on the inode and parent inode
+	 * numbers. This should work for all unix-like filesystems ...
+	 */
+	looked_up = 1;
+	dentry = lookup_inode(fh->fh_dev, fh->fh_dirino, fh->fh_ino);
+	if (!IS_ERR(dentry)) {
+		struct inode * inode = dentry->d_inode;
+#ifdef NFSD_DEBUG_VERBOSE
+printk("find_fh_dentry: looked up %s/%s\n",
+dentry->d_parent->d_name.name, dentry->d_name.name);
+#endif
+		if (inode && inode->i_ino == fh->fh_ino)
+			goto out;
+#ifdef NFSD_PARANOIA
+printk("find_fh_dentry: %s/%s lookup mismatch!\n",
+dentry->d_parent->d_name.name, dentry->d_name.name);
+#endif
+		dput(dentry);
+	}
+
+	/*
+	 * Stage 4: Look for the parent dentry in the fhcache ...
 	 */
 	parent = find_dentry_by_ino(fh->fh_dev, fh->fh_dirino);
 	if (parent) {
@@ -702,7 +934,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name, dir->i_ino, fh->fh_dirino);
 	}
 
 	/*
-	 * Stage 4: Search the whole volume.
+	 * Stage 5: Search the whole volume.
 	 */
 #ifdef NFSD_PARANOIA
 printk("find_fh_dentry: %s, %ld/%ld not found -- need full search!\n",
@@ -711,6 +943,10 @@ kdevname(fh->fh_dev), fh->fh_dirino, fh->fh_ino);
 	dentry = NULL;
 	
 out:
+	if (looked_up && dentry) {
+		add_to_lookup_cache(dentry, fh);
+	}
+
 	/*
 	 * Perform any needed housekeeping ...
 	 * N.B. move this into one of the daemons ...
@@ -903,7 +1139,7 @@ static int nfsd_d_validate(struct dentry *dentry)
 	unsigned long dent_addr = (unsigned long) dentry;
 	unsigned long min_addr = PAGE_OFFSET;
 	unsigned long max_addr = min_addr + (num_physpages << PAGE_SHIFT);
-	unsigned long align_mask = 0x1F;
+	unsigned long align_mask = 0x0F;
 	unsigned int len;
 	int valid = 0;
 
@@ -912,14 +1148,17 @@ static int nfsd_d_validate(struct dentry *dentry)
 	if (dent_addr > max_addr - sizeof(struct dentry))
 		goto bad_addr;
 	if ((dent_addr & ~align_mask) != dent_addr)
-		goto bad_addr;
+		goto bad_align;
 	/*
 	 * Looks safe enough to dereference ...
 	 */
 	len = dentry->d_name.len;
 	if (len > NFS_MAXNAMLEN)
 		goto bad_length;
-
+	/*
+	 * Note: d_validate doesn't dereference the parent pointer ...
+	 * just combines it with the name hash to find the hash chain.
+	 */
 	valid = d_validate(dentry, dentry->d_parent, dentry->d_name.hash, len);
 
 out:
@@ -927,6 +1166,9 @@ out:
 
 bad_addr:
 	printk("nfsd_d_validate: invalid address %lx\n", dent_addr);
+	goto out;
+bad_align:
+	printk("nfsd_d_validate: unaligned address %lx\n", dent_addr);
 	goto out;
 bad_length:
 	printk("nfsd_d_validate: invalid length %d\n", len);
@@ -955,9 +1197,22 @@ void nfsd_fh_free(void)
 		fhe = &dirstable[0];
 	}
 
+	/*
+	 * N.B. write a destructor for these lists ...
+	 */
+	i = 0;
+	while ((tmp = fixup_head.next) != &fixup_head) {
+		struct nfsd_fixup *fp;
+		fp = list_entry(tmp, struct nfsd_fixup, lru);
+		free_fixup_entry(fp);
+		i++;
+	}
+	printk("nfsd_fh_free: %d fixups freed\n", i);
+
 	i = 0;
 	while ((tmp = path_inuse.next) != &path_inuse) {
-		struct nfsd_path *pe = list_entry(tmp, struct nfsd_path, lru);
+		struct nfsd_path *pe;
+		pe = list_entry(tmp, struct nfsd_path, lru);
 		free_path_entry(pe);
 		i++;
 	}
@@ -973,6 +1228,8 @@ nfsd_fh_init(void)
 	memset(filetable, 0, NFSD_MAXFH*sizeof(struct fh_entry));
 	memset(dirstable, 0, NFSD_MAXFH*sizeof(struct fh_entry));
 	INIT_LIST_HEAD(&path_inuse);
+	INIT_LIST_HEAD(&fixup_head);
 
 	printk("nfsd_init: initialized fhcache, entries=%lu\n", NFSD_MAXFH);
 }
+

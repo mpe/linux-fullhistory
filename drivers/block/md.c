@@ -541,6 +541,9 @@ static int do_md_add (int minor, kdev_t dev)
 	if (md_dev[minor].nb_dev==MAX_REAL)
 		return -EINVAL;
 
+	if (!fs_may_mount (dev))
+		return -EBUSY;
+
 	if (blk_size[MAJOR(dev)] == NULL || blk_size[MAJOR(dev)][MINOR(dev)] == 0) {
 		printk("md_add(): zero device size, huh, bailing out.\n");
 		return -EINVAL;

@@ -211,7 +211,7 @@ CONFIG_ISO9660_FS=y
 CONFIG_PROC_FS=y
 CONFIG_NFS_FS=y
 # CONFIG_ROOT_NFS is not set
-# CONFIG_NFSD is not set
+CONFIG_NFSD=y
 CONFIG_SUNRPC=y
 CONFIG_LOCKD=y
 # CONFIG_SMB_FS is not set
@@ -245,13 +245,17 @@ CONFIG_82C710_MOUSE=y
 # CONFIG_PC110_PAD is not set
 # CONFIG_UMISC is not set
 # CONFIG_QIC02_TAPE is not set
-# CONFIG_FTAPE is not set
 # CONFIG_APM is not set
 # CONFIG_WATCHDOG is not set
 # CONFIG_RTC is not set
 # CONFIG_NVRAM is not set
 # CONFIG_JOYSTICK is not set
 # CONFIG_MISC_RADIO is not set
+
+#
+# Ftape, the floppy tape device driver
+#
+# CONFIG_FTAPE is not set
 
 #
 # Sound

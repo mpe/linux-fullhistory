@@ -10,7 +10,7 @@
 #ifndef _PPA_H
 #define _PPA_H
 
-#define   PPA_VERSION   "1.39"
+#define   PPA_VERSION   "1.39a"
 
 /* Use the following to enable certain chipset support
  * Default is PEDANTIC = 3
@@ -54,6 +54,11 @@
  * used with lp or other parport devices on the same parallel port.
  *		1997 by Andrea Arcangeli <arcangeli@mbox.queen.it>
  *							[1.39]
+ *
+ * Little fix in ppa engine to ensure that ppa don' t release parport
+ * or disconnect in wrong cases.
+ *		1997 by Andrea Arcangeli <arcangeli@mbox.queen.it>
+ *							[1.39a]
  */
 /* ------ END OF USER CONFIGURABLE PARAMETERS ----- */
 

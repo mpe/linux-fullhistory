@@ -1009,18 +1009,11 @@ xprt_reserve_status(struct rpc_task *task)
 	} else if (!RPCXPRT_CONGESTED(xprt)) {
 		/* OK: There's room for us. Grab a free slot and bump
 		 * congestion value */
-		if (!(req = xprt->free)) {
-			/* printk("RPC: inconsistent free list!\n"); */
-			rpc_debug = ~0;
-			dprintk("RPC: %4d inconsistent free list "
-					"(cong %ld cwnd %ld)\n",
-					task->tk_pid, xprt->cong, xprt->cwnd);
-			goto bummer;
-		}
-		if (req->rq_xid) {
-			printk("RPC: used rqst slot %p on free list!\n", req);
-			goto bummer;
-		}
+		req = xprt->free;
+		if (!req)
+			goto bad_list;
+		if (req->rq_xid)
+			goto bad_used;
 		xprt->free     = req->rq_next;
 		xprt->cong    += RPC_CWNDSCALE;
 		task->tk_rqstp = req;
@@ -1035,6 +1028,13 @@ xprt_reserve_status(struct rpc_task *task)
 
 	return;
 
+bad_list:
+	printk("RPC: %4d inconsistent free list (cong %ld cwnd %ld)\n",
+		task->tk_pid, xprt->cong, xprt->cwnd);
+	rpc_debug = ~0;
+	goto bummer;
+bad_used:
+	printk("RPC: used rqst slot %p on free list!\n", req);
 bummer:
 	task->tk_status = -EIO;
 	xprt->free = NULL;

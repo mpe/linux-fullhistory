@@ -242,6 +242,9 @@ extern void plip_setup(char *str, int *ints);
 #ifdef CONFIG_HFMODEM
 extern void hfmodem_setup(char *str, int *ints);
 #endif
+#ifdef CONFIG_FTAPE
+extern void ftape_setup(char *str, int *ints);
+#endif
 
 #if defined(CONFIG_SYSVIPC) || defined(CONFIG_KERNELD)
 extern void ipc_init(void);
@@ -559,6 +562,9 @@ struct {
 #ifdef CONFIG_PMAC_CONSOLE
 	{ "console=", pmac_cons_setup },
 	{ "vmode=", pmac_vmode_setup },
+#endif
+#ifdef CONFIG_FTAPE
+	{ "ftape=", ftape_setup},
 #endif
 	{ 0, 0 }
 };

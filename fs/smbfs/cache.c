@@ -265,7 +265,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name, cachep->pages);
 	 * Fill the cache, starting at position 2.
 	 */
 retry:
-	inode->u.smbfs_i.cache_valid = 1;
+	inode->u.smbfs_i.cache_valid |= SMB_F_CACHEVALID;
 	result = smb_proc_readdir(dentry, 2, cachep);
 	if (result < 0)
 	{
@@ -279,7 +279,7 @@ printk("smb_refill_dircache: readdir failed, result=%d\n", result);
 	 * Check whether the cache was invalidated while
 	 * we were doing the scan ...
 	 */
-	if (!inode->u.smbfs_i.cache_valid)
+	if (!(inode->u.smbfs_i.cache_valid & SMB_F_CACHEVALID))
 	{
 #ifdef SMBFS_PARANOIA
 printk("smb_refill_dircache: cache invalidated, retrying\n");
@@ -310,6 +310,7 @@ smb_invalid_dir_cache(struct inode * dir)
 	 * 'valid' flag in case a scan is in progress.
 	 */
 	invalidate_inode_pages(dir);
-	dir->u.smbfs_i.cache_valid = 0;
+	dir->u.smbfs_i.cache_valid &= ~SMB_F_CACHEVALID;
+	dir->u.smbfs_i.oldmtime = 0;
 }
 

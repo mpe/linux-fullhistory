@@ -275,7 +275,7 @@ int ppa_proc_info(char *buffer, char **start, off_t offset,
 	len = length;
     return len;
 }
-/* end of ppa.c */
+
 static int device_check(int host_no);
 
 #if PPA_DEBUG > 0
@@ -1000,8 +1000,10 @@ static void ppa_interrupt(void *data)
     }
 #endif
 
-    ppa_disconnect(cmd->host->unique_id);
-    ppa_pb_release(cmd->host->unique_id);
+    if (cmd->SCp.phase > 1)
+	ppa_disconnect(cmd->host->unique_id);
+    if (cmd->SCp.phase > 0)
+	ppa_pb_release(cmd->host->unique_id);
     tmp->cur_cmd = 0;
     cmd->scsi_done(cmd);
     return;

@@ -19,6 +19,7 @@
 #include <linux/malloc.h>
 #include <linux/init.h>
 #include <linux/dcache.h>
+
 #include <linux/smb_fs.h>
 #include <linux/smbno.h>
 #include <linux/smb_mount.h>
@@ -81,6 +82,26 @@ smb_iget(struct super_block *sb, struct smb_fattr *fattr)
 	read_fattr = NULL;
 	up(&read_semaphore);
 	return result;
+}
+
+/*
+ * Copy the inode data to a smb_fattr structure.
+ */
+void
+smb_get_inode_attr(struct inode *inode, struct smb_fattr *fattr)
+{
+	memset(fattr, 0, sizeof(struct smb_fattr));
+	fattr->f_mode	= inode->i_mode;
+	fattr->f_nlink	= inode->i_nlink;
+	fattr->f_uid	= inode->i_uid;
+	fattr->f_gid	= inode->i_gid;
+	fattr->f_rdev	= inode->i_rdev;
+	fattr->f_size	= inode->i_size;
+	fattr->f_mtime	= inode->i_mtime;
+	fattr->f_ctime	= inode->i_ctime;
+	fattr->f_atime	= inode->i_atime;
+	fattr->f_blksize= inode->i_blksize;
+	fattr->f_blocks	= inode->i_blocks;
 }
 
 static void
@@ -152,6 +173,16 @@ smb_revalidate_inode(struct inode *inode)
 	int error = 0;
 
 	pr_debug("smb_revalidate_inode\n");
+	/*
+	 * If this is a file opened with write permissions,
+	 * the inode will be up-to-date.
+	 */
+	if (S_ISREG(inode->i_mode) && smb_is_open(inode)) {
+		if (inode->u.smbfs_i.access == SMB_O_RDWR ||
+		    inode->u.smbfs_i.access == SMB_O_WRONLY)
+			goto out;
+	}
+
 	/*
 	 * Check whether we've recently refreshed the inode.
 	 */
@@ -245,7 +276,6 @@ inode->i_mode, fattr.f_mode);
 			fattr.f_mode = inode->i_mode; /* save mode */
 			make_bad_inode(inode);
 			inode->i_mode = fattr.f_mode; /* restore mode */
-			inode->i_nlink = 0;
 			/*
 			 * No need to worry about unhashing the dentry: the
 			 * lookup validation will see that the inode is bad.
@@ -358,6 +388,7 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 	sb->s_blocksize = 1024;	/* Eh...  Is this correct? */
 	sb->s_blocksize_bits = 10;
 	sb->s_magic = SMB_SUPER_MAGIC;
+	sb->s_flags = 0;
 	sb->s_dev = dev; /* shouldn't need this ... */
 	sb->s_op = &smb_sops;
 
@@ -376,15 +407,23 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 	if (!mnt)
 		goto out_no_mount;
 	*mnt = *data;
-	mnt->version = 0; /* dynamic flags */
+	/* ** temp ** pass config flags in file mode */
+	mnt->version = (mnt->file_mode >> 9);
 #ifdef CONFIG_SMB_WIN95
-	mnt->version |= 1;
+	mnt->version |= SMB_FIX_WIN95;
 #endif
 	mnt->file_mode &= (S_IRWXU | S_IRWXG | S_IRWXO);
 	mnt->file_mode |= S_IFREG;
 	mnt->dir_mode  &= (S_IRWXU | S_IRWXG | S_IRWXO);
 	mnt->dir_mode  |= S_IFDIR;
 	sb->u.smbfs_sb.mnt = mnt;
+	/*
+	 * Display the enabled options
+	 */
+	if (mnt->version & SMB_FIX_WIN95)
+		printk("SMBFS: Win 95 bug fixes enabled\n");
+	if (mnt->version & SMB_FIX_OLDATTR)
+		printk("SMBFS: Using core getattr (Win 95 speedup)\n");
 
 	/*
 	 * Keep the super block locked while we get the root inode.
@@ -457,9 +496,6 @@ smb_notify_change(struct inode *inode, struct iattr *attr)
 		goto out;
 	}
 
-	/*
-	 * Make sure our inode is up-to-date ...
-	 */
 	error = smb_revalidate_inode(inode);
 	if (error)
 		goto out;
@@ -506,13 +542,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name,
 	{
 		struct smb_fattr fattr;
 
-		fattr.attr = 0;
-		fattr.f_size = inode->i_size;
-		fattr.f_blksize = inode->i_blksize;
-		fattr.f_ctime = inode->i_ctime;
-		fattr.f_mtime = inode->i_mtime;
-		fattr.f_atime = inode->i_atime;
-
+		smb_get_inode_attr(inode, &fattr);
 		if ((attr->ia_valid & ATTR_CTIME) != 0)
 			fattr.f_ctime = attr->ia_ctime;
 
@@ -531,16 +561,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name,
 
 out:
 	if (refresh)
-	{
-		/*
-		 * N.B. Currently we're only using the dir cache for
-		 * file names, so we don't need to invalidate here.
-		 */
-#if 0
-		smb_invalid_dir_cache(dentry->d_parent->d_inode);
-#endif
 		smb_refresh_inode(inode);
-	}
 	return error;
 }
 

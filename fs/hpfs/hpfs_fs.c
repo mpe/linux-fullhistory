@@ -1122,20 +1122,21 @@ static secno bplus_lookup(struct inode *inode, struct bplus_header *b,
 
 static int hpfs_lookup(struct inode *dir, struct dentry *dentry)
 {
-	struct quad_buffer_head qbh;
+	const char *name = dentry->d_name.name;
+	int len = dentry->d_name.len;
 	struct hpfs_dirent *de;
 	struct inode *inode;
 	ino_t ino;
-	const char *name = dentry->d_name.name;
-	int len = dentry->d_name.len;
 	int retval;
+	struct quad_buffer_head qbh;
 
 	/* In case of madness */
 
+	retval = -ENOTDIR;
 	if (dir == 0)
-		return -ENOENT;
+		goto out;
 	if (!S_ISDIR(dir->i_mode))
-		return -ENOENT;
+		goto out;
 
 	/*
 	 * Read in the directory entry. "." is there under the name ^A^A .
@@ -1155,9 +1156,11 @@ static int hpfs_lookup(struct inode *dir, struct dentry *dentry)
 	 * This is not really a bailout, just means file not found.
 	 */
 
-	inode = NULL;
-	if (!de)
-		goto add_dentry;
+	if (!de) {
+		d_add(dentry, NULL);
+		retval = 0;
+		goto out;
+	}
 
 	/*
 	 * Get inode number, what we're after.
@@ -1199,15 +1202,13 @@ static int hpfs_lookup(struct inode *dir, struct dentry *dentry)
 		}
 	}
 
-	/*
-	 * Add the dentry, negative or otherwise.
-	 */
-      add_dentry:
 	d_add(dentry, inode);
 	retval = 0;
 
       free4:
 	brelse4(&qbh);
+
+      out:
 	return retval;
 }
 

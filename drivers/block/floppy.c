@@ -4016,11 +4016,6 @@ __initfunc(int floppy_init(void))
 			continue;
 		}
 
-		request_region(FDCS->address, 6, "floppy");
-		request_region(FDCS->address+7, 1, "floppy DIR");
-		/* address + 6 is reserved, and may be taken by IDE.
-		 * Unfortunately, Adaptec doesn't know this :-(, */
-
 		have_no_fdc = 0;
 		/* Not all FDCs seem to be able to handle the version command
 		 * properly, so force a reset for the standard FDC clones,
@@ -4042,7 +4037,6 @@ __initfunc(int floppy_init(void))
 
 static int floppy_grab_irq_and_dma(void)
 {
-	int i;
 	unsigned long flags;
 
 	INT_OFF;
@@ -4052,16 +4046,6 @@ static int floppy_grab_irq_and_dma(void)
 	}
 	INT_ON;
 	MOD_INC_USE_COUNT;
-	for (i=0; i< N_FDC; i++){
-		if (fdc_state[i].address != -1){
-			fdc = i;
-			reset_fdc_info(1);
-			fd_outb(FDCS->dor, FD_DOR);
-		}
-	}
-	fdc = 0;
-	set_dor(0, ~0, 8);  /* avoid immediate interrupt */
-
 	if (fd_request_irq()) {
 		DPRINT("Unable to grab IRQ%d for the floppy driver\n",
 			FLOPPY_IRQ);
@@ -4077,6 +4061,36 @@ static int floppy_grab_irq_and_dma(void)
 		usage_count--;
 		return -1;
 	}
+	for (fdc=0; fdc< N_FDC; fdc++){
+		if (FDCS->address != -1){
+			if (check_region(FDCS->address, 6) < 0 ||
+			    check_region(FDCS->address+7, 1) < 0) {
+				DPRINT("Floppy io-port 0x%04x in use\n", FDCS->address);
+				fd_free_irq();
+				fd_free_dma();
+				while(--fdc >= 0) {
+					release_region(FDCS->address, 6);
+					release_region(FDCS->address+7, 1);
+				}
+				MOD_DEC_USE_COUNT;
+				usage_count--;
+				return -1;
+			}
+			request_region(FDCS->address, 6, "floppy");
+			request_region(FDCS->address+7, 1, "floppy DIR");
+			/* address + 6 is reserved, and may be taken by IDE.
+			 * Unfortunately, Adaptec doesn't know this :-(, */
+		}
+	}
+	for (fdc=0; fdc< N_FDC; fdc++){
+		if (FDCS->address != -1){
+			reset_fdc_info(1);
+			fd_outb(FDCS->dor, FD_DOR);
+		}
+	}
+	fdc = 0;
+	set_dor(0, ~0, 8);  /* avoid immediate interrupt */
+
 	for (fdc = 0; fdc < N_FDC; fdc++)
 		if (FDCS->address != -1)
 			fd_outb(FDCS->dor, FD_DOR);
@@ -4087,6 +4101,7 @@ static int floppy_grab_irq_and_dma(void)
 
 static void floppy_release_irq_and_dma(void)
 {
+	int old_fdc;
 #ifdef FLOPPY_SANITY_CHECK
 #ifndef __sparc__
 	int drive;
@@ -4136,6 +4151,13 @@ static void floppy_release_irq_and_dma(void)
 	if (floppy_tq.sync)
 		printk("task queue still active\n");
 #endif
+	old_fdc = fdc;
+	for (fdc = 0; fdc < N_FDC; fdc++)
+		if (FDCS->address != -1) {
+			release_region(FDCS->address, 6);
+			release_region(FDCS->address+7, 1);
+		}
+	fdc = old_fdc;
 	MOD_DEC_USE_COUNT;
 }
 
@@ -4223,12 +4245,6 @@ int init_module(void)
 void cleanup_module(void)
 {
 	int fdc, dummy;
-		
-	for (fdc=0; fdc<2; fdc++)
-		if (FDCS->address != -1){
-			release_region(FDCS->address, 6);
-			release_region(FDCS->address+7, 1);
-	}
 		
 	unregister_blkdev(MAJOR_NR, "fd");
 

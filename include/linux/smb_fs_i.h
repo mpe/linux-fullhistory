@@ -28,6 +28,7 @@ struct smb_inode_info {
 	__u16 access;		/* Access bits. */
 	__u16 cache_valid;	/* dircache valid? */
 	unsigned long oldmtime;	/* last time refreshed */
+	unsigned long closed;	/* timestamp when closed */
 	void * dentry;		/* The dentry we were opened with */
 };
 

@@ -297,8 +297,11 @@ else
 endif
 
 ifeq ($(CONFIG_FTAPE),y)
-SUB_DIRS += ftape
-L_OBJS += ftape/ftape.o
+L_OBJS       += ftape/ftape.o
+SUB_DIRS     += ftape
+ifneq ($(CONFIG_ZFTAPE),n)
+MOD_SUB_DIRS += ftape
+endif
 else
   ifeq ($(CONFIG_FTAPE),m)
   MOD_SUB_DIRS += ftape

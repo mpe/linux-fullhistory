@@ -96,10 +96,8 @@ int ext2_sync_file(struct file * file, struct dentry *dentry)
 		 */
 		goto skip;
 
-	if (inode->i_size > EXT2_NDIR_BLOCKS*blocksize) {
-		err = fsync_dev(inode->i_dev);
-		goto skip;
-	}
+	if (inode->i_size > EXT2_NDIR_BLOCKS*blocksize)
+		return file_fsync(file, dentry);
 
 	for (wait=0; wait<=1; wait++)
 	{

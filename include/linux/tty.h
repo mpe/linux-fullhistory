@@ -21,6 +21,7 @@
 #include <linux/tqueue.h>
 #include <linux/tty_driver.h>
 #include <linux/tty_ldisc.h>
+#include <linux/serialP.h>
 
 #include <asm/system.h>
 
@@ -223,14 +224,17 @@ struct tty_struct {
 	int count;
 	struct winsize winsize;
 	unsigned char stopped:1, hw_stopped:1, flow_stopped:1, packet:1;
+	unsigned char low_latency:1;
 	unsigned char ctrl_status;
 
 	struct tty_struct *link;
 	struct fasync_struct *fasync;
 	struct tty_flip_buffer flip;
 	int max_flip_cnt;
+	int alt_speed;		/* For magic substitution of 38400 bps */
 	struct wait_queue *write_wait;
 	struct wait_queue *read_wait;
+	struct tq_struct tq_hangup;
 	void *disc_data;
 	void *driver_data;
 
@@ -329,6 +333,8 @@ extern void tty_unhangup(struct file *filp);
 extern int tty_hung_up_p(struct file * filp);
 extern void do_SAK(struct tty_struct *tty);
 extern void disassociate_ctty(int priv);
+extern void tty_flip_buffer_push(struct tty_struct *tty);
+extern int tty_get_baud_rate(struct tty_struct *tty);
 
 /* n_tty.c */
 extern struct tty_ldisc tty_ldisc_N_TTY;

@@ -47,6 +47,7 @@
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
 #include <linux/serial.h>
+#include <linux/serialP.h>
 #include <linux/serial_reg.h>
 #include <linux/major.h>
 #include <linux/string.h>
@@ -140,11 +141,8 @@ static void change_speed(struct esp_struct *info);
 static void rs_wait_until_sent(struct tty_struct *, int);
 	
 /*
- * This assumes you have a 1.8432 MHz clock for your UART.
- *
- * It'd be nice if someone built a serial card with a 24.576 MHz
- * clock, since the 16550A is capable of handling a top speed of 1.5
- * megabits/second; but this requires the faster clock.
+ * The ESP card has a clock rate of 14.7456 MHz (that is, 2**ESPC_SCALE
+ * times the normal 1.8432 Mhz clock of most serial boards).
  */
 #define BASE_BAUD ((1843200 / 16) * (1 << ESPC_SCALE))
 
@@ -191,15 +189,6 @@ static inline int serial_paranoia_check(struct esp_struct *info,
 #endif
 	return 0;
 }
-
-/*
- * This is used to figure out the divisor speeds
- */
-static int quot_table[] = {
-/*      0,    50,    75,  110,  134,  150,  200,  300, 600, 1200, */
-	0, 18432, 12288, 8378, 6878, 6144, 4608, 3072, 1536, 768,
-/*     1800,2400,4800,9600,19200,38400,57600,115200,230400,460800 */
-	512, 384, 192,  96,   48,   24,   16,     8,     4,     2, 0 };
 
 static inline unsigned int serial_in(struct esp_struct *info, int offset)
 {
@@ -1096,7 +1085,7 @@ static void change_speed(struct esp_struct *info)
 	unsigned short port;
 	int	quot = 0;
 	unsigned cflag,cval;
-	int	i, bits;
+	int	baud, bits;
 	unsigned char flow1 = 0, flow2 = 0;
 	unsigned long flags;
 
@@ -1104,27 +1093,7 @@ static void change_speed(struct esp_struct *info)
 		return;
 	cflag = info->tty->termios->c_cflag;
 	port = info->port;
-	i = cflag & CBAUD;
-	if (i & CBAUDEX) {
-		i &= ~CBAUDEX;
-		if (i < 1 || i > 2) 
-			info->tty->termios->c_cflag &= ~CBAUDEX;
-		else
-			i += 15;
-	}
-	if (i == 15) {
-		if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_HI)
-			i += 1;
-		if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_VHI)
-			i += 2;
-                if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_SHI)
-                        i += 3;
-                if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_WARP)
-                        i += 4;
-		if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_CUST)
-			quot = info->custom_divisor;
-	}
-
+	
 	/* byte size and parity */
 	switch (cflag & CSIZE) {
 	      case CS5: cval = 0x00; bits = 7; break;
@@ -1148,14 +1117,20 @@ static void change_speed(struct esp_struct *info)
 		cval |= UART_LCR_SPAR;
 #endif
 
-	if (!quot) {
-		quot = quot_table[i];
-
-		/* default to 9600 bps */
-		if (!quot)
-			quot = BASE_BAUD / 9600;
+	baud = tty_get_baud_rate(info->tty);
+	if (baud == 38400)
+		quot = info->custom_divisor;
+	else {
+		if (baud == 134)
+			/* Special case since 134 is really 134.5 */
+			quot = (2*BASE_BAUD / 269);
+		else if (baud)
+			quot = BASE_BAUD / baud;
 	}
-
+	/* If the quotient is ever zero, default to 9600 bps */
+	if (!quot)
+		quot = BASE_BAUD / 9600;
+	
 	info->timeout = ((1024 * HZ * bits * quot) / BASE_BAUD) + (HZ / 50);
 
 	/* CTS flow control flag and modem status interrupts */
@@ -1632,8 +1607,17 @@ check_and_exit:
 		if (((old_info.flags & ASYNC_SPD_MASK) !=
 		     (info->flags & ASYNC_SPD_MASK)) ||
 		    (old_info.custom_divisor != info->custom_divisor) ||
-		    change_flow)
+		    change_flow) {
+			if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_HI)
+				info->tty->alt_speed = 57600;
+			if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_VHI)
+				info->tty->alt_speed = 115200;
+			if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_SHI)
+				info->tty->alt_speed = 230400;
+			if ((info->flags & ASYNC_SPD_MASK) == ASYNC_SPD_WARP)
+				info->tty->alt_speed = 460800;
 			change_speed(info);
+		}
 	} else
 		retval = startup(info);
 	return retval;
@@ -1723,30 +1707,27 @@ static int set_modem_info(struct esp_struct * info, unsigned int cmd,
 }
 
 /*
- * This routine sends a break character out the serial port.
+ * rs_break() --- routine which turns the break handling on or off
  */
-static void send_break(	struct esp_struct * info, int duration)
+static void esp_break(struct tty_struct *tty, int break_state)
 {
-	cli();
-	serial_out(info, UART_ESI_CMD1, ESI_ISSUE_BREAK);
-	serial_out(info, UART_ESI_CMD2, 0x01);
+	struct esp_struct * info = (struct esp_struct *)tty->driver_data;
+	unsigned long flags;
+	
+	if (serial_paranoia_check(info, tty->device, "esp_break"))
+		return;
 
-	interruptible_sleep_on(&info->break_wait);
+	save_flags(flags); cli();
+	if (break_state == -1) {
+		serial_out(info, UART_ESI_CMD1, ESI_ISSUE_BREAK);
+		serial_out(info, UART_ESI_CMD2, 0x01);
 
-	if (signal_pending(current)) {
+		interruptible_sleep_on(&info->break_wait);
+	} else {
 		serial_out(info, UART_ESI_CMD1, ESI_ISSUE_BREAK);
 		serial_out(info, UART_ESI_CMD2, 0x00);
-		sti();
-		return;
 	}
-
-	current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + duration;
-	schedule();
-
-	serial_out(info, UART_ESI_CMD1, ESI_ISSUE_BREAK);
-	serial_out(info, UART_ESI_CMD2, 0x00);
-	sti();
+	restore_flags(flags);
 }
 
 static int rs_ioctl(struct tty_struct *tty, struct file * file,
@@ -1754,7 +1735,6 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 {
 	int error;
 	struct esp_struct * info = (struct esp_struct *)tty->driver_data;
-	int retval;
 	struct async_icount cprev, cnow;	/* kernel counter temps */
 	struct serial_icounter_struct *p_cuser;	/* user space */
 
@@ -1770,41 +1750,6 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 	}
 	
 	switch (cmd) {
-		case TCSBRK:	/* SVID version: non-zero arg --> no break */
-			retval = tty_check_change(tty);
-			if (retval)
-				return retval;
-			tty_wait_until_sent(tty, 0);
-			if (signal_pending(current))
-				return -EINTR;
-			if (!arg) {
-				send_break(info, HZ/4);	/* 1/4 second */
-				if (signal_pending(current))
-					return -EINTR;
-			}
-			return 0;
-		case TCSBRKP:	/* support for POSIX tcsendbreak() */
-			retval = tty_check_change(tty);
-			if (retval)
-				return retval;
-			tty_wait_until_sent(tty, 0);
-			if (signal_pending(current))
-				return -EINTR;
-			send_break(info, arg ? arg*(HZ/10) : HZ/4);
-			if (signal_pending(current))
-				return -EINTR;
-			return 0;
-		case TIOCGSOFTCAR:
-			return put_user(C_CLOCAL(tty) ? 1 : 0,
-				    (int *) arg);
-		case TIOCSSOFTCAR:
-			error = get_user(arg, (unsigned int *)arg);
-			if (error)
-				return error;
-			tty->termios->c_cflag =
-				((tty->termios->c_cflag & ~CLOCAL) |
-				 (arg ? CLOCAL : 0));
-			return 0;
 		case TIOCMGET:
 			return get_modem_info(info, (unsigned int *) arg);
 		case TIOCMBIS:
@@ -2527,6 +2472,7 @@ __initfunc(int espserial_init(void))
 	esp_driver.stop = rs_stop;
 	esp_driver.start = rs_start;
 	esp_driver.hangup = esp_hangup;
+	esp_driver.break_ctl = esp_break;
 	esp_driver.wait_until_sent = rs_wait_until_sent;
 
 	/*

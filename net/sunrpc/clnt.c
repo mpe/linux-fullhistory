@@ -338,8 +338,10 @@ call_reserveresult(struct rpc_task *task)
 	} else {
 		task->tk_action = NULL;
 	}
-	if (!task->tk_rqstp)
+	if (!task->tk_rqstp) {
+		printk("RPC: task has no request, exit EIO\n");
 		rpc_exit(task, -EIO);
+	}
 }
 
 /*
@@ -415,6 +417,7 @@ call_encode(struct rpc_task *task)
 	/* Encode header and provided arguments */
 	encode = rpcproc_encode(clnt, task->tk_proc);
 	if (!(p = call_header(task))) {
+		printk("RPC: call_header failed, exit EIO\n");
 		rpc_exit(task, -EIO);
 	} else
 	if ((status = encode(req, p, task->tk_argp)) < 0) {
@@ -749,6 +752,7 @@ garbage:
 		task->tk_action = call_encode;
 		return NULL;
 	}
+	printk("RPC: garbage, exit EIO\n");
 	rpc_exit(task, -EIO);
 	return NULL;
 }

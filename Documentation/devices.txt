@@ -507,14 +507,30 @@ Your cooperation is appreciated.
 		  3 = /dev/sbpcd7	Panasonic CD-ROM controller 1 unit 3
 
  27 char	QIC-117 tape
-		  0 = /dev/rft0		Unit 0, rewind-on-close
-		  1 = /dev/rft1		Unit 1, rewind-on-close
-		  2 = /dev/rft2		Unit 2, rewind-on-close
-		  3 = /dev/rft3		Unit 3, rewind-on-close
-		  4 = /dev/nrft0	Unit 0, no rewind-on-close
-		  5 = /dev/nrft1	Unit 1, no rewind-on-close
-		  6 = /dev/nrft2	Unit 2, no rewind-on-close
-		  7 = /dev/nrft3	Unit 3, no rewind-on-close
+		  0 = /dev/qft0		Unit 0, rewind-on-close
+		  1 = /dev/qft1		Unit 1, rewind-on-close
+		  2 = /dev/qft2		Unit 2, rewind-on-close
+		  3 = /dev/qft3		Unit 3, rewind-on-close
+		  4 = /dev/nqft0	Unit 0, no rewind-on-close
+		  5 = /dev/nqft1	Unit 1, no rewind-on-close
+		  6 = /dev/nqft2	Unit 2, no rewind-on-close
+		  7 = /dev/nqft3	Unit 3, no rewind-on-close
+		  16 = /dev/zqft0	Unit 0, rewind-on-close, compression
+		  17 = /dev/zqft1	Unit 1, rewind-on-close, compression
+		  18 = /dev/zqft2	Unit 2, rewind-on-close, compression
+		  19 = /dev/zqft3	Unit 3, rewind-on-close, compression
+		  20 = /dev/nzqft0	Unit 0, no-rewind, compression
+		  21 = /dev/nzqft1	Unit 1, no-rewind, compression
+		  22 = /dev/nzqft2	Unit 2, no-rewind, compression
+		  23 = /dev/nzqft3	Unit 3, no-rewind, compression
+		  32 = /dev/rawft0	Unit 0, rewind-on-close, no file marks
+		  33 = /dev/rawft1	Unit 1, rewind-on-close, no file marks
+		  34 = /dev/rawft2	Unit 2, rewind-on-close, no file marks
+		  35 = /dev/rawft3	Unit 3, rewind-on-close, no file marks
+		  36 = /dev/zqft0	Unit 0, no-rewind, no file marks
+		  37 = /dev/zqft1	Unit 1, no-rewind, no file marks
+		  38 = /dev/zqft2	Unit 2, no-rewind, no file marks
+		  39 = /dev/zqft3	Unit 3, no-rewind, no file marks
     block	Third Matsushita (Panasonic/SoundBlaster) CD-ROM
 		  0 = /dev/sbpcd8	Panasonic CD-ROM controller 2 unit 0
 		  1 = /dev/sbpcd9	Panasonic CD-ROM controller 2 unit 1
@@ -1137,7 +1153,8 @@ It is recommended that these links exist on all systems:
 
 /dev/core	/proc/kcore	symbolic	Backward compatibility
 /dev/ramdisk	ram0		symbolic	Backward compatibility
-/dev/ftape	rft0		symbolic	Backward compatibility
+/dev/rft0	qft0		symbolic	Backward compatibility
+/dev/ftape	qft0		symbolic	Backward compatibility
 /dev/scd?	sr?		hard		Alternate SCSI CD-ROM name
 
 

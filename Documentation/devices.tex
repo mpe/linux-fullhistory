@@ -797,14 +797,30 @@ major number 3).
 
 \begin{devicelist}
 \major{27}{}{char }{QIC-117 tape}
-	\minor{0}{/dev/rft0}{Unit 0, rewind-on-close}
-	\minor{1}{/dev/rft1}{Unit 1, rewind-on-close}
-	\minor{2}{/dev/rft2}{Unit 2, rewind-on-close}
-	\minor{3}{/dev/rft3}{Unit 3, rewind-on-close}
-	\minor{4}{/dev/nrft0}{Unit 0, no rewind-on-close}
-	\minor{5}{/dev/nrft1}{Unit 1, no rewind-on-close}
-	\minor{6}{/dev/nrft2}{Unit 2, no rewind-on-close}
-	\minor{7}{/dev/nrft3}{Unit 3, no rewind-on-close}
+        \minor{0}{/dev/qft0}{Unit 0, rewind-on-close}
+        \minor{1}{/dev/qft1}{Unit 1, rewind-on-close}
+        \minor{2}{/dev/qft2}{Unit 2, rewind-on-close}
+        \minor{3}{/dev/qft3}{Unit 3, rewind-on-close}
+        \minor{4}{/dev/nqft0}{Unit 0, no rewind-on-close}
+        \minor{5}{/dev/nqft1}{Unit 1, no rewind-on-close}
+        \minor{6}{/dev/nqft2}{Unit 2, no rewind-on-close}
+        \minor{7}{/dev/nqft3}{Unit 3, no rewind-on-close}
+        \minor{16}{/dev/zqft0}{Unit 0, rewind-on-close, compression}
+        \minor{17}{/dev/zqft1}{Unit 1, rewind-on-close, compression}
+        \minor{18}{/dev/zqft2}{Unit 2, rewind-on-close, compression}
+        \minor{19}{/dev/zqft3}{Unit 3, rewind-on-close, compression}
+        \minor{20}{/dev/nzqft0}{Unit 0, no-rewind-on-close, compression}
+        \minor{21}{/dev/nzqft1}{Unit 1, no-rewind-on-close, compression}
+        \minor{22}{/dev/nzqft2}{Unit 2, no-rewind-on-close, compression}
+        \minor{23}{/dev/nzqft3}{Unit 3, no-rewind-on-close, compression}
+        \minor{32}{/dev/rawft0}{Unit 0, rewind-on-close, no file marks}
+        \minor{33}{/dev/rawft1}{Unit 1, rewind-on-close, no file marks}
+        \minor{34}{/dev/rawft2}{Unit 2, rewind-on-close, no file marks}
+        \minor{35}{/dev/rawft3}{Unit 3, rewind-on-close, no file marks}
+        \minor{36}{/dev/zqft0}{Unit 0, no-rewind-on-close, no file marks}
+        \minor{37}{/dev/zqft1}{Unit 1, no-rewind-on-close, no file marks}
+        \minor{38}{/dev/zqft2}{Unit 2, no-rewind-on-close, no file marks}
+        \minor{39}{/dev/zqft3}{Unit 3, no-rewind-on-close, no file marks}
 \\
 \major{  }{}{block}{Third Matsushita (Panasonic/SoundBlaster) CD-ROM}
 	\minor{0}{/dev/sbpcd8}{Panasonic CD-ROM controller 2 unit 0}
@@ -1613,6 +1629,7 @@ It is recommended that these links exist on all systems:
 \begin{nodelist}
 \link{/dev/core}{/proc/kcore}{symbolic}{Backward compatibility}
 \link{/dev/ramdisk}{ram0}{symbolic}{Backward compatibility}
+\link{/dev/rft0}{qft0}{symbolic}{Backward compatibility}
 \link{/dev/ftape}{rft0}{symbolic}{Backward compatibility}
 \link{/dev/scd?}{sr?}{hard}{Alternate name for CD-ROMs}
 \link{/dev/fd?D*}{fd?u*}{hard}{Backward compatibility}

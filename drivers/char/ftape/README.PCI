@@ -30,7 +30,7 @@ bus timing.
 I judge this a hardware problem and not a limitation of ftape ;-)
 My DOS backup software seems to be suffering from the same problems
 and even refuses to run at 1 Mbps !
-Ftape will reduce the datarate from 1 Mbps to 500 Kbps if the number
+Ftape will reduce the data-rate from 1 Mbps to 500 Kbps if the number
 of overrun errors on a track exceeds a threshold.
 
 
@@ -77,3 +77,5 @@ under DOS. If it's very slow and often repositions you're
 probably having this problem.
 
                         --//--
+ LocalWords:  ftape PCI bios GAT ISA DMA chipset Mbps Kbps FDC isa AF ok ASUS
+ LocalWords:  SP linebuffer masterbuffer XPS http www com

@@ -242,6 +242,8 @@ EXPORT_SYMBOL(tty_hangup);
 EXPORT_SYMBOL(tty_wait_until_sent);
 EXPORT_SYMBOL(tty_check_change);
 EXPORT_SYMBOL(tty_hung_up_p);
+EXPORT_SYMBOL(tty_flip_buffer_push);
+EXPORT_SYMBOL(tty_get_baud_rate);
 EXPORT_SYMBOL(do_SAK);
 EXPORT_SYMBOL(console_print);
 

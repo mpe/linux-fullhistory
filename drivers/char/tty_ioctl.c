@@ -509,18 +509,15 @@ int n_tty_ioctl(struct tty_struct * tty, struct file * file,
 				tty->packet = 0;
 			return 0;
 		}
-		/* These two ioctl's always return success; even if */
-		/* the driver doesn't support them. */
-		case TCSBRK: case TCSBRKP:
-			retval = tty_check_change(tty);
+		case TIOCGSOFTCAR:
+			return put_user(C_CLOCAL(tty) ? 1 : 0, (int *) arg);
+		case TIOCSSOFTCAR:
+			retval = get_user(arg, (unsigned int *) arg);
 			if (retval)
 				return retval;
-			tty_wait_until_sent(tty, 0);
-			if (signal_pending(current))
-				return -EINTR;
-			if (!tty->driver.ioctl)
-				return 0;
-			tty->driver.ioctl(tty, file, cmd, arg);
+			tty->termios->c_cflag =
+				((tty->termios->c_cflag & ~CLOCAL) |
+				 (arg ? CLOCAL : 0));
 			return 0;
 		default:
 			return -ENOIOCTLCMD;
