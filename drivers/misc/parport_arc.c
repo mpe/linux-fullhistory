@@ -14,6 +14,7 @@
  * a subset of the standard printer control lines connected.
  */
 
+#include <linux/config.h>
 #include <linux/tasks.h>
 #include <linux/delay.h>
 #include <linux/errno.h>

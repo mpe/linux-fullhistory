@@ -526,9 +526,9 @@ __initfunc(static unsigned long calibrate_tsc(void))
 	       /* Now let's take care of CTC channel 2 */
 	       "movb $0xb0, %%al\n\t" /* binary, mode 0, LSB/MSB, ch 2*/
 	       "outb %%al, $0x43\n\t" /* Write to CTC command port */
-	       "movb $0x0c, %%al\n\t"
+	       "movl %1, %%eax\n\t"
 	       "outb %%al, $0x42\n\t" /* LSB of count */
-	       "movb $0xe9, %%al\n\t"
+	       "shrl $8, %%eax\n\t"
 	       "outb %%al, $0x42\n\t" /* MSB of count */
 
                /* Read the TSC; counting has just started */
@@ -562,12 +562,12 @@ __initfunc(static unsigned long calibrate_tsc(void))
                 * do a real 64-by-64 divide before that time's up. */
                "movl %%eax, %%ecx\n\t"
                "xorl %%eax, %%eax\n\t"
-               "movl %1, %%edx\n\t"
+               "movl %2, %%edx\n\t"
                "divl %%ecx\n\t" /* eax= 2^32 / (1 * TSC counts per microsecond) */
 	       /* Return eax for the use of fast_gettimeoffset */
                "movl %%eax, %0\n\t"
                : "=r" (retval)
-               : "r" (5 * 1000020/HZ)
+               : "r" (5 * LATCH), "r" (5 * 1000020/HZ)
                : /* we clobber: */ "ax", "bx", "cx", "dx", "cc", "memory");
        return retval;
 }

@@ -487,6 +487,7 @@ static void shrink_fork(struct hfs_fork *fork, int ablocks)
 
 	if ((count = next + 1 - ablocks) > 0) {
 		for (i=2; (i>=0) && !ext->length[i]; --i) {};
+		lock_bitmap(mdb);
 		while (count && (ext->length[i] <= count)) {
 			ext->end -= ext->length[i];
 			count -= ext->length[i];
@@ -509,6 +510,7 @@ static void shrink_fork(struct hfs_fork *fork, int ablocks)
 				       "blocks.\n", error);
 			}
 		}
+		unlock_bitmap(mdb);
 		update_ext(fork, ext);
 	}
 
@@ -612,7 +614,9 @@ more_extents:
 		} else {
 			if (!(ext = new_extent(fork, ext, blocks/ablksz,
 					       start, len, ablksz))) {
+				lock_bitmap(mdb);
 				hfs_clear_vbm_bits(mdb, start, len);
+				unlock_bitmap(mdb);
 				return;
 			}
 		}

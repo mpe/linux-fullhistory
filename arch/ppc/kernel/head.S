@@ -1,7 +1,7 @@
 /*
  *  arch/ppc/kernel/head.S
  *
- *  $Id: head.S,v 1.107 1998/09/25 19:48:52 paulus Exp $
+ *  $Id: head.S,v 1.111 1998/11/10 01:10:32 paulus Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -210,7 +210,8 @@ __start:
 	mr	r27,r7
 #ifndef CONFIG_8xx
 	bl	prom_init
-
+	.globl	__secondary_start
+__secondary_start:
 /*
  * Use the first pair of BAT registers to map the 1st 16MB
  * of RAM to KERNELBASE.  From this point on we can't safely
@@ -1395,15 +1396,13 @@ hash_page_out:
 next_slot:
 	.long	0
 
-/*
- * FPU stuff for the 6xx/7xx follows
- *  -- Cort
- */
 load_up_fpu:
 /*
  * Disable FP for the task which had the FPU previously,
  * and save its floating-point registers in its thread_struct.
  * Enables the FPU for use in the kernel on return.
+ * On SMP we know the fpu is free, since we give it up every
+ * switch.  -- Cort
  */
 #ifndef CONFIG_APUS
 	lis	r6,-KERNELBASE@h
@@ -1411,28 +1410,23 @@ load_up_fpu:
 	lis	r6,CYBERBASEp@h
 	lwz	r6,0(r6)
 #endif
+
 	addis	r3,r6,last_task_used_math@ha
 	lwz	r4,last_task_used_math@l(r3)
 	mfmsr	r5
 	ori	r5,r5,MSR_FP
 	SYNC
 	mtmsr	r5			/* enable use of fpu now */
-#ifndef __SMP__
-	SYNC
-	cmpi	0,r4,0
-	beq	1f
-#else
 /*
  * All the saving of last_task_used_math is handled
  * by a switch_to() call to smp_giveup_fpu() in SMP so 
  * last_task_used_math is not used.
- *
- * We should never be here on SMP anyway, since the fpu should
- * always be on.
  * -- Cort
  */
-	b	1f
-#endif	
+#ifndef __SMP__
+	SYNC
+	cmpi	0,r4,0
+	beq	1f
 	add	r4,r4,r6
 	addi	r4,r4,TSS	        /* want TSS of last_task_used_math */
 	SAVE_32FPRS(0, r4)
@@ -1444,19 +1438,17 @@ load_up_fpu:
 	li	r20,MSR_FP|MSR_FE0|MSR_FE1
 	andc	r4,r4,r20		/* disable FP for previous task */
 	stw	r4,_MSR-STACK_FRAME_OVERHEAD(r5)
-
+#endif /* __SMP__ */
 1:	ori	r23,r23,MSR_FP|MSR_FE0|MSR_FE1	/* enable use of FP after return */
 	mfspr	r5,SPRG3		/* current task's TSS (phys) */
 	lfd	fr0,TSS_FPSCR-4(r5)
 	mtfsf	0xff,fr0
 	REST_32FPRS(0, r5)
-/* 
- * on SMP we don't really use last_task_used_math but set it
- * here anyway to avoid the ifdef's -- Cort
- */
 	subi	r4,r5,TSS
 	sub	r4,r4,r6
+#ifndef __SMP__
 	stw	r4,last_task_used_math@l(r3)
+#endif /* __SMP__ */
 	/* restore registers and return */
 	lwz	r3,_CCR(r21)
 	lwz	r4,_LINK(r21)
@@ -1516,8 +1508,10 @@ giveup_fpu:
 	cmpi	0,r4,0
 	beqlr-				/* if no previous owner, done */
 	addi	r4,r4,TSS	        /* want TSS of last_task_used_math */
+#ifndef __SMP__
 	li	r5,0
 	stw	r5,last_task_used_math@l(r3)
+#endif /* __SMP__ */
 	SAVE_32FPRS(0, r4)
 	mffs	fr0
 	stfd	fr0,TSS_FPSCR-4(r4)
@@ -1628,14 +1622,27 @@ start_here:
 5:	mtspr	HID0,r11		/* superscalar exec & br history tbl */
 4:
 #endif /* CONFIG_8xx */
+#ifdef __SMP__
+	/* if we're the second cpu stack and r2 are different
+	* and we want to not clear the bss -- Cort */
+	lis	r5,first_cpu_booted@h
+	ori	r5,r5,first_cpu_booted@l
+	lwz	r5,0(r5)
+	cmpi	0,r5,0
+	beq	99f
+
+	/* get current */
+	lis	r2,current_set@h
+	ori	r2,r2,current_set@l
+	addi	r2,r2,4
+	lwz	r2,0(r2)
+	
+	b	10f
+99:	
+#endif /* __SMP__ */
 	/* ptr to current */
 	lis	r2,init_task_union@h
 	ori	r2,r2,init_task_union@l
-	/* stack */
-	addi	r1,r2,TASK_UNION_SIZE
-	li	r0,0
-	stwu	r0,-STACK_FRAME_OVERHEAD(r1)
-
 	/* Clear out the BSS */
 	lis	r11,_end@ha
 	addi	r11,r11,_end@l
@@ -1651,6 +1658,15 @@ start_here:
 3:	stwu	r0,4(r8)
 	bdnz	3b
 2:
+#ifdef __SMP__	
+10:
+#endif /* __SMP__ */
+	
+	/* stack */
+	addi	r1,r2,TASK_UNION_SIZE
+	li	r0,0
+	stwu	r0,-STACK_FRAME_OVERHEAD(r1)
+	
 /*
  * Decide what sort of machine this is and initialize the MMU.
  */
@@ -1999,6 +2015,8 @@ int_return:
 	beq+	1f
 	addi	r3,r1,STACK_FRAME_OVERHEAD
 	bl	do_IRQ
+	.globl	lost_irq_ret
+lost_irq_ret:
 	b	3b
 1:	lis	r4,bh_mask@ha
 	lwz	r4,bh_mask@l(r4)
@@ -2007,6 +2025,8 @@ int_return:
 	and.	r4,r4,r5
 	beq+	2f
 	bl	do_bottom_half
+	.globl	do_bottom_half_ret
+do_bottom_half_ret:
 	SYNC
 	mtmsr	r30		/* disable interrupts again */
 	SYNC
@@ -2024,6 +2044,8 @@ int_return:
 	li	r3,0
 	addi	r4,r1,STACK_FRAME_OVERHEAD
 	bl	do_signal
+	.globl	do_signal_ret
+do_signal_ret:
 	b	0b
 8:	addi	r4,r1,INT_FRAME_SIZE+STACK_UNDERHEAD	/* size of frame */
 	stw	r4,TSS+KSP(r2)	/* save kernel stack pointer */

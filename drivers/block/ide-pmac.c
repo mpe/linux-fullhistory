@@ -25,10 +25,13 @@
 #include <asm/dbdma.h>
 #include <asm/ide.h>
 #include <asm/mediabay.h>
+#include <asm/feature.h>
 #include "ide.h"
 
 ide_ioreg_t pmac_ide_regbase[MAX_HWIFS];
 int pmac_ide_irq[MAX_HWIFS];
+int pmac_ide_count;
+struct device_node *pmac_ide_node[MAX_HWIFS];
 
 #ifdef CONFIG_BLK_DEV_IDEDMA_PMAC
 #define MAX_DCMDS	256	/* allow up to 256 DBDMA commands per xfer */
@@ -45,15 +48,18 @@ static int pmac_ide_build_dmatable(ide_drive_t *drive, int wr);
 void
 pmac_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq)
 {
-	int i;
+	int i, r;
 
 	*p = 0;
 	if (base == 0)
 		return;
-	if (base == mb_cd_base && !check_media_bay(MB_CD)) {
-		mb_cd_index = -1;
+	/* we check only for -EINVAL meaning that we have found a matching
+	   bay but with the wrong device type */ 
+
+	r = check_media_bay_by_base(base, MB_CD);
+	if (r == -EINVAL)
 		return;
-	}
+		
 	for (i = 0; i < 8; ++i)
 		*p++ = base + i * 0x10;
 	*p = base + 0x160;
@@ -93,8 +99,8 @@ pmac_ide_probe(void))
 	/* Move removable devices such as the media-bay CDROM
 	   on the PB3400 to the end of the list. */
 	for (; p != NULL; p = p->next) {
-		if (p->parent && p->parent->name
-		    && strcasecmp(p->parent->name, "media-bay") == 0) {
+		if (p->parent && p->parent->type
+		    && strcasecmp(p->parent->type, "media-bay") == 0) {
 			*rp = p;
 			rp = &p->next;
 		} else {
@@ -111,7 +117,13 @@ pmac_ide_probe(void))
 			       np->full_name);
 			continue;
 		}
+		
 		base = (unsigned long) ioremap(np->addrs[0].address, 0x200);
+		
+		/* XXX This is bogus. Should be fixed in the registry by checking
+		   the kind of host interrupt controller, a bit like gatwick
+		   fixes in irq.c
+		 */
 		if (np->n_intrs == 0) {
 			printk("ide: no intrs for device %s, using 13\n",
 			       np->full_name);
@@ -121,13 +133,13 @@ pmac_ide_probe(void))
 		}
 		pmac_ide_regbase[i] = base;
 		pmac_ide_irq[i] = irq;
+		pmac_ide_node[i] = np;
 
 		if (np->parent && np->parent->name
 		    && strcasecmp(np->parent->name, "media-bay") == 0) {
-			mb_cd_index = i;
-			mb_cd_base = base;
-			mb_cd_irq = irq;
-		}
+			media_bay_set_ide_infos(np->parent,base,irq,i);
+		} else
+			feature_set(np, FEATURE_IDE_enable);
 
 		hwif = &ide_hwifs[i];
 		pmac_ide_init_hwif_ports(hwif->io_ports, base, &hwif->irq);
@@ -143,6 +155,7 @@ pmac_ide_probe(void))
 
 		++i;
 	}
+	pmac_ide_count = i;
 }
 
 #ifdef CONFIG_BLK_DEV_IDEDMA_PMAC

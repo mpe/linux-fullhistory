@@ -618,8 +618,6 @@ extern void cache_push(__u32 addr, int length);
 extern int mm_end_of_chunk (unsigned long addr, int len);
 extern unsigned long iopa(unsigned long addr);
 extern unsigned long mm_ptov(unsigned long addr) __attribute__ ((const));
-#define VTOP(addr)  (iopa((unsigned long)(addr)))
-#define PTOV(addr)  (mm_ptov((unsigned long)(addr)))
 
 /* Values for nocacheflag and cmode */
 /* These are not used by the APUS kernel_map, but prevents

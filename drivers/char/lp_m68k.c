@@ -477,7 +477,7 @@ EXPORT_SYMBOL(lp_interrupt);
 EXPORT_SYMBOL(register_parallel);
 EXPORT_SYMBOL(unregister_parallel);
 
-__initfunc(int lp_init(void))
+__initfunc(int lp_m68k_init(void))
 {
 	extern char m68k_debug_device[];
 
@@ -517,12 +517,12 @@ __initfunc(void lp_setup(char *str, int *ints))
 #ifdef MODULE
 int init_module(void)
 {
-return lp_init();
+	return lp_m68k_init();
 }
 
 void cleanup_module(void)
 {
-unregister_chrdev(LP_MAJOR, "lp");
+	unregister_chrdev(LP_MAJOR, "lp");
 }
 #endif
 

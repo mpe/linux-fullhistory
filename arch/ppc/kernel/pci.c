@@ -1,5 +1,5 @@
 /*
- * $Id: pci.c,v 1.38 1998/08/31 06:28:02 cort Exp $
+ * $Id: pci.c,v 1.39 1998/10/13 20:59:04 cort Exp $
  * Common pmac/prep/chrp pci routines. -- Cort
  */
 
@@ -164,7 +164,7 @@ __initfunc(void
 			      get_property(find_path_device("/"), "model", NULL),3) )
 		{
 			isa_io_base = 0xfe000000;
-			set_config_access_method(raven);
+			set_config_access_method(grackle);
 		}
 		else
 		{

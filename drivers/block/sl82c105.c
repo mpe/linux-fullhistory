@@ -14,11 +14,6 @@
 #include "ide.h"
 #include "ide_modes.h"
 
-unsigned int chrp_ide_irq = 0;
-int chrp_ide_ports_known = 0;
-ide_ioreg_t chrp_ide_regbase[MAX_HWIFS];
-ide_ioreg_t chrp_idedma_regbase;
-
 void ide_init_sl82c105(ide_hwif_t *hwif)
 {
 	struct pci_dev *dev = hwif->pci_dev;
@@ -36,38 +31,4 @@ void ide_init_sl82c105(ide_hwif_t *hwif)
 	pci_read_config_dword(dev, 0x40, &t32);
 	printk("IDE control/status register: %08x\n",t32);
 	pci_write_config_dword(dev, 0x40, 0x10ff08a1);
-}
-
-/* nobody ever calls these.. ??  -mlord
- *
- * Yes somebody certainly does, check asm-ppc/ide.h for the place.  -DaveM
- */
-void chrp_ide_probe(void) {
-
-	struct pci_dev *pdev = pci_find_device(PCI_VENDOR_ID_WINBOND, PCI_DEVICE_ID_WINBOND_82C105, NULL);
-
-	chrp_ide_ports_known = 1;
-
-        if(pdev) {
-		chrp_ide_regbase[0]=pdev->base_address[0] &
-			PCI_BASE_ADDRESS_IO_MASK;
-		chrp_ide_regbase[1]=pdev->base_address[2] &
-			PCI_BASE_ADDRESS_IO_MASK;
-		chrp_idedma_regbase=pdev->base_address[4] &
-			PCI_BASE_ADDRESS_IO_MASK;
-		chrp_ide_irq=pdev->irq;
-        }
-}
-
-
-void chrp_ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq)
-{
-        ide_ioreg_t port = base;
-        int i = 8;
-
-        while (i--)
-                *p++ = port++;
-        *p++ = port;
-        if (irq != NULL)
-                *irq = chrp_ide_irq;
 }

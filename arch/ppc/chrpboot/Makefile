@@ -23,6 +23,10 @@ OBJCOPY = $(CROSS_COMPILE)objcopy
 OBJS = crt0.o start.o main.o misc.o ../coffboot/string.o ../coffboot/zlib.o image.o # initrd.o
 LIBS = $(TOPDIR)/lib/lib.a
 
+ifeq ($(CONFIG_ALL_PPC),y)
+# yes, we want to build chrp stuff
+CONFIG_CHRP = y
+endif
 
 all:	$(TOPDIR)/zImage
 

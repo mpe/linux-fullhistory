@@ -1,7 +1,7 @@
 /*
  *  linux/arch/ppc/kernel/signal.c
  *
- *  $Id: signal.c,v 1.20 1998/09/28 16:47:09 cort Exp $
+ *  $Id: signal.c,v 1.21 1998/10/22 19:37:49 paulus Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -245,7 +245,7 @@ int sys_sigreturn(struct pt_regs *regs)
 			goto badframe;
 		sr = (struct sigregs *) sigctx.regs;
 		regs->gpr[3] = ret = sigctx.signal;
-		regs->gpr[4] = (unsigned long) sr;
+		regs->gpr[4] = (unsigned long) sc;
 		regs->link = (unsigned long) &sr->tramp;
 		regs->nip = sigctx.handler;
 
@@ -293,7 +293,7 @@ setup_frame(struct pt_regs *regs, struct sigregs *frame,
 	    || get_user(regs->gpr[3], &sc->signal))
 		goto badframe;
 	regs->gpr[1] = newsp;
-	regs->gpr[4] = (unsigned long) frame;
+	regs->gpr[4] = (unsigned long) sc;
 	regs->link = (unsigned long) frame->tramp;
 
 	return;

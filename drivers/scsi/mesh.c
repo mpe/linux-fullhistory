@@ -28,6 +28,7 @@
 #include <asm/hydra.h>
 #include <asm/processor.h>
 #include <asm/spinlock.h>
+#include <asm/feature.h>
 
 #include "scsi.h"
 #include "hosts.h"
@@ -222,6 +223,13 @@ mesh_detect(Scsi_Host_Template *tp)
 	struct Scsi_Host *mesh_host;
 	void *dma_cmd_space;
 
+	if (_machine == _MACH_Pmac) {
+	    use_active_neg = (find_devices("mac-io") ? 0 : SEQ_ACTIVE_NEG);
+	} else {
+	    /* CHRP mac-io */
+	    use_active_neg = SEQ_ACTIVE_NEG;
+	}
+
 	nmeshes = 0;
 	prev_statep = &all_meshes;
 	/*
@@ -245,7 +253,7 @@ mesh_detect(Scsi_Host_Template *tp)
 		}
 		mesh_host->unique_id = nmeshes;
 		note_scsi_host(mesh, mesh_host);
-
+		
 		ms = (struct mesh_state *) mesh_host->hostdata;
 		if (ms == 0)
 			panic("no mesh state");
@@ -281,10 +289,6 @@ mesh_detect(Scsi_Host_Template *tp)
 		*prev_statep = ms;
 		prev_statep = &ms->next;
 
-		if (request_irq(ms->meshintr, do_mesh_interrupt, 0, "MESH", ms)) {
-			printk(KERN_ERR "MESH: can't get irq %d\n", ms->meshintr);
-		}
-
 		if ((cfp = (int *) get_property(mesh, "clock-frequency",
 						NULL))) {
 			ms->clk_freq = *cfp;
@@ -298,18 +302,20 @@ mesh_detect(Scsi_Host_Template *tp)
 		if (mesh_sync_period < minper)
 			mesh_sync_period = minper;
 
+		feature_set(mesh, FEATURE_MESH_enable);
+		mdelay(200);
+
 		mesh_init(ms);
+
+		if (request_irq(ms->meshintr, do_mesh_interrupt, 0, "MESH", ms)) {
+			printk(KERN_ERR "MESH: can't get irq %d\n", ms->meshintr);
+		}
 
 		++nmeshes;
 	}
-	if (_machine == _MACH_Pmac) {
-	    use_active_neg = (find_devices("mac-io") ? 0 : SEQ_ACTIVE_NEG);
-	    if (nmeshes > 0)
+
+	if ((_machine == _MACH_Pmac) && (nmeshes > 0))
 		register_reboot_notifier(&mesh_notifier);
-	} else {
-	    /* CHRP mac-io */
-	    use_active_neg = SEQ_ACTIVE_NEG;
-	}
 
 	return nmeshes;
 }
@@ -467,12 +473,27 @@ mesh_init(struct mesh_state *ms)
 	volatile struct mesh_regs *mr = ms->mesh;
 	volatile struct dbdma_regs *md = ms->dma;
 
-	out_8(&mr->interrupt, 0xff);	/* clear all interrupt bits */
+	udelay(100);
+
+	out_le32(&md->control, (RUN|PAUSE|FLUSH|WAKE) << 16);	/* stop dma */
+	out_8(&mr->exception, 0xff);	/* clear all exception bits */
+	out_8(&mr->error, 0xff);	/* clear all error bits */
+	out_8(&mr->sequence, SEQ_RESETMESH);
+	udelay(10);
 	out_8(&mr->intr_mask, INT_ERROR | INT_EXCEPTION | INT_CMDDONE);
 	out_8(&mr->source_id, ms->host->this_id);
 	out_8(&mr->sel_timeout, 25);	/* 250ms */
-	out_8(&mr->sync_params, ASYNC_PARAMS);	/* asynchronous initially */
-	out_le32(&md->control, (RUN|PAUSE|FLUSH|WAKE) << 16);
+	out_8(&mr->sync_params, ASYNC_PARAMS);
+
+	out_8(&mr->bus_status1, BS1_RST);	/* assert RST */
+	udelay(30);			/* leave it on for >= 25us */
+	out_8(&mr->bus_status1, 0);	/* negate RST */
+
+	out_8(&mr->sequence, SEQ_FLUSHFIFO);
+	udelay(1);
+	out_8(&mr->sync_params, ASYNC_PARAMS);
+	out_8(&mr->sequence, SEQ_ENBRESEL);
+	out_8(&mr->interrupt, 0xff);	/* clear all interrupt bits */
 }
 
 /*

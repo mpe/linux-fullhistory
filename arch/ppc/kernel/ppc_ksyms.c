@@ -24,6 +24,7 @@
 #include <asm/system.h>
 #include <asm/pci-bridge.h>
 #include <asm/irq.h>
+#include <asm/feature.h>
 
 #define __KERNEL_SYSCALLS__
 #include <linux/unistd.h>
@@ -100,7 +101,6 @@ EXPORT_SYMBOL(strnlen);
 EXPORT_SYMBOL(strspn);
 EXPORT_SYMBOL(strcmp);
 EXPORT_SYMBOL(strncmp);
-EXPORT_SYMBOL(strnicmp);
 EXPORT_SYMBOL(memset);
 EXPORT_SYMBOL(memcpy);
 EXPORT_SYMBOL(memmove);
@@ -159,6 +159,10 @@ EXPORT_SYMBOL(giveup_fpu);
 EXPORT_SYMBOL(flush_icache_range);
 EXPORT_SYMBOL(xchg_u32);
 
+#ifndef CONFIG_MACH_SPECIFIC
+EXPORT_SYMBOL(_machine);
+#endif
+
 EXPORT_SYMBOL(adb_request);
 EXPORT_SYMBOL(adb_autopoll);
 EXPORT_SYMBOL(adb_register);
@@ -174,10 +178,15 @@ EXPORT_SYMBOL(sleep_notifier_list);
 EXPORT_SYMBOL(abort);
 EXPORT_SYMBOL(find_devices);
 EXPORT_SYMBOL(find_type_devices);
+EXPORT_SYMBOL(find_compatible_devices);
 EXPORT_SYMBOL(find_path_device);
+EXPORT_SYMBOL(find_phandle);
 EXPORT_SYMBOL(get_property);
 EXPORT_SYMBOL(pci_io_base);
 EXPORT_SYMBOL(pci_device_loc);
+EXPORT_SYMBOL(feature_set);
+EXPORT_SYMBOL(feature_clear);
+EXPORT_SYMBOL(feature_test);
 EXPORT_SYMBOL(note_scsi_host);
 EXPORT_SYMBOL(kd_mksound);
 #ifdef CONFIG_PMAC

@@ -3937,9 +3937,8 @@ CONFIG_SCSI_NCR53C8XX_DEFAULT_TAGS
   this feature, enter 0 or 1 here (it doesn't matter which).
 
   The default value is 8 and should be supported by most hard disks.
-  This option has no effect for adapters with NVRAM, since the driver
-  will get this information from the user set-up. It also can be
-  overridden using a boot setup option, as follows (example):
+  This value can be overridden from the boot command line using the 
+  'tags' option as follows (example):
   'ncr53c8xx=tags:4/t2t3q16/t0u2q10' will set default queue depth to
   4, set queue depth to 16 for target 2 and target 3 on controller 0
   and set queue depth to 10 for target 0 / lun 2 on controller 1.
@@ -3954,12 +3953,10 @@ maximum number of queued commands
 CONFIG_SCSI_NCR53C8XX_MAX_TAGS
   This option allows you to specify the maximum number of commands
   that can be queued to any device, when tagged command queuing is
-  possible. The default value is 32. Minimum is 2, maximum is 64. For
-  value less than 32, this option only saves a little memory
-  (8*7*(32-MAXTAGS) bytes), so using less than 32 isn't worth it. For
-  value greater than 32, latency on reselection will be increased by 1
-  or 2 micro-seconds. 
-
+  possible. The default value is 32. Minimum is 2, maximum is 64.
+  Modern hard disks are able to support 64 tags and even more, but 
+  donnot seem to be faster when more than 32 tags are being used.
+  
   So, the normal answer here is to go with the default value 32 unless
   you are using very large hard disks with large cache (>= 1 MB) that
   are able to take advantage of more than 32 tagged commands.
@@ -9686,7 +9683,7 @@ CONFIG_TT_DMA_EMUL
 
 Ariadne support
 CONFIG_ARIADNE
-  If you have a VillageTronics Ariadne Ethernet adapter, say Y.
+  If you have a Village Tronic Ariadne Ethernet adapter, say Y.
   Otherwise, say N.
 
   This driver is also available as a module ( = code which can be
@@ -9696,7 +9693,7 @@ CONFIG_ARIADNE
 
 Ariadne II support
 CONFIG_ARIADNE2
-  If you have a VillageTronics Ariadne II Ethernet adapter, say Y.
+  If you have a Village Tronic Ariadne II Ethernet adapter, say Y.
   Otherwise, say N.
 
   This driver is also available as a module ( = code which can be
@@ -10272,7 +10269,7 @@ CONFIG_FRAME_POINTER
 # LocalWords:  INSNS Ataris AutoConfig ZORRO OCS AMIFB Agnus Denise ECS CDTV GB
 # LocalWords:  AGA Cybervision CYBER GSP TMS DMI Zorro ACSI ROMs SLM BioNet GVP
 # LocalWords:  PAMsNet TekMagic Cyberstorm MkI CYBERSTORMII MkII BLZ onboard cx
-# LocalWords:  VillageTronics ATARILANCE RieblCard PAMCard VME MFP sangoma LAPB
+# LocalWords:  Village Tronic ATARILANCE RieblCard PAMCard VME MFP sangoma LAPB
 # LocalWords:  Rhotron BioData's Multiface AMIGAMOUSE COPCON Amiga's bitplanes
 # LocalWords:  ATARIMOUSE MFPSER SCC's MegaSTE ESCC Atari's GVPIOEXT DMASOUND
 # LocalWords:  fdutils cisco univercd rpcg htm iface lapb LAPBETHER tpqic qic

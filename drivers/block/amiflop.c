@@ -114,7 +114,7 @@
 #define FD_HD_3 	0x55555555  /* high-density 3.5" (1760K) drive */
 #define FD_DD_5 	0xaaaaaaaa  /* double-density 5.25" (440K) drive */
 
-static long int fd_def_df0 = 0;     /* default for df0 if it doesn't identify */
+static long int fd_def_df0 = FD_DD_3;     /* default for df0 if it doesn't identify */
 
 MODULE_PARM(fd_def_df0,"l");
 
@@ -1858,20 +1858,6 @@ __initfunc(int amiga_floppy_init(void))
   blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
   blksize_size[MAJOR_NR] = floppy_blocksizes;
   blk_size[MAJOR_NR] = floppy_sizes;
-
-
-  #if 0 /* Doesn't seem to be correct */
-  if (fd_def_df0==0) {
-    if ((amiga.model == AMI_3000) || (amiga.model == AMI_3000T) ||
-        (amiga.model == AMI_3000PLUS) || (amiga.model == AMI_4000))
-      fd_def_df0=FD_HD_3;
-    else
-      fd_def_df0=FD_DD_3;
-  }
-  #else
-  /* Now we hope that every HD drive will identify itself correctly */
-  fd_def_df0 = FD_DD_3;
-  #endif
 
   for (i = 0; i < 128; i++)
 	  mfmdecode[i]=255;

@@ -8,6 +8,7 @@
 #include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/malloc.h>
+#include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/sched.h>
@@ -19,10 +20,13 @@
 #include <asm/hydra.h>
 #include <asm/init.h>
 
+EXPORT_SYMBOL(adb_hardware);
+
 enum adb_hw adb_hardware = ADB_NONE;
 int (*adb_send_request)(struct adb_request *req, int sync);
-int (*adb_autopoll)(int on);
-static void adb_scan_bus(void);
+int (*adb_autopoll)(int devs);
+int (*adb_reset_bus)(void);
+static int adb_scan_bus(void);
 
 static struct adb_handler {
 	void (*handler)(unsigned char *, int, struct pt_regs *, int);
@@ -50,13 +54,13 @@ static void printADBreply(struct adb_request *req)
 }
 #endif
 
-static void adb_scan_bus(void)
+static int adb_scan_bus(void)
 {
 	int i, highFree=0, noMovement;
+	int devmask = 0;
 	struct adb_request req;
 	
-	/* reset ADB bus */
-	/*adb_request(&req, NULL, ADBREQ_SYNC, 1, 0);*/
+	adb_reset_bus();	/* reset ADB bus */
 
 	/* assumes adb_handler[] is all zeroes at this point */
 	for (i = 1; i < 16; i++) {
@@ -134,24 +138,27 @@ static void adb_scan_bus(void)
 		adb_handler[i].handler_id = req.reply[2];
 		printk(" [%d]: %d %x", i, adb_handler[i].original_address,
 		       adb_handler[i].handler_id);
+		devmask |= 1 << i;
 	}
 	printk("\n");
+	return devmask;
 }
 
 void adb_init(void)
 {
 	adb_send_request = (void *) adb_nodev;
 	adb_autopoll = (void *) adb_nodev;
+	adb_reset_bus = adb_nodev;
 	if ( (_machine != _MACH_chrp) && (_machine != _MACH_Pmac) )
-		return;		
+		return;
 	via_cuda_init();
 	via_pmu_init();
 	macio_adb_init();
 	if (adb_hardware == ADB_NONE)
 		printk(KERN_WARNING "Warning: no ADB interface detected\n");
 	else {
-		adb_scan_bus();
-		adb_autopoll(1);
+		int devs = adb_scan_bus();
+		adb_autopoll(devs);
 	}
 }
 
@@ -187,8 +194,7 @@ adb_register(int default_id, int handler_id, struct adb_ids *ids,
 
 	ids->nids = 0;
 	for (i = 1; i < 16; i++) {
-		if ((adb_handler[i].original_address == default_id) ||
-		    (adb_handler[i].handler_id == handler_id)) {
+		if (adb_handler[i].original_address == default_id) {
 			if (adb_handler[i].handler != 0) {
 				printk(KERN_ERR
 				       "Two handlers for ADB device %d\n",

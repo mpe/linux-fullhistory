@@ -16,6 +16,8 @@
 #include <linux/signal.h>
 #include <linux/ioport.h>
 #include <linux/init.h>
+#include <linux/tty_flip.h>
+#include <linux/config.h>
 
 #include <asm/bitops.h>
 #include <asm/adb.h>
@@ -170,16 +172,22 @@ static int last_keycode;
 static void keyboard_input(unsigned char *, int, struct pt_regs *, int);
 static void input_keycode(int, int);
 static void leds_done(struct adb_request *);
+static void mac_put_queue(int);
 
+#ifdef CONFIG_ADBMOUSE
 /* XXX: Hook for mouse driver */
-void (*adb_mouse_interrupt_hook) (char *, int);
-static int adb_emulate_buttons = 0;
+void (*adb_mouse_interrupt_hook)(unsigned char *, int);
+int adb_emulate_buttons = 0;
+int adb_button2_keycode = 0x7d;	/* right control key */
+int adb_button3_keycode = 0x7c; /* right option key */
+#endif
+
 extern int console_loglevel;
 
 extern struct kbd_struct kbd_table[];
+extern struct wait_queue * keypress_wait;
 
 extern void handle_scancode(unsigned char);
-extern void put_queue(int);
 
 static struct adb_ids keyboard_ids;
 static struct adb_ids mouse_ids;
@@ -264,6 +272,7 @@ input_keycode(int keycode, int repeat)
 	if (!repeat)
 		del_timer(&repeat_timer);
 
+#ifdef CONFIG_ADBMOUSE
 	/*
 	 * XXX: Add mouse button 2+3 fake codes here if mouse open.
 	 *	Keep track of 'button' states here as we only send 
@@ -273,52 +282,27 @@ input_keycode(int keycode, int repeat)
 	 *	Might also want to know how many buttons need to be emulated.
 	 *	-> hide this as function in arch/m68k/mac ?
 	 */
-	if ( (adb_emulate_buttons) &&
-	     (adb_mouse_interrupt_hook || console_loglevel == 10) ) {
-		unsigned char button, button2, button3, fake_event;
-		static unsigned char button2state=0, button3state=0; /* up */
+	if (adb_emulate_buttons
+	    && (keycode == adb_button2_keycode
+		|| keycode == adb_button3_keycode)
+	    && (adb_mouse_interrupt_hook || console_loglevel == 10)) {
+		int button;
 		/* faked ADB packet */
-		static char data[4] = { 0, 0x80, 0x80, 0x80 };
+		static unsigned char data[4] = { 0, 0x80, 0x80, 0x80 };
 
-		button = 0;
-		fake_event = 0;
-		switch (keycode) {	/* which 'button' ? */
-			case 0x7c:	/* R-option */
-				button3 = (!up_flag);		/* new state */
-				if (button3 != button3state)	/* change ? */ 
-					button = 3; 
-				button3state = button3; 	/* save state */
-				fake_event = 3;
-				break; 
-			case 0x7d:	/* R-control */
-				button2 = (!up_flag);		/* new state */
-				if (button2 != button2state)	/* change ? */
-					button = 2; 
-				button2state = button2;		/* save state */
-				fake_event = 2;
-				break; 
-		}
-		if (fake_event && console_loglevel >= 8)
-			printk("fake event: button2 %d button3 %d button %d\n",
-				 button2state, button3state, button);
-		if (button) {		/* there's been a button state change */
-			/* fake a mouse packet : send all bytes, change one! */
-			data[button] = (up_flag ? 0x80 : 0);
+		button = keycode == adb_button2_keycode? 2: 3;
+		if (data[button] != up_flag) {
+			/* send a fake mouse packet */
+			data[button] = up_flag;
+			if (console_loglevel >= 8)
+				printk("fake mouse event: %x %x %x\n",
+				       data[1], data[2], data[3]);
 			if (adb_mouse_interrupt_hook)
-				adb_mouse_interrupt_hook(data, -1);
-			else
-				printk("mouse_fake: data %x %x %x buttons %x \n", 
-					data[1], data[2], data[3],
-					~( (data[1] & 0x80 ? 0 : 4) 
-					 | (data[2] & 0x80 ? 0 : 1) 
-					 | (data[3] & 0x80 ? 0 : 2) )&7 );
+				adb_mouse_interrupt_hook(data, 4);
 		}
-		/*
-		 * XXX: testing mouse emulation ... don't process fake keys!
-		 */
-		if (fake_event)
-			return;
+		return;
 	}
+#endif /* CONFIG_ADBMOUSE */
 
 	if (kbd->kbdmode != VC_RAW) {
 		if (!up_flag && !dont_repeat[keycode]) {
@@ -361,6 +345,20 @@ kbd_repeat(unsigned long xxx)
 	restore_flags(flags);
 }
 
+static void mac_put_queue(int ch)
+{
+	extern struct tty_driver console_driver;
+	struct tty_struct *tty;
+
+	tty = console_driver.table? console_driver.table[fg_console]: NULL;
+	wake_up(&keypress_wait);
+	if (tty) {
+		tty_insert_flip_char(tty, ch, 0);
+		con_schedule_flip(tty);
+	}
+}
+
+#ifdef CONFIG_ADBMOUSE
 static void
 mouse_input(unsigned char *data, int nb, struct pt_regs *regs, int autopoll)
 {
@@ -399,33 +397,6 @@ mouse_input(unsigned char *data, int nb, struct pt_regs *regs, int autopoll)
   */
 
   /*
-    Handler 4 -- Apple Extended mouse protocol.
-
-    For Apple's 3-button mouse protocol the data array will contain the
-    following values:
-
-		BITS    COMMENTS
-    data[0] = 0000 0000 ADB packet identifer.
-    data[1] = 0100 0000 Extended protocol register.
-	      Bits 6-7 are the device id, which should be 1.
-	      Bits 4-5 are resolution which is in "units/inch".
-	      The Logitech MouseMan returns these bits clear but it has
-	      200/300cpi resolution.
-	      Bits 0-3 are unique vendor id.
-    data[2] = 0011 1100 Bits 0-1 should be zero for a mouse device.
-	      Bits 2-3 should be 8 + 4.
-		      Bits 4-7 should be 3 for a mouse device.
-    data[3] = bxxx xxxx Left button and x-axis motion.
-    data[4] = byyy yyyy Second button and y-axis motion.
-    data[5] = byyy bxxx Third button and fourth button.  Y is additional
-	      high bits of y-axis motion.  XY is additional
-	      high bits of x-axis motion.
-
-    NOTE: data[0] and data[2] are confirmed by the parent function and
-    need not be checked here.
-  */
-
-  /*
     Handler 1 -- 100cpi original Apple mouse protocol.
     Handler 2 -- 200cpi original Apple mouse protocol.
 
@@ -433,28 +404,27 @@ mouse_input(unsigned char *data, int nb, struct pt_regs *regs, int autopoll)
     contain the following values:
 
                 BITS    COMMENTS
-    data[0] = 0000 0000 ADB packet identifer.
-    data[1] = ???? ???? (?)
-    data[2] = ???? ??00 Bits 0-1 should be zero for a mouse device.
-    data[3] = bxxx xxxx First button and x-axis motion.
-    data[4] = byyy yyyy Second button and y-axis motion.
+    data[0] = dddd 1100 ADB command: Talk, register 0, for device dddd.
+    data[1] = bxxx xxxx First button and x-axis motion.
+    data[2] = byyy yyyy Second button and y-axis motion.
 
-    NOTE: data[0] is confirmed by the parent function and need not be
-    checked here.
+    Handler 4 -- Apple Extended mouse protocol.
+
+    For Apple's 3-button mouse protocol the data array will contain the
+    following values:
+
+		BITS    COMMENTS
+    data[0] = dddd 1100 ADB command: Talk, register 0, for device dddd.
+    data[1] = bxxx xxxx Left button and x-axis motion.
+    data[2] = byyy yyyy Second button and y-axis motion.
+    data[3] = byyy bxxx Third button and fourth button.  Y is additional
+	      high bits of y-axis motion.  XY is additional
+	      high bits of x-axis motion.
   */
 	struct kbd_struct *kbd;
 
 	if (adb_mouse_interrupt_hook)
 		adb_mouse_interrupt_hook(data, nb);
-	else
-		if (console_loglevel == 10)
-		    printk("mouse_input: data %x %x %x buttons %x dx %d dy %d \n", 
-			data[1], data[2], data[3],
-			~((data[1] & 0x80 ? 0 : 4) 
-			| (data[2] & 0x80 ? 0 : 1)
-			| (data[3] & 0x80 ? 0 : 2))&7,
-			((data[2]&0x7f) < 64 ? (data[2]&0x7f) : (data[2]&0x7f)-128 ),
-			((data[1]&0x7f) < 64 ? -(data[1]&0x7f) : 128-(data[1]&0x7f) ) );
 
 	kbd = kbd_table + fg_console;
 
@@ -464,9 +434,9 @@ mouse_input(unsigned char *data, int nb, struct pt_regs *regs, int autopoll)
 		unsigned char uchButtonSecond;
 
 		/* Send first button, second button and movement. */
-		put_queue( 0x7e );
-		put_queue( data[1] );
-		put_queue( data[2] );
+		mac_put_queue(0x7e);
+		mac_put_queue(data[1]);
+		mac_put_queue(data[2]);
 
 		/* [ACA: Are there any two-button ADB mice that use handler 1 or 2?] */
 
@@ -475,12 +445,12 @@ mouse_input(unsigned char *data, int nb, struct pt_regs *regs, int autopoll)
 
 		/* Send second button. */
 		if (uchButtonSecond != uch_ButtonStateSecond) {
-			put_queue( 0x3f | uchButtonSecond );
+			mac_put_queue(0x3f | uchButtonSecond);
 			uch_ButtonStateSecond = uchButtonSecond;
 		}
 
 		/* Macintosh 3-button mouse (handler 4). */
-		if ((nb == 4) && autopoll /*?*/) {
+		if (nb == 4) {
 			static unsigned char uch_ButtonStateThird = 0x80;
 			unsigned char uchButtonThird;
 
@@ -489,12 +459,13 @@ mouse_input(unsigned char *data, int nb, struct pt_regs *regs, int autopoll)
 
 			/* Send third button. */
 			if (uchButtonThird != uch_ButtonStateThird) {
-				put_queue( 0x40 | uchButtonThird );
+				mac_put_queue(0x40 | uchButtonThird);
 				uch_ButtonStateThird = uchButtonThird;
 			}
 		}
 	}
 }
+#endif /* CONFIG_ADBMOUSE */
 
 /* Map led flags as defined in kbd_kern.h to bits for Apple keyboard. */
 static unsigned char mac_ledmap[8] = {
@@ -571,11 +542,14 @@ __initfunc(void mackbd_init_hw(void))
 	memcpy(key_maps[8], macalt_map, sizeof(plain_map));
 	memcpy(key_maps[12], macctrl_alt_map, sizeof(plain_map));
 
+#ifdef CONFIG_ADBMOUSE
 	/* initialize mouse interrupt hook */
 	adb_mouse_interrupt_hook = NULL;
 
-	adb_register(ADB_KEYBOARD, 5, &keyboard_ids, keyboard_input);
 	adb_register(ADB_MOUSE, 1, &mouse_ids, mouse_input);
+#endif /* CONFIG_ADBMOUSE */
+
+	adb_register(ADB_KEYBOARD, 5, &keyboard_ids, keyboard_input);
 
 	for(i = 0; i < keyboard_ids.nids; i++) {
 	    /* turn off all leds */
@@ -633,10 +607,4 @@ __initfunc(void mackbd_init_hw(void))
 		ADB_WRITEREG(mouse_ids.id[i],1), 03,0x38);
 	    }
 	}
-}
-
-void adb_setup_mouse( char *s, int *ints )
-{
-       if (ints[0] >= 1)
-	       adb_emulate_buttons = ints[1];
 }

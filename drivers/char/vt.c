@@ -57,6 +57,11 @@ extern struct tty_driver console_driver;
 
 struct vt_struct *vt_cons[MAX_NR_CONSOLES];
 
+/* Keyboard type: Default is KB_101, but can be set by machine
+ * specific code.
+ */
+unsigned char keyboard_type = KB_101;
+
 #ifndef __alpha__
 asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on);
 #endif
@@ -462,7 +467,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		/*
 		 * this is naive.
 		 */
-		ucval = KB_101;
+		ucval = keyboard_type;
 		goto setchar;
 
 #ifndef __alpha__

@@ -24,15 +24,21 @@ ZOFF = 0
 ZSZ = 0
 IOFF = 0
 ISZ = 0
+
+ifeq ($(CONFIG_ALL_PPC),y)
+# yes, we want to build prep stuff
+CONFIG_PREP = y
+endif
+
 ifeq ($(CONFIG_MBX),y)
 ZLINKFLAGS = -T ../vmlinux.lds -Ttext 0x00100000
 else
-#ZLINKFLAGS = -T ../vmlinux.lds -Ttext 0x00800000
 ZLINKFLAGS = -T ../vmlinux.lds -Ttext 0x00600000
 endif
+
 GZIP_FLAGS = -v9
 
-OBJECTS := head.o misc.o ../coffboot/zlib.o # inflate.o unzip.o
+OBJECTS := head.o misc.o ../coffboot/zlib.o
 CFLAGS = -O2 -DSTDC_HEADERS -fno-builtin -I$(TOPDIR)/include
 OBJCOPY = $(CROSS_COMPILE)objcopy
 OBJCOPY_ARGS = -O elf32-powerpc
@@ -45,10 +51,6 @@ OBJECTS += vreset.o kbd.o
 endif
 
 all:	zImage
-
-ifeq ($(CONFIG_ALL_PPC),y)
-CONFIG_PREP = y
-endif
 
 ifeq ($(CONFIG_PREP),y)
 zvmlinux.initrd: zvmlinux
@@ -93,14 +95,12 @@ ifeq ($(CONFIG_PREP),y)
 zImage: zvmlinux mkprep
 	./mkprep -pbp zvmlinux zImage
 else
-
 ifeq ($(CONFIG_MBX),y)
 zImage: zvmlinux
 	ln -sf zvmlinux zImage
 else
 zImage:
 endif
-
 endif
 
 ifeq ($(CONFIG_PREP),y)

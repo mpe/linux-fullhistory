@@ -196,7 +196,7 @@ prep_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
         sprintf(cmd_line,"%s console=tty0 console=ttyS0,9600n8", cmd_line);
 	printk("Boot arguments: %s\n", cmd_line);
 	
-#ifdef CONFIG_CS4232
+#ifdef CONFIG_SOUND_CS4232
 	/*
 	 * setup proper values for the cs4232 driver so we don't have
 	 * to recompile for the motorola or ibm workstations sound systems.
@@ -233,8 +233,7 @@ prep_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 			}
 		}
 	}
-#endif /* CONFIG_CS4232 */	
-	
+#endif /* CONFIG_SOUND_CS4232 */	
 
 	/*print_residual_device_info();*/
         request_region(0x20,0x20,"pic1");

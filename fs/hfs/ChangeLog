@@ -1,3 +1,9 @@
+1998-11-12  a sun  <asun@hecate.darksunrising.blah>
+
+	* extent.c (shrink_fork): added some lock_bitmap/unlock_bitmap's
+	to protect hfs_clear_vbm_bits. we should no longer have problems
+	with free_ablocks wrapping around.
+
 1998-11-02  a sun  <asun@hecate.darksunrising.blah>
 
 	* mdb.c (hfs_mdb_get): plugged up an mdb failed initialization

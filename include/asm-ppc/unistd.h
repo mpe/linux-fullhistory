@@ -5,7 +5,6 @@
  * This file contains the system call numbers.
  */
 
-#define __NR_setup		  0	/* used only by init, to get system going */
 #define __NR_exit		  1
 #define __NR_fork		  2
 #define __NR_read		  3
@@ -57,7 +56,7 @@
 #define __NR_geteuid		 49
 #define __NR_getegid		 50
 #define __NR_acct		 51
-#define __NR_phys		 52
+#define __NR_umount2		 52
 #define __NR_lock		 53
 #define __NR_ioctl		 54
 #define __NR_fcntl		 55
@@ -194,7 +193,6 @@
 #define __NR_sendfile		186
 #define __NR_getpmsg		187	/* some people actually want streams */
 #define __NR_putpmsg		188	/* some people actually want streams */
-
 
 #define __NR(n)	#n
 
@@ -394,7 +392,6 @@ static inline long kernel_thread(int (*fn)(void *), void * arg, unsigned long fl
 #define __NR__exit __NR_exit
 static inline _syscall0(int,idle)
 static inline _syscall0(int,pause)
-static inline _syscall1(int,setup,int,magic)
 static inline _syscall0(int,sync)
 static inline _syscall0(pid_t,setsid)
 static inline _syscall3(int,write,int,fd,const char *,buf,off_t,count)

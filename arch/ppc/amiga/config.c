@@ -434,10 +434,6 @@ __initfunc(void config_amiga(void))
    */
   if (AMIGAHW_PRESENT(MAGIC_REKICK))
 	  *(unsigned char *)ZTWO_VADDR(0xde0002) |= 0x80;
-
-#ifdef CONFIG_ZORRO
-  zorro_init();
-#endif
 }
 
 static unsigned short jiffy_ticks;
@@ -739,33 +735,32 @@ static void amiga_savekmsg_init(void)
     savekmsg = (struct savekmsg *)amiga_chip_alloc(SAVEKMSG_MAXMEM);
     savekmsg->magic1 = SAVEKMSG_MAGIC1;
     savekmsg->magic2 = SAVEKMSG_MAGIC2;
-    savekmsg->magicptr = VTOP(savekmsg);
+    savekmsg->magicptr = virt_to_phys(savekmsg);
     savekmsg->size = 0;
 }
 
 static void amiga_serial_putc(char c)
 {
-	custom.serdat = (unsigned char)c | 0x100;
-
-#ifdef CONFIG_APUS
-	/* I'm sure this should not be necessary since the address is
-	   marked non-cachable and coherent. Still, without it the
-	   serial output is not usable. -jskov */
-	eieio ();
-#endif
-
-	while (!(custom.serdatr & 0x2000))
-		;
+    custom.serdat = (unsigned char)c | 0x100;
+    iobarrier ();
+    while (!(custom.serdatr & 0x2000))
+       ;
 }
 
 void amiga_serial_console_write(struct console *co, const char *s,
 				       unsigned int count)
 {
-    while (count--) {
-	if (*s == '\n')
-	    amiga_serial_putc('\r');
-	amiga_serial_putc(*s++);
-    }
+#if 0 /* def CONFIG_KGDB */
+	/* FIXME:APUS GDB doesn't seem to like O-packages before it is
+           properly connected with the target. */
+	__gdb_output_string (s, count);
+#else
+	while (count--) {
+		if (*s == '\n')
+			amiga_serial_putc('\r');
+		amiga_serial_putc(*s++);
+	}
+#endif
 }
 
 #ifdef CONFIG_SERIAL_CONSOLE

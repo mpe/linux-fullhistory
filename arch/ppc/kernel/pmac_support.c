@@ -25,8 +25,7 @@ static int nvram_mult;
 #define NVRAM_SIZE	0x2000	/* 8kB of non-volatile RAM */
 
 
-__pmac
-
+__init
 void pmac_nvram_init(void)
 {
 	struct device_node *dp;

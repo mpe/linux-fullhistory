@@ -1,3 +1,4 @@
+#include <linux/config.h> /* CONFIG_HEARTBEAT */
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -68,3 +69,24 @@ static inline unsigned long mktime(unsigned int year, unsigned int mon,
 }
 
 
+void apus_heartbeat (void)
+{
+#ifdef CONFIG_HEARTBEAT
+	static unsigned cnt = 0, period = 0, dist = 0;
+
+	if (cnt == 0 || cnt == dist)
+                mach_heartbeat( 1 );
+	else if (cnt == 7 || cnt == dist+7)
+                mach_heartbeat( 0 );
+
+	if (++cnt > period) {
+                cnt = 0;
+                /* The hyperbolic function below modifies the heartbeat period
+                 * length in dependency of the current (5min) load. It goes
+                 * through the points f(0)=126, f(1)=86, f(5)=51,
+                 * f(inf)->30. */
+                period = ((672<<FSHIFT)/(5*avenrun[0]+(7<<FSHIFT))) + 30;
+                dist = period / 4;
+	}
+#endif
+}

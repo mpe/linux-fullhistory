@@ -49,9 +49,9 @@
 #include <asm/adb.h>
 #include <asm/cuda.h>
 #include <asm/pmu.h>
-#include <asm/mediabay.h>
 #include <asm/ohare.h>
 #include <asm/mediabay.h>
+#include <asm/feature.h>
 #include "time.h"
 
 unsigned char drive_info;
@@ -64,7 +64,6 @@ extern void zs_kgdb_hook(int tty_num);
 static void ohare_init(void);
 
 __pmac
-
 int
 pmac_get_cpuinfo(char *buffer)
 {
@@ -151,6 +150,7 @@ pmac_get_cpuinfo(char *buffer)
 #define MKDEV_SD_PARTITION(i)	MKDEV(SD_MAJOR_NUMBER(i), SD_MINOR_NUMBER(i))
 #define MKDEV_SD(index)		MKDEV_SD_PARTITION((index) << 4)
 
+__init
 kdev_t sd_find_target(void *host, int tgt)
 {
     Scsi_Disk *dp;
@@ -168,13 +168,13 @@ kdev_t sd_find_target(void *host, int tgt)
  * Dummy mksound function that does nothing.
  * The real one is in the dmasound driver.
  */
+__pmac
 static void
 pmac_mksound(unsigned int hz, unsigned int ticks)
 {
 }
 
 static volatile u32 *sysctrl_regs;
-static volatile u32 *feature_addr;
 
 __initfunc(void
 pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p))
@@ -206,10 +206,11 @@ pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p))
 	   and some registers used by smp boards */
 	sysctrl_regs = (volatile u32 *) ioremap(0xf8000000, 0x1000);
 	__ioremap(0xffc00000, 0x400000, pgprot_val(PAGE_READONLY));
+	ohare_init();
 
 	*memory_start_p = pmac_find_bridges(*memory_start_p, *memory_end_p);
 
-	ohare_init();
+	feature_init();
 
 #ifdef CONFIG_KGDB
 	zs_kgdb_hook(0);
@@ -234,39 +235,19 @@ pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p))
 
 __initfunc(static void ohare_init(void))
 {
-	struct device_node *np;
-
-	np = find_devices("ohare");
-	if (np == 0)
-		return;
-	if (np->next != 0)
-		printk(KERN_WARNING "only using the first ohare\n");
-	if (np->n_addrs == 0) {
-		printk(KERN_ERR "No addresses for %s\n", np->full_name);
-		return;
-	}
-	feature_addr = (volatile u32 *)
-		ioremap(np->addrs[0].address + OHARE_FEATURE_REG, 4);
-
-	if (find_devices("via-pmu") == 0) {
-		printk(KERN_INFO "Twiddling the magic ohare bits\n");
-		out_le32(feature_addr, STARMAX_FEATURES);
-	} else {
-		out_le32(feature_addr, in_le32(feature_addr) | PBOOK_FEATURES);
-		printk(KERN_DEBUG "feature reg = %x\n", in_le32(feature_addr));
-	}
-
 	/*
 	 * Turn on the L2 cache.
 	 * We assume that we have a PSX memory controller iff
 	 * we have an ohare I/O controller.
 	 */
-	if (((sysctrl_regs[2] >> 24) & 0xf) >= 3) {
-		if (sysctrl_regs[4] & 0x10)
-			sysctrl_regs[4] |= 0x04000020;
-		else
-			sysctrl_regs[4] |= 0x04000000;
-		printk(KERN_INFO "Level 2 cache enabled\n");
+	if (find_devices("ohare") != NULL) {
+		if (((sysctrl_regs[2] >> 24) & 0xf) >= 3) {
+			if (sysctrl_regs[4] & 0x10)
+				sysctrl_regs[4] |= 0x04000020;
+			else
+				sysctrl_regs[4] |= 0x04000000;
+			printk(KERN_INFO "Level 2 cache enabled\n");
+		}
 	}
 }
 
@@ -277,8 +258,10 @@ int boot_target;
 int boot_part;
 kdev_t boot_dev;
 
-__initfunc(void powermac_init(void))
+void __init powermac_init(void)
 {
+  	if ( (_machine != _MACH_chrp) && (_machine != _MACH_Pmac) )
+		return;
 	adb_init();
 	pmac_nvram_init();
 	if (_machine == _MACH_Pmac) {
@@ -363,7 +346,9 @@ __initfunc(void find_boot_device(void))
 #endif
 }
 
-__initfunc(void note_bootable_part(kdev_t dev, int part))
+/* can't be initfunc - can be called whenever a disk is first accessed */
+__pmac
+void note_bootable_part(kdev_t dev, int part)
 {
 	static int found_boot = 0;
 	char *p;

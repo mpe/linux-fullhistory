@@ -8,6 +8,8 @@
 
 #include <linux/config.h>
 #include <asm/io.h>
+#include <asm/spinlock.h>
+#include <asm/system.h>
 
 /*
  * Note: Adapted for PowerPC by Gary Thomas
@@ -202,6 +204,20 @@ extern long ppc_cs4232_dma, ppc_cs4232_dma2;
 #define DMA2_EXT_REG               0x4D6
 
 #define DMA_MODE_CASCADE 0xC0   /* pass thru DREQ->HRQ, DACK<-HLDA only */
+
+extern spinlock_t  dma_spin_lock;
+
+static __inline__ unsigned long claim_dma_lock(void)
+{
+	unsigned long flags;
+	spin_lock_irqsave(&dma_spin_lock, flags);
+	return flags;
+}
+
+static __inline__ void release_dma_lock(unsigned long flags)
+{
+	spin_unlock_irqrestore(&dma_spin_lock, flags);
+}
 
 /* enable/disable a specific DMA channel */
 static __inline__ void enable_dma(unsigned int dmanr)

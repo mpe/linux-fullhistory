@@ -25,6 +25,7 @@
  *		Alan Cox	:	New arp/rebuild header
  */
  
+#include <linux/config.h>
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <linux/types.h>

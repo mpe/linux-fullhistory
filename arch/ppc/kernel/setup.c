@@ -1,5 +1,5 @@
 /*
- * $Id: setup.c,v 1.103 1998/09/18 09:14:56 paulus Exp $
+ * $Id: setup.c,v 1.117 1998/11/09 19:55:53 geert Exp $
  * Common prep/pmac/chrp boot and setup code.
  */
 
@@ -24,6 +24,7 @@
 #include <asm/bootinfo.h>
 #include <asm/setup.h>
 #include <asm/amigappc.h>
+#include <asm/smp.h>
 #ifdef CONFIG_MBX
 #include <asm/mbx.h>
 #endif
@@ -131,9 +132,7 @@ void machine_restart(char *cmd)
 				cuda_poll();
 			break;
 		case ADB_VIAPMU:
-			pmu_request(&req, NULL, 1, PMU_RESET);
-			for (;;)
-				pmu_poll();
+			pmu_restart();
 			break;
 		default:
 		}
@@ -206,10 +205,7 @@ void machine_power_off(void)
 				cuda_poll();
 			break;
 		case ADB_VIAPMU:
-			pmu_request(&req, NULL, 5, PMU_SHUTDOWN,
-				    'M', 'A', 'T', 'T');
-			for (;;)
-				pmu_poll();
+			pmu_shutdown();
 			break;
 		default:
 		}
@@ -250,9 +246,11 @@ void ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq)
 {
 #if !defined(CONFIG_MBX) && !defined(CONFIG_APUS)
 	switch (_machine) {
+#if defined(CONFIG_BLK_DEV_IDE_PMAC)
 	case _MACH_Pmac:
-		pmac_ide_init_hwif_ports(p,base,irq);
+	  	pmac_ide_init_hwif_ports(p,base,irq);
 		break;
+#endif		
 	case _MACH_chrp:
 		chrp_ide_init_hwif_ports(p,base,irq);
 		break;
@@ -267,68 +265,31 @@ EXPORT_SYMBOL(ide_init_hwif_ports);
 
 unsigned long cpu_temp(void)
 {
-#if 0	
-	unsigned long i, temp, thrm1, dir;
-	int sanity;
+	unsigned char thres = 0;
 	
-	/*
-	 * setup thrm3 - need to give TAU at least 20us
-	 * to do the compare so assume a 300MHz clock.
-	 * We need 300*20 ticks then.
-	 * -- Cort
-	 */
-	asm("mtspr 1020, %1\n\t"
-	    "mtspr 1021, %1\n\t"
-	    "mtspr 1022, %0\n\t"::
-	    "r" ( ((300*20)<<18) | THRM3_E), "r" (0) );
-		
 #if 0
-	for ( i = 127 ; i >= 0 ; i-- )
-	{
-		asm("mtspr 1020, %0\n\t"::
-		    "r" (THRM1_TID|THRM1_V|(i<<2)) );
-		/* check value */
-		while ( !( thrm1 & THRM1_TIV) )
-			asm("mfspr %0, 1020 \n\t": "=r" (thrm1) );
-		if ( thrm1 & THRM1_TIN )
-		{
-			printk("tin set: %x tiv %x\n", thrm1,thrm1&THRM1_TIV);
-			goto out;
-		}
+	/* disable thrm2 */
+	_set_THRM2( 0 );
+	/* threshold 0 C, tid: exceeding threshold, tie: don't generate interrupt */
+	_set_THRM1( THRM1_V );
 
-	}
+	/* we need 20us to do the compare - assume 300MHz processor clock */
+	_set_THRM3(0);
+	_set_THRM3(THRM3_E | (300*30)<<18 );
+
+	udelay(100);
+	/* wait for the compare to complete */
+	/*while ( !(_get_THRM1() & THRM1_TIV) ) ;*/
+	if ( !(_get_THRM1() & THRM1_TIV) )
+		printk("no tiv\n");
+	if ( _get_THRM1() & THRM1_TIN )
+		printk("crossed\n");
+	/* turn everything off */
+	_set_THRM3(0);
+	_set_THRM1(0);
 #endif
-#if 0
-	i = 32;			/* increment */
-	dir = 1;		/* direction we're checking 0=up 1=down */
-	temp = 64;		/* threshold checking against */
-	while ( i )
-	{
-		_set_THRM1((1<<29) | THRM1_V | (temp<<2) );
-		printk("checking %d in dir %d thrm set to %x/%x\n", temp,dir,
-		       ( (1<<29) | THRM1_V | (temp<<2)),_get_THRM1());
-		/* check value */
-		sanity = 0x0fffffff;
-		while ( (!( thrm1 & THRM1_TIV)) && (sanity--) )
-			thrm1 = _get_THRM1();
-			/*asm("mfspr %0, 1020 \n\t": "=r" (thrm1) );*/
-		if ( ! sanity || sanity==0xffffffff ) printk("no sanity\n");
-		/* temp is not in that direction */
-		if ( !(thrm1 & THRM1_TIN) )
-		{
-			printk("not in that dir thrm1 %x\n",thrm1);
-			if ( dir == 0 ) dir = 1;
-			else dir = 0;
-		}
-		if ( dir ) temp -= i;
-		else temp += i;
-		i /= 2;
-	}
-	asm("mtspr 1020, %0\n\t"
-	    "mtspr 1022, %0\n\t" ::"r" (0) );
-#endif
-#endif	
-	return 0;
+		
+	return thres;
 }
 
 int get_cpuinfo(char *buffer)
@@ -342,12 +303,11 @@ int get_cpuinfo(char *buffer)
 	unsigned long i;
 	
 #ifdef __SMP__
-	extern unsigned long cpu_present_map;	
-	extern struct cpuinfo_PPC cpu_data[NR_CPUS];
+#define CPU_PRESENT(x) (cpu_callin_map[(x)])
 #define GET_PVR ((long int)(cpu_data[i].pvr))
 #define CD(x) (cpu_data[i].x)
 #else
-#define cpu_present_map 1L
+#define CPU_PRESENT(x) ((x)==0)
 #define smp_num_cpus 1
 #define GET_PVR ((long int)_get_PVR())
 #define CD(x) (x)
@@ -355,7 +315,7 @@ int get_cpuinfo(char *buffer)
 
 	for ( i = 0; i < smp_num_cpus ; i++ )
 	{
-		if ( ! ( cpu_present_map & (1<<i) ) )
+		if ( !CPU_PRESENT(i) )
 			continue;
 		if ( i )
 			len += sprintf(len+buffer,"\n");
@@ -509,9 +469,13 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		 unsigned long r6, unsigned long r7))
 {
 	extern void setup_pci_ptrs(void);
+	
+#ifdef __SMP__
+	if ( first_cpu_booted ) return 0;
+#endif /* __SMP__ */
+	
 #ifndef CONFIG_MBX
 #ifndef CONFIG_MACH_SPECIFIC
-	char *model;
 	/* boot loader will tell us if we're APUS */
 	if ( r3 == 0x61707573 )
 	{
@@ -524,13 +488,22 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		_machine = _MACH_prep;
 		have_of = 0;
 	} else {
+		char *model;
+
 		have_of = 1;
 		/* ask the OF info if we're a chrp or pmac */
-		model = get_property(find_path_device("/"), "type", NULL);
-		if ( !strncmp("chrp",model,4) )
+		model = get_property(find_path_device("/"), "device_type", NULL);
+		if ( model && !strncmp("chrp",model,4) )
 			_machine = _MACH_chrp;
-		else 
-			_machine = _MACH_Pmac;
+		else
+		{
+			model = get_property(find_path_device("/"),
+					     "model", NULL);
+			if ( model && !strncmp(model, "IBM", 3))
+				_machine = _MACH_chrp;
+			else
+				_machine = _MACH_Pmac;
+		}
 
 	}
 #endif /* CONFIG_MACH_SPECIFIC */		
@@ -714,6 +687,12 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		strcpy(cmd_line, (char *)(r6+KERNELBASE));
 	}
 #endif /* CONFIG_MBX */
+
+	/* Check for nobats option (used in mapin_ram). */
+	if (strstr(cmd_line, "nobats")) {
+		extern int __map_without_bats;
+		__map_without_bats = 1;
+	}
 	return 0;
 }
 
@@ -753,20 +732,6 @@ __initfunc(void setup_arch(char **cmdline_p,
 	*memory_start_p = find_available_memory();
 	*memory_end_p = (unsigned long) end_of_DRAM;
 
-#ifdef CONFIG_BLK_DEV_INITRD
-	/* initrd_start and size are setup by boot/head.S and kernel/head.S */
-	if ( initrd_start )
-	{
-		if (initrd_end > *memory_end_p)
-		{
-			printk("initrd extends beyond end of memory "
-			       "(0x%08lx > 0x%08lx)\ndisabling initrd\n",
-			       initrd_end,*memory_end_p);
-			initrd_start = 0;
-		}
-	}
-#endif
-	
 #ifdef CONFIG_MBX
 	mbx_setup_arch(memory_start_p,memory_end_p);
 #else /* CONFIG_MBX */	

@@ -61,8 +61,9 @@ static unsigned char adb_rbuf[16];
 
 static void macio_adb_interrupt(int irq, void *arg, struct pt_regs *regs);
 static int macio_adb_send_request(struct adb_request *req, int sync);
-static int macio_adb_autopoll(int on);
+static int macio_adb_autopoll(int devs);
 static void macio_adb_poll(void);
+static int macio_reset_bus(void);
 static void completed(void);
 
 __openfirmware
@@ -108,14 +109,30 @@ void macio_adb_init(void)
 	adb_hardware = ADB_MACIO;
 	adb_send_request = macio_adb_send_request;
 	adb_autopoll = macio_adb_autopoll;
+	adb_reset_bus = macio_reset_bus;
 }
 
-static int macio_adb_autopoll(int on)
+static int macio_adb_autopoll(int devs)
 {
-	out_8(&adb->autopoll.r, on? APE: 0);
+	out_8(&adb->active_hi.r, devs >> 8);
+	out_8(&adb->active_lo.r, devs);
+	out_8(&adb->autopoll.r, devs? APE: 0);
 	return 0;
 }
 
+static int macio_reset_bus(void)
+{
+	int timeout = 1000000;
+
+	out_8(&adb->ctrl.r, in_8(&adb->ctrl.r) | ADB_RST);
+	while ((in_8(&adb->ctrl.r) & ADB_RST) != 0) {
+		if (--timeout == 0) {
+			out_8(&adb->ctrl.r, in_8(&adb->ctrl.r) & ~ADB_RST);
+			return -1;
+		}
+	}
+	return 0;
+}
 
 /* Send an ADB command */
 static int macio_adb_send_request(struct adb_request *req, int sync)

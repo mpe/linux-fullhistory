@@ -30,6 +30,7 @@
 #include <asm/system.h>
 #include <asm/init.h>
 #include <asm/irq.h>
+#include <asm/feature.h>
 
 /* Misc minor number allocated for /dev/pmu */
 #define PMU_MINOR	154
@@ -99,7 +100,8 @@ static int pmu_queue_request(struct adb_request *req);
 static void pmu_start(void);
 static void via_pmu_interrupt(int irq, void *arg, struct pt_regs *regs);
 static int pmu_adb_send_request(struct adb_request *req, int sync);
-static int pmu_adb_autopoll(int on);
+static int pmu_adb_autopoll(int devs);
+static int pmu_reset_bus(void);
 static void send_byte(int x);
 static void recv_byte(void);
 static void pmu_sr_intr(struct pt_regs *regs);
@@ -162,6 +164,8 @@ find_via_pmu()
 		return;
 	if (vias->next != 0)
 		printk(KERN_WARNING "Warning: only using 1st via-pmu\n");
+	
+	feature_set(vias, FEATURE_VIA_enable);
 
 #if 0
 	{ int i;
@@ -215,6 +219,7 @@ via_pmu_init(void)
 	/* Set function pointers */
 	adb_send_request = pmu_adb_send_request;
 	adb_autopoll = pmu_adb_autopoll;
+	adb_reset_bus = pmu_reset_bus;
 }
 
 static int
@@ -281,11 +286,12 @@ pmu_adb_send_request(struct adb_request *req, int sync)
 
 /* Enable/disable autopolling */
 static int
-pmu_adb_autopoll(int on)
+pmu_adb_autopoll(int devs)
 {
 	struct adb_request req;
 
-	if (on) {
+	if (devs) {
+		adb_dev_map = devs;
 		pmu_request(&req, NULL, 5, PMU_ADB_CMD, 0, 0x86,
 			    adb_dev_map >> 8, adb_dev_map);
 		pmu_adb_flags = 2;
@@ -296,6 +302,49 @@ pmu_adb_autopoll(int on)
 	while (!req.complete)
 		pmu_poll();
 	return 0;
+}
+
+/* Reset the ADB bus */
+static int
+pmu_reset_bus(void)
+{
+	struct adb_request req;
+	long timeout;
+	int save_autopoll = adb_dev_map;
+
+	/* anyone got a better idea?? */
+	pmu_adb_autopoll(0);
+
+	req.nbytes = 5;
+	req.done = NULL;
+	req.data[0] = PMU_ADB_CMD;
+	req.data[1] = 0;
+	req.data[2] = 3;
+	req.data[3] = 0;
+	req.data[4] = 0;
+	req.reply_len = 0;
+	req.reply_expected = 1;
+	if (pmu_queue_request(&req) != 0)
+	{
+		printk(KERN_ERR "pmu_reset_bus: pmu_queue_request failed\n");
+		return 0;
+	}
+	while (!req.complete)
+		pmu_poll();
+	timeout = 100000;
+	while (!req.complete) {
+		if (--timeout < 0) {
+			printk(KERN_ERR "pmu_reset_bus (reset): no response from PMU\n");
+			return 0;
+		}
+		udelay(10);
+		pmu_poll();
+	}
+
+	if (save_autopoll != 0)
+		pmu_adb_autopoll(save_autopoll);
+		
+	return 1;
 }
 
 /* Construct and send a pmu request */
@@ -366,7 +415,10 @@ pmu_send_request(struct adb_request *req)
 			req->nbytes = 5;
 			for (i = 1; i <= 4; ++i)
 				req->data[i] = req->data[i+1];
-			req->reply_len = 0;
+			req->reply_len = 3;
+			req->reply[0] = CUDA_PACKET;
+			req->reply[1] = 0;
+			req->reply[2] = CUDA_SET_TIME;
 			return pmu_queue_request(req);
 		}
 		break;
@@ -691,6 +743,44 @@ set_volume(int level)
 {
 }
 
+void
+pmu_restart(void)
+{
+	struct adb_request req;
+
+	_disable_interrupts();
+	
+	pmu_request(&req, NULL, 2, PMU_SET_INTR_MASK, CB1_INT);
+	while(!req.complete)
+		pmu_poll();
+	
+	pmu_request(&req, NULL, 1, PMU_RESET);
+	while(!req.complete || (pmu_state != idle))
+		pmu_poll();
+	for (;;)
+		;
+}
+
+void
+pmu_shutdown(void)
+{
+	struct adb_request req;
+
+	_disable_interrupts();
+	
+	pmu_request(&req, NULL, 2, PMU_SET_INTR_MASK, CB1_INT);
+	while(!req.complete)
+		pmu_poll();
+
+	pmu_request(&req, NULL, 5, PMU_SHUTDOWN,
+		    'M', 'A', 'T', 'T');
+	while(!req.complete || (pmu_state != idle))
+		pmu_poll();
+	for (;;)
+		;
+}
+
+
 #ifdef CONFIG_PMAC_PBOOK
 
 /*
@@ -855,11 +945,13 @@ int powerbook_sleep(void)
 	notifier_call_chain(&sleep_notifier_list, PBOOK_WAKE, NULL);
 
 	/* reenable ADB autopoll */
-	pmu_adb_autopoll(1);
+	pmu_adb_autopoll(adb_dev_map);
 
 	/* Turn on the screen backlight, if it was on before */
 	if (save_backlight)
 		pmu_enable_backlight(1);
+
+	/* Wait for the hard disk to spin up */
 
 	return 0;
 }

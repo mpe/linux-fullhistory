@@ -54,6 +54,7 @@ struct bmac_data {
 	int rx_dma_intr;
 	volatile struct dbdma_cmd *tx_cmds;	/* xmit dma command list */
 	volatile struct dbdma_cmd *rx_cmds;	/* recv dma command list */
+	struct device_node *node;
 	struct sk_buff *rx_bufs[N_RX_RING];
 	int rx_fill;
 	int rx_empty;
@@ -235,11 +236,11 @@ bmac_reset_chip(struct device *dev)
 	dbdma_reset(rd);
 	dbdma_reset(td);
 
-	feature_set(FEATURE_BMac_IO_enable);
+	feature_set(bp->node, FEATURE_BMac_IO_enable);
 	udelay(10000);
-	feature_set(FEATURE_BMac_reset);
+	feature_set(bp->node, FEATURE_BMac_reset);
 	udelay(10000);
-	feature_clear(FEATURE_BMac_reset);
+	feature_clear(bp->node, FEATURE_BMac_reset);
 	udelay(10000);
 }
 
@@ -374,8 +375,6 @@ bmac_init_registers(struct device *dev)
 	//bmwrite(dev, TXCFG, TxMACEnable);	       	/* TxNeverGiveUp maybe later */
 	bmread(dev, STATUS);		/* read it just to clear it */
 
-	bmwrite(dev, INTDISABLE, EnableNormal);
-
 	/* zero out the chip Hash Filter registers */
 	for (i=0; i<4; i++) bp->hash_table_mask[i] = 0;
 	bmwrite(dev, BHASH3, bp->hash_table_mask[0]); 	/* bits 15 - 0 */
@@ -387,10 +386,11 @@ bmac_init_registers(struct device *dev)
 	bmwrite(dev, MADD0, *pWord16++);
 	bmwrite(dev, MADD1, *pWord16++);
 	bmwrite(dev, MADD2, *pWord16);
-    
 
 	bmwrite(dev, RXCFG, RxCRCNoStrip | RxHashFilterEnable | RxRejectOwnPackets);
-    
+
+	bmwrite(dev, INTDISABLE, EnableNormal);
+
 	return;
 }
 
@@ -620,6 +620,8 @@ static int bmac_transmit_packet(struct sk_buff *skb, struct device *dev)
 	bp->tx_bufs[bp->tx_fill] = skb;
 	bp->tx_fill = i;
 
+	bp->stats.tx_bytes += skb->len;
+
 	dbdma_continue(td);
 
 	return 0;
@@ -669,6 +671,7 @@ static void bmac_rxdma_intr(int irq, void *dev_id, struct pt_regs *regs)
 			skb_reserve(bp->rx_bufs[i], 2);
 			bmac_construct_rxbuff(bp->rx_bufs[i]->data, &bp->rx_cmds[i]);
 			++bp->stats.rx_packets;
+			bp->stats.rx_bytes += nb;
 		} else {
 			++bp->stats.rx_dropped;
 		}
@@ -1241,7 +1244,7 @@ bmac_probe(struct device *dev)
     
 	dev->base_addr = bmacs->addrs[0].address;
 	dev->irq = bmacs->intrs[0].line;
-    
+
 	bmwrite(dev, INTDISABLE, DisableAll);
     
 	addr = get_property(bmacs, "mac-address", NULL);
@@ -1288,6 +1291,7 @@ bmac_probe(struct device *dev)
 	bp->queue = (struct sk_buff_head *)(bp->rx_cmds + N_RX_RING + 1);
 	skb_queue_head_init(bp->queue);
     
+	bp->node = bmacs;
 	memset(&bp->stats, 0, sizeof(bp->stats));
 	memset((char *) bp->tx_cmds, 0,
 	       (N_TX_RING + N_RX_RING + 2) * sizeof(struct dbdma_cmd));

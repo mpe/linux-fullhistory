@@ -54,6 +54,9 @@ void pmu_poll(void);
 
 void pmu_enable_backlight(int on);
 
+void pmu_restart(void);
+void pmu_shutdown(void);
+
 /*
  * Stuff for putting the powerbook to sleep and waking it again.
  */

@@ -84,6 +84,7 @@ struct serial_struct {
 struct mac_zschannel {
 	volatile unsigned char *control;
 	volatile unsigned char *data;
+	spinlock_t	lock;
 };
 
 struct mac_serial {
@@ -91,11 +92,13 @@ struct mac_serial {
 	struct mac_zschannel *zs_channel; /* Channel registers */
 	struct mac_zschannel *zs_chan_a;	/* A side registers */
 	unsigned char read_reg_zero;
+	struct device_node* dev_node;
 
 	char soft_carrier;  /* Use soft carrier on this channel */
 	char break_abort;   /* Is serial console in, so process brk/abrt */
 	char kgdb_channel;  /* Kgdb is running on this channel */
 	char is_cons;       /* Is this our console. */
+	char is_cobalt_modem;	/* is a gatwick-based cobalt modem */
 	unsigned char tx_active; /* character is being xmitted */
 	unsigned char tx_stopped; /* output is suspended */
 

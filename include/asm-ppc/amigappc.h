@@ -14,16 +14,32 @@
 #ifndef _M68K_AMIGAPPC_H
 #define _M68K_AMIGAPPC_H
 
+#ifndef __ASSEMBLY__
+
+#ifndef iobarrier /* Don't include io.h - avoid circular dependency */
+#define iobarrier() eieio()
+#endif
+
+#define APUS_WRITE(_a_, _v_)				\
+do {							\
+	(*((volatile unsigned char *)(_a_)) = (_v_));	\
+	iobarrier ();					\
+} while (0)
+
+#define APUS_READ(_a_, _v_) 				\
+do {							\
+	(_v_) = (*((volatile unsigned char *)(_a_)));	\
+	iobarrier ();					\
+} while (0)
+#endif /* ndef __ASSEMBLY__ */
+
 /* Maybe add a [#ifdef WANT_ZTWOBASE] condition to amigahw.h? */
 #define zTwoBase (0x80000000)
 
-/* At CYBERBASEp we'll find the following sum:
+/* At CYBERBASEp we find the following sum:
  * -KERNELBASE+CyberStormMemoryBase
  */
 #define CYBERBASEp (0xfff00000)
-
-#define APUS_WRITE(a,v) (*((volatile unsigned char *)a) = v)
-#define APUS_READ(a) (*((volatile unsigned char *)a))
 
 #define APUS_IPL_BASE   	(zTwoBase + 0x00f60000)
 #define APUS_REG_RESET    	(APUS_IPL_BASE + 0x00)
@@ -32,6 +48,7 @@
 #define APUS_REG_LOCK		(APUS_IPL_BASE + 0x20)
 #define APUS_REG_INT    	(APUS_IPL_BASE + 0x28)
 #define APUS_IPL_EMU		(APUS_IPL_BASE + 0x30)
+#define APUS_INT_LVL		(APUS_IPL_BASE + 0x38)
 
 #define REGSHADOW_SETRESET	(0x80)
 #define REGSHADOW_SELFRESET	(0x40)
@@ -65,5 +82,8 @@
 #define IPLEMU_PPCIPL1		(0x02)
 #define IPLEMU_PPCIPL0		(0x01)
 #define IPLEMU_IPLMASK		(IPLEMU_PPCIPL2|IPLEMU_PPCIPL1|IPLEMU_PPCIPL0)
+
+#define INTLVL_SETRESET         (0x80)
+#define INTLVL_MASK             (0x7f)
 
 #endif /* _M68k_AMIGAPPC_H */

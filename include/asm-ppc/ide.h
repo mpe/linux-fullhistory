@@ -42,6 +42,7 @@ void ide_outsw(ide_ioreg_t port, void *buf, int ns);
 
 #ifdef __KERNEL__
 
+#include <linux/hdreg.h>
 #include <linux/ioport.h>
 #include <asm/io.h>		/* so we can redefine insw/outsw */
 
@@ -98,9 +99,11 @@ static __inline__ int ide_default_irq(ide_ioreg_t base)
 
 static __inline__ ide_ioreg_t ide_default_io_base(int index)
 {
+#if defined(CONFIG_BLK_DEV_IDE_PMAC)
         if (_machine == _MACH_Pmac) {
 		return pmac_ide_regbase[index];
 	}
+#endif	
 	if (_machine == _MACH_mbx) return index;
         if ( _machine == _MACH_chrp ) {
                 if (chrp_ide_ports_known == 0)
@@ -138,13 +141,76 @@ static __inline__ void ide_release_region (ide_ioreg_t from, unsigned int extent
 	release_region(from, extent);
 }
 
-#define ide_fix_driveid(id)	do {			\
-	int nh;						\
-	unsigned short *p = (unsigned short *) id;	\
-	if (( _machine == _MACH_Pmac ) || (_machine == _MACH_chrp)|| (_machine == _MACH_mbx) )	\
-		for (nh = SECTOR_WORDS * 2; nh != 0; --nh, ++p)	\
-			*p = (*p << 8) + (*p >> 8);	\
-} while (0)
+/* Convert the shorts/longs in hd_driveid from little to big endian;
+   chars are endian independant, of course, but strings need to be flipped.
+   (Despite what it says in drivers/block/ide.h, they come up as little endian...)
+   Changes to linux/hdreg.h may require changes here. */
+static __inline__ void ide_fix_driveid (struct hd_driveid *id) {
+	if (( _machine == _MACH_Pmac ) || (_machine == _MACH_chrp)|| (_machine == _MACH_mbx) ) {
+		int i;
+		unsigned short *stringcast;
+		id->config         = __le16_to_cpu(id->config);
+		id->cyls           = __le16_to_cpu(id->cyls);
+		id->reserved2      = __le16_to_cpu(id->reserved2);
+		id->heads          = __le16_to_cpu(id->heads);
+		id->track_bytes    = __le16_to_cpu(id->track_bytes);
+		id->sector_bytes   = __le16_to_cpu(id->sector_bytes);
+		id->sectors        = __le16_to_cpu(id->sectors);
+		id->vendor0        = __le16_to_cpu(id->vendor0);
+		id->vendor1        = __le16_to_cpu(id->vendor1);
+		id->vendor2        = __le16_to_cpu(id->vendor2);
+		stringcast = (unsigned short *)&id->serial_no[0];
+		for (i=0; i<(20/2); i++)
+			stringcast[i] = __le16_to_cpu(stringcast[i]);
+		id->buf_type       = __le16_to_cpu(id->buf_type);
+		id->buf_size       = __le16_to_cpu(id->buf_size);
+		id->ecc_bytes      = __le16_to_cpu(id->ecc_bytes);
+		stringcast = (unsigned short *)&id->fw_rev[0];
+		for (i=0; i<(8/2); i++)
+			stringcast[i] = __le16_to_cpu(stringcast[i]);
+		stringcast = (unsigned short *)&id->model[0];
+		for (i=0; i<(40/2); i++)
+			stringcast[i] = __le16_to_cpu(stringcast[i]);
+		id->dword_io       = __le16_to_cpu(id->dword_io);
+		id->reserved50     = __le16_to_cpu(id->reserved50);
+		id->field_valid    = __le16_to_cpu(id->field_valid);
+		id->cur_cyls       = __le16_to_cpu(id->cur_cyls);
+		id->cur_heads      = __le16_to_cpu(id->cur_heads);
+		id->cur_sectors    = __le16_to_cpu(id->cur_sectors);
+		id->cur_capacity0  = __le16_to_cpu(id->cur_capacity0);
+		id->cur_capacity1  = __le16_to_cpu(id->cur_capacity1);
+		id->lba_capacity   = __le32_to_cpu(id->lba_capacity);
+		id->dma_1word      = __le16_to_cpu(id->dma_1word);
+		id->dma_mword      = __le16_to_cpu(id->dma_mword);
+		id->eide_pio_modes = __le16_to_cpu(id->eide_pio_modes);
+		id->eide_dma_min   = __le16_to_cpu(id->eide_dma_min);
+		id->eide_dma_time  = __le16_to_cpu(id->eide_dma_time);
+		id->eide_pio       = __le16_to_cpu(id->eide_pio);
+		id->eide_pio_iordy = __le16_to_cpu(id->eide_pio_iordy);
+		id->word69         = __le16_to_cpu(id->word69);
+		id->word70         = __le16_to_cpu(id->word70);
+		id->word71         = __le16_to_cpu(id->word71);
+		id->word72         = __le16_to_cpu(id->word72);
+		id->word73         = __le16_to_cpu(id->word73);
+		id->word74         = __le16_to_cpu(id->word74);
+		id->word75         = __le16_to_cpu(id->word75);
+		id->word76         = __le16_to_cpu(id->word76);
+		id->word77         = __le16_to_cpu(id->word77);
+		id->word78         = __le16_to_cpu(id->word78);
+		id->word79         = __le16_to_cpu(id->word79);
+		id->word80         = __le16_to_cpu(id->word80);
+		id->word81         = __le16_to_cpu(id->word81);
+		id->word82         = __le16_to_cpu(id->word82);
+		id->word83         = __le16_to_cpu(id->word83);
+		id->word84         = __le16_to_cpu(id->word84);
+		id->word85         = __le16_to_cpu(id->word85);
+		id->word86         = __le16_to_cpu(id->word86);
+		id->word87         = __le16_to_cpu(id->word87);
+		id->dma_ultra      = __le16_to_cpu(id->dma_ultra);
+		for (i=0; i<167; i++)
+			id->reserved[i] = __le16_to_cpu(id->reserved[i]);
+	}
+}
 
 
 #undef insw

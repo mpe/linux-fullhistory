@@ -73,7 +73,7 @@
 */
 
 /*
-**	October 21 1998, version 3.1a
+**	November 11 1998, version 3.1b
 **
 **	Supported SCSI-II features:
 **	    Synchronous negotiation
@@ -4319,7 +4319,7 @@ static int ncr_prepare_setting(ncb_p np, ncr_nvram *nvram)
 #endif
 			tp->usrsync = driver_setup.default_sync;
 			tp->usrwide = driver_setup.max_wide;
-			tp->usrtags = driver_setup.default_tags;
+			tp->usrtags = SCSI_NCR_MAX_TAGS;
 			if (!driver_setup.disconnection)
 				np->target[i].usrflag = UF_NODISC;
 		}
@@ -8208,6 +8208,12 @@ static	ccb_p ncr_get_ccb (ncb_p np, u_char tn, u_char ln)
 	if (lp) {
 		XPT_QUEHEAD *qp;
 		/*
+		**	Keep from using more tags than we can handle.
+		*/
+		if (lp->usetags && lp->busyccbs >= lp->maxnxs)
+			return (ccb_p) 0;
+
+		/*
 		**	Allocate a new CCB if needed.
 		*/
 		if (xpt_que_empty(&lp->free_ccbq))
@@ -10072,19 +10078,20 @@ static void ncr53c8xx_select_queue_depths(struct Scsi_Host *host, struct scsi_de
 		lp = tp->lp[device->lun];
 
 		/*
-		**	Donnot use more than our maximum.
 		**	Select queue depth from driver setup.
 		**	Donnot use more than configured by user.
 		**	Use 2 for devices that donnot support tags.
 		**	Use at least 2.
+		**	Donnot use more than our maximum.
 		*/
-		device->queue_depth = SCSI_NCR_MAX_TAGS;
 		device->queue_depth =
 			device_queue_depth(np, device->id, device->lun);
 		if (device->queue_depth > tp->usrtags)
 			device->queue_depth = tp->usrtags;
 		if (!device->tagged_supported || device->queue_depth < 2)
 			device->queue_depth = 2;
+		if (device->queue_depth > SCSI_NCR_MAX_TAGS)
+			device->queue_depth = SCSI_NCR_MAX_TAGS;
 
 		/*
 		**	Since the queue depth is not tunable under Linux,

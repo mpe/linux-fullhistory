@@ -119,6 +119,7 @@ static int proc_lookupfd(struct inode * dir, struct dentry * dentry)
 	ino = (pid << 16) + PROC_PID_FD_DIR + fd;
 	inode = proc_get_inode(dir->i_sb, ino, NULL);
 	if (inode) {
+		dentry->d_op = &proc_dentry_operations;
 		d_add(dentry, inode);
 		err = 0;
 	}

@@ -15,7 +15,7 @@ OX_OBJS := ppc_ksyms.o setup.o
 
 
 O_OBJS := traps.o irq.o idle.o time.o process.o signal.o syscalls.o misc.o \
-	  bitops.o ptrace.o align.o ppc_htab.o
+	  bitops.o ptrace.o align.o ppc_htab.o feature.o
 
 ifdef CONFIG_PCI
 O_OBJS += pci.o

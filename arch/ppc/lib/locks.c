@@ -1,5 +1,5 @@
 /*
- * $Id: locks.c,v 1.18 1998/07/28 03:50:27 cort Exp $
+ * $Id: locks.c,v 1.20 1998/10/08 01:17:32 cort Exp $
  *
  * Locks for smp ppc 
  * 
@@ -18,13 +18,13 @@
 #define DEBUG_LOCKS 1
 
 #undef INIT_STUCK
-#define INIT_STUCK 10000
+#define INIT_STUCK 0xffffffff
 
 void _spin_lock(spinlock_t *lock)
 {
 	int cpu = smp_processor_id();
 #ifdef DEBUG_LOCKS
-	int stuck = INIT_STUCK;
+	unsigned int stuck = INIT_STUCK;
 #endif /* DEBUG_LOCKS */
 	/* try expensive atomic load/store to get lock */
 	while((unsigned long )xchg_u32((void *)&lock->lock,0xffffffff)) {
@@ -67,13 +67,13 @@ int spin_trylock(spinlock_t *lock)
 void _spin_unlock(spinlock_t *lp)
 {
 #ifdef DEBUG_LOCKS
-	if ( !lp->lock )
-		panic("_spin_unlock(%p): no lock cpu %d %s/%d\n", lp,
-		       smp_processor_id(),current->comm,current->pid);
+  	if ( !lp->lock )
+		printk("_spin_unlock(%p): no lock cpu %d %s/%d\n", lp,
+		      smp_processor_id(),current->comm,current->pid);
 	if ( lp->owner_cpu != smp_processor_id() )
-		panic("_spin_unlock(%p): cpu %d trying clear of cpu %d pc %lx val %lx\n",
-		       lp, smp_processor_id(), (int)lp->owner_cpu,
-		       lp->owner_pc,lp->lock);
+		printk("_spin_unlock(%p): cpu %d trying clear of cpu %d pc %lx val %lx\n",
+		      lp, smp_processor_id(), (int)lp->owner_cpu,
+		      lp->owner_pc,lp->lock);
 #endif /* DEBUG_LOCKS */
 	lp->owner_pc = lp->owner_cpu = 0;
 	eieio();

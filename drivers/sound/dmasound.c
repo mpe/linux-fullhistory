@@ -107,18 +107,17 @@ History:
 #include <asm/amigahw.h>
 #include <asm/amigaints.h>
 #endif /* CONFIG_AMIGA */
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_PPC
 #include <asm/prom.h>
 #include <asm/io.h>
 #include <asm/dbdma.h>
-#ifdef CONFIG_PMAC_PBOOK
 #include <asm/adb.h>
+#include <asm/cuda.h>
 #include <asm/pmu.h>
-#endif /* CONFIG_PMAC_PBOOK */
 #include "awacs_defs.h"
 #include <linux/nvram.h>
 #include <linux/vt_kern.h>
-#endif /* CONFIG_PMAC */
+#endif /* CONFIG_PPC */
 
 #include "dmasound.h"
 #include <linux/soundcard.h>
@@ -165,7 +164,7 @@ extern u_short amiga_audio_period;
 
 #endif /* CONFIG_AMIGA */
 
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_PPC
 /*
  * Interrupt numbers and addresses, obtained from the device tree.
  */
@@ -174,6 +173,8 @@ static volatile struct awacs_regs *awacs;
 static volatile struct dbdma_regs *awacs_txdma, *awacs_rxdma;
 static int awacs_rate_index;
 static int awacs_subframe;
+static int awacs_revision;
+static int awacs_spkr_vol;
 
 /*
  * Space for the DBDMA command blocks.
@@ -249,7 +250,7 @@ struct notifier_block awacs_sleep_notifier = {
 };
 #endif /* CONFIG_PMAC_PBOOK */
 
-#endif /* CONFIG_PMAC */
+#endif /* CONFIG_PPC */
 
 /*** Some declarations *******************************************************/
 
@@ -587,7 +588,7 @@ static ssize_t ami_ct_u16le(const u_char *userPtr, size_t userCount,
 			    ssize_t frameLeft);
 #endif /* CONFIG_AMIGA */
 
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_PPC
 static ssize_t pmac_ct_law(const u_char *userPtr, size_t userCount,
 			   u_char frame[], ssize_t *frameUsed,
 			   ssize_t frameLeft);
@@ -618,7 +619,7 @@ static ssize_t pmac_ctx_s16(const u_char *userPtr, size_t userCount,
 static ssize_t pmac_ctx_u16(const u_char *userPtr, size_t userCount,
 			    u_char frame[], ssize_t *frameUsed,
 			    ssize_t frameLeft);
-#endif /* CONFIG_PMAC */
+#endif /* CONFIG_PPC */
 
 /*** Machine definitions *****************************************************/
 
@@ -675,7 +676,7 @@ struct sound_settings {
 	int treble;
 	int gain;
 	int minDev;		/* minor device number currently open */
-#if defined(CONFIG_ATARI) || defined(CONFIG_PMAC)
+#if defined(CONFIG_ATARI) || defined(CONFIG_PPC)
 	int bal;		/* balance factor for expanding (not volume!) */
 	u_long data;		/* data for expanding */
 #endif /* CONFIG_ATARI */
@@ -724,7 +725,7 @@ static void AmiPlay(void);
 static void ami_sq_interrupt(int irq, void *dummy, struct pt_regs *fp);
 #endif /* CONFIG_AMIGA */
 
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_PPC
 static void *PMacAlloc(unsigned int size, int flags) __init;
 static void PMacFree(void *ptr, unsigned int size) __init;
 static int PMacIrqInit(void) __init;
@@ -743,7 +744,7 @@ static int awacs_get_volume(int reg, int lshift);
 static int awacs_volume_setter(int volume, int n, int mute, int lshift);
 static void awacs_mksound(unsigned int hz, unsigned int ticks);
 static void awacs_nosound(unsigned long xx);
-#endif /* CONFIG_PMAC */
+#endif /* CONFIG_PPC */
 
 /*** Mid level stuff *********************************************************/
 
@@ -1777,7 +1778,7 @@ static ssize_t ami_ct_u16le(const u_char *userPtr, size_t userCount,
 }
 #endif /* CONFIG_AMIGA */
 
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_PPC
 static ssize_t pmac_ct_law(const u_char *userPtr, size_t userCount,
 			   u_char frame[], ssize_t *frameUsed,
 			   ssize_t frameLeft)
@@ -2161,7 +2162,7 @@ static ssize_t pmac_ctx_u16(const u_char *userPtr, size_t userCount,
 	return stereo? utotal * 4: utotal * 2;
 }
 
-#endif /* CONFIG_PMAC */
+#endif /* CONFIG_PPC */
 
 
 #ifdef CONFIG_ATARI
@@ -2191,7 +2192,7 @@ static TRANS transAmiga = {
 };
 #endif /* CONFIG_AMIGA */
 
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_PPC
 static TRANS transAwacsNormal = {
 	pmac_ct_law, pmac_ct_law, pmac_ct_s8, pmac_ct_u8,
 	pmac_ct_s16, pmac_ct_u16, pmac_ct_s16, pmac_ct_u16
@@ -2201,7 +2202,7 @@ static TRANS transAwacsExpand = {
 	pmac_ctx_law, pmac_ctx_law, pmac_ctx_s8, pmac_ctx_u8,
 	pmac_ctx_s16, pmac_ctx_u16, pmac_ctx_s16, pmac_ctx_u16
 };
-#endif /* CONFIG_PMAC */
+#endif /* CONFIG_PPC */
 
 /*** Low level stuff *********************************************************/
 
@@ -2971,7 +2972,7 @@ static void ami_sq_interrupt(int irq, void *dummy, struct pt_regs *fp)
 }
 #endif /* CONFIG_AMIGA */
 
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_PPC
 
 /*
  * PCI PowerMac, with AWACS and DBDMA.
@@ -3226,7 +3227,7 @@ awacs_write(int val)
 {
 	while (in_le32(&awacs->codec_ctrl) & MASK_NEWECMD)
 		;	/* XXX should have timeout */
-	out_le32(&awacs->codec_ctrl, val);
+	out_le32(&awacs->codec_ctrl, val | (awacs_subframe << 22));
 }
 
 static void awacs_nosound(unsigned long xx)
@@ -3343,7 +3344,38 @@ static int awacs_sleep_notify(struct notifier_block *this,
 }
 #endif /* CONFIG_PMAC_PBOOK */
 
-#endif /* CONFIG_PMAC */
+/* Turn on sound output, needed on G3 desktop powermacs */
+static void
+awacs_enable_amp(int spkr_vol)
+{
+	struct adb_request req;
+
+	awacs_spkr_vol = spkr_vol;
+	if (adb_hardware != ADB_VIACUDA)
+		return;
+
+	/* turn on headphones */
+	cuda_request(&req, NULL, 5, CUDA_PACKET, CUDA_GET_SET_IIC,
+		     0x8a, 4, 0);
+	while (!req.complete) cuda_poll();
+	cuda_request(&req, NULL, 5, CUDA_PACKET, CUDA_GET_SET_IIC,
+		     0x8a, 6, 0);
+	while (!req.complete) cuda_poll();
+
+	/* turn on speaker */
+	cuda_request(&req, NULL, 5, CUDA_PACKET, CUDA_GET_SET_IIC,
+		     0x8a, 3, (100 - (spkr_vol & 0xff)) * 32 / 100);
+	while (!req.complete) cuda_poll();
+	cuda_request(&req, NULL, 5, CUDA_PACKET, CUDA_GET_SET_IIC,
+		     0x8a, 5, (100 - ((spkr_vol >> 8) & 0xff)) * 32 / 100);
+	while (!req.complete) cuda_poll();
+
+	cuda_request(&req, NULL, 5, CUDA_PACKET,
+		     CUDA_GET_SET_IIC, 0x8a, 1, 0x29);
+	while (!req.complete) cuda_poll();
+}
+
+#endif /* CONFIG_PPC */
 
 /*** Machine definitions *****************************************************/
 
@@ -3382,7 +3414,7 @@ static MACHINE machAmiga = {
 };
 #endif /* CONFIG_AMIGA */
 
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_PPC
 static MACHINE machPMac = {
 	DMASND_AWACS, PMacAlloc, PMacFree, PMacIrqInit,
 #ifdef MODULE
@@ -3683,7 +3715,7 @@ static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		break;
 #endif /* CONFIG_AMIGA */
 
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_PPC
 	case DMASND_AWACS:
 		switch (cmd) {
 		case SOUND_MIXER_READ_DEVMASK:
@@ -3733,12 +3765,18 @@ static int mixer_ioctl(struct inode *inode, struct file *file, u_int cmd,
 			IOCTL_IN(arg, data);
 			return IOCTL_OUT(arg, sound_set_volume(data));
 		case SOUND_MIXER_READ_SPEAKER:
-			data = (awacs_reg[1] & MASK_CMUTE)? 0:
-				awacs_get_volume(awacs_reg[4], 6);
+			if (awacs_revision >= 3 && adb_hardware == ADB_VIACUDA)
+				data = awacs_spkr_vol;
+			else
+				data = (awacs_reg[1] & MASK_CMUTE)? 0:
+					awacs_get_volume(awacs_reg[4], 6);
 			return IOCTL_OUT(arg, data);
 		case SOUND_MIXER_WRITE_SPEAKER:
 			IOCTL_IN(arg, data);
-			data = awacs_volume_setter(data, 4, MASK_CMUTE, 6);
+			if (awacs_revision >= 3 && adb_hardware == ADB_VIACUDA)
+				awacs_enable_amp(data);
+			else
+				data = awacs_volume_setter(data, 4, MASK_CMUTE, 6);
 			return IOCTL_OUT(arg, data);
 		case SOUND_MIXER_WRITE_ALTPCM:	/* really bell volume */
 			IOCTL_IN(arg, data);
@@ -3862,10 +3900,10 @@ __initfunc(static void mixer_init(void))
 
 static void sq_setup(int numBufs, int bufSize, char **buffers)
 {
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_PPC
 	int i;
 	volatile struct dbdma_cmd *cp;
-#endif /* CONFIG_PMAC */
+#endif /* CONFIG_PPC */
 
 	sq.max_count = numBufs;
 	sq.max_active = numBufs;
@@ -3887,7 +3925,7 @@ static void sq_setup(int numBufs, int bufSize, char **buffers)
 	sq.block_size_half = sq.block_size>>1;
 	sq.block_size_quarter = sq.block_size_half>>1;
 #endif /* CONFIG_AMIGA */
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_PPC
 	cp = awacs_tx_cmds;
 	memset((void *) cp, 0, (numBufs + 1) * sizeof(struct dbdma_cmd));
 	for (i = 0; i < numBufs; ++i, ++cp) {
@@ -3897,7 +3935,7 @@ static void sq_setup(int numBufs, int bufSize, char **buffers)
 	st_le32(&cp->cmd_dep, virt_to_bus(awacs_tx_cmds));
 	out_le32(&awacs_txdma->control, (RUN|PAUSE|FLUSH|WAKE) << 16);
 	out_le32(&awacs_txdma->cmdptr, virt_to_bus(awacs_tx_cmds));
-#endif /* CONFIG_PMAC */
+#endif /* CONFIG_PPC */
 }
 
 static void sq_play(void)
@@ -4206,11 +4244,11 @@ __initfunc(static void sq_init(void))
 		sound.dsp.speed = 8000;
 		break;
 #endif /* CONFIG_AMIGA */
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_PPC
 	case DMASND_AWACS:
 		sound.dsp.speed = 8000;
 		break;
-#endif /* CONFIG_PMAC */
+#endif /* CONFIG_PPC */
 	}
 
 	/* before the first open to /dev/dsp this wouldn't be set */
@@ -4251,11 +4289,11 @@ static int state_open(struct inode *inode, struct file *file)
 		mach = "Amiga ";
 		break;
 #endif /* CONFIG_AMIGA */
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_PPC
 	case DMASND_AWACS:
 		mach = "PowerMac ";
 		break;
-#endif /* CONFIG_PMAC */
+#endif /* CONFIG_PPC */
 	}
 	len += sprintf(buffer+len, "%sDMA sound driver:\n", mach);
 
@@ -4396,7 +4434,7 @@ __initfunc(void dmasound_init(void))
 {
 	int has_sound = 0;
 	int i;
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_PPC
 	struct device_node *np;
 #endif
 
@@ -4430,7 +4468,7 @@ __initfunc(void dmasound_init(void))
 	}
 #endif /* __mc68000__ */
 
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_PPC
 	awacs_subframe = 0;
 	np = find_devices("awacs");
 	if (np == 0) {
@@ -4479,6 +4517,13 @@ __initfunc(void dmasound_init(void))
 		awacs_write(awacs_reg[2] + MASK_ADDR2);
 		awacs_write(awacs_reg[4] + MASK_ADDR4);
 
+		/* Initialize recent versions of the awacs */
+		awacs_revision = (in_le32(&awacs->codec_stat) >> 12) & 0xf;
+		if (awacs_revision >= 3) {
+			awacs_write(0x6000);
+			awacs_enable_amp(100 * 0x101);
+		}
+
 		/* Initialize beep stuff */
 		beep_dbdma_cmd = awacs_tx_cmds + (numBufs + 1);
 		orig_mksound = kd_mksound;
@@ -4492,7 +4537,7 @@ __initfunc(void dmasound_init(void))
 					&awacs_sleep_notifier);
 #endif /* CONFIG_PMAC_PBOOK */
 	}
-#endif /* CONFIG_PMAC */
+#endif /* CONFIG_PPC */
 
 	if (!has_sound)
 		return;

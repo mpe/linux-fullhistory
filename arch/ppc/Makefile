@@ -16,6 +16,8 @@ KERNELLOAD	=0xc0000000
 
 ifeq ($(shell uname -m),ppc)
 CHECKS		= checks
+else
+CROSS_COMPILE	= ppc-linux-elf-
 endif
 
 ASFLAGS		=

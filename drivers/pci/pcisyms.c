@@ -6,6 +6,7 @@
  *	Copyright 1998 Martin Mares
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 

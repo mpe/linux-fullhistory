@@ -937,7 +937,7 @@ static void hdr_truncate(struct inode *inode)
 		if (fork->lsize != descr->length) {
 			fork->lsize = descr->length;
 			hfs_extent_adj(fork);
-			hfs_cat_mark_dirty(HFS_I(inode)->entry);
+			hfs_cat_mark_dirty(entry);
 		}
 	}
 }

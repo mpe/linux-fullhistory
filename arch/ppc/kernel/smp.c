@@ -1,5 +1,5 @@
 /*
- * $Id: smp.c,v 1.33 1998/09/25 04:32:30 cort Exp $
+ * $Id: smp.c,v 1.36 1998/10/08 01:17:48 cort Exp $
  *
  * Smp support for ppc.
  *
@@ -35,24 +35,20 @@
 int smp_threads_ready = 0;
 volatile int smp_commenced = 0;
 int smp_num_cpus = 1;
-unsigned long cpu_present_map = 0;
-volatile int cpu_number_map[NR_CPUS];
-volatile unsigned long cpu_callin_map[NR_CPUS] = {0,};
-volatile int __cpu_logical_map[NR_CPUS];
-static unsigned char boot_cpu_id = 0;
 struct cpuinfo_PPC cpu_data[NR_CPUS];
 struct klock_info_struct klock_info = { KLOCK_CLEAR, 0 };
 volatile unsigned char active_kernel_processor = NO_PROC_ID;	/* Processor holding kernel spinlock		*/
 volatile unsigned long ipi_count;
 spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
-
 unsigned int prof_multiplier[NR_CPUS];
 unsigned int prof_counter[NR_CPUS];
-
 int first_cpu_booted = 0;
 
-int start_secondary(void *);
+/* all cpu mappings are 1-1 -- Cort */
+int cpu_number_map[NR_CPUS] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,};
+volatile unsigned long cpu_callin_map[NR_CPUS] = {0,};
 
+int start_secondary(void *);
 extern int cpu_idle(void *unused);
 
 void smp_local_timer_interrupt(struct pt_regs * regs)
@@ -60,7 +56,6 @@ void smp_local_timer_interrupt(struct pt_regs * regs)
 	int cpu = smp_processor_id();
 	extern void update_one_process(struct task_struct *,unsigned long,
 				       unsigned long,unsigned long,int);
-
 	if (!--prof_counter[cpu]) {
 		int user=0,system=0;
 		struct task_struct * p = current;
@@ -106,7 +101,7 @@ void smp_local_timer_interrupt(struct pt_regs * regs)
  * Right now it only works for stop cpu's but will be setup
  * later for more general message passing.
  *
- * As it is now, if we're sending two message as the same time
+ * As it is now, if we're sending two message at the same time
  * we have race conditions.  I avoided doing locks here since
  * all that works right now is the stop cpu message.
  *
@@ -117,16 +112,24 @@ void smp_message_recv(void)
 {
 	int msg = smp_message[smp_processor_id()];
 	
-	printk("SMP %d: smp_message_recv() msg %x\n", smp_processor_id(),msg);
+	/* clear interrupt */
+	*(volatile unsigned long *)(0xf80000c0) = ~0L;
+	eieio();
 	
 	/* make sure msg is for us */
 	if ( msg == -1 ) return;
 
+	ipi_count++;
+	/*printk("SMP %d: smp_message_recv() msg %x\n", smp_processor_id(),msg);*/
+	
 	switch( msg )
 	{
 	case MSG_STOP_CPU:
 		__cli();
 		while (1) ;
+		break;
+	case MSG_RESCHEDULE: 
+		current->need_resched = 1;
 		break;
 	case 0xf0f0: /* syncing time bases - just return */
 		break;
@@ -141,19 +144,17 @@ void smp_message_recv(void)
 
 void smp_send_reschedule(int cpu)
 {
-	/* for now, nothing */
+	smp_message_pass(cpu, MSG_RESCHEDULE, 0, 0);
 }
-
 
 spinlock_t mesg_pass_lock = SPIN_LOCK_UNLOCKED;
 void smp_message_pass(int target, int msg, unsigned long data, int wait)
 {
-	printk("SMP %d: sending smp message\n", current->processor);
-
-	spin_lock(&mesg_pass_lock);
 	if ( _machine != _MACH_Pmac )
 		return;
-
+	/*printk("SMP %d: sending smp message\n", current->processor);*/
+if (smp_processor_id() ) printk("pass from cpu 1\n");
+	spin_lock(&mesg_pass_lock);
 #define OTHER (~smp_processor_id() & 1)
 	
 	switch( target )
@@ -169,9 +170,10 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 		break;
 	}
 	/* interrupt secondary processor */
-	/**(volatile unsigned long *)(0xf80000c0) = 0xffffffff;
-	eieio();*/
-	*(volatile unsigned long *)(0xf80000c0) = 0;
+	*(volatile unsigned long *)(0xf80000c0) = ~0L;
+	eieio();
+	*(volatile unsigned long *)(0xf80000c0) = 0L;
+	eieio();
 	/* interrupt primary */
 	/**(volatile unsigned long *)(0xf3019000);*/
 	spin_unlock(&mesg_pass_lock);	
@@ -180,6 +182,7 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 __initfunc(void smp_boot_cpus(void))
 {
 	extern struct task_struct *current_set[NR_CPUS];
+	extern void __secondary_start(void);
 	int i;
 	struct task_struct *p;
 	
@@ -189,31 +192,20 @@ __initfunc(void smp_boot_cpus(void))
 	dcbf(&first_cpu_booted);
 
 	for (i = 0; i < NR_CPUS; i++) {
-		cpu_number_map[i] = -1;
 		prof_counter[i] = 1;
 		prof_multiplier[i] = 1;
 	}
-	
-	cpu_present_map = 0;
-	for(i=0; i < NR_CPUS; i++)
-		__cpu_logical_map[i] = -1;
 
-        smp_store_cpu_info(boot_cpu_id);
-        active_kernel_processor = boot_cpu_id;
-	current->processor = boot_cpu_id;
-        cpu_present_map |= 1;
-        cpu_number_map[boot_cpu_id] = 0;
-	__cpu_logical_map[0] = boot_cpu_id;
+	cpu_callin_map[0] = 1;
+        smp_store_cpu_info(0);
+        active_kernel_processor = 0;
+	current->processor = 0;
 	
 	if ( _machine != _MACH_Pmac )
 	{
 		printk("SMP not supported on this machine.\n");
 		return;
 	}
-	
-        /* assume a 2nd processor for now */	
-        cpu_present_map |= (1 << 1); 
-	smp_num_cpus = 2;
 	
 	/* create a process for second processor */
         kernel_thread(start_secondary, NULL, CLONE_PID);
@@ -222,15 +214,16 @@ __initfunc(void smp_boot_cpus(void))
 		panic("No idle task for secondary processor\n");
 	p->processor = 1;
 	current_set[1] = p;
+
 	/* need to flush here since secondary bat's aren't setup */
 	dcbf((void *)&current_set[1]);
-	
 	/* setup entry point of secondary processor */
-	/*	*(volatile unsigned long *)(0xf2800000)
-		= (unsigned long)secondary_entry-KERNELBASE;*/
-	*(volatile unsigned long *)(0xf2800000) = 0x100;
+	*(volatile unsigned long *)(0xf2800000) =
+		(unsigned long)__secondary_start-KERNELBASE;
 	eieio();
 	/* interrupt secondary to begin executing code */
+	*(volatile unsigned long *)(0xf80000c0) = ~0L;
+	eieio();
 	*(volatile unsigned long *)(0xf80000c0) = 0L;
 	eieio();
 	/*
@@ -241,24 +234,21 @@ __initfunc(void smp_boot_cpus(void))
 	 */
 	for ( i = 1000; i && !cpu_callin_map[1] ; i-- )
 		udelay(100);
-	  
+	
 	if(cpu_callin_map[1]) {
-		cpu_number_map[1] = 1;
-		__cpu_logical_map[i] = 1;
-		printk("Processor 1 found.\n");
-
+		printk("Processor %d found.\n", smp_num_cpus);
+		smp_num_cpus++;
 #if 0 /* this sync's the decr's, but we don't want this now -- Cort */
 		set_dec(decrementer_count);
 #endif
-		/* interrupt secondary to start decr's on both cpus */
-		smp_message_pass(1,0xf0f0, 0, 0);
-		/* interrupt secondary to begin executing code */
-		/**(volatile unsigned long *)(0xf80000c0) = 0L;
-		eieio();*/
 	} else {
-		smp_num_cpus--;
-		printk("Processor %d is stuck.\n", 1);
+		printk("Processor %d is stuck. \n", smp_num_cpus);
 	}
+	/* reset the entry point so if we get another intr we won't
+	 * try to startup again */
+	*(volatile unsigned long *)(0xf2800000) = 0x100;
+	/* send interrupt to other processors to start decr's on all cpus */
+	smp_message_pass(1,0xf0f0, 0, 0);
 }
 
 __initfunc(void smp_commence(void))
@@ -278,7 +268,7 @@ __initfunc(void initialize_secondary(void))
 }
 
 /* Activate a secondary processor. */
-__initfunc(int start_secondary(void *unused))
+asmlinkage int __init start_secondary(void *unused)
 {
 	printk("SMP %d: start_secondary()\n",current->processor);
 	smp_callin();
@@ -288,16 +278,14 @@ __initfunc(int start_secondary(void *unused))
 __initfunc(void smp_callin(void))
 {
 	printk("SMP %d: smp_callin()\n",current->processor);
-        smp_store_cpu_info(1);
+        smp_store_cpu_info(current->processor);
 	set_dec(decrementer_count);
 	
 	current->mm->mmap->vm_page_prot = PAGE_SHARED;
 	current->mm->mmap->vm_start = PAGE_OFFSET;
 	current->mm->mmap->vm_end = init_task.mm->mmap->vm_end;
-	
-	/* assume we're just the secondary processor for now */
-	cpu_callin_map[1] = 1;
 
+	cpu_callin_map[current->processor] = current->processor;
 	while(!smp_commenced)
 		barrier();
 	__sti();
@@ -317,6 +305,7 @@ __initfunc(void smp_store_cpu_info(int id))
 {
         struct cpuinfo_PPC *c = &cpu_data[id];
 
+	/* assume bogomips are same for everything */
         c->loops_per_sec = loops_per_sec;
         c->pvr = _get_PVR();
 }

@@ -61,6 +61,8 @@ extern struct mem_info memory[NUM_MEMINFO];/* memory description */
 extern void amiga_floppy_setup(char *, int *);
 extern void config_amiga(void);
 
+static int __60nsram = 0;
+
 /*********************************************************** SETUP */
 /* From arch/m68k/kernel/setup.c. */
 __initfunc(void apus_setup_arch(unsigned long * memory_start_p,
@@ -76,10 +78,17 @@ __initfunc(void apus_setup_arch(unsigned long * memory_start_p,
 	for( p = cmd_line; p && *p; ) {
 	    i = 0;
 	    if (!strncmp( p, "debug=", 6 )) {
-		strncpy( debug_device, p+6, sizeof(debug_device)-1 );
-		debug_device[sizeof(debug_device)-1] = 0;
-		if ((q = strchr( debug_device, ' ' ))) *q = 0;
-		i = 1;
+		    strncpy( debug_device, p+6, sizeof(debug_device)-1 );
+		    debug_device[sizeof(debug_device)-1] = 0;
+		    if ((q = strchr( debug_device, ' ' ))) *q = 0;
+		    i = 1;
+	    } else if (!strncmp( p, "60nsram", 7 )) {
+		    APUS_WRITE (APUS_REG_WAITSTATE, 
+				REGWAITSTATE_SETRESET
+				|REGWAITSTATE_PPCR
+				|REGWAITSTATE_PPCW);
+		    __60nsram = 1;
+		    i = 1;
 	    }
 
 	    if (i) {
@@ -96,67 +105,85 @@ __initfunc(void apus_setup_arch(unsigned long * memory_start_p,
 	config_amiga();
 }
 
+
+void get_current_tb(unsigned long long *time)
+{
+	__asm __volatile ("1:mftbu 4      \n\t"
+			  "  mftb  5      \n\t"
+			  "  mftbu 6      \n\t"
+			  "  cmpw  4,6    \n\t"
+			  "  bne   1b     \n\t"
+			  "  stw   4,0(%0)\n\t"
+			  "  stw   5,4(%0)\n\t"
+			  : 
+			  : "r" (time)
+			  : "r4", "r5", "r6");
+}
+
+
 void apus_calibrate_decr(void)
 {
 	int freq, divisor;
-	unsigned char c = *(unsigned char*)ZTWO_VADDR(0xf00011);
-	printk ("CPU speed ID ('%c') ", c);
 
-	switch (c)
+	/* This algorithm for determining the bus speed was
+           contributed by Ralph Schmidt. */
+	unsigned long long start, stop;
+	int bus_speed;
+
 	{
-	case 'A':
-	case 'B':
-		if (amiga_model == AMI_1200 || amiga_model == AMI_2000){
-			freq = 1;
-		} else {
-			freq = 0;
+		unsigned long loop = amiga_eclock / 10;
+
+		get_current_tb (&start);
+		while (loop--) {
+			unsigned char tmp;
+
+			tmp = ciaa.pra;
 		}
-		break;
-	case 'C':
-		if (amiga_model == AMI_1200 || amiga_model == AMI_2000){
-			freq = 0;
-		} else {
-			freq = 1;
-		}
-		break;
-	case 'D':
-		freq = 1;
-		break;
-	default:
-		freq = 0;
-		printk (" *Unknown* ");
-		break;
+		get_current_tb (&stop);
 	}
 
+	bus_speed = (((unsigned long)(stop-start))*10*4) / 1000000;
+	if (AMI_1200 == amiga_model)
+		bus_speed /= 2;
+
+	if ((bus_speed >= 47) && (bus_speed < 53)) {
+		bus_speed = 50;
+		freq = 12500000;
+	} else if ((bus_speed >= 57) && (bus_speed < 63)) {
+		bus_speed = 60;
+		freq = 15000000;
+	} else if ((bus_speed >= 63) && (bus_speed < 69)) {
+		bus_speed = 66;
+		freq = 16500000;
+	} else {
+		printk ("APUS: Unable to determine bus speed (%d). "
+			"Defaulting to 50MHz", bus_speed);
+		bus_speed = 50;
+		freq = 12500000;
+	}
+
+	/* Ease diagnostics... */
 	{
-		int speed;
-		switch (freq)
-		{
-		case 0:
-			freq = 15000000;
-			speed = 60;
-			break;
+		extern int __map_without_bats;
 
-		case 1:
-			freq = 16500000;
-			speed =66;
-			break;
-		}
-	
-		/* Use status of left mouse button to select
-		   RAM speed. */
-		if (!(ciaa.pra & 0x40))
-		{
-			APUS_WRITE (APUS_REG_WAITSTATE, 
-				    REGWAITSTATE_SETRESET
-				    |REGWAITSTATE_PPCR
-				    |REGWAITSTATE_PPCW);
-			printk (" [RAM R/W waitstate removed. "
-				"(expecting 60ns RAM).] ");
+		printk ("APUS: BATs=%d, BUS=%dMHz, RAM=%dns\n",
+			(__map_without_bats) ? 0 : 1,
+			bus_speed,
+			(__60nsram) ? 60 : 70);
+
+		/* print a bit more if asked politely... */
+		if (!(ciaa.pra & 0x40)){
+			extern unsigned int bat_addrs[4][3];
+			int b;
+			for (b = 0; b < 4; ++b) {
+				printk ("APUS: BAT%d ", b);
+				printk ("%08x-%08x -> %08x\n",
+					bat_addrs[b][0],
+					bat_addrs[b][1],
+					bat_addrs[b][2]);
+			}
 		}
 
-		
-		printk ("PowerUp Bus Speed: %dMHz\n", speed);
 	}
 
 	freq *= 60;	/* try to make freq/1e6 an integer */

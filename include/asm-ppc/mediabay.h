@@ -14,20 +14,15 @@
 #ifdef __KERNEL__
 
 void media_bay_init(void);
-int check_media_bay(int what);
-int media_bay_task(void *);
+int check_media_bay(struct device_node *which_bay, int what);
+int check_media_bay_by_base(unsigned long base, int what);
 
-extern int media_bay_present;	/* 1 if this machine has a media bay */
+/* Number of bays in the machine or 0 */
+extern int media_bay_count;
 
-/*
- * The following give information about the IDE interface
- * of the media bay: the base virtual address and IRQ number,
- * and the index that the IDE driver has assigned to it
- * (or -1 if it is not currently registered with the driver).
- */
-extern unsigned long mb_cd_base;
-extern int mb_cd_irq;
-extern int mb_cd_index;
+/* called by pmac-ide.c to register IDE controller for media bay */
+extern int media_bay_set_ide_infos(struct device_node* which_bay,
+			unsigned long base, int irq, int index);
 
 #endif /* __KERNEL__ */
 #endif /* _PPC_MEDIABAY_H */

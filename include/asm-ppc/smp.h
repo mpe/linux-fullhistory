@@ -13,8 +13,22 @@
 
 #ifndef __ASSEMBLY__
 
-extern unsigned long cpu_present_map;
 extern int first_cpu_booted;
+extern unsigned long smp_proc_in_lock[NR_CPUS];
+
+extern void smp_message_pass(int target, int msg, unsigned long data, int wait);
+extern void smp_store_cpu_info(int id);
+
+#define NO_PROC_ID		0xFF            /* No processor magic marker */
+#define PROC_CHANGE_PENALTY	2000
+
+/* 1 to 1 mapping on PPC -- Cort */
+#define cpu_logical_map(cpu) (cpu)
+extern int cpu_number_map[NR_CPUS];
+extern volatile unsigned long cpu_callin_map[NR_CPUS];
+
+#define hard_smp_processor_id() (0)
+#define smp_processor_id() (current->processor)
 
 /* per processor PPC parameters we need. */
 struct cpuinfo_PPC {
@@ -33,40 +47,13 @@ struct klock_info_struct {
 };
 
 extern struct klock_info_struct klock_info;
-
 #define KLOCK_HELD       0xffffffff
 #define KLOCK_CLEAR      0x0
-
-#define PROC_CHANGE_PENALTY     20
-
-extern __volatile__ int cpu_number_map[NR_CPUS];
-extern __volatile__ int __cpu_logical_map[NR_CPUS];
-extern unsigned long smp_proc_in_lock[NR_CPUS];
-
-extern __inline__ int cpu_logical_map(int cpu)
-{
-	return __cpu_logical_map[cpu];
-}
-
-extern __inline__ int hard_smp_processor_id(void)
-{
-	int cpuid = 0;
-	/* assume cpu # 0 for now */
-	return cpuid;
-}
-
-#define smp_processor_id() (current->processor)
-
-extern void smp_message_pass(int target, int msg, unsigned long data, int wait);
 
 #endif /* __ASSEMBLY__ */
 
 #else /* !(__SMP__) */
 
 #endif /* !(__SMP__) */
-
-#define NO_PROC_ID               0xFF            /* No processor magic marker */
-
-extern void smp_store_cpu_info(int id);
 
 #endif /* !(_PPC_SMP_H) */

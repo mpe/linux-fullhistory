@@ -16,14 +16,15 @@ L_TARGET := macintosh.a
 M_OBJS   :=
 
 ifndef CONFIG_MBX
-L_OBJS   := via-cuda.o adb.o nvram.o macio-adb.o via-pmu.o mediabay.o
+L_OBJS   := via-cuda.o nvram.o macio-adb.o via-pmu.o mediabay.o
+LX_OBJS  := adb.o
 endif
 
 ifeq ($(CONFIG_MAC_SERIAL),y)
-  LX_OBJS += macserial.o
+  L_OBJS += macserial.o
 else
   ifeq ($(CONFIG_MAC_SERIAL),m)
-    MX_OBJS += macserial.o
+    M_OBJS += macserial.o
   endif
 endif
 

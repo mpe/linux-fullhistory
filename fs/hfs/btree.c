@@ -176,6 +176,14 @@ struct hfs_btree * hfs_btree_init(struct hfs_mdb *mdb, ino_t cnid,
 	bt->wait = NULL;
 	bt->dirt = 0;
 	memset(bt->cache, 0, sizeof(bt->cache));
+
+#if 0   /* this is a fake entry. so we don't need to initialize it. */
+	memset(&bt->entry, 0, sizeof(bt->entry));
+	hfs_init_waitqueue(&bt->entry.wait);
+	INIT_LIST_HEAD(&bt->entry.hash);
+	INIT_LIST_HEAD(&bt->entry.list);
+#endif
+
 	bt->entry.mdb = mdb;
 	bt->entry.cnid = cnid;
 	bt->entry.type = HFS_CDR_FIL;

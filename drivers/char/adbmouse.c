@@ -3,6 +3,7 @@
  *
  * 27 Oct 1997 Michael Schmitz
  * logitech fixes by anthony tong
+ * further hacking by Paul Mackerras
  *
  * Apple mouse protocol according to:
  *
@@ -33,14 +34,21 @@
 #include <linux/init.h>
 
 #include <asm/adb_mouse.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
+#ifdef __powerpc__
 #include <asm/processor.h>
+#endif
+#ifdef __mc68000__
+#include <asm/setup.h>
+#endif
 
 static struct mouse_status mouse;
-static int adb_mouse_x_threshold = 2, adb_mouse_y_threshold = 2;
-static int adb_mouse_buttons = 0;
+static unsigned char adb_mouse_buttons[16];
 
-extern void (*adb_mouse_interrupt_hook) (char *, int);
+extern void (*adb_mouse_interrupt_hook)(unsigned char *, int);
+extern int adb_emulate_buttons;
+extern int adb_button2_keycode;
+extern int adb_button3_keycode;
 
 extern int console_loglevel;
 
@@ -48,11 +56,11 @@ extern int console_loglevel;
  *	XXX: need to figure out what ADB mouse packets mean ... 
  *	This is the stuff stolen from the Atari driver ...
  */
-static void adb_mouse_interrupt(char *buf, int nb)
+static void adb_mouse_interrupt(unsigned char *buf, int nb)
 {
-    static int buttons = 7;
+    int buttons, id;
 
-  /*
+/*
     Handler 1 -- 100cpi original Apple mouse protocol.
     Handler 2 -- 200cpi original Apple mouse protocol.
 
@@ -60,76 +68,62 @@ static void adb_mouse_interrupt(char *buf, int nb)
     contain the following values:
 
                 BITS    COMMENTS
-    data[0] = 0000 0000 ADB packet identifer.
-    data[1] = ???? ???? (?)
-    data[2] = ???? ??00 Bits 0-1 should be zero for a mouse device.
-    data[3] = bxxx xxxx First button and x-axis motion.
-    data[4] = byyy yyyy Second button and y-axis motion.
+    data[0] = dddd 1100 ADB command: Talk, register 0, for device dddd.
+    data[1] = bxxx xxxx First button and x-axis motion.
+    data[2] = byyy yyyy Second button and y-axis motion.
 
-    NOTE: data[0] is confirmed by the parent function and need not be
-    checked here.
-  */
-
-  /*
     Handler 4 -- Apple Extended mouse protocol.
 
     For Apple's 3-button mouse protocol the data array will contain the
     following values:
 
 		BITS    COMMENTS
-    data[0] = 0000 0000 ADB packet identifer.
-    data[1] = 0100 0000 Extended protocol register.
-	      Bits 6-7 are the device id, which should be 1.
-	      Bits 4-5 are resolution which is in "units/inch".
-	      The Logitech MouseMan returns these bits clear but it has
-	      200/300cpi resolution.
-	      Bits 0-3 are unique vendor id.
-    data[2] = 0011 1100 Bits 0-1 should be zero for a mouse device.
-	      Bits 2-3 should be 8 + 4.
-		      Bits 4-7 should be 3 for a mouse device.
-    data[3] = bxxx xxxx Left button and x-axis motion.
-    data[4] = byyy yyyy Second button and y-axis motion.
-    data[5] = byyy bxxx Third button and fourth button.  
-    	      Y is additiona. high bits of y-axis motion.  
+    data[0] = dddd 1100 ADB command: Talk, register 0, for device dddd.
+    data[1] = bxxx xxxx Left button and x-axis motion.
+    data[2] = byyy yyyy Second button and y-axis motion.
+    data[3] = byyy bxxx Third button and fourth button.  
+    	      Y is additional high bits of y-axis motion.  
     	      X is additional high bits of x-axis motion.
 
-    NOTE: data[0] and data[2] are confirmed by the parent function and
-    need not be checked here.
-  */
+    This procedure also gets called from the keyboard code if we
+    are emulating mouse buttons with keys.  In this case data[0] == 0
+    (data[0] cannot be 0 for a real ADB packet).
 
-    /*
-     * 'buttons' here means 'button down' states!
-     * Button 1 (left)  : bit 2, busmouse button 3
-     * Button 2 (right) : bit 0, busmouse button 1
-     * Button 3 (middle): bit 1, busmouse button 2
-     */
+    'buttons' here means 'button down' states!
+    Button 1 (left)  : bit 2, busmouse button 3
+    Button 2 (middle): bit 1, busmouse button 2
+    Button 3 (right) : bit 0, busmouse button 1
+*/
 
     /* x/y and buttons swapped */
     
-    if (nb > 0)	{				/* real packet : use buttons? */
-	if (console_loglevel >= 8)
-	    printk("adb_mouse: real data; "); 
-	/* button 1 (left, bit 2) : always significant ! */
-	buttons = (buttons&3) | (buf[1] & 0x80 ? 4 : 0); /* 1+2 unchanged */
-	/* button 2 (middle) */
-	buttons = (buttons&5) | (buf[2] & 0x80 ? 2 : 0); /* 2+3 unchanged */
-	/* button 3 (right) present?
-	 *  on a logitech mouseman, the right and mid buttons sometimes behave
-	 *  strangely until they both have been pressed after booting. */
-	/* data valid only if extended mouse format ! (buf[3] = 0 else) */
-	if ( nb == 6 )
-	    buttons = (buttons&6) | (buf[3] & 0x80 ? 1 : 0); /* 1+3 unchanged */
-    } else {					/* fake packet : use 2+3 */
-	if (console_loglevel >= 8)
-	    printk("adb_mouse: fake data; "); 
-	/* we only see state changes here, but the fake driver takes care
-	 * to preserve state... button 1 state must stay unchanged! */
-	buttons = (buttons&4) | ((buf[2] & 0x80 ? 1 : 0) |
-		  (buf[3] & 0x80 ? 2 : 0));
-    }
+    if (console_loglevel >= 8)
+	printk("KERN_DEBUG adb_mouse: %s data; ", buf[0]? "real": "fake"); 
 
-    add_mouse_randomness(((~buttons & 7) << 16) + ((buf[2]&0x7f) << 8) + (buf[1]&0x7f));
-    mouse.buttons = buttons & 7;
+    id = (buf[0] >> 4) & 0xf;
+    buttons = adb_mouse_buttons[id];
+
+    /* button 1 (left, bit 2) */
+    buttons = (buttons&3) | (buf[1] & 0x80 ? 4 : 0); /* 1+2 unchanged */
+
+    /* button 2 (middle) */
+    buttons = (buttons&5) | (buf[2] & 0x80 ? 2 : 0); /* 2+3 unchanged */
+
+    /* button 3 (right) present?
+     *  on a logitech mouseman, the right and mid buttons sometimes behave
+     *  strangely until they both have been pressed after booting. */
+    /* data valid only if extended mouse format ! */
+    if (nb == 4)
+	buttons = (buttons&6) | (buf[3] & 0x80 ? 1 : 0); /* 1+3 unchanged */
+
+    add_mouse_randomness(((~buttons&7) << 16) + ((buf[2]&0x7f) << 8) + (buf[1]&0x7f));
+
+    adb_mouse_buttons[id] = buttons;
+    /* a button is down if it is down on any mouse */
+    for (id = 0; id < 16; ++id)
+	buttons &= adb_mouse_buttons[id];
+
+    mouse.buttons = buttons;
     mouse.dx += ((buf[2]&0x7f) < 64 ? (buf[2]&0x7f) : (buf[2]&0x7f)-128 );
     mouse.dy -= ((buf[1]&0x7f) < 64 ? (buf[1]&0x7f) : (buf[1]&0x7f)-128 );
 
@@ -141,7 +135,6 @@ static void adb_mouse_interrupt(char *buf, int nb)
     wake_up_interruptible(&mouse.wait);
     if (mouse.fasyncptr)
 	kill_fasync(mouse.fasyncptr, SIGIO);
-
 }
 
 static int fasync_mouse(int fd, struct file *filp, int on)
@@ -167,13 +160,16 @@ static int release_mouse(struct inode *inode, struct file *file)
 
 static int open_mouse(struct inode *inode, struct file *file)
 {
+    int id;
+
     if (mouse.active++)
 	return 0;
 	
     mouse.ready = 0;
 
     mouse.dx = mouse.dy = 0;
-    adb_mouse_buttons = 0;
+    for (id = 0; id < 16; ++id)
+	adb_mouse_buttons[id] = 7;	/* all buttons up */
     MOD_INC_USE_COUNT;
     adb_mouse_interrupt_hook = adb_mouse_interrupt;
     return 0;
@@ -198,24 +194,24 @@ static ssize_t read_mouse(struct file *file, char *buffer, size_t count,
     dy = mouse.dy;
     buttons = mouse.buttons;
     if (dx > 127)
-      dx = 127;
+	dx = 127;
     else if (dx < -128)
-      dx = -128;
+	dx = -128;
     if (dy > 127)
-      dy = 127;
+	dy = 127;
     else if (dy < -128)
-      dy = -128;
+	dy = -128;
     mouse.dx -= dx;
     mouse.dy -= dy;
     if (mouse.dx == 0 && mouse.dy == 0)
-      mouse.ready = 0;
+	mouse.ready = 0;
     if (put_user(buttons | 0x80, buffer++) ||
 	put_user((char) dx, buffer++) ||
 	put_user((char) dy, buffer++))
-      return -EFAULT;
-    if (count > 3)
-      if (clear_user(buffer, count - 3))
 	return -EFAULT;
+    if (count > 3)
+	if (clear_user(buffer, count - 3))
+	    return -EFAULT;
     return count;
 }
 
@@ -254,40 +250,35 @@ __initfunc(int adb_mouse_init(void))
     mouse.ready = 0;
     mouse.wait = NULL;
 
+#ifdef __powerpc__
     if ( (_machine != _MACH_chrp) && (_machine != _MACH_Pmac) )
 	    return -ENODEV;
-    printk(KERN_INFO "Macintosh ADB mouse installed.\n");
+#endif
+#ifdef __mc68000__
+    if (!MACH_IS_MAC)
+	return -ENODEV;
+#endif
+    printk(KERN_INFO "Macintosh ADB mouse driver installed.\n");
     misc_register(&adb_mouse);
     return 0;
 }
 
 
-#define	MIN_THRESHOLD 1
-#define	MAX_THRESHOLD 20	/* more seems not reasonable... */
-
+/*
+ * XXX this function is misnamed.
+ * It is called if the kernel is booted with the adb_buttons=xxx
+ * option, which is about using ADB keyboard buttons to emulate
+ * mouse buttons. -- paulus
+ */
 __initfunc(void adb_mouse_setup(char *str, int *ints))
 {
-    if (ints[0] < 1) {
-	printk( "adb_mouse_setup: no arguments!\n" );
-	return;
-    }
-    else if (ints[0] > 2) {
-	printk( "adb_mouse_setup: too many arguments\n" );
-    }
-
-    if (ints[1] < MIN_THRESHOLD || ints[1] > MAX_THRESHOLD)
-	printk( "adb_mouse_setup: bad threshold value (ignored)\n" );
-    else {
-	adb_mouse_x_threshold = ints[1];
-	adb_mouse_y_threshold = ints[1];
-	if (ints[0] > 1) {
-	    if (ints[2] < MIN_THRESHOLD || ints[2] > MAX_THRESHOLD)
-		printk("adb_mouse_setup: bad threshold value (ignored)\n" );
-	    else
-		adb_mouse_y_threshold = ints[2];
+	if (ints[0] >= 1) {
+		adb_emulate_buttons = ints[1] > 0;
+		if (ints[1] > 1)
+			adb_button2_keycode = ints[1];
+		if (ints[0] >= 2)
+			adb_button3_keycode = ints[2];
 	}
-    }
-	
 }
 
 #ifdef MODULE

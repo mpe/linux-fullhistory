@@ -1,3 +1,9 @@
+Wed Nov 11  10:00 1998 Gerard Roudier (groudier@club-internet.fr)
+	* revision 3.1b
+	- The driver was unhappy when configured with default_tags > MAX_TAGS
+	  Hopefully doubly-fixed.
+	- Update the Configure.help driver section that speaks of TAGS.
+
 Wed Oct 21 21:00 1998 Gerard Roudier (groudier@club-internet.fr)
 	* revision 3.1a
 	- Changes from Eddie Dost for Sparc and Alpha:

@@ -20,7 +20,8 @@
  * so it is the max of them all - which happens to be powermac
  * at present (G3 powermacs have 64).
  */
-#define NR_IRQS			64
+#define NR_IRQS			128
+
 #endif /* CONFIG_APUS */
 
 #define NUM_8259_INTERRUPTS	16

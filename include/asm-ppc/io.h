@@ -49,18 +49,18 @@ extern unsigned long pci_dram_offset;
 #endif /* CONFIG_APUS */
 #endif /* CONFIG_MBX8xx */
 
-#define readb(addr) (*(volatile unsigned char *) (addr))
-#define writeb(b,addr) ((*(volatile unsigned char *) (addr)) = (b))
+#define readb(addr) in_8((volatile unsigned char *)(addr))
+#define writeb(b,addr) out_8((volatile unsigned char *)(addr), (b))
 #if defined(CONFIG_APUS)
 #define readw(addr) (*(volatile unsigned short *) (addr))
 #define readl(addr) (*(volatile unsigned int *) (addr))
 #define writew(b,addr) ((*(volatile unsigned short *) (addr)) = (b))
 #define writel(b,addr) ((*(volatile unsigned int *) (addr)) = (b))
 #else
-#define readw(addr) ld_le16((volatile unsigned short *)(addr))
-#define readl(addr) ld_le32((volatile unsigned *)addr)
-#define writew(b,addr) st_le16((volatile unsigned short *)(addr),(b))
-#define writel(b,addr) st_le32((volatile unsigned *)(addr),(b))
+#define readw(addr) in_le16((volatile unsigned short *)(addr))
+#define readl(addr) in_le32((volatile unsigned *)addr)
+#define writew(b,addr) out_le16((volatile unsigned short *)(addr),(b))
+#define writel(b,addr) out_le32((volatile unsigned *)(addr),(b))
 #endif
 
 #define insb(port, buf, ns)	_insb((unsigned char *)((port)+_IO_BASE), (buf), (ns))
@@ -123,6 +123,7 @@ extern void _outsl_ns(volatile unsigned long *port, const void *buf, int nl);
 extern void *__ioremap(unsigned long address, unsigned long size,
 		       unsigned long flags);
 extern void *ioremap(unsigned long address, unsigned long size);
+#define ioremap_nocache(addr, size)	ioremap((addr), (size))
 extern void iounmap(void *addr);
 extern unsigned long iopa(unsigned long addr);
 #ifdef CONFIG_APUS
@@ -180,22 +181,6 @@ extern inline void * phys_to_virt(unsigned long address)
 #endif
 }
 
-static inline int check_signature(unsigned long io_addr,
-	const unsigned char *signature, int length)
-{
-	int retval = 0;
-	do {
-		if (readb(io_addr) != *signature)
-			goto out;
-		io_addr++;
-		signature++;
-		length--;
-	} while (length);
-	retval = 1;
-out:
-	return retval;
-}
-
 #endif /* __KERNEL__ */
 
 /*
@@ -207,6 +192,7 @@ extern inline void eieio(void)
 {
 	__asm__ __volatile__ ("eieio" : : : "memory");
 }
+#define iobarrier() eieio()
 
 /*
  * 8, 16 and 32 bit, big and little endian I/O operations, with barrier.
@@ -279,5 +265,23 @@ extern inline void out_be32(volatile unsigned *addr, int val)
 {
 	__asm__ __volatile__("stw%U0%X0 %1,%0; eieio" : "=m" (*addr) : "r" (val));
 }
+
+#ifdef __KERNEL__
+static inline int check_signature(unsigned long io_addr,
+	const unsigned char *signature, int length)
+{
+	int retval = 0;
+	do {
+		if (readb(io_addr) != *signature)
+			goto out;
+		io_addr++;
+		signature++;
+		length--;
+	} while (length);
+	retval = 1;
+out:
+	return retval;
+}
+#endif /* __KERNEL__ */
 
 #endif

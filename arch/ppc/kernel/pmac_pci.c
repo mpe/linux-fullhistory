@@ -40,7 +40,6 @@ static void add_bridges(struct device_node *dev, unsigned long *mem_ptr);
 #define BANDIT_COHERENT	0x40
 
 __pmac
-
 void *pci_io_base(unsigned int bus)
 {
 	struct bridge_data *bp;
@@ -50,6 +49,7 @@ void *pci_io_base(unsigned int bus)
 	return bp->io_base;
 }
 
+__pmac
 int pci_device_loc(struct device_node *dev, unsigned char *bus_ptr,
 		   unsigned char *devfn_ptr)
 {
@@ -68,6 +68,7 @@ int pci_device_loc(struct device_node *dev, unsigned char *bus_ptr,
 	return 0;
 }
 
+__pmac
 int pmac_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
 				  unsigned char offset, unsigned char *val)
 {
@@ -90,6 +91,7 @@ int pmac_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
+__pmac
 int pmac_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
 				  unsigned char offset, unsigned short *val)
 {
@@ -114,6 +116,7 @@ int pmac_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
+__pmac
 int pmac_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
 				   unsigned char offset, unsigned int *val)
 {
@@ -138,6 +141,7 @@ int pmac_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
+__pmac
 int pmac_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
 				   unsigned char offset, unsigned char val)
 {
@@ -159,6 +163,7 @@ int pmac_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
+__pmac
 int pmac_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
 				   unsigned char offset, unsigned short val)
 {
@@ -182,6 +187,7 @@ int pmac_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
 	return PCIBIOS_SUCCESSFUL;
 }
 
+__pmac
 int pmac_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
 				    unsigned char offset, unsigned int val)
 {
@@ -406,7 +412,7 @@ __initfunc(static void add_bridges(struct device_node *dev, unsigned long *mem_p
 				ioremap(0xfec00000, 0x1000);
 			bp->cfg_data = (volatile unsigned char *)
 				ioremap(0xfee00000, 0x1000);
-			bp->io_base = (void *) ioremap(0xfe000000, 0x10000);
+                        bp->io_base = (void *) ioremap(0xfe000000, 0x20000);
 		}
 		if (isa_io_base == 0)
 			isa_io_base = (unsigned long) bp->io_base;

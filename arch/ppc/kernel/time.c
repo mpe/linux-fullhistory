@@ -1,5 +1,5 @@
 /*
- * $Id: time.c,v 1.35 1998/07/24 11:05:47 geert Exp $
+ * $Id: time.c,v 1.36 1998/10/10 12:16:08 geert Exp $
  * Common time routines among all ppc machines.
  *
  * Written by Cort Dougan (cort@cs.nmt.edu) to merge
@@ -106,7 +106,12 @@ void timer_interrupt(struct pt_regs * regs)
 #ifdef __SMP__
 	smp_local_timer_interrupt(regs);
 #endif		
-	
+#ifdef CONFIG_APUS
+	{
+		extern void apus_heartbeat (void);
+		apus_heartbeat ();
+	}
+#endif
 	hardirq_exit(cpu);
 	/* restore the HID0 in case dcache was off - see idle.c
 	 * this hack should leave for a better solution -- Cort */

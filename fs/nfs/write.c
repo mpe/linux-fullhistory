@@ -46,7 +46,6 @@
  * Copyright (C) 1996, 1997, Olaf Kirch <okir@monad.swb.de>
  */
 
-#include <linux/config.h>
 #include <linux/types.h>
 #include <linux/malloc.h>
 #include <linux/swap.h>
@@ -332,8 +331,6 @@ create_write_request(struct dentry *dentry, struct inode *inode,
 	wreq->wb_bytes  = bytes;
 	wreq->wb_count	= 2;		/* One for the IO, one for us */
 
-	atomic_inc(&page->count);
-
 	append_write_request(&NFS_WRITEBACK(inode), wreq);
 
 	if (nr_write_requests++ > NFS_WRITEBACK_MAX*3/4)
@@ -480,8 +477,7 @@ nfs_updatepage(struct file *file, struct page *page, unsigned long offset, unsig
 
 	/*
 	 * Ok, there's another user of this page with the new request..
-	 * Increment the usage count, and schedule the request (the
-	 * end of the request will drop the usage count..)
+	 * The IO completion will then free the page.
 	 */
 	atomic_inc(&page->count);
 

@@ -80,7 +80,8 @@ static void cuda_start(void);
 static void via_interrupt(int irq, void *arg, struct pt_regs *regs);
 static void cuda_input(unsigned char *buf, int nb, struct pt_regs *regs);
 static int cuda_adb_send_request(struct adb_request *req, int sync);
-static int cuda_adb_autopoll(int on);
+static int cuda_adb_autopoll(int devs);
+static int cuda_reset_bus(void);
 
 __openfirmware
 
@@ -141,6 +142,7 @@ via_cuda_init(void)
     /* Set function pointers */
     adb_send_request = cuda_adb_send_request;
     adb_autopoll = cuda_adb_autopoll;
+    adb_reset_bus = cuda_reset_bus;
 }
 
 #define WAIT_FOR(cond, what)				\
@@ -216,11 +218,23 @@ cuda_adb_send_request(struct adb_request *req, int sync)
 
 /* Enable/disable autopolling */
 static int
-cuda_adb_autopoll(int on)
+cuda_adb_autopoll(int devs)
 {
     struct adb_request req;
 
-    cuda_request(&req, NULL, 3, CUDA_PACKET, CUDA_AUTOPOLL, on);
+    cuda_request(&req, NULL, 3, CUDA_PACKET, CUDA_AUTOPOLL, (devs? 1: 0));
+    while (!req.complete)
+	cuda_poll();
+    return 0;
+}
+
+/* Reset adb bus - how do we do this?? */
+static int
+cuda_reset_bus(void)
+{
+    struct adb_request req;
+
+    cuda_request(&req, NULL, 2, ADB_PACKET, 0);		/* maybe? */
     while (!req.complete)
 	cuda_poll();
     return 0;

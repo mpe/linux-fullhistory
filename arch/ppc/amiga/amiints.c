@@ -108,6 +108,11 @@ __initfunc(void amiga_init_IRQ(void))
 	custom.intreq = 0x7fff;
 
 #ifdef CONFIG_APUS
+	/* Clear any inter-CPU interupt requests. Circumvents bug in
+           Blizzard IPL emulation HW (or so it appears). */
+	APUS_WRITE(APUS_INT_LVL, INTLVL_SETRESET | INTLVL_MASK);
+
+	/* Init IPL emulation. */
 	APUS_WRITE(APUS_REG_INT, REGINT_INTMASTER | REGINT_ENABLEIPL);
 	APUS_WRITE(APUS_IPL_EMU, IPLEMU_DISABLEINT);
 	APUS_WRITE(APUS_IPL_EMU, IPLEMU_SETRESET | IPLEMU_IPLMASK);
@@ -304,12 +309,14 @@ void amiga_enable_irq(unsigned int irq)
 	}
 
 	if (irq >= IRQ_AMIGA_CIAB) {
+		cia_set_irq(&ciab_base, (1 << (irq - IRQ_AMIGA_CIAB)));
 		cia_able_irq(&ciab_base, CIA_ICR_SETCLR |
 		             (1 << (irq - IRQ_AMIGA_CIAB)));
 		return;
 	}
 
 	if (irq >= IRQ_AMIGA_CIAA) {
+		cia_set_irq(&ciaa_base, (1 << (irq - IRQ_AMIGA_CIAA)));
 		cia_able_irq(&ciaa_base, CIA_ICR_SETCLR |
 		             (1 << (irq - IRQ_AMIGA_CIAA)));
 		return;

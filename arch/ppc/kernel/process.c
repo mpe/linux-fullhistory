@@ -163,14 +163,19 @@ switch_to(struct task_struct *prev, struct task_struct *new)
 #endif
 
 #ifdef SHOW_TASK_SWITCHES
-	printk("%s/%d -> %s/%d NIP %08lx cpu %d sfr %d lock %x\n",
+	printk("%s/%d -> %s/%d NIP %08lx cpu %d lock %x root %x/%x\n",
 	       prev->comm,prev->pid,
 	       new->comm,new->pid,new->tss.regs->nip,new->processor,
-	       new->tss.smp_fork_ret,scheduler_lock.lock);
+	       scheduler_lock.lock,new->fs->root,prev->fs->root);
 #endif
 #ifdef __SMP__
 	/* avoid complexity of lazy save/restore of fpu
-	 * by just saving it every time we switch out -- Cort
+	 * by just saving it every time we switch out if
+	 * this task used the fpu during the last quantum.
+	 * 
+	 * If it tries to use the fpu again, it'll trap and
+	 * reload its fp regs.
+	 *  -- Cort
 	 */
 	if ( prev->tss.regs->msr & MSR_FP )
 		smp_giveup_fpu(prev);
@@ -383,6 +388,7 @@ asmlinkage int sys_fork(int p1, int p2, int p3, int p4, int p5, int p6,
 {
 
 	int res;
+	
 	lock_kernel();
 	res = do_fork(SIGCHLD, regs->gpr[1], regs);
 	/* only parent returns here */
@@ -404,18 +410,23 @@ asmlinkage int sys_execve(unsigned long a0, unsigned long a1, unsigned long a2,
 {
 	int error;
 	char * filename;
-	
 	lock_kernel();
 	filename = getname((char *) a0);
 	error = PTR_ERR(filename);
 	if (IS_ERR(filename))
 		goto out;
+#ifdef __SMP__	  
+	if ( regs->msr & MSR_FP )
+		smp_giveup_fpu(current);
+#else	  
 	if ( last_task_used_math == current )
-		last_task_used_math = NULL;
+		giveup_fpu();
+#endif	
 	error = do_execve(filename, (char **) a1, (char **) a2, regs);
 	putname(filename);
 out:
 	unlock_kernel();
+
 	return error;
 }
 

@@ -1,5 +1,5 @@
 /*
- * $Id: residual.c,v 1.12 1998/08/27 23:15:56 paulus Exp $
+ * $Id: residual.c,v 1.14 1998/10/11 17:38:10 cort Exp $
  *
  * Code to deal with the PReP residual data.
  *
@@ -49,7 +49,7 @@
 #include <asm/ide.h>
 
 
-const char * PnP_BASE_TYPES[]= {
+const char * PnP_BASE_TYPES[] __initdata = {
   "Reserved",
   "MassStorageDevice",
   "NetworkInterfaceController",
@@ -65,7 +65,7 @@ const char * PnP_BASE_TYPES[]= {
 
 /* Device Sub Type Codes */
 
-const unsigned char * PnP_SUB_TYPES[] = {
+const unsigned char * PnP_SUB_TYPES[] __initdata = {
   "\001\000SCSIController",
   "\001\001IDEController",
   "\001\002FloppyController",
@@ -122,7 +122,7 @@ const unsigned char * PnP_SUB_TYPES[] = {
 
 /* Device Interface Type Codes */
 
-const  unsigned char * PnP_INTERFACES[]= {
+const  unsigned char * PnP_INTERFACES[] __initdata = {
   "\000\000\000General",
   "\001\000\000GeneralSCSI",
   "\001\001\000GeneralIDE",
@@ -240,7 +240,7 @@ const  unsigned char * PnP_INTERFACES[]= {
   NULL
   };
 
-static const unsigned char *PnP_SUB_TYPE_STR(unsigned char BaseType, 
+static const unsigned char __init *PnP_SUB_TYPE_STR(unsigned char BaseType, 
 					     unsigned char SubType) {
 	const unsigned char ** s=PnP_SUB_TYPES;
 	while (*s && !((*s)[0]==BaseType 
@@ -249,7 +249,7 @@ static const unsigned char *PnP_SUB_TYPE_STR(unsigned char BaseType,
 	else return("Unknown !");
 };
 
-static const unsigned char *PnP_INTERFACE_STR(unsigned char BaseType, 
+static const unsigned char __init *PnP_INTERFACE_STR(unsigned char BaseType, 
 					      unsigned char SubType,
 					      unsigned char Interface) {
 	const unsigned char ** s=PnP_INTERFACES;
@@ -260,7 +260,7 @@ static const unsigned char *PnP_INTERFACE_STR(unsigned char BaseType,
 	else return NULL;
 };
 
-static void printsmallvendor(PnP_TAG_PACKET *pkt, int size) {
+static void __init printsmallvendor(PnP_TAG_PACKET *pkt, int size) {
 	int i, c;
 	char decomp[4];
 #define p pkt->S14_Pack.S14_Data.S14_PPCPack
@@ -285,7 +285,7 @@ static void printsmallvendor(PnP_TAG_PACKET *pkt, int size) {
 #undef p
 }
 
-static void printsmallpacket(PnP_TAG_PACKET * pkt, int size) {
+static void __init printsmallpacket(PnP_TAG_PACKET * pkt, int size) {
 	static const unsigned char * intlevel[] = {"high", "low"};
 	static const unsigned char * intsense[] = {"edge", "level"};
 
@@ -352,7 +352,7 @@ static void printsmallpacket(PnP_TAG_PACKET * pkt, int size) {
 	}
 }
 
-static void printlargevendor(PnP_TAG_PACKET * pkt, int size) {
+static void __init printlargevendor(PnP_TAG_PACKET * pkt, int size) {
 	static const unsigned char * addrtype[] = {"I/O", "Memory", "System"};
 	static const unsigned char * inttype[] = {"8259", "MPIC", "RS6k BUID %d"};
 	static const unsigned char * convtype[] = {"Bus Memory", "Bus I/O", "DMA"};
@@ -462,7 +462,7 @@ static void printlargevendor(PnP_TAG_PACKET * pkt, int size) {
 	}
 }
 
-static void printlargepacket(PnP_TAG_PACKET * pkt, int size) {
+static void __init printlargepacket(PnP_TAG_PACKET * pkt, int size) {
 	switch (tag_large_item_name(pkt->S1_Pack.Tag)) {
 	case LargeVendorItem:
 	  printlargevendor(pkt, size);
@@ -473,7 +473,7 @@ static void printlargepacket(PnP_TAG_PACKET * pkt, int size) {
 	  break;
 	}
 }
-static void printpackets(PnP_TAG_PACKET * pkt, const char * cat) {
+static void __init printpackets(PnP_TAG_PACKET * pkt, const char * cat) {
 	if (pkt->S1_Pack.Tag== END_TAG) {
 		printk("  No packets describing %s resources.\n", cat);
 		return;
@@ -494,7 +494,7 @@ static void printpackets(PnP_TAG_PACKET * pkt, const char * cat) {
 	} while (pkt->S1_Pack.Tag != END_TAG);
 }
 
-void print_residual_device_info(void)
+void __init print_residual_device_info(void)
 {
 	int i;
 	PPC_DEVICE *dev;
@@ -562,8 +562,8 @@ void print_residual_device_info(void)
 }
 
 
-
-static void printVPD(void) {
+#if 0
+static void __init printVPD(void) {
 #define vpd res->VitalProductData
 	int ps=vpd.PageSize, i, j;
 	static const char* Usage[]={
@@ -628,7 +628,6 @@ static void printVPD(void) {
 /*
  * Spit out some info about residual data
  */
-#if 0
 void print_residual_device_info(void)
 {
 	int i;
@@ -764,7 +763,7 @@ in this rarely used area we unencode and compare */
 little endian in the heap, so we use two parameters to avoid writing
 two very similar functions */
 
-static int same_DevID(unsigned short vendor,
+static int __init same_DevID(unsigned short vendor,
 	       unsigned short Number,
 	       char * str) 
 {
@@ -780,7 +779,7 @@ static int same_DevID(unsigned short vendor,
 	return 0;
 }
 
-PPC_DEVICE *residual_find_device(unsigned long BusMask,
+PPC_DEVICE __init *residual_find_device(unsigned long BusMask,
 			 unsigned char * DevID,
 			 int BaseType,
 			 int SubType,
@@ -803,7 +802,7 @@ PPC_DEVICE *residual_find_device(unsigned long BusMask,
 	return 0;
 }
 
-PPC_DEVICE *residual_find_device_id(unsigned long BusMask,
+PPC_DEVICE __init *residual_find_device_id(unsigned long BusMask,
 			 unsigned short DevID,
 			 int BaseType,
 			 int SubType,
@@ -844,7 +843,7 @@ PnP_TAG_PACKET *PnP_find_packet(unsigned char *p,
 	return 0; /* not found */
 }
 
-PnP_TAG_PACKET *PnP_find_small_vendor_packet(unsigned char *p,
+PnP_TAG_PACKET __init *PnP_find_small_vendor_packet(unsigned char *p,
 					     unsigned packet_type,
 					     int n)
 {
@@ -858,7 +857,7 @@ PnP_TAG_PACKET *PnP_find_small_vendor_packet(unsigned char *p,
 	return 0; /* not found */
 }
 
-PnP_TAG_PACKET *PnP_find_large_vendor_packet(unsigned char *p,
+PnP_TAG_PACKET __init *PnP_find_large_vendor_packet(unsigned char *p,
 					   unsigned packet_type,
 					   int n)
 {

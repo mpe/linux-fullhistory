@@ -9,7 +9,7 @@
  *  Adapted for Power Macintosh by Paul Mackerras
  *    Copyright (C) 1996 Paul Mackerras (paulus@cs.anu.edu.au)
  *  Amiga/APUS changes by Jesper Skov (jskov@cygnus.co.uk).
- *
+ *  
  * This file contains the code used by various IRQ handling routines:
  * asking for different IRQ's should be done through these routines
  * instead of just grabbing them. Thus setups with different IRQ numbers
@@ -63,8 +63,9 @@ extern void apus_init_IRQ(void);
 extern void amiga_disable_irq(unsigned int irq);
 extern void amiga_enable_irq(unsigned int irq);
 static void no_action(int cpl, void *dev_id, struct pt_regs *regs) { }
-static volatile unsigned char *gg2_int_ack_special;
+static volatile unsigned char *chrp_int_ack_special;
 extern volatile unsigned long ipi_count;
+static void pmac_fix_gatwick_interrupts(struct device_node *gw, int irq_base);
 
 #ifdef CONFIG_APUS
 /* Rename a few functions. Requires the CONFIG_APUS protection. */
@@ -88,6 +89,7 @@ void (*unmask_irq)(unsigned int irq_nr);
 
 #define VEC_SPUR    (24)
 #undef SHOW_IRQ
+#undef SHOW_GATWICK_IRQS
 #define NR_MASK_WORDS	((NR_IRQS + 31) / 32)
 #define cached_21	(((char *)(cached_irq_mask))[3])
 #define cached_A1	(((char *)(cached_irq_mask))[2])
@@ -96,6 +98,7 @@ void (*unmask_irq)(unsigned int irq_nr);
 unsigned int local_bh_count[NR_CPUS];
 unsigned int local_irq_count[NR_CPUS];
 int max_irqs;
+int max_real_irqs;
 static struct irqaction *irq_action[NR_IRQS];
 static int spurious_interrupts = 0;
 static unsigned int cached_irq_mask[NR_MASK_WORDS];
@@ -111,11 +114,32 @@ struct pmac_irq_hw {
 };
 
 /* XXX these addresses should be obtained from the device tree */
-volatile struct pmac_irq_hw *pmac_irq_hw[2] = {
+volatile struct pmac_irq_hw *pmac_irq_hw[4] = {
 	(struct pmac_irq_hw *) 0xf3000020,
 	(struct pmac_irq_hw *) 0xf3000010,
+	(struct pmac_irq_hw *) 0xf4000020,
+	(struct pmac_irq_hw *) 0xf4000010,
 };
 
+/* This is the interrupt used on the main controller for the secondary
+   controller. Happens on PowerBooks G3 Series (a second mac-io)
+   -- BenH
+ */
+static int second_irq = -999;
+
+/* Returns the number of 0's to the left of the most significant 1 bit */
+static inline int cntlzw(int bits)
+{
+	int lz;
+
+	asm ("cntlzw %0,%1" : "=r" (lz) : "r" (bits));
+	return lz;
+}
+
+static inline void sync(void)
+{
+	asm volatile ("sync");
+}
 
 /* nasty hack for shared irq's since we need to do kmalloc calls but
  * can't very very early in the boot when we need to do a request irq.
@@ -173,12 +197,12 @@ void i8259_mask_and_ack_irq(int irq_nr)
 	/*	spin_unlock(&irq_controller_lock);*/
 }
 
-void pmac_mask_and_ack_irq(int irq_nr)
+void __pmac pmac_mask_and_ack_irq(int irq_nr)
 {
 	unsigned long bit = 1UL << (irq_nr & 0x1f);
 	int i = irq_nr >> 5;
 
-	if (irq_nr >= max_irqs)
+	if ((unsigned)irq_nr >= max_irqs)
 		return;
 	/*spin_lock(&irq_controller_lock);*/
 
@@ -188,13 +212,15 @@ void pmac_mask_and_ack_irq(int irq_nr)
 	out_le32(&pmac_irq_hw[i]->ack, bit);
 	out_le32(&pmac_irq_hw[i]->enable, cached_irq_mask[i]);
 	out_le32(&pmac_irq_hw[i]->ack, bit);
+	/* make sure ack gets to controller before we enable interrupts */
+	sync();
 
 	/*spin_unlock(&irq_controller_lock);*/
 	/*if ( irq_controller_lock.lock )
 	  panic("irq controller lock still held in mask and ack\n");*/
 }
 
-void chrp_mask_and_ack_irq(int irq_nr)
+void __openfirmware chrp_mask_and_ack_irq(int irq_nr)
 {
 	/* spinlocks are done by i8259_mask_and_ack() - Cort */
 	if (is_8259_irq(irq_nr))
@@ -211,12 +237,12 @@ static void i8259_set_irq_mask(int irq_nr)
 	}
 }
 
-static void pmac_set_irq_mask(int irq_nr)
+static void __pmac pmac_set_irq_mask(int irq_nr)
 {
 	unsigned long bit = 1UL << (irq_nr & 0x1f);
 	int i = irq_nr >> 5;
 
-	if (irq_nr >= max_irqs)
+	if ((unsigned)irq_nr >= max_irqs)
 		return;
 
 	/* enable unmasked interrupts */
@@ -251,19 +277,20 @@ static void i8259_unmask_irq(unsigned int irq_nr)
 	i8259_set_irq_mask(irq_nr);
 }
 
-static void pmac_mask_irq(unsigned int irq_nr)
+static void __pmac pmac_mask_irq(unsigned int irq_nr)
 {
 	clear_bit(irq_nr, cached_irq_mask);
 	pmac_set_irq_mask(irq_nr);
+	sync();
 }
 
-static void pmac_unmask_irq(unsigned int irq_nr)
+static void __pmac pmac_unmask_irq(unsigned int irq_nr)
 {
 	set_bit(irq_nr, cached_irq_mask);
 	pmac_set_irq_mask(irq_nr);
 }
 
-static void chrp_mask_irq(unsigned int irq_nr)
+static void __openfirmware chrp_mask_irq(unsigned int irq_nr)
 {
 	if (is_8259_irq(irq_nr))
 		i8259_mask_irq(irq_nr);
@@ -271,7 +298,7 @@ static void chrp_mask_irq(unsigned int irq_nr)
 		openpic_disable_irq(irq_to_openpic(irq_nr));
 }
 
-static void chrp_unmask_irq(unsigned int irq_nr)
+static void __openfirmware chrp_unmask_irq(unsigned int irq_nr)
 {
 	if (is_8259_irq(irq_nr))
 		i8259_unmask_irq(irq_nr);
@@ -325,7 +352,7 @@ int get_irq_list(char *buf)
 
 	for (i = 0 ; i < NR_IRQS ; i++) {
 		action = irq_action[i];
-		if (!action || !action->handler)
+		if ((!action || !action->handler) && (i != second_irq))
 			continue;
 		len += sprintf(buf+len, "%3d: ", i);		
 #ifdef __SMP__
@@ -341,7 +368,10 @@ int get_irq_list(char *buf)
 			len += sprintf(buf+len, "    82c59 ");
 			break;
 		case _MACH_Pmac:
-			len += sprintf(buf+len, " PMAC-PIC ");
+			if (i < 64)
+				len += sprintf(buf+len, " PMAC-PIC ");
+			else
+				len += sprintf(buf+len, "  GATWICK ");
 			break;
 		case _MACH_chrp:
 			if ( is_8259_irq(i) )
@@ -354,23 +384,26 @@ int get_irq_list(char *buf)
 			break;
 		}
 
-		len += sprintf(buf+len, "   %s",action->name);
-		for (action=action->next; action; action = action->next) {
-			len += sprintf(buf+len, ", %s", action->name);
-		}
-		len += sprintf(buf+len, "\n");
+		if (i != second_irq) {
+			len += sprintf(buf+len, "    %s",action->name);
+			for (action=action->next; action; action = action->next) {
+				len += sprintf(buf+len, ", %s", action->name);
+			}
+			len += sprintf(buf+len, "\n");
+		} else
+			len += sprintf(buf+len, "    Gatwick secondary IRQ controller\n");
 	}
 #ifdef __SMP__
 	/* should this be per processor send/receive? */
-	len += sprintf(buf+len, "IPI: %10lu\n", ipi_count);
+	len += sprintf(buf+len, "IPI: %10lu", ipi_count);
 	for ( i = 0 ; i <= smp_num_cpus-1; i++ )
 		len += sprintf(buf+len,"          ");
-	len += sprintf(buf+len, "    interprocessor messages received\n");
+	len += sprintf(buf+len, "     interprocessor messages received\n");
 #endif		
 	len += sprintf(buf+len, "BAD: %10u",spurious_interrupts);
 	for ( i = 0 ; i <= smp_num_cpus-1; i++ )
 		len += sprintf(buf+len,"          ");
-	len += sprintf(buf+len, "    spurious or short\n");
+	len += sprintf(buf+len, "     spurious or short\n");
 	return len;
 }
 
@@ -604,7 +637,6 @@ void __global_restore_flags(unsigned long flags)
 
 #endif /* __SMP__ */
 
-
 asmlinkage void do_IRQ(struct pt_regs *regs)
 {
 	int irq;
@@ -627,9 +659,6 @@ asmlinkage void do_IRQ(struct pt_regs *regs)
 		if (!atomic_read(&n_lost_interrupts))
 		{
 			extern void smp_message_recv(void);
-			goto out;
-			
-			ipi_count++;
 			smp_message_recv();
 			goto out;
 		}
@@ -642,20 +671,48 @@ asmlinkage void do_IRQ(struct pt_regs *regs)
 	switch ( _machine )
 	{
 	case _MACH_Pmac:
-		for (irq = max_irqs - 1; irq > 0; irq -= 32) {
-			int i = irq >> 5, lz;
+		for (irq = max_real_irqs - 1; irq > 0; irq -= 32) {
+			int i = irq >> 5;
 			bits = ld_le32(&pmac_irq_hw[i]->flag)
 				| lost_interrupts[i];
 			if (bits == 0)
 				continue;
-			/* lz = number of 0 bits to left of most sig. 1 */
-			asm ("cntlzw %0,%1" : "=r" (lz) : "r" (bits));
-			irq -= lz;
+			irq -= cntlzw(bits);
 			break;
 		}
+
+		/* Here, we handle interrupts coming from Gatwick,
+		 * normal interrupt code will take care of acking and
+		 * masking the irq on Gatwick itself but we ack&mask
+		 * the Gatwick main interrupt on Heathrow now. It's
+		 * unmasked later, after interrupt handling. -- BenH 
+		 */
+		if (irq == second_irq) {
+			mask_and_ack_irq(second_irq);
+			for (irq = max_irqs - 1; irq > max_real_irqs; irq -= 32) {
+				int i = irq >> 5;
+				bits = ld_le32(&pmac_irq_hw[i]->flag)
+					| lost_interrupts[i];
+				if (bits == 0)
+					continue;
+				irq -= cntlzw(bits);
+				break;
+			}
+			/* If not found, on exit, irq is 63 (128-1-32-32).
+			 * We set it to -1 and revalidate second controller
+			 */
+			if (irq < max_real_irqs) {
+				irq = -1;
+				unmask_irq(second_irq);
+			}
+#ifdef SHOW_GATWICK_IRQS
+			printk("Gatwick irq %d (i:%d, bits:0x%08lx\n", irq, i, bits);
+#endif
+		}
+
 		break;
 	case _MACH_chrp:
-		irq = openpic_irq(0);		
+		irq = openpic_irq(0);
 		if (irq == IRQ_8259_CASCADE)
 		{
 			/*
@@ -663,7 +720,7 @@ asmlinkage void do_IRQ(struct pt_regs *regs)
 			 * 
 			 * This should go in the above mask/ack code soon. -- Cort
 			 */
-			irq = *gg2_int_ack_special;
+			irq = *chrp_int_ack_special;
 			/*
 			 * Acknowledge as soon as possible to allow i8259
 			 * interrupt nesting
@@ -740,11 +797,13 @@ apus_out:
 	}
 #endif	
 	}
-	
+
 	if (irq < 0) {
-		printk(KERN_DEBUG "Bogus interrupt from PC = %lx\n", regs->nip);
+		printk(KERN_DEBUG "Bogus interrupt %d from PC = %lx\n",
+		       irq, regs->nip);
+		spurious_interrupts++;
 		goto out;
-	}
+	}					
 	
 #else /* CONFIG_8xx */
 	/* For MPC8xx, read the SIVEC register and shift the bits down
@@ -753,9 +812,7 @@ apus_out:
 	bits = ((immap_t *)MBX_IMAP_ADDR)->im_siu_conf.sc_sivec;
 	irq = bits >> 26;
 #endif /* CONFIG_8xx */
-
 	mask_and_ack_irq(irq);
-
 	status = 0;
 	action = irq_action[irq];
 	kstat.irqs[cpu][irq]++;
@@ -765,14 +822,10 @@ apus_out:
 		do { 
 			status |= action->flags;
 			action->handler(irq, action->dev_id, regs);
-			/*if (status & SA_SAMPLE_RANDOM)
-				  add_interrupt_randomness(irq);*/
 			action = action->next;
 		} while ( action );
 		__cli();
-		/*		spin_lock(&irq_controller_lock);*/
 		unmask_irq(irq);
-		/*		spin_unlock(&irq_controller_lock);*/
 	} else {
 #ifndef CONFIG_8xx	  
 		if ( irq == 7 ) /* i8259 gives us irq 7 on 'short' intrs */
@@ -781,8 +834,13 @@ apus_out:
 		disable_irq( irq );
 	}
 	
+	/* This was a gatwick sub-interrupt, we re-enable them on Heathrow
+           now */
+	if (_machine == _MACH_Pmac && irq >= max_real_irqs)
+		unmask_irq(second_irq);
+
 	/* make sure we don't miss any cascade intrs due to eoi-ing irq 2 */
-#ifndef CONFIG_8xx	
+#ifndef CONFIG_8xx											
 	if ( is_prep && (irq > 7) )
 		goto retry_cascade;
 	/* do_bottom_half is called if necessary from int_return in head.S */
@@ -808,11 +866,15 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 
 #ifdef SHOW_IRQ
 	printk("request_irq(): irq %d handler %08x name %s dev_id %04x\n",
-	       irq,handler,devname,dev_id);
+	       irq,(int)handler,devname,(int)dev_id);
 #endif /* SHOW_IRQ */
 
 	if (irq >= NR_IRQS)
 		return -EINVAL;
+
+	/* Cannot allocate second controller IRQ */
+	if (irq == second_irq)
+		return -EBUSY;
 
 	if (!handler)
 	{
@@ -838,7 +900,7 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 	cli();
 	
 	action->handler = handler;
-	action->flags = irqflags;
+	action->flags = irqflags;					
 	action->mask = 0;
 	action->name = devname;
 	action->dev_id = dev_id;
@@ -909,6 +971,9 @@ __initfunc(void init_IRQ(void))
 {
 	extern void xmon_irq(int, void *, struct pt_regs *);
 	int i;
+	struct device_node *irqctrler;
+	unsigned long addr;
+	struct device_node *np;
 
 #ifndef CONFIG_8xx
 	switch (_machine)
@@ -918,12 +983,59 @@ __initfunc(void init_IRQ(void))
 		mask_irq = pmac_mask_irq;
 		unmask_irq = pmac_unmask_irq;
 
-		/* G3 powermacs have 64 interrupts, others have 32 */
-		max_irqs = (find_devices("mac-io") ? 64 : 32);
-		printk("System has %d possible interrupts\n", max_irqs);
+		/* G3 powermacs have 64 interrupts, G3 Series PowerBook have 128, 
+		   others have 32 */
+		max_irqs = max_real_irqs = 32;
+		irqctrler = find_devices("mac-io");
+		if (irqctrler)
+		{
+			max_real_irqs = 64;
+			if (irqctrler->next)
+				max_irqs = 128;
+			else
+				max_irqs = 64;
+		}
+		
+		/* get addresses of first controller */
+		if (irqctrler) {
+			if  (irqctrler->n_addrs > 0) {
+				addr = (unsigned long) 
+					ioremap(irqctrler->addrs[0].address, 0x40);
+				for (i = 0; i < 2; ++i)
+					pmac_irq_hw[i] = (volatile struct pmac_irq_hw*)
+						(addr + (2 - i) * 0x10);
+			}
+			
+			/* get addresses of second controller */
+			irqctrler = (irqctrler->next) ? irqctrler->next : NULL;
+			if (irqctrler && irqctrler->n_addrs > 0) {
+				addr = (unsigned long) 
+					ioremap(irqctrler->addrs[0].address, 0x40);
+				for (i = 2; i < 4; ++i)
+					pmac_irq_hw[i] = (volatile struct pmac_irq_hw*)
+						(addr + (4 - i) * 0x10);
+			}
+		}
 
+		/* disable all interrupts in all controllers */
 		for (i = 0; i * 32 < max_irqs; ++i)
 			out_le32(&pmac_irq_hw[i]->enable, 0);
+			
+		
+		/* get interrupt line of secondary interrupt controller */
+		if (irqctrler) {
+			second_irq = irqctrler->intrs[0].line;
+			printk(KERN_INFO "irq: secondary controller on irq %d\n",
+				(int)second_irq);
+			if (device_is_compatible(irqctrler, "gatwick"))
+				pmac_fix_gatwick_interrupts(irqctrler, max_real_irqs);
+			enable_irq(second_irq);
+		}
+		printk("System has %d possible interrupts\n", max_irqs);
+		if (max_irqs != max_real_irqs)
+			printk(KERN_DEBUG "%d interrupts on main controller\n",
+				max_real_irqs);
+
 #ifdef CONFIG_XMON
 		request_irq(20, xmon_irq, 0, "NMI", 0);
 #endif	/* CONFIG_XMON */
@@ -932,8 +1044,15 @@ __initfunc(void init_IRQ(void))
 		mask_and_ack_irq = chrp_mask_and_ack_irq;
 		mask_irq = chrp_mask_irq;
 		unmask_irq = chrp_unmask_irq;
-		gg2_int_ack_special = (volatile unsigned char *)
-			ioremap(GG2_INT_ACK_SPECIAL, 1);
+		
+		if ( !(np = find_devices("pci") ) )
+			printk("Cannot find pci to get ack address\n");
+		else
+		{
+			chrp_int_ack_special = (volatile unsigned char *)
+			   (*(unsigned long *)get_property(np,
+					"8259-interrupt-acknowledge", NULL));
+		}
 		openpic_init(1);
 		i8259_init();
 		cached_irq_mask[0] = cached_irq_mask[1] = ~0UL;
@@ -993,3 +1112,61 @@ __initfunc(void init_IRQ(void))
 	}
 #endif /* CONFIG_8xx */
 }
+
+/* This routine will fix some missing interrupt values in the device tree
+ * on the gatwick mac-io controller used by some PowerBooks
+ */
+__pmac
+static void pmac_fix_gatwick_interrupts(struct device_node *gw, int irq_base)
+{
+	struct device_node *node;
+	static struct interrupt_info int_pool[4];
+	
+	memset(int_pool, 0, sizeof(int_pool));
+	node = gw->child;
+	while(node)
+	{
+		/* Fix SCC */
+		if (strcasecmp(node->name, "escc") == 0)
+			if (node->child && node->child->n_intrs == 0)
+			{
+				node->child->n_intrs = 1;
+				node->child->intrs = &int_pool[0];
+				int_pool[0].line = 15+irq_base;
+				printk(KERN_INFO "irq: fixed SCC on second controller (%d)\n",
+					int_pool[0].line);
+			}
+		/* Fix media-bay & left SWIM */
+		if (strcasecmp(node->name, "media-bay") == 0)
+		{
+			struct device_node* ya_node;
+
+			if (node->n_intrs == 0)
+			{
+				node->n_intrs = 1;
+				node->intrs = &int_pool[1];
+				int_pool[1].line = 29+irq_base;
+				printk(KERN_INFO "irq: fixed media-bay on second controller (%d)\n",
+					int_pool[1].line);
+			}
+			ya_node = node->child;
+			while(ya_node)
+			{
+				if ((strcasecmp(ya_node->name, "floppy") == 0) &&
+					ya_node->n_intrs == 0)
+				{
+					ya_node->n_intrs = 2;
+					ya_node->intrs = &int_pool[2];
+					int_pool[2].line = 19+irq_base;
+					int_pool[3].line =  1+irq_base;
+					printk(KERN_INFO "irq: fixed floppy on second controller (%d,%d)\n",
+						int_pool[2].line, int_pool[3].line);
+				} 
+				ya_node = ya_node->sibling;
+			}
+		}
+		node = node->sibling;
+	}
+	
+}
+

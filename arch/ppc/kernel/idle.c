@@ -1,5 +1,5 @@
 /*
- * $Id: idle.c,v 1.50 1998/08/18 16:19:25 cort Exp $
+ * $Id: idle.c,v 1.56 1998/10/13 19:14:36 paulus Exp $
  *
  * Idle daemon for PowerPC.  Idle daemon will handle any action
  * that needs to be taken when the system becomes idle.
@@ -11,8 +11,6 @@
  * as published by the Free Software Foundation; either version
  * 2 of the License, or (at your option) any later version.
  */
-#define __KERNEL_SYSCALLS__
-
 #include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
@@ -32,9 +30,6 @@
 #include <asm/processor.h>
 #include <asm/mmu.h>
 #include <asm/cache.h>
-#ifdef CONFIG_PMAC
-#include <asm/mediabay.h>
-#endif
 
 void zero_paged(void);
 void power_save(void);
@@ -60,15 +55,7 @@ int idled(void *unused)
 
 		if ( !current->need_resched && zero_paged_on ) zero_paged();
 		if ( !current->need_resched && htab_reclaim_on ) htab_reclaim();
-
-		/*
-		 * Only processor 1 may sleep now since processor 2 would
-		 * never wake up.  Need to add timer code for processor 2
-		 * then it can sleep. -- Cort
-		 */
-#ifndef __SMP__
 		if ( !current->need_resched ) power_save();
-#endif /* __SMP__ */
 		run_task_queue(&tq_scheduler);
 		schedule();
 	}
@@ -93,14 +80,8 @@ int cpu_idle(void *unused)
  */
 asmlinkage int sys_idle(void)
 {
-	extern int media_bay_task(void *);
 	if(current->pid != 0)
 		return -EPERM;
-
-#ifdef CONFIG_PMAC
-	if (media_bay_present)
-		kernel_thread(media_bay_task, NULL, 0);
-#endif
 
 	idled(NULL);
 	return 0; /* should never execute this but it makes gcc happy -- Cort */

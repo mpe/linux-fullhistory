@@ -1,5 +1,5 @@
 /*
- * $Id: prep_pci.c,v 1.22 1998/08/05 20:11:15 cort Exp $
+ * $Id: prep_pci.c,v 1.23 1998/10/21 10:52:24 cort Exp $
  * PReP pci functions.
  * Originally by Gary Thomas
  * rewritten and updated by Cort Dougan (cort@cs.nmt.edu)
@@ -462,6 +462,11 @@ __initfunc(unsigned long route_pci_interrupts(void))
 			Motherboard_map = Utah_pci_IRQ_map;
 			Motherboard_routes = Utah_pci_IRQ_routes;
 			break;
+                case 0xE0: /* MTX -- close enough?? to Genesis, so reuse it */
+                        Motherboard_map_name = "Motorola MTX";
+                        Motherboard_map = Genesis_pci_IRQ_map;
+                        Motherboard_routes = Genesis_pci_IRQ_routes;
+                        break;
 		case 0x40: /* PowerStack */
 		default: /* Can't hurt, can it? */
 			Motherboard_map_name = "Blackhawk (Powerstack)";

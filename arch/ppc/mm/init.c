@@ -1,5 +1,5 @@
 /*
- *  $Id: init.c,v 1.123 1998/09/19 19:03:55 geert Exp $
+ *  $Id: init.c,v 1.130 1998/11/10 10:09:20 paulus Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -114,7 +114,8 @@ struct batrange {		/* stores address ranges mapped by BATs */
  * (i.e. page tables) instead of the bats.
  * -- Cort
  */
-#undef MAP_RAM_WITH_SEGREGS 1
+int __map_without_bats = 0;
+
 /* optimization for 603 to load the tlb directly from the linux table -- Cort */
 #define NO_RELOAD_HTAB 1 /* change in kernel/head.S too! */
 
@@ -243,20 +244,24 @@ void show_mem(void)
 			printk("%3d ", p->processor);
 			if ( (p->processor != NO_PROC_ID) &&
 			     (p == current_set[p->processor]) )
-			
-#else		
-			if ( p == current )
-#endif /* __SMP__ */
 			{
 				iscur = 1;
 				printk("current");
 			}
+#else		
+			if ( p == current )
+			{
+				iscur = 1;
+				printk("current");
+			}
+			
 			if ( p == last_task_used_math )
 			{
 				if ( iscur )
 					printk(",");
 				printk("last math");
 			}			
+#endif /* __SMP__ */
 			printk("\n");
 		}
 	}
@@ -677,18 +682,21 @@ __initfunc(static void sort_mem_pieces(struct mem_pieces *mp))
 
 __initfunc(static void coalesce_mem_pieces(struct mem_pieces *mp))
 {
-	unsigned long a, e;
+	unsigned long a, s, ns;
 	int i, j, d;
 
 	d = 0;
 	for (i = 0; i < mp->n_regions; i = j) {
 		a = mp->regions[i].address;
-		e = a + mp->regions[i].size;
+		s = mp->regions[i].size;
 		for (j = i + 1; j < mp->n_regions
-			     && mp->regions[j].address <= e; ++j)
-			e = mp->regions[j].address + mp->regions[j].size;
+			     && mp->regions[j].address - a <= s; ++j) {
+			ns = mp->regions[j].address + mp->regions[j].size - a;
+			if (ns > s)
+				s = ns;
+		}
 		mp->regions[d].address = a;
-		mp->regions[d].size = e - a;
+		mp->regions[d].size = s;
 		++d;
 	}
 	mp->n_regions = d;
@@ -800,28 +808,41 @@ __initfunc(static void mapin_ram(void))
 	int i;
 	unsigned long v, p, s, f;
 #ifndef CONFIG_8xx
-	unsigned long tot, mem_base, bl, done;
 
-#ifndef MAP_RAM_WITH_SEGREGS
-	/* Set up BAT2 and if necessary BAT3 to cover RAM. */
-	mem_base = __pa(KERNELBASE);
-	tot = (unsigned long)end_of_DRAM - KERNELBASE;
-	for (bl = 128<<10; bl < 256<<20; bl <<= 1) {
-		if (bl * 2 > tot)
-			break;
-	}
+	if (!__map_without_bats) {
+		unsigned long tot, mem_base, bl, done;
+		unsigned long max_size = (256<<20);
+		unsigned long align;
 
-	setbat(2, KERNELBASE, mem_base, bl, RAM_PAGE);
-	done = (unsigned long)bat_addrs[2].limit - KERNELBASE + 1;
-	if (done < tot) {
-		/* use BAT3 to cover a bit more */
-		tot -= done;
-		for (bl = 128<<10; bl < 256<<20; bl <<= 1)
+		/* Set up BAT2 and if necessary BAT3 to cover RAM. */
+		mem_base = __pa(KERNELBASE);
+
+		/* Make sure we don't map a block larger than the
+		   smallest alignment of the physical address. */
+		/* alignment of mem_base */
+		align = ~(mem_base-1) & mem_base;
+		/* set BAT block size to MIN(max_size, align) */
+		if (align && align < max_size)
+			max_size = align;
+
+		tot = (unsigned long)end_of_DRAM - KERNELBASE;
+		for (bl = 128<<10; bl < max_size; bl <<= 1) {
 			if (bl * 2 > tot)
 				break;
-		setbat(3, KERNELBASE+done, mem_base+done, bl, RAM_PAGE);
+		}
+
+		setbat(2, KERNELBASE, mem_base, bl, RAM_PAGE);
+		done = (unsigned long)bat_addrs[2].limit - KERNELBASE + 1;
+		if (done < tot) {
+			/* use BAT3 to cover a bit more */
+			tot -= done;
+			for (bl = 128<<10; bl < max_size; bl <<= 1)
+				if (bl * 2 > tot)
+					break;
+			setbat(3, KERNELBASE+done, mem_base+done, bl, 
+			       RAM_PAGE);
+		}
 	}
-#endif
 
 	v = KERNELBASE;
 	for (i = 0; i < phys_mem.n_regions; ++i) {
@@ -897,7 +918,10 @@ __initfunc(void free_initmem(void))
 	switch (_machine)
 	{
 	case _MACH_Pmac:
+		FREESEC(__prep_begin,__prep_end,num_prep_pages);
+		break;
 	case _MACH_chrp:
+		FREESEC(__pmac_begin,__pmac_end,num_pmac_pages);
 		FREESEC(__prep_begin,__prep_end,num_prep_pages);
 		break;
 	case _MACH_prep:
@@ -965,8 +989,14 @@ __initfunc(void MMU_init(void))
 		setbat(0, 0xf8000000, 0xf8000000, 0x08000000, IO_PAGE);
 		break;
 	case _MACH_Pmac:
-		setbat(0, 0xf3000000, 0xf3000000, 0x100000, IO_PAGE);
-		ioremap_base = 0xf0000000;
+		{
+			unsigned long base = 0xf3000000;
+			struct device_node *macio = find_devices("mac-io");
+			if (macio && macio->n_addrs)
+				base = macio->addrs[0].address;
+			setbat(0, base, base, 0x100000, IO_PAGE);
+			ioremap_base = 0xf0000000;
+		}
 		break;
 	case _MACH_apus:
 		/* Map PPC exception vectors. */

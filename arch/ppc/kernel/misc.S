@@ -363,8 +363,24 @@ _GLOBAL(_get_THRM1)
 	mfspr	r3,THRM1
 	blr
 
+_GLOBAL(_get_THRM2)
+	mfspr	r3,THRM2
+	blr
+
+_GLOBAL(_get_THRM3)
+	mfspr	r3,THRM3
+	blr
+		
 _GLOBAL(_set_THRM1)
 	mtspr	THRM1,r3
+	blr
+
+_GLOBAL(_set_THRM2)
+	mtspr	THRM2,r3
+	blr
+
+_GLOBAL(_set_THRM3)
+	mtspr	THRM3,r3
 	blr
 	
 _GLOBAL(_get_L2CR)
@@ -453,7 +469,6 @@ _GLOBAL(name) \
 #define __NR__exit __NR_exit
 
 SYSCALL(idle)
-SYSCALL(setup)
 SYSCALL(sync)
 SYSCALL(setsid)
 SYSCALL(write)
@@ -490,12 +505,12 @@ sys_call_table:
 	.long sys_mknod
 	.long sys_chmod		/* 15 */
 	.long sys_lchown
-	.long sys_ni_syscall
+	.long sys_ni_syscall			/* old break syscall holder */
 	.long sys_stat
 	.long sys_lseek
 	.long sys_getpid	/* 20 */
 	.long sys_mount
-	.long sys_umount
+	.long sys_oldumount
 	.long sys_setuid
 	.long sys_getuid
 	.long sys_stime		/* 25 */
@@ -504,11 +519,11 @@ sys_call_table:
 	.long sys_fstat
 	.long sys_pause
 	.long sys_utime		/* 30 */
-	.long /*sys_stty*/ sys_ni_syscall
-	.long /*sys_gtty*/ sys_ni_syscall
+	.long sys_ni_syscall			/* old stty syscall holder */
+	.long sys_ni_syscall			/* old gtty syscall holder */
 	.long sys_access
 	.long sys_nice
-	.long /*sys_ftime*/ sys_ni_syscall		/* 35 */
+	.long sys_ni_syscall	/* 35 */	/* old ftime syscall holder */
 	.long sys_sync
 	.long sys_kill
 	.long sys_rename
@@ -517,7 +532,7 @@ sys_call_table:
 	.long sys_dup
 	.long sys_pipe
 	.long sys_times
-	.long /*sys_prof*/ sys_ni_syscall
+	.long sys_ni_syscall			/* old prof syscall holder */
 	.long sys_brk		/* 45 */
 	.long sys_setgid
 	.long sys_getgid
@@ -525,13 +540,13 @@ sys_call_table:
 	.long sys_geteuid
 	.long sys_getegid	/* 50 */
 	.long sys_acct
-	.long /*sys_phys*/ sys_ni_syscall
-	.long /*sys_lock*/ sys_ni_syscall
+	.long sys_umount			/* recycled never used phys() */
+	.long sys_ni_syscall			/* old lock syscall holder */
 	.long sys_ioctl
 	.long sys_fcntl		/* 55 */
-	.long /*sys_mpx*/ sys_ni_syscall
+	.long sys_ni_syscall			/* old mpx syscall holder */
 	.long sys_setpgid
-	.long /*sys_ulimit*/ sys_ni_syscall
+	.long sys_ni_syscall			/* old ulimit syscall holder */
 	.long sys_olduname
 	.long sys_umask		/* 60 */
 	.long sys_chroot
@@ -562,7 +577,7 @@ sys_call_table:
 	.long sys_uselib
 	.long sys_swapon
 	.long sys_reboot
-	.long old_readdir		/* was sys_readdir */
+	.long old_readdir
 	.long sys_mmap		/* 90 */
 	.long sys_munmap
 	.long sys_truncate
@@ -571,7 +586,7 @@ sys_call_table:
 	.long sys_fchown	/* 95 */
 	.long sys_getpriority
 	.long sys_setpriority
-	.long /*sys_profil*/ sys_ni_syscall
+	.long sys_ni_syscall			/* old profil syscall holder */
 	.long sys_statfs
 	.long sys_fstatfs	/* 100 */
 	.long sys_ioperm
@@ -610,7 +625,7 @@ sys_call_table:
 	.long sys_bdflush
 	.long sys_sysfs		/* 135 */
 	.long sys_personality
-	.long 0				/* for afs_syscall */
+	.long sys_ni_syscall	/* for afs_syscall */
 	.long sys_setfsuid
 	.long sys_setfsgid
 	.long sys_llseek	/* 140 */
@@ -638,28 +653,28 @@ sys_call_table:
 	.long sys_nanosleep
 	.long sys_mremap
 	.long sys_setresuid
-	.long sys_getresuid		/* 165 */
+	.long sys_getresuid	/* 165 */
 	.long sys_query_module
 	.long sys_poll
 	.long sys_nfsservctl
-	.long sys_setresgid	
-	.long sys_getresgid		/* 170 */
+	.long sys_setresgid
+	.long sys_getresgid	/* 170 */
 	.long sys_prctl
 	.long sys_rt_sigreturn
 	.long sys_rt_sigaction
 	.long sys_rt_sigprocmask	
-	.long sys_rt_sigpending		/* 175 */
+	.long sys_rt_sigpending	/* 175 */
 	.long sys_rt_sigtimedwait
 	.long sys_rt_sigqueueinfo
 	.long sys_rt_sigsuspend
 	.long sys_pread
-	.long sys_pwrite		/* 180 */
+	.long sys_pwrite	/* 180 */
 	.long sys_chown
 	.long sys_getcwd
 	.long sys_capget
 	.long sys_capset
-	.long sys_sigaltstack		/* 185 */
+	.long sys_sigaltstack	/* 185 */
 	.long sys_sendfile
-	.long sys_ni_syscall
-	.long sys_ni_syscall
+	.long sys_ni_syscall		/* streams1 */
+	.long sys_ni_syscall		/* streams2 */
 	.space (NR_syscalls-183)*4

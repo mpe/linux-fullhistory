@@ -1,4 +1,4 @@
-/* $Id: namei.h,v 1.3 1997/08/29 15:52:22 jj Exp $
+/* $Id: namei.h,v 1.4 1998/10/28 08:13:33 jj Exp $
  * linux/include/asm-ppc/namei.h
  * Adapted from linux/include/asm-alpha/namei.h
  *
@@ -13,7 +13,7 @@
  * Look at asm-sparc/namei.h for details.
  */
 
-#define __prefix_lookup_dentry(name, follow_link) \
+#define __prefix_lookup_dentry(name, lookup_flags) \
 	do {} while (0)
 
 #endif /* __PPC_NAMEI_H */

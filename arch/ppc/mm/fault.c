@@ -38,7 +38,7 @@
 extern void (*debugger)(struct pt_regs *);
 extern void (*debugger_fault_handler)(struct pt_regs *);
 extern int (*debugger_dabr_match)(struct pt_regs *);
-int debugger_kernel_faults = 0;
+int debugger_kernel_faults = 1;
 #endif
 
 unsigned long htab_reloads = 0; /* updated by head.S:hash_page() */

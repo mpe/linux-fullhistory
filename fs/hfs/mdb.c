@@ -260,6 +260,9 @@ void hfs_mdb_commit(struct hfs_mdb *mdb, int backup)
 	hfs_put_hl(mdb->file_count,    raw->drFilCnt);
 	hfs_put_hl(mdb->dir_count,     raw->drDirCnt);
 
+	/* write MDB to disk */
+	hfs_buffer_dirty(mdb->buf);
+
        	/* write the backup MDB, not returning until it is written. 
          * we only do this when either the catalog or extents overflow
          * files grow. */

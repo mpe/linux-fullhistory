@@ -17,6 +17,7 @@
  *  Added change_root: Werner Almesberger & Hans Lermen, Feb '96
  */
 
+#include <linux/config.h>
 #include <linux/malloc.h>
 #include <linux/locks.h>
 #include <linux/smp_lock.h>

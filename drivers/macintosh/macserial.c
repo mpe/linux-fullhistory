@@ -33,6 +33,7 @@
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <asm/bitops.h>
+#include <asm/feature.h>
 #ifdef CONFIG_KGDB
 #include <asm/kgdb.h>
 #endif
@@ -85,7 +86,8 @@ static DECLARE_TASK_QUEUE(tq_serial);
 static struct tty_driver serial_driver, callout_driver;
 static int serial_refcount;
 
-/* serial subtype definitions */
+/* serial supmac_irq_hw *) 0xf3000010,
+btype definitions */
 #define SERIAL_TYPE_NORMAL	1
 #define SERIAL_TYPE_CALLOUT	2
 
@@ -165,25 +167,35 @@ static inline unsigned char read_zsreg(struct mac_zschannel *channel,
 				       unsigned char reg)
 {
 	unsigned char retval;
+	unsigned long flags;
 
+	/*
+	 * We have to make this atomic.
+	 */
+	spin_lock_irqsave(&channel->lock, flags);
 	if (reg != 0) {
 		*channel->control = reg;
 		RECOVERY_DELAY;
 	}
 	retval = *channel->control;
 	RECOVERY_DELAY;
+	spin_unlock_irqrestore(&channel->lock, flags);
 	return retval;
 }
 
 static inline void write_zsreg(struct mac_zschannel *channel,
 			       unsigned char reg, unsigned char value)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&channel->lock, flags);
 	if (reg != 0) {
 		*channel->control = reg;
 		RECOVERY_DELAY;
 	}
 	*channel->control = value;
 	RECOVERY_DELAY;
+	spin_unlock_irqrestore(&channel->lock, flags);
 	return;
 }
 
@@ -434,6 +446,10 @@ static void rs_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 
 	for (;;) {
 		zs_intreg = read_zsreg(info->zs_chan_a, 3) >> shift;
+#ifdef SERIAL_DEBUG_INTR
+//		printk("rs_interrupt: irq %d, zs_intreg 0x%x\n", irq, (int)zs_intreg);
+#endif	
+
 		if ((zs_intreg & CHAN_IRQMASK) == 0)
 			break;
 
@@ -1261,6 +1277,15 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	tty->closing = 0;
 	info->event = 0;
 	info->tty = 0;
+
+	if (info->is_cobalt_modem) {
+		/* Power down modem */
+		feature_set(info->dev_node, FEATURE_Modem_Reset);
+		mdelay(15);
+		feature_clear(info->dev_node, FEATURE_Modem_PowerOn);
+		mdelay(15);
+	}
+
 	if (info->blocked_open) {
 		if (info->close_delay) {
 			current->state = TASK_INTERRUPTIBLE;
@@ -1271,6 +1296,7 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	info->flags &= ~(ZILOG_NORMAL_ACTIVE|ZILOG_CALLOUT_ACTIVE|
 			 ZILOG_CLOSING);
 	wake_up_interruptible(&info->close_wait);
+	
 	restore_flags(flags);
 }
 
@@ -1508,9 +1534,25 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	/*
 	 * Start up serial port
 	 */
+
+	if (info->is_cobalt_modem) {
+		/* Power up modem */
+		feature_set(info->dev_node, FEATURE_Modem_PowerOn);
+		mdelay(250);
+		feature_clear(info->dev_node, FEATURE_Modem_Reset);
+		mdelay(10);
+	}
 	retval = startup(info);
-	if (retval)
+	if (retval) {
+		if (info->is_cobalt_modem) {
+			/* Power down modem */
+			feature_set(info->dev_node, FEATURE_Modem_Reset);
+			mdelay(15);
+			feature_clear(info->dev_node, FEATURE_Modem_PowerOn);
+			mdelay(15);
+		}
 		return retval;
+	}
 
 	retval = block_til_ready(tty, filp, info);
 	if (retval) {
@@ -1518,6 +1560,13 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 		printk("rs_open returning after block_til_ready with %d\n",
 		       retval);
 #endif
+		if (info->is_cobalt_modem) {
+			/* Power down modem */
+			feature_set(info->dev_node, FEATURE_Modem_Reset);
+			mdelay(15);
+			feature_clear(info->dev_node, FEATURE_Modem_PowerOn);
+			mdelay(15);
+		}
 		return retval;
 	}
 
@@ -1568,8 +1617,14 @@ probe_sccs()
 			       dev->full_name);
 			continue;
 		}
+		feature_clear(dev, FEATURE_Serial_reset);
+		mdelay(5);
+		feature_set(dev, FEATURE_Serial_enable);
+		feature_set(dev, FEATURE_Serial_IO_A);
+		feature_set(dev, FEATURE_Serial_IO_B);
+		mdelay(5);
 		for (ch = dev->child; ch != 0; ch = ch->sibling) {
-			if (ch->n_addrs < 1 || ch ->n_intrs < 1) {
+			if (ch->n_addrs < 1 || (ch ->n_intrs < 1)) {
 				printk("Can't use %s: %d addrs %d intrs\n",
 				      ch->full_name, ch->n_addrs, ch->n_intrs);
 				continue;
@@ -1578,8 +1633,20 @@ probe_sccs()
 				ioremap(ch->addrs[0].address, 0x1000);
 			zs_channels[n].data = zs_channels[n].control
 				+ ch->addrs[0].size / 2;
+			spin_lock_init(&zs_channels[n].lock);
 			zs_soft[n].zs_channel = &zs_channels[n];
+			zs_soft[n].dev_node = ch;
 			zs_soft[n].irq = ch->intrs[0].line;
+			zs_soft[n].is_cobalt_modem = device_is_compatible(ch, "cobalt");
+			if (zs_soft[n].is_cobalt_modem)
+			{
+				/* Just in case the modem is up, shut it down */
+				feature_set(ch, FEATURE_Modem_Reset);
+				mdelay(15);
+				feature_clear(ch, FEATURE_Modem_PowerOn);
+				mdelay(15);
+			}
+
 			/* XXX this assumes the prom puts chan A before B */
 			if (n & 1)
 				zs_soft[n].zs_chan_a = &zs_channels[n-1];
@@ -1696,6 +1763,9 @@ int macserial_init(void)
 
 	for (info = zs_chain, i = 0; info; info = info->zs_next, i++)
 	{
+		unsigned char* connector;
+		int lenp;
+
 #ifdef CONFIG_KGDB
 		if (info->kgdb_channel) {
 			continue;
@@ -1719,8 +1789,14 @@ int macserial_init(void)
 		info->open_wait = 0;
 		info->close_wait = 0;
 		printk("tty%02d at 0x%08x (irq = %d)", info->line, 
-		       info->port, info->irq);
-		printk(" is a Z8530 ESCC\n");
+			info->port, info->irq);
+		printk(" is a Z8530 ESCC");
+		connector = get_property(info->dev_node, "AAPL,connector", &lenp);
+		if (connector)
+			printk(", port = %s", connector);
+		if (info->is_cobalt_modem)
+			printk(" (cobalt modem)");
+		printk("\n");
 	}
 
 	restore_flags(flags);

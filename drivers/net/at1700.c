@@ -33,6 +33,7 @@
 static const char *version =
 	"at1700.c:v1.15 4/7/98  Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
+#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/kernel.h>
