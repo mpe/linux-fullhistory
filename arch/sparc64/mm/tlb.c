@@ -101,11 +101,10 @@ void flush_tlb_pgtables(struct mm_struct *mm, unsigned long start, unsigned long
 	if (mp->tlb_frozen)
 		return;
 
-	/* Nobody should call us with start below VM hole and end above.
-	 * See if it is really true.
-	 */
-	BUG_ON(s > e);
+	/* If start is greater than end, that is a real problem.  */
+	BUG_ON(start > end);
 
+	/* However, straddling the VA space hole is quite normal. */
 	s &= PMD_MASK;
 	e = (e + PMD_SIZE - 1) & PMD_MASK;
 
@@ -123,6 +122,22 @@ void flush_tlb_pgtables(struct mm_struct *mm, unsigned long start, unsigned long
 
 	start = vpte_base + (s >> (PAGE_SHIFT - 3));
 	end = vpte_base + (e >> (PAGE_SHIFT - 3));
+
+	/* If the request straddles the VA space hole, we
+	 * need to swap start and end.  The reason this
+	 * occurs is that "vpte_base" is the center of
+	 * the linear page table mapping area.  Thus,
+	 * high addresses with the sign bit set map to
+	 * addresses below vpte_base and non-sign bit
+	 * addresses map to addresses above vpte_base.
+	 */
+	if (end < start) {
+		unsigned long tmp = start;
+
+		start = end;
+		end = tmp;
+	}
+
 	while (start < end) {
 		mp->vaddrs[nr] = start;
 		mp->tlb_nr = ++nr;
