@@ -16,6 +16,11 @@
 
 static char *version = "tulip.c:v0.05 1/20/95 becker@cesdis.gsfc.nasa.gov\n";
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
+
 #include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -167,6 +172,7 @@ static int set_mac_address(struct device *dev, void *addr);
 
 
 
+#ifndef MODULE
 /* This 21040 probe is unlike most other board probes.  We can use memory
    efficiently by allocating a large contiguous region and dividing it
    ourselves.  This is done by having the initialization occur before
@@ -199,6 +205,14 @@ unsigned long dec21040_init(unsigned long mem_start, unsigned long mem_end)
 
 	return mem_start;
 }
+#endif
+#ifdef MODULE
+static int tulip_probe(struct device *dev)
+{
+	printk("tulip: This driver does not yet install properly from module!\n");
+	return -1;
+}
+#endif
 
 unsigned long tulip_probe1(unsigned long mem_start, int ioaddr, int irq)
 {
@@ -341,6 +355,9 @@ tulip_open(struct device *dev)
 		printk("%s: Done tulip_open(), CSR0 %8.8x, CSR13 %8.8x.\n",
 			   dev->name, inl(ioaddr + CSR0), inl(ioaddr + CSR13));
 	}
+#ifdef MODULE
+	MOD_INC_USE_COUNT;
+#endif
 	return 0;
 }
 
@@ -654,6 +671,9 @@ tulip_close(struct device *dev)
 	free_irq(dev->irq);
 	irq2dev_map[dev->irq] = 0;
 
+#ifdef MODULE
+	MOD_DEC_USE_COUNT;
+#endif
 	return 0;
 }
 
@@ -727,6 +747,36 @@ set_mac_address(struct device *dev, void *addr)
 	return 0;
 }
 
+#ifdef MODULE
+char kernel_version[] = UTS_RELEASE;
+static struct device dev_tulip = {
+	"        " /*"tulip"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, tulip_probe };
+
+int io = 0;
+int irq = 0;
+
+int init_module(void)
+{
+	dev_tulip.base_addr = io;
+	dev_tulip.irq       = irq;
+	if (register_netdev(&dev_tulip) != 0) {
+		printk("tulip: register_netdev() returned non-zero.\n");
+		return -EIO;
+	}
+	return 0;
+}
+
+void
+cleanup_module(void)
+{
+	if (MOD_IN_USE)
+		printk("tulip: device busy, remove delayed\n");
+	else
+	{
+		unregister_netdev(&dev_tulip);
+	}
+}
+#endif /* MODULE */
 
 /*
  * Local variables:

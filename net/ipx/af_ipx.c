@@ -1123,8 +1123,8 @@ ipx_device_name(ipx_interface *intrfc)
 }
 
 /* Called from proc fs */
-int 
-ipx_get_interface_info(char *buffer, char **start, off_t offset, int length)
+static int ipx_interface_get_info(char *buffer, char **start, off_t offset,
+				  int length, int dummy)
 {
 	ipx_interface *i;
 	int len=0;
@@ -1166,8 +1166,8 @@ ipx_get_interface_info(char *buffer, char **start, off_t offset, int length)
 	return len;
 }
 
-int 
-ipx_get_info(char *buffer, char **start, off_t offset, int length)
+static int ipx_get_info(char *buffer, char **start, off_t offset,
+			int length, int dummy)
 {
 	ipx_socket *s;
 	ipx_interface *i;
@@ -1223,7 +1223,8 @@ ipx_get_info(char *buffer, char **start, off_t offset, int length)
 	return len;
 }
 
-int ipx_rt_get_info(char *buffer, char **start, off_t offset, int length)
+static int ipx_rt_get_info(char *buffer, char **start, off_t offset,
+			   int length, int dummy)
 {
 	ipx_route *rt;
 	int len=0;
@@ -1966,6 +1967,13 @@ void ipx_proto_init(struct net_proto *pro)
 		printk("IPX: Unable to register with SNAP\n");
 	
 	register_netdevice_notifier(&ipx_dev_notifier);
+
+proc_net_register(&(struct proc_dir_entry)
+	{ PROC_NET_IPX,		ipx_get_info,	3, "ipx" });
+proc_net_register(&(struct proc_dir_entry)
+	{ PROC_NET_IPX_INTERFACE, ipx_interface_get_info, 13,"ipx_interface"});
+proc_net_register(&(struct proc_dir_entry)
+	{ PROC_NET_IPX_ROUTE,	ipx_rt_get_info 9, "ipx_route" });
 		
 	printk("Swansea University Computer Society IPX 0.31 for NET3.030\n");
 	printk("IPX Portions Copyright (c) 1995 Caldera, Inc.\n");

@@ -100,7 +100,7 @@ static const char *version =
 #define COUNT_LOOPS
  */
 #endif
-static int bnc, utp;
+static int bnc = 0, utp = 0;
 /*
  * Force media with insmod:
  *	insmod de620.o bnc=1
@@ -151,9 +151,9 @@ typedef unsigned char byte;
 #define DE620_IRQ	7
 #endif
 
-#define DATA_PORT	(DE620_IO)
-#define STATUS_PORT	(DE620_IO + 1)
-#define COMMAND_PORT	(DE620_IO + 2)
+#define DATA_PORT	(dev->base_addr)
+#define STATUS_PORT	(dev->base_addr + 1)
+#define COMMAND_PORT	(dev->base_addr + 2)
 
 #define RUNT 60		/* Too small Ethernet packet */
 #define GIANT 1514	/* largest legal size packet, no fcs */
@@ -189,7 +189,7 @@ static int	de620_rx_intr(struct device *);
 /* Initialization */
 static int	adapter_init(struct device *);
 int		de620_probe(struct device *);
-static int	read_eeprom(void);
+static int	read_eeprom(struct device *);
 
 
 /*
@@ -221,15 +221,15 @@ static struct nic {
  * Convenience macros/functions for D-Link DE-620 adapter *
  *                                                        *
  **********************************************************/
-#define de620_tx_buffs() (inb(STATUS_PORT) & (TXBF0 | TXBF1))
-#define de620_flip_ds() NIC_Cmd ^= DS0 | DS1; outb(NIC_Cmd, COMMAND_PORT);
+#define de620_tx_buffs(dd) (inb(STATUS_PORT) & (TXBF0 | TXBF1))
+#define de620_flip_ds(dd) NIC_Cmd ^= DS0 | DS1; outb(NIC_Cmd, COMMAND_PORT);
 
 /* Check for ready-status, and return a nibble (high 4 bits) for data input */
 #ifdef COUNT_LOOPS
 static int tot_cnt;
 #endif
 static inline byte
-de620_ready(void)
+de620_ready(struct device *dev)
 {
 	byte value;
 	register short int cnt = 0;
@@ -244,42 +244,42 @@ de620_ready(void)
 }
 
 static inline void
-de620_send_command(byte cmd)
+de620_send_command(struct device *dev, byte cmd)
 {
-	de620_ready();
+	de620_ready(dev);
 	if (cmd == W_DUMMY)
 		outb(NIC_Cmd, COMMAND_PORT);
 
 	outb(cmd, DATA_PORT);
 
 	outb(NIC_Cmd ^ CS0, COMMAND_PORT);
-	de620_ready();
+	de620_ready(dev);
 	outb(NIC_Cmd, COMMAND_PORT);
 }
 
 static inline void
-de620_put_byte(byte value)
+de620_put_byte(struct device *dev, byte value)
 {
 	/* The de620_ready() makes 7 loops, on the average, on a DX2/66 */
-	de620_ready();
+	de620_ready(dev);
 	outb(value, DATA_PORT);
-	de620_flip_ds();
+	de620_flip_ds(dev);
 }
 
 static inline byte
-de620_read_byte(void)
+de620_read_byte(struct device *dev)
 {
 	byte value;
 
 	/* The de620_ready() makes 7 loops, on the average, on a DX2/66 */
-	value = de620_ready(); /* High nibble */
-	de620_flip_ds();
-	value |= de620_ready() >> 4; /* Low nibble */
+	value = de620_ready(dev); /* High nibble */
+	de620_flip_ds(dev);
+	value |= de620_ready(dev) >> 4; /* Low nibble */
 	return value;
 }
 
 static inline void
-de620_write_block(byte *buffer, int count)
+de620_write_block(struct device *dev, byte *buffer, int count)
 {
 #ifndef LOWSPEED
 	byte uflip = NIC_Cmd ^ (DS0 | DS1);
@@ -296,9 +296,9 @@ de620_write_block(byte *buffer, int count)
 #endif /* COUNT_LOOPS */
 	/* No further optimization useful, the limit is in the adapter. */
 	for ( ; count > 0; --count, ++buffer) {
-		de620_put_byte(*buffer);
+		de620_put_byte(dev,*buffer);
 	}
-	de620_send_command(W_DUMMY);
+	de620_send_command(dev,W_DUMMY);
 #ifdef COUNT_LOOPS
 	/* trial debug output: loops per byte in de620_ready() */
 	printk("WRITE(%d)\n", tot_cnt/((bytes?bytes:1)));
@@ -310,12 +310,12 @@ de620_write_block(byte *buffer, int count)
 		outb(*buffer++, DATA_PORT);
 		outb(dflip, COMMAND_PORT);
 	}
-	de620_send_command(W_DUMMY);
+	de620_send_command(dev,W_DUMMY);
 #endif /* LOWSPEED */
 }
 
 static inline void
-de620_read_block(byte *data, int count)
+de620_read_block(struct device *dev, byte *data, int count)
 {
 #ifndef LOWSPEED
 	byte value;
@@ -332,8 +332,8 @@ de620_read_block(byte *data, int count)
 #ifdef LOWSPEED
 	/* No further optimization useful, the limit is in the adapter. */
 	while (count-- > 0) {
-		*data++ = de620_read_byte();
-		de620_flip_ds();
+		*data++ = de620_read_byte(dev);
+		de620_flip_ds(dev);
 	}
 #ifdef COUNT_LOOPS
 	/* trial debug output: loops per byte in de620_ready() */
@@ -350,47 +350,47 @@ de620_read_block(byte *data, int count)
 }
 
 static inline void
-de620_set_delay(void)
+de620_set_delay(struct device *dev)
 {
-	de620_ready();
+	de620_ready(dev);
 	outb(W_DFR, DATA_PORT);
 	outb(NIC_Cmd ^ CS0, COMMAND_PORT);
 
-	de620_ready();
+	de620_ready(dev);
 #ifdef LOWSPEED
 	outb(WRITE_DELAY, DATA_PORT);
 #else
 	outb(0, DATA_PORT);
 #endif
-	de620_flip_ds();
+	de620_flip_ds(dev);
 
-	de620_ready();
+	de620_ready(dev);
 #ifdef LOWSPEED
 	outb(READ_DELAY, DATA_PORT);
 #else
 	outb(0, DATA_PORT);
 #endif
-	de620_flip_ds();
+	de620_flip_ds(dev);
 }
 
 static inline void
-de620_set_register(byte reg, byte value)
+de620_set_register(struct device *dev, byte reg, byte value)
 {
-	de620_ready();
+	de620_ready(dev);
 	outb(reg, DATA_PORT);
 	outb(NIC_Cmd ^ CS0, COMMAND_PORT);
 
-	de620_put_byte(value);
+	de620_put_byte(dev, value);
 }
 
 static inline byte
-de620_get_register(byte reg)
+de620_get_register(struct device *dev, byte reg)
 {
 	byte value;
 
-	de620_send_command(reg);
-	value = de620_read_byte();
-	de620_send_command(W_DUMMY);
+	de620_send_command(dev,reg);
+	value = de620_read_byte(dev);
+	de620_send_command(dev,W_DUMMY);
 
 	return value;
 }
@@ -432,7 +432,7 @@ static int
 de620_close(struct device *dev)
 {
 	/* disable recv */
-	de620_set_register(W_TCR, RXOFF);
+	de620_set_register(dev, W_TCR, RXOFF);
 
 	free_irq(DE620_IRQ);
 	irq2dev_map[DE620_IRQ] = NULL;
@@ -469,10 +469,10 @@ static void
 de620_set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 {
 	if (num_addrs) { /* Enable promiscuous mode */
-		de620_set_register(W_TCR, (TCR_DEF & ~RXPBM) | RXALL);
+		de620_set_register(dev, W_TCR, (TCR_DEF & ~RXPBM) | RXALL);
 	}
 	else { /* Disable promiscuous mode, use normal mode */
-		de620_set_register(W_TCR, TCR_DEF);
+		de620_set_register(dev, W_TCR, TCR_DEF);
 	}
 }
 
@@ -501,7 +501,7 @@ de620_start_xmit(struct sk_buff *skb, struct device *dev)
 		return 0;
 	}
 
-	using_txbuf = de620_tx_buffs(); /* Peek at the adapter */
+	using_txbuf = de620_tx_buffs(dev); /* Peek at the adapter */
 	dev->tbusy = (using_txbuf == (TXBF0 | TXBF1)); /* Boolean! */
 
 	if (dev->tbusy) {	/* Do timeouts, to avoid hangs. */
@@ -537,12 +537,12 @@ de620_start_xmit(struct sk_buff *skb, struct device *dev)
 	switch (using_txbuf) {
 	default: /* both are free: use TXBF0 */
 	case TXBF1: /* use TXBF0 */
-		de620_send_command(W_CR | RW0);
+		de620_send_command(dev,W_CR | RW0);
 		using_txbuf |= TXBF0;
 		break;
 
 	case TXBF0: /* use TXBF1 */
-		de620_send_command(W_CR | RW1);
+		de620_send_command(dev,W_CR | RW1);
 		using_txbuf |= TXBF1;
 		break;
 
@@ -552,7 +552,7 @@ de620_start_xmit(struct sk_buff *skb, struct device *dev)
 		return 1;
 		break;
 	}
-	de620_write_block(buffer, len);
+	de620_write_block(dev, buffer, len);
 
 	dev->trans_start = jiffies;
 	dev->tbusy = (using_txbuf == (TXBF0 | TXBF1)); /* Boolean! */
@@ -589,7 +589,7 @@ de620_interrupt(int irq, struct pt_regs *regs)
 	dev->interrupt = 1;
 
 	/* Read the status register (_not_ the status port) */
-	irq_status = de620_get_register(R_STS);
+	irq_status = de620_get_register(dev, R_STS);
 
 	PRINTK(("de620_interrupt (%2.2X)\n", irq_status));
 
@@ -601,7 +601,7 @@ de620_interrupt(int irq, struct pt_regs *regs)
 		while (again && (++bogus_count < 100));
 	}
 
-	dev->tbusy = (de620_tx_buffs() == (TXBF0 | TXBF1)); /* Boolean! */
+	dev->tbusy = (de620_tx_buffs(dev) == (TXBF0 | TXBF1)); /* Boolean! */
 
 	dev->interrupt = 0;
 	sti();
@@ -632,12 +632,12 @@ de620_rx_intr(struct device *dev)
 	PRINTK(("de620_rx_intr: next_rx_page = %d\n", next_rx_page));
 
 	/* Tell the adapter that we are going to read data, and from where */
-	de620_send_command(W_CR | RRN);
-	de620_set_register(W_RSA1, next_rx_page);
-	de620_set_register(W_RSA0, 0);
+	de620_send_command(dev, W_CR | RRN);
+	de620_set_register(dev, W_RSA1, next_rx_page);
+	de620_set_register(dev, W_RSA0, 0);
 
 	/* Deep breath, and away we goooooo */
-	de620_read_block((byte *)&header_buf, sizeof(struct header_buf));
+	de620_read_block(dev, (byte *)&header_buf, sizeof(struct header_buf));
 	PRINTK(("page status=0x%02x, nextpage=%d, packetsize=%d\n",
 	header_buf.status, header_buf.Rx_NextPage, header_buf.Rx_ByteCount));
 
@@ -666,8 +666,8 @@ de620_rx_intr(struct device *dev)
 		/* Naah, we'll skip this packet. Probably bogus data as well */
 		printk("%s: Page link out of sync! Restoring...\n", dev->name);
 		next_rx_page = header_buf.Rx_NextPage; /* at least a try... */
-		de620_send_command(W_DUMMY);
-		de620_set_register(W_NPRF, next_rx_page);
+		de620_send_command(dev, W_DUMMY);
+		de620_set_register(dev, W_NPRF, next_rx_page);
 		((struct netstats *)(dev->priv))->rx_over_errors++;
 		return 0;
 	}
@@ -691,7 +691,7 @@ de620_rx_intr(struct device *dev)
 			/* skb->data points to the start of sk_buff data area */
 			buffer = skb_put(skb,size);
 			/* copy the packet into the buffer */
-			de620_read_block(buffer, size);
+			de620_read_block(dev, buffer, size);
 			PRINTK(("Read %d bytes\n", size));
 			skb->protocol=eth_type_trans(skb,dev);
 			netif_rx(skb); /* deliver it "upstairs" */
@@ -702,8 +702,8 @@ de620_rx_intr(struct device *dev)
 
 	/* Let's peek ahead to see if we have read the last current packet */
 	/* NOTE! We're _not_ checking the 'EMPTY'-flag! This seems better... */
-	curr_page = de620_get_register(R_CPR);
-	de620_set_register(W_NPRF, next_rx_page);
+	curr_page = de620_get_register(dev, R_CPR);
+	de620_set_register(dev, W_NPRF, next_rx_page);
 	PRINTK(("next_rx_page=%d CPR=%d\n", next_rx_page, curr_page));
 
 	return (next_rx_page != curr_page); /* That was slightly tricky... */
@@ -734,19 +734,19 @@ adapter_init(struct device *dev)
 	if (bnc)
 		EIPRegister = NCTL0;
 
-	de620_send_command(W_CR | RNOP | CLEAR);
-	de620_send_command(W_CR | RNOP);
+	de620_send_command(dev, W_CR | RNOP | CLEAR);
+	de620_send_command(dev, W_CR | RNOP);
 
-	de620_set_register(W_SCR, SCR_DEF);
+	de620_set_register(dev, W_SCR, SCR_DEF);
 	/* disable recv to wait init */
-	de620_set_register(W_TCR, RXOFF);
+	de620_set_register(dev, W_TCR, RXOFF);
 
 	/* Set the node ID in the adapter */
 	for (i = 0; i < 6; ++i) { /* W_PARn = 0xaa + n */
-		de620_set_register(W_PAR0 + i, dev->dev_addr[i]);
+		de620_set_register(dev, W_PAR0 + i, dev->dev_addr[i]);
 	}
 
-	de620_set_register(W_EIP, EIPRegister);
+	de620_set_register(dev, W_EIP, EIPRegister);
 
 	next_rx_page = first_rx_page = DE620_RX_START_PAGE;
 	if (nic_data.RAM_Size)
@@ -754,12 +754,12 @@ adapter_init(struct device *dev)
 	else /* 64k RAM */
 		last_rx_page = 255;
 
-	de620_set_register(W_SPR, first_rx_page); /* Start Page Register */
-	de620_set_register(W_EPR, last_rx_page);  /* End Page Register */
-	de620_set_register(W_CPR, first_rx_page); /* Current Page Register */
-	de620_send_command(W_NPR | first_rx_page); /* Next Page Register */
-	de620_send_command(W_DUMMY);
-	de620_set_delay();
+	de620_set_register(dev, W_SPR, first_rx_page); /* Start Page Register*/
+	de620_set_register(dev, W_EPR, last_rx_page);  /* End Page Register */
+	de620_set_register(dev, W_CPR, first_rx_page);/*Current Page Register*/
+	de620_send_command(dev, W_NPR | first_rx_page); /* Next Page Register*/
+	de620_send_command(dev, W_DUMMY);
+	de620_set_delay(dev);
 
 	/* Final sanity check: Anybody out there? */
 	/* Let's hope some bits from the statusregister make a good check */
@@ -768,7 +768,7 @@ adapter_init(struct device *dev)
         /* success:   X     0      0       X      0       0        X     X  */
         /* ignore:   EEDI                RXGOOD                   COLS  LNKS*/
 
-	if (((i = de620_get_register(R_STS)) & CHECK_MASK) != CHECK_OK) {
+	if (((i = de620_get_register(dev, R_STS)) & CHECK_MASK) != CHECK_OK) {
 		printk("Something has happened to the DE-620!  Please check it"
 #ifdef SHUTDOWN_WHEN_LOST
 			" and do a new ifconfig"
@@ -788,7 +788,7 @@ adapter_init(struct device *dev)
 	}
 
 	/* All OK, go ahead... */
-	de620_set_register(W_TCR, TCR_DEF);
+	de620_set_register(dev, W_TCR, TCR_DEF);
 
 	return 0; /* all ok */
 }
@@ -816,13 +816,13 @@ de620_probe(struct device *dev)
 
 	/* Initially, configure basic nibble mode, so we can read the EEPROM */
 	NIC_Cmd = DEF_NIC_CMD;
-	de620_set_register(W_EIP, EIPRegister);
+	de620_set_register(dev, W_EIP, EIPRegister);
 
 	/* Anybody out there? */
-	de620_set_register(W_CPR, checkbyte);
-	checkbyte = de620_get_register(R_CPR);
+	de620_set_register(dev, W_CPR, checkbyte);
+	checkbyte = de620_get_register(dev, R_CPR);
 
-	if ((checkbyte != 0xa5) || (read_eeprom() != 0)) {
+	if ((checkbyte != 0xa5) || (read_eeprom(dev) != 0)) {
 		printk(" not identified in the printer port\n");
 		return ENODEV;
 	}
@@ -888,10 +888,10 @@ de620_probe(struct device *dev)
  *
  * Note: Bitwise serial I/O to/from the EEPROM vi the status _register_!
  */
-#define sendit(data) de620_set_register(W_EIP, data | EIPRegister);
+#define sendit(dev,data) de620_set_register(dev, W_EIP, data | EIPRegister);
 
 static unsigned short
-ReadAWord(int from)
+ReadAWord(struct device *dev, int from)
 {
 	unsigned short data;
 	int nbits;
@@ -899,7 +899,7 @@ ReadAWord(int from)
 	/* cs   [__~~] SET SEND STATE */
 	/* di   [____]                */
 	/* sck  [_~~_]                */
-	sendit(0); sendit(1); sendit(5); sendit(4);
+	sendit(dev, 0); sendit(dev, 1); sendit(dev, 5); sendit(dev, 4);
 
 	/* Send the 9-bit address from where we want to read the 16-bit word */
 	for (nbits = 9; nbits > 0; --nbits, from <<= 1) {
@@ -907,13 +907,13 @@ ReadAWord(int from)
 			/* cs    [~~~~] SEND 1 */
 			/* di    [~~~~]        */
 			/* sck   [_~~_]        */
-			sendit(6); sendit(7); sendit(7); sendit(6);
+			sendit(dev, 6); sendit(dev, 7); sendit(dev, 7); sendit(dev, 6);
 		}
 		else {
 			/* cs    [~~~~] SEND 0 */
 			/* di    [____]        */
 			/* sck   [_~~_]        */
-			sendit(4); sendit(5); sendit(5); sendit(4);
+			sendit(dev, 4); sendit(dev, 5); sendit(dev, 5); sendit(dev, 4);
 		}
 	}
 
@@ -922,49 +922,49 @@ ReadAWord(int from)
 		/* cs    [~~~~] SEND 0 */
 		/* di    [____]        */
 		/* sck   [_~~_]        */
-		sendit(4); sendit(5); sendit(5); sendit(4);
-		data = (data << 1) | ((de620_get_register(R_STS) & EEDI) >> 7);
+		sendit(dev, 4); sendit(dev, 5); sendit(dev, 5); sendit(dev, 4);
+		data = (data << 1) | ((de620_get_register(dev, R_STS) & EEDI) >> 7);
 	}
 	/* cs    [____] RESET SEND STATE */
 	/* di    [____]                  */
 	/* sck   [_~~_]                  */
-	sendit(0); sendit(1); sendit(1); sendit(0);
+	sendit(dev, 0); sendit(dev, 1); sendit(dev, 1); sendit(dev, 0);
 
 	return data;
 }
 
 static int
-read_eeprom(void)
+read_eeprom(struct device *dev)
 {
 	unsigned short wrd;
 
 	/* D-Link Ethernet addresses are in the series  00:80:c8:7X:XX:XX:XX */
-	wrd = ReadAWord(0x1aa);	/* bytes 0 + 1 of NodeID */
+	wrd = ReadAWord(dev, 0x1aa);	/* bytes 0 + 1 of NodeID */
 	if (wrd != htons(0x0080)) /* Valid D-Link ether sequence? */
 		return -1; /* Nope, not a DE-620 */
 	nic_data.NodeID[0] = wrd & 0xff;
 	nic_data.NodeID[1] = wrd >> 8;
 
-	wrd = ReadAWord(0x1ab);	/* bytes 2 + 3 of NodeID */
+	wrd = ReadAWord(dev, 0x1ab);	/* bytes 2 + 3 of NodeID */
 	if ((wrd & 0xff) != 0xc8) /* Valid D-Link ether sequence? */
 		return -1; /* Nope, not a DE-620 */
 	nic_data.NodeID[2] = wrd & 0xff;
 	nic_data.NodeID[3] = wrd >> 8;
 
-	wrd = ReadAWord(0x1ac);	/* bytes 4 + 5 of NodeID */
+	wrd = ReadAWord(dev, 0x1ac);	/* bytes 4 + 5 of NodeID */
 	nic_data.NodeID[4] = wrd & 0xff;
 	nic_data.NodeID[5] = wrd >> 8;
 
-	wrd = ReadAWord(0x1ad);	/* RAM size in pages (256 bytes). 0 = 64k */
+	wrd = ReadAWord(dev, 0x1ad);	/* RAM size in pages (256 bytes). 0 = 64k */
 	nic_data.RAM_Size = (wrd >> 8);
 
-	wrd = ReadAWord(0x1ae);	/* hardware model (CT = 3) */
+	wrd = ReadAWord(dev, 0x1ae);	/* hardware model (CT = 3) */
 	nic_data.Model = (wrd & 0xff);
 
-	wrd = ReadAWord(0x1af); /* media (indicates BNC/UTP) */
+	wrd = ReadAWord(dev, 0x1af); /* media (indicates BNC/UTP) */
 	nic_data.Media = (wrd & 0xff);
 
-	wrd = ReadAWord(0x1a8); /* System Configuration Register */
+	wrd = ReadAWord(dev, 0x1a8); /* System Configuration Register */
 	nic_data.SCR = (wrd >> 8);
 
 	return 0; /* no errors */
@@ -977,13 +977,18 @@ read_eeprom(void)
  */
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
-static char nullname[8];
+static char nullname[8] = "";
 static struct device de620_dev = {
 	nullname, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, de620_probe };
+
+int de620_io  = DE620_IO;
+int de620_irq = DE620_IRQ;
 
 int
 init_module(void)
 {
+	de620_dev.base_addr = de620_io;
+	de620_dev.irq       = de620_irq;
 	if (register_netdev(&de620_dev) != 0)
 		return -EIO;
 	return 0;
@@ -993,7 +998,7 @@ void
 cleanup_module(void)
 {
 	unregister_netdev(&de620_dev);
-	release_region(DE620_IO, 3);
+	release_region(de620_dev.base_addr, 3);
 }
 #endif /* MODULE */
 
@@ -1004,4 +1009,11 @@ cleanup_module(void)
  *	gcc -D__KERNEL__ -Wall -Wstrict-prototypes -O2 \
  *	 -fomit-frame-pointer -m486 \
  *	-I/usr/src/linux/include -I../../net/inet -c de620.c
+*/
+/*
+ * Local variables:
+ *  kernel-compile-command: "gcc -D__KERNEL__ -Ilinux/include -I../../net/inet -Wall -Wstrict-prototypes -O2 -m486 -c de620.c"
+ *  module-compile-command: "gcc -D__KERNEL__ -DMODULE -Ilinux/include -I../../net/inet -Wall -Wstrict-prototypes -O2 -m486 -c de620.c"
+ *  compile-command: "gcc -D__KERNEL__ -DMODULE -Ilinux/include -I../../net/inet -Wall -Wstrict-prototypes -O2 -m486 -c de620.c"
+ * End:
  */

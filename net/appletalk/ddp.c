@@ -49,6 +49,7 @@
 #include <net/psnap.h>
 #include <net/sock.h>
 #include <linux/atalk.h>
+#include <linux/proc_fs.h>
 
 #ifdef CONFIG_ATALK
 
@@ -1858,11 +1859,18 @@ void atalk_proto_init(struct net_proto *pro)
 {
 	static char ddp_snap_id[]={0x08,0x00,0x07,0x80,0x9B};
 	(void) sock_register(atalk_proto_ops.family, &atalk_proto_ops);
-	if((ddp_dl=register_snap_client(ddp_snap_id, atalk_rcv))==NULL)
+	if ((ddp_dl = register_snap_client(ddp_snap_id, atalk_rcv)) == NULL)
 		printk("Unable to register DDP with SNAP.\n");
 	register_netdevice_notifier(&ddp_notifier);
 	aarp_proto_init();
+
+proc_net_register(&(struct proc_dir_entry)
+	{ PROC_NET_ATALK,	atalk_get_info,		9, "appletalk" });
+proc_net_register(&(struct proc_dir_entry)
+	{ PROC_NET_AT_ROUTE,	atalk_rt_get_info,	11,"atalk_route" });
+proc_net_register(&(struct proc_dir_entry)
+	{ PROC_NET_ATIF,	atalk_if_get_info,	11,"atalk_iface" });
+
 	printk("Appletalk BETA 0.11 for Linux NET3.030\n");
-	
 }
 #endif

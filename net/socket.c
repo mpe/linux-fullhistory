@@ -62,6 +62,7 @@
 #include <linux/net.h>
 #include <linux/interrupt.h>
 #include <linux/netdevice.h>
+#include <linux/proc_fs.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -78,6 +79,9 @@ static int sock_select(struct inode *inode, struct file *file, int which, select
 static int sock_ioctl(struct inode *inode, struct file *file,
 		      unsigned int cmd, unsigned long arg);
 static int sock_fasync(struct inode *inode, struct file *filp, int on);
+
+extern int proc_net_register(struct proc_dir_entry *);
+extern int proc_net_unregister(int);
 		   
 
 
@@ -1330,7 +1334,7 @@ int sock_unregister(int family)
 	{
 		if (pops[i] == NULL) 
 			continue;
-		if(pops[i]->family == family)
+		if (pops[i]->family == family)
 		{
 			pops[i]=NULL;
 			sti();

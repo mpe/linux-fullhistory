@@ -65,6 +65,7 @@
 #include <linux/fcntl.h>
 #include <linux/mm.h>
 #include <linux/interrupt.h>
+#include <linux/proc_fs.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -87,7 +88,13 @@
 #define min(a,b)	((a)<(b)?(a):(b))
 
 extern struct proto packet_prot;
+extern int raw_get_info(char *, char **, off_t, int, int);
+extern int snmp_get_info(char *, char **, off_t, int, int);
+extern int afinet_get_info(char *, char **, off_t, int, int);
+extern int tcp_get_info(char *, char **, off_t, int, int);
+extern int udp_get_info(char *, char **, off_t, int, int);
 
+int (*rarp_ioctl_hook)(int,void*) = NULL;
 
 /*
  *	See if a socket number is in use.
@@ -496,8 +503,8 @@ static int inet_listen(struct socket *sock, int backlog)
 	 */
 	if ((unsigned) backlog == 0)	/* BSDism */
 		backlog = 1;
-	if ((unsigned) backlog > 128)
-		backlog = 128;
+	if ((unsigned) backlog > SOMAXCONN)
+		backlog = SOMAXCONN;
 	sk->max_ack_backlog = backlog;
 	if (sk->state != TCP_LISTEN)
 	{
@@ -1322,12 +1329,11 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCGARP:
 		case SIOCSARP:
 			return(arp_ioctl(cmd,(void *) arg));
-#ifdef CONFIG_INET_RARP			
 		case SIOCDRARP:
 		case SIOCGRARP:
 		case SIOCSRARP:
-			return(rarp_ioctl(cmd,(void *) arg));
-#endif
+			if (rarp_ioctl_hook != NULL)
+				return(rarp_ioctl_hook(cmd,(void *) arg));
 		case SIOCGIFCONF:
 		case SIOCGIFFLAGS:
 		case SIOCSIFFLAGS:
@@ -1594,5 +1600,22 @@ void inet_proto_init(struct net_proto *pro)
   	 *	Set the IP module up
   	 */
 	ip_init();
-}
 
+#ifdef CONFIG_INET_RARP
+proc_net_register(&(struct proc_dir_entry)
+	{ PROC_NET_RARP,	rarp_get_info,		4, "rarp"});
+	rarp_ioctl_hook = rarp_ioctl;
+#endif
+proc_net_register(&(struct proc_dir_entry)
+	{ PROC_NET_RAW,		raw_get_info,		3, "raw" });
+proc_net_register(&(struct proc_dir_entry)
+	{ PROC_NET_SNMP,	snmp_get_info,		4, "snmp" });
+proc_net_register(&(struct proc_dir_entry)
+	{ PROC_NET_SOCKSTAT,	afinet_get_info,	8, "sockstat" });
+proc_net_register(&(struct proc_dir_entry)
+	{ PROC_NET_TCP,		tcp_get_info,		3, "tcp" });
+proc_net_register(&(struct proc_dir_entry)
+	{ PROC_NET_UDP,		udp_get_info,		3, "udp" });
+proc_net_register(&(struct proc_dir_entry)
+	{ PROC_NET_ROUTE,	rt_get_info,		5, "route" });
+}

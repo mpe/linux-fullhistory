@@ -26,6 +26,12 @@
 static const char *version =
 	"3c507.c:v1.10 9/23/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
+
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
+
 #include <linux/config.h>
 
 /*
@@ -440,6 +446,11 @@ el16_open(struct device *dev)
 	dev->tbusy = 0;
 	dev->interrupt = 0;
 	dev->start = 1;
+
+#ifdef MODULE
+	MOD_INC_USE_COUNT;
+#endif
+
 	return 0;
 }
 
@@ -630,6 +641,10 @@ el16_close(struct device *dev)
 	irq2dev_map[dev->irq] = 0;
 
 	/* Update the statistics here. */
+
+#ifdef MODULE
+	MOD_DEC_USE_COUNT;
+#endif
 
 	return 0;
 }
@@ -868,6 +883,36 @@ el16_rx(struct device *dev)
 	lp->rx_head = rx_head;
 	lp->rx_tail = rx_tail;
 }
+#ifdef MODULE
+char kernel_version[] = UTS_RELEASE;
+static struct device dev_3c507 = {
+	"        " /*"3c507"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, el16_probe };
+
+int io = 0;
+int irq = 0;
+
+int init_module(void)
+{
+	dev_3c507.base_addr = io;
+	dev_3c507.irq       = irq;
+	if (register_netdev(&dev_3c507) != 0) {
+		printk("3c507: register_netdev() returned non-zero.\n");
+		return -EIO;
+	}
+	return 0;
+}
+
+void
+cleanup_module(void)
+{
+	if (MOD_IN_USE)
+		printk("3c507: device busy, remove delayed\n");
+	else
+	{
+		unregister_netdev(&dev_3c507);
+	}
+}
+#endif /* MODULE */
 
 /*
  * Local variables:

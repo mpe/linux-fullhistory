@@ -33,6 +33,11 @@
  *                     
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
+
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -917,6 +922,10 @@ elp_open (struct device *dev)
 	if (elp_debug >= 3)
 		printk("%s: start receive command sent\n", dev->name);
 
+#ifdef MODULE
+	MOD_INC_USE_COUNT;
+#endif
+
 	return 0;			/* Always succeed */
 }
 
@@ -1145,6 +1154,10 @@ elp_close (struct device *dev)
 	 * and we no longer have to map irq to dev either
 	 */
 	irq2dev_map[dev->irq] = 0;
+
+#ifdef MODULE
+	MOD_DEC_USE_COUNT;
+#endif
 
 	return 0;
 }
@@ -1444,3 +1457,33 @@ elplus_probe (struct device *dev)
 	elp_init(dev);
 	return 0;
 }
+#ifdef MODULE
+char kernel_version[] = UTS_RELEASE;
+static struct device dev_3c505 = {
+	"        " /*"3c505"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, elplus_probe };
+
+int io = 0;
+int irq = 0;
+
+int init_module(void)
+{
+	dev_3c505.base_addr = io;
+	dev_3c505.irq       = irq;
+	if (register_netdev(&dev_3c505) != 0) {
+		printk("3c505: register_netdev() returned non-zero.\n");
+		return -EIO;
+	}
+	return 0;
+}
+
+void
+cleanup_module(void)
+{
+	if (MOD_IN_USE)
+		printk("3c505: device busy, remove delayed\n");
+	else
+	{
+		unregister_netdev(&dev_3c505);
+	}
+}
+#endif /* MODULE */

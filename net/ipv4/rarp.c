@@ -31,12 +31,18 @@
  *
  */
 
+#include <linux/config.h>
+
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
+
 #include <linux/types.h>
 #include <linux/string.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
-#include <linux/config.h>
 #include <linux/socket.h>
 #include <linux/sockios.h>
 #include <linux/errno.h>
@@ -59,8 +65,11 @@
 #ifdef CONFIG_AX25
 #include <net/ax25.h>
 #endif
+#include <linux/proc_fs.h>
 
-#ifdef CONFIG_INET_RARP
+#if	defined(CONFIG_INET_RARP) || defined(MODULE)
+
+extern int (*rarp_ioctl_hook)(unsigned int,void*);
 
 /*
  *	This structure defines the RARP mapping cache. As long as we make 
@@ -79,6 +88,7 @@ struct rarp_table
 
 struct rarp_table *rarp_tables = NULL;
 
+static int rarp_rcv(struct sk_buff *, struct device *, struct packet_type *);
 
 static struct packet_type rarp_packet_type =
 {
@@ -170,7 +180,7 @@ static struct notifier_block rarp_dev_notifier={
 	0
 };
  
-static void rarp_init (void)
+static void rarp_init_pkt (void)
 {
 	/* Register the packet type */
 	rarp_packet_type.type=htons(ETH_P_RARP);
@@ -184,7 +194,7 @@ static void rarp_init (void)
  *	"overhead" time isn't that high...
  */
 
-int rarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
+static int rarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 {
 /*
  *	We shouldn't use this type conversion. Check later.
@@ -226,12 +236,12 @@ int rarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		(rarp->ar_pro != htons(ETH_P_IP) && dev->type != ARPHRD_AX25)
 		|| rarp->ar_pln != 4)
 	{
-	/*
-	 *	This packet is not for us. Remove it. 
-	 */
-	kfree_skb(skb, FREE_READ);
-	return 0;
-}
+		/*
+		 *	This packet is not for us. Remove it. 
+		 */
+		kfree_skb(skb, FREE_READ);
+		return 0;
+	}
   
 /*
  *	Extract variable width fields
@@ -346,9 +356,9 @@ static int rarp_req_set(struct arpreq *req)
 			sti();
 			return -ENOMEM;
 		}
-		if(initflag)
+		if (initflag)
 		{
-			rarp_init();
+			rarp_init_pkt();
 			initflag=0;
 		}
 
@@ -468,7 +478,7 @@ int rarp_ioctl(unsigned int cmd, void *arg)
 	return 0;
 }
 
-int rarp_get_info(char *buffer, char **start, off_t offset, int length)
+int rarp_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	int len=0;
 	off_t begin=0;
@@ -477,7 +487,7 @@ int rarp_get_info(char *buffer, char **start, off_t offset, int length)
 	struct rarp_table *entry;
 	char ipbuffer[20];
 	unsigned long netip;
-	if(initflag)
+	if (initflag)
 	{
 		size = sprintf(buffer,"RARP disabled until entries added to cache.\n");
 		pos+=size;
@@ -525,11 +535,51 @@ int rarp_get_info(char *buffer, char **start, off_t offset, int length)
 		sti();
 	}      
 
-	*start=buffer+(offset-begin);	/* Start of wanted data */
-	len-=(offset-begin);		/* Start slop */
-	if(len>length)
-		len=length;		        /* Ending slop */
+	*start = buffer+(offset-begin);	/* Start of wanted data */
+	len   -= (offset-begin);	/* Start slop */
+	if (len>length)
+		len = length;		/* Ending slop */
 	return len;
+}
+
+void
+rarp_init(void)
+{
+	proc_net_register(&(struct proc_dir_entry)
+			  { PROC_NET_RARP, rarp_get_info, 4, "rarp"});
+	rarp_ioctl_hook = rarp_ioctl;
+}
+
+
+#endif
+#ifdef MODULE
+char kernel_version[] = UTS_RELEASE;
+
+int init_module(void)
+{
+	rarp_init();
+	return 0;
+}
+
+void cleanup_module(void)
+{
+	if (MOD_IN_USE)
+	  ;
+	else {
+		struct rarp_table *rt, *rt_next;
+		proc_net_unregister(PROC_NET_RARP);
+		rarp_ioctl_hook = NULL;
+		cli();
+		/* Destroy the RARP-table */
+		rt = rarp_tables;
+		rarp_tables = NULL;
+		sti();
+		/* ... and free it. */
+		for ( ; rt != NULL; rt = rt_next) {
+			rt_next = rt->next;
+			rarp_release_entry(rt);
+		}
+	}
 }
 
 #endif

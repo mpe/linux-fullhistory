@@ -31,6 +31,11 @@
 static const char *version =
 	"at1700.c:v1.12 1/18/95  Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
+
 #include <linux/config.h>
 
 #include <linux/kernel.h>
@@ -356,6 +361,10 @@ static int net_open(struct device *dev)
 	dev->interrupt = 0;
 	dev->start = 1;
 
+#ifdef MODULE
+	MOD_INC_USE_COUNT;
+#endif
+
 	return 0;
 }
 
@@ -584,6 +593,10 @@ static int net_close(struct device *dev)
 	/* Power-down the chip.  Green, green, green! */
 	outb(0x00, ioaddr + CONFIG_1);
 
+#ifdef MODULE
+	MOD_DEC_USE_COUNT;
+#endif
+
 	return 0;
 }
 
@@ -616,6 +629,36 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 	} else
 		outb(2, ioaddr + RX_MODE);	/* Disable promiscuous, use normal mode */
 }
+#ifdef MODULE
+char kernel_version[] = UTS_RELEASE;
+static struct device dev_at1700 = {
+	"        " /*"at1700"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, at1700_probe };
+
+int io = 0;
+int irq = 0;
+
+int init_module(void)
+{
+	dev_at1700.base_addr = io;
+	dev_at1700.irq       = irq;
+	if (register_netdev(&dev_at1700) != 0) {
+		printk("at1700: register_netdev() returned non-zero.\n");
+		return -EIO;
+	}
+	return 0;
+}
+
+void
+cleanup_module(void)
+{
+	if (MOD_IN_USE)
+		printk("at1700: device busy, remove delayed\n");
+	else
+	{
+		unregister_netdev(&dev_at1700);
+	}
+}
+#endif /* MODULE */
 
 /*
  * Local variables:

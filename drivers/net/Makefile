@@ -30,6 +30,8 @@ endif
 
 ifdef CONFIG_IBMTR
 NETDRV_OBJS := $(NETDRV_OBJS) ibmtr.o
+else
+MODULES := $(MODULES) ibmtr.o
 endif
 
 ifdef CONFIG_SK_G16
@@ -38,6 +40,8 @@ endif
 
 ifdef CONFIG_NET_IPIP
 NETDRV_OBJS := $(NETDRV_OBJS) tunnel.o
+else
+MODULES := $(MODULES) tunnel.o
 endif
 
 ifdef CONFIG_HP100
@@ -49,6 +53,8 @@ endif
 ifdef CONFIG_WD80x3
 NETDRV_OBJS := $(NETDRV_OBJS) wd.o
 CONFIG_8390 = CONFIG_8390
+else
+MODULES := $(MODULES) wd.o
 endif
 wd.o:	wd.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(WD_OPTS) -c $<
@@ -56,6 +62,8 @@ wd.o:	wd.c CONFIG
 ifdef CONFIG_EL2
 NETDRV_OBJS := $(NETDRV_OBJS) 3c503.o
 CONFIG_8390 = CONFIG_8390
+else
+MODULES := $(MODULES) 3c503.o
 endif
 3c503.o:	3c503.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(EL2_OPTS) -c $<
@@ -63,6 +71,8 @@ endif
 ifdef CONFIG_NE2000
 NETDRV_OBJS := $(NETDRV_OBJS) ne.o
 CONFIG_8390 = CONFIG_8390
+else
+MODULES := $(MODULES) ne.o
 endif
 ne.o:	ne.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(NE_OPTS) -c $<
@@ -70,6 +80,8 @@ ne.o:	ne.c CONFIG
 ifdef CONFIG_HPLAN
 NETDRV_OBJS := $(NETDRV_OBJS) hp.o
 CONFIG_8390 = CONFIG_8390
+else
+MODULES := $(MODULES) hp.o
 endif
 hp.o:	hp.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(HP_OPTS) -c $<
@@ -77,16 +89,22 @@ hp.o:	hp.c CONFIG
 ifdef CONFIG_HPLAN_PLUS
 NETDRV_OBJS := $(NETDRV_OBJS) hp-plus.o
 CONFIG_8390 = CONFIG_8390
+else
+MODULES := $(MODULES) hp-plus.o
 endif
 
 ifdef CONFIG_ULTRA
 NETDRV_OBJS := $(NETDRV_OBJS) smc-ultra.o
 CONFIG_8390 = CONFIG_8390
+else
+MODULES := $(MODULES) smc-ultra.o
 endif
 
 ifdef CONFIG_E2100
 NETDRV_OBJS := $(NETDRV_OBJS) e2100.o
 CONFIG_8390 = CONFIG_8390
+else
+MODULES := $(MODULES) e2100.o
 endif
 
 ifdef CONFIG_PLIP
@@ -114,7 +132,7 @@ slip.o:	slip.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<
 
 ifdef CONFIG_DE650
-NETDRV_OBJS := $(NETDRV_OBJS) de650.o
+ETDRV_OBJS := $(NETDRV_OBJS) de650.o
 CONFIG_8390 = CONFIG_8390
 endif
 
@@ -156,6 +174,8 @@ endif
 
 ifdef CONFIG_AT1700
 NETDRV_OBJS := $(NETDRV_OBJS) at1700.o
+else
+MODULES := $(MODULES) at1700.o
 endif
 
 ifdef CONFIG_EL1
@@ -166,6 +186,8 @@ endif
 
 ifdef CONFIG_EL16
 NETDRV_OBJS := $(NETDRV_OBJS) 3c507.o
+else
+MODULES ;= $(MODULES 3c507.o
 endif
 
 ifdef CONFIG_EL3
@@ -234,6 +256,8 @@ endif
 
 ifdef CONFIG_ELPLUS
 NETDRV_OBJS := $(NETDRV_OBJS) 3c505.o
+else
+MODULES := $(MODULES) 3c505.o
 endif
 3c505.o: 3c505.c CONFIG
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(ELP_OPTS) -c $<
@@ -241,6 +265,8 @@ endif
 ifdef CONFIG_AC3200
 NETDRV_OBJS := $(NETDRV_OBJS) ac3200.o
 CONFIG_8390 = CONFIG_8390
+else
+MODULES := $(MODULES) ac3200.o
 endif
 
 ifdef CONFIG_APRICOT
@@ -251,6 +277,8 @@ endif
 
 ifdef CONFIG_DEC_ELCP
 NETDRV_OBJS := $(NETDRV_OBJS) tulip.o
+else
+MODULES := $(MODULES) tulip.o
 endif
 
 ifdef CONFIG_ARCNET
@@ -277,9 +305,12 @@ NETDRV_OBJS := $(NETDRV_OBJS) 8390.o
 else
 MODULES := 8390.o $(MODULES)
 endif
+8390.o: 8390.c 8390.h CONFIG
 
 ifdef CONFIG_EQUALIZER
 NETDRV_OBJS := $(NETDRV_OBJS) eql.o
+else
+MODULES := $(MODULES) eql.o
 endif
 
 net.a: $(NETDRV_OBJS)
@@ -289,10 +320,13 @@ net.a: $(NETDRV_OBJS)
 clean:
 	rm -f core *.o *.a *.s
 
+ifdef MODULES
 dep:
 	$(CPP) -M $(NETDRV_OBJS:.o=.c) > .depend
-ifdef MODULES
 	$(CPP) -M -DMODULE $(MODULES:.o=.c) >> .depend
+else
+dep:
+	$(CPP) -M $(NETDRV_OBJS:.o=.c) > .depend
 endif
 
 tar:

@@ -10,7 +10,7 @@ extern int	arp_rcv(struct sk_buff *skb, struct device *dev,
 extern int	arp_query(unsigned char *haddr, u32 paddr, unsigned short type);
 extern int	arp_find(unsigned char *haddr, u32 paddr,
 		struct device *dev, u32 saddr, struct sk_buff *skb);
-extern int	arp_get_info(char *buffer, char **start, off_t origin, int length);
+extern int	arp_get_info(char *buffer, char **start, off_t origin, int length, int dummy);
 extern int	arp_ioctl(unsigned int cmd, void *arg);
 extern void     arp_send(int type, int ptype, u32 dest_ip, 
 			 struct device *dev, u32 src_ip, 

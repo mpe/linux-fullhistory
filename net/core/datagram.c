@@ -179,12 +179,16 @@ int datagram_select(struct sock *sk, int sel_type, select_table *wait)
 	switch(sel_type)
 	{
 		case SEL_IN:
+			if (sk->err)
+				return 1;
+			if (sk->shutdown & RCV_SHUTDOWN)
+				return 1;
 			if (sk->type==SOCK_SEQPACKET && sk->state==TCP_CLOSE)
 			{
 				/* Connection closed: Wake up */
 				return(1);
 			}
-			if (skb_peek(&sk->receive_queue) != NULL || sk->err != 0)
+			if (skb_peek(&sk->receive_queue) != NULL)
 			{	/* This appears to be consistent
 				   with other stacks */
 				return(1);
@@ -192,10 +196,14 @@ int datagram_select(struct sock *sk, int sel_type, select_table *wait)
 			return(0);
 
 		case SEL_OUT:
+			if (sk->err)
+				return 1;
+			if (sk->shutdown & SEND_SHUTDOWN)
+				return 1;
 			if (sk->type==SOCK_SEQPACKET && sk->state==TCP_SYN_SENT)
 			{
 				/* Connection still in progress */
-				return(0);
+				break;
 			}
 			if (sk->prot && sk->prot->wspace(sk) >= MIN_WRITE_SPACE)
 			{

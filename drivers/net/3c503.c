@@ -25,6 +25,12 @@
 static const char *version =
     "3c503.c:v1.10 9/23/93  Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
+
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
+
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
@@ -459,6 +465,53 @@ el2_block_input(struct device *dev, int count, char *buf, int ring_offset)
     outb_p(ei_status.interface_num == 0 ? ECNTRL_THIN : ECNTRL_AUI, E33G_CNTRL);
     return 0;
 }
+#ifdef MODULE
+char kernel_version[] = UTS_RELEASE;
+static struct device el2_drv =
+{"3c503", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, el2_probe };
+       
+static struct device el2pio_drv =
+{"3c503pio", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, el2_pio_probe };
+
+int io = 0;
+int irq = 0;
+
+static int no_pio = 1;
+int init_module(void)
+{
+	int rc1, rc2;
+	el2_drv.base_addr = io;
+	el2_drv.irq       = irq;
+	el2pio_drv.base_addr = io;
+	el2pio_drv.irq       = irq;
+
+	rc2 = 0;
+	no_pio = 1;
+	rc1 = register_netdev(&el2_drv);
+	if (rc1 != 0) {
+	    rc2 = register_netdev(&el2pio_drv);
+	    no_pio = 0;
+	}
+
+	if (rc1 != 0 && rc2 != 0)
+		return -EIO;
+	return 0;
+}
+
+void
+cleanup_module(void)
+{
+	if (MOD_IN_USE)
+		printk("3c503: device busy, remove delayed\n");
+	else {
+	    if (no_pio) {
+		unregister_netdev(&el2_drv);
+	    } else {
+		unregister_netdev(&el2pio_drv);
+	    }
+	}
+}
+#endif /* MODULE */
 
 /*
  * Local variables:

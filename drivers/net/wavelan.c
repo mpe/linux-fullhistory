@@ -31,6 +31,7 @@
 #include	<linux/skbuff.h>
 #include	<linux/malloc.h>
 #include	<linux/timer.h>
+#include	<linux/proc_fs.h>
 #define	STRUCT_CHECK	1
 #include	"i82586.h"
 #include	"wavelan.h"
@@ -84,6 +85,7 @@ static void		wavelan_interrupt(int, struct pt_regs *);
 static int		wavelan_close(device *);
 static en_stats		*wavelan_get_stats(device *);
 static void		wavelan_set_multicast_list(device *, int, void *);
+static int		wavelan_get_info(char*, char**, off_t, int, int);
 
 /*
  * Other forward declarations.
@@ -836,6 +838,10 @@ wavelan_probe(device *dev)
 		{
 			if (wavelan_debug > 0)
 				printk("%s: <-wavelan_probe(): 0\n", dev->name);
+			proc_net_register(&(struct proc_dir_entry)
+					  { PROC_NET_WAVELAN, wavelan_get_info,
+					      7, "wavelan" });
+
 			return 0;
 		}
 	}
@@ -2108,8 +2114,8 @@ sprintf_stats(char *buffer, device *dev)
 	);
 }
 
-int
-wavelan_get_info(char *buffer, char **start, off_t offset, int length)
+static int
+wavelan_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	int		len;
 	off_t		begin;
@@ -2170,11 +2176,17 @@ static struct device	dev_wavelan		=
 	0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, wavelan_probe
 };
 
+int io = 0x390; /* Default from above.. */
+int irq = 0;
+
 int
 init_module(void)
 {
+	dev_wavelan.base_addr = io;
+	dev_wavelan.irq       = irq;
 	if (register_netdev(&dev_wavelan) != 0)
 		return -EIO;
+
 	return 0;
 }
 
@@ -2185,6 +2197,7 @@ cleanup_module(void)
 		printk("wavelan: device busy, remove delayed\n");
 	else
 	{
+		proc_net_unregister(PROC_NET_WAVELAN);
 		unregister_netdev(&dev_wavelan);
 		kfree_s(dev_wavelan.priv, sizeof(struct net_local));
 		dev_wavelan.priv = NULL;

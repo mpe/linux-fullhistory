@@ -12,20 +12,22 @@
 .s.o:
 	$(AS) -o $*.o $<
 
-OBJS	:= utils.o route.o proc.o timer.o protocol.o packet.o \
+IPV4_OBJS	:= utils.o route.o proc.o timer.o protocol.o packet.o \
 		   arp.o ip.o raw.o icmp.o tcp.o udp.o devinet.o af_inet.o \
 		   igmp.o ip_fw.o ipip.o
 
+MODULES	:=
+
 ifdef CONFIG_INET_RARP
-
-OBJS	:= $(OBJS) rarp.o
-
+IPV4_OBJS := $(IPV4_OBJS) rarp.o
+else
+MODULES := $(MODULES) rarp.o
 endif
 
 ifdef CONFIG_INET
 
-ipv4.o:		$(OBJS)
-		$(LD) -r -o ipv4.o $(OBJS)
+ipv4.o:		$(IPV4_OBJS)
+		$(LD) -r -o ipv4.o $(IPV4_OBJS)
 
 else
 
@@ -34,11 +36,29 @@ ipv4.o:
 
 endif
 
+ifdef MODULES
 dep:
-		$(CPP) -M *.c > .depend
+		$(CPP) -M $(IPV4_OBJS:.o=.c) > .depend
+		$(CPP) -M -DMODULE $(MODULES:.o=.c) >> .depend
+else
+dep:
+		$(CPP) -M $(IPV4_OBJS:.o=.c) > .depend
+endif
 
 tar:
 		tar -cvf /dev/f1 .
 
+ifdef MODULES
+
+modules: $(MODULES)
+	echo $(MODULES) > ../../modules/IPV4_MODULES
+	cd ../../modules; \
+		for i in $(MODULES); do ln -sf ../net/ipv4/$$i .; done
+
+else
+
+modules:
+
+endif
 
 include $(TOPDIR)/Rules.make

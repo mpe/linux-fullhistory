@@ -37,7 +37,7 @@ extern unsigned short	eth_type_trans(struct sk_buff *skb, struct device *dev);
 extern void 		eth_header_cache(struct device *dev, struct sock *sk, unsigned long saddr, unsigned long daddr);
 extern void		eth_copy_and_sum(struct sk_buff *dest,
 				unsigned char *src, int length, int base);
-
+extern struct device	* init_etherdev(struct device *, int, unsigned long*);
 
 #endif
 

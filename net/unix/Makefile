@@ -22,6 +22,7 @@ unix.o:	$(OBJS)
 dep:
 		$(CPP) -M *.c > .depend
 
+modules:
 tar:
 		tar -cvf /dev/f1 .
 

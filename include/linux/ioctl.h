@@ -6,6 +6,7 @@
 #ifndef _LINUX_IOCTL_H
 #define _LINUX_IOCTL_H
 
+#include <asm/page.h>		/* for PAGE_SIZE */
 
 /* ioctl command encoding: 32 bits total, command in lower 16 bits,
  * size of the parameter structure in the lower 14 bits of the
@@ -23,7 +24,7 @@
 #define IOC_INOUT	(IOC_IN | IOC_OUT)	/* both */
 #define IOCSIZE_MASK	0x3fff0000	/* size (max 16k-1 bytes) */
 #define IOCSIZE_SHIFT	16		/* how to get the size */
-#define IOCSIZE_MAX	((PAGE_SIZE-1)&(IOCSIZE_MASK >> IOC_SHIFT))
+#define IOCSIZE_MAX	((PAGE_SIZE-1)&(IOCSIZE_MASK >> IOCSIZE_SHIFT))
 #define IOCCMD_MASK	0x0000ffff	/* command code */
 #define IOCCMD_SHIFT	0
 #define IOCPARM_MASK IOCCMD_MASK

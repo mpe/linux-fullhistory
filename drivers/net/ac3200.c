@@ -17,6 +17,10 @@
 static const char *version =
 	"ac3200.c:v1.01 7/1/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
@@ -189,6 +193,7 @@ static int ac_probe1(int ioaddr, struct device *dev)
 
 static int ac_open(struct device *dev)
 {
+	int rc;
 #ifdef notyet
 	/* Someday we may enable the IRQ and shared memory here. */
 	int ioaddr = dev->base_addr;
@@ -197,7 +202,14 @@ static int ac_open(struct device *dev)
 		return -EAGAIN;
 #endif
 
-	return ei_open(dev);
+	rc = ei_open(dev);
+	if (rc != 0) return rc;
+
+#ifdef MODULE
+	MOD_INC_USE_COUNT;
+#endif
+
+	return 0;
 }
 
 static void ac_reset_8390(struct device *dev)
@@ -260,9 +272,43 @@ static int ac_close_card(struct device *dev)
 
 	NS8390_init(dev, 0);
 
+#ifdef MODULE
+	MOD_DEC_USE_COUNT;
+#endif
+
 	return 0;
 }
 
+#ifdef MODULE
+char kernel_version[] = UTS_RELEASE;
+static struct device dev_ac3200 = {
+	"        " /*"ac3200"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, ac3200_probe };
+
+int io = 0;
+int irq = 0;
+
+int init_module(void)
+{
+	dev_ac3200.base_addr = io;
+	dev_ac3200.irq       = irq;
+	if (register_netdev(&dev_ac3200) != 0) {
+		printk("ac3200: register_netdev() returned non-zero.\n");
+		return -EIO;
+	}
+	return 0;
+}
+
+void
+cleanup_module(void)
+{
+	if (MOD_IN_USE)
+		printk("ac3200: device busy, remove delayed\n");
+	else
+	{
+		unregister_netdev(&dev_ac3200);
+	}
+}
+#endif /* MODULE */
 
 /*
  * Local variables:

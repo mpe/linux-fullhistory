@@ -272,6 +272,7 @@
 
 #define PCI_VENDOR_ID_SMC		0x1042
 #define PCI_DEVICE_ID_SMC_37C665	0x1000
+#define PCI_DEVICE_ID_SMC_37C922	0x1001
 
 #define PCI_VENDOR_ID_ATI		0x1002
 #define PCI_DEVICE_ID_ATI_M32		0x4158
@@ -403,6 +404,12 @@
 
 #define PCI_VENDOR_ID_HP		0x103c
 #define PCI_DEVICE_ID_HP_J2585A		0x1030
+
+#define PCI_VENDOR_ID_TEKRAM		0x1de1
+#define PCI_DEVICE_ID_TEKRAM_DC290	0xdc29
+
+#define PCI_VENDOR_ID_MUTECH		0x1159
+#define PCI_DEVICE_ID_MUTECH_MV1000	0x0001
 
 /*
  * The PCI interface treats multi-function devices as independent

@@ -470,7 +470,9 @@ plip_receive(unsigned short nibble_timeout, unsigned short status_addr,
 		return OK;
 
 	case PLIP_NB_2:
+		break;
 	}
+	return TIMEOUT; /* XX: ?? */
 }
 
 /* PLIP_RECEIVE_PACKET --- receive a packet */
@@ -632,6 +634,7 @@ plip_send(unsigned short nibble_timeout, unsigned short data_addr,
 		*ns_p = PLIP_NB_BEGIN;
 		return OK;
 	}
+	return TIMEOUT;
 }
 
 /* PLIP_SEND_PACKET --- send a packet */

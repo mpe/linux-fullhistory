@@ -849,3 +849,10 @@ cleanup_module(void)
 	release_region(DE600_IO, 3);
 }
 #endif /* MODULE */
+/*
+ * Local variables:
+ *  kernel-compile-command: "gcc -D__KERNEL__ -Ilinux/include -I../../net/inet -Wall -Wstrict-prototypes -O2 -m486 -c de600.c"
+ *  module-compile-command: "gcc -D__KERNEL__ -DMODULE -Ilinux/include -I../../net/inet -Wall -Wstrict-prototypes -O2 -m486 -c de600.c"
+ *  compile-command: "gcc -D__KERNEL__ -DMODULE -Ilinux/include -I../../net/inet -Wall -Wstrict-prototypes -O2 -m486 -c de600.c"
+ * End:
+ */

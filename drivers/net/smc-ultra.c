@@ -40,6 +40,12 @@
 static const char *version =
 	"smc-ultra.c:v1.12 1/18/95 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
+
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
+
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
@@ -133,6 +139,8 @@ int ultra_probe1(struct device *dev, int ioaddr)
 
 	if (dev == NULL)
 		dev = init_etherdev(0, sizeof(struct ei_device), 0);
+	if (dev == NULL) /* Still.. */
+		return ENOMEM; /* Out of memory ?? */
 
 	model_name = (idreg & 0xF0) == 0x20 ? "SMC Ultra" : "SMC EtherEZ";
 
@@ -171,7 +179,7 @@ int ultra_probe1(struct device *dev, int ioaddr)
 
 
 	/* OK, we are certain this is going to work.  Setup the device. */
-	request_region(ioaddr, 32, model_name);
+	request_region(ioaddr, ULTRA_IO_EXTENT, model_name);
 
 	/* The 8390 isn't at the base address, so fake the offset */
 	dev->base_addr = ioaddr+ULTRA_NIC_OFFSET;
@@ -215,6 +223,7 @@ static int
 ultra_open(struct device *dev)
 {
 	int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET; /* ASIC addr */
+	int rc;
 
 	if (request_irq(dev->irq, ei_interrupt, 0, ei_status.name))
 		return -EAGAIN;
@@ -222,7 +231,12 @@ ultra_open(struct device *dev)
 	outb(ULTRA_MEMENB, ioaddr);	/* Enable memory, 16 bit mode. */
 	outb(0x80, ioaddr + 5);
 	outb(0x01, ioaddr + 6);		/* Enable interrupts and memory. */
-	return ei_open(dev);
+	rc = ei_open(dev);
+	if (rc != 0) return rc;
+#ifdef MODULE
+	MOD_INC_USE_COUNT;
+#endif
+	return 0;
 }
 
 static void
@@ -302,8 +316,43 @@ ultra_close_card(struct device *dev)
 	/* We should someday disable shared memory and change to 8-bit mode
 	   "just in case"... */
 
+#ifdef MODULE
+	MOD_DEC_USE_COUNT;
+#endif
+
 	return 0;
 }
+
+#ifdef MODULE
+char kernel_version[] = UTS_RELEASE;
+static struct device dev_ultra = {
+	"        " /*"smc-ultra"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, ultra_probe };
+
+int io = 0;
+int irq = 0;
+
+int init_module(void)
+{
+	dev_ultra.base_addr = io;
+	dev_ultra.irq       = irq;
+	if (register_netdev(&dev_ultra) != 0) {
+		printk("smc-ultra: register_netdev() returned non-zero.\n");
+		return -EIO;
+	}
+	return 0;
+}
+
+void
+cleanup_module(void)
+{
+	if (MOD_IN_USE)
+		printk("smc-ultra: device busy, remove delayed\n");
+	else
+	{
+		unregister_netdev(&dev_ultra);
+	}
+}
+#endif /* MODULE */
 
 
 /*

@@ -69,7 +69,7 @@
 #include <linux/skbuff.h>
 #include <net/sock.h>
 #include <net/arp.h>
-
+#include <linux/proc_fs.h>
 
 /*
  *	The list of packet types we will receive (as opposed to discard)
@@ -901,7 +901,7 @@ static int sprintf_stats(char *buffer, struct device *dev)
  *	to create /proc/net/dev
  */
  
-int dev_get_info(char *buffer, char **start, off_t offset, int length)
+int dev_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	int len=0;
 	off_t begin=0;
@@ -1320,5 +1320,8 @@ void dev_init(void)
 			dev2 = dev;
 		}
 	}
+proc_net_register(&(struct proc_dir_entry)
+	{ PROC_NET_DEV,		dev_get_info,	3, "dev" });
+
 }
 

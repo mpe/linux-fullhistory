@@ -18,6 +18,7 @@
 #include <asm/segment.h>
 
 extern unsigned long prof_len;
+extern void proc_net_init(void);
 
 void proc_put_inode(struct inode *inode)
 {
@@ -90,6 +91,7 @@ struct super_block *proc_read_super(struct super_block *s,void *data,
 		return NULL;
 	}
 	parse_options(data, &s->s_mounted->i_uid, &s->s_mounted->i_gid);
+	proc_net_init();
 	return s;
 }
 
@@ -141,22 +143,22 @@ void proc_read_inode(struct inode * inode)
 		return;
 	}
 
-#ifdef CONFIG_IP_ACCT
+/* #ifdef CONFIG_IP_ACCT */
 	/* this file may be opened R/W by root to reset the accounting */
 	if (ino == PROC_NET_IPACCT) {
 		inode->i_mode = S_IFREG | S_IRUGO | S_IWUSR;
 		inode->i_op = &proc_net_inode_operations;
 		return;
 	}
-#endif
-#ifdef CONFIG_IP_FIREWALL
+/* #endif */
+/* #ifdef CONFIG_IP_FIREWALL */
 	/* these files may be opened R/W by root to reset the counters */
 	if ((ino == PROC_NET_IPFWFWD) || (ino == PROC_NET_IPFWBLK)) {
 		inode->i_mode = S_IFREG | S_IRUGO | S_IWUSR;
 		inode->i_op = &proc_net_inode_operations;
 		return;
 	}
-#endif
+/* #endif */
 
 	/* other files within /proc/net */
 	if ((ino >= PROC_NET_UNIX) && (ino < PROC_NET_LAST)) {

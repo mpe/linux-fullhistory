@@ -510,7 +510,7 @@ static int rt_kill(struct rtentry *r)
  *	Called from the PROCfs module. This outputs /proc/net/route.
  */
  
-int rt_get_info(char *buffer, char **start, off_t offset, int length)
+int rt_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	struct rtable *r;
 	int len=0;

@@ -43,54 +43,6 @@ static int proc_readnetdir(struct inode *, struct file *,
 			   void *, filldir_t filldir);
 static int proc_lookupnet(struct inode *,const char *,int,struct inode **);
 
-/* the get_*_info() functions are in the net code, and are configured
-   in via the standard mechanism... */
-extern int unix_get_info(char *, char **, off_t, int);
-#ifdef CONFIG_INET
-extern int tcp_get_info(char *, char **, off_t, int);
-extern int udp_get_info(char *, char **, off_t, int);
-extern int raw_get_info(char *, char **, off_t, int);
-extern int arp_get_info(char *, char **, off_t, int);
-extern int rarp_get_info(char *, char **, off_t, int);
-extern int dev_get_info(char *, char **, off_t, int);
-extern int rt_get_info(char *, char **, off_t, int);
-extern int snmp_get_info(char *, char **, off_t, int);
-extern int afinet_get_info(char *, char **, off_t, int);
-#if	defined(CONFIG_WAVELAN)
-extern int wavelan_get_info(char *, char **, off_t, int);
-#endif	/* defined(CONFIG_WAVELAN) */
-#ifdef CONFIG_IP_ACCT
-extern int ip_acct_procinfo(char *, char **, off_t, int, int);
-#endif /* CONFIG_IP_ACCT */
-#ifdef CONFIG_IP_FIREWALL
-extern int ip_fw_blk_procinfo(char *, char **, off_t, int, int);
-extern int ip_fw_fwd_procinfo(char *, char **, off_t, int, int);
-#endif /* CONFIG_IP_FIREWALL */
-extern int ip_msqhst_procinfo(char *, char **, off_t, int);
-extern int ip_mc_procinfo(char *, char **, off_t, int);
-#endif /* CONFIG_INET */
-#ifdef CONFIG_IPX
-extern int ipx_get_info(char *, char **, off_t, int);
-extern int ipx_rt_get_info(char *, char **, off_t, int);
-extern int ipx_get_interface_info(char *, char **, off_t , int);
-#endif /* CONFIG_IPX */
-#ifdef CONFIG_AX25
-extern int ax25_get_info(char *, char **, off_t, int);
-extern int ax25_rt_get_info(char *, char **, off_t, int);
-extern int ax25_cs_get_info(char *, char **, off_t, int);
-#ifdef CONFIG_NETROM
-extern int nr_get_info(char *, char **, off_t, int);
-extern int nr_nodes_get_info(char *, char **, off_t, int);
-extern int nr_neigh_get_info(char *, char **, off_t, int);
-#endif /* CONFIG_NETROM */
-#endif /* CONFIG_AX25 */
-#ifdef CONFIG_ATALK
-extern int atalk_get_info(char *, char **, off_t, int);
-extern int atalk_rt_get_info(char *, char **, off_t, int);
-extern int atalk_if_get_info(char *, char **, off_t, int);
-#endif
-
-
 static struct file_operations proc_net_operations = {
 	NULL,			/* lseek - default */
 	proc_readnet,		/* read - bad */
@@ -125,68 +77,65 @@ struct inode_operations proc_net_inode_operations = {
 	NULL			/* permission */
 };
 
-static struct proc_dir_entry net_dir[] = {
-	{ PROC_NET,		1, "." },
-	{ PROC_ROOT_INO,	2, ".." },
-	{ PROC_NET_UNIX,	4, "unix" },
-#ifdef CONFIG_INET
-	{ PROC_NET_ARP,		3, "arp" },
-	{ PROC_NET_ROUTE,	5, "route" },
-	{ PROC_NET_DEV,		3, "dev" },
-	{ PROC_NET_RAW,		3, "raw" },
-	{ PROC_NET_TCP,		3, "tcp" },
-	{ PROC_NET_UDP,		3, "udp" },
-	{ PROC_NET_SNMP,	4, "snmp" },
-	{ PROC_NET_SOCKSTAT,	8, "sockstat" },
-#ifdef CONFIG_INET_RARP
-	{ PROC_NET_RARP,	4, "rarp"},
-#endif
-#ifdef CONFIG_IP_MULTICAST
-	{ PROC_NET_IGMP,	4, "igmp"},
-#endif
-#ifdef CONFIG_IP_FIREWALL
-	{ PROC_NET_IPFWFWD,	10, "ip_forward"},
-	{ PROC_NET_IPFWBLK,	8,  "ip_block"},
-#endif
-#ifdef CONFIG_IP_MASQUERADE
-	{ PROC_NET_IPMSQHST,	13, "ip_masquerade"},
-#endif
-#ifdef CONFIG_IP_ACCT
-	{ PROC_NET_IPACCT,	7,  "ip_acct"},
-#endif
-#if	defined(CONFIG_WAVELAN)
-	{ PROC_NET_WAVELAN,	7, "wavelan" },
-#endif	/* defined(CONFIG_WAVELAN) */
-#endif	/* CONFIG_INET */
-#ifdef CONFIG_IPX
-	{ PROC_NET_IPX_ROUTE,	9, "ipx_route" },
-	{ PROC_NET_IPX,		3, "ipx" },
-	{ PROC_NET_IPX_INTERFACE, 13, "ipx_interface" },
-#endif /* CONFIG_IPX */
-#ifdef CONFIG_AX25
-	{ PROC_NET_AX25_ROUTE,	10, "ax25_route" },
-	{ PROC_NET_AX25,	4, "ax25" },
-	{ PROC_NET_AX25_CALLS,	10, "ax25_calls" },
-#ifdef CONFIG_NETROM
-	{ PROC_NET_NR_NODES,	8, "nr_nodes" },
-	{ PROC_NET_NR_NEIGH,	8, "nr_neigh" },
-	{ PROC_NET_NR,		2, "nr" },
-#endif /* CONFIG_NETROM */
-#endif /* CONFIG_AX25 */
-#ifdef CONFIG_ATALK
-	{ PROC_NET_ATALK,	9, "appletalk" },
-	{ PROC_NET_AT_ROUTE,	11,"atalk_route" },
-	{ PROC_NET_ATIF,	11,"atalk_iface" },
-#endif /* CONFIG_ATALK */
-	{ 0, 0, NULL }
+#define NR_MAX_PROC_NET_DIR 100
+static struct proc_dir_entry *net_dir[NR_MAX_PROC_NET_DIR] = {
+	NULL,
 };
 
-#define NR_NET_DIRENTRY ((sizeof (net_dir))/(sizeof (net_dir[0])) - 1)
+static int nr_net_direntry = 0;
+
+int proc_net_register(struct proc_dir_entry *dp)
+{
+	int i;
+
+	for (i = 0; net_dir[i] != NULL; ++i ) ;
+
+	if (i >= NR_MAX_PROC_NET_DIR)
+	  return -ENOMEM;
+
+	net_dir[i] = dp;
+	net_dir[i+1] = NULL; /* Just make sure.. */
+	++nr_net_direntry;
+	return i;
+}
+
+int proc_net_unregister(int ino)
+{
+	int i;
+	for (i = 0; net_dir[i] != NULL && i < nr_net_direntry; ++i)
+	  if (net_dir[i]->low_ino == ino) {
+	    for ( ; net_dir[i] != NULL; ++i )
+	      net_dir[i] = net_dir[i+1];
+	    --nr_net_direntry;
+	    return 0;
+	  }
+	return -ENOENT;
+}
+
+static int dir_get_info(char * a, char ** b, off_t d, int e, int f)
+{
+	return -EISDIR;
+}
+
+void proc_net_init(void)
+{
+	static struct proc_dir_entry
+	  nd_thisdir = { PROC_NET, dir_get_info, 1, "." },
+	  nd_rootdir = { PROC_ROOT_INO, dir_get_info, 1, ".." };
+	static int already = 0;
+
+	if (already) return;
+	already = 1;
+
+	proc_net_register(&nd_thisdir);
+	proc_net_register(&nd_rootdir);
+}
+
 
 static int proc_lookupnet(struct inode * dir,const char * name, int len,
-	struct inode ** result)
+			  struct inode ** result)
 {
-	struct proc_dir_entry *de;
+	struct proc_dir_entry **de;
 
 	*result = NULL;
 	if (!dir)
@@ -195,10 +144,10 @@ static int proc_lookupnet(struct inode * dir,const char * name, int len,
 		iput(dir);
 		return -ENOENT;
 	}
-	for (de = net_dir ; de->name ; de++) {
-		if (!proc_match(len, name, de))
+	for (de = net_dir ; (*de)->name ; de++) {
+		if (!proc_match(len, name, *de))
 			continue;
-		*result = iget(dir->i_sb, de->low_ino);
+		*result = iget(dir->i_sb, (*de)->low_ino);
 		iput(dir);
 		if (!*result)
 			return -ENOENT;
@@ -217,8 +166,8 @@ static int proc_readnetdir(struct inode * inode, struct file * filp,
 	if (!inode || !S_ISDIR(inode->i_mode))
 		return -EBADF;
 	ino = inode->i_ino;
-	while (((unsigned) filp->f_pos) < NR_NET_DIRENTRY) {
-		de = net_dir + filp->f_pos;
+	while (((unsigned) filp->f_pos) < nr_net_direntry) {
+		de = net_dir[filp->f_pos];
 		if (filldir(dirent, de->name, de->namelen, filp->f_pos, de->low_ino) < 0)
 			break;
 		filp->f_pos++;
@@ -233,142 +182,36 @@ static int proc_readnet(struct inode * inode, struct file * file,
 			char * buf, int count)
 {
 	char * page;
-	int length;
 	unsigned int ino;
 	int bytes=count;
-	int thistime;
+	int i;
 	int copied=0;
 	char *start;
+	struct proc_dir_entry * dp;
 
 	if (count < 0)
 		return -EINVAL;
+	ino = inode->i_ino;
+	for (i = 0; ;i++) {
+		if (i >= NR_MAX_PROC_NET_DIR || (dp = net_dir[i]) == NULL)
+			return -EBADF;
+		if (dp->low_ino == ino)
+			break;
+	}
 	if (!(page = (char*) __get_free_page(GFP_KERNEL)))
 		return -ENOMEM;
-	ino = inode->i_ino;
 
-	while(bytes>0)
+	while (bytes>0)
 	{
-		thistime=bytes;
-		if(bytes>PROC_BLOCK_SIZE)
+		int length, thistime=bytes;
+		if (bytes > PROC_BLOCK_SIZE)
 			thistime=PROC_BLOCK_SIZE;
 
-		switch (ino) 
-		{
-			case PROC_NET_UNIX:
-				length = unix_get_info(page,&start,file->f_pos,thistime);
-				break;
-#ifdef CONFIG_INET
-			case PROC_NET_SOCKSTAT:
-				length = afinet_get_info(page,&start,file->f_pos,thistime);
-				break;
-			case PROC_NET_ARP:
-				length = arp_get_info(page,&start,file->f_pos,thistime);
-				break;
-			case PROC_NET_ROUTE:
-				length = rt_get_info(page,&start,file->f_pos,thistime);
-				break;
-			case PROC_NET_DEV:
-				length = dev_get_info(page,&start,file->f_pos,thistime);
-				break;
-			case PROC_NET_RAW:
-				length = raw_get_info(page,&start,file->f_pos,thistime);
-				break;
-			case PROC_NET_TCP:
-				length = tcp_get_info(page,&start,file->f_pos,thistime);
-				break;
-			case PROC_NET_UDP:
-				length = udp_get_info(page,&start,file->f_pos,thistime);
-				break;
-			case PROC_NET_SNMP:
-				length = snmp_get_info(page, &start, file->f_pos,thistime);
-				break;
-#ifdef CONFIG_IP_MULTICAST
-			case PROC_NET_IGMP:
-				length = ip_mc_procinfo(page, &start, file->f_pos,thistime);
-				break;
-#endif
-#ifdef CONFIG_IP_FIREWALL
-			case PROC_NET_IPFWFWD:
-				length = ip_fw_fwd_procinfo(page, &start, file->f_pos,
-					thistime, (file->f_flags & O_ACCMODE) == O_RDWR);
-				break;
-			case PROC_NET_IPFWBLK:
-				length = ip_fw_blk_procinfo(page, &start, file->f_pos,
-					thistime, (file->f_flags & O_ACCMODE) == O_RDWR);
-				break;
-#endif
-#ifdef CONFIG_IP_ACCT
-			case PROC_NET_IPACCT:
-				length = ip_acct_procinfo(page, &start, file->f_pos,
-					thistime, (file->f_flags & O_ACCMODE) == O_RDWR);
-				break;
-#endif
-#ifdef CONFIG_IP_MASQUERADE
-			case PROC_NET_IPMSQHST:
-				length = ip_msqhst_procinfo(page, &start, file->f_pos,thistime);
-				break;
-#endif
-#ifdef CONFIG_INET_RARP				
-			case PROC_NET_RARP:
-				length = rarp_get_info(page,&start,file->f_pos,thistime);
-				break;
-#endif /* CONFIG_INET_RARP */				
-#if	defined(CONFIG_WAVELAN)
-			case PROC_NET_WAVELAN:
-				length = wavelan_get_info(page, &start, file->f_pos, thistime);
-				break;
-#endif	/* defined(CONFIG_WAVELAN) */
-#endif /* CONFIG_INET */
-#ifdef CONFIG_IPX
-			case PROC_NET_IPX_INTERFACE:
-				length = ipx_get_interface_info(page, &start, file->f_pos, thistime);
-				break;
-			case PROC_NET_IPX_ROUTE:
-				length = ipx_rt_get_info(page,&start,file->f_pos,thistime);
-				break;
-			case PROC_NET_IPX:
-				length = ipx_get_info(page,&start,file->f_pos,thistime);
-				break;
-#endif /* CONFIG_IPX */
-#ifdef CONFIG_ATALK
-			case PROC_NET_ATALK:
-				length = atalk_get_info(page, &start, file->f_pos, thistime);
-				break;
-			case PROC_NET_AT_ROUTE:
-				length = atalk_rt_get_info(page, &start, file->f_pos, thistime);
-				break;
-			case PROC_NET_ATIF:
-				length = atalk_if_get_info(page, &start, file->f_pos, thistime);
-				break;
-#endif /* CONFIG_ATALK */
-#ifdef CONFIG_AX25
-			case PROC_NET_AX25_ROUTE:
-				length = ax25_rt_get_info(page,&start,file->f_pos,thistime);
-				break;
-			case PROC_NET_AX25:
-				length = ax25_get_info(page,&start,file->f_pos,thistime);
-				break;
-			case PROC_NET_AX25_CALLS:
-				length = ax25_cs_get_info(page,&start,file->f_pos,thistime);
-				break;
-#ifdef CONFIG_NETROM
-			case PROC_NET_NR_NODES:
-				length = nr_nodes_get_info(page,&start,file->f_pos,thistime);
-				break;
-			case PROC_NET_NR_NEIGH:
-				length = nr_neigh_get_info(page,&start,file->f_pos,thistime);
-				break;
-			case PROC_NET_NR:
-				length = nr_get_info(page,&start,file->f_pos,thistime);
-				break;
-#endif /* CONFIG_NETROM */
-#endif /* CONFIG_AX25 */
+		length = dp->get_info(page, &start,
+				      file->f_pos,
+				      thistime,
+				      (file->f_flags & O_ACCMODE) == O_RDWR);
 
-			default:
-				free_page((unsigned long) page);
-				return -EBADF;
-		}
-		
 		/*
  		 *	We have been given a non page aligned block of
 		 *	the data we asked for + a bit. We have been given
@@ -381,13 +224,12 @@ static int proc_readnet(struct inode * inode, struct file * file,
  		 *	Copy the bytes
 		 */
 		memcpy_tofs(buf+copied, start, length);
-		file->f_pos+=length;	/* Move down the file */
-		bytes-=length;
-		copied+=length;
-		if(length<thistime)
+		file->f_pos += length;	/* Move down the file */
+		bytes  -= length;
+		copied += length;
+		if (length<thistime)
 			break;	/* End of file */
 	}
 	free_page((unsigned long) page);
 	return copied;
-
 }

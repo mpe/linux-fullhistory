@@ -25,5 +25,6 @@ dep:
 tar:
 		tar -cvf /dev/f1 .
 
+modules:
 
 include $(TOPDIR)/Rules.make

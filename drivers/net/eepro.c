@@ -1137,9 +1137,15 @@ char kernel_version[] = UTS_RELEASE;
 static struct device dev_eepro = {
 	"        " /*"eepro"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, eepro_probe };
 
+int io = 0;
+int irq = 0;
+
 int
 init_module(void)
 {
+	dev_eepro.base_addr = io;
+	dev_eepro.irq       = irq;
+
 	if (register_netdev(&dev_eepro) != 0)
 		return -EIO;
 	return 0;

@@ -1906,7 +1906,7 @@ static int ax25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	return(0);
 }
 
-int ax25_get_info(char *buffer, char **start, off_t offset, int length)
+int ax25_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	ax25_cb *ax25;
 	struct device *dev;
@@ -2029,6 +2029,14 @@ void ax25_proto_init(struct net_proto *pro)
 	bpq_packet_type.type  = htons(ETH_P_BPQ);
 	dev_add_pack(&bpq_packet_type);
 	register_netdevice_notifier(&ax25_dev_notifier);
+			  
+proc_net_register(&(struct proc_dir_entry)
+	{ PROC_NET_AX25_ROUTE,	ax25_rt_get_info,	10, "ax25_route" });
+proc_net_register(&(struct proc_dir_entry)
+	{ PROC_NET_AX25,	ax25_get_info,		4, "ax25" });
+proc_net_register(&(struct proc_dir_entry)
+	{ PROC_NET_AX25_CALLS,	ax25_cs_get_info,	10, "ax25_calls" });
+
 	printk("GW4PTS/G4KLX AX.25 for Linux. Version 0.30 ALPHA for Linux NET3.030 (Linux 1.3.0)\n");
 }
 

@@ -1020,9 +1020,14 @@ static struct device dev_apricot = {
   0x300, 10,
   0, 0, 0, NULL, apricot_probe };
 
+int io = 0x300;
+int irq = 10;
+
 int
 init_module(void)
 {
+  dev_apricot.base_addr = io;
+  dev_apricot.irq       = irq;
   if (register_netdev(&dev_apricot) != 0)
     return -EIO;
   return 0;

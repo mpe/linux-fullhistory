@@ -696,13 +696,13 @@ static int read_maps (int pid, struct file * file, char * buf, int count)
 extern int get_module_list(char *);
 extern int get_device_list(char *);
 extern int get_filesystem_list(char *);
-extern int get_ksyms_list(char *);
+extern int get_ksyms_list(char *, char **, off_t, int);
 extern int get_irq_list(char *);
 extern int get_dma_list(char *);
 extern int get_cpuinfo(char *);
 extern int get_pci_list(char*);
 
-static int get_root_array(char * page, int type)
+static int get_root_array(char * page, int type, char **start, off_t offset, int length)
 {
 	switch (type) {
 		case PROC_LOADAVG:
@@ -746,7 +746,7 @@ static int get_root_array(char * page, int type)
 			return get_filesystem_list(page);
 
 		case PROC_KSYMS:
-			return get_ksyms_list(page);
+			return get_ksyms_list(page, start, offset, length);
 
 		case PROC_DMA:
 			return get_dma_list(page);
@@ -773,42 +773,57 @@ static int get_process_array(char * page, int pid, int type)
 }
 
 
-static inline int fill_array(char * page, int pid, int type)
+static inline int fill_array(char * page, int pid, int type, char **start, off_t offset, int length)
 {
 	if (pid)
 		return get_process_array(page, pid, type);
-	return get_root_array(page, type);
+	return get_root_array(page, type, start, offset, length);
 }
+
+#define PROC_BLOCK_SIZE	(3*1024)		/* 4K page size but our output routines use some slack for overruns */
 
 static int array_read(struct inode * inode, struct file * file,char * buf, int count)
 {
 	unsigned long page;
+	char *start;
 	int length;
 	int end;
 	unsigned int type, pid;
 
 	if (count < 0)
 		return -EINVAL;
+	if (count > PROC_BLOCK_SIZE)
+		count = PROC_BLOCK_SIZE;
 	if (!(page = __get_free_page(GFP_KERNEL)))
 		return -ENOMEM;
 	type = inode->i_ino;
 	pid = type >> 16;
 	type &= 0x0000ffff;
-	length = fill_array((char *) page, pid, type);
+	start = NULL;
+	length = fill_array((char *) page, pid, type,
+			    &start, file->f_pos, count);
 	if (length < 0) {
 		free_page(page);
 		return length;
 	}
-	if (file->f_pos >= length) {
-		free_page(page);
-		return 0;
+	if (start != NULL) {
+		/* We have had block-adjusting processing! */
+		memcpy_tofs(buf, start, length);
+		file->f_pos += length;
+		count = length;
+	} else {
+		/* Static 4kB (or whatever) block capacity */
+		if (file->f_pos >= length) {
+			free_page(page);
+			return 0;
+		}
+		if (count + file->f_pos > length)
+			count = length - file->f_pos;
+		end = count + file->f_pos;
+		memcpy_tofs(buf, (char *) page + file->f_pos, count);
+		file->f_pos = end;
 	}
-	if (count + file->f_pos > length)
-		count = length - file->f_pos;
-	end = count + file->f_pos;
-	memcpy_tofs(buf, (char *) page + file->f_pos, count);
 	free_page(page);
-	file->f_pos = end;
 	return count;
 }
 

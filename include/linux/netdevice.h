@@ -210,7 +210,7 @@ extern void		dev_transmit(void);
 extern int		in_net_bh(void);
 extern void		net_bh(void *tmp);
 extern void		dev_tint(struct device *dev);
-extern int		dev_get_info(char *buffer, char **start, off_t offset, int length);
+extern int		dev_get_info(char *buffer, char **start, off_t offset, int length, int dummy);
 extern int		dev_ioctl(unsigned int cmd, void *);
 
 extern void		dev_init(void);

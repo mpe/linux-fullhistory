@@ -39,6 +39,7 @@
 #include <net/sock.h>
 #include <net/tcp.h>
 #include <net/af_unix.h>
+#include <linux/proc_fs.h>
 
 static unix_socket *volatile unix_socket_list=NULL;
 
@@ -724,7 +725,7 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 		err=sk->err;
 		sk->err=0;
 		sti();
-		return -sk->err;
+		return -err;
 	}
 	
 /*	printk("get rcv sem\n");*/
@@ -750,12 +751,12 @@ static int unix_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 			if(skb==NULL)
 			{
 				up(&sk->protinfo.af_unix.readsem);
-				if(sk->shutdown&RCV_SHUTDOWN)
+				if(sk->shutdown & RCV_SHUTDOWN)
+					return copied;
+				if(copied)
 					return copied;
 				if(noblock)
 				{
-					if(copied)
-						return copied;
 					return -EAGAIN;
 				}
 				interruptible_sleep_on(sk->sleep);
@@ -882,9 +883,7 @@ static int unix_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	return(0);
 }
 
-/* Exported for procfs. */
-
-int unix_get_info(char *buffer, char **start, off_t offset, int length)
+static int unix_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	off_t pos=0;
 	off_t begin=0;
@@ -937,7 +936,9 @@ static int unix_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 	iov.iov_base=ubuf;
 	iov.iov_len=size;
 	msg.msg_name=(void *)sa;
-	msg.msg_namelen=get_user(addr_len);
+	msg.msg_namelen=0;
+	if (addr_len)
+		msg.msg_namelen = *addr_len;
 	msg.msg_accrights=NULL;
 	msg.msg_iov=&iov;
 	msg.msg_iovlen=1;
@@ -1013,4 +1014,11 @@ void unix_proto_init(struct net_proto *pro)
 {
 	printk("NET3: Unix domain sockets 0.07 BETA for Linux NET3.030.\n");
 	sock_register(unix_proto_ops.family, &unix_proto_ops);
+	proc_net_register(&(struct proc_dir_entry)
+			  { PROC_NET_UNIX,  unix_get_info,  4,  "unix" });
 }
+/*
+ * Local variables:
+ *  compile-command: "gcc -g -D__KERNEL__ -Wall -O6 -I/usr/src/linux/include -c af_unix.c"
+ * End:
+ */

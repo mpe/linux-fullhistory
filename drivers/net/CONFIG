@@ -16,7 +16,8 @@
 #			used.  Usually pointless under Linux.
 #	show_all_SAPROM  Show the entire address PROM, not just the
 #			ethernet address, during boot.
-#	rw_bugfix	Patch an obscure bug with a version of the 8390.
+#	CONFIG_NE_RW_BUGFIX  Patch an obscure bug with a version of the 8390.
+#	CONFIG_NE_SANITY ??
 #  CONFIG_HPLAN		The HP-LAN driver (for 8390-based boards only).
 #	rw_bugfix	Fix the same obscure bug.
 #  CONFIG_EL2		The 3c503 EtherLink II driver

@@ -20,6 +20,11 @@
 static const char *version =
 	"wd.c:v1.10 9/23/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
+
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
@@ -275,6 +280,7 @@ static int
 wd_open(struct device *dev)
 {
   int ioaddr = dev->base_addr - WD_NIC_OFFSET; /* WD_CMDREG */
+  int rc;
 
   /* Map in the shared memory. Always set register 0 last to remain
 	 compatible with very old boards. */
@@ -285,7 +291,12 @@ wd_open(struct device *dev)
 	  outb(ei_status.reg5, ioaddr+WD_CMDREG5);
   outb(ei_status.reg0, ioaddr); /* WD_CMDREG */
 
-  return ei_open(dev);
+  rc = ei_open(dev);
+  if (rc != 0) return rc;
+#ifdef MODULE
+  MOD_INC_USE_COUNT;
+#endif
+  return 0;
 }
 
 static void
@@ -376,8 +387,44 @@ wd_close_card(struct device *dev)
 	/* And disable the shared memory. */
 	outb(ei_status.reg0 & ~WD_MEMENB, wd_cmdreg);
 
+#ifdef MODULE
+	MOD_DEC_USE_COUNT;
+#endif
+
 	return 0;
 }
+
+
+#ifdef MODULE
+char kernel_version[] = UTS_RELEASE;
+static struct device dev_wd80x3 = {
+	"        " /*"wd80x3"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, wd_probe };
+
+int io = 0;
+int irq = 0;
+int mem = 0;
+
+int init_module(void)
+{
+	dev_wd80x3.base_addr = io;
+	dev_wd80x3.irq       = irq;
+	dev_wd80x3.mem_start = mem;
+	if (register_netdev(&dev_wd80x3) != 0)
+		return -EIO;
+	return 0;
+}
+
+void
+cleanup_module(void)
+{
+	if (MOD_IN_USE)
+		printk("wd80x3: device busy, remove delayed\n");
+	else
+	{
+		unregister_netdev(&dev_wd80x3);
+	}
+}
+#endif /* MODULE */
 
 
 /*

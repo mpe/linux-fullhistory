@@ -125,6 +125,7 @@
 #include <linux/inet.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/proc_fs.h>
 
 #include <net/snmp.h>
 #include <net/ip.h>
@@ -1958,7 +1959,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
  *	read.
  */
  
-int ip_mc_procinfo(char *buffer, char **start, off_t offset, int length)
+int ip_mc_procinfo(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	off_t pos=0, begin=0;
 	struct ip_mc_list *im;
@@ -2810,9 +2811,15 @@ void ip_init(void)
 
 	/* So we flush routes when a device is downed */	
 	register_netdevice_notifier(&ip_rt_notifier);
+
 /*	ip_raw_init();
 	ip_packet_init();
 	ip_tcp_init();
 	ip_udp_init();*/
+
+#ifdef CONFIG_IP_MULTICAST
+	proc_net_register(&(struct proc_dir_entry)
+			  { PROC_NET_IGMP,  ip_mc_procinfo,  4,  "igmp"});
+#endif
 }
 

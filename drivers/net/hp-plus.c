@@ -21,6 +21,11 @@
 static const char *version =
 "hp-plus.c:v1.10 9/24/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
+
 #include <linux/string.h>		/* Important -- this inlines word moves. */
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -92,7 +97,7 @@ enum HP_Option {
 	EnableIRQ = 4, FakeIntr = 8, BootROMEnb = 0x10, IOEnb = 0x20,
 	MemEnable = 0x40, ZeroWait = 0x80, MemDisable = 0x1000, };
 
-int hpplus_probe(struct device *dev);
+int hp_plus_probe(struct device *dev);
 int hpp_probe1(struct device *dev, int ioaddr);
 
 static void hpp_reset_8390(struct device *dev);
@@ -362,6 +367,36 @@ hpp_mem_block_output(struct device *dev, int count,
 	return;
 }
 
+#ifdef MODULE
+char kernel_version[] = UTS_RELEASE;
+static struct device dev_hp = {
+	"        " /*"hp"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, hp_plus_probe };
+
+int io = 0;
+int irq = 0;
+
+int init_module(void)
+{
+	dev_hp.base_addr = io;
+	dev_hp.irq       = irq;
+	if (register_netdev(&dev_hp) != 0) {
+		printk("hp: register_netdev() returned non-zero.\n");
+		return -EIO;
+	}
+	return 0;
+}
+
+void
+cleanup_module(void)
+{
+	if (MOD_IN_USE)
+		printk("hp: device busy, remove delayed\n");
+	else
+	{
+		unregister_netdev(&dev_hp);
+	}
+}
+#endif /* MODULE */
 
 /*
  * Local variables:

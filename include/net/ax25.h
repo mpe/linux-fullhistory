@@ -152,7 +152,7 @@ extern struct device *ax25rtr_get_dev(ax25_address *);
 extern int  ax25_encapsulate(struct sk_buff *, struct device *, unsigned short,
 	void *, void *, unsigned int);
 extern int  ax25_rebuild_header(unsigned char *, struct device *, unsigned long, struct sk_buff *);
-extern int  ax25_get_info(char *, char **, off_t, int);
+extern int  ax25_get_info(char *, char **, off_t, int, int);
 extern ax25_uid_assoc *ax25_uid_list;
 extern int  ax25_uid_policy;
 extern ax25_address *ax25_findbyuid(uid_t);
@@ -176,8 +176,8 @@ extern void ax25_check_need_response(ax25_cb *, int, int);
 
 /* ax25_route.c */
 extern void ax25_rt_rx_frame(ax25_address *, struct device *);
-extern int  ax25_rt_get_info(char *, char **, off_t, int);
-extern int  ax25_cs_get_info(char *, char **, off_t, int);
+extern int  ax25_rt_get_info(char *, char **, off_t, int, int);
+extern int  ax25_cs_get_info(char *, char **, off_t, int, int);
 extern int  ax25_rt_autobind(ax25_cb *, ax25_address *);
 extern void ax25_rt_device_down(struct device *);
 extern void ax25_ip_mode_set(ax25_address *, struct device *, char);

@@ -44,6 +44,7 @@
 #include <net/protocol.h>
 #include <net/arp.h>
 #include <net/tcp.h>
+#include <net/route.h>
 #if defined(CONFIG_PPP) || defined(CONFIG_SLIP)
 #include "../drivers/net/slhc.h"
 #endif
@@ -65,7 +66,7 @@
 extern char *get_options(char *str, int *ints);
 extern void set_device_ro(int dev,int flag);
 extern struct file_operations * get_blkfops(unsigned int);
-  
+
 extern void *sys_call_table;
 
 #ifdef CONFIG_FTAPE
@@ -94,6 +95,7 @@ extern struct proc_dir_entry scsi_hba_dir[];
 extern int sys_tz;
 extern int request_dma(unsigned int dmanr, char * deviceID);
 extern void free_dma(unsigned int dmanr);
+extern int (*rarp_ioctl_hook)(int,void*);
 
 extern int close_fp(struct file *filp);
 extern void (* iABI_hook)(struct pt_regs * regs);
@@ -247,6 +249,10 @@ struct symbol_table symbol_table = {
 	X(timer_table),
  	X(intr_count),
 
+	/* autoirq from  drivers/net/auto_irq.c */
+	X(autoirq_setup),
+	X(autoirq_report),
+
 	/* dma handling */
 	X(request_dma),
 	X(free_dma),
@@ -306,6 +312,10 @@ struct symbol_table symbol_table = {
 #ifdef CONFIG_INET	
 	X(inet_add_protocol),
 	X(inet_del_protocol),
+	X(rarp_ioctl_hook),
+	X(init_etherdev),
+	X(ip_rt_route),
+	X(arp_send),
 #if defined(CONFIG_PPP) || defined(CONFIG_SLIP)
     	/* VJ header compression */
 	X(slhc_init),
@@ -446,6 +456,10 @@ struct symbol_table symbol_table = {
 	X(msdos_unlink),
 	X(msdos_unlink_umsdos),
 	X(msdos_write_inode),
+#endif
+#ifdef CONFIG_PROC_FS
+	X(proc_net_register),
+	X(proc_net_unregister),
 #endif
 	/********************************************************
 	 * Do not add anything below this line,

@@ -8,6 +8,10 @@
  * The proc filesystem constants/structures
  */
 
+/*
+ * We always define these enumerators
+ */
+
 enum root_directory_inos {
 	PROC_ROOT_INO = 1,
 	PROC_LOADAVG,
@@ -20,9 +24,7 @@ enum root_directory_inos {
 	PROC_SELF,	/* will change inode # */
 	PROC_NET,
         PROC_SCSI,
-#ifdef CONFIG_DEBUG_MALLOC
 	PROC_MALLOC,
-#endif
 	PROC_KCORE,
 	PROC_MODULES,
 	PROC_STAT,
@@ -55,7 +57,6 @@ enum pid_subdirectory_inos {
 
 enum net_directory_inos {
 	PROC_NET_UNIX = 128,
-#ifdef CONFIG_INET
 	PROC_NET_ARP,
 	PROC_NET_ROUTE,
 	PROC_NET_DEV,
@@ -63,46 +64,25 @@ enum net_directory_inos {
 	PROC_NET_TCP,
 	PROC_NET_UDP,
 	PROC_NET_SNMP,
-#ifdef CONFIG_INET_RARP
 	PROC_NET_RARP,
-#endif
-#ifdef CONFIG_IP_MULTICAST
 	PROC_NET_IGMP,
-#endif
-#ifdef CONFIG_IP_FIREWALL
 	PROC_NET_IPFWFWD,
 	PROC_NET_IPFWBLK,
-#endif
-#ifdef CONFIG_IP_ACCT
 	PROC_NET_IPACCT,
-#endif
-#ifdef CONFIG_IP_MASQUERADE
 	PROC_NET_IPMSQHST,
-#endif
-#if	defined(CONFIG_WAVELAN)
 	PROC_NET_WAVELAN,
-#endif	/* defined(CONFIG_WAVELAN) */
-#endif
-#ifdef CONFIG_IPX
 	PROC_NET_IPX_INTERFACE,
 	PROC_NET_IPX_ROUTE,
 	PROC_NET_IPX,
-#endif
-#ifdef CONFIG_ATALK
 	PROC_NET_ATALK,
 	PROC_NET_AT_ROUTE,
 	PROC_NET_ATIF,
-#endif
-#ifdef CONFIG_AX25
 	PROC_NET_AX25_ROUTE,
 	PROC_NET_AX25,
 	PROC_NET_AX25_CALLS,
-#ifdef CONFIG_NETROM
 	PROC_NET_NR_NODES,
 	PROC_NET_NR_NEIGH,
 	PROC_NET_NR,
-#endif
-#endif
 	PROC_NET_SOCKSTAT,
 	PROC_NET_LAST
 };
@@ -138,6 +118,7 @@ enum scsi_directory_inos {
 
 struct proc_dir_entry {
 	unsigned short low_ino;
+	int (*get_info)(char *, char **, off_t, int, int);
 	unsigned short namelen;
 	const char * name;
 };
@@ -149,6 +130,8 @@ extern void proc_statfs(struct super_block *, struct statfs *, int);
 extern void proc_read_inode(struct inode *);
 extern void proc_write_inode(struct inode *);
 extern int proc_match(int, const char *, struct proc_dir_entry *);
+extern int proc_net_register(struct proc_dir_entry *);
+extern int proc_net_unregister(int);
 
 extern struct inode_operations proc_root_inode_operations;
 extern struct inode_operations proc_base_inode_operations;

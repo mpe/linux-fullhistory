@@ -83,6 +83,7 @@
 #include <net/icmp.h>
 #include <linux/ip_fw.h>
 #include <net/checksum.h>
+#include <linux/proc_fs.h>
 
 /*
  *	Implement IP packet firewall
@@ -1394,7 +1395,7 @@ int ip_fw_ctl(int stage, void *m, int len)
 #if defined(CONFIG_IP_FIREWALL) || defined(CONFIG_IP_ACCT)
 
 static int ip_chain_procinfo(int stage, char *buffer, char **start,
-		off_t offset, int length, int reset)
+			     off_t offset, int length, int reset)
 {
 	off_t pos=0, begin=0;
 	struct ip_fw *i;
@@ -1471,29 +1472,36 @@ static int ip_chain_procinfo(int stage, char *buffer, char **start,
 
 #ifdef CONFIG_IP_ACCT
 
-int ip_acct_procinfo(char *buffer, char **start, off_t offset, int length, int reset)
+static int ip_acct_procinfo(char *buffer, char **start, off_t offset,
+			    int length, int reset)
 {
-	return ip_chain_procinfo(IP_INFO_ACCT, buffer,start,offset,length,reset);
+	return ip_chain_procinfo(IP_INFO_ACCT, buffer,start, offset,length,
+				 reset);
 }
 
 #endif
 
 #ifdef CONFIG_IP_FIREWALL
 
-int ip_fw_blk_procinfo(char *buffer, char **start, off_t offset, int length, int reset)
+static int ip_fw_blk_procinfo(char *buffer, char **start, off_t offset,
+			      int length, int reset)
 {
-	return ip_chain_procinfo(IP_INFO_BLK, buffer,start,offset,length,reset);
+	return ip_chain_procinfo(IP_INFO_BLK, buffer,start,offset,length,
+				 reset);
 }
 
-int ip_fw_fwd_procinfo(char *buffer, char **start, off_t offset, int length, int reset)
+static int ip_fw_fwd_procinfo(char *buffer, char **start, off_t offset,
+			      int length, int reset)
 {
-	return ip_chain_procinfo(IP_INFO_FWD, buffer,start,offset,length,reset);
+	return ip_chain_procinfo(IP_INFO_FWD, buffer,start,offset,length,
+				 reset);
 }
 #endif
 
 #ifdef CONFIG_IP_MASQUERADE
 
-int ip_msqhst_procinfo(char *buffer, char **start, off_t offset, int length)
+static int ip_msqhst_procinfo(char *buffer, char **start, off_t offset,
+			      int length)
 {
 	off_t pos=0, begin=0;
 	struct ip_masq *ms;
@@ -1539,3 +1547,20 @@ int ip_msqhst_procinfo(char *buffer, char **start, off_t offset, int length)
   
 #endif
 
+void ip_fw_init(void)
+{
+#ifdef CONFIG_IP_ACCT
+proc_net_register(&(struct proc_dir_entry)
+	{ PROC_NET_IPACCT,	ip_acct_procinfo,	7,  "ip_acct"});
+#endif
+#ifdef CONFIG_IP_FIREWALL
+proc_net_register(&(struct proc_dir_entry)
+	{ PROC_NET_IPFWBLK,	ip_fw_blk_procinfo,	8,  "ip_block"});
+proc_net_register(&(struct proc_dir_entry)
+	{ PROC_NET_IPFWFWD,	ip_fw_fwd_procinfo,	10, "ip_forward"});
+#endif
+#ifdef CONFIG_IP_MASQUERADE
+proc_net_register(&(struct proc_dir_entry)
+	{ PROC_NET_IPMSQHST,	ip_msqhst_procinfo,	13, "ip_masquerade"});
+#endif
+}

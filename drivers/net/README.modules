@@ -1,0 +1,231 @@
+Wed 2-Aug-95  <matti.aarnio@utu.fi>
+
+		Linux network driver modules
+
+	This is a potpourri of INSMOD-time(*) configuration
+	options (if exist) and their default values of various
+	modules on Linux network drivers collection.
+
+	Do NOT mistake this to "README.modules" at the top-level
+	directory!
+
+	--------------------------
+	(*)	"INSMOD-time" means when you load module with
+		/sbin/insmod  you can feed it optional parameters.
+		See "man insmod".
+	--------------------------
+
+
+3c501.c:
+	io  = 0x280	IO base address
+	irq = 5		IRQ
+	(Probes ports:	0x280, 0x300)
+
+3c503.c:
+	io = 0
+	irq = 0
+	(Probes ports: 0x300, 0x310, 0x330, 0x350, 0x250, 0x280, 0x2A0, 0x2E0)
+
+3c505.c:
+	io = 0
+	irq = 0
+	(Probes ports: 0x300, 0x280, 0x310)
+
+3c507.c:
+	io = 0
+	irq = 0
+	(Probes ports: 0x300, 0x320, 0x340, 0x280)
+
+3c509.c:
+	No parameters (autoprobes)
+	(EISA, and MCA probes in addition to ISA-probes;
+	 ISA probing via PCMCIA AutoConfig (or similar)
+	 via port 0x100.)
+
+8390.c:
+	ei_debug = 0
+	ei_pingpong = 1	  (If no Rx/Tx PINGPONG is desired, set to zero)
+
+ac3200.c:
+	io = 0
+	irq = 0
+	(EISA probing..)
+
+apricot.c:
+	io = 0x300  (Can't be altered!)
+	irq = 10
+
+arcnet.c:
+	io = 0
+	irqnum = 0
+	shmem = 0
+	num = 0
+	(When probing, looks at the following possible addresses:
+	 Suggested ones:
+		0x300, 0x2E0, 0x2F0, 0x2D0
+	 Other ones:
+		0x200, 0x210, 0x220, 0x230, 0x240, 0x250, 0x260, 0x270,
+		0x280, 0x290, 0x2A0, 0x2B0, 0x2C0,
+		       0x310, 0x320, 0x330, 0x340, 0x350, 0x360, 0x370,
+		0x380, 0x390, 0x3A0,			  0x3E0, 0x3F0  )
+
+at1700.c:
+	io = 0
+	irq = 0
+	(Probes ports: 0x260, 0x280, 0x2A0, 0x240, 0x340, 0x320, 0x380, 0x300)
+
+atp.c: *Not modularized*
+	(Probes ports: 0x378, 0x278, 0x3BC;
+	 fixed IRQs: 5 and 7			)
+
+
+auto_irq.c: *Static kernel component*
+
+
+de4x5.c:
+	io = 0x000b
+	irq = 10
+	is_not_dec = 0  -- For SMC card using DEC 21140 set this to 1
+	(EISA, and PCI probing)
+
+de600.c:
+	de600_debug = 0
+	(On port 0x378, irq 7 -- lpt1;  compile time configurable)
+
+de620.c:
+	bnc = 0, utp = 0  <-- Force media by setting either.
+	io = 0x378	(also compile-time configurable)
+	irq = 7
+
+depca.c:
+	io = 0x200
+	irq = 7
+	(Probes ports:	ISA:  0x300, 0x200;
+			EISA: 0x0c00		)
+
+dummy.c:
+	No options
+
+e2100.c:
+	io = 0
+	irq = 0
+	(Probes ports: 0x300, 0x280, 0x380, 0x220)
+
+eepro.c:
+	io = 0
+	irq = 0
+	(Probes ports: 0x200, 0x240, 0x280, 0x2C0, 0x300, 0x320, 0x340, 0x360)
+
+eexpress.c:
+	io = 0
+	irq = 0
+	(Probes ports: 0x300, 0x270, 0x320, 0x340)
+
+eql.c:
+	(No parameters)
+
+ewrk3.c:
+	io = 0x300
+	irq = 5
+	(With module no autoprobing!
+	 On EISA-bus does EISA probing.
+	 Static linkage probes ports on ISA bus:
+		0x100, 0x120, 0x140, 0x160, 0x180, 0x1A0, 0x1C0,
+		0x200, 0x220, 0x240, 0x260, 0x280, 0x2A0, 0x2C0, 0x2E0,
+		0x300,        0x340, 0x360, 0x380, 0x3A0, 0x3C0)
+
+hp-plus.c:
+	io = 0
+	irq = 0
+	(Probes ports: 0x200, 0x240, 0x280, 0x2C0, 0x300, 0x320, 0x340)
+
+hp.c:
+	io = 0
+	irq = 0
+	ne8390_rw_bugfix = 0
+	(Probes ports: 0x300, 0x320, 0x340, 0x280, 0x2C0, 0x200, 0x240)
+
+hp100.c:
+	hp100_port = 0 (IO-base address)
+	(Does EISA-probing, if on EISA-slot;
+	 On ISA-bus probes all ports from 0x100 thru to 0x3E0
+	 in increments of 0x020)
+
+ibmtr.c:
+	io = 0
+	(Probes ports: 0xA20, 0xA24 -- Ok, 0x220, 0x224, but IBM style..)
+
+lance.c: *Not modularized*
+	(PCI, and ISA probing; "CONFIG_PCI" needed for PCI support)
+	(Probes ISA ports: 0x300, 0x320, 0x340, 0x360)
+
+loopback.c: *Static kernel component*
+
+ne.c:
+	io = 0
+	irq = 0
+	config_ne_sanity = 0
+	ne8390_rw_bugfix = 0;
+	(Probes ports: 0x300, 0x280, 0x320, 0x340, 0x360)
+
+net_init.c: *Static kernel component*
+
+ni52.c: *Not modularized*
+	(Probes ports:	0x300, 0x280, 0x360, 0x320, 0x340
+		mems:	0xD0000, 0xD2000, 0xC8000, 0xCA000,
+			0xD4000, 0xD6000, 0xD8000 )
+
+ni65.c: *Not modularized*  **16MB MEMORY BARRIER BUG**
+	(Probes ports:	0x300, 0x320, 0x340, 0x360)
+
+pi2.c:	*Not modularized* (well, NON-STANDARD modularization!)
+	Only one card supported at this time.
+	(Probes ports: 0x380, 0x300, 0x320, 0x340, 0x360, 0x3A0)
+
+plip.c:
+	No options; goes to IO=0x278, IRQ=2
+
+ppp.c:
+	No options (ppp-2.2+ has some, this is based on non-dynamic
+	version from ppp-2.1.2d)
+
+seeq8005.c: *Not modularized*
+	(Probes ports: 0x300, 0x320, 0x340, 0x360)
+
+sk_g16.c: *Not modularized*
+	(Probes ports: 0x100, 0x180, 0x208, 0x220m 0x288, 0x320, 0x328, 0x390)
+
+skeleton.c: *Skeleton*
+
+slhc.c:
+	No configuration parameters
+
+slip.c:
+	slip_maxdev = 256 (default value from SL_NRUNIT on slip.h)
+
+
+smc-ultra.c:
+	io = 0
+	irq = 0
+	(Probes ports:	0x200, 0x220, 0x240, 0x280, 0x300, 0x340, 0x380)
+
+tulip.c: *Partial modularization*
+	(init-time memory allocation makes problems..)
+
+tunnel.c:
+	No insmod parameters
+
+wavelan.c:
+	io = 0x390	(Settable, but change not recommended)
+	irq = 0		(Not honoured, if changed..)
+
+wd.c:
+	io = 0
+	irq = 0
+	mem = 0		(Force shared-memory on address 0xC8000, or whatever..)
+	(Probes ports:	0x300, 0x280, 0x380, 0x240,
+	 uses AUTOIRQ)
+
+znet.c: *Not modularized*
+	(Only one device on  Zenith Z-Note (notebook?) systems,
+	 configuration information from (EE)PROM)

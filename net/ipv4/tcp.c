@@ -4964,7 +4964,7 @@ static void tcp_write_wakeup(struct sock *sk)
 		 *	Recover the buffer pointers
 		 */
 		 
-	    	iph = (struct iphdr *)(skb->data + skb->dev->hard_header_len);
+	    	iph = (struct iphdr *)skb->ip_hdr;
 	    	th = (struct tcphdr *)(((char *)iph) +(iph->ihl << 2));
 
 		/*
@@ -4973,7 +4973,7 @@ static void tcp_write_wakeup(struct sock *sk)
 		 
 	    	buff = sk->prot->wmalloc(sk, win_size + th->doff * 4 + 
 				     (iph->ihl << 2) +
-				     skb->dev->hard_header_len + 15, 
+				     sk->prot->max_header + 15, 
 				     1, GFP_ATOMIC);
 	    	if ( buff == NULL )
 	    		return;

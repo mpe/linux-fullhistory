@@ -51,18 +51,18 @@ struct inode_operations proc_base_inode_operations = {
 };
 
 static struct proc_dir_entry base_dir[] = {
-	{ PROC_PID_INO,		1, "." },
-	{ PROC_ROOT_INO,	2, ".." },
-	{ PROC_PID_MEM,		3, "mem" },
-	{ PROC_PID_CWD,		3, "cwd" },
-	{ PROC_PID_ROOT,	4, "root" },
-	{ PROC_PID_EXE,		3, "exe" },
-	{ PROC_PID_FD,		2, "fd" },
-	{ PROC_PID_ENVIRON,	7, "environ" },
-	{ PROC_PID_CMDLINE,	7, "cmdline" },
-	{ PROC_PID_STAT,	4, "stat" },
-	{ PROC_PID_STATM,	5, "statm" },
-	{ PROC_PID_MAPS,	4, "maps" }
+	{ PROC_PID_INO,		NULL,	1, "." },
+	{ PROC_ROOT_INO,	NULL,	2, ".." },
+	{ PROC_PID_MEM,		NULL,	3, "mem" },
+	{ PROC_PID_CWD,		NULL,	3, "cwd" },
+	{ PROC_PID_ROOT,	NULL,	4, "root" },
+	{ PROC_PID_EXE,		NULL,	3, "exe" },
+	{ PROC_PID_FD,		NULL,	2, "fd" },
+	{ PROC_PID_ENVIRON,	NULL,	7, "environ" },
+	{ PROC_PID_CMDLINE,	NULL,	7, "cmdline" },
+	{ PROC_PID_STAT,	NULL,	4, "stat" },
+	{ PROC_PID_STATM,	NULL,	5, "statm" },
+	{ PROC_PID_MAPS,	NULL,	4, "maps" }
 };
 
 #define NR_BASE_DIRENTRY ((sizeof (base_dir))/(sizeof (base_dir[0])))

@@ -1120,7 +1120,7 @@ static int sl_open_dev(struct device *dev)
 
 /* Initialize SLIP control device -- register SLIP line discipline */
 #ifdef MODULE
-static int slip_init_ctrl_dev()
+static int slip_init_ctrl_dev(void)
 #else	/* !MODULE */
 int
 slip_init_ctrl_dev(struct device *dummy)

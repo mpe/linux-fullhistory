@@ -71,11 +71,12 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 	off_t begin=0;
   
 	s_array = pro->sock_array;
-	len+=sprintf(buffer, "sl  local_address rem_address   st tx_queue rx_queue tr tm->when uid\n");
+	len += sprintf(buffer, "sl  local_address rem_address   st tx_queue rx_queue tr tm->when uid\n");
 /*
- *	This was very pretty but didn't work when a socket is destroyed at the wrong moment
- *	(eg a syn recv socket getting a reset), or a memory timer destroy. Instead of playing
- *	with timers we just concede defeat and cli().
+ *	This was very pretty but didn't work when a socket is destroyed
+ *	at the wrong moment (eg a syn recv socket getting a reset), or
+ *	a memory timer destroy. Instead of playing with timers we just
+ *	concede defeat and cli().
  */
 	for(i = 0; i < SOCK_ARRAY_SIZE; i++) 
 	{
@@ -107,7 +108,7 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 			    timer_active=timer_active2;
 			    timer_expires=sp->timer.expires;
 			}
-			len+=sprintf(buffer+len, "%2d: %08lX:%04X %08lX:%04X %02X %08lX:%08lX %02X:%08lX %08X %d %d\n",
+			len += sprintf(buffer+len, "%2d: %08lX:%04X %08lX:%04X %02X %08lX:%08lX %02X:%08lX %08X %d %d\n",
 				i, src, srcp, dest, destp, sp->state, 
 				format==0?sp->write_seq-sp->rcv_ack_seq:sp->rmem_alloc, 
 				format==0?sp->acked_seq-sp->copied_seq:sp->wmem_alloc,
@@ -131,8 +132,10 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 			if(pos>offset+length)
 				break;
 		}
-		sti();	/* We only turn interrupts back on for a moment, but because the interrupt queues anything built up
-			   before this will clear before we jump back and cli, so it's not as bad as it looks */
+		sti();	/* We only turn interrupts back on for a moment,
+			   but because the interrupt queues anything built
+			   up before this will clear before we jump back
+			   and cli(), so it's not as bad as it looks */
 		if(pos>offset+length)
 			break;
 	}
@@ -144,19 +147,19 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 } 
 
 
-int tcp_get_info(char *buffer, char **start, off_t offset, int length)
+int tcp_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	return get__netinfo(&tcp_prot, buffer,0, start, offset, length);
 }
 
 
-int udp_get_info(char *buffer, char **start, off_t offset, int length)
+int udp_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	return get__netinfo(&udp_prot, buffer,1, start, offset, length);
 }
 
 
-int raw_get_info(char *buffer, char **start, off_t offset, int length)
+int raw_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	return get__netinfo(&raw_prot, buffer,1, start, offset, length);
 }
@@ -165,7 +168,7 @@ int raw_get_info(char *buffer, char **start, off_t offset, int length)
 /*
  *	Report socket allocation statistics [mea@utu.fi]
  */
-int afinet_get_info(char *buffer, char **start, off_t offset, int length)
+int afinet_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	/* From  net/socket.c  */
 	extern int socket_get_info(char *, char **, off_t, int);
@@ -194,7 +197,7 @@ int afinet_get_info(char *buffer, char **start, off_t offset, int length)
  *	Called from the PROCfs module. This outputs /proc/net/snmp.
  */
  
-int snmp_get_info(char *buffer, char **start, off_t offset, int length)
+int snmp_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	extern struct tcp_mib tcp_statistics;
 	extern struct udp_mib udp_statistics;
@@ -265,4 +268,3 @@ int snmp_get_info(char *buffer, char **start, off_t offset, int length)
 		len = length;
 	return len;
 }
-

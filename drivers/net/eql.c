@@ -19,8 +19,6 @@
 static const char *version = 
 	"Equalizer: $Revision: 3.12 $ $Date: 1995/01/19 $ Simon Janes (simon@ncm.com)\n";
 
-#include <linux/config.h>
-
 /*
  * Sources:
  *   skeleton.c by Donald Becker.
@@ -104,6 +102,12 @@ static const char *version =
  *
  */
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
+
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>
@@ -283,6 +287,9 @@ eql_open(struct device *dev)
 	eql->timer_on = 1;
 	add_timer (&eql->timer);
 
+#ifdef MODULE
+	MOD_INC_USE_COUNT;
+#endif
 	return 0;
       }
   return 1;
@@ -306,6 +313,10 @@ eql_close(struct device *dev)
   del_timer (&eql->timer);
 
   eql_delete_slave_queue (eql->queue);
+
+#ifdef MODULE
+  MOD_DEC_USE_COUNT;
+#endif
 
   return 0;
 }
@@ -1164,6 +1175,32 @@ eql_timer(unsigned long param)
       add_timer (&eql->timer);
     }
 }
+
+#ifdef MODULE
+char kernel_version[] = UTS_RELEASE;
+static struct device dev_eql = {
+	"eql", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, eql_init };
+
+int init_module(void)
+{
+	if (register_netdev(&dev_eql) != 0) {
+		printk("eql: register_netdev() returned non-zero.\n");
+		return -EIO;
+	}
+	return 0;
+}
+
+void
+cleanup_module(void)
+{
+	if (MOD_IN_USE)
+		printk("eql: device busy, remove delayed\n");
+	else
+	{
+		unregister_netdev(&dev_eql);
+	}
+}
+#endif /* MODULE */
 
 /*
  * Local Variables: 

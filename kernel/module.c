@@ -34,6 +34,10 @@
  *	  and finally: reducing the number of entries in ksyms.c
  *	  since every subsystem should now be able to decide and
  *	  control exactly what symbols it wants to export, locally!
+ *
+ * On 1-Aug-95:  <Matti.Aarnio@utu.fi>  altered code to use same style as
+ *		 do  /proc/net/XXX  "files".  Namely allow more than 4kB
+ *		 (or what the block size if) output.
  */
 
 #ifdef DEBUG_MODULE
@@ -53,11 +57,12 @@ static int free_modules( void);
 
 static int module_init_flag = 0; /* Hmm... */
 
+extern struct symbol_table symbol_table; /* in kernel/ksyms.c */
+
 /*
  * Called at boot time
  */
 void init_modules(void) {
-	extern struct symbol_table symbol_table; /* in kernel/ksyms.c */
 	struct internal_symbol *sym;
 	int i;
 
@@ -570,40 +575,51 @@ int get_module_list(char *buf)
 /*
  * Called by the /proc file system to return a current list of ksyms.
  */
-int get_ksyms_list(char *buf)
+int get_ksyms_list(char *buf, char **start, off_t offset, int length)
 {
 	struct module *mp;
 	struct internal_symbol *sym;
 	int i;
 	char *p = buf;
+	int len     = 0;	/* code from  net/ipv4/proc.c */
+	off_t pos   = 0;
+	off_t begin = 0;
 
 	for (mp = module_list; mp; mp = mp->next) {
 		if ((mp->state == MOD_RUNNING) &&
-			(mp->symtab != NULL) && (mp->symtab->n_symbols > 0)) {
+		    (mp->symtab != NULL) &&
+		    (mp->symtab->n_symbols > 0)) {
 			for (i = mp->symtab->n_symbols,
 				sym = mp->symtab->symbol;
 				i > 0; --i, ++sym) {
 
-				if (p - buf > 4096 - 100) {
-					strcat(p, "...\n");
-					p += strlen(p);
-					return p - buf; /* avoid overflowing buffer */
-				}
-
+				p = buf + len;
 				if (mp->name[0]) {
-					sprintf(p, "%08lx %s\t[%s]\n",
-						(long)sym->addr, sym->name, mp->name);
+					len += sprintf(p, "%08lx %s\t[%s]\n",
+						       (long)sym->addr,
+						       sym->name, mp->name);
+				} else {
+					len += sprintf(p, "%08lx %s\n",
+						       (long)sym->addr,
+						       sym->name);
 				}
-				else {
-					sprintf(p, "%08lx %s\n",
-						(long)sym->addr, sym->name);
+				pos = begin + len;
+				if (pos < offset) {
+					len   = 0;
+					begin = pos;
 				}
-				p += strlen(p);
+				pos = begin + len;
+				if (pos > offset+length)
+					goto leave_the_loop;
 			}
 		}
 	}
-
-	return p - buf;
+    leave_the_loop:
+	*start = buf + (offset - begin);
+	len -= (offset - begin);
+	if (len > length)
+		len = length;
+	return len;
 }
 
 /*

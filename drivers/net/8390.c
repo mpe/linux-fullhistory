@@ -84,7 +84,12 @@ static const char *version =
 #ifdef EI_DEBUG
 int ei_debug = EI_DEBUG;
 #else
-int ei_debug = 1;
+int ei_debug = 0;
+#endif
+#ifdef EI_NOPINGPONG
+static int ei_pingpong = 0;
+#else
+static int ei_pingpong = 1;
 #endif
 
 /* Max number of packets received at one Intr.
@@ -594,9 +599,7 @@ int ethdev_init(struct device *dev)
 		dev->priv = kmalloc(sizeof(struct ei_device), GFP_KERNEL);
 		memset(dev->priv, 0, sizeof(struct ei_device));
 		ei_local = (struct ei_device *)dev->priv;
-#ifndef NO_PINGPONG
-		ei_local->pingpong = 1;
-#endif
+		ei_local->pingpong = ei_pingpong;
     }
     
     /* The open call may be overridden by the card-specific code. */

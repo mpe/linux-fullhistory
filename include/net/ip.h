@@ -43,7 +43,7 @@
 #ifdef CONFIG_IP_MULTICAST
 extern void		ip_mc_dropsocket(struct sock *);
 extern void		ip_mc_dropdevice(struct device *dev);
-extern int		ip_mc_procinfo(char *, char **, off_t, int);
+extern int		ip_mc_procinfo(char *, char **, off_t, int, int);
 #endif
  
 

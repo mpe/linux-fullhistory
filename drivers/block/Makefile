@@ -27,7 +27,7 @@ ifdef CONFIG_BLK_DEV_FD
 OBJS := $(OBJS) floppy.o
 SRCS := $(SRCS) floppy.c
 else
-BLOCK_MODULE_OBJS := $(MODULES) floppy.o
+BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) floppy.o
 endif
 
 ifdef CONFIG_AZTCD
@@ -137,10 +137,13 @@ block.a: $(OBJS)
 	$(AR) rcs block.a $(OBJS)
 	sync
 
+ifdef BLOCK_MODULE_OBJS
 dep:
 	$(CPP) -M $(SRCS) > .depend
-ifdef BLOCK_MODULE_OBJS
 	$(CPP) -M -DMODULE $(BLOCK_MODULE_OBJS:.o=.c) >> .depend
+else
+dep:
+	$(CPP) -M $(SRCS) > .depend
 endif
 
 modules: $(BLOCK_MODULE_OBJS)

@@ -9,7 +9,10 @@
 
 M: Matti Aarnio
 E: mea@utu.fi
-D: Dynamicized network socket allocations, LILO for AHA1542
+D: LILO for AHA1542, modularized several of drivers/net/,
+D: dynamic SLIP devices, dynamic /proc/net/, true size /proc/ksyms,
+D: and other hacks..
+D: Documenting various parts of network subsystem (kernel side)
 
 N: Werner Almesberger
 E: almesber@bernina.ethz.ch

@@ -1284,7 +1284,8 @@ static int nr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	return(0);
 }
 
-int nr_get_info(char *buffer, char **start, off_t offset, int length)
+static int nr_get_info(char *buffer, char **start, off_t offset,
+		       int length, int dummy)
 {
 	struct sock *s;
 	struct device *dev;
@@ -1388,6 +1389,14 @@ void nr_proto_init(struct net_proto *pro)
 	nr_default.busy_delay = NR_DEFAULT_T4;
 	nr_default.tries      = NR_DEFAULT_N2;
 	nr_default.window     = NR_DEFAULT_WINDOW;
+
+proc_net_register(&(struct proc_dir_entry)
+	{ PROC_NET_NR,		nr_get_info,		2, "nr" });
+proc_net_register(&(struct proc_dir_entry)
+	{ PROC_NET_NR_NEIGH,	nr_neigh_get_info,	8, "nr_neigh" });
+proc_net_register(&(struct proc_dir_entry)
+	{ PROC_NET_NR_NODES,	nr_nodes_get_info,	8, "nr_nodes" });
+
 }
 
 #endif

@@ -84,6 +84,7 @@
 #include <net/netrom.h>
 #endif
 #endif
+#include <linux/proc_fs.h>
 
 
 /*
@@ -1039,7 +1040,7 @@ int arp_find(unsigned char *haddr, u32 paddr, struct device *dev,
 
 #define HBUFFERLEN 30
 
-int arp_get_info(char *buffer, char **start, off_t offset, int length)
+int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	int len=0;
 	off_t begin=0;
@@ -1455,5 +1456,8 @@ void arp_init (void)
 	add_timer(&arp_timer);
 	/* Register for device down reports */
 	register_netdevice_notifier(&arp_dev_notifier);
+
+proc_net_register(&(struct proc_dir_entry)
+	{ PROC_NET_ARP,		arp_get_info,	3, "arp" });
 }
 

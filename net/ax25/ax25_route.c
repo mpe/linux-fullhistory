@@ -136,7 +136,7 @@ void ax25_rt_device_down(struct device *dev)
 	}
 }
 
-int ax25_rt_get_info(char *buffer, char **start, off_t offset, int length)
+int ax25_rt_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	struct ax25_route *ax25_rt;
 	int len     = 0;
@@ -189,7 +189,7 @@ int ax25_rt_get_info(char *buffer, char **start, off_t offset, int length)
 	return len;
 } 
 
-int ax25_cs_get_info(char *buffer, char **start, off_t offset, int length)
+int ax25_cs_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	ax25_uid_assoc *pt;
 	int len     = 0;

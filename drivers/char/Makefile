@@ -100,10 +100,13 @@ modules:
 
 endif
 
+ifdef MODULES
 dep: uni_hash_tbl.h
 	$(CPP) -M $(SRCS) > .depend
-ifdef MODULES
 	$(CPP) -M -DMODULE $(MODULES:.o=.c) >> .depend
+else
+dep: uni_hash_tbl.h
+	$(CPP) -M $(SRCS) > .depend
 endif
 
 conmakehash: conmakehash.c

@@ -31,6 +31,8 @@ dep:
 		$(CPP) -M *.c > .depend
 		set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i dep; done
 
-modules:
+modules: dummy
+	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i modules; done
+
 
 include $(TOPDIR)/Rules.make

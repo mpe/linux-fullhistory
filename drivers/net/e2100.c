@@ -34,6 +34,11 @@
 static const char *version =
 	"e2100.c:v1.01 7/21/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
+#ifdef MODULE
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
+
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
@@ -233,6 +238,7 @@ static int
 e21_open(struct device *dev)
 {
 	short ioaddr = dev->base_addr;
+	int rc;
 
 	if (request_irq(dev->irq, ei_interrupt, 0, "e2100")) {
 		return EBUSY;
@@ -248,7 +254,12 @@ e21_open(struct device *dev)
 	inb(ioaddr + E21_MEM_BASE);
 	outb(0, ioaddr + E21_ASIC + ((dev->mem_start >> 17) & 7));
 
-	return ei_open(dev);
+	rc = ei_open(dev);
+	if (rc != 0) return rc;
+#ifdef MODULE
+	MOD_INC_USE_COUNT;
+#endif
+	return 0;
 }
 
 static void
@@ -331,6 +342,10 @@ e21_close(struct device *dev)
 	   really bad things happen if it isn't. */
 	mem_off(ioaddr);
 
+#ifdef MODULE
+	MOD_DEC_USE_COUNT;
+#endif
+
 	return 0;
 }
 
@@ -339,6 +354,36 @@ struct netdev_entry e21_drv =
 {"e21", e21_probe1, E21_IO_EXTENT, e21_probe_list};
 #endif
 
+#ifdef MODULE
+char kernel_version[] = UTS_RELEASE;
+static struct device dev_e2100 = {
+	"        " /*"e2100"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, e2100_probe };
+
+int io = 0;
+int irq = 0;
+
+int init_module(void)
+{
+	dev_e2100.base_addr = io;
+	dev_e2100.irq       = irq;
+	if (register_netdev(&dev_e2100) != 0) {
+		printk("e2100: register_netdev() returned non-zero.\n");
+		return -EIO;
+	}
+	return 0;
+}
+
+void
+cleanup_module(void)
+{
+	if (MOD_IN_USE)
+		printk("e2100: device busy, remove delayed\n");
+	else
+	{
+		unregister_netdev(&dev_e2100);
+	}
+}
+#endif /* MODULE */
 
 /*
  * Local variables:
