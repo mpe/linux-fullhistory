@@ -682,7 +682,8 @@ void __init print_IO_APIC(void)
 	printk(".... register #01: %08X\n", *(int *)&reg_01);
 	printk(".......     : max redirection entries: %04X\n", reg_01.entries);
 	if (	(reg_01.entries != 0x0f) && /* ISA-only Neptune boards */
-		(reg_01.entries != 0x17)    /* ISA+PCI boards */
+		(reg_01.entries != 0x17) && /* ISA+PCI boards */
+		(reg_01.entries != 0x3F)    /* Xeon boards */
 	)
 		UNEXPECTED_IO_APIC();
 	if (reg_01.entries == 0x0f)
@@ -690,7 +691,8 @@ void __init print_IO_APIC(void)
 
 	printk(".......     : IO APIC version: %04X\n", reg_01.version);
 	if (	(reg_01.version != 0x10) && /* oldest IO-APICs */
-		(reg_01.version != 0x11)  /* my IO-APIC */
+		(reg_01.version != 0x11) && /* Pentium/Pro IO-APICs */
+		(reg_01.version != 0x13)    /* Xeon IO-APICs */
 	)
 		UNEXPECTED_IO_APIC();
 	if (reg_01.__reserved_1 || reg_01.__reserved_2)

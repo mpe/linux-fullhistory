@@ -1,4 +1,4 @@
-/* $Id: cosa.c,v 1.9 1998/12/08 02:24:23 kas Exp $ */
+/* $Id: cosa.c,v 1.11 1998/12/24 23:44:23 kas Exp $ */
 
 /*
  *  Copyright (C) 1995-1997  Jan "Yenya" Kasprzak <kas@fi.muni.cz>
@@ -357,7 +357,7 @@ __initfunc(static int cosa_init(void))
 #endif
 {
 	int i;
-	printk(KERN_INFO "cosa v1.02 (c) 1997-8 Jan Kasprzak <kas@fi.muni.cz>\n");
+	printk(KERN_INFO "cosa v1.03 (c) 1997-8 Jan Kasprzak <kas@fi.muni.cz>\n");
 #ifdef __SMP__
 	printk(KERN_INFO "cosa: SMP found. Please mail any success/failure reports to the author.\n");
 #endif
@@ -995,7 +995,9 @@ static inline int cosa_download(struct cosa_data *cosa, struct cosa_download *d)
 	get_user_ret(len, &(d->len), -EFAULT);
 	get_user_ret(code, &(d->code), -EFAULT);
 
-	if (d->len < 0)
+	if (d->addr < 0 || d->addr > COSA_MAX_FIRMWARE_SIZE)
+		return -EINVAL;
+	if (d->len < 0 || d->len > COSA_MAX_FIRMWARE_SIZE)
 		return -EINVAL;
 
 	if ((i=download(cosa, d->code, len, addr)) < 0) {
@@ -1555,6 +1557,15 @@ static int puthexnumber(struct cosa_data *cosa, int number)
  * separate functions to make it more readable. These functions are inline,
  * so there should be no overhead of function call.
  */
+
+/*
+ * Transmit interrupt routine - called when COSA is willing to obtain
+ * data from the OS. The most tricky part of the routine is selection
+ * of channel we (OS) want to send packet for. For SRP we should probably
+ * use the round-robin approach. The newer COSA firmwares have a simple
+ * flow-control - in the status word has bits 2 and 3 set to 1 means that the
+ * channel 0 or 1 doesn't want to receive data.
+ */
 static inline void tx_interrupt(struct cosa_data *cosa, int status)
 {
 	unsigned long flags, flags1;
@@ -1564,16 +1575,24 @@ static inline void tx_interrupt(struct cosa_data *cosa, int status)
 #endif
 	spin_lock_irqsave(&cosa->lock, flags);
 	set_bit(TXBIT, &cosa->rxtx);
-	/*
-	 * Using a round-robin algorithm select a first channel that has
-	 * data ready for transmit.
-	 */
 	if (!test_bit(IRQBIT, &cosa->rxtx)) {
+		/* flow control */
+		int i=0;
 		do {
+			if (i++ > cosa->nchannels) {
+				printk(KERN_WARNING
+					"%s: No channel wants data in TX IRQ\n",
+					cosa->name);
+				clear_bit(TXBIT, &cosa->rxtx);
+				spin_unlock_irqrestore(&cosa->lock, flags);
+				return;
+			}
 			cosa->txchan++;
 			if (cosa->txchan >= cosa->nchannels)
 				cosa->txchan = 0;
-		} while(!(cosa->txbitmap & (1<<cosa->txchan)));
+		} while ((!(cosa->txbitmap & (1<<cosa->txchan)))
+			|| status & (1<<(cosa->txchan+DRIVER_TXMAP_SHIFT)));
+
 		cosa->txsize = cosa->chan[cosa->txchan].txsize;
 		if (cosa_dma_able(cosa->chan+cosa->txchan,
 			cosa->chan[cosa->txchan].txbuf, cosa->txsize)) {

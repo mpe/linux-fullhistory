@@ -389,9 +389,11 @@ static inline int ppa_byte_out(unsigned short base, char *buffer, unsigned int l
      * In case you are wondering what the last line of the asm does...
      * <output allocation> : <input allocation> : <trashed registers>
      */
+    register int d0;
+
     asm("shr $2,%%ecx\n" \
 	"	jz .no_more_bulk_bo\n" \
-	"	.align 4\n" \
+	"	.p2align 4,,7\n" \
 	".loop_bulk_bo:\n" \
 	"	movl (%%esi),%%ebx\n" \
 	BYTE_OUT(%%bl) \
@@ -401,19 +403,23 @@ static inline int ppa_byte_out(unsigned short base, char *buffer, unsigned int l
 	BYTE_OUT(%%bh) \
 	"	addl $4,%%esi\n" \
 	"	loop .loop_bulk_bo\n" \
-	"	.align 4\n" \
+	"	.p2align 4,,7\n" \
 	".no_more_bulk_bo:" \
-  : "=S"(buffer): "c"(len), "d"(base), "S"(buffer):"eax", "ebx", "ecx");
+  : "=S"(buffer), "=c"(d0)
+  : "1"(len), "d"(base), "0"(buffer)
+  : "eax", "ebx");
 
     asm("andl $3,%%ecx\n" \
 	"	jz .no_more_loose_bo\n" \
-	"	.align 4\n" \
+	"	.p2align 4,,7\n" \
 	".loop_loose_bo:\n" \
 	BYTE_OUT((%%esi)) \
 	"	incl %%esi\n" \
 	"	loop .loop_loose_bo\n" \
 	".no_more_loose_bo:\n" \
-  : /* no output */ : "c"(len), "d"(base), "S"(buffer):"eax", "ebx", "ecx");
+  : "=c"(d0)
+  : "0"(len), "d"(base), "S"(buffer)
+  : "eax", "ebx");
     return 1;			/* All went well - we hope! */
 }
 
@@ -439,9 +445,11 @@ static inline int ppa_byte_in(unsigned short base, char *buffer, int len)
      * In case you are wondering what the last line of the asm does...
      * <output allocation> : <input allocation> : <trashed registers>
      */
+    register int d0;
+
     asm("shr $2,%%ecx\n" \
 	"	jz .no_more_bulk_bi\n" \
-	"	.align 4\n" \
+	"	.p2align 4,,7\n" \
 	".loop_bulk_bi:\n" \
 	BYTE_IN(%%bl) \
 	BYTE_IN(%%bh) \
@@ -452,19 +460,23 @@ static inline int ppa_byte_in(unsigned short base, char *buffer, int len)
 	"	movl %%ebx,(%%esi)\n" \
 	"	addl $4,%%esi\n" \
 	"	loop .loop_bulk_bi\n" \
-	"	.align 4\n" \
+	"	.p2align 4,,7\n" \
 	".no_more_bulk_bi:" \
-  : "=S"(buffer): "c"(len), "d"(base), "S"(buffer):"eax", "ebx", "ecx");
+  : "=S"(buffer), "=c"(d0)
+  : "1"(len), "d"(base), "0"(buffer)
+  : "eax", "ebx");
 
     asm("andl $3,%%ecx\n" \
 	"	jz .no_more_loose_bi\n" \
-	"	.align 4\n" \
+	"	.p2align 4,,7\n" \
 	".loop_loose_bi:\n" \
 	BYTE_IN((%%esi)) \
 	"	incl %%esi\n" \
 	"	loop .loop_loose_bi\n" \
 	".no_more_loose_bi:\n" \
-  : /* no output */ : "c"(len), "d"(base), "S"(buffer):"eax", "ebx", "ecx");
+  : "=c"(d0)
+  : "0"(len), "d"(base), "S"(buffer)
+  : "eax", "ebx");
     return 1;			/* All went well - we hope! */
 }
 
@@ -496,9 +508,11 @@ static inline int ppa_nibble_in(unsigned short str_p, char *buffer, int len)
      * In case you are wondering what the last line of the asm does...
      * <output allocation> : <input allocation> : <trashed registers>
      */
+    register int d0;
+
     asm("shr $2,%%ecx\n" \
 	"	jz .no_more_bulk_ni\n" \
-	"	.align 4\n" \
+	"	.p2align 4,,7\n" \
 	".loop_bulk_ni:\n" \
 	NIBBLE_IN(%%bl) \
 	NIBBLE_IN(%%bh) \
@@ -509,19 +523,23 @@ static inline int ppa_nibble_in(unsigned short str_p, char *buffer, int len)
 	"	movl %%ebx,(%%esi)\n" \
 	"	addl $4,%%esi\n" \
 	"	loop .loop_bulk_ni\n" \
-	"	.align 4\n" \
+	"	.p2align 4,,7\n" \
 	".no_more_bulk_ni:" \
-  : "=S"(buffer): "c"(len), "d"(str_p), "S"(buffer):"eax", "ebx", "ecx");
+  : "=S"(buffer), "=c"(d0)
+  : "1"(len), "d"(str_p), "0"(buffer)
+  : "eax", "ebx");
 
     asm("andl $3,%%ecx\n" \
 	"	jz .no_more_loose_ni\n" \
-	"	.align 4\n" \
+	"	.p2align 4,,7\n" \
 	".loop_loose_ni:\n" \
 	NIBBLE_IN((%%esi)) \
 	"	incl %%esi\n" \
 	"	loop .loop_loose_ni\n" \
 	".no_more_loose_ni:\n" \
-  : /* no output */ : "c"(len), "d"(str_p), "S"(buffer):"eax", "ebx", "ecx");
+  : "=c"(d0)
+  : "0"(len), "d"(str_p), "S"(buffer)
+  : "eax", "ebx");
     return 1;			/* All went well - we hope! */
 }
 #else				/* Old style C routines */

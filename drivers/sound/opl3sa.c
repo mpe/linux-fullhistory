@@ -260,7 +260,6 @@ void unload_opl3sa_wss(struct address_info *hw_config)
 		      hw_config->dma,
 		      dma2,
 		      0);
-	sound_unload_audiodev(hw_config->slots[0]);
 }
 
 void unload_opl3sa_mpu(struct address_info *hw_config)

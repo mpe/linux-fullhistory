@@ -13,8 +13,8 @@
 /*
  * Daniel J. Rodriksson: Modified sbintr to handle 8 and 16 bit interrupts
  *                       for full duplex support ( only sb16 by now )
- * Rolf Fokkens:	 Added (BETA?) support for ES18XX chips.
- *			 Which means: you can adjust the recording levels.
+ * Rolf Fokkens:	 Added (BETA?) support for ES188x chips.
+ * (fokkensr@vertis.nl)	 Which means: You can adjust the recording levels.
  */
 #include <linux/config.h>
 #include <linux/delay.h>
@@ -545,8 +545,9 @@ static int ess_init(sb_devc * devc, struct address_info *hw_config)
 
 	/*
 	 * This the detection heuristic of ESS technology, though somewhat
-	 * changed to actually make it work :-)
-	 * This is the most BETA part of the software: Will it work?
+	 * changed to actually make it work.
+	 * This is the most BETA part of the software: Will the detection
+         * always work?
 	 */
 	devc->model = MDL_ESS;
 	devc->submodel = ess_minor & 0x0f;
@@ -558,8 +559,8 @@ static int ess_init(sb_devc * devc, struct address_info *hw_config)
 		if ((ess_minor & 0x0f) >= 8) {
 			if (  !ess_probe (devc, 0x64, (1 << 3))
 			    && ess_probe (devc, 0x70, 0x7f)) {
-				chip = "ES18XX";
-				devc->submodel = SUBMDL_ES18XX;
+				chip = "ES188x";
+				devc->submodel = SUBMDL_ES188X;
 			} else {
 				chip = "ES1688";
 			};
@@ -1035,7 +1036,7 @@ void sb_dsp_unload(struct address_info *hw_config, int sbmpu)
 /*
  *	Mixer access routines
  *
- *	ES18XX modifications: some mixer registers reside in the
+ *	ES188x modifications: some mixer registers reside in the
  *	range above 0xa0. These must be accessed in another way.
  */
 

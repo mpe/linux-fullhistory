@@ -2284,7 +2284,6 @@ static int ipx_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 
 		case SIOCIPXNCPCONN:
                 {
-			int err;
 			/*
 			 * This socket wants to take care of the NCP connection
 			 * handed to us in arg.

@@ -65,6 +65,8 @@
  *				Improved debugging support.	16-May-1998
  *				Fixed bug.			16-Jun-1998
  *
+ *     Torsten Duwe            Made Opti924 PnP support non-destructive
+ *                                                             1998-12-23
  */
 
 #include "sound_config.h"
@@ -279,19 +281,21 @@ static int detect_c930(void)
 	if ((mad_read(MC0_PORT+13) & 0x80) == 0)
 		return 1;
 	
+#if 0	
 	/* Force off PnP mode. This is not recommended because
 	 * the PnP bios will not recognize the chip on the next
 	 * warm boot and may assignd different resources to other
 	 * PnP/PCI cards.
 	 */
 	mad_write(MC0_PORT+17, 0x04);
+#endif
 	return 1;
 }
 
 static int detect_mad16(void)
 {
-	unsigned char tmp, tmp2;
-	int i;
+	unsigned char tmp, tmp2, bit;
+	int i, port;
 
 	/*
 	 * Check that reading a register doesn't return bus float (0xff)
@@ -323,14 +327,19 @@ static int detect_mad16(void)
 		DDB(printk("MC1_PORT didn't close after read (0x%02x)\n", tmp2));
 		return 0;
 	}
-	mad_write(MC1_PORT, tmp ^ 0x80);	/* Toggle a bit */
-	if ((tmp2 = mad_read(MC1_PORT)) != (tmp ^ 0x80))	/* Compare the bit */
+
+	bit  = (c924pnp) ?     0x20 : 0x80;
+	port = (c924pnp) ? MC2_PORT : MC1_PORT;
+
+	tmp = mad_read(port);
+	mad_write(port, tmp ^ bit);	/* Toggle a bit */
+	if ((tmp2 = mad_read(port)) != (tmp ^ bit))	/* Compare the bit */
 	{
-		mad_write(MC1_PORT, tmp);	/* Restore */
+		mad_write(port, tmp);	/* Restore */
 		DDB(printk("Bit revert test failed (0x%02x, 0x%02x)\n", tmp, tmp2));
 		return 0;
 	}
-	mad_write(MC1_PORT, tmp);	/* Restore */
+	mad_write(port, tmp);	/* Restore */
 	return 1;		/* Bingo */
 }
 
@@ -456,14 +465,8 @@ static int chip_detect(void)
 
 	DDB(printk("Detect using password = 0xE5\n"));
 	
-	if (!detect_mad16()) {
-		c924pnp++;
-		DDB(printk("Detect using password = 0xE5 (again), port offset -0x80\n"));
-	}
-
 	if (!detect_mad16())	/* No luck. Try different model */
 	{
-		c924pnp=0;
 		board_type = C928;
 
 		DDB(printk("Detect using password = 0xE2\n"));
@@ -493,10 +496,19 @@ static int chip_detect(void)
 				for (i = 0xf8d; i <= 0xf93; i++)
 					DDB(printk("port %03x = %02x\n", i, mad_read(i)));
 
-				if (!detect_mad16())
-					return 0;
-
-				DDB(printk("mad16.c: 82C930 detected\n"));
+				if (!detect_mad16()) {
+				  board_type = C924;
+				  c924pnp++;
+				  DDB(printk("Detect using password = 0xE5 (again), port offset -0x80\n"));
+				  if (!detect_mad16()) {
+				    c924pnp=0;
+				    return 0;
+				  }
+				  
+				  DDB(printk("mad16.c: 82C924 PnP detected\n"));
+				}
+				else
+				  DDB(printk("mad16.c: 82C930 detected\n"));
 			} else
 				DDB(printk("mad16.c: 82C929 detected\n"));
 		} else {

@@ -110,11 +110,13 @@ struct solaris_x86_vtoc {
  * BSD disklabel support by Yossi Gottlieb <yogo@math.tau.ac.il>
  * updated by Marc Espie <Marc.Espie@openbsd.org>
  */
-
 #define FREEBSD_PARTITION	0xa5    /* FreeBSD Partition ID */
 #define OPENBSD_PARTITION	0xa6    /* OpenBSD Partition ID */
 #define NETBSD_PARTITION	0xa9    /* NetBSD Partition ID */
 #define BSDI_PARTITION		0xb7    /* BSDI Partition ID */
+
+/* Ours is not to wonder why.. */
+#define BSD_PARTITION		FREEBSD_PARTITION
 
 /* check against BSD src/sys/sys/disklabel.h for consistency */
 

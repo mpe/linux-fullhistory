@@ -438,6 +438,7 @@ parent->d_name.name, dentry->d_name.name);
 
 	/* Ok, remeber that we successfully checked it.. */
 	nfs_renew_times(dentry);
+	nfs_refresh_inode(inode, &fattr);
 
 out_valid:
 	return 1;

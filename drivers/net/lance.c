@@ -303,6 +303,10 @@ static int io[MAX_CARDS] = { 0, };
 static int dma[MAX_CARDS] = { 0, };
 static int irq[MAX_CARDS]  = { 0, };
 
+MODULE_PARM(io, "1-" __MODULE_STRING(MAX_CARDS) "i");
+MODULE_PARM(dma, "1-" __MODULE_STRING(MAX_CARDS) "i");
+MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_CARDS) "i");
+
 static char ifnames[MAX_CARDS][IF_NAMELEN] = { {0, }, };
 static struct device dev_lance[MAX_CARDS] =
 {{
@@ -363,11 +367,12 @@ int lance_probe(struct device *dev)
 {
 	int *port, result;
 
-	if (high_memory <= 16*1024*1024)
+	if (high_memory <= phys_to_virt(16*1024*1024))
 		lance_need_isa_bounce_buffers = 0;
 
 #if defined(CONFIG_PCI)
-    if (pci_present()) {
+	if (pci_present()) 
+	{
 		struct pci_dev *pdev = NULL;
 		if (lance_debug > 1)
 			printk("lance.c: PCI bios is present, checking for devices...\n");

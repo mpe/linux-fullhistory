@@ -29,10 +29,6 @@
 * Jan 02, 1997	Gene Kozin	Initial version.
 *****************************************************************************/
 
-#if	!defined(__KERNEL__) || !defined(MODULE)
-#error	This code MUST be compiled as a kernel module!
-#endif
-
 #include <linux/config.h>	/* OS configuration options */
 #include <linux/stddef.h>	/* offsetof(), etc. */
 #include <linux/errno.h>	/* return codes */
@@ -122,7 +118,12 @@ static struct tq_struct sdla_tq =
  *		< 0	error.
  * Context:	process
  */
+ 
+#ifdef MODULE
 int init_module (void)
+#else
+int wanpipe_init(void)
+#endif
 {
 	int cnt, err = 0;
 
@@ -173,6 +174,7 @@ int init_module (void)
 	return err;
 }
 
+#ifdef MODULE
 /*============================================================================
  * Module 'remove' entry point.
  * o unregister all adapters from the WAN router
@@ -189,6 +191,8 @@ void cleanup_module (void)
 	}
 	kfree(card_array);
 }
+
+#endif
 
 /******* WAN Device Driver Entry Points *************************************/
 

@@ -41,7 +41,7 @@ static void rw_swap_page_base(int rw, unsigned long entry, struct page *page, in
 	struct swap_info_struct * p;
 	int zones[PAGE_SIZE/512];
 	int zones_used;
-	kdev_t dev;
+	kdev_t dev = 0;
 	int block_size;
 
 #ifdef DEBUG_SWAP

@@ -592,9 +592,10 @@ struct dentry * d_lookup(struct dentry * parent, struct qstr * name)
 	struct list_head *head = d_hash(parent,hash);
 	struct list_head *tmp = head->next;
 
-	while (tmp != head) {
+	for (;;) {
 		struct dentry * dentry = list_entry(tmp, struct dentry, d_hash);
-
+		if (tmp == head)
+			break;
 		tmp = tmp->next;
 		if (dentry->d_name.hash != hash)
 			continue;

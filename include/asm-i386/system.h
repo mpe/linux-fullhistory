@@ -167,11 +167,11 @@ static inline unsigned long __xchg(unsigned long x, void * ptr, int size)
  * to devices.
  *
  * For now, "wmb()" doesn't actually do anything, as all
- * intel CPU's follow what intel calls a *Processor Order*,
+ * Intel CPU's follow what Intel calls a *Processor Order*,
  * in which all writes are seen in the program order even
  * outside the CPU.
  *
- * I expect future intel CPU's to have a weaker ordering,
+ * I expect future Intel CPU's to have a weaker ordering,
  * but I'd also expect them to finally get their act together
  * and add some real memory barriers if so.
  */

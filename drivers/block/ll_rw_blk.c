@@ -644,6 +644,7 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 		if (bh[i]) {
 			clear_bit(BH_Dirty, &bh[i]->b_state);
 			clear_bit(BH_Uptodate, &bh[i]->b_state);
+			bh[i]->b_end_io(bh[i], 0);
 		}
 	}
 	return;

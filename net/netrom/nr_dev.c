@@ -52,6 +52,8 @@
 #include <net/ax25.h>
 #include <net/netrom.h>
 
+#ifdef CONFIG_INET
+
 /*
  *	Only allow IP over NET/ROM frames through if the netrom device is up.
  */
@@ -81,37 +83,6 @@ int nr_rx_ip(struct sk_buff *skb, struct device *dev)
 	return 1;
 }
 
-static int nr_header(struct sk_buff *skb, struct device *dev, unsigned short type,
-	void *daddr, void *saddr, unsigned len)
-{
-	unsigned char *buff = skb_push(skb, NR_NETWORK_LEN + NR_TRANSPORT_LEN);
-
-	memcpy(buff, (saddr != NULL) ? saddr : dev->dev_addr, dev->addr_len);
-	buff[6] &= ~AX25_CBIT;
-	buff[6] &= ~AX25_EBIT;
-	buff[6] |= AX25_SSSID_SPARE;
-	buff    += AX25_ADDR_LEN;
-
-	if (daddr != NULL)
-		memcpy(buff, daddr, dev->addr_len);
-	buff[6] &= ~AX25_CBIT;
-	buff[6] |= AX25_EBIT;
-	buff[6] |= AX25_SSSID_SPARE;
-	buff    += AX25_ADDR_LEN;
-
-	*buff++ = sysctl_netrom_network_ttl_initialiser;
-
-	*buff++ = NR_PROTO_IP;
-	*buff++ = NR_PROTO_IP;
-	*buff++ = 0;
-	*buff++ = 0;
-	*buff++ = NR_PROTOEXT;
-
-	if (daddr != NULL)
-		return 37;
-
-	return -37;
-}
 
 static int nr_rebuild_header(struct sk_buff *skb)
 {
@@ -121,10 +92,6 @@ static int nr_rebuild_header(struct sk_buff *skb)
 	unsigned char *bp = skb->data;
 
 	if (arp_find(bp + 7, skb)) {
-#if 0
-		/* BUGGGG! If arp_find returned 1, skb does not exist. --ANK*/
-		kfree_skb(skb);
-#endif
 		return 1;
 	}
 
@@ -156,6 +123,47 @@ static int nr_rebuild_header(struct sk_buff *skb)
 	stats->tx_bytes += skbn->len;
 
 	return 1;
+}
+
+#else
+
+static int nr_rebuild_header(struct sk_buff *skb)
+{
+	return 1;
+}
+
+#endif
+
+static int nr_header(struct sk_buff *skb, struct device *dev, unsigned short type,
+	void *daddr, void *saddr, unsigned len)
+{
+	unsigned char *buff = skb_push(skb, NR_NETWORK_LEN + NR_TRANSPORT_LEN);
+
+	memcpy(buff, (saddr != NULL) ? saddr : dev->dev_addr, dev->addr_len);
+	buff[6] &= ~AX25_CBIT;
+	buff[6] &= ~AX25_EBIT;
+	buff[6] |= AX25_SSSID_SPARE;
+	buff    += AX25_ADDR_LEN;
+
+	if (daddr != NULL)
+		memcpy(buff, daddr, dev->addr_len);
+	buff[6] &= ~AX25_CBIT;
+	buff[6] |= AX25_EBIT;
+	buff[6] |= AX25_SSSID_SPARE;
+	buff    += AX25_ADDR_LEN;
+
+	*buff++ = sysctl_netrom_network_ttl_initialiser;
+
+	*buff++ = NR_PROTO_IP;
+	*buff++ = NR_PROTO_IP;
+	*buff++ = 0;
+	*buff++ = 0;
+	*buff++ = NR_PROTOEXT;
+
+	if (daddr != NULL)
+		return 37;
+
+	return -37;
 }
 
 static int nr_set_mac_address(struct device *dev, void *addr)

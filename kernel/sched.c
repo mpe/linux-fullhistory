@@ -166,10 +166,10 @@ static inline void reschedule_idle(struct task_struct * p)
 #ifdef __SMP__
 	/*
 	 * ("wakeup()" should not be called before we've initialized
-	 * SMP completely. [Linus, is there any exception to this?]
+	 * SMP completely.
 	 * Basically a not-yet initialized SMP subsystem can be
 	 * considered as a not-yet working scheduler, simply dont use
-	 * it before it'd up and running ...)
+	 * it before it's up and running ...)
 	 *
 	 * SMP rescheduling is done in 2 passes:
 	 *  - pass #1: faster: 'quick decisions'
@@ -181,9 +181,10 @@ static inline void reschedule_idle(struct task_struct * p)
 	 *
 	 * There are two metrics here:
 	 *
-	 * first, a 'cutoff' interval, currently ~250 usecs on
-	 * x86 CPUs. If the current process has longer average
-	 * timeslices than this, then we utilize the idle CPU.
+	 * first, a 'cutoff' interval, currently 0-200 usecs on
+	 * x86 CPUs, depending on the size of the 'SMP-local cache'.
+	 * If the current process has longer average timeslices than
+	 * this, then we utilize the idle CPU.
 	 *
 	 * second, if the wakeup comes from a process context,
 	 * then the two processes are 'related'. (they form a
@@ -307,8 +308,6 @@ static void process_timeout(unsigned long __data)
 
 	wake_up_process(p);
 }
-
-int _PROC_CHANGE_PENALTY = 13;
 
 /*
  * This is the function that decides how desirable a process is..

@@ -155,30 +155,30 @@ extern void ei_interrupt(int irq, void *dev_id, struct pt_regs *regs);
    things in there should be here!) */
 /* You have one of these per-board */
 struct ei_device {
-  const char *name;
-  void (*reset_8390)(struct device *);
-  void (*get_8390_hdr)(struct device *, struct e8390_pkt_hdr *, int);
-  void (*block_output)(struct device *, int, const unsigned char *, int);
-  void (*block_input)(struct device *, int, struct sk_buff *, int);
-  unsigned char mcfilter[8];
-  unsigned open:1;
-  unsigned word16:1;  /* We have the 16-bit (vs 8-bit) version of the card. */
-  unsigned txing:1;		/* Transmit Active */
-  unsigned irqlock:1;		/* 8390's intrs disabled when '1'. */
-  unsigned dmaing:1;		/* Remote DMA Active */
-  unsigned char tx_start_page, rx_start_page, stop_page;
-  unsigned char current_page;	/* Read pointer in buffer  */
-  unsigned char interface_num;	/* Net port (AUI, 10bT.) to use. */
-  unsigned char txqueue;	/* Tx Packet buffer queue length. */
-  short tx1, tx2;		/* Packet lengths for ping-pong tx. */
-  short lasttx;			/* Alpha version consistency check. */
-  unsigned char reg0;		/* Register '0' in a WD8013 */
-  unsigned char reg5;		/* Register '5' in a WD8013 */
-  unsigned char saved_irq;	/* Original dev->irq value. */
-  /* The new statistics table. */
-  struct net_device_stats stat;
-  unsigned char *reg_offset;    /* Register mapping table */
-  unsigned long priv;		/* Private field to store bus IDs etc. */
+	const char *name;
+	void (*reset_8390)(struct device *);
+	void (*get_8390_hdr)(struct device *, struct e8390_pkt_hdr *, int);
+	void (*block_output)(struct device *, int, const unsigned char *, int);
+	void (*block_input)(struct device *, int, struct sk_buff *, int);
+	unsigned char mcfilter[8];
+	unsigned open:1;
+	unsigned word16:1;  		/* We have the 16-bit (vs 8-bit) version of the card. */
+	unsigned txing:1;		/* Transmit Active */
+	unsigned irqlock:1;		/* 8390's intrs disabled when '1'. */
+	unsigned dmaing:1;		/* Remote DMA Active */
+	unsigned char tx_start_page, rx_start_page, stop_page;
+	unsigned char current_page;	/* Read pointer in buffer  */
+	unsigned char interface_num;	/* Net port (AUI, 10bT.) to use. */
+	unsigned char txqueue;		/* Tx Packet buffer queue length. */
+	short tx1, tx2;			/* Packet lengths for ping-pong tx. */
+	short lasttx;			/* Alpha version consistency check. */
+	unsigned char reg0;		/* Register '0' in a WD8013 */
+	unsigned char reg5;		/* Register '5' in a WD8013 */
+	unsigned char saved_irq;	/* Original dev->irq value. */
+	struct net_device_stats stat;	/* The new statistics table. */
+	u32 *reg_offset;		/* Register mapping table */
+	spinlock_t page_lock;		/* Page register locks */
+	unsigned long priv;		/* Private field to store bus IDs etc. */
 };
 
 /* The maximum number of 8390 interrupt service routines called per IRQ. */
@@ -190,12 +190,12 @@ struct ei_device {
 #define ei_status (*(struct ei_device *)(dev->priv))
 
 /* Some generic ethernet register configurations. */
-#define E8390_TX_IRQ_MASK 0xa	/* For register EN0_ISR */
-#define E8390_RX_IRQ_MASK  0x5
-#define E8390_RXCONFIG 0x4	/* EN0_RXCR: broadcasts, no multicast,errors */
-#define E8390_RXOFF 0x20	/* EN0_RXCR: Accept no packets */
-#define E8390_TXCONFIG 0x00	/* EN0_TXCR: Normal transmit mode */
-#define E8390_TXOFF 0x02	/* EN0_TXCR: Transmitter off */
+#define E8390_TX_IRQ_MASK	0xa	/* For register EN0_ISR */
+#define E8390_RX_IRQ_MASK	0x5
+#define E8390_RXCONFIG		0x4	/* EN0_RXCR: broadcasts, no multicast,errors */
+#define E8390_RXOFF		0x20	/* EN0_RXCR: Accept no packets */
+#define E8390_TXCONFIG		0x00	/* EN0_TXCR: Normal transmit mode */
+#define E8390_TXOFF		0x02	/* EN0_TXCR: Transmitter off */
 
 /*  Register accessed at EN_CMD, the 8390 base addr.  */
 #define E8390_STOP	0x01	/* Stop and reset the chip */
@@ -208,6 +208,10 @@ struct ei_device {
 #define E8390_PAGE1	0x40	/* using the two high-order bits */
 #define E8390_PAGE2	0x80	/* Page 3 is invalid. */
 
+/*
+ *	Only generate indirect loads given a machine that needs them.
+ */
+ 
 #if defined(CONFIG_MAC) || defined(CONFIG_AMIGA_PCMCIA) || \
     defined(CONFIG_ARIADNE2) || defined(CONFIG_ARIADNE2_MODULE)
 #define EI_SHIFT(x)	(ei_local->reg_offset[x])

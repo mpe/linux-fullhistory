@@ -72,8 +72,6 @@ extern int setup_x86_irq(int, struct irqaction *);
 
 unsigned long cpu_hz;	/* Detected as we calibrate the TSC */
 
-cycles_t cacheflush_time;
-
 /* Number of usecs that the last interrupt was delayed */
 static int delay_at_last_interrupt;
 
@@ -88,7 +86,7 @@ static unsigned long fast_gettimeoffset_quotient=0;
 
 extern rwlock_t xtime_lock;
 
-static unsigned long do_fast_gettimeoffset(void)
+static inline unsigned long do_fast_gettimeoffset(void)
 {
 	register unsigned long eax asm("ax");
 	register unsigned long edx asm("dx");
@@ -117,6 +115,13 @@ static unsigned long do_fast_gettimeoffset(void)
 	/* our adjusted time offset in microseconds */
 	return delay_at_last_interrupt + edx;
 }
+
+#define TICK_SIZE tick
+
+/*
+ * Older CPU's don't have the rdtsc instruction..
+ */
+#if CPU < 586
 
 /* This function must be called with interrupts disabled 
  * It was inspired by Steve McCanne's microtime-i386 for BSD.  -- jrs
@@ -149,8 +154,6 @@ static unsigned long do_fast_gettimeoffset(void)
  * If you are really that interested, you should be reading
  * comp.protocols.time.ntp!
  */
-
-#define TICK_SIZE tick
 
 static unsigned long do_slow_gettimeoffset(void)
 {
@@ -232,6 +235,12 @@ static unsigned long do_slow_gettimeoffset(void)
 }
 
 static unsigned long (*do_gettimeoffset)(void) = do_slow_gettimeoffset;
+
+#else
+
+#define do_gettimeoffset()	do_fast_gettimeoffset()
+
+#endif
 
 /*
  * This version of gettimeofday has microsecond resolution
@@ -625,7 +634,9 @@ __initfunc(void time_init(void))
  * smart.  See arch/i386/kernel/apm.c.
  */
 	if (boot_cpu_data.x86_capability & X86_FEATURE_TSC) {
+#ifndef do_gettimeoffset
 		do_gettimeoffset = do_fast_gettimeoffset;
+#endif
 		do_get_fast_time = do_gettimeofday;
 		use_tsc = 1;
 		fast_gettimeoffset_quotient = calibrate_tsc();
@@ -642,13 +653,5 @@ __initfunc(void time_init(void))
 			printk("Detected %ld Hz processor.\n", cpu_hz);
 		}
 	}
-
-	/*
-	 * Rough estimation for SMP scheduling, this is the number of
-	 * cycles it takes for a fully memory-limited process to flush
-	 * the SMP-local cache.
-	 */
-	cacheflush_time = cpu_hz/10000;
-
 	setup_x86_irq(0, &irq0);
 }

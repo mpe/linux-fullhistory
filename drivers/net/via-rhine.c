@@ -66,6 +66,7 @@ static const int multicast_filter_limit = 32;
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/version.h>
 #include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/errno.h>

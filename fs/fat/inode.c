@@ -428,7 +428,7 @@ fat_read_super(struct super_block *sb, void *data, int silent)
 		       MSDOS_SB(sb)->fat_bits,opts.name_check,
 		       opts.conversion,opts.fs_uid,opts.fs_gid,opts.fs_umask,
 		       MSDOS_CAN_BMAP(MSDOS_SB(sb)) ? ",bmap" : "");
-		printk("[me=0x%x,cs=%d,#f=%d,fs=%d,fl=%d,ds=%d,de=%d,data=%d,"
+		printk("[me=0x%x,cs=%d,#f=%d,fs=%d,fl=%ld,ds=%ld,de=%d,data=%ld,"
 		       "se=%d,ts=%ld,ls=%d,rc=%ld,fc=%u]\n",
 			b->media,MSDOS_SB(sb)->cluster_size,
 			MSDOS_SB(sb)->fats,MSDOS_SB(sb)->fat_start,

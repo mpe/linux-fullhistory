@@ -761,6 +761,11 @@ static int fasync_aux(int fd, struct file *filp, int on)
 }
 
 
+/*
+ * Random magic cookie for the aux device
+ */
+#define AUX_DEV ((void *)queue)
+
 static int release_aux(struct inode * inode, struct file * file)
 {
 	fasync_aux(-1, file, 0);
@@ -768,11 +773,7 @@ static int release_aux(struct inode * inode, struct file * file)
 		return 0;
 	kbd_write_cmd(AUX_INTS_OFF);			    /* Disable controller ints */
 	kbd_write(KBD_CCMD_MOUSE_DISABLE, KBD_CNTL_REG);
-#ifdef CONFIG_MCA
-	free_irq(AUX_IRQ, inode);
-#else
-	free_irq(AUX_IRQ, NULL);
-#endif
+	free_irq(AUX_IRQ, AUX_DEV);
 	return 0;
 }
 
@@ -787,11 +788,7 @@ static int open_aux(struct inode * inode, struct file * file)
 		return 0;
 	}
 	queue->head = queue->tail = 0;		/* Flush input queue */
-#ifdef CONFIG_MCA
-	if (request_irq(AUX_IRQ, keyboard_interrupt, MCA_bus ? SA_SHIRQ : 0, "PS/2 Mouse", inode)) {
-#else
-	if (request_irq(AUX_IRQ, keyboard_interrupt, 0, "PS/2 Mouse", NULL)) {
-#endif
+	if (request_irq(AUX_IRQ, keyboard_interrupt, SA_SHIRQ, "PS/2 Mouse", AUX_DEV)) {
 		aux_count--;
 		return -EBUSY;
 	}

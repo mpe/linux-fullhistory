@@ -103,6 +103,10 @@ int autofs_wait(struct autofs_sb_info *sbi, struct qstr * name)
 	struct autofs_wait_queue *wq;
 	int status;
 
+	/* In catatonic mode, we don't wait for nobody */
+	if ( sbi->catatonic )
+		return -ENOENT;
+
 	for ( wq = sbi->queues ; wq ; wq = wq->next ) {
 		if ( wq->hash == name->hash &&
 		     wq->len == name->len &&
@@ -137,6 +141,15 @@ int autofs_wait(struct autofs_sb_info *sbi, struct qstr * name)
 		wq->wait_ctr++;
 
 	/* wq->name is NULL if and only if the lock is already released */
+
+	if ( sbi->catatonic ) {
+		/* We might have slept, so check again for catatonic mode */
+		wq->status = -ENOENT;
+		if ( wq->name ) {
+			kfree(wq->name);
+			wq->name = NULL;
+		}
+	}
 
 	if ( wq->name ) {
 		/* Block all but "shutdown" signals while waiting */

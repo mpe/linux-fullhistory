@@ -701,12 +701,6 @@ dentry->d_parent->d_name.name, dentry->d_name.name, inode->i_ino, status);
 #endif
 		goto out;
 	}
-	if (fattr.mtime.seconds == NFS_OLDMTIME(inode)) {
-		/* Update attrtimeo value */
-		if ((NFS_ATTRTIMEO(inode) <<= 1) > NFS_MAXATTRTIMEO(inode))
-			NFS_ATTRTIMEO(inode) = NFS_MAXATTRTIMEO(inode);
-	}
-	NFS_OLDMTIME(inode) = fattr.mtime.seconds;
 	dfprintk(PAGECACHE, "NFS: %s/%s revalidation complete\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name);
 out:
@@ -791,6 +785,14 @@ printk("NFS: mtime change on %x/%ld\n", inode->i_dev, inode->i_ino);
 
 	if (invalid)
 		goto out_invalid;
+
+	/* Update attrtimeo value */
+	if (fattr->mtime.seconds == NFS_OLDMTIME(inode)) {
+		if ((NFS_ATTRTIMEO(inode) <<= 1) > NFS_MAXATTRTIMEO(inode))
+			NFS_ATTRTIMEO(inode) = NFS_MAXATTRTIMEO(inode);
+	}
+	NFS_OLDMTIME(inode) = fattr->mtime.seconds;
+
 out:
 	return error;
 

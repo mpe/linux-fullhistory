@@ -1,4 +1,4 @@
-/* $Id: cosa.h,v 1.8 1998/11/09 03:54:49 kas Exp $ */
+/* $Id: cosa.h,v 1.5 1998/12/24 12:40:18 kas Exp $ */
 
 /*
  *  Copyright (C) 1995-1997  Jan "Yenya" Kasprzak <kas@fi.muni.cz>
@@ -61,7 +61,7 @@
 #define SR_START_ADDR   0x4400  /* SRP microcode start address */
 
 #define COSA_LOAD_ADDR    0x400  /* SRP microcode load address */
-
+#define COSA_MAX_FIRMWARE_SIZE	0x10000
 
 /* ioctls */
 struct cosa_download {

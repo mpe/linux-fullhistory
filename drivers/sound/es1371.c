@@ -2678,7 +2678,7 @@ static int joystick[NR_DEVICE] = { 0, };
 
 /* --------------------------------------------------------------------- */
 
-static const struct initvol {
+static struct initvol {
 	int mixch;
 	int vol;
 } initvol[] __initdata = {

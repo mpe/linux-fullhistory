@@ -1,6 +1,7 @@
 VERSION = 2
-PATCHLEVEL = 1
-SUBLEVEL = 133
+PATCHLEVEL = 2
+SUBLEVEL = 0
+EXTRAVERSION =-pre1
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
 
@@ -57,6 +58,8 @@ endif
 #
 
 ROOT_DEV = CURRENT
+
+KERNELRELEASE=$(VERSION).$(PATCHLEVEL).$(SUBLEVEL)$(EXTRAVERSION)
 
 #
 # INSTALL_PATH specifies where to place the updated kernel and system map
@@ -278,7 +281,7 @@ include/linux/compile.h: $(CONFIGURATION) include/linux/version.h newversion
 	@mv -f .ver $@
 
 include/linux/version.h: ./Makefile
-	@echo \#define UTS_RELEASE \"$(VERSION).$(PATCHLEVEL).$(SUBLEVEL)\" > .ver
+	@echo \#define UTS_RELEASE \"$(KERNELRELEASE)\" > .ver
 	@echo \#define LINUX_VERSION_CODE `expr $(VERSION) \\* 65536 + $(PATCHLEVEL) \\* 256 + $(SUBLEVEL)` >> .ver
 	@echo '#define KERNEL_VERSION(a,b,c) (((a) << 16) + ((b) << 8) + (c))' >>.ver
 	@mv -f .ver $@
@@ -305,7 +308,7 @@ $(patsubst %, _mod_%, $(SUBDIRS)) : include/linux/version.h
 
 modules_install:
 	@( \
-	MODLIB=$(INSTALL_MOD_PATH)/lib/modules/$(VERSION).$(PATCHLEVEL).$(SUBLEVEL); \
+	MODLIB=$(INSTALL_MOD_PATH)/lib/modules/$(KERNELRELEASE); \
 	cd modules; \
 	MODULES=""; \
 	inst_mod() { These="`cat $$1`"; MODULES="$$MODULES $$These"; \

@@ -215,7 +215,7 @@ static void ecard_irq_noexpmask(int intr_no, void *dev_id, struct pt_regs *regs)
 		} else
 			lockup = 0;
 
-		if (!last || time_after(jiffies, last + 500)) {
+		if (!last || time_after(jiffies, last + 5*HZ)) {
 			last = jiffies;
 			printk(KERN_ERR "\nUnrecognised interrupt from backplane\n");
 		}

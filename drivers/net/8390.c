@@ -37,7 +37,7 @@
   			  68K Macintosh. Support >16bit I/O spaces
   Paul Gortmaker	: add kmod support for auto-loading of the 8390
 			  module by all drivers that require it.
-
+  Alan Cox		: Spinlocking work, added 'BUG_83C690'
 
   Sources:
   The National Semiconductor LAN Databook, and the 3Com 3c503 databook.
@@ -71,6 +71,8 @@ static const char *version =
 
 #define NS8390_CORE
 #include "8390.h"
+
+#define BUG_83C690
 
 /* These are the operational function interfaces to board-specific
    routines.
@@ -110,6 +112,34 @@ static void ei_rx_overrun(struct device *dev);
 static void NS8390_trigger_send(struct device *dev, unsigned int length,
 								int start_page);
 static void set_multicast_list(struct device *dev);
+static void do_set_multicast_list(struct device *dev);
+
+/*
+ *	SMP and the 8390 setup.
+ *
+ *	The 8390 isnt exactly designed to be multithreaded on RX/TX. There is
+ *	a page register that controls bank and packet buffer access. We guard
+ *	this with ei_local->page_lock. Nobody should assume or set the page other
+ *	than zero when the lock is not held. Lock holders must restore page 0
+ *	before unlocking. Even pure readers must take the lock to protect in 
+ *	page 0.
+ *
+ *	To make life difficult the chip can also be very slow. We therefore can't
+ *	just use spinlocks. For the longer lockups we disable the irq the device
+ *	sits on and hold the lock. We must hold the lock because there is a dual
+ *	processor case other than interrupts (get stats/set multicast list in
+ *	parallel with each other and transmit).
+ *
+ *	Note: in theory we can just disable the irq on the card _but_ there is
+ *	a latency on SMP irq delivery. So we can easily go "disable irq" "sync irqs"
+ *	enter lock, take the queued irq. So we waddle instead of flying.
+ *
+ *	Finally by special arrangement for the purpose of being generally 
+ *	annoying the transmit function is called bh atomic. That places
+ *	restrictions on the user context callers as disable_irq won't save
+ *	them.
+ */
+ 
 
 
 /* Open/initialize the board.  This routine goes all-out, setting everything
@@ -118,6 +148,7 @@ static void set_multicast_list(struct device *dev);
    */
 int ei_open(struct device *dev)
 {
+	unsigned long flags;
 	struct ei_device *ei_local = (struct ei_device *) dev->priv;
 
 	/* This can't happen unless somebody forgot to call ethdev_init(). */
@@ -127,7 +158,14 @@ int ei_open(struct device *dev)
 		return -ENXIO;
 	}
     
+	/*
+	 *	Grab the page lock so we own the register set, then call
+	 *	the init function.
+	 */
+      
+      	spin_lock_irqsave(&ei_local->page_lock, flags);
 	NS8390_init(dev, 1);
+      	spin_unlock_irqrestore(&ei_local->page_lock, flags);
 	dev->start = 1;
 	ei_local->irqlock = 0;
 	return 0;
@@ -136,7 +174,16 @@ int ei_open(struct device *dev)
 /* Opposite of above. Only used when "ifconfig <devname> down" is done. */
 int ei_close(struct device *dev)
 {
+	struct ei_device *ei_local = (struct ei_device *) dev->priv;
+	unsigned long flags;
+
+	/*
+	 *	Hold the page lock during close
+	 */
+	 	
+      	spin_lock_irqsave(&ei_local->page_lock, flags);
 	NS8390_init(dev, 0);
+      	spin_unlock_irqrestore(&ei_local->page_lock, flags);
 	dev->start = 0;
 	return 0;
 }
@@ -146,24 +193,39 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
 	int e8390_base = dev->base_addr;
 	struct ei_device *ei_local = (struct ei_device *) dev->priv;
 	int length, send_length, output_page;
+	unsigned long flags;
 
 	/*
 	 *  We normally shouldn't be called if dev->tbusy is set, but the
 	 *  existing code does anyway. If it has been too long since the
-	 *  last Tx, we assume the board has died and kick it.
+	 *  last Tx, we assume the board has died and kick it. We are
+	 *  bh_atomic here.
 	 */
  
 	if (dev->tbusy) 
 	{	/* Do timeouts, just like the 8003 driver. */
-		int txsr = inb(e8390_base+EN0_TSR), isr;
+		int txsr;
+		int isr;
 		int tickssofar = jiffies - dev->trans_start;
+
+		/*
+		 *	Need the page lock. Now see what went wrong. This bit is
+		 *	fast.
+		 */
+		 		
+		spin_lock_irqsave(&ei_local->page_lock, flags);
+		txsr = inb(e8390_base+EN0_TSR);
 		if (tickssofar < TX_TIMEOUT ||	(tickssofar < (TX_TIMEOUT+5) && ! (txsr & ENTSR_PTX))) 
+		{
+			spin_unlock_irqrestore(&ei_local->page_lock, flags);
 			return 1;
+		}
 
 		ei_local->stat.tx_errors++;
 		isr = inb(e8390_base+EN0_ISR);
 		if (dev->start == 0) 
 		{
+			spin_unlock_irqrestore(&ei_local->page_lock, flags);
 			printk(KERN_WARNING "%s: xmit on stopped card\n", dev->name);
 			return 1;
 		}
@@ -184,22 +246,54 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
 			ei_local->interface_num ^= 1;   /* Try a different xcvr.  */
 		}
 
+		/*
+		 *	Play shuffle the locks, a reset on some chips takes a few
+		 *	mS. We very rarely hit this point.
+		 */
+		 
+		spin_unlock_irqrestore(&ei_local->page_lock, flags);
+
+		/* Ugly but a reset can be slow, yet must be protected */
+		
+		disable_irq(dev->irq);
+		synchronize_irq();
+		spin_lock(&ei_local->page_lock);
+		
 		/* Try to restart the card.  Perhaps the user has fixed something. */
 		ei_reset_8390(dev);
 		NS8390_init(dev, 1);
+		
+		spin_unlock(&ei_local->page_lock);
+		enable_irq(dev->irq);
 		dev->trans_start = jiffies;
 	}
     
 	length = skb->len;
 
-	/* Mask interrupts from the ethercard. */
+	/* Mask interrupts from the ethercard. 
+	   SMP: We have to grab the lock here otherwise the IRQ handler
+	   on another CPU can flip window and race the IRQ mask set. We end
+	   up trashing the mcast filter not disabling irqs if we dont lock */
+	   
+	spin_lock_irqsave(&ei_local->page_lock, flags);
 	outb_p(0x00, e8390_base + EN0_IMR);
+	spin_unlock_irqrestore(&ei_local->page_lock, flags);
+	
+	
+	/*
+	 *	Slow phase with lock held.
+	 */
+	 
 	disable_irq(dev->irq);
 	synchronize_irq();
+	
+	spin_lock(&ei_local->page_lock);
+	
 	if (dev->interrupt) 
 	{
 		printk(KERN_WARNING "%s: Tx request while isr active.\n",dev->name);
 		outb_p(ENISR_ALL, e8390_base + EN0_IMR);
+		spin_unlock(&ei_local->page_lock);
 		enable_irq(dev->irq);
 		ei_local->stat.tx_errors++;
 		dev_kfree_skb(skb);
@@ -243,6 +337,7 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
 		ei_local->irqlock = 0;
 		dev->tbusy = 1;
 		outb_p(ENISR_ALL, e8390_base + EN0_IMR);
+		spin_unlock(&ei_local->page_lock);
 		enable_irq(dev->irq);
 		ei_local->stat.tx_errors++;
 		return 1;
@@ -294,6 +389,8 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
 	/* Turn 8390 interrupts back on. */
 	ei_local->irqlock = 0;
 	outb_p(ENISR_ALL, e8390_base + EN0_IMR);
+	
+	spin_unlock(&ei_local->page_lock);
 	enable_irq(dev->irq);
 
 	dev_kfree_skb (skb);
@@ -320,6 +417,13 @@ void ei_interrupt(int irq, void *dev_id, struct pt_regs * regs)
     
 	e8390_base = dev->base_addr;
 	ei_local = (struct ei_device *) dev->priv;
+
+	/*
+	 *	Protect the irq test too.
+	 */
+	 
+	spin_lock(&ei_local->page_lock);
+
 	if (dev->interrupt || ei_local->irqlock) 
 	{
 #if 1 /* This might just be an interrupt for a PCI device sharing this line */
@@ -330,15 +434,17 @@ void ei_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 			   dev->name, inb_p(e8390_base + EN0_ISR),
 			   inb_p(e8390_base + EN0_IMR));
 #endif
+		spin_unlock(&ei_local->page_lock);
 		return;
 	}
     
+	
 	dev->interrupt = 1;
     
 	/* Change to page 0 and read the intr status reg. */
 	outb_p(E8390_NODMA+E8390_PAGE0, e8390_base + E8390_CMD);
 	if (ei_debug > 3)
-		printk("%s: interrupt(isr=%#2.2x).\n", dev->name,
+		printk(KERN_DEBUG "%s: interrupt(isr=%#2.2x).\n", dev->name,
 			   inb_p(e8390_base + EN0_ISR));
     
 	/* !!Assumption!! -- we stay in page 0.	 Don't break this. */
@@ -386,15 +492,16 @@ void ei_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 		outb_p(E8390_NODMA+E8390_PAGE0+E8390_START, e8390_base + E8390_CMD);
 		if (nr_serviced >= MAX_SERVICE) 
 		{
-			printk("%s: Too much work at interrupt, status %#2.2x\n",
+			printk(KERN_WARNING "%s: Too much work at interrupt, status %#2.2x\n",
 				   dev->name, interrupts);
 			outb_p(ENISR_ALL, e8390_base + EN0_ISR); /* Ack. most intrs. */
 		} else {
-			printk("%s: unknown interrupt %#2x\n", dev->name, interrupts);
+			printk(KERN_WARNING "%s: unknown interrupt %#2x\n", dev->name, interrupts);
 			outb_p(0xff, e8390_base + EN0_ISR); /* Ack. all intrs. */
 		}
 	}
 	dev->interrupt = 0;
+	spin_unlock(&ei_local->page_lock);
 	return;
 }
 
@@ -405,6 +512,8 @@ void ei_interrupt(int irq, void *dev_id, struct pt_regs * regs)
  * letting the failed packet sit and collect dust in the Tx buffer. This
  * is a much better solution as it avoids kernel based Tx timeouts, and
  * an unnecessary card reset.
+ *
+ * Called with lock held
  */
 
 static void ei_tx_err(struct device *dev)
@@ -443,7 +552,7 @@ static void ei_tx_err(struct device *dev)
 }
 
 /* We have finished a transmit: check for errors and then trigger the next
-   packet to be sent. */
+   packet to be sent. Called with lock held */
 
 static void ei_tx_intr(struct device *dev)
 {
@@ -532,7 +641,8 @@ static void ei_tx_intr(struct device *dev)
 	mark_bh (NET_BH);
 }
 
-/* We have a good packet(s), get it/them out of the buffers. */
+/* We have a good packet(s), get it/them out of the buffers. 
+   Called with lock held */
 
 static void ei_receive(struct device *dev)
 {
@@ -659,6 +769,8 @@ static void ei_receive(struct device *dev)
  * the updated datasheets, or "the NIC may act in an unpredictable manner."
  * This includes causing "the NIC to defer indefinitely when it is stopped
  * on a busy network."  Ugh.
+ * Called with lock held. Don't call this with the interrupts off or your
+ * computer will hate you - it takes 10mS or so. 
  */
 
 static void ei_rx_overrun(struct device *dev)
@@ -726,19 +838,26 @@ static void ei_rx_overrun(struct device *dev)
     		outb_p(E8390_NODMA + E8390_PAGE0 + E8390_START + E8390_TRANS, e8390_base + E8390_CMD);
 }
 
+/*
+ *	Collect the stats. This is called unlocked and from several contexts.
+ */
+ 
 static struct net_device_stats *get_stats(struct device *dev)
 {
 	int ioaddr = dev->base_addr;
 	struct ei_device *ei_local = (struct ei_device *) dev->priv;
+	unsigned long flags;
     
 	/* If the card is stopped, just return the present stats. */
 	if (dev->start == 0) 
 		return &ei_local->stat;
 
+	spin_lock_irqsave(&ei_local->page_lock,flags);
 	/* Read the counter registers, assuming we are in page 0. */
 	ei_local->stat.rx_frame_errors += inb_p(ioaddr + EN0_COUNTER0);
 	ei_local->stat.rx_crc_errors   += inb_p(ioaddr + EN0_COUNTER1);
 	ei_local->stat.rx_missed_errors+= inb_p(ioaddr + EN0_COUNTER2);
+	spin_unlock_irqrestore(&ei_local->page_lock, flags);
     
 	return &ei_local->stat;
 }
@@ -794,14 +913,14 @@ static inline void make_mc_bits(u8 *bits, struct device *dev)
 }
 
 /*
- *	Set or clear the multicast filter for this adaptor.
+ *	Set or clear the multicast filter for this adaptor. May be called
+ *	from a BH in 2.1.x. Must be called with lock held. 
  */
  
-static void set_multicast_list(struct device *dev)
+static void do_set_multicast_list(struct device *dev)
 {
 	int e8390_base = dev->base_addr;
 	int i;
-	unsigned long flags;
 	struct ei_device *ei_local = (struct ei_device*)dev->priv;
 
 	if (!(dev->flags&(IFF_PROMISC|IFF_ALLMULTI))) 
@@ -825,21 +944,19 @@ static void set_multicast_list(struct device *dev)
 	 * them as r/w so this is a bug.  The SMC 83C790 (SMC Ultra and
 	 * Ultra32 EISA) appears to have this bug fixed.
 	 */
+	 
 	if (dev->start)
 		outb_p(E8390_RXCONFIG, e8390_base + EN0_RXCR);
-	save_flags(flags);
-	cli();
 	outb_p(E8390_NODMA + E8390_PAGE1, e8390_base + E8390_CMD);
 	for(i = 0; i < 8; i++) 
 	{
 		outb_p(ei_local->mcfilter[i], e8390_base + EN1_MULT_SHIFT(i));
-#ifdef NOT_83C690
+#ifndef BUG_83C690
 		if(inb_p(e8390_base + EN1_MULT_SHIFT(i))!=ei_local->mcfilter[i])
 			printk(KERN_ERR "Multicast filter read/write mismap %d\n",i);
 #endif
 	}
 	outb_p(E8390_NODMA + E8390_PAGE0, e8390_base + E8390_CMD);
-	restore_flags(flags);
 
   	if(dev->flags&IFF_PROMISC)
   		outb_p(E8390_RXCONFIG | 0x18, e8390_base + EN0_RXCR);
@@ -847,12 +964,29 @@ static void set_multicast_list(struct device *dev)
   		outb_p(E8390_RXCONFIG | 0x08, e8390_base + EN0_RXCR);
   	else
   		outb_p(E8390_RXCONFIG, e8390_base + EN0_RXCR);
-}
+ }
+
+/*
+ *	Called without lock held. This is invoked from user context and may
+ *	be parallel to just about everything else. Its also fairly quick and
+ *	not called too often. Must protect against both bh and irq users
+ */
+ 
+static void set_multicast_list(struct device *dev)
+{
+	unsigned long flags;
+	struct ei_device *ei_local = (struct ei_device*)dev->priv;
+	
+	spin_lock_irqsave(&ei_local->page_lock, flags);
+	do_set_multicast_list(dev);
+	spin_unlock_irqrestore(&ei_local->page_lock, flags);
+}	
 
 /*
  * Initialize the rest of the 8390 device structure.  Do NOT __initfunc
  * this, as it is used by 8390 based modular drivers too.
  */
+
 int ethdev_init(struct device *dev)
 {
 	if (ei_debug > 1)
@@ -867,6 +1001,7 @@ int ethdev_init(struct device *dev)
 			return -ENOMEM;
 		memset(dev->priv, 0, sizeof(struct ei_device));
 		ei_local = (struct ei_device *)dev->priv;
+		spin_lock_init(&ei_local->page_lock);
 	}
     
 	dev->hard_start_xmit = &ei_start_xmit;
@@ -883,13 +1018,16 @@ int ethdev_init(struct device *dev)
 /* This page of functions should be 8390 generic */
 /* Follow National Semi's recommendations for initializing the "NIC". */
 
+/*
+ *	Must be called with lock held.
+ */
+
 void NS8390_init(struct device *dev, int startp)
 {
 	int e8390_base = dev->base_addr;
 	struct ei_device *ei_local = (struct ei_device *) dev->priv;
 	int i;
 	int endcfg = ei_local->word16 ? (0x48 | ENDCFG_WTS) : 0x48;
-	unsigned long flags;
     
 	if(sizeof(struct e8390_pkt_hdr)!=4)
     		panic("8390.c: header struct mispacked\n");    
@@ -914,8 +1052,7 @@ void NS8390_init(struct device *dev, int startp)
 	outb_p(0x00,  e8390_base + EN0_IMR);
     
 	/* Copy the station address into the DS8390 registers. */
-	save_flags(flags);
-	cli();
+
 	outb_p(E8390_NODMA + E8390_PAGE1 + E8390_STOP, e8390_base+E8390_CMD); /* 0x61 */
 	for(i = 0; i < 6; i++) 
 	{
@@ -926,7 +1063,7 @@ void NS8390_init(struct device *dev, int startp)
 
 	outb_p(ei_local->rx_start_page, e8390_base + EN1_CURPAG);
 	outb_p(E8390_NODMA+E8390_PAGE0+E8390_STOP, e8390_base+E8390_CMD);
-	restore_flags(flags);
+
 	dev->tbusy = 0;
 	dev->interrupt = 0;
 	ei_local->tx1 = ei_local->tx2 = 0;
@@ -940,18 +1077,20 @@ void NS8390_init(struct device *dev, int startp)
 		outb_p(E8390_TXCONFIG, e8390_base + EN0_TXCR); /* xmit on. */
 		/* 3c503 TechMan says rxconfig only after the NIC is started. */
 		outb_p(E8390_RXCONFIG, e8390_base + EN0_RXCR); /* rx on,  */
-		set_multicast_list(dev);	/* (re)load the mcast table */
+		do_set_multicast_list(dev);	/* (re)load the mcast table */
 	}
 	return;
 }
 
-/* Trigger a transmit start, assuming the length is valid. */
+/* Trigger a transmit start, assuming the length is valid. 
+   Always called with the page lock held */
+   
 static void NS8390_trigger_send(struct device *dev, unsigned int length,
 								int start_page)
 {
 	int e8390_base = dev->base_addr;
-	struct ei_device *ei_local = (struct ei_device *) dev->priv;
-
+ 	struct ei_device *ei_local = (struct ei_device *) dev->priv;
+   
 	outb_p(E8390_NODMA+E8390_PAGE0, e8390_base+E8390_CMD);
     
 	if (inb_p(e8390_base) & E8390_TRANS) 

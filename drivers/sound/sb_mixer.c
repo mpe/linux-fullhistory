@@ -13,25 +13,24 @@
  *
  *
  * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
- * Rolf Fokkens    : ES18XX recording level support
+ * Rolf Fokkens    : ES188x recording level support
  */
 
 /*
- * About ES18XX support:
+ * About ES188x support:
  *
- * The standard ES688 support doesn't take care of the ES18XX recording
+ * The standard ES1688 support doesn't take care of the ES188x recording
  * levels very well. Whenever a device is selected (recmask) for recording
  * it's recording level is loud, and it cannot be changed.
  *
- * The ES18XX has separate registers to controll the recording levels. The
- * ES18XX specific software makes these level the same as their corresponding
- * playback levels, unless recmask says they aren't recorded. In tha latter
- * case the recording volumens are 0.
+ * The ES188x has separate registers to control the recording levels. The
+ * ES188x specific software makes these level the same as their corresponding
+ * playback levels, unless recmask says they aren't recorded. In the latter
+ * case the recording volumes are 0.
  *
  * Now recording levels of inputs can be controlled, by changing the playback
- * levels.
- * Futhermore several devices can be recorded together (which is not possible
- * with the ES688.
+ * levels. Futhermore several devices can be recorded together (which is not
+ * possible with the ES1688.
  */
 
 #include <linux/config.h>
@@ -139,13 +138,13 @@ static int common_mixer_set(sb_devc * devc, int dev, int left, int right)
 }
 
 /*
- * Changing input levels at ES18XX means having to take care of recording
- * levels of recorded inputs too!
+ * Changing playback levels at ES188x means having to take care of recording
+ * levels of recorded inputs (devc->recmask) too!
  */
-static int es18XX_mixer_set(sb_devc * devc, int dev, int left, int right)
+static int es188x_mixer_set(sb_devc * devc, int dev, int left, int right)
 {
 	if (devc->recmask & (1 << dev)) {
-		common_mixer_set(devc, dev + ES18XX_MIXER_RECDIFF, left, right);
+		common_mixer_set(devc, dev + ES188X_MIXER_RECDIFF, left, right);
 	}
 	return common_mixer_set(devc, dev, left, right);
 }
@@ -212,8 +211,8 @@ static int sb_mixer_set(sb_devc * devc, int dev, int value)
 		return smw_mixer_set(devc, dev, left, right);
 		break;
 	case MDL_ESS:
-		if (devc->submodel == SUBMDL_ES18XX) {
-			return es18XX_mixer_set(devc, dev, left, right);
+		if (devc->submodel == SUBMDL_ES188X) {
+			return es188x_mixer_set(devc, dev, left, right);
 		}
 		break;
 	}
@@ -222,7 +221,7 @@ static int sb_mixer_set(sb_devc * devc, int dev, int value)
 }
 
 /*
- * set_recsrc doesn't apply to ES18XX
+ * set_recsrc doesn't apply to ES188x
  */
 static void set_recsrc(sb_devc * devc, int src)
 {
@@ -230,12 +229,12 @@ static void set_recsrc(sb_devc * devc, int src)
 }
 
 /*
- * Changing the recmask on a ES18XX means:
+ * Changing the recmask on a ES188x means:
  * (1) Find the differences
  * (2) For "turned-on"  inputs: make the recording level the playback level
  * (3) For "turned-off" inputs: make the recording level zero
  */
-static int es18XX_set_recmask(sb_devc * devc, int mask)
+static int es188x_set_recmask(sb_devc * devc, int mask)
 {
 	int i, i_mask, cur_mask, diff_mask;
 	int value, left, right;
@@ -245,16 +244,16 @@ static int es18XX_set_recmask(sb_devc * devc, int mask)
 
 	for (i = 0; i < 32; i++) {
 		i_mask = (1 << i);
-		if (diff_mask & i_mask) {
-			if (mask & i_mask) {	/* Turn it on (2) */
+		if (diff_mask & i_mask) {	/* Difference? (1)	*/
+			if (mask & i_mask) {	/* Turn it on  (2)	*/
 				value = devc->levels[i];
 				left  = value & 0x000000ff;
     				right = (value & 0x0000ff00) >> 8;
-			} else {		/* Turn it off (3) */
+			} else {		/* Turn it off (3)	*/
 				left  = 0;
 				right = 0;
 			}
-			common_mixer_set(devc, i + ES18XX_MIXER_RECDIFF, left, right);
+			common_mixer_set(devc, i + ES188X_MIXER_RECDIFF, left, right);
 		}
 	}
 	return mask;
@@ -269,14 +268,18 @@ static int set_recmask(sb_devc * devc, int mask)
 
 	switch (devc->model)
 	{
-		case MDL_ESS:	/* ES18XX needs a separate approach */
-			if (devc->submodel == SUBMDL_ES18XX) {
-				devmask = es18XX_set_recmask(devc, devmask);
-				break;
-			};
 		case MDL_SBPRO:
+		case MDL_ESS:
 		case MDL_JAZZ:
 		case MDL_SMW:
+			if (devc->model == MDL_ESS &&
+				devc->submodel == SUBMDL_ES188X) {
+				/*
+				 * ES188x needs a separate approach
+				 */
+				devmask = es188x_set_recmask(devc, devmask);
+				break;
+			};
 
 			if (devmask != SOUND_MASK_MIC &&
 				devmask != SOUND_MASK_LINE &&
@@ -507,12 +510,12 @@ static void sb_mixer_reset(sb_devc * devc)
 		sb_mixer_set(devc, i, devc->levels[i]);
 
 	/*
-	 * Separate actions for ES18XX:
-	 * Change registers 7a and 1c to make the record mixer the input for
-	 *
-	 * Then call set_recmask twice to do extra ES18XX initializations
+	 * Separate actions for ES188x:
+	 * Change registers 7a and 1c to make the record mixer the
+	 * actual recording source.
+	 * Then call set_recmask twice to do extra ES188x initializations
 	 */
-	if (devc->model == MDL_ESS && devc->submodel == SUBMDL_ES18XX) {
+	if (devc->model == MDL_ESS && devc->submodel == SUBMDL_ES188X) {
 	        regval = sb_getmixer(devc, 0x7a);
 		regval = (regval & 0xe7) | 0x08;
 	        sb_setmixer(devc, 0x7a, regval);
@@ -520,7 +523,7 @@ static void sb_mixer_reset(sb_devc * devc)
 		regval = (regval & 0xf8) | 0x07;
 		sb_setmixer(devc, 0x1c, regval);
 
-		set_recmask(devc, ES18XX_RECORDING_DEVICES);
+		set_recmask(devc, ES188X_RECORDING_DEVICES);
 		set_recmask(devc, 0);
 	}
 	set_recmask(devc, SOUND_MASK_MIC);
@@ -554,15 +557,15 @@ int sb_mixer_init(sb_devc * devc)
 			devc->mixer_caps = SOUND_CAP_EXCL_INPUT;
 
 			/*
-			 * Take care of ES18XX specifics...
+			 * Take care of ES188x specifics...
 			 */
 			switch (devc->submodel) {
-			case SUBMDL_ES18XX:
+			case SUBMDL_ES188X:
 				devc->supported_devices
-					= ES18XX_MIXER_DEVICES;
+					= ES188X_MIXER_DEVICES;
 				devc->supported_rec_devices
-					= ES18XX_RECORDING_DEVICES;
-				devc->iomap = &es18XX_mix;
+					= ES188X_RECORDING_DEVICES;
+				devc->iomap = &es188x_mix;
 				break;
 			default:
 				devc->supported_devices

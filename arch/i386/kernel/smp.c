@@ -140,7 +140,6 @@ unsigned long mp_ioapic_addr = 0xFEC00000;		/* Address of the I/O apic (not yet 
 unsigned char boot_cpu_id = 0;				/* Processor that is doing the boot up 			*/
 static int smp_activated = 0;				/* Tripped once we need to start cross invalidating 	*/
 int apic_version[NR_CPUS];				/* APIC version number					*/
-volatile int smp_commenced=0;			/* Tripped when we start scheduling 		    	*/
 unsigned long apic_retval;				/* Just debugging the assembler.. 			*/
 
 volatile unsigned long kernel_counter=0;		/* Number of times the processor holds the lock		*/
@@ -633,13 +632,17 @@ void __init smp_store_cpu_info(int id)
  *	we use to track CPUs as they power up.
  */
 
+static atomic_t smp_commenced = ATOMIC_INIT(0);
+
 void __init smp_commence(void)
 {
 	/*
 	 *	Lets the callins below out of their loop.
 	 */
 	SMP_PRINTK(("Setting commenced=1, go go go\n"));
-	smp_commenced=1;
+
+	wmb();
+	atomic_set(&smp_commenced,1);
 }
 
 void __init enable_local_APIC(void)
@@ -740,8 +743,8 @@ int __init start_secondary(void *unused)
 	mtrr_init_secondary_cpu ();
 #endif
 	smp_callin();
-	while (!smp_commenced)
-		barrier();
+	while (!atomic_read(&smp_commenced))
+		/* nothing */ ;
 	return cpu_idle(NULL);
 }
 
@@ -972,6 +975,27 @@ static void __init do_boot_cpu(int i)
 	*((volatile unsigned long *)phys_to_virt(8192)) = 0;
 }
 
+cycles_t cacheflush_time;
+extern unsigned long cpu_hz;
+
+static void smp_tune_scheduling (void)
+{
+	/*
+	 * Rough estimation for SMP scheduling, this is the number of
+	 * cycles it takes for a fully memory-limited process to flush
+	 * the SMP-local cache.
+	 *
+	 * (For a P5 this pretty much means we will choose another idle
+	 *  CPU almost always at wakeup time (this is due to the small
+	 *  L1 cache), on PIIs it's around 50-100 usecs, depending on
+	 *  the cache size)
+	 */
+	cacheflush_time = cpu_hz/1024*boot_cpu_data.x86_cache_size/5000;
+	printk("per-CPU timeslice cutoff: %ld.%ld usecs.\n",
+		(long)cacheflush_time/(cpu_hz/1000000),
+		((long)cacheflush_time*100/(cpu_hz/1000000)) % 100);
+}
+
 unsigned int prof_multiplier[NR_CPUS];
 unsigned int prof_counter[NR_CPUS];
 
@@ -1004,6 +1028,7 @@ void __init smp_boot_cpus(void)
 	 */
 
 	smp_store_cpu_info(boot_cpu_id);			/* Final full version of the data */
+	smp_tune_scheduling();
 	printk("CPU%d: ", boot_cpu_id);
 	print_cpu_info(&cpu_data[boot_cpu_id]);
 
