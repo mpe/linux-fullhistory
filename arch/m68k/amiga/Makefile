@@ -9,7 +9,8 @@
 
 O_TARGET := amiga.o
 O_OBJS   := config.o amikeyb.o amiints.o cia.o \
-            chipram.o amisound.o amifb.o zorro.o ksyms.o
+            chipram.o amisound.o amifb.o zorro.o
+OX_OBJS  := amiga_ksyms.o
 
 ifdef CONFIG_FB_CYBER
 O_OBJS := $(O_OBJS) cyberfb.o

@@ -9,7 +9,7 @@
 #include <sys/mman.h>
 
 char *filename, *command, __depname[256] = "\n\t@touch ";
-int needsconfig, hasconfig, hasdep;
+int needsconfig, hasconfig, hasmodules, hasdep;
 
 #define depname (__depname+9)
 
@@ -26,8 +26,11 @@ static void handle_include(int type, char *name, int len)
 	int plen;
 	struct path_struct *path = path_array+type;
 
-	if (len == 14 && !memcmp(name, "linux/config.h", len))
-		hasconfig = 1;
+	if (len == 14)
+		if (!memcmp(name, "linux/config.h", len))
+			hasconfig = 1;
+		else if (!memcmp(name, "linux/module.h", len))
+			hasmodules = 1;
 
 	plen = path->len;
 	memcpy(path->buffer+plen, name, len);
@@ -287,9 +290,9 @@ int main(int argc, char **argv)
 					command = "";
 			}
 		}
-		needsconfig = hasconfig = hasdep = 0;
+		needsconfig = hasconfig = hasmodules = hasdep = 0;
 		do_depend();
-		if (hasconfig && !needsconfig)
+		if (hasconfig && !hasmodules && !needsconfig)
 			fprintf(stderr, "%s doesn't need config\n", filename);
 	}
 	return 0;

@@ -53,9 +53,7 @@ CONFIG_BLK_DEV_FD=y
 # Filesystems
 #
 # CONFIG_MINIX_FS is not set
-# CONFIG_EXT_FS is not set
 CONFIG_EXT2_FS=y
-# CONFIG_XIA_FS is not set
 # CONFIG_MSDOS_FS is not set
 CONFIG_PROC_FS=y
 # CONFIG_ISO9660_FS is not set

@@ -133,6 +133,11 @@ int ipv6_setsockopt(struct sock *sk, int level, int optname, char *optval,
 		retv = 0;
 		break;
 
+	case IPV6_HOPLIMIT:
+		np->rxhlim = val;
+		retv = 0;
+		break;
+
 	case IPV6_UNICAST_HOPS:
 		if (val > 255)
 		{

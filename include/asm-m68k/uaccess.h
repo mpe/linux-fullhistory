@@ -82,11 +82,12 @@ __asm__ __volatile__					\
      "   .even\n"					\
      "2: movel %3,%0\n"					\
      "   jra 1b\n"					\
+     ".previous\n"					\
      ".section __ex_table,\"a\"\n"			\
      "   .align 4\n"					\
      "   .long 21b,2b\n"				\
      "   .long 1b,2b\n"					\
-     ".text"						\
+     ".previous"					\
      : "=d"(err)					\
      : "m"(*(ptr)), "r"(x), "i"(-EFAULT), "0"(0))
 
@@ -125,10 +126,11 @@ __asm__ __volatile__				\
      "3: movel %3,%0\n"				\
      "   sub" #bwl " %1,%1\n"			\
      "   jra 2b\n"				\
+     ".previous\n"				\
      ".section __ex_table,\"a\"\n"		\
      "   .align 4\n"				\
      "   .long 1b,3b\n"				\
-     ".text"					\
+     ".previous"				\
      : "=d"(err), reg(x)			\
      : "m"(*(ptr)), "i" (-EFAULT), "0"(0))
 
@@ -162,12 +164,13 @@ __generic_copy_from_user(void *to, const void *from, unsigned long n)
 	 "   jra 6b\n"
 	 "9: addql #1,%2\n"
 	 "   jra 6b\n"
+         ".previous\n"
 	 ".section __ex_table,\"a\"\n"
 	 "   .align 4\n"
 	 "   .long 1b,7b\n"
 	 "   .long 3b,8b\n"
 	 "   .long 5b,9b\n"
-	 ".text"
+	 ".previous"
 	 : "=a"(to), "=a"(from), "=d"(n), "=&d"(tmp)
 	 : "r"(n & 3), "0"(to), "1"(from), "2"(n/4)
 	 : "d0", "memory");
@@ -204,6 +207,7 @@ __generic_copy_to_user(void *to, const void *from, unsigned long n)
 	 "   jra 5b\n"
 	 "8: addql #1,%2\n"
 	 "   jra 5b\n"
+	 ".previous\n"
 	 ".section __ex_table,\"a\"\n"
 	 "   .align 4\n"
 	 "   .long 22b,6b\n"
@@ -212,7 +216,7 @@ __generic_copy_to_user(void *to, const void *from, unsigned long n)
 	 "   .long 4b,7b\n"
 	 "   .long 25b,8b\n"
 	 "   .long 5b,8b\n"
-	 ".text"
+	 ".previous"
 	 : "=a"(to), "=a"(from), "=d"(n), "=&d"(tmp)
 	 : "r"(n & 3), "0"(to), "1"(from), "2"(n / 4));
     return n;
@@ -229,12 +233,12 @@ __generic_copy_to_user(void *to, const void *from, unsigned long n)
 	 "11: lsll #2,%2\n"				\
 	 fixup "\n"					\
 	 "    jra 12f\n"				\
+	 ".previous\n"					\
 	 ".section __ex_table,\"a\"\n"			\
 	 "    .align 4\n"				\
 	 "    .long 10b,11b\n"				\
-	 ".text\n"					\
+	 ".previous\n"					\
 	 copy "\n"					\
-	 ".text\n"					\
 	 "12:"						\
 	 : "=a"(to), "=a"(from), "=d"(n)		\
 	 : "0"(to), "1"(from), "2"(n/4)			\
@@ -255,10 +259,11 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 	     "   .even\n"
 	     "3: addql #1,%2\n"
 	     "   jra 2b\n"
+	     ".previous\n"
 	     ".section __ex_table,\"a\"\n"
 	     "   .align 4\n"
 	     "   .long 1b,3b\n"
-	     ".text"
+	     ".previous"
 	     : "=a"(to), "=a"(from), "=d"(n)
 	     : "0"(to), "1"(from), "2"(0)
 	     : "d0", "memory");
@@ -272,10 +277,11 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 	     "   .even\n"
 	     "3: addql #2,%2\n"
 	     "   jra 2b\n"
+	     ".previous\n"
 	     ".section __ex_table,\"a\"\n"
 	     "   .align 4\n"
 	     "   .long 1b,3b\n"
-	     ".text"
+	     ".previous"
 	     : "=a"(to), "=a"(from), "=d"(n)
 	     : "0"(to), "1"(from), "2"(0)
 	     : "d0", "memory");
@@ -292,11 +298,12 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 	     "4: addql #2,%2\n"
 	     "5: addql #1,%2\n"
 	     "   jra 3b\n"
+	     ".previous\n"
 	     ".section __ex_table,\"a\"\n"
 	     "   .align 4\n"
 	     "   .long 1b,4b\n"
 	     "   .long 2b,5b\n"
-	     ".text"
+	     ".previous"
 	     : "=a"(to), "=a"(from), "=d"(n)
 	     : "0"(to), "1"(from), "2"(0)
 	     : "d0", "memory");
@@ -310,10 +317,11 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 	     "   .even\n"
 	     "3: addql #4,%2\n"
 	     "   jra 2b\n"
+	     ".previous\n"
 	     ".section __ex_table,\"a\"\n"
 	     "   .align 4\n"
 	     "   .long 1b,3b\n"
-	     ".text"
+	     ".previous"
 	     : "=a"(to), "=a"(from), "=d"(n)
 	     : "0"(to), "1"(from), "2"(0)
 	     : "d0", "memory");
@@ -330,11 +338,12 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 	     "4: addql #4,%2\n"
 	     "5: addql #4,%2\n"
 	     "   jra 3b\n"
+	     ".previous\n"
 	     ".section __ex_table,\"a\"\n"
 	     "   .align 4\n"
 	     "   .long 1b,4b\n"
 	     "   .long 2b,5b\n"
-	     ".text"
+	     ".previous"
 	     : "=a"(to), "=a"(from), "=d"(n)
 	     : "0"(to), "1"(from), "2"(0)
 	     : "d0", "memory");
@@ -354,12 +363,13 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 	     "6: addql #4,%2\n"
 	     "7: addql #4,%2\n"
 	     "   jra 4b\n"
+	     ".previous\n"
 	     ".section __ex_table,\"a\"\n"
 	     "   .align 4\n"
 	     "   .long 1b,5b\n"
 	     "   .long 2b,6b\n"
 	     "   .long 3b,7b\n"
-	     ".text"
+	     ".previous"
 	     : "=a"(to), "=a"(from), "=d"(n)
 	     : "0"(to), "1"(from), "2"(0)
 	     : "d0", "memory");
@@ -382,13 +392,14 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 	     "8: addql #4,%2\n"
 	     "9: addql #4,%2\n"
 	     "   jra 5b\n"
+	     ".previous\n"
 	     ".section __ex_table,\"a\"\n"
 	     "   .align 4\n"
 	     "   .long 1b,6b\n"
 	     "   .long 2b,7b\n"
 	     "   .long 3b,8b\n"
 	     "   .long 4b,9b\n"
-	     ".text"
+	     ".previous"
 	     : "=a"(to), "=a"(from), "=d"(n)
 	     : "0"(to), "1"(from), "2"(0)
 	     : "d0", "memory");
@@ -406,7 +417,8 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 				 "2: movesb (%1)+,%%d0\n"
 				 "   moveb %%d0,(%0)+\n"
 				 ".section __ex_table,\"a\"\n"
-				 "   .long 2b,1b");
+				 "   .long 2b,1b\n"
+				 ".previous");
 	    break;
 	case 2:
 	    __copy_from_user_big(to, from, n,
@@ -416,7 +428,8 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 				 "2: movesw (%1)+,%%d0\n"
 				 "   movew %%d0,(%0)+\n"
 				 ".section __ex_table,\"a\"\n"
-				 "   .long 2b,1b");
+				 "   .long 2b,1b\n"
+				 ".previous");
 	    break;
 	case 3:
 	    __copy_from_user_big(to, from, n,
@@ -430,7 +443,8 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 				 "   moveb %%d0,(%0)+\n"
 				 ".section __ex_table,\"a\"\n"
 				 "   .long 3b,1b\n"
-				 "   .long 4b,2b");
+				 "   .long 4b,2b\n"
+				 ".previous");
 	    break;
 	}
 	break;
@@ -449,13 +463,13 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 	 "12: lsll #2,%2\n"				\
 	 fixup "\n"					\
 	 "    jra 13f\n"				\
+	 ".previous\n"					\
 	 ".section __ex_table,\"a\"\n"			\
 	 "    .align 4\n"				\
 	 "    .long 31b,12b\n"				\
 	 "    .long 11b,12b\n"				\
-	 ".text\n"					\
+	 ".previous\n"					\
 	 copy "\n"					\
-	 ".text\n"					\
 	 "13:"						\
 	 : "=a"(to), "=a"(from), "=d"(n)		\
 	 : "0"(to), "1"(from), "2"(n/4)			\
@@ -476,11 +490,12 @@ __constant_copy_to_user(void *to, const void *from, unsigned long n)
 	     "   .even\n"
 	     "2: addql #1,%2\n"
 	     "   jra 1b\n"
+	     ".previous\n"
 	     ".section __ex_table,\"a\"\n"
 	     "   .align 4\n  "
 	     "   .long 21b,2b\n"
 	     "   .long 1b,2b\n"
-	     ".text"
+	     ".previous"
 	     : "=a"(to), "=a"(from), "=d"(n)
 	     : "0"(to), "1"(from), "2"(0)
 	     : "d0", "memory");
@@ -494,11 +509,12 @@ __constant_copy_to_user(void *to, const void *from, unsigned long n)
 	     "   .even\n"
 	     "2: addql #2,%2\n"
 	     "   jra 1b\n"
+	     ".previous\n"
 	     ".section __ex_table,\"a\"\n"
 	     "   .align 4\n"
 	     "   .long 21b,2b\n"
 	     "   .long 1b,2b\n"
-	     ".text"
+	     ".previous"
 	     : "=a"(to), "=a"(from), "=d"(n)
 	     : "0"(to), "1"(from), "2"(0)
 	     : "d0", "memory");
@@ -515,13 +531,14 @@ __constant_copy_to_user(void *to, const void *from, unsigned long n)
 	     "3: addql #2,%2\n"
 	     "4: addql #1,%2\n"
 	     "   jra 2b\n"
+	     ".previous\n"
 	     ".section __ex_table,\"a\"\n"
 	     "   .align 4\n"
 	     "   .long 21b,3b\n"
 	     "   .long 1b,3b\n"
 	     "   .long 22b,4b\n"
 	     "   .long 2b,4b\n"
-	     ".text"
+	     ".previous"
 	     : "=a"(to), "=a"(from), "=d"(n)
 	     : "0"(to), "1"(from), "2"(0)
 	     : "d0", "memory");
@@ -535,11 +552,12 @@ __constant_copy_to_user(void *to, const void *from, unsigned long n)
 	     "   .even\n"
 	     "2: addql #4,%2\n"
 	     "   jra 1b\n"
+	     ".previous\n"
 	     ".section __ex_table,\"a\"\n"
 	     "   .align 4\n"
 	     "   .long 21b,2b\n"
 	     "   .long 1b,2b\n"
-	     ".text"
+	     ".previous"
 	     : "=a"(to), "=a"(from), "=d"(n)
 	     : "0"(to), "1"(from), "2"(0)
 	     : "d0", "memory");
@@ -556,13 +574,14 @@ __constant_copy_to_user(void *to, const void *from, unsigned long n)
 	     "3: addql #4,%2\n"
 	     "4: addql #4,%2\n"
 	     "   jra 2b\n"
+	     ".previous\n"
 	     ".section __ex_table,\"a\"\n"
 	     "   .align 4\n"
 	     "   .long 21b,3b\n"
 	     "   .long 1b,3b\n"
 	     "   .long 22b,4b\n"
 	     "   .long 2b,4b\n"
-	     ".text"
+	     ".previous"
 	     : "=a"(to), "=a"(from), "=d"(n)
 	     : "0"(to), "1"(from), "2"(0)
 	     : "d0", "memory");
@@ -582,6 +601,7 @@ __constant_copy_to_user(void *to, const void *from, unsigned long n)
 	     "5: addql #4,%2\n"
 	     "6: addql #4,%2\n"
 	     "   jra 3b\n"
+	     ".previous\n"
 	     ".section __ex_table,\"a\"\n"
 	     "   .align 4\n"
 	     "   .long 21b,4b\n"
@@ -590,7 +610,7 @@ __constant_copy_to_user(void *to, const void *from, unsigned long n)
 	     "   .long 2b,5b\n"
 	     "   .long 23b,6b\n"
 	     "   .long 3b,6b\n"
-	     ".text"
+	     ".previous"
 	     : "=a"(to), "=a"(from), "=d"(n)
 	     : "0"(to), "1"(from), "2"(0)
 	     : "d0", "memory");
@@ -613,6 +633,7 @@ __constant_copy_to_user(void *to, const void *from, unsigned long n)
 	     "7: addql #4,%2\n"
 	     "8: addql #4,%2\n"
 	     "   jra 4b\n"
+	     ".previous\n"
 	     ".section __ex_table,\"a\"\n"
 	     "   .align 4\n"
 	     "   .long 21b,5b\n"
@@ -623,7 +644,7 @@ __constant_copy_to_user(void *to, const void *from, unsigned long n)
 	     "   .long 3b,7b\n"
 	     "   .long 24b,8b\n"
 	     "   .long 4b,8b\n"
-	     ".text"
+	     ".previous"
 	     : "=a"(to), "=a"(from), "=d"(n)
 	     : "0"(to), "1"(from), "2"(0)
 	     : "d0", "memory");
@@ -643,7 +664,8 @@ __constant_copy_to_user(void *to, const void *from, unsigned long n)
 			       "2:"
 			       ".section __ex_table,\"a\"\n"
 			       "   .long 22b,1b\n"
-			       "   .long 2b,1b");
+			       "   .long 2b,1b\n"
+			       ".previous");
 	    break;
 	case 2:
 	    __copy_to_user_big(to, from, n,
@@ -655,7 +677,8 @@ __constant_copy_to_user(void *to, const void *from, unsigned long n)
 			       "2:"
 			       ".section __ex_table,\"a\"\n"
 			       "   .long 22b,1b\n"
-			       "   .long 2b,1b");
+			       "   .long 2b,1b\n"
+			       ".previous");
 	    break;
 	case 3:
 	    __copy_to_user_big(to, from, n,
@@ -672,7 +695,8 @@ __constant_copy_to_user(void *to, const void *from, unsigned long n)
 			       "   .long 23b,1b\n"
 			       "   .long 3b,1b\n"
 			       "   .long 24b,2b\n"
-			       "   .long 4b,2b");
+			       "   .long 4b,2b\n"
+			       ".previous");
 	    break;
 	}
 	break;
@@ -711,11 +735,12 @@ strncpy_from_user(char *dst, const char *src, long count)
 	 "   .even\n"
 	 "4: movel %4,%0\n"
 	 "   jra 3b\n"
+	 ".previous\n"
 	 ".section __ex_table,\"a\"\n"
 	 "   .align 4\n"
 	 "   .long 1b,4b\n"
 	 "   .long 12b,4b\n"
-	 ".text"
+	 ".previous"
 	 : "=d"(res), "=a"(dst), "=a"(src), "=d"(count)
 	 : "i"(-EFAULT), "0"(count), "1"(dst), "2"(src), "3"(count)
 	 : "d0", "memory");
@@ -740,11 +765,12 @@ static inline long strlen_user(const char * src)
 	 "   .even\n"
 	 "3: moveq %2,%0\n"
 	 "   jra 2b\n"
+	 ".previous\n"
 	 ".section __ex_table,\"a\"\n"
 	 "   .align 4\n"
 	 "   .long 1b,3b\n"
 	 "   .long 12b,3b\n"
-	 ".text"
+	 ".previous"
 	 : "=d"(res), "=a"(src)
 	 : "i"(0), "0"(res), "1"(src)
 	 : "d0");
@@ -781,6 +807,7 @@ clear_user(void *to, unsigned long n)
 	 "   jra 5b\n"
 	 "8: addql #1,%1\n"
 	 "   jra 5b\n"
+	 ".previous\n"
 	 ".section __ex_table,\"a\"\n"
 	 "   .align 4\n"
 	 "   .long 1b,6b\n"
@@ -789,7 +816,7 @@ clear_user(void *to, unsigned long n)
 	 "   .long 4b,7b\n"
 	 "   .long 25b,8b\n"
 	 "   .long 5b,8b\n"
-	 ".text"
+	 ".previous"
 	 : "=a"(to), "=d"(n)
 	 : "r"(n & 3), "r"(0), "0"(to), "1"(n/4));
     return n;

@@ -8,13 +8,16 @@
 #define _LINUX_MODULE_H
 
 #ifdef __GENKSYMS__
-# undef MODVERSIONS
-# define MODVERSIONS
+#  define _set_ver(sym) sym
+#  undef  MODVERSIONS
+#  define MODVERSIONS
 #else /* ! __GENKSYMS__ */
-# if defined(MODVERSIONS) && !defined(MODULE) && defined(EXPORT_SYMTAB)
+# if !defined(MODVERSIONS) && defined(EXPORT_SYMTAB)
+#   define _set_ver(sym) sym
 #   include <linux/modversions.h>
 # endif
 #endif /* __GENKSYMS__ */
+
 
 /* Don't need to bring in all of uaccess.h just for this decl.  */
 struct exception_table_entry;
@@ -39,6 +42,9 @@ struct module_ref
 	struct module_ref *next_ref;
 };
 
+/* TBD */
+struct module_persist;
+
 struct module
 {
 	unsigned long size_of_struct;	/* == sizeof(module) */
@@ -62,6 +68,11 @@ struct module
 #ifdef __alpha__
 	unsigned long gp;
 #endif
+	/* Members past this point are extensions to the basic
+	   module support and are optional.  Use mod_opt_member()
+	   to examine them.  */
+	const struct module_persist *persist_start;
+	const struct module_persist *persist_end;
 };
 
 struct module_info
@@ -78,6 +89,7 @@ struct module_info
 #define MOD_DELETED		2
 #define MOD_AUTOCLEAN		4
 #define MOD_VISITED  		8
+#define MOD_USED_ONCE		16
 
 /* Values for query_module's which.  */
 
@@ -91,12 +103,23 @@ struct module_info
 
 #define GET_USE_COUNT(module)	((module)->usecount)
 
+/* When the struct module is extended, new values must be examined using
+   this macro.  It returns a pointer to the member if available, NULL
+   otherwise. */
+
+#define mod_opt_member(mod,member) 					\
+	({ struct module *_mod = (mod);					\
+	   __typeof__(_mod->member) *_mem = &_mod->member;		\
+	   ((char *)(_mem+1) > (char *)_mod + _mod->size_of_struct	\
+	    ? (__typeof__(_mod->member) *)NULL : _mem);			\
+	})
+
 /* Indirect stringification.  */
 
 #define __MODULE_STRING_1(x)	#x
 #define __MODULE_STRING(x)	__MODULE_STRING_1(x)
 
-#ifdef MODULE
+#if defined(MODULE) && !defined(__GENKSYMS__)
 
 /* Embedded module documentation macros.  */
 
@@ -105,6 +128,10 @@ struct module_info
 #define MODULE_AUTHOR(name)						   \
 const char __module_author[] __attribute__((section(".modinfo"))) = 	   \
 "author=" name
+
+#define MODULE_DESCRIPTION(desc)					   \
+const char __module_description[] __attribute__((section(".modinfo"))) =   \
+"description=" desc
 
 /* Could potentially be used by kerneld...  */
 
@@ -130,27 +157,32 @@ const char __module_parm_##var[]		\
 __attribute__((section(".modinfo"))) =		\
 "parm_" __MODULE_STRING(var) "=" type
 
-/* The attributes of a section are set the first time the section is
-   seen; we want .modinfo to not be allocated.  This header should be
-   included before any functions or variables are defined.  */
+#define MODULE_PARM_DESC(var,desc)		\
+const char __module_parm_desc_##var[]		\
+__attribute__((section(".modinfo"))) =		\
+"parm_desc_" __MODULE_STRING(var) "=" desc
 
-__asm__(".section .modinfo\n\t.text");
+/* The attributes of a section are set the first time the section is
+   seen; we want .modinfo to not be allocated.  */
+
+__asm__(".section .modinfo\n\t.previous");
 
 /* Define the module variable, and usage macros.  */
 extern struct module __this_module;
 
-#define MOD_INC_USE_COUNT \
-	(__this_module.usecount++, __this_module.flags |= MOD_VISITED)
-#define MOD_DEC_USE_COUNT \
+#define MOD_INC_USE_COUNT 					\
+	(__this_module.usecount++,				\
+	 __this_module.flags |= MOD_VISITED|MOD_USED_ONCE)
+#define MOD_DEC_USE_COUNT					\
 	(__this_module.usecount--, __this_module.flags |= MOD_VISITED)
-#define MOD_IN_USE \
+#define MOD_IN_USE						\
 	(__this_module.usecount != 0)
 
 #ifndef __NO_VERSION__
 #include <linux/version.h>
 const char __module_kernel_version[] __attribute__((section(".modinfo"))) =
 "kernel_version=" UTS_RELEASE;
-#if defined(MODVERSIONS) && !defined(__GENKSYMS__)
+#ifdef MODVERSIONS
 const char __module_using_checksums[] __attribute__((section(".modinfo"))) =
 "using_checksums=1";
 #endif
@@ -159,14 +191,20 @@ const char __module_using_checksums[] __attribute__((section(".modinfo"))) =
 #else /* MODULE */
 
 #define MODULE_AUTHOR(name)
+#define MODULE_DESCRIPTION(desc)
 #define MODULE_SUPPORTED_DEVICE(name)
 #define MODULE_PARM(var,type)
+#define MODULE_PARM_DESC(var,desc)
+
+#ifndef __GENKSYMS__
 
 #define MOD_INC_USE_COUNT	do { } while (0)
 #define MOD_DEC_USE_COUNT	do { } while (0)
 #define MOD_IN_USE		1
 
 extern struct module *module_list;
+
+#endif /* !__GENKSYMS__ */
 
 #endif /* MODULE */
 
@@ -183,30 +221,48 @@ extern struct module *module_list;
 
 /* We want the EXPORT_SYMBOL tag left intact for recognition.  */
 
+#elif !defined(EXPORT_SYMTAB)
+
+#define __EXPORT_SYMBOL(sym,str)   error EXPORT_SYMTAB_not_defined
+#define EXPORT_SYMBOL(var)	   error EXPORT_SYMTAB_not_defined
+#define EXPORT_SYMBOL_NOVERS(var)  error EXPORT_SYMTAB_not_defined
+
+#elif !defined(AUTOCONF_INCLUDED)
+
+#define __EXPORT_SYMBOL(sym,str)   error config_must_be_included_before_module
+#define EXPORT_SYMBOL(var)	   error config_must_be_included_before_module
+#define EXPORT_SYMBOL_NOVERS(var)  error config_must_be_included_before_module
+
 #elif !defined(CONFIG_MODULES)
 
+#define __EXPORT_SYMBOL(sym,str)
 #define EXPORT_SYMBOL(var)
 #define EXPORT_SYMBOL_NOVERS(var)
-#define EXPORT_NO_SYMBOLS
 
 #else
 
-#define EXPORT_SYMBOL(var)				\
-const struct module_symbol __export_##var 		\
-__attribute__((section("__ksymtab"))) = {		\
-	(unsigned long)&var, __MODULE_STRING(var)	\
-}							\
+#define __EXPORT_SYMBOL(sym, str)			\
+const char __kstrtab_##sym[]				\
+__attribute__((section(".kstrtab"))) = str;		\
+const struct module_symbol __ksymtab_##sym 		\
+__attribute__((section("__ksymtab"))) =			\
+{ (unsigned long)&sym, __kstrtab_##sym }
 
-#define EXPORT_SYMBOL_NOVERS(var) EXPORT_SYMBOL(var)
+#if defined(MODVERSIONS) || !defined(CONFIG_MODVERSIONS)
+#define EXPORT_SYMBOL(var)  __EXPORT_SYMBOL(var, __MODULE_STRING(var))
+#else
+#define EXPORT_SYMBOL(var)  __EXPORT_SYMBOL(var, __MODULE_STRING(__VERSIONED_SYMBOL(var)))
+#endif
+
+#define EXPORT_SYMBOL_NOVERS(var)  __EXPORT_SYMBOL(var, __MODULE_STRING(var))
+
+#endif /* __GENKSYMS__ */
 
 #ifdef MODULE
 /* Force a module to export no symbols.  */
-#define EXPORT_NO_SYMBOLS				\
-__asm__(".section __ksymtab\n.text")
+#define EXPORT_NO_SYMBOLS  __asm__(".section __ksymtab\n.previous")
 #else
 #define EXPORT_NO_SYMBOLS
 #endif /* MODULE */
-
-#endif
 
 #endif /* _LINUX_MODULE_H */

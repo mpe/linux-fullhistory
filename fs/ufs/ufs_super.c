@@ -20,6 +20,7 @@
  * Gertjan van Wingerde <gertjan@cs.vu.nl>
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/kernel.h>

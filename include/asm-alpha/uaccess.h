@@ -122,7 +122,7 @@ struct __large_struct { unsigned long buf[100]; };
 	".section __ex_table,\"a\"\n"			\
 	"	.gprel32 1b\n"				\
 	"	lda %0, 2b-1b(%1)\n"			\
-	".text"						\
+	".previous"					\
 		: "=r"(__gu_val), "=r"(__gu_err)	\
 		: "m"(__m(addr)), "1"(__gu_err))
 
@@ -132,7 +132,7 @@ struct __large_struct { unsigned long buf[100]; };
 	".section __ex_table,\"a\"\n"			\
 	"	.gprel32 1b\n"				\
 	"	lda %0, 2b-1b(%1)\n"			\
-	".text"						\
+	".previous"					\
 		: "=r"(__gu_val), "=r"(__gu_err)	\
 		: "m"(__m(addr)), "1"(__gu_err))
 
@@ -145,7 +145,7 @@ struct __large_struct { unsigned long buf[100]; };
 	".section __ex_table,\"a\"\n"			\
 	"	.gprel32 1b\n"				\
 	"	lda %0, 2b-1b(%1)\n"			\
-	".text"						\
+	".previous"					\
 		: "=r"(__gu_val), "=r"(__gu_err)	\
 		: "m"(__m(addr)), "1"(__gu_err))
 
@@ -155,7 +155,7 @@ struct __large_struct { unsigned long buf[100]; };
 	".section __ex_table,\"a\"\n"			\
 	"	.gprel32 1b\n"				\
 	"	lda %0, 2b-1b(%1)\n"			\
-	".text"						\
+	".previous"					\
 		: "=r"(__gu_val), "=r"(__gu_err)	\
 		: "m"(__m(addr)), "1"(__gu_err))
 #else
@@ -176,7 +176,7 @@ struct __large_struct { unsigned long buf[100]; };
 	"	lda %0, 3b-1b(%2)\n"					\
 	"	.gprel32 2b\n"						\
 	"	lda %0, 2b-1b(%2)\n"					\
-	".text"								\
+	".previous"							\
 		: "=&r"(__gu_val), "=&r"(__gu_tmp), "=r"(__gu_err)	\
 		: "r"(addr), "2"(__gu_err));				\
 }
@@ -188,7 +188,7 @@ struct __large_struct { unsigned long buf[100]; };
 	".section __ex_table,\"a\"\n"					\
 	"	.gprel32 1b\n"						\
 	"	lda %0, 2b-1b(%1)\n"					\
-	".text"								\
+	".previous"							\
 		: "=&r"(__gu_val), "=r"(__gu_err)			\
 		: "r"(addr), "1"(__gu_err))
 #endif
@@ -236,7 +236,7 @@ __asm__ __volatile__("1: stq %r2,%1\n"				\
 	".section __ex_table,\"a\"\n"				\
 	"	.gprel32 1b\n"					\
 	"	lda $31,2b-1b(%0)\n"				\
-	".text"							\
+	".previous"						\
 		: "=r"(__pu_err)				\
 		: "m" (__m(addr)), "rJ" (x), "0"(__pu_err))
 
@@ -246,7 +246,7 @@ __asm__ __volatile__("1: stl %r2,%1\n"				\
 	".section __ex_table,\"a\"\n"				\
 	"	.gprel32 1b\n"					\
 	"	lda $31,2b-1b(%0)\n"				\
-	".text"							\
+	".previous"						\
 		: "=r"(__pu_err)				\
 		: "m"(__m(addr)), "rJ"(x), "0"(__pu_err))
 
@@ -259,7 +259,7 @@ __asm__ __volatile__("1: stw %r2,%1\n"				\
 	".section __ex_table,\"a\"\n"				\
 	"	.gprel32 1b\n"					\
 	"	lda $31,2b-1b(%0)\n"				\
-	".text"							\
+	".previous"						\
 		: "=r"(__pu_err)				\
 		: "m"(__m(addr)), "rJ"(x), "0"(__pu_err))
 
@@ -269,7 +269,7 @@ __asm__ __volatile__("1: stb %r2,%1\n"				\
 	".section __ex_table,\"a\"\n"				\
 	"	.gprel32 1b\n"					\
 	"	lda $31,2b-1b(%0)\n"				\
-	".text"							\
+	".previous"						\
 		: "=r"(__pu_err)				\
 		: "m"(__m(addr)), "rJ"(x), "0"(__pu_err))
 #else
@@ -300,7 +300,7 @@ __asm__ __volatile__("1: stb %r2,%1\n"				\
 	"	lda $31, 5b-3b(%0)\n"				\
 	"	.gprel32 4b\n"					\
 	"	lda $31, 5b-4b(%0)\n"				\
-	".text"							\
+	".previous"						\
 		: "=r"(__pu_err), "=&r"(__pu_tmp1),		\
 		  "=&r"(__pu_tmp2), "=&r"(__pu_tmp3),		\
 		  "=&r"(__pu_tmp4)				\
@@ -322,7 +322,7 @@ __asm__ __volatile__("1: stb %r2,%1\n"				\
 	"	lda $31, 3b-1b(%0)\n"				\
 	"	.gprel32 2b\n"					\
 	"	lda $31, 3b-2b(%0)\n"				\
-	".text"							\
+	".previous"						\
 		: "=r"(__pu_err),				\
 	  	  "=&r"(__pu_tmp1), "=&r"(__pu_tmp2)		\
 		: "r"((unsigned long)(x)), "r"(addr), "0"(__pu_err)); \

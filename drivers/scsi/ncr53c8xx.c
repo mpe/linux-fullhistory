@@ -40,7 +40,7 @@
 */
 
 /*
-**	26 December 1996, version 1.16b
+**	12 January 1997, version 1.16e
 **
 **	Supported SCSI-II features:
 **	    Synchronous negotiation
@@ -368,15 +368,17 @@ static inline void m_free(void *ptr, int size)
 /*
 **	Transfer direction
 **
-**	The middle scsi driver of Linux does not provide the transfer
-**	direction in the command structure.
-**	FreeBsd ncr driver requires this information.
+**	Low-level scsi drivers under Linux do not receive the expected 
+**	data transfer direction from upper scsi drivers.
+**	The driver will only check actual data direction for common 
+**	scsi opcodes. Other ones may cause problem, since they may 
+**	depend on device type or be vendor specific.
+**	I would prefer to never trust the device for data direction, 
+**	but that is not possible.
 **
-**	I spent some hours to read the scsi2 documentation to see if
-**	it was possible to deduce the direction of transfer from the opcode
-**	of the command. It seems that it's OK.
-**	guess_xfer_direction() seems to work. If it's wrong we will
-**	get a phase mismatch on some opcode.
+**	The original driver requires the expected direction to be known.
+**	The Linux version of the driver has been enhanced in order to 
+**	be able to transfer data in the direction choosen by the target. 
 */
 
 #define XferNone	0
@@ -440,6 +442,7 @@ static struct {
 	unsigned default_tags;
 	unsigned default_sync;
 	unsigned debug;
+	unsigned burst_max;
 } driver_setup = SCSI_NCR_DRIVER_SETUP;
 
 /*
@@ -656,7 +659,8 @@ static void ncr53c8xx_timeout(unsigned long np);
 #define	SIR_REJECT_SENT		(10)
 #define	SIR_IGN_RESIDUE		(11)
 #define	SIR_MISSING_SAVE	(12)
-#define	SIR_MAX			(12)
+#define	SIR_DATA_IO_IS_OUT	(13)
+#define	SIR_MAX			(13)
 
 /*==========================================================
 **
@@ -1254,6 +1258,14 @@ struct ccb {
 	*/
 
 	u_char			tag;
+
+	/*
+	**	Number of segments of the scatter list.
+	**	Used for recalculation of savep/goalp/lastp on 
+	**	SIR_DATA_IO_IS_OUT interrupt.
+	*/
+	
+	u_char			segments;
 };
 
 #define CCB_PHYS(cp,lbl)	(cp->p_ccb + offsetof(struct ccb, lbl))
@@ -1297,6 +1309,7 @@ struct ncb {
 	u_char	sv_dcntl;
 	u_char	sv_ctest3;
 	u_char	sv_ctest4;
+	u_char	sv_ctest5;
 
 	u_char	rv_dmode;
 	u_char	rv_dcntl;
@@ -1544,6 +1557,7 @@ struct script {
 	ncrcmd	resel_tmp	[  5];
 	ncrcmd  resel_lun	[ 18];
 	ncrcmd	resel_tag	[ 24];
+	ncrcmd  data_io		[  2];	/* MUST be just before data_in */
 	ncrcmd  data_in		[MAX_SCATTER * 4 + 7];
 	ncrcmd  data_out	[MAX_SCATTER * 4 + 7];
 	ncrcmd	aborttag	[  4];
@@ -3088,6 +3102,17 @@ static	struct script script0 = {
 	SCR_RETURN,
 		0,
 
+}/*-------------------------< DATA_IO >--------------------*/,{
+/*
+**	Because Linux does not provide xfer data direction 
+**	to low-level scsi drivers, we must trust the target 
+**	for actual data direction when we cannot guess it.
+**	The programmed interrupt patches savep, lastp, goalp,
+**	etc.., and restarts the scsi script at data_out.
+*/
+	SCR_INT ^ IFTRUE (WHEN (SCR_DATA_OUT)),
+		SIR_DATA_IO_IS_OUT,
+
 }/*-------------------------< DATA_IN >--------------------*/,{
 /*
 **	Because the size depends on the
@@ -4149,8 +4174,14 @@ int ncr_queue_command (Scsi_Cmnd *cmd, void (* done)(Scsi_Cmnd *))
 	**----------------------------------------------------
 	*/
 
+	cp->segments = segments;
+
 	switch (xfer_direction) {
 	default:
+	case XferBoth:
+	     cp->phys.header.savep = NCB_SCRIPT_PHYS (np, data_io);
+	     cp->phys.header.goalp = cp->phys.header.savep +8 +20 +segments*16;
+	     break;
 	case XferIn:
 	     cp->phys.header.savep = NCB_SCRIPT_PHYS (np, data_in);
 	     cp->phys.header.goalp = cp->phys.header.savep +20 +segments*16;
@@ -4470,6 +4501,7 @@ static int ncr_detach(ncb_p np, int irq)
 	OUTB(nc_dcntl,	np->sv_dcntl);
 	OUTB(nc_ctest3,	np->sv_ctest3);
 	OUTB(nc_ctest4,	np->sv_ctest4);
+	OUTB(nc_ctest5,	np->sv_ctest5);
 
 	if (np->uf_doubler) {
 		OUTB(nc_stest1, DBLEN);		/* Enable clock doubler	*/
@@ -4883,6 +4915,46 @@ void ncr_wakeup (ncb_p np, u_long code)
 	};
 }
 
+/*===============================================================
+**
+**	NCR chips allow burst lengths of 2, 4, 8, 16, 32, 64, 128 
+**	transfers. 32,64,128 are only supported by 875 chips.
+**	We use log base 2 (burst length) as internal code, with 
+**	value 0 meaning "burst disabled".
+**
+**===============================================================
+*/
+
+/*
+ *	Burst length from burst code.
+ */
+#define burst_length(bc) (!(bc))? 0 : 1 << (bc)
+
+/*
+ *	Burst code from io register bits.
+ */
+#define burst_code(dmode, ctest4, ctest5) \
+	(ctest4) & 0x80? 0 : (((dmode) & 0xc0) >> 6) + ((ctest5) & 0x04) + 1
+
+/*
+ *	Set initial io register bits from burst code.
+ */
+static void ncr_init_burst(ncb_p np, u_char bc)
+{
+	np->rv_ctest4	&= ~0x80;
+	np->rv_dmode	&= ~(0x3 << 6);
+	np->rv_ctest5	&= ~0x4;
+
+	if (!bc) {
+		np->rv_ctest4	|= 0x80;
+	}
+	else {
+		--bc;
+		np->rv_dmode	|= ((bc & 0x3) << 6);
+		np->rv_ctest5	|= (bc & 0x4);
+	}
+}
+
 /*==========================================================
 **
 **
@@ -4897,6 +4969,7 @@ void ncr_init (ncb_p np, char * msg, u_long code)
 	int	i;
 	u_long	usrsync;
 	u_char	usrwide;
+	u_char	burst_max;
 
 	/*
 	**	Reset chip.
@@ -4938,40 +5011,48 @@ void ncr_init (ncb_p np, char * msg, u_long code)
 	np->rv_dcntl	= np->sv_dcntl;
 	np->rv_ctest3	= np->sv_ctest3;
 	np->rv_ctest4	= np->sv_ctest4;
+	np->rv_ctest5	= np->sv_ctest5;
+	burst_max	= burst_code(np->sv_dmode, np->sv_ctest4, np->sv_ctest5);
 #else
 	np->rv_dmode	= 0;
 	np->rv_dcntl	= 0;
 	np->rv_ctest3	= 0;
 	np->rv_ctest4	= 0;
+	burst_max	= driver_setup.burst_max;
+	if (burst_max == 255)
+		burst_max = burst_code(np->sv_dmode, np->sv_ctest4, np->sv_ctest5);
+	if (burst_max > 7)
+		burst_max = 7;
 
 /**	NCR53C810			**/
 	if (ChipDevice == PCI_DEVICE_ID_NCR_53C810 && ChipVersion == 0) {
-		np->rv_dmode	= 0x80;	/* burst length 8 */
+		burst_max	= burst_max < 4 ? burst_max : 4;
 	}
 	else
 /**	NCR53C815			**/
 	if (ChipDevice == PCI_DEVICE_ID_NCR_53C815) {
-		np->rv_dmode	= 0x80;	/* burst length 8 */
+		burst_max	= burst_max < 4 ? burst_max : 4;
 	}
 	else
 /**	NCR53C825			**/
 	if (ChipDevice == PCI_DEVICE_ID_NCR_53C825 && ChipVersion == 0) {
-		np->rv_dmode	= 0x8a;	/* burst length 8, burst opcode fetch */
+		burst_max	= burst_max < 4 ? burst_max : 4;
+		np->rv_dmode	= 0x0a;	/* burst opcode fetch */
 	}
 	else
 /**	NCR53C810A or NCR53C860		**/
 	if ((ChipDevice == PCI_DEVICE_ID_NCR_53C810 && ChipVersion >= 0x10) ||
 	    ChipDevice == PCI_DEVICE_ID_NCR_53C860) {
 		if (!driver_setup.special_features)
-			np->rv_dmode	= 0xc0;	/* burst length 16 */
+			burst_max	= burst_max < 4 ? burst_max : 4;
 		else {
-			np->rv_dmode	= 0xc0 | BOF | ERMP | ERL;
+			burst_max	= burst_max < 4 ? burst_max : 4;
+			np->rv_dmode	= BOF | ERMP | ERL;
 						/* burst op-code fetch, read multiple */
-						/* read line, burst 16 */
+						/* read line */
 			np->rv_dcntl	= PFEN | CLSE;
 						/* prefetch, cache line size */
 			np->rv_ctest3	= WRIE;	/* write and invalidate */
-			np->rv_ctest4	= 0x0;	/* burst not disabled */
 		}
 	}
 	else
@@ -4979,30 +5060,43 @@ void ncr_init (ncb_p np, char * msg, u_long code)
 	if ((ChipDevice == PCI_DEVICE_ID_NCR_53C825 && ChipVersion >= 0x10) ||
 	    ChipDevice == PCI_DEVICE_ID_NCR_53C875) {
 		if (!driver_setup.special_features)
-			np->rv_dmode	= 0xc0;	/* burst length 16 */
+			burst_max	= burst_max < 4 ? burst_max : 4;
 		else {
-			np->rv_dmode	= 0xc0 | BOF | ERMP | ERL;
+			burst_max	= burst_max < 7 ? burst_max : 7;
+			np->rv_dmode	= BOF | ERMP | ERL;
 						/* burst op-code fetch, read multiple */
 						/* read line, burst 128 (ctest5&4) */
 			np->rv_dcntl	= PFEN | CLSE;
 						/* prefetch, cache line size */
 			np->rv_ctest3	= WRIE;	/* write and invalidate */
-			np->rv_ctest4	= 0x0;	/* burst not disabled */
-			np->rv_ctest5	= 0x24;	/* burst 128	(0x04) */
-						/* dma fifo 536	(0x20) */
+			np->rv_ctest5	= 0x20;	/* dma fifo 536 (0x20) */
 		}
 	}
 /**	OTHERS				**/
 	else {
-		np->rv_dmode	= 0xc0;	/* burst length 16 */
+		burst_max	= burst_max < 4 ? burst_max : 4;
 	}
 #endif /* SCSI_NCR_TRUST_BIOS_SETTING */
 
+	/*
+	 *	Prepare initial io register bits for burst length
+	 */
+	ncr_init_burst(np, burst_max);
+
+	if (bootverbose > 1) {
+		printf ("%s: initial value of dmode/ctest4/ctest5 = 0x%02x/0x%02x/0x%02x\n",
+			ncr_name(np), np->sv_dmode, np->sv_ctest4, np->sv_ctest5);
+	}
+	if (bootverbose) {
+		printf ("%s: final value of dmode/ctest4/ctest5 = 0x%02x/0x%02x/0x%02x\n",
+			ncr_name(np), np->rv_dmode, np->rv_ctest4, np->rv_ctest5);
+	}
+
 #if 0
-	printf("%s: bios: dmode=0x%02x, dcntl=0x%02x, ctest3=0x%02x, ctest4=0x%02x\n",
-		ncr_name(np), np->sv_dmode, np->sv_dcntl, np->sv_ctest3, np->sv_ctest4);
-	printf("%s: used: dmode=0x%02x, dcntl=0x%02x, ctest3=0x%02x, ctest4=0x%02x\n",
-		ncr_name(np), np->rv_dmode, np->rv_dcntl, np->rv_ctest3, np->rv_ctest4);
+	printf("%s: bios: dmode=0x%02x, dcntl=0x%02x, ctest3=0x%02x, ctest4=0x%02x, ctest5=0x%02x\n",
+		ncr_name(np), np->sv_dmode, np->sv_dcntl, np->sv_ctest3, np->sv_ctest4, np->sv_ctest5);
+	printf("%s: used: dmode=0x%02x, dcntl=0x%02x, ctest3=0x%02x, ctest4=0x%02x, ctest5=0x%02x\n",
+		ncr_name(np), np->rv_dmode, np->rv_dcntl, np->rv_ctest3, np->rv_ctest4, np->rv_ctest5);
 #endif
 
 	OUTB (nc_istat,  0x00   );      /*  Remove Reset, abort ...	     */
@@ -6268,6 +6362,23 @@ void ncr_int_sir (ncb_p np)
 	}
 
 	switch (num) {
+	case SIR_DATA_IO_IS_OUT:
+/*
+**	We did not guess the direction of transfer. We assumed DATA IN,
+**	but the the target drove DATA OUT.
+**	We have to patch the script context with DATA OUT context and 
+**	restart processing at data out script address.
+*/
+		cp->phys.header.savep	= NCB_SCRIPT_PHYS (np, data_out);
+		cp->phys.header.goalp	= cp->phys.header.savep +20 +cp->segments*16;
+		cp->phys.header.lastp	= cp->phys.header.savep;
+		np->header.savep	= cp->phys.header.savep;
+		np->header.goalp	= cp->phys.header.goalp;
+		np->header.lastp	= cp->phys.header.lastp;
+		OUTL (nc_temp,	np->header.savep);
+		OUTL (nc_dsp,	np->header.savep);
+		return;
+		/* break; */
 
 /*--------------------------------------------------------------------
 **
@@ -6492,14 +6603,14 @@ void ncr_int_sir (ncb_p np)
 		/*
 		**	Check against controller limits.
 		**	--------------------------------
-		**	per <= 13  special case, allow fast 20 MHz transfer.
-		**	per <  25  fast 20
+		**	per <  25  fast20
 		**	per <  50  fast
 		**	per < 100  slow
 		**	Use a value p2 twice the controller limit in order to 
 		**	not do wrong integer calculation for 80 MHz clock.
 		**	(12.5x2 = 25ns).
-		**	Compute scntl3&0xf0 sync clock divisor for 50 ns period.
+		**	Compute scntl3&0xf0 sync clock divisor for 50 ns period 
+		**	from the async pre-scaler.
 		**	Ajust it according to actual controller sync period.
 		**	- 0x40 divides it by 4  -> 50/4 = 12.5ns
 		**	- 0x20 divides it by 2  -> 50/2 = 25 ns
@@ -6513,25 +6624,19 @@ void ncr_int_sir (ncb_p np)
 			p2	= 100;
 			scntl3	= (np->rv_scntl3 & 0x07) << 4;
 
-			if (per <= 13) {
-				fak	= 0;
+			if (per < 25) {
+				p2	= 25;
 				scntl3	= (scntl3 - 0x40) | 0x80;
 			}
-			else {
-				if (per < 25) {
-					p2	= 25;
-					scntl3	= (scntl3 - 0x40) | 0x80;
-				}
-				else if (per < 50) {
-					p2	= 50;
-					scntl3	= scntl3 - 0x20;
-				}
+			else if (per < 50) {
+				p2	= 50;
+				scntl3	= scntl3 - 0x20;
+			}
 
-				fak = (8 * per - 1) / p2 - 3;
-				if (fak > 7) {
-					chg = 1;
-					ofs = 0;
-				}
+			fak = (8 * per - 1) / p2 - 3;
+			if (fak > 7) {
+				chg = 1;
+				ofs = 0;
 			}
 		}
 		if (ofs == 0) {
@@ -7654,22 +7759,27 @@ static void ncr_getclock (ncb_p np)
 **		0x04	enable read multiple
 **		0x08	enable read line
 **		0xc0	burst length 16/8/2
-**	DCNTL   0xa0
+**	DCNTL   0xa8
+**		0x08	totem pole irq
 **		0x20	enable pre-fetch
 **		0x80	enable cache line size
 **	CTEST3  0x01
 **		0x01	set write and invalidate
 **	CTEST4  0x80
 **		0x80	burst disabled
+**	CTEST5  0x24
+**		0x20	dma fifo 536		(875 only)
+**		0x04	burst len 32/64/128	(875 only)
 */
 
 static void ncr_save_bios_setting(ncb_p np)
 {
 	np->sv_scntl3	= INB(nc_scntl3) & 0x07;
 	np->sv_dmode	= INB(nc_dmode)  & 0xce;
-	np->sv_dcntl	= INB(nc_dcntl)  & 0xa0;
+	np->sv_dcntl	= INB(nc_dcntl)  & 0xa8;
 	np->sv_ctest3	= INB(nc_ctest3) & 0x01;
 	np->sv_ctest4	= INB(nc_ctest4) & 0x80;
+	np->sv_ctest5	= INB(nc_ctest5) & 0x24;
 }
 
 /*===================== LINUX ENTRY POINTS SECTION ==========================*/
@@ -7750,6 +7860,8 @@ void ncr53c8xx_setup(char *str, int *ints)
 			driver_setup.verbose	= val;
 		else if	(!strncmp(cur, "debug:", 6))
 			driver_setup.debug	= val;
+		else if	(!strncmp(cur, "burst:", 6))
+			driver_setup.burst_max	= val;
 
 		if ((cur = strchr(cur, ',')) != NULL)
 			++cur;
@@ -7804,12 +7916,13 @@ int ncr53c8xx_detect(Scsi_Host_Template *tpnt)
 
 #define YesNo(y)	y ? 'y' : 'n'
     if (bootverbose >= 2) {
-         printk("ncr53c8xx: setup=disc:%c,specf:%c,ultra:%c,tags:%d,sync:%d\n",
+         printk("ncr53c8xx: setup=disc:%c,specf:%c,ultra:%c,tags:%d,sync:%d,burst:%d\n",
 			 YesNo(driver_setup.disconnection),
 			 YesNo(driver_setup.special_features),
 			 YesNo(driver_setup.ultra_scsi),
 			 driver_setup.default_tags,
-			 driver_setup.default_sync/1000);
+			 driver_setup.default_sync/1000,
+			 driver_setup.burst_max);
          printk("ncr53c8xx: setup=mpar:%c,spar:%c,fsn=%c,verb:%d,debug:0x%x\n",
 			 YesNo(driver_setup.master_parity),
 			 YesNo(driver_setup.scsi_parity),
@@ -8173,13 +8286,7 @@ static void process_waiting_list(ncb_p np, int sts)
 #undef next_wcmd
 
 /*
-**	In order to patch the SCSI script for SAVE/RESTORE DATA POINTER,
-**	we need the direction of transfer.
-**	Linux middle-level scsi driver does not provide this information.
-**	So we have to guess it.
-**	My documentation about SCSI-II standard is old. Probably some opcode
-**	are missing.
-**	If I do'nt know the command code, I assume input transfer direction.
+**	Returns data transfer direction for common op-codes.
 */
 
 static int guess_xfer_direction(int opcode)
@@ -8187,111 +8294,31 @@ static int guess_xfer_direction(int opcode)
 	int d;
 
 	switch(opcode) {
-	case 0x00:  /*	TEST UNIT READY			00 */
-	case 0x08:  /*	READ(6)				08 */
 	case 0x12:  /*	INQUIRY				12 */
 	case 0x4D:  /*	LOG SENSE			4D */
 	case 0x5A:  /*	MODE SENSE(10)			5A */
 	case 0x1A:  /*	MODE SENSE(6)			1A */
-	case 0x28:  /*	READ(10)			28 */
-	case 0xA8:  /*	READ(12)			A8 */
 	case 0x3C:  /*	READ BUFFER			3C */
 	case 0x1C:  /*	RECEIVE DIAGNOSTIC RESULTS	1C */
-	case 0xB7:  /*	READ DEFECT DATA(12)		B7 */
-	case 0xB8:  /*	READ ELEMENT STATUS		B8 */
-	            /*	GET WINDOW			25 */
-	case 0x25:  /*	READ CAPACITY			25 */
-	case 0x29:  /*	READ GENERATION			29 */
-	case 0x3E:  /*	READ LONG			3E */
-	            /*	GET DATA BUFFER STATUS		34 */
-	            /*	PRE-FETCH			34 */
-	case 0x34:  /*	READ POSITION			34 */
 	case 0x03:  /*	REQUEST SENSE			03 */
-	case 0x05:  /*	READ BLOCK LIMITS		05 */
-	case 0x0F:  /*	READ REVERSE			0F */
-	case 0x14:  /*	RECOVER BUFFERED DATA		14 */
-	case 0x2D:  /*	READ UPDATED BLOCK		2D */
-	case 0x37:  /*	READ DEFECT DATA(10)		37 */
-	case 0x42:  /*	READ SUB-CHANNEL		42 */
-	case 0x43:  /*	READ TOC			43 */
-	case 0x44:  /*	READ HEADER			44 */
-	case 0xC7:  /*  ???                  ???        C7 */
 		d = XferIn;
 		break;
 	case 0x39:  /*	COMPARE				39 */
 	case 0x3A:  /*	COPY AND VERIFY			3A */
-	            /*	PRINT				0A */
-	            /*	SEND MESSAGE(6)			0A */
-	case 0x0A:  /*	WRITE(6)			0A */
 	case 0x18:  /*	COPY				18 */
 	case 0x4C:  /*	LOG SELECT			4C */
 	case 0x55:  /*	MODE SELECT(10)			55 */
 	case 0x3B:  /*	WRITE BUFFER			3B */
 	case 0x1D:  /*	SEND DIAGNOSTIC			1D */
 	case 0x40:  /*	CHANGE DEFINITION		40 */
-	            /*	SEND MESSAGE(12)		AA */
-	case 0xAA:  /*	WRITE(12)			AA */
-	case 0xB6:  /*	SEND VOLUME TAG			B6 */
-	case 0x3F:  /*	WRITE LONG			3F */
-	case 0x04:  /*	FORMAT UNIT			04 */
-		    /*	INITIALIZE ELEMENT STATUS	07 */
-	case 0x07:  /*	REASSIGN BLOCKS			07 */
 	case 0x15:  /*	MODE SELECT(6)			15 */
-	case 0x24:  /*	SET WINDOW			24 */
-	case 0x2A:  /*	WRITE(10)			2A */
-	case 0x2E:  /*	WRITE AND VERIFY(10)		2E */
-	case 0xAE:  /*	WRITE AND VERIFY(12)		AE */
-	case 0xB0:  /*	SEARCH DATA HIGH(12)		B0 */
-	case 0xB1:  /*	SEARCH DATA EQUAL(12)		B1 */
-	case 0xB2:  /*	SEARCH DATA LOW(12)		B2 */
-	            /*	OBJECT POSITION			31 */
-	case 0x30:  /*	SEARCH DATA HIGH(10)		30 */
-	case 0x31:  /*	SEARCH DATA EQUAL(10)		31 */
-	case 0x32:  /*	SEARCH DATA LOW(10)		32 */
-	case 0x38:  /*	MEDIUM SCAN			38 */
-	case 0x3D:  /*	UPDATE BLOCK			3D */
-	case 0x41:  /*	WRITE SAME			41 */
-	            /*	LOAD UNLOAD			1B */
-	            /*	SCAN				1B */
-	case 0x1B:  /*	START STOP UNIT			1B */
 		d = XferOut;
 		break;
-	case 0x01:  /*	REZERO UNIT			01 */
-	            /*	SEEK(6)				0B */
-	case 0x0B:  /*	SLEW AND PRINT			0B */
-	            /*	SYNCHRONIZE BUFFER		10 */
-	case 0x10:  /*	WRITE FILEMARKS			10 */
-	case 0x11:  /*	SPACE				11 */
-	case 0x13:  /*	VERIFY				13 */
-	case 0x16:  /*	RESERVE UNIT			16 */
-	case 0x17:  /*	RELEASE UNIT			17 */
-	case 0x19:  /*	ERASE				19 */
-	            /*	LOCATE				2B */
-	            /*	POSITION TO ELEMENT		2B */
-	case 0x2B:  /*	SEEK(10)			2B */
-	case 0x1E:  /*	PREVENT ALLOW MEDIUM REMOVAL	1E */
-	case 0x2C:  /*	ERASE(10)			2C */
-	case 0xAC:  /*	ERASE(12)			AC */
-	case 0x2F:  /*	VERIFY(10)			2F */
-	case 0xAF:  /*	VERIFY(12)			AF */
-	case 0x33:  /*	SET LIMITS(10)			33 */
-	case 0xB3:  /*	SET LIMITS(12)			B3 */
-	case 0x35:  /*	SYNCHRONIZE CACHE		35 */
-	case 0x36:  /*	LOCK UNLOCK CACHE		36 */
-	case 0x45:  /*	PLAY AUDIO(10)			45 */
-	case 0x47:  /*	PLAY AUDIO MSF			47 */
-	case 0x48:  /*	PLAY AUDIO TRACK/INDEX		48 */
-	case 0x49:  /*	PLAY TRACK RELATIVE(10)		49 */
-	case 0xA9:  /*	PLAY TRACK RELATIVE(12)		A9 */
-	case 0x4B:  /*	PAUSE/RESUME			4B */
-	            /*	MOVE MEDIUM			A5 */
-	case 0xA5:  /*	PLAY AUDIO(12)			A5 */
-	case 0xA6:  /*	EXCHANGE MEDIUM			A6 */
-	case 0xB5:  /*	REQUEST VOLUME ELEMENT ADDRESS	B5 */
+	case 0x00:  /*	TEST UNIT READY			00 */
 		d = XferNone;
 		break;
 	default:
-		d = XferIn;
+		d = XferBoth;
 		break;
 	}
 

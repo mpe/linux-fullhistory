@@ -284,8 +284,7 @@ void hard_reset_now (void)
 	if(!reboot_thru_bios) {
 		sti();
 		/* rebooting needs to touch the page at absolute addr 0 */
-		pg0[0] = 7;
-		*((unsigned short *)0x472) = reboot_mode;
+		*((unsigned short *)__va(0x472)) = reboot_mode;
 		for (;;) {
 			int i;
 			for (i=0; i<100; i++) {

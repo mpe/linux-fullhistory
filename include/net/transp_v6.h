@@ -28,7 +28,8 @@ extern int			datagram_recv_ctl(struct sock *sk,
 extern int			datagram_send_ctl(struct msghdr *msg,
 						  struct device **src_dev,
 						  struct in6_addr **src_addr,
-						  struct ipv6_options *opt);
+						  struct ipv6_options *opt,
+						  int *hlimit);
 
 #define		LOOPBACK4_IPV6		__constant_htonl(0x7f000006)
 

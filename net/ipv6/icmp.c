@@ -267,7 +267,7 @@ void icmpv6_send(struct sk_buff *skb, int type, int code, __u32 info,
 
 
 	ipv6_build_xmit(sk, icmpv6_getfrag, &msg, &hdr->saddr, len,
-			saddr, src_dev, NULL, IPPROTO_ICMPV6, 1);
+			saddr, src_dev, NULL, IPPROTO_ICMPV6, 0, 1);
 }
 
 static void icmpv6_echo_reply(struct sk_buff *skb)
@@ -302,7 +302,7 @@ static void icmpv6_echo_reply(struct sk_buff *skb)
 	msg.daddr = &hdr->saddr;
        
 	ipv6_build_xmit(sk, icmpv6_getfrag, &msg, &hdr->saddr, len, saddr,
-			skb->dev, NULL, IPPROTO_ICMPV6, 1);
+			skb->dev, NULL, IPPROTO_ICMPV6, 0, 1);
 }
 
 static __inline__ int ipv6_ext_hdr(u8 nexthdr)

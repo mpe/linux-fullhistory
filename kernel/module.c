@@ -43,9 +43,7 @@ static struct module kernel_module =
 	NULL,			/* cleanup */
 	__start___ex_table,	/* ex_table_start */
 	__stop___ex_table,	/* ex_table_end */
-#ifdef __alpha__
-	NULL,			/* gp */
-#endif
+	/* Rest are NULL */
 };
 
 struct module *module_list = &kernel_module;
@@ -186,11 +184,14 @@ sys_init_module(const char *name_user, struct module *mod_user)
 		goto err1;
 	}
 
-	/* In the future we can check for various known sizes, but for
-	   now there is only one.  */
+	/* Check for legal module header sizes.  */
 	if ((error = get_user(mod_user_size, &mod_user->size_of_struct)) != 0)
 		goto err1;
-	if (mod_user_size != sizeof(struct module)) {
+	switch (mod_user_size) {
+	  case sizeof(struct module):
+	  case &((struct module *)0L)->persist_start:
+		break;
+	  default:
 		printk(KERN_ERR "init_module: Invalid module header size.\n"
 		       KERN_ERR "A new version of the modutils is likely "
 				"needed.\n");
@@ -378,8 +379,9 @@ sys_delete_module(const char *name_user)
 		next = mod->next;
 		if (mod->refs == NULL &&
 		    mod->usecount == 0 &&
-		    ((mod->flags & (MOD_AUTOCLEAN|MOD_RUNNING|MOD_DELETED))
-		     == (MOD_AUTOCLEAN|MOD_RUNNING))) {
+		    ((mod->flags
+		      & (MOD_AUTOCLEAN|MOD_RUNNING|MOD_DELETED|MOD_USED_ONCE))
+		     == (MOD_AUTOCLEAN|MOD_RUNNING|MOD_USED_ONCE))) {
 			if (mod->flags & MOD_VISITED)
 				mod->flags &= ~MOD_VISITED;
 			else

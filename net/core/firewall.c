@@ -6,6 +6,7 @@
  *	much hacked by:	Alan Cox
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/skbuff.h>
 #include <linux/firewall.h>

@@ -779,10 +779,6 @@ sunos_mount(char *type, char *dir, int flags, void *data)
 		dev_fname = (char *) data;
 	} else if(strcmp(type, "minix") == 0) {
 		dev_fname = (char *) data;
-	} else if(strcmp(type, "ext") == 0) {
-		dev_fname = (char *) data;
-	} else if(strcmp(type, "xiafs") == 0) {
-		dev_fname = (char *) data;
 	} else if(strcmp(type, "nfs") == 0) {
 		return sunos_nfs_mount (dir, flags, data);
         } else if(strcmp(type, "ufs") == 0) {

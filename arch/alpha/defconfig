@@ -183,9 +183,7 @@ CONFIG_DE4X5=y
 #
 # CONFIG_QUOTA is not set
 # CONFIG_MINIX_FS is not set
-# CONFIG_EXT_FS is not set
 CONFIG_EXT2_FS=y
-# CONFIG_XIA_FS is not set
 CONFIG_FAT_FS=y
 CONFIG_MSDOS_FS=y
 # CONFIG_VFAT_FS is not set

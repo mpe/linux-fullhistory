@@ -88,4 +88,8 @@
    files and the file number status is retained. */
 #define ST_FAST_MTEOM 0
 
+/* If ST_SYSV is non-zero, the tape behaves according to the SYS V semantics.
+   The default is BSD semantics. */
+#define ST_SYSV 0
+
 #endif

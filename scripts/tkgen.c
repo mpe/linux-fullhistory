@@ -978,6 +978,7 @@ void dump_tk_script(struct kconfig *scfg)
   printf("\tputs $autocfg \"/*\"\n");
   printf("\tputs $autocfg \" * Automatically generated C config: don't edit\"\n");
   printf("\tputs $autocfg \" */\"\n");
+  printf("\tputs $autocfg \"#define AUTOCONF_INCLUDED\"\n");
   for(cfg = scfg; cfg != NULL; cfg = cfg->next)
     {
       switch (cfg->tok)

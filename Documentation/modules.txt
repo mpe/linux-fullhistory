@@ -49,7 +49,7 @@ the official kernel sources, you will certainly like this option...
 
 Here is a sample of the available modules included in the kernel sources:
 
-	Most filesystems: minix, xiafs, msdos, umsdos, sysv, isofs, hpfs,
+	Most filesystems: minix, msdos, umsdos, sysv, isofs, hpfs,
 			  smbfs, nfs
 
 	Mid-level SCSI support (required by top and low level scsi drivers).

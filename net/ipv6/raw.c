@@ -149,7 +149,7 @@ int rawv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 		*addr_len = sizeof(struct sockaddr_in6);
 	}
 
-	if (msg->msg_control)
+	if (msg->msg_controllen)
 	{
 		int err;
 
@@ -248,6 +248,7 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	struct in6_addr *daddr;
 	struct raw6_opt *raw_opt;
 	u16 proto;
+	int hlimit = 0;
 	int err;
 	
 
@@ -315,7 +316,7 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 		opt = &opt_space;
 		memset(opt, 0, sizeof(struct ipv6_options));
 
-		err = datagram_send_ctl(msg, &dev, &saddr, opt);
+		err = datagram_send_ctl(msg, &dev, &saddr, opt, &hlimit);
 		if (err < 0)
 		{
 			printk(KERN_DEBUG "invalid msg_control\n");
@@ -346,12 +347,13 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 		}
 
 		err = ipv6_build_xmit(sk, rawv6_frag_cksum, &hdr, daddr, len,
-				      saddr, dev, opt, proto, msg->msg_flags&MSG_DONTWAIT);
+				      saddr, dev, opt, proto, hlimit,
+				      msg->msg_flags&MSG_DONTWAIT);
 	}
 	else
 	{
 		err = ipv6_build_xmit(sk, rawv6_getfrag, msg->msg_iov, daddr,
-				      len, saddr, dev, opt, proto,
+				      len, saddr, dev, opt, proto, hlimit,
 				      msg->msg_flags&MSG_DONTWAIT);
 	}
 

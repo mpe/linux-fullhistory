@@ -59,6 +59,7 @@
  *   released under the GNU General Public License Version 2.
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>

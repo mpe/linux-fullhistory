@@ -6,6 +6,7 @@
  *  GK 2/5/95  -  Changed to support mounting root fs via NFS
  *  Added initrd & change_root: Werner Almesberger & Hans Lermen, Feb '96
  *  Moan early if gcc is old, avoiding bogus kernels - Paul Gortmaker, May '96
+ *  Simplified starting of init:  Michael A. Griffith <grif@acm.org> 
  */
 
 #define __KERNEL_SYSCALLS__
@@ -52,8 +53,6 @@
 
 extern char _stext, _etext;
 extern char *linux_banner;
-
-static char printbuf[1024];
 
 extern int console_loglevel;
 
@@ -236,9 +235,6 @@ extern void dquot_init(void);
 
 static char * argv_init[MAX_INIT_ARGS+2] = { "init", NULL, };
 static char * envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
-
-static char * argv_rc[] = { "/bin/sh", NULL };
-static char * envp_rc[] = { "HOME=/", "TERM=linux", NULL };
 
 char *get_options(char *str, int *ints)
 {
@@ -917,39 +913,6 @@ asmlinkage void start_kernel(void)
  	cpu_idle(NULL);
 }
 
-static int printf(const char *fmt, ...)
-{
-	va_list args;
-	int i;
-
-	va_start(args, fmt);
-	write(1,printbuf,i=vsprintf(printbuf, fmt, args));
-	va_end(args);
-	return i;
-}
-
-static int do_rc(void * rc)
-{
-	close(0);
-	if (open(rc,O_RDONLY,0))
-		return -1;
-	return execve("/bin/sh", argv_rc, envp_rc);
-}
-
-static int do_shell(void * shell)
-{
-	char *argv[2];
-
-	close(0);close(1);close(2);
-	setsid();
-	(void) open("/dev/tty1",O_RDWR,0);
-	(void) dup(0);
-	(void) dup(0);
-	argv[0] = shell;
-	argv[1] = NULL;
-	return execve(shell, argv, envp_rc);
-}
-
 #ifdef CONFIG_BLK_DEV_INITRD
 static int do_linuxrc(void * shell)
 {
@@ -971,7 +934,6 @@ static void no_initrd(char *s,int *ints)
 
 static int init(void * unused)
 {
-	int pid,i;
 #ifdef CONFIG_BLK_DEV_INITRD
 	int real_root_mountflags;
 #endif
@@ -1042,32 +1004,18 @@ static int init(void * unused)
 			
 	(void) dup(0);
 	(void) dup(0);
+	
+	/*
+	 * We try each of these until one succeeds.
+	 *
+	 * The Bourne shell can be used instead of init if we are 
+	 * trying to recover a really broken machine.
+	 */
 
-	if (!execute_command) {
-		execve("/etc/init",argv_init,envp_init);
-		execve("/bin/init",argv_init,envp_init);
-		execve("/sbin/init",argv_init,envp_init);
-		/* if this fails, fall through to original stuff */
-
-		pid = kernel_thread(do_rc, "/etc/rc", SIGCHLD);
-		if (pid>0)
-			while (pid != wait(&i))
-				/* nothing */;
-	}
-
-	while (1) {
-		pid = kernel_thread(do_shell,
-			execute_command ? execute_command : "/bin/sh",
-			SIGCHLD);
-		if (pid < 0) {
-			printf("Fork failed in init\n\r");
-			continue;
-		}
-		while (1)
-			if (pid == wait(&i))
-				break;
-		printf("\n\rchild %d died with code %04x\n\r",pid,i);
-		sync();
-	}
-	return -1;
+	execve(execute_command,argv_init,envp_init);
+	execve("/etc/init",argv_init,envp_init);
+	execve("/bin/init",argv_init,envp_init);
+	execve("/sbin/init",argv_init,envp_init);
+	execve("/bin/sh",argv_init,envp_init);
+	panic("No init found.  Try passing init= option to kernel.");
 }

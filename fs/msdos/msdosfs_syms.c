@@ -5,6 +5,7 @@
  * These symbols are used by umsdos.
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/mm.h>

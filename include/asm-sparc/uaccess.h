@@ -59,7 +59,7 @@ extern inline int verify_area(int type, const void * addr, unsigned long size)
  *
  * There is a special way how to put a range of potentially faulting
  * insns (like twenty ldd/std's with now intervening other instructions)
- * You specify address of first in insn and 0 in fixup and in the next 
+ * You specify address of first in insn and 0 in fixup and in the next
  * exception_table_entry you specify last potentially faulting insn + 1
  * and in fixup the routine which should handle the fault.
  * That fixup code will get
@@ -163,11 +163,12 @@ __asm__ __volatile__(							\
 	".align	4\n"							\
 "3:\n\t"								\
 	"b	2b\n\t"							\
-	" mov	%3, %0\n\n\t"						\
+	" mov	%3, %0\n\t"						\
+        ".previous\n\n\t"						\
 	".section __ex_table,#alloc\n\t"				\
 	".align	4\n\t"							\
 	".word	1b, 3b\n\t"						\
-	".text\n\n\t"							\
+	".previous\n\n\t"						\
        : "=&r" (ret) : "r" (x), "r" (__m(addr)),			\
 	 "i" (-EFAULT))
 
@@ -179,7 +180,7 @@ __asm__ __volatile__(							\
 	".section __ex_table,#alloc\n\t"				\
 	".align	4\n\t"							\
 	".word	1b, __ret_efault\n\n\t"					\
-	".text\n\n\t"							\
+	".previous\n\n\t"						\
        : "=r" (foo) : "r" (x), "r" (__m(addr)));			\
 else									\
 __asm__ __volatile(							\
@@ -189,11 +190,12 @@ __asm__ __volatile(							\
 	".align	4\n"							\
 "3:\n\t"								\
 	"ret\n\t"							\
-	" restore %%g0, %3, %%o0\n\n\t"					\
+	" restore %%g0, %3, %%o0\n\t"					\
+	".previous\n\n\t"						\
 	".section __ex_table,#alloc\n\t"				\
 	".align	4\n\t"							\
 	".word	1b, 3b\n\n\t"						\
-	".text\n\n\t"							\
+	".previous\n\n\t"						\
        : "=r" (foo) : "r" (x), "r" (__m(addr)), "i" (ret))
 
 extern int __put_user_bad(void);
@@ -250,10 +252,11 @@ __asm__ __volatile__(							\
 	"clr	%1\n\t"							\
 	"b	2b\n\t"							\
 	" mov	%3, %0\n\n\t"						\
+	".previous\n\t"							\
 	".section __ex_table,#alloc\n\t"				\
 	".align	4\n\t"							\
 	".word	1b, 3b\n\n\t"						\
-	".text\n\t"							\
+	".previous\n\t"							\
        : "=&r" (ret), "=&r" (x) : "r" (__m(addr)),			\
 	 "i" (-EFAULT))
 
@@ -265,7 +268,7 @@ __asm__ __volatile__(							\
 	".section __ex_table,#alloc\n\t"				\
 	".align	4\n\t"							\
 	".word	1b,__ret_efault\n\n\t"					\
-	".text\n\t"							\
+	".previous\n\t"							\
        : "=&r" (x) : "r" (__m(addr)));					\
 else									\
 __asm__ __volatile__(							\
@@ -276,10 +279,11 @@ __asm__ __volatile__(							\
 "3:\n\t"								\
 	"ret\n\t"							\
 	" restore %%g0, %2, %%o0\n\n\t"					\
+	".previous\n\t"							\
 	".section __ex_table,#alloc\n\t"				\
 	".align	4\n\t"							\
 	".word	1b, 3b\n\n\t"						\
-	".text\n\t"							\
+	".previous\n\t"							\
        : "=&r" (x) : "r" (__m(addr)), "i" (retval))
 
 extern int __get_user_bad(void);

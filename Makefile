@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 1
-SUBLEVEL = 20
+SUBLEVEL = 21
 
 ARCH = i386
 
@@ -39,6 +39,7 @@ AR	=$(CROSS_COMPILE)ar
 NM	=$(CROSS_COMPILE)nm
 STRIP	=$(CROSS_COMPILE)strip
 MAKE	=make
+GENKSYMS=/sbin/genksyms
 
 all:	do-it-all
 
@@ -87,7 +88,7 @@ SVGA_MODE=	-DSVGA_MODE=NORMAL_VGA
 # standard CFLAGS
 #
 
-CFLAGS = -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -fno-strength-reduce
+CFLAGS = -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer
 
 ifdef CONFIG_CPP
 CFLAGS := $(CFLAGS) -x c++

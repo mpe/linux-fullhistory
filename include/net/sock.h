@@ -149,8 +149,11 @@ struct ipv6_pinfo
 
 	__u8			recvsrcrt:1,
 	                        rxinfo:1,
+				rxhlim:1,
+				hopopts:1,
+				dstopts:1,
 				mc_loop:1,
-                                unused:4;
+                                unused:2;
 
 	/* device for outgoing mcast packets */
 

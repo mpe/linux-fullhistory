@@ -4,7 +4,7 @@ Written by Gerard Roudier <groudier@club-internet.fr>
 21 Rue Carnot
 95170 DEUIL LA BARRE - FRANCE
 
-29 December 1996
+12 January 1997
 ===============================================================================
 
 1.  Introduction
@@ -61,6 +61,10 @@ driver, configuration parameters and control commands available
 through the proc SCSI file system read / write operations.
 
 This driver has been tested OK with linux/i386 and Linux/Alpha.
+
+Latest driver version and patches are available at:
+
+          ftp://linux.wauug.org/pub/roudier
 
 I am not a native speaker of English and there are probably lots of
 mistakes in this README file. Any help will be welcome.
@@ -491,8 +495,20 @@ Debug mode
   DEBUG_FREEZE    0x800
   DEBUG_RESTART  0x1000
 
-You can play safely with DEBUG_NEGO. However, some of these flags may 
-generate bunches of syslog messages. 
+  You can play safely with DEBUG_NEGO. However, some of these flags may 
+  generate bunches of syslog messages. 
+
+Burst max
+      burst:0    burst disabled
+      burst:255  get burst length from initial IO register settings.
+      burst:#x   burst enabled (1<<#x burst transfers max)
+  #x is an integer value which is log base 2 of the burst transfers max.
+  The NCR53C875 and NCR53C825A support up to 128 burst transfers (#x = 7).
+  Other chips only support up to 16 (#x = 4).
+  This is a maximum value. The driver set the burst length according to chip 
+  and revision ids. By default the driver uses the maximum value supported 
+  by the chip.
+
 
 10.3 Advised boot setup commands
 
@@ -508,7 +524,8 @@ My personnal system works flawlessly with the following setup:
 
 The driver prints its actual setup when verbosity level is 2. You can try 
 "ncr53c8xx=verb:2" to get the "static" setup of the driver, or add "verb:2" 
-to your boot setup command in order to check the actual setup the drive use.
+to your boot setup command in order to check the actual setup the driver is 
+using.
 
 
 11. Some constants and flags of the ncr53c8xx.h header file

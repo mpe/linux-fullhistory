@@ -30,11 +30,19 @@ TOPDIR = ../..
 endif
 
 ifeq ($(CONFIG_SCSI),y)
-L_OBJS += hosts.o scsi.o scsi_ioctl.o constants.o scsicam.o
+  # We must attach scsi_syms.o to scsi.o, as otherwise there is nothing to
+  # pull the object file from the archive.
+  SCSI=scsi.o
+  ifeq ($(CONFIG_MODULES),y)
+    O_TARGET := scsi_n_syms.o
+    O_OBJS   := scsi.o
+    OX_OBJS  := scsi_syms.o
+    SCSI     := $(O_TARGET)
+  endif
+  L_OBJS += $(SCSI) hosts.o scsi_ioctl.o constants.o scsicam.o
   ifeq ($(CONFIG_PROC_FS),y)
     L_OBJS += scsi_proc.o
   endif
-LX_OBJS += scsi_syms.o
 else
   ifeq ($(CONFIG_SCSI),m)
     MX_OBJS += scsi_syms.o

@@ -1,5 +1,5 @@
 #
-# Makefile for the linux ext-filesystem routines.
+# Makefile for the linux romfs-filesystem routines.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
 # removes any old dependencies. DON'T put your own dependencies here
@@ -7,9 +7,8 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
-O_TARGET := ext.o
-O_OBJS   := freelists.o truncate.o namei.o inode.o file.o dir.o \
-		symlink.o fsync.o
+O_TARGET := romfs.o
+O_OBJS   := inode.o
 M_OBJS   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

@@ -1238,9 +1238,9 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 		unsigned long addr = vma->vm_start;
 		unsigned long len = vma->vm_end - vma->vm_start;
 		
+		i++;
 		if (!maydump(vma))
 			continue;
-		i++;
 #ifdef DEBUG
 		printk("elf_core_dump: writing %08lx %lx\n", addr, len);
 #endif

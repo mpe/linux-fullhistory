@@ -41,6 +41,7 @@
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
 #include <linux/ext2_fs.h>
+#include <linux/romfs_fs.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
@@ -328,6 +329,7 @@ void cleanup_module(void)
  * We currently check for the following magic numbers:
  * 	minix
  * 	ext2
+ *	romfs
  * 	gzip
  */
 int
@@ -336,6 +338,7 @@ identify_ramdisk_image(kdev_t device, struct file *fp, int start_block)
 	const int size = 512;
 	struct minix_super_block *minixsb;
 	struct ext2_super_block *ext2sb;
+	struct romfs_super_block *romfsb;
 	int nblocks = -1;
 	int max_blocks;
 	unsigned char *buf;
@@ -346,6 +349,7 @@ identify_ramdisk_image(kdev_t device, struct file *fp, int start_block)
 
 	minixsb = (struct minix_super_block *) buf;
 	ext2sb = (struct ext2_super_block *) buf;
+	romfsb = (struct romfs_super_block *) buf;
 	memset(buf, 0xe5, size);
 
 	/*
@@ -365,6 +369,16 @@ identify_ramdisk_image(kdev_t device, struct file *fp, int start_block)
 		       "RAMDISK: Compressed image found at block %d\n",
 		       start_block);
 		nblocks = 0;
+		goto done;
+	}
+
+	/* romfs is at block zero too */
+	if (romfsb->word0 == ROMSB_WORD0 &&
+	    romfsb->word1 == ROMSB_WORD1) {
+		printk(KERN_NOTICE
+		       "RAMDISK: Romfs filesystem found at block %d\n",
+		       start_block);
+		nblocks = (ntohl(romfsb->size)+BLOCK_SIZE-1)>>BLOCK_SIZE_BITS;
 		goto done;
 	}
 
@@ -396,6 +410,7 @@ identify_ramdisk_image(kdev_t device, struct file *fp, int start_block)
 		nblocks = ext2sb->s_blocks_count;
 		goto done;
 	}
+
 	printk(KERN_NOTICE
 	       "RAMDISK: Couldn't find valid ramdisk image starting at %d.\n",
 	       start_block);

@@ -214,7 +214,8 @@ extern int			ipv6_build_xmit(struct sock *sk,
 						struct in6_addr * saddr,
 						struct device *dev,
 						struct ipv6_options *opt,
-						int proto, int noblock);
+						int proto, int hlimit,
+						int noblock);
 
 /*
  *	rcv function (called from netdevice level)

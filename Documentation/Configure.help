@@ -3108,13 +3108,6 @@ CONFIG_MINIX_FS
   Documentation/modules.txt. Note that the filesystem of your root
   partition cannot be compiled as a module.
 
-Extended fs support
-CONFIG_EXT_FS
-  This is the old Linux filesystem (= method to organize files on a
-  harddisk partition or a floppy disk) and not in use anymore. It
-  enlarges your kernel by about 25 kB. Let's all kill this beast. Say
-  N.
-
 Second extended fs support
 CONFIG_EXT2_FS
   This is the de facto standard Linux filesystem (= method to organize
@@ -3137,16 +3130,6 @@ CONFIG_EXT2_FS
   short ext2fs-FAQ, available via ftp (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/faqs. This option will enlarge your
   kernel by about 41 kB. Default is Y.
-
-xiafs filesystem support
-CONFIG_XIA_FS
-  This is an old filesystem (= method to organize files on a harddisk
-  partition or a floppy disk) and not in use anymore. This option
-  would enlarge your kernel by about 28 kB. Let's all kill this beast:
-  say N.  If you want to compile this as a module ( = code which can
-  be inserted in and removed from the running kernel whenever you
-  want), say M here and read Documentation/modules.txt. Note that the
-  filesystem of your root partition cannot be compiled as a module.
 
 fat fs support
 CONFIG_FAT_FS
@@ -3449,6 +3432,14 @@ CONFIG_AFFS_FS
   running kernel whenever you want). If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
   If unsure, say N.
+
+ROMFS filesystem support (EXPERIMENTAL)
+CONFIG_ROMFS_FS
+  This is a special file system intended for installation disks or
+  otherwise prebuilt medias.  It has very low overhead and low memory
+  requirements.  However, it's read-only (one particular reason of the
+  smallness), so you need extra programs to prepare disks in this
+  format.  If you are not sure, just say N, you don't need it.
 
 Standard/generic serial support
 CONFIG_SERIAL
@@ -4587,7 +4578,7 @@ CONFIG_SUN_OPENPROMIO
 # LocalWords:  TR Sony CDU caddyless cdu Mitsumi MCD cd mcd XA MultiSession CDA
 # LocalWords:  Matsushita Panasonic SBPCD Soundblaster Longshine sbpcd Aztech
 # LocalWords:  Okano Wearnes AZTCD CDD SE aztcd sonycd Goldstar GSCD Philips fs
-# LocalWords:  LMS OPTCD Sanyo SJCD minix faqs xiafs XIA msdos harddrive mtools
+# LocalWords:  LMS OPTCD Sanyo SJCD minix faqs msdos harddrive mtools
 # LocalWords:  std softlinks umssync NetworkFileSharing nfsd mountd CDs HPFS TI
 # LocalWords:  hpfs SYSV SCO intel iBCS Wyse WordPerfect tsx mit unixes sysv NR
 # LocalWords:  SMB WfW Cyclades async mux Logitech busmouse MouseSystem aka AST

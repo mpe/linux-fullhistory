@@ -22,7 +22,8 @@ all: kernel.o head.o
 
 O_TARGET := kernel.o
 O_OBJS   := process.o signal.o entry.o traps.o irq.o vm86.o bios32.o \
-            ptrace.o ioport.o ldt.o setup.o time.o sys_i386.o ksyms.o
+            ptrace.o ioport.o ldt.o setup.o time.o sys_i386.o
+OX_OBJS  := i386_ksyms.o
 
 ifdef CONFIG_MCA
 O_OBJS += mca.o

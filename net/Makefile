@@ -89,13 +89,21 @@ else
   endif
 endif
 
-L_TARGET     := network.a
-L_OBJS	     := socket.o protocols.o sysctl_net.o $(join $(SUB_DIRS),$(SUB_DIRS:%=/%.o))
+# We must attach netsyms.o to socket.o, as otherwise there is nothing
+# to pull the object file from the archive.
+
+SOCK         := socket.o
 ifeq ($(CONFIG_NET),y)
 ifeq ($(CONFIG_MODULES),y)
-LX_OBJS = netsyms.o
+O_TARGET     := sock_n_syms.o
+O_OBJS       := socket.o
+OX_OBJS      := netsyms.o
+SOCK         := $(O_TARGET)
 endif
 endif
+
+L_TARGET     := network.a
+L_OBJS	     := $(SOCK) protocols.o sysctl_net.o $(join $(SUB_DIRS),$(SUB_DIRS:%=/%.o))
 
 M_OBJS	     :=
 

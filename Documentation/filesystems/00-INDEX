@@ -6,6 +6,8 @@ hpfs.txt
 	- info and mount options for the OS/2 HPFS.
 ncpfs.txt
 	- info on Novell Netware(tm) filesystem using NCP protocol.
+romfs.txt
+	- Description of the ROMFS filesystem.
 smbfs.txt
 	- info on using filesystems with the SMB protocol (Win 3.11, Win NT)
 sysv-fs.txt

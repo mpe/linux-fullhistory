@@ -67,10 +67,8 @@ extern void dump_thread(struct pt_regs *, struct user *);
  */
 
 #define EXPORT_SYMBOL_DOT(sym)					\
-extern int __sparc_dot_ ## sym (int) __asm__("." ## #sym);	\
-const struct module_symbol __export_dot_##sym			\
-__attribute__((section("__ksymtab"))) =				\
-{ (unsigned long) &__sparc_dot_ ## sym, "." ## #sym }
+extern int __sparc_dot_ ## sym (int) __asm__("." #sym);		\
+__EXPORT_SYMBOL(__sparc_dot_ ## sym, "." #sym)
 
 
 /* used by various drivers */

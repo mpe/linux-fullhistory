@@ -45,7 +45,7 @@
 /*
 **	Name and revision of the driver
 */
-#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 1.16b"
+#define SCSI_NCR_DRIVER_NAME		"ncr53c8xx - revision 1.16e"
  
 /*
 **	If SCSI_NCR_SETUP_SPECIAL_FEATURES is defined,
@@ -292,7 +292,8 @@
 	1,					\
 	SCSI_NCR_SETUP_DEFAULT_TAGS,		\
 	SCSI_NCR_SETUP_DEFAULT_SYNC,		\
-	0x00					\
+	0x00,					\
+	7					\
 }
 
 

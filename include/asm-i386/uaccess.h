@@ -153,10 +153,11 @@ struct __large_struct { unsigned long buf[100]; };
 		".section .fixup,\"ax\"\n"			\
 		"3:	movl %3,%0\n"				\
 		"	jmp 2b\n"				\
+		".previous\n"					\
 		".section __ex_table,\"a\"\n"			\
 		"	.align 4\n"				\
 		"	.long 1b,3b\n"				\
-		".text"						\
+		".previous"					\
 		: "=r"(err)					\
 		: ltype (x), "m"(__m(addr)), "i"(-EFAULT), "0"(err))
 
@@ -200,10 +201,11 @@ do {									\
 		"3:	movl %3,%0\n"				\
 		"	xor"itype" %"rtype"1,%"rtype"1\n"	\
 		"	jmp 2b\n"				\
+		".previous\n"					\
 		".section __ex_table,\"a\"\n"			\
 		"	.align 4\n"				\
 		"	.long 1b,3b\n"				\
-		".text"						\
+		".previous"					\
 		: "=r"(err), ltype (x)				\
 		: "m"(__m(addr)), "i"(-EFAULT), "0"(err))
 
@@ -222,11 +224,12 @@ do {									\
 		".section .fixup,\"ax\"\n"				\
 		"3:	lea 0(%1,%0,4),%0\n"				\
 		"	jmp 2b\n"					\
+		".previous\n"						\
 		".section __ex_table,\"a\"\n"				\
 		"	.align 4\n"					\
 		"	.long 0b,3b\n"					\
 		"	.long 1b,2b\n"					\
-		".text"							\
+		".previous"						\
 		: "=c"(size)						\
 		: "r"(size & 3), "0"(size / 4), "D"(to), "S"(from)	\
 		: "di", "si", "memory")
@@ -242,10 +245,11 @@ do {								\
 			".section .fixup,\"ax\"\n"		\
 			"2:	shl $2,%0\n"			\
 			"	jmp 1b\n"			\
+			".previous\n"				\
 			".section __ex_table,\"a\"\n"		\
 			"	.align 4\n"			\
 			"	.long 0b,2b\n"			\
-			".text"					\
+			".previous"				\
 			: "=c"(size)				\
 			: "S"(from), "D"(to), "0"(size/4)	\
 			: "di", "si", "memory");		\
@@ -259,11 +263,12 @@ do {								\
 			"3:	shl $2,%0\n"			\
 			"4:	incl %0\n"			\
 			"	jmp 2b\n"			\
+			".previous\n"				\
 			".section __ex_table,\"a\"\n"		\
 			"	.align 4\n"			\
 			"	.long 0b,3b\n"			\
 			"	.long 1b,4b\n"			\
-			".text"					\
+			".previous"				\
 			: "=c"(size)				\
 			: "S"(from), "D"(to), "0"(size/4)	\
 			: "di", "si", "memory");		\
@@ -277,11 +282,12 @@ do {								\
 			"3:	shl $2,%0\n"			\
 			"4:	addl $2,%0\n"			\
 			"	jmp 2b\n"			\
+			".previous\n"				\
 			".section __ex_table,\"a\"\n"		\
 			"	.align 4\n"			\
 			"	.long 0b,3b\n"			\
 			"	.long 1b,4b\n"			\
-			".text"					\
+			".previous"				\
 			: "=c"(size)				\
 			: "S"(from), "D"(to), "0"(size/4)	\
 			: "di", "si", "memory");		\
@@ -297,12 +303,13 @@ do {								\
 			"5:	addl $2,%0\n"			\
 			"6:	incl %0\n"			\
 			"	jmp 3b\n"			\
+			".previous\n"				\
 			".section __ex_table,\"a\"\n"		\
 			"	.align 4\n"			\
 			"	.long 0b,4b\n"			\
 			"	.long 1b,5b\n"			\
 			"	.long 2b,6b\n"			\
-			".text"					\
+			".previous"				\
 			: "=c"(size)				\
 			: "S"(from), "D"(to), "0"(size/4)	\
 			: "di", "si", "memory");		\
@@ -405,11 +412,12 @@ __constant_copy_from_user_nocheck(void *to, const void *from, unsigned long n)
 		".section .fixup,\"ax\"\n"				\
 		"3:	lea 0(%1,%0,4),%0\n"				\
 		"	jmp 2b\n"					\
+		".previous\n"						\
 		".section __ex_table,\"a\"\n"				\
 		"	.align 4\n"					\
 		"	.long 0b,3b\n"					\
 		"	.long 1b,2b\n"					\
-		".text"							\
+		".previous"						\
 		: "=c"(size)						\
 		: "r"(size & 3), "0"(size / 4), "D"(addr), "a"(0)	\
 		: "di")
@@ -449,10 +457,11 @@ __clear_user(void *to, unsigned long n)
 		".section .fixup,\"ax\"\n"				   \
 		"3:	movl %2,%0\n"					   \
 		"	jmp 2b\n"					   \
+		".previous\n"						   \
 		".section __ex_table,\"a\"\n"				   \
 		"	.align 4\n"					   \
 		"	.long 0b,3b\n"					   \
-		".text"							   \
+		".previous"						   \
 		: "=d"(res), "=c"(count)				   \
 		: "i"(-EFAULT), "0"(count), "1"(count), "S"(src), "D"(dst) \
 		: "si", "di", "ax", "memory")
@@ -491,10 +500,11 @@ extern inline long strlen_user(const char *s)
 		".section .fixup,\"ax\"\n"
 		"2:	xorl %0,%0\n"
 		"	jmp 1b\n"
+		".previous\n"
 		".section __ex_table,\"a\"\n"
 		"	.align 4\n"
 		"	.long 0b,2b\n"
-		".text"
+		".previous"
 		:"=c" (res), "=D" (s)
 		:"1" (s), "a" (0), "0" (-__addr_ok(s)));
 	return res & -__addr_ok(s);

@@ -31,7 +31,7 @@
 	.section __ex_table,"a";	\
 	.gprel32 99b;			\
 	lda $31, $exception-99b($31); 	\
-	.text
+	.previous
 
 	.set noat
 	.set noreorder

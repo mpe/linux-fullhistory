@@ -194,7 +194,7 @@ S: United Kingdom
 N: Remy Card
 E: Remy.Card@masi.ibp.fr
 E: Remy.Card@linux.org
-D: Extended file system designer and developer
+D: Extended file system [defunct] designer and developer
 D: Second extended file system designer and developer
 S: Institut Blaise Pascal
 S: 4 Place Jussieu
@@ -393,6 +393,14 @@ E: r.faith@ieee.org
 D: Author: Future Domain TMC-16x0 SCSI driver
 D: Debugging: SCSI code; Cyclades serial driver; APM driver
 D: Debugging: XFree86 Mach 32 server, accelerated server code
+
+N: János Farkas
+E: chexum@shadow.banki.hu
+D: romfs, various (mostly networking) fixes
+P: 1024/F81FB2E1 41 B7 E4 E6 3E D4 A6 71  6D 9C F3 9F F2 BF DF 6E
+S: Madarász Viktor utca 25
+S: 1131 Budapest
+S: Hungary
 
 N: Jürgen Fischer
 E: fischer@et-inf.fho-emden.de (=?iso-8859-1?q?J=FCrgen?= Fischer)
@@ -1562,7 +1570,7 @@ S: The Netherlands
 
 N: Frank Xia
 E: qx@math.columbia.edu
-D: Xiafs filesystem
+D: Xiafs filesystem [defunct]
 S: 542 West 112th Street, 5N
 S: New York, New York 10025
 S: USA

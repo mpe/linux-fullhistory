@@ -14,7 +14,7 @@
 	.section __ex_table,"a";	\
 	.gprel32 99b;			\
 	lda v0, $exception-99b(zero);	\
-	.text
+	.previous
 
 
 	.set noreorder

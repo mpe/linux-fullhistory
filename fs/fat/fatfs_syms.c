@@ -4,6 +4,7 @@
  * Exported kernel symbols for the low-level FAT-based fs support.
  *
  */
+#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/mm.h>

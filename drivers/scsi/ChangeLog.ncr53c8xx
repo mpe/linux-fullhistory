@@ -1,3 +1,32 @@
+Sun Jan 12 12:00 1997 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c - revision 1.16e
+	- Add support of PCI burst length control from boot setup command.
+	  burst:0     disable burst
+	  burst:255   get burst from initial settings (BIOS settings?)
+	  burst:#x    set burst transfers to 1<<#x
+	- Only check xfer direction for common op-codes.
+	  For all device specific / vendor specific opcodes the driver 
+	  now uses the xfer direction decided by the target.
+
+Sun Jan 05 12:00 1997 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c - revision 1.16d
+	- The driver is now able to process scsi commands without 
+	  knowledge of xfer data direction.
+	  Stefan agreed with this change for Linux. This change is 
+	  not needed under FreeBSD since low-level drivers receive 
+	  the expected data direction for each scsi request.
+	- Save ctest5 features bits at start-up and restore them at 
+	  module release step.
+	  Avoid side effects when a ncr driver which trusts bios 
+	  settings is reloaded (could be the ncr53c8xx itself).
+
+
+Wed Jan 01 23:30 1997 Gerard Roudier (groudier@club-internet.fr)
+	* ncr53c8xx.c - revision 1.16c
+	- Bad decision about 20MHz for 13 ns period factor.
+	  Was wrong, so I restore the previous algorithm.
+	- Burst length 128 not correctly set in dmode.
+
 Thu Dec 26 22:00 1996 Gerard Roudier (groudier@club-internet.fr)
 	* ncr53c8xx.c ncr53c8xx.h README.ncr53c8xx - revision 1.16b
 	- Remove useless code.

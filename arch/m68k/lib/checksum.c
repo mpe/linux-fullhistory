@@ -241,7 +241,7 @@ csum_partial_copy_fromuser(const char *src, char *dst, int len, int sum)
 		".long 19b,7b\n"
 		".long 20b,7b\n"
 		".long 21b,7b\n"
-		".text"
+		".previous"
 		: "=d" (sum), "=d" (len), "=a" (src), "=a" (dst),
 		  "=&d" (tmp1), "=&d" (tmp2)
 		: "0" (sum), "1" (len), "2" (src), "3" (dst)

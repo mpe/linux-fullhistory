@@ -65,6 +65,22 @@ int datagram_recv_ctl(struct sock *sk, struct msghdr *msg, struct sk_buff *skb)
 		cmsg = (struct cmsghdr *)((u8*) cmsg + cmsg->cmsg_len);
 	}
 
+	if (np->rxhlim && (len >= sizeof(struct cmsghdr) + sizeof(int)))
+	{
+		int *hlim;
+		
+		cmsg->cmsg_len = (sizeof(struct cmsghdr) + sizeof(int));
+		cmsg->cmsg_level = SOL_IPV6;
+		cmsg->cmsg_type = IPV6_HOPLIMIT;
+		
+		hlim = (int *) cmsg->cmsg_data;
+		*hlim = skb->nh.ipv6h->hop_limit;
+		
+		len -= cmsg->cmsg_len;
+		msg->msg_controllen += cmsg->cmsg_len;
+		cmsg = (struct cmsghdr *)((u8*) cmsg + cmsg->cmsg_len);
+	}
+
 	if (opt->srcrt)
 	{
 		int hdrlen = sizeof(struct rt0_hdr) + (opt->srcrt->hdrlen << 3);
@@ -90,14 +106,15 @@ int datagram_recv_ctl(struct sock *sk, struct msghdr *msg, struct sk_buff *skb)
 			 
 
 int datagram_send_ctl(struct msghdr *msg, struct device **src_dev,
-		      struct in6_addr **src_addr, struct ipv6_options *opt)
+		      struct in6_addr **src_addr, struct ipv6_options *opt, 
+		      int *hlimit)
 {
 	struct inet6_dev *in6_dev = NULL;
 	struct in6_pktinfo *src_info;
 	struct cmsghdr *cmsg;
 	struct ipv6_rt_hdr *rthdr;
 	int len;
-	int err = -EINVAL;
+	int err = 0;
 
 	for (cmsg = msg->msg_control; cmsg; cmsg = cmsg_nxthdr(msg, cmsg))
 	{
@@ -113,6 +130,7 @@ int datagram_send_ctl(struct msghdr *msg, struct device **src_dev,
 			if (cmsg->cmsg_len < (sizeof(struct cmsghdr) +
 					      sizeof(struct in6_pktinfo)))
 			{
+				err = -EINVAL;
 				goto exit_f;
 			}
 
@@ -123,6 +141,7 @@ int datagram_send_ctl(struct msghdr *msg, struct device **src_dev,
 				in6_dev = ipv6_dev_by_index(src_info->ipi6_ifindex);
 				if (in6_dev == NULL)
 				{
+					err = -ENODEV;
 					goto exit_f;
 				}
 
@@ -137,11 +156,11 @@ int datagram_send_ctl(struct msghdr *msg, struct device **src_dev,
 
 				if ( ifp == NULL)
 				{
+					err = -EINVAL;
 					goto exit_f;
 				}
 
 				*src_addr = &src_info->ipi6_addr;
-				err = 0;
 			}
 
 			break;
@@ -155,6 +174,7 @@ int datagram_send_ctl(struct msghdr *msg, struct device **src_dev,
 			/* validate option length */
 			if (len < sizeof(struct ipv6_rt_hdr))
 			{
+				err = -EINVAL;
 				goto exit_f;
 			}
 
@@ -165,28 +185,46 @@ int datagram_send_ctl(struct msghdr *msg, struct device **src_dev,
 			 */
 			if (rthdr->type)
 			{
+				err = -EINVAL;
 				goto exit_f;
 			}
 
 			if (((rthdr->hdrlen + 1) << 3) < len)
-			{				
+			{	
+				err = -EINVAL;
 				goto exit_f;
 			}
 
 			/* segments left must also match */
 			if ((rthdr->hdrlen >> 1) != rthdr->segments_left)
 			{
+				err = -EINVAL;
 				goto exit_f;
 			}
 			
 			opt->opt_nflen += ((rthdr->hdrlen + 1) << 3);
 			opt->srcrt = rthdr;
-			err = 0;
 
 			break;
+			
+		case IPV6_HOPLIMIT:
+			
+			len = cmsg->cmsg_len;
+			len -= sizeof(struct cmsghdr);
+			
+			if (len < sizeof(int))
+			{
+				err = -EINVAL;
+				goto exit_f;
+			}
+
+			*hlimit = *((int *) cmsg->cmsg_data);
+			break;
+			
 		default:
 			printk(KERN_DEBUG "invalid cmsg type: %d\n",
 			       cmsg->cmsg_type);
+			err = -EINVAL;
 			break;
 		}
 	}

@@ -174,7 +174,7 @@ asmlinkage int do_sigreturn(unsigned long __unused)
 
 	if (context.sc_usp != fp+fsize)
 		current->flags &= ~PF_ONSIGSTK;
-	
+
 	/* OK.	Make room on the supervisor stack for the extra junk,
 	 * if necessary.
 	 */
@@ -200,7 +200,7 @@ asmlinkage int do_sigreturn(unsigned long __unused)
 			 "   .align 4\n"
 			 "   .long 2b,4b\n"
 			 "   .long 3b,4b\n"
-			 ".text"
+			 ".previous"
 			 : /* no outputs, it doesn't ever return */
 			 : "a" (sw), "d" (fsize), "d" (frame_offset/4-1),
 			   "n" (frame_offset), "a" (fp)
@@ -360,7 +360,7 @@ static inline void setup_frame (struct sigaction * sa, struct pt_regs *regs,
 
 /*
  * OK, we're invoking a handler
- */	
+ */
 static inline void handle_signal(unsigned long signr, struct sigaction *sa,
 				 unsigned long oldmask, struct pt_regs *regs)
 {
@@ -482,7 +482,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs *regs)
 					continue;
 				current->state = TASK_STOPPED;
 				current->exit_code = signr;
-				if (!(current->p_pptr->sig->action[SIGCHLD-1].sa_flags & 
+				if (!(current->p_pptr->sig->action[SIGCHLD-1].sa_flags &
 				      SA_NOCLDSTOP))
 					notify_parent(current);
 				schedule();

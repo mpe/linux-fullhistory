@@ -25,6 +25,7 @@
  * 	int rs_open(struct tty_struct * tty, struct file * filp)
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/signal.h>
@@ -35,7 +36,6 @@
 #include <linux/tty_flip.h>
 #include <linux/serial.h>
 #include <linux/serial_reg.h>
-#include <linux/config.h>
 #include <linux/major.h>
 #include <linux/string.h>
 #include <linux/fcntl.h>
@@ -2931,6 +2931,11 @@ static void autoconfig(struct serial_state * state)
 	}
 	state->xmit_fifo_size =	uart_config[state->type].dfl_xmit_fifo_size;
 
+	if (state->type == PORT_UNKNOWN) {
+		restore_flags(flags);
+		return;
+	}
+
 	request_region(info->port,8,"serial(auto)");
 
 	/*
@@ -3099,11 +3104,6 @@ int register_serial(struct serial_struct *req)
 	state->port = req->port;
 	state->flags = req->flags;
 
-	if (check_region(state->port,8)) {
-		restore_flags(flags);
-		printk("register_serial(): I/O region in use\n");
-		return -1;		/* Area in use */
-	}
 	autoconfig(state);
 	if (state->type == PORT_UNKNOWN) {
 		restore_flags(flags);

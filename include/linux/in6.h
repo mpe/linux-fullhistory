@@ -96,6 +96,7 @@ struct ipv6_mreq {
 #define IPV6_RXSRCRT		5
 #define IPV6_PKTOPTIONS		6
 #define IPV6_CHECKSUM		7
+#define IPV6_HOPLIMIT		8
 
 /*
  *	Alternative names

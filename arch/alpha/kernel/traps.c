@@ -236,7 +236,7 @@ asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
 		"	lda %1,3b-1b(%0)\n"
 		"	.gprel32 2b\n"
 		"	lda %2,3b-2b(%0)\n"
-		".text"
+		".previous"
 			: "=r"(error), "=&r"(tmp1), "=&r"(tmp2)
 			: "r"(va), "0"(0));
 		if (error)
@@ -257,7 +257,7 @@ asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
 		"	lda %1,3b-1b(%0)\n"
 		"	.gprel32 2b\n"
 		"	lda %2,3b-2b(%0)\n"
-		".text"
+		".previous"
 			: "=r"(error), "=&r"(tmp1), "=&r"(tmp2)
 			: "r"(va), "0"(0));
 		if (error)
@@ -277,7 +277,7 @@ asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
 		"	lda %1,3b-1b(%0)\n"
 		"	.gprel32 2b\n"
 		"	lda %2,3b-2b(%0)\n"
-		".text"
+		".previous"
 			: "=r"(error), "=&r"(tmp1), "=&r"(tmp2)
 			: "r"(va), "0"(0));
 		if (error)
@@ -311,7 +311,7 @@ asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
 		"	lda $31,5b-3b(%0)\n"
 		"	.gprel32 4b\n"
 		"	lda $31,5b-4b(%0)\n"
-		".text"
+		".previous"
 			: "=r"(error), "=&r"(tmp1), "=&r"(tmp2),
 			  "=&r"(tmp3), "=&r"(tmp4)
 			: "r"(va), "r"(una_reg(reg)), "0"(0));
@@ -342,7 +342,7 @@ asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
 		"	lda $31,5b-3b(%0)\n"
 		"	.gprel32 4b\n"
 		"	lda $31,5b-4b(%0)\n"
-		".text"
+		".previous"
 			: "=r"(error), "=&r"(tmp1), "=&r"(tmp2),
 			  "=&r"(tmp3), "=&r"(tmp4)
 			: "r"(va), "r"(una_reg(reg)), "0"(0));
@@ -372,7 +372,7 @@ asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
 		"	lda $31,5b-3b(%0)\n"
 		"	.gprel32 4b\n"
 		"	lda $31,5b-4b(%0)\n"
-		".text"
+		".previous"
 			: "=r"(error), "=&r"(tmp1), "=&r"(tmp2),
 			  "=&r"(tmp3), "=&r"(tmp4)
 			: "r"(va), "r"(una_reg(reg)), "0"(0));

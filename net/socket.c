@@ -1193,9 +1193,10 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 	struct iovec *iov=iovstack;
 	struct msghdr msg_sys;
 	void * krn_msg_ctl = NULL;
+	void * usr_msg_ctl = NULL;
 	int err;
 	int total_len;
-	int len;
+	int len = 0;
 
 	/* kernel mode address */
 	char addr[MAX_SOCK_ADDR];
@@ -1233,6 +1234,12 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 
 	if (msg_sys.msg_controllen)
 	{
+		/*
+		 *	FIXME:
+		 *	I'm assuming that the kernel may have to examine
+		 *	the acciliary control messages passed by the user.
+		 *	Find out what POSIX says about this...
+		 */
 		krn_msg_ctl = kmalloc(msg_sys.msg_controllen, GFP_KERNEL);
 		
 		if (!krn_msg_ctl)
@@ -1243,7 +1250,11 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 		err = copy_from_user(krn_msg_ctl, msg_sys.msg_control,
 				     msg_sys.msg_controllen);
 		if (err)
+		{
+			err = -EFAULT;
 			goto flush_it;
+		}
+		usr_msg_ctl = msg_sys.msg_control;
 		msg_sys.msg_control = krn_msg_ctl;
 	}
 
@@ -1263,12 +1274,11 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 	{
 		err = move_addr_to_user(addr, msg_sys.msg_namelen, uaddr,
 					uaddr_len);
-
 	}
 	
-	if (!err && msg_sys.msg_controllen)
+	if (err >= 0 && msg_sys.msg_controllen)
 	{
-		err = copy_to_user(msg_sys.msg_control, krn_msg_ctl,
+		err = copy_to_user(usr_msg_ctl, krn_msg_ctl,
 				   msg_sys.msg_controllen);
 	}
 
@@ -1281,7 +1291,7 @@ flush_it:
 		kfree(krn_msg_ctl);
 	}
 
-	if (err)
+	if (err < 0)
 		return err;
 
 	if (put_user(msg_sys.msg_flags, &msg->msg_flags))

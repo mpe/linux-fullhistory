@@ -1,6 +1,9 @@
 /*
  *      u14-34f.c - Low-level driver for UltraStor 14F/34F SCSI host adapters.
  *
+ *       8 Jan 1997 rev. 2.50 for linux 2.1.20 and 2.0.27
+ *          Added linked command support.
+ *
  *       3 Dec 1996 rev. 2.40 for linux 2.1.14 and 2.0.27
  *          Added queue depth adjustment.
  *
@@ -81,7 +84,7 @@
  * 
  *          Multiple U14F and/or U34F host adapters are supported.
  *
- *  Copyright (C) 1994, 1995, 1996 Dario Ballabio (dario@milano.europe.dg.com)
+ *  Copyright (C) 1994-1997 Dario Ballabio (dario@milano.europe.dg.com)
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that redistributions of source
@@ -115,8 +118,8 @@
  *
  *  Here a sample configuration using two U14F boards:
  *
- U14F0: PORT 0x330, BIOS 0xc8000, IRQ 11, DMA 5, SG 32, Mbox 16, UC 1.
- U14F1: PORT 0x340, BIOS 0x00000, IRQ 10, DMA 6, SG 32, Mbox 16, UC 1.
+ U14F0: ISA 0x330, BIOS 0xc8000, IRQ 11, DMA 5, SG 32, MB 16, UC 1, LC 1, MQ 8.
+ U14F1: ISA 0x340, BIOS 0x00000, IRQ 10, DMA 6, SG 32, MB 16, UC 1, LC 1, MQ 8.
  *
  *  The boot controller must have its BIOS enabled, while other boards can
  *  have their BIOS disabled, or enabled to an higher address.
@@ -197,6 +200,7 @@
 #include <asm/irq.h>
 #include "u14-34f.h"
 #include<linux/stat.h>
+#include<linux/config.h>
 
 struct proc_dir_entry proc_scsi_u14_34f = {
     PROC_SCSI_U14_34F, 6, "u14_34f",
@@ -223,6 +227,7 @@ struct proc_dir_entry proc_scsi_u14_34f = {
 #define HA_CMD_READ_BUFF  0x3
 #define HA_CMD_WRITE_BUFF 0x4
 
+#undef  DEBUG_LINKED_COMMANDS
 #undef  DEBUG_DETECT
 #undef  DEBUG_INTERRUPT
 #undef  DEBUG_STATISTICS
@@ -251,6 +256,8 @@ struct proc_dir_entry proc_scsi_u14_34f = {
 #define LOCKED   2
 #define IN_RESET 3
 #define IGNORE   4
+#define READY    5
+#define ABORTING 6
 #define NO_DMA  0xff
 #define MAXLOOP 200000
 
@@ -296,7 +303,7 @@ struct mscp {
    unsigned int data_address PACKED;    /* transfer data pointer */
    unsigned int data_len PACKED;        /* length in bytes */
    unsigned int link_address PACKED;    /* for linking command chains */
-   unsigned char link_id;               /* identifies command in chain */
+   unsigned char clink_id;              /* identifies command in chain */
    unsigned char use_sg;                /* (if sg is set) 8 bytes per list */
    unsigned char sense_len;
    unsigned char scsi_cdbs_len;         /* 6, 10, or 12 */
@@ -306,6 +313,7 @@ struct mscp {
    unsigned int sense_addr PACKED;
    Scsi_Cmnd *SCpnt;
    unsigned int index;                  /* cp index */
+   unsigned int link_id;                /* reference cp for linked commands */
    struct sg_list *sglist;
    };
 
@@ -365,6 +373,18 @@ static void u14_34f_interrupt_handler(int, void *, struct pt_regs *);
 static int do_trace = FALSE;
 static int setup_done = FALSE;
 
+#if defined (CONFIG_SCSI_U14_34F_LINKED_COMMANDS)
+static int linked_commands = TRUE;
+#else
+static int linked_commands = FALSE;
+#endif
+
+#if defined CONFIG_SCSI_U14_34F_MAX_TAGS
+static int max_queue_depth = CONFIG_SCSI_U14_34F_MAX_TAGS;
+#else
+static int max_queue_depth = MAX_CMD_PER_LUN;
+#endif
+
 static void select_queue_depths(struct Scsi_Host *host, Scsi_Device *devlist) {
    Scsi_Device *dev;
    int j, ntag = 0, nuntag = 0, tqd, utqd; 
@@ -387,7 +407,7 @@ static void select_queue_depths(struct Scsi_Host *host, Scsi_Device *devlist) {
 
    tqd = (host->can_queue - utqd * nuntag) / (ntag + 1);
 
-   if (tqd > MAX_TAGGED_CMD_PER_LUN) tqd = MAX_TAGGED_CMD_PER_LUN;
+   if (tqd > max_queue_depth) tqd = max_queue_depth;
 
    if (tqd < MAX_CMD_PER_LUN) tqd = MAX_CMD_PER_LUN;
 
@@ -467,7 +487,7 @@ static inline int port_detect(unsigned int port_base, unsigned int j,
                               Scsi_Host_Template *tpnt) {
    unsigned char irq, dma_channel, subversion, i;
    unsigned char in_byte;
-   char dma_name[16];
+   char *bus_type, dma_name[16];
 
    /* Allowed BIOS base addresses (NULL indicates reserved) */
    void *bios_segment_table[8] = { 
@@ -595,6 +615,7 @@ static inline int port_detect(unsigned int port_base, unsigned int j,
       sh[j]->dma_channel = NO_DMA;
       sh[j]->unchecked_isa_dma = FALSE;
       sprintf(BN(j), "U34F%d", j);
+      bus_type = "VESA";
       }
    else {
       sh[j]->wish_block = TRUE;
@@ -611,6 +632,7 @@ static inline int port_detect(unsigned int port_base, unsigned int j,
       clear_dma_ff(dma_channel);
       set_dma_mode(dma_channel, DMA_MODE_CASCADE);
       enable_dma(dma_channel);
+      bus_type = "ISA";
       }
 
    sh[j]->max_channel = MAX_CHANNEL - 1;
@@ -641,10 +663,15 @@ static inline int port_detect(unsigned int port_base, unsigned int j,
          return FALSE;
          }
       
-   printk("%s: PORT 0x%03x, BIOS 0x%05x, IRQ %u, %s, SG %d, "\
-	  "Mbox %d, UC %d.\n", BN(j), sh[j]->io_port,
-          (int)sh[j]->base, sh[j]->irq, dma_name, sh[j]->sg_tablesize,
-          sh[j]->can_queue, sh[j]->hostt->use_clustering);
+   if (max_queue_depth > MAX_TAGGED_CMD_PER_LUN) 
+       max_queue_depth = MAX_TAGGED_CMD_PER_LUN;
+
+   if (max_queue_depth < MAX_CMD_PER_LUN) max_queue_depth = MAX_CMD_PER_LUN;
+
+   printk("%s: %s 0x%03x, BIOS 0x%05x, IRQ %u, %s, SG %d, MB %d, UC %d, "\
+          "LC %d, MQ %d.\n", BN(j), bus_type, sh[j]->io_port, (int)sh[j]->base,
+          sh[j]->irq, dma_name, sh[j]->sg_tablesize, sh[j]->can_queue,
+          sh[j]->hostt->use_clustering, linked_commands, max_queue_depth);
 
    if (sh[j]->max_id > 8 || sh[j]->max_lun > 8)
       printk("%s: wide SCSI support enabled, max_id %u, max_lun %u.\n",
@@ -691,7 +718,7 @@ int u14_34f_detect(Scsi_Host_Template *tpnt) {
       if (j < MAX_BOARDS && port_detect(io_port[k], j, tpnt)) j++;
 
    if (j > 0) 
-      printk("UltraStor 14F/34F: Copyright (C) 1994, 1995, 1996 Dario Ballabio.\n");
+      printk("UltraStor 14F/34F: Copyright (C) 1994-1997 Dario Ballabio.\n");
 
    restore_flags(flags);
    return j;
@@ -803,6 +830,28 @@ int u14_34f_queuecommand(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
    cpp->scsi_cdbs_len = SCpnt->cmd_len;
    memcpy(cpp->scsi_cdbs, SCpnt->cmnd, cpp->scsi_cdbs_len);
 
+   if (linked_commands && SCpnt->device->tagged_supported
+            && !HD(j)->target_to[SCpnt->target][SCpnt->channel]
+	    && !HD(j)->target_redo[SCpnt->target][SCpnt->channel])
+   
+      for (k = 0; k < sh[j]->can_queue; k++) {
+ 
+         if (HD(j)->cp_stat[k] != IN_USE) continue;
+
+         if ((&HD(j)->cp[k])->SCpnt->device != SCpnt->device) continue;
+
+         cpp->link_id = k;
+         HD(j)->cp_stat[i] = READY;
+
+#if defined (DEBUG_LINKED_COMMANDS)
+         printk("%s: qcomm, target %d.%d:%d, pid %ld, Mbox %d ready.\n", 
+                BN(j), SCpnt->channel, SCpnt->target, SCpnt->lun,
+                SCpnt->pid, i);
+#endif
+         restore_flags(flags);
+         return 0;
+         }
+
    if (wait_on_busy(sh[j]->io_port)) {
       SCpnt->result = DID_ERROR << 16;
       SCpnt->host_scribble = NULL;
@@ -884,6 +933,18 @@ int u14_34f_abort(Scsi_Cmnd *SCarg) {
       restore_flags(flags);
       return SCSI_ABORT_NOT_RUNNING;
       }
+
+   if (HD(j)->cp_stat[i] == READY || HD(j)->cp_stat[i] == ABORTING) {
+      SCarg->result = DID_ABORT << 16;
+      SCarg->host_scribble = NULL;
+      HD(j)->cp_stat[i] = FREE;
+      printk("%s, abort, mbox %d ready, DID_ABORT, pid %ld done.\n",
+	     BN(j), i, SCarg->pid);
+      SCarg->scsi_done(SCarg);
+      restore_flags(flags);
+      return SCSI_ABORT_SUCCESS;
+      }
+
    restore_flags(flags);
    panic("%s: abort, mbox %d, invalid cp_stat.\n", BN(j), i);
 }
@@ -934,13 +995,20 @@ int u14_34f_reset(Scsi_Cmnd *SCarg, unsigned int reset_flags) {
 	 continue;
 	 }
 
-      SCpnt = HD(j)->cp[i].SCpnt;
-      HD(j)->cp_stat[i] = IN_RESET;
-      printk("%s: reset, mbox %d in reset, pid %ld.\n",
-	     BN(j), i, SCpnt->pid);
-
-      if (SCpnt == NULL)
+      if (!(SCpnt = HD(j)->cp[i].SCpnt))
 	 panic("%s: reset, mbox %d, SCpnt == NULL.\n", BN(j), i);
+
+      if (HD(j)->cp_stat[i] == READY || HD(j)->cp_stat[i] == ABORTING) {
+         HD(j)->cp_stat[i] = ABORTING;
+         printk("%s: reset, mbox %d aborting, pid %ld.\n",
+                BN(j), i, SCpnt->pid);
+         }
+
+      else {
+         HD(j)->cp_stat[i] = IN_RESET;
+         printk("%s: reset, mbox %d in reset, pid %ld.\n",
+                BN(j), i, SCpnt->pid);
+         }
 
       if (SCpnt->host_scribble == NULL)
 	 panic("%s: reset, mbox %d, garbled SCpnt.\n", BN(j), i);
@@ -976,18 +1044,35 @@ int u14_34f_reset(Scsi_Cmnd *SCarg, unsigned int reset_flags) {
 
    for (i = 0; i < sh[j]->can_queue; i++) {
 
-      /* Skip mailboxes already set free by interrupt */
-      if (HD(j)->cp_stat[i] != IN_RESET) continue;
+      if (HD(j)->cp_stat[i] == IN_RESET) {
+         SCpnt = HD(j)->cp[i].SCpnt;
+         SCpnt->result = DID_RESET << 16;
+         SCpnt->host_scribble = NULL;
 
-      SCpnt = HD(j)->cp[i].SCpnt;
-      SCpnt->result = DID_RESET << 16;
-      SCpnt->host_scribble = NULL;
+         /* This mailbox is still waiting for its interrupt */
+         HD(j)->cp_stat[i] = LOCKED;
 
-      /* This mailbox is still waiting for its interrupt */
-      HD(j)->cp_stat[i] = LOCKED;
+         printk("%s, reset, mbox %d locked, DID_RESET, pid %ld done.\n",
+	        BN(j), i, SCpnt->pid);
+         }
 
-      printk("%s, reset, mbox %d locked, DID_RESET, pid %ld done.\n",
-	     BN(j), i, SCpnt->pid);
+      else if (HD(j)->cp_stat[i] == ABORTING) {
+         SCpnt = HD(j)->cp[i].SCpnt;
+         SCpnt->result = DID_RESET << 16;
+         SCpnt->host_scribble = NULL;
+
+         /* This mailbox was never queued to the adapter */
+         HD(j)->cp_stat[i] = FREE;
+
+         printk("%s, reset, mbox %d aborting, DID_RESET, pid %ld done.\n",
+	        BN(j), i, SCpnt->pid);
+         }
+
+      else
+
+         /* Any other mailbox has already been set free by interrupt */
+         continue;
+
       restore_flags(flags);
       SCpnt->scsi_done(SCpnt);
       cli();
@@ -1017,11 +1102,49 @@ int u14_34f_biosparam(Disk *disk, kdev_t dev, int *dkinfo) {
    return FALSE;
 }
 
+static inline void process_ready_list(unsigned int i, unsigned int j) {
+   Scsi_Cmnd *SCpnt;
+   unsigned int k, n_ready = 0;
+   struct mscp *cpp;
+
+   for (k = 0; k < sh[j]->can_queue; k++) {
+
+      if (HD(j)->cp_stat[k] != READY) continue;
+
+      cpp = &HD(j)->cp[k];
+
+      if (cpp->link_id != i) continue;
+
+      SCpnt = cpp->SCpnt;
+      n_ready++;
+
+      if (wait_on_busy(sh[j]->io_port)) {
+         printk("%s: ihdlr, target %d.%d:%d, pid %ld, Mbox %d, link_id %d, "\
+                "n_ready %d, adapter busy, will abort.\n", BN(j),
+                SCpnt->channel, SCpnt->target, SCpnt->lun, SCpnt->pid,
+                k, i, n_ready);
+         HD(j)->cp_stat[k] = ABORTING;
+         continue;
+         }
+
+      outl(V2DEV(cpp), sh[j]->io_port + REG_OGM);
+      outb(CMD_OGM_INTR, sh[j]->io_port + REG_LCL_INTR);
+      HD(j)->cp_stat[k] = IN_USE;
+
+#if defined (DEBUG_LINKED_COMMANDS)
+      printk("%s: ihdlr, target %d.%d:%d, pid %ld, Mbox %d in use, link_id %d,"
+             " n_ready %d.\n", BN(j), SCpnt->channel, SCpnt->target, 
+             SCpnt->lun, SCpnt->pid, k, i, n_ready);
+#endif
+      }
+
+}
+
 static void u14_34f_interrupt_handler(int irq, void *dev_id,
                                       struct pt_regs *regs) {
    Scsi_Cmnd *SCpnt;
    unsigned long flags;
-   unsigned int i, j, k, c, status, tstatus, loops, total_loops = 0;
+   unsigned int i, j, k, c, status, tstatus, loops, total_loops = 0, ret;
    struct mscp *spp;
 
    save_flags(flags);
@@ -1051,15 +1174,19 @@ static void u14_34f_interrupt_handler(int irq, void *dev_id,
 	 if (do_trace) printk("%s: ihdlr, start service, count %d.\n",
 			      BN(j), HD(j)->iocount);
 
-	 spp = (struct mscp *)DEV2V(inl(sh[j]->io_port + REG_ICM));
+	 spp = (struct mscp *)DEV2V(ret = inl(sh[j]->io_port + REG_ICM));
 
 	 /* Clear interrupt pending flag */
 	 outb(CMD_CLR_INTR, sh[j]->io_port + REG_SYS_INTR);
 
 	 i = spp - HD(j)->cp;
 
-	 if (i >= sh[j]->can_queue)
-	    panic("%s: ihdlr, invalid mscp address.\n", BN(j));
+	 if (spp < HD(j)->cp || spp >= HD(j)->cp + sh[j]->can_queue
+                                            || i >= sh[j]->can_queue)
+	    panic("%s: ihdlr, invalid mscp bus address %p, cp0 %p.\n",
+                  BN(j), (void *)ret, HD(j)->cp);
+
+         if (linked_commands) process_ready_list(i, j);
 
 	 if (HD(j)->cp_stat[i] == IGNORE) {
 	    HD(j)->cp_stat[i] = FREE;

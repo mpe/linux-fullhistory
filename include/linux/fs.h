@@ -221,17 +221,16 @@ static inline int buffer_protected(struct buffer_head * bh)
 
 #include <linux/pipe_fs_i.h>
 #include <linux/minix_fs_i.h>
-#include <linux/ext_fs_i.h>
 #include <linux/ext2_fs_i.h>
 #include <linux/hpfs_fs_i.h>
 #include <linux/msdos_fs_i.h>
 #include <linux/umsdos_fs_i.h>
 #include <linux/iso_fs_i.h>
 #include <linux/nfs_fs_i.h>
-#include <linux/xia_fs_i.h>
 #include <linux/sysv_fs_i.h>
 #include <linux/affs_fs_i.h>
 #include <linux/ufs_fs_i.h>
+#include <linux/romfs_fs_i.h>
 
 /*
  * Attribute flags.  These should be or-ed together to figure out what
@@ -310,17 +309,16 @@ struct inode {
 	union {
 		struct pipe_inode_info pipe_i;
 		struct minix_inode_info minix_i;
-		struct ext_inode_info ext_i;
 		struct ext2_inode_info ext2_i;
 		struct hpfs_inode_info hpfs_i;
 		struct msdos_inode_info msdos_i;
 		struct umsdos_inode_info umsdos_i;
 		struct iso_inode_info isofs_i;
 		struct nfs_inode_info nfs_i;
-		struct xiafs_inode_info xiafs_i;
 		struct sysv_inode_info sysv_i;
 		struct affs_inode_info affs_i;
 		struct ufs_inode_info ufs_i;
+		struct romfs_inode_info romfs_i;
 		struct socket socket_i;
 		void * generic_ip;
 	} u;
@@ -411,16 +409,15 @@ struct fasync_struct {
 extern int fasync_helper(struct inode *, struct file *, int, struct fasync_struct **);
 
 #include <linux/minix_fs_sb.h>
-#include <linux/ext_fs_sb.h>
 #include <linux/ext2_fs_sb.h>
 #include <linux/hpfs_fs_sb.h>
 #include <linux/msdos_fs_sb.h>
 #include <linux/iso_fs_sb.h>
 #include <linux/nfs_fs_sb.h>
-#include <linux/xia_fs_sb.h>
 #include <linux/sysv_fs_sb.h>
 #include <linux/affs_fs_sb.h>
 #include <linux/ufs_fs_sb.h>
+#include <linux/romfs_fs_sb.h>
 
 struct super_block {
 	kdev_t s_dev;
@@ -440,16 +437,15 @@ struct super_block {
 	struct wait_queue * s_wait;
 	union {
 		struct minix_sb_info minix_sb;
-		struct ext_sb_info ext_sb;
 		struct ext2_sb_info ext2_sb;
 		struct hpfs_sb_info hpfs_sb;
 		struct msdos_sb_info msdos_sb;
 		struct isofs_sb_info isofs_sb;
 		struct nfs_sb_info nfs_sb;
-		struct xiafs_sb_info xiafs_sb;
 		struct sysv_sb_info sysv_sb;
 		struct affs_sb_info affs_sb;
 		struct ufs_sb_info ufs_sb;
+		struct romfs_sb_info romfs_sb;
 		void *generic_sbp;
 	} u;
 };

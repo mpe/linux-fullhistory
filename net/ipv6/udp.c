@@ -506,6 +506,7 @@ static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen)
 	struct in6_addr *saddr = NULL;
 	int len = ulen + sizeof(struct udphdr);
 	int addr_type;
+	int hlimit = 0;
 	int err;
 
 	
@@ -560,7 +561,7 @@ static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen)
 		opt = &opt_space;
 		memset(opt, 0, sizeof(struct ipv6_options));
 
-		err = datagram_send_ctl(msg, &dev, &saddr, opt);
+		err = datagram_send_ctl(msg, &dev, &saddr, opt, &hlimit);
 		if (err < 0)
 		{
 			printk(KERN_DEBUG "invalid msg_control\n");
@@ -581,7 +582,8 @@ static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen)
 	udh.pl_len = len;
 	
 	err = ipv6_build_xmit(sk, udpv6_getfrag, &udh, daddr, len,
-			      saddr, dev, opt, IPPROTO_UDP, msg->msg_flags&MSG_DONTWAIT);
+			      saddr, dev, opt, IPPROTO_UDP, hlimit,
+			      msg->msg_flags&MSG_DONTWAIT);
 	
 	if (err < 0)
 		return err;

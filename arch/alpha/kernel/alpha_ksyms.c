@@ -5,7 +5,7 @@
  * modules.
  */
 
-#include <linux/string.h>
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/string.h>
 #include <linux/user.h>
@@ -14,8 +14,12 @@
 #include <asm/hwrpb.h>
 #include <asm/uaccess.h>
 
+
 extern void bcopy (const char *src, char *dst, int len);
 extern struct hwrpb_struct *hwrpb;
+extern long __kernel_thread(unsigned long, int (*)(void *), void *);
+extern void dump_thread(struct pt_regs *, struct user *);
+extern int dump_fpu(struct pt_regs *, elf_fpregset_t *);
 
 /* these are C runtime functions with special calling conventions: */
 extern void __divl (void);
@@ -26,9 +30,6 @@ extern void __divlu (void);
 extern void __remlu (void);
 extern void __divqu (void);
 extern void __remqu (void);
-
-extern void dump_thread(struct pt_regs *, struct user *);
-extern int dump_fpu(struct pt_regs *, elf_fpregset_t *);
 
 
 /* platform dependent support */
@@ -70,6 +71,7 @@ EXPORT_SYMBOL(dump_thread);
 EXPORT_SYMBOL(dump_fpu);
 EXPORT_SYMBOL(hwrpb);
 EXPORT_SYMBOL(wrusp);
+EXPORT_SYMBOL(__kernel_thread);
 
 /*
  * The following are specially called from the uaccess assembly stubs.

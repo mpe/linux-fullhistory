@@ -9,8 +9,8 @@
  *   by Bjorn Ekwall <bj0rn@blox.se>
  */
 
-#include <linux/module.h>
 #include <linux/config.h>
+#include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/smp.h>
 #include <linux/fs.h>
@@ -330,7 +330,6 @@ EXPORT_SYMBOL(nr_async_pages);
 EXPORT_SYMBOL(___strtok);
 EXPORT_SYMBOL(init_fifo);
 EXPORT_SYMBOL(super_blocks);
-EXPORT_SYMBOL(reuse_list);
 EXPORT_SYMBOL(fifo_inode_operations);
 EXPORT_SYMBOL(chrdev_inode_operations);
 EXPORT_SYMBOL(blkdev_inode_operations);

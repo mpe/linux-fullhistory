@@ -16,8 +16,8 @@ O_OBJS    = open.o read_write.o inode.o devices.o file_table.o buffer.o \
 		dcache.o $(BINFMTS) 
 
 MOD_LIST_NAME := FS_MODULES
-ALL_SUB_DIRS = minix ext ext2 fat msdos vfat proc isofs nfs xiafs umsdos \
-		hpfs sysv smbfs ncpfs ufs affs
+ALL_SUB_DIRS = minix ext2 fat msdos vfat proc isofs nfs umsdos \
+		hpfs sysv smbfs ncpfs ufs affs romfs
 
 ifeq ($(CONFIG_QUOTA),y)
 O_OBJS += dquot.o
@@ -30,14 +30,6 @@ SUB_DIRS += minix
 else
   ifeq ($(CONFIG_MINIX_FS),m)
   MOD_SUB_DIRS += minix
-  endif
-endif
-
-ifeq ($(CONFIG_EXT_FS),y)
-SUB_DIRS += ext
-else
-  ifeq ($(CONFIG_EXT_FS),m)
-  MOD_SUB_DIRS += ext
   endif
 endif
 
@@ -97,14 +89,6 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_XIA_FS),y)
-SUB_DIRS += xiafs
-else
-  ifeq ($(CONFIG_XIA_FS),m)
-  MOD_SUB_DIRS += xiafs
-  endif
-endif
-
 ifeq ($(CONFIG_UMSDOS_FS),y)
 SUB_DIRS += umsdos
 else
@@ -158,6 +142,14 @@ SUB_DIRS += affs
 else
   ifeq ($(CONFIG_AFFS_FS),m)
   MOD_SUB_DIRS += affs
+  endif
+endif
+
+ifeq ($(CONFIG_ROMFS_FS),y)
+SUB_DIRS += romfs
+else
+  ifeq ($(CONFIG_ROMFS_FS),m)
+  MOD_SUB_DIRS += romfs
   endif
 endif
 

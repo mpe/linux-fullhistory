@@ -434,8 +434,8 @@ static struct device dev_ultra[MAX_ULTRA_CARDS] = {
 static int io[MAX_ULTRA_CARDS] = { 0, };
 static int irq[MAX_ULTRA_CARDS]  = { 0, };
 
-MODULE_PARM(io, "1-" __MODULE_PARM(MAX_ULTRA_CARDS) "i");
-MODULE_PARM(irq, "1-" __MODULE_PARM(MAX_ULTRA_CARDS) "i");
+MODULE_PARM(io, "1-" __MODULE_STRING(MAX_ULTRA_CARDS) "i");
+MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_ULTRA_CARDS) "i");
 
 /* This is set up so that only a single autoprobe takes place per call.
 ISA device autoprobes on a running machine are not recommended. */

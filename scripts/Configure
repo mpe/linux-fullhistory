@@ -422,6 +422,7 @@ echo "#" >> $CONFIG
 echo "/*" > $CONFIG_H
 echo " * Automatically generated C config: don't edit" >> $CONFIG_H
 echo " */" >> $CONFIG_H
+echo "#define AUTOCONF_INCLUDED" >> $CONFIG_H
 
 DEFAULT=""
 if [ "$1" = "-d" ] ; then

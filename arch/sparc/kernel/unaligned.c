@@ -202,11 +202,11 @@ __asm__ __volatile__ (								\
 	".word	14b, " #errh "\n\t"						\
 	".word	15b, " #errh "\n\t"						\
 	".word	16b, " #errh "\n\n\t"						\
-	".text\n\t"								\
+	".previous\n\t"								\
 	: : "r" (dest_reg), "r" (size), "r" (saddr), "r" (is_signed)		\
 	: "l1", "l2", "g7", "g1");						\
 })
-	
+
 #define store_common(dst_addr, size, src_val, errh) ({				\
 __asm__ __volatile__ (								\
 	"ld	[%2], %%l1\n"							\
@@ -256,7 +256,7 @@ __asm__ __volatile__ (								\
 	".word	15b, " #errh "\n\t"						\
 	".word	16b, " #errh "\n\t"						\
 	".word	17b, " #errh "\n\n\t"						\
-	".text\n\t"								\
+	".previous\n\t"								\
 	: : "r" (dst_addr), "r" (size), "r" (src_val)				\
 	: "l1", "l2", "g7", "g1");						\
 })
@@ -307,7 +307,7 @@ void kernel_mna_trap_fault(struct pt_regs *regs, unsigned int insn)
 {
 	unsigned long g2 = regs->u_regs [UREG_G2];
 	unsigned long fixup = search_exception_table (regs->pc, &g2);
-	
+
 	if (!fixup) {
 		unsigned long address = compute_effective_address(regs, insn);
         	if(address < PAGE_SIZE) {
@@ -336,7 +336,7 @@ asmlinkage void kernel_unaligned_trap(struct pt_regs *regs, unsigned int insn)
 		printk("Unsupported unaligned load/store trap for kernel at <%08lx>.\n",
 		       regs->pc);
 		unaligned_panic("Wheee. Kernel does fpu/atomic unaligned load/store.");
-		
+
 		__asm__ __volatile__ ("\n"
 "kernel_unaligned_trap_fault:\n\t"
 		"mov	%0, %%o0\n\t"
@@ -344,7 +344,7 @@ asmlinkage void kernel_unaligned_trap(struct pt_regs *regs, unsigned int insn)
 		" mov	%1, %%o1\n\t"
 		: : "r" (regs), "r" (insn)
 		: "o0", "o1", "o2", "o3", "o4", "o5", "o7", "g1", "g2", "g3", "g4", "g5", "g7");
-		
+
 		return;
 	} else {
 		unsigned long addr = compute_effective_address(regs, insn);
@@ -369,7 +369,7 @@ asmlinkage void kernel_unaligned_trap(struct pt_regs *regs, unsigned int insn)
 #if 0 /* unsupported */
 		case both:
 			do_atomic(fetch_reg_addr(((insn>>25)&0x1f), regs),
-				  (unsigned long *) addr, 
+				  (unsigned long *) addr,
 				  kernel_unaligned_trap_fault);
 			break;
 #endif
@@ -477,7 +477,7 @@ asmlinkage void user_unaligned_trap(struct pt_regs *regs, unsigned int insn)
 			" mov	%1, %%o1\n\t"
 			: : "r" (regs), "r" (insn)
 			: "o0", "o1", "o2", "o3", "o4", "o5", "o7", "g1", "g2", "g3", "g4", "g5", "g7");
-		
+
 			return;
 		}
 		advance(regs);

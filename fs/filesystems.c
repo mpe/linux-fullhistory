@@ -10,9 +10,7 @@
 #include <linux/fs.h>
 
 #include <linux/minix_fs.h>
-#include <linux/ext_fs.h>
 #include <linux/ext2_fs.h>
-#include <linux/xia_fs.h>
 #include <linux/msdos_fs.h>
 #include <linux/umsdos_fs.h>
 #include <linux/proc_fs.h>
@@ -24,6 +22,7 @@
 #include <linux/ncp_fs.h>
 #include <linux/affs_fs.h>
 #include <linux/ufs_fs.h>
+#include <linux/romfs_fs.h>
 #include <linux/major.h>
 
 extern void device_setup(void);
@@ -42,16 +41,8 @@ asmlinkage int sys_setup(void)
 
 	binfmt_setup();
 
-#ifdef CONFIG_EXT_FS
-	init_ext_fs();
-#endif
-
 #ifdef CONFIG_EXT2_FS
 	init_ext2_fs();
-#endif
-
-#ifdef CONFIG_XIA_FS
-	init_xiafs_fs();
 #endif
 
 #ifdef CONFIG_MINIX_FS
@@ -110,6 +101,11 @@ asmlinkage int sys_setup(void)
 	init_ufs_fs();
 #endif
 
+#ifdef CONFIG_ROMFS_FS
+	init_romfs_fs();
+#endif
+
 	mount_root();
 	return 0;
 }
+

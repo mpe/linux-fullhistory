@@ -6,9 +6,7 @@ comment 'Filesystems'
 
 bool	 'Quota support' CONFIG_QUOTA
 tristate 'Minix fs support' CONFIG_MINIX_FS
-tristate 'Extended fs support' CONFIG_EXT_FS
 tristate 'Second extended fs support' CONFIG_EXT2_FS
-tristate 'xiafs filesystem support' CONFIG_XIA_FS
 
 # msdos filesystems
 tristate 'DOS FAT fs support' CONFIG_FAT_FS
@@ -38,6 +36,7 @@ tristate 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS
 tristate 'OS/2 HPFS filesystem support (read only)' CONFIG_HPFS_FS
 tristate 'System V and Coherent filesystem support' CONFIG_SYSV_FS
 tristate 'Amiga FFS filesystem support' CONFIG_AFFS_FS
+tristate 'ROM filesystem support' CONFIG_ROMFS_FS
 if [ "$CONFIG_AFFS_FS" != "n" ]; then
   define_bool CONFIG_AMIGA_PARTITION y
 fi
@@ -47,3 +46,4 @@ if [ "$CONFIG_UFS_FS" != "n" ]; then
   bool 'SMD disklabel (Sun partition tables) support' CONFIG_SMD_DISKLABEL
 fi
 endmenu
+
