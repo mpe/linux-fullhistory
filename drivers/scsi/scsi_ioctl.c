@@ -149,6 +149,10 @@ static int ioctl_internal_command(Scsi_Device *dev, char * cmd)
     
     result = SCpnt->result;
     SCpnt->request.rq_status = RQ_INACTIVE;
+
+    if(SCpnt->device->scsi_request_fn)
+	(*SCpnt->device->scsi_request_fn)();
+
     wake_up(&SCpnt->device->device_wait);
     return result;
 }

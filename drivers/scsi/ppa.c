@@ -31,7 +31,7 @@
 
 */
 
-#define   PPA_VERSION   "0.20"
+#define   PPA_VERSION   "0.26"
 
 /* Change these variables here or with insmod or with a LILO or LOADLIN
    command line argument
@@ -40,7 +40,6 @@
 static int      ppa_base       = 0x378;  /* parallel port address    */
 static int      ppa_speed_high = 1;      /* port delay in data phase */
 static int      ppa_speed_low  = 6;      /* port delay otherwise     */
-static int      ppa_call_sched = 1;      /* give up the CPU ?        */
 static int      ppa_nybble     = 0;      /* don't force nybble mode  */
 
 
@@ -52,6 +51,7 @@ static int      ppa_nybble     = 0;      /* don't force nybble mode  */
 #include  <unistd.h>
 #include  <linux/module.h>
 #include  <linux/kernel.h>
+#include  <linux/tqueue.h>
 #include  <linux/ioport.h>
 #include  <linux/delay.h>
 #include  <linux/blk.h>
@@ -70,9 +70,7 @@ static int              ppa_error_code = DID_OK;
 static char             ppa_info_string[132];
 static Scsi_Cmnd        *ppa_current = 0;
 static void             (*ppa_done) (Scsi_Cmnd *);
-static int              ppa_busy = 0;
 static int              ppa_port_delay;
-
 
 void    out_p( short port, char byte)
 
@@ -140,11 +138,7 @@ char    ppa_wait( void )
 
         In principle, this could be tied to an interrupt, but the adapter
         doesn't appear to be designed to support interrupts.  We spin on
-        the 0x80 ready bit.  If ppa_call_sched is 1, we call the scheduler 
-        to allow other processes to run while we are waiting, just like
-        the lp driver does in polling mode.  The performance hit is
-        significant, so this behaviour is configurable.
-
+        the 0x80 ready bit. 
 */
 
 {       int     k;
@@ -153,8 +147,8 @@ char    ppa_wait( void )
         ppa_error_code = DID_OK;
         k = 0;
         while (!((r = in_p(1)) & 0x80) 
-                && (k++ < PPA_SPIN_TMO) && !ppa_abort_flag  )
-                        if (need_resched && ppa_call_sched) schedule();
+                && (k++ < PPA_SPIN_TMO) && !ppa_abort_flag  ) barrier();
+                        
         if (ppa_abort_flag) {
                 if (ppa_abort_flag == 1) ppa_error_code = DID_ABORT;
                 else {  ppa_do_reset();
@@ -330,10 +324,13 @@ int     ppa_completion( Scsi_Cmnd * cmd )
         return (r & STATUS_MASK);
 }
 
+/* deprecated synchronous interface */
+
 int     ppa_command( Scsi_Cmnd * cmd )
 
 {       int     s;
 
+        sti();
         s = 0;
         if (ppa_start(cmd))
            if (ppa_wait()) 
@@ -341,29 +338,59 @@ int     ppa_command( Scsi_Cmnd * cmd )
         return s + (ppa_error_code << 16);
 }
 
-int     ppa_queuecommand( Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
+/* pseudo-interrupt queueing interface */
 
-/* This is not really a queued interface at all, but apparently there may
-   be some bugs in the mid-level support for the non-queued interface.
-   This function is re-entrant, but only to one level.
+/* Since the PPA itself doesn't generate interrupts, we use
+   the scheduler's task queue to generate a stream of call-backs and
+   complete the request when the drive is ready.
 */
 
-{       int     s;
+static void ppa_interrupt( void *data);
 
-        ppa_current = cmd; ppa_done = done;
-        if (ppa_busy) return 0;
-        ppa_busy = 1;
-        while (ppa_current) {
-                cmd = ppa_current;  done = ppa_done;
-                s = 0;
-                if (ppa_start(cmd))
-                    if (ppa_wait())
-                        s = ppa_completion(cmd);
-                cmd->result = s + (ppa_error_code << 16);
+static struct tq_struct ppa_tq = {0,0,ppa_interrupt,NULL};
+
+static void ppa_interrupt( void *data)
+
+{       Scsi_Cmnd *cmd;
+        void  (*done) (Scsi_Cmnd *);
+
+        cmd = ppa_current;
+        done = ppa_done;
+        if (!cmd) return;
+        
+        if (ppa_abort_flag) {
+                ppa_disconnect();
+                if(ppa_abort_flag == 1) cmd->result = DID_ABORT << 16;
+                else { ppa_do_reset();
+                       cmd->result = DID_RESET << 16;
+                }
                 ppa_current = 0;
-                done(cmd);              /* can reenter this function */
+                done(cmd);
+                return;
         }
-        ppa_busy = 0;
+        if (!( in_p(1) & 0x80)) {
+                queue_task(&ppa_tq,&tq_scheduler);
+                return;
+        }
+        cmd->result = ppa_completion(cmd) + (ppa_error_code << 16);
+        ppa_current = 0;
+        done(cmd);
+        return;
+}
+
+int     ppa_queuecommand( Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
+
+{       if (ppa_current) return 0;
+        sti();
+        ppa_current = cmd;
+        ppa_done = done;
+        if (!ppa_start(cmd)) {
+                cmd->result = ppa_error_code << 16;
+                ppa_current = 0;
+                done(cmd);
+                return 0;
+        }
+        queue_task(&ppa_tq,&tq_scheduler);
         return 0;
 }
 
@@ -453,7 +480,7 @@ const char      *ppa_info( struct Scsi_Host * host )
 
 /* Command line parameters (for built-in driver):
 
-   Syntax:  ppa=base[,speed_high[,speed_low[,call_sched[,nybble]]]]
+   Syntax:  ppa=base[,speed_high[,speed_low[,nybble]]]
 
    For example:  ppa=0x378   or   ppa=0x378,0,3
 
@@ -464,7 +491,7 @@ void    ppa_setup(char *str, int *ints)
 {       if (ints[0] > 0) ppa_base = ints[1];
         if (ints[0] > 1) ppa_speed_high = ints[2];
         if (ints[0] > 2) ppa_speed_low = ints[3];
-        if (ints[0] > 3) ppa_call_sched = ints[4];
+        if (ints[0] > 3) ppa_nybble = ints[4];
         if (ints[0] > 4) ppa_nybble = ints[5];
 }
 

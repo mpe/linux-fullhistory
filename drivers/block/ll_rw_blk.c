@@ -28,6 +28,12 @@
 static struct request all_requests[NR_REQUEST];
 
 /*
+ * The "disk" task queue is used to start the actual requests
+ * after a plug
+ */
+DECLARE_TASK_QUEUE(tq_disk);
+
+/*
  * used to wait on when there are no free requests
  */
 struct wait_queue * wait_for_request = NULL;
@@ -101,7 +107,7 @@ static void unplug_device(void * data)
 static inline void plug_device(struct blk_dev_struct * dev)
 {
 	dev->current_request = &dev->plug;
-	queue_task_irq_off(&dev->plug_tq, &tq_scheduler);
+	queue_task_irq_off(&dev->plug_tq, &tq_disk);
 }
 
 /*
@@ -152,6 +158,7 @@ static struct request * __get_request_wait(int n, kdev_t dev)
 		sti();
 		if (req)
 			break;
+		run_task_queue(&tq_disk);
 		schedule();
 	}
 	remove_wait_queue(&wait_for_request, &wait);
@@ -593,6 +600,7 @@ void ll_rw_swap_file(int rw, kdev_t dev, unsigned int *b, int nb, char *buf)
 			req[j]->next = NULL;
 			add_request(major+blk_dev,req[j]);
 		}
+		run_task_queue(&tq_disk);
 		while (j > 0) {
 			j--;
 			down(&sem);

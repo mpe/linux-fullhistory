@@ -42,9 +42,6 @@
 #include <linux/config.h>
 #include <linux/mm.h>
 #include <linux/pagemap.h>
-#ifdef CONFIG_APM
-#include <linux/apm_bios.h>
-#endif
 #include <linux/swap.h>
 
 #include <asm/segment.h>
@@ -1022,10 +1019,6 @@ static int get_root_array(char * page, int type, char **start, off_t offset, int
 #ifdef CONFIG_BLK_DEV_MD
 	        case PROC_MD:
 			return get_md_status(page);
-#endif
-#ifdef CONFIG_APM
-		case PROC_APM:
-			return apm_proc(page);
 #endif
 #ifdef __SMP_PROF__
 		case PROC_SMP_PROF:

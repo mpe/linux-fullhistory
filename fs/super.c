@@ -860,6 +860,11 @@ static void do_mount_root(void)
 				current->fs->root = inode;
 				ROOT_DEV = sb->s_dev;
 				printk (KERN_NOTICE "VFS: Mounted root (nfs filesystem).\n");
+				vfsmnt = add_vfsmnt(ROOT_DEV, "rootfs", "/");
+				if (!vfsmnt)
+					panic("VFS: add_vfsmnt failed for NFS root.\n");
+				vfsmnt->mnt_sb = sb;
+				vfsmnt->mnt_flags = sb->s_flags;
 				return;
 			}
 			sb->s_dev = 0;

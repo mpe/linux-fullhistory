@@ -159,62 +159,68 @@ typedef unsigned char	byte;	/* used everywhere */
 #ifdef CONFIG_BLK_DEV_IDECD
 
 struct atapi_request_sense {
-  unsigned char error_code : 7;
-  unsigned char valid      : 1;
-  byte reserved1;
-  unsigned char sense_key  : 4;
-  unsigned char reserved2  : 1;
-  unsigned char ili        : 1;
-  unsigned char reserved3  : 2;
-  byte info[4];
-  byte sense_len;
-  byte command_info[4];
-  byte asc;
-  byte ascq;
-  byte fru;
-  byte sense_key_specific[3];
+	unsigned char error_code : 7;
+	unsigned char valid      : 1;
+	byte reserved1;
+	unsigned char sense_key  : 4;
+	unsigned char reserved2  : 1;
+	unsigned char ili        : 1;
+	unsigned char reserved3  : 2;
+	byte info[4];
+	byte sense_len;
+	byte command_info[4];
+	byte asc;
+	byte ascq;
+	byte fru;
+	byte sense_key_specific[3];
 };
 
 struct packet_command {
-  char *buffer;
-  int buflen;
-  int stat;
-  struct atapi_request_sense *sense_data;
-  unsigned char c[12];
+	char *buffer;
+	int buflen;
+	int stat;
+	struct atapi_request_sense *sense_data;
+	unsigned char c[12];
 };
+
+
+/* Structure of a MSF cdrom address. */
+struct atapi_msf {
+	byte reserved;
+	byte minute;
+	byte second;
+	byte frame;
+};
+
 
 /* Space to hold the disk TOC. */
 
 #define MAX_TRACKS 99
 struct atapi_toc_header {
-  unsigned short toc_length;
-  byte first_track;
-  byte last_track;
+	unsigned short toc_length;
+	byte first_track;
+	byte last_track;
 };
 
 struct atapi_toc_entry {
-  byte reserved1;
-  unsigned control : 4;
-  unsigned adr     : 4;
-  byte track;
-  byte reserved2;
-  union {
-    unsigned lba;
-    struct {
-      byte reserved3;
-      byte m;
-      byte s;
-      byte f;
-    } msf;
-  } addr;
+	byte reserved1;
+	unsigned control : 4;
+	unsigned adr     : 4;
+	byte track;
+	byte reserved2;
+	union {
+		unsigned lba;
+		struct atapi_msf msf;
+	} addr;
 };
 
 struct atapi_toc {
-  int    last_session_lba;
-  int    xa_flag;
-  unsigned capacity;
-  struct atapi_toc_header hdr;
-  struct atapi_toc_entry  ent[MAX_TRACKS+1];  /* One extra for the leadout. */
+	int    last_session_lba;
+	int    xa_flag;
+	unsigned capacity;
+	struct atapi_toc_header hdr;
+	struct atapi_toc_entry  ent[MAX_TRACKS+1];
+	  /* One extra for the leadout. */
 };
 
 
@@ -222,62 +228,49 @@ struct atapi_toc {
    the cdrom_subchnl structure from cdrom.h. */
 struct atapi_cdrom_subchnl 
 {
-  u_char  acdsc_reserved;
-  u_char  acdsc_audiostatus;
-  u_short acdsc_length;
-  u_char  acdsc_format;
+	u_char  acdsc_reserved;
+	u_char  acdsc_audiostatus;
+	u_short acdsc_length;
+	u_char  acdsc_format;
 
-  u_char  acdsc_adr:	4;
-  u_char  acdsc_ctrl:	4;
-  u_char  acdsc_trk;
-  u_char  acdsc_ind;
-  union
-  {
-    struct 			
-    {
-      u_char    reserved;
-      u_char	minute;
-      u_char	second;
-      u_char	frame;
-    } msf;
-    int	lba;
-  } acdsc_absaddr;
-  union 
-  {
-    struct 
-    {
-      u_char    reserved;
-      u_char	minute;
-      u_char	second;
-      u_char	frame;
-    } msf;
-    int	lba;
-  } acdsc_reladdr;
+	u_char  acdsc_adr:	4;
+	u_char  acdsc_ctrl:	4;
+	u_char  acdsc_trk;
+	u_char  acdsc_ind;
+	union {
+		struct atapi_msf msf;
+		int	lba;
+	} acdsc_absaddr;
+	union {
+		struct atapi_msf msf;
+		int	lba;
+	} acdsc_reladdr;
 };
 
 
 /* Extra per-device info for cdrom drives. */
 struct cdrom_info {
 
-  /* Buffer for table of contents.  NULL if we haven't allocated
-     a TOC buffer for this device yet. */
+	/* Buffer for table of contents.  NULL if we haven't allocated
+	   a TOC buffer for this device yet. */
 
-  struct atapi_toc *toc;
+	struct atapi_toc *toc;
 
-  /* Sector buffer.  If a read request wants only the first part of a cdrom
-     block, we cache the rest of the block here, in the expectation that that
-     data is going to be wanted soon.  SECTOR_BUFFERED is the number of the
-     first buffered sector, and NSECTORS_BUFFERED is the number of sectors
-     in the buffer.  Before the buffer is allocated, we should have
-     SECTOR_BUFFER == NULL and NSECTORS_BUFFERED == 0. */
+	/* Sector buffer.  If a read request wants only the first part
+	   of a cdrom block, we cache the rest of the block here,
+	   in the expectation that that data is going to be wanted soon.
+	   SECTOR_BUFFERED is the number of the first buffered sector,
+	   and NSECTORS_BUFFERED is the number of sectors in the buffer.
+	   Before the buffer is allocated, we should have
+	   SECTOR_BUFFER == NULL and NSECTORS_BUFFERED == 0. */
 
-  unsigned long sector_buffered;
-  unsigned long nsectors_buffered;
-  char *sector_buffer;
+	unsigned long sector_buffered;
+	unsigned long nsectors_buffered;
+	char *sector_buffer;
 
-  /* The result of the last successful request sense command
-     on this device. */
-  struct atapi_request_sense sense_data;
+	/* The result of the last successful request sense command
+	   on this device. */
+	struct atapi_request_sense sense_data;
 };
 
 #endif /* CONFIG_BLK_DEV_IDECD */

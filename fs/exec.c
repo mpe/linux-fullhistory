@@ -465,7 +465,13 @@ int prepare_binprm(struct linux_binprm *bprm)
 		bprm->e_gid = current->egid;
 	} else {
 		bprm->e_uid = (i & S_ISUID) ? bprm->inode->i_uid : current->euid;
-		bprm->e_gid = (i & S_ISGID) ? bprm->inode->i_gid : current->egid;
+		/*
+		 * If setgid is set but no group execute bit then this
+		 * is a candidate for mandatory locking, not a setgid
+		 * executable.
+		 */
+		bprm->e_gid = ((i & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP)) ?
+			bprm->inode->i_gid : current->egid;
 	}
 	if ((retval = permission(bprm->inode, MAY_EXEC)) != 0)
 		return retval;

@@ -656,9 +656,9 @@ int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 	
 #ifdef CONFIG_FIREWALL
 
-	if(ax25 && call_in_firewall(PF_NETROM, skb, skb->data)!=FW_ACCEPT)
+	if(ax25 && call_in_firewall(PF_NETROM, skb->dev, skb->data)!=FW_ACCEPT)
 		return 0;
-	if(!ax25 && call_out_firewall(PF_NETROM, skb, skb->data)!=FW_ACCEPT)
+	if(!ax25 && call_out_firewall(PF_NETROM, skb->dev, skb->data)!=FW_ACCEPT)
 		return 0;
 #endif
 	nr_src  = (ax25_address *)(skb->data + 0);
@@ -695,7 +695,7 @@ int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 		return 0;
 
 #ifdef CONFIG_FIREWALL
-	if(ax25 && call_fw_firewall(PF_NETROM, skb, skb->data)!=FW_ACCEPT)
+	if(ax25 && call_fw_firewall(PF_NETROM, skb->dev, skb->data)!=FW_ACCEPT)
 		return 0;
 #endif
 

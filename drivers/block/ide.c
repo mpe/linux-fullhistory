@@ -1753,8 +1753,10 @@ int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t actio
 		rq->next = cur_rq->next;
 		cur_rq->next = rq;
 	}
-	if (action == ide_wait  && rq->rq_status != RQ_INACTIVE)
+	if (action == ide_wait  && rq->rq_status != RQ_INACTIVE) {
+		run_task_queue(&tq_disk);
 		down(&sem);	/* wait for it to be serviced */
+	}
 	restore_flags(flags);
 	return rq->errors ? -EIO : 0;	/* return -EIO if errors */
 }

@@ -20,10 +20,10 @@ bool '/proc filesystem support' CONFIG_PROC_FS
 if [ "$CONFIG_INET" = "y" ]; then
   tristate 'NFS filesystem support' CONFIG_NFS_FS
   if [ "$CONFIG_NFS_FS" = "y" ]; then
-    bool 'Root file system on NFS' CONFIG_ROOT_NFS
+    bool '   Root file system on NFS' CONFIG_ROOT_NFS
     if [ "$CONFIG_ROOT_NFS" = "y" ]; then
-      bool 'BOOTP support' CONFIG_RNFS_BOOTP
-      bool 'RARP support' CONFIG_RNFS_RARP
+      bool '      BOOTP support' CONFIG_RNFS_BOOTP
+      bool '      RARP support' CONFIG_RNFS_RARP
     fi
   fi
   tristate 'SMB filesystem support (to mount WfW shares etc..)' CONFIG_SMB_FS

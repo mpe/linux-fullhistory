@@ -66,9 +66,15 @@ M:	net-patches@lxorguk.ukuu.org.uk
 L:	linux-net@vger.rutgers.edu
 S:	Maintained
 
+ETHEREXPRESS NETWORK DRIVER
+P:	Philip Blundell
+M:	pjb27@cam.ac.uk
+L:	linux-net@vger.rutgers.edu
+S:	Maintained
+
 APM DRIVER
-P:      Rik Faith
-M:      faith@cs.unc.edu
+P:      Rik Faith & Stephen Rothwell
+M:      faith@cs.unc.edu, Stephen.Rothwell@canb.auug.org.au
 L:      linux-laptop@vger.rutgers.edu
 S:      Maintained
 
@@ -191,6 +197,12 @@ SVGA HANDLING:
 P:	Martin Mares
 M:	mj@k332.feld.cvut.cz
 L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
+DIGIBOARD DRIVER:
+P:	Christoph Lameter
+M:	clameter@fuller.edu
+L:	digiboard@list.fuller.edu
 S:	Maintained
 
 REST:

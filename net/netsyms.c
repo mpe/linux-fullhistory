@@ -168,6 +168,7 @@ static struct symbol_table net_syms = {
 	X(n_tty_ioctl),
 	X(tty_register_ldisc),
 	X(kill_fasync),
+	X(arp_query),
 #ifdef CONFIG_FIREWALL
 	X(call_in_firewall),
 	X(call_out_firewall),

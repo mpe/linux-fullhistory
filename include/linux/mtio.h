@@ -56,7 +56,7 @@ struct	mtop {
 #define MTUNLOCK 29	/* unlock the drive door */
 #define MTLOAD  30	/* execute the SCSI load command */
 #define MTUNLOAD 31	/* execute the SCSI unload command */
-
+#define MTCOMPRESSION 32/* control compression with SCSI mode page 15 */
 
 /* structure for MTIOCGET - mag tape get status command */
 
@@ -205,12 +205,9 @@ struct mtconfiginfo {
 #define GMT_IM_REP_EN(x)        ((x) & 0x00010000)  /* immediate report mode */
 /* 16 generic status bits unused */
 
-/* DDS drives have 'setmarks', sort of like filemarks but used to group
- * files, rather than blocks. Not used. Not supported.
- * I think DDS drives are DAT drives.
- */
 
 /* SCSI-tape specific definitions */
+/* Bitfield shifts in the status  */
 #define MT_ST_BLKSIZE_SHIFT	0
 #define MT_ST_BLKSIZE_MASK	0xffffff
 #define MT_ST_DENSITY_SHIFT	24
@@ -219,9 +216,15 @@ struct mtconfiginfo {
 #define MT_ST_SOFTERR_SHIFT	0
 #define MT_ST_SOFTERR_MASK	0xffff
 
+/* Bitfields for the MTSETDRVBUFFER ioctl */
 #define MT_ST_OPTIONS		0xf0000000
 #define MT_ST_BOOLEANS		0x10000000
+#define MT_ST_SETBOOLEANS	0x30000000
+#define MT_ST_CLEARBOOLEANS	0x40000000
 #define MT_ST_WRITE_THRESHOLD	0x20000000
+#define MT_ST_DEF_BLKSIZE	0x50000000
+#define MT_ST_DEF_OPTIONS	0x60000000
+
 #define MT_ST_BUFFER_WRITES	0x1
 #define MT_ST_ASYNC_WRITES	0x2
 #define MT_ST_READ_AHEAD	0x4
@@ -229,5 +232,13 @@ struct mtconfiginfo {
 #define MT_ST_TWO_FM		0x10
 #define MT_ST_FAST_MTEOM	0x20
 #define MT_ST_AUTO_LOCK		0x40
+#define MT_ST_DEF_WRITES	0x80
+#define MT_ST_CAN_BSR		0x100
+
+/* The mode parameters to be controlled. Parameter chosen with bits 20-28 */
+#define MT_ST_CLEAR_DEFAULT	0xfffff
+#define MT_ST_DEF_DENSITY	(MT_ST_DEF_OPTIONS | 0x100000)
+#define MT_ST_DEF_COMPRESSION	(MT_ST_DEF_OPTIONS | 0x200000)
+#define MT_ST_DEF_DRVBUFFER	(MT_ST_DEF_OPTIONS | 0x300000)
 
 #endif /* _LINUX_MTIO_H */

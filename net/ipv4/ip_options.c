@@ -274,7 +274,7 @@ int ip_options_compile(struct options * opt, struct sk_buff * skb)
 			continue;
 		}
 		optlen = optptr[1];
-		if (l<2 || optlen>l) 
+		if (l<2 || optlen>l || !optlen)
 		{
 			pp_ptr = optptr;
 			break;

@@ -18,7 +18,7 @@
 asmlinkage int sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
 {
 	struct file * file;
-	int tmp = -1;
+	long tmp = -1;
 
 	if (fd >= NR_OPEN || !(file=current->files->fd[fd]) || !(file->f_inode))
 		return -EBADF;
@@ -114,6 +114,9 @@ asmlinkage int sys_read(unsigned int fd,char * buf,unsigned int count)
 		return -EINVAL;
 	if (!count)
 		return 0;
+	error = locks_verify(FLOCK_VERIFY_READ,inode,file,file->f_pos,count);
+	if (error)
+		return error;
 	error = verify_area(VERIFY_WRITE,buf,count);
 	if (error)
 		return error;
@@ -135,6 +138,9 @@ asmlinkage int sys_write(unsigned int fd,char * buf,unsigned int count)
 		return -EINVAL;
 	if (!count)
 		return 0;
+	error = locks_verify(FLOCK_VERIFY_WRITE,inode,file,file->f_pos,count);
+	if (error)
+		return error;
 	error = verify_area(VERIFY_READ,buf,count);
 	if (error)
 		return error;
@@ -147,7 +153,12 @@ asmlinkage int sys_write(unsigned int fd,char * buf,unsigned int count)
 	 */
 	if (!suser() && (inode->i_mode & (S_ISUID | S_ISGID))) {
 		struct iattr newattrs;
-		newattrs.ia_mode = inode->i_mode & ~(S_ISUID | S_ISGID);
+		/*
+		 * Don't turn off setgid if no group execute. This special
+		 * case marks candidates for mandatory locking.
+		 */
+		newattrs.ia_mode = inode->i_mode &
+			~(S_ISUID | ((inode->i_mode & S_IXGRP) ? S_ISGID : 0));
 		newattrs.ia_valid = ATTR_CTIME | ATTR_MODE | ATTR_FORCE;
 		notify_change(inode, &newattrs);
 	}
@@ -215,6 +226,11 @@ static int do_readv_writev(int type, struct inode * inode, struct file * file,
 		if (retval)
 			return retval;
 	}
+
+	retval = locks_verify(type == VERIFY_READ ? FLOCK_VERIFY_READ : FLOCK_VERIFY_WRITE,
+			      inode, file, file->f_pos, tot_len);
+	if (retval)
+		return retval;
 
 	/*
 	 * Then do the actual IO.  Note that sockets need to be handled

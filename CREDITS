@@ -961,7 +961,7 @@ S: 7000 Stuttgart 50
 S: Germany
 
 N: Stephen Rothwell
-E: Stephen.Rothwell@nec.com.au
+E: Stephen.Rothwell@canb.auug.org.au
 D: Boot/setup/build work for setup > 2K
 D: Author, APM driver
 S: 59 Bugden Avenue

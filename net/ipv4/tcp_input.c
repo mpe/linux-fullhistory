@@ -755,12 +755,14 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 	/* 
 	 *	See if we can take anything off of the retransmit queue.
 	 */
-   
-	while(sk->send_head != NULL) 
-	{
+
+	for (;;) {
+		struct sk_buff * skb = sk->send_head;
+		if (!skb)
+			break;
+
 		/* Check for a bug. */
-		if (sk->send_head->link3 &&
-		    after(sk->send_head->end_seq, sk->send_head->link3->end_seq)) 
+		if (skb->link3 && after(skb->end_seq, skb->link3->end_seq)) 
 			printk("INET: tcp.c: *** bug send_list out of order.\n");
 			
 		/*
@@ -768,78 +770,57 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 		 *	discard it as it's confirmed to have arrived the other end.
 		 */
 		 
-		if (before(sk->send_head->end_seq, ack+1)) 
-		{
-			struct sk_buff *oskb;	
-			if (sk->retransmits) 
-			{	
-				/*
-				 *	We were retransmitting.  don't count this in RTT est 
-				 */
-				flag |= 2;
+		if (after(skb->end_seq, ack))
+			break;
 
-				/*
-				 * even though we've gotten an ack, we're still
-				 * retransmitting as long as we're sending from
-				 * the retransmit queue.  Keeping retransmits non-zero
-				 * prevents us from getting new data interspersed with
-				 * retransmissions.
-				 */
-
-				if (sk->send_head->link3)	/* Any more queued retransmits? */
-					sk->retransmits = 1;
-				else
-					sk->retransmits = 0;
-			}
-  			/*
-			 * Note that we only reset backoff and rto in the
-			 * rtt recomputation code.  And that doesn't happen
-			 * if there were retransmissions in effect.  So the
-			 * first new packet after the retransmissions is
-			 * sent with the backoff still in effect.  Not until
-			 * we get an ack from a non-retransmitted packet do
-			 * we reset the backoff and rto.  This allows us to deal
-			 * with a situation where the network delay has increased
-			 * suddenly.  I.e. Karn's algorithm. (SIGCOMM '87, p5.)
-			 */
-
+		if (sk->retransmits) 
+		{	
 			/*
-			 *	We have one less packet out there. 
+			 *	We were retransmitting.  don't count this in RTT est 
 			 */
+			flag |= 2;
+		}
+
+		if ((sk->send_head = skb->link3) == NULL)
+		{
+			sk->send_tail = NULL;
+			sk->retransmits = 0;
+		}
+		/*
+		 * Note that we only reset backoff and rto in the
+		 * rtt recomputation code.  And that doesn't happen
+		 * if there were retransmissions in effect.  So the
+		 * first new packet after the retransmissions is
+		 * sent with the backoff still in effect.  Not until
+		 * we get an ack from a non-retransmitted packet do
+		 * we reset the backoff and rto.  This allows us to deal
+		 * with a situation where the network delay has increased
+		 * suddenly.  I.e. Karn's algorithm. (SIGCOMM '87, p5.)
+		 */
+
+		/*
+		 *	We have one less packet out there. 
+		 */
 			 
-			if (sk->packets_out > 0) 
-				sk->packets_out --;
+		if (sk->packets_out > 0) 
+			sk->packets_out --;
 
-			oskb = sk->send_head;
-
-			if (!(flag&2)) 	/* Not retransmitting */
-				tcp_rtt_estimator(sk,oskb);
-			flag |= (2|4);	/* 2 is really more like 'don't adjust the rtt 
-					   In this case as we just set it up */
-			cli();
-			oskb = sk->send_head;
-			IS_SKB(oskb);
-			sk->send_head = oskb->link3;
-			if (sk->send_head == NULL) 
-			{
-				sk->send_tail = NULL;
-			}
+		if (!(flag&2)) 	/* Not retransmitting */
+			tcp_rtt_estimator(sk,skb);
+		flag |= (2|4);	/* 2 is really more like 'don't adjust the rtt 
+				   In this case as we just set it up */
+		IS_SKB(skb);
 
 		/*
 		 *	We may need to remove this from the dev send list. 
 		 */
-
-			if (oskb->next)
-				skb_unlink(oskb);
-			sti();
-			kfree_skb(oskb, FREE_WRITE); /* write. */
-			if (!sk->dead)
-				sk->write_space(sk);
-		}
-		else
-		{
-			break;
-		}
+		cli();
+		if (skb->next)
+			skb_unlink(skb);
+		sti();
+		kfree_skb(skb, FREE_WRITE); /* write. */
+		if (!sk->dead)
+			sk->write_space(sk);
 	}
 
 	/*

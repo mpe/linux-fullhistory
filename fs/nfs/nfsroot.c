@@ -43,6 +43,10 @@
  *				different RARP and NFS servers.
  *	Gero Kuhlmann	:	"0.0.0.0" addresses from command line are
  *				now mapped to INADDR_NONE.
+ *	Gero Kuhlmann	:	Fixed a bug which prevented BOOTP path name
+ *				from being used (thanks to Leo Spiekman)
+ *	Andy Walker	:	Allow to specify the NFS server in nfs_root
+ *				without giving a path name
  *
  */
 
@@ -1049,11 +1053,23 @@ static struct nfs_bool_opts {
 static int root_nfs_name(char *name)
 {
 	char buf[NFS_MAXPATHLEN];
-	char *cp, *options, *val;
+	char *cp, *cq, *options, *val;
+	int octets = 0;
 
 	/* It is possible to override the server IP number here */
-	if (*name >= '0' && *name <= '9' && (cp = strchr(name, ':')) != NULL) {
-		*cp++ = '\0';
+	cp = cq = name;
+	while (octets < 4) {
+		while (*cp >= '0' && *cp <= '9')
+			cp++;
+		if (cp == cq || cp - cq > 3)
+			break;
+		if (*cp == '.' || octets == 3)
+			octets++;
+		cq = cp;
+	}
+	if (octets == 4 && (*cp == ':' || *cp == '\0')) {
+		if (*cp == ':')
+			*cp++ = '\0';
 		server.sin_addr.s_addr = in_aton(name);
 		name = cp;
 	}
@@ -1064,12 +1080,15 @@ static int root_nfs_name(char *name)
 						sizeof(nfs_data.hostname)-1);
 
 	/* Set the name of the directory to mount */
-	cp = in_ntoa(myaddr.sin_addr.s_addr);
-	strncpy(buf, name, 255);
+	if (nfs_path[0] == '\0' || !strncmp(name, "default", 7))
+		strncpy(buf, name, NFS_MAXPATHLEN);
+	else
+		strncpy(buf, nfs_path, NFS_MAXPATHLEN);
 	if ((options = strchr(buf, ',')))
 		*options++ = '\0';
 	if (!strcmp(buf, "default"))
 		strcpy(buf, NFS_ROOT);
+	cp = in_ntoa(myaddr.sin_addr.s_addr);
 	if (strlen(buf) + strlen(cp) > NFS_MAXPATHLEN) {
 		printk(KERN_ERR "Root-NFS: Pathname for remote directory too long.\n");
 		return -1;

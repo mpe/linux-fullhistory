@@ -146,6 +146,7 @@ CONFIG_DUMMY=m
 CONFIG_NET_EISA=y
 # CONFIG_APRICOT is not set
 CONFIG_DE4X5=y
+# CONFIG_DEC_ELCP is not set
 # CONFIG_ZNET is not set
 # CONFIG_NET_POCKET is not set
 # CONFIG_TR is not set

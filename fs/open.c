@@ -20,8 +20,6 @@
 
 #include <asm/segment.h>
 
-extern void locks_remove_locks(struct task_struct *, struct file *);
-
 asmlinkage int sys_statfs(const char * path, struct statfs * buf)
 {
 	struct inode * inode;
@@ -109,6 +107,11 @@ asmlinkage int sys_truncate(const char * path, unsigned long length)
 		iput(inode);
 		return error;
 	}
+	error = locks_verify(FLOCK_VERIFY_WRITE, inode, NULL,
+			     length < inode->i_size ? length : inode->i_size,
+			     abs(inode->i_size - length));
+	if (error)
+		return error;
 	error = do_truncate(inode, length);
 	put_write_access(inode);
 	iput(inode);
@@ -119,6 +122,7 @@ asmlinkage int sys_ftruncate(unsigned int fd, unsigned long length)
 {
 	struct inode * inode;
 	struct file * file;
+	int error;
 
 	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 		return -EBADF;
@@ -128,6 +132,11 @@ asmlinkage int sys_ftruncate(unsigned int fd, unsigned long length)
 		return -EACCES;
 	if (IS_IMMUTABLE(inode) || IS_APPEND(inode))
 		return -EPERM;
+	error = locks_verify(FLOCK_VERIFY_WRITE, inode, file,
+			     length < inode->i_size ? length : inode->i_size,
+			     abs(inode->i_size - length));
+	if (error)
+		return error;
 	return do_truncate(inode, length);
 }
 
@@ -391,8 +400,12 @@ asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 	}
 	/*
 	 * If the group has been changed, remove the setgid bit
+	 *
+	 * Don't remove the setgid bit if no group execute bit.
+	 * This is a file marked for mandatory locking.
 	 */
-	if (group != inode->i_gid && (inode->i_mode & S_ISGID)) {
+	if (group != inode->i_gid &&
+	    ((inode->i_mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP))) {
 		newattrs.ia_mode &= ~S_ISGID;
 		newattrs.ia_valid |= ATTR_MODE;
 	}
@@ -443,8 +456,12 @@ asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
 	}
 	/*
 	 * If the group has been changed, remove the setgid bit
+	 *
+	 * Don't remove the setgid bit if no group execute bit.
+	 * This is a file marked for mandatory locking.
 	 */
-	if (group != inode->i_gid && (inode->i_mode & S_ISGID)) {
+	if (group != inode->i_gid &&
+	    ((inode->i_mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP))) {
 		newattrs.ia_mode &= ~S_ISGID;
 		newattrs.ia_valid |= ATTR_MODE;
 	}

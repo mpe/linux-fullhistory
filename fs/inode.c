@@ -54,11 +54,14 @@ static inline struct inode_hash_entry * const hash(kdev_t dev, int i)
 
 static inline void insert_inode_free(struct inode *inode)
 {
-	inode->i_next = first_inode;
-	inode->i_prev = first_inode->i_prev;
-	inode->i_next->i_prev = inode;
-	inode->i_prev->i_next = inode;
+	struct inode * prev, * next = first_inode;
+
 	first_inode = inode;
+	prev = next->i_prev;
+	inode->i_next = next;
+	inode->i_prev = prev;
+	prev->i_next = inode;
+	next->i_prev = inode;
 }
 
 static inline void remove_inode_free(struct inode *inode)

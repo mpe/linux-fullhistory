@@ -166,7 +166,16 @@ struct old_floppy_raw_cmd {
 #define MAJOR_NR FLOPPY_MAJOR
 
 #include <linux/blk.h>
+#include <linux/cdrom.h> /* for the compatibility eject ioctl */
 
+
+#ifndef FLOPPY_MOTOR_MASK
+#define FLOPPY_MOTOR_MASK 0xf0
+#endif
+
+#ifndef fd_eject
+#define fd_eject(x) -EINVAL
+#endif
 
 /* Dma Memory related stuff */
 
@@ -195,6 +204,13 @@ static unsigned long dma_mem_alloc(int size)
 
 static unsigned int fake_change = 0;
 static int initialising=1;
+
+#ifdef __sparc__
+/* We hold the FIFO configuration here.  We want to have Polling and
+ * Implied Seek enabled on Sun controllers.
+ */
+unsigned char fdc_cfg = 0;
+#endif
 
 static inline int TYPE(kdev_t x) {
 	return  (MINOR(x)>>2) & 0x1f;
@@ -722,9 +738,9 @@ static int set_dor(int fdc, char mask, char data)
 			UDRS->select_date = jiffies;
 		}
 	}
-	if (newdor & 0xf0)
+	if (newdor & FLOPPY_MOTOR_MASK)
 		floppy_grab_irq_and_dma();
-	if (olddor & 0xf0)
+	if (olddor & FLOPPY_MOTOR_MASK)
 		floppy_release_irq_and_dma();
 	return olddor;
 }
@@ -766,7 +782,9 @@ static void set_fdc(int drive)
 		return;
 	}
 	set_dor(fdc,~0,8);
+#if N_FDC > 1
 	set_dor(1-fdc, ~8, 0);
+#endif
 	if (FDCS->rawcmd == 2)
 		reset_fdc_info(1);
 	if (fd_inb(FD_STATUS) != STATUS_READY)
@@ -1105,7 +1123,7 @@ static inline void perpendicular_mode(void)
 
 	if (FDCS->perp_mode == perp_mode)
 		return;
-	if (FDCS->version >= FDC_82077_ORIG && FDCS->has_fifo) {
+	if (FDCS->version >= FDC_82072A && FDCS->has_fifo) {
 		output_byte(FD_PERPENDICULAR);
 		output_byte(perp_mode);
 		FDCS->perp_mode = perp_mode;
@@ -1147,6 +1165,12 @@ static void fdc_specify(void)
 	if (FDCS->need_configure && FDCS->has_fifo) {
 		if (FDCS->reset)
 			return;
+#ifdef __sparc__ 
+		output_byte(FD_CONFIGURE);
+		output_byte(0x64);	/* Motor off timeout */
+		output_byte(fdc_cfg | 0x0A);
+		output_byte(0);
+#else
 		/* Turn on FIFO for 82077-class FDC (improves performance) */
 		/* TODO: lock this in via LOCK during initialization */
 		output_byte(FD_CONFIGURE);
@@ -1157,9 +1181,16 @@ static void fdc_specify(void)
 			FDCS->has_fifo=0;
 			return;
 		}
+#endif
 		FDCS->need_configure = 0;
 		/*DPRINT("FIFO enabled\n");*/
 	}
+
+#ifdef __sparc__
+	/* If doing implied seeks, no specify necessary */
+	if(fdc_cfg&0x40)
+		return;
+#endif
 
 	switch (raw_cmd->rate & 0x03) {
 		case 3:
@@ -1481,6 +1512,15 @@ static void seek_floppy(void)
 		}
 	}
 
+#ifdef __sparc__
+	if (fdc_cfg&0x40) {
+		/* Implied seeks being done... */
+		DRS->track = raw_cmd->track;
+		setup_rw_floppy();
+		return;
+	}
+#endif
+
 	SET_INTR(seek_interrupt);
 	output_byte(FD_SEEK);
 	output_byte(UNIT(current_drive));
@@ -1587,6 +1627,7 @@ static void floppy_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	lasthandler = handler;
 	interruptjiffies = jiffies;
 
+	fd_disable_dma();
 	floppy_enable_hlt();
 	CLEAR_INTR;
 	if (fdc >= N_FDC || FDCS->address == -1){
@@ -1632,7 +1673,6 @@ static void reset_interrupt(void)
 #ifdef DEBUGT
 	debugt("reset interrupt:");
 #endif
-	/* fdc_specify();	   reprogram fdc */
 	result();		/* get the status ready for set_fdc */
 	if (FDCS->reset) {
 		printk("reset set in interrupt, calling %p\n", cont->error);
@@ -1650,12 +1690,17 @@ static void reset_fdc(void)
 	SET_INTR(reset_interrupt);
 	FDCS->reset = 0;
 	reset_fdc_info(0);
-	if (FDCS->version >= FDC_82077)
+
+	/* Pseudo-DMA may intercept 'reset finished' interrupt.  */
+	/* Irrelevant for systems with true DMA (i386).          */
+	fd_disable_dma();
+
+	if (FDCS->version >= FDC_82072A)
 		fd_outb(0x80 | (FDCS->dtr &3), FD_STATUS);
 	else {
 		fd_outb(FDCS->dor & ~0x04, FD_DOR);
 		udelay(FD_RESET_DELAY);
-		outb(FDCS->dor, FD_DOR);
+		fd_outb(FDCS->dor, FD_DOR);
 	}
 }
 
@@ -3111,6 +3156,7 @@ static struct translation_entry {
     {FDWERRORCLR,	27,  0},
     {FDWERRORGET,	28, 24},
     {FDRAWCMD,		 0,  0},
+    {FDEJECT,		 0,  0},
     {FDTWADDLE,		40,  0} };
 
 static inline int normalize_0x02xx_ioctl(int *cmd, int *size)
@@ -3184,6 +3230,16 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 	type = TYPE(device);
 	drive = DRIVE(device);
 
+	/* convert compatibility eject ioctls into floppy eject ioctl.
+	 * We do this in order to provide a means to eject floppy disks before
+	 * installing the new fdutils package */
+	if(cmd == CDROMEJECT || /* CD-Rom eject */
+	   cmd == 0x6470 /* SunOS floppy eject */) {
+		DPRINT("obsolete eject ioctl\n");
+		DPRINT("please use floppycontrol --eject\n");
+		cmd = FDEJECT;
+	}
+
 	/* convert the old style command into a new style command */
 	if ((cmd & 0xff00) == 0x0200) {
 		ECALL(normalize_0x02xx_ioctl(&cmd, &size));
@@ -3207,6 +3263,25 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 		ECALL(fd_copyin((void *)param, &inparam, size))
 
 	switch (cmd) {
+		case FDEJECT:
+			if(UDRS->fd_ref != 1)
+				/* somebody else has this drive open */
+				return -EBUSY;
+			LOCK_FDC(drive,1);
+
+			/* do the actual eject. Fails on
+			 * non-Sparc archtitectures */
+			ret=fd_eject(UNIT(drive)); 
+
+			/* switch the motor off, in order to make the
+			 * cached DOR status match the hard DOS status
+			 */
+			motor_off_callback(drive);
+
+			USETF(FD_DISK_CHANGED);
+			USETF(FD_VERIFY);
+			process_fd_request();
+			return ret;			
 		case FDCLRPRM:
 			LOCK_FDC(drive,1);
 			current_type[drive] = NULL;
@@ -3645,8 +3720,10 @@ static char get_fdc_version(void)
 	output_byte(FD_UNLOCK);
 	r = result();
 	if ((r == 1) && (reply_buffer[0] == 0x80)){
-		printk(KERN_INFO "FDC %d is a pre-1991 82077\n", fdc);
-		return FDC_82077_ORIG;	/* Pre-1991 82077 doesn't know LOCK/UNLOCK */
+		printk(KERN_INFO "FDC %d is a 82072A\n", fdc);
+		return FDC_82072A;	/* Pre-1991 82077 or 82072A as found
+					 * on Sparcs. These doesn't know 
+					 * LOCK/UNLOCK */
 	}
 	if ((r != 1) || (reply_buffer[0] != 0x00)) {
 		printk("FDC %d init: UNLOCK: unexpected return of %d bytes.\n",
@@ -3848,6 +3925,9 @@ int floppy_init(void)
 	blksize_size[MAJOR_NR] = floppy_blocksizes;
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 	reschedule_timeout(MAXTIMEOUT, "floppy init", MAXTIMEOUT);
+#ifdef __sparc__
+	fdc_cfg = (0x40 | 0x10); /* ImplSeek+Polling+FIFO */
+#endif
 	config_types();
 
 	for (i = 0; i < N_FDC; i++) {
@@ -3906,7 +3986,7 @@ int floppy_init(void)
 		 * properly, so force a reset for the standard FDC clones,
 		 * to avoid interrupt garbage.
 		 */
-		FDCS->has_fifo = FDCS->version >= FDC_82077_ORIG;
+		FDCS->has_fifo = FDCS->version >= FDC_82072A;
 		user_reset_fdc(-1,FD_RESET_ALWAYS,0);
 	}
 	fdc=0;
@@ -4082,6 +4162,8 @@ void cleanup_module(void)
 	unregister_blkdev(MAJOR_NR, "fd");
 
 	blk_dev[MAJOR_NR].request_fn = 0;
+	/* eject disk, if any */
+	fd_eject(0);
 }
 
 #ifdef __cplusplus

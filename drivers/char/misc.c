@@ -39,6 +39,9 @@
 #include <linux/malloc.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
+#ifdef CONFIG_APM
+#include <linux/apm_bios.h>
+#endif
 
 #include <linux/tty.h> /* needed by selection.h */
 #include "selection.h" /* export its symbols */
@@ -204,6 +207,9 @@ int misc_init(void)
 #ifdef CONFIG_SOFT_WATCHDOG
 	watchdog_init();
 #endif	
+#ifdef CONFIG_APM
+	apm_bios_init();
+#endif
 #endif /* !MODULE */
 	if (register_chrdev(MISC_MAJOR,"misc",&misc_fops)) {
 	  printk("unable to get major %d for misc devices\n",

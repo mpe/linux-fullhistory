@@ -96,7 +96,6 @@
 #include <net/route.h>
 #include <net/tcp.h>
 #include <net/udp.h>
-#include <linux/skbuff.h>
 #include <net/sock.h>
 #include <net/icmp.h>
 #include <linux/firewall.h>
@@ -607,8 +606,12 @@ static int append_to_chain(struct ip_fw *volatile* chainptr, struct ip_fw *frwl,
 	}
 
 	memcpy(ftmp, frwl, len);
-	ftmp->fw_tosand |= 0x03;
-	ftmp->fw_tosxor &= 0xFC;
+	/*
+	 *	Allow the more recent "minimise cost" flag to be
+	 *	set. [Rob van Nieuwkerk]
+	 */
+	ftmp->fw_tosand |= 0x01;
+	ftmp->fw_tosxor &= 0xFE;
 	ftmp->fw_pcnt=0L;
 	ftmp->fw_bcnt=0L;
 
@@ -1063,19 +1066,19 @@ static int ip_fw_fwd_procinfo(char *buffer, char **start, off_t offset,
  *	Interface to the generic firewall chains.
  */
  
-int ipfw_input_check(struct firewall_ops *this, int pf, struct sk_buff *skb, void *phdr)
+int ipfw_input_check(struct firewall_ops *this, int pf, struct device *dev, void *phdr)
 {
-	return ip_fw_chk(phdr, skb->dev, ip_fw_in_chain, ip_fw_in_policy, 0);
+	return ip_fw_chk(phdr, dev, ip_fw_in_chain, ip_fw_in_policy, 0);
 }
 
-int ipfw_output_check(struct firewall_ops *this, int pf, struct sk_buff *skb, void *phdr)
+int ipfw_output_check(struct firewall_ops *this, int pf, struct device *dev, void *phdr)
 {
-	return ip_fw_chk(phdr, skb->dev, ip_fw_out_chain, ip_fw_out_policy, 0);
+	return ip_fw_chk(phdr, dev, ip_fw_out_chain, ip_fw_out_policy, 0);
 }
 
-int ipfw_forward_check(struct firewall_ops *this, int pf, struct sk_buff *skb, void *phdr)
+int ipfw_forward_check(struct firewall_ops *this, int pf, struct device *dev, void *phdr)
 {
-	return ip_fw_chk(phdr, skb->dev, ip_fw_fwd_chain, ip_fw_fwd_policy, 0);
+	return ip_fw_chk(phdr, dev, ip_fw_fwd_chain, ip_fw_fwd_policy, 0);
 }
  
 struct firewall_ops ipfw_ops=

@@ -85,7 +85,7 @@ int ipip_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 *	Check the firewall [well spotted Olaf]
 	 */
 	 
-	if((err=call_in_firewall(PF_INET, skb, skb->ip_hdr))<FW_ACCEPT)
+	if((err=call_in_firewall(PF_INET, skb->dev, skb->ip_hdr))<FW_ACCEPT)
 	{
 		if(err==FW_REJECT)
 			icmp_send(skb,ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0 , dev);

@@ -7,11 +7,17 @@ The Digiboard Driver for Linux supports the following boards:
 
 Limitations:
 ------------
-Currently the Driver does not do autoprobing. You have to configure
-the driver with the correct I/O address in drivers/char/pcxxconfig.h.
+Currently the Driver does not do autoprobing!
 
-The preconfigured I/O address is 0200h and the default memory address 0D0000h.
+The preconfigured I/O address is 0200h and the default memory address
+0D0000h, ALT-PIN feature on and 16 ports available.
+
 Use them and you will not have to worry about configuring anything.
+
+You can configure the driver via lilo. HAve  look at the end of this
+message. The default settings vanish as soon as you give a digi= commandline.
+You can give multiple digi= commandline parameters to define multiple
+boards.
 
 Supporting Tools:
 -----------------
@@ -24,18 +30,23 @@ is also available.
 Currently the Linux MAKEDEV command does not support generating the Digiboard
 Devices. Use the following script to generate the devices:
 
+WARNING: Most of the stuff available right now uses the WRONG Major Device
+numbers and is severely outdated. Be careful and check them first.
+Better not use any of the software in that directory if you run a recent
+1.3.X Kernel!
+
 ------------------ mkdigidev begin
 #!/bin/sh
 #
 # Script to create Digiboard Devices
-# Christoph Lameter, April 4, 1996
+# Christoph Lameter, April 6, 1996
 #
 # Usage:
 # mkdigidev [<number of devices>]
 # 
 
-DIGIMAJOR=30
-DIGICUMAJOR=31
+DIGI_MAJOR=22
+DIGICU_MAJOR=23
 
 BOARDS=$1
 
@@ -69,4 +80,36 @@ Mailing List: digiboard@list.fuller.edu
 (Write e-mail to that address to subscribe. Common ListServ commands work.
 Archive of messages available)
 
-Christoph Lameter (clameter@fuller.edu) 4. April 1996.
+Christoph Lameter (clameter@fuller.edu) 6. April 1996.
+
+-----------------------------------------------------------------------------
+
+Changes v1.5.5:
+
+The ability to use the kernel's command line to pass in the configuration for 
+boards.  Using LILO's APPEND command, a string of comma seperated identifiers 
+or integers can be used.  The 6 values in order are:
+
+   Enable/Disable this card,
+   Type of card: PC/Xi(0), PC/Xe(1), PC/Xeve(2), PC/Xem(3)
+   Enable/Disable alternate pin arrangement,
+   Number of ports on this card,
+   I/O Port where card is configured (in HEX if using string identifiers),
+   Base of memory window (in HEX if using string identifiers), 
+
+Samples:
+   append="digi=E,PC/Xi,D,16,200,D0000"
+   append="digi=1,0,0,16,512,(whatever D0000 is in base 10 :)
+
+Driver's minor device numbers are conserved. This means that instead of
+each board getting a block of 16 minors pre-assigned, it gets however
+many it should, with the next card following directly behind it.  A
+system with 4 2-port PC/Xi boards will use minor numbers 0-7.
+This conserves some memory, and removes a few hard coded constants.
+
+NOTE!! NOTE!! NOTE!!
+The definition of PC/Xem as a valid board type is the BEGINNING of support
+for this device.  The driver does not currently recognise the board, nor
+does it want to initialize it.  At least not the EISA version.
+
+Mike McLagan <mike.mclagan@linux.org> 5, April 1996.

@@ -1,6 +1,7 @@
 /* -*- linux-c -*-
  * APM BIOS driver for Linux
- * Copyright 1994, 1995 Stephen Rothwell (Stephen.Rothwell@pd.necisa.oz.au)
+ * Copyright 1994, 1995, 1996 Stephen Rothwell
+ *                           (Stephen.Rothwell@canb.auug.org.au)
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -22,12 +23,16 @@
  * March 1996, Rik Faith (faith@cs.unc.edu):
  *    Prohibit APM BIOS calls unless apm_enabled.
  *    (Thanks to Ulrich Windl <Ulrich.Windl@rz.uni-regensburg.de>)
+ * April 1996, Stephen Rothwell (Stephen.Rothwell@canb.auug.org.au)
+ *    Version 1.0
  *
  * History:
  *    0.6b: first version in official kernel, Linux 1.3.46
  *    0.7: changed /proc/apm format, Linux 1.3.58
  *    0.8: fixed gcc 2.7.[12] compilation problems, Linux 1.3.59
  *    0.9: only call bios if bios is present, Linux 1.3.72
+ *    1.0: use fixed device number, consolidate /proc/apm into
+ *         this file, Linux 1.3.85
  *
  * Reference:
  *
@@ -54,6 +59,11 @@
 #include <linux/fcntl.h>
 #include <linux/malloc.h>
 #include <linux/linkage.h>
+#ifdef CONFIG_PROC_FS
+#include <linux/stat.h>
+#include <linux/proc_fs.h>
+#endif
+#include <linux/miscdevice.h>
 #include <linux/apm_bios.h>
 
 static struct symbol_table	apm_syms = {
@@ -64,6 +74,12 @@ static struct symbol_table	apm_syms = {
 };
 
 extern unsigned long get_cmos_time(void);
+
+/*
+ * The apm_bios device is one of the misc char devices.
+ * This is its minor number.
+ */
+#define	APM_MINOR_DEV	134
 
 /* Configurable options:
  *  
@@ -285,6 +301,10 @@ static int	do_select(struct inode *, struct file *, int,
 			  select_table *);
 static int	do_ioctl(struct inode *, struct file *, u_int, u_long);
 
+#ifdef CONFIG_PROC_FS
+static int	apm_get_info(char *, char **, off_t, int, int);
+#endif
+
 extern int	apm_register_callback(int (*)(apm_event_t));
 extern void	apm_unregister_callback(int (*)(apm_event_t));
 
@@ -311,7 +331,7 @@ static struct apm_bios_struct *	user_list = NULL;
 
 static struct timer_list	apm_timer;
 
-static char			driver_version[] = "0.9";/* no spaces */
+static char			driver_version[] = "1.0";/* no spaces */
 
 #ifdef APM_DEBUG
 static char *	apm_event_name[] = {
@@ -344,6 +364,18 @@ static struct file_operations apm_bios_fops = {
 	NULL,		/* fsync */
 	NULL		/* fasync */
 };
+
+static struct miscdevice apm_device = {
+	APM_MINOR_DEV,
+	"apm",
+	&apm_bios_fops
+};
+
+#ifdef CONFIG_PROC_FS
+static struct proc_dir_entry	apm_proc_entry = {
+        0, 3, "apm", S_IFREG | S_IRUGO, 1, 0, 0, 0, 0, apm_get_info
+};
+#endif
 
 typedef struct callback_list_t {
 	int (*				callback)(apm_event_t);
@@ -472,7 +504,7 @@ int apm_display_blank(void)
 #ifdef CONFIG_APM_DISPLAY_BLANK
 	int	error;
 
-	if (!apm_enabled || apm_bios_info.version == 0)
+	if (!apm_enabled)
 		return 0;
 	error = apm_set_display_power_state(APM_STATE_STANDBY);
 	if (error == APM_SUCCESS)
@@ -488,7 +520,7 @@ int apm_display_unblank(void)
 #ifdef CONFIG_APM_DISPLAY_BLANK
 	int error;
 
-	if (!apm_enabled || apm_bios_info.version == 0)
+	if (!apm_enabled)
 		return 0;
 	error = apm_set_display_power_state(APM_STATE_READY);
 	if (error == APM_SUCCESS)
@@ -914,7 +946,8 @@ static int do_open(struct inode * inode, struct file * filp)
 	return 0;
 }
 
-int apm_proc(char *buf)
+#ifdef CONFIG_PROC_FS
+int apm_get_info(char *buf, char **start, off_t fpos, int length, int dummy)
 {
 	char *		p;
 	unsigned short	bx;
@@ -924,31 +957,29 @@ int apm_proc(char *buf)
 	unsigned short  ac_line_status = 0xff;
 	unsigned short  battery_status = 0xff;
 	unsigned short  battery_flag   = 0xff;
-	unsigned short  percentage     = -1;
+	int		percentage     = -1;
 	int             time_units     = -1;
 	char            *units         = "?";
 
-	if (apm_bios_info.version == 0)
+	if (!apm_enabled)
 		return 0;
 	p = buf;
 
-	if ((apm_bios_info.flags & APM_32_BIT_SUPPORT) != 0) {
-		if (!(error = apm_get_power_status(&bx, &cx, &dx))) {
-			ac_line_status = (bx >> 8) & 0xff;
-			battery_status = bx & 0xff;
-			if ((cx & 0xff) != 0xff)
-				percentage = cx & 0xff;
-	
-			if (apm_bios_info.version > 0x100) {
-				battery_flag = (cx >> 8) & 0xff;
-				if (dx != 0xffff) {
-					if ((dx & 0x8000) == 0x8000) {
-						units = "min";
-						time_units = dx & 0x7ffe;
-					} else {
-						units = "sec";
-						time_units = dx & 0x7fff;
-					}
+	if (!(error = apm_get_power_status(&bx, &cx, &dx))) {
+		ac_line_status = (bx >> 8) & 0xff;
+		battery_status = bx & 0xff;
+		if ((cx & 0xff) != 0xff)
+			percentage = cx & 0xff;
+
+		if (apm_bios_info.version > 0x100) {
+			battery_flag = (cx >> 8) & 0xff;
+			if (dx != 0xffff) {
+				if ((dx & 0x8000) == 0x8000) {
+					units = "min";
+					time_units = dx & 0x7ffe;
+				} else {
+					units = "sec";
+					time_units = dx & 0x7fff;
 				}
 			}
 		}
@@ -1000,12 +1031,13 @@ int apm_proc(char *buf)
 		     battery_flag,
 		     percentage,
 		     time_units,
-		     units );
+		     units);
 
 	return p - buf;
 }
+#endif
 
-static int apm_setup(void)
+void apm_bios_init(void)
 {
 	unsigned short	bx;
 	unsigned short	cx;
@@ -1016,7 +1048,7 @@ static int apm_setup(void)
 
 	if (apm_bios_info.version == 0) {
 		printk("APM BIOS not found.\n");
-		return -1;
+		return;
 	}
 	printk("APM BIOS version %c.%c Flags 0x%02x (Driver version %s)\n",
 	       ((apm_bios_info.version >> 8) & 0xff) + '0',
@@ -1025,7 +1057,7 @@ static int apm_setup(void)
 	       driver_version);
 	if ((apm_bios_info.flags & APM_32_BIT_SUPPORT) == 0) {
 		printk("    No 32 bit BIOS support\n");
-		return -1;
+		return;
 	}
 
 	/*
@@ -1128,7 +1160,7 @@ static int apm_setup(void)
 	if (error)
 		apm_error("enable power management", error);
 	if (error == APM_DISABLED)
-		return -1;
+		return;
 #endif
 
 	init_timer(&apm_timer);
@@ -1138,15 +1170,11 @@ static int apm_setup(void)
 
 	register_symtab(&apm_syms);
 
+#ifdef CONFIG_PROC_FS
+	proc_register_dynamic(&proc_root, &apm_proc_entry);
+#endif
+
+	misc_register(&apm_device);
+
 	apm_enabled = 1;
-
-	if ((apm_major = register_chrdev(0, "apm_bios", &apm_bios_fops)) < 0)
-		printk("APM BIOS: Cannot allocate major device number\n");
-
-	return 0;
-}
-
-void apm_bios_init(void)
-{
-	apm_setup();
 }

@@ -48,7 +48,7 @@ is different.  It may also be configured by editing the source file.
 Built-in drivers accept parameters using this LILO/LOADLIN command line
 syntax (omitted parameters retain their default values):
 
-        ppa=base[,speed_high[,speed_low[,call_sched[,nybble]]]]
+        ppa=base[,speed_high[,speed_low[,nybble]]]
 
 For example:    ppa=0x378,0,3
 
@@ -66,7 +66,6 @@ Variable        Default    Description
 ppa_base        0x378   The base address of PPA's parallel port.
 ppa_speed_high  1       Microsecond i/o delay used in data transfers
 ppa_speed_low   6       Microsecond delay used in other operations
-ppa_call_sched  1       1 to give up CPU during busy waits
 ppa_nybble      0       1 to force the driver to use 4-bit mode.
 
 A word about the timing parameters:  the ppa_speed_low parameter controls 
@@ -83,15 +82,6 @@ the transfer rates on your system.  Please be careful to watch for
 SCSI timeout errors in your log files.  If you are getting timeouts, you
 have set these parameters too low.  The default values appear to be
 safe on most machines.
-
-The ppa_call_sched parameter controls the 'friendliness' of this driver
-to the rest of your system.  When it is set to zero, the driver waits for
-events on the drive by continuously reading a port until the 0x80 bit is
-asserted.  Since it is in a tight loop inside the kernel, the rest of the
-system becomes very sluggish.  If you set ppa_call_sched to one, then
-ppa will call the scheduler in such circumstances, voluntarily giving up the
-CPU to other processes.   This appears to reduce the ZIP drive's 
-responsiveness, however.
 
 If you have both the lp and ppa drivers in your kernel, you must ensure
 that they access different parallel ports.  By default, the lp driver is
@@ -113,6 +103,12 @@ give the following options on your boot command:
 
 In this case lp would use the polling driver, since an interrupt was not 
 specified.
+
+If you want to share the same parallel port between a ZIP drive and a
+printer, you should build both the lp and ppa drivers as modules and
+load and unload one or the other as required.  This is clumsy but we
+currently have no protocol for synchronising access to shared parallel
+ports.
 
 For information about using the ZIP drive, please read the generic
 instructions in the SCSI-HOWTO and the man pages for the normal disk

@@ -17,6 +17,7 @@
 
 #include <linux/sched.h>
 #include <linux/nfs_fs.h>
+#include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/rpcsock.h>
 #include <linux/nfsiod.h>

@@ -1,10 +1,10 @@
 /* fdomain.c -- Future Domain TMC-16x0 SCSI driver
  * Created: Sun May  3 18:53:19 1992 by faith@cs.unc.edu
- * Revised: Thu Feb  8 08:21:33 1996 by r.faith@ieee.org
+ * Revised: Thu Apr  4 20:44:47 1996 by r.faith@ieee.org
  * Author: Rickard E. Faith, faith@cs.unc.edu
- * Copyright 1992, 1993, 1994, 1995 Rickard E. Faith
+ * Copyright 1992, 1993, 1994, 1995, 1996 Rickard E. Faith
  *
- * $Id: fdomain.c,v 5.39 1995/10/12 20:31:47 root Exp $
+ * $Id: fdomain.c,v 5.41 1996/04/05 04:22:25 root Exp $
 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -21,9 +21,26 @@
  * 675 Mass Ave, Cambridge, MA 02139, USA.
 
  **************************************************************************
- 
- DESCRIPTION:
 
+ SUMMARY:
+
+ Future Domain BIOS versions supported for autodetect:
+    2.0, 3.0, 3.2, 3.4 (1.0), 3.5 (2.0), 3.6, 3.61
+ Chips are supported:
+    TMC-1800, TMC-18C50, TMC-18C30, TMC-36C70
+ Boards supported:
+    Future Domain TMC-1650, TMC-1660, TMC-1670, TMC-1680, TMC-1610M/MER/MEX
+    Future Domain TMC-3260 (PCI)
+    Quantum ISA-200S, ISA-250MG
+    Adaptec AHA-2920 (PCI)
+    IBM ?
+ LILO command-line options:
+    fdomain=<PORT_BASE>,<IRQ>[,<ADAPTER_ID>]
+
+
+
+ DESCRIPTION:
+ 
  This is the Linux low-level SCSI driver for Future Domain TMC-1660/1680
  TMC-1650/1670, and TMC-3260 SCSI host adapters.  The 1650 and 1670 have a
  25-pin external connector, whereas the 1660 and 1680 have a SCSI-2 50-pin
@@ -38,11 +55,6 @@
  signature, then the driver may fail to function after the board is
  detected.
 
- The following BIOS versions are supported: 2.0, 3.0, 3.2, 3.4, and 3.5.
- The following chips are supported: TMC-1800, TMC-18C50, TMC-18C30.
- Reports suggest that the driver will also work with the 36C70 chip and
- with the Quantum ISA-200S and ISA-250MG SCSI adapters.
-
  Please note that the drive ordering that Future Domain implemented in BIOS
  versions 3.4 and 3.5 is the opposite of the order (currently) used by the
  rest of the SCSI industry.  If you have BIOS version 3.4 or 3.5, and have
@@ -51,11 +63,47 @@
  SCSI ID 1 will be C: (the boot device).  Under Linux, SCSI ID 0 will be
  /dev/sda and SCSI ID 1 will be /dev/sdb.  The Linux ordering is consistent
  with that provided by all the other SCSI drivers for Linux.  If you want
- this changed, send me patches that are protected by #ifdefs.
+ this changed, you will probably have to patch the higher level SCSI code.
+ If you do so, please send me patches that are protected by #ifdefs.
 
  If you have a TMC-8xx or TMC-9xx board, then this is not the driver for
  your board.  Please refer to the Seagate driver for more information and
  possible support.
+
+
+ 
+ HISTORY:
+
+ Linux       Driver      Driver
+ Version     Version     Date         Support/Notes
+
+             0.0          3 May 1992  V2.0 BIOS; 1800 chip
+ 0.97        1.9         28 Jul 1992
+ 0.98.6      3.1         27 Nov 1992
+ 0.99        3.2          9 Dec 1992
+
+ 0.99.3      3.3         10 Jan 1993  V3.0 BIOS
+ 0.99.5      3.5         18 Feb 1993
+ 0.99.10     3.6         15 May 1993  V3.2 BIOS; 18C50 chip
+ 0.99.11     3.17         3 Jul 1993  (now under RCS)
+ 0.99.12     3.18        13 Aug 1993
+ 0.99.14     5.6         31 Oct 1993  (reselection code removed)
+
+ 0.99.15     5.9         23 Jan 1994  V3.4 BIOS (preliminary)
+ 1.0.8/1.1.1 5.15         1 Apr 1994  V3.4 BIOS; 18C30 chip (preliminary)
+ 1.0.9/1.1.3 5.16         7 Apr 1994  V3.4 BIOS; 18C30 chip
+ 1.1.38      5.18        30 Jul 1994  36C70 chip (PCI version of 18C30)
+ 1.1.62      5.20         2 Nov 1994  V3.5 BIOS
+ 1.1.73      5.22         7 Dec 1994  Quantum ISA-200S board; V2.0 BIOS
+
+ 1.1.82      5.26        14 Jan 1995  V3.5 BIOS; TMC-1610M/MER/MEX board
+ 1.2.10      5.28         5 Jun 1995  Quantum ISA-250MG board; V2.0, V2.01 BIOS
+ 1.3.4       5.31        23 Jun 1995  PCI BIOS-32 detection (preliminary)
+ 1.3.7       5.33         4 Jul 1995  PCI BIOS-32 detection
+ 1.3.28      5.36        17 Sep 1995  V3.61 BIOS; LILO command-line support
+ 1.3.34      5.39        12 Oct 1995  V3.60 BIOS; /proc
+ 1.3.72      5.39         8 Feb 1996  Adaptec AHA-2920 board
+ 1.3.85      5.41         4 Apr 1996
 
  
 
@@ -165,7 +213,8 @@
  ENABLE_PARITY: This turns on SCSI parity checking.  With the current
  driver, all attached devices must support SCSI parity.  If none of your
  devices support parity, then you can probably get the driver to work by
- turning this option off.  I have no way of testing this, however.
+ turning this option off.  I have no way of testing this, however, and it
+ would appear that no one ever uses this option.
 
  FIFO_COUNT: The host adapter has an 8K cache (host adapters based on the
  18C30 chip have a 2k cache).  When this many 512 byte blocks are filled by
@@ -226,7 +275,7 @@ struct proc_dir_entry proc_scsi_fdomain = {
     S_IFDIR | S_IRUGO | S_IXUGO, 2
 };
   
-#define VERSION          "$Revision: 5.39 $"
+#define VERSION          "$Revision: 5.41 $"
 
 /* START OF USER DEFINABLE OPTIONS */
 

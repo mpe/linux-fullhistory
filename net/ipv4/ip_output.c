@@ -359,7 +359,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	iph->tot_len = htons(skb->len-(((unsigned char *)iph)-skb->data));
 
 #ifdef CONFIG_FIREWALL
-	if(call_out_firewall(PF_INET, skb, iph) < FW_ACCEPT)
+	if(call_out_firewall(PF_INET, skb->dev, iph) < FW_ACCEPT)
 		/* just don't send this packet */
 		return;
 #endif	
@@ -701,7 +701,7 @@ int ip_build_xmit(struct sock *sk,
 			getfrag(frag,saddr,(void *)iph,0,length-20);
 		dev_unlock_list();
 #ifdef CONFIG_FIREWALL
-		if(call_out_firewall(PF_INET, skb, iph)< FW_ACCEPT)
+		if(call_out_firewall(PF_INET, skb->dev, iph)< FW_ACCEPT)
 		{
 			kfree_skb(skb, FREE_WRITE);
 			return -EPERM;
@@ -905,7 +905,7 @@ int ip_build_xmit(struct sock *sk,
 		 */
 		 
 #ifdef CONFIG_FIREWALL
-		if(!offset && call_out_firewall(PF_INET, skb, iph) < FW_ACCEPT)
+		if(!offset && call_out_firewall(PF_INET, skb->dev, iph) < FW_ACCEPT)
 		{
 			kfree_skb(skb, FREE_WRITE);
 			dev_unlock_list();

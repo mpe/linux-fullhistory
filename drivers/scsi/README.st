@@ -1,14 +1,66 @@
 This file contains brief information about the SCSI tape driver.
-Last modified: Sun Nov 26 12:54:21 1995 by root@kai.makisara.fi
+Last modified: Mon Apr  8 09:34:33 1996 by makisara@kai.makisara.fi
+
 
 BASICS
 
-The driver is generic. The state of a drive is not modified when the
-driver is initialized or a device is opened. The mode parameters of the
-drive can be modified with ioctls. The driver supports fixed and
-variable block size (within buffer limits). Both the auto-rewind
-(minor equals device number) and non-rewind devices (minor is 128 +
-device number) are implemented.
+The driver is generic, i.e., it does not contain any code tailored
+to any specific tape drive. The tape parameters can be specified with
+one of the following three methods:
+
+1. Each user can specify the tape parameters he/she wants to use
+directly with ioctls. This is administratively a very simple and
+flexible method and applicable to single-user workstations. However,
+in a multiuser environment the next user finds the tape parameters in
+state the previous user left them.
+
+2. The system manager (root) can define default values for some tape
+parameters, like block size and density using the MTSETDRVBUFFER ioctl.
+These parameters can be programmed to come into effect either when a
+new tape is loaded into the drive or if writing begins at the
+beginning of the tape. The second method is applicable if the tape
+drive performs auto-detection of the tape format well (like some
+QIC-drives). The result is that any tape can be read, writing can be
+continued using existing format, and the default format is used if
+the tape is rewritten from the beginning (or a new tape is written
+for the first time). The first method is applicable if the drive
+does not perform auto-detection well enough and there is a single
+"sensible" mode for the device. An example is a DAT drive that is
+used only in variable block mode (I don't know if this is sensible
+or not :-).
+
+The user can override the parameters defined by the system
+manager. The changes persist until the defaults again come into
+effect.
+
+3. Up to four modes can be defined and selected using the minor number
+(bits 5 and 6). Mode 0 corresponds to the defaults discussed
+above. Additional modes are dormant until they are defined by the
+system manager (root). When specification of a new mode is started,
+the configuration of mode 0 is used to provide a starting point for
+definition of the new mode.
+
+Using the modes allows the system manager to give the users choices
+over some of the buffering parameters not directly accessible to the
+users (buffered and asynchronous writes). The modes also allow choices
+between formats in multi-tape operations (the explicitly overridden
+parameters are reset when a new tape is loaded).
+
+If more than one mode is used, all modes should contain definitions
+for the same set of parameters.
+
+Many Unices contain internal tables that associate different modes to
+supported devices. The Linux SCSI tape driver does not contain such
+tables (and will not do that in future). Instead of that, a utility
+program can be made that fetches the inquiry data sent by the device,
+scans its database, and sets up the modes using the ioctls. Another
+alternative is to make a small script that uses mt to set the defaults
+tailored to the system.
+
+
+The driver supports fixed and variable block size (within buffer
+limits). Both the auto-rewind (minor equals device number) and
+non-rewind devices (minor is 128 + device number) are implemented.
 
 By default the driver writes one filemark when the device is closed after
 writing and the last operation has been a write. Two filemarks can be
@@ -16,6 +68,7 @@ optionally written. In both cases end of data is signified by
 returning zero bytes for two consecutive reads.
 
 The compile options are defined in the file linux/drivers/scsi/st_options.h.
+
 
 BUFFERING
 
@@ -112,7 +165,7 @@ MTWSM   Write count setmarks.
 MTREW   Rewind tape.
 MTOFFL  Set device off line (often rewind plus eject).
 MTNOP   Do nothing except flush the buffers.
-MTRETEN Retension tape.
+MTRETEN Re-tension tape.
 MTEOM   Space to end of recorded data.
 MTERASE Erase tape.
 MTSEEK	Seek to tape block count. Uses Tandberg-compatible seek (QFA)
@@ -122,25 +175,54 @@ MTSETBLK Set the drive block size. Setting to zero sets the drive into
         variable block mode (if applicable).
 MTSETDENSITY Sets the drive density code to arg. See drive
         documentation for available codes.
+MTLOCK and MTUNLOCK Explicitly lock/unlock the tape drive door.
+MTLOAD and MTUNLOAD Explicitly load and unload the tape.
+MTCOMPRESSION Sets compressing or uncompressing drive mode using the
+	SCSI mode page 15. Note that some drives other methods for
+	control of compression. Some drives (like the Exabytes) use
+	density codes for compression control. Some drives use another
+	mode page but this page has not been implemented in the driver.
 MTSETDRVBUFFER
-	Is used for several things. The command is obtained from count
+	Is used for several purposes. The command is obtained from count
         with mask MT_SET_OPTIONS, the low order bits are used as argument.
-	The subcommands are:
+	This command is only allowed for the superuser (root). The
+	subcommands are:
 	0
            The drive buffer option is set to the argument. Zero means
            no buffering.
         MT_ST_BOOLEANS
            Sets the buffering options. The bits are the new states
-           (enabled/disabled) of the write buffering (MT_ST_BUFFER_WRITES),
-           asynchronous writes (MT_ST_ASYNC_WRITES), read ahead
-           (MT_ST_READ_AHEAD), writing of two filemark (ST_TWO_FM),
-	   using the SCSI spacing to EOD (MT_ST_FAST_EOM), automatic
-	   locking of the drive door (MT_ST_AUTO_LOCK) and debugging
-	   (MT_ST_DEBUGGING ; debugging must be compiled into the
-	   driver).
+           (enabled/disabled) the following options (in the
+	   parenthesis is specified whether the option is global or
+	   can be specified differently for each mode):
+	     MT_ST_BUFFER_WRITES write buffering (mode)
+	     MT_ST_ASYNC_WRITES asynchronous writes (mode)
+             MT_ST_READ_AHEAD  read ahead (global)
+             MT_ST_TWO_FM writing of two filemarks (global)
+	     MT_ST_FAST_EOM using the SCSI spacing to EOD (global)
+	     MT_ST_AUTO_LOCK automatic locking of the drive door (global)
+             MT_ST_DEF_WRITES the defaults are meant only for writes (mode)
+	     MT_ST_CAN_BSR backspacing over records can be used for
+		repositioning the tape (global)
+	     MT_ST_DEBUGGING debugging (global; debugging must be
+		compiled into the driver)
+	MT_ST_SETBOOLEANS
+	MT_ST_CLEARBOOLEANS
+	   Sets or clears the option bits.
         MT_ST_WRITE_THRESHOLD
            Sets the write threshold for this device to kilobytes
            specified by the lowest bits.
+	MT_ST_DEF_BLKSIZE
+	   Defines the default block size set automatically. Value
+	   0xffffff means that the default is not used any more.
+	MT_ST_DEF_DENSITY
+	MT_ST_DEF_DRVBUFFER
+	MT_ST_DEF_COMPRESSION
+	   Used to set or clear the density (8 bits), drive buffer
+	   state (3 bits), and compression (single bit). If the value is
+	   MT_ST_CLEAR_DEFAULT (0xfffff), the default will not be used
+	   any more. Otherwise the lower-most bits of the value contain
+	   the new value of the parameter.
 
 The following ioctl uses the structure mtpos:
 MTIOCPOS Reads the current position from the drive. Uses
@@ -168,7 +250,7 @@ The recovered write errors are considered fatal if ST_RECOVERED_WRITE_FATAL
 is defined.
 
 The maximum number of tape devices is determined by the define
-ST_MAX_TAPES. If more tapes are detected at driver intialization, the
+ST_MAX_TAPES. If more tapes are detected at driver initialization, the
 maximum is adjusted accordingly.
 
 Immediate return from tape positioning SCSI commands can be enabled by

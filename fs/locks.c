@@ -51,20 +51,23 @@
  *
  *  Removed some race conditions in flock_lock_file(), marked other possible
  *  races. Just grep for FIXME to see them. 
- *  Dmitry Gorodchanin (begemot@bgm.rosprint.net), Feb 09, 1996.
+ *  Dmitry Gorodchanin (begemot@bgm.rosprint.net), February 09, 1996.
  *
  *  Addressed Dmitry's concerns. Deadlock checking no longer recursive.
  *  Lock allocation changed to GFP_ATOMIC as we can't afford to sleep
  *  once we've checked for blocking and deadlocking.
- *  Andy Walker (andy@lysaker.kvaerner.no), Apr 03, 1996.
+ *  Andy Walker (andy@lysaker.kvaerner.no), April 03, 1996.
  *
  *  NOTE:
  *  Starting to look at mandatory locks - using SunOS as a model.
  *  Probably a configuration option because mandatory locking can cause
  *  all sorts  of chaos with runaway processes.
+ *
+ *  Initial implementation of mandatory locks. SunOS turned out to be
+ *  a rotten model, so I implemented the "obvious" semantics.
+ *  See 'linux/Documentation/mandatory.txt' for details.
+ *  Andy Walker (andy@lysaker.kvaerner.no), April 06, 1996.
  */
-
-#include <asm/segment.h>
 
 #include <linux/malloc.h>
 #include <linux/sched.h>
@@ -73,6 +76,7 @@
 #include <linux/stat.h>
 #include <linux/fcntl.h>
 
+#include <asm/segment.h>
 
 #define OFFSET_MAX	((off_t)0x7fffffff)	/* FIXME: move elsewhere? */
 
@@ -282,6 +286,63 @@ void locks_remove_locks(struct task_struct *task, struct file *filp)
 	}
 
 	return;
+}
+
+int locks_verify(int read_write, struct inode *inode, struct file *filp,
+		 unsigned int offset, unsigned int count)
+{
+	/* Candidates for mandatory locking have the setgid bit set
+	 * but no group execute bit -  an otherwise meaningless combination.
+	 */
+	if ((inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
+		return (locks_locked_mandatory(read_write, inode, filp,
+					       offset, count));
+	return (0);
+}
+	
+int locks_locked_mandatory(int read_write, struct inode *inode,
+			   struct file *filp, unsigned int offset,
+			   unsigned int count)
+{
+	struct file_lock *fl;
+
+repeat:
+	/*
+	 * Search the lock list for this inode for locks that conflict with
+	 * the proposed read/write.
+	 */
+	for (fl = inode->i_flock; fl != NULL; fl = fl->fl_next) {
+		if (fl->fl_flags == F_FLOCK ||
+		    (fl->fl_flags == F_POSIX && fl->fl_owner == current))
+			continue;
+		if (fl->fl_end < offset ||
+		    fl->fl_start >= offset + count)
+			continue;
+		/*
+		 * Block for writes against a "read" lock, and both reads and
+		 * writes against a "write" lock.
+		 */
+		if (read_write == FLOCK_VERIFY_WRITE ||
+		    fl->fl_type == F_WRLCK) {
+			if (filp && (filp->f_flags & O_NONBLOCK))
+				return (-EAGAIN);
+			if (current->signal & ~current->blocked)
+				return (-ERESTARTSYS);
+			if (posix_locks_deadlock(current, fl->fl_owner))
+				return (-EDEADLOCK);
+			interruptible_sleep_on(&fl->fl_wait);
+			if (current->signal & ~current->blocked)
+				return (-ERESTARTSYS);
+			/*
+			 * If we've been sleeping someone might have changed
+			 * the permissions behind our back.
+			 */
+			if ((inode->i_mode & (S_ISGID | S_IXGRP)) != S_ISGID)
+				break;
+			goto repeat;
+		}
+	}
+	return (0);
 }
 
 /* Verify a "struct flock" and copy it to a "struct file_lock" as a POSIX

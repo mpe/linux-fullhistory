@@ -25,6 +25,9 @@
  *		allocation harmonized with 1.3.X Series.
  *  1.5.4 March 30, 1996 Christoph Lameter: Fixup for 1.3.81. Use init_bh
  *		instead of direct assigment to kernel arrays.
+ *  1.5.5 April 5, 1996 Major device numbers corrected.
+ *              Mike McLagan<mike.mclagan@linux.org>: Add setup
+ *              variable handling, instead of using the old pcxxconfig.h
  *
  */
 
@@ -49,18 +52,21 @@
 #include <linux/string.h>
 #include <linux/fcntl.h>
 #include <linux/ptrace.h>
-#include <linux/major.h>
 #include <linux/delay.h>
 #include <linux/serial.h>
 #include <linux/tty_driver.h>
 #include <linux/malloc.h>
+#include <linux/string.h>
+#include <linux/ctype.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/segment.h>
 #include <asm/bitops.h>
 
-#define VERSION 	"1.5.4"
+#define VERSION 	"1.5.5"
+static char *banner = "Digiboard PC/X{i,e,eve,em} driver v1.5.5.  Christoph Lameter <clameter@fuller.edu>.";
+
 /*#define	DEFAULT_HW_FLOW	1 */
 /*#define	DEBUG_IOCTL */
 
@@ -69,20 +75,25 @@
 #include "pcxx.h"
 #include "digi_fep.h"
 #include "digi_bios.h"
-#include "pcxxconfig.h"
 
-#define DIGIMAJOR   30
-#define DIGICUMAJOR 31 
+/* Define one default setting if no digi= config line is used.
+ * Default is ALTPIN = ON, PC/16E, 16 ports, I/O 200h Memory 0D0000h
+ */
+static struct board_info boards[MAX_DIGI_BOARDS] = { {	ENABLED, 0, ON, 16, 0x200, 0xd0000,0 } };
+ 
+static int               numcards = 1;
+static int               nbdevs = 0;
+ 
+/* C is a pain!  I want a pointer to an array of structs */
+static struct channel    *(*digi_channels);
 
-#define MAXPORTS 16     /* Max ports per PC/Xx type board */
-#define NBDEVS   (NUMCARDS * MAXPORTS)
-#define PORTNUM(x)  ((x)->dev % MAXPORTS)
-#define LINENUM(x)  (MINOR((x)->device) - (x)->driver.minor_start)
-
+/* this is supposed to be a pointer to an array of pointers */
+static struct tty_struct *(*pcxe_table)[];
+static struct termios    *(*pcxe_termios)[];
+static struct termios    *(*pcxe_termios_locked)[];
+ 
 int pcxx_ncook=sizeof(pcxx_cook);
 int pcxx_nbios=sizeof(pcxx_bios);
-
-struct channel digi_channels[NBDEVS];
 
 #define MIN(a,b)	((a) < (b) ? (a) : (b))
 #define pcxxassert(x, msg)  if(!(x)) pcxx_error(__LINE__, msg)
@@ -97,9 +108,6 @@ struct tty_driver pcxe_callout;
 static int pcxe_refcount;
 
 DECLARE_TASK_QUEUE(tq_pcxx);
-static struct tty_struct *pcxe_table[NBDEVS];
-static struct termios *pcxe_termios[NBDEVS];
-static struct termios *pcxe_termios_locked[NBDEVS];
 
 static void pcxxpoll(void);
 static void pcxxdelay(int);
@@ -142,7 +150,7 @@ static inline struct channel *chan(register struct tty_struct *tty)
 {
 	if (tty) {
 		register struct channel *ch=(struct channel *)tty->driver_data;
-		if ((ch >= &digi_channels[0]) && (ch < &digi_channels[NBDEVS])) {
+		if ((ch >= &((*digi_channels)[0])) && (ch < &((*digi_channels)[nbdevs]))) {
 			if (ch->magic==PCXX_MAGIC)
 				return ch;
 		}
@@ -293,20 +301,25 @@ int pcxe_open(struct tty_struct *tty, struct file * filp)
 	int retval;
 
 	line = MINOR(tty->device) - tty->driver.minor_start;
-	if(line < 0 || line >= NBDEVS) {
+
+	if(line < 0 || line >= nbdevs) {
 		printk("line out of range in pcxe_open\n");
 		tty->driver_data = NULL;
 		return(-ENODEV);
 	}
 
-	boardnum = line / 16;
-	if(boardnum >= NUMCARDS || boards[boardnum].status == DISABLED ||
-								(line % MAXPORTS) >= boards[boardnum].numports) {
+	for(boardnum=0;boardnum<numcards;boardnum++)
+		if ((line >= boards[boardnum].first_minor) && 
+			(line <= boards[boardnum].first_minor + boards[boardnum].numports))
+		break;
+
+	if(boardnum >= numcards || boards[boardnum].status == DISABLED ||
+		(line - boards[boardnum].first_minor) >= boards[boardnum].numports) {
 		tty->driver_data = NULL;   /* Mark this device as 'down' */
 		return(-ENODEV);
 	}
-	
-	ch = &digi_channels[line];
+
+	ch = &((*digi_channels)[line]);
 
 	if(ch->brdchan == 0) {
 		tty->driver_data = NULL;
@@ -746,16 +759,256 @@ static void pcxe_flush_chars(struct tty_struct *tty)
 	}
 }
 
+/* Flag if lilo configuration option is used. If so the
+ * default settings are removed
+ */
+
+static int liloconfig=0;
+
+void pcxx_setup(char *str, int *ints)
+{
+
+	struct board_info board;
+	int               i, j, last;
+	char              *temp, *t2;
+	unsigned          len;
+
+#if 0
+	if (!numcards)
+		memset(&boards, 0, sizeof(boards));
+#endif
+	if (liloconfig==0) { liloconfig=1;numcards=0; }
+
+	memset(&board, 0, sizeof(board));
+
+	for(last=0,i=1;i<=ints[0];i++)
+		switch(i)
+		{
+			case 1:
+				board.status = ints[i];
+				last = i;
+				break;
+
+			case 2:
+				board.type = ints[i];
+				last = i;
+				break;
+
+			case 3:
+				board.altpin = ints[i];
+				last = i;
+				break;
+
+			case 4:
+				board.numports = ints[i];
+				last = i;
+				break;
+
+			case 5:
+				board.port = ints[i];
+				last = i;
+				break;
+
+			case 6:
+				board.membase = ints[i];
+				last = i;
+				break;
+
+			default:
+				printk("PC/Xx: Too many integer parms\n");
+				return;
+		}
+
+	
+	while (str && *str) 
+	{
+		/* find the next comma or terminator */
+		temp = str;
+		while (*temp && (*temp != ','))
+			temp++;
+
+		if (!*temp)
+			temp = NULL;
+		else
+			*temp++ = 0;
+
+		i = last + 1;
+
+		switch(i)
+		{
+			case 1:
+				len = strlen(str);
+				if (strncmp("Disable", str, len) == 0) 
+					board.status = 0;
+				else
+					if (strncmp("Enable", str, len) == 0)
+						board.status = 1;
+					else
+					{
+						printk("PC/Xx: Invalid status %s\n", str);
+						return;
+					}
+				last = i;
+				break;
+
+			case 2:
+				for(j=0;j<PCXX_NUM_TYPES;j++)
+					if (strcmp(board_desc[j], str) == 0)
+						break;
+
+				if (i<PCXX_NUM_TYPES) 
+					board.type = j;
+				else
+				{
+					printk("PC/Xx: Invalid board name: %s\n", str);
+					return;
+				}
+				last = i;
+				break;
+
+			case 3:
+				len = strlen(str);
+				if (strncmp("Disable", str, len) == 0) 
+					board.altpin = 0;
+				else
+					if (strncmp("Enable", str, len) == 0)
+						board.altpin = 1;
+					else
+					{
+						printk("PC/Xx: Invalid altpin %s\n", str);
+						return;
+					}
+				last = i;
+				break;
+
+			case 4:
+				t2 = str;
+				while (isdigit(*t2))
+					t2++;
+
+				if (*t2)
+				{
+					printk("PC/Xx: Invalid port count %s\n", str);
+					return;
+				}
+
+				board.numports = simple_strtoul(str, NULL, 0);
+				last = i;
+				break;
+
+			case 5:
+				t2 = str;
+				while (isxdigit(*t2))
+					t2++;
+
+				if (*t2)
+				{
+					printk("PC/Xx: Invalid port count %s\n", str);
+					return;
+				}
+
+				board.port = simple_strtoul(str, NULL, 16);
+				last = i;
+				break;
+
+			case 6:
+				t2 = str;
+				while (isxdigit(*t2))
+					t2++;
+
+				if (*t2)
+				{
+					printk("PC/Xx: Invalid memory base %s\n", str);
+					return;
+				}
+
+				board.membase = simple_strtoul(str, NULL, 16);
+				last = i;
+				break;
+
+			default:
+				printk("PC/Xx: Too many string parms\n");
+				return;
+		}
+		str = temp;
+	}
+
+	if (last < 6)  
+	{
+		printk("PC/Xx: Insufficient parms specified\n");
+		return;
+	}
+ 
+        /* I should REALLY validate the stuff here */
+
+	memcpy(&boards[numcards],&board, sizeof(board));
+	printk("PC/Xx: Added board %i, %s %s %i ports at 0x%4.4X base 0x%6.6X\n", 
+		numcards, board_desc[board.type], board_mem[board.type], 
+		board.numports, board.port, (unsigned int) board.membase);
+
+	/* keep track of my inital minor number */
+        if (numcards)
+		boards[numcards].first_minor = boards[numcards-1].first_minor + boards[numcards-1].numports;
+	else
+		boards[numcards].first_minor = 0;
+
+	/* yeha!  string parameter was successful! */
+	numcards++;
+}
+
 
 int pcxe_init(void)
 {
-	ulong flags, save_loops_per_sec, memory_seg=0, memory_size;
+#if 0
+	ulong save_loops_per_sec;
+#endif
+
+	ulong flags, memory_seg=0, memory_size;
 	int lowwater, i, crd, shrinkmem=0, topwin = 0xff00L, botwin=0x100L;
 	unchar *fepos, *memaddr, *bios, v;
 	volatile struct global_data *gd;
 	struct board_info *bd;
 	volatile struct board_chan *bc;
 	struct channel *ch;
+
+	printk("%s\n", banner);
+
+	if (numcards <= 0)
+	{
+		printk("PC/Xx: No cards configured, exiting.\n");
+		return(0);
+	}
+
+	for (i=0;i<numcards;i++)
+		nbdevs += boards[i].numports;
+
+	if (nbdevs <= 0)
+	{
+		printk("PC/Xx: No devices activated, exiting.\n");
+		return(0);
+	}
+
+	/*
+	 * this turns out to be more memory efficient, as there are no 
+	 * unused spaces.  There is *NO* way I'm going to explain these
+	 * convoluted casts, suffice it to say they WORK!  :)
+	 */
+	digi_channels = (struct channel **) kmalloc(sizeof(struct channel) * nbdevs, GFP_KERNEL);
+	if (!digi_channels)
+		panic("Unable to allocate digi_channel struct");
+
+	pcxe_table = (struct tty_struct *(*)[]) kmalloc(sizeof(struct tty_struct *) * nbdevs, GFP_KERNEL);
+	if (!pcxe_table)
+		panic("Unable to allocate pcxe_table struct");
+
+	pcxe_termios = (struct termios *(*)[]) kmalloc(sizeof(struct termios *) * nbdevs, GFP_KERNEL);
+	if (!pcxe_termios)
+		panic("Unable to allocate pcxe_termios struct");
+
+	pcxe_termios_locked = (struct termios *(*)[]) kmalloc(sizeof(struct termios *) * nbdevs, GFP_KERNEL);
+	if (!pcxe_termios_locked)
+		panic("Unable to allocate pcxe_termios_locked struct");
+
 
 	init_bh(DIGI_BH,do_pcxe_bh);
 	enable_bh(DIGI_BH);
@@ -766,18 +1019,21 @@ int pcxe_init(void)
 	memset(&pcxe_driver, 0, sizeof(struct tty_driver));
 	pcxe_driver.magic = TTY_DRIVER_MAGIC;
 	pcxe_driver.name = "ttyd";
-	pcxe_driver.major = DIGIMAJOR; 
+	pcxe_driver.major = DIGI_MAJOR; 
 	pcxe_driver.minor_start = 0;
-	pcxe_driver.num = NBDEVS;
+
+	pcxe_driver.num = nbdevs;
+
 	pcxe_driver.type = TTY_DRIVER_TYPE_SERIAL;
 	pcxe_driver.subtype = SERIAL_TYPE_NORMAL;
 	pcxe_driver.init_termios = tty_std_termios;
 	pcxe_driver.init_termios.c_cflag = B9600 | CS8 | CREAD | CLOCAL | HUPCL;
 	pcxe_driver.flags = TTY_DRIVER_REAL_RAW;
 	pcxe_driver.refcount = &pcxe_refcount;
-	pcxe_driver.table = pcxe_table;
-	pcxe_driver.termios = pcxe_termios;
-	pcxe_driver.termios_locked = pcxe_termios_locked;
+
+	pcxe_driver.table = *pcxe_table;
+	pcxe_driver.termios = *pcxe_termios;
+	pcxe_driver.termios_locked = *pcxe_termios_locked;
 
 	pcxe_driver.open = pcxe_open;
 	pcxe_driver.close = pcxe_close;
@@ -797,9 +1053,13 @@ int pcxe_init(void)
 
 	pcxe_callout = pcxe_driver;
 	pcxe_callout.name = "ttyD";
-	pcxe_callout.major = DIGICUMAJOR;
+	pcxe_callout.major = DIGICU_MAJOR;
 	pcxe_callout.subtype = SERIAL_TYPE_CALLOUT;
 	pcxe_callout.init_termios.c_cflag = B9600 | CS8 | CREAD | HUPCL;
+
+#if 0 
+
+/* strangely enough, this is FALSE */
 
 	/* 
 	 * loops_per_sec hasn't been set at this point :-(, so fake it out... 
@@ -807,18 +1067,19 @@ int pcxe_init(void)
 	 */
 	save_loops_per_sec = loops_per_sec;
 	loops_per_sec = 13L*500000L;
+#endif
 
 	save_flags(flags);
 	cli();
 
-	for(crd=0; crd < NUMCARDS; crd++) {
+	for(crd=0; crd < numcards; crd++) {
 		bd = &boards[crd];
 		outb(FEPRST, bd->port);
 		pcxxdelay(1);
 
 		for(i=0; (inb(bd->port) & FEPMASK) != FEPRST; i++) {
 			if(i > 1000) {
-				printk("Board not found at port 0x%x! Check switch settings.\n",
+				printk("PC/Xx: Board not found at port 0x%x! Check switch settings.\n",
 					bd->port);
 				bd->status = DISABLED;
 				break;
@@ -854,7 +1115,7 @@ int pcxe_init(void)
 		} else {
 			if((v & 0x1) == 0x1) {
 				bd->status = DISABLED;   /* PC/Xm unsupported card */
-				printk("PC/Xm at 0x%x not supported!!\n", bd->port);
+				printk("PC/Xx: PC/Xm at 0x%x not supported!!\n", bd->port);
 				continue;
 			} else {
 				if(v & 0xC0) {    
@@ -877,7 +1138,7 @@ int pcxe_init(void)
 
 		for(i=0; (inb(bd->port) & FEPMASK) != (FEPRST|FEPMEM); i++) {
 			if(i > 10000) {
-				printk("%s not resetting at port 0x%x! Check switch settings.\n",
+				printk("PC/Xx: %s not resetting at port 0x%x! Check switch settings.\n",
 					board_desc[bd->type], bd->port);
 				bd->status = DISABLED;
 				break;
@@ -893,7 +1154,7 @@ int pcxe_init(void)
 
 		if(*(ulong *)(memaddr + botwin) != 0xa55a3cc3 ||
 					*(ulong *)(memaddr + topwin) != 0x5aa5c33c) {
-			printk("Failed memory test at %lx for %s at port %x, check switch settings.\n",
+			printk("PC/Xx: Failed memory test at %lx for %s at port %x, check switch settings.\n",
 				bd->membase, board_desc[bd->type], bd->port);
 			bd->status = DISABLED;
 			continue;
@@ -917,7 +1178,7 @@ int pcxe_init(void)
 				pcxxdelay(1);
 			}
 
-			printk("BIOS download failed on the %s at 0x%x!\n",
+			printk("PC/Xx: BIOS download failed on the %s at 0x%x!\n",
 							board_desc[bd->type], bd->port);
 			bd->status = DISABLED;
 			continue;
@@ -939,7 +1200,7 @@ int pcxe_init(void)
 				pcxxdelay(1);
 			}
 
-			printk("BIOS download failed on the %s at 0x%x!\n",
+			printk("PC/Xx: BIOS download failed on the %s at 0x%x!\n",
 				board_desc[bd->type], bd->port);
 			bd->status = DISABLED;
 			continue;
@@ -966,7 +1227,7 @@ load_fep:
 
 		for(i=0; *(ushort *)((ulong)memaddr + MBOX); i++) {
 			if(i > 2000) {
-				printk("Command failed for the %s at 0x%x!\n",
+				printk("PC/Xx: Command failed for the %s at 0x%x!\n",
 					board_desc[bd->type], bd->port);
 				bd->status = DISABLED;
 				break;
@@ -988,7 +1249,7 @@ load_fep:
 
 		for(i=0; *(ushort *)((ulong)memaddr + FEPSTAT) != *(ushort *)"OS"; i++) {
 			if(i > 10000) {
-				printk("FEP/OS download failed on the %s at 0x%x!\n",
+				printk("PC/Xx: FEP/OS download failed on the %s at 0x%x!\n",
 					board_desc[bd->type], bd->port);
 				bd->status = DISABLED;
 				break;
@@ -998,8 +1259,8 @@ load_fep:
 		if(bd->status == DISABLED)
 			continue;
 
-		ch = &digi_channels[MAXPORTS * crd];
-		pcxxassert(ch <= &digi_channels[NBDEVS-1], "ch out of range");
+		ch = &((*digi_channels)[bd->first_minor]);
+		pcxxassert(ch < &((*digi_channels)[nbdevs]), "ch out of range");
 
 		bc = (volatile struct board_chan *)((ulong)memaddr + CHANSTRUCT);
 		gd = (volatile struct global_data *)((ulong)memaddr + GLOBAL);
@@ -1035,7 +1296,7 @@ load_fep:
 			ch->boardnum = crd;
 			ch->channelnum = i;
 
-			ch->dev = (MAXPORTS * crd) + i;
+			ch->dev = bd->first_minor + i;
 			ch->tty = 0;
 
 			if(shrinkmem) {
@@ -1089,8 +1350,9 @@ load_fep:
 			ch->close_wait = 0;
 		}
 
-		printk("DigiBoard PC/Xx Driver V%s:  %s I/O=0x%x Mem=0x%lx Ports=%d\n", 
-				VERSION, board_desc[bd->type], bd->port, bd->membase, bd->numports);
+		printk("PC/Xx: %s (%s) I/O=0x%x Mem=0x%lx Ports=%d\n", 
+			board_desc[bd->type], board_mem[bd->type], bd->port, 
+			bd->membase, bd->numports);
 
 		memwinoff(bd, 0);
 	}
@@ -1101,8 +1363,9 @@ load_fep:
 	if(tty_register_driver(&pcxe_callout))
 		panic("Couldn't register PC/Xe callout");
 
-
+#if 0
 	loops_per_sec = save_loops_per_sec;  /* reset it to what it should be */
+#endif
 
 	/*
 	 * Start up the poller to check for events on all enabled boards
@@ -1125,9 +1388,10 @@ static void pcxxpoll(void)
 	save_flags(flags);
 	cli();
 
-	for(crd=0; crd < NUMCARDS; crd++) {
+	for(crd=0; crd < numcards; crd++) {
 		bd = &boards[crd];
-		ch = &digi_channels[MAXPORTS*crd];
+
+		ch = &((*digi_channels)[bd->first_minor]);
 
 		if(bd->status == DISABLED)
 			continue;
@@ -1164,8 +1428,9 @@ static void doevent(int crd)
 
 	bd = &boards[crd];
 
-	chan0 = &digi_channels[MAXPORTS * crd];
-	pcxxassert(chan0 <= &digi_channels[NBDEVS-1], "ch out of range");
+	chan0 = &((*digi_channels)[bd->first_minor]);
+	pcxxassert(chan0 < &((*digi_channels)[nbdevs]), "ch out of range");
+
 
 	assertgwinon(chan0);
 
@@ -1292,12 +1557,15 @@ fepcmd(struct channel *ch, int cmd, int word_or_byte, int byte2, int ncmds,
 
 	if(bytecmd) {
 		*(unchar *)(memaddr+head+CSTART+0) = cmd;
-		*(unchar *)(memaddr+head+CSTART+1) = PORTNUM(ch);
+
+		*(unchar *)(memaddr+head+CSTART+1) = ch->dev - ch->board->first_minor;
+
 		*(unchar *)(memaddr+head+CSTART+2) = word_or_byte;
 		*(unchar *)(memaddr+head+CSTART+3) = byte2;
 	} else {
 		*(unchar *)(memaddr+head+CSTART+0) = cmd;
-		*(unchar *)(memaddr+head+CSTART+1) = PORTNUM(ch);
+
+		*(unchar *)(memaddr+head+CSTART+1) = ch->dev - ch->board->first_minor;
 		*(ushort*)(memaddr+head+CSTART+2) = word_or_byte;
 	}
 
@@ -1660,7 +1928,7 @@ static int pcxe_ioctl(struct tty_struct *tty, struct file * file,
 					break;
 
 				case TIOCMBIC:
-					ch->modemfake |= mflag;
+					ch->modemfake &= ~mflag;
 					ch->modem &= ~mflag;
 					break;
 			}
@@ -1964,4 +2232,3 @@ static void setup_empty_event(struct tty_struct *tty, struct channel *ch)
 	memoff(ch);
 	restore_flags(flags);
 }
-

@@ -3154,6 +3154,7 @@ void idetape_wait_for_request (struct request *rq)
 	}
 #endif /* IDETAPE_DEBUG_BUGS */
 
+	run_task_queue(&tq_disk);
 	rq->sem=&sem;
 	down (&sem);
 }

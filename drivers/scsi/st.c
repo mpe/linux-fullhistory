@@ -8,10 +8,10 @@
   order) Klaus Ehrenfried, Steve Hirsch, Wolfgang Denk, Andreas Koppenh"ofer,
   J"org Weule, and Eric Youngdale.
 
-  Copyright 1992, 1993, 1994, 1995 Kai Makisara
+  Copyright 1992 - 1996 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Fri Mar 29 20:55:05 1996 by root@kai.makisara.fi
+  Last modified: Sun Apr  7 20:33:27 1996 by root@kai.makisara.fi
   Some small formal changes - aeb, 950809
 */
 
@@ -74,7 +74,8 @@ static int debugging = 1;
 #define ST_TIMEOUT (900 * HZ)
 #define ST_LONG_TIMEOUT (2000 * HZ)
 
-#define TAPE_NR(x) (MINOR(x) & 127)
+#define TAPE_NR(x) (MINOR(x) & ~(128 | ST_MODE_MASK))
+#define TAPE_MODE(x) ((MINOR(x) & ST_MODE_MASK) >> ST_MODE_SHIFT)
 
 static int st_nbr_buffers;
 static ST_buffer **st_buffers;
@@ -83,6 +84,8 @@ static int st_write_threshold = ST_WRITE_THRESHOLD;
 static int st_max_buffers = ST_MAX_BUFFERS;
 
 Scsi_Tape * scsi_tapes = NULL;
+
+static int modes_defined = FALSE;
 
 static ST_buffer *new_tape_buffer(int, int);
 static int enlarge_buffer(ST_buffer *, int, int);
@@ -97,6 +100,8 @@ struct Scsi_Device_Template st_template = {NULL, "tape", "st", NULL, TYPE_TAPE,
 					     SCSI_TAPE_MAJOR, 0, 0, 0, 0,
 					     st_detect, st_init,
 					     NULL, st_attach, st_detach};
+
+static int st_compression(Scsi_Tape *, int);
 
 static int st_int_ioctl(struct inode * inode,struct file * file,
 	     unsigned int cmd_in, unsigned long arg);
@@ -454,11 +459,13 @@ flush_buffer(struct inode * inode, struct file * filp, int seek_next)
 scsi_tape_open(struct inode * inode, struct file * filp)
 {
     unsigned short flags;
-    int i, need_dma_buffer;
+    int i, need_dma_buffer, new_session = FALSE, setting_failed;
     unsigned char cmd[10];
     Scsi_Cmnd * SCpnt;
     Scsi_Tape * STp;
+    ST_mode * STm;
     int dev = TAPE_NR(inode->i_rdev);
+    int mode = TAPE_MODE(inode->i_rdev);
 
     if (dev >= st_template.dev_max || !scsi_tapes[dev].device)
       return (-ENXIO);
@@ -470,6 +477,19 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       return (-EBUSY);
     }
     STp->rew_at_close = (MINOR(inode->i_rdev) & 0x80) == 0;
+
+    if (mode != STp->current_mode) {
+#if DEBUG
+      if (debugging)
+	printk(ST_DEB_MSG "st%d: Mode change from %d to %d.\n",
+	       dev, STp->current_mode, mode);
+#endif
+      /*      if (!STp->modes[mode].defined)
+	return (-ENXIO); */
+      new_session = TRUE;
+      STp->current_mode = mode;
+    }
+    STm = &(STp->modes[STp->current_mode]);
 
     /* Allocate buffer for this user */
     need_dma_buffer = STp->restr_dma;
@@ -522,6 +542,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       (STp->mt_status)->mt_fileno = STp->drv_block = 0;
       STp->eof = ST_NOEOF;
       (STp->device)->was_reset = 0;
+      new_session = TRUE;
     }
 
     if ((STp->buffer)->last_result_fatal != 0) {
@@ -649,6 +670,46 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       }
     }
 
+    if (new_session) {
+      STp->density_changed = STp->blksize_changed = FALSE;
+      STp->compression_changed = FALSE;
+      if (!(STm->defaults_for_writes)) {
+	setting_failed = FALSE;
+	if (STm->default_blksize >= 0 &&
+	    STm->default_blksize != STp->block_size) {
+	  if (STm->default_density >= 0 &&
+	      STm->default_density != STp->density)
+	    STp->density = STm->default_density;  /* Dirty trick! */
+	  if (st_int_ioctl(inode, filp, MTSETBLK, STm->default_blksize)) {
+	    printk(KERN_WARNING "st%d: Can't set default block size to %d bytes.\n",
+		   dev, STm->default_blksize);
+	    if (modes_defined)
+	      setting_failed = TRUE;
+	  }
+	}
+	if (STm->default_density >= 0 &&
+	    STm->default_density != STp->density) {
+	  if (st_int_ioctl(inode, filp, MTSETDENSITY, STm->default_density)) {
+	    printk(KERN_WARNING "st%d: Can't set default density to %x.\n",
+		   dev, STm->default_density);
+	    if (modes_defined)
+	      setting_failed = TRUE;
+	  }
+	}
+	if (setting_failed) {
+	  (STp->buffer)->in_use = 0;
+	  STp->buffer = 0;
+	  STp->in_use = 0;
+	  return (-EINVAL);
+	}
+      }
+      if (STp->default_drvbuffer != 0xff) {
+	if (st_int_ioctl(inode, filp, MTSETDRVBUFFER, STp->default_drvbuffer))
+	  printk(KERN_WARNING "st%d: Can't set default drive buffering to %d.\n",
+		 dev, STp->default_drvbuffer);
+      }
+    }
+
     if (scsi_tapes[dev].device->host->hostt->usage_count)
       (*scsi_tapes[dev].device->host->hostt->usage_count)++;
     if(st_template.usage_count) (*st_template.usage_count)++;
@@ -714,12 +775,10 @@ scsi_tape_close(struct inode * inode, struct file * filp)
 #endif
     }
     else if (!STp->rew_at_close) {
-#if ST_IN_FILE_POS
-      flush_buffer(inode, filp, 0);
-#else
-      if ((STp->eof == ST_FM) && !STp->eof_hit)
+      if (STp->can_bsr)
+	flush_buffer(inode, filp, 0);
+      else if ((STp->eof == ST_FM) && !STp->eof_hit)
 	back_over_eof(STp);
-#endif
     }
 
     if (STp->rew_at_close)
@@ -753,11 +812,15 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
     const char *b_point;
     Scsi_Cmnd * SCpnt = NULL;
     Scsi_Tape * STp;
+    ST_mode * STm;
     int dev = TAPE_NR(inode->i_rdev);
 
     STp = &(scsi_tapes[dev]);
     if (STp->ready != ST_READY)
       return (-EIO);
+    STm = &(STp->modes[STp->current_mode]);
+    if (!STm->defined)
+      return (-ENXIO);
 
     /*
      * If there was a bus reset, block further access
@@ -791,6 +854,42 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
        return retval;
       STp->rw = ST_WRITING;
     }
+    else if (STp->rw != ST_WRITING) {
+      if (STm->defaults_for_writes &&
+	  (STp->mt_status)->mt_fileno == 0 && STp->drv_block == 0) {
+	/* Force unless explicitly changed by the user */
+	if (!(STp->blksize_changed) && STm->default_blksize >= 0 &&
+	    STp->block_size != STm->default_blksize) {
+	  if (STm->default_density >= 0 &&
+	      STm->default_density != STp->density)
+	    STp->density = STm->default_density;  /* Dirty trick! */
+	  if (st_int_ioctl(inode, filp, MTSETBLK, STm->default_blksize)) {
+	    printk(KERN_WARNING "st%d: Can't set default block size to %d bytes.\n",
+		   dev, STm->default_blksize);
+	    if (modes_defined)
+	      return (-EINVAL);
+	  }
+	}
+	if (!(STp->density_changed) && STm->default_density >= 0 &&
+	    STm->default_density != STp->density) {
+	  if (st_int_ioctl(inode, filp, MTSETDENSITY, STm->default_density)) {
+	    printk(KERN_WARNING "st%d: Can't set default density %x.\n",
+		   dev, STm->default_density);
+	    if (modes_defined)
+	      return (-EINVAL);
+	  }
+	}
+      }
+      if (STm->default_compression != ST_DONT_TOUCH &&
+	  !(STp->compression_changed)) {
+	if (st_compression(STp, (STm->default_compression == ST_YES))) {
+	  printk(KERN_WARNING "st%d: Can't set default compression.\n",
+		 dev);
+	  if (modes_defined)
+	    return (-EINVAL);
+	}
+      }
+    }
 
     if (STp->moves_after_eof < 255)
       STp->moves_after_eof++;
@@ -817,14 +916,14 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
     else if (STp->eof == ST_EOM_ERROR)
       return (-EIO);
 
-    if (!STp->do_buffer_writes) {
+    if (!STm->do_buffer_writes) {
       if (STp->block_size != 0 && (count % STp->block_size) != 0)
 	return (-EIO);   /* Write must be integral number of blocks */
       write_threshold = 1;
     }
     else
       write_threshold = (STp->buffer)->buffer_blocks * STp->block_size;
-    if (!STp->do_async_writes)
+    if (!STm->do_async_writes)
       write_threshold--;
 
     total = count;
@@ -836,7 +935,7 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
     STp->rw = ST_WRITING;
 
     b_point = buf;
-    while((STp->block_size == 0 && !STp->do_async_writes && count > 0) ||
+    while((STp->block_size == 0 && !STm->do_async_writes && count > 0) ||
 	  (STp->block_size != 0 &&
 	   (STp->buffer)->buffer_bytes + count > write_threshold))
     {
@@ -951,7 +1050,7 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
       return (STp->buffer)->last_result_fatal;
     }
 
-    if (STp->do_async_writes &&
+    if (STm->do_async_writes &&
 	((STp->buffer)->buffer_bytes >= STp->write_threshold ||
 	 STp->block_size == 0) ) {
       /* Schedule an asynchronous write */
@@ -1010,6 +1109,8 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
     STp = &(scsi_tapes[dev]);
     if (STp->ready != ST_READY)
       return (-EIO);
+    if (!STp->modes[STp->current_mode].defined)
+      return (-ENXIO);
 #if DEBUG
     if (!STp->in_use) {
       printk(ST_DEB_MSG "st%d: Incorrect device.\n", dev);
@@ -1239,48 +1340,238 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 
 
 /* Set the driver options */
+	static void
+st_log_options(Scsi_Tape *STp, ST_mode *STm, int dev)
+{
+  printk(KERN_INFO
+"st%d: Mode %d options: buffer writes: %d, async writes: %d, read ahead: %d\n",
+	 dev, STp->current_mode, STm->do_buffer_writes, STm->do_async_writes,
+	 STp->do_read_ahead);
+  printk(KERN_INFO
+"st%d:    can bsr: %d, two FMs: %d, fast mteom: %d, auto lock: %d, defs for wr: %d \n",
+	 dev, STp->can_bsr, STp->two_fm, STp->fast_mteom, STp->do_auto_lock,
+	 STm->defaults_for_writes);
+#if DEBUG
+  printk(KERN_INFO
+	 "st%d:    debugging: %d\n",
+	 dev, debugging);
+#endif
+}
+
+  
 	static int
 st_set_options(struct inode * inode, long options)
 {
   int value;
+  long code;
   Scsi_Tape *STp;
+  ST_mode *STm;
   int dev = TAPE_NR(inode->i_rdev);
 
   STp = &(scsi_tapes[dev]);
-  if ((options & MT_ST_OPTIONS) == MT_ST_BOOLEANS) {
-    STp->do_buffer_writes = (options & MT_ST_BUFFER_WRITES) != 0;
-    STp->do_async_writes  = (options & MT_ST_ASYNC_WRITES) != 0;
+  STm = &(STp->modes[STp->current_mode]);
+  if (!STm->defined) {
+    memcpy(STm, &(STp->modes[0]), sizeof(ST_mode));
+    modes_defined = TRUE;
+#if DEBUG
+    if (debugging)
+      printk(ST_DEB_MSG "st%d: Initialized mode %d definition from mode 0\n",
+	     dev, STp->current_mode);
+#endif
+  }
+
+  code = options & MT_ST_OPTIONS;
+  if (code == MT_ST_BOOLEANS) {
+    STm->do_buffer_writes = (options & MT_ST_BUFFER_WRITES) != 0;
+    STm->do_async_writes  = (options & MT_ST_ASYNC_WRITES) != 0;
+    STm->defaults_for_writes = (options & MT_ST_DEF_WRITES) != 0;
     STp->do_read_ahead    = (options & MT_ST_READ_AHEAD) != 0;
     STp->two_fm		  = (options & MT_ST_TWO_FM) != 0;
     STp->fast_mteom	  = (options & MT_ST_FAST_MTEOM) != 0;
     STp->do_auto_lock     = (options & MT_ST_AUTO_LOCK) != 0;
+    STp->can_bsr          = (options & MT_ST_CAN_BSR) != 0;
 #if DEBUG
     debugging = (options & MT_ST_DEBUGGING) != 0;
-    printk(ST_DEB_MSG
-	   "st%d: options: buffer writes: %d, async writes: %d, read ahead: %d\n",
-	   dev, STp->do_buffer_writes, STp->do_async_writes, STp->do_read_ahead);
-    printk(ST_DEB_MSG
-	   "st%d:          two FMs: %d, fast mteom: %d auto lock: %d, debugging: %d\n",
-	   dev, STp->two_fm, STp->fast_mteom, STp->do_auto_lock, debugging);
 #endif
+    st_log_options(STp, STm, dev);
   }
-  else if ((options & MT_ST_OPTIONS) == MT_ST_WRITE_THRESHOLD) {
+  else if (code == MT_ST_SETBOOLEANS || code == MT_ST_CLEARBOOLEANS) {
+    value = (code == MT_ST_SETBOOLEANS);
+    if ((options & MT_ST_BUFFER_WRITES) != 0)
+      STm->do_buffer_writes = value;
+    if ((options & MT_ST_ASYNC_WRITES) != 0)
+      STm->do_async_writes = value;
+    if ((options & MT_ST_DEF_WRITES) != 0)
+      STm->defaults_for_writes = value;
+    if ((options & MT_ST_READ_AHEAD) != 0)
+      STp->do_read_ahead = value;
+    if ((options & MT_ST_TWO_FM) != 0)
+      STp->two_fm = value;
+    if ((options & MT_ST_FAST_MTEOM) != 0)
+      STp->fast_mteom = value;
+    if ((options & MT_ST_AUTO_LOCK) != 0)
+      STp->do_auto_lock = value;
+    if ((options & MT_ST_CAN_BSR) != 0)
+      STp->can_bsr = value;
+#if DEBUG
+    if ((options & MT_ST_DEBUGGING) != 0)
+      debugging = value;
+#endif
+    st_log_options(STp, STm, dev);
+  }
+  else if (code == MT_ST_WRITE_THRESHOLD) {
     value = (options & ~MT_ST_OPTIONS) * ST_BLOCK_SIZE;
     if (value < 1 || value > st_buffer_size) {
-      printk(KERN_WARNING "st: Write threshold %d too small or too large.\n",
-	     value);
+      printk(KERN_WARNING "st%d: Write threshold %d too small or too large.\n",
+	     dev, value);
       return (-EIO);
     }
     STp->write_threshold = value;
-#if DEBUG
-    printk(ST_DEB_MSG "st%d: Write threshold set to %d bytes.\n", dev,
-	   STp->write_threshold);
-#endif
+    printk(KERN_INFO "st%d: Write threshold set to %d bytes.\n",
+	   dev, value);
+  }
+  else if (code == MT_ST_DEF_BLKSIZE) {
+    value = (options & ~MT_ST_OPTIONS);
+    if (value == ~MT_ST_OPTIONS) {
+      STm->default_blksize = (-1);
+      printk(KERN_INFO "st%d: Default block size disabled.\n", dev);
+    }
+    else {
+      STm->default_blksize = value;
+      printk(KERN_INFO "st%d: Default block size set to %d bytes.\n",
+	     dev, STm->default_blksize);
+    }
+  }
+  else if (code == MT_ST_DEF_OPTIONS) {
+    code = (options & ~MT_ST_CLEAR_DEFAULT);
+    value = (options & MT_ST_CLEAR_DEFAULT);
+    if (code == MT_ST_DEF_DENSITY) {
+      if (value == MT_ST_CLEAR_DEFAULT) {
+	STm->default_density = (-1);
+	printk(KERN_INFO "st%d: Density default disabled.\n", dev);
+      }
+      else {
+	STm->default_density = value & 0xff;
+	printk(KERN_INFO "st%d: Density default set to %x\n",
+	       dev, STm->default_density);
+      }
+    }
+    else if (code == MT_ST_DEF_DRVBUFFER) {
+      if (value == MT_ST_CLEAR_DEFAULT) {
+	STp->default_drvbuffer = 0xff;
+	printk(KERN_INFO "st%d: Drive buffer default disabled.\n", dev);
+      }
+      else {
+	STp->default_drvbuffer = value & 7;
+	printk(KERN_INFO "st%d: Drive buffer default set to %x\n",
+	       dev, STp->default_drvbuffer);
+      }
+    }
+    else if (code == MT_ST_DEF_COMPRESSION) {
+      if (value == MT_ST_CLEAR_DEFAULT) {
+	STm->default_compression = ST_DONT_TOUCH;
+	printk(KERN_INFO "st%d: Compression default disabled.\n", dev);
+      }
+      else {
+	STm->default_compression = (value & 1 ? ST_YES : ST_NO);
+	printk(KERN_INFO "st%d: Compression default set to %x\n",
+	       dev, (value & 1));
+      }
+    }
   }
   else
     return (-EIO);
 
   return 0;
+}
+
+
+#define COMPRESSION_PAGE        0x0f
+#define COMPRESSION_PAGE_LENGTH 16
+
+#define MODE_HEADER_LENGTH  4
+
+#define DCE_MASK  0x80
+#define DCC_MASK  0x40
+#define RED_MASK  0x60
+
+
+/* Control the compression with mode page 15. Algorithm not changed if zero. */
+	static int
+st_compression(Scsi_Tape * STp, int state)
+{
+  int dev;
+  unsigned char cmd[10];
+  Scsi_Cmnd * SCpnt = NULL;
+
+  /* Read the current page contents */
+  memset(cmd, 0, 10);
+  cmd[0] = MODE_SENSE;
+  cmd[1] = 8;
+  cmd[2] = COMPRESSION_PAGE;
+  cmd[4] = COMPRESSION_PAGE_LENGTH + MODE_HEADER_LENGTH;
+
+  SCpnt = st_do_scsi(SCpnt, STp, cmd, cmd[4], ST_TIMEOUT, 0);
+  dev = TAPE_NR(SCpnt->request.rq_dev);
+
+  if ((STp->buffer)->last_result_fatal != 0) {
+#if DEBUG
+    if (debugging)
+      printk(ST_DEB_MSG "st%d: Compression mode page not supported.\n", dev);
+#endif
+    SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+    return (-EIO);
+  }
+#if DEBUG
+  if (debugging)
+    printk(ST_DEB_MSG "st%d: Compression state is %d.\n", dev,
+	   ((STp->buffer)->b_data[MODE_HEADER_LENGTH + 2] & DCE_MASK ? 1 : 0));
+#endif
+
+  /* Check if compression can be changed */
+  if (((STp->buffer)->b_data[MODE_HEADER_LENGTH + 2] & DCC_MASK) == 0) {
+#if DEBUG
+    if (debugging)
+      printk(ST_DEB_MSG "st%d: Compression not supported.\n", dev);
+#endif
+    SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+    return (-EIO);
+  }
+
+  /* Do the change */
+  if (state)
+    (STp->buffer)->b_data[MODE_HEADER_LENGTH + 2] |= DCE_MASK;
+  else
+    (STp->buffer)->b_data[MODE_HEADER_LENGTH + 2] &= ~DCE_MASK;
+
+  memset(cmd, 0, 10);
+  cmd[0] = MODE_SELECT;
+  cmd[1] = 0x10;
+  cmd[4] = COMPRESSION_PAGE_LENGTH + MODE_HEADER_LENGTH;
+
+  (STp->buffer)->b_data[0] = 0;  /* Reserved data length */
+  (STp->buffer)->b_data[1] = 0;  /* Reserved media type byte */
+  (STp->buffer)->b_data[MODE_HEADER_LENGTH] &= 0x3f;
+  SCpnt = st_do_scsi(SCpnt, STp, cmd, cmd[4], ST_TIMEOUT, 0);
+
+  if ((STp->buffer)->last_result_fatal != 0) {
+#if DEBUG
+    if (debugging)
+      printk(ST_DEB_MSG "st%d: Compression change failed.\n", dev);
+#endif
+    SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+    return (-EIO);
+  }
+
+#if DEBUG
+  if (debugging)
+    printk(ST_DEB_MSG "st%d: Compression state changed to %d.\n",
+	   dev, state);
+#endif
+
+  SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+  STp->compression_changed = TRUE;
+  return 0;  /* Not implemented yet */
 }
 
 
@@ -1469,8 +1760,12 @@ st_int_ioctl(struct inode * inode,struct file * file,
        timeout = ST_LONG_TIMEOUT * 8;
 #endif
 #if DEBUG
-       if (debugging)
-	 printk(ST_DEB_MSG "st%d: Unloading tape.\n", dev);
+       if (debugging) {
+	 if (cmd_in != MTLOAD)
+	   printk(ST_DEB_MSG "st%d: Unloading tape.\n", dev);
+	 else
+	   printk(ST_DEB_MSG "st%d: Loading tape.\n", dev);
+       }
 #endif
        fileno = blkno = at_sm = 0 ;
        break; 
@@ -1599,12 +1894,16 @@ st_int_ioctl(struct inode * inode,struct file * file,
 	 (STp->buffer)->b_data[2] = 
 	   STp->drv_buffer << 4;
        (STp->buffer)->b_data[3] = 8;     /* block descriptor length */
-       if (cmd_in == MTSETDENSITY)
+       if (cmd_in == MTSETDENSITY) {
 	 (STp->buffer)->b_data[4] = arg;
+	 STp->density_changed = TRUE;  /* At least we tried ;-) */
+       }
        else
 	 (STp->buffer)->b_data[4] = STp->density;
-       if (cmd_in == MTSETBLK)
+       if (cmd_in == MTSETBLK) {
 	 ltmp = arg;
+	 STp->blksize_changed = TRUE;  /* At least we tried ;-) */
+       }
        else
 	 ltmp = STp->block_size;
        (STp->buffer)->b_data[9] = (ltmp >> 16);
@@ -1684,7 +1983,6 @@ st_int_ioctl(struct inode * inode,struct file * file,
        STp->rew_at_close = 0;
      else if (cmd_in == MTLOAD)
        STp->rew_at_close = (MINOR(inode->i_rdev) & 0x80) == 0;
-
    } else {  /* SCSI command was not completely successful */
      if (SCpnt->sense_buffer[2] & 0x40) {
        if (cmd_in != MTBSF && cmd_in != MTBSFM &&
@@ -1760,6 +2058,7 @@ st_ioctl(struct inode * inode,struct file * file,
    unsigned char scmd[10];
    Scsi_Cmnd *SCpnt;
    Scsi_Tape *STp;
+   ST_mode *STm;
    int dev = TAPE_NR(inode->i_rdev);
 
    STp = &(scsi_tapes[dev]);
@@ -1769,6 +2068,7 @@ st_ioctl(struct inode * inode,struct file * file,
      return (-EIO);
    }
 #endif
+   STm = &(STp->modes[STp->current_mode]);
 
    /*
     * If this is something intended for the lower layer, just pass it
@@ -1791,6 +2091,14 @@ st_ioctl(struct inode * inode,struct file * file,
 
      memcpy_fromfs((char *) &mtc, (char *)arg, sizeof(struct mtop));
 
+     if (mtc.mt_op == MTSETDRVBUFFER && !suser()) {
+       printk(KERN_WARNING "st%d: MTSETDRVBUFFER only allowed for root.\n", dev);
+       return (-EPERM);
+     }
+     if (!STm->defined &&
+	 (mtc.mt_op != MTSETDRVBUFFER && (mtc.mt_count & MT_ST_OPTIONS) == 0))
+       return (-ENXIO);
+
      if (!(STp->device)->was_reset) {
 
        if (STp->eof_hit) {
@@ -1807,7 +2115,8 @@ st_ioctl(struct inode * inode,struct file * file,
        i = flush_buffer(inode, file, mtc.mt_op == MTSEEK ||
 			mtc.mt_op == MTREW || mtc.mt_op == MTOFFL ||
 			mtc.mt_op == MTRETEN || mtc.mt_op == MTEOM ||
-			mtc.mt_op == MTLOCK || mtc.mt_op == MTLOAD);
+			mtc.mt_op == MTLOCK || mtc.mt_op == MTLOAD ||
+			mtc.mt_op == MTCOMPRESSION);
        if (i < 0)
 	 return i;
      }
@@ -1846,10 +2155,16 @@ st_ioctl(struct inode * inode,struct file * file,
      if (mtc.mt_op == MTSETDRVBUFFER &&
 	 (mtc.mt_count & MT_ST_OPTIONS) != 0)
        return st_set_options(inode, mtc.mt_count);
+     else if (mtc.mt_op == MTCOMPRESSION)
+       return st_compression(STp, (mtc.mt_count & 1));
      else
        return st_int_ioctl(inode, file, mtc.mt_op, mtc.mt_count);
    }
-   else if (cmd_type == _IOC_TYPE(MTIOCGET) && cmd_nr == _IOC_NR(MTIOCGET)) {
+
+   if (!STm->defined)
+     return (-ENXIO);
+
+   if (cmd_type == _IOC_TYPE(MTIOCGET) && cmd_nr == _IOC_NR(MTIOCGET)) {
 
      if (_IOC_SIZE(cmd_in) != sizeof(struct mtget))
        return (-EINVAL);
@@ -2135,17 +2450,32 @@ static int st_attach(Scsi_Device * SDp){
    tpnt->drv_buffer = 1;  /* Try buffering if no mode sense */
    tpnt->restr_dma = (SDp->host)->unchecked_isa_dma;
    tpnt->density = 0;
-   tpnt->do_buffer_writes = ST_BUFFER_WRITES;
-   tpnt->do_async_writes = ST_ASYNC_WRITES;
    tpnt->do_read_ahead = ST_READ_AHEAD;
    tpnt->do_auto_lock = ST_AUTO_LOCK;
+   tpnt->can_bsr = ST_IN_FILE_POS;
    tpnt->two_fm = ST_TWO_FM;
    tpnt->fast_mteom = ST_FAST_MTEOM;
    tpnt->write_threshold = st_write_threshold;
+   tpnt->default_drvbuffer = 0xff; /* No forced buffering */
    tpnt->drv_block = (-1);
    tpnt->moves_after_eof = 1;
    tpnt->at_sm = 0;
    (tpnt->mt_status)->mt_fileno = (tpnt->mt_status)->mt_blkno = (-1);
+
+   for (i=0; i < ST_NBR_MODES; i++) {
+     tpnt->modes[i].defined = FALSE;
+     tpnt->modes[i].defaults_for_writes = 0;
+     tpnt->modes[i].do_async_writes = ST_ASYNC_WRITES;
+     tpnt->modes[i].do_buffer_writes = ST_BUFFER_WRITES;
+     tpnt->modes[i].default_compression = ST_DONT_TOUCH;
+     tpnt->modes[i].default_blksize = (-1);  /* No forced size */
+     tpnt->modes[i].default_density = (-1);  /* No forced density */
+   }
+   tpnt->current_mode = 0;
+   tpnt->modes[0].defined = TRUE;
+
+   tpnt->density_changed = tpnt->compression_changed =
+     tpnt->blksize_changed = FALSE;
 
    st_template.nr_dev++;
    return 0;
@@ -2187,6 +2517,8 @@ static int st_init()
   st_template.dev_max = st_template.dev_noticed + ST_EXTRA_DEVS;
   if (st_template.dev_max < ST_MAX_TAPES)
     st_template.dev_max = ST_MAX_TAPES;
+  if (st_template.dev_max > 128 / ST_NBR_MODES)
+    printk(KERN_INFO "st: Only %d tapes accessible.\n", 128 / ST_NBR_MODES);
   scsi_tapes =
     (Scsi_Tape *) scsi_init_malloc(st_template.dev_max * sizeof(Scsi_Tape),
 				   GFP_ATOMIC);
@@ -2201,27 +2533,10 @@ static int st_init()
 	 st_buffer_size, st_write_threshold);
 #endif
 
+  memset(scsi_tapes, 0, st_template.dev_max * sizeof(Scsi_Tape));
   for (i=0; i < st_template.dev_max; ++i) {
     STp = &(scsi_tapes[i]);
-    STp->device = NULL;
     STp->capacity = 0xfffff;
-    STp->dirty = 0;
-    STp->rw = ST_IDLE;
-    STp->eof = ST_NOEOF;
-    STp->waiting = NULL;
-    STp->in_use = 0;
-    STp->drv_buffer = 1;  /* Try buffering if no mode sense */
-    STp->density = 0;
-    STp->do_buffer_writes = ST_BUFFER_WRITES;
-    STp->do_async_writes = ST_ASYNC_WRITES;
-    STp->do_read_ahead = ST_READ_AHEAD;
-    STp->do_auto_lock = ST_AUTO_LOCK;
-    STp->two_fm = ST_TWO_FM;
-    STp->fast_mteom = ST_FAST_MTEOM;
-    STp->write_threshold = st_write_threshold;
-    STp->drv_block = 0;
-    STp->moves_after_eof = 1;
-    STp->at_sm = 0;
     STp->mt_status = (struct mtget *) scsi_init_malloc(sizeof(struct mtget),
 						       GFP_ATOMIC);
     /* Initialize status */

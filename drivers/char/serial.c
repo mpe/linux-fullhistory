@@ -171,18 +171,20 @@ struct async_struct rs_table[] = {
 /* You can have up to four HUB6's in the system, but I've only
  * included two cards here for a total of twelve ports.
  */
+#ifdef CONFIG_HUB6
 	{ 0, BASE_BAUD, 0x302, 3, HUB6_FLAGS, C_P(0,0) },	/* ttyS32 */
 	{ 0, BASE_BAUD, 0x302, 3, HUB6_FLAGS, C_P(0,1) },	/* ttyS33 */
 	{ 0, BASE_BAUD, 0x302, 3, HUB6_FLAGS, C_P(0,2) },	/* ttyS34 */
 	{ 0, BASE_BAUD, 0x302, 3, HUB6_FLAGS, C_P(0,3) },	/* ttyS35 */
 	{ 0, BASE_BAUD, 0x302, 3, HUB6_FLAGS, C_P(0,4) },	/* ttyS36 */
 	{ 0, BASE_BAUD, 0x302, 3, HUB6_FLAGS, C_P(0,5) },	/* ttyS37 */
-	{ 0, BASE_BAUD, 0x302, 3, HUB6_FLAGS, C_P(1,0) },	/* ttyS32 */
-	{ 0, BASE_BAUD, 0x302, 3, HUB6_FLAGS, C_P(1,1) },	/* ttyS33 */
-	{ 0, BASE_BAUD, 0x302, 3, HUB6_FLAGS, C_P(1,2) },	/* ttyS34 */
-	{ 0, BASE_BAUD, 0x302, 3, HUB6_FLAGS, C_P(1,3) },	/* ttyS35 */
-	{ 0, BASE_BAUD, 0x302, 3, HUB6_FLAGS, C_P(1,4) },	/* ttyS36 */
-	{ 0, BASE_BAUD, 0x302, 3, HUB6_FLAGS, C_P(1,5) },	/* ttyS37 */
+	{ 0, BASE_BAUD, 0x302, 3, HUB6_FLAGS, C_P(1,0) },	/* ttyS38 */
+	{ 0, BASE_BAUD, 0x302, 3, HUB6_FLAGS, C_P(1,1) },	/* ttyS39 */
+	{ 0, BASE_BAUD, 0x302, 3, HUB6_FLAGS, C_P(1,2) },	/* ttyS40 */
+	{ 0, BASE_BAUD, 0x302, 3, HUB6_FLAGS, C_P(1,3) },	/* ttyS41 */
+	{ 0, BASE_BAUD, 0x302, 3, HUB6_FLAGS, C_P(1,4) },	/* ttyS42 */
+	{ 0, BASE_BAUD, 0x302, 3, HUB6_FLAGS, C_P(1,5) },	/* ttyS43 */
+#endif
 };
 
 #define NR_PORTS	(sizeof(rs_table)/sizeof(struct async_struct))
@@ -2426,7 +2428,7 @@ int rs_open(struct tty_struct *tty, struct file * filp)
  */
 static void show_serial_version(void)
 {
-	printk("Serial driver version 4.11 with");
+	printk("Serial driver version 4.11a with");
 #ifdef CONFIG_HUB6
 	printk(" HUB-6");
 #define SERIAL_OPT

@@ -153,7 +153,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	pg_dir = swapper_pg_dir;
 	while (address < end_mem) {
 #ifdef USE_PENTIUM_MM
-		if (address <= end_mem + 4*1024*1024 &&
+		if (address + 4*1024*1024 <= end_mem &&
 		    (x86_capability & 8)) {
 #ifdef GAS_KNOWS_CR4
 			__asm__("movl %%cr4,%%eax\n\t"

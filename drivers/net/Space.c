@@ -38,6 +38,7 @@
    ethernet adaptor have the name "eth[0123...]".
    */
 
+extern int tulip_probe(struct device *dev);
 extern int hp100_probe(struct device *dev);
 extern int ultra_probe(struct device *dev);
 extern int wd_probe(struct device *dev);
@@ -91,6 +92,9 @@ ethif_probe(struct device *dev)
 #endif
 #if defined(CONFIG_SEEQ8005)
 	&& seeq8005_probe(dev)
+#endif
+#if defined(CONFIG_DEC_ELCP)
+	&& tulip_probe(dev)
 #endif
 #if defined(CONFIG_HP100)
 	&& hp100_probe(dev)

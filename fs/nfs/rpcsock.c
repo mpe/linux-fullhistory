@@ -285,7 +285,7 @@ rpc_cwnd_adjust(struct rpc_sock *rsock, int timeout)
 static inline void
 rpc_send_check(char *where, u32 *ptr)
 {
-	if (ptr[1] != 0 || ptr[2] != htonl(2) || ptr[3] != htonl(100003)) {
+	if (ptr[1] != htonl(RPC_CALL) || ptr[2] != htonl(RPC_VERSION)) {
 		printk("RPC: %s sending evil packet:\n"
 		       "     %08x %08x %08x %08x %08x %08x %08x %08x\n",
 		       where,

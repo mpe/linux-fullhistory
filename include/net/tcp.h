@@ -199,13 +199,8 @@ static __inline__ unsigned short tcp_raise_window(struct sock *sk)
 	/* 
          * compute the actual window i.e. 
          * old_window - received_bytes_on_that_win.
-	 *
-	 * Don't raise the window if we have lots left:
-	 * that only results in unnecessary packets.
 	 */
 	window = sk->window - (sk->acked_seq - sk->lastwin_seq);	
-	if (window >= MAX_WINDOW/2)
-		return 0;
 
 	free_space = sock_rspace(sk);
 	if (free_space > 1024)

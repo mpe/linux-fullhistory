@@ -130,6 +130,7 @@ void __wait_on_buffer(struct buffer_head * bh)
 	bh->b_count++;
 	add_wait_queue(&bh->b_wait, &wait);
 repeat:
+	run_task_queue(&tq_disk);
 	current->state = TASK_UNINTERRUPTIBLE;
 	if (buffer_locked(bh)) {
 		schedule();
@@ -993,6 +994,7 @@ static void get_more_buffer_heads(void)
 		 * wait for old buffer heads to become free due to
 		 * finishing IO..
 		 */
+		run_task_queue(&tq_disk);
 		sleep_on(&buffer_wait);
 	}
 
@@ -1817,6 +1819,7 @@ struct wait_queue * bdflush_done = NULL;
 
 static void wakeup_bdflush(int wait)
 {
+	run_task_queue(&tq_disk);
 	wake_up(&bdflush_wait);
 	if(wait) sleep_on(&bdflush_done);
 }
@@ -1930,7 +1933,7 @@ asmlinkage int sys_bdflush(int func, long data)
 			return -EINVAL;
 		bdf_prm.data[i] = data;
 		return 0;
-	};
+	}
 
 	/* Having func 0 used to launch the actual bdflush and then never
 	return (unless explicitly killed). We return zero here to 
@@ -2023,6 +2026,7 @@ int bdflush(void * unused)
 		if (ncount) printk("sys_bdflush: %d dirty buffers not on dirty list\n", ncount);
 		printk("sleeping again.\n");
 #endif
+		run_task_queue(&tq_disk);
 		wake_up(&bdflush_done);
 		
 		/* If there are still a lot of dirty buffers around, skip the sleep

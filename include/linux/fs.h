@@ -320,7 +320,7 @@ struct file {
 	loff_t f_pos;
 	unsigned short f_flags;
 	unsigned short f_count;
-	off_t f_reada;
+	loff_t f_reada;
 	struct file *f_next, *f_prev;
 	int f_owner;		/* pid or -pgrp where SIGIO should be sent */
 	struct inode * f_inode;
@@ -342,6 +342,33 @@ struct file_lock {
 	off_t fl_start;
 	off_t fl_end;
 };
+
+#include <linux/fcntl.h>
+
+extern int fcntl_getlk(unsigned int fd, struct flock *l);
+extern int fcntl_setlk(unsigned int fd, unsigned int cmd, struct flock *l);
+extern void locks_remove_locks(struct task_struct *task, struct file *filp);
+
+#include <linux/stat.h>
+
+#define FLOCK_VERIFY_READ  1
+#define FLOCK_VERIFY_WRITE 2
+
+extern int locks_locked_mandatory(int read_write, struct inode *inode,
+				  struct file *filp, unsigned int offset,
+				  unsigned int count);
+extern inline int locks_verify(int read_write, struct inode *inode,
+			       struct file *filp, unsigned int offset,
+			       unsigned int count)
+{
+	/* Candidates for mandatory locking have the setgid bit set
+	 * but no group execute bit -  an otherwise meaningless combination.
+	 */
+	if ((inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
+		return (locks_locked_mandatory(read_write, inode, filp,
+					       offset, count));
+	return (0);
+}
 
 struct fasync_struct {
 	int    magic;

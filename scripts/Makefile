@@ -2,7 +2,13 @@ HOSTCFLAGS:=$(HOSTCFLAGS) -g -Wall
 HEADER=header.tk
 TAIL=tail.tk
 
-kconfig.tk: ../arch/${ARCH}/config.in tkparse ${HEADER} ${TAIL}
+SOUNDSCRIPT=${TOPDIR}/drivers/sound/Config.in
+
+${SOUNDSCRIPT}: ${TOPDIR}/drivers/sound/configure.c
+	make -C ${TOPDIR}/drivers/sound mkscript
+
+kconfig.tk: ${SOUNDSCRIPT} ${TOPDIR}/Makefile ../arch/${ARCH}/config.in \
+		tkparse ${HEADER} ${TAIL}
 	./tkparse < ../arch/${ARCH}/config.in  > kconfig.tmp
 	@if [ -f /usr/local/bin/wish ];	then \
 		echo '#!'"/usr/local/bin/wish -f" > kconfig.tk; \

@@ -304,7 +304,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	
 #ifdef	CONFIG_FIREWALL
 
-	if ((err=call_in_firewall(PF_INET, skb, iph))<FW_ACCEPT)
+	if ((err=call_in_firewall(PF_INET, skb->dev, iph))<FW_ACCEPT)
 	{
 		if(err==FW_REJECT)
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0, dev);

@@ -1236,16 +1236,14 @@ CONFIG_SCSI_U14_34F
 Future Domain 16xx SCSI support
 CONFIG_SCSI_FUTURE_DOMAIN
   This is support for Future Domain's 16-bit SCSI host adaptors
-  (TMC-1660/1680, TMC-1650/1670, TMC-3260) and other adaptors based on
-  the Future Domain chipsets (Quantum ISA-200S, ISA-250MG; and at
-  least one IBM board).  It is explained in section 3.7 of the
-  SCSI-HOWTO, available via ftp (user: anonymous) at
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If it doesn't work out of
-  the box, you may have to change some settings in
-  drivers/scsi/fdomain.h. This driver is also available as a module (
-  = code which can be inserted in and removed from the running kernel
-  whenever you want). If you want to compile it as a module, say M
-  here and read Documentation/modules.txt.
+  (TMC-1660/1680, TMC-1650/1670, TMC-3260, TMC-1610M/MER/MEX) and other
+  adaptors based on the Future Domain chipsets (Quantum ISA-200S,
+  ISA-250MG; Adaptec AHA-2920; and at least one IBM board).  It is
+  explained in section 3.7 of the SCSI-HOWTO, available via ftp (user:
+  anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO.  This driver is
+  also available as a module ( = code which can be inserted in and
+  removed from the running kernel whenever you want). If you want to
+  compile it as a module, say M here and read Documentation/modules.txt.
 
 Generic NCR5380/53c400 SCSI support
 CONFIG_SCSI_GENERIC_NCR5380
@@ -2878,14 +2876,21 @@ CONFIG_SUN_ZS
 
 Advanced Power Management
 CONFIG_APM
-  APM is a BIOS standard for saving power using several different
-  techniques. This is mostly useful for battery powered laptops with
-  APM compliant BIOSes.  Specifically, the time will be reset after a
-  USER RESUME operation, the /proc/apm device will provide battery
-  status information, and ioctls are provided to put the machine in
-  STANDBY or SUSPEND mode.  This driver does not work for the TI 4000M
-  TravelMate and the ACER 486/DX4/75 because they don't follow the
-  standard. Say Y if you have a different laptop.
+  APM is a BIOS specification for saving power using several different
+  techniques.  This is mostly useful for battery powered laptops with APM
+  compliant BIOSes.  Specifically, the time will be reset after a USER
+  RESUME operation, the /proc/apm device will provide battery status
+  information, and user-space programs will receive notification of APM
+  "events" (e.g., battery status change).  This driver does not spin down
+  disk drives (see hdparm(8) for that); and it doesn't turn off
+  VESA-compliant "green" monitors.  This driver does not support the TI
+  4000M TravelMate and the ACER 486/DX4/75 because they don't have
+  compliant BIOSes.  Many "green" desktop machines also don't have
+  compliant BIOSes, and this driver will cause those machines to panic
+  during the boot phase (typically, these machines are using a data
+  segment of 0040, which is reserved for the Linux kernel).  If you don't
+  have a battery in your machine, there isn't much point in using this
+  driver.
 
 Ignore USER SUSPEND
 CONFIG_APM_IGNORE_USER_SUSPEND
@@ -2897,16 +2902,37 @@ Enable APM features
 CONFIG_APM_DO_ENABLE
   Enable APM features at boot time.  From page 36 of the APM BIOS
   specification: "When disabled, the APM BIOS does not automatically
-  power manage devices, enter the Standby State, enter the Suspend
-  State, or take power saving steps in response to CPU Idle calls."
-  This driver will make CPU Idle calls when Linux is idle (unless this
-  feature is turned off -- see below).  This should always save
-  battery power, but more complicated APM features will be dependent
-  on your BIOS implementation.  You may need to turn this option off
-  if your computer hangs at boot time when using APM support, or if it
-  beeps continuously instead of suspending.  Turn this off if you have
-  a NEC UltraLite Versa 33/C or a Toshiba T400CDT.  This is off by
-  default since most machines do fine without this feature.
+  power manage devices, enter the Standby State, enter the Suspend State,
+  or take power saving steps in response to CPU Idle calls."  This driver
+  will make CPU Idle calls when Linux is idle (unless this feature is
+  turned off -- see below).  This should always save battery power, but
+  more complicated APM features will be dependent on your BIOS
+  implementation.  You may need to turn this option off if your computer
+  hangs at boot time when using APM support, or if it beeps continuously
+  instead of suspending.  Turn this off if you have a NEC UltraLite Versa
+  33/C or a Toshiba T400CDT.  This is off by default since most machines
+  do fine without this feature.
+
+Do CPU IDLE calls
+CONFIG_APM_CPU_IDLE
+  Enable calls to APM CPU Idle/CPU Busy inside the kernel's idle loop.
+  On some machines, this can activate improved power savings, such as a
+  slowed CPU clock rate, when the machine is idle.  These idle calls are
+  made after the idle loop has run for some length of time (e.g., 333
+  mS).  On some machines, this will cause a hang at boot time or whenever
+  the CPU becomes idle.  (On machines with more than one CPU, this option
+  does nothing.)
+
+Black display
+CONFIG_APM_DISPLAY_BLANK
+  Enable console blanking using the APM.  Some laptops can use this to
+  turn off the LCD backlight when the VC screen blanker blanks the
+  screen.  Note that this is only used by the VC screen blanker, and
+  won't turn off the backlight when using X11 (this also doesn't have
+  anything to do with your VESA-compliant power-saving monitor).
+  Further, this option doesn't work for all laptops -- it might not turn
+  off your backlight at all, or it might print a lot of errors to the
+  console.
 
 Watchdog Timer Support 
 CONFIG_WATCHDOG
@@ -2959,23 +2985,6 @@ CONFIG_SOFT_WATCHDOG
   A software monitoring watchdog. This will fail to reboot your system
   from some situations that the hardware watchdog will recover
   from. Equally it's a lot cheaper to install.
-
-Do CPU IDLE calls
-CONFIG_APM_CPU_IDLE
-  Enable calls to APM CPU Idle/CPU Busy inside the kernel's idle loop.
-  On some machines, this can activate improved power savings, such as
-  a slowed CPU clock rate, when the machine is idle.  These idle call
-  is made after the idle loop has run for some length of time (e.g.,
-  333 mS).  On some machines, this will cause a hang at boot time or
-  whenever the CPU becomes idle.  (On machines with more than one CPU,
-  this option does nothing.)
-
-Black display
-CONFIG_APM_DISPLAY_BLANK
-  Enable console blanking using the APM.  Some laptops can use this to
-  turn off the LCD backlight when the VC screen blanker blanks the
-  screen.  Note that this is only used by the VC screen blanker, and
-  won't turn off the backlight when using X11.
 
 Sound card support
 CONFIG_SOUND

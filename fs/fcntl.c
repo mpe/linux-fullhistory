@@ -13,8 +13,6 @@
 #include <linux/fcntl.h>
 #include <linux/string.h>
 
-extern int fcntl_getlk(unsigned int, struct flock *);
-extern int fcntl_setlk(unsigned int, unsigned int, struct flock *);
 extern int sock_fcntl (struct file *, unsigned int cmd, unsigned long arg);
 
 static inline int dupfd(unsigned int fd, unsigned int arg)

@@ -716,7 +716,7 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 	 *	We firewall first, ask questions later.
 	 */
 	 
-	if (call_in_firewall(PF_IPX, skb, ipx)!=FW_ACCEPT)
+	if (call_in_firewall(PF_IPX, skb->dev, ipx)!=FW_ACCEPT)
 	{
 		kfree_skb(skb, FREE_READ);
 		return 0;
@@ -760,7 +760,7 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 		/*
 		 *	See if we are allowed to firewall forward
 		 */
-		if (call_fw_firewall(PF_IPX, skb, ipx)!=FW_ACCEPT)
+		if (call_fw_firewall(PF_IPX, skb->dev, ipx)!=FW_ACCEPT)
 		{
 			kfree_skb(skb, FREE_READ);
 			return 0;
@@ -1318,7 +1318,7 @@ static int ipxrtr_route_packet(ipx_socket *sk, struct sockaddr_ipx *usipx, struc
 		ipx->ipx_checksum=ipx_set_checksum(ipx, len+sizeof(ipx_packet));
 
 #ifdef CONFIG_FIREWALL	
-	if(call_out_firewall(PF_IPX, skb, ipx)!=FW_ACCEPT)
+	if(call_out_firewall(PF_IPX, skb->dev, ipx)!=FW_ACCEPT)
 	{
 		kfree_skb(skb, FREE_WRITE);
 		return -EPERM;

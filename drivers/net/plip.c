@@ -1,4 +1,4 @@
-/* $Id: plip.c,v 1.15 1995/10/03 01:47:09 gniibe Exp $ */
+/* $Id: plip.c,v 1.16 1996-04-06 15:36:57+09 gniibe Exp $ */
 /* PLIP: A parallel port "network" driver for Linux. */
 /* This driver is for parallel port with 5-bit cable (LapLink (R) cable). */
 /*
@@ -26,6 +26,7 @@
  *			# insmod plip.o io=0x3bc irq=7
  *		  - MTU fix.
  *		  - Make sure other end is OK, before sending a packet.
+ *		  - Fix immediate timer problem.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -51,7 +52,7 @@
  *     To use with DOS box, please do (Turn on ARP switch):
  *	# ifconfig plip[0-2] arp
  */
-static const char *version = "NET3 PLIP version 2.1 gniibe@mri.co.jp\n";
+static const char *version = "NET3 PLIP version 2.2 gniibe@mri.co.jp\n";
 
 /*
   Sources:
@@ -591,6 +592,7 @@ plip_receive_packet(struct device *dev, struct net_local *nl,
 			nl->connection = PLIP_CN_SEND;
 			sti();
 			queue_task(&nl->immediate, &tq_immediate);
+			mark_bh(IMMEDIATE_BH);
 			outb(PAR_INTR_ON, PAR_CONTROL(dev));
 			enable_irq(dev->irq);
 			return OK;

@@ -276,6 +276,7 @@ void __wait_on_page(struct page *page)
 	page->count++;
 	add_wait_queue(&page->wait, &wait);
 repeat:
+	run_task_queue(&tq_disk);
 	current->state = TASK_UNINTERRUPTIBLE;
 	if (page->locked) {
 		schedule();
@@ -300,6 +301,7 @@ int generic_file_read(struct inode * inode, struct file * filp, char * buf, int 
 {
 	int error, read;
 	unsigned long pos, page_cache;
+	unsigned long ra_pos, ra_end;	/* read-ahead */
 	
 	if (count <= 0)
 		return 0;
@@ -308,6 +310,14 @@ int generic_file_read(struct inode * inode, struct file * filp, char * buf, int 
 	page_cache = 0;
 
 	pos = filp->f_pos;
+	ra_pos = filp->f_reada;
+	ra_end = MAX_READAHEAD;
+	if (!ra_pos) {
+		ra_pos = (pos + PAGE_SIZE) & PAGE_MASK;
+		ra_end = 0;
+	}
+	ra_end += pos + count;
+
 	for (;;) {
 		struct page *page;
 		unsigned long offset, addr, nr;
@@ -358,15 +368,9 @@ found_page:
 		 *  - if "f_reada" is set
 		 */
 		if (page->locked) {
-			unsigned long max_ahead, ahead;
-
-			max_ahead = count - nr;
-			if (filp->f_reada || max_ahead > MAX_READAHEAD)
-				max_ahead = MAX_READAHEAD;
-			ahead = 0;
-			while (ahead < max_ahead) {
-				ahead += PAGE_SIZE;
-				page_cache = try_to_read_ahead(inode, pos + ahead, page_cache);
+			while (ra_pos < ra_end) {
+				page_cache = try_to_read_ahead(inode, ra_pos, page_cache);
+				ra_pos += PAGE_SIZE;
 				if (!page->locked)
 					goto unlocked_page;
 			}
@@ -418,17 +422,30 @@ read_page:
 		break;
 	}
 
-	filp->f_pos = pos;
-	filp->f_reada = 1;
+	if (read) {
+		error = read;
+
+		/*
+		 * Start some extra read-ahead if we haven't already
+		 * read ahead enough..
+		 */
+		while (ra_pos < ra_end) {
+			page_cache = try_to_read_ahead(inode, ra_pos, page_cache);
+			ra_pos += PAGE_SIZE;
+		}
+		run_task_queue(&tq_disk);
+
+		filp->f_pos = pos;
+		filp->f_reada = ra_pos;
+		if (!IS_RDONLY(inode)) {
+			inode->i_atime = CURRENT_TIME;
+			inode->i_dirt = 1;
+		}
+	}
 	if (page_cache)
 		free_page(page_cache);
-	if (!IS_RDONLY(inode)) {
-		inode->i_atime = CURRENT_TIME;
-		inode->i_dirt = 1;
-	}
-	if (!read)
-		read = error;
-	return read;
+
+	return error;
 }
 
 /*

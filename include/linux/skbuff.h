@@ -53,7 +53,7 @@ struct sk_buff
 #if CONFIG_SKB_CHECK
 	int		magic_debug_cookie;
 #endif
-	struct sk_buff	* volatile link3;	/* Link for IP protocol level buffer chains 	*/
+	struct sk_buff	*link3;			/* Link for IP protocol level buffer chains 	*/
 	struct sock	*sk;			/* Socket we are owned by 			*/
 	unsigned long	when;			/* used to compute rtt's			*/
 	struct timeval	stamp;			/* Time we arrived				*/

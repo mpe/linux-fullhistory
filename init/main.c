@@ -32,9 +32,6 @@
 #include <linux/mm.h>
 #include <linux/major.h>
 #include <linux/blk.h>
-#ifdef CONFIG_APM
-#include <linux/apm_bios.h>
-#endif
 #ifdef CONFIG_ROOT_NFS
 #include <linux/nfs_fs.h>
 #endif
@@ -133,6 +130,10 @@ extern void icn_setup(char *str, int *ints);
 #endif
 #ifdef CONFIG_ISDN_DRV_TELES
 extern void teles_setup(char *str, int *ints);
+#endif
+
+#ifdef CONFIG_DIGI
+extern void pcxx_setup(char *str, int *ints);
 #endif
 
 #if defined(CONFIG_SYSVIPC) || defined(CONFIG_KERNELD)
@@ -334,6 +335,9 @@ struct {
 #endif
 #ifdef CONFIG_ISDN_DRV_TELES
 	{ "teles=", teles_setup },
+#endif
+#ifdef CONFIG_DIGI
+	{ "digi=", pcxx_setup },
 #endif
 	{ 0, 0 }
 };
@@ -727,9 +731,6 @@ asmlinkage void start_kernel(void)
 	sock_init();
 #if defined(CONFIG_SYSVIPC) || defined(CONFIG_KERNELD)
 	ipc_init();
-#endif
-#ifdef CONFIG_APM
-	apm_bios_init();
 #endif
 	dquot_init();
 	arch_syms_export();

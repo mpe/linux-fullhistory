@@ -1,19 +1,34 @@
 #
-# Set to be the x and y position of subwindows.
-#
-set winx 100
-set winy 200
-
-#
 # Create a "reference" object to steal colors from.
 #
 button .ref
 
 #
+# This is a handy replacement for ".widget cget" that requires neither tk4
+# nor additional source code uglification.
+#
+proc cget { w option } {
+	return [lindex [$w configure $option] 4]
+}
+
+#
+# Function to compensate for broken config.in scripts like the sound driver,
+# which make dependencies on variables that are never even conditionally
+# defined.
+#
+proc vfix { var } {
+	global $var
+	if [catch {set $var [subst $$var]}] {
+		puts stdout "WARNING - broken Config.in!  $var was not declared!"
+		set $var 0
+	}
+}
+
+#
 # Define some macros we will need to parse the config.in file.
 #
 proc mainmenu_name { text } {
-	message .header.message -width 400 -relief raised -bg grey -text "$text"
+	message .header.message -width 400 -relief raised -text "$text"
 	pack .header.label .header.message -side left -padx 15
         wm title . "$text"
 }
@@ -27,6 +42,9 @@ proc menu_option { w menu_num text } {
 # Not used at the moment, but this runs a command in a subprocess and
 # displays the result in a window with a scrollbar.
 #
+# For now, we just do external "make" commands to stdout with do_make, so
+# this function is never called.
+#
 proc do_cmd { w command } {
 	catch {destroy $w}
 	toplevel $w -class Dialog
@@ -38,9 +56,9 @@ proc do_cmd { w command } {
 
 	set oldFocus [focus]
 	frame $w.back
-	button $w.back.ok -text "OK" -activebackground green -width 20 \
+	button $w.back.ok -text "OK" -width 20 \
 		-command "destroy $w; focus $oldFocus" -state disabled
-	button $w.back.ccl -text "Cancel" -activebackground green -width 20 \
+	button $w.back.ccl -text "Cancel" -width 20 \
 		-command "destroy $w; focus $oldFocus"
 	pack $w.tb -side top
 	pack $w.back.ok $w.back.ccl -side left
@@ -74,9 +92,9 @@ proc load_configfile { w title func } {
 
 	set oldFocus [focus]
 	frame $w.f
-	button $w.f.back -text "OK" -activebackground green -width 20 \
+	button $w.f.back -text "OK" -width 20 \
 		-command "destroy $w; focus $oldFocus;$func .fileio"
-	button $w.f.canc -text "Cancel" -activebackground red \
+	button $w.f.canc -text "Cancel" \
 		-width 20 -command "destroy $w; focus $oldFocus"
 	pack $w.f.back $w.f.canc -side left -pady 10 -padx 45
 	pack $w.f -pady 10 -side bottom -padx 10 -anchor w
@@ -98,9 +116,9 @@ proc maybe_exit { w } {
 
 	set oldFocus [focus]
 	frame $w.f
-	button $w.f.back -text "OK" -activebackground green -width 20 \
+	button $w.f.back -text "OK" -width 20 \
 		-command "exit"
-	button $w.f.canc -text "Cancel" -activebackground red \
+	button $w.f.canc -text "Cancel" \
 		-width 20 -command "destroy $w; focus $oldFocus"
 	pack $w.f.back $w.f.canc -side left -pady 10 -padx 45
 	pack $w.f -pady 10 -side bottom -padx 10 -anchor w
@@ -126,7 +144,7 @@ proc read_config_file { w } {
 
 		set oldFocus [focus]
 		frame $w.f
-		button $w.f.back -text "Bummer" -activebackground green \
+		button $w.f.back -text "Bummer" \
 			-width 10 -command "destroy $w; focus $oldFocus"
 		pack $w.f.back -side bottom -pady 10 -anchor s
 		pack $w.f -pady 10 -side top -padx 10 -anchor s
@@ -154,7 +172,7 @@ proc write_config_file  { w } {
 
 		set oldFocus [focus]
 		frame $w.f
-		button $w.f.back -text "OK" -activebackground green \
+		button $w.f.back -text "OK" \
 			-width 10 -command "destroy $w; focus $oldFocus"
 		pack $w.f.back -side bottom -pady 10 -anchor s
 		pack $w.f -pady 10 -side top -padx 10 -anchor s
@@ -234,10 +252,12 @@ proc write_hex { file1 file2 varname variable dep } {
 	}
 }
 
-proc option_name {w mnum line text variable} {
-	button $w.x$line.help -text "Help" -relief raised \
-		-command "dohelp .dohelp $variable"
+proc option_name {w mnum line text helpidx} {
 	button $w.x$line.l -text "$text" -relief groove -anchor w
+	$w.x$line.l configure -activefore [cget $w.x$line.l -fg] \
+				-activeback [cget $w.x$line.l -bg]
+	button $w.x$line.help -text "Help" -relief raised \
+		-command "dohelp .dohelp $helpidx"
 	pack $w.x$line.help -side right -fill y
 	pack $w.x$line.l -side right -fill both -expand on
 }
@@ -246,9 +266,9 @@ proc toggle_switch {w mnum line text variable} {
 	frame $w.x$line -relief sunken
 	radiobutton $w.x$line.y -text "y" -variable $variable -value 1 \
 		-relief groove -width 2 -command "update_menu$mnum .menu$mnum"
-	radiobutton $w.x$line.n -text "n"  -variable $variable -value 0 \
-		-relief groove -width 2 -command "update_menu$mnum .menu$mnum"
 	radiobutton $w.x$line.m -text "m"  -variable $variable -value 2 \
+		-relief groove -width 2 -command "update_menu$mnum .menu$mnum"
+	radiobutton $w.x$line.n -text "n"  -variable $variable -value 0 \
 		-relief groove -width 2 -command "update_menu$mnum .menu$mnum"
 		
 	option_name $w $mnum $line $text $variable
@@ -273,9 +293,9 @@ proc dep_tristate {w mnum line text variable depend } {
 
 proc int { w mnum line text variable } {
 	frame $w.x$line
-	option_name $w $mnum $line $text $variable
 	entry $w.x$line.x -width 18 -relief sunken -borderwidth 2 \
 		-textvariable $variable
+	option_name $w $mnum $line $text $variable
 	pack $w.x$line.x -anchor w -side right -fill y
 	pack $w.x$line -anchor w -fill both -expand on
 }
@@ -284,12 +304,12 @@ proc hex { w mnum line text variable } {
 	int $w $mnum $line $text $variable
 }
 
-proc minimenu { w mnum line text variable } {
+proc minimenu { w mnum line text variable helpidx } {
 	frame $w.x$line
-	option_name $w $mnum $line $text $variable
 	menubutton $w.x$line.x -textvariable $variable -menu \
 		$w.x$line.x.menu -relief raised \
 		-width 15 -anchor w
+	option_name $w $mnum $line $text $helpidx
 	pack $w.x$line.x -anchor w -side right -fill y
 	pack $w.x$line -anchor w -fill both -expand on
 }
@@ -299,7 +319,8 @@ proc comment {w line text } {
 }
 
 proc do_make { command } {
-	exec sh -c $command
+	exec sh -c $command <@stdin >@stdout 2>@stderr
+#	do_cmd .make_window "sh -c $command"
 }
 
 proc dohelp {w var }  {
@@ -356,7 +377,7 @@ ${var}:\\
 	# Do the OK button
 	#
 	frame $w.f2
-	button $w.f2.ok -text "OK" -activebackground green \
+	button $w.f2.ok -text "OK" \
 		-width 10 -command "destroy $w; focus $oldFocus"
 	pack $w.f2.ok -side bottom -pady 10 -anchor s
 	pack $w.f2 -side bottom -padx 10 -anchor s
@@ -380,7 +401,7 @@ proc wrapup {w }  {
 
 	set oldFocus [focus]
 	frame $w.f
-	button $w.f.back -text "OK" -activebackground green \
+	button $w.f.back -text "OK" \
 		-width 10 -command "exit"
 	pack $w.f.back -side bottom -pady 10 -anchor s
 	pack $w.f -pady 10 -side top -padx 10 -anchor s

@@ -14,16 +14,29 @@
 #define	FEPMASK     0x0e
 #define	FEPWIN      0x80
 
-#define PCXI    0
-#define PCXE    1
-#define	PCXEVE	2
+/* Maximum Number of Boards supported */
+#define MAX_DIGI_BOARDS 4
+
+#define PCXX_NUM_TYPES	4
+
+#define PCXI		0
+#define PCXE		1
+#define	PCXEVE		2
+#define PCXEM		3
 
 static char *board_desc[] = {
-	"PC/Xi (64K)",
-	"PC/Xe (64K)",
-	"PC/Xe (8K) ",
+	"PC/Xi",
+	"PC/Xe",
+	"PC/Xeve",
+	"PC/Xem",
 };
 
+static char *board_mem[] = {
+	"64k",
+	"64k",
+	"8k",
+	"32k",
+};
 #define STARTC      021
 #define STOPC       023
 #define IAIXON      0x2000
@@ -36,6 +49,7 @@ struct board_info	{
 	ushort numports;
 	ushort port;
 	ulong  membase;
+	ushort first_minor;
 };
 
 

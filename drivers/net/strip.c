@@ -256,8 +256,8 @@ static __u8 *StuffData(__u8 *src, __u32 length, __u8 *dst, __u8 **code_ptr_ptr)
 		/*
 		 *	Recover state from last call, if applicable 
 		 */
-		code  = *code_ptr & Stuff_CodeMask;
-		count = *code_ptr & Stuff_CountMask;
+		code  = (*code_ptr ^ Stuff_Magic) & Stuff_CodeMask;
+		count = (*code_ptr ^ Stuff_Magic) & Stuff_CountMask;
 	}
 
 	while (src < end) 

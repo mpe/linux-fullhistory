@@ -27,14 +27,31 @@
  * 1996 03 16
  * Avery Pennarun - basic "do_make" support added to let sound config work.
  *
+ * 1996 03 25
+ *     Axel Boldt - Help now works on "choice" buttons.
+ *
+ * 1996 04 06
+ * Avery Pennarun - Improved sound config stuff. (I think it actually works
+ *                  now!)
+ *                - Window-resize-limits don't use ugly /usr/lib/tk4.0 hack.
+ *                - int/hex work with tk3 again. (The "cget" error.)
+ *                - Next/Prev buttons switch between menus.  I can't take
+ *                  much credit for this; the code was already there, but
+ *                  ifdef'd out for some reason.  It flickers a lot, but
+ *                  I suspect there's no "easy" fix for that.
+ *                - Labels no longer highlight as you move the mouse over
+ *                  them (although you can still press them... oh well.)
+ *                - Got rid of the last of the literal color settings, to
+ *                  help out people with mono X-Windows systems. 
+ *                  (Apparently there still are some out there!)
+ *                - Tabstops seem sensible now.
+ *
  * TO DO:
  *   - clean up - there are useless ifdef's everywhere.
- *   - do more sensible things with the 'config -resizable" business.
  *   - better comments throughout - C code generating tcl is really cryptic.
- *   - eliminate silly "update idletasks" hack to improve display speed.
- *   - make tabstops work left->right instead of right->left.
+ *   - eliminate silly "update idletasks" hack to improve display speed and
+ *     reduce flicker.  But how?
  *   - make canvas contents resize with the window (good luck).
- *   - make next/prev buttons go to next/previous menu.
  *   - some way to make submenus inside of submenus (ie. Main->Networking->IP)
  *           (perhaps a button where the description would be)
  *   - make the main menu use the same tcl code as the submenus.
@@ -44,10 +61,8 @@
  *   - choice buttons should default to the first menu option, rather than a
  *           blank.  Also look up the right variable when the help button
  *           is pressed.
- *   - remove the remaining bits of the now-unnecessary "next/prev" submenu
- *           code.
  *   - clean up +/- 16 confusion for enabling/disabling variables; causes
- *           problems with dependencies.
+ *           (theoretical, at the moment) problems with dependencies.
  *   
  */
 #include <stdio.h>
@@ -61,13 +76,6 @@
 #ifndef FALSE
 #define FALSE (0)
 #endif
-
-/*
- * This prevents the Prev/Next buttons from going through the entire sequence
- * of submenus.  I need to fix the window titles before it would really be
- * appropriate to enable this.
- */
-#define PREVLAST_LIMITED_RANGE
 
 /*
  * This is the total number of submenus that we have.
@@ -90,18 +98,45 @@ static void start_proc(char * label, int menu_num, int flag)
   printf("\tpack $w.m -pady 10 -side top -padx 10\n");
   printf("\twm title $w \"%s\" \n\n", label);
   
+  /*
+   * Attach the "Prev", "Next" and "OK" buttons at the end of the window.
+   */
+  printf("\tset oldFocus [focus]\n");
+  printf("\tframe $w.f\n");
+  printf("\tbutton $w.f.back -text \"Main Menu\" \\\n"
+         "\t\t-width 15 -command \"destroy $w; focus $oldFocus; update_mainmenu $w\"\n");
+  printf("\tbutton $w.f.next -text \"Next\" \\\n"
+         "\t\t-width 15 -command \" destroy $w; focus $oldFocus;  menu%d .menu%d \\\"$title\\\"\"\n",
+         	menu_num+1, menu_num+1);
+  if (menu_num == tot_menu_num)
+  	printf("\t$w.f.next configure -state disabled\n");
+  printf("\tbutton $w.f.prev -text \"Prev\" \\\n"
+         "\t\t-width 15 -command \" destroy $w; focus $oldFocus; menu%d .menu%d \\\"$title\\\"\"\n",
+       		menu_num-1, menu_num-1);
+  if (1 == menu_num)
+  	printf("\t$w.f.prev configure -state disabled\n");
+  printf("\tpack $w.f.back $w.f.next $w.f.prev -side left -expand on\n");
+  printf("\tpack $w.f -pady 10 -side bottom -anchor w -fill x\n");
+
+  /*
+   * Lines between canvas and other areas of the window.
+   */
   printf("\tframe $w.topline -relief ridge -borderwidth 2 -height 2\n");
   printf("\tpack $w.topline -side top -fill x\n\n");
+  printf("\tframe $w.botline -relief ridge -borderwidth 2 -height 2\n");
+  printf("\tpack $w.botline -side bottom -fill x\n\n");
   
+  /*
+   * The "config" frame contains the canvas and a scrollbar.
+   */
   printf("\tframe $w.config\n");
   printf("\tpack $w.config -fill y -expand on\n\n");
-  
   printf("\tscrollbar $w.config.vscroll -command \"$w.config.canvas yview\"\n");
   printf("\tpack $w.config.vscroll -side right -fill y\n\n");
   
-  printf("\tframe $w.botline -relief ridge -borderwidth 2 -height 2\n");
-  printf("\tpack $w.botline -side top -fill x\n\n");
-  
+  /*
+   * The scrollable canvas itself, where the real work (and mess) gets done.
+   */
   printf("\tcanvas $w.config.canvas -height 1\\\n"
   	 "\t\t-relief flat -borderwidth 0 -yscrollcommand \"$w.config.vscroll set\" \\\n"
   	 "\t\t-width [expr [winfo screenwidth .] * 1 / 2] \n");
@@ -126,6 +161,16 @@ void clear_globalflags(struct kconfig * cfg)
 }
 
 /*
+ * Output a "global" line for a given variable.  Also include the
+ * call to "vfix".  (If vfix is not needed, then it's fine to just printf
+ * a "global" line).
+ */
+void inline global(char *var)
+{
+  printf("\tglobal %s; vfix %s\n", var, var);
+}
+
+/*
  * This function walks the chain of conditions that we got from cond.c,
  * and creates a wish conditional to enable/disable a given widget.
  */
@@ -145,12 +190,12 @@ void generate_if(struct kconfig * item,
     {
       switch(cond->op){
       case op_variable:
-	printf("\tglobal %s\n", cond->variable.str);
+      	global(cond->variable.str);
 	break;
       case op_kvariable:
 	if(cond->variable.cfg->flags & GLOBAL_WRITTEN) break;
 	cond->variable.cfg->flags |= GLOBAL_WRITTEN;
-	printf("\tglobal %s\n", cond->variable.cfg->optionname);
+	global(cond->variable.cfg->optionname);
 	break;
       default:
 	break;
@@ -164,7 +209,7 @@ void generate_if(struct kconfig * item,
   if(   (item->flags & GLOBAL_WRITTEN) == 0
      && (item->optionname != NULL) )
     {
-      printf("\tglobal %s\n", item->optionname);
+      global(item->optionname);
       item->flags |= GLOBAL_WRITTEN;
     }
   /*
@@ -240,10 +285,10 @@ void generate_if(struct kconfig * item,
     case tok_int:
     case tok_hex:
       printf("} then { ");
-      printf(".menu%d.config.f.x%d.x configure -state normal -fore [ .ref cget -foreground ]; ", menu_num, line_num);
+      printf(".menu%d.config.f.x%d.x configure -state normal -fore [ cget .ref -foreground ]; ", menu_num, line_num);
       printf(".menu%d.config.f.x%d.l configure -state normal; ", menu_num, line_num);
       printf("} else { ");
-      printf(".menu%d.config.f.x%d.x configure -state disabled -fore [ .ref cget -disabledforeground ];", menu_num, line_num );
+      printf(".menu%d.config.f.x%d.x configure -state disabled -fore [ cget .ref -disabledforeground ];", menu_num, line_num );
       printf(".menu%d.config.f.x%d.l configure -state disabled;", menu_num, line_num );
       printf("}\n");
       break;
@@ -277,7 +322,7 @@ void generate_if(struct kconfig * item,
       printf("} then { ");
       if( item->tok == tok_dep_tristate )
 	{
-	  printf("global %s;", item->depend.str);
+	  global(item->depend.str);
 	  printf("if { $%s != 1 && $%s != 0 } then {", 
 	  	item->depend.str,item->depend.str);
 	  printf(".menu%d.config.f.x%d.y configure -state disabled;",menu_num, line_num);
@@ -338,12 +383,12 @@ void generate_if_for_outfile(struct kconfig * item,
     {
       switch(cond->op){
       case op_variable:
-	printf("\tglobal %s\n", cond->variable.str);
+        global(cond->variable.str);
 	break;
       case op_kvariable:
 	if(cond->variable.cfg->flags & GLOBAL_WRITTEN) break;
 	cond->variable.cfg->flags |= GLOBAL_WRITTEN;
-	printf("\tglobal %s\n", cond->variable.cfg->optionname);
+	global(cond->variable.cfg->optionname);
 	break;
       default:
 	break;
@@ -452,48 +497,16 @@ void generate_if_for_outfile(struct kconfig * item,
 /*
  * Generates a fragment of wish script that closes out a submenu procedure.
  */
-static void end_proc(int menu_num, int first, int last)
+static void end_proc(int menu_num)
 {
   struct kconfig * cfg;
 
   printf("\n\n\n");
-  printf("\tset oldFocus [focus]\n");
-  printf("\tframe $w.f\n");
-
-  /*
-   * Attach the "Prev", "Next" and "OK" buttons at the end of the window.
-   */
-  printf("\tbutton $w.f.prev -text \"Prev\" -activebackground green \\\n");
-      printf("\t\t-width 15 -command \" destroy $w; focus $oldFocus; menu%d .menu%d \\\"$title\\\"\"\n", menu_num-1, menu_num-1);
-#ifdef PREVLAST_LIMITED_RANGE
-  if(first == menu_num ) printf("\t$w.f.prev configure -state disabled\n");
-#else
-  if( 1 == menu_num ) printf("\t$w.f.prev configure -state disabled\n");
-#endif
-
-  printf("\tbutton $w.f.next -text \"Next\" -activebackground green \\\n");
-  printf("\t\t-width 15 -command \" destroy $w; focus $oldFocus;  menu%d .menu%d \\\"$title\\\"\"\n", menu_num+1, menu_num+1);
-#ifdef PREVLAST_LIMITED_RANGE
-  if(last == menu_num ) printf("\t$w.f.next configure -state disabled\n");
-#else
-  if(last == tot_menu_num ) printf("\t$w.f.next configure -state disabled\n");
-#endif
-
-  printf("\tbutton $w.f.back -text \"Main Menu\" -activebackground green \\\n");
-  printf("\t\t-width 15 -command \"destroy $w; focus $oldFocus; update_mainmenu $w\"\n");
-
-  printf("\tpack $w.f.back $w.f.next $w.f.prev -side left -expand on\n");
-  printf("\tpack $w.f -pady 10 -side bottom -anchor w -fill x\n");
   printf("\tfocus $w\n");
   printf("\tupdate_menu%d $w.config.f\n", menu_num);
   printf("\tglobal winx; global winy\n");
   printf("\tset winx [expr [winfo x .]+30]; set winy [expr [winfo y .]+30]\n");
   printf("\twm geometry $w +$winx+$winy\n");
-  /*
-   *	We have a cunning plan....
-   */
-  if(access("/usr/lib/tk4.0",0)==0)
-	  printf("\twm resizable $w no yes\n\n");
   
   /*
    * Now that the whole window is in place, we need to wait for an "update"
@@ -525,6 +538,14 @@ static void end_proc(int menu_num, int first, int last)
   	 "\t} else {\n"
   	 "\t\t$w.config.canvas configure -height [expr $scry - $winy]\n"
   	 "\t}\n");
+  
+  /*
+   * Limit the min/max window size.  Height can vary, but not width,
+   * because of the limitations of canvas and our laziness.
+   */
+  printf("\tupdate idletasks\n");
+  printf("\twm maxsize $w [winfo width $w] [winfo screenheight $w]\n");
+  printf("\twm minsize $w [winfo width $w] 100\n\n");
   
   printf("}\n\n\n");
 
@@ -577,7 +598,7 @@ static void end_proc(int menu_num, int first, int last)
 	   */
 	  if(cfg->tok == tok_dep_tristate)
 	    {
-	      printf("\tglobal %s;", cfg->depend.str);
+	      global(cfg->depend.str);
 	      printf("\tif {$%s != 1 && $%s != 0 } then { .menu%d.config.f.x%d.y configure -state disabled } else { .menu%d.config.f.x%d.y configure -state normal}\n",
 		     cfg->depend.str,cfg->depend.str,
 		     menu_num, cfg->menu_line,
@@ -724,7 +745,7 @@ void dump_tk_script(struct kconfig *scfg)
 	   */
 	  if( cfg->menu_number > 1 )
 	    {
-	      end_proc(menu_num, menu_min, menu_max);
+	      end_proc(menu_num);
 	    }
 	  menulabel = cfg->label;
 	  start_proc(cfg->label, cfg->menu_number, TRUE);
@@ -740,7 +761,7 @@ void dump_tk_script(struct kconfig *scfg)
 	   */
 	  if( cfg->menu_number != menu_num )
 	    {
-	      end_proc(menu_num, menu_min, menu_max);
+	      end_proc(menu_num);
 	      start_proc(menulabel, cfg->menu_number, FALSE);
 	      menu_num = cfg->menu_number;
 	    }
@@ -762,23 +783,30 @@ void dump_tk_script(struct kconfig *scfg)
 	case tok_choose:
 	  if( cfg->menu_number != menu_num )
 	    {
-	      end_proc(menu_num, menu_min, menu_max);
+	      end_proc(menu_num);
 	      start_proc(menulabel, cfg->menu_number, FALSE);
 	      menu_num = cfg->menu_number;
 	    }
 	  printf("\tglobal %s\n",cfg->optionname);
-	  printf("\tminimenu $w.config.f %d %d \"%s\" %s\n",
+	  printf("\tminimenu $w.config.f %d %d \"%s\" %s %s\n",
 	  	cfg->menu_number,
 	  	cfg->menu_line,
 	  	cfg->label,
-	  	cfg->optionname);
+	  	cfg->optionname,
+	  	/*
+	  	 * We rely on the fact that the first tok_choice corresponding
+	  	 * to the current tok_choose is cfg->next (compare parse() in
+	  	 * tkparse.c).  We need its name to pick out the right help
+	  	 * text from Configure.help.
+	  	 */
+	  	cfg->next->optionname);
 	  printf("\tmenu $w.config.f.x%d.x.menu\n", cfg->menu_line);
 	  cfg1 = cfg;
 	  break;
 	case tok_tristate:
 	  if( cfg->menu_number != menu_num )
 	    {
-	      end_proc(menu_num, menu_min, menu_max);
+	      end_proc(menu_num);
 	      start_proc(menulabel, cfg->menu_number, FALSE);
 	      menu_num = cfg->menu_number;
 	    }
@@ -791,7 +819,7 @@ void dump_tk_script(struct kconfig *scfg)
 	case tok_dep_tristate:
 	  if( cfg->menu_number != menu_num )
 	    {
-	      end_proc(menu_num, menu_min, menu_max);
+	      end_proc(menu_num);
 	      start_proc(menulabel, cfg->menu_number, FALSE);
 	      menu_num = cfg->menu_number;
 	    }
@@ -805,7 +833,7 @@ void dump_tk_script(struct kconfig *scfg)
 	case tok_int:
 	  if( cfg->menu_number != menu_num )
 	    {
-	      end_proc(menu_num, menu_min, menu_max);
+	      end_proc(menu_num);
 	      start_proc(menulabel, cfg->menu_number, FALSE);
 	      menu_num = cfg->menu_number;
 	    }
@@ -818,7 +846,7 @@ void dump_tk_script(struct kconfig *scfg)
 	case tok_hex:
 	  if( cfg->menu_number != menu_num )
 	    {
-	      end_proc(menu_num, menu_min, menu_max);
+	      end_proc(menu_num);
 	      start_proc(menulabel, cfg->menu_number, FALSE);
 	      menu_num = cfg->menu_number;
 	    }
@@ -837,7 +865,7 @@ void dump_tk_script(struct kconfig *scfg)
   /*
    * Generate the code to close out the last menu.
    */
-  end_proc(menu_num, menu_min, menu_max);
+  end_proc(menu_num);
 
 #ifdef ERIC_DONT_DEF
   /*
@@ -855,7 +883,7 @@ void dump_tk_script(struct kconfig *scfg)
   /*
    * Close out the last menu.
    */
-  end_proc(menu_num, menu_num, menu_num);
+  end_proc(menu_num);
 #endif
 
   /*
@@ -1046,7 +1074,7 @@ void dump_tk_script(struct kconfig *scfg)
 	  cfg1 != NULL && cfg1->tok == tok_choice;
 	  cfg1 = cfg1->next)
 	{
-	  printf("\tglobal %s; set %s 0\n",  cfg1->optionname, cfg1->optionname);
+	  printf("\tglobal %s; set %s 0\n",cfg1->optionname,cfg1->optionname);
 	}
     }
   printf("}\n\n\n");

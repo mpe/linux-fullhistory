@@ -1305,7 +1305,6 @@ int dev_ioctl(unsigned int cmd, void *arg)
 extern int lance_init(void);
 extern int ni65_init(void);
 extern int pi_init(void);
-extern int dec21040_init(void);
 extern void sdla_setup(void);
 extern void dlci_setup(void);
 
@@ -1336,9 +1335,6 @@ int net_dev_init(void)
 #if defined(CONFIG_PT)
 	pt_init();
 #endif
-#if defined(CONFIG_DEC_ELCP)
-	dec21040_init();
-#endif	
 #if defined(CONFIG_DLCI)
         dlci_setup();
 #endif

@@ -1472,7 +1472,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 
 #ifdef CONFIG_FIREWALL
 	
-	if(call_in_firewall(AF_APPLETALK, skb, ddp)!=FW_ACCEPT)
+	if(call_in_firewall(AF_APPLETALK, skb->dev, ddp)!=FW_ACCEPT)
 	{
 		kfree_skb(skb, FREE_READ);
 		return 0;
@@ -1506,7 +1506,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 		 *	Check firewall allows this routing
 		 */
 		
-		if(call_fw_firewall(AF_APPLETALK, skb, ddp)!=FW_ACCEPT)
+		if(call_fw_firewall(AF_APPLETALK, skb->dev, ddp)!=FW_ACCEPT)
 		{
 			kfree_skb(skb, FREE_READ);
 			return(0);
@@ -1767,7 +1767,7 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len, int n
 		
 #ifdef CONFIG_FIREWALL
 
-	if(call_out_firewall(AF_APPLETALK, skb, ddp)!=FW_ACCEPT)
+	if(call_out_firewall(AF_APPLETALK, skb->dev, ddp)!=FW_ACCEPT)
 	{
 		kfree_skb(skb, FREE_WRITE);
 		return -EPERM;

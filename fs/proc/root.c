@@ -13,9 +13,6 @@
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #include <linux/config.h>
-#ifdef CONFIG_APM
-#include <linux/apm_bios.h>
-#endif
 #include <asm/bitops.h>
 
 /*
@@ -351,12 +348,6 @@ void proc_root_init(void)
 		PROC_IOPORTS, 7, "ioports",
 		S_IFREG | S_IRUGO, 1, 0, 0,
 	});
-#ifdef CONFIG_APM
-	proc_register(&proc_root, &(struct proc_dir_entry) {
-	        PROC_APM, 3, "apm",
-		S_IFREG | S_IRUGO, 1, 0, 0,
-	});
-#endif
 	proc_register(&proc_root, &(struct proc_dir_entry) {
 		PROC_CMDLINE, 7, "cmdline",
 		S_IFREG | S_IRUGO, 1, 0, 0,

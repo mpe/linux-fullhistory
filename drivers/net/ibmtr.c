@@ -153,7 +153,7 @@ static short TokBaseAddrs[] = { MMIOStartLocP, MMIOStartLocA };
 int tok_probe(struct device *dev);
 unsigned char get_sram_size(struct tok_info *adapt_info);
 
-static void tok_init_card(unsigned long dev_addr);
+static int tok_init_card(struct device *dev);
 int trdev_init(struct device *dev);
 void tok_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 
@@ -543,14 +543,8 @@ int tok_probe(struct device *dev)
 
 	dev->base_addr=PIOaddr; /* set the value for device */
 	
-	dev->open=tok_open;
-	dev->stop=tok_close;
-	dev->hard_start_xmit=tok_send_packet;
-	dev->get_stats = NULL;
-	dev->get_stats = tok_get_stats;
-	dev->set_multicast_list = NULL;
-	tr_setup(dev);
-	tok_init_card((unsigned long)dev);
+	trdev_init(dev);
+	tok_init_card(dev);
 	
 	return 0;  /* Return 0 to indicate we have found a Token Ring card. */
 }
@@ -577,11 +571,31 @@ unsigned char get_sram_size(struct tok_info *adapt_info)
 		return 1<<((readb(adapt_info->mmio+ ACA_OFFSET + ACA_RW + RRR_ODD)>>2)+4);
 }
 
+int trdev_init(struct device *dev)
+{
+  struct tok_info *ti=(struct tok_info *)dev->priv;
+
+  ti->open_status=CLOSED;
+
+  dev->init=tok_init_card;
+  dev->open=tok_open;
+  dev->stop=tok_close;
+  dev->hard_start_xmit=tok_send_packet;
+  dev->get_stats = NULL;
+  dev->get_stats = tok_get_stats;
+  dev->set_multicast_list = NULL;
+  tr_setup(dev);
+
+  return 0;
+}
+
+
+
 static int tok_open(struct device *dev) 
 {
 	struct tok_info *ti=(struct tok_info *)dev->priv;
 	
-	if (ti->open_status==CLOSED) tok_init_card((unsigned long)dev);
+	if (ti->open_status==CLOSED) tok_init_card(dev);
 	
 	if (ti->open_status==IN_PROGRESS) sleep_on(&ti->wait_for_reset);
 	
@@ -650,13 +664,31 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 			outb(0, ti->global_int_enable);
 		
 		status=readb(ti->mmio + ACA_OFFSET + ACA_RW + ISRP_ODD);
+		#ifdef PCMCIA
+      		/* Check if the PCMCIA card was pulled. */
+    		if (status == 0xFF)
+       		{
+		          DPRINTK("PCMCIA card removed.\n");
+        		  dev->interrupt = 0;
+          		  return;
+       		}
+
+    	        /* Check ISRP EVEN too. */
+      	        if ( *(unsigned char *)(ti->mmio + ACA_OFFSET + ACA_RW + ISRP_EVEN) == 0xFF)
+    	        {
+         		 DPRINTK("PCMCIA card removed.\n");
+         		 dev->interrupt = 0;
+         		 return;
+      		 }
+		#endif
+
 		
 		if (status & ADAP_CHK_INT) {
 			
 			int i;
 			__u32 check_reason;
 
-			check_reason=ti->mmio + ntohs(readw(ti->mmio + ACA_OFFSET + ACA_RW +WWCR_EVEN));
+			check_reason=ti->mmio + ntohs(readw(ti->sram + ACA_OFFSET + ACA_RW +WWCR_EVEN));
 			
 			DPRINTK("Adapter check interrupt\n");
 			DPRINTK("8 reason bytes follow: ");
@@ -1046,12 +1078,11 @@ static void initial_tok_int(struct device *dev)
 	tok_open_adapter((unsigned long)dev);
 }
 
-static void tok_init_card(unsigned long dev_addr) 
+static int tok_init_card(struct device *dev) 
 {
 	struct tok_info *ti;
 	short PIOaddr;
 	int i;
-	struct device *dev=(struct device *)dev_addr;
 	PIOaddr = dev->base_addr;
 	ti=(struct tok_info *) dev->priv;
 	
@@ -1082,7 +1113,7 @@ static void tok_init_card(unsigned long dev_addr)
 	
 	ti->open_status=IN_PROGRESS;
 	writeb(INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_SET + ISRP_EVEN);
-		
+	return 0;	
 }
 
 static void open_sap(unsigned char type,struct device *dev) 

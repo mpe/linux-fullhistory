@@ -9,6 +9,7 @@
 #include "scsi.h"
 #endif
 
+/* The tape buffer descriptor. */
 typedef struct {
   unsigned char in_use;
   unsigned char dma;	/* DMA-able buffer */
@@ -24,11 +25,48 @@ typedef struct {
   unsigned char *orig_b_data;
 } ST_buffer;
 
+
+/* The tape mode definition */
+typedef struct {
+  unsigned char defined;
+  unsigned char do_async_writes;
+  unsigned char do_buffer_writes;
+  unsigned char defaults_for_writes;
+  unsigned char default_compression; /* 0 = don't touch, etc */
+  short default_density; /* Forced density, -1 = no value */
+  int default_blksize;	/* Forced blocksize, -1 = no value */
+} ST_mode;
+
+#define ST_NBR_MODE_BITS 2
+#define ST_NBR_MODES (1 << ST_NBR_MODE_BITS)
+#define ST_MODE_SHIFT (7 - ST_NBR_MODE_BITS)
+#define ST_MODE_MASK ((ST_NBR_MODES - 1) << ST_MODE_SHIFT)
+
+/* The tape drive descriptor */
 typedef struct {
   kdev_t devt;
   unsigned capacity;
   struct wait_queue * waiting;
   Scsi_Device* device;
+  Scsi_Cmnd SCpnt;
+  struct semaphore sem;
+  ST_buffer * buffer;
+
+  /* Drive characteristics */
+  unsigned char do_read_ahead;
+  unsigned char do_auto_lock;
+  unsigned char can_bsr;
+  unsigned char two_fm;
+  unsigned char fast_mteom;
+  unsigned char restr_dma;
+  unsigned char default_drvbuffer;  /* 0xff = don't touch, value 3 bits */
+  int write_threshold;
+
+  /* Mode characteristics */
+  ST_mode modes[ST_NBR_MODES];
+  int current_mode;
+
+  /* Status variables */
   unsigned char dirty;
   unsigned char rw;
   unsigned char ready;
@@ -37,29 +75,22 @@ typedef struct {
   unsigned char drv_write_prot;
   unsigned char in_use;
   unsigned char eof_hit;
+  unsigned char moves_after_eof;
+  unsigned char at_sm;
+  unsigned char blksize_changed;
+  unsigned char density_changed;
+  unsigned char compression_changed;
   unsigned char drv_buffer;
-  unsigned char restr_dma;
-  unsigned char do_buffer_writes;
-  unsigned char do_async_writes;
-  unsigned char do_read_ahead;
-  unsigned char do_auto_lock;
-  unsigned char two_fm;
-  unsigned char fast_mteom;
   unsigned char density;
   unsigned char door_locked;
   unsigned char rew_at_close;
-  ST_buffer * buffer;
-  struct semaphore sem;
   int block_size;
   int min_block;
   int max_block;
-  int write_threshold;
   int recover_count;
   int drv_block;	/* The block where the drive head is */
-  unsigned char moves_after_eof;
-  unsigned char at_sm;
   struct mtget * mt_status;
-  Scsi_Cmnd SCpnt;
+
 #if DEBUG
   unsigned char write_pending;
   int nbr_finished;
@@ -95,6 +126,11 @@ extern Scsi_Tape * scsi_tapes;
 /* Positioning SCSI-commands for Tandberg, etc. drives */
 #define	QFA_REQUEST_BLOCK	0x02
 #define	QFA_SEEK_BLOCK		0x0c
+
+/* Setting the binary options */
+#define ST_DONT_TOUCH  0
+#define ST_NO          1
+#define ST_YES         2
 
 #endif
 

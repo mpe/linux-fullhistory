@@ -66,6 +66,9 @@ static struct sun_floppy_ops sun_fdops;
 #define fd_cacheflush(addr, size) /* nothing... */
 #define fd_request_irq()          sun_fd_request_irq()
 #define fd_free_irq()             /* nothing... */
+#define fd_eject(x)               sun_fd_eject()
+
+#define FLOPPY_MOTOR_MASK         0x10
 
 /* It's all the same... */
 #define virt_to_bus(x)            (x)
@@ -205,7 +208,11 @@ static void sun_82077_fd_outb(unsigned char value, int port)
  */
 char *pdma_vaddr;
 unsigned long pdma_size;
-int doing_pdma = 0;
+volatile int doing_pdma = 0;
+
+/* This is software state */
+char *pdma_base = 0;
+unsigned long pdma_areasize;
 
 /* Common routines to all controller types on the Sparc. */
 static inline void virtual_dma_init(void)
@@ -216,6 +223,10 @@ static inline void virtual_dma_init(void)
 static inline void sun_fd_disable_dma(void)
 {
 	doing_pdma = 0;
+	if (pdma_base) {
+		mmu_unlockarea(pdma_base, pdma_areasize);
+		pdma_base = 0;
+	}
 }
 
 static inline void sun_fd_set_dma_mode(int mode)
@@ -245,8 +256,17 @@ static inline void sun_fd_set_dma_count(int length)
 
 static inline void sun_fd_enable_dma(void)
 {
-	/* We're about to let it rip, lock any tlb entries necessary. */
 	pdma_vaddr = mmu_lockarea(pdma_vaddr, pdma_size);
+	pdma_base = pdma_vaddr;
+	pdma_areasize = pdma_size;
+}
+
+static int sun_fd_eject(void)
+{
+	set_auxio(AUXIO_FLPY_DSEL, AUXIO_FLPY_EJCT);
+	udelay(1000);
+	set_auxio(AUXIO_FLPY_EJCT, AUXIO_FLPY_DSEL);
+	return 0;
 }
 
 /* Our low-level entry point in arch/sparc/kernel/entry.S */
@@ -338,14 +358,12 @@ static int sun_floppy_init(void)
 		}
 	}
 
-	/* P3: The only realiable way which I found for ejection
+	/* P3: The only reliable way which I found for ejection
 	 * of boot floppy. AUXIO_FLPY_EJCT is not enougth alone.
 	 */
-	set_auxio(AUXIO_FLPY_EJCT, 0);
+	set_auxio(AUXIO_FLPY_EJCT, 0); /* Bring EJECT line to normal. */
 	udelay(1000);
-	set_auxio(AUXIO_FLPY_DSEL, AUXIO_FLPY_EJCT);
-	udelay(1000);
-	set_auxio(0, AUXIO_FLPY_DSEL);
+	sun_fd_eject(0);		/* Send Eject Pulse. */
 
 	/* Success... */
 	return (int) sun_fdc;

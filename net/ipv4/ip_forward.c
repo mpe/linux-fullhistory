@@ -102,17 +102,18 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 	int fw_res = 0;		/* Forwarding result */	
 #ifdef CONFIG_IP_MASQUERADE	
 	struct sk_buff *skb_in = skb;	/* So we can remember if the masquerader did some swaps */
-#endif
+#endif /* CONFIG_IP_MASQUERADE */
+#endif /* CONFIG_FIREWALL */
 	
 	/* 
 	 *	See if we are allowed to forward this.
  	 *	Note: demasqueraded fragments are always 'back'warded.
 	 */
-
 	
+#ifdef CONFIG_FIREWALL
 	if(!(is_frag&IPFWD_MASQUERADED))
 	{
-		fw_res=call_fw_firewall(PF_INET, skb, skb->h.iph);
+		fw_res=call_fw_firewall(PF_INET, dev, skb->h.iph);
 		switch (fw_res) {
 		case FW_ACCEPT:
 		case FW_MASQUERADE:
@@ -125,6 +126,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 		}
 	}
 #endif
+
 	/*
 	 *	According to the RFC, we must first decrease the TTL field. If
 	 *	that reaches zero, we must reply an ICMP control message telling
@@ -200,7 +202,8 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 		}
 
 		/*
-		 *	Having picked a route we can now send the frame out.
+		 *	Having picked a route we can now send the frame out
+		 *	after asking the firewall permission to do so.
 		 */
 
 		dev2 = rt->rt_dev;
@@ -234,7 +237,6 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 	}
 #endif	
 	
-
 	/*
 	 * We now may allocate a new buffer, and copy the datagram into it.
 	 * If the indicated interface is up and running, kick it.
@@ -351,7 +353,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 #endif			
 		}
 #ifdef CONFIG_FIREWALL
-		if((fw_res = call_out_firewall(PF_INET, skb2, iph)) < FW_ACCEPT)
+		if((fw_res = call_out_firewall(PF_INET, skb2->dev, iph)) < FW_ACCEPT)
 		{
 			/* FW_ACCEPT and FW_MASQUERADE are treated equal:
 			   masquerading is only supported via forward rules */

@@ -35,10 +35,10 @@ if [ "$CONFIG_SCSI_GENERIC_NCR5380" != "n" ]; then
 fi
 if [ "$CONFIG_PCI" = "y" ]; then
   dep_tristate 'NCR53c7,8xx SCSI support'  CONFIG_SCSI_NCR53C7xx $CONFIG_SCSI
-fi
-if [ "$CONFIG_SCSI_NCR53C7xx" != "n" ]; then
-  bool '   always negotiate synchronous transfers' CONFIG_SCSI_NCR53C7xx_sync
-  bool '   allow FAST-SCSI [10MHz]' CONFIG_SCSI_NCR53C7xx_FAST
+  if [ "$CONFIG_SCSI_NCR53C7xx" != "n" ]; then
+    bool '   always negotiate synchronous transfers' CONFIG_SCSI_NCR53C7xx_sync
+    bool '   allow FAST-SCSI [10MHz]' CONFIG_SCSI_NCR53C7xx_FAST
+  fi
 fi
 dep_tristate 'Always IN2000 SCSI support (test release)' CONFIG_SCSI_IN2000 $CONFIG_SCSI
 dep_tristate 'PAS16 SCSI support' CONFIG_SCSI_PAS16 $CONFIG_SCSI
