@@ -55,6 +55,14 @@ config LOCK_KERNEL
 	depends on SMP || PREEMPT
 	default y
 
+config INIT_ENV_ARG_LIMIT
+	int
+	default 32 if !USERMODE
+	default 128 if USERMODE
+	help
+	  This is the value of the two limits on the number of argument and of
+	  env.var passed to init from the kernel command line.
+
 endmenu
 
 menu "General setup"
