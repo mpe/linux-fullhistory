@@ -5,6 +5,7 @@
 
 extern unsigned long event;
 
+#include <linux/config.h>
 #include <linux/binfmts.h>
 #include <linux/personality.h>
 #include <linux/threads.h>
@@ -85,7 +86,7 @@ extern int last_pid;
 
 #define __set_task_state(tsk, state_value)		\
 	do { (tsk)->state = (state_value); } while (0)
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define set_task_state(tsk, state_value)		\
 	set_mb((tsk)->state, (state_value))
 #else
@@ -95,7 +96,7 @@ extern int last_pid;
 
 #define __set_current_state(state_value)			\
 	do { current->state = (state_value); } while (0)
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define set_current_state(state_value)		\
 	set_mb(current->state, (state_value))
 #else

@@ -375,11 +375,6 @@ int hpfs_rmdir(struct inode *dir, struct dentry *dentry)
 		hpfs_unlock_2inodes(dir, inode);
 		return -ENOTDIR;
 	}
-	if (!d_unhashed(dentry)) {
-		hpfs_brelse4(&qbh);
-		hpfs_unlock_2inodes(dir, inode);
-		return -EBUSY;
-	}
 	hpfs_count_dnodes(dir->i_sb, inode->i_hpfs_dno, NULL, NULL, &n_items);
 	if (n_items) {
 		hpfs_brelse4(&qbh);

@@ -6,7 +6,9 @@
  *		Alan Cox. <alan@redhat.com>
  */
 
-#ifdef __SMP__
+#include <linux/config.h>
+
+#ifdef CONFIG_SMP
 
 #include <asm/smp.h>
 

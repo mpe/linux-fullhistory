@@ -101,9 +101,11 @@ nfs_read_inode(struct inode * inode)
 	inode->i_rdev = 0;
 	NFS_FILEID(inode) = 0;
 	NFS_FSID(inode) = 0;
+	INIT_LIST_HEAD(&inode->u.nfs_i.read);
 	INIT_LIST_HEAD(&inode->u.nfs_i.dirty);
 	INIT_LIST_HEAD(&inode->u.nfs_i.commit);
 	INIT_LIST_HEAD(&inode->u.nfs_i.writeback);
+	inode->u.nfs_i.nread = 0;
 	inode->u.nfs_i.ndirty = 0;
 	inode->u.nfs_i.ncommit = 0;
 	inode->u.nfs_i.npages = 0;
@@ -131,7 +133,7 @@ nfs_delete_inode(struct inode * inode)
 	/*
 	 * The following can never actually happen...
 	 */
-	if (nfs_have_writebacks(inode)) {
+	if (nfs_have_writebacks(inode) || nfs_have_read(inode)) {
 		printk(KERN_ERR "nfs_delete_inode: inode %ld has pending RPC requests\n", inode->i_ino);
 	}
 
@@ -429,12 +431,20 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 		sb->s_blocksize = nfs_block_bits(fsinfo.bsize, &sb->s_blocksize_bits);
 	if (server->rsize > fsinfo.rtmax)
 		server->rsize = fsinfo.rtmax;
-	if (server->rsize > PAGE_CACHE_SIZE)
-		server->rsize = PAGE_CACHE_SIZE;
 	if (server->wsize > fsinfo.wtmax)
 		server->wsize = fsinfo.wtmax;
-        if (server->wsize > NFS_WRITE_MAXIOV << PAGE_CACHE_SHIFT)
-                server->wsize = NFS_WRITE_MAXIOV << PAGE_CACHE_SHIFT;
+
+	server->rpages = (server->rsize + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
+	if (server->rpages > NFS_READ_MAXIOV) {
+		server->rpages = NFS_READ_MAXIOV;
+		server->rsize = server->rpages << PAGE_CACHE_SHIFT;
+	}
+
+	server->wpages = (server->wsize + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
+        if (server->wpages > NFS_WRITE_MAXIOV) {
+		server->wpages = NFS_WRITE_MAXIOV;
+                server->wsize = server->wpages << PAGE_CACHE_SHIFT;
+	}
 
         maxlen = (version == 2) ? NFS2_MAXNAMLEN : NFS3_MAXNAMLEN;
 
@@ -1146,6 +1156,8 @@ extern int nfs_init_fhcache(void);
 extern void nfs_destroy_fhcache(void);
 extern int nfs_init_nfspagecache(void);
 extern void nfs_destroy_nfspagecache(void);
+extern int nfs_init_readpagecache(void);
+extern int nfs_destroy_readpagecache(void);
 
 /*
  * Initialize NFS
@@ -1160,6 +1172,10 @@ init_nfs_fs(void)
 		return err;
 
 	err = nfs_init_nfspagecache();
+	if (err)
+		return err;
+
+	err = nfs_init_readpagecache();
 	if (err)
 		return err;
 
@@ -1187,6 +1203,7 @@ init_module(void)
 void
 cleanup_module(void)
 {
+	nfs_destroy_readpagecache();
 	nfs_destroy_nfspagecache();
 	nfs_destroy_fhcache();
 #ifdef CONFIG_PROC_FS

@@ -12,11 +12,11 @@
 #ifndef __ASM_ARM_ATOMIC_H
 #define __ASM_ARM_ATOMIC_H
 
-#ifdef __SMP__
+#include <linux/config.h>
+
+#ifdef CONFIG_SMP
 #error SMP not supported
 #endif
-
-#include <linux/config.h>
 
 #ifdef CONFIG_ARCH_CO285
 typedef struct { volatile int counter; } atomic_t;

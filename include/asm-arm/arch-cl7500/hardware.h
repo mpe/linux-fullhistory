@@ -44,10 +44,8 @@
 
 /* Let's define SCREEN_START for CL7500, even though it's a lie. */
 #define SCREEN_START		0x02000000	/* VRAM */
-#define SCREEN2_END		0xe0000000
-#define SCREEN2_BASE		0xd8000000
-#define SCREEN1_END		0xd8000000
-#define SCREEN1_BASE		0xd0000000
+#define SCREEN_END		0xdfc00000
+#define SCREEN_BASE		0xdf800000
 
 #define FLUSH_BASE		0xdf000000
 

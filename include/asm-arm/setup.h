@@ -49,6 +49,7 @@ struct param_struct {
 	    unsigned long system_rev;		/* 76 */
 	    unsigned long system_serial_low;	/* 80 */
 	    unsigned long system_serial_high;	/* 84 */
+	    unsigned long mem_fclk_21285;       /* 88 */ 
 	} s;
 	char unused[256];
     } u1;

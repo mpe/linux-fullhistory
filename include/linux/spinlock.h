@@ -1,6 +1,8 @@
 #ifndef __LINUX_SPINLOCK_H
 #define __LINUX_SPINLOCK_H
 
+#include <linux/config.h>
+
 /*
  * These are the generic versions of the spinlocks and read-write
  * locks..
@@ -29,7 +31,7 @@
 #define write_unlock_irq(lock)			do { write_unlock(lock); local_irq_enable();       } while (0)
 #define write_unlock_bh(lock)			do { write_unlock(lock); local_bh_enable();        } while (0)
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #include <asm/spinlock.h>
 
 #else /* !SMP */

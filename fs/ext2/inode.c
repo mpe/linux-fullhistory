@@ -620,7 +620,7 @@ struct buffer_head * ext2_bread (struct inode * inode, int block,
 	return NULL;
 }
 
-static int ext2_writepage(struct dentry *dentry, struct page *page)
+static int ext2_writepage(struct file *file, struct dentry *dentry, struct page *page)
 {
 	return block_write_full_page(page,ext2_get_block);
 }
@@ -639,6 +639,7 @@ static int ext2_bmap(struct address_space *mapping, long block)
 struct address_space_operations ext2_aops = {
 	readpage: ext2_readpage,
 	writepage: ext2_writepage,
+	sync_page: block_sync_page,
 	prepare_write: ext2_prepare_write,
 	commit_write: generic_commit_write,
 	bmap: ext2_bmap

@@ -11,11 +11,12 @@
 extern unsigned int system_rev;
 extern unsigned int system_serial_low;
 extern unsigned int system_serial_high;
+extern unsigned int mem_fclk_21285;
 
 /* The type of machine we're running on */
 extern unsigned int __machine_arch_type;
 
-/* see arch/arm/kernel/setup.c for a description of these */
+/* see arch/arm/kernel/arch.c for a description of these */
 #define MACH_TYPE_EBSA110		0
 #define MACH_TYPE_RISCPC		1
 #define MACH_TYPE_NEXUSPCI		3
@@ -31,8 +32,13 @@ extern unsigned int __machine_arch_type;
 #define MACH_TYPE_LACIE_NAS		13
 #define MACH_TYPE_CLPS7500		14
 #define MACH_TYPE_SHARK			15
-#define MACH_TYPE_SA1100		16
+#define MACH_TYPE_BRUTUS		16
 #define MACH_TYPE_PERSONAL_SERVER	17
+#define MACH_TYPE_BITSY			22
+#define MACH_TYPE_THINCLIENT		24
+#define MACH_TYPE_ASSABET		25
+#define MACH_TYPE_VICTOR		26
+#define MACH_TYPE_LART			27
 
 /*
  * Sort out a definition for machine_arch_type
@@ -168,16 +174,16 @@ extern unsigned int __machine_arch_type;
 # define machine_is_shark()	(0)
 #endif
 
-#ifdef CONFIG_ARCH_SA1100
+#ifdef CONFIG_SA1100_BRUTUS
 # ifdef machine_arch_type
 #  undef machine_arch_type
 #  define machine_arch_type	__machine_arch_type
 # else
-#  define machine_arch_type	MACH_TYPE_SA1100
+#  define machine_arch_type	MACH_TYPE_BRUTUS
 # endif
-# define machine_is_sa1100()	(machine_arch_type == MACH_TYPE_SA1100)
+# define machine_is_brutus()	(machine_arch_type == MACH_TYPE_BRUTUS)
 #else
-# define machine_is_sa1100()	(0)
+# define machine_is_brutus()	(0)
 #endif
 
 #ifdef CONFIG_ARCH_PERSONAL_SERVER
@@ -190,6 +196,126 @@ extern unsigned int __machine_arch_type;
 # define machine_is_personal_server()	(machine_arch_type == MACH_TYPE_PERSONAL_SERVER)
 #else
 # define machine_is_personal_server()	(0)
+#endif
+
+#ifdef CONFIG_SA1100_ITSY
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type	__machine_arch_type
+# else
+#  define machine_arch_type	MACH_TYPE_ITSY
+# endif
+# define machine_is_itsy()	(machine_arch_type == MACH_TYPE_ITSY)
+#else
+# define machine_is_itsy()	(0)
+#endif
+
+#ifdef CONFIG_SA1100_EMPEG
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type	__machine_arch_type
+# else
+#  define machine_arch_type	MACH_TYPE_EMPEG
+# endif
+# define machine_is_empeg()	(machine_arch_type == MACH_TYPE_EMPEG)
+#else
+# define machine_is_empeg()	(0)
+#endif
+
+#ifdef CONFIG_SA1100_ASSABET
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type	__machine_arch_type
+# else
+#  define machine_arch_type	MACH_TYPE_ASSABET
+# endif
+# define machine_is_assabet()	(machine_arch_type == MACH_TYPE_ASSABET)
+#else
+# define machine_is_assabet()	(0)
+#endif
+
+#ifdef CONFIG_SA1100_VICTOR
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type	__machine_arch_type
+# else
+#  define machine_arch_type	MACH_TYPE_VICTOR
+# endif
+# define machine_is_victor()	(machine_arch_type == MACH_TYPE_VICTOR)
+#else
+# define machine_is_victor()	(0)
+#endif
+
+#ifdef CONFIG_SA1100_LART
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type	__machine_arch_type
+# else
+#  define machine_arch_type	MACH_TYPE_LART
+# endif
+# define machine_is_lart()	(machine_arch_type == MACH_TYPE_LART)
+#else
+# define machine_is_lart()	(0)
+#endif
+
+#ifdef CONFIG_SA1100_BITSY
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type	__machine_arch_type
+# else
+#  define machine_arch_type	MACH_TYPE_BITSY
+# endif
+# define machine_is_bitsy()	(machine_arch_type == MACH_TYPE_BITSY)
+#else
+# define machine_is_bitsy()	(0)
+#endif
+
+#ifdef CONFIG_SA1100_TIFON
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type	__machine_arch_type
+# else
+#  define machine_arch_type	MACH_TYPE_TIFON
+# endif
+# define machine_is_tifon()	(machine_arch_type == MACH_TYPE_TIFON)
+#else
+# define machine_is_tifon()	(0)
+#endif
+
+#ifdef CONFIG_SA1100_PLEB
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type	__machine_arch_type
+# else
+#  define machine_arch_type	MACH_TYPE_PLEB
+# endif
+# define machine_is_pleb()	(machine_arch_type == MACH_TYPE_PLEB)
+#else
+# define machine_is_pleb()	(0)
+#endif
+
+#ifdef CONFIG_SA1100_THINCLIENT
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type	__machine_arch_type
+# else
+#  define machine_arch_type	MACH_TYPE_THINCLIENT
+# endif
+# define machine_is_thinclient()	(machine_arch_type == MACH_TYPE_THINCLIENT)
+#else
+# define machine_is_thinclient()	(0)
+#endif
+
+#ifdef CONFIG_SA1100_PENNY
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type	__machine_arch_type
+# else
+#  define machine_arch_type	MACH_TYPE_PENNY
+# endif
+# define machine_is_penny()	(machine_arch_type == MACH_TYPE_PENNY)
+#else
+# define machine_is_penny()	(0)
 #endif
 
 #ifndef machine_arch_type

@@ -109,8 +109,8 @@ static const struct camera {
 
 struct camera_state {
 	struct usb_device	*dev;		/* USB device handle */
-	char			inEP;		/* read endpoint */
-	char			outEP;		/* write endpoint */
+	int			inEP;		/* read endpoint */
+	int			outEP;		/* write endpoint */
 	const struct camera	*info;		/* DC-240, etc */
 	int			subminor;	/* which minor dev #? */
 	int			isActive;	/* I/O taking place? */

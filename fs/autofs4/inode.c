@@ -183,10 +183,6 @@ struct super_block *autofs4_read_super(struct super_block *s, void *data,
 	struct autofs_sb_info *sbi;
 	int minproto, maxproto;
 
-	/* Super block already completed? */
-	if (s->s_root)
-		goto out_unlock;
-
 	sbi = (struct autofs_sb_info *) kmalloc(sizeof(*sbi), GFP_KERNEL);
 	if ( !sbi )
 		goto fail_unlock;
@@ -206,7 +202,6 @@ struct super_block *autofs4_read_super(struct super_block *s, void *data,
 	s->s_blocksize_bits = 10;
 	s->s_magic = AUTOFS_SUPER_MAGIC;
 	s->s_op = &autofs4_sops;
-	s->s_root = NULL;
 
 	/*
 	 * Get the root inode and dentry, but defer checking for errors.
@@ -216,12 +211,6 @@ struct super_block *autofs4_read_super(struct super_block *s, void *data,
 	root_inode->i_fop = &autofs4_root_operations;
 	root = d_alloc_root(root_inode);
 	pipe = NULL;
-
-	/*
-	 * Check whether somebody else completed the super block.
-	 */
-	if (s->s_root)
-		goto out_dput;
 
 	if (!root)
 		goto fail_iput;
@@ -249,11 +238,6 @@ struct super_block *autofs4_read_super(struct super_block *s, void *data,
 
 	DPRINTK(("autofs: pipe fd = %d, pgrp = %u\n", pipefd, sbi->oz_pgrp));
 	pipe = fget(pipefd);
-	/*
-	 * Check whether somebody else completed the super block.
-	 */
-	if (s->s_root)
-		goto out_fput;
 	
 	if ( !pipe ) {
 		printk("autofs: could not open pipe file descriptor\n");
@@ -268,25 +252,9 @@ struct super_block *autofs4_read_super(struct super_block *s, void *data,
 	 */
 	s->s_root = root;
 	return s;
-
-	/*
-	 * Success ... somebody else completed the super block for us. 
-	 */ 
-out_unlock:
-	goto out_dec;
-out_fput:
-	if (pipe)
-		fput(pipe);
-out_dput:
-	if (root)
-		dput(root);
-	else
-		iput(root_inode);
-out_dec:
-	return s;
 	
 	/*
-	 * Failure ... clear the s_dev slot and clean up.
+	 * Failure ... clean up.
 	 */
 fail_fput:
 	printk("autofs: pipe file descriptor does not contain proper ops\n");
@@ -317,9 +285,6 @@ static int autofs4_statfs(struct super_block *sb, struct statfs *buf)
 {
 	buf->f_type = AUTOFS_SUPER_MAGIC;
 	buf->f_bsize = 1024;
-	buf->f_bfree = 0;
-	buf->f_bavail = 0;
-	buf->f_ffree = 0;
 	buf->f_namelen = NAME_MAX;
 	return 0;
 }

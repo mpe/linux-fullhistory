@@ -9,7 +9,9 @@ struct nfs_server {
 	struct nfs_rpc_ops *	rpc_ops;	/* NFS protocol vector */
 	int			flags;		/* various flags */
 	unsigned int		rsize;		/* read size */
+	unsigned int		rpages;		/* read size (in pages) */
 	unsigned int		wsize;		/* write size */
+	unsigned int		wpages;		/* write size (in pages) */
 	unsigned int		dtsize;		/* readdir size */
 	unsigned int		bsize;		/* server block size */
 	unsigned int		acregmin;	/* attr cache timeouts */

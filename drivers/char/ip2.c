@@ -6,6 +6,7 @@
 //  __initdata should work as advertized
 //
 
+#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/init.h>
@@ -28,8 +29,6 @@ int
 ip2_loadmain(int *, int  *, unsigned char *, int ); // ref into ip2main.c
 
 #ifdef MODULE
-
-#include <linux/autoconf.h>
 #if defined(CONFIG_MODVERSIONS) && !defined(MODVERSIONS)
 #	define MODVERSIONS
 #endif

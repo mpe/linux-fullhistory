@@ -1535,8 +1535,7 @@ int get_cpuinfo(char * buffer)
 	return p - buffer;
 }
 
-int cpus_initialized = 0;
-unsigned long cpu_initialized = 0;
+static unsigned long cpu_initialized __initdata = 0;
 
 /*
  * cpu_init() initializes state that is per-CPU. Some data is already
@@ -1553,7 +1552,6 @@ void __init cpu_init (void)
 		printk("CPU#%d already initialized!\n", nr);
 		for (;;) __sti();
 	}
-	cpus_initialized++;
 	printk("Initializing CPU#%d\n", nr);
 
 	if (cpu_has_vme || cpu_has_tsc || cpu_has_de)

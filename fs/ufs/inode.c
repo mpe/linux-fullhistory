@@ -540,7 +540,7 @@ struct buffer_head * ufs_bread (struct inode * inode, unsigned fragment,
 	return NULL;
 }
 
-static int ufs_writepage(struct dentry *dentry, struct page *page)
+static int ufs_writepage(struct file *file, struct dentry *dentry, struct page *page)
 {
 	return block_write_full_page(page,ufs_getfrag_block);
 }
@@ -559,6 +559,7 @@ static int ufs_bmap(struct address_space *mapping, long block)
 struct address_space_operations ufs_aops = {
 	readpage: ufs_readpage,
 	writepage: ufs_writepage,
+	sync_page: block_sync_page,
 	prepare_write: ufs_prepare_write,
 	commit_write: generic_commit_write,
 	bmap: ufs_bmap

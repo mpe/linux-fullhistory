@@ -167,7 +167,7 @@ printk("smb_writepage_sync: short write, wsize=%d, result=%d\n", wsize, result);
  * We are called with the page locked and the caller unlocks.
  */
 static int
-smb_writepage(struct dentry *dentry, struct page *page)
+smb_writepage(struct file *file, struct dentry *dentry, struct page *page)
 {
 	struct inode *inode = dentry->d_inode;
 	unsigned long end_index = inode->i_size >> PAGE_CACHE_SHIFT;

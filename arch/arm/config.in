@@ -137,9 +137,6 @@ else
    define_bool CONFIG_ISA_DMA n
 fi
 
-define_bool CONFIG_SBUS n
-define_bool CONFIG_PCMCIA n
-
 if [ "$CONFIG_CPU_32" = "y" -a "$CONFIG_ARCH_EBSA110" != "y" ]; then
    bool 'Kernel-mode alignment trap handler' CONFIG_ALIGNMENT_TRAP
 fi
@@ -221,7 +218,6 @@ if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
       fi
    fi
 fi
-
 
 #source drivers/misc/Config.in
 

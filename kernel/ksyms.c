@@ -195,6 +195,7 @@ EXPORT_SYMBOL(___wait_on_page);
 EXPORT_SYMBOL(block_write_full_page);
 EXPORT_SYMBOL(block_read_full_page);
 EXPORT_SYMBOL(block_prepare_write);
+EXPORT_SYMBOL(block_sync_page);
 EXPORT_SYMBOL(cont_prepare_write);
 EXPORT_SYMBOL(generic_commit_write);
 EXPORT_SYMBOL(generic_block_bmap);

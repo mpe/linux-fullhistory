@@ -65,7 +65,7 @@ static int udf_adinicb_readpage(struct dentry *dentry, struct page * page)
 	return 0;
 }
 
-static int udf_adinicb_writepage(struct dentry *dentry, struct page *page)
+static int udf_adinicb_writepage(struct file *file, struct dentry *dentry, struct page *page)
 {
 	struct inode *inode = (struct inode *)page->mapping->host;
 
@@ -118,6 +118,7 @@ static int udf_adinicb_commit_write(struct file *file, struct page *page, unsign
 struct address_space_operations udf_adinicb_aops = {
 	readpage:			udf_adinicb_readpage,
 	writepage:			udf_adinicb_writepage,
+	sync_page:		block_sync_page,
 	prepare_write:		udf_adinicb_prepare_write,
 	commit_write:		udf_adinicb_commit_write,
 };

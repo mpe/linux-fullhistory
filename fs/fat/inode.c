@@ -729,7 +729,7 @@ static int is_exec(char *extension)
 	return 0;
 }
 
-static int fat_writepage(struct dentry *dentry, struct page *page)
+static int fat_writepage(struct file *file, struct dentry *dentry, struct page *page)
 {
 	return block_write_full_page(page,fat_get_block);
 }
@@ -749,6 +749,7 @@ static int _fat_bmap(struct address_space *mapping, long block)
 static struct address_space_operations fat_aops = {
 	readpage: fat_readpage,
 	writepage: fat_writepage,
+	sync_page: block_sync_page,
 	prepare_write: fat_prepare_write,
 	commit_write: generic_commit_write,
 	bmap: _fat_bmap

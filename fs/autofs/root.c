@@ -186,7 +186,7 @@ static struct dentry *autofs_root_lookup(struct inode *dir, struct dentry *dentr
 	autofs_say(dentry->d_name.name,dentry->d_name.len);
 
 	if (dentry->d_name.len > NAME_MAX)
-		return ERR_PTR(-ENOENT);/* File name too long to exist */
+		return ERR_PTR(-ENAMETOOLONG);/* File name too long to exist */
 
 	sbi = autofs_sbi(dir->i_sb);
 
@@ -247,9 +247,6 @@ static int autofs_root_symlink(struct inode *dir, struct dentry *dentry, const c
 
 	if ( !autofs_oz_mode(sbi) )
 		return -EACCES;
-
-	if ( dentry->d_name.len > NAME_MAX )
-		return -ENAMETOOLONG;
 
 	if ( autofs_hash_lookup(dh, &dentry->d_name) )
 		return -EEXIST;
@@ -374,9 +371,6 @@ static int autofs_root_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 
 	if ( !autofs_oz_mode(sbi) )
 		return -EACCES;
-
-	if ( dentry->d_name.len > NAME_MAX )
-		return -ENAMETOOLONG;
 
 	ent = autofs_hash_lookup(dh, &dentry->d_name);
 	if ( ent )

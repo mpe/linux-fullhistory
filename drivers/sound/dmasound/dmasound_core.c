@@ -1,6 +1,6 @@
 
 /*
- *  linux/drivers/sound/dmasound.c
+ *  linux/drivers/sound/dmasound/dmasound_core.c
  *
  *
  *  OSS/Free compatible Atari TT/Falcon and Amiga DMA sound driver for
@@ -1193,8 +1193,10 @@ static void __init state_init(void)
 
 int __init dmasound_init(void)
 {
+#ifdef MODULE
 	if (irq_installed)
 		return -EBUSY;
+#endif
 
 	/* Set up sound queue, /dev/audio and /dev/dsp. */
 

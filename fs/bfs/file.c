@@ -127,7 +127,7 @@ out:
 	return err;
 }
 
-static int bfs_writepage(struct dentry *dentry, struct page *page)
+static int bfs_writepage(struct file *file, struct dentry *dentry, struct page *page)
 {
 	return block_write_full_page(page, bfs_get_block);
 }
@@ -150,6 +150,7 @@ static int bfs_bmap(struct address_space *mapping, long block)
 struct address_space_operations bfs_aops = {
 	readpage:	bfs_readpage,
 	writepage:	bfs_writepage,
+	sync_page:	block_sync_page,
 	prepare_write:	bfs_prepare_write,
 	commit_write:	generic_commit_write,
 	bmap:		bfs_bmap

@@ -48,9 +48,9 @@
 /************/
 /* Includes */
 /************/
+#include <linux/config.h>
 // Uncomment the following if you want it compiled with modversions
 #ifdef MODULE
-#	include <linux/autoconf.h>
 #	if defined(CONFIG_MODVERSIONS) && !defined(MODVERSIONS)
 #		define MODVERSIONS
 #	endif
@@ -65,8 +65,6 @@
 #include <linux/string.h>
 #include <linux/fcntl.h>
 #include <linux/errno.h>
-
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/signal.h>
 #include <linux/sched.h>

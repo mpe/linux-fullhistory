@@ -23,18 +23,28 @@
 #define MAX_SLOTS		21
 
 extern int setup_arm_irq(int, struct irqaction *);
-extern void pcibios_report_device_errors(void);
+extern void pcibios_report_device_errors(int warn);
 
 static unsigned long
-dc21285_base_address(struct pci_dev *dev, int where)
+dc21285_base_address(struct pci_dev *dev)
 {
 	unsigned long addr = 0;
 	unsigned int devfn = dev->devfn;
 
-	if (dev->bus->number != 0)
+	if (dev->bus->number == 0) {
+		if (PCI_SLOT(devfn) == 0)
+			/*
+			 * For devfn 0, point at the 21285
+			 */
+			addr = ARMCSR_BASE;
+		else {
+			devfn -= 1 << 3;
+
+			if (devfn < PCI_DEVFN(MAX_SLOTS, 0))
+				addr = PCICFG0_BASE | 0xc00000 | (devfn << 8);
+		}
+	} else
 		addr = PCICFG1_BASE | (dev->bus->number << 16) | (devfn << 8);
-	else if (devfn < PCI_DEVFN(MAX_SLOTS, 0))
-		addr = PCICFG0_BASE | 0xc00000 | (devfn << 8);
 
 	return addr;
 }
@@ -42,7 +52,7 @@ dc21285_base_address(struct pci_dev *dev, int where)
 static int
 dc21285_read_config_byte(struct pci_dev *dev, int where, u8 *value)
 {
-	unsigned long addr = dc21285_base_address(dev, where);
+	unsigned long addr = dc21285_base_address(dev);
 	u8 v;
 
 	if (addr)
@@ -59,7 +69,7 @@ dc21285_read_config_byte(struct pci_dev *dev, int where, u8 *value)
 static int
 dc21285_read_config_word(struct pci_dev *dev, int where, u16 *value)
 {
-	unsigned long addr = dc21285_base_address(dev, where);
+	unsigned long addr = dc21285_base_address(dev);
 	u16 v;
 
 	if (addr)
@@ -76,7 +86,7 @@ dc21285_read_config_word(struct pci_dev *dev, int where, u16 *value)
 static int
 dc21285_read_config_dword(struct pci_dev *dev, int where, u32 *value)
 {
-	unsigned long addr = dc21285_base_address(dev, where);
+	unsigned long addr = dc21285_base_address(dev);
 	u32 v;
 
 	if (addr)
@@ -93,7 +103,7 @@ dc21285_read_config_dword(struct pci_dev *dev, int where, u32 *value)
 static int
 dc21285_write_config_byte(struct pci_dev *dev, int where, u8 value)
 {
-	unsigned long addr = dc21285_base_address(dev, where);
+	unsigned long addr = dc21285_base_address(dev);
 
 	if (addr)
 		asm("str%?b	%0, [%1, %2]"
@@ -105,7 +115,7 @@ dc21285_write_config_byte(struct pci_dev *dev, int where, u8 value)
 static int
 dc21285_write_config_word(struct pci_dev *dev, int where, u16 value)
 {
-	unsigned long addr = dc21285_base_address(dev, where);
+	unsigned long addr = dc21285_base_address(dev);
 
 	if (addr)
 		asm("str%?h	%0, [%1, %2]"
@@ -117,7 +127,7 @@ dc21285_write_config_word(struct pci_dev *dev, int where, u16 value)
 static int
 dc21285_write_config_dword(struct pci_dev *dev, int where, u32 value)
 {
-	unsigned long addr = dc21285_base_address(dev, where);
+	unsigned long addr = dc21285_base_address(dev);
 
 	if (addr)
 		asm("str%?	%0, [%1, %2]"
@@ -146,6 +156,9 @@ dc21285_error(int irq, void *dev_id, struct pt_regs *regs)
 	unsigned long ctrl      = (*CSR_SA110_CNTL) & 0xffffde07;
 	unsigned long irqstatus = *CSR_IRQ_RAWSTATUS;
 	int warn = time_after_eq(jiffies, next_warn);
+
+	if (machine_is_netwinder())
+		warn = 0;
 
 	ctrl |= SA110_CNTL_DISCARDTIMER;
 
@@ -193,7 +206,7 @@ dc21285_error(int irq, void *dev_id, struct pt_regs *regs)
 	if (warn)
 		printk("pc=[<%08lX>]\n", instruction_pointer(regs));
 
-	pcibios_report_device_errors();
+	pcibios_report_device_errors(warn);
 
 	*CSR_PCICMD = cmd;
 	*CSR_SA110_CNTL = ctrl;

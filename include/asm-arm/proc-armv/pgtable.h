@@ -79,7 +79,7 @@ extern __inline__ unsigned long pmd_page(pmd_t pmd)
 * PTE functions *
 ****************/
 
-/* PTE types (actially level 2 descriptor) */
+/* PTE types (actually level 2 descriptor) */
 #define PTE_TYPE_MASK		0x0003
 #define PTE_TYPE_FAULT		0x0000
 #define PTE_TYPE_LARGE		0x0001
@@ -122,12 +122,12 @@ extern __inline__ unsigned long pmd_page(pmd_t pmd)
  * The following macros handle the cache and bufferable bits...
  */
 #define _L_PTE_DEFAULT	L_PTE_PRESENT | L_PTE_YOUNG
-#define _L_PTE_READ	L_PTE_USER | L_PTE_CACHEABLE
+#define _L_PTE_READ	L_PTE_USER | L_PTE_CACHEABLE | L_PTE_BUFFERABLE
 
 #define PAGE_NONE       __pgprot(_L_PTE_DEFAULT)
-#define PAGE_COPY       __pgprot(_L_PTE_DEFAULT | _L_PTE_READ  | L_PTE_BUFFERABLE)
-#define PAGE_SHARED     __pgprot(_L_PTE_DEFAULT | _L_PTE_READ  | L_PTE_BUFFERABLE | L_PTE_WRITE)
-#define PAGE_READONLY   __pgprot(_L_PTE_DEFAULT | _L_PTE_READ  | L_PTE_BUFFERABLE)
+#define PAGE_COPY       __pgprot(_L_PTE_DEFAULT | _L_PTE_READ)
+#define PAGE_SHARED     __pgprot(_L_PTE_DEFAULT | _L_PTE_READ | L_PTE_WRITE)
+#define PAGE_READONLY   __pgprot(_L_PTE_DEFAULT | _L_PTE_READ)
 #define PAGE_KERNEL     __pgprot(_L_PTE_DEFAULT | L_PTE_CACHEABLE | L_PTE_BUFFERABLE | L_PTE_DIRTY | L_PTE_WRITE)
 
 #define _PAGE_CHG_MASK	(PAGE_MASK | L_PTE_DIRTY | L_PTE_YOUNG)

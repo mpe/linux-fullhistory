@@ -1,7 +1,7 @@
 /*
  * linux/include/asm-arm/arch-ebsa110/hardware.h
  *
- * Copyright (C) 1996-1999 Russell King.
+ * Copyright (C) 1996-2000 Russell King.
  *
  * This file contains the hardware definitions of the EBSA-110.
  */
@@ -27,7 +27,6 @@
  * RAM definitions
  */
 #define FLUSH_BASE_PHYS		0x40000000
-#define UNCACHEABLE_ADDR	0xf3000000
 
 #else	/* __ASSEMBLY__ */
 
@@ -40,6 +39,8 @@
 
 #define FLUSH_BASE		0xdf000000
 #define PCIO_BASE		0xf0000000
+
+#define UNCACHEABLE_ADDR	0xf3000000
 
 #define PARAMS_BASE		(PAGE_OFFSET + 0x400)
 

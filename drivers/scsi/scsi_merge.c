@@ -282,7 +282,7 @@ __inline static int __count_segments(struct request *req,
  *		This can come up if you get a MEDIUM_ERROR, for example,
  *		as we will have "completed" all of the sectors up to and
  *		including the bad sector, and the leftover bit is what
- *		we have to do now.  This tends to be a rare occurence, so
+ *		we have to do now.  This tends to be a rare occurrence, so
  *		we aren't busting our butts to instantiate separate versions
  *		of this function for the 4 different flag values.  We
  *		probably should, however.
@@ -320,7 +320,7 @@ static inline int scsi_new_mergeable(request_queue_t * q,
 	 * scsi.c allocates for this purpose
 	 * min(64,sg_tablesize) entries.
 	 */
-	if (req->nr_segments >= max_segments &&
+	if (req->nr_segments >= max_segments ||
 	    req->nr_segments >= SHpnt->sg_tablesize)
 		return 0;
 	req->nr_segments++;
@@ -339,8 +339,7 @@ static inline int scsi_new_segment(request_queue_t * q,
 	 * check if things fit into sg_tablesize.
 	 */
 	if (req->nr_hw_segments >= SHpnt->sg_tablesize ||
-	    (req->nr_segments >= max_segments &&
-	     req->nr_segments >= SHpnt->sg_tablesize))
+	     req->nr_segments >= SHpnt->sg_tablesize)
 		return 0;
 	if (req->nr_segments >= max_segments)
 		return 0;
@@ -609,7 +608,7 @@ __inline static int __scsi_merge_requests_fn(request_queue_t * q,
 	/* If it would not fit into prepared memory space for sg chain,
 	 * then don't allow the merge.
 	 */
-	if (req->nr_segments + next->nr_segments - 1 > max_segments &&
+	if (req->nr_segments + next->nr_segments - 1 > max_segments ||
 	    req->nr_segments + next->nr_segments - 1 > SHpnt->sg_tablesize) {
 		return 0;
 	}
@@ -674,7 +673,7 @@ __inline static int __scsi_merge_requests_fn(request_queue_t * q,
 	}
       dont_combine:
 #ifdef DMA_CHUNK_SIZE
-	if (req->nr_segments + next->nr_segments > max_segments &&
+	if (req->nr_segments + next->nr_segments > max_segments ||
 	    req->nr_segments + next->nr_segments > SHpnt->sg_tablesize) {
 		return 0;
 	}
@@ -697,7 +696,7 @@ __inline static int __scsi_merge_requests_fn(request_queue_t * q,
 	 * Make sure we can fix something that is the sum of the two.
 	 * A slightly stricter test than we had above.
 	 */
-	if (req->nr_segments + next->nr_segments > max_segments &&
+	if (req->nr_segments + next->nr_segments > max_segments ||
 	    req->nr_segments + next->nr_segments > SHpnt->sg_tablesize) {
 		return 0;
 	} else {

@@ -18,7 +18,7 @@
 
 struct map_desc io_desc[] __initdata = {
 	/* VRAM		*/
-	{ SCREEN2_BASE,	SCREEN_START,	2*1048576, DOMAIN_IO, 0, 1, 0, 0 },
+	{ SCREEN_BASE,	SCREEN_START,	2*1048576, DOMAIN_IO, 0, 1, 0, 0 },
 	/* IO space	*/
 	{ IO_BASE,	IO_START,	IO_SIZE	 , DOMAIN_IO, 0, 1, 0, 0 },
 	/* EASI space	*/

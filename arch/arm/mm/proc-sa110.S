@@ -4,7 +4,9 @@
  * (C) 1997-2000 Russell King
  *
  * These are the low level assembler for performing cache and TLB
- * functions on the StrongARM-110 and StrongARM-1100
+ * functions on the StrongARM-110, StrongARM-1100 and StrongARM-1110.
+ * 
+ * Note that SA1100 and SA1110 share everything but their name and CPU ID.
  */
 #include <linux/linkage.h>
 #include <asm/assembler.h>
@@ -420,13 +422,12 @@ ENTRY(cpu_sa1100_proc_init)
 		mov	pc, lr
 
 ENTRY(cpu_sa110_proc_fin)
-ENTRY(cpu_sa1100_proc_fin)
 		stmfd	sp!, {r1, lr}
 		mrs	r0, cpsr
 		orr	r0, r0, #F_BIT | I_BIT
 		msr	cpsr, r0
 		bl	cpu_sa110_flush_cache_all	@ clean caches
-		mov	r0, #0
+1:		mov	r0, #0
 		mcr	p15, 0, r0, c15, c2, 2		@ Disable clock switching
 		mrc	p15, 0, r0, c1, c0, 0
 		bic	r0, r0, #0x1000			@ ...i............
@@ -434,8 +435,17 @@ ENTRY(cpu_sa1100_proc_fin)
 		mcr	p15, 0, r0, c1, c0, 0		@ disable caches
 		ldmfd	sp!, {r1, pc}
 
+ENTRY(cpu_sa1100_proc_fin)
+		stmfd	sp!, {r1, lr}
+		mrs	r0, cpsr
+		orr	r0, r0, #F_BIT | I_BIT
+		msr	cpsr, r0
+		bl	cpu_sa1100_flush_cache_all	@ clean caches
+		b	1b
+
+
 		.align	5
-idle:		mcr	p15, 0, r0, c15, c8, 2		@ Wait for interrupt
+idle:		mcr	p15, 0, r0, c15, c8, 2		@ Wait for interrupt, cache aligned
 		mov	r0, r0				@ safety
 		mov	pc, lr
 /*
@@ -483,16 +493,14 @@ ENTRY(cpu_sa1100_reset)
 		bic	ip, ip, #0x1100			@ ...i...s........
 		mcr	p15, 0, ip, c1, c0, 0		@ ctrl register
 		mov	pc, r0
-/*
- * Purpose : Function pointers used to access above functions - all calls
- *	     come through these
- */
+
 
 cpu_manu_name:	.asciz	"Intel"
-ENTRY(cpu_sa110_name)
-		.asciz	"StrongARM-110"
-ENTRY(cpu_sa1100_name)
+cpu_sa110_name:	.asciz	"StrongARM-110"
+cpu_sa1100_name:
 		.asciz	"StrongARM-1100"
+cpu_sa1110_name:
+		.asciz	"StrongARM-1110"
 		.align
 
 		.section ".text.init", #alloc, #execinstr
@@ -510,6 +518,13 @@ __sa110_setup:	mov	r0, #0
 		orr	r0, r0, #0x003d			@ ..........DPWC.M
 		orr	r0, r0, #0x1100			@ ...I...S........
 		mov	pc, lr
+
+		.text
+
+/*
+ * Purpose : Function pointers used to access above functions - all calls
+ *	     come through these
+ */
 
 		.type	sa110_processor_functions, #object
 ENTRY(sa110_processor_functions)
@@ -543,6 +558,9 @@ cpu_sa110_info:
 		.size	cpu_sa110_info, . - cpu_sa110_info
 
 
+/*
+ * SA1100 and SA1110 share the same function calls
+ */
 		.type	sa1100_processor_functions, #object
 ENTRY(sa1100_processor_functions)
 		.word	cpu_sa1100_data_abort
@@ -572,6 +590,12 @@ cpu_sa1100_info:
 		.long	cpu_manu_name
 		.long	cpu_sa1100_name
 		.size	cpu_sa1100_info, . - cpu_sa1100_info
+
+cpu_sa1110_info:
+		.long	cpu_manu_name
+		.long	cpu_sa1110_name
+		.size	cpu_sa1110_info, . - cpu_sa1110_info
+
 
 		.type	cpu_arch_name, #object
 cpu_arch_name:	.asciz	"armv4"
@@ -609,5 +633,18 @@ __sa1100_proc_info:
 		.long	cpu_sa1100_info
 		.long	sa1100_processor_functions
 		.size	__sa1100_proc_info, . - __sa1100_proc_info
+
+		.type	__sa1110_proc_info,#object
+__sa1110_proc_info:
+		.long	0x6901b110
+		.long	0xfffffff0
+		.long	0x00000c02
+		b	__sa110_setup
+		.long	cpu_arch_name
+		.long	cpu_elf_name
+		.long	HWCAP_SWP | HWCAP_HALF | HWCAP_26BIT
+		.long	cpu_sa1110_info
+		.long	sa1100_processor_functions
+		.size	__sa1110_proc_info, . - __sa1110_proc_info
 
 

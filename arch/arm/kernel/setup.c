@@ -5,15 +5,14 @@
  */
 #include <linux/config.h>
 #include <linux/kernel.h>
-#include <linux/mm.h>
 #include <linux/stddef.h>
 #include <linux/ioport.h>
 #include <linux/delay.h>
 #include <linux/utsname.h>
 #include <linux/blk.h>
 #include <linux/console.h>
-#include <linux/init.h>
 #include <linux/bootmem.h>
+#include <linux/init.h>
 
 #include <asm/elf.h>
 #include <asm/hardware.h>
@@ -33,6 +32,7 @@
 #endif
 
 extern void paging_init(struct meminfo *);
+extern void bootmem_init(struct meminfo *);
 extern void reboot_setup(char *str);
 extern void disable_hlt(void);
 extern int root_mountflags;
@@ -43,6 +43,7 @@ unsigned int __machine_arch_type;
 unsigned int system_rev;
 unsigned int system_serial_low;
 unsigned int system_serial_high;
+unsigned int mem_fclk_21285 = 50000000;
 unsigned int elf_hwcap;
 
 #ifdef MULTI_CPU
@@ -199,7 +200,8 @@ parse_cmdline(struct meminfo *mi, char **cmdline_p, char *from)
 			if (to != command_line)
 				to -= 1;
 
-			/* If the user specifies memory size, we
+			/*
+			 * If the user specifies memory size, we
 			 * blow away any automatically generated
 			 * size.
 			 */
@@ -253,137 +255,6 @@ void __init setup_initrd(unsigned int start, unsigned int size)
 		size = 0;
 	initrd_start = start;
 	initrd_end   = start + size;
-#endif
-}
-
-#define O_PFN_DOWN(x)	((x) >> PAGE_SHIFT)
-#define V_PFN_DOWN(x)	O_PFN_DOWN(__pa(x))
-
-#define O_PFN_UP(x)	(PAGE_ALIGN(x) >> PAGE_SHIFT)
-#define V_PFN_UP(x)	O_PFN_UP(__pa(x))
-
-#define PFN_SIZE(x)	((x) >> PAGE_SHIFT)
-#define PFN_RANGE(s,e)	PFN_SIZE(PAGE_ALIGN((unsigned long)(e)) - \
-				(((unsigned long)(s)) & PAGE_MASK))
-
-/*
- * FIXME: These can be removed when Ingo's cleanup patch goes in
- */
-#define free_bootmem(s,sz)	free_bootmem((s)<<PAGE_SHIFT, (sz)<<PAGE_SHIFT)
-#define reserve_bootmem(s,sz)	reserve_bootmem((s)<<PAGE_SHIFT, (sz)<<PAGE_SHIFT)
-
-static unsigned int __init
-find_bootmap_pfn(struct meminfo *mi, unsigned int bootmap_pages)
-{
-	unsigned int start_pfn, bank, bootmap_pfn;
-
-	start_pfn   = V_PFN_UP(&_end);
-	bootmap_pfn = 0;
-
-	/*
-	 * FIXME: We really want to avoid allocating the bootmap
-	 * over the top of the initrd.
-	 */
-#ifdef CONFIG_BLK_DEV_INITRD
-	if (initrd_start) {
-		if (__pa(initrd_end) > mi->end) {
-			printk ("initrd extends beyond end of memory "
-				"(0x%08lx > 0x%08lx) - disabling initrd\n",
-				__pa(initrd_end), mi->end);
-			initrd_start = 0;
-			initrd_end   = 0;
-		}
-	}
-#endif
-
-	for (bank = 0; bank < mi->nr_banks; bank ++) {
-		unsigned int start, end;
-
-		if (mi->bank[bank].size == 0)
-			continue;
-
-		start = O_PFN_UP(mi->bank[bank].start);
-		end   = O_PFN_DOWN(mi->bank[bank].size +
-				   mi->bank[bank].start);
-
-		if (end < start_pfn)
-			continue;
-
-		if (start < start_pfn)
-			start = start_pfn;
-
-		if (end <= start)
-			continue;
-
-		if (end - start >= bootmap_pages) {
-			bootmap_pfn = start;
-			break;
-		}
-	}
-
-	if (bootmap_pfn == 0)
-		BUG();
-
-	return bootmap_pfn;
-}
-
-/*
- * Initialise the bootmem allocator.
- */
-static void __init setup_bootmem(struct meminfo *mi)
-{
-	unsigned int end_pfn, start_pfn, bootmap_pages, bootmap_pfn;
-	unsigned int i;
-
-	/*
-	 * Calculate the  physical address of the top of memory.
-	 */
-	mi->end = 0;
-	for (i = 0; i < mi->nr_banks; i++) {
-		unsigned long end;
-
-		if (mi->bank[i].size != 0) {
-			end = mi->bank[i].start + mi->bank[i].size;
-			if (mi->end < end)
-				mi->end = end;
-		}
-	}
-
-	start_pfn     = O_PFN_UP(PHYS_OFFSET);
-	end_pfn	      = O_PFN_DOWN(mi->end);
-	bootmap_pages = bootmem_bootmap_pages(end_pfn - start_pfn);
-	bootmap_pfn   = find_bootmap_pfn(mi, bootmap_pages);
-
-	/*
-	 * Initialise the boot-time allocator
-	 */
-	init_bootmem_start(bootmap_pfn, start_pfn, end_pfn);
-
-	/*
-	 * Register all available RAM with the bootmem allocator.
-	 */
-	for (i = 0; i < mi->nr_banks; i++)
-		if (mi->bank[i].size)
-			free_bootmem(O_PFN_UP(mi->bank[i].start),
-				     PFN_SIZE(mi->bank[i].size));
-
-	/*
-	 * Register the reserved regions with bootmem
-	 */
-	reserve_bootmem(bootmap_pfn, bootmap_pages);
-	reserve_bootmem(V_PFN_DOWN(&_stext), PFN_RANGE(&_stext, &_end));
-
-#ifdef CONFIG_CPU_32
-	/*
-	 * Reserve the page tables.  These are already in use.
-	 */
-	reserve_bootmem(V_PFN_DOWN(swapper_pg_dir),
-			PFN_SIZE(PTRS_PER_PGD * sizeof(void *)));
-#endif
-#ifdef CONFIG_BLK_DEV_INITRD
-	if (initrd_start)
-		reserve_bootmem(V_PFN_DOWN(initrd_start),
-				PFN_RANGE(initrd_start, initrd_end));
 #endif
 }
 
@@ -487,6 +358,9 @@ void __init setup_arch(char **cmdline_p)
 		system_serial_low  = params->u1.s.system_serial_low;
 		system_serial_high = params->u1.s.system_serial_high;
 
+		if (params->u1.s.mem_fclk_21285 > 0)
+			mem_fclk_21285 = params->u1.s.mem_fclk_21285;  
+
 		setup_ramdisk((params->u1.s.flags & FLAG_RDLOAD) == 0,
 			      (params->u1.s.flags & FLAG_RDPROMPT) == 0,
 			      params->u1.s.rd_start,
@@ -518,9 +392,8 @@ void __init setup_arch(char **cmdline_p)
 	memcpy(saved_command_line, from, COMMAND_LINE_SIZE);
 	saved_command_line[COMMAND_LINE_SIZE-1] = '\0';
 	parse_cmdline(&meminfo, cmdline_p, from);
-	setup_bootmem(&meminfo);
+	bootmem_init(&meminfo);
 	request_standard_resources(&meminfo, mdesc);
-
 	paging_init(&meminfo);
 
 #ifdef CONFIG_VT

@@ -19,7 +19,7 @@ struct map_desc {
 extern struct map_desc	io_desc[];
 extern unsigned int	io_desc_size;
 
-extern void zonesize_init(unsigned int *);
-extern void create_memmap_holes(void);
-extern void pagetable_init(void);
+struct meminfo;
 
+extern void create_memmap_holes(struct meminfo *);
+extern void pagetable_init(struct meminfo *);

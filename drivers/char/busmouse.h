@@ -1,12 +1,12 @@
 /*
- * linux/drivers/char/mouse.h
+ * linux/drivers/char/busmouse.h
  *
  * Copyright (C) 1995 - 1998 Russell King
  *
  * Prototypes for generic busmouse interface
  */
-#ifndef MOUSE_H
-#define MOUSE_H
+#ifndef BUSMOUSE_H
+#define BUSMOUSE_H
 
 struct busmouse {
 	int minor;

@@ -696,7 +696,7 @@ static void __init set_call_gate(void *a, void *addr)
 		((limit) & 0x0ffff); }
 
 #define _set_tssldt_desc(n,addr,limit,type) \
-__asm__ __volatile__ ("movw %3,0(%2)\n\t" \
+__asm__ __volatile__ ("movw %w3,0(%2)\n\t" \
 	"movw %%ax,2(%2)\n\t" \
 	"rorl $16,%%eax\n\t" \
 	"movb %%al,4(%2)\n\t" \

@@ -310,7 +310,7 @@ void setup_mm_for_reboot(char mode)
 	}
 }
 
-void __init pagetable_init(void)
+void __init pagetable_init(struct meminfo *mi)
 {
 	struct map_desc *init_maps, *p, *q;
 	unsigned long address = 0;
@@ -335,13 +335,13 @@ void __init pagetable_init(void)
 
 	p ++;
 
-	for (i = 0; i < meminfo.nr_banks; i++) {
-		if (meminfo.bank[i].size == 0)
+	for (i = 0; i < mi->nr_banks; i++) {
+		if (mi->bank[i].size == 0)
 			continue;
 
-		p->physical   = meminfo.bank[i].start;
+		p->physical   = mi->bank[i].start;
 		p->virtual    = __phys_to_virt(p->physical);
-		p->length     = meminfo.bank[i].size;
+		p->length     = mi->bank[i].size;
 		p->domain     = DOMAIN_KERNEL;
 		p->prot_read  = 0;
 		p->prot_write = 1;
@@ -414,7 +414,7 @@ void __init pagetable_init(void)
  * The mem_map array can get very big.  Mark the end of the valid mem_map
  * banks with PG_skip, and setup the address validity bitmap.
  */
-void __init create_memmap_holes(void)
+void __init create_memmap_holes(struct meminfo *mi)
 {
 	unsigned int start_pfn, end_pfn = -1;
 	struct page *pg = NULL;
@@ -423,11 +423,11 @@ void __init create_memmap_holes(void)
 #define PFN(x)	(((x) - PHYS_OFFSET) >> PAGE_SHIFT)
 #define free_bootmem(s,sz)  free_bootmem(((s)<<PAGE_SHIFT)+PHYS_OFFSET, (sz)<<PAGE_SHIFT)
 
-	for (i = 0; i < meminfo.nr_banks; i++) {
-		if (meminfo.bank[i].size == 0)
+	for (i = 0; i < mi->nr_banks; i++) {
+		if (mi->bank[i].size == 0)
 			continue;
 
-		start_pfn = PFN(meminfo.bank[i].start);
+		start_pfn = PFN(mi->bank[i].start);
 
 		/*
 		 * subtle here - if we have a full bank, then
@@ -447,9 +447,9 @@ void __init create_memmap_holes(void)
 			pg = NULL;
 		}
 
-		end_pfn = PFN(meminfo.bank[i].start + meminfo.bank[i].size);
+		end_pfn = PFN(mi->bank[i].start + mi->bank[i].size);
 
-		if (end_pfn != PFN(meminfo.end))
+		if (end_pfn != PFN(mi->end))
 			pg = mem_map + end_pfn;
 	}
 

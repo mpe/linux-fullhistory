@@ -616,8 +616,8 @@ static int cyber2000fb_decode_crtc(struct par_info *hw, struct fb_var_screeninfo
  *   mult = reg0xb0.7:0
  *   div1 = (reg0xb1.5:0 + 1)
  *   div2 =  2^(reg0xb1.7:6)
- *   fpll should be between 115 and 257 MHz
- *  (8696ps and 3891ps)
+ *   fpll should be between 115 and 260 MHz
+ *  (8696ps and 3846ps)
  */
 static int
 cyber2000fb_decode_clock(struct par_info *hw, struct fb_var_screeninfo *var)
@@ -631,7 +631,7 @@ cyber2000fb_decode_clock(struct par_info *hw, struct fb_var_screeninfo *var)
 
 	/*
 	 * Step 1:
-	 *   find div2 such that 115MHz < fpll < 257MHz
+	 *   find div2 such that 115MHz < fpll < 260MHz
 	 *   and 0 <= div2 < 4
 	 */
 	if (current_par.dev_id == PCI_DEVICE_ID_INTERG_2010)
@@ -643,7 +643,7 @@ cyber2000fb_decode_clock(struct par_info *hw, struct fb_var_screeninfo *var)
 		unsigned long new_pll;
 
 		new_pll = pll_ps / divisors[div2];
-		if (8696 > new_pll && new_pll > 3891) {
+		if (8696 > new_pll && new_pll > 3846) {
 			pll_ps = new_pll;
 			break;
 		}
@@ -655,8 +655,10 @@ cyber2000fb_decode_clock(struct par_info *hw, struct fb_var_screeninfo *var)
 #if 0
 	/*
 	 * Step 2:
-	 *  Find fpll
-	 *    fpll = fref * mult / div1
+	 *  Given pll_ps and ref_ps, find:
+	 *    pll_ps * 0.995 < pll_ps_calc < pll_ps * 1.005
+	 *  where { 0 < div1 < 32, 0 < mult < 256 }
+	 *    pll_ps_calc = div1 / (ref_ps * mult)
 	 *
 	 * Note!  This just picks any old values at the moment,
 	 * and as such I don't trust it.  It certainly doesn't
@@ -1172,13 +1174,42 @@ static struct fb_ops cyber2000fb_ops =
 	cyber2000fb_ioctl
 };
 
+/*
+ * Enable access to the extended registers
+ *  Bug: this should track the usage of these registers
+ */
+static void cyber2000fb_enable_extregs(void)
+{
+	int old;
+
+	old = cyber2000_grphr(FUNC_CTL);
+	cyber2000_grphw(FUNC_CTL, old | FUNC_CTL_EXTREGENBL);
+}
+
+/*
+ * Disable access to the extended registers
+ *  Bug: this should track the usage of these registers
+ */
+static void cyber2000fb_disable_extregs(void)
+{
+	int old;
+
+	old = cyber2000_grphr(FUNC_CTL);
+	cyber2000_grphw(FUNC_CTL, old & ~FUNC_CTL_EXTREGENBL);
+}
+
+/*
+ * Attach a capture/tv driver to the core CyberX0X0 driver.
+ */
 int cyber2000fb_attach(struct cyberpro_info *info)
 {
 	if (current_par.initialised) {
-		info->dev     = current_par.dev;
-		info->regs    = CyberRegs;
-		info->fb      = current_par.screen_base;
-		info->fb_size = current_par.screen_size;
+		info->dev	      = current_par.dev;
+		info->regs	      = CyberRegs;
+		info->fb	      = current_par.screen_base;
+		info->fb_size	      = current_par.screen_size;
+		info->enable_extregs  = cyber2000fb_enable_extregs;
+		info->disable_extregs = cyber2000fb_disable_extregs;
 
 		strncpy(info->dev_name, current_par.dev_name, sizeof(info->dev_name));
 
@@ -1188,6 +1219,9 @@ int cyber2000fb_attach(struct cyberpro_info *info)
 	return current_par.initialised;
 }
 
+/*
+ * Detach a capture/tv driver from the core CyberX0X0 driver.
+ */
 void cyber2000fb_detach(void)
 {
 	MOD_DEC_USE_COUNT;
@@ -1496,7 +1530,7 @@ int __init cyber2000fb_init(void)
 	v_sync = h_sync / (init_var.yres + init_var.upper_margin +
 		 init_var.lower_margin + init_var.vsync_len);
 
-	printk("%s: %ldkB VRAM, using %dx%d, %d.%03dkHz, %dHz\n",
+	printk(KERN_INFO "%s: %ldkB VRAM, using %dx%d, %d.%03dkHz, %dHz\n",
 		current_par.dev_name,
 		current_par.screen_size >> 10,
 		init_var.xres, init_var.yres,

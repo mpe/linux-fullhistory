@@ -1006,7 +1006,7 @@ struct buffer_head * minix_bread(struct inode * inode, int block, int create)
 	return NULL;
 }
 
-static int minix_writepage(struct dentry *dentry, struct page *page)
+static int minix_writepage(struct file *file, struct dentry *dentry, struct page *page)
 {
 	return block_write_full_page(page,minix_get_block);
 }
@@ -1025,6 +1025,7 @@ static int minix_bmap(struct address_space *mapping, long block)
 struct address_space_operations minix_aops = {
 	readpage: minix_readpage,
 	writepage: minix_writepage,
+	sync_page: block_sync_page,
 	prepare_write: minix_prepare_write,
 	commit_write: generic_commit_write,
 	bmap: minix_bmap

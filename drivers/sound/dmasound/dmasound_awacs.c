@@ -1,10 +1,10 @@
 
 /*
- *  linux/drivers/sound/dmasound_awacs.c
+ *  linux/drivers/sound/dmasound/dmasound_awacs.c
  *
- *  PowerMac DMA Sound Driver
+ *  PowerMac `AWACS' and `Burgundy' DMA Sound Driver
  *
- *  See linux/drivers/sound/dmasound_core.c for copyright and credits
+ *  See linux/drivers/sound/dmasound/dmasound_core.c for copyright and credits
  */
 
 

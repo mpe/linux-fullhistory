@@ -30,6 +30,7 @@
 
 extern int setup_arm_irq(int, struct irqaction *);
 extern void setup_timer(void);
+extern rwlock_t xtime_lock;
 extern volatile unsigned long lost_ticks;
 
 /* change this if you have some constant time drift */
@@ -59,7 +60,8 @@ static unsigned long dummy_gettimeoffset(void)
 }
 
 /*
- * hook for getting the time offset
+ * hook for getting the time offset.  Note that it is
+ * always called with interrupts disabled.
  */
 unsigned long (*gettimeoffset)(void) = dummy_gettimeoffset;
 
@@ -175,29 +177,33 @@ static void do_leds(void)
 void do_gettimeofday(struct timeval *tv)
 {
 	unsigned long flags;
+	unsigned long usec, sec;
 
-	save_flags_cli (flags);
-	*tv = xtime;
-	tv->tv_usec += gettimeoffset();
+	read_lock_irqsave(&xtime_lock, flags);
+	usec = gettimeoffset();
+	{
+		unsigned long lost = lost_ticks;
 
-	/*
-	 * xtime is atomically updated in timer_bh. lost_ticks is
-	 * nonzero if the timer bottom half hasnt executed yet.
-	 */
-	if (lost_ticks)
-		tv->tv_usec += USECS_PER_JIFFY;
-
-	restore_flags(flags);
-
-	if (tv->tv_usec >= 1000000) {
-		tv->tv_usec -= 1000000;
-		tv->tv_sec++;
+		if (lost)
+			usec += lost * USECS_PER_JIFFY;
 	}
+	sec = xtime.tv_sec;
+	usec += xtime.tv_usec;
+	read_unlock_irqrestore(&xtime_lock, flags);
+
+	/* usec may have gone up a lot: be safe */
+	while (usec >= 1000000) {
+		usec -= 1000000;
+		sec++;
+	}
+
+	tv->tv_sec = sec;
+	tv->tv_usec = usec;
 }
 
 void do_settimeofday(struct timeval *tv)
 {
-	cli ();
+	write_lock_irq(&xtime_lock);
 	/* This is revolting. We need to set the xtime.tv_usec
 	 * correctly. However, the value in this location is
 	 * is value at the last tick.
@@ -205,8 +211,9 @@ void do_settimeofday(struct timeval *tv)
 	 * would have done, and then undo it!
 	 */
 	tv->tv_usec -= gettimeoffset();
+	tv->tv_usec -= lost_ticks * USECS_PER_JIFFY;
 
-	if (tv->tv_usec < 0) {
+	while (tv->tv_usec < 0) {
 		tv->tv_usec += 1000000;
 		tv->tv_sec--;
 	}
@@ -216,7 +223,7 @@ void do_settimeofday(struct timeval *tv)
 	time_status |= STA_UNSYNC;
 	time_maxerror = NTP_PHASE_LIMIT;
 	time_esterror = NTP_PHASE_LIMIT;
-	sti();
+	write_unlock_irq(&xtime_lock);
 }
 
 static struct irqaction timer_irq = {

@@ -198,7 +198,7 @@ One should provide the exact DMA direction if you know it.
 PCI_DMA_TODEVICE means "from main memory to the PCI device"
 PCI_DMA_FROMDEVICE means "from the PCI device to main memory"
 
-Cou are _strongly_ encouraged to specify this as precisely
+You are _strongly_ encouraged to specify this as precisely
 as you possibly can.
 
 If you absolutely cannot know the direction of the DMA transfer,
@@ -284,7 +284,7 @@ accessed sg->address and sg->length as shown above.
 
 To unmap a scatterlist, just call:
 
-	pci_unmap_sg(dev, sglist, nents);
+	pci_unmap_sg(dev, sglist, nents, direction);
 
 Again, make sure DMA activity finished.
 

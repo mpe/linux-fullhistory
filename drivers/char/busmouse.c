@@ -1,22 +1,11 @@
 /*
- * linux/drivers/char/mouse.c
+ * linux/drivers/char/busmouse.c
  *
- * Copyright (C) 1995 - 1998 Russell King
- *  Protocol taken from busmouse.c
+ * Copyright (C) 1995 - 1998 Russell King <linux@arm.linux.org.uk>
+ *  Protocol taken from original busmouse.c
  *  read() waiting taken from psaux.c
  *
  * Medium-level interface for quadrature or bus mice.
- *
- * Currently, the majority of kernel busmice drivers in the
- * kernel common code to talk to userspace.  This driver
- * attempts to rectify this situation by presenting a
- * simple and safe interface to the mice and user.
- *
- * This driver:
- *  - is SMP safe
- *  - handles multiple opens
- *  - handles the wakeups and locking
- *  - has optional blocking reads
  */
 
 #include <linux/module.h>
@@ -40,10 +29,8 @@
 /* Uncomment this if your mouse drivers expect the kernel to
  * return with EAGAIN if the mouse does not have any events
  * available, even if the mouse is opened in nonblocking mode.
- *
- * Should this be on a per-mouse basis?  If so, add an entry to
- * the struct busmouse structure and add the relevent flag to
- * the drivers.
+ * Please report use of this "feature" to the author using the
+ * above address.
  */
 /*#define BROKEN_MOUSE*/
 
@@ -56,7 +43,6 @@ struct busmouse_data {
 	struct fasync_struct	*fasyncptr;
 	char			active;
 	char			buttons;
-	char			latch_buttons;
 	char			ready;
 	int			dxpos;
 	int			dypos;
@@ -75,32 +61,19 @@ struct busmouse_data {
 static struct busmouse_data *busmouse_data[NR_MICE];
 static DECLARE_MUTEX(mouse_sem);
 
-/* a mouse driver just has to interface with these functions
- *  These are !!!OLD!!!  Do not use!!!
+/**
+ *	busmouse_add_movement - notification of a change of mouse position
+ *	@mousedev: mouse number
+ *	@dx: delta X movement
+ *	@dy: delta Y movement
+ *	@buttons: new button state
+ *
+ *	Updates the mouse position and button information. The mousedev
+ *	parameter is the value returned from register_busmouse. The
+ *	movement information is updated, and the new button state is
+ *	saved.  A waiting user thread is woken.
  */
-void add_mouse_movement(int dx, int dy)
-{
-	struct busmouse_data *mse = busmouse_data[MINOR_TO_MOUSE(6)];
-
-	mse->dxpos += dx;
-	mse->dypos += dy;
-	mse->ready = 1;
-	wake_up(&mse->wait);
-}
-
-int add_mouse_buttonchange(int set, int value)
-{
-	struct busmouse_data *mse = busmouse_data[MINOR_TO_MOUSE(6)];
-
-	mse->buttons = (mse->buttons & ~set) ^ value;
-	mse->ready = 1;
-	wake_up(&mse->wait);
-	return mse->buttons;
-}
-
-/* New interface.  !!! Use this one !!!
- * These routines will most probably be called from interrupt.
- */
+ 
 void busmouse_add_movementbuttons(int mousedev, int dx, int dy, int buttons)
 {
 	struct busmouse_data *mse = busmouse_data[mousedev];
@@ -113,7 +86,6 @@ void busmouse_add_movementbuttons(int mousedev, int dx, int dy, int buttons)
 		add_mouse_randomness((buttons << 16) + (dy << 8) + dx);
 
 		mse->buttons = buttons;
-//		mse->latch_buttons |= buttons;
 		mse->dxpos += dx;
 		mse->dypos += dy;
 		mse->ready = 1;
@@ -143,6 +115,17 @@ void busmouse_add_movementbuttons(int mousedev, int dx, int dy, int buttons)
 	}
 }
 
+/**
+ *	busmouse_add_movement - notification of a change of mouse position
+ *	@mousedev: mouse number
+ *	@dx: delta X movement
+ *	@dy: delta Y movement
+ *
+ *	Updates the mouse position. The mousedev parameter is the value
+ *	returned from register_busmouse. The movement information is
+ *	updated, and a waiting user thread is woken.
+ */
+ 
 void busmouse_add_movement(int mousedev, int dx, int dy)
 {
 	struct busmouse_data *mse = busmouse_data[mousedev];
@@ -150,6 +133,18 @@ void busmouse_add_movement(int mousedev, int dx, int dy)
 	busmouse_add_movementbuttons(mousedev, dx, dy, mse->buttons);
 }
 
+/**
+ *	busmouse_add_buttons - notification of a change of button state
+ *	@mousedev: mouse number
+ *	@clear: mask of buttons to clear
+ *	@eor: mask of buttons to change
+ *
+ *	Updates the button state. The mousedev parameter is the value
+ *	returned from register_busmouse. The buttons are updated by:
+ *		new_state = (old_state & ~clear) ^ eor
+ *	A waiting user thread is woken up.
+ */
+ 
 void busmouse_add_buttons(int mousedev, int clear, int eor)
 {
 	struct busmouse_data *mse = busmouse_data[mousedev];
@@ -191,7 +186,6 @@ static int busmouse_release(struct inode *inode, struct file *file)
 static int busmouse_open(struct inode *inode, struct file *file)
 {
 	struct busmouse_data *mse;
-	unsigned long flags;
 	unsigned int mousedev;
 	int ret = -ENODEV;
 
@@ -219,7 +213,7 @@ static int busmouse_open(struct inode *inode, struct file *file)
 
 	MOD_INC_USE_COUNT;
 
-	spin_lock_irqsave(&mse->lock, flags);
+	spin_lock_irq(&mse->lock);
 
 	mse->ready   = 0;
 	mse->dxpos   = 0;
@@ -229,7 +223,7 @@ static int busmouse_open(struct inode *inode, struct file *file)
 	else
 		mse->buttons = 7;
 
-	spin_unlock_irqrestore(&mse->lock, flags);
+	spin_unlock_irq(&mse->lock);
 end:
 	up(&mouse_sem);
 	return ret;
@@ -244,21 +238,20 @@ static ssize_t busmouse_read(struct file *file, char *buffer, size_t count, loff
 {
 	struct busmouse_data *mse = (struct busmouse_data *)file->private_data;
 	DECLARE_WAITQUEUE(wait, current);
-	unsigned long flags;
 	int dxpos, dypos, buttons;
 
 	if (count < 3)
 		return -EINVAL;
 
-	spin_lock_irqsave(&mse->lock, flags);
+	spin_lock_irq(&mse->lock);
 
 	if (!mse->ready) {
 #ifdef BROKEN_MOUSE
-		spin_unlock_irqrestore(&mse->lock, flags);
+		spin_unlock_irq(&mse->lock);
 		return -EAGAIN;
 #else
 		if (file->f_flags & O_NONBLOCK) {
-			spin_unlock_irqrestore(&mse->lock, flags);
+			spin_unlock_irq(&mse->lock);
 			return -EAGAIN;
 		}
 
@@ -266,9 +259,9 @@ static ssize_t busmouse_read(struct file *file, char *buffer, size_t count, loff
 repeat:
 		set_current_state(TASK_INTERRUPTIBLE);
 		if (!mse->ready && !signal_pending(current)) {
-			spin_unlock_irqrestore(&mse->lock, flags);
+			spin_unlock_irq(&mse->lock);
 			schedule();
-			spin_lock_irqsave(&mse->lock, flags);
+			spin_lock_irq(&mse->lock);
 			goto repeat;
 		}
 
@@ -276,7 +269,7 @@ repeat:
 		remove_wait_queue(&mse->wait, &wait);
 
 		if (signal_pending(current)) {
-			spin_unlock_irqrestore(&mse->lock, flags);
+			spin_unlock_irq(&mse->lock);
 			return -ERESTARTSYS;
 		}
 #endif
@@ -285,7 +278,6 @@ repeat:
 	dxpos = mse->dxpos;
 	dypos = mse->dypos;
 	buttons = mse->buttons;
-//	mse->latch_buttons = mse->buttons;
 
 	if (dxpos < -127)
 		dxpos =- 127;
@@ -306,7 +298,7 @@ repeat:
 	 */
 	mse->ready = mse->dxpos || mse->dypos;
 
-	spin_unlock_irqrestore(&mse->lock, flags);
+	spin_unlock_irq(&mse->lock);
 
 	/* Write out data to the user.  Format is:
 	 *   byte 0 - identifer (0x80) and (inverted) mouse buttons
@@ -413,6 +405,7 @@ int register_busmouse(struct busmouse *ops)
 int unregister_busmouse(int mousedev)
 {
 	int err = -EINVAL;
+
 	if (mousedev < 0)
 		return 0;
 	if (mousedev >= NR_MICE) {
@@ -435,7 +428,7 @@ int unregister_busmouse(int mousedev)
 		goto fail;
 	}
 
-	err=misc_deregister(&busmouse_data[mousedev]->miscdev);
+	err = misc_deregister(&busmouse_data[mousedev]->miscdev);
 
 	kfree(busmouse_data[mousedev]);
 	busmouse_data[mousedev] = NULL;

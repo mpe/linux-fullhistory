@@ -1,7 +1,9 @@
 #ifndef __ASM_SMP_H
 #define __ASM_SMP_H
 
-#ifdef __SMP__
+#include <linux/config.h>
+
+#ifdef CONFIG_SMP
 #error SMP not supported
 #endif
 

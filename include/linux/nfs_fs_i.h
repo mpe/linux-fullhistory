@@ -53,11 +53,13 @@ struct nfs_inode_info {
 	/*
 	 * This is the list of dirty unwritten pages.
 	 */
+	struct list_head	read;
 	struct list_head	dirty;
 	struct list_head	commit;
 	struct list_head	writeback;
 
-	unsigned int		ndirty,
+	unsigned int		nread,
+				ndirty,
 				ncommit,
 				npages;
 

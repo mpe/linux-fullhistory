@@ -17,17 +17,13 @@
 static void autofs_init_usage(struct autofs_dirhash *dh,
 			      struct autofs_dir_ent *ent)
 {
-	ent->exp_next = &dh->expiry_head;
-	ent->exp_prev = dh->expiry_head.exp_prev;
-	dh->expiry_head.exp_prev->exp_next = ent;
-	dh->expiry_head.exp_prev = ent;
+	list_add_tail(&ent->exp, &dh->expiry_head);
 	ent->last_usage = jiffies;
 }
 
 static void autofs_delete_usage(struct autofs_dir_ent *ent)
 {
-	ent->exp_prev->exp_next = ent->exp_next;
-	ent->exp_next->exp_prev = ent->exp_prev;
+	list_del(&ent->exp);
 }
 
 void autofs_update_usage(struct autofs_dirhash *dh,
@@ -45,12 +41,13 @@ struct autofs_dir_ent *autofs_expire(struct super_block *sb,
 	struct dentry *dentry;
 	unsigned long timeout = sbi->exp_timeout;
 
-	ent = dh->expiry_head.exp_next;
-
-	if ( ent == &(dh->expiry_head) || sbi->catatonic )
-		return NULL;	/* No entries */
-
-	while ( jiffies - ent->last_usage >= timeout ) {
+	while (1) {
+		if ( list_empty(&dh->expiry_head) || sbi->catatonic )
+			return NULL;	/* No entries */
+		/* We keep the list sorted by last_usage and want old stuff */
+		ent = list_entry(dh->expiry_head.next, struct autofs_dir_ent, exp);
+		if (jiffies - ent->last_usage < timeout)
+			break;
 		/* Move to end of list in case expiry isn't desirable */
 		autofs_update_usage(dh, ent);
 
@@ -94,8 +91,7 @@ struct autofs_dir_ent *autofs_expire(struct super_block *sb,
 
 void autofs_initialize_hash(struct autofs_dirhash *dh) {
 	memset(&dh->h, 0, AUTOFS_HASH_SIZE*sizeof(struct autofs_dir_ent *));
-	dh->expiry_head.exp_next = dh->expiry_head.exp_prev =
-		&dh->expiry_head;
+	INIT_LIST_HEAD(&dh->expiry_head);
 }
 
 struct autofs_dir_ent *autofs_hash_lookup(const struct autofs_dirhash *dh, struct qstr *name)

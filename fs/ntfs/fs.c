@@ -587,7 +587,7 @@ static struct inode_operations ntfs_dir_inode_operations = {
 #endif
 };
 
-static int ntfs_writepage(struct dentry *dentry, struct page *page)
+static int ntfs_writepage(struct file *file, struct dentry *dentry, struct page *page)
 {
 	return block_write_full_page(page,ntfs_get_block);
 }
@@ -607,6 +607,7 @@ static int _ntfs_bmap(struct address_space *mapping, long block)
 struct address_space_operations ntfs_aops = {
 	readpage: ntfs_readpage,
 	writepage: ntfs_writepage,
+	sync_page: block_sync_page,
 	prepare_write: ntfs_prepare_write,
 	commit_write: generic_commit_write,
 	bmap: _ntfs_bmap

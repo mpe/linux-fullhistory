@@ -939,7 +939,7 @@ struct buffer_head *sysv_file_bread(struct inode *inode, int block, int create)
 	return NULL;
 }
 
-static int sysv_writepage(struct dentry *dentry, struct page *page)
+static int sysv_writepage(struct file *file, struct dentry *dentry, struct page *page)
 {
 	return block_write_full_page(page,sysv_get_block);
 }
@@ -958,6 +958,7 @@ static int sysv_bmap(struct address_space *mapping, long block)
 struct address_space_operations sysv_aops = {
 	readpage: sysv_readpage,
 	writepage: sysv_writepage,
+	sync_page: block_sync_page,
 	prepare_write: sysv_prepare_write,
 	commit_write: generic_commit_write,
 	bmap: sysv_bmap

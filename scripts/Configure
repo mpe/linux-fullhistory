@@ -321,9 +321,6 @@ function dep_mbool () {
 	      define_bool "$var" "n"
 	      return
 	      ;;
-	    m)
-	      eval "$var=y"
-	      ;;
 	  esac
 	  shift
 	done

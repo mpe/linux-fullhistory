@@ -12,6 +12,8 @@
 #include <asm/hardware.h>
 #include <asm/dec21285.h>
 
+#include "arch.h"
+
 #if (TEXTADDR & 0xffff) != 0x8000
 #error TEXTADDR must start at 0xXXXX8000
 #endif
@@ -231,6 +233,13 @@ __create_page_tables:
  * Generally, only serious errors cause this.
  */
 __error:
+#ifdef CONFIG_DEBUG_LL
+		mov	r8, r0				@ preserve r0
+		adr	r0, err_str
+		bl	printascii
+		mov	r0, r8
+		bl	printch
+#endif
 #ifdef CONFIG_ARCH_RPC
 /*
  * Turn the screen red on a error - RiscPC only.
@@ -247,7 +256,10 @@ __error:
 1:		mov	r0, r0
 		b	1b
 
-
+#ifdef CONFIG_DEBUG_LL
+err_str:	.asciz	"\nError: "
+		.align
+#endif
 
 /*
  * Read processor ID register (CP#15, CR0), and determine
@@ -262,9 +274,9 @@ __error:
 __lookup_processor_type:
 		adr	r5, 2f
 		ldmia	r5, {r7, r9, r10}
-		sub	r5, r5, r9
+		sub	r5, r5, r10
 		add	r7, r7, r5
-		add	r10, r10, r5
+		add	r10, r9, r5
 		mrc	p15, 0, r9, c0, c0		@ get processor id
 1:		ldmia	r10, {r5, r6, r8}		@ value, mask, mmuflags
 		eor	r5, r5, r9
@@ -277,8 +289,10 @@ __lookup_processor_type:
 		mov	pc, lr
 
 2:		.long	__proc_info_end
-		.long	2b
 		.long	__proc_info_begin
+		.long	2b
+		.long	__arch_info_begin
+		.long	__arch_info_end
 
 /*
  * Lookup machine architecture
@@ -290,135 +304,18 @@ __lookup_processor_type:
  *  r7 = byte offset into page tables for IO
  */
 __lookup_architecture_type:
-		cmp	r1, #(__arch_types_end - __arch_types_start) / 16
-		bge	1f
-		adr	r4, __arch_types_start
-		add	r4, r4, r1, lsl #4
-		ldmia	r4, {r4, r5, r6, r7}
-		mov	r7, r7, lsr #18
+		adr	r4, 2b
+		ldmia	r4, {r2, r3, r5, r6, r7}	@ throw away r2, r3
+		sub	r5, r4, r5
+		add	r4, r6, r5
+		add	r7, r7, r5
+1:		ldr	r5, [r4]
+		teq	r5, r1
+		beq	2f
+		add	r4, r4, #SIZEOF_MACHINE_DESC
+		cmp	r4, r7
+		blt	1b
+		mov	r7, #0
 		mov	pc, lr
-1:		mov	r7, #0
+2:		ldmib	r4, {r5, r6, r7}
 		mov	pc, lr
-
-/*
- * Machine parameters.  Each machine requires 4 words, which are:
- *
- * word0: unused
- * word1: physical start address of RAM
- * word2: physical start address of IO
- * word3: virtual start address of IO
- *
- * The IO mappings entered here are used to set up mappings
- * required for debugging information to be shown to the user.
- * paging_init() does the real page table initialisation.
- */
-		.type	__arch_types_start, #object
-		@ 0x00 - DEC EBSA110
-__arch_types_start:
-		.long	0
-		.long	0
-		.long	0xe0000000
-		.long	0xe0000000
-
-		@ 0x01 - Acorn RiscPC
-		.long	0
-		.long	0x10000000
-		.long	0x03000000
-		.long	0xe0000000
-
-		@ 0x02 - Unused
-		.long	0
-		.long	0
-		.long	0xe0000000
-		.long	0xe0000000
-
-		@ 0x03 - NexusPCI
-		.long	0
-		.long	0x40000000
-		.long	0x10000000
-		.long	0xe0000000
-
-		@ 0x04 - DEC EBSA285
-		.long	0
-		.long	0
-		.long	DC21285_ARMCSR_BASE
-		.long	0xfe000000
-
-		@ 0x05 - Rebel.com NetWinder
-		.long	0
-		.long	0
-		.long	DC21285_ARMCSR_BASE
-		.long	0xfe000000
-
-		@ 0x06 - CATS
-		.long	0
-		.long	0
-		.long	DC21285_ARMCSR_BASE
-		.long	0xfe000000
-
-		@ 0x07 - tbox
-		.long	0
-		.long	0x80000000
-		.long	0x00400000			@ Uart
-		.long	0xe0000000
-
-		@ 0x08 - DEC EBSA285 as co-processor
-		.long	0
-		.long	0
-		.long	DC21285_ARMCSR_BASE		@ Physical I/O base address
-		.long	0x7cf00000			@ Virtual I/O base address
-
-		@ 0x09 - CL-PS7110
-		.long	0
-		.long	0
-		.long	0
-		.long	0
-
-		@ 0x0a - Acorn Archimedes
-		.long	0
-		.long	0
-		.long	0
-		.long	0
-
-		@ 0x0b - Acorn A5000
-		.long	0
-		.long	0
-		.long	0
-		.long	0
-
-		@ 0x0c - Etoile
-		.long	0
-		.long	0
-		.long	0
-		.long	0
-
-		@ 0x0d - LaCie_NAS
-		.long	0
-		.long	0
-		.long	0
-		.long	0
-
-		@ 0x0e - CL-PS7500
-		.long	0
-		.long	0x10000000
-		.long	0x03000000
-		.long	0xe0000000
-
-		@ 0x0f - Digital Shark (DNARD)
-		.long	0
-		.long	0x08000000
-		.long	0x40000000
-		.long	0xe0000000
-
-		@ 0x10 - SA1100
-		.long	0
-		.long	0xc0000000
-		.long	0x80000000
-		.long	0xf8000000
-
-		/*
-		 * Don't add anything here unless you have an
-		 * architecture number allocated - see
-		 * Documentation/arm/README
-		 */
-__arch_types_end:

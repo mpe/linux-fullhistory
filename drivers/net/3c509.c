@@ -168,7 +168,7 @@ struct el3_mca_adapters_struct el3_mca_adapters[] = {
 };
 #endif
 
-#ifdef CONFIG_ISAPNP
+#ifdef __ISAPNP__
 struct el3_isapnp_adapters_struct {
 	unsigned short vendor, function;
 	char *name;
@@ -187,7 +187,7 @@ u16 el3_isapnp_phys_addr[8][3] = {
 	{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}
 };
 #endif /* CONFIG_ISAPNP */
-#if defined(CONFIG_ISAPNP) || defined(MODULE)
+#if defined(__ISAPNP__) || defined(MODULE)
 static int nopnp = 0;
 #endif
 
@@ -198,7 +198,7 @@ int el3_probe(struct net_device *dev)
 	u16 phys_addr[3];
 	static int current_tag = 0;
 	int mca_slot = -1;
-#ifdef CONFIG_ISAPNP
+#ifdef __ISAPNP__
 	static int pnp_cards = 0;
 #endif
 
@@ -294,7 +294,7 @@ int el3_probe(struct net_device *dev)
 	}
 #endif
 
-#ifdef CONFIG_ISAPNP
+#ifdef __ISAPNP__
 	if (nopnp == 1)
 		goto no_pnp;
 
@@ -376,7 +376,7 @@ no_pnp:
 		phys_addr[i] = htons(id_read_eeprom(i));
 	}
 
-#ifdef CONFIG_ISAPNP
+#ifdef __ISAPNP__
 	if (nopnp == 0) {
 		/* The ISA PnP 3c509 cards respond to the ID sequence.
 		   This check is needed in order not to register them twice. */

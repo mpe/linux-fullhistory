@@ -217,7 +217,7 @@ int hfs_notify_change_hdr(struct dentry *dentry, struct iattr * attr)
 	return __hfs_notify_change(dentry, attr, HFS_HDR);
 }
 
-static int hfs_writepage(struct dentry *dentry, struct page *page)
+static int hfs_writepage(struct file *file, struct dentry *dentry, struct page *page)
 {
 	return block_write_full_page(page,hfs_get_block);
 }
@@ -237,6 +237,7 @@ static int hfs_bmap(struct address_space *mapping, long block)
 struct address_space_operations hfs_aops = {
 	readpage: hfs_readpage,
 	writepage: hfs_writepage,
+	sync_page: block_sync_page,
 	prepare_write: hfs_prepare_write,
 	commit_write: generic_commit_write,
 	bmap: hfs_bmap

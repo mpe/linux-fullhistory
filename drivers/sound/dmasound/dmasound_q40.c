@@ -1,10 +1,10 @@
 
 /*
- *  linux/drivers/sound/dmasound_q40.c
+ *  linux/drivers/sound/dmasound/dmasound_q40.c
  *
  *  Q40 DMA Sound Driver
  *
- *  See linux/drivers/sound/dmasound_core.c for copyright and credits
+ *  See linux/drivers/sound/dmasound/dmasound_core.c for copyright and credits
  */
 
 

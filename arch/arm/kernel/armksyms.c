@@ -101,6 +101,7 @@ EXPORT_SYMBOL(kernel_thread);
 EXPORT_SYMBOL(system_rev);
 EXPORT_SYMBOL(system_serial_low);
 EXPORT_SYMBOL(system_serial_high);
+EXPORT_SYMBOL(mem_fclk_21285);
 EXPORT_SYMBOL(__bug);
 EXPORT_SYMBOL(__readwrite_bug);
 EXPORT_SYMBOL(enable_irq);

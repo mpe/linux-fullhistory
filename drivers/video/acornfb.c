@@ -1599,7 +1599,7 @@ acornfb_init(void)
 	}
 
 	current_par.currcon	   = -1;
-	current_par.screen_base	   = SCREEN2_BASE;
+	current_par.screen_base	   = SCREEN_BASE;
 	current_par.screen_base_p  = SCREEN_START;
 	current_par.using_vram     = 0;
 
@@ -1696,7 +1696,8 @@ acornfb_init(void)
 	v_sync = h_sync / (init_var.yres + init_var.upper_margin +
 		 init_var.lower_margin + init_var.vsync_len);
 
-	printk("Acornfb: %ldkB %cRAM, %s, using %dx%d, %d.%03dkHz, %dHz\n",
+	printk(KERN_INFO "Acornfb: %ldkB %cRAM, %s, using %dx%d, "
+		"%d.%03dkHz, %dHz\n",
 		current_par.screen_size / 1024,
 		current_par.using_vram ? 'V' : 'D',
 		VIDC_NAME, init_var.xres, init_var.yres,

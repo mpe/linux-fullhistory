@@ -7,6 +7,8 @@
 #ifndef __ASM_PROC_SYSTEM_H
 #define __ASM_PROC_SYSTEM_H
 
+#include <linux/config.h>
+
 extern const char xchg_str[];
 
 extern __inline__ unsigned long __xchg(unsigned long x, volatile void *ptr, int size)
@@ -106,7 +108,7 @@ extern unsigned long cr_alignment;	/* defined in entry-armv.S */
 #define local_irq_disable()	__cli()
 #define local_irq_enable()	__sti()
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #error SMP not supported
 #else
 

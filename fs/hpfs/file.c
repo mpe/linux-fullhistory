@@ -86,7 +86,7 @@ int hpfs_get_block(struct inode *inode, long iblock, struct buffer_head *bh_resu
 	return 0;
 }
 
-static int hpfs_writepage(struct dentry *dentry, struct page *page)
+static int hpfs_writepage(struct file *file, struct dentry *dentry, struct page *page)
 {
 	return block_write_full_page(page,hpfs_get_block);
 }
@@ -106,6 +106,7 @@ static int _hpfs_bmap(struct address_space *mapping, long block)
 struct address_space_operations hpfs_aops = {
 	readpage: hpfs_readpage,
 	writepage: hpfs_writepage,
+	sync_page: block_sync_page,
 	prepare_write: hpfs_prepare_write,
 	commit_write: generic_commit_write,
 	bmap: _hpfs_bmap

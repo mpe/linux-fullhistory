@@ -410,7 +410,7 @@ static void qnx4_put_super(struct super_block *sb)
 	return;
 }
 
-static int qnx4_writepage(struct dentry *dentry, struct page *page)
+static int qnx4_writepage(struct file *file, struct dentry *dentry, struct page *page)
 {
 	return block_write_full_page(page,qnx4_get_block);
 }
@@ -430,6 +430,7 @@ static int qnx4_bmap(struct address_space *mapping, long block)
 struct address_space_operations qnx4_aops = {
 	readpage: qnx4_readpage,
 	writepage: qnx4_writepage,
+	sync_page: block_sync_page,
 	prepare_write: qnx4_prepare_write,
 	commit_write: generic_commit_write,
 	bmap: qnx4_bmap

@@ -84,7 +84,7 @@ extern int	softoss_dev;
 static void
 vidc_mksound(unsigned int hz, unsigned int ticks)
 {
-	printk("BEEP - %d %d!\n", hz, ticks);
+//	printk("BEEP - %d %d!\n", hz, ticks);
 }
 
 static void

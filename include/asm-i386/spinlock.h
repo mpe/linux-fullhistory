@@ -33,7 +33,7 @@ typedef struct {
 #define SPINLOCK_MAGIC_INIT	/* */
 #endif
 
-#define SPIN_LOCK_UNLOCKED (spinlock_t) { 0 SPINLOCK_MAGIC_INIT }
+#define SPIN_LOCK_UNLOCKED (spinlock_t) { 1 SPINLOCK_MAGIC_INIT }
 
 #define spin_lock_init(x)	do { *(x) = SPIN_LOCK_UNLOCKED; } while(0)
 /*
@@ -43,32 +43,39 @@ typedef struct {
  * We make no fairness assumptions. They have a cost.
  */
 
-#define spin_unlock_wait(x)	do { barrier(); } while(((volatile spinlock_t *)(x))->lock)
-#define spin_is_locked(x)	((x)->lock != 0)
+#define spin_is_locked(x)	(*(volatile char *)(&(x)->lock) <= 0)
+#define spin_unlock_wait(x)	do { barrier(); } while(spin_is_locked(x))
 
 #define spin_lock_string \
 	"\n1:\t" \
-	"lock ; btsl $0,%0\n\t" \
-	"jc 2f\n" \
+	"lock ; decb %0\n\t" \
+	"js 2f\n" \
 	".section .text.lock,\"ax\"\n" \
 	"2:\t" \
-	"testb $1,%0\n\t" \
+	"cmpb $0,%0\n\t" \
 	"rep;nop\n\t" \
-	"jne 2b\n\t" \
+	"jle 2b\n\t" \
 	"jmp 1b\n" \
 	".previous"
 
 /*
- * Sadly, some early PPro chips require the locked access,
- * otherwise we could just always simply do
- *
- * 	#define spin_unlock_string \
- *		"movb $0,%0"
- *
- * Which is noticeably faster.
+ * This works. Despite all the confusion.
  */
 #define spin_unlock_string \
-	"lock ; btrl $0,%0"
+	"movb $1,%0"
+
+/*
+ * Won't work on i386-SMP. Does anybody care?
+ */
+static inline int spin_trylock(spinlock_t *lock)
+{
+	char oldval;
+	__asm__ __volatile__(
+		"lock ; cmpxchg %b2,%1"
+		:"=a" (oldval), "=m" (__dummy_lock(lock))
+		:"q" (0), "0" (1));
+	return oldval > 0;
+}
 
 extern inline void spin_lock(spinlock_t *lock)
 {
@@ -90,15 +97,13 @@ extern inline void spin_unlock(spinlock_t *lock)
 #if SPINLOCK_DEBUG
 	if (lock->magic != SPINLOCK_MAGIC)
 		BUG();
-	if (!lock->lock)
+	if (!spin_is_locked(lock))
 		BUG();
 #endif
 	__asm__ __volatile__(
 		spin_unlock_string
 		:"=m" (__dummy_lock(lock)));
 }
-
-#define spin_trylock(lock) ({ !test_and_set_bit(0,(lock)); })
 
 /*
  * Read-write spinlocks, allowing multiple readers

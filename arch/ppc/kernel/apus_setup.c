@@ -108,18 +108,6 @@ void (*mach_floppy_eject) (void) __apusdata = NULL;
 #ifdef CONFIG_HEARTBEAT
 void (*mach_heartbeat) (int) __apusdata = NULL;
 extern void apus_heartbeat (void);
-static int heartbeat_enabled = 1;
-
-void enable_heartbeat(void)
-{
-	heartbeat_enabled = 1;
-}
-
-void disable_heartbeat(void)
-{
-	heartbeat_enabled = 0;
-	mach_heartbeat(0);
-}
 #endif
 
 extern unsigned long amiga_model;

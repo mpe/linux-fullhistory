@@ -43,10 +43,8 @@
  * Screen mapping information
  */
 #define SCREEN_START		0x02000000
-#define SCREEN2_END		0x02078000
-#define SCREEN2_BASE		0x02000000
-#define SCREEN1_END		0x02000000
-#define SCREEN1_BASE		0x01f88000
+#define SCREEN_END		0x02078000
+#define SCREEN_BASE		0x02000000
 
 
 #ifndef __ASSEMBLY__

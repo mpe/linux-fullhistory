@@ -125,7 +125,7 @@ void udf_discard_prealloc(struct inode * inode)
 		udf_trunc(inode);
 }
 
-static int udf_writepage(struct dentry *dentry, struct page *page)
+static int udf_writepage(struct file *file, struct dentry *dentry, struct page *page)
 {
 	return block_write_full_page(page, udf_get_block);
 }
@@ -148,6 +148,7 @@ static int udf_bmap(struct address_space *mapping, long block)
 struct address_space_operations udf_aops = {
 	readpage:			udf_readpage,
 	writepage:			udf_writepage,
+	sync_page:		block_sync_page,
 	prepare_write:		udf_prepare_write,
 	commit_write:		generic_commit_write,
 	bmap:				udf_bmap,
@@ -201,7 +202,7 @@ void udf_expand_file_adinicb(struct inode * inode, int newsize, int * err)
 	mark_buffer_dirty(bh, 1);
 	udf_release_data(bh);
 
-	inode->i_data.a_ops->writepage(NULL, page);
+	inode->i_data.a_ops->writepage(NULL, NULL, page);
 	UnlockPage(page);
 	page_cache_release(page);
 

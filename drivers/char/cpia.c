@@ -1577,9 +1577,13 @@ static int do_command(struct cam_data *cam, u16 command, u8 a, u8 b, u8 c, u8 d)
 	cmd[7] = 0;
 
 	retval = cam->ops->transferCmd(cam->lowlevel_data, cmd, data);
-	if (retval)
+	if (retval) {
 		DBG("%x - failed, retval=%d\n", command, retval);
-	else {
+		if (command == CPIA_COMMAND_GetColourParams ||
+		    command == CPIA_COMMAND_GetColourBalance ||
+		    command == CPIA_COMMAND_GetExposure)
+			up(&cam->param_lock);
+	} else {
 		switch(command) {
 		case CPIA_COMMAND_GetCPIAVersion:
 			cam->params.version.firmwareVersion = data[0];

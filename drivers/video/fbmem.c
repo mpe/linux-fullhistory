@@ -160,15 +160,15 @@ static struct {
 #ifdef CONFIG_FB_ATY
 	{ "atyfb", atyfb_init, atyfb_setup },
 #endif
+#ifdef CONFIG_FB_ATY128
+	{ "aty128fb", aty128fb_init, aty128fb_setup },
+#endif
 #ifdef CONFIG_FB_OF
 	/*
 	 * Offb must be initialized _after_ all other frame buffer devices
 	 * that use PCI probing and PCI resources! [ Geert ]
 	 */
 	{ "offb", offb_init, offb_setup },
-#endif
-#ifdef CONFIG_FB_ATY128
-	{ "aty128fb", aty128fb_init, aty128fb_setup },
 #endif
 #ifdef CONFIG_FB_IGA
         { "igafb", igafb_init, igafb_setup },

@@ -462,14 +462,18 @@ last_component:
 		goto return_base;
 no_inode:
 		err = -ENOENT;
-		if (lookup_flags & LOOKUP_POSITIVE)
+		if (lookup_flags & (LOOKUP_POSITIVE|LOOKUP_DIRECTORY))
 			break;
-		if (lookup_flags & LOOKUP_DIRECTORY)
-			if (!(lookup_flags & LOOKUP_SLASHOK))
-				break;
 		goto return_base;
 lookup_parent:
 		nd->last = this;
+		nd->last_type = LAST_NORM;
+		if (this.name[0] != '.')
+			goto return_base;
+		if (this.len == 1)
+			nd->last_type = LAST_DOT;
+		else if (this.len == 2 && this.name[1] == '.')
+			nd->last_type = LAST_DOTDOT;
 return_base:
 		return 0;
 out_dput:
@@ -492,7 +496,7 @@ static int __emul_lookup_dentry(const char *name, struct nameidata *nd)
 
 	if (!nd->dentry->d_inode) {
 		struct nameidata nd_root;
-		nd_root.last.len = 0;
+		nd_root.last_type = LAST_ROOT;
 		nd_root.flags = nd->flags;
 		nd_root.mnt = mntget(current->fs->rootmnt);
 		nd_root.dentry = dget(current->fs->root);
@@ -550,7 +554,7 @@ walk_init_root(const char *name, struct nameidata *nd)
 
 int walk_init(const char *name,unsigned int flags,struct nameidata *nd)
 {
-	nd->last.len = 0;
+	nd->last_type = LAST_ROOT; /* if there are only slashes... */
 	nd->flags = flags;
 	if (*name=='/')
 		return walk_init_root(name,nd);
@@ -704,6 +708,8 @@ static inline int may_delete(struct inode *dir,struct dentry *victim, int isdir)
 	int error;
 	if (!victim->d_inode || victim->d_parent->d_inode != dir)
 		return -ENOENT;
+	if (IS_DEADDIR(dir))
+		return -ENOENT;
 	error = permission(dir,MAY_WRITE | MAY_EXEC);
 	if (error)
 		return error;
@@ -735,6 +741,8 @@ static inline int may_delete(struct inode *dir,struct dentry *victim, int isdir)
 static inline int may_create(struct inode *dir, struct dentry *child) {
 	if (child->d_inode)
 		return -EEXIST;
+	if (IS_DEADDIR(dir))
+		return -ENOENT;
 	return permission(dir,MAY_WRITE | MAY_EXEC);
 }
 
@@ -825,9 +833,7 @@ int open_namei(const char * pathname, int flag, int mode, struct nameidata *nd)
 		 * luserdom and let him sod off - -EISDIR it is.
 		 */
 		error = -EISDIR;
-		if (!nd->last.len || (nd->last.name[0] == '.' &&
-		     (nd->last.len == 1 ||
-		      (nd->last.name[1] == '.' && nd->last.len == 2))))
+		if (nd->last_type != LAST_NORM)
 			goto exit;
 		/* same for foo/ */
 		if (nd->last.name[nd->last.len])
@@ -971,8 +977,7 @@ static struct dentry *lookup_create(const char *name, int is_dir)
 		goto out;
 	down(&nd.dentry->d_inode->i_sem);
 	dentry = ERR_PTR(-EEXIST);
-	if (!nd.last.len || (nd.last.name[0] == '.' &&
-	      (nd.last.len == 1 || (nd.last.name[1] == '.' && nd.last.len == 2))))
+	if (nd.last_type != LAST_NORM)
 		goto fail;
 	dentry = lookup_hash(&nd.last, nd.dentry);
 	if (IS_ERR(dentry))
@@ -1172,47 +1177,53 @@ int vfs_rmdir(struct inode *dir, struct dentry *dentry)
 	double_down(&dir->i_zombie, &dentry->d_inode->i_zombie);
 	d_unhash(dentry);
 	error = dir->i_op->rmdir(dir, dentry);
+	if (!error)
+		dentry->d_inode->i_flags |= S_DEAD;
 	double_up(&dir->i_zombie, &dentry->d_inode->i_zombie);
 	dput(dentry);
 
 	return error;
 }
 
-static inline int do_rmdir(const char * name)
-{
-	int error;
-	struct dentry *dir;
-	struct dentry *dentry;
-
-	dentry = lookup_dentry(name, LOOKUP_POSITIVE);
-	error = PTR_ERR(dentry);
-	if (IS_ERR(dentry))
-		goto exit;
-
-	dir = lock_parent(dentry);
-	error = -ENOENT;
-	if (check_parent(dir, dentry))
-		error = vfs_rmdir(dir->d_inode, dentry);
-	unlock_dir(dir);
-	dput(dentry);
-exit:
-	return error;
-}
-
 asmlinkage long sys_rmdir(const char * pathname)
 {
-	int error;
-	char * tmp;
+	int error = 0;
+	char * name;
+	struct dentry *dentry;
+	struct nameidata nd;
 
-	tmp = getname(pathname);
-	if(IS_ERR(tmp))
-		return PTR_ERR(tmp);
+	name = getname(pathname);
+	if(IS_ERR(name))
+		return PTR_ERR(name);
 	lock_kernel();
-	error = do_rmdir(tmp);
+
+	if (walk_init(name, LOOKUP_PARENT, &nd))
+		error = walk_name(name, &nd);
+	if (error)
+		goto exit;
+
+	switch(nd.last_type) {
+		case LAST_DOTDOT:
+			error = -ENOTEMPTY;
+			goto exit1;
+		case LAST_ROOT: case LAST_DOT:
+			error = -EBUSY;
+			goto exit1;
+	}
+	down(&nd.dentry->d_inode->i_sem);
+	dentry = lookup_hash(&nd.last, nd.dentry);
+	error = PTR_ERR(dentry);
+	if (!IS_ERR(dentry)) {
+		error = vfs_rmdir(nd.dentry->d_inode, dentry);
+		dput(dentry);
+	}
+	up(&nd.dentry->d_inode->i_sem);
+exit1:
+	dput(nd.dentry);
+	mntput(nd.mnt);
+exit:
 	unlock_kernel();
-
-	putname(tmp);
-
+	putname(name);
 	return error;
 }
 
@@ -1233,42 +1244,50 @@ int vfs_unlink(struct inode *dir, struct dentry *dentry)
 	return error;
 }
 
-static int do_unlink(const char * name)
-{
-	int error;
-	struct dentry *dir;
-	struct dentry *dentry;
-
-	dentry = lookup_dentry(name, LOOKUP_POSITIVE);
-	error = PTR_ERR(dentry);
-	if (IS_ERR(dentry))
-		goto exit;
-
-	dir = lock_parent(dentry);
-	error = -ENOENT;
-	if (check_parent(dir, dentry))
-		error = vfs_unlink(dir->d_inode, dentry);
-
-        unlock_dir(dir);
-	dput(dentry);
-exit:
-	return error;
-}
-
 asmlinkage long sys_unlink(const char * pathname)
 {
-	int error;
-	char * tmp;
+	int error = 0;
+	char * name;
+	struct dentry *dentry;
+	struct nameidata nd;
 
-	tmp = getname(pathname);
-	if(IS_ERR(tmp))
-		return PTR_ERR(tmp);
+	name = getname(pathname);
+	if(IS_ERR(name))
+		return PTR_ERR(name);
 	lock_kernel();
-	error = do_unlink(tmp);
+
+	if (walk_init(name, LOOKUP_PARENT, &nd))
+		error = walk_name(name, &nd);
+	if (error)
+		goto exit;
+	error = -EISDIR;
+	if (nd.last_type != LAST_NORM)
+		goto exit1;
+	down(&nd.dentry->d_inode->i_sem);
+	dentry = lookup_hash(&nd.last, nd.dentry);
+	error = PTR_ERR(dentry);
+	if (!IS_ERR(dentry)) {
+		/* Why not before? Because we want correct error value */
+		if (nd.last.name[nd.last.len])
+			goto slashes;
+		error = vfs_unlink(nd.dentry->d_inode, dentry);
+	exit2:
+		dput(dentry);
+	}
+	up(&nd.dentry->d_inode->i_sem);
+exit1:
+	dput(nd.dentry);
+	mntput(nd.mnt);
+exit:
 	unlock_kernel();
-	putname(tmp);
+	putname(name);
 
 	return error;
+
+slashes:
+	error = !dentry->d_inode ? -ENOENT :
+		S_ISDIR(dentry->d_inode->i_mode) ? -EISDIR : -ENOTDIR;
+	goto exit2;
 }
 
 int vfs_symlink(struct inode *dir, struct dentry *dentry, const char *oldname)
@@ -1485,6 +1504,8 @@ int vfs_rename_dir(struct inode *old_dir, struct dentry *old_dentry,
 			    &new_dir->i_zombie);
 	error = old_dir->i_op->rename(old_dir, old_dentry, new_dir, new_dentry);
 	if (target) {
+		if (!error)
+			target->i_flags |= S_DEAD;
 		triple_up(&old_dir->i_zombie,
 			  &new_dir->i_zombie,
 			  &target->i_zombie);
@@ -1551,41 +1572,72 @@ int vfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 
 static inline int do_rename(const char * oldname, const char * newname)
 {
-	int error;
+	int error = 0;
 	struct dentry * old_dir, * new_dir;
 	struct dentry * old_dentry, *new_dentry;
+	struct nameidata oldnd, newnd;
 
-	old_dentry = lookup_dentry(oldname, LOOKUP_POSITIVE);
+	if (walk_init(oldname, LOOKUP_PARENT, &oldnd))
+		error = walk_name(oldname, &oldnd);
 
-	error = PTR_ERR(old_dentry);
-	if (IS_ERR(old_dentry))
+	if (error)
 		goto exit;
 
-	{
-		unsigned int flags = 0;
-		if (S_ISDIR(old_dentry->d_inode->i_mode))
-			flags = LOOKUP_SLASHOK;
-		new_dentry = lookup_dentry(newname, flags);
-	}
+	if (walk_init(newname, LOOKUP_PARENT, &newnd))
+		error = walk_name(newname, &newnd);
+	if (error)
+		goto exit1;
 
-	error = PTR_ERR(new_dentry);
-	if (IS_ERR(new_dentry))
-		goto exit_old;
+	error = -EXDEV;
+	if (oldnd.mnt != newnd.mnt)
+		goto exit2;
 
-	new_dir = get_parent(new_dentry);
-	old_dir = get_parent(old_dentry);
+	old_dir = oldnd.dentry;
+	error = -EBUSY;
+	if (oldnd.last_type != LAST_NORM)
+		goto exit2;
+
+	new_dir = newnd.dentry;
+	if (newnd.last_type != LAST_NORM)
+		goto exit2;
 
 	double_lock(new_dir, old_dir);
 
+	old_dentry = lookup_hash(&oldnd.last, old_dir);
+	error = PTR_ERR(old_dentry);
+	if (IS_ERR(old_dentry))
+		goto exit3;
+	/* source must exist */
 	error = -ENOENT;
-	if (check_parent(old_dir, old_dentry) && check_parent(new_dir, new_dentry))
-		error = vfs_rename(old_dir->d_inode, old_dentry,
+	if (!old_dentry->d_inode)
+		goto exit4;
+	/* unless the source is a directory trailing slashes give -ENOTDIR */
+	if (!S_ISDIR(old_dentry->d_inode->i_mode)) {
+		error = -ENOTDIR;
+		if (oldnd.last.name[oldnd.last.len])
+			goto exit4;
+		if (newnd.last.name[newnd.last.len])
+			goto exit4;
+	}
+	new_dentry = lookup_hash(&newnd.last, new_dir);
+	error = PTR_ERR(new_dentry);
+	if (IS_ERR(new_dentry))
+		goto exit4;
+
+	error = vfs_rename(old_dir->d_inode, old_dentry,
 				   new_dir->d_inode, new_dentry);
 
-	double_unlock(new_dir, old_dir);
 	dput(new_dentry);
-exit_old:
+exit4:
 	dput(old_dentry);
+exit3:
+	double_up(&new_dir->d_inode->i_sem, &old_dir->d_inode->i_sem);
+exit2:
+	dput(newnd.dentry);
+	mntput(newnd.mnt);
+exit1:
+	dput(oldnd.dentry);
+	mntput(oldnd.mnt);
 exit:
 	return error;
 }

@@ -98,6 +98,7 @@ extern int max_super_blocks, nr_super_blocks;
 #define MS_ODD_RENAME	32768	/* Temporary stuff; will go away as soon
 				  * as nfs_rename() will be cleaned up
 				  */
+#define S_DEAD		(1<<16)	/* removed, but still open directory */
 
 /*
  * Flags that can be altered by MS_REMOUNT
@@ -140,6 +141,7 @@ extern int max_super_blocks, nr_super_blocks;
 #define IS_NOATIME(inode)	__IS_FLG(inode, MS_NOATIME)
 #define IS_NODIRATIME(inode)	__IS_FLG(inode, MS_NODIRATIME)
 
+#define IS_DEADDIR(inode)	((inode)->i_flags & S_DEAD)
 
 /* the read-only stuff doesn't really belong here, but any other place is
    probably as bad and I don't want to create yet another include file. */
@@ -336,8 +338,9 @@ struct page;
 struct address_space;
 
 struct address_space_operations {
-	int (*writepage) (struct dentry *, struct page *);
+	int (*writepage)(struct file *, struct dentry *, struct page *);
 	int (*readpage)(struct dentry *, struct page *);
+	int (*sync_page)(struct page *);
 	int (*prepare_write)(struct file *, struct page *, unsigned, unsigned);
 	int (*commit_write)(struct file *, struct page *, unsigned, unsigned);
 	/* Unfortunately this kludge is needed for FIBMAP. Don't use it */
@@ -552,6 +555,7 @@ struct nameidata {
 	struct vfsmount *mnt;
 	struct qstr last;
 	unsigned int flags;
+	int last_type;
 };
 
 #define FASYNC_MAGIC 0x4601
@@ -694,7 +698,6 @@ struct block_device_operations {
  * NOTE:
  * read, write, poll, fsync, readv, writev can be called
  *   without the big kernel lock held in all filesystems.
- * fasync can be called at interrupt time.
  */
 struct file_operations {
 	loff_t (*llseek) (struct file *, loff_t, int);
@@ -998,11 +1001,14 @@ extern ino_t find_inode_number(struct dentry *, struct qstr *);
  */
 #define LOOKUP_FOLLOW		(1)
 #define LOOKUP_DIRECTORY	(2)
-#define LOOKUP_SLASHOK		(4)
-#define LOOKUP_CONTINUE		(8)
-#define LOOKUP_POSITIVE		(16)
-#define LOOKUP_PARENT		(32)
-#define LOOKUP_NOALT		(64)
+#define LOOKUP_CONTINUE		(4)
+#define LOOKUP_POSITIVE		(8)
+#define LOOKUP_PARENT		(16)
+#define LOOKUP_NOALT		(32)
+/*
+ * Type of the last component on LOOKUP_PARENT
+ */
+enum {LAST_NORM, LAST_ROOT, LAST_DOT, LAST_DOTDOT };
 
 /*
  * "descriptor" for what we're up to with a read for sendfile().
@@ -1089,6 +1095,8 @@ extern int block_read_full_page(struct page*, get_block_t*);
 extern int block_prepare_write(struct page*, unsigned, unsigned, get_block_t*);
 extern int cont_prepare_write(struct page*, unsigned, unsigned, get_block_t*,
 				unsigned long *);
+extern int block_sync_page(struct page *);
+
 int generic_block_bmap(struct address_space *, long, get_block_t *);
 int generic_commit_write(struct file *, struct page *, unsigned, unsigned);
 

@@ -250,16 +250,18 @@ nfs_flushd(struct rpc_task *task)
 		NFS_FLAGS(inode) &= ~NFS_INO_FLUSH;
 
 		if (flush) {
+			nfs_pagein_inode(inode, 0, 0);
 			nfs_sync_file(inode, NULL, 0, 0, FLUSH_AGING);
 		} else if (time_after(jiffies, NFS_NEXTSCAN(inode))) {
 			NFS_NEXTSCAN(inode) = jiffies + NFS_WRITEBACK_LOCKDELAY;
+			nfs_pagein_timeout(inode);
 			nfs_flush_timeout(inode, FLUSH_AGING);
 #ifdef CONFIG_NFS_V3
 			nfs_commit_timeout(inode, FLUSH_AGING);
 #endif
 		}
 
-		if (nfs_have_writebacks(inode)) {
+		if (nfs_have_writebacks(inode) || nfs_have_read(inode)) {
 			inode_append_flushd(inode);
 			if (time_after(delay, NFS_NEXTSCAN(inode)))
 				delay = NFS_NEXTSCAN(inode);

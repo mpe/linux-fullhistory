@@ -339,9 +339,9 @@ setup_sigcontext(struct sigcontext *sc, struct _fpstate *fpstate,
 	int tmp, err = 0;
 
 	tmp = 0;
-	__asm__("movl %%gs,%w0" : "=r"(tmp): "0"(tmp));
+	__asm__("movl %%gs,%0" : "=r"(tmp): "0"(tmp));
 	err |= __put_user(tmp, (unsigned int *)&sc->gs);
-	__asm__("movl %%fs,%w0" : "=r"(tmp): "0"(tmp));
+	__asm__("movl %%fs,%0" : "=r"(tmp): "0"(tmp));
 	err |= __put_user(tmp, (unsigned int *)&sc->fs);
 
 	err |= __put_user(regs->xes, (unsigned int *)&sc->es);

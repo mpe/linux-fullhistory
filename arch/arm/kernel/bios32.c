@@ -21,7 +21,7 @@ int have_isa_bridge;
 
 extern void hw_init(void);
 
-void pcibios_report_device_errors(void)
+void pcibios_report_device_errors(int warn)
 {
 	struct pci_dev *dev;
 
@@ -34,8 +34,11 @@ void pcibios_report_device_errors(void)
 			continue;
 
 		pci_write_config_word(dev, PCI_STATUS, status & 0xf900);
-		printk(KERN_DEBUG "PCI: %02X:%02X: status %04X on %s\n",
-			dev->bus->number, dev->devfn, status, dev->name);
+
+		if (warn)
+			printk(KERN_DEBUG "PCI: %02X:%02X: status %04X "
+			       "on %s\n", dev->bus->number, dev->devfn,
+			       status, dev->name);
 	}
 }
 
@@ -48,10 +51,6 @@ void pcibios_report_device_errors(void)
  * - (0x48) enable all memory requests from ISA to be channeled to PCI
  * - (0x42) disable ping-pong (as per errata)
  * - (0x40) enable PCI packet retry
- * - (0x44) Route INTA to IRQ11
- * - (0x83) don't use CPU park enable, park on last master, disable GAT bit
- * - (0x80) default rotating priorities
- * - (0x81) rotate bank 4
  */
 static void __init pci_fixup_83c553(struct pci_dev *dev)
 {
@@ -64,16 +63,49 @@ static void __init pci_fixup_83c553(struct pci_dev *dev)
 	pci_write_config_byte(dev, 0x48, 0xff);
 	pci_write_config_byte(dev, 0x42, 0x00);
 	pci_write_config_byte(dev, 0x40, 0x22);
-	pci_write_config_word(dev, 0x44, 0xb000);
-	pci_write_config_byte(dev, 0x83, 0x02);
+
+	/*
+	 * We used to set the arbiter to "park on last master"
+	 * (bit 1 set), but unfortunately the CyberPro does not
+	 * park the bus.  We must therefore park on CPU.
+	 */
+	pci_write_config_byte(dev, 0x83, 0x00);
+
+	/*
+	 * Rotate priorities of each PCI request
+	 */
 	pci_write_config_byte(dev, 0x80, 0xe0);
 	pci_write_config_byte(dev, 0x81, 0x01);
+
+	/*
+	 * Route INTA input to IRQ 11, and set
+	 * IRQ11 to be level sensitive.
+	 */
+	pci_write_config_word(dev, 0x44, 0xb000);
+	outb(0x08, 0x4d1);
 }
 
 static void __init pci_fixup_unassign(struct pci_dev *dev)
 {
 	dev->resource[0].end -= dev->resource[0].start;
 	dev->resource[0].start = 0;
+}
+
+/*
+ * Prevent the PCI layer from seeing the resources
+ * allocated to this device.  These resources are
+ * of no consequence to the PCI layer (they are
+ * handled elsewhere).
+ */
+static void __init pci_fixup_disable(struct pci_dev *dev)
+{
+	int i;
+
+	for (i = 0; i < PCI_NUM_RESOURCES; i++) {
+		dev->resource[i].start = 0;
+		dev->resource[i].end   = 0;
+		dev->resource[i].flags = 0;
+	}
 }
 
 /*
@@ -99,6 +131,10 @@ static void __init pci_fixup_ide_bases(struct pci_dev *dev)
 
 struct pci_fixup pcibios_fixups[] = {
 	{
+		PCI_FIXUP_HEADER,
+		PCI_VENDOR_ID_DEC,	PCI_DEVICE_ID_DEC_21285,
+		pci_fixup_disable
+	}, {
 		PCI_FIXUP_HEADER,
 		PCI_VENDOR_ID_WINBOND,	PCI_DEVICE_ID_WINBOND_83C553,
 		pci_fixup_83c553
@@ -339,6 +375,7 @@ static int __init netwinder_map_irq(struct pci_dev *dev, u8 slot, u8 pin)
 
 	case DEV(PCI_VENDOR_ID_INTERG, PCI_DEVICE_ID_INTERG_2000):
 	case DEV(PCI_VENDOR_ID_INTERG, PCI_DEVICE_ID_INTERG_2010):
+	case DEV(PCI_VENDOR_ID_INTERG, PCI_DEVICE_ID_INTERG_5000):
 		return IRQ_NETWINDER_VGA;
 
 	default:

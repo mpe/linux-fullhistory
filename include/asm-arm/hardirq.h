@@ -1,6 +1,7 @@
 #ifndef __ASM_HARDIRQ_H
 #define __ASM_HARDIRQ_H
 
+#include <linux/config.h>
 #include <linux/threads.h>
 
 extern unsigned int local_irq_count[NR_CPUS];
@@ -14,7 +15,7 @@ extern unsigned int local_irq_count[NR_CPUS];
 
 #define in_irq() (local_irq_count[smp_processor_id()] != 0)
 
-#ifndef __SMP__
+#ifndef CONFIG_SMP
 
 #define hardirq_trylock(cpu)	(local_irq_count[cpu] == 0)
 #define hardirq_endlock(cpu)	do { } while (0)
@@ -26,6 +27,6 @@ extern unsigned int local_irq_count[NR_CPUS];
 
 #else
 #error SMP not supported
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 
 #endif /* __ASM_HARDIRQ_H */

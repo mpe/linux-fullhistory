@@ -153,9 +153,9 @@ ENTRY(csum_partial_copy_from_user)
 		save_regs
 		sub	fp, ip, #4
 		cmp	r2, #4
-		blt	.too_small_user
+		blt	.too_small
 		tst	r1, #2			@ Test destination alignment
-		beq	.dst_aligned_user
+		beq	.dst_aligned
 		load2b	ip, r8
 		subs	r2, r2, #2		@ We do not know if SRC is aligned...
 		orr	ip, ip, r8, lsl #8
@@ -164,9 +164,8 @@ ENTRY(csum_partial_copy_from_user)
 		strb	ip, [r1], #1
 		mov	ip, ip, lsr #8
 		strb	ip, [r1], #1		@ Destination now aligned
-.dst_aligned_user:
-		tst	r0, #3
-		bne	.src_not_aligned_user
+.dst_aligned:	tst	r0, #3
+		bne	.src_not_aligned
 		adds	r3, r3, #0
 		bics	ip, r2, #15		@ Routine for src & dst aligned
 		beq	2f
@@ -210,18 +209,17 @@ ENTRY(csum_partial_copy_from_user)
 		adcs	r0, r3, #0
 		load_regs	ea
 
-.too_small_user:
-		teq	r2, #0
+.too_small:	teq	r2, #0
 		load_regs	eqea
 		cmp	r2, #2
-		blt	.too_small_user1
+		blt	.too_small1
 		load2b	ip, r8
 		orr	ip, ip, r8, lsl #8
 		adds	r3, r3, ip
 		strb	ip, [r1], #1
 		strb	r8, [r1], #1
 		tst	r2, #1
-.too_small_user1:				@ C = 0
+.too_small1:				@ C = 0
 		beq	.csum_exit
 		load1b	ip
 		strb	ip, [r1], #1
@@ -229,15 +227,15 @@ ENTRY(csum_partial_copy_from_user)
 .csum_exit:	adc	r0, r3, #0
 		load_regs	ea
 
-.src_not_aligned_user:
+.src_not_aligned:
 		cmp	r2, #4
-		blt	.too_small_user
+		blt	.too_small
 		and	ip, r0, #3
 		bic	r0, r0, #3
 		load1l	r4
 		cmp	ip, #2
-		beq	.src2_aligned_user
-		bhi	.src3_aligned_user
+		beq	.src2_aligned
+		bhi	.src3_aligned
 		mov	r4, r4, lsr #8
 		adds	r3, r3, #0
 		bics	ip, r2, #15
@@ -290,8 +288,7 @@ ENTRY(csum_partial_copy_from_user)
 		mov	r4, r4, lsr #8
 		b	.exit
 
-.src2_aligned_user:
-		mov	r4, r4, lsr #16
+.src2_aligned:	mov	r4, r4, lsr #16
 		adds	r3, r3, #0
 		bics	ip, r2, #15
 		beq	2f
@@ -346,8 +343,7 @@ ENTRY(csum_partial_copy_from_user)
 		load1b	r4
 		b	.exit
 
-.src3_aligned_user:
-		mov	r4, r4, lsr #24
+.src3_aligned:	mov	r4, r4, lsr #24
 		adds	r3, r3, #0
 		bics	ip, r2, #15
 		beq	2f

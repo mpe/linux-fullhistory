@@ -357,7 +357,7 @@ struct thread_struct {
 }
 
 #define start_thread(regs, new_eip, new_esp) do {		\
-	__asm__("movl %w0,%%fs ; movl %w0,%%gs": :"r" (0));	\
+	__asm__("movl %0,%%fs ; movl %0,%%gs": :"r" (0));	\
 	set_fs(USER_DS);					\
 	regs->xds = __USER_DS;					\
 	regs->xes = __USER_DS;					\

@@ -51,7 +51,7 @@ pci_free_consistent(struct pci_dev *hwdev, size_t size, void *vaddr,
 extern inline dma_addr_t
 pci_map_single(struct pci_dev *hwdev, void *ptr, size_t size, int direction)
 {
-	consistent_sync(ptr, size, 3);
+	consistent_sync(ptr, size, direction);
 	return virt_to_bus(ptr);
 }
 
@@ -89,7 +89,7 @@ pci_map_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nents, int directi
 	int i;
 
 	for (i = 0; i < nents; i++, sg++)
-		consistent_sync(sg->address, sg->length, 3);
+		consistent_sync(sg->address, sg->length, direction);
 
 	return nents;
 }
@@ -116,7 +116,7 @@ pci_unmap_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nents, int direc
 extern inline void
 pci_dma_sync_single(struct pci_dev *hwdev, dma_addr_t dma_handle, size_t size, int direction)
 {
-	consistent_sync(bus_to_virt(dma_handle), size, 3);
+	consistent_sync(bus_to_virt(dma_handle), size, direction);
 }
 
 /* Make physical memory consistent for a set of streaming

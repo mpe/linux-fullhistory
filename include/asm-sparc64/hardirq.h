@@ -41,8 +41,6 @@ extern unsigned int local_irq_count;
 
 #else /* (__SMP__) */
 
-#include <linux/spinlock.h>
-
 static __inline__ int irqs_running(void)
 {
 	enum brlock_indices idx = BR_GLOBALIRQ_LOCK;

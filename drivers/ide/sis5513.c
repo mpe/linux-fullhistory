@@ -170,7 +170,7 @@ static int sis_get_info (char *buffer, char **addr, off_t offset, int count)
 		     reg2, reg3);
 
 	rc = pci_read_config_byte(bmide_dev, 0x4b, &reg);	     
-	p += sprintf(p, "Drvie 0:        Postwrite %s \t \t Postwrite %s\n",
+	p += sprintf(p, "Drive 0:        Postwrite %s \t \t Postwrite %s\n",
 		     (reg & 0x10) ? "Enabled" : "Disabled",
 		     (reg & 0x40) ? "Enabled" : "Disabled");
 	p += sprintf(p, "                Prefetch  %s \t \t Prefetch  %s\n",
@@ -194,7 +194,7 @@ static int sis_get_info (char *buffer, char **addr, off_t offset, int count)
 
 
 	rc = pci_read_config_byte(bmide_dev, 0x4b, &reg);	     
-	p += sprintf(p, "Drvie 1:        Postwrite %s \t \t Postwrite %s\n",
+	p += sprintf(p, "Drive 1:        Postwrite %s \t \t Postwrite %s\n",
 		     (reg & 0x20) ? "Enabled" : "Disabled",
 		     (reg & 0x80) ? "Enabled" : "Disabled");
 	p += sprintf(p, "                Prefetch  %s \t \t Prefetch  %s\n",

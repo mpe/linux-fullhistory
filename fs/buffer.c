@@ -1756,8 +1756,6 @@ static void end_buffer_io_kiobuf(struct buffer_head *bh, int uptodate)
 
 	kiobuf = bh->b_kiobuf;
 	unlock_buffer(bh);
-	
-	kiobuf = bh->b_kiobuf;
 	end_kio_request(kiobuf, uptodate);
 }
 
@@ -2413,6 +2411,12 @@ static int sync_old_buffers(void)
 
 	flush_dirty_buffers(1);
 	/* must really sync all the active I/O request to disk here */
+	run_task_queue(&tq_disk);
+	return 0;
+}
+
+int block_sync_page(struct page *page)
+{
 	run_task_queue(&tq_disk);
 	return 0;
 }

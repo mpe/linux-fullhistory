@@ -6,7 +6,7 @@
 #define S_OFF		8
 
 		.macro	get_softirq, rd
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #error SMP not supported
 #else
 		ldr	\rd, __softirq_state

@@ -83,9 +83,9 @@ extern void __handle_bad_pmd_kernel(pmd_t *pmd);
 #define pmd_clear(pmdp)		set_pmd(pmdp, __pmd(0))
 
 /*
- * Permanent address of a page.
+ * Permanent address of a page. We never have highmem, so this is trivial.
  */
-#define page_address(page)	({ if (!(page)->virtual) BUG(); (page)->virtual; })
+#define page_address(page)	((page)->virtual)
 #define pages_to_mb(x)		((x) >> (20 - PAGE_SHIFT))
 #define pte_page(x)		(mem_map + pte_pagenr(x))
 
@@ -100,13 +100,12 @@ extern __inline__ pte_t mk_pte_phys(unsigned long physpage, pgprot_t pgprot)
 	return pte;
 }
 
-#define mk_pte(page,pgprot)					\
-({								\
-	pte_t __pte;						\
-	pte_val(__pte) = PHYS_OFFSET + 				\
-			  (((page) - mem_map) << PAGE_SHIFT) +	\
-			   pgprot_val(pgprot);			\
-	__pte;							\
+#define mk_pte(page,pgprot)				\
+({							\
+	pte_t __pte;					\
+	pte_val(__pte) = __pa(page_address(page)) +	\
+			   pgprot_val(pgprot);		\
+	__pte;						\
 })
 
 /*

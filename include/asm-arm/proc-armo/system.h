@@ -9,6 +9,7 @@
 
 extern const char xchg_str[];
 
+#include <linux/config.h>
 #include <asm/proc-fns.h>
 
 extern __inline__ unsigned long __xchg(unsigned long x, volatile void *ptr, int size)
@@ -113,7 +114,7 @@ extern __inline__ unsigned long __xchg(unsigned long x, volatile void *ptr, int 
 #define local_irq_disable()	__cli()
 #define local_irq_enable()	__sti()
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #error SMP not supported
 #else
 

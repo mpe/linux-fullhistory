@@ -22,7 +22,11 @@ int vfs_readdir(struct file *file,
 	if (!file->f_op || !file->f_op->readdir)
 		goto out;
 	down(&inode->i_sem);
-	res = file->f_op->readdir(file, buf, filler);
+	down(&inode->i_zombie);
+	res = -ENOENT;
+	if (!IS_DEADDIR(inode))
+		res = file->f_op->readdir(file, buf, filler);
+	up(&inode->i_zombie);
 	up(&inode->i_sem);
 out:
 	return res;

@@ -147,7 +147,7 @@ S:	Maintained
 ARM PORT
 P:	Russell King
 M:	linux@arm.linux.org.uk
-L:	linux-arm@vger.rutgers.edu
+L:	linux-arm-kernel@lists.arm.linux.org.uk
 W:	http://www.arm.linux.org.uk/
 S:	Maintained
 

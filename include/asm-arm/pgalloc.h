@@ -25,9 +25,9 @@ extern __inline__ void flush_tlb_pgtables(struct mm_struct *mm,
  */
 #ifndef CONFIG_NO_PGT_CACHE
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #error Pgtable caches have to be per-CPU, so that no locking is needed.
-#endif	/* __SMP__ */
+#endif	/* CONFIG_SMP */
 
 extern struct pgtable_cache_struct {
 	unsigned long *pgd_cache;

@@ -12,16 +12,46 @@
  * Params  : r0 = src, r1 = dst, r2 = len, r3 = checksum
  * Returns : r0 = new checksum
  */
+
+		.macro	save_regs
+		stmfd	sp!, {r4 - r8, fp, ip, lr, pc}
+		.endm
+
+		.macro	load_regs,flags
+		LOADREGS(\flags,fp,{r4 - r8, fp, sp, pc})
+		.endm
+
+		.macro	load1b, reg1
+		ldrb	\reg1, [r0], #1
+		.endm
+
+		.macro	load2b, reg1, reg2
+		ldrb	\reg1, [r0], #1
+		ldrb	\reg2, [r0], #1
+		.endm
+
+		.macro	load1l, reg1
+		ldr	\reg1, [r0], #4
+		.endm
+
+		.macro	load2l, reg1, reg2
+		ldr	\reg1, [r0], #4
+		ldr	\reg2, [r0], #4
+		.endm
+
+		.macro	load4l, reg1, reg2, reg3, reg4
+		ldmia	r0!, {\reg1, \reg2, \reg3, \reg4}
+		.endm
+
 ENTRY(csum_partial_copy_nocheck)
 		mov	ip, sp
-		stmfd	sp!, {r4 - r8, fp, ip, lr, pc}
+		save_regs
 		sub	fp, ip, #4
 		cmp	r2, #4
-		blt	Ltoo_small
+		blt	.too_small
 		tst	r1, #2			@ Test destination alignment
-		beq	Ldst_aligned
-		ldrb	ip, [r0], #1
-		ldrb	r8, [r0], #1
+		beq	.dst_aligned
+		load2b	ip, r8
 		subs	r2, r2, #2		@ We do not know if SRC is aligned...
 		orr	ip, ip, r8, lsl #8
 		adds	r3, r3, ip
@@ -29,12 +59,12 @@ ENTRY(csum_partial_copy_nocheck)
 		strb	ip, [r1], #1
 		mov	ip, ip, lsr #8
 		strb	ip, [r1], #1		@ Destination now aligned
-Ldst_aligned:	tst	r0, #3
-		bne	Lsrc_not_aligned
+.dst_aligned:	tst	r0, #3
+		bne	.src_not_aligned
 		adds	r3, r3, #0
 		bics	ip, r2, #15		@ Routine for src & dst aligned
-		beq	3f
-1:		ldmia	r0!, {r4, r5, r6, r7}
+		beq	2f
+1:		load4l	r4, r5, r6, r7
 		stmia	r1!, {r4, r5, r6, r7}
 		adcs	r3, r3, r4
 		adcs	r3, r3, r5
@@ -43,65 +73,69 @@ Ldst_aligned:	tst	r0, #3
 		sub	ip, ip, #16
 		teq	ip, #0
 		bne	1b
-3:		ands	ip, r2, #12
-		beq	5f
-		tst	ip, #8
+2:		ands	ip, r2, #12
 		beq	4f
-		ldmia	r0!, {r4, r5}
+		tst	ip, #8
+		beq	3f
+		load2l	r4, r5
 		stmia	r1!, {r4, r5}
 		adcs	r3, r3, r4
 		adcs	r3, r3, r5
 		tst	ip, #4
-		beq	5f
-4:		ldr	r4, [r0], #4
+		beq	4f
+3:		load1l	r4
 		str	r4, [r1], #4
 		adcs	r3, r3, r4
-5:		ands	r2, r2, #3
+4:		ands	r2, r2, #3
 		adceq	r0, r3, #0
-		LOADREGS(eqea,fp,{r4 - r8, fp, sp, pc})
-		ldr	r4, [r0], #4
+		load_regs	eqea
+		load1l	r4
 		tst	r2, #2
-		beq	Lexit_r4
+		beq	.exit
 		adcs	r3, r3, r4, lsl #16
 		strb	r4, [r1], #1
 		mov	r4, r4, lsr #8
 		strb	r4, [r1], #1
 		mov	r4, r4, lsr #8
-		b	Lexit_r4
+.exit:		tst	r2, #1
+		strneb	r4, [r1], #1
+		andne	r4, r4, #255
+		adcnes	r3, r3, r4
+		adcs	r0, r3, #0
+		load_regs	ea
 
-Ltoo_small:	teq	r2, #0
-		LOADREGS(eqea,fp,{r4 - r8, fp, sp, pc})
+.too_small:	teq	r2, #0
+		load_regs	eqea
 		cmp	r2, #2
-		blt	Ltoo_small1
-		ldrb	ip, [r0], #1
-		ldrb	r8, [r0], #1
+		blt	.too_small1
+		load2b	ip, r8
 		orr	ip, ip, r8, lsl #8
 		adds	r3, r3, ip
 		strb	ip, [r1], #1
 		strb	r8, [r1], #1
 		tst	r2, #1
-Ltoo_small1:	ldrneb	r4, [r0], #1
-Lexit_r4:	tst	r2, #1
-		strneb	r4, [r1], #1
-		andne	r4, r4, #255
-		adcnes	r3, r3, r4
-		adcs	r0, r3, #0
-		LOADREGS(ea,fp,{r4 - r8, fp, sp, pc})
+.too_small1:				@ C = 0
+		beq	.csum_exit
+		load1b	ip
+		strb	ip, [r1], #1
+		adcs	r3, r3, ip
+.csum_exit:	adc	r0, r3, #0
+		load_regs	ea
 
-Lsrc_not_aligned:
+.src_not_aligned:
 		cmp	r2, #4
-		blt	Ltoo_small
+		blt	.too_small
 		and	ip, r0, #3
 		bic	r0, r0, #3
-		ldr	r4, [r0], #4
+		load1l	r4
 		cmp	ip, #2
-		beq	Lsrc2_aligned
-		bhi	Lsrc3_aligned
+		beq	.src2_aligned
+		bhi	.src3_aligned
 		mov	r4, r4, lsr #8
 		adds	r3, r3, #0
 		bics	ip, r2, #15
 		beq	2f
-1:		ldmia	r0!, {r5, r6, r7, r8}
+1:		load4l	r5, r6, r7, r8
 		orr	r4, r4, r5, lsl #24
 		mov	r5, r5, lsr #8
 		orr	r5, r5, r6, lsl #24
@@ -122,7 +156,7 @@ Lsrc_not_aligned:
 		beq	4f
 		tst	ip, #8
 		beq	3f
-		ldmia	r0!, {r5, r6}
+		load2l	r5, r6
 		orr	r4, r4, r5, lsl #24
 		mov	r5, r5, lsr #8
 		orr	r5, r5, r6, lsl #24
@@ -132,28 +166,28 @@ Lsrc_not_aligned:
 		mov	r4, r6, lsr #8
 		tst	ip, #4
 		beq	4f
-3:		ldr	r5, [r0], #4
+3:		load1l	r5
 		orr	r4, r4, r5, lsl #24
 		str	r4, [r1], #4
 		adcs	r3, r3, r4
 		mov	r4, r5, lsr #8
 4:		ands	r2, r2, #3
 		adceq	r0, r3, #0
-		LOADREGS(eqea,fp,{r4 - r8, fp, sp, pc})
+		load_regs	eqea
 		tst	r2, #2
-		beq	Lexit_r4
+		beq	.exit
 		adcs	r3, r3, r4, lsl #16
 		strb	r4, [r1], #1
 		mov	r4, r4, lsr #8
 		strb	r4, [r1], #1
 		mov	r4, r4, lsr #8
-		b	Lexit_r4
+		b	.exit
 
-Lsrc2_aligned:	mov	r4, r4, lsr #16
+.src2_aligned:	mov	r4, r4, lsr #16
 		adds	r3, r3, #0
 		bics	ip, r2, #15
 		beq	2f
-1:		ldmia	r0!, {r5, r6, r7, r8}
+1:		load4l	r5, r6, r7, r8
 		orr	r4, r4, r5, lsl #16
 		mov	r5, r5, lsr #16
 		orr	r5, r5, r6, lsl #16
@@ -174,7 +208,7 @@ Lsrc2_aligned:	mov	r4, r4, lsr #16
 		beq	4f
 		tst	ip, #8
 		beq	3f
-		ldmia	r0!, {r5, r6}
+		load2l	r5, r6
 		orr	r4, r4, r5, lsl #16
 		mov	r5, r5, lsr #16
 		orr	r5, r5, r6, lsl #16
@@ -184,28 +218,31 @@ Lsrc2_aligned:	mov	r4, r4, lsr #16
 		mov	r4, r6, lsr #16
 		tst	ip, #4
 		beq	4f
-3:		ldr	r5, [r0], #4
+3:		load1l	r5
 		orr	r4, r4, r5, lsl #16
 		str	r4, [r1], #4
 		adcs	r3, r3, r4
 		mov	r4, r5, lsr #16
 4:		ands	r2, r2, #3
 		adceq	r0, r3, #0
-		LOADREGS(eqea,fp,{r4 - r8, fp, sp, pc})
+		load_regs	eqea
 		tst	r2, #2
-		beq	Lexit_r4
+		beq	.exit
 		adcs	r3, r3, r4, lsl #16
 		strb	r4, [r1], #1
 		mov	r4, r4, lsr #8
 		strb	r4, [r1], #1
-		ldrb	r4, [r0], #1
-		b	Lexit_r4
+		tst	r2, #1
+		adceq	r0, r3, #0
+		load_regs	eqea
+		load1b	r4
+		b	.exit
 
-Lsrc3_aligned:	mov	r4, r4, lsr #24
+.src3_aligned:	mov	r4, r4, lsr #24
 		adds	r3, r3, #0
 		bics	ip, r2, #15
 		beq	2f
-1:		ldmia	r0!, {r5, r6, r7, r8}
+1:		load4l	r5, r6, r7, r8
 		orr	r4, r4, r5, lsl #8
 		mov	r5, r5, lsr #24
 		orr	r5, r5, r6, lsl #8
@@ -226,7 +263,7 @@ Lsrc3_aligned:	mov	r4, r4, lsr #24
 		beq	4f
 		tst	ip, #8
 		beq	3f
-		ldmia	r0!, {r5, r6}
+		load2l	r5, r6
 		orr	r4, r4, r5, lsl #8
 		mov	r5, r5, lsr #24
 		orr	r5, r5, r6, lsl #8
@@ -236,22 +273,20 @@ Lsrc3_aligned:	mov	r4, r4, lsr #24
 		mov	r4, r6, lsr #24
 		tst	ip, #4
 		beq	4f
-3:		ldr	r5, [r0], #4
+3:		load1l	r5
 		orr	r4, r4, r5, lsl #8
 		str	r4, [r1], #4
 		adcs	r3, r3, r4
 		mov	r4, r5, lsr #24
 4:		ands	r2, r2, #3
 		adceq	r0, r3, #0
-		LOADREGS(eqea,fp,{r4 - r8, fp, sp, pc})
+		load_regs	eqea
 		tst	r2, #2
-		beq	Lexit_r4
+		beq	.exit
 		adcs	r3, r3, r4, lsl #16
 		strb	r4, [r1], #1
-		ldr	r4, [r0], #4
+		load1l	r4
 		strb	r4, [r1], #1
 		adcs	r3, r3, r4, lsl #24
 		mov	r4, r4, lsr #8
-		b	Lexit_r4
-
-
+		b	.exit

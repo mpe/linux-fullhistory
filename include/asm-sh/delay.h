@@ -5,6 +5,8 @@
  * Copyright (C) 1999  Kaz Kojima
  */
 
+#include <linux/config.h>
+
 extern __inline__ void __delay(unsigned long loops)
 {
 	__asm__ __volatile__(
@@ -28,7 +30,7 @@ extern __inline__ void __udelay(unsigned long usecs, unsigned long lps)
 }
 
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define __udelay_val cpu_data[smp_processor_id()].udelay_val
 #else
 #define __udelay_val loops_per_sec

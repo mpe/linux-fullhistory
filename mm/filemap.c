@@ -77,6 +77,15 @@ static void remove_page_from_hash_queue(struct page * page)
 	atomic_dec(&page_cache_size);
 }
 
+static inline int sync_page(struct page *page)
+{
+	struct address_space *mapping = page->mapping;
+
+	if (mapping && mapping->a_ops && mapping->a_ops->sync_page)
+		return mapping->a_ops->sync_page(page);
+	return 0;
+}
+
 /*
  * Remove a page from the page cache and free it. Caller has to make
  * sure the page is locked and that nobody else uses it - or that usage
@@ -86,6 +95,9 @@ void remove_inode_page(struct page *page)
 {
 	if (!PageLocked(page))
 		PAGE_BUG(page);
+
+	/* Initiate completion of any async operations */
+	sync_page(page);
 
 	spin_lock(&pagecache_lock);
 	remove_page_from_inode_queue(page);
@@ -99,6 +111,7 @@ void invalidate_inode_pages(struct inode * inode)
 	struct list_head *head, *curr;
 	struct page * page;
 
+ repeat:
 	head = &inode->i_mapping->pages;
 	spin_lock(&pagecache_lock);
 	curr = head->next;
@@ -110,14 +123,13 @@ void invalidate_inode_pages(struct inode * inode)
 		/* We cannot invalidate a locked page */
 		if (TryLockPage(page))
 			continue;
+		spin_unlock(&pagecache_lock);
 
 		lru_cache_del(page);
-		remove_page_from_inode_queue(page);
-		remove_page_from_hash_queue(page);
-		page->mapping = NULL;
+		remove_inode_page(page);
 		UnlockPage(page);
-
 		page_cache_release(page);
+		goto repeat;
 	}
 	spin_unlock(&pagecache_lock);
 }
@@ -577,7 +589,7 @@ void ___wait_on_page(struct page *page)
 
 	add_wait_queue(&page->wait, &wait);
 	do {
-		run_task_queue(&tq_disk);
+		sync_page(page);
 		set_task_state(tsk, TASK_UNINTERRUPTIBLE);
 		if (!PageLocked(page))
 			break;
@@ -622,7 +634,7 @@ repeat:
 		struct task_struct *tsk = current;
 		DECLARE_WAITQUEUE(wait, tsk);
 
-		run_task_queue(&tq_disk);
+		sync_page(page);
 
 		__set_task_state(tsk, TASK_UNINTERRUPTIBLE);
 		add_wait_queue(&page->wait, &wait);
@@ -672,7 +684,7 @@ repeat:
 		struct task_struct *tsk = current;
 		DECLARE_WAITQUEUE(wait, tsk);
 
-		run_task_queue(&tq_disk);
+		sync_page(page);
 
 		__set_task_state(tsk, TASK_UNINTERRUPTIBLE);
 		add_wait_queue(&page->wait, &wait);
@@ -1499,7 +1511,7 @@ static int filemap_write_page(struct file *file,
 	 * mmap_sem is held.
 	 */
 	lock_page(page);
-	result = inode->i_mapping->a_ops->writepage(dentry, page);
+	result = inode->i_mapping->a_ops->writepage(file, dentry, page);
 	UnlockPage(page);
 	return result;
 }
@@ -1710,8 +1722,8 @@ static int msync_interval(struct vm_area_struct * vma,
 		error = vma->vm_ops->sync(vma, start, end-start, flags);
 		if (!error && (flags & MS_SYNC)) {
 			struct file * file = vma->vm_file;
-			if (file)
-				error = file_fsync(file, file->f_dentry);
+			if (file && file->f_op && file->f_op->fsync)
+				error = file->f_op->fsync(file, file->f_dentry);
 		}
 		return error;
 	}

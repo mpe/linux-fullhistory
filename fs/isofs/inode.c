@@ -991,6 +991,7 @@ static int _isofs_bmap(struct address_space *mapping, long block)
 }
 static struct address_space_operations isofs_aops = {
 	readpage: isofs_readpage,
+	sync_page: block_sync_page,
 	bmap: _isofs_bmap
 };
 

@@ -45,6 +45,7 @@
  * The upper limit on timeouts for the exponential backoff algorithm.
  */
 #define NFS_MAX_RPC_TIMEOUT		(6*HZ)
+#define NFS_READ_DELAY			(2*HZ)
 #define NFS_WRITEBACK_DELAY		(5*HZ)
 #define NFS_WRITEBACK_LOCKDELAY		(60*HZ)
 #define NFS_COMMIT_DELAY		(5*HZ)
@@ -174,12 +175,9 @@ extern int nfs_lock(struct file *, int, struct file_lock *);
 /*
  * linux/fs/nfs/write.c
  */
-extern int  nfs_writepage(struct dentry *, struct page *);
-extern int  nfs_check_failed_request(struct inode *);
-extern struct nfs_page* nfs_find_request(struct inode *, struct page *);
-extern void nfs_release_request(struct nfs_page *req);
+extern int  nfs_writepage(struct file *file, struct dentry *, struct page *);
 extern int  nfs_flush_incompatible(struct file *file, struct page *page);
-extern int  nfs_updatepage(struct file *, struct page *, unsigned long, unsigned int);
+extern int  nfs_updatepage(struct file *, struct page *, unsigned int, unsigned int);
 /*
  * Try to write back everything synchronously (but check the
  * return value!)
@@ -191,6 +189,12 @@ extern int  nfs_flush_timeout(struct inode *, int);
 extern int  nfs_commit_file(struct inode *, struct file *, unsigned long, unsigned int, int);
 extern int  nfs_commit_timeout(struct inode *, int);
 #endif
+
+static inline int
+nfs_have_read(struct inode *inode)
+{
+	return !list_empty(&inode->u.nfs_i.read);
+}
 
 static inline int
 nfs_have_writebacks(struct inode *inode)
@@ -229,6 +233,8 @@ nfs_wb_file(struct inode *inode, struct file *file)
  * linux/fs/nfs/read.c
  */
 extern int  nfs_readpage(struct dentry *, struct page *);
+extern int  nfs_pagein_inode(struct inode *, unsigned long, unsigned int);
+extern int  nfs_pagein_timeout(struct inode *);
 
 /*
  * linux/fs/mount_clnt.c

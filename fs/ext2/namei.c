@@ -218,19 +218,10 @@ int ext2_add_entry (struct inode * dir, const char * name, int namelen,
 	struct super_block * sb;
 	int	retval;
 
-	if (!dir || !dir->i_nlink)
-		return -EINVAL;
 	sb = dir->i_sb;
 
 	if (!namelen)
 		return -EINVAL;
-	/*
-	 * Is this a busy deleted directory?  Can't create new files if so
-	 */
-	if (dir->i_size == 0)
-	{
-		return -ENOENT;
-	}
 	bh = ext2_bread (dir, 0, 0, &retval);
 	if (!bh)
 		return retval;

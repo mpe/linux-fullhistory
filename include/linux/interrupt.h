@@ -2,6 +2,7 @@
 #ifndef _LINUX_INTERRUPT_H
 #define _LINUX_INTERRUPT_H
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/smp.h>
 #include <linux/cache.h>
@@ -154,7 +155,7 @@ struct tasklet_head
 extern struct tasklet_head tasklet_vec[NR_CPUS];
 extern struct tasklet_head tasklet_hi_vec[NR_CPUS];
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define tasklet_trylock(t) (!test_and_set_bit(TASKLET_STATE_RUN, &(t)->state))
 #define tasklet_unlock_wait(t) while (test_bit(TASKLET_STATE_RUN, &(t)->state)) { /* NOTHING */ }
 #define tasklet_unlock(t) clear_bit(TASKLET_STATE_RUN, &(t)->state)
@@ -213,7 +214,7 @@ extern void tasklet_kill(struct tasklet_struct *t);
 extern void tasklet_init(struct tasklet_struct *t,
 			 void (*func)(unsigned long), unsigned long data);
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 
 #define SMP_TIMER_NAME(name) name##__thr
 
@@ -224,12 +225,12 @@ static void name (unsigned long dummy) \
 	tasklet_schedule(&(task)); \
 }
 
-#else /* __SMP__ */
+#else /* CONFIG_SMP */
 
 #define SMP_TIMER_NAME(name) name
 #define SMP_TIMER_DEFINE(name, task)
 
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 
 
 /* Old BH definitions */

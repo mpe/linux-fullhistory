@@ -112,6 +112,14 @@ below:
 
    system 64-bit serial number
 
+ mem_fclk_21285
+
+   The speed of the external oscillator to the 21285 (footbridge),
+   which control's the speed of the memory bus, timer & serial port.
+   Depending upon the speed of the cpu its value can be between
+   0-66 MHz. If no params are passed or a value of zero is passed,
+   then a value of 50 Mhz is the default on 21285 architectures.
+
  paths[8][128]
 
    These are now obsolete, and should not be used.

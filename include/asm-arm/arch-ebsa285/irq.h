@@ -212,5 +212,14 @@ static __inline__ void irq_init_irq(void)
 		request_resource(&ioport_resource, &pic2_resource);
 		setup_arm_irq(IRQ_ISA_CASCADE, &irq_cascade);
 		setup_arm_irq(isa_irq, &irq_cascade);
+
+		/*
+		 * On the NetWinder, don't automatically
+		 * enable ISA IRQ11 when it is requested.
+		 * There appears to be a missing pull-up
+		 * resistor on this line.
+		 */
+		if (machine_is_netwinder())
+			irq_desc[_ISA_IRQ(11)].noautoenable = 1;
 	}
 }

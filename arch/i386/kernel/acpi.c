@@ -1129,6 +1129,7 @@ static int acpi_enter_sx(acpi_sstate_t state)
 	// finished sleeping, update system time
 	acpi_update_clock();
 	acpi_enter_dx(ACPI_D0);
+	acpi_sleep_state = ACPI_S0;
 	
 	return 0;
 }

@@ -74,6 +74,11 @@ nfs_file_flush(struct file *file)
 
 	dfprintk(VFS, "nfs: flush(%x/%ld)\n", inode->i_dev, inode->i_ino);
 
+	/* Make sure all async reads have been sent off. We don't bother
+	 * waiting on them though... */
+	if (file->f_mode & FMODE_READ)
+		nfs_pagein_inode(inode, 0, 0);
+
 	status = nfs_wb_file(inode, file);
 	if (!status) {
 		status = file->f_error;
@@ -166,8 +171,36 @@ static int nfs_commit_write(struct file *file, struct page *page, unsigned offse
 	return status;
 }
 
+/*
+ * The following is used by wait_on_page(), generic_file_readahead()
+ * to initiate the completion of any page readahead operations.
+ */
+static int nfs_sync_page(struct page *page)
+{
+	struct inode	*inode = (struct inode *)page->mapping->host;
+	unsigned long	index = page_index(page);
+	unsigned int	rpages, wpages;
+	int		result;
+
+	if (!inode)
+		return 0;
+
+	rpages = NFS_SERVER(inode)->rpages;
+	result = nfs_pagein_inode(inode, index, rpages);
+	if (result < 0)
+		goto out_bad;
+	wpages = NFS_SERVER(inode)->wpages;
+	result = nfs_sync_file(inode, NULL, index, wpages, FLUSH_STABLE);
+	if (result < 0)
+		goto out_bad;
+	return 0;
+ out_bad:
+	return result;
+}
+
 struct address_space_operations nfs_file_aops = {
 	readpage: nfs_readpage,
+	sync_page: nfs_sync_page,
 	writepage: nfs_writepage,
 	prepare_write: nfs_prepare_write,
 	commit_write: nfs_commit_write

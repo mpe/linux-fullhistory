@@ -270,5 +270,5 @@ extern __inline__ void setup_timer(void)
 		timer_irq.handler = isa_timer_interrupt;
 		irq = IRQ_ISA_TIMER;
 	}
-	setup_arm_irq(IRQ_ISA_TIMER, &timer_irq);
+	setup_arm_irq(irq, &timer_irq);
 }

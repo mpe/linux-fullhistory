@@ -1415,6 +1415,7 @@ static void fas216_busservice_intr(FAS216_Info *info, unsigned int stat, unsigne
 	case STATE(STAT_MESGIN, PHASE_DATAOUT): /* Data Out     -> Message In   */
 	case STATE(STAT_MESGIN, PHASE_DATAIN):  /* Data In      -> Message In   */
 		fas216_stoptransfer(info);
+	case STATE(STAT_MESGIN, PHASE_COMMAND):	/* Command	-> Message In	*/
 	case STATE(STAT_MESGIN, PHASE_SELSTEPS):/* Sel w/ steps -> Message In   */
 	case STATE(STAT_MESGIN, PHASE_MSGOUT):  /* Message Out  -> Message In   */
 		info->scsi.msgin_fifo = inb(REG_CFIS(info)) & CFIS_CF;
@@ -1753,6 +1754,23 @@ static void fas216_kick(FAS216_Info *info)
 	fas216_set_sync(info, SCpnt->target);
 
 	tot_msglen = msgqueue_msglength(&info->scsi.msgs);
+
+#ifdef DEBUG_MESSAGES
+	{
+		struct message *msg;
+		int msgnr = 0, i;
+
+		printk("scsi%d.%c: message out: ",
+			info->host->host_no, '0' + SCpnt->target);
+		while ((msg = msgqueue_getmsg(&info->scsi.msgs, msgnr++)) != NULL) {
+			printk("{ ");
+			for (i = 0; i < msg->length; i++)
+				printk("%02x ", msg->msg[i]);
+			printk("} ");
+		}
+		printk("\n");
+	}
+#endif
 
 	if (tot_msglen == 1 || tot_msglen == 3) {
 		/*

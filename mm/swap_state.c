@@ -17,12 +17,17 @@
 
 #include <asm/pgtable.h>
 
+static struct address_space_operations swap_aops = {
+	sync_page: block_sync_page
+};
+
 struct address_space swapper_space = {
 	{				/* pages	*/
 		&swapper_space.pages,	/*        .next */
 		&swapper_space.pages	/*	  .prev */
 	},
-	0				/* nrpages	*/
+	0,				/* nrpages	*/
+	&swap_aops,
 };
 
 #ifdef SWAP_CACHE_INFO

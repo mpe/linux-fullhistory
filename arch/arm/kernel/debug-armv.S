@@ -68,7 +68,10 @@
 #ifndef CONFIG_DEBUG_DC21285_PORT
 	/* For NetWinder debugging */
 		.macro	addruart,rx
-		mov	\rx, #0xff000000
+		mrc	p15, 0, \rx, c1, c0
+		tst	\rx, #1			@ MMU enabled?
+		moveq	\rx, #0x7c000000	@ physical
+		movne	\rx, #0xff000000	@ virtual
 		orr	\rx, \rx, #0x000003f8
 		.endm
 
@@ -133,7 +136,10 @@
 
 #elif defined(CONFIG_ARCH_SA1100)
 		.macro	addruart,rx
-		mov	\rx, #0xf8000000
+		mrc	p15, 0, \rx, c1, c0
+		tst	\rx, #1			@ MMU enabled?
+		moveq	\rx, #0x80000000	@ physical base address
+		movne	\rx, #0xf8000000	@ virtual address
 		add	\rx, \rx, #0x00050000	@ Ser3
 		@add	\rx, \rx, #0x00010000	@ Ser1
 		.endm
@@ -171,7 +177,7 @@ ENTRY(printhex4)
 
 ENTRY(printhex2)
 		mov	r1, #2
-printhex:	ldr	r2, =hexbuf
+printhex:	adr	r2, hexbuf
 		add	r3, r2, r1
 		mov	r1, #0
 		strb	r1, [r3]
@@ -209,5 +215,4 @@ ENTRY(printch)
 		mov	r0, #0
 		b	1b
 
-		.bss
 hexbuf:		.space 16

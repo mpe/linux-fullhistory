@@ -1059,15 +1059,21 @@ static int arp_get_info(char *buffer, char **start, off_t offset, int length)
 		}
 #endif
 
-			size = sprintf(buffer+len,
-				"%u.%u.%u.%u0x%-10x0x%-10x%s",
-				NIPQUAD(*(u32*)n->primary_key),
-				hatype,
-				arp_state_to_flags(n), 
-				hbuffer);
-			size += sprintf(buffer+len+size,
-				 "     %-17s %s\n",
-				 "*", dev->name);
+			{
+				char tbuf[16];
+				sprintf(tbuf, "%u.%u.%u.%u", NIPQUAD(*(u32*)n->primary_key));
+
+				size = sprintf(buffer+len, "%-16s 0x%-10x0x%-10x%s",
+					tbuf,
+					hatype,
+					arp_state_to_flags(n), 
+					hbuffer);
+
+				size += sprintf(buffer+len+size,
+					 "     %-8s %s\n",
+					 "*", dev->name);
+			}
+
 			read_unlock(&n->lock);
 
 			len += size;

@@ -338,7 +338,7 @@ abort_negative:
 
 }
 		
-static int affs_writepage(struct dentry *dentry, struct page *page)
+static int affs_writepage(struct file *file, struct dentry *dentry, struct page *page)
 {
 	return block_write_full_page(page,affs_get_block);
 }
@@ -358,6 +358,7 @@ static int _affs_bmap(struct address_space *mapping, long block)
 struct address_space_operations affs_aops = {
 	readpage: affs_readpage,
 	writepage: affs_writepage,
+	sync_page: block_sync_page,
 	prepare_write: affs_prepare_write,
 	commit_write: generic_commit_write,
 	bmap: _affs_bmap

@@ -6,12 +6,12 @@ Release Notes For Linux Kernel 2.2 and higher.
 These notes are for the drivers which have already been integrated into the
 kernel and have been tested on Linux kernels 2.0, 2.2, and 2.3.
 
-Version: 1.2.4
-Date: 12/15/99
+Version: 1.2.9
+Date: 04/12/2000
 Author: Andrew Manison <amanison@america.net>
 Testing: larryg@computone.com
 Support: support@computone.com
-Fixes and Updates: Doug McNash <dmcnash@computone.com>
+Fixes and Updates: Doug McNash <dougm@computone.com>
 Proc Filesystem and Kernel Integration: Mike Warfield <mhw@wittsend.com>
 
 
@@ -28,7 +28,7 @@ with the exception of the MicroChannel controllers.  It does not support
 products previous to the Intelliport II.
 
 This driver was developed on the v2.0.x Linux tree and has been tested up
-to v2.2.13; it will probably not work with earlier v1.X kernels,.
+to v2.2.14; it will probably not work with earlier v1.X kernels,.
 
 
 2. QUICK INSTALLATION
@@ -43,49 +43,48 @@ Hardware - If you have an ISA card, find a free interrupt and io port.
 
 	Note the hardware address from the Computone ISA cards installed into
 		the system.  These are required for editing ip2.h or editing
-		/etc/config.modules, or for specification on the modprobe
+		/etc/modules.conf, or for specification on the modprobe
 		command line.
+
+	Note that the /etc/modules.conf file is named /etc/conf.modules
+		with older versions of the module utilities.
 
 Software -
 
 Module installation:
 
-a) Obtain driver-kernel patch file
-b) Copy to the linux source tree root, Run ip2build (if not patch)
-c) Determine free irq/address to use if any (configure BIOS if need be)
-d) Run "make config" or "make menuconfig" or "make xconfig"
+a) Determine free irq/address to use if any (configure BIOS if need be)
+b) Run "make config" or "make menuconfig" or "make xconfig"
    Select (m) module for CONFIG_COMPUTONE under character
    devices.  CONFIG_PCI and CONFIG_MODULES also may need to be set.
-e) Set address on ISA cards then:
+c) Set address on ISA cards then:
    edit /usr/src/linux/drivers/char/ip2/ip2.h if needed 
 	or
    edit /etc/modules.conf if needed (module).
 	or both to match this setting.
-f) Run "make dep"
-g) Run "make modules"
-h) Run "make modules_install"
-i) Run "/sbin/depmod -a"
-j) install driver using `modprobe ip2 <options>` (options listed below)
-k) run ip2mkdev (either the script below or the binary version)
+d) Run "make dep"
+e) Run "make modules"
+f) Run "make modules_install"
+g) Run "/sbin/depmod -a"
+h) install driver using `modprobe ip2 <options>` (options listed below)
+i) run ip2mkdev (either the script below or the binary version)
 
 
 Kernel installation:
 
-a) Obtain driver-kernel patch file
-b) Copy to the linux source tree root, Run ip2build (if not patch)
-c) Determine free irq/address to use if any (configure BIOS if need be)
-d) Run "make config" or "make menuconfig" or "make xconfig"
+a) Determine free irq/address to use if any (configure BIOS if need be)
+b) Run "make config" or "make menuconfig" or "make xconfig"
    Select (y) kernel for CONFIG_COMPUTONE under character
    devices.  CONFIG_PCI may need to be set if you have PCI bus.
-e) Set address on ISA cards then:
+c) Set address on ISA cards then:
 	   edit /usr/src/linux/drivers/char/ip2/ip2.h  
-f) Run "make dep"
-g) Run "make zImage" or whatever target you prefer.
-h) mv /usr/src/linux/arch/i386/boot/zImage to /boot.
-i) Add new config for this kernel into /etc/lilo.conf, run "lilo"
+d) Run "make dep"
+e) Run "make zImage" or whatever target you prefer.
+f) mv /usr/src/linux/arch/i386/boot/zImage to /boot.
+g) Add new config for this kernel into /etc/lilo.conf, run "lilo"
 	or copy to a floppy disk and boot from that floppy disk.
-j) Reboot using this kernel
-k) run ip2mkdev (either the script below or the binary version)
+h) Reboot using this kernel
+i) run ip2mkdev (either the script below or the binary version)
 
 
 3. INSTALLATION
@@ -162,6 +161,22 @@ boxes this will leave gaps in the sequence of device names. ip2mkdev uses
 Linux tty naming conventions: ttyF0 - ttyF255 for normal devices, and
 cuf0 - cuf255 for callout devices.
 
+If you are using devfs, existing devices are automatically created within
+the devfs name space.  Normal devices will be ttf/0 - ttf/255 and callout
+devices will be cuf/0 - cuf/255.  With devfs installed, ip2mkdev will
+create symbolic links in /dev from the old conventional names to the newer
+devfs names as follows:
+
+	/dev/ip2ipl[n]	-> /dev/ip2/ipl[n]	n = 0 - 3
+	/dev/ip2stat[n]	-> /dev/ip2/stat[n]	n = 0 - 3
+	/dev/ttyF[n]	-> /dev/ttf/[n]		n = 0 - 255
+	/dev/cuf[n]	-> /dev/cuf/[n]		n = 0 - 255
+
+Only devices for existing ports and boards will be created.
+
+You do not need to run ip2mkdev if you are using devfs and only want to
+use the devfs native device names.
+
 
 4. USING THE DRIVERS
 
@@ -195,14 +210,49 @@ cut out and run as "ip2mkdev" to create the necessary device files.  To
 use the ip2mkdev script, you must have procfs enabled and the proc file
 system mounted on /proc.
 
-6. NOTES
+You do not need to run ip2mkdev if you are using devfs and only want to
+use the devfs native device names.
+
+
+6. DEVFS
+
+DEVFS is the DEVice File System available as an add on package for the
+2.2.x kernels and available as a configuration option in 2.3.46 and higher.
+Devfs allows for the automatic creation and management of device names
+under control of the device drivers themselves.  The Devfs namespace is
+hierarchial and reduces the clutter present in the normal flat /dev
+namespace.  Devfs names and conventional device names may be intermixed.
+A userspace daemon, devfsd, exists to allow for automatic creation and
+management of symbolic links from the devfs name space to the conventional
+names.  More details on devfs can be found on the DEVFS home site at
+<http://www.atnf.csiro.au/~rgooch/linux/> or in the file kernel
+documenation files, .../linux/Documenation/filesystems/devfs/REAME.
+
+If you are using devfs, existing devices are automatically created within
+the devfs name space.  Normal devices will be ttf/0 - ttf/255 and callout
+devices will be cuf/0 - cuf/255.  With devfs installed, ip2mkdev will
+create symbolic links in /dev from the old conventional names to the newer
+devfs names as follows:
+
+	/dev/ip2ipl[n]	-> /dev/ip2/ipl[n]	n = 0 - 3
+	/dev/ip2stat[n]	-> /dev/ip2/stat[n]	n = 0 - 3
+	/dev/ttyF[n]	-> /dev/ttf/[n]		n = 0 - 255
+	/dev/cuf[n]	-> /dev/cuf/[n]		n = 0 - 255
+
+Only devices for existing ports and boards will be created.
+
+You do not need to run ip2mkdev if you are using devfs and only want to
+use the devfs native device names.
+ 
+
+7. NOTES
 
 This is a release version of the driver, but it is impossible to test it
 in all configurations of Linux. If there is any anomalous behaviour that 
 does not match the standard serial port's behaviour please let us know.
 
 
-7. ip2mkdev shell script
+8. ip2mkdev shell script
 
 Previously, this script was simply attached here.  It is now attached as a
 shar archive to make it easier to extract the script from the documentation.
@@ -223,15 +273,15 @@ are present on you system at the time it is run.
 # To extract the files from this archive, save it to some FILE, remove
 # everything before the `!/bin/sh' line above, then type `sh FILE'.
 #
-# Made on 1999-12-17 16:06 EST by <root@alcove.wittsend.com>.
-# Source directory was `/mnt2/src/linux-2.3.33/Documentation'.
+# Made on 2000-03-10 11:55 EST by <root@wittsend.wittsend.com>.
+# Source directory was `/mnt1/src/linux-2.3.50c/Documentation'.
 #
 # Existing files will *not* be overwritten unless `-c' is specified.
 #
 # This shar contains:
 # length mode       name
 # ------ ---------- ------------------------------------------
-#   3300 -rwxr-xr-x ip2mkdev
+#   4061 -rwxr-xr-x ip2mkdev
 #
 save_IFS="${IFS}"
 IFS="${IFS}:"
@@ -278,7 +328,7 @@ else
 fi
 rm -f 1231235999 $$.touch
 #
-if mkdir _sh06360; then
+if mkdir _sh17088; then
   $echo 'x -' 'creating lock directory'
 else
   $echo 'failed to create lock directory'
@@ -291,7 +341,7 @@ else
   $echo 'x -' extracting 'ip2mkdev' '(text)'
   sed 's/^X//' << 'SHAR_EOF' > 'ip2mkdev' &&
 #!/bin/sh -
-X
+#
 #	ip2mkdev
 #
 #	Make or remove devices as needed for Computone Intelliport drivers
@@ -300,16 +350,48 @@ X
 #	with it.  That prevents us from screwing up open ttys, ownership
 #	and permissions on a running system!
 #
-#	This script will NOT remove devices that no longer exist because
-#	their board or interface box has been removed.  If you want to get
-#	rid of them, you can manually do an "rm -f /dev/ttyF* /dev/cuaf*"
-#	before running this script, which will then recreate all the valid
-#	devices
+#	This script will NOT remove devices that no longer exist if their
+#	board or interface box has been removed.  If you want to get rid
+#	of them, you can manually do an "rm -f /dev/ttyF* /dev/cuaf*"
+#	before running this script.  Running this script will then recreate
+#	all the valid devices.
 #
 #	=mhw=
 #	Michael H. Warfield
 #	mhw@wittsend.com
 #
+#	Updated 03/09/2000 for devfs support in ip2 drivers. =mhw=
+#
+X
+if test -d /dev/ip2 ; then
+#	This is devfs mode...  We don't do anything except create symlinks
+#	from the real devices to the old names!
+X	cd /dev
+X	echo "Creating symbolic links to devfs devices"
+X	for i in `ls ip2` ; do
+X		if test ! -L ip2$i ; then
+X			# Remove it incase it wasn't a symlink (old device)
+X			rm -f ip2$i
+X			ln -s ip2/$i ip2$i
+X		fi
+X	done
+X	for i in `ls ttf` ; do
+X		if test ! -L ttyF$i ; then
+X			# Remove it incase it wasn't a symlink (old device)
+X			rm -f ttyF$i
+X			ln -s ttyf/$i ttyF$i
+X		fi
+X	done
+X	for i in `ls cuf` ; do
+X		if test ! -L cuf$i ; then
+X			# Remove it incase it wasn't a symlink (old device)
+X			rm -f cuf$i
+X			ln -s cuf/$i cuf$i
+X		fi
+X	done
+X	exit 0
+fi
+X
 if test ! -f /proc/tty/drivers
 then
 X	echo "\
@@ -344,8 +426,8 @@ X
 # Ok...  So we got the driver loaded and we can locate the procfs files.
 # Next we need our major numbers.
 X
-TTYMAJOR=`sed -e '/^ip2/!d' -e '/\/dev\/tty/!d' -e 's/.*tty.[ 	]*\([0-9]*\)[ 	]*.*/\1/' < /proc/tty/drivers`
-CUAMAJOR=`sed -e '/^ip2/!d' -e '/\/dev\/cu/!d' -e 's/.*cu.[ 	]*\([0-9]*\)[ 	]*.*/\1/' < /proc/tty/drivers`
+TTYMAJOR=`sed -e '/^ip2/!d' -e '/\/dev\/tt/!d' -e 's/.*tt[^ 	]*[ 	]*\([0-9]*\)[ 	]*.*/\1/' < /proc/tty/drivers`
+CUAMAJOR=`sed -e '/^ip2/!d' -e '/\/dev\/cu/!d' -e 's/.*cu[^ 	]*[ 	]*\([0-9]*\)[ 	]*.*/\1/' < /proc/tty/drivers`
 BRDMAJOR=`sed -e '/^Driver: /!d' -e 's/.*IMajor=\([0-9]*\)[ 	]*.*/\1/' < /proc/tty/driver/ip2`
 X
 echo "\
@@ -426,20 +508,20 @@ done
 X
 Xexit 0
 SHAR_EOF
-  $shar_touch -am 1217160599 'ip2mkdev' &&
+  $shar_touch -am 03101153100 'ip2mkdev' &&
   chmod 0755 'ip2mkdev' ||
   $echo 'restore of' 'ip2mkdev' 'failed'
   if ( md5sum --help 2>&1 | grep 'sage: md5sum \[' ) >/dev/null 2>&1 \
   && ( md5sum --version 2>&1 | grep -v 'textutils 1.12' ) >/dev/null; then
     md5sum -c << SHAR_EOF >/dev/null 2>&1 \
     || $echo 'ip2mkdev:' 'MD5 check failed'
-eccd181f4a2005e47a969fc83885df61  ip2mkdev
+b0671abeba07b0a9266b70aaf24509b3  ip2mkdev
 SHAR_EOF
   else
     shar_count="`LC_ALL= LC_CTYPE= LANG= wc -c < 'ip2mkdev'`"
-    test 3300 -eq "$shar_count" ||
-    $echo 'ip2mkdev:' 'original size' '3300,' 'current size' "$shar_count!"
+    test 4061 -eq "$shar_count" ||
+    $echo 'ip2mkdev:' 'original size' '4061,' 'current size' "$shar_count!"
   fi
 fi
-rm -fr _sh06360
+rm -fr _sh17088
 exit 0

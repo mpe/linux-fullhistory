@@ -46,7 +46,6 @@ static int max_interrupt_work = 20;
 #define RX_RING_SIZE	16
 #define PKT_BUF_SZ		1536	/* Size of each temporary Rx buffer. */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/isapnp.h>
@@ -353,7 +352,7 @@ static struct media_table {
 	{ "Default", 0, 0xFF, XCVR_10baseT, 10000},
 };
 
-#ifdef CONFIG_ISAPNP
+#ifdef __ISAPNP__
 struct corkscrew_isapnp_adapters_struct {
 	unsigned short vendor, function;
 	char *name;
@@ -445,7 +444,7 @@ static int corkscrew_scan(struct net_device *dev)
 	static int ioaddr;
 	static int pnp_cards = 0;
 
-#ifdef CONFIG_ISAPNP
+#ifdef __ISAPNP__
 	if(nopnp == 1)
 		goto no_pnp;
 	for(i=0; corkscrew_isapnp_adapters[i].vendor != 0; i++) {
@@ -503,12 +502,12 @@ static int corkscrew_scan(struct net_device *dev)
 		}
 	}
 no_pnp:
-#endif /* not CONFIG_ISAPNP */
+#endif /* not __ISAPNP__ */
 
 	/* Check all locations on the ISA bus -- evil! */
 	for (ioaddr = 0x100; ioaddr < 0x400; ioaddr += 0x20) {
 		int irq;
-#ifdef CONFIG_ISAPNP
+#ifdef __ISAPNP__
 		/* Make sure this was not already picked up by isapnp */
 		if(ioaddr == corkscrew_isapnp_phys_addr[0]) continue;
 		if(ioaddr == corkscrew_isapnp_phys_addr[1]) continue;

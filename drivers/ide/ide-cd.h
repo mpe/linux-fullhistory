@@ -10,6 +10,15 @@
 #include <linux/cdrom.h>
 #include <asm/byteorder.h>
 
+/*
+ * Apparently older drives have problems with filling out the entire
+ * mode_sense capability structure. Define this to 1 if your drive isn't
+ * probed correctly.
+ */
+#ifndef BROKEN_CAP_PAGE
+#define BROKEN_CAP_PAGE 0
+#endif
+
 /* Turn this on to have the driver print out the meanings of the
    ATAPI error codes.  This will use up additional kernel-space
    memory, though. */
@@ -189,6 +198,7 @@ struct atapi_cdrom_subchnl {
  * generic stuff now in the Mt. Fuji spec.
  */
 struct atapi_capabilities_page {
+	struct mode_page_header header;
 #if defined(__BIG_ENDIAN_BITFIELD)
 	__u8 parameters_saveable : 1;
 	__u8 reserved1           : 1;
@@ -400,9 +410,9 @@ struct atapi_capabilities_page {
 	unsigned short buffer_size;
 	/* Current speed (in kB/s). */
 	unsigned short curspeed;
-
-	/* Truncate the structure here, so we don't have headaches reading
-	   from older drives. */
+#if !BROKEN_CAP_PAGE
+	char pad[4];
+#endif
 };
 
 

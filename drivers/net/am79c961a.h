@@ -45,6 +45,7 @@
 #define CSR3_EMBA	0x0008
 #define CSR3_DXMT2PD	0x0010
 #define CSR3_LAPPEN	0x0020
+#define CSR3_DXSUFLO	0x0040
 #define CSR3_IDONM	0x0100
 #define CSR3_TINTM	0x0200
 #define CSR3_RINTM	0x0400
@@ -52,6 +53,9 @@
 #define CSR3_MISSM	0x1000
 #define CSR3_BABLM	0x4000
 #define CSR3_MASKALL	0x5F00
+
+#define CTRL1		5
+#define CTRL1_SPND	0x0001
 
 #define LADRL		8
 #define LADRM1		9
@@ -97,8 +101,8 @@
 #define TMD_ERR		0x4000
 #define TMD_OWN		0x8000
 
-#define TST_RTRY	0x0200
-#define TST_LCAR	0x0400
+#define TST_RTRY	0x0400
+#define TST_LCAR	0x0800
 #define TST_LCOL	0x1000
 #define TST_UFLO	0x4000
 
@@ -115,14 +119,5 @@ struct dev_priv {
 };
 
 extern int	am79c961_probe (struct net_device *dev);
-static int	am79c961_probe1 (struct net_device *dev);
-static int	am79c961_open (struct net_device *dev);
-static int	am79c961_sendpacket (struct sk_buff *skb, struct net_device *dev);
-static void	am79c961_interrupt (int irq, void *dev_id, struct pt_regs *regs);
-static void	am79c961_rx (struct net_device *dev, struct dev_priv *priv);
-static void	am79c961_tx (struct net_device *dev, struct dev_priv *priv);
-static int	am79c961_close (struct net_device *dev);
-static struct enet_statistics *am79c961_getstats (struct net_device *dev);
-static void	am79c961_setmulticastlist (struct net_device *dev);
 
 #endif

@@ -1,14 +1,15 @@
 
 /*
- *  linux/drivers/sound/dmasound_paula.c
+ *  linux/drivers/sound/dmasound/dmasound_paula.c
  *
- *  Amiga DMA Sound Driver
+ *  Amiga `Paula' DMA Sound Driver
  *
- *  See linux/drivers/sound/dmasound_core.c for copyright and credits
+ *  See linux/drivers/sound/dmasound/dmasound_core.c for copyright and credits
  */
 
 
 #include <linux/module.h>
+#include <linux/config.h>
 #include <linux/mm.h>
 #include <linux/init.h>
 #include <linux/ioport.h>
@@ -18,6 +19,7 @@
 #include <asm/setup.h>
 #include <asm/amigahw.h>
 #include <asm/amigaints.h>
+#include <asm/machdep.h>
 
 #include "dmasound.h"
 
@@ -75,6 +77,38 @@ static int AmiSetTreble(int treble);
 static void AmiPlayNextFrame(int index);
 static void AmiPlay(void);
 static void AmiInterrupt(int irq, void *dummy, struct pt_regs *fp);
+
+#ifdef CONFIG_HEARTBEAT
+
+    /*
+     *  Heartbeat interferes with sound since the 7 kHz low-pass filter and the
+     *  power LED are controlled by the same line.
+     */
+
+#ifdef CONFIG_APUS
+#define mach_heartbeat	ppc_md.heartbeat
+#endif
+
+static void (*saved_heartbeat)(int) = NULL;
+
+static inline void disable_heartbeat(void)
+{
+	if (mach_heartbeat) {
+	    saved_heartbeat = mach_heartbeat;
+	    mach_heartbeat = NULL;
+	}
+	AmiSetTreble(dmasound.treble);
+}
+
+static inline void enable_heartbeat(void)
+{
+	if (saved_heartbeat)
+	    mach_heartbeat = saved_heartbeat;
+}
+#else /* !CONFIG_HEARTBEAT */
+#define disable_heartbeat()	do { } while (0)
+#define enable_heartbeat()	do { } while (0)
+#endif /* !CONFIG_HEARTBEAT */
 
 
 /*** Mid level stuff *********************************************************/
@@ -285,6 +319,7 @@ static inline void StopDMA(void)
 	custom.aud[0].audvol = custom.aud[1].audvol = 0;
 	custom.aud[2].audvol = custom.aud[3].audvol = 0;
 	custom.dmacon = AMI_AUDIO_OFF;
+	enable_heartbeat();
 }
 
 static void *AmiAlloc(unsigned int size, int flags)
@@ -350,8 +385,6 @@ static void AmiInit(void)
 	for (i = 0; i < 4; i++)
 		custom.aud[i].audper = period;
 	amiga_audio_period = period;
-
-	AmiSetTreble(50);  /* recommended for newer amiga models */
 }
 
 
@@ -453,6 +486,7 @@ static void AmiPlayNextFrame(int index)
 		ch1 = start;
 	}
 
+	disable_heartbeat();
 	custom.aud[0].audvol = dmasound.volume_left;
 	custom.aud[1].audvol = dmasound.volume_right;
 	if (dmasound.hard.size == 8) {

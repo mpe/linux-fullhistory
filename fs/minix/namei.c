@@ -399,10 +399,6 @@ static int minix_rmdir(struct inode * dir, struct dentry *dentry)
 		retval = -ENOENT;
 		goto end_rmdir;
 	}
-	if (!d_unhashed(dentry)) {
-		retval = -EBUSY;
-		goto end_rmdir;
-	}
 	if (inode->i_nlink != 2)
 		printk("empty directory has nlink!=2 (%d)\n",inode->i_nlink);
 	de->inode = 0;
@@ -569,9 +565,6 @@ static int minix_rename(struct inode * old_dir, struct dentry *old_dentry,
 	}
 	if (S_ISDIR(old_inode->i_mode)) {
 		if (new_inode) {
-			retval = -EBUSY;
-			if (!d_unhashed(new_dentry))
-				goto end_rename;
 			retval = -ENOTEMPTY;
 			if (!empty_dir(new_inode))
 				goto end_rename;

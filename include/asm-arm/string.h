@@ -15,6 +15,8 @@ extern char * strchr(const char * s, int c);
 #define __HAVE_ARCH_MEMCPY
 #define __HAVE_ARCH_MEMMOVE
 #define __HAVE_ARCH_MEMCHR
+extern void * memchr(const void *cs, int c, size_t count);
+
 #define __HAVE_ARCH_MEMZERO
 #define __HAVE_ARCH_MEMSET
 

@@ -201,7 +201,7 @@ static int use_virtual_dma=0;
 static unsigned short virtual_dma_port=0x3f0;
 void floppy_interrupt(int irq, void *dev_id, struct pt_regs * regs);
 static int set_dor(int fdc, char mask, char data);
-static void register_devfs_entries (int drive);
+static void register_devfs_entries (int drive) __init;
 static devfs_handle_t devfs_handle = NULL;
 
 #define K_64	0x10000		/* 64KB */
@@ -3582,7 +3582,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 #undef IN
 }
 
-static void config_types(void)
+static void __init config_types(void)
 {
 	int first=1;
 	int drive;
@@ -3836,7 +3836,7 @@ static struct block_device_operations floppy_fops = {
 	revalidate:		floppy_revalidate,
 };
 
-static void register_devfs_entries (int drive)
+static void __init register_devfs_entries (int drive)
 {
     int base_minor, i;
     static char *table[] =
@@ -4075,7 +4075,7 @@ static int __init floppy_setup(char *str)
 		printk("\n");
 	} else
 		DPRINT("botched floppy option\n");
-	DPRINT("Read linux/drivers/block/README.fd\n");
+	DPRINT("Read linux/Documentation/floppy.txt\n");
 	return 0;
 }
 

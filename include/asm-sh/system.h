@@ -5,6 +5,8 @@
  * Copyright (C) 1999, 2000  Niibe Yutaka  &  Kaz Kojima
  */
 
+#include <linux/config.h>
+
 /*
  *	switch_to() should switch tasks to task nr n, first
  */
@@ -13,7 +15,7 @@ typedef struct {
 	unsigned long seg;
 } mm_segment_t;
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #error no SMP SuperH
 #else
 #define prepare_to_switch()	do { } while(0)
@@ -183,7 +185,7 @@ do {						\
 #define local_irq_disable()	__cli()
 #define local_irq_enable()	__sti()
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 
 extern void __global_cli(void);
 extern void __global_sti(void);

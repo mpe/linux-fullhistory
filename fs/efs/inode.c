@@ -21,6 +21,7 @@ static int _efs_bmap(struct address_space *mapping, long block)
 }
 struct address_space_operations efs_aops = {
 	readpage: efs_readpage,
+	sync_page: block_sync_page,
 	bmap: _efs_bmap
 };
 

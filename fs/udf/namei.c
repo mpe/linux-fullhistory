@@ -344,9 +344,6 @@ udf_add_entry(struct inode *dir, struct dentry *dentry,
 	Uint32 extoffset, elen, offset;
 	struct buffer_head *bh = NULL;
 
-	*err = -EINVAL;
-	if (!dir || !dir->i_nlink)
-		return NULL;
 	sb = dir->i_sb;
 
 	if (dentry->d_name.len)
@@ -365,6 +362,7 @@ udf_add_entry(struct inode *dir, struct dentry *dentry,
 	}
 	else if (dir->i_size != 0)
 	{
+		/* WTF??? */
 		*err = -ENOENT;
 		return NULL;
 	}
@@ -1165,9 +1163,6 @@ static int udf_rename (struct inode * old_dir, struct dentry * old_dentry,
 
 		if (new_inode)
 		{
-			retval = -EBUSY;
-			if (!d_unhashed(new_dentry))
-				goto end_rename;
 			retval = -ENOTEMPTY;
 			if (!empty_dir(new_inode))
 				goto end_rename;

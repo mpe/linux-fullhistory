@@ -26,6 +26,12 @@ static inline void cyber2000_grphw(int reg, int val)
 	cyber2000_outb(val, 0x3cf);
 }
 
+static inline unsigned int cyber2000_grphr(int reg)
+{
+	cyber2000_outb(reg, 0x3ce);
+	return cyber2000_inb(0x3cf);
+}
+
 static inline void cyber2000_attrw(int reg, int val)
 {
 	cyber2000_inb(0x3da);
@@ -145,6 +151,9 @@ struct cyber2000fb_par {
 
 #define CAP_NEW_CTL2		0x89
 
+#define BM_CTRL0		0x9c
+#define BM_CTRL1		0x9d
+
 #define CAP_MODE1		0xa4
 #define CAP_MODE1_8BIT			0x01	/* enable 8bit capture mode		*/
 #define CAP_MODE1_CCIR656		0x02	/* CCIR656 mode				*/
@@ -244,11 +253,14 @@ struct cyber2000fb_par {
 /*
  * Bus-master
  */
+#define BM_VID_ADDR_LOW		0xbc040
+#define BM_VID_ADDR_HIGH	0xbc044
 #define BM_ADDRESS_LOW		0xbc080
 #define BM_ADDRESS_HIGH		0xbc084
 #define BM_LENGTH		0xbc088
 #define BM_CONTROL		0xbc08c
 #define BM_CONTROL_ENABLE		0x01	/* enable transfer			*/
+#define BM_CONTROL_IRQEN		0x02	/* enable IRQ at end of transfer	*/
 #define BM_CONTROL_INIT			0x04	/* initialise status & count		*/
 #define BM_COUNT		0xbc090		/* read-only				*/
 
@@ -282,6 +294,12 @@ struct cyberpro_info {
 	char		*fb;
 	char		dev_name[32];
 	unsigned int	fb_size;
+
+	/*
+	 * Use these to enable the BM or TV registers.
+	 */
+	void (*enable_extregs)(void);
+	void (*disable_extregs)(void);
 };
 
 /*

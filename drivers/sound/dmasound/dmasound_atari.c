@@ -1,10 +1,10 @@
 
 /*
- *  linux/drivers/sound/dmasound_atari.c
+ *  linux/drivers/sound/dmasound/dmasound_atari.c
  *
- *  Atari DMA Sound Driver
+ *  Atari TT and Falcon DMA Sound Driver
  *
- *  See linux/drivers/sound/dmasound_core.c for copyright and credits
+ *  See linux/drivers/sound/dmasound/dmasound_core.c for copyright and credits
  */
 
 

@@ -147,7 +147,7 @@ void setup_mm_for_reboot(char mode)
  * some more work to get it to fit into our separate processor and
  * architecture structure.
  */
-void __init pagetable_init(void)
+void __init pagetable_init(struct meminfo *mi)
 {
 	pte_t *pte;
 	int i;
@@ -165,6 +165,6 @@ void __init pagetable_init(void)
 /*
  * We never have holes in the memmap
  */
-void __init create_memmap_holes(void)
+void __init create_memmap_holes(struct meminfo *mi)
 {
 }

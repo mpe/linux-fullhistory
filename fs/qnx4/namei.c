@@ -171,10 +171,6 @@ int qnx4_rmdir(struct inode *dir, struct dentry *dentry)
 		goto end_rmdir;
 	}
 #endif
-	if (!d_unhashed(dentry)) {
-		retval = -EBUSY;
-		goto end_rmdir;
-	}
 	if (inode->i_nlink != 2) {
 		QNX4DEBUG(("empty directory has nlink!=2 (%d)\n", inode->i_nlink));
 	}

@@ -164,6 +164,18 @@
        different situations. We also investigate the complex topic of
        DMA".
        
+     * Title: "Device Drivers Concluded"
+       Author: Georg v. Zezschwitz.
+       URL: http://www2.linuxjournal.com/lj-issues/issue28/1287.html
+       Keywords: address spaces, pages, pagination, page management,
+       demand loading, swapping, memory protection, memory mapping, mmap,
+       virtual memory areas (VMAs), vremap, PCI.
+       Description: Finally, the above turned out into a five articles
+       series. This latest one's introduction reads: "This is the last of
+       five articles about character device drivers. In this final
+       section, Georg deals with memory mapping devices, beginning with
+       an overall description of the Linux memory management concepts".
+       
      * Title: "Network Buffers And Memory Management"
        Author: Alan Cox.
        URL: http://www.ssc.com/lj/issue30/kk30.html
@@ -234,11 +246,26 @@
        Description: 68 pages paper on writing character drivers. A little
        bit old (1.993, 1.994) although still useful.
        
+     * Title: "Design and Implementation of the Second Extended
+       Filesystem"
+       Author: Rémy Card, Theodore Ts'o, Stephen Tweedie.
+       URL: http://web.mit.edu/tytso/www/linux/ext2intro.html
+       Keywords: ext2, linux fs history, inode, directory, link, devices,
+       VFS, physical structure, performance, benchmarks, ext2fs library,
+       ext2fs tools, e2fsck.
+       Description: Paper written by three of the top ext2 hackers.
+       Covers Linux filesystems history, ext2 motivation, ext2 features,
+       design, physical structure on disk, performance, benchmarks,
+       e2fsck's passes description... A must read!
+       Notes: This paper was first published in the Proceedings of the
+       First Dutch International Symposium on Linux, ISBN 90-367-0385-9.
+       
      * Title: "The Second Extended Filesystem"
        Author: Matthew Wilcox.
        URL: http://pocket.fluff.org/~mrw/linux/ext2.txt
        Keywords: ext2, filesystem.
-       Description: Description of ext2's blocks, directories, inodes ...
+       Description: Description of ext2's blocks, directories, inodes...
+       Notes: Seems to be DOWN. Anyone knows another link for it?
        
      * Title: "Analysis of the Ext2fs structure"
        Author: Louis-Dominique Dubeau.
@@ -246,6 +273,15 @@
        Keywords: ext2, filesystem, ext2fs.
        Description: Description of ext2's blocks, directories, inodes,
        bitmaps, invariants ...
+       
+     * Title: "Journaling the Linux ext2fs Filesystem"
+       Author: Stephen C. Tweedie.
+       URL:
+       ftp://ftp.uk.linux.org:/pub/linux/sct/fs/jfs/journal-design.ps.gz
+       Keywords: ext3, journalist.
+       Description: Excellent 8-pages paper explaining the journaling
+       capabilities added to ext2 by the author, showing different
+       problems faced and the alternatives chosen.
        
      * Title: "Kernel API changes from 2.0 to 2.2"
        Author: Richard Gooch.
@@ -258,7 +294,7 @@
      * Title: "Kernel API changes from 2.2 to 2.3"
        Author: Richard Gooch.
        URL:
-       http://www.atnf.csiro.au/~rgooch/linux/docs/porting-to-2.2.html
+       http://www.atnf.csiro.au/~rgooch/linux/docs/porting-to-2.3.html
        Keywords: 2.3, changes.
        Description: Kernel functions/structures/variables which changed
        from 2.2.x to 2.3.x.
@@ -294,6 +330,81 @@
        (have data ready to be read or are ready for writing). Ideally you
        want a mechanism that is scalable. This means a large number of
        inactive FDs cost very little in memory and CPU time to manage".
+       
+     * Title: "The Kernel Hacking HOWTO"
+       Author: Various Talented People, and Rusty.
+       URL: http://www.samba.org/~netfilter/kernel-hacking-HOWTO.html
+       Keywords: HOWTO, kernel contexts, deadlock, locking, modules,
+       symbols, return conventions.
+       Description: From the Introduction: "Please understand that I
+       never wanted to write this document, being grossly underqualified,
+       but I always wanted to read it, and this was the only way. I
+       simply explain some best practices, and give reading entry-points
+       into the kernel sources. I avoid implementation details: that's
+       what the code is for, and I ignore whole tracts of useful
+       routines. This document assumes familiarity with C, and an
+       understanding of what the kernel is, and how it is used. It was
+       originally written for the 2.3 kernels, but nearly all of it
+       applies to 2.2 too; 2.0 is slightly different. ".
+       
+     * Title: "ALSA 0.5.0 Developer documentation"
+       Author: Stephan 'Jumpy' Bartels .
+       URL: http://www.math.TU-Berlin.de/~sbartels/alsa/
+       Keywords: ALSA, sound, soundcard, driver, lowlevel, hardware.
+       Description: Advanced Linux Sound Architecture for developers,
+       both at kernel and user-level sides. Work in progress. ALSA is
+       supposed to be Linux's next generation sound architecture.
+       
+     * Title: "Programming Guide for Linux USB Device Drivers"
+       Author: Detlef Fliegl.
+       URL: http://usb.in.tum.de/usbdoc/
+       Keywords: USB, universal serial bus.
+       Description: A must-read. From the Preface: "This document should
+       give detailed information about the current state of the USB
+       subsystem and its API for USB device drivers. The first section
+       will deal with the basics of USB devices. You will learn about
+       different types of devices and their properties. Going into detail
+       you will see how USB devices communicate on the bus. The second
+       section gives an overview of the Linux USB subsystem [2] and the
+       device driver framework. Then the API and its data structures will
+       be explained step by step. The last section of this document
+       contains a reference of all API calls and their return codes".
+       Notes: Beware: the main page states: "This document may not be
+       published, printed or used in excerpts without explicit permission
+       of the author". Fortunately, it may still be read...
+       
+     * Title: "Tour Of the Linux Kernel Source"
+       Author: Vijo Cherian.
+       URL: http://www.geocities.com/vijoc/tolks/tolks.html
+       Keywords: .
+       Description: A classic of this page! Was lost for a while and is
+       back again. Thanks Vijo! TOLKS: the name says it all. A tour of
+       the sources, describing directories, files, variables, data
+       structures... It covers general stuff, device drivers,
+       filesystems, IPC and Networking Code.
+       
+     * Title: "Linux Kernel Mailing List Glossary"
+       Author: John Levon.
+       URL: http://www.movement.uklinux.net/glossary.html
+       Keywords: glossary, terms, linux-kernel.
+       Description: From the introduction: "This glossary is intended as
+       a brief description of some of the acronyms and terms you may hear
+       during discussion of the Linux kernel".
+       
+     * Title: "Linux Kernel Locking HOWTO"
+       Author: Various Talented People, and Rusty.
+       URL:
+       http://netfilter.kernelnotes.org/unreliable-guides/kernel-locking-
+       HOWTO.html
+       Keywords: locks, locking, spinlock, semaphore, atomic, race
+       condition, bottom halves, tasklets, softirqs.
+       Description: The title says it all: document describing the
+       locking system in the Linux Kernel either in uniprocessor or SMP
+       systems.
+       Notes: "It was originally written for the later (>2.3.47) 2.3
+       kernels, but most of it applies to 2.2 too; 2.0 is slightly
+       different". Freely redistributable under the conditions of the GNU
+       General Public License.
        
      BOOKS: (Not on-line)
    
@@ -366,15 +477,33 @@
      * Title: "Linux Core Kernel Commentary. Guide to Insider's Knowledge
        on the Core Kernel od the Linux Code"
        Author: Scott Maxwell.
-       Publisher: ???.
+       Publisher: Coriolis.
        Date: 1999.
        Pages: 592.
        ISBN: 1-57610-469-9
-       Notes: CD-ROM included.
+       Notes: CD-ROM included. Line by line commentary of the kernel
+       code.
+       
+     * Title: "Linux IP Stacks Commentary"
+       Author: Stephen Satchell and HBJ Clifford.
+       Publisher: Coriolis.
+       Date: 2000.
+       Pages: ???.
+       ISBN: 1-57610-470-2
+       Notes: Line by line source code commentary book.
+       
+     * Title: "Programming for the real world - POSIX.4"
+       Author: Bill O. Gallmeister.
+       Publisher: O'Reilly & Associates, Inc..
+       Date: 1995.
+       Pages: ???.
+       ISBN: I-56592-074-0
+       Notes: Though not being directly about Linux, Linux aims to be
+       POSIX. Good reference.
        
      MISCELLANEOUS:
    
-     * Name: Linux Source Driver.
+     * Name: "Linux Source Driver"
        URL: http://lsd.linux.cz
        Keywords: Browsing source code.
        Description: "Linux Source Driver (LSD) is an application, which
@@ -385,27 +514,27 @@
        and variables) and LSD can generate patches for you on the fly
        (files, directories or kernel)".
        
-     * Name: Cross-Referencing Linux.
+     * Name: "Cross-Referencing Linux"
        URL: http://lxr.linux.no/source/
        Keywords: Browsing source code.
        Description: Another web-based Linux kernel source code browser.
        Lots of cross references to variables and functions. You can see
        where they are defined and where they are used.
        
-     * Name: Linux Weekly News.
+     * Name: "Linux Weekly News"
        URL: http://lwn.net
        Keywords: latest kernel news.
        Description: The title says it all. There's a fixed kernel section
        summarizing developers' work, bug fixes, new features and versions
        produced during the week. Published every Thursday.
        
-     * Name: Kernel Traffic.
+     * Name: "Kernel Traffic"
        URL: http://kt.linuxcare.com
        Keywords: linux-kernel mailing list, weekly kernel news.
        Description: Weekly newsletter covering the most relevant
        discussions of the linux-kernel mailing list.
        
-     * Name: CuTTiNG.eDGe.LiNuX.
+     * Name: "CuTTiNG.eDGe.LiNuX"
        URL: http://edge.kernelnotes.org
        Keywords: changelist.
        Description: Site which provides the changelist for every kernel
@@ -413,7 +542,7 @@
        the patches and describes them. Pointers to the patches are there,
        too.
        
-     * Name: New linux-kernel Mailing List FAQ.
+     * Name: "New linux-kernel Mailing List FAQ"
        URL: Original site:
        http://www.altern.org/andrebalsa/doc/lkml-faq.html
        URL: U.S. mirror site:
@@ -433,6 +562,45 @@
        Description: Set of slides, presumably from a presentation on the
        Linux VFS layer. Covers version 2.1.x, with dentries and the
        dcache.
+       
+     * Name: "Gary's Enciclopedia - The Linux Kernel"
+       Author: Gary (I suppose...).
+       URL: http://members.aa.net/~swear/pedia/kernel.html
+       Keywords: links, not found here?.
+       Description: Gary's Enciclopedia exists to allow the rapid finding
+       of documentation and other information of interest to GNU/Linux
+       users. It has about 4000 links to external pages in 150 major
+       categories. This link is for kernel-specific links, documents,
+       sites... Look there if you could not find here whar you were
+       looking for.
+       
+     * Name: "The home page of Linux-MM"
+       Author: The Linux-MM team.
+       URL: http://www.linux.eu.org/Linux-MM/
+       Keywords: memory management, Linux-MM, mm patches, TODO, docs,
+       mailing list.
+       Description: Site devoted to Linux Memory Mangement development.
+       Memory related patches, HOWTOs, links, mm developers... Don't miss
+       it if you are interested in memory management development!
+       
+     * Name: "Kernel Newbies IRC Channel"
+       URL: http://www.surriel.com/kernelnewbies.shtml
+       Keywords: IRC, newbies, channel, asking doubts.
+       Description: #kernelnewbies on irc.openprojects.net. From the web
+       page: "#kernelnewbies is an IRC network dedicated to the 'newbie'
+       kernel hacker. The audience mostly consists of people who are
+       learning about the kernel, working on kernel projects or
+       professional kernel hackers that want to help less seasoned kernel
+       people. [...] #kernelnewbies is on the Open Projects IRC Network,
+       try irc.openprojects.net or irc.<country>.openprojects.net as your
+       server and then /join #kernelnewbies".
+       
+     * Name: "linux-kernel mailing list archives and search engines"
+       URL: http://www.uwsg.indiana.edu/hypermail/linux/kernel/index.html
+       URL: http://www.kernelnotes.org/lnxlists/linux-kernel/
+       Keywords: linux-kernel, archives, search.
+       Description: Some of the linux-kernel mailing list archivers. If
+       you have a better/another one, please let me know.
      _________________________________________________________________
    
-   Document last updated on Tue Nov 30 11:20:00 CET 1999
+   Document last updated on Mon Apr 17 18:07:07 CEST 2000

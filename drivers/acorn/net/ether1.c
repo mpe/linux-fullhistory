@@ -798,6 +798,8 @@ ether1_sendpacket (struct sk_buff *skb, struct net_device *dev)
 
 		if (ether1_init_for_open(dev))
 			printk(KERN_ERR "%s: unable to restart interface\n", dev->name);
+		else
+			priv->restart = 0;
 	}
 
 	/*

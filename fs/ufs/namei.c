@@ -240,8 +240,6 @@ static struct buffer_head * ufs_add_entry (struct inode * dir,
 	
 	*err = -EINVAL;
 	*res_dir = NULL;
-	if (!dir || !dir->i_nlink)
-		return NULL;
 		
 	sb = dir->i_sb;
 	flags = sb->u.ufs_sb.s_flags;
@@ -250,14 +248,6 @@ static struct buffer_head * ufs_add_entry (struct inode * dir,
 
 	if (!namelen)
 		return NULL;
-	/*
-	 * Is this a busy deleted directory?  Can't create new files if so
-	 */
-	if (dir->i_size == 0)
-	{
-		*err = -ENOENT;
-		return NULL;
-	}
 	bh = ufs_bread (dir, 0, 0, err);
 	if (!bh)
 		return NULL;

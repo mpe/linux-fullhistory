@@ -79,20 +79,20 @@
 
 #include <linux/usb.h>
 
-#define VERSION 		"0.7.3"
-#define RELEASE_DATE "(15/04/2000)"
+#define VERSION 	"0.7.3"
+#define RELEASE_DATE 	"(24/04/2000)"
 
 /* Vendor and Product Information */
 #define MDC800_VENDOR_ID 	0x055f
 #define MDC800_PRODUCT_ID	0xa800
 
 /* Timeouts (msec) */
-#define TO_READ_FROM_IRQ 		4000
-#define TO_GET_READY			2000
 #define TO_DOWNLOAD_GET_READY		1500
 #define TO_DOWNLOAD_GET_BUSY		1500
-#define TO_WRITE_GET_READY		3000
+#define TO_WRITE_GET_READY		1000
 #define TO_DEFAULT_COMMAND		5000
+#define TO_READ_FROM_IRQ 		TO_DEFAULT_COMMAND
+#define TO_GET_READY			TO_DEFAULT_COMMAND
 
 /* Minor Number of the device (create with mknod /dev/mustek c 180 32) */
 #define MDC800_DEVICE_MINOR_BASE 32
@@ -367,16 +367,17 @@ static void* mdc800_usb_probe (struct usb_device *dev ,unsigned int ifnum )
 
 	dbg ("(mdc800_usb_probe) called.");
 
-	if (mdc800->dev != 0)
-	{
-		warn ("only one Mustek MDC800 is supported.");
-		return 0;
-	}
 
 	if (dev->descriptor.idVendor != MDC800_VENDOR_ID)
 		return 0;
 	if (dev->descriptor.idProduct != MDC800_PRODUCT_ID)
 		return 0;
+
+	if (mdc800->dev != 0)
+	{
+		warn ("only one Mustek MDC800 is supported.");
+		return 0;
+	}
 
 	if (dev->descriptor.bNumConfigurations != 1)
 	{
@@ -747,7 +748,7 @@ static ssize_t mdc800_device_write (struct file *file, const char *buf, size_t l
 				mdc800->rw_lock=0;
 				return -EIO;
 			}
-			interruptible_sleep_on_timeout (&mdc800->write_wait, TO_DEFAULT_COMMAND*HZ/1000);
+			interruptible_sleep_on_timeout (&mdc800->write_wait, TO_WRITE_GET_READY*HZ/1000);
 			if (mdc800->state == WORKING)
 			{
 				usb_unlink_urb (mdc800->write_urb);

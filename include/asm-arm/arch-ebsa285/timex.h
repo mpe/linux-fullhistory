@@ -11,4 +11,4 @@
  * divided by a 4-bit prescaler.  Other boards use an
  * ISA derived timer, and this is unused.
  */
-#define CLOCK_TICK_RATE		(50000000 / 16)
+#define CLOCK_TICK_RATE		(mem_fclk_21285 / 16)

@@ -7,7 +7,9 @@
  * for more details.
  */
 
-#ifndef __SMP__
+#include <linux/config.h>
+
+#ifndef CONFIG_SMP
 
 #define lock_kernel()				do { } while(0)
 #define unlock_kernel()				do { } while(0)
@@ -65,6 +67,6 @@ do { \
 		spin_lock(&kernel_flag); \
 } while (0)
 
-#endif /* __SMP__ */
+#endif /* CONFIG_SMP */
 
 #endif /* __ASM_SH_SMPLOCK_H */

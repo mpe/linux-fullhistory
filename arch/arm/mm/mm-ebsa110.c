@@ -8,6 +8,7 @@
 #include <linux/mm.h>
 #include <linux/init.h>
 
+#include <asm/hardware.h>
 #include <asm/pgtable.h>
 #include <asm/page.h>
 
@@ -15,7 +16,7 @@
  
 #define SIZE(x) (sizeof(x) / sizeof(x[0]))
 
-const struct map_desc io_desc[] __initdata = {
+struct map_desc io_desc[] __initdata = {
 	{ IO_BASE - PGDIR_SIZE, 0xc0000000, PGDIR_SIZE, DOMAIN_IO, 0, 1, 0, 0 },
 	{ IO_BASE             , IO_START  , IO_SIZE   , DOMAIN_IO, 0, 1, 0, 0 }
 };

@@ -118,10 +118,8 @@ void enable_irq(unsigned int irq)
 	cliIF();
 	irq_desc[irq].probing = 0;
 	irq_desc[irq].triggered = 0;
-	if (!irq_desc[irq].noautoenable) {
-		irq_desc[irq].enabled = 1;
-		irq_desc[irq].unmask(irq);
-	}
+	irq_desc[irq].enabled = 1;
+	irq_desc[irq].unmask(irq);
 	spin_unlock_irqrestore(&irq_controller_lock, flags);
 }
 
