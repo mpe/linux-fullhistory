@@ -982,7 +982,6 @@ static int do_swap_page(struct task_struct * tsk,
 	struct vm_area_struct * vma, unsigned long address,
 	pte_t * page_table, swp_entry_t entry, int write_access)
 {
-	int dograb = 0;
 	struct page *page = lookup_swap_cache(entry);
 	pte_t pte;
 

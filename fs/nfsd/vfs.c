@@ -48,7 +48,12 @@
 
 /* Hack until we have a macro check for mandatory locks. */
 #ifndef IS_ISMNDLK
-#define IS_ISMNDLK(i)	(((i)->i_mode & (S_ISGID|S_IXGRP)) == S_ISGID)
+/* We must ignore files (but only file) which might have mandatory
+ * locks on them because there is no way to know if the accesser has
+ * the lock.
+ */
+#define IS_ISMNDLK(i)	(((i)->i_mode & (S_ISGID|S_IXGRP|S_IFMT)) \
+			 == (S_ISGID|S_IFREG))
 #endif
 
 /* Check for dir entries '.' and '..' */
@@ -78,39 +83,44 @@ int nfsd_nservers = 0;
 static struct raparms *		raparml = NULL;
 static struct raparms *		raparm_cache = NULL;
 
+
+/*
+ * We need to do a check-parent every time
+ * after we have locked the parent - to verify
+ * that the parent is still our parent and
+ * that we are still hashed onto it..
+ *
+ * This is required in case two processes race
+ * on removing (or moving) the same entry: the
+ * parent lock will serialize them, but the
+ * other process will be too late..
+ *
+ * Note that this nfsd_check_parent is identical
+ * the check_parent in linux/fs/namei.c.
+ */
+#define nfsd_check_parent(dir, dentry) \
+	((dir) == (dentry)->d_parent && !list_empty(&dentry->d_hash))
+
 /*
  * Lock a parent directory following the VFS locking protocol.
  */
 int
 fh_lock_parent(struct svc_fh *parent_fh, struct dentry *dchild)
 {
-	int	nfserr = 0;
-
 	fh_lock(parent_fh);
 	/*
 	 * Make sure the parent->child relationship still holds,
 	 * and that the child is still hashed.
 	 */
-	if (dchild->d_parent != parent_fh->fh_dentry) 
-		goto out_not_parent;
-	if (list_empty(&dchild->d_hash))
-		goto out_not_hashed; 
-out:
-	return nfserr;
+	if (nfsd_check_parent(parent_fh->fh_dentry, dchild))
+	    return 0;
 
-out_not_parent:
 	printk(KERN_WARNING
-		"fh_lock_parent: %s/%s parent changed\n",
+		"fh_lock_parent: %s/%s parent changed or child unhashed\n",
 		dchild->d_parent->d_name.name, dchild->d_name.name);
-	goto out_unlock;
-out_not_hashed:
-	printk(KERN_WARNING
-		"fh_lock_parent: %s/%s unhashed\n",
-		dchild->d_parent->d_name.name, dchild->d_name.name);
-out_unlock:
-	nfserr = nfserr_noent;
+
 	fh_unlock(parent_fh);
-	goto out;
+	return nfserr_noent;
 }
 
 /*
@@ -250,6 +260,32 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
 	inode = dentry->d_inode;
 
 	err = inode_change_ok(inode, iap);
+	/* could be a "touch" (utimes) request where the user is not the owner but does
+	 * have write permission. In this case the user should be allowed to set
+	 * both times to the current time.  We could just assume any such SETATTR
+	 * is intended to set the times to "now", but we do a couple of simple tests
+	 * to increase our confidence.
+	 */
+#define BOTH_TIME_SET (ATTR_ATIME_SET | ATTR_MTIME_SET)
+#define	MAX_TOUCH_TIME_ERROR (30*60)
+	if (err
+	    && (iap->ia_valid & BOTH_TIME_SET) == BOTH_TIME_SET
+	    && iap->ia_mtime == iap->ia_ctime
+	    ) {
+	    /* looks good.  now just make sure time is in the right ballpark.
+	     * solaris, at least, doesn't seem to care what the time request is
+	     */
+	    time_t delta = iap->ia_atime - CURRENT_TIME;
+	    if (delta<0) delta = -delta;
+	    if (delta < MAX_TOUCH_TIME_ERROR) {
+		/* turn off ATTR_[AM]TIME_SET but leave ATTR_[AM]TIME
+		 * this will cause notify_change to setthese times to "now"
+		 */
+		iap->ia_valid &= ~BOTH_TIME_SET;
+		err = inode_change_ok(inode, iap);
+	    }
+	}
+	    
 	if (err)
 		goto out_nfserr;
 
@@ -415,11 +451,28 @@ nfsd_close(struct file *filp)
 
 /*
  * Sync a file
+ * As this calls fsync (not fdatasync) there is no need for a write_inode
+ * after it.
  */
 void
-nfsd_sync(struct inode *inode, struct file *filp)
+nfsd_sync(struct file *filp)
 {
+	dprintk("nfsd: sync file %s\n", filp->f_dentry->d_name.name);
+	down(&filp->f_dentry->d_inode->i_sem);
 	filp->f_op->fsync(filp, filp->f_dentry);
+	up(&filp->f_dentry->d_inode->i_sem);
+}
+
+void
+nfsd_sync_dir(struct dentry *dp)
+{
+	struct inode *inode = dp->d_inode;
+	int (*fsync) (struct file *, struct dentry *);
+	
+	if (inode->i_op->default_file_ops
+	    && (fsync = inode->i_op->default_file_ops->fsync)) {
+		fsync(NULL, dp);
+	}
 }
 
 /*
@@ -574,7 +627,7 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	/* clear setuid/setgid flag after write */
 	if (err >= 0 && (inode->i_mode & (S_ISUID | S_ISGID))) {
 		struct iattr	ia;
-		kernel_cap_t	saved_cap;
+		kernel_cap_t	saved_cap = 0;
 
 		ia.ia_valid = ATTR_MODE;
 		ia.ia_mode  = inode->i_mode & ~(S_ISUID | S_ISGID);
@@ -616,15 +669,14 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 
 		if (inode->i_state & I_DIRTY) {
 			dprintk("nfsd: write sync %d\n", current->pid);
-			nfsd_sync(inode, &file);
-			write_inode_now(inode);
+			nfsd_sync(&file);
 		}
 		wake_up(&inode->i_wait);
 		last_ino = inode->i_ino;
 		last_dev = inode->i_dev;
 	}
 
-	dprintk("nfsd: write complete\n");
+	dprintk("nfsd: write complete err=%d\n", err);
 	if (err >= 0)
 		err = 0;
 	else 
@@ -672,6 +724,7 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	 * If it has, the parent directory should already be locked.
 	 */
 	if (!resfhp->fh_dverified) {
+		/* called from nfsd_proc_mkdir, or possibly nfsd3_proc_create */
 		dchild = lookup_dentry(fname, dget(dentry), 0);
 		err = PTR_ERR(dchild);
 		if (IS_ERR(dchild))
@@ -682,20 +735,24 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		if (err)
 			goto out;
 	} else {
+		/* called from nfsd_proc_create */
 		dchild = resfhp->fh_dentry;
-		if (!fhp->fh_locked)
+		if (!fhp->fh_locked) {
+			/* not actually possible */
 			printk(KERN_ERR
 				"nfsd_create: parent %s/%s not locked!\n",
 				dentry->d_parent->d_name.name,
 				dentry->d_name.name);
+			err = -EIO;
+			goto out;
+		}
 	}
 	/*
 	 * Make sure the child dentry is still negative ...
 	 */
 	err = nfserr_exist;
 	if (dchild->d_inode) {
-		printk(KERN_WARNING
-			"nfsd_create: dentry %s/%s not negative!\n",
+		dprintk("nfsd_create: dentry %s/%s not negative!\n",
 			dentry->d_name.name, dchild->d_name.name);
 		goto out; 
 	}
@@ -725,6 +782,9 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	case S_IFSOCK:
 		opfunc = dirp->i_op->mknod;
 		break;
+	default:
+	        printk("nfsd: bad file type %o in nfsd_create\n", type);
+		err = nfserr_inval;
 	}
 	if (!opfunc)
 		goto out;
@@ -740,8 +800,10 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	if (err < 0)
 		goto out_nfserr;
 
-	if (EX_ISSYNC(fhp->fh_export))
-		write_inode_now(dirp);
+	if (EX_ISSYNC(fhp->fh_export)) {
+		nfsd_sync_dir(dentry);
+		write_inode_now(dchild->d_inode);
+	}
 
 	/*
 	 * Update the file handle to get the new inode info.
@@ -779,7 +841,7 @@ nfsd_truncate(struct svc_rqst *rqstp, struct svc_fh *fhp, unsigned long size)
 	struct inode	*inode;
 	struct iattr	newattrs;
 	int		err;
-	kernel_cap_t	saved_cap;
+	kernel_cap_t	saved_cap = 0;
 
 	err = fh_verify(rqstp, fhp, S_IFREG, MAY_WRITE | MAY_TRUNC);
 	if (err)
@@ -815,6 +877,8 @@ nfsd_truncate(struct svc_rqst *rqstp, struct svc_fh *fhp, unsigned long size)
 	if (current->fsuid != 0)
 		current->cap_effective = saved_cap;
 	put_write_access(inode);
+	if (EX_ISSYNC(fhp->fh_export))
+		nfsd_sync_dir(dentry);
 	fh_unlock(fhp);
 out_nfserr:
 	if (err)
@@ -848,7 +912,10 @@ nfsd_readlink(struct svc_rqst *rqstp, struct svc_fh *fhp, char *buf, int *lenp)
 		goto out;
 
 	UPDATE_ATIME(inode);
-	/* N.B. Why does this call need a get_fs()?? */
+	/* N.B. Why does this call need a get_fs()??
+	 * Remove the set_fs and watch the fireworks:-) --okir
+	 */
+
 	oldfs = get_fs(); set_fs(KERNEL_DS);
 	err = inode->i_op->readlink(dentry, buf, *lenp);
 	set_fs(oldfs);
@@ -913,7 +980,7 @@ nfsd_symlink(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		err = dirp->i_op->symlink(dirp, dnew, path);
 		if (!err) {
 			if (EX_ISSYNC(fhp->fh_export))
-				write_inode_now(dirp);
+				nfsd_sync_dir(dentry);
 		} else
 			err = nfserrno(-err);
 	}
@@ -945,7 +1012,7 @@ nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
 	err = fh_verify(rqstp, ffhp, S_IFDIR, MAY_CREATE);
 	if (err)
 		goto out;
-	err = fh_verify(rqstp, tfhp, S_IFREG, MAY_NOP);
+	err = fh_verify(rqstp, tfhp, -S_IFDIR, MAY_NOP);
 	if (err)
 		goto out;
 
@@ -991,7 +1058,7 @@ nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
 	err = dirp->i_op->link(dold, dirp, dnew);
 	if (!err) {
 		if (EX_ISSYNC(ffhp->fh_export)) {
-			write_inode_now(dirp);
+			nfsd_sync_dir(ddir);
 			write_inode_now(dest);
 		}
 	} else
@@ -1010,29 +1077,12 @@ out_nfserr:
 }
 
 /*
- * We need to do a check-parent every time
- * after we have locked the parent - to verify
- * that the parent is still our parent and
- * that we are still hashed onto it..
- *
- * This is required in case two processes race
- * on removing (or moving) the same entry: the
- * parent lock will serialize them, but the
- * other process will be too late..
- *
- * Note that this nfsd_check_parent is different
- * than the one in linux/include/dcache_func.h.
- */
-#define nfsd_check_parent(dir, dentry) \
-	((dir) == (dentry)->d_parent->d_inode && !list_empty(&dentry->d_hash))
-
-/*
  * This follows the model of double_lock() in the VFS.
  */
 static inline void nfsd_double_down(struct semaphore *s1, struct semaphore *s2)
 {
 	if (s1 != s2) {
-		if ((unsigned long) s1 > (unsigned long) s2) {
+		if ((unsigned long) s1 < (unsigned long) s2) {
 			struct semaphore *tmp = s1;
 			s1 = s2;
 			s2 = tmp;
@@ -1102,13 +1152,13 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 	nfsd_double_down(&tdir->i_sem, &fdir->i_sem);
 	err = -ENOENT;
 	/* GAM3 check for parent changes after locking. */
-	if (nfsd_check_parent(fdir, odentry) &&
-	    nfsd_check_parent(tdir, ndentry)) {
+	if (nfsd_check_parent(fdentry, odentry) &&
+	    nfsd_check_parent(tdentry, ndentry)) {
 
 		err = vfs_rename(fdir, odentry, tdir, ndentry);
 		if (!err && EX_ISSYNC(tfhp->fh_export)) {
-			write_inode_now(fdir);
-			write_inode_now(tdir);
+			nfsd_sync_dir(tdentry);
+			nfsd_sync_dir(fdentry);
 		}
 	} else
 		dprintk("nfsd: Caught race in nfsd_rename");
@@ -1182,17 +1232,13 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 
 		rdentry->d_count++;
 		nfsd_double_down(&dirp->i_sem, &rdentry->d_inode->i_sem);
-		if (!fhp->fh_pre_mtime)
-			fhp->fh_pre_mtime = dirp->i_mtime;
 		fhp->fh_locked = 1;
 
 		err = -ENOENT;
-		if (nfsd_check_parent(dirp, rdentry))
+		if (nfsd_check_parent(dentry, rdentry))
 			err = vfs_rmdir(dirp, rdentry);
 
 		rdentry->d_count--;
-		if (!fhp->fh_post_version)
-			fhp->fh_post_version = dirp->i_version;
 		fhp->fh_locked = 0;
 		nfsd_double_up(&dirp->i_sem, &rdentry->d_inode->i_sem);
 
@@ -1201,8 +1247,11 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 
 	if (err)
 		goto out_nfserr;
-	if (EX_ISSYNC(fhp->fh_export))
-		write_inode_now(dirp);
+	if (EX_ISSYNC(fhp->fh_export)) {
+		down(&dentry->d_inode->i_sem);
+		nfsd_sync_dir(dentry);
+		up(&dentry->d_inode->i_sem);
+	}
 out:
 	return err;
 
@@ -1334,7 +1383,7 @@ nfsd_permission(struct svc_export *exp, struct dentry *dentry, int acc)
 {
 	struct inode	*inode = dentry->d_inode;
 	int		err;
-	kernel_cap_t	saved_cap;
+	kernel_cap_t	saved_cap = 0;
 
 	if (acc == MAY_NOP)
 		return 0;

@@ -11,12 +11,15 @@
  * Copyright (C) 1995, 1996, 1997 Olaf Kirch <okir@monad.swb.de>
  */
 
-#ifndef NFSD_FH_H
-#define NFSD_FH_H
+#ifndef _LINUX_NFSD_FH_H
+#define _LINUX_NFSD_FH_H
 
-#include <linux/types.h>
-#include <linux/string.h>
-#include <linux/fs.h>
+#include <asm/types.h>
+#ifdef __KERNEL__
+# include <linux/types.h>
+# include <linux/string.h>
+# include <linux/fs.h>
+#endif
 #include <linux/nfsd/const.h>
 #include <linux/nfsd/debug.h>
 
@@ -83,10 +86,6 @@ typedef struct svc_fh {
 	struct knfs_fh		fh_handle;	/* FH data */
 	struct dentry *		fh_dentry;	/* validated dentry */
 	struct svc_export *	fh_export;	/* export pointer */
-	size_t			fh_pre_size;	/* size before operation */
-	time_t			fh_pre_mtime;	/* mtime before oper */
-	time_t			fh_pre_ctime;	/* ctime before oper */
-	unsigned long		fh_post_version;/* inode version after oper */
 	unsigned char		fh_locked;	/* inode locked by us */
 	unsigned char		fh_dverified;	/* dentry has been checked */
 } svc_fh;
@@ -138,10 +137,9 @@ fh_lock(struct svc_fh *fhp)
 	struct dentry	*dentry = fhp->fh_dentry;
 	struct inode	*inode;
 
-	/*
 	dfprintk(FILEOP, "nfsd: fh_lock(%x/%ld) locked = %d\n",
-			SVCFH_DEV(fhp), SVCFH_INO(fhp), fhp->fh_locked);
-	 */
+			SVCFH_DEV(fhp), (long)SVCFH_INO(fhp), fhp->fh_locked);
+
 	if (!fhp->fh_dverified) {
 		printk(KERN_ERR "fh_lock: fh not verified!\n");
 		return;
@@ -154,8 +152,6 @@ fh_lock(struct svc_fh *fhp)
 
 	inode = dentry->d_inode;
 	down(&inode->i_sem);
-	if (!fhp->fh_pre_mtime)
-		fhp->fh_pre_mtime = inode->i_mtime;
 	fhp->fh_locked = 1;
 }
 
@@ -172,41 +168,11 @@ fh_unlock(struct svc_fh *fhp)
 		struct dentry *dentry = fhp->fh_dentry;
 		struct inode *inode = dentry->d_inode;
 
-		if (!fhp->fh_post_version)
-			fhp->fh_post_version = inode->i_version;
 		fhp->fh_locked = 0;
 		up(&inode->i_sem);
 	}
 }
-
-/*
- * Release an inode
- */
-#if 0
-#define fh_put(fhp)	__fh_put(fhp, __FILE__, __LINE__)
-
-static inline void
-__fh_put(struct svc_fh *fhp, char *file, int line)
-{
-	struct dentry	*dentry;
-
-	if (!fhp->fh_dverified)
-		return;
-
-	dentry = fhp->fh_dentry;
-	if (!dentry->d_count) {
-		printk("nfsd: trying to free free dentry in %s:%d\n"
-		       "      file %s/%s\n",
-		       file, line,
-		       dentry->d_parent->d_name.name, dentry->d_name.name);
-	} else {
-		fh_unlock(fhp);
-		fhp->fh_dverified = 0;
-		dput(dentry);
-	}
-}
-#endif
-
 #endif /* __KERNEL__ */
 
-#endif /* NFSD_FH_H */
+
+#endif /* _LINUX_NFSD_FH_H */

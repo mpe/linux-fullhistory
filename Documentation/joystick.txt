@@ -1,5 +1,6 @@
-		     Linux Joystick driver v1.2.13
-	       (c) 1996-1998 Vojtech Pavlik <vojtech@suse.cz>
+		       Linux Joystick driver v1.2.15
+	       (c) 1996-1999 Vojtech Pavlik <vojtech@suse.cz>
+			     Sponsored by SuSE
 ----------------------------------------------------------------------------
 
 0. Disclaimer
@@ -38,18 +39,18 @@ gamepads.
 
   In addition to these it also supports some of the new PC joysticks that
 use proprietary digital protocols to communicate over the gameport,
-currently by FPGaming, Genius, Gravis, Logitech, MadCatz, Microsoft and
-ThrustMaster. Creative Labs protocol support is still to be done.
+currently by FPGaming, Gravis, Logitech, MadCatz, Microsoft, Creative and
+ThrustMaster. Saitek protocol support is still to be done.
 
   The driver also includes support for many gamepads and joysticks that were
 used by various non-PC computers and game consoles. These include Multi
 system joysticks (Atari, Amiga, Commodore, Amstrad), Sega gamepads (Master
-System, Genesis, Saturn), Nintendo gamepads (NES, SNES), Sony gamepads (PSX).
-Support for N64, Atari Jaguar, Atari 2600, NES FourScore, SNES MultiTap,
-PSX NegCon and others might be added later.
+System, Genesis, Saturn), Nintendo gamepads (NES, SNES, N64), Sony gamepads
+(PSX).  Support for Atari Jaguar, Atari 2600, NES FourScore, SNES MultiTap
+and others might be added later.
 
   Last, but not least there is also native Amiga joystick support for the
-Amiga linux port.
+Amiga Linux port.
 
   Should you encounter any problems while using the driver, or joysticks
 this driver can't make complete use of, I'm very interested in hearing about
@@ -57,18 +58,13 @@ them. Bug reports and success stories are also welcome.
 
   The joystick package is available at the following FTP sites:
 
+	ftp://ftp.suse.cz/pub/development/joystick/
 	ftp://atrey.karlin.mff.cuni.cz/pub/linux/joystick/
-
-  The joystick driver is also included in the Linux 2.1+ kernels:
-
-	ftp://linux.kernel.org/pub/linux/kernel/
+	ftp://ftp.gts.cz/pub/linux/joystick/
 
   And a homepage of the driver is at:
 
 	http://www.suse.cz/development/joystick/
-
-  Mirrors of the homepage are at:
-
 	http://atrey.karlin.mff.cuni.cz/~vojtech/joystick/
 	http://www.trylinux.com/projects/joystick/
 	http://www.linuxgames.com/joystick/
@@ -92,7 +88,21 @@ above mentioned locations. The rest of this file assumes you have it.
   To compile the utilities in the joystick package, and the driver itself,
 as a standalone module, you first unpack the package, and then edit the
 Makefile to meet your needs (namely whether are you using versioned
-modules). Then you compile it
+modules). You will also need an unpacked and configured
+
+	make config
+
+kernel in
+	
+	/usr/src/linux
+
+Furthermore, if you're using versioned modules, you'll also need
+
+	make dep
+
+done on the kernel, to create some needed files.
+
+After that, you compile the joystick driver
 
 	make
 
@@ -163,6 +173,14 @@ joystick driver module into the kernel
   where 'something' is the type of your joystick. See below for more precise
 explanation.
 
+  Alternately you can add the lines
+
+	alias char-major-15 joy-something
+	options joy-something js_xx=x,x,x,x,...
+
+  to the /etc/conf.modules file, so that the joystick module will be loaded
+automatically when the /dev/js devices are accessed.
+
 2.5 Verifying that it works
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
   For testing the joystick driver functionality, there is the jstest
@@ -197,14 +215,14 @@ what the driver would choose itself.
 calibration using the jstest command, and if you do, you then can save the
 correction coefficients into a file
 
-	jscal -s /dev/js0 > /etc/joystick.cal
+	jscal -p /dev/js0 > /etc/joystick.cal
 
   And add a line to your rc script executing that file
 
 	source /etc/joystick.cal
 
   This way, after the next reboot your joystick will remain calibrated. You
-can also add the jscal -s line to your shutdown script.
+can also add the jscal -p line to your shutdown script.
 
 
 3. HW specific driver information
@@ -222,7 +240,7 @@ ThrustMaster FCS or 6 and 8 button gamepads.
 
 * 2-axis, 4-button joystick
 * 3-axis, 4-button joystick
-* Two 2-axis, 2-button joysticks on an Y-cable
+* 4-axis, 4-button joystick
 
   For other joystick types (more/less axes, hats, and buttons) support
 you'll need to specify the types either on the kernel command line or on the
@@ -261,6 +279,8 @@ you have any additions/corrections to it, e-mail me.
 
 	Joystick				| 'm' value
 	----------------------------------------------------
+	Simple 2-button 2-axis joystick		| 0x0033
+	Second simple joystick on Y-cable	| 0x00cc
 	Genius Flight2000 F-12			| 0x00f3
 	Genius Flight2000 F-21			| 0x08f7
 	Genius Flight2000 F-22			| 0x02ff
@@ -268,9 +288,11 @@ you have any additions/corrections to it, e-mail me.
 	Genius MaxFire G-07			| 0xf0f3   
 	Genius PowerStation			| 0xf0f3
 	Laing #1 PC SuperPad			| 0xf0f3
+	Logitech Wingman			| 0x003b
 	Microsoft SideWinder Standard		| 0x003b
 	QuickShot QS-201 SuperWarrior		| 0x00fb
 	Saitek Megapad XII			| 0x30f3
+	PC Powerpad Pro				| 0x30f3
 
   In case you have one of the joystick in the table below, and it doesn't
 work with a specific driver in digital mode for some reason, you can use
@@ -280,8 +302,7 @@ operation is always better.
 	Joystick				| 'm' value
 	----------------------------------------------------
 	Gravis GamePad Pro - analog mode	| 0x00f3
-	Genius Flight2000 F-23 - CHF mode	| 0x02ff
-	Genius Flight2000 F-23 - FCS mode	| 0x08f7
+	Genius Flight2000 F-23			| 0x02ff
 	Microsoft SideWinder 3D Pro - CHF mode	| 0x02ff
 	Microsoft SideWinder 3D Pro - FCS mode	| 0x08f7
 
@@ -302,70 +323,85 @@ Using this method you'd get a command line:
   And it would do the same as the above explained command line. Use
 whichever way you like best.
 
-3.2 Microsoft SideWinder and Genius Digital joysticks
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  SideWinder and Genius Digital joysticks are supported by the
+3.2 Microsoft SideWinder joysticks
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  Microsoft 'Digital Overdrive' protocol is supported by the
 joy-sidewinder.c module. All currently supported joysticks:
 
-* SideWinder 3d Pro
-* SideWinder Precision Pro 
+* SideWinder 3D Pro
 * SideWinder Force Feedback Pro
-* SideWinder Game Pad (up to four, chained together)
-* Genius Flight2000 Digital F-23
+* SideWinder Force Feedback Wheel
+* SideWinder FreeStyle Pro
+* SideWinder GamePad (up to four, chained together)
+* SideWinder Precision Pro 
 
   are autodetected, and thus no module parameters are needed.
 
+  There is one caveat with the 3D Pro. There are 9 buttons reported,
+although the joystick has only 8. The 9th button is the mode switch on the
+rear side of the joystick. However, moving it, you'll reset the joystick,
+and make it unresponsive for about a one third of a second. Furthermore, the
+joystick will also re-center itself, taking the position it was in during
+this time as a new center position. Use it if you want, but think first.
+
   The SideWinder Standard is not a digital joystick, and thus is supported
-by the analog driver described above. SideWinder FreeStyle Pro and
-SideWinder Force Feedback Wheel are not supported yet.
+by the analog driver described above. 
 
-3.3 Logitech Digital joysticks
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  Logitech Digital joysticks are supported by the joy-logitech.c module. It
-currently supports these devices:
+3.3 Logitech ADI devices
+~~~~~~~~~~~~~~~~~~~~~~~~
+  Logitech ADI protocol is supported by the joy-logitech.c module. It should
+support any Logitech device using this protocol. This includes, but is not
+limited to:
 
-* Logitech Wingman Extreme Digital
 * Logitech CyberMan 2
 * Logitech ThunderPad Digital
+* Logitech WingMan Extreme Digital
+* Logitech WingMan Formula
+* Logitech WingMan Interceptor
+* Logitech WingMan GamePad
+* Logitech WingMan GamePad USB
+* Logitech WingMan GamePad Extreme
+* Logitech WingMan Extreme Digital 3D
 
-  All three are autodetected, and thus no parameters to the module are
-needed.
+  ADI devices are autodetected, and the driver supports up to two (any
+combination of) devices on a single gameport, using an Y-cable or chained
+together.
 
-  Logitech Wingman is not a digital joystick and is handled by the analog
-driver described above. Logitech Wingman Warrior communicates through a
-serial port and is not supported yet. Logitech Wingman Force, Wingman
-Formula, Wingman Formula Force, Wingman Gamepad, Wingman Interceptor are USB
-joysticks, with optional serial port connection, and are not supported yet.
+  Logitech WingMan Joystick, Logitech WingMan Attack, Logitech WingMan
+Extreme and Logitech WingMan ThunderPad are not digital joysticks and are
+handled by the analog driver described above. Logitech WingMan Warrior and
+Logitech Magellan are supported by serial drivers described below. Logitech
+CyberMan, Logitech WingMan Force and Logitech WingMan Formula Force are not
+supported yet.
 
 3.4 Gravis GrIP
 ~~~~~~~~~~~~~~~
-  Gravis GrIP gamepads are supported by the joy-gravis.c module. It
+  Gravis GrIP protocol is supported by the joy-gravis.c module. It
 currently supports:
 
 * Gravis GamePad Pro
 * Gravis Xterminator
-* Gravis Blackhawk Digital
+* Gravis BlackHawk Digital
 
-  All these pads are autodetected, and you can even use any combination of
-up to two of these pads either chained together or using an Y-cable on a single
-gameport.
+  All these devices are autodetected, and you can even use any combination
+of up to two of these pads either chained together or using an Y-cable on a
+single gameport.
 
-GrIP MultiPort support is in the works. Gravis Xcalibur, ArcadeXtreme,
-GamePad Pro/M are joysticks/pads that probably never reached mass
-production. Gravis Stinger is a serial device and hopefully will be
-supported in the future.
+GrIP MultiPort and Gravis Xterminator DualControl aren't supported yet.
+Gravis Stinger is a serial device and hopefully will be supported in the
+future. Other Gravis joysticks are supported by the joy-analog driver.
 
 3.5 FPGaming A3D and MadCatz A3D
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  The Assasin 3D protocol created by FPGaming, is used both by FPGaming
+  The Assassin 3D protocol created by FPGaming, is used both by FPGaming
 themselves and is licensed to MadCatz. A3D devices are supported by the
-joy-assasin.c module. It currently supports:
+joy-assassin.c module. It currently supports:
 
-* FPGaming Assasin 3D
+* FPGaming Assassin 3D
 * MadCatz Panther
 * MadCatz Panther XL
 
-  All these devices are autodetected. Because the Assasin 3D and the Panther
+  All these devices are autodetected. Because the Assassin 3D and the Panther
 allow connecting analog joysticks to them, these are supported in this
 driver, too. The driver uses the js_as parameter for the analog joysticks,
 which has the same syntax as js_an for the analog driver.
@@ -376,20 +412,33 @@ but should be well usable.
 3.6 ThrustMaster DirectConnect (BSP)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   The TM DirectConnect (BSP) protocol is supported by the joy-thrustmaster.c
-module. It currently supports:
+module. This includes, but is not limited to:
 
 * ThrustMaster Millenium 3D Inceptor
 * ThrustMaster 3D Rage Pad
+* ThrustMaster Fusion Digital Game Pad
 
-  Both these drvices are autodetected, and thus no parameters to the module
+  Devices not directly supported, but hopefully working are:
+
+* ThrustMaster FragMaster
+* ThrustMaster Attack Throttle
+
+  If you have one of these, contact me.
+
+  BSP devices are autodetected, and thus no parameters to the module
 are needed.
 
-  The Millenium and Rage Pad should work fine now. TM WCS III won't work,
-because important parts of code for that are missing. I'm not sure if it was
-ever mass produced.
+3.7 Creative Labs Blaster
+~~~~~~~~~~~~~~~~~~~~~~~~~
+  The Blaster protocol is supported by the joy-creative.c module. It
+currently supports only the:
 
-3.7 PDPI Lightning 4 gamecards
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+* Creative Blaster GamePad Cobra
+
+  Up to two of these can be used on a single gameport, using an Y-cable.
+
+3.8 PDPI Lightning 4 gamecards
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   PDPI Lightning 4 gamecards are supported by the joy-lightning.c module.
 This driver is only for analog joysticks connected to the card - if you want
 to use some of the digital devices, you need to use its specific driver. The
@@ -420,8 +469,49 @@ port the joystick is attached to:
   See the description of analog joystick driver for explanations of m0 and
 n0 values.
 
-3.8 Amiga
-~~~~~~~~~
+3.9 Trident 4DWave / Aureal Vortex
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  Soundcards with a Trident 4DWave DX/NX or Aureal Vortex chipset provide an
+"Enhanced Game Port" mode where the soundcard handles polling the joystick.
+This mode is supported by the joy-pci module.
+
+  If no module parameters are given, the joy-pci module will set all the
+soundcards it finds to "enhanced" mode, and will try to autodetect the type
+of attached joystick. It can only detect the same types of joysticks that
+the joy-analog module can.
+
+  This module accepts parameters in the form:
+
+	js_pci=t0,i0,m0,n0,t1,i1,m1,n1,....
+
+  The "t" value specifies the type of card, as follows:
+
+	  t  | Card Type
+	----------------------------
+	  0  | Trident 4DWave DX
+	  1  | Trident 4DWave NX
+	  2  | Aureal Vortex1 (Au8820 chipset)
+	  3  | Aureal Vortex2 (Au8830 chipset)
+
+  If you have more than one card of the same type, the "i" parameter lets
+you choose which card to apply the "m" and "n" values to. It counts from
+"0". (The driver detects cards in the order listed in the above table.)
+
+  The "m" and "n" values have the same meaning as for the analog module,
+with the exception that the value m=0, n=0 indicates that joy-pci should
+completely ignore that port. This can be useful to reserve a certain port
+for purely MIDI operation.
+
+  For example, let's say you have 3 sound cards - a 4Dwave DX, a 4DWave NX,
+and a Vortex 2. You have a three-axis, four-button, one-hat CHF- compatible
+joystick on the DX. You use the NX to interface to an external MIDI device.
+Finally, you have two two-axis, two-button joysticks on the Vortex. Your
+command line might look like:
+
+	js_pci=0,0,0x207,0,1,1,0,0,3,0,0x33,0xcc
+
+3.10 Amiga
+~~~~~~~~~~
   Amiga joysticks, connected to an Amiga, are supported by the joy-amiga.c
 driver. Since they can't be autodetected, the driver has a command line.
 
@@ -438,9 +528,74 @@ the Amiga.
   No more joystick types are supported now, but that should change in the
 future if I get an Amiga in the reach of my fingers.
 
-3.9 Game console and 8-bit pads and joysticks
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+3.11 Game console and 8-bit pads and joysticks
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 See joystick-parport.txt for more info.
+
+3.12 SpaceTec/LabTec devices
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  SpaceTec serial devices communicate using the SpaceWare protocol. It is
+supported by the joy-spaceorb and joy-spaceball drivers. The devices currently
+supported by joy-spaceorb are:
+
+* SpaceTec SpaceBall Avenger
+* SpaceTec SpaceOrb 360
+
+Devices currently supported by joy-spaceball are:
+
+* SpaceTec SpaceBall 4000 FLX
+
+  In addition to having the joy-spaceorb/spaceball module in the kernel, you
+also need to attach a serial port to it. to do that, run the jsattach
+program:
+
+	jsattach --spaceorb /dev/ttySx &
+or
+	jsattach --sball4 /dev/ttySx &
+
+where /dev/ttySx is the serial port which the device is connected to. After
+doing this, the device will be reported and will start working.
+
+  There is one caveat with the SpaceOrb. The button #6, the on the bottom
+side of the orb, although reported as an ordinary button, causes internal
+recentering of the spaceorb, moving the zero point to the position in which
+the ball is at the moment of pressing the button. So, think first before
+you bind it to some other function.
+
+SpaceTec SpaceBall 2003 FLX and 3003 FLX are not supported yet. 
+
+3.13 Logitech SWIFT devices
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  The SWIFT serial protocol is supported by the joy-warrior module. It
+currently supports only the:
+
+* Logitech WingMan Warrior
+
+but in the future, Logitech CyberMan (the original one, not CM2) could be
+supported as well. To use the module, you need to run jsattach after you
+insert/compile the module into your kernel:
+
+	jsattach --warrior /dev/ttySx &
+
+ttySx is the serial port your Warrior is attached to.
+
+3.14 Magellan / Space Mouse
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  The Magellan (or Space Mouse), manufactured by LogiCad3d (formerly Space
+Systems), for many other companies (Logitech, HP, ...) is supported by the
+joy-magellan module. It currently supports only the:
+
+* Magellan 3D
+* Space Mouse
+
+models, the additional buttons on the 'Plus' versions are not supported yet.
+
+  To use it, you need to attach the serial port to the driver using the
+
+	jsattach --magellan /dev/ttySx &
+
+command. After that the Magellan will be detected, initialized, will beep,
+and the /dev/jsX device should become useable.
 
 4. Troubleshooting
 ~~~~~~~~~~~~~~~~~~
@@ -452,9 +607,10 @@ interface, and "old" for the "0.x" interface. You run it by typing:
 	jstest --normal /dev/js0
 	jstest --old    /dev/js0
 
-  If your trouble stems from the fact the drivers can't detect the attached
-joystick, and/or you decide you need my help (which I will gladly provide),
-please use the joydump utility first. It's created just by typing
+  If your trouble stems from the fact the drivers can't detect the joystick
+attached to your gameport, and you decide you need my help (which I will
+gladly provide), please use the joydump utility first. It's created just by
+typing
 
 	make joydump.o
 
@@ -465,64 +621,73 @@ by typing
 
   in the same directory. It will return a 'device busy' or 'initialization
 failed' error. This is perfectly okay. It has already done it's job. The
-results can be found in the system log. Please send me the results along
-with your problem report.
+results can be found in the system log or in the output of the
+
+	dmesg
+
+command. Please send me the results along with your problem report.
 
   Oh, and read the FAQ! :)
 
 5. FAQ
 ~~~~~~
- Q: The driver doesn't find any joysticks connected to my soundcard with the
-message "joy-something: no joysticks found" and "joy-something.o:
-init_module: Device or resource busy." or "Initialization of joy-something
-failed"  What could be the cause?
-  A: The most common cause is that the joystick port on your soundcard is
-not enabled. If it is an ISA PnP card, you'll need isapnptools to configure
-the gameport. Non-PnP cards usually use some option to the sound driver -
-see the sound driver docs and source and enable the port.
+Q: The driver doesn't find any joysticks connected to my soundcard with the
+   message "joy-something: no joysticks found" and "joy-something.o:
+   init_module: Device or resource busy." or "Initialization of joy-something
+   failed"  What could be the cause?
+A: The most common cause is that the joystick port on your soundcard is
+   not enabled. If it is an ISA PnP card, you'll need isapnptools to configure
+   the gameport. Non-PnP cards usually use some option to the sound driver -
+   see the sound driver docs and source and enable the port. Note that in case
+   of a PnP card you have to load the joystick driver as a module after running
+   the isapnp command, it will not work in the opposite order.
 
-  Q: Any access to the joystick devices gives me "Operation not supported by
-device". What am I doing wrong?
-  A: You're running a 2.0 kernel and you forgot to insmod the hardware
-specific module. You not only need the joystick.o, but also one of the other
-joy-*.o files (most usually joy-analog.o), as described in this document,
-section 2. If you are not using modules, then you didn't say 'Y' to any of
-the hardware-specific questions. Again, see section 2. If you did select
-the specific support, and you still get this message, check that you
-selected the right one, and if it still doesn't work, go to the previous
-FAQ.
+Q: Any access to the joystick devices gives me "Operation not supported by
+   device". What am I doing wrong?
+A: You're running a 2.0 kernel and you forgot to insmod the hardware
+   specific module. You not only need the joystick.o, but also one of the other
+   joy-*.o files (most usually joy-analog.o), as described in this document,
+   section 2. If you are not using modules, then you didn't say 'Y' to any of
+   the hardware-specific questions. Again, see section 2. If you did select
+   the specific support, and you still get this message, check that you
+   selected the right one, and if it still doesn't work, go to the previous
+   FAQ.
 
-  Q: Everything is fine, except I get "No such device" error when I try to
-do anything with /dev/js0. What's the cause?
-  A: You're running a 2.1 kernel and you want to read the previous FAQ.
+Q: Everything is fine, except I get "No such device" error when I try to
+   do anything with /dev/js0. What's the cause?
+A: You're running a 2.1 or 2.2. kernel and you want to read the previous FAQ.
 
-  Q: Upon 'insmod joystick.o' I get a LOT of unresolved symbols, including
-printk and others. Why?
-  A: You either don't have your kernel compiled with module support. If
-that's the cause, re-compile your kernel with module support switched on.
-Or, you use versioned symbols, and don't have -DMODVERSIONS in the joystick
-driver Makefile, or vice versa. Correct the situation by either removing or
-adding -DMODVERSIONS to the Makefile.
+Q: Upon 'insmod joystick.o' I get a LOT of unresolved symbols, including
+   'printk' and others. Why?
+A: You either don't have your kernel compiled with module support. If
+   that's the cause, re-compile your kernel with module support switched on.
+   Or, you use versioned symbols, and don't have -DMODVERSIONS in the joystick
+   driver Makefile, or vice versa. Correct the situation by either removing or
+   adding -DMODVERSIONS to the Makefile.
 
-  Q: Running 'jstest 1' or 'jscal 1' doesn't work, and returns with "File
-not found" error. What is the problem?
-  A: The command line interface for these tools is different from what
-version 0.8.0 used. You have to specify the whole device name, eg. 'jstest
-/dev/js0'.
+Q: Upon 'insmod joy-something' I get a bunch of unresolved symbols, like
+   'js_register_port, js_unregister device' and others. What's wrong?
+A: You need to 'insmod joystick.o' first.
 
-  Q: Running 'jstest /dev/js0' results in "File not found" error. What's the
-cause?
-  A: The device files don't exist. Run 'make devs'.
+Q: Running 'jstest 1' or 'jscal 1' doesn't work, and returns with "File
+   not found" error. What is the problem?
+A: The command line interface for these tools is different from what
+   version 0.8.0 used. You have to specify the whole device name, eg. 'jstest
+   /dev/js0'.
 
-  Q: Is it possible to connect my old Atari/Commodore/Amiga/console joystick
-or pad that uses a 9-pin D-type cannon connector to the serial port of my
-PC?
-  A: Yes, it is possible, but it'll burn your serial port or the pad. It
-won't work, of course.
+Q: Running 'jstest /dev/js0' results in "File not found" error. What's the
+   cause?
+A: The device files don't exist. Run 'make devs'.
 
-  Q: My joystick doesnt work with Quake / Quake 2. What's the cause?
-  A: Quake / Quake 2 don't support joystick. Use joy2key to simulate keypresses
-for them.
+Q: Is it possible to connect my old Atari/Commodore/Amiga/console joystick
+   or pad that uses a 9-pin D-type cannon connector to the serial port of my
+   PC?
+A: Yes, it is possible, but it'll burn your serial port or the pad. It
+   won't work, of course.
+
+Q: My joystick doesn't work with Quake / Quake 2. What's the cause?
+A: Quake / Quake 2 don't support joystick. Use joy2key to simulate keypresses
+   for them.
 
 6. Programming Interface
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -565,23 +730,31 @@ to the joystick driver development:
 	Brian Gerst		<bgerst@quark.vpplus.com>
 	Andree Borrmann		<a.borrmann@tu-bs.de>
 	Martin Giguere		<zefrench@hotmail.com>
+	David Thompson		<dcthomp@mail.utexas.edu>
+	Justin Wake		<spectre@telefragged.com>
+	Benoit Triquet		<benoit@adsl-216-100-248-201.dsl.pacbell.net>
+	John Dahlstrom		<jodaman@bradley.edu>
+	Dan Gohman		<gohmandj@mrs.umn.edu>
+	Joe Krahn		<krahn@niehs.nih.gov>
+	David Kuder		<alphagod@penguinpowered.com>
+	Raymond Ingles		<sorceror@tir.com>
 
   If you think you should be in this list and are not, it's possible that
 I forgot to include you - contact me and I'll correct the error. :)
 
   Thanks to KYE Systems Europe, who provided me with driver sources for the
-Genius Flight2000 Digital F-23, which happens to be compatible with
-Microsoft SideWinder 3d Pro.
+Genius Flight2000 Digital F-23, which happens to be identical (in software)
+to Microsoft SideWinder 3D Pro.
 
   Thanks to ThrustMaster Inc. who provided me with docs for their digital
-protocol, and to Trystan A Larey-williams <axe@mail.wsu.edu>, who wrote an
-attempt of a driver for them.
+protocol specifications, and to Trystan A Larey-Williams <axe@mail.wsu.edu>,
+who wrote an attempt of a driver for them.
 
   Thanks to Creative Labs Europe, and Ifor Powell <ipowell@cle.creaf.com>,
-who provided me with docs for their first generation gamepad.
+who provided me with docs for their first generation Blaster GamePad.
 
   Special thanks go to FP-Gaming, Inc. and James C Barnes <james@fpgaming.com>,
-who provided me with help and detailed information about the Assasin 3D
+who provided me with help and detailed information about the Assassin 3D
 protocol and devices, and even sent me a Panther and Panther XL for testing,
 along with cool T-shirts.
 
@@ -590,10 +763,20 @@ along with cool T-shirts.
 code for their L4 gamecard, and sending me the card to test my driver with
 it.
 
+  Thanks to LogiCad3D for their support, for having the specifications
+online and for the nice music on their telephone.
+
+  Special thanks to Logitech, Jerry de Raad <Jerry_de_Raad@logitech.com>,
+Thomas Burgel <Thomas_Burgel@logitech.com>, Avinash Shinde
+<Avinash_Shinde@logitech.com> for providing me with a lot of documentation
+for their devices, and also for a big box, containing a CyberMan2, Wingman
+Extreme, Magellan, Wingman Warrior, two MouseMan mice, and a NewTouch
+keyboard.
+
   Thanks to everyone else who helped me develop this package of drivers!
 
-  No thanks to Microsoft, Logitech, and Gravis, who don't release a word
-about their hardware .... :(
+  No thanks to Microsoft and Gravis, who don't release a word about their
+hardware .... :(
 
 8. ChangeLog
 ~~~~~~~~~~~~
@@ -602,50 +785,3 @@ about their hardware .... :(
 9. To do
 ~~~~~~~~
   See the TODO file for the list of things planned.
-
-10. Current driver status
-~~~~~~~~~~~~~~~~~~~~~~~~~
-  OK means tested and not touched till this driver revision, unknown means
-that the driver was changed since last test, broken means doesn't work,
-incomplete means can't work, because vital parts of support are missing.
-
-joystick.c:		2.1.x kernel interface	- OK
-joy-amiga.c:		Multi1 stick		- unknown
-joy-analog.c:		standard joysticks	- OK
-			FCS hats		- OK
-			CHF hats & buttons	- OK
-			XY buttons		- OK
-			UV buttons		- OK
-joy-assasin.c:		MadCatz Panther XL	- OK
-			MadCatz PXL rudder	- OK
-			MadCatz Panther		- OK
-			FPG Assasin 3D		- OK
-joy-console.c:		NES pad			- OK
-			SNES pad		- OK
-			Multi1 stick		- OK
-			Multi2 stick		- OK
-			PSX			- SW OK, HW unreliable
-joy-db9.c:		Multi1 stick		- OK
-			Multi2 stick		- OK
-			Sega Genesis pad	- OK
-			Sega Genesis 5 pad	- OK
-			Sega Genesis 6 pad	- OK
-			Sega Saturn pad		- unknown
-joy-gravis.c		Gravis GamePad Pro	- OK
-			Gravis Xterminator	- OK
-			Gravis Blackhawk Digital- OK
-joy-lightning.c		PDPI Lightning 4	- OK
-joy-logitech.c		WingMan Extreme Digital	- OK
-			CyberMan 2		- OK
-			Thunder Pad Digital	- unknown
-joy-sidewinder.c	SW 3D Pro		- OK
-			Genius F-23		- OK
-			SW GP			- OK
-			SW PP			- OK
-			SW FFP			- OK
-joy-thrustmaster.c	Millenium 3D Inceptor	- OK
-			3D-Rage Pad		- OK
-joy-turbografx.c	Multi1 stick		- OK
-
-Please help me and send me success / failure reports for the drivers,
-I need to know what works, and what needs to be debugged. Thank you.

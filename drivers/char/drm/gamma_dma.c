@@ -1,6 +1,6 @@
 /* gamma_dma.c -- DMA support for GMX 2000 -*- linux-c -*-
  * Created: Fri Mar 19 14:30:16 1999 by faith@precisioninsight.com
- * Revised: Fri Aug 20 11:31:45 1999 by faith@precisioninsight.com
+ * Revised: Thu Sep 16 12:55:37 1999 by faith@precisioninsight.com
  *
  * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
  * All Rights Reserved.
@@ -24,8 +24,8 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  * 
- * $PI: xc/programs/Xserver/hw/xfree86/os-support/linux/drm/generic/gamma_dma.c,v 1.8 1999/08/30 13:05:00 faith Exp $
- * $XFree86$
+ * $PI: xc/programs/Xserver/hw/xfree86/os-support/linux/drm/kernel/gamma_dma.c,v 1.9 1999/09/16 16:56:18 faith Exp $
+ * $XFree86: xc/programs/Xserver/hw/xfree86/os-support/linux/drm/kernel/gamma_dma.c,v 1.1 1999/09/25 14:38:00 dawes Exp $
  *
  */
 

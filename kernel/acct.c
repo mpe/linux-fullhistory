@@ -150,12 +150,12 @@ asmlinkage long sys_acct(const char *name)
 {
 	struct file *file = NULL, *old_acct = NULL;
 	char *tmp;
-	int error = -EPERM;
+	int error;
+
+	if (!capable(CAP_SYS_PACCT))
+		return -EPERM;
 
 	lock_kernel();
-	if (!capable(CAP_SYS_PACCT))
-		goto out;
-
 	if (name) {
 		tmp = getname(name);
 		error = PTR_ERR(tmp);
@@ -257,8 +257,6 @@ static comp_t encode_comp_t(unsigned long value)
  *  into the accounting file. This function should only be called from
  *  do_exit().
  */
-#define KSTK_EIP(stack) (((unsigned long *)(stack))[1019])
-#define KSTK_ESP(stack) (((unsigned long *)(stack))[1022])
 
 /*
  *  do_acct_process does all actual work.

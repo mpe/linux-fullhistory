@@ -1,7 +1,9 @@
 /*
  *  joy-lightning.c  Version 1.2
  *
- *  Copyright (c) 1998 Vojtech Pavlik
+ *  Copyright (c) 1998-1999 Vojtech Pavlik
+ *
+ *  Sponsored by SuSE
  */
 
 /*
@@ -38,6 +40,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/string.h>
+#include <linux/init.h>
 
 #define JS_L4_PORT		0x201
 #define JS_L4_SELECT_ANALOG	0xa4
@@ -55,7 +58,7 @@ static struct js_port* __initdata js_l4_port = NULL;
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
 MODULE_PARM(js_l4, "2-24i");
 
-static int js_l4[]={-1,0,0,-1,0,0,-1,0,0,-1,0,0,-1,0,0,-1,0,0,-1,0,0,-1,0,0,-1,0,0};
+static int __initdata js_l4[] = { -1,0,0,-1,0,0,-1,0,0,-1,0,0,-1,0,0,-1,0,0,-1,0,0,-1,0,0 };
 
 #include "joy-analog.h"
 
@@ -70,11 +73,10 @@ struct js_l4_info {
 
 static int js_l4_wait_ready(void)
 {
-	unsigned int t, t1, timeout;
-	timeout = (JS_L4_TIMEOUT * js_time_speed) >> 10;
-	t = t1 = js_get_time();
-	while ((inb(JS_L4_PORT) & JS_L4_BUSY) && (js_delta(t1 = js_get_time(), t) < timeout));
-	return -(js_delta(t1, t) >= timeout);
+	unsigned int t;
+	t = JS_L4_TIMEOUT;
+	while ((inb(JS_L4_PORT) & JS_L4_BUSY) && t > 0) t--;
+	return -(t<=0);
 }
 
 /*
@@ -255,13 +257,13 @@ static struct js_port __init *js_l4_probe(unsigned char *cards, int l4port, int 
 
 	port = js_register_port(port, info, numdev, sizeof(struct js_l4_info), js_l4_read);
 
+	info = port->info;
+
 	for (i = 0; i < numdev; i++)
 		printk(KERN_INFO "js%d: %s on L4 port %d\n",
 			js_register_device(port, i, js_an_axes(i, &info->an), js_an_buttons(i, &info->an),
 				js_an_name(i, &info->an), js_l4_open, js_l4_close),
 			js_an_name(i, &info->an), info->port);
-
-	info = port->info;
 
 	js_l4_calibrate(info);
 	js_l4_read(info, port->axes, port->buttons);
@@ -300,18 +302,21 @@ static void __init js_l4_card_probe(unsigned char *cards)
 
 		cards[i] = rev; 
 
-		printk(KERN_INFO "js: PDPI Lightning 4 %s card (ports %d-%d) firmware v%d.%d found at %#x\n",
+		printk(KERN_INFO "js: PDPI Lightning 4 %s card (ports %d-%d) firmware v%d.%d at %#x\n",
 			i ? "secondary" : "primary", (i << 2), (i << 2) + 3, rev >> 4, rev & 0xf, JS_L4_PORT);
 	}
 
 }
 
 #ifndef MODULE
-void __init js_l4_setup(char *str, int *ints)
+int __init js_l4_setup(SETUP_PARAM)
 {
 	int i;
+	SETUP_PARSE(24);
 	for (i = 0; i <= ints[0] && i < 24; i++) js_l4[i] = ints[i+1];
+	return 1;
 }
+__setup("js_l4=", js_l4_setup);
 #endif
 
 #ifdef MODULE
@@ -333,7 +338,7 @@ int __init js_l4_init(void)
 			js_l4_port = js_l4_probe(cards, i, 0, 0, js_l4_port);
 	}
 
-	if (js_l4_port == NULL) {
+	if (!js_l4_port) {
 #ifdef MODULE
 		printk(KERN_WARNING "joy-lightning: no joysticks found\n");
 #endif
@@ -352,9 +357,9 @@ void cleanup_module(void)
 	int cal[4] = {59, 59, 59, 59};
 	struct js_l4_info *info;
 
-	while (js_l4_port != NULL) {
+	while (js_l4_port) {
 		for (i = 0; i < js_l4_port->ndevs; i++)
-			if (js_l4_port->devs[i] != NULL)
+			if (js_l4_port->devs[i])
 				js_unregister_device(js_l4_port->devs[i]);
 		info = js_l4_port->info;
 		js_l4_setcal(info->port, cal);

@@ -213,7 +213,7 @@ static inline void ncp_kfree_s(void *obj, int size)
 #endif				/* DEBUG_NCP_MALLOC */
 
 /* linux/fs/ncpfs/inode.c */
-int ncp_notify_change(struct dentry *, struct iattr *attr);
+int ncp_notify_change(struct dentry *, struct iattr *);
 struct super_block *ncp_read_super(struct super_block *, void *, int);
 struct inode *ncp_iget(struct super_block *, struct ncp_entry_info *);
 void ncp_update_inode(struct inode *, struct ncp_entry_info *);
@@ -250,54 +250,24 @@ int ncp_mmap(struct file *, struct vm_area_struct *);
 /* linux/fs/ncpfs/ncplib_kernel.c */
 int ncp_make_closed(struct inode *);
 
-static inline void str_upper(char *name)
-{
-	while (*name) {
-		if (*name >= 'a' && *name <= 'z') {
-			*name -= ('a' - 'A');
-		}
-		name++;
-	}
-}
+#define ncp_namespace(i)	(NCP_SERVER(i)->name_space[NCP_FINFO(i)->volNumber])
 
-static inline void str_lower(char *name)
+static inline int ncp_preserve_entry_case(struct inode *i, __u32 nscreator)
 {
-	while (*name) {
-		if (*name >= 'A' && *name <= 'Z') {
-			*name += ('a' - 'A');
-		}
-		name++;
-	}
-}
-
-static inline int ncp_namespace(struct inode *inode)
-{
-	struct ncp_server *server = NCP_SERVER(inode);
-	return server->name_space[NCP_FINFO(inode)->volNumber];
-}
-
-static inline int ncp_preserve_entry_case(struct inode *i, __u32 nscreator) {
-#if defined(CONFIG_NCPFS_NFS_NS) || defined(CONFIG_NCPFS_OS2_NS)
+#ifdef CONFIG_NCPFS_SMALLDOS
 	int ns = ncp_namespace(i);
-#endif
-#if defined(CONFIG_NCPFS_SMALLDOS) && defined(CONFIG_NCPFS_OS2_NS)
-	if ((ns == NW_NS_OS2) && (nscreator == NW_NS_DOS))
-		return 0;
-#endif
-	return
+
+	if ((ns == NW_NS_DOS)
 #ifdef CONFIG_NCPFS_OS2_NS
-	(ns == NW_NS_OS2) ||
-#endif	/* CONFIG_NCPFS_OS2_NS */
-#ifdef CONFIG_NCPFS_NFS_NS
-	(ns == NW_NS_NFS) ||
-#endif	/* CONFIG_NCPFS_NFS_NS */
-	0;
+		|| ((ns == NW_NS_OS2) && (nscreator == NW_NS_DOS))
+#endif /* CONFIG_NCPFS_OS2_NS */
+				)
+		return 0;
+#endif /* CONFIG_NCPFS_SMALLDOS */
+	return 1;
 }
 
-static inline int ncp_preserve_case(struct inode *i)
-{
-	return ncp_preserve_entry_case(i, NW_NS_OS2);
-}
+#define ncp_preserve_case(i)	(ncp_namespace(i) != NW_NS_DOS)
 
 static inline int ncp_case_sensitive(struct inode *i)
 {

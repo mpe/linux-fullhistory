@@ -196,7 +196,8 @@ nfsd_dispatch(struct svc_rqst *rqstp, u32 *statp)
 	kxdrproc_t		xdr;
 	u32			nfserr;
 
-	dprintk("nfsd_dispatch: proc %d\n", rqstp->rq_proc);
+	dprintk("nfsd_dispatch: vers %d proc %d\n",
+				rqstp->rq_vers, rqstp->rq_proc);
 	proc = rqstp->rq_procinfo;
 
 	/* Check whether we have this call in the cache. */

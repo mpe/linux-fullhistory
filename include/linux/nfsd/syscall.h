@@ -3,15 +3,18 @@
  *
  * This file holds all declarations for the knfsd syscall interface.
  *
- * Copyright (C) 1995 Olaf Kirch <okir@monad.swb.de>
+ * Copyright (C) 1995-1997 Olaf Kirch <okir@monad.swb.de>
  */
 
 #ifndef NFSD_SYSCALL_H
 #define NFSD_SYSCALL_H
 
-#include <linux/config.h>
-#include <linux/types.h>
-#include <linux/socket.h>
+#include <asm/types.h>
+#ifdef __KERNEL__
+# include <linux/config.h>
+# include <linux/types.h>
+# include <linux/in.h>
+#endif 
 #include <linux/posix_types.h>
 #include <linux/nfsd/const.h>
 #include <linux/nfsd/export.h>

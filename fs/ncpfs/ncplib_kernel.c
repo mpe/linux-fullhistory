@@ -4,6 +4,7 @@
  *  Copyright (C) 1995, 1996 by Volker Lendecke
  *  Modified for big endian by J.F. Chadima and David S. Miller
  *  Modified 1997 Peter Waltenberg, Bill Hawes, David Woodhouse for 2.1 dcache
+ *  Modified 1999 Wolfram Pienkoss for NLS
  *
  */
 
@@ -886,4 +887,225 @@ ncp_ClearPhysicalRecord(struct ncp_server *server, const char *file_id,
 }
 #endif	/* CONFIG_NCPFS_IOCTL_LOCKING */
 
+#ifdef CONFIG_NCPFS_NLS
+/* This are the NLS conversion routines with inspirations and code parts
+ * from the vfat file system and hints from Petr Vandrovec.
+ */
 
+inline unsigned char
+ncp__tolower(struct nls_table *t, unsigned char c)
+{
+	unsigned char nc = t->charset2lower[c];
+
+	return nc ? nc : c;
+}
+
+inline unsigned char
+ncp__toupper(struct nls_table *t, unsigned char c)
+{
+	unsigned char nc = t->charset2upper[c];
+
+	return nc ? nc : c;
+}
+
+int
+ncp__io2vol(struct ncp_server *server, unsigned char *vname, unsigned int *vlen,
+		const unsigned char *iname, unsigned int ilen, int cc)
+{
+	struct nls_table *in = server->nls_io;
+	struct nls_table *out = server->nls_vol;
+	struct nls_unicode uc;
+	unsigned char nc, *up;
+	int i, k, maxlen = *vlen - 1;
+	__u16 ec;
+
+	*vlen = 0;
+
+	for (i = 0; i < ilen;) {
+		if (*vlen == maxlen)
+			return -ENAMETOOLONG;
+
+		if (NCP_IS_FLAG(server, NCP_FLAG_UTF8)) {
+			k = utf8_mbtowc(&ec, iname, ilen - i);
+			if (k == -1)
+				return -EINVAL;
+			uc.uni1 = ec & 0xFF;
+			uc.uni2 = ec >> 8;
+			iname += k;
+			i += k;
+		} else {
+			if (*iname == NCP_ESC) {
+				if (i > ilen - 5)
+					return -EINVAL;
+
+				ec = 0;
+				for (k = 1; k < 5; k++) {
+					nc = iname[k];
+					ec <<= 4;
+					if (nc >= '0' && nc <= '9') {
+						ec |= nc - '0';
+						continue;
+					}
+					if (nc >= 'a' && nc <= 'f') {
+						ec |= nc - ('a' - 10);
+						continue;
+					}
+					if (nc >= 'A' && nc <= 'F') {
+						ec |= nc - ('A' - 10);
+						continue;
+					}
+					return -EINVAL;
+				}
+				uc.uni1 = ec & 0xFF;
+				uc.uni2 = ec >> 8;
+				iname += 5;
+				i += 5;
+			} else {
+				uc = in->charset2uni[*iname];
+				iname++;
+				i++;
+			}
+		}
+
+		up = out->page_uni2charset[uc.uni2];
+		if (!up)
+			return -EINVAL;
+
+		nc = up[uc.uni1];
+		if (!nc)
+			return -EINVAL;
+
+		*vname = cc ? ncp_toupper(out, nc) : nc;
+		vname++;
+		*vlen += 1;
+	}
+
+	*vname = 0;
+	return 0;
+}
+
+int
+ncp__vol2io(struct ncp_server *server, unsigned char *iname, unsigned int *ilen,
+		const unsigned char *vname, unsigned int vlen, int cc)
+{
+	struct nls_table *in = server->nls_vol;
+	struct nls_table *out = server->nls_io;
+	struct nls_unicode uc;
+	unsigned char nc, *up;
+	int i, k, maxlen = *ilen - 1;
+	__u16 ec;
+
+	*ilen = 0;
+
+	for (i = 0; i < vlen; i++) {
+		if (*ilen == maxlen)
+			return -ENAMETOOLONG;
+
+		uc = in->charset2uni[cc ? ncp_tolower(in, *vname) : *vname];
+
+		if (NCP_IS_FLAG(server, NCP_FLAG_UTF8)) {
+			k = utf8_wctomb(iname, (uc.uni2 << 8) + uc.uni1,
+								maxlen - *ilen);
+			if (k == -1)
+				return -ENAMETOOLONG;
+			iname += k;
+			*ilen += k;
+		} else {
+			up = out->page_uni2charset[uc.uni2];
+			if (up)
+				nc = up[uc.uni1];
+			else
+				nc = 0;
+
+			if (nc) {
+				*iname = nc;
+				iname++;
+				*ilen += 1;
+			} else {
+				if (*ilen > maxlen - 5)
+					return -ENAMETOOLONG;
+				ec = (uc.uni2 << 8) + uc.uni1;
+				*iname = NCP_ESC;
+				for (k = 4; k > 0; k--) {
+					nc = ec & 0xF;
+					iname[k] = nc > 9 ? nc + ('a' - 10)
+							  : nc + '0';
+					ec >>= 4;
+				}
+				iname += 5;
+				*ilen += 5;
+			}
+		}
+		vname++;
+	}
+
+	*iname = 0;
+	return 0;
+}
+
+#else
+
+int
+ncp__io2vol(unsigned char *vname, unsigned int *vlen,
+		const unsigned char *iname, unsigned int ilen, int cc)
+{
+	int i;
+
+	if (*vlen <= ilen)
+		return -ENAMETOOLONG;
+
+	if (cc)
+		for (i = 0; i < ilen; i++) {
+			*vname = toupper(*iname);
+			vname++;
+			iname++;
+		}
+	else {
+		memmove(vname, iname, ilen);
+		vname += ilen;
+	}
+
+	*vlen = ilen;
+	*vname = 0;
+	return 0;
+}
+
+int
+ncp__vol2io(unsigned char *iname, unsigned int *ilen,
+		const unsigned char *vname, unsigned int vlen, int cc)
+{
+	int i;
+
+	if (*ilen <= vlen)
+		return -ENAMETOOLONG;
+
+	if (cc)
+		for (i = 0; i < vlen; i++) {
+			*iname = tolower(*vname);
+			iname++;
+			vname++;
+		}
+	else {
+		memmove(iname, vname, vlen);
+		iname += vlen;
+	}
+
+	*ilen = vlen;
+	*iname = 0;
+	return 0;
+}
+
+#endif
+
+inline int
+ncp_strnicmp(struct nls_table *t, const unsigned char *s1,
+					const unsigned char *s2, int n)
+{
+	int i;
+
+	for (i=0; i<n; i++)
+		if (ncp_tolower(t, s1[i]) != ncp_tolower(t, s2[i]))
+			return 1;
+
+	return 0;
+}

@@ -553,8 +553,7 @@ struct dentry * d_lookup(struct dentry * parent, struct qstr * name)
 /*
  * An insecure source has sent us a dentry, here we verify it.
  *
- * This is just to make knfsd able to have the dentry pointer
- * in the NFS file handle.
+ * This is used by ncpfs in its readdir implementation.
  *
  * NOTE! Do _not_ dereference the pointers before we have
  * validated them. We can test the pointer values, but we

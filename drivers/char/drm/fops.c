@@ -1,6 +1,6 @@
 /* fops.c -- File operations for DRM -*- linux-c -*-
  * Created: Mon Jan  4 08:58:31 1999 by faith@precisioninsight.com
- * Revised: Fri Aug 20 11:31:46 1999 by faith@precisioninsight.com
+ * Revised: Fri Dec  3 10:26:26 1999 by faith@precisioninsight.com
  *
  * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
  * All Rights Reserved.
@@ -24,8 +24,8 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  * 
- * $PI: xc/programs/Xserver/hw/xfree86/os-support/linux/drm/generic/fops.c,v 1.3 1999/08/20 15:36:45 faith Exp $
- * $XFree86$
+ * $PI: xc/programs/Xserver/hw/xfree86/os-support/linux/drm/kernel/fops.c,v 1.3 1999/08/20 15:36:45 faith Exp $
+ * $XFree86: xc/programs/Xserver/hw/xfree86/os-support/linux/drm/kernel/fops.c,v 1.1 1999/09/25 14:37:59 dawes Exp $
  *
  */
 
@@ -75,8 +75,8 @@ int drm_flush(struct file *filp)
 	drm_file_t    *priv   = filp->private_data;
 	drm_device_t  *dev    = priv->dev;
 
-	DRM_DEBUG("pid = %d, device = 0x%x, open_count = %d, f_count = %d\n",
-		  current->pid, dev->device, dev->open_count, atomic_read(&filp->f_count));
+	DRM_DEBUG("pid = %d, device = 0x%x, open_count = %d\n",
+		  current->pid, dev->device, dev->open_count);
 	return 0;
 }
 
@@ -91,6 +91,20 @@ int drm_release(struct inode *inode, struct file *filp)
 	DRM_DEBUG("pid = %d, device = 0x%x, open_count = %d\n",
 		  current->pid, dev->device, dev->open_count);
 
+	if (_DRM_LOCK_IS_HELD(dev->lock.hw_lock->lock)
+	    && dev->lock.pid == current->pid) {
+		DRM_ERROR("Process %d dead, freeing lock for context %d\n",
+			  current->pid,
+			  _DRM_LOCKING_CONTEXT(dev->lock.hw_lock->lock));
+		drm_lock_free(dev,
+			      &dev->lock.hw_lock->lock,
+			      _DRM_LOCKING_CONTEXT(dev->lock.hw_lock->lock));
+		
+				/* FIXME: may require heavy-handed reset of
+                                   hardware at this point, possibly
+                                   processed via a callback to the X
+                                   server. */
+	}
 	drm_reclaim_buffers(dev, priv->pid);
 
 	drm_fasync(-1, filp, 0);
@@ -197,7 +211,12 @@ int drm_write_string(drm_device_t *dev, const char *s)
 		send -= count;
 	}
 
-	if (dev->buf_async) kill_fasync(dev->buf_async, SIGIO, POLL_OUT);
+#if LINUX_VERSION_CODE < 0x020315
+	if (dev->buf_async) kill_fasync(dev->buf_async, SIGIO);
+#else
+				/* Parameter added in 2.3.21 */
+	if (dev->buf_async) kill_fasync(dev->buf_async, SIGIO, POLL_IN);
+#endif
 	DRM_DEBUG("waking\n");
 	wake_up_interruptible(&dev->buf_readers);
 	return 0;

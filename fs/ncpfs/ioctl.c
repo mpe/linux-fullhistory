@@ -3,7 +3,7 @@
  *
  *  Copyright (C) 1995, 1996 by Volker Lendecke
  *  Modified 1997 Peter Waltenberg, Bill Hawes, David Woodhouse for 2.1 dcache
- *  Modified 1998 Wolfram Pienkoss for NLS
+ *  Modified 1998, 1999 Wolfram Pienkoss for NLS
  *
  */
 
@@ -527,7 +527,8 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 
 			codepage = NULL;
 			user.codepage[NCP_IOCSNAME_LEN] = 0;
-			if (!user.codepage[0])
+			if (!user.codepage[0] ||
+					!strcmp(user.codepage, "default"))
 				codepage = load_nls_default();
 			else {
 				codepage = load_nls(user.codepage);
@@ -538,13 +539,21 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 
 			iocharset = NULL;
 			user.iocharset[NCP_IOCSNAME_LEN] = 0;
-			if (user.iocharset[0] == 0)
+			if (!user.iocharset[0] ||
+					!strcmp(user.iocharset, "default")) {
 				iocharset = load_nls_default();
-			else {
-				iocharset = load_nls(user.iocharset);
-				if (!iocharset) {
-					unload_nls(codepage);
-					return -EBADRQC;
+				NCP_CLR_FLAG(server, NCP_FLAG_UTF8);
+			} else {
+				if (!strcmp(user.iocharset, "utf8")) {
+					iocharset = load_nls_default();
+					NCP_SET_FLAG(server, NCP_FLAG_UTF8);
+				} else {
+					iocharset = load_nls(user.iocharset);
+					if (!iocharset) {
+						unload_nls(codepage);
+						return -EBADRQC;
+					}
+					NCP_CLR_FLAG(server, NCP_FLAG_UTF8);
 				}
 			}
 
@@ -564,35 +573,28 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 	case NCP_IOC_GETCHARSETS: /* not tested */
 		{
 			struct ncp_nls_ioctl user;
+			int len;
 
 			memset(&user, 0, sizeof(user));
-			if (server->nls_vol)
-				if (server->nls_vol->charset) {
-					strncpy(user.codepage,
-						server->nls_vol->charset,
-						NCP_IOCSNAME_LEN);
-					user.codepage[NCP_IOCSNAME_LEN] = 0;
-					if (!strcmp(user.codepage, "default"))
-						/* unfortunately, we cannot set
-						   'default' charset... maybe
-						   we should change load_nls()?
-						   It is easy, do not initialize
-						   'tables' in fs/nls/nls_base.c
-						   with NULL, but with
-						   'default_table'... */
-						memset(user.codepage, 0,
-							sizeof(user.codepage));
-				}
+			if (server->nls_vol && server->nls_vol->charset) {
+				len = strlen(server->nls_vol->charset);
+				if (len > NCP_IOCSNAME_LEN)
+					len = NCP_IOCSNAME_LEN;
+				strncpy(user.codepage,
+						server->nls_vol->charset, len);
+				user.codepage[len] = 0;
+			}
 
-			if (server->nls_io)
-				if (server->nls_io->charset) {
+			if (NCP_IS_FLAG(server, NCP_FLAG_UTF8))
+				strcpy(user.iocharset, "utf8");
+			else
+				if (server->nls_io && server->nls_io->charset) {
+					len = strlen(server->nls_io->charset);
+					if (len > NCP_IOCSNAME_LEN)
+						len = NCP_IOCSNAME_LEN;
 					strncpy(user.iocharset,
-						server->nls_io->charset,
-						NCP_IOCSNAME_LEN);
-					user.iocharset[NCP_IOCSNAME_LEN] = 0;
-					if (!strcmp(user.iocharset, "default"))
-						memset(user.iocharset, 0,
-							sizeof(user.iocharset));
+						server->nls_io->charset, len);
+					user.iocharset[len] = 0;
 				}
 
 			if (copy_to_user((struct ncp_nls_ioctl*)arg, &user,

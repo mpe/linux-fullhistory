@@ -5513,6 +5513,83 @@ CONFIG_ARLAN
   On some computers the card ends up in non-valid state after some time.
   Use a ping-reset script to clear it.
 
+Aironet 4500/4800 series adapters
+CONFIG_AIRONET4500
+  www.aironet.com (recently bought by Cisco) makes these 802.11 DS
+  adapters.  Driver by Elmer Joandi (elmer@ylenurme.ee).
+  Work sponsored by www.spectrumwireless.net and www.vendomar.ee
+  This configuration option enables common code for all devices (PCI, ISA,
+  PCMCIA)
+  module is aironet4500_core
+  quickconfig parameters: 
+	SSID=tsunami - "The Password"
+	adhoc=1  	there are no Access Points around
+	master=1 	Adhoc master (the one who creates network sync)
+	slave=1		Adhoc slave(btw, it is still forming own net 
+			sometimes)
+	channel=1..? 	meaningful in adhoc mode
+  all other parameters can be set via proc interface
+  These parameters belong to .._card module, but alas, they are here
+
+Aironet 4500/4800 ISA/PCI/PNP/365 support
+CONFIG_AIRONET4500_NONCS
+  This is module aironet4500_card, which includes _possibility_ to
+  support for following
+  PCI device
+  ISA device in ISA mode(does not work currently)
+  ISA device in PNP mode
+  PCMCIA device _without_ cardservices, direct 365 chip INIT, 
+	does not work currently
+  PCMCIA _with_ CardServices(normal way) is at another module 
+  radio parameters are currently configurable at ..._core module
+
+Aironet 4500/4800 PNP support
+CONFIG_AIRONET4500_PNP
+	This option should be enabled for ISA cards, remember to enable
+	PNP jumper on board. 
+	module aironet4500_card
+
+Aironet 4500/4800 PCI support
+CONFIG_AIRONET4500_PCI
+	This option should be enabled for PCI cards
+	module aironet4500_card
+
+Aironet 4500/4800 ISA broken support
+CONFIG_AIRONET4500_ISA
+	This option enables support for ISA cards in non-PNP mode. 
+	Does not operate correctly by now.
+	module aironet4500_card
+
+Aironet 4500/4800 I365 broken support
+CONFIG_AIRONET4500_I365
+	This option enables support for PCMCIA cards on i365 controller 
+	_without_ cardservices. Doesnt have much sense and is not working
+	properly. Comes from times where there was no PCMCIA support in
+	kernel main source tree
+
+Aironet 4500/4800 PCMCIA support
+CONFIG_AIRONET4500_CS
+	This option enables support for PCMCIA cards to be used with
+	CardServices. 
+	This is not for ISA and PCI adapters.
+	module aironet4500_cs.o
+	The same option is both on:
+		1. PCMCIA netdevices configuring panel
+		2. Wireless netdevices configuring panel
+	Possibility to change this option depeds on options set in 2.
+	
+Aironet 4500/4800 PROC interface
+CONFIG_AIRONET4500_PROC
+	This option enables /proc/sys/aironet4500 interface for 
+	configuring the device.
+	NOTE: it takes lot of memory. Compile it as module and remove
+	after configuration
+	module: aironet4500_proc
+
+
+
+ 
+
 LAPB over Ethernet driver
 CONFIG_LAPBETHER
   This is a driver for a pseudo device (typically called /dev/lapb0)
@@ -9960,6 +10037,10 @@ CONFIG_DRM
   synchronization, security, and DMA transfers. Select the module that
   provides support for your graphics card.
 
+tdfx Direct Rendering Manager (XFree86 DRI support)
+CONFIG_DRM_TDFX
+  Choose M here if you have a 3dfx Banshee/Voodoo3 graphics card.
+
 3dlabs GMX 2000 Direct Rendering Driver (XFree86 DRI support)
 CONFIG_DRM_GAMMA
   Choose M here if you have a 3dlabs GMX 2000 graphics card.
@@ -10352,83 +10433,117 @@ CONFIG_NVRAM
 
 Joystick support
 CONFIG_JOYSTICK
-  If you have a joystick, you can say Y here to enable generic
-  joystick support. You will also need to say Y or M to at least one
-  of the hardware specific joystick drivers. This will make the
-  joysticks available as /dev/jsX devices. Please read the file
-  Documentation/joystick.txt which contains more information and the
-  location of the joystick package that you'll need.
+  If you have a joystick, 6dof controller, gamepad, steering wheel,
+  weapon control system or something like that you can say Y here to
+  enable generic support for these controllers. You will also need to
+  say Y or M to at least one of the hardware specific drivers. This
+  will make the controllers available as /dev/jsX devices. Please read
+  the file Documentation/joystick.txt which contains more information
+  and the location of the joystick package that you'll need.
 
-  This driver is also available as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want).
-  The module will be called joystick.o. If you want to compile it as a
-  module, say M here and read Documentation/modules.txt.
-
-Classic PC analog joysticks and gamepads
+Classic PC analog
 CONFIG_JOY_ANALOG
-  Say Y here if you have an analog joystick or gamepad that connects
-  to the PC gameport. This supports many different types, including
-  joysticks with throttle control, with rudders, or with extensions
-  like additional hats and buttons compatible with CH Flightstick Pro,
+  Say Y here if you have a controller that connects to the PC
+  gameport. This supports many different types, including joysticks
+  with throttle control, with rudders, or with extensions like
+  additional hats and buttons compatible with CH Flightstick Pro,
   ThrustMaster FCS or 6 and 8 button gamepads. For more information on
   how to use the driver please read Documentation/joystick.txt
 
-FPGaming and MadCatz A3D controllers
-CONFIG_JOY_ASSASIN
-  Say Y here if you have an FPGaming Assasin 3D, MadCatz Panther or
-  MadCatz Panther XL. For more information on how to use the driver
+FPGaming and MadCatz A3D
+CONFIG_JOY_ASSASSIN
+  Say Y here if you have an FPGaming or MadCatz controller using the
+  A3D protocol over the PC gameport. For more information on how to
+  use the driver please read Documentation/joystick.txt
+
+Gravis GrIP
+CONFIG_JOY_GRAVIS
+  Say Y here if you have a Gravis controller using the GrIP protocol
+  over the PC gameport. For more information on how to use the driver
   please read Documentation/joystick.txt
 
-Gravis GrIP joysticks and gamepads
-CONFIG_JOY_GRAVIS
-  Say Y here if you have a Gravis GamePad Pro, Gravis Xterminator or
-  Gravis Blackhawk Digital. For more information on how to use the
-  driver please read Documentation/joystick.txt
+Logitech ADI
+CONFIG_JOY_LOGITECH
+  Say Y here if you have a Logitech controller using the ADI
+  protocol over the PC gameport. For more information on how to use
+  the driver please read Documentation/joystick.txt
 
-PDPI Lightning 4 gamecards
+Microsoft SideWinder
+CONFIG_JOY_SIDEWINDER
+  Say Y here if you have a Microsoft controller using the Digital
+  Overdrive protocol over PC gameport. For more information on how to
+  use the driver please read Documentation/joystick.txt
+
+ThrustMaster DirectConnect
+CONFIG_JOY_THRUSTMASTER
+  Say Y here if you have a ThrustMaster controller using the
+  DirectConnect (BSP) protocol over the PC gameport. For more
+  information on how to use the driver please read
+  Documentation/joystick.txt
+
+Creative Labs Blaster
+CONFIG_JOY_CREATIVE
+  Say Y here if you have a Creative Labs controller using the
+  Blaster protocol over the PC gameport. For more information on how
+  to use the driver please read Documentation/joystick.txt
+
+PDPI Lightning 4 card
 CONFIG_JOY_LIGHTNING
   Say Y here if you have a PDPI Lightning 4 gamecard and an analog
   joystick or gamepad connected to it. For more information on how to
   use the driver please read Documentation/joystick.txt
 
-Logitech Digital joysticks and gamepads
-CONFIG_JOY_LOGITECH
-  Say Y here if you have a Logitech WingMan Extreme Digital,
-  Logitech ThunderPad Digital or Logitech CyberMan 2. For more
+Trident 4DWave and Aureal Vortex gameport
+CONFIG_JOY_PCI
+  Say Y here if you have a Trident 4DWave DX/NX or Aureal Vortex 1/2
+  card and want to use its gameport in its enhanced digital mode
+  with and ordinary analog joystick. For more information on how to
+  use the driver please read Documentation/joystick.txt
+
+Magellan and Space Mouse
+CONFIG_JOY_MAGELLAN
+  Say Y here if you have a Magellan or Space Mouse 6DOF controller
+  connected to your computer's serial port.  For more information on
+  how to use the driver please read Documentation/joystick.txt
+
+SpaceTec SpaceOrb 360 and SpaceBall Avenger
+CONFIG_JOY_SPACEORB
+  Say Y here if you have a SpaceOrb 360 or SpaceBall Avenger 6DOF
+  controller connected to your computer's serial port.  For more
   information on how to use the driver please read
   Documentation/joystick.txt
 
-Microsoft SideWinder, Genius Digital joysticks and gamepads
-CONFIG_JOY_SIDEWINDER
-  Say Y here if you have a Microsoft SideWinder 3d Pro, Microsoft
-  SideWinder Precision Pro, Microsoft SideWinder Force Feedback Pro,
-  Microsoft Sidewinder GamePad or Genius Flight2000 F-23 Digital. For
-  more information on how to use the driver please read
+SpaceTec SpaceBall 4000 FLX
+CONFIG_JOY_SPACEBALL
+  Say Y here if you have a SpaceTec SpaceBall 4000 FLX
+  controller connected to your computer's serial port.  For more
+  information on how to use the driver please read
   Documentation/joystick.txt
 
-ThrustMaster DirectConnect joysticks and gamepads
-CONFIG_JOY_THRUSTMASTER
-  Say Y here if you have a ThrustMaster Millenium 3D Inceptor or a
-  ThrustMaster 3D Rage Pad. For more information on how to use the
-  driver please read Documentation/joystick.txt
+Logitech WingMan Warrior
+CONFIG_JOY_WARRIOR
+  Say Y here if you have a Logitech WingMan Warrior controller
+  connected to your computer's serial port.  For more information on
+  how to use the driver please read Documentation/joystick.txt
 
-NES, SNES, PSX, Multisystem joysticks and gamepads
+NES, SNES, N64, PSX, Multi
 CONFIG_JOY_CONSOLE
   Say Y here if you have a Nintendo Entertainment System gamepad,
-  Super Nintendo Entertainment System gamepad, Sony PlayStation
-  gamepad or a Multisystem -- Atari, Amiga, Commodore, Amstrad CPC
-  joystick. For more information on how to use the driver please read
+  Super Nintendo Entertainment System gamepad, Nintendo 64 gamepad,
+  Sony PlayStation gamepad or a Multisystem -- Atari, Amiga,
+  Commodore, Amstrad CPC joystick connected to your parallel port.
+  For more information on how to use the driver please read
   Documentation/joystick.txt and Documentation/joystick-parport.txt
 
-Sega, Multisystem joysticks and gamepads
+Sega, Multi
 CONFIG_JOY_DB9
   Say Y here if you have a Sega Master System gamepad, Sega Genesis
   gamepad, Sega Saturn gamepad, or a Multisystem -- Atari, Amiga,
-  Commodore, Amstrad CPC joystick. For more information on how to use
-  the driver please read Documentation/joystick.txt and
-  Documentation/joystick-parport.txt
+  Commodore, Amstrad CPC joystick connected to your parallel port. For
+  more information on how to use the driver please read
+  Documentation/joystick.txt and Documentation/joystick-parport.txt
 
-TurboGraFX Multisystem joystick interface
+TurboGraFX interface
 CONFIG_JOY_TURBOGRAFX
   Say Y here if you have the TurboGraFX interface by Steffen Schwenke,
   and want to use it with Multiststem -- Atari, Amiga, Commodore,

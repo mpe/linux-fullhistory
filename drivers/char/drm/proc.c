@@ -1,6 +1,6 @@
 /* proc.c -- /proc support for DRM -*- linux-c -*-
  * Created: Mon Jan 11 09:48:47 1999 by faith@precisioninsight.com
- * Revised: Fri Aug 20 11:31:48 1999 by faith@precisioninsight.com
+ * Revised: Fri Dec  3 09:44:16 1999 by faith@precisioninsight.com
  *
  * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
  * All Rights Reserved.
@@ -24,8 +24,8 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  * 
- * $PI: xc/programs/Xserver/hw/xfree86/os-support/linux/drm/generic/proc.c,v 1.4 1999/08/20 15:36:46 faith Exp $
- * $XFree86$
+ * $PI: xc/programs/Xserver/hw/xfree86/os-support/linux/drm/kernel/proc.c,v 1.4 1999/08/20 15:36:46 faith Exp $
+ * $XFree86: xc/programs/Xserver/hw/xfree86/os-support/linux/drm/kernel/proc.c,v 1.1 1999/09/25 14:38:02 dawes Exp $
  *
  */
 
@@ -79,41 +79,44 @@ int drm_proc_init(drm_device_t *dev)
 	struct proc_dir_entry *ent;
 	int		      i, j;
 
-	drm_root = proc_mkdir("video", NULL);
+	drm_root = create_proc_entry("graphics", S_IFDIR, NULL);
 	if (!drm_root) {
-		DRM_ERROR("Cannot create /proc/video\n");
+		DRM_ERROR("Cannot create /proc/graphics\n");
 		return -1;
 	}
 
 				/* Instead of doing this search, we should
-				   add some global support for /proc/video. */
+				   add some global support for /proc/graphics. */
 	for (i = 0; i < 8; i++) {
-		sprintf(drm_slot_name, "video/%d", i);
-		drm_dev_root = proc_mkdir(drm_slot_name, NULL);
+		sprintf(drm_slot_name, "graphics/%d", i);
+		drm_dev_root = create_proc_entry(drm_slot_name, S_IFDIR, NULL);
 		if (!drm_dev_root) {
 			DRM_ERROR("Cannot create /proc/%s\n", drm_slot_name);
-			remove_proc_entry("video", NULL);
+			remove_proc_entry("graphics", NULL);
 		}
 		if (drm_dev_root->nlink == 2) break;
 		drm_dev_root = NULL;
 	}
 	if (!drm_dev_root) {
-		DRM_ERROR("Cannot find slot in /proc/video\n");
+		DRM_ERROR("Cannot find slot in /proc/graphics\n");
 		return -1;
 	}
 
 	for (i = 0; i < DRM_PROC_ENTRIES; i++) {
-		if (create_proc_read_entry(drm_proc_list[i].name,0,drm_dev_root,
-					   drm_proc_list[i].f, dev))
-			continue;
-
-		DRM_ERROR("Cannot create /proc/%s/%s\n",
-			  drm_slot_name, drm_proc_list[i].name);
-		for (j = 0; j < i; j++)
-			remove_proc_entry(drm_proc_list[i].name, drm_dev_root);
-		remove_proc_entry(drm_slot_name, NULL);
-		remove_proc_entry("video", NULL);
-		return -1;
+		ent = create_proc_entry(drm_proc_list[i].name,
+					S_IFREG|S_IRUGO, drm_dev_root);
+		if (!ent) {
+			DRM_ERROR("Cannot create /proc/%s/%s\n",
+				  drm_slot_name, drm_proc_list[i].name);
+			for (j = 0; j < i; j++)
+				remove_proc_entry(drm_proc_list[i].name,
+						  drm_dev_root);
+			remove_proc_entry(drm_slot_name, NULL);
+			remove_proc_entry("graphics", NULL);
+			return -1;
+		}
+		ent->read_proc = drm_proc_list[i].f;
+		ent->data      = dev;
 	}
 
 	return 0;
@@ -132,7 +135,7 @@ int drm_proc_cleanup(void)
 			}
 			remove_proc_entry(drm_slot_name, NULL);
 		}
-		remove_proc_entry("video", NULL);
+		remove_proc_entry("graphics", NULL);
 		remove_proc_entry(DRM_NAME, NULL);
 	}
 	drm_root = drm_dev_root = NULL;
@@ -379,7 +382,8 @@ static int _drm_vma_info(char *buf, char **start, off_t offset, int len,
 			       vma->vm_flags & VM_MAYSHARE ? 's' : 'p',
 			       vma->vm_flags & VM_LOCKED   ? 'l' : '-',
 			       vma->vm_flags & VM_IO	   ? 'i' : '-',
-			       vma->vm_pgoff << PAGE_SHIFT );
+			       VM_OFFSET(vma));
+		
 #if defined(__i386__)
 		pgprot = pgprot_val(vma->vm_page_prot);
 		DRM_PROC_PRINT(" %c%c%c%c%c%c%c%c%c",

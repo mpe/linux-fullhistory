@@ -35,6 +35,7 @@ obj-$(CONFIG_PCMCIA_XIRC2PS)	+= xirc2ps_cs.o
 obj-$(CONFIG_PCMCIA_RAYCS)	+= ray_cs.o
 obj-$(CONFIG_PCMCIA_NETWAVE)	+= netwave_cs.o
 obj-$(CONFIG_PCMCIA_WAVELAN)	+= wavelan_cs.o
+obj-$(CONFIG_AIRONET4500_CS)	+= aironet4500_cs.o
 
 # Cardbus client drivers
 obj-$(CONFIG_PCMCIA_3C575)	+= 3c575_cb.o

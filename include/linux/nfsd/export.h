@@ -4,16 +4,17 @@
  * Public declarations for NFS exports. The definitions for the
  * syscall interface are in nfsctl.h
  *
- * Copyright (C) 1995, 1996 Olaf Kirch <okir@monad.swb.de>
+ * Copyright (C) 1995-1997 Olaf Kirch <okir@monad.swb.de>
  */
 
 #ifndef NFSD_EXPORT_H
 #define NFSD_EXPORT_H
 
-#include <linux/types.h>
-#include <linux/socket.h>
-#include <linux/in.h>
-#include <linux/fs.h>
+#include <asm/types.h>
+#ifdef __KERNEL__
+# include <linux/types.h>
+# include <linux/in.h>
+#endif
 
 /*
  * Important limits for the exports stuff.

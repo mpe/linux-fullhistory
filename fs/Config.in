@@ -22,7 +22,7 @@ fi
 # msdos filesystems
 tristate 'DOS FAT fs support' CONFIG_FAT_FS
 dep_tristate '  MSDOS fs support' CONFIG_MSDOS_FS $CONFIG_FAT_FS
-dep_tristate '  UMSDOS: Unix-like filesystem on top of standard MSDOS filesystem' CONFIG_UMSDOS_FS $CONFIG_MSDOS_FS
+dep_tristate '    UMSDOS: Unix-like filesystem on top of standard MSDOS fs' CONFIG_UMSDOS_FS $CONFIG_MSDOS_FS
 dep_tristate '  VFAT (Windows-95) fs support' CONFIG_VFAT_FS $CONFIG_FAT_FS
 
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
@@ -35,11 +35,6 @@ if [ "$CONFIG_ISO9660_FS" != "n" ]; then
 else
    # needed by nls/Config.in
    define_bool CONFIG_JOLIET n
-fi
-
-tristate 'UDF filesystem support (read only)' CONFIG_UDF_FS
-if [ "$CONFIG_UDF_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
-   bool '  UDF write support (DANGEROUS)' CONFIG_UDF_RW
 fi
 
 tristate 'Minix fs support' CONFIG_MINIX_FS
@@ -67,6 +62,10 @@ tristate 'Second extended fs support' CONFIG_EXT2_FS
 tristate 'System V and Coherent filesystem support' CONFIG_SYSV_FS
 if [ "$CONFIG_SYSV_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
    bool '  SYSV filesystem write support (DANGEROUS)' CONFIG_SYSV_FS_WRITE
+fi
+tristate 'UDF filesystem support (read only)' CONFIG_UDF_FS
+if [ "$CONFIG_UDF_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
+   bool '  UDF write support (DANGEROUS)' CONFIG_UDF_RW
 fi
 tristate 'UFS filesystem support (read only)' CONFIG_UFS_FS
 if [ "$CONFIG_UFS_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then

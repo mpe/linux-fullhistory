@@ -24,7 +24,7 @@
 /*
  * nfsd version
  */
-#define NFSD_VERSION		"0.4"
+#define NFSD_VERSION		"0.5"
 
 #ifdef __KERNEL__
 /*
@@ -146,6 +146,7 @@ extern u32	nfs_ok,
 		nfserr_rofs,
 		nfserr_mlink,
 		nfserr_nametoolong,
+		nfserr_notempty,
 		nfserr_dquot,
 		nfserr_stale,
 		nfserr_remote,

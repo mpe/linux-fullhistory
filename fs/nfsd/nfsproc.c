@@ -1,7 +1,10 @@
 /*
  * nfsproc2.c	Process version 2 NFS requests.
+ * linux/fs/nfsd/nfs2proc.c
+ * 
+ * Process version 2 NFS requests.
  *
- * Copyright (C) 1995 Olaf Kirch <okir@monad.swb.de>
+ * Copyright (C) 1995-1997 Olaf Kirch <okir@monad.swb.de>
  */
 
 #include <linux/linkage.h>
@@ -144,7 +147,7 @@ nfsd_proc_read(struct svc_rqst *rqstp, struct nfsd_readargs *argp,
 				ntohl(rqstp->rq_addr.sin_addr.s_addr),
 				ntohs(rqstp->rq_addr.sin_port),
 				argp->count);
-		argp->count = avail;
+		argp->count = avail << 2;
 	}
 
 	resp->count = argp->count;
@@ -273,18 +276,21 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 		rdev = (dev_t) size;
 		if (type != S_IFBLK && type != S_IFCHR) {
 			rdev = 0;
-		} else if (type == S_IFCHR && size == ~(u32) 0) {
+		} else if (type == S_IFCHR && !(attr->ia_valid & ATTR_SIZE)) {
 			/* If you think you've seen the worst, grok this. */
 			attr->ia_mode = S_IFIFO | mode;
 			type = S_IFIFO;
 		} else if (size != rdev) {
 			/* dev got truncated because of 16bit Linux dev_t */
-			nfserr = nfserr_io;	/* or nfserr_inval? */
+			nfserr = nfserr_inval;
 			goto out_unlock;
 		} else {
 			/* Okay, char or block special */
 			is_borc = 1;
 		}
+
+		/* we've used the SIZE information, so discard it */
+		attr->ia_valid &= ~ATTR_SIZE;
 
 		/* Make sure the type and device matches */
 		nfserr = nfserr_exist;
@@ -442,8 +448,8 @@ static int
 nfsd_proc_readdir(struct svc_rqst *rqstp, struct nfsd_readdirargs *argp,
 					  struct nfsd_readdirres  *resp)
 {
-	u32 *	buffer;
-	int	nfserr, count;
+	u32 *		buffer;
+	int		nfserr, count;
 
 	dprintk("nfsd: READDIR  %d/%d %d bytes at %d\n",
 		SVCFH_DEV(&argp->fh), SVCFH_INO(&argp->fh),
@@ -556,33 +562,15 @@ nfserrno (int errno)
 		{ NFSERR_DQUOT, EDQUOT },
 #endif
 		{ NFSERR_STALE, ESTALE },
-		{ NFSERR_WFLUSH, EIO },
 		{ -1, EIO }
 	};
 	int	i;
 
 	for (i = 0; nfs_errtbl[i].nfserr != -1; i++) {
 		if (nfs_errtbl[i].syserr == errno)
-			return htonl (nfs_errtbl[i].nfserr);
+			return htonl(nfs_errtbl[i].nfserr);
 	}
 	printk (KERN_INFO "nfsd: non-standard errno: %d\n", errno);
 	return nfserr_io;
 }
 
-#if 0
-static void
-nfsd_dump(char *tag, u32 *buf, int len)
-{
-	int	i;
-
-	printk(KERN_NOTICE
-		"nfsd: %s (%d words)\n", tag, len);
-
-	for (i = 0; i < len && i < 32; i += 8)
-		printk(KERN_NOTICE
-			" %08lx %08lx %08lx %08lx"
-			" %08lx %08lx %08lx %08lx\n",
-			buf[i],   buf[i+1], buf[i+2], buf[i+3],
-			buf[i+4], buf[i+5], buf[i+6], buf[i+7]);
-}
-#endif

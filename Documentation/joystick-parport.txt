@@ -1,6 +1,7 @@
 		  Linux Joystick parport drivers v1.2 BETA
-		  (c) 1998 Vojtech Pavlik <vojtech@suse.cz>
+	       (c) 1998-1999 Vojtech Pavlik <vojtech@suse.cz>
 	       (c) 1998 Andree Borrmann <a.borrmann@tu-bs.de>
+			     Sponsored by SuSE
 ----------------------------------------------------------------------------
 
 0. Disclaimer
@@ -44,7 +45,8 @@ you'll use for NES and SNES gamepads.
   The main problem with PC parallel ports is that they don't have +5V power
 source on any of their pins. So, if you want a reliable source of power
 for your pads, use either keyboard or joystick port, and make a pass-through
-cable.
+cable. You can also pull the power directly from the power supply (the red
+wire is +5V).
 
   If you want to use the parallel port only, you can take the power is from
 some data pin. For most gamepad and parport implementations only one pin is
@@ -298,27 +300,29 @@ work for most people. If you like adventure, you can try yourself.
 
   The PSX controller is supported by the joy-console.c.
 
-Pinout of the PSX controller:
+Pinout of the PSX controller (compatible with DirectPadPro):
 
   +---------+---------+---------+
 9 | o  o  o | o  o  o | o  o  o | 1               parallel
    \________|_________|________/                  port pins
     |  |      |  |  |   |
-    |  |      |  |  |   +-------->  Clock    ---  (1)
-    |  |      |  |  +------------>  Select   ---  (17)
-    |  |      |  +--------------->  Power    ---  (16)
+    |  |      |  |  |   +-------->  Clock    ---  (4)
+    |  |      |  |  +------------>  Select   ---  (3)
+    |  |      |  +--------------->  Power    ---  (5-9)
     |  |      +------------------>  Ground   ---  (18-25)
-    |  +------------------------->  Command  ---  (14)
+    |  +------------------------->  Command  ---  (2)
     +---------------------------->  Data     ---  (10,11,12,13,15) one only...
 
   You may have to add pull up/down resistors. Maybe your pad also won't like
 the 5V (PSX uses 3.7V).
 
-  Currently the driver supports only ONE psx pad and only one type of
-controller: The normal PSX controller. NEGCON support is planned for the
-next release. ANALOG controller may be too (I do not recommend to connect
-the "force feedback"/"rumble pack" version... it (may) use too much
-power...)
+  Currently the driver supports only one psx pad per parallel port, and these
+controllers:
+
+ * Standard PSX Pad
+ * NegCon PSX Pad
+ * Analog PSX Pad (red mode)
+ * Analog PSX Pad (green mode)
 
 2.4 Sega
 ~~~~~~~~
@@ -437,13 +441,15 @@ Linux kernels, the number of the parport interface (eg. 0 for parport0).
 	  4  | Multisystem 1-button joystick
 	  5  | Multisystem 2-button joystick
 	  6  | Sony PSX controller
+	  7  | N64 pad
+	  8  | N64 pad with direction pad as buttons (DirectPadPro style)
 
   The exact type of the PSX controller type is autoprobed, so you must have
 your controller plugged in before initializing.
 
   Should you want to use more than one of parallel ports at once, you can
-use js_console_2 and js_db9_3 as additional command line parameters for two
-more parallel ports.
+use js_console_2 and js_console_3 as additional command line parameters for
+two more parallel ports.
 
   Changes:
     v0.1  : First version (SNES only)
@@ -463,6 +469,9 @@ more parallel ports.
     v0.10 : Fixed PSX buttons 8 and 9
     v0.11V: Switched to EXCL mode
 	    Removed wakeup
+    v0.12V: Added N64 support
+    v0.13V: Updated N64 support
+    v0.14V: Fixed N64 axis/button counts
 
 3.2 joy-db9.c
 ~~~~~~~~~~~~~
@@ -475,6 +484,10 @@ joy-db9.c driver. It uses the following kernel/module command line:
 is connected to (eg. 0x378), or, if you are using the parport driver of 2.1+
 Linux kernels, the number of the parport interface (eg. 0 for parport0).
 
+  Caveat here: This driver only works on bidirectional parallel ports. If
+your parallel port is recent enough, you should have no trouble with this.
+Old parallel ports may not have this feature.
+
   'Type' is the type of joystick or pad attached:
 
 	Type | Joystick/Pad
@@ -484,9 +497,10 @@ Linux kernels, the number of the parport interface (eg. 0 for parport0).
 	  2  | Multisystem 2-button joystick
 	  3  | Genesis pad (3+1 buttons)
 	  5  | Genesis pad (5+1 buttons)
-	  6  | Genesis pad (6+1 buttons)
-	  7  | Saturn pad
+	  6  | Genesis pad (6+2 buttons)
+	  7  | Saturn pad (8 buttons)
 	  8  | Multisystem 1-button joystick (v0.8.0.2 pin-out)
+	  9  | Two Multiststem 1-button joysticks (v0.8.0.2 pin-out) 
 
   Should you want to use more than one of these joysticks/pads at once, you
 can use js_db9_2 and js_db9_3 as additional command line parameters for two
@@ -501,6 +515,8 @@ more joysticks/pads.
     v0.4V: Switched to EXCL mode
            Removed wakeup
     v0.5V: Added 0.8.0.2 HW compatibility for Multi sticks
+    v0.6V: Better timing for Genesis 6
+    v0.7V: Added 0.8.0.2 second joystick support
 
 3.3 joy-turbografx.c
 ~~~~~~~~~~~~~~~~~~~~
@@ -519,6 +535,27 @@ interface ports 1-7 have. For a standard multisystem joystick, this is 1.
 use js_tg_2 and js_tg_3 as additional command line parameters for two more
 interfaces.
 
-3.4 End
+3.4 PC parallel port pinout
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+		  .----------------------------------------.
+   At the PC:     \ 13 12 11 10  9  8  7  6  5  4  3  2  1 /
+                   \  25 24 23 22 21 20 19 18 17 16 15 14 /
+                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+	  Pin | Name    | Description
+	~~~~~~|~~~~~~~~~|~~~~~~~~~~
+	    1 | /STROBE | Strobe
+	  2-9 | D0-D7   | Data Bit 0-7
+	   10 | /ACK    | Acknowledge
+	   11 | BUSY    | Busy
+	   12 | PE      | Paper End
+	   13 | SELIN   | Select In
+	   14 | /AUTOFD | Autofeed
+	   15 | /ERROR  | Error
+	   16 | /INIT   | Initialize
+	   17 | /SEL    | Select
+	18-25 | GND     | Signal Ground
+
+3.5 End
 ~~~~~~~
   That's all, folks! Have fun!

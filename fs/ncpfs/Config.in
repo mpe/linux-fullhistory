@@ -6,9 +6,7 @@ bool '  Proprietary file locking' CONFIG_NCPFS_IOCTL_LOCKING
 bool '  Clear remove/delete inhibit when needed' CONFIG_NCPFS_STRONG
 bool '  Use NFS namespace if available' CONFIG_NCPFS_NFS_NS
 bool '  Use LONG (OS/2) namespace if available' CONFIG_NCPFS_OS2_NS
-if [ "$CONFIG_NCPFS_OS2_NS" = "y" ]; then
-   bool '    Lowercase DOS filenames' CONFIG_NCPFS_SMALLDOS
-fi
+bool '  Lowercase DOS filenames' CONFIG_NCPFS_SMALLDOS
 bool '  Allow mounting of volume subdirectories' CONFIG_NCPFS_MOUNT_SUBDIR
 bool '  NDS authentication support' CONFIG_NCPFS_NDS_DOMAINS
 bool '  Use Native Language Support' CONFIG_NCPFS_NLS

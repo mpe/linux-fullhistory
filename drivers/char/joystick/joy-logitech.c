@@ -1,12 +1,14 @@
 /*
  *  joy-logitech.c  Version 1.2
  *
- *  Copyright (c) 1998 Vojtech Pavlik
+ *  Copyright (c) 1998-1999 Vojtech Pavlik
+ *
+ *  Sponsored by SuSE
  */
 
 /*
  * This is a module for the Linux joystick driver, supporting
- * Logitech Digital joystick family.
+ * Logitech ADI joystick family.
  */
 
 /*
@@ -38,113 +40,175 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/string.h>
+#include <linux/malloc.h>
+#include <linux/init.h>
 
-#define JS_LT_MAX_START		250
-#define JS_LT_MAX_STROBE	25
-#define JS_LT_MAX_LENGTH	72
+/*
+ * Times array sizes, flags, ids.
+ */
 
-#define JS_LT_MAX_DELAY		12000
+#undef JS_LT_DEBUG
 
-#define JS_LT_MODE_WMED		1
-#define JS_LT_MODE_CM2		2
-#define JS_LT_MODE_TPD		3
+#define JS_LT_MAX_START		400	/* Trigger to packet timeout [400us] */
 
-static int js_lt_seq_init[] __initdata = { 6000, 11000, 7000, 9000, 6000, 11000, 7000, 9000, 0 };
-static int js_lt_seq_reset[] __initdata = { 2000, 3000, 2000, 3000, 0 };
+#define JS_LT_MAX_LENGTH	256
+#define JS_LT_MIN_LENGTH	8
+#define JS_LT_MIN_LEN_LENGTH	10
+#define JS_LT_MIN_ID_LENGTH	66
+#define JS_LT_MAX_NAME_LENGTH	16
 
-static int js_lt_port_list[] __initdata = {0x201, 0};
+#define JS_LT_INIT_DELAY	10	/* Delay after init packet [10ms] */
+#define JS_LT_DATA_DELAY	4	/* Delay after data packet [4ms] */
+
+#define JS_LT_FLAG_HAT		0x04
+#define JS_LT_FLAG_10BIT	0x08
+
+#define JS_LT_ID_WMED		0x00
+#define JS_LT_ID_TPD		0x01
+#define JS_LT_ID_WMI		0x04
+#define JS_LT_ID_WGP		0x06
+#define JS_LT_ID_WM3D		0x07
+#define JS_LT_ID_WGPE		0x08
+
+#define JS_LT_BUG_BUTTONS	0x01
+#define JS_LT_BUG_LONGID	0x02
+#define JS_LT_BUG_LONGDATA	0x04
+#define JS_LT_BUG_IGNTRIG	0x08
+
+/*
+ * Port probing variables.
+ */
+
+static int js_lt_port_list[] __initdata = { 0x201, 0 };
 static struct js_port* js_lt_port __initdata = NULL;
+
+/*
+ * Device names.
+ */
+
+#define JS_LT_MAX_ID		10
+
+static char *js_lt_names[] = {	"WingMan Extreme Digital", "ThunderPad Digital", "SideCar", "CyberMan 2",
+				"WingMan Interceptor", "WingMan Formula", "WingMan GamePad", 
+				"WingMan Extreme Digital 3D", "WingMan GamePad Extreme", 
+				"WingMan GamePad USB", "Unknown Device %#x"};
+
+/*
+ * Hat to axis conversion arrays.
+ */
 
 static struct {
 	int x;
 	int y;
 } js_lt_hat_to_axis[] = {{ 0, 0}, { 0,-1}, { 1,-1}, { 1, 0}, { 1, 1}, { 0, 1}, {-1, 1}, {-1, 0}, {-1,-1}};
 
+/*
+ * Per-port information.
+ */
+
 struct js_lt_info {
-	int io;
-	unsigned char mode;
+	int  io;
+	int  length[2];
+	int  ret[2];
+	int  idx[2];
+	unsigned char id[2];
+	char buttons[2];
+	char axes10[2];
+	char axes8[2];
+	char pad[2];
+	char hats[2];
+	char name[2][JS_LT_MAX_NAME_LENGTH];
+	unsigned char data[2][JS_LT_MAX_LENGTH];
+	char bugs[2];
 };
 
 /*
- * js_lt_read_packet() reads a Logitech packet.
+ * js_lt_read_packet() reads a Logitech ADI packet.
  */
 
-static int js_lt_read_packet(int io, __u64 *data)
+static void js_lt_read_packet(struct js_lt_info *info)
 {
-
-	static unsigned char buf[JS_LT_MAX_LENGTH];
-	unsigned char u, v, w, mask = 0;
-	int i;
+	unsigned char u, v, w, x, z;
+	int t[2], s[2], p[2], i;
 	unsigned long flags;
-	unsigned int t, t1;
 
-	int start = (js_time_speed * JS_LT_MAX_START) >> 10;
-	int strobe = (js_time_speed * JS_LT_MAX_STROBE) >> 10;
-
-	u = inb(io) >> 4;
-
-	if (u == 0xc) mask = 0x10;
-	if (u == 0x0) mask = 0x50;
-	if (!mask) return 0;
-
-	i = 0;
+	for (i = 0; i < 2; i++) {
+		info->ret[i] = -1;
+		p[i] = t[i] = JS_LT_MAX_START;
+		s[i] = 0;
+	}
 
 	__save_flags(flags);
 	__cli();
 
-	outb(0xff,io);
-
-	u = inb(io);
-	t = js_get_time();
-
-	if ((u & 0xc) != 0xc) mask = 0x10;
+	outb(0xff, info->io);
+	v = z = inb(info->io);
 
 	do {
-		u = inb(io);
-		t1 = js_get_time();
-	} while ((((u >> 1) ^ u) & mask) != mask && js_delta(t1,t) < start);
-
-	t = t1;
-
-	do {
-		v = inb(io);
-		t1 = js_get_time();
-		w = u ^ v;
-		if ((((w >> 1) ^ w) & mask) == mask) {
-			buf[i++] = w;
-			t = t1;
-			u = v;
+		u = v;
+		w = u ^ (v = x = inb(info->io));
+		for (i = 0; i < 2; i++, w >>= 2, x >>= 2) {
+			t[i]--;
+			if ((w & 0x30) && s[i]) {
+				if ((w & 0x30) < 0x30 && info->ret[i] < JS_LT_MAX_LENGTH && t[i] > 0) {
+					info->data[i][++info->ret[i]] = w;
+					p[i] = t[i] = (p[i] - t[i]) << 1;
+				} else t[i] = 0;
+			} else if (!(x & 0x30)) s[i] = 1;
 		}
-	} while (i < JS_LT_MAX_LENGTH && js_delta(t1,t) < strobe);
+	} while (t[0] > 0 || t[1] > 0);
 
 	__restore_flags(flags);
 
-	t = i;
-	*data = 0;
+	for (i = 0; i < 2; i++, z >>= 2)
+		if ((z & 0x30) && info->ret[i] > 0)
+			info->bugs[i] |= JS_LT_BUG_BUTTONS;
 
-	if (mask == 0x10) {
-		for (i = 0; i < t; i++)
-			*data = ((buf[i] >> 5) & 1) | (*data << 1);
-		return t;
-	}
-	if (mask == 0x50) {
-		for (i = 0; i < t; i++)
-			*data = ((__u64)(buf[i] & 0x20) << (t - 5)) | (buf[i] >> 7) | (*data << 1);
-		return t << 1;
-	}
-	return 0;
+#ifdef JS_LT_DEBUG
+	printk(KERN_DEBUG "joy-logitech: read %d %d bits\n", info->ret[0], info->ret[1]);
+	printk(KERN_DEBUG "joy-logitech: stream0:");
+	for (i = 0; i <= info->ret[0]; i++) printk("%d", (info->data[0][i] >> 5) & 1);
+	printk("\n");
+	printk(KERN_DEBUG "joy-logitech: stream1:");
+	for (i = 0; i <= info->ret[1]; i++) printk("%d", (info->data[1][i] >> 5) & 1);
+	printk("\n");
+#endif
+
+	return;
 }
 
 /*
- * js_lt_reverse() reverses the order of bits in a byte.
+ * js_lt_move_bits() detects a possible 2-stream mode, and moves
+ * the bits accordingly. 
  */
 
-static unsigned char js_lt_reverse(unsigned char u)
+static void js_lt_move_bits(struct js_lt_info *info, int length)
 {
-	u = ((u & 0x0f) << 4) | ((u >> 4) & 0x0f);
-	u = ((u & 0x33) << 2) | ((u >> 2) & 0x33);
-	u = ((u & 0x55) << 1) | ((u >> 1) & 0x55);
-	return u;
+	int i;
+
+ 	info->idx[0] = info->idx[1] = 0;
+
+	if (info->ret[0] <= 0 || info->ret[1] <= 0) return;
+	if (info->data[0][0] & 0x20 || ~info->data[1][0] & 0x20) return;
+
+	for (i = 1; i <= info->ret[1]; i++)
+		info->data[0][((length - 1) >> 1) + i + 1] = info->data[1][i];
+
+	info->ret[0] += info->ret[1];
+	info->ret[1] = -1;
+}
+
+/*
+ * js_lt_get_bits() gathers bits from the data packet.
+ */
+
+static inline int js_lt_get_bits(struct js_lt_info *info, int device, int count)
+{
+	int bits = 0;
+	int i;
+	if ((info->idx[device] += count) > info->ret[device]) return 0;
+	for (i = 0; i < count; i++) bits |= ((info->data[device][info->idx[device] - i] >> 5) & 1) << i; 
+	return bits;
 }
 
 /*
@@ -154,54 +218,61 @@ static unsigned char js_lt_reverse(unsigned char u)
 static int js_lt_read(void *xinfo, int **axes, int **buttons)
 {
 	struct js_lt_info *info = xinfo;
-	__u64 data;
-	int hat;
+	int i, j, k, l, t;
+	int ret = 0;
 
-	switch (info->mode) {
+	js_lt_read_packet(info);
+	js_lt_move_bits(info, info->length[0]);
 
-		case JS_LT_MODE_TPD:
+	for (i = 0; i < 2; i++) {
 
-			if (js_lt_read_packet(info->io, &data) != 20) return -1;
+		if (!info->length[i]) continue;
+		
+		if (info->length[i] > info->ret[i] ||
+		    info->id[i] != (js_lt_get_bits(info, i, 4) | (js_lt_get_bits(info, i, 4) << 4))) {
+			ret = -1;
+			continue;
+		}
 
-			axes[0][0] = ((data >> 6) & 1) - ((data >> 4) & 1);
-			axes[0][1] = ((data >> 5) & 1) - ((data >> 7) & 1);
+		if (info->length[i] < info->ret[i])
+			info->bugs[i] |= JS_LT_BUG_LONGDATA;
+			
+		k = l = 0;
 
-			buttons[0][0] = js_lt_reverse((data & 0x0f) | ((data >> 4) & 0xf0));
+		for (j = 0; j < info->axes10[i]; j++) 
+			axes[i][k++] = js_lt_get_bits(info, i, 10);
 
-			return 0;
+		for (j = 0; j < info->axes8[i]; j++) 
+			axes[i][k++] = js_lt_get_bits(info, i, 8);
 
-		case JS_LT_MODE_WMED:
+		for (j = 0; j <= (info->buttons[i] - 1) >> 5; j++) buttons[i][j] = 0;
 
-			if (js_lt_read_packet(info->io, &data) != 42) return -1;
-			if ((hat = data & 0xf) > 8) return -1;
+		for (j = 0; j < info->buttons[i] && j < 63; j++) {
+			if (j == info->pad[i]) {
+				t = js_lt_get_bits(info, i, 4);
+				axes[i][k++] = ((t >> 2) & 1) - ( t       & 1);
+				axes[i][k++] = ((t >> 1) & 1) - ((t >> 3) & 1);
+			}
+			buttons[i][l >> 5] |= js_lt_get_bits(info, i, 1) << (l & 0x1f);
+			l++;
+		}
 
-			axes[0][0] = (data >> 26) & 0xff;
-			axes[0][1] = (data >> 18) & 0xff;
-			axes[0][2] = (data >> 10) & 0xff;
-			axes[0][3] = js_lt_hat_to_axis[hat].x;
-			axes[0][4] = js_lt_hat_to_axis[hat].y;
+		for (j = 0; j < info->hats[i]; j++) {
+			if((t = js_lt_get_bits(info, i, 4)) > 8) {
+				if (t != 15) ret = -1; /* Hat press */
+				t = 0;
+			}
+			axes[i][k++] = js_lt_hat_to_axis[t].x;
+			axes[i][k++] = js_lt_hat_to_axis[t].y;
+		}
 
-			buttons[0][0] = js_lt_reverse((data >> 2) & 0xfc);
-
-			return 0;
-
-		case JS_LT_MODE_CM2:
-
-			if (js_lt_read_packet(info->io, &data) != 64) return -1;
-
-			axes[0][0] = (data >> 48) & 0xff;
-			axes[0][1] = (data >> 40) & 0xff;
-			axes[0][2] = (data >> 32) & 0xff;
-			axes[0][3] = (data >> 24) & 0xff;
-			axes[0][4] = (data >> 16) & 0xff;
-			axes[0][5] = (data >>  8) & 0xff;
-
-			buttons[0][0] = js_lt_reverse(data & 0xff);
-
-			return 0;
+		for (j = 63; j < info->buttons[i]; j++) {
+			buttons[i][l >> 5] |= js_lt_get_bits(info, i, 1) << (l & 0x1f);
+			l++;
+		}
 	}
 
-	return -1;
+	return ret;
 }
 
 /*
@@ -225,15 +296,18 @@ static int js_lt_close(struct js_dev *jd)
 }
 
 /*
- * js_lt_trigger_sequence() sends a trigger & delay sequence
- * to reset/initialize a Logitech joystick.
+ * js_lt_init_digital() sends a trigger & delay sequence
+ * to reset and initialize a Logitech joystick into digital mode.
  */
 
-static void __init js_lt_trigger_sequence(int io, int *seq)
+static void __init js_lt_init_digital(int io)
 {
-	while (*seq) {
+	int seq[] = { 3, 2, 3, 10, 6, 11, 7, 9, 11, 0 };
+	int i;
+
+	for (i = 0; seq[i]; i++) {
 		outb(0xff,io);
-		udelay(*seq++);
+		mdelay(seq[i]);
 	}
 }
 
@@ -242,35 +316,45 @@ static void __init js_lt_trigger_sequence(int io, int *seq)
  * Logitech joysticks.
  */
 
-static void __init js_lt_init_corr(int num_axes, int mode, int **axes, struct js_corr **corr)
+static void __init js_lt_init_corr(int id, int naxes10, int naxes8, int naxes1, int *axes, struct js_corr *corr)
 {
 	int j;
+	
+	if (id == JS_LT_ID_WMED) axes[2] = 128;	/* Throttle fixup */
+	if (id == JS_LT_ID_WMI)  axes[2] = 512;
+	if (id == JS_LT_ID_WM3D) axes[3] = 128;	
 
-	for (j = 0; j < num_axes; j++) {
-		corr[0][j].type = JS_CORR_BROKEN;
-		corr[0][j].prec = 2;
-		corr[0][j].coef[0] = axes[0][j] - 8;
-		corr[0][j].coef[1] = axes[0][j] + 8;
-		corr[0][j].coef[2] = (1 << 29) / (127 - 32);
-		corr[0][j].coef[3] = (1 << 29) / (127 - 32);
+	if (id == JS_LT_ID_WGPE) {		/* Tilt fixup */
+		axes[0] = 512;
+		axes[1] = 512;
 	}
 
-	switch (mode) {
-		case JS_LT_MODE_TPD:  j = 0; break;
-		case JS_LT_MODE_WMED: j = 3; break;
-		case JS_LT_MODE_CM2:  j = 6; break;
-		default:	      j = 0; break;
+	for (j = 0; j < naxes10; j++) {
+		corr[j].type = JS_CORR_BROKEN;
+		corr[j].prec = 2;
+		corr[j].coef[0] = axes[j] - 16;
+		corr[j].coef[1] = axes[j] + 16;
+		corr[j].coef[2] = (1 << 29) / (256 - 32);
+		corr[j].coef[3] = (1 << 29) / (256 - 32);
 	}
 
-	for (; j < num_axes; j++) {
-		corr[0][j].type = JS_CORR_BROKEN;
-		corr[0][j].prec = 0;
-		corr[0][j].coef[0] = 0;
-		corr[0][j].coef[1] = 0;
-		corr[0][j].coef[2] = (1 << 29);
-		corr[0][j].coef[3] = (1 << 29);
+	for (; j < naxes8 + naxes10; j++) {
+		corr[j].type = JS_CORR_BROKEN;
+		corr[j].prec = 1;
+		corr[j].coef[0] = axes[j] - 2;
+		corr[j].coef[1] = axes[j] + 2;
+		corr[j].coef[2] = (1 << 29) / (64 - 16);
+		corr[j].coef[3] = (1 << 29) / (64 - 16);
 	}
 
+	for (; j < naxes1 + naxes8 + naxes10; j++) {
+		corr[j].type = JS_CORR_BROKEN;
+		corr[j].prec = 0;
+		corr[j].coef[0] = 0;
+		corr[j].coef[1] = 0;
+		corr[j].coef[2] = (1 << 29);
+		corr[j].coef[3] = (1 << 29);
+	}
 }
 
 /*
@@ -279,61 +363,157 @@ static void __init js_lt_init_corr(int num_axes, int mode, int **axes, struct js
 
 static struct js_port __init *js_lt_probe(int io, struct js_port *port)
 {
-	struct js_lt_info info;
-	char *name;
-	int axes, buttons, i;
-	__u64 data;
-	unsigned char u;
+	struct js_lt_info iniinfo;
+	struct js_lt_info *info = &iniinfo;
+	char name[32];
+	int i, j, t;
 
 	if (check_region(io, 1)) return port;
 
-	if (((u = inb(io)) & 3) == 3) return port;
-	outb(0xff,io);
-	if (!((inb(io) ^ u) & ~u & 0xf)) return port;
+	js_lt_init_digital(io);
 
-	if (!(i = js_lt_read_packet(io, &data))) {
-		udelay(JS_LT_MAX_DELAY);
-		js_lt_trigger_sequence(io, js_lt_seq_reset);
-		js_lt_trigger_sequence(io, js_lt_seq_init);
-		i = js_lt_read_packet(io, &data);
+	memset(info, 0, sizeof(struct js_lt_info));
+
+	info->length[0] = info->length[1] = JS_LT_MAX_LENGTH;
+
+	info->io = io;
+	js_lt_read_packet(info);
+	
+	if (info->ret[0] >= JS_LT_MIN_LEN_LENGTH)
+		js_lt_move_bits(info, js_lt_get_bits(info, 0, 10));
+
+	info->length[0] = info->length[1] = 0;
+
+	for (i = 0; i < 2; i++) {
+
+		if (info->ret[i] < JS_LT_MIN_ID_LENGTH) continue; /* Minimum ID packet length */
+
+		if (info->ret[i] < (t = js_lt_get_bits(info, i, 10))) {
+			printk(KERN_WARNING "joy-logitech: Short ID packet: reported: %d != read: %d\n",
+				t, info->ret[i]); 
+			continue;
+		}
+
+		if (info->ret[i] > t)
+			info->bugs[i] |= JS_LT_BUG_LONGID;
+
+#ifdef JS_LT_DEBUG
+		printk(KERN_DEBUG "joy-logitech: id %d length %d", i, t);
+#endif
+
+		info->id[i] = js_lt_get_bits(info, i, 4) | (js_lt_get_bits(info, i, 4) << 4);
+
+		if ((t = js_lt_get_bits(info, i, 4)) & JS_LT_FLAG_HAT) info->hats[i]++;
+
+#ifdef JS_LT_DEBUG
+		printk(KERN_DEBUG "joy-logitech: id %d flags %d", i, t);
+#endif
+
+		if ((info->length[i] = js_lt_get_bits(info, i, 10)) >= JS_LT_MAX_LENGTH) {
+			printk(KERN_WARNING "joy-logitech: Expected packet length too long (%d).\n",
+				info->length[i]);
+			continue;
+		}
+
+		if (info->length[i] < JS_LT_MIN_LENGTH) {
+			printk(KERN_WARNING "joy-logitech: Expected packet length too short (%d).\n",
+				info->length[i]);
+			continue;
+		}
+
+		info->axes8[i] = js_lt_get_bits(info, i, 4);
+		info->buttons[i] = js_lt_get_bits(info, i, 6);
+
+		if (js_lt_get_bits(info, i, 6) != 8 && info->hats[i]) {
+			printk(KERN_WARNING "joy-logitech: Other than 8-dir POVs not supported yet.\n");
+			continue;
+		}
+
+		info->buttons[i] += js_lt_get_bits(info, i, 6);
+		info->hats[i] += js_lt_get_bits(info, i, 4);
+
+		j = js_lt_get_bits(info, i, 4);
+
+		if (t & JS_LT_FLAG_10BIT) {
+			info->axes10[i] = info->axes8[i] - j;
+			info->axes8[i] = j;
+		}
+
+		t = js_lt_get_bits(info, i, 4);
+
+		for (j = 0; j < t; j++)
+			info->name[i][j] = js_lt_get_bits(info, i, 8);
+		info->name[i][j] = 0;
+
+		switch (info->id[i]) {
+			case JS_LT_ID_TPD:
+				info->pad[i] = 4;
+				info->buttons[i] -= 4;
+				break;
+			case JS_LT_ID_WGP:
+				info->pad[i] = 0;
+				info->buttons[i] -= 4;
+				break;
+			default:
+				info->pad[i] = -1;
+				break;
+		}
+
+		if (info->length[i] != 
+			(t = 8 + info->buttons[i] + info->axes10[i] * 10 + info->axes8[i] * 8 +
+			info->hats[i] * 4 + (info->pad[i] != -1) * 4)) {
+			printk(KERN_WARNING "js%d: Expected lenght %d != data length %d\n", i, t, info->length[i]);
+		}
+
 	}
 
-	switch (i) {
-		case 0:
-			return port;
-		case 20:
-			info.mode = JS_LT_MODE_TPD;
-			axes = 2; buttons = 8; name = "Logitech ThunderPad Digital";
-			break;
-		case 42:
-			info.mode = JS_LT_MODE_WMED;
-			axes = 5; buttons = 6; name = "Logitech WingMan Extreme Digital";
-			break;
-		case 64:
-			info.mode = JS_LT_MODE_CM2;
-			axes = 6; buttons = 8; name = "Logitech CyberMan 2";
-			break;
-		case 72:
-		case 144:
-			return port;
-		default:
-			printk(KERN_WARNING "joy-logitech: unknown joystick device detected "
-				"(io=%#x, count=%d, data=0x%08x%08x), contact <vojtech@suse.cz>\n",
-				io, i, (int)(data >> 32), (int)(data & 0xffffffff));
-			return port;
-	}
-
-	info.io = io;
+	if (!info->length[0] && !info->length[1])
+		return port;
 
 	request_region(io, 1, "joystick (logitech)");
-	port = js_register_port(port, &info, 1, sizeof(struct js_lt_info), js_lt_read);
-	printk(KERN_INFO "js%d: %s at %#x\n",
-		js_register_device(port, 0, axes, buttons, name, js_lt_open, js_lt_close), name, io);
 
-	udelay(JS_LT_MAX_DELAY);
+	port = js_register_port(port, info, 2, sizeof(struct js_lt_info), js_lt_read);
+	info = port->info;
 
-	js_lt_read(port->info, port->axes, port->buttons);
-	js_lt_init_corr(axes, info.mode, port->axes, port->corr);
+	for (i = 0; i < 2; i++)
+		if (info->length[i] > 0) {
+			sprintf(name, info->id[i] < JS_LT_MAX_ID ?
+				js_lt_names[info->id[i]] : js_lt_names[JS_LT_MAX_ID], info->id[i]); 
+			printk(KERN_INFO "js%d: %s [%s] at %#x\n",
+				js_register_device(port, i,
+					info->axes10[i] + info->axes8[i] + ((info->hats[i] + (info->pad[i] >= 0)) << 1),
+					info->buttons[i], name, js_lt_open, js_lt_close), name, info->name[i], io);
+		}
+
+	mdelay(JS_LT_INIT_DELAY);
+	if (js_lt_read(info, port->axes, port->buttons)) {
+		if (info->ret[0] < 1) info->bugs[0] |= JS_LT_BUG_IGNTRIG;
+		if (info->ret[1] < 1) info->bugs[1] |= JS_LT_BUG_IGNTRIG;
+		mdelay(JS_LT_DATA_DELAY);
+		js_lt_read(info, port->axes, port->buttons);
+	}
+
+	for (i = 0; i < 2; i++)
+		if (info->length[i] > 0) {
+#ifdef JS_LT_DEBUG
+				printk(KERN_DEBUG "js%d: length %d ret %d id %d buttons %d axes10 %d axes8 %d "
+						  "pad %d hats %d name %s explen %d\n",
+					i, info->length[i], info->ret[i], info->id[i],
+					info->buttons[i], info->axes10[i], info->axes8[i],
+					info->pad[i], info->hats[i], info->name[i],
+					8 + info->buttons[i] + info->axes10[i] * 10 + info->axes8[i] * 8 +
+					info->hats[i] * 4 + (info->pad[i] != -1) * 4);
+#endif
+				if (info->bugs[i]) {
+					printk(KERN_WARNING "js%d: Firmware bugs detected:%s%s%s%s\n", i,
+						info->bugs[i] & JS_LT_BUG_BUTTONS ? " init_buttons" : "",
+						info->bugs[i] & JS_LT_BUG_LONGID ? " long_id" : "",
+						info->bugs[i] & JS_LT_BUG_LONGDATA ? " long_data" : "",
+						info->bugs[i] & JS_LT_BUG_IGNTRIG ? " ignore_trigger" : "");
+				}
+				js_lt_init_corr(info->id[i], info->axes10[i], info->axes8[i],
+					((info->pad[i] >= 0) + info->hats[i]) << 1, port->axes[i], port->corr[i]);
+	}
 
 	return port;
 }
@@ -359,10 +539,13 @@ int __init js_lt_init(void)
 #ifdef MODULE
 void cleanup_module(void)
 {
+	int i;
 	struct js_lt_info *info;
 
-	while (js_lt_port != NULL) {
-		js_unregister_device(js_lt_port->devs[0]);
+	while (js_lt_port) {
+		for (i = 0; i < js_lt_port->ndevs; i++)
+			 if (js_lt_port->devs[i])
+				js_unregister_device(js_lt_port->devs[i]);
 		info = js_lt_port->info;
 		release_region(info->io, 1);
 		js_lt_port = js_unregister_port(js_lt_port);

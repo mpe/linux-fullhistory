@@ -1,12 +1,14 @@
 /*
- *  joy-assasin.c  Version 1.2
+ *  joy-assassin.c  Version 1.2
  *
- *  Copyright (c) 1998 Vojtech Pavlik
+ *  Copyright (c) 1998-1999 Vojtech Pavlik
+ *
+ *  Sponsored by SuSE
  */
 
 /*
  * This is a module for the Linux joystick driver, supporting
- * joysticks using FP-Gaming's Assasin 3D protocol.
+ * joysticks using FP-Gaming's Assassin 3D protocol.
  */
 
 /*
@@ -38,13 +40,13 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/string.h>
+#include <linux/init.h>
 
-#define JS_AS_MAX_START		250
-#define JS_AS_MAX_STROBE	50
-#define JS_AS_MAX_TIME		2400
+#define JS_AS_MAX_START		1000
+#define JS_AS_DELAY_READ	3000
 #define JS_AS_MAX_LENGTH	40
 
-#define JS_AS_MODE_A3D		1	/* Assasin 3D */
+#define JS_AS_MODE_A3D		1	/* Assassin 3D */
 #define JS_AS_MODE_PAN		2	/* Panther */
 #define JS_AS_MODE_OEM		3	/* Panther OEM version */
 #define JS_AS_MODE_PXL		4	/* Panther XL */
@@ -52,7 +54,7 @@
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
 MODULE_PARM(js_as, "2-24i");
 
-static int js_as[]={-1,0,0,-1,0,0,-1,0,0,-1,0,0,-1,0,0,-1,0,0,-1,0,0,-1,0,0,-1,0,0};
+static int __initdata js_as[] = { -1,0,0,-1,0,0,-1,0,0,-1,0,0,-1,0,0,-1,0,0,-1,0,0,-1,0,0 };
 
 static int js_as_port_list[] __initdata = {0x201, 0};
 static struct js_port* js_as_port __initdata = NULL;
@@ -67,44 +69,33 @@ struct js_as_info {
 };
 
 /*
- * js_as_read_packet() reads an Assasin 3D packet.
+ * js_as_read_packet() reads an Assassin 3D packet.
  */
 
 static int js_as_read_packet(int io, int length, char *data)
 {
 	unsigned char u, v;
 	int i;
-	unsigned int t, t1;
+	unsigned int t, p;
 	unsigned long flags;
-
-	int start = (js_time_speed * JS_AS_MAX_START) >> 10;
-	int strobe = (js_time_speed * JS_AS_MAX_STROBE) >> 10;
 
 	i = 0;
 
 	__save_flags(flags);
 	__cli();
+
 	outb(0xff,io);
+	v = inb(io);
+	t = p = JS_AS_MAX_START;
 
-	u = inb(io);
-	t = js_get_time();
-
-	do {
-		v = inb(io);
-		t1 = js_get_time();
-	} while (u == v && js_delta(t1, t) < start);
-
-	t = t1;
-
-	do {
-		v = inb(io);
-		t1 = js_get_time();
-		if ((u ^ v) & u & 0x10) {
+	while (t > 0 && i < length) {
+		t--;
+		u = v; v = inb(io);
+		if (~v & u & 0x10) {
 			data[i++] = v >> 5;
-			t = t1;
+			p = t = (p - t) << 3;
 		}
-		u = v;
-	} while (i < length && js_delta(t1,t) < strobe);
+	}
 
 	__restore_flags(flags);
 
@@ -181,11 +172,8 @@ static int js_as_read(void *xinfo, int **axes, int **buttons)
 			if (info->rudder) axes[1][0] = info->an.axes[0];
 
 			return 0;
-
-		default:
-			printk("Error.\n");
-			return -1;
 	}
+	return -1;
 }
 
 /*
@@ -254,7 +242,7 @@ static void __init js_as_pxl_init_corr(struct js_corr **corr, int **axes)
 
 /*
  * js_as_as_init_corr() initializes the correction values for
- * the Panther and Assasin.
+ * the Panther and Assassin.
  */
 
 static void __init js_as_as_init_corr(struct js_corr **corr)
@@ -305,25 +293,27 @@ static struct js_port __init *js_as_probe(int io, int mask0, int mask1, struct j
 	if (io < 0) return port;
 
 	if (check_region(io, 1)) return port;
-	if (((u = inb(io)) & 3) == 3) return port;
-	outb(0xff,io);
-	if (!((inb(io) ^ u) & ~u & 0xf)) return port;
 
-	if (js_as_read_packet(io, 1, data) != 1) return port;
+	i = js_as_read_packet(io, JS_AS_MAX_LENGTH, data);
+
+	printk("%d\n", i);
+
+	if (!i) return port;
+	if (js_as_csum(data, i)) return port;
 
 	if (data[0] && data[0] <= 4) {
 		info->mode = data[0];
 		info->io = io;
-		request_region(io, 1, "joystick (assasin)");
+		request_region(io, 1, "joystick (assassin)");
 		port = js_register_port(port, info, 3, sizeof(struct js_as_info), js_as_read);
 		info = port->info;
 	} else {
-		printk(KERN_WARNING "joy-assasin: unknown joystick device detected "
+		printk(KERN_WARNING "joy-assassin: unknown joystick device detected "
 			"(io=%#x, id=%d), contact <vojtech@suse.cz>\n", io, data[0]);
 		return port;
 	}
 
-	udelay(JS_AS_MAX_TIME);
+	udelay(JS_AS_DELAY_READ);
 
 	if (info->mode == JS_AS_MODE_PXL) {
 			printk(KERN_INFO "js%d: MadCatz Panther XL at %#x\n",
@@ -342,9 +332,9 @@ static struct js_port __init *js_as_probe(int io, int mask0, int mask1, struct j
 	}
 
 	switch (info->mode) {
-		case JS_AS_MODE_A3D: name = "FP-Gaming Assasin 3D"; break;
+		case JS_AS_MODE_A3D: name = "FP-Gaming Assassin 3D"; break;
 		case JS_AS_MODE_PAN: name = "MadCatz Panther"; break;
-		case JS_AS_MODE_OEM: name = "OEM Assasin 3D"; break;
+		case JS_AS_MODE_OEM: name = "OEM Assassin 3D"; break;
 		default: name = "This cannot happen"; break;
 	}
 
@@ -374,11 +364,14 @@ static struct js_port __init *js_as_probe(int io, int mask0, int mask1, struct j
 }
 
 #ifndef MODULE
-void __init js_as_setup(char *str, int *ints)
+int __init js_as_setup(SETUP_PARAM)
 {
 	int i;
+	SETUP_PARSE(24);
 	for (i = 0; i <= ints[0] && i < 24; i++) js_as[i] = ints[i+1];
+	return 1;
 }
+__setup("js_as=", js_as_setup);
 #endif
 
 #ifdef MODULE
@@ -398,7 +391,7 @@ int __init js_as_init(void)
 	if (js_as_port) return 0;
 
 #ifdef MODULE
-	printk(KERN_WARNING "joy-assasin: no joysticks found\n");
+	printk(KERN_WARNING "joy-assassin: no joysticks found\n");
 #endif
 
 	return -ENODEV;
@@ -410,9 +403,9 @@ void cleanup_module(void)
 	int i;
 	struct js_as_info *info;
 
-	while (js_as_port != NULL) {
+	while (js_as_port) {
 		for (i = 0; i < js_as_port->ndevs; i++)
-			if (js_as_port->devs[i] != NULL)
+			if (js_as_port->devs[i])
 				js_unregister_device(js_as_port->devs[i]);
 		info = js_as_port->info;
 		release_region(info->io, 1);

@@ -1,13 +1,15 @@
 /*
  *  joy-analog.h  Version 1.2
  *
- *  Copyright (c) 1996-1998 Vojtech Pavlik
+ *  Copyright (c) 1996-1999 Vojtech Pavlik
+ *
+ *  Sponsored by SuSE
  */
 
 /*
  * This file is designed to be included in any joystick driver
  * that communicates with standard analog joysticks. This currently
- * is: joy-analog.c, joy-assasin.c, and joy-lightning.c
+ * is: joy-analog.c, joy-assassin.c, and joy-lightning.c
  */
 
 /*
@@ -29,6 +31,8 @@
  * e-mail - mail your message to <vojtech@suse.cz>, or by paper mail:
  * Vojtech Pavlik, Ucitelska 1576, Prague 8, 182 00 Czech Republic
  */
+
+#include <linux/bitops.h>
 
 #define JS_AN_AXES_STD		0x0f
 #define JS_AN_BUTTONS_STD	0xf0
@@ -53,7 +57,6 @@ static struct {
 } js_an_hat_to_axis[] = {{ 0, 0}, { 0,-1}, { 1, 0}, { 0, 1}, {-1, 0}};
 
 struct js_an_info {
-	int io;
 	unsigned char mask[2];
 	unsigned int extensions;
 	int axes[4];
@@ -75,7 +78,7 @@ static void js_an_decode(struct js_an_info *info, int **axes, int **buttons)
 	if (info->mask[1] & JS_AN_BUTTONS_STD) buttons[1][0] = 0;
 
 	if (info->extensions & JS_AN_ANY_CHF) {
-		switch (info->buttons) {
+		switch (info->buttons & 0xf) {
 			case 0x1: buttons[0][0] = 0x01; break;
 			case 0x2: buttons[0][0] = 0x02; break;
 			case 0x4: buttons[0][0] = 0x04; break;
@@ -134,19 +137,6 @@ static void js_an_decode(struct js_an_info *info, int **axes, int **buttons)
 	}
 }
 
-/*
- * js_an_count_bits() counts set bits in a byte.
- */
-
-static inline int js_an_count_bits(unsigned long c)
-{
-	int i = 0;
-	while (c) {
-		i += c & 1;
-		c >>= 1;
-	}
-	return i;
-}
 
 /*
  * js_an_init_corr() initializes the correction values for
@@ -158,7 +148,7 @@ static void __init js_an_init_corr(struct js_an_info *info, int **axes, struct j
 	int i, j, t;
 
 	for (i = 0; i < 2; i++)
-	for (j = 0; j < js_an_count_bits(info->mask[i] & 0xf); j++) {
+	for (j = 0; j < hweight8(info->mask[i] & 0xf); j++) {
 
 		if ((j == 2 && (info->mask[i] & 0xb) == 0xb) ||
 		    (j == 3 && (info->mask[i] & 0xf) == 0xf)) {
@@ -175,9 +165,9 @@ static void __init js_an_init_corr(struct js_an_info *info, int **axes, struct j
 		corr[i][j].coef[3] = (1 << 29) / (t - (t >> 2) + 1);
 	}
 
-	i = js_an_count_bits(info->mask[0] & 0xf);
+	i = hweight8(info->mask[0] & 0xf);
 
-	for (j = i; j < i + (js_an_count_bits(info->extensions & JS_AN_HATS_ALL) << 1); j++) {
+	for (j = i; j < i + (hweight8(info->extensions & JS_AN_HATS_ALL) << 1); j++) {
 		corr[0][j].type = JS_CORR_BROKEN;
 		corr[0][j].prec = 0;
 		corr[0][j].coef[0] = 0;
@@ -204,6 +194,7 @@ static int __init js_an_probe_devs(struct js_an_info *info, int exist, int mask0
 		info->mask[1] = mask1 & (exist | 0xf0) & ~info->mask[0];
 		info->extensions = (mask0 >> 8) & ((exist & JS_AN_HAT_FCS) | ((exist << 2) & JS_AN_BUTTONS_PXY_XY) |
 					((exist << 4) & JS_AN_BUTTONS_PXY_UV) | JS_AN_ANY_CHF);
+
 		if (info->extensions & JS_AN_BUTTONS_PXY) {
 			info->mask[0] &= ~((info->extensions & JS_AN_BUTTONS_PXY_XY) >> 2);
 			info->mask[0] &= ~((info->extensions & JS_AN_BUTTONS_PXY_UV) >> 4);
@@ -212,7 +203,7 @@ static int __init js_an_probe_devs(struct js_an_info *info, int exist, int mask0
 		if (info->extensions & JS_AN_HAT_FCS) {
 			info->mask[0] &= ~JS_AN_HAT_FCS;
 			info->mask[1] = 0;
-			info->extensions &= ~(JS_AN_BUTTON_PXY_Y | JS_AN_BUTTON_PXY_U);
+			info->extensions &= ~(JS_AN_BUTTON_PXY_Y | JS_AN_BUTTON_PXY_V);
 		}
 		if (info->extensions & JS_AN_ANY_CHF) {
 			info->mask[0] |= 0xf0;
@@ -233,8 +224,7 @@ static int __init js_an_probe_devs(struct js_an_info *info, int exist, int mask0
 				info->mask[0] = 0xcc; /* joystick 1 */
 				break;
 			case 0xf:
-				info->mask[0] = 0x33; /* joysticks 0 and 1 */
-				info->mask[1] = 0xcc;
+				info->mask[0] = 0xff; /* 4-axis 4-button joystick */
 				break;
 			default:
 				printk(KERN_WARNING "joy-analog: Unknown joystick device detected "
@@ -252,7 +242,7 @@ static int __init js_an_probe_devs(struct js_an_info *info, int exist, int mask0
 
 static inline int js_an_axes(int i, struct js_an_info *info)
 {
-	return js_an_count_bits(info->mask[i] & 0x0f) + js_an_count_bits(info->extensions & JS_AN_HATS_ALL) * 2;
+	return hweight8(info->mask[i] & 0x0f) + hweight8(info->extensions & JS_AN_HATS_ALL) * 2;
 }
 
 /*
@@ -261,9 +251,9 @@ static inline int js_an_axes(int i, struct js_an_info *info)
 
 static inline int js_an_buttons(int i, struct js_an_info *info)
 {
-	return js_an_count_bits(info->mask[i] & 0xf0) +
+	return hweight8(info->mask[i] & 0xf0) +
 	       (info->extensions & JS_AN_BUTTONS_CHF) * 2 +
-	       js_an_count_bits(info->extensions & JS_AN_BUTTONS_PXY);
+	       hweight8(info->extensions & JS_AN_BUTTONS_PXY);
 }
 
 /*
@@ -276,13 +266,13 @@ static char __init *js_an_name(int i, struct js_an_info *info)
 {
 
 	sprintf(js_an_name_buf, "Analog %d-axis %d-button",
-		js_an_count_bits(info->mask[i] & 0x0f),
+		hweight8(info->mask[i] & 0x0f),
 		js_an_buttons(i, info));
 
 	if (info->extensions & JS_AN_HATS_ALL)
 		sprintf(js_an_name_buf, "%s %d-hat",
 			js_an_name_buf,
-			js_an_count_bits(info->extensions & JS_AN_HATS_ALL));
+			hweight8(info->extensions & JS_AN_HATS_ALL));
 
 	strcat(js_an_name_buf, " joystick");
 
@@ -291,7 +281,7 @@ static char __init *js_an_name(int i, struct js_an_info *info)
 			js_an_name_buf,
 			info->extensions & JS_AN_ANY_CHF ? " CHF" : "",
 			info->extensions & JS_AN_HAT_FCS ? " FCS" : "",
-			info->extensions & JS_AN_BUTTONS_PXY ? " XY-button" : "");
+			info->extensions & JS_AN_BUTTONS_PXY ? " XY/UV" : "");
 
 	return js_an_name_buf;
 }

@@ -4,7 +4,7 @@
  *  Copyright (C) 1995, 1996 by Volker Lendecke
  *  Modified for big endian by J.F. Chadima and David S. Miller
  *  Modified 1997 Peter Waltenberg, Bill Hawes, David Woodhouse for 2.1 dcache
- *  Modified 1998 Wolfram Pienkoss for NLS
+ *  Modified 1998, 1999 Wolfram Pienkoss for NLS
  *  Modified 1999 Wolfram Pienkoss for directory caching
  *
  */
@@ -29,7 +29,9 @@
 
 #ifdef CONFIG_NCPFS_NLS
 #include <linux/nls.h>
-#endif
+#else
+#include <linux/ctype.h>
+#endif /* CONFIG_NCPFS_NLS */
 
 #include <linux/ncp_fs.h>
 
@@ -97,81 +99,39 @@ ncp_mount_subdir(struct ncp_server *, struct nw_info_struct *,
 #endif	/* CONFIG_NCPFS_MOUNT_SUBDIR */
 
 #ifdef CONFIG_NCPFS_NLS
-/* This are the NLS conversion routines with inspirations and code parts
- * from the vfat file system and hints from Petr Vandrovec.
- */
 
-/*
- * It should be replaced by charset specifc conversion. Gordon Chaffee
- * has prepared some things, but I don't know, what he thinks about it.
- * The conversion tables for the io charsets should be generatable by
- * Unicode table, shouldn't it? I have written so generation code for it.
- * The tables for the vendor specific codepages...? Hmm. The Samba sources
- * contains also any hints.
- */
+inline unsigned char ncp__tolower(struct nls_table *, unsigned char);
+inline unsigned char ncp__toupper(struct nls_table *, unsigned char);
+int ncp__io2vol(struct ncp_server *, unsigned char *, unsigned int *,
+				const unsigned char *, unsigned int, int);
+int ncp__vol2io(struct ncp_server *, unsigned char *, unsigned int *,
+				const unsigned char *, unsigned int, int);
 
-#define toupperif(c, u) ((((u) != 0) && ((c) >= 'a') && ((c) <= 'z')) \
-			? (c)-('a'-'A') : (c))
-#define tolowerif(c, u) ((((u) != 0) && ((c) >= 'A') && ((c) <= 'Z')) \
-			? (c)-('A'-'a') : (c))
-
-static inline void
-io2vol(struct ncp_server *server, char *name, int case_trans)
-{
-	unsigned char nc;
-	unsigned char *np;
-	unsigned char *up;
-	struct nls_unicode uc;
-	struct nls_table *nls_in;
-	struct nls_table *nls_out;
-
-	nls_in = server->nls_io;
-	nls_out = server->nls_vol;
-	np = name;
-
-	while (*np)
-	{
-		nc = 0;
-		uc = nls_in->charset2uni[toupperif(*np, case_trans)];
-		up = nls_out->page_uni2charset[uc.uni2];
-		if (up != NULL)	nc = up[uc.uni1];
-		if (nc != 0) *np = nc;
-		np++;
-	}
-}
-
-static inline void
-vol2io(struct ncp_server *server, char *name, int case_trans)
-{
-	unsigned char nc;
-	unsigned char *np;
-	unsigned char *up;
-	struct nls_unicode uc;
-	struct nls_table *nls_in;
-	struct nls_table *nls_out;
-
-	nls_in = server->nls_vol;
-	nls_out = server->nls_io;
-	np = name;
-
-	while (*np)
-	{
-		nc = 0;
-		uc = nls_in->charset2uni[*np];
-		up = nls_out->page_uni2charset[uc.uni2];
-		if (up != NULL)	nc = up[uc.uni1];
-		if (nc == 0) nc = *np;
-		*np = tolowerif(nc, case_trans);
-		np++;
-	}
-}
+#define NCP_ESC			':'
+#define NCP_IO_TABLE(dentry)	(NCP_SERVER((dentry)->d_inode)->nls_io)
+#define ncp_tolower(t, c)	ncp__tolower(t, c)
+#define ncp_toupper(t, c)	ncp__toupper(t, c)
+#define ncp_io2vol(S,m,i,n,k,U)	ncp__io2vol(S,m,i,n,k,U)
+#define ncp_vol2io(S,m,i,n,k,U)	ncp__vol2io(S,m,i,n,k,U)
 
 #else
 
-#define io2vol(S,N,U) if (U) str_upper(N)
-#define vol2io(S,N,U) if (U) str_lower(N)
+int ncp__io2vol(unsigned char *, unsigned int *,
+				const unsigned char *, unsigned int, int);
+int ncp__vol2io(unsigned char *, unsigned int *,
+				const unsigned char *, unsigned int, int);
+
+#define NCP_IO_TABLE(dentry)	NULL
+#define ncp_tolower(t, c)	tolower(c)
+#define ncp_toupper(t, c)	toupper(c)
+#define ncp_io2vol(S,m,i,n,k,U)	ncp__io2vol(m,i,n,k,U)
+#define ncp_vol2io(S,m,i,n,k,U)	ncp__vol2io(m,i,n,k,U)
 
 #endif /* CONFIG_NCPFS_NLS */
+
+inline int
+ncp_strnicmp(struct nls_table *,
+		const unsigned char *, const unsigned char *, int);
 
 #define NCP_GET_AGE(dentry)	(jiffies - (dentry)->d_time)
 #define NCP_MAX_AGE(server)	((server)->dentry_ttl)

@@ -1,7 +1,9 @@
 /*
  *  joy-amiga.c  Version 1.2
  *
- *  Copyright (c) 1998 Vojtech Pavlik
+ *  Copyright (c) 1998-1999 Vojtech Pavlik
+ *
+ *  Sponsored by SuSE
  */
 
 /*
@@ -36,13 +38,14 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <asm/amigahw.h>
+#include <linux/init.h>
 
 static struct js_port* js_am_port __initdata = NULL;
 
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
 MODULE_PARM(js_am, "1-2i");
 
-static int js_am[]={0,0};
+static int __initdata js_am[] = { 0, 0 };
 
 /*
  * js_am_read() reads and Amiga joystick data.
@@ -69,7 +72,7 @@ static int js_am_read(void *info, int **axes, int **buttons)
 
 	axes[0][0] = ((data >> 1) & 1) - ((data >> 9) & 1);
 	data = ~(data ^ (data << 1));
-	axes[0][0] = ((data >> 1) & 1) - ((data >> 9) & 1);
+	axes[0][1] = ((data >> 1) & 1) - ((data >> 9) & 1);
 
 	return 0;
 }
@@ -114,11 +117,14 @@ static void __init js_am_init_corr(struct js_corr **corr)
 }
 
 #ifndef MODULE
-void __init js_am_setup(char *str, int *ints)
+int __init js_am_setup(SETUP_PARAM)
 {
 	int i;
+	SETUP_PARSE(2);
 	for (i = 0; i <= ints[0] && i < 2; i++) js_am[i] = ints[i+1];
+	return 1;
 }
+__setup("js_am=", js_am_setup);
 #endif
 
 #ifdef MODULE
@@ -148,8 +154,8 @@ int __init js_am_init(void)
 #ifdef MODULE
 void cleanup_module(void)
 {
-	while (js_am_port != NULL) {
-		if (js_am_port->devs[0] != NULL)
+	while (js_am_port) {
+		if (js_am_port->devs[0])
 			js_unregister_device(js_am_port->devs[0]);
 		js_am_port = js_unregister_port(js_am_port);
 	}

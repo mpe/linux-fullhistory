@@ -41,6 +41,43 @@ asmlinkage int sys_pipe(unsigned long * fildes)
 	return error;
 }
 
+/* common code for old and new mmaps */
+static inline long do_mmap2(
+	unsigned long addr, unsigned long len,
+	unsigned long prot, unsigned long flags,
+	unsigned long fd, unsigned long pgoff)
+{
+	int error = -EBADF;
+	struct file * file = NULL;
+
+	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
+	if (!(flags & MAP_ANONYMOUS)) {
+		file = fget(fd);
+		if (!file)
+			goto out;
+	}
+
+	down(&current->mm->mmap_sem);
+	lock_kernel();
+
+	error = do_mmap_pgoff(file, addr, len, prot, flags, pgoff);
+
+	unlock_kernel();
+	up(&current->mm->mmap_sem);
+
+	if (file)
+		fput(file);
+out:
+	return error;
+}
+
+asmlinkage long sys_mmap2(unsigned long addr, unsigned long len,
+	unsigned long prot, unsigned long flags,
+	unsigned long fd, unsigned long pgoff)
+{
+	return do_mmap2(addr, len, prot, flags, fd, pgoff);
+}
+
 /*
  * Perform the select(nd, in, out, ex, tv) and mmap() system
  * calls. Linux/i386 didn't use to be able to handle more than
@@ -59,31 +96,21 @@ struct mmap_arg_struct {
 
 asmlinkage int old_mmap(struct mmap_arg_struct *arg)
 {
-	int error = -EFAULT;
-	struct file * file = NULL;
 	struct mmap_arg_struct a;
+	int err = -EFAULT;
 
 	if (copy_from_user(&a, arg, sizeof(a)))
-		return -EFAULT;
+		goto out;
 
-	down(&current->mm->mmap_sem);
-	lock_kernel();
-	if (!(a.flags & MAP_ANONYMOUS)) {
-		error = -EBADF;
-		file = fget(a.fd);
-		if (!file)
-			goto out;
-	}
-	a.flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
+	err = -EINVAL;
+	if (a.offset & ~PAGE_MASK)
+		goto out;
 
-	error = do_mmap(file, a.addr, a.len, a.prot, a.flags, a.offset);
-	if (file)
-		fput(file);
+	err = do_mmap2(a.addr, a.len, a.prot, a.flags, a.fd, a.offset >> PAGE_SHIFT);
 out:
-	unlock_kernel();
-	up(&current->mm->mmap_sem);
-	return error;
+	return err;
 }
+
 
 extern asmlinkage int sys_select(int, fd_set *, fd_set *, fd_set *, struct timeval *);
 

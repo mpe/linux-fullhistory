@@ -80,8 +80,7 @@ extern rwlock_t xtime_lock;
 
 static inline unsigned long do_fast_gettimeoffset(void)
 {
-	register unsigned long eax asm("ax");
-	register unsigned long edx asm("dx");
+	register unsigned long eax, edx;
 
 	/* Read the Time Stamp Counter */
 

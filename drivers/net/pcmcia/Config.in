@@ -14,6 +14,7 @@ if [ "$CONFIG_NET_PCMCIA" = "y" ]; then
    dep_tristate '  New Media PCMCIA support' CONFIG_PCMCIA_NMCLAN $CONFIG_PCMCIA
    dep_tristate '  SMC 91Cxx PCMCIA support' CONFIG_PCMCIA_SMC91C92 $CONFIG_PCMCIA
    dep_tristate '  Xircom 16-bit PCMCIA support' CONFIG_PCMCIA_XIRC2PS $CONFIG_PCMCIA
+   dep_tristate '  Aironet 4500/4800 PCMCIA support ' CONFIG_AIRONET4500_CS $CONFIG_AIRONET4500 $CONFIG_PCMCIA
 
    if [ "$CONFIG_CARDBUS" = "y" ]; then
       dep_tristate '  3Com 3c575 CardBus support' CONFIG_PCMCIA_3C575 m

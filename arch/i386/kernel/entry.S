@@ -592,6 +592,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_ni_syscall)		/* streams2 */
 	.long SYMBOL_NAME(sys_vfork)            /* 190 */
 	.long SYMBOL_NAME(sys_getrlimit)
+	.long SYMBOL_NAME(sys_mmap2)
 
 	/*
 	 * NOTE!! This doesn't have to be exact - we just have
@@ -599,6 +600,6 @@ ENTRY(sys_call_table)
 	 * entries. Don't panic if you notice that this hasn't
 	 * been shrunk every time we add a new system call.
 	 */
-	.rept NR_syscalls-191
+	.rept NR_syscalls-192
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr

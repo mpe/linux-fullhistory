@@ -32,6 +32,9 @@ svc_create(struct svc_program *prog, unsigned int bufsize, unsigned int xdrsize)
 	struct svc_serv	*serv;
 
 	xdr_init();
+#ifdef RPC_DEBUG
+	rpc_register_sysctl();
+#endif
 
 	if (!(serv = (struct svc_serv *) kmalloc(sizeof(*serv), GFP_KERNEL)))
 		return NULL;

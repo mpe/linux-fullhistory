@@ -76,9 +76,7 @@ EXPORT_SYMBOL(svc_makesock);
 
 /* RPC statistics */
 #ifdef CONFIG_PROC_FS
-EXPORT_SYMBOL(rpc_proc_init);
 EXPORT_SYMBOL(rpc_proc_register);
-EXPORT_SYMBOL(rpc_register_sysctl);
 EXPORT_SYMBOL(rpc_proc_unregister);
 EXPORT_SYMBOL(rpc_proc_read);
 EXPORT_SYMBOL(svc_proc_register);

@@ -1,7 +1,9 @@
 /*
- * joystick.c  Version 1.2
+ *  joystick.c  Version 1.2
  *
- * Copyright (c) 1996-1998 Vojtech Pavlik
+ *  Copyright (c) 1996-1999 Vojtech Pavlik
+ *
+ *  Sponsored by SuSE
  */
 
 /*
@@ -33,7 +35,6 @@
 #include <asm/io.h>
 #include <asm/system.h>
 #include <asm/segment.h>
-#include <linux/config.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/joystick.h>
@@ -42,17 +43,24 @@
 #include <linux/malloc.h>
 #include <linux/mm.h>
 #include <linux/module.h>
-#include <linux/version.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,0)
-#include <linux/spinlock.h>
 #include <linux/poll.h>
-#endif
+#include <linux/config.h>
+#include <linux/init.h>
 
 /*
  * Configurable parameters.
  */
 
 #define JS_REFRESH_TIME		HZ/50	/* Time between two reads of joysticks (20ms) */
+
+/*
+ * Exported symbols.
+ */
+
+EXPORT_SYMBOL(js_register_port);
+EXPORT_SYMBOL(js_unregister_port);
+EXPORT_SYMBOL(js_register_device);
+EXPORT_SYMBOL(js_unregister_device);
 
 /*
  * Buffer macros.
@@ -75,261 +83,11 @@ spinlock_t js_lock = SPIN_LOCK_UNLOCKED;
 static int js_use_count = 0;
 
 /*
- * Exported variables.
- */
-
-unsigned int js_time_speed = 0;
-js_time_func js_get_time;
-js_delta_func js_delta;
-
-unsigned int js_time_speed_a = 0;
-js_time_func js_get_time_a;
-js_delta_func js_delta_a;
-
-/*
  * Module info.
  */
 
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
 MODULE_SUPPORTED_DEVICE("js");
-
-/*
- * js_get_time_*() are different functions to get current time.
- * js_delta_*() are functions to compute time difference.
- */
-
-#ifdef __i386__
-
-static unsigned int js_get_time_rdtsc(void)
-{
-	unsigned int x;
-	__asm__ __volatile__ ( "rdtsc" : "=A" (x) );
-	return x;
-}
-
-static unsigned int js_get_time_pit(void)
-{
-	unsigned long flags;
-	unsigned int x;
-
-	__save_flags(flags);
-	__cli();
-	outb(0, 0x43);
-	x = inb(0x40);
-	x |= inb(0x40) << 8;
-	__restore_flags(flags);
-
-	return x;
-}
-
-static int js_delta_pit(unsigned int x, unsigned int y)
-{
-	return y - x + ( y < x ? 1193180L / HZ : 0 );
-}
-
-static unsigned int js_get_time_counter(void)
-{
-	static int time_counter = 0;
-	return time_counter++;
-}
-
-#else
-#ifdef __alpha__
-
-static unsigned int js_get_time_rpcc(void)
-{
-	unsigned int x;
-	__asm__ __volatile__ ( "rpcc %0" : "=r" (x) );
-	return x;
-}
-
-#else
-
-#ifndef MODULE
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,0)
-static unsigned int js_get_time_system(void)
-{
-	static struct timeval js_tv;
-	get_fast_time(&js_tv);
-	return js_tv.tv_sec * 1000000L + js_tv.tv_usec;
-}
-#endif
-#endif
-
-#endif
-#endif
-
-static int js_delta_normal(unsigned int x, unsigned int y)
-{
-	return x - y;
-}
-
-/*
- * js_calibrate_time() calibrates a given timer.
- */
-
-static int __init js_calibrate_time(js_time_func get_time, js_delta_func delta)
-{
-	unsigned int t1, t2, t3;
-	unsigned long flags;
-
-	__save_flags(flags);
-	__cli();
-	t1 = get_time();
-	udelay(1000);
-	t2 = get_time();
-	t3 = get_time();
-	__restore_flags(flags);
-
-	return delta(t2, t1) - delta(t3, t2);
-}
-
-/*
- * js_calibrate_time_counter() calibrates the counter timer, which can't
- * be calibrated using the above function.
- */
-
-#ifdef __i386__
-
-static int __init js_calibrate_time_counter(void)
-{
-	unsigned int i, j, t1, t2, t3;
-
-	j = jiffies; do { inb(0x201); t1 = js_get_time_counter(); } while (j == jiffies);
-	j = jiffies; do { inb(0x201); t2 = js_get_time_counter(); } while (j == jiffies);
-
-	j = (t2 - t1) * HZ / 1000;
-
-	t1 = js_get_time_pit();
-	for (i = 0; i < 1000; i++) {
-		inb(0x201);
-		js_get_time_counter();
-	}
-	t2 = js_get_time_pit();
-	t3 = js_get_time_pit();
-
-	i = 1193180L / (js_delta_pit(t2, t1) - js_delta_pit(t3, t2));
-
-	if (DIFF(i,j) > 5)
-		printk(KERN_WARNING "js: Counter timer calibration unsure,"
-			" pass1 (0.%d MHz) and pass2 (0.%d MHz) differ.\n", j, i);
-
-	return (i + j) >> 1;
-}
-
-#endif
-
-/*
- * js_setup_time chooses the best available timers
- * on the system and calibrates them.
- */
-
-static int __init js_setup_time(void)
-{
-	int t;
-	char *name, *name_a;
-
-	name = "";
-	name_a = "";
-	js_time_speed = 0;
-	js_time_speed_a = 0;
-
-#ifdef __i386__
-
-	t = js_calibrate_time(js_get_time_pit, js_delta_pit);
-
-	if (DIFF(t, 1193) > 5)
-		printk(KERN_WARNING "js: Measured PIT speed is %d.%03d MHz, but should be 1.193 MHz.\n"
-		       KERN_WARNING "js: This is probably caused by wrong BogoMIPS value. It is: %ld, should be: %ld.\n",
-			t / 1000, t % 1000, loops_per_sec / 500000, loops_per_sec / (t * 500000 / 1193));
-
-	if (JS_HAS_RDTSC && (t = js_calibrate_time(js_get_time_rdtsc, js_delta_normal)) > 0) {
-
-		js_time_speed_a = t;
-		js_get_time_a = js_get_time_rdtsc;
-		js_delta_a = js_delta_normal;
-		js_time_speed = t;
-		js_get_time = js_get_time_rdtsc;
-		js_delta = js_delta_normal;
-		name = "RDTSC";
-
-	} else {
-
-		js_time_speed_a = t;
-		js_get_time_a = js_get_time_pit;
-		js_delta_a = js_delta_pit;
-		name_a = "PIT";
-
-		t = js_calibrate_time_counter();
-
-		js_time_speed = t;
-		js_get_time = js_get_time_counter;
-		js_delta = js_delta_normal;
-		name = "counter";
-
-	}
-
-#else
-#ifdef __alpha__
-
-	t = js_calibrate_time(js_get_time_rpcc, js_delta_normal);
-
-	js_time_speed_a = t;
-	js_get_time_a = js_get_time_rpcc;
-	js_delta_a = js_delta_normal;
-	js_time_speed = t;
-	js_get_time = js_get_time_rpcc;
-	js_delta = js_delta_normal;
-	name = "RPCC";
-
-#else
-
-#ifndef MODULE
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,0)
-	t = js_calibrate_time(js_get_time_system, js_delta_normal);
-
-	js_time_speed_a = t;
-	js_get_time_a = js_get_time_system;
-	js_delta_a = js_delta_normal;
-	js_time_speed = t;
-	js_get_time = js_get_time_system;
-	js_delta = js_delta_normal;
-	name = "system";
-#endif
-#endif
-
-#endif
-#endif
-
-	printk(KERN_INFO "js: Version %d.%d.%d ",
-		JS_VERSION >> 16 & 0xff, JS_VERSION >> 8 & 0xff, JS_VERSION & 0xff);
-
-	if (js_time_speed_a <= 0 || js_time_speed <= 0) {
-		printk("\n");
-		return -1;
-	}
-
-	printk("using ");
-
-	if (js_time_speed > 10000) {
-		t = js_time_speed / 1000 + (js_time_speed % 1000 >= 500);
-		printk("%d MHz ", t);
-	} else {
-		t = js_time_speed / 10 + (js_time_speed % 10 >= 5);
-		printk("%d.%02d MHz ", t / 100, t % 100);
-	}
-
-	if (js_get_time_a != js_get_time) {
-		t = js_time_speed_a / 10 + (js_time_speed_a % 10 >= 5);
-		printk("%s timer and %d.%02d MHz %s timer.\n",
-			name, t / 100, t % 100, name_a);
-	} else {
-		printk("%s timer.\n", name);
-	}
-
-	return 0;
-}
-
 
 /*
  * js_correct() performs correction of raw joystick data.
@@ -364,7 +122,6 @@ static inline int js_button(int *buttons, int i)
 {
 	return (buttons[i >> 5] >> (i & 0x1f)) & 1;
 }
-
 
 /*
  * js_add_event() adds an event to the buffer. This requires additional
@@ -458,14 +215,17 @@ static void js_do_timer(unsigned long data)
 	struct js_dev *curd = js_dev;
 	unsigned long flags;
 
-	while (curp != NULL) {
-		curp->read(curp->info, curp->axes, curp->buttons);
+	while (curp) {
+		if (curp->read) 
+			if (curp->read(curp->info, curp->axes, curp->buttons))
+				curp->fail++;
+		curp->total++;
 		curp = curp->next;
 	}
 
 	spin_lock_irqsave(&js_lock, flags);
 
-	while (curd != NULL) {
+	while (curd) {
 		if (data) {
 			js_process_data(curd);
 			js_sync_buff(curd);
@@ -486,11 +246,7 @@ static void js_do_timer(unsigned long data)
  * space.
  */
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,0)
 static ssize_t js_read(struct file *file, char *buf, size_t count, loff_t *ppos)
-#else
-static int js_read(struct inode *inode, struct file *file, char *buf, int count)
-#endif
 {
 	DECLARE_WAITQUEUE(wait, current);
 	struct js_event *buff = (void *) buf;
@@ -576,13 +332,8 @@ static int js_read(struct inode *inode, struct file *file, char *buf, int count)
 
 			tmpevent.time = jiffies * (1000/HZ);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,0)
 			if (copy_to_user(&buff[written], &tmpevent, sizeof(struct js_event)))
 				retval = -EFAULT;
-#else
-			if (!(retval = verify_area(VERIFY_WRITE, &buff[written], sizeof(struct js_event))))
-				memcpy_tofs(&buff[written], &tmpevent, sizeof(struct js_event));
-#endif
 
 			curl->startup++;
 			written++;
@@ -594,17 +345,11 @@ static int js_read(struct inode *inode, struct file *file, char *buf, int count)
 
 		while ((jd->bhead != (new_tail = GOF(curl->tail))) && (written < blocks) && !retval) {
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,0)
 			if (copy_to_user(&buff[written], &jd->buff[new_tail], sizeof(struct js_event)))
 				retval = -EFAULT;
 			if (put_user((__u32)(jd->buff[new_tail].time * (1000/HZ)), &buff[written].time))
 				retval = -EFAULT;
-#else
-			if (!(retval = verify_area(VERIFY_WRITE, &buff[written], sizeof(struct js_event)))) {
-				memcpy_tofs(&buff[written], &jd->buff[new_tail], sizeof(struct js_event));
-				put_user((__u32)(jd->buff[new_tail].time * (1000/HZ)), &buff[written].time);
-			}
-#endif
+
 			curl->tail = new_tail;
 			written++;
 		}
@@ -625,15 +370,9 @@ static int js_read(struct inode *inode, struct file *file, char *buf, int count)
 		data.y = jd->num_axes < 2 ? 0 :
 			((js_correct(jd->new.axes[1], &jd->corr[1]) / 256) + 128) >> js_comp_glue.JS_CORR.y;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,0)
 		retval = copy_to_user(buf, &data, sizeof(struct JS_DATA_TYPE)) ? -EFAULT : 0;
-#else
-		if (!(retval = verify_area(VERIFY_WRITE, buf, sizeof(struct JS_DATA_TYPE)))) {
-			memcpy_tofs(buf, &data, sizeof(struct JS_DATA_TYPE));
-		}
-#endif
 
-		curl->startup = 0;
+		curl->startup = jd->num_axes + jd->num_buttons;
 		curl->tail = GOB(jd->bhead);
 		if (!retval) retval = sizeof(struct JS_DATA_TYPE);
 	}
@@ -645,12 +384,12 @@ static int js_read(struct inode *inode, struct file *file, char *buf, int count)
 	if (orig_tail == jd->tail) {
 		new_tail = curl->tail;
 		curl = jd->list;
-		while (curl != NULL && curl->tail != jd->tail) {
+		while (curl && curl->tail != jd->tail) {
 			if (ROT(jd->bhead, new_tail, curl->tail) ||
 				(jd->bhead == curl->tail)) new_tail = curl->tail;
 			curl = curl->next;
 		}
-		if (curl == NULL) jd->tail = new_tail;
+		if (!curl) jd->tail = new_tail;
 	}
 
 	spin_unlock_irqrestore(&js_lock, flags);
@@ -661,8 +400,6 @@ static int js_read(struct inode *inode, struct file *file, char *buf, int count)
 /*
  * js_poll() does select() support.
  */
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,0)
 
 static unsigned int js_poll(struct file *file, poll_table *wait)
 {
@@ -677,20 +414,6 @@ static unsigned int js_poll(struct file *file, poll_table *wait)
 	return retval;
 }
 
-#else
-
-static int js_select(struct inode *inode, struct file *file, int sel_type, select_table *wait)
-{
-	struct js_list *curl = file->private_data;
-	if (sel_type == SEL_IN) {
-		if (GOF(curl->tail) != curl->dev->bhead) return 1;
-		select_wait(&curl->dev->wait, wait);
-	}
-	return 0;
-}
-
-#endif
-
 /*
  * js_ioctl handles misc ioctl calls.
  */
@@ -703,8 +426,6 @@ static int js_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 
 	curl = file->private_data;
 	jd = curl->dev;
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,0)
 
 	switch (cmd) {
 
@@ -758,95 +479,6 @@ static int js_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 			}
 	}
 
-#else
-
-	switch (cmd) {
-
-/*
- * 0.x compatibility
- */
-
-		case JS_SET_CAL:
-			if (verify_area(VERIFY_READ, (struct JS_DATA_TYPE *) arg,
-				sizeof(struct JS_DATA_TYPE))) return -EFAULT;
-			memcpy_fromfs(&js_comp_glue.JS_CORR, (struct JS_DATA_SAVE_TYPE *) arg,
-				sizeof(struct JS_DATA_TYPE));
-			return 0;
-		case JS_GET_CAL:
-			if (verify_area(VERIFY_WRITE, (struct JS_DATA_TYPE *) arg,
-				sizeof(struct JS_DATA_TYPE))) return -EFAULT;
-			memcpy_tofs((struct JS_DATA_SAVE_TYPE *) arg, &js_comp_glue.JS_CORR,
-				sizeof(struct JS_DATA_TYPE));
-			return 0;
-		case JS_SET_TIMEOUT:
-			if (verify_area(VERIFY_READ, (int *) arg, sizeof(int))) return -EFAULT;
-			js_comp_glue.JS_TIMEOUT = get_user((int *) arg);
-			return 0;
-		case JS_GET_TIMEOUT:
-			if (verify_area(VERIFY_WRITE, (int *) arg, sizeof(int))) return -EFAULT;
-			put_user(js_comp_glue.JS_TIMEOUT, (int *) arg);
-			return 0;
-		case JS_SET_TIMELIMIT:
-			if (verify_area(VERIFY_READ, (long *) arg, sizeof(long))) return -EFAULT;
-			js_comp_glue.JS_TIMELIMIT = get_user((long *) arg);
-			return 0;
-		case JS_GET_TIMELIMIT:
-			if (verify_area(VERIFY_WRITE, (long *) arg, sizeof(long))) return -EFAULT;
-			put_user(js_comp_glue.JS_TIMELIMIT, (long *) arg);
-			return 0;
-		case JS_SET_ALL:
-			if (verify_area(VERIFY_READ, (struct JS_DATA_SAVE_TYPE *) arg,
-				sizeof(struct JS_DATA_SAVE_TYPE))) return -EFAULT;
-			memcpy_fromfs(&js_comp_glue, (struct JS_DATA_SAVE_TYPE *) arg,
-				sizeof(struct JS_DATA_SAVE_TYPE));
-			return 0;
-		case JS_GET_ALL:
-			if (verify_area(VERIFY_WRITE, (struct JS_DATA_SAVE_TYPE *) arg,
-				sizeof(struct JS_DATA_SAVE_TYPE))) return -EFAULT;
-			memcpy_tofs((struct JS_DATA_SAVE_TYPE *) arg, &js_comp_glue,
-				sizeof(struct JS_DATA_SAVE_TYPE));
-			return 0;
-
-/*
- * 1.x ioctl calls
- */
-
-		case JSIOCGVERSION:
-			if (verify_area(VERIFY_WRITE, (__u32 *) arg, sizeof(__u32))) return -EFAULT;
-			put_user(JS_VERSION, (__u32 *) arg);
-			return 0;
-		case JSIOCGAXES:
-			if (verify_area(VERIFY_WRITE, (__u8 *) arg, sizeof(__u8))) return -EFAULT;
-			put_user(jd->num_axes, (__u8 *) arg);
-			return 0;
-		case JSIOCGBUTTONS:
-			if (verify_area(VERIFY_WRITE, (__u8 *) arg, sizeof(__u8))) return -EFAULT;
-			put_user(jd->num_buttons, (__u8 *) arg);
-			return 0;
-		case JSIOCSCORR:
-			if (verify_area(VERIFY_READ, (struct js_corr *) arg,
-				sizeof(struct js_corr) * jd->num_axes)) return -EFAULT;
-			memcpy_fromfs(jd->corr, (struct js_corr *) arg,
-				sizeof(struct js_corr) * jd->num_axes);
-			return 0;
-		case JSIOCGCORR:
-			if (verify_area(VERIFY_WRITE, (struct js_corr *) arg,
-				sizeof(struct js_corr) * jd->num_axes)) return -EFAULT;
-			memcpy_tofs((struct js_corr *) arg,
-				jd->corr, sizeof(struct js_corr) * jd->num_axes);
-			return 0;
-		default:
-			if ((cmd & ~(_IOC_SIZEMASK << _IOC_SIZESHIFT)) == JSIOCGNAME(0)) {
-				len = strlen(jd->name) + 1;
-				if (verify_area(VERIFY_WRITE, (char *) arg, len)) return -EFAULT;
-				if (len > _IOC_SIZE(cmd)) len = _IOC_SIZE(cmd);
-				memcpy_tofs((char *) arg, jd->name, len);
-				return len;
-			}
-	}
-
-#endif
-
 	return -EINVAL;
 }
 
@@ -868,21 +500,20 @@ static int js_open(struct inode *inode, struct file *file)
 
 	spin_lock_irqsave(&js_lock, flags);
 
-	while (i > 0 && jd != NULL) {
+	while (i > 0 && jd) {
 		jd = jd->next;
 		i--;
 	}
 
 	spin_unlock_irqrestore(&js_lock, flags);
 
-	if (jd == NULL) return -ENODEV;
+	if (!jd) return -ENODEV;
 
 	if ((result = jd->open(jd))) return result;
 
-	MOD_INC_USE_COUNT;
-	if (!js_use_count++) js_do_timer(0);
+	if ((new = kmalloc(sizeof(struct js_list), GFP_KERNEL))) {
 
-	if ((new = kmalloc(sizeof(struct js_list), GFP_KERNEL)) != NULL) {
+		MOD_INC_USE_COUNT;
 
 		spin_lock_irqsave(&js_lock, flags);
 
@@ -897,6 +528,8 @@ static int js_open(struct inode *inode, struct file *file)
 
 		spin_unlock_irqrestore(&js_lock, flags);
 
+		if (!js_use_count++) js_do_timer(0);
+
 	} else {
 		result = -ENOMEM;
 	}
@@ -909,11 +542,7 @@ static int js_open(struct inode *inode, struct file *file)
  * used by it.
  */
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,0)
 static int js_release(struct inode *inode, struct file *file)
-#else
-static void js_release(struct inode *inode, struct file *file)
-#endif
 {
 	struct js_list *curl = file->private_data;
 	struct js_dev *jd = curl->dev;
@@ -926,11 +555,11 @@ static void js_release(struct inode *inode, struct file *file)
 	while (*curp && (*curp != curl)) curp = &((*curp)->next);
 	*curp = (*curp)->next;
 
-	if (jd->list != NULL)
+	if (jd->list)
 	if (curl->tail == jd->tail) {
 		curl = jd->list;
 		new_tail = curl->tail;
-		while (curl != NULL && curl->tail != jd->tail) {
+		while (curl && curl->tail != jd->tail) {
 			if (ROT(jd->bhead, new_tail, curl->tail) ||
 			       (jd->bhead == curl->tail)) new_tail = curl->tail;
 			curl = curl->next;
@@ -947,9 +576,7 @@ static void js_release(struct inode *inode, struct file *file)
 
 	jd->close(jd);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,0)
 	return 0;
-#endif
 }
 
 /*
@@ -968,7 +595,7 @@ static void js_dump_mem(void)
 	printk(",--- Dumping Devices:\n");
 	printk("| js_dev = %x\n", (int) js_dev);
 
-	while (curd != NULL) {
+	while (curd) {
 		printk("|  %s-device %x, next %x axes %d, buttons %d, port %x - %#x\n",
 			curd->next ? "|":"`",
 			(int) curd, (int) curd->next, curd->num_axes, curd->num_buttons, (int) curd->port, curd->port->io);
@@ -978,7 +605,7 @@ static void js_dump_mem(void)
 	printk(">--- Dumping ports:\n");
 	printk("| js_port = %x\n", (int) js_port);
 
-	while (curp != NULL) {
+	while (curp) {
 		printk("|  %s-port %x, next %x, io %#x, devices %d\n",
 			curp->next ? "|":"`",
 			(int) curp, (int) curp->next, curp->io, curp->ndevs);
@@ -1010,7 +637,7 @@ struct js_port *js_register_port(struct js_port *port,
 	int i;
 	unsigned long flags;
 
-	if ((all = kmalloc(sizeof(struct js_port) + 4 * devs * sizeof(void*) + infos, GFP_KERNEL)) == NULL)
+	if (!(all = kmalloc(sizeof(struct js_port) + 4 * devs * sizeof(void*) + infos, GFP_KERNEL)))
 		return NULL;
 
 	curp = all;
@@ -1019,6 +646,8 @@ struct js_port *js_register_port(struct js_port *port,
 	curp->prev = port;
 	curp->read = read;
 	curp->ndevs = devs;
+	curp->fail = 0;
+	curp->total = 0;
 
 	curp->devs = all += sizeof(struct js_port);
 	for (i = 0; i < devs; i++) curp->devs[i] = NULL;
@@ -1036,7 +665,7 @@ struct js_port *js_register_port(struct js_port *port,
 
 	spin_lock_irqsave(&js_lock, flags);
 
-	while (*ptrp != NULL) ptrp=&((*ptrp)->next);
+	while (*ptrp) ptrp=&((*ptrp)->next);
 	*ptrp = curp;
 
 	spin_unlock_irqrestore(&js_lock, flags);
@@ -1052,7 +681,9 @@ struct js_port *js_unregister_port(struct js_port *port)
 
 	spin_lock_irqsave(&js_lock, flags);
 
-	while (*curp != NULL && (*curp != port)) curp = &((*curp)->next);
+	printk("js: There were %d failures out of %d read attempts.\n", port->fail, port->total);
+
+	while (*curp && (*curp != port)) curp = &((*curp)->next);
 	*curp = (*curp)->next;
 
 	spin_unlock_irqrestore(&js_lock, flags);
@@ -1072,9 +703,9 @@ int js_register_device(struct js_port *port, int number, int axes, int buttons, 
 	int i = 0;
 	unsigned long flags;
 
-	if ((all = kmalloc(sizeof(struct js_dev) + 2 * axes * sizeof(int) +
+	if (!(all = kmalloc(sizeof(struct js_dev) + 2 * axes * sizeof(int) +
 			2 * (((buttons - 1) >> 5) + 1) * sizeof(int) +
-			axes * sizeof(struct js_corr) + strlen(name) + 1, GFP_KERNEL)) == NULL)
+			axes * sizeof(struct js_corr) + strlen(name) + 1, GFP_KERNEL)))
 		return -1;
 
 	curd = all;
@@ -1082,9 +713,10 @@ int js_register_device(struct js_port *port, int number, int axes, int buttons, 
 	curd->next = NULL;
 	curd->list = NULL;
 	curd->port = port;
-	init_waitqueue_head(&curd->wait);
 	curd->open = open;
 	curd->close = close;
+
+	init_waitqueue_head(&curd->wait);
 
 	curd->ahead = 0;
 	curd->bhead = 0;
@@ -1108,7 +740,7 @@ int js_register_device(struct js_port *port, int number, int axes, int buttons, 
 
 	spin_lock_irqsave(&js_lock, flags);
 
-	while (*ptrd != NULL) { ptrd=&(*ptrd)->next; i++; }
+	while (*ptrd) { ptrd=&(*ptrd)->next; i++; }
 	*ptrd = curd;
 
 	spin_unlock_irqrestore(&js_lock, flags);	
@@ -1123,7 +755,7 @@ void js_unregister_device(struct js_dev *dev)
 
 	spin_lock_irqsave(&js_lock, flags);
 
-	while (*curd != NULL && (*curd != dev)) curd = &((*curd)->next);
+	while (*curd && (*curd != dev)) curd = &((*curd)->next);
 	*curd = (*curd)->next;
 
 	spin_unlock_irqrestore(&js_lock, flags);	
@@ -1138,11 +770,7 @@ void js_unregister_device(struct js_dev *dev)
 static struct file_operations js_fops =
 {
 	read:		js_read,
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,0)
 	poll:		js_poll,
-#else
-	select:		js_select,
-#endif
 	ioctl:		js_ioctl,
 	open:		js_open,
 	release:	js_release,
@@ -1159,14 +787,14 @@ int init_module(void)
 int __init js_init(void)
 #endif
 {
-	int result;
-
-	js_setup_time();
 
 	if (register_chrdev(JOYSTICK_MAJOR, "js", &js_fops)) {
 		printk(KERN_ERR "js: unable to get major %d for joystick\n", JOYSTICK_MAJOR);
 		return -EBUSY;
 	}
+
+	printk(KERN_INFO "js: Joystick driver v%d.%d.%d (c) 1999 Vojtech Pavlik <vojtech@suse.cz>\n",
+		JS_VERSION >> 16 & 0xff, JS_VERSION >> 8 & 0xff, JS_VERSION & 0xff);
 
 	spin_lock_init(&js_lock);
 
@@ -1178,44 +806,61 @@ int __init js_init(void)
 	js_comp_glue.JS_TIMEOUT = JS_DEF_TIMEOUT;
 	js_comp_glue.JS_TIMELIMIT = JS_DEF_TIMELIMIT;
 
-#ifdef MODULE
-	result = 0;
-#else
-	result = -ENODEV;
+#ifndef MODULE
+#ifdef CONFIG_JOY_PCI
+	js_pci_init();
+#endif
 #ifdef CONFIG_JOY_LIGHTNING
-	if (!js_l4_init()) result = 0;
+	js_l4_init();
 #endif
 #ifdef CONFIG_JOY_SIDEWINDER
-	if (!js_sw_init()) result = 0;
+	js_sw_init();
 #endif
-#ifdef CONFIG_JOY_ASSASIN
-	if (!js_as_init()) result = 0;
+#ifdef CONFIG_JOY_ASSASSIN
+	js_as_init();
 #endif
 #ifdef CONFIG_JOY_LOGITECH
-	if (!js_lt_init()) result = 0;
+	js_lt_init();
 #endif
 #ifdef CONFIG_JOY_THRUSTMASTER
-	if (!js_tm_init()) result = 0;
+	js_tm_init();
 #endif
 #ifdef CONFIG_JOY_GRAVIS
-	if (!js_gr_init()) result = 0;
+	js_gr_init();
+#endif
+#ifdef CONFIG_JOY_CREATIVE
+	js_cr_init();
 #endif
 #ifdef CONFIG_JOY_ANALOG
-	if (!js_an_init()) result = 0;
+	js_an_init();
 #endif
 #ifdef CONFIG_JOY_CONSOLE
-	if (!js_console_init()) result = 0;
+	js_console_init();
 #endif
 #ifdef CONFIG_JOY_DB9
-	if (!js_db9_init()) result = 0;
+	js_db9_init();
+#endif
+#ifdef CONFIG_JOY_TURBOGRAFX
+	js_tg_init();
 #endif
 #ifdef CONFIG_JOY_AMIGA
-	if (!js_am_init()) result = 0;
+	js_am_init();
 #endif
-	if (result) printk(KERN_ERR "js: no joysticks found\n");
+#ifdef CONFIG_JOY_MAGELLAN
+	js_mag_init();
+#endif
+#ifdef CONFIG_JOY_WARRIOR
+	js_war_init();
+#endif
+#ifdef CONFIG_JOY_SPACEORB
+	js_orb_init();
+#endif
+#ifdef CONFIG_JOY_SPACEBALL
+	js_sball_init();
+#endif
 #endif
 
-	return result;
+	return 0;
 }
 
 /*
@@ -1230,3 +875,4 @@ void cleanup_module(void)
 		printk(KERN_ERR "js: can't unregister device\n");
 }
 #endif
+

@@ -1,23 +1,18 @@
 #
 # Makefile for the joystick drivers.
 #
-# Note! Dependencies are done automagically by 'make dep', which also
-# removes any old dependencies. DON'T put your own dependencies here
-# unless it's something special (ie not a .c file).
-#
-# Note 2! The CFLAGS definitions are now inherited from the
-# parent makes..
-#
 
 O_TARGET := js.o
+OX_OBJS  :=
 O_OBJS   :=
+MX_OBJS  :=
 M_OBJS   :=
 
 ifeq ($(CONFIG_JOYSTICK),y)
-O_OBJS += joystick.o
+OX_OBJS += joystick.o
 else
   ifeq ($(CONFIG_JOYSTICK),m)
-  M_OBJS += joystick.o
+  MX_OBJS += joystick.o
   endif
 endif
 
@@ -37,11 +32,11 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_JOY_ASSASIN),y)
-O_OBJS += joy-assasin.o
+ifeq ($(CONFIG_JOY_ASSASSIN),y)
+O_OBJS += joy-assassin.o
 else
-  ifeq ($(CONFIG_JOY_ASSASIN),m)
-  M_OBJS += joy-assasin.o
+  ifeq ($(CONFIG_JOY_ASSASSIN),m)
+  M_OBJS += joy-assassin.o
   endif
 endif
 
@@ -50,6 +45,14 @@ O_OBJS += joy-console.o
 else
   ifeq ($(CONFIG_JOY_CONSOLE),m)
   M_OBJS += joy-console.o
+  endif
+endif
+
+ifeq ($(CONFIG_JOY_CREATIVE),y)
+O_OBJS += joy-creative.o
+else
+  ifeq ($(CONFIG_JOY_CREATIVE),m)
+  M_OBJS += joy-creative.o
   endif
 endif
 
@@ -85,11 +88,43 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_JOY_MAGELLAN),y)
+O_OBJS += joy-magellan.o
+else
+  ifeq ($(CONFIG_JOY_MAGELLAN),m)
+  M_OBJS += joy-magellan.o
+  endif
+endif
+
+ifeq ($(CONFIG_JOY_PCI),y)
+O_OBJS += joy-pci.o
+else
+  ifeq ($(CONFIG_JOY_PCI),m)
+  M_OBJS += joy-pci.o
+  endif
+endif
+
 ifeq ($(CONFIG_JOY_SIDEWINDER),y)
 O_OBJS += joy-sidewinder.o
 else
   ifeq ($(CONFIG_JOY_SIDEWINDER),m)
   M_OBJS += joy-sidewinder.o
+  endif
+endif
+
+ifeq ($(CONFIG_JOY_SPACEORB),y)
+O_OBJS += joy-spaceorb.o
+else
+  ifeq ($(CONFIG_JOY_SPACEORB),m)
+  M_OBJS += joy-spaceorb.o
+  endif
+endif
+
+ifeq ($(CONFIG_JOY_SPACEBALL),y)
+O_OBJS += joy-spaceball.o
+else
+  ifeq ($(CONFIG_JOY_SPACEBALL),m)
+  M_OBJS += joy-spaceball.o
   endif
 endif
 
@@ -106,6 +141,14 @@ O_OBJS += joy-turbografx.o
 else 
   ifeq ($(CONFIG_JOY_TURBOGRAFX),m)
   M_OBJS += joy-turbografx.o
+  endif
+endif
+
+ifeq ($(CONFIG_JOY_WARRIOR),y)
+O_OBJS += joy-warrior.o
+else
+  ifeq ($(CONFIG_JOY_WARRIOR),m)
+  M_OBJS += joy-warrior.o
   endif
 endif
 

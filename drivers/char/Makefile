@@ -622,6 +622,7 @@ else
 endif
 
 ifeq ($(CONFIG_DRM),y)
+  SUB_DIRS += drm
   ALL_SUB_DIRS += drm
   MOD_SUB_DIRS += drm
 endif

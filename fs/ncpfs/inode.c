@@ -124,16 +124,15 @@ void ncp_update_inode2(struct inode* inode, struct ncp_entry_info *nwinfo)
 	}
 	inode->i_blocks = (inode->i_size + NCP_BLOCK_SIZE - 1) >> NCP_BLOCK_SHIFT;
 
-	inode->i_mtime = ncp_date_dos2unix(le16_to_cpu(nwinfo->i.modifyTime),
-			  		   le16_to_cpu(nwinfo->i.modifyDate));
-	inode->i_ctime = ncp_date_dos2unix(le16_to_cpu(nwinfo->i.creationTime),
-			    		   le16_to_cpu(nwinfo->i.creationDate));
-	inode->i_atime = ncp_date_dos2unix(0,
-					   le16_to_cpu(nwinfo->i.lastAccessDate));
+	inode->i_mtime = ncp_date_dos2unix(le16_to_cpu(nwi->modifyTime),
+					   le16_to_cpu(nwi->modifyDate));
+	inode->i_ctime = ncp_date_dos2unix(le16_to_cpu(nwi->creationTime),
+					   le16_to_cpu(nwi->creationDate));
+	inode->i_atime = ncp_date_dos2unix(0, le16_to_cpu(nwi->lastAccessDate));
 
-	NCP_FINFO(inode)->DosDirNum = nwinfo->i.DosDirNum;
-	NCP_FINFO(inode)->dirEntNum = nwinfo->i.dirEntNum;
-	NCP_FINFO(inode)->volNumber = nwinfo->i.volNumber;
+	NCP_FINFO(inode)->DosDirNum = nwi->DosDirNum;
+	NCP_FINFO(inode)->dirEntNum = nwi->dirEntNum;
+	NCP_FINFO(inode)->volNumber = nwi->volNumber;
 }
 
 /*

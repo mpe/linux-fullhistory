@@ -575,7 +575,7 @@ asmlinkage void smp_spurious_interrupt(void)
  * This interrupt should never happen with our APIC/SMP architecture
  */
 
-static spinlock_t err_lock;
+static spinlock_t err_lock = SPIN_LOCK_UNLOCKED;
 
 asmlinkage void smp_error_interrupt(void)
 {

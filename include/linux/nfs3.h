@@ -12,7 +12,6 @@
 #define NFS3_MAXPATHLEN		PATH_MAX
 #define NFS3_MAXNAMLEN		NAME_MAX
 #define NFS3_MAXGROUPS		16
-#define NFS3_FHSIZE		NFS_FHSIZE
 #define NFS3_COOKIESIZE		4
 #define NFS3_FIFO_DEV		(-1)
 #define NFS3MODE_FMT		0170000
@@ -25,38 +24,28 @@
 #define NFS3MODE_FIFO		0010000
 
 	
-enum nfs3_stat {
-	NFS3_OK			= 0,
-	NFS3ERR_PERM		= 1,
-	NFS3ERR_NOENT		= 2,
-	NFS3ERR_IO		= 5,
-	NFS3ERR_NXIO		= 6,
-	NFS3ERR_EAGAIN		= 11,
-	NFS3ERR_ACCES		= 13,
-	NFS3ERR_EXIST		= 17,
-	NFS3ERR_XDEV		= 18,	/* new in NFSv3 */
-	NFS3ERR_NODEV		= 19,
-	NFS3ERR_NOTDIR		= 20,
-	NFS3ERR_ISDIR		= 21,
-	NFS3ERR_INVAL		= 22,	/* new in NFSv3 */
-	NFS3ERR_FBIG		= 27,
-	NFS3ERR_NOSPC		= 28,
-	NFS3ERR_ROFS		= 30,
-	NFS3ERR_MLINK		= 31,	/* new in NFSv3 */
-	NFS3ERR_NAMETOOLONG	= 63,
-	NFS3ERR_NOTEMPTY	= 66,
-	NFS3ERR_DQUOT		= 69,
-	NFS3ERR_STALE		= 70,
-	NFS3ERR_REMOTE		= 71,	/* new in NFSv3 */
-	NFS3ERR_BADHANDLE	= 10001,/* ditto */
-	NFS3ERR_NOT_SYNC	= 10002,/* ditto */
-	NFS3ERR_BAD_COOKIE	= 10003,/* ditto */
-	NFS3ERR_NOTSUPP		= 10004,/* ditto */
-	NFS3ERR_TOOSMALL	= 10005,/* ditto */
-	NFS3ERR_SERVERFAULT	= 10006,/* ditto */
-	NFS3ERR_BADTYPE		= 10007,/* ditto */
-	NFS3ERR_JUKEBOX		= 10008,/* ditto */
-};
+/* Flags for access() call */
+#define NFS3_ACCESS_READ	0x0001
+#define NFS3_ACCESS_LOOKUP	0x0002
+#define NFS3_ACCESS_MODIFY	0x0004
+#define NFS3_ACCESS_EXTEND	0x0008
+#define NFS3_ACCESS_DELETE	0x0010
+#define NFS3_ACCESS_EXECUTE	0x0020
+
+/* Flags for create mode */
+#define NFS3_CREATE_UNCHECKED	0
+#define NFS3_CREATE_GUARDED	1
+#define NFS3_CREATE_EXCLUSIVE	2
+
+/* NFSv3 file system properties */
+#define NFS3_FSF_LINK		0x0001
+#define NFS3_FSF_SYMLINK	0x0002
+#define NFS3_FSF_HOMOGENEOUS	0x0008
+#define NFS3_FSF_CANSETTIME	0x0010
+/* Some shorthands. See fs/nfsd/nfs3proc.c */
+#define NFS3_FSF_DEFAULT	0x001B
+#define NFS3_FSF_BILLYBOY	0x0018
+#define NFS3_FSF_READONLY	0x0008
 
 enum nfs3_ftype {
 	NF3NON  = 0,
@@ -92,10 +81,8 @@ enum nfs3_ftype {
 
 #if defined(__KERNEL__) || defined(NFS_NEED_KERNEL_TYPES)
 
-struct nfs3_fh {
-	__u32			size;
-	__u8			data[NFS3_FHSIZE];
-};
+/* Number of 32bit words in post_op_attr */
+#define NFS3_POST_OP_ATTR_WORDS		22
 
 struct nfs3_fattr {
 	enum nfs3_ftype		type;

@@ -1,19 +1,34 @@
 #
-# Joystick lowlevel driver configuration
+# Joystick driver
 #
 
-dep_tristate '  Classic PC analog joysticks and gamepads' CONFIG_JOY_ANALOG $CONFIG_JOYSTICK
-dep_tristate '  FPGaming and MadCatz A3D controllers' CONFIG_JOY_ASSASIN $CONFIG_JOYSTICK
-dep_tristate '  Gravis GrIP joysticks and gamepads' CONFIG_JOY_GRAVIS $CONFIG_JOYSTICK
-dep_tristate '  Logitech Digital joysticks and gamepads' CONFIG_JOY_LOGITECH $CONFIG_JOYSTICK
-dep_tristate '  Microsoft SideWinder, Genius Digital joysticks and gamepads' CONFIG_JOY_SIDEWINDER $CONFIG_JOYSTICK
-dep_tristate '  ThrustMaster DirectConnect joysticks and gamepads' CONFIG_JOY_THRUSTMASTER $CONFIG_JOYSTICK
-dep_tristate '  PDPI Lightning 4 gamecards' CONFIG_JOY_LIGHTNING $CONFIG_JOYSTICK
-if [ "$CONFIG_PARPORT" != "n" ]; then
-   dep_tristate '  NES, SNES, PSX, Multisystem joysticks and gamepads' CONFIG_JOY_CONSOLE $CONFIG_JOYSTICK $CONFIG_PARPORT
-   dep_tristate '  Sega, Multisystem joysticks and gamepads' CONFIG_JOY_DB9 $CONFIG_JOYSTICK $CONFIG_PARPORT
-   dep_tristate '  TurboGraFX Multisystem joystick interface' CONFIG_JOY_TURBOGRAFX $CONFIG_JOYSTICK $CONFIG_PARPORT
-fi  
-if [ "$CONFIG_AMIGA" = "y" ]; then
-   dep_tristate '  Amiga joysticks' CONFIG_JOY_AMIGA $CONFIG_JOYSTICK
+mainmenu_option next_comment
+comment 'Joysticks'
+
+tristate 'Joystick support' CONFIG_JOYSTICK
+
+if [ "$CONFIG_JOYSTICK" != "n" ]; then
+   dep_tristate '  Classic PC analog' CONFIG_JOY_ANALOG $CONFIG_JOYSTICK
+   dep_tristate '  FPGaming and MadCatz A3D' CONFIG_JOY_ASSASSIN $CONFIG_JOYSTICK
+   dep_tristate '  Gravis GrIP' CONFIG_JOY_GRAVIS $CONFIG_JOYSTICK
+   dep_tristate '  Logitech ADI' CONFIG_JOY_LOGITECH $CONFIG_JOYSTICK
+   dep_tristate '  Microsoft SideWinder' CONFIG_JOY_SIDEWINDER $CONFIG_JOYSTICK
+   dep_tristate '  ThrustMaster DirectConnect' CONFIG_JOY_THRUSTMASTER $CONFIG_JOYSTICK
+   dep_tristate '  Creative Labs Blaster' CONFIG_JOY_CREATIVE $CONFIG_JOYSTICK
+   dep_tristate '  PDPI Lightning 4 card' CONFIG_JOY_LIGHTNING $CONFIG_JOYSTICK
+   dep_tristate '  Trident 4DWave and Aureal Vortex gameport' CONFIG_JOY_PCI $CONFIG_JOYSTICK
+   dep_tristate '  Magellan and Space Mouse' CONFIG_JOY_MAGELLAN $CONFIG_JOYSTICK
+   dep_tristate '  SpaceTec SpaceOrb 360 and SpaceBall Avenger' CONFIG_JOY_SPACEORB $CONFIG_JOYSTICK
+   dep_tristate '  SpaceTec SpaceBall 4000 FLX' CONFIG_JOY_SPACEBALL $CONFIG_JOYSTICK
+   dep_tristate '  Logitech WingMan Warrior' CONFIG_JOY_WARRIOR $CONFIG_JOYSTICK
+   if [ "$CONFIG_PARPORT" != "n" ]; then
+      dep_tristate '  NES, SNES, PSX, N64, Multi' CONFIG_JOY_CONSOLE $CONFIG_JOYSTICK $CONFIG_PARPORT
+      dep_tristate '  Sega, Multi' CONFIG_JOY_DB9 $CONFIG_JOYSTICK $CONFIG_PARPORT
+      dep_tristate '  TurboGraFX interface' CONFIG_JOY_TURBOGRAFX $CONFIG_JOYSTICK $CONFIG_PARPORT
+   fi  
+   if [ "$CONFIG_AMIGA" = "y" ]; then
+      dep_tristate '  Amiga joysticks' CONFIG_JOY_AMIGA $CONFIG_JOYSTICK
+   fi
 fi
+
+endmenu

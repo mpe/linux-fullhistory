@@ -44,6 +44,43 @@ asmlinkage int sys_pipe(unsigned long * fildes)
 	return error;
 }
 
+/* common code for old and new mmaps */
+static inline long do_mmap2(
+	unsigned long addr, unsigned long len,
+	unsigned long prot, unsigned long flags,
+	unsigned long fd, unsigned long pgoff)
+{
+	int error = -EBADF;
+	struct file * file = NULL;
+
+	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
+	if (!(flags & MAP_ANONYMOUS)) {
+		file = fget(fd);
+		if (!file)
+			goto out;
+	}
+
+	down(&current->mm->mmap_sem);
+	lock_kernel();
+
+	error = do_mmap_pgoff(file, addr, len, prot, flags, pgoff);
+
+	unlock_kernel();
+	up(&current->mm->mmap_sem);
+
+	if (file)
+		fput(file);
+out:
+	return error;
+}
+
+asmlinkage long sys_mmap2(unsigned long addr, unsigned long len,
+	unsigned long prot, unsigned long flags,
+	unsigned long fd, unsigned long pgoff)
+{
+	return do_mmap2(addr, len, prot, flags, fd, pgoff);
+}
+
 /*
  * Perform the select(nd, in, out, ex, tv) and mmap() system
  * calls. Linux/m68k cloned Linux/i386, which didn't use to be able to
@@ -62,12 +99,48 @@ struct mmap_arg_struct {
 
 asmlinkage int old_mmap(struct mmap_arg_struct *arg)
 {
-	int error;
-	struct file * file = NULL;
 	struct mmap_arg_struct a;
+	int error = -EFAULT;
+
+	if (copy_from_user(&a, arg, sizeof(a)))
+		goto out;
+
+	error = -EINVAL;
+	if (a.offset & ~PAGE_MASK)
+		goto out;
+
+	a.flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
+
+	error = do_mmap2(file, a.addr, a.len, a.prot, a.flags, a.offset >> PAGE_SHIFT);
+out:
+	return error;
+}
+
+struct mmap_arg_struct64 {
+	__u32 addr;
+	__u32 len;
+	__u32 prot;
+	__u32 flags;
+	__u64 offset; /* 64 bits */
+	__u32 fd;
+};
+
+asmlinkage long sys_mmap64(struct mmap_arg_struct64 *arg)
+{
+	int error = -EFAULT;
+	struct file * file = NULL;
+	struct mmap_arg_struct64 a;
+	unsigned long pgoff;
 
 	if (copy_from_user(&a, arg, sizeof(a)))
 		return -EFAULT;
+
+	if ((long)a.offset & ~PAGE_MASK)
+		return -EINVAL;
+
+	pgoff = a.offset >> PAGE_SHIFT;
+	if ((a.offset >> PAGE_SHIFT) != pgoff)
+		return -EINVAL;
 
 	down(&current->mm->mmap_sem);
 	lock_kernel();
@@ -79,7 +152,7 @@ asmlinkage int old_mmap(struct mmap_arg_struct *arg)
 	}
 	a.flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
 
-	error = do_mmap(file, a.addr, a.len, a.prot, a.flags, a.offset);
+	error = do_mmap_pgoff(file, a.addr, a.len, a.prot, a.flags, pgoff);
 	if (file)
 		fput(file);
 out:
@@ -87,7 +160,6 @@ out:
 	up(&current->mm->mmap_sem);
 	return error;
 }
-
 
 extern asmlinkage int sys_select(int, fd_set *, fd_set *, fd_set *, struct timeval *);
 
@@ -103,7 +175,7 @@ asmlinkage int old_select(struct sel_arg_struct *arg)
 
 	if (copy_from_user(&a, arg, sizeof(a)))
 		return -EFAULT;
-       /* sys_select() does the appropriate kernel locking */
+	/* sys_select() does the appropriate kernel locking */
 	return sys_select(a.n, a.inp, a.outp, a.exp, a.tvp);
 }
 

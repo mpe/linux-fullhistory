@@ -124,15 +124,14 @@ oops_we_failed:
 }
 
 static inline unsigned long move_vma(struct vm_area_struct * vma,
-	unsigned long addr, unsigned long old_len, unsigned long new_len)
+	unsigned long addr, unsigned long old_len, unsigned long new_len,
+	unsigned long new_addr)
 {
 	struct vm_area_struct * new_vma;
 
 	new_vma = kmem_cache_alloc(vm_area_cachep, SLAB_KERNEL);
 	if (new_vma) {
-		unsigned long new_addr = get_unmapped_area(addr, new_len);
-
-		if (new_addr && !move_page_tables(current->mm, new_addr, addr, old_len)) {
+		if (!move_page_tables(current->mm, new_addr, addr, old_len)) {
 			*new_vma = *vma;
 			new_vma->vm_start = new_addr;
 			new_vma->vm_end = new_addr+new_len;
@@ -163,19 +162,48 @@ static inline unsigned long move_vma(struct vm_area_struct * vma,
 /*
  * Expand (or shrink) an existing mapping, potentially moving it at the
  * same time (controlled by the MREMAP_MAYMOVE flag and available VM space)
+ *
+ * MREMAP_FIXED option added 5-Dec-1999 by Benjamin LaHaise
+ * This option implies MREMAP_MAYMOVE.
  */
 asmlinkage unsigned long sys_mremap(unsigned long addr,
 	unsigned long old_len, unsigned long new_len,
-	unsigned long flags)
+	unsigned long flags, unsigned long new_addr)
 {
 	struct vm_area_struct *vma;
 	unsigned long ret = -EINVAL;
 
 	down(&current->mm->mmap_sem);
+	if (flags & ~(MREMAP_FIXED | MREMAP_MAYMOVE))
+		goto out;
+
 	if (addr & ~PAGE_MASK)
 		goto out;
+
 	old_len = PAGE_ALIGN(old_len);
 	new_len = PAGE_ALIGN(new_len);
+
+	/* new_addr is only valid if MREMAP_FIXED is specified */
+	if (flags & MREMAP_FIXED) {
+		if (new_addr & ~PAGE_MASK)
+			goto out;
+		if (!(flags & MREMAP_MAYMOVE))
+			goto out;
+
+		if (new_len > TASK_SIZE || new_addr > TASK_SIZE - new_len)
+			goto out;
+
+		/* Check if the location we're moving into overlaps the
+		 * old location at all, and fail if it does.
+		 */
+		if ((new_addr <= addr) && (new_addr+new_len) > addr)
+			goto out;
+
+		if ((addr <= new_addr) && (addr+old_len) > new_addr)
+			goto out;
+
+		do_munmap(new_addr, new_len);
+	}
 
 	/*
 	 * Always allow a shrinking remap: that just unmaps
@@ -184,11 +212,12 @@ asmlinkage unsigned long sys_mremap(unsigned long addr,
 	ret = addr;
 	if (old_len >= new_len) {
 		do_munmap(addr+new_len, old_len - new_len);
-		goto out;
+		if (!(flags & MREMAP_FIXED) || (new_addr == addr))
+			goto out;
 	}
 
 	/*
-	 * Ok, we need to grow..
+	 * Ok, we need to grow..  or relocate.
 	 */
 	ret = -EFAULT;
 	vma = find_vma(current->mm, addr);
@@ -214,8 +243,11 @@ asmlinkage unsigned long sys_mremap(unsigned long addr,
 	    !vm_enough_memory((new_len - old_len) >> PAGE_SHIFT))
 		goto out;
 
-	/* old_len exactly to the end of the area.. */
+	/* old_len exactly to the end of the area..
+	 * And we're not relocating the area.
+	 */
 	if (old_len == vma->vm_end - addr &&
+	    !((flags & MREMAP_FIXED) && (addr != new_addr)) &&
 	    (old_len != new_len || !(flags & MREMAP_MAYMOVE))) {
 		unsigned long max_addr = TASK_SIZE;
 		if (vma->vm_next)
@@ -241,10 +273,15 @@ asmlinkage unsigned long sys_mremap(unsigned long addr,
 	 * We weren't able to just expand or shrink the area,
 	 * we need to create a new one and move it..
 	 */
-	if (flags & MREMAP_MAYMOVE)
-		ret = move_vma(vma, addr, old_len, new_len);
-	else
-		ret = -ENOMEM;
+	ret = -ENOMEM;
+	if (flags & MREMAP_MAYMOVE) {
+		if (!(flags & MREMAP_FIXED)) {
+			new_addr = get_unmapped_area(addr, new_len);
+			if (!new_addr)
+				goto out;
+		}
+		ret = move_vma(vma, addr, old_len, new_len, new_addr);
+	}
 out:
 	up(&current->mm->mmap_sem);
 	return ret;

@@ -7,7 +7,8 @@ struct nls_table {
 	char *charset;
 	unsigned char **page_uni2charset;
 	struct nls_unicode *charset2uni;
-
+	unsigned char *charset2lower;
+	unsigned char *charset2upper;
 	void (*inc_use_count) (void);
 	void (*dec_use_count) (void);
 	struct nls_table *next;

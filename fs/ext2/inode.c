@@ -42,7 +42,8 @@ void ext2_put_inode (struct inode * inode)
  */
 void ext2_delete_inode (struct inode * inode)
 {
-	if (inode->i_ino == EXT2_ACL_IDX_INO ||
+	if (is_bad_inode(inode) ||
+	    inode->i_ino == EXT2_ACL_IDX_INO ||
 	    inode->i_ino == EXT2_ACL_DATA_INO)
 		return;
 	inode->u.ext2_i.i_dtime	= CURRENT_TIME;

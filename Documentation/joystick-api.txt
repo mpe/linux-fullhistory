@@ -74,10 +74,9 @@ is, you have both an axis 0 and a button 0). Generally,
 	2nd Axis Y	3
 	...and so on
 
-Hats vary from one joystick type to another.  Some can be moved in 8
-directions, some only in 4.  The driver, however, always reports a hat
-as two independent axis, even if the hardware doesn't allow independent
-movement. 
+Hats vary from one joystick type to another. Some can be moved in 8
+directions, some only in 4, The driver, however, always reports a hat as two
+independent axis, even if the hardware doesn't allow independent movement.
 
 
 2.3 js_event.value
@@ -300,7 +299,7 @@ fixed range for reporting the values, 1 being the minimum, 128 the
 center, and 255 maximum value.
 
 The v0.8.0.2 driver also had an interface for 'digital joysticks', (now
-called Multisystem joystick in this driver), under /dev/djsX. This driver
+called Multisystem joysticks in this driver), under /dev/djsX. This driver
 doesn't try to be compatible with that interface.
 
 

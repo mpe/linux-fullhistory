@@ -11,17 +11,33 @@
 #
 
 L_TARGET        := libdrm.a
+O_TARGET	:= drm.o
 
 L_OBJS		:= init.o memory.o proc.o auth.o context.o drawable.o bufs.o \
 			lists.o lock.o ioctl.o fops.o vm.o dma.o
 
 M_OBJS		:= 
 
-ifdef CONFIG_DRM_GAMMA
-M_OBJS          += gamma.o
+ifeq ($(CONFIG_DRM_GAMMA),y)
+ O_OBJS += gamma.o
+else
+  ifeq ($(CONFIG_DRM_GAMMA),m)
+    M_OBJS += gamma.o
+  endif
+endif
+
+ifeq ($(CONFIG_DRM_TDFX),y)
+ O_OBJS += tdfx.o
+else
+  ifeq ($(CONFIG_DRM_TDFX),m)
+    M_OBJS += tdfx.o
+  endif
 endif
 
 include $(TOPDIR)/Rules.make
 
 gamma.o: gamma_drv.o gamma_dma.o $(L_TARGET)
 	$(LD) $(LD_RFLAG) -r -o $@ gamma_drv.o gamma_dma.o -L. -ldrm
+
+tdfx.o: tdfx_drv.o tdfx_context.o $(L_TARGET)
+	$(LD) $(LD_RFLAG) -r -o $@ tdfx_drv.o tdfx_context.o -L. -ldrm

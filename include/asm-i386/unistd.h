@@ -196,6 +196,7 @@
 #define __NR_putpmsg		189	/* some people actually want streams */
 #define __NR_vfork		190
 #define __NR_ugetrlimit		191	/* SuS compliant getrlimit */
+#define __NR_mmap2		192
 
 /* user-visible error numbers are in the range -1 - -124: see <asm-i386/errno.h> */
 
@@ -270,6 +271,19 @@ __asm__ volatile ("int $0x80" \
 	: "=a" (__res) \
 	: "0" (__NR_##name),"b" ((long)(arg1)),"c" ((long)(arg2)), \
 	  "d" ((long)(arg3)),"S" ((long)(arg4)),"D" ((long)(arg5))); \
+__syscall_return(type,__res); \
+}
+
+#define _syscall6(type,name,type1,arg1,type2,arg2,type3,arg3,type4,arg4, \
+	  type5,arg5,type6,arg6) \
+type name (type1 arg1,type2 arg2,type3 arg3,type4 arg4,type5 arg5,type6 arg6) \
+{ \
+long __res; \
+__asm__ volatile ("push %%ebp ; movl %%eax,%%ebp ; movl %1,%%eax ; int $0x80 ; pop %%ebp" \
+	: "=a" (__res) \
+	: "i" (__NR_##name),"b" ((long)(arg1)),"c" ((long)(arg2)), \
+	  "d" ((long)(arg3)),"S" ((long)(arg4)),"D" ((long)(arg5)), \
+	  "0" ((long)(arg6))); \
 __syscall_return(type,__res); \
 }
 

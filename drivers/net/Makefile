@@ -27,7 +27,7 @@ MOD_LIST_NAME := NET_MODULES
 # All of the (potential) objects that export symbols.
 # This list comes from 'grep -l EXPORT_SYMBOL *.[hc]'.
 
-export-objs     :=	8390.o arcnet.o arlan.o ppp_async.o \
+export-objs     :=	8390.o arcnet.o arlan.o aironet4500_core.o aironet4500_card.o ppp_async.o \
 			ppp_generic.o slhc.o
 
 ifeq ($(CONFIG_PCMCIA),y)
@@ -96,6 +96,12 @@ else
     endif
   endif
 endif
+
+
+
+obj-$(CONFIG_AIRONET4500) 	+= aironet4500_core.o
+obj-$(CONFIG_AIRONET4500_NONCS)  += aironet4500_card.o
+obj-$(CONFIG_AIRONET4500_PROC)	+= aironet4500_proc.o
 
 obj-$(CONFIG_NET) += Space.o setup.o net_init.o loopback.o
 obj-$(CONFIG_SEEQ8005) += seeq8005.o

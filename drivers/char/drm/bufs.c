@@ -1,6 +1,6 @@
 /* bufs.c -- IOCTLs to manage buffers -*- linux-c -*-
  * Created: Tue Feb  2 08:37:54 1999 by faith@precisioninsight.com
- * Revised: Fri Aug 20 22:48:10 1999 by faith@precisioninsight.com
+ * Revised: Fri Dec  3 12:11:11 1999 by faith@precisioninsight.com
  *
  * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
  * All Rights Reserved.
@@ -24,13 +24,12 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  * 
- * $PI: xc/programs/Xserver/hw/xfree86/os-support/linux/drm/generic/bufs.c,v 1.8 1999/08/30 13:05:00 faith Exp $
- * $XFree86$
+ * $PI: xc/programs/Xserver/hw/xfree86/os-support/linux/drm/kernel/bufs.c,v 1.8 1999/08/30 13:05:00 faith Exp $
+ * $XFree86: xc/programs/Xserver/hw/xfree86/os-support/linux/drm/kernel/bufs.c,v 1.1 1999/09/25 14:37:57 dawes Exp $
  *
  */
 
 #define __NO_VERSION__
-#include <linux/config.h>
 #include "drmP.h"
 #include "linux/un.h"
 
@@ -90,10 +89,11 @@ int drm_addmap(struct inode *inode, struct file *filp, unsigned int cmd,
 			
 
 	case _DRM_SHM:
-		DRM_DEBUG("%ld %d\n", map->size, drm_order(map->size));
 		map->handle = (void *)drm_alloc_pages(drm_order(map->size)
 						      - PAGE_SHIFT,
 						      DRM_MEM_SAREA);
+		DRM_DEBUG("%ld %d %p\n", map->size, drm_order(map->size),
+			  map->handle);
 		if (!map->handle) {
 			drm_free(map, sizeof(*map), DRM_MEM_MAPS);
 			return -ENOMEM;

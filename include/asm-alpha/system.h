@@ -317,12 +317,11 @@ extern void __global_restore_flags(unsigned long flags);
 #define tbia()		__tbi(-2, /* no second argument */)
 
 /*
- * Give prototypes to shut up gcc.
+ * Atomic exchange.
  */
-extern __inline__ unsigned long xchg_u32(volatile int *m, unsigned long val);
-extern __inline__ unsigned long xchg_u64(volatile long *m, unsigned long val);
 
-extern __inline__ unsigned long xchg_u32(volatile int *m, unsigned long val)
+extern __inline__ unsigned long
+__xchg_u32(volatile int *m, unsigned long val)
 {
 	unsigned long dummy;
 
@@ -341,7 +340,8 @@ extern __inline__ unsigned long xchg_u32(volatile int *m, unsigned long val)
 	return val;
 }
 
-extern __inline__ unsigned long xchg_u64(volatile long * m, unsigned long val)
+extern __inline__ unsigned long
+__xchg_u64(volatile long *m, unsigned long val)
 {
 	unsigned long dummy;
 
@@ -360,32 +360,108 @@ extern __inline__ unsigned long xchg_u64(volatile long * m, unsigned long val)
 	return val;
 }
 
-/*
- * This function doesn't exist, so you'll get a linker error
- * if something tries to do an invalid xchg().
- *
- * This only works if the compiler isn't horribly bad at optimizing.
- * gcc-2.5.8 reportedly can't handle this, but as that doesn't work
- * too well on the alpha anyway..
- */
+/* This function doesn't exist, so you'll get a linker error
+   if something tries to do an invalid xchg().  */
 extern void __xchg_called_with_bad_pointer(void);
 
 static __inline__ unsigned long
-__xchg(unsigned long x, volatile void * ptr, int size)
+__xchg(volatile void *ptr, unsigned long x, int size)
 {
 	switch (size) {
 		case 4:
-			return xchg_u32(ptr, x);
+			return __xchg_u32(ptr, x);
 		case 8:
-			return xchg_u64(ptr, x);
+			return __xchg_u64(ptr, x);
 	}
 	__xchg_called_with_bad_pointer();
 	return x;
 }
 
-#define xchg(ptr,x) \
-  ((__typeof__(*(ptr)))__xchg((unsigned long)(x),(ptr),sizeof(*(ptr))))
+#define xchg(ptr,x)							     \
+  ({									     \
+     __typeof__(*(ptr)) _x_ = (x);					     \
+     (__typeof__(*(ptr))) __xchg((ptr), (unsigned long)_x_, sizeof(*(ptr))); \
+  })
+
 #define tas(ptr) (xchg((ptr),1))
+
+
+/* 
+ * Atomic compare and exchange.  Compare OLD with MEM, if identical,
+ * store NEW in MEM.  Return the initial value in MEM.  Success is
+ * indicated by comparing RETURN with OLD.
+ */
+
+#define __HAVE_ARCH_CMPXCHG 1
+
+extern __inline__ unsigned long
+__cmpxchg_u32(volatile int *m, int old, int new)
+{
+	unsigned long prev, cmp;
+
+	__asm__ __volatile__(
+	"1:	ldl_l %0,%2\n"
+	"	cmpeq %0,%3,%1\n"
+	"	beq %1,2f\n"
+	"	mov %4,%1\n"
+	"	stl_c %1,%2\n"
+	"	beq %1,3f\n"
+	"2:	mb\n"
+	".section .text2,\"ax\"\n"
+	"3:	br 1b\n"
+	".previous"
+	: "=&r"(prev), "=&r"(cmp), "=m"(*m)
+	: "r"((long) old), "r"(new), "m"(*m));
+
+	return prev;
+}
+
+extern __inline__ unsigned long
+__cmpxchg_u64(volatile long *m, unsigned long old, unsigned long new)
+{
+	unsigned long prev, cmp;
+
+	__asm__ __volatile__(
+	"1:	ldq_l %0,%2\n"
+	"	cmpeq %0,%3,%1\n"
+	"	beq %1,2f\n"
+	"	mov %4,%1\n"
+	"	stq_c %1,%2\n"
+	"	beq %1,3f\n"
+	"2:	mb\n"
+	".section .text2,\"ax\"\n"
+	"3:	br 1b\n"
+	".previous"
+	: "=&r"(prev), "=&r"(cmp), "=m"(*m)
+	: "r"((long) old), "r"(new), "m"(*m));
+
+	return prev;
+}
+
+/* This function doesn't exist, so you'll get a linker error
+   if something tries to do an invalid cmpxchg().  */
+extern void __cmpxchg_called_with_bad_pointer(void);
+
+static __inline__ unsigned long
+__cmpxchg(volatile void *ptr, unsigned long old, unsigned long new, int size)
+{
+	switch (size) {
+		case 4:
+			return __cmpxchg_u32(ptr, old, new);
+		case 8:
+			return __cmpxchg_u64(ptr, old, new);
+	}
+	__cmpxchg_called_with_bad_pointer();
+	return old;
+}
+
+#define cmpxchg(ptr,o,n)						 \
+  ({									 \
+     __typeof__(*(ptr)) _o_ = (o);					 \
+     __typeof__(*(ptr)) _n_ = (n);					 \
+     (__typeof__(*(ptr))) __cmpxchg((ptr), (unsigned long)_o_,		 \
+				    (unsigned long)_n_, sizeof(*(ptr))); \
+  })
 
 #endif /* __ASSEMBLY__ */
 

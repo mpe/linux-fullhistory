@@ -958,8 +958,6 @@ init_nfs_fs(void)
 		return err;
 
 #ifdef CONFIG_PROC_FS
-	rpc_register_sysctl();
-	rpc_proc_init();
 	rpc_proc_register(&nfs_rpcstat);
 #endif
         return register_filesystem(&nfs_fs_type);

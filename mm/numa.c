@@ -7,7 +7,6 @@
 #include <linux/init.h>
 #include <linux/bootmem.h>
 #include <linux/mmzone.h>
-#include <linux/init.h>
 #include <linux/spinlock.h>
 
 int numnodes = 1;	/* Initialized for UMA platforms */

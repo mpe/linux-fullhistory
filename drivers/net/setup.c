@@ -22,6 +22,10 @@ extern int scc_init(void);
 extern int yam_init(void);
 
 extern int acenic_probe(void); 
+extern int awc4500_pci_probe(void);
+extern int awc4500_isa_probe(void);
+extern int awc4500_pnp_probe(void);
+extern int awc4500_365_probe(void);
 extern int arcnet_init(void); 
 extern int bigmac_probe(void); 
 extern int bmac_probe(void); 
@@ -214,6 +218,22 @@ struct net_probe pci_probes[] __initdata = {
 	{starfire_probe, 0},
 #endif
 
+/*
+*
+*	Wireless non-HAM
+*
+*/
+#ifdef CONFIG_AIRONET4500_NONCS
+
+#ifdef CONFIG_AIRONET4500_PCI
+	{awc4500_pci_probe,0},
+#endif
+
+#ifdef CONFIG_AIRONET4500_PNP
+	{awc4500_pnp_probe,0},
+#endif
+
+#endif
 /*
  *	Amateur Radio Drivers
  */	
