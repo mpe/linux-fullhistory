@@ -286,7 +286,7 @@ struct sv_state {
 	spinlock_t lock;
 	struct semaphore open_sem;
 	mode_t open_mode;
-	struct wait_queue *open_wait;
+	wait_queue_head_t open_wait;
 
 	struct dmabuf {
 		void *rawbuf;
@@ -297,7 +297,7 @@ struct sv_state {
 		unsigned total_bytes;
 		int count;
 		unsigned error; /* over/underrun */
-		struct wait_queue *wait;
+		wait_queue_head_t wait;
 		/* redundant, but makes calculations easier */
 		unsigned fragsize;
 		unsigned dmasize;
@@ -315,8 +315,8 @@ struct sv_state {
 	struct {
 		unsigned ird, iwr, icnt;
 		unsigned ord, owr, ocnt;
-		struct wait_queue *iwait;
-		struct wait_queue *owait;
+		wait_queue_head_t iwait;
+		wait_queue_head_t owait;
 		struct timer_list timer;
 		unsigned char ibuf[MIDIINBUF];
 		unsigned char obuf[MIDIOUTBUF];
@@ -1241,7 +1241,7 @@ static /*const*/ struct file_operations sv_mixer_fops = {
 
 static int drain_dac(struct sv_state *s, int nonblock)
 {
-        struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	unsigned long flags;
 	int count, tmo;
 
@@ -2043,7 +2043,7 @@ static int sv_midi_open(struct inode *inode, struct file *file)
 static int sv_midi_release(struct inode *inode, struct file *file)
 {
 	struct sv_state *s = (struct sv_state *)file->private_data;
-        struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	unsigned long flags;
 	unsigned count, tmo;
 
@@ -2344,11 +2344,11 @@ __initfunc(int init_sonicvibes(void))
 			continue;
 		}
 		memset(s, 0, sizeof(struct sv_state));
-		init_waitqueue(&s->dma_adc.wait);
-		init_waitqueue(&s->dma_dac.wait);
-		init_waitqueue(&s->open_wait);
-		init_waitqueue(&s->midi.iwait);
-		init_waitqueue(&s->midi.owait);
+		init_waitqueue_head(&s->dma_adc.wait);
+		init_waitqueue_head(&s->dma_dac.wait);
+		init_waitqueue_head(&s->open_wait);
+		init_waitqueue_head(&s->midi.iwait);
+		init_waitqueue_head(&s->midi.owait);
 		s->open_sem = MUTEX;
 		s->magic = SV_MAGIC;
 		s->iosb = pcidev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;

@@ -225,7 +225,6 @@ extern hfs_rwret_t hfs_dir_read(struct file *, char *, hfs_rwarg_t,
 				loff_t *);
 extern int hfs_create(struct inode *, struct dentry *, int);
 extern int hfs_mkdir(struct inode *, struct dentry *, int);
-extern int hfs_mknod(struct inode *, struct dentry *, int, int);
 extern int hfs_unlink(struct inode *, struct dentry *);
 extern int hfs_rmdir(struct inode *, struct dentry *);
 extern int hfs_rename(struct inode *, struct dentry *,

@@ -63,8 +63,8 @@ static int apm_resume = 0;
 
  
 
-static struct wait_queue *control_wakeup;         
-static struct wait_queue *root_hub = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(control_wakeup);
+static DECLARE_WAIT_QUEUE_HEAD(root_hub);
  
 static __u8 cc_to_status[16] = { /* mapping of the OHCI CC to the UHCI status codes; first guess */
 /* Activ, Stalled, Data Buffer Err, Babble Detected : NAK recvd, CRC/Timeout, Bitstuff, reservd */
@@ -145,7 +145,7 @@ static int sohci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_
 
 static int sohci_control_msg(struct usb_device *usb_dev, unsigned int pipe, void *cmd, void *data, int len)
 {
-	struct wait_queue wait = { current, NULL }; 
+	DECLARE_WAITQUEUE(wait, current);
 	struct ohci * ohci = usb_dev->bus->hcpriv;
 	int status;
 	union ep_addr_ ep_addr;

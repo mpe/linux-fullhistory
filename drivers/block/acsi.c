@@ -245,7 +245,7 @@ static int				acsi_blocksizes[MAX_DEV<<4] = { 0, };
 static struct hd_struct	acsi_part[MAX_DEV<<4] = { {0,0}, };
 static int 				access_count[MAX_DEV] = { 0, };
 static char 			busy[MAX_DEV] = { 0, };
-static struct wait_queue *busy_wait;
+static DECLARE_WAIT_QUEUE_HEAD(busy_wait);
 
 static int				CurrentNReq;
 static int				CurrentNSect;

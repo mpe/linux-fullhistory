@@ -882,7 +882,7 @@ void sysv_read_inode(struct inode * inode)
 	}
 	inode->i_blocks = inode->i_blksize = 0;
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
-		inode->i_rdev = to_kdev_t(raw_inode->i_a.i_rdev);
+		;
 	else
 	if (sb->sv_convert)
 		for (block = 0; block < 10+1+1+1; block++)
@@ -899,12 +899,8 @@ void sysv_read_inode(struct inode * inode)
 		inode->i_op = &sysv_dir_inode_operations;
 	else if (S_ISLNK(inode->i_mode))
 		inode->i_op = &sysv_symlink_inode_operations;
-	else if (S_ISCHR(inode->i_mode))
-		inode->i_op = &chrdev_inode_operations;
-	else if (S_ISBLK(inode->i_mode))
-		inode->i_op = &blkdev_inode_operations;
-	else if (S_ISFIFO(inode->i_mode))
-		init_fifo(inode);
+	else
+		init_special_inode(inode, inode->i_mode,raw_inode->i_a.i_rdev);
 }
 
 /* To avoid inconsistencies between inodes in memory and inodes on disk. */

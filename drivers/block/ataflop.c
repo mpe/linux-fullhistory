@@ -314,8 +314,8 @@ MODULE_PARM(UserSteprate, "1-" __MODULE_STRING(FD_MAX_UNITS) "i");
 
 /* Synchronization of FDC access. */
 static volatile int fdc_busy = 0;
-static struct wait_queue *fdc_wait = NULL;
-static struct wait_queue *format_wait = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(fdc_wait);
+static DECLARE_WAIT_QUEUE_HEAD(format_wait);
 
 static unsigned int changed_floppies = 0xff, fake_change = 0;
 #define	CHECK_CHANGE_DELAY	HZ/2

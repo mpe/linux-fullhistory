@@ -159,7 +159,8 @@ static struct file_operations xd_fops = {
 	xd_release,		/* release */
 	block_fsync		/* fsync */
 };
-static struct wait_queue *xd_wait_int = NULL, *xd_wait_open = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(xd_wait_int);
+static DECLARE_WAIT_QUEUE_HEAD(xd_wait_open);
 static u_char xd_valid[XD_MAXDRIVES] = { 0,0 };
 static u_char xd_drives = 0, xd_irq = 5, xd_dma = 3, xd_maxsectors;
 static u_char xd_override __initdata = 0, xd_type = 0;
@@ -167,7 +168,7 @@ static u_short xd_iobase = 0x320;
 static int xd_geo[XD_MAXDRIVES*3] __initdata = { 0,0,0,0,0,0 };
 
 static volatile int xdc_busy = 0;
-static struct wait_queue *xdc_wait = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(xdc_wait);
 
 typedef void (*timeout_fn)(unsigned long);
 static struct timer_list xd_timer = { NULL, NULL, 0, 0, (timeout_fn) xd_wakeup },

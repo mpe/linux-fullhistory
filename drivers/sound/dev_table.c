@@ -435,9 +435,9 @@ int sound_install_audiodrv(int vers, char *name, struct audio_driver *driver,
 		return -(ENOMEM);
 	}
 	memset((char *) op, 0, sizeof(struct audio_operations));
-	init_waitqueue(&op->in_sleeper);
-	init_waitqueue(&op->out_sleeper);	
-	init_waitqueue(&op->poll_sleeper);
+	init_waitqueue_head(&op->in_sleeper);
+	init_waitqueue_head(&op->out_sleeper);	
+	init_waitqueue_head(&op->poll_sleeper);
 	if (driver_size < sizeof(struct audio_driver))
 		memset((char *) d, 0, sizeof(struct audio_driver));
 

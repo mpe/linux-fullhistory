@@ -587,7 +587,7 @@ int venus_pioctl(struct super_block *sb, struct ViceFid *fid,
 
 static inline unsigned long coda_waitfor_upcall(struct upc_req *vmp)
 {
-	struct wait_queue	wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	unsigned long posttime;
 
 	vmp->uc_posttime = jiffies;
@@ -662,7 +662,7 @@ ENTRY;
 	req->uc_outSize = *outSize ? *outSize : inSize;
 	req->uc_opcode = ((union inputArgs *)buffer)->ih.opcode;
 	req->uc_unique = ++vcommp->vc_seq;
-        req->uc_sleep = NULL;
+	init_waitqueue_head(&req->uc_sleep);
 	
 	/* Fill in the common input args. */
 	((union inputArgs *)buffer)->ih.unique = req->uc_unique;

@@ -569,15 +569,11 @@ void ext2_read_inode (struct inode * inode)
 	if (inode->u.ext2_i.i_prealloc_count)
 		ext2_error (inode->i_sb, "ext2_read_inode",
 			    "New inode has non-zero prealloc count!");
-	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
-		inode->i_rdev = to_kdev_t(le32_to_cpu(raw_inode->i_block[0]));
-	else if (S_ISLNK(inode->i_mode) && !inode->i_blocks)
+	if (S_ISLNK(inode->i_mode) && !inode->i_blocks)
 		for (block = 0; block < EXT2_N_BLOCKS; block++)
 			inode->u.ext2_i.i_data[block] = raw_inode->i_block[block];
 	else for (block = 0; block < EXT2_N_BLOCKS; block++)
 		inode->u.ext2_i.i_data[block] = le32_to_cpu(raw_inode->i_block[block]);
-	brelse (bh);
-	inode->i_op = NULL;
 	if (inode->i_ino == EXT2_ACL_IDX_INO ||
 	    inode->i_ino == EXT2_ACL_DATA_INO)
 		/* Nothing to do */ ;
@@ -587,12 +583,10 @@ void ext2_read_inode (struct inode * inode)
 		inode->i_op = &ext2_dir_inode_operations;
 	else if (S_ISLNK(inode->i_mode))
 		inode->i_op = &ext2_symlink_inode_operations;
-	else if (S_ISCHR(inode->i_mode))
-		inode->i_op = &chrdev_inode_operations;
-	else if (S_ISBLK(inode->i_mode))
-		inode->i_op = &blkdev_inode_operations;
-	else if (S_ISFIFO(inode->i_mode))
-		init_fifo(inode);
+	else 
+		init_special_inode(inode, inode->i_mode,
+				   le32_to_cpu(raw_inode->i_block[0]));
+	brelse (bh);
 	inode->i_attr_flags = 0;
 	if (inode->u.ext2_i.i_flags & EXT2_SYNC_FL) {
 		inode->i_attr_flags |= ATTR_FLAG_SYNCRONOUS;

@@ -719,6 +719,7 @@ extern struct inode_operations chrdev_inode_operations;
 extern char * bdevname(kdev_t dev);
 extern char * cdevname(kdev_t dev);
 extern char * kdevname(kdev_t dev);
+extern void init_special_inode(struct inode *, umode_t, int);
 
 
 extern void init_fifo(struct inode * inode);

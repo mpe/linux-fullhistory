@@ -64,7 +64,7 @@ static int			initialized = 0;
 static int			hash_lock = 0;
 static int			want_lock = 0;
 static int			hash_count = 0;
-static struct wait_queue *	hash_wait = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(	hash_wait );
 
 #define READLOCK		0
 #define WRITELOCK		1

@@ -108,7 +108,9 @@ void ps2esdi_reset_timer(unsigned long unused);
 
 u_int dma_arb_level;		/* DMA arbitration level */
 
-static struct wait_queue *ps2esdi_int = NULL, *ps2esdi_wait_open = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(ps2esdi_int);
+static DECLARE_WAIT_QUEUE_HEAD(ps2esdi_wait_open);
+
 int no_int_yet;
 static int access_count[MAX_HD] = {0,};
 static char ps2esdi_valid[MAX_HD] = {0,};

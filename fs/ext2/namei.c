@@ -347,6 +347,25 @@ static int ext2_delete_entry (struct ext2_dir_entry_2 * dir,
 	return -ENOENT;
 }
 
+static inline void ext2_set_de_type(struct super_block *sb,
+				struct ext2_dir_entry_2 *de,
+				umode_t mode) {
+	if (!EXT2_HAS_INCOMPAT_FEATURE(sb, EXT2_FEATURE_INCOMPAT_FILETYPE))
+		return;
+	if (S_ISCHR(mode))
+		de->file_type = EXT2_FT_CHRDEV;
+	else if (S_ISBLK(mode))
+		de->file_type = EXT2_FT_BLKDEV;
+	else if (S_ISFIFO(mode))  
+		de->file_type = EXT2_FT_FIFO;
+	else if (S_ISLNK(mode))
+		de->file_type = EXT2_FT_SYMLINK;
+	else if (S_ISREG(mode))
+		de->file_type = EXT2_FT_REG_FILE;
+	else if (S_ISDIR(mode))  
+		de->file_type = EXT2_FT_DIR;
+}
+
 /*
  * By the time this is called, we already have created
  * the directory cache entry for the new file, but it
@@ -380,9 +399,7 @@ int ext2_create (struct inode * dir, struct dentry * dentry, int mode)
 		return err;
 	}
 	de->inode = cpu_to_le32(inode->i_ino);
-	if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
-				      EXT2_FEATURE_INCOMPAT_FILETYPE))
-		de->file_type = EXT2_FT_REG_FILE;
+	ext2_set_de_type(dir->i_sb, de, S_IFREG);
 	dir->i_version = ++event;
 	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
@@ -406,36 +423,13 @@ int ext2_mknod (struct inode * dir, struct dentry *dentry, int mode, int rdev)
 		goto out;
 
 	inode->i_uid = current->fsuid;
-	inode->i_mode = mode;
-	inode->i_op = NULL;
+	init_special_inode(inode, mode, rdev);
 	bh = ext2_add_entry (dir, dentry->d_name.name, dentry->d_name.len, &de, &err);
 	if (!bh)
 		goto out_no_entry;
 	de->inode = cpu_to_le32(inode->i_ino);
 	dir->i_version = ++event;
-	if (S_ISREG(inode->i_mode)) {
-		inode->i_op = &ext2_file_inode_operations;
-		if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
-					      EXT2_FEATURE_INCOMPAT_FILETYPE))
-			de->file_type = EXT2_FT_REG_FILE;
-	} else if (S_ISCHR(inode->i_mode)) {
-		inode->i_op = &chrdev_inode_operations;
-		if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
-					      EXT2_FEATURE_INCOMPAT_FILETYPE))
-			de->file_type = EXT2_FT_CHRDEV;
-	} else if (S_ISBLK(inode->i_mode)) {
-		inode->i_op = &blkdev_inode_operations;
-		if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
-					      EXT2_FEATURE_INCOMPAT_FILETYPE))
-			de->file_type = EXT2_FT_BLKDEV;
-	} else if (S_ISFIFO(inode->i_mode))  {
-		init_fifo(inode);
-		if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
-					      EXT2_FEATURE_INCOMPAT_FILETYPE))
-			de->file_type = EXT2_FT_FIFO;
-	}
-	if (S_ISBLK(mode) || S_ISCHR(mode))
-		inode->i_rdev = to_kdev_t(rdev);
+	ext2_set_de_type(dir->i_sb, de, inode->i_mode);
 	mark_inode_dirty(inode);
 	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
@@ -486,17 +480,13 @@ int ext2_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 	de->name_len = 1;
 	de->rec_len = cpu_to_le16(EXT2_DIR_REC_LEN(de->name_len));
 	strcpy (de->name, ".");
-	if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
-				      EXT2_FEATURE_INCOMPAT_FILETYPE))
-		de->file_type = EXT2_FT_DIR;
+	ext2_set_de_type(dir->i_sb, de, S_IFDIR);
 	de = (struct ext2_dir_entry_2 *) ((char *) de + le16_to_cpu(de->rec_len));
 	de->inode = cpu_to_le32(dir->i_ino);
 	de->rec_len = cpu_to_le16(inode->i_sb->s_blocksize - EXT2_DIR_REC_LEN(1));
 	de->name_len = 2;
 	strcpy (de->name, "..");
-	if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
-				      EXT2_FEATURE_INCOMPAT_FILETYPE))
-		de->file_type = EXT2_FT_DIR;
+	ext2_set_de_type(dir->i_sb, de, S_IFDIR);
 	inode->i_nlink = 2;
 	mark_buffer_dirty(dir_block, 1);
 	brelse (dir_block);
@@ -508,9 +498,7 @@ int ext2_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 	if (!bh)
 		goto out_no_entry;
 	de->inode = cpu_to_le32(inode->i_ino);
-	if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
-				      EXT2_FEATURE_INCOMPAT_FILETYPE))
-		de->file_type = EXT2_FT_DIR;
+	ext2_set_de_type(dir->i_sb, de, S_IFDIR);
 	dir->i_version = ++event;
 	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
@@ -744,9 +732,7 @@ int ext2_symlink (struct inode * dir, struct dentry *dentry, const char * symnam
 	if (!bh)
 		goto out_no_entry;
 	de->inode = cpu_to_le32(inode->i_ino);
-	if (EXT2_HAS_INCOMPAT_FEATURE(dir->i_sb,
-				      EXT2_FEATURE_INCOMPAT_FILETYPE))
-		de->file_type = EXT2_FT_SYMLINK;
+	ext2_set_de_type(dir->i_sb, de, S_IFLNK);
 	dir->i_version = ++event;
 	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {
@@ -785,21 +771,7 @@ int ext2_link (struct dentry * old_dentry,
 		return err;
 
 	de->inode = cpu_to_le32(inode->i_ino);
-	if (EXT2_HAS_INCOMPAT_FEATURE(inode->i_sb,
-				      EXT2_FEATURE_INCOMPAT_FILETYPE)) {
-		if (S_ISREG(inode->i_mode))
-			de->file_type = EXT2_FT_REG_FILE;
-		else if (S_ISDIR(inode->i_mode))
-			de->file_type = EXT2_FT_DIR;
-		else if (S_ISLNK(inode->i_mode))
-			de->file_type = EXT2_FT_SYMLINK;
-		else if (S_ISCHR(inode->i_mode))
-			de->file_type = EXT2_FT_CHRDEV;
-		else if (S_ISBLK(inode->i_mode))
-			de->file_type = EXT2_FT_BLKDEV;
-		else if (S_ISFIFO(inode->i_mode))  
-			de->file_type = EXT2_FT_FIFO;
-	}
+	ext2_set_de_type(dir->i_sb, de, inode->i_mode);
 	dir->i_version = ++event;
 	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(dir)) {

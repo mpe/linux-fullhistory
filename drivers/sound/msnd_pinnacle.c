@@ -1913,9 +1913,9 @@ __initfunc(int msnd_pinnacle_init(void))
 	if (digital)
 		set_bit(F_HAVEDIGITAL, &dev.flags);
 #endif
-	init_waitqueue(&dev.writeblock);
-	init_waitqueue(&dev.readblock);
-	init_waitqueue(&dev.writeflush);
+	init_waitqueue_head(&dev.writeblock);
+	init_waitqueue_head(&dev.readblock);
+	init_waitqueue_head(&dev.writeflush);
 	msnd_fifo_init(&dev.DAPF);
 	msnd_fifo_init(&dev.DARF);
 #ifndef LINUX20

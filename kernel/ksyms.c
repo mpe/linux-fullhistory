@@ -358,6 +358,7 @@ EXPORT_SYMBOL(clear_inode);
 EXPORT_SYMBOL(refile_buffer);
 EXPORT_SYMBOL(nr_async_pages);
 EXPORT_SYMBOL(___strtok);
+EXPORT_SYMBOL(init_special_inode);
 EXPORT_SYMBOL(init_fifo);
 EXPORT_SYMBOL(fifo_inode_operations);
 EXPORT_SYMBOL(chrdev_inode_operations);

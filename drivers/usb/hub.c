@@ -24,7 +24,7 @@
 extern struct usb_operations uhci_device_operations;
 
 /* Wakes up khubd */
-static struct wait_queue *usb_hub_wait = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(usb_hub_wait);
 static spinlock_t hub_event_lock = SPIN_LOCK_UNLOCKED;
 
 /* List of hubs needing servicing */

@@ -39,7 +39,7 @@ static int c_seen_eof;
 static int c_last_returned_index;
 static struct ncp_dirent *c_entry = NULL;
 static int c_lock = 0;
-static struct wait_queue *c_wait = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(c_wait);
 
 static int ncp_read_volume_list(struct ncp_server *, int, int,
 					struct ncp_dirent *);

@@ -809,7 +809,7 @@ struct sound_queue {
 	 *	       Bit 1 is set: a frame is playing
 	 */
 	int playing;
-	struct wait_queue *write_queue, *open_queue, *sync_queue;
+	wait_queue_head_t write_queue, open_queue, sync_queue;
 	int open_mode;
 	int busy, syncing;
 #ifdef CONFIG_ATARI
@@ -4623,7 +4623,9 @@ static void __init sq_init(void)
 	if (sq_unit < 0)
 		return;
 
-	sq.write_queue = sq.open_queue = sq.sync_queue = 0;
+	init_waitqueue_head(&sq.write_queue);
+	init_waitqueue_head(&sq.open_queue);
+	init_waitqueue_head(&sq.sync_queue);
 	sq.busy = 0;
 
 	/* whatever you like as startup mode for /dev/dsp,

@@ -91,7 +91,7 @@ static inline void finish_stripe(struct stripe_head *sh)
 
 void __wait_on_stripe(struct stripe_head *sh)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 
 	PRINTK(("wait_on_stripe %lu\n", sh->sector));
 	sh->count++;
@@ -1395,7 +1395,7 @@ static int raid5_run (int minor, struct md_dev *mddev)
 		goto abort;
 	memset(raid_conf->stripe_hashtbl, 0, HASH_PAGES * PAGE_SIZE);
 
-	init_waitqueue(&raid_conf->wait_for_stripe);
+	init_waitqueue_head(&raid_conf->wait_for_stripe);
 	PRINTK(("raid5_run(%d) called.\n", minor));
 
   	for (i = 0; i < mddev->nb_dev; i++) {

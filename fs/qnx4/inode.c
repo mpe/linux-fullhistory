@@ -408,29 +408,16 @@ static void qnx4_read_inode(struct inode *inode)
 
 	memcpy(&inode->u.qnx4_i, (struct qnx4_inode_info *) raw_inode, QNX4_DIR_ENTRY_SIZE);
 	inode->i_op = &qnx4_file_inode_operations;
-	if (S_ISREG(inode->i_mode)) {
+	if (S_ISREG(inode->i_mode))
 		inode->i_op = &qnx4_file_inode_operations;
-	} else {
-		if (S_ISDIR(inode->i_mode)) {
-			inode->i_op = &qnx4_dir_inode_operations;
-		} else {
-			if (S_ISLNK(inode->i_mode)) {
-				inode->i_op = &qnx4_symlink_inode_operations;
-			} else {
-				if (S_ISCHR(inode->i_mode)) {
-					inode->i_op = &chrdev_inode_operations;
-				} else {
-					if (S_ISBLK(inode->i_mode)) {
-						inode->i_op = &blkdev_inode_operations;
-					} else {
-						if (S_ISFIFO(inode->i_mode)) {
-							init_fifo(inode);
-						}
-					}
-				}
-			}
-		}
-	}
+	else if (S_ISDIR(inode->i_mode))
+		inode->i_op = &qnx4_dir_inode_operations;
+	else if (S_ISLNK(inode->i_mode))
+		inode->i_op = &qnx4_symlink_inode_operations;
+	else
+		/* HUH??? Where is device number? Oh, well... */
+		init_special_inode(inode, inode->i_mode, 0);
+
 	brelse(bh);
 }
 

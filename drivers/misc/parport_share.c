@@ -277,7 +277,7 @@ struct pardevice *parport_register_device(struct parport *port, const char *name
 	inc_parport_count();
 	port->ops->inc_use_count();
 
-	init_waitqueue(&tmp->wait_q);
+	init_waitqueue_head(&tmp->wait_q);
 	tmp->timeslice = PARPORT_DEFAULT_TIMESLICE;
 	tmp->waitnext = tmp->waitprev = NULL;
 

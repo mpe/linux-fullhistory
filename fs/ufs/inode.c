@@ -518,7 +518,7 @@ void ufs_read_inode (struct inode * inode)
 	inode->u.ufs_i.i_lastfrag = howmany (inode->i_size, uspi->s_fsize);
 	
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
-		inode->i_rdev = to_kdev_t(SWAB32(ufs_inode->ui_u2.ui_addr.ui_db[0]));
+		;
 	else if (inode->i_blocks) {
 		for (i = 0; i < (UFS_NDADDR + UFS_NINDIR); i++)
 			inode->u.ufs_i.i_u1.i_data[i] = ufs_inode->ui_u2.ui_addr.ui_db[i];
@@ -528,7 +528,6 @@ void ufs_read_inode (struct inode * inode)
 			inode->u.ufs_i.i_u1.i_symlink[i] = ufs_inode->ui_u2.ui_symlink[i];
 	}
 
-	brelse (bh);
 
 	inode->i_op = NULL;
 
@@ -538,12 +537,11 @@ void ufs_read_inode (struct inode * inode)
 		inode->i_op = &ufs_dir_inode_operations;
 	else if (S_ISLNK(inode->i_mode))
 		inode->i_op = &ufs_symlink_inode_operations;
-	else if (S_ISCHR(inode->i_mode))
-		inode->i_op = &chrdev_inode_operations;
-	else if (S_ISBLK(inode->i_mode))
-		inode->i_op = &blkdev_inode_operations;
-	else if (S_ISFIFO(inode->i_mode))
-		init_fifo(inode);
+	else
+		init_special_inode(inode, inode->i_mode,
+				   SWAB32(ufs_inode->ui_u2.ui_addr.ui_db[0]));
+
+	brelse (bh);
 
 #ifdef UFS_INODE_DEBUG_MORE
 	ufs_print_inode (inode);

@@ -633,6 +633,24 @@ static inline int lookup_flags(unsigned int f)
 	return retval;
 }
 
+int vfs_create(struct inode *dir, struct dentry *dentry, int mode)
+{
+	int error;
+
+	error = may_create(dir, dentry);
+	if (error)
+		goto exit_lock;
+
+	error = -EACCES;	/* shouldn't it be ENOSYS? */
+	if (!dir->i_op || !dir->i_op->create)
+		goto exit_lock;
+
+	DQUOT_INIT(dir);
+	error = dir->i_op->create(dir, dentry, mode);
+exit_lock:
+	return error;
+}
+
 /*
  *	open_namei()
  *
@@ -695,16 +713,11 @@ struct dentry * open_namei(const char * pathname, int flag, int mode)
 			error = 0;
 			if (flag & O_EXCL)
 				error = -EEXIST;
-		} else if ((error = may_create(dir->d_inode, dentry)) == 0) {
-			if (!dir->d_inode->i_op || !dir->d_inode->i_op->create)
-				error = -EACCES;
-			else {
-				DQUOT_INIT(dir->d_inode);
-				error = dir->d_inode->i_op->create(dir->d_inode, dentry, mode);
-				/* Don't check for write permission, don't truncate */
-				acc_mode = 0;
-				flag &= ~O_TRUNC;
-			}
+		} else {
+			error = vfs_create(dir->d_inode, dentry,mode);
+			/* Don't check for write permission, don't truncate */
+			acc_mode = 0;
+			flag &= ~O_TRUNC;
 		}
 		unlock_dir(dir);
 		if (error)
@@ -825,32 +838,45 @@ asmlinkage int sys_mknod(const char * filename, int mode, dev_t dev)
 {
 	int error;
 	char * tmp;
+	struct dentry * dentry;
 
 	lock_kernel();
 	error = -EPERM;
 	if (S_ISDIR(mode) || (!S_ISFIFO(mode) && !capable(CAP_SYS_ADMIN)))
 		goto out;
+	tmp = getname(filename);
+	error = PTR_ERR(tmp);
+	if (IS_ERR(tmp))
+		goto out;
+
 	error = -EINVAL;
 	switch (mode & S_IFMT) {
 	case 0:
-		mode |= S_IFREG;
+		mode |= S_IFREG;	/* fallthrough */
+	case S_IFREG:
+		mode &= ~current->fs->umask;
+		dentry = lookup_dentry(filename, NULL, LOOKUP_FOLLOW);
+		if (IS_ERR(dentry))
+			error = PTR_ERR(dentry);
+		else {
+			struct dentry *dir = lock_parent(dentry);
+			error = -ENOENT;
+			if (check_parent(dir, dentry))
+				error = vfs_create(dir->d_inode, dentry, mode);
+			dput(dentry);
+		}
 		break;
-	case S_IFREG: case S_IFCHR: case S_IFBLK: case S_IFIFO: case S_IFSOCK:
-		break;
-	default:
-		goto out;
-	}
-	tmp = getname(filename);
-	error = PTR_ERR(tmp);
-	if (!IS_ERR(tmp)) {
-		struct dentry * dentry = do_mknod(tmp,mode,dev);
-		putname(tmp);
+	case S_IFCHR: case S_IFBLK: case S_IFIFO: case S_IFSOCK:
+		dentry = do_mknod(tmp,mode,dev);
 		error = PTR_ERR(dentry);
 		if (!IS_ERR(dentry)) {
 			dput(dentry);
 			error = 0;
 		}
+		break;
 	}
+	putname(tmp);
+
 out:
 	unlock_kernel();
 	return error;

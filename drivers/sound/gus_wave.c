@@ -118,7 +118,7 @@ static int      gus_audio_bits;
 static int      gus_audio_bsize;
 static char     bounce_buf[8 * 1024];	/* Must match value set to max_fragment */
 
-static struct wait_queue *dram_sleeper = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(dram_sleeper);
 
 /*
  * Variables and buffers for PCM output
@@ -1663,7 +1663,7 @@ static int guswave_open(int dev, int mode)
 			gus_no_dma = 0;
 	}
 
-	init_waitqueue(&dram_sleeper);
+	init_waitqueue_head(&dram_sleeper);
 	gus_busy = 1;
 	active_device = GUS_DEV_WAVE;
 

@@ -756,23 +756,17 @@ static void V1_minix_read_inode(struct inode * inode)
 	inode->i_size = raw_inode->i_size;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = raw_inode->i_time;
 	inode->i_blocks = inode->i_blksize = 0;
-	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
-		inode->i_rdev = to_kdev_t(raw_inode->i_zone[0]);
-	else for (block = 0; block < 9; block++)
+	for (block = 0; block < 9; block++)
 		inode->u.minix_i.u.i1_data[block] = raw_inode->i_zone[block];
-	brelse(bh);
 	if (S_ISREG(inode->i_mode))
 		inode->i_op = &minix_file_inode_operations;
 	else if (S_ISDIR(inode->i_mode))
 		inode->i_op = &minix_dir_inode_operations;
 	else if (S_ISLNK(inode->i_mode))
 		inode->i_op = &minix_symlink_inode_operations;
-	else if (S_ISCHR(inode->i_mode))
-		inode->i_op = &chrdev_inode_operations;
-	else if (S_ISBLK(inode->i_mode))
-		inode->i_op = &blkdev_inode_operations;
-	else if (S_ISFIFO(inode->i_mode))
-		init_fifo(inode);
+	else
+		init_special_inode(inode, inode->i_mode, raw_inode->i_zone[0]);
+	brelse(bh);
 }
 
 /*
@@ -812,23 +806,17 @@ static void V2_minix_read_inode(struct inode * inode)
 	inode->i_atime = raw_inode->i_atime;
 	inode->i_ctime = raw_inode->i_ctime;
 	inode->i_blocks = inode->i_blksize = 0;
-	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
-		inode->i_rdev = to_kdev_t(raw_inode->i_zone[0]);
-	else for (block = 0; block < 10; block++)
+	for (block = 0; block < 10; block++)
 		inode->u.minix_i.u.i2_data[block] = raw_inode->i_zone[block];
-	brelse(bh);
 	if (S_ISREG(inode->i_mode))
 		inode->i_op = &minix_file_inode_operations;
 	else if (S_ISDIR(inode->i_mode))
 		inode->i_op = &minix_dir_inode_operations;
 	else if (S_ISLNK(inode->i_mode))
 		inode->i_op = &minix_symlink_inode_operations;
-	else if (S_ISCHR(inode->i_mode))
-		inode->i_op = &chrdev_inode_operations;
-	else if (S_ISBLK(inode->i_mode))
-		inode->i_op = &blkdev_inode_operations;
-	else if (S_ISFIFO(inode->i_mode))
-		init_fifo(inode);
+	else
+		init_special_inode(inode, inode->i_mode, raw_inode->i_zone[0]);
+	brelse(bh);
 }
 
 /*

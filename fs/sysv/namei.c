@@ -240,18 +240,7 @@ int sysv_mknod(struct inode * dir, struct dentry * dentry, int mode, int rdev)
 	if (!inode)
 		return -ENOSPC;
 	inode->i_uid = current->fsuid;
-	inode->i_mode = mode;
-	inode->i_op = NULL;
-	if (S_ISREG(inode->i_mode))
-		inode->i_op = &sysv_file_inode_operations;
-	else if (S_ISCHR(inode->i_mode))
-		inode->i_op = &chrdev_inode_operations;
-	else if (S_ISBLK(inode->i_mode))
-		inode->i_op = &blkdev_inode_operations;
-	else if (S_ISFIFO(inode->i_mode))
-		init_fifo(inode);
-	if (S_ISBLK(mode) || S_ISCHR(mode))
-		inode->i_rdev = to_kdev_t(rdev);
+	init_special_inode(inode, mode, rdev);
 	mark_inode_dirty(inode);
 	error = sysv_add_entry(dir, dentry->d_name.name, 
 			       dentry->d_name.len, &bh, &de);

@@ -53,3 +53,8 @@ Sun, 21 Mar 1999   AV
 			_inode()'s job.
 	*    ialloc.c: (sysv_free_inode):
 			Fixed race.
+
+Sun, 30 Apr 1999   AV
+	*    namei.c (sysv_mknod):
+			Removed dead code (S_IFREG case is now passed to
+			->create() by VFS).

@@ -370,3 +370,21 @@ char * cdevname(kdev_t dev)
 	sprintf(buffer, "%s(%d,%d)", name, MAJOR(dev), MINOR(dev));
 	return buffer;
 }
+
+void init_special_inode(struct inode *inode, umode_t mode, int rdev)
+{
+	inode->i_mode = mode;
+	inode->i_op = NULL;
+	if (S_ISCHR(mode)) {
+		inode->i_op = &chrdev_inode_operations;
+		inode->i_rdev = to_kdev_t(rdev);
+	} else if (S_ISBLK(mode)) {
+		inode->i_op = &blkdev_inode_operations;
+		inode->i_rdev = to_kdev_t(rdev);
+	} else if (S_ISFIFO(mode))
+		init_fifo(inode);
+	else if (S_ISSOCK(mode))
+		;
+	else
+		printk(KERN_DEBUG "init_special_inode: bogus imode (%o)\n", mode);
+}

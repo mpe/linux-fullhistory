@@ -167,9 +167,9 @@ static int on_attempts;
 /* request loop (trackbuffer) */
 static volatile int fdc_busy = -1;
 static volatile int fdc_nested = 0;
-static struct wait_queue *fdc_wait = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(fdc_wait);
  
-static struct wait_queue *motor_wait = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(motor_wait);
 
 static volatile int selected = -1;	/* currently selected drive */
 
@@ -185,7 +185,7 @@ static char *raw_buf;
  * request.
  */
 static volatile char block_flag = 0;
-static struct wait_queue *wait_fd_block = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(wait_fd_block);
 
 /* MS-Dos MFM Coding tables (should go quick and easy) */
 static unsigned char mfmencode[16]={
@@ -196,7 +196,7 @@ static unsigned char mfmdecode[128];
 
 /* floppy internal millisecond timer stuff */
 static volatile int ms_busy = -1;
-static struct wait_queue *ms_wait = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(ms_wait);
 #define MS_TICKS ((amiga_eclock+50)/1000)
 
 /*

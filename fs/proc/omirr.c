@@ -16,8 +16,8 @@ static int cleared_flag = 0;
 static char * buffer = NULL;
 static int read_pos, write_pos;
 static int clip_pos, max_pos;
-static struct wait_queue * read_wait = NULL;
-static struct wait_queue * write_wait = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(read_wait);
+static DECLARE_WAIT_QUEUE_HEAD(write_wait);
 
 static /*inline*/ int reserve_write_space(int len)
 {

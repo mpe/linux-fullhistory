@@ -53,8 +53,8 @@ static int      max_synthdev = 0;
 #define SEQ_2	2
 static int      seq_mode = SEQ_1;
 
-static struct wait_queue *seq_sleeper = NULL;
-static struct wait_queue *midi_sleeper = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(seq_sleeper);
+static DECLARE_WAIT_QUEUE_HEAD(midi_sleeper);
 
 static int      midi_opened[MAX_MIDI_DEV] = {
 	0
@@ -1117,8 +1117,8 @@ int sequencer_open(int dev, struct file *file)
 	if (seq_mode == SEQ_2)
 		tmr->open(tmr_no, seq_mode);
 
- 	init_waitqueue(&seq_sleeper);
- 	init_waitqueue(&midi_sleeper);
+ 	init_waitqueue_head(&seq_sleeper);
+ 	init_waitqueue_head(&midi_sleeper);
 	output_threshold = SEQ_MAX_QUEUE / 2;
 
 	return 0;

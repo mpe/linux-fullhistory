@@ -79,7 +79,7 @@ int fat_is_binary(char conversion,char *extension)
 /* File creation lock. This is system-wide to avoid deadlocks in rename. */
 /* (rename might deadlock before detecting cross-FS moves.) */
 
-static struct wait_queue *creation_wait = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(creation_wait);
 static int creation_lock = 0;
 
 

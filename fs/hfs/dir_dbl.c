@@ -27,7 +27,6 @@ static struct dentry *dbl_lookup(struct inode *, struct dentry *);
 static int dbl_readdir(struct file *, void *, filldir_t);
 static int dbl_create(struct inode *, struct dentry *, int);
 static int dbl_mkdir(struct inode *, struct dentry *, int);
-static int dbl_mknod(struct inode *, struct dentry *, int, int);
 static int dbl_unlink(struct inode *, struct dentry *);
 static int dbl_rmdir(struct inode *, struct dentry *);
 static int dbl_rename(struct inode *, struct dentry *,
@@ -83,7 +82,7 @@ struct inode_operations hfs_dbl_dir_inode_operations = {
 	NULL,			/* symlink */
 	dbl_mkdir,		/* mkdir */
 	dbl_rmdir,		/* rmdir */
-	dbl_mknod,		/* mknod */
+	NULL,			/* mknod */
 	dbl_rename,		/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
@@ -318,28 +317,6 @@ static int dbl_mkdir(struct inode * parent, struct dentry *dentry,
 		error = -EEXIST;
 	} else {
 		error = hfs_mkdir(parent, dentry, mode);
-	}
-	return error;
-}
-
-/*
- * dbl_mknod()
- *
- * This is the mknod() entry in the inode_operations structure for
- * regular HFS directories.  The purpose is to create a new entry
- * in a directory, given the inode for the parent directory and the
- * name (and its length) and the mode of the new entry (and the device
- * number if the entry is to be a device special file).
- */
-static int dbl_mknod(struct inode *dir, struct dentry *dentry,
-		     int mode, int rdev)
-{
-	int error;
-
-	if (is_hdr(dir, dentry->d_name.name, dentry->d_name.len)) {
-		error = -EEXIST;
-	} else {
-		error = hfs_mknod(dir, dentry, mode, rdev);
 	}
 	return error;
 }

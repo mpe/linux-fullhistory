@@ -290,7 +290,7 @@ struct wf_config {
 	int samples_used;                  /* how many */
 	char interrupts_on;                /* h/w MPU interrupts enabled ? */
 	char rom_samples_rdonly;           /* can we write on ROM samples */
-	struct wait_queue *interrupt_sleeper; 
+	wait_queue_head_t interrupt_sleeper; 
 } dev;
 
 static int  detect_wffx(void);
@@ -2535,7 +2535,7 @@ __initfunc (static int detect_wavefront (int irq, int io_base))
 
 	}
 
-	init_waitqueue (&dev.interrupt_sleeper);
+	init_waitqueue_head (&dev.interrupt_sleeper);
 
 	if (wavefront_hw_reset ()) {
 		printk (KERN_WARNING LOGNAME "hardware reset failed\n");

@@ -310,7 +310,7 @@ struct es1370_state {
 	spinlock_t lock;
 	struct semaphore open_sem;
 	mode_t open_mode;
-	struct wait_queue *open_wait;
+	wait_queue_head_t open_wait;
 
 	struct dmabuf {
 		void *rawbuf;
@@ -321,7 +321,7 @@ struct es1370_state {
 		unsigned total_bytes;
 		int count;
 		unsigned error; /* over/underrun */
-		struct wait_queue *wait;
+		wait_queue_head_t wait;
 		/* redundant, but makes calculations easier */
 		unsigned fragsize;
 		unsigned dmasize;
@@ -339,8 +339,8 @@ struct es1370_state {
 	struct {
 		unsigned ird, iwr, icnt;
 		unsigned ord, owr, ocnt;
-		struct wait_queue *iwait;
-		struct wait_queue *owait;
+		wait_queue_head_t iwait;
+		wait_queue_head_t owait;
 		unsigned char ibuf[MIDIINBUF];
 		unsigned char obuf[MIDIOUTBUF];
 	} midi;
@@ -1007,7 +1007,7 @@ static /*const*/ struct file_operations es1370_mixer_fops = {
 
 static int drain_dac1(struct es1370_state *s, int nonblock)
 {
-        struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	unsigned long flags;
 	int count, tmo;
 	
@@ -1042,7 +1042,7 @@ static int drain_dac1(struct es1370_state *s, int nonblock)
 
 static int drain_dac2(struct es1370_state *s, int nonblock)
 {
-        struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	unsigned long flags;
 	int count, tmo;
 
@@ -2191,7 +2191,7 @@ static int es1370_midi_open(struct inode *inode, struct file *file)
 static int es1370_midi_release(struct inode *inode, struct file *file)
 {
 	struct es1370_state *s = (struct es1370_state *)file->private_data;
-        struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	unsigned long flags;
 	unsigned count, tmo;
 
@@ -2308,12 +2308,12 @@ __initfunc(int init_es1370(void))
 			continue;
 		}
 		memset(s, 0, sizeof(struct es1370_state));
-		init_waitqueue(&s->dma_adc.wait);
-		init_waitqueue(&s->dma_dac1.wait);
-		init_waitqueue(&s->dma_dac2.wait);
-		init_waitqueue(&s->open_wait);
-		init_waitqueue(&s->midi.iwait);
-		init_waitqueue(&s->midi.owait);
+		init_waitqueue_head(&s->dma_adc.wait);
+		init_waitqueue_head(&s->dma_dac1.wait);
+		init_waitqueue_head(&s->dma_dac2.wait);
+		init_waitqueue_head(&s->open_wait);
+		init_waitqueue_head(&s->midi.iwait);
+		init_waitqueue_head(&s->midi.owait);
 		s->open_sem = MUTEX;
 		s->magic = ES1370_MAGIC;
 		s->io = pcidev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;

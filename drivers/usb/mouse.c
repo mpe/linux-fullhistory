@@ -48,13 +48,17 @@ struct mouse_state {
 	int present; /* this mouse is plugged in */
 	int active; /* someone is has this mouse's device open */
 	int ready; /* the mouse has changed state since the last read */
-	struct wait_queue *wait; /* for polling */
+	wait_queue_head_t wait; /* for polling */
 	struct fasync_struct *fasync;
 	/* later, add a list here to support multiple mice */
 	/* but we will also need a list of file pointers to identify it */
 };
 
-static struct mouse_state static_mouse_state;
+static struct mouse_state static_mouse_state = {
+	0, 0, 0, 0,
+	0, 0, 0,
+	__WAIT_QUEUE_HEAD_INITIALIZER(static_mouse_state.wait),
+};
 
 spinlock_t usb_mouse_lock = SPIN_LOCK_UNLOCKED;
 

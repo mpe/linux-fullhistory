@@ -193,7 +193,7 @@ struct floppy_state {
 	struct timer_list timeout;
 	int	timeout_pending;
 	int	ejected;
-	struct wait_queue *wait;
+	wait_queue_head_t wait;
 	int	wanted;
 	struct device_node*	media_bay; /* NULL when not in bay */
 	char	dbdma_cmd_space[5 * sizeof(struct dbdma_cmd)];
@@ -1132,6 +1132,7 @@ static int swim3_add_device(struct device_node *swim)
 	fs->secpertrack = 18;
 	fs->total_secs = 2880;
 	fs->media_bay = mediabay;
+	init_waitqueue_head(&fs->wait);
 
 	fs->dma_cmd = (struct dbdma_cmd *) DBDMA_ALIGN(fs->dbdma_cmd_space);
 	memset(fs->dma_cmd, 0, 2 * sizeof(struct dbdma_cmd));

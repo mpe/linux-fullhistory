@@ -143,8 +143,8 @@ static unsigned long	SLMSliceSize;	/* size of one DMA chunk */
 static int				SLMError;
 
 /* wait queues */
-static struct wait_queue *slm_wait;		/* waiting for buffer */
-static struct wait_queue *print_wait;	/* waiting for printing finished */
+static DECLARE_WAIT_QUEUE_HEAD(slm_wait);	/* waiting for buffer */
+static DECLARE_WAIT_QUEUE_HEAD(print_wait);	/* waiting for printing finished */
 
 /* status codes */
 #define	SLMSTAT_OK		0x00

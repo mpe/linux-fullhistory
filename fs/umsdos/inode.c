@@ -163,13 +163,9 @@ dentry, f_pos));
 		umsdos_setup_dir(dentry);
 	} else if (S_ISLNK (inode->i_mode)) {
 		inode->i_op = &umsdos_symlink_inode_operations;
-	} else if (S_ISCHR (inode->i_mode)) {
-		inode->i_op = &chrdev_inode_operations;
-	} else if (S_ISBLK (inode->i_mode)) {
-		inode->i_op = &blkdev_inode_operations;
-	} else if (S_ISFIFO (inode->i_mode)) {
-		init_fifo (inode);
-	}
+	} else
+		init_special_inode(inode, inode->i_mode,
+					kdev_t_to_nr(inode->i_rdev));
 }
 
 

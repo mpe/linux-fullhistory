@@ -47,7 +47,7 @@ static int apm_resume = 0;
 
 #define compile_assert(x) do { switch (0) { case 1: case !(x): } } while (0)
 
-static struct wait_queue *uhci_configure = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(uhci_configure);
 
 /*
  * Return the result of a TD..
@@ -312,7 +312,7 @@ static int uhci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_d
  * We need to remove the TD from the lists (both interrupt
  * list and TD lists) by hand if something bad happens!
  */
-static struct wait_queue *control_wakeup;
+static DECLARE_WAIT_QUEUE_HEAD(control_wakeup);
 
 static int uhci_control_completed(int status, void *buffer, void *dev_id)
 {
@@ -323,7 +323,7 @@ static int uhci_control_completed(int status, void *buffer, void *dev_id)
 /* td points to the last td in the list, which interrupts on completion */
 static int uhci_run_control(struct uhci_device *dev, struct uhci_td *first, struct uhci_td *last)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	struct uhci_qh *ctrl_qh = uhci_qh_allocate(dev);
 	struct uhci_td *curtd;
 

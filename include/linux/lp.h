@@ -123,7 +123,7 @@ struct lp_struct {
 	unsigned int runchars;
 	struct lp_stats stats;
 #endif
-	struct wait_queue *wait_q;
+	wait_queue_head_t wait_q;
 	unsigned int last_error;
 	volatile unsigned int irq_detected:1;
 	volatile unsigned int irq_missed:1;

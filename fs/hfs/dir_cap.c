@@ -83,7 +83,7 @@ struct inode_operations hfs_cap_ndir_inode_operations = {
 	NULL,			/* symlink */
 	hfs_mkdir,		/* mkdir */
 	hfs_rmdir,		/* rmdir */
-	hfs_mknod,		/* mknod */
+	NULL,			/* mknod */
 	hfs_rename,		/* rename */
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
