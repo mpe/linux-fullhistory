@@ -1,11 +1,14 @@
 /*
- * $Id: compat.h,v 1.3 1997/11/04 06:12:15 calle Exp $
+ * $Id: compat.h,v 1.4 1998/10/25 14:39:02 fritz Exp $
  * 
  * Headerfile for Compartibility between different kernel versions
  * 
  * (c) Copyright 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: compat.h,v $
+ * Revision 1.4  1998/10/25 14:39:02  fritz
+ * Backported from MIPS (Cobalt).
+ *
  * Revision 1.3  1997/11/04 06:12:15  calle
  * capi.c: new read/write in file_ops since 2.1.60
  * capidrv.c: prepared isdnlog interface for d2-trace in newer firmware.
@@ -32,6 +35,7 @@
 #define __COMPAT_H__
 
 #include <linux/version.h>
+#include <asm/segment.h>
 #include <linux/isdnif.h>
 
 #ifndef LinuxVersionCode

@@ -1,9 +1,10 @@
-/* $Id: isdn_audio.c,v 1.10 1998/02/20 17:09:40 fritz Exp $
+/* $Id: isdn_audio.c,v 1.13 1999/04/12 12:33:09 fritz Exp $
 
  * Linux ISDN subsystem, audio conversion and compression (linklevel).
  *
- * Copyright 1994,95,96 by Fritz Elfert (fritz@wuemaus.franken.de)
+ * Copyright 1994-1999 by Fritz Elfert (fritz@isdn4linux.de)
  * DTMF code (c) 1996 by Christian Mock (cm@kukuruz.ping.at)
+ * Silence detection (c) 1998 by Armin Schindler (mac@gismo.telekom.de)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,6 +21,15 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_audio.c,v $
+ * Revision 1.13  1999/04/12 12:33:09  fritz
+ * Changes from 2.0 tree.
+ *
+ * Revision 1.12  1998/07/26 18:48:43  armin
+ * Added silence detection in voice receive mode.
+ *
+ * Revision 1.11  1998/04/10 10:35:10  paul
+ * fixed (silly?) warnings from egcs on Alpha.
+ *
  * Revision 1.10  1998/02/20 17:09:40  fritz
  * Changes for recent kernels.
  *
@@ -61,7 +71,7 @@
 #include "isdn_audio.h"
 #include "isdn_common.h"
 
-char *isdn_audio_revision = "$Revision: 1.10 $";
+char *isdn_audio_revision = "$Revision: 1.13 $";
 
 /*
  * Misc. lookup-tables.
@@ -276,7 +286,7 @@ static inline void
 isdn_audio_tlookup(const char *table, char *buff, unsigned long n)
 {
 	while (n--)
-		*buff++ = table[*buff];
+		*buff++ = table[*(unsigned char *)buff];
 }
 #endif
 
@@ -659,4 +669,93 @@ isdn_audio_calc_dtmf(modem_info * info, unsigned char *buf, int len, int fmt)
 		}
 		len -= c;
 	}
+}
+
+silence_state *
+isdn_audio_silence_init(silence_state * s)
+{
+	if (!s)
+		s = (silence_state *) kmalloc(sizeof(silence_state), GFP_ATOMIC);
+	if (s) {
+		s->idx = 0;
+		s->state = 0;
+	}
+	return s;
+}
+
+void
+isdn_audio_calc_silence(modem_info * info, unsigned char *buf, int len, int fmt)
+{
+	silence_state *s = info->silence_state;
+	int i;
+	signed char c;
+
+	if (!info->emu.vpar[1]) return;
+
+	for (i = 0; i < len; i++) {
+		if (fmt)
+		    c = isdn_audio_alaw_to_ulaw[*buf++];
+			else
+		    c = *buf++;
+
+		if (c > 0) c -= 128;
+		c = abs(c);
+
+		if (c > (info->emu.vpar[1] * 4)) { 
+			s->idx = 0;
+			s->state = 1; 
+		} else {
+			if (s->idx < 210000) s->idx++; 
+		}
+	}
+}
+
+void
+isdn_audio_eval_silence(modem_info * info)
+{
+	silence_state *s = info->silence_state;
+	struct sk_buff *skb;
+	unsigned long flags;
+	int di;
+	int ch;
+	char what;
+	char *p;
+
+	what = ' ';
+
+	if (s->idx > (info->emu.vpar[2] * 800)) { 
+		s->idx = 0;
+		if (!s->state) {	/* silence from beginning of rec */ 
+			what = 's';
+		} else {
+			what = 'q';
+		}
+	}
+		if ((what == 's') || (what == 'q')) {
+			printk(KERN_DEBUG "ttyI%d: %s\n", info->line,
+				(what=='s') ? "silence":"quiet");
+			skb = dev_alloc_skb(2);
+			p = (char *) skb_put(skb, 2);
+			p[0] = 0x10;
+			p[1] = what;
+			if (skb_headroom(skb) < sizeof(isdn_audio_skb)) {
+				printk(KERN_WARNING
+				       "isdn_audio: insufficient skb_headroom, dropping\n");
+				kfree_skb(skb);
+				return;
+			}
+			ISDN_AUDIO_SKB_DLECOUNT(skb) = 0;
+			ISDN_AUDIO_SKB_LOCK(skb) = 0;
+			save_flags(flags);
+			cli();
+			di = info->isdn_driver;
+			ch = info->isdn_channel;
+			__skb_queue_tail(&dev->drv[di]->rpqueue[ch], skb);
+			dev->drv[di]->rcvcount[ch] += 2;
+			restore_flags(flags);
+			/* Schedule dequeuing */
+			if ((dev->modempoll) && (info->rcvsched))
+				isdn_timer_ctrl(ISDN_TIMER_MODEMREAD, 1);
+			wake_up_interruptible(&dev->drv[di]->rcv_waitq[ch]);
+		} 
 }

@@ -55,7 +55,7 @@ static int udp_v6_verify_bind(struct sock *sk, unsigned short snum)
 	int addr_type = ipv6_addr_type(&sk->net_pinfo.af_inet6.rcv_saddr);
 	int retval = 0, sk_reuse = sk->reuse;
 
-	SOCKHASH_LOCK();
+	SOCKHASH_LOCK_READ();
 	for(sk2 = udp_hash[snum & (UDP_HTABLE_SIZE - 1)]; sk2 != NULL; sk2 = sk2->next) {
 		if((sk2->num == snum) && (sk2 != sk)) {
 			unsigned char state = sk2->state;
@@ -86,7 +86,7 @@ static int udp_v6_verify_bind(struct sock *sk, unsigned short snum)
 			}
 		}
 	}
-	SOCKHASH_UNLOCK();
+	SOCKHASH_UNLOCK_READ();
 	return retval;
 }
 
@@ -98,11 +98,11 @@ static void udp_v6_hash(struct sock *sk)
 	num &= (UDP_HTABLE_SIZE - 1);
 	skp = &udp_hash[num];
 
-	SOCKHASH_LOCK();
+	SOCKHASH_LOCK_WRITE();
 	sk->next = *skp;
 	*skp = sk;
 	sk->hashent = num;
-	SOCKHASH_UNLOCK();
+	SOCKHASH_UNLOCK_WRITE();
 }
 
 static void udp_v6_unhash(struct sock *sk)
@@ -113,7 +113,7 @@ static void udp_v6_unhash(struct sock *sk)
 	num &= (UDP_HTABLE_SIZE - 1);
 	skp = &udp_hash[num];
 
-	SOCKHASH_LOCK();
+	SOCKHASH_LOCK_WRITE();
 	while(*skp != NULL) {
 		if(*skp == sk) {
 			*skp = sk->next;
@@ -121,7 +121,7 @@ static void udp_v6_unhash(struct sock *sk)
 		}
 		skp = &((*skp)->next);
 	}
-	SOCKHASH_UNLOCK();
+	SOCKHASH_UNLOCK_WRITE();
 }
 
 static void udp_v6_rehash(struct sock *sk)
@@ -133,7 +133,7 @@ static void udp_v6_rehash(struct sock *sk)
 	num &= (UDP_HTABLE_SIZE - 1);
 	skp = &udp_hash[oldnum];
 
-	SOCKHASH_LOCK();
+	SOCKHASH_LOCK_WRITE();
 	while(*skp != NULL) {
 		if(*skp == sk) {
 			*skp = sk->next;
@@ -144,7 +144,7 @@ static void udp_v6_rehash(struct sock *sk)
 	sk->next = udp_hash[num];
 	udp_hash[num] = sk;
 	sk->hashent = num;
-	SOCKHASH_UNLOCK();
+	SOCKHASH_UNLOCK_WRITE();
 }
 
 static struct sock *udp_v6_lookup(struct in6_addr *saddr, u16 sport,
@@ -154,6 +154,7 @@ static struct sock *udp_v6_lookup(struct in6_addr *saddr, u16 sport,
 	unsigned short hnum = ntohs(dport);
 	int badness = -1;
 
+	SOCKHASH_LOCK_READ();
 	for(sk = udp_hash[hnum & (UDP_HTABLE_SIZE - 1)]; sk != NULL; sk = sk->next) {
 		if((sk->num == hnum)		&&
 		   (sk->family == PF_INET6)	&&
@@ -189,6 +190,7 @@ static struct sock *udp_v6_lookup(struct in6_addr *saddr, u16 sport,
 			}
 		}
 	}
+	SOCKHASH_UNLOCK_READ();
 	return result;
 }
 
@@ -331,6 +333,8 @@ ipv4_connected:
 
 static void udpv6_close(struct sock *sk, long timeout)
 {
+	bh_lock_sock(sk);
+
 	/* See for explanation: raw_close in ipv4/raw.c */
 	sk->state = TCP_CLOSE;
 	udp_v6_unhash(sk);

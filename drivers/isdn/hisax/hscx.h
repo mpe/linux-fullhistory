@@ -1,4 +1,4 @@
-/* $Id: hscx.h,v 1.3 1997/07/27 21:38:35 keil Exp $
+/* $Id: hscx.h,v 1.4 1998/04/15 16:45:34 keil Exp $
 
  * hscx.h   HSCX specific defines
  *
@@ -6,6 +6,9 @@
  *
  *
  * $Log: hscx.h,v $
+ * Revision 1.4  1998/04/15 16:45:34  keil
+ * new init code
+ *
  * Revision 1.3  1997/07/27 21:38:35  keil
  * new B-channel interface
  *
@@ -44,3 +47,4 @@ extern void hscx_sched_event(struct BCState *bcs, int event);
 extern void modehscx(struct BCState *bcs, int mode, int bc);
 extern void clear_pending_hscx_ints(struct IsdnCardState *cs);
 extern void inithscx(struct IsdnCardState *cs);
+extern void inithscxisac(struct IsdnCardState *cs, int part);

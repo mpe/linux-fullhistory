@@ -144,19 +144,21 @@ extern __inline__ int unix_may_send(unix_socket *sk, unix_socket *osk)
 	return (unix_peer(osk) == NULL || unix_our_peer(sk, osk));
 }
 
+#define ulock(sk)	(&(sk->protinfo.af_unix.user_count))
+
 extern __inline__ void unix_lock(unix_socket *sk)
 {
-	atomic_inc(&sk->sock_readers);
+	atomic_inc(ulock(sk));
 }
 
 extern __inline__ void unix_unlock(unix_socket *sk)
 {
-	atomic_dec(&sk->sock_readers);
+	atomic_dec(ulock(sk));
 }
 
 extern __inline__ int unix_locked(unix_socket *sk)
 {
-	return atomic_read(&sk->sock_readers);
+	return (atomic_read(ulock(sk)) != 0);
 }
 
 extern __inline__ void unix_release_addr(struct unix_address *addr)
@@ -1511,7 +1513,7 @@ static int unix_read_proc(char *buffer, char **start, off_t offset,
 	{
 		len+=sprintf(buffer+len,"%p: %08X %08X %08lX %04X %02X %5ld",
 			s,
-			atomic_read(&s->sock_readers),
+			atomic_read(ulock(s)),
 			0,
 			s->socket ? s->socket->flags : 0,
 			s->type,

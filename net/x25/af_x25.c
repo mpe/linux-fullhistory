@@ -1336,14 +1336,20 @@ int init_module(void)
 	/*
 	 *	Register any pre existing devices.
 	 */
-	for (dev = dev_base; dev != NULL; dev = dev->next)
+	read_lock_bh(&dev_base_lock);
+	for (dev = dev_base; dev != NULL; dev = dev->next) {
 		if ((dev->flags & IFF_UP) && (dev->type == ARPHRD_X25
 #if defined(CONFIG_LLC) || defined(CONFIG_LLC_MODULE)
 					   || dev->type == ARPHRD_ETHER
 #endif
-									))
-		x25_link_device_up(dev);
-	
+			)) {
+			read_unlock_bh(&dev_base_lock);
+			x25_link_device_up(dev);
+			read_lock_bh(&dev_base_lock);
+		}
+	}
+	read_unlock_bh(&dev_base_lock);
+
 	return 0;
 }
 

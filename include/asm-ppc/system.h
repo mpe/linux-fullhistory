@@ -58,7 +58,6 @@ extern void __cli(void);
 extern int _disable_interrupts(void);
 extern void _enable_interrupts(int);
 
-extern void instruction_dump(unsigned long *);
 extern void print_backtrace(unsigned long *);
 extern void show_regs(struct pt_regs * regs);
 extern void flush_instruction_cache(void);

@@ -96,8 +96,10 @@ void qdisc_run_queues(void)
 		struct Qdisc *q = (struct Qdisc*)h;
 		struct device *dev = q->dev;
 
+		spin_lock_bh(&dev->xmit_lock);
 		while (!dev->tbusy && (res = qdisc_restart(dev)) < 0)
 			/* NOTHING */;
+		spin_unlock_bh(&dev->xmit_lock);
 
 		/* An explanation is necessary here.
 		   qdisc_restart called dev->hard_start_xmit,
@@ -131,8 +133,11 @@ static void dev_do_watchdog(unsigned long dummy)
 	for (h = qdisc_head.forw; h != &qdisc_head; h = h->forw) {
 		struct Qdisc *q = (struct Qdisc*)h;
 		struct device *dev = q->dev;
+
+		spin_lock_bh(&dev->xmit_lock);
 		if (dev->tbusy && jiffies - q->tx_last > q->tx_timeo)
 			qdisc_restart(dev);
+		spin_unlock_bh(&dev->xmit_lock);
 	}
 	dev_watchdog.expires = jiffies + 5*HZ;
 	add_timer(&dev_watchdog);

@@ -1,4 +1,4 @@
-/* $Id: isdnloop.h,v 1.2 1997/10/01 09:22:07 fritz Exp $
+/* $Id: isdnloop.h,v 1.3 1998/04/14 20:59:35 he Exp $
 
  * Loopback lowlevel module for testing of linklevel.
  *
@@ -19,6 +19,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdnloop.h,v $
+ * Revision 1.3  1998/04/14 20:59:35  he
+ * merged 2.1.94 changes
+ *
  * Revision 1.2  1997/10/01 09:22:07  fritz
  * Removed old compatibility stuff for 2.0.X kernels.
  * From now on, this code is for 2.1.X ONLY!

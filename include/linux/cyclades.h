@@ -557,7 +557,8 @@ struct cyclades_port {
 	unsigned long		event;
 	unsigned long		last_active;
 	int			count;	/* # of fd on device */
-	int                     x_break;
+	int                     breakon;
+	int                     breakoff;
 	int			blocked_open; /* # of blocked opens */
 	long			session; /* Session of opening process */
 	long			pgrp; /* pgrp of opening process */

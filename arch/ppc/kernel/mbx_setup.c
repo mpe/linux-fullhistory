@@ -1,5 +1,5 @@
 /*
- * $Id: mbx_setup.c,v 1.9 1999/04/28 11:54:09 davem Exp $
+ * $Id: mbx_setup.c,v 1.10 1999/05/14 07:24:19 davem Exp $
  *
  *  linux/arch/ppc/kernel/setup.c
  *

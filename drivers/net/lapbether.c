@@ -533,10 +533,15 @@ int lapbeth_init(void)
 
 	printk(KERN_INFO "LAPB Ethernet driver version 0.01\n");
 
+	read_lock_bh(&dev_base_lock);
 	for (dev = dev_base; dev != NULL; dev = dev->next) {
-		if (dev_is_ethdev(dev))
+		if (dev_is_ethdev(dev)) {
+			read_unlock_bh(&dev_base_lock);
 			lapbeth_new_device(dev);
+			read_lock_bh(&dev_base_lock);
+		}
 	}
+	read_unlock_bh(&dev_base_lock);
 
 	return 0;
 }

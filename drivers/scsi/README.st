@@ -2,7 +2,7 @@ This file contains brief information about the SCSI tape driver.
 The driver is currently maintained by Kai M{kisara (email
 Kai.Makisara@metla.fi)
 
-Last modified: Sun Jan 17 10:57:41 1999 by makisara@home
+Last modified: Sun Apr 18 13:24:43 1999 by makisara@home
 
 
 BASICS
@@ -348,15 +348,6 @@ MTIOCGET Returns some status information.
 	The GMT_xxx status bits reflect the drive status. GMT_DR_OPEN
 	is set if there is no tape in the drive. GMT_EOD means either
 	end of recorded data or end of tape. GMT_EOT means end of tape.
-
-The following ioctls use the structure mtlocation that contains both
-the block number and the partition number. These ioctls are available
-only for SCSI-2 tape drives and the block number is the
-device-independent logical block number defined by the standard.
-
-MTGETLOC Returns the current block and partition number.
-MTSETLOC Sets the tape to the block and partition specified by the
-	arguments.
 
 
 MISCELLANEOUS COMPILE OPTIONS

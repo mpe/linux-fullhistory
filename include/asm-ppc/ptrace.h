@@ -18,21 +18,26 @@
  */
 
 #ifndef __ASSEMBLY__
+#ifdef CONFIG_PPC64
+#define REG unsigned long /*long*/
+#else
+#define REG unsigned long
+#endif
 struct pt_regs {
-	unsigned long gpr[32];
-	unsigned long nip;
-	unsigned long msr;
-	unsigned long orig_gpr3; /* Used for restarting system calls */
-	unsigned long ctr;
-	unsigned long link;
-	unsigned long xer;
-	unsigned long ccr;
-	unsigned long mq;	/* 601 only (not used at present) */
-				/* Used on APUS to hold IPL value. */
-	unsigned long trap;	/* Reason for being here */
-	unsigned long dar;	/* Fault registers */
-	unsigned long dsisr;
-	unsigned long result;   /* Result of a system call */
+	REG gpr[32];
+	REG nip;
+	REG msr;
+	REG orig_gpr3;	/* Used for restarting system calls */
+	REG ctr;
+	REG link;
+	REG xer;
+	REG ccr;
+	REG mq;		/* 601 only (not used at present) */
+			/* Used on APUS to hold IPL value. */
+	REG trap;	/* Reason for being here */
+	REG dar;	/* Fault registers */
+	REG dsisr;
+	REG result;   	/* Result of a system call */
 };
 #endif
 

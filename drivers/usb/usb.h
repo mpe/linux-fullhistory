@@ -10,6 +10,7 @@ extern int usb_hub_init(void);
 extern int usb_kbd_init(void);
 extern int usb_cpia_init(void);
 extern int usb_mouse_init(void);
+extern int usb_printer_init(void);
 
 extern void hub_cleanup(void);
 extern void usb_mouse_cleanup(void);
@@ -113,6 +114,7 @@ struct usb_devmap {
 #define USB_MAXCONFIG		8
 #define USB_MAXINTERFACES	32
 #define USB_MAXENDPOINTS	32
+#define USB_MAXSTRINGS		16
 
 struct usb_device_descriptor {
 	__u8  bLength;
@@ -176,6 +178,7 @@ struct usb_config_descriptor {
 struct usb_string_descriptor {
 	__u8  bLength;
 	__u8  bDescriptorType;
+	__u16 wData[1];
 };
 
 /* Hub descriptor */
@@ -217,7 +220,7 @@ struct usb_operations {
 	struct usb_device *(*allocate)(struct usb_device *);
 	int (*deallocate)(struct usb_device *);
 	int (*control_msg)(struct usb_device *, unsigned int, void *, void *, int);
-	int (*bulk_msg)(struct usb_device *, unsigned int, void *, int);
+	int (*bulk_msg)(struct usb_device *, unsigned int, void *, int, unsigned long *);
 	int (*request_irq)(struct usb_device *, unsigned int, usb_device_irq, int, void *);
 };
 
@@ -238,12 +241,18 @@ struct usb_device {
 	int devnum;						/* Device number on USB bus */
 	int slow;						/* Slow device? */
 	int maxpacketsize;					/* Maximum packet size */
-
+	__u16 toggle;						/* one bit for each endpoint */
+	struct usb_config_descriptor *actconfig;		/* the active configuration */
+	int epmaxpacket[16];					/* endpoint specific maximums */
+	int ifnum;						/* active interface number */
 	struct usb_bus *bus;					/* Bus we're apart of */
 	struct usb_driver *driver;				/* Driver */
 	struct usb_device_descriptor descriptor;		/* Descriptor */
 	struct usb_config_descriptor *config;			/* All of the configs */
 	struct usb_device *parent;
+	char *stringtable;					/* Strings (multiple, null term) */
+	char **stringindex;					/* pointers to strings */
+	int maxstring;						/* max valid index */
   
 	/*
 	 * Child devices - these can be either new devices
@@ -306,7 +315,7 @@ extern void usb_destroy_configuration(struct usb_device *dev);
  * appropriately.
  */
 
-#define usb_maxpacket(pipe)	(8 << ((pipe) & 3))
+#define usb_maxpacket(dev,pipe)	((dev)->epmaxpacket[usb_pipeendpoint(pipe)])
 #define usb_packetid(pipe)	(((pipe) & 0x80) ? 0x69 : 0xE1)
 
 #define usb_pipedevice(pipe)	(((pipe) >> 8) & 0x7f)
@@ -323,6 +332,11 @@ extern void usb_destroy_configuration(struct usb_device *dev);
 
 #define usb_pipe_endpdev(pipe)	(((pipe) >> 8) & 0x7ff)
 
+/* The D0/D1 toggle bits */
+#define usb_gettoggle(dev, ep) (((dev)->toggle >> ep) & 1)
+#define	usb_dotoggle(dev, ep)	((dev)->toggle ^= (1 <<	ep))
+#define usb_settoggle(dev, ep, bit) ((dev)->toggle = ((dev)->toggle & (0xfffe << ep)) | (bit << ep))
+
 static inline unsigned int __create_pipe(struct usb_device *dev, unsigned int endpoint)
 {
 	return (dev->devnum << 8) | (endpoint << 15) | (dev->slow << 26) | dev->maxpacketsize;
@@ -338,6 +352,8 @@ static inline unsigned int __default_pipe(struct usb_device *dev)
 #define usb_rcvctrlpipe(dev,endpoint)	((2 << 30) | __create_pipe(dev,endpoint) | 0x80)
 #define usb_sndisocpipe(dev,endpoint)	((0 << 30) | __create_pipe(dev,endpoint))
 #define usb_rcvisocpipe(dev,endpoint)	((0 << 30) | __create_pipe(dev,endpoint) | 0x80)
+#define usb_sndbulkpipe(dev,endpoint)	((3 << 30) | __create_pipe(dev,endpoint))
+#define usb_rcvbulkpipe(dev,endpoint)	((3 << 30) | __create_pipe(dev,endpoint) | 0x80)
 #define usb_snddefctrl(dev)		((2 << 30) | __default_pipe(dev))
 #define usb_rcvdefctrl(dev)		((2 << 30) | __default_pipe(dev) | 0x80)
 
@@ -371,6 +387,7 @@ void usb_show_interface_descriptor(struct usb_interface_descriptor *);
 void usb_show_endpoint_descriptor(struct usb_endpoint_descriptor *);
 void usb_show_hub_descriptor(struct usb_hub_descriptor *);
 void usb_show_device(struct usb_device *);
+void usb_show_string(struct usb_device* dev, char *id, int index);
 
 /*
  * Audio parsing helpers

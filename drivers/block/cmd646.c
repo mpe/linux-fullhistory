@@ -275,9 +275,11 @@ __initfunc(void ide_init_cmd646 (ide_hwif_t *hwif))
 	(void) pci_write_config_byte(dev, 0x58, 0x3f);
 	(void) pci_write_config_byte(dev, 0x5b, 0x3f);
 
-	if (class_rev == 0x01) {
-		hwif->dmaproc = &cmd646_1_dmaproc;
-	} else {
-		hwif->dmaproc = &cmd646_dmaproc;
+	if (hwif->dma_base) {
+		if (class_rev == 0x01) {
+			hwif->dmaproc = &cmd646_1_dmaproc;
+		} else {
+			hwif->dmaproc = &cmd646_dmaproc;
+		}
 	}
 }

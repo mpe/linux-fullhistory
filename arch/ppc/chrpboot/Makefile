@@ -23,15 +23,21 @@ OBJCOPY = $(CROSS_COMPILE)objcopy
 OBJS = crt0.o start.o main.o misc.o ../coffboot/string.o ../coffboot/zlib.o image.o # initrd.o
 LIBS = $(TOPDIR)/lib/lib.a
 
+ifeq ($(CONFIG_PPC64),y)
+MSIZE=.64
+else
+MSIZE=
+endif
+
 ifeq ($(CONFIG_ALL_PPC),y)
 # yes, we want to build chrp stuff
 CONFIG_CHRP = y
 endif
 
 ifeq ($(CONFIG_SMP),y)
-TFTPIMAGE=/tftpboot/zImage.chrp.smp
+TFTPIMAGE=/tftpboot/zImage.chrp.smp$(MSIZE)
 else
-TFTPIMAGE=/tftpboot/zImage.chrp
+TFTPIMAGE=/tftpboot/zImage.chrp$(MSIZE)
 endif
 
 all:	$(TOPDIR)/zImage

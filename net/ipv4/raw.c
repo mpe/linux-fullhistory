@@ -75,11 +75,11 @@ static void raw_v4_hash(struct sock *sk)
 
 	num &= (RAWV4_HTABLE_SIZE - 1);
 	skp = &raw_v4_htable[num];
-	SOCKHASH_LOCK();
+	SOCKHASH_LOCK_WRITE();
 	sk->next = *skp;
 	*skp = sk;
 	sk->hashent = num;
-	SOCKHASH_UNLOCK();
+	SOCKHASH_UNLOCK_WRITE();
 }
 
 static void raw_v4_unhash(struct sock *sk)
@@ -90,7 +90,7 @@ static void raw_v4_unhash(struct sock *sk)
 	num &= (RAWV4_HTABLE_SIZE - 1);
 	skp = &raw_v4_htable[num];
 
-	SOCKHASH_LOCK();
+	SOCKHASH_LOCK_WRITE();
 	while(*skp != NULL) {
 		if(*skp == sk) {
 			*skp = sk->next;
@@ -98,7 +98,7 @@ static void raw_v4_unhash(struct sock *sk)
 		}
 		skp = &((*skp)->next);
 	}
-	SOCKHASH_UNLOCK();
+	SOCKHASH_UNLOCK_WRITE();
 }
 
 static void raw_v4_rehash(struct sock *sk)
@@ -110,7 +110,7 @@ static void raw_v4_rehash(struct sock *sk)
 	num &= (RAWV4_HTABLE_SIZE - 1);
 	skp = &raw_v4_htable[oldnum];
 
-	SOCKHASH_LOCK();
+	SOCKHASH_LOCK_WRITE();
 	while(*skp != NULL) {
 		if(*skp == sk) {
 			*skp = sk->next;
@@ -121,7 +121,7 @@ static void raw_v4_rehash(struct sock *sk)
 	sk->next = raw_v4_htable[num];
 	raw_v4_htable[num] = sk;
 	sk->hashent = num;
-	SOCKHASH_UNLOCK();
+	SOCKHASH_UNLOCK_WRITE();
 }
 
 /* Grumble... icmp and ip_input want to get at this... */
@@ -130,7 +130,7 @@ struct sock *raw_v4_lookup(struct sock *sk, unsigned short num,
 {
 	struct sock *s = sk;
 
-	SOCKHASH_LOCK();
+	SOCKHASH_LOCK_READ();
 	for(s = sk; s; s = s->next) {
 		if((s->num == num) 				&&
 		   !(s->dead && (s->state == TCP_CLOSE))	&&
@@ -139,7 +139,7 @@ struct sock *raw_v4_lookup(struct sock *sk, unsigned short num,
 		   !(s->bound_dev_if && s->bound_dev_if != dif))
 			break; /* gotcha */
 	}
-	SOCKHASH_UNLOCK();
+	SOCKHASH_UNLOCK_READ();
 	return s;
 }
 
@@ -402,6 +402,8 @@ done:
 
 static void raw_close(struct sock *sk, long timeout)
 {
+	bh_lock_sock(sk);
+
 	/* Observation: when raw_close is called, processes have
 	   no access to socket anymore. But net still has.
 	   Step one, detach it from networking:

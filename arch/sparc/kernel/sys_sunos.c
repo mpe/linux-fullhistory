@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.94 1998/10/12 06:15:04 jj Exp $
+/* $Id: sys_sunos.c,v 1.97 1999/05/24 19:40:39 davem Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -1198,7 +1198,7 @@ asmlinkage int sunos_readv(unsigned long fd, const struct iovec * vector, long c
 
 	lock_kernel();
 	ret = check_nonblock(sys_readv(fd,vector,count),fd);
-	lock_kernel();
+	unlock_kernel();
 	return ret;
 }
 

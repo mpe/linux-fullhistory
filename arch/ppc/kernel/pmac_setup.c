@@ -41,6 +41,7 @@
 #include <linux/blk.h>
 #include <linux/vt_kern.h>
 #include <linux/console.h>
+#include <linux/ide.h>
 #include <asm/prom.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
@@ -543,17 +544,18 @@ pmac_ide_fix_driveid(struct hd_driveid *id)
         ppc_generic_ide_fix_driveid(id);
 }
 
+#if defined(CONFIG_BLK_DEV_IDE_PMAC)
 /* This is declared in drivers/block/ide-pmac.c */
 void pmac_ide_init_hwif_ports (hw_regs_t *hw, ide_ioreg_t data_port, ide_ioreg_t ctrl_port, int *irq);
-
+#else
 /*
  * This registers the standard ports for this architecture with the IDE
  * driver.
  */
-void
-ide_init_default_hwifs(void)
+void pmac_ide_init_hwif_ports(hw_regs_t *hw, ide_ioreg_t data_port, ide_ioreg_t ctrl_port, int *irq)
 {
 }
+#endif
 #endif
 
 __initfunc(void

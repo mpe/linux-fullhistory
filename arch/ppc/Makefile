@@ -29,6 +29,10 @@ ifdef CONFIG_8xx
 CFLAGS := $(CFLAGS) -mcpu=860
 endif
 
+ifdef CONFIG_PPC64
+CFLAGS := $(CFLAGS) -Wa,-mppc64bridge #-Wa,-mppc64
+#CFLAGS := $(CFLAGS) -Wa,-mppc64 -mpowerpc64
+endif
 
 HEAD := arch/ppc/kernel/head.o
 

@@ -656,8 +656,8 @@ int ip_mc_procinfo(char *buffer, char **start, off_t offset, int length, int dum
 	
 	len=sprintf(buffer,"Idx\tDevice    : Count Querier\tGroup    Users Timer\tReporter\n");  
 	
-	for(dev = dev_base; dev; dev = dev->next)
-	{
+	read_lock_bh(&dev_base_lock);
+	for(dev = dev_base; dev; dev = dev->next) {
 		struct in_device *in_dev = dev->ip_ptr;
 		char   *querier = "NONE";
 		
@@ -686,6 +686,8 @@ int ip_mc_procinfo(char *buffer, char **start, off_t offset, int length, int dum
 		}
 	}
 done:
+	read_unlock_bh(&dev_base_lock);
+
 	*start=buffer+(offset-begin);
 	len-=(offset-begin);
 	if(len>length)

@@ -2023,8 +2023,10 @@ __initfunc(void arcnet_init(void))
   for (c=0; c< (arcnet_num_devs-1); c++)
     arcnet_devs[c].next=&arcnet_devs[c+1];
 
+  write_lock_bh(&dev_base_lock);
   arcnet_devs[c].next=dev_base;
   dev_base=&arcnet_devs[0];
+  write_unlock_bh(&dev_base_lock);
 
   /* Give names to those without them */
 
@@ -2078,9 +2080,11 @@ void arcnet_makename(char *device)
   for (;;)
     {
       sprintf(device, "arc%d", arcnum);
+      read_lock_bh(&dev_base_lock);
       for (dev = dev_base; dev; dev=dev->next)
 	if (dev->name != device && !strcmp(dev->name, device))
 	  break;
+      read_unlock_bh(&dev_base_lock);
       if (!dev)
 	return;
       arcnum++;

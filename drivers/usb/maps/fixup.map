@@ -1,7 +1,6 @@
 # misc fixes
 keycode   0 = Pause
 keycode  29 = Control
-keycode  99 = Remove
 keycode  42 = Shift
 keycode  54 = Shift_R
 keycode 109 = Application
@@ -25,7 +24,7 @@ keycode 207 = End
 keycode 208 = Down
 keycode 209 = Next
 keycode 210 = Insert
-keycode 211 = Delete
+keycode 211 = Remove
 keycode 219 = Window
 keycode 220 = Window_R
 keycode 221 = Menu

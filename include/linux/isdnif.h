@@ -1,8 +1,4 @@
-/* X25 changes:
-   Added constants ISDN_PROTO_L2_X25DTE/DCE and corresponding ISDN_FEATURE_..
-   */
-
-/* $Id: isdnif.h,v 1.23 1998/02/20 17:36:52 fritz Exp $
+/* $Id: isdnif.h,v 1.25 1998/06/17 19:51:55 he Exp $
  *
  * Linux ISDN subsystem
  *
@@ -26,6 +22,15 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: isdnif.h,v $
+ * Revision 1.25  1998/06/17 19:51:55  he
+ * merged with 2.1.10[34] (cosmetics and udelay() -> mdelay())
+ * brute force fix to avoid Ugh's in isdn_tty_write()
+ * cleaned up some dead code
+ *
+ * Revision 1.24  1998/03/19 13:18:57  keil
+ * Start of a CAPI like interface for supplementary Service
+ * first service: SUSPEND
+ *
  * Revision 1.23  1998/02/20 17:36:52  fritz
  * Added L2-protocols for V.110, changed FEATURE-Flag-constants.
  *
@@ -139,6 +144,7 @@
 #define ISDN_PROTO_L2_V11096 7   /* V.110 bitrate adaption 9600 Baud  */
 #define ISDN_PROTO_L2_V11019 8   /* V.110 bitrate adaption 19200 Baud */
 #define ISDN_PROTO_L2_V11038 9   /* V.110 bitrate adaption 38400 Baud */
+#define ISDN_PROTO_L2_MODEM  10  /* Analog Modem on Board */
 #define ISDN_PROTO_L2_MAX    15  /* Max. 16 Protocols                 */
 
 /*
@@ -173,6 +179,7 @@
 #define ISDN_CMD_UNLOCK  15       /* Release usage-lock                    */
 #define ISDN_CMD_SUSPEND 16       /* Suspend connection                    */
 #define ISDN_CMD_RESUME  17       /* Resume connection                     */
+#define CAPI_PUT_MESSAGE 18       /* CAPI message send down or up          */
 
 /*
  * Status-Values delivered from lowlevel to linklevel via
@@ -216,6 +223,7 @@
 #define ISDN_FEATURE_L2_V11096  (0x0001 << ISDN_PROTO_L2_V11096)
 #define ISDN_FEATURE_L2_V11019  (0x0001 << ISDN_PROTO_L2_V11019)
 #define ISDN_FEATURE_L2_V11038  (0x0001 << ISDN_PROTO_L2_V11038)
+#define ISDN_FEATURE_L2_MODEM   (0x0001 << ISDN_PROTO_L2_MODEM)
 
 #define ISDN_FEATURE_L2_MASK    (0x0FFFF) /* Max. 16 protocols */
 #define ISDN_FEATURE_L2_SHIFT   (0)
@@ -236,13 +244,36 @@
 #define ISDN_FEATURE_P_SHIFT    (24)
 
 typedef struct setup_parm {
-    char phone[32];         /* Remote Phone-Number */
-    char eazmsn[32];        /* Local EAZ or MSN    */
+    unsigned char phone[32];	/* Remote Phone-Number */
+    unsigned char eazmsn[32];	/* Local EAZ or MSN    */
     unsigned char si1;      /* Service Indicator 1 */
     unsigned char si2;      /* Service Indicator 2 */
     unsigned char plan;     /* Numbering plan      */
     unsigned char screen;   /* Screening info      */
 } setup_parm;
+
+/* CAPI structs */
+
+/* this is compatible to the old union size */
+#define MAX_CAPI_PARA_LEN 50
+
+typedef struct {
+	/* Header */
+	__u16 Length;
+	__u16 ApplId;
+	__u8 Command;
+	__u8 Subcommand;
+	__u16 Messagenumber;
+
+	/* Parameter */
+	union {
+		__u32 Controller;
+		__u32 PLCI;
+		__u32 NCCI;
+	} adr;
+	__u8 para[MAX_CAPI_PARA_LEN];
+} capi_msg;
+
 
 /*
  * Structure for exchanging above infos
@@ -255,8 +286,9 @@ typedef struct {
   union {
 	ulong errcode;               /* Type of error with STAT_L1ERR         */
 	int   length;                /* Amount of bytes sent with STAT_BSENT  */
-	char  num[50];               /* Additional Data                       */
-	setup_parm setup;
+	u_char	num[50];	/* Additional Data			*/
+	setup_parm 	setup;	/* For SETUP msg			*/
+	capi_msg  	cmsg;	/* For CAPI like messages		*/
   } parm;
 } isdn_ctrl;
 

@@ -106,9 +106,16 @@ EXPORT_SYMBOL(dev_lockct);
 EXPORT_SYMBOL(skb_over_panic);
 EXPORT_SYMBOL(skb_under_panic);
 
+/* Socket layer global data */
+EXPORT_SYMBOL(sockhash_lock);
+
 /* Socket layer registration */
 EXPORT_SYMBOL(sock_register);
 EXPORT_SYMBOL(sock_unregister);
+
+/* Socket locking */
+EXPORT_SYMBOL(lock_sock);
+EXPORT_SYMBOL(release_sock);
 
 /* Socket layer support routines */
 EXPORT_SYMBOL(memcpy_fromiovec);
@@ -243,7 +250,6 @@ EXPORT_SYMBOL(ip_mc_dec_group);
 EXPORT_SYMBOL(__ip_finish_output);
 EXPORT_SYMBOL(inet_dgram_ops);
 EXPORT_SYMBOL(ip_cmsg_recv);
-EXPORT_SYMBOL(__release_sock);
 
 /* Route manipulation */
 EXPORT_SYMBOL(ip_rt_ioctl);
@@ -279,9 +285,11 @@ EXPORT_SYMBOL(inet_recvmsg);
 
 /* Socket demultiplexing. */
 EXPORT_SYMBOL(tcp_good_socknum);
-EXPORT_SYMBOL(tcp_established_hash);
+EXPORT_SYMBOL(tcp_ehash);
+EXPORT_SYMBOL(tcp_ehash_size);
 EXPORT_SYMBOL(tcp_listening_hash);
-EXPORT_SYMBOL(tcp_bound_hash);
+EXPORT_SYMBOL(tcp_bhash);
+EXPORT_SYMBOL(tcp_bhash_size);
 EXPORT_SYMBOL(udp_good_socknum);
 EXPORT_SYMBOL(udp_hash);
 
@@ -470,6 +478,7 @@ EXPORT_SYMBOL(netdev_unregister_fc);
 EXPORT_SYMBOL(netdev_fc_xoff);
 #endif
 EXPORT_SYMBOL(dev_base);
+EXPORT_SYMBOL(dev_base_lock);
 EXPORT_SYMBOL(dev_close);
 EXPORT_SYMBOL(dev_mc_add);
 EXPORT_SYMBOL(dev_mc_delete);

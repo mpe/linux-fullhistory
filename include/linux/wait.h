@@ -8,10 +8,13 @@
 
 #ifdef __KERNEL__
 
-#include <asm/page.h>
-#include <asm/spinlock.h>
+#include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/stddef.h>
+
+#include <asm/page.h>
+#include <asm/spinlock.h>
+#include <asm/processor.h>
 
 /*
  * Temporary debugging help until all code is converted to the new
@@ -118,7 +121,6 @@ typedef struct __wait_queue_head wait_queue_head_t;
 static inline void init_waitqueue_head(wait_queue_head_t *q)
 {
 #if WAITQUEUE_DEBUG
-	__label__ __x;
 	if (!q)
 		WQ_BUG();
 #endif
@@ -126,7 +128,7 @@ static inline void init_waitqueue_head(wait_queue_head_t *q)
 	INIT_LIST_HEAD(&q->task_list);
 #if WAITQUEUE_DEBUG
 	q->__magic = (long)&q->__magic;
-	__x: q->__creator = (long)&&__x;
+	q->__creator = (long)current_text_addr();
 #endif
 }
 

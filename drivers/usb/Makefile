@@ -40,6 +40,10 @@ ifeq ($(CONFIG_USB_CPIA),y)
   USBX_OBJS += cpia.o
 endif
 
+ifeq ($(CONFIG_USB_PRINTER),y)
+  USBX_OBJS += printer.o
+endif
+
 ifeq ($(CONFIG_USB), y)
   L_OBJS += $(USBX_OBJS)
 endif

@@ -34,6 +34,7 @@
 
 /* Eventually we may need a look-up table, but this works for now.
 */
+#define LFS	48
 #define LFD	50
 #define LFDU	51
 #define STFD	54
@@ -82,6 +83,12 @@ Soft_emulate_8xx(struct pt_regs *regs)
 			retval = EFAULT;
 		else
 			regs->gpr[idxreg] = (uint)ea;
+		break;
+	case LFS:
+		sdisp = (instword & 0xffff);
+		ea = (uint *)(regs->gpr[idxreg] + sdisp);
+		if (copy_from_user(ip, ea, sizeof(float)))
+			retval = EFAULT;
 		break;
 	case STFD:
 		/* this is a 16 bit quantity that is sign extended

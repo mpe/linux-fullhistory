@@ -739,12 +739,12 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	padzero(elf_bss);
 
 #if 0
-	printk("(start_brk) %x\n" , current->mm->start_brk);
-	printk("(end_code) %x\n" , current->mm->end_code);
-	printk("(start_code) %x\n" , current->mm->start_code);
-	printk("(end_data) %x\n" , current->mm->end_data);
-	printk("(start_stack) %x\n" , current->mm->start_stack);
-	printk("(brk) %x\n" , current->mm->brk);
+	printk("(start_brk) %lx\n" , (long) current->mm->start_brk);
+	printk("(end_code) %lx\n" , (long) current->mm->end_code);
+	printk("(start_code) %lx\n" , (long) current->mm->start_code);
+	printk("(end_data) %lx\n" , (long) current->mm->end_data);
+	printk("(start_stack) %lx\n" , (long) current->mm->start_stack);
+	printk("(brk) %lx\n" , (long) current->mm->brk);
 #endif
 
 	if ( current->personality == PER_SVR4 )

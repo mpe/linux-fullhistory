@@ -603,6 +603,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		if((!child->dumpable ||
 		    (current->uid != child->euid) ||
 		    (current->uid != child->uid) ||
+		    (current->uid != child->suid) ||
 		    (current->gid != child->egid) ||
 		    (current->gid != child->sgid) ||
 		    (!cap_issubset(child->cap_permitted, current->cap_permitted)) ||

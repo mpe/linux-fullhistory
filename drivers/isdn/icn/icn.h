@@ -318,9 +318,9 @@ static char *icn_id2 = "\0";
 #ifdef MODULE
 MODULE_AUTHOR("Fritz Elfert");
 MODULE_PARM(portbase, "i");
-MODULE_PARM_DESC(portbase, "Port address of first card");
+MODULE_PARM_DESC(portbase, "Port adress of first card");
 MODULE_PARM(membase, "i");
-MODULE_PARM_DESC(membase, "Shared memory address of all cards");
+MODULE_PARM_DESC(membase, "Shared memory adress of all cards");
 MODULE_PARM(icn_id, "s");
 MODULE_PARM_DESC(icn_id, "ID-String of first card");
 MODULE_PARM(icn_id2, "s");

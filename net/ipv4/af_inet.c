@@ -160,9 +160,10 @@ static __inline__ void kill_sk_queues(struct sock *sk)
 	while((skb = skb_dequeue(&sk->error_queue)) != NULL)
 		kfree_skb(skb);
 
-  	/* Now the backlog. */
-  	while((skb=skb_dequeue(&sk->back_log)) != NULL)
-		kfree_skb(skb);
+	/* It is _impossible_ for the backlog to contain anything
+	 * when we get here.  All user references to this socket
+	 * have gone away, only the net layer knows can touch it.
+	 */
 }
 
 static __inline__ void kill_sk_now(struct sock *sk)
@@ -195,14 +196,19 @@ static __inline__ void kill_sk_later(struct sock *sk)
 
 	sk->destroy = 1;
 	sk->ack_backlog = 0;
-	release_sock(sk);
+	bh_unlock_sock(sk);
 	net_reset_timer(sk, TIME_DESTROY, SOCK_DESTROY_TIME);
 }
 
+/* Callers must hold the BH spinlock.
+ *
+ * At this point, there should be no process reference to this
+ * socket, and thus no user references at all.  Therefore we
+ * can assume the socket waitqueue is inactive and nobody will
+ * try to jump onto it.
+ */
 void destroy_sock(struct sock *sk)
 {
-	lock_sock(sk);			/* just to be safe. */
-
   	/* Now we can no longer get new packets or once the
   	 * timers are killed, send them.
   	 */

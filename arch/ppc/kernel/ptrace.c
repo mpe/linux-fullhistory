@@ -330,8 +330,12 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		if ((!child->dumpable ||
 		    (current->uid != child->euid) ||
 		    (current->uid != child->uid) ||
+		    (current->uid != child->suid) ||
 	 	    (current->gid != child->egid) ||
-	 	    (current->gid != child->gid)) && !capable(CAP_SYS_PTRACE))
+	 	    (current->gid != child->gid) ||
+		    (current->gid != child->sgid) ||
+		    (!cap_issubset(child->cap_permitted, current->cap_permitted)))
+		    && !capable(CAP_SYS_PTRACE))
 			goto out;
 		/* the same process cannot be attached many times */
 		if (child->flags & PF_PTRACED)

@@ -1,8 +1,8 @@
-/* $Id: module.c,v 1.7 1998/02/12 23:06:52 keil Exp $
+/* $Id: module.c,v 1.9 1999/04/12 13:13:56 fritz Exp $
  *
  * ISDN lowlevel-module for the IBM ISDN-S0 Active 2000.
  *
- * Copyright 1997 by Fritz Elfert (fritz@wuemaus.franken.de)
+ * Copyright 1998 by Fritz Elfert (fritz@isdn4linux.de)
  * Thanks to Friedemann Baitinger and IBM Germany
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,6 +20,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: module.c,v $
+ * Revision 1.9  1999/04/12 13:13:56  fritz
+ * Made cards pointer static to avoid name-clash.
+ *
+ * Revision 1.8  1998/11/05 22:12:51  fritz
+ * Changed mail-address.
+ *
  * Revision 1.7  1998/02/12 23:06:52  keil
  * change for 2.1.86 (removing FREE_READ/FREE_WRITE from [dev]_kfree_skb()
  *
@@ -57,7 +63,7 @@ static unsigned short isa_ports[] =
 };
 #define ISA_NRPORTS (sizeof(isa_ports)/sizeof(unsigned short))
 
-act2000_card *actcards = (act2000_card *) NULL;
+static act2000_card *cards = (act2000_card *) NULL;
 
 /* Parameters to be set by insmod */
 static int   act_bus  =  0;
@@ -589,7 +595,7 @@ act2000_logstat(struct act2000_card *card, char *str)
 static inline act2000_card *
 act2000_findcard(int driverid)
 {
-        act2000_card *p = actcards;
+        act2000_card *p = cards;
 
         while (p) {
                 if (p->myid == driverid)
@@ -714,8 +720,8 @@ act2000_alloccard(int bus, int port, int irq, char *id)
         card->bus = bus;
         card->port = port;
         card->irq = irq;
-        card->next = actcards;
-        actcards = card;
+        card->next = cards;
+        cards = card;
 }
 
 /*
@@ -805,9 +811,9 @@ act2000_addcard(int bus, int port, int irq, char *id)
 				       bus);
 		}
 	}
-	if (!actcards)
+	if (!cards)
 		return 1;
-        p = actcards;
+        p = cards;
         while (p) {
 		initialized = 0;
 		if (!p->interface.statcallb) {
@@ -870,9 +876,9 @@ act2000_addcard(int bus, int port, int irq, char *id)
                                 kfree(p);
                                 p = q->next;
                         } else {
-                                actcards = p->next;
+                                cards = p->next;
                                 kfree(p);
-                                p = actcards;
+                                p = cards;
                         }
 			failed++;
                 }
@@ -890,9 +896,9 @@ int
 act2000_init(void)
 {
         printk(KERN_INFO "%s\n", DRIVERNAME);
-        if (!actcards)
+        if (!cards)
 		act2000_addcard(act_bus, act_port, act_irq, act_id);
-        if (!actcards)
+        if (!cards)
                 printk(KERN_INFO "act2000: No cards defined yet\n");
         /* No symbols to export, hide all symbols */
         EXPORT_NO_SYMBOLS;
@@ -903,14 +909,14 @@ act2000_init(void)
 void
 cleanup_module(void)
 {
-        act2000_card *card = actcards;
+        act2000_card *card = cards;
         act2000_card *last;
         while (card) {
                 unregister_card(card);
 		del_timer(&card->ptimer);
                 card = card->next;
         }
-        card = actcards;
+        card = cards;
         while (card) {
                 last = card;
                 card = card->next;

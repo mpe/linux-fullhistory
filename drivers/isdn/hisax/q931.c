@@ -1,4 +1,4 @@
-/* $Id: q931.c,v 1.6 1997/07/27 21:09:44 keil Exp $
+/* $Id: q931.c,v 1.7 1998/11/15 23:55:17 keil Exp $
 
  * q931.c       code to decode ITU Q.931 call control messages
  *
@@ -14,6 +14,9 @@
  *
  *
  * $Log: q931.c,v $
+ * Revision 1.7  1998/11/15 23:55:17  keil
+ * changes from 2.0
+ *
  * Revision 1.6  1997/07/27 21:09:44  keil
  * move functions to isdnl3.c
  *
@@ -159,7 +162,7 @@ struct MessageType mt_n0[] =
 	{MT_N0_CLO_ACK, "CLOse ACKnowledge"}
 };
 
-int mt_n0_len = (sizeof(mt_n0) / sizeof(struct MessageType));
+#define MT_N0_LEN (sizeof(mt_n0) / sizeof(struct MessageType))
 
 static
 struct MessageType mt_n1[] =
@@ -196,7 +199,7 @@ struct MessageType mt_n1[] =
 	{MT_N1_STAT, "STATus"}
 };
 
-int mt_n1_len = (sizeof(mt_n1) / sizeof(struct MessageType));
+#define MT_N1_LEN (sizeof(mt_n1) / sizeof(struct MessageType))
 
 static struct MessageType fac_1tr6[] =
 {
@@ -220,9 +223,7 @@ static struct MessageType fac_1tr6[] =
 	{FAC_Rueckwechsel, "Rueckwechsel"},
 	{FAC_Umleitung, "Umleitung"}
 };
-int fac_1tr6_len = (sizeof(fac_1tr6) / sizeof(struct MessageType));
-
-
+#define FAC_1TR6_LEN (sizeof(fac_1tr6) / sizeof(struct MessageType))
 
 static int
 prbits(char *dest, u_char b, int start, int len)
@@ -925,7 +926,7 @@ static struct InformationElement we_0[] =
 	{WE0_userInfo, "User Info", general}
 };
 
-static int we_0_len = (sizeof(we_0) / sizeof(struct InformationElement));
+#define WE_0_LEN (sizeof(we_0) / sizeof(struct InformationElement))
 
 static struct InformationElement we_6[] =
 {
@@ -937,7 +938,7 @@ static struct InformationElement we_6[] =
 	{WE6_statusCalled, "Status Called", general},
 	{WE6_addTransAttr, "Additional Transmission Attributes", general}
 };
-static int we_6_len = (sizeof(we_6) / sizeof(struct InformationElement));
+#define WE_6_LEN (sizeof(we_6) / sizeof(struct InformationElement))
 
 int
 QuickHex(char *txt, u_char * p, int cnt)
@@ -964,39 +965,92 @@ QuickHex(char *txt, u_char * p, int cnt)
 }
 
 void
-LogFrame(struct IsdnCardState *sp, u_char * buf, int size)
+LogFrame(struct IsdnCardState *cs, u_char * buf, int size)
 {
 	char *dp;
 
 	if (size < 1)
 		return;
-	dp = sp->dlogspace;
-	if (size < 4096 / 3 - 10) {
-		dp += sprintf(dp, "HEX:");
+	dp = cs->dlog;
+	if (size < MAX_DLOG_SPACE / 3 - 10) {
+		*dp++ = 'H';
+		*dp++ = 'E';
+		*dp++ = 'X';
+		*dp++ = ':';
 		dp += QuickHex(dp, buf, size);
 		dp--;
 		*dp++ = '\n';
 		*dp = 0;
+		HiSax_putstatus(cs, NULL, cs->dlog);
 	} else
-		sprintf(dp, "LogFrame: warning Frame too big (%d)\n",
-			size);
-	HiSax_putstatus(sp, sp->dlogspace);
+		HiSax_putstatus(cs, "LogFrame: ", "warning Frame too big (%d)", size);
 }
 
 void
-dlogframe(struct IsdnCardState *sp, u_char * buf, int size, char *comment)
+dlogframe(struct IsdnCardState *cs, struct sk_buff *skb, int dir)
 {
-	u_char *bend = buf + size;
+	u_char *bend, *buf;
 	char *dp;
 	unsigned char pd, cr_l, cr, mt;
-	int i, cs = 0, cs_old = 0, cs_fest = 0;
+	unsigned char sapi, tei, ftyp;
+	int i, cset = 0, cs_old = 0, cs_fest = 0;
+	int size, finish = 0;
 
-	if (size < 1)
+	if (skb->len < 3)
 		return;
 	/* display header */
-	dp = sp->dlogspace;
-	dp += sprintf(dp, "%s\n", comment);
-
+	dp = cs->dlog;
+	dp += jiftime(dp, jiffies);
+	*dp++ = ' ';
+	sapi = skb->data[0] >> 2;
+	tei  = skb->data[1] >> 1;
+	ftyp = skb->data[2];
+	buf = skb->data;
+	dp += sprintf(dp, "frame %s ", dir ? "network->user" : "user->network");
+	size = skb->len;
+	
+	if (tei == GROUP_TEI) {
+		if (sapi == CTRL_SAPI) { /* sapi 0 */
+			if (ftyp == 3) {
+				dp += sprintf(dp, "broadcast\n");
+				buf += 3;
+				size -= 3;
+			} else {
+				dp += sprintf(dp, "no UI broadcast\n");
+				finish = 1;
+			}
+		} else if (sapi == TEI_SAPI) {
+			dp += sprintf(dp, "tei managment\n");
+			finish = 1;
+		} else {
+			dp += sprintf(dp, "unknown sapi %d broadcast\n", sapi);
+			finish = 1;
+		}
+	} else {
+		if (sapi == CTRL_SAPI) {
+			if (!(ftyp & 1)) { /* IFrame */
+				dp += sprintf(dp, "with tei %d\n", tei);
+				buf += 4;
+				size -= 4;
+			} else {
+				dp += sprintf(dp, "SFrame with tei %d\n", tei);
+				finish = 1;
+			}
+		} else {
+			dp += sprintf(dp, "unknown sapi %d tei %d\n", sapi, tei);
+			finish = 1;
+		}
+	}
+	bend = skb->data + skb->len;
+	if (buf >= bend) {
+		dp += sprintf(dp, "frame too short\n");
+		finish = 1;
+	}
+	if (finish) {
+		*dp = 0;
+		HiSax_putstatus(cs, NULL, cs->dlog);
+		return;
+	}
 	if ((0xfe & buf[0]) == PROTO_DIS_N0) {	/* 1TR6 */
 		/* locate message type */
 		pd = *buf++;
@@ -1007,11 +1061,11 @@ dlogframe(struct IsdnCardState *sp, u_char * buf, int size, char *comment)
 			cr = 0;
 		mt = *buf++;
 		if (pd == PROTO_DIS_N0) {	/* N0 */
-			for (i = 0; i < mt_n0_len; i++)
+			for (i = 0; i < MT_N0_LEN; i++)
 				if (mt_n0[i].nr == mt)
 					break;
 			/* display message type if it exists */
-			if (i == mt_n0_len)
+			if (i == MT_N0_LEN)
 				dp += sprintf(dp, "callref %d %s size %d unknown message type N0 %x!\n",
 					      cr & 0x7f, (cr & 0x80) ? "called" : "caller",
 					      size, mt);
@@ -1020,11 +1074,11 @@ dlogframe(struct IsdnCardState *sp, u_char * buf, int size, char *comment)
 					      cr & 0x7f, (cr & 0x80) ? "called" : "caller",
 					      size, mt_n0[i].descr);
 		} else {	/* N1 */
-			for (i = 0; i < mt_n1_len; i++)
+			for (i = 0; i < MT_N1_LEN; i++)
 				if (mt_n1[i].nr == mt)
 					break;
 			/* display message type if it exists */
-			if (i == mt_n1_len)
+			if (i == MT_N1_LEN)
 				dp += sprintf(dp, "callref %d %s size %d unknown message type N1 %x!\n",
 					      cr & 0x7f, (cr & 0x80) ? "called" : "caller",
 					      size, mt);
@@ -1041,8 +1095,8 @@ dlogframe(struct IsdnCardState *sp, u_char * buf, int size, char *comment)
 				switch ((*buf >> 4) & 7) {
 					case 1:
 						dp += sprintf(dp, "  Shift %x\n", *buf & 0xf);
-						cs_old = cs;
-						cs = *buf & 7;
+						cs_old = cset;
+						cset = *buf & 7;
 						cs_fest = *buf & 8;
 						break;
 					case 3:
@@ -1066,33 +1120,33 @@ dlogframe(struct IsdnCardState *sp, u_char * buf, int size, char *comment)
 				continue;
 			}
 			/* No, locate it in the table */
-			if (cs == 0) {
-				for (i = 0; i < we_0_len; i++)
+			if (cset == 0) {
+				for (i = 0; i < WE_0_LEN; i++)
 					if (*buf == we_0[i].nr)
 						break;
 
 				/* When found, give appropriate msg */
-				if (i != we_0_len) {
+				if (i != WE_0_LEN) {
 					dp += sprintf(dp, "  %s\n", we_0[i].descr);
 					dp += we_0[i].f(dp, buf);
 				} else
-					dp += sprintf(dp, "  Codeset %d attribute %x attribute size %d\n", cs, *buf, buf[1]);
-			} else if (cs == 6) {
-				for (i = 0; i < we_6_len; i++)
+					dp += sprintf(dp, "  Codeset %d attribute %x attribute size %d\n", cset, *buf, buf[1]);
+			} else if (cset == 6) {
+				for (i = 0; i < WE_6_LEN; i++)
 					if (*buf == we_6[i].nr)
 						break;
 
 				/* When found, give appropriate msg */
-				if (i != we_6_len) {
+				if (i != WE_6_LEN) {
 					dp += sprintf(dp, "  %s\n", we_6[i].descr);
 					dp += we_6[i].f(dp, buf);
 				} else
-					dp += sprintf(dp, "  Codeset %d attribute %x attribute size %d\n", cs, *buf, buf[1]);
+					dp += sprintf(dp, "  Codeset %d attribute %x attribute size %d\n", cset, *buf, buf[1]);
 			} else
-				dp += sprintf(dp, "  Unknown Codeset %d attribute %x attribute size %d\n", cs, *buf, buf[1]);
+				dp += sprintf(dp, "  Unknown Codeset %d attribute %x attribute size %d\n", cset, *buf, buf[1]);
 			/* Skip to next element */
 			if (cs_fest == 8) {
-				cs = cs_old;
+				cset = cs_old;
 				cs_old = 0;
 				cs_fest = 0;
 			}
@@ -1170,6 +1224,6 @@ dlogframe(struct IsdnCardState *sp, u_char * buf, int size, char *comment)
 	} else {
 		dp += sprintf(dp, "Unknown protocol %x!", buf[0]);
 	}
-	dp += sprintf(dp, "\n");
-	HiSax_putstatus(sp, sp->dlogspace);
+	*dp = 0;
+	HiSax_putstatus(cs, NULL, cs->dlog);
 }

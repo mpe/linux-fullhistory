@@ -564,10 +564,13 @@ struct device *nr_dev_first(void)
 {
 	struct device *dev, *first = NULL;
 
-	for (dev = dev_base; dev != NULL; dev = dev->next)
+	read_lock_bh(&dev_base_lock);
+	for (dev = dev_base; dev != NULL; dev = dev->next) {
 		if ((dev->flags & IFF_UP) && dev->type == ARPHRD_NETROM)
 			if (first == NULL || strncmp(dev->name, first->name, 3) < 0)
 				first = dev;
+	}
+	read_unlock_bh(&dev_base_lock);
 
 	return first;
 }
@@ -579,11 +582,14 @@ struct device *nr_dev_get(ax25_address *addr)
 {
 	struct device *dev;
 
-	for (dev = dev_base; dev != NULL; dev = dev->next)
+	read_lock_bh(&dev_base_lock);
+	for (dev = dev_base; dev != NULL; dev = dev->next) {
 		if ((dev->flags & IFF_UP) && dev->type == ARPHRD_NETROM && ax25cmp(addr, (ax25_address *)dev->dev_addr) == 0)
-			return dev;
-
-	return NULL;
+			goto out;
+	}
+out:
+	read_unlock_bh(&dev_base_lock);
+	return dev;
 }
 
 static ax25_digi *nr_call_to_digi(int ndigis, ax25_address *digipeaters)

@@ -266,6 +266,9 @@ struct device
 	struct Qdisc		*qdisc_list;
 	unsigned long		tx_queue_len;	/* Max frames per queue allowed */
 
+	/* hard_start_xmit synchronizer */
+	spinlock_t		xmit_lock;
+
 	/* Pointers to interface service routines.	*/
 	int			(*open)(struct device *dev);
 	int			(*stop)(struct device *dev);
@@ -331,6 +334,7 @@ struct packet_type
 
 extern struct device		loopback_dev;		/* The loopback */
 extern struct device		*dev_base;		/* All devices */
+extern rwlock_t			dev_base_lock;		/* Device list lock */
 extern struct packet_type 	*ptype_base[16];	/* Hashed types */
 extern int			netdev_dropping;
 extern int			net_cpu_congestion;

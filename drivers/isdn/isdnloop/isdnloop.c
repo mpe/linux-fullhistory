@@ -1,4 +1,4 @@
-/* $Id: isdnloop.c,v 1.4 1998/02/24 21:39:05 he Exp $
+/* $Id: isdnloop.c,v 1.8 1998/11/18 18:59:43 armin Exp $
 
  * ISDN low-level module implementing a dummy loop driver.
  *
@@ -19,6 +19,20 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdnloop.c,v $
+ * Revision 1.8  1998/11/18 18:59:43  armin
+ * changes for 2.1.127
+ *
+ * Revision 1.7  1998/10/30 18:58:03  he
+ * typecast to suppress a compiler warning
+ *
+ * Revision 1.6  1998/06/17 19:51:37  he
+ * merged with 2.1.10[34] (cosmetics and udelay() -> mdelay())
+ * brute force fix to avoid Ugh's in isdn_tty_write()
+ * cleaned up some dead code
+ *
+ * Revision 1.5  1998/04/14 20:59:32  he
+ * merged 2.1.94 changes
+ *
  * Revision 1.4  1998/02/24 21:39:05  he
  * L2_PROT_X25DTE / DCE
  * additional state 17 and new internal signal messages "BCON_I"
@@ -42,7 +56,7 @@
 #include "isdnloop.h"
 
 static char
-*revision = "$Revision: 1.4 $";
+*revision = "$Revision: 1.8 $";
 
 static int isdnloop_addcard(char *);
 
@@ -1312,7 +1326,7 @@ isdnloop_command(isdn_ctrl * c, isdnloop_card * card)
 							c->parm.num[0] ? "N" : "ALL", c->parm.num);
 					} else
 						sprintf(cbuf, "%02d;EAZ%s\n", (int) a,
-							c->parm.num[0] ? c->parm.num : "0123456789");
+							c->parm.num[0] ? c->parm.num : (u_char *) "0123456789");
 					i = isdnloop_writecmd(cbuf, strlen(cbuf), 0, card);
 				}
 				break;

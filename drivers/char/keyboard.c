@@ -247,9 +247,10 @@ void handle_scancode(unsigned char scancode, int down)
 		sysrq_pressed = !up_flag;
 		return;
 	} else if (sysrq_pressed) {
-		if (!up_flag)
+		if (!up_flag) {
 			handle_sysrq(kbd_sysrq_xlate[keycode], kbd_pt_regs, kbd, tty);
-		return;
+			return;
+		}
 	}
 #endif
 
@@ -474,7 +475,6 @@ static void scroll_back(void)
 
 static void boot_it(void)
 {
-	if (kbd->slockstate & ~shift_state) return;
 	ctrl_alt_del();
 }
 

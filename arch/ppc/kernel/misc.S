@@ -649,15 +649,6 @@ __clear_msr_me:
         blr
 
 /*
- * Fetch the current SR register
- *   get_SR(int index)
- */
-_GLOBAL(get_SR)
-	mfsrin	r4,r3
-	mr	r3,r4
-	blr
-
-/*
  * Create a kernel thread
  *   __kernel_thread(flags, fn, arg)
  */

@@ -1,8 +1,8 @@
-/* $Id: isdn_tty.h,v 1.10 1997/03/02 14:29:26 fritz Exp $
+/* $Id: isdn_tty.h,v 1.13 1999/04/12 12:33:46 fritz Exp $
 
  * header for Linux ISDN subsystem, tty related functions (linklevel).
  *
- * Copyright 1994,95,96 by Fritz Elfert (fritz@wuemaus.franken.de)
+ * Copyright 1994-1999  by Fritz Elfert (fritz@isdn4linux.de)
  * Copyright 1995,96    by Thinking Objects Software GmbH Wuerzburg
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,6 +20,24 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_tty.h,v $
+ * Revision 1.13  1999/04/12 12:33:46  fritz
+ * Changes from 2.0 tree.
+ *
+ * Revision 1.12  1999/03/02 12:04:51  armin
+ * -added ISDN_STAT_ADDCH to increase supported channels after
+ *  register_isdn().
+ * -ttyI now goes on-hook on ATZ when B-Ch is connected.
+ * -added timer-function for register S7 (Wait for Carrier).
+ * -analog modem (ISDN_PROTO_L2_MODEM) implementations.
+ * -on L2_MODEM a string will be appended to the CONNECT-Message,
+ *  which is provided by the HL-Driver in parm.num in ISDN_STAT_BCONN.
+ * -variable "dialing" used for ATA also, for interrupting call
+ *  establishment and register S7.
+ *
+ * Revision 1.11  1998/03/19 13:18:27  keil
+ * Start of a CAPI like interface for supplementary Service
+ * first service: SUSPEND
+ *
  * Revision 1.10  1997/03/02 14:29:26  fritz
  * More ttyI related cleanup.
  *
@@ -56,6 +74,7 @@
 
 extern void isdn_tty_modem_escape(void);
 extern void isdn_tty_modem_ring(void);
+extern void isdn_tty_carrier_timeout(void);
 extern void isdn_tty_modem_xmit(void);
 extern int isdn_tty_modem_init(void);
 extern void isdn_tty_readmodem(void);
@@ -63,3 +82,4 @@ extern int isdn_tty_find_icall(int, int, setup_parm);
 extern void isdn_tty_cleanup_xmit(modem_info *);
 extern int isdn_tty_stat_callback(int, isdn_ctrl *);
 extern int isdn_tty_rcv_skb(int, int, int, struct sk_buff *);
+extern int isdn_tty_capi_facility(capi_msg *cm); 

@@ -2027,7 +2027,9 @@ static struct device *get_strip_dev(struct strip *strip_info)
         !memcmp(strip_info->dev.dev_addr, zero_address.c, sizeof(zero_address)) &&
         memcmp(&strip_info->true_dev_addr, zero_address.c, sizeof(zero_address)))
     {
-        struct device *dev = dev_base;
+        struct device *dev;
+	read_lock_bh(&dev_base_lock);
+	dev = dev_base;
         while (dev)
         {
             if (dev->type == strip_info->dev.type &&
@@ -2035,10 +2037,12 @@ static struct device *get_strip_dev(struct strip *strip_info)
             {
                 printk(KERN_INFO "%s: Transferred packet ownership to %s.\n",
                     strip_info->dev.name, dev->name);
+		read_unlock_bh(&dev_base_lock);
                 return(dev);
             }
             dev = dev->next;
         }
+	read_unlock_bh(&dev_base_lock);
     }
     return(&strip_info->dev);
 }

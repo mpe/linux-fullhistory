@@ -11,6 +11,13 @@
  *        callbacks for the FSM
  */
 
+/*
+ * Fix: 19981230 - Carlos Morgado <chbm@techie.com>
+ * Port of Nelson Escravana's <nelson.escravana@usa.net> fix to CalledPN 
+ * NULL pointer dereference in cb_in_1 (originally fixed in 2.0)
+ */
+
+
 #define __NO_VERSION__
 
 #include <linux/module.h>
@@ -164,12 +171,24 @@ void cb_in_1(struct pcbit_dev * dev, struct pcbit_chan* chan,
          *  ictl.num >= strlen() + strlen() + 5
          */
 
+	if (cbdata->data.setup.CallingPN == NULL) {
+		printk(KERN_DEBUG "NULL CallingPN to phone; using 0\n");
+		strcpy(ictl.parm.setup.phone, "0");
+	}
+	else {
 		strcpy(ictl.parm.setup.phone, cbdata->data.setup.CallingPN);
+	}
+	if (cbdata->data.setup.CalledPN == NULL) {
+		printk(KERN_DEBUG "NULL CalledPN to eazmsn; using 0\n");
+		strcpy(ictl.parm.setup.eazmsn, "0");
+	}
+	else {
 		strcpy(ictl.parm.setup.eazmsn, cbdata->data.setup.CalledPN);
-		ictl.parm.setup.si1 = 7;
-		ictl.parm.setup.si2 = 0;
-		ictl.parm.setup.plan = 0;
-		ictl.parm.setup.screen = 0;
+	}
+	ictl.parm.setup.si1 = 7;
+	ictl.parm.setup.si2 = 0;
+	ictl.parm.setup.plan = 0;
+	ictl.parm.setup.screen = 0;
 
 #ifdef DEBUG
 	printk(KERN_DEBUG "statstr: %s\n", ictl.num);

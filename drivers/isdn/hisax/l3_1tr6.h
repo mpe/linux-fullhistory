@@ -1,8 +1,11 @@
-/* $Id: l3_1tr6.h,v 2.0 1997/07/27 21:15:47 keil Exp $
+/* $Id: l3_1tr6.h,v 2.1 1998/08/13 23:36:48 keil Exp $
  *
  *  German 1TR6 D-channel protocol defines
  *
  * $Log: l3_1tr6.h,v $
+ * Revision 2.1  1998/08/13 23:36:48  keil
+ * HiSax 3.1 - don't work stable with current LinkLevel
+ *
  * Revision 2.0  1997/07/27 21:15:47  keil
  * New Callref based layer3
  *
@@ -64,6 +67,7 @@
 #define MT_N1_REG_ACK 0x6C
 #define MT_N1_REG_REJ 0x6F
 #define MT_N1_STAT 0x63
+#define MT_N1_INVALID 0
 
 /*
  * W Elemente

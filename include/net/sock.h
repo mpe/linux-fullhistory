@@ -105,6 +105,7 @@ struct unix_opt {
 	struct sock **		list;
 	struct sock *		gc_tree;
 	int			inflight;
+	atomic_t		user_count;
 };
 
 #ifdef CONFIG_NETLINK
@@ -353,6 +354,22 @@ struct tcp_opt {
 #define SOCK_DEBUG(sk, msg...) do { } while (0)
 #endif
 
+/* This is the per-socket lock.  The spinlock provides a synchronization
+ * between user contexts and software interrupt processing, whereas the
+ * mini-semaphore synchronizes multiple users amongst themselves.
+ */
+typedef struct {
+	spinlock_t		slock;
+	unsigned int		users;
+	wait_queue_head_t	wq;
+} socket_lock_t;
+
+#define sock_lock_init(__sk) \
+do {	spin_lock_init(&((__sk)->lock.slock)); \
+	(__sk)->lock.users = 0; \
+	init_waitqueue_head(&((__sk)->lock.wq)); \
+} while(0);
+
 struct sock {
 	/* This must be first. */
 	struct sock		*sklist_next;
@@ -381,7 +398,7 @@ struct sock {
 	unsigned char		reuse,		/* SO_REUSEADDR setting			*/
 				nonagle;	/* Disable Nagle algorithm?		*/
 
-	atomic_t		sock_readers;	/* User count				*/
+	socket_lock_t		lock;		/* Synchronizer...			*/
 	int			rcvbuf;		/* Size of receive buffer in bytes	*/
 
 	wait_queue_head_t	*sleep;	/* Sock wait queue			*/
@@ -415,9 +432,17 @@ struct sock {
 	int			hashent;
 	struct sock		*pair;
 
-	/* Error and backlog packet queues, rarely used. */
-	struct sk_buff_head	back_log,
-	                        error_queue;
+	/* The backlog queue is special, it is always used with
+	 * the per-socket spinlock held and requires low latency
+	 * access.  Therefore we special case it's implementation.
+	 */
+	struct {
+		struct sk_buff *head;
+		struct sk_buff *tail;
+	} backlog;
+
+	/* Error queue, rarely used. */
+	struct sk_buff_head	error_queue;
 
 	struct proto		*prot;
 
@@ -537,6 +562,18 @@ struct sock {
 	void                    (*destruct)(struct sock *sk);
 };
 
+/* The per-socket spinlock must be held here. */
+#define sk_add_backlog(__sk, __skb)			\
+do {	if((__sk)->backlog.tail == NULL) {		\
+		(__sk)->backlog.head =			\
+		     (__sk)->backlog.tail = (__skb);	\
+	} else {					\
+		((__sk)->backlog.tail)->next = (__skb);	\
+		(__sk)->backlog.tail = (__skb);		\
+	}						\
+	(__skb)->next = NULL;				\
+} while(0)
+
 /* IP protocol blocks we attach to sockets.
  * socket layer -> transport layer interface
  * transport -> network interface is defined by struct inet_proto
@@ -616,15 +653,26 @@ struct proto {
 /* Per-protocol hash table implementations use this to make sure
  * nothing changes.
  */
-#define SOCKHASH_LOCK()		start_bh_atomic()
-#define SOCKHASH_UNLOCK()	end_bh_atomic()
+extern rwlock_t sockhash_lock;
+#define SOCKHASH_LOCK_READ()		read_lock_bh(&sockhash_lock)
+#define SOCKHASH_UNLOCK_READ()		read_unlock_bh(&sockhash_lock)
+#define SOCKHASH_LOCK_WRITE()		write_lock_bh(&sockhash_lock)
+#define SOCKHASH_UNLOCK_WRITE()		write_unlock_bh(&sockhash_lock)
+
+/* The following variants must _only_ be used when you know you
+ * can only be executing in a BH context.
+ */
+#define SOCKHASH_LOCK_READ_BH()		read_lock(&sockhash_lock)
+#define SOCKHASH_UNLOCK_READ_BH()	read_unlock(&sockhash_lock)
+#define SOCKHASH_LOCK_WRITE_BH()	write_lock(&sockhash_lock)
+#define SOCKHASH_UNLOCK_WRITE_BH()	write_unlock(&sockhash_lock)
 
 /* Some things in the kernel just want to get at a protocols
  * entire socket list commensurate, thus...
  */
 static __inline__ void add_to_prot_sklist(struct sock *sk)
 {
-	SOCKHASH_LOCK();
+	SOCKHASH_LOCK_WRITE();
 	if(!sk->sklist_next) {
 		struct proto *p = sk->prot;
 
@@ -638,54 +686,37 @@ static __inline__ void add_to_prot_sklist(struct sock *sk)
 		if(sk->prot->highestinuse < sk->prot->inuse)
 			sk->prot->highestinuse = sk->prot->inuse;
 	}
-	SOCKHASH_UNLOCK();
+	SOCKHASH_UNLOCK_WRITE();
 }
 
 static __inline__ void del_from_prot_sklist(struct sock *sk)
 {
-	SOCKHASH_LOCK();
+	SOCKHASH_LOCK_WRITE();
 	if(sk->sklist_next) {
 		sk->sklist_next->sklist_prev = sk->sklist_prev;
 		sk->sklist_prev->sklist_next = sk->sklist_next;
 		sk->sklist_next = NULL;
 		sk->prot->inuse--;
 	}
-	SOCKHASH_UNLOCK();
+	SOCKHASH_UNLOCK_WRITE();
 }
 
-/*
- * Used by processes to "lock" a socket state, so that
+/* Used by processes to "lock" a socket state, so that
  * interrupts and bottom half handlers won't change it
  * from under us. It essentially blocks any incoming
  * packets, so that we won't get any new data or any
  * packets that change the state of the socket.
  *
- * Note the 'barrier()' calls: gcc may not move a lock
- * "downwards" or a unlock "upwards" when optimizing.
+ * While locked, BH processing will add new packets to
+ * the backlog queue.  This queue is processed by the
+ * owner of the socket lock right before it is released.
  */
-extern void __release_sock(struct sock *sk);
+extern void lock_sock(struct sock *sk);
+extern void release_sock(struct sock *sk);
 
-static inline void lock_sock(struct sock *sk)
-{
-#if 0
-/* debugging code: the test isn't even 100% correct, but it can catch bugs */
-/* Note that a double lock is ok in theory - it's just _usually_ a bug */
-	if (atomic_read(&sk->sock_readers)) {
-		__label__ here;
-		printk("double lock on socket at %p\n", &&here);
-here:
-	}
-#endif
-	atomic_inc(&sk->sock_readers);
-	synchronize_bh();
-}
-
-static inline void release_sock(struct sock *sk)
-{
-	barrier();
-	if (atomic_dec_and_test(&sk->sock_readers))
-		__release_sock(sk);
-}
+/* BH context may only use the following locking interface. */
+#define bh_lock_sock(__sk)	spin_lock(&((__sk)->lock.slock))
+#define bh_unlock_sock(__sk)	spin_unlock(&((__sk)->lock.slock))
 
 /*
  *	This might not be the most appropriate place for this two	 

@@ -15,6 +15,8 @@
 #define _LINUX_SKBUFF_H
 
 #include <linux/config.h>
+#include <linux/kernel.h>
+#include <linux/sched.h>
 #include <linux/time.h>
 
 #include <asm/atomic.h>
@@ -462,11 +464,8 @@ extern __inline__ unsigned char *skb_put(struct sk_buff *skb, unsigned int len)
 	unsigned char *tmp=skb->tail;
 	skb->tail+=len;
 	skb->len+=len;
-	if(skb->tail>skb->end)
-	{
-		__label__ here; 
-		skb_over_panic(skb, len, &&here); 
-here:		;
+	if(skb->tail>skb->end) {
+		skb_over_panic(skb, len, current_text_addr());
 	}
 	return tmp;
 }
@@ -482,11 +481,8 @@ extern __inline__ unsigned char *skb_push(struct sk_buff *skb, unsigned int len)
 {
 	skb->data-=len;
 	skb->len+=len;
-	if(skb->data<skb->head)
-	{
-		__label__ here;
-		skb_under_panic(skb, len, &&here);
-here: 		;
+	if(skb->data<skb->head) {
+		skb_under_panic(skb, len, current_text_addr());
 	}
 	return skb->data;
 }

@@ -63,10 +63,12 @@
 
 __initfunc(void eth_setup(char *str, int *ints))
 {
-	struct device *d = dev_base;
+	struct device *d;
 
 	if (!str || !*str)
 		return;
+	read_lock_bh(&dev_base_lock);
+	d = dev_base;
 	while (d) 
 	{
 		if (!strcmp(str,d->name)) 
@@ -83,6 +85,7 @@ __initfunc(void eth_setup(char *str, int *ints))
 		}
 		d=d->next;
 	}
+	read_unlock_bh(&dev_base_lock);
 }
 
 

@@ -69,13 +69,15 @@ void net_reset_timer (struct sock *t, int timeout, unsigned long len)
  */
 void net_timer (unsigned long data)
 {
-	struct sock *sk = (struct sock*)data;
+	struct sock *sk = (struct sock *) data;
 	int why = sk->timeout;
 
 	/* Only process if socket is not in use. */
-	if (atomic_read(&sk->sock_readers)) {
+	bh_lock_sock(sk);
+	if (sk->lock.users) {
 		/* Try again later. */ 
 		mod_timer(&sk->timer, jiffies+HZ/20);
+		bh_unlock_sock(sk);
 		return;
 	}
 
@@ -99,15 +101,15 @@ void net_timer (unsigned long data)
 				printk (KERN_DEBUG "non CLOSE socket in time_done\n");
 				break;
 			}
-			destroy_sock (sk);
-			break;
+			destroy_sock(sk);
+			return;
 
 		case TIME_DESTROY:
 			/* We've waited for a while for all the memory associated with
 			 * the socket to be freed.
 			 */
 			destroy_sock(sk);
-			break;
+			return;
 
 		case TIME_CLOSE:
 			/* We've waited long enough, close the socket. */
@@ -123,5 +125,8 @@ void net_timer (unsigned long data)
 			printk ("net_timer: timer expired - reason %d is unknown\n", why);
 			break;
 	}
+
+	/* We only need to unlock if the socket was not destroyed. */
+	bh_unlock_sock(sk);
 }
 

@@ -1311,18 +1311,9 @@ int generic_file_mmap(struct file * file, struct vm_area_struct * vma)
 	struct vm_operations_struct * ops;
 	struct inode *inode = file->f_dentry->d_inode;
 
-	if ((vma->vm_flags & VM_SHARED) && (vma->vm_flags & VM_MAYWRITE)) {
+	ops = &file_private_mmap;
+	if ((vma->vm_flags & VM_SHARED) && (vma->vm_flags & VM_MAYWRITE))
 		ops = &file_shared_mmap;
-		/* share_page() can only guarantee proper page sharing if
-		 * the offsets are all page aligned. */
-		if (vma->vm_offset & (PAGE_SIZE - 1))
-			return -EINVAL;
-	} else {
-		ops = &file_private_mmap;
-		if (inode->i_op && inode->i_op->bmap &&
-		    (vma->vm_offset & (inode->i_sb->s_blocksize - 1)))
-			return -EINVAL;
-	}
 	if (!inode->i_sb || !S_ISREG(inode->i_mode))
 		return -EACCES;
 	if (!inode->i_op || !inode->i_op->readpage)

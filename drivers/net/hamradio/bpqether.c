@@ -641,11 +641,16 @@ __initfunc(int bpq_init(void))
 	});
 #endif
 
+	read_lock_bh(&dev_base_lock);
 	for (dev = dev_base; dev != NULL; dev = dev->next) {
-		if (dev_is_ethdev(dev))
+		if (dev_is_ethdev(dev)) {
+			read_unlock_bh(&dev_base_lock);
 			bpq_new_device(dev);
+			read_lock_bh(&dev_base_lock);
+		}
 	}
-
+	read_unlock_bh(&dev_base_lock);
+out:
 	return 0;
 }
 

@@ -1,4 +1,4 @@
-/* $Id: isdn_ppp.h,v 1.12 1998/01/31 22:07:48 keil Exp $
+/* $Id: isdn_ppp.h,v 1.13 1998/03/22 18:50:50 hipp Exp $
 
  * header for Linux ISDN subsystem, functions for synchronous PPP (linklevel).
  *
@@ -19,6 +19,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_ppp.h,v $
+ * Revision 1.13  1998/03/22 18:50:50  hipp
+ * Added BSD Compression for syncPPP .. UNTESTED at the moment
+ *
  * Revision 1.12  1998/01/31 22:07:48  keil
  * changes for newer kernels
  *
@@ -83,6 +86,9 @@ extern int isdn_ppp_ioctl(int, struct file *, unsigned int, unsigned long);
 extern void isdn_ppp_release(int, struct file *);
 extern int isdn_ppp_dial_slave(char *);
 extern void isdn_ppp_wakeup_daemon(isdn_net_local *);
+
+extern int isdn_ppp_register_compressor(struct isdn_ppp_compressor *ipc);
+extern int isdn_ppp_unregister_compressor(struct isdn_ppp_compressor *ipc);
 
 #define IPPP_OPEN	0x01
 #define IPPP_CONNECT	0x02

@@ -330,6 +330,16 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_I2C_PARPORT),y)
+L_OBJS += i2c-parport.o
+L_I2C = y
+else
+  ifeq ($(CONFIG_I2C_PARPORT),m)
+    M_OBJS += i2c-parport.o
+    M_I2C = y
+  endif
+endif
+
 ifeq ($(CONFIG_VIDEO_BWQCAM),y)
 L_OBJS += bw-qcam.o
 else

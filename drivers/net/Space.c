@@ -805,3 +805,4 @@ struct device loopback_dev = {
 };
 
 struct device *dev_base = &loopback_dev;
+rwlock_t dev_base_lock = RW_LOCK_UNLOCKED;

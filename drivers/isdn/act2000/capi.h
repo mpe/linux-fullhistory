@@ -1,8 +1,8 @@
-/* $Id: capi.h,v 1.4 1997/10/01 09:21:04 fritz Exp $
+/* $Id: capi.h,v 1.5 1998/11/05 22:12:48 fritz Exp $
  *
  * ISDN lowlevel-module for the IBM ISDN-S0 Active 2000.
  *
- * Copyright 1997 by Fritz Elfert (fritz@wuemaus.franken.de)
+ * Copyright 1998 by Fritz Elfert (fritz@isdn4linux.de)
  * Thanks to Friedemann Baitinger and IBM Germany
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,6 +20,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: capi.h,v $
+ * Revision 1.5  1998/11/05 22:12:48  fritz
+ * Changed mail-address.
+ *
  * Revision 1.4  1997/10/01 09:21:04  fritz
  * Removed old compatibility stuff for 2.0.X kernels.
  * From now on, this code is for 2.1.X ONLY!

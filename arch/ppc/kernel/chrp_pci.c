@@ -8,6 +8,7 @@
 #include <linux/string.h>
 #include <linux/init.h>
 #include <linux/openpic.h>
+#include <linux/ide.h>
 
 #include <asm/io.h>
 #include <asm/pgtable.h>

@@ -1,4 +1,4 @@
-/* $Id: isdn_x25iface.c,v 1.3 1998/02/20 17:25:20 fritz Exp $
+/* $Id: isdn_x25iface.c,v 1.6 1999/01/27 22:53:19 he Exp $
  * stuff needed to support the Linux X.25 PLP code on top of devices that
  * can provide a lab_b service using the concap_proto mechanism.
  * This module supports a network interface wich provides lapb_sematics
@@ -10,6 +10,17 @@
  * goes to another -- device related -- concap_proto support source file.
  *
  * $Log: isdn_x25iface.c,v $
+ * Revision 1.6  1999/01/27 22:53:19  he
+ * minor updates (spellings, jiffies wrap around in isdn_tty)
+ *
+ * Revision 1.5  1998/10/30 17:55:39  he
+ * dialmode for x25iface and multulink ppp
+ *
+ * Revision 1.4  1998/06/17 19:51:00  he
+ * merged with 2.1.10[34] (cosmetics and udelay() -> mdelay())
+ * brute force fix to avoid Ugh's in isdn_tty_write()
+ * cleaned up some dead code
+ *
  * Revision 1.3  1998/02/20 17:25:20  fritz
  * Changes for recent kernels.
  *
@@ -302,7 +313,12 @@ int isdn_x25iface_xmit(struct concap_proto *cprot, struct sk_buff *skb)
 	case 0x01: /* dl_connect request */
 		if( *state == WAN_DISCONNECTED ){
 			*state = WAN_CONNECTING;
-		        cprot -> dops -> connect_req(cprot);
+		        ret = cprot -> dops -> connect_req(cprot);
+			if(ret){
+				/* reset state and notify upper layer about
+				 * immidiatly failed attempts */
+				isdn_x25iface_disconn_ind(cprot);
+			}
 		} else {
 			illegal_state_warn( *state, firstbyte );
 		}

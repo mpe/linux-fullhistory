@@ -1,4 +1,4 @@
-/* $Id: teles3.c,v 2.7 1998/02/02 13:29:48 keil Exp $
+/* $Id: teles3.c,v 2.10 1999/02/15 14:37:15 cpetig Exp $
 
  * teles3.c     low level stuff for Teles 16.3 & PNP isdn cards
  *
@@ -11,6 +11,15 @@
  *              Beat Doebeli
  *
  * $Log: teles3.c,v $
+ * Revision 2.10  1999/02/15 14:37:15  cpetig
+ * oops, missed something in last commit
+ *
+ * Revision 2.9  1999/02/15 14:11:02  cpetig
+ * fixed a bug with Teles PCMCIA, it doesn't have a config register
+ *
+ * Revision 2.8  1998/04/15 16:44:30  keil
+ * new init code
+ *
  * Revision 2.7  1998/02/02 13:29:48  keil
  * fast io
  *
@@ -69,7 +78,7 @@
 #include "isdnl1.h"
 
 extern const char *CardType[];
-const char *teles3_revision = "$Revision: 2.7 $";
+const char *teles3_revision = "$Revision: 2.10 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -214,15 +223,14 @@ void
 release_io_teles3(struct IsdnCardState *cs)
 {
 	if (cs->typ == ISDN_CTYPE_TELESPCMCIA)
-		release_region(cs->hw.teles3.cfg_reg, 97);
+		release_region(cs->hw.teles3.hscx[0], 97);
 	else {
-		if (cs->hw.teles3.cfg_reg) {
+		if (cs->hw.teles3.cfg_reg)
 			if (cs->typ == ISDN_CTYPE_COMPAQ_ISA) {
 				release_region(cs->hw.teles3.cfg_reg, 1);
 			} else {
 				release_region(cs->hw.teles3.cfg_reg, 8);
 			}
-		}
 		release_ioregs(cs, 0x7);
 	}
 }
@@ -305,10 +313,7 @@ Teles_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 			return(request_irq(cs->irq, &teles3_interrupt,
 					I4L_IRQ_FLAG, "HiSax", cs));
 		case CARD_INIT:
-			clear_pending_isac_ints(cs);
-			clear_pending_hscx_ints(cs);
-			initisac(cs);
-			inithscx(cs);
+			inithscxisac(cs, 3);
 			return(0);
 		case CARD_TEST:
 			return(0);
@@ -342,7 +347,7 @@ setup_teles3(struct IsdnCard *card))
 		cs->hw.teles3.hscx[0] = cs->hw.teles3.cfg_reg - 0xc20;
 		cs->hw.teles3.hscx[1] = cs->hw.teles3.cfg_reg - 0x820;
 	} else if (cs->typ == ISDN_CTYPE_TELESPCMCIA) {
-		cs->hw.teles3.cfg_reg = card->para[1];
+		cs->hw.teles3.cfg_reg = 0;
 		cs->hw.teles3.hscx[0] = card->para[1] - 0x20;
 		cs->hw.teles3.hscx[1] = card->para[1];
 		cs->hw.teles3.isac = card->para[1] + 0x20;
@@ -362,12 +367,12 @@ setup_teles3(struct IsdnCard *card))
 	cs->hw.teles3.hscxfifo[0] = cs->hw.teles3.hscx[0] + 0x3e;
 	cs->hw.teles3.hscxfifo[1] = cs->hw.teles3.hscx[1] + 0x3e;
 	if (cs->typ == ISDN_CTYPE_TELESPCMCIA) {
-		if (check_region((cs->hw.teles3.cfg_reg), 97)) {
+		if (check_region((cs->hw.teles3.hscx[0]), 97)) {
 			printk(KERN_WARNING
 			       "HiSax: %s ports %x-%x already in use\n",
 			       CardType[cs->typ],
-			       cs->hw.teles3.cfg_reg,
-			       cs->hw.teles3.cfg_reg + 96);
+			       cs->hw.teles3.hscx[0],
+			       cs->hw.teles3.hscx[0] + 96);
 			return (0);
 		} else
 			request_region(cs->hw.teles3.hscx[0], 97, "HiSax Teles PCMCIA");
@@ -400,13 +405,12 @@ setup_teles3(struct IsdnCard *card))
 			       CardType[cs->typ],
 			       cs->hw.teles3.isac + 32,
 			       cs->hw.teles3.isac + 64);
-			if (cs->hw.teles3.cfg_reg) {
+			if (cs->hw.teles3.cfg_reg)
 				if (cs->typ == ISDN_CTYPE_COMPAQ_ISA) {
 					release_region(cs->hw.teles3.cfg_reg, 1);
 				} else {
 					release_region(cs->hw.teles3.cfg_reg, 8);
 				}
-			}
 			return (0);
 		} else
 			request_region(cs->hw.teles3.isac + 32, 32, "HiSax isac");
@@ -416,13 +420,12 @@ setup_teles3(struct IsdnCard *card))
 			       CardType[cs->typ],
 			       cs->hw.teles3.hscx[0] + 32,
 			       cs->hw.teles3.hscx[0] + 64);
-			if (cs->hw.teles3.cfg_reg) {
+			if (cs->hw.teles3.cfg_reg)
 				if (cs->typ == ISDN_CTYPE_COMPAQ_ISA) {
 					release_region(cs->hw.teles3.cfg_reg, 1);
 				} else {
 					release_region(cs->hw.teles3.cfg_reg, 8);
 				}
-			}
 			release_ioregs(cs, 1);
 			return (0);
 		} else
@@ -433,13 +436,12 @@ setup_teles3(struct IsdnCard *card))
 			       CardType[cs->typ],
 			       cs->hw.teles3.hscx[1] + 32,
 			       cs->hw.teles3.hscx[1] + 64);
-			if (cs->hw.teles3.cfg_reg) {
+			if (cs->hw.teles3.cfg_reg)
 				if (cs->typ == ISDN_CTYPE_COMPAQ_ISA) {
 					release_region(cs->hw.teles3.cfg_reg, 1);
 				} else {
 					release_region(cs->hw.teles3.cfg_reg, 8);
 				}
-			}
 			release_ioregs(cs, 3);
 			return (0);
 		} else

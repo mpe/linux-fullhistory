@@ -1,11 +1,21 @@
-/* $Id: lmgr.c,v 1.2 1997/10/29 19:09:34 keil Exp $
+/* $Id: lmgr.c,v 1.5 1998/11/15 23:55:12 keil Exp $
 
- * Author       Karsten Keil (keil@temic-ech.spacenet.de)
+ * Author       Karsten Keil (keil@isdn4linux.de)
  *
  *
  *  Layermanagement module
  *
  * $Log: lmgr.c,v $
+ * Revision 1.5  1998/11/15 23:55:12  keil
+ * changes from 2.0
+ *
+ * Revision 1.4  1998/05/25 12:58:19  keil
+ * HiSax golden code from certification, Don't use !!!
+ * No leased lines, no X75, but many changes.
+ *
+ * Revision 1.3  1998/03/07 22:57:06  tsbogend
+ * made HiSax working on Linux/Alpha
+ *
  * Revision 1.2  1997/10/29 19:09:34  keil
  * new L1
  *
@@ -26,7 +36,7 @@ error_handling_dchan(struct PStack *st, int Error)
 		case 'D':
 		case 'G':
 		case 'H':
-			st->l2.l2tei(st, MDL_ERROR_REQ, NULL);
+			st->l2.l2tei(st, MDL_ERROR | REQUEST, NULL);
 			break;
 	}
 }
@@ -34,17 +44,15 @@ error_handling_dchan(struct PStack *st, int Error)
 static void
 hisax_manager(struct PStack *st, int pr, void *arg)
 {
-	char tm[32], str[256];
-	int Code;
+	long Code;
 
 	switch (pr) {
-		case MDL_ERROR_IND:
-			Code = (int) arg;
-			jiftime(tm, jiffies);
-			sprintf(str, "%s manager: MDL_ERROR %c %s\n", tm,
-				Code, test_bit(FLG_LAPD, &st->l2.flag) ?
+		case (MDL_ERROR | INDICATION):
+			Code = (long) arg;
+			HiSax_putstatus(st->l1.hardware, "manager: MDL_ERROR",
+				"%c %s\n", (char)Code, 
+				test_bit(FLG_LAPD, &st->l2.flag) ?
 				"D-channel" : "B-channel");
-			HiSax_putstatus(st->l1.hardware, str);
 			if (test_bit(FLG_LAPD, &st->l2.flag))
 				error_handling_dchan(st, Code);
 			break;

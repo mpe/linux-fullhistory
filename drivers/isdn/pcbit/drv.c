@@ -86,6 +86,9 @@ int pcbit_init_dev(int board, int mem_base, int irq)
 
 	dev_pcbit[board] = dev;
 	memset(dev, 0, sizeof(struct pcbit_dev));
+#if LINUX_VERSION_CODE >= 131841
+	init_waitqueue_head(&dev->set_running_wq);
+#endif
 
 	if (mem_base >= 0xA0000 && mem_base <= 0xFFFFF )
 		dev->sh_mem = (unsigned char*) mem_base;

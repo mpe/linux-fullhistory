@@ -34,7 +34,7 @@ struct blkpg_ioctl_arg {
         int flags;
         int datalen;
         void *data;
-} *p;
+};
 
 /* The subfunctions (for the op field) */
 #define BLKPG_ADD_PARTITION	1

@@ -914,8 +914,11 @@ extern void tcp_tw_schedule(struct tcp_tw_bucket *tw);
 extern void tcp_tw_reschedule(struct tcp_tw_bucket *tw);
 extern void tcp_tw_deschedule(struct tcp_tw_bucket *tw);
 
+/* Must be called only from BH context. */
 void tcp_timewait_kill(struct tcp_tw_bucket *tw)
 {
+	SOCKHASH_LOCK_WRITE_BH();
+
 	/* Unlink from various places. */
 	if(tw->bind_next)
 		tw->bind_next->bind_pprev = tw->bind_pprev;
@@ -932,6 +935,8 @@ void tcp_timewait_kill(struct tcp_tw_bucket *tw)
 	 */
 	tw->sklist_next->sklist_prev = tw->sklist_prev;
 	tw->sklist_prev->sklist_next = tw->sklist_next;
+
+	SOCKHASH_UNLOCK_WRITE_BH();
 
 	/* Ok, now free it up. */
 	kmem_cache_free(tcp_timewait_cachep, tw);
@@ -963,6 +968,7 @@ int tcp_timewait_state_process(struct tcp_tw_bucket *tw, struct sk_buff *skb,
 		struct sock *sk;
 		struct tcp_func *af_specific = tw->af_specific;
 		__u32 isn;
+		int ret;
 
 		isn = tw->rcv_nxt + 128000;
 		if(isn == 0)
@@ -971,14 +977,25 @@ int tcp_timewait_state_process(struct tcp_tw_bucket *tw, struct sk_buff *skb,
 		tcp_timewait_kill(tw);
 		sk = af_specific->get_sock(skb, th);
 		if(sk == NULL ||
-		   !ipsec_sk_policy(sk,skb) ||
-		   atomic_read(&sk->sock_readers) != 0)
+		   !ipsec_sk_policy(sk,skb))
 			return 0;
+
+		bh_lock_sock(sk);
+
+		/* Default is to discard the frame. */
+		ret = 0;
+
+		if(sk->lock.users)
+			goto out_unlock;
+
 		skb_set_owner_r(skb, sk);
 		af_specific = sk->tp_pinfo.af_tcp.af_specific;
+
 		if(af_specific->conn_request(sk, skb, isn) < 0)
-			return 1; /* Toss a reset back. */
-		return 0; /* Discard the frame. */
+			ret = 1; /* Toss a reset back. */
+	out_unlock:
+		bh_unlock_sock(sk);
+		return ret;
 	}
 
 	/* Check RST or SYN */
@@ -1031,7 +1048,7 @@ static __inline__ void tcp_tw_hashdance(struct sock *sk, struct tcp_tw_bucket *t
 	sk->prot->inuse--;
 
 	/* Step 4: Hash TW into TIMEWAIT half of established hash table. */
-	head = &tcp_established_hash[sk->hashent + (TCP_HTABLE_SIZE/2)];
+	head = &tcp_ehash[sk->hashent + (tcp_ehash_size >> 1)];
 	sktw = (struct sock *)tw;
 	if((sktw->next = *head) != NULL)
 		(*head)->pprev = &sktw->next;
@@ -1069,7 +1086,9 @@ void tcp_time_wait(struct sock *sk)
 		}
 #endif
 		/* Linkage updates. */
+		SOCKHASH_LOCK_WRITE();
 		tcp_tw_hashdance(sk, tw);
+		SOCKHASH_UNLOCK_WRITE();
 
 		/* Get the TIME_WAIT timeout firing. */
 		tcp_tw_schedule(tw);

@@ -40,6 +40,55 @@
 static struct parport *portlist = NULL, *portlist_tail = NULL;
 spinlock_t parportlist_lock = SPIN_LOCK_UNLOCKED;
 
+static struct parport_driver *driver_chain = NULL;
+spinlock_t driverlist_lock = SPIN_LOCK_UNLOCKED;
+
+static void call_driver_chain (int attach, struct parport *port)
+{
+	struct parport_driver *drv;
+
+	for (drv = driver_chain; drv; drv = drv->next) {
+		if (attach)
+			drv->attach (port);
+		else
+			drv->detach (port);
+	}
+}
+
+int parport_register_driver (struct parport_driver *drv)
+{
+	struct parport *port;
+
+	spin_lock (&driverlist_lock);
+	drv->next = driver_chain;
+	driver_chain = drv;
+	spin_unlock (&driverlist_lock);
+
+	for (port = portlist; port; port = port->next)
+		drv->attach (port);
+
+	return 0;
+}
+
+void parport_unregister_driver (struct parport_driver *arg)
+{
+	struct parport_driver *drv = driver_chain, *olddrv = NULL;
+
+	while (drv) {
+		if (drv == arg) {
+			spin_lock (&driverlist_lock);
+			if (olddrv)
+				olddrv->next = drv->next;
+			else
+				driver_chain = drv->next;
+			spin_unlock (&driverlist_lock);
+			return;
+		}
+		olddrv = drv;
+		drv = drv->next;
+	}
+}
+
 void (*parport_probe_hook)(struct parport *port) = NULL;
 
 /* Return a list of all the ports we know about. */
@@ -138,9 +187,18 @@ struct parport *parport_register_port(unsigned long base, int irq, int dma,
 	return tmp;
 }
 
+void parport_announce_port (struct parport *port)
+{
+	/* Let drivers know that a new port has arrived. */
+	call_driver_chain (1, port);
+}
+
 void parport_unregister_port(struct parport *port)
 {
 	struct parport *p;
+
+	/* Spread the word. */
+	call_driver_chain (0, port);
 
 	spin_lock(&parportlist_lock);
 	if (portlist == port) {
@@ -517,23 +575,38 @@ void parport_release(struct pardevice *dev)
 	}
 }
 
-void parport_parse_irqs(int nports, const char *irqstr[], int irqval[])
+static int parport_parse_params (int nports, const char *str[], int val[],
+				 int automatic, int none)
 {
 	unsigned int i;
-	for (i = 0; i < nports && irqstr[i]; i++) {
-		if (!strncmp(irqstr[i], "auto", 4))
-			irqval[i] = PARPORT_IRQ_AUTO;
-		else if (!strncmp(irqstr[i], "none", 4))
-			irqval[i] = PARPORT_IRQ_NONE;
+	for (i = 0; i < nports && str[i]; i++) {
+		if (!strncmp(str[i], "auto", 4))
+			val[i] = automatic;
+		else if (!strncmp(str[i], "none", 4))
+			val[i] = none;
 		else {
 			char *ep;
-			unsigned long r = simple_strtoul(irqstr[i], &ep, 0);
-			if (ep != irqstr[i])
-				irqval[i] = r;
+			unsigned long r = simple_strtoul(str[i], &ep, 0);
+			if (ep != str[i])
+				val[i] = r;
 			else {
-				printk("parport: bad irq specifier `%s'\n", irqstr[i]);
-				return;
+				printk("parport: bad specifier `%s'\n", str[i]);
+				return -1;
 			}
 		}
 	}
+
+	return 0;
+}
+
+int parport_parse_irqs(int nports, const char *irqstr[], int irqval[])
+{
+	return parport_parse_params (nports, irqstr, irqval, PARPORT_IRQ_AUTO,
+				     PARPORT_IRQ_NONE);
+}
+
+int parport_parse_dmas(int nports, const char *dmastr[], int dmaval[])
+{
+	return parport_parse_params (nports, dmastr, dmaval, PARPORT_DMA_AUTO,
+				     PARPORT_DMA_NONE);
 }

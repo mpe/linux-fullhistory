@@ -615,6 +615,7 @@ static int igmp6_read_proc(char *buffer, char **start, off_t offset,
 	int len=0;
 	struct device *dev;
 	
+	read_lock_bh(&dev_base_lock);
 	for (dev = dev_base; dev; dev = dev->next) {
 		struct inet6_dev *idev;
 
@@ -647,6 +648,8 @@ static int igmp6_read_proc(char *buffer, char **start, off_t offset,
 	*eof = 1;
 
 done:
+	read_unlock_bh(&dev_base_lock);
+
 	*start=buffer+(offset-begin);
 	len-=(offset-begin);
 	if(len>length)

@@ -33,8 +33,8 @@
  *            to make the card a four channel one: use dsp to output two
  *            channels to LINE and dac to output the other two channels to
  *            SPKR. Set the mixer to only output synth to SPKR.
- *   micz     it looks like this changes the MIC input impedance. I don't know
- *            any detail though.
+ *   micbias  sets the +5V bias to the mic if using an electretmic.
+ *            
  *
  *  Note: sync mode is not yet supported (i.e. running dsp and dac from the same
  *  clock source)
@@ -92,6 +92,12 @@
  *                     Alpha fixes reported by Peter Jones <pjones@redhat.com>
  *                     Note: joystick address handling might still be wrong on archs
  *                     other than i386
+ *    10.05.99   0.21  Added support for an electret mic for SB PCI64
+ *                     to the Linux kernel sound driver. This mod also straighten
+ *                     out the question marks around the mic impedance setting
+ *                     (micz). From Kim.Berts@fisub.mail.abb.com
+ *    11.05.99   0.22  Implemented the IMIX call to mute recording monitor.
+ *                     Guenter Geiger <geiger@epy.co.at>
  *
  * some important things missing in Ensoniq documentation:
  *
@@ -107,8 +113,8 @@
  * The card uses a 22.5792 MHz crystal.
  * The LINEIN jack may be converted to an AOUT jack by
  * setting pin 47 (XCTL0) of the ES1370 to high.
- * Pin 48 (XCTL1) of the ES1370 presumably changes the input impedance of the
- * MIC jack.
+ * Pin 48 (XCTL1) of the ES1370 sets the +5V bias for an electretmic
+ * 
  *
  */
 
@@ -190,7 +196,7 @@ static const unsigned dac1_samplerate[] = { 5512, 11025, 22050, 44100 };
 #define DAC2_DIVTOSR(x) (1411200/((x)+2))
 
 #define CTRL_ADC_STOP   0x80000000  /* 1 = ADC stopped */
-#define CTRL_XCTL1      0x40000000  /* ? mic impedance */
+#define CTRL_XCTL1      0x40000000  /* electret mic bias */
 #define CTRL_OPEN       0x20000000  /* no function, can be read and written */
 #define CTRL_PCLKDIV    0x1fff0000  /* ADC/DAC2 clock divider */
 #define CTRL_SH_PCLKDIV 16
@@ -301,6 +307,7 @@ struct es1370_state {
 		unsigned int recsrc;
 		unsigned int modcnt;
 		unsigned short micpreamp;
+	        unsigned int imix;
 	} mix;
 
 	/* wave stuff */
@@ -839,7 +846,8 @@ static int mixer_ioctl(struct es1370_state *s, unsigned int cmd, unsigned long a
 			return put_user(s->mix.recsrc, (int *)arg);
 			
                 case SOUND_MIXER_DEVMASK: /* Arg contains a bit for each supported device */
-			for (val = i = 0; i < SOUND_MIXER_NRDEVICES; i++)
+			val = SOUND_MASK_IMIX;
+			for (i = 0; i < SOUND_MIXER_NRDEVICES; i++)
 				if (mixtable[i].avail)
 					val |= 1 << i;
 			return put_user(val, (int *)arg);
@@ -858,6 +866,9 @@ static int mixer_ioctl(struct es1370_state *s, unsigned int cmd, unsigned long a
 			
                 case SOUND_MIXER_CAPS:
 			return put_user(0, (int *)arg);
+		
+		case SOUND_MIXER_IMIX:
+			return put_user(s->mix.imix, (int *)arg);
 
 		default:
 			i = _IOC_NR(cmd);
@@ -870,6 +881,14 @@ static int mixer_ioctl(struct es1370_state *s, unsigned int cmd, unsigned long a
 		return -EINVAL;
 	s->mix.modcnt++;
 	switch (_IOC_NR(cmd)) {
+
+	case SOUND_MIXER_IMIX:
+		if (arg == 0) 
+			return -EFAULT;
+		get_user_ret(s->mix.imix,(int *)arg, -EFAULT);
+		val = s->mix.recsrc;
+		/* fall through */
+
 	case SOUND_MIXER_RECSRC: /* Arg contains a bit for each recording source */
 		get_user_ret(val, (int *)arg, -EFAULT);
 		for (j = i = 0; i < SOUND_MIXER_NRDEVICES; i++) {
@@ -886,7 +905,10 @@ static int mixer_ioctl(struct es1370_state *s, unsigned int cmd, unsigned long a
 		wrcodec(s, 0x13, j & 0xaa);
 		wrcodec(s, 0x14, (j >> 8) & 0x17);
 		wrcodec(s, 0x15, (j >> 8) & 0x0f);
-		i = (j & 0x37f) | ((j << 1) & 0x3000) | 0xc30;
+		i = (j & 0x37f) | ((j << 1) & 0x3000) | 0xc60;
+		if (!s->mix.imix) {
+		     i &= 0xff60;  /* mute record and line monitor */
+		}
 		wrcodec(s, 0x10, i);
 		wrcodec(s, 0x11, i >> 8);
 		return 0;
@@ -2262,7 +2284,7 @@ static int joystick[NR_DEVICE] = { 1, 0, };
 static int joystick[NR_DEVICE] = { 0, };
 #endif
 static int lineout[NR_DEVICE] = { 0, };
-static int micz[NR_DEVICE] = { 0, };
+static int micbias[NR_DEVICE] = { 0, };
 
 /* --------------------------------------------------------------------- */
 
@@ -2295,7 +2317,7 @@ __initfunc(int init_es1370(void))
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "es1370: version v0.20 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "es1370: version v0.22 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1370, pcidev))) {
 		if (pcidev->base_address[0] == 0 || 
@@ -2328,8 +2350,10 @@ __initfunc(int init_es1370(void))
 			goto err_irq;
 		}
 		/* initialize codec registers */
-		s->ctrl = CTRL_CDC_EN | CTRL_SERR_DIS | (DAC2_SRTODIV(8000) << CTRL_SH_PCLKDIV) | (1 << CTRL_SH_WTSRSEL);
-		if (joystick[index]) {
+		/* note: setting CTRL_SERR_DIS is reported to break
+		 * mic bias setting (by Kim.Berts@fisub.mail.abb.com) */
+	        s->ctrl = CTRL_CDC_EN | (DAC2_SRTODIV(8000) << CTRL_SH_PCLKDIV) | (1 << CTRL_SH_WTSRSEL);
+	        if (joystick[index]) {
 			if (check_region(0x200, JOY_EXTENT))
 				printk(KERN_ERR "es1370: io port 0x200 in use\n");
 			else
@@ -2337,7 +2361,7 @@ __initfunc(int init_es1370(void))
 		}
 		if (lineout[index])
 			s->ctrl |= CTRL_XCTL0;
-		if (micz[index])
+		if (micbias[index])
 			s->ctrl |= CTRL_XCTL1;
 		s->sctrl = 0;
 		printk(KERN_INFO "es1370: found adapter at io %#lx irq %u\n"
@@ -2361,6 +2385,7 @@ __initfunc(int init_es1370(void))
 		wrcodec(s, 0x17, 0); /* CODEC ADC and CODEC DAC use {LR,B}CLK2 and run off the LRCLK2 PLL; program DAC_SYNC=0!!  */
 		wrcodec(s, 0x18, 0); /* recording source is mixer */
 		wrcodec(s, 0x19, s->mix.micpreamp = 1); /* turn on MIC preamp */
+		s->mix.imix = 1;
 		fs = get_fs();
 		set_fs(KERNEL_DS);
 		val = SOUND_MASK_LINE|SOUND_MASK_SYNTH|SOUND_MASK_CD;
@@ -2403,8 +2428,8 @@ MODULE_PARM(joystick, "1-" __MODULE_STRING(NR_DEVICE) "i");
 MODULE_PARM_DESC(joystick, "if 1 enables joystick interface (still need separate driver)");
 MODULE_PARM(lineout, "1-" __MODULE_STRING(NR_DEVICE) "i");
 MODULE_PARM_DESC(lineout, "if 1 the LINE input is converted to LINE out");
-MODULE_PARM(micz, "1-" __MODULE_STRING(NR_DEVICE) "i");
-MODULE_PARM_DESC(micz, "changes (??) the microphone impedance");
+MODULE_PARM(micbias, "1-" __MODULE_STRING(NR_DEVICE) "i");
+MODULE_PARM_DESC(micbias, "sets the +5V bias for an electret microphone");
 
 MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
 MODULE_DESCRIPTION("ES1370 AudioPCI Driver");

@@ -1039,7 +1039,7 @@ out:
 #endif /* __sparc__ */
 #endif
 
-#if !defined(__alpha__)
+#if !defined(__alpha__) && !defined(__ia64__)
 /*
  * For backwards compatibility.  Functionality superseded by sigprocmask.
  */
@@ -1082,4 +1082,4 @@ sys_signal(int sig, __sighandler_t handler)
 
 	return ret ? ret : (unsigned long)old_sa.sa.sa_handler;
 }
-#endif /* !alpha */
+#endif /* !alpha && !__ia64__ */

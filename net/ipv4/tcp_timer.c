@@ -171,11 +171,12 @@ void tcp_delack_timer(unsigned long data)
 	if(!sk->zapped &&
 	   sk->tp_pinfo.af_tcp.delayed_acks &&
 	   sk->state != TCP_CLOSE) {
-		/* If socket is currently locked, defer the ACK. */
-		if (!atomic_read(&sk->sock_readers))
+		bh_lock_sock(sk);
+		if (!sk->lock.users)
 			tcp_send_ack(sk);
 		else
 			tcp_send_delayed_ack(&(sk->tp_pinfo.af_tcp), HZ/10);
+		bh_unlock_sock(sk);
 	}
 }
 
@@ -187,9 +188,11 @@ void tcp_probe_timer(unsigned long data)
 	if(sk->zapped) 
 		return;
 	
-	if (atomic_read(&sk->sock_readers)) {
+	bh_lock_sock(sk);
+	if (sk->lock.users) {
 		/* Try again later. */
 		tcp_reset_xmit_timer(sk, TIME_PROBE0, HZ/5);
+		bh_unlock_sock(sk);
 		return;
 	}
 
@@ -216,6 +219,7 @@ void tcp_probe_timer(unsigned long data)
 		/* Only send another probe if we didn't close things up. */
 		tcp_send_probe0(sk);
 	}
+	bh_unlock_sock(sk);
 }
 
 static __inline__ int tcp_keepopen_proc(struct sock *sk)
@@ -253,8 +257,9 @@ static void tcp_bucketgc(unsigned long data)
 {
 	int i, reaped = 0;;
 
-	for(i = 0; i < TCP_BHTABLE_SIZE; i++) {
-		struct tcp_bind_bucket *tb = tcp_bound_hash[i];
+	SOCKHASH_LOCK_WRITE_BH();
+	for(i = 0; i < tcp_bhash_size; i++) {
+		struct tcp_bind_bucket *tb = tcp_bhash[i];
 
 		while(tb) {
 			struct tcp_bind_bucket *next = tb->next;
@@ -274,6 +279,8 @@ static void tcp_bucketgc(unsigned long data)
 			tb = next;
 		}
 	}
+	SOCKHASH_UNLOCK_WRITE_BH();
+
 	if(reaped != 0) {
 		struct tcp_sl_timer *slt = (struct tcp_sl_timer *)data;
 
@@ -294,8 +301,14 @@ static void tcp_twkill(unsigned long data)
 	struct tcp_tw_bucket *tw;
 	int killed = 0;
 
+	/* The death-row tw chains are only ever touched
+	 * in BH context so no locking is needed.
+	 */
 	tw = tcp_tw_death_row[tcp_tw_death_row_slot];
 	tcp_tw_death_row[tcp_tw_death_row_slot] = NULL;
+	tcp_tw_death_row_slot =
+	  ((tcp_tw_death_row_slot + 1) & (TCP_TWKILL_SLOTS - 1));
+
 	while(tw != NULL) {
 		struct tcp_tw_bucket *next = tw->next_death;
 
@@ -307,8 +320,6 @@ static void tcp_twkill(unsigned long data)
 		struct tcp_sl_timer *slt = (struct tcp_sl_timer *)data;
 		atomic_sub(killed, &slt->count);
 	}
-	tcp_tw_death_row_slot =
-	  ((tcp_tw_death_row_slot + 1) & (TCP_TWKILL_SLOTS - 1));
 }
 
 /* These are always called from BH context.  See callers in
@@ -319,12 +330,14 @@ void tcp_tw_schedule(struct tcp_tw_bucket *tw)
 	int slot = (tcp_tw_death_row_slot - 1) & (TCP_TWKILL_SLOTS - 1);
 	struct tcp_tw_bucket **tpp = &tcp_tw_death_row[slot];
 
+	SOCKHASH_LOCK_WRITE_BH();
 	if((tw->next_death = *tpp) != NULL)
 		(*tpp)->pprev_death = &tw->next_death;
 	*tpp = tw;
 	tw->pprev_death = tpp;
 
 	tw->death_slot = slot;
+	SOCKHASH_UNLOCK_WRITE_BH();
 
 	tcp_inc_slow_timer(TCP_SLT_TWKILL);
 }
@@ -335,6 +348,7 @@ void tcp_tw_reschedule(struct tcp_tw_bucket *tw)
 	struct tcp_tw_bucket **tpp;
 	int slot;
 
+	SOCKHASH_LOCK_WRITE_BH();
 	if(tw->next_death)
 		tw->next_death->pprev_death = tw->pprev_death;
 	*tw->pprev_death = tw->next_death;
@@ -348,16 +362,21 @@ void tcp_tw_reschedule(struct tcp_tw_bucket *tw)
 	tw->pprev_death = tpp;
 
 	tw->death_slot = slot;
+	SOCKHASH_UNLOCK_WRITE_BH();
+
 	/* Timer was incremented when we first entered the table. */
 }
 
 /* This is for handling early-kills of TIME_WAIT sockets. */
 void tcp_tw_deschedule(struct tcp_tw_bucket *tw)
 {
+	SOCKHASH_LOCK_WRITE_BH();
 	if(tw->next_death)
 		tw->next_death->pprev_death = tw->pprev_death;
 	*tw->pprev_death = tw->next_death;
 	tw->pprev_death = NULL;
+	SOCKHASH_UNLOCK_WRITE_BH();
+
 	tcp_dec_slow_timer(TCP_SLT_TWKILL);
 }
 
@@ -399,20 +418,30 @@ static void tcp_keepalive(unsigned long data)
 	int count = 0;
 	int i;
 	
-	for(i = chain_start; i < (chain_start + ((TCP_HTABLE_SIZE/2) >> 2)); i++) {
-		struct sock *sk = tcp_established_hash[i];
+	SOCKHASH_LOCK_READ_BH();
+	for(i = chain_start; i < (chain_start + ((tcp_ehash_size >> 1) >> 2)); i++) {
+		struct sock *sk;
+
+		sk = tcp_ehash[i];
 		while(sk) {
-			if(!atomic_read(&sk->sock_readers) && sk->keepopen) {
+			struct sock *next = sk->next;
+
+			bh_lock_sock(sk);
+			if (sk->keepopen && !sk->lock.users) {
+				SOCKHASH_UNLOCK_READ_BH();
 				count += tcp_keepopen_proc(sk);
-				if(count == sysctl_tcp_max_ka_probes)
-					goto out;
+				SOCKHASH_LOCK_READ_BH();
 			}
-			sk = sk->next;
+			bh_unlock_sock(sk);
+			if(count == sysctl_tcp_max_ka_probes)
+				goto out;
+			sk = next;
 		}
 	}
 out:
-	chain_start = ((chain_start + ((TCP_HTABLE_SIZE/2)>>2)) &
-		       ((TCP_HTABLE_SIZE/2) - 1));
+	SOCKHASH_UNLOCK_READ_BH();
+	chain_start = ((chain_start + ((tcp_ehash_size >> 1)>>2)) &
+		       ((tcp_ehash_size >> 1) - 1));
 }
 
 /*
@@ -439,9 +468,11 @@ void tcp_retransmit_timer(unsigned long data)
 		return;
 	}
 
-	if (atomic_read(&sk->sock_readers)) {
+	bh_lock_sock(sk);
+	if (sk->lock.users) {
 		/* Try again later */  
 		tcp_reset_xmit_timer(sk, TIME_RETRANS, HZ/20);
+		bh_unlock_sock(sk);
 		return;
 	}
 
@@ -508,11 +539,50 @@ void tcp_retransmit_timer(unsigned long data)
 	tcp_reset_xmit_timer(sk, TIME_RETRANS, tp->rto);
 
 	tcp_write_timeout(sk);
+
+	bh_unlock_sock(sk);
 }
 
 /*
  *	Slow timer for SYN-RECV sockets
  */
+
+static void tcp_do_syn_queue(struct sock *sk, struct tcp_opt *tp, unsigned long now)
+{
+	struct open_request *prev, *req;
+
+	prev = (struct open_request *) &tp->syn_wait_queue;
+	for(req = tp->syn_wait_queue; req; ) {
+		struct open_request *next = req->dl_next;
+
+		if (! req->sk) {
+			tcp_synq_unlink(tp, req, prev);
+			if(req->retrans >= sysctl_tcp_retries1) {
+				(*req->class->destructor)(req);
+				tcp_dec_slow_timer(TCP_SLT_SYNACK);
+				tp->syn_backlog--;
+				tcp_openreq_free(req);
+				if (! tp->syn_wait_queue)
+					break;
+			} else {
+				unsigned long timeo;
+				struct open_request *rp;
+
+				(*req->class->rtx_syn_ack)(sk, req);
+				req->retrans++;
+				timeo = min((TCP_TIMEOUT_INIT << req->retrans),
+					    (120 * HZ));
+				req->expires = now + timeo;
+				rp = prev->dl_next;
+				tcp_synq_queue(tp, req);
+				if(rp != prev->dl_next)
+					prev = prev->dl_next;
+			}
+		} else
+			prev = req;
+		req = next;
+	}
+}
 
 /* This now scales very nicely. -DaveM */
 static void tcp_syn_recv_timer(unsigned long data)
@@ -521,66 +591,21 @@ static void tcp_syn_recv_timer(unsigned long data)
 	unsigned long now = jiffies;
 	int i;
 
+	SOCKHASH_LOCK_READ_BH();
 	for(i = 0; i < TCP_LHTABLE_SIZE; i++) {
 		sk = tcp_listening_hash[i];
-
 		while(sk) {
 			struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 			
 			/* TCP_LISTEN is implied. */
-			if (!atomic_read(&sk->sock_readers) && tp->syn_wait_queue) {
-				struct open_request *prev = (struct open_request *)(&tp->syn_wait_queue);
-				struct open_request *req = tp->syn_wait_queue;
-				do {
-					struct open_request *conn;
-				  
-					conn = req;
-					req = req->dl_next;
-
-					if (conn->sk) {
-						prev = conn; 
-						continue; 
-					}
-
-					tcp_synq_unlink(tp, conn, prev);
-					if (conn->retrans >= sysctl_tcp_retries1) {
-#ifdef TCP_DEBUG
-						printk(KERN_DEBUG "syn_recv: "
-						       "too many retransmits\n");
-#endif
-						(*conn->class->destructor)(conn);
-						tcp_dec_slow_timer(TCP_SLT_SYNACK);
-						tp->syn_backlog--;
-						tcp_openreq_free(conn);
-
-						if (!tp->syn_wait_queue)
-							break;
-					} else {
-						unsigned long timeo;
-						struct open_request *op; 
-
-						(*conn->class->rtx_syn_ack)(sk, conn);
-
-						conn->retrans++;
-#ifdef TCP_DEBUG
-						printk(KERN_DEBUG "syn_ack rtx %d\n",
-						       conn->retrans);
-#endif
-						timeo = min((TCP_TIMEOUT_INIT 
-							     << conn->retrans),
-							    120*HZ);
-						conn->expires = now + timeo;
-						op = prev->dl_next; 
-						tcp_synq_queue(tp, conn);
-						if (op != prev->dl_next)
-							prev = prev->dl_next;
-					}
-					/* old prev still valid here */
-				} while (req);
-			}
+			bh_lock_sock(sk);
+			if (!sk->lock.users && tp->syn_wait_queue)
+				tcp_do_syn_queue(sk, tp, now);
+			bh_unlock_sock(sk);
 			sk = sk->next;
 		}
 	}
+	SOCKHASH_UNLOCK_READ_BH();
 }
 
 void tcp_sltimer_handler(unsigned long data)

@@ -83,12 +83,18 @@ void ppc_generic_ide_fix_driveid(struct hd_driveid *id);
 
 static __inline__ int ide_default_irq(ide_ioreg_t base)
 {
-	return ppc_ide_md.default_irq(base);
+	if ( ppc_ide_md.default_irq )
+		return ppc_ide_md.default_irq(base);
+	else
+		return -1;
 }
 
 static __inline__ ide_ioreg_t ide_default_io_base(int index)
 {
-	return ppc_ide_md.default_io_base(index);
+	if ( ppc_ide_md.default_io_base )
+		return ppc_ide_md.default_io_base(index);
+	else
+		return -1;
 }
 
 static __inline__ void ide_init_default_hwifs(void)
@@ -107,21 +113,28 @@ static __inline__ void ide_init_default_hwifs(void)
 
 static __inline__ int ide_check_region (ide_ioreg_t from, unsigned int extent)
 {
-	return ppc_ide_md.check_region(from, extent);
+	if ( ppc_ide_md.check_region )
+		return ppc_ide_md.check_region(from, extent);
+	else
+		return -1;
 }
 
 static __inline__ void ide_request_region (ide_ioreg_t from, unsigned int extent, const char *name)
 {
-	ppc_ide_md.request_region(from, extent, name);
+	if ( ppc_ide_md.request_region )
+		ppc_ide_md.request_region(from, extent, name);
 }
 
 static __inline__ void ide_release_region (ide_ioreg_t from, unsigned int extent)
 {
-	ppc_ide_md.release_region(from, extent);
+	if ( ppc_ide_md.release_region )
+		ppc_ide_md.release_region(from, extent);
 }
 
-static __inline__ void ide_fix_driveid (struct hd_driveid *id) {
-        ppc_ide_md.fix_driveid(id);
+static __inline__ void ide_fix_driveid (struct hd_driveid *id)
+{
+        if ( ppc_ide_md.fix_driveid )
+		ppc_ide_md.fix_driveid(id);
 }
 
 #undef inb

@@ -212,6 +212,13 @@ struct parport {
 	rwlock_t cad_lock;
 };
 
+struct parport_driver {
+	const char *name;
+	void (*attach) (struct parport *);
+	void (*detach) (struct parport *);
+	struct parport_driver *next;
+};
+
 /* parport_register_port registers a new parallel port at the given address (if
  * one does not already exist) and returns a pointer to it.  This entails
  * claiming the I/O region, IRQ and DMA.
@@ -219,6 +226,13 @@ struct parport {
  */
 struct parport *parport_register_port(unsigned long base, int irq, int dma,
 				      struct parport_operations *ops);
+
+/* Once a registered port is ready for high-level drivers to use, the
+   low-level driver that registered it should announce it.  This will
+   call the high-level drivers' attach() functions (after things like
+   determining the IEEE 1284.3 topology of the port and collecting
+   DeviceIDs). */
+void parport_announce_port (struct parport *port);
 
 /* Unregister a port. */
 extern void parport_unregister_port(struct parport *port);
@@ -234,6 +248,12 @@ extern void parport_quiesce(struct parport *);
  * in this machine.
  */
 struct parport *parport_enumerate(void);
+
+/* Register a new high-level driver. */
+extern int parport_register_driver (struct parport_driver *);
+
+/* Unregister a high-level driver. */
+extern void parport_unregister_driver (struct parport_driver *);
 
 /* parport_register_device declares that a device is connected to a port, and 
  * tells the kernel all it needs to know.  
@@ -322,7 +342,8 @@ extern __inline__ void parport_generic_irq(int irq, struct parport *port,
 #define PARPORT_FLAG_COMA		(1<<0)
 #define PARPORT_FLAG_EXCL		(1<<1)	/* EXCL driver registered. */
 
-extern void parport_parse_irqs(int, const char *[], int irqval[]);
+extern int parport_parse_irqs(int, const char *[], int irqval[]);
+extern int parport_parse_dmas(int, const char *[], int irqval[]);
 extern int parport_ieee1284_nibble_mode_ok(struct parport *, unsigned char);
 extern int parport_wait_peripheral(struct parport *, unsigned char, unsigned
 				   char);

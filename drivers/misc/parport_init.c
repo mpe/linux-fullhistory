@@ -22,7 +22,7 @@
 static int io[PARPORT_MAX+1] __initdata = { [0 ... PARPORT_MAX] = 0 };
 static int io_hi[PARPORT_MAX+1] __initdata = { [0 ... PARPORT_MAX] = 0 };
 static int irq[PARPORT_MAX] __initdata = { [0 ... PARPORT_MAX-1] = PARPORT_IRQ_PROBEONLY };
-static int dma[PARPORT_MAX] __initdata = { [0 ... PARPORT_MAX-1] = PARPORT_DMA_NONE };
+static int dma[PARPORT_MAX] __initdata = { [0 ... PARPORT_MAX-1] = PARPORT_DMA_AUTO };
 
 extern int parport_pc_init(int *io, int *io_hi, int *irq, int *dma);
 extern int parport_ax_init(void);
@@ -146,8 +146,11 @@ EXPORT_SYMBOL(parport_claim);
 EXPORT_SYMBOL(parport_claim_or_block);
 EXPORT_SYMBOL(parport_release);
 EXPORT_SYMBOL(parport_register_port);
+EXPORT_SYMBOL(parport_announce_port);
 EXPORT_SYMBOL(parport_unregister_port);
 EXPORT_SYMBOL(parport_quiesce);
+EXPORT_SYMBOL(parport_register_driver);
+EXPORT_SYMBOL(parport_unregister_driver);
 EXPORT_SYMBOL(parport_register_device);
 EXPORT_SYMBOL(parport_unregister_device);
 EXPORT_SYMBOL(parport_enumerate);
@@ -157,6 +160,7 @@ EXPORT_SYMBOL(parport_proc_register);
 EXPORT_SYMBOL(parport_proc_unregister);
 EXPORT_SYMBOL(parport_probe_hook);
 EXPORT_SYMBOL(parport_parse_irqs);
+EXPORT_SYMBOL(parport_parse_dmas);
 
 void inc_parport_count(void)
 {

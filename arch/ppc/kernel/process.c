@@ -1,5 +1,5 @@
 /*
- * $Id: process.c,v 1.83 1999/05/10 04:43:43 cort Exp $
+ * $Id: process.c,v 1.85 1999/05/16 21:27:08 cort Exp $
  *
  *  linux/arch/ppc/kernel/process.c
  *
@@ -51,8 +51,8 @@ static struct fs_struct init_fs = INIT_FS;
 static struct file * init_fd_array[NR_OPEN] = { NULL, };
 static struct files_struct init_files = INIT_FILES;
 static struct signal_struct init_signals = INIT_SIGNALS;
-struct mm_struct init_mm = INIT_MM;
-union task_union init_task_union = { INIT_TASK };
+struct mm_struct init_mm = INIT_MM(init_mm);
+union task_union init_task_union = { INIT_TASK(init_task_union.task) };
 /* only used to get secondary processor up */
 struct task_struct *current_set[NR_CPUS] = {&init_task, };
 
@@ -233,24 +233,6 @@ void show_regs(struct pt_regs * regs)
 		}
 	}
 out:
-}
-
-void instruction_dump (unsigned long *pc)
-{
-	int i;
-
-	if((((unsigned long) pc) & 3))
-                return;
-
-	printk("Instruction DUMP:");
-	for(i = -3; i < 6; i++)
-	{
-		unsigned long p;
-		if (__get_user( p, &pc[i] ))
-			break;
-		printk("%c%08lx%c",i?' ':'<',p,i?' ':'>');
-	}
-	printk("\n");
 }
 
 void exit_thread(void)

@@ -20,6 +20,14 @@ typedef unsigned char spinlock_t;
 #define spin_unlock(lock)	do { } while(0)
 #define spin_lock_irq(lock)	cli()
 #define spin_unlock_irq(lock)	sti()
+#define spin_lock_bh(lock) \
+do {	local_bh_count++; \
+	barrier(); \
+} while(0)
+#define spin_unlock_bh(lock) \
+do {	barrier(); \
+	local_bh_count--; \
+} while(0)
 
 #define spin_lock_irqsave(lock, flags)		save_and_cli(flags)
 #define spin_unlock_irqrestore(lock, flags)	restore_flags(flags)
@@ -43,8 +51,27 @@ typedef unsigned long rwlock_t;
 #define write_unlock(lock)	do { } while(0)
 #define read_lock_irq(lock)	cli()
 #define read_unlock_irq(lock)	sti()
+#define read_lock_bh(lock) \
+do {	local_bh_count++; \
+	barrier(); \
+} while(0)
+#define read_unlock_bh(lock) \
+do {	barrier(); \
+	local_bh_count--; \
+} while(0)
+
 #define write_lock_irq(lock)	cli()
 #define write_unlock_irq(lock)	sti()
+
+#define write_lock_bh(lock) \
+do {	local_bh_count++; \
+	barrier(); \
+} while(0)
+ 
+#define write_unlock_bh(lock) \
+do {	barrier(); \
+	local_bh_count--; \
+} while(0)
 
 #define read_lock_irqsave(lock, flags)		save_and_cli(flags)
 #define read_unlock_irqrestore(lock, flags)	restore_flags(flags)
@@ -149,6 +176,16 @@ extern __inline__ void spin_unlock_irq(spinlock_t *lock)
 	: "memory");
 }
 
+#define spin_lock_bh(__lock)	\
+do {	local_bh_count++;	\
+	spin_lock(__lock);	\
+} while(0)
+
+#define spin_unlock_bh(__lock)		\
+do {	spin_unlock(__lock);		\
+	local_bh_count--;		\
+} while(0)
+
 #define spin_lock_irqsave(__lock, flags)			\
 do {	register spinlock_t *__lp asm("g1");			\
 	__lp = (__lock);					\
@@ -205,9 +242,11 @@ extern int _spin_trylock (spinlock_t *lock);
 #define spin_trylock(lp)	_spin_trylock(lp)
 #define spin_lock(lock)		_do_spin_lock(lock, "spin_lock")
 #define spin_lock_irq(lock)	do { __cli(); _do_spin_lock(lock, "spin_lock_irq"); } while(0)
+#define spin_lock_bh(lock)	do { local_bh_count++; _do_spin_lock(lock, "spin_lock_bh"); } while(0)
 #define spin_lock_irqsave(lock, flags) do { __save_and_cli(flags); _do_spin_lock(lock, "spin_lock_irqsave"); } while(0)
 #define spin_unlock(lock)	_do_spin_unlock(lock)
 #define spin_unlock_irq(lock)	do { _do_spin_unlock(lock); __sti(); } while(0)
+#define spin_unlock_bh(lock)	do { _do_spin_unlock(lock); local_bh_count--; } while(0)
 #define spin_unlock_irqrestore(lock, flags) do { _do_spin_unlock(lock); __restore_flags(flags); } while(0)
 
 #endif /* SPIN_LOCK_DEBUG */
@@ -303,8 +342,12 @@ extern __inline__ void write_unlock(rwlock_t *rw)
 
 #define read_lock_irq(lock)	do { __cli(); read_lock(lock); } while (0)
 #define read_unlock_irq(lock)	do { read_unlock(lock); __sti(); } while (0)
+#define read_lock_bh(lock)	do { local_bh_count++; read_lock(lock); } while (0)
+#define read_unlock_bh(lock)	do { read_unlock(lock); local_bh_count--; } while (0)
 #define write_lock_irq(lock)	do { __cli(); write_lock(lock); } while (0)
 #define write_unlock_irq(lock)	do { write_unlock(lock); __sti(); } while (0)
+#define write_lock_bh(lock)	do { local_bh_count++; write_lock(lock); } while (0)
+#define write_unlock_bh(lock)	do { write_unlock(lock); local_bh_count--; } while (0)
 
 #define read_lock_irqsave(lock, flags)	\
 	do { __save_and_cli(flags); read_lock(lock); } while (0)
@@ -336,6 +379,7 @@ do {	unsigned long flags; \
 	__restore_flags(flags); \
 } while(0)
 #define read_lock_irq(lock)	do { __cli(); _do_read_lock(lock, "read_lock_irq"); } while(0)
+#define read_lock_bh(lock)	do { local_bh_count++; _do_read_lock(lock, "read_lock_bh"); } while(0)
 #define read_lock_irqsave(lock, flags) do { __save_and_cli(flags); _do_read_lock(lock, "read_lock_irqsave"); } while(0)
 
 #define read_unlock(lock) \
@@ -345,6 +389,7 @@ do {	unsigned long flags; \
 	__restore_flags(flags); \
 } while(0)
 #define read_unlock_irq(lock)	do { _do_read_unlock(lock, "read_unlock_irq"); __sti() } while(0)
+#define read_unlock_bh(lock)	do { _do_read_unlock(lock, "read_unlock_bh"); local_bh_count--; } while(0)
 #define read_unlock_irqrestore(lock, flags) do { _do_read_unlock(lock, "read_unlock_irqrestore"); __restore_flags(flags); } while(0)
 
 #define write_lock(lock) \
@@ -354,6 +399,7 @@ do {	unsigned long flags; \
 	__restore_flags(flags); \
 } while(0)
 #define write_lock_irq(lock)	do { __cli(); _do_write_lock(lock, "write_lock_irq"); } while(0)
+#define write_lock_bh(lock)	do { local_bh_count++; _do_write_lock(lock, "write_lock_bh"); } while(0)
 #define write_lock_irqsave(lock, flags) do { __save_and_cli(flags); _do_write_lock(lock, "write_lock_irqsave"); } while(0)
 
 #define write_unlock(lock) \
@@ -363,6 +409,7 @@ do {	unsigned long flags; \
 	__restore_flags(flags); \
 } while(0)
 #define write_unlock_irq(lock)	do { _do_write_unlock(lock); __sti(); } while(0)
+#define write_unlock_bh(lock)	do { _do_write_unlock(lock); local_bh_count--; } while(0)
 #define write_unlock_irqrestore(lock, flags) do { _do_write_unlock(lock); __restore_flags(flags); } while(0)
 
 #endif /* SPIN_LOCK_DEBUG */

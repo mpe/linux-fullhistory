@@ -159,6 +159,7 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
   if [ "$CONFIG_RADIO_ZOLTRIX" = "y" ]; then
     hex '  ZOLTRIX I/O port (0x20c or 0x30c)' CONFIG_RADIO_ZOLTRIX_PORT 20c
   fi
+  dep_tristate 'IIC on parallel port' CONFIG_I2C_PARPORT $CONFIG_PARPORT
 fi
 
 endmenu

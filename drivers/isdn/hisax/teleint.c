@@ -1,11 +1,17 @@
-/* $Id: teleint.c,v 1.5 1998/02/02 13:40:47 keil Exp $
+/* $Id: teleint.c,v 1.7 1998/11/15 23:55:26 keil Exp $
 
  * teleint.c     low level stuff for TeleInt isdn cards
  *
- * Author     Karsten Keil (keil@temic-ech.spacenet.de)
+ * Author     Karsten Keil (keil@isdn4linux.de)
  *
  *
  * $Log: teleint.c,v $
+ * Revision 1.7  1998/11/15 23:55:26  keil
+ * changes from 2.0
+ *
+ * Revision 1.6  1998/04/15 16:45:31  keil
+ * new init code
+ *
  * Revision 1.5  1998/02/02 13:40:47  keil
  * fast io
  *
@@ -32,7 +38,7 @@
 
 extern const char *CardType[];
 
-const char *TeleInt_revision = "$Revision: 1.5 $";
+const char *TeleInt_revision = "$Revision: 1.7 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -64,17 +70,20 @@ static inline void
 readfifo(unsigned int ale, unsigned int adr, u_char off, u_char * data, int size)
 {
 	register u_char ret;
-	int max_delay = 2000;
+	register int max_delay = 20000;
+	register int i;
+	
 	byteout(ale, off);
-
-	ret = HFC_BUSY & bytein(ale);
-	while (ret && --max_delay)
+	for (i = 0; i<size; i++) {
 		ret = HFC_BUSY & bytein(ale);
-	if (!max_delay) {
-		printk(KERN_WARNING "TeleInt Busy not inaktive\n");
-		return;
+		while (ret && --max_delay)
+			ret = HFC_BUSY & bytein(ale);
+		if (!max_delay) {
+			printk(KERN_WARNING "TeleInt Busy not inaktive\n");
+			return;
+		}
+		data[i] = bytein(adr);
 	}
-	insb(adr, data, size);
 }
 
 
@@ -104,18 +113,21 @@ static inline void
 writefifo(unsigned int ale, unsigned int adr, u_char off, u_char * data, int size)
 {
 	register u_char ret;
-	int max_delay = 2000;
-
+	register int max_delay = 20000;
+	register int i;
+	
 	/* fifo write without cli because it's allready done  */
 	byteout(ale, off);
-	ret = HFC_BUSY & bytein(ale);
-	while (ret && --max_delay)
+	for (i = 0; i<size; i++) {
 		ret = HFC_BUSY & bytein(ale);
-	if (!max_delay) {
-		printk(KERN_WARNING "TeleInt Busy not inaktive\n");
-		return;
+		while (ret && --max_delay)
+			ret = HFC_BUSY & bytein(ale);
+		if (!max_delay) {
+			printk(KERN_WARNING "TeleInt Busy not inaktive\n");
+			return;
+		}
+		byteout(adr, data[i]);
 	}
-	outsb(adr, data, size);
 }
 
 /* Interface functions */
@@ -157,11 +169,8 @@ ReadHFC(struct IsdnCardState *cs, int data, u_char reg)
 		cs->hw.hfc.cip = reg;
 		byteout(cs->hw.hfc.addr | 1, reg);
 		ret = bytein(cs->hw.hfc.addr);
-		if (cs->debug & L1_DEB_HSCX_FIFO && (data != 2)) {
-			char tmp[32];
-			sprintf(tmp, "hfc RD %02x %02x", reg, ret);
-			debugl1(cs, tmp);
-		}
+		if (cs->debug & L1_DEB_HSCX_FIFO && (data != 2))
+			debugl1(cs, "hfc RD %02x %02x", reg, ret);
 	} else
 		ret = bytein(cs->hw.hfc.addr | 1);
 	return (ret);
@@ -174,11 +183,8 @@ WriteHFC(struct IsdnCardState *cs, int data, u_char reg, u_char value)
 	cs->hw.hfc.cip = reg;
 	if (data)
 		byteout(cs->hw.hfc.addr, value);
-	if (cs->debug & L1_DEB_HSCX_FIFO && (data != 2)) {
-		char tmp[32];
-		sprintf(tmp, "hfc W%c %02x %02x", data ? 'D' : 'C', reg, value);
-		debugl1(cs, tmp);
-	}
+	if (cs->debug & L1_DEB_HSCX_FIFO && (data != 2))
+		debugl1(cs, "hfc W%c %02x %02x", data ? 'D' : 'C', reg, value);
 }
 
 static void
@@ -271,6 +277,9 @@ TeleInt_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 			inithfc(cs);
 			clear_pending_isac_ints(cs);
 			initisac(cs);
+			/* Reenable all IRQ */
+			cs->writeisac(cs, ISAC_MASK, 0);
+			cs->writeisac(cs, ISAC_CMDR, 0x41);
 			cs->hw.hfc.timer.expires = jiffies + 1;
 			add_timer(&cs->hw.hfc.timer);
 			return(0);

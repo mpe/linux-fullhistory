@@ -1,8 +1,8 @@
-/* $Id: isdn_net.h,v 1.6 1997/10/09 21:28:54 fritz Exp $
+/* $Id: isdn_net.h,v 1.9 1999/04/12 12:33:27 fritz Exp $
 
  * header for Linux ISDN subsystem, network related functions (linklevel).
  *
- * Copyright 1994,95,96 by Fritz Elfert (fritz@wuemaus.franken.de)
+ * Copyright 1994-1999  by Fritz Elfert (fritz@isdn4linux.de)
  * Copyright 1995,96    by Thinking Objects Software GmbH Wuerzburg
  * Copyright 1995,96    by Michael Hipp (Michael.Hipp@student.uni-tuebingen.de)
  *
@@ -21,6 +21,16 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_net.h,v $
+ * Revision 1.9  1999/04/12 12:33:27  fritz
+ * Changes from 2.0 tree.
+ *
+ * Revision 1.8  1998/10/30 17:55:33  he
+ * dialmode for x25iface and multulink ppp
+ *
+ * Revision 1.7  1998/08/31 21:09:55  he
+ * new ioctl IIOCNETGPN for /dev/isdninfo (get network interface'
+ *     peer phone number)
+ *
  * Revision 1.6  1997/10/09 21:28:54  fritz
  * New HL<->LL interface:
  *   New BSENT callback with nr. of bytes included.
@@ -99,6 +109,7 @@ extern int isdn_net_setcfg(isdn_net_ioctl_cfg *);
 extern int isdn_net_getcfg(isdn_net_ioctl_cfg *);
 extern int isdn_net_addphone(isdn_net_ioctl_phone *);
 extern int isdn_net_getphones(isdn_net_ioctl_phone *, char *);
+extern int isdn_net_getpeer(isdn_net_ioctl_phone *, isdn_net_ioctl_phone *);
 extern int isdn_net_delphone(isdn_net_ioctl_phone *);
 extern int isdn_net_find_icall(int, int, int, setup_parm);
 extern void isdn_net_hangup(struct device *);
@@ -111,3 +122,4 @@ extern int isdn_net_send_skb(struct device *, isdn_net_local *,
 			     struct sk_buff *);
 extern int isdn_net_rcv_skb(int, struct sk_buff *);
 extern void isdn_net_slarp_out(void);
+extern int isdn_net_dial_req(isdn_net_local *);

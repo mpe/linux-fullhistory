@@ -112,7 +112,8 @@ static int __init ic_open_devs(void)
 	unsigned short oflags;
 
 	last = &ic_first_dev;
-	for (dev = dev_base; dev; dev = dev->next)
+	read_lock_bh(&dev_base_lock);
+	for (dev = dev_base; dev; dev = dev->next) {
 		if (user_dev_name[0] ? !strcmp(dev->name, user_dev_name) :
 		    (!(dev->flags & IFF_LOOPBACK) &&
 		     (dev->flags & (IFF_POINTOPOINT|IFF_BROADCAST)) &&
@@ -142,6 +143,9 @@ static int __init ic_open_devs(void)
 			ic_proto_have_if |= able;
 			DBG(("IP-Config: Opened %s (able=%d)\n", dev->name, able));
 		}
+	}
+	read_unlock_bh(&dev_base_lock);
+
 	*last = NULL;
 
 	if (!ic_first_dev) {

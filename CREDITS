@@ -767,11 +767,8 @@ S: 5623 HZ Eindhoven
 S: The Netherlands
 
 N: Kai Harrekilde-Petersen
-E: khp@dolphinics.no
+E: khp@olicom.dk
 D: Original author of the ftape-HOWTO, i82078 fdc detection code.
-S: Peder Holters vei 13
-S: 1168 Oslo
-S: Norway
 
 N: Andrew Haylett
 E: ajh@primag.co.uk
@@ -1439,8 +1436,8 @@ S: D-37083 Goettingen
 S: Germany
 
 N: David Mosberger-Tang
-E: David.Mosberger@acm.org
-D: Linux/Alpha
+E: davidm@hpl.hp.com if IA-64 related, else David.Mosberger@acm.org
+D: Linux/Alpha and Linux/ia64
 S: 35706 Runckel Lane
 S: Fremont, California 94536
 S: USA

@@ -19,6 +19,7 @@
  */
 
 /* 4/4/1999 added data toggle for interrupt pipes -keryan */
+/* 5/16/1999 added global toggles for bulk and control */
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -52,17 +53,30 @@ static DECLARE_WAIT_QUEUE_HEAD(uhci_configure);
 /*
  * Return the result of a TD..
  */
-static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td)
+static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td, unsigned long *rval)
 {
 	unsigned int status;
+	struct uhci_td *tmp = td->first;
 
-	status = (td->status >> 16) & 0xff;
+	/* locate the first failing td, if any */
 
+	do {
+		status = (tmp->status >> 16) & 0xff;
+		if (status)
+			break;
+		if ((tmp->link & 1) || (tmp->link & 2))
+			break;
+		tmp = bus_to_virt(tmp->link & ~0xF);
+	} while (1);
+
+	if(rval)
+		*rval = 0;
 	/* Some debugging code */
-	if (status) {
+	if (status && (!usb_pipeendpoint(tmp->info) || !(status & 0x08)) ) {
 		int i = 10;
-		struct uhci_td *tmp = td->first;
-		printk("uhci_td_result() failed with status %d\n", status);
+
+		tmp = td->first;
+		printk("uhci_td_result() failed with status %x\n", status);
 		show_status(dev->uhci);
 		do {
 			show_td(tmp);
@@ -72,6 +86,34 @@ static int uhci_td_result(struct uhci_device *dev, struct uhci_td *td)
 			if (!--i)
 				break;
 		} while (1);
+	}
+	if (usb_pipeendpoint(tmp->info) && (status & 0x08)) {
+//		printk("uhci_td_result() - NAK\n");
+		/* find total length xferred and reset toggle on failed packets */
+		tmp = td->first;
+		do {
+			/* sum up packets that did not fail */
+			if(rval && !((tmp->status >> 16) & 0xff))
+				*rval += (tmp->status & 0x3ff) + 1;
+
+			/* 
+			 * Note - only the first to fail will be marked NAK
+			 */
+			if (tmp->status & 0xFF0000) {
+				/* must reset the toggle on any error */
+				usb_settoggle(dev->usb, usb_pipeendpoint(tmp->info), (tmp->info >> 19) & 1);
+				break;
+			} 
+
+			if ((tmp->link & 1) || (tmp->link & 2))
+				break;
+			tmp = bus_to_virt(tmp->link & ~0xF);
+		} while (1);
+#if 0
+		if (rval) {
+			printk("uhci_td_result returning partial count %d\n", *rval);
+		}
+#endif
 	}
 	return status;		
 }
@@ -207,8 +249,8 @@ static struct uhci_qh *uhci_qh_allocate(struct uhci_device *dev)
 
 static void uhci_qh_deallocate(struct uhci_qh *qh)
 {
-	if (qh->element != 1)
-		printk("qh %p leaving dangling entries? (%X)\n", qh, qh->element);
+//	if (qh->element != 1)
+//		printk("qh %p leaving dangling entries? (%X)\n", qh, qh->element);
 
 	qh->element = 1;
 	qh->link = 1;
@@ -571,7 +613,7 @@ static int uhci_run_control(struct uhci_device *dev, struct uhci_td *first, stru
 
 	uhci_qh_deallocate(ctrl_qh);
 
-	return uhci_td_result(dev, last);
+	return uhci_td_result(dev, last, NULL);
 }
 
 /*
@@ -601,8 +643,9 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, void 
 	struct uhci_td *first, *td, *prevtd;
 	unsigned long destination, status;
 	int ret;
+	int maxsze = usb_maxpacket(usb_dev, pipe);
 
-	if (len > usb_maxpacket(usb_dev->maxpacketsize) * 29)
+	if (len > maxsze * 29)
 		printk("Warning, too much data for a control packet, crashing\n");
 
 	first = td = uhci_td_allocate(dev);
@@ -639,7 +682,6 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, void 
 	while (len > 0) {
 		/* Build the TD for control status */
 		int pktsze = len;
-		int maxsze = usb_maxpacket(pipe);
 
 		if (pktsze > maxsze)
 			pktsze = maxsze;
@@ -653,12 +695,13 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, void 
 		td->first = first;
 		td->backptr = &prevtd->link;
 
+		data += pktsze;
+		len -= pktsze;
+
 		prevtd = td;
 		td = uhci_td_allocate(dev);
 		prevtd->link = 4 | virt_to_bus(td);			/* Update previous TD */
 
-		data += maxsze;
-		len -= maxsze;
 	}
 
 	/*
@@ -697,6 +740,12 @@ static int uhci_control_msg(struct usb_device *usb_dev, unsigned int pipe, void 
 		} while (1);
 	}
 
+	if (ret) {
+		__u8 *p = cmd;
+
+		printk("Failed cmd - %02X %02X %02X %02X %02X %02X %02X %02X\n",
+		       p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+	}
 	return ret;
 }
 
@@ -718,7 +767,7 @@ static int uhci_bulk_completed(int status, void *buffer, void *dev_id)
 }
 
 /* td points to the last td in the list, which interrupts on completion */
-static int uhci_run_bulk(struct uhci_device *dev, struct uhci_td *first, struct uhci_td *last)
+static int uhci_run_bulk(struct uhci_device *dev, struct uhci_td *first, struct uhci_td *last, unsigned long *rval)
 {
 	DECLARE_WAITQUEUE(wait, current);
 	struct uhci_qh *bulk_qh = uhci_qh_allocate(dev);
@@ -780,7 +829,7 @@ static int uhci_run_bulk(struct uhci_device *dev, struct uhci_td *first, struct 
 
 	uhci_qh_deallocate(bulk_qh);
 
-	return uhci_td_result(dev, last);
+	return uhci_td_result(dev, last, rval);
 }
 
 /*
@@ -799,15 +848,16 @@ static int uhci_run_bulk(struct uhci_device *dev, struct uhci_td *first, struct 
  * 31 TD's is a minimum of 248 bytes worth of bulk
  * information.
  */
-static int uhci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *data, int len)
+static int uhci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *data, int len, unsigned long *rval)
 {
 	struct uhci_device *dev = usb_to_uhci(usb_dev);
 	struct uhci_td *first, *td, *prevtd;
 	unsigned long destination, status;
 	int ret;
+	int maxsze = usb_maxpacket(usb_dev, pipe);
 
-	if (len > usb_maxpacket(usb_dev->maxpacketsize) * 31)
-		printk("Warning, too much data for a bulk packet, crashing\n");
+	if (len > maxsze * 31)
+		printk("Warning, too much data for a bulk packet, crashing (%d/%d)\n", len, maxsze);
 
 	/* The "pipe" thing contains the destination in bits 8--18, 0x69 is IN */
 	/*
@@ -833,29 +883,33 @@ static int uhci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *da
 	while (len > 0) {
 		/* Build the TD for control status */
 		int pktsze = len;
-		int maxsze = usb_maxpacket(pipe);
 
 		if (pktsze > maxsze)
 			pktsze = maxsze;
 
 		td->status = status;					/* Status */
-		td->info = destination | ((pktsze-1) << 21);		/* pktsze bytes of data */
+		td->info = destination | ((pktsze-1) << 21) |
+			 (usb_gettoggle(usb_dev, usb_pipeendpoint(pipe)) << 19); /* pktsze bytes of data */
 		td->buffer = virt_to_bus(data);
 		td->backptr = &prevtd->link;
-
-		prevtd = td;
-		td = uhci_td_allocate(dev);
-		prevtd->link = 4 | virt_to_bus(td);			/* Update previous TD */
+		td->first = first;
 
 		data += maxsze;
 		len -= maxsze;
+
+		if (len > 0) {
+			prevtd = td;
+			td = uhci_td_allocate(dev);
+			prevtd->link = 4 | virt_to_bus(td);			/* Update previous TD */
+		}
+
 		/* Alternate Data0/1 (start with Data0) */
-		destination ^= 1 << 19;
+		usb_dotoggle(usb_dev, usb_pipeendpoint(pipe));
 	}
 	td->link = 1;					/* Terminate */
 
 	/* Start it up.. */
-	ret = uhci_run_bulk(dev, first, td);
+	ret = uhci_run_bulk(dev, first, td, rval);
 
 	{
 		int maxcount = 100;
@@ -1154,8 +1208,8 @@ static void uhci_interrupt(int irq, void *__uhci, struct pt_regs *regs)
 	status = inw(io_addr + USBSTS);
 	outw(status, io_addr + USBSTS);
 
-	if ((status & ~0x21) != 0)
-		printk("interrupt: %X\n", status);
+//	if ((status & ~0x21) != 0)
+//		printk("interrupt: %X\n", status);
 
 	/* Walk the list of pending TD's to see which ones completed.. */
 	uhci_interrupt_notify(uhci);
@@ -1218,12 +1272,13 @@ static void start_hc(struct uhci *uhci)
 		}
 	}
 
+
 	outw(USBINTR_TIMEOUT | USBINTR_RESUME | USBINTR_IOC | USBINTR_SP, io_addr + USBINTR);
 	outw(0, io_addr + USBFRNUM);
 	outl(virt_to_bus(uhci->fl), io_addr + USBFLBASEADD);
 
 	/* Run and mark it configured with a 64-byte max packet */
-	outw(USBCMD_RS | USBCMD_CF, io_addr + USBCMD);
+	outw(USBCMD_RS | USBCMD_CF | USBCMD_MAXP, io_addr + USBCMD);
 }
 
 /*
@@ -1556,7 +1611,10 @@ void cleanup_module(void)
 #endif
 }
 
-#define uhci_init init_module
+int init_modules(void)
+{
+	return uhci_init();
+}
 
 #endif
 

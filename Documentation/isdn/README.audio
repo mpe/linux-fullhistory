@@ -1,4 +1,4 @@
-$Id: README.audio,v 1.5 1997/02/23 23:53:46 fritz Exp $
+$Id: README.audio,v 1.7 1998/07/26 18:45:34 armin Exp $
 
 ISDN subsystem for Linux.
   Description of audio mode.
@@ -50,10 +50,11 @@ The following commands are supported:
                          the application. See below for data format
 
         AT+VSD=x,y       Set silence-detection parameters.
-                         NO EFFECT, supported for compatibility
-                         only. Possible parameters:
-                           x = 0 ... 31
-                           y = 0 ... 255
+                         Possible parameters:
+                           x = 0 ... 31  sensitivity threshold level.
+                                         (default 0 , deactivated)
+                           y = 0 ... 255 range of interval in units
+                                         of 0.1 second. (default 70)
         AT+VSD=?         Report possible parameters.
         AT+VSD?          Show current parameters.
 
@@ -102,13 +103,14 @@ General behavior and description of data formats/protocol.
     <DLE>C                  Touchtone "C" received.
     <DLE>D                  Touchtone "D" received.
 
+    <DLE>q                  quiet. Silence detected after non-silence.
+    <DLE>s                  silence. Silence detected from the
+                            start of recording.
+
     Currently unsupported DLE sequences:
 
     <DLE>c                  FAX calling tone received.
     <DLE>b                  busy tone received.
-    <DLE>q                  quiet. Silence detected after non-silence.
-    <DLE>s                  silence. Silence detected from the
-                            start of recording.
 
   Audio playback.
 

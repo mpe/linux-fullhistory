@@ -1,12 +1,27 @@
-/* $Id: isdnl3.c,v 2.5 1998/02/12 23:07:52 keil Exp $
+/* $Id: isdnl3.c,v 2.8 1998/11/15 23:55:04 keil Exp $
 
- * Author       Karsten Keil (keil@temic-ech.spacenet.de)
+ * Author       Karsten Keil (keil@isdn4linux.de)
  *              based on the teles driver from Jan den Ouden
+ *
+ *		This file is (c) under GNU PUBLIC LICENSE
+ *		For changes and modifications please read
+ *		../../../Documentation/isdn/HiSax.cert
  *
  * Thanks to    Jan den Ouden
  *              Fritz Elfert
  *
  * $Log: isdnl3.c,v $
+ * Revision 2.8  1998/11/15 23:55:04  keil
+ * changes from 2.0
+ *
+ * Revision 2.7  1998/05/25 14:10:15  keil
+ * HiSax 3.0
+ * X.75 and leased are working again.
+ *
+ * Revision 2.6  1998/05/25 12:58:11  keil
+ * HiSax golden code from certification, Don't use !!!
+ * No leased lines, no X75, but many changes.
+ *
  * Revision 2.5  1998/02/12 23:07:52  keil
  * change for 2.1.86 (removing FREE_READ/FREE_WRITE from [dev]_kfree_skb()
  *
@@ -47,7 +62,60 @@
 #include "isdnl3.h"
 #include <linux/config.h>
 
-const char *l3_revision = "$Revision: 2.5 $";
+const char *l3_revision = "$Revision: 2.8 $";
+
+static
+struct Fsm l3fsm =
+{NULL, 0, 0, NULL, NULL};
+
+enum {
+	ST_L3_LC_REL,
+	ST_L3_LC_ESTAB_WAIT,
+	ST_L3_LC_REL_WAIT,
+	ST_L3_LC_ESTAB,
+};
+
+#define L3_STATE_COUNT (ST_L3_LC_ESTAB+1)
+
+static char *strL3State[] =
+{
+	"ST_L3_LC_REL",
+	"ST_L3_LC_ESTAB_WAIT",
+	"ST_L3_LC_REL_WAIT",
+	"ST_L3_LC_ESTAB",
+};
+
+enum {
+	EV_ESTABLISH_REQ,
+	EV_ESTABLISH_IND,
+	EV_ESTABLISH_CNF,
+	EV_RELEASE_REQ,
+	EV_RELEASE_CNF,
+	EV_RELEASE_IND,
+};
+
+#define L3_EVENT_COUNT (EV_RELEASE_IND+1)
+
+static char *strL3Event[] =
+{
+	"EV_ESTABLISH_REQ",
+	"EV_ESTABLISH_IND",
+	"EV_ESTABLISH_CNF",
+	"EV_RELEASE_REQ",
+	"EV_RELEASE_CNF",
+	"EV_RELEASE_IND",
+};
+
+static void
+l3m_debug(struct FsmInst *fi, char *fmt, ...)
+{
+	va_list args;
+	struct PStack *st = fi->userdata;
+
+	va_start(args, fmt);
+	VHiSax_putstatus(st->l1.hardware, st->l3.debug_id, fmt, args);
+	va_end(args);
+}
 
 u_char *
 findie(u_char * p, int size, u_char ie, int wanted_set)
@@ -115,25 +183,11 @@ newcallref(void)
 }
 
 void
-l3_debug(struct PStack *st, char *s)
-{
-	char str[256], tm[32];
-
-	jiftime(tm, jiffies);
-	sprintf(str, "%s l3 %s\n", tm, s);
-	HiSax_putstatus(st->l1.hardware, str);
-}
-
-void
 newl3state(struct l3_process *pc, int state)
 {
-	char tmp[80];
-
-	if (pc->debug & L3_DEB_STATE) {
-		sprintf(tmp, "newstate cr %d %d --> %d", pc->callref,
+	if (pc->debug & L3_DEB_STATE)
+		l3_debug(pc->st, "newstate cr %d %d --> %d", pc->callref,
 			pc->state, state);
-		l3_debug(pc->st, tmp);
-	}
 	pc->state = state;
 }
 
@@ -197,7 +251,7 @@ no_l3_proto(struct PStack *st, int pr, void *arg)
 {
 	struct sk_buff *skb = arg;
 
-	HiSax_putstatus(st->l1.hardware, "L3 no D protocol\n");
+	HiSax_putstatus(st->l1.hardware, "L3", "no D protocol");
 	if (skb) {
 		dev_kfree_skb(skb);
 	}
@@ -277,16 +331,25 @@ release_l3_process(struct l3_process *p)
 		pp = np;
 		np = np->next;
 	}
-	printk(KERN_ERR "HiSax internal L3 error CR not in list\n");
+	printk(KERN_ERR "HiSax internal L3 error CR(%d) not in list\n", p->callref);
+	l3_debug(p->st, "HiSax internal L3 error CR(%d) not in list", p->callref);
 };
 
 void
-setstack_isdnl3(struct PStack *st, struct Channel *chanp)
+setstack_l3dc(struct PStack *st, struct Channel *chanp)
 {
 	char tmp[64];
 
 	st->l3.proc   = NULL;
 	st->l3.global = NULL;
+	skb_queue_head_init(&st->l3.squeue);
+	st->l3.l3m.fsm = &l3fsm;
+	st->l3.l3m.state = ST_L3_LC_REL;
+	st->l3.l3m.debug = 1;
+	st->l3.l3m.userdata = st;
+	st->l3.l3m.userint = 0;
+	st->l3.l3m.printdebug = l3m_debug;
+	strcpy(st->l3.debug_id, "L3DC ");
 
 #ifdef	CONFIG_HISAX_EURO
 	if (st->protocol == ISDN_PTYPE_EURO) {
@@ -321,6 +384,11 @@ setstack_isdnl3(struct PStack *st, struct Channel *chanp)
 }
 
 void
+isdnl3_trans(struct PStack *st, int pr, void *arg) {
+	st->l3.l3l2(st, pr, arg);
+}
+
+void
 releasestack_isdnl3(struct PStack *st)
 {
 	while (st->l3.proc)
@@ -330,4 +398,136 @@ releasestack_isdnl3(struct PStack *st)
 		kfree(st->l3.global);
 		st->l3.global = NULL;
 	}
+	discard_queue(&st->l3.squeue);
+}
+
+void
+setstack_l3bc(struct PStack *st, struct Channel *chanp)
+{
+
+	st->l3.proc   = NULL;
+	st->l3.global = NULL;
+	skb_queue_head_init(&st->l3.squeue);
+	st->l3.l3m.fsm = &l3fsm;
+	st->l3.l3m.state = ST_L3_LC_REL;
+	st->l3.l3m.debug = 1;
+	st->l3.l3m.userdata = st;
+	st->l3.l3m.userint = 0;
+	st->l3.l3m.printdebug = l3m_debug;
+	strcpy(st->l3.debug_id, "L3BC ");
+	st->lli.l4l3 = isdnl3_trans;
+}
+
+static void
+lc_activate(struct FsmInst *fi, int event, void *arg)
+{
+	struct PStack *st = fi->userdata;
+
+	FsmChangeState(fi, ST_L3_LC_ESTAB_WAIT);
+	st->l3.l3l2(st, DL_ESTABLISH | REQUEST, NULL);
+}
+
+static void
+lc_connect(struct FsmInst *fi, int event, void *arg)
+{
+	struct PStack *st = fi->userdata;
+	struct sk_buff *skb = arg;
+
+	FsmChangeState(fi, ST_L3_LC_ESTAB);
+	while ((skb = skb_dequeue(&st->l3.squeue))) {
+		st->l3.l3l2(st, DL_DATA | REQUEST, skb);
+	}
+	st->l3.l3l4(st, DL_ESTABLISH | INDICATION, NULL);
+}
+
+static void
+lc_release_req(struct FsmInst *fi, int event, void *arg)
+{
+	struct PStack *st = fi->userdata;
+
+	if (fi->state == ST_L3_LC_ESTAB_WAIT)
+		FsmChangeState(fi, ST_L3_LC_REL);
+	else
+		FsmChangeState(fi, ST_L3_LC_REL_WAIT);
+	st->l3.l3l2(st, DL_RELEASE | REQUEST, NULL);
+}
+
+static void
+lc_release_ind(struct FsmInst *fi, int event, void *arg)
+{
+	struct PStack *st = fi->userdata;
+
+	FsmChangeState(fi, ST_L3_LC_REL);
+	discard_queue(&st->l3.squeue);
+	st->l3.l3l4(st, DL_RELEASE | INDICATION, NULL);
+}
+
+/* *INDENT-OFF* */
+static struct FsmNode L3FnList[] HISAX_INITDATA =
+{
+	{ST_L3_LC_REL,		EV_ESTABLISH_REQ,	lc_activate},
+	{ST_L3_LC_REL,		EV_ESTABLISH_IND,	lc_connect},
+	{ST_L3_LC_REL,		EV_ESTABLISH_CNF,	lc_connect},
+	{ST_L3_LC_ESTAB_WAIT,	EV_ESTABLISH_CNF,	lc_connect},
+	{ST_L3_LC_ESTAB_WAIT,	EV_RELEASE_REQ,		lc_release_req},
+	{ST_L3_LC_ESTAB_WAIT,	EV_RELEASE_IND,		lc_release_ind},
+	{ST_L3_LC_ESTAB,	EV_RELEASE_IND,		lc_release_ind},
+	{ST_L3_LC_ESTAB,	EV_RELEASE_REQ,		lc_release_req},
+	{ST_L3_LC_REL_WAIT,	EV_RELEASE_CNF,		lc_release_ind},
+	{ST_L3_LC_REL_WAIT,	EV_ESTABLISH_REQ,	lc_activate},
+};
+/* *INDENT-ON* */
+
+#define L3_FN_COUNT (sizeof(L3FnList)/sizeof(struct FsmNode))
+
+void
+l3_msg(struct PStack *st, int pr, void *arg)
+{
+	
+	switch (pr) {
+		case (DL_DATA | REQUEST):
+			if (st->l3.l3m.state == ST_L3_LC_ESTAB) {
+				st->l3.l3l2(st, pr, arg);
+			} else {
+				struct sk_buff *skb = arg;
+
+				skb_queue_head(&st->l3.squeue, skb);
+				FsmEvent(&st->l3.l3m, EV_ESTABLISH_REQ, NULL); 
+			}
+			break;
+		case (DL_ESTABLISH | REQUEST):
+			FsmEvent(&st->l3.l3m, EV_ESTABLISH_REQ, NULL);
+			break;
+		case (DL_ESTABLISH | CONFIRM):
+			FsmEvent(&st->l3.l3m, EV_ESTABLISH_CNF, NULL);
+			break;
+		case (DL_ESTABLISH | INDICATION):
+			FsmEvent(&st->l3.l3m, EV_ESTABLISH_IND, NULL);
+			break;
+		case (DL_RELEASE | INDICATION):
+			FsmEvent(&st->l3.l3m, EV_RELEASE_IND, NULL);
+			break;
+		case (DL_RELEASE | CONFIRM):
+			FsmEvent(&st->l3.l3m, EV_RELEASE_CNF, NULL);
+			break;
+		case (DL_RELEASE | REQUEST):
+			FsmEvent(&st->l3.l3m, EV_RELEASE_REQ, NULL);
+			break;
+	}
+}
+
+HISAX_INITFUNC(void
+Isdnl3New(void))
+{
+	l3fsm.state_count = L3_STATE_COUNT;
+	l3fsm.event_count = L3_EVENT_COUNT;
+	l3fsm.strEvent = strL3Event;
+	l3fsm.strState = strL3State;
+	FsmNew(&l3fsm, L3FnList, L3_FN_COUNT);
+}
+
+void
+Isdnl3Free(void)
+{
+	FsmFree(&l3fsm);
 }

@@ -17,14 +17,57 @@ struct semaphore {
 	atomic_t count;
 	atomic_t waking;		/* biased by -1 */
 	wait_queue_head_t wait;
+#if WAITQUEUE_DEBUG
+	long __magic;
+#endif
 };
 
-#define MUTEX ((struct semaphore) \
- { ATOMIC_INIT(1), ATOMIC_INIT(-1), NULL })
-#define MUTEX_LOCKED ((struct semaphore) \
- { ATOMIC_INIT(0), ATOMIC_INIT(-1), NULL })
+#if WAITQUEUE_DEBUG
+# define __SEM_DEBUG_INIT(name)		, (long)&(name).__magic
+#else
+# define __SEM_DEBUG_INIT(name)
+#endif
 
-#define sema_init(sem, val)	atomic_set(&((sem)->count), val)
+#define __SEMAPHORE_INITIALIZER(name,count)		\
+	{ ATOMIC_INIT(count), ATOMIC_INIT(-1),		\
+	  __WAIT_QUEUE_HEAD_INITIALIZER((name).wait)	\
+	  __SEM_DEBUG_INIT(name) }
+
+#define __MUTEX_INITIALIZER(name) \
+	__SEMAPHORE_INITIALIZER(name,1)
+
+#define __DECLARE_SEMAPHORE_GENERIC(name,count) \
+	struct semaphore name = __SEMAPHORE_INITIALIZER(name,count)
+
+#define DECLARE_MUTEX(name) __DECLARE_SEMAPHORE_GENERIC(name,1)
+#define DECLARE_MUTEX_LOCKED(name) __DECLARE_SEMAPHORE_GENERIC(name,0)
+
+extern inline void sema_init (struct semaphore *sem, int val)
+{
+	/*
+	 * Logically, 
+	 *   *sem = (struct semaphore)__SEMAPHORE_INITIALIZER((*sem),val);
+	 * except that gcc produces better initializing by parts yet.
+	 */
+
+	atomic_set(&sem->count, val);
+	atomic_set(&sem->waking, -1);
+	init_waitqueue_head(&sem->wait);
+#if WAITQUEUE_DEBUG
+	sem->__magic = (long)&sem->__magic;
+#endif
+}
+
+static inline void init_MUTEX (struct semaphore *sem)
+{
+	sema_init(sem, 1);
+}
+
+static inline void init_MUTEX_LOCKED (struct semaphore *sem)
+{
+	sema_init(sem, 0);
+}
+
 
 extern void __down(struct semaphore * sem);
 extern int  __down_interruptible(struct semaphore * sem);
@@ -57,8 +100,13 @@ extern inline void down(struct semaphore * sem)
 	   a function that ordinarily wouldn't.  Otherwise we could
 	   have it done by the macro directly, which can be optimized
 	   the linker.  */
-	register void *pv __asm__("$27") = __down_failed;
+	register void *pv __asm__("$27");
+
+#if WAITQUEUE_DEBUG
+	CHECK_MAGIC(sem->__magic);
+#endif
 	
+	pv = __down_failed;
 	__asm__ __volatile__ (
 		"/* semaphore down operation */\n"
 		"1:	ldl_l	$24,%1\n"
@@ -88,8 +136,13 @@ extern inline int down_interruptible(struct semaphore * sem)
 	   value is in $24.  */
 
 	register int ret __asm__("$24");
-	register void *pv __asm__("$27") = __down_failed_interruptible;
+	register void *pv __asm__("$27");
 
+#if WAITQUEUE_DEBUG
+	CHECK_MAGIC(sem->__magic);
+#endif
+	
+	pv = __down_failed_interruptible;
 	__asm__ __volatile__ (
 		"/* semaphore down interruptible operation */\n"
 		"1:	ldl_l	$24,%2\n"
@@ -144,6 +197,10 @@ extern inline int down_trylock(struct semaphore * sem)
 	   } while (tmp == 0);
 	*/
 
+#if WAITQUEUE_DEBUG
+	CHECK_MAGIC(sem->__magic);
+#endif
+	
 	__asm__ __volatile__(
 		"1:	ldq_l	%1,%4\n"
 		"	lda	%3,1\n"
@@ -179,8 +236,13 @@ extern inline void up(struct semaphore * sem)
 	   it's return address in $28.  The pv is loaded as usual.
 	   The gp is clobbered (in the module case) as usual.  */
 
-	register void *pv __asm__("$27") = __up_wakeup;
+	register void *pv __asm__("$27");
 
+#if WAITQUEUE_DEBUG
+	CHECK_MAGIC(sem->__magic);
+#endif
+	
+	pv = __up_wakeup;
 	__asm__ __volatile__ (
 		"/* semaphore up operation */\n"
 		"	mb\n"

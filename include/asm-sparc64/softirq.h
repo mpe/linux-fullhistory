@@ -94,7 +94,8 @@ static inline void end_bh_atomic(void)
 static inline int softirq_trylock(int cpu)
 {
 	if (spin_trylock(&global_bh_count)) {
-		if (atomic_read(&global_bh_lock) == 0) {
+		if (atomic_read(&global_bh_lock) == 0 &&
+		    cpu_data[cpu].bh_count == 0) {
 			++(cpu_data[cpu].bh_count);
 			return 1;
 		}

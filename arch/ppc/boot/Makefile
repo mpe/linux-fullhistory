@@ -26,9 +26,15 @@ IOFF = 0
 ISZ = 0
 
 ifeq ($(CONFIG_SMP),y)
-TFTPIMAGE=/tftpboot/zImage.prep.smp
+TFTPIMAGE=/tftpboot/zImage.prep.smp$(MSIZE)
 else
-TFTPIMAGE=/tftpboot/zImage.prep
+TFTPIMAGE=/tftpboot/zImage.prep$(MSIZE)
+endif
+
+ifeq ($(CONFIG_PPC64),y)
+MSIZE=.64
+else
+MSIZE=
 endif
 
 ZLINKFLAGS = -T ../vmlinux.lds -Ttext 0x00800000

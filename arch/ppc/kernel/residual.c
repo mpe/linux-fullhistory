@@ -1,5 +1,5 @@
 /*
- * $Id: residual.c,v 1.14 1998/10/11 17:38:10 cort Exp $
+ * $Id: residual.c,v 1.15 1999/05/14 07:24:27 davem Exp $
  *
  * Code to deal with the PReP residual data.
  *

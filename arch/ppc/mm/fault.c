@@ -89,7 +89,6 @@ void do_page_fault(struct pt_regs *regs, unsigned long address,
 			printk("page fault in interrupt handler, addr=%lx\n",
 			       address);
 			show_regs(regs);
-			instruction_dump((unsigned long *)regs->nip);
 #if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
 			if (debugger_kernel_faults)
 				debugger(regs);
@@ -176,7 +175,6 @@ bad_page_fault(struct pt_regs *regs, unsigned long address)
 	/* kernel has accessed a bad area */
 	show_regs(regs);
 	print_backtrace( (unsigned long *)regs->gpr[1] );
-	instruction_dump((unsigned long *)regs->nip);
 #if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
 	if (debugger_kernel_faults)
 		debugger(regs);

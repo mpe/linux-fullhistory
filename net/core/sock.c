@@ -487,10 +487,10 @@ struct sock *sk_alloc(int family, int priority, int zero_it)
 {
 	struct sock *sk = kmem_cache_alloc(sk_cachep, priority);
 
-	if(sk) {
-		if (zero_it) 
-			memset(sk, 0, sizeof(struct sock));
+	if(sk && zero_it) {
+		memset(sk, 0, sizeof(struct sock));
 		sk->family = family;
+		sock_lock_init(sk);
 	}
 
 	return sk;
@@ -736,24 +736,44 @@ failure:
 	return NULL;
 }
 
-
-void __release_sock(struct sock *sk)
+void lock_sock(struct sock *sk)
 {
-#ifdef CONFIG_INET
-	if (!sk->prot || !sk->backlog_rcv)
-		return;
-		
-	/* See if we have any packets built up. */
-	start_bh_atomic();
-	while (!skb_queue_empty(&sk->back_log)) {
-		struct sk_buff * skb = sk->back_log.next;
-		__skb_unlink(skb, &sk->back_log);
-		sk->backlog_rcv(sk, skb);
+	spin_lock_bh(&sk->lock.slock);
+	if(sk->lock.users != 0) {
+		DECLARE_WAITQUEUE(wait, current);
+
+		add_wait_queue_exclusive(&sk->lock.wq, &wait);
+		for(;;) {
+			current->state = TASK_EXCLUSIVE | TASK_UNINTERRUPTIBLE;
+			spin_unlock_bh(&sk->lock.slock);
+			schedule();
+			spin_lock_bh(&sk->lock.slock);
+			if(!sk->lock.users)
+				break;
+		}
+		current->state = TASK_RUNNING;
+		remove_wait_queue(&sk->lock.wq, &wait);
 	}
-	end_bh_atomic();
-#endif  
+	sk->lock.users = 1;
+	spin_unlock_bh(&sk->lock.slock);
 }
 
+void release_sock(struct sock *sk)
+{
+	spin_lock_bh(&sk->lock.slock);
+	sk->lock.users = 0;
+	if(sk->backlog.tail != NULL) {
+		struct sk_buff *skb = sk->backlog.head;
+		do {	struct sk_buff *next = skb->next;
+			skb->next = NULL;
+			sk->backlog_rcv(sk, skb);
+			skb = next;
+		} while(skb != NULL);
+		sk->backlog.head = sk->backlog.tail = NULL;
+	}
+	wake_up(&sk->lock.wq);
+	spin_unlock_bh(&sk->lock.slock);
+}
 
 /*
  *	Generic socket manager library. Most simpler socket families
@@ -1019,7 +1039,6 @@ void sock_init_data(struct socket *sock, struct sock *sk)
 {
 	skb_queue_head_init(&sk->receive_queue);
 	skb_queue_head_init(&sk->write_queue);
-	skb_queue_head_init(&sk->back_log);
 	skb_queue_head_init(&sk->error_queue);
 	
 	init_timer(&sk->timer);

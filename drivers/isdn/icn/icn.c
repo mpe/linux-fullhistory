@@ -1,4 +1,4 @@
-/* $Id: icn.c,v 1.49 1998/02/13 11:14:15 keil Exp $
+/* $Id: icn.c,v 1.56 1999/04/12 13:15:07 fritz Exp $
 
  * ISDN low-level module for the ICN active ISDN-Card.
  *
@@ -19,6 +19,30 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: icn.c,v $
+ * Revision 1.56  1999/04/12 13:15:07  fritz
+ * Fixed a cast.
+ *
+ * Revision 1.55  1999/04/12 12:34:02  fritz
+ * Changes from 2.0 tree.
+ *
+ * Revision 1.54  1999/01/05 18:29:39  he
+ * merged remaining schedule_timeout() changes from 2.1.127
+ *
+ * Revision 1.53  1998/06/17 19:51:28  he
+ * merged with 2.1.10[34] (cosmetics and udelay() -> mdelay())
+ * brute force fix to avoid Ugh's in isdn_tty_write()
+ * cleaned up some dead code
+ *
+ * Revision 1.52  1998/05/20 19:29:58  tsbogend
+ * fixed bug introduced by changes for new BSENT callback
+ *
+ * Revision 1.51  1998/03/07 22:29:55  fritz
+ * Adapted Detlef's chenges for 2.1.
+ *
+ * Revision 1.50  1998/03/07 17:41:54  detabc
+ * add d-channel connect and disconnect support statcallback
+ * from icn low-level to link->level
+ *
  * Revision 1.49  1998/02/13 11:14:15  keil
  * change for 2.1.86 (removing FREE_READ/FREE_WRITE from [dev]_kfree_skb()
  *
@@ -209,7 +233,7 @@
 #undef MAP_DEBUG
 
 static char
-*revision = "$Revision: 1.49 $";
+*revision = "$Revision: 1.56 $";
 
 static int icn_addcard(int, char *, char *);
 
@@ -232,10 +256,10 @@ icn_free_queue(icn_card * card, int channel)
 	cli();
 	card->xlen[channel] = 0;
 	card->sndcount[channel] = 0;
-	if (card->xskb[channel]) {
+	if ((skb = card->xskb[channel])) {
 		card->xskb[channel] = NULL;
 		restore_flags(flags);
-		dev_kfree_skb(card->xskb[channel]);
+		dev_kfree_skb(skb);
 	} else
 		restore_flags(flags);
 }
@@ -529,6 +553,11 @@ icn_pollbchan_send(int channel, icn_card * card)
 					cmd.parm.length = card->xlen[channel];
 					card->interface.statcallb(&cmd);
 				}
+			} else {
+				save_flags(flags);
+				cli();
+				card->xskb[channel] = skb;
+				restore_flags(flags);
 			}
 			card->xmit_lock[channel] = 0;
 			if (!icn_trymaplock_channel(card, mch))
@@ -580,8 +609,11 @@ static icn_stat icn_stat_table[] =
 {
 	{"BCON_",          ISDN_STAT_BCONN, 1},	/* B-Channel connected        */
 	{"BDIS_",          ISDN_STAT_BHUP,  2},	/* B-Channel disconnected     */
-	{"DCON_",          ISDN_STAT_DCONN, 0},	/* D-Channel connected        */
-	{"DDIS_",          ISDN_STAT_DHUP,  0},	/* D-Channel disconnected     */
+	/*
+	** add d-channel connect and disconnect support to link-level
+	*/
+	{"DCON_",          ISDN_STAT_DCONN, 10},	/* D-Channel connected        */
+	{"DDIS_",          ISDN_STAT_DHUP,  11},	/* D-Channel disconnected     */
 	{"DCAL_I",         ISDN_STAT_ICALL, 3},	/* Incoming call dialup-line  */
 	{"DSCA_I",         ISDN_STAT_ICALL, 3},	/* Incoming call 1TR6-SPV     */
 	{"FCALL",          ISDN_STAT_ICALL, 4},	/* Leased line connection up  */
@@ -630,7 +662,33 @@ icn_parse_status(u_char * status, int channel, icn_card * card)
 	cmd.driver = card->myid;
 	cmd.arg = channel;
 	switch (action) {
+	case 11:
+			save_flags(flags);
+			cli();
+			icn_free_queue(card,channel);
+			card->rcvidx[channel] = 0;
+
+			if (card->flags & 
+			    ((channel)?ICN_FLAGS_B2ACTIVE:ICN_FLAGS_B1ACTIVE)) {
+				
+				isdn_ctrl ncmd;
+				
+				card->flags &= ~((channel)?
+						 ICN_FLAGS_B2ACTIVE:ICN_FLAGS_B1ACTIVE);
+				
+				memset(&ncmd, 0, sizeof(ncmd));
+				
+				ncmd.driver = card->myid;
+				ncmd.arg = channel;
+				ncmd.command = ISDN_STAT_BHUP;
+				restore_flags(flags);
+				card->interface.statcallb(&cmd);
+			} else
+				restore_flags(flags);
+			
+			break;
 		case 1:
+			icn_free_queue(card,channel);
 			card->flags |= (channel) ?
 			    ICN_FLAGS_B2ACTIVE : ICN_FLAGS_B1ACTIVE;
 			break;
@@ -1539,7 +1597,7 @@ icn_command(isdn_ctrl * c, icn_card * card)
 						c->parm.num[0] ? "N" : "ALL", c->parm.num);
 				} else
 					sprintf(cbuf, "%02d;EAZ%s\n", (int) a,
-						c->parm.num[0] ? c->parm.num : "0123456789");
+						c->parm.num[0] ? (char *)(c->parm.num) : "0123456789");
 				i = icn_writecmd(cbuf, strlen(cbuf), 0, card);
 			}
 			break;

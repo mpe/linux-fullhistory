@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.92 1999/04/30 05:41:43 cort Exp $
+# $Id: config.in,v 1.93 1999/05/14 22:36:58 cort Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -8,8 +8,9 @@ mainmenu_option next_comment
 comment 'Platform support'
 define_bool CONFIG_PPC y
 choice 'Processor type' \
-	"6xx/7xx	CONFIG_6xx \
-	 860/821	CONFIG_8xx" 6xx/7xx
+	"6xx/7xx		CONFIG_6xx \
+	 630/Power3(64-Bit) 	CONFIG_PPC64 \
+	 860/821		CONFIG_8xx" 6xx/7xx
 
 choice 'Machine Type' \
 	"PowerMac	CONFIG_PMAC \
@@ -22,6 +23,10 @@ choice 'Machine Type' \
 bool 'Symmetric multi-processing support' CONFIG_SMP
 if [ "$CONFIG_ALL_PPC" != "y" ];then
   define_bool CONFIG_MACH_SPECIFIC y
+fi
+
+if [ "$CONFIG_PPC64" != "y" ];then
+  define_bool CONFIG_6xx y
 fi
 endmenu
 

@@ -36,6 +36,8 @@
 
 #include <net/tcp.h>
 
+#include <linux/smp_lock.h>
+
 extern int sysctl_tcp_timestamps;
 extern int sysctl_tcp_window_scaling;
 extern int sysctl_tcp_sack;
@@ -966,6 +968,7 @@ void tcp_connect(struct sock *sk, struct sk_buff *buff, int mtu)
 	/* Ok, now lock the socket before we make it visible to
 	 * the incoming packet engine.
 	 */
+	unlock_kernel();
 	lock_sock(sk);
 
 	/* Socket identity change complete, no longer
@@ -993,6 +996,7 @@ void tcp_connect(struct sock *sk, struct sk_buff *buff, int mtu)
 
 	/* Now, it is safe to release the socket. */
 	release_sock(sk);
+	lock_kernel();
 }
 
 /* Send out a delayed ack, the caller does the policy checking

@@ -1,8 +1,12 @@
-/* $Id: l3dss1.h,v 1.5 1998/02/02 13:34:30 keil Exp $
+/* $Id: l3dss1.h,v 1.6 1998/03/19 13:18:50 keil Exp $
  *
  *  DSS1 (Euro) D-channel protocol defines
  *
  * $Log: l3dss1.h,v $
+ * Revision 1.6  1998/03/19 13:18:50  keil
+ * Start of a CAPI like interface for supplementary Service
+ * first service: SUSPEND
+ *
  * Revision 1.5  1998/02/02 13:34:30  keil
  * Support australian Microlink net and german AOCD
  *
@@ -63,8 +67,9 @@
 
 #define MT_INVALID             0xff
 
-#define IE_CAUSE               0x08
 #define IE_BEARER              0x04
+#define IE_CAUSE               0x08
+#define IE_CALLID              0x10
 #define IE_FACILITY            0x1c
 #define IE_CALL_STATE          0x14
 #define IE_CHANNEL_ID          0x18

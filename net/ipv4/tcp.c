@@ -416,6 +416,7 @@
 #include <linux/fcntl.h>
 #include <linux/poll.h>
 #include <linux/init.h>
+#include <linux/smp_lock.h>
 
 #include <net/icmp.h>
 #include <net/tcp.h>
@@ -655,7 +656,8 @@ int tcp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 /*
  *	Wait for a socket to get into the connected state
  *
- *	Note: must be called with the socket locked.
+ *	Note: Must be called with the socket locked, and it
+ *	      runs with the kernel fully unlocked.
  */
 static int wait_for_tcp_connect(struct sock * sk, int flags)
 {
@@ -698,6 +700,8 @@ static inline int tcp_memory_free(struct sock *sk)
 
 /*
  *	Wait for more memory for a socket
+ *
+ * NOTE: This runs with the kernel fully unlocked.
  */
 static void wait_for_tcp_memory(struct sock * sk)
 {
@@ -744,6 +748,7 @@ int tcp_do_sendmsg(struct sock *sk, struct msghdr *msg)
 	int mss_now;
 	int err, copied;
 
+	unlock_kernel();
 	lock_sock(sk);
 
 	err = 0;
@@ -896,6 +901,7 @@ int tcp_do_sendmsg(struct sock *sk, struct msghdr *msg)
 					err = -ERESTARTSYS;
 					goto do_interrupted;
 				}
+				tcp_push_pending_frames(sk, tp);
 				wait_for_tcp_memory(sk);
 
 				/* If SACK's were formed or PMTU events happened,
@@ -969,6 +975,7 @@ do_fault2:
 out:
 	tcp_push_pending_frames(sk, tp);
 	release_sock(sk);
+	lock_kernel();
 	return err;
 }
 
@@ -1148,6 +1155,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 	if (flags & MSG_WAITALL)
 		target=len;
 
+	unlock_kernel();
 	add_wait_queue(sk->sleep, &wait);
 	lock_sock(sk);
 	
@@ -1300,6 +1308,8 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 		/*	We now will not sleep again until we are finished
 		 *	with skb. Sorry if you are doing the SMP port
 		 *	but you'll just have to fix it neatly ;)
+		 *
+		 *	Very funny Alan... -DaveM
 		 */
 		atomic_dec(&skb->users);
 
@@ -1344,6 +1354,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 	/* Clean up data we have read: This will do ACK frames. */
 	cleanup_rbuf(sk, copied);
 	release_sock(sk);
+	lock_kernel();
 	return copied;
 }
 
@@ -1471,22 +1482,17 @@ void tcp_close(struct sock *sk, long timeout)
 	struct sk_buff *skb;
 	int data_was_unread = 0;
 
-	/*
-	 * Check whether the socket is locked ... supposedly
-	 * it's impossible to tcp_close() a locked socket.
-	 */
-	if (atomic_read(&sk->sock_readers))
-		printk("tcp_close: socket already locked!\n");
-
 	/* We need to grab some memory, and put together a FIN,
 	 * and then put it into the queue to be sent.
 	 */
+	unlock_kernel();
 	lock_sock(sk);
 	if(sk->state == TCP_LISTEN) {
 		/* Special case. */
 		tcp_set_state(sk, TCP_CLOSE);
 		tcp_close_pending(sk);
 		release_sock(sk);
+		lock_kernel();
 		sk->dead = 1;
 		return;
 	}
@@ -1560,12 +1566,14 @@ void tcp_close(struct sock *sk, long timeout)
 	tcp_check_fin_timer(sk);
 
 	release_sock(sk);
+	lock_kernel();
 	sk->dead = 1;
 }
 
 /*
  *	Wait for an incoming connection, avoid race
- *	conditions. This must be called with the socket locked.
+ *	conditions. This must be called with the socket locked,
+ *	and without the kernel lock held.
  */
 static struct open_request * wait_for_connect(struct sock * sk,
 					      struct open_request **pprev)
@@ -1620,6 +1628,7 @@ struct sock *tcp_accept(struct sock *sk, int flags)
 	struct sock *newsk = NULL;
 	int error;
 
+	unlock_kernel();
 	lock_sock(sk); 
 
 	/* We need to make sure that this socket is listening,
@@ -1652,6 +1661,7 @@ struct sock *tcp_accept(struct sock *sk, int flags)
 		tcp_inc_slow_timer(TCP_SLT_KEEPALIVE);
 
 	release_sock(sk);
+	lock_kernel();
 	return newsk;
 
 out:
@@ -1660,6 +1670,7 @@ out:
 	 */ 
 	sk->err = error; 
 	release_sock(sk);
+	lock_kernel();
 	return newsk;
 }
 
@@ -1782,6 +1793,8 @@ extern void __skb_cb_too_small_for_tcp(int, int);
 void __init tcp_init(void)
 {
 	struct sk_buff *skb = NULL;
+	unsigned long goal;
+	int order;
 
 	if(sizeof(struct tcp_skb_cb) > sizeof(skb->cb))
 		__skb_cb_too_small_for_tcp(sizeof(struct tcp_skb_cb),
@@ -1807,4 +1820,37 @@ void __init tcp_init(void)
 						NULL, NULL);
 	if(!tcp_timewait_cachep)
 		panic("tcp_init: Cannot alloc tcp_tw_bucket cache.");
+
+	/* Size and allocate the main established and bind bucket
+	 * hash tables.
+	 *
+	 * The methodology is similar to that of the buffer cache.
+	 */
+	goal = num_physpages >> (20 - PAGE_SHIFT);
+	for(order = 5; (1UL << order) < goal; order++)
+		;
+	do {
+		tcp_ehash_size = (1UL << order) * PAGE_SIZE /
+			sizeof(struct sock *);
+		tcp_ehash = (struct sock **)
+			__get_free_pages(GFP_ATOMIC, order);
+	} while (tcp_ehash == NULL && --order > 4);
+
+	if (!tcp_ehash)
+		panic("Failed to allocate TCP established hash table\n");
+	memset(tcp_ehash, 0, tcp_ehash_size * sizeof(struct sock *));
+
+	do {
+		tcp_bhash_size = (1UL << order) * PAGE_SIZE /
+			sizeof(struct tcp_bind_bucket *);
+		tcp_bhash = (struct tcp_bind_bucket **)
+			__get_free_pages(GFP_ATOMIC, order);
+	} while (tcp_bhash == NULL && --order > 4);
+
+	if (!tcp_bhash)
+		panic("Failed to allocate TCP bind hash table\n");
+	memset(tcp_bhash, 0, tcp_bhash_size * sizeof(struct tcp_bind_bucket *));
+
+	printk("TCP: Hash tables configured (established %d bind %d)\n",
+	       tcp_ehash_size, tcp_bhash_size);
 }

@@ -11,6 +11,13 @@
 #include <asm/math_emu.h>
 #include <asm/segment.h>
 #include <asm/page.h>
+#include <asm/types.h>
+
+/*
+ * Default implementation of macro that returns current
+ * instruction pointer ("program counter").
+ */
+#define current_text_addr() ({ void *pc; __asm__("movl $1f,%0\n1:":"=g" (pc)); pc; })
 
 /*
  *  CPU type and hardware bug flags. Kept separately for each CPU.
@@ -279,6 +286,7 @@ struct thread_struct {
 } while (0)
 
 /* Forward declaration, a strange C thing */
+struct task_struct;
 struct mm_struct;
 
 /* Free all resources held by a thread. */

@@ -44,6 +44,7 @@
 #include <linux/ioport.h>
 #include <linux/kernel.h>
 #include <linux/malloc.h>
+#include <linux/pci.h>
 
 #include <asm/io.h>
 
@@ -847,7 +848,57 @@ static int __init probe_one_port(unsigned long int base,
 	if (parport_probe_hook)
 		(*parport_probe_hook)(p);
 
+	/* Now that we've told the sharing engine about the port, and
+	   found out its characteristics, let the high-level drivers
+	   know about it. */
+	parport_announce_port (p);
+
 	return 1;
+}
+
+/* Look for PCI parallel port cards. */
+static int __init parport_pc_init_pci (int irq, int dma)
+{
+	int count = 0;
+#ifdef CONFIG_PCI
+	int i;
+	struct {
+		unsigned int vendor;
+		unsigned int device;
+		unsigned int numports;
+		struct {
+			unsigned int lo;
+			unsigned int hi; /* -ve if not there */
+		} addr[4];
+	} cards[] = {
+		{ 0, }
+	};
+
+	if (!pci_present ())
+		return 0;
+
+	for (i = 0; cards[i].vendor; i++) {
+		struct pci_dev *pcidev = NULL;
+		while ((pcidev = pci_find_device (cards[i].vendor,
+						  cards[i].device,
+						  pcidev)) != NULL) {
+			int n;
+			for (n = 0; n < cards[i].numports; n++) {
+				int lo = cards[i].addr[n].lo;
+				int hi = cards[i].addr[n].hi;
+				int io_lo = pcidev->base_address[lo];
+				int io_hi = ((hi < 0) ? 0 :
+					     pcidev->base_address[hi]);
+				io_lo &= PCI_BASE_ADDRESS_IO_MASK;
+				io_hi &= PCI_BASE_ADDRESS_IO_MASK;
+				count += probe_one_port (io_lo, io_hi,
+							 irq, dma);
+			}
+		}
+	}
+#endif /* CONFIG_PCI */
+
+	return count;
 }
 
 int __init parport_pc_init(int *io, int *io_hi, int *irq, int *dma)
@@ -866,6 +917,7 @@ int __init parport_pc_init(int *io, int *io_hi, int *irq, int *dma)
 		count += probe_one_port(0x3bc, 0x7bc, irq[0], dma[0]);
 		count += probe_one_port(0x378, 0x778, irq[0], dma[0]);
 		count += probe_one_port(0x278, 0x678, irq[0], dma[0]);
+		count += parport_pc_init_pci (irq[0], dma[0]);
 	}
 
 	return count;
@@ -874,13 +926,22 @@ int __init parport_pc_init(int *io, int *io_hi, int *irq, int *dma)
 #ifdef MODULE
 static int io[PARPORT_PC_MAX_PORTS+1] = { [0 ... PARPORT_PC_MAX_PORTS] = 0 };
 static int io_hi[PARPORT_PC_MAX_PORTS+1] = { [0 ... PARPORT_PC_MAX_PORTS] = 0 };
-static int dma[PARPORT_PC_MAX_PORTS] = { [0 ... PARPORT_PC_MAX_PORTS-1] = PARPORT_DMA_NONE };
+static int dmaval[PARPORT_PC_MAX_PORTS] = { [0 ... PARPORT_PC_MAX_PORTS-1] = PARPORT_DMA_AUTO };
 static int irqval[PARPORT_PC_MAX_PORTS] = { [0 ... PARPORT_PC_MAX_PORTS-1] = PARPORT_IRQ_PROBEONLY };
 static const char *irq[PARPORT_PC_MAX_PORTS] = { NULL, };
+static const char *dma[PARPORT_PC_MAX_PORTS] = { NULL, };
+
+MODULE_PARM_DESC(io, "base address");
 MODULE_PARM(io, "1-" __MODULE_STRING(PARPORT_PC_MAX_PORTS) "i");
+
+MODULE_PARM_DESC(io_hi, "base address for ECR");
 MODULE_PARM(io_hi, "1-" __MODULE_STRING(PARPORT_PC_MAX_PORTS) "i");
+
+MODULE_PARM_DESC(irq, "irq line to use (or 'auto' or 'none')");
 MODULE_PARM(irq, "1-" __MODULE_STRING(PARPORT_PC_MAX_PORTS) "s");
-MODULE_PARM(dma, "1-" __MODULE_STRING(PARPORT_PC_MAX_PORTS) "i");
+
+MODULE_PARM_DESC(dma, "dma channel to use (or 'auto' or 'none')");
+MODULE_PARM(dma, "1-" __MODULE_STRING(PARPORT_PC_MAX_PORTS) "s");
 
 int init_module(void)
 {	
@@ -888,9 +949,30 @@ int init_module(void)
 	   the irq values. */
 	unsigned int i;
 	for (i = 0; i < PARPORT_PC_MAX_PORTS && io[i]; i++);
-	parport_parse_irqs(i, irq, irqval);
+	if (i) {
+		if (parport_parse_irqs(i, irq, irqval)) return 1;
+		if (parport_parse_dmas(i, dma, dmaval)) return 1;
+	}
+	else {
+		/* The user can make us use any IRQs or DMAs we find. */
+		int val;
 
-	return (parport_pc_init(io, io_hi, irqval, dma)?0:1);
+		if (irq[0] && !parport_parse_irqs (1, irq, &val))
+			switch (val) {
+			case PARPORT_IRQ_NONE:
+			case PARPORT_IRQ_AUTO:
+				irqval[0] = val;
+			}
+
+		if (dma[0] && !parport_parse_dmas (1, dma, &val))
+			switch (val) {
+			case PARPORT_DMA_NONE:
+			case PARPORT_DMA_AUTO:
+				dmaval[0] = val;
+			}
+	}
+
+	return (parport_pc_init(io, io_hi, irqval, dmaval)?0:1);
 }
 
 void cleanup_module(void)

@@ -1,4 +1,4 @@
-/* $Id: ipac.h,v 1.2 1997/10/29 18:51:21 keil Exp $
+/* $Id: ipac.h,v 1.3 1998/04/15 16:48:09 keil Exp $
 
  * ipac.h   IPAC specific defines
  *
@@ -6,6 +6,9 @@
  *
  *
  * $Log: ipac.h,v $
+ * Revision 1.3  1998/04/15 16:48:09  keil
+ * IPAC_ATX added
+ *
  * Revision 1.2  1997/10/29 18:51:21  keil
  * New files
  *
@@ -26,6 +29,7 @@
 #define IPAC_ACFG	0xC3
 #define IPAC_AOE	0xC4
 #define IPAC_ARX	0xC5
+#define IPAC_ATX	0xC5
 #define IPAC_PITA1	0xC6
 #define IPAC_PITA2	0xC7
 #define IPAC_POTA1	0xC8

@@ -1,4 +1,4 @@
-/* $Id: ix1_micro.c,v 2.6 1998/02/11 17:28:09 keil Exp $
+/* $Id: ix1_micro.c,v 2.7 1998/04/15 16:44:31 keil Exp $
 
  * ix1_micro.c  low level stuff for ITK ix1-micro Rev.2 isdn cards
  *              derived from the original file teles3.c from Karsten Keil
@@ -11,6 +11,9 @@
  *              Beat Doebeli
  *
  * $Log: ix1_micro.c,v $
+ * Revision 2.7  1998/04/15 16:44:31  keil
+ * new init code
+ *
  * Revision 2.6  1998/02/11 17:28:09  keil
  * Niccy PnP/PCI support
  *
@@ -81,7 +84,7 @@
 #include "isdnl1.h"
 
 extern const char *CardType[];
-const char *ix1_revision = "$Revision: 2.6 $";
+const char *ix1_revision = "$Revision: 2.7 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -277,10 +280,7 @@ ix1_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 			return(request_irq(cs->irq, &ix1micro_interrupt,
 					I4L_IRQ_FLAG, "HiSax", cs));
 		case CARD_INIT:
-			clear_pending_isac_ints(cs);
-			clear_pending_hscx_ints(cs);
-			initisac(cs);
-			inithscx(cs);
+			inithscxisac(cs, 3);
 			return(0);
 		case CARD_TEST:
 			return(0);

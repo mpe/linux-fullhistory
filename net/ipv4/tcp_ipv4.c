@@ -90,12 +90,14 @@ void tcp_v4_send_check(struct sock *sk, struct tcphdr *th, int len,
  * First half of the table is for sockets not in TIME_WAIT, second half
  * is for TIME_WAIT sockets only.
  */
-struct sock *tcp_established_hash[TCP_HTABLE_SIZE];
+struct sock **tcp_ehash;
+int tcp_ehash_size;
 
 /* Ok, let's try this, I give up, we do need a local binding
  * TCP hash as well as the others for fast bind/connect.
  */
-struct tcp_bind_bucket *tcp_bound_hash[TCP_BHTABLE_SIZE];
+struct tcp_bind_bucket **tcp_bhash;
+int tcp_bhash_size;
 
 /* All sockets in TCP_LISTEN state will be in here.  This is the only table
  * where wildcard'd TCP sockets can exist.  Hash function here is just local
@@ -117,7 +119,7 @@ int tcp_port_rover = (1024 - 1);
 static __inline__ int tcp_hashfn(__u32 laddr, __u16 lport,
 				 __u32 faddr, __u16 fport)
 {
-	return ((laddr ^ lport) ^ (faddr ^ fport)) & ((TCP_HTABLE_SIZE/2) - 1);
+	return ((laddr ^ lport) ^ (faddr ^ fport)) & ((tcp_ehash_size >> 1) - 1);
 }
 
 static __inline__ int tcp_sk_hashfn(struct sock *sk)
@@ -136,8 +138,8 @@ void tcp_bucket_unlock(struct sock *sk)
 	struct tcp_bind_bucket *tb;
 	unsigned short snum = sk->num;
 
-	SOCKHASH_LOCK();
-	for(tb = tcp_bound_hash[tcp_bhashfn(snum)]; tb; tb = tb->next) {
+	SOCKHASH_LOCK_WRITE();
+	for(tb = tcp_bhash[tcp_bhashfn(snum)]; tb; tb = tb->next) {
 		if(tb->port == snum) {
 			if(tb->owners == NULL &&
 			   (tb->flags & TCPB_FLAG_LOCKED)) {
@@ -148,9 +150,10 @@ void tcp_bucket_unlock(struct sock *sk)
 			break;
 		}
 	}
-	SOCKHASH_UNLOCK();
+	SOCKHASH_UNLOCK_WRITE();
 }
 
+/* The sockhash lock must be held as a writer here. */
 struct tcp_bind_bucket *tcp_bucket_create(unsigned short snum)
 {
 	struct tcp_bind_bucket *tb;
@@ -158,7 +161,7 @@ struct tcp_bind_bucket *tcp_bucket_create(unsigned short snum)
 	tb = kmem_cache_alloc(tcp_bucket_cachep, SLAB_ATOMIC);
 	if(tb != NULL) {
 		struct tcp_bind_bucket **head =
-			&tcp_bound_hash[tcp_bhashfn(snum)];
+			&tcp_bhash[tcp_bhashfn(snum)];
 		tb->port = snum;
 		tb->flags = TCPB_FLAG_LOCKED;
 		tb->owners = NULL;
@@ -176,13 +179,18 @@ struct tcp_bind_bucket *tcp_bucket_create(unsigned short snum)
  */
 static __inline__ int tcp_bucket_check(unsigned short snum)
 {
-	struct tcp_bind_bucket *tb = tcp_bound_hash[tcp_bhashfn(snum)];
+	struct tcp_bind_bucket *tb;
+	int ret = 0;
+
+	SOCKHASH_LOCK_WRITE();
+	tb = tcp_bhash[tcp_bhashfn(snum)];
 	for( ; (tb && (tb->port != snum)); tb = tb->next)
 		;
 	if(tb == NULL && tcp_bucket_create(snum) == NULL)
-		return 1;
-	else
-		return 0;
+		ret = 1;
+	SOCKHASH_UNLOCK_WRITE();
+
+	return ret;
 }
 #endif
 
@@ -191,8 +199,8 @@ static int tcp_v4_verify_bind(struct sock *sk, unsigned short snum)
 	struct tcp_bind_bucket *tb;
 	int result = 0;
 
-	SOCKHASH_LOCK();
-	for(tb = tcp_bound_hash[tcp_bhashfn(snum)];
+	SOCKHASH_LOCK_WRITE();
+	for(tb = tcp_bhash[tcp_bhashfn(snum)];
 	    (tb && (tb->port != snum));
 	    tb = tb->next)
 		;
@@ -256,7 +264,7 @@ static int tcp_v4_verify_bind(struct sock *sk, unsigned short snum)
 		}
 	}
 go_like_smoke:
-	SOCKHASH_UNLOCK();
+	SOCKHASH_UNLOCK_WRITE();
 	return result;
 }
 
@@ -268,13 +276,13 @@ unsigned short tcp_good_socknum(void)
 	int remaining = (high - low) + 1;
 	int rover;
 
-	SOCKHASH_LOCK();
+	SOCKHASH_LOCK_WRITE();
 	rover = tcp_port_rover;
 	do {
 		rover += 1;
 		if((rover < low) || (rover > high))
 			rover = low;
-		tb = tcp_bound_hash[tcp_bhashfn(rover)];
+		tb = tcp_bhash[tcp_bhashfn(rover)];
 		for( ; tb; tb = tb->next) {
 			if(tb->port == rover)
 				goto next;
@@ -288,7 +296,7 @@ unsigned short tcp_good_socknum(void)
 		rover = 0;
 	if (tb != NULL)
 		tb->flags |= TCPB_FLAG_GOODSOCKNUM;
-	SOCKHASH_UNLOCK();
+	SOCKHASH_UNLOCK_WRITE();
 
 	return rover;
 }
@@ -298,20 +306,20 @@ static void tcp_v4_hash(struct sock *sk)
 	if (sk->state != TCP_CLOSE) {
 		struct sock **skp;
 
-		SOCKHASH_LOCK();
-		skp = &tcp_established_hash[(sk->hashent = tcp_sk_hashfn(sk))];
+		SOCKHASH_LOCK_WRITE();
+		skp = &tcp_ehash[(sk->hashent = tcp_sk_hashfn(sk))];
 		if((sk->next = *skp) != NULL)
 			(*skp)->pprev = &sk->next;
 		*skp = sk;
 		sk->pprev = skp;
 		tcp_sk_bindify(sk);
-		SOCKHASH_UNLOCK();
+		SOCKHASH_UNLOCK_WRITE();
 	}
 }
 
 static void tcp_v4_unhash(struct sock *sk)
 {
-	SOCKHASH_LOCK();
+	SOCKHASH_LOCK_WRITE();
 	if(sk->pprev) {
 		if(sk->next)
 			sk->next->pprev = sk->pprev;
@@ -320,14 +328,14 @@ static void tcp_v4_unhash(struct sock *sk)
 		tcp_reg_zap(sk);
 		tcp_sk_unbindify(sk);
 	}
-	SOCKHASH_UNLOCK();
+	SOCKHASH_UNLOCK_WRITE();
 }
 
 static void tcp_v4_rehash(struct sock *sk)
 {
 	unsigned char state;
 
-	SOCKHASH_LOCK();
+	SOCKHASH_LOCK_WRITE();
 	state = sk->state;
 	if(sk->pprev != NULL) {
 		if(sk->next)
@@ -342,7 +350,7 @@ static void tcp_v4_rehash(struct sock *sk)
 		if(state == TCP_LISTEN)
 			skp = &tcp_listening_hash[tcp_sk_listen_hashfn(sk)];
 		else
-			skp = &tcp_established_hash[(sk->hashent = tcp_sk_hashfn(sk))];
+			skp = &tcp_ehash[(sk->hashent = tcp_sk_hashfn(sk))];
 
 		if((sk->next = *skp) != NULL)
 			(*skp)->pprev = &sk->next;
@@ -351,7 +359,7 @@ static void tcp_v4_rehash(struct sock *sk)
 		if(state == TCP_LISTEN)
 			tcp_sk_bindify(sk);
 	}
-	SOCKHASH_UNLOCK();
+	SOCKHASH_UNLOCK_WRITE();
 }
 
 /* Don't inline this cruft.  Here are some nice properties to
@@ -395,10 +403,10 @@ static struct sock *tcp_v4_lookup_listener(u32 daddr, unsigned short hnum, int d
 
 /* Sockets in TCP_CLOSE state are _always_ taken out of the hash, so
  * we need not check it for TCP lookups anymore, thanks Alexey. -DaveM
- * It is assumed that this code only gets called from within NET_BH.
+ *
+ * The sockhash lock must be held as a reader here.
  */
-static inline struct sock *__tcp_v4_lookup(struct tcphdr *th,
-					   u32 saddr, u16 sport,
+static inline struct sock *__tcp_v4_lookup(u32 saddr, u16 sport,
 					   u32 daddr, u16 dport, int dif)
 {
 	TCP_V4_ADDR_COOKIE(acookie, saddr, daddr)
@@ -416,7 +424,7 @@ static inline struct sock *__tcp_v4_lookup(struct tcphdr *th,
 	 * have wildcards anyways.
 	 */
 	hash = tcp_hashfn(daddr, hnum, saddr, sport);
-	for(sk = tcp_established_hash[hash]; sk; sk = sk->next) {
+	for(sk = tcp_ehash[hash]; sk; sk = sk->next) {
 		if(TCP_IPV4_MATCH(sk, acookie, saddr, daddr, ports, dif)) {
 			if (sk->state == TCP_ESTABLISHED)
 				TCP_RHASH(sport) = sk;
@@ -424,7 +432,7 @@ static inline struct sock *__tcp_v4_lookup(struct tcphdr *th,
 		}
 	}
 	/* Must check for a TIME_WAIT'er before going to listener hash. */
-	for(sk = tcp_established_hash[hash+(TCP_HTABLE_SIZE/2)]; sk; sk = sk->next)
+	for(sk = tcp_ehash[hash+(tcp_ehash_size >> 1)]; sk; sk = sk->next)
 		if(TCP_IPV4_MATCH(sk, acookie, saddr, daddr, ports, dif))
 			goto hit;
 	sk = tcp_v4_lookup_listener(daddr, hnum, dif);
@@ -434,7 +442,13 @@ hit:
 
 __inline__ struct sock *tcp_v4_lookup(u32 saddr, u16 sport, u32 daddr, u16 dport, int dif)
 {
-	return __tcp_v4_lookup(0, saddr, sport, daddr, dport, dif);
+	struct sock *sk;
+
+	SOCKHASH_LOCK_READ();
+	sk = __tcp_v4_lookup(saddr, sport, daddr, dport, dif);
+	SOCKHASH_UNLOCK_READ();
+
+	return sk;
 }
 
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
@@ -462,9 +476,12 @@ static struct sock *tcp_v4_proxy_lookup(unsigned short num, unsigned long raddr,
 			paddr = idev->ifa_list->ifa_local;
 	}
 
-	/* This code must run only from NET_BH. */
+	/* We must obtain the sockhash lock here, we are always
+	 * in BH context.
+	 */
+	SOCKHASH_LOCK_READ_BH();
 	{
-		struct tcp_bind_bucket *tb = tcp_bound_hash[tcp_bhashfn(hnum)];
+		struct tcp_bind_bucket *tb = tcp_bhash[tcp_bhashfn(hnum)];
 		for( ; (tb && tb->port != hnum); tb = tb->next)
 			;
 		if(tb == NULL)
@@ -505,7 +522,7 @@ pass2:
 	}
 next:
 	if(firstpass--) {
-		struct tcp_bind_bucket *tb = tcp_bound_hash[tcp_bhashfn(hpnum)];
+		struct tcp_bind_bucket *tb = tcp_bhash[tcp_bhashfn(hpnum)];
 		for( ; (tb && tb->port != hpnum); tb = tb->next)
 			;
 		if(tb) {
@@ -514,6 +531,7 @@ next:
 		}
 	}
 gotit:
+	SOCKHASH_UNLOCK_READ_BH();
 	return result;
 }
 #endif /* CONFIG_IP_TRANSPARENT_PROXY */
@@ -540,21 +558,23 @@ static int tcp_v4_unique_address(struct sock *sk)
 	int retval = 1;
 
 	/* Freeze the hash while we snoop around. */
-	SOCKHASH_LOCK();
-	tb = tcp_bound_hash[tcp_bhashfn(snum)];
+	SOCKHASH_LOCK_READ();
+	tb = tcp_bhash[tcp_bhashfn(snum)];
 	for(; tb; tb = tb->next) {
 		if(tb->port == snum && tb->owners != NULL) {
 			/* Almost certainly the re-use port case, search the real hashes
 			 * so it actually scales.
 			 */
-			sk = __tcp_v4_lookup(NULL, sk->daddr, sk->dport,
+			sk = __tcp_v4_lookup(sk->daddr, sk->dport,
 					     sk->rcv_saddr, snum, sk->bound_dev_if);
+			SOCKHASH_UNLOCK_READ();
+
 			if((sk != NULL) && (sk->state != TCP_LISTEN))
 				retval = 0;
-			break;
+			return retval;
 		}
 	}
-	SOCKHASH_UNLOCK();
+	SOCKHASH_UNLOCK_READ();
 	return retval;
 }
 
@@ -727,15 +747,16 @@ static inline void do_pmtu_discovery(struct sock *sk, struct iphdr *ip, unsigned
 {
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 
-	if (atomic_read(&sk->sock_readers))
-		return;
-
-	/* Don't interested in TCP_LISTEN and open_requests (SYN-ACKs
+	/* We are not interested in TCP_LISTEN and open_requests (SYN-ACKs
 	 * send out by Linux are always <576bytes so they should go through
 	 * unfragmented).
 	 */
 	if (sk->state == TCP_LISTEN)
 		return; 
+
+	bh_lock_sock(sk);
+	if(sk->lock.users != 0)
+		goto out;
 
 	/* We don't check in the destentry if pmtu discovery is forbidden
 	 * on this route. We just assume that no packet_to_big packets
@@ -744,7 +765,8 @@ static inline void do_pmtu_discovery(struct sock *sk, struct iphdr *ip, unsigned
 	 * route, but I think that's acceptable.
 	 */
 	if (sk->dst_cache == NULL)
-		return;
+		goto out;
+
 	ip_rt_update_pmtu(sk->dst_cache, mtu);
 	if (sk->ip_pmtudisc != IP_PMTUDISC_DONT &&
 	    tp->pmtu_cookie > sk->dst_cache->pmtu) {
@@ -757,6 +779,8 @@ static inline void do_pmtu_discovery(struct sock *sk, struct iphdr *ip, unsigned
 		 */
 		tcp_simple_retransmit(sk);
 	} /* else let the usual retransmit timer handle it */
+out:
+	bh_unlock_sock(sk);
 }
 
 /*
@@ -849,17 +873,6 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 	switch (sk->state) {
 		struct open_request *req, *prev;
 	case TCP_LISTEN:
-		/* Prevent race conditions with accept() - 
-		 * ICMP is unreliable. 
-		 */
-		if (atomic_read(&sk->sock_readers)) {
-			net_statistics.LockDroppedIcmps++;
-			 /* If too many ICMPs get dropped on busy
-			  * servers this needs to be solved differently.
-			  */
-			return;
-		}
-
 		/* The final ACK of the handshake should be already 
 		 * handled in the new socket context, not here.
 		 * Strictly speaking - an ICMP error for the final
@@ -869,12 +882,24 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 		if (!no_flags && !th->syn && !th->ack)
 			return;
 
+		/* Prevent race conditions with accept() - 
+		 * ICMP is unreliable. 
+		 */
+		bh_lock_sock(sk);
+		if (sk->lock.users != 0) {
+			net_statistics.LockDroppedIcmps++;
+			 /* If too many ICMPs get dropped on busy
+			  * servers this needs to be solved differently.
+			  */
+			goto out_unlock;
+		}
+
 		req = tcp_v4_search_req(tp, iph, th, &prev); 
 		if (!req)
-			return;
+			goto out_unlock;
 		if (seq != req->snt_isn) {
 			net_statistics.OutOfWindowIcmps++;
-			return;
+			goto out_unlock;
 		}
 		if (req->sk) {	
 			/* 
@@ -884,6 +909,7 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 			 * but only with the next operation on the socket after
 			 * accept. 
 			 */
+			bh_unlock_sock(sk);
 			sk = req->sk;
 		} else {
 			/* 
@@ -896,6 +922,8 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 			tcp_synq_unlink(tp, req, prev);
 			req->class->destructor(req);
 			tcp_openreq_free(req);
+	out_unlock:
+			bh_unlock_sock(sk);
 			return; 
 		}
 		break;
@@ -1025,9 +1053,10 @@ static struct sock *tcp_v4_search_proxy_openreq(struct sk_buff *skb)
 {
 	struct iphdr *iph = skb->nh.iph;
 	struct tcphdr *th = (struct tcphdr *)(skb->nh.raw + iph->ihl*4);
-	struct sock *sk;
+	struct sock *sk = NULL;
 	int i;
 
+	SOCKHASH_LOCK_READ();
 	for (i=0; i<TCP_LHTABLE_SIZE; i++) {
 		for(sk = tcp_listening_hash[i]; sk; sk = sk->next) {
 			struct open_request *dummy;
@@ -1035,10 +1064,12 @@ static struct sock *tcp_v4_search_proxy_openreq(struct sk_buff *skb)
 					      th, &dummy) &&
 			    (!sk->bound_dev_if ||
 			     sk->bound_dev_if == skb->dev->ifindex))
-				return sk;
+				goto out;
 		}
 	}
-	return NULL;
+out:
+	SOCKHASH_UNLOCK_READ();
+	return sk;
 }
 
 /*
@@ -1319,7 +1350,8 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 		/* Clone the TCP header template */
 		newsk->dport = req->rmt_port;
 
-		atomic_set(&newsk->sock_readers, 0);
+		sock_lock_init(newsk);
+
 		atomic_set(&newsk->rmem_alloc, 0);
 		skb_queue_head_init(&newsk->receive_queue);
 		atomic_set(&newsk->wmem_alloc, 0);
@@ -1329,7 +1361,7 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 		newsk->done = 0;
 		newsk->proc = 0;
 		newsk->pair = NULL;
-		skb_queue_head_init(&newsk->back_log);
+		newsk->backlog.head = newsk->backlog.tail = NULL;
 		skb_queue_head_init(&newsk->error_queue);
 #ifdef CONFIG_FILTER
 		if ((filter = newsk->filter) != NULL)
@@ -1570,8 +1602,17 @@ static inline struct sock *tcp_v4_hnd_req(struct sock *sk,struct sk_buff *skb)
 	return sk; 
 }
 
+/* The socket must have it's spinlock held when we get
+ * here.
+ *
+ * We have a potential double-lock case here, so even when
+ * doing backlog processing we use the BH locking scheme.
+ * This is because we cannot sleep with the original spinlock
+ * held.
+ */
 int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 {
+	int need_unlock = 0;
 #ifdef CONFIG_FILTER
 	struct sk_filter *filter = sk->filter;
 	if (filter && sk_filter(skb, filter))
@@ -1591,7 +1632,6 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 		return 0; 
 	} 
 
-
 	if (sk->state == TCP_LISTEN) { 
 		struct sock *nsk;
 		
@@ -1604,17 +1644,22 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 		 * otherwise we just shortcircuit this and continue with
 		 * the new socket..
 		 */
-		if (atomic_read(&nsk->sock_readers)) {
-			skb_orphan(skb);
-			__skb_queue_tail(&nsk->back_log, skb);
-			return 0;
+		if (nsk != sk) {
+			bh_lock_sock(nsk);
+			if (nsk->lock.users != 0) {
+				skb_orphan(skb);
+				sk_add_backlog(nsk, skb);
+				bh_unlock_sock(nsk);
+				return 0;
+			}
+			need_unlock = 1;
+			sk = nsk;
 		}
-		sk = nsk;
 	}
 	
 	if (tcp_rcv_state_process(sk, skb, skb->h.th, skb->len))
 		goto reset;
-	return 0;
+	goto out_maybe_unlock;
 
 reset:
 	tcp_v4_send_reset(skb);
@@ -1625,6 +1670,9 @@ discard:
 	 * might be destroyed here. This current version compiles correctly,
 	 * but you have been warned.
 	 */
+out_maybe_unlock:
+	if(need_unlock)
+		bh_unlock_sock(sk);
 	return 0;
 }
 
@@ -1636,6 +1684,7 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 {
 	struct tcphdr *th;
 	struct sock *sk;
+	int ret;
 
 	if (skb->pkt_type!=PACKET_HOST)
 		goto discard_it;
@@ -1681,8 +1730,10 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 					 IPCB(skb)->redirport, skb->dev->ifindex);
 	else {
 #endif
-		sk = __tcp_v4_lookup(th, skb->nh.iph->saddr, th->source,
+		SOCKHASH_LOCK_READ_BH();
+		sk = __tcp_v4_lookup(skb->nh.iph->saddr, th->source,
 				     skb->nh.iph->daddr, th->dest, skb->dev->ifindex);
+		SOCKHASH_UNLOCK_READ_BH();
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
 		if (!sk)
 			sk = tcp_v4_search_proxy_openreq(skb);
@@ -1702,11 +1753,16 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 
 	if (sk->state == TCP_TIME_WAIT)
 		goto do_time_wait;
-	if (!atomic_read(&sk->sock_readers))
-		return tcp_v4_do_rcv(sk, skb);
 
-	__skb_queue_tail(&sk->back_log, skb);
-	return 0;
+	bh_lock_sock(sk);
+	ret = 0;
+	if (!sk->lock.users)
+		ret = tcp_v4_do_rcv(sk, skb);
+	else
+		sk_add_backlog(sk, skb);
+	bh_unlock_sock(sk);
+
+	return ret;
 
 no_tcp_socket:
 	tcp_v4_send_reset(skb);

@@ -181,6 +181,11 @@ __asm__ __volatile__("pushfl ; popl %0":"=g" (x): /* no input */ :"memory")
 #define __restore_flags(x) \
 __asm__ __volatile__("pushl %0 ; popfl": /* no output */ :"g" (x):"memory")
 
+/* For spinlocks etc */
+#define local_irq_save(x)	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=g" (x): /* no input */ :"memory")
+#define local_irq_restore(x)	__asm__ __volatile__("pushl %0 ; popfl": /* no output */ :"g" (x):"memory")
+#define local_irq_disable()	__asm__ __volatile__("cli": : :"memory")
+#define local_irq_enable()	__asm__ __volatile__("sti": : :"memory")
 
 #ifdef __SMP__
 

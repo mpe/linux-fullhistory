@@ -171,7 +171,7 @@ out:
 	return error;
 }
 
-#ifndef __alpha__
+#if !(defined(__alpha__) || defined(__ia64__))
 
 /*
  * sys_utime() can be implemented in user-level using sys_utimes().

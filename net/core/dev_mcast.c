@@ -203,8 +203,7 @@ static int dev_mc_read_proc(char *buffer, char **start, off_t offset,
 	int len=0;
 	struct device *dev;
 
-	start_bh_atomic();
-
+	read_lock_bh(&dev_base_lock);
 	for (dev = dev_base; dev; dev = dev->next) {
 		for (m = dev->mc_list; m; m = m->next) {
 			int i;
@@ -229,7 +228,7 @@ static int dev_mc_read_proc(char *buffer, char **start, off_t offset,
 	*eof = 1;
 
 done:
-	end_bh_atomic();
+	read_unlock_bh(&dev_base_lock);
 	*start=buffer+(offset-begin);
 	len-=(offset-begin);
 	if(len>length)

@@ -172,6 +172,30 @@ static ssize_t read_mouse(struct file * file, char * buffer, size_t count, loff_
 			buffer++;
 			retval++;
 			state = 0;
+			if (!--count)
+				break;
+		}
+
+		/*
+		 * SUBTLE:
+		 *
+		 * The only way to get here is to do a read() of
+		 * more than 3 bytes: if you read a byte at a time
+		 * you will just ever see states 0-2, for backwards
+		 * compatibility.
+		 *
+		 * So you can think of this as a packet interface,
+		 * where you have arbitrary-sized packets, and you
+		 * only ever see the first three bytes when you read
+		 * them in small chunks.
+		 */
+		{ /* fallthrough - dz */
+			int dz = mouse->dz;
+			mouse->dz = 0;
+			put_user(dz, buffer);
+			buffer++;
+			retval++;
+			state = 0;
 		}
 		break;
 		}

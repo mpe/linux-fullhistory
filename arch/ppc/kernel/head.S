@@ -1,7 +1,7 @@
 /*
  *  arch/ppc/kernel/head.S
  *
- *  $Id: head.S,v 1.130 1999/05/09 19:16:43 cort Exp $
+ *  $Id: head.S,v 1.131 1999/05/14 22:37:21 cort Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -97,18 +97,32 @@ LG_CACHE_LINE_SIZE = 4
 	bdnz	0b
 #endif
 
+#ifdef CONFIG_PPC64
+#define LOAD_BAT(n, offset, reg, RA, RB) \
+	ld	RA,offset+0(reg);	\
+	ld	RB,offset+8(reg);	\
+	mtspr	IBAT##n##U,RA;		\
+	mtspr	IBAT##n##L,RB;		\
+	ld	RA,offset+16(reg);	\
+	ld	RB,offset+24(reg);	\
+	mtspr	DBAT##n##U,RA;		\
+	mtspr	DBAT##n##L,RB;		\
+	
+#else /* CONFIG_PPC64 */
+	
 /* 601 only have IBAT cr0.eq is set on 601 when using this macro */ 
 #define LOAD_BAT(n, offset, reg, RA, RB) \
-	lwz	RA,offset+0(reg); \
+	lwz	RA,offset+0(reg);	\
 	lwz	RB,offset+4(reg);	\
-	mtspr	IBAT##n##U,RA;	\
-	mtspr	IBAT##n##L,RB;	\
-	beq	1f;		\
+	mtspr	IBAT##n##U,RA;		\
+	mtspr	IBAT##n##L,RB;		\
+	beq	1f;			\
 	lwz	RA,offset+8(reg);	\
 	lwz	RB,offset+12(reg);	\
-	mtspr	DBAT##n##U,RA;	\
-	mtspr	DBAT##n##L,RB;	\
-1:	 
+	mtspr	DBAT##n##U,RA;		\
+	mtspr	DBAT##n##L,RB;		\
+1:	
+#endif /* CONFIG_PPC64 */	 
 
 #ifndef CONFIG_APUS
 #define tophys(rd,rs,rt)	addis	rd,rs,-KERNELBASE@h
@@ -206,6 +220,16 @@ _start:
 	
 	.globl	__start
 __start:
+#ifdef CONFIG_PPC64
+/* 
+ * Go into 32-bit mode to boot.  OF should do this for
+ * us already but just in case...
+ * -- Cort 
+ */
+	mfmsr	r10
+	clrldi	r10,r10,3
+	mtmsr	r10
+#endif	
 /*
  * We have to do any OF calls before we map ourselves to KERNELBASE,
  * because OF may have I/O devices mapped in in that area
@@ -226,10 +250,11 @@ __secondary_start:
  * of RAM to KERNELBASE.  From this point on we can't safely
  * call OF any more.
  */
+	lis	r11,KERNELBASE@h
+#ifndef CONFIG_PPC64
 	mfspr	r9,PVR
 	rlwinm	r9,r9,16,16,31		/* r9 = 1 for 601, 4 for 604 */
 	cmpi	0,r9,1
-	lis	r11,KERNELBASE@h
 	bne	4f
 	ori	r11,r11,4		/* set up BAT registers for 601 */
 	li	r8,0x7f			/* valid, block length = 8MB */
@@ -240,6 +265,7 @@ __secondary_start:
 	mtspr	IBAT1U,r9
 	mtspr	IBAT1L,r10
 	b	5f
+#endif /* CONFIG_PPC64 */
 4:
 #ifdef CONFIG_APUS
 	ori	r11,r11,BL_8M<<2|0x2	/* set up an 8MB mapping */
@@ -248,9 +274,17 @@ __secondary_start:
 	lwz	r8,0(r8)
 	addis	r8,r8,KERNELBASE@h
 	addi	r8,r8,2
-#else
+#else	
 	ori	r11,r11,BL_256M<<2|0x2	/* set up BAT registers for 604 */
 	li	r8,2			/* R/W access */
+#ifdef CONFIG_PPC64
+	/* clear out the high 32 bits in the BAT */
+	clrldi	r11,r11,32
+	clrldi	r8,r8,32
+	/* turn off the pagetable mappings just in case */
+	clrldi	r16,r16,63
+	mtsdr1	r16
+#else /* CONFIG_PPC64 */
 	/* 
 	 * allow secondary cpus to get at all of ram in early bootup
 	 * since their init_task may be up there -- Cort
@@ -268,6 +302,7 @@ __secondary_start:
 	mtspr	DBAT2U,r21		/* bit in upper BAT register */
 	mtspr	IBAT2L,r28
 	mtspr	IBAT2U,r21
+#endif /* CONFIG_PPC64 */
 #endif
 	mtspr	DBAT0L,r8		/* N.B. 6xx (not 601) have valid */
 	mtspr	DBAT0U,r11		/* bit in upper BAT register */
@@ -1246,7 +1281,7 @@ hash_page:
 	eieio
 	lis	r2,hash_table_lock@h
 	ori	r2,r2,hash_table_lock@l
-	tophys(r2,r2,r6)
+ 	tophys(r2,r2,r6)
 	lis	r6,100000000@h
 	mtctr	r6
 	lwz	r0,PROCESSOR-TSS(r5)
@@ -1294,6 +1329,11 @@ hash_page:
 	stw	r6,0(r2)		/* update PTE (accessed/dirty bits) */
 
 	/* Convert linux-style PTE to low word of PPC-style PTE */
+#ifdef CONFIG_PPC64
+	/* clear the high 32 bits just in case */
+	clrldi	r6,r6,32
+	clrldi	r4,r4,32
+#endif /* CONFIG_PPC64 */
 	rlwinm	r4,r6,32-9,31,31	/* _PAGE_HWWRITE -> PP lsb */
 	rlwimi	r6,r6,32-1,31,31	/* _PAGE_USER -> PP (both bits now) */
 	ori	r4,r4,0xe04		/* clear out reserved bits */
@@ -1301,16 +1341,34 @@ hash_page:
 
 	/* Construct the high word of the PPC-style PTE */
 	mfsrin	r5,r3			/* get segment reg for segment */
+#ifdef CONFIG_PPC64
+	sldi	r5,r5,12
+#else /* CONFIG_PPC64 */
 	rlwinm	r5,r5,7,1,24		/* put VSID in 0x7fffff80 bits */
+#endif /* CONFIG_PPC64 */
+	
 #ifndef __SMP__				/* do this later for SMP */
+#ifdef CONFIG_PPC64
+	ori	r5,r5,1			/* set V (valid) bit */
+#else /* CONFIG_PPC64 */
 	oris	r5,r5,0x8000		/* set V (valid) bit */
+#endif /* CONFIG_PPC64 */
 #endif
+	
+#ifdef CONFIG_PPC64
+/* XXX:	 does this insert the api correctly? -- Cort */
+	rlwimi	r5,r3,17,21,25		/* put in API (abbrev page index) */
+#else /* CONFIG_PPC64 */
 	rlwimi	r5,r3,10,26,31		/* put in API (abbrev page index) */
-
+#endif /* CONFIG_PPC64 */
 	/* Get the address of the primary PTE group in the hash table */
 	.globl	hash_page_patch_A
 hash_page_patch_A:
 	lis	r4,Hash_base@h		/* base address of hash table */
+#ifdef CONFIG_PPC64
+	/* just in case */
+	clrldi	r4,r4,32
+#endif	
 	rlwimi	r4,r5,32-1,26-Hash_bits,25	/* (VSID & hash_mask) << 6 */
 	rlwinm	r0,r3,32-6,26-Hash_bits,25	/* (PI & hash_mask) << 6 */
 	xor	r4,r4,r0		/* make primary hash */
@@ -1799,7 +1857,11 @@ start_here:
  */
 #ifndef CONFIG_8xx
 	lis	r6,_SDR1@ha
+#ifdef CONFIG_PPC64	
+	ld	r6,_SDR1@l(r6)
+#else
 	lwz	r6,_SDR1@l(r6)
+#endif		
 #else
 	/* The right way to do this would be to track it down through
 	 * init's TSS like the context switch code does, but this is
@@ -1828,6 +1890,14 @@ start_here:
 #endif
 #ifndef CONFIG_8xx
 	mtspr	SDR1,r6
+#ifdef CONFIG_PPC64
+	/* clear the v bit in the ASR so we can
+	 * behave as if we have segment registers 
+	 * -- Cort
+	 */
+	clrldi	r6,r6,63
+	mtasr	r6
+#endif /* CONFIG_PPC64 */
 	li	r0,16		/* load up segment register values */
 	mtctr	r0		/* for context 0 */
 	lis	r3,0x2000	/* Ku = 1, VSID = 0 */
@@ -1844,10 +1914,17 @@ start_here:
 	lis	r3,BATS@ha
 	addi	r3,r3,BATS@l
 	tophys(r3,r3,r4)
+#ifdef CONFIG_PPC64
+	LOAD_BAT(0,0,r3,r4,r5)
+	LOAD_BAT(1,32,r3,r4,r5)
+	LOAD_BAT(2,64,r3,r4,r5)
+	LOAD_BAT(3,96,r3,r4,r5)
+#else /* CONFIG_PPC64 */
 	LOAD_BAT(0,0,r3,r4,r5)
 	LOAD_BAT(1,16,r3,r4,r5)
 	LOAD_BAT(2,32,r3,r4,r5)
 	LOAD_BAT(3,48,r3,r4,r5)
+#endif /* CONFIG_PPC64 */
 #endif /* CONFIG_8xx */
 /* Set up for using our exception vectors */
 	/* ptr to phys current tss */

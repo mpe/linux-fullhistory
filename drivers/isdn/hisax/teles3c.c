@@ -1,11 +1,14 @@
-/* $Id: teles3c.c,v 1.2 1998/02/02 13:27:07 keil Exp $
+/* $Id: teles3c.c,v 1.3 1998/11/15 23:55:27 keil Exp $
 
  * teles3c.c     low level stuff for teles 16.3c
  *
- * Author     Karsten Keil (keil@temic-ech.spacenet.de)
+ * Author     Karsten Keil (keil@isdn4linux.de)
  *
  *
  * $Log: teles3c.c,v $
+ * Revision 1.3  1998/11/15 23:55:27  keil
+ * changes from 2.0
+ *
  * Revision 1.2  1998/02/02 13:27:07  keil
  * New
  *
@@ -20,14 +23,13 @@
 
 extern const char *CardType[];
 
-const char *teles163c_revision = "$Revision: 1.2 $";
+const char *teles163c_revision = "$Revision: 1.3 $";
 
 static void
 t163c_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 {
 	struct IsdnCardState *cs = dev_id;
 	u_char val, stat;
-	char tmp[32];
 
 	if (!cs) {
 		printk(KERN_WARNING "teles3c: Spurious interrupt!\n");
@@ -36,16 +38,12 @@ t163c_interrupt(int intno, void *dev_id, struct pt_regs *regs)
 	if ((HFCD_ANYINT | HFCD_BUSY_NBUSY) & 
 		(stat = cs->BC_Read_Reg(cs, HFCD_DATA, HFCD_STAT))) {
 		val = cs->BC_Read_Reg(cs, HFCD_DATA, HFCD_INT_S1);
-		if (cs->debug & L1_DEB_ISAC) {
-			sprintf(tmp, "teles3c: stat(%02x) s1(%02x)", stat, val);
-			debugl1(cs, tmp);
-		}
+		if (cs->debug & L1_DEB_ISAC)
+			debugl1(cs, "teles3c: stat(%02x) s1(%02x)", stat, val);
 		hfc2bds0_interrupt(cs, val);
 	} else {
-		if (cs->debug & L1_DEB_ISAC) {
-			sprintf(tmp, "teles3c: irq_no_irq stat(%02x)", stat);
-			debugl1(cs, tmp);
-		}
+		if (cs->debug & L1_DEB_ISAC)
+			debugl1(cs, "teles3c: irq_no_irq stat(%02x)", stat);
 	}
 }
 
@@ -110,13 +108,9 @@ static int
 t163c_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 {
 	long flags;
-	char tmp[32];
 
-	if (cs->debug & L1_DEB_ISAC) {
-		
-		sprintf(tmp, "teles3c: card_msg %x", mt);
-		debugl1(cs, tmp);
-	}
+	if (cs->debug & L1_DEB_ISAC)
+		debugl1(cs, "teles3c: card_msg %x", mt);
 	switch (mt) {
 		case CARD_RESET:
 			reset_t163c(cs);

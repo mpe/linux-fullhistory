@@ -62,7 +62,7 @@ static int apm_resume = 0;
 #endif
 
  
-
+static DECLARE_WAIT_QUEUE_HEAD(bulk_wakeup);
 static DECLARE_WAIT_QUEUE_HEAD(control_wakeup);
 static DECLARE_WAIT_QUEUE_HEAD(root_hub);
  
@@ -122,7 +122,19 @@ static int sohci_ctrl_handler(void * ohci_in, unsigned int ep_addr, int ctrl_len
 	OHCI_DEBUG( printk(" ret_status: %x\n", status); })
     return 0;                       
 } 
-                                                             
+
+static int sohci_bulk_handler(void * ohci_in, unsigned int ep_addr, int ctrl_len, void * ctrl, void * data, int data_len, int status, __OHCI_BAG lw0, __OHCI_BAG lw)
+{  
+	*(int * )lw0 = status;
+	wake_up(&bulk_wakeup);
+
+	OHCI_DEBUG( { int i; printk("USB HC BULK<<<: %x:", ep_addr, ctrl_len);)
+	OHCI_DEBUG( printk(" data(%d):", data_len);) 
+	OHCI_DEBUG( for(i=0; i < data_len; i++ ) printk(" %02x", ((__u8 *) data)[i]);)
+	OHCI_DEBUG( printk(" ret_status: %x\n", status); })
+    return 0;                       
+}
+                                                           
 static int sohci_request_irq(struct usb_device *usb_dev, unsigned int pipe, usb_device_irq handler, int period, void *dev_id)
 {
 	struct ohci * ohci = usb_dev->bus->hcpriv;
@@ -179,6 +191,40 @@ static int sohci_control_msg(struct usb_device *usb_dev, unsigned int pipe, void
 	return cc_to_status[status & 0x0f];
 }
 
+static int sohci_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *data, int len)
+{
+	DECLARE_WAITQUEUE(wait, current);
+	struct ohci * ohci = usb_dev->bus->hcpriv;
+	int status;
+	union ep_addr_ ep_addr;
+
+    ep_addr.iep = 0;
+	ep_addr.bep.ep = ((pipe >> 15) & 0x0f) 		/* endpoint address */		
+				| (pipe  & 0x80)  				/* direction */
+				|  (11 << 5);					/* type = bulk*/
+	ep_addr.bep.fa	= ((pipe >> 8) & 0x7f);				/* device address */
+	
+	status = 0xf; /* CC not Accessed */
+	OHCI_DEBUG( { int i; printk("USB HC BULK>>>: %x:", ep_addr.iep);)
+	OHCI_DEBUG( printk(" data(%d):", len);) 
+	OHCI_DEBUG( for(i=0; i < len; i++ ) printk(" %02x", ((__u8 *) data)[i]);)
+	OHCI_DEBUG( printk("\n"); })
+	
+	usb_ohci_add_ep(ohci, ep_addr.iep, 0, 1, sohci_bulk_handler, 1 << ((pipe & 0x03) + 3) , (pipe >> 26) & 0x01);
+	
+	current->state = TASK_UNINTERRUPTIBLE;
+    add_wait_queue(&bulk_wakeup, &wait);   
+ 
+	ohci_trans_req(ohci, ep_addr.iep, 0, NULL, data, len, (__OHCI_BAG) &status, 0);
+
+	schedule_timeout(HZ/10);
+
+    remove_wait_queue(&bulk_wakeup, &wait); 
+     
+    OHCI_DEBUG(printk("USB HC status::: %x\n", cc_to_status[status & 0x0f]);)
+     
+	return cc_to_status[status & 0x0f];
+}
 
 static int sohci_usb_deallocate(struct usb_device *usb_dev) {
     struct ohci_device *dev = usb_to_ohci(usb_dev); 
@@ -234,8 +280,6 @@ static struct usb_device *sohci_usb_allocate(struct usb_device *parent) {
 	return usb_dev;
 }
 
-/* FIXME! */
-#define sohci_bulk_msg NULL
 
 struct usb_operations sohci_device_operations = {
 	sohci_usb_allocate,
@@ -567,7 +611,7 @@ static int ohci_rm_eds(struct ohci * ohci) {
   }
   writel(0, &ohci->regs->ed_controlcurrent); /* reset CTRL list */
   writel(0, &ohci->regs->ed_bulkcurrent);    /* reset BULK list */
-  writel_set((0x01<<4), &ohci->regs->control);   /* start CTRL u. (BULK list) */ 
+  writel_set((0x03<<4), &ohci->regs->control);   /* start CTRL u. (BULK list) */ 
 
   spin_unlock_irqrestore(&usb_ed_lock, flags);
   
@@ -915,6 +959,7 @@ void start_hc(struct ohci *ohci)
 {
    /*  int fminterval; */
     unsigned int mask;
+    int port_nr;
   /*  fminterval = readl(&ohci->regs->fminterval) & 0x3fff;
 	reset_hc(ohci); */
  
@@ -926,16 +971,19 @@ void start_hc(struct ohci *ohci)
 	/* | OHCI_INTR_SO | OHCI_INTR_UE |OHCI_INTR_RHSC |OHCI_INTR_SF|  
 		OHCI_INTR_FNO */
 		
-
+	if(readl(&ohci->regs->roothub.a) & 0x100) /* global power on */
+ 		writel( 0x10000, &ohci->regs->roothub.status); /* root hub power on */
+	else { /* port power on */
+ 		for(port_nr=0; port_nr < (ohci->regs->roothub.a & 0xff); port_nr++)
+	     		 writel(0x100, &ohci->regs->roothub.portstatus[port_nr]);
+	}
+	wait_ms(50); 		
 	 
 	writel((0x00), &ohci->regs->control); /* USB Reset BUS */
 	wait_ms(10);
 	  
-	writel((0x97), &ohci->regs->control); /* USB Operational  */
-	
- 	writel( 0x10000, &ohci->regs->roothub.status); /* root hub power on */
-	wait_ms(50); 
-		
+	writel((0xB7), &ohci->regs->control); /* USB Operational  */
+ 		
 	OHCI_DEBUG(printk("USB HC rstart_hc_operational: %x\n", readl(&ohci->regs->control)); )
  	OHCI_DEBUG(printk("USB HC roothubstata: %x \n", readl( &(ohci->regs->roothub.a) )); )
  	OHCI_DEBUG(printk("USB HC roothubstatb: %x \n", readl( &(ohci->regs->roothub.b) )); )

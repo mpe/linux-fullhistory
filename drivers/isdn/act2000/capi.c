@@ -1,9 +1,9 @@
-/* $Id: capi.c,v 1.7 1998/02/23 23:35:41 fritz Exp $
+/* $Id: capi.c,v 1.8 1998/11/05 22:12:46 fritz Exp $
  *
  * ISDN lowlevel-module for the IBM ISDN-S0 Active 2000.
  *        CAPI encoder/decoder
  *
- * Copyright 1997 by Fritz Elfert (fritz@wuemaus.franken.de)
+ * Copyright 1998 by Fritz Elfert (fritz@isdn4linux.de)
  * Thanks to Friedemann Baitinger and IBM Germany
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,6 +21,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: capi.c,v $
+ * Revision 1.8  1998/11/05 22:12:46  fritz
+ * Changed mail-address.
+ *
  * Revision 1.7  1998/02/23 23:35:41  fritz
  * Eliminated some compiler warnings.
  *

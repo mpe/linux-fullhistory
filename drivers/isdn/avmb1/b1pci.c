@@ -1,11 +1,29 @@
 /*
- * $Id: b1pci.c,v 1.5 1998/01/31 11:14:43 calle Exp $
+ * $Id: b1pci.c,v 1.9 1999/04/15 19:49:32 calle Exp $
  * 
  * Module for AVM B1 PCI-card.
  * 
  * (c) Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
  * 
  * $Log: b1pci.c,v $
+ * Revision 1.9  1999/04/15 19:49:32  calle
+ * fix fuer die B1-PCI. Jetzt geht z.B. auch IRQ 17 ...
+ *
+ * Revision 1.8  1998/06/17 19:51:16  he
+ * merged with 2.1.10[34] (cosmetics and udelay() -> mdelay())
+ * brute force fix to avoid Ugh's in isdn_tty_write()
+ * cleaned up some dead code
+ *
+ * Revision 1.7  1998/03/29 16:06:02  calle
+ * changes from 2.0 tree merged.
+ *
+ * Revision 1.2.2.2  1998/01/23 16:49:30  calle
+ * added functions for pcmcia cards,
+ * avmb1_addcard returns now the controller number.
+ *
+ * Revision 1.6  1998/02/25 09:15:36  fritz
+ * apply Martin's pci driver patch to isdn drivers (vgerCVS)
+ *
  * Revision 1.5  1998/01/31 11:14:43  calle
  * merged changes to 2.0 tree, prepare 2.1.82 to work.
  *
@@ -44,7 +62,7 @@
 #define PCI_DEVICE_ID_AVM_B1	0x700
 #endif
 
-static char *revision = "$Revision: 1.5 $";
+static char *revision = "$Revision: 1.9 $";
 
 /* ------------------------------------------------------------- */
 
@@ -93,13 +111,13 @@ int b1pci_init(void)
 		printk(KERN_INFO
 			"b1pci: PCI BIOS reports AVM-B1 at i/o %#x, irq %d\n",
 			ioaddr, irq);
-		if ((rc = avmb1_probecard(ioaddr, irq, AVM_CARDTYPE_B1)) != 0) {
+		if ((rc = avmb1_probecard(ioaddr, irq, AVM_CARDTYPE_B1PCI)) != 0) {
 		        printk(KERN_ERR
 			"b1pci: no AVM-B1 at i/o %#x, irq %d detected\n",
 			ioaddr, irq);
 			return rc;
 		}
-		if ((rc = avmb1_addcard(ioaddr, irq, AVM_CARDTYPE_B1)) < 0)
+		if ((rc = avmb1_addcard(ioaddr, irq, AVM_CARDTYPE_B1PCI)) < 0)
 			return rc;
 	}
 	return 0;

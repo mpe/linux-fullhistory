@@ -1,4 +1,4 @@
-/* $Id: sportster.c,v 1.5 1998/02/02 13:29:46 keil Exp $
+/* $Id: sportster.c,v 1.7 1998/11/15 23:55:22 keil Exp $
 
  * sportster.c     low level stuff for USR Sportster internal TA
  *
@@ -7,6 +7,12 @@
  * Thanks to Christian "naddy" Weisgerber (3Com, US Robotics) for documentation
  *
  * $Log: sportster.c,v $
+ * Revision 1.7  1998/11/15 23:55:22  keil
+ * changes from 2.0
+ *
+ * Revision 1.6  1998/04/15 16:44:35  keil
+ * new init code
+ *
  * Revision 1.5  1998/02/02 13:29:46  keil
  * fast io
  *
@@ -30,7 +36,7 @@
 #include "isdnl1.h"
 
 extern const char *CardType[];
-const char *sportster_revision = "$Revision: 1.5 $";
+const char *sportster_revision = "$Revision: 1.7 $";
 
 #define byteout(addr,val) outb(val,addr)
 #define bytein(addr) inb(addr)
@@ -187,12 +193,10 @@ Sportster_card_msg(struct IsdnCardState *cs, int mt, void *arg)
 			return(request_irq(cs->irq, &sportster_interrupt,
 					I4L_IRQ_FLAG, "HiSax", cs));
 		case CARD_INIT:
-			clear_pending_isac_ints(cs);
-			clear_pending_hscx_ints(cs);
-			initisac(cs);
-			inithscx(cs);
+			inithscxisac(cs, 1);
 			cs->hw.spt.res_irq |= SPORTSTER_INTE; /* IRQ On */
 			byteout(cs->hw.spt.cfg_reg + SPORTSTER_RES_IRQ, cs->hw.spt.res_irq);
+			inithscxisac(cs, 2);
 			return(0);
 		case CARD_TEST:
 			return(0);

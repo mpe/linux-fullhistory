@@ -14,7 +14,7 @@
 
 static inline unsigned long page_address(struct page * page)
 {
-	return PAGE_OFFSET + PAGE_SIZE * (page - mem_map);
+	return PAGE_OFFSET + ((page - mem_map) << PAGE_SHIFT);
 }
 
 /*

@@ -12,6 +12,8 @@
 
 void show_td(struct uhci_td * td)
 {
+	char *spid;
+
 	printk("%08x ", td->link);
 	printk("%se%d %s%s%s%s%s%s%s%s%s%sLength=%x ",
 		((td->status >> 29) & 1) ? "SPD " : "",
@@ -27,12 +29,27 @@ void show_td(struct uhci_td * td)
 		((td->status >> 18) & 1) ? "CRC/Timeo " : "",
 		((td->status >> 17) & 1) ? "BitStuff " : "",
 		td->status & 0x7ff);
-	printk("MaxLen=%x %sEndPt=%x Dev=%x, PID=%x ",
+	switch (td->info & 0xff) {
+	case 0x2d:
+		spid = "SETUP";
+		break;
+	case 0xe1:
+		spid = "OUT";
+		break;
+	case 0x69:
+		spid = "IN";
+		break;
+	default:
+		spid = "?";
+		break;
+	}
+	printk("MaxLen=%x %sEndPt=%x Dev=%x, PID=%x(%s) ",
 		td->info >> 21,
 		 ((td->info >> 19) & 1) ? "DT " : "",
 		 (td->info >> 15) & 15,
 		 (td->info >> 8) & 127,
-		 td->info & 0xff);
+		 (td->info & 0xff),
+		 spid);
 	printk("(buf=%08x)\n", td->buffer);
 }
 

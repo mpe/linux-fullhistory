@@ -22,6 +22,8 @@
  *
  */
 
+#include <linux/version.h>
+
 #define I2C_BUS_MAX       4    /* max # of bus drivers  */
 #define I2C_DRIVER_MAX    8    /* max # of chip drivers */
 #define I2C_DEVICE_MAX    8    /* max # if devices per bus/driver */
@@ -35,6 +37,7 @@ struct i2c_device;
 #define I2C_DRIVERID_VIDEOTEXT	 3
 
 #define I2C_BUSID_BT848		1	/* I2C bus on a BT848 */
+#define I2C_BUSID_PARPORT	2	/* Bit banging on a parallel port */
 
 /*
  * struct for a driver for a i2c chip (tuner, soundprocessor,

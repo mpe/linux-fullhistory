@@ -11,7 +11,7 @@
   Copyright 1992 - 1999 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Sun Mar  7 09:03:17 1999 by makisara@home
+  Last modified: Tue May 18 08:32:34 1999 by makisara@home
   Some small formal changes - aeb, 950809
 */
 
@@ -164,8 +164,6 @@ st_chk_result(Scsi_Cmnd * SCpnt)
 	   SCpnt->request_bufflen);
     if (driver_byte(result) & DRIVER_SENSE)
       print_sense("st", SCpnt);
-    else
-      printk("\n");
   }
   else
 #endif
@@ -289,6 +287,7 @@ st_do_scsi(Scsi_Cmnd *SCpnt, Scsi_Tape *STp, unsigned char *cmd, int bytes,
   }
   else
       bp = (STp->buffer)->b_data;
+  SCpnt->cmd_len = 0;
   SCpnt->request.sem = &(STp->sem);
   SCpnt->request.rq_status = RQ_SCSI_BUSY;
   SCpnt->request.rq_dev = STp->devt;
@@ -3380,7 +3379,6 @@ static int st_attach(Scsi_Device * SDp){
 
    tpnt->devt = MKDEV(SCSI_TAPE_MAJOR, i);
    tpnt->dirty = 0;
-   tpnt->waiting = NULL;
    tpnt->in_use = 0;
    tpnt->drv_buffer = 1;  /* Try buffering if no mode sense */
    tpnt->restr_dma = (SDp->host)->unchecked_isa_dma;

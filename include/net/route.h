@@ -94,8 +94,6 @@ struct rtable
 #endif
 };
 
-extern struct rtable 	*rt_hash_table[RT_HASH_DIVISOR];
-
 struct ip_rt_acct
 {
 	__u32 	o_bytes;

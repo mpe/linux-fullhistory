@@ -16,6 +16,7 @@ extern unsigned long event;
 #include <asm/system.h>
 #include <asm/semaphore.h>
 #include <asm/page.h>
+#include <asm/ptrace.h>
 
 #include <linux/smp.h>
 #include <linux/tty.h>
@@ -381,9 +382,13 @@ struct task_struct {
 /* signals */	SPIN_LOCK_UNLOCKED, &init_signals, {{0}}, {{0}}, NULL, &init_task.sigqueue, 0, 0, \
 }
 
+#ifndef INIT_TASK_SIZE
+# define INIT_TASK_SIZE	2048*sizeof(long)
+#endif
+
 union task_union {
 	struct task_struct task;
-	unsigned long stack[2048];
+	unsigned long stack[INIT_TASK_SIZE/sizeof(long)];
 };
 
 extern union task_union init_task_union;
@@ -538,8 +543,7 @@ static inline void recalc_sigpending(struct task_struct *t)
 
 static inline int on_sig_stack(unsigned long sp)
 {
-	return (sp >= current->sas_ss_sp
-		&& sp < current->sas_ss_sp + current->sas_ss_size);
+	return (sp - current->sas_ss_sp < current->sas_ss_size);
 }
 
 static inline int sas_ss_flags(unsigned long sp)

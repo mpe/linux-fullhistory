@@ -1,11 +1,22 @@
 /*
- * $Id: capidrv.h,v 1.1 1997/03/04 21:50:33 calle Exp $
+ * $Id: capidrv.h,v 1.2 1998/03/29 16:06:06 calle Exp $
  *
  * ISDN4Linux Driver, using capi20 interface (kernelcapi)
  *
  * Copyright 1997 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capidrv.h,v $
+ * Revision 1.2  1998/03/29 16:06:06  calle
+ * changes from 2.0 tree merged.
+ *
+ * Revision 1.1.2.1  1998/03/20 14:38:28  calle
+ * capidrv: prepared state machines for suspend/resume/hold
+ * capidrv: fix bug in state machine if B1/T1 is out of nccis
+ * b1capi: changed some errno returns.
+ * b1capi: detect if you try to add same T1 to different io address.
+ * b1capi: change number of nccis depending on number of channels.
+ * b1lli: cosmetics
+ *
  * Revision 1.1  1997/03/04 21:50:33  calle
  * Frirst version in isdn4linux
  *
@@ -49,34 +60,70 @@
 #define ST_PLCI_ACCEPTING		6	/* P-4 */
 #define ST_PLCI_DISCONNECTING		7	/* P-5 */
 #define ST_PLCI_DISCONNECTED		8	/* P-6 */
+#define ST_PLCI_RESUMEING		9	/* P-0.Res */
+#define ST_PLCI_RESUME			10	/* P-Res */
+#define ST_PLCI_HELD			11	/* P-HELD */
 
-#define EV_PLCI_CONNECT_REQ		1	/* P-0 -> P-0.1 */
-#define EV_PLCI_CONNECT_CONF_ERROR	2	/* P-0.1 -> P-0 */
-#define EV_PLCI_CONNECT_CONF_OK		3	/* P-0.1 -> P-1 */
-#define EV_PLCI_FACILITY_IND_UP		4	/* P-0 -> P-1 */
-#define EV_PLCI_CONNECT_IND		5	/* P-0 -> P-2 */
-#define EV_PLCI_CONNECT_ACTIVE_IND	6	/* P-1 -> P-ACT */
+#define EV_PLCI_CONNECT_REQ		1	/* P-0 -> P-0.1
+                                                 */
+#define EV_PLCI_CONNECT_CONF_ERROR	2	/* P-0.1 -> P-0
+                                                 */
+#define EV_PLCI_CONNECT_CONF_OK		3	/* P-0.1 -> P-1
+                                                 */
+#define EV_PLCI_FACILITY_IND_UP		4	/* P-0 -> P-1
+                                                 */
+#define EV_PLCI_CONNECT_IND		5	/* P-0 -> P-2
+                                                 */
+#define EV_PLCI_CONNECT_ACTIVE_IND	6	/* P-1 -> P-ACT
+                                                 */
 #define EV_PLCI_CONNECT_REJECT		7	/* P-2 -> P-5
-						   P-3 -> P-5 */
+						   P-3 -> P-5
+						 */
 #define EV_PLCI_DISCONNECT_REQ		8	/* P-1 -> P-5
 						   P-2 -> P-5
 						   P-3 -> P-5
 						   P-4 -> P-5
-						   P-ACT -> P-5 */
+						   P-ACT -> P-5
+						   P-Res -> P-5 (*)
+						   P-HELD -> P-5 (*)
+						   */
 #define EV_PLCI_DISCONNECT_IND		9	/* P-1 -> P-6
 						   P-2 -> P-6
 						   P-3 -> P-6
 						   P-4 -> P-6
 						   P-5 -> P-6
-						   P-ACT -> P-6 */
+						   P-ACT -> P-6
+						   P-Res -> P-6 (*)
+						   P-HELD -> P-6 (*)
+						   */
 #define EV_PLCI_FACILITY_IND_DOWN	10	/* P-0.1 -> P-5
 						   P-1 -> P-5
 						   P-ACT -> P-5
 						   P-2 -> P-5
 						   P-3 -> P-5
-						   P-4 -> P-5 */
-#define EV_PLCI_DISCONNECT_RESP		11	/* P-6 -> P-0 */
-#define EV_PLCI_CONNECT_RESP		12	/* P-6 -> P-0 */
+						   P-4 -> P-5
+						   */
+#define EV_PLCI_DISCONNECT_RESP		11	/* P-6 -> P-0
+                                                   */
+#define EV_PLCI_CONNECT_RESP		12	/* P-6 -> P-0
+                                                   */
+
+#define EV_PLCI_RESUME_REQ		13	/* P-0 -> P-0.Res
+                                                 */
+#define EV_PLCI_RESUME_CONF_OK		14	/* P-0.Res -> P-Res
+                                                 */
+#define EV_PLCI_RESUME_CONF_ERROR	15	/* P-0.Res -> P-0
+                                                 */
+#define EV_PLCI_RESUME_IND		16	/* P-Res -> P-ACT
+                                                 */
+#define EV_PLCI_HOLD_IND		17	/* P-ACT -> P-HELD
+                                                 */
+#define EV_PLCI_RETRIEVE_IND		18	/* P-HELD -> P-ACT
+                                                 */
+#define EV_PLCI_SUSPEND_IND		19	/* P-ACT -> P-5
+                                                 */
+#define EV_PLCI_CD_IND			20	/* P-2 -> P-5
+                                                 */
 
 /*
  * per ncci state machine

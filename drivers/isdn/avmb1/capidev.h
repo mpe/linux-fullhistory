@@ -22,7 +22,11 @@ struct capidev {
 	int is_registered;
 	__u16 applid;
 	struct sk_buff_head recv_queue;
+#if LINUX_VERSION_CODE < 131841
+	struct wait_queue *recv_wait;
+#else
 	wait_queue_head_t recv_wait;
+#endif
 	__u16 errcode;
 };
 

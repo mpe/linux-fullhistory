@@ -1,11 +1,23 @@
 /*
- * $Id: capi.c,v 1.10 1998/02/13 07:09:13 calle Exp $
+ * $Id: capi.c,v 1.13 1998/08/28 04:32:25 calle Exp $
  *
  * CAPI 2.0 Interface for Linux
  *
  * Copyright 1996 by Carsten Paeth (calle@calle.in-berlin.de)
  *
  * $Log: capi.c,v $
+ * Revision 1.13  1998/08/28 04:32:25  calle
+ * Added patch send by Michael.Mueller4@post.rwth-aachen.de, to get AVM B1
+ * driver running with 2.1.118.
+ *
+ * Revision 1.12  1998/05/26 22:39:34  he
+ * sync'ed with 2.1.102 where appropriate (CAPABILITY changes)
+ * concap typo
+ * cleared dev.tbusy in isdn_net BCONN status callback
+ *
+ * Revision 1.11  1998/03/09 17:46:37  he
+ * merged in 2.1.89 changes
+ *
  * Revision 1.10  1998/02/13 07:09:13  calle
  * change for 2.1.86 (removing FREE_READ/FREE_WRITE from [dev]_kfree_skb()
  *
@@ -237,6 +249,9 @@ capi_poll(struct file *file, poll_table * wait)
 		return POLLERR;
 
 	cdev = &capidevs[minor];
+#if (LINUX_VERSION_CODE < 0x020159) /* 2.1.89 */
+#define poll_wait(f,wq,w) poll_wait((wq),(w))
+#endif
 	poll_wait(file, &(cdev->recv_wait), wait);
 	mask = POLLOUT | POLLWRNORM;
 	if (!skb_queue_empty(&cdev->recv_queue))
@@ -464,7 +479,9 @@ static struct file_operations capi_fops =
 	capi_ioctl,
 	NULL,			/* capi_mmap */
 	capi_open,
-	NULL,			/* flush */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,118)
+        NULL,                   /* capi_flush */
+#endif
 	capi_release,
 	NULL,			/* capi_fsync */
 	NULL,			/* capi_fasync */
@@ -484,7 +501,16 @@ static struct capi_interface_user cuser = {
 
 int capi_init(void)
 {
+#if LINUX_VERSION_CODE >= 131841
+	int j;
+#endif
+	
 	memset(capidevs, 0, sizeof(capidevs));
+#if LINUX_VERSION_CODE >= 131841
+	for ( j = 0; j < CAPI_MAXMINOR+1; j++ ) {
+		init_waitqueue_head(&capidevs[j].recv_wait);
+	}
+#endif
 
 	if (register_chrdev(capi_major, "capi20", &capi_fops)) {
 		printk(KERN_ERR "capi20: unable to get major %d\n", capi_major);
@@ -496,6 +522,7 @@ int capi_init(void)
 		unregister_chrdev(capi_major, "capi20");
 		return -EIO;
 	}
+	
 	return 0;
 }
 

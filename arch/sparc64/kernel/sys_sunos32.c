@@ -1,4 +1,4 @@
-/* $Id: sys_sunos32.c,v 1.22 1998/10/26 20:01:13 davem Exp $
+/* $Id: sys_sunos32.c,v 1.25 1999/05/24 19:40:44 davem Exp $
  * sys_sunos32.c: SunOS binary compatability layer on sparc64.
  *
  * Copyright (C) 1995, 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -1347,7 +1347,7 @@ asmlinkage int sunos_readv(u32 fd, u32 vector, s32 count)
 
 	lock_kernel();
 	ret = check_nonblock(sys32_readv(fd, vector, count), fd);
-	lock_kernel();
+	unlock_kernel();
 	return ret;
 }
 

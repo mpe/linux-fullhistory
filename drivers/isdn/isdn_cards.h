@@ -1,8 +1,8 @@
-/* $Id: isdn_cards.h,v 1.2 1997/02/03 23:31:55 fritz Exp $
+/* $Id: isdn_cards.h,v 1.3 1999/04/12 12:33:13 fritz Exp $
 
  * Linux ISDN subsystem, initialization for non-modularized drivers.
  *
- * Copyright 1994,95,96 by Fritz Elfert (fritz@wuemaus.franken.de)
+ * Copyright 1994-1999 by Fritz Elfert (fritz@isdn4linux.de)
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +19,9 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_cards.h,v $
+ * Revision 1.3  1999/04/12 12:33:13  fritz
+ * Changes from 2.0 tree.
+ *
  * Revision 1.2  1997/02/03 23:31:55  fritz
  * Reformatted according CodingStyle
  *

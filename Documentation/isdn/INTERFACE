@@ -1,4 +1,4 @@
-$Id: INTERFACE,v 1.8 1998/02/20 17:38:20 fritz Exp $
+$Id: INTERFACE,v 1.11 1999/03/02 12:14:51 armin Exp $
 
 Description of the Interface between Linklevel and Hardwarelevel
   of isdn4linux:
@@ -478,6 +478,14 @@ Description of the Interface between Linklevel and Hardwarelevel
       1           = At least one device matching this call (RING on ttyI).
                     HL-driver may send ALERTING on the D-channel in this case.
       2           = Call will be rejected.
+      3           = Incomplete number.
+                    The CalledNumber would match, if more digits are appended.
+                    This feature is needed for Number-Blocks assigned to
+                    a line. In this case, the LL driver should assemble the
+					CalledNumber by handling keypad protocol and try again
+					later with a longer CalledNumber.
+					HL drivers serving ordinary lines should interpret this
+					return code like 0 (nothing matches).
       -1          = An error happened. (Invalid parameters for example.)
 
   ISDN_STAT_RUN:
@@ -526,7 +534,9 @@ Description of the Interface between Linklevel and Hardwarelevel
       driver      = driver-Id
       command     = ISDN_STAT_BCONN
       arg         = channel-number, locally to the driver. (starting with 0)
-      para        = unused.
+      para.num    = ASCII-String, containing type of connection (for analog
+		    modem only). This will be appended to the CONNECT message
+		    e.g. 14400/V.32bis
 
   ISDN_STAT_DHUP:
 

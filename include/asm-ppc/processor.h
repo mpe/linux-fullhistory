@@ -1,12 +1,22 @@
 #ifndef __ASM_PPC_PROCESSOR_H
 #define __ASM_PPC_PROCESSOR_H
 
+/*
+ * Default implementation of macro that returns current
+ * instruction pointer ("program counter").
+ */
+#define current_text_addr() ({ __label__ _l; _l: &&_l;})
+
 #include <linux/config.h>
 
 #include <asm/ptrace.h>
 #include <asm/residual.h>
 
 /* Bit encodings for Machine State Register (MSR) */
+#ifdef CONFIG_PPC64
+#define MSR_SF		(1<<63)
+#define MSR_ISF		(1<<61)
+#endif /* CONFIG_PPC64 */
 #define MSR_POW		(1<<18)		/* Enable Power Management */
 #define MSR_TGPR	(1<<17)		/* TLB Update registers in use */
 #define MSR_ILE		(1<<16)		/* Interrupt Little-Endian enable */

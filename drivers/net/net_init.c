@@ -91,9 +91,11 @@ init_etherdev(struct device *dev, int sizeof_priv)
 		for (i = 0; i < MAX_ETH_CARDS; ++i)
 			if (ethdev_index[i] == NULL) {
 				sprintf(pname, "eth%d", i);
-				for (cur_dev = dev_base; cur_dev; cur_dev = cur_dev->next)
+				read_lock_bh(&dev_base_lock);
+				for (cur_dev = dev_base; cur_dev; cur_dev = cur_dev->next) {
 					if (strcmp(pname, cur_dev->name) == 0) {
 						dev = cur_dev;
+						read_unlock_bh(&dev_base_lock);
 						dev->init = NULL;
 						sizeof_priv = (sizeof_priv + 3) & ~3;
 						dev->priv = sizeof_priv
@@ -102,6 +104,8 @@ init_etherdev(struct device *dev, int sizeof_priv)
 						if (dev->priv) memset(dev->priv, 0, sizeof_priv);
 						goto found;
 					}
+				}
+				read_unlock_bh(&dev_base_lock);
 			}
 
 		alloc_size &= ~3;		/* Round to dword boundary. */
@@ -209,9 +213,11 @@ struct device *init_hippi_dev(struct device *dev, int sizeof_priv)
 		for (i = 0; i < MAX_HIP_CARDS; ++i)
 			if (hipdev_index[i] == NULL) {
 				sprintf(pname, "hip%d", i);
-				for (cur_dev = dev_base; cur_dev; cur_dev = cur_dev->next)
+				read_lock_bh(&dev_base_lock);
+				for (cur_dev = dev_base; cur_dev; cur_dev = cur_dev->next) {
 					if (strcmp(pname, cur_dev->name) == 0) {
 						dev = cur_dev;
+						read_unlock_bh(&dev_base_lock);
 						dev->init = NULL;
 						sizeof_priv = (sizeof_priv + 3) & ~3;
 						dev->priv = sizeof_priv
@@ -220,6 +226,8 @@ struct device *init_hippi_dev(struct device *dev, int sizeof_priv)
 						if (dev->priv) memset(dev->priv, 0, sizeof_priv);
 						goto hipfound;
 					}
+				}
+				read_unlock_bh(&dev_base_lock);
 			}
 
 		alloc_size &= ~3;		/* Round to dword boundary. */
@@ -536,9 +544,11 @@ struct device *init_trdev(struct device *dev, int sizeof_priv)
 		for (i = 0; i < MAX_TR_CARDS; ++i)
 			if (trdev_index[i] == NULL) {
 				sprintf(pname, "tr%d", i);
-				for (cur_dev = dev_base; cur_dev; cur_dev = cur_dev->next)
+				read_lock_bh(&dev_base_lock);
+				for (cur_dev = dev_base; cur_dev; cur_dev = cur_dev->next) {
 					if (strcmp(pname, cur_dev->name) == 0) {
 						dev = cur_dev;
+						read_unlock_bh(&dev_base_lock);
 						dev->init = NULL;
 						sizeof_priv = (sizeof_priv + 3) & ~3;
 						dev->priv = sizeof_priv
@@ -547,6 +557,8 @@ struct device *init_trdev(struct device *dev, int sizeof_priv)
 						if (dev->priv) memset(dev->priv, 0, sizeof_priv);
 						goto trfound;
 					}
+				}
+				read_unlock_bh(&dev_base_lock);
 			}
 
 		alloc_size &= ~3;		/* Round to dword boundary. */

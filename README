@@ -62,7 +62,7 @@ INSTALLING the kernel:
  - If you install the full sources, do a
 
 		cd /usr/src
-		gzip -cd linux-2.3.XX.tar.gz | tar xfv -
+		gzip -cd linux-2.3.XX.tar.gz | tar xvf -
 
    to get it all put in place. Replace "XX" with the version number of the
    latest kernel.

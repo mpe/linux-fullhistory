@@ -114,10 +114,8 @@ static inline void get__sock(struct sock *sp, char *tmpbuf, int i, int format)
 			slot_dist = tcp_tw_death_row_slot - slot_dist;
 		timer_expires	= jiffies + (slot_dist * TCP_TWKILL_PERIOD);
 	} else {
-		timer_active1 = del_timer(&tp->retransmit_timer);
-		timer_active2 = del_timer(&sp->timer);
-		if (!timer_active1) tp->retransmit_timer.expires=0;
-		if (!timer_active2) sp->timer.expires=0;
+		timer_active1 = tp->retransmit_timer.prev != NULL;
+		timer_active2 = sp->timer.prev != NULL;
 		timer_active	= 0;
 		timer_expires	= (unsigned) -1;
 	}
@@ -147,9 +145,6 @@ static inline void get__sock(struct sock *sp, char *tmpbuf, int i, int format)
 		(!tw_bucket && sp->socket) ? sp->socket->inode->i_uid : 0,
 		(!tw_bucket && timer_active) ? sp->timeout : 0,
 		(!tw_bucket && sp->socket) ? sp->socket->inode->i_ino : 0);
-	
-	if (timer_active1) add_timer(&tp->retransmit_timer);
-	if (timer_active2) add_timer(&sp->timer);	
 }
 
 /*
@@ -176,7 +171,7 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 			       "  sl  local_address rem_address   st tx_queue "
 			       "rx_queue tr tm->when retrnsmt   uid  timeout inode");
 	pos = 128;
-	SOCKHASH_LOCK(); 
+	SOCKHASH_LOCK_READ();
 	sp = pro->sklist_next;
 	while(sp != (struct sock *)pro) {
 		if (format == 0 && sp->state == TCP_LISTEN) {
@@ -211,7 +206,7 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 		i++;
 	}
 out: 
-	SOCKHASH_UNLOCK();
+	SOCKHASH_UNLOCK_READ();
 	
 	begin = len - (pos - offset);
 	*start = buffer + begin;

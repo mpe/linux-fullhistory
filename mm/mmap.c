@@ -185,6 +185,9 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	if (len > TASK_SIZE || addr > TASK_SIZE-len)
 		return -EINVAL;
 
+	if (off & ~PAGE_MASK)
+		return -EINVAL;
+
 	/* offset overflow? */
 	if (off + len < off)
 		return -EINVAL;

@@ -286,29 +286,6 @@ __initfunc(void
 	if ( !strncmp("MOT", get_property(find_path_device("/"),
 					  "model", NULL),3) )
 		*memory_start_p = pmac_find_bridges(*memory_start_p, *memory_end_p);
-	/*
-	 * The f50 has a lot of IO space - we need to map some in that
-	 * isn't covered by the BAT mappings in MMU_init() -- Cort
-	 */
-	if ( !strncmp("F5", get_property(find_path_device("/"),
-					 "ibm,model-class", NULL),2) )
-	{
-#if 0		
-		/*
-		 * This ugly hack allows us to force ioremap() to
-		 * create a 1-to-1 mapping for us, even though
-		 * the address is < ioremap_base.  This is necessary
-		 * since we want our PCI IO space to have contiguous
-		 * virtual addresses and I think it's worse to have
-		 * calls to map_page() here.
-		 * -- Cort
-		 */
-		unsigned long hold = ioremap_base;
-		ioremap_base = 0;
-		__ioremap(0x90000000, 0x10000000, _PAGE_NO_CACHE);
-		ioremap_base = hold;
-#endif		
-	}
 }
 
 void

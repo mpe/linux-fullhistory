@@ -1,8 +1,8 @@
-/* $Id: act2000.h,v 1.5 1997/10/09 22:22:59 fritz Exp $
+/* $Id: act2000.h,v 1.7 1999/04/12 13:13:54 fritz Exp $
  *
  * ISDN lowlevel-module for the IBM ISDN-S0 Active 2000.
  *
- * Copyright 1997 by Fritz Elfert (fritz@wuemaus.franken.de)
+ * Copyright 1998 by Fritz Elfert (fritz@isdn4linux.de)
  * Thanks to Friedemann Baitinger and IBM Germany
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,6 +20,12 @@
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
  *
  * $Log: act2000.h,v $
+ * Revision 1.7  1999/04/12 13:13:54  fritz
+ * Made cards pointer static to avoid name-clash.
+ *
+ * Revision 1.6  1998/11/05 22:12:38  fritz
+ * Changed mail-address.
+ *
  * Revision 1.5  1997/10/09 22:22:59  fritz
  * New HL<->LL interface:
  *   New BSENT callback with nr. of bytes included.
@@ -212,8 +218,6 @@ typedef struct act2000_card {
         isdn_if interface;               /* Interface to upper layer         */
         char regname[35];                /* Name used for request_region     */
 } act2000_card;
-
-extern act2000_card *actcards;
 
 extern __inline__ void act2000_schedule_tx(act2000_card *card)
 {

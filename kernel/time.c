@@ -54,13 +54,15 @@ void get_fast_time(struct timeval * t)
 	do_get_fast_time(t);
 }
 
-#ifndef __alpha__
+#if !defined(__alpha__) && !defined(__ia64__)
 
 /*
  * sys_time() can be implemented in user-level using
  * sys_gettimeofday().  Is this for backwards compatibility?  If so,
  * why not move it into the appropriate arch directory (for those
  * architectures that need it).
+ *
+ * XXX This function is NOT 64-bit clean!
  */
 asmlinkage int sys_time(int * tloc)
 {

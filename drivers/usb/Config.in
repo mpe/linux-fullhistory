@@ -29,6 +29,8 @@ if [ ! "$CONFIG_USB" = "n" ]; then
   bool 'USB keyboard support' CONFIG_USB_KBD
   bool 'USB audio parsing support' CONFIG_USB_AUDIO
   bool 'USB Abstract Control Model support' CONFIG_USB_ACM
+  bool 'USB printer support' CONFIG_USB_PRINTER
+  
 fi
 
 endmenu

@@ -1,7 +1,7 @@
 /*
  * misc.c
  *
- * $Id: misc.c,v 1.64 1999/04/30 05:52:46 cort Exp $
+ * $Id: misc.c,v 1.65 1999/05/17 19:11:13 cort Exp $
  * 
  * Adapted for PowerPC by Gary Thomas
  *
@@ -363,7 +363,7 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum,
 			if (board_type == 0xe0) {	
 				base_mod = inb(0x803);
 				/* if a MVME2300/2400 or a Sitka then no keyboard */
-				if((base_mod == 0x9) || (base_mod == 0xF9) ||
+				if((base_mod == 0xFA) || (base_mod == 0xF9) ||
 				   (base_mod == 0xE1)) {
 					keyb_present = 0;	/* no keyboard */
 				}

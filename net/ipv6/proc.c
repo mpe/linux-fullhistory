@@ -52,7 +52,7 @@ static int get__netinfo6(struct proto *pro, char *buffer, int format, char **sta
 										/*144 */
 
 	pos = 149;
-	SOCKHASH_LOCK();
+	SOCKHASH_LOCK_READ();
 	sp = pro->sklist_next;
 	while(sp != (struct sock *)pro) {
 		struct tcp_tw_bucket *tw = (struct tcp_tw_bucket *)sp;
@@ -72,6 +72,7 @@ static int get__netinfo6(struct proto *pro, char *buffer, int format, char **sta
 		}
 		destp = ntohs(sp->dport);
 		srcp  = ntohs(sp->sport);
+
 		if((format == 0) && (sp->state == TCP_TIME_WAIT)) {
 			extern int tcp_tw_death_row_slot;
 			int slot_dist;
@@ -85,10 +86,8 @@ static int get__netinfo6(struct proto *pro, char *buffer, int format, char **sta
 				slot_dist = tcp_tw_death_row_slot - slot_dist;
 			timer_expires	= jiffies + (slot_dist * TCP_TWKILL_PERIOD);
 		} else {
-			timer_active1 = del_timer(&tp->retransmit_timer);
-			timer_active2 = del_timer(&sp->timer);
-			if(!timer_active1) tp->retransmit_timer.expires = 0;
-			if(!timer_active2) sp->timer.expires = 0;
+			timer_active1 = tp->retransmit_timer.prev != NULL;
+			timer_active2 = sp->timer.prev != NULL;
 			timer_active = 0;
 			timer_expires = (unsigned) -1;
 		}
@@ -128,8 +127,6 @@ static int get__netinfo6(struct proto *pro, char *buffer, int format, char **sta
 			((!tw_bucket && sp->socket) ?
 			 sp->socket->inode->i_ino : 0));
 
-		if(timer_active1) add_timer(&tp->retransmit_timer);
-		if(timer_active2) add_timer(&sp->timer);
 		len += sprintf(buffer+len, "%-148s\n", tmpbuf);
 		if(len >= length)
 			break;
@@ -137,7 +134,7 @@ static int get__netinfo6(struct proto *pro, char *buffer, int format, char **sta
 		sp = sp->sklist_next;
 		i++;
 	}
-	SOCKHASH_UNLOCK();
+	SOCKHASH_UNLOCK_READ();
 
 	begin = len - (pos - offset);
 	*start = buffer + begin;
