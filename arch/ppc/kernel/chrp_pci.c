@@ -96,11 +96,12 @@ int gg2_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
 #define python_config_data(bus) ((0xfef00000+0xf8010)-(bus*0x100000))
 #define PYTHON_CFA(b, d, o)	(0x80 | ((b<<6) << 8) | ((d) << 16) \
 				 | (((o) & ~3) << 24))
-     
+unsigned int python_busnr = 1;
+
 int python_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
 				    unsigned char offset, unsigned char *val)
 {
-	if (bus > 2) {
+	if (bus > python_busnr) {
 		*val = 0xff;
 		return PCIBIOS_DEVICE_NOT_FOUND;
 	}
@@ -112,7 +113,7 @@ int python_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
 int python_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
 				    unsigned char offset, unsigned short *val)
 {
-	if (bus > 2) {
+	if (bus > python_busnr) {
 		*val = 0xffff;
 		return PCIBIOS_DEVICE_NOT_FOUND;
 	}
@@ -125,7 +126,7 @@ int python_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
 int python_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
 				     unsigned char offset, unsigned int *val)
 {
-	if (bus > 2) {
+	if (bus > python_busnr) {
 		*val = 0xffffffff;
 		return PCIBIOS_DEVICE_NOT_FOUND;
 	}
@@ -137,7 +138,7 @@ int python_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
 int python_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
 				     unsigned char offset, unsigned char val)
 {
-	if (bus > 2)
+	if (bus > python_busnr)
 		return PCIBIOS_DEVICE_NOT_FOUND;
 	out_be32( python_config_address( bus ), PYTHON_CFA(bus,dev_fn,offset));
 	out_8((volatile unsigned char *)python_config_data(bus) + (offset&3), val);
@@ -147,7 +148,7 @@ int python_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
 int python_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
 				     unsigned char offset, unsigned short val)
 {
-	if (bus > 2)
+	if (bus > python_busnr)
 		return PCIBIOS_DEVICE_NOT_FOUND;
 	out_be32( python_config_address( bus ), PYTHON_CFA(bus,dev_fn,offset));
 	out_le16((volatile unsigned short *)python_config_data(bus) + (offset&3),
@@ -158,7 +159,7 @@ int python_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
 int python_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
 				      unsigned char offset, unsigned int val)
 {
-	if (bus > 2)
+	if (bus > python_busnr)
 		return PCIBIOS_DEVICE_NOT_FOUND;
 	out_be32( python_config_address( bus ), PYTHON_CFA(bus,dev_fn,offset));
 	out_le32((unsigned *)python_config_data(bus) + (offset&3), val);
@@ -217,9 +218,9 @@ chrp_pcibios_fixup(void)
 {
 	struct pci_dev *dev;
 	
-	/* get the other 2 busses on the F50 */
-	if ( !strncmp("F5", get_property(find_path_device("/"),
-					 "ibm,model-class", NULL),2) )
+	/* some of IBM chrps have > 1 bus */
+	if ( !strncmp("IBM", get_property(find_path_device("/"),
+					 "name", NULL),3) )
 	{
 		pci_scan_peer_bridge(1);
 		pci_scan_peer_bridge(2);
@@ -258,6 +259,8 @@ decl_config_access_method(indirect);
 void __init
 chrp_setup_pci_ptrs(void)
 {
+	struct device_node *py;
+	
         if ( !strncmp("MOT",
                       get_property(find_path_device("/"), "model", NULL),3) )
         {
@@ -268,16 +271,28 @@ chrp_setup_pci_ptrs(void)
         }
         else
         {
-		if ( find_compatible_devices( "pci", "IBM,python" ) )
+		if ( (py = find_compatible_devices( "pci", "IBM,python" )) )
 		{
-			/*
-			 * We assume these values but should someday get them
-			 * from the device tree or python itself instead -- Cort
-			 */
-			pci_dram_offset = 0x80000000;
-			isa_mem_base = 0xa0000000;
-			isa_io_base = 0x88000000;
+			/* find out how many pythons */
+			while ( (py = py->next) ) python_busnr++;
                         set_config_access_method(python);
+			/*
+			 * We base these values on the machine type but should
+			 * try to read them from the python controller itself.
+			 * -- Cort
+			 */
+			if ( !strncmp("IBM,7025-F50", get_property(find_path_device("/"), "name", NULL),12) )
+			{
+				pci_dram_offset = 0x80000000;
+				isa_mem_base = 0xa0000000;
+				isa_io_base = 0x88000000;
+			} else if ( !strncmp("IBM,7043-260",
+			   get_property(find_path_device("/"), "name", NULL),12) )
+			{
+				pci_dram_offset = 0x80000000;
+				isa_mem_base = 0xc0000000;
+				isa_io_base = 0xf8000000;
+			}
                 }
                 else
                 {

@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.57 1999/03/14 20:51:28 davem Exp $
+/* $Id: sparc64_ksyms.c,v 1.58 1999/05/08 03:00:31 davem Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -90,7 +90,6 @@ extern int __ashrdi3(int, int);
 extern void dump_thread(struct pt_regs *, struct user *);
 
 #ifdef __SMP__
-extern spinlock_t scheduler_lock;
 extern spinlock_t kernel_flag;
 extern int smp_num_cpus;
 #ifdef SPIN_LOCK_DEBUG
@@ -120,7 +119,6 @@ __attribute__((section("__ksymtab"))) =				\
 /* used by various drivers */
 #ifdef __SMP__
 /* Kernel wide locking */
-EXPORT_SYMBOL(scheduler_lock);
 EXPORT_SYMBOL(kernel_flag);
 
 /* Software-IRQ BH locking */

@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.48 1999/01/02 16:50:28 davem Exp $ */
+/* $Id: system.h,v 1.50 1999/05/08 03:03:22 davem Exp $ */
 #ifndef __SPARC64_SYSTEM_H
 #define __SPARC64_SYSTEM_H
 
@@ -48,7 +48,7 @@ extern unsigned long empty_zero_page;
 ({	unsigned long retval; \
 	__asm__ __volatile__("rdpr	%%pil, %0\n\t" \
 			     "wrpr	%1, %%pil" \
-			     : "=r" (retval) \
+			     : "=&r" (retval) \
 			     : "r" (__new_pil) \
 			     : "memory"); \
 	retval; \
@@ -127,21 +127,14 @@ extern __inline__ void flushw_user(void)
 
 	/* See what happens when you design the chip correctly?
 	 *
-	 * XXX What we are doing here assumes a lot about gcc reload
-	 * XXX internals, it heavily risks compiler aborts due to
-	 * XXX forbidden registers being spilled.  Rewrite me...  -DaveM
-	 *
-	 * SMP NOTE: At first glance it looks like there is a tiny
-	 *           race window here at the end.  The possible problem
-	 *           would be if a tlbcachesync MONDO vector got delivered
-	 *           to us right before we set the final %g6 thread reg
-	 *           value.  But that is impossible since only the holder
-	 *           of scheduler_lock can send a tlbcachesync MONDO and
-	 *           by definition we hold it right now.  Normal tlb
-	 *           flush xcalls can come in, but those are safe and do
-	 *           not reference %g6.
+	 * We tell gcc we clobber all non-fixed-usage registers except
+	 * for l0/l1.  It will use one for 'next' and the other to hold
+	 * the output value of 'last'.  'next' is not referenced again
+	 * past the invocation of switch_to in the scheduler, so we need
+	 * not preserve it's value.  Hairy, but it lets us remove 2 loads
+	 * and 2 stores in this critical code path.  -DaveM
 	 */
-#define switch_to(prev, next)							\
+#define switch_to(prev, next, last)						\
 do {	if (current->tss.flags & SPARC_FLAG_PERFCTR) {				\
 		unsigned long __tmp;						\
 		read_pcr(__tmp);						\
@@ -157,26 +150,23 @@ do {	if (current->tss.flags & SPARC_FLAG_PERFCTR) {				\
 	__get_mmu_context(next);						\
 	(next)->mm->cpu_vm_mask |= (1UL << smp_processor_id());			\
 	__asm__ __volatile__(							\
+	"mov	%%g6, %%g5\n\t"							\
 	"wrpr	%%g0, 0x95, %%pstate\n\t"					\
-	"stx	%%l0, [%%sp + 2047 + 0x60]\n\t"					\
-	"stx	%%l1, [%%sp + 2047 + 0x68]\n\t"					\
 	"stx	%%i6, [%%sp + 2047 + 0x70]\n\t"					\
 	"stx	%%i7, [%%sp + 2047 + 0x78]\n\t"					\
 	"rdpr	%%wstate, %%o5\n\t"						\
-	"stx	%%o6, [%%g6 + %2]\n\t"						\
-	"sth	%%o5, [%%g6 + %1]\n\t"						\
+	"stx	%%o6, [%%g6 + %3]\n\t"						\
+	"sth	%%o5, [%%g6 + %2]\n\t"						\
 	"rdpr	%%cwp, %%o5\n\t"						\
-	"sth	%%o5, [%%g6 + %4]\n\t"						\
-	"mov	%0, %%g6\n\t"							\
-	"lduh	[%0 + %4], %%g1\n\t"						\
+	"sth	%%o5, [%%g6 + %5]\n\t"						\
+	"mov	%1, %%g6\n\t"							\
+	"lduh	[%1 + %5], %%g1\n\t"						\
 	"wrpr	%%g1, %%cwp\n\t"						\
-	"ldx	[%%g6 + %2], %%o6\n\t"						\
-	"lduh	[%%g6 + %1], %%o5\n\t"						\
-	"lduh	[%%g6 + %3], %%o7\n\t"						\
+	"ldx	[%%g6 + %3], %%o6\n\t"						\
+	"lduh	[%%g6 + %2], %%o5\n\t"						\
+	"lduh	[%%g6 + %4], %%o7\n\t"						\
 	"mov	%%g6, %%l2\n\t"							\
 	"wrpr	%%o5, 0x0, %%wstate\n\t"					\
-	"ldx	[%%sp + 2047 + 0x60], %%l0\n\t"					\
-	"ldx	[%%sp + 2047 + 0x68], %%l1\n\t"					\
 	"ldx	[%%sp + 2047 + 0x70], %%i6\n\t"					\
 	"ldx	[%%sp + 2047 + 0x78], %%i7\n\t"					\
 	"wrpr	%%g0, 0x94, %%pstate\n\t"					\
@@ -184,8 +174,8 @@ do {	if (current->tss.flags & SPARC_FLAG_PERFCTR) {				\
 	"wrpr	%%g0, 0x96, %%pstate\n\t"					\
 	"andcc	%%o7, 0x100, %%g0\n\t"						\
 	"bne,pn	%%icc, ret_from_syscall\n\t"					\
-	" nop\n\t"								\
-	: 									\
+	" mov	%%g5, %0\n\t"							\
+	: "=&r" (last)								\
 	: "r" (next),								\
 	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.wstate)),	\
 	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.ksp)),	\

@@ -1,5 +1,5 @@
 /*
- *  $Id: init.c,v 1.163 1999/04/09 06:37:13 cort Exp $
+ *  $Id: init.c,v 1.164 1999/05/05 17:33:55 cort Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -119,12 +119,19 @@ extern struct task_struct *current_set[NR_CPUS];
 PTE *Hash, *Hash_end;
 unsigned long Hash_size, Hash_mask;
 #ifndef CONFIG_8xx
+#ifdef CONFIG_PPC64
+unsigned long long _SDR1;
+#else
 unsigned long _SDR1;
+#endif
 static void hash_init(void);
 union ubat {			/* BAT register values to be loaded */
 	BAT	bat;
-	P601_BAT bat_601;
+#ifdef CONFIG_PPC64
+	u64	word[2];
+#else
 	u32	word[2];
+#endif	
 } BATS[4][2];			/* 4 pairs of IBAT, DBAT */
 
 struct batrange {		/* stores address ranges mapped by BATs */
@@ -145,7 +152,6 @@ int __map_without_bats = 0;
 
 /* optimization for 603 to load the tlb directly from the linux table -- Cort */
 #define NO_RELOAD_HTAB 1 /* change in kernel/head.S too! */
-
 
 void __bad_pte(pmd_t *pmd)
 {
@@ -354,7 +360,6 @@ __ioremap(unsigned long addr, unsigned long size, unsigned long flags)
 		return NULL;
 
 #ifndef CONFIG_8xx
-#if 0	
 	/*
 	 * Is it already mapped?  Perhaps overlapped by a previous
 	 * BAT mapping.  If the whole area is mapped then we're done,
@@ -368,7 +373,6 @@ __ioremap(unsigned long addr, unsigned long size, unsigned long flags)
 	 */
 	if ( (v = p_mapped_by_bats(addr)) /*&& p_mapped_by_bats(addr+(size-1))*/ )
 		goto out;
-#endif	
 #endif /* CONFIG_8xx */
 	
 	if (mem_init_done) {
@@ -397,7 +401,8 @@ __ioremap(unsigned long addr, unsigned long size, unsigned long flags)
 	
 	for (i = 0; i < size; i += PAGE_SIZE)
 		map_page(&init_task, v+i, p+i, flags);
-	return (void *) (v + (addr & ~PAGE_MASK));
+out:	
+	return (void *) (v + (p & ~PAGE_MASK));
 }
 
 void iounmap(void *addr)
@@ -1500,10 +1505,18 @@ __initfunc(static void hash_init(void))
 	 * up to a maximum of 2MB.
 	 */
 	ramsize = (ulong)end_of_DRAM - KERNELBASE;
+#ifdef CONFIG_PPC64	
+	Hash_mask = 0;
+	for (h = 256<<10; h < ramsize / 256 && h < 4<<20; h *= 2, Hash_mask++)
+		;
+	Hash_size = h;
+	Hash_mask << 10;  /* so setting _SDR1 works the same -- Cort */
+#else
 	for (h = 64<<10; h < ramsize / 256 && h < 2<<20; h *= 2)
 		;
 	Hash_size = h;
 	Hash_mask = (h >> 6) - 1;
+#endif	
 	
 #ifdef NO_RELOAD_HTAB
 	/* shrink the htab since we don't use it on 603's -- Cort */

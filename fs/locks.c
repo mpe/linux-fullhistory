@@ -263,16 +263,18 @@ static void locks_wake_up_blocks(struct file_lock *blocker, unsigned int wait)
 		if (waiter->fl_notify)
 			waiter->fl_notify(waiter);
 		wake_up(&waiter->fl_wait);
-		if (wait)
+		if (wait) {
 			/* Let the blocked process remove waiter from the
 			 * block list when it gets scheduled.
 			 */
+			current->policy |= SCHED_YIELD;
 			schedule();
-		else
+		} else {
 			/* Remove waiter from the block list, because by the
 			 * time it wakes up blocker won't exist any more.
 			 */
 			locks_delete_block(blocker, waiter);
+		}
 	}
 	return;
 }

@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.136 1999/04/16 01:20:33 anton Exp $
+/*  $Id: process.c,v 1.137 1999/05/08 03:00:10 davem Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -63,6 +63,8 @@ asmlinkage int sys_idle(void)
 	/* endless idle loop with no priority at all */
 	current->priority = 0;
 	current->counter = -100;
+	init_idle();
+
 	for (;;) {
 		if (ARCH_SUN4C_SUN4) {
 			static int count = HZ;
@@ -111,6 +113,8 @@ int cpu_idle(void *unused)
 	/* endless idle loop with no priority at all */
 	current->priority = 0;
 	current->counter = -100;
+	init_idle();
+
 	while(1) {
 		if(current->need_resched) {
 			schedule();

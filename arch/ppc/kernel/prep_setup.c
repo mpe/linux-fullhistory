@@ -45,6 +45,8 @@
 #include <asm/machdep.h>
 #include <asm/mk48t59.h>
 #include <asm/prep_nvram.h>
+#include <asm/raven.h>
+
 
 #include "time.h"
 #include "local_irq.h"
@@ -82,15 +84,7 @@ extern void pckbd_init_hw(void);
 extern unsigned char pckbd_sysrq_xlate[128];
 
 extern void prep_setup_pci_ptrs(void);
-
-/* these need to be here since PReP uses them for OpenPIC support */
-/* Maybe move these to a 'openpic_irq.c' file instead? --Troy */
-extern void chrp_mask_and_ack_irq(unsigned int irq_nr);
-extern void chrp_mask_irq(unsigned int irq_nr);
-extern void chrp_unmask_irq(unsigned int irq_nr);
 extern void chrp_do_IRQ(struct pt_regs *regs, int cpu, int isfake);
-extern volatile unsigned char *chrp_int_ack_special;
-
 extern char saved_command_line[256];
 
 int _prep_type;
@@ -355,6 +349,8 @@ prep_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 	request_region(0x80,0x10,"dma page reg");
 	request_region(0xc0,0x20,"dma2");
 
+	raven_init();
+
 #ifdef CONFIG_VGA_CONSOLE
 	/* remap the VGA memory */
 	vgacon_remap_base = 0xf0000000;
@@ -595,39 +591,13 @@ void
 prep_do_IRQ(struct pt_regs *regs, int cpu, int isfake)
 {
         int irq;
-	
-        /*
-         * Perform an interrupt acknowledge cycle on controller 1
-         */                                                             
-        outb(0x0C, 0x20);
-        irq = inb(0x20) & 7;                                   
-        if (irq == 2)                                                     
-        {                                                                   
-                /*                                     
-                 * Interrupt is cascaded so perform interrupt
-                 * acknowledge on controller 2
-                 */
-                outb(0x0C, 0xA0);                      
-                irq = (inb(0xA0) & 7) + 8;
-        }
-        else if (irq==7)                                
-        {
-                /*                               
-                 * This may be a spurious interrupt
-                 *                         
-                 * Read the interrupt status register. If the most
-                 * significant bit is not set then there is no valid
-		 * interrupt
-		 */
-		outb(0x0b, 0x20);
-		 
-		if(~inb(0x20)&0x80)
-		{
-			printk(KERN_DEBUG "Bogus interrupt from PC = %lx\n",
-			       regs->nip);
-                        ppc_spurious_interrupts++;
-                        return;
-                }
+
+	if ( (irq = i8259_irq(0)) < 0 )
+	{
+		printk(KERN_DEBUG "Bogus interrupt from PC = %lx\n",
+		       regs->nip);
+		ppc_spurious_interrupts++;
+		return;
 	}
         ppc_irq_dispatch_handler( regs, irq );
 }		
@@ -637,9 +607,19 @@ prep_init_IRQ(void))
 {
 	int i;
 
+	if (OpenPIC != NULL) {
+		for ( i = 16 ; i < 36 ; i++ )
+			irq_desc[i].ctl = &open_pic;
+		openpic_init(1);
+	}
+	
         for ( i = 0 ; i < 16  ; i++ )
                 irq_desc[i].ctl = &i8259_pic;
         i8259_init();
+#ifdef __SMP__
+	request_irq(openpic_to_irq(OPENPIC_VEC_SPURIOUS), openpic_ipi_action,
+		    0, "IPI0", 0);
+#endif /* __SMP__ */
 }
 
 #if defined(CONFIG_BLK_DEV_IDE) || defined(CONFIG_BLK_DEV_IDE_MODULE)
@@ -728,8 +708,6 @@ __initfunc(void
 prep_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	  unsigned long r6, unsigned long r7))
 {
-	int tmp;
-
 	/* make a copy of residual data */
 	if ( r3 )
 	{
@@ -784,27 +762,15 @@ prep_init(unsigned long r3, unsigned long r4, unsigned long r5,
 		strcpy(cmd_line, (char *)(r6+KERNELBASE));
 	}
 
-	if ( is_powerplus ) {	/* look for a Raven OpenPIC */
-		pcibios_read_config_dword(0, 0, 0, &tmp);
-		if (tmp == PCI_VENDOR_ID_MOTOROLA + (PCI_DEVICE_ID_MOTOROLA_RAVEN<<16)) {
-			pcibios_read_config_dword(0, 0, PCI_BASE_ADDRESS_1, &tmp);
-			if (tmp) {
-				OpenPIC=(volatile struct OpenPIC *)
-					(tmp + isa_mem_base);
-				/* printk("OpenPIC found at %p: \n", OpenPIC);*/
-			}
-		} else {
-			printk ("prep_init: WARNING: can't find an OpenPIC on what looks like a PowerPlus board\n");
-		}
-	}
-
-
 	ppc_md.setup_arch     = prep_setup_arch;
 	ppc_md.setup_residual = prep_setup_residual;
 	ppc_md.get_cpuinfo    = prep_get_cpuinfo;
 	ppc_md.irq_cannonicalize = prep_irq_cannonicalize;
 	ppc_md.init_IRQ       = prep_init_IRQ;
-	ppc_md.do_IRQ         = prep_do_IRQ;
+	if ( !OpenPIC )
+		ppc_md.do_IRQ         = prep_do_IRQ;
+	else
+		ppc_md.do_IRQ         = chrp_do_IRQ;
 	ppc_md.init           = NULL;
 
 	ppc_md.restart        = prep_restart;
@@ -858,9 +824,8 @@ prep_init(unsigned long r3, unsigned long r4, unsigned long r5,
         ppc_ide_md.release_region = prep_ide_release_region;
         ppc_ide_md.fix_driveid = prep_ide_fix_driveid;
         ppc_ide_md.ide_init_hwif = prep_ide_init_hwif_ports;
-
-        ppc_ide_md.io_base = _IO_BASE;
 #endif		
+        ppc_ide_md.io_base = _IO_BASE;
 
 #ifdef CONFIG_VT
 	ppc_md.kbd_setkeycode    = pckbd_setkeycode;

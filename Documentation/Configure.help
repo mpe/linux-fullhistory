@@ -10170,26 +10170,10 @@ CONFIG_M68040
   MC68EC040 will not work, as it does not include an MMU (Memory
   Management Unit).
 
-Use -m68040 flag for 68040 specific optimizations
-CONFIG_OPTIMIZE_040
-  If you will only be running this kernel on a 68040-series processor,
-  this will make the kernel run somewhat faster. However, it will no
-  longer run on a 68020 or 68030, no matter whether you included 68020
-  and 68030 support or not. Say N unless the only processor you are
-  compiling support for is the 68040 (or 68LC040).
-
 68060 support
 CONFIG_M68060
   If you anticipate running this kernel on a computer with a MC68060
   processor, say Y. Otherwise, say N.
-
-Use -m68060 flag for 68060 specific optimizations
-CONFIG_OPTIMIZE_060
-  If you will only be running this kernel on a 68060-series processor,
-  this will make the kernel run somewhat faster. However, it will no
-  longer run on a 68020, 68030 or 68040, no matter whether you
-  included support for those processors or not. Say N unless the only
-  processor you are compiling support for is the 68060.
 
 Advanced processor options
 CONFIG_ADVANCED_CPU
@@ -10223,25 +10207,9 @@ CONFIG_ZORRO
   Note that even if you say N here, you can still use your expansion
   cards. If in doubt, say Y.
 
-Amiga OCS chipset support
-CONFIG_AMIFB_OCS
-  This enables support for the original Agnus and Denise video chips,
-  found in the Amiga 1000 and most A500's and A2000's. If you intend
-  to run Linux on any of these systems, say Y; otherwise say N.
-
-Amiga ECS chipset support
-CONFIG_AMIFB_ECS
-  This enables support for the Enhanced Chip Set, found in later
-  A500's, later A2000's, the A600, the A3000, the A3000T and CDTV. If
-  you intend to run Linux on any of these systems, say Y; otherwise
-  say N.
-
-Amiga AGA chipset support
-CONFIG_AMIFB_AGA
-  This enables support for the Advanced Graphics Architecture (also
-  known as the AGA or AA) Chip Set, found in the A1200, A4000, A4000T
-  and CD32. If you intend to run Linux on any of these systems, say Y;
-  otherwise say N.
+CONFIG_AMIGA_PCMCIA
+  Include support in the kernel for pcmcia on Amiga 1200 and Amiga 600.
+  If you intend to use pcmcia cards say Y; otherwise say N.
 
 Amiga GSP (TMS340x0) support
 CONFIG_AMIGA_GSP
@@ -10445,6 +10413,16 @@ CONFIG_HYDRA
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you
   want). The module is called hydra.o. If you want to compile it as a
+  module, say M here and read Documentation/modules.txt.
+
+Pcmcia NE2000 compatible support
+CONFIG_APNE
+  If you have a pcmcia ne2000 compatible adapter, say Y.  Otherwise,
+  say N.
+
+  This driver is also available as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you
+  want). The module is called apne.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
 Atari Lance support

@@ -43,12 +43,14 @@ extern inline void wrusp(unsigned long usp) {
  * the mm structures are shared in d2 (to avoid atc flushing).
  */
 asmlinkage void resume(void);
-#define switch_to(prev,next) { \
+#define switch_to(prev,next,last) { \
   register void *_prev __asm__ ("a0") = (prev); \
   register void *_next __asm__ ("a1") = (next); \
+  register void *_last __asm__ ("d1"); \
   __asm__ __volatile__("jbsr " SYMBOL_NAME_STR(resume) \
-		       : : "a" (_prev), "a" (_next) \
+		       : "=d" (_last) : "a" (_prev), "a" (_next) \
 		       : "d0", "d1", "d2", "d3", "d4", "d5", "a0", "a1"); \
+  (last) = _last; \
 }
 
 #define xchg(ptr,x) ((__typeof__(*(ptr)))__xchg((unsigned long)(x),(ptr),sizeof(*(ptr))))
@@ -66,6 +68,8 @@ struct __xchg_dummy { unsigned long a[100]; };
 #define __cli() __asm__ __volatile__ ("oriw  #0x0700,%/sr": : : "memory")
 #define nop() __asm__ __volatile__ ("nop"::)
 #define mb()  __asm__ __volatile__ (""   : : :"memory")
+#define rmb()  __asm__ __volatile__ (""   : : :"memory")
+#define wmb()  __asm__ __volatile__ (""   : : :"memory")
 
 #define __save_flags(x) \
 __asm__ __volatile__("movew %/sr,%0":"=d" (x) : /* no input */ :"memory")

@@ -45,7 +45,7 @@ static struct buffer_head * minix_find_entry(struct inode * dir,
 	struct minix_dir_entry *de;
 
 	*res_dir = NULL;
-	if (!dir || !dir->i_sb)
+	if (!dir->i_sb)
 		return NULL;
 	info = &dir->i_sb->u.minix_sb;
 	if (namelen > info->s_namelen) {
@@ -249,12 +249,6 @@ int minix_mknod(struct inode * dir, struct dentry *dentry, int mode, int rdev)
 	struct buffer_head * bh;
 	struct minix_dir_entry * de;
 
-	bh = minix_find_entry(dir, dentry->d_name.name,
-			      dentry->d_name.len, &de);
-	if (bh) {
-		brelse(bh);
-		return -EEXIST;
-	}
 	inode = minix_new_inode(dir);
 	if (!inode)
 		return -ENOSPC;
@@ -295,12 +289,6 @@ int minix_mkdir(struct inode * dir, struct dentry *dentry, int mode)
 	struct minix_sb_info * info;
 
 	info = &dir->i_sb->u.minix_sb;
-	bh = minix_find_entry(dir, dentry->d_name.name,
-			      dentry->d_name.len, &de);
-	if (bh) {
-		brelse(bh);
-		return -EEXIST;
-	}
 	if (dir->i_nlink >= info->s_link_max)
 		return -EMLINK;
 	inode = minix_new_inode(dir);
@@ -524,15 +512,6 @@ int minix_symlink(struct inode * dir, struct dentry *dentry,
 	brelse(name_block);
 	inode->i_size = i;
 	mark_inode_dirty(inode);
-	bh = minix_find_entry(dir, dentry->d_name.name,
-			      dentry->d_name.len, &de);
-	if (bh) {
-		inode->i_nlink--;
-		mark_inode_dirty(inode);
-		iput(inode);
-		brelse(bh);
-		return -EEXIST;
-	}
 	i = minix_add_entry(dir, dentry->d_name.name,
 			    dentry->d_name.len, &bh, &de);
 	if (i) {
@@ -562,12 +541,6 @@ int minix_link(struct dentry * old_dentry, struct inode * dir,
 	if (inode->i_nlink >= inode->i_sb->u.minix_sb.s_link_max)
 		return -EMLINK;
 
-	bh = minix_find_entry(dir, dentry->d_name.name,
-			      dentry->d_name.len, &de);
-	if (bh) {
-		brelse(bh);
-		return -EEXIST;
-	}
 	error = minix_add_entry(dir, dentry->d_name.name,
 				dentry->d_name.len, &bh, &de);
 	if (error) {

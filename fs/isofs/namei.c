@@ -74,7 +74,6 @@ isofs_find_entry(struct inode *dir, struct dentry *dentry, unsigned long *ino)
 	char c;
 
 	*ino = 0;
-	if (!dir) return NULL;
 	
 	if (!(block = dir->u.isofs_i.i_first_extent)) return NULL;
   

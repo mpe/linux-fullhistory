@@ -18,6 +18,7 @@
 #include <asm/checksum.h>
 #include <asm/hardirq.h>
 #include <asm/softirq.h>
+#include <asm/m68kserial.h>
 
 asmlinkage long long __ashrdi3 (long long, int);
 extern char m68k_debug_device[];
@@ -54,6 +55,8 @@ EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
 EXPORT_SYMBOL(kernel_set_cachemode);
 EXPORT_SYMBOL(kernel_thread);
+EXPORT_SYMBOL(register_serial);
+EXPORT_SYMBOL(unregister_serial);
 
 /* Networking helper routines. */
 EXPORT_SYMBOL(csum_partial_copy);
@@ -69,4 +72,5 @@ EXPORT_SYMBOL_NOVERS(memcmp);
 
 EXPORT_SYMBOL_NOVERS(__down_failed);
 EXPORT_SYMBOL_NOVERS(__down_failed_interruptible);
+EXPORT_SYMBOL_NOVERS(__down_failed_trylock);
 EXPORT_SYMBOL_NOVERS(__up_wakeup);

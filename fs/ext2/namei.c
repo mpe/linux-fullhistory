@@ -74,8 +74,6 @@ static struct buffer_head * ext2_find_entry (struct inode * dir,
 	int block, toread, i, err;
 
 	*res_dir = NULL;
-	if (!dir)
-		return NULL;
 	sb = dir->i_sb;
 
 	if (namelen > EXT2_NAME_LEN)

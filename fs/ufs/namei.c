@@ -91,8 +91,6 @@ static struct buffer_head * ufs_find_entry (struct inode * dir,
 	UFSD(("ENTER, dir_ino %lu, name %s, namlen %u\n", dir->i_ino, name, namelen))
 	
 	*res_dir = NULL;
-	if (!dir) 
-		return NULL;
 	
 	sb = dir->i_sb;
 	flags = sb->u.ufs_sb.s_flags;

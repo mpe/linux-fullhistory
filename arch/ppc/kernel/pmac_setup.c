@@ -75,7 +75,9 @@ extern int mackbd_translate(unsigned char scancode, unsigned char *keycode,
 extern char mackbd_unexpected_up(unsigned char keycode);
 extern void mackbd_leds(unsigned char leds);
 extern void mackbd_init_hw(void);
-extern unsigned char mackbd_sysrq_xlate[128];
+#ifdef CONFIG_MAGIC_SYSRQ
+unsigned char mackbd_sysrq_xlate[128];
+#endif /* CONFIG_MAGIC_SYSRQ */
 extern int pckbd_setkeycode(unsigned int scancode, unsigned int keycode);
 extern int pckbd_getkeycode(unsigned int scancode);
 extern int pckbd_translate(unsigned char scancode, unsigned char *keycode,
@@ -575,7 +577,7 @@ pmac_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.get_rtc_time   = pmac_get_rtc_time;
 	ppc_md.calibrate_decr = pmac_calibrate_decr;
 
-#ifdef CONFIG_VT
+#if defined(CONFIG_VT) && defined(CONFIG_MAC_KEYBOARD)
 	ppc_md.kbd_setkeycode    = mackbd_setkeycode;
 	ppc_md.kbd_getkeycode    = mackbd_getkeycode;
 	ppc_md.kbd_translate     = mackbd_translate;
@@ -584,7 +586,7 @@ pmac_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	ppc_md.kbd_init_hw       = mackbd_init_hw;
 #ifdef CONFIG_MAGIC_SYSRQ
 	ppc_md.kbd_sysrq_xlate	 = mackbd_sysrq_xlate;
-#endif	
+#endif
 #endif
 
 #if defined(CONFIG_BLK_DEV_IDE_PMAC)

@@ -103,7 +103,7 @@ int indirect_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
 }
 
 int indirect_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
-			     unsigned char offset, unsigned short val)
+			     unsigned char offset, unsigned int val)
 {
 	unsigned flags;
 

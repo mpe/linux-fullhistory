@@ -507,6 +507,7 @@ extern inline void SET_PAGE_DIR(struct task_struct * tsk, pgd_t * pgdir)
 	if (tsk == current) {
 		if (CPU_IS_040_OR_060)
 			__asm__ __volatile__ (".chip 68040\n\t"
+					      "pflushan\n\t"
 					      "movec %0,%%urp\n\t"
 					      ".chip 68k"
 					      : : "r" (tsk->tss.crp[1]));
@@ -514,10 +515,22 @@ extern inline void SET_PAGE_DIR(struct task_struct * tsk, pgd_t * pgdir)
 			unsigned long tmp;
 			__asm__ __volatile__ ("movec  %%cacr,%0\n\t"
 					      "orw #0x0808,%0\n\t"
-					      "movec %0,%%cacr\n\t"
-					      "pmove %1,%%crp\n\t"
-					      : "=d" (tmp)
-					      : "m" (tsk->tss.crp[0]));
+					      "movec %0,%%cacr"
+					      : "=d" (tmp));
+			/* For a 030-only kernel, avoid flushing the whole
+			   ATC, we only need to flush the user entries.
+			   The 68851 does this by itself.  Avoid a runtime
+			   check here.  */
+			__asm__ __volatile__ (
+#ifdef CPU_M68030_ONLY
+					      ".chip 68030\n\t"
+					      "pmovefd %0,%%crp\n\t"
+					      ".chip 68k\n\t"
+					      "pflush #0,#4"
+#else
+					      "pmove %0,%%crp"
+#endif
+					      : : "m" (tsk->tss.crp[0]));
 		}
 	}
 }

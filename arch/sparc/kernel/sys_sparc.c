@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.51 1999/03/20 22:02:00 davem Exp $
+/* $Id: sys_sparc.c,v 1.52 1999/05/08 08:09:48 anton Exp $
  * linux/arch/sparc/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -231,7 +231,7 @@ c_sys_nis_syscall (struct pt_regs *regs)
 	
 	if (count++ > 5) return -ENOSYS;
 	lock_kernel();
-	printk ("Unimplemented SPARC system call %d\n",(int)regs->u_regs[1]);
+	printk ("%s[%d]: Unimplemented SPARC system call %d\n", current->comm, current->pid, (int)regs->u_regs[1]);
 #ifdef DEBUG_UNIMP_SYSCALL	
 	show_regs (regs);
 #endif

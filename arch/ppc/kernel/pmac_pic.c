@@ -1,4 +1,4 @@
-#include <linux/config.h>
+
 #include <linux/stddef.h>
 #include <linux/init.h>
 #include <linux/sched.h>

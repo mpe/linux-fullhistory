@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.61 1999/04/28 19:44:31 davem Exp $
+/* $Id: ioctl32.c,v 1.62 1999/05/01 09:17:44 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
@@ -36,6 +36,7 @@
 #include <linux/vt_kern.h>
 #include <linux/fb.h>
 #include <linux/ext2_fs.h>
+#include <linux/videodev.h>
 
 #include <scsi/scsi.h>
 /* Ugly hack. */
@@ -118,6 +119,247 @@ static int do_ext2_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	return sys_ioctl(fd, cmd, arg);
 }
  
+struct video_tuner32 {
+	s32 tuner;
+	u8 name[32];
+	u32 rangelow, rangehigh;
+	u32 flags;
+	u16 mode, signal;
+};
+
+static int get_video_tuner32(struct video_tuner *kp, struct video_tuner32 *up)
+{
+	int i;
+
+	if(get_user(kp->tuner, &up->tuner))
+		return -EFAULT;
+	for(i = 0; i < 32; i++)
+		__get_user(kp->name[i], &up->name[i]);
+	__get_user(kp->rangelow, &up->rangelow);
+	__get_user(kp->rangehigh, &up->rangehigh);
+	__get_user(kp->flags, &up->flags);
+	__get_user(kp->mode, &up->mode);
+	__get_user(kp->signal, &up->signal);
+	return 0;
+}
+
+static int put_video_tuner32(struct video_tuner *kp, struct video_tuner32 *up)
+{
+	int i;
+
+	if(put_user(kp->tuner, &up->tuner))
+		return -EFAULT;
+	for(i = 0; i < 32; i++)
+		__put_user(kp->name[i], &up->name[i]);
+	__put_user(kp->rangelow, &up->rangelow);
+	__put_user(kp->rangehigh, &up->rangehigh);
+	__put_user(kp->flags, &up->flags);
+	__put_user(kp->mode, &up->mode);
+	__put_user(kp->signal, &up->signal);
+	return 0;
+}
+
+struct video_buffer32 {
+	/* void * */ u32 base;
+	s32 height, width, depth, bytesperline;
+};
+
+static int get_video_buffer32(struct video_buffer *kp, struct video_buffer32 *up)
+{
+	u32 tmp;
+
+	if(get_user(tmp, &up->base))
+		return -EFAULT;
+	kp->base = (void *) ((unsigned long)tmp);
+	__get_user(kp->height, &up->height);
+	__get_user(kp->width, &up->width);
+	__get_user(kp->depth, &up->depth);
+	__get_user(kp->bytesperline, &up->bytesperline);
+	return 0;
+}
+
+static int put_video_buffer32(struct video_buffer *kp, struct video_buffer32 *up)
+{
+	u32 tmp = (u32)((unsigned long)kp->base);
+
+	if(put_user(tmp, &up->base))
+		return -EFAULT;
+	__put_user(kp->height, &up->height);
+	__put_user(kp->width, &up->width);
+	__put_user(kp->depth, &up->depth);
+	__put_user(kp->bytesperline, &up->bytesperline);
+	return 0;
+}
+
+struct video_clip32 {
+	s32 x, y, width, height;
+	/* struct video_clip32 * */ u32 next;
+};
+
+struct video_window32 {
+	u32 x, y, width, height, chromakey, flags;
+	/* struct video_clip32 * */ u32 clips;
+	s32 clipcount;
+};
+
+static void free_kvideo_clips(struct video_window *kp)
+{
+	struct video_clip *cp;
+
+	cp = kp->clips;
+	if(cp != NULL)
+		kfree(cp);
+}
+
+static int get_video_window32(struct video_window *kp, struct video_window32 *up)
+{
+	struct video_clip32 *ucp;
+	struct video_clip *kcp;
+	int nclips, err, i;
+	u32 tmp;
+
+	if(get_user(kp->x, &up->x))
+		return -EFAULT;
+	__get_user(kp->y, &up->y);
+	__get_user(kp->width, &up->width);
+	__get_user(kp->height, &up->height);
+	__get_user(kp->chromakey, &up->chromakey);
+	__get_user(kp->flags, &up->flags);
+	__get_user(kp->clipcount, &up->clipcount);
+	__get_user(tmp, &up->clips);
+	ucp = (struct video_clip32 *)A(tmp);
+	kp->clips = NULL;
+
+	nclips = kp->clipcount;
+	if(nclips == 0)
+		return 0;
+
+	if(ucp == 0)
+		return -EINVAL;
+
+	/* Peculiar interface... */
+	if(nclips < 0)
+		nclips = VIDEO_CLIPMAP_SIZE;
+
+	kcp = kmalloc(nclips * sizeof(struct video_clip), GFP_KERNEL);
+	err = -ENOMEM;
+	if(kcp == NULL)
+		goto cleanup_and_err;
+
+	kp->clips = kcp;
+	for(i = 0; i < nclips; i++) {
+		__get_user(kcp[i].x, &ucp[i].x);
+		__get_user(kcp[i].y, &ucp[i].y);
+		__get_user(kcp[i].width, &ucp[i].width);
+		__get_user(kcp[i].height, &ucp[i].height);
+		kcp[nclips].next = NULL;
+	}
+
+	return 0;
+
+cleanup_and_err:
+	free_kvideo_clips(kp);
+	return err;
+}
+
+/* You get back everything except the clips... */
+static int put_video_window32(struct video_window *kp, struct video_window32 *up)
+{
+	if(put_user(kp->x, &up->x))
+		return -EFAULT;
+	__put_user(kp->y, &up->y);
+	__put_user(kp->width, &up->width);
+	__put_user(kp->height, &up->height);
+	__put_user(kp->chromakey, &up->chromakey);
+	__put_user(kp->flags, &up->flags);
+	__put_user(kp->clipcount, &up->clipcount);
+	return 0;
+}
+
+#define VIDIOCGTUNER32		_IOWR('v',4, struct video_tuner32)
+#define VIDIOCSTUNER32		_IOW('v',5, struct video_tuner32)
+#define VIDIOCGWIN32		_IOR('v',9, struct video_window32)
+#define VIDIOCSWIN32		_IOW('v',10, struct video_window32)
+#define VIDIOCGFBUF32		_IOR('v',11, struct video_buffer32)
+#define VIDIOCSFBUF32		_IOW('v',12, struct video_buffer32)
+#define VIDIOCGFREQ32		_IOR('v',14, u32)
+#define VIDIOCSFREQ32		_IOW('v',15, u32)
+
+static int do_video_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
+{
+	union {
+		struct video_tuner vt;
+		struct video_buffer vb;
+		struct video_window vw;
+		unsigned long vx;
+	} karg;
+	mm_segment_t old_fs = get_fs();
+	void *up = (void *)arg;
+	int err = 0;
+
+	/* First, convert the command. */
+	switch(cmd) {
+	case VIDIOCGTUNER32: cmd = VIDIOCGTUNER; break;
+	case VIDIOCSTUNER32: cmd = VIDIOCSTUNER; break;
+	case VIDIOCGWIN32: cmd = VIDIOCGWIN; break;
+	case VIDIOCSWIN32: cmd = VIDIOCSWIN; break;
+	case VIDIOCGFBUF32: cmd = VIDIOCGFBUF; break;
+	case VIDIOCSFBUF32: cmd = VIDIOCSFBUF; break;
+	case VIDIOCGFREQ32: cmd = VIDIOCGFREQ; break;
+	case VIDIOCSFREQ32: cmd = VIDIOCSFREQ; break;
+	};
+
+	switch(cmd) {
+	case VIDIOCSTUNER:
+	case VIDIOCGTUNER:
+		err = get_video_tuner32(&karg.vt, up);
+		break;
+
+	case VIDIOCSWIN:
+		err = get_video_window32(&karg.vw, up);
+		break;
+
+	case VIDIOCSFBUF:
+		err = get_video_buffer32(&karg.vb, up);
+		break;
+
+	case VIDIOCSFREQ:
+		err = get_user(karg.vx, (u32 *)up);
+		break;
+	};
+	if(err)
+		goto out;
+
+	set_fs(KERNEL_DS);
+	err = sys_ioctl(fd, cmd, (unsigned long)&karg);
+	set_fs(old_fs);
+
+	if(cmd == VIDIOCSWIN)
+		free_kvideo_clips(&karg.vw);
+
+	if(err == 0) {
+		switch(cmd) {
+		case VIDIOCGTUNER:
+			err = put_video_tuner32(&karg.vt, up);
+			break;
+
+		case VIDIOCGWIN:
+			err = put_video_window32(&karg.vw, up);
+			break;
+
+		case VIDIOCGFBUF:
+			err = put_video_buffer32(&karg.vb, up);
+			break;
+
+		case VIDIOCGFREQ:
+			err = put_user(((u32)karg.vx), (u32 *)up);
+			break;
+		};
+	}
+out:
+	return err;
+}
+
 struct timeval32 {
 	int tv_sec;
 	int tv_usec;
@@ -1601,6 +1843,17 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 		error = do_ext2_ioctl(fd, cmd, arg);
 		goto out;
 		
+	case VIDIOCGTUNER32:
+	case VIDIOCSTUNER32:
+	case VIDIOCGWIN32:
+	case VIDIOCSWIN32:
+	case VIDIOCGFBUF32:
+	case VIDIOCSFBUF32:
+	case VIDIOCGFREQ32:
+	case VIDIOCSFREQ32:
+		error = do_video_ioctl(fd, cmd, arg);
+		goto out;
+
 	/* List here exlicitly which ioctl's are known to have
 	 * compatable types passed or none at all...
 	 */
@@ -1793,6 +2046,33 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	/* Little v */
 	case VUIDSFORMAT:
 	case VUIDGFORMAT:
+
+	/* Little v, the video4linux ioctls */
+	case VIDIOCGCAP:
+	case VIDIOCGCHAN:
+	case VIDIOCSCHAN:
+	case VIDIOCGPICT:
+	case VIDIOCSPICT:
+	case VIDIOCCAPTURE:
+	case VIDIOCKEY:
+	case VIDIOCGAUDIO:
+	case VIDIOCSAUDIO:
+	case VIDIOCSYNC:
+	case VIDIOCMCAPTURE:
+	case VIDIOCGMBUF:
+	case VIDIOCGUNIT:
+	case VIDIOCGCAPTURE:
+	case VIDIOCSCAPTURE:
+
+	/* BTTV specific... */
+	case _IOW('v',  BASE_VIDIOCPRIVATE+0, char [256]):
+	case _IOR('v',  BASE_VIDIOCPRIVATE+1, char [256]):
+	case _IOR('v' , BASE_VIDIOCPRIVATE+2, unsigned int):
+	case _IOW('v' , BASE_VIDIOCPRIVATE+3, char [16]): /* struct bttv_pll_info */
+	case _IOR('v' , BASE_VIDIOCPRIVATE+4, int):
+	case _IOR('v' , BASE_VIDIOCPRIVATE+5, int):
+	case _IOR('v' , BASE_VIDIOCPRIVATE+6, int):
+	case _IOR('v' , BASE_VIDIOCPRIVATE+7, int):
 
 	/* Little p (/dev/rtc, /dev/envctrl, etc.) */
 	case RTCGET:

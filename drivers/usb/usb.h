@@ -194,6 +194,14 @@ struct usb_driver {
 
 /*
  * Pointer to a device endpoint interrupt function -greg
+ *   Parameters:
+ *     int status - This needs to be defined.  Right now each HCD
+ *         passes different transfer status bits back.  Don't use it
+ *         until we come up with a common meaning.
+ *     void *buffer - This is a pointer to the data used in this
+ *         USB transfer.
+ *     void *dev_id - This is a user defined pointer set when the IRQ
+ *         is requested that is passed back.
  */
 typedef int (*usb_device_irq)(int, void *, void *);
 

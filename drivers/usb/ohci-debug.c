@@ -14,40 +14,58 @@ void show_ohci_status(struct ohci *ohci)
 	struct ohci_regs regs;
 	int i;
 
-	regs.revision = readl(ohci->regs->revision);
-	regs.control = readl(ohci->regs->control);
-	regs.cmdstatus = readl(ohci->regs->cmdstatus);
-	regs.intrstatus = readl(ohci->regs->intrstatus);
-	regs.intrenable = readl(ohci->regs->intrenable);
-	regs.intrdisable = readl(ohci->regs->intrdisable);
-	regs.hcca = readl(ohci->regs->hcca);
-	regs.ed_periodcurrent = readl(ohci->regs->ed_periodcurrent);
-	regs.ed_controlhead = readl(ohci->regs->ed_controlhead);
-	regs.ed_bulkhead = readl(ohci->regs->ed_bulkhead);
-	regs.ed_bulkcurrent = readl(ohci->regs->ed_bulkcurrent);
-	regs.current_donehead = readl(ohci->regs->current_donehead);
-	regs.fminterval = readl(ohci->regs->fminterval);
-	regs.fmremaining = readl(ohci->regs->fmremaining);
-	regs.fmnumber = readl(ohci->regs->fmnumber);
-	regs.periodicstart = readl(ohci->regs->periodicstart);
-	regs.lsthresh = readl(ohci->regs->lsthresh);
-	regs.roothub.a = readl(ohci->regs->roothub.a);
-	regs.roothub.b = readl(ohci->regs->roothub.b);
-	regs.roothub.status = readl(ohci->regs->roothub.status);
+	regs.revision = readl(&ohci->regs->revision);
+	regs.control = readl(&ohci->regs->control);
+	regs.cmdstatus = readl(&ohci->regs->cmdstatus);
+	regs.intrstatus = readl(&ohci->regs->intrstatus);
+	regs.intrenable = readl(&ohci->regs->intrenable);
+	regs.hcca = readl(&ohci->regs->hcca);
+	regs.ed_periodcurrent = readl(&ohci->regs->ed_periodcurrent);
+	regs.ed_controlhead = readl(&ohci->regs->ed_controlhead);
+	regs.ed_controlcurrent = readl(&ohci->regs->ed_controlcurrent);
+	regs.ed_bulkhead = readl(&ohci->regs->ed_bulkhead);
+	regs.ed_bulkcurrent = readl(&ohci->regs->ed_bulkcurrent);
+	regs.current_donehead = readl(&ohci->regs->current_donehead);
+	regs.fminterval = readl(&ohci->regs->fminterval);
+	regs.fmremaining = readl(&ohci->regs->fmremaining);
+	regs.fmnumber = readl(&ohci->regs->fmnumber);
+	regs.periodicstart = readl(&ohci->regs->periodicstart);
+	regs.lsthresh = readl(&ohci->regs->lsthresh);
+	regs.roothub.a = readl(&ohci->regs->roothub.a);
+	regs.roothub.b = readl(&ohci->regs->roothub.b);
+	regs.roothub.status = readl(&ohci->regs->roothub.status);
 	for (i=0; i<MAX_ROOT_PORTS; ++i)
-		regs.roothub.portstatus[i] = readl(ohci->regs->roothub.portstatus[i]);
+		regs.roothub.portstatus[i] = readl(&ohci->regs->roothub.portstatus[i]);
 
-	printk("  ohci revision    =  0x%x\n", regs.revision);
-	printk("  ohci control     =  0x%x\n", regs.control);
-	printk("  ohci cmdstatus   =  0x%x\n", regs.cmdstatus);
-	printk("  ohci intrstatus  =  0x%x\n", regs.intrstatus);
-	printk("  ohci roothub.a   =  0x%x\n", regs.roothub.a);
-	printk("  ohci roothub.b   =  0x%x\n", regs.roothub.b);
-	printk("  ohci root status =  0x%x\n", regs.roothub.status);
+	printk(KERN_DEBUG "  ohci revision    =  %x\n", regs.revision);
+	printk(KERN_DEBUG "  ohci control     =  %x\n", regs.control);
+	printk(KERN_DEBUG "  ohci cmdstatus   =  %x\n", regs.cmdstatus);
+	printk(KERN_DEBUG "  ohci intrstatus  =  %x\n", regs.intrstatus);
+	printk(KERN_DEBUG "  ohci intrenable  =  %x\n", regs.intrenable);
+
+	printk(KERN_DEBUG "  ohci hcca        =  %x\n", regs.hcca);
+	printk(KERN_DEBUG "  ohci ed_pdcur    =  %x\n", regs.ed_periodcurrent);
+	printk(KERN_DEBUG "  ohci ed_ctrlhead =  %x\n", regs.ed_controlhead);
+	printk(KERN_DEBUG "  ohci ed_ctrlcur  =  %x\n", regs.ed_controlcurrent);
+	printk(KERN_DEBUG "  ohci ed_bulkhead =  %x\n", regs.ed_bulkhead);
+	printk(KERN_DEBUG "  ohci ed_bulkcur  =  %x\n", regs.ed_bulkcurrent);
+	printk(KERN_DEBUG "  ohci curdonehead =  %x\n", regs.current_donehead);
+
+	printk(KERN_DEBUG "  ohci fminterval  =  %x\n", regs.fminterval);
+	printk(KERN_DEBUG "  ohci fmremaining =  %x\n", regs.fmremaining);
+	printk(KERN_DEBUG "  ohci fmnumber    =  %x\n", regs.fmnumber);
+	printk(KERN_DEBUG "  ohci pdstart     =  %x\n", regs.periodicstart);
+	printk(KERN_DEBUG "  ohci lsthresh    =  %x\n", regs.lsthresh);
+
+	printk(KERN_DEBUG "  ohci roothub.a   =  %x\n", regs.roothub.a);
+	printk(KERN_DEBUG "  ohci roothub.b   =  %x\n", regs.roothub.b);
+	printk(KERN_DEBUG "  ohci root status =  %x\n", regs.roothub.status);
+	printk(KERN_DEBUG "    roothub.port0  =  %x\n", regs.roothub.portstatus[0]);
+	printk(KERN_DEBUG "    roothub.port1  =  %x\n", regs.roothub.portstatus[1]);
 } /* show_ohci_status() */
 
 
-static void show_ohci_ed(struct ohci_ed *ed)
+void show_ohci_ed(struct ohci_ed *ed)
 {
 	int stat = ed->status;
 	int skip = (stat & OHCI_ED_SKIP);
@@ -57,82 +75,103 @@ static void show_ohci_ed(struct ohci_ed *ed)
 	int dir = (stat & OHCI_ED_D);
 	int endnum = (stat & OHCI_ED_EN) >> 7;
 	int funcaddr = (stat & OHCI_ED_FA);
-	int halted = (ed->head_td & 1);
-	int toggle = (ed->head_td & 2) >> 1;
+	int halted = (ed->_head_td & 1);
+	int toggle = (ed->_head_td & 2) >> 1;
 
-	printk("   ohci ED:\n");
-	printk("     status     =  0x%x\n", stat);
-	printk("       %sMPS %d%s%s%s%s tc%d e%d fa%d\n",
+	printk(KERN_DEBUG "   ohci ED:\n");
+	printk(KERN_DEBUG "     status     =  0x%x\n", stat);
+	printk(KERN_DEBUG "       %sMPS %d%s%s%s%s tc%d e%d fa%d\n",
 			skip ? "Skip " : "",
 			mps,
 			isoc ? "Isoc. " : "",
-			low_speed ? "LowSpd " : "",
-			(dir == OHCI_ED_D_IN) ? "Input " :
-			(dir == OHCI_ED_D_OUT) ? "Output " : "",
-			halted ? "Halted " : "",
+			low_speed ? " LowSpd" : "",
+			(dir == OHCI_ED_D_IN) ? " Input" :
+			(dir == OHCI_ED_D_OUT) ? " Output" : "",
+			halted ? " Halted" : "",
 			toggle,
 			endnum,
 			funcaddr);
-	printk("     tail_td    =  0x%x\n", ed->tail_td);
-	printk("     head_td    =  0x%x\n", ed->head_td);
-	printk("     next_ed    =  0x%x\n", ed->next_ed);
+	printk(KERN_DEBUG "     tail_td    =  0x%x\n", ed->tail_td);
+	printk(KERN_DEBUG "     head_td    =  0x%x\n", ed_head_td(ed));
+	printk(KERN_DEBUG "     next_ed    =  0x%x\n", ed->next_ed);
 } /* show_ohci_ed() */
 
 
-static void show_ohci_td(struct ohci_td *td)
+void show_ohci_td(struct ohci_td *td)
 {
 	int td_round = td->info & OHCI_TD_ROUND;
 	int td_dir = td->info & OHCI_TD_D;
-	int td_int_delay = td->info & OHCI_TD_IOC_DELAY;
-	int td_toggle = td->info & OHCI_TD_DT;
-	int td_errcnt = td_errorcount(td->info);
-	int td_cc = td->info & OHCI_TD_CC;
+	int td_int_delay = (td->info & OHCI_TD_IOC_DELAY) >> 21;
+	int td_toggle = (td->info & OHCI_TD_DT) >> 24;
+	int td_errcnt = td_errorcount(*td);
+	int td_cc = OHCI_TD_CC_GET(td->info);
 
-	printk("   ohci TD hardware fields:\n");
-	printk("      info     =  0x%x\n", td->info);
-	printk("        %s%s%s%d%s%s%d%s%d\n",
+	printk(KERN_DEBUG "   ohci TD hardware fields:\n");
+	printk(KERN_DEBUG "      info     =  0x%x\n", td->info);
+	printk(KERN_DEBUG "        %s%s%s%d %s\n",
 		td_round ? "Rounding " : "",
 		(td_dir == OHCI_TD_D_IN) ? "Input " :
 		(td_dir == OHCI_TD_D_OUT) ? "Output " :
 		(td_dir == OHCI_TD_D_SETUP) ? "Setup " : "",
-		"IntDelay ", td_int_delay >> 21,
-		td_toggle ? "Data1 " : "Data0 ",
+		"IntDelay ", td_int_delay,
+		(td_toggle < 2) ? " " :
+		(td_toggle & 1) ? "Data1 " : "Data0 ");
+	printk(KERN_DEBUG "        %s%d %s0x%x, %sAccessed, %sActive\n",
 		"ErrorCnt ", td_errcnt,
-		"ComplCode ", td_cc);
-	printk("       %sAccessed, %sActive\n",
-			td_cc_accessed(td->info) ? "" : "Not ",
-			td_active(td->info) ? "" : "Not ");
+		"ComplCode ", td_cc,
+		td_cc_accessed(*td) ? "" : "Not ",
+		td_active(*td) ? "" : "Not ");
 
-	printk("      cur_buf  =  0x%x\n", td->cur_buf);
-	printk("      next_td  =  0x%x\n", td->next_td);
-	printk("      buf_end  =  0x%x\n", td->buf_end);
-	printk("   ohci TD driver fields:\n");
-	printk("      data     =  %p\n", td->data);
-	printk("      dev_id   =  %p\n", td->dev_id);
-	printk("      ed_bus   =  %x\n", td->ed_bus);
+	printk(KERN_DEBUG "      cur_buf  =  0x%x\n", td->cur_buf);
+	printk(KERN_DEBUG "      next_td  =  0x%x\n", td->next_td);
+	printk(KERN_DEBUG "      buf_end  =  0x%x\n", td->buf_end);
+	printk(KERN_DEBUG "   ohci TD driver fields:\n");
+	printk(KERN_DEBUG "      data     =  %p\n", td->data);
+	printk(KERN_DEBUG "      dev_id   =  %p\n", td->dev_id);
+	printk(KERN_DEBUG "      ed       =  %p\n", td->ed);
+	if (td->data != NULL) {
+	unsigned char *d = td->data;
+	printk(KERN_DEBUG "   DATA: %02x %02x %02x %02x %02x %02x %02x %02x\n",
+			d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7] );
+	}
 } /* show_ohci_td() */
 
 
 void show_ohci_device(struct ohci_device *dev)
 {
 	int idx;
-	printk("  ohci_device usb       =  %p\n", dev->usb);
-	printk("  ohci_device ohci      =  %p\n", dev->ohci);
-	printk("  ohci_device ohci_hcca =  %p\n", dev->hcca);
-	for (idx=0; idx<8 /*NUM_EDS*/; ++idx) {
-		printk("   [ed num %d] ", idx);
+	printk(KERN_DEBUG "  ohci_device usb       =  %p\n", dev->usb);
+	printk(KERN_DEBUG "  ohci_device ohci      =  %p\n", dev->ohci);
+	printk(KERN_DEBUG "  ohci_device ohci_hcca =  %p\n", dev->hcca);
+	for (idx=0; idx<3 /*NUM_EDS*/; ++idx) {
+		printk(KERN_DEBUG "   [ed num %d] ", idx);
 		show_ohci_ed(&dev->ed[idx]);
 	}
-	for (idx=0; idx<8 /*NUM_TDS*/; ++idx) {
-		printk("   [td num %d] ", idx);
+	for (idx=0; idx<3 /*NUM_TDS*/; ++idx) {
+		printk(KERN_DEBUG "   [td num %d] ", idx);
 		show_ohci_td(&dev->td[idx]);
 	}
-	printk("  ohci_device data\n    ");
+	printk(KERN_DEBUG "  ohci_device data\n    ");
 	for (idx=0; idx<4; ++idx) {
-		printk(" %08lx", dev->data[idx]);
+		printk(KERN_DEBUG " %08lx", dev->data[idx]);
 	}
-	printk("\n");
+	printk(KERN_DEBUG "\n");
 } /* show_ohci_device() */
+
+
+void show_ohci_hcca(struct ohci_hcca *hcca)
+{
+	int idx;
+
+	printk(KERN_DEBUG "  ohci_hcca\n");
+
+	for (idx=0; idx<NUM_INTS; idx++) {
+		printk(KERN_DEBUG "    int_table[%2d]  == %p\n", idx, hcca->int_table +idx);
+	}
+
+	printk(KERN_DEBUG "    frame_no          == %d\n", hcca->frame_no);
+	printk(KERN_DEBUG "    donehead          == 0x%08x\n", hcca->donehead);
+} /* show_ohci_hcca() */
 
 
 /* vim:sw=8

@@ -97,7 +97,7 @@ __initfunc(void smp_store_cpu_info(int id))
 	cpu_data[id].pte_cache			= NULL;
 	cpu_data[id].pgdcache_size		= 0;
 	cpu_data[id].pgd_cache			= NULL;
-	cpu_data[id].idle_volume		= 0;
+	cpu_data[id].idle_volume		= 1;
 
 	for(i = 0; i < 16; i++)
 		cpu_data[id].irq_worklists[i] = 0;
@@ -196,6 +196,7 @@ __initfunc(void smp_boot_cpus(void))
 	__sti();
 	smp_store_cpu_info(boot_cpu_id);
 	smp_tune_scheduling();
+	init_idle();
 
 	if(linux_num_cpus == 1)
 		return;
@@ -217,6 +218,7 @@ __initfunc(void smp_boot_cpus(void))
 			kernel_thread(start_secondary, NULL, CLONE_PID);
 			p = task[++cpucount];
 			p->processor = i;
+			p->has_cpu = 1; /* we schedule the first task manually */
 			callin_flag = 0;
 			for (no = 0; no < linux_num_cpus; no++)
 				if (linux_cpus[no].mid == i)
@@ -460,8 +462,6 @@ void smp_flush_tlb_page(struct mm_struct *mm, unsigned long page)
 			mm->cpu_vm_mask = (1UL << smp_processor_id());
 		goto local_flush_and_out;
 	} else {
-		spin_lock(&scheduler_lock);
-
 		/* Try to handle two special cases to avoid cross calls
 		 * in common scenerios where we are swapping process
 		 * pages out.
@@ -471,16 +471,12 @@ void smp_flush_tlb_page(struct mm_struct *mm, unsigned long page)
 			/* A dead context cannot ever become "alive" until
 			 * a task switch is done to it.
 			 */
-			spin_unlock(&scheduler_lock);
 			return; /* It's dead, nothing to do. */
 		}
 		if(mm->cpu_vm_mask == (1UL << smp_processor_id())) {
-			spin_unlock(&scheduler_lock);
 			__flush_tlb_page(ctx, page, SECONDARY_CONTEXT);
 			return; /* Only local flush is necessary. */
 		}
-
-		spin_unlock(&scheduler_lock);
 	}
 	smp_cross_call(&xcall_flush_tlb_page, ctx, page, 0);
 

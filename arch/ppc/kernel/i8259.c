@@ -10,6 +10,40 @@ unsigned char cached_8259[2] = { 0xff, 0xff };
 #define cached_A1 (cached_8259[0])
 #define cached_21 (cached_8259[1])
 
+int i8259_irq(int cpu)
+{
+	int irq;
+	
+        /*
+         * Perform an interrupt acknowledge cycle on controller 1
+         */                                                             
+        outb(0x0C, 0x20);
+        irq = inb(0x20) & 7;                                   
+        if (irq == 2)                                                     
+        {                                                                   
+                /*                                     
+                 * Interrupt is cascaded so perform interrupt
+                 * acknowledge on controller 2
+                 */
+                outb(0x0C, 0xA0);                      
+                irq = (inb(0xA0) & 7) + 8;
+        }
+        else if (irq==7)                                
+        {
+                /*                               
+                 * This may be a spurious interrupt
+                 *                         
+                 * Read the interrupt status register. If the most
+                 * significant bit is not set then there is no valid
+		 * interrupt
+		 */
+		outb(0x0b, 0x20);
+		if(~inb(0x20)&0x80)
+			return -1;
+	}
+	return irq;
+}
+
 static void i8259_mask_and_ack_irq(unsigned int irq_nr)
 {
         if ( irq_nr >= i8259_pic.irq_offset )

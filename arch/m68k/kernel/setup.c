@@ -77,9 +77,25 @@ int (*mach_hwclk) (int, struct hwclk_time*) = NULL;
 int (*mach_set_clock_mmss) (unsigned long) = NULL;
 void (*mach_reset)( void );
 long mach_max_dma_address = 0x00ffffff; /* default set to the lower 16MB */
-#if defined(CONFIG_AMIGA_FLOPPY) || defined(CONFIG_ATARI_FLOPPY)
+#if defined(CONFIG_AMIGA_FLOPPY) || defined(CONFIG_ATARI_FLOPPY) || defined(CONFIG_BLK_DEV_FD)
 void (*mach_floppy_setup) (char *, int *) __initdata = NULL;
 void (*mach_floppy_eject) (void) = NULL;
+#endif
+struct serial_struct;
+#ifdef CONFIG_SERIAL
+long serial_rs_init(void);
+int serial_register_serial(struct serial_struct *);
+void serial_unregister_serial(int);
+long ser_console_init(long, long );
+#endif
+#if defined(CONFIG_USERIAL)||defined(CONFIG_BVME6000_SCC)||defined(CONFIG_MVME162_SCC)||defined(CONFIG_HPDCA)||defined(CONFIG_WHIPPET_SERIAL)||defined(CONFIG_MULTIFACE_III_TTY)||defined(CONFIG_GVPIOEXT)||defined(CONFIG_AMIGA_BUILTIN_SERIAL)||defined(CONFIG_MAC_SCC)||defined(CONFIG_ATARI_MIDI)||defined(CONFIG_ATARI_SCC)||defined(CONFIG_ATARI_MFPSER)
+#define M68K_SERIAL
+#endif
+#ifdef M68K_SERIAL
+long m68k_rs_init(void);
+int m68k_register_serial(struct serial_struct *);
+void m68k_unregister_serial(int);
+long m68k_serial_console_init(long, long );
 #endif
 #ifdef CONFIG_HEARTBEAT
 void (*mach_heartbeat) (int) = NULL;
@@ -97,15 +113,19 @@ char *mach_sysrq_xlate = NULL;
 extern int amiga_parse_bootinfo(const struct bi_record *);
 extern int atari_parse_bootinfo(const struct bi_record *);
 extern int mac_parse_bootinfo(const struct bi_record *);
+extern int q40_parse_bootinfo(const struct bi_record *);
 
 extern void config_amiga(void);
 extern void config_atari(void);
 extern void config_mac(void);
 extern void config_sun3(void);
 extern void config_apollo(void);
+extern void config_mvme147(void);
 extern void config_mvme16x(void);
 extern void config_bvme6000(void);
 extern void config_hp300(void);
+extern void config_q40(void);
+extern void config_sun3x(void);
 
 #define MASK_256K 0xfffc0000
 
@@ -149,6 +169,8 @@ __initfunc(static void m68k_parse_bootinfo(const struct bi_record *record))
 		    unknown = atari_parse_bootinfo(record);
 		else if (MACH_IS_MAC)
 		    unknown = mac_parse_bootinfo(record);
+		else if (MACH_IS_Q40)
+		    unknown = q40_parse_bootinfo(record);
 		else
 		    unknown = 1;
 	}
@@ -258,6 +280,11 @@ __initfunc(void setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 	    	config_apollo();
 	    	break;
 #endif
+#ifdef CONFIG_MVME147
+	    case MACH_MVME147:
+	    	config_mvme147();
+	    	break;
+#endif
 #ifdef CONFIG_MVME16x
 	    case MACH_MVME16x:
 	    	config_mvme16x();
@@ -271,6 +298,16 @@ __initfunc(void setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 #ifdef CONFIG_HP300
 	    case MACH_HP300:
 		config_hp300();
+		break;
+#endif
+#ifdef CONFIG_Q40
+	    case MACH_Q40:
+	        config_q40();
+		break;
+#endif
+#ifdef CONFIG_SUN3X
+	    case MACH_SUN3X:
+		config_sun3x();
 		break;
 #endif
 	    default:
@@ -384,7 +421,52 @@ int get_hardware_list(char *buffer)
     return(len);
 }
 
-#if defined(CONFIG_AMIGA_FLOPPY) || defined(CONFIG_ATARI_FLOPPY)
+#if defined(CONFIG_SERIAL) || defined(M68K_SERIAL)
+int rs_init(void)
+{
+#ifdef CONFIG_SERIAL
+  if (MACH_IS_Q40)
+    return serial_rs_init();
+#endif
+#ifdef M68K_SERIAL  
+    return m68k_rs_init();
+#endif
+}
+int register_serial(struct serial_struct *p)
+{
+#ifdef CONFIG_SERIAL
+  if (MACH_IS_Q40)
+    return serial_register_serial(p);
+#endif
+#ifdef M68K_SERIAL
+  return m68k_register_serial(p);
+#endif
+}
+void unregister_serial(int i)
+{
+#ifdef CONFIG_SERIAL
+  if (MACH_IS_Q40)
+    serial_unregister_serial(i);
+#endif
+#ifdef M68K_SERIAL
+  m68k_unregister_serial(i);
+#endif
+}
+#ifdef CONFIG_SERIAL_CONSOLE
+long serial_console_init(long kmem_start, long kmem_end)
+{
+#ifdef CONFIG_SERIAL
+  if (MACH_IS_Q40)
+    return ser_console_init(kmem_start, kmem_end);
+#endif
+#if defined(M68K_SERIAL) && defined(CONFIG_SERIAL_CONSOLE)
+  return m68k_serial_console_init(kmem_start, kmem_end);
+#endif
+}
+#endif
+#endif
+
+#if defined(CONFIG_AMIGA_FLOPPY) || defined(CONFIG_ATARI_FLOPPY) || defined(CONFIG_BLK_DEV_FD)
 __initfunc(void floppy_setup(char *str, int *ints))
 {
 	if (mach_floppy_setup)
@@ -399,7 +481,7 @@ void floppy_eject(void)
 #endif
 
 /* for "kbd-reset" cmdline param */
-void __init kbd_reset_setup(char *str, int *ints)
+__initfunc(void kbd_reset_setup(char *str, int *ints))
 {
 }
 

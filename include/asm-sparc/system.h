@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.73 1999/04/20 13:22:49 anton Exp $ */
+/* $Id: system.h,v 1.74 1999/05/08 03:03:14 davem Exp $ */
 #include <linux/config.h>
 
 #ifndef __SPARC_SYSTEM_H
@@ -84,8 +84,15 @@ extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 #define SWITCH_DO_LAZY_FPU if(last_task_used_math != next) next->tss.kregs->psr&=~PSR_EF;
 #endif
 
-	/* Much care has gone into this code, do not touch it. */
-#define switch_to(prev, next) do {							\
+	/* Much care has gone into this code, do not touch it.
+	 *
+	 * We need to loadup regs l0/l1 for the newly forked child
+	 * case because the trap return path relies on those registers
+	 * holding certain values, gcc is told that they are clobbered.
+	 * Gcc needs registers for 3 values in and 1 value out, so we
+	 * clobber every non-fixed-usage register besides l2/l3/o4/o5.  -DaveM
+	 */
+#define switch_to(prev, next, last) do {						\
 	__label__ here;									\
 	register unsigned long task_pc asm("o7");					\
 	extern struct task_struct *current_set[NR_CPUS];				\
@@ -103,21 +110,22 @@ extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 	next->mm->cpu_vm_mask |= (1 << smp_processor_id());				\
 	task_pc = ((unsigned long) &&here) - 0x8;					\
 	__asm__ __volatile__(								\
+	"mov	%%g6, %%g3\n\t"								\
 	"rd	%%psr, %%g4\n\t"							\
-	"std	%%sp, [%%g6 + %3]\n\t"							\
+	"std	%%sp, [%%g6 + %4]\n\t"							\
 	"rd	%%wim, %%g5\n\t"							\
 	"wr	%%g4, 0x20, %%psr\n\t"							\
 	"nop\n\t"									\
-	"std	%%g4, [%%g6 + %2]\n\t"							\
-	"ldd	[%1 + %2], %%g4\n\t"							\
-	"mov	%1, %%g6\n\t"								\
+	"std	%%g4, [%%g6 + %3]\n\t"							\
+	"ldd	[%2 + %3], %%g4\n\t"							\
+	"mov	%2, %%g6\n\t"								\
 	".globl	patchme_store_new_current\n"						\
 "patchme_store_new_current:\n\t"							\
-	"st	%1, [%0]\n\t"								\
+	"st	%2, [%1]\n\t"								\
 	"wr	%%g4, 0x20, %%psr\n\t"							\
 	"nop\n\t"									\
 	"nop\n\t"									\
-	"ldd	[%%g6 + %3], %%sp\n\t"							\
+	"ldd	[%%g6 + %4], %%sp\n\t"							\
 	"wr	%%g5, 0x0, %%wim\n\t"							\
 	"ldd	[%%sp + 0x00], %%l0\n\t"						\
 	"ldd	[%%sp + 0x38], %%i6\n\t"						\
@@ -125,11 +133,13 @@ extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 	"nop\n\t"									\
 	"nop\n\t"									\
 	"jmpl	%%o7 + 0x8, %%g0\n\t"							\
-	" nop\n\t" : : "r" (&(current_set[hard_smp_processor_id()])), "r" (next),	\
+	" mov	%%g3, %0\n\t"								\
+        : "=&r" (last)									\
+        : "r" (&(current_set[hard_smp_processor_id()])), "r" (next),			\
 	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.kpsr)),		\
 	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.ksp)),		\
 	  "r" (task_pc)									\
-	: "g1", "g2", "g3", "g4", "g5", "g7", "l2", "l3",				\
+	: "g1", "g2", "g3", "g4", "g5", "g7", "l0", "l1",				\
 	"l4", "l5", "l6", "l7", "i0", "i1", "i2", "i3", "i4", "i5", "o0", "o1", "o2",	\
 	"o3");										\
 here:  } while(0)

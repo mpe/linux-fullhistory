@@ -937,7 +937,7 @@ static unsigned long filemap_nopage(struct vm_area_struct * area, unsigned long 
 	unsigned long old_page, new_page;
 
 	new_page = 0;
-	offset = (address - area->vm_start + area->vm_offset) & PAGE_MASK;
+	offset = (address & PAGE_MASK) - area->vm_start + area->vm_offset;
 	if (offset >= inode->i_size && (area->vm_flags & VM_SHARED) && area->vm_mm == current->mm)
 		goto no_page;
 

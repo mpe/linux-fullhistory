@@ -169,15 +169,7 @@ asmlinkage int m68k_fork(struct pt_regs *regs)
 
 asmlinkage int m68k_vfork(struct pt_regs *regs)
 {
-	int     child;
-	struct semaphore sem = MUTEX_LOCKED;
-
-	child = do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, rdusp(), regs);
-
-	if (child > 0)
-		down(&sem);
-
-	return child;
+	return do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, rdusp(), regs);
 }
 
 asmlinkage int m68k_clone(struct pt_regs *regs)
@@ -190,7 +182,7 @@ asmlinkage int m68k_clone(struct pt_regs *regs)
 	newsp = regs->d2;
 	if (!newsp)
 		newsp = rdusp();
-	return do_fork(clone_flags & ~CLONE_VFORK, newsp, regs);
+	return do_fork(clone_flags, newsp, regs);
 }
 
 int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,

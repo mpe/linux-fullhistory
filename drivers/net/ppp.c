@@ -4,7 +4,7 @@
  *  Al Longyear <longyear@netcom.com>
  *  Extensively rewritten by Paul Mackerras <paulus@cs.anu.edu.au>
  *
- *  ==FILEVERSION 990331==
+ *  ==FILEVERSION 990510==
  *
  *  NOTE TO MAINTAINERS:
  *     If you modify this file at all, please set the number above to the
@@ -90,9 +90,6 @@
 #include <linux/kmod.h>
 #endif
 
-typedef ssize_t		rw_ret_t;
-typedef size_t		rw_count_t;
-
 /*
  * Local functions
  */
@@ -109,6 +106,7 @@ static int ppp_tty_push(struct ppp *ppp);
 static int ppp_async_encode(struct ppp *ppp);
 static int ppp_async_send(struct ppp *, struct sk_buff *);
 static int ppp_sync_send(struct ppp *, struct sk_buff *);
+static void ppp_tty_flush_output(struct ppp *);
 
 static int ppp_ioctl(struct ppp *, unsigned int, unsigned long);
 static int ppp_set_compression (struct ppp *ppp, struct ppp_option_data *odp);
@@ -191,10 +189,10 @@ EXPORT_SYMBOL(ppp_unregister_compressor);
  * TTY callbacks
  */
 
-static rw_ret_t ppp_tty_read(struct tty_struct *, struct file *, __u8 *,
-			     rw_count_t);
-static rw_ret_t ppp_tty_write(struct tty_struct *, struct file *, const __u8 *,
-			      rw_count_t);
+static ssize_t ppp_tty_read(struct tty_struct *, struct file *, __u8 *,
+			    size_t);
+static ssize_t ppp_tty_write(struct tty_struct *, struct file *, const __u8 *,
+			     size_t);
 static int ppp_tty_ioctl(struct tty_struct *, struct file *, unsigned int,
 			 unsigned long);
 static unsigned int ppp_tty_poll(struct tty_struct *tty, struct file *filp,
@@ -446,6 +444,7 @@ ppp_tty_close (struct tty_struct *tty)
 		ppp->tty = ppp->backup_tty;
 		if (ppp_tty_push(ppp))
 			ppp_output_wakeup(ppp);
+		wake_up_interruptible(&ppp->read_wait);
 	} else {
 		ppp->tty = 0;
 		ppp->sc_xfer = 0;
@@ -463,13 +462,13 @@ ppp_tty_close (struct tty_struct *tty)
  * Read a PPP frame from the rcv_q list,
  * waiting if necessary
  */
-static rw_ret_t
+static ssize_t
 ppp_tty_read(struct tty_struct *tty, struct file *file, __u8 * buf,
-	     rw_count_t nr)
+	     size_t nr)
 {
 	struct ppp *ppp = tty2ppp (tty);
 	struct sk_buff *skb;
-	rw_ret_t len, err;
+	ssize_t len, err;
 
 	/*
 	 * Validate the pointers
@@ -551,9 +550,9 @@ out:
  * Writing to a tty in ppp line discipline sends a PPP frame.
  * Used by pppd to send control packets (LCP, etc.).
  */
-static rw_ret_t
+static ssize_t
 ppp_tty_write(struct tty_struct *tty, struct file *file, const __u8 * data,
-	      rw_count_t count)
+	      size_t count)
 {
 	struct ppp *ppp = tty2ppp (tty);
 	__u8 *new_data;
@@ -605,7 +604,7 @@ ppp_tty_write(struct tty_struct *tty, struct file *file, const __u8 * data,
 	 */
 	ppp_send_ctrl(ppp, skb);
 
-	return (rw_ret_t) count;
+	return (ssize_t) count;
 }
 
 /*
@@ -721,6 +720,21 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
 		/*
 		 * Allow users to read, but not set, the serial port parameters
 		 */
+		error = n_tty_ioctl (tty, file, param2, param3);
+		break;
+
+	case TCFLSH:
+		/*
+		 * Flush our buffers, then call the generic code to
+		 * flush the serial port's buffer.
+		 */
+		if (param3 == TCIFLUSH || param3 == TCIOFLUSH) {
+			struct sk_buff *skb;
+			while ((skb = skb_dequeue(&ppp->rcv_q)) != NULL)
+				kfree_skb(skb);
+		}
+		if (param3 == TCIOFLUSH || param3 == TCOFLUSH)
+			ppp_tty_flush_output(ppp);
 		error = n_tty_ioctl (tty, file, param2, param3);
 		break;
 
@@ -882,7 +896,7 @@ ppp_tty_sync_push(struct ppp *ppp)
 	save_flags(flags);
 	cli();
 	if (ppp->tty_pushing) {
-		/* record wakeup attempt so we don't loose */
+		/* record wakeup attempt so we don't lose */
 		/* a wakeup call while doing push processing */
 		ppp->woke_up=1;
 		restore_flags(flags);
@@ -965,16 +979,20 @@ ppp_tty_push(struct ppp *ppp)
 	int avail, sent, done = 0;
 	struct tty_struct *tty = ppp2tty(ppp);
 	
-	if ( ppp->flags & SC_SYNC ) 
+	if (ppp->flags & SC_SYNC) 
 		return ppp_tty_sync_push(ppp);
 
 	CHECK_PPP(0);
-	if (ppp->tty_pushing)
+	if (ppp->tty_pushing) {
+		ppp->woke_up = 1;
 		return 0;
+	}
 	if (tty == NULL || tty->disc_data != (void *) ppp)
 		goto flush;
 	while (ppp->optr < ppp->olim || ppp->tpkt != 0) {
 		ppp->tty_pushing = 1;
+		mb();
+		ppp->woke_up = 0;
 		avail = ppp->olim - ppp->optr;
 		if (avail > 0) {
 			tty->flags |= (1 << TTY_DO_WRITE_WAKEUP);
@@ -984,18 +1002,24 @@ ppp_tty_push(struct ppp *ppp)
 			ppp->stats.ppp_obytes += sent;
 			ppp->optr += sent;
 			if (sent < avail) {
+				wmb();
 				ppp->tty_pushing = 0;
+				mb();
+				if (ppp->woke_up)
+					continue;
 				return done;
 			}
 		}
 		if (ppp->tpkt != 0)
 			done = ppp_async_encode(ppp);
+		wmb();
 		ppp->tty_pushing = 0;
 	}
 	return done;
 
 flush:
 	ppp->tty_pushing = 1;
+	mb();
 	ppp->stats.ppp_oerrors++;
 	if (ppp->tpkt != 0) {
 		kfree_skb(ppp->tpkt);
@@ -1003,6 +1027,7 @@ flush:
 		done = 1;
 	}
 	ppp->optr = ppp->olim;
+	wmb();
 	ppp->tty_pushing = 0;
 	return done;
 }
@@ -1114,6 +1139,32 @@ ppp_async_encode(struct ppp *ppp)
 	ppp->tpkt_pos = i;
 	ppp->tfcs = fcs;
 	return 0;
+}
+
+/*
+ * Flush output from our internal buffers.
+ * Called for the TCFLSH ioctl.
+ */
+static void
+ppp_tty_flush_output(struct ppp *ppp)
+{
+	struct sk_buff *skb;
+	int done = 0;
+
+	while ((skb = skb_dequeue(&ppp->xmt_q)) != NULL)
+		kfree_skb(skb);
+	ppp->tty_pushing = 1;
+	mb();
+	ppp->optr = ppp->olim;
+	if (ppp->tpkt != NULL) {
+		kfree_skb(ppp->tpkt);
+		ppp->tpkt = 0;
+		done = 1;
+	}
+	wmb();
+	ppp->tty_pushing = 0;
+	if (done)
+		ppp_output_wakeup(ppp);
 }
 
 /*

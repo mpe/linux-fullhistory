@@ -67,8 +67,6 @@ static struct buffer_head * sysv_find_entry(struct inode * dir,
 	struct buffer_head * bh;
 
 	*res_dir = NULL;
-	if (!dir)
-		return NULL;
 	sb = dir->i_sb;
 	if (namelen > SYSV_NAMELEN) {
 		if (sb->sv_truncate)

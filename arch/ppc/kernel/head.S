@@ -1,7 +1,7 @@
 /*
  *  arch/ppc/kernel/head.S
  *
- *  $Id: head.S,v 1.127 1999/04/07 07:26:55 paulus Exp $
+ *  $Id: head.S,v 1.130 1999/05/09 19:16:43 cort Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -2045,8 +2045,9 @@ _GLOBAL(_switch)
 	stw	r0,GPR0(r1)
 	lwz	r0,0(r1)
 	stw	r0,GPR1(r1)
-	SAVE_10GPRS(2, r1)
-	SAVE_10GPRS(12, r1)
+	/* r3-r13 are caller saved -- Cort */
+	SAVE_GPR(2, r1)
+	SAVE_8GPRS(14, r1)
 	SAVE_10GPRS(22, r1)
 	mflr	r20		/* Return to switch caller */
 	mfmsr	r22
@@ -2069,6 +2070,8 @@ _GLOBAL(_switch)
 	mtspr	SPRG3,r0	/* Update current TSS phys addr */
 	SYNC
 	lwz	r1,KSP(r4)	/* Load new stack pointer */
+	/* save the old current 'last' for return value */
+	mr	r3,r2
 	addi	r2,r4,-TSS	/* Update current */
 #ifndef CONFIG_8xx
 	/* Set up segment registers for new task */
@@ -2076,39 +2079,62 @@ _GLOBAL(_switch)
 	addis	r5,r5,0x6000	/* Set Ks, Ku bits */
 	li	r0,12		/* TASK_SIZE / SEGMENT_SIZE */
 	mtctr	r0
-	li	r3,0
-3:	mtsrin	r5,r3
+	li	r9,0
+3:	mtsrin	r5,r9
 	addi	r5,r5,1		/* next VSID */
-	addis	r3,r3,0x1000	/* address of next segment */
+	addis	r9,r9,0x1000	/* address of next segment */
 	bdnz	3b
 #else
 /* On the MPC8xx, we place the physical address of the new task
  * page directory loaded into the MMU base register, and set the
  * ASID compare register with the new "context".
  */
-        lwz     r3,MM-TSS(r4)           /* Get virtual address of mm */
-        lwz     r3,PGD(r3)              /* get new->mm->pgd */
-        addis   r3,r3,-KERNELBASE@h     /* convert to phys addr */
-        mtspr   M_TWB, r3               /* Update MMU base address */
+        lwz     r9,MM-TSS(r4)           /* Get virtual address of mm */
+        lwz     r9,PGD(r9)              /* get new->mm->pgd */
+        addis   r9,r9,-KERNELBASE@h     /* convert to phys addr */
+        mtspr   M_TWB, r9               /* Update MMU base address */
         mtspr   M_CASID, r5             /* Update context */
         tlbia
 #endif
 	SYNC
-
-/* FALL THROUGH into int_return */
-#ifdef __SMP__
-	/* call schedule_tail if this is the first time for a child process */
-	lwz	r5,TSS_SMP_FORK_RET(r4)
-	cmpi	0,r5,0
-	beq+	int_return
-	li	r3,0
-	stw	r3,TSS_SMP_FORK_RET(r4)
-	bl	schedule_tail
-#endif /* __SMP__ */
+2:	lwz	r9,_MSR(r1)	/* Returning to user mode? */
+	andi.	r9,r9,MSR_PR
+	beq+	10f		/* if not, don't adjust kernel stack */
+8:	addi	r4,r1,INT_FRAME_SIZE+STACK_UNDERHEAD	/* size of frame */
+	stw	r4,TSS+KSP(r2)	/* save kernel stack pointer */
+	tophys(r9,r1,r9)
+	mtspr	SPRG2,r9	/* phys exception stack pointer */
+10:	lwz	r2,_CTR(r1)
+	lwz	r0,_LINK(r1)
+	mtctr	r2
+	mtlr	r0
+	lwz	r2,_XER(r1)
+	lwz	r0,_CCR(r1)
+	mtspr	XER,r2
+	mtcrf	0xFF,r0
+	/* r3-r13 are destroyed -- Cort */
+	REST_GPR(14, r1)
+	REST_8GPRS(15, r1)
+	REST_8GPRS(23, r1)
+	REST_GPR(31, r1)
+	lwz	r2,_NIP(r1)	/* Restore environment */
+	lwz	r0,_MSR(r1)
+	mtspr	SRR0,r2
+	mtspr	SRR1,r0
+	lwz	r0,GPR0(r1)
+	lwz	r2,GPR2(r1)
+	lwz	r1,GPR1(r1)
+	SYNC
+	rfi
 
 /*
  * Trap exit.
  */
+#ifdef __SMP__	
+	.globl	ret_from_smpfork
+ret_from_smpfork:
+	bl	schedule_tail
+#endif	
 	.globl	ret_from_syscall
 ret_from_syscall:	
 	.globl	int_return

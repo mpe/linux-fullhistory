@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.90 1999/03/22 02:12:16 davem Exp $
+/*  $Id: process.c,v 1.92 1999/05/08 23:04:48 davem Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -54,6 +54,8 @@ asmlinkage int sys_idle(void)
 	/* endless idle loop with no priority at all */
 	current->priority = 0;
 	current->counter = -100;
+	init_idle();
+
 	for (;;) {
 		/* If current->need_resched is zero we should really
 		 * setup for a system wakup event and execute a shutdown
@@ -79,6 +81,8 @@ asmlinkage int cpu_idle(void)
 {
 	current->priority = 0;
 	current->counter = -100;
+	init_idle();
+
 	while(1) {
 		if (current->need_resched != 0) {
 			unidle_me();

@@ -110,7 +110,22 @@ typedef unsigned long pgprot_t;
 /* This handles the memory map.. */
 #define PAGE_OFFSET		0
 #define __pa(x)			((unsigned long)(x)-PAGE_OFFSET)
-#define __va(x)			((void *)((unsigned long)(x)+PAGE_OFFSET))
+/*
+ * A hacky workaround for the problems with mmap() of frame buffer
+ * memory in the lower 16MB physical memoryspace.
+ *
+ * This is a short term solution, we will have to deal properly
+ * with this in 2.3.x.
+ */
+extern inline void *__va(unsigned long physaddr)
+{
+#ifdef CONFIG_AMIGA
+	if (MACH_IS_AMIGA && (physaddr < 16*1024*1024))
+		return (void *)0xffffffff;
+	else
+#endif
+		return (void *)(physaddr+PAGE_OFFSET);
+}
 #define MAP_NR(addr)		(__pa(addr) >> PAGE_SHIFT)
 
 #endif /* __KERNEL__ */

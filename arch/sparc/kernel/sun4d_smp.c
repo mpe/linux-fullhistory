@@ -190,6 +190,7 @@ __initfunc(void smp4d_boot_cpus(void))
 	current->processor = boot_cpu_id;
 	smp_store_cpu_info(boot_cpu_id);
 	smp_setup_percpu_timer();
+	init_idle();
 	local_flush_cache_all();
 	if(linux_num_cpus == 1)
 		return;  /* Not an MP box. */
@@ -211,6 +212,7 @@ __initfunc(void smp4d_boot_cpus(void))
 			p = task[++cpucount];
 
 			p->processor = i;
+			p->has_cpu = 1; /* we schedule the first task manually */
 			current_set[i] = p;
 			
 			for (no = 0; no < linux_num_cpus; no++)

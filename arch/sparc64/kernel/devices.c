@@ -73,6 +73,9 @@ device_scan(unsigned long mem_start))
 	
 	prom_cpu_nodes[0] = prom_node_cpu;
 
+	mem_start = central_probe(mem_start);
+
 	cpu_probe();
-	return central_probe(mem_start);
+
+	return mem_start;
 }

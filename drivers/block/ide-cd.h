@@ -363,7 +363,7 @@ struct atapi_capabilities_page {
 #endif
 
 #if defined(__BIG_ENDIAN_BITFIELD)
-	__u8 reserved4           : 4;
+	__u8 reserved4           : 1;
 	/* Drive can read multisession discs. */
 	__u8 multisession        : 1;
 	/* Drive can read mode 2, form 2 data. */

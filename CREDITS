@@ -2222,6 +2222,12 @@ S: 1507 145th Place SE #B5
 S: Bellevue, Washington 98007
 S: USA
 
+N: Richard Zidlicky
+E: rdzidlic@geocities.com,rdzidlic@cip.informatik.uni-erlangen.de
+W: http://www.geocities.com/SiliconValley/Bay/2602/
+D: Q40 port - see arch/m68k/q40/README
+S: Germany
+
 N: Werner Zimmermann
 E: Werner.Zimmermann@fht-esslingen.de
 D: CDROM driver "aztcd" (Aztech/Okano/Orchid/Wearnes)

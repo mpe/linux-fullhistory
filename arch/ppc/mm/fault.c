@@ -140,7 +140,8 @@ good_area:
 		if (!(vma->vm_flags & (VM_READ | VM_EXEC)))
 			goto bad_area;
 	}
-	handle_mm_fault(current, vma, address, error_code & 0x02000000);
+	if (!handle_mm_fault(current, vma, address, error_code & 0x02000000))
+		goto bad_area;
 	up(&mm->mmap_sem);
 	/*
 	 * keep track of tlb+htab misses that are good addrs but

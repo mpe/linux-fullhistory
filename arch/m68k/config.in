@@ -37,6 +37,7 @@ fi
 bool 'Apollo support' CONFIG_APOLLO
 bool 'VME (Motorola and BVM) support' CONFIG_VME
 if [ "$CONFIG_VME" = "y" ]; then
+  bool 'MVME147 support' CONFIG_MVME147
   bool 'MVME162, 166 and 167 support' CONFIG_MVME16x
   bool 'BVME4000 and BVME6000 support' CONFIG_BVME6000
 fi
@@ -44,10 +45,13 @@ bool 'HP9000/300 support' CONFIG_HP300
 if [ "$CONFIG_HP300" = "y" ]; then
   bool 'DIO bus support' CONFIG_DIO
 fi
+bool 'Sun3x support' CONFIG_SUN3X
+  
 define_bool CONFIG_SUN3 n
 if [ "$CONFIG_PCI" = "y" ]; then
   bool 'Backward-compatible /proc/pci' CONFIG_PCI_OLD_PROC
 fi
+bool 'Q40/Q60 support' CONFIG_Q40
 
 comment 'Processor type'
 bool '68020 support' CONFIG_M68020
@@ -94,6 +98,29 @@ else
   fi
 fi
 bool '/proc/hardware support' CONFIG_PROC_HARDWARE
+
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  tristate 'Parallel port support (EXPERIMENTAL, disables old lp driver!)' CONFIG_PARPORT
+  if [ "$CONFIG_PARPORT" != "n" ]; then
+    if [ "$CONFIG_AMIGA" != "n" ]; then
+      dep_tristate '   Amiga builtin port' CONFIG_PARPORT_AMIGA $CONFIG_PARPORT
+      if [ "$CONFIG_ZORRO" != "n" ]; then
+        dep_tristate '    Multiface III parallel port' CONFIG_PARPORT_MFC3 $CONFIG_PARPORT
+      fi
+    fi
+    if [ "$CONFIG_Q40" != "n" ]; then
+       tristate '    Q40 Parallel port' CONFIG_PARPORT
+       if [ "$CONFIG_PARPORT" != "n" ]; then
+         define_bool CONFIG_PARPORT_PC y
+       fi
+    fi
+  fi
+  if [ "$CONFIG_ATARI" == "y" ]; then
+    dep_tristate '    Atari builtin port' CONFIG_PARPORT_ATARI $CONFIG_PARPORT
+  fi
+fi
+
+
 endmenu
 
 source drivers/block/Config.in
@@ -147,6 +174,7 @@ if [ "$CONFIG_ZORRO" = "y" ]; then
     bool 'A4091 SCSI support' CONFIG_A4091_SCSI
     bool 'WarpEngine SCSI support' CONFIG_WARPENGINE_SCSI
     bool 'Blizzard PowerUP 603e+ SCSI' CONFIG_BLZ603EPLUS_SCSI
+    dep_tristate 'BSC Oktagon SCSI support' CONFIG_OKTAGON_SCSI $CONFIG_SCSI
     bool 'Cyberstorm Mk III SCSI support' CONFIG_CYBERSTORMIII_SCSI
 #    bool 'GVP Turbo 040/060 SCSI support' CONFIG_GVP_TURBO_SCSI
   fi
@@ -167,12 +195,20 @@ if [ "$CONFIG_MAC" = "y" ]; then
 fi
 #dep_tristate 'SCSI debugging host adapter' CONFIG_SCSI_DEBUG $CONFIG_SCSI
 
+if [ "$CONFIG_VME" = "y" -a "$CONFIG_MVME147" = "y" ]; then
+  bool 'WD33C93 SCSI driver for MVME147' CONFIG_MVME147_SCSI
+fi
+
 if [ "$CONFIG_VME" = "y" -a "$CONFIG_MVME16x" = "y" ]; then
   bool 'NCR53C710 SCSI driver for MVME16x' CONFIG_MVME16x_SCSI
 fi
 
 if [ "$CONFIG_VME" = "y" -a "$CONFIG_BVME6000" = "y" ]; then
   bool 'NCR53C710 SCSI driver for BVME6000' CONFIG_BVME6000_SCSI
+fi
+
+if [ "$CONFIG_SUN3X" = "y" ]; then
+  bool 'ESP SCSI driver' CONFIG_SUN3X_ESP
 fi
 
 endmenu
@@ -219,6 +255,9 @@ if [ "$CONFIG_MAC" = "y" ]; then
 #  bool 'Macintosh (AV) onboard MACE ethernet' CONFIG_MACMACE
   bool 'Macintosh (Quadra) onboard SONIC ethernet' CONFIG_MACSONIC
 fi
+if [ "$CONFIG_VME" = "y" -a "$CONFIG_MVME147" = "y" ]; then
+  tristate 'MVME147 (Lance) Ethernet support' CONFIG_MVME147_NET
+fi
 if [ "$CONFIG_VME" = "y" -a "$CONFIG_MVME16x" = "y" ]; then
   tristate 'MVME16x Ethernet support' CONFIG_MVME16x_NET
 fi
@@ -232,8 +271,16 @@ if [ "$CONFIG_ATARI" = "y" ]; then
     tristate 'PAMsNet support' CONFIG_ATARI_PAMSNET
   fi
 fi
+if [ "$CONFIG_SUN3X" = "y" ]; then
+  bool 'Sun3x Lance support' CONFIG_SUNLANCE
+fi
 if [ "$CONFIG_HP300" = "y" ]; then
   bool 'HP on-board LANCE support' CONFIG_HPLANCE
+fi
+if [ "$CONFIG_Q40" = "y" ]; then
+  if [ ! "$CONFIG_PARPORT" = "n" ]; then
+    dep_tristate 'PLIP (parallel port) support' CONFIG_PLIP $CONFIG_PARPORT
+  fi
 fi
 fi
 endmenu
@@ -243,6 +290,23 @@ fi
 mainmenu_option next_comment
 comment 'Character devices'
  
+if [ "$CONFIG_Q40" = "y" ]; then
+   tristate 'Q40 Standard/generic serial support' CONFIG_SERIAL
+fi
+
+if [ "$CONFIG_SERIAL" = "y" ]; then
+   bool '   Support for console on serial port' CONFIG_SERIAL_CONSOLE
+   bool 'Extended dumb serial driver options' CONFIG_SERIAL_EXTENDED
+fi
+
+if [ "$CONFIG_SERIAL_EXTENDED" = "y" ]; then
+   bool '   Support more than 4 serial ports' CONFIG_SERIAL_MANY_PORTS
+   bool '   Support for sharing serial interrupts' CONFIG_SERIAL_SHARE_IRQ
+#   bool '   Autodetect IRQ - do not yet enable !!' CONFIG_SERIAL_DETECT_IRQ
+   bool '   Support special multiport boards' CONFIG_SERIAL_MULTIPORT
+   bool '   Support the Bell Technologies HUB6 card' CONFIG_HUB6
+fi
+
 if [ "$CONFIG_VME" = "n" ]; then
   define_bool CONFIG_VT y
   if [ "$CONFIG_VT" = "y" ]; then
@@ -254,10 +318,17 @@ if [ "$CONFIG_ATARI" = "y" ]; then
   define_bool CONFIG_NVRAM y
 fi
 
-tristate 'Parallel printer support' CONFIG_M68K_PRINTER
-if [ "$CONFIG_ZORRO" = "y" ]; then
-  dep_tristate 'Multiface Card III parallel support' CONFIG_MULTIFACE_III_LP $CONFIG_M68K_PRINTER
-fi
+if [ "$CONFIG_PARPORT" = "n" ]; then
+  tristate 'Parallel printer support' CONFIG_M68K_PRINTER
+  if [ "$CONFIG_ZORRO" = "y" ]; then
+    dep_tristate 'Multiface Card III parallel support' CONFIG_MULTIFACE_III_LP $CONFIG_M68K_PRINTER
+  fi
+else
+  dep_tristate 'Parallel printer support' CONFIG_PRINTER $CONFIG_PARPORT
+  if [ "$CONFIG_PRINTER" != "n" ]; then
+    bool '  Support IEEE1284 status readback' CONFIG_PRINTER_READBACK
+  fi
+fi   
 if [ "$CONFIG_AMIGA" = "y" ]; then
   tristate 'Amiga mouse support' CONFIG_AMIGAMOUSE
 fi
@@ -280,13 +351,17 @@ if [ "$CONFIG_ATARI" = "y" ]; then
 fi
 if [ "$CONFIG_AMIGA" = "y" ]; then
   tristate 'Amiga builtin serial support' CONFIG_AMIGA_BUILTIN_SERIAL
-  bool 'Hisoft Whippet PCMCIA serial support' CONFIG_WHIPPET
+  if [ "$CONFIG_AMIGA_PCMCIA" = "y" ]; then
+    tristate 'Hisoft Whippet PCMCIA serial support' CONFIG_WHIPPET_SERIAL
+  fi
 fi
-if [ "$CONFIG_ZORRO" = "y" ]; then
-  tristate 'GVP IO-Extender support' CONFIG_GVPIOEXT
-  dep_tristate 'GVP IO-Extender parallel printer support' CONFIG_GVPIOEXT_LP $CONFIG_GVPIOEXT
-  dep_tristate 'GVP IO-Extender PLIP support' CONFIG_GVPIOEXT_PLIP $CONFIG_GVPIOEXT
-  tristate 'Multiface Card III serial support' CONFIG_MULTIFACE_III_TTY
+if [ "$CONFIG_PARPORT" = "n" ]; then
+  if [ "$CONFIG_ZORRO" = "y" ]; then
+    tristate 'GVP IO-Extender support' CONFIG_GVPIOEXT
+    dep_tristate 'GVP IO-Extender parallel printer support' CONFIG_GVPIOEXT_LP $CONFIG_GVPIOEXT
+    dep_tristate 'GVP IO-Extender PLIP support' CONFIG_GVPIOEXT_PLIP $CONFIG_GVPIOEXT
+    tristate 'Multiface Card III serial support' CONFIG_MULTIFACE_III_TTY
+  fi
 fi
 if [ "$CONFIG_MAC" = "y" ]; then
   bool 'Mac SCC serial support' CONFIG_MAC_SCC
@@ -294,18 +369,32 @@ fi
 if [ "$CONFIG_HP300" = "y" -a "$CONFIG_DIO" = "y" ]; then
   tristate 'HP DCA serial support' CONFIG_HPDCA
 fi
+if [ "$CONFIG_SUN3X" = "y" ]; then
+  bool 'Sun3x builtin serial support' CONFIG_SUN3X_ZS
+  if [ "$CONFIG_SUN3X_ZS" = "y" ]; then
+    bool 'Sun keyboard support' CONFIG_SUN_KEYBOARD
+    bool 'Sun mouse support' CONFIG_SUN_MOUSE
+    define_bool CONFIG_SBUS y
+    define_bool CONFIG_SBUSCHAR y
+    define_bool CONFIG_SUN_SERIAL y
+  fi  
+fi
 if [ "$CONFIG_AMIGA" = "y" -o "$CONFIG_ATARI" = "y" -o \
-     "$CONFIG_MAC" = "y" -o "$CONFIG_HP300" = "y" ]; then
+     "$CONFIG_MAC" = "y" -o "$CONFIG_HP300" = "y" -o \
+     "$CONFIG_SUN3X" = "y" ]; then
   if [ "$CONFIG_ATARI_MFPSER" = "y" -o "$CONFIG_ATARI_SCC" = "y" -o \
        "$CONFIG_ATARI_MIDI" = "y" -o "$CONFIG_MAC_SCC" = "y" -o \
        "$CONFIG_AMIGA_BUILTIN_SERIAL" = "y" -o \
        "$CONFIG_GVPIOEXT" = "y" -o "$CONFIG_MULTIFACE_III_TTY" = "y" -o \
-       "$CONFIG_HPDCA" = "y" ]; then
+       "$CONFIG_HPDCA" = "y" -o "$CONFIG_SUN3X_ZS" = "y" ]; then
     bool 'Support for serial port console' CONFIG_SERIAL_CONSOLE
   fi
 fi
 if [ "$CONFIG_VME" = "y" ]; then
   define_bool CONFIG_SERIAL_CONSOLE y
+  if [ "$CONFIG_MVME147" = "y" ]; then
+    bool 'SCC support for MVME147 serial ports' CONFIG_MVME147_SCC
+  fi
   if [ "$CONFIG_MVME16x" = "y" ]; then
     bool 'CD2401 support for MVME166/7 serial ports' CONFIG_SERIAL167
     bool 'SCC support for MVME162 serial ports' CONFIG_MVME162_SCC

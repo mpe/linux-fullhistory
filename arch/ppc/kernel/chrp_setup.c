@@ -400,7 +400,10 @@ chrp_do_IRQ(struct pt_regs *regs,
                  *
                  * This should go in the above mask/ack code soon. -- Cort
                  */
-                irq = *chrp_int_ack_special;
+		if ( chrp_int_ack_special )
+			irq = *chrp_int_ack_special;
+		else
+			irq = i8259_irq(0);
                 /*
                  * Acknowledge as soon as possible to allow i8259
                  * interrupt nesting                         */

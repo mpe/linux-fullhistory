@@ -11,6 +11,7 @@
 #include <linux/types.h>
 #include <linux/malloc.h>
 #include <linux/init.h>
+#include <linux/pagemap.h>
 
 #include <asm/setup.h>
 #include <asm/segment.h>
@@ -93,12 +94,11 @@ typedef struct page ptable_desc;
 static ptable_desc ptable_list = { &ptable_list, &ptable_list };
 
 #define PD_MARKBITS(dp) (*(unsigned char *)&(dp)->offset)
-#define PD_PAGE(dp) (PAGE_OFFSET + ((dp)->map_nr << PAGE_SHIFT))
 #define PAGE_PD(page) ((ptable_desc *)&mem_map[MAP_NR(page)])
 
 #define PTABLE_SIZE (PTRS_PER_PMD * sizeof(pmd_t))
 
-void __init init_pointer_table(unsigned long ptable)
+__initfunc(void init_pointer_table(unsigned long ptable))
 {
 	ptable_desc *dp;
 	unsigned long page = ptable & PAGE_MASK;
@@ -166,7 +166,7 @@ pmd_t *get_pointer_table (void)
 		(dp->next = last->next)->prev = dp;
 		(dp->prev = last)->next = dp;
 	}
-	return (pmd_t *) (PD_PAGE(dp) + off);
+	return (pmd_t *) (page_address(dp) + off);
 }
 
 int free_pointer_table (pmd_t *ptable)
@@ -215,8 +215,8 @@ static unsigned long transp_transl_matches( unsigned long regval,
 	/* function code match? */
 	base = (regval >> 4) & 7;
 	mask = ~(regval & 7);
-	if ((SUPER_DATA & mask) != (base & mask))
-	    return( 0 );
+	if (((SUPER_DATA ^ base) & mask) != 0)
+	    return 0;
     }
     else {
 	/* must not be user-only */
@@ -226,8 +226,8 @@ static unsigned long transp_transl_matches( unsigned long regval,
 
     /* address match? */
     base = regval & 0xff000000;
-    mask = ~((regval << 8) & 0xff000000);
-    return( (vaddr & mask) == (base & mask) );
+    mask = ~(regval << 8) & 0xff000000;
+    return ((vaddr ^ base) & mask) == 0;
 }
 
 #ifndef CONFIG_SINGLE_MEMORY_CHUNK

@@ -335,10 +335,10 @@ void mvme16x_init_console_port (struct console *co, int cflag)
 static void scc_delay (void)
 {
 	int n;
-	char i;
+	volatile int trash;
 
 	for (n = 0; n < 20; n++)
-		i = *(volatile char *)0;
+		trash = n;
 }
 
 static void scc_write (char ch)

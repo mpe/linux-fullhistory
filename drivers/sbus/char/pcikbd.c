@@ -1,4 +1,4 @@
-/* $Id: pcikbd.c,v 1.26 1999/04/28 11:55:42 davem Exp $
+/* $Id: pcikbd.c,v 1.27 1999/05/09 06:40:47 ecd Exp $
  * pcikbd.c: Ultra/AX PC keyboard support.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -276,6 +276,7 @@ int pcikbd_translate(unsigned char scancode, unsigned char *keycode,
 		prev_scancode = 0;
 		return 0;
 	}
+	scancode &= 0x7f;
 	if(prev_scancode) {
 		if(prev_scancode != 0xe0) {
 			if(prev_scancode == 0xe1 && scancode == 0x1d) {

@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.158 1999/04/27 14:35:07 davem Exp $
+/* $Id: entry.S,v 1.159 1999/05/08 03:00:03 davem Exp $
  * arch/sparc/kernel/entry.S:  Sparc trap low-level entry points.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -1476,7 +1476,7 @@ C_LABEL(ret_from_smpfork):
 	wr	%l0, PSR_ET, %psr
 	WRITE_PAUSE
 	call	schedule_tail
-	 nop
+	 mov	%g3, %o0
 	b	C_LABEL(ret_sys_call)
 	 ld	[%sp + REGWIN_SZ + PT_I0], %o0
 #endif

@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.126 1999/04/09 16:16:41 jj Exp $
+/*  $Id: init.c,v 1.127 1999/05/08 03:00:38 davem Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996-1999 David S. Miller (davem@caip.rutgers.edu)
@@ -949,8 +949,7 @@ void __flush_tlb_all(void)
 #define CTX_BMAP_SLOTS (1UL << (CTX_VERSION_SHIFT - 6))
 unsigned long mmu_context_bmap[CTX_BMAP_SLOTS];
 
-/* We are always protected by scheduler_lock under SMP.
- * Caller does TLB context flushing on local CPU if necessary.
+/* Caller does TLB context flushing on local CPU if necessary.
  *
  * We must be careful about boundary cases so that we never
  * let the user have CTX 0 (nucleus) or we ever use a CTX

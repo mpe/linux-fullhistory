@@ -34,6 +34,27 @@ ifeq ($(CONFIG_PARPORT),y)
       M_OBJS += parport_ax.o
     endif
   endif
+  ifeq ($(CONFIG_PARPORT_AMIGA),y)
+    LX_OBJS += parport_amiga.o
+  else
+    ifeq ($(CONFIG_PARPORT_AMIGA),m)
+      M_OBJS += parport_amiga.o
+    endif
+  endif
+  ifeq ($(CONFIG_PARPORT_MFC3),y)
+    LX_OBJS += parport_mfc3.o
+  else
+    ifeq ($(CONFIG_PARPORT_MFC3),m)
+      M_OBJS += parport_mfc3.o
+    endif
+  endif
+  ifeq ($(CONFIG_PARPORT_ATARI),y)
+    LX_OBJS += parport_atari.o
+  else
+    ifeq ($(CONFIG_PARPORT_ATARI),m)
+      M_OBJS += parport_atari.o
+    endif
+  endif
   LX_OBJS += parport_init.o
 else
   ifeq ($(CONFIG_PARPORT),m)
@@ -49,6 +70,15 @@ else
   endif
   ifeq ($(CONFIG_PARPORT_AX),m)
     M_OBJS += parport_ax.o
+  endif
+  ifeq ($(CONFIG_PARPORT_AMIGA),m)
+    M_OBJS += parport_amiga.o
+  endif
+  ifeq ($(CONFIG_PARPORT_MFC3),m)
+    M_OBJS += parport_mfc3.o
+  endif
+  ifeq ($(CONFIG_PARPORT_ATARI),m)
+    M_OBJS += parport_atari.o
   endif
 endif
 

@@ -65,7 +65,7 @@ __initfunc(void cpu_probe(void))
 	long ver, fpu_vers;
 	long fprs;
 	
-	cpuid = smp_processor_id();
+	cpuid = hard_smp_processor_id();
 
 	fprs = fprs_read ();
 	fprs_write (FPRS_FEF);

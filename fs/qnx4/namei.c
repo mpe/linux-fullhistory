@@ -70,12 +70,8 @@ static struct buffer_head *qnx4_find_entry(int len, struct inode *dir,
 	struct buffer_head *bh;
 
 	*res_dir = NULL;
-	if (!dir || !dir->i_sb) {
-		if (!dir) {
-			printk("qnx4: NULL dir.\n");
-		} else {
-			printk("qnx4: no superblock on dir.\n");
-		}
+	if (!dir->i_sb) {
+		printk("qnx4: no superblock on dir.\n");
 		return NULL;
 	}
 	bh = NULL;

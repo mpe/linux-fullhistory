@@ -23,6 +23,7 @@
 ** 98/04/25 Phil Blundell: added HP300 support
 ** 1998/08/30 David Kilzer: Added support for fbcon_font_desc structures
 **            for linux-2.1.115
+** 9/02/11  Richard Zidlicky: added Q40 support (initial vesion 99/01/01) 
 **
 ** This file is subject to the terms and conditions of the GNU General Public
 ** License. See the file README.legal in the main directory of this archive
@@ -303,6 +304,12 @@
 .globl SYMBOL_NAME(availmem)
 .globl SYMBOL_NAME(m68k_pgtable_cachemode)
 .globl SYMBOL_NAME(m68k_supervisor_cachemode)
+#ifdef CONFIG_MVME16x
+.globl SYMBOL_NAME(mvme_bdid_ptr)
+#endif
+#ifdef CONFIG_Q40
+.globl SYMBOL_NAME(q40_mem_cptr)	
+#endif		
 
 CPUTYPE_040	= 1	/* indicates an 040 */
 CPUTYPE_060	= 2	/* indicates an 060 */
@@ -512,13 +519,15 @@ func_define	putn,1
 #endif
 .endm
 
-
 #define is_not_amiga(lab) cmpl &MACH_AMIGA,%pc@(m68k_machtype); jne lab
 #define is_not_atari(lab) cmpl &MACH_ATARI,%pc@(m68k_machtype); jne lab
 #define is_not_mac(lab) cmpl &MACH_MAC,%pc@(m68k_machtype); jne lab
+#define is_not_mvme147(lab) cmpl &MACH_MVME147,%pc@(m68k_machtype); jne lab
 #define is_not_mvme16x(lab) cmpl &MACH_MVME16x,%pc@(m68k_machtype); jne lab
 #define is_not_bvme6000(lab) cmpl &MACH_BVME6000,%pc@(m68k_machtype); jne lab
 #define is_not_hp300(lab) cmpl &MACH_HP300,%pc@(m68k_machtype); jne lab
+#define is_not_q40(lab) cmpl &MACH_Q40,%pc@(m68k_machtype); jne lab
+#define is_not_sun3x(lab) cmpl &MACH_SUN3X,%pc@(m68k_machtype); jne lab
 
 #define is_040_or_060(lab)	btst &CPUTYPE_0460,%pc@(L(cputype)+3); jne lab
 #define is_not_040_or_060(lab)	btst &CPUTYPE_0460,%pc@(L(cputype)+3); jeq lab
@@ -552,9 +561,11 @@ ENTRY(_stext)
 	.long	BOOTINFOV_MAGIC
 	.long	MACH_AMIGA, AMIGA_BOOTI_VERSION
 	.long	MACH_ATARI, ATARI_BOOTI_VERSION
+	.long	MACH_MVME147, MVME147_BOOTI_VERSION
 	.long	MACH_MVME16x, MVME16x_BOOTI_VERSION
 	.long	MACH_BVME6000, BVME6000_BOOTI_VERSION
 	.long	MACH_MAC, MAC_BOOTI_VERSION
+	.long	MACH_Q40, Q40_BOOTI_VERSION	
 	.long	0
 1:	jra	SYMBOL_NAME(__start)
 
@@ -859,7 +870,12 @@ L(mmu_init_amiga):
 	/*
 	 * 040: Map the 16Meg range physical 0x0 upto logical 0x8000.0000
 	 */
-	mmu_map	#0x80000000,#0,#0x01000000,#_PAGE_NOCACHE_S
+	mmu_map		#0x80000000,#0,#0x01000000,#_PAGE_NOCACHE_S
+	/*
+	 * Map the Zorro III I/O space with transparent translation
+	 * for frame buffer memory etc.
+	 */
+	mmu_map_tt	#1,#0x40000000,#0x20000000,#_PAGE_NOCACHE_S
 
 	jbra	L(mmu_init_done)
 
@@ -867,7 +883,8 @@ L(mmu_init_amiga):
 	/*
 	 * 030:	Map the 32Meg range physical 0x0 upto logical 0x8000.0000
 	 */
-	mmu_map	#0x80000000,#0,#0x02000000,#_PAGE_NOCACHE030
+	mmu_map		#0x80000000,#0,#0x02000000,#_PAGE_NOCACHE030
+	mmu_map_tt	#1,#0x40000000,#0x20000000,#_PAGE_NOCACHE030
 
 	jbra	L(mmu_init_done)
 
@@ -926,6 +943,25 @@ L(spata68040):
 L(mmu_init_not_atari):
 #endif
 
+#ifdef CONFIG_Q40
+	is_not_q40(L(notq40))
+	/*
+	 * add transparent mapping for 0xff00 0000 - 0xffff ffff
+	 * non-cached serialized etc..
+	 * this includes master chip, DAC, RTC and ISA ports
+	 * 0xfe000000-0xfeffffff is for screen and ROM
+	 */
+
+	putc    'Q'
+
+	mmu_map_tt	#0,#0xfe000000,#0x01000000,#_PAGE_CACHE040W
+	mmu_map_tt	#1,#0xff000000,#0x01000000,#_PAGE_NOCACHE_S
+	
+	jbra	L(mmu_init_done)
+	
+L(notq40):		
+#endif	
+	
 #ifdef CONFIG_HP300
 	is_not_hp300(L(nothp300))
 
@@ -939,6 +975,24 @@ L(mmu_init_not_atari):
 L(nothp300):
 
 #endif
+
+#ifdef CONFIG_MVME147
+
+       is_not_mvme147(L(not147))
+
+       /*
+	* On MVME147 we have already created kernel page tables for
+	* 4MB of RAM at address 0, so now need to do a transparent
+	* mapping of the top of memory space.  Make it 0.5GByte for now,
+	* so we can access on-board i/o areas.
+	*/
+
+       mmu_map_tt      #1,#0xe0000000,#0x20000000,#_PAGE_NOCACHE030
+
+       jbra    L(mmu_init_done)
+
+L(not147):
+#endif /* CONFIG_MVME147 */
 
 #ifdef CONFIG_MVME16x
 
@@ -965,7 +1019,7 @@ L(nothp300):
 	 * 0xffe00000->0xffe1ffff.
 	 */
 
-	mmu_map_tt	1,#0xe0000000,#0x20000000,#_PAGE_NOCACHE_S
+	mmu_map_tt	#1,#0xe0000000,#0x20000000,#_PAGE_NOCACHE_S
 
 	jbra	L(mmu_init_done)
 
@@ -985,7 +1039,7 @@ L(not16x):
 	 * clash with User code virtual address space.
 	 */
 
-	mmu_map_tt	1,#0xe0000000,#0x20000000,#_PAGE_NOCACHE_S
+	mmu_map_tt	#1,#0xe0000000,#0x20000000,#_PAGE_NOCACHE_S
 
 	jbra	L(mmu_init_done)
 
@@ -1052,11 +1106,21 @@ L(mmu_init_mac):
 	mmu_map_eq	#0x50000000,#0x02000000,%d3
 	mmu_map_eq	#0x60000000,#0x00400000,%d3
 	mmu_map_eq	#0x9c000000,#0x00400000,%d3
-	mmu_map_tt	1,#0xf8000000,#0x08000000,%d3
+	mmu_map_tt	#1,#0xf8000000,#0x08000000,%d3
 
 	jbra	L(mmu_init_done)
 
 L(mmu_init_not_mac):
+#endif
+
+#ifdef CONFIG_SUN3X
+	is_not_sun3x(L(notsun3x))
+
+	/* setup tt1 for I/O */
+	mmu_map_tt	#1,#0x40000000,#0x40000000,#_PAGE_NOCACHE_S
+
+L(notsun3x):
+	jbra	L(mmu_init_done)
 #endif
 
 L(mmu_init_done):
@@ -1211,6 +1275,14 @@ L(mmu_fixup_done):
 	 * Energise the FPU and caches.
 	 */
 	movel	#0x60,0xf05f400c
+1:
+#endif
+
+#ifdef CONFIG_SUN3X
+	is_not_sun3x(1f)
+
+	/* enable copro */
+	oriw	#0x4000,0x61000000
 1:
 #endif
 
@@ -1780,7 +1852,7 @@ func_start	mmu_map_tt,%d0/%d1/%a0,4
 	/* Extract the highest bit set
 	 */
 	bfffo	ARG3{#0,#32},%d1
-	cmpw	#8,%d0
+	cmpw	#8,%d1
 	jcc	L(do_map)
 
 	/* And get the mask
@@ -2155,7 +2227,9 @@ func_start	mmu_temp_map,%d0/%d1/%a0/%a1
 	/* Temporary allocate a page table and insert it into the ptr table
 	 */
 	movel	%a1@,%d0
-	addl	#PTR_TABLE_SIZE*4,%a1@
+	/* The 512 should be PAGE_TABLE_SIZE*4, but that violates the
+	   alignment restriction for pointer tables on the '0[46]0.  */
+	addl	#512,%a1@
 	orw	#_PAGE_TABLE+_PAGE_ACCESSED,%d0
 	movel	%d0,%a0@
 	dputs	" (new)"
@@ -2703,6 +2777,31 @@ func_start	serial_init,%d0/%d1/%a0/%a1
 L(serial_init_not_mac):
 #endif	/* CONFIG_MAC */
 
+#ifdef CONFIG_Q40
+	is_not_q40(2f)
+/* debug output goes into SRAM, so we don't do it unless requested
+   - check for '%LX$' signature in SRAM   */
+	lea	%pc@(SYMBOL_NAME(q40_mem_cptr)),%a1
+	move.l	#0xff020010,%a1@  /* must be inited - also used by debug=mem */
+	move.l	#0xff020000,%a1   
+	cmp.b	#'%',%a1@
+	bne	2f	/*nodbg*/
+	addq.w	#4,%a1
+	cmp.b	#'L',%a1@
+	bne	2f	/*nodbg*/
+	addq.w	#4,%a1
+	cmp.b	#'X',%a1@
+	bne	2f	/*nodbg*/
+	addq.w	#4,%a1
+	cmp.b	#'$',%a1@
+	bne	2f	/*nodbg*/
+	/* signature OK */
+	lea	%pc@(L(q40_do_debug)),%a1
+	tas	%a1@
+/*nodbg: q40_do_debug is 0 by default*/	
+2:		
+#endif	
+	
 L(serial_init_done):
 func_return	serial_init
 
@@ -2792,6 +2891,15 @@ func_start	serial_putc,%d0/%d1/%a0/%a1
 4:
 #endif	/* CONFIG_ATARI */
 
+#ifdef CONFIG_MVME147
+	is_not_mvme147(2f)
+1:	btst	#2,M147_SCC_CTRL_A
+	jeq	1b
+	moveb	%d0,M147_SCC_DATA_A
+	jbra	L(serial_putc_done)
+2:
+#endif
+
 #ifdef CONFIG_MVME16x
 	is_not_mvme16x(2f)
 	/*
@@ -2805,7 +2913,7 @@ func_start	serial_putc,%d0/%d1/%a0/%a1
 	moveml	%sp@+,%d0-%d7/%a2-%a6
 	jbra	L(serial_putc_done)
 2:
-#endif CONFIG_MVME162 | CONFIG_MVME167
+#endif CONFIG_MVME16x
 
 #ifdef CONFIG_BVME6000
 	is_not_bvme6000(2f)
@@ -2818,6 +2926,18 @@ func_start	serial_putc,%d0/%d1/%a0/%a1
 	jbra	L(serial_putc_done)
 2:
 #endif
+
+#ifdef CONFIG_Q40
+	is_not_q40(2f)
+	tst.l	%pc@(L(q40_do_debug))	/* only debug if requested */
+	beq	2f
+	lea	%pc@(SYMBOL_NAME(q40_mem_cptr)),%a1
+	move.l	%a1@,%a0
+	move.b	%d0,%a0@
+	addq.l	#4,%a0
+	move.l	%a0,%a1@
+2:		
+#endif	
 
 L(serial_putc_done):
 func_return	serial_putc
@@ -3472,6 +3592,10 @@ L(kernel_pgdir_ptr):
 L(temp_mmap_mem):
 	.long	0
 
+#if defined (CONFIG_MVME147)
+M147_SCC_CTRL_A = 0xfffe3002
+M147_SCC_DATA_A = 0xfffe3003
+#endif
 
 #if defined (CONFIG_BVME6000)
 BVME_SCC_CTRL_A	= 0xffb0000b
@@ -3508,4 +3632,10 @@ SYMBOL_NAME_LABEL(m68k_supervisor_cachemode)
 #if defined(CONFIG_MVME16x)
 SYMBOL_NAME_LABEL(mvme_bdid_ptr)
 	.long	0
+#endif
+#if defined(CONFIG_Q40)
+SYMBOL_NAME_LABEL(q40_mem_cptr)
+	.long 0
+L(q40_do_debug):	
+	.long 0	
 #endif

@@ -100,7 +100,8 @@ union bdflush_param{
 				each time we call refill */
 		int nref_dirt; /* Dirty buffer threshold for activating bdflush
 				  when trying to refill buffers. */
-		int dummy1;    /* unused */
+		int interval;  /* Interval (seconds) between spontaneous
+				  bdflush runs */
 		int age_buffer;  /* Time for normal buffer to age before 
 				    we flush it */
 		int age_super;  /* Time for superblock to age before we 
@@ -109,10 +110,10 @@ union bdflush_param{
 		int dummy3;    /* unused */
 	} b_un;
 	unsigned int data[N_PARAM];
-} bdf_prm = {{40, 500, 64, 256, 15, 30*HZ, 5*HZ, 1884, 2}};
+} bdf_prm = {{40, 500, 64, 256, 5, 30*HZ, 5*HZ, 1884, 2}};
 
 /* These are the min and max parameter values that we will allow to be assigned */
-int bdflush_min[N_PARAM] = {  0,  10,    5,   25,  0,   1*HZ,   1*HZ, 1, 1};
+int bdflush_min[N_PARAM] = {  0,  10,    5,   25,  1,   1*HZ,   1*HZ, 1, 1};
 int bdflush_max[N_PARAM] = {100,5000, 2000, 2000,100, 600*HZ, 600*HZ, 2047, 5};
 
 void wakeup_bdflush(int);
@@ -1553,7 +1554,6 @@ void __init buffer_init(unsigned long memory_size)
  * response to dirty buffers.  Once this process is activated, we write back
  * a limited number of buffers to the disks and then go back to sleep again.
  */
-static struct wait_queue * bdflush_wait = NULL;
 static struct wait_queue * bdflush_done = NULL;
 struct task_struct *bdflush_tsk = 0;
 
@@ -1561,7 +1561,7 @@ void wakeup_bdflush(int wait)
 {
 	if (current == bdflush_tsk)
 		return;
-	wake_up(&bdflush_wait);
+	wake_up_process(bdflush_tsk);
 	if (wait) {
 		run_task_queue(&tq_disk);
 		sleep_on(&bdflush_done);
@@ -1570,82 +1570,107 @@ void wakeup_bdflush(int wait)
 
 
 /* 
- * Here we attempt to write back old buffers.  We also try to flush inodes 
- * and supers as well, since this function is essentially "update", and 
- * otherwise there would be no way of ensuring that these quantities ever 
- * get written back.  Ideally, we would have a timestamp on the inodes
- * and superblocks so that we could write back only the old ones as well
- */
+ * Here we attempt to write back old buffers.
+ * To prevent deadlocks for a loop device:
+ * 1) Do non-blocking writes to loop (avoids deadlock with running
+ *	out of request blocks).
+ * 2) But do a blocking write if the only dirty buffers are loop buffers
+ *	(otherwise we go into an infinite busy-loop).
+ * 3) Quit writing loop blocks if a freelist went low (avoids deadlock
+ *	with running out of free buffers for loop's "real" device).
+*/
 
-static int sync_old_buffers(void)
+static inline void sync_old_buffers(void)
 {
 	int i;
-	int ndirty, nwritten;
-	int nlist;
-	int ncount;
+	int ndirty = 0;
+	int wrta_cmd = WRITEA;
+#ifdef DEBUG
+	int ncount = 0, nwritten = 0;
+#endif
 	struct buffer_head * bh, *next;
 
-	sync_supers(0);
-	sync_inodes(0);
-
-	ncount = 0;
 #ifdef DEBUG
-	for(nlist = 0; nlist < NR_LIST; nlist++)
-#else
-	for(nlist = BUF_LOCKED; nlist <= BUF_DIRTY; nlist++)
-#endif
-	{
-		ndirty = 0;
-		nwritten = 0;
-	repeat:
+	bh = lru_list[BUF_CLEAN];
+	if(bh)
+		for(i = nr_buffers_type[BUF_CLEAN]; --i > 0; bh = next) {
+			next = bh->b_next_free;
 
-		bh = lru_list[nlist];
-		if(bh) 
-			 for (i = nr_buffers_type[nlist]; i-- > 0; bh = next) {
-				 /* We may have stalled while waiting for I/O to complete. */
-				 if(bh->b_list != nlist) goto repeat;
-				 next = bh->b_next_free;
-				 if(!lru_list[nlist]) {
-					 printk("Dirty list empty %d\n", i);
-					 break;
-				 }
-				 
-				 /* Clean buffer on dirty list?  Refile it */
-				 if (nlist == BUF_DIRTY && !buffer_dirty(bh) && !buffer_locked(bh)) {
-					 refile_buffer(bh);
-					 continue;
-				 }
-				  
-				  /* Unlocked buffer on locked list?  Refile it */
-				  if (nlist == BUF_LOCKED && !buffer_locked(bh)) {
-					  refile_buffer(bh);
-					  continue;
-				  }
-				 
-				 if (buffer_locked(bh) || !buffer_dirty(bh))
-					  continue;
-				 ndirty++;
-				 if(time_before(jiffies, bh->b_flushtime))
-					continue;
-				 nwritten++;
-				 next->b_count++;
-				 bh->b_count++;
-				 bh->b_flushtime = 0;
-#ifdef DEBUG
-				 if(nlist != BUF_DIRTY) ncount++;
+			/* Dirty/locked buffer on clean list?  Refile it */
+			if (buffer_locked(bh) || buffer_dirty(bh)) {
+				ncount++;
+				refile_buffer(bh);
+			}
+		}
 #endif
-				 ll_rw_block(WRITE, 1, &bh);
-				 bh->b_count--;
-				 next->b_count--;
-			 }
+
+	bh = lru_list[BUF_LOCKED];
+	if(bh)
+		for(i = nr_buffers_type[BUF_LOCKED]; --i > 0; bh = next) {
+			next = bh->b_next_free;
+
+			/* Unlocked buffer on locked list?  Refile it */
+			if (!buffer_locked(bh))
+				refile_buffer(bh);
+		}
+
+ restart:
+	bh = lru_list[BUF_DIRTY];
+	if(bh) 
+		for (i = nr_buffers_type[BUF_DIRTY];
+		     i-- > 0 && ndirty < bdf_prm.b_un.ndirty; 
+		     bh = next) {
+			/* We may have stalled while waiting for
+			   I/O to complete. */
+			if(bh->b_list != BUF_DIRTY)
+				goto restart;
+			next = bh->b_next_free;
+			if(!lru_list[BUF_DIRTY]) {
+				printk("Dirty list empty %d\n", i);
+				break;
+			}
+					  
+			/* Clean buffer on dirty list?  Refile it */
+			if (!buffer_dirty(bh)) {
+				refile_buffer(bh);
+				continue;
+			}
+					  
+			if (buffer_locked(bh))
+				continue;
+			/* Should we write back buffers that are
+			   shared or not??  Currently dirty buffers
+			   are not shared, so it does not matter */
+			next->b_count++;
+			bh->b_count++;
+			ndirty++;
+			bh->b_flushtime = 0;
+			if (MAJOR(bh->b_dev) == LOOP_MAJOR) {
+				ll_rw_block(wrta_cmd,1, &bh);
+				wrta_cmd = WRITEA;
+				if (buffer_dirty(bh))
+					--ndirty;
+			}
+			else
+				ll_rw_block(WRITE, 1, &bh);
+			bh->b_count--;
+			next->b_count--;
+		}
+	/* If we didn't write anything, but there are still
+	 * dirty buffers, then make the next write to a
+	 * loop device to be a blocking write.
+	 * This lets us block--which we _must_ do! */
+	if (ndirty == 0
+	    && nr_buffers_type[BUF_DIRTY] > 0 && wrta_cmd != WRITE) {
+		wrta_cmd = WRITE;
+		goto restart;
 	}
-	run_task_queue(&tq_disk);
+
 #ifdef DEBUG
 	if (ncount) printk("sync_old_buffers: %d dirty buffers not on dirty list\n", ncount);
-	printk("Wrote %d/%d buffers\n", nwritten, ndirty);
+	printk("wrote %d/%d buffers...", nwritten, ndirty);
 #endif
 	run_task_queue(&tq_disk);
-	return 0;
 }
 
 
@@ -1662,10 +1687,12 @@ asmlinkage int sys_bdflush(int func, long data)
 	if (!capable(CAP_SYS_ADMIN))
 		goto out;
 
-	if (func == 1) {
-		 error = sync_old_buffers();
-		 goto out;
-	}
+	if (func == 1)
+		/* Func 1 used to call sync_old_buffers; a user space
+		   daemon would call it periodically.  This is no
+		   longer necessary.  Returning -EPERM here makes the
+		   daemon silently exit.  */
+		goto out;
 
 	/* Basically func 1 means read param 1, 2 means write param 1, etc */
 	if (func >= 2) {
@@ -1694,27 +1721,17 @@ out:
 	return error;
 }
 
-/* This is the actual bdflush daemon itself. It used to be started from
- * the syscall above, but now we launch it ourselves internally with
- * kernel_thread(...)  directly after the first thread in init/main.c */
+/* This is the actual bdflush daemon itself. It used to be started
+ * from the syscall above, but now we launch it ourselves internally
+ * with kernel_thread(...)  directly after the first thread in
+ * init/main.c.  Every so often, or when woken up by another task that
+ * needs memory, we call sync_old_buffers to partially clear the dirty list.
+ */
 
-/* To prevent deadlocks for a loop device:
- * 1) Do non-blocking writes to loop (avoids deadlock with running
- *	out of request blocks).
- * 2) But do a blocking write if the only dirty buffers are loop buffers
- *	(otherwise we go into an infinite busy-loop).
- * 3) Quit writing loop blocks if a freelist went low (avoids deadlock
- *	with running out of free buffers for loop's "real" device).
-*/
 int bdflush(void * unused) 
 {
-	int i;
-	int ndirty;
-	int nlist;
-	int ncount;
-	struct buffer_head * bh, *next;
-	int major;
-	int wrta_cmd = WRITEA;	/* non-blocking write for LOOP */
+	long remaining = HZ * bdf_prm.b_un.interval;
+	struct task_struct *tsk = current;
 
 	/*
 	 *	We have a bare-bones task_struct, and really should fill
@@ -1722,10 +1739,12 @@ int bdflush(void * unused)
 	 *	display semi-sane things. Not real crucial though...  
 	 */
 
-	current->session = 1;
-	current->pgrp = 1;
-	sprintf(current->comm, "kflushd");
-	bdflush_tsk = current;
+	tsk->session = 1;
+	tsk->pgrp = 1;
+	tsk->dumpable = 0;  /* inhibit ptrace() */
+	strcpy(tsk->comm, "kflushd");
+	sigfillset(&tsk->blocked);
+	bdflush_tsk = tsk;
 
 	/*
 	 *	As a kernel thread we want to tamper with system buffers
@@ -1735,93 +1754,36 @@ int bdflush(void * unused)
 	lock_kernel();
 		 
 	for (;;) {
+		tsk->state = TASK_INTERRUPTIBLE;
+		remaining = schedule_timeout(remaining);
+
 #ifdef DEBUG
 		printk("bdflush() activated...");
 #endif
-
 		CHECK_EMERGENCY_SYNC
 
-		ncount = 0;
-#ifdef DEBUG
-		for(nlist = 0; nlist < NR_LIST; nlist++)
-#else
-		for(nlist = BUF_LOCKED; nlist <= BUF_DIRTY; nlist++)
-#endif
-		 {
-			 ndirty = 0;
-		 repeat:
+		if (remaining == 0) {
+			/*
+			 * Also try to flush inodes and supers, since
+			 * otherwise there would be no way of ensuring
+			 * that these quantities ever get written
+			 * back.  Ideally, we would have a timestamp
+			 * on the inodes and superblocks so that we
+			 * could write back only the old ones.
+			 */
+			sync_supers(0);
+			sync_inodes(0);
+			remaining = HZ * bdf_prm.b_un.interval;
+		}
+			
+		/* Keep flushing till there aren't very many dirty buffers */
+		do {
+			sync_old_buffers();
+		} while(nr_buffers_type[BUF_DIRTY] > nr_buffers * bdf_prm.b_un.nfract/100);
 
-			 bh = lru_list[nlist];
-			 if(bh) 
-				  for (i = nr_buffers_type[nlist]; i-- > 0 && ndirty < bdf_prm.b_un.ndirty; 
-				       bh = next) {
-					  /* We may have stalled while waiting for I/O to complete. */
-					  if(bh->b_list != nlist) goto repeat;
-					  next = bh->b_next_free;
-					  if(!lru_list[nlist]) {
-						  printk("Dirty list empty %d\n", i);
-						  break;
-					  }
-					  
-					  /* Clean buffer on dirty list?  Refile it */
-					  if (nlist == BUF_DIRTY && !buffer_dirty(bh)) {
-						  refile_buffer(bh);
-						  continue;
-					  }
-					  
-					  /* Unlocked buffer on locked list?  Refile it */
-					  if (nlist == BUF_LOCKED && !buffer_locked(bh)) {
-						  refile_buffer(bh);
-						  continue;
-					  }
-					  
-					  if (buffer_locked(bh) || !buffer_dirty(bh))
-						   continue;
-					  major = MAJOR(bh->b_dev);
-					  /* Should we write back buffers that are shared or not??
-					     currently dirty buffers are not shared, so it does not matter */
-					  next->b_count++;
-					  bh->b_count++;
-					  ndirty++;
-					  bh->b_flushtime = 0;
-					  if (major == LOOP_MAJOR) {
-						  ll_rw_block(wrta_cmd,1, &bh);
-						  wrta_cmd = WRITEA;
-						  if (buffer_dirty(bh))
-							  --ndirty;
-					  }
-					  else
-					  ll_rw_block(WRITE, 1, &bh);
+		wake_up(&bdflush_done);
 #ifdef DEBUG
-					  if(nlist != BUF_DIRTY) ncount++;
-#endif
-					  bh->b_count--;
-					  next->b_count--;
-				  }
-		 }
-#ifdef DEBUG
-		if (ncount) printk("sys_bdflush: %d dirty buffers not on dirty list\n", ncount);
 		printk("sleeping again.\n");
 #endif
-		/* If we didn't write anything, but there are still
-		 * dirty buffers, then make the next write to a
-		 * loop device to be a blocking write.
-		 * This lets us block--which we _must_ do! */
-		if (ndirty == 0 && nr_buffers_type[BUF_DIRTY] > 0 && wrta_cmd != WRITE) {
-			wrta_cmd = WRITE;
-			continue;
-		}
-		run_task_queue(&tq_disk);
-		wake_up(&bdflush_done);
-		
-		/* If there are still a lot of dirty buffers around, skip the sleep
-		   and flush some more */
-		if(ndirty == 0 || nr_buffers_type[BUF_DIRTY] <= nr_buffers * bdf_prm.b_un.nfract/100) {
-			spin_lock_irq(&current->sigmask_lock);
-			flush_signals(current);
-			spin_unlock_irq(&current->sigmask_lock);
-
-			interruptible_sleep_on(&bdflush_wait);
-		}
 	}
 }

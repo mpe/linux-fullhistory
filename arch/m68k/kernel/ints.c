@@ -38,6 +38,10 @@
 #include <asm/page.h>
 #include <asm/machdep.h>
 
+#ifdef CONFIG_Q40
+#include <asm/q40ints.h>
+#endif
+
 /* table for system interrupt handlers */
 static irq_handler_t irq_list[SYS_IRQS];
 
@@ -177,14 +181,24 @@ void sys_free_irq(unsigned int irq, void *dev_id)
 
 /*
  * Do we need these probe functions on the m68k?
+ *
+ *  ... may be usefull with ISA devices
  */
 unsigned long probe_irq_on (void)
 {
+#ifdef CONFIG_Q40
+	if (MACH_IS_Q40)
+		return q40_probe_irq_on();
+#endif
 	return 0;
 }
 
 int probe_irq_off (unsigned long irqs)
 {
+#ifdef CONFIG_Q40
+	if (MACH_IS_Q40)
+		return q40_probe_irq_off(irqs);
+#endif
 	return 0;
 }
 

@@ -46,7 +46,7 @@ static int adfs_find_entry (struct inode *dir, const char * const name, int name
 	unsigned long parent_object_id, dir_object_id;
 	int buffers, pos;
 
-	if (!dir || !S_ISDIR(dir->i_mode))
+	if (!S_ISDIR(dir->i_mode))
 		return 0;
 
 	sb = dir->i_sb;

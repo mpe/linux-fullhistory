@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.102 1999/03/29 12:38:09 jj Exp $
+/* $Id: entry.S,v 1.103 1999/05/08 03:00:21 davem Exp $
  * arch/sparc64/kernel/entry.S:  Sparc64 trap low-level entry points.
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -766,6 +766,7 @@ ret_from_syscall:
 		 */
 #ifdef __SMP__
 		andn		%o7, 0x100, %l0
+		mov		%g5, %o0	/* 'prev' */
 		call		schedule_tail
 		 sth		%l0, [%g6 + AOFF_task_tss + AOFF_thread_flags]
 #else

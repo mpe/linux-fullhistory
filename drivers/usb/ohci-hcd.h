@@ -22,6 +22,8 @@
  * ohci-hcd.h
  */
 
+#include <linux/config.h>
+
 #ifdef CONFIG_USB_OHCI_VROOTHUB
 #define VROOTHUB  
 #endif

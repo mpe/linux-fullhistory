@@ -126,6 +126,15 @@ __initfunc(int parport_init(void))
 #ifdef CONFIG_PARPORT_AX
 	parport_ax_init();
 #endif
+#ifdef CONFIG_PARPORT_AMIGA
+	parport_amiga_init();
+#endif
+#ifdef CONFIG_PARPORT_MFC3
+	parport_mfc3_init();
+#endif
+#ifdef CONFIG_PARPORT_ATARI
+	parport_atari_init();
+#endif
 	return 0;
 }
 #endif

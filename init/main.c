@@ -46,6 +46,10 @@
 #include <linux/apm_bios.h>
 #endif
 
+#ifdef CONFIG_MAC
+extern void nubus_init(void);
+#endif
+
 /*
  * Versions of gcc older than that listed below may actually compile
  * and link okay, but the end product can have subtle run time bugs.
@@ -789,7 +793,8 @@ static struct kernel_param cooked_params[] __initdata = {
 #endif
 #if defined(CONFIG_A4000T_SCSI) || defined(CONFIG_WARPENGINE_SCSI) \
 	    || defined(CONFIG_A4091_SCSI) || defined(CONFIG_MVME16x_SCSI) \
-	    || defined(CONFIG_BVME6000_SCSI)
+	    || defined(CONFIG_BVME6000_SCSI) \
+	    || defined(CONFIG_BLZ603EPLUS_SCSI)
         { "53c7xx=", ncr53c7xx_setup },
 #endif
 #if defined(CONFIG_A3000_SCSI) || defined(CONFIG_A2091_SCSI) \
@@ -1276,6 +1281,9 @@ static void __init do_basic_setup(void)
 #endif
 #ifdef CONFIG_DIO
 	dio_init();
+#endif
+#ifdef CONFIG_MAC
+	nubus_init();
 #endif
 
 	/* Networking initialization needs a process context */ 

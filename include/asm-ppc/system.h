@@ -80,11 +80,14 @@ struct device_node;
 extern void note_scsi_host(struct device_node *, void *);
 
 struct task_struct;
-extern void switch_to(struct task_struct *prev, struct task_struct *next);
+#define switch_to(prev,next,last) _switch_to((prev),(next),&(last))
+extern void _switch_to(struct task_struct *, struct task_struct *,
+		       struct task_struct **);
 
 struct thread_struct;
-extern void _switch(struct thread_struct *prev, struct thread_struct *next,
-		    unsigned long context);
+extern struct task_struct *_switch(struct thread_struct *prev,
+				     struct thread_struct *next,
+				     unsigned long context);
 
 struct pt_regs;
 extern void dump_regs(struct pt_regs *);

@@ -312,6 +312,7 @@ static int write_long(struct task_struct * tsk, unsigned long addr,
 asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 {
 	struct task_struct *child;
+	unsigned long flags;
 	int ret;
 
 	lock_kernel();
@@ -343,21 +344,22 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		    (current->uid != child->uid) ||
 	 	    (current->gid != child->egid) ||
 		    (current->gid != child->sgid) ||
+	 	    (!cap_issubset(child->cap_permitted, current->cap_permitted)) ||
 	 	    (current->gid != child->gid)) && !capable(CAP_SYS_PTRACE))
 			goto out;
 		/* the same process cannot be attached many times */
 		if (child->flags & PF_PTRACED)
 			goto out;
 		child->flags |= PF_PTRACED;
-		if (child->p_pptr != current) {
-			unsigned long flags;
 
-			write_lock_irqsave(&tasklist_lock, flags);
+		write_lock_irqsave(&tasklist_lock, flags);
+		if (child->p_pptr != current) {
 			REMOVE_LINKS(child);
 			child->p_pptr = current;
 			SET_LINKS(child);
-			write_unlock_irqrestore(&tasklist_lock, flags);
 		}
+		write_unlock_irqrestore(&tasklist_lock, flags);
+
 		send_sig(SIGSTOP, child, 1);
 		ret = 0;
 		goto out;
@@ -502,7 +504,6 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		}
 
 		case PTRACE_DETACH: { /* detach a process that was attached. */
-			unsigned long flags;
 			long tmp;
 
 			ret = -EIO;

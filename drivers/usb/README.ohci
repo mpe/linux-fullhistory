@@ -1,8 +1,26 @@
-April 24, 1999 04:37:42 PST
+May 09, 1999 16:25:58
 
-Okay, I've written a lot more of the OHCI code and actually got it back to
-a compiling state now with all of the recent improvements to the way stuff
-is structured.  It is completely untested.
+Cool, things are working "well" now.  (I'm not getting oops's from the
+OHCI code anyways.. ;).  I can attach a usb hub and mouse in any
+possible arrangement of the two and they get configured properly.
+
+You can see that the mouse Interrupt transfers are occuring and being
+acknowledged because /proc/interrupts usb-ohci goes up accordingly with
+mouse movements/events.  That means the TD at least returns some data
+and requeues itself.
+
+Device attach/detach from the root hub is not working well.  Currently
+every interrupt checks for root hub status changes and frame number
+overflow interrupts are enabled.  This means you shouldn't have to
+wait more than 32-33 seconds for the change to occur, less if there is
+other activity.  (due to checking in the WDH caused interrupts)
+My OHCI controller [SiS 5598 motherboard] doesn't seem to play well
+with the RHSC interrupt so it has been disabled.  The ohci_timer
+should be polling but it not currently working, I haven't had time to
+look into that problem.
+
+However, when I tried telling X to use /dev/psaux for the mouse my
+machine locked up...
 
 - greg@electricrain.com
 

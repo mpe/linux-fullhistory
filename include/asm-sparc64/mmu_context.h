@@ -1,4 +1,4 @@
-/* $Id: mmu_context.h,v 1.34 1999/01/11 13:45:44 davem Exp $ */
+/* $Id: mmu_context.h,v 1.35 1999/05/08 03:03:20 davem Exp $ */
 #ifndef __SPARC64_MMU_CONTEXT_H
 #define __SPARC64_MMU_CONTEXT_H
 
@@ -13,7 +13,6 @@
 #ifndef __ASSEMBLY__
 
 extern unsigned long tlb_context_cache;
-extern spinlock_t scheduler_lock;
 extern unsigned long mmu_context_bmap[];
 
 #define CTX_VERSION_SHIFT	(PAGE_SHIFT - 3)
@@ -38,11 +37,9 @@ extern void get_new_mmu_context(struct mm_struct *mm);
 #define destroy_context(__mm)	do { 						\
 	if ((__mm)->context != NO_CONTEXT &&					\
 	    atomic_read(&(__mm)->count) == 1) { 				\
-		spin_lock(&scheduler_lock); 					\
 		if (!(((__mm)->context ^ tlb_context_cache) & CTX_VERSION_MASK))\
 			clear_bit((__mm)->context & ~(CTX_VERSION_MASK),	\
 				  mmu_context_bmap);				\
-		spin_unlock(&scheduler_lock); 					\
 		(__mm)->context = NO_CONTEXT; 					\
 		if(current->mm == (__mm)) {					\
 			current->tss.ctx = 0;					\
@@ -126,9 +123,7 @@ extern __inline__ void __get_mmu_context(struct task_struct *tsk)
 #define activate_context(__tsk)		\
 do {	flushw_user();			\
 	(__tsk)->mm->cpu_vm_mask = 0;	\
-	spin_lock(&scheduler_lock);	\
 	__get_mmu_context(__tsk);	\
-	spin_unlock(&scheduler_lock);	\
 	(__tsk)->mm->cpu_vm_mask = (1UL<<smp_processor_id()); \
 } while(0)
 

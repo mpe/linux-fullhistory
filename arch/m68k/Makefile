@@ -56,6 +56,11 @@ SUBDIRS += arch/m68k/kernel arch/m68k/mm arch/m68k/lib
 CORE_FILES := arch/m68k/kernel/kernel.o arch/m68k/mm/mm.o $(CORE_FILES)
 LIBS += arch/m68k/lib/lib.a
 
+ifdef CONFIG_Q40
+CORE_FILES := $(CORE_FILES) arch/m68k/q40/q40.o
+SUBDIRS := $(SUBDIRS) arch/m68k/q40
+endif
+
 ifdef CONFIG_AMIGA
 CORE_FILES := $(CORE_FILES) arch/m68k/amiga/amiga.o
 SUBDIRS := $(SUBDIRS) arch/m68k/amiga
@@ -81,6 +86,11 @@ CORE_FILES := $(CORE_FILES) arch/m68k/apollo/apollo.o
 SUBDIRS := $(SUBDIRS) arch/m68k/apollo
 endif
 
+ifdef CONFIG_MVME147
+CORE_FILES := $(CORE_FILES) arch/m68k/mvme147/mvme147.o
+SUBDIRS := $(SUBDIRS) arch/m68k/mvme147
+endif
+
 ifdef CONFIG_MVME16x
 CORE_FILES := $(CORE_FILES) arch/m68k/mvme16x/mvme16x.o
 SUBDIRS := $(SUBDIRS) arch/m68k/mvme16x
@@ -89,6 +99,11 @@ endif
 ifdef CONFIG_BVME6000
 CORE_FILES := $(CORE_FILES) arch/m68k/bvme6000/bvme6000.o
 SUBDIRS := $(SUBDIRS) arch/m68k/bvme6000
+endif
+
+ifdef CONFIG_SUN3X
+CORE_FILES := $(CORE_FILES) arch/m68k/sun3x/sun3x.o
+SUBDIRS := $(SUBDIRS) arch/m68k/sun3x
 endif
 
 ifdef CONFIG_M68040

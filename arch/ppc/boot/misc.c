@@ -1,7 +1,7 @@
 /*
  * misc.c
  *
- * $Id: misc.c,v 1.63 1999/04/05 21:48:20 cort Exp $
+ * $Id: misc.c,v 1.64 1999/04/30 05:52:46 cort Exp $
  * 
  * Adapted for PowerPC by Gary Thomas
  *
@@ -362,8 +362,9 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum,
 			 */
 			if (board_type == 0xe0) {	
 				base_mod = inb(0x803);
-				/* if a MVME2300 or a MCME2400 then no keyboard */
-				if((base_mod == 0x9) || (base_mod == 0xF9)) {
+				/* if a MVME2300/2400 or a Sitka then no keyboard */
+				if((base_mod == 0x9) || (base_mod == 0xF9) ||
+				   (base_mod == 0xE1)) {
 					keyb_present = 0;	/* no keyboard */
 				}
 			}
@@ -471,6 +472,7 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum,
 	{
 		puts("initrd at:     "); puthex(initrd_start);
 		puts(" "); puthex(initrd_end); puts("\n");
+#ifdef OMIT
 		avail_ram = (char *)PAGE_ALIGN(
 			(unsigned long)zimage_size+(unsigned long)zimage_start);
 		memcpy ((void *)avail_ram, (void *)initrd_start, INITRD_SIZE );
@@ -478,6 +480,7 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum,
 		initrd_end = initrd_start + INITRD_SIZE;
 		puts("relocated to:  "); puthex(initrd_start);
 		puts(" "); puthex(initrd_end); puts("\n");
+#endif
 	}
 
 	avail_ram = (char *)0x00400000;

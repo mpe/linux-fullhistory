@@ -1,5 +1,5 @@
 /*
- * $Id: prom.c,v 1.53 1999/04/22 22:45:42 cort Exp $
+ * $Id: prom.c,v 1.54 1999/05/10 04:43:46 cort Exp $
  *
  * Procedures for interfacing to the Open Firmware PROM on
  * Power Macintosh computers.
@@ -457,7 +457,7 @@ prom_init(int r3, int r4, prom_entry pp)
 	 * a holding pattern controlled by the kernel (not OF) before
 	 * we destroy the OF.
 	 *
-	 * This used a chunk of high memory, puts some holding pattern
+	 * This uses a chunk of high memory, puts some holding pattern
 	 * code there and sends the other processors off to there until
 	 * smp_boot_cpus tells them to do something.  We do that by using
 	 * physical address 0x0.  The holding pattern checks that address

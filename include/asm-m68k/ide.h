@@ -45,22 +45,38 @@
 #include <asm/macints.h>
 #endif
 
+
+typedef unsigned int   q40ide_ioreg_t;
+
+
 typedef unsigned char * ide_ioreg_t;
+
 
 #ifndef MAX_HWIFS
 #define MAX_HWIFS	4	/* same as the other archs */
 #endif
 
-static __inline int ide_default_irq (ide_ioreg_t base)
+int q40ide_default_irq(q40ide_ioreg_t);
+
+static __inline__ int ide_default_irq(ide_ioreg_t base)
 {
-	return 0;
+        if (MACH_IS_Q40)
+	      return q40ide_default_irq((q40ide_ioreg_t) base);
+	else return 0;
 }
+
 
 /*
  *  Can we do this in a generic manner??
  */
+void q40_ide_init_hwif_ports (q40ide_ioreg_t *p, q40ide_ioreg_t base, int *irq);
+
 static __inline__ void ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq)
 {
+#ifdef CONFIG_Q40
+    if (MACH_IS_Q40)
+      return q40_ide_init_hwif_ports((q40ide_ioreg_t *)p,(q40ide_ioreg_t)base,irq);
+#endif
     printk("ide_init_hwif_ports: must not be called\n");
 }
 
@@ -86,6 +102,10 @@ static __inline__ int ide_request_irq(unsigned int irq, void (*handler)(int, voi
 	if (MACH_IS_AMIGA)
 		return request_irq(irq, handler, 0, device, dev_id);
 #endif /* CONFIG_AMIGA */
+#ifdef CONFIG_Q40
+	if (MACH_IS_Q40)
+	  	return request_irq(irq, handler, 0, device, dev_id);
+#endif /* CONFIG_Q40*/
 #ifdef CONFIG_MAC
 	if (MACH_IS_MAC)
 #if 0	/* MSch Hack: maybe later we'll call ide_intr without a wrapper */
@@ -103,6 +123,10 @@ static __inline__ void ide_free_irq(unsigned int irq, void *dev_id)
 	if (MACH_IS_AMIGA)
 		free_irq(irq, dev_id);
 #endif /* CONFIG_AMIGA */
+#ifdef CONFIG_Q40
+	if (MACH_IS_Q40)
+	  	free_irq(irq, dev_id);
+#endif /* CONFIG_Q40*/
 #ifdef CONFIG_MAC
 	if (MACH_IS_MAC)
 		nubus_free_irq(12);
@@ -119,10 +143,18 @@ static __inline__ int ide_check_region (ide_ioreg_t from, unsigned int extent)
 
 static __inline__ void ide_request_region (ide_ioreg_t from, unsigned int extent, const char *name)
 {
+#ifdef CONFIG_Q40
+        if (MACH_IS_Q40)
+            request_region((q40ide_ioreg_t)from,extent,name);
+#endif
 }
 
 static __inline__ void ide_release_region (ide_ioreg_t from, unsigned int extent)
 {
+#ifdef CONFIG_Q40
+        if (MACH_IS_Q40)
+            release_region((q40ide_ioreg_t)from,extent);
+#endif
 }
 
 #undef SUPPORT_SLOW_DATA_PORTS
@@ -131,14 +163,36 @@ static __inline__ void ide_release_region (ide_ioreg_t from, unsigned int extent
 #undef SUPPORT_VLB_SYNC
 #define SUPPORT_VLB_SYNC 0
 
+/* this definition is used only on startup .. */
+#ifndef CONFIG_Q40
 #undef HD_DATA
 #define HD_DATA NULL
+#else
+#ifdef MACH_Q40_ONLY
+#undef HD_DATA
+#define HD_DATA ((ide_ioreg_t)0x1f0)
+#else
+#undef HD_DATA
+#define HD_DATA   (MACH_IS_Q40 ? (ide_ioreg_t)0x1f0 : 0)
+#endif
+#endif
+
 
 #define insl(data_reg, buffer, wcount) insw(data_reg, buffer, (wcount)<<1)
 #define outsl(data_reg, buffer, wcount) outsw(data_reg, buffer, (wcount)<<1)
 
+#ifdef CONFIG_Q40
+#ifdef MACH_Q40_ONLY
+#define ADDR_TRANS(_addr_) (Q40_ISA_IO_W(_addr_))
+#else
+#define ADDR_TRANS(_addr_) (MACH_IS_Q40 ? ((unsigned char *)Q40_ISA_IO_W(_addr_)) : (_addr_))
+#endif
+#else
+#define ADDR_TRANS(_addr_) (_addr_)
+#endif
+
 #define insw(port, buf, nr) ({				\
-	unsigned char *_port = (unsigned char *)(port);	\
+	unsigned char *_port = (unsigned char *) ADDR_TRANS(port);	\
 	unsigned char *_buf = (buf);			\
 	int _nr = (nr);					\
 	unsigned long _tmp;				\
@@ -179,7 +233,7 @@ static __inline__ void ide_release_region (ide_ioreg_t from, unsigned int extent
 })
 
 #define outsw(port, buf, nr) ({				\
-	unsigned char *_port = (unsigned char *)(port);	\
+	unsigned char *_port = (unsigned char *) ADDR_TRANS(port);	\
 	unsigned char *_buf = (buf);			\
 	int _nr = (nr);					\
 	unsigned long _tmp;				\
@@ -219,7 +273,7 @@ static __inline__ void ide_release_region (ide_ioreg_t from, unsigned int extent
 	}						\
 })
 
-#ifdef CONFIG_ATARI
+#if defined(CONFIG_ATARI) || defined(CONFIG_Q40)
 #define insl_swapw(data_reg, buffer, wcount) \
     insw_swapw(data_reg, buffer, (wcount)<<1)
 #define outsl_swapw(data_reg, buffer, wcount) \
@@ -236,7 +290,7 @@ static __inline__ void ide_release_region (ide_ioreg_t from, unsigned int extent
 		 rolw  #8,%/d0; \
 		 movew %/d0,%/a1@+; \
 		 dbra %/d6,1b" : \
-		: "g" (port), "g" (buf), "g" (nr) \
+		: "g" (ADDR_TRANS(port)), "g" (buf), "g" (nr) \
 		: "d0", "a0", "a1", "d6"); \
     else \
 	__asm__ __volatile__ \
@@ -270,8 +324,9 @@ static __inline__ void ide_release_region (ide_ioreg_t from, unsigned int extent
 		 rolw  #8,%/d0; \
 		 movew %/d0,%/a1@+; \
 		 dbra %/d6,1b" : \
-		: "g" (port), "g" (buf), "g" (nr) \
-		: "d0", "a0", "a1", "d6")
+		: "g" (ADDR_TRANS(port)), "g" (buf), "g" (nr) \
+		: "d0", "a0", "a1", "d6") 
+
 
 #define outsw_swapw(port, buf, nr) \
     if ((nr) % 8) \
@@ -284,7 +339,7 @@ static __inline__ void ide_release_region (ide_ioreg_t from, unsigned int extent
 		 rolw  #8,%/d0; \
 		 movew %/d0,%/a0@; \
 		 dbra %/d6,1b" : \
-		: "g" (port), "g" (buf), "g" (nr) \
+		: "g" (ADDR_TRANS(port)), "g" (buf), "g" (nr) \
 		: "d0", "a0", "a1", "d6"); \
     else \
 	__asm__ __volatile__ \
@@ -318,7 +373,7 @@ static __inline__ void ide_release_region (ide_ioreg_t from, unsigned int extent
 		 rolw  #8,%/d0; \
 		 movew %/d0,%/a0@; \
 		 dbra %/d6,1b" : \
-		: "g" (port), "g" (buf), "g" (nr) \
+		: "g" (ADDR_TRANS(port)), "g" (buf), "g" (nr) \
 		: "d0", "a0", "a1", "d6")
 
 #endif /* CONFIG_ATARI */

@@ -28,6 +28,8 @@
 #define SCC_BAUD_BASE_NONE	0		/* for not connected or unused
 						 * clock sources */
 
+#define SCC_BAUD_BASE_M147_PCLK	312500	/* 5 MHz */
+#define SCC_BAUD_BASE_M147	312500	/* 5 MHz */
 #define SCC_BAUD_BASE_MVME_PCLK	781250	/* 12.5 MHz */
 #define SCC_BAUD_BASE_MVME	625000	/* 10.000 MHz */
 #define SCC_BAUD_BASE_BVME_PCLK	781250	/* 12.5 MHz */   /* XXX ??? */

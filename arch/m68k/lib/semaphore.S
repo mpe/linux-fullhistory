@@ -32,6 +32,16 @@ ENTRY(__down_failed_interruptible)
 	movel (%sp)+,%a0
 	rts
 
+ENTRY(__down_failed_trylock)
+	movel %a0,-(%sp)
+	movel %d1,-(%sp)
+	movel %a1,-(%sp)
+	jbsr SYMBOL_NAME(__down_trylock)
+	movel (%sp)+,%a1
+	movel (%sp)+,%d1
+	movel (%sp)+,%a0
+	rts
+
 ENTRY(__up_wakeup)
 	moveml %a0/%d0/%d1,-(%sp)
 	movel %a1,-(%sp)

@@ -14,13 +14,13 @@ void openpic_ipi_action(int cpl, void *dev_id, struct pt_regs *regs)
 }
 #endif /* __SMP__ */
 
-void __openfirmware chrp_mask_and_ack_irq(unsigned int irq_nr)
+void chrp_mask_and_ack_irq(unsigned int irq_nr)
 {
 	if (is_8259_irq(irq_nr))
 	    i8259_pic.mask_and_ack(irq_nr);
 }
 
-static void __openfirmware chrp_mask_irq(unsigned int irq_nr)
+static void chrp_mask_irq(unsigned int irq_nr)
 {
 	if (is_8259_irq(irq_nr))
 		i8259_pic.disable(irq_nr);
@@ -28,7 +28,7 @@ static void __openfirmware chrp_mask_irq(unsigned int irq_nr)
 		openpic_disable_irq(irq_to_openpic(irq_nr));
 }
 
-static void __openfirmware chrp_unmask_irq(unsigned int irq_nr)
+static void chrp_unmask_irq(unsigned int irq_nr)
 {
 	if (is_8259_irq(irq_nr))
 		i8259_pic.enable(irq_nr);

@@ -6,7 +6,7 @@
  *
  * (C) Copyright 1999 Gregory P. Smith <greg@electricrain.com>
  *
- * $Id: ohci.h,v 1.6 1999/04/24 22:50:06 greg Exp $
+ * $Id: ohci.h,v 1.15 1999/05/09 23:25:49 greg Exp $
  */
 
 #include <linux/list.h>
@@ -14,49 +14,64 @@
 
 #include "usb.h"
 
+struct ohci_ed;
+
 /*
  * Each TD must be aligned on a 16-byte boundary.  From the OHCI v1.0 spec
  * it does not state that TDs must be contiguious in memory (due to the
  * use of the next_td field).  This gives us extra room at the end of a
  * TD for our own driver specific data.
  *
- * This structure's size must be a multiple of 16 bytes.
+ * This structure's size must be a multiple of 16 bytes. ?? no way, I
+ * don't see why.  Alignment should be all that matters.
  */
 struct ohci_td {
     	/* OHCI Hardware fields */
-    	__u32 info;
-	__u32 cur_buf;		/* Current Buffer Pointer */
-	__u32 next_td;		/* Next TD Pointer */
-	__u32 buf_end;		/* Memory Buffer End Pointer */
+    	__u32 info;		/* TD status & type flags */
+	__u32 cur_buf;		/* Current Buffer Pointer (bus address) */
+	__u32 next_td;		/* Next TD Pointer (bus address) */
+	__u32 buf_end;		/* Memory Buffer End Pointer (bus address) */
 
 	/* Driver specific fields */
-	struct list_head irq_list;	/* Active interrupt list */
+	struct ohci_ed *ed;		/* address of the ED this TD is on */
+	struct ohci_td *next_dl_td;	/* used during donelist processing */
+	void *data;			/* virt. address of the the buffer */
 	usb_device_irq completed;	/* Completion handler routine */
-	void *data;	/* XXX ? */
-	void *dev_id;	/* XXX ? */
-	__u32 ed_bus;			/* bus address of original ED */
-} __attribute((aligned(32)));
+	int allocated;			/* boolean: is this TD allocated? */
+
+	/* User or Device class driver specific fields */
+	void *dev_id;	/* user defined pointer passed to irq handler */
+} __attribute((aligned(16)));
 
 #define OHCI_TD_ROUND	(1 << 18)	/* buffer rounding bit */
-#define OHCI_TD_D	(3 << 11)	/* direction of xfer: */
-#define OHCI_TD_D_IN	(2 << 11)
-#define OHCI_TD_D_OUT	(1 << 11)
-#define OHCI_TD_D_SETUP (0)
+#define OHCI_TD_D	(3 << 19)	/* direction of xfer: */
+#define OHCI_TD_D_IN	(2 << 19)
+#define OHCI_TD_D_OUT	(1 << 19)
+#define OHCI_TD_D_SETUP (0 << 19)
 #define td_set_dir_in(d)	((d) ? OHCI_TD_D_IN : OHCI_TD_D_OUT )
 #define td_set_dir_out(d)	((d) ? OHCI_TD_D_OUT : OHCI_TD_D_IN )
 #define OHCI_TD_IOC_DELAY (7 << 21)	/* frame delay allowed before int. */
 #define OHCI_TD_IOC_OFF	(OHCI_TD_IOC_DELAY)	/* no interrupt on complete */
 #define OHCI_TD_DT	(3 << 24)	/* data toggle bits */
+#define TOGGLE_AUTO	(0 << 24)	/* automatic (from the ED) */
+#define TOGGLE_DATA0	(2 << 24)	/* force Data0 */
+#define TOGGLE_DATA1	(3 << 24)	/* force Data1 */
 #define td_force_toggle(b)	(((b) | 2) << 24)
 #define OHCI_TD_ERRCNT	(3 << 26)	/* error count */
-#define td_errorcount(td)	(((td) >> 26) & 3)
+#define td_errorcount(td)	(((td).info >> 26) & 3)
 #define OHCI_TD_CC	(0xf << 28)	/* condition code */
+#define OHCI_TD_CC_GET(td_i) (((td_i) >> 28) & 0xf)
 #define OHCI_TD_CC_NEW	(OHCI_TD_CC)	/* set this on all unaccessed TDs! */
-#define td_cc_notaccessed(td)	((td >> 29) == 7)
-#define td_cc_accessed(td)	((td >> 29) != 7)
-#define td_cc_noerror(td)	(((td) & OHCI_TD_CC) == 0)
+#define td_cc_notaccessed(td)	(((td).info >> 29) == 7)
+#define td_cc_accessed(td)	(((td).info >> 29) != 7)
+#define td_cc_noerror(td)	((((td).info) & OHCI_TD_CC) == 0)
 #define td_active(td)	(!td_cc_noerror((td)) && (td_errorcount((td)) < 3))
 #define td_done(td)	(td_cc_noerror((td)) || (td_errorcount((td)) == 3))
+
+#define td_allocated(td)	((td).allocated)
+#define allocate_td(td)		((td)->allocated = 1)
+#define ohci_free_td(td)	((td)->allocated = 0)
+
 
 /*
  * The endpoint descriptors also requires 16-byte alignment
@@ -65,9 +80,15 @@ struct ohci_ed {
 	/* OHCI hardware fields */
 	__u32 status;
 	__u32 tail_td;	/* TD Queue tail pointer */
-	__u32 head_td;	/* TD Queue head pointer */
+	__u32 _head_td;	/* TD Queue head pointer, toggle carry & halted bits */
 	__u32 next_ed;	/* Next ED */
 } __attribute((aligned(16)));
+
+/* get the head_td */
+#define ed_head_td(ed)	((ed)->_head_td & 0xfffffff0)
+
+/* save the carry flag while setting the head_td */
+#define set_ed_head_td(ed, td)	((ed)->_head_td = (td) | ((ed)->_head_td & 3))
 
 #define OHCI_ED_SKIP	(1 << 14)
 #define OHCI_ED_MPS	(0x7ff << 16)
@@ -90,10 +111,10 @@ struct ohci_ed {
 
 /* NOTE: bits 27-31 of the status dword are reserved for the driver */
 /*
- * We'll use this status flag for the non-predefined EDs to mark if
- * they're in use or not.
+ * We'll use this status flag for to mark if an ED is in use by the
+ * driver or not.  If the bit is set, it is used.
  *
- * FIXME: unimplemented (needed?)
+ * FIXME: implement this!
  */
 #define ED_USED	(1 << 31)
 
@@ -174,8 +195,8 @@ struct ohci_device {
 
 /*
  * Given a period p in ms, convert it to the closest endpoint
- * interrupt frequency; rounding down.  I'm sure many feel that this
- * is a gross macro.  Feel free to toss it for actual code.
+ * interrupt frequency; rounding down.  This is a gross macro.
+ * Feel free to toss it for actual code. (gasp!)
  */
 #define ms_to_ed_int(p) \
 	((p >= 32) ? ED_INT_32 : \
@@ -257,6 +278,15 @@ struct ohci_regs {
 #define PORT_OCIC	(1 << 19)	/* port over current indicator chg */
 #define PORT_PRSC	(1 << 20)	/* port reset status change */
 
+/*
+ * Root Hub status register masks
+ */
+#define OHCI_ROOT_LPS	(1)		/* turn off root hub ports power */
+#define OHCI_ROOT_OCI	(1 << 1)	/* Overcurrent Indicator */
+#define OHCI_ROOT_DRWE	(1 << 15)	/* Device remote wakeup enable */
+#define OHCI_ROOT_LPSC	(1 << 16)	/* turn on root hub ports power */
+#define OHCI_ROOT_OCIC	(1 << 17)	/* Overcurrent indicator change */
+#define OHCI_ROOT_CRWE	(1 << 31)	/* Clear RemoteWakeupEnable */
 
 /*
  * Interrupt register masks
@@ -276,6 +306,19 @@ struct ohci_regs {
  */
 #define OHCI_USB_OPER		(2 << 6)
 #define OHCI_USB_SUSPEND	(3 << 6)
+#define OHCI_USB_PLE		(1 << 2)  /* Periodic (interrupt) list enable */
+#define OHCI_USB_IE		(1 << 3)  /* Isochronous list enable */
+#define OHCI_USB_CLE		(1 << 4)  /* Control list enable */
+#define OHCI_USB_BLE		(1 << 5)  /* Bulk list enable */
+
+/*
+ * Command status register masks
+ */
+#define OHCI_CMDSTAT_HCR	(1)
+#define OHCI_CMDSTAT_CLF	(1 << 1)
+#define OHCI_CMDSTAT_BLF	(1 << 2)
+#define OHCI_CMDSTAT_OCR	(1 << 3)
+#define OHCI_CMDSTAT_SOC	(3 << 16)
 
 /*
  * This is the full ohci controller description
@@ -291,10 +334,15 @@ struct ohci {
 	struct list_head interrupt_list;	/* List of interrupt active TDs for this OHCI */
 };
 
+#define OHCI_TIMER
+#define OHCI_TIMER_FREQ	(1)		/* frequency of OHCI status checks */
+
 /* Debugging code */
-void show_ed(struct ohci_ed *ed);
-void show_td(struct ohci_td *td);
-void show_status(struct ohci *ohci);
+void show_ohci_ed(struct ohci_ed *ed);
+void show_ohci_td(struct ohci_td *td);
+void show_ohci_status(struct ohci *ohci);
+void show_ohci_device(struct ohci_device *dev);
+void show_ohci_hcca(struct ohci_hcca *hcca);
 
 #endif
 /* vim:sw=8

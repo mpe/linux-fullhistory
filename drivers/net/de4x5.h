@@ -1028,4 +1028,4 @@ struct de4x5_ioctl {
 
 #define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))
 
-#define MOTO_SROM_BUG    ((lp->active == 8) && ((*((s32 *)le32_to_cpu(get_unaligned(dev->dev_addr)))&0x00ffffff)==0x3e0008))
+#define MOTO_SROM_BUG    ((lp->active == 8) && (((le32_to_cpu(get_unaligned(((s32 *)dev->dev_addr))))&0x00ffffff)==0x3e0008))

@@ -98,7 +98,6 @@ __initfunc(int ethertap_probe(struct device *dev))
 
 	ether_setup(dev);
 
-	dev->hard_header_len = 16;
 	dev->tx_queue_len = 0;
 	dev->flags|=IFF_NOARP;
 	tap_map[dev->base_addr]=dev;
@@ -178,11 +177,21 @@ static int ethertap_start_xmit(struct sk_buff *skb, struct device *dev)
 #endif
 
 	if (skb_headroom(skb) < 2) {
-		printk(KERN_DEBUG "%s : bug --- xmit with head<2\n", dev->name);
+		static int once;
+	  	struct sk_buff *skb2;
+
+		if (!once) {
+			once = 1;
+			printk(KERN_DEBUG "%s: not aligned xmit by protocol %04x\n", dev->name, skb->protocol);
+		}
+
+		skb2 = skb_realloc_headroom(skb, 2);
 		dev_kfree_skb(skb);
-		return 0;
+		if (skb2 == NULL)
+			return 0;
+		skb = skb2;
 	}
-	skb_push(skb, 2);
+	__skb_push(skb, 2);
 
 	/* Make the same thing, which loopback does. */
 	if (skb_shared(skb)) {
