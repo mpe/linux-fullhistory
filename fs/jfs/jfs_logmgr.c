@@ -1119,6 +1119,7 @@ int lmLogOpen(struct super_block *sb)
 	}
 	memset(log, 0, sizeof(struct jfs_log));
 	INIT_LIST_HEAD(&log->sb_list);
+	init_waitqueue_head(&log->syncwait);
 
 	/*
 	 *      external log as separate logical volume
@@ -1192,6 +1193,7 @@ static int open_inline_log(struct super_block *sb)
 		return -ENOMEM;
 	memset(log, 0, sizeof(struct jfs_log));
 	INIT_LIST_HEAD(&log->sb_list);
+	init_waitqueue_head(&log->syncwait);
 
 	set_bit(log_INLINELOG, &log->flag);
 	log->bdev = sb->s_bdev;
@@ -1229,6 +1231,7 @@ static int open_dummy_log(struct super_block *sb)
 		}
 		memset(dummy_log, 0, sizeof(struct jfs_log));
 		INIT_LIST_HEAD(&dummy_log->sb_list);
+		init_waitqueue_head(&dummy_log->syncwait);
 		dummy_log->no_integrity = 1;
 		/* Make up some stuff */
 		dummy_log->base = 0;
@@ -1290,8 +1293,6 @@ int lmLogInit(struct jfs_log * log)
 	LOGSYNC_LOCK_INIT(log);
 
 	INIT_LIST_HEAD(&log->synclist);
-
-	init_waitqueue_head(&log->syncwait);
 
 	INIT_LIST_HEAD(&log->cqueue);
 	log->flush_tblk = NULL;

@@ -178,6 +178,11 @@ static inline struct jfs_inode_info *JFS_IP(struct inode *inode)
 	return list_entry(inode, struct jfs_inode_info, vfs_inode);
 }
 
+static inline int jfs_dirtable_inline(struct inode *inode)
+{
+	return (JFS_IP(inode)->next_index <= (MAX_INLINE_DIRTABLE_ENTRY + 1));
+}
+
 static inline struct jfs_sb_info *JFS_SBI(struct super_block *sb)
 {
 	return sb->s_fs_info;
@@ -189,5 +194,4 @@ static inline int isReadOnly(struct inode *inode)
 		return 0;
 	return 1;
 }
-
 #endif /* _H_JFS_INCORE */
