@@ -29,25 +29,6 @@
 #include <asm/segment.h>
 #include <asm/io.h>
 
-#ifdef CONFIG_SCSI
-#ifdef CONFIG_BLK_DEV_SR
-extern int check_cdrom_media_change(int, int);
-#endif
-#ifdef CONFIG_BLK_DEV_SD
-extern int check_scsidisk_media_change(int, int);
-extern int revalidate_scsidisk(int, int);
-#endif
-#endif
-#ifdef CONFIG_CDU31A
-extern int check_cdu31a_media_change(int, int);
-#endif
-#ifdef CONFIG_MCD
-extern int check_mcd_media_change(int, int);
-#endif
-#ifdef CONFIG_SBPCD
-extern int check_sbpcd_media_change(int, int);
-#endif
-
 #define NR_SIZES 4
 static char buffersize_index[9] = {-1,  0,  1, -1,  2, -1, -1, -1, 3};
 static short int bufferindex_size[NR_SIZES] = {512, 1024, 2048, 4096};
@@ -284,85 +265,6 @@ void invalidate_buffers(dev_t dev)
 					  bh->b_dirt = bh->b_req = 0;
 		}
 	}
-}
-
-/*
- * This routine checks whether a floppy has been changed, and
- * invalidates all buffer-cache-entries in that case. This
- * is a relatively slow routine, so we have to try to minimize using
- * it. Thus it is called only upon a 'mount' or 'open'. This
- * is the best way of combining speed and utility, I think.
- * People changing diskettes in the middle of an operation deserve
- * to loose :-)
- *
- * NOTE! Although currently this is only for floppies, the idea is
- * that any additional removable block-device will use this routine,
- * and that mount/open needn't know that floppies/whatever are
- * special.
- */
-void check_disk_change(dev_t dev)
-{
-	int i;
-	struct buffer_head * bh;
-
-	switch(MAJOR(dev)){
-	case FLOPPY_MAJOR:
-		if (!(bh = getblk(dev,0,1024)))
-			return;
-		i = floppy_change(bh);
-		brelse(bh);
-		break;
-
-#if defined(CONFIG_BLK_DEV_SD) && defined(CONFIG_SCSI)
-         case SCSI_DISK_MAJOR:
-		i = check_scsidisk_media_change(dev, 0);
-		break;
-#endif
-
-#if defined(CONFIG_BLK_DEV_SR) && defined(CONFIG_SCSI)
-	 case SCSI_CDROM_MAJOR:
-		i = check_cdrom_media_change(dev, 0);
-		break;
-#endif
-
-#if defined(CONFIG_CDU31A)
-         case CDU31A_CDROM_MAJOR:
-		i = check_cdu31a_media_change(dev, 0);
-		break;
-#endif
-
-#if defined(CONFIG_MCD)
-         case MITSUMI_CDROM_MAJOR:
-		i = check_mcd_media_change(dev, 0);
-		break;
-#endif
-
-#if defined(CONFIG_SBPCD)
-         case MATSUSHITA_CDROM_MAJOR:
-		i = check_sbpcd_media_change(dev, 0);
-		break;
-#endif
-
-         default:
-		return;
-	};
-
-	if (!i)	return;
-
-	printk("VFS: Disk change detected on device %d/%d\n",
-					MAJOR(dev), MINOR(dev));
-	for (i=0 ; i<NR_SUPER ; i++)
-		if (super_blocks[i].s_dev == dev)
-			put_super(super_blocks[i].s_dev);
-	invalidate_inodes(dev);
-	invalidate_buffers(dev);
-
-#if defined(CONFIG_BLK_DEV_SD) && defined(CONFIG_SCSI)
-/* This is trickier for a removable hardisk, because we have to invalidate
-   all of the partitions that lie on the disk. */
-	if (MAJOR(dev) == SCSI_DISK_MAJOR)
-		revalidate_scsidisk(dev, 0);
-#endif
 }
 
 #define _hashfn(dev,block) (((unsigned)(dev^block))%nr_hash)

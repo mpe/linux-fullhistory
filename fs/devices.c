@@ -15,6 +15,29 @@
 #include <linux/fcntl.h>
 #include <linux/errno.h>
 
+/*
+ * Ugly. We'll fix this once all the drivers use the f_ops->check_media_change()
+ * stuff instead..
+ */
+#ifdef CONFIG_SCSI
+#ifdef CONFIG_BLK_DEV_SR
+extern int check_cdrom_media_change(int, int);
+#endif
+#ifdef CONFIG_BLK_DEV_SD
+extern int check_scsidisk_media_change(int, int);
+extern int revalidate_scsidisk(int, int);
+#endif
+#endif
+#ifdef CONFIG_CDU31A
+extern int check_cdu31a_media_change(int, int);
+#endif
+#ifdef CONFIG_MCD
+extern int check_mcd_media_change(int, int);
+#endif
+#ifdef CONFIG_SBPCD
+extern int check_sbpcd_media_change(int, int);
+#endif
+
 struct device_struct {
 	const char * name;
 	struct file_operations * fops;
@@ -108,6 +131,88 @@ int unregister_blkdev(unsigned int major, const char * name)
 	blkdevs[major].name = NULL;
 	blkdevs[major].fops = NULL;
 	return 0;
+}
+
+/*
+ * This routine checks whether a removable media has been changed,
+ * and invalidates all buffer-cache-entries in that case. This
+ * is a relatively slow routine, so we have to try to minimize using
+ * it. Thus it is called only upon a 'mount' or 'open'. This
+ * is the best way of combining speed and utility, I think.
+ * People changing diskettes in the middle of an operation deserve
+ * to loose :-)
+ */
+void check_disk_change(dev_t dev)
+{
+	int i;
+	struct file_operations * fops;
+
+	i = MAJOR(dev);
+	if (i >= MAX_BLKDEV || (fops = blkdevs[i].fops) == NULL)
+		return;
+	if (fops->check_media_change != NULL) {
+		if (!fops->check_media_change(dev))
+			return;
+	} 
+#if 1 /* this will go soon.. */
+	else switch(MAJOR(dev)){
+#if defined(CONFIG_BLK_DEV_SD) && defined(CONFIG_SCSI)
+         case SCSI_DISK_MAJOR:
+		if (!check_scsidisk_media_change(dev, 0))
+			return;
+		break;
+#endif
+
+#if defined(CONFIG_BLK_DEV_SR) && defined(CONFIG_SCSI)
+	 case SCSI_CDROM_MAJOR:
+		if (!check_cdrom_media_change(dev, 0))
+			return;
+		break;
+#endif
+
+#if defined(CONFIG_CDU31A)
+         case CDU31A_CDROM_MAJOR:
+		if (!check_cdu31a_media_change(dev, 0))
+			return;
+		break;
+#endif
+
+#if defined(CONFIG_MCD)
+         case MITSUMI_CDROM_MAJOR:
+		if (!check_mcd_media_change(dev, 0))
+			return;
+		break;
+#endif
+
+#if defined(CONFIG_SBPCD)
+         case MATSUSHITA_CDROM_MAJOR:
+		if (!check_sbpcd_media_change(dev, 0))
+			return;
+		break;
+#endif
+
+         default:
+		return;
+	}
+#endif	/* will go away */
+
+	printk("VFS: Disk change detected on device %d/%d\n",
+					MAJOR(dev), MINOR(dev));
+	for (i=0 ; i<NR_SUPER ; i++)
+		if (super_blocks[i].s_dev == dev)
+			put_super(super_blocks[i].s_dev);
+	invalidate_inodes(dev);
+	invalidate_buffers(dev);
+
+	if (fops->revalidate)
+		fops->revalidate(dev);
+
+#if defined(CONFIG_BLK_DEV_SD) && defined(CONFIG_SCSI)
+/* This is trickier for a removable hardisk, because we have to invalidate
+   all of the partitions that lie on the disk. */
+	if (MAJOR(dev) == SCSI_DISK_MAJOR)
+		revalidate_scsidisk(dev, 0);
+#endif
 }
 
 /*

@@ -292,6 +292,8 @@ struct file_operations {
 	void (*release) (struct inode *, struct file *);
 	int (*fsync) (struct inode *, struct file *);
 	int (*fasync) (struct inode *, struct file *, int);
+	int (*check_media_change) (dev_t dev);
+	int (*revalidate) (dev_t dev);
 };
 
 struct inode_operations {
@@ -414,7 +416,6 @@ extern inline void mark_buffer_dirty(struct buffer_head * bh, int flag)
 extern void check_disk_change(dev_t dev);
 extern void invalidate_inodes(dev_t dev);
 extern void invalidate_buffers(dev_t dev);
-extern int floppy_change(struct buffer_head * first_block);
 extern void sync_inodes(dev_t dev);
 extern void sync_dev(dev_t dev);
 extern int fsync_dev(dev_t dev);

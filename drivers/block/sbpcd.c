@@ -5,7 +5,7 @@
  *            and for "no-sound" interfaces like Lasermate and the
  *            Panasonic CI-101P.
  *
- *  NOTE:     This is release 2.0.
+ *  NOTE:     This is release 2.1.
  *            It works with my SbPro & drive CR-521 V2.11 from 2/92
  *            and with the new CR-562-B V0.75 on a "naked" Panasonic
  *            CI-101P interface. And vice versa. 
@@ -106,6 +106,21 @@
  *       reset the drive and do again. Needs lots of resets here and sometimes
  *       that does not cure, so this can't be the solution.
  *
+ *  2.1  Found bug with multisession CDs (accessing frame 16).
+ *       "read audio" works now with address type CDROM_MSF, too.
+ *       Bigger audio frame buffer: allows reading max. 4 frames at time; but
+ *       reading more than one frame at once gives poor quality.
+ *
+ *
+ *  TODO
+ *
+ *     disk change detection
+ *     allow & synchronize multi-activity
+ *        (data + audio + ioctl + disk change, multiple drives)
+ *     implement multi-controller-support with a single driver
+ *     implement "read all subchannel data" (96 bytes per frame)
+ *
+ *
  *     special thanks to Kai Makisara (kai.makisara@vtt.fi) for his fine
  *     elaborated speed-up experiments (and the fabulous results!), for
  *     the "push" towards load-free wait loops, and for the extensive mail
@@ -172,7 +187,7 @@
 
 #include "blk.h"
 
-#define VERSION "2.0 Eberhard Moenkeberg <emoenke@gwdg.de>"
+#define VERSION "2.1 Eberhard Moenkeberg <emoenke@gwdg.de>"
 
 #define SBPCD_DEBUG
 
@@ -198,7 +213,6 @@
 #define XA_TEST2
 
 #define TEST_UPC 0
-#define READ_AUDIO 1
 #define SPEA_TEST 0
 #define PRINTK_BUG 0
 #define TEST_STI 0
@@ -289,10 +303,11 @@ static int autoprobe[] =
 {
   CDROM_PORT, SBPRO, /* probe with user's setup first */
   0x230, 1, /* Soundblaster Pro and 16 (default) */
-  0x300, 0, /* CI-101P (default), Galaxy (default), Reveal (one default) */
+  0x300, 0, /* CI-101P (default), WDH-7001C (default),
+	       Galaxy (default), Reveal (one default) */
   0x250, 1, /* OmniCD default, Soundblaster Pro and 16 */
   0x260, 1, /* OmniCD */
-  0x320, 0, /* Lasermate, CI-101P, Galaxy, Reveal (other default) */
+  0x320, 0, /* Lasermate, CI-101P, WDH-7001C, Galaxy, Reveal (other default) */
   0x340, 0, /* Lasermate, CI-101P */
   0x360, 0, /* Lasermate, CI-101P */
   0x270, 1, /* Soundblaster 16 */
@@ -304,11 +319,11 @@ static int autoprobe[] =
   0x350, 2, /* SPEA Media FX */
 #if 0
 /* some "hazardous" locations (ethernet cards) */
-  0x330, 0, /* Lasermate, CI-101P */
+  0x330, 0, /* Lasermate, CI-101P, WDH-7001C */
   0x350, 0, /* Lasermate, CI-101P */
   0x370, 0, /* Lasermate, CI-101P */
   0x290, 1, /* Soundblaster 16 */
-  0x310, 0, /* Lasermate, CI-101P */
+  0x310, 0, /* Lasermate, CI-101P, WDH-7001C */
 /* excluded due to incomplete address decoding of the SbPro card */
   0x630, 0, /* "sound card #9" (default) */
   0x650, 0, /* "sound card #9" */
@@ -323,8 +338,9 @@ static int autoprobe[] =
  * the forward references:
  */
 static void sbp_read_cmd(void);
-static int  sbp_data(void);
+static int sbp_data(void);
 static int cmd_out(void);
+static int DiskInfo(void);
 
 /*==========================================================================*/
 
@@ -370,12 +386,7 @@ static int sbpcd_debug =  (1<<DBG_INF) |
 #else
 static int sbpcd_debug =  (1<<DBG_INF) |
                           (1<<DBG_TOC) |
-                          (1<<DBG_UPC) |
-                          (1<<DBG_TIM) |
-                          (1<<DBG_LCK) |
-                          (1<<DBG_CHK) |
-                          (1<<DBG_AUD) |
-                          (1<<DBG_IOX);
+                          (1<<DBG_UPC);
 #endif
 #endif
 static int sbpcd_ioaddr = CDROM_PORT;	/* default I/O base address */
@@ -404,7 +415,8 @@ static struct wait_queue *sbp_waitq = NULL;
 
 /*==========================================================================*/
 
-#define SBP_BUFFER_FRAMES 4 /* driver's own read_ahead */
+#define SBP_BUFFER_FRAMES 4 /* driver's own read_ahead, data mode */
+#define SBP_BUFFER_AUDIO_FRAMES 4 /* driver's own read_ahead, read audio mode */
 
 /*==========================================================================*/
 
@@ -419,6 +431,7 @@ static u_char infobuf[20];
 static u_char xa_head_buf[CD_XA_HEAD];
 static u_char xa_tail_buf[CD_XA_TAIL];
 
+static u_char busy_data=0, busy_audio=0; /* true semaphores would be safer */
 static u_char timed_out=0;
 static u_int datarate= 1000000;
 static u_int maxtim16=16000000;
@@ -460,11 +473,8 @@ static struct {
   int sbp_current;       /* Frame being currently read */
 
   u_char mode;           /* read_mode: READ_M1, READ_M2, READ_SC, READ_AU */
-#if READ_AUDIO
   u_char *aud_buf;                  /* Pointer to audio data buffer,
                                  space allocated during sbpcd_init() */
-#endif READ_AUDIO
-
   u_char drv_type;
   u_char drv_options;
   u_char status_byte;
@@ -671,22 +681,34 @@ static int msf2blk(int msfx)
   return (i);
 }
 /*==========================================================================*/
+/*
+ *  convert m-s-f_number (3 bytes only) to logical_block_address 
+ */
+static int msf2lba(u_char *msf)
+{
+  int i;
+
+  i=(msf[0] * CD_SECS + msf[1]) * CD_FRAMES + msf[2] - CD_BLOCK_OFFSET;
+  if (i<0) return (0);
+  return (i);
+}
+/*==========================================================================*/
 /* evaluate xx_ReadError code (still mysterious) */ 
 static int sta2err(int sta)
 {
   if (sta<=2) return (sta);
-  if (sta==0x05) return (-4);
-  if (sta==0x06) return (-6);
-  if (sta==0x0d) return (-6);
-  if (sta==0x0e) return (-3);
-  if (sta==0x14) return (-3);
-  if (sta==0x0c) return (-11);
-  if (sta==0x0f) return (-11);
-  if (sta==0x10) return (-11);
-  if (sta>=0x16) return (-12);
+  if (sta==0x05) return (-4); /* CRC error */
+  if (sta==0x06) return (-6); /* seek error */
+  if (sta==0x0d) return (-6); /* seek error */
+  if (sta==0x0e) return (-3); /* unknown command */
+  if (sta==0x14) return (-3); /* unknown command */
+  if (sta==0x0c) return (-11); /* read fault */
+  if (sta==0x0f) return (-11); /* read fault */
+  if (sta==0x10) return (-11); /* read fault */
+  if (sta>=0x16) return (-12); /* general failure */
   DriveStruct[d].CD_changed=0xFF;
-  if (sta==0x11) return (-15);
-  return (-2);
+  if (sta==0x11) return (-15); /* invalid disk change */
+  return (-2); /* drive not ready */
 }
 /*==========================================================================*/
 static void clr_cmdbuf(void)
@@ -1208,6 +1230,7 @@ static int xy_DriveReset(void)
       response_count=0;
       i=cmd_out();
     }
+  sbp_sleep(100); /* wait a second */
   flush_status();
   i=GetStatus();
   if (i>=0) return -1;
@@ -1244,7 +1267,7 @@ static int DriveReset(void)
     }
   while (!st_diskok);
   DriveStruct[d].CD_changed=1;
-  i=SetSpeed();
+  i=DiskInfo();
   if (i<0) return (-2);
   return (0);
 }
@@ -1730,13 +1753,13 @@ static int yy_CheckMultiSession(void)
 /*==========================================================================*/
 #if FUTURE
 static int yy_SubChanInfo(int frame, int count, u_char *buffer)
-/* "frame" is a RED BOOK address */
+/* "frame" is a RED BOOK (msf-bin) address */
 {
   int i;
 
-  if (!new_drive) return (-3);
+  if (!new_drive) return (-ENOSYS); /* drive firmware lacks it */
 #if 0
-  if (DriveStruct[d].audio_state!=audio_playing) return (-2);
+  if (DriveStruct[d].audio_state!=audio_playing) return (-ENODATA);
 #endif
   clr_cmdbuf();
   drvcmd[0]=0x11;
@@ -1748,7 +1771,7 @@ static int yy_SubChanInfo(int frame, int count, u_char *buffer)
   flags_cmd_out=f_putcmd|f_respo2|f_ResponseStatus|f_obey_p_check;
   cmd_type=READ_SC;
   DriveStruct[d].frame_size=CD_FRAMESIZE_SUB;
-  i=cmd_out(); /* read directly into user's buffer */
+  i=cmd_out(); /* which buffer to use? */
   return (i);
 }
 #endif FUTURE
@@ -2076,7 +2099,7 @@ static int ReadToC(void)
 /* fake entry for LeadOut Track */
   DriveStruct[d].TocBuffer[j].nixbyte=0;
   DriveStruct[d].TocBuffer[j].ctl_adr=0;
-  DriveStruct[d].TocBuffer[j].number=0;
+  DriveStruct[d].TocBuffer[j].number=CDROM_LEADOUT;
   DriveStruct[d].TocBuffer[j].format=0;
   DriveStruct[d].TocBuffer[j].address=DriveStruct[d].size_msf;
 
@@ -2088,9 +2111,7 @@ static int DiskInfo(void)
 {
   int i, j;
 
-#if READ_AUDIO
       DriveStruct[d].mode=READ_M1;
-#endif READ_AUDIO
 
 #undef LOOP_COUNT
 #define LOOP_COUNT 20 /* needed for some "old" drives */
@@ -2579,7 +2600,6 @@ static int SBPCD_IOCTL(struct inode *inode, struct file *file, u_int cmd,
       DriveStruct[d].mode=READ_M2;
       return (0);
 
-#if READ_AUDIO
     case CDROMREADAUDIO:
       { /* start of CDROMREADAUDIO */
 	int i=0, j=0, frame, block;
@@ -2596,21 +2616,30 @@ static int SBPCD_IOCTL(struct inode *inode, struct file *file, u_int cmd,
 
 	DPRINTF((DBG_IOC,"SBPCD: ioctl: CDROMREADAUDIO requested.\n"));
 
+#if 0
+	if (!new_drive) return (-EINVAL);
+#endif
+	if (DriveStruct[d].aud_buf==NULL) return (-EINVAL);
 	i=verify_area(VERIFY_READ, (void *) arg, sizeof(struct cdrom_read_audio));
 	if (i) return (i);
 	memcpy_fromfs(&read_audio, (void *) arg, sizeof(struct cdrom_read_audio));
-	i=verify_area(VERIFY_WRITE, read_audio.buf, CD_FRAMESIZE_RAW);
+	if (read_audio.nframes>SBP_BUFFER_AUDIO_FRAMES) return (-EINVAL);
+	i=verify_area(VERIFY_WRITE, read_audio.buf,
+		      read_audio.nframes*CD_FRAMESIZE_RAW);
 	if (i) return (i);
 
 	if (read_audio.addr_format==CDROM_MSF) /* MSF-bin specification of where to start */
-	  block=msf2blk(read_audio.addr.lba);
+	  block=msf2lba(&read_audio.addr.msf.minute);
 	else if (read_audio.addr_format==CDROM_LBA) /* lba specification of where to start */
 	  block=read_audio.addr.lba;
 	else return (-EINVAL);
-	if (read_audio.nframes!=1) return (-EINVAL);
 	DPRINTF((DBG_AUD,"SBPCD: read_audio: lba: %d, msf: %06X\n",
 		 block, blk2msf(block)));
 	DPRINTF((DBG_AUD,"SBPCD: read_audio: before xx_ReadStatus.\n"));
+
+	while (busy_data) sbp_sleep(10); /* wait a bit */
+	busy_audio=1;
+
 	for (data_tries=5; data_tries>0; data_tries--)
 	  {
 	    DPRINTF((DBG_AUD,"SBPCD: data_tries=%d ...\n", data_tries));
@@ -2641,7 +2670,7 @@ static int SBPCD_IOCTL(struct inode *inode, struct file *file, u_int cmd,
 		drvcmd[2]=(block>>8)&0x000000ff;
 		drvcmd[3]=block&0x000000ff;
 		drvcmd[4]=0;
-		drvcmd[5]=1;   /* # of frames */
+		drvcmd[5]=read_audio.nframes;   /* # of frames */
 		drvcmd[6]=0;
 	      }
 	    else /* if new_drive */
@@ -2692,7 +2721,13 @@ static int SBPCD_IOCTL(struct inode *inode, struct file *file, u_int cmd,
 		error_flag=0;
 		p = DriveStruct[d].aud_buf;
 		if (sbpro_type==1) OUT(CDo_sel_d_i,0x01);
-		READ_DATA(CDi_data, p, CD_FRAMESIZE_RAW);
+#if 0
+		cli();
+#endif
+		READ_DATA(CDi_data, p, read_audio.nframes*CD_FRAMESIZE_RAW);
+#if 0
+		sti();
+#endif
 		if (sbpro_type==1) OUT(CDo_sel_d_i,0x00);
 		data_retrying = 0;
 	      }
@@ -2747,13 +2782,15 @@ static int SBPCD_IOCTL(struct inode *inode, struct file *file, u_int cmd,
 		continue;
 	      }
 	    memcpy_tofs((u_char *) read_audio.buf,
-			(u_char *) DriveStruct[d].aud_buf, CD_FRAMESIZE_RAW);
+			(u_char *) DriveStruct[d].aud_buf,
+			read_audio.nframes*CD_FRAMESIZE_RAW);
 	    DPRINTF((DBG_AUD,"SBPCD: read_audio: memcpy_tofs done.\n"));
 	    break;
 	  }
 	xx_ModeSelect(CD_FRAMESIZE);
 	xx_ModeSense();
 	DriveStruct[d].mode=READ_M1;
+	busy_audio=0;
 	if (data_tries == 0)
 	  {
 	    DPRINTF((DBG_AUD,"SBPCD: read_audio: failed after 5 tries.\n"));
@@ -2762,7 +2799,6 @@ static int SBPCD_IOCTL(struct inode *inode, struct file *file, u_int cmd,
 	DPRINTF((DBG_AUD,"SBPCD: read_audio: successful return.\n"));
 	return (0);
       } /* end of CDROMREADAUDIO */
-#endif READ_AUDIO
 
     case BLKRASET:
       if(!suser())  return -EACCES;
@@ -2811,14 +2847,14 @@ request_loop:
 
   sti();
 
-  if ((CURRENT==NULL)||(CURRENT->dev<0)) return;
-  if (CURRENT -> sector == -1)	return;
+  if ((CURRENT==NULL)||(CURRENT->dev<0)) goto done;
+  if (CURRENT -> sector == -1) goto done;
 
   dev = MINOR(CURRENT->dev);
   if ( (dev<0) || (dev>=NR_SBPCD) )
     {
       printk("SBPCD: do_request: bad device: %d\n", dev);
-      return;
+      goto done;
     }
   switch_drive(dev);
 
@@ -2846,6 +2882,9 @@ request_loop:
   i=prepare(0,0); /* at moment not really a hassle check, but ... */
   if (i!=0)
     DPRINTF((DBG_INF,"SBPCD: \"prepare\" tells error %d -- ignored\n", i));
+
+  while (busy_audio) sbp_sleep(100); /* wait a bit */
+  busy_data=1;
 
   if (!st_spinning) xx_SpinUp();
 
@@ -2884,6 +2923,10 @@ request_loop:
   end_request(0);
   sbp_sleep(10);    /* wait a bit, try again */
   goto request_loop;
+
+done:
+  busy_data=0;
+  return;
 }
 /*==========================================================================*/
 /*
@@ -2904,13 +2947,13 @@ static void sbp_read_cmd(void)
       DPRINTF((DBG_MUL,"SBPCD: read MSF %08X\n", blk2msf(block)));
       if ( (DriveStruct[d].f_multisession) && (multisession_valid) )
 	{
-	  DPRINTF((DBG_MUL,"SBPCD: MultiSession: use %08X for %08X (msf)\n",
+	  DPRINTF((DBG_MUL,"SBPCD: ManySession: use %08X for %08X (msf)\n",
 		         blk2msf(DriveStruct[d].lba_multi+block),
                          blk2msf(block)));
 	  block=DriveStruct[d].lba_multi+block;
 	}
 #else
-      if ( (block==CD_BLOCK_OFFSET+16) && (DriveStruct[d].f_multisession) && (multisession_valid) )
+      if ( (block==16) && (DriveStruct[d].f_multisession) && (multisession_valid) )
 	{
 	  DPRINTF((DBG_MUL,"SBPCD: MultiSession: use %08X for %08X (msf)\n",
 		         blk2msf(DriveStruct[d].lba_multi+16),
@@ -3418,6 +3461,9 @@ unsigned long SBPCD_INIT(u_long mem_start, u_long mem_end)
   check_datarate();
   DPRINTF((DBG_INI,"SBPCD: check_datarate done.\n"));
 
+  OUT(CDo_reset,0);
+  sbp_sleep(100);
+
   for (j=0;j<NR_SBPCD;j++)
     {
       if (DriveStruct[j].drv_minor==-1) continue;
@@ -3484,10 +3530,12 @@ unsigned long SBPCD_INIT(u_long mem_start, u_long mem_end)
  */ 
       DriveStruct[j].sbp_buf=(u_char *)mem_start;
       mem_start += SBP_BUFFER_FRAMES*CD_FRAMESIZE;
-#if READ_AUDIO
-      DriveStruct[j].aud_buf=(u_char *)mem_start;
-      mem_start += CD_FRAMESIZE_RAW;
-#endif READ_AUDIO
+      if (new_drive)
+	{
+	  DriveStruct[j].aud_buf=(u_char *)mem_start;
+	  mem_start += SBP_BUFFER_AUDIO_FRAMES*CD_FRAMESIZE_RAW;
+	}
+      else DriveStruct[j].aud_buf=NULL;
 /*
  * set the block size
  */

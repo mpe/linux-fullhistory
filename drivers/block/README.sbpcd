@@ -1,4 +1,4 @@
-This README belongs to release 2.0 of the SoundBlaster Pro (Matsushita,
+This README belongs to release 2.1 of the SoundBlaster Pro (Matsushita,
 Kotobuki, Panasonic, CreativeLabs) CD-ROM driver for Linux.
 
 The driver is able to drive the whole family of IDE-style
@@ -48,14 +48,21 @@ CDplayer and WorkBone - tell me if it is not compatible with other software.
 
 With the "new" drive family CR-562 and CR-563, the reading of audio frames is
 possible. This is currently implemented by an IOCTL function which reads only
-one frame of 2352 bytes at a time. The transfer rate is as slow as 32 kB/sec.
-This will get better, and the software interface may change. We have to 
-standardize it the day the SCSI driver supports it too.
+up to 4 frames of 2352 bytes at once. Reading more than 1 frame at once gives
+very poor quality. Reading the same frame a second time gives different data;
+it seems that the drive is out-of-sync at the beginning. See the program
+example below. This lack has to get corrected by higher level software.
+The transfer rate with reading audio (1-frame-pieces) is as slow as 32 kB/sec.
+This could be better reading bigger chunks, but the out-of-sync parts occur at
+the beginning of each single frame.
+The software interface possibly may change a bit the day the SCSI driver
+supports it too.
 
-MultiSession is supported (even my "old" CR-521 can handle it), "ManySession"
-(not recommended, see below) alternatively.
-Photo CDs work, too. At ftp.gwdg.de:/pub/linux/hpcdtoppm/ is Hadmut Danisch's
-package to convert photo CD image files.
+MultiSession is supported, "ManySession" (not recommended, see below)
+alternatively.
+Photo CDs work, too (even with my "old" CR-521).
+At ftp.gwdg.de:/pub/linux/hpcdtoppm/ is Hadmut Danisch's package to convert
+photo CD image files.
 
 The transfer rate will reach 150 kB/sec with "old" drives and 300 kB/sec with
 double-speed drives. XA (PhotoCD) disks with "old" drives give only 50 kB/sec.
@@ -339,6 +346,10 @@ entry[track+1].cdte_addr.lba=190;
     }
 }
 /*===================== end program ========================================*/
+
+At ftp.gwdg.de:/pub/linux/misc/cdda2wav-sbpcd.tar.gz is an adapted version of
+Heiko Eissfeldt's digital-audio to .WAV converter (the original is there, too).
+This is preliminary, as Heiko himself will care about it.
 
 
 Known problems:
