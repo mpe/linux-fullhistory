@@ -163,7 +163,7 @@ static inline unsigned long mktime(unsigned int year, unsigned int mon,
 }
 
 void
-common_init_rtc(struct irqaction *action)
+common_init_rtc()
 {
 	unsigned char x;
 
@@ -192,18 +192,12 @@ common_init_rtc(struct irqaction *action)
 	outb(0x31, 0x42);
 	outb(0x13, 0x42);
 
-	setup_irq(RTC_IRQ, action);
+	init_rtc_irq();
 }
 
 void
 time_init(void)
 {
-	static struct irqaction timer_irqaction = {
-		handler:	timer_interrupt,
-		flags:		SA_INTERRUPT,
-		name:		"timer",
-	};
-
 	unsigned int year, mon, day, hour, min, sec, cc1, cc2;
 	unsigned long cycle_freq, one_percent;
 	long diff;
@@ -292,7 +286,9 @@ time_init(void)
 	state.partial_tick = 0L;
 
 	/* Startup the timer source. */
-	alpha_mv.init_rtc(&timer_irqaction);
+	alpha_mv.init_rtc();
+
+	do_get_fast_time = do_gettimeofday;
 }
 
 /*

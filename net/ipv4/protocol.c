@@ -5,7 +5,7 @@
  *
  *		INET protocol dispatch tables.
  *
- * Version:	$Id: protocol.c,v 1.10 1999/08/20 11:05:55 davem Exp $
+ * Version:	$Id: protocol.c,v 1.11 2000/02/22 23:54:26 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -35,6 +35,7 @@
 #include <linux/inet.h>
 #include <linux/netdevice.h>
 #include <linux/timer.h>
+#include <linux/brlock.h>
 #include <net/ip.h>
 #include <net/protocol.h>
 #include <net/tcp.h>
@@ -116,8 +117,6 @@ struct inet_protocol *inet_protos[MAX_INET_PROTOS] =
 	NULL
 };
 
-rwlock_t inet_protocol_lock = RW_LOCK_UNLOCKED;
-
 /*
  *	Add a protocol handler to the hash tables
  */
@@ -128,7 +127,7 @@ void inet_add_protocol(struct inet_protocol *prot)
 	struct inet_protocol *p2;
 
 	hash = prot->protocol & (MAX_INET_PROTOS - 1);
-	write_lock_bh(&inet_protocol_lock);
+	br_write_lock_bh(BR_NETPROTO_LOCK);
 	prot ->next = inet_protos[hash];
 	inet_protos[hash] = prot;
 	prot->copy = 0;
@@ -147,7 +146,7 @@ void inet_add_protocol(struct inet_protocol *prot)
 		}
 		p2 = (struct inet_protocol *) p2->next;
 	}
-	write_unlock_bh(&inet_protocol_lock);
+	br_write_unlock_bh(BR_NETPROTO_LOCK);
 }
 
 /*
@@ -161,11 +160,11 @@ int inet_del_protocol(struct inet_protocol *prot)
 	unsigned char hash;
 
 	hash = prot->protocol & (MAX_INET_PROTOS - 1);
-	write_lock_bh(&inet_protocol_lock);
+	br_write_lock_bh(BR_NETPROTO_LOCK);
 	if (prot == inet_protos[hash]) 
 	{
 		inet_protos[hash] = (struct inet_protocol *) inet_protos[hash]->next;
-		write_unlock_bh(&inet_protocol_lock);
+		br_write_unlock_bh(BR_NETPROTO_LOCK);
 		return(0);
 	}
 
@@ -186,7 +185,7 @@ int inet_del_protocol(struct inet_protocol *prot)
 			if (p->copy == 0 && lp != NULL) 
 				lp->copy = 0;
 			p->next = prot->next;
-			write_unlock_bh(&inet_protocol_lock);
+			br_write_unlock_bh(BR_NETPROTO_LOCK);
 			return(0);
 		}
 		if (p->next != NULL && p->next->protocol == prot->protocol) 
@@ -194,6 +193,6 @@ int inet_del_protocol(struct inet_protocol *prot)
 
 		p = (struct inet_protocol *) p->next;
 	}
-	write_unlock_bh(&inet_protocol_lock);
+	br_write_unlock_bh(BR_NETPROTO_LOCK);
 	return(-1);
 }

@@ -16,11 +16,12 @@ M_OBJS   :=
 # All of the (potential) objects that export symbols.
 # This list comes from 'grep -l EXPORT_SYMBOL *.[hc]'.
 
-export-objs    :=  fbmem.o fbcmap.o fbcon.o fbcon-afb.o fbcon-ilbm.o fbcon-vga.o \
-		   fbcon-iplan2p2.o fbcon-iplan2p4.o fbcon-iplan2p8.o fbcon-vga-planes.o \
-		   fbcon-cfb16.o fbcon-cfb2.o fbcon-cfb24.o fbcon-cfb32.o fbcon-cfb4.o fbcon-cfb8.o \
-		   fbcon-mac.o fbcon-mfb.o fbcon-vga8-planes.o \
-		   matrox/matroxfb.o
+export-objs    := fbmem.o fbcmap.o fbcon.o fbcon-afb.o fbcon-ilbm.o \
+		  fbcon-vga.o fbcon-iplan2p2.o fbcon-iplan2p4.o \
+		  fbcon-iplan2p8.o fbcon-vga-planes.o fbcon-cfb16.o \
+		  fbcon-cfb2.o fbcon-cfb24.o fbcon-cfb32.o fbcon-cfb4.o \
+		  fbcon-cfb8.o fbcon-mac.o fbcon-mfb.o fbcon-vga8-planes.o \
+		  matrox/matroxfb.o cyber2000fb.o
 
 # Object file lists.
 obj-y          :=

@@ -43,6 +43,8 @@
 #define SO_ATTACH_FILTER        26
 #define SO_DETACH_FILTER        27
 
+#define SO_PEERNAME		28
+
 /* Security levels - as per NRL IPv6 - don't actually do anything */
 #define SO_SECURITY_AUTHENTICATION		19
 #define SO_SECURITY_ENCRYPTION_TRANSPORT	20

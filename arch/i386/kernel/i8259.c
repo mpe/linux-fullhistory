@@ -131,7 +131,7 @@ static spinlock_t i8259A_lock = SPIN_LOCK_UNLOCKED;
 
 static void end_8259A_irq (unsigned int irq)
 {
-	if (!(irq_desc[irq].status & IRQ_DISABLED))
+	if (!(irq_desc[irq].status & (IRQ_DISABLED|IRQ_INPROGRESS)))
 		enable_8259A_irq(irq);
 }
 

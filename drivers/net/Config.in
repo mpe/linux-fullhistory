@@ -5,6 +5,7 @@
 source drivers/net/arcnet/Config.in
 
 tristate 'Dummy net driver support' CONFIG_DUMMY
+tristate 'Bonding driver support' CONFIG_BONDING
 tristate 'EQL (serial line load balancing) support' CONFIG_EQUALIZER
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
    if [ "$CONFIG_NETLINK" = "y" ]; then

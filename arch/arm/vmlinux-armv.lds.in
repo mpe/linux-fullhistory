@@ -25,22 +25,6 @@ SECTIONS
 		__init_end = .;
 	}
 
-	.ebsa285 : {
-		__ebsa285_begin = .;
-			*(.text.ebsa285)
-			*(.data.ebsa285)
-		. = ALIGN(4096);
-		__ebsa285_end = .;
-	}
-
-	.netwinder : {
-		__netwinder_begin = .;
-	  		*(.text.netwinder)
-			*(.data.netwinder)
-		. = ALIGN(4096);
-		__netwinder_end = .;
-	}
-
 	.text : {			/* Real text segment		*/
 		_text = .;		/* Text and read-only data	*/
 			*(.text)
@@ -65,11 +49,26 @@ SECTIONS
 
 	. = ALIGN(8192);
 
-	.data : {			/* Data				*/
+	.data : {
+		/*
+		 * first, the init task union, aligned
+		 * to an 8192 byte boundary.
+		 */
 		*(.init.task)
+
+		/*
+		 * then the cacheline aligned data
+		 */
+		. = ALIGN(32);
+		*(.data.cacheline_aligned)
+
+		/*
+		 * and the usual data section
+		 */
 		*(.data)
 		CONSTRUCTORS
-		_edata = .;		/* End of data section		*/
+
+		_edata = .;
 	}
 
 	.bss : {

@@ -45,9 +45,6 @@ struct inet_protocol
 	const char		*name;
 };
 
-extern rwlock_t inet_protocol_lock;
-
-
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
 struct inet6_protocol 
 {
@@ -65,7 +62,6 @@ struct inet6_protocol
 	const char	*name;
 };
 
-extern rwlock_t inet6_protocol_lock;
 #endif
 
 extern struct inet_protocol *inet_protocol_base;

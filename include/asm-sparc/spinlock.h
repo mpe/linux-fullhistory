@@ -12,7 +12,12 @@
 
 #include <asm/psr.h>
 
-/* Define this to use the verbose/debugging versions in arch/sparc/lib/debuglocks.c */
+/*
+ * Define this to use the verbose/debugging versions in
+ * arch/sparc/lib/debuglocks.c
+ *
+ * Be sure to make check_asm whenever changing this option.
+ */
 #define SPIN_LOCK_DEBUG
 
 #ifdef SPIN_LOCK_DEBUG
@@ -82,9 +87,13 @@ do {	unsigned long flags; \
 typedef unsigned char spinlock_t;
 #define SPIN_LOCK_UNLOCKED	0
 
-#define spin_lock_init(lock)	(*(lock) = 0)
+#define spin_lock_init(lock)   (*((unsigned char *)(lock)) = 0)
 #define spin_is_locked(lock)    (*((volatile unsigned char *)(lock)) != 0)
-#define spin_unlock_wait(lock)	do { barrier(); } while(*(volatile unsigned char *)lock)
+
+#define spin_unlock_wait(lock) \
+do { \
+	barrier(); \
+} while(*((volatile unsigned char *)lock))
 
 extern __inline__ void spin_lock(spinlock_t *lock)
 {
@@ -93,7 +102,7 @@ extern __inline__ void spin_lock(spinlock_t *lock)
 	orcc	%%g2, 0x0, %%g0
 	bne,a	2f
 	 ldub	[%0], %%g2
-	.text	2
+	.subsection	2
 2:	orcc	%%g2, 0x0, %%g0
 	bne,a	2b
 	 ldub	[%0], %%g2
@@ -159,7 +168,7 @@ extern __inline__ void _read_lock(rwlock_t *rw)
 	 ldstub	[%%g1 + 3], %%g2
 "	: /* no outputs */
 	: "r" (lp)
-	: "g2", "g4", "g7", "memory", "cc");
+	: "g2", "g4", "memory", "cc");
 }
 
 #define read_lock(lock) \
@@ -179,7 +188,7 @@ extern __inline__ void _read_unlock(rwlock_t *rw)
 	 ldstub	[%%g1 + 3], %%g2
 "	: /* no outputs */
 	: "r" (lp)
-	: "g2", "g4", "g7", "memory", "cc");
+	: "g2", "g4", "memory", "cc");
 }
 
 #define read_unlock(lock) \
@@ -199,7 +208,7 @@ extern __inline__ void write_lock(rwlock_t *rw)
 	 ldstub	[%%g1 + 3], %%g2
 "	: /* no outputs */
 	: "r" (lp)
-	: "g2", "g4", "g7", "memory", "cc");
+	: "g2", "g4", "memory", "cc");
 }
 
 #define write_unlock(rw)	do { (rw)->lock = 0; } while(0)

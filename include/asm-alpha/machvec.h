@@ -22,7 +22,6 @@ struct linux_hose_info;
 struct pci_dev;
 struct pci_ops;
 struct pci_controler;
-struct irqaction;
 
 struct alpha_machine_vector
 {
@@ -82,7 +81,7 @@ struct alpha_machine_vector
 
 	void (*init_arch)(void);
 	void (*init_irq)(void);
-	void (*init_rtc)(struct irqaction *);
+	void (*init_rtc)(void);
 	void (*init_pci)(void);
 	void (*kill_arch)(int);
 

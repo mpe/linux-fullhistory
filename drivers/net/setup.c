@@ -185,27 +185,6 @@ static void __init appletalk_device_init(void)
 #endif /* CONFIG_IPDDP */
 }
 
-
-/*
- *	The loopback device is global so it can be directly referenced
- *	by the network code.
- */
- 
-extern int loopback_init(struct net_device *dev);
-struct net_device loopback_dev = 
-{
-	"lo" __PAD2,		/* Software Loopback interface		*/
-	0x0,			/* recv memory end			*/
-	0x0,			/* recv memory start			*/
-	0x0,			/* memory end				*/
-	0x0,			/* memory start				*/
-	0,			/* base I/O address			*/
-	0,			/* IRQ					*/
-	0, 0, 0,		/* flags				*/
-	NULL,			/* next device				*/
-	loopback_init		/* loopback_init should set up the rest	*/
-};
-
 static void special_device_init(void)
 {
 #ifdef CONFIG_DUMMY
@@ -248,12 +227,20 @@ static void special_device_init(void)
 		extern int sb1000_probe(struct net_device *dev);
 		static struct net_device sb1000_dev = 
 		{
-			"cm0", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NULL, sb1000_probe 
+			"cm0 __PAD3", 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NULL, sb1000_probe 
 		};
 		register_netdev(&sb1000_dev);
 	}
 #endif
-	register_netdev(&loopback_dev);
+#ifdef CONFIG_BONDING
+	{
+		extern int bond_init(struct net_device *dev);
+		static struct net_device bond_dev = {
+			"bond" __PAD4, 0x0, 0x0, 0x0, 0x0, 0, 0, 0, 0, 0, NULL, bond_init,
+		};
+		register_netdev(&bond_dev);
+	}
+#endif	
 }
 
 /*

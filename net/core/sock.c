@@ -7,7 +7,7 @@
  *		handler for protocols to use and generic option handler.
  *
  *
- * Version:	$Id: sock.c,v 1.89 2000/01/18 08:24:13 davem Exp $
+ * Version:	$Id: sock.c,v 1.90 2000/02/27 19:48:11 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -526,7 +526,20 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
 			if(copy_to_user((void*)optval, &sk->peercred, len))
 				return -EFAULT;
 			goto lenout;
-			
+
+		case SO_PEERNAME:
+		{
+			char address[128];
+
+			if (sock->ops->getname(sock, (struct sockaddr *)address, &lv, 2))
+				return -ENOTCONN;
+			if (lv < len)
+				return -EINVAL;
+			if(copy_to_user((void*)optval, address, len))
+				return -EFAULT;
+			goto lenout;
+		}
+
 		default:
 			return(-ENOPROTOOPT);
 	}

@@ -46,7 +46,16 @@ extern unsigned long __irq_attempt[];
 
 extern int global_irq_holder;
 extern spinlock_t global_irq_lock;
-extern atomic_t global_irq_count;
+
+static inline int irqs_running (void)
+{
+	int i;
+
+	for (i = 0; i < smp_num_cpus; i++)
+		if (local_irq_count(i))
+			return 1;
+	return 0;
+}
 
 static inline void release_irqlock(int cpu)
 {
@@ -60,7 +69,6 @@ static inline void release_irqlock(int cpu)
 static inline void irq_enter(int cpu, int irq)
 {
 	++local_irq_count(cpu);
-        atomic_inc(&global_irq_count);
 
 	while (spin_is_locked(&global_irq_lock))
 		barrier();
@@ -68,7 +76,6 @@ static inline void irq_enter(int cpu, int irq)
 
 static inline void irq_exit(int cpu, int irq)
 {
-	atomic_dec(&global_irq_count);
         --local_irq_count(cpu);
 }
 

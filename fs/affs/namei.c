@@ -273,10 +273,10 @@ affs_create(struct inode *dir, struct dentry *dentry, int mode)
 		goto out;
 
 	pr_debug("AFFS: ino=%lu\n",inode->i_ino);
-	if (dir->i_sb->u.affs_sb.s_flags & SF_OFS)
+	if (dir->i_sb->u.affs_sb.s_flags & SF_OFS) {
 		inode->i_op = &affs_file_inode_operations;
 		inode->i_fop = &affs_file_operations_ofs;
-	else {
+	} else {
 		inode->i_op = &affs_file_inode_operations;
 		inode->i_fop = &affs_file_operations;
 		inode->i_mapping->a_ops = &affs_aops;

@@ -767,6 +767,8 @@ void __init setup_arch(char **cmdline_p)
 	setup_bootmem();
 	request_standard_resources(mdesc);
 
+	paging_init();
+
 #ifdef CONFIG_VT
 #if defined(CONFIG_VGA_CONSOLE)
 	conswitchp = &vga_con;

@@ -471,6 +471,10 @@ out:
 	return irq_found;
 }
 
+void __init init_irq_proc(void)
+{
+}
+
 void __init init_IRQ(void)
 {
 	extern void init_dma(void);

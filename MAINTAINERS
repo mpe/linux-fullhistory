@@ -148,7 +148,7 @@ ARM PORT
 P:	Russell King
 M:	linux@arm.linux.org.uk
 L:	linux-arm@vger.rutgers.edu
-W:	http://www.arm.linux.org.uk/~rmk/armlinux.html
+W:	http://www.arm.linux.org.uk/
 S:	Maintained
 
 ARPD SUPPORT
@@ -232,6 +232,12 @@ S:	Maintained
 CREDITS FILE
 P:	John A. Martin
 M:	jam@acm.org
+S:	Maintained
+
+CYBERPRO FB DRIVER
+P:	Russell King
+M:	linux@arm.linux.org.uk
+W:	http://www.arm.linux.org.uk/
 S:	Maintained
 
 CYCLADES 2X SYNC CARD DRIVER

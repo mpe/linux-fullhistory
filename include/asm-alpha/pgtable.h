@@ -306,4 +306,6 @@ extern inline pte_t mk_swap_pte(unsigned long type, unsigned long offset)
 #define pgd_ERROR(e) \
 	printk("%s:%d: bad pgd %016lx.\n", __FILE__, __LINE__, pgd_val(e))
 
+extern void paging_init(void);
+
 #endif /* _ALPHA_PGTABLE_H */

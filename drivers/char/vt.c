@@ -203,7 +203,7 @@ do_kdsk_ioctl(int cmd, struct kbentry *user_kbe, int perm, struct kbd_struct *kb
 		if (!(key_map = key_maps[s])) {
 			int j;
 
-			if (keymap_count >= MAX_NR_OF_USER_KEYMAPS && 
+			if (keymap_count >= MAX_NR_OF_USER_KEYMAPS &&
 			    !capable(CAP_SYS_RESOURCE))
 				return -EPERM;
 

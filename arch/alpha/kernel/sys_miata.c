@@ -70,7 +70,6 @@ miata_init_irq(void)
 #endif
 
 	init_i8259a_irqs();
-	init_rtc_irq();
 
 	/* Not interested in the bogus interrupts (3,10), Fan Fault (0),
            NMI (1), or EIDE (9).

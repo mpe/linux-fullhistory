@@ -3,7 +3,7 @@
  *	
  *		Alan Cox, <alan@redhat.com>
  *
- *	Version: $Id: icmp.c,v 1.64 2000/02/09 11:16:40 davem Exp $
+ *	Version: $Id: icmp.c,v 1.65 2000/02/22 23:54:25 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -801,9 +801,10 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, int len)
 
 	/*
 	 *	This can't change while we are doing it. 
+	 *	Callers have obtained BR_NETPROTO_LOCK so
+	 *	we are OK.
 	 */
 
-	read_lock(&inet_protocol_lock);
 	ipprot = (struct inet_protocol *) inet_protos[hash];
 	while(ipprot != NULL) {
 		struct inet_protocol *nextip;
@@ -822,7 +823,6 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, int len)
 
 		ipprot = nextip;
   	}
-	read_unlock(&inet_protocol_lock);
 }
 
 

@@ -304,7 +304,7 @@ pyxis_enable_irq(unsigned int irq)
 	pyxis_update_irq_hw(cached_irq_mask |= 1UL << (irq - 16));
 }
 
-static inline void
+static void
 pyxis_disable_irq(unsigned int irq)
 {
 	pyxis_update_irq_hw(cached_irq_mask &= ~(1UL << (irq - 16)));
@@ -315,6 +315,13 @@ pyxis_startup_irq(unsigned int irq)
 {
 	pyxis_enable_irq(irq);
 	return 0;
+}
+
+static void
+pyxis_end_irq(unsigned int irq)
+{
+	if (!(irq_desc[irq].status & (IRQ_DISABLED|IRQ_INPROGRESS)))
+		pyxis_enable_irq(irq);
 }
 
 static void
@@ -340,7 +347,7 @@ static struct hw_interrupt_type pyxis_irq_type = {
 	enable:		pyxis_enable_irq,
 	disable:	pyxis_disable_irq,
 	ack:		pyxis_mask_and_ack_irq,
-	end:		pyxis_enable_irq,
+	end:		pyxis_end_irq,
 };
 
 void 

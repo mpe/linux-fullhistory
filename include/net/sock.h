@@ -894,7 +894,7 @@ extern __inline__ void sk_filter_charge(struct sock *sk, struct sk_filter *fp)
  *   socket is looked up by one cpu and unhasing is made by another CPU.
  *   It is true for udp/raw, netlink (leak to receive and error queues), tcp
  *   (leak to backlog). Packet socket does all the processing inside
- *   ptype_lock, so that it has not this race condition. UNIX sockets
+ *   BR_NETPROTO_LOCK, so that it has not this race condition. UNIX sockets
  *   use separate SMP lock, so that they are prone too.
  */
 

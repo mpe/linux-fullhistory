@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) module.
  *
- * Version:	$Id: ip_input.c,v 1.45 2000/01/16 05:11:22 davem Exp $
+ * Version:	$Id: ip_input.c,v 1.46 2000/02/22 23:54:26 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -241,7 +241,6 @@ static inline int ip_local_deliver_finish(struct sk_buff *skb)
 		if(raw_sk != NULL)
 			raw_sk = raw_v4_input(skb, iph, hash);
 
-		read_lock(&inet_protocol_lock);
 		ipprot = (struct inet_protocol *) inet_protos[hash];
 		flag = 0;
 		if(ipprot != NULL) {
@@ -254,13 +253,11 @@ static inline int ip_local_deliver_finish(struct sk_buff *skb)
 				ret = ipprot->handler(skb, (ntohs(iph->tot_len) -
 							    (iph->ihl * 4)));
 
-				read_unlock(&inet_protocol_lock);
 				return ret;
 			} else {
 				flag = ip_run_ipprot(skb, iph, ipprot, (raw_sk != NULL));
 			}
 		}
-		read_unlock(&inet_protocol_lock);
 
 		/* All protocols checked.
 		 * If this packet was a broadcast, we may *not* reply to it, since that

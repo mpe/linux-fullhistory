@@ -1194,8 +1194,9 @@ S: Santa Clara, CA 95051
 S: USA
 
 N: Russell King
-E: rmk@arm.uk.linux.org
+E: rmk@arm.linux.org.uk
 D: Linux/arm integrator, maintainer & hacker
+D: Acornfb, Cyber2000fb author
 S: Burgh Heath, Tadworth, Surrey.
 S: England
 

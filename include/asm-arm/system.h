@@ -7,17 +7,6 @@
 
 #include <linux/config.h>
 
-#define __ebsa285_data		__attribute__((__section__(".data.ebsa285")))
-#define __netwinder_data	__attribute__((__section__(".data.netwinder")))
-
-#ifdef CONFIG_TEXT_SECTIONS
-#define __ebsa285_text		__attribute__((__section__(".text.ebsa285")))
-#define __netwinder_text	__attribute__((__section__(".text.netwinder")))
-#else
-#define __ebsa285_text
-#define __netwinder_text
-#endif
-
 /* information about the system we're running on */
 extern unsigned int system_rev;
 extern unsigned int system_serial_low;

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: icmp.c,v 1.26 2000/01/19 04:06:19 davem Exp $
+ *	$Id: icmp.c,v 1.27 2000/02/22 23:54:28 davem Exp $
  *
  *	Based on net/ipv4/icmp.c
  *
@@ -477,7 +477,6 @@ static void icmpv6_notify(struct sk_buff *skb,
 
 	hash = nexthdr & (MAX_INET_PROTOS - 1);
 
-	read_lock(&inet6_protocol_lock);
 	for (ipprot = (struct inet6_protocol *) inet6_protos[hash]; 
 	     ipprot != NULL; 
 	     ipprot=(struct inet6_protocol *)ipprot->next) {
@@ -487,7 +486,6 @@ static void icmpv6_notify(struct sk_buff *skb,
 		if (ipprot->err_handler)
 			ipprot->err_handler(skb, hdr, NULL, type, code, pb, info);
 	}
-	read_unlock(&inet6_protocol_lock);
 
 	read_lock(&raw_v6_lock);
 	if ((sk = raw_v6_htable[hash]) != NULL) {

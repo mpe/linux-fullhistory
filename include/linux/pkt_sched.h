@@ -192,6 +192,16 @@ struct tc_red_qopt
 	unsigned char   Wlog;		/* log(W)		*/
 	unsigned char   Plog;		/* log(P_max/(qth_max-qth_min))	*/
 	unsigned char   Scell_log;	/* cell size for idle damping */
+	unsigned char	flags;
+#define TC_RED_ECN	1
+};
+
+struct tc_red_xstats
+{
+	__u32           early;          /* Early drops */
+	__u32           pdrop;          /* Drops due to queue limits */
+	__u32           other;          /* Drops due to drop() calls */
+	__u32           marked;         /* Marked packets */
 };
 
 /* GRED section */

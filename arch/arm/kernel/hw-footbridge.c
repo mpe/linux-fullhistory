@@ -68,13 +68,13 @@ static inline void wb977_ww(int reg, int val)
 /*
  * This is a lock for accessing ports GP1_IO_BASE and GP2_IO_BASE
  */
-spinlock_t __netwinder_data gpio_lock = SPIN_LOCK_UNLOCKED;
+spinlock_t gpio_lock = SPIN_LOCK_UNLOCKED;
 
-static unsigned int __netwinder_data current_gpio_op = 0;
-static unsigned int __netwinder_data current_gpio_io = 0;
-static unsigned int __netwinder_data current_cpld = 0;
+static unsigned int current_gpio_op = 0;
+static unsigned int current_gpio_io = 0;
+static unsigned int current_cpld = 0;
 
-void __netwinder_text gpio_modify_op(int mask, int set)
+void gpio_modify_op(int mask, int set)
 {
 	unsigned int new_gpio, changed;
 
@@ -119,7 +119,7 @@ static inline void __gpio_modify_io(int mask, int in)
 	}
 }
 
-void __netwinder_text gpio_modify_io(int mask, int in)
+void gpio_modify_io(int mask, int in)
 {
 	/* Open up the SuperIO chip */
 	wb977_open();
@@ -130,7 +130,7 @@ void __netwinder_text gpio_modify_io(int mask, int in)
 	wb977_close();
 }
 
-int __netwinder_text gpio_read(void)
+int gpio_read(void)
 {
 	return inb(GP1_IO_BASE) | inb(GP2_IO_BASE) << 8;
 }
@@ -360,7 +360,7 @@ static void __init wb977_init(void)
 	wb977_close();
 }
 
-void __netwinder_text cpld_modify(int mask, int set)
+void cpld_modify(int mask, int set)
 {
 	int msk;
 

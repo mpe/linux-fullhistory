@@ -65,6 +65,13 @@ cabriolet_startup_irq(unsigned int irq)
 	return 0; /* never anything pending */
 }
 
+static void
+cabriolet_end_irq(unsigned int irq)
+{ 
+	if (!(irq_desc[irq].status & (IRQ_DISABLED|IRQ_INPROGRESS)))
+		cabriolet_enable_irq(irq);
+}
+
 static struct hw_interrupt_type cabriolet_irq_type = {
 	typename:	"CABRIOLET",
 	startup:	cabriolet_startup_irq,
@@ -72,7 +79,7 @@ static struct hw_interrupt_type cabriolet_irq_type = {
 	enable:		cabriolet_enable_irq,
 	disable:	cabriolet_disable_irq,
 	ack:		cabriolet_disable_irq,
-	end:		cabriolet_enable_irq,
+	end:		cabriolet_end_irq,
 };
 
 static void 
@@ -103,7 +110,6 @@ static void __init
 cabriolet_init_irq(void)
 {
 	init_i8259a_irqs();
-	init_rtc_irq();
 
 	if (alpha_using_srm) {
 		alpha_mv.device_interrupt = srm_device_interrupt;

@@ -56,6 +56,8 @@ To add: #define SO_REUSEPORT 0x0200	/* Allow local address and port reuse.  */
 #define SO_ATTACH_FILTER        26
 #define SO_DETACH_FILTER        27
 
+#define SO_PEERNAME             28
+
 /* Types of sockets.  */
 #define SOCK_DGRAM 1		/* Connectionless, unreliable datagrams
 				   of fixed maximum length.  */

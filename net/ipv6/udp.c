@@ -7,7 +7,10 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.50 2000/01/18 08:24:24 davem Exp $
+ *	$Id: udp.c,v 1.51 2000/02/27 19:51:51 davem Exp $
+ *
+ *	Fixes:
+ *	Hideaki YOSHIFUJI	:	sin6_scope_id support
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -218,7 +221,7 @@ int udpv6_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		goto ipv4_connected;
 	}
 
-	if (addr_len < sizeof(*usin)) 
+	if (addr_len < SIN6_LEN_RFC2133)
 	  	return -EINVAL;
 
 	if (usin->sin6_family != AF_INET6) 
@@ -276,6 +279,21 @@ ipv4_connected:
 				      sk->rcv_saddr);
 		}
 		return 0;
+	}
+
+	if (addr_type&IPV6_ADDR_LINKLOCAL) {
+		if (addr_len >= sizeof(struct sockaddr_in6) &&
+		    usin->sin6_scope_id) {
+			if (sk->bound_dev_if && sk->bound_dev_if != usin->sin6_scope_id) {
+				fl6_sock_release(flowlabel);
+				return -EINVAL;
+			}
+			sk->bound_dev_if = usin->sin6_scope_id;
+		}
+
+		/* Connect to link-local address requires an interface */
+		if (sk->bound_dev_if == 0)
+			return -EINVAL;
 	}
 
 	ipv6_addr_copy(&np->daddr, daddr);
@@ -392,6 +410,7 @@ int udpv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 		sin6->sin6_family = AF_INET6;
 		sin6->sin6_port = skb->h.uh->source;
 		sin6->sin6_flowinfo = 0;
+		sin6->sin6_scope_id = 0;
 
 		if (skb->protocol == __constant_htons(ETH_P_IP)) {
 			ipv6_addr_set(&sin6->sin6_addr, 0, 0,
@@ -404,6 +423,10 @@ int udpv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 
 			if (sk->net_pinfo.af_inet6.rxopt.all)
 				datagram_recv_ctl(sk, msg, skb);
+			if (ipv6_addr_type(&sin6->sin6_addr) & IPV6_ADDR_LINKLOCAL) {
+				struct inet6_skb_parm *opt = (struct inet6_skb_parm *) skb->cb;
+				sin6->sin6_scope_id = opt->iif;
+			}
 		}
   	}
 	err = copied;
@@ -746,12 +769,13 @@ static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen)
 		return -EMSGSIZE;
 	
 	fl.fl6_flowlabel = 0;
+	fl.oif = 0;
 
 	if (sin6) {
 		if (sin6->sin6_family == AF_INET)
 			return udp_sendmsg(sk, msg, ulen);
 
-		if (addr_len < sizeof(*sin6))
+		if (addr_len < SIN6_LEN_RFC2133)
 			return -EINVAL;
 
 		if (sin6->sin6_family && sin6->sin6_family != AF_INET6)
@@ -777,6 +801,11 @@ static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen)
 		if (sk->state == TCP_ESTABLISHED &&
 		    !ipv6_addr_cmp(daddr, &sk->net_pinfo.af_inet6.daddr))
 			daddr = &sk->net_pinfo.af_inet6.daddr;
+
+		if (addr_len >= sizeof(struct sockaddr_in6) &&
+		    sin6->sin6_scope_id &&
+		    ipv6_addr_type(daddr)&IPV6_ADDR_LINKLOCAL)
+			fl.oif = sin6->sin6_scope_id;
 	} else {
 		if (sk->state != TCP_ESTABLISHED)
 			return -ENOTCONN;
@@ -802,7 +831,8 @@ static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen)
 	}
 
 	udh.daddr = NULL;
-	fl.oif = sk->bound_dev_if;
+	if (!fl.oif)
+		fl.oif = sk->bound_dev_if;
 	fl.fl6_src = NULL;
 
 	if (msg->msg_controllen) {

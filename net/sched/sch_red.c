@@ -11,6 +11,7 @@
  * Changes:
  * J Hadi Salim <hadi@nortel.com> 980914:	computation fixes
  * Alexey Makarenko <makar@phoenix.kharkov.ua> 990814: qave on idle link was calculated incorrectly.
+ * J Hadi Salim <hadi@nortelnetworks.com> 980816:  ECN support	
  */
 
 #include <linux/config.h>
@@ -38,6 +39,9 @@
 #include <linux/skbuff.h>
 #include <net/sock.h>
 #include <net/pkt_sched.h>
+
+#define RED_ECN_ECT  0x02
+#define RED_ECN_CE   0x01
 
 
 /*	Random Early Detection (RED) algorithm.
@@ -138,6 +142,7 @@ struct red_sched_data
 	u32		qth_max;	/* Max average length threshold: A scaled */
 	u32		Rmask;
 	u32		Scell_max;
+	unsigned char	flags;
 	char		Wlog;		/* log(W)		*/
 	char		Plog;		/* random number bits	*/
 	char		Scell_log;
@@ -149,7 +154,47 @@ struct red_sched_data
 	u32		qR;		/* Cached random number */
 
 	psched_time_t	qidlestart;	/* Start of idle period		*/
+	struct tc_red_xstats st;
 };
+
+static int red_ecn_mark(struct sk_buff *skb)
+{
+	if (skb->nh.raw + 20 < skb->tail)
+		return 0;
+
+	switch (skb->protocol) {
+	case __constant_htons(ETH_P_IP):
+	{
+		u8 tos = skb->nh.iph->tos;
+
+		if (!(tos & RED_ECN_ECT))
+			return 0;
+
+		if (!(tos & RED_ECN_CE)) {
+			u32 check = skb->nh.iph->check;
+
+			check += __constant_htons(0xFFFE);
+			skb->nh.iph->check = check + (check>>16);
+
+			skb->nh.iph->tos = tos | RED_ECN_CE;
+		}
+		return 1;
+	}
+
+	case __constant_htons(ETH_P_IPV6):
+	{
+		u32 label = *(u32*)skb->nh.raw;
+
+		if (!(label & __constant_htonl(RED_ECN_ECT<<20)))
+			return 0;
+		label |= __constant_htonl(RED_ECN_CE<<20);
+		return 1;
+	}
+
+	default:
+		return 0;
+	}
+}
 
 static int
 red_enqueue(struct sk_buff *skb, struct Qdisc* sch)
@@ -221,7 +266,9 @@ enqueue:
 			sch->stats.backlog += skb->len;
 			sch->stats.bytes += skb->len;
 			sch->stats.packets++;
-			return 0;
+			return NET_XMIT_SUCCESS;
+		} else {
+			q->st.pdrop++;
 		}
 		kfree_skb(skb);
 		sch->stats.drops++;
@@ -231,10 +278,14 @@ enqueue:
 		q->qcount = -1;
 		sch->stats.overlimits++;
 mark:
-		kfree_skb(skb);
-		sch->stats.drops++;
-		return NET_XMIT_CN;
+		if  (!(q->flags&TC_RED_ECN) || !red_ecn_mark(skb)) {
+			q->st.early++;
+			goto drop;
+		}
+		q->st.marked++;
+		goto enqueue;
 	}
+
 	if (++q->qcount) {
 		/* The formula used below causes questions.
 
@@ -261,6 +312,11 @@ mark:
 	}
 	q->qR = net_random()&q->Rmask;
 	goto enqueue;
+
+drop:
+	kfree_skb(skb);
+	sch->stats.drops++;
+	return NET_XMIT_CN;
 }
 
 static int
@@ -300,6 +356,7 @@ red_drop(struct Qdisc* sch)
 	if (skb) {
 		sch->stats.backlog -= skb->len;
 		sch->stats.drops++;
+		q->st.other++;
 		kfree_skb(skb);
 		return 1;
 	}
@@ -336,6 +393,7 @@ static int red_change(struct Qdisc *sch, struct rtattr *opt)
 	ctl = RTA_DATA(tb[TCA_RED_PARMS-1]);
 
 	sch_tree_lock(sch);
+	q->flags = ctl->flags;
 	q->Wlog = ctl->Wlog;
 	q->Plog = ctl->Plog;
 	q->Rmask = ctl->Plog < 32 ? ((1<<ctl->Plog) - 1) : ~0UL;
@@ -367,6 +425,15 @@ static int red_init(struct Qdisc* sch, struct rtattr *opt)
 
 
 #ifdef CONFIG_RTNETLINK
+int red_copy_xstats(struct sk_buff *skb, struct tc_red_xstats *st)
+{
+        RTA_PUT(skb, TCA_XSTATS, sizeof(*st), st);
+        return 0;
+
+rtattr_failure:
+        return 1;
+}
+
 static int red_dump(struct Qdisc *sch, struct sk_buff *skb)
 {
 	struct red_sched_data *q = (struct red_sched_data *)sch->data;
@@ -382,8 +449,12 @@ static int red_dump(struct Qdisc *sch, struct sk_buff *skb)
 	opt.Wlog = q->Wlog;
 	opt.Plog = q->Plog;
 	opt.Scell_log = q->Scell_log;
+	opt.flags = q->flags;
 	RTA_PUT(skb, TCA_RED_PARMS, sizeof(opt), &opt);
 	rta->rta_len = skb->tail - b;
+
+	if (red_copy_xstats(skb, &q->st))
+		goto rtattr_failure;
 
 	return skb->len;
 

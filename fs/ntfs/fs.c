@@ -692,7 +692,7 @@ static void ntfs_read_inode(struct inode* inode)
 			inode->u.ntfs_i.mmu_private = inode->i_size;
 		} else {
 			inode->i_op=&ntfs_inode_operations_nobmap;
-			inode->i_fop=&ntfs_file_operations_nommap,
+			inode->i_fop=&ntfs_file_operations_nommap;
 		}
 		inode->i_mode=S_IFREG|S_IRUGO;
 	}

@@ -54,7 +54,6 @@ static void __init
 nautilus_init_irq(void)
 {
 	init_i8259a_irqs();
-	init_rtc_irq();
 	common_init_isa_dma();
 }
 

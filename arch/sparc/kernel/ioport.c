@@ -1,4 +1,4 @@
-/* $Id: ioport.c,v 1.34 2000/02/18 13:48:48 davem Exp $
+/* $Id: ioport.c,v 1.35 2000/02/27 08:16:25 davem Exp $
  * ioport.c:  Simple io mapping allocator.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)

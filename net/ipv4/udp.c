@@ -5,7 +5,7 @@
  *
  *		The User Datagram Protocol (UDP).
  *
- * Version:	$Id: udp.c,v 1.79 2000/01/18 08:24:20 davem Exp $
+ * Version:	$Id: udp.c,v 1.80 2000/02/27 19:51:43 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -798,6 +798,7 @@ int udp_disconnect(struct sock *sk, int flags)
 	sk->rcv_saddr = 0;
 	sk->daddr = 0;
 	sk->dport = 0;
+	sk->bound_dev_if = 0;
 	sk_dst_reset(sk);
 	return 0;
 }

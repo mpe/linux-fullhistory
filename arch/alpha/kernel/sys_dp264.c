@@ -35,6 +35,10 @@
 
 /* Note mask bit is true for ENABLED irqs.  */
 static unsigned long cached_irq_mask;
+/* dp264 boards handle at max four CPUs */
+static unsigned long cpu_irq_affinity[4];
+
+spinlock_t dp264_irq_lock = SPIN_LOCK_UNLOCKED;
 
 static void
 tsunami_update_irq_hw(unsigned long mask, unsigned long isa_enable)
@@ -47,12 +51,16 @@ tsunami_update_irq_hw(unsigned long mask, unsigned long isa_enable)
 	volatile unsigned long *dim0, *dim1, *dim2, *dim3;
 	unsigned long mask0, mask1, mask2, mask3, maskB, dummy;
 
-	mask0 = mask1 = mask2 = mask3 = mask;
+	mask0 = mask & cpu_irq_affinity[0];
+	mask1 = mask & cpu_irq_affinity[1];
+	mask2 = mask & cpu_irq_affinity[2];
+	mask3 = mask & cpu_irq_affinity[3];
+
 	maskB = mask | isa_enable;
-	if (bcpu == 0) mask0 = maskB;
-	if (bcpu == 1) mask1 = maskB;
-	if (bcpu == 2) mask2 = maskB;
-	if (bcpu == 3) mask3 = maskB;
+	if (bcpu == 0) mask0 = maskB & cpu_irq_affinity[0];
+	else if (bcpu == 1) mask1 = maskB & cpu_irq_affinity[1];
+	else if (bcpu == 2) mask2 = maskB & cpu_irq_affinity[2];
+	else if (bcpu == 3) mask3 = maskB & cpu_irq_affinity[3];
 
 	dim0 = &cchip->dim0.csr;
 	dim1 = &cchip->dim1.csr;
@@ -73,10 +81,12 @@ tsunami_update_irq_hw(unsigned long mask, unsigned long isa_enable)
 	*dim2;
 	*dim3;
 #else
-	volatile unsigned long *dimB = &cchip->dim1.csr;
+	volatile unsigned long *dimB;
 	if (bcpu == 0) dimB = &cchip->dim0.csr;
-	if (bcpu == 2) dimB = &cchip->dim2.csr;
-	if (bcpu == 3) dimB = &cchip->dim3.csr;
+	else if (bcpu == 1) dimB = &cchip->dim1.csr;
+	else if (bcpu == 2) dimB = &cchip->dim2.csr;
+	else if (bcpu == 3) dimB = &cchip->dim3.csr;
+
 	*dimB = mask | isa_enable;
 	mb();
 	*dimB;
@@ -98,15 +108,19 @@ clipper_update_irq_hw(unsigned long mask)
 static inline void
 dp264_enable_irq(unsigned int irq)
 {
+	spin_lock(&dp264_irq_lock);
 	cached_irq_mask |= 1UL << irq;
 	dp264_update_irq_hw(cached_irq_mask);
+	spin_unlock(&dp264_irq_lock);
 }
 
 static void
 dp264_disable_irq(unsigned int irq)
 {
+	spin_lock(&dp264_irq_lock);
 	cached_irq_mask &= ~(1UL << irq);
 	dp264_update_irq_hw(cached_irq_mask);
+	spin_unlock(&dp264_irq_lock);
 }
 
 static unsigned int
@@ -116,18 +130,29 @@ dp264_startup_irq(unsigned int irq)
 	return 0; /* never anything pending */
 }
 
+static void
+dp264_end_irq(unsigned int irq)
+{ 
+	if (!(irq_desc[irq].status & (IRQ_DISABLED|IRQ_INPROGRESS)))
+		dp264_enable_irq(irq);
+}
+
 static inline void
 clipper_enable_irq(unsigned int irq)
 {
+	spin_lock(&dp264_irq_lock);
 	cached_irq_mask |= 1UL << irq;
 	clipper_update_irq_hw(cached_irq_mask);
+	spin_unlock(&dp264_irq_lock);
 }
 
 static void
 clipper_disable_irq(unsigned int irq)
 {
+	spin_lock(&dp264_irq_lock);
 	cached_irq_mask &= ~(1UL << irq);
 	clipper_update_irq_hw(cached_irq_mask);
+	spin_unlock(&dp264_irq_lock);
 }
 
 static unsigned int
@@ -137,6 +162,45 @@ clipper_startup_irq(unsigned int irq)
 	return 0; /* never anything pending */
 }
 
+static void
+clipper_end_irq(unsigned int irq)
+{ 
+	if (!(irq_desc[irq].status & (IRQ_DISABLED|IRQ_INPROGRESS)))
+		clipper_enable_irq(irq);
+}
+
+static void
+cpu_set_irq_affinity(unsigned int irq, unsigned long affinity)
+{
+	int cpu;
+
+	for (cpu = 0; cpu < 4; cpu++) {
+		if (affinity & (1UL << cpu))
+			cpu_irq_affinity[cpu] |= 1UL << irq;
+		else
+			cpu_irq_affinity[cpu] &= ~(1UL << irq);
+	}
+
+}
+
+static void
+dp264_set_affinity(unsigned int irq, unsigned long affinity)
+{ 
+	spin_lock(&dp264_irq_lock);
+	cpu_set_irq_affinity(irq, affinity);
+	dp264_update_irq_hw(cached_irq_mask);
+	spin_unlock(&dp264_irq_lock);
+}
+
+static void
+clipper_set_affinity(unsigned int irq, unsigned long affinity)
+{ 
+	spin_lock(&dp264_irq_lock);
+	cpu_set_irq_affinity(irq, affinity);
+	clipper_update_irq_hw(cached_irq_mask);
+	spin_unlock(&dp264_irq_lock);
+}
+
 static struct hw_interrupt_type dp264_irq_type = {
 	typename:	"DP264",
 	startup:	dp264_startup_irq,
@@ -144,7 +208,8 @@ static struct hw_interrupt_type dp264_irq_type = {
 	enable:		dp264_enable_irq,
 	disable:	dp264_disable_irq,
 	ack:		dp264_disable_irq,
-	end:		dp264_enable_irq,
+	end:		dp264_end_irq,
+	set_affinity:	dp264_set_affinity,
 };
 
 static struct hw_interrupt_type clipper_irq_type = {
@@ -154,7 +219,8 @@ static struct hw_interrupt_type clipper_irq_type = {
 	enable:		clipper_enable_irq,
 	disable:	clipper_disable_irq,
 	ack:		clipper_disable_irq,
-	end:		clipper_enable_irq,
+	end:		clipper_end_irq,
+	set_affinity:	clipper_set_affinity,
 };
 
 static void
@@ -249,6 +315,8 @@ init_tsunami_irqs(struct hw_interrupt_type * ops)
 static void __init
 dp264_init_irq(void)
 {
+	int cpu;
+
 	outb(0, DMA1_RESET_REG);
 	outb(0, DMA2_RESET_REG);
 	outb(DMA_MODE_CASCADE, DMA2_MODE_REG);
@@ -257,10 +325,12 @@ dp264_init_irq(void)
 	if (alpha_using_srm)
 		alpha_mv.device_interrupt = dp264_srm_device_interrupt;
 
+	/* this is single threaded by design so no need of any smp lock */
+	for (cpu = 0; cpu < 4; cpu++)
+		cpu_irq_affinity[cpu] = ~0UL;
 	dp264_update_irq_hw(0UL);
 
 	init_i8259a_irqs();
-	init_rtc_irq();
 	init_tsunami_irqs(&dp264_irq_type);
 }
 
@@ -278,7 +348,6 @@ clipper_init_irq(void)
 	clipper_update_irq_hw(0UL);
 
 	init_i8259a_irqs();
-	init_rtc_irq();
 	init_tsunami_irqs(&clipper_irq_type);
 }
 

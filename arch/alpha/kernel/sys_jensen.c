@@ -71,7 +71,7 @@ static struct hw_interrupt_type jensen_local_irq_type = {
 	enable:		i8259a_enable_irq,
 	disable:	i8259a_disable_irq,
 	ack:		jensen_local_ack,
-	end:		i8259a_enable_irq,
+	end:		i8259a_end_irq,
 };
 
 static void 
@@ -110,7 +110,6 @@ static void __init
 jensen_init_irq(void)
 {
 	init_i8259a_irqs();
-	init_rtc_irq();
 
 	irq_desc[1].handler = &jensen_local_irq_type;
 	irq_desc[4].handler = &jensen_local_irq_type;

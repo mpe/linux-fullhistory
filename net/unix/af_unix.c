@@ -8,7 +8,7 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  *
- * Version:	$Id: af_unix.c,v 1.88 2000/01/18 08:24:28 davem Exp $
+ * Version:	$Id: af_unix.c,v 1.89 2000/02/27 19:52:50 davem Exp $
  *
  * Fixes:
  *		Linus Torvalds	:	Assorted bug cures.
@@ -1556,8 +1556,10 @@ static int unix_shutdown(struct socket *sock, int mode)
 			other->shutdown |= peer_mode;
 			unix_state_wunlock(other);
 			other->state_change(other);
-			if (peer_mode&RCV_SHUTDOWN)
-				sock_wake_async(sk->socket,1,POLL_HUP);
+			if (peer_mode == SHUTDOWN_MASK)
+				sock_wake_async(other->socket,1,POLL_HUP);
+			else if (peer_mode & RCV_SHUTDOWN)
+				sock_wake_async(other->socket,1,POLL_IN);
 		}
 		if (other)
 			sock_put(other);

@@ -1160,7 +1160,7 @@ static void end_level_ioapic_irq (unsigned int i)
 
 static void mask_and_ack_level_ioapic_irq (unsigned int i) { /* nothing */ }
 
-static void set_ioapic_affinity (unsigned int irq, unsigned int mask)
+static void set_ioapic_affinity (unsigned int irq, unsigned long mask)
 {
 	unsigned long flags;
 	/*

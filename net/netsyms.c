@@ -502,6 +502,7 @@ EXPORT_SYMBOL(dev_remove_pack);
 EXPORT_SYMBOL(dev_get);
 EXPORT_SYMBOL(dev_alloc);
 EXPORT_SYMBOL(dev_alloc_name);
+EXPORT_SYMBOL(__netdev_watchdog_up);
 #ifdef CONFIG_KMOD
 EXPORT_SYMBOL(dev_load);
 #endif

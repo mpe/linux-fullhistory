@@ -42,7 +42,6 @@ sio_init_irq(void)
 		alpha_mv.device_interrupt = srm_device_interrupt;
 
 	init_i8259a_irqs();
-	init_rtc_irq();
 	common_init_isa_dma();
 }
 

@@ -30,6 +30,7 @@
 #include "pci_impl.h"
 #include "machvec_impl.h"
 
+spinlock_t sable_irq_lock = SPIN_LOCK_UNLOCKED:
 
 /*
  *   For SABLE, which is really baroque, we manage 40 IRQ's, but the
@@ -137,8 +138,10 @@ sable_enable_irq(unsigned int irq)
 	unsigned long bit, mask;
 
 	bit = sable_irq_swizzle.irq_to_mask[irq];
+	spin_lock(&sable_irq_lock);
 	mask = sable_irq_swizzle.shadow_mask &= ~(1UL << bit);
 	sable_update_irq_hw(bit, mask);
+	spin_unlock(&sable_irq_lock);
 }
 
 static void
@@ -147,8 +150,10 @@ sable_disable_irq(unsigned int irq)
 	unsigned long bit, mask;
 
 	bit = sable_irq_swizzle.irq_to_mask[irq];
+	spin_lock(&sable_irq_lock);
 	mask = sable_irq_swizzle.shadow_mask |= 1UL << bit;
 	sable_update_irq_hw(bit, mask);
+	spin_unlock(&sable_irq_lock);
 }
 
 static unsigned int
@@ -159,14 +164,23 @@ sable_startup_irq(unsigned int irq)
 }
 
 static void
+sable_end_irq(unsigned int irq)
+{
+	if (!(irq_desc[irq].status & (IRQ_DISABLED|IRQ_INPROGRESS)))
+		sable_enable_irq(irq);
+}
+
+static void
 sable_mask_and_ack_irq(unsigned int irq)
 {
 	unsigned long bit, mask;
 
 	bit = sable_irq_swizzle.irq_to_mask[irq];
+	spin_lock(&sable_irq_lock);
 	mask = sable_irq_swizzle.shadow_mask |= 1UL << bit;
 	sable_update_irq_hw(bit, mask);
 	sable_ack_irq_hw(bit);
+	spin_unlock(&sable_irq_lock);
 }
 
 static struct hw_interrupt_type sable_irq_type = {
@@ -176,7 +190,7 @@ static struct hw_interrupt_type sable_irq_type = {
 	enable:		sable_enable_irq,
 	disable:	sable_disable_irq,
 	ack:		sable_mask_and_ack_irq,
-	end:		sable_enable_irq,
+	end:		sable_end_irq,
 };
 
 static void 
@@ -208,7 +222,6 @@ sable_init_irq(void)
 		irq_desc[i].handler = &sable_irq_type;
 	}
 	
-	init_rtc_irq();
 	common_init_isa_dma();
 }
 

@@ -7,7 +7,10 @@
  *
  *	Adapted from linux/net/ipv4/raw.c
  *
- *	$Id: raw.c,v 1.33 2000/01/18 08:24:22 davem Exp $
+ *	$Id: raw.c,v 1.34 2000/02/27 19:51:48 davem Exp $
+ *
+ *	Fixes:
+ *	Hideaki YOSHIFUJI	:	sin6_scope_id support
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -183,9 +186,8 @@ static int rawv6_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	int addr_type;
 	int err;
 
-	if (addr_len < sizeof(struct sockaddr_in6))
+	if (addr_len < SIN6_LEN_RFC2133)
 		return -EINVAL;
-
 	addr_type = ipv6_addr_type(&addr->sin6_addr);
 
 	/* Raw sockets are IPv6 only */
@@ -197,6 +199,20 @@ static int rawv6_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	err = -EINVAL;
 	if (sk->state != TCP_CLOSE)
 		goto out;
+
+	if (addr_type & IPV6_ADDR_LINKLOCAL) {
+		if (addr_len >= sizeof(struct sockaddr_in6) &&
+		    addr->sin6_scope_id) {
+			/* Override any existing binding, if another one
+			 * is supplied by user.
+			 */
+			sk->bound_dev_if = addr->sin6_scope_id;
+		}
+
+		/* Binding to link-local address requires an interface */
+		if (sk->bound_dev_if == 0)
+			goto out;
+	}
 
 	/* Check if the address belongs to the host. */
 	if (addr_type != IPV6_ADDR_ANY) {
@@ -325,6 +341,11 @@ int rawv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 		memcpy(&sin6->sin6_addr, &skb->nh.ipv6h->saddr, 
 		       sizeof(struct in6_addr));
 		sin6->sin6_flowinfo = 0;
+		sin6->sin6_scope_id = 0;
+		if (ipv6_addr_type(&sin6->sin6_addr) & IPV6_ADDR_LINKLOCAL) {
+			struct inet6_skb_parm *opt = (struct inet6_skb_parm *) skb->cb;
+			sin6->sin6_scope_id = opt->iif;
+		}
 	}
 
 	if (sk->net_pinfo.af_inet6.rxopt.all)
@@ -429,14 +450,15 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	 */
 
 	fl.fl6_flowlabel = 0;
+	fl.oif = 0;
 
 	if (sin6) {
-		if (addr_len < sizeof(struct sockaddr_in6)) 
-			return(-EINVAL);
+		if (addr_len < SIN6_LEN_RFC2133) 
+			return -EINVAL;
 
 		if (sin6->sin6_family && sin6->sin6_family != AF_INET6) 
 			return(-EINVAL);
-		
+
 		/* port is the proto value [0..255] carried in nexthdr */
 		proto = ntohs(sin6->sin6_port);
 
@@ -457,11 +479,15 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 			}
 		}
 
-
 		/* Otherwise it will be difficult to maintain sk->dst_cache. */
 		if (sk->state == TCP_ESTABLISHED &&
 		    !ipv6_addr_cmp(daddr, &sk->net_pinfo.af_inet6.daddr))
 			daddr = &sk->net_pinfo.af_inet6.daddr;
+
+		if (addr_len >= sizeof(struct sockaddr_in6) &&
+		    sin6->sin6_scope_id &&
+		    ipv6_addr_type(daddr)&IPV6_ADDR_LINKLOCAL)
+			fl.oif = sin6->sin6_scope_id;
 	} else {
 		if (sk->state != TCP_ESTABLISHED) 
 			return(-EINVAL);
@@ -479,7 +505,8 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 		return(-EINVAL);
 	}
 
-	fl.oif = sk->bound_dev_if;
+	if (fl.oif == 0)
+		fl.oif = sk->bound_dev_if;
 	fl.fl6_src = NULL;
 
 	if (msg->msg_controllen) {

@@ -4,7 +4,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: ipv6.h,v 1.19 2000/01/09 02:19:26 davem Exp $
+ *	$Id: ipv6.h,v 1.20 2000/02/27 19:51:38 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -19,6 +19,8 @@
 #include <asm/hardirq.h>
 #include <net/ndisc.h>
 #include <net/flow.h>
+
+#define SIN6_LEN_RFC2133	24
 
 /*
  *	NextHeader field of IPv6 header

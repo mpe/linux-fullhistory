@@ -55,6 +55,8 @@ extern int __cpu_logical_map[NR_CPUS];
 #define hard_smp_processor_id()	__hard_smp_processor_id()
 #define smp_processor_id()	(current->processor)
 
+extern unsigned long cpu_present_mask;
+
 #endif /* __SMP__ */
 
 #define NO_PROC_ID	(-1)

@@ -65,6 +65,13 @@ rx164_startup_irq(unsigned int irq)
 	return 0;
 }
 
+static void
+rx164_end_irq(unsigned int irq)
+{
+	if (!(irq_desc[irq].status & (IRQ_DISABLED|IRQ_INPROGRESS)))
+		rx164_enable_irq(irq);
+}
+
 static struct hw_interrupt_type rx164_irq_type = {
 	typename:	"RX164",
 	startup:	rx164_startup_irq,
@@ -72,7 +79,7 @@ static struct hw_interrupt_type rx164_irq_type = {
 	enable:		rx164_enable_irq,
 	disable:	rx164_disable_irq,
 	ack:		rx164_disable_irq,
-	end:		rx164_enable_irq,
+	end:		rx164_end_irq,
 };
 
 static void 
@@ -114,7 +121,6 @@ rx164_init_irq(void)
 	}
 
 	init_i8259a_irqs();
-	init_rtc_irq();
 	common_init_isa_dma();
 
 	setup_irq(16+20, &isa_cascade_irqaction);

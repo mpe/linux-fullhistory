@@ -1,6 +1,8 @@
 /*
  * linux/drivers/video/cyber2000fb.c
  *
+ * Copyright (C) 1998-2000 Russell King
+ *
  * Integraphics Cyber2000 frame buffer device
  *
  * Based on cyberfb.c

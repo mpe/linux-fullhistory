@@ -685,6 +685,15 @@ static struct net_device tr0_dev = {
 	
 	
 	
-struct net_device *dev_base = NEXT_DEV;
+/*
+ *	The loopback device is global so it can be directly referenced
+ *	by the network code. Also, it must be first on device list.
+ */
+
+extern int loopback_init(struct net_device *dev);
+struct net_device loopback_dev = 
+	{"lo", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, loopback_init};
+
+struct net_device *dev_base = &loopback_dev;
 rwlock_t dev_base_lock = RW_LOCK_UNLOCKED;
 

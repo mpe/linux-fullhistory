@@ -874,7 +874,7 @@ static struct proc_dir_entry * root_irq_dir;
 static struct proc_dir_entry * irq_dir [NR_IRQS];
 static struct proc_dir_entry * smp_affinity_entry [NR_IRQS];
 
-unsigned int irq_affinity [NR_IRQS] = { [0 ... NR_IRQS-1] = 0xffffffff};
+static unsigned long irq_affinity [NR_IRQS] = { [0 ... NR_IRQS-1] = ~0UL };
 
 #define HEX_DIGITS 8
 
@@ -883,7 +883,7 @@ static int irq_affinity_read_proc (char *page, char **start, off_t off,
 {
 	if (count < HEX_DIGITS+1)
 		return -EINVAL;
-	return sprintf (page, "%08x\n", irq_affinity[(int)data]);
+	return sprintf (page, "%08lx\n", irq_affinity[(long)data]);
 }
 
 static unsigned int parse_hex_value (const char *buffer,
@@ -926,7 +926,7 @@ out:
 static int irq_affinity_write_proc (struct file *file, const char *buffer,
 					unsigned long count, void *data)
 {
-	int irq = (int) data, full_count = count, err;
+	int irq = (long) data, full_count = count, err;
 	unsigned long new_value;
 
 	if (!irq_desc[irq].handler->set_affinity)
@@ -993,7 +993,7 @@ static void register_irq_proc (unsigned int irq)
 	entry = create_proc_entry("smp_affinity", 0700, irq_dir[irq]);
 
 	entry->nlink = 1;
-	entry->data = (void *)irq;
+	entry->data = (void *)(long)irq;
 	entry->read_proc = irq_affinity_read_proc;
 	entry->write_proc = irq_affinity_write_proc;
 

@@ -43,6 +43,7 @@
 #include <linux/mm.h>
 #include <linux/capability.h>
 #include <linux/highuid.h>
+#include <linux/brlock.h>
 
 #if defined(CONFIG_PROC_FS)
 #include <linux/proc_fs.h>
@@ -340,6 +341,14 @@ EXPORT_SYMBOL(timer_table);
 #ifdef __SMP__
 /* Various random spinlocks we want to export */
 EXPORT_SYMBOL(tqueue_lock);
+
+/* Big-Reader lock implementation */
+EXPORT_SYMBOL(__brlock_array);
+#ifndef __BRLOCK_USE_ATOMICS
+EXPORT_SYMBOL(__br_write_locks);
+#endif
+EXPORT_SYMBOL(__br_write_lock);
+EXPORT_SYMBOL(__br_write_unlock);
 #endif
 
 /* autoirq from  drivers/net/auto_irq.c */

@@ -104,6 +104,7 @@ extern void   affs_dir_truncate(struct inode *);
 
 extern struct inode_operations	 affs_file_inode_operations;
 extern struct inode_operations	 affs_dir_inode_operations;
+extern struct inode_operations   affs_symlink_inode_operations;
 extern struct file_operations	 affs_file_operations;
 extern struct file_operations	 affs_file_operations_ofs;
 extern struct file_operations	 affs_dir_operations;

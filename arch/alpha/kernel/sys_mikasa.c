@@ -48,7 +48,7 @@ mikasa_enable_irq(unsigned int irq)
 	mikasa_update_irq_hw(cached_irq_mask |= 1 << (irq - 16));
 }
 
-static inline void
+static void
 mikasa_disable_irq(unsigned int irq)
 {
 	mikasa_update_irq_hw(cached_irq_mask &= ~(1 << (irq - 16)));
@@ -61,6 +61,13 @@ mikasa_startup_irq(unsigned int irq)
 	return 0;
 }
 
+static void
+mikasa_end_irq(unsigned int irq)
+{
+	if (!(irq_desc[irq].status & (IRQ_DISABLED|IRQ_INPROGRESS)))
+		mikasa_enable_irq(irq);
+}
+
 static struct hw_interrupt_type mikasa_irq_type = {
 	typename:	"MIKASA",
 	startup:	mikasa_startup_irq,
@@ -68,7 +75,7 @@ static struct hw_interrupt_type mikasa_irq_type = {
 	enable:		mikasa_enable_irq,
 	disable:	mikasa_disable_irq,
 	ack:		mikasa_disable_irq,
-	end:		mikasa_enable_irq,
+	end:		mikasa_end_irq,
 };
 
 static void 
@@ -113,7 +120,6 @@ mikasa_init_irq(void)
 	}
 
 	init_i8259a_irqs();
-	init_rtc_irq();
 	common_init_isa_dma();
 }
 

@@ -49,7 +49,7 @@ static int
 vcs_size(struct inode *inode)
 {
 	int size;
-   	int currcons = MINOR(inode->i_rdev) & 127;
+	int currcons = MINOR(inode->i_rdev) & 127;
 	if (currcons == 0)
 		currcons = fg_console;
 	else

@@ -1991,6 +1991,7 @@ static int __init parport_pc_init_pci (int irq, int dma)
 		}
 	}
 
+#ifdef CONFIG_PCI
 	/* Look for parallel controllers that we don't know about. */
 	pci_for_each_dev(pcidev) {
 		const int class_noprogif = pcidev->class & ~0xff;
@@ -2011,6 +2012,7 @@ static int __init parport_pc_init_pci (int irq, int dma)
 			"tim@cyberelk.demon.co.uk\n",
 			pcidev->vendor, pcidev->device);
 	}
+#endif
 
 	return count;
 }

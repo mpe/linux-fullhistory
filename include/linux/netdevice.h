@@ -184,7 +184,8 @@ enum netdev_state_t
 	__LINK_STATE_XOFF=0,
 	__LINK_STATE_START,
 	__LINK_STATE_PRESENT,
-	__LINK_STATE_SCHED
+	__LINK_STATE_SCHED,
+	__LINK_STATE_NOCARRIER
 };
 
 
@@ -287,6 +288,7 @@ struct net_device
 	void			*ip_ptr;	/* IPv4 specific data	*/  
 	void                    *dn_ptr;        /* DECnet specific data */
 	void                    *ip6_ptr;       /* IPv6 specific data */
+	void			*ec_ptr;	/* Econet specific data	*/
 
 	struct Qdisc		*qdisc;
 	struct Qdisc		*qdisc_sleeping;
@@ -533,6 +535,30 @@ extern __inline__ void dev_put(struct net_device *dev)
 #define __dev_put(dev) atomic_dec(&(dev)->refcnt)
 #define dev_hold(dev) atomic_inc(&(dev)->refcnt)
 
+/* Carrier loss detection, dial on demand. The functions netif_carrier_on
+ * and _off may be called from IRQ context, but it is caller
+ * who is responsible for serialization of these calls.
+ */
+
+extern __inline__ int netif_carrier_ok(struct net_device *dev)
+{
+	return !test_bit(__LINK_STATE_NOCARRIER, &dev->state);
+}
+
+extern void __netdev_watchdog_up(struct net_device *dev);
+
+extern __inline__ void netif_carrier_on(struct net_device *dev)
+{
+	clear_bit(__LINK_STATE_NOCARRIER, &dev->state);
+	if (netif_running(dev))
+		__netdev_watchdog_up(dev);
+}
+
+extern __inline__ void netif_carrier_off(struct net_device *dev)
+{
+	set_bit(__LINK_STATE_NOCARRIER, &dev->state);
+}
+
 /* Hot-plugging. */
 extern __inline__ int netif_device_present(struct net_device *dev)
 {
@@ -544,22 +570,15 @@ extern __inline__ void netif_device_detach(struct net_device *dev)
 	if (test_and_clear_bit(__LINK_STATE_PRESENT, &dev->state) &&
 	    netif_running(dev)) {
 		netif_stop_queue(dev);
-		if (dev->tx_timeout &&
-		    del_timer(&dev->watchdog_timer))
-			__dev_put(dev);
 	}
 }
 
 extern __inline__ void netif_device_attach(struct net_device *dev)
 {
-	if (test_and_set_bit(__LINK_STATE_PRESENT, &dev->state) &&
+	if (!test_and_set_bit(__LINK_STATE_PRESENT, &dev->state) &&
 	    netif_running(dev)) {
 		netif_wake_queue(dev);
-		if (dev->tx_timeout) {
-			dev->watchdog_timer.expires = jiffies + dev->watchdog_timeo;
-			add_timer(&dev->watchdog_timer);
-			dev_hold(dev);
-		}
+ 		__netdev_watchdog_up(dev);
 	}
 }
 

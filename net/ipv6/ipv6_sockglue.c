@@ -7,7 +7,7 @@
  *
  *	Based on linux/net/ipv4/ip_sockglue.c
  *
- *	$Id: ipv6_sockglue.c,v 1.32 2000/01/31 01:21:25 davem Exp $
+ *	$Id: ipv6_sockglue.c,v 1.33 2000/02/27 19:42:54 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -35,6 +35,7 @@
 #include <linux/if_arp.h>
 #include <linux/init.h>
 #include <linux/sysctl.h>
+#include <linux/netfilter.h>
 
 #include <net/sock.h>
 #include <net/snmp.h>
@@ -371,6 +372,14 @@ done:
 	case IPV6_FLOWLABEL_MGR:
 		retv = ipv6_flowlabel_opt(sk, optval, optlen);
 		break;
+
+#ifdef CONFIG_NETFILTER
+	default:
+		retv = nf_setsockopt(sk, PF_INET6, optname, optval, 
+					    optlen);
+		break;
+#endif
+
 	}
 	release_sock(sk);
 
@@ -450,7 +459,17 @@ int ipv6_getsockopt(struct sock *sk, int level, int optname, char *optval,
 		break;
 	}
 	default:
+#ifdef CONFIG_NETFILTER
+		lock_sock(sk);
+		val = nf_getsockopt(sk, PF_INET6, optname, optval, 
+				    &len);
+		release_sock(sk);
+		if (val >= 0)
+			val = put_user(len, optlen);
+		return val;
+#else
 		return -EINVAL;
+#endif
 	}
 	len=min(sizeof(int),len);
 	if(put_user(len, optlen))

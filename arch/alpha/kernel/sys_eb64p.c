@@ -48,7 +48,7 @@ eb64p_enable_irq(unsigned int irq)
 	eb64p_update_irq_hw(irq, cached_irq_mask &= ~(1 << irq));
 }
 
-static inline void
+static void
 eb64p_disable_irq(unsigned int irq)
 {
 	eb64p_update_irq_hw(irq, cached_irq_mask |= 1 << irq);
@@ -61,6 +61,13 @@ eb64p_startup_irq(unsigned int irq)
 	return 0; /* never anything pending */
 }
 
+static void
+eb64p_end_irq(unsigned int irq)
+{
+	if (!(irq_desc[irq].status & (IRQ_DISABLED|IRQ_INPROGRESS)))
+		eb64p_enable_irq(irq);
+}
+
 static struct hw_interrupt_type eb64p_irq_type = {
 	typename:	"EB64P",
 	startup:	eb64p_startup_irq,
@@ -68,7 +75,7 @@ static struct hw_interrupt_type eb64p_irq_type = {
 	enable:		eb64p_enable_irq,
 	disable:	eb64p_disable_irq,
 	ack:		eb64p_disable_irq,
-	end:		eb64p_enable_irq,
+	end:		eb64p_end_irq,
 };
 
 static void 
@@ -119,7 +126,6 @@ eb64p_init_irq(void)
 	outb(0xff, 0x27);
 
 	init_i8259a_irqs();
-	init_rtc_irq();
 
 	for (i = 16; i < 32; ++i) {
 		irq_desc[i].status = IRQ_DISABLED;

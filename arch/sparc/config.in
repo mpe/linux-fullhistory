@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.86 2000/02/10 02:51:10 davem Exp $
+# $Id: config.in,v 1.87 2000/02/27 19:34:12 davem Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -163,6 +163,7 @@ if [ "$CONFIG_NET" = "y" ]; then
    bool 'Network device support' CONFIG_NETDEVICES
    if [ "$CONFIG_NETDEVICES" = "y" ]; then
       tristate '  Dummy net driver support' CONFIG_DUMMY
+      tristate '  Bonding driver support' CONFIG_BONDING
       tristate '  PPP (point-to-point) support' CONFIG_PPP
       if [ ! "$CONFIG_PPP" = "n" ]; then
         dep_tristate '  PPP support for async serial ports' CONFIG_PPP_ASYNC $CONFIG_PPP

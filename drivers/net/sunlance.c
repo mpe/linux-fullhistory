@@ -1,4 +1,4 @@
-/* $Id: sunlance.c,v 1.99 2000/02/16 10:36:14 davem Exp $
+/* $Id: sunlance.c,v 1.100 2000/02/27 09:38:12 anton Exp $
  * lance.c: Linux/Sparc/Lance driver
  *
  *	Written 1995, 1996 by Miguel de Icaza
@@ -1287,8 +1287,10 @@ static void lance_set_multicast(struct net_device *dev)
 static void lance_set_multicast_retry(unsigned long _opaque)
 {
 	struct net_device *dev = (struct net_device *) _opaque;
+	struct lance_private *lp = (struct lance_private *) dev->priv;
 
 	lance_set_multicast(dev);
+	timer_exit(&lp->multicast_timer);
 }
 
 static void lance_free_hwresources(struct lance_private *lp)

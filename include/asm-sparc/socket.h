@@ -1,4 +1,4 @@
-/* $Id: socket.h,v 1.12 1998/07/22 22:06:48 davem Exp $ */
+/* $Id: socket.h,v 1.13 2000/02/27 19:47:43 davem Exp $ */
 #ifndef _ASM_SOCKET_H
 #define _ASM_SOCKET_H
 
@@ -39,6 +39,8 @@
 
 #define SO_ATTACH_FILTER	0x001a
 #define SO_DETACH_FILTER        0x001b
+
+#define SO_PEERNAME		0x001c
 
 /* Security levels - as per NRL IPv6 - don't actually do anything */
 #define SO_SECURITY_AUTHENTICATION		0x5001

@@ -228,6 +228,7 @@ obj-$(CONFIG_STRIP) += strip.o
 obj-$(CONFIG_DE650) += de650.o 8390.o
 obj-$(CONFIG_3C589) += 3c589.o
 obj-$(CONFIG_DUMMY) += dummy.o
+obj-$(CONFIG_BONDING) += bonding.o
 obj-$(CONFIG_DE600) += de600.o
 obj-$(CONFIG_DE620) += de620.o
 obj-$(CONFIG_AT1500) += lance.o

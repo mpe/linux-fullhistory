@@ -11,6 +11,10 @@ fi
 tristate 'Standard/generic (dumb) serial support' CONFIG_SERIAL
 if [ "$CONFIG_SERIAL" = "y" ]; then
    bool '  Support for console on serial port' CONFIG_SERIAL_CONSOLE
+   if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
+      tristate '   Atomwide serial port support' CONFIG_ATOMWIDE_SERIAL
+      tristate '   Dual serial port support' CONFIG_DUALSP_SERIAL
+   fi
 fi
 bool 'Extended dumb serial driver options' CONFIG_SERIAL_EXTENDED
 if [ "$CONFIG_SERIAL_EXTENDED" = "y" ]; then
@@ -116,9 +120,23 @@ if [ "$CONFIG_WATCHDOG" != "n" ]; then
    tristate '  Berkshire Products PC Watchdog' CONFIG_PCWATCHDOG
    tristate '  Acquire SBC Watchdog Timer' CONFIG_ACQUIRE_WDT
    tristate '  Mixcom Watchdog' CONFIG_MIXCOMWD 
+   if [ "$CONFIG_FOOTBRIDGE" = "y" ]; then
+      tristate '  DC21285 watchdog' CONFIG_21285_WATCHDOG
+      if [ "$CONFIG_ARCH_NETWINDER" = "y" ]; then
+         tristate '  NetWinder WB83C977 watchdog' CONFIG_977_WATCHDOG
+      fi
+   fi
 fi
 endmenu
 
+if [ "$CONFIG_ARCH_NETWINDER" = "y" ]; then
+   tristate 'NetWinder thermometer support' CONFIG_DS1620
+   tristate 'NetWinder Button' CONFIG_NWBUTTON
+   if [ "$CONFIG_NWBUTTON" != "n" ]; then
+      bool '  Reboot Using Button' CONFIG_NWBUTTON_REBOOT
+   fi
+   tristate 'NetWinder flash support' CONFIG_NWFLASH
+fi
 
 tristate '/dev/nvram support' CONFIG_NVRAM
 tristate 'Enhanced Real Time Clock Support' CONFIG_RTC

@@ -1,5 +1,12 @@
-/* This exists merely to satisfy <linux/irq.h>.  There is
-   nothing that would go here of general interest.
+#ifndef _ALPHA_HW_IRQ_H
+#define _ALPHA_HW_IRQ_H
 
-   Everything of consequence is in arch/alpha/kernel/irq_impl.h,
-   to be used only in arch/alpha/kernel/.  */
+static inline void hw_resend_irq(struct hw_interrupt_type *h, unsigned int i) {}
+
+#ifdef CONFIG_ALPHA_GENERIC
+#define ACTUAL_NR_IRQS	alpha_mv.nr_irqs
+#else
+#define ACTUAL_NR_IRQS	NR_IRQS
+#endif
+
+#endif

@@ -84,7 +84,7 @@ static ssize_t do_write_mem(struct file * file, void *p, unsigned long realp,
 		written+=sz;
 	}
 #endif
-	if (copy_from_user(p, buf, count)) 
+	if (copy_from_user(p, buf, count))
 		return -EFAULT;
 	written += count;
 	*ppos += written;
@@ -634,12 +634,12 @@ int __init chr_dev_init(void)
 	misc_init();
 #ifdef CONFIG_SOUND
 	soundcore_init();
-#ifdef CONFIG_SOUND_OSS	
+#ifdef CONFIG_SOUND_OSS
 	soundcard_init();
-#endif	
+#endif
 #ifdef CONFIG_DMASOUND
 	dmasound_init();
-#endif	
+#endif
 #endif
 #ifdef CONFIG_SPARCAUDIO
 	sparcaudio_init();

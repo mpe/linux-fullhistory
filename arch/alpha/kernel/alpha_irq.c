@@ -1,0 +1,319 @@
+/*
+ * Alpha specific irq code.
+ */
+
+#include <linux/init.h>
+#include <linux/sched.h>
+#include <linux/irq.h>
+
+#include <asm/machvec.h>
+#include <asm/dma.h>
+
+#include "proto.h"
+#include "irq_impl.h"
+
+/* Only uniprocessor needs this IRQ/BH locking depth, on SMP it lives
+   in the per-cpu structure for cache reasons.  */
+#ifndef CONFIG_SMP
+int __local_irq_count;
+int __local_bh_count;
+unsigned long __irq_attempt[NR_IRQS];
+#endif
+
+/* Hack minimum IPL during interupt processing for broken hardware.  */
+#ifdef CONFIG_ALPHA_BROKEN_IRQ_MASK
+int __min_ipl;
+#endif
+
+/*
+ * Performance counter hook.  A module can override this to
+ * do something useful.
+ */
+static void
+dummy_perf(unsigned long vector, struct pt_regs *regs)
+{
+	irq_err_count++;
+	printk(KERN_CRIT "Performance counter interrupt!\n");
+}
+
+void (*perf_irq)(unsigned long, struct pt_regs *) = dummy_perf;
+
+/*
+ * Dispatch device interrupts.
+ */
+
+/* Handle ISA interrupt via the PICs. */
+
+#if defined(CONFIG_ALPHA_GENERIC)
+# define IACK_SC	alpha_mv.iack_sc
+#elif defined(CONFIG_ALPHA_APECS)
+# define IACK_SC	APECS_IACK_SC
+#elif defined(CONFIG_ALPHA_LCA)
+# define IACK_SC	LCA_IACK_SC
+#elif defined(CONFIG_ALPHA_CIA)
+# define IACK_SC	CIA_IACK_SC
+#elif defined(CONFIG_ALPHA_PYXIS)
+# define IACK_SC	PYXIS_IACK_SC
+#elif defined(CONFIG_ALPHA_TSUNAMI)
+# define IACK_SC	TSUNAMI_IACK_SC
+#elif defined(CONFIG_ALPHA_POLARIS)
+# define IACK_SC	POLARIS_IACK_SC
+#elif defined(CONFIG_ALPHA_IRONGATE)
+# define IACK_SC        IRONGATE_IACK_SC
+#endif
+
+#if defined(IACK_SC)
+void
+isa_device_interrupt(unsigned long vector, struct pt_regs *regs)
+{
+	/*
+	 * Generate a PCI interrupt acknowledge cycle.  The PIC will
+	 * respond with the interrupt vector of the highest priority
+	 * interrupt that is pending.  The PALcode sets up the
+	 * interrupts vectors such that irq level L generates vector L.
+	 */
+	int j = *(vuip) IACK_SC;
+	j &= 0xff;
+	if (j == 7) {
+		if (!(inb(0x20) & 0x80)) {
+			/* It's only a passive release... */
+			return;
+		}
+	}
+	handle_irq(j, regs);
+}
+#endif
+
+#if defined(CONFIG_ALPHA_GENERIC) || !defined(IACK_SC)
+void
+isa_no_iack_sc_device_interrupt(unsigned long vector, struct pt_regs *regs)
+{
+	unsigned long pic;
+
+	/*
+	 * It seems to me that the probability of two or more *device*
+	 * interrupts occurring at almost exactly the same time is
+	 * pretty low.  So why pay the price of checking for
+	 * additional interrupts here if the common case can be
+	 * handled so much easier?
+	 */
+	/* 
+	 *  The first read of gives you *all* interrupting lines.
+	 *  Therefore, read the mask register and and out those lines
+	 *  not enabled.  Note that some documentation has 21 and a1 
+	 *  write only.  This is not true.
+	 */
+	pic = inb(0x20) | (inb(0xA0) << 8);	/* read isr */
+	pic &= 0xFFFB;				/* mask out cascade & hibits */
+
+	while (pic) {
+		int j = ffz(~pic);
+		pic &= pic - 1;
+		handle_irq(j, regs);
+	}
+}
+#endif
+
+/*
+ * The main interrupt entry point.
+ */
+
+asmlinkage void 
+do_entInt(unsigned long type, unsigned long vector, unsigned long la_ptr,
+	  unsigned long a3, unsigned long a4, unsigned long a5,
+	  struct pt_regs regs)
+{
+	switch (type) {
+	case 0:
+#ifdef CONFIG_SMP
+		handle_ipi(&regs);
+		return;
+#else
+		irq_err_count++;
+		printk(KERN_CRIT "Interprocessor interrupt? "
+		       "You must be kidding!\n");
+#endif
+		break;
+	case 1:
+#ifdef CONFIG_SMP
+		cpu_data[smp_processor_id()].smp_local_irq_count++;
+		smp_percpu_timer_interrupt(&regs);
+		if (smp_processor_id() == boot_cpuid)
+#endif
+			handle_irq(RTC_IRQ, &regs);
+		return;
+	case 2:
+		irq_err_count++;
+		alpha_mv.machine_check(vector, la_ptr, &regs);
+		return;
+	case 3:
+		alpha_mv.device_interrupt(vector, &regs);
+		return;
+	case 4:
+		perf_irq(vector, &regs);
+		return;
+	default:
+		printk(KERN_CRIT "Hardware intr %ld %lx? Huh?\n",
+		       type, vector);
+	}
+	printk("PC = %016lx PS=%04lx\n", regs.pc, regs.ps);
+}
+
+void __init
+common_init_isa_dma(void)
+{
+	outb(0, DMA1_RESET_REG);
+	outb(0, DMA2_RESET_REG);
+	outb(0, DMA1_CLR_MASK_REG);
+	outb(0, DMA2_CLR_MASK_REG);
+}
+
+void __init
+init_IRQ(void)
+{
+	alpha_mv.init_irq();
+	wrent(entInt, 0);
+}
+
+/*
+ * machine error checks
+ */
+#define MCHK_K_TPERR           0x0080
+#define MCHK_K_TCPERR          0x0082
+#define MCHK_K_HERR            0x0084
+#define MCHK_K_ECC_C           0x0086
+#define MCHK_K_ECC_NC          0x0088
+#define MCHK_K_OS_BUGCHECK     0x008A
+#define MCHK_K_PAL_BUGCHECK    0x0090
+
+#ifndef CONFIG_SMP
+struct mcheck_info __mcheck_info;
+#endif
+
+void
+process_mcheck_info(unsigned long vector, unsigned long la_ptr,
+		    struct pt_regs *regs, const char *machine,
+		    int expected)
+{
+	struct el_common *mchk_header;
+	const char *reason;
+
+	/*
+	 * See if the machine check is due to a badaddr() and if so,
+	 * ignore it.
+	 */
+
+#if DEBUG_MCHECK > 0
+	 printk(KERN_CRIT "%s machine check %s\n", machine,
+	        expected ? "expected." : "NOT expected!!!");
+#endif
+
+	if (expected) {
+		int cpu = smp_processor_id();
+		mcheck_expected(cpu) = 0;
+		mcheck_taken(cpu) = 1;
+		return;
+	}
+
+	mchk_header = (struct el_common *)la_ptr;
+
+	printk(KERN_CRIT "%s machine check: vector=0x%lx pc=0x%lx code=0x%lx\n",
+	       machine, vector, regs->pc, mchk_header->code);
+
+	switch ((unsigned int) mchk_header->code) {
+	/* Machine check reasons.  Defined according to PALcode sources.  */
+	case 0x80: reason = "tag parity error"; break;
+	case 0x82: reason = "tag control parity error"; break;
+	case 0x84: reason = "generic hard error"; break;
+	case 0x86: reason = "correctable ECC error"; break;
+	case 0x88: reason = "uncorrectable ECC error"; break;
+	case 0x8A: reason = "OS-specific PAL bugcheck"; break;
+	case 0x90: reason = "callsys in kernel mode"; break;
+	case 0x96: reason = "i-cache read retryable error"; break;
+	case 0x98: reason = "processor detected hard error"; break;
+	
+	/* System specific (these are for Alcor, at least): */
+	case 0x202: reason = "system detected hard error"; break;
+	case 0x203: reason = "system detected uncorrectable ECC error"; break;
+	case 0x204: reason = "SIO SERR occurred on PCI bus"; break;
+	case 0x205: reason = "parity error detected by CIA"; break;
+	case 0x206: reason = "SIO IOCHK occurred on ISA bus"; break;
+	case 0x207: reason = "non-existent memory error"; break;
+	case 0x208: reason = "MCHK_K_DCSR"; break;
+	case 0x209: reason = "PCI SERR detected"; break;
+	case 0x20b: reason = "PCI data parity error detected"; break;
+	case 0x20d: reason = "PCI address parity error detected"; break;
+	case 0x20f: reason = "PCI master abort error"; break;
+	case 0x211: reason = "PCI target abort error"; break;
+	case 0x213: reason = "scatter/gather PTE invalid error"; break;
+	case 0x215: reason = "flash ROM write error"; break;
+	case 0x217: reason = "IOA timeout detected"; break;
+	case 0x219: reason = "IOCHK#, EISA add-in board parity or other catastrophic error"; break;
+	case 0x21b: reason = "EISA fail-safe timer timeout"; break;
+	case 0x21d: reason = "EISA bus time-out"; break;
+	case 0x21f: reason = "EISA software generated NMI"; break;
+	case 0x221: reason = "unexpected ev5 IRQ[3] interrupt"; break;
+	default: reason = "unknown"; break;
+	}
+
+	printk(KERN_CRIT "machine check type: %s%s\n",
+	       reason, mchk_header->retry ? " (retryable)" : "");
+
+	dik_show_regs(regs, NULL);
+
+#if DEBUG_MCHECK > 1
+	{
+		/* Dump the logout area to give all info.  */
+		unsigned long *ptr = (unsigned long *)la_ptr;
+		long i;
+		for (i = 0; i < mchk_header->size / sizeof(long); i += 2) {
+			printk(KERN_CRIT "   +%8lx %016lx %016lx\n",
+			       i*sizeof(long), ptr[i], ptr[i+1]);
+		}
+	}
+#endif
+}
+
+/* RTC */
+static void enable_rtc(unsigned int irq) { }
+static unsigned int startup_rtc(unsigned int irq) { return 0; }
+#define shutdown_rtc	enable_rtc
+#define end_rtc		enable_rtc
+#define ack_rtc		enable_rtc
+#define disable_rtc	enable_rtc
+
+struct irqaction timer_irqaction  = { timer_interrupt,
+				      SA_INTERRUPT, 0, "timer",
+				      NULL, NULL};
+
+void __init
+init_rtc_irq(void)
+{
+	static struct hw_interrupt_type rtc_irq_type = { "RTC",
+							 startup_rtc,
+							 shutdown_rtc,
+							 enable_rtc,
+							 disable_rtc,
+							 ack_rtc,
+							 end_rtc };
+	irq_desc[RTC_IRQ].status = IRQ_DISABLED;
+	irq_desc[RTC_IRQ].handler = &rtc_irq_type;
+
+	setup_irq(RTC_IRQ, &timer_irqaction);
+}
+
+/* dummy irqactions */
+struct irqaction isa_cascade_irqaction = {
+	handler:	no_action,
+	name:		"isa-cascade"
+};
+
+struct irqaction timer_cascade_irqaction = {
+	handler:	no_action,
+	name:		"timer-cascade"
+};
+
+struct irqaction halt_switch_irqaction = {
+	handler:	no_action,
+	name:		"halt-switch"
+};

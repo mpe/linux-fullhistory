@@ -7,6 +7,6 @@
 #
 
 L_TARGET := lib.a
-L_OBJS   := errno.o ctype.o string.o vsprintf.o
+L_OBJS   := errno.o ctype.o string.o vsprintf.o brlock.o
 
 include $(TOPDIR)/Rules.make

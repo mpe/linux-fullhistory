@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *	Ian P. Morris		<I.P.Morris@soton.ac.uk>
  *
- *	$Id: ip6_input.c,v 1.15 2000/01/09 02:19:54 davem Exp $
+ *	$Id: ip6_input.c,v 1.17 2000/02/27 19:42:53 davem Exp $
  *
  *	Based in linux/net/ipv4/ip_input.c
  *
@@ -26,6 +26,9 @@
 #include <linux/in6.h>
 #include <linux/icmpv6.h>
 
+#include <linux/netfilter.h>
+#include <linux/netfilter_ipv6.h>
+
 #include <net/sock.h>
 #include <net/snmp.h>
 
@@ -37,6 +40,16 @@
 #include <net/ip6_route.h>
 #include <net/addrconf.h>
 
+
+
+static inline int ip6_rcv_finish( struct sk_buff *skb) 
+{
+
+	if (skb->dst == NULL)
+		ip6_route_input(skb);
+
+	return skb->dst->input(skb);
+}
 
 int ipv6_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt)
 {
@@ -77,12 +90,7 @@ int ipv6_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt
 			return 0;
 		}
 	}
-
-	if (skb->dst == NULL)
-		ip6_route_input(skb);
-
-	return skb->dst->input(skb);
-
+	return NF_HOOK(PF_INET6,NF_IP6_PRE_ROUTING, skb, dev, NULL, ip6_rcv_finish);
 truncated:
 	IP6_INC_STATS_BH(Ip6InTruncatedPkts);
 err:
@@ -97,7 +105,8 @@ out:
  *	Deliver the packet to the host
  */
 
-int ip6_input(struct sk_buff *skb)
+
+static inline int ip6_input_finish(struct sk_buff *skb)
 {
 	struct ipv6hdr *hdr = skb->nh.ipv6h;
 	struct inet6_protocol *ipprot;
@@ -147,7 +156,6 @@ int ip6_input(struct sk_buff *skb)
 		raw_sk = ipv6_raw_deliver(skb, nexthdr, len);
 
 	hash = nexthdr & (MAX_INET_PROTOS - 1);
-	read_lock(&inet6_protocol_lock);
 	for (ipprot = (struct inet6_protocol *) inet6_protos[hash]; 
 	     ipprot != NULL; 
 	     ipprot = (struct inet6_protocol *) ipprot->next) {
@@ -163,7 +171,6 @@ int ip6_input(struct sk_buff *skb)
 			ipprot->handler(buff, len);
 		found = 1;
 	}
-	read_unlock(&inet6_protocol_lock);
 
 	if (raw_sk) {
 		rawv6_rcv(raw_sk, skb, len);
@@ -180,6 +187,12 @@ int ip6_input(struct sk_buff *skb)
 	}
 
 	return 0;
+}
+
+
+int ip6_input(struct sk_buff *skb)
+{
+	return NF_HOOK(PF_INET6,NF_IP6_LOCAL_IN, skb, skb->dev, NULL, ip6_input_finish);
 }
 
 int ip6_mc_input(struct sk_buff *skb)

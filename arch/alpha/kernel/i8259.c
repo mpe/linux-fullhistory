@@ -21,6 +21,7 @@
 
 /* Note mask bit is true for DISABLED irqs.  */
 static unsigned int cached_irq_mask = 0xffff;
+spinlock_t i8259_irq_lock = SPIN_LOCK_UNLOCKED;
 
 static inline void
 i8259_update_irq_hw(unsigned int irq, unsigned long mask)
@@ -34,19 +35,30 @@ i8259_update_irq_hw(unsigned int irq, unsigned long mask)
 inline void
 i8259a_enable_irq(unsigned int irq)
 {
+	spin_lock(&i8259_irq_lock);
 	i8259_update_irq_hw(irq, cached_irq_mask &= ~(1 << irq));
+	spin_unlock(&i8259_irq_lock);
 }
 
-inline void
-i8259a_disable_irq(unsigned int irq)
+static inline void
+__i8259a_disable_irq(unsigned int irq)
 {
 	i8259_update_irq_hw(irq, cached_irq_mask |= 1 << irq);
 }
 
 void
+i8259a_disable_irq(unsigned int irq)
+{
+	spin_lock(&i8259_irq_lock);
+	__i8259a_disable_irq(irq);
+	spin_unlock(&i8259_irq_lock);
+}
+
+void
 i8259a_mask_and_ack_irq(unsigned int irq)
 {
-	i8259a_disable_irq(irq);
+	spin_lock(&i8259_irq_lock);
+	__i8259a_disable_irq(irq);
 
 	/* Ack the interrupt making it the lowest priority.  */
 	if (irq >= 8) {
@@ -54,6 +66,7 @@ i8259a_mask_and_ack_irq(unsigned int irq)
 		irq = 2;
 	}
 	outb(0xE0 | irq, 0x20);			/* ack the master */
+	spin_unlock(&i8259_irq_lock);
 }
 
 unsigned int
@@ -63,6 +76,13 @@ i8259a_startup_irq(unsigned int irq)
 	return 0; /* never anything pending */
 }
 
+void
+i8259a_end_irq(unsigned int irq)
+{
+	if (!(irq_desc[irq].status & (IRQ_DISABLED|IRQ_INPROGRESS)))
+		i8259a_enable_irq(irq);
+}
+
 struct hw_interrupt_type i8259a_irq_type = {
 	typename:	"XT-PIC",
 	startup:	i8259a_startup_irq,
@@ -70,7 +90,7 @@ struct hw_interrupt_type i8259a_irq_type = {
 	enable:		i8259a_enable_irq,
 	disable:	i8259a_disable_irq,
 	ack:		i8259a_mask_and_ack_irq,
-	end:		i8259a_enable_irq,
+	end:		i8259a_end_irq,
 };
 
 void __init

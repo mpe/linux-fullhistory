@@ -10,7 +10,6 @@ struct pt_regs;
 struct task_struct;
 struct pci_dev;
 struct pci_controler;
-struct irqaction;
 
 /* core_apecs.c */
 extern struct pci_ops apecs_pci_ops;
@@ -81,14 +80,13 @@ extern void setup_smp(void);
 extern int smp_info(char *buffer);
 extern void handle_ipi(struct pt_regs *);
 extern void smp_percpu_timer_interrupt(struct pt_regs *);
-extern unsigned long cpu_present_mask;
 
 /* bios32.c */
 /* extern void reset_for_srm(void); */
 
 /* time.c */
 extern void timer_interrupt(int irq, void *dev, struct pt_regs * regs);
-extern void common_init_rtc(struct irqaction *);
+extern void common_init_rtc(void);
 extern unsigned long est_cycle_freq;
 
 /* smc37c93x.c */

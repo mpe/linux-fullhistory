@@ -64,7 +64,7 @@ ruffian_init_irq(void)
 }
 
 static void __init
-ruffian_init_rtc(struct irqaction *action)
+ruffian_init_rtc(void)
 {
 	/* Ruffian does not have the RTC connected to the CPU timer
 	   interrupt.  Instead, it uses the PIT connected to IRQ 0.  */
@@ -78,7 +78,7 @@ ruffian_init_rtc(struct irqaction *action)
 	outb(0x31, 0x42);
 	outb(0x13, 0x42);
 
-	setup_irq(0, action);
+	setup_irq(0, &timer_irqaction);
 }
 
 static void

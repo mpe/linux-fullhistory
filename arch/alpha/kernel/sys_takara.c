@@ -66,6 +66,13 @@ takara_startup_irq(unsigned int irq)
 	return 0; /* never anything pending */
 }
 
+static void
+takara_end_irq(unsigned int irq)
+{
+	if (!(irq_desc[irq].status & (IRQ_DISABLED|IRQ_INPROGRESS)))
+		takara_enable_irq(irq);
+}
+
 static struct hw_interrupt_type takara_irq_type = {
 	typename:	"TAKARA",
 	startup:	takara_startup_irq,
@@ -73,7 +80,7 @@ static struct hw_interrupt_type takara_irq_type = {
 	enable:		takara_enable_irq,
 	disable:	takara_disable_irq,
 	ack:		takara_disable_irq,
-	end:		takara_enable_irq,
+	end:		takara_end_irq,
 };
 
 static void
@@ -126,7 +133,6 @@ takara_init_irq(void)
 	long i;
 
 	init_i8259a_irqs();
-	init_rtc_irq();
 
 	if (alpha_using_srm) {
 		alpha_mv.device_interrupt = takara_srm_device_interrupt;

@@ -37,7 +37,7 @@ extern spinlock_t gpio_lock;
 
 #ifdef CONFIG_FOOTBRIDGE
 
-static void __ebsa285_text ebsa285_leds_event(led_event_t evt)
+static void ebsa285_leds_event(led_event_t evt)
 {
 	unsigned long flags;
 
@@ -129,7 +129,7 @@ static void __ebsa285_text ebsa285_leds_event(led_event_t evt)
 
 #ifdef CONFIG_ARCH_NETWINDER
 
-static void __netwinder_text netwinder_leds_event(led_event_t evt)
+static void netwinder_leds_event(led_event_t evt)
 {
 	unsigned long flags;
 

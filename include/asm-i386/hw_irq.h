@@ -68,7 +68,6 @@ extern int irq_vector[NR_IRQS];
  * Interrupt entry/exit code at both C and assembly level
  */
 
-extern void no_action(int cpl, void *dev_id, struct pt_regs *regs);
 extern void mask_irq(unsigned int irq);
 extern void unmask_irq(unsigned int irq);
 extern void disable_8259A_irq(unsigned int irq);

@@ -45,4 +45,6 @@
 #define SO_ATTACH_FILTER	26
 #define SO_DETACH_FILTER	27
 
+#define SO_PEERNAME		28
+
 #endif /* _ASM_SOCKET_H */

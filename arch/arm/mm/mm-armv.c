@@ -60,6 +60,8 @@ __setup("noalign", noalign_setup);
 __setup("nocache", nocache_setup);
 __setup("nowb", nowrite_setup);
 
+#define FIRST_KERNEL_PGD_NR	(FIRST_USER_PGD_NR + USER_PTRS_PER_PGD)
+
 /*
  * need to get a 16k page for level 1
  */
@@ -71,9 +73,9 @@ pgd_t *get_pgd_slow(void)
 	if (pgd) {
 		pgd_t *init = pgd_offset_k(0);
 		
-		memzero(pgd, USER_PTRS_PER_PGD * sizeof(pgd_t));
-		memcpy(pgd + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
-			(PTRS_PER_PGD - USER_PTRS_PER_PGD) * sizeof(pgd_t));
+		memzero(pgd, FIRST_KERNEL_PGD_NR * sizeof(pgd_t));
+		memcpy(pgd  + FIRST_KERNEL_PGD_NR, init + FIRST_KERNEL_PGD_NR,
+		       (PTRS_PER_PGD - FIRST_KERNEL_PGD_NR) * sizeof(pgd_t));
 		clean_cache_area(pgd, PTRS_PER_PGD * sizeof(pgd_t));
 
 		/*

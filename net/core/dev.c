@@ -76,6 +76,7 @@
 #include <linux/etherdevice.h>
 #include <linux/notifier.h>
 #include <linux/skbuff.h>
+#include <linux/brlock.h>
 #include <net/sock.h>
 #include <linux/rtnetlink.h>
 #include <net/slhc.h>
@@ -129,7 +130,6 @@ const char *if_port_text[] = {
 
 static struct packet_type *ptype_base[16];		/* 16 way hashed list */
 static struct packet_type *ptype_all = NULL;		/* Taps */
-static rwlock_t ptype_lock = RW_LOCK_UNLOCKED;
 
 /*
  *	Our notifier list
@@ -181,7 +181,7 @@ void dev_add_pack(struct packet_type *pt)
 {
 	int hash;
 
-	write_lock_bh(&ptype_lock);
+	br_write_lock_bh(BR_NETPROTO_LOCK);
 
 #ifdef CONFIG_NET_FASTROUTE
 	/* Hack to detect packet socket */
@@ -199,7 +199,7 @@ void dev_add_pack(struct packet_type *pt)
 		pt->next = ptype_base[hash];
 		ptype_base[hash] = pt;
 	}
-	write_unlock_bh(&ptype_lock);
+	br_write_unlock_bh(BR_NETPROTO_LOCK);
 }
 
 
@@ -211,7 +211,7 @@ void dev_remove_pack(struct packet_type *pt)
 {
 	struct packet_type **pt1;
 
-	write_lock_bh(&ptype_lock);
+	br_write_lock_bh(BR_NETPROTO_LOCK);
 
 	if (pt->type == htons(ETH_P_ALL)) {
 		netdev_nit--;
@@ -227,11 +227,11 @@ void dev_remove_pack(struct packet_type *pt)
 			if (pt->data)
 				netdev_fastroute_obstacles--;
 #endif
-			write_unlock_bh(&ptype_lock);
+			br_write_unlock_bh(BR_NETPROTO_LOCK);
 			return;
 		}
 	}
-	write_unlock_bh(&ptype_lock);
+	br_write_unlock_bh(BR_NETPROTO_LOCK);
 	printk(KERN_WARNING "dev_remove_pack: %p not found.\n", pt);
 }
 
@@ -581,7 +581,7 @@ void dev_queue_xmit_nit(struct sk_buff *skb, struct net_device *dev)
 	struct packet_type *ptype;
 	get_fast_time(&skb->stamp);
 
-	read_lock(&ptype_lock);
+	br_read_lock(BR_NETPROTO_LOCK);
 	for (ptype = ptype_all; ptype!=NULL; ptype = ptype->next) 
 	{
 		/* Never send packets back to the socket
@@ -615,7 +615,7 @@ void dev_queue_xmit_nit(struct sk_buff *skb, struct net_device *dev)
 			ptype->func(skb2, skb->dev, ptype);
 		}
 	}
-	read_unlock(&ptype_lock);
+	br_read_unlock(BR_NETPROTO_LOCK);
 }
 
 /*
@@ -863,8 +863,8 @@ static void deliver_to_old_ones(struct packet_type *pt, struct sk_buff *skb, int
 }
 
 /* Reparent skb to master device. This function is called
- * only from net_rx_action under ptype_lock. It is misuse
- * of ptype_lock, but it is OK for now.
+ * only from net_rx_action under BR_NETPROTO_LOCK. It is misuse
+ * of BR_NETPROTO_LOCK, but it is OK for now.
  */
 static __inline__ void skb_bond(struct sk_buff *skb)
 {
@@ -924,9 +924,9 @@ static void net_tx_action(struct softirq_action *h)
 
 void net_call_rx_atomic(void (*fn)(void))
 {
-	write_lock_bh(&ptype_lock);
+	br_write_lock_bh(BR_NETPROTO_LOCK);
 	fn();
-	write_unlock_bh(&ptype_lock);
+	br_write_unlock_bh(BR_NETPROTO_LOCK);
 }
 
 #if defined(CONFIG_BRIDGE) || defined(CONFIG_BRIDGE_MODULE)
@@ -954,7 +954,7 @@ static void net_rx_action(struct softirq_action *h)
 	unsigned long start_time = jiffies;
 	int bugdet = netdev_max_backlog;
 
-	read_lock(&ptype_lock);
+	br_read_lock(BR_NETPROTO_LOCK);
 
 	for (;;) {
 		struct sk_buff *skb;
@@ -1034,7 +1034,7 @@ static void net_rx_action(struct softirq_action *h)
 		if (bugdet-- < 0 || jiffies - start_time > 1)
 			goto softnet_break;
 	}
-	read_unlock(&ptype_lock);
+	br_read_unlock(BR_NETPROTO_LOCK);
 
 	local_irq_disable();
 	if (queue->throttle) {
@@ -1050,7 +1050,7 @@ static void net_rx_action(struct softirq_action *h)
 	return;
 
 softnet_break:
-	read_unlock(&ptype_lock);
+	br_read_unlock(BR_NETPROTO_LOCK);
 
 	local_irq_disable();
 	netdev_rx_stat[this_cpu].time_squeeze++;
@@ -1391,9 +1391,9 @@ int netdev_set_master(struct net_device *slave, struct net_device *master)
 		dev_hold(master);
 	}
 
-	write_lock_bh(&ptype_lock);
+	br_write_lock_bh(BR_NETPROTO_LOCK);
 	slave->master = master;
-	write_unlock_bh(&ptype_lock);
+	br_write_unlock_bh(BR_NETPROTO_LOCK);
 
 	if (old)
 		dev_put(old);
@@ -1516,7 +1516,7 @@ static int dev_ifsioc(struct ifreq *ifr, unsigned int cmd)
 		case SIOCGIFFLAGS:	/* Get interface flags */
 			ifr->ifr_flags = (dev->flags&~(IFF_PROMISC|IFF_ALLMULTI|IFF_RUNNING))
 				|(dev->gflags&(IFF_PROMISC|IFF_ALLMULTI));
-			if (netif_running(dev))
+			if (netif_running(dev) && netif_carrier_ok(dev))
 				ifr->ifr_flags |= IFF_RUNNING;
 			return 0;
 
@@ -2129,6 +2129,7 @@ int __init net_dev_init(void)
 			if (dev->rebuild_header == NULL)
 				dev->rebuild_header = default_rebuild_header;
 			dev_init_scheduler(dev);
+			set_bit(__LINK_STATE_PRESENT, &dev->state);
 		}
 	}
 

@@ -146,16 +146,17 @@ static void dev_watchdog(unsigned long arg)
 
 	spin_lock(&dev->xmit_lock);
 	if (dev->qdisc != &noop_qdisc) {
-		if (netif_queue_stopped(dev) &&
-		    (jiffies - dev->trans_start) > dev->watchdog_timeo) {
-			printk(KERN_INFO "NETDEV WATCHDOG: %s: transmit timed out\n", dev->name);
-			dev->tx_timeout(dev);
+		if (netif_device_present(dev) &&
+		    netif_running(dev) &&
+		    netif_carrier_ok(dev)) {
+			if (netif_queue_stopped(dev) &&
+			    (jiffies - dev->trans_start) > dev->watchdog_timeo) {
+				printk(KERN_INFO "NETDEV WATCHDOG: %s: transmit timed out\n", dev->name);
+				dev->tx_timeout(dev);
+			}
+			if (!mod_timer(&dev->watchdog_timer, jiffies + dev->watchdog_timeo))
+				dev_hold(dev);
 		}
-		if (!del_timer(&dev->watchdog_timer))
-			dev_hold(dev);
-
-		dev->watchdog_timer.expires = jiffies + dev->watchdog_timeo;
-		add_timer(&dev->watchdog_timer);
 	}
 	spin_unlock(&dev->xmit_lock);
 
@@ -169,32 +170,30 @@ static void dev_watchdog_init(struct net_device *dev)
 	dev->watchdog_timer.function = dev_watchdog;
 }
 
-static void dev_watchdog_up(struct net_device *dev)
+void __netdev_watchdog_up(struct net_device *dev)
 {
-	spin_lock_bh(&dev->xmit_lock);
-
 	if (dev->tx_timeout) {
 		if (dev->watchdog_timeo <= 0)
 			dev->watchdog_timeo = 5*HZ;
-		if (!del_timer(&dev->watchdog_timer))
+		if (!mod_timer(&dev->watchdog_timer, jiffies + dev->watchdog_timeo))
 			dev_hold(dev);
-		dev->watchdog_timer.expires = jiffies + dev->watchdog_timeo;
-		add_timer(&dev->watchdog_timer);
 	}
+}
+
+static void dev_watchdog_up(struct net_device *dev)
+{
+	spin_lock_bh(&dev->xmit_lock);
+	__netdev_watchdog_up(dev);
 	spin_unlock_bh(&dev->xmit_lock);
 }
 
 static void dev_watchdog_down(struct net_device *dev)
 {
 	spin_lock_bh(&dev->xmit_lock);
-
-	if (dev->tx_timeout) {
-		if (del_timer(&dev->watchdog_timer))
-			__dev_put(dev);
-	}
+	if (del_timer(&dev->watchdog_timer))
+		__dev_put(dev);
 	spin_unlock_bh(&dev->xmit_lock);
 }
-
 
 /* "NOOP" scheduler: the best scheduler, recommended for all interfaces
    under all circumstances. It is difficult to invent anything faster or

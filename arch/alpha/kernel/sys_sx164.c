@@ -43,7 +43,6 @@ sx164_init_irq(void)
 		alpha_mv.device_interrupt = srm_device_interrupt;
 
 	init_i8259a_irqs();
-	init_rtc_irq();
 
 	/* Not interested in the bogus interrupts (0,3,4,5,40-47),
 	   NMI (1), or HALT (2).  */

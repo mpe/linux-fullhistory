@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.188 2000/02/08 21:27:14 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.189 2000/02/27 19:52:55 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -533,6 +533,9 @@ static void tcp_reset(struct sock *sk)
 		default:
 			sk->err = ECONNRESET;
 	}
+
+	if (!sk->dead)
+		sk->error_report(sk);
 
 	tcp_done(sk);
 }
@@ -1660,7 +1663,12 @@ static void tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 
 	if (!sk->dead) {
 		sk->state_change(sk);
-		sock_wake_async(sk->socket, 1, POLL_HUP);
+
+		/* Do not send POLL_HUP for half duplex close. */
+		if (sk->shutdown == SHUTDOWN_MASK || sk->state == TCP_CLOSE)
+			sock_wake_async(sk->socket, 1, POLL_HUP);
+		else
+			sock_wake_async(sk->socket, 1, POLL_IN);
 	}
 }
 

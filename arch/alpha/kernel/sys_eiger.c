@@ -76,6 +76,13 @@ eiger_startup_irq(unsigned int irq)
 	return 0; /* never anything pending */
 }
 
+static void
+eiger_end_irq(unsigned int irq)
+{
+	if (!(irq_desc[irq].status & (IRQ_DISABLED|IRQ_INPROGRESS)))
+		eiger_enable_irq(irq);
+}
+
 static struct hw_interrupt_type eiger_irq_type = {
 	typename:	"EIGER",
 	startup:	eiger_startup_irq,
@@ -83,7 +90,7 @@ static struct hw_interrupt_type eiger_irq_type = {
 	enable:		eiger_enable_irq,
 	disable:	eiger_disable_irq,
 	ack:		eiger_disable_irq,
-	end:		eiger_enable_irq,
+	end:		eiger_end_irq,
 };
 
 static void
@@ -147,7 +154,6 @@ eiger_init_irq(void)
 		eiger_update_irq_hw(i, -1);
 
 	init_i8259a_irqs();
-	init_rtc_irq();
 
 	for (i = 16; i < 128; ++i) {
 		irq_desc[i].status = IRQ_DISABLED;

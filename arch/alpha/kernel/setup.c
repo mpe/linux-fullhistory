@@ -487,6 +487,7 @@ setup_arch(char **cmdline_p)
 #ifdef __SMP__
 	setup_smp();
 #endif
+	paging_init();
 }
 
 static char sys_unknown[] = "Unknown";

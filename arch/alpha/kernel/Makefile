@@ -14,7 +14,7 @@
 
 O_TARGET := kernel.o
 O_OBJS   := entry.o traps.o process.o osf_sys.o irq.o signal.o setup.o \
-	    ptrace.o time.o semaphore.o i8259.o
+	    ptrace.o time.o semaphore.o i8259.o srm_irq.o alpha_irq.o
 OX_OBJS  := alpha_ksyms.o
 
 

@@ -5,12 +5,15 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.119 2000/01/31 01:21:26 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.120 2000/02/27 19:51:49 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
  *	linux/net/ipv4/tcp_input.c
  *	linux/net/ipv4/tcp_output.c
+ *
+ *	Fixes:
+ *	Hideaki YOSHIFUJI	:	sin6_scope_id support
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -509,8 +512,8 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 	int addr_type;
 	int err;
 
-	if (addr_len < sizeof(struct sockaddr_in6)) 
-		return(-EINVAL);
+	if (addr_len < SIN6_LEN_RFC2133) 
+		return -EINVAL;
 
 	if (usin->sin6_family != AF_INET6) 
 		return(-EAFNOSUPPORT);
@@ -539,6 +542,24 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 
 	if(addr_type & IPV6_ADDR_MULTICAST)
 		return -ENETUNREACH;
+
+	if (addr_type&IPV6_ADDR_LINKLOCAL) {
+		if (addr_len >= sizeof(struct sockaddr_in6) &&
+		    usin->sin6_scope_id) {
+			/* If interface is set while binding, indices
+			 * must coincide.
+			 */
+			if (sk->bound_dev_if &&
+			    sk->bound_dev_if != usin->sin6_scope_id)
+				return -EINVAL;
+
+			sk->bound_dev_if = usin->sin6_scope_id;
+		}
+
+		/* Connect to link-local address requires an interface */
+		if (sk->bound_dev_if == 0)
+			return -EINVAL;
+	}
 
 	if (tp->ts_recent_stamp && ipv6_addr_cmp(&np->daddr, &usin->sin6_addr)) {
 		tp->ts_recent = 0;
@@ -603,15 +624,6 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 	if ((err = dst->error) != 0) {
 		dst_release(dst);
 		goto failure;
-	}
-
-	if (fl.oif == 0 && addr_type&IPV6_ADDR_LINKLOCAL) {
-		/* Ough! This guy tries to connect to link local
-		 * address and did not specify interface.
-		 * Actually we should kick him out, but
-		 * we will be patient :) --ANK
-		 */
-		sk->bound_dev_if = dst->dev->ifindex;
 	}
 
 	ip6_dst_store(sk, dst, NULL);
@@ -1723,6 +1735,9 @@ static void v6_addr2sockaddr(struct sock *sk, struct sockaddr * uaddr)
 	sin6->sin6_port	= sk->dport;
 	/* We do not store received flowlabel for TCP */
 	sin6->sin6_flowinfo = 0;
+	sin6->sin6_scope_id = 0;
+	if (sk->bound_dev_if && ipv6_addr_type(&sin6->sin6_addr)&IPV6_ADDR_LINKLOCAL)
+		sin6->sin6_scope_id = sk->bound_dev_if;
 }
 
 static int tcp_v6_remember_stamp(struct sock *sk)
