@@ -461,12 +461,7 @@ extern __inline__ unsigned char *skb_put(struct sk_buff *skb, unsigned int len)
 	if(skb->tail>skb->end)
 	{
 		__label__ here;
-#if 1
-		printk(KERN_DEBUG "skbput: over: %p:tail=%p:end=%p:len=%u\n",
-						&&here, skb->tail, skb->end, len);
-#else
 		panic(skb_put_errstr,&&here,len);
-#endif
 here:          ;
 	}
 	return tmp;

@@ -93,6 +93,7 @@ install: memsize vmlinux
 	@$(MAKEBOOT) BOOTIMAGE=bzImage install
 
 archclean:
+	rm -f .kernel_offset.lds
 	@$(MAKEBOOT) clean
 
 archdep:

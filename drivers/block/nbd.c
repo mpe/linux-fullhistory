@@ -32,6 +32,7 @@
 #include <linux/fs.h>
 #include <linux/stat.h>
 #include <linux/errno.h>
+#include <linux/file.h>
 
 #include <asm/segment.h>
 #include <asm/uaccess.h>
@@ -432,7 +433,7 @@ int nbd_init(void)
 #endif
 	blksize_size[MAJOR_NR] = nbd_blksizes;
 	blk_size[MAJOR_NR] = nbd_sizes;
-	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blk_dev[MAJOR_NR].request_fn = do_nbd_request;
 	for (i = 0; i < MAX_NBD; i++) {
 		nbd_dev[i].refcnt = 0;
 		nbd_dev[i].file = NULL;

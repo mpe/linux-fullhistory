@@ -219,6 +219,11 @@ static ssize_t ext2_file_write (struct file * filp, const char * buf,
 		count -= c;
 		mark_buffer_uptodate(bh, 1);
 		mark_buffer_dirty(bh, 0);
+
+		/* Mark the buffer untouched if we'll move on to the next one.. */
+		if (!(pos & (sb->s_blocksize-1)))
+			clear_bit(BH_Touched, &bh->b_state);
+
 		if (filp->f_flags & O_SYNC)
 			bufferlist[buffercount++] = bh;
 		else

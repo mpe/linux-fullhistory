@@ -14,6 +14,7 @@
 */
 int kmod_unload_delay = 60;
 char modprobe_path[256] = "/sbin/modprobe";
+static int kmod_running = 0;
 static char module_name[64] = "";
 static char * argv[] = { "modprobe", "-k", module_name, NULL, };
 static char * envp[] = { "HOME=/", "TERM=linux", NULL, };
@@ -41,6 +42,7 @@ int kmod_thread(void * data)
 	current->pgrp = 1;
 	sprintf(current->comm, "kmod");
 	sigfillset(&current->blocked);
+	kmod_running = 1;
 
 	/*
 		This is the main kmod_thread loop.  It first sleeps, then
@@ -133,6 +135,9 @@ int request_module(const char * name)
 		the module into module_name.  Once that is done, wake up
 		kmod_thread.
 	*/
+	if(!kmod_running)
+		return 0;
+
 	strncpy(module_name, name, sizeof(module_name));
 	module_name[sizeof(module_name)-1] = '\0';
 	wake_up(&kmod_queue);

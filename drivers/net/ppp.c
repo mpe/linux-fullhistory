@@ -8,7 +8,7 @@
  *  Dynamic PPP devices by Jim Freeman <jfree@caldera.com>.
  *  ppp_tty_receive ``noisy-raise-bug'' fixed by Ove Ewerlid <ewerlid@syscon.uu.se>
  *
- *  ==FILEVERSION 980123==
+ *  ==FILEVERSION 980319==
  *
  *  NOTE TO MAINTAINERS:
  *     If you modify this file at all, please set the number above to the
@@ -1326,6 +1326,10 @@ ppp_doframe (struct ppp *ppp)
 			(*ppp->sc_rcomp->incomp) (ppp->sc_rc_state,
 						  data, count);
 		}
+	} else if (proto == PPP_COMP && (ppp->flags & SC_DEBUG)) {
+		printk(KERN_DEBUG "ppp: frame not decompressed: "
+		       "flags=%x, count=%d, sc_rc_state=%p\n",
+		       ppp->flags, count, ppp->sc_rc_state);
 	}
 /*
  * Process the uncompressed frame.
@@ -1659,6 +1663,9 @@ static void ppp_proto_ccp (struct ppp *ppp, __u8 *dp, int len, int rcvd)
 		}
 		break;
 	}
+	if (ppp->flags & SC_DEBUG)
+		printk(KERN_DEBUG "ppp_proto_ccp: %s code %d, flags=%x\n",
+		       (rcvd? "rcvd": "sent"), CCP_CODE(dp), ppp->flags);
 	restore_flags(flags);
 }
 
@@ -1977,16 +1984,15 @@ ppp_dev_xmit_frame (struct ppp *ppp, struct ppp_buffer *buf,
 	    (control == PPP_UI)			&&
 	    (proto != PPP_LCP)			&&
 	    (proto != PPP_CCP)) {
-		new_data = kmalloc (ppp->mtu, GFP_ATOMIC);
+		new_data = kmalloc (ppp->mtu + PPP_HDRLEN, GFP_ATOMIC);
 		if (new_data == NULL) {
-			if (ppp->flags & SC_DEBUG)
-				printk (KERN_ERR
-					"ppp_dev_xmit_frame: no memory\n");
+			printk (KERN_ERR "ppp_dev_xmit_frame: no memory\n");
 			return 1;
 		}
 
 		new_count = (*ppp->sc_xcomp->compress)
-		    (ppp->sc_xc_state, data, new_data, count, ppp->mtu);
+		    (ppp->sc_xc_state, data, new_data, count,
+		     ppp->mtu + PPP_HDRLEN);
 
 		if (new_count > 0 && (ppp->flags & SC_CCP_UP)) {
 			ppp_dev_xmit_lower (ppp, buf, new_data, new_count, 0);
@@ -2153,7 +2159,7 @@ out:
 }
 
 /*
- * Process the BSD compression IOCTL event for the tty device.
+ * Process the set-compression ioctl.
  */
 
 static int
@@ -2187,7 +2193,7 @@ ppp_set_compression (struct ppp *ppp, struct ppp_option_data *odp)
 
 	save_flags(flags);
 	cli();
-	ppp->flags &= ~(SC_COMP_RUN | SC_DECOMP_RUN);
+	ppp->flags &= ~(data.transmit? SC_COMP_RUN: SC_DECOMP_RUN);
 	restore_flags(flags);
 
 	cp = find_compressor (ccp_option[0]);
@@ -2257,8 +2263,9 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
                unsigned int param2, unsigned long param3)
 {
 	struct ppp *ppp = tty2ppp (tty);
-	register int temp_i = 0;
+	register int temp_i = 0, oldflags;
 	int error = 0;
+	unsigned long flags;
 /*
  * Verify the status of the PPP device.
  */
@@ -2308,16 +2315,18 @@ ppp_tty_ioctl (struct tty_struct *tty, struct file * file,
 		if (error != 0)
 			break;
 		temp_i &= SC_MASK;
-		temp_i |= (ppp->flags & ~SC_MASK);
 
-		if ((ppp->flags & SC_CCP_OPEN) &&
-		    (temp_i & SC_CCP_OPEN) == 0)
-			ppp_ccp_closed (ppp);
+		if ((ppp->flags & SC_CCP_OPEN) && (temp_i & SC_CCP_OPEN) == 0)
+			ppp_ccp_closed(ppp);
 
-		if ((ppp->flags | temp_i) & SC_DEBUG)
+		save_flags(flags);
+		cli();
+		oldflags = ppp->flags;
+		ppp->flags = temp_i |= (ppp->flags & ~SC_MASK);
+		restore_flags(flags);
+		if ((oldflags | temp_i) & SC_DEBUG)
 			printk (KERN_INFO
 				"ppp_tty_ioctl: set flags to %x\n", temp_i);
-		ppp->flags = temp_i;
 		break;
 /*
  * Set the compression mode

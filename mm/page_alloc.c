@@ -126,7 +126,14 @@ int free_memory_available(int nr)
 {
 	int retval = 0;
 	unsigned long flags;
-	struct free_area_struct * list = NULL;
+	struct free_area_struct * list;
+
+	/*
+	 * If we have more than 25% of all memory free,
+	 * consider it to be good enough for anything.
+	 */
+	if (nr_free_pages > num_physpages >> 2)
+		return nr+1;
 
 	list = free_area + NR_MEM_LISTS;
 	spin_lock_irqsave(&page_alloc_lock, flags);

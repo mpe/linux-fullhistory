@@ -1285,7 +1285,7 @@ init_dev_done:
 	}
 	if ((tty->driver.type == TTY_DRIVER_TYPE_SERIAL) &&
 	    (tty->driver.subtype == SERIAL_TYPE_CALLOUT)) {
-		printk("Warning, %s opened, is a deprecated tty "
+		printk(KERN_INFO "Warning, %s opened, is a deprecated tty "
 		       "callout device\n", tty_name(tty, buf));
 	}
 	return 0;

@@ -1144,7 +1144,7 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 	unsigned char ctl[sizeof(struct cmsghdr) + 20];	/* 20 is size of ipv6_pktinfo */
 	unsigned char *ctl_buf = ctl;
 	struct msghdr msg_sys;
-	int err, total_len;
+	int err, ctl_len, total_len;
 	
 	lock_kernel();
 
@@ -1161,16 +1161,16 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 	err = verify_iovec(&msg_sys, iov, address, VERIFY_READ);
 	if (err < 0) 
 		goto out;
-	
 	total_len=err;
 
 	sock = sockfd_lookup(fd, &err);
 	if (!sock) 
 		goto out_freeiov;
 
-	if (msg_sys.msg_controllen) 
+	ctl_len = msg_sys.msg_controllen; 
+	if (ctl_len) 
 	{
-		if (msg_sys.msg_controllen > sizeof(ctl))
+		if (ctl_len > sizeof(ctl))
 		{
 			/* Suggested by the Advanced Sockets API for IPv6 draft:
 			 * Limit the msg_controllen size by the SO_SNDBUF size.
@@ -1179,15 +1179,13 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 			 * SMP machines you have a race to fix here.
 			 */
 			err = -ENOBUFS;
-			ctl_buf = sock_kmalloc(sock->sk, msg_sys.msg_controllen, 
-					       GFP_KERNEL);
+			ctl_buf = sock_kmalloc(sock->sk, ctl_len, GFP_KERNEL);
 			if (ctl_buf == NULL) 
-				goto failed2;
+				goto out_put;
 		}
 		err = -EFAULT;
-		if (copy_from_user(ctl_buf, msg_sys.msg_control, 
-					    msg_sys.msg_controllen))
-			goto failed;
+		if (copy_from_user(ctl_buf, msg_sys.msg_control, ctl_len))
+			goto out_freectl;
 		msg_sys.msg_control = ctl_buf;
 	}
 	msg_sys.msg_flags = flags;
@@ -1196,10 +1194,10 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 		msg_sys.msg_flags |= MSG_DONTWAIT;
 	err = sock_sendmsg(sock, &msg_sys, total_len);
 
-failed:
+out_freectl:
 	if (ctl_buf != ctl)    
-		sock_kfree_s(sock->sk, ctl_buf, msg_sys.msg_controllen);
-failed2:
+		sock_kfree_s(sock->sk, ctl_buf, ctl_len);
+out_put:
 	sockfd_put(sock);
 out_freeiov:
 	if (msg_sys.msg_iov != iov)
