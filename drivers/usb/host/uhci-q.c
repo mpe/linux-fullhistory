@@ -1467,16 +1467,15 @@ __acquires(uhci->lock)
 	spin_lock(&uhci->lock);
 }
 
-static void uhci_finish_completion(struct usb_hcd *hcd, struct pt_regs *regs)
+static void uhci_finish_completion(struct uhci_hcd *uhci, struct pt_regs *regs)
 {
-	struct uhci_hcd *uhci = hcd_to_uhci(hcd);
 	struct urb_priv *urbp, *tmp;
 
 	list_for_each_entry_safe(urbp, tmp, &uhci->complete_list, urb_list) {
 		struct urb *urb = urbp->urb;
 
 		list_del_init(&urbp->urb_list);
-		uhci_finish_urb(hcd, urb, regs);
+		uhci_finish_urb(uhci_to_hcd(uhci), urb, regs);
 	}
 }
 

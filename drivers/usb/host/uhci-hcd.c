@@ -119,7 +119,7 @@ static void stall_callback(unsigned long ptr)
 	if (!list_empty(&uhci->urb_remove_list) &&
 	    uhci_get_current_frame_number(uhci) != uhci->urb_remove_age) {
 		uhci_remove_pending_urbps(uhci);
-		uhci_finish_completion(hcd, NULL);
+		uhci_finish_completion(uhci, NULL);
 		called_uhci_finish_completion = 1;
 	}
 
@@ -134,7 +134,6 @@ static void stall_callback(unsigned long ptr)
 
 		spin_unlock(&u->lock);
 	}
-	spin_unlock_irqrestore(&uhci->lock, flags);
 
 	/* Wake up anyone waiting for an URB to complete */
 	if (called_uhci_finish_completion)
@@ -152,6 +151,7 @@ static void stall_callback(unsigned long ptr)
 		uhci_check_ports(uhci);
 
 	init_stall_timer(hcd);
+	spin_unlock_irqrestore(&uhci->lock, flags);
 }
 
 static int init_stall_timer(struct usb_hcd *hcd)
@@ -227,7 +227,7 @@ static irqreturn_t uhci_irq(struct usb_hcd *hcd, struct pt_regs *regs)
 		/* Checks the status and does all of the magic necessary */
 		uhci_transfer_result(uhci, urb);
 	}
-	uhci_finish_completion(hcd, regs);
+	uhci_finish_completion(uhci, regs);
 
 	spin_unlock(&uhci->lock);
 
@@ -747,7 +747,7 @@ static void uhci_stop(struct usb_hcd *hcd)
 	uhci_free_pending_qhs(uhci);
 	uhci_free_pending_tds(uhci);
 	uhci_remove_pending_urbps(uhci);
-	uhci_finish_completion(hcd, NULL);
+	uhci_finish_completion(uhci, NULL);
 
 	uhci_free_pending_qhs(uhci);
 	uhci_free_pending_tds(uhci);
@@ -764,13 +764,20 @@ static int uhci_suspend(struct usb_hcd *hcd, u32 state)
 {
 	struct uhci_hcd *uhci = hcd_to_uhci(hcd);
 
+	spin_lock_irq(&uhci->lock);
+
 	/* Don't try to suspend broken motherboards, reset instead */
 	if (suspend_allowed(uhci)) {
 		suspend_hc(uhci);
 		uhci->saved_framenumber =
 				inw(uhci->io_addr + USBFRNUM) & 0x3ff;
-	} else
+	} else {
+		spin_unlock_irq(&uhci->lock);
 		reset_hc(uhci);
+		spin_lock_irq(&uhci->lock);
+	}
+
+	spin_unlock_irq(&uhci->lock);
 	return 0;
 }
 
@@ -780,6 +787,8 @@ static int uhci_resume(struct usb_hcd *hcd)
 	int rc;
 
 	pci_set_master(to_pci_dev(uhci_dev(uhci)));
+
+	spin_lock_irq(&uhci->lock);
 
 	if (uhci->state == UHCI_SUSPENDED) {
 
@@ -799,11 +808,15 @@ static int uhci_resume(struct usb_hcd *hcd)
 		pci_write_config_word(to_pci_dev(uhci_dev(uhci)), USBLEGSUP,
 				USBLEGSUP_DEFAULT);
 	} else {
+		spin_unlock_irq(&uhci->lock);
 		reset_hc(uhci);
 		if ((rc = start_hc(uhci)) != 0)
 			return rc;
+		spin_lock_irq(&uhci->lock);
 	}
 	hcd->state = HC_STATE_RUNNING;
+
+	spin_unlock_irq(&uhci->lock);
 	return 0;
 }
 #endif
