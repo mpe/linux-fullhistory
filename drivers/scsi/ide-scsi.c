@@ -96,13 +96,38 @@ typedef struct idescsi_pc_s {
  */
 #define IDESCSI_LOG_CMD			0	/* Log SCSI commands */
 
-typedef struct {
-	ide_drive_t *drive;
+typedef struct ide_scsi_obj {
+	ide_drive_t		*drive;
+	struct Scsi_Host	*host;
+
 	idescsi_pc_t *pc;			/* Current packet command */
 	unsigned long flags;			/* Status/Action flags */
 	unsigned long transform;		/* SCSI cmd translation layer */
 	unsigned long log;			/* log flags */
 } idescsi_scsi_t;
+
+static DECLARE_MUTEX(idescsi_ref_sem);
+
+#define ide_scsi_g(disk)	((disk)->private_data)
+
+static struct ide_scsi_obj *ide_scsi_get(struct gendisk *disk)
+{
+	struct ide_scsi_obj *scsi = NULL;
+
+	down(&idescsi_ref_sem);
+	scsi = ide_scsi_g(disk);
+	if (scsi)
+		scsi_host_get(scsi->host);
+	up(&idescsi_ref_sem);
+	return scsi;
+}
+
+static void ide_scsi_put(struct ide_scsi_obj *scsi)
+{
+	down(&idescsi_ref_sem);
+	scsi_host_put(scsi->host);
+	up(&idescsi_ref_sem);
+}
 
 static inline idescsi_scsi_t *scsihost_to_idescsi(struct Scsi_Host *host)
 {
@@ -693,16 +718,18 @@ static void idescsi_setup (ide_drive_t *drive, idescsi_scsi_t *scsi)
 static int idescsi_cleanup (ide_drive_t *drive)
 {
 	struct Scsi_Host *scsihost = drive->driver_data;
+	struct gendisk *g = drive->disk;
 
 	if (ide_unregister_subdriver(drive))
 		return 1;
-	
-	/* FIXME?: Are these two statements necessary? */
+
 	drive->driver_data = NULL;
-	drive->disk->fops = ide_fops;
+	g->private_data = NULL;
+	g->fops = ide_fops;
 
 	scsi_remove_host(scsihost);
-	scsi_host_put(scsihost);
+	ide_scsi_put(scsihost_to_idescsi(scsihost));
+
 	return 0;
 }
 
@@ -739,15 +766,30 @@ static ide_driver_t idescsi_driver = {
 
 static int idescsi_ide_open(struct inode *inode, struct file *filp)
 {
-	ide_drive_t *drive = inode->i_bdev->bd_disk->private_data;
+	struct gendisk *disk = inode->i_bdev->bd_disk;
+	struct ide_scsi_obj *scsi;
+	ide_drive_t *drive;
+
+	if (!(scsi = ide_scsi_get(disk)))
+		return -ENXIO;
+
+	drive = scsi->drive;
+
 	drive->usage++;
+
 	return 0;
 }
 
 static int idescsi_ide_release(struct inode *inode, struct file *filp)
 {
-	ide_drive_t *drive = inode->i_bdev->bd_disk->private_data;
+	struct gendisk *disk = inode->i_bdev->bd_disk;
+	struct ide_scsi_obj *scsi = ide_scsi_g(disk);
+	ide_drive_t *drive = scsi->drive;
+
 	drive->usage--;
+
+	ide_scsi_put(scsi);
+
 	return 0;
 }
 
@@ -755,8 +797,8 @@ static int idescsi_ide_ioctl(struct inode *inode, struct file *file,
 			unsigned int cmd, unsigned long arg)
 {
 	struct block_device *bdev = inode->i_bdev;
-	ide_drive_t *drive = bdev->bd_disk->private_data;
-	return generic_ide_ioctl(drive, file, bdev, cmd, arg);
+	struct ide_scsi_obj *scsi = ide_scsi_g(bdev->bd_disk);
+	return generic_ide_ioctl(scsi->drive, file, bdev, cmd, arg);
 }
 
 static struct block_device_operations idescsi_ops = {
@@ -1043,6 +1085,7 @@ static int idescsi_attach(ide_drive_t *drive)
 {
 	idescsi_scsi_t *idescsi;
 	struct Scsi_Host *host;
+	struct gendisk *g = drive->disk;
 	static int warned;
 	int err;
 
@@ -1071,10 +1114,12 @@ static int idescsi_attach(ide_drive_t *drive)
 	drive->driver_data = host;
 	idescsi = scsihost_to_idescsi(host);
 	idescsi->drive = drive;
+	idescsi->host = host;
 	err = ide_register_subdriver(drive, &idescsi_driver);
 	if (!err) {
 		idescsi_setup (drive, idescsi);
-		drive->disk->fops = &idescsi_ops;
+		g->fops = &idescsi_ops;
+		g->private_data = idescsi;
 		err = scsi_add_host(host, &drive->gendev);
 		if (!err) {
 			scsi_scan_host(host);
