@@ -753,9 +753,9 @@ static void dev_clear_backlog(struct device *dev)
 			curr=curr->next;
 			if ( curr->prev->dev == dev ) {
 				prev = curr->prev;
-				spin_lock_irqsave(&skb_queue_lock, flags);
+				spin_lock_irqsave(&backlog.lock, flags);
 				__skb_unlink(prev, &backlog);
-				spin_unlock_irqrestore(&skb_queue_lock, flags);
+				spin_unlock_irqrestore(&backlog.lock, flags);
 				kfree_skb(prev);
 			}
 		}

@@ -16,6 +16,9 @@ extern unsigned int local_bh_count;
 #define local_bh_count		(cpu_data[smp_processor_id()].bh_count)
 #endif
 
+#define local_bh_disable()	(local_bh_count++)
+#define local_bh_enable()	(local_bh_count--)
+
 /* The locking mechanism for base handlers, to prevent re-entrancy,
  * is entirely private to an implementation, it should not be
  * referenced at all outside of this file.

@@ -87,6 +87,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SUN_AURORA),y)
+O_OBJS += aurora.o
+else
+  ifeq ($(CONFIG_SUN_AURORA),m)
+  M_OBJS += aurora.o
+  endif
+endif
+
 include $(TOPDIR)/Rules.make
 
 sunkbdmap.o: sunkeymap.c

@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.89 1999/05/27 00:37:42 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.90 1999/05/29 04:30:38 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -147,14 +147,8 @@ static __inline__ void kill_sk_queues(struct sock *sk)
 	struct sk_buff *skb;
 
 	/* First the read buffer. */
-	while((skb = skb_dequeue(&sk->receive_queue)) != NULL) {
-		/* This will take care of closing sockets that were
-		 * listening and didn't accept everything.
-		 */
-		if (skb->sk != NULL && skb->sk != sk)
-			skb->sk->prot->close(skb->sk, 0);
+	while((skb = skb_dequeue(&sk->receive_queue)) != NULL)
 		kfree_skb(skb);
-	}
 
 	/* Next, the error queue. */
 	while((skb = skb_dequeue(&sk->error_queue)) != NULL)

@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) module.
  *
- * Version:	$Id: ip_input.c,v 1.37 1999/04/22 10:38:36 davem Exp $
+ * Version:	$Id: ip_input.c,v 1.39 1999/05/30 01:16:25 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -154,42 +154,9 @@
 
 struct ip_mib ip_statistics={2,IPDEFTTL,};	/* Forwarding=No, Default TTL=64 */
 
-
-/*
- *	Handle the issuing of an ioctl() request
- *	for the ip device. This is scheduled to
- *	disappear
- */
-
-int ip_ioctl(struct sock *sk, int cmd, unsigned long arg)
-{
-	switch(cmd)
-	{
-		default:
-			return(-EINVAL);
-	}
-}
-
-
 #if defined(CONFIG_IP_TRANSPARENT_PROXY) && !defined(CONFIG_IP_ALWAYS_DEFRAG)
 #define CONFIG_IP_ALWAYS_DEFRAG 1
 #endif
-
-/*
- *	0 - deliver
- *	1 - block
- */
-static __inline__ int icmp_filter(struct sock *sk, struct sk_buff *skb)
-{
-	int    type;
-
-	type = skb->h.icmph->type;
-	if (type < 32)
-		return test_bit(type, &sk->tp_pinfo.tp_raw4.filter);
-
-	/* Do not block unknown ICMP types */
-	return 0;
-}
 
 /*
  *	Process Router Attention IP option
@@ -224,16 +191,37 @@ int ip_call_ra_chain(struct sk_buff *skb)
 	return 0;
 }
 
+/* Handle this out of line, it is rare. */
+static int ip_run_ipprot(struct sk_buff *skb, struct iphdr *iph,
+			 struct inet_protocol *ipprot, int force_copy)
+{
+	int ret = 0;
+
+	do {
+		if (ipprot->protocol == iph->protocol) {
+			struct sk_buff *skb2 = skb;
+			if (ipprot->copy || force_copy)
+				skb2 = skb_clone(skb, GFP_ATOMIC);
+			if(skb2 != NULL) {
+				ret = 1;
+				ipprot->handler(skb2,
+						ntohs(iph->tot_len) - (iph->ihl * 4));
+			}
+		}
+		ipprot = (struct inet_protocol *) ipprot->next;
+	} while(ipprot != NULL);
+
+	return ret;
+}
+
+extern struct sock *raw_v4_input(struct sk_buff *, struct iphdr *, int);
+
 /*
  * 	Deliver IP Packets to the higher protocol layers.
  */ 
 int ip_local_deliver(struct sk_buff *skb)
 {
 	struct iphdr *iph = skb->nh.iph;
-	struct inet_protocol *ipprot;
-	struct sock *raw_sk=NULL;
-	unsigned char hash;
-	int flag = 0;
 
 #ifndef CONFIG_IP_ALWAYS_DEFRAG
 	/*
@@ -249,34 +237,29 @@ int ip_local_deliver(struct sk_buff *skb)
 #endif
 
 #ifdef CONFIG_IP_MASQUERADE
-	/*
-	 * Do we need to de-masquerade this packet?
-	 */
-        {
-		int ret;
-		/*
-		 *	Some masq modules can re-inject packets if
-		 *	bad configured.
+	/* Do we need to de-masquerade this packet? */
+	if((IPCB(skb)->flags&IPSKB_MASQUERADED)) {
+		/* Some masq modules can re-inject packets if
+		 * bad configured.
 		 */
+		printk(KERN_DEBUG "ip_input(): demasq recursion detected. "
+		       "Check masq modules configuration\n");
+		kfree_skb(skb);
+		return 0;
+	} else {
+		int ret = ip_fw_demasquerade(&skb);
 
-		if((IPCB(skb)->flags&IPSKB_MASQUERADED)) {
-			printk(KERN_DEBUG "ip_input(): demasq recursion detected. Check masq modules configuration\n");
-			kfree_skb(skb);
-			return 0;
-		}
-
-		ret = ip_fw_demasquerade(&skb);
 		if (ret < 0) {
 			kfree_skb(skb);
 			return 0;
 		}
-
 		if (ret) {
-			iph=skb->nh.iph;
+			iph = skb->nh.iph;
 			IPCB(skb)->flags |= IPSKB_MASQUERADED;
 			dst_release(skb->dst);
 			skb->dst = NULL;
-			if (ip_route_input(skb, iph->daddr, iph->saddr, iph->tos, skb->dev)) {
+			if (ip_route_input(skb, iph->daddr, iph->saddr,
+					   iph->tos, skb->dev)) {
 				kfree_skb(skb);
 				return 0;
 			}
@@ -285,112 +268,50 @@ int ip_local_deliver(struct sk_buff *skb)
         }
 #endif
 
-        /*
-	 *	Point into the IP datagram, just past the header.
-	 */
-
+        /* Point into the IP datagram, just past the header. */
         skb->h.raw = skb->nh.raw + iph->ihl*4;
 
-	/*
-	 *	Deliver to raw sockets. This is fun as to avoid copies we want to make no 
-	 *	surplus copies.
-	 *
-	 *	RFC 1122: SHOULD pass TOS value up to the transport layer.
-	 *	-> It does. And not only TOS, but all IP header.
-	 */
- 
-	/* Note: See raw.c and net/raw.h, RAWV4_HTABLE_SIZE==MAX_INET_PROTOS */
-	hash = iph->protocol & (MAX_INET_PROTOS - 1);
-
-	/* 
-	 *	If there maybe a raw socket we must check - if not we don't care less 
-	 */
-		 
-	if((raw_sk = raw_v4_htable[hash]) != NULL) {
-		struct sock *sknext = NULL;
-		struct sk_buff *skb1;
-		raw_sk = raw_v4_lookup(raw_sk, iph->protocol, iph->saddr, iph->daddr, skb->dev->ifindex);
-		if(raw_sk) {	/* Any raw sockets */
-			do {
-				/* Find the next */
-				sknext = raw_v4_lookup(raw_sk->next, iph->protocol,
-						       iph->saddr, iph->daddr, skb->dev->ifindex);
-				if (iph->protocol != IPPROTO_ICMP || !icmp_filter(raw_sk, skb)) {
-					if (sknext == NULL)
-						break;
-					skb1 = skb_clone(skb, GFP_ATOMIC);
-					if(skb1)
-					{
-						raw_rcv(raw_sk, skb1);
-					}
-				}
-				raw_sk = sknext;
-			} while(raw_sk!=NULL);
-				
-			/*	Here either raw_sk is the last raw socket, or NULL if
-			 *	none.  We deliver to the last raw socket AFTER the
-			 *	protocol checks as it avoids a surplus copy.
-			 */
-		}
-	}
-	
-	/*
-	 *	skb->h.raw now points at the protocol beyond the IP header.
-	 */
-	
-	for (ipprot = (struct inet_protocol *)inet_protos[hash];ipprot != NULL;ipprot=(struct inet_protocol *)ipprot->next)
 	{
-		struct sk_buff *skb2;
-	
-		if (ipprot->protocol != iph->protocol)
-			continue;
-		/*
-		 * 	See if we need to make a copy of it.  This will
-		 * 	only be set if more than one protocol wants it.
-		 * 	and then not for the last one. If there is a pending
-		 *	raw delivery wait for that
+		/* Note: See raw.c and net/raw.h, RAWV4_HTABLE_SIZE==MAX_INET_PROTOS */
+		int hash = iph->protocol & (MAX_INET_PROTOS - 1);
+		struct sock *raw_sk = raw_v4_htable[hash];
+		struct inet_protocol *ipprot;
+		int flag;
+
+		/* If there maybe a raw socket we must check - if not we
+		 * don't care less
 		 */
-	
-		if (ipprot->copy || raw_sk)
-		{
-			skb2 = skb_clone(skb, GFP_ATOMIC);
-			if(skb2==NULL)
-				continue;
-		}
-		else
-		{
-			skb2 = skb;
-		}
-		flag = 1;
+		if(raw_sk != NULL)
+			raw_sk = raw_v4_input(skb, iph, hash);
 
-		/*
-		 *	Pass on the datagram to each protocol that wants it,
-		 *	based on the datagram protocol.  We should really
-		 *	check the protocol handler's return values here...
+		ipprot = (struct inet_protocol *) inet_protos[hash];
+		flag = 0;
+		if(ipprot != NULL) {
+			if(raw_sk == NULL &&
+			   ipprot->next == NULL &&
+			   ipprot->protocol == iph->protocol) {
+				/* Fast path... */
+				return ipprot->handler(skb, (ntohs(iph->tot_len) -
+							     (iph->ihl * 4)));
+			} else {
+				flag = ip_run_ipprot(skb, iph, ipprot, (raw_sk != NULL));
+			}
+		}	
+
+		/* All protocols checked.
+		 * If this packet was a broadcast, we may *not* reply to it, since that
+		 * causes (proven, grin) ARP storms and a leakage of memory (i.e. all
+		 * ICMP reply messages get queued up for transmission...)
 		 */
-
-		ipprot->handler(skb2, ntohs(iph->tot_len) - (iph->ihl * 4));
+		if(raw_sk != NULL) {	/* Shift to last raw user */
+			raw_rcv(raw_sk, skb);
+		} else if (!flag) {		/* Free and report errors */
+			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PROT_UNREACH, 0);	
+			kfree_skb(skb);
+		}
 	}
 
-	/*
-	 *	All protocols checked.
-	 *	If this packet was a broadcast, we may *not* reply to it, since that
-	 *	causes (proven, grin) ARP storms and a leakage of memory (i.e. all
-	 *	ICMP reply messages get queued up for transmission...)
-	 */
-
-	if(raw_sk!=NULL)	/* Shift to last raw user */
-	{
-		raw_rcv(raw_sk, skb);
-
-	}
-	else if (!flag)		/* Free and report errors */
-	{
-		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PROT_UNREACH, 0);	
-		kfree_skb(skb);
-	}
-
-	return(0);
+	return 0;
 }
 
 /*
@@ -404,9 +325,8 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	u16 rport;
 #endif /* CONFIG_FIREWALL */
 
-	/*
-	 * 	When the interface is in promisc. mode, drop all the crap
-	 * 	that it receives, do not try to analyse it.
+	/* When the interface is in promisc. mode, drop all the crap
+	 * that it receives, do not try to analyse it.
 	 */
 	if (skb->pkt_type == PACKET_OTHERHOST)
 		goto drop;
@@ -430,17 +350,15 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		goto inhdr_error; 
 
 	{
-	__u32 len = ntohs(iph->tot_len); 
-	if (skb->len < len)
-		goto inhdr_error; 
+		__u32 len = ntohs(iph->tot_len); 
+		if (skb->len < len)
+			goto inhdr_error; 
 
-	/*
-	 *	Our transport medium may have padded the buffer out. Now we know it
-	 *	is IP we can trim to the true length of the frame.
-	 *	Note this now means skb->len holds ntohs(iph->tot_len).
-	 */
-
-	__skb_trim(skb, len);
+		/* Our transport medium may have padded the buffer out. Now we know it
+		 * is IP we can trim to the true length of the frame.
+		 * Note this now means skb->len holds ntohs(iph->tot_len).
+		 */
+		__skb_trim(skb, len);
 	}
 	
 #ifdef CONFIG_IP_ALWAYS_DEFRAG

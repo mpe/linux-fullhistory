@@ -3,7 +3,7 @@
  *	
  *		Alan Cox, <alan@cymru.net>
  *
- *	Version: $Id: icmp.c,v 1.53 1999/05/12 11:24:32 davem Exp $
+ *	Version: $Id: icmp.c,v 1.54 1999/05/30 01:16:22 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -1152,6 +1152,11 @@ __initfunc(void icmp_init(struct net_proto_family *ops))
 	if ((err=ops->create(icmp_socket, IPPROTO_ICMP))<0)
 		panic("Failed to create the ICMP control socket.\n");
 	icmp_socket->sk->allocation=GFP_ATOMIC;
-	icmp_socket->sk->num = 256;		/* Don't receive any data */
 	icmp_socket->sk->ip_ttl = MAXTTL;
+
+	/* Unhash it so that IP input processing does not even
+	 * see it, we do not wish this socket to see incoming
+	 * packets.
+	 */
+	icmp_socket->sk->prot->unhash(icmp_socket->sk);
 }

@@ -1,4 +1,4 @@
-/* $Id: sbus.c,v 1.76 1998/12/17 11:11:26 davem Exp $
+/* $Id: sbus.c,v 1.77 1999/05/29 06:25:57 davem Exp $
  * sbus.c:  SBus support routines.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -206,6 +206,9 @@ extern void auxio_probe(void);
 #endif
 #ifdef CONFIG_OBP_FLASH
 extern int flash_init(void);
+#endif
+#ifdef CONFIG_SUN_AURORA
+extern int aurora_init(void);
 #endif
 
 __initfunc(static void
@@ -440,6 +443,9 @@ __initfunc(void sbus_init(void))
 #endif
 #ifdef CONFIG_OBP_FLASH
 	flash_init();
+#endif
+#ifdef CONFIG_SUN_AURORA
+	aurora_init();
 #endif
 #ifdef __sparc_v9__
 	if (sparc_cpu_model == sun4u) {

@@ -4,7 +4,7 @@
  *	Authors:	Alan Cox <iiitac@pyr.swan.ac.uk>
  *			Florian La Roche <rzsfl@rz.uni-sb.de>
  *
- *	Version:	$Id: skbuff.c,v 1.55 1999/02/23 08:12:27 davem Exp $
+ *	Version:	$Id: skbuff.c,v 1.56 1999/05/29 23:20:42 davem Exp $
  *
  *	Fixes:	
  *		Alan Cox	:	Fixed the worst of the load balancer bugs.
@@ -60,11 +60,6 @@
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
-
-/*
- * Skb list spinlock
- */
-spinlock_t skb_queue_lock = SPIN_LOCK_UNLOCKED;
 
 /*
  *	Resource tracking variables

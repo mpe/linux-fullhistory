@@ -151,15 +151,15 @@ restart:
 		   is reentearble (it is not) or this function
 		   is called by interrupts.
 
-		   Protect it with global skb spinlock,
+		   Protect it with skb queue spinlock,
 		   though for now even this is overkill.
 		                                --ANK (980728)
 		 */
-		spin_lock_irqsave(&skb_queue_lock, cpu_flags);
+		spin_lock_irqsave(&sk->receive_queue.lock, cpu_flags);
 		skb = skb_peek(&sk->receive_queue);
 		if(skb!=NULL)
 			atomic_inc(&skb->users);
-		spin_unlock_irqrestore(&skb_queue_lock, cpu_flags);
+		spin_unlock_irqrestore(&sk->receive_queue.lock, cpu_flags);
 	} else
 		skb = skb_dequeue(&sk->receive_queue);
 

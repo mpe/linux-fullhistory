@@ -5,7 +5,7 @@
  *
  *		RAW - implementation of IP "raw" sockets.
  *
- * Version:	$Id: raw.c,v 1.40 1999/05/27 00:37:48 davem Exp $
+ * Version:	$Id: raw.c,v 1.41 1999/05/30 01:16:19 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -124,13 +124,12 @@ static void raw_v4_rehash(struct sock *sk)
 	SOCKHASH_UNLOCK_WRITE();
 }
 
-/* Grumble... icmp and ip_input want to get at this... */
-struct sock *raw_v4_lookup(struct sock *sk, unsigned short num,
-			   unsigned long raddr, unsigned long laddr, int dif)
+static __inline__ struct sock *__raw_v4_lookup(struct sock *sk, unsigned short num,
+					       unsigned long raddr, unsigned long laddr,
+					       int dif)
 {
 	struct sock *s = sk;
 
-	SOCKHASH_LOCK_READ();
 	for(s = sk; s; s = s->next) {
 		if((s->num == num) 				&&
 		   !(s->dead && (s->state == TCP_CLOSE))	&&
@@ -139,8 +138,77 @@ struct sock *raw_v4_lookup(struct sock *sk, unsigned short num,
 		   !(s->bound_dev_if && s->bound_dev_if != dif))
 			break; /* gotcha */
 	}
-	SOCKHASH_UNLOCK_READ();
 	return s;
+}
+
+struct sock *raw_v4_lookup(struct sock *sk, unsigned short num,
+			   unsigned long raddr, unsigned long laddr,
+			   int dif)
+{
+	SOCKHASH_LOCK_READ();
+	sk = __raw_v4_lookup(sk, num, raddr, laddr, dif);
+	SOCKHASH_UNLOCK_READ();
+
+	return sk;
+}
+
+/*
+ *	0 - deliver
+ *	1 - block
+ */
+static __inline__ int icmp_filter(struct sock *sk, struct sk_buff *skb)
+{
+	int    type;
+
+	type = skb->h.icmph->type;
+	if (type < 32)
+		return test_bit(type, &sk->tp_pinfo.tp_raw4.filter);
+
+	/* Do not block unknown ICMP types */
+	return 0;
+}
+
+/* IP input processing comes here for RAW socket delivery.
+ * This is fun as to avoid copies we want to make no surplus
+ * copies.
+ *
+ * RFC 1122: SHOULD pass TOS value up to the transport layer.
+ * -> It does. And not only TOS, but all IP header.
+ */
+struct sock *raw_v4_input(struct sk_buff *skb, struct iphdr *iph, int hash)
+{
+	struct sock *sk;
+
+	SOCKHASH_LOCK_READ_BH();
+	if ((sk = raw_v4_htable[hash]) == NULL)
+		goto out;
+	sk = __raw_v4_lookup(sk, iph->protocol,
+			     iph->saddr, iph->daddr,
+			     skb->dev->ifindex);
+	while(sk != NULL) {
+		struct sock *sknext = __raw_v4_lookup(sk->next, iph->protocol,
+						      iph->saddr, iph->daddr,
+						      skb->dev->ifindex);
+
+		if (iph->protocol != IPPROTO_ICMP ||
+		    ! icmp_filter(sk, skb)) {
+			struct sk_buff *clone;
+
+			if(sknext == NULL)
+				break;
+			clone = skb_clone(skb, GFP_ATOMIC);
+			if(clone) {
+				SOCKHASH_UNLOCK_READ_BH();
+				raw_rcv(sk, clone);
+				SOCKHASH_LOCK_READ_BH();
+			}
+		}
+		sk = sknext;
+	}
+out:
+	SOCKHASH_UNLOCK_READ_BH();
+
+	return sk;
 }
 
 void raw_err (struct sock *sk, struct sk_buff *skb)

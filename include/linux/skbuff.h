@@ -32,15 +32,19 @@
 #define CHECKSUM_UNNECESSARY 2
 
 struct sk_buff_head {
+	/* These two members must be first. */
 	struct sk_buff	* next;
 	struct sk_buff	* prev;
-	__u32		qlen;		/* Must be same length as a pointer
-					   for using debugging */
+
+	__u32		qlen;
+	spinlock_t	lock;
 };
 
 struct sk_buff {
+	/* These two members must be first. */
 	struct sk_buff	* next;			/* Next buffer in list 				*/
 	struct sk_buff	* prev;			/* Previous buffer in list 			*/
+
 	struct sk_buff_head * list;		/* List we are on				*/
 	struct sock	*sk;			/* Socket we are owned by 			*/
 	struct timeval	stamp;			/* Time we arrived				*/
@@ -247,6 +251,7 @@ extern __inline__ __u32 skb_queue_len(struct sk_buff_head *list_)
 
 extern __inline__ void skb_queue_head_init(struct sk_buff_head *list)
 {
+	spin_lock_init(&list->lock);
 	list->prev = (struct sk_buff *)list;
 	list->next = (struct sk_buff *)list;
 	list->qlen = 0;
@@ -273,15 +278,13 @@ extern __inline__ void __skb_queue_head(struct sk_buff_head *list, struct sk_buf
 	prev->next = newsk;
 }
 
-extern spinlock_t skb_queue_lock;
-
 extern __inline__ void skb_queue_head(struct sk_buff_head *list, struct sk_buff *newsk)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&skb_queue_lock, flags);
+	spin_lock_irqsave(&list->lock, flags);
 	__skb_queue_head(list, newsk);
-	spin_unlock_irqrestore(&skb_queue_lock, flags);
+	spin_unlock_irqrestore(&list->lock, flags);
 }
 
 /*
@@ -306,9 +309,9 @@ extern __inline__ void skb_queue_tail(struct sk_buff_head *list, struct sk_buff 
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&skb_queue_lock, flags);
+	spin_lock_irqsave(&list->lock, flags);
 	__skb_queue_tail(list, newsk);
-	spin_unlock_irqrestore(&skb_queue_lock, flags);
+	spin_unlock_irqrestore(&list->lock, flags);
 }
 
 /*
@@ -340,9 +343,9 @@ extern __inline__ struct sk_buff *skb_dequeue(struct sk_buff_head *list)
 	long flags;
 	struct sk_buff *result;
 
-	spin_lock_irqsave(&skb_queue_lock, flags);
+	spin_lock_irqsave(&list->lock, flags);
 	result = __skb_dequeue(list);
-	spin_unlock_irqrestore(&skb_queue_lock, flags);
+	spin_unlock_irqrestore(&list->lock, flags);
 	return result;
 }
 
@@ -369,9 +372,9 @@ extern __inline__ void skb_insert(struct sk_buff *old, struct sk_buff *newsk)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&skb_queue_lock, flags);
+	spin_lock_irqsave(&old->list->lock, flags);
 	__skb_insert(newsk, old->prev, old, old->list);
-	spin_unlock_irqrestore(&skb_queue_lock, flags);
+	spin_unlock_irqrestore(&old->list->lock, flags);
 }
 
 /*
@@ -387,9 +390,9 @@ extern __inline__ void skb_append(struct sk_buff *old, struct sk_buff *newsk)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&skb_queue_lock, flags);
+	spin_lock_irqsave(&old->list->lock, flags);
 	__skb_append(old, newsk);
-	spin_unlock_irqrestore(&skb_queue_lock, flags);
+	spin_unlock_irqrestore(&old->list->lock, flags);
 }
 
 /*
@@ -419,12 +422,16 @@ extern __inline__ void __skb_unlink(struct sk_buff *skb, struct sk_buff_head *li
 
 extern __inline__ void skb_unlink(struct sk_buff *skb)
 {
-	unsigned long flags;
+	struct sk_buff_head *list = skb->list;
 
-	spin_lock_irqsave(&skb_queue_lock, flags);
-	if(skb->list)
-		__skb_unlink(skb, skb->list);
-	spin_unlock_irqrestore(&skb_queue_lock, flags);
+	if(list) {
+		unsigned long flags;
+
+		spin_lock_irqsave(&list->lock, flags);
+		if(skb->list == list)
+			__skb_unlink(skb, skb->list);
+		spin_unlock_irqrestore(&list->lock, flags);
+	}
 }
 
 /* XXX: more streamlined implementation */
@@ -441,9 +448,9 @@ extern __inline__ struct sk_buff *skb_dequeue_tail(struct sk_buff_head *list)
 	long flags;
 	struct sk_buff *result;
 
-	spin_lock_irqsave(&skb_queue_lock, flags);
+	spin_lock_irqsave(&list->lock, flags);
 	result = __skb_dequeue_tail(list);
-	spin_unlock_irqrestore(&skb_queue_lock, flags);
+	spin_unlock_irqrestore(&list->lock, flags);
 	return result;
 }
 

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.177 1999/05/27 00:37:27 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.178 1999/05/30 01:16:27 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -2011,6 +2011,11 @@ __initfunc(void tcp_v4_init(struct net_proto_family *ops))
 	if ((err=ops->create(tcp_socket, IPPROTO_TCP))<0)
 		panic("Failed to create the TCP control socket.\n");
 	tcp_socket->sk->allocation=GFP_ATOMIC;
-	tcp_socket->sk->num = 256;		/* Don't receive any data */
 	tcp_socket->sk->ip_ttl = MAXTTL;
+
+	/* Unhash it so that IP input processing does not even
+	 * see it, we do not wish this socket to see incoming
+	 * packets.
+	 */
+	tcp_socket->sk->prot->unhash(tcp_socket->sk);
 }
