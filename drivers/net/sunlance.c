@@ -1,4 +1,4 @@
-/* $Id: sunlance.c,v 1.84 1999/03/11 12:30:22 anton Exp $
+/* $Id: sunlance.c,v 1.85 1999/03/21 05:22:05 davem Exp $
  * lance.c: Linux/Sparc/Lance driver
  *
  *	Written 1995, 1996 by Miguel de Icaza
@@ -331,8 +331,6 @@ static void lance_init_ring (struct device *dev)
 	lp->rx_new = lp->tx_new = 0;
 	lp->rx_old = lp->tx_old = 0;
 
-	ib->mode = 0;
-
 	/* Copy the ethernet address to the lance init block
 	 * Note that on the sparc you need to swap the ethernet address.
 	 * Note also we want the CPU ptr of the init_block here.
@@ -389,10 +387,6 @@ static void lance_init_ring (struct device *dev)
 	ib->tx_ptr = leptr;
 	if (ZERO)
 		printk ("TX ptr: %8.8x\n", leptr);
-
-	/* Clear the multicast filter */
-	ib->filter [0] = 0;
-	ib->filter [1] = 0;
 }
 
 static int init_restart_lance (struct lance_private *lp)
@@ -673,6 +667,7 @@ static int lance_open (struct device *dev)
 {
 	struct lance_private *lp = (struct lance_private *)dev->priv;
 	volatile struct lance_regs *ll = lp->ll;
+	volatile struct lance_init_block *ib = lp->init_block;
 	int status = 0;
 
 	last_dev = dev;
@@ -690,6 +685,16 @@ static int lance_open (struct device *dev)
 	/* On the 4m, setup the ledma to provide the upper bits for buffers */
 	if (lp->ledma)
 		lp->ledma->regs->dma_test = ((__u32) lp->init_block_dvma) & 0xff000000;
+
+	/* Set mode and clear multicast filter only at device open,
+	   so that lance_init_ring() called at any error will not
+	   forget multicast filters.
+
+	   BTW it is common bug in all lance drivers! --ANK
+	 */
+	ib->mode = 0;
+	ib->filter [0] = 0;
+	ib->filter [1] = 0;
 
 	lance_init_ring (dev);
 	load_csrs (lp);
@@ -747,6 +752,7 @@ static int lance_close (struct device *dev)
 
 	dev->start = 0;
 	dev->tbusy = 1;
+	del_timer(&lp->multicast_timer);
 
 	/* Stop the card */
 	ll->rap = LE_CSR0;
@@ -916,14 +922,31 @@ static void lance_set_multicast (struct device *dev)
 	volatile struct lance_init_block *ib = lp->init_block;
 	volatile struct lance_regs *ll = lp->ll;
 
+	if (!dev->start)
+		return;
+
 	if (dev->tbusy) {
 		mod_timer(&lp->multicast_timer, jiffies + 2);
 		return;
 	}
+	/* This CANNOT be correct. Chip is running
+	   and dev->tbusy may change any moment.
+	   It is useless to set it.
+
+	   Generally, usage of dev->tbusy in this driver is completely
+	   wrong.
+
+	   I protected calls to this function
+	   with start_bh_atomic, so that set_multicast_list
+	   and hard_start_xmit are serialized now by top level. --ANK
+
+	   The same is true about a2065.
+	 */
 	set_bit (0, (void *) &dev->tbusy);
 
 	if (lp->tx_old != lp->tx_new) {
 		mod_timer(&lp->multicast_timer, jiffies + 4);
+		dev->tbusy = 0;
 		return;
 	}
 
@@ -940,6 +963,7 @@ static void lance_set_multicast (struct device *dev)
 	load_csrs (lp);
 	init_restart_lance (lp);
 	dev->tbusy = 0;
+	mark_bh(NET_BH);
 }
 
 __initfunc(static int 

@@ -5,7 +5,7 @@
  *
  *		IPv4 Forwarding Information Base: policy rules.
  *
- * Version:	$Id: fib_rules.c,v 1.7 1998/10/03 09:37:09 davem Exp $
+ * Version:	$Id: fib_rules.c,v 1.8 1999/03/21 05:22:33 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -16,6 +16,7 @@
  *
  * Fixes:
  * 		Rani Assaf	:	local_rule cannot be deleted
+ *		Marc Boucher	:	routing by fwmark
  */
 
 #include <linux/config.h>
@@ -63,6 +64,9 @@ struct fib_rule
 	u32		r_srcmap;
 	u8		r_flags;
 	u8		r_tos;
+#ifdef CONFIG_IP_ROUTE_FWMARK
+	u32		r_fwmark;
+#endif
 	int		r_ifindex;
 #ifdef CONFIG_NET_CLS_ROUTE
 	__u32		r_tclassid;
@@ -88,13 +92,18 @@ int inet_rtm_delrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 		    rtm->rtm_dst_len == r->r_dst_len &&
 		    (!rta[RTA_DST-1] || memcmp(RTA_DATA(rta[RTA_DST-1]), &r->r_dst, 4) == 0) &&
 		    rtm->rtm_tos == r->r_tos &&
+#ifdef CONFIG_IP_ROUTE_FWMARK
+		    (!rta[RTA_PROTOINFO-1] || memcmp(RTA_DATA(rta[RTA_PROTOINFO-1]), &r->r_fwmark, 4) == 0) &&
+#endif
 		    (!rtm->rtm_type || rtm->rtm_type == r->r_action) &&
 		    (!rta[RTA_PRIORITY-1] || memcmp(RTA_DATA(rta[RTA_PRIORITY-1]), &r->r_preference, 4) == 0) &&
 		    (!rta[RTA_IIF-1] || strcmp(RTA_DATA(rta[RTA_IIF-1]), r->r_ifname) == 0) &&
 		    (!rtm->rtm_table || (r && rtm->rtm_table == r->r_table))) {
 			if (r == &local_rule)
 				return -EPERM;
+			net_serialize_enter();
 			*rp = r->r_next;
+			net_serialize_leave();
 			if (r != &default_rule && r != &main_rule)
 				kfree(r);
 			return 0;
@@ -155,6 +164,10 @@ int inet_rtm_newrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 	new_r->r_srcmask = inet_make_mask(rtm->rtm_src_len);
 	new_r->r_dstmask = inet_make_mask(rtm->rtm_dst_len);
 	new_r->r_tos = rtm->rtm_tos;
+#ifdef CONFIG_IP_ROUTE_FWMARK
+	if (rta[RTA_PROTOINFO-1])
+		memcpy(&new_r->r_fwmark, RTA_DATA(rta[RTA_PROTOINFO-1]), 4);
+#endif
 	new_r->r_action = rtm->rtm_type;
 	new_r->r_flags = rtm->rtm_flags;
 	if (rta[RTA_PRIORITY-1])
@@ -267,14 +280,15 @@ FRprintk("Lookup: %08x <- %08x ", key->dst, key->src);
 #ifdef CONFIG_IP_ROUTE_TOS
 		    (r->r_tos && r->r_tos != key->tos) ||
 #endif
+#ifdef CONFIG_IP_ROUTE_FWMARK
+		    (r->r_fwmark && r->r_fwmark != key->fwmark) ||
+#endif
 		    (r->r_ifindex && r->r_ifindex != key->iif))
 			continue;
 
 FRprintk("tb %d r %d ", r->r_table, r->r_action);
 		switch (r->r_action) {
 		case RTN_UNICAST:
-			policy = NULL;
-			break;
 		case RTN_NAT:
 			policy = r;
 			break;
@@ -295,12 +309,21 @@ FRprintk("ok\n");
 			res->r = policy;
 			return 0;
 		}
-		if (err < 0)
+		if (err < 0 && err != -EAGAIN)
 			return err;
-FRprintk("RCONT ");
 	}
 FRprintk("FAILURE\n");
 	return -ENETUNREACH;
+}
+
+void fib_select_default(const struct rt_key *key, struct fib_result *res)
+{
+	if (res->r && res->r->r_action == RTN_UNICAST &&
+	    FIB_RES_GW(*res) && FIB_RES_NH(*res).nh_scope == RT_SCOPE_LINK) {
+		struct fib_table *tb;
+		if ((tb = fib_get_table(res->r->r_table)) != NULL)
+			tb->tb_select_default(tb, key, res);
+	}
 }
 
 static int fib_rules_event(struct notifier_block *this, unsigned long event, void *ptr)
@@ -337,6 +360,10 @@ extern __inline__ int inet_fill_rule(struct sk_buff *skb,
 	rtm->rtm_dst_len = r->r_dst_len;
 	rtm->rtm_src_len = r->r_src_len;
 	rtm->rtm_tos = r->r_tos;
+#ifdef CONFIG_IP_ROUTE_FWMARK
+	if (r->r_fwmark)
+		RTA_PUT(skb, RTA_PROTOINFO, 4, &r->r_fwmark);
+#endif
 	rtm->rtm_table = r->r_table;
 	rtm->rtm_protocol = 0;
 	rtm->rtm_scope = 0;

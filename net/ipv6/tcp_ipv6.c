@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.99 1999/03/11 00:04:26 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.100 1999/03/21 05:22:59 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -376,12 +376,13 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 	struct sockaddr_in6 *usin = (struct sockaddr_in6 *) uaddr;
 	struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
-	struct inet6_ifaddr *ifa;
 	struct in6_addr *saddr = NULL;
+	struct in6_addr saddr_buf;
 	struct flowi fl;
 	struct dst_entry *dst;
 	struct sk_buff *buff;
 	int addr_type;
+	int err;
 
 	if (sk->state != TCP_CLOSE) 
 		return(-EISCONN);
@@ -428,7 +429,6 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 	if (addr_type == IPV6_ADDR_MAPPED) {
 		u32 exthdrlen = tp->ext_header_len;
 		struct sockaddr_in sin;
-		int err;
 
 		SOCK_DEBUG(sk, "connect: ipv4 mapped\n");
 
@@ -472,9 +472,9 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 
 	dst = ip6_route_output(sk, &fl);
 
-	if (dst->error) {
+	if ((err = dst->error) != 0) {
 		dst_release(dst);
-		return dst->error;
+		return err;
 	}
 
 	if (fl.oif == 0 && addr_type&IPV6_ADDR_LINKLOCAL) {
@@ -489,17 +489,16 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 	ip6_dst_store(sk, dst, NULL);
 
 	if (saddr == NULL) {
-		ifa = ipv6_get_saddr(dst, &np->daddr);
+		err = ipv6_get_saddr(dst, &np->daddr, &saddr_buf);
+		if (err)
+			return err;
 
-		if (ifa == NULL)
-			return -ENETUNREACH;
-		
-		saddr = &ifa->addr;
-
-		/* set the source address */
-		ipv6_addr_copy(&np->rcv_saddr, saddr);
-		ipv6_addr_copy(&np->saddr, saddr);
+		saddr = &saddr_buf;
 	}
+
+	/* set the source address */
+	ipv6_addr_copy(&np->rcv_saddr, saddr);
+	ipv6_addr_copy(&np->saddr, saddr);
 
 	tp->ext_header_len = 0;
 	if (np->opt)
@@ -602,11 +601,14 @@ void tcp_v6_err(struct sk_buff *skb, struct ipv6hdr *hdr,
 	np = &sk->net_pinfo.af_inet6;
 	if (type == ICMPV6_PKT_TOOBIG) {
 		struct dst_entry *dst = NULL;
-		/* icmp should have updated the destination cache entry */
+
+		if (atomic_read(&sk->sock_readers))
+			return;
 
 		if (sk->state == TCP_LISTEN)
 			return;
 
+		/* icmp should have updated the destination cache entry */
 		if (sk->dst_cache)
 			dst = dst_check(&sk->dst_cache, np->dst_cookie);
 
@@ -631,8 +633,7 @@ void tcp_v6_err(struct sk_buff *skb, struct ipv6hdr *hdr,
 
 		if (dst->error) {
 			sk->err_soft = -dst->error;
-		} else if (tp->pmtu_cookie > dst->pmtu
-			   && !atomic_read(&sk->sock_readers)) {
+		} else if (tp->pmtu_cookie > dst->pmtu) {
 			tcp_sync_mss(sk, dst->pmtu);
 			tcp_simple_retransmit(sk);
 		} /* else let the usual retransmit timer handle it */
@@ -1193,6 +1194,11 @@ static int tcp_v6_do_rcv(struct sock *sk, struct sk_buff *skb)
 	if (skb->protocol == __constant_htons(ETH_P_IP))
 		return tcp_v4_do_rcv(sk, skb);
 
+#ifdef CONFIG_FILTER
+	if (sk->filter && sk_filter(skb, sk->filter))
+		goto discard;
+#endif /* CONFIG_FILTER */
+
 	/*
 	 *	socket locking is here for SMP purposes as backlog rcv
 	 *	is currently called with bh processing disabled.
@@ -1420,6 +1426,9 @@ static struct sock * tcp_v6_get_sock(struct sk_buff *skb, struct tcphdr *th)
 {
 	struct in6_addr *saddr;
 	struct in6_addr *daddr;
+
+	if (skb->protocol == __constant_htons(ETH_P_IP))
+		return ipv4_specific.get_sock(skb, th);
 
 	saddr = &skb->nh.ipv6h->saddr;
 	daddr = &skb->nh.ipv6h->daddr;

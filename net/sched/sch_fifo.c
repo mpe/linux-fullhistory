@@ -97,10 +97,7 @@ fifo_drop(struct Qdisc* sch)
 static void
 fifo_reset(struct Qdisc* sch)
 {
-	struct sk_buff *skb;
-
-	while ((skb=__skb_dequeue(&sch->q)) != NULL)
-		kfree_skb(skb);
+	skb_queue_purge(&sch->q);
 	sch->stats.backlog = 0;
 }
 
@@ -137,15 +134,15 @@ pfifo_dequeue(struct Qdisc* sch)
 	return __skb_dequeue(&sch->q);
 }
 
-
 static int fifo_init(struct Qdisc *sch, struct rtattr *opt)
 {
 	struct fifo_sched_data *q = (void*)sch->data;
 
 	if (opt == NULL) {
-		q->limit = sch->dev->tx_queue_len;
 		if (sch->ops == &bfifo_qdisc_ops)
-			q->limit *= sch->dev->mtu;
+			q->limit = sch->dev->tx_queue_len*sch->dev->mtu;
+		else	
+			q->limit = sch->dev->tx_queue_len;
 	} else {
 		struct tc_fifo_qopt *ctl = RTA_DATA(opt);
 		if (opt->rta_len < RTA_LENGTH(sizeof(*ctl)))
@@ -188,6 +185,8 @@ struct Qdisc_ops pfifo_qdisc_ops =
 	fifo_init,
 	fifo_reset,
 	NULL,
+	fifo_init,
+
 #ifdef CONFIG_RTNETLINK
 	fifo_dump,
 #endif
@@ -208,6 +207,7 @@ struct Qdisc_ops bfifo_qdisc_ops =
 	fifo_init,
 	fifo_reset,
 	NULL,
+	fifo_init,
 #ifdef CONFIG_RTNETLINK
 	fifo_dump,
 #endif

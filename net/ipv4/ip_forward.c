@@ -5,7 +5,7 @@
  *
  *		The IP forwarding functionality.
  *		
- * Version:	$Id: ip_forward.c,v 1.42 1998/10/03 09:37:19 davem Exp $
+ * Version:	$Id: ip_forward.c,v 1.43 1999/03/21 05:22:37 davem Exp $
  *
  * Authors:	see ip.c
  *
@@ -260,7 +260,7 @@ skip_call_fw_firewall:
 		if (rt->rt_flags&RTCF_FAST && !netdev_fastroute_obstacles) {
 			unsigned h = ((*(u8*)&rt->key.dst)^(*(u8*)&rt->key.src))&NETDEV_FASTROUTE_HMASK;
 			/* Time to switch to functional programming :-) */
-			dst_release(xchg(&skb->dev->fastpath[h], dst_clone(&rt->u.dst)));
+			dst_release_irqwait(xchg(&skb->dev->fastpath[h], dst_clone(&rt->u.dst)));
 		}
 #endif
 		ip_send(skb);

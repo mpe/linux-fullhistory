@@ -36,9 +36,10 @@ struct dst_entry
 	struct device	        *dev;
 	int			obsolete;
 	unsigned long		lastuse;
+	unsigned long		expires;
 	unsigned		mxlock;
-	unsigned		window;
 	unsigned		pmtu;
+	unsigned		window;
 	unsigned		rtt;
 	unsigned long		rate_last;	/* rate limiting for ICMP */
 	unsigned long		rate_tokens;
@@ -98,6 +99,19 @@ void dst_release(struct dst_entry * dst)
 		atomic_dec(&dst->use);
 }
 
+/* The following primitive should be use if and only if
+   destination entry has just been removed from a location
+   accessed directly by hard irq.
+ */
+extern __inline__
+void dst_release_irqwait(struct dst_entry * dst)
+{
+	if (dst) {
+		synchronize_irq();
+		atomic_dec(&dst->use);
+	}
+}
+
 extern __inline__
 struct dst_entry * dst_check(struct dst_entry ** dst_p, u32 cookie)
 {
@@ -151,6 +165,17 @@ extern __inline__ void dst_link_failure(struct sk_buff *skb)
 	struct dst_entry * dst = skb->dst;
 	if (dst && dst->ops && dst->ops->link_failure)
 		dst->ops->link_failure(skb);
+}
+
+extern __inline__ void dst_set_expires(struct dst_entry *dst, int timeout)
+{
+	unsigned long expires = jiffies + timeout;
+
+	if (expires == 0)
+		expires = 1;
+
+	if (dst->expires == 0 || (long)(dst->expires - expires) > 0)
+		dst->expires = expires;
 }
 #endif
 

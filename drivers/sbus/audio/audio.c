@@ -636,6 +636,28 @@ static int sparcaudio_mixer_ioctl(struct inode * inode, struct file * file,
 
   k = arg;
 
+  if(cmd == SOUND_MIXER_INFO) {
+          audio_device_t tmp;
+          mixer_info info;
+          int retval = -EINVAL;
+
+          if(drv->ops->sunaudio_getdev) {
+                  drv->ops->sunaudio_getdev(drv, &tmp);
+                  memset(&info, 0, sizeof(info));
+                  strncpy(info.id, tmp.name, sizeof(info.id));
+                  strncpy(info.name, "Sparc Audio", sizeof(info.name));
+
+                  /* XXX do this right... */
+                  info.modify_counter = 0;
+
+                  if(copy_to_user((char *)arg, &info, sizeof(info)))
+                          retval = -EFAULT;
+                  else
+                          retval = 0;
+          }
+          return retval;
+  }
+
   switch (cmd) {
   case SOUND_MIXER_WRITE_RECLEV:
   case SOUND_MIXER_WRITE_MIC:

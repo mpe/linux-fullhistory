@@ -8,7 +8,7 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  *
- * Version:	$Id: af_unix.c,v 1.73 1999/01/15 06:55:48 davem Exp $
+ * Version:	$Id: af_unix.c,v 1.74 1999/03/21 05:23:16 davem Exp $
  *
  * Fixes:
  *		Linus Torvalds	:	Assorted bug cures.
@@ -33,6 +33,16 @@
  *					Lots of bug fixes.
  *	     Alexey Kuznetosv	:	Repaired (I hope) bugs introduces
  *					by above two patches.
+ *	     Andrea Arcangeli	:	If possible we block in connect(2)
+ *					if the max backlog of the listen socket
+ *					is been reached. This won't break
+ *					old apps and it will avoid huge amount
+ *					of socks hashed (this for unix_gc()
+ *					performances reasons).
+ *					Security fix that limits the max
+ *					number of socks to 2*max_files and
+ *					the number of skb queueable in the
+ *					dgram receiver.
  *
  * Known differences from reference BSD that was tested:
  *
@@ -100,8 +110,12 @@
 
 int sysctl_unix_delete_delay = HZ;
 int sysctl_unix_destroy_delay = 10*HZ;
+int sysctl_unix_max_dgram_qlen = 10;
 
 unix_socket *unix_socket_table[UNIX_HASH_SIZE+1];
+static atomic_t unix_nr_socks = ATOMIC_INIT(0);
+static struct wait_queue * unix_ack_wqueue = NULL;
+static struct wait_queue * unix_dgram_wqueue = NULL;
 
 #define unix_sockets_unbound	(unix_socket_table[UNIX_HASH_SIZE])
 
@@ -263,6 +277,8 @@ static void unix_destroy_timer(unsigned long data)
 	unix_socket *sk=(unix_socket *)data;
 	if(!unix_locked(sk) && atomic_read(&sk->wmem_alloc) == 0)
 	{
+		atomic_dec(&unix_nr_socks);
+
 		sk_free(sk);
 	
 		/* socket destroyed, decrement count		      */
@@ -294,6 +310,11 @@ static int unix_release_sock (unix_socket *sk)
 	sk->state_change(sk);
 	sk->dead=1;
 	sk->socket = NULL;
+
+	if (sk->state == TCP_LISTEN)
+		wake_up_interruptible(&unix_ack_wqueue);
+	if (sk->type == SOCK_DGRAM)
+		wake_up_interruptible(&unix_dgram_wqueue);
 
 	skpair=unix_peer(sk);
 
@@ -347,6 +368,8 @@ static void unix_destroy_socket(unix_socket *sk)
 	
 	if(!unix_locked(sk) && atomic_read(&sk->wmem_alloc) == 0)
 	{
+		atomic_dec(&unix_nr_socks);
+		
 		sk_free(sk);
 	
 		/* socket destroyed, decrement count		      */
@@ -371,6 +394,8 @@ static int unix_listen(struct socket *sock, int backlog)
 		return -EOPNOTSUPP;		/* Only stream sockets accept */
 	if (!sk->protinfo.af_unix.addr)
 		return -EINVAL;			/* No listens on an unbound socket */
+	if ((unsigned) backlog > SOMAXCONN)
+		backlog = SOMAXCONN;
 	sk->max_ack_backlog=backlog;
 	sk->state=TCP_LISTEN;
 	sock->flags |= SO_ACCEPTCON;
@@ -388,12 +413,17 @@ static struct sock * unix_create1(struct socket *sock, int stream)
 {
 	struct sock *sk;
 
+	if (atomic_read(&unix_nr_socks) >= 2*max_files)
+		return NULL;
+
 	MOD_INC_USE_COUNT;
 	sk = sk_alloc(PF_UNIX, GFP_KERNEL, 1);
 	if (!sk) {
 		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
+
+	atomic_inc(&unix_nr_socks);
 
 	sock_init_data(sock,sk);
 
@@ -673,8 +703,24 @@ static int unix_stream_connect(struct socket *sock, struct sockaddr *uaddr,
 	   we will have to recheck all again in any case.
 	 */
 
+restart:
 	/*  Find listening sock */
 	other=unix_find_other(sunaddr, addr_len, sk->type, hash, &err);
+
+	if (!other)
+		return -ECONNREFUSED;
+
+	while (other->ack_backlog >= other->max_ack_backlog) {
+		unix_unlock(other);
+		if (other->dead || other->state != TCP_LISTEN)
+			return -ECONNREFUSED;
+		if (flags & O_NONBLOCK)
+			return -EAGAIN;
+		interruptible_sleep_on(&unix_ack_wqueue);
+		if (signal_pending(current))
+			return -ERESTARTSYS;
+		goto restart;
+        }
 
 	/* create new sock for complete connection */
 	newsk = unix_create1(NULL, 1);
@@ -704,7 +750,7 @@ static int unix_stream_connect(struct socket *sock, struct sockaddr *uaddr,
 
 	/* Check that listener is in valid state. */
 	err = -ECONNREFUSED;
-	if (other == NULL || other->dead || other->state != TCP_LISTEN)
+	if (other->dead || other->state != TCP_LISTEN)
 		goto out;
 
 	err = -ENOMEM;
@@ -815,11 +861,10 @@ static int unix_accept(struct socket *sock, struct socket *newsock, int flags)
 			continue;
 		}
 		tsk = skb->sk;
-		sk->ack_backlog--;
+		if (sk->max_ack_backlog == sk->ack_backlog--)
+			wake_up_interruptible(&unix_ack_wqueue);
 		kfree_skb(skb);
-		if (!tsk->dead) 
-			break;
-		unix_release_sock(tsk);
+		break;
 	}
 
 
@@ -947,6 +992,7 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		 *	Check with 1003.1g - what should
 		 *	datagram error
 		 */
+	dead:
 		unix_unlock(other);
 		unix_peer(sk)=NULL;
 		other = NULL;
@@ -962,6 +1008,29 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		err = -EINVAL;
 		if (!unix_may_send(sk, other))
 			goto out_unlock;
+	}
+
+	while (skb_queue_len(&other->receive_queue) >=
+	       sysctl_unix_max_dgram_qlen)
+	{
+		if (sock->file->f_flags & O_NONBLOCK)
+		{
+			err = -EAGAIN;
+			goto out_unlock;
+		}
+		interruptible_sleep_on(&unix_dgram_wqueue);
+		if (other->dead)
+			goto dead;
+		if (sk->shutdown & SEND_SHUTDOWN)
+		{
+			err = -EPIPE;
+			goto out_unlock;
+		}
+		if (signal_pending(current))
+		{
+			err = -ERESTARTSYS;
+			goto out_unlock;
+		}
 	}
 
 	skb_queue_tail(&other->receive_queue, skb);
@@ -1125,6 +1194,13 @@ static int unix_dgram_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 	skb = skb_recv_datagram(sk, flags, noblock, &err);
 	if (!skb)
 		goto out;
+
+	/*
+	 * sysctl_unix_max_dgram_qlen may change over the time we blocked
+	 * in the waitqueue so we must wakeup every time we shrink the
+	 * receiver queue. -arca
+	 */
+	wake_up_interruptible(&unix_dgram_wqueue);
 
 	if (msg->msg_name)
 	{

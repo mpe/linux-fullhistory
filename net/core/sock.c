@@ -7,7 +7,7 @@
  *		handler for protocols to use and generic option handler.
  *
  *
- * Version:	$Id: sock.c,v 1.76 1999/02/23 08:12:29 davem Exp $
+ * Version:	$Id: sock.c,v 1.77 1999/03/21 05:22:26 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -251,12 +251,10 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			break;
 
 		case SO_PRIORITY:
-			if (val >= 0 && val <= 7) 
-			{
-				if(val==7 && !capable(CAP_NET_ADMIN))
-					return -EPERM;
+			if ((val >= 0 && val <= 6) || capable(CAP_NET_ADMIN)) 
 				sk->priority = val;
-			}			
+			else
+				return(-EPERM);
 			break;
 
 		case SO_LINGER:
@@ -348,8 +346,9 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 
 				filter = sk->filter;
 
+				net_serialize_enter();
 				sk->filter = NULL;
-				wmb();
+				net_serialize_leave();
 				
 				if (filter)
 					sk_filter_release(sk, filter);
@@ -504,6 +503,16 @@ void sk_free(struct sock *sk)
 {
 	if (sk->destruct)
 		sk->destruct(sk);
+
+#ifdef CONFIG_FILTER
+	if (sk->filter) {
+		sk_filter_release(sk, sk->filter);
+		sk->filter = NULL;
+	}
+#endif
+
+	if (atomic_read(&sk->omem_alloc))
+		printk(KERN_DEBUG "sk_free: optmem leakage (%d bytes) detected.\n", atomic_read(&sk->omem_alloc));
 
 #ifdef CONFIG_FILTER
 	if (sk->filter) {

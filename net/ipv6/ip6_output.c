@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_output.c,v 1.15 1998/10/03 09:38:34 davem Exp $
+ *	$Id: ip6_output.c,v 1.16 1999/03/21 05:22:54 davem Exp $
  *
  *	Based on linux/net/ipv4/ip_output.c
  *
@@ -77,11 +77,14 @@ int ip6_output(struct sk_buff *skb)
 		/* Alpha has disguisting memcpy. Help it. */
 	        u64 *aligned_hdr = (u64*)(skb->data - 16);
 		u64 *aligned_hdr0 = hh->hh_data;
+		read_lock_irq(&hh->hh_lock);
 		aligned_hdr[0] = aligned_hdr0[0];
 		aligned_hdr[1] = aligned_hdr0[1];
 #else
+		read_lock_irq(&hh->hh_lock);
 		memcpy(skb->data - 16, hh->hh_data, 16);
 #endif
+		read_unlock_irq(&hh->hh_lock);
 	        skb_push(skb, dev->hard_header_len);
 		return hh->hh_output(skb);
 	} else if (dst->neighbour)
@@ -164,7 +167,9 @@ int ip6_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
 	}
 
 	printk(KERN_DEBUG "IPv6: sending pkt_too_big to self\n");
+	start_bh_atomic();
 	icmpv6_send(skb, ICMPV6_PKT_TOOBIG, 0, dst->pmtu, skb->dev);
+	end_bh_atomic();
 	kfree_skb(skb);
 	return -EMSGSIZE;
 }
@@ -427,6 +432,7 @@ int ip6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 	struct dst_entry *dst;
 	int err = 0;
 	unsigned int pktlength, jumbolen, mtu;
+	struct in6_addr saddr;
 
 	if (opt && opt->srcrt) {
 		struct rt0_hdr *rt0 = (struct rt0_hdr *) opt->srcrt;
@@ -481,19 +487,16 @@ int ip6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 	}
 
 	if (fl->nl_u.ip6_u.saddr == NULL) {
-		struct inet6_ifaddr *ifa;
-		
-		ifa = ipv6_get_saddr(dst, fl->nl_u.ip6_u.daddr);
+		err = ipv6_get_saddr(dst, fl->nl_u.ip6_u.daddr, &saddr);
 
-		if (ifa == NULL) {
+		if (err) {
 #if IP6_DEBUG >= 2
 			printk(KERN_DEBUG "ip6_build_xmit: "
 			       "no availiable source address\n");
 #endif
-			err = -ENETUNREACH;
 			goto out;
 		}
-		fl->nl_u.ip6_u.saddr = &ifa->addr;
+		fl->nl_u.ip6_u.saddr = &saddr;
 	}
 	pktlength = length;
 

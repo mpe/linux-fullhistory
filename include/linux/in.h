@@ -80,7 +80,6 @@ struct in_addr {
 /* These need to appear somewhere around here */
 #define IP_DEFAULT_MULTICAST_TTL        1
 #define IP_DEFAULT_MULTICAST_LOOP       1
-#define IP_MAX_MEMBERSHIPS              20
 
 /* Request struct for multicast socket ops */
 

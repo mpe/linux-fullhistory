@@ -1,11 +1,11 @@
-# $Id: Makefile,v 1.27 1999/01/02 16:45:45 davem Exp $
+# $Id: Makefile,v 1.28 1999/03/21 06:37:44 davem Exp $
 # Makefile for Sparc library files..
 #
 
 OBJS  = mul.o rem.o sdiv.o udiv.o umul.o urem.o ashrdi3.o memcpy.o memset.o \
         strlen.o checksum.o blockops.o memscan.o memcmp.o strncmp.o \
 	strncpy_from_user.o divdi3.o udivdi3.o strlen_user.o \
-	copy_user.o locks.o atomic.o bitops.o debuglocks.o
+	copy_user.o locks.o atomic.o bitops.o debuglocks.o lshrdi3.o
 
 ifdef CONFIG_SMP
 OBJS += irqlock.o
@@ -88,6 +88,9 @@ urem.o: urem.S
 
 ashrdi3.o: ashrdi3.S
 	$(CC) -D__ASSEMBLY__ -c -o ashrdi3.o ashrdi3.S
+
+lshrdi3.o: lshrdi3.S
+	$(CC) -D__ASSEMBLY__ -c -o lshrdi3.o lshrdi3.S
 
 dep:
 

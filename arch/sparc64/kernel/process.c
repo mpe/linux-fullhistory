@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.89 1999/01/19 07:54:39 davem Exp $
+/*  $Id: process.c,v 1.90 1999/03/22 02:12:16 davem Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -456,6 +456,11 @@ static unsigned long clone_stackframe(unsigned long csp, unsigned long psp)
 {
 	unsigned long fp, distance, rval;
 
+	/* do_fork() grabs the parent semaphore, we must release it
+	 * temporarily so we can build the child clone stack frame
+	 * without deadlocking.
+	 */
+	up(&current->mm->mmap_sem);
 	if(!(current->tss.flags & SPARC_FLAG_32BIT)) {
 		csp += STACK_BIAS;
 		psp += STACK_BIAS;
@@ -472,17 +477,20 @@ static unsigned long clone_stackframe(unsigned long csp, unsigned long psp)
 	distance = fp - psp;
 	rval = (csp - distance);
 	if(copy_in_user(rval, psp, distance))
-		return 0;
-	if(current->tss.flags & SPARC_FLAG_32BIT) {
+		rval = 0;
+	else if(current->tss.flags & SPARC_FLAG_32BIT) {
 		if(put_user(((u32)csp), &(((struct reg_window32 *)rval)->ins[6])))
-			return 0;
-		return rval;
+			rval = 0;
 	} else {
 		if(put_user(((u64)csp - STACK_BIAS),
 			    &(((struct reg_window *)rval)->ins[6])))
-			return 0;
-		return rval - STACK_BIAS;
+			rval = 0;
+		else
+			rval = rval - STACK_BIAS;
 	}
+	down(&current->mm->mmap_sem);
+
+	return rval;
 }
 
 /* Standard stuff. */

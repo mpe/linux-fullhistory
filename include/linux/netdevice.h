@@ -65,33 +65,6 @@
 #define MAX_HEADER (LL_MAX_HEADER + 48)
 #endif
 
-struct neighbour;
-struct neigh_parms;
-struct sk_buff;
-
-/*
- *	We tag multicasts with these structures.
- */
- 
-struct dev_mc_list
-{	
-	struct dev_mc_list	*next;
-	__u8			dmi_addr[MAX_ADDR_LEN];
-	unsigned char		dmi_addrlen;
-	int			dmi_users;
-	int			dmi_gusers;
-};
-
-struct hh_cache
-{
-	struct hh_cache *hh_next;	/* Next entry			     */
-	atomic_t	hh_refcnt;	/* number of users                   */
-	unsigned short  hh_type;	/* protocol identifier, f.e ETH_P_IP */
-	int		(*hh_output)(struct sk_buff *skb);
-	/* cached hardware header; allow for machine alignment needs.        */
-	unsigned long	hh_data[16/sizeof(unsigned long)];
-};
-
 /*
  *	Network device statistics. Akin to the 2.0 ether stats but
  *	with byte counters.
@@ -156,6 +129,35 @@ enum {
 extern const char *if_port_text[];
 
 #include <linux/skbuff.h>
+
+struct neighbour;
+struct neigh_parms;
+struct sk_buff;
+
+/*
+ *	We tag multicasts with these structures.
+ */
+ 
+struct dev_mc_list
+{	
+	struct dev_mc_list	*next;
+	__u8			dmi_addr[MAX_ADDR_LEN];
+	unsigned char		dmi_addrlen;
+	int			dmi_users;
+	int			dmi_gusers;
+};
+
+struct hh_cache
+{
+	struct hh_cache *hh_next;	/* Next entry			     */
+	atomic_t	hh_refcnt;	/* number of users                   */
+	unsigned short  hh_type;	/* protocol identifier, f.e ETH_P_IP */
+	int		(*hh_output)(struct sk_buff *skb);
+	rwlock_t	hh_lock;
+	/* cached hardware header; allow for machine alignment needs.        */
+	unsigned long	hh_data[16/sizeof(unsigned long)];
+};
+
 
 /*
  *	The DEVICE structure.
@@ -432,6 +434,7 @@ extern int		dev_mc_add(struct device *dev, void *addr, int alen, int newonly);
 extern void		dev_mc_discard(struct device *dev);
 extern void		dev_set_promiscuity(struct device *dev, int inc);
 extern void		dev_set_allmulti(struct device *dev, int inc);
+extern void		netdev_state_change(struct device *dev);
 /* Load a device via the kmod */
 extern void		dev_load(const char *name);
 extern void		dev_mcast_init(void);

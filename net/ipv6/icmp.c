@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: icmp.c,v 1.20 1998/10/03 09:38:31 davem Exp $
+ *	$Id: icmp.c,v 1.21 1999/03/21 05:22:51 davem Exp $
  *
  *	Based on net/ipv4/icmp.c
  *
@@ -200,9 +200,11 @@ static inline int icmpv6_xrlim_allow(struct sock *sk, int type,
 	 * this lookup should be more aggressive (not longer than timeout).
 	 */
 	dst = ip6_route_output(sk, fl);
-	if (dst->error)
+	if (dst->error) {
 		ipv6_statistics.Ip6OutNoRoutes++;
-	else {
+	} else if (dst->dev && (dst->dev->flags&IFF_LOOPBACK)) {
+		res = 1;
+	} else {
 		struct rt6_info *rt = (struct rt6_info *)dst;
 		int tmo = sysctl_icmpv6_time;
 

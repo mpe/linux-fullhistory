@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.62 1999/01/07 14:13:00 jj Exp $
+/*  $Id: init.c,v 1.63 1999/03/20 22:02:01 davem Exp $
  *  linux/arch/sparc/mm/init.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -330,11 +330,18 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 	       initpages << (PAGE_SHIFT-10),
 	       (unsigned long)PAGE_OFFSET, end_mem);
 
-	freepages.min = nr_free_pages >> 7;
-	if(freepages.min < 16)
-		freepages.min = 16;
-	freepages.low = freepages.min + (freepages.min >> 1);
-	freepages.high = freepages.min + freepages.min;
+	/* NOTE NOTE NOTE NOTE
+	 * Please keep track of things and make sure this
+	 * always matches the code in mm/page_alloc.c -DaveM
+	 */
+	i = nr_free_pages >> 7;
+	if (i < 48)
+		i = 48;
+	if (i > 256)
+		i = 256;
+	freepages.min = i;
+	freepages.low = i << 1;
+	freepages.high = freepages.low + i;
 }
 
 void free_initmem (void)

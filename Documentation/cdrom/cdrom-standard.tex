@@ -25,7 +25,7 @@
 \author{David van Leeuwen\\{\normalsize\tt david@ElseWare.cistron.nl}
 \\{\footnotesize updated by Erik Andersen {\tt(andersee@debian.org)}}
 \\{\footnotesize updated by Jens Axboe {\tt(axboe@image.dk)}}}
-\date{11 January 1999}
+\date{12 March 1999}
 
 \maketitle
 
@@ -549,7 +549,9 @@ non-supported $ioctl$s are: {\it CDROMREADMODE1, CDROMREADMODE2,
   CDROMREADAUDIO, CDROMREADRAW, CDROMREADCOOKED, CDROMSEEK,
   CDROMPLAY\-BLK and CDROM\-READALL}.
 
+
 \subsection{\cdrom\ capabilities}
+\label{capability}
 
 Instead of just implementing some $ioctl$ calls, the interface in
 \cdromc\ supplies the possibility to indicate the {\em capabilities\/}
@@ -944,6 +946,13 @@ the current flags.
 \item[CDROM_CHANGER_NSLOTS] Returns the number of slots in a
   juke-box. 
 \item[CDROMRESET] Reset the drive. 
+\item[CDROM_GET_CAPABILITY] Returns the $capability$ flags for the
+  drive. Refer to section \ref{capability} for more information on
+  these flags.
+\item[CDROM_LOCKDOOR] Locks the door of the drive. $arg == \rm0$
+  unlocks the door, any other value locks it.
+\item[CDROM_DEBUG] Turns on debugging info. Only root is allowed
+  to do this. Same semantics as CDROM_LOCKDOOR.
 \end{description}
 
 \subsubsection{Device dependent $ioctl$s}

@@ -997,15 +997,15 @@ static void __init pcibios_fixup_peer_bridges(void)
 			    l != 0x0000 && l != 0xffff) {
 #ifdef CONFIG_PCI_BIOS
 				if (pci_bios_present) {
-					int succ, idx = 0;
+					int err, idx = 0;
 					u8 bios_bus, bios_dfn;
 					u16 d;
 					pcibios_read_config_word(n, i, PCI_DEVICE_ID, &d);
 					DBG("BIOS test for %02x:%02x (%04x:%04x)\n", n, i, l, d);
-					while ((succ = pci_bios_find_device(l, d, idx, &bios_bus, &bios_dfn)) &&
+					while (!(err = pci_bios_find_device(l, d, idx, &bios_bus, &bios_dfn)) &&
 					       (bios_bus != n || bios_dfn != i))
 						idx++;
-					if (!succ)
+					if (err)
 						break;
 				}
 #endif

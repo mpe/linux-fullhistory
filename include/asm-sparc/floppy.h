@@ -99,6 +99,7 @@ static int FDC2=-1;
 /* Routines unique to each controller type on a Sun. */
 static unsigned char sun_82072_fd_inb(int port)
 {
+	udelay(5);
 	switch(port & 7) {
 	default:
 		printk("floppy: Asked to read unknown port %d\n", port);
@@ -115,6 +116,7 @@ static unsigned char sun_82072_fd_inb(int port)
 
 static void sun_82072_fd_outb(unsigned char value, int port)
 {
+	udelay(5);
 	switch(port & 7) {
 	default:
 		printk("floppy: Asked to write to unknown port %d\n", port);
@@ -150,6 +152,7 @@ static void sun_82072_fd_outb(unsigned char value, int port)
 
 static unsigned char sun_82077_fd_inb(int port)
 {
+	udelay(5);
 	switch(port & 7) {
 	default:
 		printk("floppy: Asked to read unknown port %d\n", port);
@@ -167,6 +170,7 @@ static unsigned char sun_82077_fd_inb(int port)
 
 static void sun_82077_fd_outb(unsigned char value, int port)
 {
+	udelay(5);
 	switch(port & 7) {
 	default:
 		printk("floppy: Asked to write to unknown port %d\n", port);

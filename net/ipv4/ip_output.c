@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) output module.
  *
- * Version:	$Id: ip_output.c,v 1.65 1999/01/21 13:37:34 davem Exp $
+ * Version:	$Id: ip_output.c,v 1.66 1999/03/21 05:22:41 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -36,8 +36,7 @@
  *					for decreased register pressure on x86 
  *					and more readibility. 
  *		Marc Boucher	:	When call_out_firewall returns FW_QUEUE,
- *					silently abort send instead of failing
- *					with -EPERM.
+ *					silently drop skb instead of failing with -EPERM.
  */
 
 #include <asm/uaccess.h>
@@ -132,8 +131,16 @@ void ip_build_and_send_pkt(struct sk_buff *skb, struct sock *sk,
 	dev = rt->u.dst.dev;
 
 #ifdef CONFIG_FIREWALL
-	if (call_out_firewall(PF_INET, dev, iph, NULL, &skb) < FW_ACCEPT)
-		goto drop;
+	/* Now we have no better mechanism to notify about error. */
+	switch (call_out_firewall(PF_INET, dev, iph, NULL, &skb)) {
+	case FW_REJECT:
+		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0);
+		/* Fall thru... */
+	case FW_BLOCK:
+	case FW_QUEUE:
+		kfree_skb(skb);
+		return;
+	}
 #endif
 
 	ip_send_check(iph);
@@ -141,11 +148,6 @@ void ip_build_and_send_pkt(struct sk_buff *skb, struct sock *sk,
 	/* Send it out. */
 	skb->dst->output(skb);
 	return;
-
-#ifdef CONFIG_FIREWALL
-drop:
-	kfree_skb(skb);
-#endif
 }
 
 int __ip_finish_output(struct sk_buff *skb)
@@ -292,8 +294,17 @@ void ip_queue_xmit(struct sk_buff *skb)
 	dev = rt->u.dst.dev;
 
 #ifdef CONFIG_FIREWALL
-	if (call_out_firewall(PF_INET, dev, iph, NULL, &skb) < FW_ACCEPT) 
-		goto drop;
+	/* Now we have no better mechanism to notify about error. */
+	switch (call_out_firewall(PF_INET, dev, iph, NULL, &skb)) {
+	case FW_REJECT:
+		start_bh_atomic();
+		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0);
+		end_bh_atomic();
+		/* Fall thru... */
+	case FW_BLOCK:
+	case FW_QUEUE:
+ 		goto drop;
+	}
 #endif
 
 	/* This can happen when the transport layer has segments queued
@@ -340,8 +351,12 @@ fragment:
 		 */
 		iph->frag_off |= __constant_htons(IP_DF);
 		printk(KERN_DEBUG "sending pkt_too_big to self\n");
+
+		/* icmp_send is not reenterable, so that bh_atomic... --ANK */
+		start_bh_atomic();
 		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED,
 			  htonl(rt->u.dst.pmtu));
+		end_bh_atomic();
 		goto drop;
 	}
 	ip_fragment(skb, skb->dst->output);
@@ -402,14 +417,13 @@ int ip_build_xmit_slow(struct sock *sk,
 	if (ip_dont_fragment(sk, &rt->u.dst))
 		df = htons(IP_DF);
   
-	if (!sk->ip_hdrincl)
-		length -= sizeof(struct iphdr);
+	length -= sizeof(struct iphdr);
 
 	if (opt) {
 		fragheaderlen = sizeof(struct iphdr) + opt->optlen;
 		maxfraglen = ((mtu-sizeof(struct iphdr)-opt->optlen) & ~7) + fragheaderlen;
 	} else {
-		fragheaderlen = sk->ip_hdrincl ? 0 : sizeof(struct iphdr);
+		fragheaderlen = sizeof(struct iphdr);
 		
 		/*
 		 *	Fragheaderlen is the size of 'overhead' on each buffer. Now work
@@ -474,7 +488,6 @@ int ip_build_xmit_slow(struct sock *sk,
 	 */
 	 
 	do {
-		int error;
 		char *data;
 		struct sk_buff * skb;
 
@@ -482,15 +495,10 @@ int ip_build_xmit_slow(struct sock *sk,
 		 *	Get the memory we require with some space left for alignment.
 		 */
 
-		skb = sock_alloc_send_skb(sk, fraglen+hh_len+15, 0, flags&MSG_DONTWAIT, &error);
-		if (skb == NULL) {
-			ip_statistics.IpOutDiscards++;
-			if(nfrags>1)
-				ip_statistics.IpFragCreates++;			
-			dev_unlock_list();
-			return(error);
-		}
-		
+		skb = sock_alloc_send_skb(sk, fraglen+hh_len+15, 0, flags&MSG_DONTWAIT, &err);
+		if (skb == NULL)
+			goto error;
+
 		/*
 		 *	Fill in the control structures
 		 */
@@ -510,7 +518,7 @@ int ip_build_xmit_slow(struct sock *sk,
 		 *	Only write IP header onto non-raw packets 
 		 */
 		 
-		if(!sk->ip_hdrincl) {
+		{
 			struct iphdr *iph = (struct iphdr *)data;
 
 			iph->version = 4;
@@ -547,53 +555,46 @@ int ip_build_xmit_slow(struct sock *sk,
 		 *	User data callback
 		 */
 
-		err = 0;
-		if (getfrag(frag, data, offset, fraglen-fragheaderlen))
+		if (getfrag(frag, data, offset, fraglen-fragheaderlen)) {
 			err = -EFAULT;
-		
-		/*
-		 *	Account for the fragment.
-		 */
-
-#ifdef CONFIG_FIREWALL
-		if(!err) {
-			int fw_res;
-
-			fw_res = call_out_firewall(PF_INET, rt->u.dst.dev, skb->nh.iph, NULL, &skb);
-			if(fw_res == FW_QUEUE) {
-				kfree_skb(skb);
-				skb = NULL;
-			} else if(fw_res < FW_ACCEPT) {
-				err = -EPERM;
-			}
-		}
-#endif
-
-		if (err) { 
-			ip_statistics.IpOutDiscards++;
 			kfree_skb(skb);
-			dev_unlock_list();
-			return err; 
+			goto error;
 		}
-			
 
 		offset -= (maxfraglen-fragheaderlen);
 		fraglen = maxfraglen;
 
 		nfrags++;
 
-		err = 0; 
-		if (skb && rt->u.dst.output(skb)) {
-			err = -ENETDOWN;
-			ip_statistics.IpOutDiscards++;	
-			break;
+#ifdef CONFIG_FIREWALL
+		switch (call_out_firewall(PF_INET, rt->u.dst.dev, skb->nh.iph, NULL, &skb)) {
+		case FW_QUEUE:
+			kfree_skb(skb);
+			continue;
+		case FW_BLOCK:
+		case FW_REJECT:
+			kfree_skb(skb);
+			err = -EPERM;
+			goto error;
 		}
+#endif
+
+		err = -ENETDOWN;
+		if (rt->u.dst.output(skb))
+			goto error;
 	} while (offset >= 0);
 
 	if (nfrags>1)
 		ip_statistics.IpFragCreates += nfrags;
 	dev_unlock_list();
-	return err;
+	return 0;
+
+error:
+	ip_statistics.IpOutDiscards++;
+	if (nfrags>1)
+		ip_statistics.IpFragCreates += nfrags;
+	dev_unlock_list();
+	return err; 
 }
 
 
@@ -621,14 +622,20 @@ int ip_build_xmit(struct sock *sk,
 	 *	choice RAW frames within 20 bytes of maximum size(rare) to the long path
 	 */
 
-	if (!sk->ip_hdrincl)
+	if (!sk->ip_hdrincl) {
 		length += sizeof(struct iphdr);
 
-	/*
-	 * 	Check for slow path.
-	 */
-	if (length > rt->u.dst.pmtu || ipc->opt != NULL)  
-		return ip_build_xmit_slow(sk,getfrag,frag,length,ipc,rt,flags); 
+		/*
+		 * 	Check for slow path.
+		 */
+		if (length > rt->u.dst.pmtu || ipc->opt != NULL)  
+			return ip_build_xmit_slow(sk,getfrag,frag,length,ipc,rt,flags); 
+	} else {
+		if (length > rt->u.dst.dev->mtu) {
+			ip_local_error(sk, EMSGSIZE, rt->rt_dst, sk->dport, rt->u.dst.dev->mtu);
+			return -EMSGSIZE;
+		}
+	}
 
 	/*
 	 *	Do path mtu discovery if needed.
@@ -636,7 +643,7 @@ int ip_build_xmit(struct sock *sk,
 	df = 0;
 	if (ip_dont_fragment(sk, &rt->u.dst))
 		df = htons(IP_DF);
-	 	
+
 	/* 
 	 *	Fast path for unfragmented frames without options. 
 	 */ 
@@ -679,31 +686,27 @@ int ip_build_xmit(struct sock *sk,
 
 	dev_unlock_list();
 
-	if (err) 
-		err = -EFAULT;
+	if (err)
+		goto error_fault;
 
 #ifdef CONFIG_FIREWALL
-	if(!err) {
-		int fw_res;
-
-		fw_res = call_out_firewall(PF_INET, rt->u.dst.dev, iph, NULL, &skb);
-		if(fw_res == FW_QUEUE) {
-			/* re-queued elsewhere; silently abort this send */
-			kfree_skb(skb);
-			return 0;
-		}
-		if(fw_res < FW_ACCEPT)
-			err = -EPERM;
+	switch (call_out_firewall(PF_INET, rt->u.dst.dev, iph, NULL, &skb)) {
+	case FW_QUEUE:
+		kfree_skb(skb);
+		return 0;
+	case FW_BLOCK:
+	case FW_REJECT:
+		kfree_skb(skb);
+		err = -EPERM;
+		goto error;
 	}
 #endif
 
-	if (err) { 
-		kfree_skb(skb);
-		goto error;
-	}
-	
 	return rt->u.dst.output(skb);
 
+error_fault:
+	err = -EFAULT;
+	kfree_skb(skb);
 error:
 	ip_statistics.IpOutDiscards++;
 	return err; 

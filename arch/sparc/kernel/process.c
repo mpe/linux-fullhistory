@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.131 1999/01/19 07:54:33 davem Exp $
+/*  $Id: process.c,v 1.132 1999/03/22 02:12:13 davem Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -442,10 +442,17 @@ clone_stackframe(struct sparc_stackf *dst, struct sparc_stackf *src)
 	size = ((unsigned long)src->fp) - ((unsigned long)src);
 	sp = (struct sparc_stackf *)(((unsigned long)dst) - size); 
 
+	/* do_fork() grabs the parent semaphore, we must release it
+	 * temporarily so we can build the child clone stack frame
+	 * without deadlocking.
+	 */
+	up(&current->mm->mmap_sem);
 	if (copy_to_user(sp, src, size))
-		return 0;
-	if (put_user(dst, &sp->fp))
-		return 0;
+		sp = (struct sparc_stackf *) 0;
+	else if (put_user(dst, &sp->fp))
+		sp = (struct sparc_stackf *) 0;
+	down(&current->mm->mmap_sem);
+
 	return sp;
 }
 

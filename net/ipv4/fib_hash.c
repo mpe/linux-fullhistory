@@ -5,7 +5,7 @@
  *
  *		IPv4 FIB: lookup engine and maintenance routines.
  *
- * Version:	$Id: fib_hash.c,v 1.6 1998/10/03 09:37:06 davem Exp $
+ * Version:	$Id: fib_hash.c,v 1.7 1999/03/21 05:22:32 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -302,6 +302,90 @@ fn_hash_lookup(struct fib_table *tb, const struct rt_key *key, struct fib_result
 	return 1;
 }
 
+static int fn_hash_last_dflt=-1;
+
+static int fib_detect_death(struct fib_info *fi, int order,
+			    struct fib_info **last_resort, int *last_idx)
+{
+	struct neighbour *n;
+	int state = NUD_NONE;
+
+	n = neigh_lookup(&arp_tbl, &fi->fib_nh[0].nh_gw, fi->fib_dev);
+	if (n) {
+		state = n->nud_state;
+		neigh_release(n);
+	}
+	if (state==NUD_REACHABLE)
+		return 0;
+	if ((state&NUD_VALID) && order != fn_hash_last_dflt)
+		return 0;
+	if ((state&NUD_VALID) ||
+	    (*last_idx<0 && order > fn_hash_last_dflt)) {
+		*last_resort = fi;
+		*last_idx = order;
+	}
+	return 1;
+}
+
+static void
+fn_hash_select_default(struct fib_table *tb, const struct rt_key *key, struct fib_result *res)
+{
+	int order, last_idx;
+	struct fib_node *f;
+	struct fib_info *fi = NULL;
+	struct fib_info *last_resort;
+	struct fn_hash *t = (struct fn_hash*)tb->tb_data;
+	struct fn_zone *fz = t->fn_zones[0];
+
+	if (fz == NULL)
+		return;
+
+	last_idx = -1;
+	last_resort = NULL;
+	order = -1;
+
+	for (f = fz->fz_hash[0]; f; f = f->fn_next) {
+		struct fib_info *next_fi = FIB_INFO(f);
+
+		if ((f->fn_state&FN_S_ZOMBIE) ||
+		    f->fn_scope != res->scope ||
+		    f->fn_type != RTN_UNICAST)
+			continue;
+
+		if (next_fi->fib_priority > res->fi->fib_priority)
+			break;
+		if (!next_fi->fib_nh[0].nh_gw || next_fi->fib_nh[0].nh_scope != RT_SCOPE_LINK)
+			continue;
+		f->fn_state |= FN_S_ACCESSED;
+
+		if (fi == NULL) {
+			if (next_fi != res->fi)
+				break;
+		} else if (!fib_detect_death(fi, order, &last_resort, &last_idx)) {
+			res->fi = fi;
+			fn_hash_last_dflt = order;
+			return;
+		}
+		fi = next_fi;
+		order++;
+	}
+
+	if (order<=0 || fi==NULL) {
+		fn_hash_last_dflt = -1;
+		return;
+	}
+
+	if (!fib_detect_death(fi, order, &last_resort, &last_idx)) {
+		res->fi = fi;
+		fn_hash_last_dflt = order;
+		return;
+	}
+
+	if (last_idx >= 0)
+		res->fi = last_resort;
+	fn_hash_last_dflt = last_idx;
+}
+
 #define FIB_SCAN(f, fp) \
 for ( ; ((f) = *(fp)) != NULL; (fp) = &(f)->fn_next)
 
@@ -476,14 +560,16 @@ replace:
 	 */
 
 	new_f->fn_next = f;
-	/* ATOMIC_SET */
 	*fp = new_f;
 	fz->fz_nent++;
 
 	if (del_fp) {
 		f = *del_fp;
 		/* Unlink replaced node */
+		net_serialize_enter();
 		*del_fp = f->fn_next;
+		net_serialize_leave();
+
 		if (!(f->fn_state&FN_S_ZOMBIE))
 			rtmsg_fib(RTM_DELROUTE, f, z, tb->tb_id, n, req);
 		if (f->fn_state&FN_S_ACCESSED)
@@ -570,7 +656,10 @@ FTprint("tb(%d)_delete: %d %08x/%d %d\n", tb->tb_id, r->rtm_type, rta->rta_dst ?
 		rtmsg_fib(RTM_DELROUTE, f, z, tb->tb_id, n, req);
 
 		if (matched != 1) {
+			net_serialize_enter();
 			*del_fp = f->fn_next;
+			net_serialize_leave();
+
 			if (f->fn_state&FN_S_ACCESSED)
 				rt_cache_flush(-1);
 			fn_free_node(f);
@@ -600,7 +689,10 @@ fn_flush_list(struct fib_node ** fp, int z, struct fn_hash *table)
 		struct fib_info *fi = FIB_INFO(f);
 
 		if (fi && ((f->fn_state&FN_S_ZOMBIE) || (fi->fib_flags&RTNH_F_DEAD))) {
+			net_serialize_enter();
 			*fp = f->fn_next;
+			net_serialize_leave();
+
 			fn_free_node(f);
 			found++;
 			continue;
@@ -710,7 +802,7 @@ fn_hash_dump_zone(struct sk_buff *skb, struct netlink_callback *cb,
 	for (h=0; h < fz->fz_divisor; h++) {
 		if (h < s_h) continue;
 		if (h > s_h)
-			memset(&cb->args[3], 0, sizeof(cb->args) - 3*sizeof(int));
+			memset(&cb->args[3], 0, sizeof(cb->args) - 3*sizeof(cb->args[0]));
 		if (fz->fz_hash == NULL || fz->fz_hash[h] == NULL)
 			continue;
 		if (fn_hash_dump_bucket(skb, cb, tb, fz, fz->fz_hash[h]) < 0) {
@@ -732,7 +824,7 @@ static int fn_hash_dump(struct fib_table *tb, struct sk_buff *skb, struct netlin
 	for (fz = table->fn_zone_list, m=0; fz; fz = fz->fz_next, m++) {
 		if (m < s_m) continue;
 		if (m > s_m)
-			memset(&cb->args[2], 0, sizeof(cb->args) - 2*sizeof(int));
+			memset(&cb->args[2], 0, sizeof(cb->args) - 2*sizeof(cb->args[0]));
 		if (fn_hash_dump_zone(skb, cb, tb, fz) < 0) {
 			cb->args[1] = m;
 			return -1;
@@ -784,6 +876,7 @@ __initfunc(struct fib_table * fib_hash_init(int id))
 	tb->tb_insert = fn_hash_insert;
 	tb->tb_delete = fn_hash_delete;
 	tb->tb_flush = fn_hash_flush;
+	tb->tb_select_default = fn_hash_select_default;
 #ifdef CONFIG_RTNETLINK
 	tb->tb_dump = fn_hash_dump;
 #endif

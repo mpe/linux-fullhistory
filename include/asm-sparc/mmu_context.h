@@ -22,11 +22,9 @@ BTFIXUPDEF_CALL(void, destroy_context, struct mm_struct *)
 
 #define destroy_context(mm) BTFIXUP_CALL(destroy_context)(mm)
 
-/*
- * After we have set current->mm to a new value, this activates
+/* After we have set current->mm to a new value, this activates
  * the context for the new mm so we see the new mappings.
- * XXX this presumably needs a sensible implementation - paulus.
  */
-#define activate_context(tsk)	do { } while(0)
+#define activate_context(tsk)	switch_to_context(tsk)
 
 #endif /* !(__SPARC_MMU_CONTEXT_H) */

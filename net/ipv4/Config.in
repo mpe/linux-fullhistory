@@ -32,6 +32,9 @@ if [ "$CONFIG_FIREWALL" = "y" ]; then
 	fi
     fi
     bool 'IP: always defragment (required for masquerading)' CONFIG_IP_ALWAYS_DEFRAG
+    if [ "$CONFIG_IP_MULTIPLE_TABLES" = "y" ]; then
+	bool 'IP: use FWMARK value as routing key' CONFIG_IP_ROUTE_FWMARK
+    fi
   fi
 fi
 if [ "$CONFIG_IP_FIREWALL" = "y" ]; then

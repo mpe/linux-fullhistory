@@ -114,7 +114,7 @@ static int u32_classify(struct sk_buff *skb, struct tcf_proto *tp, struct tcf_re
 	int sel = 0;
 	int i;
 
-#ifndef __i386__
+#if !defined(__i386__) && !defined(__m68k__)
 	if ((unsigned long)ptr & 3)
 		return -1;
 #endif
@@ -137,10 +137,13 @@ check_terminal:
 			if (n->sel.flags&TC_U32_TERMINAL) {
 				*res = n->res;
 #ifdef CONFIG_NET_CLS_POLICE
-				if (n->police)
-					return tcf_police(skb, n->police);
+				if (n->police) {
+					int pol_res = tcf_police(skb, n->police);
+					if (pol_res >= 0)
+						return pol_res;
+				} else
 #endif
-				return 0;
+					return 0;
 			}
 			n = n->next;
 			goto next_knode;
@@ -304,7 +307,7 @@ static int u32_destroy_key(struct tcf_proto *tp, struct tc_u_knode *n)
 {
 	unsigned long cl;
 
-	if ((cl = xchg(&n->res.class, 0)) != 0)
+	if ((cl = cls_set_class(&n->res.class, 0)) != 0)
 		tp->q->ops->cl_ops->unbind_tcf(tp->q, cl);
 #ifdef CONFIG_NET_CLS_POLICE
 	tcf_police_release(n->police);
@@ -323,7 +326,10 @@ static int u32_delete_key(struct tcf_proto *tp, struct tc_u_knode* key)
 	if (ht) {
 		for (kp = &ht->ht[TC_U32_HASH(key->handle)]; *kp; kp = &(*kp)->next) {
 			if (*kp == key) {
+				net_serialize_enter();
 				*kp = key->next;
+				net_serialize_leave();
+
 				u32_destroy_key(tp, key);
 				return 0;
 			}
@@ -340,7 +346,9 @@ static void u32_clear_hnode(struct tcf_proto *tp, struct tc_u_hnode *ht)
 
 	for (h=0; h<=ht->divisor; h++) {
 		while ((n = ht->ht[h]) != NULL) {
+			net_serialize_enter();
 			ht->ht[h] = n->next;
+			net_serialize_leave();
 			u32_destroy_key(tp, n);
 		}
 	}
@@ -402,6 +410,7 @@ static void u32_destroy(struct tcf_proto *tp)
 		kfree(tp_c);
 	}
 
+	MOD_DEC_USE_COUNT;
 	tp->data = NULL;
 }
 
@@ -437,8 +446,10 @@ static u32 gen_new_kid(struct tc_u_hnode *ht, u32 handle)
 	return handle|(i>0xFFF ? 0xFFF : i);
 }
 
-static int u32_set_parms(struct Qdisc *q, struct tc_u_hnode *ht,
-			 struct tc_u_knode *n, struct rtattr **tb)
+static int u32_set_parms(struct Qdisc *q, unsigned long base,
+			 struct tc_u_hnode *ht,
+			 struct tc_u_knode *n, struct rtattr **tb,
+			 struct rtattr *est)
 {
 	if (tb[TCA_U32_LINK-1]) {
 		u32 handle = *(u32*)RTA_DATA(tb[TCA_U32_LINK-1]);
@@ -455,29 +466,34 @@ static int u32_set_parms(struct Qdisc *q, struct tc_u_hnode *ht,
 			ht_down->refcnt++;
 		}
 
+		net_serialize_enter();
 		ht_down = xchg(&n->ht_down, ht_down);
+		net_serialize_leave();
 
 		if (ht_down)
 			ht_down->refcnt--;
 	}
 	if (tb[TCA_U32_CLASSID-1]) {
-		unsigned long cl = xchg(&n->res.class, 0);
+		unsigned long cl;
+
+		n->res.classid = *(u32*)RTA_DATA(tb[TCA_U32_CLASSID-1]);
+		cl = cls_set_class(&n->res.class, q->ops->cl_ops->bind_tcf(q, base, n->res.classid));
 		if (cl)
 			q->ops->cl_ops->unbind_tcf(q, cl);
-		n->res.classid = *(u32*)RTA_DATA(tb[TCA_U32_CLASSID-1]);
-		n->res.class = q->ops->cl_ops->bind_tcf(q, n->res.classid);
 	}
 #ifdef CONFIG_NET_CLS_POLICE
 	if (tb[TCA_U32_POLICE-1]) {
-		struct tcf_police *police = tcf_police_locate(tb[TCA_U32_POLICE-1]);
-
-		tcf_police_release(xchg(&n->police, police));
+		struct tcf_police *police = tcf_police_locate(tb[TCA_U32_POLICE-1], est);
+		net_serialize_enter();
+		police = xchg(&n->police, police);
+		net_serialize_leave();
+		tcf_police_release(police);
 	}
 #endif
 	return 0;
 }
 
-static int u32_change(struct tcf_proto *tp, u32 handle,
+static int u32_change(struct tcf_proto *tp, unsigned long base, u32 handle,
 		      struct rtattr **tca,
 		      unsigned long *arg)
 {
@@ -500,7 +516,7 @@ static int u32_change(struct tcf_proto *tp, u32 handle,
 		if (TC_U32_KEY(n->handle) == 0)
 			return -EINVAL;
 
-		return u32_set_parms(tp->q, n->ht_up, n, tb);
+		return u32_set_parms(tp->q, base, n->ht_up, n, tb, tca[TCA_RATE-1]);
 	}
 
 	if (tb[TCA_U32_DIVISOR-1]) {
@@ -531,7 +547,7 @@ static int u32_change(struct tcf_proto *tp, u32 handle,
 
 	if (tb[TCA_U32_HASH-1]) {
 		htid = *(unsigned*)RTA_DATA(tb[TCA_U32_HASH-1]);
-		if (TC_U32_HTID(handle) == TC_U32_ROOT) {
+		if (TC_U32_HTID(htid) == TC_U32_ROOT) {
 			ht = tp->root;
 			htid = ht->handle;
 		} else {
@@ -550,8 +566,6 @@ static int u32_change(struct tcf_proto *tp, u32 handle,
 	if (handle) {
 		if (TC_U32_HTID(handle) && TC_U32_HTID(handle^htid))
 			return -EINVAL;
-		if (TC_U32_HASH(handle) && TC_U32_HASH(handle^htid))
-			return -EINVAL;
 		handle = htid | TC_U32_NODE(handle);
 	} else
 		handle = gen_new_kid(ht, htid);
@@ -568,14 +582,16 @@ static int u32_change(struct tcf_proto *tp, u32 handle,
 	memcpy(&n->sel, s, sizeof(*s) + s->nkeys*sizeof(struct tc_u32_key));
 	n->ht_up = ht;
 	n->handle = handle;
-	err = u32_set_parms(tp->q, ht, n, tb);
+	err = u32_set_parms(tp->q, base, ht, n, tb, tca[TCA_RATE-1]);
 	if (err == 0) {
 		struct tc_u_knode **ins;
 		for (ins = &ht->ht[TC_U32_HASH(handle)]; *ins; ins = &(*ins)->next)
-			if (TC_U32_NODE(handle) >= TC_U32_NODE((*ins)->handle))
+			if (TC_U32_NODE(handle) < TC_U32_NODE((*ins)->handle))
 				break;
+		net_serialize_enter();
 		n->next = *ins;
 		*ins = n;
+		net_serialize_leave();
 		*arg = (unsigned long)n;
 		return 0;
 	}
@@ -664,6 +680,11 @@ static int u32_dump(struct tcf_proto *tp, unsigned long fh,
 	}
 
 	rta->rta_len = skb->tail - b;
+#ifdef CONFIG_NET_CLS_POLICE
+	if (TC_U32_KEY(n->handle) && n->police) {
+		RTA_PUT(skb, TCA_STATS, sizeof(struct tc_stats), &n->police->stats);
+	}
+#endif
 	return skb->len;
 
 rtattr_failure:

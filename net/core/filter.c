@@ -441,8 +441,9 @@ int sk_attach_filter(struct sock_fprog *fprog, struct sock *sk)
 
 	if ((err = sk_chk_filter(fp->insns, fp->len))==0) {
 		struct sk_filter *old_fp = sk->filter;
+		net_serialize_enter();
 		sk->filter = fp;
-		wmb();
+		net_serialize_leave();
 		fp = old_fp;
 	}
 

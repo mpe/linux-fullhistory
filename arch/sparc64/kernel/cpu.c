@@ -88,7 +88,7 @@ __initfunc(void cpu_probe(void))
 	if(i==NSPARCCHIPS) {
 		printk("DEBUG: manuf = 0x%x   impl = 0x%x\n", manuf, 
 			    impl);
-		sparc_cpu_type[cpuid] = "Unknow CPU";
+		sparc_cpu_type[cpuid] = "Unknown CPU";
 	}
 
 	for(i = 0; i<NSPARCFPU; i++) {

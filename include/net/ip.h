@@ -147,13 +147,14 @@ extern __inline__ int ip_finish_output(struct sk_buff *skb)
 	skb->protocol = __constant_htons(ETH_P_IP);
 
 	if (hh) {
+		read_lock_irq(&hh->hh_lock);
 		memcpy(skb->data - 16, hh->hh_data, 16);
+		read_unlock_irq(&hh->hh_lock);
 	        skb_push(skb, dev->hard_header_len);
 		return hh->hh_output(skb);
 	} else if (dst->neighbour)
 		return dst->neighbour->output(skb);
 
-	printk(KERN_DEBUG "khm\n");
 	kfree_skb(skb);
 	return -EINVAL;
 }

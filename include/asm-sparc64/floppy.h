@@ -1,4 +1,4 @@
-/* $Id: floppy.h,v 1.17 1998/12/02 12:42:23 davem Exp $
+/* $Id: floppy.h,v 1.18 1999/03/21 10:51:38 davem Exp $
  * asm-sparc64/floppy.h: Sparc specific parts of the Floppy driver.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -114,6 +114,7 @@ static int FDC2 =		-1;
 
 static unsigned char sun_82077_fd_inb(unsigned long port)
 {
+	udelay(5);
 	switch(port & 7) {
 	default:
 		printk("floppy: Asked to read unknown port %lx\n", port);
@@ -131,6 +132,7 @@ static unsigned char sun_82077_fd_inb(unsigned long port)
 
 static void sun_82077_fd_outb(unsigned char value, unsigned long port)
 {
+	udelay(5);
 	switch(port & 7) {
 	default:
 		printk("floppy: Asked to write to unknown port %lx\n", port);

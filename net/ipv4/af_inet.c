@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.84 1999/03/15 22:16:47 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.85 1999/03/21 05:22:28 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -176,8 +176,6 @@ static __inline__ void kill_sk_now(struct sock *sk)
 	if(sk->opt)
 		kfree(sk->opt);
 	dst_release(sk->dst_cache);
-	if (atomic_read(&sk->omem_alloc))
-		printk(KERN_DEBUG "kill_sk_now: optmem leakage (%d bytes) detected.\n", atomic_read(&sk->omem_alloc));
 	sk_free(sk);
 }
 

@@ -184,7 +184,7 @@ struct Qdisc noop_qdisc =
         { NULL }, 
 	noop_enqueue,
 	noop_dequeue,
-	TCQ_F_DEFAULT|TCQ_F_BUILTIN,
+	TCQ_F_BUILTIN,
 	&noop_qdisc_ops,	
 };
 
@@ -207,7 +207,7 @@ struct Qdisc noqueue_qdisc =
         { NULL }, 
 	NULL,
 	NULL,
-	TCQ_F_DEFAULT|TCQ_F_BUILTIN,
+	TCQ_F_BUILTIN,
 	&noqueue_qdisc_ops,
 };
 
@@ -322,8 +322,8 @@ struct Qdisc * qdisc_create_dflt(struct device *dev, struct Qdisc_ops *ops)
 	sch->enqueue = ops->enqueue;
 	sch->dequeue = ops->dequeue;
 	sch->dev = dev;
-	sch->flags |= TCQ_F_DEFAULT;
-	if (ops->init && ops->init(sch, NULL) == 0)
+	atomic_set(&sch->refcnt, 1);
+	if (!ops->init || ops->init(sch, NULL) == 0)
 		return sch;
 
 	kfree(sch);
@@ -342,6 +342,10 @@ void qdisc_reset(struct Qdisc *qdisc)
 void qdisc_destroy(struct Qdisc *qdisc)
 {
 	struct Qdisc_ops *ops = qdisc->ops;
+
+	if (!atomic_dec_and_test(&qdisc->refcnt))
+		return;
+
 #ifdef CONFIG_NET_SCHED
 	if (qdisc->dev) {
 		struct Qdisc *q, **qp;
@@ -442,32 +446,5 @@ void dev_shutdown(struct device *dev)
 	BUG_TRAP(dev->qdisc_list == NULL);
 	dev->qdisc_list = NULL;
 	end_bh_atomic();
-}
-
-struct Qdisc * dev_set_scheduler(struct device *dev, struct Qdisc *qdisc)
-{
-	struct Qdisc *oqdisc;
-
-	if (dev->flags & IFF_UP)
-		dev_deactivate(dev);
-
-	start_bh_atomic();
-	oqdisc = dev->qdisc_sleeping;
-
-	/* Prune old scheduler */
-	if (oqdisc)
-		qdisc_reset(oqdisc);
-
-	/* ... and graft new one */
-	if (qdisc == NULL)
-		qdisc = &noop_qdisc;
-	dev->qdisc_sleeping = qdisc;
-	dev->qdisc = &noop_qdisc;
-	end_bh_atomic();
-
-	if (dev->flags & IFF_UP)
-		dev_activate(dev);
-
-	return oqdisc;
 }
 

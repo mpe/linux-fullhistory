@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: mcast.c,v 1.17 1998/08/26 12:05:06 davem Exp $
+ *	$Id: mcast.c,v 1.18 1999/03/21 05:22:55 davem Exp $
  *
  *	Based on linux/ipv4/igmp.c and linux/ipv4/ip_sockglue.c 
  *
@@ -132,7 +132,9 @@ int ipv6_sock_mc_drop(struct sock *sk, int ifindex, struct in6_addr *addr)
 		if (mc_lst->ifindex == ifindex &&
 		    ipv6_addr_cmp(&mc_lst->addr, addr) == 0) {
 			struct device *dev;
+			net_serialize_enter();
 			*lnk = mc_lst->next;
+			net_serialize_leave();
 			if ((dev = dev_get_by_index(ifindex)) != NULL)
 				ipv6_dev_mc_dec(dev, &mc_lst->addr);
 			sock_kfree_s(sk, mc_lst, sizeof(*mc_lst));
@@ -252,7 +254,9 @@ static void ipv6_mca_remove(struct device *dev, struct ifmcaddr6 *ma)
 		
 		for (lnk = &idev->mc_list; (iter = *lnk) != NULL; lnk = &iter->if_next) {
 			if (iter == ma) {
+				net_serialize_enter();
 				*lnk = iter->if_next;
+				net_serialize_leave();
 				return;
 			}
 		}
@@ -273,7 +277,9 @@ int ipv6_dev_mc_dec(struct device *dev, struct in6_addr *addr)
 		if (ipv6_addr_cmp(&ma->mca_addr, addr) == 0 && ma->dev == dev) {
 			if (atomic_dec_and_test(&ma->mca_users)) {
 				igmp6_group_dropped(ma);
+				net_serialize_enter();
 				*lnk = ma->next;
+				net_serialize_leave();
 				ipv6_mca_remove(dev, ma);
 				kfree(ma);
 			}
@@ -496,10 +502,10 @@ static void igmp6_join_group(struct ifmcaddr6 *ma)
 	if ((addr_type & (IPV6_ADDR_LINKLOCAL|IPV6_ADDR_LOOPBACK)))
 		return;
 
+	start_bh_atomic();
 	igmp6_send(&ma->mca_addr, ma->dev, ICMPV6_MGM_REPORT);
 
 	delay = net_random() % IGMP6_UNSOLICITED_IVAL;
-	start_bh_atomic();
 	if (del_timer(&ma->mca_timer))
 		delay = ma->mca_timer.expires - jiffies;
 
@@ -519,11 +525,13 @@ static void igmp6_leave_group(struct ifmcaddr6 *ma)
 	if ((addr_type & IPV6_ADDR_LINKLOCAL))
 		return;
 
+	start_bh_atomic();
 	if (ma->mca_flags & MAF_LAST_REPORTER)
 		igmp6_send(&ma->mca_addr, ma->dev, ICMPV6_MGM_REDUCTION);
 
 	if (ma->mca_flags & MAF_TIMER_RUNNING)
 		del_timer(&ma->mca_timer);
+	end_bh_atomic();
 }
 
 void igmp6_timer_handler(unsigned long data)
@@ -577,10 +585,22 @@ void ipv6_mc_up(struct inet6_dev *idev)
 
 void ipv6_mc_destroy_dev(struct inet6_dev *idev)
 {
-	struct ifmcaddr6 *i;
+	int hash;
+	struct ifmcaddr6 *i, **lnk;
 
 	while ((i = idev->mc_list) != NULL) {
 		idev->mc_list = i->if_next;
+
+		hash = ipv6_addr_hash(&i->mca_addr);
+
+		for (lnk = &inet6_mcast_lst[hash]; *lnk; lnk = &(*lnk)->next) {
+			if (*lnk == i) {
+				net_serialize_enter();
+				*lnk = i->next;
+				net_serialize_leave();
+				break;
+			}
+		}
 		igmp6_group_dropped(i);
 		kfree(i);
 	}
@@ -631,6 +651,8 @@ done:
 	len-=(offset-begin);
 	if(len>length)
 		len=length;
+	if (len<0)
+		len=0;
 	return len;
 }
 #endif

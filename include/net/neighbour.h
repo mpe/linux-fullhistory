@@ -226,7 +226,6 @@ extern __inline__ void neigh_confirm(struct neighbour *neigh)
 		neigh->confirmed = jiffies;
 }
 
-
 extern __inline__ struct neighbour *
 neigh_lookup(struct neigh_table *tbl, const void *pkey, struct device *dev)
 {
@@ -258,6 +257,7 @@ extern __inline__ int neigh_event_send(struct neighbour *neigh, struct sk_buff *
 extern __inline__ void neigh_table_lock(struct neigh_table *tbl)
 {
 	atomic_inc(&tbl->lock);
+	synchronize_bh();
 }
 
 extern __inline__ void neigh_table_unlock(struct neigh_table *tbl)

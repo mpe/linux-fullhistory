@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.50 1999/01/07 19:06:57 jj Exp $
+/* $Id: sys_sparc.c,v 1.51 1999/03/20 22:02:00 davem Exp $
  * linux/arch/sparc/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -191,6 +191,7 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
 			goto out;
 	}
 	retval = -ENOMEM;
+	len = PAGE_ALIGN(len);
 	if(!(flags & MAP_FIXED) && !addr) {
 		addr = get_unmapped_area(addr, len);
 		if(!addr)
@@ -204,6 +205,7 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
 
 	if(ARCH_SUN4C_SUN4) {
 		if(((addr >= 0x20000000) && (addr < 0xe0000000))) {
+			/* VM hole */
 			retval = current->mm->brk;
 			goto out_putf;
 		}

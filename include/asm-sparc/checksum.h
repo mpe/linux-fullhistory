@@ -1,4 +1,4 @@
-/* $Id: checksum.h,v 1.28 1998/04/17 02:37:25 davem Exp $ */
+/* $Id: checksum.h,v 1.29 1999/03/21 05:22:07 davem Exp $ */
 #ifndef __SPARC_CHECKSUM_H
 #define __SPARC_CHECKSUM_H
 
@@ -117,7 +117,10 @@ csum_partial_copy_to_user(const char *src, char *dst, int len,
 		return ret;
 	}
 }
-  
+
+#define HAVE_CSUM_COPY_USER
+#define csum_and_copy_to_user csum_partial_copy_to_user
+
 /* ihl is always 5 or greater, almost always is 5, and iph is word aligned
  * the majority of the time.
  */

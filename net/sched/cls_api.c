@@ -7,6 +7,10 @@
  *		2 of the License, or (at your option) any later version.
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
+ *
+ * Changes:
+ *
+ * Eduardo J. Blanco <ejbs@netlabs.com.uy> :990222: kmod support
  */
 
 #include <asm/uaccess.h>
@@ -27,6 +31,7 @@
 #include <linux/skbuff.h>
 #include <linux/rtnetlink.h>
 #include <linux/init.h>
+#include <linux/kmod.h>
 #include <net/sock.h>
 #include <net/pkt_sched.h>
 
@@ -87,20 +92,12 @@ static int tfilter_notify(struct sk_buff *oskb, struct nlmsghdr *n,
 
 /* Select new prio value from the range, managed by kernel. */
 
-static __inline__ u32 tcf_auto_prio(struct tcf_proto *tp, u32 prio)
+static __inline__ u32 tcf_auto_prio(struct tcf_proto *tp)
 {
 	u32 first = TC_H_MAKE(0xC0000000U,0U);
 
-	if (!tp || tp->next == NULL)
-		return first;
-
-	if (prio == TC_H_MAKE(0xFFFF0000U,0U))
-		first = tp->prio+1; 
-	else
+	if (tp)
 		first = tp->prio-1;
-
-	if (first == prio)
-		first = tp->prio;
 
 	return first;
 }
@@ -129,10 +126,7 @@ static int tc_ctl_tfilter(struct sk_buff *skb, struct nlmsghdr *n, void *arg)
 		/* If no priority is given, user wants we allocated it. */
 		if (n->nlmsg_type != RTM_NEWTFILTER || !(n->nlmsg_flags&NLM_F_CREATE))
 			return -ENOENT;
-		if (n->nlmsg_flags&NLM_F_APPEND)
-			prio = TC_H_MAKE(0xFFFF0000U,0U);
-		else
-			prio = TC_H_MAKE(0x80000000U,0U);
+		prio = TC_H_MAKE(0x80000000U,0U);
 	}
 
 	/* Find head of filter chain. */
@@ -194,6 +188,18 @@ static int tc_ctl_tfilter(struct sk_buff *skb, struct nlmsghdr *n, void *arg)
 		if ((tp = kmalloc(sizeof(*tp), GFP_KERNEL)) == NULL)
 			goto errout;
 		tp_ops = tcf_proto_lookup_ops(tca[TCA_KIND-1]);
+#ifdef CONFIG_KMOD
+		if (tp_ops==NULL && tca[TCA_KIND-1] != NULL) {
+			struct rtattr *kind = tca[TCA_KIND-1];
+			char module_name[4 + IFNAMSIZ + 1];
+
+			if (RTA_PAYLOAD(kind) <= IFNAMSIZ) {
+				sprintf(module_name, "cls_%s", (char*)RTA_DATA(kind));
+				request_module (module_name);
+				tp_ops = tcf_proto_lookup_ops(kind);
+			}
+		}
+#endif
 		if (tp_ops == NULL) {
 			err = -EINVAL;
 			kfree(tp);
@@ -202,7 +208,7 @@ static int tc_ctl_tfilter(struct sk_buff *skb, struct nlmsghdr *n, void *arg)
 		memset(tp, 0, sizeof(*tp));
 		tp->ops = tp_ops;
 		tp->protocol = protocol;
-		tp->prio = nprio ? : tcf_auto_prio(*back, prio);
+		tp->prio = nprio ? : tcf_auto_prio(*back);
 		tp->q = q;
 		tp->classify = tp_ops->classify;
 		tp->classid = parent;
@@ -220,7 +226,9 @@ static int tc_ctl_tfilter(struct sk_buff *skb, struct nlmsghdr *n, void *arg)
 
 	if (fh == 0) {
 		if (n->nlmsg_type == RTM_DELTFILTER && t->tcm_handle == 0) {
+			net_serialize_enter();
 			*back = tp->next;
+			net_serialize_leave();
 			tp->ops->destroy(tp);
 			kfree(tp);
 			err = 0;
@@ -249,7 +257,7 @@ static int tc_ctl_tfilter(struct sk_buff *skb, struct nlmsghdr *n, void *arg)
 		}
 	}
 
-	err = tp->ops->change(tp, t->tcm_handle, tca, &fh);
+	err = tp->ops->change(tp, cl, t->tcm_handle, tca, &fh);
 	if (err == 0)
 		tfilter_notify(skb, n, tp, fh, RTM_NEWTFILTER);
 
@@ -336,12 +344,16 @@ static int tc_dump_tfilter(struct sk_buff *skb, struct netlink_callback *cb)
 		return skb->len;
 	if ((dev = dev_get_by_index(tcm->tcm_ifindex)) == NULL)
 		return skb->len;
-	if ((q = qdisc_lookup(dev, tcm->tcm_parent)) == NULL)
+	if (!tcm->tcm_parent)
+		q = dev->qdisc_sleeping;
+	else
+		q = qdisc_lookup(dev, TC_H_MAJ(tcm->tcm_parent));
+	if (q == NULL)
 		return skb->len;
-	cops = q->ops->cl_ops;
+	if ((cops = q->ops->cl_ops) == NULL)
+		goto errout;
 	if (TC_H_MIN(tcm->tcm_parent)) {
-		if (cops)
-			cl = cops->get(q, tcm->tcm_parent);
+		cl = cops->get(q, tcm->tcm_parent);
 		if (cl == 0)
 			goto errout;
 	}
@@ -360,7 +372,7 @@ static int tc_dump_tfilter(struct sk_buff *skb, struct netlink_callback *cb)
 		    TC_H_MIN(tcm->tcm_info) != tp->protocol)
 			continue;
 		if (t > s_t)
-			memset(&cb->args[1], 0, sizeof(cb->args)-sizeof(int));
+			memset(&cb->args[1], 0, sizeof(cb->args)-sizeof(cb->args[0]));
 		if (cb->args[1] == 0) {
 			if (tcf_fill_node(skb, tp, 0, NETLINK_CB(cb->skb).pid,
 					  cb->nlh->nlmsg_seq, NLM_F_MULTI, RTM_NEWTFILTER) <= 0) {
@@ -418,8 +430,8 @@ __initfunc(int tc_filter_init(void))
 #ifdef CONFIG_NET_CLS_U32
 	INIT_TC_FILTER(u32);
 #endif
-#ifdef CONFIG_NET_CLS_ROUTE
-	INIT_TC_FILTER(route);
+#ifdef CONFIG_NET_CLS_ROUTE4
+	INIT_TC_FILTER(route4);
 #endif
 #ifdef CONFIG_NET_CLS_FW
 	INIT_TC_FILTER(fw);

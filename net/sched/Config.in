@@ -18,10 +18,11 @@ if [ "$CONFIG_NET_QOS" = "y" ]; then
 fi
 bool 'Packet classifier API' CONFIG_NET_CLS
 if [ "$CONFIG_NET_CLS" = "y" ]; then
-  bool 'Routing tables based classifier' CONFIG_NET_CLS_ROUTE
-  if [ "$CONFIG_IP_FIREWALL" = "y" ]; then
-    bool 'Firewall based classifier' CONFIG_NET_CLS_FW
+  tristate 'Routing table based classifier' CONFIG_NET_CLS_ROUTE4
+  if [ "$CONFIG_NET_CLS_ROUTE4" != "n" ]; then
+    define_bool CONFIG_NET_CLS_ROUTE y
   fi
+  tristate 'Firewall based classifier' CONFIG_NET_CLS_FW
   tristate 'U32 classifier' CONFIG_NET_CLS_U32
   if [ "$CONFIG_NET_QOS" = "y" ]; then
     tristate 'Special RSVP classifier' CONFIG_NET_CLS_RSVP

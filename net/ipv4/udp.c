@@ -5,7 +5,7 @@
  *
  *		The User Datagram Protocol (UDP).
  *
- * Version:	$Id: udp.c,v 1.64 1998/11/08 11:17:07 davem Exp $
+ * Version:	$Id: udp.c,v 1.65 1999/03/21 05:22:49 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -570,7 +570,6 @@ struct udpfakehdr
 	struct udphdr uh;
 	u32 saddr;
 	u32 daddr;
-	u32 other;
 	struct iovec *iov;
 	u32 wcheck;
 };
@@ -778,7 +777,6 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 		ufh.daddr = ipc.addr = rt->rt_dst;
 	ufh.uh.len = htons(ulen);
 	ufh.uh.check = 0;
-	ufh.other = (htons(ulen) << 16) + IPPROTO_UDP*256;
 	ufh.iov = msg->msg_iov;
 	ufh.wcheck = 0;
 
@@ -846,7 +844,7 @@ int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 	return(0);
 }
 
-#if defined(CONFIG_FILTER) || !defined(HAVE_CSUM_COPY_USER) 
+#ifndef HAVE_CSUM_COPY_USER
 #undef CONFIG_UDP_DELAY_CSUM
 #endif
 
@@ -890,11 +888,11 @@ int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	err = skb_copy_datagram_iovec(skb, sizeof(struct udphdr), msg->msg_iov,
 					copied);
 #else
-	if (sk->no_check || skb->ip_summed==CHECKSUM_UNNECESSARY) {
+	if (skb->ip_summed==CHECKSUM_UNNECESSARY) {
 		err = skb_copy_datagram_iovec(skb, sizeof(struct udphdr), msg->msg_iov,
 					      copied);
 	} else if (copied > msg->msg_iov[0].iov_len || (msg->msg_flags&MSG_TRUNC)) {
-		if (csum_fold(csum_partial(skb->h.raw, ntohs(skb->h.uh->len), skb->csum))) 
+		if ((unsigned short)csum_fold(csum_partial(skb->h.raw, skb->len, skb->csum))) 
 			goto csum_copy_err;
 		err = skb_copy_datagram_iovec(skb, sizeof(struct udphdr), msg->msg_iov,
 					      copied);
@@ -907,7 +905,7 @@ int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 					     copied, csum, &err);
 		if (err)
 			goto out_free;
-		if (csum_fold(csum)) 
+		if ((unsigned short)csum_fold(csum)) 
 			goto csum_copy_err;
 	}
 #endif
@@ -1029,6 +1027,19 @@ static int udp_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
 	/*
 	 *	Charge it to the socket, dropping if the queue is full.
 	 */
+
+#if defined(CONFIG_FILTER) && defined(CONFIG_UDP_DELAY_CSUM)
+	if (sk->filter && skb->ip_summed != CHECKSUM_UNNECESSARY) {
+		if ((unsigned short)csum_fold(csum_partial(skb->h.raw, skb->len, skb->csum))) {
+			udp_statistics.UdpInErrors++;
+			ip_statistics.IpInDiscards++;
+			ip_statistics.IpInDelivers--;
+			kfree_skb(skb);
+			return -1;
+		}
+		skb->ip_summed = CHECKSUM_UNNECESSARY;
+	}
+#endif
 
 	if (sock_queue_rcv_skb(sk,skb)<0) {
 		udp_statistics.UdpInErrors++;
@@ -1179,7 +1190,7 @@ int udp_rcv(struct sk_buff *skb, unsigned short len)
 	if (sk == NULL) {
 #ifdef CONFIG_UDP_DELAY_CSUM
 		if (skb->ip_summed != CHECKSUM_UNNECESSARY &&
-		    csum_fold(csum_partial((char*)uh, ulen, skb->csum))) 
+		    (unsigned short)csum_fold(csum_partial((char*)uh, ulen, skb->csum))) 
 			goto csum_error;
 #endif
   		udp_statistics.UdpNoPorts++;

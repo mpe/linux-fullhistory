@@ -84,7 +84,7 @@ do_midi_msg(int synthno, unsigned char *msg, int mlen)
 
 	  case 0xE0:
 		  STORE(SEQ_BENDER(synthno, msg[0] & 0x0f,
-			      (msg[1] % 0x7f) | ((msg[2] & 0x7f) << 7)));
+			      (msg[1] & 0x7f) | ((msg[2] & 0x7f) << 7)));
 		  break;
 
 	  default:

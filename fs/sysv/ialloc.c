@@ -86,6 +86,7 @@ void sysv_free_inode(struct inode * inode)
 		return;
 	}
 	raw_inode = (struct sysv_inode *) bh->b_data + ((ino-1) & sb->sv_inodes_per_block_1);
+	clear_inode(inode);
 	lock_super(sb);
 	if (*sb->sv_sb_fic_count < sb->sv_fic_size)
 		*sv_sb_fic_inode(sb,(*sb->sv_sb_fic_count)++) = ino;
@@ -97,7 +98,6 @@ void sysv_free_inode(struct inode * inode)
 	mark_buffer_dirty(bh, 1);
 	unlock_super(sb);
 	brelse(bh);
-	clear_inode(inode);
 }
 
 struct inode * sysv_new_inode(const struct inode * dir)

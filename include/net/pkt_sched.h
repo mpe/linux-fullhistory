@@ -5,7 +5,7 @@
 #define PSCHED_JIFFIES 		2
 #define PSCHED_CPU 		3
 
-#define PSCHED_CLOCK_SOURCE	PSCHED_GETTIMEOFDAY
+#define PSCHED_CLOCK_SOURCE	PSCHED_JIFFIES
 
 #include <linux/pkt_sched.h>
 #include <net/pkt_cls.h>
@@ -25,6 +25,7 @@ struct Qdisc_class_ops
 {
 	/* Child qdisc manipulation */
 	int			(*graft)(struct Qdisc *, unsigned long cl, struct Qdisc *, struct Qdisc **);
+	struct Qdisc *		(*leaf)(struct Qdisc *, unsigned long cl);
 
 	/* Class manipulation routines */
 	unsigned long		(*get)(struct Qdisc *, u32 classid);
@@ -35,7 +36,7 @@ struct Qdisc_class_ops
 
 	/* Filter manipulation */
 	struct tcf_proto **	(*tcf_chain)(struct Qdisc *, unsigned long);
-	unsigned long		(*bind_tcf)(struct Qdisc *, u32 classid);
+	unsigned long		(*bind_tcf)(struct Qdisc *, unsigned long, u32 classid);
 	void			(*unbind_tcf)(struct Qdisc *, unsigned long);
 
 	/* rtnetlink specific */
@@ -57,6 +58,7 @@ struct Qdisc_ops
 	int			(*init)(struct Qdisc *, struct rtattr *arg);
 	void			(*reset)(struct Qdisc *);
 	void			(*destroy)(struct Qdisc *);
+	int			(*change)(struct Qdisc *, struct rtattr *arg);
 
 	int			(*dump)(struct Qdisc *, struct sk_buff *);
 };
@@ -74,13 +76,12 @@ struct Qdisc
 	int 			(*enqueue)(struct sk_buff *skb, struct Qdisc *dev);
 	struct sk_buff *	(*dequeue)(struct Qdisc *dev);
 	unsigned		flags;
-#define TCQ_F_DEFAULT	1
-#define TCQ_F_BUILTIN	2
+#define TCQ_F_BUILTIN	1
+#define TCQ_F_THROTTLED	2
 	struct Qdisc_ops	*ops;
 	struct Qdisc		*next;
 	u32			handle;
-	u32			classid;
-	struct Qdisc		*parent;
+	atomic_t		refcnt;
 	struct sk_buff_head	q;
 	struct device 		*dev;
 
@@ -88,6 +89,11 @@ struct Qdisc
 	unsigned long		tx_timeo;
 	unsigned long		tx_last;
 	int			(*reshape_fail)(struct sk_buff *skb, struct Qdisc *q);
+
+	/* This field is deprecated, but it is still used by CBQ
+	 * and it will live until better solution will be invented.
+	 */
+	struct Qdisc		*__parent;
 
 	char			data[0];
 };
@@ -129,6 +135,15 @@ struct qdisc_rate_table
    which have fast and precise clock source, but it is too expensive.
  */
 
+/* General note about internal clock.
+
+   Any clock source returns time intervals, measured in units
+   close to 1usec. With source PSCHED_GETTIMEOFDAY it is precisely
+   microseconds, otherwise something close but different chosen to minimize
+   arithmetic cost. Ratio usec/internal untis in form nominator/denominator
+   may be read from /proc/net/psched.
+ */
+
 
 #if PSCHED_CLOCK_SOURCE == PSCHED_GETTIMEOFDAY
 
@@ -138,7 +153,11 @@ typedef long		psched_tdiff_t;
 #define PSCHED_GET_TIME(stamp) do_gettimeofday(&(stamp))
 #define PSCHED_US2JIFFIE(usecs) (((usecs)+(1000000/HZ-1))/(1000000/HZ))
 
+#define PSCHED_EXPORTLIST EXPORT_SYMBOL(psched_tod_diff);
+
 #else /* PSCHED_CLOCK_SOURCE != PSCHED_GETTIMEOFDAY */
+
+#define PSCHED_EXPORTLIST PSCHED_EXPORTLIST_1 PSCHED_EXPORTLIST_2
 
 typedef u64	psched_time_t;
 typedef long	psched_tdiff_t;
@@ -146,10 +165,6 @@ typedef long	psched_tdiff_t;
 extern psched_time_t	psched_time_base;
 
 #if PSCHED_CLOCK_SOURCE == PSCHED_JIFFIES
-
-#define PSCHED_WATCHER unsigned long
-
-extern PSCHED_WATCHER psched_time_mark;
 
 #if HZ == 100
 #define PSCHED_JSCALE 13
@@ -159,22 +174,45 @@ extern PSCHED_WATCHER psched_time_mark;
 #define PSCHED_JSCALE 0
 #endif
 
+#define PSCHED_EXPORTLIST_2
+
+#if ~0UL == 0xFFFFFFFF
+
+#define PSCHED_WATCHER unsigned long
+
+extern PSCHED_WATCHER psched_time_mark;
+
 #define PSCHED_GET_TIME(stamp) ((stamp) = psched_time_base + (((unsigned long)(jiffies-psched_time_mark))<<PSCHED_JSCALE))
-#define PSCHED_US2JIFFIE(delay) ((delay)>>PSCHED_JSCALE)
+
+#define PSCHED_EXPORTLIST_1 EXPORT_SYMBOL(psched_time_base); \
+                            EXPORT_SYMBOL(psched_time_mark);
+
+#else
+
+#define PSCHED_GET_TIME(stamp) ((stamp) = (jiffies<<PSCHED_JSCALE))
+
+#define PSCHED_EXPORTLIST_1 
+
+#endif
+
+#define PSCHED_US2JIFFIE(delay) (((delay)+(1<<PSCHED_JSCALE)-1)>>PSCHED_JSCALE)
 
 #elif PSCHED_CLOCK_SOURCE == PSCHED_CPU
 
 extern psched_tdiff_t psched_clock_per_hz;
 extern int psched_clock_scale;
 
+#define PSCHED_EXPORTLIST_2 EXPORT_SYMBOL(psched_clock_per_hz); \
+                            EXPORT_SYMBOL(psched_clock_scale);
+
 #define PSCHED_US2JIFFIE(delay) (((delay)+psched_clock_per_hz-1)/psched_clock_per_hz)
 
 #if CPU == 586 || CPU == 686
 
 #define PSCHED_GET_TIME(stamp) \
-({ u32 hi, lo; \
-   __asm__ __volatile__ (".byte 0x0f,0x31" :"=a" (lo), "=d" (hi)); \
-   (stamp) = ((((u64)hi)<<32) + lo)>>psched_clock_scale; \
+({ u64 __cur; \
+   __asm__ __volatile__ (".byte 0x0f,0x31" :"=A" (__cur)); \
+   (stamp) = __cur>>psched_clock_scale; \
 })
 
 #elif defined (__alpha__)
@@ -190,6 +228,9 @@ extern PSCHED_WATCHER psched_time_mark;
    psched_time_mark = __res; \
    (stamp) = (psched_time_base + __res)>>psched_clock_scale; \
 })
+
+#define PSCHED_EXPORTLIST_1 EXPORT_SYMBOL(psched_time_base); \
+                            EXPORT_SYMBOL(psched_time_mark);
 
 #else
 
@@ -219,13 +260,15 @@ extern PSCHED_WATCHER psched_time_mark;
 	   __delta; \
 })
 
+extern int psched_tod_diff(int delta_sec, int bound);
+
 #define PSCHED_TDIFF_SAFE(tv1, tv2, bound, guard) \
 ({ \
 	   int __delta_sec = (tv1).tv_sec - (tv2).tv_sec; \
 	   int __delta = (tv1).tv_usec - (tv2).tv_usec; \
 	   switch (__delta_sec) { \
 	   default: \
-		   __delta = (bound); guard; break; \
+		   __delta = psched_tod_diff(__delta_sec, bound); guard; break; \
 	   case 2: \
 		   __delta += 1000000; \
 	   case 1: \
@@ -290,6 +333,8 @@ struct tcf_police
 	u32		index;
 
 	int		action;
+	int		result;
+	u32		ewma_rate;
 	u32		burst;
 	u32		mtu;
 
@@ -298,10 +343,12 @@ struct tcf_police
 	psched_time_t	t_c;
 	struct qdisc_rate_table *R_tab;
 	struct qdisc_rate_table *P_tab;
+
+	struct tc_stats	stats;
 };
 
 extern void tcf_police_destroy(struct tcf_police *p);
-extern struct tcf_police * tcf_police_locate(struct rtattr *rta);
+extern struct tcf_police * tcf_police_locate(struct rtattr *rta, struct rtattr *est);
 extern int tcf_police_dump(struct sk_buff *skb, struct tcf_police *p);
 extern int tcf_police(struct sk_buff *skb, struct tcf_police *p);
 
@@ -327,7 +374,6 @@ void dev_deactivate(struct device *dev);
 void qdisc_reset(struct Qdisc *qdisc);
 void qdisc_destroy(struct Qdisc *qdisc);
 struct Qdisc * qdisc_create_dflt(struct device *dev, struct Qdisc_ops *ops);
-struct Qdisc * dev_set_scheduler(struct device *dev, struct Qdisc *qdisc);
 int qdisc_new_estimator(struct tc_stats *stats, struct rtattr *opt);
 void qdisc_kill_estimator(struct tc_stats *stats);
 struct qdisc_rate_table *qdisc_get_rtab(struct tc_ratespec *r, struct rtattr *tab);

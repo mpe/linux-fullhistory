@@ -135,6 +135,7 @@ struct lance_private {
 	struct Linux_SBus_DMA *ledma; /* if set this points to ledma and arch=4m */
 	int burst_sizes;	      /* ledma SBus burst sizes */
 #endif
+	struct timer_list         multicast_timer;
 };
 
 #define TX_BUFFS_AVAIL ((lp->tx_old<=lp->tx_new)?\
@@ -527,6 +528,7 @@ static int lance_close (struct device *dev)
 
 	dev->start = 0;
 	dev->tbusy = 1;
+	del_timer(&lp->multicast_timer);
 
 	/* Stop the card */
 	ll->rap = LE_CSR0;
@@ -706,12 +708,20 @@ static void lance_set_multicast (struct device *dev)
 	volatile struct lance_init_block *ib = lp->init_block;
 	volatile struct lance_regs *ll = lp->ll;
 
-	while (dev->tbusy)
-		schedule();
+	if (!dev->start)
+		return;
+
+	if (dev->tbusy) {
+		mod_timer(&lp->multicast_timer, jiffies + 2);
+		return;
+	}
 	set_bit (0, (void *) &dev->tbusy);
 
-	while (lp->tx_old != lp->tx_new)
-		schedule();
+	if (lp->tx_old != lp->tx_new) {
+		mod_timer(&lp->multicast_timer, jiffies + 4);
+		dev->tbusy = 0;
+		return;
+	}
 
 	ll->rap = LE_CSR0;
 	ll->rdp = LE_C0_STOP;
@@ -726,6 +736,7 @@ static void lance_set_multicast (struct device *dev)
 	load_csrs (lp);
 	init_restart_lance (lp);
 	dev->tbusy = 0;
+	mark_bh(NET_BH);
 }
 
 
@@ -795,6 +806,11 @@ __initfunc(int a2065_probe(struct device *dev))
 			dev->dma = 0;
 
 			ether_setup(dev);
+			init_timer(&priv->multicast_timer);
+			priv->multicast_timer.data = (unsigned long) dev;
+			priv->multicast_timer.function =
+				(void (*)(unsigned long)) &lance_set_multicast;
+
 			zorro_config_board(key, 0);
 			return(0);
 		}

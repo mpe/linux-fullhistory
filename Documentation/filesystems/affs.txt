@@ -151,6 +151,28 @@ Command line:
 /etc/fstab entry:
     /dev/sdb5	/amiga/Workbench    affs    noauto,user,exec,verbose 0 0
 
+IMPORTANT NOTE
+==============
+
+If you boot Windows 95 (don't know about 3.x, 98 and NT) while you
+have an Amiga harddisk connected to your PC, it will overwrite
+the bytes 0x00dc..0x00df of block 0 with garbage, thus invalidating
+the Rigid Disk Block. Sheer luck has it that this is an unused
+area of the RDB, so only the checksum doesn's match anymore.
+Linux will ignore this garbage and recognize the RDB anyway, but
+before you connect that drive to your Amiga again, you must
+restore or repair your RDB. So please do make a backup copy of it
+before booting Windows!
+
+If the damage is already done, the following should fix the RDB
+(where <disk> is the device name).
+DO AT YOUR OWN RISK:
+
+  dd if=/dev/<disk> of=rdb.tmp count=1
+  cp rdb.tmp rdb.fixed
+  dd if=/dev/zero of=rdb.fixed bs=1 seek=220 count=4
+  dd if=rdb.fixed of=/dev/<disk>
+
 Bugs, Restrictions, Caveats
 ===========================
 
@@ -185,9 +207,8 @@ system crashes while an affs partition is mounted. There's currently
 no way to fix a garbled filesystem without an Amiga (disk validator)
 or manually (who would do this?). Maybe later.
 
-A fsck.affs and mkfs.affs will probably be available in the future.
-If you mount them on system startup, you may want to tell fsck
-that the fs should not be checked (place a '0' in the sixth field
+If you mount affs partitions on system startup, you may want to tell
+fsck that the fs should not be checked (place a '0' in the sixth field
 of /etc/fstab).
 
 It's not possible to read floppy disks with a normal PC or workstation

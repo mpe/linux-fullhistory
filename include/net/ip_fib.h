@@ -127,6 +127,8 @@ struct fib_table
 	int		(*tb_flush)(struct fib_table *table);
 	int		(*tb_get_info)(struct fib_table *table, char *buf,
 				       int first, int count);
+	void		(*tb_select_default)(struct fib_table *table,
+					     const struct rt_key *key, struct fib_result *res);
 
 	unsigned char	tb_data[0];
 };
@@ -156,6 +158,12 @@ extern __inline__ int fib_lookup(const struct rt_key *key, struct fib_result *re
 	return 0;
 }
 
+extern __inline__ void fib_select_default(const struct rt_key *key, struct fib_result *res)
+{
+	if (FIB_RES_GW(*res) && FIB_RES_NH(*res).nh_scope == RT_SCOPE_LINK)
+		main_table->tb_select_default(main_table, key, res);
+}
+
 #else /* CONFIG_IP_MULTIPLE_TABLES */
 #define local_table (fib_tables[RT_TABLE_LOCAL])
 #define main_table (fib_tables[RT_TABLE_MAIN])
@@ -179,6 +187,9 @@ extern __inline__ struct fib_table *fib_new_table(int id)
 
 	return fib_tables[id] ? : __fib_new_table(id);
 }
+
+extern void fib_select_default(const struct rt_key *key, struct fib_result *res);
+
 #endif /* CONFIG_IP_MULTIPLE_TABLES */
 
 /* Exported by fib_frontend.c */
@@ -189,7 +200,7 @@ extern int inet_rtm_newroute(struct sk_buff *skb, struct nlmsghdr* nlh, void *ar
 extern int inet_rtm_getroute(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg);
 extern int inet_dump_fib(struct sk_buff *skb, struct netlink_callback *cb);
 extern int fib_validate_source(u32 src, u32 dst, u8 tos, int oif,
-			       struct device *dev, u32 *spec_dst);
+			       struct device *dev, u32 *spec_dst, u32 *itag);
 extern void fib_select_multipath(const struct rt_key *key, struct fib_result *res);
 
 /* Exported by fib_semantics.c */
@@ -226,5 +237,21 @@ extern u32 fib_rules_tclass(struct fib_result *res);
 extern u32 fib_rules_policy(u32 saddr, struct fib_result *res, unsigned *flags);
 extern void fib_rules_init(void);
 #endif
+
+extern __inline__ void fib_combine_itag(u32 *itag, struct fib_result *res)
+{
+#ifdef CONFIG_NET_CLS_ROUTE
+#ifdef CONFIG_IP_MULTIPLE_TABLES
+	u32 rtag;
+#endif
+	*itag = FIB_RES_NH(*res).nh_tclassid<<16;
+#ifdef CONFIG_IP_MULTIPLE_TABLES
+	rtag = fib_rules_tclass(res);
+	if (*itag == 0)
+		*itag = (rtag<<16);
+	*itag |= (rtag>>16);
+#endif
+#endif
+}
 
 #endif  _NET_FIB_H

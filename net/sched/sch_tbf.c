@@ -114,6 +114,7 @@ struct tbf_sched_data
 	u32		limit;		/* Maximal length of backlog: bytes */
 	u32		buffer;		/* Token bucket depth/rate: MUST BE >= MTU/B */
 	u32		mtu;
+	u32		max_size;
 	struct qdisc_rate_table	*R_tab;
 	struct qdisc_rate_table	*P_tab;
 
@@ -132,6 +133,8 @@ tbf_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 {
 	struct tbf_sched_data *q = (struct tbf_sched_data *)sch->data;
 
+	if (skb->len > q->max_size)
+		goto drop;
 	__skb_queue_tail(&sch->q, skb);
 	if ((sch->stats.backlog += skb->len) <= q->limit) {
 		sch->stats.bytes += skb->len;
@@ -145,6 +148,8 @@ tbf_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 
 	__skb_unlink(skb, &sch->q);
 	sch->stats.backlog -= skb->len;
+
+drop:
 	sch->stats.drops++;
 #ifdef CONFIG_NET_CLS_POLICE
 	if (sch->reshape_fail==NULL || sch->reshape_fail(skb, sch))
@@ -180,6 +185,7 @@ static void tbf_watchdog(unsigned long arg)
 {
 	struct Qdisc *sch = (struct Qdisc*)arg;
 
+	sch->flags &= ~TCQ_F_THROTTLED;
 	qdisc_wakeup(sch->dev);
 }
 
@@ -216,6 +222,7 @@ tbf_dequeue(struct Qdisc* sch)
 			q->tokens = toks;
 			q->ptokens = ptoks;
 			sch->stats.backlog -= skb->len;
+			sch->flags &= ~TCQ_F_THROTTLED;
 			return skb;
 		}
 
@@ -238,10 +245,11 @@ tbf_dequeue(struct Qdisc* sch)
 		   Really, if we split the flow into independent
 		   subflows, it would be a very good solution.
 		   This is the main idea of all FQ algorithms
-		   (cf. CSZ, HPFQ, HFCS)
+		   (cf. CSZ, HPFQ, HFSC)
 		 */
 		__skb_queue_head(&sch->q, skb);
 
+		sch->flags |= TCQ_F_THROTTLED;
 		sch->stats.overlimits++;
 	}
 	return NULL;
@@ -258,53 +266,86 @@ tbf_reset(struct Qdisc* sch)
 	PSCHED_GET_TIME(q->t_c);
 	q->tokens = q->buffer;
 	q->ptokens = q->mtu;
+	sch->flags &= ~TCQ_F_THROTTLED;
 	del_timer(&q->wd_timer);
+}
+
+static int tbf_change(struct Qdisc* sch, struct rtattr *opt)
+{
+	int err = -EINVAL;
+	struct tbf_sched_data *q = (struct tbf_sched_data *)sch->data;
+	struct rtattr *tb[TCA_TBF_PTAB];
+	struct tc_tbf_qopt *qopt;
+	struct qdisc_rate_table *rtab = NULL;
+	struct qdisc_rate_table *ptab = NULL;
+	int max_size;
+
+	if (rtattr_parse(tb, TCA_TBF_PTAB, RTA_DATA(opt), RTA_PAYLOAD(opt)) ||
+	    tb[TCA_TBF_PARMS-1] == NULL ||
+	    RTA_PAYLOAD(tb[TCA_TBF_PARMS-1]) < sizeof(*qopt))
+		goto done;
+
+	qopt = RTA_DATA(tb[TCA_TBF_PARMS-1]);
+	rtab = qdisc_get_rtab(&qopt->rate, tb[TCA_TBF_RTAB-1]);
+	if (rtab == NULL)
+		goto done;
+
+	if (qopt->peakrate.rate) {
+		if (qopt->peakrate.rate > qopt->rate.rate)
+			ptab = qdisc_get_rtab(&qopt->peakrate, tb[TCA_TBF_PTAB-1]);
+		if (ptab == NULL)
+			goto done;
+	}
+
+	max_size = psched_mtu(sch->dev);
+	if (ptab) {
+		int n = max_size>>qopt->peakrate.cell_log;
+		while (n>0 && ptab->data[n-1] > qopt->mtu) {
+			max_size -= (1<<qopt->peakrate.cell_log);
+			n--;
+		}
+	}
+	if (rtab->data[max_size>>qopt->rate.cell_log] > qopt->buffer)
+		goto done;
+
+	start_bh_atomic();
+	q->limit = qopt->limit;
+	q->mtu = qopt->mtu;
+	q->max_size = max_size;
+	q->buffer = qopt->buffer;
+	q->tokens = q->buffer;
+	q->ptokens = q->mtu;
+	rtab = xchg(&q->R_tab, rtab);
+	ptab = xchg(&q->P_tab, ptab);
+	end_bh_atomic();
+	err = 0;
+done:
+	if (rtab)
+		qdisc_put_rtab(rtab);
+	if (ptab)
+		qdisc_put_rtab(ptab);
+	return err;
 }
 
 static int tbf_init(struct Qdisc* sch, struct rtattr *opt)
 {
+	int err;
 	struct tbf_sched_data *q = (struct tbf_sched_data *)sch->data;
-	struct rtattr *tb[TCA_TBF_PTAB];
-	struct tc_tbf_qopt *qopt;
-
+	
+	if (opt == NULL)
+		return -EINVAL;
+	
 	MOD_INC_USE_COUNT;
-
-	if (opt == NULL ||
-	    rtattr_parse(tb, TCA_TBF_PTAB, RTA_DATA(opt), RTA_PAYLOAD(opt)) ||
-	    tb[TCA_TBF_PARMS-1] == NULL ||
-	    RTA_PAYLOAD(tb[TCA_TBF_PARMS-1]) < sizeof(*qopt)) {
-		MOD_DEC_USE_COUNT;
-		return -EINVAL;
-	}
-
-	qopt = RTA_DATA(tb[TCA_TBF_PARMS-1]);
-	q->R_tab = qdisc_get_rtab(&qopt->rate, tb[TCA_TBF_RTAB-1]);
-	if (q->R_tab == NULL) {
-		MOD_DEC_USE_COUNT;
-		return -EINVAL;
-	}
-
-	if (qopt->peakrate.rate) {
-		q->P_tab = qdisc_get_rtab(&qopt->rate, tb[TCA_TBF_PTAB-1]);
-		if (q->P_tab == NULL) {
-			MOD_DEC_USE_COUNT;
-			qdisc_put_rtab(q->R_tab);
-			return -EINVAL;
-		}
-	}
-
+	
 	PSCHED_GET_TIME(q->t_c);
 	init_timer(&q->wd_timer);
 	q->wd_timer.function = tbf_watchdog;
 	q->wd_timer.data = (unsigned long)sch;
-	q->limit = qopt->limit;
-	q->mtu = qopt->mtu;
-	if (q->mtu == 0)
-		q->mtu = psched_mtu(sch->dev);
-	q->buffer = qopt->buffer;
-	q->tokens = q->buffer;
-	q->ptokens = q->mtu;
-	return 0;
+	
+	if ((err = tbf_change(sch, opt)) != 0) {
+		MOD_DEC_USE_COUNT;
+	}
+	return err;
 }
 
 static void tbf_destroy(struct Qdisc *sch)
@@ -328,10 +369,10 @@ static int tbf_dump(struct Qdisc *sch, struct sk_buff *skb)
 	unsigned char	 *b = skb->tail;
 	struct rtattr *rta;
 	struct tc_tbf_qopt opt;
-
+	
 	rta = (struct rtattr*)b;
 	RTA_PUT(skb, TCA_OPTIONS, 0, NULL);
-
+	
 	opt.limit = q->limit;
 	opt.rate = q->R_tab->rate;
 	if (q->P_tab)
@@ -366,6 +407,7 @@ struct Qdisc_ops tbf_qdisc_ops =
 	tbf_init,
 	tbf_reset,
 	tbf_destroy,
+	tbf_change,
 
 #ifdef CONFIG_RTNETLINK
 	tbf_dump,

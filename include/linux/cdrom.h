@@ -343,14 +343,15 @@ struct cdrom_blk
 #define CDC_IOCTLS              0x400   /* driver has non-standard ioctls */
 #define CDC_DRIVE_STATUS        0x800   /* driver implements drive status */
 
-/* drive status possibilities used with the uniform CD-ROM driver */
-#define CDS_NO_INFO		0               /* if not implemented */
+/* drive status possibilities returned by CDROM_DRIVE_STATUS ioctl */
+#define CDS_NO_INFO		0	/* if not implemented */
 #define CDS_NO_DISC		1
 #define CDS_TRAY_OPEN		2
 #define CDS_DRIVE_NOT_READY	3
 #define CDS_DISC_OK		4
 
-/* disc status possibilities, other than CDS_NO_DISC and CDS_NO_INFO */
+/* return values for the CDROM_DISC_STATUS ioctl */
+/* can also return CDS_NO_[INFO|DISC], from above */
 #define CDS_AUDIO		100
 #define CDS_DATA_1		101
 #define CDS_DATA_2		102

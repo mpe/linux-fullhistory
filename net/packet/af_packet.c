@@ -5,7 +5,7 @@
  *
  *		PACKET - implements raw packet sockets.
  *
- * Version:	$Id: af_packet.c,v 1.18 1998/10/03 15:55:24 freitag Exp $
+ * Version:	$Id: af_packet.c,v 1.19 1999/03/21 05:23:03 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -831,7 +831,7 @@ static int packet_recvmsg(struct socket *sock, struct msghdr *msg, int len,
 	 *	Free or return the buffer as appropriate. Again this
 	 *	hides all the races and re-entrancy issues from us.
 	 */
-	err = copied;
+	err = (flags&MSG_TRUNC) ? skb->len : copied;
 
 out_free:
 	skb_free_datagram(sk, skb);

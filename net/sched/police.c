@@ -74,6 +74,9 @@ void tcf_police_destroy(struct tcf_police *p)
 	for (p1p = &tcf_police_ht[h]; *p1p; p1p = &(*p1p)->next) {
 		if (*p1p == p) {
 			*p1p = p->next;
+#ifdef CONFIG_NET_ESTIMATOR
+			qdisc_kill_estimator(&p->stats);
+#endif
 			if (p->R_tab)
 				qdisc_put_rtab(p->R_tab);
 			if (p->P_tab)
@@ -85,7 +88,7 @@ void tcf_police_destroy(struct tcf_police *p)
 	BUG_TRAP(0);
 }
 
-struct tcf_police * tcf_police_locate(struct rtattr *rta)
+struct tcf_police * tcf_police_locate(struct rtattr *rta, struct rtattr *est)
 {
 	unsigned h;
 	struct tcf_police *p;
@@ -111,20 +114,35 @@ struct tcf_police * tcf_police_locate(struct rtattr *rta)
 
 	memset(p, 0, sizeof(*p));
 	p->refcnt = 1;
-	if ((p->R_tab = qdisc_get_rtab(&parm->rate, tb[TCA_POLICE_RATE-1])) == NULL)
-		goto failure;
-	if (parm->peakrate.rate &&
-	    (p->P_tab = qdisc_get_rtab(&parm->peakrate, tb[TCA_POLICE_PEAKRATE-1])) == NULL)
-		goto failure;
+	if (parm->rate.rate) {
+		if ((p->R_tab = qdisc_get_rtab(&parm->rate, tb[TCA_POLICE_RATE-1])) == NULL)
+			goto failure;
+		if (parm->peakrate.rate &&
+		    (p->P_tab = qdisc_get_rtab(&parm->peakrate, tb[TCA_POLICE_PEAKRATE-1])) == NULL)
+			goto failure;
+	}
+	if (tb[TCA_POLICE_RESULT-1])
+		p->result = *(int*)RTA_DATA(tb[TCA_POLICE_RESULT-1]);
+#ifdef CONFIG_NET_ESTIMATOR
+	if (tb[TCA_POLICE_AVRATE-1])
+		p->ewma_rate = *(u32*)RTA_DATA(tb[TCA_POLICE_AVRATE-1]);
+#endif
 	p->toks = p->burst = parm->burst;
 	p->mtu = parm->mtu;
-	if (p->mtu == 0)
-		p->mtu = 255<<p->R_tab->rate.cell_log;
+	if (p->mtu == 0) {
+		p->mtu = ~0;
+		if (p->R_tab)
+			p->mtu = 255<<p->R_tab->rate.cell_log;
+	}
 	if (p->P_tab)
 		p->ptoks = L2T_P(p, p->mtu);
 	PSCHED_GET_TIME(p->t_c);
 	p->index = parm->index ? : tcf_police_new_index();
 	p->action = parm->action;
+#ifdef CONFIG_NET_ESTIMATOR
+	if (est)
+		qdisc_new_estimator(&p->stats, est);
+#endif
 	h = tcf_police_hash(p->index);
 	p->next = tcf_police_ht[h];
 	tcf_police_ht[h] = p;
@@ -143,7 +161,20 @@ int tcf_police(struct sk_buff *skb, struct tcf_police *p)
 	long toks;
 	long ptoks = 0;
 
+	p->stats.bytes += skb->len;
+	p->stats.packets++;
+
+#ifdef CONFIG_NET_ESTIMATOR
+	if (p->ewma_rate && p->stats.bps >= p->ewma_rate) {
+		p->stats.overlimits++;
+		return p->action;
+	}
+#endif
+
 	if (skb->len <= p->mtu) {
+		if (p->R_tab == NULL)
+			return p->result;
+
 		PSCHED_GET_TIME(now);
 
 		toks = PSCHED_TDIFF_SAFE(now, p->t_c, p->burst, 0);
@@ -163,10 +194,11 @@ int tcf_police(struct sk_buff *skb, struct tcf_police *p)
 			p->t_c = now;
 			p->toks = toks;
 			p->ptoks = ptoks;
-			return TC_POLICE_OK;
+			return p->result;
 		}
 	}
 
+	p->stats.overlimits++;
 	return p->action;
 }
 
@@ -180,12 +212,21 @@ int tcf_police_dump(struct sk_buff *skb, struct tcf_police *p)
 	opt.action = p->action;
 	opt.mtu = p->mtu;
 	opt.burst = p->burst;
-	opt.rate = p->R_tab->rate;
+	if (p->R_tab)
+		opt.rate = p->R_tab->rate;
+	else
+		memset(&opt.rate, 0, sizeof(opt.rate));
 	if (p->P_tab)
 		opt.peakrate = p->P_tab->rate;
 	else
 		memset(&opt.peakrate, 0, sizeof(opt.peakrate));
 	RTA_PUT(skb, TCA_POLICE_TBF, sizeof(opt), &opt);
+	if (p->result)
+		RTA_PUT(skb, TCA_POLICE_RESULT, sizeof(int), &p->result);
+#ifdef CONFIG_NET_ESTIMATOR
+	if (p->ewma_rate)
+		RTA_PUT(skb, TCA_POLICE_AVRATE, 4, &p->ewma_rate);
+#endif
 	return skb->len;
 
 rtattr_failure:

@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.37 1998/11/08 11:17:10 davem Exp $
+ *	$Id: udp.c,v 1.38 1999/03/21 05:23:00 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -201,8 +201,8 @@ int udpv6_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	struct sockaddr_in6	*usin = (struct sockaddr_in6 *) uaddr;
 	struct ipv6_pinfo      	*np = &sk->net_pinfo.af_inet6;
 	struct in6_addr		*daddr;
+	struct in6_addr		saddr;
 	struct dst_entry	*dst;
-	struct inet6_ifaddr	*ifa;
 	struct flowi		fl;
 	int			addr_type;
 	int			err;
@@ -284,28 +284,29 @@ ipv4_connected:
 
 	dst = ip6_route_output(sk, &fl);
 
-	if (dst->error) {
+	if ((err = dst->error) != 0) {
 		dst_release(dst);
-		return dst->error;
+		return err;
 	}
 
 	ip6_dst_store(sk, dst, fl.nl_u.ip6_u.daddr);
 
 	/* get the source adddress used in the apropriate device */
 
-	ifa = ipv6_get_saddr(dst, daddr);
+	err = ipv6_get_saddr(dst, daddr, &saddr);
 
-	if(ipv6_addr_any(&np->saddr))
-		ipv6_addr_copy(&np->saddr, &ifa->addr);
+	if (err == 0) {
+		if(ipv6_addr_any(&np->saddr))
+			ipv6_addr_copy(&np->saddr, &saddr);
 
-	if(ipv6_addr_any(&np->rcv_saddr)) {
-		ipv6_addr_copy(&np->rcv_saddr, &ifa->addr);
-		sk->rcv_saddr = 0xffffffff;
+		if(ipv6_addr_any(&np->rcv_saddr)) {
+			ipv6_addr_copy(&np->rcv_saddr, &saddr);
+			sk->rcv_saddr = 0xffffffff;
+		}
+		sk->state = TCP_ESTABLISHED;
 	}
 
-	sk->state = TCP_ESTABLISHED;
-
-	return(0);
+	return err;
 }
 
 static void udpv6_close(struct sock *sk, long timeout)
@@ -317,7 +318,7 @@ static void udpv6_close(struct sock *sk, long timeout)
 	destroy_sock(sk);
 }
 
-#if defined(CONFIG_FILTER) || !defined(HAVE_CSUM_COPY_USER)
+#ifndef HAVE_CSUM_COPY_USER
 #undef CONFIG_UDP_DELAY_CSUM
 #endif
 
@@ -352,11 +353,11 @@ int udpv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	err = skb_copy_datagram_iovec(skb, sizeof(struct udphdr), 
 				      msg->msg_iov, copied);
 #else
-	if (sk->no_check || skb->ip_summed==CHECKSUM_UNNECESSARY) {
+	if (skb->ip_summed==CHECKSUM_UNNECESSARY) {
 		err = skb_copy_datagram_iovec(skb, sizeof(struct udphdr), msg->msg_iov,
 					      copied);
 	} else if (copied > msg->msg_iov[0].iov_len || (msg->msg_flags&MSG_TRUNC)) {
-		if (csum_fold(csum_partial(skb->h.raw, ntohs(skb->h.uh->len), skb->csum))) {
+		if ((unsigned short)csum_fold(csum_partial(skb->h.raw, skb->len, skb->csum))) {
 			/* Error for blocking case is chosen to masquerade
 			   as some normal condition.
 			 */
@@ -373,7 +374,7 @@ int udpv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 		csum = csum_and_copy_to_user((char*)&skb->h.uh[1], msg->msg_iov[0].iov_base, copied, csum, &err);
 		if (err)
 			goto out_free;
-		if (csum_fold(csum)) {
+		if ((unsigned short)csum_fold(csum)) {
 			/* Error for blocking case is chosen to masquerade
 			   as some normal condition.
 			 */
@@ -454,6 +455,17 @@ void udpv6_err(struct sk_buff *skb, struct ipv6hdr *hdr,
 
 static inline int udpv6_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
 {
+#if defined(CONFIG_FILTER) && defined(CONFIG_UDP_DELAY_CSUM)
+	if (sk->filter && skb->ip_summed != CHECKSUM_UNNECESSARY) {
+		if ((unsigned short)csum_fold(csum_partial(skb->h.raw, skb->len, skb->csum))) {
+			udp_stats_in6.UdpInErrors++;
+			ipv6_statistics.Ip6InDiscards++;
+			kfree_skb(skb);
+			return 0;
+		}
+		skb->ip_summed = CHECKSUM_UNNECESSARY;
+	}
+#endif
 	if (sock_queue_rcv_skb(sk,skb)<0) {
 		udp_stats_in6.UdpInErrors++;
 		ipv6_statistics.Ip6InDiscards++;
@@ -627,14 +639,13 @@ int udpv6_rcv(struct sk_buff *skb, unsigned long len)
 	if (sk == NULL) {
 #ifdef CONFIG_UDP_DELAY_CSUM
 		if (skb->ip_summed != CHECKSUM_UNNECESSARY &&
-		    csum_fold(csum_partial((char*)uh, len, skb->csum)))
+		    (unsigned short)csum_fold(csum_partial((char*)uh, len, skb->csum)))
 			goto discard;
 #endif
-		
 		udp_stats_in6.UdpNoPorts++;
 
 		icmpv6_send(skb, ICMPV6_DEST_UNREACH, ICMPV6_PORT_UNREACH, 0, dev);
-		
+
 		kfree_skb(skb);
 		return(0);
 	}

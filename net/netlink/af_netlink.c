@@ -55,6 +55,13 @@ static struct socket *netlink_kernel[MAX_LINKS];
 static int netlink_dump(struct sock *sk);
 static void netlink_destroy_callback(struct netlink_callback *cb);
 
+/* Netlink table lock. It protects against sk list changes
+   during uninterruptible sleeps in netlink_broadcast.
+
+   These lock MUST NOT be used from bh/irq on SMP kernels, because
+   It would result in race in netlink_wait_on_table.
+ */
+
 extern __inline__ void
 netlink_wait_on_table(int protocol)
 {
@@ -69,16 +76,16 @@ netlink_lock_table(int protocol)
 }
 
 extern __inline__ void
-netlink_unlock_table(int protocol, int wakeup)
+netlink_unlock_table(int protocol)
 {
 #if 0
 	/* F...g gcc does not eat it! */
 
-	if (atomic_dec_and_test(&nl_table_lock[protocol]) && wakeup)
+	if (atomic_dec_and_test(&nl_table_lock[protocol]))
 		wake_up(&nl_table_wait);
 #else
 	atomic_dec(&nl_table_lock[protocol]);
-	if (atomic_read(&nl_table_lock[protocol]) && wakeup)
+	if (!atomic_read(&nl_table_lock[protocol]))
 		wake_up(&nl_table_wait);
 #endif
 }
@@ -125,7 +132,9 @@ static void netlink_remove(struct sock *sk)
 	struct sock **skp;
 	for (skp = &nl_table[sk->protocol]; *skp; skp = &((*skp)->next)) {
 		if (*skp == sk) {
+			start_bh_atomic();
 			*skp = sk->next;
+			end_bh_atomic();
 			return;
 		}
 	}
@@ -186,7 +195,7 @@ static int netlink_release(struct socket *sock, struct socket *peer)
 	   transport (and AF_UNIX datagram, when it will be repaired).
 	   
 	   Someone could wait on our sock->wait now.
-	   We cannot release socket until waiter will remove yourself
+	   We cannot release socket until waiter will remove itself
 	   from wait queue. I choose the most conservetive way of solving
 	   the problem.
 
@@ -217,8 +226,6 @@ static int netlink_autobind(struct socket *sock)
 {
 	struct sock *sk = sock->sk;
 	struct sock *osk;
-
-	netlink_wait_on_table(sk->protocol);
 
 	sk->protinfo.af_netlink.groups = 0;
 	sk->protinfo.af_netlink.pid = current->pid;
@@ -263,8 +270,6 @@ static int netlink_bind(struct socket *sock, struct sockaddr *addr, int addr_len
 		sk->protinfo.af_netlink.groups = nladdr->nl_groups;
 		return 0;
 	}
-
-	netlink_wait_on_table(sk->protocol);
 
 	for (osk=nl_table[sk->protocol]; osk; osk=osk->next) {
 		if (osk->protinfo.af_netlink.pid == nladdr->nl_pid)
@@ -332,7 +337,7 @@ int netlink_unicast(struct sock *ssk, struct sk_buff *skb, u32 pid, int nonblock
 retry:
 	for (sk = nl_table[protocol]; sk; sk = sk->next) {
 		if (sk->protinfo.af_netlink.pid != pid)
-				continue;
+			continue;
 
 		netlink_lock(sk);
 
@@ -416,7 +421,8 @@ void netlink_broadcast(struct sock *ssk, struct sk_buff *skb, u32 pid,
 
 	/* While we sleep in clone, do not allow to change socket list */
 
-	netlink_lock_table(protocol);
+	if (allocation == GFP_KERNEL)
+		netlink_lock_table(protocol);
 
 	for (sk = nl_table[protocol]; sk; sk = sk->next) {
 		if (ssk == sk)
@@ -454,7 +460,8 @@ void netlink_broadcast(struct sock *ssk, struct sk_buff *skb, u32 pid,
 		netlink_unlock(sk);
 	}
 
-	netlink_unlock_table(protocol, allocation == GFP_KERNEL);
+	if (allocation == GFP_KERNEL)
+		netlink_unlock_table(protocol);
 
 	if (skb2)
 		kfree_skb(skb2);
@@ -475,7 +482,7 @@ Nprintk("seterr");
 		    !(sk->protinfo.af_netlink.groups&group))
 			continue;
 
-		sk->err = -code;
+		sk->err = code;
 		sk->state_change(sk);
 	}
 }
@@ -739,15 +746,20 @@ int netlink_attach(int unit, int (*function)(int, struct sk_buff *skb))
 void netlink_detach(int unit)
 {
 	struct socket *sock = netlink_kernel[unit];
+
+	net_serialize_enter();
 	netlink_kernel[unit] = NULL;
+	net_serialize_leave();
 	sock_release(sock);
 }
 
 int netlink_post(int unit, struct sk_buff *skb)
 {
-	if (netlink_kernel[unit]) {
+	struct socket *sock = netlink_kernel[unit];
+	barrier();
+	if (sock) {
 		memset(skb->cb, 0, sizeof(skb->cb));
-		netlink_broadcast(netlink_kernel[unit]->sk, skb, 0, ~0, GFP_ATOMIC);
+		netlink_broadcast(sock->sk, skb, 0, ~0, GFP_ATOMIC);
 		return 0;
 	}
 	return -EUNATCH;;
@@ -800,6 +812,8 @@ done:
 	len-=(offset-begin);
 	if(len>length)
 		len=length;
+	if(len<0)
+		len=0;
 	return len;
 }
 #endif

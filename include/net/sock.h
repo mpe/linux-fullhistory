@@ -918,6 +918,18 @@ extern void net_delete_timer (struct sock *);
 extern void net_reset_timer (struct sock *, int, unsigned long);
 extern void net_timer (unsigned long);
 
+extern __inline__ int gfp_any(void)
+{
+	return in_interrupt() ? GFP_ATOMIC : GFP_KERNEL;
+}
+
+#ifdef __SMP__
+#define net_serialize_enter()	start_bh_atomic()
+#define net_serialize_leave()	end_bh_atomic()
+#else
+#define net_serialize_enter()	barrier();
+#define net_serialize_leave()	barrier();
+#endif
 
 /* 
  *	Enable debug/info messages 

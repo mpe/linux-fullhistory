@@ -1,7 +1,7 @@
 /*
  *	NET3	IP device support routines.
  *
- *	Version: $Id: devinet.c,v 1.25 1999/01/04 20:14:33 davem Exp $
+ *	Version: $Id: devinet.c,v 1.26 1999/03/21 05:22:31 davem Exp $
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -138,7 +138,9 @@ static void inetdev_destroy(struct in_device *in_dev)
 #ifdef CONFIG_SYSCTL
 	devinet_sysctl_unregister(&in_dev->cnf);
 #endif
+	net_serialize_enter();
 	in_dev->dev->ip_ptr = NULL;
+	net_serialize_leave();
 	neigh_parms_release(&arp_tbl, in_dev->arp_parms);
 	kfree(in_dev);
 }
@@ -172,7 +174,10 @@ inet_del_ifa(struct in_device *in_dev, struct in_ifaddr **ifap, int destroy)
 				ifap1 = &ifa->ifa_next;
 				continue;
 			}
+			net_serialize_enter();
 			*ifap1 = ifa->ifa_next;
+			net_serialize_leave();
+
 			rtmsg_ifa(RTM_DELADDR, ifa);
 			notifier_call_chain(&inetaddr_chain, NETDEV_DOWN, ifa);
 			inet_free_ifa(ifa);
@@ -181,8 +186,9 @@ inet_del_ifa(struct in_device *in_dev, struct in_ifaddr **ifap, int destroy)
 
 	/* 2. Unlink it */
 
+	net_serialize_enter();
 	*ifap = ifa1->ifa_next;
-
+	net_serialize_leave();
 
 	/* 3. Announce address deletion */
 
@@ -238,8 +244,9 @@ inet_insert_ifa(struct in_device *in_dev, struct in_ifaddr *ifa)
 	}
 
 	ifa->ifa_next = *ifap;
-	/* ATOMIC_SET */
+	net_serialize_enter();
 	*ifap = ifa;
+	net_serialize_leave();
 
 	/* Send message first, then call notifier.
 	   Notifier will trigger FIB update, so that
@@ -650,8 +657,25 @@ u32 inet_select_addr(struct device *dev, u32 dst, int scope)
 		if (!dst || inet_ifa_match(dst, ifa))
 			return addr;
 	} endfor_ifa(in_dev);
+	
+	if (addr || scope >= RT_SCOPE_LINK)
+		return addr;
 
-	return addr;
+	/* Not loopback addresses on loopback should be preferred
+	   in this case. It is importnat that lo is the first interface
+	   in dev_base list.
+	 */
+	for (dev=dev_base; dev; dev=dev->next) {
+		if ((in_dev=dev->ip_ptr) == NULL)
+			continue;
+
+		for_primary_ifa(in_dev) {
+			if (ifa->ifa_scope <= scope)
+				return ifa->ifa_local;
+		} endfor_ifa(in_dev);
+	}
+
+	return 0;
 }
 
 /*

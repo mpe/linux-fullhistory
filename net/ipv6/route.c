@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: route.c,v 1.34 1998/10/03 09:38:43 davem Exp $
+ *	$Id: route.c,v 1.35 1999/03/21 05:22:57 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -71,6 +71,7 @@ int ip6_rt_gc_min_interval = 5*HZ;
 int ip6_rt_gc_timeout = 60*HZ;
 int ip6_rt_gc_interval = 30*HZ;
 int ip6_rt_gc_elasticity = 9;
+int ip6_rt_mtu_expires = 10*60*HZ;
 
 static struct rt6_info * ip6_rt_copy(struct rt6_info *ort);
 static struct dst_entry	*ip6_dst_check(struct dst_entry *dst, u32 cookie);
@@ -97,7 +98,7 @@ struct dst_ops ip6_dst_ops = {
 
 struct rt6_info ip6_null_entry = {
 	{{NULL, ATOMIC_INIT(1), ATOMIC_INIT(1), &loopback_dev,
-	  -1, 0, 0, 0, 0, 0, 0, 0,
+	  -1, 0, 0, 0, 0, 0, 0, 0, 0,
 	  -ENETUNREACH, NULL, NULL,
 	  ip6_pkt_discard, ip6_pkt_discard,
 #ifdef CONFIG_NET_CLS_ROUTE
@@ -105,7 +106,7 @@ struct rt6_info ip6_null_entry = {
 #endif
 	  &ip6_dst_ops}},
 	NULL, {{{0}}}, RTF_REJECT|RTF_NONEXTHOP, ~0U,
-	255, 0, ATOMIC_INIT(1), {NULL}, {{{{0}}}, 0}, {{{{0}}}, 0}
+	255, ATOMIC_INIT(1), {NULL}, {{{{0}}}, 0}, {{{{0}}}, 0}
 };
 
 struct fib6_node ip6_routing_table = {
@@ -515,13 +516,30 @@ static struct dst_entry *ip6_dst_reroute(struct dst_entry *dst, struct sk_buff *
 
 static struct dst_entry *ip6_negative_advice(struct dst_entry *dst)
 {
-	dst_release(dst);
+	struct rt6_info *rt = (struct rt6_info *) dst;
+
+	if (rt) {
+		if (rt->rt6i_flags & RTF_CACHE)
+			ip6_del_rt(rt);
+		dst_release(dst);
+	}
 	return NULL;
 }
 
 static void ip6_link_failure(struct sk_buff *skb)
 {
+	struct rt6_info *rt;
+
 	icmpv6_send(skb, ICMPV6_DEST_UNREACH, ICMPV6_ADDR_UNREACH, 0, skb->dev);
+
+	rt = (struct rt6_info *) skb->dst;
+	if (rt) {
+		if (rt->rt6i_flags&RTF_CACHE) {
+			dst_set_expires(&rt->u.dst, 0);
+			rt->rt6i_flags |= RTF_EXPIRES;
+		} else if (rt->rt6i_node && (rt->rt6i_flags & RTF_DEFAULT))
+			rt->rt6i_node->fn_sernum = -1;
+	}
 }
 
 static int ip6_dst_gc()
@@ -1009,12 +1027,10 @@ void rt6_pmtu_discovery(struct in6_addr *daddr, struct in6_addr *saddr,
 	   when cache entry will expire old pmtu
 	   would return automatically.
 	 */
-	if (rt->rt6i_dst.plen == 128) {
-		/*
-		 *	host route
-		 */
+	if (rt->rt6i_flags & RTF_CACHE) {
 		rt->u.dst.pmtu = pmtu;
-		rt->rt6i_flags |= RTF_MODIFIED;
+		dst_set_expires(&rt->u.dst, ip6_rt_mtu_expires);
+		rt->rt6i_flags |= RTF_MODIFIED|RTF_EXPIRES;
 		goto out;
 	}
 
@@ -1025,9 +1041,12 @@ void rt6_pmtu_discovery(struct in6_addr *daddr, struct in6_addr *saddr,
 	 */
 	if (!rt->rt6i_nexthop && !(rt->rt6i_flags & RTF_NONEXTHOP)) {
 		nrt = rt6_cow(rt, daddr, saddr);
-		nrt->u.dst.pmtu = pmtu;
-		nrt->rt6i_flags |= RTF_DYNAMIC;
-		dst_release(&nrt->u.dst);
+		if (!nrt->u.dst.error) {
+			nrt->u.dst.pmtu = pmtu;
+			dst_set_expires(&rt->u.dst, ip6_rt_mtu_expires);
+			nrt->rt6i_flags |= RTF_DYNAMIC|RTF_EXPIRES;
+			dst_release(&nrt->u.dst);
+		}
 	} else {
 		nrt = ip6_rt_copy(rt);
 		if (nrt == NULL)
@@ -1035,7 +1054,8 @@ void rt6_pmtu_discovery(struct in6_addr *daddr, struct in6_addr *saddr,
 		ipv6_addr_copy(&nrt->rt6i_dst.addr, daddr);
 		nrt->rt6i_dst.plen = 128;
 		nrt->rt6i_nexthop = neigh_clone(rt->rt6i_nexthop);
-		nrt->rt6i_flags |= (RTF_DYNAMIC | RTF_CACHE);
+		dst_set_expires(&rt->u.dst, ip6_rt_mtu_expires);
+		nrt->rt6i_flags |= RTF_DYNAMIC|RTF_CACHE|RTF_EXPIRES;
 		nrt->u.dst.pmtu = pmtu;
 		rt6_ins(nrt);
 	}
@@ -1069,7 +1089,7 @@ static struct rt6_info * ip6_rt_copy(struct rt6_info *ort)
 
 		ipv6_addr_copy(&rt->rt6i_gateway, &ort->rt6i_gateway);
 		rt->rt6i_flags = ort->rt6i_flags & ~RTF_EXPIRES;
-		rt->rt6i_metric = ort->rt6i_metric;
+		rt->rt6i_metric = 0;
 
 		memcpy(&rt->rt6i_dst, &ort->rt6i_dst, sizeof(struct rt6key));
 #ifdef CONFIG_IPV6_SUBTREES
@@ -1521,9 +1541,9 @@ static int rt6_fill_node(struct sk_buff *skb, struct rt6_info *rt,
 	if (iif)
 		RTA_PUT(skb, RTA_IIF, 4, &iif);
 	else if (dst) {
-		struct inet6_ifaddr *ifp = ipv6_get_saddr(&rt->u.dst, dst);
-		if (ifp)
-			RTA_PUT(skb, RTA_PREFSRC, 16, &ifp->addr);
+		struct in6_addr saddr_buf;
+		if (ipv6_get_saddr(&rt->u.dst, dst, &saddr_buf))
+			RTA_PUT(skb, RTA_PREFSRC, 16, &saddr_buf);
 	}
 	mx = (struct rtattr*)skb->tail;
 	RTA_PUT(skb, RTA_METRICS, 0, NULL);
@@ -1722,7 +1742,7 @@ void inet6_rt_notify(int event, struct rt6_info *rt)
 	struct sk_buff *skb;
 	int size = NLMSG_SPACE(sizeof(struct rtmsg)+256);
 
-	skb = alloc_skb(size, GFP_ATOMIC);
+	skb = alloc_skb(size, gfp_any());
 	if (!skb) {
 		netlink_set_err(rtnl, 0, RTMGRP_IPV6_ROUTE, ENOBUFS);
 		return;
@@ -1733,7 +1753,7 @@ void inet6_rt_notify(int event, struct rt6_info *rt)
 		return;
 	}
 	NETLINK_CB(skb).dst_groups = RTMGRP_IPV6_ROUTE;
-	netlink_broadcast(rtnl, skb, 0, RTMGRP_IPV6_ROUTE, GFP_ATOMIC);
+	netlink_broadcast(rtnl, skb, 0, RTMGRP_IPV6_ROUTE, gfp_any());
 }
 
 #endif
@@ -1915,6 +1935,9 @@ ctl_table ipv6_route_table[] = {
          &proc_dointvec_jiffies},
 	{NET_IPV6_ROUTE_GC_ELASTICITY, "gc_elasticity",
          &ip6_rt_gc_elasticity, sizeof(int), 0644, NULL,
+         &proc_dointvec_jiffies},
+	{NET_IPV6_ROUTE_MTU_EXPIRES, "mtu_expires",
+         &ip6_rt_mtu_expires, sizeof(int), 0644, NULL,
          &proc_dointvec_jiffies},
 	 {0}
 };

@@ -53,6 +53,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
       tristate '3c507 support' CONFIG_EL16
       if [ "$CONFIG_MCA" = "y" ]; then
         tristate '3c523 support' CONFIG_ELMC
+        tristate '3c527 support' CONFIG_ELMC_II
       fi
     fi
     tristate '3c509/3c579 support' CONFIG_EL3

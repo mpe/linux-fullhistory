@@ -23,9 +23,12 @@ enum
 	TCA_POLICE_TBF,
 	TCA_POLICE_RATE,
 	TCA_POLICE_PEAKRATE,
+	TCA_POLICE_AVRATE,
+	TCA_POLICE_RESULT
+#define TCA_POLICE_RESULT TCA_POLICE_RESULT
 };
 
-#define TCA_POLICE_MAX TCA_POLICE_PEAKRATE
+#define TCA_POLICE_MAX TCA_POLICE_RESULT
 
 /* U32 filters */
 
@@ -113,5 +116,31 @@ struct tc_rsvp_pinfo
 	__u8	tunnelid;
 	__u8	tunnelhdr;
 };
+
+/* ROUTE filter */
+
+enum
+{
+	TCA_ROUTE4_UNSPEC,
+	TCA_ROUTE4_CLASSID,
+	TCA_ROUTE4_TO,
+	TCA_ROUTE4_FROM,
+	TCA_ROUTE4_IIF,
+	TCA_ROUTE4_POLICE,
+};
+
+#define TCA_ROUTE4_MAX TCA_ROUTE4_POLICE
+
+
+/* FW filter */
+
+enum
+{
+	TCA_FW_UNSPEC,
+	TCA_FW_CLASSID,
+	TCA_FW_POLICE,
+};
+
+#define TCA_FW_MAX TCA_FW_POLICE
 
 #endif

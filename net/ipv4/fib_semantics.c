@@ -5,7 +5,7 @@
  *
  *		IPv4 Forwarding Information Base: semantics.
  *
- * Version:	$Id: fib_semantics.c,v 1.12 1999/01/26 05:33:44 davem Exp $
+ * Version:	$Id: fib_semantics.c,v 1.13 1999/03/21 05:22:34 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -89,7 +89,7 @@ static struct
 	{ -EINVAL, RT_SCOPE_UNIVERSE},	/* RTN_BLACKHOLE */
 	{ -EHOSTUNREACH, RT_SCOPE_UNIVERSE},/* RTN_UNREACHABLE */
 	{ -EACCES, RT_SCOPE_UNIVERSE},	/* RTN_PROHIBIT */
-	{ 1, RT_SCOPE_UNIVERSE},	/* RTN_THROW */
+	{ -EAGAIN, RT_SCOPE_UNIVERSE},	/* RTN_THROW */
 #ifdef CONFIG_IP_ROUTE_NAT
 	{ 0, RT_SCOPE_HOST},		/* RTN_NAT */
 #else
@@ -420,7 +420,7 @@ fib_create_info(const struct rtmsg *r, struct kern_rta *rta,
 			unsigned flavor = attr->rta_type;
 			if (flavor) {
 				if (flavor > FIB_MAX_METRICS)
-					goto failure;
+					goto err_inval;
 				fi->fib_metrics[flavor-1] = *(unsigned*)RTA_DATA(attr);
 			}
 			attr = RTA_NEXT(attr, attrlen);

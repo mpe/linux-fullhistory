@@ -28,6 +28,15 @@ Known bugs:
 
 Please direct bug reports to: hjw@zvw.de
 
+Version 3.10
+------------
+
+- Changed partition checker to allow devices
+  with physical blocks != 512 bytes.
+
+- The partition checker now also ignores the
+  word at 0xd0 that Windows likes to write to.
+
 Version 3.9
 -----------
 

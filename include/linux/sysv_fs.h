@@ -398,7 +398,6 @@ extern void sysv_write_super(struct super_block *);
 extern void sysv_read_inode(struct inode *);
 extern int sysv_notify_change(struct dentry *, struct iattr *);
 extern void sysv_write_inode(struct inode *);
-extern void sysv_put_inode(struct inode *);
 extern int sysv_statfs(struct super_block *, struct statfs *, int);
 extern int sysv_sync_inode(struct inode *);
 extern int sysv_sync_file(struct file *, struct dentry *);

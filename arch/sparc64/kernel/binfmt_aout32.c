@@ -9,7 +9,6 @@
 
 #include <linux/module.h>
 
-#include <linux/fs.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
@@ -18,9 +17,10 @@
 #include <linux/errno.h>
 #include <linux/signal.h>
 #include <linux/string.h>
+#include <linux/fs.h>
+#include <linux/file.h>
 #include <linux/stat.h>
 #include <linux/fcntl.h>
-#include <linux/file.h>
 #include <linux/ptrace.h>
 #include <linux/user.h>
 #include <linux/malloc.h>
@@ -58,14 +58,13 @@ static void set_brk(unsigned long start, unsigned long end)
  * macros to write out all the necessary info.
  */
 #define DUMP_WRITE(addr,nr) \
-while (file.f_op->write(&file,(char *)(addr),(nr),&file.f_pos) != (nr)) \
-	goto close_coredump
+while (file->f_op->write(file,(char *)(addr),(nr),&file->f_pos) != (nr)) goto close_coredump
 
 #define DUMP_SEEK(offset) \
-if (file.f_op->llseek) { \
-	if (file.f_op->llseek(&file,(offset),0) != (offset)) \
+if (file->f_op->llseek) { \
+	if (file->f_op->llseek(file,(offset),0) != (offset)) \
  		goto close_coredump; \
-} else file.f_pos = (offset)
+} else file->f_pos = (offset)
 
 /*
  * Routine writes a core dump image in the current directory.
@@ -82,7 +81,7 @@ do_aout32_core_dump(long signr, struct pt_regs * regs)
 {
 	struct dentry * dentry = NULL;
 	struct inode * inode = NULL;
-	struct file file;
+	struct file * file;
 	mm_segment_t fs;
 	int has_dumped = 0;
 	char corefile[6+sizeof(current->comm)];
@@ -106,29 +105,16 @@ do_aout32_core_dump(long signr, struct pt_regs * regs)
 #else
 	corefile[4] = '\0';
 #endif
-	dentry = open_namei(corefile,O_CREAT | 2 | O_TRUNC | O_NOFOLLOW, 0600);
-	if (IS_ERR(dentry)) {
-		dentry = NULL;
+	file = filp_open(corefile,O_CREAT | 2 | O_TRUNC | O_NOFOLLOW, 0600);
+	if (IS_ERR(file))
 		goto end_coredump;
-	}
+	dentry = file->f_dentry;
 	inode = dentry->d_inode;
 	if (!S_ISREG(inode->i_mode))
-		goto end_coredump;
+		goto close_coredump;
 	if (!inode->i_op || !inode->i_op->default_file_ops)
-		goto end_coredump;
-	if (get_write_access(inode))
-		goto end_coredump;
-	file.f_mode = 3;
-	file.f_flags = 0;
-	file.f_count = 1;
-	file.f_dentry = dentry;
-	file.f_pos = 0;
-	file.f_reada = 0;
-	file.f_op = inode->i_op->default_file_ops;
-	if (file.f_op->open)
-		if (file.f_op->open(inode,&file))
-			goto done_coredump;
-	if (!file.f_op->write)
+		goto close_coredump;
+	if (!file->f_op->write)
 		goto close_coredump;
 	has_dumped = 1;
 	current->flags |= PF_DUMPCORE;
@@ -175,13 +161,9 @@ do_aout32_core_dump(long signr, struct pt_regs * regs)
 	set_fs(KERNEL_DS);
 	DUMP_WRITE(current,sizeof(*current));
 close_coredump:
-	if (file.f_op->release)
-		file.f_op->release(inode,&file);
-done_coredump:
-	put_write_access(inode);
+	close_fp(file, NULL);
 end_coredump:
 	set_fs(fs);
-	dput(dentry);
 	return has_dumped;
 }
 
@@ -269,7 +251,6 @@ static inline int do_load_aout32_binary(struct linux_binprm * bprm,
 		return -ENOEXEC;
 	}
 
-	current->personality = PER_LINUX;
 	fd_offset = N_TXTOFF(ex);
 
 	/* Check initial limits. This avoids letting people circumvent
@@ -288,6 +269,8 @@ static inline int do_load_aout32_binary(struct linux_binprm * bprm,
 		return retval;
 
 	/* OK, This is the point of no return */
+	current->personality = PER_LINUX;
+
 	current->mm->end_code = ex.a_text +
 		(current->mm->start_code = N_TXTADDR(ex));
 	current->mm->end_data = ex.a_data +
@@ -297,8 +280,7 @@ static inline int do_load_aout32_binary(struct linux_binprm * bprm,
 
 	current->mm->rss = 0;
 	current->mm->mmap = NULL;
-	current->suid = current->euid = current->fsuid = bprm->e_uid;
-	current->sgid = current->egid = current->fsgid = bprm->e_gid;
+	compute_creds(bprm);
  	current->flags &= ~PF_FORKNOEXEC;
 	if (N_MAGIC(ex) == NMAGIC) {
 		/* Fuck me plenty... */
@@ -404,48 +386,44 @@ static inline int
 do_load_aout32_library(int fd)
 {
         struct file * file;
-	struct exec ex;
-	struct dentry * dentry;
 	struct inode * inode;
-	unsigned int len;
-	unsigned int bss;
-	unsigned int start_addr;
+	unsigned long bss, start_addr, len;
 	unsigned long error;
+	int retval;
+	loff_t offset = 0;
+	struct exec ex;
 
-	file = fcheck(fd);
+	retval = -EACCES;
+	file = fget(fd);
+	if (!file)
+		goto out;
+	if (!file->f_op)
+		goto out_putf;
+	inode = file->f_dentry->d_inode;
 
-	if (!file || !file->f_op)
-		return -EACCES;
-
-	dentry = file->f_dentry;
-	inode = dentry->d_inode;
-
-	/* Seek into the file */
-	if (file->f_op->llseek) {
-		if ((error = file->f_op->llseek(file, 0, 0)) != 0)
-			return -ENOEXEC;
-	} else
-		file->f_pos = 0;
-
+	retval = -ENOEXEC;
+	/* N.B. Save current fs? */
 	set_fs(KERNEL_DS);
-	error = file->f_op->read(file, (char *) &ex, sizeof(ex), &file->f_pos);
+	error = file->f_op->read(file, (char *) &ex, sizeof(ex), &offset);
 	set_fs(USER_DS);
 	if (error != sizeof(ex))
-		return -ENOEXEC;
+		goto out_putf;
 
 	/* We come in here for the regular a.out style of shared libraries */
 	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != QMAGIC) || N_TRSIZE(ex) ||
 	    N_DRSIZE(ex) || ((ex.a_entry & 0xfff) && N_MAGIC(ex) == ZMAGIC) ||
 	    inode->i_size < ex.a_text+ex.a_data+N_SYMSIZE(ex)+N_TXTOFF(ex)) {
-		return -ENOEXEC;
+		goto out_putf;
 	}
+
 	if (N_MAGIC(ex) == ZMAGIC && N_TXTOFF(ex) &&
 	    (N_TXTOFF(ex) < inode->i_sb->s_blocksize)) {
 		printk("N_TXTOFF < BLOCK_SIZE. Please convert library\n");
-		return -ENOEXEC;
+		goto out_putf;
 	}
 
-	if (N_FLAGS(ex)) return -ENOEXEC;
+	if (N_FLAGS(ex))
+		goto out_putf;
 
 	/* For  QMAGIC, the starting address is 0x20 into the page.  We mask
 	   this off to get the starting address for the page */
@@ -457,18 +435,26 @@ do_load_aout32_library(int fd)
 			PROT_READ | PROT_WRITE | PROT_EXEC,
 			MAP_FIXED | MAP_PRIVATE | MAP_DENYWRITE,
 			N_TXTOFF(ex));
+	retval = error;
 	if (error != start_addr)
-		return error;
+		goto out_putf;
+
 	len = PAGE_ALIGN(ex.a_text + ex.a_data);
 	bss = ex.a_text + ex.a_data + ex.a_bss;
 	if (bss > len) {
-		error = do_mmap(NULL, start_addr + len, bss-len,
-				PROT_READ|PROT_WRITE|PROT_EXEC,
-				MAP_PRIVATE|MAP_FIXED, 0);
+		error = do_mmap(NULL, start_addr + len, bss - len,
+				PROT_READ | PROT_WRITE | PROT_EXEC,
+				MAP_PRIVATE | MAP_FIXED, 0);
+		retval = error;
 		if (error != start_addr + len)
-			return error;
+			goto out_putf;
 	}
-	return 0;
+	retval = 0;
+
+out_putf:
+	fput(file);
+out:
+	return retval;
 }
 
 static int

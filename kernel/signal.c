@@ -265,7 +265,6 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 	    && ((sig != SIGCONT) || (current->session != t->session))
 	    && (current->euid ^ t->suid) && (current->euid ^ t->uid)
 	    && (current->uid ^ t->suid) && (current->uid ^ t->uid)
-	    && (cap_issubset(t->cap_permitted, current->cap_permitted))
 	    && !capable(CAP_SYS_ADMIN))
 		goto out_nolock;
 

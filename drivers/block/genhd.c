@@ -867,19 +867,20 @@ amiga_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector)
 	int			 nr_sects;
 	int			 blk;
 	int			 part, res;
+	int			 old_blocksize;
+	int			 blocksize;
 
-	/*
-	 *	Don't bother touching M/O 2K media.
-	 */
-	 
-	if (get_ptable_blocksize(dev) != 1024)
-		return 0;
-		
-	set_blocksize(dev,512);
+	old_blocksize = get_ptable_blocksize(dev);
+	if (hardsect_size[MAJOR(dev)] != NULL)
+		blocksize = hardsect_size[MAJOR(dev)][MINOR(dev)];
+	else
+		blocksize = 512;
+
+	set_blocksize(dev,blocksize);
 	res = 0;
 
 	for (blk = 0; blk < RDB_ALLOCATION_LIMIT; blk++) {
-		if(!(bh = bread(dev,blk,512))) {
+		if(!(bh = bread(dev,blk,blocksize))) {
 			printk("Dev %s: unable to read RDB block %d\n",
 			       kdevname(dev),blk);
 			goto rdb_done;
@@ -887,16 +888,25 @@ amiga_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector)
 		if (*(u32 *)bh->b_data == htonl(IDNAME_RIGIDDISK)) {
 			rdb = (struct RigidDiskBlock *)bh->b_data;
 			if (checksum_block((u32 *)bh->b_data,htonl(rdb->rdb_SummedLongs) & 0x7F)) {
-				printk("Dev %s: RDB in block %d has bad checksum\n",
-				       kdevname(dev),blk);
-				brelse(bh);
-				continue;
+				/* Try again with 0xdc..0xdf zeroed, Windows might have
+				 * trashed it.
+				 */
+				*(u32 *)(&bh->b_data[0xdc]) = 0;
+				if (checksum_block((u32 *)bh->b_data,
+						htonl(rdb->rdb_SummedLongs) & 0x7F)) {
+					brelse(bh);
+					printk("Dev %s: RDB in block %d has bad checksum\n",
+					       kdevname(dev),blk);
+					continue;
+				}
+				printk("Warning: Trashed word at 0xd0 in block %d "
+					"ignored in checksum calculation\n",kdevname(dev),blk);
 			}
 			printk(" RDSK");
 			blk = htonl(rdb->rdb_PartitionList);
 			brelse(bh);
 			for (part = 1; blk > 0 && part <= 16; part++) {
-				if (!(bh = bread(dev,blk, 512))) {
+				if (!(bh = bread(dev,blk,blocksize))) {
 					printk("Dev %s: unable to read partition block %d\n",
 						       kdevname(dev),blk);
 					goto rdb_done;
@@ -929,11 +939,7 @@ amiga_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector)
 	}
 
 rdb_done:
-	/*
-	 *	FIXME: should restore the original size. Then we could clean
-	 *	up the M/O skip. Amiga people ?
-	 */
-	set_blocksize(dev,BLOCK_SIZE);
+	set_blocksize(dev,old_blocksize);
 	return res;
 }
 #endif /* CONFIG_AMIGA_PARTITION */

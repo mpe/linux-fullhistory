@@ -125,12 +125,20 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_NET_CLS_ROUTE), y)
+ifeq ($(CONFIG_NET_CLS_ROUTE4), y)
 O_OBJS += cls_route.o
+else
+  ifeq ($(CONFIG_NET_CLS_ROUTE4), m)
+	M_OBJS += cls_route.o
+  endif
 endif
 
 ifeq ($(CONFIG_NET_CLS_FW), y)
 O_OBJS += cls_fw.o
+else
+  ifeq ($(CONFIG_NET_CLS_FW), m)
+	M_OBJS += cls_fw.o
+  endif
 endif
 
 endif

@@ -4,7 +4,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: ipv6.h,v 1.14 1998/10/03 09:36:45 davem Exp $
+ *	$Id: ipv6.h,v 1.15 1999/03/21 05:22:16 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -184,14 +184,6 @@ extern __inline__ int ipv6_addr_any(struct in6_addr *a)
 {
 	return ((a->s6_addr32[0] | a->s6_addr32[1] | 
 		 a->s6_addr32[2] | a->s6_addr32[3] ) == 0); 
-}
-
-extern __inline__ int gfp_any(void)
-{
-	int pri = GFP_KERNEL;
-	if (in_interrupt())
-		pri = GFP_ATOMIC;
-	return pri;
 }
 
 /*

@@ -59,6 +59,7 @@ struct rt6_info
 
 #define rt6i_dev			u.dst.dev
 #define rt6i_nexthop			u.dst.neighbour
+#define rt6i_expires			u.dst.expires
 
 	struct fib6_node		*rt6i_node;
 
@@ -67,7 +68,6 @@ struct rt6_info
 	u32				rt6i_flags;
 	u32				rt6i_metric;
 	u8				rt6i_hoplimit;
-	unsigned long			rt6i_expires;
 	atomic_t			rt6i_ref;
 
 	union {

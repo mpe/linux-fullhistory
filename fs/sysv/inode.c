@@ -55,10 +55,8 @@ void sysv_print_inode(struct inode * inode)
 }
 #endif
 
-void sysv_put_inode(struct inode *inode)
+static void sysv_delete_inode(struct inode *inode)
 {
-	if (inode->i_nlink)
-		return;
 	inode->i_size = 0;
 	sysv_truncate(inode);
 	sysv_free_inode(inode);
@@ -68,8 +66,8 @@ void sysv_put_inode(struct inode *inode)
 static struct super_operations sysv_sops = {
 	sysv_read_inode,
 	sysv_write_inode,
-	sysv_put_inode,
-	NULL,			/* delete_inode */
+	NULL,			/* nothing special on put_inode() */
+	sysv_delete_inode,
 	sysv_notify_change,
 	sysv_put_super,
 	sysv_write_super,

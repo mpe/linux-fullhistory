@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.183 1999/03/16 11:36:16 davem Exp $
+/* $Id: srmmu.c,v 1.184 1999/03/20 22:02:03 davem Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -465,7 +465,8 @@ static inline pte_t *srmmu_s_pte_offset(pmd_t * dir, unsigned long address)
 /* This must update the context table entry for this process. */
 static void srmmu_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdp) 
 {
-	if(tsk->mm->context != NO_CONTEXT) {
+	if(tsk->mm->context != NO_CONTEXT &&
+	   tsk->mm->pgd != pgdp) {
 		flush_cache_mm(tsk->mm);
 		ctxd_set(&srmmu_context_table[tsk->mm->context], pgdp);
 		flush_tlb_mm(tsk->mm);
@@ -816,13 +817,19 @@ static inline void free_context(int context)
 
 static void srmmu_switch_to_context(struct task_struct *tsk)
 {
+	int set = 0;
+
 	if(tsk->mm->context == NO_CONTEXT) {
 		alloc_context(tsk->mm);
 		flush_cache_mm(tsk->mm);
 		ctxd_set(&srmmu_context_table[tsk->mm->context], tsk->mm->pgd);
 		flush_tlb_mm(tsk->mm);
-	}
-	srmmu_set_context(tsk->mm->context);
+		set = 1;
+	} else if(tsk->mm != current->mm)
+		set = 1;
+
+	if(set != 0)
+		srmmu_set_context(tsk->mm->context);
 }
 
 static void srmmu_init_new_context(struct mm_struct *mm)
@@ -1335,7 +1342,8 @@ static void hypersparc_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdp)
 	if(pgdp != swapper_pg_dir)
 		hypersparc_flush_page_to_ram(page);
 
-	if(tsk->mm->context != NO_CONTEXT) {
+	if(tsk->mm->context != NO_CONTEXT &&
+	   tsk->mm->pgd != pgdp) {
 		flush_cache_mm(tsk->mm);
 		ctxd_set(&srmmu_context_table[tsk->mm->context], pgdp);
 		flush_tlb_mm(tsk->mm);
@@ -1344,8 +1352,10 @@ static void hypersparc_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdp)
 
 static void viking_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdp) 
 {
-	viking_flush_page((unsigned long)pgdp);
-	if(tsk->mm->context != NO_CONTEXT) {
+	if(pgdp != swapper_pg_dir)
+		viking_flush_page((unsigned long)pgdp);
+	if(tsk->mm->context != NO_CONTEXT &&
+	   tsk->mm->pgd != pgdp) {
 		flush_cache_mm(tsk->mm);
 		ctxd_set(&srmmu_context_table[tsk->mm->context], pgdp);
 		flush_tlb_mm(tsk->mm);
@@ -1357,6 +1367,9 @@ static void cypress_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdp)
 	register unsigned long a, b, c, d, e, f, g;
 	unsigned long page = ((unsigned long) pgdp) & PAGE_MASK;
 	unsigned long line;
+
+	if(pgdp == swapper_pg_dir)
+		goto skip_flush;
 
 	a = 0x20; b = 0x40; c = 0x60; d = 0x80; e = 0xa0; f = 0xc0; g = 0xe0;
 	page &= PAGE_MASK;
@@ -1378,8 +1391,9 @@ static void cypress_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdp)
 				     "r" (a), "r" (b), "r" (c), "r" (d),
 				     "r" (e), "r" (f), "r" (g));
 	} while(line != page);
-
-	if(tsk->mm->context != NO_CONTEXT) {
+skip_flush:
+	if(tsk->mm->context != NO_CONTEXT &&
+	   tsk->mm->pgd != pgdp) {
 		flush_cache_mm(tsk->mm);
 		ctxd_set(&srmmu_context_table[tsk->mm->context], pgdp);
 		flush_tlb_mm(tsk->mm);
@@ -1388,6 +1402,8 @@ static void cypress_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdp)
 
 static void hypersparc_switch_to_context(struct task_struct *tsk)
 {
+	int set = 0;
+
 	if(tsk->mm->context == NO_CONTEXT) {
 		ctxd_t *ctxp;
 
@@ -1395,9 +1411,14 @@ static void hypersparc_switch_to_context(struct task_struct *tsk)
 		ctxp = &srmmu_context_table[tsk->mm->context];
 		srmmu_set_entry((pte_t *)ctxp, __pte((SRMMU_ET_PTD | (srmmu_v2p((unsigned long) tsk->mm->pgd) >> 4))));
 		hypersparc_flush_page_to_ram((unsigned long)ctxp);
+		set = 1;
+	} else if(tsk->mm != current->mm)
+		set = 1;
+
+	if(set != 0) {
+		hyper_flush_whole_icache();
+		srmmu_set_context(tsk->mm->context);
 	}
-	hyper_flush_whole_icache();
-	srmmu_set_context(tsk->mm->context);
 }
 
 static void hypersparc_init_new_context(struct mm_struct *mm)
@@ -1410,9 +1431,10 @@ static void hypersparc_init_new_context(struct mm_struct *mm)
 	srmmu_set_entry((pte_t *)ctxp, __pte((SRMMU_ET_PTD | (srmmu_v2p((unsigned long) mm->pgd) >> 4))));
 	hypersparc_flush_page_to_ram((unsigned long)ctxp);
 
-	hyper_flush_whole_icache();
-	if(mm == current->mm)
+	if(mm == current->mm) {
+		hyper_flush_whole_icache();
 		srmmu_set_context(mm->context);
+	}
 }
 
 static unsigned long mempool;
@@ -2022,6 +2044,11 @@ static void srmmu_update_mmu_cache(struct vm_area_struct * vma, unsigned long ad
 static void srmmu_destroy_context(struct mm_struct *mm)
 {
 	if(mm->context != NO_CONTEXT && atomic_read(&mm->count) == 1) {
+		/* XXX This could be drastically improved.
+		 * XXX We are only called from __exit_mm and it just did
+		 * XXX cache/tlb mm flush and right after this will (re-)
+		 * XXX SET_PAGE_DIR to swapper_pg_dir.  -DaveM
+		 */
 		flush_cache_mm(mm);
 		ctxd_set(&srmmu_context_table[mm->context], swapper_pg_dir);
 		flush_tlb_mm(mm);
@@ -2680,15 +2707,8 @@ __initfunc(static void init_viking(void))
 
 	/* Ahhh, the viking.  SRMMU VLSI abortion number two... */
 	if(mreg & VIKING_MMODE) {
-		unsigned long bpreg;
-
 		srmmu_name = "TI Viking";
 		viking_mxcc_present = 0;
-
-		bpreg = viking_get_bpreg();
-		bpreg &= ~(VIKING_ACTION_MIX);
-		viking_set_bpreg(bpreg);
-
 		msi_set_sync();
 
 		BTFIXUPSET_CALL(set_pte, srmmu_set_pte_nocache_viking, BTFIXUPCALL_NORM);

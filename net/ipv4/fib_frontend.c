@@ -5,7 +5,7 @@
  *
  *		IPv4 Forwarding Information Base: FIB frontend.
  *
- * Version:	$Id: fib_frontend.c,v 1.14 1999/01/04 20:13:55 davem Exp $
+ * Version:	$Id: fib_frontend.c,v 1.15 1999/03/21 05:22:31 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -189,7 +189,7 @@ unsigned inet_addr_type(u32 addr)
  */
 
 int fib_validate_source(u32 src, u32 dst, u8 tos, int oif,
-			struct device *dev, u32 *spec_dst)
+			struct device *dev, u32 *spec_dst, u32 *itag)
 {
 	struct in_device *in_dev = dev->ip_ptr;
 	struct rt_key key;
@@ -209,6 +209,8 @@ int fib_validate_source(u32 src, u32 dst, u8 tos, int oif,
 	if (res.type != RTN_UNICAST)
 		return -EINVAL;
 	*spec_dst = FIB_RES_PREFSRC(res);
+	if (itag)
+		fib_combine_itag(itag, &res);
 #ifdef CONFIG_IP_ROUTE_MULTIPATH
 	if (FIB_RES_DEV(res) == dev || res.fi->fib_nhs > 1)
 #else
@@ -231,6 +233,7 @@ last_resort:
 	if (IN_DEV_RPFILTER(in_dev))
 		return -EINVAL;
 	*spec_dst = inet_select_addr(dev, 0, RT_SCOPE_UNIVERSE);
+	*itag = 0;
 	return 0;
 }
 
@@ -354,7 +357,7 @@ int inet_dump_fib(struct sk_buff *skb, struct netlink_callback *cb)
 	for (t=s_t; t<=RT_TABLE_MAX; t++) {
 		if (t < s_t) continue;
 		if (t > s_t)
-			memset(&cb->args[1], 0, sizeof(cb->args)-sizeof(int));
+			memset(&cb->args[1], 0, sizeof(cb->args)-sizeof(cb->args[0]));
 		if ((tb = fib_get_table(t))==NULL)
 			continue;
 		if (tb->tb_dump(tb, skb, cb) < 0) 

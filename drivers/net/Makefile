@@ -486,6 +486,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_ELMC_II),y)
+L_OBJS += 3c527.o
+else
+  ifeq ($(CONFIG_ELMC_II),m)
+  M_OBJS += 3c527.o
+  endif
+endif
+
 ifeq ($(CONFIG_EL3),y)
 L_OBJS += 3c509.o
 else

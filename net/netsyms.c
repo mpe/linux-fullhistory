@@ -428,6 +428,7 @@ EXPORT_SYMBOL(register_netdevice);
 EXPORT_SYMBOL(unregister_netdevice);
 EXPORT_SYMBOL(register_netdev);
 EXPORT_SYMBOL(unregister_netdev);
+EXPORT_SYMBOL(netdev_state_change);
 EXPORT_SYMBOL(ether_setup);
 EXPORT_SYMBOL(dev_new_index);
 EXPORT_SYMBOL(dev_get_by_index);
@@ -482,6 +483,7 @@ EXPORT_SYMBOL(qdisc_head);
 EXPORT_SYMBOL(qdisc_create_dflt);
 EXPORT_SYMBOL(noop_qdisc);
 #ifdef CONFIG_NET_SCHED
+PSCHED_EXPORTLIST;
 EXPORT_SYMBOL(pfifo_qdisc_ops);
 EXPORT_SYMBOL(register_qdisc);
 EXPORT_SYMBOL(unregister_qdisc);

@@ -57,6 +57,9 @@ struct rt_key
 	__u32			src;
 	int			iif;
 	int			oif;
+#ifdef CONFIG_IP_ROUTE_FWMARK
+	__u32			fwmark;
+#endif
 	__u8			tos;
 	__u8			scope;
 };
@@ -92,6 +95,16 @@ struct rtable
 };
 
 extern struct rtable 	*rt_hash_table[RT_HASH_DIVISOR];
+
+struct ip_rt_acct
+{
+	__u32 	o_bytes;
+	__u32 	o_packets;
+	__u32 	i_bytes;
+	__u32 	i_packets;
+};
+
+extern struct ip_rt_acct ip_rt_acct[256];
 
 extern void		ip_rt_init(void);
 extern void		ip_rt_redirect(u32 old_gw, u32 dst, u32 new_gw,

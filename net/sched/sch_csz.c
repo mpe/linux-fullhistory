@@ -826,6 +826,12 @@ static int csz_graft(struct Qdisc *sch, unsigned long cl, struct Qdisc *new,
 	return -EINVAL;
 }
 
+static struct Qdisc * csz_leaf(struct Qdisc *sch, unsigned long cl)
+{
+	return NULL;
+}
+
+
 static unsigned long csz_get(struct Qdisc *sch, u32 classid)
 {
 	struct csz_sched_data *q = (struct csz_sched_data *)sch->data;
@@ -839,6 +845,12 @@ static unsigned long csz_get(struct Qdisc *sch, u32 classid)
 
 	return band+1;
 }
+
+static unsigned long csz_bind(struct Qdisc *sch, unsigned long parent, u32 classid)
+{
+	return csz_get(sch, classid);
+}
+
 
 static void csz_put(struct Qdisc *sch, unsigned long cl)
 {
@@ -1006,6 +1018,8 @@ static struct tcf_proto ** csz_find_tcf(struct Qdisc *sch, unsigned long cl)
 struct Qdisc_class_ops csz_class_ops =
 {
 	csz_graft,
+	csz_leaf,
+
 	csz_get,
 	csz_put,
 	csz_change,
@@ -1013,7 +1027,7 @@ struct Qdisc_class_ops csz_class_ops =
 	csz_walk,
 
 	csz_find_tcf,
-	csz_get,
+	csz_bind,
 	csz_put,
 
 #ifdef CONFIG_RTNETLINK
@@ -1036,6 +1050,7 @@ struct Qdisc_ops csz_qdisc_ops =
 	csz_init,
 	csz_reset,
 	csz_destroy,
+	NULL /* csz_change */,
 
 #ifdef CONFIG_RTNETLINK
 	csz_dump,

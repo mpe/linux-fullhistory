@@ -139,6 +139,7 @@ enum
 #define RTPROT_RA	9	/* RDISC/ND router advertisments */
 #define RTPROT_MRT	10	/* Merit MRT */
 #define RTPROT_ZEBRA	11	/* Zebra */
+#define RTPROT_BIRD	12	/* BIRD */
 
 /* rtm_scope
 

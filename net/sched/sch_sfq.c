@@ -380,6 +380,27 @@ static void sfq_perturbation(unsigned long arg)
 	}
 }
 
+static int sfq_change(struct Qdisc *sch, struct rtattr *opt)
+{
+	struct sfq_sched_data *q = (struct sfq_sched_data *)sch->data;
+	struct tc_sfq_qopt *ctl = RTA_DATA(opt);
+
+	if (opt->rta_len < RTA_LENGTH(sizeof(*ctl)))
+		return -EINVAL;
+
+	start_bh_atomic();
+	q->quantum = ctl->quantum ? : psched_mtu(sch->dev);
+	q->perturb_period = ctl->perturb_period*HZ;
+
+	del_timer(&q->perturb_timer);
+	if (q->perturb_period) {
+		q->perturb_timer.expires = jiffies + q->perturb_period;
+		add_timer(&q->perturb_timer);
+	}
+	end_bh_atomic();
+	return 0;
+}
+
 static int sfq_init(struct Qdisc *sch, struct rtattr *opt)
 {
 	struct sfq_sched_data *q = (struct sfq_sched_data *)sch->data;
@@ -399,24 +420,15 @@ static int sfq_init(struct Qdisc *sch, struct rtattr *opt)
 	q->max_depth = 0;
 	q->tail = SFQ_DEPTH;
 	if (opt == NULL) {
-		q->quantum = sch->dev->mtu;
+		q->quantum = psched_mtu(sch->dev);
 		q->perturb_period = 0;
-		if (sch->dev->hard_header)
-			q->quantum += sch->dev->hard_header_len;
 	} else {
-		struct tc_sfq_qopt *ctl = RTA_DATA(opt);
-		if (opt->rta_len < RTA_LENGTH(sizeof(*ctl)))
-			return -EINVAL;
-		q->quantum = ctl->quantum ? : psched_mtu(sch->dev);
-		q->perturb_period = ctl->perturb_period*HZ;
-		/* The rest is compiled in */
+		int err = sfq_change(sch, opt);
+		if (err)
+			return err;
 	}
 	for (i=0; i<SFQ_DEPTH; i++)
 		sfq_link(q, i);
-	if (q->perturb_period) {
-		q->perturb_timer.expires = jiffies + q->perturb_period;
-		add_timer(&q->perturb_timer);
-	}
 	MOD_INC_USE_COUNT;
 	return 0;
 }
@@ -467,6 +479,7 @@ struct Qdisc_ops sfq_qdisc_ops =
 	sfq_init,
 	sfq_reset,
 	sfq_destroy,
+	NULL, /* sfq_change */
 
 #ifdef CONFIG_RTNETLINK
 	sfq_dump,

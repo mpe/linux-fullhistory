@@ -444,6 +444,7 @@ static struct teql_master the_master = {
 	teql_qdisc_init,
 	teql_reset,
 	teql_destroy,
+	NULL,
 },};
 
 

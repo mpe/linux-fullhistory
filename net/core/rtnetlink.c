@@ -41,7 +41,6 @@
 
 #include <linux/inet.h>
 #include <linux/netdevice.h>
-#include <net/pkt_sched.h>
 #include <net/ip.h>
 #include <net/protocol.h>
 #include <net/arp.h>
@@ -49,6 +48,7 @@
 #include <net/tcp.h>
 #include <net/udp.h>
 #include <net/sock.h>
+#include <net/pkt_sched.h>
 
 atomic_t rtnl_rlockct;
 struct wait_queue *rtnl_wait;

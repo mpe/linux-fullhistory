@@ -116,11 +116,15 @@
   -- Added CDROM_DEBUG ioctl. Enable debug messages on-the-fly.
   -- Added CDROM_GET_CAPABILITY ioctl. This relieves userspace programs
   from parsing /proc/sys/dev/cdrom/info.
+  
+  2.54 Mar 15, 1999 - Jens Axboe <axboe@image.dk>
+  -- Check capability mask from low level driver when counting tracks as
+  per suggestion from Corey J. Scotts <cstotts@blue.weeg.uiowa.edu>.
 
 -------------------------------------------------------------------------*/
 
-#define REVISION "Revision: 2.53"
-#define VERSION "Id: cdrom.c 2.53 1999/02/22"
+#define REVISION "Revision: 2.54"
+#define VERSION "Id: cdrom.c 2.54 1999/03/15"
 
 /* I use an error-log mask to give fine grain control over the type of
    messages dumped to the system logs.  The available masks include: */
@@ -601,14 +605,17 @@ void cdrom_count_tracks(struct cdrom_device_info *cdi, tracktype* tracks)
 	tracks->xa=0;
 	tracks->error=0;
 	cdinfo(CD_COUNT_TRACKS, "entering cdrom_count_tracks\n"); 
-        if (!(cdi->ops->capability & CDC_PLAY_AUDIO)) { 
+        if (!(cdi->ops->capability & ~cdi->mask & CDC_PLAY_AUDIO)) { 
                 tracks->error=CDS_NO_INFO;
                 return;
         }        
 	/* Grab the TOC header so we can see how many tracks there are */
-	ret=cdi->ops->audio_ioctl(cdi, CDROMREADTOCHDR, &header);
+	ret = cdi->ops->audio_ioctl(cdi, CDROMREADTOCHDR, &header);
 	if (ret) {
-		tracks->error=(ret == -ENOMEDIUM) ? CDS_NO_DISC : CDS_NO_INFO;
+		if (ret == -ENOMEDIUM)
+			tracks->error = CDS_NO_DISC;
+		else
+			tracks->error = CDS_NO_INFO;
 		return;
 	}	
 	/* check what type of tracks are on this disc */
@@ -729,7 +736,7 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 		cdinfo(CD_DO_IOCTL, "entering CDROMEJECT\n"); 
 		if (!(cdo->capability & ~cdi->mask & CDC_OPEN_TRAY))
 			return -ENOSYS;
-		if (cdi->use_count != 1)
+		if (cdi->use_count != 1 || keeplocked)
 			return -EBUSY;
 		if (cdo->capability & ~cdi->mask & CDC_LOCK)
 			if ((ret=cdo->lock_door(cdi, 0)))
@@ -748,6 +755,8 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 		cdinfo(CD_DO_IOCTL, "entering CDROMEJECT_SW\n"); 
 		if (!(cdo->capability & ~cdi->mask & CDC_OPEN_TRAY))
 			return -ENOSYS;
+		if (keeplocked)
+			return -EBUSY;
 		cdi->options &= ~(CDO_AUTO_CLOSE | CDO_AUTO_EJECT);
 		if (arg)
 			cdi->options |= CDO_AUTO_CLOSE | CDO_AUTO_EJECT;
@@ -778,6 +787,8 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 			if (!(cdo->capability & ~cdi->mask & CDC_LOCK))
 				return -ENOSYS;
 			break;
+		case 0:
+			return cdi->options;
 		/* default is basically CDO_[AUTO_CLOSE|AUTO_EJECT] */
 		default:
 			if (!(cdo->capability & ~cdi->mask & arg))
@@ -814,31 +825,30 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 		if (!(cdo->capability & ~cdi->mask & CDC_RESET))
 			return -ENOSYS;
 		return cdo->reset(cdi);
-	}
+		}
 
 	case CDROM_LOCKDOOR: {
 		cdinfo(CD_DO_IOCTL, "%socking door.\n",arg?"L":"Unl");
-		if (cdo->capability & ~cdi->mask & CDC_LOCK) {
+		if (!(cdo->capability & ~cdi->mask & CDC_LOCK)) {
+			return -EDRIVE_CANT_DO_THIS;
+		} else {
 			keeplocked = arg ? 1 : 0;
 			return cdo->lock_door(cdi, arg);
-		} else
-			return -EDRIVE_CANT_DO_THIS;
-	}
+		}
+		}
 
 	case CDROM_DEBUG: {
 		if (!capable(CAP_SYS_ADMIN))
 			return -EACCES;
 		cdinfo(CD_DO_IOCTL, "%sabling debug.\n",arg?"En":"Dis");
 		debug = arg ? 1 : 0;
-		return 0;
-	}
+		return debug;
+		}
 
 	case CDROM_GET_CAPABILITY: {
 		cdinfo(CD_DO_IOCTL, "entering CDROM_GET_CAPABILITY\n");
 		return cdo->capability;
-	}
-
-
+		}
 
 /* The following function is implemented, although very few audio
  * discs give Universal Product Code information, which should just be

@@ -189,6 +189,48 @@ static struct ip_tunnel * ipgre_tunnel_lookup(u32 remote, u32 local, u32 key)
 	return NULL;
 }
 
+static struct ip_tunnel **ipgre_bucket(struct ip_tunnel *t)
+{
+	u32 remote = t->parms.iph.daddr;
+	u32 local = t->parms.iph.saddr;
+	u32 key = t->parms.i_key;
+	unsigned h = HASH(key);
+	int prio = 0;
+
+	if (local)
+		prio |= 1;
+	if (remote && !MULTICAST(remote)) {
+		prio |= 2;
+		h ^= HASH(remote);
+	}
+
+	return &tunnels[prio][h];
+}
+
+static void ipgre_tunnel_link(struct ip_tunnel *t)
+{
+	struct ip_tunnel **tp = ipgre_bucket(t);
+
+	net_serialize_enter();
+	t->next = *tp;
+	*tp = t;
+	net_serialize_leave();
+}
+
+static void ipgre_tunnel_unlink(struct ip_tunnel *t)
+{
+	struct ip_tunnel **tp;
+
+	for (tp = ipgre_bucket(t); *tp; tp = &(*tp)->next) {
+		if (t == *tp) {
+			net_serialize_enter();
+			*tp = t->next;
+			net_serialize_leave();
+			break;
+		}
+	}
+}
+
 static struct ip_tunnel * ipgre_tunnel_locate(struct ip_tunnel_parm *parms, int create)
 {
 	u32 remote = parms->iph.daddr;
@@ -241,10 +283,7 @@ static struct ip_tunnel * ipgre_tunnel_locate(struct ip_tunnel_parm *parms, int 
 	if (register_netdevice(dev) < 0)
 		goto failed;
 
-	start_bh_atomic();
-	nt->next = t;
-	*tp = nt;
-	end_bh_atomic();
+	ipgre_tunnel_link(nt);
 	/* Do not decrement MOD_USE_COUNT here. */
 	return nt;
 
@@ -256,28 +295,11 @@ failed:
 
 static void ipgre_tunnel_destroy(struct device *dev)
 {
-	struct ip_tunnel *t, **tp;
-	struct ip_tunnel *t0 = (struct ip_tunnel*)dev->priv;
-	u32 remote = t0->parms.iph.daddr;
-	u32 local = t0->parms.iph.saddr;
-	unsigned h = HASH(t0->parms.i_key);
-	int prio = 0;
+	ipgre_tunnel_unlink((struct ip_tunnel*)dev->priv);
 
-	if (local)
-		prio |= 1;
-	if (remote && !MULTICAST(remote)) {
-		prio |= 2;
-		h ^= HASH(remote);
-	}
-	for (tp = &tunnels[prio][h]; (t = *tp) != NULL; tp = &t->next) {
-		if (t == t0) {
-			*tp = t->next;
-			if (dev != &ipgre_fb_tunnel_dev) {
-				kfree(dev);
-				MOD_DEC_USE_COUNT;
-			}
-			break;
-		}
+	if (dev != &ipgre_fb_tunnel_dev) {
+		kfree(dev);
+		MOD_DEC_USE_COUNT;
 	}
 }
 
@@ -848,6 +870,41 @@ ipgre_tunnel_ioctl (struct device *dev, struct ifreq *ifr, int cmd)
 			p.o_key = 0;
 
 		t = ipgre_tunnel_locate(&p, cmd == SIOCADDTUNNEL);
+
+		if (dev != &ipgre_fb_tunnel_dev && cmd == SIOCCHGTUNNEL &&
+		    t != &ipgre_fb_tunnel) {
+			if (t != NULL) {
+				if (t->dev != dev) {
+					err = -EEXIST;
+					break;
+				}
+			} else {
+				unsigned nflags=0;
+
+				t = (struct ip_tunnel*)dev->priv;
+
+				if (MULTICAST(p.iph.daddr))
+					nflags = IFF_BROADCAST;
+				else if (p.iph.daddr)
+					nflags = IFF_POINTOPOINT;
+
+				if ((dev->flags^nflags)&(IFF_POINTOPOINT|IFF_BROADCAST)) {
+					err = -EINVAL;
+					break;
+				}
+				start_bh_atomic();
+				ipgre_tunnel_unlink(t);
+				t->parms.iph.saddr = p.iph.saddr;
+				t->parms.iph.daddr = p.iph.daddr;
+				t->parms.i_key = p.i_key;
+				t->parms.o_key = p.o_key;
+				memcpy(dev->dev_addr, &p.iph.saddr, 4);
+				memcpy(dev->broadcast, &p.iph.daddr, 4);
+				ipgre_tunnel_link(t);
+				end_bh_atomic();
+				netdev_state_change(dev);
+			}
+		}
 
 		if (t) {
 			err = 0;

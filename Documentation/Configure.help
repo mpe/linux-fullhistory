@@ -2251,6 +2251,12 @@ CONFIG_IP_ROUTE_TOS
   you say Y here, you will be able to specify different routes for
   packets with different TOS values.
 
+IP: use FWMARK value as routing key
+CONFIG_IP_ROUTE_FWMARK
+  If you say Y here, you will be able to specify different routes for
+  packets with different FWMARK ("firewalling mark") values
+  (see ipchains(8), "-m" argument).
+
 IP: verbose route monitoring
 CONFIG_IP_ROUTE_VERBOSE
   If you say Y here, which is recommended, then the kernel will print
@@ -5103,7 +5109,7 @@ CONFIG_NET_FASTROUTE
     *** networking options: especially CONFIG*FIREWALL.      ***
 
   However, it will work with all options in CONFIG_IP_ADVANCED_ROUTER
-  section (except for CONFIG_IP_ROUTE_TOS). At the moment, few devices
+  section (except for CONFIG_IP_ROUTE_TOS&FWMARK). At the moment, few devices
   support fast switching (tulip is one of them, modified 8390 can be
   found at ftp://ftp.inr.ac.ru/ip-routing/fastroute-8390.tar.gz). 
 

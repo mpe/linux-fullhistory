@@ -120,6 +120,18 @@ static __inline__ unsigned hash_src(u32 *src)
 	return h & 0xF;
 }
 
+#ifdef CONFIG_NET_CLS_POLICE
+#define RSVP_POLICE() \
+if (f->police) { \
+	int pol_res = tcf_police(skb, f->police); \
+	if (pol_res < 0) continue; \
+	if (pol_res) return pol_res; \
+}
+#else
+#define RSVP_POLICE()
+#endif
+
+
 static int rsvp_classify(struct sk_buff *skb, struct tcf_proto *tp,
 			 struct tcf_result *res)
 {
@@ -137,7 +149,7 @@ static int rsvp_classify(struct sk_buff *skb, struct tcf_proto *tp,
 	struct iphdr *nhptr = skb->nh.iph;
 #endif
 
-#ifndef __i386__
+#if !defined( __i386__) && !defined(__m68k__)
 	if ((unsigned long)nhptr & 3)
 		return -1;
 #endif
@@ -181,13 +193,12 @@ restart:
 				    && src[2] == f->src[2]
 #endif
 				    ) {
+
+					RSVP_POLICE();
+
 matched:
 					if (f->tunnelhdr == 0) {
 						*res = f->res;
-#ifdef CONFIG_NET_CLS_POLICE
-						if (f->police)
-							return tcf_police(skb, f->police);
-#endif
 						return 0;
 					} else {
 						tunnelid = f->res.classid;
@@ -198,8 +209,10 @@ matched:
 			}
 
 			/* And wildcard bucket... */
-			if ((f = s->ht[16]) != NULL)
+			for (f = s->ht[16]; f; f = f->next) {
+				RSVP_POLICE();
 				goto matched;
+			}
 			return -1;
 		}
 	}
@@ -260,7 +273,6 @@ static void rsvp_destroy(struct tcf_proto *tp)
 		struct rsvp_session *s;
 
 		while ((s = sht[h1]) != NULL) {
-
 			sht[h1] = s->next;
 
 			for (h2=0; h2<=16; h2++) {
@@ -270,7 +282,7 @@ static void rsvp_destroy(struct tcf_proto *tp)
 					unsigned long cl;
 
 					s->ht[h2] = f->next;
-					if ((cl = xchg(&f->res.class, 0)) != 0)
+					if ((cl = cls_set_class(&f->res.class, 0)) != 0)
 						tp->q->ops->cl_ops->unbind_tcf(tp->q, cl);
 #ifdef CONFIG_NET_CLS_POLICE
 					tcf_police_release(f->police);
@@ -297,8 +309,11 @@ static int rsvp_delete(struct tcf_proto *tp, unsigned long arg)
 		if (*fp == f) {
 			unsigned long cl;
 
+			net_serialize_enter();
 			*fp = f->next;
-			if ((cl = xchg(&f->res.class, 0)) != 0)
+			net_serialize_leave();
+
+			if ((cl = cls_set_class(&f->res.class, 0)) != 0)
 				tp->q->ops->cl_ops->unbind_tcf(tp->q, cl);
 
 #ifdef CONFIG_NET_CLS_POLICE
@@ -317,12 +332,14 @@ static int rsvp_delete(struct tcf_proto *tp, unsigned long arg)
 			for (sp = &((struct rsvp_head*)tp->root)->ht[h&0xFF];
 			     *sp; sp = &(*sp)->next) {
 				if (*sp == s) {
+					net_serialize_enter();
 					*sp = s->next;
+					net_serialize_leave();
 					kfree(s);
 					return 0;
 				}
 			}
-			
+
 			return 0;
 		}
 	}
@@ -399,7 +416,8 @@ static u32 gen_tunnel(struct rsvp_head *data)
 	return 0;
 }
 
-static int rsvp_change(struct tcf_proto *tp, u32 handle,
+static int rsvp_change(struct tcf_proto *tp, unsigned long base,
+		       u32 handle,
 		       struct rtattr **tca,
 		       unsigned long *arg)
 {
@@ -425,17 +443,20 @@ static int rsvp_change(struct tcf_proto *tp, u32 handle,
 		if (f->handle != handle && handle)
 			return -EINVAL;
 		if (tb[TCA_RSVP_CLASSID-1]) {
-			unsigned long cl = xchg(&f->res.class, 0);
+			unsigned long cl;
+
+			f->res.classid = *(u32*)RTA_DATA(tb[TCA_RSVP_CLASSID-1]);
+			cl = cls_set_class(&f->res.class, tp->q->ops->cl_ops->bind_tcf(tp->q, base, f->res.classid));
 			if (cl)
 				tp->q->ops->cl_ops->unbind_tcf(tp->q, cl);
-			f->res.classid = *(u32*)RTA_DATA(tb[TCA_RSVP_CLASSID-1]);
-			f->res.class = tp->q->ops->cl_ops->bind_tcf(tp->q, f->res.classid);
 		}
 #ifdef CONFIG_NET_CLS_POLICE
 		if (tb[TCA_RSVP_POLICE-1]) {
-			struct tcf_police *police = tcf_police_locate(tb[TCA_RSVP_POLICE-1]);
-
-			tcf_police_release(xchg(&f->police, police));
+			struct tcf_police *police = tcf_police_locate(tb[TCA_RSVP_POLICE-1], tca[TCA_RATE-1]);
+			net_serialize_enter();
+			police = xchg(&f->police, police);
+			net_serialize_leave();
+			tcf_police_release(police);
 		}
 #endif
 		return 0;
@@ -514,17 +535,19 @@ insert:
 
 			f->sess = s;
 			if (f->tunnelhdr == 0)
-				f->res.class = tp->q->ops->cl_ops->bind_tcf(tp->q, f->res.classid);
+				cls_set_class(&f->res.class, tp->q->ops->cl_ops->bind_tcf(tp->q, base, f->res.classid));
 #ifdef CONFIG_NET_CLS_POLICE
 			if (tb[TCA_RSVP_POLICE-1])
-				f->police = tcf_police_locate(tb[TCA_RSVP_POLICE-1]);
+				f->police = tcf_police_locate(tb[TCA_RSVP_POLICE-1], tca[TCA_RATE-1]);
 #endif
 
 			for (fp = &s->ht[h2]; *fp; fp = &(*fp)->next)
 				if (((*fp)->spi.mask&f->spi.mask) != f->spi.mask)
 					break;
 			f->next = *fp;
+			net_serialize_enter();
 			*fp = f;
+			net_serialize_leave();
 			*arg = (unsigned long)f;
 			return 0;
 		}
@@ -546,7 +569,10 @@ insert:
 			break;
 	}
 	s->next = *sp;
+	net_serialize_enter();
 	*sp = s;
+	net_serialize_leave();
+	
 	goto insert;
 
 errout:
@@ -631,6 +657,11 @@ static int rsvp_dump(struct tcf_proto *tp, unsigned long fh,
 #endif
 
 	rta->rta_len = skb->tail - b;
+#ifdef CONFIG_NET_CLS_POLICE
+	if (f->police) {
+		RTA_PUT(skb, TCA_STATS, sizeof(struct tc_stats), &f->police->stats);
+	}
+#endif
 	return skb->len;
 
 rtattr_failure:

@@ -1,7 +1,7 @@
 /*
  *	Linux NET3:	IP/IP protocol decoder. 
  *
- *	Version: $Id: ipip.c,v 1.24 1998/10/03 09:37:35 davem Exp $
+ *	Version: $Id: ipip.c,v 1.25 1999/03/21 05:22:43 davem Exp $
  *
  *	Authors:
  *		Sam Lantinga (slouken@cs.ucdavis.edu)  02/01/95
@@ -157,6 +157,49 @@ static struct ip_tunnel * ipip_tunnel_lookup(u32 remote, u32 local)
 	return NULL;
 }
 
+static struct ip_tunnel **ipip_bucket(struct ip_tunnel *t)
+{
+	u32 remote = t->parms.iph.daddr;
+	u32 local = t->parms.iph.saddr;
+	unsigned h = 0;
+	int prio = 0;
+
+	if (remote) {
+		prio |= 2;
+		h ^= HASH(remote);
+	}
+	if (local) {
+		prio |= 1;
+		h ^= HASH(local);
+	}
+	return &tunnels[prio][h];
+}
+
+
+static void ipip_tunnel_unlink(struct ip_tunnel *t)
+{
+	struct ip_tunnel **tp;
+
+	for (tp = ipip_bucket(t); *tp; tp = &(*tp)->next) {
+		if (t == *tp) {
+			net_serialize_enter();
+			*tp = t->next;
+			net_serialize_leave();
+			break;
+		}
+	}
+}
+
+static void ipip_tunnel_link(struct ip_tunnel *t)
+{
+	struct ip_tunnel **tp = ipip_bucket(t);
+
+	net_serialize_enter();
+	t->next = *tp;
+	*tp = t;
+	net_serialize_leave();
+}
+
 struct ip_tunnel * ipip_tunnel_locate(struct ip_tunnel_parm *parms, int create)
 {
 	u32 remote = parms->iph.daddr;
@@ -208,10 +251,7 @@ struct ip_tunnel * ipip_tunnel_locate(struct ip_tunnel_parm *parms, int create)
 	if (register_netdevice(dev) < 0)
 		goto failed;
 
-	start_bh_atomic();
-	nt->next = t;
-	*tp = nt;
-	end_bh_atomic();
+	ipip_tunnel_link(nt);
 	/* Do not decrement MOD_USE_COUNT here. */
 	return nt;
 
@@ -221,38 +261,19 @@ failed:
 	return NULL;
 }
 
+
 static void ipip_tunnel_destroy(struct device *dev)
 {
-	struct ip_tunnel *t, **tp;
-	struct ip_tunnel *t0 = (struct ip_tunnel*)dev->priv;
-	u32 remote = t0->parms.iph.daddr;
-	u32 local = t0->parms.iph.saddr;
-	unsigned h = 0;
-	int prio = 0;
-
 	if (dev == &ipip_fb_tunnel_dev) {
+		net_serialize_enter();
 		tunnels_wc[0] = NULL;
-		return;
-	}
-
-	if (remote) {
-		prio |= 2;
-		h ^= HASH(remote);
-	}
-	if (local) {
-		prio |= 1;
-		h ^= HASH(local);
-	}
-	for (tp = &tunnels[prio][h]; (t = *tp) != NULL; tp = &t->next) {
-		if (t == t0) {
-			*tp = t->next;
-			kfree(dev);
-			MOD_DEC_USE_COUNT;
-			break;
-		}
+		net_serialize_leave();
+	} else {
+		ipip_tunnel_unlink((struct ip_tunnel*)dev->priv);
+		kfree(dev);
+		MOD_DEC_USE_COUNT;
 	}
 }
-
 
 void ipip_err(struct sk_buff *skb, unsigned char *dp, int len)
 {
@@ -641,6 +662,32 @@ ipip_tunnel_ioctl (struct device *dev, struct ifreq *ifr, int cmd)
 			p.iph.frag_off |= __constant_htons(IP_DF);
 
 		t = ipip_tunnel_locate(&p, cmd == SIOCADDTUNNEL);
+
+		if (dev != &ipip_fb_tunnel_dev && cmd == SIOCCHGTUNNEL &&
+		    t != &ipip_fb_tunnel) {
+			if (t != NULL) {
+				if (t->dev != dev) {
+					err = -EEXIST;
+					break;
+				}
+			} else {
+				if (((dev->flags&IFF_POINTOPOINT) && !p.iph.daddr) ||
+				    (!(dev->flags&IFF_POINTOPOINT) && p.iph.daddr)) {
+					err = -EINVAL;
+					break;
+				}
+				t = (struct ip_tunnel*)dev->priv;
+				start_bh_atomic();
+				ipip_tunnel_unlink(t);
+				t->parms.iph.saddr = p.iph.saddr;
+				t->parms.iph.daddr = p.iph.daddr;
+				memcpy(dev->dev_addr, &p.iph.saddr, 4);
+				memcpy(dev->broadcast, &p.iph.daddr, 4);
+				ipip_tunnel_link(t);
+				end_bh_atomic();
+				netdev_state_change(dev);
+			}
+		}
 
 		if (t) {
 			err = 0;

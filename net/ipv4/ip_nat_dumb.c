@@ -5,7 +5,7 @@
  *
  *		Dumb Network Address Translation.
  *
- * Version:	$Id: ip_nat_dumb.c,v 1.7 1998/10/06 04:49:09 davem Exp $
+ * Version:	$Id: ip_nat_dumb.c,v 1.8 1999/03/21 05:22:40 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -89,6 +89,8 @@ ip_do_nat(struct sk_buff *skb)
 		{
 			struct icmphdr *icmph = (struct icmphdr*)((char*)iph + (iph->ihl<<2));
 			struct   iphdr *ciph;
+			u32 idaddr, isaddr;
+			int updated;
 
 			if ((icmph->type != ICMP_DEST_UNREACH) &&
 			    (icmph->type != ICMP_TIME_EXCEEDED) &&
@@ -100,8 +102,14 @@ ip_do_nat(struct sk_buff *skb)
 			if ((u8*)(ciph+1) > skb->tail)
 				goto truncated;
 
-			if (rt->rt_flags&RTCF_DNAT && ciph->saddr == odaddr)
+			isaddr = ciph->saddr;
+			idaddr = ciph->daddr;
+			updated = 0;
+
+			if (rt->rt_flags&RTCF_DNAT && ciph->saddr == odaddr) {
 				ciph->saddr = iph->daddr;
+				updated = 1;
+			}
 			if (rt->rt_flags&RTCF_SNAT) {
 				if (ciph->daddr != osaddr) {
 					struct   fib_result res;
@@ -115,16 +123,27 @@ ip_do_nat(struct sk_buff *skb)
 #ifdef CONFIG_IP_ROUTE_TOS
 					key.tos = RT_TOS(ciph->tos);
 #endif
+#ifdef CONFIG_IP_ROUTE_FWMARK
+					key.fwmark = 0;
+#endif
 					/* Use fib_lookup() until we get our own
 					 * hash table of NATed hosts -- Rani
 				 	 */
-					if (fib_lookup(&key, &res) != 0)
-						return 0;
-					if (res.r)
+					if (fib_lookup(&key, &res) == 0 && res.r) {
 						ciph->daddr = fib_rules_policy(ciph->daddr, &res, &flags);
-				}
-				else
+						if (ciph->daddr != idaddr)
+							updated = 1;
+					}
+				} else {
 					ciph->daddr = iph->saddr;
+					updated = 1;
+				}
+			}
+			if (updated) {
+				cksum  = &icmph->checksum;
+				/* Using tcpudp primitive. Why not? */
+				check  = csum_tcpudp_magic(ciph->saddr, ciph->daddr, 0, 0, ~(*cksum));
+				*cksum = csum_tcpudp_magic(~isaddr, ~idaddr, 0, 0, ~check);
 			}
 			break;
 		}
