@@ -229,6 +229,7 @@ nfs_readpage(struct file *file, struct page *page)
 
 	dprintk("NFS: nfs_readpage (%p %ld@%ld)\n",
 		page, PAGE_SIZE, page->offset);
+	atomic_inc(&page->count);
 	set_bit(PG_locked, &page->flags);
 
 	/*
@@ -240,18 +241,24 @@ nfs_readpage(struct file *file, struct page *page)
 	 */
 	error = nfs_wb_page(inode, page);
 	if (error)
-		return error;
+		goto out_error;
 
 	error = -1;
-	atomic_inc(&page->count);
 	if (!IS_SWAPFILE(inode) && !PageError(page) &&
 	    NFS_SERVER(inode)->rsize >= PAGE_SIZE)
 		error = nfs_readpage_async(dentry, inode, page);
-	if (error < 0) {	/* couldn't enqueue */
-		error = nfs_readpage_sync(dentry, inode, page);
-		if (error < 0 && IS_SWAPFILE(inode))
-			printk("Aiee.. nfs swap-in of page failed!\n");
-		free_page(page_address(page));
-	}
+	if (error >= 0)
+		goto out;
+
+	error = nfs_readpage_sync(dentry, inode, page);
+	if (error < 0 && IS_SWAPFILE(inode))
+		printk("Aiee.. nfs swap-in of page failed!\n");
+	goto out_free;
+
+out_error:
+	clear_bit(PG_locked, &page->flags);
+out_free:
+	free_page(page_address(page));
+out:
 	return error;
 }

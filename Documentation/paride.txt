@@ -42,6 +42,7 @@ parallel port IDE subsystem, including:
 	SyQuest EZ-135, EZ-230 & SparQ drives
 	Avatar Shark
 	Imation Superdisk LS-120
+	Maxell Superdisk LS-120
 	FreeCom Power CD 
 	Hewlett-Packard 5GB and 8GB tape drives
 	Hewlett-Packard 7100 and 7200 CD-RW drives
@@ -76,6 +77,7 @@ support is available for almost all known adapter protocols:
         epia    Shuttle EPIA                           (UK)
 	fit2    FIT TD-2000			       (US)
 	fit3    FIT TD-3000			       (US)
+	friq    Freecom IQ cable                       (DE)
         frpw    Freecom Power                          (DE)
         kbic    KingByte KBIC-951A and KBIC-971A       (TW)
 	ktti    KT Technology PHd adapter              (SG)
@@ -111,10 +113,12 @@ and high-level drivers that you would use:
 	MicroSolutions          8000t tape      pt      bpck
 	SyQuest			EZ, SparQ	pd	epat
 	Imation			Superdisk	pf	epat
+	Maxell                  Superdisk       pf      friq
 	Avatar			Shark		pd	epat
 	FreeCom			CD-ROM		pcd	frpw
 	Hewlett-Packard		5GB Tape	pt	epat
-	Hewlett-Packard		7100/7200	pg	epat
+	Hewlett-Packard		7200e (CD)	pcd	epat
+	Hewlett-Packard		7200e (CD-R)	pg	epat
 
 2.1  Configuring built-in drivers
 
@@ -299,7 +303,6 @@ and LS-120 drives.  Traditionally, media for these devices are not
 partitioned.  Consequently, the pf driver does not support partitioned
 media.  This may be changed in a future version of the driver. 
 
-
 2.5  Using the pt driver
 
 The pt driver for parallel port ATAPI tape drives is a minimal driver.
@@ -307,26 +310,28 @@ It does not yet support many of the standard tape ioctl operations.
 For best performance, a block size of 32KB should be used.  You will
 probably want to set the parallel port delay to 0, if you can.
 
-
 2.6  Using the pg driver
 
 The pg driver can be used in conjunction with the cdrecord program
-to create CD-ROMs.  Please get cdrecord version 1.6.1a3 or later
-from ftp://ftp.fokus.gmd.de/pub/unix/cdrecord/ (you may have to look
-in the alpha subdirectory).  To record CD-R media your parallel port
-should ideally be set to EPP mode, and the "port delay" should be
-set to 0.  With those settings it is possible to record at 2x speed
-without any buffer underruns.  If you cannot get the driver to work
+to create CD-ROMs.  Please get cdrecord version 1.6.1 or later
+from ftp://ftp.fokus.gmd.de/pub/unix/cdrecord/ .  To record CD-R media 
+your parallel port should ideally be set to EPP mode, and the "port delay" 
+should be set to 0.  With those settings it is possible to record at 2x 
+speed without any buffer underruns.  If you cannot get the driver to work
 in EPP mode, try to use "bidirectional" or "PS/2" mode and 1x speeds only.
 
 
 3. Troubleshooting
+
+3.1  Use EPP mode if you can
 
 The most common problems that people report with the PARIDE drivers
 concern the parallel port CMOS settings.  At this time, none of the
 PARIDE protocol modules support ECP mode, or any ECP combination modes.
 If you are able to do so, please set your parallel port into EPP mode
 using your CMOS setup procedure.
+
+3.2  Check the port delay
 
 Some parallel ports cannot reliably transfer data at full speed.  To
 offset the errors, the PARIDE protocol modules introduce a "port
@@ -340,6 +345,25 @@ port delay.   The delay can be programmed using the "driveN" parameters
 to each of the high-level drivers.  Please see the notes above, or
 read the comments at the beginning of the driver source files in
 linux/drivers/block/paride.
+
+3.3  Some drives need a printer reset
+
+There appear to be a number of "noname" external drives on the market
+that do not always power up correctly.  We have noticed this with some
+drives based on OnSpec and older Freecom adapters.  In these rare cases,
+the adapter can often be reinitialised by issuing a "printer reset" on
+the parallel port.  As the reset operation is potentially disruptive in 
+multiple device environments, the PARIDE drivers will not do it 
+automatically.  You can however, force a printer reset by doing:
+
+	insmod lp
+	rmmod lp
+
+If you have one of these marginal cases, you should probably build
+your paride drivers as modules, and arrange to do the printer reset
+before loading the PARIDE drivers. 
+
+3.4  Use the verbose option and dmesg if you need help
 
 While a lot of testing has gone into these drivers to make them work
 as smoothly as possible, problems will arise.  If you do have problems,
@@ -368,6 +392,8 @@ include that with your bug report.  You can submit a bug report in one
 of two ways.  Either send it directly to the author of the PARIDE suite,
 by e-mail to grant@torque.net, or join the linux-parport mailing list
 and post your report there.
+
+3.5  For more information or help
 
 You can join the linux-parport mailing list by sending a mail message
 to 

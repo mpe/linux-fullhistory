@@ -25,6 +25,8 @@
 * Oct 15, 1997  Farhan Thawar   changed wan_encapsulate to add a pad byte of 0
 * Apr 20, 1998	Alan Cox	Fixed 2.1 symbols
 * May 17, 1998  K. Baranowski	Fixed SNAP encapsulation in wan_encapsulate
+* Dec 15, 1998  Arnaldo Melo    support for firmwares of up to 128000 bytes
+*                               check wandev->setup return value
 *****************************************************************************/
 
 #include <linux/stddef.h>	/* offsetof(), etc. */
@@ -459,7 +461,7 @@ static int device_setup (wan_device_t* wandev, wandev_conf_t* u_conf)
 
 	if (conf->data_size && conf->data)
 	{
-		if(conf->data_size > 64000 || conf->data_size < 0){
+		if(conf->data_size > 128000 || conf->data_size < 0){
 			goto bail;
 		}
 		data = kmalloc(conf->data_size, GFP_KERNEL);
@@ -468,8 +470,7 @@ static int device_setup (wan_device_t* wandev, wandev_conf_t* u_conf)
 			if(!copy_from_user(data, conf->data, conf->data_size))
 			{
 				conf->data=data;
-				wandev->setup(wandev,conf);
-				err = 0;
+				err = wandev->setup(wandev,conf);
 			}
 			else 
 				err = -ENOBUFS;

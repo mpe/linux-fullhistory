@@ -798,6 +798,16 @@ CONFIG_PARIDE_FIT3
   called fit3.o. You must also have a high-level driver for the type
   of device that you want to support.
 
+Freecom IQ ASIC-2 protocol
+CONFIG_PARIDE_FRIQ
+  This option enables support for version 2 of the Freecom IQ parallel
+  port IDE adapter.  This adapter is used by the Maxell Superdisk 
+  drive.  If you chose to build PARIDE support into your kernel, you
+  may answer Y here to build in the protocol driver, otherwise you
+  should answer M to build it as a loadable module. The module will be
+  called friq.o. You must also have a high-level driver for the type
+  of device that you want to support. 
+
 FreeCom power protocol
 CONFIG_PARIDE_FRPW
   This option enables support for the Freecom power parallel port IDE

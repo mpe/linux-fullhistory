@@ -363,6 +363,11 @@ S: 98 Paxton Street
 S: East Malvern, Victoria, 3145
 S: Australia
 
+N: Neil Conway
+E: nconway.list@ukaea.org.uk
+D: Assorted sched/mm titbits
+S: Oxfordshire, UK.
+
 N: Alan Cox
 W: http://roadrunner.swansea.linux.org.uk/alan.shtml
 E: alan@lxorguk.ukuu.org.uk
@@ -1270,6 +1275,14 @@ D: 8 bit XT hard disk driver for OMTI5520
 S: Schloessleinsgasse 31
 S: D-90453 Nuernberg
 S: Germany
+
+N: Arnaldo Carvalho de Melo
+E: acme@conectiva.com.br
+D: wanrouter hacking
+D: cyclades 2X sync card driver (still in early devel stage)
+S: R. Prof. Rubens Elke Braga, 558 - Parolin
+S: 80220-320 Curitiba - Parana
+S: Brazil
 
 N: Michael Meskes
 E: meskes@debian.org

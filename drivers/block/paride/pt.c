@@ -471,7 +471,7 @@ static int pt_poll_dsc( int unit, int pause, int tmo, char *msg )
 
 {	int	k, e, s;
 
-	k = 0;
+	k = 0; e = 0; s = 0;
 	while (k < tmo) {
 		pt_sleep(pause);
 		k++;

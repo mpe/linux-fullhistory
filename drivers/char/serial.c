@@ -194,7 +194,7 @@ static struct serial_uart_config uart_config[] = {
 	{ "16550", 1, 0 }, 
 	{ "16550A", 16, UART_CLEAR_FIFO | UART_USE_FIFO }, 
 	{ "cirrus", 1, 0 }, 
-	{ "ST16650", 1, UART_CLEAR_FIFO |UART_STARTECH }, 
+	{ "ST16650", 1, UART_CLEAR_FIFO | UART_STARTECH }, 
 	{ "ST16650V2", 32, UART_CLEAR_FIFO | UART_USE_FIFO |
 		  UART_STARTECH }, 
 	{ "TI16750", 64, UART_CLEAR_FIFO | UART_USE_FIFO},
@@ -2899,8 +2899,8 @@ static unsigned detect_uart_irq (struct serial_state * state)
  * This routine is called by rs_init() to initialize a specific serial
  * port.  It determines what type of UART chip this serial port is
  * using: 8250, 16450, 16550, 16550A.  The important question is
- * whether or not this UART is a 16550A or not, since this will
- * determine whether or not we can use its FIFO features or not.
+ * whether or not this UART is a 16550A, since this will determine
+ * whether or not we can use its FIFO features.
  */
 static void autoconfig(struct serial_state * state)
 {

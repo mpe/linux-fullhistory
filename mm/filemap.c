@@ -141,10 +141,12 @@ int shrink_mmap(int priority, int gfp_mask)
 			clock = page->map_nr;
 		}
 		
-		if (PageLocked(page))
+		if (test_and_clear_bit(PG_referenced, &page->flags))
 			continue;
 
-		if (test_and_clear_bit(PG_referenced, &page->flags))
+		/* Decrement count only for non-referenced pages */
+		count--;
+		if (PageLocked(page))
 			continue;
 
 		if ((gfp_mask & __GFP_DMA) && !PageDMA(page))
@@ -176,7 +178,7 @@ int shrink_mmap(int priority, int gfp_mask)
 			return 1;
 		}
 
-	} while (--count >= 0);
+	} while (count > 0);
 	return 0;
 }
 

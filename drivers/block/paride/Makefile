@@ -147,6 +147,15 @@ else
   endif
 endif
 
+
+ifeq ($(CONFIG_PARIDE_FRIQ),y)
+  LX_OBJS += friq.o
+else
+  ifeq ($(CONFIG_PARIDE_FRIQ),m)
+    M_OBJS += friq.o
+  endif
+endif
+
 ifeq ($(CONFIG_PARIDE_ON20),y)
   LX_OBJS += on20.o
 else

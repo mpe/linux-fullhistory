@@ -5,6 +5,12 @@
 	frpw.c is a low-level protocol driver for the Freecom "Power"
 	parallel port IDE adapter.
 	
+	Some applications of this adapter may require a "printer" reset
+	prior to loading the driver.  This can be done by loading and
+	unloading the "lp" driver, or it can be done by this driver
+	if you define FRPW_HARD_RESET.  The latter is not recommended
+	as it may upset devices on other ports.
+
 */
 
 /* Changes:
@@ -13,10 +19,11 @@
 			       fix chip detect
 			       added EPP-16 and EPP-32
 	1.02    GRG 1998.09.23 added hard reset to initialisation process
+	1.03    GRG 1998.12.14 made hard reset conditional
 
 */
 
-#define	FRPW_VERSION	"1.02" 
+#define	FRPW_VERSION	"1.03" 
 
 #include <linux/module.h>
 #include <linux/delay.h>
@@ -185,8 +192,10 @@ static int frpw_test_pnp ( PIA *pi )
 
 {	int olddelay, a, b;
 
+#ifdef FRPW_HARD_RESET
         w0(0); w2(8); udelay(50); w2(0xc);   /* parallel bus reset */
         mdelay(1500);
+#endif
 
 	olddelay = pi->delay;
 	pi->delay = 10;

@@ -17,7 +17,7 @@ struct irqaction {
 
 extern volatile unsigned char bh_running;
 
-extern int bh_mask_count[32];
+extern atomic_t bh_mask_count[32];
 extern unsigned long bh_active;
 extern unsigned long bh_mask;
 extern void (*bh_base[32])(void);

@@ -11,10 +11,12 @@
 
         1.01    GRG 1998.05.06 init_proto, release_proto
 	1.02    GRG 1998.09.23 updates for the -E rev chip
+	1.03    GRG 1998.12.14 fix for slave drives
+	1.04    GRG 1998.12.20 yet another bug fix
 
 */
 
-#define ON26_VERSION      "1.02"
+#define ON26_VERSION      "1.04"
 
 #include <linux/module.h>
 #include <linux/delay.h>
@@ -118,9 +120,11 @@ static void on26_disconnect ( PIA *pi )
         w2(pi->saved_r2);
 } 
 
+#define	RESET_WAIT  200
+
 static int on26_test_port( PIA *pi)  /* hard reset */
 
-{       int     i, m, d;
+{       int     i, m, d, x, y;
 
         pi->saved_r0 = r0();
         pi->saved_r2 = r2();
@@ -151,10 +155,17 @@ static int on26_test_port( PIA *pi)  /* hard reset */
             
             on26_write_regr(pi,0,6,0xa0);
 
-            for (i=0;i<100;i++) {
-                if (!(on26_read_regr(pi,0,7) & 0x80)) break;
-                udelay(100000);
+            for (i=0;i<RESET_WAIT;i++) {
+                on26_write_regr(pi,0,6,0xa0);
+                x = on26_read_regr(pi,0,7);
+                on26_write_regr(pi,0,6,0xb0);
+                y = on26_read_regr(pi,0,7);
+                if (!((x&0x80)||(y&0x80))) break;
+                mdelay(100);
             }
+
+	    if (i == RESET_WAIT) 
+		printk("on26: Device reset failed (%x,%x)\n",x,y);
 
             w0(4); P1; w0(4); P1;
         }
@@ -189,7 +200,7 @@ static void on26_read_block( PIA *pi, char * buf, int count )
         case 1: w0(1); P1; w0(1); P2; w0(2); P1; w0(0x19); P2; w0(0); P1;
 		udelay(10);
                 for (k=0;k<count/2;k++) {
-                        w2(0x26); buf[2*k] = r0(); 
+                        w2(0x26); buf[2*k] = r0();  
 			w2(0x24); buf[2*k+1] = r0();
                 }
                 w0(2); P1; w0(9); P2;

@@ -93,4 +93,7 @@ static __inline__ int irq_cannonicalize(int irq)
 extern void disable_irq(unsigned int);
 extern void enable_irq(unsigned int);
 
+extern void (*perf_irq)(unsigned long, struct pt_regs *);
+
+
 #endif /* _ALPHA_IRQ_H */

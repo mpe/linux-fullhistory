@@ -6,6 +6,9 @@
  * do_bottom_half() runs at normal kernel priority: all interrupts
  * enabled.  do_bottom_half() is atomic with respect to itself: a
  * bottom_half handler need not be re-entrant.
+ *
+ * Fixed a disable_bh()/enable_bh() race (was causing a console lockup)
+ * due bh_mask_count not atomic handling. Copyright (C) 1998  Andrea Arcangeli
  */
 
 #include <linux/mm.h>
@@ -17,7 +20,7 @@
 
 /* intr_count died a painless death... -DaveM */
 
-int bh_mask_count[32];
+atomic_t bh_mask_count[32];
 unsigned long bh_active = 0;
 unsigned long bh_mask = 0;
 void (*bh_base[32])(void);
