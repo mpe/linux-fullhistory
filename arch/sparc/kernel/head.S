@@ -263,7 +263,7 @@ C_LABEL(trapbase):
         TRAP_ENTRY_INTERRUPT(11)            /* Interrupt Level 11 */
         TRAP_ENTRY_INTERRUPT(12)            /* Interrupt Level 12 */
         TRAP_ENTRY_INTERRUPT(13)            /* Interrupt Level 13 */
-        TRAP_ENTRY(0x27, sparc_timer)       /* Interrupt Level 14 */
+        TRAP_ENTRY_TIMER                    /* Interrupt Level 14 */
         TRAP_ENTRY_INTERRUPT_NMI(15, linux_trap_nmi) /* Level 15 (nmi) */
 
 	TRAP_ENTRY(0x20, my_trap_handler)   /* General Register Access Error */
@@ -370,7 +370,7 @@ C_LABEL(trapbase):
 	TRAP_ENTRY(0x85, my_trap_handler)   /* Software Trap                 */
 	TRAP_ENTRY(0x86, my_trap_handler)   /* Fix Unaligned Access Trap XXX */
 	TRAP_ENTRY(0x87, my_trap_handler)   /* Integer Overflow Trap XXX     */
-	TRAP_ENTRY(0x88, my_trap_handler)   /* Software Trap                 */
+	TRAP_ENTRY(0x88, my_trap_handler)   /* Slowaris System Call          */
 	TRAP_ENTRY(0x89, my_trap_handler)   /* NetBSD System Call            */
 	TRAP_ENTRY(0x8a, my_trap_handler)   /* Software Trap                 */
 	TRAP_ENTRY(0x8b, my_trap_handler)   /* Software Trap                 */
@@ -725,10 +725,7 @@ rest_of_boot:
 
 		sta	%l1, [%l0] ASI_PTE
 	
-		or	%g0, INTS_ENAB, %l1
-		nop
-		nop
-
+		or	%g0, 0x1, %l1
 		stb	%l1, [%l0]
 	
 

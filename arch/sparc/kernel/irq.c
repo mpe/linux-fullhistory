@@ -30,6 +30,11 @@
 #include <asm/ptrace.h>
 #include <asm/system.h>
 #include <asm/psr.h>
+#include <asm/vaddrs.h>
+#include <asm/clock.h>
+#include <asm/openprom.h>
+
+#define DEBUG_IRQ
 
 void disable_irq(unsigned int irq_nr)
 {
@@ -43,7 +48,7 @@ void disable_irq(unsigned int irq_nr)
    * have to do here is frob the bits.
    */
 
-  int_reg = (char *) IRQ_ENA_ADR;
+  int_reg = (unsigned char *) IRQ_ENA_ADR;
 
   switch(irq_nr)
     {
@@ -78,7 +83,7 @@ void disable_irq(unsigned int irq_nr)
 void enable_irq(unsigned int irq_nr)
 {
   unsigned long flags;
-  unsigned int *int_reg;
+  unsigned char *int_reg;
   
   save_flags(flags);
   cli();
@@ -87,8 +92,12 @@ void enable_irq(unsigned int irq_nr)
    * have to do here is frob the bits.
    */
 
-  int_reg = (unsigned int *) IRQ_ENA_ADR;
+  int_reg = (unsigned char *) IRQ_ENA_ADR;
   
+#ifdef DEBUG_IRQ
+  printk(" --- Enabling IRQ level %d ---\n", irq_nr);
+#endif
+
   switch(irq_nr)
     {
     case 1:
@@ -116,6 +125,7 @@ void enable_irq(unsigned int irq_nr)
     };
 
   restore_flags(flags);
+
   return;
 }
 
@@ -163,7 +173,7 @@ void free_irq(unsigned int irq)
         unsigned long flags;
 
         if (irq > 14) {  /* 14 irq levels on the sparc */
-                printk("Trying to free IRQ%d\n", irq);
+                printk("Trying to free IRQ %d\n", irq);
                 return;
         }
         if (!action->handler) {
@@ -188,7 +198,7 @@ static void handle_nmi(struct pt_regs * regs)
 }
 #endif
 
-static void unexpected_irq(int irq, struct pt_regs * regs)
+void unexpected_irq(int irq, struct pt_regs * regs)
 {
         int i;
 
@@ -230,6 +240,28 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 }
 
 /*
+ * Since we need to special things to clear up the clock chip around
+ * the do_timer() call we have a special version of do_IRQ for the
+ * level 14 interrupt which does these things.
+ */
+
+asmlinkage void do_sparc_timer(int irq, struct pt_regs * regs)
+{
+  struct irqaction *action = irq + irq_action;
+  register volatile int clear;
+
+  kstat.interrupts[irq]++;
+
+  /* I do the following already in the entry code, better safe than
+   * sorry for now. Reading the limit register clears the interrupt.
+   */
+  clear = TIMER_STRUCT->timer_limit14;
+
+  action->handler(irq, regs);
+  return;
+}
+
+/*
  * do_fast_IRQ handles IRQ's that don't need the fancy interrupt return
  * stuff - the handler is also running with interrupts disabled unless
  * it explicitly enables them later.
@@ -241,6 +273,8 @@ asmlinkage void do_fast_IRQ(int irq)
   return;
 }
 
+extern int first_descent;
+extern void probe_clock(int);
 		
 int request_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
 	unsigned long irqflags, const char * devname)
@@ -252,7 +286,10 @@ int request_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
     return -EINVAL;
 
   if(irq == 0)  /* sched_init() requesting the timer IRQ */
-    irq = 14;
+    {
+      irq = 14;
+      probe_clock(first_descent);
+    }
 
   action = irq + irq_action;
 
@@ -263,6 +300,7 @@ int request_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
     return -EINVAL;
 
   save_flags(flags);
+
   cli();
 
   action->handler = handler;
@@ -273,6 +311,7 @@ int request_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
   enable_irq(irq);
 
   restore_flags(flags);
+
   return 0;
 }
 

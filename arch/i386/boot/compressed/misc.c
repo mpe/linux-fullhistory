@@ -107,7 +107,7 @@ void *malloc(int size)
 	}
 	if (free_mem_ptr < 0x90000)
 	return p;
-	puts("memory is tight...");
+	puts("large kernel, low 1M tight...");
 	free_mem_ptr = (long)input_data;
 	}
 }

@@ -156,7 +156,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	 */
 
 	/* Make the kernel text unwritable and cacheable, the prom
-	 * loaded out text as writable, only sneaky sunos kernels need
+	 * loaded our text as writable, only sneaky sunos kernels need
 	 * self-modifying code.
 	 */
 

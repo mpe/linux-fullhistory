@@ -32,6 +32,8 @@
 #include "hosts.h"
 #include "constants.h"
 
+#undef USE_STATIC_SCSI_MEMORY
+
 /*
 static const char RCSid[] = "$Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/scsi.c,v 1.5 1993/09/24 12:45:18 drew Exp drew $";
 */
@@ -148,6 +150,7 @@ static struct blist blacklist[] =
    {"CHINON","CD-ROM CDS-431","H42"},  /* Locks up if polled for lun != 0 */
    {"CHINON","CD-ROM CDS-535","Q14"}, /* Lockup if polled for lun != 0 */
    {"DENON","DRD-25X","V"},   /* A cdrom that locks up when probed at lun != 0 */
+   {"HITACHI","DK312C","CM81"},   /* Responds to all lun - dtg */
    {"HITACHI","DK314C","CR21" }, /* responds to all lun */
    {"IMS", "CDD521/10","2.06"},   /* Locks-up when LUN>0 polled. */
    {"MAXTOR","XT-3280","PR02"},   /* Locks-up when LUN>0 polled. */
@@ -190,8 +193,8 @@ static int blacklisted(unsigned char * response_data){
     if(memcmp(blacklist[i].model, pnt,
 	       strlen(blacklist[i].model))) continue;
     return 1;
-  };
-};
+  }
+}
 
 /*
  *	As the actual SCSI command runs in the background, we must set up a
@@ -305,43 +308,39 @@ void scan_scsis (struct Scsi_Host * shpnt)
   unsigned char * scsi_result;
   Scsi_Device * SDpnt, *SDtail;
   struct Scsi_Device_Template * sdtpnt;
-  Scsi_Cmnd  SCmd;
+  Scsi_Cmnd  *SCpnt;
 
-  memset(&SCmd, 0,  sizeof(SCmd));
   ++in_scan_scsis;
   lun = 0;
   type = -1;
-  SCmd.next = NULL;
-  SCmd.prev = NULL;
+  SCpnt = (Scsi_Cmnd *) scsi_init_malloc(sizeof(Scsi_Cmnd), GFP_ATOMIC|GFP_DMA);
   SDpnt = (Scsi_Device *) scsi_init_malloc(sizeof (Scsi_Device), GFP_ATOMIC);
-  SCmd.device = SDpnt;  /* This was really needed! (DB) */
-  memset(SDpnt, 0, sizeof(Scsi_Device));
   SDtail = scsi_devices;
-  if(scsi_devices) {
-    while(SDtail->next) SDtail = SDtail->next;
-  }
+
+  if(scsi_devices) while(SDtail->next) SDtail = SDtail->next;
 
   /* Make sure we have something that is valid for DMA purposes */
   scsi_result = ((current == task[0]  || !shpnt->unchecked_isa_dma)
 		 ?  &scsi_result0[0] : scsi_malloc(512));
 
 
-  shpnt->host_queue = &SCmd;  /* We need this so that
-					 commands can time out */
+  shpnt->host_queue = SCpnt;  /* We need this so that commands can time out */
+
   for (dev = 0; dev < 8; ++dev)
     if (shpnt->this_id != dev)
+
 /*
  * We need the for so our continue, etc. work fine.
  */
-
       for (lun = 0; lun < max_scsi_luns; ++lun)
 	{
+	  memset(SDpnt, 0, sizeof(Scsi_Device));
 	  SDpnt->host = shpnt;
 	  SDpnt->id = dev;
 	  SDpnt->lun = lun;
-	  SDpnt->device_wait = NULL;
-	  SDpnt->next = NULL;
-	  SDpnt->attached = 0;
+
+	  /* Some low level driver could use device->type (DB) */
+	  SDpnt->type = -1;
 /*
  * Assume that the device will have handshaking problems, and then
  * fix this field later if it turns out it doesn't.
@@ -350,59 +349,55 @@ void scan_scsis (struct Scsi_Host * shpnt)
 
 	  scsi_cmd[0] = TEST_UNIT_READY;
 	  scsi_cmd[1] = lun << 5;
-	  scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[5] = 0;
-	  scsi_cmd[4] = 0;
+	  scsi_cmd[2] = scsi_cmd[3] = scsi_cmd[4] = scsi_cmd[5] = 0;
 
-	  SCmd.host = shpnt;
-	  SCmd.target = dev;
-	  SCmd.lun = lun;
+	  memset(SCpnt, 0,  sizeof(Scsi_Cmnd));
+	  SCpnt->host = SDpnt->host;
+	  SCpnt->device = SDpnt;
+	  SCpnt->target = SDpnt->id;
+	  SCpnt->lun = SDpnt->lun;
 
-	  SCmd.request.sem = NULL;  /* Used for mutex if loading devices after boot */
-	  SCmd.request.dev = 0xffff; /* Mark not busy */
-	  SCmd.use_sg  = 0;
-	  SCmd.cmd_len = 0;
-	  SCmd.old_use_sg  = 0;
-	  SCmd.transfersize = 0;
-	  SCmd.underflow = 0;
+	  /* Used for mutex if loading devices after boot */
+	  SCpnt->request.sem = NULL;
 
-	  scsi_do_cmd (&SCmd,
-		       (void *)  scsi_cmd, (void *)
-		       scsi_result, 256,  scan_scsis_done,
-		       SCSI_TIMEOUT + 400, 5);
+	  SCpnt->request.dev = 0xffff; /* Mark not busy */
 
-	  /* Wait for command to finish.  Use simple wait if we are booting, else
+	  scsi_do_cmd (SCpnt, (void *)  scsi_cmd, (void *) scsi_result,
+		       256,  scan_scsis_done, SCSI_TIMEOUT + 400, 5);
+
+	  /* Wait for command to finish. Use simple wait if we are booting, else
 	     do it right and use a mutex */
 
-	  if (current == task[0]){
-	    while (SCmd.request.dev != 0xfffe);
-	  } else {
-	    if (SCmd.request.dev != 0xfffe){
+	  if (current == task[0])
+	      while (SCpnt->request.dev != 0xfffe);
+	  else if (SCpnt->request.dev != 0xfffe) {
 	      struct semaphore sem = MUTEX_LOCKED;
-	      SCmd.request.sem = &sem;
+
+	      SCpnt->request.sem = &sem;
 	      down(&sem);
+
 	      /* Hmm.. Have to ask about this one */
-	      while (SCmd.request.dev != 0xfffe) schedule();
-	    }
-	  }
+	      while (SCpnt->request.dev != 0xfffe) schedule();
+	      }
 
 #if defined(DEBUG) || defined(DEBUG_INIT)
 	  printk("scsi: scan SCSIS id %d lun %d\n", dev, lun);
-	  printk("scsi: return code %08x\n", SCmd.result);
+	  printk("scsi: return code %08x\n", SCpnt->result);
 #endif
 
 
-	  if(SCmd.result) {
-	    if ((driver_byte(SCmd.result)  & DRIVER_SENSE) &&
-		((SCmd.sense_buffer[0] & 0x70) >> 4) == 7) {
-	      if (SCmd.sense_buffer[2] &0xe0)
+	  if(SCpnt->result) {
+	    if ((driver_byte(SCpnt->result)  & DRIVER_SENSE) &&
+		((SCpnt->sense_buffer[0] & 0x70) >> 4) == 7) {
+	      if (SCpnt->sense_buffer[2] &0xe0)
 		continue; /* No devices here... */
-	      if(((SCmd.sense_buffer[2] & 0xf) != NOT_READY) &&
-		 ((SCmd.sense_buffer[2] & 0xf) != UNIT_ATTENTION))
+	      if(((SCpnt->sense_buffer[2] & 0xf) != NOT_READY) &&
+		 ((SCpnt->sense_buffer[2] & 0xf) != UNIT_ATTENTION))
 		continue;
 	    }
 	    else
 	      break;
-	  };
+	  }
 
 #if defined (DEBUG) || defined(DEBUG_INIT)
 	  printk("scsi: performing INQUIRY\n");
@@ -411,7 +406,6 @@ void scan_scsis (struct Scsi_Host * shpnt)
 	  /*
 	   * Build an INQUIRY command block.
 	   */
-
 	  scsi_cmd[0] = INQUIRY;
 	  scsi_cmd[1] = (lun << 5) & 0xe0;
 	  scsi_cmd[2] = 0;
@@ -419,27 +413,25 @@ void scan_scsis (struct Scsi_Host * shpnt)
 	  scsi_cmd[4] = 255;
 	  scsi_cmd[5] = 0;
 
-	  SCmd.request.dev = 0xffff; /* Mark not busy */
-	  SCmd.cmd_len = 0;
+	  SCpnt->request.dev = 0xffff; /* Mark not busy */
+	  SCpnt->cmd_len = 0;
 
-	  scsi_do_cmd (&SCmd,
-		       (void *)  scsi_cmd, (void *)
-		       scsi_result, 256,  scan_scsis_done,
-		       SCSI_TIMEOUT, 3);
+	  scsi_do_cmd (SCpnt, (void *)  scsi_cmd, (void *) scsi_result,
+		       256,  scan_scsis_done, SCSI_TIMEOUT, 3);
 
-	  if (current == task[0]){
-	    while (SCmd.request.dev != 0xfffe);
-	  } else {
-	    if (SCmd.request.dev != 0xfffe){
+	  if (current == task[0])
+	      while (SCpnt->request.dev != 0xfffe);
+	  else if (SCpnt->request.dev != 0xfffe) {
 	      struct semaphore sem = MUTEX_LOCKED;
-	      SCmd.request.sem = &sem;
-	      down(&sem);
-	      /* Hmm.. Have to ask about this one */
-	      while (SCmd.request.dev != 0xfffe) schedule();
-	    }
-	  }
 
-	  the_result = SCmd.result;
+	      SCpnt->request.sem = &sem;
+	      down(&sem);
+
+	      /* Hmm.. Have to ask about this one */
+	      while (SCpnt->request.dev != 0xfffe) schedule();
+	      }
+
+	  the_result = SCpnt->result;
 
 #if defined(DEBUG) || defined(DEBUG_INIT)
 	  if (!the_result)
@@ -578,25 +570,24 @@ void scan_scsis (struct Scsi_Host * shpnt)
 		    scsi_cmd[4] = 0x2a;
 		    scsi_cmd[5] = 0;
 
-		    SCmd.request.dev = 0xffff; /* Mark not busy */
-		    SCmd.cmd_len = 0;
+		    SCpnt->request.dev = 0xffff; /* Mark not busy */
+		    SCpnt->cmd_len = 0;
 
-		    scsi_do_cmd (&SCmd,
-				 (void *)  scsi_cmd, (void *)
-				 scsi_result, 0x2a,  scan_scsis_done,
+		    scsi_do_cmd (SCpnt, (void *)  scsi_cmd,
+				 (void *) scsi_result, 0x2a,  scan_scsis_done,
 				 SCSI_TIMEOUT, 3);
 
-		    if (current == task[0]){
-		      while (SCmd.request.dev != 0xfffe);
-		    } else {
-		      if (SCmd.request.dev != 0xfffe){
+		    if (current == task[0])
+			while (SCpnt->request.dev != 0xfffe);
+		    else if (SCpnt->request.dev != 0xfffe) {
 			struct semaphore sem = MUTEX_LOCKED;
-			SCmd.request.sem = &sem;
+
+			SCpnt->request.sem = &sem;
 			down(&sem);
+
 			/* Hmm.. Have to ask about this one */
-			while (SCmd.request.dev != 0xfffe) schedule();
-		      }
-		    }
+			while (SCpnt->request.dev != 0xfffe) schedule();
+			}
 		  }
 		  /* Add this device to the linked list at the end */
 		  if(SDtail)
@@ -619,10 +610,13 @@ void scan_scsis (struct Scsi_Host * shpnt)
 		}
 	    }       /* if result == DID_OK ends */
 	}       /* for lun ends */
+
   shpnt->host_queue = NULL;  /* No longer needed here */
 
   /* Last device block does not exist.  Free memory. */
   scsi_init_free((char *) SDpnt, sizeof(Scsi_Device));
+
+  scsi_init_free((char *) SCpnt, sizeof(Scsi_Cmnd));
 
 
   /* If we allocated a buffer so we could do DMA, free it now */
@@ -703,7 +697,7 @@ Scsi_Cmnd * request_queueable (struct request * req, Scsi_Device * device)
 	 SCpnt->lun == device->lun)
 	if(SCpnt->request.dev < 0) break;
       SCpnt = SCpnt->next;
-    };
+    }
 
   if (!SCpnt) return NULL;
 
@@ -723,7 +717,7 @@ Scsi_Cmnd * request_queueable (struct request * req, Scsi_Device * device)
 	    req->sector += bh->b_size >> 9;
 	    if(!tablesize) break;
 	    bh = bhp;
-    };
+    }
     if(req->nr_sectors && bh && bh->b_reqnext){  /* Any leftovers? */
       SCpnt->request.bhtail = bh;
       req->bh = bh->b_reqnext; /* Divide request */
@@ -738,11 +732,11 @@ Scsi_Cmnd * request_queueable (struct request * req, Scsi_Device * device)
     } else {
       req->dev = -1;
       wake_up(&wait_for_request);
-    };
+    }
   } else {
     SCpnt->request.dev = 0xffff; /* Busy, but no request */
     SCpnt->request.sem = NULL;  /* And no one is waiting for the device either */
-  };
+  }
 
   SCpnt->use_sg = 0;  /* Reset the scatter-gather flag */
   SCpnt->old_use_sg  = 0;
@@ -792,16 +786,16 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, Scsi_Device * device,
 	 SCpnt->lun == device->lun) {
 	SCwait = SCpnt;
 	if(SCpnt->request.dev < 0) break;
-      };
+      }
       SCpnt = SCpnt->next;
-    };
+    }
     save_flags(flags);
     cli();
     /* See if this request has already been queued by an interrupt routine */
     if (req && ((req->dev < 0) || (req->dev != dev))) {
       restore_flags(flags);
       return NULL;
-    };
+    }
     if (!SCpnt || SCpnt->request.dev >= 0)  /* Might have changed */
       {
 	restore_flags(flags);
@@ -810,7 +804,7 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, Scsi_Device * device,
 	  printk("Attempt to allocate device target %d, lun %d\n",
 		 device->id ,device->lun);
 	  panic("No device found in allocate_device\n");
-	};
+	}
 	SCSI_SLEEP(&device->device_wait,
 		   (SCwait->request.dev > 0));
       } else {
@@ -828,7 +822,7 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, Scsi_Device * device,
 	    req->sector += bh->b_size >> 9;
 	    if(!tablesize) break;
 	    bh = bhp;
-	  };
+	  }
 	  if(req->nr_sectors && bh && bh->b_reqnext){  /* Any leftovers? */
 	    SCpnt->request.bhtail = bh;
 	    req->bh = bh->b_reqnext; /* Divide request */
@@ -845,15 +839,15 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, Scsi_Device * device,
 	      req->dev = -1;
 	      *reqp = req->next;
 	      wake_up(&wait_for_request);
-	    };
+	    }
 	} else {
 	  SCpnt->request.dev = 0xffff; /* Busy */
 	  SCpnt->request.sem = NULL;  /* And no one is waiting for this to complete */
-	};
+	}
 	restore_flags(flags);
 	break;
-      };
-  };
+      }
+  }
 
   SCpnt->use_sg = 0;  /* Reset the scatter-gather flag */
   SCpnt->old_use_sg  = 0;
@@ -935,7 +929,7 @@ update_timeout(SCpnt, SCpnt->timeout_per_command);
 #ifdef DEBUG_DELAY
 	clock = jiffies + 400;
 	while (jiffies < clock);
-	printk("done(host = %d, result = %04x) : routine at %08x\n", host->host_no, temp, done);
+	printk("done(host = %d, result = %04x) : routine at %08x\n", host->host_no, temp);
 #endif
 		scsi_done(SCpnt);
 		}
@@ -995,7 +989,7 @@ void scsi_do_cmd (Scsi_Cmnd * SCpnt, const void *cmnd ,
 	for (i = 0; i < 10; ++i)
 		printk ("%02x  ", ((unsigned char *) cmnd)[i]);
 	printk("\n");
-      };
+      }
 #endif
 
 	if (!host)
@@ -1096,7 +1090,7 @@ static void reset (Scsi_Cmnd * SCpnt)
 	if(SCpnt->flags & NEEDS_JUMPSTART) {
 	  SCpnt->flags &= ~NEEDS_JUMPSTART;
 	  scsi_request_sense (SCpnt);
-	};
+	}
 #endif
 }
 
@@ -1472,7 +1466,7 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 			    SCpnt->use_sg = SCpnt->old_use_sg;
 			    SCpnt->cmd_len = SCpnt->old_cmd_len;
 			    internal_cmnd (SCpnt);
-			  };
+			  }
 			break;
 		default:
 			INTERNAL_ERROR;
@@ -1665,7 +1659,7 @@ int scsi_reset (Scsi_Cmnd * SCpnt)
 				    SCpnt1->flags |= IS_RESETTING;
 				  }
 				  SCpnt1 = SCpnt1->next;
-				};
+				}
 
 				host->last_reset = jiffies;
 				temp = host->hostt->reset(SCpnt);
@@ -1755,7 +1749,7 @@ static void scsi_main_timeout(void)
 			save_flags(flags);
 			cli();
 		      }
-		};
+		}
 	      } while (timed_out);
 	restore_flags(flags);
       }
@@ -1796,7 +1790,7 @@ static int update_timeout(Scsi_Cmnd * SCset, int timeout)
 	if(SCset){
 	  oldto = SCset->timeout - used;
 	  SCset->timeout = timeout + used;
-	};
+	}
 
 	least = 0xffffffff;
 
@@ -1807,7 +1801,7 @@ static int update_timeout(Scsi_Cmnd * SCset, int timeout)
 	      if(SCpnt->timeout <= 0) SCpnt->timeout = -1;
 	      if(SCpnt->timeout > 0 && SCpnt->timeout < least)
 		least = SCpnt->timeout;
-	    };
+	    }
 
 /*
 	If something is due to timeout again, then we will set the next timeout
@@ -1864,8 +1858,8 @@ void *scsi_malloc(unsigned int len)
 	printk("SMalloc: %d %x ",len, dma_malloc_pages[i] + (j << 9));
 #endif
 	return (void *) ((unsigned long) dma_malloc_pages[i] + (j << 9));
-      };
-    };
+      }
+    }
   restore_flags(flags);
   return NULL;  /* Nope.  No more */
 }
@@ -1923,7 +1917,9 @@ int scsi_loadable_module_flag; /* Set after we scan builtin drivers */
 void * scsi_init_malloc(unsigned int size, int priority)
 {
   unsigned long retval;
-#if 0 /* Use the statically allocated memory instead of kmalloc  (DB) */
+
+/* Use the statically allocated memory instead of kmalloc  (DB) */
+#if defined(USE_STATIC_SCSI_MEMORY)
   if(scsi_loadable_module_flag && !(priority & GFP_DMA))
 #else
   if(scsi_loadable_module_flag)
@@ -1946,6 +1942,7 @@ void * scsi_init_malloc(unsigned int size, int priority)
        scsi_init_memory_start += size;
        }
     }
+  memset((void *) retval, 0, size);
   return (void *) retval;
 }
 
@@ -2035,9 +2032,9 @@ unsigned long scsi_dev_init (unsigned long memory_start,unsigned long memory_end
 	      SCpnt->next = host->host_queue;
 	      SCpnt->prev = NULL;
 	      host->host_queue = SCpnt;
-	    };
-	  };
-	};
+	    }
+	  }
+	}
 
 	if (scsi_devicelist)
 	  dma_sectors = 16;  /* Base value we use */
@@ -2061,8 +2058,8 @@ unsigned long scsi_dev_init (unsigned long memory_start,unsigned long memory_end
 	    dma_sectors += (PAGE_SIZE >> 9) * host->sg_tablesize *
 	      host->cmd_per_lun;
 	    need_isa_buffer++;
-	  };
-	};
+	  }
+	}
 
 	dma_sectors = (dma_sectors + 15) & 0xfff0;
 	dma_free_sectors = dma_sectors;  /* This must be a multiple of 16 */
@@ -2088,15 +2085,16 @@ unsigned long scsi_dev_init (unsigned long memory_start,unsigned long memory_end
 
 	scsi_loadable_module_flag = 1;
 
-#if 0   /* This allocates statically some extra memory to be used for modules,
-           until the kmalloc problem is fixed (DB) */
 
-        scsi_memory_upper_value = scsi_init_memory_start + 
-                     2 * (scsi_init_memory_start - scsi_memory_lower_value);
+/* This allocates statically some extra memory to be used for modules,
+   until the kmalloc problem is fixed (DB) */
 
-        printk ("scsi memory: lower %p, upper %p.\n", 
-             (void *)scsi_memory_lower_value, (void *)scsi_memory_upper_value);
-
+#if defined(USE_STATIC_SCSI_MEMORY)
+	scsi_memory_upper_value = scsi_init_memory_start + 256 * 1024;
+	printk ("SCSI memory: total %ldKb, used %ldKb, free %ldKb.\n",
+		(scsi_memory_upper_value - scsi_memory_lower_value) / 1024,
+		(scsi_init_memory_start - scsi_memory_lower_value) / 1024,
+		(scsi_memory_upper_value - scsi_init_memory_start) / 1024);
 	return scsi_memory_upper_value;
 #else
 	return scsi_init_memory_start;
@@ -2234,8 +2232,8 @@ static int scsi_register_host(Scsi_Host_Template * tpnt)
 		host->host_queue = SCpnt;
 		if(host->host_queue)
 		  host->host_queue->prev = SCpnt;
-	      };
-	    };
+	      }
+	    }
 	  }
 	/* Next, check to see if we need to extend the DMA buffer pool */
       {
@@ -2261,8 +2259,8 @@ static int scsi_register_host(Scsi_Host_Template * tpnt)
 	      new_dma_sectors += (PAGE_SIZE >> 9) * host->sg_tablesize *
 		host->cmd_per_lun;
 	      new_need_isa_buffer++;
-	    };
-	  };
+	    }
+	  }
 
 	  new_dma_sectors = (new_dma_sectors + 15) & 0xfff0;
 
@@ -2303,6 +2301,14 @@ static int scsi_register_host(Scsi_Host_Template * tpnt)
 	if(sdtpnt->finish && sdtpnt->nr_dev)
 	  (*sdtpnt->finish)();
     }
+
+#if defined(USE_STATIC_SCSI_MEMORY)
+  printk ("SCSI memory: total %ldKb, used %ldKb, free %ldKb.\n",
+	  (scsi_memory_upper_value - scsi_memory_lower_value) / 1024,
+	  (scsi_init_memory_start - scsi_memory_lower_value) / 1024,
+	  (scsi_memory_upper_value - scsi_init_memory_start) / 1024);
+#endif
+
   return 0;
 }
 
@@ -2325,7 +2331,7 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 
   for(sdpnt = scsi_devices; sdpnt; sdpnt = sdpnt->next)
     if(sdpnt->host->hostt == tpnt && sdpnt->host->hostt->usage_count
-                                 && *sdpnt->host->hostt->usage_count) return;
+				 && *sdpnt->host->hostt->usage_count) return;
 
   for(shpnt = scsi_hostlist; shpnt; shpnt = shpnt->next)
     {
@@ -2342,6 +2348,7 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 	    return;
 	  }
 	  SCpnt->request.dev = 0xffe0;  /* Mark as busy */
+	  restore_flags(flags);
 	}
     }
   /* Next we detach the high level drivers from the Scsi_Device structures */
@@ -2413,6 +2420,13 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 
   printk ("scsi : %d host%s.\n", next_scsi_host,
 	  (next_scsi_host == 1) ? "" : "s");
+
+#if defined(USE_STATIC_SCSI_MEMORY)
+  printk ("SCSI memory: total %ldKb, used %ldKb, free %ldKb.\n",
+	  (scsi_memory_upper_value - scsi_memory_lower_value) / 1024,
+	  (scsi_init_memory_start - scsi_memory_lower_value) / 1024,
+	  (scsi_memory_upper_value - scsi_init_memory_start) / 1024);
+#endif
 
   scsi_make_blocked_list();
 
@@ -2500,7 +2514,7 @@ scsi_dump_status(void)
 	       SCpnt->cmnd[0],
 	       SCpnt->sense_buffer[2],
 	       SCpnt->result);
-      };
+      }
   printk("wait_for_request = %p\n", wait_for_request);
   /* Now dump the request lists for each block device */
   printk("Dump of pending block device requests\n");
@@ -2523,3 +2537,20 @@ scsi_dump_status(void)
       }
 }
 #endif
+
+/*
+ * Overrides for Emacs so that we follow Linus's tabbing style.
+ * Emacs will notice this stuff at the end of the file and automatically
+ * adjust the settings for this buffer only.  This must remain at the end
+ * of the file.
+ * ---------------------------------------------------------------------------
+ * Local variables:
+ * c-indent-level: 8
+ * c-brace-imaginary-offset: 0
+ * c-brace-offset: -8
+ * c-argdecl-indent: 8
+ * c-label-offset: -8
+ * c-continued-statement-offset: 8
+ * c-continued-brace-offset: 0
+ * End:
+ */

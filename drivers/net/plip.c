@@ -171,6 +171,9 @@ struct plip_local {
 #elif defined(__mc68000__)
 			unsigned char msb;
 			unsigned char lsb;
+#elif defined(__sparc__)
+			unsigned char msb;
+			unsigned char lsb;
 #elif defined(__MIPSEL__)
 			unsigned char lsb;
 			unsigned char msb;

@@ -91,9 +91,9 @@ extern inline void mapioaddr(unsigned long physaddr, unsigned long virt_addr)
   unsigned long page_entry;
 
   page_entry = physaddr >> PAGE_SHIFT;
-  page_entry |= (PTE_V | PTE_ACC | PTE_W | PTE_P | PTE_IO);  /* kernel io addr */
+  page_entry |= (PTE_V | PTE_ACC | PTE_NC | PTE_IO);  /* kernel io addr */
 
-  put_pte(page_entry, virt_addr);
+  put_pte(virt_addr, page_entry);
   return;
 }
 

@@ -389,10 +389,10 @@ static inline int try_to_swap_out(struct vm_area_struct* vma, unsigned offset, p
 #define SWAP_RATIO	128
 
 static inline int swap_out_pmd(struct vm_area_struct * vma, pmd_t *dir,
-	unsigned long address, unsigned long size, unsigned long offset)
+	unsigned long address, unsigned long end)
 {
 	pte_t * pte;
-	unsigned long end;
+	unsigned long pmd_end;
 
 	if (pmd_none(*dir))
 		return 0;
@@ -401,21 +401,22 @@ static inline int swap_out_pmd(struct vm_area_struct * vma, pmd_t *dir,
 		pmd_clear(dir);
 		return 0;
 	}
+	
 	pte = pte_offset(dir, address);
-	offset += address & PMD_MASK;
-	address &= ~PMD_MASK;
-	end = address + size;
-	if (end > PMD_SIZE)
-		end = PMD_SIZE;
+	
+	pmd_end = (address + PMD_SIZE) & PMD_MASK;
+	if (end > pmd_end)
+		end = pmd_end;
+
 	do {
-		switch (try_to_swap_out(vma, offset+address-vma->vm_start, pte)) {
+		switch (try_to_swap_out(vma, address-vma->vm_start, pte)) {
 			case 0:
 				break;
 
 			case 1:
 				vma->vm_task->mm->rss--;
 				/* continue with the following page the next time */
-				vma->vm_task->mm->swap_address = address + offset + PAGE_SIZE;
+				vma->vm_task->mm->swap_address = address + PAGE_SIZE;
 				return 1;
 
 			default:
@@ -429,10 +430,10 @@ static inline int swap_out_pmd(struct vm_area_struct * vma, pmd_t *dir,
 }
 
 static inline int swap_out_pgd(struct vm_area_struct * vma, pgd_t *dir,
-	unsigned long address, unsigned long size)
+	unsigned long address, unsigned long end)
 {
 	pmd_t * pmd;
-	unsigned long offset, end;
+	unsigned long pgd_end;
 
 	if (pgd_none(*dir))
 		return 0;
@@ -441,14 +442,15 @@ static inline int swap_out_pgd(struct vm_area_struct * vma, pgd_t *dir,
 		pgd_clear(dir);
 		return 0;
 	}
+
 	pmd = pmd_offset(dir, address);
-	offset = address & PGDIR_MASK;
-	address &= ~PGDIR_MASK;
-	end = address + size;
-	if (end > PGDIR_SIZE)
-		end = PGDIR_SIZE;
+
+	pgd_end = (address + PGDIR_SIZE) & PGDIR_MASK;	
+	if (end > pgd_end)
+		end = pgd_end;
+	
 	do {
-		if (swap_out_pmd(vma, pmd, address, end - address, offset))
+		if (swap_out_pmd(vma, pmd, address, end))
 			return 1;
 		address = (address + PMD_SIZE) & PMD_MASK;
 		pmd++;
@@ -457,10 +459,13 @@ static inline int swap_out_pgd(struct vm_area_struct * vma, pgd_t *dir,
 }
 
 static int swap_out_vma(struct vm_area_struct * vma, pgd_t *pgdir,
-	unsigned long start, unsigned long end)
+	unsigned long start)
 {
+	unsigned long end;
+
+	end = vma->vm_end;
 	while (start < end) {
-		if (swap_out_pgd(vma, pgdir, start, end - start))
+		if (swap_out_pgd(vma, pgdir, start, end))
 			return 1;
 		start = (start + PGDIR_SIZE) & PGDIR_MASK;
 		pgdir++;
@@ -489,7 +494,7 @@ static int swap_out_process(struct task_struct * p)
 		address = vma->vm_start;
 
 	for (;;) {
-		if (swap_out_vma(vma, pgd_offset(p, address), address, vma->vm_end))
+		if (swap_out_vma(vma, pgd_offset(p, address), address))
 			return 1;
 		vma = vma->vm_next;
 		if (!vma)
@@ -554,16 +559,29 @@ static int swap_out(unsigned int priority)
 
 static int try_to_free_page(int priority)
 {
+	static int state = 0;
 	int i=6;
 
-	while (i--) {
-		if (priority != GFP_NOBUFFER && shrink_buffers(i))
-			return 1;
-		if (shm_swap(i))
-			return 1;
-		if (swap_out(i))
-			return 1;
+	switch (state) {
+		do {
+		case 0:
+			if (priority != GFP_NOBUFFER && shrink_buffers(i)) {
+				state = 1;
+				return 1;
+			}
+		case 1:
+			if (shm_swap(i)) {
+				state = 2;
+				return 1;
+			}
+		case 2:
+			if (swap_out(i)) {
+				state = 0;
+				return 1;
+			}
+		} while(--i);
 	}
+	state = 2;
 	return 0;
 }
 

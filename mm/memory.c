@@ -502,7 +502,13 @@ static inline void remap_pte_range(pte_t * pte, unsigned long address, unsigned 
 		end = PMD_SIZE;
 	do {
 		pte_t oldpage = *pte;
-		*pte = mk_pte(offset, prot);
+		pte_clear(pte);
+		if (offset >= high_memory || (mem_map[MAP_NR(offset)] & MAP_PAGE_RESERVED))
+			*pte = mk_pte(offset, prot);
+		else if (mem_map[MAP_NR(offset)]) {
+			mem_map[MAP_NR(offset)]++;
+			*pte = mk_pte(offset, prot);
+		}
 		forget_pte(oldpage);
 		address += PAGE_SIZE;
 		offset += PAGE_SIZE;

@@ -10,7 +10,9 @@
 
 #include <asm/head.h>
 #include <asm/asi.h>
+#include <asm/psr.h>
 #include <asm/cprefix.h>
+#include <asm/vaddrs.h>
 
 /* Here are macros for routines we do often, this allows me to inline this
  * without making the code look real ugly. Well, the macro looks ugly too but
@@ -179,12 +181,15 @@
 	andcc	%l0, 0x40, %g0; \
 	bz	1f; \
 	andcc	%l4, %l5, %g0; \
-	bz,a	0f; \
 	sethi	%hi( C_LABEL(eintstack) ), %l7; \
+	or	%l7, %lo( C_LABEL(eintstack) ), %l7; \
+	bz	0f; \
+	nop; \
 	TRAP_WIN_CLEAN \
 	sethi	%hi( C_LABEL(eintstack) ), %l7; \
-0:	cmp	%fp, %l7; \
-	bge,a	3f; \
+	or	%l7, %lo( C_LABEL(eintstack) ), %l7; \
+0:	subcc	%fp, %l7, %g0; \
+	bg,a	3f; \
 	sub	%l7, 0xb0, %sp; \
 	b	3f; \
 	sub	%fp, 0xb0, %sp; \
@@ -204,11 +209,12 @@
 5:	st	%l5, [%l6 + THREAD_UWINDOWS]; \
 	bz,a	2f; \
 	sethi	%hi( C_LABEL(eintstack) ), %l7; \
-	TRAP_WIN_CLEAN; \
+	TRAP_WIN_CLEAN \
 	sethi	%hi( C_LABEL(eintstack) ), %l7; \
 2: \
 	sub	%l7, 0xb0, %sp; \
 3:
+
 
 	.text
 	.align 4
@@ -240,15 +246,257 @@ my_trap_handler:
 		rett %l2
 #endif /* bogon */
 	
+	.align 4
 	.globl sparc_timer
 sparc_timer:
-	ENTER_IRQ
-	or	%g0, 0x10, %o0	
-	call	C_LABEL(do_IRQ)
+	sethi	%hi(TIMER_VADDR), %l4
+	or	%l4, %lo(TIMER_VADDR), %l4	! read the limit register
+	ld	[%l4 + 0xc], %l4		! to clear the interrupt
+	rd	%wim, %l4
+	or	%g0, 0x1, %l5
+	sll	%l5, %l0, %l5
+	andcc	%l0, 0x40, %g0
+	bz	st1
+	sethi	%hi( C_LABEL(eintstack) ), %l7
+	andcc	%l4, %l5, %g0
+	bz	st0
+	or	%l7, %lo( C_LABEL(eintstack) ), %l7
+	TRAP_WIN_CLEAN
+	sethi	%hi( C_LABEL(eintstack) ), %l7
+	or	%l7, %lo( C_LABEL(eintstack) ), %l7
+st0:	subcc	%fp, %l7, %g0
+	bg,a	st3
+	sub	%l7, 0xb0, %sp
+	b	st3
+	sub	%fp, 0xb0, %sp
+st1: 	sethi	%hi( C_LABEL(current) ), %l6
+	ld	[%l6 + %lo( C_LABEL(current) )], %l6
+	ld	[%l6 + THREAD_WIM], %l5
+	and	%l0, 0x1f, %l7
+	cmp	%l5, %l7
+	ble,a	st4
+	sethi	%hi( C_LABEL(nwindowsm1) ), %l4
+	sub	%l5, %l7, %l7
+	b	st5
+	sub	%l7, 0x1, %l5
+st4:	ld	[%l4 + %lo( C_LABEL(nwindowsm1) )], %l4
+	sub	%l4, %l7, %l4
+	add	%l5, %l4, %l5
+st5:	st	%l5, [%l6 + THREAD_UWINDOWS]
+	sethi	%hi( C_LABEL(eintstack) ), %l7
+	bz,a	st2
+	or	%l7, %lo( C_LABEL(eintstack) ), %l7
+	TRAP_WIN_CLEAN
+	sethi	%hi( C_LABEL(eintstack) ), %l7
+	or	%l7, %lo( C_LABEL(eintstack) ), %l7
+st2:	sub	%l7, 0xb0, %sp
+
+st3:	std	%g2, [%sp + 96 + 24]
+	or	%g0, %g1, %l7
+	rd	%y, %l6
+	std	%g4, [%sp + 96 + 32]
+	andn	%l0, PSR_PIL, %l4
+	sll	%l3, 0x8, %l5
+	std	%g6, [%sp + 96 + 40]
+	or	%l5, %l4, %l4
+
+	wr	%l4, 0x0, %psr
+	wr	%l4, PSR_ET, %psr
+
+	std	%l0, [%sp + 96 + 0]
+	std	%l2, [%sp + 96 + 8]
+	st	%fp, [%sp + 96 + 16]
+	
+	or	%g0, 14, %o0	
 	or	%g0, %g0, %o1
+	call	C_LABEL(do_sparc_timer)
+	nop
+
+	or	%g0, %l7, %g1
+	wr	%l6, 0x0, %y
+	ldd	[%sp + 96 + 24], %g2
+	ldd	[%sp + 96 + 32], %g4
+	ldd	[%sp + 96 + 40], %g6
+	wr	%l0, 0x0, %psr
+	nop
+	nop
+	nop
+
+	and	%l0, 31, %l5
+	sethi	%hi(lnx_winmask), %l6
+	or	%l6, %lo(lnx_winmask), %l6
+	ldub	[%l6 + %l5], %l5
+	andcc	%l0, PSR_PS, %g0
+	bnz	1f
+	rd	%wim, %l4
+
+1:	andcc	%l5, %l4, %g0
+	bnz	2f
+	wr	%l0, 0x0, %psr
+	nop
+	nop
+	nop
+
 	jmp	%l1
 	rett	%l2
-	nop	
+
+2:	wr	%g0, 0x0, %wim
+	nop
+	nop
+	nop
+
+	restore
+	restore	%g0, 0x1, %l1
+	rd	%psr, %l0
+	and	%l0, 31, %l0
+	sll	%l1, %l0, %l1
+	wr	%l1, 0x0, %wim
+	sethi	%hi( C_LABEL(current) ), %l1
+	ld	[%l1 + %lo( C_LABEL(current) ) ], %l1
+	st	%l0, [%l1 + THREAD_WIM]
+	save	%g0, %g0, %g0
+	
+	ldd	[%sp], %l0
+	ldd	[%sp + 0x8], %l2
+	ldd	[%sp + 0x10], %l4
+	ldd	[%sp + 0x18], %l6
+	ldd	[%sp + 0x20], %i0
+	ldd	[%sp + 0x28], %i2
+	ldd	[%sp + 0x30], %i4
+	ldd	[%sp + 0x38], %i6
+	
+	save	%g0, %g0, %g0
+	
+	jmp	%l1
+	rett	%l2
+
+
+/* For now all IRQ's not registered get sent here so I can see
+ * what is poking the chip.
+ */
+
+	.align 4
+	.globl stray_irq_entry
+stray_irq_entry:
+	rd	%wim, %l4
+	or	%g0, 0x1, %l5
+	sll	%l5, %l0, %l5
+	andcc	%l0, 0x40, %g0
+	bz	tt1
+	sethi	%hi( C_LABEL(eintstack) ), %l7
+	andcc	%l4, %l5, %g0
+	bz	tt0
+	or	%l7, %lo( C_LABEL(eintstack) ), %l7
+	TRAP_WIN_CLEAN
+	sethi	%hi( C_LABEL(eintstack) ), %l7
+	or	%l7, %lo( C_LABEL(eintstack) ), %l7
+tt0:	subcc	%fp, %l7, %g0
+	bg,a	tt3
+	sub	%l7, 0xb0, %sp
+	b	tt3
+	sub	%fp, 0xb0, %sp
+tt1: 	sethi	%hi( C_LABEL(current) ), %l6
+	ld	[%l6 + %lo( C_LABEL(current) )], %l6
+	ld	[%l6 + THREAD_WIM], %l5
+	and	%l0, 0x1f, %l7
+	cmp	%l5, %l7
+	ble,a	tt4
+	sethi	%hi( C_LABEL(nwindowsm1) ), %l4
+	sub	%l5, %l7, %l7
+	b	tt5
+	sub	%l7, 0x1, %l5
+tt4:	ld	[%l4 + %lo( C_LABEL(nwindowsm1) )], %l4
+	sub	%l4, %l7, %l4
+	add	%l5, %l4, %l5
+tt5:	st	%l5, [%l6 + THREAD_UWINDOWS]
+	sethi	%hi( C_LABEL(eintstack) ), %l7
+	bz,a	tt2
+	or	%l7, %lo( C_LABEL(eintstack) ), %l7
+	TRAP_WIN_CLEAN
+	sethi	%hi( C_LABEL(eintstack) ), %l7
+	or	%l7, %lo( C_LABEL(eintstack) ), %l7
+tt2:	sub	%l7, 0xb0, %sp
+
+tt3:	std	%g2, [%sp + 96 + 24]
+	or	%g0, %g1, %l7
+	rd	%y, %l6
+	std	%g4, [%sp + 96 + 32]
+	andn	%l0, PSR_PIL, %l4
+	sll	%l3, 0x8, %l5
+	std	%g6, [%sp + 96 + 40]
+	or	%l5, %l4, %l4
+
+	wr	%l4, 0x0, %psr
+	wr	%l4, PSR_ET, %psr
+
+	std	%l0, [%sp + 96 + 0]
+	std	%l2, [%sp + 96 + 8]
+	st	%fp, [%sp + 96 + 16]
+	
+	or	%g0, %l3, %o0	
+	or	%g0, %g0, %o1
+	call	C_LABEL(unexpected_irq)
+	nop
+
+	or	%g0, %l7, %g1
+	wr	%l6, 0x0, %y
+	ldd	[%sp + 96 + 24], %g2
+	ldd	[%sp + 96 + 32], %g4
+	ldd	[%sp + 96 + 40], %g6
+	wr	%l0, 0x0, %psr
+	nop
+	nop
+	nop
+
+	and	%l0, 31, %l5
+	sethi	%hi(lnx_winmask), %l6
+	or	%l6, %lo(lnx_winmask), %l6
+	ldub	[%l6 + %l5], %l5
+	andcc	%l0, PSR_PS, %g0
+	bnz	1f
+	rd	%wim, %l4
+
+1:	andcc	%l5, %l4, %g0
+	bnz	2f
+	wr	%l0, 0x0, %psr
+	nop
+	nop
+	nop
+
+	jmp	%l1
+	rett	%l2
+
+2:	wr	%g0, 0x0, %wim
+	nop
+	nop
+	nop
+
+	restore
+	restore	%g0, 0x1, %l1
+	rd	%psr, %l0
+	and	%l0, 31, %l0
+	sll	%l1, %l0, %l1
+	wr	%l1, 0x0, %wim
+	sethi	%hi( C_LABEL(current) ), %l1
+	ld	[%l1 + %lo( C_LABEL(current) ) ], %l1
+	st	%l0, [%l1 + THREAD_WIM]
+	save	%g0, %g0, %g0
+	
+	ldd	[%sp], %l0
+	ldd	[%sp + 0x8], %l2
+	ldd	[%sp + 0x10], %l4
+	ldd	[%sp + 0x18], %l6
+	ldd	[%sp + 0x20], %i0
+	ldd	[%sp + 0x28], %i2
+	ldd	[%sp + 0x30], %i4
+	ldd	[%sp + 0x38], %i6
+	
+	save	%g0, %g0, %g0
+	
+	jmp	%l1
+	rett	%l2
+
+
 
 /* This routine is optimized for kernel window fills. User fills take about two
  * or three extra jumps on the average. We'll see how this works out.
@@ -529,7 +777,7 @@ leave_trap:
 
 		.data
 		.align 4
-lnx_winmask:	.byte	2, 4, 8, 16, 32, 64, 128,1  ! lnx_winmask[0..7]
+lnx_winmask:	.byte	2, 4, 8, 16, 32, 64, 128, 1  ! lnx_winmask[0..7]
 
 	
 		.align 4

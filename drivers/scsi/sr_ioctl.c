@@ -409,7 +409,7 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 			    ms_info.addr.lba=scsi_CDs[target].mpcd_sector;
 			  else return (-EINVAL);
 			
-			  ms_info.xa_flag=scsi_CDs[target].is_xa;
+			  ms_info.xa_flag=scsi_CDs[target].xa_flags & 0x01;
 			 			  
 			  err=verify_area(VERIFY_WRITE,(void *) arg,
 					  sizeof(struct cdrom_multisession));
@@ -430,3 +430,20 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 			return scsi_ioctl(scsi_CDs[target].device,cmd,(void *) arg);
 		}
 }
+
+/*
+ * Overrides for Emacs so that we follow Linus's tabbing style.
+ * Emacs will notice this stuff at the end of the file and automatically
+ * adjust the settings for this buffer only.  This must remain at the end
+ * of the file.
+ * ---------------------------------------------------------------------------
+ * Local variables:
+ * c-indent-level: 8
+ * c-brace-imaginary-offset: 0
+ * c-brace-offset: -8
+ * c-argdecl-indent: 8
+ * c-label-offset: -8
+ * c-continued-statement-offset: 8
+ * c-continued-brace-offset: 0
+ * End:
+ */

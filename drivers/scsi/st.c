@@ -11,7 +11,7 @@
   Copyright 1992, 1993, 1994, 1995 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Mon Jan 30 23:20:07 1995 by root@kai.home
+  Last modified: Sat Feb 18 10:51:25 1995 by root@kai.home
 */
 
 #include <linux/fs.h>
@@ -74,6 +74,7 @@ static int debugging = 1;
 #endif
 
 #define MAX_RETRIES 0
+#define MAX_WRITE_RETRIES 0
 #define MAX_READY_RETRIES 5
 #define NO_TAPE  NOT_READY
 
@@ -110,10 +111,10 @@ st_chk_result(Scsi_Cmnd * SCpnt)
 {
   int dev = SCpnt->request.dev;
   int result = SCpnt->result;
-  unsigned char * sense = SCpnt->sense_buffer;
+  unsigned char * sense = SCpnt->sense_buffer, scode;
   char *stp;
 
-  if (!result && SCpnt->sense_buffer[0] == 0)
+  if (!result /* && SCpnt->sense_buffer[0] == 0 */ )
     return 0;
 #ifdef DEBUG
   if (debugging) {
@@ -123,13 +124,25 @@ st_chk_result(Scsi_Cmnd * SCpnt)
 	   SCpnt->request_bufflen);
     if (driver_byte(result) & DRIVER_SENSE)
       print_sense("st", SCpnt);
-  }
+  } else
 #endif
-/*  if ((sense[0] & 0x70) == 0x70 &&
-       ((sense[2] & 0x80) ))
-    return 0; */
+    scode = sense[2] & 0x0f;
+    if (!(driver_byte(result) & DRIVER_SENSE) ||
+	((sense[0] & 0x70) == 0x70 &&
+	 scode != NO_SENSE &&
+	 scode != RECOVERED_ERROR &&
+	 scode != UNIT_ATTENTION &&
+	 scode != BLANK_CHECK &&
+	 scode != VOLUME_OVERFLOW)) {  /* Abnormal conditions for tape */
+      printk("st%d: Error %x. ", dev, result);
+      if (driver_byte(result) & DRIVER_SENSE)
+	print_sense("st", SCpnt);
+      else
+	printk("\n");
+    }
+
   if ((sense[0] & 0x70) == 0x70 &&
-      sense[2] == RECOVERED_ERROR
+      scode == RECOVERED_ERROR
 #ifdef ST_RECOVERED_WRITE_FATAL
       && SCpnt->cmnd[0] != WRITE_6
       && SCpnt->cmnd[0] != WRITE_FILEMARKS
@@ -312,7 +325,7 @@ flush_write_buffer(int dev)
     SCpnt->request.dev = dev;
     scsi_do_cmd (SCpnt,
 		 (void *) cmd, (STp->buffer)->b_data, transfer,
-		 st_sleep_done, ST_TIMEOUT, MAX_RETRIES);
+		 st_sleep_done, ST_TIMEOUT, MAX_WRITE_RETRIES);
 
     if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
 
@@ -472,7 +485,6 @@ scsi_tape_open(struct inode * inode, struct file * filp)
 	printk("st%d: No tape.\n", dev);
 	STp->ready = ST_NO_TAPE;
       } else {
-	printk("st%d: Error %x.\n", dev, SCpnt->result);
         (STp->mt_status)->mt_fileno = STp->drv_block = (-1);
 	STp->ready = ST_NOT_READY;
       }
@@ -484,6 +496,8 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       STp->block_size = 0;
       STp->eof = ST_NOEOF;
       (STp->mt_status)->mt_fileno = STp->drv_block = 0;
+      if (scsi_tapes[dev].device->host->hostt->usage_count)
+	(*scsi_tapes[dev].device->host->hostt->usage_count)++;
       return 0;
     }
 
@@ -637,7 +651,7 @@ scsi_tape_close(struct inode * inode, struct file * filp)
 	SCpnt->request.dev = dev;
 	scsi_do_cmd( SCpnt,
 		    (void *) cmd, (void *) (STp->buffer)->b_data,
-		    0, st_sleep_done, ST_TIMEOUT, MAX_RETRIES);
+		    0, st_sleep_done, ST_TIMEOUT, MAX_WRITE_RETRIES);
 
 	if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
 
@@ -797,7 +811,7 @@ st_write(struct inode * inode, struct file * filp, char * buf, int count)
       SCpnt->request.dev = dev;
       scsi_do_cmd (SCpnt,
 		   (void *) cmd, (STp->buffer)->b_data, transfer,
-		   st_sleep_done, ST_TIMEOUT, MAX_RETRIES);
+		   st_sleep_done, ST_TIMEOUT, MAX_WRITE_RETRIES);
 
       if (SCpnt->request.dev == dev) sleep_on( &(STp->waiting) );
 
@@ -910,7 +924,7 @@ st_write(struct inode * inode, struct file * filp, char * buf, int count)
       scsi_do_cmd (SCpnt,
 		   (void *) cmd, (STp->buffer)->b_data,
 		   (STp->buffer)->writing,
-		   st_sleep_done, ST_TIMEOUT, MAX_RETRIES);
+		   st_sleep_done, ST_TIMEOUT, MAX_WRITE_RETRIES);
     }
     else
       SCpnt->request.dev = -1;  /* Mark as not busy */

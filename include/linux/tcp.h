@@ -76,6 +76,16 @@ struct tcphdr {
 		ack:1,
 		urg:1,
 		res2:2;
+#elif defined(__sparc__)
+	__u16	res2:2,
+		urg:1,
+		ack:1,
+		psh:1,
+		rst:1,
+		syn:1,
+		fin:1,
+		doff:4,
+		res1:4;
 #else
 #error	"Adjust this structure for your cpu alignment rules"
 #endif	

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 3.11  January 25, 1995
+ *  linux/drivers/block/ide.c	Version 3.12  February 19, 1995
  *
  *  Copyright (C) 1994, 1995  Linus Torvalds & authors (see below)
  */
@@ -101,6 +101,8 @@
  *			fix byte-ordering for some NEC cdrom drives
  *  Version 3.10	disable multiple mode by default; was causing trouble
  *  Version 3.11	fix mis-identification of old WD disks as cdroms
+ *  Version 3,12	simplify logic for selecting initial mult_count
+ *			  (fixes problems with buggy WD drives)
  *
  *  To do:
  *	- special 32-bit controller-type detection & support
@@ -136,8 +138,7 @@
 #include <asm/io.h>
 
 #undef	REALLY_FAST_IO			/* define if ide ports are perfect */
-#define INITIAL_MULT_COUNT	0	/* undef to use BIOS setting on entry */
-					/*   or non-zero to enable block mode */
+#define INITIAL_MULT_COUNT	0	/* use zero to disable block mode */
 #ifndef VLB_32BIT_IDE			/* 0 for safety, 1 for 32-bit chipset:*/
 #define VLB_32BIT_IDE		0	/*   Winbond 83759F or OPTi 82C621 */
 #endif
@@ -903,8 +904,7 @@ static int do_special (ide_dev_t *dev)
 		if (dev->type == disk) {
 			if (dev->id && dev->mult_req > dev->id->max_multsect)
 				dev->mult_req = dev->id->max_multsect;
-			if (dev->mult_req != dev->mult_count)
-				ide_cmd(dev,WIN_SETMULT,dev->mult_req,&set_multmode_intr);
+			ide_cmd(dev,WIN_SETMULT,dev->mult_req,&set_multmode_intr);
 		} else {
 			dev->mult_req = 0;
 			printk("%s: multmode not supported by this device\n", dev->name);
@@ -1696,24 +1696,13 @@ static void do_identify (ide_dev_t *dev, byte cmd)
 	 dev->select.b.lba ? "LBA, " : "",
 	 dev->bios_cyl, dev->bios_head, dev->bios_sect);
 
-	/* Keep current multiplemode setting, if any (from DOS/BIOS) */
+	dev->mult_count = 0;
 	if (id->max_multsect) {
-		if ((id->multsect_valid & 1) && id->multsect)
-			dev->mult_count = id->multsect;	/* current setting */
-#ifdef INITIAL_MULT_COUNT
 		dev->mult_req = INITIAL_MULT_COUNT;
-#if INITIAL_MULT_COUNT
-		/* use specified value, or maximum, whichever is less */
-		if (INITIAL_MULT_COUNT > id->max_multsect)
+		if (dev->mult_req > id->max_multsect)
 			dev->mult_req = id->max_multsect;
-#endif
-#else	/* use existing setting from DOS/BIOS: */
-		if (dev->mult_count <= id->max_multsect) /* valid? */
-			dev->mult_req = dev->mult_count; /* keep it */
-#endif	/* INITIAL_MULT_COUNT */
-		if (dev->mult_req != dev->mult_count)
-			dev->special.b.set_multmode = 1;
-		printk(", Mult=%d/%d", dev->mult_req, id->max_multsect);
+		dev->special.b.set_multmode = 1;
+		printk(", MaxMult=%d", id->max_multsect);
 	}
 	printk("\n");
 }

@@ -347,7 +347,8 @@ int seagate_st0x_detect (Scsi_Host_Template * tpnt)
  */
 		instance = scsi_register(tpnt, 0);
 		hostno = instance->host_no;
-		if (request_irq((int) irq, seagate_reconnect_intr, SA_INTERRUPT, "seagate")) {
+		if (request_irq((int) irq, seagate_reconnect_intr, SA_INTERRUPT,
+		   (controller_type == SEAGATE) ? "seagate" : "tmc-8xx")) {
 			printk("scsi%d : unable to allocate IRQ%d\n",
 				hostno, (int) irq);
 			return 0;

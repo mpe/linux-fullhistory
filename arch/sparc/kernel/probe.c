@@ -23,6 +23,8 @@ extern int node_get_child(int node);
 extern char* get_str_from_prom(int node, char* name, char* value);
 extern unsigned int* get_int_from_prom(int node, char* name, unsigned int *value);
 
+int first_descent;
+
 /* Cpu-type information and manufacturer strings */
 
 
@@ -275,13 +277,12 @@ probe_clock(int fchild)
 
   printk("%s\n", node_str);
   printk("At OBIO address: 0x%x Virtual address: 0x%x\n",
-	 (unsigned int) 0xf3000000, (unsigned int) TIMER_STRUCT);
+	 (unsigned int) TIMER_PHYSADDR, (unsigned int) TIMER_STRUCT);
 
-  mapioaddr((unsigned long) 0xf3000000,
+  mapioaddr((unsigned long) TIMER_PHYSADDR,
 	    (unsigned long) TIMER_STRUCT);
 
-  TIMER_STRUCT->timer_limit14=(((10000) << 10) | 0x80000000);
-  TIMER_STRUCT->timer_limit10=(((10000) << 10) | 0x80000000);
+  TIMER_STRUCT->timer_limit14=(((1000000/HZ) << 10) | 0x80000000);
 
   return;
 }
@@ -390,7 +391,7 @@ probe_sbus(register int cpu_child_node)
 void
 probe_devices(void)
 {
-  register int nd, first_descent;
+  register int nd;
   register char* str;
 
   nd = prom_node_root;
@@ -427,7 +428,6 @@ probe_devices(void)
   probe_cpu();
   probe_vac();
   probe_mmu();
-  probe_clock(first_descent);
 
 /*
   printk("PROM Root Child Node: 0x%x Name: %s \n", nd,

@@ -207,8 +207,11 @@ while (tries --)
             page->nfree--;
             if (!page->nfree)
                 {
-                sizes[order].firstfree = page->next;
-                page->next = NULL;
+		  if(dma_flag)
+		    sizes[order].dmafree = page->next;
+		  else
+		    sizes[order].firstfree = page->next;
+		  page->next = NULL;
                 }
             restore_flags(flags);
 

@@ -1,4 +1,4 @@
-README.ide -- Information regarding ide.c and ide-cd.c
+README.ide -- Information regarding ide.c and ide-cd.c (IDE driver in 1.1.93)
 ================================================================================
 Supported by:  mlord@bnr.ca           -- disks, interfaces, probing
                snyder@fnald0.fnal.gov -- cdroms, ATAPI, audio
@@ -12,13 +12,13 @@ Major features of ide.c & ide-cd.c:
 	- support for reading IDE ATAPI cdrom drives (NEC, MITSUMI, VERSA, SONY)
 	- support for audio functions on FX400,NEC-260 cdrom drives (others?)
 	- auto-detection of interfaces, drives, IRQs, and disk geometries
+	  -- "single" drives should be jumpered as "master", not "slave"
 	- support for BIOSs which report "more than 16 heads" on disk drives
 	- uses LBA (slightly faster) on disk drives which support it
 	- support for lots of fancy (E)IDE drive functions with hdparm utility
 	- optional (compile time) support for 32-bit VLB data transfers
 	- support for IDE multiple (block) mode (same as hd.c)
 	- support for interrupt unmasking during I/O (better than hd.c)
-	- compile flag for auto detection/use of multiple mode setting from BIOS
 	- improved handshaking and error detection/recovery
 	- can co-exist with hd.c to control only the secondary interface
 
@@ -65,6 +65,11 @@ probe/identification sequence.  For example:
 or
 	hdc=768,16,32
 	hdc=noprobe
+
+Note that when only one IDE device is attached to an interface,
+it must be jumpered as "single" or "master", *not* "slave".
+Many folks have had "trouble" with cdroms because of this requirement
+of the ATA (IDE) standard.
 
 Courtesy of Scott Snyder, the driver now supports ATAPI cdrom drives
 such as the NEC-260 and the new MITSUMI triple/quad speed drives.

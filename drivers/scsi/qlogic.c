@@ -18,7 +18,7 @@
    Reference Qlogic FAS408 Technical Manual, 53408-510-00A, May 10, 1994
    (you can reference it, but it is incomplete and inaccurate in places)
 
-   Version 0.39a
+   Version 0.40a
 
    Functions as standalone, loadable, and PCMCIA driver, the latter from
    Dave Hind's PCMCIA package.
@@ -28,14 +28,6 @@
 */
 /*----------------------------------------------------------------*/
 /* Configuration */
-
-/* The following option is normally left alone.  PCMCIA support needs to
-   change this to adapt to the different way the interrupt pin works.
-   
-   Set the following to 2 to use normal interrupt (active high/totempole-
-   tristate), otherwise use 0 (REQUIRED FOR PCMCIA) for active low, open
-   drain */
-#define QL_INT_ACTIVE_HIGH 2
 
 /* Set the following to 1 to enable the use of interrupts.  Note that 0 tends
    to be more stable, but slower (or ties up the system more) */
@@ -51,21 +43,36 @@
    without requiring a cold boot.  It does take some time to recover from a
    reset, so it is slower, and I have seen timeouts so that devices weren't
    recognized when this was set. */
-#define QL_RESET_AT_START 1
+#define QL_RESET_AT_START 0
 
-/* This will set fast (10Mhz) synchronous timing, FASTCLK must also be 1 */
+/* crystal frequency in megahertz (for offset 5 and 9) */
+#define XTALFREQ	40
+
+/*****/
+/* offset 0xc */
+/* This will set fast (10Mhz) synchronous timing when set to 1
+   FASTCLK must also be 0 */
 #define FASTSCSI  0
 
-/* This will set a faster sync transfer rate */
+/* This when set to 1 will set a faster sync transfer rate */
 #define FASTCLK   0
 
-/* This bit needs to be set to 1 if your cabling is long or noisy */
+/*****/
+/* config register 1 (offset 8) options */
+/* This needs to be set to 1 if your cabling is long or noisy */
 #define SLOWCABLE 0
 
+/* This should be 1 to enable parity detection */
+#define QL_ENABLE_PARITY 1
+
+/*****/
+/* offset 6 */
 /* This is the sync transfer divisor, 40Mhz/X will be the data rate
 	The power on default is 5, the maximum normal value is 5 */
 #define SYNCXFRPD 4
 
+/*****/
+/* offset 7 */
 /* This is the count of how many synchronous transfers can take place
 	i.e. how many reqs can occur before an ack is given.
 	The maximum value for this is 15, the upper bits can modify
@@ -77,15 +84,9 @@
 	cause the deassertion to be early by 1/2 clock.  Bits 5&4 control
 	the assertion delay, also in 1/2 clocks (FASTCLK is ignored here). */
 
-/* PCMCIA option adjustment */
-#ifdef PCMCIA
-#undef QL_INT_ACTIVE_HIGH
-#define QL_INT_ACTIVE_HIGH 0
-#endif
-
 /*----------------------------------------------------------------*/
-
-#ifdef MODULE
+#if defined(MODULE) || defined(PCMCIA)
+#include <linux/config.h>
 #include <linux/module.h>
 #endif
 
@@ -103,17 +104,24 @@
 
 /*----------------------------------------------------------------*/
 /* driver state info, local to driver */
-static int	    qbase;	/* Port */
+static int	    qbase = 0;	/* Port */
 static int	    qinitid;	/* initiator ID */
 static int	    qabort;	/* Flag to cause an abort */
-static int	    qlirq;	/* IRQ being used */
+static int	    qlirq = -1;	/* IRQ being used */
 static char	    qinfo[80];	/* description */
 static Scsi_Cmnd   *qlcmd;	/* current command being processed */
+
+static int	    qlcfg5 = ( XTALFREQ << 5 );	/* 15625/512 */
+static int	    qlcfg6 = SYNCXFRPD;
+static int	    qlcfg7 = SYNCOFFST;
+static int	    qlcfg8 = ( SLOWCABLE << 7 ) | ( QL_ENABLE_PARITY << 4 );
+static int	    qlcfg9 = ( ( XTALFREQ + 4 ) / 5 );
+static int	    qlcfgc = ( FASTCLK << 3 ) | ( FASTSCSI << 4 );
 
 /*----------------------------------------------------------------*/
 /* The qlogic card uses two register maps - These macros select which one */
 #define REG0 ( outb( inb( qbase + 0xd ) & 0x7f , qbase + 0xd ), outb( 4 , qbase + 0xd ))
-#define REG1 ( outb( inb( qbase + 0xd ) | 0x80 , qbase + 0xd ), outb( 0xb4 | QL_INT_ACTIVE_HIGH , qbase + 0xd ))
+#define REG1 ( outb( inb( qbase + 0xd ) | 0x80 , qbase + 0xd ), outb( 0xb6 , qbase + 0xd ))
 
 /* following is watchdog timeout in microseconds */
 #define WATCHDOG 5000000
@@ -270,27 +278,15 @@ unsigned long	flags;
 	outb(0x40, qbase + 0xb);		/* enable features */
 
 /* configurables */
-#if FASTSCSI
-#if FASTCLK
-	outb(0x18, qbase + 0xc);
-#else
-	outb(0x10, qbase + 0xc);
-#endif
-#else
-#if FASTCLK
-	outb(8, qbase + 0xc);
-#endif
-#endif
-
-#if SLOWCABLE
-	outb(0xd0 | qinitid, qbase + 8);	/* (initiator) bus id */
-#else
-	outb(0x50 | qinitid, qbase + 8);	/* (initiator) bus id */
-#endif
-	outb( SYNCOFFST , qbase + 7 );
-	outb( SYNCXFRPD , qbase + 6 );
+	outb( qlcfgc , qbase + 0xc);
+/* config: no reset interrupt, (initiator) bus id */
+	outb( 0x40 | qlcfg8 | qinitid, qbase + 8);
+	outb( qlcfg7 , qbase + 7 );
+	outb( qlcfg6 , qbase + 6 );
 /**/
-	outb(0x99, qbase + 5);	/* timer */
+	outb(qlcfg5, qbase + 5);		/* select timer */
+	outb(qlcfg9 & 7, qbase + 9);			/* prescaler */
+/*	outb(0x99, qbase + 5);	*/
 	outb(cmd->target, qbase + 4);
 
 	for (i = 0; i < cmd->cmd_len; i++)
@@ -482,6 +478,17 @@ int	qlogic_queuecommand(Scsi_Cmnd * cmd, void (*done) (Scsi_Cmnd *))
 }
 #endif
 
+#ifdef PCMCIA
+/*----------------------------------------------------------------*/
+/* allow PCMCIA code to preset the port */
+/* port should be 0 and irq to -1 respectively for autoprobing */
+void	qlogic_preset(int port, int irq)
+{
+	qbase=port;
+	qlirq=irq;
+}
+#endif
+
 /*----------------------------------------------------------------*/
 /* look for qlogic card and init if found */
 int	qlogic_detect(Scsi_Host_Template * host)
@@ -499,16 +506,20 @@ unsigned long	flags;
    card, but I haven't tested this.
 */
 
-	for (qbase = 0x230; qbase < 0x430; qbase += 0x100) {
-		if( check_region( qbase , 0x10 ) )
-			continue;
-		REG1;
-		if ( ( (inb(qbase + 0xe) ^ inb(qbase + 0xe)) == 7 )
-		  && ( (inb(qbase + 0xe) ^ inb(qbase + 0xe)) == 7 ) )
-			break;
+	if( !qbase ) {
+		for (qbase = 0x230; qbase < 0x430; qbase += 0x100) {
+			if( check_region( qbase , 0x10 ) )
+				continue;
+			REG1;
+			if ( ( (inb(qbase + 0xe) ^ inb(qbase + 0xe)) == 7 )
+			  && ( (inb(qbase + 0xe) ^ inb(qbase + 0xe)) == 7 ) )
+				break;
+		}
+		if (qbase == 0x430)
+			return 0;
 	}
-	if (qbase == 0x430)
-		return 0;
+	else
+		printk( "Ql: Using preset base address of %03x\n", qbase );
 
 	qltyp = inb(qbase + 0xe) & 0xf8;
 	qinitid = host->this_id;
@@ -516,8 +527,9 @@ unsigned long	flags;
 		qinitid = 7;			/* if no ID, use 7 */
 	outb(1, qbase + 8);			/* set for PIO pseudo DMA */
 	REG0;
-	outb(0xd0 | qinitid, qbase + 8);	/* (ini) bus id, disable scsi rst */
-	outb(0x99, qbase + 5);			/* select timer */
+	outb(0x40 | qlcfg8 | qinitid, qbase + 8);	/* (ini) bus id, disable scsi rst */
+	outb(qlcfg5, qbase + 5);		/* select timer */
+	outb(qlcfg9, qbase + 9);			/* prescaler */
 	qlirq = -1;
 #if QL_RESET_AT_START
 	outb( 3 , qbase + 3 );
@@ -527,27 +539,31 @@ unsigned long	flags;
 #endif
 #if QL_USE_IRQ
 /* IRQ probe - toggle pin and check request pending */
-	save_flags( flags );
-	cli();
-	i = 0xffff;
-	j = 3;
-	outb(0x90, qbase + 3);	/* illegal command - cause interrupt */
-	REG1;
-	outb(10, 0x20); /* access pending interrupt map */
-	outb(10, 0xa0);
-	while (j--) {
-		outb(0xb0 | QL_INT_ACTIVE_HIGH , qbase + 0xd);		/* int pin off */
-		i &= ~(inb(0x20) | (inb(0xa0) << 8));	/* find IRQ off */
-		outb(0xb4 | QL_INT_ACTIVE_HIGH , qbase + 0xd);		/* int pin on */
-		i &= inb(0x20) | (inb(0xa0) << 8);	/* find IRQ on */
+	if( qlirq == -1 ) {
+		save_flags( flags );
+		cli();
+		i = 0xffff;
+		j = 3;
+		outb(0x90, qbase + 3);	/* illegal command - cause interrupt */
+		REG1;
+		outb(10, 0x20); /* access pending interrupt map */
+		outb(10, 0xa0);
+		while (j--) {
+			outb(0xb2 , qbase + 0xd);		/* int pin off */
+			i &= ~(inb(0x20) | (inb(0xa0) << 8));	/* find IRQ off */
+			outb(0xb6 , qbase + 0xd);		/* int pin on */
+			i &= inb(0x20) | (inb(0xa0) << 8);	/* find IRQ on */
+		}
+		REG0;
+		while (inb(qbase + 5)); 			/* purge int */
+		while (i)					/* find on bit */
+			i >>= 1, qlirq++;	/* should check for exactly 1 on */
+		if (qlirq >= 0 && !request_irq(qlirq, ql_ihandl, 0, "qlogic"))
+			host->can_queue = 1;
+		restore_flags( flags );
 	}
-	REG0;
-	while (inb(qbase + 5)); 			/* purge int */
-	while (i)					/* find on bit */
-		i >>= 1, qlirq++;	/* should check for exactly 1 on */
-	if (qlirq >= 0 && !request_irq(qlirq, ql_ihandl, 0, "qlogic"))
-		host->can_queue = 1;
-	restore_flags( flags );
+	else
+		printk( "Ql: Using preset IRQ of %d\n", qlirq );
 #endif
 	request_region( qbase , 0x10 ,"qlogic");
 	hreg = scsi_register( host , 0 );	/* no host data */
@@ -557,8 +573,8 @@ unsigned long	flags;
 	if( qlirq != -1 )
 		hreg->irq = qlirq;
 
-	sprintf(qinfo, "Qlogic Driver version 0.39a, chip %02X at %03X, IRQ %d, Opts:%d%d",
-	    qltyp, qbase, qlirq, QL_INT_ACTIVE_HIGH, QL_TURBO_PDMA );
+	sprintf(qinfo, "Qlogic Driver version 0.40a, chip %02X at %03X, IRQ %d, TPdma:%d",
+	    qltyp, qbase, qlirq, QL_TURBO_PDMA );
 	host->name = qinfo;
 
 	return 1;

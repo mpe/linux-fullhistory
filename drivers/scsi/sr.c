@@ -305,8 +305,15 @@ static void sr_photocd(struct inode *inode)
   unsigned char   *cmd;       /* the scsi-command */
   unsigned char   *send;      /* the data we send to the drive ... */
   unsigned char   *rec;       /* ... and get back */
-  int             rc,is_xa;
+  int             rc,is_xa,no_multi;
 
+  if (scsi_CDs[MINOR(inode->i_rdev)].xa_flags & 0x02) {
+#ifdef DEBUG
+    printk("sr_photocd: drive does not support multisession CD's");
+#endif
+    return;
+  }
+  
   if (!suser()) {
     /* I'm not the superuser, so SCSI_IOCTL_SEND_COMMAND isn't allowed for me.
      * That's why mpcd_sector will be initialized with zero, because I'm not
@@ -314,12 +321,18 @@ static void sr_photocd(struct inode *inode)
      * no disk change happened since the last call of this function and we can
      * keep the old value.
      */
-    if (1 == scsi_CDs[MINOR(inode->i_rdev)].device->access_count)
+    if (1 == scsi_CDs[MINOR(inode->i_rdev)].device->access_count) {
       scsi_CDs[MINOR(inode->i_rdev)].mpcd_sector = 0;
+      scsi_CDs[MINOR(inode->i_rdev)].xa_flags &= ~0x01;
+    }
     return;
   }
 
+  sector   = 0;
+  is_xa    = 0;
+  no_multi = 0;
   cmd = rec = &buf[8];
+
   switch(scsi_CDs[MINOR(inode->i_rdev)].device->manufacturer) {
 
   case SCSI_MAN_NEC:
@@ -336,22 +349,23 @@ static void sr_photocd(struct inode *inode)
 			   SCSI_IOCTL_SEND_COMMAND, buf);
     if (rc != 0) {
       printk("sr_photocd: ioctl error (NEC): 0x%x\n",rc);
-      sector = 0;
-      is_xa = 0;
-    } else {
-      min   = (unsigned long) rec[15]/16*10 + (unsigned long) rec[15]%16;
-      sec   = (unsigned long) rec[16]/16*10 + (unsigned long) rec[16]%16;
-      frame = (unsigned long) rec[17]/16*10 + (unsigned long) rec[17]%16;
-      /* if rec[14] isn't 0xb0, the drive does not support multisession CD's, use zero */
-      sector = (0xb0 == rec[14]) ? min*CD_SECS*CD_FRAMES + sec*CD_FRAMES + frame : 0;
-      is_xa = (rec[14] == 0xb0);
-#ifdef DEBUG
-      printk("NEC: (%2x) %2li:%02li:%02li = %li\n",buf[8+14],min,sec,frame,sector);
-      if (sector) {
-	printk("sr_photocd: multisession CD detected. start: %lu\n",sector);
-      }
-#endif
+      break;
     }
+    if (rec[14] != 0 && rec[14] != 0xb0) {
+      printk("sr_photocd: Hmm, seems the CDROM does'nt support multisession CD's\n");
+      no_multi = 1;
+      break;
+    }
+    min   = (unsigned long) rec[15]/16*10 + (unsigned long) rec[15]%16;
+    sec   = (unsigned long) rec[16]/16*10 + (unsigned long) rec[16]%16;
+    frame = (unsigned long) rec[17]/16*10 + (unsigned long) rec[17]%16;
+    sector = min*CD_SECS*CD_FRAMES + sec*CD_FRAMES + frame;
+    is_xa  = (rec[14] == 0xb0);
+#ifdef DEBUG
+    if (sector) {
+      printk("sr_photocd: multisession CD detected. start: %lu\n",sector);
+    }
+#endif
     break;
 
   case SCSI_MAN_TOSHIBA:
@@ -369,15 +383,22 @@ static void sr_photocd(struct inode *inode)
     rc = kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
 			   SCSI_IOCTL_SEND_COMMAND, buf);
     if (rc != 0) {
-      printk("sr_photocd: ioctl error (TOSHIBA #1): 0x%x\n",rc);
-      sector = 0;
-      is_xa = 0;
+      if (rc == 0x28000002) {
+	/* Got a "not ready" - error. No chance to find out if this is
+	   becauce there is no CD in the drive or becauce the drive
+	   don't knows multisession CD's. So I need to do an extra check... */
+	if (kernel_scsi_ioctl(scsi_CDs[MINOR(inode->i_rdev)].device,
+			      SCSI_IOCTL_TEST_UNIT_READY, NULL)) {
+	  printk("sr_photocd: drive not ready\n");
+	} else {
+	  printk("sr_photocd: Hmm, seems the CDROM does'nt support multisession CD's\n");
+	  no_multi = 1;
+	}
+      } else
+	printk("sr_photocd: ioctl error (TOSHIBA #1): 0x%x\n",rc);
       break; /* if the first ioctl fails, we don't call the second one */
     }
     is_xa  = (rec[0] == 0x20);
-#ifdef DEBUG
-    printk("sr_photocd: TOSHIBA %x\n",rec[0]);
-#endif
     min    = (unsigned long) rec[1]/16*10 + (unsigned long) rec[1]%16;
     sec    = (unsigned long) rec[2]/16*10 + (unsigned long) rec[2]%16;
     frame  = (unsigned long) rec[3]/16*10 + (unsigned long) rec[3]%16;
@@ -436,12 +457,15 @@ static void sr_photocd(struct inode *inode)
 #ifdef DEBUG
     printk("sr_photocd: unknown drive, no special multisession code\n");
 #endif
-    sector = 0;
-    is_xa = 0;
     break; }
 
   scsi_CDs[MINOR(inode->i_rdev)].mpcd_sector = sector;
-  scsi_CDs[MINOR(inode->i_rdev)].is_xa = is_xa;
+  if (is_xa)
+    scsi_CDs[MINOR(inode->i_rdev)].xa_flags |= 0x01;
+  else
+    scsi_CDs[MINOR(inode->i_rdev)].xa_flags &= ~0x01;
+  if (no_multi)
+    scsi_CDs[MINOR(inode->i_rdev)].xa_flags |= 0x02;
   return;
 }
 
@@ -1045,3 +1069,20 @@ static void sr_detach(Scsi_Device * SDp)
     }
   return;
 }
+
+/*
+ * Overrides for Emacs so that we follow Linus's tabbing style.
+ * Emacs will notice this stuff at the end of the file and automatically
+ * adjust the settings for this buffer only.  This must remain at the end
+ * of the file.
+ * ---------------------------------------------------------------------------
+ * Local variables:
+ * c-indent-level: 8
+ * c-brace-imaginary-offset: 0
+ * c-brace-offset: -8
+ * c-argdecl-indent: 8
+ * c-label-offset: -8
+ * c-continued-statement-offset: 8
+ * c-continued-brace-offset: 0
+ * End:
+ */

@@ -765,8 +765,12 @@ unsigned long bios32_init(unsigned long memory_start, unsigned long memory_end)
 		}
 		printk ("bios32_init : BIOS32 Service Directory structure at 0x%p\n", check);
 		if (!bios32_entry) {
-			bios32_indirect.address = bios32_entry = check->fields.entry;
-			printk ("bios32_init : BIOS32 Service Directory entry at 0x%lx\n", bios32_entry);
+			if (check->fields.entry >= 0x100000) {
+				printk("bios32_init: entry in high memory, unable to access\n");
+			} else {
+				bios32_indirect.address = bios32_entry = check->fields.entry;
+				printk ("bios32_init : BIOS32 Service Directory entry at 0x%lx\n", bios32_entry);
+			}
 		} else {
 			printk ("bios32_init : multiple entries, mail drew@colorado.edu\n");
 			/*

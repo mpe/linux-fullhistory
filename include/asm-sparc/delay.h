@@ -14,7 +14,7 @@ extern __inline__ void __delay(unsigned int loops)
 {
   __asm__ __volatile__("\n1:\tcmp %0, 0\n\t"
 		       "bne,a 1b\n\t"
-		       "sub %0, 1, %0\n": "=r" (loops) : "0" (loops));
+		       "sub %0, 1, %0\n": "=&r" (loops) : "0" (loops));
 }
 
 /* udelay(usecs) is used for very short delays up to 1 millisecond. */

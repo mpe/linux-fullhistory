@@ -46,6 +46,8 @@ struct sparc_clock_info {
   unsigned char foo[14];
 };
 
+#define TIMER_PHYSADDR   0xf3000000
+
 /* YUCK YUCK YUCK, grrr... */
 #define  TIMER_STRUCT  ((struct sparc_timer_info *)((struct sparc_clock_info *) TIMER_VADDR))
 

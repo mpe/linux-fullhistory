@@ -49,6 +49,9 @@ struct timestamp {
 #elif defined(__alpha__)
 	__u8	flags:4,
 		overflow:4;
+#elif defined(__sparc__)
+	__u8	overflow:4,
+		flags:4;
 #else
 #error	"Adjust this structure to match your CPU"
 #endif						
@@ -96,6 +99,9 @@ struct iphdr {
 #elif defined(__alpha__)
 	__u8	ihl:4,
 		version:4;
+#elif defined (__sparc__)
+	__u8	version:4,
+  		ihl:4;
 #else
 #error "Adjust this structure to match your CPU"
 #endif

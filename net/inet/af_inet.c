@@ -734,6 +734,20 @@ static int inet_dup(struct socket *newsock, struct socket *oldsock)
 	return(inet_create(newsock,((struct sock *)(oldsock->data))->protocol));
 }
 
+/*
+ * Return 1 if we still have things to send in our buffers.
+ */
+static inline int closing(struct sock * sk)
+{
+	switch (sk->state) {
+		case TCP_FIN_WAIT1:
+		case TCP_CLOSING:
+		case TCP_LAST_ACK:
+			return 1;
+	}
+	return 0;
+}
+
 
 /*
  *	The peer socket should always be NULL (or else). When we call this
@@ -772,8 +786,7 @@ static int inet_release(struct socket *sock, struct socket *peer)
 		cli();
 		if (sk->lingertime)
 			current->timeout = jiffies + HZ*sk->lingertime;
-		while(sk->state < TCP_LAST_ACK && sk->state!= TCP_FIN_WAIT2 &&
-		     sk->state != TCP_TIME_WAIT && current->timeout>0) 
+		while(closing(sk) && current->timeout>0) 
 		{
 			interruptible_sleep_on(sk->sleep);
 			if (current->signal & ~current->blocked) 
@@ -856,7 +869,7 @@ outside_loop:
 			destroy_sock(sk2);
 			goto outside_loop;
 		}
-		if (!sk->reuse || sk2->state==TCP_LISTEN) 
+		if (!sk->reuse)
 		{
 			sti();
 			return(-EADDRINUSE);
@@ -866,7 +879,7 @@ outside_loop:
 			continue;		/* more than one */
 		if (sk2->saddr != sk->saddr) 
 			continue;	/* socket per slot ! -FB */
-		if (!sk2->reuse) 
+		if (!sk2->reuse || sk2->state==TCP_LISTEN) 
 		{
 			sti();
 			return(-EADDRINUSE);

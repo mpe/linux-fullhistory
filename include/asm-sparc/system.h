@@ -64,7 +64,7 @@ retval = ((retval>>8)&15); \
 retval; })
 
 #define cli()			swpipl(15)  /* 15 = no int's except nmi's */
-#define sti()			swpipl(0)   /* same as alpha */
+#define sti()			swpipl(0)   /* I'm scared */
 #define save_flags(flags)	do { flags = swpipl(15); } while (0)
 #define restore_flags(flags)	swpipl(flags)
 

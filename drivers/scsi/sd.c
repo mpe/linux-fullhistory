@@ -384,7 +384,15 @@ static void do_sd_request (void)
       SCpnt = allocate_device(&CURRENT,
 			      rscsi_disks[DEVICE_NR(MINOR(CURRENT->dev))].device, 0); 
     else SCpnt = NULL;
+
+    /*
+     * The following restore_flags leads to latency problems.  FIXME.
+     */
+#if 0
     restore_flags(flags);
+#else
+    sti();
+#endif
 
 /* This is a performance enhancement.  We dig down into the request list and
    try and find a queueable request (i.e. device not busy, and host able to
@@ -1273,3 +1281,20 @@ static void sd_detach(Scsi_Device * SDp)
     }
   return;
 }
+
+/*
+ * Overrides for Emacs so that we follow Linus's tabbing style.
+ * Emacs will notice this stuff at the end of the file and automatically
+ * adjust the settings for this buffer only.  This must remain at the end
+ * of the file.
+ * ---------------------------------------------------------------------------
+ * Local variables:
+ * c-indent-level: 8
+ * c-brace-imaginary-offset: 0
+ * c-brace-offset: -8
+ * c-argdecl-indent: 8
+ * c-label-offset: -8
+ * c-continued-statement-offset: 8
+ * c-continued-brace-offset: 0
+ * End:
+ */
