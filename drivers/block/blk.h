@@ -189,6 +189,14 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)
 
+#elif (MAJOR_NR == MATSUSHITA_CDROM_MAJOR)
+
+#define DEVICE_NAME "Matsushita CD-ROM"
+#define DEVICE_REQUEST do_sbpcd_request
+#define DEVICE_NR(device) (MINOR(device))
+#define DEVICE_ON(device)
+#define DEVICE_OFF(device)
+
 #else
 
 #error "unknown blk device"

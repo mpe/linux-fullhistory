@@ -225,6 +225,7 @@ asmlinkage int sys_fchdir(unsigned int fd)
 		return -EACCES;
 	iput(current->pwd);
 	current->pwd = inode;
+	inode->i_count++;
 	return (0);
 }
 

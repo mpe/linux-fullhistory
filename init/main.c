@@ -91,6 +91,9 @@ extern void t128_setup(char *str, int *ints);
 extern void generic_NCR5380_setup(char *str, int *intr);
 extern void aha152x_setup(char *str, int *ints);
 extern void sound_setup(char *str, int *ints);
+#ifdef CONFIG_SBPCD
+extern void sbpcd_setup(char *str, int *ints);
+#endif CONFIG_SBPCD
 
 #ifdef CONFIG_SYSVIPC
 extern void ipc_init(void);
@@ -198,6 +201,9 @@ struct {
 #ifdef CONFIG_SOUND
 	{ "sound=", sound_setup },
 #endif
+#ifdef CONFIG_SBPCD
+	{ "sbpcd=", sbpcd_setup },
+#endif CONFIG_SBPCD
 	{ 0, 0 }
 };
 

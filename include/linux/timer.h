@@ -30,6 +30,8 @@
  * TAPE_QIC02_TIMER	timer for QIC-02 tape driver (it's not hardcoded)
  *
  * MCD_TIMER		Mitsumi CD-ROM Timer
+ *
+ * SBPCD_TIMER		SoundBlaster/Matsushita/Panasonic CD-ROM timer
  */
 
 #define BLANK_TIMER	0
@@ -47,6 +49,8 @@
 #define MCD_TIMER	23
 
 #define HD_TIMER2	24
+
+#define SBPCD_TIMER	25
 
 struct timer_struct {
 	unsigned long expires;

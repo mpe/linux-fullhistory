@@ -103,6 +103,7 @@
 
 #define SEQ_TICK 3
 unsigned long seq_offset;
+#define LOCALNET_BIGPACKETS
 
 static __inline__ int 
 min(unsigned int a, unsigned int b)
@@ -177,10 +178,18 @@ static int tcp_select_window(struct sock *sk)
 {
 	int new_window = sk->prot->rspace(sk);
 
-	/* Enforce RFC793 - we've offered it we must live with it */	
-	if(new_window<sk->window)
-		return(sk->window);
-	
+/*
+ * two things are going on here.  First, we don't ever offer a
+ * window less than min(sk->mtu, MAX_WINDOW/2).  This is the
+ * receiver side of SWS as specified in RFC1122.
+ * Second, we always give them at least the window they
+ * had before, in order to avoid retracting window.  This
+ * is technically allowed, but RFC1122 advises against it and
+ * in practice it causes trouble.
+ */
+	if (new_window < min(sk->mtu, MAX_WINDOW/2) ||
+	    new_window < sk->window)
+	  return(sk->window);
 	return(new_window);
 }
 
@@ -210,18 +219,13 @@ tcp_retransmit(struct sock *sk, int all)
 	return;
   }
 
-/*
- *  If we had the full V-J mechanism, this might be right.  But
- *  for the moment we want simple slow start after error.
- *
- *  if (sk->cong_window > 4)
- *       sk->cong_window = sk->cong_window / 2;
- */
- 
-  sk->cong_window = 1;
-  sk->exp_growth = 0;
+  sk->ssthresh = sk->cong_window >> 1; /* remember window where we lost */
+  /* sk->ssthresh in theory can be zero.  I guess that's OK */
+  sk->cong_count = 0;
 
-  /* Do the actuall retransmit. */
+  sk->cong_window = 1;
+
+  /* Do the actual retransmit. */
   ip_retransmit(sk, all);
 }
 
@@ -638,8 +642,7 @@ static void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 		if (before(sk->window_seq, sk->wfront->h.seq) &&
 		    sk->send_head == NULL &&
 		    sk->ack_backlog == 0)
-		  reset_timer(sk, TIME_PROBE0, 
-			      backoff(sk->backoff) * (2 * sk->mdev + sk->rtt));
+		  reset_timer(sk, TIME_PROBE0, sk->rto);
 	} else {
 		sk->prot->queue_xmit(sk, skb->dev, skb, 0);
 	}
@@ -918,25 +921,26 @@ tcp_write(struct sock *sk, unsigned char *from,
 		continue;
 	}
 
-#if 0
 	/*
 	 * We also need to worry about the window.
-	 * If window < 1/4 offered window, don't use it.  That's
-	 *   silly window prevention.  What we actually do is 
+ 	 * If window < 1/2 the maximum window we've seen from this
+ 	 *   host, don't use it.  This is sender side
+ 	 *   silly window prevention, as specified in RFC1122.
+ 	 *   (Note that this is diffferent than earlier versions of
+ 	 *   SWS prevention, e.g. RFC813.).  What we actually do is 
 	 *   use the whole MTU.  Since the results in the right
 	 *   edge of the packet being outside the window, it will
 	 *   be queued for later rather than sent.
 	 */
 
 	copy = diff(sk->window_seq, sk->send_seq);
-	if (copy < (diff(sk->window_seq, sk->rcv_ack_seq) >> 2))
-	  copy = sk->mtu;
+	if (sk->max_window > 1) {
+	  if (copy < (sk->max_window >> 1))
+	    copy = sk->mtu;
+	} else  /* no max_window yet, punt this test */
+	  copy = sk->mtu;	
 	copy = min(copy, sk->mtu);
 	copy = min(copy, len);
-#else
-	/* This also prevents silly windows by simply ignoring the offered window.. */
-	copy = min(sk->mtu, len);
-#endif
 
   /* We should really check the window here also. */
 	if (sk->packets_out && copy < sk->mtu && !(flags & MSG_OOB)) {
@@ -1780,6 +1784,16 @@ tcp_options(struct sock *sk, struct tcphdr *th)
 
 }
 
+static inline unsigned long default_mask(unsigned long dst)
+{
+	dst = ntohl(dst);
+	if (IN_CLASSA(dst))
+		return htonl(IN_CLASSA_NET);
+	if (IN_CLASSB(dst))
+		return htonl(IN_CLASSB_NET);
+	return htonl(IN_CLASSC_NET);
+}
+
 /*
  * This routine handles a connection request.
  * It should make sure we haven't already responded.
@@ -1846,8 +1860,13 @@ tcp_conn_request(struct sock *sk, struct sk_buff *skb,
   newsk->send_head = NULL;
   newsk->send_tail = NULL;
   newsk->back_log = NULL;
-  newsk->rtt = TCP_CONNECT_TIME;
+  newsk->rtt = TCP_CONNECT_TIME << 3;
+  newsk->rto = TCP_CONNECT_TIME;
   newsk->mdev = 0;
+  newsk->max_window = 0;
+  newsk->cong_window = 1;
+  newsk->cong_count = 0;
+  newsk->ssthresh = 0;
   newsk->backoff = 0;
   newsk->blog = 0;
   newsk->intr = 0;
@@ -1903,8 +1922,14 @@ tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 /* note use of sk->mss, since user has no direct access to newsk */
   if (sk->mss)
     newsk->mtu = sk->mss;
-  else
-    newsk->mtu = 576 - HEADER_SIZE;
+  else {
+#ifdef LOCALNET_BIGPACKETS
+    if ((saddr & default_mask(saddr)) == (daddr & default_mask(daddr)))
+      newsk->mtu = MAX_WINDOW;
+    else
+#endif
+      newsk->mtu = 576 - HEADER_SIZE;
+  }
 /* but not bigger than device MTU */
   newsk->mtu = min(newsk->mtu, dev->mtu - HEADER_SIZE);
 
@@ -2036,7 +2061,11 @@ tcp_close(struct sock *sk, int timeout)
 	case TCP_FIN_WAIT2:
 	case TCP_LAST_ACK:
 		/* start a timer. */
-		reset_timer(sk, TIME_CLOSE, 4 * sk->rtt);
+                /* original code was 4 * sk->rtt.  In converting to the
+		 * new rtt representation, we can't quite use that.
+		 * it seems to make most sense to  use the backed off value
+		 */
+		reset_timer(sk, TIME_CLOSE, 4 * sk->rto);
 		if (timeout) tcp_time_wait(sk);
 		release_sock(sk);
 		return;	/* break causes a double release - messy */
@@ -2109,8 +2138,7 @@ tcp_close(struct sock *sk, int timeout)
 		if (sk->wfront == NULL) {
 			prot->queue_xmit(sk, dev, buff, 0);
 		} else {
-			reset_timer(sk, TIME_WRITE,
-			  backoff(sk->backoff) * (2 * sk->mdev + sk->rtt));
+			reset_timer(sk, TIME_WRITE, sk->rto);
 			buff->next = NULL;
 			if (sk->wback == NULL) {
 				sk->wfront=buff;
@@ -2218,6 +2246,12 @@ tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
 {
   unsigned long ack;
   int flag = 0;
+  /* 
+   * 1 - there was data in packet as well as ack or new data is sent or 
+   *     in shutdown state
+   * 2 - data from retransmit queue was acked and removed
+   * 4 - window shrunk or data from retransmit queue was acked and removed
+   */
 
   if(sk->zapped)
 	return(1);	/* Dead, cant ack any more so why bother */
@@ -2226,6 +2260,9 @@ tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
   DPRINTF((DBG_TCP, "tcp_ack ack=%d, window=%d, "
 	  "sk->rcv_ack_seq=%d, sk->window_seq = %d\n",
 	  ack, ntohs(th->window), sk->rcv_ack_seq, sk->window_seq));
+
+  if (ntohs(th->window) > sk->max_window)
+  	sk->max_window = ntohs(th->window);
 
   if (sk->retransmits && sk->timeout == TIME_KEEPOPEN)
   	sk->retransmits = 0;
@@ -2309,9 +2346,29 @@ tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
 
   /* We don't want too many packets out there. */
   if (sk->timeout == TIME_WRITE && 
-      sk->cong_window < 2048 && ack != sk->rcv_ack_seq) {
-	if (sk->exp_growth) sk->cong_window *= 2;
-	  else sk->cong_window++;
+      sk->cong_window < 2048 && after(ack, sk->rcv_ack_seq)) {
+/* 
+ * This is Jacobson's slow start and congestion avoidance. 
+ * SIGCOMM '88, p. 328.  Because we keep cong_window in integral
+ * mss's, we can't do cwnd += 1 / cwnd.  Instead, maintain a 
+ * counter and increment it once every cwnd times.  It's possible
+ * that this should be done only if sk->retransmits == 0.  I'm
+ * interpreting "new data is acked" as including data that has
+ * been retransmitted but is just now being acked.
+ */
+	if (sk->cong_window < sk->ssthresh)  
+	  /* in "safe" area, increase */
+	  sk->cong_window++;
+	else {
+	  /* in dangerous area, increase slowly.  In theory this is
+	     sk->cong_window += 1 / sk->cong_window
+	   */
+	  if (sk->cong_count >= sk->cong_window) {
+	    sk->cong_window++;
+	    sk->cong_count = 0;
+	  } else 
+	    sk->cong_count++;
+	}
   }
 
   DPRINTF((DBG_TCP, "tcp_ack: Updating rcv ack sequence.\n"));
@@ -2327,6 +2384,12 @@ tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
 	    ! before (sk->window_seq, sk->wfront->h.seq)) {
 	  sk->retransmits = 0;
 	  sk->backoff = 0;
+	  /* recompute rto from rtt.  this eliminates any backoff */
+	  sk->rto = ((sk->rtt >> 2) + sk->mdev) >> 1;
+	  if (sk->rto > 120*HZ)
+	    sk->rto = 120*HZ;
+	  if (sk->rto < 1*HZ)
+	    sk->rto = 1*HZ;
 	}
   }
 
@@ -2344,23 +2407,36 @@ tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
 
 		if (sk->retransmits) {
 
-		  /* if we're retransmitting, don't start any new
-		   * packets until after everything in retransmit queue
-		   * is acked.  That's as close as I can come at the
-		   * moment to slow start the way this code is organized
+		  /* we were retransmitting.  don't count this in RTT est */
+		  flag |= 2;
+
+		  /*
+		   * even though we've gotten an ack, we're still
+		   * retransmitting as long as we're sending from
+		   * the retransmit queue.  Keeping retransmits non-zero
+		   * prevents us from getting new data interspersed with
+		   * retransmissions.
 		   */
+
 		  if (sk->send_head->link3)
 		    sk->retransmits = 1;
 		  else
 		    sk->retransmits = 0;
+
 		}
 
-		/*
-		 * need to restart backoff whenever we get a response,
-		 * or things get impossible if we lose a window-full of
-		 * data with very small MSS
+  		/*
+		 * Note that we only reset backoff and rto in the
+		 * rtt recomputation code.  And that doesn't happen
+		 * if there were retransmissions in effect.  So the
+		 * first new packet after the retransmissions is
+		 * sent with the backoff still in effect.  Not until
+		 * we get an ack from a non-retransmitted packet do
+		 * we reset the backoff and rto.  This allows us to deal
+		 * with a situation where the network delay has increased
+		 * suddenly.  I.e. Karn's algorithm. (SIGCOMM '87, p5.)
 		 */
-		sk->backoff = 0;
+
 		/* We have one less packet out there. */
 		if (sk->packets_out > 0) sk->packets_out --;
 		DPRINTF((DBG_TCP, "skb=%X skb->h.seq = %d acked ack=%d\n",
@@ -2371,42 +2447,32 @@ tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
 
 		oskb = sk->send_head;
 
-		/* 
-		 * In theory we're supposed to ignore rtt's when there's
-		 * retransmission in process.  Unfortunately this means
-		 * that if there's a sharp increase in RTT, we may 
-		 * never get out of retransmission.  For the moment
-		 * ignore the test.
-		 */
+		if (!(flag&2)) {
+		  long m;
 
-		if (/* sk->retransmits == 0 && */ !(flag&2)) {
-		  long abserr, rtt = jiffies - oskb->when;
-
-		  /*
-		   * Berkeley's code puts these limits on a separate timeout
-		   * field, not on the RTT estimate itself.  However the way this
-		   * code is done, that would complicate things.  If we're going
-		   * to clamp the values, we have to do so before calculating
-		   * the mdev, or we'll get unreasonably large mdev's.  Experience
-		   * shows that with a minium rtt of .1 sec, we get spurious
-		   * retransmits, due to delayed acks on some hosts.  Berkeley uses
-		   * 1 sec, so why not?
+		  /* The following amusing code comes from Jacobson's
+		   * article in SIGCOMM '88.  Note that rtt and mdev
+		   * are scaled versions of rtt and mean deviation.
+		   * This is designed to be as fast as possible 
+		   * m stands for "measurement".
 		   */
 
-		  if (rtt < 100) rtt = 100; /* 1 sec */
-		  if (rtt > 12000) rtt = 12000; /* 2 min - max rtt allowed by protocol */
+		  m = jiffies - oskb->when;  /* RTT */
+		  m -= (sk->rtt >> 3);       /* m is now error in rtt est */
+		  sk->rtt += m;              /* rtt = 7/8 rtt + 1/8 new */
+		  if (m < 0)
+		    m = -m;		     /* m is now abs(error) */
+		  m -= (sk->mdev >> 2);      /* similar update on mdev */
+		  sk->mdev += m;	     /* mdev = 3/4 mdev + 1/4 new */
 
-		  if (sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV) {
-		    /* first ack, so nothing else to average with */
-		    sk->rtt = rtt;
-		    sk->mdev = rtt; /* overcautious initial estimate */
-		  }
-		  else {
-		    abserr = (rtt > sk->rtt) ? rtt - sk->rtt : sk->rtt - rtt;
-		    sk->rtt = (7 * sk->rtt + rtt) >> 3;
-		    sk->mdev = (3 * sk->mdev + abserr) >> 2;
-		  }
+		  /* now update timeout.  Note that this removes any backoff */
+		  sk->rto = ((sk->rtt >> 2) + sk->mdev) >> 1;
+		  if (sk->rto > 120*HZ)
+		    sk->rto = 120*HZ;
+		  if (sk->rto < 1*HZ)
+		    sk->rto = 1*HZ;
 		  sk->backoff = 0;
+
 		}
 		flag |= (2|4);
 
@@ -2446,8 +2512,7 @@ tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
  		   sk->send_head == NULL &&
  		   sk->ack_backlog == 0 &&
  		   sk->state != TCP_TIME_WAIT) {
- 	        reset_timer(sk, TIME_PROBE0, 
- 			    backoff(sk->backoff) * (2 * sk->mdev + sk->rtt));
+ 	        reset_timer(sk, TIME_PROBE0, sk->rto);
  	}		
   } else {
 	if (sk->send_head == NULL && sk->ack_backlog == 0 &&
@@ -2461,8 +2526,7 @@ tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
 			delete_timer(sk);
 	} else {
 		if (sk->state != (unsigned char) sk->keepopen) {
-			reset_timer(sk, TIME_WRITE,
-			  backoff(sk->backoff) * (2 * sk->mdev + sk->rtt));
+			reset_timer(sk, TIME_WRITE, sk->rto);
 		}
 		if (sk->state == TCP_TIME_WAIT) {
 			reset_timer(sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
@@ -2503,12 +2567,41 @@ tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int len)
 	}
   }
 
+/*
+ * I make no guarantees about the first clause in the following
+ * test, i.e. "(!flag) || (flag&4)".  I'm not entirely sure under
+ * what conditions "!flag" would be true.  However I think the rest
+ * of the conditions would prevent that from causing any
+ * unnecessary retransmission. 
+ *   Clearly if the first packet has expired it should be 
+ * retransmitted.  The other alternative, "flag&2 && retransmits", is
+ * harder to explain:  You have to look carefully at how and when the
+ * timer is set and with what timeout.  The most recent transmission always
+ * sets the timer.  So in general if the most recent thing has timed
+ * out, everything before it has as well.  So we want to go ahead and
+ * retransmit some more.  If we didn't explicitly test for this
+ * condition with "flag&2 && retransmits", chances are "when + rto < jiffies"
+ * would not be true.  If you look at the pattern of timing, you can
+ * show that rto is increased fast enough that the next packet would
+ * almost never be retransmitted immediately.  Then you'd end up
+ * waiting for a timeout to send each packet on the retranmission
+ * queue.  With my implementation of the Karn sampling algorithm,
+ * the timeout would double each time.  The net result is that it would
+ * take a hideous amount of time to recover from a single dropped packet.
+ * It's possible that there should also be a test for TIME_WRITE, but
+ * I think as long as "send_head != NULL" and "retransmit" is on, we've
+ * got to be in real retransmission mode.
+ *   Note that ip_do_retransmit is called with all==1.  Setting cong_window
+ * back to 1 at the timeout will cause us to send 1, then 2, etc. packets.
+ * As long as no further losses occur, this seems reasonable.
+ */
+
   if (((!flag) || (flag&4)) && sk->send_head != NULL &&
-      (sk->send_head->when + backoff(sk->backoff) * (2 * sk->mdev + sk->rtt)
-       < jiffies)) {
-	sk->exp_growth = 0;
-	ip_retransmit(sk, 1);
-  }
+      (((flag&2) && sk->retransmits) ||
+       (sk->send_head->when + sk->rto < jiffies))) {
+	ip_do_retransmit(sk, 1);
+	reset_timer(sk, TIME_WRITE, sk->rto);
+      }
 
   DPRINTF((DBG_TCP, "leaving tcp_ack\n"));
   return(1);
@@ -2979,8 +3072,15 @@ tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 /* use 512 or whatever user asked for */
   if (sk->mss)
     sk->mtu = sk->mss;
-  else
-    sk->mtu = 576 - HEADER_SIZE;
+  else {
+#ifdef LOCALNET_BIGPACKETS
+    if ((sk->saddr & default_mask(sk->saddr)) == 
+	(sk->daddr & default_mask(sk->daddr)))
+      sk->mtu = MAX_WINDOW;
+    else
+#endif
+      sk->mtu = 576 - HEADER_SIZE;
+  }
 /* but not bigger than device MTU */
   sk->mtu = min(sk->mtu, dev->mtu - HEADER_SIZE);
 
@@ -3639,8 +3739,15 @@ tcp_send_probe0(struct sock *sk)
    */
   sk->prot->queue_xmit(sk, dev, skb2, 1);
   sk->backoff++;
-  reset_timer (sk, TIME_PROBE0, 
-	       backoff (sk->backoff) * (2 * sk->mdev + sk->rtt));
+  /*
+   * in the case of retransmissions, there's good reason to limit
+   * rto to 120 sec, as that's the maximum legal RTT on the Internet.
+   * For probes it could reasonably be longer.  However making it
+   * much longer could cause unacceptable delays in some situation,
+   * so we might as well use the same value
+   */
+  sk->rto = min(sk->rto << 1, 120*HZ);
+  reset_timer (sk, TIME_PROBE0, sk->rto);
   sk->retransmits++;
   sk->prot->retransmits ++;
 }

@@ -843,13 +843,15 @@ inet_create(struct socket *sock, int protocol)
   sk->copied_seq = 0;
   sk->fin_seq = 0;
   sk->proc = 0;
-  sk->rtt = TCP_WRITE_TIME;
+  sk->rtt = TCP_WRITE_TIME << 3;
+  sk->rto = TCP_WRITE_TIME;
   sk->mdev = 0;
   sk->backoff = 0;
   sk->packets_out = 0;
   sk->cong_window = 1; /* start with only sending one packet at a time. */
-  sk->exp_growth = 1;  /* if set cong_window grow exponentially every time
-			  we get an ack. */
+  sk->cong_count = 0;
+  sk->ssthresh = 0;
+  sk->max_window = 0;
   sk->urginline = 0;
   sk->intr = 0;
   sk->linger = 0;

@@ -72,6 +72,8 @@
 extern int last_retran;
 extern void sort_send(struct sock *sk);
 
+#define min(a,b)	((a)<(b)?(a):(b))
+
 void
 ip_print(struct iphdr *ip)
 {
@@ -1402,8 +1404,7 @@ ip_queue_xmit(struct sock *sk, struct device *dev,
 		}
 	}
 	sti();
-	reset_timer(sk, TIME_WRITE,
-		backoff(sk->backoff) * (2 * sk->mdev + sk->rtt));
+	reset_timer(sk, TIME_WRITE, sk->rto);
   } else {
 	skb->sk = sk;
   }
@@ -1423,14 +1424,16 @@ ip_queue_xmit(struct sock *sk, struct device *dev,
 
 
 void
-ip_retransmit(struct sock *sk, int all)
+ip_do_retransmit(struct sock *sk, int all)
 {
   struct sk_buff * skb;
   struct proto *prot;
   struct device *dev;
+  int retransmits;
 
   prot = sk->prot;
   skb = sk->send_head;
+  retransmits = sk->retransmits;
   while (skb != NULL) {
 	dev = skb->dev;
 	/* I know this can't happen but as it does.. */
@@ -1469,7 +1472,7 @@ ip_retransmit(struct sock *sk, int all)
 	/*	  else dev->queue_xmit(skb, dev, SOPRI_NORMAL ); CANNOT HAVE SK=NULL HERE */
 	}
 
-oops:	sk->retransmits++;
+oops:	retransmits++;
 	sk->prot->retransmits ++;
 	if (!all) break;
 
@@ -1477,43 +1480,37 @@ oops:	sk->retransmits++;
 	if (sk->retransmits > sk->cong_window) break;
 	skb = (struct sk_buff *)skb->link3;
   }
-
-  /*
-   * Increase the RTT time every time we retransmit. 
-   * This will cause exponential back off on how hard we try to
-   * get through again.  Once we get through, the rtt will settle
-   * back down reasonably quickly.
-   */
-  sk->backoff++;
-  reset_timer(sk, TIME_WRITE, backoff(sk->backoff) * (2 * sk->mdev + sk->rtt));
 }
 
-/* Backoff function - the subject of much research */
-int backoff(int n)
-{
-	/* Use binary exponential up to retry #4, and quadratic after that
-	 * This yields the sequence
-	 * 1, 2, 4, 8, 16, 25, 36, 49, 64, 81, 100 ...
-	 */
+/*
+ * This is the normal code called for timeouts.  It does the retransmission
+ * and then does backoff.  ip_do_retransmit is separated out because
+ * tcp_ack needs to send stuff from the retransmit queue without
+ * initiating a backoff.
+ */
 
-	if(n<0)
-	{
-		printk("Backoff < 0!\n");
-		return 16;	/* Make up a value */
-	}
-	
-	if(n <= 4)
-		return 1 << n;	/* Binary exponential back off */
-	else
-	{
-		if(n<255)
-			return n * n;	/* Quadratic back off */
-		else
-		{
-			printk("Overloaded backoff!\n");
-			return 255*255;
-		}
-	}
+void
+ip_retransmit(struct sock *sk, int all)
+{
+  ip_do_retransmit(sk, all);
+
+  /*
+   * Increase the timeout each time we retransmit.  Note that
+   * we do not increase the rtt estimate.  rto is initialized
+   * from rtt, but increases here.  Jacobson (SIGCOMM 88) suggests
+   * that doubling rto each time is the least we can get away with.
+   * In KA9Q, Karns uses this for the first few times, and then
+   * goes to quadratic.  netBSD doubles, but only goes up to *64,
+   * and clamps at 1 to 64 sec afterwards.  Note that 120 sec is
+   * defined in the protocol as the maximum possible RTT.  I guess
+   * we'll have to use something other than TCP to talk to the
+   * University of Mars.
+   */
+
+  sk->retransmits++;
+  sk->backoff++;
+  sk->rto = min(sk->rto << 1, 120*HZ);
+  reset_timer(sk, TIME_WRITE, sk->rto);
 }
 
 /*

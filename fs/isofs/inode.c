@@ -30,6 +30,9 @@ extern int check_cdu31a_media_change(int, int);
 #if defined(CONFIG_MCD)
 extern int check_mcd_media_change(int, int);
 #endif
+#if defined (CONFIG_SBPCD)
+extern int check_sbpcd_media_change(int, int);
+#endif CONFIG_SBPCD
 
 #ifdef LEAK_CHECK
 static int check_malloc = 0;
@@ -288,6 +291,13 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 		  goto out;
 	}
 #endif
+#if defined(CONFIG_SBPCD)
+	if (MAJOR(s->s_dev) == MATSUSHITA_CDROM_MAJOR) {
+		if (check_sbpcd_media_change(s->s_dev,0))
+		  goto out;
+	};
+#endif CONFIG_SBPCD
+
 	return s;
  out: /* Kick out for various error conditions */
 	brelse(bh);

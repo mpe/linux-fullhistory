@@ -157,10 +157,9 @@ net_timer (unsigned long data)
 	 * So we need to check for that.
 	 */
 	if (sk->send_head) {
-	  if (jiffies < (sk->send_head->when + backoff (sk->backoff)
-	    * (2 * sk->mdev + sk->rtt))) {
-	    reset_timer (sk, TIME_WRITE, (sk->send_head->when
-		+ backoff (sk->backoff) * (2 * sk->mdev + sk->rtt)) - jiffies);
+	  if (jiffies < (sk->send_head->when + sk->rto)) {
+	    reset_timer (sk, TIME_WRITE, 
+			 (sk->send_head->when + sk->rto - jiffies));
 	    release_sock (sk);
 	    break;
 	  }

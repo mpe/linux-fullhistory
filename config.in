@@ -87,6 +87,7 @@ fi
 *
 bool 'Sony CDU31A CDROM driver support' CONFIG_CDU31A n
 bool 'Mitsumi CDROM driver support' CONFIG_MCD n
+bool 'Matsushita/Panasonic CDROM driver support' CONFIG_SBPCD n
 *
 * Filesystems
 *

@@ -18,6 +18,10 @@
 
 #include "blk.h"
 
+#ifdef CONFIG_SBPCD
+extern u_long sbpcd_init(u_long, u_long);
+#endif CONFIG_SBPCD
+
 /*
  * The request-struct contains all necessary data
  * to load a nr of sectors into memory
@@ -485,6 +489,9 @@ long blk_dev_init(long mem_start, long mem_end)
 #ifdef CONFIG_MCD
 	mem_start = mcd_init(mem_start,mem_end);
 #endif
+#ifdef CONFIG_SBPCD
+	mem_start = sbpcd_init(mem_start, mem_end);
+#endif CONFIG_SBPCD
 	if (ramdisk_size)
 		mem_start += rd_init(mem_start, ramdisk_size*1024);
 	return mem_start;

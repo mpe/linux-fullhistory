@@ -42,7 +42,7 @@
  * 22 -                        (at2disk)
  * 23 -                        mitsumi cdrom
  * 24 -	                       sony535 cdrom
- * 25 -
+ * 25 -                        matsushita cdrom       minors 0..3
  * 26 -
  * 27 - qic117 tape
  */
@@ -71,6 +71,7 @@
 /* unused: 22 */
 #define MITSUMI_CDROM_MAJOR 23
 #define CDU535_CDROM_MAJOR 24
+#define MATSUSHITA_CDROM_MAJOR 25
 #define QIC117_TAPE_MAJOR 27
 
 /*

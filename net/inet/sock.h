@@ -79,7 +79,6 @@ struct sock {
 				destroy,
 				ack_timed,
 				no_check,
-				exp_growth,
 				zapped,	/* In ax25 & ipx means not linked */
 				broadcast,
 				nonagle;
@@ -103,14 +102,21 @@ struct sock {
   unsigned short		window;
   unsigned short		bytes_rcv;
   unsigned short		mtu;
+  unsigned short		max_window;
   unsigned short		num;
   volatile unsigned short	cong_window;
+  volatile unsigned short	cong_count;
+  volatile unsigned short	ssthresh;
   volatile unsigned short	packets_out;
   volatile unsigned short	urg;
   volatile unsigned short	shutdown;
   unsigned short		mss;
   volatile unsigned long	rtt;
   volatile unsigned long	mdev;
+  volatile unsigned long	rto;
+/* currently backoff isn't used, but I'm maintaining it in case
+ * we want to go back to a backoff formula that needs it
+ */
   volatile unsigned short	backoff;
   volatile short		err;
   unsigned char			protocol;

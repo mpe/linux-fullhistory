@@ -213,7 +213,7 @@ static int screen_size = 0;
 #define VT102ID "\033[?6c"
 
 static unsigned char * translations[] = {
-/* 8-bit Latin-1 mapped to the PC charater set: '\0' means non-printable */
+/* 8-bit Latin-1 mapped to the PC character set: '\0' means non-printable */
 (unsigned char *)
 	"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
 	"\0\0\0\0\0\0\0\0\0\0\376\0\0\0\0\0"

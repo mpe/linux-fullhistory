@@ -9,8 +9,10 @@
 
 _register_chrdev
 _unregister_chrdev
-___verify_write
 _wake_up_interruptible
+
+_wp_works_ok
+___verify_write
 
 _current
 _jiffies

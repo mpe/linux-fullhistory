@@ -34,6 +34,14 @@ OBJS := $(OBJS) mcd.o
 SRCS := $(SRCS) mcd.c
 endif
 
+ifdef CONFIG_SBPCD
+OBJS := $(OBJS) sbpcd.o
+SRCS := $(SRCS) sbpcd.c
+ifdef PATCHLEVEL
+CFLAGS := $(CFLAGS) -DPATCHLEVEL=$(PATCHLEVEL) 
+endif
+endif #CONFIG_SBPCD
+
 ifdef CONFIG_BLK_DEV_HD
 OBJS := $(OBJS) hd.o
 SRCS := $(SRCS) hd.c

@@ -294,7 +294,7 @@ struct tty_ldisc {
 			 unsigned int cmd, unsigned long arg);
 	int	(*select)(struct tty_struct * tty, struct inode * inode,
 			  struct file * file, int sel_type,
-			  select_table *wait);
+			  struct select_table_struct *wait);
 	/*
 	 * The following routines are called from below.
 	 */

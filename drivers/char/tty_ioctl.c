@@ -213,23 +213,8 @@ static int set_termios_2(struct tty_struct * tty, struct termios * termios)
 		wake_up_interruptible(&tty->link->secondary.proc_list);
 	}
 
-#if 0
-	/* puting mpty's into echo mode is very bad, and I think under
-	   some situations can cause the kernel to do nothing but
-	   copy characters back and forth. -RAB */
-	/* This can no longer happen because a set_termios is redirected
-	   to the pty slave.  -- jrs */
-	if (IS_A_PTY_MASTER(channel)) tty->termios->c_lflag &= ~ECHO;
-#endif
-
 	unset_locked_termios(tty->termios, &old_termios,
 			     termios_locked[tty->line]);
-
-#if 0
-	retval = tty_set_ldisc(tty, tty->termios->c_line);
-	if (retval)
-		return retval;
-#endif
 
 	if (tty->set_termios)
 		(*tty->set_termios)(tty, &old_termios);
