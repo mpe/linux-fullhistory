@@ -162,4 +162,11 @@ config DVB_OR51132
 	tristate "OR51132 based (pcHDTV)"
 	depends on DVB_CORE
 
+config DVB_OR51211
+	tristate "or51211 based (pcHDTV HD2000 card)"
+	depends on DVB_CORE
+	select FW_LOADER
+	help
+	  An ATSC 8VSB tuner module. Say Y when you want to support this frontend.
+
 endmenu
