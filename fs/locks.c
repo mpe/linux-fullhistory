@@ -375,8 +375,22 @@ next_lock:
 	}
 
 	if (! added) {
-		if (caller->fl_type == F_UNLCK)
+		if (caller->fl_type == F_UNLCK) {
+/*
+ * XXX - under iBCS-2, attempting to unlock a not-locked region is 
+ * 	not considered an error condition, although I'm not sure if this 
+ * 	should be a default behavior (it makes porting to native Linux easy)
+ * 	or a personality option.
+ *
+ *	Does Xopen/1170 say anything about this?
+ *	- drew@Colorado.EDU
+ */
+#if 0
+			return -EINVAL;
+#else
 			return 0;
+#endif
+		}
 		if (! (caller = alloc_lock(before, caller, fd)))
 			return -ENOLCK;
 	}

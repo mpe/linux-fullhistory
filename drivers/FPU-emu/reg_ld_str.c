@@ -825,7 +825,7 @@ int reg_store_single(float *single, FPU_REG *st0_ptr)
 #ifdef PARANOID
   else
     {
-      EXCEPTION(EX_INTERNAL|0x106);
+      EXCEPTION(EX_INTERNAL|0x163);
       return 0;
     }
 #endif
@@ -1389,16 +1389,16 @@ static void write_to_extended(FPU_REG *rp, char *d)
     {
     case TW_Zero:
       if ( rp->sigh | rp->sigl | e )
-	EXCEPTION(EX_INTERNAL | 0x114);
+	EXCEPTION(EX_INTERNAL | 0x160);
       break;
     case TW_Infinity:
     case TW_NaN:
       if ( (e ^ 0x7fff) | !(rp->sigh & 0x80000000) )
-	EXCEPTION(EX_INTERNAL | 0x114);
+	EXCEPTION(EX_INTERNAL | 0x161);
       break;
     default:
       if (e > 0x7fff || e < -63)
-	EXCEPTION(EX_INTERNAL | 0x114);
+	EXCEPTION(EX_INTERNAL | 0x162);
     }
 #endif PARANOID
 

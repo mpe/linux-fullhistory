@@ -58,7 +58,7 @@ extern int ni52_probe(struct device *);
 extern int ni65_probe(struct device *);
 extern int SK_init(struct device *);
 
-/* Detachable devices ("pocket adaptors" and special PCMCIA drivers). */
+/* Detachable devices ("pocket adaptors") */
 extern int atp_init(struct device *);
 extern int de600_probe(struct device *);
 extern int de620_probe(struct device *);
@@ -144,38 +144,6 @@ ethif_probe(struct device *dev)
     return 0;
 }
 
-#ifdef CONFIG_PCMCIA_NET
-extern int dl_open(struct device *dev);
-extern int tc589_open(struct device *dev);
-extern int ibmccae_open(struct device *dev);
-static int pc_eth_open(struct device *dev);
-
-static int pc_eth_probe(struct device *dev)
-  {
-  dev->open = &pc_eth_open;
-  dev->set_config = &ether_config;
-  dev->tbusy = 1;
-  return 0;
-  }
-
-static int pc_eth_open(struct device *dev)
-  {
-  if (1
-#ifdef CONFIG_DE650
-      && dl_open(dev)
-#endif
-#ifdef CONFIG_3C589
-      && tc589_open(dev)
-#endif
-#ifdef CONFIG_IBMCCAE
-      && ibmccae_open(dev)
-#endif
-      && 1)
-    return -ENODEV;
-  else
-    return 0;
-  }
-#endif /* CONFIG_PCMCIA_NET */
 
 
 /* Run-time ATtachable (Pocket) devices have a different (not "eth#") name. */
@@ -185,17 +153,6 @@ static struct device atp_dev = {
 #   undef NEXT_DEV
 #   define NEXT_DEV	(&atp_dev)
 #endif
-
-#ifdef CONFIG_PCMCIA_NET
-static struct device pc_eth1_dev = {
-    "pc_eth1", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, pc_eth_probe,
-    };
-static struct device pc_eth0_dev = {
-    "pc_eth0", 0, 0, 0, 0, 0, 0, 0, 0, 0, &pc_eth1_dev, pc_eth_probe,
-    };
-#   undef NEXT_DEV
-#   define NEXT_DEV	(&pc_eth0_dev)
-#endif /* CONFIG_PCMCIA_NET */
 
 /* The first device defaults to I/O base '0', which means autoprobe. */
 #ifndef ETH0_ADDR

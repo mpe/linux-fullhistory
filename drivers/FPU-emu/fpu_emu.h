@@ -143,13 +143,6 @@ extern unsigned char const data_sizes_16[32];
 /*----- Prototypes for functions written in assembler -----*/
 /* extern void reg_move(FPU_REG *a, FPU_REG *b); */
 
-asmlinkage void mul64(unsigned long long const *a, unsigned long long const *b,
-		      unsigned long long *result);
-asmlinkage void poly_div2(unsigned long long *x);
-asmlinkage void poly_div4(unsigned long long *x);
-asmlinkage void poly_div16(unsigned long long *x);
-asmlinkage void polynomial(unsigned accum[], unsigned const x[],
-		       unsigned short const terms[][4], int const n);
 asmlinkage void normalize(FPU_REG *x);
 asmlinkage void normalize_nuo(FPU_REG *x);
 asmlinkage int reg_div(FPU_REG const *arg1, FPU_REG const *arg2,

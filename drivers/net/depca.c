@@ -114,6 +114,29 @@
     used and the common memory area is in low memory on the network card (my
     current system has 20MB and I've not had problems yet).
 
+    The ability to load this driver as a loadable module has been added. To
+    utilise this ability, you have to do <8 things:
+
+    1) copy depca.c from the  /linux/drivers/net directory to your favourite
+    temporary directory.
+    2) edit the  source code near  line 1530 to reflect  the I/O address and
+    IRQ you're using.
+    3) compile  depca.c, but include -DMODULE in  the command line to ensure
+    that the correct bits are compiled (see end of source code).
+    4) if you are wanting to add a new  card, goto 5. Otherwise, recompile a
+    kernel with the depca configuration turned off and reboot.
+    5) insmod depca.o
+    6) run the net startup bits for your eth?? interface manually 
+    (usually /etc/rc.inet[12] at boot time). 
+    7) enjoy!
+
+    Note that autoprobing is not allowed in loadable modules - the system is
+    already up and running and you're messing with interrupts. Also, there
+    is no way to check on the number of depcas installed at the moment.
+
+    To unload a module, turn off the associated interface 
+    'ifconfig eth?? down' then 'rmmod depca'.
+
     TO DO:
     ------
 
@@ -125,7 +148,7 @@
     Version   Date        Description
   
       0.1   25-jan-94     Initial writing.
-      0.2   27-jan-94     Added LANCE TX buffer chaining.
+      0.2   27-jan-94     Added LANCE TX hardware buffer chaining.
       0.3    1-feb-94     Added multiple DEPCA support.
       0.31   4-feb-94     Added DE202 recognition.
       0.32  19-feb-94     Tidy up. Improve multi-DEPCA support.
@@ -136,11 +159,12 @@
       0.35   8-mar-94     Added DE201 recognition. Tidied up.
       0.351 30-apr-94     Added EISA support. Added DE422 recognition.
       0.36  16-may-94     DE422 fix released.
+      0.37  22-jul-94     Added MODULE support
 
     =========================================================================
 */
 
-static char *version = "depca.c:v0.36 5/16/94 davies@wanton.lkg.dec.com\n";
+static char *version = "depca.c:v0.37 7/22/94 davies@wanton.lkg.dec.com\n";
 
 #include <stdarg.h>
 #include <linux/config.h>
@@ -159,12 +183,18 @@ static char *version = "depca.c:v0.36 5/16/94 davies@wanton.lkg.dec.com\n";
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+
+#ifdef MODULE
+#include <linux/module.h>
+#include "/linux/tools/version.h"
+#endif /* MODULE */
+
 #include "depca.h"
 
 #ifdef DEPCA_DEBUG
-int depca_debug = DEPCA_DEBUG;
+static int depca_debug = DEPCA_DEBUG;
 #else
-int depca_debug = 1;
+static int depca_debug = 1;
 #endif
 
 #ifndef PROBE_LENGTH
@@ -302,11 +332,19 @@ static int DevicePresent(short ioaddr);
 #ifdef HAVE_MULTICAST
 static void SetMulticastFilter(int num_addrs, char *addrs, char *multicast_table);
 #endif
+
+#ifndef MODULE
 static struct device *isa_probe(struct device *dev);
 static struct device *eisa_probe(struct device *dev);
 static struct device *alloc_device(struct device *dev, int ioaddr);
 
 static int num_depcas = 0, num_eth = 0;;
+
+#else
+int  init_module(void);
+void cleanup_module(void);
+
+#endif /* MODULE */
 
 /*
 ** Miscellaneous defines...
@@ -320,9 +358,11 @@ static int num_depcas = 0, num_eth = 0;;
 
 int depca_probe(struct device *dev)
 {
-    int base_addr = dev->base_addr;
+    short base_addr = dev->base_addr;
     int status = -ENODEV;
+#ifndef MODULE
     struct device *eth0;
+#endif
 
     if (base_addr > 0x1ff) {	      /* Check a single specified location. */
       if (DevicePresent(base_addr) == 0) { /* Is DEPCA really here? */
@@ -331,10 +371,16 @@ int depca_probe(struct device *dev)
     } else if (base_addr > 0) {	      /* Don't probe at all. */
       status = -ENXIO;
     } else {                          /* First probe for the DEPCA test */
-                                      /* pattern in ROM */
+
+#ifdef MODULE                         /* pattern in ROM */
+      printk("Autoprobing is not supported when loading a module based driver.\n");
+      status = -EIO;
+#else
       eth0=isa_probe(dev);
       eth0=eisa_probe(eth0);
       if (dev->priv) status=0;
+#endif /* MODULE */
+
     }
 
     if (status) dev->base_addr = base_addr;
@@ -559,10 +605,11 @@ depca_probe1(struct device *dev, short ioaddr)
 
 	/* The DMA channel may be passed in on this parameter. */
 	dev->dma = 0;
-	
+
 	/* To auto-IRQ we enable the initialization-done and DMA err,
 	 interrupts. For now we will always get a DMA error. */
 	if (dev->irq < 2) {
+#ifndef MODULE
 	  autoirq_setup(0);
 
 	  /* Trigger an initialization just for the interrupt. */
@@ -575,6 +622,7 @@ depca_probe1(struct device *dev, short ioaddr)
 	    printk(" and failed to detect IRQ line.\n");
 	    status = -EAGAIN;
 	  }
+#endif /* MODULE */
 	} else {
 	  printk(" and assigned IRQ%d.\n", dev->irq);
 	}
@@ -689,6 +737,10 @@ depca_open(struct device *dev)
       printk("CSR0: 0x%4.4x\n",inw(DEPCA_DATA));
       printk("nicsr: 0x%02x\n",inb(DEPCA_NICSR));
     }
+
+#ifdef MODULE
+  MOD_INC_USE_COUNT;
+#endif       
 
     return 0;			          /* Always succeed */
 }
@@ -1091,6 +1143,10 @@ depca_close(struct device *dev)
 
     irq2dev_map[dev->irq] = 0;
 
+#ifdef MODULE
+    MOD_DEC_USE_COUNT;
+#endif    
+
     return 0;
 }
 
@@ -1229,6 +1285,7 @@ static void SetMulticastFilter(int num_addrs, char *addrs, char *multicast_table
 
 #endif  /* HAVE_MULTICAST */
 
+#ifndef MODULE
 /*
 ** ISA bus I/O device probe
 */
@@ -1241,11 +1298,6 @@ struct device *dev;
   for (status = -ENODEV, port = &ports[0]; 
                              *port && (num_depcas < MAX_NUM_DEPCAS); port++) {
     int ioaddr = *port;
-
-#ifdef HAVE_PORTRESERVE
-    if (check_region(ioaddr, DEPCA_TOTAL_SIZE))
-	    continue;
-#endif
 
     if (DevicePresent(ioaddr) == 0) {
       if (num_depcas > 0) {        /* only gets here in autoprobe */
@@ -1274,10 +1326,6 @@ struct device *dev;
   ioaddr+=0x1000;                         /* get the first slot address */
   for (status = -ENODEV, i=1; i<MAX_EISA_SLOTS; i++, ioaddr+=0x1000) {
 
-#ifdef HAVE_PORTRESERVE
-    if (check_region(ioaddr, DEPCA_TOTAL_SIZE))
-	    continue;
-#endif
     if (DevicePresent(ioaddr) == 0) {
       if (num_depcas > 0) {        /* only gets here in autoprobe */
 	dev = alloc_device(dev, ioaddr);
@@ -1340,6 +1388,7 @@ int ioaddr;
 
   return dev;
 }
+#endif    /* MODULE */
 
 /*
 ** Look for a particular board name in the on-board Remote Diagnostics
@@ -1473,12 +1522,38 @@ static char asc2hex(char value)
   return value;                   /* return hex char or error */
 }
 
+#ifdef MODULE
+char kernel_version[] = UTS_RELEASE;
+static struct device thisDepca = {
+  "        ", /* device name inserted by /linux/drivers/net/net_init.c */
+  0, 0, 0, 0,
+  0x200, 7,   /* I/O address, IRQ <--- EDIT THIS LINE FOR YOUR CONFIGURATION */
+  0, 0, 0, NULL, depca_probe };
+	
+int
+init_module(void)
+{
+  if (register_netdev(&thisDepca) != 0)
+    return -EIO;
+  return 0;
+}
+
+void
+cleanup_module(void)
+{
+  if (MOD_IN_USE) {
+    printk("%s: device busy, remove delayed\n",thisDepca.name);
+  } else {
+    unregister_netdev(&thisDepca);
+  }
+}
+#endif /* MODULE */
+
 
 /*
  * Local variables:
- *  compile-command: "gcc -D__KERNEL__ -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O6 -m486 -c depca.c"
+ *  kernel-compile-command: "gcc -D__KERNEL__ -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O6 -m486 -c depca.c"
+ *
+ *  module-compile-command: "gcc -D__KERNEL__ -DMODULE -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O6 -m486 -c depca.c"
  * End:
  */
-
-
-

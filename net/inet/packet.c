@@ -22,6 +22,7 @@
  *		Alan Cox	:	Added NULL's for socket options.
  *		Alan Cox	:	Re-commented the code.
  *		Alan Cox	:	Use new kernel side addressing
+ *		Rob Janssen	:	Correct MTU usage.
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -162,7 +163,7 @@ static int packet_sendto(struct sock *sk, unsigned char *from, int len,
 	 *	raw protocol and you must do your own fragmentation at this level.
 	 */
 	 
-	if(len>dev->mtu)
+	if(len>dev->mtu+dev->hard_header_len)
   		return -EMSGSIZE;
 
 	skb = sk->prot->wmalloc(sk, len, 0, GFP_KERNEL);

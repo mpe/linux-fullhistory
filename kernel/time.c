@@ -337,7 +337,7 @@ asmlinkage int sys_adjtimex(struct timex *txc_p)
 	/* Now we validate the data before disabling interrupts
 	 */
 
-	if (txc.mode & ADJ_OFFSET)
+	if (txc.mode != ADJ_OFFSET_SINGLESHOT && (txc.mode & ADJ_OFFSET))
 	  /* Microsec field limited to -131000 .. 131000 usecs */
 	  if (txc.offset <= -(1 << (31 - SHIFT_UPDATE))
 	      || txc.offset >= (1 << (31 - SHIFT_UPDATE)))

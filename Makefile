@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 1
-SUBLEVEL = 37
+SUBLEVEL = 38
 
 all:	Version zImage
 
@@ -153,6 +153,7 @@ tools/version.h: $(CONFIGURE) Makefile
 	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_HOST \"`hostname`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_DOMAIN \"`domainname`\" >> tools/version.h
+	@echo \#define LINUX_COMPILER \"`$(HOSTCC) -v 2>&1 | tail -1`\" >> tools/version.h
 
 tools/build: tools/build.c $(CONFIGURE)
 	$(HOSTCC) $(CFLAGS) -o $@ $<

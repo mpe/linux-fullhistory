@@ -1,10 +1,10 @@
 /* fdomain.c -- Future Domain TMC-16x0 SCSI driver
  * Created: Sun May  3 18:53:19 1992 by faith@cs.unc.edu
- * Revised: Thu Apr  7 20:30:09 1994 by faith@cs.unc.edu
+ * Revised: Sat Jul 30 22:06:37 1994 by faith@cs.unc.edu
  * Author: Rickard E. Faith, faith@cs.unc.edu
  * Copyright 1992, 1993, 1994 Rickard E. Faith
  *
- * $Id: fdomain.c,v 5.16 1994/04/08 00:30:15 root Exp $
+ * $Id: fdomain.c,v 5.18 1994/07/31 03:09:15 faith Exp $
 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -25,24 +25,22 @@
  DESCRIPTION:
 
  This is the Linux low-level SCSI driver for Future Domain TMC-1660/1680
- and TMC-1650/1670 SCSI host adapters.  The 1650 and 1670 have a 25-pin
- external connector, whereas the 1660 and 1680 have a SCSI-2 50-pin
+ TMC-1650/1670, and TMC-3260 SCSI host adapters.  The 1650 and 1670 have a
+ 25-pin external connector, whereas the 1660 and 1680 have a SCSI-2 50-pin
  high-density external connector.  The 1670 and 1680 have floppy disk
- controllers built in.
+ controllers built in.  The TMC-3260 is a PCI bus card.
 
  Future Domain's older boards are based on the TMC-1800 chip, and this
- driver was originally written for a TMC-1680 board with the TMC-1800
- chip.  More recently, boards are being produced with the TMC-18C50 chip.
- The latest and greatest board may not work with this driver.  If you have
- to patch this driver so that it will recognize your board's BIOS
+ driver was originally written for a TMC-1680 board with the TMC-1800 chip.
+ More recently, boards are being produced with the TMC-18C50 and TMC-18C30
+ chips.  The latest and greatest board may not work with this driver.  If
+ you have to patch this driver so that it will recognize your board's BIOS
  signature, then the driver may fail to function after the board is
  detected.
 
  The following BIOS versions are supported: 2.0, 3.0, 3.2, and 3.4.
- The following chips are supported: TMC-1800, TMC-18C50.
- Reports suggest that the driver will also work with the TMC-18C30 chip.
- The support for the version 3.4 BIOS is new, as of March 1994, and may not
- be stable.
+ The following chips are supported: TMC-1800, TMC-18C50, TMC-18C30.
+ Reports suggest that the driver will also work with the 36C70 chip.
 
  If you have a TMC-8xx or TMC-9xx board, then this is not the driver for
  your board.  Please refer to the Seagate driver for more information and
@@ -118,10 +116,14 @@
  Thanks to Dave Newman (dnewman@crl.com) for providing initial patches for
  the version 3.4 BIOS.
 
+ Thanks to James T. McKinley (mckinley@msupa.pa.msu.edu) for providing
+ patches that support the TMC-3260, a PCI bus card with the 36C70 chip.
+ The 36C70 chip appears to be "completely compatible" with the 18C30 chip.
+ 
  All of the alpha testers deserve much thanks.
- 
 
- 
+
+
  NOTES ON USER DEFINABLE OPTIONS:
 
  DEBUG: This turns on the printing of various debug informaiton.
@@ -167,7 +169,7 @@
 #include <linux/string.h>
 #include <linux/ioport.h>
 
-#define VERSION          "$Revision: 5.16 $"
+#define VERSION          "$Revision: 5.18 $"
 
 /* START OF USER DEFINABLE OPTIONS */
 
@@ -257,6 +259,7 @@ static int               port_base         = 0;
 static void              *bios_base        = NULL;
 static int               bios_major        = 0;
 static int               bios_minor        = 0;
+static int               PCI_bus           = 0;
 static int               interrupt_level   = 0;
 static volatile int      in_command        = 0;
 static Scsi_Cmnd         *current_SC       = NULL;
@@ -329,15 +332,17 @@ struct signature {
    int  sig_length;
    int  major_bios_version;
    int  minor_bios_version;
+   int  PCI_bus;
 } signatures[] = {
    /*          1         2         3         4         5         6 */
    /* 123456789012345678901234567890123456789012345678901234567890 */
-   { "FUTURE DOMAIN CORP. (C) 1986-1990 1800-V2.07/28/89", 5, 50,  2,  0 },
-   { "FUTURE DOMAIN CORP. (C) 1986-1990 1800-V1.07/28/89", 5, 50,  2,  0 },
-   { "FUTURE DOMAIN CORP. (C) 1992 V3.00.004/02/92",       5, 44,  3,  0 },
-   { "FUTURE DOMAIN TMC-18XX (C) 1993 V3.203/12/93",       5, 44,  3,  2 },
-   { "Future Domain Corp. V1.0008/18/93",                  5, 33,  3,  4 }, 
-   { "FUTURE DOMAIN TMC-18XX",                             5, 22, -1, -1 },
+   { "FUTURE DOMAIN CORP. (C) 1986-1990 1800-V2.07/28/89",  5, 50,  2,  0, 0 },
+   { "FUTURE DOMAIN CORP. (C) 1986-1990 1800-V1.07/28/89",  5, 50,  2,  0, 0 },
+   { "FUTURE DOMAIN CORP. (C) 1992 V3.00.004/02/92",        5, 44,  3,  0, 0 },
+   { "FUTURE DOMAIN TMC-18XX (C) 1993 V3.203/12/93",        5, 44,  3,  2, 0 },
+   { "Future Domain Corp. V1.0008/18/93",                   5, 33,  3,  4, 0 },
+   { "Future Domain Corp. V1.0008/18/93",                  26, 33,  3,  4, 1 },
+   { "FUTURE DOMAIN TMC-18XX",                              5, 22, -1, -1, 0 },
 
    /* READ NOTICE ABOVE *BEFORE* YOU WASTE YOUR TIME ADDING A SIGANTURE
     Also, fix the disk geometry code for your signature and send your
@@ -479,7 +484,7 @@ static int fdomain_test_loopback( void )
    return 0;
 }
 
-int fdomain_16x0_detect(Scsi_Host_Template * tpnt)
+int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
 {
    int              i, j;
    int              flag = 0;
@@ -508,7 +513,8 @@ int fdomain_16x0_detect(Scsi_Host_Template * tpnt)
 		      signatures[j].signature, signatures[j].sig_length )) {
 	    bios_major = signatures[j].major_bios_version;
 	    bios_minor = signatures[j].minor_bios_version;
-	    bios_base = addresses[i];
+	    PCI_bus    = signatures[j].PCI_bus;
+	    bios_base  = addresses[i];
 	 }
       }
    }
@@ -557,29 +563,54 @@ int fdomain_16x0_detect(Scsi_Host_Template * tpnt)
       if (bios_major != 2) printk( " RAM FAILED, " );
 #endif
 
-      /* Anyway, the alternative to finding the address in the RAM is
-	 to just search through every possible port address for one
-	 that is attached to the Future Domain card.  Don't panic,
-	 though, about reading all these random port addresses--there
-	 are rumors that the Future Domain BIOS does something very
-	 similar.
+      /* Anyway, the alternative to finding the address in the RAM is to
+	 just search through every possible port address for one that is
+	 attached to the Future Domain card.  Don't panic, though, about
+	 reading all these random port addresses -- there are rumors that
+	 the Future Domain BIOS does something very similar.
 
 	 Do not, however, check ports which the kernel knows are being used
-         by another driver.
-       */
+	 by another driver. */
 
-      for (i = 0; !flag && i < PORT_COUNT; i++) {
-	 port_base = ports[i];
-	 if (check_region( port_base, 0x10 )) {
+      if (!PCI_bus) {
+	 for (i = 0; !flag && i < PORT_COUNT; i++) {
+	    port_base = ports[i];
+	    if (check_region( port_base, 0x10 )) {
 #if DEBUG_DETECT
-	    printk( " (%x inuse),", port_base );
+	       printk( " (%x inuse),", port_base );
 #endif
-	    continue;
+	       continue;
+	    }
+#if DEBUG_DETECT
+	    printk( " %x,", port_base );
+#endif
+	    flag = fdomain_is_valid_port( port_base );
 	 }
+      } else {
+
+	 /* The proper way of doing this is to use the PCI BIOS call
+            (interrupt 0x1a) to determine the device IRQ and interrupt
+            level.  Then the port_base will be in configuration register
+            0x10 (and configuration register 0x30 will contain the value of
+            bios_base).
+
+	    Until the Linux kernel supports this sort of PCI bus query, we
+	    scan down a bunch of addresses (Future Domain folks say we
+	    should find the address before we get to 0xf800).  This works
+	    fine on some systems -- other systems may have to scan more
+	    addresses.  If you have to modify this section for your
+	    installation, please send mail to faith@cs.unc.edu. */
+
+	 for (i = 0xff00; !flag && i > 0xf000; i -= 8) {
+	    port_base = i;
+	    if (check_region( port_base, 0x10 )) {
 #if DEBUG_DETECT
-	 printk( " %x,", port_base );
+	       printk( " (%x inuse)," , port_base );
 #endif
-	 flag = fdomain_is_valid_port( port_base );
+	       continue;
+	    }
+	    flag = fdomain_is_valid_port( port_base );
+	 }
       }
    }
 
@@ -674,7 +705,7 @@ int fdomain_16x0_detect(Scsi_Host_Template * tpnt)
    printk( "Future Domain detection routine scanning for devices:\n" );
    for (i = 0; i < 8; i++) {
       SCinit.target = i;
-      if (i == tpnt->this_id) /* Skip host adapter */
+      if (i == tpnt->this_id)	/* Skip host adapter */
 	    continue;
       memcpy(SCinit.cmnd, do_request_sense, sizeof(do_request_sense));
       retcode = fdomain_16x0_command(&SCinit);
@@ -1453,11 +1484,11 @@ int fdomain_16x0_reset( Scsi_Cmnd *SCpnt )
 #include "sd.h"
 #include "scsi_ioctl.h"
 
-int fdomain_16x0_biosparam(Scsi_Disk * disk, int dev, int *info_array )
+int fdomain_16x0_biosparam( Scsi_Disk *disk, int dev, int *info_array )
 {
    int              drive;
-   int		    size = disk->capacity;
    unsigned char    buf[512 + sizeof( int ) * 2];
+   int		    size      = disk->capacity;
    int              *sizes    = (int *)buf;
    unsigned char    *data     = (unsigned char *)(sizes + 2);
    unsigned char    do_read[] = { READ_6, 0, 0, 0, 1, 0 };

@@ -46,6 +46,16 @@
 #define SBPRO     1
 #endif
 
+/*
+ * If you have a "compatible" soundcard of type "SBPRO 0" or "SBPRO 2",
+ * enter your sound card's base address here if you want sbpcd to turn
+ * the CD sound channels on.
+ *
+ * Example: #define SOUND_BASE 0x220 enables the sound card's CD channels
+ *          #define SOUND_BASE 0     leaves the soundcard untouched
+ */
+#define SOUND_BASE 0
+
 /* ignore the rest if you have only one interface board & driver */
 
 #if !(SBPCD_ISSUE-2) /* second interface board: */
@@ -419,14 +429,14 @@ Read XA Parameter:
  */
 #define OUT(x,y) outb(y,x)
 
-
-#define MIXER_CD_Volume	0x28
-
-/*==========================================================================*/
 /*
  * use "REP INSB" for strobing the data in:
  */
 #define READ_DATA(port, buf, nr) insb(port, buf, nr)
+
+/*==========================================================================*/
+
+#define MIXER_CD_Volume	0x28 /* internal SB Pro register address */
 
 /*==========================================================================*/
 /*

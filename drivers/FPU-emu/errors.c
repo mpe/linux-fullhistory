@@ -235,10 +235,8 @@ static struct {
        0x1nn  in a *.c file:
               0x101  in reg_add_sub.c
               0x102  in reg_mul.c
-              0x103  in poly_sin.c
               0x104  in poly_atan.c
               0x105  in reg_mul.c
-	      0x106  in reg_ld_str.c
               0x107  in fpu_trig.c
 	      0x108  in reg_compare.c
 	      0x109  in reg_compare.c
@@ -246,7 +244,6 @@ static struct {
 	      0x111  in fpe_entry.c
 	      0x112  in fpu_trig.c
 	      0x113  in errors.c
-	      0x114  in reg_ld_str.c
 	      0x115  in fpu_trig.c
 	      0x116  in fpu_trig.c
 	      0x117  in fpu_trig.c
@@ -267,6 +264,12 @@ static struct {
 	      0x133  in get_address.c
 	      0x140  in load_store.c
 	      0x141  in load_store.c
+              0x150  in poly_sin.c
+              0x151  in poly_sin.c
+	      0x160  in reg_ld_str.c
+	      0x161  in reg_ld_str.c
+	      0x162  in reg_ld_str.c
+	      0x163  in reg_ld_str.c
        0x2nn  in an *.S file:
               0x201  in reg_u_add.S
               0x202  in reg_u_div.S
@@ -292,6 +295,9 @@ static struct {
 	      0x234  in reg_round.S
 	      0x235  in reg_round.S
 	      0x236  in reg_round.S
+	      0x240  in div_Xsig.S
+	      0x241  in div_Xsig.S
+	      0x242  in div_Xsig.S
  */
 
 void exception(int n)

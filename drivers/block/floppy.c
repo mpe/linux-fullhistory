@@ -1417,7 +1417,7 @@ static int floppy_open(struct inode * inode, struct file * filp)
 		if (filp->f_mode & 2) {
 			if (1 & (read_only >> drive)) {
 				floppy_release(inode, filp);
-				return -EACCES;
+				return -EROFS;
 			}
 		}
 	}

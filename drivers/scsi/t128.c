@@ -231,7 +231,7 @@ int t128_detect(Scsi_Host_Template * tpnt) {
 	instance = scsi_register (tpnt, sizeof(struct NCR5380_hostdata));
 	instance->base = base;
 
-	NCR5380_init(instance);
+	NCR5380_init(instance, 0);
 
 	if (overrides[current_override].irq != IRQ_AUTO)
 	    instance->irq = overrides[current_override].irq;
@@ -319,10 +319,16 @@ static inline int NCR5380_pread (struct Scsi_Host *instance, unsigned char *dst,
 	T_DATA_REG_OFFSET), *d = dst;
     register i = len;
 
-    while (!(instance->base[T_STATUS_REG_OFFSET]) & T_ST_RDY);
 
-    for (; i; --i) 
+#if 0
+    for (; i; --i) {
+	while (!(instance->base[T_STATUS_REG_OFFSET]) & T_ST_RDY);
+#else
+    while (!(instance->base[T_STATUS_REG_OFFSET]) & T_ST_RDY);
+    for (; i; --i) {
+#endif
 	*d++ = *reg;
+    }
 
     if (*(instance->base + T_STATUS_REG_OFFSET) & T_ST_TIM) {
 	unsigned char tmp;
@@ -331,7 +337,7 @@ static inline int NCR5380_pread (struct Scsi_Host *instance, unsigned char *dst,
 	tmp = *foo;
 	*foo = tmp | T_CR_CT;
 	*foo = tmp;
-	printk("scsi%d : watchdog timer fired in NCR5480_pread()\n",
+	printk("scsi%d : watchdog timer fired in NCR5380_pread()\n",
 	    instance->host_no);
 	return -1;
     } else
@@ -357,9 +363,15 @@ static inline int NCR5380_pwrite (struct Scsi_Host *instance, unsigned char *src
 	T_DATA_REG_OFFSET), *s = src;
     register i = len;
 
+#if 0
+    for (; i; --i) {
+	while (!(instance->base[T_STATUS_REG_OFFSET]) & T_ST_RDY);
+#else
     while (!(instance->base[T_STATUS_REG_OFFSET]) & T_ST_RDY);
-    for (; i; --i)
+    for (; i; --i) {
+#endif
 	*reg = *s++;
+    }
 
     if (*(instance->base + T_STATUS_REG_OFFSET) & T_ST_TIM) {
 	unsigned char tmp;
@@ -368,7 +380,7 @@ static inline int NCR5380_pwrite (struct Scsi_Host *instance, unsigned char *src
 	tmp = *foo;
 	*foo = tmp | T_CR_CT;
 	*foo = tmp;
-	printk("scsi%d : watchdog timer fired in NCR5480_pwrite()\n",
+	printk("scsi%d : watchdog timer fired in NCR5380_pwrite()\n",
 	    instance->host_no);
 	return -1;
     } else 

@@ -28,6 +28,7 @@
  *              Ross Martin     :       Rewrote arp_rcv() and arp_get_info()
  *		Stephen Henson	:	Add AX25 support to arp_get_info()
  *		Alan Cox	:	Drop data when a device is downed.
+ *		Alan Cox	:	Use init_timer()
  */
 
 #include <linux/types.h>
@@ -746,7 +747,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		entry->hlen = hlen;
 		entry->htype = htype;
 		entry->flags = ATF_COM;
-		entry->timer.next = entry->timer.prev = NULL;
+		init_timer(&entry->timer);
 		memcpy(entry->ha, sha, hlen);
 		entry->last_used = jiffies;
 		entry->dev = skb->dev;
@@ -839,7 +840,7 @@ int arp_find(unsigned char *haddr, unsigned long paddr, struct device *dev,
 		memset(entry->ha, 0, dev->addr_len);
 		entry->dev = dev;
 		entry->last_used = jiffies;
-		entry->timer.next = entry->timer.prev = NULL;
+		init_timer(&entry->timer);
 		entry->timer.function = arp_expire_request;
 		entry->timer.data = (unsigned long)entry;
 		entry->timer.expires = ARP_RES_TIME;
@@ -1048,7 +1049,7 @@ static int arp_req_set(struct arpreq *req)
 		entry->ip = ip;
 		entry->hlen = hlen;
 		entry->htype = htype;
-		entry->timer.next = entry->timer.prev = NULL;
+		init_timer(&entry->timer);
 		entry->next = arp_tables[hash];
 		arp_tables[hash] = entry;
 		skb_queue_head_init(&entry->skb);

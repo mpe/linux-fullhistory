@@ -62,7 +62,7 @@ asmlinkage int printk(const char * fmt, ...)
  * permissions checks first, and check suser() last.
  */
 #define suser() (current->euid == 0)
-
+extern int splx (int new_ipl);
 #endif /* __KERNEL__ */
 
 #define SI_LOAD_SHIFT	16

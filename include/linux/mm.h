@@ -58,6 +58,8 @@ struct vm_area_struct {
 #define VM_SHM		0x0400
 #define VM_DENYWRITE	0x0800	/* ETXTBSY on write attempts.. */
 
+#define VM_EXECUTABLE	0x1000
+
 #define VM_STACK_FLAGS	0x0177
 
 /*

@@ -23,10 +23,10 @@
 
 
 wm-FPU-emu is an FPU emulator for Linux. It is derived from wm-emu387
-which is my 80387 emulator for djgpp (gcc under msdos); wm-emu387 was
-in turn based upon emu387 which was written by DJ Delorie for djgpp.
-The interface to the Linux kernel is based upon the original Linux
-math emulator by Linus Torvalds.
+which was my 80387 emulator for early versions of djgpp (gcc under
+msdos); wm-emu387 was in turn based upon emu387 which was written by
+DJ Delorie for djgpp.  The interface to the Linux kernel is based upon
+the original Linux math emulator by Linus Torvalds.
 
 My target FPU for wm-FPU-emu is that described in the Intel486
 Programmer's Reference Manual (1992 edition). Unfortunately, numerous
@@ -37,8 +37,9 @@ possible to be sure that all of the peculiarities of the 80486 have
 been discovered, so there is always likely to be obscure differences
 in the detailed behaviour of the emulator and a real 80486.
 
-wm-FPU-emu does not implement all of the behaviour of the 80486 FPU.
-See "Limitations" later in this file for a list of some differences.
+wm-FPU-emu does not implement all of the behaviour of the 80486 FPU,
+but is very close.  See "Limitations" later in this file for a list of
+some differences.
 
 Please report bugs, etc to me at:
        billm@vaxc.cc.monash.edu.au
@@ -47,7 +48,7 @@ Please report bugs, etc to me at:
 
 
 --Bill Metzenthen
-  June 1994
+  August 1994
 
 
 ----------------------- Internals of wm-FPU-emu -----------------------
@@ -96,7 +97,7 @@ form of re-entrancy which is required by the Linux kernel.
 ----------------------- Limitations of wm-FPU-emu -----------------------
 
 There are a number of differences between the current wm-FPU-emu
-(version 1.12) and the 80486 FPU (apart from bugs). Some of the more
+(version 1.20) and the 80486 FPU (apart from bugs). Some of the more
 important differences are listed below:
 
 The Roundup flag does not have much meaning for the transcendental
@@ -233,54 +234,58 @@ have been implemented.
 ----------------------- Accuracy of wm-FPU-emu -----------------------
 
 
-Accuracy: The following table gives the accuracy of the sqrt(), trig
-and log functions. Each function was tested at about 400 points. Ideal
-results would be 64 bits. The reduced accuracy of cos() and tan() for
-arguments greater than pi/4 can be thought of as being due to the
+The accuracy of the emulator is in almost all cases equal to or better
+than that of an Intel 80486 FPU.
+
+The results of the basic arithmetic functions (+,-,*,/), and fsqrt
+match those of an 80486 FPU. They are the best possible; the error for
+these never exceeds 1/2 an lsb. The fprem and fprem1 instructions
+return exact results; they have no error.
+
+
+The following table compares the emulator accuracy for the sqrt(),
+trig and log functions against the Turbo C "emulator". For this table,
+each function was tested at about 400 points. Ideal worst-case results
+would be 64 bits. The reduced Turbo C accuracy of cos() and tan() for
+arguments greater than pi/4 can be thought of as being related to the
 precision of the argument x; e.g. an argument of pi/2-(1e-10) which is
-accurate to 64 bits can result in a relative accuracy in cos() of about
-64 + log2(cos(x)) = 31 bits. Results for the Turbo C emulator are given
-in the last column.
+accurate to 64 bits can result in a relative accuracy in cos() of
+about 64 + log2(cos(x)) = 31 bits.
 
 
 Function      Tested x range            Worst result                Turbo C
                                         (relative bits)
 
 sqrt(x)       1 .. 2                    64.1                         63.2
-atan(x)       1e-10 .. 200              62.6                         62.8
-cos(x)        0 .. pi/2-(1e-10)         63.2 (x <= pi/4)             62.4
-                                        35.2 (x = pi/2-(1e-10))      31.9
-sin(x)        1e-10 .. pi/2             63.0                         62.8
-tan(x)        1e-10 .. pi/2-(1e-10)     62.4 (x <= pi/4)             62.1
-                                        35.2 (x = pi/2-(1e-10))      31.9
-exp(x)        0 .. 1                    63.1                         62.9
-log(x)        1+1e-6 .. 2               62.4                         62.1
+atan(x)       1e-10 .. 200              64.2                         62.8
+cos(x)        0 .. pi/2-(1e-10)         64.4 (x <= pi/4)             62.4
+                                        64.1 (x = pi/2-(1e-10))      31.9
+sin(x)        1e-10 .. pi/2             64.0                         62.8
+tan(x)        1e-10 .. pi/2-(1e-10)     64.0 (x <= pi/4)             62.1
+                                        64.1 (x = pi/2-(1e-10))      31.9
+exp(x)        0 .. 1                    63.1 **                      62.9
+log(x)        1+1e-6 .. 2               63.8 **                      62.1
+
+** The accuracy for exp() and log() is low because the FPU (emulator)
+does not compute them directly; two operations are required.
 
 
-As of version 1.3 of the emulator, the accuracy of the basic
-arithmetic has been improved (by a small fraction of a bit). Care has
-been taken to ensure full accuracy of the rounding of the basic
-arithmetic functions (+,-,*,/,and fsqrt), and they all now produce
-results which are exact to the 64th bit (unless there are any bugs
-left). To ensure this, it was necessary to effectively get information
-of up to about 128 bits precision. The emulator now passes the
-"paranoia" tests (compiled with gcc 2.3.3) for 'float' variables (24
-bit precision numbers) when precision control is set to 24, 53 or 64
-bits, and for 'double' variables (53 bit precision numbers) when
-precision control is set to 53 bits (a properly performing FPU cannot
-pass the 'paranoia' tests for 'double' variables when precision
-control is set to 64 bits).
+The emulator passes the "paranoia" tests (compiled with gcc 2.3.3 or
+later) for 'float' variables (24 bit precision numbers) when precision
+control is set to 24, 53 or 64 bits, and for 'double' variables (53
+bit precision numbers) when precision control is set to 53 bits (a
+properly performing FPU cannot pass the 'paranoia' tests for 'double'
+variables when precision control is set to 64 bits).
 
-For version 1.5, the accuracy of fprem and fprem1 has been improved.
-These functions now produce exact results. The code for reducing the
-argument for the trig functions (fsin, fcos, fptan and fsincos) has
-been improved and now effectively uses a value for pi which is
-accurate to more than 128 bits precision. As a consquence, the
-accuracy of these functions for large arguments has been dramatically
-improved (and is now very much better than an 80486 FPU). There is
-also now no degradation of accuracy for fcos and ftan for operands
-close to pi/2. Measured results are (note that the definition of
-accuracy has changed slightly from that used for the above table):
+The code for reducing the argument for the trig functions (fsin, fcos,
+fptan and fsincos) has been improved and now effectively uses a value
+for pi which is accurate to more than 128 bits precision. As a
+consequence, the accuracy of these functions for large arguments has
+been dramatically improved (and is now very much better than an 80486
+FPU). There is also now no degradation of accuracy for fcos and fptan
+for operands close to pi/2. Measured results are (note that the
+definition of accuracy has changed slightly from that used for the
+above table):
 
 Function      Tested x range          Worst result
                                      (absolute bits)
@@ -302,6 +307,99 @@ result is about -9.739715e-8). On the other hand, an 80486 FPU returns
 For arguments close to critical angles (which occur at multiples of
 pi/2) the emulator is more accurate than an 80486 FPU. For very large
 arguments, the emulator is far more accurate.
+
+
+Prior to version 1.20 of the emulator, the accuracy of the results for
+the transcendental functions (in their principal range) was not as
+good as the results from an 80486 FPU. From version 1.20, the accuracy
+has been considerably improved and these functions now give measured
+worst-case results which are better than the worst-case results given
+by an 80486 FPU.
+
+The following table gives the measured results for the emulator. The
+number of randomly selected arguments in each case is about half a
+million.  The group of three columns gives the frequency of the given
+accuracy in number of times per million, thus the second of these
+columns shows that an accuracy of between 63.80 and 63.89 bits was
+found at a rate of 133 times per one million measurements for fsin.
+The results show that the fsin, fcos and fptan instructions return
+results which are in error (i.e. less accurate than the best possible
+result (which is 64 bits)) for about one per cent of all arguments
+between -pi/2 and +pi/2.  The other instructions have a lower
+frequency of results which are in error.  The last two columns give
+the worst accuracy which was found (in bits) and the approximate value
+of the argument which produced it.
+
+                                frequency (per M)
+                               -------------------   ---------------
+instr   arg range    # tests   63.7   63.8    63.9   worst   at arg
+                               bits   bits    bits    bits
+-----  ------------  -------   ----   ----   -----   -----  --------
+fsin     (0,pi/2)     547756      0    133   10673   63.89  0.451317
+fcos     (0,pi/2)     547563      0    126   10532   63.85  0.700801
+fptan    (0,pi/2)     536274     11    267   10059   63.74  0.784876
+fpatan  4 quadrants   517087      0      8    1855   63.88  0.435121 (4q)
+fyl2x     (0,20)      541861      0      0    1323   63.94  1.40923  (x)
+fyl2xp1 (-.293,.414)  520256      0      0    5678   63.93  0.408542 (x)
+f2xm1     (-1,1)      538847      4    481    6488   63.79  0.167709
+
+
+Tests performed on an 80486 FPU showed results of lower accuracy. The
+following table gives the results which were obtained with an AMD
+486DX2/66 (other tests indictate that an Intel 486DX produces
+identical results).  The tests were basically the same as those used
+to measure the emulator (the values, being random, were in general not
+the same).  The total number of tests for each instruction are given
+at the end of the table, in case each about 100k tests were performed.
+Another line of figures at the end of the table shows that most of the
+instructions return results which are in error for more than 10
+percent of the arguments tested.
+
+The numbers in the body of the table give the approx number of times a
+result of the given accuracy in bits (given in the left-most column)
+was obtained per one million arguments. For three of the instructions,
+two columns of results are given: * The second column for f2xm1 gives
+the number cases where the results of the first column were for a
+positive argument, this shows that this instruction gives better
+results for positive arguments than it does for negative.  * In the
+cases of fcos and fptan, the first column gives the results when all
+cases where arguments greater than 1.5 were removed from the results
+given in the second column. Unlike the emulator, an 80486 FPU returns
+results of relatively poor accuracy for these instructions when the
+argument approaches pi/2. The table does not show those cases when the
+accuracy of the results were less than 62 bits, which occurs quite
+often for fsin and fptan when the argument approaches pi/2. This poor
+accuracy is discussed above in relation to the Turbo C "emulator", and
+the accuracy of the value of pi.
+
+
+bits   f2xm1  f2xm1 fpatan   fcos   fcos  fyl2x fyl2xp1  fsin  fptan  fptan
+62.0       0      0      0      0    437      0      0      0      0    925
+62.1       0      0     10      0    894      0      0      0      0   1023
+62.2      14      0      0      0   1033      0      0      0      0    945
+62.3      57      0      0      0   1202      0      0      0      0   1023
+62.4     385      0      0     10   1292      0     23      0      0   1178
+62.5    1140      0      0    119   1649      0     39      0      0   1149
+62.6    2037      0      0    189   1620      0     16      0      0   1169
+62.7    5086     14      0    646   2315     10    101     35     39   1402
+62.8    8818     86      0    984   3050     59    287    131    224   2036
+62.9   11340   1355      0   2126   4153     79    605    357    321   1948
+63.0   15557   4750      0   3319   5376    246   1281    862    808   2688
+63.1   20016   8288      0   4620   6628    511   2569   1723   1510   3302
+63.2   24945  11127     10   6588   8098   1120   4470   2968   2990   4724
+63.3   25686  12382     69   8774  10682   1906   6775   4482   5474   7236
+63.4   29219  14722     79  11109  12311   3094   9414   7259   8912  10587
+63.5   30458  14936    393  13802  15014   5874  12666   9609  13762  15262
+63.6   32439  16448   1277  17945  19028  10226  15537  14657  19158  20346
+63.7   35031  16805   4067  23003  23947  18910  20116  21333  25001  26209
+63.8   33251  15820   7673  24781  25675  24617  25354  24440  29433  30329
+63.9   33293  16833  18529  28318  29233  31267  31470  27748  29676  30601
+
+Per cent with error:
+        30.9           3.2          18.5    9.8   13.1   11.6          17.4
+Total arguments tested:
+       70194  70099 101784 100641 100641 101799 128853 114893 102675 102675
+
 
 ------------------------- Contributors -------------------------------
 

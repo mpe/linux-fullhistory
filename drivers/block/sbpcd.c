@@ -5,7 +5,7 @@
  *            and for "no-sound" interfaces like Lasermate and the
  *            Panasonic CI-101P.
  *
- *  NOTE:     This is release 2.4.
+ *  NOTE:     This is release 2.5.
  *            It works with my SbPro & drive CR-521 V2.11 from 2/92
  *            and with the new CR-562-B V0.75 on a "naked" Panasonic
  *            CI-101P interface. And vice versa. 
@@ -119,6 +119,12 @@
  *
  *  2.4  Use different names for device registering.
  *       
+ *  2.5  Added "#ifdef EJECT" code (default: enabled) to automatically eject
+ *       the tray during last call to "sbpcd_release".
+ *       Added "#ifdef JUKEBOX" code (default: disabled) to automatically eject
+ *       the tray during call to "sbpcd_open" if no disk is in.
+ *       Turn on the CD volume of "compatible" sound cards, too; just define
+ *       SOUND_BASE (in sbpcd.h) accordingly (default: disabled).
  *
  *  TODO
  *
@@ -195,7 +201,7 @@
 
 #include "blk.h"
 
-#define VERSION "2.4 Eberhard Moenkeberg <emoenke@gwdg.de>"
+#define VERSION "2.5 Eberhard Moenkeberg <emoenke@gwdg.de>"
 
 #define SBPCD_DEBUG
 
@@ -211,6 +217,8 @@
 /*
  * still testing around...
  */
+#define JUKEBOX 0 /* tray control: eject if no disk is in */
+#define EJECT 1 /* tray control: eject tray after last use */
 #define LONG_TIMING 0 /* test against timeouts with "gold" CDs on CR-521 */
 #define MANY_SESSION 0 /* this will conflict with "true" multi-session! */
 #undef  FUTURE
@@ -3226,7 +3234,7 @@ static int sbpcd_open(struct inode *ip, struct file *fp)
   if (ndrives==0) return (-ENXIO);             /* no hardware */
 
   if (fp->f_mode & 2)
-	  return -EACCES;
+	  return -EROFS;
 
   i = MINOR(ip->i_rdev);
   if ( (i<0) || (i>=NR_SBPCD) )
@@ -3254,9 +3262,14 @@ static int sbpcd_open(struct inode *ip, struct file *fp)
   if (!st_door_closed||!st_caddy_in)
     {
       printk("SBPCD: sbpcd_open: no disk in drive\n");
+#if JUKEBOX
+      do
+	i=yy_LockDoor(0);
+      while (i!=0);
+      if (new_drive) yy_SpinDown(); /* eject tray */
+#endif
       return (-ENXIO);
     }
-
 /*
  * try to keep an "open" counter here and lock the door if 0->1.
  */
@@ -3308,6 +3321,9 @@ static void sbpcd_release(struct inode * ip, struct file * file)
 	  do
 	    i=yy_LockDoor(0);
 	  while (i!=0);
+#ifdef EJECT
+	  if (new_drive) yy_SpinDown();
+#endif
 	}
     }
 }
@@ -3559,12 +3575,22 @@ unsigned long SBPCD_INIT(u_long mem_start, u_long mem_end)
       if (i>=0) DriveStruct[d].CD_changed=1;
     }
 
-  if (sbpro_type==1)
+/*
+ * Turn on the CD audio channels.
+ * For "compatible" soundcards (with "SBPRO 0" or "SBPRO 2"), the addresses
+ * are obtained from SOUND_BASE (see sbpcd.h).
+ */
+  if ((sbpro_type==1) || (SOUND_BASE))
     {
-      OUT(MIXER_addr,MIXER_CD_Volume);
-      OUT(MIXER_data,0xCC); /* one nibble per channel */
+      if (sbpro_type!=1)
+	{
+	  MIXER_addr=SOUND_BASE+0x04; /* sound card's address register */
+	  MIXER_data=SOUND_BASE+0x05; /* sound card's data register */
+	}
+      OUT(MIXER_addr,MIXER_CD_Volume); /* select SB Pro mixer register */
+      OUT(MIXER_data,0xCC); /* one nibble per channel, max. value: 0xFF */
     }
-  
+
   if (register_blkdev(MAJOR_NR, major_name, &sbpcd_fops) != 0)
     {
       printk("SBPCD: Can't get MAJOR %d for Matsushita CDROM\n", MAJOR_NR);

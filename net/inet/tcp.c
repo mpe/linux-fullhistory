@@ -710,7 +710,7 @@ void tcp_enqueue_partial(struct sk_buff * skb, struct sock * sk)
 	if (tmp)
 		del_timer(&sk->partial_timer);
 	sk->partial = skb;
-	sk->partial_timer.next = sk->partial_timer.prev = NULL;
+	init_timer(&sk->partial_timer);
 	sk->partial_timer.expires = HZ;
 	sk->partial_timer.function = (void (*)(unsigned long)) tcp_send_partial;
 	sk->partial_timer.data = (unsigned long) sk;
@@ -1987,7 +1987,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	newsk->urg_data = 0;
 	newsk->retransmits = 0;
 	newsk->destroy = 0;
-	newsk->timer.next = newsk->timer.prev = NULL;
+	init_timer(&newsk->timer);
 	newsk->timer.data = (unsigned long)newsk;
 	newsk->timer.function = &net_timer;
 	newsk->dummy_th.source = skb->h.th->dest;

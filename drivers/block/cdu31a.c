@@ -1773,7 +1773,7 @@ scd_open(struct inode *inode,
 
 
    if (filp->f_mode & 2)
-      return -EACCES;
+      return -EROFS;
 
    if (!sony_spun_up)
    {

@@ -12,12 +12,13 @@
 #define HZ 100
 
 /*
- * System setup flags..
+ * System setup and hardware bug flags..
  */
 extern int hard_math;
 extern int x86;
 extern int ignore_irq13;
-extern int wp_works_ok;
+extern int wp_works_ok;		/* doesn't work on a 386 */
+extern int hlt_works_ok;	/* problems on some 486Dx4's and old 386's */
 
 extern unsigned long intr_count;
 extern unsigned long event;

@@ -21,6 +21,9 @@
 #include <linux/binfmts.h>
 #include <linux/personality.h>
 #include <linux/module.h>
+#include <linux/termios.h>
+#include <linux/tqueue.h>
+#include <linux/serial.h>
 #ifdef CONFIG_INET
 #include <linux/netdevice.h>
 #endif
@@ -64,6 +67,7 @@ extern struct device *irq2dev_map[];
 extern void dev_kfree_skb(struct sk_buff *, int);
 #endif
 
+
 struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	{
 	/* stackable module support */
@@ -102,6 +106,9 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(unregister_chrdev),
 	X(register_blkdev),
 	X(unregister_blkdev),
+	/* Module creation of serial units */
+	X(register_serial),
+	X(unregister_serial),
 
 	/* filesystem registration */
 	X(register_filesystem),

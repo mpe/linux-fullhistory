@@ -161,7 +161,7 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
   int this_count = SCpnt->bufflen >> 9;
 
 #ifdef DEBUG
-  printk("sd%d : rw_intr(%d, %d)\n", MINOR(SCpnt->request.dev), SCpnt->host->host_no, result);
+  printk("sd%c : rw_intr(%d, %d)\n", 'a' + MINOR(SCpnt->request.dev), SCpnt->host->host_no, result);
 #endif
 
 /*
@@ -173,7 +173,7 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
   if (!result) {
 
 #ifdef DEBUG
-    printk("sd%d : %d sectors remain.\n", MINOR(SCpnt->request.dev), SCpnt->request.nr_sectors);
+    printk("sd%c : %d sectors remain.\n", 'a' + MINOR(SCpnt->request.dev), SCpnt->request.nr_sectors);
     printk("use_sg is %d\n ",SCpnt->use_sg);
 #endif
     if (SCpnt->use_sg) {
@@ -215,8 +215,8 @@ static void rw_intr (Scsi_Cmnd *SCpnt)
 	if (!SCpnt->request.bh)
 	  {
 #ifdef DEBUG
-	    printk("sd%d : handling page request, no buffer\n",
-		   MINOR(SCpnt->request.dev));
+	    printk("sd%c : handling page request, no buffer\n",
+		   'a' + MINOR(SCpnt->request.dev));
 #endif
 /*
   The SCpnt->request.nr_sectors field is always done in 512 byte sectors,
@@ -441,7 +441,7 @@ repeat:
 		}
 
 #ifdef DEBUG
-	printk("sd%d : real dev = /dev/sd%d, block = %d\n", MINOR(SCpnt->request.dev), dev, block);
+	printk("sd%c : real dev = /dev/sd%c, block = %d\n", 'a' + MINOR(SCpnt->request.dev), dev, block);
 #endif
 
 	switch (SCpnt->request.cmd)
@@ -689,7 +689,7 @@ repeat:
 	  };
 	};
 #ifdef DEBUG
-	printk("sd%d : %s %d/%d 512 byte blocks.\n", MINOR(SCpnt->request.dev),
+	printk("sd%c : %s %d/%d 512 byte blocks.\n", 'a' + MINOR(SCpnt->request.dev),
 		(SCpnt->request.cmd == WRITE) ? "writing" : "reading",
 		this_count, SCpnt->request.nr_sectors);
 #endif
@@ -839,7 +839,7 @@ static int sd_init_onedisk(int i)
 	 SCpnt->sense_buffer[2] == NOT_READY) {
 	int time1;
 	if(!spintime){
-	  printk( "sd%d: Spinning up disk...", i );
+	  printk( "sd%c: Spinning up disk...", 'a' + i );
 	  cmd[0] = START_STOP;
 	  cmd[1] = (rscsi_disks[i].device->lun << 5) & 0xe0;
 	  cmd[1] |= 1;  /* Return immediately */
@@ -925,20 +925,20 @@ static int sd_init_onedisk(int i)
 
   if (the_result)
     {
-      printk ("sd%d : READ CAPACITY failed.\n"
-	      "sd%d : status = %x, message = %02x, host = %d, driver = %02x \n",
-	      i,i,
+      printk ("sd%c : READ CAPACITY failed.\n"
+	      "sd%c : status = %x, message = %02x, host = %d, driver = %02x \n",
+	      'a' + i, 'a' + i,
 	      status_byte(the_result),
 	      msg_byte(the_result),
 	      host_byte(the_result),
 	      driver_byte(the_result)
 	      );
       if (driver_byte(the_result)  & DRIVER_SENSE)
-	printk("sd%d : extended sense code = %1x \n", i, SCpnt->sense_buffer[2] & 0xf);
+	printk("sd%c : extended sense code = %1x \n", 'a' + i, SCpnt->sense_buffer[2] & 0xf);
       else
-	printk("sd%d : sense not available. \n", i);
+	printk("sd%c : sense not available. \n", 'a' + i);
 
-      printk("sd%d : block size assumed to be 512 bytes, disk size 1GB.  \n", i);
+      printk("sd%c : block size assumed to be 512 bytes, disk size 1GB.  \n", 'a' + i);
       rscsi_disks[i].capacity = 0x1fffff;
       rscsi_disks[i].sector_size = 512;
 
@@ -963,8 +963,8 @@ static int sd_init_onedisk(int i)
 	  rscsi_disks[i].sector_size != 1024 &&
 	  rscsi_disks[i].sector_size != 256)
 	{
-	  printk ("sd%d : unsupported sector size %d.\n",
-		  i, rscsi_disks[i].sector_size);
+	  printk ("sd%c : unsupported sector size %d.\n",
+		  'a' + i, rscsi_disks[i].sector_size);
 	  if(rscsi_disks[i].device->removable){
 	    rscsi_disks[i].capacity = 0;
 	  } else {

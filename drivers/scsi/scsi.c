@@ -67,8 +67,11 @@ const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE] =
 	scsi_devices an array of these specifing the address for each 
 	(host, id, LUN)
 */
-	
+
 Scsi_Device * scsi_devices = NULL;
+
+/* Process ID of SCSI commands */
+unsigned long scsi_pid = 0;
 
 static unsigned char generic_sense[6] = {REQUEST_SENSE, 0,0,0, 255, 0};
 
@@ -152,6 +155,7 @@ static struct blist blacklist[] =
 				 * controller, which causes SCSI code to reset bus.*/
    {"TEXEL","CD-ROM","1.06"},   /* causes failed REQUEST SENSE on lun 1 for seagate
 				 * controller, which causes SCSI code to reset bus.*/
+   {"QUANTUM","LPS525S","3110"},/* Locks sometimes if polled for lun != 0 */
    {NULL, NULL, NULL}};	
 
 static int blacklisted(unsigned char * response_data){
@@ -180,7 +184,7 @@ static int blacklisted(unsigned char * response_data){
  *	scsi_do_cmd() function.
  */
 
-static volatile int in_scan = 0;
+volatile int in_scan_scsis = 0;
 static int the_result;
 static void scan_scsis_done (Scsi_Cmnd * SCpnt)
 	{
@@ -221,7 +225,7 @@ static void scan_scsis (struct Scsi_Host * shpnt)
   struct Scsi_Device_Template * sdtpnt;
   Scsi_Cmnd  SCmd;
   
-  ++in_scan;
+  ++in_scan_scsis;
   lun = 0;
   type = -1;
   SCmd.next = NULL;
@@ -492,7 +496,7 @@ static void scan_scsis (struct Scsi_Host * shpnt)
   /* Last device block does not exist.  Free memory. */
   scsi_init_free((char *) SDpnt, sizeof(Scsi_Device));
   
-  in_scan = 0;
+  in_scan_scsis = 0;
 }       /* scan_scsis  ends */
 
 /*
@@ -514,9 +518,11 @@ static void scsi_times_out (Scsi_Cmnd * SCpnt)
  	switch (SCpnt->internal_timeout & (IN_ABORT | IN_RESET))
 		{
 		case NORMAL_TIMEOUT:
-			if (!in_scan) {
-			  printk("SCSI host %d timed out - aborting command\n",
-				 SCpnt->host->host_no);
+			if (!in_scan_scsis) {
+			      printk("scsi : aborting command due to timeout : pid %lu, scsi%d, id %d, lun %d ",
+				SCpnt->pid, SCpnt->host->host_no, (int) SCpnt->target, (int) 
+				SCpnt->lun);
+				print_command (SCpnt->cmnd);
 #ifdef DEBUG_TIMEOUT
 			  scsi_dump_status();
 #endif
@@ -865,6 +871,8 @@ void scsi_do_cmd (Scsi_Cmnd * SCpnt, const void *cmnd ,
 	time we check for the host being not busy, and the time we mark it busy
 	ourselves.
 */
+
+	SCpnt->pid = scsi_pid++; 
 
 	while (1==1){
 	  cli();

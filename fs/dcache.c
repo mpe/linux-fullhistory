@@ -169,7 +169,7 @@ static inline void move_to_level2(struct dir_cache_entry * old_de, struct hash_l
 	add_hash(de, hash);
 }
 
-unsigned long dcache_lookup(struct inode * dir, const char * name, int len)
+int dcache_lookup(struct inode * dir, const char * name, int len, unsigned long * ino)
 {
 	struct hash_list * hash;
 	struct dir_cache_entry *de;
@@ -180,8 +180,9 @@ unsigned long dcache_lookup(struct inode * dir, const char * name, int len)
 	de = find_entry(dir, name, len, hash);
 	if (!de)
 		return 0;
+	*ino = de->ino;
 	move_to_level2(de, hash);
-	return de->ino;
+	return 1;
 }
 
 void dcache_add(struct inode * dir, const char * name, int len, unsigned long ino)

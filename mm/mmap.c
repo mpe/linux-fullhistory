@@ -130,7 +130,7 @@ int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 	vma->vm_end = addr + len;
 	vma->vm_page_prot = mask;
 	vma->vm_flags = prot & (VM_READ | VM_WRITE | VM_EXEC);
-	vma->vm_flags |= flags & (VM_GROWSDOWN | VM_DENYWRITE);
+	vma->vm_flags |= flags & (VM_GROWSDOWN | VM_DENYWRITE | VM_EXECUTABLE);
 
 	if (file) {
 		if (file->f_mode & 1)

@@ -79,6 +79,7 @@ extern void floppy_init(void);
 extern void sock_init(void);
 extern long rd_init(long mem_start, int length);
 unsigned long net_dev_init(unsigned long, unsigned long);
+extern long bios32_init(long, long);
 
 extern void hd_setup(char *str, int *ints);
 extern void bmouse_setup(char *str, int *ints);
@@ -89,6 +90,7 @@ extern void st_setup(char *str, int *ints);
 extern void st0x_setup(char *str, int *ints);
 extern void tmc8xx_setup(char *str, int *ints);
 extern void t128_setup(char *str, int *ints);
+extern void pas16_setup(char *str, int *ints);
 extern void generic_NCR5380_setup(char *str, int *intr);
 extern void aha152x_setup(char *str, int *ints);
 extern void scsi_luns_setup(char *str, int *ints);
@@ -194,6 +196,9 @@ struct {
 #endif
 #ifdef CONFIG_SCSI_T128
 	{ "t128=", t128_setup },
+#endif
+#ifdef CONFIG_SCSI_PAS16
+	{ "pas16=", pas16_setup },
 #endif
 #ifdef CONFIG_SCSI_GENERIC_NCR5380
 	{ "ncr5380=", generic_NCR5380_setup },
@@ -310,6 +315,8 @@ static void parse_options(char *line)
 			root_mountflags &= ~MS_RDONLY;
 		else if (!strcmp(line,"debug"))
 			console_loglevel = 10;
+		else if (!strcmp(line,"no-hlt"))
+			hlt_works_ok = 0;
 		else if (!strcmp(line,"no387")) {
 			hard_math = 0;
 			__asm__("movl %%cr0,%%eax\n\t"
@@ -407,11 +414,17 @@ asmlinkage void start_kernel(void)
 	prof_len >>= 2;
 	memory_start += prof_len * sizeof(unsigned long);
 #endif
+	memory_start = bios32_init(memory_start,memory_end);
 	memory_start = kmalloc_init(memory_start,memory_end);
 	memory_start = chr_dev_init(memory_start,memory_end);
 	memory_start = blk_dev_init(memory_start,memory_end);
 	sti();
 	calibrate_delay();
+	if (hlt_works_ok) {
+		printk("Checking 'hlt' ...");
+		__asm__ __volatile__("hlt");
+		printk(" ok\n");
+	}
 #ifdef CONFIG_INET
 	memory_start = net_dev_init(memory_start,memory_end);
 #endif

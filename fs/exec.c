@@ -847,7 +847,7 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		if (ex.a_text) {
 			error = do_mmap(file, N_TXTADDR(ex), ex.a_text,
 				PROT_READ | PROT_EXEC,
-				MAP_FIXED | MAP_SHARED | MAP_DENYWRITE,
+				MAP_FIXED | MAP_SHARED | MAP_DENYWRITE | MAP_EXECUTABLE,
 				fd_offset);
 
 			if (error != N_TXTADDR(ex)) {
@@ -859,7 +859,7 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		
  		error = do_mmap(file, N_TXTADDR(ex) + ex.a_text, ex.a_data,
 				PROT_READ | PROT_WRITE | PROT_EXEC,
-				MAP_FIXED | MAP_PRIVATE | MAP_DENYWRITE,
+				MAP_FIXED | MAP_PRIVATE | MAP_DENYWRITE | MAP_EXECUTABLE,
 				fd_offset + ex.a_text);
 		sys_close(fd);
 		if (error != N_TXTADDR(ex) + ex.a_text) {

@@ -1,9 +1,9 @@
 /*---------------------------------------------------------------------------+
- |  p_atan.c                                                                 |
+ |  poly_atan.c                                                              |
  |                                                                           |
- | Compute the tan of a FPU_REG, using a polynomial approximation.           |
+ | Compute the arctan of a FPU_REG, using a polynomial approximation.        |
  |                                                                           |
- | Copyright (C) 1992,1993                                                   |
+ | Copyright (C) 1992,1993,1994                                              |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
@@ -13,184 +13,185 @@
 #include "exception.h"
 #include "reg_constant.h"
 #include "fpu_emu.h"
+#include "status_w.h"
 #include "control_w.h"
+#include "poly.h"
 
 
 #define	HIPOWERon	6	/* odd poly, negative terms */
-static unsigned const oddnegterms[HIPOWERon][2] =
+static const unsigned long long oddnegterms[HIPOWERon] =
 {
-  { 0x00000000, 0x00000000 }, /* for + 1.0 */
-  { 0x763b6f3d, 0x1adc4428 },
-  { 0x20f0630b, 0x0502909d },
-  { 0x4e825578, 0x0198ce38 },
-  { 0x22b7cb87, 0x008da6e3 },
-  { 0x9b30ca03, 0x00239c79 }
+  0x0000000000000000LL, /* Dummy (not for - 1.0) */
+  0x015328437f756467LL,
+  0x0005dda27b73dec6LL,
+  0x0000226bf2bfb91aLL,
+  0x000000ccc439c5f7LL,
+  0x0000000355438407LL
 } ;
 
 #define	HIPOWERop	6	/* odd poly, positive terms */
-static unsigned const	oddplterms[HIPOWERop][2] =
+static const unsigned long long oddplterms[HIPOWERop] =
 {
-  { 0xa6f67cb8, 0x94d910bd },
-  { 0xa02ffab4, 0x0a43cb45 },
-  { 0x04265e6b, 0x02bf5655 },
-  { 0x0a728914, 0x00f280f7 },
-  { 0x6d640e01, 0x004d6556 },
-  { 0xf1dd2dbf, 0x000a530a }
+/*  0xaaaaaaaaaaaaaaabLL,  transferred to fixedpterm[] */
+  0x0db55a71875c9ac2LL,
+  0x0029fce2d67880b0LL,
+  0x0000dfd3908b4596LL,
+  0x00000550fd61dab4LL,
+  0x0000001c9422b3f9LL,
+  0x000000003e3301e1LL
 };
 
-static unsigned long long const denomterm = 0xea2e6612fc4bd208LL;
+static const unsigned long long denomterm = 0xebd9b842c5c53a0eLL;
+
+static const Xsig fixedpterm = MK_XSIG(0xaaaaaaaa, 0xaaaaaaaa, 0xaaaaaaaa);
+
+static const Xsig pi_signif = MK_XSIG(0xc90fdaa2, 0x2168c234, 0xc4c6628b);
 
 
 /*--- poly_atan() -----------------------------------------------------------+
  |                                                                           |
  +---------------------------------------------------------------------------*/
-void	poly_atan(FPU_REG *arg)
+void	poly_atan(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *result)
 {
-  char		recursions = 0;
-  short		exponent;
-  FPU_REG       odd_poly, even_poly, pos_poly, neg_poly, ratio;
-  FPU_REG       argSq;
-  unsigned long long     arg_signif, argSqSq;
+  char		        transformed, inverted,
+                        sign1 = arg1->sign, sign2 = arg2->sign;
+  long int   		exponent, dummy_exp;
+  Xsig                  accumulator, Numer, Denom, accumulatore, argSignif,
+                        argSq, argSqSq;
   
 
-#ifdef PARANOID
-  if ( arg->sign != 0 )	/* Can't hack a number < 0.0 */
-    { arith_invalid(arg); return; }  /* Need a positive number */
-#endif PARANOID
-
-  exponent = arg->exp - EXP_BIAS;
-  
-  if ( arg->tag == TW_Zero )
+  arg1->sign = arg2->sign = SIGN_POS;
+  if ( (compare(arg2) & ~COMP_Denormal) == COMP_A_lt_B )
     {
-      /* Return 0.0 */
-      reg_move(&CONST_Z, arg);
-      return;
+      inverted = 1;
+      exponent = arg1->exp - arg2->exp;
+      Numer.lsw = Denom.lsw = 0;
+      XSIG_LL(Numer) = significand(arg1);
+      XSIG_LL(Denom) = significand(arg2);
     }
-  
-  if ( exponent >= -2 )
+  else
     {
-      /* argument is in the range  [0.25 .. 1.0] */
+      inverted = 0;
+      exponent = arg2->exp - arg1->exp;
+      Numer.lsw = Denom.lsw = 0;
+      XSIG_LL(Numer) = significand(arg2);
+      XSIG_LL(Denom) = significand(arg1);
+     }
+  div_Xsig(&Numer, &Denom, &argSignif);
+  exponent += norm_Xsig(&argSignif);
+
+  if ( (exponent >= -1)
+      || ((exponent == -2) && (argSignif.msw > 0xd413ccd0)) )
+    {
+      /* The argument is greater than sqrt(2)-1 (=0.414213562...) */
+      /* Convert the argument by an identity for atan */
+      transformed = 1;
+
       if ( exponent >= 0 )
 	{
 #ifdef PARANOID
-	  if ( (exponent == 0) && 
-	      (arg->sigl == 0) && (arg->sigh == 0x80000000) )
-#endif PARANOID
+	  if ( !( (exponent == 0) && 
+		 (argSignif.lsw == 0) && (argSignif.midw == 0) &&
+		 (argSignif.msw == 0x80000000) ) )
 	    {
-	      reg_move(&CONST_PI4, arg);
+	      EXCEPTION(EX_INTERNAL|0x104);  /* There must be a logic error */
 	      return;
 	    }
-#ifdef PARANOID
-	  EXCEPTION(EX_INTERNAL|0x104);	/* There must be a logic error */
-	  return;
 #endif PARANOID
+	  argSignif.msw = 0;   /* Make the transformed arg -> 0.0 */
 	}
-
-      /* If the argument is greater than sqrt(2)-1 (=0.414213562...) */
-      /* convert the argument by an identity for atan */
-      if ( (exponent >= -1) || (arg->sigh > 0xd413ccd0) )
+      else
 	{
-	  FPU_REG numerator, denom;
+	  Numer.lsw = Denom.lsw = argSignif.lsw;
+	  XSIG_LL(Numer) = XSIG_LL(Denom) = XSIG_LL(argSignif);
 
-	  recursions++;
-
-	  arg_signif = significand(arg);
 	  if ( exponent < -1 )
-	    {
-	      if ( shrx(&arg_signif, -1-exponent) >= 0x80000000U )
-		arg_signif++;	/* round up */
-	    }
-	  significand(&numerator) = -arg_signif;
-	  numerator.exp = EXP_BIAS - 1;
-	  normalize(&numerator);                       /* 1 - arg */
+	    shr_Xsig(&Numer, -1-exponent);
+	  negate_Xsig(&Numer);
+      
+	  shr_Xsig(&Denom, -exponent);
+	  Denom.msw |= 0x80000000;
+      
+	  div_Xsig(&Numer, &Denom, &argSignif);
 
-	  arg_signif = significand(arg);
-	  if ( shrx(&arg_signif, -exponent) >= 0x80000000U )
-	    arg_signif++;	/* round up */
-	  significand(&denom) = arg_signif;
-	  denom.sigh |= 0x80000000;                    /* 1 + arg */
-
-	  arg->exp = numerator.exp;
-	  reg_u_div(&numerator, &denom, arg, FULL_PRECISION);
-
-	  exponent = arg->exp - EXP_BIAS;
+	  exponent = -1 + norm_Xsig(&argSignif);
 	}
     }
-
-  arg_signif = significand(arg);
-
-#ifdef PARANOID
-  /* This must always be true */
-  if ( exponent >= -1 )
+  else
     {
-      EXCEPTION(EX_INTERNAL|0x120);	/* There must be a logic error */
+      transformed = 0;
     }
-#endif PARANOID
 
-  /* shift the argument right by the required places */
-  if ( shrx(&arg_signif, -1-exponent) >= 0x80000000U )
-    arg_signif++;	/* round up */
+  argSq.lsw = argSignif.lsw; argSq.midw = argSignif.midw;
+  argSq.msw = argSignif.msw;
+  mul_Xsig_Xsig(&argSq, &argSq);
   
-  /* Now have arg_signif with binary point at the left
+  argSqSq.lsw = argSq.lsw; argSqSq.midw = argSq.midw; argSqSq.msw = argSq.msw;
+  mul_Xsig_Xsig(&argSqSq, &argSqSq);
+
+  accumulatore.lsw = argSq.lsw;
+  XSIG_LL(accumulatore) = XSIG_LL(argSq);
+
+  shr_Xsig(&argSq, 2*(-1-exponent-1));
+  shr_Xsig(&argSqSq, 4*(-1-exponent-1));
+
+  /* Now have argSq etc with binary point at the left
      .1xxxxxxxx */
-  mul64(&arg_signif, &arg_signif, &significand(&argSq));
-  mul64(&significand(&argSq), &significand(&argSq), &argSqSq);
-
-  /* will be a valid positive nr with expon = 0 */
-  *(short *)&(pos_poly.sign) = 0;
-  pos_poly.exp = EXP_BIAS;
 
   /* Do the basic fixed point polynomial evaluation */
-  polynomial(&pos_poly.sigl, (unsigned *)&argSqSq,
-	     (unsigned short (*)[4])oddplterms, HIPOWERop-1);
-  mul64(&significand(&argSq), &significand(&pos_poly),
-	&significand(&pos_poly));
+  accumulator.msw = accumulator.midw = accumulator.lsw = 0;
+  polynomial_Xsig(&accumulator, &XSIG_LL(argSqSq),
+		   oddplterms, HIPOWERop-1);
+  mul64_Xsig(&accumulator, &XSIG_LL(argSq));
+  negate_Xsig(&accumulator);
+  polynomial_Xsig(&accumulator, &XSIG_LL(argSqSq), oddnegterms, HIPOWERon-1);
+  negate_Xsig(&accumulator);
+  add_two_Xsig(&accumulator, &fixedpterm, &dummy_exp);
 
-  /* will be a valid positive nr with expon = 0 */
-  *(short *)&(neg_poly.sign) = 0;
-  neg_poly.exp = EXP_BIAS;
+  mul64_Xsig(&accumulatore, &denomterm);
+  shr_Xsig(&accumulatore, 1 + 2*(-1-exponent));
+  accumulatore.msw |= 0x80000000;
 
-  /* Do the basic fixed point polynomial evaluation */
-  polynomial(&neg_poly.sigl, (unsigned *)&argSqSq,
-	     (unsigned short (*)[4])oddnegterms, HIPOWERon-1);
+  div_Xsig(&accumulator, &accumulatore, &accumulator);
 
-  /* Subtract the mantissas */
-  significand(&pos_poly) -= significand(&neg_poly);
+  mul_Xsig_Xsig(&accumulator, &argSignif);
+  mul_Xsig_Xsig(&accumulator, &argSq);
 
-  reg_move(&pos_poly, &odd_poly);
-  poly_add_1(&odd_poly);
+  shr_Xsig(&accumulator, 3);
+  negate_Xsig(&accumulator);
+  add_Xsig_Xsig(&accumulator, &argSignif);
 
-  /* will be a valid positive nr with expon = 0 */
-  *(short *)&(even_poly.sign) = 0;
+  if ( transformed )
+    {
+      /* compute pi/4 - accumulator */
+      shr_Xsig(&accumulator, -1-exponent);
+      negate_Xsig(&accumulator);
+      add_Xsig_Xsig(&accumulator, &pi_signif);
+      exponent = -1;
+    }
 
-  mul64(&significand(&argSq), &denomterm, &significand(&even_poly));
+  if ( inverted )
+    {
+      /* compute pi/2 - accumulator */
+      shr_Xsig(&accumulator, -exponent);
+      negate_Xsig(&accumulator);
+      add_Xsig_Xsig(&accumulator, &pi_signif);
+      exponent = 0;
+    }
 
-  poly_add_1(&even_poly);
+  if ( sign1 )
+    {
+      /* compute pi - accumulator */
+      shr_Xsig(&accumulator, 1 - exponent);
+      negate_Xsig(&accumulator);
+      add_Xsig_Xsig(&accumulator, &pi_signif);
+      exponent = 1;
+    }
 
-  reg_div(&odd_poly, &even_poly, &ratio, FULL_PRECISION);
-
-  reg_u_mul(&ratio, arg, arg, FULL_PRECISION);
-
-  if ( recursions )
-    reg_sub(&CONST_PI4, arg, arg, FULL_PRECISION);
-
-}
-
-
-/* The argument to this function must be polynomial() compatible,
-   i.e. have an exponent (not checked) of EXP_BIAS-1 but need not
-   be normalized.
-   This function adds 1.0 to the (assumed positive) argument. */
-void poly_add_1(FPU_REG *src)
-{
-/* Rounding in a consistent direction produces better results
-   for the use of this function in poly_atan. Simple truncation
-   is used here instead of round-to-nearest. */
-
-shrx(&src->sigl, 1);
-
-src->sigh |= 0x80000000;
-
-src->exp = EXP_BIAS;
+  exponent += round_Xsig(&accumulator);
+  significand(result) = XSIG_LL(accumulator);
+  result->exp = exponent + EXP_BIAS;
+  result->tag = TW_Valid;
+  result->sign = sign2;
 
 }

@@ -422,16 +422,19 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	restore_flags(flags);
 
 	/* copy outgoing packets to any sniffer packet handlers */
-	for (nitcount = dev_nit, ptype = ptype_base; nitcount > 0 && ptype != NULL; ptype = ptype->next) {
-		if (ptype->type == htons(ETH_P_ALL)) {
-			struct sk_buff *skb2;
-			if ((skb2 = skb_clone(skb, GFP_ATOMIC)) == NULL)
-				break;
-			ptype->func(skb2, skb->dev, ptype);
-			nitcount--;
+	if(!where)
+	{
+		for (nitcount = dev_nit, ptype = ptype_base; nitcount > 0 && ptype != NULL; ptype = ptype->next) 
+		{
+			if (ptype->type == htons(ETH_P_ALL)) {
+				struct sk_buff *skb2;
+				if ((skb2 = skb_clone(skb, GFP_ATOMIC)) == NULL)
+					break;
+				ptype->func(skb2, skb->dev, ptype);
+				nitcount--;
+			}
 		}
 	}
-
 	if (dev->hard_start_xmit(skb, dev) == 0) {
 		/*
 		 *	Packet is now solely the responsibility of the driver

@@ -672,8 +672,8 @@ static int internal_command(unsigned char target, unsigned char lun, const void 
  */
 		
 		for (clock = jiffies + 10, temp = 0; (jiffies < clock) &&
-		     !(STATUS & STAT_IO););
-		
+		    !((temp = STATUS) & STAT_IO) || (STAT & STAT_BSY););
+
 		if (jiffies >= clock)
 			{
 #if (DEBUG & PHASE_RESELECT)

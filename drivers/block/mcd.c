@@ -1031,7 +1031,7 @@ mcd_open(struct inode *ip, struct file *fp)
 		return -ENXIO;			/* no hardware */
 	
 	if (fp->f_mode & 2)			/* write access? */
-		return -EACCES;
+		return -EROFS;
 
 	if (!mcd_open_count && mcd_state == MCD_S_IDLE) {
 

@@ -78,18 +78,18 @@ extern int load_store_instr(unsigned char type, fpu_addr_modes addr_modes,
 extern int poly_2xm1(FPU_REG const *arg, FPU_REG *result);
 
 /* poly_atan.c */
-extern void poly_atan(FPU_REG *arg);
-extern void poly_add_1(FPU_REG *src);
+extern void poly_atan(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *result);
 
 /* poly_l2.c */
-extern void poly_l2(FPU_REG const *arg, FPU_REG *result);
-extern int poly_l2p1(FPU_REG const *arg, FPU_REG *result);
+extern void poly_l2(FPU_REG const *arg, FPU_REG const *y, FPU_REG *result);
+extern int poly_l2p1(FPU_REG const *arg, FPU_REG const *y, FPU_REG *result);
 
 /* poly_sin.c */
 extern void poly_sine(FPU_REG const *arg, FPU_REG *result);
+extern void poly_cos(FPU_REG const *arg, FPU_REG *result);
 
 /* poly_tan.c */
-extern void poly_tan(FPU_REG const *arg, FPU_REG *result, int invert);
+extern void poly_tan(FPU_REG const *arg, FPU_REG *result);
 
 /* reg_add_sub.c */
 extern int reg_add(FPU_REG const *a, FPU_REG const *b,

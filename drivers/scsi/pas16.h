@@ -36,7 +36,7 @@
 #ifndef PAS16_H
 #define PAS16_H
 
-#define PAS16_PUBLIC_RELEASE 1
+#define PAS16_PUBLIC_RELEASE 2
 
 #define PDEBUG_INIT	0x1
 #define PDEBUG_TRANSFER 0x2

@@ -3,7 +3,7 @@
  |                                                                           |
  | Compute the base 2 log of a FPU_REG, using a polynomial approximation.    |
  |                                                                           |
- | Copyright (C) 1992,1993                                                   |
+ | Copyright (C) 1992,1993,1994                                              |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
@@ -15,206 +15,93 @@
 #include "reg_constant.h"
 #include "fpu_emu.h"
 #include "control_w.h"
+#include "poly.h"
 
 
 
-#define	HIPOWER	9
-static unsigned short const	lterms[HIPOWER][4] =
-	{
-	/* Ideal computation with these coeffs gives about
-	   64.6 bit rel accuracy. */
-	{ 0xe177, 0xb82f, 0x7652, 0x7154 },
-	{ 0xee0f, 0xe80f, 0x2770, 0x7b1c },
-	{ 0x0fc0, 0xbe87, 0xb143, 0x49dd },
-	{ 0x78b9, 0xdadd, 0xec54, 0x34c2 },
-	{ 0x003a, 0x5de9, 0x628b, 0x2909 },
-	{ 0x5588, 0xed16, 0x4abf, 0x2193 },
-	{ 0xb461, 0x85f7, 0x347a, 0x1c6a },
-	{ 0x0975, 0x87b3, 0xd5bf, 0x1876 },
-	{ 0xe85c, 0xcec9, 0x84e7, 0x187d }
-	};
-
-
+static void log2_kernel(FPU_REG const *arg,
+			Xsig *accum_result, long int *expon);
 
 
 /*--- poly_l2() -------------------------------------------------------------+
  |   Base 2 logarithm by a polynomial approximation.                         |
  +---------------------------------------------------------------------------*/
-void	poly_l2(FPU_REG const *arg, FPU_REG *result)
+void	poly_l2(FPU_REG const *arg, FPU_REG const *y, FPU_REG *result)
 {
-  short		  exponent;
-  char		  zero;		/* flag for an Xx == 0 */
-  unsigned short  bits, shift;
-  unsigned long long       Xsq;
-  FPU_REG	  accum, denom, num, Xx;
+  long int	       exponent, expon, expon_expon;
+  Xsig                 accumulator, expon_accum, yaccum;
+  char		       sign;
+  FPU_REG              x;
 
 
   exponent = arg->exp - EXP_BIAS;
 
-  accum.tag = TW_Valid;	/* set the tags to Valid */
-
+  /* From arg, make a number > sqrt(2)/2 and < sqrt(2) */
   if ( arg->sigh > (unsigned)0xb504f334 )
     {
-      /* This is good enough for the computation of the polynomial
-	 sum, but actually results in a loss of precision for
-	 the computation of Xx. This will matter only if exponent
-	 becomes zero. */
+      /* Treat as  sqrt(2)/2 < arg < 1 */
+      significand(&x) = - significand(arg);
+      x.sign = SIGN_NEG;
+      x.tag = TW_Valid;
+      x.exp = EXP_BIAS-1;
       exponent++;
-      accum.sign = 1;	/* sign to negative */
-      num.exp = EXP_BIAS;  /* needed to prevent errors in div routine */
-      reg_u_div(&CONST_1, arg, &num, FULL_PRECISION);
+      normalize(&x);
     }
   else
     {
-      accum.sign = 0;	/* set the sign to positive */
-      num.sigl = arg->sigl;		/* copy the mantissa */
-      num.sigh = arg->sigh;
+      /* Treat as  1 <= arg < sqrt(2) */
+      x.sigh = arg->sigh - 0x80000000;
+      x.sigl = arg->sigl;
+      x.sign = SIGN_POS;
+      x.tag = TW_Valid;
+      x.exp = EXP_BIAS;
+      normalize(&x);
     }
 
-
-  /* shift num left, lose the ms bit */
-  num.sigh <<= 1;
-  if ( num.sigl & 0x80000000 ) num.sigh |= 1;
-  num.sigl <<= 1;
-
-  denom.sigl = num.sigl;
-  denom.sigh = num.sigh;
-  poly_div4(&significand(&denom));
-  denom.sigh += 0x80000000;			/* set the msb */
-  Xx.exp = EXP_BIAS;  /* needed to prevent errors in div routine */
-  reg_u_div(&num, &denom, &Xx, FULL_PRECISION);
-
-  zero = !(Xx.sigh | Xx.sigl);
-  
-  mul64(&significand(&Xx), &significand(&Xx), &Xsq);
-  poly_div16(&Xsq);
-
-  accum.exp = -1;		/* exponent of accum */
-
-  /* Do the basic fixed point polynomial evaluation */
-  polynomial((unsigned *)&accum.sigl, (unsigned *)&Xsq, lterms, HIPOWER-1);
-
-  if ( !exponent )
+  if ( x.tag == TW_Zero )
     {
-      /* If the exponent is zero, then we would lose precision by
-	 sticking to fixed point computation here */
-      /* We need to re-compute Xx because of loss of precision. */
-      FPU_REG   lXx;
-      char	sign;
-      
-      sign = accum.sign;
-      accum.sign = 0;
-
-      /* make accum compatible and normalize */
-      accum.exp = EXP_BIAS + accum.exp;
-      normalize(&accum);
-
-      if ( zero )
-	{
-	  reg_move(&CONST_Z, result);
-	}
-      else
-	{
-	  /* we need to re-compute lXx to better accuracy */
-	  num.tag = TW_Valid;		/* set the tags to Vaild */
-	  num.sign = 0;		/* set the sign to positive */
-	  num.exp = EXP_BIAS - 1;
-	  if ( sign )
-	    {
-	      /* The argument is of the form 1-x */
-	      /* Use  1-1/(1-x) = x/(1-x) */
-	      significand(&num) = - significand(arg);
-	      normalize(&num);
-	      reg_div(&num, arg, &num, FULL_PRECISION);
-	    }
-	  else
-	    {
-	      normalize(&num);
-	    }
-
-	  denom.tag = TW_Valid;	/* set the tags to Valid */
-	  denom.sign = SIGN_POS;	/* set the sign to positive */
-	  denom.exp = EXP_BIAS;
-	  
-	  reg_div(&num, &denom, &lXx, FULL_PRECISION);
-
-	  reg_u_mul(&lXx, &accum, &accum, FULL_PRECISION);
-
-	  reg_u_add(&lXx, &accum, result, FULL_PRECISION);
-	  
-	  normalize(result);
-	}
-
-      result->sign = sign;
-      return;
+      expon = 0;
+      accumulator.msw = accumulator.midw = accumulator.lsw = 0;
     }
-
-  mul64(&significand(&accum),
-	&significand(&Xx), &significand(&accum));
-
-  significand(&accum) += significand(&Xx);
-
-  if ( Xx.sigh > accum.sigh )
+  else
     {
-      /* There was an overflow */
-
-      poly_div2(&significand(&accum));
-      accum.sigh |= 0x80000000;
-      accum.exp++;
+      log2_kernel(&x, &accumulator, &expon);
     }
 
-  /* When we add the exponent to the accum result later, we will
-     require that their signs are the same. Here we ensure that
-     this is so. */
-  if ( exponent && ((exponent < 0) ^ (accum.sign)) )
+  sign = exponent < 0;
+  if ( sign ) exponent = -exponent;
+  expon_accum.msw = exponent; expon_accum.midw = expon_accum.lsw = 0;
+  if ( exponent )
     {
-      /* signs are different */
+      expon_expon = 31 + norm_Xsig(&expon_accum);
+      shr_Xsig(&accumulator, expon_expon - expon);
 
-      accum.sign = !accum.sign;
-
-      /* An exceptional case is when accum is zero */
-      if ( accum.sigl | accum.sigh )
-	{
-	  /* find 1-accum */
-	  /* Shift to get exponent == 0 */
-	  if ( accum.exp < 0 )
-	    {
-	      poly_div2(&significand(&accum));
-	      accum.exp++;
-	    }
-	  /* Just negate, but throw away the sign */
-	  significand(&accum) = - significand(&accum);
-	  if ( exponent < 0 )
-	    exponent++;
-	  else
-	    exponent--;
-	}
+      if ( sign ^ (x.sign == SIGN_NEG) )
+	negate_Xsig(&accumulator);
+      add_Xsig_Xsig(&accumulator, &expon_accum);
     }
-
-  shift = exponent >= 0 ? exponent : -exponent ;
-  bits = 0;
-  if ( shift )
+  else
     {
-      if ( accum.exp )
-	{
-	  accum.exp++;
-	  poly_div2(&significand(&accum));
-	}
-      while ( shift )
-	{
-	  poly_div2(&significand(&accum));
-	  if ( shift & 1)
-	    accum.sigh |= 0x80000000;
-	  shift >>= 1;
-	  bits++;
-	}
+      expon_expon = expon;
+      sign = x.sign;
     }
 
-  /* Convert to 64 bit signed-compatible */
-  accum.exp += bits + EXP_BIAS - 1;
+  yaccum.lsw = 0; XSIG_LL(yaccum) = significand(y);
+  mul_Xsig_Xsig(&accumulator, &yaccum);
 
-  reg_move(&accum, result);
-  normalize(result);
+  expon_expon += round_Xsig(&accumulator);
+
+  if ( accumulator.msw == 0 )
+    {
+      reg_move(&CONST_Z, y);
+    }
+  else
+    {
+      result->exp = expon_expon + y->exp + 1;
+      significand(result) = XSIG_LL(accumulator);
+      result->tag = TW_Valid; /* set the tags to Valid */
+      result->sign = sign ^ y->sign;
+    }
 
   return;
 }
@@ -224,66 +111,145 @@ void	poly_l2(FPU_REG const *arg, FPU_REG *result)
  |   Base 2 logarithm by a polynomial approximation.                         |
  |   log2(x+1)                                                               |
  +---------------------------------------------------------------------------*/
-int	poly_l2p1(FPU_REG const *arg, FPU_REG *result)
+int	poly_l2p1(FPU_REG const *arg, FPU_REG const *y, FPU_REG *result)
 {
-  char		sign = 0;
-  unsigned long long     Xsq;
-  FPU_REG      	arg_pl1, denom, accum, local_arg, poly_arg;
+  char                 sign;
+  long int             exponent;
+  Xsig                 accumulator, yaccum;
 
 
   sign = arg->sign;
 
-  reg_add(arg, &CONST_1, &arg_pl1, FULL_PRECISION);
-
-  if ( (arg_pl1.sign) | (arg_pl1.tag) )
-    {			/* We need a valid positive number! */
-      return 1;
-    }
-
-  reg_add(&CONST_1, &arg_pl1, &denom, FULL_PRECISION);
-  reg_div(arg, &denom, &local_arg, FULL_PRECISION);
-  local_arg.sign = 0;	/* Make the sign positive */
-
-  /* Now we need to check that  |local_arg| is less than
-     3-2*sqrt(2) = 0.17157.. = .0xafb0ccc0 * 2^-2 */
-
-  if ( local_arg.exp >= EXP_BIAS - 3 )
+  if ( arg->exp < EXP_BIAS )
     {
-      if ( (local_arg.exp > EXP_BIAS - 3) ||
-	  (local_arg.sigh > (unsigned)0xafb0ccc0) )
+      log2_kernel(arg, &accumulator, &exponent);
+
+      yaccum.lsw = 0;
+      XSIG_LL(yaccum) = significand(y);
+      mul_Xsig_Xsig(&accumulator, &yaccum);
+
+      exponent += round_Xsig(&accumulator);
+
+      result->exp = exponent + y->exp + 1;
+      significand(result) = XSIG_LL(accumulator);
+      result->tag = TW_Valid; /* set the tags to Valid */
+      result->sign = sign ^ y->sign;
+
+      return 0;
+    }
+  else
+    {
+      /* The magnitude of arg is far too large. */
+      reg_move(y, result);
+      if ( sign != SIGN_POS )
 	{
-	  /* The argument is large */
-	  poly_l2(&arg_pl1, result); return 0;
+	  /* Trying to get the log of a negative number. */
+	  return 1;
+	}
+      else
+	{
+	  return 0;
 	}
     }
 
-  /* Make a copy of local_arg */
-  reg_move(&local_arg, &poly_arg);
+}
 
-  /* Get poly_arg bits aligned as required */
-  shrx((unsigned *)&(poly_arg.sigl), -(poly_arg.exp - EXP_BIAS + 3));
 
-  mul64(&significand(&poly_arg), &significand(&poly_arg), &Xsq);
-  poly_div16(&Xsq);
 
+
+#undef HIPOWER
+#define	HIPOWER	10
+static const unsigned long long logterms[HIPOWER] =
+{
+  0x2a8eca5705fc2ef0LL,
+  0xf6384ee1d01febceLL,
+  0x093bb62877cdf642LL,
+  0x006985d8a9ec439bLL,
+  0x0005212c4f55a9c8LL,
+  0x00004326a16927f0LL,
+  0x0000038d1d80a0e7LL,
+  0x0000003141cc80c6LL,
+  0x00000002b1668c9fLL,
+  0x000000002c7a46aaLL
+};
+
+static const unsigned long leadterm = 0xb8000000;
+
+
+/*--- log2_kernel() ---------------------------------------------------------+
+ |   Base 2 logarithm by a polynomial approximation.                         |
+ |   log2(x+1)                                                               |
+ +---------------------------------------------------------------------------*/
+static void log2_kernel(FPU_REG const *arg, Xsig *accum_result,
+			long int *expon)
+{
+  char                 sign;
+  long int             exponent, adj;
+  unsigned long long   Xsq;
+  Xsig                 accumulator, Numer, Denom, argSignif, arg_signif;
+
+  sign = arg->sign;
+
+  exponent = arg->exp - EXP_BIAS;
+  Numer.lsw = Denom.lsw = 0;
+  XSIG_LL(Numer) = XSIG_LL(Denom) = significand(arg);
+  if ( sign == SIGN_POS )
+    {
+      shr_Xsig(&Denom, 2 - (1 + exponent));
+      Denom.msw |= 0x80000000;
+      div_Xsig(&Numer, &Denom, &argSignif);
+    }
+  else
+    {
+      shr_Xsig(&Denom, 1 - (1 + exponent));
+      negate_Xsig(&Denom);
+      if ( Denom.msw & 0x80000000 )
+	{
+	  div_Xsig(&Numer, &Denom, &argSignif);
+	  exponent ++;
+	}
+      else
+	{
+	  /* Denom must be 1.0 */
+	  argSignif.lsw = Numer.lsw; argSignif.midw = Numer.midw;
+	  argSignif.msw = Numer.msw;
+	}
+    }
+
+#ifndef PECULIAR_486
+  /* Should check here that  |local_arg|  is within the valid range */
+  if ( exponent >= -2 )
+    {
+      if ( (exponent > -2) ||
+	  (argSignif.msw > (unsigned)0xafb0ccc0) )
+	{
+	  /* The argument is too large */
+	}
+    }
+#endif PECULIAR_486
+
+  arg_signif.lsw = argSignif.lsw; XSIG_LL(arg_signif) = XSIG_LL(argSignif);
+  adj = norm_Xsig(&argSignif);
+  accumulator.lsw = argSignif.lsw; XSIG_LL(accumulator) = XSIG_LL(argSignif);
+  mul_Xsig_Xsig(&accumulator, &accumulator);
+  shr_Xsig(&accumulator, 2*(-1 - (1 + exponent + adj)));
+  Xsq = XSIG_LL(accumulator);
+  if ( accumulator.lsw & 0x80000000 )
+    Xsq++;
+
+  accumulator.msw = accumulator.midw = accumulator.lsw = 0;
   /* Do the basic fixed point polynomial evaluation */
-  polynomial(&(accum.sigl), (unsigned *)&Xsq, lterms, HIPOWER-1);
+  polynomial_Xsig(&accumulator, &Xsq, logterms, HIPOWER-1);
 
-  accum.tag = TW_Valid;	/* set the tags to Valid */
-  accum.sign = SIGN_POS;	/* and make accum positive */
+  mul_Xsig_Xsig(&accumulator, &argSignif);
+  shr_Xsig(&accumulator, 6 - adj);
 
-  /* make accum compatible and normalize */
-  accum.exp = EXP_BIAS - 1;
-  normalize(&accum);
+  mul32_Xsig(&arg_signif, leadterm);
+  add_two_Xsig(&accumulator, &arg_signif, &exponent);
 
-  reg_u_mul(&local_arg, &accum, &accum, FULL_PRECISION);
+  *expon = exponent + 1;
+  accum_result->lsw = accumulator.lsw;
+  accum_result->midw = accumulator.midw;
+  accum_result->msw = accumulator.msw;
 
-  reg_u_add(&local_arg, &accum, result, FULL_PRECISION);
-
-  /* Multiply the result by 2 */
-  result->exp++;
-
-  result->sign = sign;
-  
-  return 0;
 }

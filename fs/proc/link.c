@@ -74,7 +74,7 @@ static int proc_follow_link(struct inode * dir, struct inode * inode,
 		case 6: {
 			struct vm_area_struct * vma = p->mm->mmap;
 			while (vma) {
-				if (vma->vm_flags & VM_DENYWRITE) {
+				if (vma->vm_flags & VM_EXECUTABLE) {
 					inode = vma->vm_inode;
 					break;
 				}

@@ -14,5 +14,6 @@
 
 #define MAP_GROWSDOWN	0x0400		/* stack-like segment */
 #define MAP_DENYWRITE	0x0800		/* ETXTBSY */
+#define MAP_EXECUTABLE	0x1000		/* mark it as a executable */
 
 #endif /* _LINUX_MMAN_H */

@@ -27,6 +27,7 @@
  *			multiple datalinks <Greg Page>
  *	Revision 0.26:  Device drop kills IPX routes via it. (needed for modules)
  *	Revision 0.27:  Autobind <Mark Evans>
+ *	Revision 0.28:  Small fix for multiple local networks <Thomas Winder>
  *
  *			
  *
@@ -216,7 +217,7 @@ ipxrtr_get_local_net(struct device *dev, unsigned short datalink)
 			restore_flags(flags);
 			return r;
 		}
-		r=r->next;
+		r=r->nextlocal;
 	}
 	restore_flags(flags);
 	return NULL;
@@ -1347,7 +1348,7 @@ void ipx_proto_init(struct net_proto *pro)
 	if ((p8022_datalink = register_8022_client(val, ipx_rcv)) == NULL)
 		printk("IPX: Unable to register with 802.2\n");
 	
-	printk("Swansea University Computer Society IPX 0.26 BETA for NET3.016\n");
+	printk("Swansea University Computer Society IPX 0.28 BETA for NET3.016\n");
 	
 }
 #endif

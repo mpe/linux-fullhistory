@@ -1,4 +1,4 @@
-#
+
 # Makefile for kernel/blk_drv/scsi
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -24,8 +24,8 @@ SCSI_SRCS =
 
 ifdef CONFIG_SCSI
 
-SCSI_OBJS := hosts.o scsi.o scsi_ioctl.o constants.o
-SCSI_SRCS := hosts.c scsi.c scsi_ioctl.c constants.c
+SCSI_OBJS := hosts.o scsi.o scsi_ioctl.o constants.o scsicam.o
+SCSI_SRCS := hosts.c scsi.c scsi_ioctl.c constants.c scsicam.c
 
 ifdef CONFIG_CHR_DEV_ST
 SCSI_OBJS := $(SCSI_OBJS) st.o
@@ -87,6 +87,11 @@ SCSI_OBJS := $(SCSI_OBJS) g_NCR5380.o
 SCSI_SRCS := $(SCSI_SRCS) g_NCR5380.c
 endif
 
+#ifdef CONFIG_SCSI_NCR53C7xx
+SCSI_OBJS := $(SCSI_OBJS) 53c7,8xx.o 
+SCSI_SRCS := $(SCSI_SRCS) 53c7,8xx.c
+#endif
+
 ifdef CONFIG_SCSI_PAS16
 SCSI_OBJS := $(SCSI_OBJS) pas16.o
 SCSI_SRCS := $(SCSI_SRCS) pas16.c
@@ -130,6 +135,17 @@ aha152x.o: aha152x.c
 
 seagate.o: seagate.c
 	$(CC) $(CFLAGS) -DARBITRATE -DSLOW_HANDSHAKE -DFAST32 -c seagate.c 
+
+# For debugging, use the -g flag
+53c7,8xx.o : 53c7,8xx.c
+	$(CC) $(CFLAGS) -g -c 53c7,8xx.c
+
+53c8xx_d.h 53c8xx_u.h : 53c7,8xx.scr script_asm.pl
+	ln 53c7,8xx.scr fake.c
+	$(CPP) -DCHIP=810 fake.c | grep -v ^# | perl script_asm.pl 
+	mv script.h 53c8xx_d.h
+	mv scriptu.h 53c8xx_u.h
+	rm fake.c
 
 dep:
 	$(CPP) -M $(AHA152X) $(SCSI_SRCS) > .depend

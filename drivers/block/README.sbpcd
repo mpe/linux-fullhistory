@@ -1,11 +1,18 @@
-This README belongs to release 2.3 of the SoundBlaster Pro (Matsushita,
+This README belongs to release 2.5 of the SoundBlaster Pro (Matsushita,
 Kotobuki, Panasonic, CreativeLabs) CD-ROM driver for Linux.
 
-The driver is able to drive the whole family of IDE-style
-Matsushita/Kotobuki/Panasonic drives (the "double speed" versions like CR-562
-and CR-563, too), and it will work with the soundcard interfaces (SB Pro,
-SB 16, Galaxy, SoundFX, ...) and/or with the "no-sound" cards (Panasonic
-CI-101P, LaserMate, WDH-7001C, Aztech, ...).
+The driver is able to drive the whole family of "traditional" IDE-style (that
+has nothing to do with the new "Enhanced IDE" drive standard) Matsushita,
+Kotobuki, Panasonic drives, sometimes labelled as "CreativeLabs". The
+well-known drives are CR-521, CR-522, CR-523, CR-562, CR-563.
+
+This driver is NOT for Mitsumi or Sony or Aztech or Philips or XXX drives.
+The matter that some other brand's drives work with newer sound card
+interfaces does NOT make the drives compatible. :-)
+
+It will work with the soundcard interfaces (SB Pro, SB 16, Galaxy, SoundFX,
+...) and/or with the "no-sound" cards (Panasonic CI-101P, LaserMate,
+WDH-7001C, older Aztech cards, ...).
 It should work too now with the "configurable" interface "Sequoia S-1000",
 which is found on the Spea Media FX sound card.
 The interface type has to get configured in /usr/include/linux/sbpcd.h, 
@@ -15,11 +22,12 @@ The driver respects different drive firmware releases - my old drive is a 2.11,
 but it should work with "old" drives <2.01 ... >3.00 and with "new" drives
 (which count the releases around 0.75 or 1.00).
 
-Up to 4 drives are supported. CR-52x ("old") and CR-56x ("new") drives can be
-mixed, but the CR-521 ones are hard-wired to drive ID 0. The drives have to
-use different drive IDs, and each drive has to get a unique minor number
-(0...3), corresponding to it's drive ID. The drive IDs may be selected freely
-from 0 to 3 - they must not be in consecutive order.
+Up to 4 drives per interface card, and up to 4 interface cards are supported.
+CR-52x ("old") and CR-56x ("new") drives can be mixed, but the CR-521 ones are
+hard-wired to drive ID 0. The drives have to use different drive IDs, and each
+drive has to get a unique minor number (0...3), corresponding to it's drive ID.
+The drive IDs may be selected freely from 0 to 3 - they do not have to be in
+consecutive order.
 
 As Don Carroll, don@ds9.us.dell.com or FIDO 1:382/14, told me, it is possible
 to change old drives to any ID, too. He writes in this sense:
@@ -39,8 +47,9 @@ to change old drives to any ID, too. He writes in this sense:
    ID 3 behaves like ID 0."
 
 To use more than 4 drives (now that the single-speed CR-521's are as cheap as
-50$), you have to "duplicate" the driver. Just copy sbpcd.c into sbpcd2.c and
-change SBPCD_ISSUE accordingly.
+50$), you need a second interface card and you have to "duplicate" the driver.
+Just copy sbpcd.c into sbpcd2.c and so forth and change SBPCD_ISSUE
+accordingly.
 
 The driver supports reading of data from the CD and playing of audio tracks.
 The audio part should run with WorkMan, xcdplayer, with the "non-X11" products
@@ -168,7 +177,9 @@ execution of a binary from the CD; you have to copy it to a device with the
 standard BLOCK_SIZE (1024) before. So, do not use this if your system is
 directly "running from the CDROM" (like some of YGGDRASIL's installation
 variants). There are CDs on the market (like the german "unifix" Linux
-distribution) which MUST get handled with a block_size of 1024.
+distribution) which MUST get handled with a block_size of 1024. Generally,
+one can say all the CDs which hold files of the name YMTRANS.TBL are defective;
+do not use block=2048 with those.
 
 
 Auto-probing at boot time:
@@ -209,9 +220,9 @@ Most of the "SoundBlaster compatible" cards behave like the no-sound
 interfaces! 
 
 With "original" SB Pro cards, an initial setting of CD_volume through the
-sound cards MIXER register gets done. That happens at the end of "sbpcd_init".
-If you are using a "compatible" sound card of type "LaserMate", you can change
-that code to get it done with your card, too...
+sound cards MIXER register gets done.
+If you are using a "compatible" sound card of types "LaserMate" or "SPEA",
+you can set SOUND_BASE (in sbpcd.h) to get it done with your card, too...
 
 
 Using audio CDs:
@@ -367,9 +378,9 @@ Known problems:
 
 Currently, the detection of disk change or removal is actively disabled.
 
-All attempts to read the UPC/EAN code result in a stream of zeroes. All my
-drives are telling there is no UPC/EAN code on disk or there is, but it is an
-all-zero number.
+Most attempts to read the UPC/EAN code result in a stream of zeroes. All my
+drives are mostly telling there is no UPC/EAN code on disk or there is, but it
+is an all-zero number. I guess now almost no CD holds such a number.
 
 Bug reports, comments, wishes, donations (technical information is a donation,
 too :-) etc. to

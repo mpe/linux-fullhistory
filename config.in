@@ -53,6 +53,7 @@ bool 'Adaptec AHA1740 support' CONFIG_SCSI_AHA1740 n
 bool 'BusLogic SCSI support' CONFIG_SCSI_BUSLOGIC n
 bool 'Future Domain 16xx SCSI support' CONFIG_SCSI_FUTURE_DOMAIN n
 bool 'Generic NCR5380 SCSI support' CONFIG_SCSI_GENERIC_NCR5380 n
+bool 'NCR53c7,8xx SCSI support'  CONFIG_SCSI_NCR53C7xx n
 #bool 'Always IN2000 SCSI support' CONFIG_SCSI_IN2000 n
 bool 'PAS16 SCSI support' CONFIG_SCSI_PAS16 n
 bool 'Seagate ST-02 and Future Domain TMC-8xx SCSI support' CONFIG_SCSI_SEAGATE n

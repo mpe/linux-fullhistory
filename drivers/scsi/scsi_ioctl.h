@@ -5,6 +5,7 @@
 #define SCSI_IOCTL_SEND_COMMAND 1
 #define SCSI_IOCTL_TEST_UNIT_READY 2
 #define SCSI_IOCTL_BENCHMARK_COMMAND 3
+#define SCSI_IOCTL_SYNC 4			/* Request synchronous parameters */
 /* The door lock/unlock constants are compatible with Sun constants for
    the cdrom */
 #define SCSI_IOCTL_DOORLOCK 0x5380		/* lock the eject mechanism */

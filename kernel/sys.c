@@ -49,7 +49,7 @@ asmlinkage int sys_idle(void)
 	/* endless idle loop with no priority at all */
 	current->counter = -100;
 	for (;;) {
-		if (!need_resched)
+		if (hlt_works_ok && !need_resched)
 			__asm__("hlt");
 		schedule();
 	}
@@ -212,8 +212,8 @@ asmlinkage int sys_setregid(gid_t rgid, gid_t egid)
 	int old_rgid = current->gid;
 
 	if (rgid != (gid_t) -1) {
-		if ((current->egid==rgid) ||
-		    (old_rgid == rgid) || 
+		if ((old_rgid == rgid) ||
+		    (current->egid==rgid) ||
 		    suser())
 			current->gid = rgid;
 		else
@@ -222,6 +222,7 @@ asmlinkage int sys_setregid(gid_t rgid, gid_t egid)
 	if (egid != (gid_t) -1) {
 		if ((old_rgid == egid) ||
 		    (current->egid == egid) ||
+		    (current->sgid == egid) ||
 		    suser())
 			current->egid = egid;
 		else {

@@ -3,7 +3,7 @@
  |                                                                           |
  | Compute the tan of a FPU_REG, using a polynomial approximation.           |
  |                                                                           |
- | Copyright (C) 1992,1993                                                   |
+ | Copyright (C) 1992,1993,1994                                              |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
@@ -14,48 +14,51 @@
 #include "reg_constant.h"
 #include "fpu_emu.h"
 #include "control_w.h"
+#include "poly.h"
 
 
-#define	HIPOWERop	3	/* odd poly, positive terms */
-static unsigned short const	oddplterms[HIPOWERop][4] =
-	{
-	{ 0x846a, 0x42d1, 0xb544, 0x921f},
-	{ 0x6fb2, 0x0215, 0x95c0, 0x099c},
-	{ 0xfce6, 0x0cc8, 0x1c9a, 0x0000}
-	};
+#define	HiPOWERop	3	/* odd poly, positive terms */
+static const unsigned long long oddplterm[HiPOWERop] =
+{
+  0x0000000000000000LL,
+  0x0051a1cf08fca228LL,
+  0x0000000071284ff7LL
+};
 
-#define	HIPOWERon	2	/* odd poly, negative terms */
-static unsigned short const	oddnegterms[HIPOWERon][4] =
-	{
-	{ 0x6906, 0xe205, 0x25c8, 0x8838},
-	{ 0x1dd7, 0x3fe3, 0x944e, 0x002c}
-	};
+#define	HiPOWERon	2	/* odd poly, negative terms */
+static const unsigned long long oddnegterm[HiPOWERon] =
+{
+   0x1291a9a184244e80LL,
+   0x0000583245819c21LL
+};
 
-#define	HIPOWERep	2	/* even poly, positive terms */
-static unsigned short const	evenplterms[HIPOWERep][4] =
-	{
-	{ 0xdb8f, 0x3761, 0x1432, 0x2acf},
-	{ 0x16eb, 0x13c1, 0x3099, 0x0003}
-	};
+#define	HiPOWERep	2	/* even poly, positive terms */
+static const unsigned long long evenplterm[HiPOWERep] =
+{
+  0x0e848884b539e888LL,
+  0x00003c7f18b887daLL
+};
 
-#define	HIPOWERen	2	/* even poly, negative terms */
-static unsigned short const	evennegterms[HIPOWERen][4] =
-	{
-	{ 0x3a7c, 0xe4c5, 0x7f87, 0x2945},
-	{ 0x572b, 0x664c, 0xc543, 0x018c}
-	};
+#define	HiPOWERen	2	/* even poly, negative terms */
+static const unsigned long long evennegterm[HiPOWERen] =
+{
+  0xf1f0200fd51569ccLL,
+  0x003afb46105c4432LL
+};
+
+static const unsigned long long twothirds = 0xaaaaaaaaaaaaaaabLL;
 
 
 /*--- poly_tan() ------------------------------------------------------------+
  |                                                                           |
  +---------------------------------------------------------------------------*/
-void	poly_tan(FPU_REG const *arg, FPU_REG *result, int invert)
+void	poly_tan(FPU_REG const *arg, FPU_REG *result)
 {
-  short		exponent;
-  FPU_REG       odd_poly, even_poly, pos_poly, neg_poly;
-  FPU_REG       argSq;
-  unsigned long long     arg_signif, argSqSq;
-  
+  long int    		exponent;
+  int                   invert;
+  Xsig                  argSq, argSqSq, accumulatoro, accumulatore, accum,
+                        argSignif, fix_up;
+  unsigned long         adj;
 
   exponent = arg->exp - EXP_BIAS;
 
@@ -64,86 +67,147 @@ void	poly_tan(FPU_REG const *arg, FPU_REG *result, int invert)
     { arith_invalid(result); return; }  /* Need a positive number */
 #endif PARANOID
 
-  arg_signif = significand(arg);
-  if ( exponent < -1 )
+  /* Split the problem into two domains, smaller and larger than pi/4 */
+  if ( (exponent == 0) || ((exponent == -1) && (arg->sigh > 0xc90fdaa2)) )
     {
-      /* shift the argument right by the required places */
-      if ( shrx(&arg_signif, -1-exponent) >= 0x80000000U )
-	arg_signif++;	/* round up */
+      /* The argument is greater than (approx) pi/4 */
+      invert = 1;
+      accum.lsw = 0;
+      XSIG_LL(accum) = significand(arg);
+ 
+      if ( exponent == 0 )
+	{
+	  /* The argument is >= 1.0 */
+	  /* Put the binary point at the left. */
+	  XSIG_LL(accum) <<= 1;
+	}
+      /* pi/2 in hex is: 1.921fb54442d18469 898CC51701B839A2 52049C1 */
+      XSIG_LL(accum) = 0x921fb54442d18469LL - XSIG_LL(accum);
+
+      argSignif.lsw = accum.lsw;
+      XSIG_LL(argSignif) = XSIG_LL(accum);
+      exponent = -1 + norm_Xsig(&argSignif);
+    }
+  else
+    {
+      invert = 0;
+      argSignif.lsw = 0;
+      XSIG_LL(accum) = XSIG_LL(argSignif) = significand(arg);
+ 
+      if ( exponent < -1 )
+	{
+	  /* shift the argument right by the required places */
+	  if ( shrx(&XSIG_LL(accum), -1-exponent) >= 0x80000000U )
+	    XSIG_LL(accum) ++;	/* round up */
+	}
     }
 
-  mul64(&arg_signif, &arg_signif, &significand(&argSq));
-  mul64(&significand(&argSq), &significand(&argSq), &argSqSq);
+  XSIG_LL(argSq) = XSIG_LL(accum); argSq.lsw = accum.lsw;
+  mul_Xsig_Xsig(&argSq, &argSq);
+  XSIG_LL(argSqSq) = XSIG_LL(argSq); argSqSq.lsw = argSq.lsw;
+  mul_Xsig_Xsig(&argSqSq, &argSqSq);
 
-  /* will be a valid positive nr with expon = 0 */
-  *(short *)&(pos_poly.sign) = 0;
-  pos_poly.exp = EXP_BIAS;
+  /* Compute the negative terms for the numerator polynomial */
+  accumulatoro.msw = accumulatoro.midw = accumulatoro.lsw = 0;
+  polynomial_Xsig(&accumulatoro, &XSIG_LL(argSqSq), oddnegterm, HiPOWERon-1);
+  mul_Xsig_Xsig(&accumulatoro, &argSq);
+  negate_Xsig(&accumulatoro);
+  /* Add the positive terms */
+  polynomial_Xsig(&accumulatoro, &XSIG_LL(argSqSq), oddplterm, HiPOWERop-1);
 
-  /* Do the basic fixed point polynomial evaluation */
-  polynomial(&pos_poly.sigl, (unsigned *)&argSqSq, oddplterms, HIPOWERop-1);
-
-  /* will be a valid positive nr with expon = 0 */
-  *(short *)&(neg_poly.sign) = 0;
-  neg_poly.exp = EXP_BIAS;
-
-  /* Do the basic fixed point polynomial evaluation */
-  polynomial(&neg_poly.sigl, (unsigned *)&argSqSq, oddnegterms, HIPOWERon-1);
-  mul64(&significand(&argSq), &significand(&neg_poly),
-	&significand(&neg_poly));
-
-  /* Subtract the mantissas */
-  significand(&pos_poly) -= significand(&neg_poly);
-
-  /* Convert to 64 bit signed-compatible */
-  pos_poly.exp -= 1;
-
-  reg_move(&pos_poly, &odd_poly);
-  normalize(&odd_poly);
   
-  reg_mul(&odd_poly, arg, &odd_poly, FULL_PRECISION);
-  /* Complete the odd polynomial. */
-  reg_u_add(&odd_poly, arg, &odd_poly, FULL_PRECISION);
+  /* Compute the positive terms for the denominator polynomial */
+  accumulatore.msw = accumulatore.midw = accumulatore.lsw = 0;
+  polynomial_Xsig(&accumulatore, &XSIG_LL(argSqSq), evenplterm, HiPOWERep-1);
+  mul_Xsig_Xsig(&accumulatore, &argSq);
+  negate_Xsig(&accumulatore);
+  /* Add the negative terms */
+  polynomial_Xsig(&accumulatore, &XSIG_LL(argSqSq), evennegterm, HiPOWERen-1);
+  /* Multiply by arg^2 */
+  mul64_Xsig(&accumulatore, &XSIG_LL(argSignif));
+  mul64_Xsig(&accumulatore, &XSIG_LL(argSignif));
+  /* de-normalize and divide by 2 */
+  shr_Xsig(&accumulatore, -2*(1+exponent) + 1);
+  negate_Xsig(&accumulatore);      /* This does 1 - accumulator */
 
-  /* will be a valid positive nr with expon = 0 */
-  *(short *)&(pos_poly.sign) = 0;
-  pos_poly.exp = EXP_BIAS;
-  
-  /* Do the basic fixed point polynomial evaluation */
-  polynomial(&pos_poly.sigl, (unsigned *)&argSqSq, evenplterms, HIPOWERep-1);
-  mul64(&significand(&argSq),
-	&significand(&pos_poly), &significand(&pos_poly));
-  
-  /* will be a valid positive nr with expon = 0 */
-  *(short *)&(neg_poly.sign) = 0;
-  neg_poly.exp = EXP_BIAS;
-
-  /* Do the basic fixed point polynomial evaluation */
-  polynomial(&neg_poly.sigl, (unsigned *)&argSqSq, evennegterms, HIPOWERen-1);
-
-  /* Subtract the mantissas */
-  significand(&neg_poly) -= significand(&pos_poly);
-  /* and multiply by argSq */
-
-  /* Convert argSq to a valid reg number */
-  *(short *)&(argSq.sign) = 0;
-  argSq.exp = EXP_BIAS - 1;
-  normalize(&argSq);
-
-  /* Convert to 64 bit signed-compatible */
-  neg_poly.exp -= 1;
-
-  reg_move(&neg_poly, &even_poly);
-  normalize(&even_poly);
-
-  reg_mul(&even_poly, &argSq, &even_poly, FULL_PRECISION);
-  reg_add(&even_poly, &argSq, &even_poly, FULL_PRECISION);
-  /* Complete the even polynomial */
-  reg_sub(&CONST_1, &even_poly, &even_poly, FULL_PRECISION);
-
-  /* Now ready to copy the results */
-  if ( invert )
-    { reg_div(&even_poly, &odd_poly, result, FULL_PRECISION); }
+  /* Now find the ratio. */
+  if ( accumulatore.msw == 0 )
+    {
+      /* accumulatoro must contain 1.0 here, (actually, 0) but it
+	 really doesn't matter what value we use because it will
+	 have neglibible effect in later calculations
+	 */
+      XSIG_LL(accum) = 0x8000000000000000LL;
+      accum.lsw = 0;
+    }
   else
-    { reg_div(&odd_poly, &even_poly, result, FULL_PRECISION); }
+    {
+      div_Xsig(&accumulatoro, &accumulatore, &accum);
+    }
+
+  /* Multiply by 1/3 * arg^3 */
+  mul64_Xsig(&accum, &XSIG_LL(argSignif));
+  mul64_Xsig(&accum, &XSIG_LL(argSignif));
+  mul64_Xsig(&accum, &XSIG_LL(argSignif));
+  mul64_Xsig(&accum, &twothirds);
+  shr_Xsig(&accum, -2*(exponent+1));
+
+  /* tan(arg) = arg + accum */
+  add_two_Xsig(&accum, &argSignif, &exponent);
+
+  if ( invert )
+    {
+      /* We now have the value of tan(pi_2 - arg) where pi_2 is an
+	 approximation for pi/2
+	 */
+      /* The next step is to fix the answer to compensate for the
+	 error due to the approximation used for pi/2
+	 */
+
+      /* This is (approx) delta, the error in our approx for pi/2
+	 (see above). It has an exponent of -65
+	 */
+      XSIG_LL(fix_up) = 0x898cc51701b839a2LL;
+      fix_up.lsw = 0;
+
+      if ( exponent == 0 )
+	adj = 0xffffffff;   /* We want approx 1.0 here, but
+			       this is close enough. */
+      else if ( exponent > -30 )
+	{
+	  adj = accum.msw >> -(exponent+1);      /* tan */
+	  mul_32_32(adj, adj, &adj);           /* tan^2 */
+	}
+      else
+	adj = 0;
+      mul_32_32(0x898cc517, adj, &adj);        /* delta * tan^2 */
+
+      fix_up.msw += adj;
+      if ( !(fix_up.msw & 0x80000000) )   /* did fix_up overflow ? */
+	{
+	  /* Yes, we need to add an msb */
+	  shr_Xsig(&fix_up, 1);
+	  fix_up.msw |= 0x80000000;
+	  shr_Xsig(&fix_up, 64 + exponent);
+	}
+      else
+	shr_Xsig(&fix_up, 65 + exponent);
+
+      add_two_Xsig(&accum, &fix_up, &exponent);
+
+      /* accum now contains tan(pi/2 - arg).
+	 Use tan(arg) = 1.0 / tan(pi/2 - arg)
+	 */
+      accumulatoro.lsw = accumulatoro.midw = 0;
+      accumulatoro.msw = 0x80000000;
+      div_Xsig(&accumulatoro, &accum, &accum);
+      exponent = - exponent - 1;
+    }
+
+  /* Transfer the result */
+  round_Xsig(&accum);
+  *(short *)&(result->sign) = 0;
+  significand(result) = XSIG_LL(accum);
+  result->exp = EXP_BIAS + exponent;
 
 }

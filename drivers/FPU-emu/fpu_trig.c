@@ -25,8 +25,9 @@ static void rem_kernel(unsigned long long st0, unsigned long long *y,
 #define BETTER_THAN_486
 
 #define FCOS  4
+/* Not needed now with new code
 #define FPTAN 1
-
+ */
 
 /* Used only by fptan, fsin, fcos, and fsincos. */
 /* This routine produces very accurate results, similar to
@@ -64,6 +65,7 @@ static int trig_arg(FPU_REG *X, int even)
       reg_move(&tmp, X);
     }
 
+#ifdef FPTAN
   if ( even == FPTAN )
     {
       if ( ((X->exp >= EXP_BIAS) ||
@@ -73,6 +75,7 @@ static int trig_arg(FPU_REG *X, int even)
       else
 	even = 0;
     }
+#endif FPTAN
 
   if ( (even && !(q & 1)) || (!even && (q & 1)) )
     {
@@ -234,43 +237,27 @@ static void f2xm1(FPU_REG *st0_ptr)
     {
     case TW_Valid:
       {
-	FPU_REG rv, tmp;
-
 	if ( st0_ptr->exp >= 0 )
 	  {
 	    /* For an 80486 FPU, the result is undefined. */
 	  }
-	else if ( st0_ptr->exp >= -64 )
-	  {
-	    if ( st0_ptr->sign == SIGN_POS )
-	      {
-		/* poly_2xm1(x) requires 0 < x < 1. */
-		poly_2xm1(st0_ptr, &rv);
-		reg_mul(&rv, st0_ptr, st0_ptr, FULL_PRECISION);
-	      }
-	    else
-	      {
-		/* poly_2xm1(x) doesn't handle negative numbers yet. */
-		/* So we compute z=poly_2xm1(-x), and the answer is
-		   then -z/(1+z) */
-		st0_ptr->sign = SIGN_POS;
-		poly_2xm1(st0_ptr, &rv);
-		reg_mul(&rv, st0_ptr, &rv, FULL_PRECISION);
-		reg_add(&rv, &CONST_1, &tmp, FULL_PRECISION);
-		reg_div(&rv, &tmp, st0_ptr, FULL_PRECISION);
-		st0_ptr->sign = SIGN_NEG;
-	      }
-	  }
+#ifdef DENORM_OPERAND
+	else if ( (st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
+	  return;
+#endif DENORM_OPERAND
 	else
 	  {
-#ifdef DENORM_OPERAND
-	    if ( (st0_ptr->exp <= EXP_UNDER) && (denormal_operand()) )
-	      return;
-#endif DENORM_OPERAND
-	    /* For very small arguments, this is accurate enough. */
-	    reg_mul(&CONST_LN2, st0_ptr, st0_ptr, FULL_PRECISION);
+	    /* poly_2xm1(x) requires 0 < x < 1. */
+	    poly_2xm1(st0_ptr, st0_ptr);
 	  }
-	set_precision_flag_up();
+	if ( st0_ptr->exp <= EXP_UNDER )
+	  {
+	    /* A denormal result has been produced.
+	       Precision must have been lost, this is always
+	       an underflow. */
+	    arith_underflow(st0_ptr);
+	  }
+	set_precision_flag_up();   /* 80486 appears to always do this */
 	return;
       }
     case TW_Zero:
@@ -315,15 +302,12 @@ static void fptan(FPU_REG *st0_ptr)
   switch ( st0_tag )
     {
     case TW_Valid:
-
       if ( st0_ptr->exp > EXP_BIAS - 40 )
 	{
 	  st0_ptr->sign = SIGN_POS;
-	  if ( (q = trig_arg(st0_ptr, FPTAN)) != -1 )
+	  if ( (q = trig_arg(st0_ptr, 0)) != -1 )
 	    {
-	      reg_div(st0_ptr, &CONST_PI2, st0_ptr,
-		      FULL_PRECISION);
-	      poly_tan(st0_ptr, st0_ptr, q & FCOS);
+	      poly_tan(st0_ptr, st0_ptr);
 	      st0_ptr->sign = (q & 1) ^ arg_sign;
 	    }
 	  else
@@ -332,6 +316,7 @@ static void fptan(FPU_REG *st0_ptr)
 	      st0_ptr->sign = arg_sign;         /* restore st(0) */
 	      return;
 	    }
+	  set_precision_flag_up();  /* We do not really know if up or down */
 	}
       else
 	{
@@ -350,8 +335,7 @@ static void fptan(FPU_REG *st0_ptr)
 	      if ( arith_underflow(st0_ptr) )
 		return;
 	    }
-	  else
-	    set_precision_flag_up();  /* Must be up. */
+	  set_precision_flag_down();  /* Must be down. */
 	}
       push();
       reg_move(&CONST_1, st_new_ptr);
@@ -550,7 +534,6 @@ static void fsin(FPU_REG *st0_ptr)
 	  st0_ptr->sign = SIGN_POS;
 	  if ( (q = trig_arg(st0_ptr, 0)) != -1 )
 	    {
-	      reg_div(st0_ptr, &CONST_PI2, st0_ptr, FULL_PRECISION);
 
 	      poly_sine(st0_ptr, &rv);
 
@@ -619,10 +602,20 @@ static int f_cos(FPU_REG *arg)
       if ( arg->exp > EXP_BIAS - 40 )
 	{
 	  arg->sign = SIGN_POS;
-	  if ( (q = trig_arg(arg, FCOS)) != -1 )
+	  if ( (arg->exp < EXP_BIAS)
+	      || ((arg->exp == EXP_BIAS)
+		  && (significand(arg) <= 0xc90fdaa22168c234LL)) )
 	    {
-	      reg_div(arg, &CONST_PI2, arg, FULL_PRECISION);
-	      
+	      poly_cos(arg, &rv);
+	      reg_move(&rv, arg);
+
+	      /* We do not really know if up or down */
+	      set_precision_flag_down();
+	  
+	      return 0;
+	    }
+	  else if ( (q = trig_arg(arg, FCOS)) != -1 )
+	    {
 	      poly_sine(arg, &rv);
 
 	      if ((q+1) & 2)
@@ -988,38 +981,57 @@ static void do_fprem(FPU_REG *st0_ptr, int round)
 static void fyl2x(FPU_REG *st0_ptr)
 {
   char st0_tag = st0_ptr->tag;
-  FPU_REG *st1_ptr = &st(1);
+  FPU_REG *st1_ptr = &st(1), exponent;
   char st1_tag = st1_ptr->tag;
+  int e;
 
   clear_C1();
   if ( !((st0_tag ^ TW_Valid) | (st1_tag ^ TW_Valid)) )
     {
       if ( st0_ptr->sign == SIGN_POS )
 	{
-	  int saved_control, saved_status;
-
 #ifdef DENORM_OPERAND
 	  if ( ((st0_ptr->exp <= EXP_UNDER) ||
 		(st1_ptr->exp <= EXP_UNDER)) && (denormal_operand()) )
 	    return;
 #endif DENORM_OPERAND
 
-	  /* We use the general purpose arithmetic,
-	     so we need to save these. */
-	  saved_status = partial_status;
-	  saved_control = control_word;
-	  control_word = FULL_PRECISION;
-
-	  poly_l2(st0_ptr, st0_ptr);
-
-	  /* Enough of the basic arithmetic is done now */
-	  control_word = saved_control;
-	  partial_status = saved_status;
-
-	  /* Let the multiply set the flags */
-	  reg_mul(st0_ptr, st1_ptr, st1_ptr, FULL_PRECISION);
-
+	  if ( (st0_ptr->sigh == 0x80000000) && (st0_ptr->sigl == 0) )
+	    {
+	      /* Special case. The result can be precise. */
+	      e = st0_ptr->exp - EXP_BIAS;
+	      if ( e > 0 )
+		{
+		  exponent.sigh = e;
+		  exponent.sign = SIGN_POS;
+		}
+	      else
+		{
+		  exponent.sigh = -e;
+		  exponent.sign = SIGN_NEG;
+		}
+	      exponent.sigl = 0;
+	      exponent.exp = EXP_BIAS + 31;
+	      exponent.tag = TW_Valid;
+	      normalize_nuo(&exponent);
+	      reg_mul(&exponent, st1_ptr, st1_ptr, FULL_PRECISION);
+	    }
+	  else
+	    {
+	      /* The usual case */
+	      poly_l2(st0_ptr, st1_ptr, st1_ptr);
+	      if ( st1_ptr->exp <= EXP_UNDER )
+		{
+		  /* A denormal result has been produced.
+		     Precision must have been lost, this is always
+		     an underflow. */
+		  arith_underflow(st1_ptr);
+		}
+	      else
+		set_precision_flag_up();  /* 80486 appears to always do this */
+	    }
 	  pop();
+	  return;
 	}
       else
 	{
@@ -1181,67 +1193,27 @@ static void fpatan(FPU_REG *st0_ptr)
   char st0_tag = st0_ptr->tag;
   FPU_REG *st1_ptr = &st(1);
   char st1_tag = st1_ptr->tag;
-  char st1_sign = st1_ptr->sign, st0_sign = st0_ptr->sign;
 
   clear_C1();
   if ( !((st0_tag ^ TW_Valid) | (st1_tag ^ TW_Valid)) )
     {
-      int saved_control, saved_status;
-      FPU_REG sum;
-      char inverted;
-
 #ifdef DENORM_OPERAND
       if ( ((st0_ptr->exp <= EXP_UNDER) ||
 	    (st1_ptr->exp <= EXP_UNDER)) && (denormal_operand()) )
 	return;
 #endif DENORM_OPERAND
 
-      /* We use the general purpose arithmetic so we need to save these. */
-      saved_status = partial_status;
-      saved_control = control_word;
-      control_word = FULL_PRECISION;
+      poly_atan(st0_ptr, st1_ptr, st1_ptr);
 
-      st1_ptr->sign = st0_ptr->sign = SIGN_POS;
-      if ( (compare(st1_ptr) & ~COMP_Denormal) == COMP_A_lt_B )
+      if ( st1_ptr->exp <= EXP_UNDER )
 	{
-	  inverted = 1;
-	  reg_div(st0_ptr, st1_ptr, &sum, FULL_PRECISION);
+	  /* A denormal result has been produced.
+	     Precision must have been lost.
+	     This is by definition an underflow. */
+	  arith_underflow(st1_ptr);
+	  pop();
+	  return;
 	}
-      else
-	{
-	  inverted = 0;
-	  if ( (st0_sign == 0) &&
-	      (st1_ptr->exp - st0_ptr->exp < -64) )
-	    {
-	      control_word = saved_control;
-	      partial_status = saved_status;
-	      reg_div(st1_ptr, st0_ptr, st1_ptr,
-		      control_word | PR_64_BITS);
-	      st1_ptr->sign = st1_sign;
-	      pop();
-	      set_precision_flag_down();
-	      return;
-	    }
-	  reg_div(st1_ptr, st0_ptr, &sum, FULL_PRECISION);
-	}
-
-      poly_atan(&sum);
-
-      if ( inverted )
-	{
-	  reg_sub(&CONST_PI2, &sum, &sum, FULL_PRECISION);
-	}
-      if ( st0_sign )
-	{
-	  reg_sub(&CONST_PI, &sum, &sum, FULL_PRECISION);
-	}
-      sum.sign = st1_sign;
-
-      /* All of the basic arithmetic is done now */
-      control_word = saved_control;
-      partial_status = saved_status;
-
-      reg_move(&sum, st1_ptr);
     }
   else if ( (st0_tag == TW_Empty) || (st1_tag == TW_Empty) )
     {
@@ -1358,48 +1330,41 @@ static void fprem1(FPU_REG *st0_ptr)
 
 static void fyl2xp1(FPU_REG *st0_ptr)
 {
-  char st0_tag = st0_ptr->tag;
+  char st0_tag = st0_ptr->tag, sign;
   FPU_REG *st1_ptr = &st(1);
   char st1_tag = st1_ptr->tag;
 
   clear_C1();
   if ( !((st0_tag ^ TW_Valid) | (st1_tag ^ TW_Valid)) )
     {
-      int saved_control, saved_status;
-
 #ifdef DENORM_OPERAND
       if ( ((st0_ptr->exp <= EXP_UNDER) ||
 	    (st1_ptr->exp <= EXP_UNDER)) && denormal_operand() )
 	return;
 #endif DENORM_OPERAND
 
-      /* We use the general purpose arithmetic so we need to save these. */
-      saved_status = partial_status;
-      saved_control = control_word;
-      control_word = FULL_PRECISION;
-
-      if ( poly_l2p1(st0_ptr, st0_ptr) )
+      if ( poly_l2p1(st0_ptr, st1_ptr, st1_ptr) )
 	{
 #ifdef PECULIAR_486   /* Stupid 80486 doesn't worry about log(negative). */
 	  st1_ptr->sign ^= SIGN_POS^SIGN_NEG;
-	  control_word = saved_control;
-	  partial_status = saved_status;
-	  set_precision_flag_down();
 #else
 	  if ( arith_invalid(st1_ptr) )  /* poly_l2p1() returned invalid */
 	    return;
 #endif PECULIAR_486
-	  pop(); return;
 	}
-      
-      /* Enough of the basic arithmetic is done now */
-      control_word = saved_control;
-      partial_status = saved_status;
-
-      /* Let the multiply set the flags */
-      reg_mul(st0_ptr, st1_ptr, st1_ptr, FULL_PRECISION);
-
+      if ( st1_ptr->exp <= EXP_UNDER )
+	{
+	  /* A denormal result has been produced.
+	     Precision must have been lost, this is always
+	     an underflow. */
+	  sign = st1_ptr->sign;
+	  arith_underflow(st1_ptr);
+	  st1_ptr->sign = sign;
+	}
+      else
+	set_precision_flag_up();   /* 80486 appears to always do this */
       pop();
+      return;
     }
   else if ( (st0_tag == TW_Empty) | (st1_tag == TW_Empty) )
     {

@@ -76,6 +76,7 @@
 #define MODE_SELECT_10		0x55
 #define MODE_SENSE_10		0x5a
 
+extern volatile int in_scan_scsis;
 extern const unsigned char scsi_command_size[8];
 #define COMMAND_SIZE(opcode) scsi_command_size[((opcode) >> 5) & 7]
 
@@ -85,6 +86,10 @@ extern const unsigned char scsi_command_size[8];
 
 #define COMMAND_COMPLETE	0x00
 #define EXTENDED_MESSAGE	0x01
+#define 	EXTENDED_MODIFY_DATA_POINTER	0x00
+#define 	EXTENDED_SDTR			0x01
+#define 	EXTENDED_EXTENDED_IDENTIFY	0x02	/* SCSI-I only */
+#define 	EXTENDED_WDTR			0x03
 #define SAVE_POINTERS		0x02
 #define RESTORE_POINTERS 	0x03
 #define DISCONNECT		0x04
@@ -96,6 +101,9 @@ extern const unsigned char scsi_command_size[8];
 #define LINKED_CMD_COMPLETE	0x0a
 #define LINKED_FLG_CMD_COMPLETE	0x0b
 #define BUS_DEVICE_RESET	0x0c
+
+#define INITIATE_RECOVERY	0x0f			/* SCSI-II only */
+#define RELEASE_RECOVERY	0x10			/* SCSI-II only */
 
 #define SIMPLE_QUEUE_TAG	0x20
 #define HEAD_OF_QUEUE_TAG	0x21
@@ -265,6 +273,7 @@ typedef struct scsi_device {
 	struct wait_queue * device_wait;  /* Used to wait if device is busy */
 	struct Scsi_Host * host;
 	void (*scsi_request_fn)(void); /* Used to jumpstart things after an ioctl */
+	void *hostdata;                   /* available to low-level driver */
 	char type;
 	char scsi_level;
 	unsigned writeable:1;
@@ -280,6 +289,9 @@ typedef struct scsi_device {
 	unsigned disconnect:1;     /* can disconnect */
 	unsigned soft_reset:1;		/* Uses soft reset option */
 	unsigned char current_tag; /* current tag */
+	unsigned sync:1;	/* Negotiate for sync transfers */
+	unsigned char sync_min_period;	/* Not less than this period */
+	unsigned char sync_max_offset;  /* Not greater than this offset */
 } Scsi_Device;
 /*
 	Use these to separate status msg and our bytes
@@ -479,6 +491,7 @@ typedef struct scsi_cmnd {
 	int result;                   /* Status code from lower level driver */
 
 	unsigned char tag;		/* SCSI-II queued command tag */
+	unsigned long pid;		/* Process ID, starts at 0 */
 	} Scsi_Cmnd;		 
 
 /*

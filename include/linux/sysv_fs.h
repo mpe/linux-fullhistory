@@ -427,7 +427,7 @@ extern void sysv_put_inode(struct inode *);
 extern void sysv_statfs(struct super_block *, struct statfs *);
 extern int sysv_sync_inode(struct inode *);
 extern int sysv_sync_file(struct inode *, struct file *);
-extern int sysv_mmap(struct inode *, struct file *, unsigned long, size_t, int, unsigned long);
+extern int sysv_mmap(struct inode *, struct file *, struct vm_area_struct *);
 
 extern struct inode_operations sysv_file_inode_operations;
 extern struct inode_operations sysv_file_inode_operations_with_bmap;

@@ -79,6 +79,10 @@ int generic_NCR5380_reset(Scsi_Cmnd *);
 #define NCR5380_abort generic_NCR5380_abort
 #define NCR5380_reset generic_NCR5380_reset
 
+#define BOARD_NORMAL	0
+#define BOARD_NCR53C400	1
+
 #endif /* else def HOSTS_C */
 #endif /* ndef ASM */
 #endif /* GENERIC_NCR5380_H */
+

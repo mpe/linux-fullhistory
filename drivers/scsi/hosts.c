@@ -67,6 +67,10 @@
 #include "t128.h"
 #endif
 
+#ifdef CONFIG_SCSI_NCR53C7xx
+#include "53c7,8xx.h"
+#endif
+
 #ifdef CONFIG_SCSI_ULTRASTOR
 #include "ultrastor.h"
 #endif
@@ -145,6 +149,9 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_T128
         TRANTOR_T128,
+#endif
+#ifdef CONFIG_SCSI_NCR53C7xx
+	NCR53c7xx,
 #endif
 #ifdef CONFIG_SCSI_7000FASST
 	WD7000,

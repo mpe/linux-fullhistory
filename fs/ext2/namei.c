@@ -181,15 +181,28 @@ int ext2_lookup (struct inode * dir, const char * name, int len,
 		iput (dir);
 		return -ENOENT;
 	}
-	if (!(ino = dcache_lookup(dir, name, len))) {
-		if (!(bh = ext2_find_entry (dir, name, len, &de))) {
-			iput (dir);
+	if (dcache_lookup(dir, name, len, &ino)) {
+		if (!ino) {
+			iput(dir);
 			return -ENOENT;
 		}
-		ino = de->inode;
-		dcache_add(dir, de->name, de->name_len, ino);
-		brelse (bh);
+		if (!(*result = iget (dir->i_sb, ino))) {
+			iput (dir);
+			return -EACCES;
+		}
+		iput (dir);
+		return 0;
 	}
+	ino = dir->i_version;
+	if (!(bh = ext2_find_entry (dir, name, len, &de))) {
+		if (ino == dir->i_version)
+			dcache_add(dir, name, len, 0);
+		iput (dir);
+		return -ENOENT;
+	}
+	ino = de->inode;
+	dcache_add(dir, name, len, ino);
+	brelse (bh);
 	if (!(*result = iget (dir->i_sb, ino))) {
 		iput (dir);
 		return -EACCES;

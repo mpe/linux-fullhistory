@@ -648,6 +648,9 @@ void mount_root(void)
 	if (MAJOR(ROOT_DEV) == FLOPPY_MAJOR) {
 		printk(KERN_NOTICE "VFS: Insert root floppy and press ENTER\n");
 		wait_for_keypress();
+		/* ugly, ugly */
+		if (floppy_grab_irq_and_dma())
+			printk("Unable to gram floppy IRQ/DMA for mounting root floppy\n");
 	}
 	for (fs_type = file_systems ; fs_type ; fs_type = fs_type->next) {
 		if (!fs_type->requires_dev)

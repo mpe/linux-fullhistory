@@ -471,7 +471,7 @@ extern int block_fsync(struct inode *, struct file *);
 extern int file_fsync(struct inode *, struct file *);
 
 extern void dcache_add(struct inode *, const char *, int, unsigned long);
-extern unsigned long dcache_lookup(struct inode *, const char *, int);
+extern int dcache_lookup(struct inode *, const char *, int, unsigned long *);
 
 extern inline struct inode * iget(struct super_block * sb,int nr)
 {

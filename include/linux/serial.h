@@ -132,5 +132,8 @@ struct async_struct {
 #define RS_EVENT_WRITE_WAKEUP	0
 #define RS_EVENT_HANGUP		1
 
+/* Export to allow PCMCIA to use this - Dave Hinds */
+extern int register_serial(struct serial_struct *req);
+extern void unregister_serial(int line);
 #endif /* __KERNEL__ */
 #endif /* _LINUX_SERIAL_H */
