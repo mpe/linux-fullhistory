@@ -32,6 +32,7 @@ ENTRY(pxa_cpu_suspend)
 	stmfd	sp!, {r2 - r12, lr}		@ save registers on stack
 
 	@ get coprocessor registers
+	mrc	p14, 0, r3, c6, c0, 0		@ clock configuration, for turbo mode
 	mrc	p15, 0, r4, c15, c1, 0		@ CP access reg
 	mrc	p15, 0, r5, c13, c0, 0		@ PID
 	mrc 	p15, 0, r6, c3, c0, 0		@ domain ID
@@ -39,9 +40,11 @@ ENTRY(pxa_cpu_suspend)
 	mrc	p15, 0, r8, c1, c1, 0           @ auxiliary control reg
 	mrc 	p15, 0, r9, c1, c0, 0		@ control reg
 
+	bic	r3, r3, #2			@ clear frequency change bit
+
 	@ store them plus current virtual stack ptr on stack
 	mov	r10, sp
-	stmfd	sp!, {r4 - r10}
+	stmfd	sp!, {r3 - r10}
 
 	@ preserve phys address of stack
 	mov	r0, sp
@@ -90,10 +93,11 @@ ENTRY(pxa_cpu_suspend)
 	orrne	r7, r7, #1			@@ 99.53MHz
 
 	@ get ready for the change
-	@ note, since we are making turbo=run, do not remove the turbo
-	@ as this may cause non-turbo mode on resume
-	mrc	p14, 0, r0, c6, c0, 0
-	bic	r0, r0, #2			@ clear change bit
+
+	@ note, turbo is not preserved over sleep so there is no
+	@ point in preserving it here. we save it on the stack with the
+	@ other CP registers instead.
+	mov	r0, #0
 	mcr	p14, 0, r0, c6, c0, 0
 	orr	r0, r0, #2			@ initiate change bit
 
@@ -145,7 +149,7 @@ ENTRY(pxa_cpu_resume)
 
 	ldr	r0, sleep_save_sp		@ stack phys addr
 	ldr	r2, =resume_after_mmu		@ its absolute virtual address
-	ldmfd	r0, {r4 - r9, sp}		@ CP regs + virt stack ptr
+	ldmfd	r0, {r3 - r9, sp}		@ CP regs + virt stack ptr
 
 	mov	r1, #0
 	mcr	p15, 0, r1, c8, c7, 0   	@ invalidate I & D TLBs
@@ -155,6 +159,7 @@ ENTRY(pxa_cpu_resume)
 	bic     r9, r9, #0x0004			@ see cpu_xscale_proc_init
 #endif
 
+	mcr	p14, 0, r3, c6, c0, 0		@ clock configuration, turbo mode.
 	mcr	p15, 0, r4, c15, c1, 0		@ CP access reg
 	mcr	p15, 0, r5, c13, c0, 0		@ PID
 	mcr 	p15, 0, r6, c3, c0, 0		@ domain ID
