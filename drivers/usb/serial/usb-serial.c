@@ -1418,11 +1418,11 @@ void usb_serial_deregister(struct usb_serial_device_type *device)
 
 /* If the usb-serial core is built into the core, the usb-serial drivers
    need these symbols to load properly as modules. */
-EXPORT_SYMBOL(usb_serial_register);
-EXPORT_SYMBOL(usb_serial_deregister);
-EXPORT_SYMBOL(usb_serial_probe);
-EXPORT_SYMBOL(usb_serial_disconnect);
-EXPORT_SYMBOL(usb_serial_port_softint);
+EXPORT_SYMBOL_GPL(usb_serial_register);
+EXPORT_SYMBOL_GPL(usb_serial_deregister);
+EXPORT_SYMBOL_GPL(usb_serial_probe);
+EXPORT_SYMBOL_GPL(usb_serial_disconnect);
+EXPORT_SYMBOL_GPL(usb_serial_port_softint);
 
 
 /* Module information */

@@ -193,6 +193,10 @@ ohci_dump_status (struct ohci_hcd *controller, char **next, unsigned *size)
 
 	maybe_print_eds (controller, "donehead",
 			ohci_readl (controller, &regs->donehead), next, size);
+
+	/* broken fminterval means traffic won't flow! */ 
+	ohci_dbg (controller, "fminterval %08x\n", 
+			ohci_readl (controller, &regs->fminterval));
 }
 
 #define dbg_port_sw(hc,num,value,next,size) \
@@ -620,9 +624,11 @@ show_registers (struct class_device *class_dev, char *buf)
 
 	ohci_dbg_sw (ohci, &next, &size,
 		"bus %s, device %s\n"
+		"%s\n"
 		"%s version " DRIVER_VERSION "\n",
 		hcd->self.controller->bus->name,
 		hcd->self.controller->bus_id,
+		hcd->product_desc,
 		hcd_name);
 
 	if (bus->controller->power.power_state) {

@@ -58,6 +58,9 @@
 #define KYOCERA_VENDOR_ID		0x0C88
 #define KYOCERA_7135_ID			0x0021 
 
+#define FOSSIL_VENDOR_ID		0x0E67
+#define FOSSIL_ABACUS_ID		0x0002
+
 /****************************************************************************
  * Handspring Visor Vendor specific request codes (bRequest values)
  * A big thank you to Handspring for providing the following information.

@@ -41,14 +41,8 @@
 #ifndef _SCSIGLUE_H_
 #define _SCSIGLUE_H_
 
-#include <scsi/scsi_host.h>
-
-struct us_data;
-struct scsi_cmnd;
-
 extern void usb_stor_report_device_reset(struct us_data *us);
 
-extern unsigned char usb_stor_sense_notready[18];
 extern unsigned char usb_stor_sense_invalidCDB[18];
 extern struct scsi_host_template usb_stor_host_template;
 

@@ -74,6 +74,8 @@ struct usb_hcd {	/* usb_bus.hcpriv points to this */
 	unsigned		saw_irq : 1;
 	unsigned		can_wakeup:1;	/* hw supports wakeup? */
 	unsigned		remote_wakeup:1;/* sw should use wakeup? */
+	unsigned		rh_registered:1;/* is root hub registered? */
+
 	int			irq;		/* irq allocated */
 	void __iomem		*regs;		/* device memory/io */
 	u64			rsrc_start;	/* memory/io resource start */
@@ -87,14 +89,14 @@ struct usb_hcd {	/* usb_bus.hcpriv points to this */
 #	define	__SUSPEND		0x04
 #	define	__TRANSIENT		0x80
 
-#	define	USB_STATE_HALT		0
-#	define	USB_STATE_RUNNING	(__ACTIVE)
-#	define	USB_STATE_QUIESCING	(__SUSPEND|__TRANSIENT|__ACTIVE)
-#	define	USB_STATE_RESUMING	(__SUSPEND|__TRANSIENT)
-#	define	HCD_STATE_SUSPENDED	(__SUSPEND)
+#	define	HC_STATE_HALT		0
+#	define	HC_STATE_RUNNING	(__ACTIVE)
+#	define	HC_STATE_QUIESCING	(__SUSPEND|__TRANSIENT|__ACTIVE)
+#	define	HC_STATE_RESUMING	(__SUSPEND|__TRANSIENT)
+#	define	HC_STATE_SUSPENDED	(__SUSPEND)
 
-#define	HCD_IS_RUNNING(state) ((state) & __ACTIVE)
-#define	HCD_IS_SUSPENDED(state) ((state) & __SUSPEND)
+#define	HC_IS_RUNNING(state) ((state) & __ACTIVE)
+#define	HC_IS_SUSPENDED(state) ((state) & __SUSPEND)
 
 	/* more shared queuing code would be good; it should support
 	 * smarter scheduling, handle transaction translators, etc;
@@ -208,7 +210,6 @@ struct hc_driver {
 };
 
 extern void usb_hcd_giveback_urb (struct usb_hcd *hcd, struct urb *urb, struct pt_regs *regs);
-extern void usb_bus_init (struct usb_bus *bus);
 
 extern struct usb_hcd *usb_create_hcd (const struct hc_driver *driver,
 		struct device *dev, char *bus_name);
@@ -340,25 +341,10 @@ extern long usb_calc_bus_time (int speed, int is_input,
 
 extern struct usb_bus *usb_alloc_bus (struct usb_operations *);
 
-extern int usb_register_bus (struct usb_bus *);
-extern void usb_deregister_bus (struct usb_bus *);
+extern int usb_hcd_register_root_hub (struct usb_device *usb_dev,
+		struct usb_hcd *hcd);
 
-extern int usb_register_root_hub (struct usb_device *usb_dev,
-		struct device *parent_dev);
-
-static inline int hcd_register_root (struct usb_device *usb_dev,
-		struct usb_hcd *hcd)
-{
-	/* hcd->driver->start() reported can_wakeup, probably with
-	 * assistance from board's boot firmware.
-	 * NOTE:  normal devices won't enable wakeup by default.
-	 */
-	if (hcd->can_wakeup)
-		dev_dbg (hcd->self.controller, "supports USB remote wakeup\n");
-	hcd->remote_wakeup = hcd->can_wakeup;
-
-	return usb_register_root_hub (usb_dev, hcd->self.controller);
-}
+extern void usb_hcd_resume_root_hub (struct usb_hcd *hcd);
 
 extern void usb_set_device_state(struct usb_device *udev,
 		enum usb_device_state new_state);

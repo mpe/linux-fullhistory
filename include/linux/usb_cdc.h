@@ -6,8 +6,12 @@
  * firmware based USB peripherals.
  */
 
-#define USB_CDC_SUBCLASS_ACM			2
-#define USB_CDC_SUBCLASS_ETHERNET		6
+#define USB_CDC_SUBCLASS_ACM			0x02
+#define USB_CDC_SUBCLASS_ETHERNET		0x06
+#define USB_CDC_SUBCLASS_WHCM			0x08
+#define USB_CDC_SUBCLASS_DMM			0x09
+#define USB_CDC_SUBCLASS_MDLM			0x0a
+#define USB_CDC_SUBCLASS_OBEX			0x0b
 
 #define USB_CDC_PROTO_NONE			0
 
@@ -31,6 +35,11 @@
 #define USB_CDC_UNION_TYPE		0x06		/* union_desc */
 #define USB_CDC_COUNTRY_TYPE		0x07
 #define USB_CDC_ETHERNET_TYPE		0x0f		/* ether_desc */
+#define USB_CDC_WHCM_TYPE		0x11
+#define USB_CDC_MDLM_TYPE		0x12		/* mdlm_desc */
+#define USB_CDC_MDLM_DETAIL_TYPE	0x13		/* mdlm_detail_desc */
+#define USB_CDC_DMM_TYPE		0x14
+#define USB_CDC_OBEX_TYPE		0x15
 
 /* "Header Functional Descriptor" from CDC spec  5.2.3.1 */
 struct usb_cdc_header_desc {
@@ -85,6 +94,27 @@ struct usb_cdc_ether_desc {
 	__le16	wMaxSegmentSize;
 	__le16	wNumberMCFilters;
 	__u8	bNumberPowerFilters;
+} __attribute__ ((packed));
+
+/* "MDLM Functional Descriptor" from CDC WMC spec 6.7.2.3 */
+struct usb_cdc_mdlm_desc {
+	__u8	bLength;
+	__u8	bDescriptorType;
+	__u8	bDescriptorSubType;
+
+	__le16	bcdVersion;
+	__u8	bGUID[16];
+} __attribute__ ((packed));
+
+/* "MDLM Detail Functional Descriptor" from CDC WMC spec 6.7.2.4 */
+struct usb_cdc_mdlm_detail_desc {
+	__u8	bLength;
+	__u8	bDescriptorType;
+	__u8	bDescriptorSubType;
+
+	/* type is associated with mdlm_desc.bGUID */
+	__u8	bGuidDescriptorType;
+	__u8	bDetailData[];
 } __attribute__ ((packed));
 
 /*-------------------------------------------------------------------------*/

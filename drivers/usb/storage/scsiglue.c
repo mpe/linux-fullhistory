@@ -53,10 +53,9 @@
 #include <scsi/scsi_devinfo.h>
 #include <scsi/scsi_device.h>
 #include <scsi/scsi_eh.h>
-#include <scsi/scsi_host.h>
 
-#include "scsiglue.h"
 #include "usb.h"
+#include "scsiglue.h"
 #include "debug.h"
 #include "transport.h"
 #include "protocol.h"
@@ -83,7 +82,7 @@ static int slave_alloc (struct scsi_device *sdev)
 
 static int slave_configure(struct scsi_device *sdev)
 {
-	struct us_data *us = (struct us_data *) sdev->host->hostdata[0];
+	struct us_data *us = host_to_us(sdev->host);
 
 	/* Scatter-gather buffers (all but the last) must have a length
 	 * divisible by the bulk maxpacket size.  Otherwise a data packet
@@ -137,17 +136,19 @@ static int slave_configure(struct scsi_device *sdev)
 		 * 192 bytes (that's what Windows uses). */
 		sdev->use_192_bytes_for_3f = 1;
 
+		/* Some devices don't like MODE SENSE with page=0x3f,
+		 * which is the command used for checking if a device
+		 * is write-protected.  Now that we tell the sd driver
+		 * to do a 192-byte transfer with this command the
+		 * majority of devices work fine, but a few still can't
+		 * handle it.  The sd driver will simply assume those
+		 * devices are write-enabled. */
+		if (us->flags & US_FL_NO_WP_DETECT)
+			sdev->skip_ms_page_3f = 1;
+
 		/* A number of devices have problems with MODE SENSE for
 		 * page x08, so we will skip it. */
 		sdev->skip_ms_page_8 = 1;
-
-#ifndef CONFIG_USB_STORAGE_RW_DETECT
-		/* Some devices may not like MODE SENSE with page=0x3f.
-		 * Now that we're using 192-byte transfers this may no
-		 * longer be a problem.  So this will be a configuration
-		 * option. */
-		sdev->skip_ms_page_3f = 1;
-#endif
 
 		/* Some disks return the total number of blocks in response
 		 * to READ CAPACITY rather than the highest block number.
@@ -173,14 +174,13 @@ static int slave_configure(struct scsi_device *sdev)
 }
 
 /* queue a command */
-/* This is always called with scsi_lock(srb->host) held */
+/* This is always called with scsi_lock(host) held */
 static int queuecommand(struct scsi_cmnd *srb,
 			void (*done)(struct scsi_cmnd *))
 {
-	struct us_data *us = (struct us_data *)srb->device->host->hostdata[0];
+	struct us_data *us = host_to_us(srb->device->host);
 
 	US_DEBUGP("%s called\n", __FUNCTION__);
-	srb->host_scribble = (unsigned char *)us;
 
 	/* check for state-transition errors */
 	if (us->srb != NULL) {
@@ -210,11 +210,10 @@ static int queuecommand(struct scsi_cmnd *srb,
  ***********************************************************************/
 
 /* Command timeout and abort */
-/* This is always called with scsi_lock(srb->host) held */
-static int command_abort(struct scsi_cmnd *srb )
+/* This is always called with scsi_lock(host) held */
+static int command_abort(struct scsi_cmnd *srb)
 {
-	struct Scsi_Host *host = srb->device->host;
-	struct us_data *us = (struct us_data *) host->hostdata[0];
+	struct us_data *us = host_to_us(srb->device->host);
 
 	US_DEBUGP("%s called\n", __FUNCTION__);
 
@@ -234,13 +233,13 @@ static int command_abort(struct scsi_cmnd *srb )
 		set_bit(US_FLIDX_ABORTING, &us->flags);
 		usb_stor_stop_transport(us);
 	}
-	scsi_unlock(host);
+	scsi_unlock(us_to_host(us));
 
 	/* Wait for the aborted command to finish */
 	wait_for_completion(&us->notify);
 
 	/* Reacquire the lock and allow USB transfers to resume */
-	scsi_lock(host);
+	scsi_lock(us_to_host(us));
 	clear_bit(US_FLIDX_ABORTING, &us->flags);
 	clear_bit(US_FLIDX_TIMED_OUT, &us->flags);
 	return SUCCESS;
@@ -248,15 +247,15 @@ static int command_abort(struct scsi_cmnd *srb )
 
 /* This invokes the transport reset mechanism to reset the state of the
  * device */
-/* This is always called with scsi_lock(srb->host) held */
+/* This is always called with scsi_lock(host) held */
 static int device_reset(struct scsi_cmnd *srb)
 {
-	struct us_data *us = (struct us_data *)srb->device->host->hostdata[0];
+	struct us_data *us = host_to_us(srb->device->host);
 	int result;
 
 	US_DEBUGP("%s called\n", __FUNCTION__);
 
-	scsi_unlock(srb->device->host);
+	scsi_unlock(us_to_host(us));
 
 	/* lock the device pointers and do the reset */
 	down(&(us->dev_semaphore));
@@ -268,22 +267,22 @@ static int device_reset(struct scsi_cmnd *srb)
 	up(&(us->dev_semaphore));
 
 	/* lock the host for the return */
-	scsi_lock(srb->device->host);
+	scsi_lock(us_to_host(us));
 	return result;
 }
 
 /* This resets the device's USB port. */
 /* It refuses to work if there's more than one interface in
  * the device, so that other users are not affected. */
-/* This is always called with scsi_lock(srb->host) held */
+/* This is always called with scsi_lock(host) held */
 static int bus_reset(struct scsi_cmnd *srb)
 {
-	struct us_data *us = (struct us_data *)srb->device->host->hostdata[0];
+	struct us_data *us = host_to_us(srb->device->host);
 	int result, rc;
 
 	US_DEBUGP("%s called\n", __FUNCTION__);
 
-	scsi_unlock(srb->device->host);
+	scsi_unlock(us_to_host(us));
 
 	/* The USB subsystem doesn't handle synchronisation between
 	 * a device's several drivers. Therefore we reset only devices
@@ -311,7 +310,7 @@ static int bus_reset(struct scsi_cmnd *srb)
 	up(&(us->dev_semaphore));
 
 	/* lock the host for the return */
-	scsi_lock(srb->device->host);
+	scsi_lock(us_to_host(us));
 	return result < 0 ? FAILED : SUCCESS;
 }
 
@@ -321,11 +320,12 @@ static int bus_reset(struct scsi_cmnd *srb)
 void usb_stor_report_device_reset(struct us_data *us)
 {
 	int i;
+	struct Scsi_Host *host = us_to_host(us);
 
-	scsi_report_device_reset(us->host, 0, 0);
+	scsi_report_device_reset(host, 0, 0);
 	if (us->flags & US_FL_SCM_MULT_TARG) {
-		for (i = 1; i < us->host->max_id; ++i)
-			scsi_report_device_reset(us->host, 0, i);
+		for (i = 1; i < host->max_id; ++i)
+			scsi_report_device_reset(host, 0, i);
 	}
 }
 
@@ -337,41 +337,41 @@ void usb_stor_report_device_reset(struct us_data *us)
 #undef SPRINTF
 #define SPRINTF(args...) \
 	do { if (pos < buffer+length) pos += sprintf(pos, ## args); } while (0)
-#define DO_FLAG(a) \
-	do { if (us->flags & US_FL_##a) pos += sprintf(pos, " " #a); } while(0)
 
-static int proc_info (struct Scsi_Host *hostptr, char *buffer, char **start, off_t offset,
-		int length, int inout)
+static int proc_info (struct Scsi_Host *host, char *buffer,
+		char **start, off_t offset, int length, int inout)
 {
-	struct us_data *us;
+	struct us_data *us = host_to_us(host);
 	char *pos = buffer;
+	const char *string;
 
 	/* if someone is sending us data, just throw it away */
 	if (inout)
 		return length;
 
-	us = (struct us_data*)hostptr->hostdata[0];
-
 	/* print the controller name */
-	SPRINTF("   Host scsi%d: usb-storage\n", hostptr->host_no);
+	SPRINTF("   Host scsi%d: usb-storage\n", host->host_no);
 
 	/* print product, vendor, and serial number strings */
 	if (us->pusb_dev->manufacturer)
-		SPRINTF("       Vendor: %s\n", us->pusb_dev->manufacturer);
+		string = us->pusb_dev->manufacturer;
 	else if (us->unusual_dev->vendorName)
-		SPRINTF("       Vendor: %s\n", us->unusual_dev->vendorName);
+		string = us->unusual_dev->vendorName;
 	else
-		SPRINTF("       Vendor: Unknown\n");
+		string = "Unknown";
+	SPRINTF("       Vendor: %s\n", string);
 	if (us->pusb_dev->product)
-		SPRINTF("      Product: %s\n", us->pusb_dev->product);
+		string = us->pusb_dev->product;
 	else if (us->unusual_dev->productName)
-		SPRINTF("      Product: %s\n", us->unusual_dev->productName);
+		string = us->unusual_dev->productName;
 	else
-		SPRINTF("      Product: Unknown\n");
+		string = "Unknown";
+	SPRINTF("      Product: %s\n", string);
 	if (us->pusb_dev->serial)
-		SPRINTF("Serial Number: %s\n", us->pusb_dev->serial);
+		string = us->pusb_dev->serial;
 	else
-		SPRINTF("Serial Number: None\n");
+		string = "None";
+	SPRINTF("Serial Number: %s\n", string);
 
 	/* show the protocol and transport */
 	SPRINTF("     Protocol: %s\n", us->protocol_name);
@@ -381,10 +381,10 @@ static int proc_info (struct Scsi_Host *hostptr, char *buffer, char **start, off
 	if (pos < buffer + length) {
 		pos += sprintf(pos, "       Quirks:");
 
-		DO_FLAG(SINGLE_LUN);
-		DO_FLAG(SCM_MULT_TARG);
-		DO_FLAG(FIX_INQUIRY);
-		DO_FLAG(FIX_CAPACITY);
+#define US_FLAG(name, value) \
+	if (us->flags & value) pos += sprintf(pos, " " #name);
+US_DO_ALL_FLAGS
+#undef US_FLAG
 
 		*(pos++) = '\n';
 	}
@@ -488,15 +488,6 @@ struct scsi_host_template usb_stor_host_template = {
 
 	/* module management */
 	.module =			THIS_MODULE
-};
-
-/* For a device that is "Not Ready" */
-unsigned char usb_stor_sense_notready[18] = {
-	[0]	= 0x70,			    /* current error */
-	[2]	= 0x02,			    /* not ready */
-	[7]	= 0x0a,			    /* additional length */
-	[12]	= 0x04,			    /* not ready */
-	[13]	= 0x03			    /* manual intervention */
 };
 
 /* To Report "Illegal Request: Invalid Field in CDB */

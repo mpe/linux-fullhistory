@@ -236,7 +236,7 @@ static int klsi_105_get_line_state(struct usb_serial_port *port,
 			     0, /* value */
 			     0, /* index */
 			     status_buf, KLSI_STATUSBUF_LEN,
-			     10*HZ
+			     10000
 			     );
 	if (rc < 0)
 		err("Reading line status failed (error = %d)", rc);

@@ -130,6 +130,15 @@ UNUSUAL_DEV(  0x04b0, 0x0405, 0x0100, 0x0100,
 		US_SC_DEVICE, US_PR_DEVICE, NULL,
 		US_FL_FIX_CAPACITY),
 
+/* BENQ DC5330
+ * Reported by Manuel Fombuena <mfombuena@ya.com> and
+ * Frank Copeland <fjc@thingy.apana.org.au> */
+UNUSUAL_DEV(  0x04a5, 0x3010, 0x0100, 0x0100,
+		"Tekom Technologies, Inc",
+		"300_CAMERA",
+		US_SC_DEVICE, US_PR_DEVICE, NULL,
+		US_FL_IGNORE_RESIDUE ),
+
 /* Reported by Simon Levitt <simon@whattf.com>
  * This entry needs Sub and Proto fields */
 UNUSUAL_DEV(  0x04b8, 0x0601, 0x0100, 0x0100,
@@ -340,7 +349,7 @@ UNUSUAL_DEV(  0x054c, 0x0010, 0x0106, 0x0450,
 		"Sony",
 		"DSC-S30/S70/S75/505V/F505/F707/F717/P8", 
 		US_SC_SCSI, US_PR_DEVICE, NULL,
-		US_FL_SINGLE_LUN | US_FL_NOT_LOCKABLE ),
+		US_FL_SINGLE_LUN | US_FL_NOT_LOCKABLE | US_FL_NO_WP_DETECT ),
 
 /* This entry is needed because the device reports Sub=ff */
 UNUSUAL_DEV(  0x054c, 0x0010, 0x0500, 0x0500, 
@@ -364,6 +373,13 @@ UNUSUAL_DEV(  0x054c, 0x002b, 0x0100, 0x0110,
 		US_SC_ISD200, US_PR_BULK, isd200_Initialization,
 		0 ),
 #endif
+
+/* Submitted by Olaf Hering, <olh@suse.de> SuSE Bugzilla #49049 */
+UNUSUAL_DEV(  0x054c, 0x002c, 0x0501, 0x0501,
+		"Sony",
+		"USB Floppy Drive",
+		US_SC_DEVICE, US_PR_DEVICE, NULL,
+		US_FL_SINGLE_LUN ),
 
 UNUSUAL_DEV(  0x054c, 0x002d, 0x0100, 0x0100, 
 		"Sony",
@@ -508,6 +524,12 @@ UNUSUAL_DEV( 0x05ac, 0x1203, 0x0001, 0x0001,
 		US_SC_DEVICE, US_PR_DEVICE, NULL,
 		US_FL_FIX_CAPACITY ),
 
+UNUSUAL_DEV( 0x05ac, 0x1205, 0x0001, 0x0001,
+		"Apple",
+		"iPod",
+		US_SC_DEVICE, US_PR_DEVICE, NULL,
+		US_FL_FIX_CAPACITY ),
+
 #ifdef CONFIG_USB_STORAGE_JUMPSHOT
 UNUSUAL_DEV(  0x05dc, 0x0001, 0x0000, 0x0001,
 		"Lexar",
@@ -612,20 +634,6 @@ UNUSUAL_DEV(  0x0781, 0x0001, 0x0200, 0x0200,
 		US_SC_SCSI, US_PR_CB, NULL,
 		US_FL_SINGLE_LUN ),
 
-UNUSUAL_DEV(  0x0781, 0x0002, 0x0009, 0x0009, 
-		"Sandisk",
-		"ImageMate SDDR-31",
-		US_SC_DEVICE, US_PR_DEVICE, NULL,
-		US_FL_IGNORE_SER ),
-
-#ifdef CONFIG_USB_STORAGE_USBAT
-UNUSUAL_DEV(  0x0781, 0x0005, 0x0005, 0x0005,
-		"Sandisk",
-		"ImageMate SDDR-05b",
-		US_SC_SCSI, US_PR_SCM_ATAPI, init_usbat,
-		US_FL_SINGLE_LUN),
-#endif
-
 UNUSUAL_DEV(  0x0781, 0x0100, 0x0100, 0x0100,
 		"Sandisk",
 		"ImageMate SDDR-12",
@@ -696,6 +704,13 @@ UNUSUAL_DEV( 0x07c4, 0xa001, 0x0000, 0xffff,
 		"SIIG/Datafab Memory Stick+CF Reader/Writer",
 		US_SC_SCSI, US_PR_DATAFAB, NULL,
 		0 ),
+
+/* Reported by Josef Reisinger <josef.reisinger@netcologne.de> */
+UNUSUAL_DEV( 0x07c4, 0xa002, 0x0000, 0xffff,
+		"Datafab/Unknown",
+		"MD2/MD3 Disk enclosure",
+		US_SC_SCSI, US_PR_DATAFAB, NULL,
+		US_FL_SINGLE_LUN ),
 
 UNUSUAL_DEV( 0x07c4, 0xa003, 0x0000, 0xffff,
 		"Datafab/Unknown",
@@ -930,6 +945,13 @@ UNUSUAL_DEV(  0x0ea0, 0x6828, 0x0110, 0x0110,
 		"Flash Disk",
 		US_SC_DEVICE, US_PR_DEVICE, NULL,
 		US_FL_IGNORE_RESIDUE ),
+
+/* Reported by Michael Stattmann <michael@stattmann.com> */
+UNUSUAL_DEV(  0x0fce, 0xd008, 0x0000, 0x0000,
+		"Sony Ericsson",
+		"V800-Vodafone 802",
+		US_SC_DEVICE, US_PR_DEVICE, NULL,
+		US_FL_NO_WP_DETECT ),
 
 /* Reported by Kevin Cernekee <kpc-usbdev@gelato.uiuc.edu>
  * Tested on hardware version 1.10.

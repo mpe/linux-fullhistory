@@ -243,6 +243,8 @@ static struct usb_device_id id_table [] = {
 		.driver_info = (kernel_ulong_t)&palm_os_4_probe },
 	{ USB_DEVICE(KYOCERA_VENDOR_ID, KYOCERA_7135_ID),
 		.driver_info = (kernel_ulong_t)&palm_os_4_probe },
+	{ USB_DEVICE(FOSSIL_VENDOR_ID, FOSSIL_ABACUS_ID),
+		.driver_info = (kernel_ulong_t)&palm_os_4_probe },
 	{ },					/* optional parameter entry */
 	{ }					/* Terminating entry */
 };
@@ -287,6 +289,7 @@ static struct usb_device_id id_table_combined [] = {
 	{ USB_DEVICE(GARMIN_VENDOR_ID, GARMIN_IQUE_3600_ID) },
 	{ USB_DEVICE(ACEECA_VENDOR_ID, ACEECA_MEZ1000_ID) },
 	{ USB_DEVICE(KYOCERA_VENDOR_ID, KYOCERA_7135_ID) },
+	{ USB_DEVICE(FOSSIL_VENDOR_ID, FOSSIL_ABACUS_ID) },
 	{ },					/* optional parameter entry */
 	{ }					/* Terminating entry */
 };
@@ -386,6 +389,7 @@ struct visor_private {
 	int bytes_in;
 	int bytes_out;
 	int outstanding_urbs;
+	int throttled;
 };
 
 /* number of outstanding urbs to prevent userspace DoS from happening */
@@ -415,6 +419,7 @@ static int visor_open (struct usb_serial_port *port, struct file *filp)
 	priv->bytes_in = 0;
 	priv->bytes_out = 0;
 	priv->outstanding_urbs = 0;
+	priv->throttled = 0;
 	spin_unlock_irqrestore(&priv->lock, flags);
 
 	/*
@@ -602,6 +607,7 @@ static void visor_read_bulk_callback (struct urb *urb, struct pt_regs *regs)
 	struct tty_struct *tty;
 	unsigned long flags;
 	int i;
+	int throttled;
 	int result;
 
 	dbg("%s - port %d", __FUNCTION__, port->number);
@@ -627,18 +633,21 @@ static void visor_read_bulk_callback (struct urb *urb, struct pt_regs *regs)
 	}
 	spin_lock_irqsave(&priv->lock, flags);
 	priv->bytes_in += urb->actual_length;
+	throttled = priv->throttled;
 	spin_unlock_irqrestore(&priv->lock, flags);
 
-	/* Continue trying to always read  */
-	usb_fill_bulk_urb (port->read_urb, port->serial->dev,
-			   usb_rcvbulkpipe(port->serial->dev,
-					   port->bulk_in_endpointAddress),
-			   port->read_urb->transfer_buffer,
-			   port->read_urb->transfer_buffer_length,
-			   visor_read_bulk_callback, port);
-	result = usb_submit_urb(port->read_urb, GFP_ATOMIC);
-	if (result)
-		dev_err(&port->dev, "%s - failed resubmitting read urb, error %d\n", __FUNCTION__, result);
+	/* Continue trying to always read if we should */
+	if (!throttled) {
+		usb_fill_bulk_urb (port->read_urb, port->serial->dev,
+				   usb_rcvbulkpipe(port->serial->dev,
+						   port->bulk_in_endpointAddress),
+				   port->read_urb->transfer_buffer,
+				   port->read_urb->transfer_buffer_length,
+				   visor_read_bulk_callback, port);
+		result = usb_submit_urb(port->read_urb, GFP_ATOMIC);
+		if (result)
+			dev_err(&port->dev, "%s - failed resubmitting read urb, error %d\n", __FUNCTION__, result);
+	}
 	return;
 }
 
@@ -683,16 +692,26 @@ exit:
 
 static void visor_throttle (struct usb_serial_port *port)
 {
+	struct visor_private *priv = usb_get_serial_port_data(port);
+	unsigned long flags;
+
 	dbg("%s - port %d", __FUNCTION__, port->number);
-	usb_kill_urb(port->read_urb);
+	spin_lock_irqsave(&priv->lock, flags);
+	priv->throttled = 1;
+	spin_unlock_irqrestore(&priv->lock, flags);
 }
 
 
 static void visor_unthrottle (struct usb_serial_port *port)
 {
+	struct visor_private *priv = usb_get_serial_port_data(port);
+	unsigned long flags;
 	int result;
 
 	dbg("%s - port %d", __FUNCTION__, port->number);
+	spin_lock_irqsave(&priv->lock, flags);
+	priv->throttled = 0;
+	spin_unlock_irqrestore(&priv->lock, flags);
 
 	port->read_urb->dev = port->serial->dev;
 	result = usb_submit_urb(port->read_urb, GFP_ATOMIC);

@@ -430,7 +430,7 @@ struct ehci_iso_packet {
 	__le32			transaction;	/* itd->hw_transaction[i] |= */
 	u8			cross;		/* buf crosses pages */
 	/* for full speed OUT splits */
-	u16			buf1;
+	u32			buf1;
 };
 
 /* temporary schedule data for packets from iso urbs (both speeds)

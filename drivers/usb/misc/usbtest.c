@@ -851,7 +851,7 @@ test_ctrl_queue (struct usbtest_dev *dev, struct usbtest_param *param)
 	 */
 	urb = kmalloc (param->sglen * sizeof (struct urb *), SLAB_KERNEL);
 	if (!urb)
-		goto cleanup;
+		return -ENOMEM;
 	memset (urb, 0, param->sglen * sizeof (struct urb *));
 	for (i = 0; i < param->sglen; i++) {
 		int			pipe = usb_rcvctrlpipe (udev, 0);

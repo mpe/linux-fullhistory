@@ -89,7 +89,7 @@ static char *errbuf;
 
 static kmem_cache_t *uhci_up_cachep;	/* urb_priv */
 
-static unsigned int uhci_get_current_frame_number(struct uhci_hcd *uhci);
+static void uhci_get_current_frame_number(struct uhci_hcd *uhci);
 static void hc_state_transitions(struct uhci_hcd *uhci);
 
 /* If a transfer is still active after this much time, turn off FSBR */
@@ -113,15 +113,9 @@ static void stall_callback(unsigned long ptr)
 	struct uhci_hcd *uhci = hcd_to_uhci(hcd);
 	struct urb_priv *up;
 	unsigned long flags;
-	int called_uhci_finish_completion = 0;
 
-	spin_lock_irqsave(&uhci->schedule_lock, flags);
-	if (!list_empty(&uhci->urb_remove_list) &&
-	    uhci_get_current_frame_number(uhci) != uhci->urb_remove_age) {
-		uhci_remove_pending_urbps(uhci);
-		uhci_finish_completion(hcd, NULL);
-		called_uhci_finish_completion = 1;
-	}
+	spin_lock_irqsave(&uhci->lock, flags);
+	uhci_scan_schedule(uhci, NULL);
 
 	list_for_each_entry(up, &uhci->urb_list, urb_list) {
 		struct urb *u = up->urb;
@@ -134,11 +128,6 @@ static void stall_callback(unsigned long ptr)
 
 		spin_unlock(&u->lock);
 	}
-	spin_unlock_irqrestore(&uhci->schedule_lock, flags);
-
-	/* Wake up anyone waiting for an URB to complete */
-	if (called_uhci_finish_completion)
-		wake_up_all(&uhci->waitqh);
 
 	/* Really disable FSBR */
 	if (!uhci->fsbr && uhci->fsbrtimeout && time_after_eq(jiffies, uhci->fsbrtimeout)) {
@@ -149,9 +138,10 @@ static void stall_callback(unsigned long ptr)
 	/* Poll for and perform state transitions */
 	hc_state_transitions(uhci);
 	if (unlikely(uhci->suspended_ports && uhci->state != UHCI_SUSPENDED))
-		uhci_check_resume(uhci);
+		uhci_check_ports(uhci);
 
 	init_stall_timer(hcd);
+	spin_unlock_irqrestore(&uhci->lock, flags);
 }
 
 static int init_stall_timer(struct usb_hcd *hcd)
@@ -172,8 +162,6 @@ static irqreturn_t uhci_irq(struct usb_hcd *hcd, struct pt_regs *regs)
 	struct uhci_hcd *uhci = hcd_to_uhci(hcd);
 	unsigned long io_addr = uhci->io_addr;
 	unsigned short status;
-	struct urb_priv *urbp, *tmp;
-	unsigned int age;
 
 	/*
 	 * Read the interrupt status, and write it back to clear the
@@ -202,37 +190,9 @@ static irqreturn_t uhci_irq(struct usb_hcd *hcd, struct pt_regs *regs)
 	if (status & USBSTS_RD)
 		uhci->resume_detect = 1;
 
-	spin_lock(&uhci->schedule_lock);
-
-	age = uhci_get_current_frame_number(uhci);
-	if (age != uhci->qh_remove_age)
-		uhci_free_pending_qhs(uhci);
-	if (age != uhci->td_remove_age)
-		uhci_free_pending_tds(uhci);
-	if (age != uhci->urb_remove_age)
-		uhci_remove_pending_urbps(uhci);
-
-	if (list_empty(&uhci->urb_remove_list) &&
-	    list_empty(&uhci->td_remove_list) &&
-	    list_empty(&uhci->qh_remove_list))
-		uhci_clear_next_interrupt(uhci);
-	else
-		uhci_set_next_interrupt(uhci);
-
-	/* Walk the list of pending URBs to see which ones completed
-	 * (must be _safe because uhci_transfer_result() dequeues URBs) */
-	list_for_each_entry_safe(urbp, tmp, &uhci->urb_list, urb_list) {
-		struct urb *urb = urbp->urb;
-
-		/* Checks the status and does all of the magic necessary */
-		uhci_transfer_result(uhci, urb);
-	}
-	uhci_finish_completion(hcd, regs);
-
-	spin_unlock(&uhci->schedule_lock);
-
-	/* Wake up anyone waiting for an URB to complete */
-	wake_up_all(&uhci->waitqh);
+	spin_lock(&uhci->lock);
+	uhci_scan_schedule(uhci, regs);
+	spin_unlock(&uhci->lock);
 
 	return IRQ_HANDLED;
 }
@@ -256,6 +216,7 @@ static void reset_hc(struct uhci_hcd *uhci)
 	/* Another 10ms delay */
 	msleep(10);
 	uhci->resume_detect = 0;
+	uhci->is_stopped = UHCI_IS_STOPPED;
 }
 
 static void suspend_hc(struct uhci_hcd *uhci)
@@ -266,6 +227,12 @@ static void suspend_hc(struct uhci_hcd *uhci)
 	uhci->state = UHCI_SUSPENDED;
 	uhci->resume_detect = 0;
 	outw(USBCMD_EGSM, io_addr + USBCMD);
+
+	/* FIXME: Wait for the controller to actually stop */
+	uhci_get_current_frame_number(uhci);
+	uhci->is_stopped = UHCI_IS_STOPPED;
+
+	uhci_scan_schedule(uhci, NULL);
 }
 
 static void wakeup_hc(struct uhci_hcd *uhci)
@@ -280,6 +247,7 @@ static void wakeup_hc(struct uhci_hcd *uhci)
 			outw(USBCMD_FGR | USBCMD_EGSM, io_addr + USBCMD);
 			uhci->state = UHCI_RESUMING_1;
 			uhci->state_end = jiffies + msecs_to_jiffies(20);
+			uhci->is_stopped = 0;
 			break;
 
 		case UHCI_RESUMING_1:		/* End global resume */
@@ -386,11 +354,13 @@ static void hc_state_transitions(struct uhci_hcd *uhci)
 }
 
 /*
- * returns the current frame number for a USB bus/controller.
+ * Store the current frame number in uhci->frame_number if the controller
+ * is runnning
  */
-static unsigned int uhci_get_current_frame_number(struct uhci_hcd *uhci)
+static void uhci_get_current_frame_number(struct uhci_hcd *uhci)
 {
-	return inw(uhci->io_addr + USBFRNUM);
+	if (!uhci->is_stopped)
+		uhci->frame_number = inw(uhci->io_addr + USBFRNUM);
 }
 
 static int start_hc(struct uhci_hcd *uhci)
@@ -413,6 +383,9 @@ static int start_hc(struct uhci_hcd *uhci)
 		msleep(1);
 	}
 
+	/* Mark controller as running before we enable interrupts */
+	uhci_to_hcd(uhci)->state = HC_STATE_RUNNING;
+
 	/* Turn on PIRQ and all interrupts */
 	pci_write_config_word(to_pci_dev(uhci_dev(uhci)), USBLEGSUP,
 			USBLEGSUP_DEFAULT);
@@ -427,8 +400,8 @@ static int start_hc(struct uhci_hcd *uhci)
 	uhci->state = UHCI_RUNNING_GRACE;
 	uhci->state_end = jiffies + HZ;
 	outw(USBCMD_RS | USBCMD_CF | USBCMD_MAXP, io_addr + USBCMD);
+	uhci->is_stopped = 0;
 
-        uhci_to_hcd(uhci)->state = USB_STATE_RUNNING;
 	return 0;
 }
 
@@ -524,7 +497,7 @@ static int uhci_start(struct usb_hcd *hcd)
 	uhci->fsbr = 0;
 	uhci->fsbrtimeout = 0;
 
-	spin_lock_init(&uhci->schedule_lock);
+	spin_lock_init(&uhci->lock);
 	INIT_LIST_HEAD(&uhci->qh_remove_list);
 
 	INIT_LIST_HEAD(&uhci->td_remove_list);
@@ -678,7 +651,7 @@ static int uhci_start(struct usb_hcd *hcd)
 
 	udev->speed = USB_SPEED_FULL;
 
-	if (hcd_register_root(udev, hcd) != 0) {
+	if (usb_hcd_register_root_hub(udev, hcd) != 0) {
 		dev_err(uhci_dev(uhci), "unable to start root hub\n");
 		retval = -ENOMEM;
 		goto err_start_root_hub;
@@ -733,26 +706,11 @@ static void uhci_stop(struct usb_hcd *hcd)
 	struct uhci_hcd *uhci = hcd_to_uhci(hcd);
 
 	del_timer_sync(&uhci->stall_timer);
-
-	/*
-	 * At this point, we're guaranteed that no new connects can be made
-	 * to this bus since there are no more parents
-	 */
-
 	reset_hc(uhci);
 
-	spin_lock_irq(&uhci->schedule_lock);
-	uhci_free_pending_qhs(uhci);
-	uhci_free_pending_tds(uhci);
-	uhci_remove_pending_urbps(uhci);
-	uhci_finish_completion(hcd, NULL);
-
-	uhci_free_pending_qhs(uhci);
-	uhci_free_pending_tds(uhci);
-	spin_unlock_irq(&uhci->schedule_lock);
-
-	/* Wake up anyone waiting for an URB to complete */
-	wake_up_all(&uhci->waitqh);
+	spin_lock_irq(&uhci->lock);
+	uhci_scan_schedule(uhci, NULL);
+	spin_unlock_irq(&uhci->lock);
 	
 	release_uhci(uhci);
 }
@@ -762,13 +720,19 @@ static int uhci_suspend(struct usb_hcd *hcd, u32 state)
 {
 	struct uhci_hcd *uhci = hcd_to_uhci(hcd);
 
+	spin_lock_irq(&uhci->lock);
+
 	/* Don't try to suspend broken motherboards, reset instead */
-	if (suspend_allowed(uhci)) {
+	if (suspend_allowed(uhci))
 		suspend_hc(uhci);
-		uhci->saved_framenumber =
-				inw(uhci->io_addr + USBFRNUM) & 0x3ff;
-	} else
+	else {
+		spin_unlock_irq(&uhci->lock);
 		reset_hc(uhci);
+		spin_lock_irq(&uhci->lock);
+		uhci_scan_schedule(uhci, NULL);
+	}
+
+	spin_unlock_irq(&uhci->lock);
 	return 0;
 }
 
@@ -778,6 +742,8 @@ static int uhci_resume(struct usb_hcd *hcd)
 	int rc;
 
 	pci_set_master(to_pci_dev(uhci_dev(uhci)));
+
+	spin_lock_irq(&uhci->lock);
 
 	if (uhci->state == UHCI_SUSPENDED) {
 
@@ -789,7 +755,7 @@ static int uhci_resume(struct usb_hcd *hcd)
 		 */
 		pci_write_config_word(to_pci_dev(uhci_dev(uhci)), USBLEGSUP,
 				0);
-		outw(uhci->saved_framenumber, uhci->io_addr + USBFRNUM);
+		outw(uhci->frame_number, uhci->io_addr + USBFRNUM);
 		outl(uhci->fl->dma_handle, uhci->io_addr + USBFLBASEADD);
 		outw(USBINTR_TIMEOUT | USBINTR_RESUME | USBINTR_IOC |
 				USBINTR_SP, uhci->io_addr + USBINTR);
@@ -797,11 +763,15 @@ static int uhci_resume(struct usb_hcd *hcd)
 		pci_write_config_word(to_pci_dev(uhci_dev(uhci)), USBLEGSUP,
 				USBLEGSUP_DEFAULT);
 	} else {
+		spin_unlock_irq(&uhci->lock);
 		reset_hc(uhci);
 		if ((rc = start_hc(uhci)) != 0)
 			return rc;
+		spin_lock_irq(&uhci->lock);
 	}
-	hcd->state = USB_STATE_RUNNING;
+	hcd->state = HC_STATE_RUNNING;
+
+	spin_unlock_irq(&uhci->lock);
 	return 0;
 }
 #endif
@@ -817,7 +787,17 @@ static void uhci_hcd_endpoint_disable(struct usb_hcd *hcd,
 
 static int uhci_hcd_get_frame_number(struct usb_hcd *hcd)
 {
-	return uhci_get_current_frame_number(hcd_to_uhci(hcd));
+	struct uhci_hcd *uhci = hcd_to_uhci(hcd);
+	int frame_number;
+	unsigned long flags;
+
+	/* Minimize latency by avoiding the spinlock */
+	local_irq_save(flags);
+	rmb();
+	frame_number = (uhci->is_stopped ? uhci->frame_number :
+			inw(uhci->io_addr + USBFRNUM));
+	local_irq_restore(flags);
+	return frame_number;
 }
 
 static const char hcd_name[] = "uhci_hcd";

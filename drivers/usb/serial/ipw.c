@@ -457,7 +457,7 @@ static struct usb_serial_device_type ipw_device = {
 
 
 
-int usb_ipw_init(void)
+static int usb_ipw_init(void)
 {
 	int retval;
 
@@ -473,7 +473,7 @@ int usb_ipw_init(void)
 	return 0;
 }
 
-void usb_ipw_exit(void)
+static void usb_ipw_exit(void)
 {
 	usb_deregister(&usb_ipw_driver);
 	usb_serial_deregister(&ipw_device);

@@ -1647,11 +1647,11 @@ static int dummy_start (struct usb_hcd *hcd)
 		return -ENOMEM;
 
 	/* root hub enters addressed state... */
-	hcd->state = USB_STATE_RUNNING;
+	hcd->state = HC_STATE_RUNNING;
 	root->speed = USB_SPEED_HIGH;
 
 	/* ...then configured, so khubd sees us. */
-	if ((retval = hcd_register_root (root, hcd)) != 0) {
+	if ((retval = usb_hcd_register_root_hub (root, hcd)) != 0) {
 		goto err1;
 	}
 
@@ -1669,7 +1669,7 @@ static int dummy_start (struct usb_hcd *hcd)
 	usb_disconnect (&hcd->self.root_hub);
  err1:
 	usb_put_dev (root);
-	hcd->state = USB_STATE_QUIESCING;
+	hcd->state = HC_STATE_QUIESCING;
 	return retval;
 }
 

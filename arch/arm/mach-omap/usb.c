@@ -326,8 +326,8 @@ static u64 ohci_dmamask = ~(u32)0;
 
 static struct resource ohci_resources[] = {
 	{
-		.start	= IO_ADDRESS(OMAP_OHCI_BASE),
-		.end	= IO_ADDRESS(OMAP_OHCI_BASE + 4096),
+		.start	= OMAP_OHCI_BASE,
+		.end	= OMAP_OHCI_BASE + 4096,
 		.flags	= IORESOURCE_MEM,
 	},
 	{

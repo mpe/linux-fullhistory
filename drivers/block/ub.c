@@ -300,6 +300,7 @@ struct ub_dev {
 
 /*
  */
+static void ub_cleanup(struct ub_dev *sc);
 static int ub_bd_rq_fn_1(struct ub_dev *sc, struct request *rq);
 static int ub_cmd_build_block(struct ub_dev *sc, struct ub_scsi_cmd *cmd,
     struct request *rq);
@@ -478,24 +479,55 @@ static int ub_id_get(void)
 
 static void ub_id_put(int id)
 {
+	unsigned long flags;
 
 	if (id < 0 || id >= UB_MAX_HOSTS) {
 		printk(KERN_ERR DRV_NAME ": bad host ID %d\n", id);
 		return;
 	}
+
+	spin_lock_irqsave(&ub_lock, flags);
 	if (ub_hostv[id] == 0) {
+		spin_unlock_irqrestore(&ub_lock, flags);
 		printk(KERN_ERR DRV_NAME ": freeing free host ID %d\n", id);
 		return;
 	}
 	ub_hostv[id] = 0;
+	spin_unlock_irqrestore(&ub_lock, flags);
+}
+
+/*
+ * Downcount for deallocation. This rides on two assumptions:
+ *  - once something is poisoned, its refcount cannot grow
+ *  - opens cannot happen at this time (del_gendisk was done)
+ * If the above is true, we can drop the lock, which we need for
+ * blk_cleanup_queue(): the silly thing may attempt to sleep.
+ * [Actually, it never needs to sleep for us, but it calls might_sleep()]
+ */
+static void ub_put(struct ub_dev *sc)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&ub_lock, flags);
+	--sc->openc;
+	if (sc->openc == 0 && atomic_read(&sc->poison)) {
+		spin_unlock_irqrestore(&ub_lock, flags);
+		ub_cleanup(sc);
+	} else {
+		spin_unlock_irqrestore(&ub_lock, flags);
+	}
 }
 
 /*
  * Final cleanup and deallocation.
- * This must be called with ub_lock taken.
  */
 static void ub_cleanup(struct ub_dev *sc)
 {
+	request_queue_t *q;
+
+	/* I don't think queue can be NULL. But... Stolen from sx8.c */
+	if ((q = sc->disk->queue) != NULL)
+		blk_cleanup_queue(q);
 
 	/*
 	 * If we zero disk->private_data BEFORE put_disk, we have to check
@@ -1526,11 +1558,7 @@ static int ub_bd_open(struct inode *inode, struct file *filp)
 	return 0;
 
 err_open:
-	spin_lock_irqsave(&ub_lock, flags);
-	--sc->openc;
-	if (sc->openc == 0 && atomic_read(&sc->poison))
-		ub_cleanup(sc);
-	spin_unlock_irqrestore(&ub_lock, flags);
+	ub_put(sc);
 	return rc;
 }
 
@@ -1540,15 +1568,8 @@ static int ub_bd_release(struct inode *inode, struct file *filp)
 {
 	struct gendisk *disk = inode->i_bdev->bd_disk;
 	struct ub_dev *sc = disk->private_data;
-	unsigned long flags;
 
-	spin_lock_irqsave(&ub_lock, flags);
-	--sc->openc;
-	if (sc->openc == 0)
-		sc->first_open = 0;
-	if (sc->openc == 0 && atomic_read(&sc->poison))
-		ub_cleanup(sc);
-	spin_unlock_irqrestore(&ub_lock, flags);
+	ub_put(sc);
 	return 0;
 }
 
@@ -2043,9 +2064,7 @@ err_diag:
 	usb_set_intfdata(intf, NULL);
 	// usb_put_intf(sc->intf);
 	usb_put_dev(sc->dev);
-	spin_lock_irq(&ub_lock);
 	ub_id_put(sc->id);
-	spin_unlock_irq(&ub_lock);
 err_id:
 	kfree(sc);
 err_core:
@@ -2056,8 +2075,16 @@ static void ub_disconnect(struct usb_interface *intf)
 {
 	struct ub_dev *sc = usb_get_intfdata(intf);
 	struct gendisk *disk = sc->disk;
-	request_queue_t *q = disk->queue;
 	unsigned long flags;
+
+	/*
+	 * Prevent ub_bd_release from pulling the rug from under us.
+	 * XXX This is starting to look like a kref.
+	 * XXX Why not to take this ref at probe time?
+	 */
+	spin_lock_irqsave(&ub_lock, flags);
+	sc->openc++;
+	spin_unlock_irqrestore(&ub_lock, flags);
 
 	/*
 	 * Fence stall clearnings, operations triggered by unlinkings and so on.
@@ -2095,17 +2122,18 @@ static void ub_disconnect(struct usb_interface *intf)
 	spin_unlock_irqrestore(&sc->lock, flags);
 
 	/*
-	 * Unregister the upper layer, this waits for all commands to end.
+	 * Unregister the upper layer.
 	 */
 	if (disk->flags & GENHD_FL_UP)
 		del_gendisk(disk);
-	if (q)
-		blk_cleanup_queue(q);
+	/*
+	 * I wish I could do:
+	 *    set_bit(QUEUE_FLAG_DEAD, &q->queue_flags);
+	 * As it is, we rely on our internal poisoning and let
+	 * the upper levels to spin furiously failing all the I/O.
+	 */
 
 	/*
-	 * We really expect blk_cleanup_queue() to wait, so no amount
-	 * of paranoya is too much.
-	 *
 	 * Taking a lock on a structure which is about to be freed
 	 * is very nonsensual. Here it is largely a way to do a debug freeze,
 	 * and a bracket which shows where the nonsensual code segment ends.
@@ -2139,13 +2167,10 @@ static void ub_disconnect(struct usb_interface *intf)
 	usb_put_dev(sc->dev);
 	sc->dev = NULL;
 
-	spin_lock_irqsave(&ub_lock, flags);
-	if (sc->openc == 0)
-		ub_cleanup(sc);
-	spin_unlock_irqrestore(&ub_lock, flags);
+	ub_put(sc);
 }
 
-struct usb_driver ub_driver = {
+static struct usb_driver ub_driver = {
 	.owner =	THIS_MODULE,
 	.name =		"ub",
 	.probe =	ub_probe,

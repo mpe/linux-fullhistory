@@ -626,6 +626,13 @@ static struct usb_driver ftdi_driver = {
 	.id_table =	id_table_combined,
 };
 
+static char *ftdi_chip_name[] = {
+	[SIO] = "SIO",	/* the serial part of FT8U100AX */
+	[FT8U232AM] = "FT8U232AM",
+	[FT232BM] = "FT232BM",
+	[FT2232C] = "FT2232C",
+};
+
 
 /* Constants for read urb and write urb */
 #define BUFSZ 512
@@ -1004,7 +1011,6 @@ static __u32 get_ftdi_divisor(struct usb_serial_port * port)
 	struct ftdi_private *priv = usb_get_serial_port_data(port);
 	__u32 div_value = 0;
 	int div_okay = 1;
-	char *chip_name = "";
 	int baud;
 
 	/*
@@ -1049,7 +1055,6 @@ static __u32 get_ftdi_divisor(struct usb_serial_port * port)
 	if (!baud) baud = 9600;	
 	switch(priv->chip_type) {
 	case SIO: /* SIO chip */
-		chip_name = "SIO";
 		switch(baud) {
 		case 300: div_value = ftdi_sio_b300; break;
 		case 600: div_value = ftdi_sio_b600; break;
@@ -1069,7 +1074,6 @@ static __u32 get_ftdi_divisor(struct usb_serial_port * port)
 		}
 		break;
 	case FT8U232AM: /* 8U232AM chip */
-		chip_name = "FT8U232AM";
 		if (baud <= 3000000) {
 			div_value = ftdi_232am_baud_to_divisor(baud);
 		} else {
@@ -1080,11 +1084,6 @@ static __u32 get_ftdi_divisor(struct usb_serial_port * port)
 		break;
 	case FT232BM: /* FT232BM chip */
 	case FT2232C: /* FT2232C chip */
-		if (priv->chip_type == FT2232C) {
-			chip_name = "FT2232C";
-		} else {
-			chip_name = "FT232BM";
-		}
 		if (baud <= 3000000) {
 			div_value = ftdi_232bm_baud_to_divisor(baud);
 		} else {
@@ -1097,7 +1096,8 @@ static __u32 get_ftdi_divisor(struct usb_serial_port * port)
 
 	if (div_okay) {
 		dbg("%s - Baud rate set to %d (divisor 0x%lX) on chip %s",
-			__FUNCTION__, baud, (unsigned long)div_value, chip_name);
+			__FUNCTION__, baud, (unsigned long)div_value,
+			ftdi_chip_name[priv->chip_type]);
 	}
 
 	return(div_value);
@@ -1187,7 +1187,7 @@ check_and_exit:
  * ***************************************************************************
  */
 
-ssize_t show_latency_timer(struct device *dev, char *buf)
+static ssize_t show_latency_timer(struct device *dev, char *buf)
 {
 	struct usb_serial_port *port = to_usb_serial_port(dev);
 	struct ftdi_private *priv = usb_get_serial_port_data(port);
@@ -1214,7 +1214,8 @@ ssize_t show_latency_timer(struct device *dev, char *buf)
 }
 
 /* Write a new value of the latency timer, in units of milliseconds. */
-ssize_t store_latency_timer(struct device *dev, const char *valbuf, size_t count)
+static ssize_t store_latency_timer(struct device *dev, const char *valbuf,
+				   size_t count)
 {
 	struct usb_serial_port *port = to_usb_serial_port(dev);
 	struct ftdi_private *priv = usb_get_serial_port_data(port);
@@ -1244,7 +1245,8 @@ ssize_t store_latency_timer(struct device *dev, const char *valbuf, size_t count
 
 /* Write an event character directly to the FTDI register.  The ASCII
    value is in the low 8 bits, with the enable bit in the 9th bit. */
-ssize_t store_event_char(struct device *dev, const char *valbuf, size_t count)
+static ssize_t store_event_char(struct device *dev, const char *valbuf,
+				size_t count)
 {
 	struct usb_serial_port *port = to_usb_serial_port(dev);
 	struct ftdi_private *priv = usb_get_serial_port_data(port);
@@ -1272,10 +1274,10 @@ ssize_t store_event_char(struct device *dev, const char *valbuf, size_t count)
 	return count;
 }
 
-static DEVICE_ATTR(latency_timer, S_IWUGO | S_IRUGO, show_latency_timer, store_latency_timer);
-static DEVICE_ATTR(event_char, S_IWUGO, NULL, store_event_char);
+static DEVICE_ATTR(latency_timer, S_IWUSR | S_IRUGO, show_latency_timer, store_latency_timer);
+static DEVICE_ATTR(event_char, S_IWUSR, NULL, store_event_char);
 
-void create_sysfs_attrs(struct usb_serial *serial)
+static void create_sysfs_attrs(struct usb_serial *serial)
 {	
 	struct ftdi_private *priv;
 	struct usb_device *udev;
@@ -1285,14 +1287,18 @@ void create_sysfs_attrs(struct usb_serial *serial)
 	priv = usb_get_serial_port_data(serial->port[0]);
 	udev = serial->dev;
 	
-	if (priv->chip_type == FT232BM) {
-		dbg("sysfs attributes for FT232BM");
+	/* XXX I've no idea if the original SIO supports the event_char
+	 * sysfs parameter, so I'm playing it safe.  */
+	if (priv->chip_type != SIO) {
+		dbg("sysfs attributes for %s", ftdi_chip_name[priv->chip_type]);
 		device_create_file(&udev->dev, &dev_attr_event_char);
-		device_create_file(&udev->dev, &dev_attr_latency_timer);
+		if (priv->chip_type == FT232BM || priv->chip_type == FT2232C) {
+			device_create_file(&udev->dev, &dev_attr_latency_timer);
+		}
 	}
 }
 
-void remove_sysfs_attrs(struct usb_serial *serial)
+static void remove_sysfs_attrs(struct usb_serial *serial)
 {
 	struct ftdi_private *priv;
 	struct usb_device *udev;
@@ -1302,9 +1308,12 @@ void remove_sysfs_attrs(struct usb_serial *serial)
 	priv = usb_get_serial_port_data(serial->port[0]);
 	udev = serial->dev;
 	
-	if (priv->chip_type == FT232BM) {
+	/* XXX see create_sysfs_attrs */
+	if (priv->chip_type != SIO) {
 		device_remove_file(&udev->dev, &dev_attr_event_char);
-		device_remove_file(&udev->dev, &dev_attr_latency_timer);
+		if (priv->chip_type == FT232BM || priv->chip_type == FT2232C) {
+			device_remove_file(&udev->dev, &dev_attr_latency_timer);
+		}
 	}
 	
 }
@@ -1406,6 +1415,8 @@ static int ftdi_8U232AM_startup (struct usb_serial *serial)
 	priv->chip_type = FT8U232AM;
 	priv->baud_base = 48000000 / 2; /* Would be / 16, but FTDI supports 0.125, 0.25 and 0.5 divisor fractions! */
 	
+	create_sysfs_attrs(serial);
+	
 	return (0);
 } /* ftdi_8U232AM_startup */
 
@@ -1457,6 +1468,8 @@ static int ftdi_FT2232C_startup (struct usb_serial *serial)
 	}
 	priv->baud_base = 48000000 / 2; /* Would be / 16, but FT2232C supports multiple of 0.125 divisor fractions! */
 	
+	create_sysfs_attrs(serial);
+
 	return (0);
 } /* ftdi_FT2232C_startup */
 

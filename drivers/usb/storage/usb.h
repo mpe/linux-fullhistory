@@ -48,6 +48,7 @@
 #include <linux/blkdev.h>
 #include <linux/smp_lock.h>
 #include <linux/completion.h>
+#include <scsi/scsi_host.h>
 
 struct us_data;
 struct scsi_cmnd;
@@ -65,18 +66,35 @@ struct us_unusual_dev {
 	unsigned int flags;
 };
 
-/* Flag definitions: these entries are static */
-#define US_FL_SINGLE_LUN      0x00000001 /* allow access to only LUN 0	    */
-#define US_FL_MODE_XLATE      0          /* [no longer used]                */
-#define US_FL_NEED_OVERRIDE   0x00000004 /* unusual_devs entry is necessary */
-#define US_FL_IGNORE_SER      0		 /* [no longer used]		    */
-#define US_FL_SCM_MULT_TARG   0x00000020 /* supports multiple targets	    */
-#define US_FL_FIX_INQUIRY     0x00000040 /* INQUIRY response needs faking   */
-#define US_FL_FIX_CAPACITY    0x00000080 /* READ CAPACITY response too big  */
-#define US_FL_IGNORE_RESIDUE  0x00000100 /* reported residue is wrong	    */
-#define US_FL_BULK32          0x00000200 /* Uses 32-byte CBW length         */
-#define US_FL_NOT_LOCKABLE    0x00000400 /* PREVENT/ALLOW not supported     */
-#define US_FL_GO_SLOW         0x00000800 /* Need delay after Command phase  */
+/*
+ * Static flag definitions.  We use this roundabout technique so that the
+ * proc_info() routine can automatically display a message for each flag.
+ */
+#define US_DO_ALL_FLAGS						\
+	US_FLAG(SINGLE_LUN,	0x00000001)			\
+		/* allow access to only LUN 0 */		\
+	US_FLAG(NEED_OVERRIDE,	0x00000002)			\
+		/* unusual_devs entry is necessary */		\
+	US_FLAG(SCM_MULT_TARG,	0x00000004)			\
+		/* supports multiple targets */			\
+	US_FLAG(FIX_INQUIRY,	0x00000008)			\
+		/* INQUIRY response needs faking */		\
+	US_FLAG(FIX_CAPACITY,	0x00000010)			\
+		/* READ CAPACITY response too big */		\
+	US_FLAG(IGNORE_RESIDUE,	0x00000020)			\
+		/* reported residue is wrong */			\
+	US_FLAG(BULK32,		0x00000040)			\
+		/* Uses 32-byte CBW length */			\
+	US_FLAG(NOT_LOCKABLE,	0x00000080)			\
+		/* PREVENT/ALLOW not supported */		\
+	US_FLAG(GO_SLOW,	0x00000100)			\
+		/* Need delay after Command phase */		\
+	US_FLAG(NO_WP_DETECT,	0x00000200)			\
+		/* Don't check for write-protect */		\
+
+#define US_FLAG(name, value)	US_FL_##name = value ,
+enum { US_DO_ALL_FLAGS };
+#undef US_FLAG
 
 /* Dynamic flag definitions: used in set_bit() etc. */
 #define US_FLIDX_URB_ACTIVE	18  /* 0x00040000  current_urb is in use  */
@@ -139,7 +157,6 @@ struct us_data {
 	proto_cmnd		proto_handler;	 /* protocol handler	   */
 
 	/* SCSI interfaces */
-	struct Scsi_Host	*host;		 /* our dummy host data */
 	struct scsi_cmnd	*srb;		 /* current srb		*/
 
 	/* thread information */
@@ -154,19 +171,22 @@ struct us_data {
 	dma_addr_t		iobuf_dma;
 
 	/* mutual exclusion and synchronization structures */
-	struct semaphore	sema;		 /* to sleep thread on   */
-	struct completion	notify;		 /* thread begin/end	 */
-	wait_queue_head_t	dev_reset_wait;  /* wait during reset    */
-	wait_queue_head_t	scsi_scan_wait;	 /* wait before scanning */
-	struct completion	scsi_scan_done;	 /* scan thread end	 */
+	struct semaphore	sema;		 /* to sleep thread on	    */
+	struct completion	notify;		 /* thread begin/end	    */
+	wait_queue_head_t	delay_wait;	 /* wait during scan, reset */
 
 	/* subdriver information */
 	void			*extra;		 /* Any extra data          */
 	extra_data_destructor	extra_destructor;/* extra data destructor   */
 };
 
-/* The structure which defines our driver */
-extern struct usb_driver usb_storage_driver;
+/* Convert between us_data and the corresponding Scsi_Host */
+static struct Scsi_Host inline *us_to_host(struct us_data *us) {
+	return container_of((void *) us, struct Scsi_Host, hostdata);
+}
+static struct us_data inline *host_to_us(struct Scsi_Host *host) {
+	return (struct us_data *) host->hostdata;
+}
 
 /* Function to fill an inquiry response. See usb.c for details */
 extern void fill_inquiry_response(struct us_data *us,

@@ -594,7 +594,7 @@ static void kaweth_usb_receive(struct urb *urb, struct pt_regs *regs)
 
 	struct sk_buff *skb;
 
-	if(unlikely(urb->status == -ECONNRESET || urb->status == -ECONNABORTED || urb->status == -ESHUTDOWN))
+	if(unlikely(urb->status == -ECONNRESET || urb->status == -ESHUTDOWN))
 	/* we are killed - set a flag and wake the disconnect handler */
 	{
 		kaweth->end = 1;

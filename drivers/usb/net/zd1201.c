@@ -673,7 +673,7 @@ static int zd1201_enable(struct zd1201 *zd)
 		return 0;
 
 	err = zd1201_docmd(zd, ZD1201_CMDCODE_ENABLE, 0, 0, 0);
-	if (!err);
+	if (!err)
 		zd->mac_enabled = 1;
 
 	if (zd->monitor)
@@ -690,7 +690,7 @@ static int zd1201_disable(struct zd1201 *zd)
 		return 0;
 	if (zd->monitor) {
 		err = zd1201_setconfig16(zd, ZD1201_RID_PROMISCUOUSMODE, 0);
-		if (err);
+		if (err)
 			return err;
 	}
 

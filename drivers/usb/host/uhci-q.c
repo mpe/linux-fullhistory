@@ -264,7 +264,6 @@ static void uhci_remove_qh(struct uhci_hcd *uhci, struct uhci_qh *qh)
 {
 	struct uhci_qh *pqh;
 	__le32 newlink;
-	unsigned int age;
 
 	if (!qh)
 		return;
@@ -310,10 +309,10 @@ static void uhci_remove_qh(struct uhci_hcd *uhci, struct uhci_qh *qh)
 	list_del_init(&qh->urbp->queue_list);
 	qh->urbp = NULL;
 
-	age = uhci_get_current_frame_number(uhci);
-	if (age != uhci->qh_remove_age) {
+	uhci_get_current_frame_number(uhci);
+	if (uhci->frame_number + uhci->is_stopped != uhci->qh_remove_age) {
 		uhci_free_pending_qhs(uhci);
-		uhci->qh_remove_age = age;
+		uhci->qh_remove_age = uhci->frame_number;
 	}
 
 	/* Check to see if the remove list is empty. Set the IOC bit */
@@ -492,7 +491,6 @@ static void uhci_destroy_urb_priv(struct uhci_hcd *uhci, struct urb *urb)
 {
 	struct uhci_td *td, *tmp;
 	struct urb_priv *urbp;
-	unsigned int age;
 
 	urbp = (struct urb_priv *)urb->hcpriv;
 	if (!urbp)
@@ -502,10 +500,10 @@ static void uhci_destroy_urb_priv(struct uhci_hcd *uhci, struct urb *urb)
 		dev_warn(uhci_dev(uhci), "urb %p still on uhci->urb_list "
 				"or uhci->remove_list!\n", urb);
 
-	age = uhci_get_current_frame_number(uhci);
-	if (age != uhci->td_remove_age) {
+	uhci_get_current_frame_number(uhci);
+	if (uhci->frame_number + uhci->is_stopped != uhci->td_remove_age) {
 		uhci_free_pending_tds(uhci);
-		uhci->td_remove_age = age;
+		uhci->td_remove_age = uhci->frame_number;
 	}
 
 	/* Check to see if the remove list is empty. Set the IOC bit */
@@ -1063,11 +1061,11 @@ static int isochronous_find_start(struct uhci_hcd *uhci, struct urb *urb)
 	limits = isochronous_find_limits(uhci, urb, &start, &end);
 
 	if (urb->transfer_flags & URB_ISO_ASAP) {
-		if (limits)
-			urb->start_frame =
-					(uhci_get_current_frame_number(uhci) +
-						10) & (UHCI_NUMFRAMES - 1);
-		else
+		if (limits) {
+			uhci_get_current_frame_number(uhci);
+			urb->start_frame = (uhci->frame_number + 10)
+					& (UHCI_NUMFRAMES - 1);
+		} else
 			urb->start_frame = end;
 	} else {
 		urb->start_frame &= (UHCI_NUMFRAMES - 1);
@@ -1184,7 +1182,7 @@ static int uhci_urb_enqueue(struct usb_hcd *hcd,
 	struct urb *eurb;
 	int bustime;
 
-	spin_lock_irqsave(&uhci->schedule_lock, flags);
+	spin_lock_irqsave(&uhci->lock, flags);
 
 	ret = urb->status;
 	if (ret != -EINPROGRESS)		/* URB already unlinked! */
@@ -1242,7 +1240,7 @@ static int uhci_urb_enqueue(struct usb_hcd *hcd,
 		ret = 0;
 
 out:
-	spin_unlock_irqrestore(&uhci->schedule_lock, flags);
+	spin_unlock_irqrestore(&uhci->lock, flags);
 	return ret;
 }
 
@@ -1371,9 +1369,8 @@ static int uhci_urb_dequeue(struct usb_hcd *hcd, struct urb *urb)
 	struct uhci_hcd *uhci = hcd_to_uhci(hcd);
 	unsigned long flags;
 	struct urb_priv *urbp;
-	unsigned int age;
 
-	spin_lock_irqsave(&uhci->schedule_lock, flags);
+	spin_lock_irqsave(&uhci->lock, flags);
 	urbp = urb->hcpriv;
 	if (!urbp)			/* URB was never linked! */
 		goto done;
@@ -1381,10 +1378,10 @@ static int uhci_urb_dequeue(struct usb_hcd *hcd, struct urb *urb)
 
 	uhci_unlink_generic(uhci, urb);
 
-	age = uhci_get_current_frame_number(uhci);
-	if (age != uhci->urb_remove_age) {
+	uhci_get_current_frame_number(uhci);
+	if (uhci->frame_number + uhci->is_stopped != uhci->urb_remove_age) {
 		uhci_remove_pending_urbps(uhci);
-		uhci->urb_remove_age = age;
+		uhci->urb_remove_age = uhci->frame_number;
 	}
 
 	/* If we're the first, set the next interrupt bit */
@@ -1393,7 +1390,7 @@ static int uhci_urb_dequeue(struct usb_hcd *hcd, struct urb *urb)
 	list_add_tail(&urbp->urb_list, &uhci->urb_remove_list);
 
 done:
-	spin_unlock_irqrestore(&uhci->schedule_lock, flags);
+	spin_unlock_irqrestore(&uhci->lock, flags);
 	return 0;
 }
 
@@ -1455,28 +1452,27 @@ static void uhci_free_pending_tds(struct uhci_hcd *uhci)
 
 static void
 uhci_finish_urb(struct usb_hcd *hcd, struct urb *urb, struct pt_regs *regs)
-__releases(uhci->schedule_lock)
-__acquires(uhci->schedule_lock)
+__releases(uhci->lock)
+__acquires(uhci->lock)
 {
 	struct uhci_hcd *uhci = hcd_to_uhci(hcd);
 
 	uhci_destroy_urb_priv(uhci, urb);
 
-	spin_unlock(&uhci->schedule_lock);
+	spin_unlock(&uhci->lock);
 	usb_hcd_giveback_urb(hcd, urb, regs);
-	spin_lock(&uhci->schedule_lock);
+	spin_lock(&uhci->lock);
 }
 
-static void uhci_finish_completion(struct usb_hcd *hcd, struct pt_regs *regs)
+static void uhci_finish_completion(struct uhci_hcd *uhci, struct pt_regs *regs)
 {
-	struct uhci_hcd *uhci = hcd_to_uhci(hcd);
 	struct urb_priv *urbp, *tmp;
 
 	list_for_each_entry_safe(urbp, tmp, &uhci->complete_list, urb_list) {
 		struct urb *urb = urbp->urb;
 
 		list_del_init(&urbp->urb_list);
-		uhci_finish_urb(hcd, urb, regs);
+		uhci_finish_urb(uhci_to_hcd(uhci), urb, regs);
 	}
 }
 
@@ -1485,4 +1481,59 @@ static void uhci_remove_pending_urbps(struct uhci_hcd *uhci)
 
 	/* Splice the urb_remove_list onto the end of the complete_list */
 	list_splice_init(&uhci->urb_remove_list, uhci->complete_list.prev);
+}
+
+/* Process events in the schedule, but only in one thread at a time */
+static void uhci_scan_schedule(struct uhci_hcd *uhci, struct pt_regs *regs)
+{
+	struct urb_priv *urbp, *tmp;
+
+	/* Don't allow re-entrant calls */
+	if (uhci->scan_in_progress) {
+		uhci->need_rescan = 1;
+		return;
+	}
+	uhci->scan_in_progress = 1;
+ rescan:
+	uhci->need_rescan = 0;
+
+	uhci_get_current_frame_number(uhci);
+
+	if (uhci->frame_number + uhci->is_stopped != uhci->qh_remove_age)
+		uhci_free_pending_qhs(uhci);
+	if (uhci->frame_number + uhci->is_stopped != uhci->td_remove_age)
+		uhci_free_pending_tds(uhci);
+	if (uhci->frame_number + uhci->is_stopped != uhci->urb_remove_age)
+		uhci_remove_pending_urbps(uhci);
+
+	/* Walk the list of pending URBs to see which ones completed
+	 * (must be _safe because uhci_transfer_result() dequeues URBs) */
+	list_for_each_entry_safe(urbp, tmp, &uhci->urb_list, urb_list) {
+		struct urb *urb = urbp->urb;
+
+		/* Checks the status and does all of the magic necessary */
+		uhci_transfer_result(uhci, urb);
+	}
+	uhci_finish_completion(uhci, regs);
+
+	/* If the controller is stopped, we can finish these off right now */
+	if (uhci->is_stopped) {
+		uhci_free_pending_qhs(uhci);
+		uhci_free_pending_tds(uhci);
+		uhci_remove_pending_urbps(uhci);
+	}
+
+	if (uhci->need_rescan)
+		goto rescan;
+	uhci->scan_in_progress = 0;
+
+	if (list_empty(&uhci->urb_remove_list) &&
+	    list_empty(&uhci->td_remove_list) &&
+	    list_empty(&uhci->qh_remove_list))
+		uhci_clear_next_interrupt(uhci);
+	else
+		uhci_set_next_interrupt(uhci);
+
+	/* Wake up anyone waiting for an URB to complete */
+	wake_up_all(&uhci->waitqh);
 }

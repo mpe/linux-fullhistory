@@ -141,7 +141,7 @@ static struct {
 
 static int pwc_video_open(struct inode *inode, struct file *file);
 static int pwc_video_close(struct inode *inode, struct file *file);
-static ssize_t pwc_video_read(struct file *file, char *buf,
+static ssize_t pwc_video_read(struct file *file, char __user * buf,
 			  size_t count, loff_t *ppos);
 static unsigned int pwc_video_poll(struct file *file, poll_table *wait);
 static int  pwc_video_ioctl(struct inode *inode, struct file *file,
@@ -322,7 +322,7 @@ static int pwc_allocate_buffers(struct pwc_device *pdev)
 	  case 730:
 	  case 740:
 	  case 750:
-	    Trace(TRACE_MEMORY,"private_data(%d)\n",sizeof(struct pwc_dec23_private));
+	    Trace(TRACE_MEMORY,"private_data(%Zd)\n",sizeof(struct pwc_dec23_private));
 	    kbuf = kmalloc(sizeof(struct pwc_dec23_private), GFP_KERNEL);	/* Timon & Kiara */
 	    break;
 	  case 645:
@@ -618,7 +618,7 @@ static void pwc_isoc_handler(struct urb *urb, struct pt_regs *regs)
 	int i, fst, flen;
 	int awake;
 	struct pwc_frame_buf *fbuf;
-	unsigned char *fillptr = 0, *iso_buf = 0;
+	unsigned char *fillptr = NULL, *iso_buf = NULL;
 
 	awake = 0;
 	pdev = (struct pwc_device *)urb->context;
@@ -844,7 +844,7 @@ static int pwc_isoc_init(struct pwc_device *pdev)
 	pdev->vmax_packet_size = -1;
 	for (i = 0; i < idesc->desc.bNumEndpoints; i++)
 		if ((idesc->endpoint[i].desc.bEndpointAddress & 0xF) == pdev->vendpoint) {
-			pdev->vmax_packet_size = idesc->endpoint[i].desc.wMaxPacketSize;
+			pdev->vmax_packet_size = le16_to_cpu(idesc->endpoint[i].desc.wMaxPacketSize);
 			break;
 		}
 	
@@ -1170,7 +1170,7 @@ static int pwc_video_close(struct inode *inode, struct file *file)
                 device is tricky anyhow.
  */
 
-static ssize_t pwc_video_read(struct file *file, char *buf,
+static ssize_t pwc_video_read(struct file *file, char __user * buf,
 			  size_t count, loff_t *ppos)
 {
 	struct video_device *vdev = file->private_data;
@@ -1179,7 +1179,7 @@ static ssize_t pwc_video_read(struct file *file, char *buf,
 	DECLARE_WAITQUEUE(wait, current);
         int bytes_to_read;
 
-	Trace(TRACE_READ, "video_read(0x%p, %p, %d) called.\n", vdev, buf, count);
+	Trace(TRACE_READ, "video_read(0x%p, %p, %Zd) called.\n", vdev, buf, count);
 	if (vdev == NULL)
 		return -EFAULT;
 	pdev = vdev->priv;
@@ -1653,7 +1653,8 @@ static int usb_pwc_probe(struct usb_interface *intf, const struct usb_device_id 
 
 	/* Check if we can handle this device */
 	Trace(TRACE_PROBE, "probe() called [%04X %04X], if %d\n", 
-		udev->descriptor.idVendor, udev->descriptor.idProduct, 
+		le16_to_cpu(udev->descriptor.idVendor),
+		le16_to_cpu(udev->descriptor.idProduct),
 		intf->altsetting->desc.bInterfaceNumber);
 
 	/* the interfaces are probed one by one. We are only interested in the
@@ -1663,8 +1664,8 @@ static int usb_pwc_probe(struct usb_interface *intf, const struct usb_device_id 
 	if (intf->altsetting->desc.bInterfaceNumber > 0)
 		return -ENODEV;
 
-	vendor_id = udev->descriptor.idVendor;
-	product_id = udev->descriptor.idProduct;
+	vendor_id = le16_to_cpu(udev->descriptor.idVendor);
+	product_id = le16_to_cpu(udev->descriptor.idProduct);
 
 	if (vendor_id == 0x0471) {
 		switch (product_id) {
@@ -1915,7 +1916,7 @@ static int usb_pwc_probe(struct usb_interface *intf, const struct usb_device_id 
 	pdev->vdev->owner = THIS_MODULE;
 	video_set_drvdata(pdev->vdev, pdev);
 
-	pdev->release = udev->descriptor.bcdDevice;
+	pdev->release = le16_to_cpu(udev->descriptor.bcdDevice);
 	Trace(TRACE_PROBE, "Release: %04x\n", pdev->release);
 
 	/* Now search device_hint[] table for a match, so we can hint a node number. */
@@ -2027,7 +2028,7 @@ static int pwc_atoi(const char *s)
  * Initialization code & module stuff 
  */
 
-static char *size = NULL;
+static char size[10];
 static int fps = 0;
 static int fbufs = 0;
 static int mbufs = 0;
@@ -2036,23 +2037,23 @@ static int compression = -1;
 static int leds[2] = { -1, -1 };
 static char *dev_hint[MAX_DEV_HINTS] = { };
 
-MODULE_PARM(size, "s");
+module_param_string(size, size, sizeof(size), 0);
 MODULE_PARM_DESC(size, "Initial image size. One of sqcif, qsif, qcif, sif, cif, vga");
-MODULE_PARM(fps, "i");
+module_param(fps, int, 0000);
 MODULE_PARM_DESC(fps, "Initial frames per second. Varies with model, useful range 5-30");
-MODULE_PARM(fbufs, "i");
+module_param(fbufs, int, 0000);
 MODULE_PARM_DESC(fbufs, "Number of internal frame buffers to reserve");
-MODULE_PARM(mbufs, "i");
+module_param(mbufs, int, 0000);
 MODULE_PARM_DESC(mbufs, "Number of external (mmap()ed) image buffers");
-MODULE_PARM(trace, "i");
+module_param(trace, int, 0000);
 MODULE_PARM_DESC(trace, "For debugging purposes");
-MODULE_PARM(power_save, "i");
+module_param(power_save, bool, 0000);
 MODULE_PARM_DESC(power_save, "Turn power save feature in camera on or off");
-MODULE_PARM(compression, "i");
+module_param(compression, int, 0000);
 MODULE_PARM_DESC(compression, "Preferred compression quality. Range 0 (uncompressed) to 3 (high compression)");
-MODULE_PARM(leds, "2i");
+module_param_array(leds, int, NULL, 0000);
 MODULE_PARM_DESC(leds, "LED on,off time in milliseconds");
-MODULE_PARM(dev_hint, "0-20s");
+module_param_array(dev_hint, charp, NULL, 0000);
 MODULE_PARM_DESC(dev_hint, "Device node hints");
 
 MODULE_DESCRIPTION("Philips & OEM USB webcam driver");
@@ -2078,7 +2079,7 @@ static int __init usb_pwc_init(void)
 		Info("Default framerate set to %d.\n", default_fps);
 	}
 
-	if (size) {
+	if (size[0]) {
 		/* string; try matching with array */
 		for (sz = 0; sz < PSZ_MAX; sz++) {
 			if (!strcmp(sizenames[sz], size)) { /* Found! */

@@ -289,6 +289,11 @@ static void kick_khubd(struct usb_hub *hub)
 	spin_unlock_irqrestore(&hub_event_lock, flags);
 }
 
+void usb_kick_khubd(struct usb_device *hdev)
+{
+	kick_khubd(hdev_to_hub(hdev));
+}
+
 
 /* completion function, fires on port status changes and various faults */
 static void hub_irq(struct urb *urb, struct pt_regs *regs)
@@ -1383,8 +1388,13 @@ static int hub_port_reset(struct usb_hub *hub, int port1,
 			dev_err(hub->intfdev,
 					"cannot reset port %d (err = %d)\n",
 					port1, status);
-		else
+		else {
 			status = hub_port_wait_reset(hub, port1, udev, delay);
+			if (status)
+				dev_dbg(hub->intfdev,
+						"port_wait_reset: err = %d\n",
+						status);
+		}
 
 		/* return on disconnect or reset */
 		switch (status) {
@@ -1533,7 +1543,8 @@ static int hub_port_suspend(struct usb_hub *hub, int port1,
  * Linux (2.6) currently has NO mechanisms to initiate that:  no khubd
  * timer, no SRP, no requests through sysfs.
  */
-int __usb_suspend_device (struct usb_device *udev, int port1, pm_message_t state)
+static int __usb_suspend_device (struct usb_device *udev, int port1,
+				 pm_message_t state)
 {
 	int	status;
 
@@ -1614,9 +1625,11 @@ int __usb_suspend_device (struct usb_device *udev, int port1, pm_message_t state
 		struct usb_bus	*bus = udev->bus;
 		if (bus && bus->op->hub_suspend) {
 			status = bus->op->hub_suspend (bus);
-			if (status == 0)
+			if (status == 0) {
+				dev_dbg(&udev->dev, "usb suspend\n");
 				usb_set_device_state(udev,
 						USB_STATE_SUSPENDED);
+			}
 		} else
 			status = -EOPNOTSUPP;
 	} else
@@ -1834,9 +1847,11 @@ int usb_resume_device(struct usb_device *udev)
 		} else
 			status = -EOPNOTSUPP;
 		if (status == 0) {
+			dev_dbg(&udev->dev, "usb resume\n");
 			/* TRSMRCY = 10 msec */
 			msleep(10);
 			usb_set_device_state (udev, USB_STATE_CONFIGURED);
+			udev->dev.power.power_state = PMSG_ON;
 			status = hub_resume (udev
 					->actconfig->interface[0]);
 		}
@@ -1955,8 +1970,17 @@ static int hub_resume(struct usb_interface *intf)
 	}
 	intf->dev.power.power_state = PMSG_ON;
 
+	hub->resume_root_hub = 0;
 	hub_activate(hub);
 	return 0;
+}
+
+void usb_resume_root_hub(struct usb_device *hdev)
+{
+	struct usb_hub *hub = hdev_to_hub(hdev);
+
+	hub->resume_root_hub = 1;
+	kick_khubd(hub);
 }
 
 #else	/* !CONFIG_USB_SUSPEND */
@@ -2615,7 +2639,12 @@ static void hub_events(void)
 				(u16) hub->event_bits[0]);
 
 		usb_get_intf(intf);
+		i = hub->resume_root_hub;
 		spin_unlock_irq(&hub_event_lock);
+
+		/* Is this is a root hub wanting to be resumed? */
+		if (i)
+			usb_resume_device(hdev);
 
 		/* Lock the device, then check to see if we were
 		 * disconnected while waiting for the lock to succeed. */
@@ -2623,7 +2652,17 @@ static void hub_events(void)
 			usb_put_intf(intf);
 			continue;
 		}
-		if (hub != usb_get_intfdata(intf) || hub->quiescing)
+		if (hub != usb_get_intfdata(intf))
+			goto loop;
+
+		/* If the hub has died, clean up after it */
+		if (hdev->state == USB_STATE_NOTATTACHED) {
+			hub_pre_reset(hub);
+			goto loop;
+		}
+
+		/* If this is an inactive or suspended hub, do nothing */
+		if (hub->quiescing)
 			goto loop;
 
 		if (hub->error) {
@@ -2643,6 +2682,8 @@ static void hub_events(void)
 
 		/* deal with port status changes */
 		for (i = 1; i <= hub->descriptor->bNbrPorts; i++) {
+			if (test_bit(i, hub->busy_bits))
+				continue;
 			connect_change = test_bit(i, hub->change_bits);
 			if (!test_and_clear_bit(i, hub->event_bits) &&
 					!connect_change && !hub->activating)
@@ -2948,6 +2989,7 @@ int usb_reset_device(struct usb_device *udev)
 		hub_pre_reset(hub);
 	}
 
+	set_bit(port1, parent_hub->busy_bits);
 	for (i = 0; i < SET_CONFIG_TRIES; ++i) {
 
 		/* ep0 maxpacket size may change; let the HCD know about it.
@@ -2957,6 +2999,7 @@ int usb_reset_device(struct usb_device *udev)
 		if (ret >= 0)
 			break;
 	}
+	clear_bit(port1, parent_hub->busy_bits);
 	if (ret < 0)
 		goto re_enumerate;
  

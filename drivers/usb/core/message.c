@@ -90,8 +90,10 @@ static int usb_start_wait_urb(struct urb *urb, int timeout, int* actual_length)
 
 /*-------------------------------------------------------------------*/
 // returns status (negative) or length (positive)
-int usb_internal_control_msg(struct usb_device *usb_dev, unsigned int pipe, 
-			    struct usb_ctrlrequest *cmd,  void *data, int len, int timeout)
+static int usb_internal_control_msg(struct usb_device *usb_dev,
+				    unsigned int pipe, 
+				    struct usb_ctrlrequest *cmd,
+				    void *data, int len, int timeout)
 {
 	struct urb *urb;
 	int retv;
@@ -1041,8 +1043,8 @@ usb_enable_endpoint(struct usb_device *dev, struct usb_host_endpoint *ep)
  *
  * Enables all the endpoints for the interface's current altsetting.
  */
-void usb_enable_interface(struct usb_device *dev,
-		struct usb_interface *intf)
+static void usb_enable_interface(struct usb_device *dev,
+				 struct usb_interface *intf)
 {
 	struct usb_host_interface *alt = intf->cur_altsetting;
 	int i;

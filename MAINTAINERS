@@ -984,11 +984,6 @@ M:	mikulas@artax.karlin.mff.cuni.cz
 W:	http://artax.karlin.mff.cuni.cz/~mikulas/vyplody/hpfs/index-e.cgi
 S:	Maintained
 
-HPUSBSCSI
-P:	Oliver Neukum
-M:	oliver@neukum.name
-S:	Maintained
-
 HUGETLB FILESYSTEM
 P:	William Irwin
 M:	wli@holomorphy.com
@@ -2314,6 +2309,13 @@ L:	linux-usb-users@lists.sourceforge.net
 L:	linux-usb-devel@lists.sourceforge.net
 S:	Maintained
 
+USB BLOCK DRIVER (UB ub)
+P:	Pete Zaitcev
+M:	zaitcev@redhat.com
+L:	linux-kernel@vger.kernel.org
+L:	linux-usb-devel@lists.sourceforge.net
+S:	Supported
+
 USB BLUETOOTH TTY CONVERTER DRIVER
 P:	Greg Kroah-Hartman
 M:	greg@kroah.com
@@ -2663,11 +2665,11 @@ M:	jpr@f6fbb.org
 L:	linux-hams@vger.kernel.org
 S:	Maintained
 
-YMFPCI YAMAHA PCI SOUND
+YMFPCI YAMAHA PCI SOUND (Use ALSA instead)
 P:	Pete Zaitcev
 M:	zaitcev@yahoo.com
 L:	linux-kernel@vger.kernel.org
-S:	Maintained
+S:	Obsolete
 
 Z8530 DRIVER FOR AX.25
 P:	Joerg Reuter

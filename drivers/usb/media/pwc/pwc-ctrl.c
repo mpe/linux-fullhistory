@@ -151,7 +151,7 @@ static struct Nala_table_entry Nala_table[PSZ_MAX][8] =
 		USB_DIR_OUT | USB_TYPE_VENDOR | USB_RECIP_DEVICE, \
 		value, \
 		pdev->vcinterface, \
-		&buf, buflen, HZ / 2)
+		&buf, buflen, 500)
 
 #define RecvControlMsg(request, value, buflen) \
 	usb_control_msg(pdev->udev, usb_rcvctrlpipe(pdev->udev, 0), \
@@ -159,7 +159,7 @@ static struct Nala_table_entry Nala_table[PSZ_MAX][8] =
 		USB_DIR_IN | USB_TYPE_VENDOR | USB_RECIP_DEVICE, \
 		value, \
 		pdev->vcinterface, \
-		&buf, buflen, HZ / 2)
+		&buf, buflen, 500)
 
 
 #if PWC_DEBUG
@@ -194,7 +194,7 @@ static inline int send_video_command(struct usb_device *udev, int index, void *b
 		USB_DIR_OUT | USB_TYPE_VENDOR | USB_RECIP_DEVICE,
 		VIDEO_OUTPUT_CONTROL_FORMATTER,
 		index,
-		buf, buflen, HZ);
+		buf, buflen, 1000);
 }
 
 
@@ -341,7 +341,7 @@ static inline int set_video_mode_Timon(struct pwc_device *pdev, int size, int fr
 
 static inline int set_video_mode_Kiara(struct pwc_device *pdev, int size, int frames, int compression, int snapshot)
 {
-	const struct Kiara_table_entry *pChoose = 0;
+	const struct Kiara_table_entry *pChoose = NULL;
 	int fps, ret;
 	unsigned char buf[12];
 	struct Kiara_table_entry RawEntry = {6, 773, 1272, {0xAD, 0xF4, 0x10, 0x27, 0xB6, 0x24, 0x96, 0x02, 0x30, 0x05, 0x03, 0x80}};
@@ -1087,7 +1087,7 @@ static inline int pwc_get_dynamic_noise(struct pwc_device *pdev, int *noise)
 	return 0;
 }
 
-int pwc_mpt_reset(struct pwc_device *pdev, int flags)
+static int pwc_mpt_reset(struct pwc_device *pdev, int flags)
 {
 	unsigned char buf;
 	

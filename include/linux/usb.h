@@ -949,11 +949,11 @@ void *usb_buffer_alloc (struct usb_device *dev, size_t size,
 void usb_buffer_free (struct usb_device *dev, size_t size,
 	void *addr, dma_addr_t dma);
 
-struct urb *usb_buffer_map (struct urb *urb);
 #if 0
+struct urb *usb_buffer_map (struct urb *urb);
 void usb_buffer_dmasync (struct urb *urb);
-#endif
 void usb_buffer_unmap (struct urb *urb);
+#endif
 
 struct scatterlist;
 int usb_buffer_map_sg (struct usb_device *dev, unsigned pipe,

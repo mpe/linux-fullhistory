@@ -1036,7 +1036,8 @@ static enum ParseState ibmcam_model4_128x96_parse_lines(
  * History:
  * 1/21/00  Created.
  */
-void ibmcam_ProcessIsocData(struct uvd *uvd, struct usbvideo_frame *frame)
+static void ibmcam_ProcessIsocData(struct uvd *uvd,
+				   struct usbvideo_frame *frame)
 {
 	enum ParseState newstate;
 	long copylen = 0;

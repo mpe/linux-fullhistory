@@ -89,6 +89,16 @@ config USB_SERIAL_DIGI_ACCELEPORT
 	  To compile this driver as a module, choose M here: the
 	  module will be called digi_acceleport.
 
+config USB_SERIAL_CP2101
+	tristate "USB CP2101 UART Bridge Controller"
+	depends on USB_SERIAL && EXPERIMENTAL
+	help
+	  Say Y here if you want to use a CP2101/CP2102 based USB to RS232
+	  converter.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called cp2101.
+
 config USB_SERIAL_CYPRESS_M8
 	tristate "USB Cypress M8 USB Serial Driver"
 	depends on USB_SERIAL && EXPERIMENTAL

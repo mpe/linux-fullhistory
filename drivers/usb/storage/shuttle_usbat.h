@@ -105,10 +105,6 @@
 #define USBAT_FEAT_ET1	0x02
 #define USBAT_FEAT_ET2	0x01
 
-/* Transport functions */
-int usbat_hp8200e_transport(struct scsi_cmnd *srb, struct us_data *us);
-int usbat_flash_transport(struct scsi_cmnd * srb, struct us_data *us);
-
 extern int usbat_transport(struct scsi_cmnd *srb, struct us_data *us);
 extern int init_usbat(struct us_data *us);
 

@@ -594,17 +594,21 @@ static inline u16 ohci_hwPSW(const struct ohci_hcd *ohci,
 
 static inline void disable (struct ohci_hcd *ohci)
 {
-	ohci_to_hcd(ohci)->state = USB_STATE_HALT;
+	ohci_to_hcd(ohci)->state = HC_STATE_HALT;
 }
 
 #define	FI			0x2edf		/* 12000 bits per frame (-1) */
 #define	FSMP(fi) 		(0x7fff & ((6 * ((fi) - 210)) / 7))
+#define	FIT			(1 << 31)
 #define LSTHRESH		0x628		/* lowspeed bit threshold */
 
-static inline void periodic_reinit (struct ohci_hcd *ohci)
+static void periodic_reinit (struct ohci_hcd *ohci)
 {
-	u32	fi = ohci->fminterval & 0x0ffff;
+	u32	fi = ohci->fminterval & 0x03fff;
+	u32	fit = ohci_readl(ohci, &ohci->regs->fminterval) & FIT;
 
+	ohci_writel (ohci, (fit ^ FIT) | ohci->fminterval,
+						&ohci->regs->fminterval);
 	ohci_writel (ohci, ((9 * fi) / 10) & 0x3fff,
 						&ohci->regs->periodicstart);
 }

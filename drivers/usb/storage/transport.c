@@ -54,10 +54,10 @@
 #include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_device.h>
 
+#include "usb.h"
 #include "transport.h"
 #include "protocol.h"
 #include "scsiglue.h"
-#include "usb.h"
 #include "debug.h"
 
 
@@ -383,7 +383,8 @@ int usb_stor_ctrl_transfer(struct us_data *us, unsigned int pipe,
  * This routine always uses us->recv_intr_pipe as the pipe and
  * us->ep_bInterval as the interrupt interval.
  */
-int usb_stor_intr_transfer(struct us_data *us, void *buf, unsigned int length)
+static int usb_stor_intr_transfer(struct us_data *us, void *buf,
+				  unsigned int length)
 {
 	int result;
 	unsigned int pipe = us->recv_intr_pipe;
@@ -436,7 +437,7 @@ int usb_stor_bulk_transfer_buf(struct us_data *us, unsigned int pipe,
  * This function does basically the same thing as usb_stor_bulk_transfer_buf()
  * above, but it uses the usbcore scatter-gather library.
  */
-int usb_stor_bulk_transfer_sglist(struct us_data *us, unsigned int pipe,
+static int usb_stor_bulk_transfer_sglist(struct us_data *us, unsigned int pipe,
 		struct scatterlist *sg, int num_sg, unsigned int length,
 		unsigned int *act_len)
 {
@@ -1138,11 +1139,11 @@ static int usb_stor_reset_common(struct us_data *us,
 	 * RESETTING bit, and clear the ABORTING bit so that the reset
 	 * may proceed.
 	 */
-	scsi_lock(us->host);
+	scsi_lock(us_to_host(us));
 	usb_stor_report_device_reset(us);
 	set_bit(US_FLIDX_RESETTING, &us->flags);
 	clear_bit(US_FLIDX_ABORTING, &us->flags);
-	scsi_unlock(us->host);
+	scsi_unlock(us_to_host(us));
 
 	/* A 20-second timeout may seem rather long, but a LaCie
 	 * StudioDrive USB2 device takes 16+ seconds to get going
@@ -1158,7 +1159,7 @@ static int usb_stor_reset_common(struct us_data *us,
 
  	/* Give the device some time to recover from the reset,
  	 * but don't delay disconnect processing. */
- 	wait_event_interruptible_timeout(us->dev_reset_wait,
+ 	wait_event_interruptible_timeout(us->delay_wait,
  			test_bit(US_FLIDX_DISCONNECTING, &us->flags),
  			HZ*6);
 	if (test_bit(US_FLIDX_DISCONNECTING, &us->flags)) {
