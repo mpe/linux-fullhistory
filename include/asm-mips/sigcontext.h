@@ -7,7 +7,7 @@
  *
  * Copyright (C) 1996, 1997 by Ralf Baechle
  *
- * $Id: sigcontext.h,v 1.6 1998/05/01 01:36:10 ralf Exp $
+ * $Id: sigcontext.h,v 1.5 1997/12/14 18:57:19 ralf Exp $
  */
 #ifndef __ASM_MIPS_SIGCONTEXT_H
 #define __ASM_MIPS_SIGCONTEXT_H

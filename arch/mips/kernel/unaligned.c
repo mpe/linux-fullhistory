@@ -7,7 +7,7 @@
  *
  * Copyright (C) 1996, 1998 by Ralf Baechle
  *
- * $Id: unaligned.c,v 1.4 1998/06/10 07:21:15 davem Exp $
+ * $Id: unaligned.c,v 1.5 1998/08/17 13:57:44 ralf Exp $
  *
  * This file contains exception handler for address error exception with the
  * special capability to execute faulting instructions in software.  The

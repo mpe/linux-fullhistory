@@ -1,13 +1,14 @@
-/* $Id: pci.c,v 1.5 1998/05/08 01:44:26 ralf Exp $
+/* $Id: pci.c,v 1.6 1998/05/07 14:17:48 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
  * SNI specific PCI support for RM200/RM300.
+ *
+ * Copyright (C) 1997, 1998 Ralf Baechle
  */
 #include <linux/config.h>
-#include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/types.h>
 #include <asm/byteorder.h>

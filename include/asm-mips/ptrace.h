@@ -1,11 +1,10 @@
-/*
- * linux/include/asm-mips/ptrace.h
+/* $Id: ptrace.h,v 1.3 1998/07/09 21:45:21 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1994, 1995, 1996 by Ralf Baechle
+ * Copyright (C) 1994, 1995, 1996, 1997, 1998 by Ralf Baechle
  *
  * Machine dependent structs and defines to help the user use
  * the ptrace system call.
@@ -14,6 +13,15 @@
 #define __ASM_MIPS_PTRACE_H
 
 #include <linux/types.h>
+
+/* 0 - 31 are integer registers, 32 - 63 are fp registers.  */
+#define PC		64
+#define CAUSE		65
+#define MMLO		66
+#define MMHI		67
+#define FPC_CSR		68	/* XXX */
+#define FPC_EIR		69	/* XXX */
+#define FPR_BASE	70	/* XXX */
 
 #ifndef __ASSEMBLY__
 /*

@@ -1,10 +1,10 @@
-/*
+/* $Id: sysirix.c,v 1.12 1998/08/17 10:16:27 ralf Exp $
+ *
  * sysirix.c: IRIX system call emulation.
  *
  * Copyright (C) 1996 David S. Miller
  * Copyright (C) 1997 Miguel de Icaza
- *
- * $Id: sysirix.c,v 1.10 1998/05/08 21:01:33 davem Exp $
+ * Copyright (C) 1997, 1998 Ralf Baechle
  */
 
 #include <linux/kernel.h>
@@ -1638,96 +1638,6 @@ asmlinkage int irix_fstatvfs(int fd, struct irix_statvfs *buf)
 out:
 	unlock_kernel();
 	return error;
-}
-
-#define NOFOLLOW_LINKS  0
-#define FOLLOW_LINKS    1
-
-static inline int chown_common(uid_t user, gid_t group, struct dentry *dentry)
-{
-	struct inode * inode;
-	int error;
-	struct iattr newattrs;
-
-	error = PTR_ERR(dentry);
-	if (IS_ERR(dentry))
-		goto out;
-	inode = dentry->d_inode;
-
-	error = -EROFS;
-	if (IS_RDONLY(inode))
-		goto dput_and_out;
-
-	error = -EPERM;
-	if (IS_IMMUTABLE(inode) || IS_APPEND(inode))
-		goto dput_and_out;
-
-	if (user == (uid_t) -1)
-		user = inode->i_uid;
-	if (group == (gid_t) -1)
-		group = inode->i_gid;
-	newattrs.ia_mode = inode->i_mode;
-	newattrs.ia_uid = user;
-	newattrs.ia_gid = group;
-	newattrs.ia_valid =  ATTR_UID | ATTR_GID | ATTR_CTIME;
-	/*
-	 * If the owner has been changed, remove the setuid bit
-	 */
-	if (inode->i_mode & S_ISUID) {
-		newattrs.ia_mode &= ~S_ISUID;
-		newattrs.ia_valid |= ATTR_MODE;
-	}
-	/*
-	 * If the group has been changed, remove the setgid bit
-	 *
-	 * Don't remove the setgid bit if no group execute bit.
-	 * This is a file marked for mandatory locking.
-	 */
-	if (((inode->i_mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP))) {
-		newattrs.ia_mode &= ~S_ISGID;
-		newattrs.ia_valid |= ATTR_MODE;
-	}
-	if (inode->i_sb->dq_op) {
-		inode->i_sb->dq_op->initialize(inode, -1);
-		error = -EDQUOT;
-		if (inode->i_sb->dq_op->transfer(inode, &newattrs, 0))
-			goto dput_and_out;
-		error = notify_change(dentry, &newattrs);
-		if (error)
-			inode->i_sb->dq_op->transfer(inode, &newattrs, 1);
-	} else
-		error = notify_change(dentry, &newattrs);
-
-dput_and_out:
-	dput(dentry);
-out:
-	return error;
-}
-
-asmlinkage int irix_chown(const char *filename, int uid, int gid)
-{
-	int retval;
-	struct dentry *dentry;
-
-	lock_kernel();
-	/* Do follow any and all links... */
-	dentry = namei(filename);
-	retval = chown_common(uid, gid, dentry);
-	unlock_kernel();
-	return retval;
-}
-
-asmlinkage int irix_lchown(const char *filename, int uid, int gid)
-{
-	int retval;
-	struct dentry *dentry;
-
-	lock_kernel();
-	/* Do _not_ follow any links... */
-	dentry = lnamei(filename);
-	retval = chown_common(uid, gid, dentry);
-	unlock_kernel();
-	return retval;
 }
 
 asmlinkage int irix_priocntl(struct pt_regs *regs)

@@ -799,9 +799,9 @@ extern inline char *task_cap(struct task_struct *p, char *buffer)
     return buffer + sprintf(buffer, "CapInh:\t%016x\n"
 			    "CapPrm:\t%016x\n"
 			    "CapEff:\t%016x\n",
-			    p->cap_inheritable.cap,
-			    p->cap_permitted.cap,
-			    p->cap_effective.cap);
+			    cap_t(p->cap_inheritable),
+			    cap_t(p->cap_permitted),
+			    cap_t(p->cap_effective));
 }
 
 

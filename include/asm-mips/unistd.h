@@ -1,11 +1,10 @@
-/*
- * This file contains the system call numbers.
+/* $Id: unistd.h,v 1.21 1998/10/19 21:29:15 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1995, 1996, 1997 by Ralf Baechle
+ * Copyright (C) 1995, 1996, 1997, 1998 by Ralf Baechle
  *
  * Changed system calls macros _syscall5 - _syscall7 to push args 5 to 7 onto
  * the stack. Robin Farine for ACN S.A, Copyright (C) 1996 by ACN S.A
@@ -1039,7 +1038,7 @@
 #define __NR_geteuid			(__NR_Linux +  49)
 #define __NR_getegid			(__NR_Linux +  50)
 #define __NR_acct			(__NR_Linux +  51)
-#define __NR_phys			(__NR_Linux +  52)
+#define __NR_umount2			(__NR_Linux +  52)
 #define __NR_lock			(__NR_Linux +  53)
 #define __NR_ioctl			(__NR_Linux +  54)
 #define __NR_fcntl			(__NR_Linux +  55)
@@ -1137,7 +1136,7 @@
 #define __NR_cacheflush			(__NR_Linux + 147)
 #define __NR_cachectl			(__NR_Linux + 148)
 #define __NR_sysmips			(__NR_Linux + 149)
-#define __NR_setup			(__NR_Linux + 150)	/* used only by init, to get system going */
+#define __NR_unused150			(__NR_Linux + 150)
 #define __NR_getsid			(__NR_Linux + 151)
 #define __NR_fdatasync			(__NR_Linux + 152)
 #define __NR__sysctl			(__NR_Linux + 153)
@@ -1191,13 +1190,19 @@
 #define __NR_pwrite			(__NR_Linux + 201)
 #define __NR_chown			(__NR_Linux + 202)
 #define __NR_getcwd			(__NR_Linux + 203)
+#define __NR_capget			(__NR_Linux + 204)
+#define __NR_capset			(__NR_Linux + 205)
+#define __NR_sigaltstack		(__NR_Linux + 206)
+#define __NR_sendfile			(__NR_Linux + 207)
+#define __NR_getpmsg			(__NR_Linux + 208)
+#define __NR_putpmsg			(__NR_Linux + 209)
 
 /*
  * Offset of the last Linux flavoured syscall
  */
-#define __NR_Linux_syscalls		203
+#define __NR_Linux_syscalls		209
 
-#ifndef __LANGUAGE_ASSEMBLY__
+#ifndef _LANGUAGE_ASSEMBLY
 
 /* XXX - _foo needs to be __foo, while __NR_bar could be _NR_bar. */
 #define _syscall0(type,name) \
@@ -1416,7 +1421,6 @@ return -1; \
 #define __NR__exit __NR_exit
 static inline _syscall0(int,idle)
 static inline _syscall0(int,pause)
-static inline _syscall1(int,setup,int,magic)
 static inline _syscall0(int,sync)
 static inline _syscall0(pid_t,setsid)
 static inline _syscall3(int,write,int,fd,const char *,buf,off_t,count)
@@ -1476,6 +1480,6 @@ static inline pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long f
 }
 
 #endif /* !defined (__KERNEL_SYSCALLS__) */
-#endif /* !defined (__LANGUAGE_ASSEMBLY__) */
+#endif /* !defined (_LANGUAGE_ASSEMBLY) */
 
 #endif /* __ASM_MIPS_UNISTD_H */

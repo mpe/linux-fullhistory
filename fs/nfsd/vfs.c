@@ -39,6 +39,7 @@
 #endif
 
 #define NFSDDBG_FACILITY		NFSDDBG_FILEOP
+#define NFSD_PARANOIA
 
 /* Open mode for nfsd_open */
 #define OPEN_READ	0
@@ -168,13 +169,19 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 	if (IS_ERR(dchild))
 		goto out_nfserr;
 	/*
-	 * Make sure we haven't crossed a mount point ...
+	 * check if we have crossed a mount point ...
 	 */
 	if (dchild->d_sb != dparent->d_sb) {
-#ifdef NFSD_PARANOIA
-printk("nfsd_lookup: %s/%s crossed mount point!\n", dparent->d_name.name, name);
-#endif
-		goto out_dput;
+		struct dentry *tdentry;
+		tdentry = dchild->d_covers;
+		if (tdentry == dchild)
+			goto out_dput;
+	        dput(dchild);
+		dchild = dget(tdentry);
+	        if (dchild->d_sb != dparent->d_sb) {
+printk("nfsd_lookup: %s/%s crossed mount point!\n", dparent->d_name.name, dchild->d_name.name);
+			goto out_dput;
+		}
 	}
 
 	/*
@@ -416,8 +423,8 @@ found:
  * N.B. After this call fhp needs an fh_put
  */
 int
-nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset, char *buf,
-						unsigned long *count)
+nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
+          char *buf, unsigned long *count)
 {
 	struct raparms	*ra;
 	mm_segment_t	oldfs;
@@ -1239,6 +1246,12 @@ nfsd_permission(struct svc_export *exp, struct dentry *dentry, int acc)
 	dprintk("      owner %d/%d user %d/%d\n",
 		inode->i_uid, inode->i_gid, current->fsuid, current->fsgid);
 	 */
+
+#ifndef CONFIG_NFSD_SUN
+        if (dentry->d_mounts != dentry) {
+		return nfserr_perm;
+	}
+#endif
 
 	if (acc & (MAY_WRITE | MAY_SATTR | MAY_TRUNC)) {
 		if (EX_RDONLY(exp) || IS_RDONLY(inode))

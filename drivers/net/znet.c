@@ -679,6 +679,7 @@ void show_dma(void)
    or when we come out of suspend mode. */
 static void hardware_init(struct device *dev)
 {
+	unsigned long flags;
 	short ioaddr = dev->base_addr;
 
 	zn.rx_cur = zn.rx_start;

@@ -27,7 +27,7 @@ they all have sufficient number of POS registers to cover 8. */
 	See Documentation/mca.txt or one of the existing drivers for
 	more information.
 */
-#define MCA_NOTFOUND	-1
+#define MCA_NOTFOUND	(-1)
 #define MCA_INTEGSCSI	(MCA_MAX_SLOT_NR)
 #define MCA_INTEGVIDEO	(MCA_MAX_SLOT_NR+1)
 
@@ -40,10 +40,15 @@ specify a starting slot beyond zero, to deal with detecting multiple
 devices.  Returns MCA_NOTFOUND if id not found.  Also checks the
 integrated adapters. */
 extern int mca_find_adapter( int id, int start );
+extern int mca_find_unused_adapter( int id, int start );
 
 /* adapter state info - returns 0 if no */
 extern int mca_isadapter( int slot );
 extern int mca_isenabled( int slot );
+
+extern int mca_is_adapter_used( int slot );
+extern int mca_mark_as_used( int slot );
+extern void mca_mark_as_unused( int slot );
 
 /* gets a byte out of POS register (stored in memory) */
 extern unsigned char mca_read_stored_pos( int slot, int reg );
@@ -87,5 +92,9 @@ extern unsigned char mca_read_pos( int slot, int reg );
 
 /* write a byte to the specified POS register. */
 extern void mca_write_pos( int slot, int reg, unsigned char byte );
+
+/* Should only be called by the NMI interrupt handler, this will do some
+fancy stuff to figure out what might have generated a NMI. */
+extern void mca_handle_nmi( void );
 
 #endif /* _LINUX_MCA_H */

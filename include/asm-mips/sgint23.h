@@ -1,4 +1,4 @@
-/* $Id: sgint23.h,v 1.2 1998/05/01 01:36:09 ralf Exp $
+/* $Id: sgint23.h,v 1.2 1998/03/11 11:58:36 ralf Exp $
  * sgint23.h: Defines for the SGI INT2 and INT3 chipsets.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)

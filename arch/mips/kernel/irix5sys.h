@@ -1,4 +1,5 @@
-/* $Id: irix5sys.h,v 1.3 1998/05/01 01:33:55 ralf Exp $
+/* $Id: irix5sys.h,v 1.2 1998/08/17 10:16:25 ralf Exp $
+ *
  * irix5sys.h: 32-bit IRIX5 ABI system call table.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
@@ -34,7 +35,7 @@ SYS(sys_chdir, 1)			/* 1012  chdir()	       V*/
 SYS(irix_gtime, 0)			/* 1013  time()		       V*/
 SYS(irix_unimp, 0)			/* 1014  (XXX IRIX 4 mknod)    V*/
 SYS(sys_chmod, 2)			/* 1015  chmod()	       V*/
-SYS(irix_chown, 3)			/* 1016  chown()	       V*/
+SYS(sys_chown, 3)			/* 1016  chown()	       V*/
 SYS(irix_brk, 1)			/* 1017  break()	       V*/
 SYS(irix_unimp, 0)			/* 1018  (XXX IRIX 4 stat)     V*/
 SYS(sys_lseek, 3)			/* 1019  lseek()     XXX64bit HV*/
@@ -196,7 +197,7 @@ SYS(irix_statvfs, 2)			/* 1174  statvfs()	       V*/
 SYS(irix_fstatvfs, 2)			/* 1175  fstatvfs()	       V*/
 SYS(irix_unimp, 0)			/* 1176  XXX getpmsg()	      DC*/
 SYS(irix_unimp, 0)			/* 1177  XXX putpmsg()	      DC*/
-SYS(irix_lchown, 3)			/* 1178  lchown()	       V*/
+SYS(sys_lchown, 3)			/* 1178  lchown()	       V*/
 SYS(irix_priocntl, 0)			/* 1179  priocntl()	      DC*/
 SYS(irix_sigqueue, 4)			/* 1180  sigqueue()	      IV*/
 SYS(sys_readv, 3)			/* 1181  readv()	       V*/

@@ -188,8 +188,12 @@ struct audio_driver
 	int (*prepare_for_output) (int dev, int bufsize, int nbufs);
 	void (*halt_io) (int dev);
 	int (*local_qlen)(int dev);
-        void (*copy_user)(int dev, char *localbuf, int localoffs,
-                               const char *userbuf, int useroffs, int len);
+    void (*copy_user)(int dev,
+                      char *localbuf, int localoffs,
+                      const char *userbuf, int useroffs,
+                      int max_in, int max_out,
+                      int *used, int *returned,
+                      int len);
 	void (*halt_input) (int dev);
 	void (*halt_output) (int dev);
 	void (*trigger) (int dev, int bits);

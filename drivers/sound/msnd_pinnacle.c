@@ -29,7 +29,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: msnd_pinnacle.c,v 1.65 1998/09/18 19:13:03 andrewtv Exp $
+ * $Id: msnd_pinnacle.c,v 1.66 1998/10/09 19:54:39 andrewtv Exp $
  *
  ********************************************************************/
 
@@ -64,6 +64,10 @@
 #  endif
 #  include "msnd_pinnacle.h"
 #  define LOGNAME			"msnd_pinnacle"
+#endif
+
+#ifndef CONFIG_MSND_WRITE_NDELAY
+#  define CONFIG_MSND_WRITE_NDELAY	0
 #endif
 
 #define get_play_delay_jiffies(size)	((size) * HZ *			\
@@ -281,7 +285,8 @@ static int dsp_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		return 0;
 
 	case SNDCTL_DSP_NONBLOCK:
-		if (file->f_mode & FMODE_WRITE)
+		if (!test_bit(F_DISABLE_WRITE_NDELAY, &dev.flags) &&
+		    file->f_mode & FMODE_WRITE)
 			dev.play_ndelay = 1;
 		if (file->f_mode & FMODE_READ)
 			dev.rec_ndelay = 1;
@@ -742,11 +747,14 @@ static int dev_open(struct inode *inode, struct file *file)
 			dev.nresets = 0;
 			if (file->f_mode & FMODE_WRITE) {
 				set_default_play_audio_parameters();
-				dev.play_ndelay = (file->f_mode & O_NDELAY) ? 1 : 0;
+				if (!test_bit(F_DISABLE_WRITE_NDELAY, &dev.flags))
+					dev.play_ndelay = (file->f_flags & O_NDELAY) ? 1 : 0;
+				else
+					dev.play_ndelay = 0;
 			}
 			if (file->f_mode & FMODE_READ) {
 				set_default_rec_audio_parameters();
-				dev.rec_ndelay = (file->f_mode & O_NDELAY) ? 1 : 0;
+				dev.rec_ndelay = (file->f_flags & O_NDELAY) ? 1 : 0;
 			}
 		}
 	}
@@ -820,7 +828,7 @@ static __inline__ int pack_DARQ_to_DARF(register int bank)
 	if ((n = msnd_fifo_write(
 		&dev.DARF,
 		(char *)(dev.base + bank * DAR_BUFF_SIZE),
-		size, 0)) < 0) {
+		size, 0)) <= 0) {
 		outb(HPBLKSEL_0, dev.io + HP_BLKS);
 		return n;
 	}
@@ -1633,6 +1641,7 @@ MODULE_DESCRIPTION			("Turtle Beach " LONGNAME " Linux Driver");
 MODULE_PARM				(io, "i");
 MODULE_PARM				(irq, "i");
 MODULE_PARM				(mem, "i");
+MODULE_PARM				(write_ndelay, "i");
 MODULE_PARM				(major, "i");
 MODULE_PARM				(fifosize, "i");
 MODULE_PARM				(calibrate_signal, "i");
@@ -1651,6 +1660,7 @@ MODULE_PARM				(joystick_io, "i");
 static int io __initdata =		-1;
 static int irq __initdata =		-1;
 static int mem __initdata =		-1;
+static int write_ndelay __initdata =	-1;
 
 #ifndef MSND_CLASSIC
 /* Pinnacle/Fiji non-PnP Config Port */
@@ -1677,6 +1687,8 @@ static int calibrate_signal __initdata;
 int init_module(void)
 
 #else /* not a module */
+
+static int write_ndelay __initdata =	-1;
 
 #ifdef MSND_CLASSIC
 static int io __initdata =		CONFIG_MSNDCLAS_IO;
@@ -1890,6 +1902,12 @@ __initfunc(int msnd_pinnacle_init(void))
 	dev.recsrc = 0;
 	dev.inc_ref = mod_inc_ref;
 	dev.dec_ref = mod_dec_ref;
+	if (write_ndelay == -1)
+		write_ndelay = CONFIG_MSND_WRITE_NDELAY;
+	if (write_ndelay)
+		clear_bit(F_DISABLE_WRITE_NDELAY, &dev.flags);
+	else
+		set_bit(F_DISABLE_WRITE_NDELAY, &dev.flags);
 
 #ifndef MSND_CLASSIC
 	if (digital) {

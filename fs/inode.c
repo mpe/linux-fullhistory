@@ -559,6 +559,9 @@ add_new_inode:
 
 /*
  * This is called with the inode lock held.. Be careful.
+ *
+ * We no longer cache the sb_flags in i_flags - see fs.h
+ *	-- rmk@arm.uk.linux.org
  */
 static struct inode * get_new_inode(struct super_block *sb, unsigned long ino, struct list_head *head)
 {
@@ -575,7 +578,7 @@ add_new_inode:
 		inode->i_sb = sb;
 		inode->i_dev = sb->s_dev;
 		inode->i_ino = ino;
-		inode->i_flags = sb->s_flags;
+		inode->i_flags = 0;
 		inode->i_count = 1;
 		inode->i_state = I_LOCK;
 		spin_unlock(&inode_lock);

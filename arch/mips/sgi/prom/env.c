@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: env.c,v 1.2 1998/05/01 01:35:24 ralf Exp $
+ * $Id: env.c,v 1.2 1998/03/27 08:53:46 ralf Exp $
  */
 #include <linux/init.h>
 #include <linux/kernel.h>

@@ -167,6 +167,11 @@ static inline int shrink_one_page(struct page *page, int gfp_mask)
 	case 1:
 		/* is it a swap-cache or page-cache page? */
 		if (page->inode) {
+			/* Throw swap-cache pages away more aggressively */
+			if (PageSwapCache(page)) {
+				delete_from_swap_cache(page);
+				return 1;
+			}
 			if (test_and_clear_bit(PG_referenced, &page->flags)) {
 				touch_page(page);
 				break;
@@ -176,10 +181,6 @@ static inline int shrink_one_page(struct page *page, int gfp_mask)
 				break;
 			if (pgcache_under_min())
 				break;
-			if (PageSwapCache(page)) {
-				delete_from_swap_cache(page);
-				return 1;
-			}
 			remove_inode_page(page);
 			return 1;
 		}
@@ -1519,23 +1520,41 @@ generic_file_write(struct file *file, const char *buf,
 {
 	struct dentry	*dentry = file->f_dentry; 
 	struct inode	*inode = dentry->d_inode; 
+	unsigned long	pos = *ppos;
+	unsigned long	limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
 	struct page	*page, **hash;
 	unsigned long	page_cache = 0;
 	unsigned long	pgpos, offset;
 	unsigned long	bytes, written;
-	unsigned long	pos;
 	long		status, sync, didread;
 
 	if (!inode->i_op || !inode->i_op->updatepage)
 		return -EIO;
 
 	sync    = file->f_flags & O_SYNC;
-	pos     = *ppos;
 	written = 0;
-	status  = 0;
 
 	if (file->f_flags & O_APPEND)
 		pos = inode->i_size;
+
+	/*
+	 * Check whether we've reached the file size limit.
+	 */
+	status = -EFBIG;
+	if (pos >= limit) {
+		send_sig(SIGXFSZ, current, 0);
+		goto out;
+	}
+
+	status  = 0;
+	/*
+	 * Check whether to truncate the write,
+	 * and send the signal if we do.
+	 */
+	if (count > limit - pos) {
+		send_sig(SIGXFSZ, current, 0);
+		count = limit - pos;
+	}
 
 	while (count) {
 		/*
@@ -1621,6 +1640,7 @@ done_with_page:
 
 	if (page_cache)
 		free_page(page_cache);
+out:
 	return written ? written : status;
 }
 

@@ -5,6 +5,7 @@
  *
  * Copyright (C) 1995, 1996 Olaf Kirch <okir@monad.swb.de>
  */
+#define NFS_GETFH_NEW
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -47,6 +48,7 @@ static int	nfsctl_delclient(struct nfsctl_client *data);
 static int	nfsctl_export(struct nfsctl_export *data);
 static int	nfsctl_unexport(struct nfsctl_export *data);
 static int	nfsctl_getfh(struct nfsctl_fhparm *, struct knfs_fh *);
+static int	nfsctl_getfd(struct nfsctl_fdparm *, struct knfs_fh *);
 /* static int	nfsctl_ugidupdate(struct nfsctl_ugidmap *data); */
 
 static int	initialized = 0;
@@ -108,6 +110,29 @@ nfsctl_ugidupdate(nfs_ugidmap *data)
 #endif
 
 static inline int
+nfsctl_getfd(struct nfsctl_fdparm *data, struct knfs_fh *res)
+{
+	struct sockaddr_in	*sin;
+	struct svc_client	*clp;
+	int			err = 0;
+
+	if (data->gd_addr.sa_family != AF_INET)
+		return -EPROTONOSUPPORT;
+	if (data->gd_version < 2 || data->gd_version > NFSSVC_MAXVERS)
+		return -EINVAL;
+	sin = (struct sockaddr_in *)&data->gd_addr;
+
+	exp_readlock();
+	if (!(clp = exp_getclient(sin)))
+		err = -EPERM;
+	else
+		err = exp_rootfh(clp, 0, 0, data->gd_path, res);
+	exp_unlock();
+
+	return err;
+}
+
+static inline int
 nfsctl_getfh(struct nfsctl_fhparm *data, struct knfs_fh *res)
 {
 	struct sockaddr_in	*sin;
@@ -124,7 +149,7 @@ nfsctl_getfh(struct nfsctl_fhparm *data, struct knfs_fh *res)
 	if (!(clp = exp_getclient(sin)))
 		err = -EPERM;
 	else
-		err = exp_rootfh(clp, to_kdev_t(data->gf_dev), data->gf_ino, res);
+		err = exp_rootfh(clp, to_kdev_t(data->gf_dev), data->gf_ino, NULL, res);
 	exp_unlock();
 
 	return err;
@@ -193,6 +218,9 @@ asmlinkage handle_sys_nfsservctl(int cmd, void *opaque_argp, void *opaque_resp)
 #endif
 	case NFSCTL_GETFH:
 		err = nfsctl_getfh(&arg->ca_getfh, &res->cr_getfh);
+		break;
+	case NFSCTL_GETFD:
+		err = nfsctl_getfd(&arg->ca_getfd, &res->cr_getfh);
 		break;
 	default:
 		err = -EINVAL;

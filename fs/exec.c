@@ -702,17 +702,17 @@ int prepare_binprm(struct linux_binprm *bprm)
 
 void compute_creds(struct linux_binprm *bprm) 
 {
+	int new_permitted = cap_t(bprm->cap_permitted) |
+		(cap_t(bprm->cap_inheritable) & 
+		 cap_t(current->cap_inheritable));
+
 	/* For init, we want to retain the capabilities set
          * in the init_task struct. Thus we skip the usual
          * capability rules */
 	if (current->pid != 1) {
-		int new_permitted = bprm->cap_permitted.cap |
-			(bprm->cap_inheritable.cap & 
-			current->cap_inheritable.cap);
-
-		current->cap_permitted.cap = new_permitted;
-		current->cap_effective.cap = new_permitted & 
-						bprm->cap_effective.cap;
+		cap_t(current->cap_permitted) = new_permitted;
+		cap_t(current->cap_effective) = new_permitted & 
+						cap_t(bprm->cap_effective);
 	}
 	
         /* AUD: Audit candidate if current->cap_effective is set */
@@ -720,7 +720,7 @@ void compute_creds(struct linux_binprm *bprm)
         current->suid = current->euid = current->fsuid = bprm->e_uid;
         current->sgid = current->egid = current->fsgid = bprm->e_gid;
         if (current->euid != current->uid || current->egid != current->gid ||
-	    !cap_isclear(current->cap_permitted))
+	    !cap_issubset(new_permitted, current->cap_permitted))
                 current->dumpable = 0;
 }
 

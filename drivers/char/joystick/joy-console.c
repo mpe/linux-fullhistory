@@ -1,5 +1,5 @@
 /*
- * joy-console.c  Version 0.10
+ * joy-console.c  Version 0.11V
  *
  * Copyright (c) 1998 Andree Borrmann
  */
@@ -57,8 +57,6 @@ MODULE_PARM(js_console3,"2-6i");
 struct js_console_info {
 #ifdef USE_PARPORT
 	struct pardevice *port;	/* parport device */
-	int use;		/* use count */
-	int wanted;		/* parport wanted */
 #else
 	int port;		/* hw port */
 #endif
@@ -345,19 +343,11 @@ static int js_console_read(void *xinfo, int **axes, int **buttons)
 
 int js_console_open(struct js_dev *dev)
 {
-	MOD_INC_USE_COUNT;
-
 #ifdef USE_PARPORT
-	{
-		struct js_console_info *info = dev->port->info;
-		if (!info->use && parport_claim(info->port)) {
-			printk(KERN_WARNING "joy-console: parport busy!\n");	/* port currently not available ... */
-			info->wanted++;						/* we'll claim it on wakeup */
-			return 0;
-		}
-		info->use++;
-	}
+	struct js_console_info *info = dev->port->info;
+	if (!MOD_IN_USE && parport_claim(info->port)) return -EBUSY;
 #endif
+	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -369,32 +359,13 @@ int js_console_close(struct js_dev *dev)
 {
 #ifdef USE_PARPORT
 	struct js_console_info *info = dev->port->info;
-
-	if (!--info->use)
-		parport_release(info->port);
 #endif
 	MOD_DEC_USE_COUNT;
-
+#ifdef USE_PARPORT
+	if (!MOD_IN_USE) parport_release(info->port);
+#endif
 	return 0;
 }
-
-/*
- * parport wakeup callback: claim the port!
- */
-
-#ifdef USE_PARPORT
-static void js_console_wakeup(void *v)
-{
-	struct js_console_info *info = js_console_port->info;	/* FIXME! We can have more than 1 port! */
-
-	if (!info->use && info->wanted)
-	{
-		parport_claim(info->port);
-		info->use++;
-		info->wanted--;
-	}
-}
-#endif
 
 #ifdef MODULE
 void cleanup_module(void)
@@ -466,11 +437,9 @@ static struct js_port __init *js_console_probe(int *config, struct js_port *port
 			return port;
 		}
 
-		info.port = parport_register_device(pp, "joystick (console)", NULL, js_console_wakeup, NULL, PARPORT_DEV_EXCL, NULL);
+		info.port = parport_register_device(pp, "joystick (console)", NULL, NULL, NULL, PARPORT_DEV_EXCL, NULL);
 		if (!info.port)
 			return port;
-		info.wanted = 0;
-		info.use = 0;
 	}
 
 	if (parport_claim(info.port))

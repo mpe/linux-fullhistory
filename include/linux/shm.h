@@ -14,8 +14,13 @@ struct shmid_ds {
 	__kernel_ipc_pid_t	shm_cpid;	/* pid of creator */
 	__kernel_ipc_pid_t	shm_lpid;	/* pid of last operator */
 	unsigned short		shm_nattch;	/* no. of current attaches */
+};
+
+struct shmid_kernel
+{	
+	struct shmid_ds		u;
 	/* the following are private */
-	unsigned short		shm_npages;	/* size of segment (pages) */
+	unsigned long		shm_npages;	/* size of segment (pages) */
 	unsigned long		*shm_pages;	/* array of ptrs to frames -> SHMMAX */ 
 	struct vm_area_struct	*attaches;	/* descriptors for attaches */
 };

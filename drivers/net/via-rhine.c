@@ -511,9 +511,8 @@ static int pci_etherdev_probe(struct device *dev, struct pci_id_info pci_tbl[])
 }
 
 #ifndef MODULE
-static int via_rhine_probe(struct device *dev)
+int via_rhine_probe(struct device *dev)
 {
-	printk(KERN_INFO "%s" KERN_INFO "%s", versionA, versionB);
 	return pci_etherdev_probe(dev, pci_tbl);
 }
 #endif
@@ -522,8 +521,12 @@ static struct device *via_probe1(int pci_bus, int pci_devfn,
 								 struct device *dev, long ioaddr, int irq,
 								 int chip_id, int card_idx)
 {
+	static int did_version = 0;		/* Already printed version info */
 	struct netdev_private *np;
 	int i, option = card_idx < MAX_UNITS ? options[card_idx] : 0;
+
+	if (debug > 0 && did_version++ == 0)
+		printk(KERN_INFO "%s" KERN_INFO "%s", versionA, versionB);
 
 	dev = init_etherdev(dev, 0);
 

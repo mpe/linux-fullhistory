@@ -1,13 +1,10 @@
-/*
- * List of Linux/MIPS syscalls.
+/* $Id: syscalls.h,v 1.16 1998/09/16 22:50:43 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1995, 1996 by Ralf Baechle
- *
- * $Id: syscalls.h,v 1.14 1998/05/07 00:39:37 ralf Exp $
+ * Copyright (C) 1995, 1996, 1997, 1998 by Ralf Baechle
  */
 
 /*
@@ -16,7 +13,7 @@
  * accepts.  Syscalls that receive a pointer to the saved registers are
  * marked as having zero arguments.
  *
- * The binary compatibility calls are still missing in this list.
+ * The binary compatibility calls are in a separate list.
  */
 SYS(sys_syscall, 0)				/* 4000 */
 SYS(sys_exit, 1)
@@ -40,7 +37,7 @@ SYS(sys_stat, 2)
 SYS(sys_lseek, 3)
 SYS(sys_getpid, 0)				/* 4020 */
 SYS(sys_mount, 5)
-SYS(sys_umount, 1)
+SYS(sys_oldumount, 1)
 SYS(sys_setuid, 1)
 SYS(sys_getuid, 0)
 SYS(sys_stime, 1)				/* 4025 */
@@ -70,7 +67,7 @@ SYS(sys_ni_syscall, 0)	/* was signal(2) */
 SYS(sys_geteuid, 0)
 SYS(sys_getegid, 0)				/* 4050 */
 SYS(sys_acct, 0)
-SYS(sys_ni_syscall, 0)
+SYS(sys_umount, 2)
 SYS(sys_ni_syscall, 0)
 SYS(sys_ioctl, 3)
 SYS(sys_fcntl, 3)				/* 4055 */
@@ -168,7 +165,7 @@ SYS(sys_writev, 3)
 SYS(sys_cacheflush, 3)
 SYS(sys_cachectl, 3)
 SYS(sys_sysmips, 4)
-SYS(sys_setup, 1)				/* 4150 */
+SYS(sys_ni_syscall, 0)				/* 4150 */
 SYS(sys_getsid, 1)
 SYS(sys_fdatasync, 0)
 SYS(sys_sysctl, 1)
@@ -222,3 +219,9 @@ SYS(sys_pread, 4)				/* 4200 */
 SYS(sys_pwrite, 4)
 SYS(sys_chown, 3)
 SYS(sys_getcwd, 2)
+SYS(sys_capget, 2)
+SYS(sys_capset, 2)				/* 4205 */
+SYS(sys_sigaltstack, 2)
+SYS(sys_sendfile, 3)
+SYS(sys_ni_syscall, 0)
+SYS(sys_ni_syscall, 0)

@@ -106,6 +106,9 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
     fi
     bool 'SK_G16 support' CONFIG_SK_G16
   fi
+  if [ "$CONFIG_MCA" = "y" ]; then
+    tristate 'NE/2 (ne2000 MCA version) support' CONFIG_NE2_MCA
+  fi
   bool 'EISA, VLB, PCI and on board controllers' CONFIG_NET_EISA
   if [ "$CONFIG_NET_EISA" = "y" ]; then
     tristate 'AMD PCnet32 (VLB and PCI) support' CONFIG_PCNET32

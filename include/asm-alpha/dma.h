@@ -20,6 +20,7 @@
 
 #include <linux/config.h>
 #include <asm/io.h>
+#include <asm/spinlock.h>
 
 #define dma_outb	outb
 #define dma_inb		inb
@@ -171,6 +172,20 @@
 #define DMA_MODE_READ	0x44	/* I/O to memory, no autoinit, increment, single mode */
 #define DMA_MODE_WRITE	0x48	/* memory to I/O, no autoinit, increment, single mode */
 #define DMA_MODE_CASCADE 0xC0   /* pass thru DREQ->HRQ, DACK<-HLDA only */
+
+extern spinlock_t  dma_spin_lock;
+
+static __inline__ unsigned long claim_dma_lock(void)
+{
+	unsigned long flags;
+	spin_lock_irqsave(&dma_spin_lock, flags);
+	return flags;
+}
+
+static __inline__ void release_dma_lock(unsigned long flags)
+{
+	spin_unlock_irqrestore(&dma_spin_lock, flags);
+}
 
 /* enable/disable a specific DMA channel */
 static __inline__ void enable_dma(unsigned int dmanr)

@@ -94,7 +94,7 @@ static int js_tm_read_packet(int io, unsigned char *data)
 
 	__save_flags(flags);
 	__cli();
-	outb(inb(io),io);
+	outb(0xff,io);
 
 	t = js_get_time();
 
@@ -262,7 +262,7 @@ static struct js_port __init *js_tm_probe(int io, struct js_port *port)
 	if (check_region(io, 1)) return port;
 
 	if (((u = inb(io)) & 3) == 3) return port;
-	outb(u,io);
+	outb(0xff,io);
 	if (!((inb(io) ^ u) & ~u & 0xf)) return port;
 
 	if(js_tm_read_packet(io, data)) {

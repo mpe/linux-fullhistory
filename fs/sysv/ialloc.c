@@ -112,7 +112,7 @@ struct inode * sysv_new_inode(const struct inode * dir)
 		return NULL;
 	sb = dir->i_sb;
 	inode->i_sb = sb;
-	inode->i_flags = inode->i_sb->s_flags;
+	inode->i_flags = 0;
 	lock_super(sb);		/* protect against task switches */
 	if ((*sb->sv_sb_fic_count == 0)
 	    || (*sv_sb_fic_inode(sb,(*sb->sv_sb_fic_count)-1) == 0) /* Applies only to SystemV2 FS */

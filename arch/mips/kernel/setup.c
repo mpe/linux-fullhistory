@@ -1,11 +1,12 @@
-/*
- *  linux/arch/mips/kernel/setup.c
+/* $Id: setup.c,v 1.12 1998/08/18 20:45:06 ralf Exp $
  *
- *  Copyright (C) 1995  Linus Torvalds
- *  Copyright (C) 1995, 1996  Ralf Baechle
- *  Copyright (C) 1996  Stoned Elipot
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
  *
- * $Id: setup.c,v 1.10 1998/06/10 07:21:10 davem Exp $
+ * Copyright (C) 1995  Linus Torvalds
+ * Copyright (C) 1995, 1996, 1997, 1998  Ralf Baechle
+ * Copyright (C) 1996  Stoned Elipot
  */
 #include <linux/config.h>
 #include <linux/errno.h>
@@ -37,23 +38,13 @@
 #include <asm/cachectl.h>
 #include <asm/ide.h>
 #include <asm/io.h>
-#include <asm/vector.h>
 #include <asm/stackframe.h>
 #include <asm/system.h>
 #ifdef CONFIG_SGI
 #include <asm/sgialib.h>
 #endif
 
-/*
- * How to handle the machine's features
- */
-struct feature *feature;
-
-/*
- * What to do to keep the caches consistent with memory
- * We don't use the normal cacheflush routine to keep Tyne caches happier.
- */
-void (*fd_cacheflush)(const void *addr, size_t size);
+struct mips_cpuinfo boot_cpu_data = { NULL, NULL, 0 };
 
 /*
  * Not all of the MIPS CPUs have the "wait" instruction available.  This
@@ -88,13 +79,21 @@ int EISA_bus = 0;
 struct drive_info_struct drive_info = DEFAULT_DRIVE_INFO;
 struct screen_info screen_info = DEFAULT_SCREEN_INFO;
 
+#ifdef CONFIG_BLK_DEV_FD
+extern struct fd_ops no_fd_ops;
+struct fd_ops *fd_ops;
+#endif
+
 #ifdef CONFIG_BLK_DEV_IDE
 extern struct ide_ops no_ide_ops;
 struct ide_ops *ide_ops;
 #endif
 
+extern struct rtc_ops no_rtc_ops;
+struct rtc_ops *rtc_ops;
+
 /*
- * setup informations
+ * Setup information
  *
  * These are intialized so they are in the .data section
  */
@@ -150,15 +149,12 @@ __initfunc(static void default_irq_setup(void))
 	panic("Unknown machtype in init_IRQ");
 }
 
-__initfunc(static void default_fd_cacheflush(const void *addr, size_t size))
-{
-}
-
 __initfunc(void setup_arch(char **cmdline_p,
            unsigned long * memory_start_p, unsigned long * memory_end_p))
 {
 	unsigned long memory_end;
 	tag* atag;
+	void cobalt_setup(void);
 	void decstation_setup(void);
 	void deskstation_setup(void);
 	void jazz_setup(void);
@@ -179,13 +175,24 @@ __initfunc(void setup_arch(char **cmdline_p,
 
 	/* Save defaults for configuration-dependent routines.  */
 	irq_setup = default_irq_setup;
-	fd_cacheflush = default_fd_cacheflush;
+
+#ifdef CONFIG_BLK_DEV_FD
+	fd_ops = &no_fd_ops;
+#endif
+
 #ifdef CONFIG_BLK_DEV_IDE
 	ide_ops = &no_ide_ops;
 #endif
 
+	rtc_ops = &no_rtc_ops;
+
 	switch(mips_machgroup)
 	{
+#ifdef CONFIG_COBALT_MICRO_SERVER
+	case MACH_GROUP_COBALT:
+		cobalt_setup();
+		break;
+#endif
 #ifdef CONFIG_MIPS_JAZZ
 	case MACH_GROUP_JAZZ:
 		jazz_setup();

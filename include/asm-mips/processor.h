@@ -1,27 +1,47 @@
-/*
- * include/asm-mips/processor.h
+/* $Id: processor.h,v 1.18 1998/10/14 20:31:12 ralf Exp $
  *
- * Copyright (C) 1994  Waldorf Electronics
- * written by Ralf Baechle
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
+ *
+ * Copyright (C) 1994 Waldorf GMBH
+ * Copyright (C) 1995, 1996, 1997, 1998 Ralf Baechle
  * Modified further for R[236]000 compatibility by Paul M. Antoine
- *
- * $Id: processor.h,v 1.22 1998/05/11 08:40:07 davem Exp $
  */
 #ifndef __ASM_MIPS_PROCESSOR_H
 #define __ASM_MIPS_PROCESSOR_H
 
-#if !defined (__LANGUAGE_ASSEMBLY__)
+#if !defined (_LANGUAGE_ASSEMBLY)
 #include <asm/cachectl.h>
 #include <asm/mipsregs.h>
 #include <asm/reg.h>
 #include <asm/system.h>
 
+struct mips_cpuinfo {
+	unsigned long *pgd_quick;
+	unsigned long *pte_quick;
+	unsigned long pgtable_cache_sz;
+};
+
 /*
  * System setup and hardware flags..
+ * XXX: Should go into mips_cpuinfo.
  */
 extern char wait_available;		/* only available on R4[26]00 */
 extern char cyclecounter_available;	/* only available from R4000 upwards. */
 extern char dedicated_iv_available;	/* some embedded MIPS like Nevada */
+extern char vce_available;		/* Supports VCED / VCEI exceptions */
+
+extern struct mips_cpuinfo boot_cpu_data;
+extern unsigned int vced_count, vcei_count;
+
+#ifdef __SMP__
+extern struct mips_cpuinfo cpu_data[];
+#define current_cpu_data cpu_data[smp_processor_id()]
+#else
+#define cpu_data &boot_cpu_data
+#define current_cpu_data boot_cpu_data
+#endif
 
 /*
  * Bus types (default is ISA, but people can check others with these..)
@@ -39,6 +59,9 @@ extern int EISA_bus;
  */
 #define wp_works_ok 1
 #define wp_works_ok__is_a_macro /* for versions in ksyms.c */
+
+/* Lazy FPU handling on uni-processor */
+extern struct task_struct *last_task_used_math;
 
 /*
  * User space process size: 2GB. This is hardcoded into a few places,
@@ -114,7 +137,7 @@ struct thread_struct {
 	unsigned long irix_oldctx;
 };
 
-#endif /* !defined (__LANGUAGE_ASSEMBLY__) */
+#endif /* !defined (_LANGUAGE_ASSEMBLY) */
 
 #define INIT_MMAP { &init_mm, KSEG0, KSEG1, PAGE_SHARED, \
                     VM_READ | VM_WRITE | VM_EXEC, NULL, &init_mm.mmap }
@@ -147,7 +170,7 @@ struct thread_struct {
 
 #define KERNEL_STACK_SIZE 8192
 
-#if !defined (__LANGUAGE_ASSEMBLY__)
+#if !defined (_LANGUAGE_ASSEMBLY)
 
 /* Free all resources held by a thread. */
 extern void release_thread(struct task_struct *);
@@ -188,7 +211,7 @@ extern void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long 
 #define init_task	(init_task_union.task)
 #define init_stack	(init_task_union.stack)
 
-#endif /* !defined (__LANGUAGE_ASSEMBLY__) */
+#endif /* !defined (_LANGUAGE_ASSEMBLY) */
 #endif /* __KERNEL__ */
 
 /*

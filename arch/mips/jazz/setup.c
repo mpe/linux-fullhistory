@@ -1,21 +1,24 @@
-/*
+/* $Id: setup.c,v 1.14 1998/09/16 22:50:40 ralf Exp $
+ *
  * Setup pointers to hardware-dependent routines.
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1996, 1997 by Ralf Baechle
- *
- * $Id: setup.c,v 1.7 1998/06/10 07:21:07 davem Exp $
+ * Copyright (C) 1996, 1997, 1998 by Ralf Baechle
  */
 #include <linux/config.h>
 #include <linux/hdreg.h>
 #include <linux/init.h>
 #include <linux/ioport.h>
+#include <linux/kbd_ll.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
 #include <linux/mm.h>
+#include <linux/console.h>
+#include <linux/fb.h>
+#include <linux/mc146818rtc.h>
 #include <asm/bootinfo.h>
 #include <asm/keyboard.h>
 #include <asm/ide.h>
@@ -23,7 +26,6 @@
 #include <asm/jazz.h>
 #include <asm/ptrace.h>
 #include <asm/reboot.h>
-#include <asm/vector.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
 
@@ -38,8 +40,6 @@ static void no_action(int cpl, void *dev_id, struct pt_regs *regs) { }
 static struct irqaction irq2  = { no_action, 0, 0, "cascade", NULL, NULL};
 
 extern asmlinkage void jazz_handle_int(void);
-extern asmlinkage void jazz_fd_cacheflush(const void *addr, size_t size);
-extern struct feature jazz_feature;
 extern void jazz_keyboard_setup(void);
 
 extern void jazz_machine_restart(char *command);
@@ -47,6 +47,7 @@ extern void jazz_machine_halt(void);
 extern void jazz_machine_power_off(void);
 
 extern struct ide_ops std_ide_ops;
+extern struct rtc_ops jazz_rtc_ops;
 
 void (*board_time_init)(struct irqaction *irq);
 
@@ -110,9 +111,7 @@ __initfunc(void jazz_setup(void))
 	add_wired_entry (0x01800017, 0x01000017, 0xe4000000, PM_4M);
 
 	irq_setup = jazz_irq_setup;
-	fd_cacheflush = jazz_fd_cacheflush;
 	keyboard_setup = jazz_keyboard_setup;
-	feature = &jazz_feature;			// Will go away
 	mips_io_port_base = JAZZ_PORT_BASE;
 	isa_slot_offset = 0xe3000000;
 	request_region(0x00,0x20,"dma1");
@@ -129,4 +128,6 @@ __initfunc(void jazz_setup(void))
 #ifdef CONFIG_BLK_DEV_IDE
 	ide_ops = &std_ide_ops;
 #endif
+	conswitchp = &fb_con;
+	rtc_ops = &jazz_rtc_ops;
 }

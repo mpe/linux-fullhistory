@@ -4,7 +4,7 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@sgi.com)
  *
- * $Id: printf.c,v 1.2 1998/05/01 01:35:27 ralf Exp $
+ * $Id: printf.c,v 1.2 1998/03/27 08:53:48 ralf Exp $
  */
 #include <linux/init.h>
 #include <linux/kernel.h>

@@ -98,6 +98,11 @@ if [ "$CONFIG_MODULES" = "y" ]; then
   bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
   bool 'Kernel module loader' CONFIG_KMOD
 fi
+
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  bool 'Support for frame buffer devices (EXPERIMENTAL)' CONFIG_FB
+fi
+
 endmenu
 
 source drivers/block/Config.in
@@ -189,6 +194,9 @@ source fs/Config.in
 
 source fs/nls/Config.in
 
+comment 'Console drivers'
+source drivers/video/Config.in
+
 mainmenu_option next_comment
 comment 'Sound'
 
@@ -211,4 +219,5 @@ if [ "$CONFIG_MODULES" = "y" ]; then
   bool ' Build fp execption handler module' CONFIG_MIPS_FPE_MODULE
 fi
 bool 'Remote GDB kernel debugging' CONFIG_REMOTE_DEBUG
+bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ
 endmenu

@@ -97,19 +97,27 @@ extern __inline__ void queue_task(struct tq_struct *bh_pointer,
  */
 extern __inline__ void run_task_queue(task_queue *list)
 {
-	struct tq_struct *p;
+	if (*list) {
+		unsigned long flags;
+		struct tq_struct *p;
 
-	p = xchg(list,NULL);
-	while (p) {
-		void *arg;
-		void (*f) (void *);
-		struct tq_struct *save_p;
-		arg    = p -> data;
-		f      = p -> routine;
-		save_p = p;
-		p      = p -> next;
-		save_p -> sync = 0;
-		(*f)(arg);
+		spin_lock_irqsave(&tqueue_lock, flags);
+		p = *list;
+		*list = NULL;
+		spin_unlock_irqrestore(&tqueue_lock, flags);
+		
+		while (p) {
+			void *arg;
+			void (*f) (void *);
+			struct tq_struct *save_p;
+			arg    = p -> data;
+			f      = p -> routine;
+			save_p = p;
+			p      = p -> next;
+			mb();
+			save_p -> sync = 0;
+			(*f)(arg);
+		}
 	}
 }
 

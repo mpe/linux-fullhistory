@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: time.c,v 1.2 1998/05/01 01:35:29 ralf Exp $
+ * $Id: time.c,v 1.2 1998/03/27 08:53:49 ralf Exp $
  */
 #include <linux/init.h>
 #include <asm/sgialib.h>

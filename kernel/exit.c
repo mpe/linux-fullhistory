@@ -29,6 +29,7 @@
 #include <asm/mmu_context.h>
 
 extern void sem_exit (void);
+extern struct task_struct *child_reaper;
 
 int getrusage(struct task_struct *, int, struct rusage *);
 
@@ -156,7 +157,7 @@ static inline void forget_original_parent(struct task_struct * father)
 	for_each_task(p) {
 		if (p->p_opptr == father) {
 			p->exit_signal = SIGCHLD;
-			p->p_opptr = task[smp_num_cpus] ? : task[0]; /* init */
+			p->p_opptr = child_reaper; /* init */
 			if (p->pdeath_signal) send_sig(p->pdeath_signal, p, 0);
 		}
 	}

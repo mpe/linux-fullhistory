@@ -3,7 +3,7 @@
  *
  *  Copyright (C) 1994, 1995, 1996 by Ralf Baechle and Paul M. Antoine.
  *
- * $Id: stackframe.h,v 1.6 1998/05/04 09:19:00 ralf Exp $
+ * $Id: stackframe.h,v 1.7 1998/04/28 19:39:15 ralf Exp $
  */
 #ifndef __ASM_MIPS_STACKFRAME_H
 #define __ASM_MIPS_STACKFRAME_H

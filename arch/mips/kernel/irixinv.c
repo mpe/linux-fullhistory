@@ -5,7 +5,7 @@
  *
  * Miguel de Icaza, 1997.
  *
- * $Id: irixinv.c,v 1.2 1998/05/01 01:33:58 ralf Exp $
+ * $Id: irixinv.c,v 1.3 1998/03/27 08:53:40 ralf Exp $
  */
 #include <linux/mm.h>
 #include <linux/init.h>

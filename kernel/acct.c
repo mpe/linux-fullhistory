@@ -20,6 +20,9 @@
  *  the file happened to be read-only. 2) If the accounting was suspended
  *  due to the lack of space it happily allowed to reopen it and completely
  *  lost the old acct_file. 3/10/98, Al Viro.
+ *
+ *  Now we silently close acct_file on attempt to reopen. Cleaned sys_acct().
+ *  XTerms and EMACS are manifestations of pure evil. 21/10/98, AV.
  */
 
 #include <linux/config.h>
@@ -79,17 +82,18 @@ static void check_free_space(void)
 {
 	mm_segment_t fs;
 	struct statfs sbuf;
+	struct super_block *sb;
 
 	if (!acct_file || !acct_needcheck)
 		return;
 
-	if (!acct_file->f_dentry->d_inode->i_sb->s_op ||
-            !acct_file->f_dentry->d_inode->i_sb->s_op->statfs)
+	sb = acct_file->f_dentry->f_inode->i_sb;
+	if (!sb->s_op || !sb->s_op->statfs)
 		return;
 
 	fs = get_fs();
 	set_fs(KERNEL_DS);
-	acct_file->f_dentry->d_inode->i_sb->s_op->statfs(acct_file->f_dentry->d_inode->i_sb, &sbuf, sizeof(struct statfs));
+	sb->s_op->statfs(sb, &sbuf, sizeof(struct statfs));
 	set_fs(fs);
 
 	if (acct_active) {
@@ -119,6 +123,7 @@ asmlinkage int sys_acct(const char *name)
 {
 	struct dentry *dentry;
 	struct inode *inode;
+	struct file_operations *ops;
 	char *tmp;
 	int error = -EPERM;
 
@@ -126,86 +131,74 @@ asmlinkage int sys_acct(const char *name)
 	if (!capable(CAP_SYS_PACCT))
 		goto out;
 
-	if (name == (char *)NULL) {
-		if (acct_file) {
-			/* fput() may block, so just in case... */
-			struct file *tmp = acct_file;
-			if (acct_active)
-				acct_process(0); 
-		        del_timer(&acct_timer);
-			acct_active = 0;
-			acct_needcheck = 0;
-			acct_file = NULL;
-			fput(tmp);
-		}
-		error = 0;
-		goto out;
-	} else {
-		/*
-		 * We can't rely on acct_active - it might be disabled
-		 * due to the lack of space.
-		 */
-		if (!acct_file) {
-			tmp = getname(name);
-			error = PTR_ERR(tmp);
-			if (IS_ERR(tmp))
-				goto out;
-
-			dentry = open_namei(tmp, O_RDWR, 0600);
-			putname(tmp);
-
-			error = PTR_ERR(dentry);
-			if (IS_ERR(dentry))
-				goto out;
-
-			inode = dentry->d_inode;
-
-			if (!S_ISREG(inode->i_mode)) {
-				dput(dentry);
-				error = -EACCES;
-				goto out;
-			}
-
-			if (!inode->i_op || !inode->i_op->default_file_ops || 
-			    !inode->i_op->default_file_ops->write) {
-				dput(dentry);
-				error = -EIO;
-				goto out;
-			}
-
-			if ((acct_file = get_empty_filp()) != (struct file *)NULL) {
-				acct_file->f_mode = (O_WRONLY + 1) & O_ACCMODE;
-				acct_file->f_flags = O_WRONLY;
-				acct_file->f_dentry = dentry;
-				acct_file->f_pos = inode->i_size;
-				acct_file->f_reada = 0;
-				acct_file->f_op = inode->i_op->default_file_ops;
-				if ((error = get_write_access(acct_file->f_dentry->d_inode)) == 0) {
-					if (acct_file->f_op && acct_file->f_op->open)
-						error = acct_file->f_op->open(inode, acct_file);
-					if (error == 0) {
-						acct_needcheck = 0;
-						acct_active = 1;
-						acct_timer.expires = jiffies + ACCT_TIMEOUT;
-						add_timer(&acct_timer);
-						error = 0;
-						goto out;
-					}
-					put_write_access(acct_file->f_dentry->d_inode);
-				}
-				/* decrementing f_count is _not_ enough */
-				put_filp(acct_file);
-				acct_file = NULL;
-			} else
-				error = -EUSERS;
-			dput(dentry);
-		} else
-			/*
-			 * NB: in this case FreeBSD just closes acct_file
-			 * and opens new one. Maybe it's better behavior...
-			 */
-			error = -EBUSY;
+	if (acct_file) {
+		/* fput() may block, so just in case... */
+		struct file *tmp = acct_file;
+		if (acct_active)
+			acct_process(0); 
+		del_timer(&acct_timer);
+		acct_active = 0;
+		acct_needcheck = 0;
+		acct_file = NULL;
+		fput(tmp);
 	}
+	error = 0;
+	if (!name)		/* We are done */
+		goto out;
+
+	tmp = getname(name);
+	error = PTR_ERR(tmp);
+	if (IS_ERR(tmp))
+		goto out;
+
+	dentry = open_namei(tmp, O_RDWR, 0600);
+	putname(tmp);
+
+	error = PTR_ERR(dentry);
+	if (IS_ERR(dentry))
+		goto out;
+
+	inode = dentry->d_inode;
+
+	error = -EACCES;
+	if (!S_ISREG(inode->i_mode)) 
+		goto out_d;
+
+	error = -EIO;
+	if (!inode->i_op || !(ops = inode->i_op->default_file_ops) || 
+	    !ops->write) 
+		goto out_d;
+
+	error = -EUSERS;
+	if (!(acct_file = get_empty_filp()))
+		goto out_d;
+
+	acct_file->f_mode = (O_WRONLY + 1) & O_ACCMODE;
+	acct_file->f_flags = O_WRONLY;
+	acct_file->f_dentry = dentry;
+	acct_file->f_pos = inode->i_size;
+	acct_file->f_reada = 0;
+	acct_file->f_op = ops;
+	error = get_write_access(inode);
+	if (error)
+		goto out_f;
+	if (ops->open)
+		error = ops->open(inode, acct_file);
+	if (error) {
+		put_write_access(inode);
+		goto out_f;
+	}
+	acct_needcheck = 0;
+	acct_active = 1;
+	acct_timer.expires = jiffies + ACCT_TIMEOUT;
+	add_timer(&acct_timer);
+	goto out;
+out_f:
+	/* decrementing f_count is _not_ enough */
+	put_filp(acct_file);
+	acct_file = NULL;
+out_d:
+	dput(dentry);
 out:
 	unlock_kernel();
 	return error;
@@ -274,9 +267,9 @@ int acct_process(long exitcode)
 	unsigned long vsize;
 
 	/*
-	 * First check to see if there is enough free_space to continue the process
-	 * accounting system. Check_free_space toggles the acct_active flag so we
-	 * need to check that after check_free_space.
+	 * First check to see if there is enough free_space to continue
+	 * the process accounting system. Check_free_space toggles the
+	 * acct_active flag so we need to check that after check_free_space.
 	 */
 	check_free_space();
 
@@ -329,7 +322,8 @@ int acct_process(long exitcode)
 	ac.ac_exitcode = exitcode;
 
 	/*
-         * Kernel segment override to datasegment and write it to the accounting file.
+         * Kernel segment override to datasegment and write it
+         * to the accounting file.
          */
 	fs = get_fs();
 	set_fs(KERNEL_DS);

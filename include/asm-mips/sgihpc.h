@@ -1,9 +1,11 @@
-/* $Id: sgihpc.h,v 1.2 1998/05/01 01:36:07 ralf Exp $
+/* $Id: sgihpc.h,v 1.4 1998/09/16 22:52:42 ralf Exp $
+ *
  * sgihpc.h: Various HPC I/O controller defines.  The HPC is basically
  *           the approximate functional equivalent of the Sun SYSIO
  *           on SGI INDY machines.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
+ * Copyright (C) 1998 Ralf Baechle (ralf@gnu.org)
  */
 #ifndef _MIPS_SGIHPC_H
 #define _MIPS_SGIHPC_H
@@ -321,6 +323,11 @@ struct hpc3_miscregs {
 extern struct hpc3_miscregs *hpc3mregs;
 #define HPC3_MREGS_PBASE   0x1fbd9800 /* physical */
 
+/* We need software copies of these because they are write only. */
+extern unsigned long sgi_hpc_write1, sgi_hpc_write2;
+
+#define SGI_KEYBOARD_IRQ 20
+
 struct hpc_keyb {
 #ifdef __MIPSEB__
 	unsigned char _unused0[3];
@@ -334,6 +341,29 @@ struct hpc_keyb {
 	unsigned char _unused1[3];
 #endif
 };
+
+/* Indy RTC  */
+
+/* The layout of registers for the INDY Dallas 1286 clock chipset. */
+struct indy_clock {
+	volatile unsigned int hsec;
+	volatile unsigned int sec;
+	volatile unsigned int min;
+	volatile unsigned int malarm;
+	volatile unsigned int hr;
+	volatile unsigned int halarm;
+	volatile unsigned int day;
+	volatile unsigned int dalarm;
+	volatile unsigned int date;
+	volatile unsigned int month;
+	volatile unsigned int year;
+	volatile unsigned int cmd;
+	volatile unsigned int whsec;
+	volatile unsigned int wsec;
+	volatile unsigned int _unused0[50];
+};
+
+#define INDY_CLOCK_REGS (KSEG1ADDR(0x1fbe0000))
 
 extern void sgihpc_init(void);
 

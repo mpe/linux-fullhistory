@@ -859,6 +859,7 @@ static int js_open(struct inode *inode, struct file *file)
 	struct js_dev *jd = js_dev;
 	int i = MINOR(inode->i_rdev);
 	unsigned long flags;
+	int result;
 
 	if (MAJOR(inode->i_rdev) != JOYSTICK_MAJOR)
 		return -EINVAL;
@@ -870,7 +871,7 @@ static int js_open(struct inode *inode, struct file *file)
 
 	if (!jd) return -ENODEV;
 
-	jd->open(jd);
+	if ((result = jd->open(jd))) return result;
 
 	MOD_INC_USE_COUNT;
 	if (!js_use_count++) js_do_timer(0);

@@ -1,32 +1,34 @@
-/* $Id: setup.c,v 1.6 1998/05/07 00:39:53 ralf Exp $
+/* $Id: setup.c,v 1.13 1998/09/16 22:50:46 ralf Exp $
  *
  * setup.c: SGI specific setup, including init of the feature struct.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
+ * Copyright (C) 1997, 1998 Ralf Baechle (ralf@gnu.org)
  */
 #include <linux/init.h>
+#include <linux/kbd_ll.h>
 #include <linux/kernel.h>
+#include <linux/kdev_t.h>
+#include <linux/types.h>
+#include <linux/console.h>
 #include <linux/sched.h>
+#include <linux/mc146818rtc.h>
 
 #include <asm/addrspace.h>
 #include <asm/bcache.h>
 #include <asm/keyboard.h>
+#include <asm/irq.h>
 #include <asm/reboot.h>
-#include <asm/vector.h>
 #include <asm/sgialib.h>
 #include <asm/sgi.h>
 #include <asm/sgimc.h>
 #include <asm/sgihpc.h>
 #include <asm/sgint23.h>
 
-extern int serial_console; /* in console.c, of course */
+extern int serial_console; /* in sgiserial.c  */
 
-extern void sgi_machine_restart(char *command);
-extern void sgi_machine_halt(void);
-extern void sgi_machine_power_off(void);
-
-struct feature sgi_feature = {
-};
+extern struct rtc_ops indy_rtc_ops;
+void indy_reboot_setup(void);
 
 static volatile struct hpc_keyb *sgi_kh = (struct hpc_keyb *) (KSEG1 + 0x1fbd9800 + 64);
 
@@ -68,6 +70,16 @@ __initfunc(static void sgi_keyboard_setup(void))
 	kbd_write_output = sgi_write_output;
 	kbd_write_command = sgi_write_command;
 	kbd_read_status = sgi_read_status;
+
+	request_irq(SGI_KEYBOARD_IRQ, keyboard_interrupt,
+	            0, "keyboard", NULL);
+
+	/* Dirty hack, this get's called as a callback from the keyboard
+	   driver.  We piggyback the initialization of the front panel
+	   button handling on it even though they're technically not
+	   related with the keyboard driver in any way.  Doing it from
+	   indy_setup wouldn't work since kmalloc isn't initialized yet.  */
+	indy_reboot_setup();
 }
 
 __initfunc(static void sgi_irq_setup(void))
@@ -77,15 +89,12 @@ __initfunc(static void sgi_irq_setup(void))
 
 __initfunc(void sgi_setup(void))
 {
+#ifdef CONFIG_SERIAL_CONSOLE
 	char *ctype;
+#endif
 
 	irq_setup = sgi_irq_setup;
-	feature = &sgi_feature;
 	keyboard_setup = sgi_keyboard_setup;
-
-	_machine_restart = sgi_machine_restart;
-	_machine_halt = sgi_machine_halt;
-	_machine_power_off = sgi_machine_power_off;
 
 	/* Init the INDY HPC I/O controller.  Need to call this before
 	 * fucking with the memory controller because it needs to know the
@@ -99,6 +108,7 @@ __initfunc(void sgi_setup(void))
 	/* Now enable boardcaches, if any. */
 	indy_sc_init();
 
+#ifdef CONFIG_SERIAL_CONSOLE
 	/* ARCS console environment variable is set to "g?" for
 	 * graphics console, it is set to "d" for the first serial
 	 * line and "d2" for the second serial line.
@@ -117,4 +127,10 @@ __initfunc(void sgi_setup(void))
 			prom_imode();
 		}
 	}
+#endif
+
+#ifdef CONFIG_VT
+	conswitchp = &newport_con;
+#endif
+	rtc_ops = &indy_rtc_ops;
 }

@@ -1,4 +1,5 @@
-/*
+/* $Id: bootinfo.h,v 1.5 1998/08/19 21:58:10 ralf Exp $
+ *
  * bootinfo.h -- Definition of the Linux/MIPS boot information structure
  *
  * Copyright (C) 1995, 1996 by Ralf Baechle, Andreas Busse,
@@ -7,8 +8,6 @@
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file COPYING in the main directory of this archive
  * for more details.
- *
- * $Id: bootinfo.h,v 1.7 1998/05/01 01:35:46 ralf Exp $
  */
 #ifndef __ASM_MIPS_BOOTINFO_H
 #define __ASM_MIPS_BOOTINFO_H
@@ -126,7 +125,7 @@
 
 #define CL_SIZE      (80)
 
-#ifndef __LANGUAGE_ASSEMBLY__
+#ifndef _LANGUAGE_ASSEMBLY
 
 /*
  * Some machine parameters passed by the bootloaders. 
@@ -266,19 +265,17 @@ void bi_TagWalk(void);
 
 
 #ifdef CONFIG_SGI
-
 /* screen info will dissapear... soon */
-#define DEFAULT_SCREEN_INFO {0, 0, {0, 0, }, 0, 0, 158, 0, 0, 0, 62, 0, 16}
+//#define DEFAULT_SCREEN_INFO {0, 0, 0, 0, 0, 158, 0, 0, 0, 62, 0, 16}
+#define DEFAULT_SCREEN_INFO {0, 0, 0, 0, 0, 160, 0, 0, 0, 64, 0, 16}
 #define DEFAULT_DRIVE_INFO { {0,}}
-
 #else
-
 /* default values for screen_info variable */
-#define DEFAULT_SCREEN_INFO {0, 0, {0, }, 52, 3, 80, 4626, 3, 9, 50}
+#define DEFAULT_SCREEN_INFO {0, 0, 0, 52, 3, 80, 4626, 3, 9, 50}
+#endif
+
 /* default values for drive info */
 #define DEFAULT_DRIVE_INFO { {0,}}
-
-#endif
 
 
 /*
@@ -296,6 +293,6 @@ extern unsigned long mips_vram_base;
 extern unsigned long mips_dma_cache_size;
 extern unsigned long mips_dma_cache_base;
 
-#endif /* __LANGUAGE_ASSEMBLY__ */
+#endif /* _LANGUAGE_ASSEMBLY */
 
 #endif /* __ASM_MIPS_BOOTINFO_H */

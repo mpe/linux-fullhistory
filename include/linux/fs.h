@@ -114,19 +114,27 @@ extern int max_super_blocks, nr_super_blocks;
  * ioctl() that is not currently implemented.
  *
  * Exception: MS_RDONLY is always applied to the entire file system.
+ *
+ * Unfortunately, it is possible to change a filesystems flags with it mounted
+ * with files in use.  This means that all of the inodes will not have their
+ * i_flags updated.  Hence, i_flags no longer inherit the superblock mount
+ * flags, so these have to be checked separately. -- rmk@arm.uk.linux.org
  */
-#define IS_RDONLY(inode) (((inode)->i_sb) && ((inode)->i_sb->s_flags & MS_RDONLY))
-#define IS_NOSUID(inode) ((inode)->i_flags & MS_NOSUID)
-#define IS_NODEV(inode) ((inode)->i_flags & MS_NODEV)
-#define IS_NOEXEC(inode) ((inode)->i_flags & MS_NOEXEC)
-#define IS_SYNC(inode) ((inode)->i_flags & MS_SYNCHRONOUS)
-#define IS_MANDLOCK(inode) ((inode)->i_flags & MS_MANDLOCK)
+#define __IS_FLG(inode,flg) (((inode)->i_sb && (inode)->i_sb->s_flags & (flg)) \
+				|| (inode)->i_flags & (flg))
 
-#define IS_QUOTAINIT(inode) ((inode)->i_flags & S_QUOTA)
-#define IS_APPEND(inode) ((inode)->i_flags & S_APPEND)
-#define IS_IMMUTABLE(inode) ((inode)->i_flags & S_IMMUTABLE)
-#define IS_NOATIME(inode) ((inode)->i_flags & MS_NOATIME)
-#define IS_NODIRATIME(inode) ((inode)->i_flags & MS_NODIRATIME)
+#define IS_RDONLY(inode) (((inode)->i_sb) && ((inode)->i_sb->s_flags & MS_RDONLY))
+#define IS_NOSUID(inode)	__IS_FLG(inode, MS_NOSUID)
+#define IS_NODEV(inode)		__IS_FLG(inode, MS_NODEV)
+#define IS_NOEXEC(inode)	__IS_FLG(inode, MS_NOEXEC)
+#define IS_SYNC(inode)		__IS_FLG(inode, MS_SYNCHRONOUS)
+#define IS_MANDLOCK(inode)	__IS_FLG(inode, MS_MANDLOCK)
+
+#define IS_QUOTAINIT(inode)	((inode)->i_flags & S_QUOTA)
+#define IS_APPEND(inode)	((inode)->i_flags & S_APPEND)
+#define IS_IMMUTABLE(inode)	((inode)->i_flags & S_IMMUTABLE)
+#define IS_NOATIME(inode)	__IS_FLG(inode, MS_NOATIME)
+#define IS_NODIRATIME(inode)	__IS_FLG(inode, MS_NODIRATIME)
 
 /* the read-only stuff doesn't really belong here, but any other place is
    probably as bad and I don't want to create yet another include file. */
@@ -479,39 +487,6 @@ extern void posix_unblock_lock(struct file_lock *);
 
 #include <linux/stat.h>
 
-#define FLOCK_VERIFY_READ  1
-#define FLOCK_VERIFY_WRITE 2
-
-extern int locks_mandatory_locked(struct inode *inode);
-extern int locks_mandatory_area(int read_write, struct inode *inode,
-				struct file *filp, loff_t offset,
-				size_t count);
-
-extern inline int locks_verify_locked(struct inode *inode)
-{
-	/* Candidates for mandatory locking have the setgid bit set
-	 * but no group execute bit -  an otherwise meaningless combination.
-	 */
-	if (IS_MANDLOCK(inode) &&
-	    (inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
-		return (locks_mandatory_locked(inode));
-	return (0);
-}
-
-extern inline int locks_verify_area(int read_write, struct inode *inode,
-				    struct file *filp, loff_t offset,
-				    size_t count)
-{
-	/* Candidates for mandatory locking have the setgid bit set
-	 * but no group execute bit -  an otherwise meaningless combination.
-	 */
-	if (IS_MANDLOCK(inode) &&
-	    (inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
-		return (locks_mandatory_area(read_write, inode, filp, offset,
-					     count));
-	return (0);
-}
-
 struct fasync_struct {
 	int    magic;
 	int    fa_fd;
@@ -668,6 +643,41 @@ struct file_system_type {
 
 extern int register_filesystem(struct file_system_type *);
 extern int unregister_filesystem(struct file_system_type *);
+
+
+#define FLOCK_VERIFY_READ  1
+#define FLOCK_VERIFY_WRITE 2
+
+extern int locks_mandatory_locked(struct inode *inode);
+extern int locks_mandatory_area(int read_write, struct inode *inode,
+				struct file *filp, loff_t offset,
+				size_t count);
+
+extern inline int locks_verify_locked(struct inode *inode)
+{
+	/* Candidates for mandatory locking have the setgid bit set
+	 * but no group execute bit -  an otherwise meaningless combination.
+	 */
+	if (IS_MANDLOCK(inode) &&
+	    (inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
+		return (locks_mandatory_locked(inode));
+	return (0);
+}
+
+extern inline int locks_verify_area(int read_write, struct inode *inode,
+				    struct file *filp, loff_t offset,
+				    size_t count)
+{
+	/* Candidates for mandatory locking have the setgid bit set
+	 * but no group execute bit -  an otherwise meaningless combination.
+	 */
+	if (IS_MANDLOCK(inode) &&
+	    (inode->i_mode & (S_ISGID | S_IXGRP)) == S_ISGID)
+		return (locks_mandatory_area(read_write, inode, filp, offset,
+					     count));
+	return (0);
+}
+
 
 /* fs/open.c */
 

@@ -481,7 +481,7 @@ nfs_fhget(struct dentry *dentry, struct nfs_fh *fhandle,
 			goto out;	
 		inode->i_sb = sb;
 		inode->i_dev = sb->s_dev;
-		inode->i_flags = sb->s_flags;
+		inode->i_flags = 0;
 		inode->i_ino = fattr->fileid;
 		nfs_read_inode(inode);
 		nfs_fill_inode(inode, fattr);

@@ -850,6 +850,26 @@ CONFIG_MD_STRIPED
   here and read Documentation/modules.txt. The module will be called
   raid0.o. If unsure, say Y.
 
+Are you using a crosscompiler
+CONFIG_CROSSCOMPILE
+  Set this if you are using another architecture to compile the
+  kernel for your MIPS machine.
+
+Support for Acer PICA 1 chipset
+CONFIG_ACER_PICA_61
+  This is a machine with a R4400 133/150 MHz CPU. To compile a Linux
+  kernel that runs on these, say Y here. For details about Linux on
+  the MIPS architecture, check out the Linux/MIPS FAQ on the WWW at
+  http://lena.fnet.fr/ (To browse the WWW, you need to have access to
+  a machine on the Internet that has a program like lynx or
+  netscape).
+
+Support for Algorithmics P4032
+CONFIG_ALGOR_P4032
+  This is an evaluation board of the British company Algorithmics.  The
+  board uses the R4300 and a R5230 CPUs.  For more information about
+  this board see www.algor.co.uk.
+
 RAID-1 (mirroring) mode
 CONFIG_MD_MIRRORING
   A RAID-1 set consists of several disk drives which are exact copies
@@ -870,6 +890,11 @@ CONFIG_MD_MIRRORING
   in and removed from the running kernel whenever you want). If you
   want to compile it as a module, say M here and read
   Documentation/modules.txt. If unsure, say Y.
+
+Boot support (linear, striped)
+CONFIG_MD_BOOT
+  To boot with an initial linear or striped md device you have to say
+  Y here. For lilo and loadlin options see Documentation/md.txt.
 
 RAID-4/RAID-5 mode
 CONFIG_MD_RAID5
@@ -892,28 +917,6 @@ CONFIG_MD_RAID5
   want to compile it as a module, say M here and read
   Documentation/modules.txt. If unsure, say Y.
 
-Boot support (linear, striped)
-CONFIG_MD_BOOT
-  To boot with an initial linear or striped md device you have to say
-  Y here. For lilo and loadlin options see Documentation/md.txt.
-
-Support for Deskstation RPC44 
-CONFIG_DESKSTATION_RPC44
-  This is a machine with a R4400 100 MHz CPU. To compile a Linux
-  kernel that runs on these, say Y here. For details about Linux
-  on the MIPS architecture, check out the Linux/MIPS FAQ on the WWW at
-  http://lena.fnet.fr/ (To browse the WWW, you need to
-  have access to a machine on the Internet that has a program like
-  lynx or netscape).
-
-Support for Mips Magnum 3000 
-CONFIG_MIPS_MAGNUM_3000
-  To compile a Linux kernel that runs on these machines, say Y here.
-  For details about Linux on the MIPS architecture, check out the
-  Linux/MIPS FAQ on the WWW at http://lena.fnet.fr/ (To browse the
-  WWW, you need to have access to a machine on the Internet that has a
-  program like lynx or netscape).
-
 Support for Mips Magnum 4000
 CONFIG_MIPS_MAGNUM_4000
   This is a machine with a R4000 100 MHz CPU. To compile a Linux
@@ -930,39 +933,29 @@ CONFIG_OLIVETTI_M700
   http://lena.fnet.fr/ (To browse the WWW, you need to have access to
   a machine on the Internet that has a program like lynx or netscape).
 
-Support for Deskstation Tyne
-CONFIG_DESKSTATION_TYNE
-  This is a machine with a R4600 134 MHz CPU. The Linux port for this
-  system is idle right now because of hardware or documentation
-  problems. For details about Linux on the MIPS architecture, check
-  out the Linux/MIPS FAQ on the WWW at http://lena.fnet.fr/ (To browse
-  the WWW, you need to have access to a machine on the Internet that
-  has a program like lynx or netscape).
-
-Support for Acer PICA 1 chipset
-CONFIG_ACER_PICA_61
-  This is a machine with a R4400 134/150 MHz CPU. To compile a Linux
-  kernel that runs on these, say Y here. For details about Linux on
-  the MIPS architecture, check out the Linux/MIPS FAQ on the WWW at
-  http://lena.fnet.fr/ (To browse the WWW, you need to have access to
-  a machine on the Internet that has a program like lynx or
-  netscape).
-
-Support for DECstation
-CONFIG_DECSTATION
-  The DECstation 3100 (with a MIPS R2000 series CPU) and DECstation
-  5000/xxx (MIPS R3000 series CPU) are also sometimes labeled
-  PMAX. They often run the Ultrix operating system. To compile a Linux
-  kernel that runs on these, say Y here. For details about Linux on
-  the MIPS architecture, check out the Linux/MIPS FAQ on the WWW at
-  http://lena.fnet.fr/ (To browse the WWW, you need to have access to
-  a machine on the Internet that has a program like lynx or netscape).
-
 CPU type
 CONFIG_CPU_R3000
   Give the type of your machine's MIPS CPU. For this question,
   it suffices to give a unique prefix of the option you want to
-  choose. 
+  choose.  In case of doubt select the R3000 CPU.  This kernel will
+  run on other MIPS machines but with slightly reduced performance.
+
+Compile the kernel into the ECOFF object format
+CONFIG_ECOFF_KERNEL
+  Some machines require a kernel in the ECOFF format.  You will have to
+  Choose this option for example if you want to a Mips Magnum 3000 or a
+  DECstation over network.
+
+Generate little endian code
+CONFIG_CPU_LITTLE_ENDIAN
+  Some MIPS machines can be configured for either little or big endian
+  byte order.  Both modes require different kernels.  Say yes if your
+  machine is little endian, no if it's a big endian machine.
+
+Kernel support for IRIX binaries
+CONFIG_BINFMT_IRIX
+  This option enables the kernel support for IRIX binaries.  Running
+  IRIX binaries additionally requires IRIX libraries.
 
 Networking support
 CONFIG_NET
@@ -1190,6 +1183,24 @@ CONFIG_SERIAL_MULTIPORT
   signal when there are any serial ports on the board which need
   servicing.  Say Y here to enable the serial driver to take advantage
   of those special I/O ports.
+
+SGI Zilog85C30 serial support
+CONFIG_SGI_SERIAL
+  If you want to use your SGI's built-in serial ports under Linux, say Y.
+
+SGI graphics support
+CONFIG_SGI_GRAPHICS
+  If you have an SGI machine and you want to compile the graphic drivers
+  select this option.  This will include the code for the /dev/graphics
+  and /dev/gfx drivers into the kernel for supporting the virtualized
+  access to your graphics hardware.
+
+Remote GDB kernel debugging
+CONFIG_REMOTE_DEBUG
+  This enables remote debugging support for the MIPS kernel.  Enabling
+  this option enlarges you kernel image disk size by several megabytes
+  and requires a machine with more than 16mb, better 32mb RAM to avoid
+  excessive linking time.
 
 Support the Bell Technologies HUB6 card
 CONFIG_HUB6
@@ -1856,6 +1867,12 @@ CONFIG_CPU_LITTLE_ENDIAN
   otherwise N. Most MIPS machines use little-endian code, but it might
   be necessary to run older Mips systems, such as the Sony News and
   MIPS RC3xxx, in big endian mode.
+
+Build fp execption handler module
+CONFIG_MIPS_FPE_MODULE
+  Build the floating point exception handler module.  This option is only
+  useful for people working on the floating point exception handler.  If
+  you don't, say n.
 
 Plug and Play support
 CONFIG_PNP
@@ -4109,6 +4126,11 @@ CONFIG_SCSI_PPA_HAVE_PEDANTIC
   your EPP chipset is from the SMC series, you are likely to have to
   set this value greater than 0.
 
+SGI wd93 Scsi Driver
+CONFIG_SCSI_SGIWD93
+  This is the SCSI driver for WD33C93 / WD33C95 SCSI chips used in many
+  SGI machines.
+
 SCSI Debug host simulator.
 CONFIG_SCSI_DEBUG
   This is a host adapter simulator that can be programmed to simulate
@@ -5839,6 +5861,10 @@ CONFIG_DEFXX
   This is support for the DIGITAL series of EISA (DEFEA) and PCI
   (DEFPA) controllers which can connect you to a local FDDI network.
 
+SGI Seeq ethernet controller support
+  This is a driver for the Seeq based Ethernet adapters used in many
+  Silicon Graphics machines.
+
 Acorn Ether1 card
 CONFIG_ARM_ETHER1
   If you have an Acorn system with one of these (AKA25) network cards,
@@ -6387,6 +6413,12 @@ CONFIG_NFSD
   inserted in and removed from the running kernel whenever you want).
   The module is called nfsd.o. If you want to compile it as a module,
   say M here and read Documentation/modules.txt. If unsure, say N.
+
+Emulate Sun NFS daemon
+CONFIG_NFSD_SUN
+  If you would like for the server to allow clients to access
+  directories that are mountpoints on the local filesystem (this is
+  how nfsd behaves on Sun systems), say yes here.  If unsure, say N.
 
 OS/2 HPFS filesystem support (read only)
 CONFIG_HPFS_FS

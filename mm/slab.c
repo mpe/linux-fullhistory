@@ -1444,8 +1444,10 @@ alloc_new_slab:
 		}
 		/* Couldn't grow, but some objs may have been freed. */
 		spin_lock_irq(&cachep->c_spinlock);
-		if (cachep->c_freep != kmem_slab_end(cachep))
-			goto try_again;
+		if (cachep->c_freep != kmem_slab_end(cachep)) {
+			if ((flags & SLAB_ATOMIC) == 0) 
+				goto try_again;
+		}
 	} else {
 		/* Very serious error - maybe panic() here? */
 		kmem_report_alloc_err("Bad slab magic (corrupt)", cachep);

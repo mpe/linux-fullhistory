@@ -55,8 +55,6 @@
 
 #include <asm/spinlock.h>
 
-extern unsigned char aux_device_present, pckbd_read_mask;
-
 #if defined(CONFIG_PROC_FS)
 #include <linux/proc_fs.h>
 #endif
@@ -195,6 +193,7 @@ EXPORT_SYMBOL(shrink_dcache_sb);
 EXPORT_SYMBOL(shrink_dcache_parent);
 EXPORT_SYMBOL(find_inode_number);
 EXPORT_SYMBOL(is_subdir);
+EXPORT_SYMBOL(get_unused_fd);
 
 #if !defined(CONFIG_NFSD) && defined(CONFIG_NFSD_MODULE)
 EXPORT_SYMBOL(do_nfsservctl);
@@ -383,14 +382,6 @@ EXPORT_SYMBOL(__up);
 /* all busmice */
 EXPORT_SYMBOL(add_mouse_randomness);
 EXPORT_SYMBOL(fasync_helper);
-
-#ifdef CONFIG_PSMOUSE_MODULE
-/* psaux mouse */
-EXPORT_SYMBOL(aux_device_present);
-#ifdef CONFIG_VT
-EXPORT_SYMBOL(pckbd_read_mask);
-#endif
-#endif
 
 #ifdef CONFIG_BLK_DEV_MD
 EXPORT_SYMBOL(disk_name);	/* for md.c */

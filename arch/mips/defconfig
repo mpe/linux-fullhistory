@@ -48,7 +48,9 @@ CONFIG_SYSCTL=y
 #
 # Loadable module support
 #
-# CONFIG_MODULES is not set
+CONFIG_MODULES=y
+# CONFIG_MODVERSIONS is not set
+CONFIG_KMOD=y
 
 #
 # Block devices
@@ -173,7 +175,8 @@ CONFIG_SCSI_NCR53C8XX_SYNC=5
 # CONFIG_SCSI_T128 is not set
 # CONFIG_SCSI_U14_34F is not set
 # CONFIG_SCSI_ULTRASTOR is not set
-# CONFIG_JAZZ_ESP is not set
+CONFIG_JAZZ_ESP=y
+CONFIG_JAZZ_ESP=y
 
 #
 # Network device support
@@ -195,10 +198,12 @@ CONFIG_PCNET32=y
 # CONFIG_CS89x0 is not set
 # CONFIG_DE4X5 is not set
 # CONFIG_DEC_ELCP is not set
+# CONFIG_DEC_ELCP is not set
 # CONFIG_DGRS is not set
 # CONFIG_EEXPRESS_PRO100 is not set
 # CONFIG_NE2K_PCI is not set
 # CONFIG_TLAN is not set
+# CONFIG_VIA_RHINE is not set
 # CONFIG_NET_POCKET is not set
 # CONFIG_FDDI is not set
 # CONFIG_DLCI is not set
@@ -206,6 +211,7 @@ CONFIG_PCNET32=y
 # CONFIG_SLIP is not set
 # CONFIG_NET_RADIO is not set
 # CONFIG_TR is not set
+# CONFIG_HOSTESS_SV11 is not set
 # CONFIG_WAN_DRIVERS is not set
 # CONFIG_LAPBETHER is not set
 # CONFIG_X25_ASY is not set
@@ -243,11 +249,9 @@ CONFIG_SERIAL=y
 # CONFIG_SERIAL_CONSOLE is not set
 # CONFIG_SERIAL_EXTENDED is not set
 # CONFIG_SERIAL_NONSTANDARD is not set
-CONFIG_UNIX98_PTYS=y
-CONFIG_UNIX98_PTY_COUNT=256
+# CONFIG_UNIX98_PTYS is not set
 # CONFIG_MOUSE is not set
 # CONFIG_QIC02_TAPE is not set
-# CONFIG_APM is not set
 # CONFIG_WATCHDOG is not set
 # CONFIG_RTC is not set
 # CONFIG_VIDEO_DEV is not set
@@ -286,7 +290,9 @@ CONFIG_LOCKD=y
 # CONFIG_ROMFS_FS is not set
 # CONFIG_AUTOFS_FS is not set
 # CONFIG_UFS_FS is not set
-CONFIG_DEVPTS_FS=y
+# CONFIG_BSD_DISKLABEL is not set
+# CONFIG_SMD_DISKLABEL is not set
+# CONFIG_SOLARIS_X86_PARTITION is not set
 # CONFIG_MAC_PARTITION is not set
 CONFIG_NLS=y
 
@@ -321,6 +327,10 @@ CONFIG_NLS_ISO8859_1=y
 # CONFIG_NLS_KOI8_R is not set
 
 #
+# Console drivers
+#
+
+#
 # Sound
 #
 # CONFIG_SOUND is not set
@@ -329,4 +339,6 @@ CONFIG_NLS_ISO8859_1=y
 # Kernel hacking
 #
 CONFIG_CROSSCOMPILE=y
+# CONFIG_MIPS_FPE_MODULE is not set
 # CONFIG_REMOTE_DEBUG is not set
+# CONFIG_MAGIC_SYSRQ is not set

@@ -294,6 +294,39 @@ static int set_recmask(sb_devc * devc, int mask)
 	return devc->recmask;
 }
 
+static int set_outmask(sb_devc * devc, int mask)
+{
+	int devmask, i;
+	unsigned char  regimage;
+
+	devmask = mask & devc->supported_out_devices;
+
+	switch (devc->model)
+	{
+		case MDL_SB16:
+			if (devc->submodel == SUBMDL_ALS007) 
+				break;
+			else
+			{
+				regimage = 0;
+				for (i = 0; i < SOUND_MIXER_NRDEVICES; i++)
+				{
+					if ((1 << i) & devmask)
+					{
+						regimage |= (sb16_recmasks_L[i] | sb16_recmasks_R[i]);
+					}
+					sb_setmixer (devc, SB16_OMASK, regimage);
+				}
+			}
+			break;
+		default:
+			break;
+	}
+
+	devc->outmask = devmask;
+	return devc->outmask;
+}
+
 static int sb_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 {
 	sb_devc *devc = mixer_devs[dev]->devc;
@@ -321,6 +354,10 @@ static int sb_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 					ret = set_recmask(devc, val);
 					break;
 
+				case SOUND_MIXER_OUTSRC:
+					ret = set_outmask(devc, val);
+					break;
+
 				default:
 					ret = sb_mixer_set(devc, cmd & 0xff, val);
 			}
@@ -329,6 +366,10 @@ static int sb_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 		{
 			case SOUND_MIXER_RECSRC:
 				ret = devc->recmask;
+				break;
+				  
+			case SOUND_MIXER_OUTSRC:
+				ret = devc->outmask;
 				break;
 				  
 			case SOUND_MIXER_DEVMASK:
@@ -346,6 +387,10 @@ static int sb_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 				  
 			case SOUND_MIXER_RECMASK:
 				ret = devc->supported_rec_devices;
+				break;
+				  
+			case SOUND_MIXER_OUTMASK:
+				ret = devc->supported_out_devices;
 				break;
 				  
 			case SOUND_MIXER_CAPS:
@@ -435,6 +480,7 @@ int sb_mixer_init(sb_devc * devc)
 		case MDL_SB16:
 			devc->mixer_caps = 0;
 			devc->supported_rec_devices = SB16_RECORDING_DEVICES;
+			devc->supported_out_devices = SB16_OUTFILTER_DEVICES;
 			if (devc->submodel != SUBMDL_ALS007)
 			{
 				devc->supported_devices = SB16_MIXER_DEVICES;

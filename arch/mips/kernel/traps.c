@@ -1,14 +1,11 @@
-/*
- * arch/mips/kernel/traps.c
+/* $Id: traps.c,v 1.20 1998/10/14 20:26:26 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright 1994, 1995, 1996, 1997 by Ralf Baechle
+ * Copyright 1994, 1995, 1996, 1997, 1998 by Ralf Baechle
  * Modified for R3000 by Paul M. Antoine, 1995, 1996
- *
- * $Id: traps.c,v 1.10 1998/05/04 09:17:57 ralf Exp $
  */
 #include <linux/config.h>
 #include <linux/init.h>
@@ -20,15 +17,12 @@
 #include <asm/branch.h>
 #include <asm/cachectl.h>
 #include <asm/jazz.h>
-#include <asm/vector.h>
 #include <asm/pgtable.h>
 #include <asm/io.h>
 #include <asm/bootinfo.h>
 #include <asm/watch.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
-
-#undef CONF_DEBUG_EXCEPTIONS
 
 static inline void console_verbose(void)
 {
@@ -61,9 +55,7 @@ extern asmlinkage void handle_ri(void);
 extern asmlinkage void handle_cpu(void);
 extern asmlinkage void handle_ov(void);
 extern asmlinkage void handle_tr(void);
-extern asmlinkage void handle_vcei(void);
 extern asmlinkage void handle_fpe(void);
-extern asmlinkage void handle_vced(void);
 extern asmlinkage void handle_watch(void);
 extern asmlinkage void handle_reserved(void);
 
@@ -71,6 +63,7 @@ static char *cpu_names[] = CPU_NAMES;
 
 char watch_available = 0;
 char dedicated_iv_available = 0;
+char vce_available = 0;
 
 void (*ibe_board_handler)(struct pt_regs *regs);
 void (*dbe_board_handler)(struct pt_regs *regs);
@@ -159,10 +152,9 @@ void show_registers(char * str, struct pt_regs * regs, long err)
 	}
 	else
 		printk("(Bad address in epc)\n");
-	do_exit(SIGSEGV);
 }
 
-void die_if_kernel(const char * str, struct pt_regs * regs, long err)
+void die(const char * str, struct pt_regs * regs, unsigned long err)
 {
 	if (user_mode(regs))	/* Just return if in user mode.  */
 		return;
@@ -171,6 +163,12 @@ void die_if_kernel(const char * str, struct pt_regs * regs, long err)
 	printk("%s: %04lx\n", str, err & 0xffff);
 	show_regs(regs);
 	do_exit(SIGSEGV);
+}
+
+void die_if_kernel(const char * str, struct pt_regs * regs, unsigned long err)
+{
+	if (!user_mode(regs))
+		die(str, regs, err);
 }
 
 static void default_be_board_handler(struct pt_regs *regs)
@@ -183,31 +181,21 @@ static void default_be_board_handler(struct pt_regs *regs)
 
 void do_ibe(struct pt_regs *regs)
 {
-	lock_kernel();
 show_regs(regs); while(1);
 	ibe_board_handler(regs);
-	unlock_kernel();
 }
 
 void do_dbe(struct pt_regs *regs)
 {
-	lock_kernel();
 show_regs(regs); while(1);
 	dbe_board_handler(regs);
-	unlock_kernel();
 }
 
 void do_ov(struct pt_regs *regs)
 {
-	lock_kernel();
-#ifdef CONF_DEBUG_EXCEPTIONS
-	show_regs(regs);
-#endif
 	if (compute_return_epc(regs))
-		goto out;
+		return;
 	force_sig(SIGFPE, current);
-out:
-	unlock_kernel();
 }
 
 #ifdef CONFIG_MIPS_FPE_MODULE
@@ -235,6 +223,9 @@ int unregister_fpe(void (*handler)(struct pt_regs *regs, unsigned int fcr31))
  */
 void do_fpe(struct pt_regs *regs, unsigned long fcr31)
 {
+	unsigned long pc;
+	unsigned int insn;
+
 #ifdef CONFIG_MIPS_FPE_MODULE
 	if (fpe_handler != NULL) {
 		fpe_handler(regs, fcr31);
@@ -242,9 +233,6 @@ void do_fpe(struct pt_regs *regs, unsigned long fcr31)
 	}
 #endif
 	lock_kernel();
-#ifdef CONF_DEBUG_EXCEPTIONS
-	show_regs(regs);
-#endif
 	if (fcr31 & 0x20000) {
 		/* Retry instruction with flush to zero ...  */
 		if (!(fcr31 & (1<<24))) {
@@ -258,13 +246,22 @@ void do_fpe(struct pt_regs *regs, unsigned long fcr31)
 				: "r" (fcr31));
 			goto out;
 		}
-		printk("Unimplemented exception at 0x%08lx in %s.\n",
-		       regs->cp0_epc, current->comm);
+		pc = regs->cp0_epc + ((regs->cp0_cause & CAUSEF_BD) ? 4 : 0);
+		if (get_user(insn, (unsigned int *)pc)) {
+			/* XXX Can this happen?  */
+			force_sig(SIGSEGV, current);
+		}
+
+		printk(KERN_DEBUG "Unimplemented exception for insn %08x at 0x%08lx in %s.\n",
+		       insn, regs->cp0_epc, current->comm);
+		simfp(insn);
 	}
 
 	if (compute_return_epc(regs))
 		goto out;
-	force_sig(SIGFPE, current);
+	//force_sig(SIGFPE, current);
+	printk(KERN_DEBUG "Should send SIGFPE to %s\n", current->comm);
+
 out:
 	unlock_kernel();
 }
@@ -286,72 +283,53 @@ static inline int get_insn_opcode(struct pt_regs *regs, unsigned int *opcode)
 	return 0;
 }
 
-static inline void
-do_bp_and_tr(struct pt_regs *regs, char *exc, unsigned int trapcode)
+
+void do_bp(struct pt_regs *regs)
 {
+	unsigned int opcode, bcode;
+
+	/*
+	 * There is the ancient bug in the MIPS assemblers that the break
+	 * code starts left to bit 16 instead to bit 6 in the opcode.
+	 * Gas is bug-compatible ...
+	 */
+	if (get_insn_opcode(regs, &opcode))
+		return;
+	bcode = ((opcode >> 16) & ((1 << 20) - 1));
+
 	/*
 	 * (A short test says that IRIX 5.3 sends SIGTRAP for all break
 	 * insns, even for break codes that indicate arithmetic failures.
 	 * Wiered ...)
 	 */
 	force_sig(SIGTRAP, current);
-#ifdef CONF_DEBUG_EXCEPTIONS
-	show_regs(regs);
-#endif
-}
-
-void do_bp(struct pt_regs *regs)
-{
-	unsigned int opcode, bcode;
-
-	lock_kernel();
-	/*
-	 * There is the ancient bug in the MIPS assemblers that the break
-	 * code starts left to bit 16 instead to bit 6 in the opcode.
-	 * Gas is bug-compatible ...
-	 */
-#ifdef CONF_DEBUG_EXCEPTIONS
-	printk("BREAKPOINT at %08lx\n", regs->cp0_epc);
-#endif
-	if (get_insn_opcode(regs, &opcode))
-		goto out;
-	bcode = ((opcode >> 16) & ((1 << 20) - 1));
-
-	do_bp_and_tr(regs, "bp", bcode);
-
-	if (compute_return_epc(regs))
-		goto out;
-out:
-	unlock_kernel();
 }
 
 void do_tr(struct pt_regs *regs)
 {
 	unsigned int opcode, bcode;
 
-	lock_kernel();
 	if (get_insn_opcode(regs, &opcode))
-		goto out;
+		return;
 	bcode = ((opcode >> 6) & ((1 << 20) - 1));
 
-	do_bp_and_tr(regs, "tr", bcode);
-out:
-	unlock_kernel();
+	/*
+	 * (A short test says that IRIX 5.3 sends SIGTRAP for all break
+	 * insns, even for break codes that indicate arithmetic failures.
+	 * Wiered ...)
+	 */
+	force_sig(SIGTRAP, current);
 }
 
 void do_ri(struct pt_regs *regs)
 {
 	lock_kernel();
-#ifdef CONF_DEBUG_EXCEPTIONS
-	show_regs(regs);
-#endif
 	printk("[%s:%ld] Illegal instruction at %08lx ra=%08lx\n",
 	       current->comm, current->pid, regs->cp0_epc, regs->regs[31]);
-	if (compute_return_epc(regs))
-		goto out;
-	force_sig(SIGILL, current);
-out:
 	unlock_kernel();
+	if (compute_return_epc(regs))
+		return;
+	force_sig(SIGILL, current);
 }
 
 void do_cpu(struct pt_regs *regs)
@@ -364,7 +342,7 @@ void do_cpu(struct pt_regs *regs)
 
 	regs->cp0_status |= ST0_CU1;
 	if (last_task_used_math == current)
-		goto out;
+		return;
 
 	if (current->used_math) {		/* Using the FPU again.  */
 		r4xx0_lazy_fpu_switch(last_task_used_math);
@@ -377,56 +355,27 @@ void do_cpu(struct pt_regs *regs)
 	return;
 
 bad_cid:
-	lock_kernel();
 	force_sig(SIGILL, current);
-	unlock_kernel();
-out:
-}
-
-void do_vcei(struct pt_regs *regs)
-{
-	lock_kernel();
-	/*
-	 * Only possible on R4[04]00[SM]C. No handler because I don't have
-	 * such a cpu.  Theory says this exception doesn't happen.
-	 */
-	panic("Caught VCEI exception - should not happen");
-	unlock_kernel();
-}
-
-void do_vced(struct pt_regs *regs)
-{
-	lock_kernel();
-	/*
-	 * Only possible on R4[04]00[SM]C. No handler because I don't have
-	 * such a cpu.  Theory says this exception doesn't happen.
-	 */
-	panic("Caught VCE exception - should not happen");
-	unlock_kernel();
 }
 
 void do_watch(struct pt_regs *regs)
 {
-	lock_kernel();
 	/*
 	 * We use the watch exception where available to detect stack
 	 * overflows.
 	 */
 	show_regs(regs);
 	panic("Caught WATCH exception - probably caused by stack overflow.");
-	unlock_kernel();
 }
 
 void do_reserved(struct pt_regs *regs)
 {
-	lock_kernel();
 	/*
 	 * Game over - no way to handle this if it ever occurs.
 	 * Most probably caused by a new unknown cpu type or
 	 * after another deadly hard/software error.
 	 */
 	panic("Caught reserved exception - should not happen.");
-	unlock_kernel();
 }
 
 static inline void watch_init(unsigned long cputype)
@@ -545,11 +494,8 @@ __initfunc(void trap_init(void))
 	case CPU_R4400MC:
 	case CPU_R4000SC:
 	case CPU_R4400SC:
-		/* XXX The following won't work because we _cannot_
-		 * XXX perform any load/store before the VCE handler.
-		 */
-		set_except_vector(14, handle_vcei);
-		set_except_vector(31, handle_vced);
+		vce_available = 1;
+		/* Fall through ...  */
 	case CPU_R4000PC:
 	case CPU_R4400PC:
 	case CPU_R4200:
@@ -565,13 +511,16 @@ __initfunc(void trap_init(void))
 		else
 			memcpy((void *)KSEG0, &except_vec0_r4000, 0x80);
 
-		/*
-		 * The idea is that this special r4000 general exception
-		 * vector will check for VCE exceptions before calling
-		 * out of the exception array.  XXX TODO
-		 */
+		/* Cache error vector  */
 		memcpy((void *)(KSEG0 + 0x100), (void *) KSEG0, 0x80);
-		memcpy((void *)(KSEG0 + 0x180), &except_vec3_r4000, 0x80);
+
+		if (vce_available) {
+			memcpy((void *)(KSEG0 + 0x180), &except_vec3_r4000,
+			       0x180);
+		} else {
+			memcpy((void *)(KSEG0 + 0x180), &except_vec3_generic,
+			       0x100);
+		}
 
 		save_fp_context = r4k_save_fp_context;
 		restore_fp_context = r4k_restore_fp_context;

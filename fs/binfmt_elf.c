@@ -273,13 +273,13 @@ static unsigned long load_elf_interp(struct elfhdr * interp_elf_ex,
 	    if (eppnt->p_flags & PF_R) elf_prot =  PROT_READ;
 	    if (eppnt->p_flags & PF_W) elf_prot |= PROT_WRITE;
 	    if (eppnt->p_flags & PF_X) elf_prot |= PROT_EXEC;
+	    vaddr = eppnt->p_vaddr;
 	    if (interp_elf_ex->e_type == ET_EXEC || load_addr_set) {
 	    	elf_type |= MAP_FIXED;
-	    	vaddr = eppnt->p_vaddr;
 #ifdef __sparc__
 	    } else {
 		load_addr = get_unmapped_area(0, eppnt->p_filesz +
-					ELF_PAGEOFFSET(eppnt->p_vaddr));
+					ELF_PAGEOFFSET(vaddr));
 #endif
 	    }
 
@@ -293,7 +293,7 @@ static unsigned long load_elf_interp(struct elfhdr * interp_elf_ex,
 		goto out_close;
 
 	    if (!load_addr_set && interp_elf_ex->e_type == ET_DYN) {
-		load_addr = map_addr;
+		load_addr = map_addr - ELF_PAGESTART(vaddr);
 		load_addr_set = 1;
 	    }
 
@@ -433,6 +433,13 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		goto out;
 	if (!elf_check_arch(elf_ex.e_machine))
 		goto out;
+#ifdef __mips__
+	/* IRIX binaries handled elsewhere. */
+	if (elf_ex.e_flags & EF_MIPS_ARCH) {
+		retval = -ENOEXEC;
+		goto out;
+	}
+#endif
 	if (!bprm->dentry->d_inode->i_op		   ||
 	    !bprm->dentry->d_inode->i_op->default_file_ops ||
 	    !bprm->dentry->d_inode->i_op->default_file_ops->mmap)
@@ -613,7 +620,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	for(i = 0, elf_ppnt = elf_phdata; i < elf_ex.e_phnum; i++, elf_ppnt++) {
 		if (elf_ppnt->p_type == PT_LOAD) {
 			int elf_prot = 0, elf_flags;
-			unsigned long vaddr = 0;
+			unsigned long vaddr;
 
 			if (elf_ppnt->p_flags & PF_R) elf_prot |= PROT_READ;
 			if (elf_ppnt->p_flags & PF_W) elf_prot |= PROT_WRITE;
@@ -621,8 +628,8 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 
 			elf_flags = MAP_PRIVATE|MAP_DENYWRITE|MAP_EXECUTABLE;
 
+			vaddr = elf_ppnt->p_vaddr;
 			if (elf_ex.e_type == ET_EXEC || load_addr_set) {
-				vaddr = elf_ppnt->p_vaddr;
 				elf_flags |= MAP_FIXED;
 			}
 
@@ -639,7 +646,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 				load_addr = (elf_ppnt->p_vaddr -
 					     elf_ppnt->p_offset);
 				if (elf_ex.e_type == ET_DYN) {
-					load_bias = error;
+					load_bias = error - ELF_PAGESTART(load_bias + vaddr);
 					load_addr += error;
 				}
 			}
@@ -1118,12 +1125,16 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 #else
 	corefile[4] = '\0';
 #endif
-	dentry = open_namei(corefile, O_CREAT | 2 | O_TRUNC, 0600);
+	dentry = open_namei(corefile, O_CREAT | 2 | O_TRUNC | O_NOFOLLOW, 0600);
 	if (IS_ERR(dentry)) {
 		dentry = NULL;
 		goto end_coredump;
 	}
 	inode = dentry->d_inode;
+
+	if(inode->i_nlink > 1)
+		goto end_coredump;	/* multiple links - don't dump */
+
 	if (!S_ISREG(inode->i_mode))
 		goto end_coredump;
 	if (!inode->i_op || !inode->i_op->default_file_ops)

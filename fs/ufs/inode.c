@@ -53,10 +53,11 @@
 static void ufs_print_inode(struct inode * inode)
 {
 	unsigned swab = inode->i_sb->u.ufs_sb.s_swab;
-	printk("ino %lu  mode 0%6.6o  nlink %d  uid %d  gid %d"
-	       "  size %lu blocks %lu\n",
+	printk("ino %lu  mode 0%6.6o  nlink %d  uid %d  uid32 %u"
+	       "  gid %d  gid32 %u  size %lu blocks %lu\n",
 	       inode->i_ino, inode->i_mode, inode->i_nlink,
-	       inode->i_uid,inode->i_gid, inode->i_size, inode->i_blocks);
+	       inode->i_uid, inode->u.ufs_i.i_uid, inode->i_gid, 
+	       inode->u.ufs_i.i_gid, inode->i_size, inode->i_blocks);
 	printk("  db <%u %u %u %u %u %u %u %u %u %u %u %u>\n",
 		SWAB32(inode->u.ufs_i.i_u1.i_data[0]),
 		SWAB32(inode->u.ufs_i.i_u1.i_data[1]),
@@ -487,10 +488,10 @@ void ufs_read_inode (struct inode * inode)
 	 */
 	inode->i_uid = inode->u.ufs_i.i_uid = ufs_get_inode_uid(ufs_inode);
 	inode->i_gid = inode->u.ufs_i.i_gid = ufs_get_inode_gid(ufs_inode);
-	if (inode->i_uid == UFS_USEEFT) {
+	if (inode->u.ufs_i.i_uid >= UFS_USEEFT) {
 		inode->i_uid = 0;
 	}
-	if (inode->i_gid == UFS_USEEFT) {
+	if (inode->u.ufs_i.i_gid >= UFS_USEEFT) {
 		inode->i_gid = 0;
 	}
 	
@@ -600,11 +601,13 @@ static int ufs_update_inode(struct inode * inode, int do_sync)
 	ufs_inode->ui_mtime.tv_sec = SWAB32(inode->i_mtime);
 	ufs_inode->ui_mtime.tv_usec = SWAB32(0);
 	ufs_inode->ui_blocks = SWAB32(inode->i_blocks);
-
 	ufs_inode->ui_flags = SWAB32(inode->u.ufs_i.i_flags);
 	ufs_inode->ui_gen = SWAB32(inode->u.ufs_i.i_gen);
-	ufs_inode->ui_u3.ui_sun.ui_shadow = SWAB32(inode->u.ufs_i.i_shadow);
-	ufs_inode->ui_u3.ui_sun.ui_oeftflag = SWAB32(inode->u.ufs_i.i_oeftflag);
+
+	if ((flags & UFS_UID_MASK) == UFS_UID_EFT) {
+		ufs_inode->ui_u3.ui_sun.ui_shadow = SWAB32(inode->u.ufs_i.i_shadow);
+		ufs_inode->ui_u3.ui_sun.ui_oeftflag = SWAB32(inode->u.ufs_i.i_oeftflag);
+	}
 
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
 		ufs_inode->ui_u2.ui_addr.ui_db[0] = SWAB32(kdev_t_to_nr(inode->i_rdev));

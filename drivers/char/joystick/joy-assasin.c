@@ -84,7 +84,7 @@ static int js_as_read_packet(int io, int length, char *data)
 
 	__save_flags(flags);
 	__cli();
-	outb(inb(io),io);
+	outb(0xff,io);
 
 	u = inb(io);
 	t = js_get_time();
@@ -306,7 +306,7 @@ static struct js_port __init *js_as_probe(int io, int mask0, int mask1, struct j
 
 	if (check_region(io, 1)) return port;
 	if (((u = inb(io)) & 3) == 3) return port;
-	outb(u,io);
+	outb(0xff,io);
 	if (!((inb(io) ^ u) & ~u & 0xf)) return port;
 
 	if (js_as_read_packet(io, 1, data) != 1) return port;

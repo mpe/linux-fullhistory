@@ -1063,6 +1063,16 @@ __initfunc(void pcibios_fixup_devices(void))
 			if (pin) {
 				pin--;		/* interrupt pins are numbered starting from 1 */
 				irq = IO_APIC_get_PCI_irq_vector(dev->bus->number, PCI_SLOT(dev->devfn), pin);
+				if (irq < 0 && dev->bus->parent) { /* go back to the bridge */
+					struct pci_dev * bridge = dev->bus->self;
+
+					pin = (pin + PCI_SLOT(dev->devfn)) % 4;
+					irq = IO_APIC_get_PCI_irq_vector(bridge->bus->number, 
+							PCI_SLOT(bridge->devfn), pin);
+					if (irq >= 0)
+						printk(KERN_WARNING "PCI: using PPB(B%d,I%d,P%d) to get irq %d\n", 
+							bridge->bus->number, PCI_SLOT(bridge->devfn), pin, irq);
+				}
 				if (irq >= 0) {
 					printk("PCI->APIC IRQ transform: (B%d,I%d,P%d) -> %d\n",
 						dev->bus->number, PCI_SLOT(dev->devfn), pin, irq);

@@ -4,7 +4,7 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: tags.c,v 1.2 1998/05/01 01:35:28 ralf Exp $
+ * $Id: tags.c,v 1.2 1998/03/27 08:53:48 ralf Exp $
  */
 #include <linux/init.h>
 #include <linux/kernel.h>

@@ -318,7 +318,7 @@ struct inode * ext2_new_inode (const struct inode * dir, int mode, int * err)
 
 	sb = dir->i_sb;
 	inode->i_sb = sb;
-	inode->i_flags = sb->s_flags;
+	inode->i_flags = 0;
 	lock_super (sb);
 	es = sb->u.ext2_sb.s_es;
 repeat:

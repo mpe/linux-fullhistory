@@ -219,24 +219,25 @@ static inline void remove_from_swap_cache(struct page *page)
 }
 
 
+/*
+ * This must be called only on pages that have
+ * been verified to be in the swap cache.
+ */
 void delete_from_swap_cache(struct page *page)
 {
+	long entry = page->offset;
+
 #ifdef SWAP_CACHE_INFO
 	swap_cache_del_total++;
-#endif	
-	if (PageSwapCache (page))  {
-		long entry = page->offset;
-#ifdef SWAP_CACHE_INFO
-		swap_cache_del_success++;
+	swap_cache_del_success++;
 #endif
 #ifdef DEBUG_SWAP
-		printk("DebugVM: delete_from_swap_cache(%08lx count %d, "
-		       "entry %08lx)\n",
-		       page_address(page), atomic_read(&page->count), entry);
+	printk("DebugVM: delete_from_swap_cache(%08lx count %d, "
+	       "entry %08lx)\n",
+	       page_address(page), atomic_read(&page->count), entry);
 #endif
-		remove_from_swap_cache (page);
-		swap_free (entry);
-	}
+	remove_from_swap_cache (page);
+	swap_free (entry);
 }
 
 /* 

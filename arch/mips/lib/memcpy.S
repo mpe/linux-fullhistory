@@ -3,7 +3,7 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * $Id: memcpy.S,v 1.2 1998/05/04 09:18:16 ralf Exp $
+ * $Id: memcpy.S,v 1.4 1998/07/03 14:05:33 ralf Exp $
  *
  * Unified implementation of memcpy, memmove and the __copy_user backend.
  * For __rmemcpy and memmove an exception is always a kernel bug, therefore
@@ -416,6 +416,7 @@ LEAF(__rmemcpy)					/* a0=dst a1=src a2=len */
 	addu	a0, a2				# dst = dst + len
 	addu	a1, a2				# src = src + len
 
+#if 0 /* Horror fix */
 	xor	t0, a0, a1
 	andi	t0, t0, 0x3
 	move	t7, a0
@@ -552,6 +553,7 @@ r_maybe_end_cruft:
 r_small_memcpy:
 	beqz	t2, r_out
 	 move	a2, t2
+#endif /* Horror fix */
 
 r_end_bytes:
 	lb	t0, -1(a1)
@@ -565,6 +567,7 @@ r_out:
 	jr	ra
 	 move	a2, zero
 
+#if 0 /* Horror fix */
 /* ------------------------------------------------------------------------- */
 
 /* Bad, bad.  At least try to align the source  */
@@ -686,6 +689,7 @@ ru_end_bytes:
 	jr	ra
 	 move	a2, zero
 	END(__rmemcpy)
+#endif /* Horror fix */
 
 l_fixup:					# clear the rest of the buffer
 	lw	t0, THREAD_BUADDR($28)

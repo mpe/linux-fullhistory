@@ -92,7 +92,7 @@ static int js_lt_read_packet(int io, __u64 *data)
 	__save_flags(flags);
 	__cli();
 
-	outb(u,io);
+	outb(0xff,io);
 
 	u = inb(io);
 	t = js_get_time();
@@ -232,7 +232,7 @@ static int js_lt_close(struct js_dev *jd)
 static void __init js_lt_trigger_sequence(int io, int *seq)
 {
 	while (*seq) {
-		outb(inb(io),io);
+		outb(0xff,io);
 		udelay(*seq++);
 	}
 }
@@ -288,7 +288,7 @@ static struct js_port __init *js_lt_probe(int io, struct js_port *port)
 	if (check_region(io, 1)) return port;
 
 	if (((u = inb(io)) & 3) == 3) return port;
-	outb(u,io);
+	outb(0xff,io);
 	if (!((inb(io) ^ u) & ~u & 0xf)) return port;
 
 	if (!(i = js_lt_read_packet(io, &data))) {

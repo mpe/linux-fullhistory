@@ -1,10 +1,10 @@
-/* $Id: system.h,v 1.8 1998/05/07 00:40:09 ralf Exp $
+/* $Id: system.h,v 1.8 1998/07/20 17:52:21 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1994, 1995 by Ralf Baechle
+ * Copyright (C) 1994, 1995, 1996, 1997, 1998 by Ralf Baechle
  * Modified further for R[236]000 by Paul M. Antoine, 1996
  */
 #ifndef __ASM_MIPS_SYSTEM_H
@@ -118,13 +118,13 @@ __asm__ __volatile__(					\
 	: /* no input */				\
 	: "memory")
 
-#if !defined (__LANGUAGE_ASSEMBLY__)
+#if !defined (_LANGUAGE_ASSEMBLY)
 /*
  * switch_to(n) should switch tasks to task nr n, first
  * checking that n isn't the current task, in which case it does nothing.
  */
 extern asmlinkage void (*resume)(void *tsk);
-#endif /* !defined (__LANGUAGE_ASSEMBLY__) */
+#endif /* !defined (_LANGUAGE_ASSEMBLY) */
 
 #define switch_to(prev,next) \
 do { \

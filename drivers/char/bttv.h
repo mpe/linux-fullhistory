@@ -35,7 +35,7 @@
 #define RISCMEM_LEN	(32744*2)
 
 /* maximum needed buffer size for extended VBI frame mode capturing */
-#define BTTV_MAX_FBUF	0x151000
+#define BTTV_MAX_FBUF	0x190000
 
 #ifdef __KERNEL__
 
@@ -59,6 +59,7 @@ struct bttv_pll_info {
 	unsigned int pll_ifreq;		/* PLL input frequency    */
 	unsigned int pll_ofreq;		/* PLL output frequency   */
 	unsigned int pll_crystal;	/* Crystal used for input */
+	unsigned int pll_current;	/* Current programmed ofrq*/
 };
 
 struct bttv 
@@ -114,6 +115,7 @@ struct bttv
 	struct gbuffer *ogbuffers;
 	struct gbuffer *egbuffers;
 	u16 gwidth, gheight, gfmt;
+        u16 gwidth_next, gheight_next, gfmt_next;
 	u32 *grisc;
 	
 	unsigned long gro;
@@ -166,6 +168,10 @@ struct bttv
 #define BTTV_GRAB		_IOR('v' , BASE_VIDIOCPRIVATE+2, struct gbuf)
 #define BTTV_FIELDNR		_IOR('v' , BASE_VIDIOCPRIVATE+2, unsigned int)
 #define BTTV_PLLSET		_IOW('v' , BASE_VIDIOCPRIVATE+3, struct bttv_pll_info)
+#define BTTV_BURST_ON		_IOR('v' , BASE_VIDIOCPRIVATE+4, int)
+#define BTTV_BURST_OFF		_IOR('v' , BASE_VIDIOCPRIVATE+5, int)
+#define BTTV_NAGRAVERSION	_IOR('v' , BASE_VIDIOCPRIVATE+6, int)
+#define BTTV_PICNR		_IOR('v' , BASE_VIDIOCPRIVATE+7, int)
 
 
 #define BTTV_UNKNOWN       0x00
@@ -177,7 +183,9 @@ struct bttv
 #define BTTV_AVERMEDIA     0x06 
 #define BTTV_MATRIX_VISION 0x07 
 #define BTTV_FLYVIDEO      0x08
-#define BTTV_HAUPPAUGE878  0x09
+#define BTTV_TURBOTV       0x09
+#define BTTV_HAUPPAUGE878  0x0a
+#define BTTV_MIROPRO       0x0b
 
 #define AUDIO_TUNER        0x00
 #define AUDIO_RADIO        0x01

@@ -7,9 +7,10 @@
  *
  * Copyright (c) 1997 by Ralf Baechle
  *
- * $Id: pcimt_scache.c,v 1.1 1998/03/04 08:47:29 ralf Exp $
+ * $Id: pcimt_scache.c,v 1.2 1998/05/28 03:18:02 ralf Exp $
  */
 #include <linux/init.h>
+#include <linux/kernel.h>
 #include <asm/bcache.h>
 #include <asm/sni.h>
 

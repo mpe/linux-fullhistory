@@ -12,6 +12,7 @@
 #include <asm/watch.h>
 
 unsigned long unaligned_instructions;
+unsigned int vced_count, vcei_count;
 
 /*
  * BUFFER is PAGE_SIZE bytes long.
@@ -21,6 +22,7 @@ unsigned long unaligned_instructions;
  */
 int get_cpuinfo(char *buffer)
 {
+	char fmt [64];
 	const char *cpu_name[] = CPU_NAMES;
 	const char *mach_group_names[] = GROUP_NAMES;
 	const char *mach_unknown_names[] = GROUP_UNKNOWN_NAMES;
@@ -69,6 +71,11 @@ int get_cpuinfo(char *buffer)
 	               dedicated_iv_available ? "yes" : "no");
 	len += sprintf(buffer + len, "hardware watchpoint\t: %s\n",
 	               watch_available ? "yes" : "no");
+
+	sprintf(fmt, "VCE%%c exceptions\t\t: %s\n",
+	        vce_available ? "%d" : "not available");
+	len += sprintf(buffer + len, fmt, 'D', vced_count);
+	len += sprintf(buffer + len, fmt, 'I', vcei_count);
 
 	return len;
 }

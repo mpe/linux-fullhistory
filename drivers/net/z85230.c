@@ -1213,7 +1213,7 @@ static void z8530_rx_done(struct z8530_channel *c)
 		disable_dma(c->rxdma);
 		clear_dma_ff(c->rxdma);
 		c->rxdma_on=0;
-		ct=c->mtu-get_dma_residue(c->rxdma)-4;
+		ct=c->mtu-get_dma_residue(c->rxdma);
 		if(ct<0)
 			ct=2;	/* Shit happens.. */
 		c->dma_ready=0;
@@ -1257,7 +1257,6 @@ static void z8530_rx_done(struct z8530_channel *c)
 		{
 			skb_put(skb, ct);
 			memcpy(skb->data, rxb, ct);
-			skb_pull(skb,2);
 		}
 		c->dma_ready=1;
 	}

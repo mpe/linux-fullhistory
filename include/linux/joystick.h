@@ -34,7 +34,7 @@
  * Version
  */
 
-#define JS_VERSION		0x01020b
+#define JS_VERSION		0x01020c
 
 /*
  * Types and constants for reading from /dev/js
@@ -158,7 +158,7 @@ struct JS_DATA_SAVE_TYPE {
 #define __cli cli
 #define __save_flags(flags) save_flags(flags)
 #define __restore_flags(flags)	restore_flags(flags)
-#define spin_lock_irqsave(x, flags) do { cli(); save_flags(flags); } while (0)
+#define spin_lock_irqsave(x, flags) do { save_flags(flags); cli(); } while (0)
 #define spin_unlock_irqrestore(x, flags) restore_flags(flags)
 #define spin_lock_init(x) do { } while (0)
 typedef struct { int something; } spinlock_t;

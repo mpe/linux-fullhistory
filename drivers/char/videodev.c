@@ -53,6 +53,9 @@ extern int init_colour_qcams(struct video_init *);
 #ifdef CONFIG_VIDEO_BWQCAM
 extern int init_bw_qcams(struct video_init *);
 #endif
+#ifdef CONFIG_VIDEO_PLANB
+extern int init_planbs(struct video_init *);
+#endif
 #ifdef CONFIG_RADIO_AZTECH
 extern int aztech_init(struct video_init *);
 #endif
@@ -83,6 +86,9 @@ static struct video_init video_init_list[]={
 #ifdef CONFIG_VIDEO_PMS
 	{"PMS", init_pms_cards}, 
 #endif	
+#ifdef CONFIG_VIDEO_PLANB
+	{"planb", init_planbs},
+#endif
 #ifdef CONFIG_RADIO_AZTECH
 	{"Aztech", aztech_init}, 
 #endif	

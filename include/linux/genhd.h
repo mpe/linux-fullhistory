@@ -21,6 +21,10 @@
 #define CONFIG_SUN_PARTITION 1
 #endif
 
+#if defined(CONFIG_SGI)
+#define CONFIG_SGI_PARTITION 1
+#endif
+
 /* These three have identical behaviour; use the second one if DOS fdisk gets
    confused about extended/logical partitions starting past cylinder 1023. */
 #define DOS_EXTENDED_PARTITION 5

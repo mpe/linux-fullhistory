@@ -5,7 +5,7 @@
 # removes any old dependencies. DON'T put your own dependencies here
 # unless it's something special (ie not a .c file).
 #
-# $Id: Makefile,v 1.2 1998/05/01 01:35:32 ralf Exp $
+# $Id: Makefile,v 1.2 1997/12/20 13:27:14 ralf Exp $
 #
 
 .S.s:

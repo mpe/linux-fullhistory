@@ -15,6 +15,7 @@ int aha152x_detect(Scsi_Host_Template *);
 int aha152x_command(Scsi_Cmnd *);
 int aha152x_queue(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int aha152x_abort(Scsi_Cmnd *);
+int aha152x_release(struct Scsi_Host *shpnt);
 int aha152x_reset(Scsi_Cmnd *, unsigned int);
 int aha152x_biosparam(Disk *, kdev_t, int*);
 int aha152x_proc_info(char *buffer, char **start, off_t offset, int length, int hostno, int inout);

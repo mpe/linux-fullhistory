@@ -658,6 +658,74 @@ static int sun_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sec
 
 #endif /* CONFIG_SUN_PARTITION */
 
+#ifdef CONFIG_SGI_PARTITION
+
+static int sgi_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector)
+{
+	int i, csum;
+	unsigned int *ui;
+	struct buffer_head *bh;
+	struct sgi_disklabel {
+		int magic_mushroom;         /* Big fat spliff... */
+		short root_part_num;        /* Root partition number */
+		short swap_part_num;        /* Swap partition number */
+		char boot_file[16];         /* Name of boot file for ARCS */
+		unsigned char _unused0[48]; /* Device parameter useless crapola.. */
+		struct sgi_volume {
+			char name[8];       /* Name of volume */
+			int  block_num;     /* Logical block number */
+			int  num_bytes;     /* How big, in bytes */
+		} volume[15];
+		struct sgi_partition {
+			int num_blocks;     /* Size in logical blocks */
+			int first_block;    /* First logical block */
+			int type;           /* Type of this partition */
+		} partitions[16];
+		int csum;                   /* Disk label checksum */
+		int _unused1;               /* Padding */
+	} *label;
+	struct sgi_partition *p;
+#define SGI_LABEL_MAGIC 0x0be5a941
+
+	if(!(bh = bread(dev, 0, 1024))) {
+		printk("Dev %s: unable to read partition table\n", kdevname(dev));
+		return -1;
+	}
+	label = (struct sgi_disklabel *) bh->b_data;
+	p = &label->partitions[0];
+	if(label->magic_mushroom != SGI_LABEL_MAGIC) {
+		printk("Dev %s SGI disklabel: bad magic %08x\n",
+		       kdevname(dev), label->magic_mushroom);
+		brelse(bh);
+		return 0;
+	}
+	ui = ((unsigned int *) (label + 1)) - 1;
+	for(csum = 0; ui >= ((unsigned int *) label);)
+		csum += *ui--;
+	if(csum) {
+		printk("Dev %s SGI disklabel: csum bad, label corrupted\n",
+		       kdevname(dev));
+		brelse(bh);
+		return 0;
+	}
+	/* All SGI disk labels have 16 partitions, disks under Linux only
+	 * have 15 minor's.  Luckily there are always a few zero length
+	 * partitions which we don't care about so we never overflow the
+	 * current_minor.
+	 */
+	for(i = 0; i < 16; i++, p++) {
+		if(!(p->num_blocks))
+			continue;
+		add_partition(hd, current_minor, p->first_block, p->num_blocks);
+		current_minor++;
+	}
+	printk("\n");
+	brelse(bh);
+	return 1;
+}
+
+#endif
+
 #ifdef CONFIG_AMIGA_PARTITION
 #include <asm/byteorder.h>
 #include <linux/affs_hardblocks.h>
@@ -1048,6 +1116,10 @@ static void check_partition(struct gendisk *hd, kdev_t dev)
 #endif
 #ifdef CONFIG_MAC_PARTITION
 	if (mac_partition(hd, dev, first_sector))
+		return;
+#endif
+#ifdef CONFIG_SGI_PARTITION
+	if(sgi_partition(hd, dev, first_sector))
 		return;
 #endif
 	printk(" unknown partition table\n");

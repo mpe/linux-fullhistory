@@ -497,9 +497,7 @@ M:	campbell@torque.net
 P:	Andrea Arcangeli
 M:	andrea@e-mind.com
 L:	linux-parport@torque.net
-L:	pnp-list@redhat.com
 W:	http://www.cyberelk.demon.co.uk/parport.html
-W:	http://www.cage.curtin.edu.au/~campbell/parbus/
 S:	Maintained
 
 PARIDE DRIVERS FOR PARALLEL PORT IDE DEVICES

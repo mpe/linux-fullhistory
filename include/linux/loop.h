@@ -103,8 +103,12 @@ struct loop_func_table {
 	int (*transfer)(struct loop_device *lo, int cmd, 
 			char *raw_buf, char *loop_buf, int size);
 	int (*init)(struct loop_device *, struct loop_info *); 
-	int (*release)(struct loop_device *);  
+	/* release is called from loop_unregister_transfer or clr_fd */
+	int (*release)(struct loop_device *); 
 	int (*ioctl)(struct loop_device *, int cmd, unsigned long arg);
+	/* lock and unlock manage the module use counts */ 
+	void (*lock)(struct loop_device *);
+	void (*unlock)(struct loop_device *);
 }; 
 
 int  loop_register_transfer(struct loop_func_table *funcs);

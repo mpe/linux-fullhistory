@@ -31,6 +31,25 @@
  *  Fixes:
  *	Alan Cox	07 Sept	1997	Vmalloc internal stack as needed.
  *					Cope with changing max_files.
+ *	Al Viro		11 Oct 1998
+ *		Graph may have cycles. That is, we can send the descriptor
+ *		of foo to bar and vice versa. Current code chokes on that.
+ *		Fix: move SCM_RIGHTS ones into the separate list and then
+ *		skb_free() them all instead of doing explicit fput's.
+ *		Another problem: since fput() may block somebody may
+ *		create a new unix_socket when we are in the middle of sweep
+ *		phase. Fix: revert the logic wrt MARKED. Mark everything
+ *		upon the beginning and unmark non-junk ones.
+ *
+ *		[12 Oct 1998] AAARGH! New code purges all SCM_RIGHTS
+ *		sent to connect()'ed but still not accept()'ed sockets.
+ *		Fixed. Old code had slightly different problem here:
+ *		extra fput() in situation when we passed the descriptor via
+ *		such socket and closed it (descriptor). That would happen on
+ *		each unix_gc() until the accept(). Since the struct file in
+ *		question would go to the free list and might be reused...
+ *		That might be the reason of random oopses on close_fp() in
+ *		unrelated processes.
  *
  */
  
@@ -123,11 +142,11 @@ extern inline int empty_stack(void)
 	return in_stack == 0;
 }
 
-extern inline void maybe_mark_and_push(unix_socket *x)
+extern inline void maybe_unmark_and_push(unix_socket *x)
 {
-	if (x->protinfo.af_unix.marksweep&MARKED)
+	if (!(x->protinfo.af_unix.marksweep&MARKED))
 		return;
-	x->protinfo.af_unix.marksweep|=MARKED;
+	x->protinfo.af_unix.marksweep&=~MARKED;
 	push_stack(x);
 }
 
@@ -139,7 +158,8 @@ void unix_gc(void)
 	static int in_unix_gc=0;
 	int i;
 	unix_socket *s;
-	unix_socket *next;
+	struct sk_buff_head hitlist;
+	struct sk_buff *skb;
 	
 	/*
 	 *	Avoid a recursive GC.
@@ -163,17 +183,21 @@ void unix_gc(void)
 		max_stack=max_files;
 	}
 	
+	forall_unix_sockets(i, s)
+	{
+		s->protinfo.af_unix.marksweep|=MARKED;
+	}
 	/*
-	 *	Assume everything is now unmarked 
+	 *	Everything is now marked 
 	 */
 
 	/* Invariant to be maintained:
-		- everything marked is either:
+		- everything unmarked is either:
 		-- (a) on the stack, or
-		-- (b) has all of its children marked
-		- everything on the stack is always marked
+		-- (b) has all of its children unmarked
+		- everything on the stack is always unmarked
 		- nothing is ever pushed onto the stack twice, because:
-		-- nothing previously marked is ever pushed on the stack
+		-- nothing previously unmarked is ever pushed on the stack
 	 */
 
 	/*
@@ -186,8 +210,9 @@ void unix_gc(void)
 		 *	If all instances of the descriptor are not
 		 *	in flight we are in use.
 		 */
-		if(s->socket && s->socket->file && s->socket->file->f_count > s->protinfo.af_unix.inflight)
-			maybe_mark_and_push(s);
+		if(s->socket && s->socket->file &&
+		   s->socket->file->f_count > s->protinfo.af_unix.inflight)
+			maybe_unmark_and_push(s);
 	}
 
 	/*
@@ -198,7 +223,6 @@ void unix_gc(void)
 	{
 		unix_socket *x = pop_stack();
 		unix_socket *f=NULL,*sk;
-		struct sk_buff *skb;
 tail:		
 		skb=skb_peek(&x->receive_queue);
 		
@@ -227,15 +251,22 @@ tail:
 					if((sk=unix_get_socket(*fp++))!=NULL)
 					{
 						/*
-						 *	Remember the first, mark the
-						 *	rest.
+						 *	Remember the first,
+						 *	unmark the rest.
 						 */
 						if(f==NULL)
 							f=sk;
 						else
-							maybe_mark_and_push(sk);
+							maybe_unmark_and_push(sk);
 					}
 				}
+			}
+			/* We have to scan not-yet-accepted ones too */
+			if (UNIXCB(skb).attr & MSG_SYN) {
+				if (f==NULL)
+					f=skb->sk;
+				else
+					maybe_unmark_and_push(skb->sk);
 			}
 			skb=skb->next;
 		}
@@ -245,9 +276,9 @@ tail:
 
 		if (f) 
 		{
-			if (!(f->protinfo.af_unix.marksweep&MARKED))
+			if ((f->protinfo.af_unix.marksweep&MARKED))
 			{
-				f->protinfo.af_unix.marksweep|=MARKED;
+				f->protinfo.af_unix.marksweep&=~MARKED;
 				x=f;
 				f=NULL;
 				goto tail;
@@ -255,35 +286,37 @@ tail:
 		}
 	}
 
-	/*
-	 *	Sweep phase.  NOTE: this part dominates the time complexity 
-	 */
+	skb_queue_head_init(&hitlist);
 
 	forall_unix_sockets(i, s)
 	{
-		next=s->next;
-		if (!(s->protinfo.af_unix.marksweep&MARKED))
+		if (s->protinfo.af_unix.marksweep&MARKED)
 		{
-			/*
-			 *	We exist only in the passing tree of sockets
-			 *	that is no longer connected to active descriptors
-			 *	Time to die..
-			 *
-			 *	Subtle item: We will correctly sweep out the
-			 *	socket that has just been closed by the user.
-			 *	We must not close this as we are in the middle
-			 *	of its close at this moment. Skip that file
-			 *	using f_count==0 to spot it.
-			 */
-			 
-			if(s->socket && s->socket->file && s->socket->file->f_count)
-				fput(s->socket->file);
+			struct sk_buff *nextsk;
+			skb=skb_peek(&s->receive_queue);
+			while(skb && skb != (struct sk_buff *)&s->receive_queue)
+			{
+				nextsk=skb->next;
+				/*
+				 *	Do we have file descriptors ?
+				 */
+				if(UNIXCB(skb).fp)
+				{
+					skb_unlink(skb);
+					skb_queue_tail(&hitlist,skb);
+				}
+				skb=nextsk;
+			}
 		}
-		else
-			s->protinfo.af_unix.marksweep&=~MARKED;	/* unmark everything for next collection */
 	}
-	
+
+	/*
+	 *	Here we are. Hitlist is filled. Die.
+	 */
+
+	while ((skb=skb_dequeue(&hitlist))!=NULL) {
+		kfree_skb(skb);
+	}
+
 	in_unix_gc=0;
-	
-	free_page((long)stack);
 }

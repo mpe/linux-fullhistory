@@ -144,7 +144,7 @@ static int	stl_nrbrds = sizeof(stl_brdconf) / sizeof(stlconf_t);
  */
 static char	*stl_drvtitle = "Stallion Multiport Serial Driver";
 static char	*stl_drvname = "stallion";
-static char	*stl_drvversion = "5.4.6";
+static char	*stl_drvversion = "5.4.7";
 static char	*stl_serialname = "ttyE";
 static char	*stl_calloutname = "cue";
 
@@ -664,17 +664,21 @@ static unsigned int	sc26198_baudtable[] = {
  *	to get at port stats - only not using the port device itself.
  */
 static struct file_operations	stl_fsiomem = {
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	stl_memioctl,
-	NULL,
-	stl_memopen,
+	NULL,		/* llseek */
+	NULL,		/* read */
+	NULL,		/* write */
+	NULL,		/* readdir */
+	NULL,		/* poll */
+	stl_memioctl,	/* ioctl */
+	NULL,		/* mmap */
+	stl_memopen,	/* open */
 	NULL,		/* flush */
-	stl_memclose,
-	NULL
+	stl_memclose,	/* release */
+	NULL,		/* fsync */
+	NULL,		/* fasync */
+	NULL,		/* check_media_change */
+	NULL,		/* revalidate */
+	NULL		/* lock */
 };
 
 /*****************************************************************************/

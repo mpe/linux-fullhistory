@@ -1,5 +1,4 @@
-/*
- * include/asm-mips/mipsregs.h
+/* $Id: mipsregs.h,v 1.6 1998/08/17 11:27:08 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -7,8 +6,6 @@
  *
  * Copyright (C) 1994, 1995, 1996, 1997 by Ralf Baechle
  * Modified for further R[236]000 support by Paul M. Antoine, 1996.
- *
- * $Id: mipsregs.h,v 1.7 1998/05/21 07:37:31 davem Exp $
  */
 #ifndef __ASM_MIPS_MIPSREGS_H
 #define __ASM_MIPS_MIPSREGS_H
@@ -157,7 +154,7 @@
 #define C_IRQ4          (1<<14)
 #define C_IRQ5          (1<<15)
 
-#ifndef __LANGUAGE_ASSEMBLY__
+#ifndef _LANGUAGE_ASSEMBLY
 /*
  * Manipulate the status register.
  * Mostly used to access the interrupt bits.
@@ -181,7 +178,7 @@ __BUILD_SET_CP0(status,CP0_STATUS)
 __BUILD_SET_CP0(cause,CP0_CAUSE)
 __BUILD_SET_CP0(config,CP0_CONFIG)
 
-#endif /* defined (__LANGUAGE_ASSEMBLY__) */
+#endif /* defined (_LANGUAGE_ASSEMBLY) */
 
 /*
  * Inline code for use of the ll and sc instructions
@@ -317,20 +314,20 @@ __BUILD_SET_CP0(config,CP0_CONFIG)
 #define  CAUSEF_BD		(1   << 31)
 
 /*
- * Bits in the coprocessor 0 config register.
+ * Bits in the coprozessor 0 config register.
  */
-#define CONF_REG_CM_CACHABLE_NO_WA	0
-#define CONF_REG_CM_CACHABLE_WA		1
-#define CONF_REG_CM_UNCACHED		2
-#define CONF_REG_CM_CACHABLE_NONCOHERENT	3
-#define CONF_REG_CM_CACHABLE_CE		4
-#define CONF_REG_CM_CACHABLE_COW		5
-#define CONF_REG_CM_CACHABLE_CUW		6
-#define CONF_REG_CM_CACHABLE_ACCELERATED	7
-#define CONF_REG_CM_CMASK			7
-#define CONF_REG_DB			(1 <<  4)
-#define CONF_REG_IB			(1 <<  5)
-#define CONF_REG_SC			(1 << 17)
+#define CONF_CM_CACHABLE_NO_WA		0
+#define CONF_CM_CACHABLE_WA		1
+#define CONF_CM_UNCACHED		2
+#define CONF_CM_CACHABLE_NONCOHERENT	3
+#define CONF_CM_CACHABLE_CE		4
+#define CONF_CM_CACHABLE_COW		5
+#define CONF_CM_CACHABLE_CUW		6
+#define CONF_CM_CACHABLE_ACCELERATED	7
+#define CONF_CM_CMASK			7
+#define CONF_DB				(1 <<  4)
+#define CONF_IB				(1 <<  5)
+#define CONF_SC				(1 << 17)
 
 /*
  * R10000 performance counter definitions.
@@ -388,7 +385,7 @@ __BUILD_SET_CP0(config,CP0_CONFIG)
 #define CEB_KERNEL	2	/* Count events in kernel mode EXL = ERL = 0 */
 #define CEB_EXL		1	/* Count events with EXL = 1, ERL = 0 */
 
-#ifndef __LANGUAGE_ASSEMBLY__
+#ifndef _LANGUAGE_ASSEMBLY
 /*
  * Functions to access the performance counter and control registers
  */

@@ -93,7 +93,7 @@ int probe_sgalaxy( struct address_info *ai )
 	}
         
 	if ( ad1848_detect( ai->io_base+4, NULL, ai->osp ) )
-		return 1;	       /* The card is already active */
+		return probe_ms_sound(ai);  /* The card is already active, check irq etc... */
 
 	if ( check_region( ai->ai_sgbase, 0x10 ) )
 	{

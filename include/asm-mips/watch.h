@@ -1,13 +1,10 @@
-/*
- * Functions to use the watch register debugging functionality.
+/* $Id: watch.h,v 1.3 1998/08/19 21:58:15 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1996, 1997 by Ralf Baechle
- *
- * $Id: watch.h,v 1.3 1998/05/01 01:36:18 ralf Exp $
+ * Copyright (C) 1996, 1997, 1998 by Ralf Baechle
  */
 #ifndef __ASM_WATCH_H
 #define __ASM_WATCH_H
@@ -24,9 +21,9 @@ enum wref_type {
 
 extern char watch_available;
 
-extern asmlinkage __watch_set(unsigned long addr, enum wref_type ref);
-extern asmlinkage __watch_clear(void);
-extern asmlinkage __watch_reenable(void);
+extern asmlinkage void __watch_set(unsigned long addr, enum wref_type ref);
+extern asmlinkage void __watch_clear(void);
+extern asmlinkage void __watch_reenable(void);
 
 #define watch_set(addr, ref)					\
 	if (watch_available)					\

@@ -1,4 +1,4 @@
-/* $Id: sgialib.h,v 1.2 1998/05/01 01:36:06 ralf Exp $
+/* $Id: sgialib.h,v 1.2 1998/07/08 16:01:13 ralf Exp $
  * sgialib.h: SGI ARCS firmware interface library for the Linux kernel.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
@@ -106,11 +106,11 @@ extern long prom_invoke(unsigned long pc, unsigned long sp, long argc, char **ar
 extern long prom_exec(char *name, long argc, char **argv, char **envp);
 
 /* Misc. routines. */
-extern void prom_halt(void);
-extern void prom_powerdown(void);
-extern void prom_restart(void);
-extern void prom_reboot(void);
-extern void prom_imode(void);
+extern void prom_halt(void) __attribute__((noreturn));
+extern void prom_powerdown(void) __attribute__((noreturn));
+extern void prom_restart(void) __attribute__((noreturn));
+extern void prom_reboot(void) __attribute__((noreturn));
+extern void prom_imode(void) __attribute__((noreturn));
 extern long prom_cfgsave(void);
 extern struct linux_sysid *prom_getsysid(void);
 extern void prom_cacheflush(void);

@@ -1,19 +1,25 @@
-/*
- *  arch/mips/kernel/head.S
+/* $Id: head.S,v 1.13 1998/10/14 20:26:27 ralf Exp $
  *
- *  Copyright (C) 1994, 1995 Waldorf Electronics, 1996 Paul M. Antoine
- *  Written by Ralf Baechle and Andreas Busse
- *  Modified for DECStation and hence R3000 support by Paul M. Antoine
- *  Further modifications by David S. Miller
+ * arch/mips/kernel/head.S
  *
- *  Head.S contains the MIPS exception handler and startup code.
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
  *
- * $Id: head.S,v 1.9 1998/05/01 01:33:53 ralf Exp $
+ * Copyright (C) 1994, 1995 Waldorf Electronics
+ * Written by Ralf Baechle and Andreas Busse
+ * Copyright (C) 1995, 1996, 1997, 1998 Ralf Baechle
+ * Copyright (C) 1996 Paul M. Antoine
+ * Modified for DECStation and hence R3000 support by Paul M. Antoine
+ * Further modifications by David S. Miller
+ *
+ * Head.S contains the MIPS exception handler and startup code.
  */
 #include <linux/config.h>
 #include <linux/tasks.h>
 
 #include <asm/asm.h>
+#include <asm/cacheops.h>
 #include <asm/current.h>
 #include <asm/offset.h>
 #include <asm/processor.h>
@@ -29,10 +35,10 @@
 	/*
 	 * Reserved space for exception handlers.
 	 * Necessary for machines which link their kernels at KSEG0.
-	 * FIXME: We could overwrite some of the useless handlers
-	 * with those actually being used.
+	 * FIXME: Use the initcode feature to get rid of unused handler
+	 * variants.
 	 */
-	.fill	520
+	.fill	0x280
 /*	
  * This is space for the interrupt handlers.
  * After trap_init() they are located at virtual address KSEG0.
@@ -317,16 +323,48 @@
 	NESTED(except_vec3_r4000, 0, sp)
 	.set	noat
 	mfc0	k1, CP0_CAUSE
-
-	/* XXX Have to check for VCE's _before_ we do a load or store. */
-
-	la	k0, exception_handlers
 	andi	k1, k1, 0x7c
+	li	k0, 31<<2
+	beq	k1, k0, handle_vced
+	 li	k0, 14<<2
+	beq	k1, k0, handle_vcei
+	 la	k0, exception_handlers
 	addu	k0, k0, k1
 	lw	k0, (k0)
 	nop
 	jr	k0
 	 nop
+
+/*
+ * Big shit, we now may have two dirty primary cache lines for the same
+ * physical address.  We can savely invalidate the line pointed to by
+ * c0_badvaddr because after return from this exception handler the load /
+ * store will be re-executed.
+ */
+handle_vced:
+	mfc0	k0, CP0_BADVADDR
+ li k1, -4
+ and k0, k1
+	mtc0	zero, CP0_TAGLO
+ //	nop;nop
+	cache	Index_Store_Tag_D,(k0)
+ //	nop;nop
+	cache	Hit_Writeback_Inv_SD,(k0)
+	lui	k0, %hi(vced_count)
+	lw	k1, %lo(vced_count)(k0)
+	addiu	k1, 1
+	sw	k1, %lo(vced_count)(k0)
+	eret
+
+handle_vcei:
+	mfc0	k0, CP0_BADVADDR
+	cache	Hit_Writeback_Inv_SD,(k0)		# also cleans pi
+	lui	k0, %hi(vcei_count)
+	lw	k1, %lo(vcei_count)(k0)
+	addiu	k1, 1
+	sw	k1, %lo(vcei_count)(k0)
+	eret
+
 	END(except_vec3_r4000)
 	.set	at
 
@@ -779,32 +817,35 @@ map0_sni_rm200_pci:
 		.word  	0			# no. wired TLB entries
 		.word	0			# dummy
 
-			.text
+/*
+ * This buffer is reserved for the use of the cache error handler.
+ */
+		.data
+		EXPORT(cache_error_buffer)
+		.fill	32*4,1,0
 
-			.org	0x1000
-			EXPORT(swapper_pg_dir)
+EXPORT(kernelsp)
+		PTR	0
+		.text
 
-			.org	0x2000
-			EXPORT(empty_bad_page)
+		.org	0x1000
+EXPORT(swapper_pg_dir)
 
-			.org	0x3000
-			EXPORT(empty_bad_page_table)
+		.org	0x2000
+EXPORT(empty_bad_page)
 
-			.org	0x4000
-			EXPORT(empty_zero_page)
+		.org	0x3000
+EXPORT(empty_bad_page_table)
 
-			.org	0x5000
-			EXPORT(invalid_pte_table)
+		.org	0x4000
+EXPORT(invalid_pte_table)
 
-			.org	0x6000
-
-			/*
-			 * init_task_union follows here in the .text segment.
-			 * Keep this aligned to a 8kb boundary!
-			 */
-			.data
-			EXPORT(cache_error_buffer)
-			.fill	32*4,1,0
-
-			EXPORT(kernelsp)
-			PTR	0
+		.org	0x5000
+/* XXX This label is required to keep GAS trying to be too clever ...
+   Bug?  */
+dummy:
+/*
+ * Align to 8kb boundary for init_task_union which follows in the
+ * .text segment.
+ */
+		.align	13

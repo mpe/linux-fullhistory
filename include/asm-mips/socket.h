@@ -1,5 +1,5 @@
 /*
- * $Id: socket.h,v 1.10 1998/05/01 01:36:12 ralf Exp $
+ * $Id: socket.h,v 1.5 1998/03/15 09:52:54 ralf Exp $
  */
 #ifndef __ASM_MIPS_SOCKET_H
 #define __ASM_MIPS_SOCKET_H

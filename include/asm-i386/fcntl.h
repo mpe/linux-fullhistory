@@ -19,6 +19,7 @@
 #define O_DIRECT	 040000	/* direct disk access hint - currently ignored */
 #define O_LARGEFILE	0100000
 #define O_DIRECTORY	0200000	/* must be a directory */
+#define O_NOFOLLOW	0400000 /* don't follow links */
 
 #define F_DUPFD		0	/* dup */
 #define F_GETFD		1	/* get f_flags */

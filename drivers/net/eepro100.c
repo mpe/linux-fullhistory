@@ -953,6 +953,7 @@ static void speedo_tx_timeout(struct device *dev)
 	} else {
 		outw(DRVR_INT, ioaddr + SCBCmd);
 	}
+#ifdef oh_no_you_dont_unless_you_honour_the_options_passed_in_to_us
 	/* Reset the MII transceiver, suggested by Fred Young @ scalable.com. */
 	if ((sp->phy[0] & 0x8000) == 0) {
 		int phy_addr = sp->phy[0] & 0x1f;
@@ -964,6 +965,7 @@ static void speedo_tx_timeout(struct device *dev)
 		mdio_write(ioaddr, phy_addr, 0, mii_ctrl[dev->default_port & 7]);
 #endif
 	}
+#endif
 	sp->stats.tx_errors++;
 	dev->trans_start = jiffies;
 	return;

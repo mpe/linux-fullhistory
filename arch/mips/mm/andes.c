@@ -1,9 +1,8 @@
-/*
+/* $Id: andes.c,v 1.6 1998/10/16 19:22:42 ralf Exp $
+ *
  * andes.c: MMU and cache operations for the R10000 (ANDES).
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
- *
- * $Id: andes.c,v 1.5 1998/05/04 09:18:26 ralf Exp $
  */
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -13,6 +12,7 @@
 #include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/sgialib.h>
+#include <asm/mmu_context.h>
 
 extern unsigned long mips_tlb_entries;
 
@@ -104,6 +104,7 @@ __initfunc(void ld_mmu_andes(void))
 	flush_tlb_mm = andes_flush_tlb_mm;
 	flush_tlb_range = andes_flush_tlb_range;
 	flush_tlb_page = andes_flush_tlb_page;
+	andes_asid_setup();
     
         add_wired_entry = andes_add_wired_entry;
 

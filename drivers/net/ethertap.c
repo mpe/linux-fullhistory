@@ -329,7 +329,7 @@ static struct net_device_stats *ethertap_get_stats(struct device *dev)
 
 #ifdef MODULE
 
-int unit;
+static int unit;
 MODULE_PARM(unit,"i");
 
 static char devicename[9] = { 0, };

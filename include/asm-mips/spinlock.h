@@ -1,16 +1,24 @@
+/* $Id: spinlock.h,v 1.3 1998/08/28 15:55:39 ralf Exp $
+ */
 #ifndef __ASM_MIPS_SPINLOCK_H
 #define __ASM_MIPS_SPINLOCK_H
 
 #ifndef __SMP__
 
-/* gcc 2.7.2 can crash initializing an empty structure.  For now we
-   try to do though ...  */
-typedef struct { } spinlock_t;
-#define SPIN_LOCK_UNLOCKED { }
+/*
+ * Gcc-2.7.x has a nasty bug with empty initializers.
+ */
+#if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8)
+  typedef struct { } spinlock_t;
+  #define SPIN_LOCK_UNLOCKED { }
+#else
+  typedef struct { int gcc_is_buggy; } spinlock_t;
+  #define SPIN_LOCK_UNLOCKED { 0 }
+#endif
 
 #define spin_lock_init(lock)	do { } while(0)
 #define spin_lock(lock)		do { } while(0)
-#define spin_trylock(lock)	do { } while(0)
+#define spin_trylock(lock)	(1)
 #define spin_unlock_wait(lock)	do { } while(0)
 #define spin_unlock(lock)	do { } while(0)
 #define spin_lock_irq(lock)	cli()

@@ -378,8 +378,8 @@ static unsigned int load_irix_interp(struct elfhdr * interp_elf_ex,
 
 	/* Now fill out the bss section.  First pad the last page up
 	 * to the page boundary, and then perform a mmap to make sure
-	 * that there are zeromapped pages up to and including the last
-	 * bss page.
+	 * that there are zero-mapped pages up to and including the
+	 * last bss page.
 	 */
 #ifdef DEBUG_ELF
 	printk("padzero(%08lx) ", (unsigned long) (elf_bss));
@@ -1254,10 +1254,9 @@ static int irix_core_dump(long signr, struct pt_regs * regs)
 	notes[1].type = NT_PRPSINFO;
 	notes[1].datasz = sizeof(psinfo);
 	notes[1].data = &psinfo;
-	psinfo.pr_state = current->state;
-	psinfo.pr_sname =
-		((current->state < 0 || current->state > 5) ?
-		('.') : ("RSDZTD"[current->state]));
+	i = current->state ? ffz(~current->state) + 1 : 0;
+	psinfo.pr_state = i;
+	psinfo.pr_sname = (i < 0 || i > 5) ? '.' : "RSDZTD"[i];
 	psinfo.pr_zomb = psinfo.pr_sname == 'Z';
 	psinfo.pr_nice = current->priority-15;
 	psinfo.pr_flag = current->flags;
@@ -1286,7 +1285,7 @@ static int irix_core_dump(long signr, struct pt_regs * regs)
 	notes[2].datasz = sizeof(*current);
 	notes[2].data = current;
 	
-	/* Try to dump the fpu. */
+	/* Try to dump the FPU. */
 	prstatus.pr_fpvalid = dump_fpu (&fpu);
 	if (!prstatus.pr_fpvalid) {
 		numnote--;
@@ -1388,7 +1387,7 @@ static int irix_core_dump(long signr, struct pt_regs * regs)
 	return has_dumped;
 }
 
-__initfunc(int init_irix_binfmt(void))
+int __init init_irix_binfmt(void)
 {
 	return register_binfmt(&irix_format);
 }

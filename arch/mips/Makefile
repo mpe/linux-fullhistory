@@ -1,10 +1,4 @@
-#
-# arch/mips/Makefile
-#
-# This file is included by the global makefile so that you can add your own
-# architecture-specific flags and dependencies. Remember to do have actions
-# for "archclean" and "archdep" for cleaning up and making dependencies for
-# this architecture
+# $Id: Makefile,v 1.13 1998/08/17 10:16:23 ralf Exp $
 #
 # This file is subject to the terms and conditions of the GNU General Public
 # License.  See the file "COPYING" in the main directory of this archive
@@ -13,7 +7,10 @@
 # Copyright (C) 1994, 1995, 1996 by Ralf Baechle
 # DECStation modifications by Paul M. Antoine, 1996
 #
-# $Id: Makefile,v 1.14 1998/05/01 01:33:20 ralf Exp $
+# This file is included by the global makefile so that you can add your own
+# architecture-specific flags and dependencies. Remember to do have actions
+# for "archclean" and "archdep" for cleaning up and making dependencies for
+# this architecture
 #
 
 #
@@ -39,7 +36,7 @@ ifdef CONFIG_CROSSCOMPILE
 CROSS_COMPILE  = $(tool-prefix)
 endif
 
-LINKFLAGS	= -static -N
+LINKFLAGS	= -static #-N
 MODFLAGS	+= -mlong-calls
 
 #
@@ -74,7 +71,7 @@ ifdef CONFIG_CPU_R6000
 CFLAGS		:= $(CFLAGS) -mcpu=r6000 -mips2
 endif
 ifdef CONFIG_CPU_R4300
-CFLAGS		:= $(CFLAGS) -mcpu=r4600 -Wa,-mcpu=vr4300 -mips2
+CFLAGS		:= $(CFLAGS) -mcpu=r4300 -mips2
 endif
 ifdef CONFIG_CPU_R4X00
 CFLAGS		:= $(CFLAGS) -mcpu=r4600 -mips2
@@ -169,6 +166,8 @@ archclean:
 	@$(MAKEBOOT) clean
 	$(MAKE) -C arch/$(ARCH)/kernel clean
 	$(MAKE) -C arch/$(ARCH)/tools clean
+
+archmrproper:
 
 archdep:
 	@$(MAKEBOOT) dep

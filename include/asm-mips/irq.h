@@ -1,13 +1,11 @@
-/*
- * include/asm-mips/irq.h
+/* $Id: irq.h,v 1.4 1998/05/28 03:18:13 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1994 by Waldorf GMBH
- * written by Ralf Baechle
- *
+ * Copyright (C) 1994 by Waldorf GMBH, written by Ralf Baechle
+ * Copyright (C) 1995, 1996, 1997, 1998 by Ralf Baechle
  */
 #ifndef __ASM_MIPS_IRQ_H
 #define __ASM_MIPS_IRQ_H
@@ -34,5 +32,8 @@ extern unsigned int local_irq_count[];
 #define irq_enter(cpu, irq)     (++local_irq_count[cpu])
 #define irq_exit(cpu, irq)      (--local_irq_count[cpu])
 #endif
+
+/* Machine specific interrupt initialization  */
+extern void (*irq_setup)(void);
 
 #endif /* __ASM_MIPS_IRQ_H */

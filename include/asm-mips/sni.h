@@ -1,11 +1,12 @@
-/*
+/* $Id: sni.h,v 1.2 1998/09/16 22:52:43 ralf Exp $
+ *
  * SNI specific definitions
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1997 by Ralf Baechle
+ * Copyright (C) 1997, 1998 by Ralf Baechle
  */
 #ifndef __ASM_MIPS_SNI_H 
 #define __ASM_MIPS_SNI_H 
@@ -87,5 +88,10 @@
  * Base address for the mapped 16mb EISA bus segment.
  */
 #define PCIMT_EISA_BASE		0xb0000000
+
+/*
+ * The keyboard interrupt is an ISA interrupt
+ */
+#define SNI_KEYBOARD_IRQ 1
 
 #endif /* __ASM_MIPS_SNI_H */

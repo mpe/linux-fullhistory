@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: system.c,v 1.4 1998/05/01 01:35:19 ralf Exp $
+ * $Id: system.c,v 1.4 1998/03/27 08:53:45 ralf Exp $
  */
 #include <linux/init.h>
 #include <linux/kernel.h>

@@ -2600,6 +2600,8 @@ int ide_cdrom_select_disc (struct cdrom_device_info *cdi, int slot)
 		return 0;
 	}
 	else {
+		int was_locked;
+
 		if (
 #if ! STANDARD_ATAPI
 		    CDROM_STATE_FLAGS (drive)->sanyo_slot == 0 &&
@@ -2607,6 +2609,10 @@ int ide_cdrom_select_disc (struct cdrom_device_info *cdi, int slot)
 		    info->changer_info->slots[slot].disc_present == 0) {
 			return -ENOMEDIUM;
 		}
+
+		was_locked = CDROM_STATE_FLAGS (drive)->door_locked;
+		if (was_locked)
+			(void) cdrom_lockdoor (drive, 0, NULL);
 
 		stat = cdrom_load_unload (drive, slot, NULL);
 		cdrom_saw_media_change (drive);
@@ -2621,10 +2627,12 @@ int ide_cdrom_select_disc (struct cdrom_device_info *cdi, int slot)
 			stat = cdrom_read_toc (drive, &my_reqbuf);
 			if (stat)
 				return stat;
-			return slot;
 		}
-		else
-			return stat;
+
+		if (was_locked)
+			(void) cdrom_lockdoor (drive, 1, NULL);
+
+		return stat;
 	}
 }
 

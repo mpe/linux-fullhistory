@@ -21,9 +21,13 @@
  * Still To Fix:
  * - Advisory locking is ignored here. 
  * - Should use an own CAP_* category instead of CAP_SYS_ADMIN 
+ * - Should use the underlying filesystems/devices read function if possible
+ *   to support read ahead (and for write)
  */
 
 #include <linux/module.h>
+
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
 #include <linux/file.h>
@@ -304,7 +308,7 @@ static int create_missing_block(struct loop_device *lo, int block, int blksize)
 		file->f_version = ++event;
 	}
 
-	if ((file->f_mode & FMODE_WRITE) == 0 ||  file->f_op->write == NULL) {
+	if (file->f_op->write == NULL) {
 		printk(KERN_WARNING "loop: cannot create block - file not writeable\n");
 		return FALSE;
 	}
@@ -384,9 +388,9 @@ static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 			lo->lo_backing_file->f_op = file->f_op;
 			lo->lo_backing_file->private_data = file->private_data;
 
-			error = get_write_access(inode); /* cannot fail */
+			error = get_write_access(inode);
 			if (error) {
-				fput(lo->lo_backing_file);
+				put_filp(lo->lo_backing_file);
 				lo->lo_backing_file = NULL;
 			}
 		}
@@ -402,8 +406,7 @@ static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 		set_device_ro(dev, 0);
 	}
 
-	lo->lo_dentry = file->f_dentry;
-	lo->lo_dentry->d_count++;
+	lo->lo_dentry = dget(file->f_dentry);
 	lo->transfer = NULL;
 	lo->ioctl = NULL;
 	figure_loop_size(lo);
@@ -420,14 +423,31 @@ static int loop_release_xfer(struct loop_device *lo)
 {
 	int err = 0; 
 	if (lo->lo_encrypt_type) {
-		if (xfer_funcs[lo->lo_encrypt_type] && 
-		    xfer_funcs[lo->lo_encrypt_type]->release) { 
-			err = xfer_funcs[lo->lo_encrypt_type]->release(lo);
-		}
+		struct loop_func_table *xfer= xfer_funcs[lo->lo_encrypt_type]; 
+		if (xfer && xfer->release)
+			err = xfer->release(lo); 
+		if (xfer && xfer->unlock)
+			xfer->unlock(lo); 
 		lo->lo_encrypt_type = 0;
 	}
 	return err;
 }
+
+static int loop_init_xfer(struct loop_device *lo, int type,struct loop_info *i)
+{
+	int err = 0; 
+	if (type) {
+		struct loop_func_table *xfer = xfer_funcs[type]; 
+		if (xfer->init)
+			err = xfer->init(lo, i);
+		if (!err) { 
+			lo->lo_encrypt_type = type;
+			if (xfer->lock)
+				xfer->lock(lo);
+		}
+	}
+	return err;
+}  
 
 static int loop_clr_fd(struct loop_device *lo, kdev_t dev)
 {
@@ -449,6 +469,7 @@ static int loop_clr_fd(struct loop_device *lo, kdev_t dev)
 		dput(dentry);
 	}
 
+	loop_release_xfer(lo);
 	lo->transfer = NULL;
 	lo->ioctl = NULL;
 	lo->lo_device = 0;
@@ -481,17 +502,14 @@ static int loop_set_status(struct loop_device *lo, struct loop_info *arg)
 	type = info.lo_encrypt_type; 
 	if (type >= MAX_LO_CRYPT || xfer_funcs[type] == NULL)
 		return -EINVAL;
-	err = loop_release_xfer(lo); 
+	err = loop_release_xfer(lo);
+	if (!err) 
+		err = loop_init_xfer(lo, type, &info);
 	if (err)
-		return err;
-	if (xfer_funcs[type]->init) 
-		err = xfer_funcs[type]->init(lo, &info);
-	if (err)
-		return err;
+		return err;	
 
 	lo->lo_offset = info.lo_offset;
 	strncpy(lo->lo_name, info.lo_name, LO_NAME_SIZE);
-	lo->lo_encrypt_type = type; 
 
 	lo->transfer = xfer_funcs[type]->transfer;
 	lo->ioctl = xfer_funcs[type]->ioctl;
@@ -572,7 +590,8 @@ static int lo_ioctl(struct inode * inode, struct file * file,
 static int lo_open(struct inode *inode, struct file *file)
 {
 	struct loop_device *lo;
-	int	dev;
+	int	dev, type;
+
 
 	if (!inode)
 		return -EINVAL;
@@ -585,6 +604,10 @@ static int lo_open(struct inode *inode, struct file *file)
 		return -ENODEV;
 	}
 	lo = &loop_dev[dev];
+
+	type = lo->lo_encrypt_type; 
+	if (type && xfer_funcs[type] && xfer_funcs[type]->lock)
+		xfer_funcs[type]->lock(lo);
 	lo->lo_refcnt++;
 	MOD_INC_USE_COUNT;
 	return 0;
@@ -593,7 +616,7 @@ static int lo_open(struct inode *inode, struct file *file)
 static int lo_release(struct inode *inode, struct file *file)
 {
 	struct loop_device *lo;
-	int	dev, err = 0;
+	int	dev, err;
 
 	if (!inode)
 		return 0;
@@ -605,14 +628,14 @@ static int lo_release(struct inode *inode, struct file *file)
 	if (dev >= MAX_LOOP)
 		return 0;
 	err = fsync_dev(inode->i_rdev);
-	if (err < 0) 
-		return err; 
 	lo = &loop_dev[dev];
 	if (lo->lo_refcnt <= 0)
 		printk(KERN_ERR "lo_release: refcount(%d) <= 0\n", lo->lo_refcnt);
 	else  {
-		if (--lo->lo_refcnt == 0) 
-			err = loop_release_xfer(lo);
+		int type  = lo->lo_encrypt_type;
+		--lo->lo_refcnt;
+		if (xfer_funcs[type] && xfer_funcs[type]->unlock)
+			xfer_funcs[type]->unlock(lo);
 		MOD_DEC_USE_COUNT;
 	}
 	return err;
@@ -646,11 +669,20 @@ int loop_register_transfer(struct loop_func_table *funcs)
 	return 0; 
 }
 
-/* Usage checking must be done by the caller - usually with MOD_INC/DEC_* */  
 int loop_unregister_transfer(int number)
 {
+	struct loop_device *lo; 
+
 	if ((unsigned)number >= MAX_LO_CRYPT)
 		return -EINVAL; 
+	for (lo = &loop_dev[0]; lo < &loop_dev[MAX_LOOP]; lo++) { 
+		int type = lo->lo_encrypt_type;
+		if (type == number) { 
+			xfer_funcs[type]->release(lo);
+			lo->transfer = NULL; 
+			lo->lo_encrypt_type = 0; 
+		}
+	}
 	xfer_funcs[number] = NULL; 
 	return 0; 
 }

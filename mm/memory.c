@@ -289,10 +289,6 @@ skip_copy_pte_range:		address = (address + PMD_SIZE) & PMD_MASK;
 				}
 				if (cow)
 					pte = pte_wrprotect(pte);
-#if 0	/* No longer needed with the new swap cache code */
-				if (delete_from_swap_cache(&mem_map[page_nr]))
-					pte = pte_mkdirty(pte);
-#endif
 				set_pte(dst_pte, pte_mkold(pte));
 				set_pte(src_pte, pte);
 				atomic_inc(&mem_map[page_nr].count);

@@ -20,6 +20,7 @@
 #ifndef _SYNCPPP_H_
 #define _SYNCPPP_H_ 1
 
+#ifdef __KERNEL__
 struct slcp {
 	u16	state;          /* state machine */
 	u32	magic;          /* local magic number */
@@ -71,7 +72,6 @@ struct ppp_device
 #define IPCP_STATE_ACK_SENT     2       /* IPCP state: conf-ack sent */
 #define IPCP_STATE_OPENED       3       /* IPCP state: opened */
 
-#ifdef __KERNEL__
 void sppp_attach (struct ppp_device *pd);
 void sppp_detach (struct device *dev);
 void sppp_input (struct device *dev, struct sk_buff *m);
@@ -85,5 +85,6 @@ int sppp_close (struct device *dev);
 
 #define SPPPIOCCISCO	(SIOCDEVPRIVATE)
 #define SPPPIOCPPP	(SIOCDEVPRIVATE+1)
+#define SPPPIOCDEBUG	(SIOCDEVPRIVATE+2)
 
 #endif /* _SYNCPPP_H_ */

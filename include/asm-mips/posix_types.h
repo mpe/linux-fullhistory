@@ -1,11 +1,10 @@
-/*
- * POSIX types
+/* $Id: posix_types.h,v 1.5 1998/08/17 13:59:34 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1996 by Ralf Baechle
+ * Copyright (C) 1996, 1997, 1998 by Ralf Baechle
  */
 #ifndef __ARCH_MIPS_POSIX_TYPES_H
 #define __ARCH_MIPS_POSIX_TYPES_H
@@ -45,6 +44,8 @@ typedef long long      __kernel_loff_t;
 typedef struct {
         long    val[2];
 } __kernel_fsid_t;
+
+#if defined(__KERNEL__) || !defined(__GLIBC__) || (__GLIBC__ < 2)
 
 #undef __FD_SET
 static __inline__ void __FD_SET(unsigned long __fd, __kernel_fd_set *__fdsetp)
@@ -113,5 +114,7 @@ static __inline__ void __FD_ZERO(__kernel_fd_set *__p)
 		__tmp++;
 	}
 }
+
+#endif /* defined(__KERNEL__) || !defined(__GLIBC__) || (__GLIBC__ < 2) */
 
 #endif /* __ARCH_MIPS_POSIX_TYPES_H */

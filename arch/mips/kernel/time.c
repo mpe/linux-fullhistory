@@ -6,7 +6,7 @@
  * This file contains the time handling details for PC-style clocks as
  * found in some MIPS systems.
  *
- * $Id: time.c,v 1.9 1998/06/10 07:21:13 davem Exp $
+ * $Id: time.c,v 1.6 1998/08/17 13:57:44 ralf Exp $
  */
 #include <linux/errno.h>
 #include <linux/init.h>

@@ -33,7 +33,10 @@ typedef struct svc_client	svc_client;
 typedef struct svc_export	svc_export;
 
 static svc_export *	exp_find(svc_client *clp, kdev_t dev);
-static svc_export *	exp_parent(svc_client *clp, kdev_t dev);
+static svc_export *	exp_parent(svc_client *clp, kdev_t dev,
+					struct dentry *dentry);
+static svc_export *	exp_child(svc_client *clp, kdev_t dev,
+					struct dentry *dentry);
 static void		exp_unexport_all(svc_client *clp);
 static void		exp_do_unexport(svc_export *unexp);
 static svc_client *	exp_getclientbyname(char *name);
@@ -90,8 +93,16 @@ exp_get(svc_client *clp, kdev_t dev, ino_t ino)
 
 	if (!clp)
 		return NULL;
-	exp = exp_find(clp, dev);
-	return (exp && exp->ex_ino == ino)? exp : NULL;
+
+	exp = clp->cl_export[EXPORT_HASH(dev)];
+	if (exp)
+		do {
+			if (exp->ex_ino == ino && exp->ex_dev == dev)
+				goto out;
+		} while (NULL != (exp = exp->ex_next));
+	exp = NULL;
+out:
+	return exp;
 }
 
 /*
@@ -126,22 +137,80 @@ nfsd_parentdev(kdev_t *devp)
 }
 
 /*
- * Find the parent export entry for a given fs. This function is used
- * only by the export syscall to keep the export tree consistent.
+ * Find the export entry for a given dentry.  <gam3@acm.org>
  */
 static svc_export *
-exp_parent(svc_client *clp, kdev_t dev)
+exp_parent(svc_client *clp, kdev_t dev, struct dentry *dentry)
 {
-	svc_export	*exp;
+	svc_export      *exp;
 	kdev_t		xdev = dev;
+	struct dentry	*xdentry = dentry;
+	struct dentry	*ndentry = NULL;
+
+	if (clp == NULL || dentry == NULL)
+		return NULL;
 
 	do {
-		exp = exp_find(clp, xdev);
-		if (exp)
-			return exp;
-	} while (nfsd_parentdev(&xdev));
+		xdev = dev;
+		do {
+			exp = clp->cl_export[EXPORT_HASH(xdev)];
+			if (exp)
+				do {
+					ndentry = exp->ex_dentry;
+				        if (ndentry == xdentry) {
+#ifdef NFSD_PARANOIA
+if (dev == xdev)
+	dprintk("nfsd: exp_parent submount over mount.\n");
+else
+	dprintk("nfsd: exp_parent found.\n");
+#endif
+						goto out;
+					}
+				} while (NULL != (exp = exp->ex_next));
+		} while (nfsd_parentdev(&xdev));
+		if (xdentry == xdentry->d_parent) {
+			break;
+		}
+	} while ((xdentry = xdentry->d_parent));
+	exp = NULL;
+out:
+	return exp;
+}
 
-	return NULL;
+/*
+ * Find the child export entry for a given fs. This function is used
+ * only by the export syscall to keep the export tree consistent.
+ * <gam3@acm.org>
+ */
+static svc_export *
+exp_child(svc_client *clp, kdev_t dev, struct dentry *dentry)
+{
+	svc_export      *exp;
+	struct dentry	*xdentry = dentry;
+	struct dentry	*ndentry = NULL;
+
+	if (clp == NULL || dentry == NULL)
+		return NULL;
+
+	exp = clp->cl_export[EXPORT_HASH(dev)];
+	if (exp)
+		do {
+			ndentry = exp->ex_dentry;
+			if (ndentry)
+				while ((ndentry = ndentry->d_parent)) {
+					if (ndentry == xdentry) {
+#ifdef NFSD_PARANOIA
+dprintk("nfsd: exp_child mount under submount.\n");
+#endif
+						goto out;
+					}
+					if (ndentry == ndentry->d_parent)
+						break;
+				}
+		} while (NULL != (exp = exp->ex_next));
+	exp = NULL;
+out:
+	return exp;
 }
 
 /*
@@ -160,9 +229,10 @@ exp_export(struct nfsctl_export *nxp)
 	ino_t		ino;
 
 	/* Consistency check */
+	err = -EINVAL;
 	if (!exp_verify_string(nxp->ex_path, NFS_MAXPATHLEN) ||
 	    !exp_verify_string(nxp->ex_client, NFSCLNT_IDMAX))
-		return -EINVAL;
+		goto out;
 
 	dprintk("exp_export called for %s:%s (%x/%ld fl %x).\n",
 			nxp->ex_client, nxp->ex_path,
@@ -183,15 +253,11 @@ exp_export(struct nfsctl_export *nxp)
 	 * If there's already an export for this file, assume this
 	 * is just a flag update.
 	 */
-	if ((exp = exp_find(clp, dev)) != NULL) {
-		/* Ensure there's only one export per FS. */
-		err = -EPERM;
-		if (exp->ex_ino == ino) {
-			exp->ex_flags    = nxp->ex_flags;
-			exp->ex_anon_uid = nxp->ex_anon_uid;
-			exp->ex_anon_gid = nxp->ex_anon_gid;
-			err = 0;
-		}
+	if ((exp = exp_get(clp, dev, ino)) != NULL) {
+		exp->ex_flags    = nxp->ex_flags;
+		exp->ex_anon_uid = nxp->ex_anon_uid;
+		exp->ex_anon_gid = nxp->ex_anon_gid;
+		err = 0;
 		goto out_unlock;
 	}
 
@@ -203,32 +269,32 @@ exp_export(struct nfsctl_export *nxp)
 
 	err = -ENOENT;
 	inode = dentry->d_inode;
-	if(!inode)
+	if (!inode)
 		goto finish;
 	err = -EINVAL;
-	if(inode->i_dev != dev || inode->i_ino != nxp->ex_ino) {
-
+	if (inode->i_dev != dev || inode->i_ino != nxp->ex_ino) {
 		printk(KERN_DEBUG "exp_export: i_dev = %x, dev = %x\n",
 			inode->i_dev, dev); 
 		/* I'm just being paranoid... */
 		goto finish;
 	}
 
-	/* We currently export only dirs. */
+	/* We currently export only dirs and regular files.
+	 * This is what umountd does.
+	 */
 	err = -ENOTDIR;
-	if (!S_ISDIR(inode->i_mode))
+	if (!S_ISDIR(inode->i_mode) && !S_ISREG(inode->i_mode))
 		goto finish;
 
-	/* If this is a sub-export, must be root of FS */
 	err = -EINVAL;
-	if ((parent = exp_parent(clp, dev)) != NULL) {
-		struct super_block *sb = inode->i_sb;
-
-		if (inode != sb->s_root->d_inode) {
-#ifdef NFSD_PARANOIA
-printk("exp_export: sub-export %s not root of device %s\n",
-nxp->ex_path, kdevname(sb->s_dev));
-#endif
+	if ((parent = exp_child(clp, dev, dentry)) != NULL) {
+		dprintk("exp_export: export not valid (Rule 3).\n");
+		goto finish;
+	}
+	/* Is this is a sub-export, must be a proper subset of FS */
+	if ((parent = exp_parent(clp, dev, dentry)) != NULL) {
+		if (dev == parent->ex_dev) {
+			dprintk("exp_export: sub-export not valid (Rule 2).\n");
 			goto finish;
 		}
 	}
@@ -306,7 +372,7 @@ exp_do_unexport(svc_export *unexp)
 	 */
 	if (!exp_device_in_use(unexp->ex_dev)) {
 printk("exp_do_unexport: %s last use, flushing cache\n",
-kdevname(unexp->ex_dev));
+	kdevname(unexp->ex_dev));
 		nfsd_fh_flush(unexp->ex_dev);
 	}
 
@@ -362,18 +428,15 @@ exp_unexport(struct nfsctl_export *nxp)
 	err = -EINVAL;
 	clp = exp_getclientbyname(nxp->ex_client);
 	if (clp) {
-printk("exp_unexport: found client %s\n", nxp->ex_client);
 		expp = clp->cl_export + EXPORT_HASH(nxp->ex_dev);
 		while ((exp = *expp) != NULL) {
 			if (exp->ex_dev == nxp->ex_dev) {
-				if (exp->ex_ino != nxp->ex_ino) {
-printk("exp_unexport: ino mismatch, %ld not %ld\n", exp->ex_ino, nxp->ex_ino);
+				if (exp->ex_ino == nxp->ex_ino) {
+					*expp = exp->ex_next;
+					exp_do_unexport(exp);
+					err = 0;
 					break;
 				}
-				*expp = exp->ex_next;
-				exp_do_unexport(exp);
-				err = 0;
-				break;
 			}
 			expp = &(exp->ex_next);
 		}
@@ -390,28 +453,43 @@ out:
  * since its harder to fool a kernel module than a user space program.
  */
 int
-exp_rootfh(struct svc_client *clp, kdev_t dev, ino_t ino, struct knfs_fh *f)
+exp_rootfh(struct svc_client *clp, kdev_t dev, ino_t ino,
+	   char *path, struct knfs_fh *f)
 {
 	struct svc_export	*exp;
 	struct dentry		*dentry;
 	struct inode		*inode;
 	struct svc_fh		fh;
+	int			err;
 
-	dprintk("nfsd: exp_rootfh(%s:%x/%ld)\n", clp->cl_ident, dev, ino);
+	if (path) {
+		dentry = lookup_dentry(path, NULL, 0);
 
-	exp = exp_get(clp, dev, ino);
+		dev = dentry->d_inode->i_dev;
+		ino = dentry->d_inode->i_ino;
+	
+		dprintk("nfsd: exp_rootfh(%s [%p] %s:%x/%ld)\n",
+		         path, dentry, clp->cl_ident, dev, ino);
+		exp = exp_parent(clp, dev, dentry);
+	} else {
+		dprintk("nfsd: exp_rootfh(%s:%x/%ld)\n",
+		         clp->cl_ident, dev, ino);
+		exp = exp_get(clp, dev, ino);
+		dentry = dget(exp->ex_dentry);
+	}
+	err = -EPERM;
 	if (!exp)
-		return -EPERM;
+		goto out;
 
-	dentry = exp->ex_dentry;
 	inode = dentry->d_inode;
-	if(!inode) {
+	if (!inode) {
 		printk("exp_rootfh: Aieee, NULL d_inode\n");
 		return -EPERM;
 	}
-	if(inode->i_dev != dev || inode->i_ino != ino) {
+	if (inode->i_dev != dev || inode->i_ino != ino) {
 		printk("exp_rootfh: Aieee, ino/dev mismatch\n");
-		printk("exp_rootfh: arg[dev(%x):ino(%ld)] inode[dev(%x):ino(%ld)]\n",
+		printk("exp_rootfh: arg[dev(%x):ino(%ld)]"
+		       " inode[dev(%x):ino(%ld)]\n",
 		       dev, ino, inode->i_dev, inode->i_ino);
 	}
 
@@ -419,11 +497,14 @@ exp_rootfh(struct svc_client *clp, kdev_t dev, ino_t ino, struct knfs_fh *f)
 	 * fh must be initialized before calling fh_compose
 	 */
 	fh_init(&fh);
-	fh_compose(&fh, exp, dget(dentry));
+	fh_compose(&fh, exp, dentry);
 	memcpy(f, &fh.fh_handle, sizeof(struct knfs_fh));
 	fh_put(&fh);
-
 	return 0;
+
+out:
+	dput(dentry);
+	return err;
 }
 
 /*

@@ -169,6 +169,7 @@ nfs_fsync(struct file *file, struct dentry *dentry)
 	return status;
 }
 
+
 /* 
  * Write to a file (through the page cache).
  */
@@ -179,14 +180,10 @@ nfs_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 	struct inode * inode = dentry->d_inode;
 	ssize_t result;
 
-	dfprintk(VFS, "nfs: write(%s/%s (%d), %lu@%lu)\n",
+	dfprintk(VFS, "nfs: write(%s/%s(%ld), %lu@%lu)\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name,
-		inode->i_count, (unsigned long) count, (unsigned long) *ppos);
+		inode->i_ino, (unsigned long) count, (unsigned long) *ppos);
 
-	if (!inode) {
-		printk("nfs_file_write: inode = NULL\n");
-		return -EINVAL;
-	}
 	result = -EBUSY;
 	if (IS_SWAPFILE(inode))
 		goto out_swapfile;
@@ -194,14 +191,6 @@ nfs_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 	if (result)
 		goto out;
 
-#ifdef NFS_PARANOIA
-/* N.B. This should be impossible now -- inodes can't change mode */
-if (!S_ISREG(inode->i_mode)) {
-	printk("nfs_file_write: write to non-file, mode %07o\n",
-		inode->i_mode);
-	return -EINVAL;
-}
-#endif
 	result = count;
 	if (!count)
 		goto out;
@@ -214,7 +203,7 @@ out:
 	return result;
 
 out_swapfile:
-	printk(KERN_ERR "NFS: attempt to write to active swap file!\n");
+	printk(KERN_INFO "NFS: attempt to write to active swap file!\n");
 	goto out;
 }
 

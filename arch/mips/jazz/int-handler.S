@@ -1,4 +1,4 @@
-/* $Id: int-handler.S,v 1.6 1998/05/08 01:44:08 ralf Exp $
+/* $Id: int-handler.S,v 1.6 1998/08/28 15:55:19 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -261,7 +261,12 @@ loc_keyboard:	li	s1,~JAZZ_IE_KEYBOARD
 		li	a0,JAZZ_KEYBOARD_IRQ
 		b	loc_call
 
-loc_mouse:	PANIC("Unimplemented loc_mouse handler")
+/*
+ * Mouse interrupt handler
+ */
+loc_mouse:	li	s1,~JAZZ_IE_MOUSE
+		li	a0,JAZZ_MOUSE_IRQ
+		b	loc_call
 
 /*
  * Serial port 1 IRQ

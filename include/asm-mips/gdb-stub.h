@@ -1,9 +1,11 @@
-/*
- *  include/asm-mips/gdb-stub.h
+/* $Id: gdb-stub.h,v 1.3 1998/07/20 17:52:19 ralf Exp $
  *
- *  Copyright (C) 1995 Andreas Busse
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
+ *
+ * Copyright (C) 1995 Andreas Busse
  */
-
 #ifndef __ASM_MIPS_GDB_STUB_H
 #define __ASM_MIPS_GDB_STUB_H
 
@@ -131,7 +133,7 @@
 
 #define GDB_FR_SIZE		((((GDB_FR_CP0_PRID) + 4) + (PTRSIZE-1)) & ~(PTRSIZE-1))
 
-#ifndef __LANGUAGE_ASSEMBLY__
+#ifndef _LANGUAGE_ASSEMBLY
 
 /*
  * This is the same as above, but for the high-level
@@ -207,5 +209,5 @@ struct gdb_regs {
 
 void set_debug_traps(void);
 
-#endif /* __LANGUAGE_ASSEMBLY */
+#endif /* _LANGUAGE_ASSEMBLY */
 #endif /* __ASM_MIPS_GDB_STUB_H */

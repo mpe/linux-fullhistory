@@ -5,7 +5,7 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * $Id: keyboard.h,v 1.8 1998/05/07 00:40:03 ralf Exp $
+ * $Id: keyboard.h,v 1.12 1998/09/16 22:52:41 ralf Exp $
  */
 #ifndef __ASM_MIPS_KEYBOARD_H
 #define __ASM_MIPS_KEYBOARD_H
@@ -51,12 +51,11 @@ void (*keyboard_setup)(void);
 
 #ifdef CONFIG_MIPS_JAZZ
 
-/* Not true for Jazz machines, we cheat a bit for 'em. */
-#define KEYBOARD_IRQ 1
+extern int jazz_ps2_request_irq(void);
+extern void jazz_ps2_free_irq(void);
 
-/*
- * No PS/2 style mouse support for Jazz machines
- */
+#define ps2_request_irq()      jazz_ps2_request_irq()
+#define ps2_free_irq(inode)    jazz_ps2_free_irq()
 
 #endif /* CONFIG_MIPS_JAZZ */
 
@@ -64,13 +63,10 @@ void (*keyboard_setup)(void);
 
 #define DISABLE_KBD_DURING_INTERRUPTS 1
 
-#define KEYBOARD_IRQ 20
-
 /*
  * Machine specific bits for the PS/2 driver.
  * Aux device and keyboard share the interrupt on the Indy.
  */
-
 #define ps2_request_irq() 0
 #define ps2_free_irq(void) do { } while(0);
 
@@ -86,8 +82,6 @@ void (*keyboard_setup)(void);
  * memory mapped I/O ports.
  */
 #include <asm/io.h>
-
-#define KEYBOARD_IRQ 1
 
 /*
  * Machine specific bits for the PS/2 driver

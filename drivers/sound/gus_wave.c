@@ -863,7 +863,7 @@ static void pnp_mem_init(void)
 
 	int bank, chunk, addr, total = 0;
 	int bank_sizes[4];
-	int i, j, bits = -1, nbanks = 0;
+	int i, j, bits = -1, testbits = -1, nbanks = 0;
 
 	/*
 	 * This routine determines what kind of RAM is installed in each of the four
@@ -974,28 +974,26 @@ static void pnp_mem_init(void)
 		}
 	}
 	/*
-	 * The last resort is to search for a combination where the last bank is
-	 * smaller than the actual SIMM. This leaves some memory in the last bank
-	 * unused but doesn't leave holes in the DRAM address space.
-	 */
-	if (bits == -1)		/* No luck yet */
-	{
-		for (i = 0; bits == -1 && i < 13; i++)
-		{
-			bits = i;
-
-			for (j = 0; bits != -1 && j < nbanks - 1; j++)
-				if (mem_decode[i][j] != bank_sizes[j])
-					bits = -1;	/* No hit */
-		}
-		if (bits != -1)
-		{
+ 	 * The last resort is to search for a combination where the banks are
+ 	 * smaller than the actual SIMMs. This leaves some memory in the banks
+ 	 * unused but doesn't leave holes in the DRAM address space.
+ 	 */
+ 	if (bits == -1)		/* No luck yet */
+ 	{
+ 		for (i = 0; i < 13; i++)
+ 		{
+ 			testbits = i;
+ 			for (j = 0; testbits != -1 && j < nbanks - 1; j++)
+ 				if (mem_decode[i][j] > bank_sizes[j]) {
+ 					testbits = -1;
+ 				}
+ 			if(testbits > bits) bits = testbits;
+ 		}
+ 		if (bits != -1)
+ 		{
 			printk(KERN_INFO "Interwave: Can't use all installed RAM.\n");
 			printk(KERN_INFO "Interwave: Try reordering SIMMS.\n");
 		}
-	}
-	if (bits == -1)
-	{
 		printk(KERN_INFO "Interwave: Can't find working DRAM encoding.\n");
 		printk(KERN_INFO "Interwave: Defaulting to 256k. Try reordering SIMMS.\n");
 		bits = 0;

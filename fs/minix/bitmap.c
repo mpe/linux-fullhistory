@@ -249,7 +249,7 @@ struct inode * minix_new_inode(const struct inode * dir)
 		return NULL;
 	sb = dir->i_sb;
 	inode->i_sb = sb;
-	inode->i_flags = inode->i_sb->s_flags;
+	inode->i_flags = 0;
 	j = 8192;
 	bh = NULL;
 	for (i = 0; i < sb->u.minix_sb.s_imap_blocks; i++) {

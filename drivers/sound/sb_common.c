@@ -10,7 +10,10 @@
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
-
+/*
+ * Daniel J. Rodriksson: Modified sbintr to handle 8 and 16 bit interrupts
+ *                       for full duplex support ( only sb16 by now )
+ */
 #include <linux/config.h>
 #include <linux/delay.h>
 #include <asm/init.h>
@@ -140,7 +143,7 @@ static void sbintr(int irq, void *dev_id, struct pt_regs *dummy)
 		if (!(src & 3))
 			return;	/* Not a DSP interrupt */
 	}
-	if (devc->intr_active)
+	if (devc->intr_active && (!devc->fullduplex || (src & 0x01)))
 	{
 		switch (devc->irq_mode)
 		{
@@ -165,7 +168,17 @@ static void sbintr(int irq, void *dev_id, struct pt_regs *dummy)
 				/* printk(KERN_WARN "Sound Blaster: Unexpected interrupt\n"); */
 				;
 		}
-	}
+    } else if (devc->intr_active_2 && (src & 0x02)) {
+        switch (devc->irq_mode_2)
+        {
+            case IMODE_OUTPUT:
+                DMAbuf_outputintr (devc->dev, 1);
+                break;
+            case IMODE_INPUT:
+                DMAbuf_inputintr (devc->dev);
+                break;
+        }
+    }
 	/*
 	 * Acknowledge interrupts 
 	 */

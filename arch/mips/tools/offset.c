@@ -1,10 +1,9 @@
-/*
+/* $Id: offset.c,v 1.10 1998/08/19 21:53:53 ralf Exp $
+ *
  * offset.c: Calculate pt_regs and task_struct offsets.
  *
  * Copyright (C) 1996 David S. Miller
  * Made portable by Ralf Baechle
- *
- * $Id: offset.c,v 1.6 1998/05/04 09:18:45 ralf Exp $
  */
 
 #include <linux/types.h>
@@ -77,10 +76,11 @@ void output_task_defines(void)
 {
 	text("/* MIPS task_struct offsets. */");
 	offset("#define TASK_STATE         ", struct task_struct, state);
-	offset("#define TASK_COUNTER       ", struct task_struct, counter);
-	offset("#define TASK_PRIORITY      ", struct task_struct, priority);
 	offset("#define TASK_FLAGS         ", struct task_struct, flags);
 	offset("#define TASK_SIGPENDING    ", struct task_struct, sigpending);
+	offset("#define TASK_NEED_RESCHED  ", struct task_struct, need_resched);
+	offset("#define TASK_COUNTER       ", struct task_struct, counter);
+	offset("#define TASK_PRIORITY      ", struct task_struct, priority);
 	offset("#define TASK_MM            ", struct task_struct, mm);
 	linefeed;
 }

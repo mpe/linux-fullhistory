@@ -86,7 +86,7 @@ struct svc_client *	exp_getclient(struct sockaddr_in *sin);
 void			exp_putclient(struct svc_client *clp);
 struct svc_export *	exp_get(struct svc_client *clp, kdev_t dev, ino_t ino);
 int			exp_rootfh(struct svc_client *, kdev_t, ino_t,
-					struct knfs_fh *);
+					char *path, struct knfs_fh *);
 int			nfserrno(int errno);
 void			exp_nlmdetach(void);
 

@@ -1,10 +1,9 @@
-/*
+/* $Id: signal.c,v 1.24 1998/09/16 22:50:42 ralf Exp $
+ *
  *  linux/arch/mips/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
- *  Copyright (C) 1994, 1995, 1996  Ralf Baechle
- *
- * $Id: signal.c,v 1.13 1998/06/10 07:21:12 davem Exp $
+ *  Copyright (C) 1994, 1995, 1996, 1997, 1998  Ralf Baechle
  *
  * XXX Handle lazy fp context switches correctly.
  */
@@ -23,6 +22,7 @@
 #include <asm/asm.h>
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
+#include <asm/stackframe.h>
 #include <asm/uaccess.h>
 
 #define DEBUG_SIG 0
@@ -43,6 +43,7 @@ sys_sigsuspend(struct pt_regs regs)
 {
 	sigset_t *uset, saveset, newset;
 
+	save_static(&regs);
 	uset = (sigset_t *) regs.regs[4];
 	if (copy_from_user(&newset, uset, sizeof(sigset_t)))
 		return -EFAULT;
@@ -53,7 +54,8 @@ sys_sigsuspend(struct pt_regs regs)
 	current->blocked = newset;
 	spin_unlock_irq(&current->sigmask_lock);
 
-	regs.regs[2] = -EINTR;
+	regs.regs[2] = EINTR;
+	regs.regs[7] = 1;
 	while (1) {
 		current->state = TASK_INTERRUPTIBLE;
 		schedule();
@@ -67,6 +69,7 @@ sys_rt_sigsuspend(struct pt_regs regs)
 {
 	sigset_t *uset, saveset, newset;
 
+	save_static(&regs);
 	uset = (sigset_t *) regs.regs[4];
 	if (copy_from_user(&newset, uset, sizeof(sigset_t)))
 		return -EFAULT;
@@ -77,7 +80,8 @@ sys_rt_sigsuspend(struct pt_regs regs)
 	current->blocked = newset;
 	spin_unlock_irq(&current->sigmask_lock);
 
-	regs.regs[2] = -EINTR;
+	regs.regs[2] = EINTR;
+	regs.regs[7] = 1;
 	while (1) {
 		current->state = TASK_INTERRUPTIBLE;
 		schedule();
@@ -116,6 +120,14 @@ sys_sigaction(int sig, const struct sigaction *act,
 	}
 
 	return ret;
+}
+
+asmlinkage int
+sys_sigaltstack(const stack_t *uss, stack_t *uoss)
+{
+	struct pt_regs *regs = (struct pt_regs *) &uss;
+
+	return do_sigaltstack(uss, uoss, regs->regs[29]);
 }
 
 /*

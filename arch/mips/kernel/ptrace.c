@@ -1,8 +1,14 @@
-/* ptrace.c */
-/* By Ross Biro 1/23/92 */
-/* edited by Linus Torvalds */
-/* further hacked for MIPS by David S. Miller (dm@engr.sgi.com) */
-
+/* $Id: ptrace.c,v 1.11 1998/10/19 16:26:31 ralf Exp $
+ *
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
+ *
+ * Copyright (C) 1992 Ross Biro
+ * Copyright (C) Linus Torvalds
+ * Copyright (C) 1994, 1995, 1996, 1997, 1998 Ralf Baechle
+ * Copyright (C) 1996 David S. Miller
+ */
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -12,10 +18,12 @@
 #include <linux/smp_lock.h>
 #include <linux/user.h>
 
-#include <asm/uaccess.h>
+#include <asm/fp.h>
+#include <asm/mipsregs.h>
 #include <asm/pgtable.h>
 #include <asm/page.h>
 #include <asm/system.h>
+#include <asm/uaccess.h>
 
 /*
  * This routine gets a long from any process space by following the page
@@ -67,6 +75,7 @@ repeat:
 	 */
 	flush_cache_all();
 	retval = *(unsigned long *) page;
+	flush_cache_all();	/* VCED avoidance  */
 	return retval;
 }
 
@@ -121,10 +130,10 @@ repeat:
 	}
 	/* This is a hack for non-kernel-mapped video buffers and similar */
 	if (MAP_NR(page) < MAP_NR(high_memory))
-		flush_cache_page(vma, addr);
+		flush_cache_all();
 	*(unsigned long *) (page + (addr & ~PAGE_MASK)) = data;
 	if (MAP_NR(page) < MAP_NR(high_memory))
-		flush_page_to_ram(page);
+		flush_cache_all();
 	/*
 	 * We're bypassing pagetables, so we have to set the dirty bit
 	 * ourselves this should also re-instate whatever read-only mode
@@ -324,163 +333,182 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	}
 
 	switch (request) {
-	/* when I and D space are separate, these will need to be fixed. */
-		case PTRACE_PEEKTEXT: /* read word at location addr. */ 
-		case PTRACE_PEEKDATA: {
-			unsigned long tmp;
+	case PTRACE_PEEKTEXT: /* read word at location addr. */ 
+	case PTRACE_PEEKDATA: {
+		unsigned long tmp;
 
-			res = read_long(child, addr, &tmp);
-			if (res < 0)
-				goto out;
-			res = put_user(tmp,(unsigned long *) data);
+		res = read_long(child, addr, &tmp);
+		if (res < 0)
 			goto out;
+		res = put_user(tmp,(unsigned long *) data);
+		goto out;
 		}
 
 	/* read the word at location addr in the USER area. */
 /* #define DEBUG_PEEKUSR */
-		case PTRACE_PEEKUSR: {
-			struct pt_regs *regs;
-			unsigned long tmp;
+	case PTRACE_PEEKUSR: {
+		struct pt_regs *regs;
+		unsigned long tmp;
 
-			regs = (struct pt_regs *) ((unsigned long) child +
-			       KERNEL_STACK_SIZE - 32 - sizeof(struct pt_regs));
-			tmp = 0;  /* Default return value. */
-			if(addr < 32 && addr >= 0) {
-				tmp = regs->regs[addr];
-			} else if(addr >= 32 && addr < 64) {
-				unsigned long long *fregs;
+		regs = (struct pt_regs *) ((unsigned long) child +
+		       KERNEL_STACK_SIZE - 32 - sizeof(struct pt_regs));
+		tmp = 0;  /* Default return value. */
+		if (addr < 32 && addr >= 0)
+			tmp = regs->regs[addr];
+		else if (addr >= 32 && addr < 64) {
+			unsigned long long *fregs;
 
-				/* We don't want to do a FPU operation here. */
+			if (child->used_math) {
+				if (last_task_used_math == child) {
+					enable_cp1();
+					r4xx0_save_fp(child);
+					disable_cp1();
+					last_task_used_math = NULL;
+				}
 				fregs = (unsigned long long *)
 					&child->tss.fpu.hard.fp_regs[0];
 				tmp = (unsigned long) fregs[(addr - 32)];
 			} else {
-				addr -= 64;
-				switch(addr) {
-				case 0:
-					tmp = regs->cp0_epc;
-					break;
-				case 1:
-					tmp = regs->cp0_cause;
-					break;
-				case 2:
-					tmp = regs->cp0_badvaddr;
-					break;
-				case 3:
-					tmp = regs->lo;
-					break;
-				case 4:
-					tmp = regs->hi;
-					break;
-				case 5:
-					tmp = child->tss.fpu.hard.control;
-					break;
-				case 6:	/* implementation / version register */
-					tmp = 0;
-					break;
-				default:
-					tmp = 0;
-					res = -EIO;
-					goto out;
-				};
+				tmp = -1;	/* FP not yet used  */
 			}
-			res = put_user(tmp, (unsigned long *) data);
-			goto out;
+		} else {
+			addr -= 64;
+			switch(addr) {
+			case 0:
+				tmp = regs->cp0_epc;
+				break;
+			case 1:
+				tmp = regs->cp0_cause;
+				break;
+			case 2:
+				tmp = regs->cp0_badvaddr;
+				break;
+			case 3:
+				tmp = regs->lo;
+				break;
+			case 4:
+				tmp = regs->hi;
+				break;
+			case 5:
+				tmp = child->tss.fpu.hard.control;
+				break;
+			case 6:	/* implementation / version register */
+				tmp = 0;	/* XXX */
+				break;
+			default:
+				tmp = 0;
+				res = -EIO;
+				goto out;
+			}
+		}
+		res = put_user(tmp, (unsigned long *) data);
+		goto out;
 		}
 
-      /* when I and D space are separate, this will have to be fixed. */
-		case PTRACE_POKETEXT: /* write the word at location addr. */
-		case PTRACE_POKEDATA:
-			res = write_long(child,addr,data);
-			goto out;
+	case PTRACE_POKETEXT: /* write the word at location addr. */
+	case PTRACE_POKEDATA:
+		res = write_long(child,addr,data);
+		goto out;
 
-		case PTRACE_POKEUSR: {
-			struct pt_regs *regs;
-			int res = 0;
+	case PTRACE_POKEUSR: {
+		struct pt_regs *regs;
+		int res = 0;
 
-			regs = (struct pt_regs *) ((unsigned long) child +
-			       KERNEL_STACK_SIZE - 32 - sizeof(struct pt_regs));
-			if(addr < 32 && addr >= 0) {
-				regs->regs[addr] = data;
-			} else if(addr >= 32 && addr < 64) {
-				unsigned long long *fregs;
+		regs = (struct pt_regs *) ((unsigned long) child +
+		       KERNEL_STACK_SIZE - 32 - sizeof(struct pt_regs));
+		if (addr < 32 && addr >= 0)
+			regs->regs[addr] = data;
+		else if (addr >= 32 && addr < 64) {
+			unsigned long long *fregs;
 
-				/* We don't want to do a FPU operation here. */
-				fregs = (unsigned long long *)
-					&child->tss.fpu.hard.fp_regs[0];
-				fregs[(addr - 32)] = (unsigned long long) data;
+			if (child->used_math) {
+				if (last_task_used_math == child) {
+					enable_cp1();
+					r4xx0_save_fp(child);
+					disable_cp1();
+					last_task_used_math = NULL;
+				}
 			} else {
-				addr -= 64;
-				switch(addr) {
-				case 0:
-					regs->cp0_epc = data;
-					break;
-				case 3:
-					regs->lo = data;
-					break;
-				case 4:
-					regs->hi = data;
-					break;
-				case 5:
-					child->tss.fpu.hard.control = data;
-					break;
-				default:
-					/* The rest are not allowed. */
-					res = -EIO;
-					break;
-				};
+				/* FP not yet used  */
+				memset(&child->tss.fpu.hard, ~0,
+				       sizeof(child->tss.fpu.hard));
+				child->tss.fpu.hard.control = 0;
 			}
-			goto out;
-		}
-
-		case PTRACE_SYSCALL: /* continue and stop at next (return from) syscall */
-		case PTRACE_CONT: { /* restart after signal. */
-			if ((unsigned long) data > _NSIG) {
+			fregs = (unsigned long long *)
+				&child->tss.fpu.hard.fp_regs[0];
+			fregs[(addr - 32)] = (unsigned long long) data;
+		} else {
+			addr -= 64;
+			switch (addr) {
+			case 0:
+				regs->cp0_epc = data;
+				break;
+			case 3:
+				regs->lo = data;
+				break;
+			case 4:
+				regs->hi = data;
+				break;
+			case 5:
+				child->tss.fpu.hard.control = data;
+				break;
+			default:
+				/* The rest are not allowed. */
 				res = -EIO;
-				goto out;
-			}
-			if (request == PTRACE_SYSCALL)
-				child->flags |= PF_TRACESYS;
-			else
-				child->flags &= ~PF_TRACESYS;
-			child->exit_code = data;
-			wake_up_process(child);
-			res = data;
-			goto out;
+				break;
+			};
+		}
+		goto out;
 		}
 
-/*
- * make the child exit.  Best I can do is send it a sigkill. 
- * perhaps it should be put in the status that it wants to 
- * exit.
- */
-		case PTRACE_KILL: {
-			if (child->state != TASK_ZOMBIE) {
-				wake_up_process(child);
-				child->exit_code = SIGKILL;
-			}
-			res = 0;
-			goto out;
-		}
-
-		case PTRACE_DETACH: { /* detach a process that was attached. */
-			if ((unsigned long) data > _NSIG) {
-				res = -EIO;
-				goto out;
-			}
-			child->flags &= ~(PF_PTRACED|PF_TRACESYS);
-			wake_up_process(child);
-			child->exit_code = data;
-			REMOVE_LINKS(child);
-			child->p_pptr = child->p_opptr;
-			SET_LINKS(child);
-			res = 0;
-			goto out;
-		}
-
-		default:
+	case PTRACE_SYSCALL: /* continue and stop at next (return from) syscall */
+	case PTRACE_CONT: { /* restart after signal. */
+		if ((unsigned long) data > _NSIG) {
 			res = -EIO;
 			goto out;
+		}
+		if (request == PTRACE_SYSCALL)
+			child->flags |= PF_TRACESYS;
+		else
+			child->flags &= ~PF_TRACESYS;
+		child->exit_code = data;
+		wake_up_process(child);
+		res = data;
+		goto out;
+		}
+
+	/*
+	 * make the child exit.  Best I can do is send it a sigkill. 
+	 * perhaps it should be put in the status that it wants to 
+	 * exit.
+	 */
+	case PTRACE_KILL: {
+		if (child->state != TASK_ZOMBIE) {
+			child->exit_code = SIGKILL;
+			wake_up_process(child);
+		}
+		res = 0;
+		goto out;
+		}
+
+	case PTRACE_DETACH: { /* detach a process that was attached. */
+		if ((unsigned long) data > _NSIG) {
+			res = -EIO;
+			goto out;
+		}
+		child->flags &= ~(PF_PTRACED|PF_TRACESYS);
+		child->exit_code = data;
+		REMOVE_LINKS(child);
+		child->p_pptr = child->p_opptr;
+		SET_LINKS(child);
+		wake_up_process(child);
+		res = 0;
+		goto out;
+		}
+
+	default:
+		res = -EIO;
+		goto out;
 	}
 out:
 	unlock_kernel();

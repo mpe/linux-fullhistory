@@ -98,7 +98,7 @@ Though this
 
 may work well if you handle JS_EVENT_INIT events separately,
 
-	if (js_event.type & ~JS_EVENT_INIT == JS_EVENT_BUTTON) {
+	if ((js_event.type & ~JS_EVENT_INIT) == JS_EVENT_BUTTON) {
 	   if (js_event.value)
 	      buttons_state |= (1 << js_event.number);
 	   else
@@ -292,9 +292,12 @@ To test the state of the buttons,
 
 The axis values do not have a defined range in the original 0.x driver,
 except for that the values are non-negative. The 1.2.8+ drivers use a
-fixed range for reporting the values, 0 being the minimum, 128 the
+fixed range for reporting the values, 1 being the minimum, 128 the
 center, and 255 maximum value.
 
+The v0.8.0.2 driver also had an interface for 'digital joysticks', (now
+called Multisystem joystick in this driver), under /dev/djsX. This driver
+doesn't try to be compatible with that interface.
 
 6. Final Notes
 ~~~~~~~~~~~~~~

@@ -1,13 +1,10 @@
-/*
- * arch/mips/kernel/scall_o32.S
+/* $Id: scall_o32.S,v 1.5 1998/08/19 21:53:50 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
  * Copyright (C) 1997, 1998 by Ralf Baechle
- *
- * $Id: scall_o32.S,v 1.2 1998/07/26 03:02:07 davem Exp $
  */
 #include <asm/asm.h>
 #include <linux/errno.h>
@@ -73,8 +70,7 @@ EXPORT(o32_ret_from_sys_call)
 
 9:	lw	t0,PT_STATUS(sp)	# returning to kernel mode?
 	andi	t1, t0, 0x10
-#error Change this to current->need_resched --DaveM
-	lw	t2, need_resched
+	lw	t2, TASK_NEED_RESCHED($28)
 	beqz	t1, o32_return		# -> yes
 	bnez	t2, o32_reschedule
 	lw	v0, TASK_SIGPENDING($28)
@@ -105,9 +101,13 @@ trace_a_syscall:
 	SAVE_STATIC
 	sw	t2,PT_R1(sp)
 	jal	syscall_trace
-	sw	t2,PT_R1(sp)
+	lw	t2,PT_R1(sp)
 
-	jalr	t2			# Do The Real Thing (TM)
+	lw	a0, PT_R4(sp)		# Restore argument registers
+	lw	a1, PT_R5(sp)
+	lw	a2, PT_R6(sp)
+	lw	a3, PT_R7(sp)
+	jalr	t2
 
 	li	t0, -EMAXERRNO - 1	# error?
 	sltu	t0, t0, v0

@@ -170,7 +170,7 @@ static int	stli_nrbrds = sizeof(stli_brdconf) / sizeof(stlconf_t);
  */
 static char	*stli_drvtitle = "Stallion Intelligent Multiport Serial Driver";
 static char	*stli_drvname = "istallion";
-static char	*stli_drvversion = "5.4.6";
+static char	*stli_drvversion = "5.4.7";
 static char	*stli_serialname = "ttyE";
 static char	*stli_calloutname = "cue";
 
@@ -635,16 +635,21 @@ static inline int	stli_initports(stlibrd_t *brdp);
  *	board. This is also a very useful debugging tool.
  */
 static struct file_operations	stli_fsiomem = {
-	NULL,
-	stli_memread,
-	stli_memwrite,
-	NULL,
-	NULL,
-	stli_memioctl,
-	NULL,
-	stli_memopen,
-	stli_memclose,
-	NULL
+	NULL,		/* llseek */
+	stli_memread,	/* read */
+	stli_memwrite,	/* write */
+	NULL,		/* readdir */
+	NULL,		/* poll */
+	stli_memioctl,	/* ioctl */
+	NULL,		/* mmap */
+	stli_memopen,	/* open */
+	NULL,		/* flush */
+	stli_memclose,	/* release */
+	NULL,		/* fsync */
+	NULL,		/* fasync */
+	NULL,		/* check_media_change */
+	NULL,		/* revalidate */
+	NULL		/* lock */
 };
 
 /*****************************************************************************/

@@ -38,9 +38,19 @@ typedef struct __user_cap_data_struct {
   
 #ifdef __KERNEL__
 
+/* #define STRICT_CAP_T_TYPECHECKS */
+
+#ifdef STRICT_CAP_T_TYPECHECKS
+
 typedef struct kernel_cap_struct {
 	__u32 cap;
 } kernel_cap_t;
+
+#else
+
+typedef __u32 kernel_cap_t;
+
+#endif
   
 #define _USER_CAP_HEADER_SIZE  (2*sizeof(__u32))
 #define _KERNEL_CAP_T_SIZE     (sizeof(kernel_cap_t))
@@ -259,51 +269,63 @@ typedef struct kernel_cap_struct {
 /*
  * Internal kernel functions only
  */
+ 
+#ifdef STRICT_CAP_T_TYPECHECKS
 
-#define CAP_EMPTY_SET       {  0 }
-#define CAP_FULL_SET        { ~0 }
-#define CAP_INIT_EFF_SET    { ~0 & ~CAP_TO_MASK(CAP_SETPCAP) }
-#define CAP_INIT_INH_SET    { ~0 & ~CAP_TO_MASK(CAP_SETPCAP) }
+#define to_cap_t(x) { x }
+#define cap_t(x) (x).cap
+
+#else
+
+#define to_cap_t(x) (x)
+#define cap_t(x) (x)
+
+#endif
+
+#define CAP_EMPTY_SET       to_cap_t(0)
+#define CAP_FULL_SET        to_cap_t(~0)
+#define CAP_INIT_EFF_SET    to_cap_t(~0 & ~CAP_TO_MASK(CAP_SETPCAP))
+#define CAP_INIT_INH_SET    to_cap_t(~0 & ~CAP_TO_MASK(CAP_SETPCAP))
 
 #define CAP_TO_MASK(x) (1 << (x))
-#define cap_raise(c, flag)   ((c).cap |=  CAP_TO_MASK(flag))
-#define cap_lower(c, flag)   ((c).cap &= ~CAP_TO_MASK(flag))
-#define cap_raised(c, flag)  ((c).cap &   CAP_TO_MASK(flag))
+#define cap_raise(c, flag)   (cap_t(c) |=  CAP_TO_MASK(flag))
+#define cap_lower(c, flag)   (cap_t(c) &= ~CAP_TO_MASK(flag))
+#define cap_raised(c, flag)  (cap_t(c) &   CAP_TO_MASK(flag))
 
 static inline kernel_cap_t cap_combine(kernel_cap_t a, kernel_cap_t b)
 {
      kernel_cap_t dest;
-     dest.cap = a.cap | b.cap;
+     cap_t(dest) = cap_t(a) | cap_t(b);
      return dest;
 }
 
 static inline kernel_cap_t cap_intersect(kernel_cap_t a, kernel_cap_t b)
 {
      kernel_cap_t dest;
-     dest.cap = a.cap & b.cap;
+     cap_t(dest) = cap_t(a) & cap_t(b);
      return dest;
 }
 
 static inline kernel_cap_t cap_drop(kernel_cap_t a, kernel_cap_t drop)
 {
      kernel_cap_t dest;
-     dest.cap = a.cap & ~drop.cap;
+     cap_t(dest) = cap_t(a) & ~cap_t(drop);
      return dest;
 }
 
 static inline kernel_cap_t cap_invert(kernel_cap_t c)
 {
      kernel_cap_t dest;
-     dest.cap = ~c.cap;
+     cap_t(dest) = ~cap_t(c);
      return dest;
 }
 
-#define cap_isclear(c)       (!(c).cap)
-#define cap_issubset(a,set)  (!((a).cap & ~(set).cap))
+#define cap_isclear(c)       (!cap_t(c))
+#define cap_issubset(a,set)  (!(cap_t(a) & ~cap_t(set)))
 
-#define cap_clear(c)         do { (c).cap =  0; } while(0)
-#define cap_set_full(c)      do { (c).cap = ~0; } while(0)
-#define cap_mask(c,mask)     do { (c).cap &= (mask).cap; } while(0)
+#define cap_clear(c)         do { cap_t(c) =  0; } while(0)
+#define cap_set_full(c)      do { cap_t(c) = ~0; } while(0)
+#define cap_mask(c,mask)     do { cap_t(c) &= cap_t(mask); } while(0)
 
 #define cap_is_fs_cap(c)     (CAP_TO_MASK(c) & CAP_FS_MASK)
 

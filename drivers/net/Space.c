@@ -39,6 +39,7 @@
    ethernet adaptor have the name "eth[0123...]".
    */
 
+extern int ne2_probe(struct device *dev);
 extern int tulip_probe(struct device *dev);
 extern int hp100_probe(struct device *dev);
 extern int ultra_probe(struct device *dev);
@@ -108,6 +109,7 @@ extern int am79c961_probe(struct device *dev);
 extern int epic100_probe(struct device *dev);
 extern int rtl8139_probe(struct device *dev);
 extern int hplance_probe(struct device *dev);
+extern int via_rhine_probe(struct device *dev);
 
 /* Gigabit Ethernet adapters */
 extern int yellowfin_probe(struct device *dev);
@@ -195,6 +197,9 @@ struct devprobe pci_probes[] __initdata = {
 #ifdef CONFIG_YELLOWFIN
 	{yellowfin_probe, 0},
 #endif
+#ifdef CONFIG_VIA_RHINE
+	{via_rhine_probe, 0},
+#endif
 	{NULL, 0},
 };
 
@@ -242,6 +247,9 @@ struct devprobe sparc_probes[] __initdata = {
 struct devprobe mca_probes[] __initdata = {
 #ifdef CONFIG_ULTRAMCA 
 	{ultramca_probe, 0},
+#endif
+#ifdef CONFIG_NE2_MCA
+	{ne2_probe, 0},
 #endif
 #ifdef CONFIG_ELMC		/* 3c523 */
 	{elmc_probe, 0},

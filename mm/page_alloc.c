@@ -408,8 +408,9 @@ void swap_in(struct task_struct * tsk, struct vm_area_struct * vma,
 	/* The page is unshared, and we want write access.  In this
 	   case, it is safe to tear down the swap cache and give the
 	   page over entirely to this process. */
-		
-	delete_from_swap_cache(page_map);
+
+	if (PageSwapCache(page_map))
+		delete_from_swap_cache(page_map);
 	set_pte(page_table, pte_mkwrite(pte_mkdirty(mk_pte(page, vma->vm_page_prot))));
   	return;
 }

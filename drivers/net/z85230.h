@@ -272,8 +272,8 @@ struct z8530_channel
 	u8		status;		/* Current DCD */
 	u8		sync;		/* Set if in sync mode */
 
-	u8		regs[16];	/* Register map for the chip */
-	u8		pendregs[16];	/* Pending register values */
+	u8		regs[32];	/* Register map for the chip */
+	u8		pendregs[32];	/* Pending register values */
 	
 	struct sk_buff 	*tx_skb;	/* Buffer being transmitted */
 	struct sk_buff  *tx_next_skb;	/* Next transmit buffer */

@@ -586,11 +586,11 @@ asmlinkage int sys_setfsuid(uid_t uid)
 	
 	if (!issecure(SECURE_NO_SETUID_FIXUP)) {
 		if (old_fsuid == 0 && current->fsuid != 0) {
-			current->cap_effective.cap &= ~CAP_FS_MASK;
+			cap_t(current->cap_effective) &= ~CAP_FS_MASK;
 		}
 		if (old_fsuid != 0 && current->fsuid == 0) {
-			current->cap_effective.cap |=
-				(current->cap_permitted.cap & CAP_FS_MASK);
+			cap_t(current->cap_effective) |=
+				(cap_t(current->cap_permitted) & CAP_FS_MASK);
 		}
 	}
 

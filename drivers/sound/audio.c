@@ -18,6 +18,8 @@
  *                   lifetime as the rest in there and dynamic allocation saves
  *                   12k or so
  * Thomas Sailer   : use more logical O_NONBLOCK semantics
+ * Daniel Rodriksson: reworked the use of the device specific copy_user
+ *                    still generic
  */
 
 #include <linux/config.h>
@@ -155,10 +157,21 @@ void audio_release(int dev, struct file *file)
 
 	dev = dev >> 4;
 
+	/*
+	 * We do this in DMAbuf_release(). Why are we doing it
+	 * here? Why don't we test the file mode before setting
+	 * both flags? DMAbuf_release() does.
+	 * ...pester...pester...pester...
+	 */
 	audio_devs[dev]->dmap_out->closing = 1;
 	audio_devs[dev]->dmap_in->closing = 1;
 
-	sync_output(dev);
+	/*
+	 * We need to make sure we allocated the dmap_out buffer
+	 * before we go mucking around with it in sync_output().
+	 */
+	if (mode & OPEN_WRITE)
+		sync_output(dev);
 
 	if (audio_devs[dev]->coproc)
 		audio_devs[dev]->coproc->close(audio_devs[dev]->coproc->devc, COPR_PCM);
@@ -178,7 +191,7 @@ static void translate_bytes(const unsigned char *table, unsigned char *buff, int
 
 int audio_write(int dev, struct file *file, const char *buf, int count)
 {
-	int c, p, l, buf_size;
+	int c, p, l, buf_size, used, returned;
 	int err;
 	char *dma_buf;
 
@@ -215,6 +228,8 @@ int audio_write(int dev, struct file *file, const char *buf, int count)
 		if (l > buf_size)
 			l = buf_size;
 
+        returned = l;
+        used = l;
 		if (!audio_devs[dev]->d->copy_user)
 		{
 			if ((dma_buf + l) >
@@ -231,7 +246,13 @@ int audio_write(int dev, struct file *file, const char *buf, int count)
 			if(copy_from_user(dma_buf, &(buf)[p], l))
 				return -EFAULT;
 		} 
-		else audio_devs[dev]->d->copy_user(dev, dma_buf, 0, buf, p, l);
+		else audio_devs[dev]->d->copy_user ( dev,
+                                             dma_buf, 0,
+                                             buf, p,
+                                             c, buf_size,
+                                             &used, &returned,
+                                             l);
+        l = returned;
 
 		if (audio_devs[dev]->local_conversion & CNV_MU_LAW)
 		{
@@ -241,8 +262,8 @@ int audio_write(int dev, struct file *file, const char *buf, int count)
 			sti();
 			translate_bytes(ulaw_dsp, (unsigned char *) dma_buf, l);
 		}
-		c -= l;
-		p += l;
+		c -= used;
+		p += used;
 		DMAbuf_move_wrpointer(dev, l);
 
 	}

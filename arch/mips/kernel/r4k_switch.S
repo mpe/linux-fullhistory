@@ -1,12 +1,12 @@
-/*
- * r4k_switch.S: R4xx0 specific task switching code.
+/* $Id: r4k_switch.S,v 1.4 1998/07/14 09:15:33 ralf Exp $
  *
- * Copyright (C) 1994, 1995, 1996 by Ralf Baechle and Andreas Busse
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
  *
- * Multi-cpu abstraction and macros for easier reading:
+ * Copyright (C) 1994, 1995, 1996, 1998 by Ralf Baechle
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
- *
- * $Id: r4k_switch.S,v 1.2 1998/05/01 01:34:19 ralf Exp $
+ * Copyright (C) 1994, 1995, 1996, by Andreas Busse
  */
 #include <asm/asm.h>
 #include <asm/bootinfo.h>
@@ -28,12 +28,8 @@
 	.set	mips3
 	.align	5
 	LEAF(r4xx0_resume)
-	mfc0	t1, CP0_STATUS			# fp exception boundary
-	sll	t0, t1, 2
-	bgez	t0, 1f
-	 nop
-	cfc1	zero, fcr31
-1:	sw	t1, THREAD_STATUS($28)
+	mfc0	t1, CP0_STATUS
+	sw	t1, THREAD_STATUS($28)
 	CPU_SAVE_NONSCRATCH($28)
 	sw	ra, THREAD_REG31($28)
 
@@ -114,7 +110,7 @@ LEAF(r4xx0_save_fp)
  * We initialize fcr31 to rounding to nearest, no exceptions.
  */
 
-#define FPU_DEFAULT  0x00000600
+#define FPU_DEFAULT  0x00000000
 
 LEAF(r4xx0_init_fpu)
 	mfc0	t0, CP0_STATUS

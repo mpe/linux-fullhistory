@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: loadmmu.c,v 1.6 1998/05/01 01:34:54 ralf Exp $
+ * $Id: loadmmu.c,v 1.7 1998/03/27 08:53:41 ralf Exp $
  */
 #include <linux/init.h>
 #include <linux/kernel.h>

@@ -68,21 +68,20 @@ struct js_sw_info {
 
 /*
  * js_sw_init_digital() switches a SideWinder into digital mode.
- * It currently switches to 2-bit mode only (FIXME).
  */
 
 static void __init js_sw_init_digital(int io)
 {
 	unsigned int t;
 	unsigned int timeout = (js_time_speed * JS_SW_MAX_TIME) >> 10;
-	int delays[] = {100, 850, 400, 0};
+        int delays[] = {140, 140+726, 140+300, 0};
 	int i = 0;
 	unsigned long flags;
 
 	__save_flags(flags);
 	__cli();
 	do {
-		outb(inb(io),io);
+		outb(0xff,io);
 		t = js_get_time();
 		while ((inb(io) & 1) && (js_delta(js_get_time(),t) < timeout));
 		udelay(delays[i]);
@@ -112,7 +111,7 @@ static int js_sw_read_packet(int io, int l1, int l2, int strobe, __u64 *data)
 
 	__save_flags(flags);
 	__cli();
-	outb(inb(io),io);
+	outb(0xff,io);
 
 	v = inb(io);
 	t = js_get_time();
@@ -214,7 +213,6 @@ static int js_sw_read(void *xinfo, int **axes, int **buttons)
 				info->optimize = 0;
 				return -1;
 			}
-
 			axes[0][0] = ((data <<  4) & 0x380) | ((data >> 16) & 0x07f);
 			axes[0][1] = ((data <<  7) & 0x380) | ((data >> 24) & 0x07f);
 			axes[0][2] = ((data >> 28) & 0x180) | ((data >> 40) & 0x07f);
@@ -367,7 +365,7 @@ static struct js_port __init *js_sw_probe(int io, struct js_port *port)
 
 	if (check_region(io, 1)) return port;
 	if (((u = inb(io)) & 3) == 3) return port;
-	outb(u,io);
+	outb(0xff,io);
 	if (!((inb(io) ^ u) & ~u & 0xf)) return port;
 
 	i = js_sw_read_packet(io, JS_SW_MAX_LENGTH, -1, JS_SW_EXT_STROBE, &data);
@@ -390,7 +388,7 @@ static struct js_port __init *js_sw_probe(int io, struct js_port *port)
 		case 45:
 		case 60:
 			info.mode = JS_SW_MODE_GP;
-			outb(inb(io),io);						/* Kick into 3-bit mode */
+			outb(0xff,io);							/* Kick into 3-bit mode */
 			udelay(JS_SW_MAX_TIME);
 			i = js_sw_read_packet(io, 60, -1, JS_SW_EXT_STROBE, &data);	/* Get total length */
 			udelay(JS_SW_MIN_TIME);

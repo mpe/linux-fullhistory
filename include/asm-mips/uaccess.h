@@ -5,16 +5,15 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1996, 1997 by Ralf Baechle
+ * Copyright (C) 1996, 1997, 1998 by Ralf Baechle
  *
- * $Id: uaccess.h,v 1.9 1998/05/04 09:19:05 ralf Exp $
+ * $Id: uaccess.h,v 1.15 1998/05/03 11:13:54 ralf Exp $
  */
 #ifndef __ASM_MIPS_UACCESS_H
 #define __ASM_MIPS_UACCESS_H
 
 #include <linux/errno.h>
 #include <linux/sched.h>
-#include <asm/asm.h>
 
 #define STR(x)  __STR(x)
 #define __STR(x)  #x

@@ -182,7 +182,7 @@ struct inode * ufs_new_inode (const struct inode * dir,	int mode, int * err )
 	usb1 = ubh_get_usb_first(USPI_UBH);
 
 	inode->i_sb = sb;
-	inode->i_flags = sb->s_flags;
+	inode->i_flags = 0;
 	
 	lock_super (sb);
 

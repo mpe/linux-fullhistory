@@ -1,15 +1,16 @@
-/*
+/* $Id: indy_sc.c,v 1.9 1998/08/17 12:14:55 ralf Exp $
+ *
  * indy_sc.c: Indy cache managment functions.
  *
  * Copyright (C) 1997 Ralf Baechle (ralf@gnu.org),
  * derived from r4xx0.c by David S. Miller (dm@engr.sgi.com).
- *
- * $Id: indy_sc.c,v 1.4 1998/05/04 09:12:57 ralf Exp $
  */
+#include <linux/config.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
+#include <linux/autoconf.h>
 
 #include <asm/bcache.h>
 #include <asm/sgi.h>

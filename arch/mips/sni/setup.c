@@ -1,4 +1,4 @@
-/* $Id: setup.c,v 1.7 1998/06/10 07:21:19 davem Exp $
+/* $Id: setup.c,v 1.13 1998/08/17 13:57:45 ralf Exp $
  *
  * Setup pointers to hardware-dependent routines.
  *
@@ -6,7 +6,7 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1996, 1997 by Ralf Baechle
+ * Copyright (C) 1996, 1997, 1998 by Ralf Baechle
  */
 #include <asm/ptrace.h>
 #include <linux/config.h>
@@ -26,7 +26,6 @@
 #include <asm/processor.h>
 #include <asm/reboot.h>
 #include <asm/sni.h>
-#include <asm/vector.h>
 #include <asm/pci.h>
 
 /*
@@ -40,8 +39,6 @@ static void no_action(int cpl, void *dev_id, struct pt_regs *regs) { }
 static struct irqaction irq2  = { no_action, 0, 0, "cascade", NULL, NULL};
 
 extern asmlinkage void sni_rm200_pci_handle_int(void);
-extern asmlinkage void sni_fd_cacheflush(const void *addr, size_t size);
-extern struct feature sni_rm200_pci_feature;
 extern void sni_rm200_keyboard_setup(void);
 
 extern void sni_machine_restart(char *command);
@@ -49,6 +46,7 @@ extern void sni_machine_halt(void);
 extern void sni_machine_power_off(void);
 
 extern struct ide_ops std_ide_ops;
+extern struct rtc_ops std_rtc_ops;
 
 __initfunc(static void sni_irq_setup(void))
 {
@@ -133,8 +131,6 @@ __initfunc(void sni_rm200_pci_setup(void))
 	sni_pcimt_sc_init();
 
 	irq_setup = sni_irq_setup;
-	fd_cacheflush = sni_fd_cacheflush;	// Will go away
-	feature = &sni_rm200_pci_feature;
 	mips_io_port_base = SNI_PORT_BASE;
 	keyboard_setup = sni_rm200_keyboard_setup;
 
@@ -165,7 +161,10 @@ __initfunc(void sni_rm200_pci_setup(void))
 	 */
 	request_region(0xcfc,0x04,"PCI config data");
 	pci_ops = &sni_pci_ops;
+
 #ifdef CONFIG_BLK_DEV_IDE
 	ide_ops = &std_ide_ops;
 #endif
+
+	rtc_ops = &std_rtc_ops;
 }

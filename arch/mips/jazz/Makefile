@@ -13,11 +13,7 @@
 
 all: jazz.o
 O_TARGET := jazz.o
-O_OBJS	 := hw-access.o int-handler.o jazzdma.o reset.o setup.o
-
-ifdef CONFIG_VIDEO_G364
-O_OBJS += g364.o
-endif
+O_OBJS	 := hw-access.o int-handler.o jazzdma.o reset.o rtc-jazz.o setup.o
 
 int-handler.o: int-handler.S
 

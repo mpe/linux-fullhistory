@@ -543,7 +543,7 @@ static ssize_t lp_read(struct file * file, char * buf,
 
 		if (( i & 1) != 0) {
 			Byte= (Byte | z<<4);
-			if (put_user(Byte, (char *)temp))
+			if (__put_user(Byte, (char *)temp))
 				return -EFAULT;
 			temp++;
 		} else Byte=z;

@@ -199,6 +199,16 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_NE2_MCA),y)
+L_OBJS += ne2.o
+CONFIG_8390_BUILTIN = y
+else
+  ifeq ($(CONFIG_NE2_MCA),m)
+  CONFIG_8390_MODULE = y
+  M_OBJS += ne2.o
+  endif
+endif
+
 ifeq ($(CONFIG_HPLAN),y)
 L_OBJS += hp.o
 CONFIG_8390_BUILTIN = y

@@ -1,11 +1,10 @@
-/*
+/* $Id: init.c,v 1.13 1998/10/16 19:22:42 ralf Exp $
+ *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1994, 1995, 1996 by Ralf Baechle
- *
- * $Id: init.c,v 1.15 1998/08/04 20:48:30 davem Exp $
+ * Copyright (C) 1994 - 1998 by Ralf Baechle
  */
 #include <linux/config.h>
 #include <linux/init.h>
@@ -15,10 +14,12 @@
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/types.h>
+#include <linux/pagemap.h>
 #include <linux/ptrace.h>
 #include <linux/mman.h>
 #include <linux/mm.h>
 #include <linux/swap.h>
+#include <linux/swapctl.h>
 #ifdef CONFIG_BLK_DEV_INITRD
 #include <linux/blk.h>
 #endif
@@ -27,17 +28,77 @@
 #include <asm/cachectl.h>
 #include <asm/dma.h>
 #include <asm/jazzdma.h>
-#include <asm/vector.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
 #ifdef CONFIG_SGI
 #include <asm/sgialib.h>
 #endif
+#include <asm/mmu_context.h>
+
+/*
+ * Define this to effectivly disable the userpage colouring shit.
+ */
+#define CONF_GIVE_A_SHIT_ABOUT_COLOURS
 
 extern void deskstation_tyne_dma_init(void);
 extern void show_net_buffers(void);
 
-const char bad_pmd_string[] = "Bad pmd in pte_alloc: %08lx\n";
+void __bad_pte_kernel(pmd_t *pmd)
+{
+	printk("Bad pmd in pte_alloc_kernel: %08lx\n", pmd_val(*pmd));
+	pmd_val(*pmd) = BAD_PAGETABLE;
+}
+
+void __bad_pte(pmd_t *pmd)
+{
+	printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
+	pmd_val(*pmd) = BAD_PAGETABLE;
+}
+
+pte_t *get_pte_kernel_slow(pmd_t *pmd, unsigned long offset)
+{
+	pte_t *page;
+
+	page = (pte_t *) __get_free_page(GFP_KERNEL);
+	if (pmd_none(*pmd)) {
+		if (page) {
+			clear_page((unsigned long)page);
+			pmd_val(*pmd) = (unsigned long)page;
+			return page + offset;
+		}
+		pmd_val(*pmd) = BAD_PAGETABLE;
+		return NULL;
+	}
+	free_page((unsigned long)page);
+	if (pmd_bad(*pmd)) {
+		__bad_pte_kernel(pmd);
+		return NULL;
+	}
+	return (pte_t *) pmd_page(*pmd) + offset;
+}
+
+pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
+{
+	pte_t *page;
+
+	page = (pte_t *) __get_free_page(GFP_KERNEL);
+	if (pmd_none(*pmd)) {
+		if (page) {
+			clear_page((unsigned long)page);
+			pmd_val(*pmd) = (unsigned long)page;
+			return page + offset;
+		}
+		pmd_val(*pmd) = BAD_PAGETABLE;
+		return NULL;
+	}
+	free_page((unsigned long)page);
+	if (pmd_bad(*pmd)) {
+		__bad_pte(pmd);
+		return NULL;
+	}
+	return (pte_t *) pmd_page(*pmd) + offset;
+}
+
 
 asmlinkage int sys_cacheflush(void *addr, int bytes, int cache)
 {
@@ -46,9 +107,50 @@ asmlinkage int sys_cacheflush(void *addr, int bytes, int cache)
 	return 0;
 }
 
+/*
+ * We have upto 8 empty zeroed pages so we can map one of the right colour
+ * when needed.  This is necessary only on R4000 / R4400 SC and MC versions
+ * where we have to avoid VCED / VECI exceptions for good performance at
+ * any price.  Since page is never written to after the initialization we
+ * don't have to care about aliases on other CPUs.
+ */
+unsigned long empty_zero_page, zero_page_mask;
+
+static inline unsigned long setup_zero_pages(void)
+{
+	unsigned long order, size, pg;
+
+	switch (mips_cputype) {
+	case CPU_R4000SC:
+	case CPU_R4000MC:
+	case CPU_R4400SC:
+	case CPU_R4400MC:
+		order = 3;
+	default:
+		order = 0;
+	}
+
+	empty_zero_page = __get_free_pages(GFP_KERNEL, order);
+	if (!empty_zero_page)
+		panic("Oh boy, that early out of memory?");
+
+	pg = MAP_NR(empty_zero_page);
+	while(pg < MAP_NR(empty_zero_page) + (1 << order)) {
+		set_bit(PG_reserved, &mem_map[pg].flags);
+		pg++;
+	}
+
+	size = PAGE_SIZE << order;
+	zero_page_mask = (size - 1) & PAGE_MASK;
+	memset((void *)empty_zero_page, 0, size);
+
+	return size;
+}
+
 int do_check_pgt_cache(int low, int high)
 {
 	int freed = 0;
+
 	if(pgtable_cache_size > high) {
 		do {
 			if(pgd_quicklist)
@@ -141,10 +243,87 @@ pte_t __bad_page(void)
 	return pte_mkdirty(mk_pte(page, PAGE_SHARED));
 }
 
+#ifdef __SMP__
+spinlock_t user_page_lock = SPIN_LOCK_UNLOCKED;
+#endif
+struct upcache user_page_cache[8] __attribute__((aligned(32)));
+static unsigned long user_page_order;
+unsigned long user_page_colours;
+
+unsigned long get_user_page_slow(int which)
+{
+	unsigned long chunk;
+	struct upcache *up = &user_page_cache[0];
+	struct page *p, *res;
+	int i;
+
+	do {
+		chunk = __get_free_pages(GFP_KERNEL, user_page_order);
+	} while(chunk==0);
+
+	p = mem_map + MAP_NR(chunk);
+	res = p + which;
+	spin_lock(&user_page_lock);
+	for (i=user_page_colours; i>=0; i--,p++,up++,chunk+=PAGE_SIZE) {
+		atomic_set(&p->count, 1);
+		p->age = PAGE_INITIAL_AGE;
+
+		if (p != res) {
+			if(up->count < USER_PAGE_WATER) {
+				p->next = up->list;
+				up->list = p;
+				up->count++;
+			} else
+				free_pages(chunk, 0);
+		}
+	}
+	spin_unlock(&user_page_lock);
+
+	return page_address(res);
+}
+
+static inline void user_page_setup(void)
+{
+	unsigned long assoc = 0;
+	unsigned long dcache_log, icache_log, cache_log;
+	unsigned long config = read_32bit_cp0_register(CP0_CONFIG);
+
+	switch(mips_cputype) {
+	case CPU_R4000SC:
+	case CPU_R4000MC:
+	case CPU_R4400SC:
+	case CPU_R4400MC:
+		cache_log = 3;	/* => 32k, sucks  */
+		break;
+
+        case CPU_R4600:                 /* two way set associative caches?  */
+        case CPU_R4700:
+        case CPU_R5000:
+        case CPU_NEVADA:
+		assoc = 1;
+		/* fall through */
+	default:
+		/* use bigger cache  */
+		icache_log = (config >> 9) & 7;
+		dcache_log = (config >> 6) & 7;
+		if (dcache_log > icache_log)
+			cache_log = dcache_log;
+		else
+			cache_log = icache_log;
+	}
+
+#ifdef CONF_GIVE_A_SHIT_ABOUT_COLOURS
+	cache_log = assoc = 0;
+#endif
+
+	user_page_order = cache_log - assoc;
+	user_page_colours = (1 << (cache_log - assoc)) - 1;
+}
+
 void show_mem(void)
 {
 	int i, free = 0, total = 0, reserved = 0;
-	int shared = 0;
+	int shared = 0, cached = 0;
 
 	printk("Mem-info:\n");
 	show_free_areas();
@@ -154,15 +333,19 @@ void show_mem(void)
 		total++;
 		if (PageReserved(mem_map+i))
 			reserved++;
+		else if (PageSwapCache(mem_map+i))
+			cached++;
 		else if (!atomic_read(&mem_map[i].count))
 			free++;
 		else
 			shared += atomic_read(&mem_map[i].count) - 1;
 	}
 	printk("%d pages of RAM\n", total);
-	printk("%d free pages\n", free);
 	printk("%d reserved pages\n", reserved);
 	printk("%d pages shared\n", shared);
+	printk("%d pages swap cached\n",cached);
+	printk("%ld pages in page table cache\n",pgtable_cache_size);
+	printk("%d free pages\n", free);
 	show_buffers();
 #ifdef CONFIG_NET
 	show_net_buffers();
@@ -173,7 +356,9 @@ extern unsigned long free_area_init(unsigned long, unsigned long);
 
 __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_mem))
 {
+	/* Initialize the entire pgd.  */
 	pgd_init((unsigned long)swapper_pg_dir);
+	pgd_init((unsigned long)swapper_pg_dir + PAGE_SIZE / 2);
 	return free_area_init(start_mem, end_mem);
 }
 
@@ -192,9 +377,6 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 	end_mem &= PAGE_MASK;
 	max_mapnr = num_physpages = MAP_NR(end_mem);
 	high_memory = (void *)end_mem;
-
-	/* clear the zero-page */
-	clear_page((unsigned long)empty_zero_page);
 
 	/* mark usable pages in the mem_map[] */
 	start_mem = PAGE_ALIGN(start_mem);
@@ -232,13 +414,18 @@ __initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 			free_page(tmp);
 	}
 	tmp = nr_free_pages << PAGE_SHIFT;
+
+	/* Setup zeroed pages.  */
+	tmp -= setup_zero_pages();
+
 	printk("Memory: %luk/%luk available (%dk kernel code, %dk data)\n",
 		tmp >> 10,
 		max_mapnr << (PAGE_SHIFT-10),
 		codepages << (PAGE_SHIFT-10),
 		datapages << (PAGE_SHIFT-10));
 
-	return;
+	/* Initialize allocator for colour matched mapped pages.  */
+	user_page_setup();
 }
 
 extern char __init_begin, __init_end;
@@ -277,4 +464,36 @@ void si_meminfo(struct sysinfo *val)
 	val->totalram <<= PAGE_SHIFT;
 	val->sharedram <<= PAGE_SHIFT;
 	return;
+}
+
+/* Fixup an immediate instruction  */
+__initfunc(static void __i_insn_fixup(unsigned int **start, unsigned int **stop,
+                         unsigned int i_const))
+{
+	unsigned int **p, *ip;
+
+	for (p = start;p < stop; p++) {
+		ip = *p;
+		*ip = (*ip & 0xffff0000) | i_const;
+	}
+}
+
+#define i_insn_fixup(section, const)					  \
+do {									  \
+	extern unsigned int *__start_ ## section;			  \
+	extern unsigned int *__stop_ ## section;			  \
+	__i_insn_fixup(&__start_ ## section, &__stop_ ## section, const); \
+} while(0)
+
+/* Caller is assumed to flush the caches before the first context switch.  */
+__initfunc(void __asid_setup(unsigned int inc, unsigned int mask,
+                             unsigned int version_mask,
+                             unsigned int first_version))
+{
+	i_insn_fixup(__asid_inc, inc);
+	i_insn_fixup(__asid_mask, mask);
+	i_insn_fixup(__asid_version_mask, version_mask);
+	i_insn_fixup(__asid_first_version, first_version);
+
+	asid_cache = first_version;
 }

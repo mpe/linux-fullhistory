@@ -1,17 +1,14 @@
-/*
- * MIPS specific syscall handling functions and syscalls
+/* $Id: syscall.c,v 1.10 1998/08/20 14:38:40 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1995, 1996 by Ralf Baechle
+ * Copyright (C) 1995 - 1998 by Ralf Baechle
  *
  * TODO:  Implement the compatibility syscalls.
  *        Don't waste that much memory for empty entries in the syscall
  *        table.
- *
- * $Id: syscall.c,v 1.12 1998/07/26 03:02:09 davem Exp $
  */
 #undef CONF_PRINT_SYSCALLS
 #undef CONF_DEBUG_IRIX
@@ -82,14 +79,15 @@ out:
 
 asmlinkage int sys_idle(void)
 {
+	unsigned long start_idle = 0;
         int ret = -EPERM;
 
 	lock_kernel();
 	if (current->pid != 0)
 		goto out;
 	/* endless idle loop with no priority at all */
-	current->priority = -100;
-	current->counter = -100;
+	current->priority = 0;
+	current->counter = 0;
 	for (;;) {
 		/*
 		 * R4[36]00 have wait, R4[04]00 don't.
@@ -99,13 +97,20 @@ asmlinkage int sys_idle(void)
 		 *        same for logic clocked with the processor generated
 		 *        clocks.
 		 */
+		if (!start_idle) {
+			check_pgt_cache();
+			start_idle = jiffies;
+		}
 		if (wait_available && !current->need_resched)
 			__asm__(".set\tmips3\n\t"
 				"wait\n\t"
 				".set\tmips0");
 		run_task_queue(&tq_scheduler);
+		if (current->need_resched)
+			start_idle = 0;
 		schedule();
 	}
+	ret = 0;
 out:
 	unlock_kernel();
 	return ret;

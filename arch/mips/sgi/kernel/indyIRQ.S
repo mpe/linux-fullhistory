@@ -1,4 +1,4 @@
-/* $Id: indyIRQ.S,v 1.3 1998/05/01 01:35:14 ralf Exp $
+/* $Id: indyIRQ.S,v 1.3 1998/03/21 22:39:53 ralf Exp $
  * indyIRQ.S: Interrupt exception dispatch code for FullHouse and
  *            Guiness.
  *

@@ -63,6 +63,7 @@ running, the suggested command should tell you.
 - Ncpfs                  2.2.0                   ; ncpmount -v
 - Pcmcia-cs              3.0.5                   ; cardmgr -V
 - PPP                    2.3.5                   ; pppd -v
+- PCI Utilities          1.08                    ; lspci --version
 
 Upgrade notes
 *************
@@ -594,6 +595,13 @@ Fbset
 
 The 7/13/98 release:
 http://www.cs.kuleuven.ac.be/~geert/bin/fbset-2.0-pre-19980713.tar.gz
+
+PCIutils
+========
+
+The 1.08 release:
+ftp://atrey.karlin.mff.cuni.cz/pub/linux/pci/pciutils-1.08.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/hardware/pciutils-1.08.tar.gz
 
 Other Info
 ==========

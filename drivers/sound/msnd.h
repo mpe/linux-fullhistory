@@ -24,13 +24,13 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: msnd.h,v 1.31 1998/09/10 14:02:58 andrewtv Exp $
+ * $Id: msnd.h,v 1.32 1998/10/09 19:54:39 andrewtv Exp $
  *
  ********************************************************************/
 #ifndef __MSND_H
 #define __MSND_H
 
-#define VERSION			"0.8.2"
+#define VERSION			"0.8.2.1"
 
 #define DEFSAMPLERATE		DSP_DEFAULT_SPEED
 #define DEFSAMPLESIZE		AFMT_U8
@@ -230,6 +230,7 @@ typedef struct multisound_dev {
 #define F_READBLOCK			8
 #define F_EXT_MIDI_INUSE		9
 #define F_INT_MIDI_INUSE		10
+#define F_DISABLE_WRITE_NDELAY		11
 	struct wait_queue *writeblock, *readblock;
 	struct wait_queue *writeflush;
 #ifndef LINUX20

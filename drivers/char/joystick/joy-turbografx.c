@@ -61,8 +61,6 @@ static int js_tg_3[] __initdata = { -1, 0 };
 struct js_tg_info {
 #ifdef USE_PARPORT
 	struct pardevice *port;	/* parport device */
-	int use;		/* use count */
-	int wanted;		/* parport wanted */
 #else
 	int port;		/* hw port */
 #endif
@@ -99,19 +97,11 @@ static int js_tg_read(void *xinfo, int **axes, int **buttons)
 
 int js_tg_open(struct js_dev *dev)
 {
-	MOD_INC_USE_COUNT;
-
 #ifdef USE_PARPORT
-	{
-		struct js_tg_info *info = dev->port->info;
-		if (!info->use && parport_claim(info->port)) {
-			printk(KERN_WARNING "joy-tg: parport busy\n");		/* port currently not available ... */
-			info->wanted++;						/* we'll claim it on wakeup */
-			return 0;
-		}
-		info->use++;
-	}
+	struct js_tg_info *info = dev->port->info;
+	if (!MOD_IN_USE && parport_claim(info->port)) return -EBUSY; 
 #endif
+	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -122,33 +112,14 @@ int js_tg_open(struct js_dev *dev)
 int js_tg_close(struct js_dev *dev)
 {
 #ifdef USE_PARPORT
-	struct js_tg_info *info = dev->port->info;
-
-	if (!--info->use)
-		parport_release(info->port);
+        struct js_tg_info *info = dev->port->info;
 #endif
-	MOD_DEC_USE_COUNT;
-
-	return 0;
-}
-
-/*
- * parport wakeup callback: claim the port!
- */
-
+        MOD_DEC_USE_COUNT;
 #ifdef USE_PARPORT
-static void js_tg_wakeup(void *v)
-{
-	struct js_tg_info *info = js_tg_port->info;	/* FIXME! We can have more than 1 port! */
-
-	if (!info->use && info->wanted)
-	{
-		parport_claim(info->port);
-		info->use++;
-		info->wanted--;
-	}
-}
+        if (!MOD_IN_USE) parport_release(info->port);
 #endif
+        return 0;
+}
 
 #ifdef MODULE
 void cleanup_module(void)
@@ -217,11 +188,9 @@ static struct js_port __init *js_tg_probe(int *config, struct js_port *port)
 			return port;
 		}
 
-		info.port = parport_register_device(pp, "joystick (turbografx)", NULL, js_tg_wakeup, NULL, PARPORT_DEV_EXCL, NULL);
+		info.port = parport_register_device(pp, "joystick (turbografx)", NULL, NULL, NULL, PARPORT_DEV_EXCL, NULL);
 		if (!info.port)
 			return port;
-		info.wanted = 0;
-		info.use = 0;
 	}
 #else
 	info.port = config[0];

@@ -68,7 +68,7 @@ unsigned long est_cycle_freq;
 static inline __u32 rpcc(void)
 {
     __u32 result;
-    asm volatile ("rpcc %0" : "r="(result));
+    asm volatile ("rpcc %0" : "=r"(result));
     return result;
 }
 

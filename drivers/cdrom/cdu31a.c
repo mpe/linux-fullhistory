@@ -3020,14 +3020,15 @@ static int scd_dev_ioctl(struct cdrom_device_info *cdi,
          sony_get_toc();
          if (!sony_toc_read)
          {
-            return -EIO;
+         	return -EIO;
          }
 
-	 copy_from_user(&ra, (char *) arg, sizeof(ra));
+	 if(copy_from_user(&ra, (char *) arg, sizeof(ra)))
+	 	return -EFAULT;
 
          if (ra.nframes == 0)
          {
-            return 0;
+         	return 0;
          }
 
          i=verify_area(VERIFY_WRITE, ra.buf, CD_FRAMESIZE_RAW * ra.nframes);

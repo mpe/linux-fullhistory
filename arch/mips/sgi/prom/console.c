@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@sgi.com)
  *
- * $Id: console.c,v 1.2 1998/05/01 01:35:23 ralf Exp $
+ * $Id: console.c,v 1.2 1998/03/27 08:53:46 ralf Exp $
  */
 #include <linux/init.h>
 #include <asm/sgialib.h>

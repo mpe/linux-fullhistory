@@ -1,4 +1,4 @@
-/* $Id: checksum.h,v 1.8 1998/05/07 00:39:59 ralf Exp $
+/* $Id: checksum.h,v 1.6 1998/09/16 13:30:51 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -27,8 +27,7 @@ unsigned int csum_partial(const unsigned char * buff, int len, unsigned int sum)
  * this is a new version of the above that records errors it finds in *errp,
  * but continues and zeros the rest of the buffer.
  */
-unsigned int csum_partial_copy_nocheck(const char *src, char *dst, int len,
-                                       unsigned int sum);
+#define csum_partial_copy_nocheck csum_partial_copy
 
 /*
  * this is a new version of the above that records errors it finds in *errp,
@@ -36,6 +35,10 @@ unsigned int csum_partial_copy_nocheck(const char *src, char *dst, int len,
  */
 unsigned int csum_partial_copy_from_user(const char *src, char *dst, int len,
                                          unsigned int sum, int *errp);
+
+#define HAVE_CSUM_COPY_USER
+unsigned int csum_and_copy_to_user (const char *src, char *dst,
+                                    int len, int sum, int *err_ptr);
 
 /*
  * the same as csum_partial, but copies from user space (but on MIPS

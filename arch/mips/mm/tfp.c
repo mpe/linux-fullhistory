@@ -1,4 +1,5 @@
-/*
+/* $Id: tfp.c,v 1.6 1998/10/16 19:22:44 ralf Exp $
+ *
  * tfp.c: MMU and cache routines specific to the r8000 (TFP).
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
@@ -13,6 +14,7 @@
 #include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/sgialib.h>
+#include <asm/mmu_context.h>
 
 extern unsigned long mips_tlb_entries;
 
@@ -104,6 +106,7 @@ __initfunc(void ld_mmu_tfp(void))
 	flush_tlb_mm = tfp_flush_tlb_mm;
 	flush_tlb_range = tfp_flush_tlb_range;
 	flush_tlb_page = tfp_flush_tlb_page;
+	tfp_asid_setup();
 
         add_wired_entry = tfp_add_wired_entry;
 

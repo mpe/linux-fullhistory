@@ -1,4 +1,5 @@
-/* $Id: r6000.c,v 1.4 1998/05/01 01:35:06 ralf Exp $
+/* $Id: r6000.c,v 1.6 1998/10/16 19:22:44 ralf Exp $
+ *
  * r6000.c: MMU and cache routines for the R6000 processors.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
@@ -13,6 +14,7 @@
 #include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/sgialib.h>
+#include <asm/mmu_context.h>
 
 __asm__(".set mips3"); /* because we know... */
 
@@ -109,7 +111,7 @@ static void r6000_pgd_init(unsigned long page)
 		 "=r" (dummy2)
 		:"r" ((unsigned long) invalid_pte_table),
 		 "0" (page),
-		 "1" (PAGE_SIZE/(sizeof(pmd_t)*8)),
+		 "1" (USER_PTRS_PER_PGD/8),
 		 "i" (Create_Dirty_Excl_D));
 }
 
@@ -180,6 +182,7 @@ __initfunc(void ld_mmu_r6000(void))
 	flush_tlb_mm = r6000_flush_tlb_mm;
 	flush_tlb_range = r6000_flush_tlb_range;
 	flush_tlb_page = r6000_flush_tlb_page;
+	r6000_asid_setup();
 
 	load_pgd = r6000_load_pgd;
 	pgd_init = r6000_pgd_init;

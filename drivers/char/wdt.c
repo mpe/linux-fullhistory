@@ -23,6 +23,7 @@
  *		Alan Cox	:	Fixed the reboot problem (as noted by
  *					Matt Crocker).
  *		Alan Cox	:	Added wdt= boot option
+ *		Alan Cox	:	Cleaned up copy/user stuff
  */
 
 #include <linux/config.h>
@@ -191,7 +192,6 @@ static ssize_t wdt_read(struct file *file, char *buf, size_t count, loff_t *ptr)
 {
 	unsigned short c=inb_p(WDT_RT);
 	unsigned char cp;
-	int err;
 	
 	/*  Can't seek (pread) on this device  */
 	if (ptr != &file->f_pos)
@@ -200,13 +200,11 @@ static ssize_t wdt_read(struct file *file, char *buf, size_t count, loff_t *ptr)
 	switch(MINOR(file->f_dentry->d_inode->i_rdev))
 	{
 		case TEMP_MINOR:
-			err=verify_area(VERIFY_WRITE, buf, 1);
-			if(err)
-				return err;
 			c*=11;
 			c/=15;
 			cp=c+7;
-			copy_to_user(buf,&cp,1);
+			if(copy_to_user(buf,&cp,1))
+				return -EFAULT;
 			return 1;
 		default:
 			return -EINVAL;
@@ -216,7 +214,6 @@ static ssize_t wdt_read(struct file *file, char *buf, size_t count, loff_t *ptr)
 static int wdt_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 	unsigned long arg)
 {
-	int i;
 	static struct watchdog_info ident=
 	{
 		WDIOF_OVERHEAT|WDIOF_POWERUNDER|WDIOF_POWEROVER
@@ -231,20 +228,10 @@ static int wdt_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		default:
 			return -ENOIOCTLCMD;
 		case WDIOC_GETSUPPORT:
-			i = verify_area(VERIFY_WRITE, (void*) arg, sizeof(struct watchdog_info));
-			if (i)
-				return i;
-			else
-				return copy_to_user((struct watchdog_info *)arg, &ident, sizeof(ident));
+			return copy_to_user((struct watchdog_info *)arg, &ident, sizeof(ident))?-EFAULT:0;
 
 		case WDIOC_GETSTATUS:
-			i = verify_area(VERIFY_WRITE, (void*) arg, sizeof(int));
-			if (i)
-				return i;
-			else 
-			{
-				return put_user(wdt_status(),(int *)arg);
-			}
+			return put_user(wdt_status(),(int *)arg);
 		case WDIOC_GETBOOTSTATUS:
 			return put_user(0, (int *)arg);
 		case WDIOC_KEEPALIVE:

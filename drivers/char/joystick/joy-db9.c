@@ -1,5 +1,5 @@
 /*
- * joy-db9.c  Version 0.3V
+ * joy-db9.c  Version 0.5V
  *
  * Copyright (c) 1998 Andree Borrmann
  */
@@ -47,8 +47,8 @@ MODULE_PARM(js_db9_3, "0-2i");
 #define JS_GENESIS5_PAD 0x05
 #define JS_GENESIS6_PAD	0x06
 #define JS_SATURN_PAD	0x07
-
-#define JS_MAX_PAD	(JS_SATURN_PAD + 1)
+#define JS_MULTI_0802	0x08
+#define JS_MAX_PAD	0x09
 
 #define JS_DB9_UP	0x01
 #define JS_DB9_DOWN	0x02
@@ -78,11 +78,9 @@ static int js_db9_3[] __initdata = { -1, 0 };
 struct js_db9_info {
 #ifdef USE_PARPORT
 	struct pardevice *port;	/* parport device */
-	int wanted;		/* parport wanted */
 #else
 	int port;		/* hw port */
 #endif
-	int use;		/* use count */
 	int mode;		/* pad mode */
 };
 
@@ -97,6 +95,17 @@ static int js_db9_read(void *xinfo, int **axes, int **buttons)
 
 	switch(info->mode)
 	{
+	  case JS_MULTI_0802:
+
+		data = JS_PAR_STATUS(info->port) >> 3;
+
+		axes[0][1] = (data&JS_DB9_DOWN ?0:1) - (data&JS_DB9_UP  ?0:1);
+		axes[0][0] = (data&JS_DB9_RIGHT?0:1) - (data&JS_DB9_LEFT?0:1);
+
+		buttons[0][0] = (data&JS_DB9_FIRE1?1:0);
+
+		break;
+
 	  case JS_MULTI_STICK:
 
 		data = JS_PAR_DATA_IN(info->port);
@@ -262,19 +271,14 @@ int js_db9_open(struct js_dev *dev)
 {
 	struct js_db9_info *info = dev->port->info;
 
-	MOD_INC_USE_COUNT;
-	if (!info->use) {
-
+	if (!MOD_IN_USE) {
 #ifdef USE_PARPORT
-		if (parport_claim(info->port)) {
-			printk(KERN_WARNING "joy-db9: parport busy\n");		/* port currently not available ... */
-			info->wanted++;						/* we'll claim it on wakeup */
-			return 0;
-		}
+		if (parport_claim(info->port)) return -EBUSY;
 #endif
 		js_db9_enable_ps2(info);
 	}
-	info->use++;
+		
+	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -287,9 +291,8 @@ int js_db9_close(struct js_dev *dev)
 	struct js_db9_info *info = dev->port->info;
 
 	MOD_DEC_USE_COUNT;
-	info->use--;
 
-	if (!info->use) {
+	if (!MOD_IN_USE) {
 		js_db9_disable_ps2(info);
 #ifdef USE_PARPORT
 		parport_release(info->port);
@@ -297,25 +300,6 @@ int js_db9_close(struct js_dev *dev)
 	}
 	return 0;
 }
-
-/*
- * parport wakeup callback: claim the port!
- */
-
-#ifdef USE_PARPORT
-static void js_db9_wakeup(void *v)
-{
-	struct js_db9_info *info = js_db9_port->info;	/* FIXME! We can have more than 1 port! */
-
-	if (!info->use && info->wanted)
-	{
-		parport_claim(info->port);
-		js_db9_enable_ps2(info);
-		info->use++;
-		info->wanted--;
-	}
-}
-#endif
 
 #ifdef MODULE
 void cleanup_module(void)
@@ -363,9 +347,9 @@ static void __init js_db9_init_corr(struct js_corr **corr)
 static struct js_port __init *js_db9_probe(int *config, struct js_port *port)
 {
 	struct js_db9_info info;
-	char buttons[JS_MAX_PAD] = {0,1,2,4,0,6,7,8};
+	char buttons[JS_MAX_PAD] = {0,1,2,4,0,6,7,8,1};
 	char *name[JS_MAX_PAD] = {NULL, "Multisystem joystick", "Multisystem joystick (2 fire)", "Genesis pad",
-					NULL, "Genesis 5 pad", "Genesis 6 pad", "Saturn pad"};
+					NULL, "Genesis 5 pad", "Genesis 6 pad", "Saturn pad", "Multisystem (0.8.0.2) joystick"};
 
 	if (config[0] < 0) return port;
 	if (config[1] < 0 || config[1] >= JS_MAX_PAD || !name[config[1]]) return port;
@@ -389,10 +373,9 @@ static struct js_port __init *js_db9_probe(int *config, struct js_port *port)
 			return port;
 		}
 
-		info.port = parport_register_device(pp, "joystick (db9)", NULL, js_db9_wakeup, NULL, PARPORT_DEV_EXCL, NULL);
+		info.port = parport_register_device(pp, "joystick (db9)", NULL, NULL, NULL, PARPORT_DEV_EXCL, NULL);
 		if (!info.port)
 			return port;
-		info.wanted = 0;
 	}
 #else
 	info.port = config[0];
@@ -402,7 +385,6 @@ static struct js_port __init *js_db9_probe(int *config, struct js_port *port)
 #endif
 
 	info.mode = config[1];
-	info.use = 0;
 
 	port = js_register_port(port, &info, 1, sizeof(struct js_db9_info), js_db9_read);
 

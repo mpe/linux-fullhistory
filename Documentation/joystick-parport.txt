@@ -231,7 +231,13 @@ the parallel port.
 
 (pin 7) -----> Button 2
 
-2.2.1 Multisystem joysticks using joy-console.c
+  And that's it.
+
+  On a side note, if you have already built a different adapter for use with
+the digital joystick driver 0.8.0.2, this is also supported by the joy-db9.c
+driver, as device type 8. (See section 3.2)
+
+2.2.2 Multisystem joysticks using joy-console.c
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   For some people just one joystick per parallel port is not enough, and/or
 want to use them on one parallel port together with NES/SNES/PSX pads. This
@@ -440,21 +446,23 @@ use js_console_2 and js_db9_3 as additional command line parameters for two
 more parallel ports.
 
   Changes:
-    v0.1 : First version (SNES only)
-    v0.2 : X/Y directions were exchanged...
-    v0.3 : Adaptation for kernel 2.1
-    v0.4 : Adaptation for joystick-1.2.6
-	   - added open/close callbacks
-    v0.5 : Renamed to "joy-console" because I have added
-	   PSX controller support.
-    v0.6 : NES support
-    v0.7V: Added "multi system" support
-    v0.8 : Bugfixed PSX driver...
-    v0.9V: Changed multi system support
-	   Added Multi2 support
-	   Fixed parport handling
-	   Cleaned up
-    v0.10: Fixed PSX buttons 7 and 8
+    v0.1  : First version (SNES only)
+    v0.2  : X/Y directions were exchanged...
+    v0.3  : Adaptation for kernel 2.1
+    v0.4  : Adaptation for joystick-1.2.6
+	    - added open/close callbacks
+    v0.5  : Renamed to "joy-console" because I have added
+	    PSX controller support.
+    v0.6  : NES support
+    v0.7V : Added "multi system" support
+    v0.8  : Bugfixed PSX driver...
+    v0.9V : Changed multi system support
+	    Added Multi2 support
+	    Fixed parport handling
+	    Cleaned up
+    v0.10 : Fixed PSX buttons 8 and 9
+    v0.11V: Switched to EXCL mode
+	    Removed wakeup
 
 3.2 joy-db9.c
 ~~~~~~~~~~~~~
@@ -478,6 +486,7 @@ Linux kernels, the number of the parport interface (eg. 0 for parport0).
 	  5  | Genesis pad (5+1 buttons)
 	  6  | Genesis pad (6+1 buttons)
 	  7  | Saturn pad
+	  8  | Multisystem 1-button joystick (v0.8.0.2 pin-out)
 
   Should you want to use more than one of these joysticks/pads at once, you
 can use js_db9_2 and js_db9_3 as additional command line parameters for two
@@ -489,6 +498,9 @@ more joysticks/pads.
     v0.3V: Added Sega Saturn support
 	   Fixed parport and PS/2 mode handling
 	   Cleaned up
+    v0.4V: Switched to EXCL mode
+           Removed wakeup
+    v0.5V: Added 0.8.0.2 HW compatibility for Multi sticks
 
 3.3 joy-turbografx.c
 ~~~~~~~~~~~~~~~~~~~~
@@ -506,9 +518,6 @@ interface.
   Should you want to use more than one of these interfaces at once, you can
 use js_tg_2 and js_tg_3 as additional command line parameters for two more
 interfaces.
-
-  Changes:
-    v0.1V: First version
 
 3.4 End
 ~~~~~~~

@@ -7,7 +7,7 @@
  *
  * Copyright (C) 1994, 1995 by Ralf Baechle
  *
- * $Id: entry.S,v 1.10 1998/07/26 03:02:06 davem Exp $
+ * $Id: entry.S,v 1.15 1998/10/14 20:26:26 ralf Exp $
  */
 
 /*
@@ -59,8 +59,7 @@ EXPORT(ret_from_irq)
 
 		andi	t1, t0, 0x10
 		beqz	t1, return		# -> yes
-#error Change this to current->need_resched --DaveM
-		 lw	t1, need_resched
+		 lw	t1, TASK_NEED_RESCHED($28)
 		bnez	t1, reschedule
 		lw	v0, TASK_SIGPENDING($28)
 		 move	a0, zero
@@ -101,8 +100,6 @@ LEAF(spurious_interrupt)
 		STI
 #define __BUILD_clear_cli(exception)                                    \
 		CLI
-#define __BUILD_clear_kmode(exception)                                  \
-		KMODE
 #define __BUILD_clear_fpe(exception)                                    \
 		cfc1	a1,fcr31;                                       \
 		li	a2,~(0x3f<<12);                                 \
@@ -112,7 +109,7 @@ LEAF(spurious_interrupt)
 #define __BUILD_clear_ade(exception)                                    \
 		MFC0	t0,CP0_BADVADDR;                                \
 		REG_S	t0,PT_BVADDR(sp);                               \
-		STI
+		KMODE
 #define __BUILD_silent(exception)
 
 #define fmt "Got %s at %08lx.\n"
@@ -146,8 +143,8 @@ EXPORT(exception_count_##exception);                                    \
 		 nop;                                                   \
 		END(handle_##exception)
 
-		BUILD_HANDLER(adel,ade,kmode,silent)		/* #4  */
-		BUILD_HANDLER(ades,ade,kmode,silent)		/* #5  */
+		BUILD_HANDLER(adel,ade,ade,silent)		/* #4  */
+		BUILD_HANDLER(ades,ade,ade,silent)		/* #5  */
 		BUILD_HANDLER(ibe,ibe,cli,verbose)		/* #6  */
 		BUILD_HANDLER(dbe,dbe,cli,verbose)		/* #7  */
 		BUILD_HANDLER(bp,bp,sti,silent)			/* #9  */
@@ -155,10 +152,8 @@ EXPORT(exception_count_##exception);                                    \
 		BUILD_HANDLER(cpu,cpu,sti,silent)		/* #11 */
 		BUILD_HANDLER(ov,ov,sti,silent)			/* #12 */
 		BUILD_HANDLER(tr,tr,sti,silent)			/* #13 */
-		BUILD_HANDLER(vcei,vcei,sti,verbose)		/* #14 */
 		BUILD_HANDLER(fpe,fpe,fpe,silent)		/* #15 */
 		BUILD_HANDLER(watch,watch,sti,verbose)		/* #23 */
-		BUILD_HANDLER(vced,vced,sti,verbose)		/* #31 */
 		BUILD_HANDLER(reserved,reserved,sti,verbose)	/* others */
 
 /*

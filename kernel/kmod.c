@@ -24,24 +24,23 @@
 */
 char modprobe_path[256] = "/sbin/modprobe";
 
-/*
-	exec_modprobe is spawned from a kernel-mode user process,
-	then changes its state to behave _as_if_ it was spawned
-	from the kernel's init process
-	(ppid and {e,}gid are not adjusted, but that shouldn't
-	be a problem since we trust modprobe)
-*/
-#define task_init task[smp_num_cpus]
-
 static inline void
 use_init_file_context(void)
 {
+	struct fs_struct * fs;
+
 	lock_kernel();
 
-	/* don't use the user's root, use init's root instead */
+	/*
+	 * Don't use the user's root, use init's root instead.
+	 * Note that we can use "init_task" (which is not actually
+	 * the same as the user-level "init" process) because we
+	 * started "init" with a CLONE_FS
+	 */
 	exit_fs(current);	/* current->fs->count--; */
-	current->fs = task_init->fs;
-	atomic_inc(&current->fs->count);
+	fs = init_task.fs;
+	current->fs = fs;
+	atomic_inc(&fs->count);
 
 	unlock_kernel();
 }

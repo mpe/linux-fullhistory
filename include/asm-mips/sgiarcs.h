@@ -1,4 +1,5 @@
-/* $Id: sgiarcs.h,v 1.2 1998/05/01 01:36:07 ralf Exp $
+/* $Id: sgiarcs.h,v 1.2 1998/07/08 16:01:57 ralf Exp $
+ *
  * SGI ARCS firmware interface defines.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
@@ -170,11 +171,11 @@ struct linux_romvec {
 	/* Load and begin execution of a standalong image. */
 	long (*exec)(char *file, long argc, char **argv, char **envp);
 
-	void (*halt)(void); 	/* Halt the machine. */
-	void (*pdown)(void);    /* Power down the machine. */
-	void (*restart)(void);  /* XXX soft reset??? */
-	void (*reboot)(void);   /* Reboot the machine. */
-	void (*imode)(void);    /* Enter PROM interactive mode. */
+	void (*halt)(void) __attribute__((noreturn)); 	/* Halt the machine. */
+	void (*pdown)(void) __attribute__((noreturn));    /* Power down the machine. */
+	void (*restart)(void) __attribute__((noreturn));  /* XXX soft reset??? */
+	void (*reboot)(void) __attribute__((noreturn));   /* Reboot the machine. */
+	void (*imode)(void) __attribute__((noreturn));    /* Enter PROM interactive mode. */
 	int _unused1; /* padding */
 
 	/* PROM device tree interface. */

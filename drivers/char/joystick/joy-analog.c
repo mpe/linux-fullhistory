@@ -73,7 +73,7 @@ static int js_an_read(void *xinfo, int **axes, int **buttons)
 	u = a = ((info->mask[0] | info->mask[1]) & JS_AN_AXES_STD) | (info->extensions & JS_AN_HAT_FCS)
 	      | ((info->extensions & JS_AN_BUTTONS_PXY_XY) >> 2) | ((info->extensions & JS_AN_BUTTONS_PXY_UV) >> 4);
 
-	outb(inb(io),io);
+	outb(0xff,io);
 	t = js_get_time_a();
 	do {
 		v = inb(io) & a;
@@ -130,7 +130,7 @@ static struct js_port __init *js_an_probe(int io, int mask0, int mask1, struct j
 	if (check_region(io, 1)) return port;
 
 	if (((u = inb(io)) & 3) == 3) return port;
-	outb(u,io);
+	outb(0xff,io);
 	u = inb(io);
 	udelay(JS_AN_MAX_TIME);
 	u = (inb(io) ^ u) & u;

@@ -210,9 +210,11 @@ S: Marrickville NSW 2204
 S: Australia
 
 N: Philip Blundell
-E: Philip.Blundell@pobox.com
-D: Device driver hacking 
-D: Some Linux/ARM stuff
+E: philb@gnu.org
+D: Linux/ARM hacker
+D: Device driver hacker (eexpress, 3c505, c-qcam, ...)
+D: m68k port to HP9000/300
+D: AUN network protocols
 D: Co-architect of the parallel port sharing system
 S: Nexus Electronics Ltd
 S: 10 St Barnabas Road, Cambridge CB1 2BY

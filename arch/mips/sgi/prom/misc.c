@@ -1,9 +1,8 @@
-/*
+/* $Id: misc.c,v 1.6 1998/07/08 15:59:13 ralf Exp $
+ *
  * misc.c: Miscellaneous ARCS PROM routines.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
- *
- * $Id: misc.c,v 1.2 1998/05/01 01:35:26 ralf Exp $
  */
 #include <linux/config.h>
 #include <linux/init.h>
@@ -15,14 +14,12 @@
 #include <asm/system.h>
 
 extern unsigned long mips_cputype;
-extern int initialize_kbd(void);
 extern void *sgiwd93_host;
 extern void reset_wd33c93(void *instance);
 
 void prom_halt(void)
 {
 	bcops->bc_disable();
-	initialize_kbd();
 	cli();
 #if CONFIG_SCSI_SGIWD93
 	reset_wd33c93(sgiwd93_host);
@@ -33,7 +30,6 @@ void prom_halt(void)
 void prom_powerdown(void)
 {
 	bcops->bc_disable();
-	initialize_kbd();
 	cli();
 #if CONFIG_SCSI_SGIWD93
 	reset_wd33c93(sgiwd93_host);
@@ -45,7 +41,6 @@ void prom_powerdown(void)
 void prom_restart(void)
 {
 	bcops->bc_disable();
-	initialize_kbd();
 	cli();
 #if CONFIG_SCSI_SGIWD93
 	reset_wd33c93(sgiwd93_host);
@@ -56,7 +51,6 @@ void prom_restart(void)
 void prom_reboot(void)
 {
 	bcops->bc_disable();
-	initialize_kbd();
 	cli();
 #if CONFIG_SCSI_SGIWD93
 	reset_wd33c93(sgiwd93_host);
@@ -67,7 +61,6 @@ void prom_reboot(void)
 void prom_imode(void)
 {
 	bcops->bc_disable();
-	initialize_kbd();
 	cli();
 #if CONFIG_SCSI_SGIWD93
 	reset_wd33c93(sgiwd93_host);

@@ -1,4 +1,4 @@
-/* $Id: pci.c,v 1.11 1998/07/15 20:34:33 mj Exp $
+/* $Id: pci.c,v 1.6 1998/08/19 21:53:50 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -40,7 +40,7 @@ int pcibios_present (void)
  * each PCI chipset configuration.  We just run the hook to the machine
  * specific implementation.
  */
-__initfunc(void pcibios_fixup (void))
+void pcibios_fixup (void)
 {
 	return pci_ops->pcibios_fixup();
 }
@@ -79,6 +79,11 @@ int pcibios_write_config_dword (unsigned char bus, unsigned char dev_fn,
                                 unsigned char where, unsigned int val)
 {
 	return pci_ops->pcibios_write_config_dword(bus, dev_fn, where, val);
+}
+
+__initfunc(char *pcibios_setup(char *str))
+{
+	return str;
 }
 
 __initfunc(void pcibios_fixup_bus(struct pci_bus *bus))

@@ -32,8 +32,8 @@
 #define NFSCTL_EXPORT		3	/* export a file system. */
 #define NFSCTL_UNEXPORT		4	/* unexport a file system. */
 #define NFSCTL_UGIDUPDATE	5	/* update a client's uid/gid map. */
-#define NFSCTL_GETFH		6	/* get an fh (used by mountd) */
-
+#define NFSCTL_GETFH		6	/* get an fh by ino (used by mountd) */
+#define NFSCTL_GETFD		7	/* get an fh by path (used by mountd) */
 
 /* SVC */
 struct nfsctl_svc {
@@ -81,6 +81,13 @@ struct nfsctl_fhparm {
 	int			gf_version;
 };
 
+/* GETFD */
+struct nfsctl_fdparm {
+	struct sockaddr		gd_addr;
+	char			gd_path[NFS_MAXPATHLEN+1];
+	int			gd_version;
+};
+
 /*
  * This is the argument union.
  */
@@ -92,6 +99,7 @@ struct nfsctl_arg {
 		struct nfsctl_export	u_export;
 		struct nfsctl_uidmap	u_umap;
 		struct nfsctl_fhparm	u_getfh;
+		struct nfsctl_fdparm	u_getfd;
 		unsigned int		u_debug;
 	} u;
 #define ca_svc		u.u_svc
@@ -99,6 +107,7 @@ struct nfsctl_arg {
 #define ca_export	u.u_export
 #define ca_umap		u.u_umap
 #define ca_getfh	u.u_getfh
+#define ca_getfd	u.u_getfd
 #define ca_authd	u.u_authd
 #define ca_debug	u.u_debug
 };

@@ -120,7 +120,6 @@ static inline __u32 _ufs_get_inode_uid_(struct ufs_inode * inode,
 			return SWAB32(inode->ui_u3.ui_sun.ui_uid);
 		case UFS_UID_44BSD:
 			return SWAB32(inode->ui_u3.ui_44.ui_uid);
-		case UFS_UID_OLD:
 		default:
 			return SWAB16(inode->ui_u1.oldids.ui_suid);
 	}
@@ -130,19 +129,14 @@ static inline __u32 _ufs_get_inode_uid_(struct ufs_inode * inode,
 static inline void _ufs_set_inode_uid_(struct ufs_inode * inode, __u32 value,
 	unsigned flags, unsigned swab)
 {
-	
+	inode->ui_u1.oldids.ui_suid = SWAB16(value); 
 	switch (flags & UFS_UID_MASK) {
 		case UFS_UID_EFT:
-			inode->ui_u1.oldids.ui_suid = 
 			inode->ui_u3.ui_sun.ui_uid = SWAB32(value);
 			break;
 		case UFS_UID_44BSD:
-			inode->ui_u1.oldids.ui_suid = 
 			inode->ui_u3.ui_44.ui_uid = SWAB32(value);
 			break;
-		case UFS_UID_OLD:
-		default:
-			inode->ui_u1.oldids.ui_suid = SWAB16(value);
 	}
 }
 
@@ -155,7 +149,6 @@ static inline __u32 _ufs_get_inode_gid_(struct ufs_inode * inode,
 			return SWAB32(inode->ui_u3.ui_sun.ui_gid);
 		case UFS_UID_44BSD:
 			return SWAB32(inode->ui_u3.ui_44.ui_gid);
-		case UFS_UID_OLD:
 		default:
 			return SWAB16(inode->ui_u1.oldids.ui_sgid);
 	}
@@ -165,18 +158,14 @@ static inline __u32 _ufs_get_inode_gid_(struct ufs_inode * inode,
 static inline void _ufs_set_inode_gid_(struct ufs_inode * inode, __u32 value, 
 	unsigned flags, unsigned swab)
 {
+	inode->ui_u1.oldids.ui_sgid =  SWAB16(value);
 	switch (flags & UFS_UID_MASK) {
 		case UFS_UID_EFT:
-			inode->ui_u1.oldids.ui_sgid = 
 			inode->ui_u3.ui_sun.ui_gid = SWAB32(value);
 			break;
 		case UFS_UID_44BSD:
-			inode->ui_u1.oldids.ui_sgid = 
 			inode->ui_u3.ui_44.ui_gid = SWAB32(value);
 			break;
-		case UFS_UID_OLD:
-		default:
-			inode->ui_u1.oldids.ui_sgid = SWAB16(value);
 	}
 }
 

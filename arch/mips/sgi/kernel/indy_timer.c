@@ -1,9 +1,9 @@
-/*
+/* $Id: indy_timer.c,v 1.9 1998/06/25 20:15:02 ralf Exp $
+ *
  * indy_timer.c: Setting up the clock on the INDY 8254 controller.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
- *
- * $Id: indy_timer.c,v 1.5 1998/05/01 01:35:17 ralf Exp $
+ * Copytight (C) 1997, 1998 Ralf Baechle (ralf@gnu.org)
  */
 #include <linux/errno.h>
 #include <linux/init.h>
@@ -26,26 +26,6 @@
 #include <asm/sgihpc.h>
 #include <asm/sgint23.h>
 
-/* The layout of registers for the INDY Dallas 1286 clock chipset. */
-struct indy_clock {
-        volatile unsigned int hsec;
-        volatile unsigned int sec;
-        volatile unsigned int min;
-        volatile unsigned int malarm;
-        volatile unsigned int hr;
-        volatile unsigned int halarm;
-        volatile unsigned int day;
-        volatile unsigned int dalarm;
-        volatile unsigned int date;
-        volatile unsigned int month;
-        volatile unsigned int year;
-        volatile unsigned int cmd;
-        volatile unsigned int whsec;
-        volatile unsigned int wsec;
-        volatile unsigned int _unused0[50];
-};
-
-#define INDY_CLOCK_REGS ((struct indy_clock *)(KSEG1ADDR(0x1fbe0000)))
 
 /* Because of a bug in the i8254 timer we need to use the onchip r4k
  * counter as our system wide timer interrupt running at 100HZ.
@@ -60,7 +40,7 @@ static inline void ack_r4ktimer(unsigned long newval)
 
 static int set_rtc_mmss(unsigned long nowtime)
 {
-	struct indy_clock *clock = INDY_CLOCK_REGS;
+	struct indy_clock *clock = (struct indy_clock *)INDY_CLOCK_REGS;
 	int retval = 0;
 	int real_seconds, real_minutes, clock_minutes;
 
@@ -197,7 +177,7 @@ static inline unsigned long mktime(unsigned int year, unsigned int mon,
 
 __initfunc(static unsigned long get_indy_time(void))
 {
-	struct indy_clock *clock = INDY_CLOCK_REGS;
+	struct indy_clock *clock = (struct indy_clock *)INDY_CLOCK_REGS;
 	unsigned int year, mon, day, hour, min, sec;
 
 	/* Freeze it. */

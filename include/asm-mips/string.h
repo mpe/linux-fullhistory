@@ -1,13 +1,10 @@
-/*
- * include/asm-mips/string.h
+/* $Id: string.h,v 1.6 1998/07/20 17:52:21 ralf Exp $
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (c) 1994, 1995, 1996, 1997 by Ralf Baechle
- *
- * $Id: string.h,v 1.7 1998/05/04 09:19:02 ralf Exp $
+ * Copyright (c) 1994, 1995, 1996, 1997, 1998 by Ralf Baechle
  */
 #ifndef __ASM_MIPS_STRING_H
 #define __ASM_MIPS_STRING_H
@@ -127,11 +124,8 @@ extern void *memcpy(void *__to, __const__ void *__from, size_t __n);
 #define __HAVE_ARCH_MEMMOVE
 extern void *memmove(void *__dest, __const__ void *__src, size_t __n);
 
+/* Don't build bcopy at all ...  */
 #define __HAVE_ARCH_BCOPY
-extern __inline__ char * bcopy(const char * src, char * dest, int count)
-{
-	memmove(dest, src, count);
-}
 
 #define __HAVE_ARCH_MEMSCAN
 extern __inline__ void *memscan(void *__addr, int __c, size_t __size)
