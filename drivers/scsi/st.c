@@ -11,7 +11,7 @@
   Copyright 1992 - 1996 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Tue Oct  1 22:53:51 1996 by makisara@kai.makisara.fi
+  Last modified: Tue Oct 22 20:59:52 1996 by root@kai.makisara.fi
   Some small formal changes - aeb, 950809
 */
 
@@ -26,7 +26,7 @@
 #include <linux/mtio.h>
 #include <linux/ioctl.h>
 #include <linux/fcntl.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/dma.h>
 #include <asm/system.h>
 
@@ -888,10 +888,12 @@ out:
 
 
 /* Write command */
-	static int
-st_write(struct inode * inode, struct file * filp, const char * buf, int count)
+	static long
+st_write(struct inode * inode, struct file * filp, const char * buf,
+	 unsigned long count)
 {
-    int total, do_count, blks, retval, transfer;
+    long total;
+    int do_count, blks, retval, transfer;
     int write_threshold;
     int doing_write = 0;
     static unsigned char cmd[10];
@@ -1166,10 +1168,10 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
 
 
 /* Read command */
-	static int
-st_read(struct inode * inode, struct file * filp, char * buf, int count)
+	static long
+st_read(struct inode * inode, struct file * filp, char * buf, unsigned long count)
 {
-    int total;
+    long total;
     int transfer, blks, bytes;
     static unsigned char cmd[10];
     Scsi_Cmnd * SCpnt = NULL;
@@ -1310,7 +1312,7 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 		  (STp->buffer)->buffer_bytes = (blks - transfer) * STp->block_size;
 #if DEBUG
 		  if (debugging)
-		    printk(ST_DEB_MSG "st%d: ILI but enough data received %d %d.\n",
+		    printk(ST_DEB_MSG "st%d: ILI but enough data received %ld %d.\n",
 			   dev, count - total, (STp->buffer)->buffer_bytes);
 #endif
 		  if (count - total > (STp->buffer)->buffer_bytes)
@@ -1332,7 +1334,7 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 #if DEBUG
 		if (debugging)
 		  printk(ST_DEB_MSG
-		    "st%d: EOF detected (%d bytes read, transferred %d bytes).\n",
+		    "st%d: EOF detected (%d bytes read, transferred %ld bytes).\n",
 			 dev, (STp->buffer)->buffer_bytes, total);
 #endif
 	      }
@@ -2314,6 +2316,7 @@ set_location(struct inode * inode, unsigned int block, int partition,
       return (-EBUSY);
 
     STp->drv_block = (STp->mt_status)->mt_fileno = (-1);
+    STp->eof = ST_NOEOF;
     if ((STp->buffer)->last_result_fatal != 0) {
       result = (-EIO);
       if (STp->can_partitions &&

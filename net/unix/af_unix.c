@@ -63,7 +63,7 @@
 #include <linux/in.h>
 #include <linux/fs.h>
 #include <linux/malloc.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
 #include <net/sock.h>

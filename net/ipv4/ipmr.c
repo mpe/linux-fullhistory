@@ -29,7 +29,7 @@
 
 #include <linux/config.h>
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <linux/types.h>
 #include <linux/sched.h>
 #include <linux/errno.h>

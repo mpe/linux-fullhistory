@@ -16,7 +16,7 @@
 #include <linux/mm.h>
 #include <linux/pagemap.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 #define	NBUF	32

@@ -16,7 +16,7 @@
 #include <linux/stat.h>
 #include <linux/mm.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #define ACC_MODE(x) ("\000\004\002\006"[(x)&O_ACCMODE])
 

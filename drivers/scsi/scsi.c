@@ -17,8 +17,8 @@
  *  add scatter-gather, multiple outstanding request, and other
  *  enhancements.
  *
- *  Native multichannel and wide scsi support added 
- *  by Michael Neuffer neuffer@goofy.zdv.uni-mainz.de
+ *  Native multichannel, wide scsi, /proc/scsi and hot plugging 
+ *  support added by Michael Neuffer <mike@i-connect.net>
  *
  *  Added request_module("scsi_hostadapter") for kerneld:
  *  (Put an "alias scsi_hostadapter your_hostadapter" in /etc/conf.modules)
@@ -47,6 +47,7 @@
 #include <linux/stat.h>
 #include <linux/blk.h>
 #include <linux/interrupt.h>
+#include <linux/delay.h>
 
 #include <asm/system.h>
 #include <asm/irq.h>
@@ -275,6 +276,7 @@ static struct dev_info device_list[] =
  */
 {"SONY","CD-ROM CDU-8001","*", BLIST_BORKEN},
 {"TEXEL","CD-ROM","1.06", BLIST_BORKEN},
+{"IOMEGA","Io20S         *F","*", BLIST_KEY},
 {"INSITE","Floptical   F*8I","*", BLIST_KEY},
 {"INSITE","I325VM","*", BLIST_KEY},
 {"NRC","MBR-7","*", BLIST_FORCELUN | BLIST_SINGLELUN},
@@ -1219,17 +1221,19 @@ inline void internal_cmnd (Scsi_Cmnd * SCpnt)
      */
     timeout = host->last_reset + MIN_RESET_DELAY;
     if (jiffies < timeout) {
-        /*
-         * NOTE: This may be executed from within an interrupt
-         * handler!  This is bad, but for now, it'll do.  The irq
-         * level of the interrupt handler has been masked out by the
-         * platform dependent interrupt handling code already, so the
-         * sti() here will not cause another call to the SCSI host's
-         * interrupt handler (assuming there is one irq-level per
-         * host).
-         */
-        sti();
-        while (jiffies < timeout) barrier();
+	int ticks_remaining = timeout - jiffies;
+	/*
+	 * NOTE: This may be executed from within an interrupt
+	 * handler!  This is bad, but for now, it'll do.  The irq
+	 * level of the interrupt handler has been masked out by the
+	 * platform dependent interrupt handling code already, so the
+	 * sti() here will not cause another call to the SCSI host's
+	 * interrupt handler (assuming there is one irq-level per
+	 * host).
+	 */
+	sti();
+	while (--ticks_remaining >= 0) udelay(1000000/HZ);
+	host->last_reset = jiffies - MIN_RESET_DELAY;
     }
     restore_flags(flags);
     
@@ -3065,7 +3069,11 @@ static int scsi_register_host(Scsi_Host_Template * tpnt)
 	 */
 	
 	for(shpnt=scsi_hostlist; shpnt; shpnt = shpnt->next)
-	    if(shpnt->hostt == tpnt) scan_scsis(shpnt,0,0,0,0);
+	    if(shpnt->hostt == tpnt) {
+	      scan_scsis(shpnt,0,0,0,0);
+	      if (shpnt->select_queue_depths != NULL)
+		  (shpnt->select_queue_depths)(shpnt, scsi_devices);
+	    }
 	
 	for(sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
 	    if(sdtpnt->init && sdtpnt->dev_noticed) (*sdtpnt->init)();

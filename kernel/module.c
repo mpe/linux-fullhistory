@@ -1,6 +1,5 @@
 #include <linux/errno.h>
 #include <linux/kernel.h>
-#include <asm/segment.h>
 #include <linux/mm.h>		/* defines GFP_KERNEL */
 #include <linux/string.h>
 #include <linux/module.h>
@@ -8,6 +7,8 @@
 #include <linux/malloc.h>
 #include <linux/vmalloc.h>
 #include <linux/config.h>
+
+#include <asm/uaccess.h>
 /*
  * Originally by Anonymous (as far as I know...)
  * Linux version by Bas Laarhoven <bas@vimec.nl>

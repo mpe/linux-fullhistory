@@ -14,7 +14,7 @@ extern char   *teles_id;
 int             nrcards;
 
 typedef struct {
-	byte           *membase;
+	unsigned int	membase;
 	int             interrupt;
 	unsigned int    iobase;
 	unsigned int    protocol;
@@ -73,7 +73,7 @@ void teles_setup(char *str, int *ints)
                         j++; argc--;
                 }
                 if (argc) {
-                        io[i].membase   = (byte *)ints[j];
+                        io[i].membase   = ints[j];
                         j++; argc--;
                 }
                 if (argc) {

@@ -11,7 +11,7 @@
 #include <linux/errno.h>
 #include <linux/mm.h>
 #include <linux/malloc.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include "consolemap.h"
 
 static unsigned short translations[][256] = {

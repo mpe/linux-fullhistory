@@ -17,7 +17,7 @@
 
 #include <linux/config.h>	/* For CONFIG_IP_CLASSLESS */
  
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <linux/types.h>

@@ -15,7 +15,7 @@
 #include <linux/string.h>
 #include <linux/stat.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #include "../fat/msbuffer.h"
 

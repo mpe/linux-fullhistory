@@ -63,11 +63,9 @@
 #include <linux/string.h>
 #include <linux/malloc.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
-
-#include <linux/scc.h>
 
 #include "kbd_kern.h"
 #include "vt_kern.h"
@@ -1714,7 +1712,7 @@ void do_SAK( struct tty_struct *tty)
 		if (((*p)->tty == tty) ||
 		    ((session > 0) && ((*p)->session == session)))
 			send_sig(SIGKILL, *p, 1);
-		else {
+		else if ((*p)->files) {
 			for (i=0; i < NR_OPEN; i++) {
 				filp = (*p)->files->fd[i];
 				if (filp && (filp->f_op == &tty_fops) &&
@@ -1927,9 +1925,6 @@ int tty_init(void)
 	kbd_init();
 #ifdef CONFIG_SERIAL
 	rs_init();
-#endif
-#ifdef CONFIG_SCC
-	scc_init();
 #endif
 #ifdef CONFIG_CYCLADES
 	cy_init();

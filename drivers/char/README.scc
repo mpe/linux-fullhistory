@@ -1,24 +1,5 @@
+The z8530drv is now a network device driver, you can find it in
+	../net/scc.c
 
-You will find subset of the documentation in
-
-                 linux/Documentation/networking/z8530drv.txt
-
-
-To use this driver you MUST have the full package from
-
-ftp.ucsd.edu:/hamradio/packet/tcpip/incoming/z8530drv-2.01.dl1bke.real.tar.gz
-
-[
-  if you can't find it there, try:
-  .../tcpip/linux/z8530drv-2.01.dl1bke.tar.gz
-
-]
-
-and various mirrors (i.e. nic.switch.ch)
-
-The package includes the utilities necessary to initialize and
-control the driver.
-
-Joerg Reuter	ampr-net: dl1bke@db0pra.ampr.org
-		AX-25   : DL1BKE @ DB0ACH.#NRW.DEU.EU
-		Internet: jreuter@lykos.tng.oche.de
+A subset of the documentation is in
+	../../Documentation/networking/z8530drv.txt

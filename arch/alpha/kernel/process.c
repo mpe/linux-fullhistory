@@ -27,7 +27,7 @@
 #include <linux/elfcore.h>
 
 #include <asm/reg.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/io.h>
 

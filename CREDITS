@@ -927,7 +927,7 @@ S: Fairfax, Virginia 22033
 S: USA
 
 N: William (Bill) Metzenthen
-E: billm@jacobi.maths.monash.edu.au
+E: billm@suburbia.net
 D: Author of the FPU emulator.
 D: Minor kernel hacker for other lost causes (Hercules mono, etc).
 S: 22 Parker Street
@@ -1117,6 +1117,12 @@ D: Modularized affs and ufs. Minor fixes.
 S: Rebmannsweg 34h
 S: 79539 Loerrach
 S: Germany
+
+N: Joerg Reuter
+E: jreuter@lykos.oche.de
+E: dl1bke@db0pra.ampr.org
+D: Generic Z8530 driver, AX.25 DAMA slave implementation
+D: Several AX.25 hacks
 
 N: William E. Roadcap
 E: roadcapw@cfw.com

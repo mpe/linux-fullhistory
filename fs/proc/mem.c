@@ -11,7 +11,7 @@
 #include <linux/mm.h>
 
 #include <asm/page.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
 

@@ -25,7 +25,7 @@
 #include <linux/ufs_fs.h>
 #include <linux/locks.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 int ufs_need_swab = 0;
 

@@ -20,7 +20,7 @@
 #include <linux/fs.h>
 #include <linux/minix_fs.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 #define blocksize BLOCK_SIZE

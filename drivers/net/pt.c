@@ -79,7 +79,7 @@
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/dma.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <linux/inet.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>

@@ -35,7 +35,7 @@
 #include <linux/malloc.h>
 #include <linux/mount.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #define __DQUOT_VERSION__	"dquot_5.6.0"
 

@@ -23,7 +23,7 @@
 #include <linux/delay.h>
 
 #include <asm/io.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 /* the BIOS manuals say there can be up to 4 lpt devices

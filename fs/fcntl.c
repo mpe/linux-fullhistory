@@ -4,8 +4,6 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-#include <asm/segment.h>
-
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
@@ -14,6 +12,7 @@
 #include <linux/string.h>
 
 #include <asm/bitops.h>
+#include <asm/uaccess.h>
 
 extern int sock_fcntl (struct file *, unsigned int cmd, unsigned long arg);
 

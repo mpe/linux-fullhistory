@@ -7,7 +7,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -37,15 +37,15 @@ static int     *trix_osp = NULL;
 static unsigned char
 trix_read (int addr)
 {
-  outb ((unsigned char) addr, 0x390);	/* MT-0002-PC ASIC address */
+  outb (((unsigned char) addr), 0x390);		/* MT-0002-PC ASIC address */
   return inb (0x391);		/* MT-0002-PC ASIC data */
 }
 
 static void
 trix_write (int addr, int data)
 {
-  outb ((unsigned char) addr, 0x390);	/* MT-0002-PC ASIC address */
-  outb ((unsigned char) data, 0x391);	/* MT-0002-PC ASIC data */
+  outb (((unsigned char) addr), 0x390);		/* MT-0002-PC ASIC address */
+  outb (((unsigned char) data), 0x391);		/* MT-0002-PC ASIC data */
 }
 
 static void
@@ -57,22 +57,22 @@ download_boot (int base)
     return;
 
   trix_write (0xf8, 0x00);	/* ??????? */
-  outb (0x01, base + 6);	/* Clear the internal data pointer */
-  outb (0x00, base + 6);	/* Restart */
+  outb ((0x01), base + 6);	/* Clear the internal data pointer */
+  outb ((0x00), base + 6);	/* Restart */
 
   /*
      *  Write the boot code to the RAM upload/download register.
      *  Each write increments the internal data pointer.
    */
-  outb (0x01, base + 6);	/* Clear the internal data pointer */
-  outb (0x1A, 0x390);		/* Select RAM download/upload port */
+  outb ((0x01), base + 6);	/* Clear the internal data pointer */
+  outb ((0x1A), 0x390);		/* Select RAM download/upload port */
 
   for (i = 0; i < n; i++)
-    outb (trix_boot[i], 0x391);
+    outb ((trix_boot[i]), 0x391);
   for (i = n; i < 10016; i++)	/* Clear up to first 16 bytes of data RAM */
-    outb (0x00, 0x391);
-  outb (0x00, base + 6);	/* Reset */
-  outb (0x50, 0x390);		/* ?????? */
+    outb ((0x00), 0x391);
+  outb ((0x00), base + 6);	/* Reset */
+  outb ((0x50), 0x390);		/* ?????? */
 
 }
 
@@ -175,7 +175,7 @@ probe_trix_wss (struct address_info *hw_config)
       return 0;
     }
 
-  if (hw_config->dma2 != -1)
+  if (hw_config->dma2 != -1 && hw_config->dma2 != hw_config->dma)
     if (hw_config->dma2 != 0 && hw_config->dma2 != 1 && hw_config->dma2 != 3)
       {
 	printk ("AudioTrix: Bad capture DMA %d\n", hw_config->dma2);
@@ -218,6 +218,7 @@ attach_trix_wss (struct address_info *hw_config)
 
   int             config_port = hw_config->io_base + 0;
   int             dma1 = hw_config->dma, dma2 = hw_config->dma2;
+  int             old_num_mixers = num_mixers;
 
   trix_osp = hw_config->osp;
 
@@ -238,7 +239,7 @@ attach_trix_wss (struct address_info *hw_config)
       return;
     }
 
-  outb (bits | 0x40, config_port);
+  outb ((bits | 0x40), config_port);
 
   if (hw_config->dma2 == -1 || hw_config->dma2 == hw_config->dma)
     {
@@ -256,7 +257,7 @@ attach_trix_wss (struct address_info *hw_config)
       trix_write (0x14, tmp | 0x80 | (dma2 << 4));
     }
 
-  outb (bits, config_port);	/* Write IRQ+DMA setup */
+  outb ((bits), config_port);	/* Write IRQ+DMA setup */
 
   ad1848_init ("AudioTrix Pro", hw_config->io_base + 4,
 	       hw_config->irq,
@@ -265,6 +266,14 @@ attach_trix_wss (struct address_info *hw_config)
 	       0,
 	       hw_config->osp);
   request_region (hw_config->io_base, 4, "MSS config");
+
+  if (num_mixers > old_num_mixers)	/* Mixer got installed */
+    {
+      AD1848_REROUTE (SOUND_MIXER_LINE1, SOUND_MIXER_LINE);	/* Line in */
+      AD1848_REROUTE (SOUND_MIXER_LINE2, SOUND_MIXER_CD);
+      AD1848_REROUTE (SOUND_MIXER_LINE3, SOUND_MIXER_SYNTH);	/* OPL4 */
+      AD1848_REROUTE (SOUND_MIXER_SPEAKER, SOUND_MIXER_ALTPCM);		/* SB */
+    }
 }
 
 int
@@ -316,7 +325,7 @@ probe_trix_sb (struct address_info *hw_config)
 
   hw_config->name = "AudioTrix SB";
 #ifdef CONFIG_SBDSP
-  return probe_sb (hw_config);
+  return sb_dsp_detect (hw_config);
 #else
   return 0;
 #endif
@@ -327,7 +336,7 @@ attach_trix_sb (struct address_info *hw_config)
 {
 #ifdef CONFIG_SBDSP
   hw_config->driver_use_1 = SB_NO_MIDI | SB_NO_MIXER | SB_NO_RECORDING;
-  attach_sb_card (hw_config);
+  sb_dsp_init (hw_config);
 #endif
 }
 
@@ -443,7 +452,7 @@ void
 unload_trix_sb (struct address_info *hw_config)
 {
 #ifdef CONFIG_SBDSP
-  unload_sb (hw_config);
+  sb_dsp_unload (hw_config);
 #endif
 }
 

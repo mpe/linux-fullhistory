@@ -16,8 +16,6 @@
 #include <linux/kdev_t.h>
 #include <linux/ioctl.h>
 
-#include <asm/semaphore.h>
-
 /*
  * It's silly to have NR_OPEN bigger than NR_FILE, but I'll fix
  * that later. Anyway, now the file code is no longer dependent
@@ -123,6 +121,7 @@ extern int max_files, nr_files;
 
 #ifdef __KERNEL__
 
+#include <asm/semaphore.h>
 #include <asm/bitops.h>
 
 extern void buffer_init(void);

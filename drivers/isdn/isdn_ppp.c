@@ -345,15 +345,15 @@ void isdn_ppp_release(int min, struct file *file)
 	is->state = 0;
 }
 
+#if 0 /* get_user() / put_user() in 2.1 replace them 1:1 */
 /*
  * get_arg .. ioctl helper
  */
 static int get_arg(void *b, unsigned long *val)
 {
 	int r;
-	if ((r = verify_area(VERIFY_READ, (void *) b, sizeof(unsigned long))))
-		 return r;
-	copy_from_user((void *) val, b, sizeof(unsigned long));
+	if (copy_from_user((void *) val, b, sizeof(unsigned long))) 
+		return -EFAULT; 
 	return 0;
 }
 
@@ -368,6 +368,7 @@ static int set_arg(void *b, unsigned long val)
 	copy_to_user(b, (void *) &val, sizeof(unsigned long));
 	return 0;
 }
+#endif
 
 /*
  * ippp device ioctl 
@@ -377,6 +378,7 @@ int isdn_ppp_ioctl(int min, struct file *file, unsigned int cmd, unsigned long a
 	unsigned long val;
 	int r;
 	struct ippp_struct *is;
+	unsigned long *argp = (unsigned long*)arg; 
 
 	is = file->private_data;
 
@@ -389,7 +391,7 @@ int isdn_ppp_ioctl(int min, struct file *file, unsigned int cmd, unsigned long a
 	switch (cmd) {
 	case PPPIOCBUNDLE:
 #ifdef CONFIG_ISDN_MPP
-		if ((r = get_arg((void *) arg, &val)))
+		if ((r = get_user(val, arg)))
 			return r;
 		printk(KERN_DEBUG "iPPP-bundle: minor: %d, slave unit: %d, master unit: %d\n",
                         (int) min, (int) is->unit, (int) val);
@@ -399,24 +401,24 @@ int isdn_ppp_ioctl(int min, struct file *file, unsigned int cmd, unsigned long a
 #endif
 		break;
 	case PPPIOCGUNIT:	/* get ppp/isdn unit number */
-		if ((r = set_arg((void *) arg, is->unit)))
+		if ((r = put_user(is->unit, argp)))
 			return r;
 		break;
 	case PPPIOCGMPFLAGS:	/* get configuration flags */
-		if ((r = set_arg((void *) arg, is->mpppcfg)))
+		if ((r = put_user(is->mpppcfg, argp)))
 			return r;
 		break;
 	case PPPIOCSMPFLAGS:	/* set configuration flags */
-		if ((r = get_arg((void *) arg, &val)))
+		if ((r = get_user(val, argp)))
 			return r;
 		is->mpppcfg = val;
 		break;
 	case PPPIOCGFLAGS:	/* get configuration flags */
-		if ((r = set_arg((void *) arg, is->pppcfg)))
+		if ((r = put_user(is->pppcfg ,argp)))
 			return r;
 		break;
 	case PPPIOCSFLAGS:	/* set configuration flags */
-		if ((r = get_arg((void *) arg, &val))) {
+		if ((r = get_user(val, argp))) {
 			return r;
 		}
 		if (val & SC_ENABLE_IP && !(is->pppcfg & SC_ENABLE_IP)) {
@@ -433,7 +435,7 @@ int isdn_ppp_ioctl(int min, struct file *file, unsigned int cmd, unsigned long a
 		break;
 #endif
 	case PPPIOCSMRU:	/* set receive unit size for PPP */
-		if ((r = get_arg((void *) arg, &val)))
+		if ((r = get_user(val, argp)))
 			return r;
 		is->mru = val;
 		break;
@@ -442,7 +444,7 @@ int isdn_ppp_ioctl(int min, struct file *file, unsigned int cmd, unsigned long a
 	case PPPIOCSMPMTU:
 		break;
 	case PPPIOCSMAXCID:	/* set the maximum compression slot id */
-		if ((r = get_arg((void *) arg, &val)))
+		if ((r = get_user(val, argp)))
 			return r;
 		val++;
 		if(is->maxcid != val) {
@@ -465,11 +467,11 @@ int isdn_ppp_ioctl(int min, struct file *file, unsigned int cmd, unsigned long a
 		}
 		break;
 	case PPPIOCGDEBUG:
-		if ((r = set_arg((void *) arg, is->debug)))
+		if ((r = put_user(is->debug, argp)))
 			return r;
 		break;
 	case PPPIOCSDEBUG:
-		if ((r = get_arg((void *) arg, &val)))
+		if ((r = get_user(val, argp)))
 			return r;
 		is->debug = val;
 		break;
@@ -594,9 +596,6 @@ int isdn_ppp_read(int min, struct file *file, char *buf, int count)
 	if (!(is->state & IPPP_OPEN))
 		return 0;
 
-	if ((r = verify_area(VERIFY_WRITE, (void *) buf, count)))
-		return r;
-
 	save_flags(flags);
 	cli();
 
@@ -607,7 +606,8 @@ int isdn_ppp_read(int min, struct file *file, char *buf, int count)
 	}
 	if (b->len < count)
 		count = b->len;
-	copy_to_user(buf, b->buf, count);
+	if (copy_to_user(buf, b->buf, count)) 
+		count = -EFAULT; /* ugly */
 	kfree(b->buf);
 	b->buf = NULL;
 	is->first = b;
@@ -1447,11 +1447,7 @@ static int isdn_ppp_dev_ioctl_stats(int slot,struct ifreq *ifr,struct device *de
 	isdn_net_local *lp = (isdn_net_local *) dev->priv;
 	int err;
 
-        res = (struct ppp_stats *) ifr->ifr_ifru.ifru_data;
-        err = verify_area (VERIFY_WRITE, res,sizeof(struct ppp_stats));
-
-	if(err)
-		return err;
+	res = (struct ppp_stats *) ifr->ifr_ifru.ifru_data;
 
 	/* build a temporary stat struct and copy it to user space */
 
@@ -1475,9 +1471,7 @@ static int isdn_ppp_dev_ioctl_stats(int slot,struct ifreq *ifr,struct device *de
 		}
 #endif
 	}
-	copy_to_user (res, &t, sizeof (struct ppp_stats));
-	return 0;
-
+	return copy_to_user (res, &t, sizeof (struct ppp_stats)) ? -EFAULT : 0;
 }
 
 int isdn_ppp_dev_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
@@ -1498,9 +1492,8 @@ int isdn_ppp_dev_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 		case SIOCGPPPVER:
 			r = (char *) ifr->ifr_ifru.ifru_data;
 			len = strlen(PPP_VERSION) + 1;
-			error = verify_area(VERIFY_WRITE, r, len);
-			if (!error)
-				copy_to_user(r, PPP_VERSION, len);
+			if (copy_to_user(r, PPP_VERSION, len))
+				error = -EFAULT; 
 			break;
 		case SIOCGPPPSTATS:
 			error = isdn_ppp_dev_ioctl_stats (lp->ppp_slot, ifr, dev);

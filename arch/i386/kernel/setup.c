@@ -28,7 +28,7 @@
 #ifdef CONFIG_BLK_DEV_RAM
 #include <linux/blk.h>
 #endif
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/smp.h>
 

@@ -1066,11 +1066,10 @@ void BusLogic_StartMailboxCommand(BusLogic_HostAdapter_T *HostAdapter)
 
 static inline void BusLogic_Delay(int Seconds)
 {
-  unsigned long TimeoutJiffies = jiffies + Seconds * HZ;
   unsigned long ProcessorFlags;
   save_flags(ProcessorFlags);
   sti();
-  while (jiffies < TimeoutJiffies) barrier();
+  while (--Seconds >= 0) udelay(1000000);
   restore_flags(ProcessorFlags);
 }
 

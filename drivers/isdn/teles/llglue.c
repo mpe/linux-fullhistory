@@ -46,9 +46,10 @@ teles_readstatus(byte * buf, int len, int user, int id, int channel)
 	byte           *p;
 
 	for (p = buf, count = 0; count < len; p++, count++) {
-		if (user)
-			put_fs_byte(*teles_status_read++, p);
-		else
+		if (user) {
+			put_user(*teles_status_read, p);
+			teles_status_read++; 
+		} else
 			*p++ = *teles_status_read++;
 		if (teles_status_read > teles_status_end)
 			teles_status_read = teles_status_buf;

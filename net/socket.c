@@ -74,7 +74,7 @@
 #include <net/netlink.h>
 
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #if defined(CONFIG_MODULES) && defined(CONFIG_NET)
 extern void export_net_symbols(void);

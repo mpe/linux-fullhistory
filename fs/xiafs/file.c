@@ -19,7 +19,7 @@
 #include <linux/locks.h>
 #include <linux/pagemap.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 #include "xiafs_mac.h"

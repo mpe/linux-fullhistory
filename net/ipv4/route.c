@@ -50,7 +50,7 @@
  */
 
 #include <linux/config.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <linux/types.h>

@@ -256,7 +256,7 @@
 #include <linux/errno.h>
 #include <linux/timer.h>
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <net/checksum.h>
 
 #define min(a,b)	((a)<(b)?(a):(b))

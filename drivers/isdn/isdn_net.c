@@ -170,14 +170,14 @@ isdn_net_open(struct device *dev)
 			p->start = 1;
 			p = (((isdn_net_local *) p->priv)->slave);
 		}
-	}
+ 	}
 
-	isdn_MOD_INC_USE_COUNT();
-	return 0;
-}
+	isdn_MOD_INC_USE_COUNT(); 
+ 	return 0; 
+} 
 
-/*
- * Assign an ISDN-channel to a net-interface
+/* 
+ Assign an ISDN-channel to a net-interface 
  */
 static void
 isdn_net_bind_channel(isdn_net_local * lp, int idx)
@@ -2179,7 +2179,7 @@ int isdn_net_getphones(isdn_net_ioctl_phone * phone, char *phones)
 	int count = 0;
 	isdn_net_phone *n;
 	int flags;
-	int ret;
+	int ret = 0;
 
 	if (!p)
 		return -ENODEV;
@@ -2188,22 +2188,22 @@ int isdn_net_getphones(isdn_net_ioctl_phone * phone, char *phones)
 	inout &= 1;
         for (n = p->local.phone[inout]; n; n = n->next) {
 		if (more) {
-			put_fs_byte(' ', phones++);
+			ret = put_user(((char)' '), phones);
+			phones++; 
 			count++;
 		}
-		if ((ret = verify_area(VERIFY_WRITE, (void *) phones, strlen(n->num) + 1))) {
+		if (ret || copy_to_user(phones, n->num, strlen(n->num) + 1)) {
 			restore_flags(flags);
-			return ret;
+			return -EFAULT;
 		}
-		copy_to_user(phones, n->num, strlen(n->num) + 1);
 		phones += strlen(n->num);
 		count += strlen(n->num);
 		more = 1;
 	}
-        put_fs_byte(0,phones);
-        count++;
+    ret = put_user(((char)0),phones);  
+    count++;
 	restore_flags(flags);
-	return count;
+	return ret ? -EFAULT : count;
 }
 
 /*

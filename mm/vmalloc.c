@@ -7,7 +7,7 @@
 #include <linux/malloc.h>
 #include <linux/vmalloc.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 static struct vm_struct * vmlist = NULL;

@@ -6,7 +6,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -22,6 +22,7 @@
  * Numbers 1000 to N are reserved for driver's internal use.
  */
 #define SNDCARD_DESKPROXL		27	/* Compaq Deskpro XL */
+#define SNDCARD_SBPNP			29
 
 /*
  *	NOTE! 	NOTE!	NOTE!	NOTE!
@@ -50,12 +51,6 @@ struct card_info {
 	void *for_driver_use;
 };
 
-typedef struct pnp_sounddev
-{
-	int id;
-	void (*setup)(void *dev);
-	char *driver_name;
-}pnp_sounddev;
 
 /*
  * Device specific parameters (used only by dmabuf.c)
@@ -90,6 +85,7 @@ struct dma_buffparms {
 #define DMA_ALLOC_DONE	0x00000020
 #define DMA_SYNCING	0x00000040
 #define DMA_CLEAN	0x00000080
+#define DMA_POST	0x00000100
 
 	int      open_mode;
 
@@ -112,6 +108,7 @@ struct dma_buffparms {
 
 	int	 underrun_count;
 	int	 byte_counter;
+	int	 data_rate; /* Bytes/second */
 
 	int	 mapping_flags;
 #define			DMA_MAP_MAPPED		0x00000001
@@ -126,7 +123,7 @@ struct dma_buffparms {
  * in the recent soundcards.
  */
 typedef struct coproc_operations {
-		char name[32];
+		char name[64];
 		int (*open) (void *devc, int sub_device);
 		void (*close) (void *devc, int sub_device);
 		int (*ioctl) (void *devc, unsigned int cmd, caddr_t arg, int local);
@@ -148,7 +145,7 @@ struct audio_driver {
 	void (*reset) (int dev);
 	void (*halt_xfer) (int dev);
 	int (*local_qlen)(int dev);
-        void (*copy_from_user)(int dev, char *localbuf, int localoffs,
+        void (*copy_user)(int dev, char *localbuf, int localoffs,
                                const char *userbuf, int useroffs, int len);
 	void (*halt_input) (int dev);
 	void (*halt_output) (int dev);
@@ -159,7 +156,7 @@ struct audio_driver {
 };
 
 struct audio_operations {
-        char name[32];
+        char name[64];
 	int flags;
 #define NOTHING_SPECIAL 	0x00
 #define NEEDS_RESTART		0x01
@@ -167,6 +164,7 @@ struct audio_operations {
 #define DMA_DUPLEX		0x04
 #define DMA_PSEUDO_AUTOMODE	0x08
 #define DMA_HARDSTOP		0x10
+#define DMA_NODMA		0x20
 	int  format_mask;	/* Bitmask for supported audio formats */
 	void *devc;		/* Driver specific info */
 	struct audio_driver *d;
@@ -181,12 +179,15 @@ struct audio_operations {
 	int min_fragment;	/* 0 == unlimited */
 };
 
+int *load_mixer_volumes(char *name, int *levels, int present);
+
 struct mixer_operations {
 	char id[16];
-	char name[32];
+	char name[64];
 	int (*ioctl) (int dev, unsigned int cmd, caddr_t arg);
 	
 	void *devc;
+	int modify_counter;
 };
 
 struct synth_operations {
@@ -242,7 +243,7 @@ struct midi_operations {
 		);
 	void (*close) (int dev);
 	int (*ioctl) (int dev, unsigned int cmd, caddr_t arg);
-	int (*putc) (int dev, unsigned char data);
+	int (*outputc) (int dev, unsigned char data);
 	int (*start_read) (int dev);
 	int (*end_read) (int dev);
 	void (*kick)(int dev);
@@ -273,6 +274,7 @@ struct sound_timer_operations {
 };
 
 #ifdef _DEV_TABLE_C_   
+
 	struct audio_operations *audio_devs[MAX_AUDIO_DEV] = {NULL}; int num_audiodevs = 0;
 	struct mixer_operations *mixer_devs[MAX_MIXER_DEV] = {NULL}; int num_mixers = 0;
 	struct synth_operations *synth_devs[MAX_SYNTH_DEV+MAX_MIDI_DEV] = {NULL}; int num_synths = 0;
@@ -301,8 +303,6 @@ struct sound_timer_operations {
 #endif
 #ifdef CONFIG_MSS
 		{"MSS", 0, SNDCARD_MSS,	"MS Sound System",	attach_ms_sound, probe_ms_sound, unload_ms_sound},
-	/* MSS without IRQ/DMA config registers (for DEC Alphas) */
-		{"PCXBJ", 1, SNDCARD_PSEUDO_MSS,	"MS Sound System (AXP)",	attach_ms_sound, probe_ms_sound, unload_ms_sound},
 	/* Compaq Deskpro XL */
 		{"DESKPROXL", 2, SNDCARD_DESKPROXL,	"Compaq Deskpro XL",	attach_ms_sound, probe_ms_sound, unload_ms_sound},
 #endif
@@ -314,14 +314,18 @@ struct sound_timer_operations {
 		{"CS4232", 0, SNDCARD_CS4232,	"CS4232",		attach_cs4232, probe_cs4232, unload_cs4232},
 		{"CS4232MPU", 0, SNDCARD_CS4232_MPU,	"CS4232 MIDI",		attach_cs4232_mpu, probe_cs4232_mpu, unload_cs4232_mpu},
 #endif
-#ifdef CONFIG_YM3812
+#if defined(CONFIG_YM3812)
 		{"OPL3", 0, SNDCARD_ADLIB,	"OPL-2/OPL-3 FM",		attach_adlib_card, probe_adlib, unload_adlib},
 #endif
 #ifdef CONFIG_PAS
 		{"PAS16", 0, SNDCARD_PAS,	"ProAudioSpectrum",	attach_pas_card, probe_pas, unload_pas},
 #endif
-#if defined(CONFIG_MPU401) && defined(CONFIG_MIDI)
+#if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
 		{"MPU401", 0, SNDCARD_MPU401,"Roland MPU-401",	attach_mpu401, probe_mpu401, unload_mpu401},
+#endif
+#if (defined(CONFIG_UART401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
+	{"UART401", 0, SNDCARD_UART401,"MPU-401 (UART)", 
+		attach_uart401, probe_uart401, unload_uart401},
 #endif
 #if defined(CONFIG_MAUI)
 		{"MAUI", 0, SNDCARD_MAUI,"TB Maui",	attach_maui, probe_maui, unload_maui},
@@ -329,20 +333,29 @@ struct sound_timer_operations {
 #if defined(CONFIG_UART6850) && defined(CONFIG_MIDI)
 		{"MIDI6850", 0, SNDCARD_UART6850,"6860 UART Midi",	attach_uart6850, probe_uart6850, unload_uart6850},
 #endif
-#ifdef CONFIG_SB
+
+
+
+
+#ifdef CONFIG_SBDSP
 		{"SBLAST", 0, SNDCARD_SB,	"Sound Blaster",		attach_sb_card, probe_sb, unload_sb},
-#ifdef CONFIG_MIDI
+		{"SBPNP", 6, SNDCARD_SBPNP,	"Sound Blaster PnP",		attach_sb_card, probe_sb, unload_sb},
+
+#	ifdef CONFIG_MIDI
 		{"SBMPU", 0, SNDCARD_SB16MIDI,"SB MPU-401",	attach_sbmpu, probe_sbmpu, unload_sbmpu},
+#	endif
 #endif
-#endif
+
+
+
 #ifdef CONFIG_GUS16
 		{"GUS16", 0, SNDCARD_GUS16,	"Ultrasound 16-bit opt.",	attach_gus_db16, probe_gus_db16, unload_gus_db16},
 #endif
-#ifdef CONFIG_GUS
+#ifdef CONFIG_GUSHW
 		{"GUS", 0, SNDCARD_GUS,	"Gravis Ultrasound",	attach_gus_card, probe_gus, unload_gus},
 		{"GUSPNP", 1, SNDCARD_GUSPNP,	"GUS PnP",	attach_gus_card, probe_gus, unload_gus},
 #endif
-#ifdef CONFIG_SSCAPE
+#ifdef CONFIG_SSCAPEHW
 		{"SSCAPE", 0, SNDCARD_SSCAPE, "Ensoniq SoundScape",	attach_sscape, probe_sscape, unload_sscape},
 		{"SSCAPEMSS", 0, SNDCARD_SSCAPE_MSS,	"MS Sound System (SoundScape)",	attach_ss_ms_sound, probe_ss_ms_sound, unload_ss_ms_sound},
 #endif
@@ -351,6 +364,7 @@ struct sound_timer_operations {
 		{"TRXPROSB", 0, SNDCARD_TRXPRO_SB, "AudioTrix (SB mode)",	attach_trix_sb, probe_trix_sb, unload_trix_sb},
 		{"TRXPROMPU", 0, SNDCARD_TRXPRO_MPU, "AudioTrix MIDI",	attach_trix_mpu, probe_trix_mpu, unload_trix_mpu},
 #endif
+
 		{NULL, 0, 0,		"*?*",			NULL, NULL, NULL}
 	};
 
@@ -479,11 +493,6 @@ struct sound_timer_operations {
 #ifdef CONFIG_YM3812
 		{SNDCARD_ADLIB, {FM_MONO, 0, 0, -1}, SND_DEFAULT_ENABLE},
 #endif
-/* Define some expansion space */
-		{0, {0}, 0},
-		{0, {0}, 0},
-		{0, {0}, 0},
-		{0, {0}, 0},
 		{0, {0}, 0}
 	};
 
@@ -498,11 +507,12 @@ struct sound_timer_operations {
 	int max_sound_cards = 20;
 #endif
 
-#   ifdef MODULE
+#if defined(MODULE) || (!defined(linux) && !defined(_AIX))
 	int trace_init = 0;
 #   else
 	int trace_init = 1;
 #   endif
+
 #else
 	extern struct audio_operations * audio_devs[MAX_AUDIO_DEV]; extern int num_audiodevs;
 	extern struct mixer_operations * mixer_devs[MAX_MIXER_DEV]; extern int num_mixers;
@@ -531,9 +541,8 @@ int sndtable_identify_card(char *name);
 void sound_setup (char *str, int *ints);
 
 int sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan);
-void sound_free_dmap (int dev, struct dma_buffparms *dmap);
+void sound_free_dmap (int dev, struct dma_buffparms *dmap, int chn);
 extern int sound_map_buffer (int dev, struct dma_buffparms *dmap, buffmem_desc *info);
-void install_pnp_sounddrv(struct pnp_sounddev *drv);
 int sndtable_probe (int unit, struct address_info *hw_config);
 int sndtable_init_card (int unit, struct address_info *hw_config);
 int sndtable_start_card (int unit, struct address_info *hw_config);
@@ -543,8 +552,8 @@ int sound_start_dma (	int dev, struct dma_buffparms *dmap, int chan,
 			int count, int dma_mode, int autoinit);
 void sound_dma_intr (int dev, struct dma_buffparms *dmap, int chan);
 
-#define AUDIO_DRIVER_VERSION	1
-#define MIXER_DRIVER_VERSION	1
+#define AUDIO_DRIVER_VERSION	2
+#define MIXER_DRIVER_VERSION	2
 int sound_install_audiodrv(int vers,
 			   char *name,
 			   struct audio_driver *driver,

@@ -32,13 +32,14 @@
  */
 
 #include <linux/errno.h>
-#include <asm/segment.h>
 #include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/sem.h>
 #include <linux/ipc.h>
 #include <linux/stat.h>
 #include <linux/malloc.h>
+
+#include <asm/uaccess.h>
 
 extern int ipcperms (struct ipc_perm *ipcp, short semflg);
 static int newary (key_t, int, int);

@@ -17,11 +17,11 @@
 #include <linux/malloc.h>
 #include <linux/stat.h>
 #include <linux/ctype.h>
-#include <asm/bitops.h>
-#include <asm/segment.h>
-
 #include <linux/utsname.h>
 #include <linux/swapctl.h>
+
+#include <asm/bitops.h>
+#include <asm/uaccess.h>
 
 /* External variables not in a header file. */
 extern int panic_timeout;

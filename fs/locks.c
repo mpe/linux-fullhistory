@@ -106,7 +106,7 @@
 #include <linux/stat.h>
 #include <linux/fcntl.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #define OFFSET_MAX	((off_t)0x7fffffff)	/* FIXME: move elsewhere? */
 

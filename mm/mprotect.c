@@ -13,7 +13,7 @@
 #include <linux/string.h>
 #include <linux/malloc.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
 

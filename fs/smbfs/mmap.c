@@ -17,7 +17,7 @@
 #include <linux/smb_fs.h>
 #include <linux/fcntl.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 /*

@@ -43,7 +43,7 @@
 
 #include <asm/io.h>
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <linux/mm.h>
 
 extern unsigned short video_port_reg, video_port_val;

@@ -11,7 +11,7 @@
 #include <linux/ptrace.h>
 #include <linux/mm.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/io.h>
 

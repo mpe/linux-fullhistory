@@ -15,7 +15,7 @@
  *  Goal-directed block allocation by Stephen Tweedie (sct@dcs.ed.ac.uk), 1993
  */
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 #include <linux/errno.h>

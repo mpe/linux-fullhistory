@@ -6,6 +6,7 @@
  */
 
 #include <asm/ptrace.h>
+#include <asm/user.h>
 
 typedef unsigned long elf_greg_t;
 

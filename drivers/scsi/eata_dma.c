@@ -58,7 +58,7 @@
  * Jagdis who did a lot of testing and found quite a number *
  * of bugs during the development.                          *
  ************************************************************
- *  last change: 96/08/13                 OS: Linux 2.0.12  *
+ *  last change: 96/10/21                 OS: Linux 2.0.23  *
  ************************************************************/
 
 /* Look in eata_dma.h for configuration and revision information */
@@ -295,12 +295,9 @@ void eata_int_handler(int irq, void *dev_id, struct pt_regs * regs)
            sp->EOC = FALSE; /* Clean out this flag */
 
            if (ccb->status == LOCKED || ccb->status == RESET) {
-               ccb->status = FREE;
-               eata_stat = inb(base + HA_RSTATUS);
-               printk("eata_dma: int_handler, reseted command returned,"
-                      " freeing reseted queueslot\n");
+               printk("eata_dma: int_handler, reseted command pid %ld returned"
+		      "\n", cmd->pid);
 	       DBG(DBG_INTR && DBG_DELAY, DELAY(1));
-	       break;
 	    }
 	    
 	    eata_stat = inb(base + HA_RSTATUS); 
@@ -467,23 +464,33 @@ int eata_queue(Scsi_Cmnd * cmd, void (* done) (Scsi_Cmnd *))
     struct Scsi_Host *sh;
     struct eata_ccb *ccb;
     struct scatterlist *sl;
+
     
     save_flags(flags);
     cli();
+
+#if 0
+    for (x = 1, sh = first_HBA; x <= registered_HBAs; x++, sh = SD(sh)->next) {
+      if(inb((uint)sh->base + HA_RAUXSTAT) & HA_AIRQ) {
+            printk("eata_dma: scsi%d interrupt pending in eata_queue.\n"
+		   "          Calling interrupt handler.\n", sh->host_no);
+            eata_int_handler(sh->irq, 0, 0);
+      }
+    }
+#endif
     
     queue_counter++;
 
     hd = HD(cmd);
     sh = cmd->host;
     
-#if 1
     if (cmd->cmnd[0] == REQUEST_SENSE && cmd->sense_buffer[0] != 0) {
         DBG(DBG_REQSENSE, printk(KERN_DEBUG "Tried to REQUEST SENSE\n"));
 	cmd->result = DID_OK << 16;
 	done(cmd);
+
 	return(0);
     }
-#endif
 
     /* check for free slot */
     for (y = hd->last_ccb + 1, x = 0; x < sh->can_queue; x++, y++) { 
@@ -678,7 +685,6 @@ int eata_reset(Scsi_Cmnd * cmd, unsigned int resetflags)
 			   " reason %x\n", cmd->pid, cmd->target, cmd->lun, 
 			   cmd->abort_reason));
 	
-    /* Some interrupt controllers seem to loose interrupts */
     for (x = 1, sh = first_HBA; x <= registered_HBAs; x++, sh = SD(sh)->next) {
         if(inb((uint)sh->base + HA_RAUXSTAT) & HA_AIRQ) {
             printk("eata_dma: scsi%d interrupt pending in eata_reset.\n"
@@ -686,6 +692,7 @@ int eata_reset(Scsi_Cmnd * cmd, unsigned int resetflags)
             eata_int_handler(sh->irq, 0, 0);
       }
     }
+
     if (HD(cmd)->state == RESET) {
 	printk("eata_reset: exit, already in reset.\n");
 	restore_flags(flags);
@@ -766,9 +773,9 @@ int eata_reset(Scsi_Cmnd * cmd, unsigned int resetflags)
     restore_flags(flags);
     
     if (success) {
-	DBG(DBG_ABNORM, printk("eata_reset: exit, success.\n"));
+	DBG(DBG_ABNORM, printk("eata_reset: exit, pending.\n"));
 	DBG(DBG_ABNORM && DBG_DELAY, DELAY(1));
-	return (SCSI_RESET_SUCCESS);
+	return (SCSI_RESET_PENDING);
     } else {
 	DBG(DBG_ABNORM, printk("eata_reset: exit, wakeup.\n"));
 	DBG(DBG_ABNORM && DBG_DELAY, DELAY(1));
@@ -852,8 +859,9 @@ static void eata_select_queue_depths(struct Scsi_Host *host,
 		    device->queue_depth = (TYPE_OTHER_QUEUE * factor) / 10;
 		    break;
 		}
-	    } else /* ISA forces us to limit the QS because of bounce buffers*/
-	        device->queue_depth = 2; /* I know this is cruel */
+	    } else /* ISA forces us to limit the queue depth because of the 
+		    * bounce buffer memory overhead. I know this is cruel */
+	        device->queue_depth = 2; 
 
 	    /* 
 	     * It showed that we need to set an upper limit of commands 
@@ -863,6 +871,8 @@ static void eata_select_queue_depths(struct Scsi_Host *host,
 	     */
 	    if(device->queue_depth > UPPER_DEVICE_QUEUE_LIMIT)
 		device->queue_depth = UPPER_DEVICE_QUEUE_LIMIT;
+	    if(device->queue_depth == 0) 
+		device->queue_depth = 1;
 
 	    printk(KERN_INFO "scsi%d: queue depth for target %d on channel %d "
 		   "set to %d\n", host->host_no, device->id, device->channel,

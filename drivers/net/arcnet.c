@@ -17,6 +17,14 @@
          
 	**********************
 	
+	v2.56 (96/10/18)
+	  - Turned arc0e/arc0s startup messages back on by default, as most
+	    people will probably not notice the additional devices
+	    otherwise, and experience more protocol confusion than
+	    necessary.
+	  - Fixed a tiny but noticeable bug in the packet debugging routines
+	    (thanks Tomasz)
+
 	v2.55 (96/08/05)
 	  - A couple more messages moved to D_EXTRA.
 	  - SLOW_XMIT_COPY off by default.
@@ -202,7 +210,7 @@
 */
 
 static const char *version =
- "arcnet.c: v2.55 96/08/05 Avery Pennarun <apenwarr@foxnet.net>\n";
+ "arcnet.c: v2.56 96/10/18 Avery Pennarun <apenwarr@foxnet.net>\n";
 
  
 
@@ -708,8 +716,7 @@ void arcnet_dump_skb(struct device *dev,struct sk_buff *skb,char *desc)
         {
 		if (i%16==0)
 			printk("\n" KERN_DEBUG "[%04X] ",i);
-		else
-                       	printk("%02X ",((u_char *)skb->data)[i]);
+               	printk("%02X ",((u_char *)skb->data)[i]);
 	}
         printk("\n");
         restore_flags(flags);
@@ -731,8 +738,7 @@ void arcnet_dump_packet(struct device *dev,u_char *buffer,int ext,char *desc)
 	{
 		if (i%16==0)
 			printk("\n" KERN_DEBUG "[%04X] ",i);
-		else
-			printk("%02X ",buffer[i]);
+		printk("%02X ",buffer[i]);
 	}
 	printk("\n");
 	restore_flags(flags);
@@ -754,6 +760,8 @@ void arcnet_dump_packet(struct device *dev,u_char *buffer,int ext,char *desc)
  * NOTE: the list of possible ports/shmems is static, so it is retained
  * across calls to arcnet_probe.  So, if more than one ARCnet probe is made,
  * values that were discarded once will not even be tried again.
+ *
+ * FIXME: grab all devices in one shot and eliminate the big static array.
  */
 int arcnet_probe(struct device *dev)
 {
@@ -775,9 +783,8 @@ int arcnet_probe(struct device *dev)
 			ports[(count-0x200)/16] = count;
 		for (count=0xA0000; count<=0xFF800; count+=2048)
 			shmems[(count-0xA0000)/2048] = count;
-	}
-	else
 		init_once=1;
+	}
 
 	BUGLVL(D_NORMAL) printk(version);
 
@@ -1370,7 +1377,7 @@ arcnet_open(struct device *dev)
 	
 	/* The RFC1201 driver is the default - just store */
 	lp->adev=dev;
-	BUGMSG(D_EXTRA,"ARCnet RFC1201 protocol initialized.\n");
+	BUGMSG(D_NORMAL,"ARCnet RFC1201 protocol initialized.\n");
 
 #ifdef CONFIG_ARCNET_ETH	
 	/* Initialize the ethernet-encap protocol driver */
@@ -1388,7 +1395,7 @@ arcnet_open(struct device *dev)
 	lp->edev->init=arcnetE_init;
 	register_netdev(lp->edev);
 #else
-	BUGMSG(D_EXTRA,"Ethernet-Encap protocol not available (disabled).\n");
+	BUGMSG(D_NORMAL,"Ethernet-Encap protocol not available (disabled).\n");
 #endif
 
 #ifdef CONFIG_ARCNET_1051
@@ -1400,7 +1407,7 @@ arcnet_open(struct device *dev)
 	lp->sdev->init=arcnetS_init;
 	register_netdev(lp->sdev);
 #else
-	BUGMSG(D_EXTRA,"RFC1051 protocol not available (disabled).\n");
+	BUGMSG(D_NORMAL,"RFC1051 protocol not available (disabled).\n");
 #endif
 
 	/* we're started */
@@ -2781,7 +2788,7 @@ static int arcnetE_init(struct device *dev)
 	dev->stop=arcnetE_open_close;
 	dev->hard_start_xmit=arcnetE_send_packet;
 
-	BUGMSG(D_EXTRA,"ARCnet Ethernet-Encap protocol initialized.\n");
+	BUGMSG(D_NORMAL,"ARCnet Ethernet-Encap protocol initialized.\n");
 			
 	return 0;
 }
@@ -2961,7 +2968,7 @@ static int arcnetS_init(struct device *dev)
 	dev->hard_start_xmit=arcnetS_send_packet;
 	dev->hard_header=arcnetS_header;
 	dev->rebuild_header=arcnetS_rebuild_header;
-	BUGMSG(D_EXTRA,"ARCnet RFC1051 (NetBSD, AmiTCP) protocol initialized.\n");
+	BUGMSG(D_NORMAL,"ARCnet RFC1051 (NetBSD, AmiTCP) protocol initialized.\n");
 
 	return 0;
 }
@@ -3241,10 +3248,10 @@ static struct device thiscard = {
 	
 	
 static int io=0x0;	/* <--- EDIT THESE LINES FOR YOUR CONFIGURATION */
-static int irqnum=0;	/* or use the insmod io= irqnum= shmem= options */
+static int irqnum=0;	/* or use the insmod io= irq= shmem= options */
 static int irq=0;
 static int shmem=0;
-static char *device = NULL;
+static char *device = NULL;	/* use eg. device="arc1" to change name */
 
 int
 init_module(void)
@@ -3304,15 +3311,3 @@ cleanup_module(void)
 }
 
 #endif /* MODULE */
-
-
-
-/*
- * Local variables:
- *  compile-command: "gcc -D__KERNEL__ -I/usr/src/linux/net/inet -Wall -Wstrict-prototypes -O6 -m486 -c arcnet.c"
- *  version-control: t
- *  kept-new-versions: 5
- *  tab-width: 8
- * End:
- */
-

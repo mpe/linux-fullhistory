@@ -26,7 +26,7 @@
 #include <linux/mm.h>
 #include <linux/timex.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 /* 
  * The timezone where the local system is located.  Used as a default by some

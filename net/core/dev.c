@@ -50,7 +50,7 @@
  *
  */
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <linux/config.h>
@@ -1366,6 +1366,7 @@ int dev_ioctl(unsigned int cmd, void *arg)
 extern int lance_init(void);
 extern int ni65_init(void);
 extern int pi_init(void);
+extern int scc_init(void);
 extern void sdla_setup(void);
 extern void dlci_setup(void);
 
@@ -1407,6 +1408,9 @@ int net_dev_init(void)
 #if defined(CONFIG_PI)
 	pi_init();
 #endif	
+#if defined(CONFIG_SCC)
+	scc_init();
+#endif
 #if defined(CONFIG_PT)
 	pt_init();
 #endif

@@ -17,7 +17,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -36,6 +36,7 @@ typedef struct
   {
     int             base;
     int             irq;
+    int             dma1, dma2;
     int             dual_dma;	/* 1, when two DMA channels allocated */
     unsigned char   MCE_bit;
     unsigned char   saved_regs[16];
@@ -46,6 +47,7 @@ typedef struct
     int             channels;
     int             audio_format;
     unsigned char   format_bits;
+    int             audio_flags;
 
     int             xfer_count;
     int             audio_mode;
@@ -63,14 +65,15 @@ typedef struct
 
     /* Mixer parameters */
     int             recmask;
-    int             supported_devices;
-    int             supported_rec_devices;
-    unsigned short  levels[32];
+    int             supported_devices, orig_devices;
+    int             supported_rec_devices, orig_rec_devices;
+    int            *levels;
+    short           mixer_reroute[32];
     int             dev_no;
     volatile unsigned long timer_ticks;
     int             timer_running;
     int             irq_ok;
-    int            *osp;
+    mixer_ents     *mix_devices;
   }
 
 ad1848_info;
@@ -86,12 +89,12 @@ static int      ad_format_mask[8 /*devc->model */ ] =
 {
   0,
   AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW,
-  AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW | AFMT_U16_LE | AFMT_IMA_ADPCM,
-  AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW | AFMT_U16_LE | AFMT_IMA_ADPCM,
+  AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW | AFMT_S16_BE | AFMT_IMA_ADPCM,
+  AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW | AFMT_S16_BE | AFMT_IMA_ADPCM,
   AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW,	/* AD1845 */
-  AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW | AFMT_U16_LE | AFMT_IMA_ADPCM,
-  AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW | AFMT_U16_LE | AFMT_IMA_ADPCM,
-  AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW | AFMT_U16_LE | AFMT_IMA_ADPCM
+  AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW | AFMT_S16_BE | AFMT_IMA_ADPCM,
+  AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW | AFMT_S16_BE | AFMT_IMA_ADPCM,
+  AFMT_U8 | AFMT_S16_LE | AFMT_MU_LAW | AFMT_A_LAW | AFMT_S16_BE | AFMT_IMA_ADPCM
 };
 
 static ad1848_info dev_info[MAX_AUDIO_DEV];
@@ -128,7 +131,7 @@ ad_read (ad1848_info * devc, int reg)
 
   save_flags (flags);
   cli ();
-  outb ((unsigned char) (reg & 0xff) | devc->MCE_bit, io_Index_Addr (devc));
+  outb (((unsigned char) (reg & 0xff) | devc->MCE_bit), io_Index_Addr (devc));
   x = inb (io_Indexed_Data (devc));
   /*  printk("(%02x<-%02x) ", reg|devc->MCE_bit, x); */
   restore_flags (flags);
@@ -148,8 +151,8 @@ ad_write (ad1848_info * devc, int reg, int data)
 
   save_flags (flags);
   cli ();
-  outb ((unsigned char) (reg & 0xff) | devc->MCE_bit, io_Index_Addr (devc));
-  outb ((unsigned char) (data & 0xff), io_Indexed_Data (devc));
+  outb (((unsigned char) (reg & 0xff) | devc->MCE_bit), io_Index_Addr (devc));
+  outb (((unsigned char) (data & 0xff)), io_Indexed_Data (devc));
   /* printk("(%02x->%02x) ", reg|devc->MCE_bit, data); */
   restore_flags (flags);
 }
@@ -204,6 +207,7 @@ ad_mute (ad1848_info * devc)
 /*
  * Let's have some delay
  */
+
   for (i = 0; i < 1000; i++)
     inb (devc->base);
 }
@@ -220,7 +224,7 @@ ad_unmute (ad1848_info * devc)
     inb (devc->base);
 
   /*
-     * Restore back old volume registers (unmute)
+   * Restore back old volume registers (unmute)
    */
   for (i = 6; i < 8; i++)
     {
@@ -249,7 +253,7 @@ ad_enter_MCE (ad1848_info * devc)
       return;
     }
 
-  outb (devc->MCE_bit, io_Index_Addr (devc));
+  outb ((devc->MCE_bit), io_Index_Addr (devc));
   restore_flags (flags);
 }
 
@@ -268,7 +272,7 @@ ad_leave_MCE (ad1848_info * devc)
 
   devc->MCE_bit = 0x00;
   prev = inb (io_Index_Addr (devc));
-  outb (0x00, io_Index_Addr (devc));	/* Clear the MCE bit */
+  outb ((0x00), io_Index_Addr (devc));	/* Clear the MCE bit */
 
   if ((prev & 0x40) == 0)	/* Not in MCE mode */
     {
@@ -276,7 +280,7 @@ ad_leave_MCE (ad1848_info * devc)
       return;
     }
 
-  outb (0x00, io_Index_Addr (devc));	/* Clear the MCE bit */
+  outb ((0x00), io_Index_Addr (devc));	/* Clear the MCE bit */
   wait_for_calibration (devc);
   restore_flags (flags);
 }
@@ -289,6 +293,15 @@ ad1848_set_recmask (ad1848_info * devc, int mask)
   int             i, n;
 
   mask &= devc->supported_rec_devices;
+
+  /* Rename the mixer bits if necessary */
+  for (i = 0; i < 32; i++)
+    if (devc->mixer_reroute[i] != i)
+      if (mask & (1 << i))
+	{
+	  mask &= ~(1 << i);
+	  mask |= (1 << devc->mixer_reroute[i]);
+	}
 
   n = 0;
   for (i = 0; i < 32; i++)	/* Count selected device bits */
@@ -339,21 +352,30 @@ ad1848_set_recmask (ad1848_info * devc, int mask)
   ad_write (devc, 0, (ad_read (devc, 0) & 0x3f) | recdev);
   ad_write (devc, 1, (ad_read (devc, 1) & 0x3f) | recdev);
 
+  /* Rename the mixer bits back if necessary */
+  for (i = 0; i < 32; i++)
+    if (devc->mixer_reroute[i] != i)
+      if (mask & (1 << devc->mixer_reroute[i]))
+	{
+	  mask &= ~(1 << devc->mixer_reroute[i]);
+	  mask |= (1 << i);
+	}
+
   devc->recmask = mask;
   return mask;
 }
 
 static void
-change_bits (unsigned char *regval, int dev, int chn, int newval)
+change_bits (ad1848_info * devc, unsigned char *regval, int dev, int chn, int newval)
 {
   unsigned char   mask;
   int             shift;
 
-  if (mix_devices[dev][chn].polarity == 1)	/* Reverse */
+  if (devc->mix_devices[dev][chn].polarity == 1)	/* Reverse */
     newval = 100 - newval;
 
-  mask = (1 << mix_devices[dev][chn].nbits) - 1;
-  shift = mix_devices[dev][chn].bitpos;
+  mask = (1 << devc->mix_devices[dev][chn].nbits) - 1;
+  shift = devc->mix_devices[dev][chn].bitpos;
   newval = (int) ((newval * mask) + 50) / 100;	/* Scale it */
 
   *regval &= ~(mask << shift);	/* Clear bits */
@@ -364,7 +386,9 @@ static int
 ad1848_mixer_get (ad1848_info * devc, int dev)
 {
   if (!((1 << dev) & devc->supported_devices))
-    return -(EINVAL);
+    return -EINVAL;
+
+  dev = devc->mixer_reroute[dev];
 
   return devc->levels[dev];
 }
@@ -379,12 +403,20 @@ ad1848_mixer_set (ad1848_info * devc, int dev, int value)
   int             regoffs;
   unsigned char   val;
 
+  if (dev > 31)
+    return -EINVAL;
+
+  if (!(devc->supported_devices & (1 << dev)))
+    return -EINVAL;
+
+  dev = devc->mixer_reroute[dev];
+
   if (left > 100)
     left = 100;
   if (right > 100)
     right = 100;
 
-  if (mix_devices[dev][RIGHT_CHN].nbits == 0)	/* Mono control */
+  if (devc->mix_devices[dev][RIGHT_CHN].nbits == 0)	/* Mono control */
     right = left;
 
   retvol = left | (right << 8);
@@ -397,14 +429,8 @@ ad1848_mixer_set (ad1848_info * devc, int dev, int value)
   left = mix_cvt[left];
   right = mix_cvt[right];
 
-  if (dev > 31)
-    return -(EINVAL);
-
-  if (!(devc->supported_devices & (1 << dev)))
-    return -(EINVAL);
-
-  if (mix_devices[dev][LEFT_CHN].nbits == 0)
-    return -(EINVAL);
+  if (devc->mix_devices[dev][LEFT_CHN].nbits == 0)
+    return -EINVAL;
 
   devc->levels[dev] = retvol;
 
@@ -412,9 +438,9 @@ ad1848_mixer_set (ad1848_info * devc, int dev, int value)
      * Set the left channel
    */
 
-  regoffs = mix_devices[dev][LEFT_CHN].regno;
+  regoffs = devc->mix_devices[dev][LEFT_CHN].regno;
   val = ad_read (devc, regoffs);
-  change_bits (&val, dev, LEFT_CHN, left);
+  change_bits (devc, &val, dev, LEFT_CHN, left);
   ad_write (devc, regoffs, val);
   devc->saved_regs[regoffs] = val;
 
@@ -422,12 +448,12 @@ ad1848_mixer_set (ad1848_info * devc, int dev, int value)
      * Set the right channel
    */
 
-  if (mix_devices[dev][RIGHT_CHN].nbits == 0)
+  if (devc->mix_devices[dev][RIGHT_CHN].nbits == 0)
     return retvol;		/* Was just a mono channel */
 
-  regoffs = mix_devices[dev][RIGHT_CHN].regno;
+  regoffs = devc->mix_devices[dev][RIGHT_CHN].regno;
   val = ad_read (devc, regoffs);
-  change_bits (&val, dev, RIGHT_CHN, right);
+  change_bits (devc, &val, dev, RIGHT_CHN, right);
   ad_write (devc, regoffs, val);
   devc->saved_regs[regoffs] = val;
 
@@ -438,15 +464,31 @@ static void
 ad1848_mixer_reset (ad1848_info * devc)
 {
   int             i;
+  char            name[32];
+
+  devc->mix_devices = &(ad1848_mix_devices[0]);
+
+  sprintf (name, "%s_%d", devc->chip_name, nr_ad1848_devs);
+
+  for (i = 0; i < 32; i++)
+    devc->mixer_reroute[i] = i;
 
   switch (devc->model)
     {
     case MD_4231:
     case MD_4231A:
-    case MD_C930:
-    case MD_IWAVE:
     case MD_1845:
       devc->supported_devices = MODE2_MIXER_DEVICES;
+      break;
+
+    case MD_C930:
+      devc->supported_devices = C930_MIXER_DEVICES;
+      devc->mix_devices = &(c930_mix_devices[0]);
+      break;
+
+    case MD_IWAVE:
+      devc->supported_devices = MODE3_MIXER_DEVICES;
+      devc->mix_devices = &(iwave_mix_devices[0]);
       break;
 
     case MD_4232:
@@ -458,10 +500,14 @@ ad1848_mixer_reset (ad1848_info * devc)
     }
 
   devc->supported_rec_devices = MODE1_REC_DEVICES;
+  devc->orig_devices = devc->supported_devices;
+  devc->orig_rec_devices = devc->supported_rec_devices;
+
+  devc->levels = load_mixer_volumes (name, default_mixer_levels, 1);
 
   for (i = 0; i < SOUND_MIXER_NRDEVICES; i++)
     if (devc->supported_devices & (1 << i))
-      ad1848_mixer_set (devc, i, default_mixer_levels[i]);
+      ad1848_mixer_set (devc, i, devc->levels[i]);
   ad1848_set_recmask (devc, SOUND_MASK_MIC);
 }
 
@@ -472,16 +518,19 @@ ad1848_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 
   if (((cmd >> 8) & 0xff) == 'M')
     {
+      int             val;
 
       if (_IOC_DIR (cmd) & _IOC_WRITE)
 	switch (cmd & 0xff)
 	  {
 	  case SOUND_MIXER_RECSRC:
-	    return snd_ioctl_return ((int *) arg, ad1848_set_recmask (devc, get_user ((int *) arg)));
+	    get_user (val, (int *) arg);
+	    return ioctl_out (arg, ad1848_set_recmask (devc, val));
 	    break;
 
 	  default:
-	    return snd_ioctl_return ((int *) arg, ad1848_mixer_set (devc, cmd & 0xff, get_user ((int *) arg)));
+	    get_user (val, (int *) arg);
+	    return ioctl_out (arg, ad1848_mixer_set (devc, cmd & 0xff, val));
 	  }
       else
 	switch (cmd & 0xff)	/*
@@ -490,31 +539,34 @@ ad1848_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 	  {
 
 	  case SOUND_MIXER_RECSRC:
-	    return snd_ioctl_return ((int *) arg, devc->recmask);
+	    return ioctl_out (arg, devc->recmask);
 	    break;
 
 	  case SOUND_MIXER_DEVMASK:
-	    return snd_ioctl_return ((int *) arg, devc->supported_devices);
+	    return ioctl_out (arg, devc->supported_devices);
 	    break;
 
 	  case SOUND_MIXER_STEREODEVS:
-	    return snd_ioctl_return ((int *) arg, devc->supported_devices & ~(SOUND_MASK_SPEAKER | SOUND_MASK_IMIX));
+	    if (devc->model == MD_C930)
+	      return ioctl_out (arg, devc->supported_devices);
+	    else
+	      return ioctl_out (arg, devc->supported_devices & ~(SOUND_MASK_SPEAKER | SOUND_MASK_IMIX));
 	    break;
 
 	  case SOUND_MIXER_RECMASK:
-	    return snd_ioctl_return ((int *) arg, devc->supported_rec_devices);
+	    return ioctl_out (arg, devc->supported_rec_devices);
 	    break;
 
 	  case SOUND_MIXER_CAPS:
-	    return snd_ioctl_return ((int *) arg, SOUND_CAP_EXCL_INPUT);
+	    return ioctl_out (arg, SOUND_CAP_EXCL_INPUT);
 	    break;
 
 	  default:
-	    return snd_ioctl_return ((int *) arg, ad1848_mixer_get (devc, cmd & 0xff));
+	    return ioctl_out (arg, ad1848_mixer_get (devc, cmd & 0xff));
 	  }
     }
   else
-    return -(EINVAL);
+    return -EINVAL;
 }
 
 static int
@@ -560,7 +612,7 @@ ad1848_set_speed (int dev, int arg)
 
   n = sizeof (speed_table) / sizeof (speed_struct);
 
-  if (arg == 0)
+  if (arg <= 0)
     return devc->speed;
 
   if (devc->model == MD_1845)	/* AD1845 has different timer than others */
@@ -730,7 +782,7 @@ ad1848_open (int dev, int mode)
   unsigned long   flags;
 
   if (dev < 0 || dev >= num_audiodevs)
-    return -(ENXIO);
+    return -ENXIO;
 
   devc = (ad1848_info *) audio_devs[dev]->devc;
 
@@ -740,7 +792,7 @@ ad1848_open (int dev, int mode)
   if (devc->opened)
     {
       restore_flags (flags);
-      return -(EBUSY);
+      return -EBUSY;
     }
 
   devc->dual_dma = 0;
@@ -788,7 +840,7 @@ ad1848_close (int dev)
 static int
 ad1848_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 {
-  return -(EINVAL);
+  return -EINVAL;
 }
 
 static void
@@ -828,8 +880,7 @@ ad1848_output_block (int dev, unsigned long buf, int count, int intrflag, int dm
   save_flags (flags);
   cli ();
 
-  /* ad_write (devc, 9, ad_read (devc, 9) & ~ 0x01); / * Playback disable */
-  ad1848_halt (dev);
+  ad1848_halt_output (dev);
   DMAbuf_start_dma (dev, buf, count, DMA_MODE_WRITE);
 
   ad_write (devc, 15, (unsigned char) (cnt & 0xff));
@@ -880,8 +931,7 @@ ad1848_start_input (int dev, unsigned long buf, int count, int intrflag, int dma
 
   if (dma_restart)
     {
-      /* ad1848_halt (dev); */
-      ad_write (devc, 9, ad_read (devc, 9) & ~0x02);	/* Capture disable */
+      ad1848_halt_input (dev);
       DMAbuf_start_dma (dev, buf, count, DMA_MODE_READ);
     }
 
@@ -911,6 +961,25 @@ ad1848_prepare_for_output (int dev, int bsize, int bcount)
   ad1848_info    *devc = (ad1848_info *) audio_devs[dev]->devc;
 
   ad_mute (devc);
+  {
+/*
+ * This code fragment ensures that the playback FIFO is empty before
+ * setting the codec for playback. Enabling playback for a moment should
+ * be enough to do that.
+ */
+    int             tmout;
+
+    ad_write (devc, 9, ad_read (devc, 9) | 0x01);	/* Enable playback */
+    disable_dma (audio_devs[dev]->dmachan1);
+    for (tmout = 0; tmout < 1000000; tmout++)
+      if (ad_read (devc, 11) & 0x10)	/* DRQ active */
+	if (tmout > 10000)
+	  break;
+    ad_write (devc, 9, ad_read (devc, 9) & ~0x01);	/* Stop playback */
+
+    enable_dma (audio_devs[dev]->dmachan1);
+    devc->audio_mode &= ~PCM_ENABLE_OUTPUT;
+  }
 
   return ad1848_prepare_for_IO (dev, bsize, bcount);
 }
@@ -943,13 +1012,6 @@ ad1848_prepare_for_IO (int dev, int bsize, int bcount)
 
   old_fs = ad_read (devc, 8);
 
-  if (devc->model != MD_4232)
-    if (fs == old_fs)		/* No change */
-      {
-	restore_flags (flags);
-	devc->xfer_count = 0;
-	return 0;
-      }
 
   ad_enter_MCE (devc);		/* Enables changes to the format select reg */
 
@@ -963,9 +1025,12 @@ ad1848_prepare_for_IO (int dev, int bsize, int bcount)
   /*
    * Write to I8 starts resynchronization. Wait until it completes.
    */
-  timeout = 10000;
-  while (timeout > 0 && inb (devc->base) == 0x80)
-    timeout--;
+  timeout = 0;
+  while (timeout < 100 && inb (devc->base) != 0x80)
+    timeout++;
+  timeout = 0;
+  while (timeout < 10000 && inb (devc->base) == 0x80)
+    timeout++;
 
   /*
      * If mode >= 2 (CS4231), set I28 also. It's the capture format register.
@@ -975,12 +1040,15 @@ ad1848_prepare_for_IO (int dev, int bsize, int bcount)
       ad_write (devc, 28, fs);
 
       /*
-         * Write to I28 starts resynchronization. Wait until it completes.
+       * Write to I28 starts resynchronization. Wait until it completes.
        */
-      timeout = 10000;
-      while (timeout > 0 && inb (devc->base) == 0x80)
-	timeout--;
+      timeout = 0;
+      while (timeout < 100 && inb (devc->base) != 0x80)
+	timeout++;
 
+      timeout = 0;
+      while (timeout < 10000 && inb (devc->base) == 0x80)
+	timeout++;
     }
 
   if (devc->model == MD_4232)
@@ -1020,6 +1088,7 @@ ad1848_halt (int dev)
 
   if (bits & 0x02)
     ad1848_halt_input (dev);
+  devc->audio_mode = 0;
 }
 
 static void
@@ -1028,31 +1097,31 @@ ad1848_halt_input (int dev)
   ad1848_info    *devc = (ad1848_info *) audio_devs[dev]->devc;
   unsigned long   flags;
 
+  if (!(ad_read (devc, 9) & 0x02))
+    return;			/* Capture not enabled */
+
   save_flags (flags);
   cli ();
 
   ad_mute (devc);
 
-  if (devc->model == MD_4232)	/* Use applied black magic */
-    {
-      int             tmout;
+  {
+    int             tmout;
 
-      disable_dma (audio_devs[dev]->dmachan1);
+    disable_dma (audio_devs[dev]->dmachan1);
 
-      for (tmout = 0; tmout < 100000; tmout++)
-	if (ad_read (devc, 11) & 0x10)
-	  break;
-      ad_write (devc, 9, ad_read (devc, 9) & ~0x01);	/* Stop playback */
+    for (tmout = 0; tmout < 100000; tmout++)
+      if (ad_read (devc, 11) & 0x10)
+	break;
+    ad_write (devc, 9, ad_read (devc, 9) & ~0x02);	/* Stop capture */
 
-      enable_dma (audio_devs[dev]->dmachan1);
-      restore_flags (flags);
-      return;
-    }
-  ad_write (devc, 9, ad_read (devc, 9) & ~0x02);	/* Stop capture */
+    enable_dma (audio_devs[dev]->dmachan1);
+    devc->audio_mode &= ~PCM_ENABLE_INPUT;
+  }
 
 
-  outb (0, io_Status (devc));	/* Clear interrupt status */
-  outb (0, io_Status (devc));	/* Clear interrupt status */
+  outb ((0), io_Status (devc));	/* Clear interrupt status */
+  outb ((0), io_Status (devc));	/* Clear interrupt status */
 
   devc->audio_mode &= ~PCM_ENABLE_INPUT;
 
@@ -1065,30 +1134,30 @@ ad1848_halt_output (int dev)
   ad1848_info    *devc = (ad1848_info *) audio_devs[dev]->devc;
   unsigned long   flags;
 
+  if (!(ad_read (devc, 9) & 0x01))
+    return;			/* Playback not enabled */
+
   save_flags (flags);
   cli ();
 
   ad_mute (devc);
-  if (devc->model == MD_4232)	/* Use applied black magic */
-    {
-      int             tmout;
+  {
+    int             tmout;
 
-      disable_dma (audio_devs[dev]->dmachan1);
+    disable_dma (audio_devs[dev]->dmachan1);
 
-      for (tmout = 0; tmout < 100000; tmout++)
-	if (ad_read (devc, 11) & 0x10)
-	  break;
-      ad_write (devc, 9, ad_read (devc, 9) & ~0x01);	/* Stop playback */
+    for (tmout = 0; tmout < 100000; tmout++)
+      if (ad_read (devc, 11) & 0x10)
+	break;
+    ad_write (devc, 9, ad_read (devc, 9) & ~0x01);	/* Stop playback */
 
-      enable_dma (audio_devs[dev]->dmachan1);
-      restore_flags (flags);
-      return;
-    }
-  ad_write (devc, 9, ad_read (devc, 9) & ~0x01);	/* Stop playback */
+    enable_dma (audio_devs[dev]->dmachan1);
+    devc->audio_mode &= ~PCM_ENABLE_OUTPUT;
+  }
 
 
-  outb (0, io_Status (devc));	/* Clear interrupt status */
-  outb (0, io_Status (devc));	/* Clear interrupt status */
+  outb ((0), io_Status (devc));	/* Clear interrupt status */
+  outb ((0), io_Status (devc));	/* Clear interrupt status */
 
   devc->audio_mode &= ~PCM_ENABLE_OUTPUT;
 
@@ -1112,20 +1181,20 @@ ad1848_trigger (int dev, int state)
   if (state & PCM_ENABLE_OUTPUT)
     tmp |= 0x01;
 
-  if (!(state & PCM_ENABLE_OUTPUT) && old & 0x01);
   ad_mute (devc);
 
   ad_write (devc, 9, tmp);
 
-  if (state & PCM_ENABLE_OUTPUT && !(old & 0x01));
   ad_unmute (devc);
 
   restore_flags (flags);
 }
 
-int
-ad1848_detect (int io_base, int *ad_flags, int *osp)
+void
+ad1848_init_hw (ad1848_info * devc)
 {
+  int             i;
+
   /*
    * Initial values for the indirect registers of CS4248/AD1848.
    */
@@ -1138,6 +1207,64 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
     0x80, 0x00, 0x10, 0x10, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
   };
+
+
+  for (i = 0; i < 16; i++)
+    ad_write (devc, i, init_values[i]);
+
+
+  ad_mute (devc);		/* Initialize some variables */
+  ad_unmute (devc);		/* Leave it unmuted now */
+
+  if (devc->model > MD_1848)
+    {
+      ad_write (devc, 12, ad_read (devc, 12) | 0x40);	/* Mode2 = enabled */
+
+      if (devc->model == MD_IWAVE)
+	ad_write (devc, 12, 0x6c);	/* Select codec mode 3 */
+
+      for (i = 16; i < 32; i++)
+	ad_write (devc, i, init_values[i]);
+
+    }
+
+  if (devc->model > MD_1848)
+    {
+      if (devc->audio_flags & DMA_DUPLEX)
+	ad_write (devc, 9, ad_read (devc, 9) & ~0x04);	/* Dual DMA mode */
+      else
+	ad_write (devc, 9, ad_read (devc, 9) | 0x04);	/* Single DMA mode */
+
+      if (devc->model == MD_1845)
+	ad_write (devc, 27, ad_read (devc, 27) | 0x08);		/* Alternate freq select enabled */
+
+      if (devc->model == MD_IWAVE)
+	{			/* Some magic Interwave specific initialization */
+	  ad_write (devc, 12, 0x6c);	/* Select codec mode 3 */
+	  ad_write (devc, 17, 0xc2);	/* Alternate feature enable */
+	}
+    }
+  else
+    {
+      devc->audio_flags &= ~DMA_DUPLEX;
+      ad_write (devc, 9, ad_read (devc, 9) | 0x04);	/* Single DMA mode */
+    }
+
+  outb ((0), io_Status (devc));	/* Clear pending interrupts */
+
+  /*
+   * Toggle the MCE bit. It completes the initialization phase.
+   */
+
+  ad_enter_MCE (devc);		/* In case the bit was off */
+  ad_leave_MCE (devc);
+
+  ad1848_mixer_reset (devc);
+}
+
+int
+ad1848_detect (int io_base, int *ad_flags, int *osp)
+{
 
   unsigned char   tmp;
   ad1848_info    *devc = &dev_info[nr_ad1848_devs];
@@ -1153,8 +1280,10 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
   if (ad_flags)
     {
       if (*ad_flags == 0x12345678)
-	interwave = 1;
-      *ad_flags = 0;
+	{
+	  interwave = 1;
+	  *ad_flags = 0;
+	}
     }
 
   if (nr_ad1848_devs >= MAX_AUDIO_DEV)
@@ -1176,7 +1305,7 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
   devc->opened = 0;
   devc->chip_name = "AD1848";
   devc->model = MD_1848;	/* AD1848 or CS4248 */
-  devc->osp = osp;
+  devc->levels = NULL;
   devc->debug_flag = 0;
 
   /*
@@ -1190,6 +1319,20 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
    */
 
   DDB (printk ("ad1848_detect() - step A\n"));
+
+/*
+ * Wait for the device to stop initialization
+ */
+  /* outb(( 0x0b),  devc->base); */
+
+  for (i = 0; i < 10000000; i++)
+    {
+      unsigned char   x = inb (devc->base);
+
+      if (x == 0xff || !(x & 0x80))
+	break;
+    }
+
   if ((inb (devc->base) & 0x80) != 0x00)	/* Not a AD1848 */
     {
       DDB (printk ("ad1848 detect error - step A (%02x)\n",
@@ -1284,7 +1427,14 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
    */
 
   DDB (printk ("ad1848_detect() - step G\n"));
-  ad_write (devc, 12, 0x40);	/* Set mode2, clear 0x80 */
+
+  if (ad_flags && *ad_flags == 400)
+    *ad_flags = 0;
+  else
+    ad_write (devc, 12, 0x40);	/* Set mode2, clear 0x80 */
+
+  if (ad_flags)
+    *ad_flags = 0;
 
   tmp1 = ad_read (devc, 12);
   if (tmp1 & 0x80)
@@ -1419,22 +1569,6 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
   if (devc->model == MD_1848 && ad1847_flag)
     devc->chip_name = "AD1847";
 
-  for (i = 0; i < 16; i++)
-    ad_write (devc, i, init_values[i]);
-
-  ad_mute (devc);		/* Initialize some variables */
-  ad_unmute (devc);		/* Leave it unmuted now */
-
-  if (devc->model > MD_1848)
-    {
-      ad_write (devc, 12, ad_read (devc, 12) | 0x40);	/* Mode2 = enabled */
-
-      if (devc->model == MD_IWAVE)
-	ad_write (devc, 12, 0x6c);	/* Select codec mode 3 */
-
-      for (i = 16; i < 32; i++)
-	ad_write (devc, i, init_values[i]);
-    }
 
   return 1;
 }
@@ -1454,7 +1588,6 @@ ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture
 
   ad1848_info    *devc = &dev_info[nr_ad1848_devs];
 
-  int             audio_flags = DMA_AUTOMODE;
 
 
   request_region (devc->base, 4, devc->chip_name);
@@ -1462,37 +1595,9 @@ ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture
   devc->irq = (irq > 0) ? irq : 0;
   devc->opened = 0;
   devc->timer_ticks = 0;
-  devc->osp = osp;
-
-  if (devc->model > MD_1848)
-    {
-      if (dma_capture == dma_playback || dma_capture == -1 || dma_playback == -1)
-	{
-	  ad_write (devc, 9, ad_read (devc, 9) | 0x04);		/* Single DMA mode */
-	  audio_flags &= ~DMA_DUPLEX;
-	}
-      else
-	{
-	  ad_write (devc, 9, ad_read (devc, 9) & ~0x04);	/* Dual DMA mode */
-	  audio_flags |= DMA_DUPLEX;
-	}
-
-      if (devc->model == MD_1845)
-	ad_write (devc, 27, ad_read (devc, 27) | 0x08);		/* Alternate freq select enabled */
-
-      if (devc->model == MD_IWAVE)
-	{			/* Some magic Interwave specific initialization */
-	  ad_write (devc, 12, 0x6c);	/* Select codec mode 3 */
-	  ad_write (devc, 17, 0xc2);	/* Alternate feature enable */
-	}
-    }
-  else
-    {
-      audio_flags &= ~DMA_DUPLEX;
-      ad_write (devc, 9, ad_read (devc, 9) | 0x04);	/* Single DMA mode */
-    }
-
-  outb (0, io_Status (devc));	/* Clear pending interrupts */
+  devc->dma1 = dma_playback;
+  devc->dma2 = dma_capture;
+  devc->audio_flags = DMA_AUTOMODE;
 
   if (name != NULL && name[0] != 0)
     sprintf (dev_name,
@@ -1504,14 +1609,22 @@ ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture
   conf_printf2 (dev_name,
 		devc->base, devc->irq, dma_playback, dma_capture);
 
-  if (devc->model == MD_1848)
-    audio_flags |= DMA_HARDSTOP;
+  if (devc->model == MD_1848 || devc->model == MD_C930)
+    devc->audio_flags |= DMA_HARDSTOP;
+
+  if (devc->model > MD_1848)
+    {
+      if (devc->dma1 == devc->dma2 || devc->dma2 == -1 || devc->dma1 == -1)
+	devc->audio_flags &= ~DMA_DUPLEX;
+      else
+	devc->audio_flags |= DMA_DUPLEX;
+    }
 
   if ((my_dev = sound_install_audiodrv (AUDIO_DRIVER_VERSION,
 					dev_name,
 					&ad1848_audio_driver,
 					sizeof (struct audio_driver),
-					audio_flags,
+					devc->audio_flags,
 					ad_format_mask[devc->model],
 					devc,
 					dma_playback,
@@ -1520,17 +1633,21 @@ ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture
       return;
     }
 
+  nr_ad1848_devs++;
+
+  ad1848_init_hw (devc);
+
   if (irq > 0)
     {
       irq2dev[irq] = devc->dev_no = my_dev;
       if (snd_set_irq_handler (devc->irq, ad1848_interrupt,
 			       "SoundPort",
-			       devc->osp) < 0)
+			       NULL) < 0)
 	{
 	  printk ("ad1848: IRQ in use\n");
 	}
 
-      if (devc->model != MD_1848)
+      if (devc->model != MD_1848 && devc->model != MD_C930)
 	{
 	  int             x;
 	  unsigned char   tmp = ad_read (devc, 16);
@@ -1547,17 +1664,20 @@ ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture
 	  if (devc->timer_ticks == 0)
 	    printk ("ad1848: Interrupt test failed (IRQ%d)\n", devc->irq);
 	  else
-	    devc->irq_ok = 1;
+	    {
+	      DDB (printk ("Interrupt test OK\n"));
+	      devc->irq_ok = 1;
+	    }
 	}
       else
 	devc->irq_ok = 1;	/* Couldn't test. assume it's OK */
     }
   else if (irq < 0)
     irq2dev[-irq] = devc->dev_no = my_dev;
-  nr_ad1848_devs++;
 
 #ifdef CONFIG_SEQUENCER
-  if (devc->model != MD_1848 && devc->model != MD_1845 && devc->irq_ok)
+  if (devc->model != MD_1848 &&
+      devc->model != MD_C930 && devc->irq_ok)
     ad1848_tmr_install (my_dev);
 #endif
 
@@ -1571,14 +1691,6 @@ ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture
 	  printk ("ad1848.c: Can't allocate DMA%d\n", dma_capture);
     }
 
-  /*
-     * Toggle the MCE bit. It completes the initialization phase.
-   */
-
-  ad_enter_MCE (devc);		/* In case the bit was off */
-  ad_leave_MCE (devc);
-  ad1848_mixer_reset (devc);
-
   if (sound_install_mixer (MIXER_DRIVER_VERSION,
 			   dev_name,
 			   &ad1848_mixer_operations,
@@ -1586,6 +1698,59 @@ ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture
 			   devc) >= 0)
     {
       audio_devs[my_dev]->mixer_dev = num_mixers - 1;
+    }
+}
+
+void
+ad1848_control (int cmd, int arg)
+{
+  ad1848_info    *devc;
+
+  if (nr_ad1848_devs < 1)
+    return;
+
+  devc = &dev_info[nr_ad1848_devs - 1];
+
+  switch (cmd)
+    {
+    case AD1848_SET_XTAL:	/* Change clock frequency of AD1845 (only ) */
+      if (devc->model != MD_1845)
+	return;
+      ad_enter_MCE (devc);
+      ad_write (devc, 29, (ad_read (devc, 29) & 0x1f) | (arg << 5));
+      ad_leave_MCE (devc);
+      break;
+
+    case AD1848_MIXER_REROUTE:
+      {
+	int             o = (arg >> 8) & 0xff;
+	int             n = arg & 0xff;
+
+	if (n == SOUND_MIXER_NONE)
+	  {			/* Just hide this control */
+	    ad1848_mixer_set (devc, o, 0);	/* Shut up it */
+	    devc->supported_devices &= ~(1 << o);
+	    devc->supported_rec_devices &= ~(1 << o);
+	    return;
+	  }
+
+	/* Make the mixer control identified by o to appear as n */
+
+	if (o < 0 || o > SOUND_MIXER_NRDEVICES)
+	  return;
+	if (n < 0 || n > SOUND_MIXER_NRDEVICES)
+	  return;
+	if (!(devc->supported_devices & (1 << o)))
+	  return;		/* Not supported */
+
+	devc->mixer_reroute[n] = o;	/* Rename the control */
+	devc->supported_devices &= ~(1 << o);
+	devc->supported_devices |= (1 << n);
+	if (devc->supported_rec_devices & (1 << o))
+	  devc->supported_rec_devices |= (1 << n);
+	devc->supported_rec_devices &= ~(1 << o);
+      }
+      break;
     }
 }
 
@@ -1629,6 +1794,7 @@ ad1848_interrupt (int irq, void *dev_id, struct pt_regs *dummy)
   ad1848_info    *devc;
   int             dev;
   int             alt_stat = 0xff;
+  unsigned char   c930_stat = 0;
 
   if (irq < 0 || irq > 15)
     {
@@ -1655,6 +1821,8 @@ ad1848_interrupt (int irq, void *dev_id, struct pt_regs *dummy)
   else
     devc = (ad1848_info *) audio_devs[dev]->devc;
 
+interrupt_again:		/* Jump back here if int status doesn't reset */
+
   status = inb (io_Status (devc));
 
   if (status == 0x80)
@@ -1662,8 +1830,25 @@ ad1848_interrupt (int irq, void *dev_id, struct pt_regs *dummy)
 
   if (status & 0x01)
     {
+      if (devc->model == MD_C930)
+	{			/* 82C930 has interrupt status register in MAD16 register MC11 */
+	  unsigned long   flags;
 
-      if (devc->model != MD_1848)
+	  save_flags (flags);
+	  cli ();
+
+	  alt_stat = 0;
+
+	  outb ((11), 0xe0e);
+	  c930_stat = inb (0xe0f);
+
+	  if (c930_stat & 0x04)
+	    alt_stat |= 0x10;	/* Playback intr */
+	  if (c930_stat & 0x08)
+	    alt_stat |= 0x20;	/* Playback intr */
+	  restore_flags (flags);
+	}
+      else if (devc->model != MD_1848)
 	alt_stat = ad_read (devc, 24);
 
       if (devc->opened && devc->audio_mode & PCM_ENABLE_INPUT && alt_stat & 0x20)
@@ -1687,10 +1872,30 @@ ad1848_interrupt (int irq, void *dev_id, struct pt_regs *dummy)
 	}
     }
 
-  if (devc->model != MD_1848)
+  if (devc->model == MD_C930)
+    {				/* 82C930 has interrupt status register in MAD16 register MC11 */
+      unsigned long   flags;
+
+      save_flags (flags);
+      cli ();
+
+      outb ((11), 0xe0e);
+      outb ((~c930_stat), 0xe0f);
+      restore_flags (flags);
+    }
+  else if (devc->model != MD_1848)
     ad_write (devc, 24, ad_read (devc, 24) & ~alt_stat);	/* Selective ack */
   else
-    outb (0, io_Status (devc));	/* Clear interrupt status */
+    outb ((0), io_Status (devc));	/* Clear interrupt status */
+
+/*
+ * Sometimes playback or capture interrupts occur while a timer interrupt
+ * is being handled. The interrupt will not be retriggered if we don't
+ * handle it now. Check if an interrupt is still pending and restart
+ * the handler in this case.
+ */
+  if (inb (io_Status (devc)) & 0x01)
+    goto interrupt_again;
 }
 
 /*
@@ -1733,7 +1938,7 @@ init_deskpro (struct address_info *hw_config)
       return 0;
     }
 
-  outb (tmp | 0x04, 0xc44);	/* Select bank 1 */
+  outb ((tmp | 0x04), 0xc44);	/* Select bank 1 */
   if (inb (0xc44) != 0x04)
     {
       DDB (printk ("init_deskpro: Invalid bank1 signature in port 0xc44\n"));
@@ -1774,9 +1979,9 @@ init_deskpro (struct address_info *hw_config)
 #ifdef DEBUGXL
   /* Debug printing */
   printk ("Port 0xc44 (before): ");
-  outb (tmp & ~0x04, 0xc44);
+  outb ((tmp & ~0x04), 0xc44);
   printk ("%02x ", inb (0xc44));
-  outb (tmp | 0x04, 0xc44);
+  outb ((tmp | 0x04), 0xc44);
   printk ("%02x\n", inb (0xc44));
 #endif
 
@@ -1802,14 +2007,14 @@ init_deskpro (struct address_info *hw_config)
 		   hw_config->io_base));
       return 0;
     }
-  outb (tmp & ~0x04, 0xc44);	/* Write to bank=0 */
+  outb ((tmp & ~0x04), 0xc44);	/* Write to bank=0 */
 
 #ifdef DEBUGXL
   /* Debug printing */
   printk ("Port 0xc44 (after): ");
-  outb (tmp & ~0x04, 0xc44);	/* Select bank=0 */
+  outb ((tmp & ~0x04), 0xc44);	/* Select bank=0 */
   printk ("%02x ", inb (0xc44));
-  outb (tmp | 0x04, 0xc44);	/* Select bank=1 */
+  outb ((tmp | 0x04), 0xc44);	/* Select bank=1 */
   printk ("%02x\n", inb (0xc44));
 #endif
 
@@ -1826,23 +2031,23 @@ init_deskpro (struct address_info *hw_config)
 #ifdef DEBUGXL
   /* Debug printing */
   printk ("Port 0xc45 (before): ");
-  outb (tmp & ~0x04, 0xc44);	/* Select bank=0 */
+  outb ((tmp & ~0x04), 0xc44);	/* Select bank=0 */
   printk ("%02x ", inb (0xc45));
-  outb (tmp | 0x04, 0xc44);	/* Select bank=1 */
+  outb ((tmp | 0x04), 0xc44);	/* Select bank=1 */
   printk ("%02x\n", inb (0xc45));
 #endif
 
-  outb (tmp & ~0x04, 0xc44);	/* Select bank=0 */
-  outb (0x88, 0xc45);		/* FM base 7:0 = 0x88 */
-  outb (tmp | 0x04, 0xc44);	/* Select bank=1 */
-  outb (0x10, 0xc45);		/* MSS ID = 0x10 (MSS port returns 0x04) */
+  outb ((tmp & ~0x04), 0xc44);	/* Select bank=0 */
+  outb ((0x88), 0xc45);		/* FM base 7:0 = 0x88 */
+  outb ((tmp | 0x04), 0xc44);	/* Select bank=1 */
+  outb ((0x10), 0xc45);		/* MSS ID = 0x10 (MSS port returns 0x04) */
 
 #ifdef DEBUGXL
   /* Debug printing */
   printk ("Port 0xc45 (after): ");
-  outb (tmp & ~0x04, 0xc44);	/* Select bank=0 */
+  outb ((tmp & ~0x04), 0xc44);	/* Select bank=0 */
   printk ("%02x ", inb (0xc45));
-  outb (tmp | 0x04, 0xc44);	/* Select bank=1 */
+  outb ((tmp | 0x04), 0xc44);	/* Select bank=1 */
   printk ("%02x\n", inb (0xc45));
 #endif
 
@@ -1857,23 +2062,23 @@ init_deskpro (struct address_info *hw_config)
 #ifdef DEBUGXL
   /* Debug printing */
   printk ("Port 0xc46 (before): ");
-  outb (tmp & ~0x04, 0xc44);	/* Select bank=0 */
+  outb ((tmp & ~0x04), 0xc44);	/* Select bank=0 */
   printk ("%02x ", inb (0xc46));
-  outb (tmp | 0x04, 0xc44);	/* Select bank=1 */
+  outb ((tmp | 0x04), 0xc44);	/* Select bank=1 */
   printk ("%02x\n", inb (0xc46));
 #endif
 
-  outb (tmp & ~0x04, 0xc44);	/* Select bank=0 */
-  outb (0x03, 0xc46);		/* FM base 15:8 = 0x03 */
-  outb (tmp | 0x04, 0xc44);	/* Select bank=1 */
-  outb (0x11, 0xc46);		/* ASIC ID = 0x11 */
+  outb ((tmp & ~0x04), 0xc44);	/* Select bank=0 */
+  outb ((0x03), 0xc46);		/* FM base 15:8 = 0x03 */
+  outb ((tmp | 0x04), 0xc44);	/* Select bank=1 */
+  outb ((0x11), 0xc46);		/* ASIC ID = 0x11 */
 
 #ifdef DEBUGXL
   /* Debug printing */
   printk ("Port 0xc46 (after): ");
-  outb (tmp & ~0x04, 0xc44);	/* Select bank=0 */
+  outb ((tmp & ~0x04), 0xc44);	/* Select bank=0 */
   printk ("%02x ", inb (0xc46));
-  outb (tmp | 0x04, 0xc44);	/* Select bank=1 */
+  outb ((tmp | 0x04), 0xc44);	/* Select bank=1 */
   printk ("%02x\n", inb (0xc46));
 #endif
 
@@ -1887,23 +2092,23 @@ init_deskpro (struct address_info *hw_config)
 #ifdef DEBUGXL
   /* Debug printing */
   printk ("Port 0xc47 (before): ");
-  outb (tmp & ~0x04, 0xc44);	/* Select bank=0 */
+  outb ((tmp & ~0x04), 0xc44);	/* Select bank=0 */
   printk ("%02x ", inb (0xc47));
-  outb (tmp | 0x04, 0xc44);	/* Select bank=1 */
+  outb ((tmp | 0x04), 0xc44);	/* Select bank=1 */
   printk ("%02x\n", inb (0xc47));
 #endif
 
-  outb (tmp & ~0x04, 0xc44);	/* Select bank=0 */
-  outb (0x7c, 0xc47);		/* FM decode enable bits = 0x7c */
-  outb (tmp | 0x04, 0xc44);	/* Select bank=1 */
-  outb (0x00, 0xc47);		/* Reserved bank1 = 0x00 */
+  outb ((tmp & ~0x04), 0xc44);	/* Select bank=0 */
+  outb ((0x7c), 0xc47);		/* FM decode enable bits = 0x7c */
+  outb ((tmp | 0x04), 0xc44);	/* Select bank=1 */
+  outb ((0x00), 0xc47);		/* Reserved bank1 = 0x00 */
 
 #ifdef DEBUGXL
   /* Debug printing */
   printk ("Port 0xc47 (after): ");
-  outb (tmp & ~0x04, 0xc44);	/* Select bank=0 */
+  outb ((tmp & ~0x04), 0xc44);	/* Select bank=0 */
   printk ("%02x ", inb (0xc47));
-  outb (tmp | 0x04, 0xc44);	/* Select bank=1 */
+  outb ((tmp | 0x04), 0xc44);	/* Select bank=1 */
   printk ("%02x\n", inb (0xc47));
 #endif
 
@@ -1915,7 +2120,7 @@ init_deskpro (struct address_info *hw_config)
   printk ("Port 0xc6f (before) = %02x\n", inb (0xc6f));
 #endif
 
-  outb (0x80, 0xc6f);
+  outb ((0x80), 0xc6f);
 
 #ifdef DEBUGXL
   printk ("Port 0xc6f (after) = %02x\n", inb (0xc6f));
@@ -2034,8 +2239,6 @@ attach_ms_sound (struct address_info *hw_config)
   int             dma = hw_config->dma;
   int             dma2 = hw_config->dma2;
 
-  if (!ad1848_detect (hw_config->io_base + 4, &ad_flags, hw_config->osp))
-    return;
 
   if (hw_config->card_subtype == 1)	/* Has no IRQ/DMA registers */
     {
@@ -2055,9 +2258,9 @@ attach_ms_sound (struct address_info *hw_config)
   if (bits == -1)
     return;
 
-  outb (bits | 0x40, config_port);
+  outb ((bits | 0x40), config_port);
   if ((inb (version_port) & 0x40) == 0)
-    printk ("[IRQ Conflict?]");
+    printk ("[MSS: IRQ Conflict?]");
 
 /*
  * Handle the capture DMA channel
@@ -2090,7 +2293,7 @@ attach_ms_sound (struct address_info *hw_config)
   else
     dma2 = dma;
 
-  outb (bits | dma_bits[dma] | dma2_bit, config_port);	/* Write IRQ+DMA setup */
+  outb ((bits | dma_bits[dma] | dma2_bit), config_port);	/* Write IRQ+DMA setup */
 
   ad1848_init ("MSS audio codec", hw_config->io_base + 4,
 	       hw_config->irq,

@@ -12,7 +12,7 @@
 #include <linux/minix_fs.h>
 #include <linux/stat.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 static long minix_dir_read(struct inode * inode, struct file * filp,
 	char * buf, unsigned long count)

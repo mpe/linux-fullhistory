@@ -16,7 +16,7 @@
 #include <linux/msdos_fs.h>
 #include <linux/umsdos_fs.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 #define PRINTK(x)

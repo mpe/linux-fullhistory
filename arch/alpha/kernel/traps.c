@@ -14,7 +14,7 @@
 #include <linux/tty.h>
 
 #include <asm/gentrap.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/unaligned.h>
 
 void die_if_kernel(char * str, struct pt_regs * regs, long err)

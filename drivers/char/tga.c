@@ -28,7 +28,7 @@
 
 #include <asm/io.h>
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/bitops.h>
 
 #include "kbd_kern.h"

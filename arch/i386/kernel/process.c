@@ -28,7 +28,7 @@
 #include <linux/delay.h>
 #include <linux/smp.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/io.h>

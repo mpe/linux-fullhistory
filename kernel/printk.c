@@ -13,7 +13,6 @@
 
 #include <stdarg.h>
 
-#include <asm/segment.h>
 #include <asm/system.h>
 
 #include <linux/errno.h>
@@ -22,6 +21,8 @@
 #include <linux/mm.h>
 #include <linux/tty.h>
 #include <linux/tty_driver.h>
+
+#include <asm/uaccess.h>
 
 #define LOG_BUF_LEN	8192
 

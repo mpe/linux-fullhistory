@@ -6,7 +6,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -41,7 +41,7 @@ static int      jazz16_base = 0;	/* Not detected */
 static unsigned char jazz16_bits = 0;	/* I/O relocation bits */
 
 /*
- * Logitech SoundMan Wave specific initialization code
+ * Logitech Soundman Wave specific initialization code
  */
 
 #ifdef SMW_MIDI0001_INCLUDED
@@ -65,7 +65,7 @@ sb_dsp_command (sb_devc * devc, unsigned char val)
   /*
    * Note! the i<500000 is an emergency exit. The sb_dsp_command() is sometimes
    * called while interrupts are disabled. This means that the timer is
-   * disabled also. However the timeout situation is an abnormal condition.
+   * disabled also. However the timeout situation is a abnormal condition.
    * Normally the DSP should be ready to accept commands after just couple of
    * loops.
    */
@@ -74,7 +74,7 @@ sb_dsp_command (sb_devc * devc, unsigned char val)
     {
       if ((inb (DSP_STATUS) & 0x80) == 0)
 	{
-	  outb (val, DSP_COMMAND);
+	  outb ((val), DSP_COMMAND);
 	  return 1;
 	}
     }
@@ -192,12 +192,12 @@ sb_dsp_reset (sb_devc * devc)
   int             loopc;
 
   if (devc->model == MDL_ESS)
-    outb (3, DSP_RESET);	/* Reset FIFO too */
+    outb ((3), DSP_RESET);	/* Reset FIFO too */
   else
-    outb (1, DSP_RESET);
+    outb ((1), DSP_RESET);
 
   tenmicrosec (devc->osp);
-  outb (0, DSP_RESET);
+  outb ((0), DSP_RESET);
   tenmicrosec (devc->osp);
   tenmicrosec (devc->osp);
   tenmicrosec (devc->osp);
@@ -261,28 +261,31 @@ sb16_set_dma_hw (sb_devc * devc)
   return 1;
 }
 
+#if defined(CONFIG_MIDI) && defined(CONFIG_UART401)
 static void
-sb16_set_mpu_port(sb_devc *devc, struct address_info *hw_config)
+sb16_set_mpu_port (sb_devc * devc, struct address_info *hw_config)
 {
 /*
- * This routine initializes new MIDI port setup register of SB Vibra.
+ * This routine initializes new MIDI port setup register of SB Vibra (CT2502).
  */
-	unsigned char bits = sb_getmixer(devc, 0x84) & ~0x06;
-	switch (hw_config->io_base)
-	{
-	case 0x300:
-  		sb_setmixer (devc, 0x84, bits | 0x04);
-		break;
+  unsigned char   bits = sb_getmixer (devc, 0x84) & ~0x06;
 
-	case 0x330:
-  		sb_setmixer (devc, 0x84, bits | 0x00);
-		break;
+  switch (hw_config->io_base)
+    {
+    case 0x300:
+      sb_setmixer (devc, 0x84, bits | 0x04);
+      break;
 
-	default:
-  		sb_setmixer (devc, 0x84, bits | 0x02); /* Disable MPU */
-		printk("SB16: Invalid MIDI I/O port %x\n", hw_config->io_base);
-	}
+    case 0x330:
+      sb_setmixer (devc, 0x84, bits | 0x00);
+      break;
+
+    default:
+      sb_setmixer (devc, 0x84, bits | 0x02);	/* Disable MPU */
+      printk ("SB16: Invalid MIDI I/O port %x\n", hw_config->io_base);
+    }
 }
+#endif
 
 static int
 sb16_set_irq_hw (sb_devc * devc, int level)
@@ -304,6 +307,8 @@ sb16_set_irq_hw (sb_devc * devc, int level)
       ival = 8;
       break;
     default:
+      if (devc->type == MDL_SBPNP)
+	return 1;
       printk ("SB16 IRQ%d is not possible\n", level);
       return 0;
     }
@@ -345,9 +350,9 @@ relocate_Jazz16 (sb_devc * devc, struct address_info *hw_config)
  */
   save_flags (flags);
   cli ();
-  outb (0xAF, 0x201);
-  outb (0x50, 0x201);
-  outb (bits, 0x201);
+  outb ((0xAF), 0x201);
+  outb ((0x50), 0x201);
+  outb ((bits), 0x201);
   restore_flags (flags);
 }
 
@@ -425,6 +430,7 @@ init_Jazz16 (sb_devc * devc, struct address_info *hw_config)
   return 1;
 }
 
+
 static int
 ess_init (sb_devc * devc, struct address_info *hw_config)
 {
@@ -466,9 +472,14 @@ ess_init (sb_devc * devc, struct address_info *hw_config)
     }
   else if (ess_major == 0x68 && (ess_minor & 0xf0) == 0x80)
     {
+      char           *chip = "ES688";
+
+      if ((ess_minor & 0x0f) >= 8)
+	chip = "ES1688";
+
       sprintf (name,
-	       "ESS ES1688 AudioDrive (rev %d)",
-	       ess_minor & 0x0f);
+	       "ESS %s AudioDrive (rev %d)",
+	       chip, ess_minor & 0x0f);
     }
   else
     strcpy (name, "Jazz16");
@@ -570,7 +581,6 @@ sb_dsp_detect (struct address_info *hw_config)
 
   memset ((char *) &sb_info, 0, sizeof (sb_info));	/* Zero everything */
 
-  devc->osp = hw_config->osp;
   devc->type = hw_config->card_subtype;
 
   devc->base = hw_config->io_base;
@@ -591,6 +601,7 @@ sb_dsp_detect (struct address_info *hw_config)
   if (devc->type == 0 || devc->type == MDL_JAZZ || devc->type == MDL_SMW)
     if (devc->major == 0 || (devc->major == 3 && devc->minor == 1))
       relocate_Jazz16 (devc, hw_config);
+
 
   if (!sb_dsp_reset (devc))
     {
@@ -642,16 +653,14 @@ void
 sb_dsp_init (struct address_info *hw_config)
 {
   sb_devc        *devc;
-  char            name[100];
-
-#ifndef NO_SB_IRQ_TEST
   int             n;
-#endif
+  char            name[100];
 
 /*
  * Check if we had detected a SB device earlier
  */
   DDB (printk ("sb_dsp_init(%x) entered\n", hw_config->io_base));
+  name[0] = 0;
 
   if (detected_devc == NULL)
     {
@@ -674,61 +683,64 @@ sb_dsp_init (struct address_info *hw_config)
   devc->dev = num_audiodevs;
   devc->caps = hw_config->driver_use_1;
 
-  if (snd_set_irq_handler (hw_config->irq,
-			   sbintr, "sound blaster", devc->osp) < 0)
-    {
-      printk ("SB: Can't allocate IRQ%d\n", hw_config->irq);
-      irq2devc[hw_config->irq] = NULL;
-      return;
-    }
+  if (!(devc->caps & SB_NO_AUDIO && devc->caps & SB_NO_MIDI) &&
+      hw_config->irq > 0)
+    {				/* IRQ setup */
+      if (snd_set_irq_handler (hw_config->irq,
+			       sbintr, "soundblaster", devc->osp) < 0)
+	{
+	  printk ("SB: Can't allocate IRQ%d\n", hw_config->irq);
+	  return;
+	}
 
-  irq2devc[hw_config->irq] = devc;
-  devc->irq_ok = 0;
+      irq2devc[hw_config->irq] = devc;
+      devc->irq_ok = 0;
 
-  if (devc->major == 4)
-    if (!sb16_set_irq_hw (devc, devc->irq))	/* Unsupported IRQ */
-      {
-	snd_release_irq (devc->irq);
-	return;
-      }
-
-  if ((devc->type == 0 || devc->type == MDL_ESS) &&
-      devc->major == 3 && devc->minor == 1)
-    {				/* Handle various chipsets which claim they are SB Pro compatible */
-      if ((devc->type != 0 && devc->type != MDL_ESS) ||
-	  !ess_init (devc, hw_config))
-	if ((devc->type != 0 && devc->type != MDL_JAZZ &&
-	     devc->type != MDL_SMW) || !init_Jazz16 (devc, hw_config))
+      if (devc->major == 4)
+	if (!sb16_set_irq_hw (devc, devc->irq))		/* Unsupported IRQ */
 	  {
-	    DDB (printk ("This is a genuine SB Pro\n"));
+	    snd_release_irq (devc->irq);
+	    irq2devc[hw_config->irq] = NULL;
+	    return;
 	  }
+
+      if ((devc->type == 0 || devc->type == MDL_ESS) &&
+	  devc->major == 3 && devc->minor == 1)
+	{			/* Handle various chipsets which claim they are SB Pro compatible */
+	  if ((devc->type != 0 && devc->type != MDL_ESS) ||
+	      !ess_init (devc, hw_config))
+	    if ((devc->type != 0 && devc->type != MDL_JAZZ &&
+		 devc->type != MDL_SMW) || !init_Jazz16 (devc, hw_config))
+	      {
+		DDB (printk ("This is a genuine SB Pro\n"));
+	      }
+	}
+
+      if (devc->major == 4 && devc->minor <= 11)	/* Won't work */
+	devc->irq_ok = 1;
+      else
+	{
+	  for (n = 0; n < 3 && devc->irq_ok == 0; n++)
+	    if (sb_dsp_command (devc, 0xf2))	/* Cause interrupt immediately */
+	      {
+		int             i;
+
+		for (i = 0; !devc->irq_ok && i < 10000; i++);
+	      }
+
+	  if (!devc->irq_ok)
+	    {
+	      printk ("sb: Interrupt test on IRQ%d failed - Propable IRQ conflict\n", devc->irq);
+	    }
+	  else
+	    {
+	      DDB (printk ("IRQ test OK (IRQ%d)\n", devc->irq));
+	    }
+
+	}			/* IRQ setup */
     }
 
-#ifndef NO_SB_IRQ_TEST
-  if (devc->major != 4 || devc->minor > 11) /* Not Sb16 v4.5 or v4.11 */
-  {
-    for (n = 0; n < 3 && devc->irq_ok == 0; n++)
-    if (sb_dsp_command (devc, 0xf2))	/* Cause interrupt immediately */
-      {
-	int             i;
-
-	for (i = 0; !devc->irq_ok && i < 10000; i++);
-      }
-
-  if (!devc->irq_ok)
-    {
-      printk ("sb: Interrupt test on IRQ%d failed - device disabled\n", devc->irq);
-      snd_release_irq (devc->irq);
-      return;
-    }
-  else
-    {
-      DDB (printk ("IRQ test OK (IRQ%d)\n", devc->irq));
-    }
-  }
-#endif
-
-  request_region (hw_config->io_base, 16, "sound blaster");
+  request_region (hw_config->io_base, 16, "soundblaster");
 
   switch (devc->major)
     {
@@ -788,14 +800,14 @@ sb_dsp_init (struct address_info *hw_config)
   hw_config->card_subtype = devc->model;
   last_devc = devc;		/* For SB MPU detection */
 
-  if (!(devc->caps & SB_NO_AUDIO))
+  if (!(devc->caps & SB_NO_AUDIO) && devc->dma8 >= 0)
     {
-      if (sound_alloc_dma (devc->dma8, "Sound Blaster8"))
+      if (sound_alloc_dma (devc->dma8, "SoundBlaster8"))
 	{
 	  printk ("SB: Can't allocate 8 bit DMA channel %d\n", devc->dma8);
 	}
       if (devc->dma16 >= 0 && devc->dma16 != devc->dma8)
-	if (sound_alloc_dma (devc->dma16, "Sound Blaster16"))
+	if (sound_alloc_dma (devc->dma16, "SoundBlaster16"))
 	  {
 	    printk ("SB: Can't allocate 16 bit DMA channel %d\n", devc->dma16);
 	  }
@@ -822,11 +834,15 @@ sb_dsp_unload (struct address_info *hw_config)
   if (irq < 0)
     irq *= -1;
 
-  devc = irq2devc[irq];
+  if (irq > 2 && irq < 16)
+    devc = irq2devc[irq];
+  else
+    devc = NULL;
 
   if (devc && devc->base == hw_config->io_base)
     {
       release_region (devc->base, 16);
+
       if (!(devc->caps & SB_NO_AUDIO))
 	{
 	  sound_free_dma (devc->dma8);
@@ -835,9 +851,15 @@ sb_dsp_unload (struct address_info *hw_config)
 	    sound_free_dma (devc->dma16);
 	}
 
-      snd_release_irq (devc->irq);
-      irq2devc[devc->irq] = NULL;
+      if (!(devc->caps & SB_NO_AUDIO && devc->caps & SB_NO_MIDI) &&
+	  devc->irq > 0)
+	{
+	  snd_release_irq (devc->irq);
+	  irq2devc[devc->irq] = NULL;
+	}
     }
+  else
+    release_region (hw_config->io_base, 16);
 }
 
 /*
@@ -851,10 +873,12 @@ sb_setmixer (sb_devc * devc, unsigned int port, unsigned int value)
 
   save_flags (flags);
   cli ();
-  outb ((unsigned char) (port & 0xff), MIXER_ADDR);
+  outb (((unsigned char) (port & 0xff)), MIXER_ADDR);
 
   tenmicrosec (devc->osp);
-  outb ((unsigned char) (value & 0xff), MIXER_DATA);
+  tenmicrosec (devc->osp);
+  outb (((unsigned char) (value & 0xff)), MIXER_DATA);
+  tenmicrosec (devc->osp);
   tenmicrosec (devc->osp);
   restore_flags (flags);
 }
@@ -867,8 +891,9 @@ sb_getmixer (sb_devc * devc, unsigned int port)
 
   save_flags (flags);
   cli ();
-  outb ((unsigned char) (port & 0xff), MIXER_ADDR);
+  outb (((unsigned char) (port & 0xff)), MIXER_ADDR);
 
+  tenmicrosec (devc->osp);
   tenmicrosec (devc->osp);
   val = inb (MIXER_DATA);
   tenmicrosec (devc->osp);
@@ -890,9 +915,9 @@ smw_putmem (sb_devc * devc, int base, int addr, unsigned char val)
   save_flags (flags);
   cli ();
 
-  outb (addr & 0xff, base + 1);	/* Low address bits */
-  outb (addr >> 8, base + 2);	/* High address bits */
-  outb (val, base);		/* Data */
+  outb ((addr & 0xff), base + 1);	/* Low address bits */
+  outb ((addr >> 8), base + 2);	/* High address bits */
+  outb ((val), base);		/* Data */
 
   restore_flags (flags);
 }
@@ -906,8 +931,8 @@ smw_getmem (sb_devc * devc, int base, int addr)
   save_flags (flags);
   cli ();
 
-  outb (addr & 0xff, base + 1);	/* Low address bits */
-  outb (addr >> 8, base + 2);	/* High address bits */
+  outb ((addr & 0xff), base + 1);	/* Low address bits */
+  outb ((addr >> 8), base + 2);	/* High address bits */
   val = inb (base);		/* Data */
 
   restore_flags (flags);
@@ -928,13 +953,13 @@ smw_midi_init (sb_devc * devc, struct address_info *hw_config)
    */
 
   control = inb (mpu_base + 7);
-  outb (control | 3, mpu_base + 7);	/* Set last two bits to 1 (?) */
-  outb ((control & 0xfe) | 2, mpu_base + 7);	/* xxxxxxx0 resets the mc */
+  outb ((control | 3), mpu_base + 7);	/* Set last two bits to 1 (?) */
+  outb (((control & 0xfe) | 2), mpu_base + 7);	/* xxxxxxx0 resets the mc */
 
   for (i = 0; i < 300; i++)	/* Wait at least 1ms */
     tenmicrosec (devc->osp);
 
-  outb (control & 0xfc, mpu_base + 7);	/* xxxxxx00 enables RAM */
+  outb ((control & 0xfc), mpu_base + 7);	/* xxxxxx00 enables RAM */
 
   /*
      *  Detect microcontroller by probing the 8k RAM area
@@ -1012,7 +1037,7 @@ smw_midi_init (sb_devc * devc, struct address_info *hw_config)
   /* control |= 0x20;      Uncomment this if you want to use IRQ7 */
 #endif
 
-  outb (control | 0x03, mpu_base + 7);	/* xxxxxx11 restarts */
+  outb ((control | 0x03), mpu_base + 7);	/* xxxxxx11 restarts */
   hw_config->name = "SoundMan Wave";
   return 1;
 }
@@ -1125,9 +1150,9 @@ init_Jazz16_midi (sb_devc * devc, struct address_info *hw_config)
  */
   save_flags (flags);
   cli ();
-  outb (0xAF, 0x201);
-  outb (0x50, 0x201);
-  outb (bits, 0x201);
+  outb ((0xAF), 0x201);
+  outb ((0x50), 0x201);
+  outb ((bits), 0x201);
   restore_flags (flags);
 
   hw_config->name = "Jazz16";
@@ -1167,7 +1192,7 @@ probe_sbmpu (struct address_info *hw_config)
   last_devc = 0;
 
   if (hw_config->io_base <= 0)
-     return 0;
+    return 0;
 
   if (check_region (hw_config->io_base, 4))
     {
@@ -1185,7 +1210,8 @@ probe_sbmpu (struct address_info *hw_config)
 	}
       hw_config->name = "Sound Blaster 16";
       hw_config->irq = -devc->irq;
-      sb16_set_mpu_port(devc, hw_config);
+      if (devc->minor > 12)	/* What is Vibra's version??? */
+	sb16_set_mpu_port (devc, hw_config);
       break;
 
     case MDL_ESS:

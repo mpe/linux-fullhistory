@@ -4,8 +4,6 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-#include <asm/segment.h>
-
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/errno.h>
@@ -13,6 +11,8 @@
 #include <linux/fcntl.h>
 #include <linux/termios.h>
 #include <linux/mm.h>
+
+#include <asm/uaccess.h>
 
 /*
  * Define this if you want SunOS compatibility wrt braindead

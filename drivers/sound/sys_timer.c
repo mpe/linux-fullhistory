@@ -7,7 +7,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -90,7 +90,7 @@ static int
 def_tmr_open (int dev, int mode)
 {
   if (opened)
-    return -(EBUSY);
+    return -EBUSY;
 
   tmr_reset ();
   curr_tempo = 60;
@@ -192,7 +192,7 @@ def_tmr_ioctl (int dev,
   switch (cmd)
     {
     case SNDCTL_TMR_SOURCE:
-      return snd_ioctl_return ((int *) arg, TMR_INTERNAL);
+      return ioctl_out (arg, TMR_INTERNAL);
       break;
 
     case SNDCTL_TMR_START:
@@ -213,7 +213,9 @@ def_tmr_ioctl (int dev,
 
     case SNDCTL_TMR_TIMEBASE:
       {
-	int             val = get_user ((int *) arg);
+	int             val;
+
+	get_user (val, (int *) arg);
 
 	if (val)
 	  {
@@ -224,13 +226,15 @@ def_tmr_ioctl (int dev,
 	    curr_timebase = val;
 	  }
 
-	return snd_ioctl_return ((int *) arg, curr_timebase);
+	return ioctl_out (arg, curr_timebase);
       }
       break;
 
     case SNDCTL_TMR_TEMPO:
       {
-	int             val = get_user ((int *) arg);
+	int             val;
+
+	get_user (val, (int *) arg);
 
 	if (val)
 	  {
@@ -244,15 +248,19 @@ def_tmr_ioctl (int dev,
 	    curr_tempo = val;
 	  }
 
-	return snd_ioctl_return ((int *) arg, curr_tempo);
+	return ioctl_out (arg, curr_tempo);
       }
       break;
 
     case SNDCTL_SEQ_CTRLRATE:
-      if (get_user ((int *) arg) != 0)	/* Can't change */
-	return -(EINVAL);
+      if (ioctl_in (arg) != 0)	/* Can't change */
+	return -EINVAL;
 
-      return snd_ioctl_return ((int *) arg, ((curr_tempo * curr_timebase) + 30) / 60);
+      return ioctl_out (arg, ((curr_tempo * curr_timebase) + 30) / 60);
+      break;
+
+    case SNDCTL_SEQ_GETTIME:
+      return ioctl_out (arg, curr_ticks);
       break;
 
     case SNDCTL_TMR_METRONOME:
@@ -262,7 +270,7 @@ def_tmr_ioctl (int dev,
     default:;
     }
 
-  return -(EINVAL);
+  return -EINVAL;
 }
 
 static void

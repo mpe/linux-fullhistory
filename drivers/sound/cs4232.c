@@ -11,7 +11,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -30,7 +30,7 @@ static int     *osp;
 static void 
 CS_OUT (unsigned char a)
 {
-  outb (a, KEY_PORT);
+  outb ((a), KEY_PORT);
 }
 #define CS_OUT2(a, b)		{CS_OUT(a);CS_OUT(b);}
 #define CS_OUT3(a, b, c)	{CS_OUT(a);CS_OUT(b);CS_OUT(c);}
@@ -71,11 +71,10 @@ probe_cs4232 (struct address_info *hw_config)
   int             base = hw_config->io_base, irq = hw_config->irq;
   int             dma1 = hw_config->dma, dma2 = hw_config->dma2;
 
-  static wait_handle *cs_sleeper = NULL;
+  static struct wait_queue *cs_sleeper = NULL;
   static volatile struct snd_wait cs_sleep_flag =
   {0};
 
-  osp = hw_config->osp;
 
 /*
  * Verify that the I/O port range is free.
@@ -105,7 +104,7 @@ probe_cs4232 (struct address_info *hw_config)
 
   for (n = 0; n < 4; n++)
     {
-      cs_sleep_flag.flags = WK_NONE;
+      cs_sleep_flag.opts = WK_NONE;
 /*
  * Wake up the card by sending a 32 byte Crystal key to the key port.
  */
@@ -117,17 +116,17 @@ probe_cs4232 (struct address_info *hw_config)
 	unsigned long   tlimit;
 
 	if (HZ / 10)
-	  current_set_timeout (tlimit = jiffies + (HZ / 10));
+	  current->timeout = tlimit = jiffies + (HZ / 10);
 	else
 	  tlimit = (unsigned long) -1;
-	cs_sleep_flag.flags = WK_SLEEP;
-	module_interruptible_sleep_on (&cs_sleeper);
-	if (!(cs_sleep_flag.flags & WK_WAKEUP))
+	cs_sleep_flag.opts = WK_SLEEP;
+	interruptible_sleep_on (&cs_sleeper);
+	if (!(cs_sleep_flag.opts & WK_WAKEUP))
 	  {
 	    if (jiffies >= tlimit)
-	      cs_sleep_flag.flags |= WK_TIMEOUT;
+	      cs_sleep_flag.opts |= WK_TIMEOUT;
 	  }
-	cs_sleep_flag.flags &= ~WK_SLEEP;
+	cs_sleep_flag.opts &= ~WK_SLEEP;
       };			/* Delay */
 
 /*
@@ -165,17 +164,17 @@ probe_cs4232 (struct address_info *hw_config)
 	unsigned long   tlimit;
 
 	if (HZ / 10)
-	  current_set_timeout (tlimit = jiffies + (HZ / 10));
+	  current->timeout = tlimit = jiffies + (HZ / 10);
 	else
 	  tlimit = (unsigned long) -1;
-	cs_sleep_flag.flags = WK_SLEEP;
-	module_interruptible_sleep_on (&cs_sleeper);
-	if (!(cs_sleep_flag.flags & WK_WAKEUP))
+	cs_sleep_flag.opts = WK_SLEEP;
+	interruptible_sleep_on (&cs_sleeper);
+	if (!(cs_sleep_flag.opts & WK_WAKEUP))
 	  {
 	    if (jiffies >= tlimit)
-	      cs_sleep_flag.flags |= WK_TIMEOUT;
+	      cs_sleep_flag.opts |= WK_TIMEOUT;
 	  }
-	cs_sleep_flag.flags &= ~WK_SLEEP;
+	cs_sleep_flag.opts &= ~WK_SLEEP;
       };			/* Delay */
 
 /*
@@ -202,17 +201,17 @@ probe_cs4232 (struct address_info *hw_config)
 	unsigned long   tlimit;
 
 	if (HZ / 5)
-	  current_set_timeout (tlimit = jiffies + (HZ / 5));
+	  current->timeout = tlimit = jiffies + (HZ / 5);
 	else
 	  tlimit = (unsigned long) -1;
-	cs_sleep_flag.flags = WK_SLEEP;
-	module_interruptible_sleep_on (&cs_sleeper);
-	if (!(cs_sleep_flag.flags & WK_WAKEUP))
+	cs_sleep_flag.opts = WK_SLEEP;
+	interruptible_sleep_on (&cs_sleeper);
+	if (!(cs_sleep_flag.opts & WK_WAKEUP))
 	  {
 	    if (jiffies >= tlimit)
-	      cs_sleep_flag.flags |= WK_TIMEOUT;
+	      cs_sleep_flag.opts |= WK_TIMEOUT;
 	  }
-	cs_sleep_flag.flags &= ~WK_SLEEP;
+	cs_sleep_flag.opts &= ~WK_SLEEP;
       };			/* Delay */
 
 /*
@@ -227,17 +226,17 @@ probe_cs4232 (struct address_info *hw_config)
 	unsigned long   tlimit;
 
 	if (HZ)
-	  current_set_timeout (tlimit = jiffies + (HZ));
+	  current->timeout = tlimit = jiffies + (HZ);
 	else
 	  tlimit = (unsigned long) -1;
-	cs_sleep_flag.flags = WK_SLEEP;
-	module_interruptible_sleep_on (&cs_sleeper);
-	if (!(cs_sleep_flag.flags & WK_WAKEUP))
+	cs_sleep_flag.opts = WK_SLEEP;
+	interruptible_sleep_on (&cs_sleeper);
+	if (!(cs_sleep_flag.opts & WK_WAKEUP))
 	  {
 	    if (jiffies >= tlimit)
-	      cs_sleep_flag.flags |= WK_TIMEOUT;
+	      cs_sleep_flag.opts |= WK_TIMEOUT;
 	  }
-	cs_sleep_flag.flags &= ~WK_SLEEP;
+	cs_sleep_flag.opts &= ~WK_SLEEP;
       };			/* Longer delay */
     }
 
@@ -249,6 +248,7 @@ attach_cs4232 (struct address_info *hw_config)
 {
   int             base = hw_config->io_base, irq = hw_config->irq;
   int             dma1 = hw_config->dma, dma2 = hw_config->dma2;
+  int             old_num_mixers = num_mixers;
 
   if (dma2 == -1)
     dma2 = dma1;
@@ -259,6 +259,13 @@ attach_cs4232 (struct address_info *hw_config)
 	       dma2,		/* Capture DMA */
 	       0,
 	       hw_config->osp);
+
+  if (num_mixers > old_num_mixers)
+    {				/* Assume the mixer map is as suggested in the CS4232 databook */
+      AD1848_REROUTE (SOUND_MIXER_LINE1, SOUND_MIXER_LINE);
+      AD1848_REROUTE (SOUND_MIXER_LINE2, SOUND_MIXER_CD);
+      AD1848_REROUTE (SOUND_MIXER_LINE3, SOUND_MIXER_SYNTH);	/* FM synth */
+    }
 
 #if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
   if (mpu_base != 0 && mpu_irq != 0)
@@ -275,7 +282,6 @@ attach_cs4232 (struct address_info *hw_config)
       hw_config2.driver_use_1 = 0;
       hw_config2.driver_use_2 = 0;
       hw_config2.card_subtype = 0;
-      hw_config2.osp = hw_config->osp;
 
       if (probe_mpu401 (&hw_config2))
 	{
@@ -320,7 +326,6 @@ unload_cs4232 (struct address_info *hw_config)
       hw_config2.driver_use_1 = 0;
       hw_config2.driver_use_2 = 0;
       hw_config2.card_subtype = 0;
-      hw_config2.osp = hw_config->osp;
 
       unload_mpu401 (&hw_config2);
     }

@@ -7,7 +7,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -31,12 +31,21 @@
 					 SOUND_MASK_IGAIN | \
 					 SOUND_MASK_PCM | SOUND_MASK_IMIX)
 
-#define MODE2_MIXER_DEVICES		(SOUND_MASK_LINE1 | SOUND_MASK_LINE2 | SOUND_MASK_MIC | \
+#define MODE2_MIXER_DEVICES		(SOUND_MASK_LINE1 | SOUND_MASK_LINE2 | \
+					 SOUND_MASK_MIC | \
 					 SOUND_MASK_LINE3 | SOUND_MASK_SPEAKER | \
 					 SOUND_MASK_IGAIN | \
 					 SOUND_MASK_PCM | SOUND_MASK_IMIX)
 
 #define MODE3_MIXER_DEVICES		(MODE2_MIXER_DEVICES | SOUND_MASK_VOLUME)
+
+/* OPTi 82C930 has no IMIX level control, but it can still be selected as an
+ * input
+ */
+#define C930_MIXER_DEVICES	(SOUND_MASK_LINE1 | SOUND_MASK_LINE2 | \
+				 SOUND_MASK_MIC | SOUND_MASK_VOLUME | \
+				 SOUND_MASK_LINE3 | \
+				 SOUND_MASK_IGAIN | SOUND_MASK_PCM)
 
 struct mixer_def {
 	unsigned int regno: 7;
@@ -55,6 +64,7 @@ static char mix_cvt[101] = {
 };
 
 typedef struct mixer_def mixer_ent;
+typedef mixer_ent mixer_ents[2];
 
 /*
  * Most of the mixer entries work in backwards. Setting the polarity field
@@ -68,7 +78,7 @@ typedef struct mixer_def mixer_ent;
 #define MIX_ENT(name, reg_l, pola_l, pos_l, len_l, reg_r, pola_r, pos_r, len_r)	\
 	{{reg_l, pola_l, pos_l, len_l}, {reg_r, pola_r, pos_r, len_r}}
 
-mixer_ent mix_devices[32][2] = {
+mixer_ents ad1848_mix_devices[32] = {
 MIX_ENT(SOUND_MIXER_VOLUME,	27, 1, 0, 4,	29, 1, 0, 4),
 MIX_ENT(SOUND_MIXER_BASS,	 0, 0, 0, 0,	 0, 0, 0, 0),
 MIX_ENT(SOUND_MIXER_TREBLE,	 0, 0, 0, 0,	 0, 0, 0, 0),
@@ -88,14 +98,59 @@ MIX_ENT(SOUND_MIXER_LINE2,	 4, 1, 0, 5,	 5, 1, 0, 5),
 MIX_ENT(SOUND_MIXER_LINE3,	18, 1, 0, 5,	19, 1, 0, 5)
 };
 
-static unsigned short default_mixer_levels[SOUND_MIXER_NRDEVICES] =
+mixer_ents iwave_mix_devices[32] = {
+MIX_ENT(SOUND_MIXER_VOLUME,	25, 1, 0, 5,	27, 1, 0, 5),
+MIX_ENT(SOUND_MIXER_BASS,	 0, 0, 0, 0,	 0, 0, 0, 0),
+MIX_ENT(SOUND_MIXER_TREBLE,	 0, 0, 0, 0,	 0, 0, 0, 0),
+MIX_ENT(SOUND_MIXER_SYNTH,	 4, 1, 0, 5,	 5, 1, 0, 5),
+MIX_ENT(SOUND_MIXER_PCM,	 6, 1, 0, 6,	 7, 1, 0, 6),
+MIX_ENT(SOUND_MIXER_SPEAKER,	26, 1, 0, 4,	 0, 0, 0, 0),
+MIX_ENT(SOUND_MIXER_LINE,	18, 1, 0, 5,	19, 1, 0, 5),
+MIX_ENT(SOUND_MIXER_MIC,	 0, 0, 5, 1,	 1, 0, 5, 1),
+MIX_ENT(SOUND_MIXER_CD,	 	 2, 1, 0, 5,	 3, 1, 0, 5),
+MIX_ENT(SOUND_MIXER_IMIX,	13, 1, 2, 6,	 0, 0, 0, 0),
+MIX_ENT(SOUND_MIXER_ALTPCM,	 0, 0, 0, 0,	 0, 0, 0, 0),
+MIX_ENT(SOUND_MIXER_RECLEV,	 0, 0, 0, 0,	 0, 0, 0, 0),
+MIX_ENT(SOUND_MIXER_IGAIN,	 0, 0, 0, 4,	 1, 0, 0, 4),
+MIX_ENT(SOUND_MIXER_OGAIN,	 0, 0, 0, 0,	 0, 0, 0, 0),
+MIX_ENT(SOUND_MIXER_LINE1, 	 2, 1, 0, 5,	 3, 1, 0, 5),
+MIX_ENT(SOUND_MIXER_LINE2,	 4, 1, 0, 5,	 5, 1, 0, 5),
+MIX_ENT(SOUND_MIXER_LINE3,	18, 1, 0, 5,	19, 1, 0, 5)
+};
+
+/* OPTi 82C930 has somewhat different port addresses.
+ * Note: VOLUME == SPEAKER, SYNTH == LINE2, LINE == LINE3, CD == LINE1
+ * VOLUME, SYNTH, LINE, CD are not enabled above.
+ * MIC is level of mic monitoring direct to output. Same for CD, LINE, etc.
+ */
+mixer_ents c930_mix_devices[32] = {
+MIX_ENT(SOUND_MIXER_VOLUME,	22, 1, 0, 5,	23, 1, 0, 5),
+MIX_ENT(SOUND_MIXER_BASS,	 0, 0, 0, 0,	 0, 0, 0, 0),
+MIX_ENT(SOUND_MIXER_TREBLE,	 0, 0, 0, 0,	 0, 0, 0, 0),
+MIX_ENT(SOUND_MIXER_SYNTH,	 4, 1, 0, 5,	 5, 1, 0, 5),
+MIX_ENT(SOUND_MIXER_PCM,	 6, 1, 0, 6,	 7, 1, 0, 6),
+MIX_ENT(SOUND_MIXER_SPEAKER,	22, 1, 0, 5,	 23, 1, 0, 5),
+MIX_ENT(SOUND_MIXER_LINE,	18, 1, 1, 4,	19, 1, 1, 4),
+MIX_ENT(SOUND_MIXER_MIC,	 20, 1, 0, 4,	 21, 1, 0, 4),
+MIX_ENT(SOUND_MIXER_CD,	 	 2, 1, 1, 4,	 3, 1, 1, 4),
+MIX_ENT(SOUND_MIXER_IMIX,	0, 0, 0, 0,	 0, 0, 0, 0),
+MIX_ENT(SOUND_MIXER_ALTPCM,	 0, 0, 0, 0,	 0, 0, 0, 0),
+MIX_ENT(SOUND_MIXER_RECLEV,	 0, 0, 0, 0,	 0, 0, 0, 0),
+MIX_ENT(SOUND_MIXER_IGAIN,	 0, 0, 0, 4,	 1, 0, 0, 4),
+MIX_ENT(SOUND_MIXER_OGAIN,	 0, 0, 0, 0,	 0, 0, 0, 0),
+MIX_ENT(SOUND_MIXER_LINE1, 	 2, 1, 1, 4,	 3, 1, 1, 4),
+MIX_ENT(SOUND_MIXER_LINE2,	 4, 1, 1, 4,	 5, 1, 1, 4),
+MIX_ENT(SOUND_MIXER_LINE3,	18, 1, 1, 4,	19, 1, 1, 4)
+};
+
+static int default_mixer_levels[32] =
 {
   0x3232,			/* Master Volume */
   0x3232,			/* Bass */
   0x3232,			/* Treble */
   0x4b4b,			/* FM */
   0x3232,			/* PCM */
-  0x4b4b,			/* PC Speaker */
+  0x1515,			/* PC Speaker */
   0x2020,			/* Ext Line */
   0x1010,			/* Mic */
   0x4b4b,			/* CD */

@@ -21,8 +21,6 @@ endif
 ifeq (.defines,$(wildcard .defines))
 include .defines
 include .objects
-else
-OBJS   = `cat .object_files`
 endif
 
 ifndef TOPDIR
@@ -72,7 +70,7 @@ sound.a: $(OBJS)
 
 clean:
 	rm -f core core.* *.o *.a tmp_make *~ x y z *%
-	rm -f configure sound_stub.c objects/*.o 
+	rm -f configure
 	cd lowlevel;make clean
 
 indent:
@@ -80,7 +78,7 @@ indent:
 
 local.h: 
 	$(MAKE) clean
-	$(MAKE) setup-$(TARGET_OS)
+	$(MAKE) setup
 	$(MAKE) oldconfig
 	$(MAKE) dep
 	@echo
@@ -93,7 +91,7 @@ local.h:
 	@echo
 
 config: configure
-	@$(MAKE) setup-$(TARGET_OS)
+	@$(MAKE) setup
 	@./configure > local.h
 	@echo \#define SOUND_CONFIG_DATE \"`date`\" >> local.h
 	@echo \#define SOUND_CONFIG_BY \"`whoami`\" >> local.h
@@ -101,7 +99,7 @@ config: configure
 #	@echo \#define SOUND_CONFIG_DOMAIN \"`hostname -d`\" >> local.h 2>/dev/null
 	@echo \#define SOUND_UNAME_A \"`uname -a`\" >> local.h
 
-oldconfig: setup-$(TARGET_OS) configure
+oldconfig: setup configure
 	@./configure -o > local.h
 	@echo \#define SOUND_CONFIG_DATE \"`date`\" >> local.h
 	@echo \#define SOUND_CONFIG_BY \"`whoami`\" >> local.h
@@ -109,7 +107,7 @@ oldconfig: setup-$(TARGET_OS) configure
 #	@echo \#define SOUND_CONFIG_DOMAIN \"`hostname -d`\" >> local.h 2>/dev/null
 	@echo \#define SOUND_UNAME_A \"`uname -a`\" >> local.h
 
-kernelconfig: setup-$(TARGET_OS)
+kernelconfig: setup
 	rm -f configure
 	$(HOSTCC) -o configure configure.c
 	./configure fixedlocal > local.h
@@ -120,7 +118,7 @@ kernelconfig: setup-$(TARGET_OS)
 #	@echo \#define SOUND_CONFIG_DOMAIN \"`hostname -d`\" >> local.h 2>/dev/null
 	@echo \#define SOUND_UNAME_A \"`uname -a`\" >> local.h
 
-mkscript: setup-$(TARGET_OS)
+mkscript: setup
 	rm -f configure
 	$(HOSTCC) -o configure configure.c
 	./configure script > Config.in
@@ -136,9 +134,9 @@ configure: configure.c
 	@cat .blurb
 
 dep:
-	$(CPP) -M *.c > .depend
+	$(CPP) -M $(CFLAGS) -I. *.c > .depend
 
-setup-linux:
+setup:
 	@echo Compiling Sound Driver v $(VERSION) for Linux
 
 sound.o: local.h $(FIXEDOBJS) sound.a
@@ -151,6 +149,9 @@ modules: local.h sound.o
 
 lowlevel/lowlevel.o: dummy
 		cd lowlevel;make
+
+contrib:
+		cd lowlevel;make clean;make module CFLAGS="$(CFLAGS)"
 
 ifdef USE_DEPEND
 #

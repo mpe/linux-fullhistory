@@ -20,7 +20,7 @@
 #include <linux/mm.h>
 #include <linux/random.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
 

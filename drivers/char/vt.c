@@ -22,7 +22,7 @@
 #include <linux/fs.h>
 
 #include <asm/io.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #include "kbd_kern.h"
 #include "vt_kern.h"

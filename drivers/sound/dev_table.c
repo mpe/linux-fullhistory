@@ -6,7 +6,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -44,7 +44,7 @@ start_services (void)
   if (num_audiodevs)		/* Audio devices present */
     {
       DMAbuf_init ();
-      audio_init ();
+      audio_init_devices ();
     }
 #endif
 
@@ -69,6 +69,14 @@ start_cards (void)
   sound_started = 1;
   if (trace_init)
     printk ("Sound initialization started\n");
+
+#ifdef CONFIG_LOWLEVEL_SOUND
+  {
+    extern void     sound_preinit_lowlevel_drivers (void);
+
+    sound_preinit_lowlevel_drivers ();
+  }
+#endif
 
 /*
  * Check the number of cards actually defined in the table
@@ -105,6 +113,14 @@ start_cards (void)
 						 */
       }
 
+#ifdef CONFIG_LOWLEVEL_SOUND
+  {
+    extern void     sound_init_lowlevel_drivers (void);
+
+    sound_init_lowlevel_drivers ();
+  }
+#endif
+
   if (trace_init)
     printk ("Sound initialization complete\n");
 }
@@ -112,7 +128,7 @@ start_cards (void)
 void
 sndtable_init (void)
 {
-  return start_cards ();
+  start_cards ();
 }
 
 void
@@ -147,7 +163,7 @@ sound_unload_driver (int type)
 
   unsigned long   flags;
 
-  DDB (printk ("unload driver %d: ", type));
+  DEB (printk ("unload driver %d: ", type));
 
   for (i = 0; i < n && snd_installed_cards[i].card_type; i++)
     if (snd_installed_cards[i].card_type == type)
@@ -156,7 +172,7 @@ sound_unload_driver (int type)
 	  {
 	    if ((drv = snd_find_driver (type)) != -1)
 	      {
-		DDB (printk (" card %d", i));
+		DEB (printk (" card %d", i));
 		if (sound_drivers[drv].unload)
 		  {
 		    sound_drivers[drv].unload (&snd_installed_cards[i].config);
@@ -165,7 +181,7 @@ sound_unload_driver (int type)
 	      }
 	  }
       }
-  DDB (printk ("\n"));
+  DEB (printk ("\n"));
 
   save_flags (flags);
   cli ();
@@ -179,12 +195,10 @@ sndtable_probe (int unit, struct address_info *hw_config)
 {
   int             sel = -1;
 
-  DDB (printk ("sndtable_probe(%d)\n", unit));
+  DEB (printk ("sndtable_probe(%d)\n", unit));
 
   if (!unit)
-    return TRUE;
-
-  sound_started = 1;
+    return 1;
 
 
   if (sel == -1 && num_sound_cards < max_sound_cards)
@@ -211,15 +225,14 @@ sndtable_probe (int unit, struct address_info *hw_config)
       snd_installed_cards[sel].config.driver_use_1 = hw_config->driver_use_1;
       snd_installed_cards[sel].config.driver_use_2 = hw_config->driver_use_2;
       snd_installed_cards[sel].config.card_subtype = hw_config->card_subtype;
-      snd_installed_cards[sel].config.osp = hw_config->osp;
 
       if ((drv = snd_find_driver (snd_installed_cards[sel].card_type)) == -1)
 	{
 	  snd_installed_cards[sel].enabled = 0;
-	  DDB (printk ("Failed to find driver\n"));
-	  return FALSE;
+	  DEB (printk ("Failed to find driver\n"));
+	  return 0;
 	}
-      DDB (printk ("Driver name '%s'\n", sound_drivers[drv].name));
+      DEB (printk ("Driver name '%s'\n", sound_drivers[drv].name));
 
       hw_config->card_subtype =
 	snd_installed_cards[sel].config.card_subtype =
@@ -227,99 +240,32 @@ sndtable_probe (int unit, struct address_info *hw_config)
 
       if (sound_drivers[drv].probe (hw_config))
 	{
-	  DDB (printk ("Hardware probed OK\n"));
-	  return TRUE;
+	  DEB (printk ("Hardware probed OK\n"));
+	  return 1;
 	}
 
-      DDB (printk ("Failed to find hardware\n"));
+      DEB (printk ("Failed to find hardware\n"));
       snd_installed_cards[sel].enabled = 0;	/*
 						 * Mark as not detected
 						 */
-      return FALSE;
+      return 0;
     }
 
-  return FALSE;
+  return 0;
 }
 
-int
-sndtable_start_card (int unit, struct address_info *hw_config)
-{
-  int             sel = -1;
-
-  DDB (printk ("sndtable_probe(%d)\n", unit));
-
-  if (!unit)
-    return TRUE;
-
-  sound_started = 1;
-
-  if (sel == -1 && num_sound_cards < max_sound_cards)
-    {
-      int             i;
-
-      i = sel = (num_sound_cards++);
-
-      snd_installed_cards[sel].card_type = unit;
-      snd_installed_cards[sel].enabled = 1;
-    }
-
-  if (sel != -1)
-    {
-      int             drv;
-
-      snd_installed_cards[sel].for_driver_use = NULL;
-      snd_installed_cards[sel].config.io_base = hw_config->io_base;
-      snd_installed_cards[sel].config.irq = hw_config->irq;
-      snd_installed_cards[sel].config.dma = hw_config->dma;
-      snd_installed_cards[sel].config.dma2 = hw_config->dma2;
-      snd_installed_cards[sel].config.name = hw_config->name;
-      snd_installed_cards[sel].config.always_detect = hw_config->always_detect;
-      snd_installed_cards[sel].config.driver_use_1 = hw_config->driver_use_1;
-      snd_installed_cards[sel].config.driver_use_2 = hw_config->driver_use_2;
-      snd_installed_cards[sel].config.card_subtype = hw_config->card_subtype;
-      snd_installed_cards[sel].config.osp = hw_config->osp;
-
-      if ((drv = snd_find_driver (snd_installed_cards[sel].card_type)) == -1)
-	{
-	  snd_installed_cards[sel].enabled = 0;
-	  DDB (printk ("Failed to find driver\n"));
-	  return FALSE;
-	}
-      DDB (printk ("Driver name '%s'\n", sound_drivers[drv].name));
-
-      hw_config->card_subtype =
-	snd_installed_cards[sel].config.card_subtype =
-	sound_drivers[drv].card_subtype;
-
-      if (sound_drivers[drv].probe (hw_config))
-	{
-	  DDB (printk ("Hardware probed OK\n"));
-	  sound_drivers[drv].attach (hw_config);
-	  start_services ();
-	  return TRUE;
-	}
-
-      DDB (printk ("Failed to find hardware\n"));
-      snd_installed_cards[sel].enabled = 0;	/*
-						 * Mark as not detected
-						 */
-      return FALSE;
-    }
-
-  return FALSE;
-}
 
 int
 sndtable_init_card (int unit, struct address_info *hw_config)
 {
   int             i, n = num_sound_cards;
 
-  DDB (printk ("sndtable_init_card(%d) entered\n", unit));
+  DEB (printk ("sndtable_init_card(%d) entered\n", unit));
 
   if (!unit)
     {
       sndtable_init ();
-      return TRUE;
+      return 1;
     }
 
   for (i = 0; i < n && snd_installed_cards[i].card_type; i++)
@@ -336,7 +282,6 @@ sndtable_init_card (int unit, struct address_info *hw_config)
 	snd_installed_cards[i].config.driver_use_1 = hw_config->driver_use_1;
 	snd_installed_cards[i].config.driver_use_2 = hw_config->driver_use_2;
 	snd_installed_cards[i].config.card_subtype = hw_config->card_subtype;
-	snd_installed_cards[i].config.osp = hw_config->osp;
 
 	if ((drv = snd_find_driver (snd_installed_cards[i].card_type)) == -1)
 	  snd_installed_cards[i].enabled = 0;	/*
@@ -345,18 +290,18 @@ sndtable_init_card (int unit, struct address_info *hw_config)
 	else
 	  {
 
-	    DDB (printk ("Located card - calling attach routine\n"));
+	    DEB (printk ("Located card - calling attach routine\n"));
 	    sound_drivers[drv].attach (hw_config);
 
-	    DDB (printk ("attach routine finished\n"));
+	    DEB (printk ("attach routine finished\n"));
 	  }
 	start_services ();
-	return TRUE;
+	return 1;
       }
 
-  DDB (printk ("sndtable_init_card: No card defined with type=%d, num cards: %d\n",
+  DEB (printk ("sndtable_init_card: No card defined with type=%d, num cards: %d\n",
 	       unit, num_sound_cards));
-  return FALSE;
+  return 0;
 }
 
 int
@@ -449,7 +394,6 @@ sound_setup (char *str, int *ints)
 	  snd_installed_cards[ptr].config.driver_use_1 = 0;
 	  snd_installed_cards[ptr].config.driver_use_2 = 0;
 	  snd_installed_cards[ptr].config.card_subtype = 0;
-	  snd_installed_cards[ptr].config.osp = NULL;
 	}
     }
 }
@@ -486,6 +430,7 @@ sound_install_audiodrv (int vers,
 			int dma1,
 			int dma2)
 {
+#ifdef CONFIG_AUDIO
   struct audio_driver *d;
   struct audio_operations *op;
   int             l, num;
@@ -493,14 +438,14 @@ sound_install_audiodrv (int vers,
   if (num_audiodevs >= MAX_AUDIO_DEV)
     {
       printk ("Sound: Too many audio drivers\n");
-      return -(EIO);
+      return -EIO;
     }
 
   if (vers != AUDIO_DRIVER_VERSION ||
       driver_size > sizeof (struct audio_driver))
     {
       printk ("Sound: Incompatible audio driver for %s\n", name);
-      return -(EIO);
+      return -EIO;
     }
 
 
@@ -516,7 +461,7 @@ sound_install_audiodrv (int vers,
   if (d == NULL || op == NULL)
     {
       printk ("Sound: Can't allocate driver for (%s)\n", name);
-      return -(ENOSPC);
+      return -ENOSPC;
     }
 
   memset ((char *) op, 0, sizeof (struct audio_operations));
@@ -546,11 +491,12 @@ sound_install_audiodrv (int vers,
   audio_devs[num_audiodevs] = op;
   num = num_audiodevs++;
 
-#ifdef CONFIG_AUDIO
   DMAbuf_init ();
-  audio_init ();
-#endif
+  audio_init_devices ();
   return num;
+#else
+  return -EINVAL;
+#endif
 }
 
 int 
@@ -566,14 +512,14 @@ sound_install_mixer (int vers,
   if (num_mixers >= MAX_MIXER_DEV)
     {
       printk ("Sound: Too many mixer drivers\n");
-      return -(EIO);
+      return -EIO;
     }
 
   if (vers != MIXER_DRIVER_VERSION ||
       driver_size > sizeof (struct mixer_operations))
     {
       printk ("Sound: Incompatible mixer driver for %s\n", name);
-      return -(EIO);
+      return -EIO;
     }
 
 
@@ -584,7 +530,7 @@ sound_install_mixer (int vers,
   if (op == NULL)
     {
       printk ("Sound: Can't allocate mixer driver for (%s)\n", name);
-      return -(ENOSPC);
+      return -ENOSPC;
     }
 
   memset ((char *) op, 0, sizeof (struct mixer_operations));

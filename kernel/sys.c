@@ -25,7 +25,7 @@
 #include <linux/apm_bios.h>
 #endif
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/io.h>
 
 /*
@@ -776,18 +776,7 @@ asmlinkage int sys_newuname(struct new_utsname * name)
 asmlinkage int sys_uname(struct old_utsname * name)
 {
 	int error = -EFAULT;;
-	if (!name &&
-	    !copy_to_user(&name->sysname,&system_utsname.sysname,
-		sizeof (system_utsname.sysname)) &&
-	    !copy_to_user(&name->nodename,&system_utsname.nodename,
-		sizeof (system_utsname.nodename)) &&
-	    !copy_to_user(&name->release,&system_utsname.release,
-		sizeof (system_utsname.release)) &&
-	    !copy_to_user(&name->version,&system_utsname.version,
-		sizeof (system_utsname.version)) &&
-	    !copy_to_user(&name->machine,&system_utsname.machine,
-		sizeof (system_utsname.machine))
-	)
+	if (name && !copy_to_user(name, &system_utsname, sizeof (*name)))
 		error = 0;
 	return error;
 }

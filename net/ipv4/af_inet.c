@@ -75,7 +75,7 @@
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 #include <linux/inet.h>

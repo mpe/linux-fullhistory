@@ -16,7 +16,7 @@
 #include <linux/umsdos_fs.h>
 #include <linux/malloc.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #define PRINTK(x)
 #define Printk(x) printk x

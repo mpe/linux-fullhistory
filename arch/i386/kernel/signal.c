@@ -15,7 +15,7 @@
 #include <linux/ptrace.h>
 #include <linux/unistd.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #define _S(nr) (1<<((nr)-1))
 
@@ -181,7 +181,8 @@ static void setup_frame(struct sigaction * sa,
 /* set up the "normal" stack seen by the signal handler (iBCS2) */
 #define __CODE ((unsigned long)(frame+24))
 #define CODE(x) ((unsigned long *) ((x)+__CODE))
-	put_user(__CODE,frame);
+	if (put_user(__CODE,frame))
+		do_exit(SIGSEGV);
 	if (current->exec_domain && current->exec_domain->signal_invmap)
 		put_user(current->exec_domain->signal_invmap[signr], frame+1);
 	else
@@ -189,7 +190,7 @@ static void setup_frame(struct sigaction * sa,
 	{
 		unsigned int tmp = 0;
 #define PUT_SEG(seg, mem) \
-__asm__("mov %%" #seg",%w0":"=r" (tmp):"0" (tmp)); *(mem) = tmp;
+__asm__("mov %%" #seg",%w0":"=r" (tmp):"0" (tmp)); put_user(tmp,mem);
 		PUT_SEG(gs, frame+2);
 		PUT_SEG(fs, frame+3);
 	}

@@ -161,7 +161,7 @@ struct old_floppy_raw_cmd {
 #include <asm/irq.h>
 #include <asm/system.h>
 #include <asm/io.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 static int use_virtual_dma=0; /* virtual DMA for Intel */
 static unsigned short virtual_dma_port=0x3f0;

@@ -13,7 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <linux/string.h>
 #include <linux/stat.h>
 #include <linux/umsdos_fs.h>

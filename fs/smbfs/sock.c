@@ -11,7 +11,7 @@
 #include <linux/socket.h>
 #include <linux/fcntl.h>
 #include <linux/stat.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <linux/in.h>
 #include <linux/net.h>
 #include <linux/mm.h>

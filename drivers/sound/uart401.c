@@ -6,7 +6,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -23,7 +23,7 @@ typedef struct uart401_devc
     int             irq;
     int            *osp;
     void            (*midi_input_intr) (int dev, unsigned char data);
-    int             opened;
+    int             opened, disabled;
     volatile unsigned char input_byte;
     int             my_dev;
     int             share_irq;
@@ -48,7 +48,7 @@ uart401_status (uart401_devc * devc)
 static void 
 uart401_cmd (uart401_devc * devc, unsigned char cmd)
 {
-  outb (cmd, COMDPORT);
+  outb ((cmd), COMDPORT);
 }
 static int 
 uart401_read (uart401_devc * devc)
@@ -58,7 +58,7 @@ uart401_read (uart401_devc * devc)
 static void 
 uart401_write (uart401_devc * devc, unsigned char byte)
 {
-  outb (byte, DATAPORT);
+  outb ((byte), DATAPORT);
 }
 
 #define	OUTPUT_READY	0x40
@@ -68,6 +68,7 @@ uart401_write (uart401_devc * devc, unsigned char byte)
 #define	UART_MODE_ON	0x3F
 
 static int      reset_uart401 (uart401_devc * devc);
+static void     enter_uart_mode (uart401_devc * devc);
 
 static void
 uart401_input_loop (uart401_devc * devc)
@@ -110,7 +111,7 @@ uart401_open (int dev, int mode,
 
   if (devc->opened)
     {
-      return -(EBUSY);
+      return -EBUSY;
     }
 
   while (input_avail (devc))
@@ -118,6 +119,8 @@ uart401_open (int dev, int mode,
 
   devc->midi_input_intr = input;
   devc->opened = mode;
+  enter_uart_mode (devc);
+  devc->disabled = 0;
 
   return 0;
 }
@@ -127,6 +130,7 @@ uart401_close (int dev)
 {
   uart401_devc   *devc = (uart401_devc *) midi_devs[dev]->devc;
 
+  reset_uart401 (devc);
   devc->opened = 0;
 }
 
@@ -137,6 +141,8 @@ uart401_out (int dev, unsigned char midi_byte)
   unsigned long   flags;
   uart401_devc   *devc = (uart401_devc *) midi_devs[dev]->devc;
 
+  if (devc->disabled)
+    return 1;
   /*
    * Test for input since pending input seems to block the output.
    */
@@ -158,8 +164,11 @@ uart401_out (int dev, unsigned char midi_byte)
 
   if (!output_ready (devc))
     {
-      printk ("MPU-401: Timeout\n");
-      return 0;
+      printk ("MPU-401: Timeout - Device not responding\n");
+      devc->disabled = 1;
+      reset_uart401 (devc);
+      enter_uart_mode (devc);
+      return 1;
     }
 
   uart401_write (devc, midi_byte);
@@ -181,7 +190,7 @@ uart401_end_read (int dev)
 static int
 uart401_ioctl (int dev, unsigned cmd, caddr_t arg)
 {
-  return -(EINVAL);
+  return -EINVAL;
 }
 
 static void
@@ -347,8 +356,6 @@ reset_uart401 (uart401_devc * devc)
 
   ok = 0;
 
-  /* save_flags(flags);cli(); */
-
   for (n = 0; n < 2 && !ok; n++)
     {
       for (timeout = 30000; timeout < 0 && !output_ready (devc); timeout--);
@@ -370,12 +377,18 @@ reset_uart401 (uart401_devc * devc)
 
     }
 
+
+  if (ok)
+    {
+      DDB (printk ("Reset UART401 OK\n"));
+    }
+  else
+    DDB (printk ("Reset UART401 failed - No hardware detected.\n"));
+
   if (ok)
     uart401_input_loop (devc);	/*
 				 * Flush input before enabling interrupts
 				 */
-
-  /* restore_flags(flags); */
 
   return ok;
 }
@@ -387,6 +400,8 @@ probe_uart401 (struct address_info *hw_config)
 
   static uart401_devc hw_info;
   uart401_devc   *devc = &hw_info;
+
+  DDB (printk ("Entered probe_uart401()\n"));
 
   detected_devc = NULL;
 
@@ -428,7 +443,6 @@ unload_uart401 (struct address_info *hw_config)
     return;
 
   reset_uart401 (devc);
-
   release_region (hw_config->io_base, 4);
 
   if (!devc->share_irq)

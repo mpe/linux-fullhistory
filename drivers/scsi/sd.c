@@ -512,7 +512,7 @@ static void do_sd_request (void)
 
 	if (flag++ == 0)
 	    SCpnt = allocate_device(&CURRENT,
-				    rscsi_disks[DEVICE_NR(CURRENT->rq_dev)].device, 0); 
+			   rscsi_disks[DEVICE_NR(CURRENT->rq_dev)].device, 0); 
 	else SCpnt = NULL;
 	
 	/*
@@ -537,7 +537,8 @@ static void do_sd_request (void)
 	    cli();
 	    req = CURRENT;
 	    while(req){
-		SCpnt = request_queueable(req, rscsi_disks[DEVICE_NR(req->rq_dev)].device);
+		SCpnt = request_queueable(req, 
+                                   rscsi_disks[DEVICE_NR(req->rq_dev)].device);
 		if(SCpnt) break;
 		req1 = req;
 		req = req->next;

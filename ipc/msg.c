@@ -16,7 +16,7 @@
 #include <linux/kerneld.h>
 #include <linux/interrupt.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 extern int ipcperms (struct ipc_perm *ipcp, short msgflg);
 

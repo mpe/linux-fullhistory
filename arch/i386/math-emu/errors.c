@@ -19,7 +19,7 @@
 
 #include <linux/signal.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #include "fpu_system.h"
 #include "exception.h"

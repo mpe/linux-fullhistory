@@ -27,7 +27,7 @@
 #include <linux/major.h>
 #include <linux/blkdev.h>
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 extern int *blk_size[];
 extern struct timezone sys_tz;

@@ -14,7 +14,7 @@
 #include <linux/mm.h>
 
 #include <asm/bitops.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #define _S(nr) (1<<((nr)-1))
 #define _BLOCKABLE (~(_S(SIGKILL) | _S(SIGSTOP)))

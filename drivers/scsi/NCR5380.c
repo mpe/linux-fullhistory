@@ -734,7 +734,7 @@ static void NCR5380_print_options (struct Scsi_Host *instance) {
  */
 
 static void NCR5380_print_status (struct Scsi_Host *instance) {
-   char pr_bfr[256];
+   static char pr_bfr[512];
    char *start;
    int len;
 
@@ -767,7 +767,7 @@ static void NCR5380_print_status (struct Scsi_Host *instance) {
 */
 
 #undef SPRINTF
-#define SPRINTF(args...) do { if(pos < buffer + length) pos += sprintf(pos, ## args); } while(0)
+#define SPRINTF(args...) do { if(pos < buffer + length-80) pos += sprintf(pos, ## args); } while(0)
 static
 char *lprint_Scsi_Cmnd (Scsi_Cmnd *cmd, char *pos, char *buffer, int length);
 static

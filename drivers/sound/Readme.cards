@@ -1,9 +1,15 @@
-Configuring version 3.5.4 (for Linux) with some most common soundcards
-======================================================================
+Configuring version 3.7 (for Linux) with some most common soundcards
+====================================================================
+
+This document describes configuring soundcards with freeware version of
+Open Sound Systems (OSS/Free). Information about the commercial version
+(OSS/Linux) and it's configuration is available from 
+http://www.4front-tech.com/linux.html. Information presented here is
+not valid for OSS/Linux.
 
 IMPORTANT!	This document covers only cards that were "known" when
 		this driver version was released. Please look at
-		http://www.4front-tech.com/usslite for info about
+		http://www.4front-tech.com/ossfree for info about
 		cards introduced recently.
 
 		The following covers mainly the "old" configuration
@@ -22,45 +28,15 @@ IMPORTANT!	This document covers only cards that were "known" when
 Cards that are not (fully) supported by this driver
 ---------------------------------------------------
 
-There are many soundcards which don't work with this driver
-version (v3.5). Support for some of them is expected to be
-available during/after summer 1996 (in version 3.6). Please check
-http://www.4front-tech.com/usslite for latest news. Please don't
-mail me and ask about these cards. The unsupported cards are:
-
-	- All PnP soundcards (SB PnP, GUS PnP, Soundscape PnP etc.)
-		Schedule for availability of PnP soundcard support in
-		USS/Lite depends on progress made by kernel PnP team
-		(probably in Linux 2.1.xx versions). With Linux 2.0.x
-		versions there are two ways to get PnP soundcards to work:
-	 	- Use isapnptools, DOS, Win95 or PnP aware BIOS to wake up the
-		card before starting the sound driver. See "Configuring PnP 
-		soundcards" below for some hints.
-		- Support for SB PnP and GUS PnP is present in USS/Linux (the
-		commercial version of this driver).
-	- Mwave soundcards and motherboards
-		(Version 3.6 or 3.7. Depends on how fast I get
-		suitable documents for Mwave).
-	- Emu8k (SB 32/AWE)
-		(Probably not _before_ summer 97. I know the unofficial
-		AWE programmers guide so don't send me more copies of it).
-	- Diamond Edge 3D
-		(ASAP. In practice this may take relatively long time).
-	- Compaq Deskpro
-		(Version 3.5.4-beta6 (already released))
-	- Sound Galaxy Washington/Waverider
-		(Audio features already in USS/Linux (USS/Lite soon). 
-		Can't promise the waverider synth since
-		availability of chip specs is uncertain).
-	- Yamaha OPL4 (on cards having _RAM_ for samples)
-		(Late 96?. Works as OPL3 with current driver versions)
+See http://www.4front-tech.com/ossfree for information about soundcards 
+to be supported in future. 
 
 How to use sound without recompiling kernel and/or sound driver
 ---------------------------------------------------------------
 
 There is commercial sound driver which should be released during Apr 96.
 It comes in precompiled form and doesn't require recompiling of kernel. See
-http://www.4Front-tech.com/uss.html for more info.
+http://www.4Front-tech.com/oss.html for more info.
 
 Configuring PnP cards
 ---------------------
@@ -75,9 +51,9 @@ motherboards) is also based on PnP technology but there is a "native" driver
 available for it (see information about CS4232 later in this document).
 
 PnP soundcards (as well as most other PnP ISA cards) are not supported
-by version 3.5 of this driver (Linux 1.3.xx and Linux 2.0.x). Proper
-support for them should be released during spring 96 
-(see http://www.4front-tech.com/usslite for latest info).
+by this version of the driver . Proper
+support for them should be released during spring 97 once kernel level
+PnP support is available.
 
 There is a method to get most of the PnP cards to work. The basic method
 is the following:
@@ -99,6 +75,7 @@ before running it.
 Some machines have BIOS utility for setting PnP resources. This is a good
 way to configure some cards. In this case you don't need to boot DOS/Win95
 prior starting Linux.
+
 Another way to initialize PnP cards without DOS/Win95 is a Linux based
 PnP isolation tool. When writing this there is a pre alpha test version
 of such tool available from ftp://ftp.demon.co.uk/pub/unix/linux/utils. The
@@ -106,11 +83,9 @@ file is called isapnptools-*. Please note that this tool is just a temporary
 solution which may be incompatible with future kernel versions having proper
 support for PnP cards. There are bugs in setting DMA channels in earlier
 versions of isapnptools so at least version 1.6 is required with soundcards.
-You can find latest version of isapnptools from
-ftp://ftp.demon.co.uk/pub/unix/linux/utils/
 
-These two methods don't work with GUS PnP which requires some additional
-initialization (cards DOS/Win95 driver does it). 
+Yet another way to use PnP cards is to use (commercial) OSS/Linux drivers.
+See http://www.4front-tech.com/linux.html for more info.
 
 Read this before trying to configure the driver
 -----------------------------------------------
@@ -138,25 +113,35 @@ Sound Blasters
 	SB 1.0 to 2.0
 	SB Pro
 	SB 16
-	NOTE!	The ASP chip and the EMU synth of AWE32 are not supported 
-		since their manufacturer doesn't release information about
-		the card. However, both SB16ASP and AWE32 work with
-		the driver just like a SB16. Also see the comment about some
-		unsupported cards at the end of this file.
-		(The OPL3 FM chip of SB32/AWE works but you cannot hear it).
+	SB32/AWE
+		Configure SB32/AWE just like SB16. See lowlevel/README.awe
+		for information about using the wave table synth.
 	SB16 compatible cards by other manufacturers than Creative.
-		You have been fooled since there are no SB16 compatible
+		You have been fooled since there are _no_ SB16 compatible
 		cards on the market (Feb 96). It's likely that your card
 		is compatible just with SB Pro but there is also a non-SB-
 		compatible 16 bit mode. Usually it's MSS/WSS but it could also
-		be a proprietary one like MV Jazz16 or ESS ES688.
+		be a proprietary one like MV Jazz16 or ESS ES688. OPTi
+		MAD16 chips are very common in so called "SB 16 bit cards".
+	"Supposed to be SB compatible" cards.
+		Forget the SB compatibility and check for other alternatives
+		first. The only cards that work with the SB driver in
+		Linux have been made by Creative Technology (there is at least
+		one chip on the card with "CREATIVE" printed on it). The
+		only other SB compatible chips are ESS and Jazz16 chips
+		(maybe ALSxxx chips too but they propably don't work).
+
+		Practically all soundcards have some kind of SB emulation mode
+		in addition to their native (16 bit) mode. In most cases this
+		(8 bit only) SB compatible mode doesn't work with Linux. However
+		in most cases the native 16 bit mode is supported by Linux.
 
 Gravis Ultrasound (GUS)
 	GUS
 	GUS + the 16 bit option
 	GUS MAX
 	GUS ACE (No MIDI port and audio recording)
-	GUS PnP (Partially supported)
+	GUS PnP (in GUS MAX compatible mode)
 
 MPU-401	and compatibles
 	The driver works both with the full (intelligent mode) MPU-401
@@ -230,8 +215,8 @@ Ensoniq SoundScape and compatibles
 	NOTE! The new PnP SoundScape is not supported yet.
 
 MAD16 and Mozart based cards
-	The Mozart (OAK OTI-601), MAD16 (OPTi 82C928), MAD16 Pro (OPTi 82C929) 
-	and OPTi 82C930 interface
+	The Mozart (OAK OTI-601), MAD16 (OPTi 82C928), MAD16 Pro (OPTi 82C929),
+	OPTi 82C924 (non PnP mode) and OPTi 82C930 interface
 	chips are used in many different soundcards, including some
 	cards by Reveal miro and Turtle Beach (Tropez). The purpose of these
 	chips is to connect other audio components to the PC bus. The
@@ -240,16 +225,14 @@ MAD16 and Mozart based cards
 
 Audio Excel DSP16 
 	Support for this card was written by Riccardo Faccetti
-	(riccardo@cdc8g5.cdc.polimi.it). See aedsp16.c for more info.
-	(This driver is not functional in version 3.5 of this driver. A
-	patch should be made available during April 96 (sunsite.unc.edu)).
+	(riccardo@cdc8g5.cdc.polimi.it). The AEDSP16 driver included in
+	this source distribution is not fully functional. A patch is
+	available from sunsite.unc.edu/pub/Linux/kernel/sound.
 	
 Crystal CS4232 based cards such as AcerMagic S23, TB Tropez _Plus_ and 
 	many PC motherboards (Compaq, HP, Intel, ...)
 	CS4232 is a PnP multimedia chip which contains a CS3231A codec,
 	SB and MPU401 emulations. There is support for OPL3 too.
-	This is a temporary driver which uses the chip in non PnP mode
-	(The final driver should be included in version 3.6 of the driver).
 	Unfortunately the MPU401 mode doesn't work (I don't know how to
 	initialize it). 
 
@@ -454,7 +437,8 @@ select some options automatically as well.
 	- Answer 'y' if you have the AudioTrix Pro.
   "Support for MAD16 and/or Mozart based cards",
 	- Answer y if your card has a Mozart (OAK OTI-601) or MAD16
-	  (OPTi 82C928, 82C929 or 82C930) audio interface chip. These chips are
+	  (OPTi 82C928, 82C929, 82C924 or 82C930) audio interface chip. 
+	  These chips are
 	  currently quite common so it's possible that many no-name cards
 	  have one of them. In addition the MAD16 chip is used in some
 	  cards made by known manufacturers such as Turtle Beach (Tropez),
@@ -463,15 +447,11 @@ select some options automatically as well.
 	- This enables TB Maui specific initialization. Works with TB Maui
 	and TB Tropez (may not work with Tropez Plus).
 
-  "Audio Excel DSP 16 initialization support",
-	- Don't know much about this card. Look at aedsp16.c for more info.
 
 Then the configuration program asks some y/n questions about the higher
 level services. It's recommended to answer 'y' to each of these questions.
 Answer 'n' only if you know you will not need the option.
 
-  "/dev/dsp and /dev/audio supports (usually required)",
-	- Answering 'n' disables /dev/dsp and /dev/audio. Answer 'y'.
   "MIDI interface support",
 	- Answering 'n' disables /dev/midi## devices and access to any
 	  MIDI ports using /dev/sequencer and /dev/music. This option
@@ -705,7 +685,10 @@ when using the (future) binary distribution version of the driver.
 Ensoniq SoundScape
 ------------------
 
-NOTE!	The new PnP SoundScape is not supported yet.
+NOTE!	The new PnP SoundScape is not supported yet. Soundscape compatible
+	cards made by Reveal don't work with Linux. They use older revision
+	of the Soundscape chipset which is not fully compatible with
+	newer cards made by Ensoniq.
 
 The SoundScape driver handles initialization of MSS and MPU supports
 itself so you don't need to enable other drivers than SoundScape
@@ -719,7 +702,7 @@ itself so you don't need to enable other drivers than SoundScape
 !!!!!	    purposes. It WAS required to change /dev/dsp (a symlink) to !!!!
 !!!!!	    point to /dev/dsp1.						!!!!
 !!!!!                                                                   !!!!
-!!!!!	    This is not required with USS versions 3.5-beta6 and later	!!!!
+!!!!!	    This is not required with OSS versions 3.5-beta6 and later	!!!!
 !!!!!	    since there is now just one audio device file. Please 	!!!!
 !!!!!	    change /dev/dsp to point back to /dev/dsp0 if you are	!!!!
 !!!!!	    upgrading from an earlier driver version using		!!!!
@@ -756,6 +739,10 @@ card. If the driver displays string <Ensoniq Soundscape (old)>, you have
 an old card and you will need to use sndscape.co1. For other cards use
 soundscape.co0. New Soundscape revisions such as Elite and PnP use
 code files with higher numbers (.co2, .co3, etc.).
+
+NOTE!	Ensoniq Soundscape VIVO is not compatible with other Soundscape cards.
+	Currently it's possible to use it in Linux only with OSS/Linux
+	drivers.
 
 Check /var/adm/messages after running ssinit. The driver prints
 the board version after downloading the microcode file. That version
@@ -800,6 +787,10 @@ to the file linux/drivers/sound/local.h (after running make config).
 MAD16 cards having a CS4231 codec support full duplex mode. This mode
 can be enabled by configuring the card to use two DMA channels. Possible
 DMA channel pairs are: 0&1, 1&0 and 3&0.
+
+NOTE! Cards having an OPTi 82C924 chip work with OSS/Free only in
+non-PnP mode (usually jumper selectable). The PnP mode is supported only
+by OSS/Linux.
 
 MV Jazz (ProSonic)
 ------------------
@@ -854,10 +845,6 @@ which initializes the card to match the EEPROM settings when the machine
 is powered on. These cards actually behave just like they have jumpers
 for all of the settings. Configure driver for MSS, MPU, SB/SB Pro  and OPL3 
 supports with these cards. 
-
-The config program asks if you want support for the mixer of
-SG NX Pro. Answer 'y' to these questions if you have one of the above 8 or
-16 bit Aztech cards.
 
 There are some new Sound Galaxies in the market. I have no experience with
 them so read the card's manual carefully.
@@ -992,14 +979,12 @@ required in maintaining the driver (some changes need to be done
 to all low level drivers and be tested too, maybe with multiple
 operating systems). For this reason I have made a decision to not support
 obsolete cards. It's possible that someone else makes a separately 
-distributed driver (diffs) for the card. Version v3.6 will be much more
-modular so making separately distributed drivers will be easier with it.
-(The bad news is that v3.6 will not be available before summer -96).
+distributed driver (diffs) for the card. 
 
 Writing a driver for a new card is not possible if there are no 
 programming information available about the card. If you don't
 find your new card from this file, look from the home page 
-(http://www.4front-tech.com/usslite). Then please contact
+(http://www.4front-tech.com/ossfree). Then please contact
 manufacturer of the card and ask if they have (or are willing to)
 released technical details of the card. Do this before contacting me. I
 can only answer 'no' if there are no programming information available.
@@ -1015,12 +1000,12 @@ Some companies don't give low level technical information about their
 products to public or at least their require signing a NDA. It's not
 possible to implement a freeware driver for them. However it's possible
 that support for such cards become available in the commercial version
-of this driver (see http://www.4Front-tech.com/uss.html for more info).
+of this driver (see http://www.4Front-tech.com/oss.html for more info).
 
 There are some common audio chipsets that are not supported yet. For example
 Sierra Aria and IBM Mwave. It's possible that these architectures
 get some support in future but I can't make any promises. Just look
-at the home page (http://www.4front-tech.com/usslite/new_cards.html)
+at the home page (http://www.4front-tech.com/ossfree/new_cards.html)
 for latest info.
 
 Information about unsupported soundcards and chipsets is welcome as well
@@ -1032,9 +1017,9 @@ Hannu Savolainen
 hannu@voxware.pp.fi
 
 Personal home page:	   http://personal.eunet.fi/pp/voxware/hannu.html
-www home page of USS/Lite: http://www.4front-tech.com/usslite
+www home page of OSS/Free: http://www.4front-tech.com/ossfree
   European/Finnish mirror: http://personal.eunet.fi/pp/voxware
 
-www home page of commercial
-Open Sound System drivers: http://www.4front-tech.com/uss.html
+www home page of commercial OSS
+(Open Sound System) drivers: http://www.4front-tech.com/oss.html
 

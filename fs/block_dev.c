@@ -11,7 +11,7 @@
 #include <linux/fcntl.h>
 #include <linux/mm.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 extern int *blk_size[];

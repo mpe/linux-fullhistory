@@ -326,7 +326,7 @@
 
 #include <asm/byteorder.h>
 #include <asm/irq.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/io.h>
 
 /*

@@ -59,7 +59,7 @@ NORET_TYPE void panic(const char * fmt, ...)
 }
 
 /*
- * GCC 2.5.8 doesn't always optimize correctly; see include/asm/segment.h
+ * GCC 2.5.8 doesn't always optimize correctly; see include/asm/uaccess.h
  */
 
 int bad_user_access_length(void)

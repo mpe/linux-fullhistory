@@ -13,7 +13,7 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #include <linux/errno.h>
 #include <linux/fs.h>

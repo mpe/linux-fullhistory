@@ -4,7 +4,7 @@
 *             mike@i-Connect.Net                        *
 *             neuffer@mail.uni-mainz.de                 *
 *********************************************************
-* last change: 96/08/14                                 *
+* last change: 96/10/14                                 *
 ********************************************************/
 
 #ifndef _EATA_DMA_H
@@ -17,7 +17,7 @@
 
 #define VER_MAJOR 2
 #define VER_MINOR 5
-#define VER_SUB   "9a"
+#define VER_SUB   "9b"
 
 
 /************************************************************************

@@ -2,7 +2,7 @@
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/fs.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <linux/errno.h>
 #include <linux/string.h>
 

@@ -7,7 +7,7 @@
 #include <linux/module.h>
 
 #include <asm/io.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 #include <linux/errno.h>

@@ -860,11 +860,11 @@ EOM
 
 #
 # Load config options from a file.
-# Converts all "# OPTION is not set" lines to "OPTION=" lines
+# Converts all "# OPTION is not set" lines to "OPTION=n" lines
 #
 function load_config_file () {
 	awk '
-	  /# .* is not set.*/ { printf("%s=\n", $2) }
+	  /# .* is not set.*/ { printf("%s=n\n", $2) }
 	! /# .* is not set.*/ { print }
 	' $1 >.tmpconfig
 
@@ -1119,11 +1119,11 @@ inputbox_instructions_hex="\
 Please enter a hexadecimal value. \
 Use the <TAB> key to move from the input field to the buttons below it."
 
-backtitle="Linux Kernel Configuration"
-
 DIALOG="./scripts/lxdialog/lxdialog"
 
 kernel_version="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}"
+
+backtitle="Linux Kernel v$kernel_version Configuration"
 
 trap "cleanup ; rm -f .menuconfig ; exit 1" 1 2 15
 
@@ -1146,7 +1146,7 @@ then
   echo "#"
   echo "# Using defaults found in" $DEFAULTS
   echo "#"
-  . $DEFAULTS
+  load_config_file $DEFAULTS
 else
   echo "#"
   echo "# No defaults found"

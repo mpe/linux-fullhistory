@@ -15,7 +15,7 @@
 #include <linux/stat.h>
 #include <linux/affs_fs.h>
 #include <linux/amigaffs.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 

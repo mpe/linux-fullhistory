@@ -32,7 +32,7 @@
 
 #include <asm/system.h>
 #include <asm/io.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/dma.h>
 
 #define MAJOR_NR XT_DISK_MAJOR

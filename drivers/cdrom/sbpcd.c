@@ -331,7 +331,7 @@
 
 #include <asm/system.h>
 #include <asm/io.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <stdarg.h>
 #include <linux/sbpcd.h>
 #include <linux/config.h>

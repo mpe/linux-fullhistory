@@ -16,7 +16,7 @@
 #include <linux/fcntl.h>
 #include <linux/locks.h>
 #include <linux/amigaffs.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #include <linux/errno.h>
 

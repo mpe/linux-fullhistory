@@ -34,7 +34,7 @@
 #include <linux/if_ether.h>	/* For the statistics structure. */
 
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/io.h>
 
 #include <linux/inet.h>

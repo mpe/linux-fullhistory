@@ -6,7 +6,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -47,7 +47,7 @@ static int      maui_osLen = 0;
 
 #endif
 
-static wait_handle *maui_sleeper = NULL;
+static struct wait_queue *maui_sleeper = NULL;
 static volatile struct snd_wait maui_sleep_flag =
 {0};
 
@@ -84,20 +84,22 @@ maui_wait (int mask)
 	unsigned long   tlimit;
 
 	if (HZ / 10)
-	  current_set_timeout (tlimit = jiffies + (HZ / 10));
+	  current->timeout = tlimit = jiffies + (HZ / 10);
 	else
 	  tlimit = (unsigned long) -1;
-	maui_sleep_flag.flags = WK_SLEEP;
-	module_interruptible_sleep_on (&maui_sleeper);
-	if (!(maui_sleep_flag.flags & WK_WAKEUP))
+	maui_sleep_flag.opts = WK_SLEEP;
+	interruptible_sleep_on (&maui_sleeper);
+	if (!(maui_sleep_flag.opts & WK_WAKEUP))
 	  {
 	    if (jiffies >= tlimit)
-	      maui_sleep_flag.flags |= WK_TIMEOUT;
+	      maui_sleep_flag.opts |= WK_TIMEOUT;
 	  }
-	maui_sleep_flag.flags &= ~WK_SLEEP;
+	maui_sleep_flag.opts &= ~WK_SLEEP;
       };
-      if (current_got_fatal_signal ())
-	return 0;
+      if ((current->signal & ~current->blocked))
+	{
+	  return 0;
+	}
     }
 
   return 0;
@@ -117,7 +119,7 @@ maui_write (unsigned char data)
 {
   if (maui_wait (STAT_TX_AVAIL))
     {
-      outb (data, HOST_DATA_PORT);
+      outb ((data), HOST_DATA_PORT);
       return 1;
     }
   printk ("Maui: Write timeout\n");
@@ -228,29 +230,29 @@ maui_init (int irq)
       return 0;
     }
 
-  outb (0x00, HOST_CTRL_PORT);	/* Reset */
+  outb ((0x00), HOST_CTRL_PORT);	/* Reset */
 
-  outb (bits, HOST_DATA_PORT);	/* Set the IRQ bits */
-  outb (bits | 0x80, HOST_DATA_PORT);	/* Set the IRQ bits again? */
+  outb ((bits), HOST_DATA_PORT);	/* Set the IRQ bits */
+  outb ((bits | 0x80), HOST_DATA_PORT);		/* Set the IRQ bits again? */
 
-  outb (0x80, HOST_CTRL_PORT);	/* Leave reset */
-  outb (0x80, HOST_CTRL_PORT);	/* Leave reset */
+  outb ((0x80), HOST_CTRL_PORT);	/* Leave reset */
+  outb ((0x80), HOST_CTRL_PORT);	/* Leave reset */
 
-  outb (0xD0, HOST_CTRL_PORT);	/* Cause interrupt */
+  outb ((0xD0), HOST_CTRL_PORT);	/* Cause interrupt */
 
   for (i = 0; i < 1000000 && !irq_ok; i++);
 
   if (!irq_ok)
     return 0;
 
-  outb (0x80, HOST_CTRL_PORT);	/* Leave reset */
+  outb ((0x80), HOST_CTRL_PORT);	/* Leave reset */
 
   printk ("Turtle Beach Maui initialization\n");
 
   if (!download_code ())
     return 0;
 
-  outb (0xE0, HOST_CTRL_PORT);	/* Normal operation */
+  outb ((0xE0), HOST_CTRL_PORT);	/* Normal operation */
 
   /* Select mpu401 mode */
 
@@ -305,7 +307,7 @@ maui_load_patch (int dev, int format, const char *addr,
   if (count < hdr_size)
     {
       printk ("Maui error: Patch header too short\n");
-      return -(EINVAL);
+      return -EINVAL;
     }
 
   count -= hdr_size;
@@ -331,12 +333,12 @@ maui_load_patch (int dev, int format, const char *addr,
     {
       unsigned char   data;
 
-      data = get_fs_byte (&((addr)[hdr_size + i]));
+      get_user (data, (unsigned char *) &((addr)[hdr_size + i]));
       if (i == 0 && !(data & 0x80))
-	return -(EINVAL);
+	return -EINVAL;
 
       if (maui_write (data) == -1)
-	return -(EIO);
+	return -EIO;
     }
 
   if ((i = maui_read ()) != 0x80)
@@ -344,7 +346,7 @@ maui_load_patch (int dev, int format, const char *addr,
       if (i != -1)
 	printk ("Maui: Error status %02x\n", i);
 
-      return -(EIO);
+      return -EIO;
     }
 
   return 0;
@@ -365,7 +367,7 @@ probe_maui (struct address_info *hw_config)
   if (snd_set_irq_handler (hw_config->irq, mauiintr, "Maui", maui_osp) < 0)
     return 0;
 
-  maui_sleep_flag.flags = WK_NONE;
+  maui_sleep_flag.opts = WK_NONE;
 /*
  * Initialize the processor if necessary
  */

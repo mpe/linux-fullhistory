@@ -22,7 +22,7 @@
 #include "msbuffer.h"
 #include "tables.h"
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/unaligned.h>
 
 

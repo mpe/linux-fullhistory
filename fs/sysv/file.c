@@ -23,7 +23,7 @@
 #include <linux/locks.h>
 #include <linux/pagemap.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #define	NBUF	32
 

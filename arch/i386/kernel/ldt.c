@@ -10,7 +10,7 @@
 #include <linux/mm.h>
 #include <linux/vmalloc.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/ldt.h>
 

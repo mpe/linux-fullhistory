@@ -4,7 +4,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -69,10 +69,10 @@
 #define   COMPOSITE_SINE_WAVE_MODE	0x80		/* Don't use with OPL-3? */
 #define   KEYBOARD_SPLIT		0x40
 
-#define PERCUSSION_REGISTER			0xbd	/* Left side only */
+#define PERCOSSION_REGISTER			0xbd	/* Left side only */
 #define   TREMOLO_DEPTH			0x80
 #define   VIBRATO_DEPTH			0x40
-#define	  PERCUSSION_ENABLE		0x20
+#define	  PERCOSSION_ENABLE		0x20
 #define   BASSDRUM_ON			0x10
 #define   SNAREDRUM_ON			0x08
 #define   TOMTOM_ON			0x04

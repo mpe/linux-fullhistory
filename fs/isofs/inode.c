@@ -23,7 +23,7 @@
 #include <linux/cdrom.h>
 
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 /*
  * We have no support for "multi volume" CDs, but more and more disks carry

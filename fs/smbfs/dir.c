@@ -12,7 +12,7 @@
 #include <linux/malloc.h>
 #include <linux/mm.h>
 #include <linux/smb_fs.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <linux/errno.h>
 
 #define NAME_OFFSET(de) ((int) ((de)->d_name - (char *) (de)))

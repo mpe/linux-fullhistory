@@ -29,20 +29,20 @@
 
 struct IsdnCard cards[] =
 {
-	{(byte *) 0xd0000, 15, 0xd80, ISDN_PTYPE_EURO, NULL},	/* example */
-	{NULL, 0, 0, 0, NULL},
-	{NULL, 0, 0, 0, NULL},
-	{NULL, 0, 0, 0, NULL},
-	{NULL, 0, 0, 0, NULL},
-	{NULL, 0, 0, 0, NULL},
-	{NULL, 0, 0, 0, NULL},
-	{NULL, 0, 0, 0, NULL},
-	{NULL, 0, 0, 0, NULL},
-	{NULL, 0, 0, 0, NULL},
-	{NULL, 0, 0, 0, NULL},
-	{NULL, 0, 0, 0, NULL},
-	{NULL, 0, 0, 0, NULL},
-	{NULL, 0, 0, 0, NULL},
-	{NULL, 0, 0, 0, NULL},
-	{NULL, 0, 0, 0, NULL},
+	{0xd0000, 15, 0xd80, ISDN_PTYPE_EURO, NULL},	/* example */
+	{0, 0, 0, 0, NULL},
+	{0, 0, 0, 0, NULL},
+	{0, 0, 0, 0, NULL},
+	{0, 0, 0, 0, NULL},
+	{0, 0, 0, 0, NULL},
+	{0, 0, 0, 0, NULL},
+	{0, 0, 0, 0, NULL},
+	{0, 0, 0, 0, NULL},
+	{0, 0, 0, 0, NULL},
+	{0, 0, 0, 0, NULL},
+	{0, 0, 0, 0, NULL},
+	{0, 0, 0, 0, NULL},
+	{0, 0, 0, 0, NULL},
+	{0, 0, 0, 0, NULL},
+	{0, 0, 0, 0, NULL},
 };

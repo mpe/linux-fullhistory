@@ -224,6 +224,12 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #ifdef CONFIG_SCSI_ADVANSYS
 	ADVANSYS,
 #endif
+#ifdef CONFIG_SCSI_EATA_DMA
+    EATA_DMA,
+#endif
+#ifdef CONFIG_SCSI_EATA_PIO
+    EATA_PIO,
+#endif
 /* BusLogic must come before aha1542.c */
 #ifdef CONFIG_SCSI_BUSLOGIC
     BUSLOGIC,
@@ -281,12 +287,6 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_NCR53C8XX
     NCR53C8XX,
-#endif
-#ifdef CONFIG_SCSI_EATA_DMA
-    EATA_DMA,
-#endif
-#ifdef CONFIG_SCSI_EATA_PIO
-    EATA_PIO,
 #endif
 #ifdef CONFIG_SCSI_7000FASST
     WD7000,

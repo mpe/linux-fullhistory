@@ -79,7 +79,7 @@
  */
 
 #include <linux/config.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -149,7 +149,9 @@ struct ip_fw *ip_acct_chain;
 
 static struct ip_fw **chains[] =
 	{&ip_fw_fwd_chain, &ip_fw_in_chain, &ip_fw_out_chain, &ip_acct_chain};
+#endif /* CONFIG_IP_ACCT || CONFIG_IP_FIREWALL */
 
+#ifdef CONFIG_IP_FIREWALL
 int ip_fw_fwd_policy=IP_FW_F_ACCEPT;
 int ip_fw_in_policy=IP_FW_F_ACCEPT;
 int ip_fw_out_policy=IP_FW_F_ACCEPT;

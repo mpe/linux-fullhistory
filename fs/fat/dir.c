@@ -21,7 +21,7 @@
 #include <linux/dirent.h>
 #include <linux/mm.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #include "msbuffer.h"
 #include "tables.h"

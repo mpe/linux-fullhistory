@@ -14,8 +14,6 @@
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/major.h>
-#include <asm/segment.h>
-#include <asm/io.h>
 #include <linux/delay.h>
 #include <linux/kernel.h>
 #include <linux/signal.h>
@@ -27,6 +25,9 @@
 #include <linux/wait.h>
 #include <linux/isdnif.h>
 #include <linux/tty.h>
+
+#include <asm/uaccess.h>
+#include <asm/io.h>
 
 #define PH_ACTIVATE   1
 #define PH_DATA       2
@@ -306,7 +307,7 @@ struct PStack {
 };
 
 struct HscxState {
-	byte           *membase;
+	unsigned int	membase;
 	int             iobase;
 	int             inuse, init, active;
 	struct BufPool  sbufpool, rbufpool, smallpool;
@@ -329,7 +330,7 @@ struct IsdnCardState {
 #ifdef DEBUG_MAGIC
 	int             magic;
 #endif
-	byte           *membase;
+	unsigned int	membase;
 	int             iobase;
 	struct BufPool  sbufpool, rbufpool, smallpool;
 	struct PStack  *stlist;
@@ -351,7 +352,7 @@ struct IsdnCardState {
 };
 
 struct IsdnCard {
-	byte           *membase;
+	unsigned int	membase;
 	int             interrupt;
 	unsigned int    iobase;
 	int             protocol;	/* EDSS1 or 1TR6 */

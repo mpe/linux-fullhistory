@@ -22,7 +22,7 @@
 #endif
 
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/dma.h>
 

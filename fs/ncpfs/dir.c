@@ -13,7 +13,7 @@
 #include <linux/vmalloc.h>
 #include <linux/mm.h>
 #include <linux/ncp_fs.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <linux/errno.h>
 #include <linux/locks.h>
 #include "ncplib_kernel.h"

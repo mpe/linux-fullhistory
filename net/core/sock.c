@@ -97,7 +97,7 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 #include <linux/inet.h>

@@ -42,7 +42,7 @@
 #include <linux/random.h>
 
 #include <asm/io.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/irq.h>
 

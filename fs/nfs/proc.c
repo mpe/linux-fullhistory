@@ -44,7 +44,7 @@
 #include <linux/in.h>
 #include <linux/pagemap.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #ifdef NFS_PROC_DEBUG
 

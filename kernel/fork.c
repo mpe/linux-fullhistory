@@ -21,9 +21,9 @@
 #include <linux/malloc.h>
 #include <linux/smp.h>
 
-#include <asm/segment.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
+#include <asm/uaccess.h>
 
 int nr_tasks=1;
 int nr_running=1;

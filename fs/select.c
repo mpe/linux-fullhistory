@@ -22,7 +22,7 @@
 #include <linux/personality.h>
 #include <linux/mm.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 #define ROUND_UP(x,y) (((x)+(y)-1)/(y))

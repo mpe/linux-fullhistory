@@ -4,8 +4,6 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-#include <asm/segment.h>
-
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/errno.h>
@@ -13,6 +11,8 @@
 #include <linux/stat.h>
 #include <linux/termios.h>
 #include <linux/fcntl.h> /* for f_flags values */
+
+#include <asm/uaccess.h>
 
 static int file_ioctl(struct file *filp,unsigned int cmd,unsigned long arg)
 {

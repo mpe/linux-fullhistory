@@ -7,7 +7,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -31,11 +31,13 @@ static int      dev_nblock[MAX_AUDIO_DEV];	/* 1 if in nonblocking mode */
 #define		AM_WRITE	1
 #define 	AM_READ		2
 
+
 static int      audio_format[MAX_AUDIO_DEV];
 static int      local_conversion[MAX_AUDIO_DEV];
 
+#define CNV_MU_LAW	0x00000001
 static int
-set_format (int dev, long fmt)
+set_format (int dev, int fmt)
 {
   if (fmt != AFMT_QUERY)
     {
@@ -46,12 +48,12 @@ set_format (int dev, long fmt)
 	if (fmt == AFMT_MU_LAW)
 	  {
 	    fmt = AFMT_U8;
-	    local_conversion[dev] = AFMT_MU_LAW;
+	    local_conversion[dev] = CNV_MU_LAW;
 	  }
 	else
 	  fmt = AFMT_U8;	/* This is always supported */
 
-      audio_format[dev] = DMAbuf_ioctl (dev, SNDCTL_DSP_SETFMT, (caddr_t) fmt, 1);
+      audio_format[dev] = audio_devs[dev]->d->set_bits (dev, fmt);
     }
 
   if (local_conversion[dev])	/* This shadows the HW format */
@@ -64,7 +66,7 @@ int
 audio_open (int dev, struct fileinfo *file)
 {
   int             ret;
-  long            bits;
+  int             bits;
   int             dev_type = dev & 0x0f;
   int             mode = file->mode & O_ACCMODE;
 
@@ -74,6 +76,9 @@ audio_open (int dev, struct fileinfo *file)
     bits = 16;
   else
     bits = 8;
+
+  if (dev < 0 || dev >= num_audiodevs)
+    return -ENXIO;
 
   if ((ret = DMAbuf_open (dev, mode)) < 0)
     return ret;
@@ -90,11 +95,8 @@ audio_open (int dev, struct fileinfo *file)
 
   local_conversion[dev] = 0;
 
-  if (DMAbuf_ioctl (dev, SNDCTL_DSP_SETFMT, (caddr_t) bits, 1) != bits)
+  if (audio_devs[dev]->d->set_bits (dev, bits) != bits)
     {
-      printk ("audio: Can't set number of bits on device %d\n", dev);
-      audio_release (dev, file);
-      return -(ENXIO);
     }
 
   if (dev_type == SND_DEV_AUDIO)
@@ -106,6 +108,7 @@ audio_open (int dev, struct fileinfo *file)
 
   audio_mode[dev] = AM_NONE;
   dev_nblock[dev] = 0;
+
 
   return ret;
 }
@@ -119,6 +122,13 @@ sync_output (int dev)
 
   if (DMAbuf_get_curr_buffer (dev, &buf_no, &dma_buf, &buf_ptr, &buf_size) >= 0)
     {
+      int             i, n = buf_size & 3;
+
+      if (n)			/* Not 4 byte aligned */
+	{
+	  for (i = 0; i < n; i++)
+	    dma_buf[buf_ptr++] = dmap->neutral_byte;
+	}
       DMAbuf_start_output (dev, buf_no, buf_ptr);
     }
 
@@ -130,11 +140,10 @@ sync_output (int dev)
 
   for (i = dmap->qlen + 1; i < dmap->nbufs; i++)
     {
+      p = (p + 1) % dmap->nbufs;
       memset (dmap->raw_buf + p * dmap->fragment_size,
 	      dmap->neutral_byte,
 	      dmap->fragment_size);
-
-      p = (p + 1) % dmap->nbufs;
     }
 
   dmap->flags |= DMA_CLEAN;
@@ -225,7 +234,7 @@ audio_write (int dev, struct fileinfo *file, const char *buf, int count)
 					    dev_nblock[dev])) < 0)
 	    {
 	      /* Handle nonblocking mode */
-	      if (dev_nblock[dev] && buf_no == -(EAGAIN))
+	      if (dev_nblock[dev] && buf_no == -EAGAIN)
 		return p;	/* No more space. Return # of accepted bytes */
 	      return buf_no;
 	    }
@@ -236,17 +245,18 @@ audio_write (int dev, struct fileinfo *file, const char *buf, int count)
       if (l > (buf_size - buf_ptr))
 	l = (buf_size - buf_ptr);
 
-      if (!audio_devs[dev]->d->copy_from_user)
+
+      if (!audio_devs[dev]->d->copy_user)
 	{			/*
 				 * No device specific copy routine
 				 */
 	  copy_from_user (&dma_buf[buf_ptr], &(buf)[p], l);
 	}
       else
-	audio_devs[dev]->d->copy_from_user (dev,
-					    dma_buf, buf_ptr, buf, p, l);
+	audio_devs[dev]->d->copy_user (dev,
+				       dma_buf, buf_ptr, buf, p, l);
 
-      if (local_conversion[dev] == AFMT_MU_LAW)
+      if (local_conversion[dev] & CNV_MU_LAW)
 	{
 	  /*
 	   * This just allows interrupts while the conversion is running
@@ -303,7 +313,7 @@ audio_read (int dev, struct fileinfo *file, char *buf, int count)
 	{
 	  /* Nonblocking mode handling. Return current # of bytes */
 
-	  if (dev_nblock[dev] && buf_no == -(EAGAIN))
+	  if (dev_nblock[dev] && buf_no == -EAGAIN)
 	    return p;
 
 	  return buf_no;
@@ -316,7 +326,7 @@ audio_read (int dev, struct fileinfo *file, char *buf, int count)
        * Insert any local processing here.
        */
 
-      if (local_conversion[dev] == AFMT_MU_LAW)
+      if (local_conversion[dev] & CNV_MU_LAW)
 	{
 	  /*
 	   * This just allows interrupts while the conversion is running
@@ -326,7 +336,11 @@ audio_read (int dev, struct fileinfo *file, char *buf, int count)
 	  translate_bytes (dsp_ulaw, (unsigned char *) dmabuf, l);
 	}
 
-      copy_to_user (&(buf)[p], dmabuf, l);
+      {
+	char           *fixit = dmabuf;
+
+	copy_to_user (&(buf)[p], fixit, l);
+      };
 
       DMAbuf_rmchars (dev, buf_no, l);
 
@@ -341,6 +355,9 @@ int
 audio_ioctl (int dev, struct fileinfo *file,
 	     unsigned int cmd, caddr_t arg)
 {
+  int             val;
+
+/* printk("audio_ioctl(%x, %x)\n", cmd, arg); */
 
   dev = dev >> 4;
 
@@ -351,7 +368,7 @@ audio_ioctl (int dev, struct fileinfo *file,
       else
 	printk ("/dev/dsp%d: No coprocessor for this device\n", dev);
 
-      return -(ENXIO);
+      return -ENXIO;
     }
   else
     switch (cmd)
@@ -361,33 +378,39 @@ audio_ioctl (int dev, struct fileinfo *file,
 	  return 0;
 
 	sync_output (dev);
-	return DMAbuf_ioctl (dev, cmd, arg, 0);
+	DMAbuf_sync (dev);
+	DMAbuf_reset (dev);
+	return 0;
 	break;
 
       case SNDCTL_DSP_POST:
 	if (!(audio_devs[dev]->open_mode & OPEN_WRITE))
 	  return 0;
+	audio_devs[dev]->dmap_out->flags |= DMA_POST;
 	sync_output (dev);
+	DMAbuf_ioctl (dev, SNDCTL_DSP_POST, 0, 1);
 	return 0;
 	break;
 
       case SNDCTL_DSP_RESET:
 	audio_mode[dev] = AM_NONE;
-	return DMAbuf_ioctl (dev, cmd, arg, 0);
+	DMAbuf_reset (dev);
+	return 0;
 	break;
 
       case SNDCTL_DSP_GETFMTS:
-	return snd_ioctl_return ((int *) arg, audio_devs[dev]->format_mask | AFMT_MU_LAW);
+	return ioctl_out (arg, audio_devs[dev]->format_mask);
 	break;
 
       case SNDCTL_DSP_SETFMT:
-	return snd_ioctl_return ((int *) arg, set_format (dev, get_user ((int *) arg)));
+	get_user (val, (int *) arg);
+	return ioctl_out (arg, set_format (dev, val));
 
       case SNDCTL_DSP_GETISPACE:
 	if (!(audio_devs[dev]->open_mode & OPEN_READ))
 	  return 0;
 	if ((audio_mode[dev] & AM_WRITE) && !(audio_devs[dev]->flags & DMA_DUPLEX))
-	  return -(EBUSY);
+	  return -EBUSY;
 
 	{
 	  audio_buf_info  info;
@@ -397,7 +420,11 @@ audio_ioctl (int dev, struct fileinfo *file,
 	  if (err < 0)
 	    return err;
 
-	  copy_to_user (&((char *) arg)[0], (char *) &info, sizeof (info));
+	  {
+	    char           *fixit = (char *) &info;
+
+	    copy_to_user (&((char *) arg)[0], fixit, sizeof (info));
+	  };
 	  return 0;
 	}
 
@@ -405,7 +432,7 @@ audio_ioctl (int dev, struct fileinfo *file,
 	if (!(audio_devs[dev]->open_mode & OPEN_WRITE))
 	  return -EPERM;
 	if ((audio_mode[dev] & AM_READ) && !(audio_devs[dev]->flags & DMA_DUPLEX))
-	  return -(EBUSY);
+	  return -EBUSY;
 
 	{
 	  audio_buf_info  info;
@@ -420,7 +447,11 @@ audio_ioctl (int dev, struct fileinfo *file,
 	  if (DMAbuf_get_curr_buffer (dev, &buf_no, &dma_buf, &buf_ptr, &buf_size) >= 0)
 	    info.bytes -= buf_ptr;
 
-	  copy_to_user (&((char *) arg)[0], (char *) &info, sizeof (info));
+	  {
+	    char           *fixit = (char *) &info;
+
+	    copy_to_user (&((char *) arg)[0], fixit, sizeof (info));
+	  };
 	  return 0;
 	}
 
@@ -447,9 +478,55 @@ audio_ioctl (int dev, struct fileinfo *file,
 
 	  info |= DSP_CAP_MMAP;
 
-	  copy_to_user (&((char *) arg)[0], (char *) &info, sizeof (info));
+	  {
+	    char           *fixit = (char *) &info;
+
+	    copy_to_user (&((char *) arg)[0], fixit, sizeof (info));
+	  };
 	  return 0;
 	}
+	break;
+
+      case SOUND_PCM_WRITE_RATE:
+	get_user (val, (int *) arg);
+	return ioctl_out (arg, audio_devs[dev]->d->set_speed (dev, val));
+
+      case SOUND_PCM_READ_RATE:
+	return ioctl_out (arg, audio_devs[dev]->d->set_speed (dev, 0));
+
+      case SNDCTL_DSP_STEREO:
+	{
+	  int             n;
+
+	  get_user (n, (int *) arg);
+	  if (n > 1)
+	    {
+	      printk ("sound: SNDCTL_DSP_STEREO called with invalid argument %d\n",
+		      n);
+	      return ioctl_out (arg, audio_devs[dev]->d->set_channels (dev, n));
+	    }
+
+	  if (n < 0)
+	    return -EINVAL;
+
+	  return ioctl_out (arg, audio_devs[dev]->d->set_channels (dev, n + 1) - 1);
+	}
+
+      case SOUND_PCM_WRITE_CHANNELS:
+	get_user (val, (int *) arg);
+	return ioctl_out (arg, audio_devs[dev]->d->set_channels (dev, val));
+
+      case SOUND_PCM_READ_CHANNELS:
+	return ioctl_out (arg, audio_devs[dev]->d->set_channels (dev, 0));
+
+      case SOUND_PCM_READ_BITS:
+	return ioctl_out (arg, audio_devs[dev]->d->set_bits (dev, 0));
+
+      case SNDCTL_DSP_SETDUPLEX:
+	if (audio_devs[dev]->flags & DMA_DUPLEX)
+	  return 0;
+	else
+	  return -EIO;
 	break;
 
       default:
@@ -458,7 +535,7 @@ audio_ioctl (int dev, struct fileinfo *file,
 }
 
 void
-audio_init (void)
+audio_init_devices (void)
 {
   /*
      * NOTE! This routine could be called several times during boot.
@@ -466,7 +543,7 @@ audio_init (void)
 }
 
 int
-audio_select (int dev, struct fileinfo *file, int sel_type, select_table_handle * wait)
+audio_select (int dev, struct fileinfo *file, int sel_type, select_table * wait)
 {
   char           *dma_buf;
   int             buf_no, buf_ptr, buf_size;

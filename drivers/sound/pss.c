@@ -6,7 +6,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -73,6 +73,31 @@ static pss_confdata *devc = &pss_data;
 
 static int      pss_initialized = 0;
 static int      nonstandard_microcode = 0;
+
+static void
+pss_write (int data)
+{
+  int             i, limit;
+
+  limit = jiffies + 10;		/* The timeout is 0.1 seconds */
+  /*
+   * Note! the i<5000000 is an emergency exit. The dsp_command() is sometimes
+   * called while interrupts are disabled. This means that the timer is
+   * disabled also. However the timeout situation is a abnormal condition.
+   * Normally the DSP should be ready to accept commands after just couple of
+   * loops.
+   */
+
+  for (i = 0; i < 5000000 && jiffies < limit; i++)
+    {
+      if (inw (devc->base + PSS_STATUS) & PSS_WRITE_EMPTY)
+	{
+	  outw (devc->base + PSS_DATA, data);
+	  return;
+	}
+    }
+  printk ("PSS: DSP Command (%04x) Timeout.\n", data);
+}
 
 int
 probe_pss (struct address_info *hw_config)
@@ -354,6 +379,22 @@ attach_pss (struct address_info *hw_config)
   conf_printf (tmp, hw_config);
 }
 
+static void
+pss_init_speaker (void)
+{
+/* Don't ask what are these commands. I really don't know */
+  pss_write (0x0010);
+  pss_write (0x0000 | 252);	/* Left master volume */
+  pss_write (0x0010);
+  pss_write (0x0100 | 252);	/* Right master volume */
+  pss_write (0x0010);
+  pss_write (0x0200 | 246);	/* Bass */
+  pss_write (0x0010);
+  pss_write (0x0300 | 246);	/* Treble */
+  pss_write (0x0010);
+  pss_write (0x0800 | 0x00ce);	/* Stereo switch? */
+}
+
 int
 probe_pss_mpu (struct address_info *hw_config)
 {
@@ -392,6 +433,8 @@ probe_pss_mpu (struct address_info *hw_config)
       return 0;
     }
 
+  pss_init_speaker ();
+
 /*
  * Finally wait until the DSP algorithm has initialized itself and
  * deactivates receive interrupt.
@@ -422,14 +465,14 @@ pss_coproc_open (void *dev_info, int sub_device)
       if (pss_synthLen == 0)
 	{
 	  printk ("PSS: MIDI synth microcode not available.\n");
-	  return -(EIO);
+	  return -EIO;
 	}
 
       if (nonstandard_microcode)
 	if (!pss_download_boot (devc, pss_synth, pss_synthLen, CPF_FIRST | CPF_LAST))
 	  {
 	    printk ("PSS: Unable to load MIDI synth microcode to DSP.\n");
-	    return -(EIO);
+	    return -EIO;
 	  }
       nonstandard_microcode = 0;
       break;
@@ -460,12 +503,12 @@ static int
 download_boot_block (void *dev_info, copr_buffer * buf)
 {
   if (buf->len <= 0 || buf->len > sizeof (buf->data))
-    return -(EINVAL);
+    return -EINVAL;
 
   if (!pss_download_boot (devc, buf->data, buf->len, buf->flags))
     {
       printk ("PSS: Unable to load microcode block to DSP.\n");
-      return -(EIO);
+      return -EIO;
     }
   nonstandard_microcode = 1;	/* The MIDI microcode has been overwritten */
 
@@ -491,7 +534,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 
 	buf = (copr_buffer *) vmalloc (sizeof (copr_buffer));
 	if (buf == NULL)
-	  return -(ENOSPC);
+	  return -ENOSPC;
 
 	copy_from_user ((char *) buf, &((char *) arg)[0], sizeof (*buf));
 	err = download_boot_block (dev_info, buf);
@@ -509,7 +552,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 
 	buf = (copr_msg *) vmalloc (sizeof (copr_msg));
 	if (buf == NULL)
-	  return -(ENOSPC);
+	  return -ENOSPC;
 
 	copy_from_user ((char *) buf, &((char *) arg)[0], sizeof (*buf));
 
@@ -524,9 +567,13 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	      {
 		restore_flags (flags);
 		buf->len = i;	/* feed back number of WORDs sent */
-		copy_to_user (&((char *) arg)[0], &buf, sizeof (buf));
+		{
+		  char           *fixit = (char *) buf;
+
+		  copy_to_user (&((char *) arg)[0], fixit, sizeof (*buf));
+		};
 		vfree (buf);
-		return -(EIO);
+		return -EIO;
 	      }
 	  }
 
@@ -548,7 +595,7 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 
 	buf = (copr_msg *) vmalloc (sizeof (copr_msg));
 	if (buf == NULL)
-	  return -(ENOSPC);
+	  return -ENOSPC;
 
 
 	data = (unsigned short *) buf->data;
@@ -562,14 +609,18 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	    if (!pss_get_dspword (devc, data++))
 	      {
 		if (i == 0)
-		  err = -(EIO);
+		  err = -EIO;
 		break;
 	      }
 	  }
 
 	restore_flags (flags);
 
-	copy_to_user (&((char *) arg)[0], &buf, sizeof (buf));
+	{
+	  char           *fixit = (char *) buf;
+
+	  copy_to_user (&((char *) arg)[0], fixit, sizeof (*buf));
+	};
 	vfree (buf);
 
 	return err;
@@ -590,25 +641,29 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	if (!pss_put_dspword (devc, 0x00d0))
 	  {
 	    restore_flags (flags);
-	    return -(EIO);
+	    return -EIO;
 	  }
 
 	if (!pss_put_dspword (devc, (unsigned short) (buf.parm1 & 0xffff)))
 	  {
 	    restore_flags (flags);
-	    return -(EIO);
+	    return -EIO;
 	  }
 
 	if (!pss_get_dspword (devc, &tmp))
 	  {
 	    restore_flags (flags);
-	    return -(EIO);
+	    return -EIO;
 	  }
 
 	buf.parm1 = tmp;
 	restore_flags (flags);
 
-	copy_to_user (&((char *) arg)[0], &buf, sizeof (buf));
+	{
+	  char           *fixit = (char *) &buf;
+
+	  copy_to_user (&((char *) arg)[0], fixit, sizeof (buf));
+	};
 	return 0;
       }
       break;
@@ -626,20 +681,20 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	if (!pss_put_dspword (devc, 0x00d1))
 	  {
 	    restore_flags (flags);
-	    return -(EIO);
+	    return -EIO;
 	  }
 
 	if (!pss_put_dspword (devc, (unsigned short) (buf.parm1 & 0xffff)))
 	  {
 	    restore_flags (flags);
-	    return -(EIO);
+	    return -EIO;
 	  }
 
 	tmp = (unsigned int) buf.parm2 & 0xffff;
 	if (!pss_put_dspword (devc, tmp))
 	  {
 	    restore_flags (flags);
-	    return -(EIO);
+	    return -EIO;
 	  }
 
 	restore_flags (flags);
@@ -660,27 +715,27 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	if (!pss_put_dspword (devc, 0x00d3))
 	  {
 	    restore_flags (flags);
-	    return -(EIO);
+	    return -EIO;
 	  }
 
 	if (!pss_put_dspword (devc, (unsigned short) (buf.parm1 & 0xffff)))
 	  {
 	    restore_flags (flags);
-	    return -(EIO);
+	    return -EIO;
 	  }
 
 	tmp = (unsigned int) buf.parm2 & 0x00ff;
 	if (!pss_put_dspword (devc, tmp))
 	  {
 	    restore_flags (flags);
-	    return -(EIO);
+	    return -EIO;
 	  }
 
 	tmp = ((unsigned int) buf.parm2 >> 8) & 0xffff;
 	if (!pss_put_dspword (devc, tmp))
 	  {
 	    restore_flags (flags);
-	    return -(EIO);
+	    return -EIO;
 	  }
 
 	restore_flags (flags);
@@ -701,19 +756,19 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	if (!pss_put_dspword (devc, 0x00d2))
 	  {
 	    restore_flags (flags);
-	    return -(EIO);
+	    return -EIO;
 	  }
 
 	if (!pss_put_dspword (devc, (unsigned short) (buf.parm1 & 0xffff)))
 	  {
 	    restore_flags (flags);
-	    return -(EIO);
+	    return -EIO;
 	  }
 
 	if (!pss_get_dspword (devc, &tmp))	/* Read MSB */
 	  {
 	    restore_flags (flags);
-	    return -(EIO);
+	    return -EIO;
 	  }
 
 	buf.parm1 = tmp << 8;
@@ -721,23 +776,27 @@ pss_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 	if (!pss_get_dspword (devc, &tmp))	/* Read LSB */
 	  {
 	    restore_flags (flags);
-	    return -(EIO);
+	    return -EIO;
 	  }
 
 	buf.parm1 |= tmp & 0x00ff;
 
 	restore_flags (flags);
 
-	copy_to_user (&((char *) arg)[0], &buf, sizeof (buf));
+	{
+	  char           *fixit = (char *) &buf;
+
+	  copy_to_user (&((char *) arg)[0], fixit, sizeof (buf));
+	};
 	return 0;
       }
       break;
 
     default:
-      return -(EINVAL);
+      return -EINVAL;
     }
 
-  return -(EINVAL);
+  return -EINVAL;
 }
 
 static coproc_operations pss_coproc_operations =
@@ -769,7 +828,7 @@ attach_pss_mpu (struct address_info *hw_config)
 int
 probe_pss_mss (struct address_info *hw_config)
 {
-  int             timeout;
+  volatile int    timeout;
 
   if (!pss_initialized)
     return 0;
@@ -808,7 +867,11 @@ probe_pss_mss (struct address_info *hw_config)
        timeout < 100000 && (inb (hw_config->io_base + 3) & 0x3f) != 0x04;
        timeout++);
 
-  outb (0x0b, hw_config->io_base + 4);	/* Required by some cards */
+  outb ((0x0b), hw_config->io_base + 4);	/* Required by some cards */
+
+  for (timeout = 0;
+       timeout < 100000;
+       timeout++);
   return probe_ms_sound (hw_config);
 }
 

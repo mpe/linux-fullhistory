@@ -234,7 +234,7 @@
 #include <linux/malloc.h>
 #include <linux/random.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/irq.h>
 #include <asm/io.h>
 

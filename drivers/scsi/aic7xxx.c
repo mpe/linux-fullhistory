@@ -1,3 +1,5 @@
+#define EXPERIMENTAL_FLAGS 0
+
 /*+M*************************************************************************
  * Adaptec AIC7xxx device driver for Linux.
  *
@@ -4314,7 +4316,7 @@ aic7xxx_register(Scsi_Host_Template *template,
   p->flags = config->flags;
   p->chan_num = config->chan_num;
   p->scb_link = &(p->scb_usage);
-#ifdef AIC7XXX_SHARE_SCBS
+#if defined(CONFIG_PCI) && defined(AIC7XXX_SHARE_SCBS)
   if ((p->chan_num == 0) && ((p->type == AIC_7873) | (p->type == AIC_7883)))
   {
     shared_3985_scbs = &(p->scb_usage);
@@ -4410,7 +4412,7 @@ aic7xxx_register(Scsi_Host_Template *template,
     outb(config->scsi_id_b, SCSIID + base);
     scsi_conf = inb(SCSICONF + base + 1) & (ENSPCHK | STIMESEL);
     outb(scsi_conf | ENSTIMER | ACTNEGEN | STPWEN, SXFRCTL1 + base);
-#if 1
+#if EXPERIMENTAL_FLAGS
     outb(ENSELTIMO | ENSCSIRST | ENSCSIPERR, SIMODE1 + base);
 #else
     outb(ENSELTIMO, SIMODE1 + base);
@@ -4432,7 +4434,7 @@ aic7xxx_register(Scsi_Host_Template *template,
   outb(config->scsi_id, SCSIID + base);
   scsi_conf = inb(SCSICONF + base) & (ENSPCHK | STIMESEL);
   outb(scsi_conf | ENSTIMER | ACTNEGEN | STPWEN, SXFRCTL1 + base);
-#if 1
+#if EXPERIMENTAL_FLAGS
   outb(ENSELTIMO | ENSCSIRST | ENSCSIPERR, SIMODE1 + base);
 #else
   outb(ENSELTIMO, SIMODE1 + base);

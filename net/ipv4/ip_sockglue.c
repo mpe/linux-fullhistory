@@ -34,7 +34,7 @@
 #include <linux/mroute.h>
 #include <net/route.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #ifdef CONFIG_IP_MULTICAST
 

@@ -14,7 +14,7 @@
 #include <linux/ufs_fs.h>
 #include <linux/sched.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 static int
 ufs_readlink(struct inode * inode, char * buffer, int buflen)

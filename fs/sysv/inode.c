@@ -30,7 +30,7 @@
 #include <linux/string.h>
 #include <linux/locks.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 void sysv_put_inode(struct inode *inode)
 {

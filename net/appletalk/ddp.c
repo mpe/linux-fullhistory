@@ -35,7 +35,7 @@
  
 #include <linux/config.h>
 #include <linux/module.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <linux/types.h>
@@ -1024,10 +1024,9 @@ static int atalk_setsockopt(struct socket *sock, int level, int optname, char *o
 	if(optval==NULL)
 		return(-EINVAL);
 
-	err=verify_area(VERIFY_READ,optval,sizeof(int));
-	if(err)
+	err = get_user(opt, (int *)optval);
+	if (err)
 		return err;
-	opt=get_fs_long((unsigned long *)optval);
 	
 	switch(level)
 	{

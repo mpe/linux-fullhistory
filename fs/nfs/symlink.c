@@ -16,7 +16,7 @@
 #include <linux/malloc.h>
 #include <linux/string.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 static int nfs_readlink(struct inode *, char *, int);
 static int nfs_follow_link(struct inode *, struct inode *, int, int,

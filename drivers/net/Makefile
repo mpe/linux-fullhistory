@@ -416,6 +416,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCC),y)
+L_OBJS += scc.o
+else
+  ifeq ($(CONFIG_SCC),m)
+  M_OBJS += scc.o
+  endif
+endif
+
 ifeq ($(CONFIG_PI),y)
 L_OBJS += pi2.o
 endif

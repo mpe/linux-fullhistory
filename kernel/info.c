@@ -6,14 +6,14 @@
 
 /* This implements the sysinfo() system call */
 
-#include <asm/segment.h>
-
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/unistd.h>
 #include <linux/types.h>
 #include <linux/mm.h>
 #include <linux/swap.h>
+
+#include <asm/uaccess.h>
 
 asmlinkage int sys_sysinfo(struct sysinfo *info)
 {

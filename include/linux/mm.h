@@ -14,15 +14,6 @@ extern void * high_memory;
 
 #include <asm/page.h>
 #include <asm/atomic.h>
-#include <asm/segment.h>
-
-#define VERIFY_READ 0
-#define VERIFY_WRITE 1
-
-extern inline int verify_area(int type, const void * addr, unsigned long size)
-{
-	return access_ok(type,addr,size)?0:-EFAULT;
-}
 
 /*
  * Linux kernel virtual memory manager primitives.

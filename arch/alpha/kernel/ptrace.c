@@ -13,7 +13,7 @@
 #include <linux/user.h>
 #include <linux/debugreg.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
 

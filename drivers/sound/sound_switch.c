@@ -6,7 +6,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -15,12 +15,13 @@
 
 #include "sound_config.h"
 
-struct sbc_device
-  {
-    int             usecount;
-  };
-
 static int      in_use = 0;	/* Total # of open devices */
+
+/*
+ * Table for configurable mixer volume handling
+ */
+static mixer_vol_table mixer_vols[MAX_MIXER_DEV];
+static int      num_mixer_volumes = 0;
 
 /*
  * /dev/sndstatus -device
@@ -28,6 +29,92 @@ static int      in_use = 0;	/* Total # of open devices */
 static char    *status_buf = NULL;
 static int      status_len, status_ptr;
 static int      status_busy = 0;
+
+int
+               *
+load_mixer_volumes (char *name, int *levels, int present)
+{
+  int             i, n;
+
+  for (i = 0; i < num_mixer_volumes; i++)
+    if (strcmp (name, mixer_vols[i].name) == 0)
+      {
+	if (present)
+	  mixer_vols[i].num = i;
+	return mixer_vols[i].levels;
+      }
+
+  if (num_mixer_volumes >= MAX_MIXER_DEV)
+    {
+      printk ("Sound: Too many mixers (%s)\n", name);
+      return levels;
+    }
+
+  n = num_mixer_volumes++;
+
+  strcpy (mixer_vols[n].name, name);
+
+  if (present)
+    mixer_vols[n].num = n;
+  else
+    mixer_vols[n].num = -1;
+
+  for (i = 0; i < 32; i++)
+    mixer_vols[n].levels[i] = levels[i];
+  return mixer_vols[n].levels;
+}
+
+static int
+set_mixer_levels (caddr_t arg)
+{
+  mixer_vol_table *buf = NULL;
+  int             err = 0;
+
+  if ((buf = (mixer_vol_table *) vmalloc (sizeof (mixer_vol_table))) == NULL)
+    return -ENOSPC;
+
+  copy_from_user ((char *) buf, &((char *) arg)[0], sizeof (*buf));
+
+  load_mixer_volumes (buf->name, buf->levels, 0);
+
+  {
+    char           *fixit = (char *) buf;
+
+    copy_to_user (&((char *) arg)[0], fixit, sizeof (*buf));
+  };
+  vfree (buf);
+
+  return err;
+}
+
+static int
+get_mixer_levels (caddr_t arg)
+{
+  mixer_vol_table *buf = NULL;
+  int             n, err = 0;
+
+  if ((buf = (mixer_vol_table *) vmalloc (sizeof (mixer_vol_table))) == NULL)
+    return -ENOSPC;
+
+  copy_from_user ((char *) buf, &((char *) arg)[0], sizeof (*buf));
+
+  n = buf->num;
+  if (n < 0 || n >= num_mixer_volumes)
+    err = -EINVAL;
+  else
+    {
+      memcpy ((char *) buf, (char *) &mixer_vols[n], sizeof (*buf));
+    }
+
+  {
+    char           *fixit = (char *) buf;
+
+    copy_to_user (&((char *) arg)[0], fixit, sizeof (*buf));
+  };
+  vfree (buf);
+
+  return err;
+}
 
 static int
 put_status (char *s)
@@ -111,6 +198,7 @@ init_status (void)
   put_status (system_utsname.machine);
   put_status ("\n");
 
+
   if (!put_status ("Config options: "))
     return;
   if (!put_status_int (SELECTED_SOUND_OPTIONS, 16))
@@ -134,6 +222,7 @@ init_status (void)
 	if (!put_status ("\n"))
 	  return;
       }
+
 
   if (!put_status ("\nCard config: \n"))
     return;
@@ -269,6 +358,7 @@ init_status (void)
     }
 #endif
 
+#ifdef CONFIG_MIDI
   if (!put_status ("\nTimers:\n"))
     return;
 
@@ -283,6 +373,7 @@ init_status (void)
       if (!put_status ("\n"))
 	return;
     }
+#endif
 
   if (!put_status ("\nMixers:\n"))
     return;
@@ -316,7 +407,11 @@ read_status (char *buf, int count)
   if (l <= 0)
     return 0;
 
-  copy_to_user (&(buf)[0], &status_buf[status_ptr], l);
+  {
+    char           *fixit = &status_buf[status_ptr];
+
+    copy_to_user (&(buf)[0], fixit, l);
+  };
   status_ptr += l;
 
   return l;
@@ -353,11 +448,10 @@ sound_read_sw (int dev, struct fileinfo *file, char *buf, int count)
       return MIDIbuf_read (dev, file, buf, count);
 #endif
 
-    default:
-      printk ("Sound: Undefined minor device %d\n", dev);
+    default:;
     }
 
-  return -(EPERM);
+  return -EINVAL;
 }
 
 int
@@ -365,6 +459,7 @@ sound_write_sw (int dev, struct fileinfo *file, const char *buf, int count)
 {
 
   DEB (printk ("sound_write_sw(dev=%d, count=%d)\n", dev, count));
+
 
   switch (dev & 0x0f)
     {
@@ -391,7 +486,7 @@ sound_write_sw (int dev, struct fileinfo *file, const char *buf, int count)
 
     }
 
-  return -(EPERM);
+  return -EINVAL;
 }
 
 int
@@ -404,24 +499,25 @@ sound_open_sw (int dev, struct fileinfo *file)
   if ((dev >= SND_NDEVS) || (dev < 0))
     {
       printk ("Invalid minor device %d\n", dev);
-      return -(ENXIO);
+      return -ENXIO;
     }
+
 
   switch (dev & 0x0f)
     {
     case SND_DEV_STATUS:
       if (status_busy)
-	return -(EBUSY);
+	return -EBUSY;
       status_busy = 1;
       if ((status_buf = (char *) vmalloc (4000)) == NULL)
-	return -(EIO);
+	return -EIO;
       status_len = status_ptr = 0;
       init_status ();
       break;
 
     case SND_DEV_CTL:
       if ((dev & 0xf0) && ((dev & 0xf0) >> 4) >= num_mixers)
-	return -(ENXIO);
+	return -ENXIO;
       return 0;
       break;
 
@@ -451,7 +547,7 @@ sound_open_sw (int dev, struct fileinfo *file)
 
     default:
       printk ("Invalid minor device %d\n", dev);
-      return -(ENXIO);
+      return -ENXIO;
     }
 
   in_use++;
@@ -510,13 +606,52 @@ get_mixer_info (int dev, caddr_t arg)
   mixer_info      info;
 
   if (dev < 0 || dev >= num_mixers)
-    return -(ENXIO);
+    return -ENXIO;
+
+  strcpy (info.id, mixer_devs[dev]->id);
+  strcpy (info.name, mixer_devs[dev]->name);
+  info.modify_counter = mixer_devs[dev]->modify_counter;
+
+  {
+    char           *fixit = (char *) &info;
+
+    copy_to_user (&((char *) arg)[0], fixit, sizeof (info));
+  };
+  return 0;
+}
+
+static int
+get_old_mixer_info (int dev, caddr_t arg)
+{
+  _old_mixer_info info;
+
+  if (dev < 0 || dev >= num_mixers)
+    return -ENXIO;
 
   strcpy (info.id, mixer_devs[dev]->id);
   strcpy (info.name, mixer_devs[dev]->name);
 
-  copy_to_user (&((char *) arg)[0], (char *) &info, sizeof (info));
+  {
+    char           *fixit = (char *) &info;
+
+    copy_to_user (&((char *) arg)[0], fixit, sizeof (info));
+  };
   return 0;
+}
+
+static int
+sound_mixer_ioctl (int mixdev,
+		   unsigned int cmd, caddr_t arg)
+{
+  if (cmd == SOUND_MIXER_INFO)
+    return get_mixer_info (mixdev, arg);
+  if (cmd == SOUND_OLD_MIXER_INFO)
+    return get_old_mixer_info (mixdev, arg);
+
+  if (_IOC_DIR (cmd) & _IOC_WRITE)
+    mixer_devs[mixdev]->modify_counter++;
+
+  return mixer_devs[mixdev]->ioctl (mixdev, cmd, arg);
 }
 
 int
@@ -524,6 +659,10 @@ sound_ioctl_sw (int dev, struct fileinfo *file,
 		unsigned int cmd, caddr_t arg)
 {
   DEB (printk ("sound_ioctl_sw(dev=%d, cmd=0x%x, arg=0x%x)\n", dev, cmd, arg));
+
+  if (cmd == OSS_GETVERSION)
+    return ioctl_out (arg, SOUND_VERSION);
+
 
   if (((cmd >> 8) & 0xff) == 'M' && num_mixers > 0)	/* Mixer ioctl */
     if ((dev & 0x0f) != SND_DEV_CTL)
@@ -539,17 +678,13 @@ sound_ioctl_sw (int dev, struct fileinfo *file,
 	  case SND_DEV_AUDIO:
 	    mixdev = audio_devs[dev >> 4]->mixer_dev;
 	    if (mixdev < 0 || mixdev >= num_mixers)
-	      return -(ENXIO);
-	    if (cmd == SOUND_MIXER_INFO)
-	      return get_mixer_info (mixdev, arg);
-	    return mixer_devs[mixdev]->ioctl (mixdev, cmd, arg);
+	      return -ENXIO;
+	    return sound_mixer_ioctl (mixdev, cmd, arg);
 	    break;
 #endif
 
 	  default:
-	    if (cmd == SOUND_MIXER_INFO)
-	      return get_mixer_info (0, arg);
-	    return mixer_devs[0]->ioctl (0, cmd, arg);
+	    return sound_mixer_ioctl (dev, cmd, arg);
 	  }
       }
 
@@ -557,18 +692,20 @@ sound_ioctl_sw (int dev, struct fileinfo *file,
     {
 
     case SND_DEV_CTL:
+      if (cmd == SOUND_MIXER_GETLEVELS)
+	return get_mixer_levels (arg);
+      if (cmd == SOUND_MIXER_SETLEVELS)
+	return set_mixer_levels (arg);
 
       if (!num_mixers)
-	return -(ENXIO);
+	return -ENXIO;
 
       dev = dev >> 4;
 
       if (dev >= num_mixers)
-	return -(ENXIO);
+	return -ENXIO;
 
-      if (cmd == SOUND_MIXER_INFO)
-	return get_mixer_info (dev, arg);
-      return mixer_devs[dev]->ioctl (dev, cmd, arg);
+      return sound_mixer_ioctl (dev, cmd, arg);
       break;
 
 #ifdef CONFIG_SEQUENCER
@@ -594,5 +731,5 @@ sound_ioctl_sw (int dev, struct fileinfo *file,
 
     }
 
-  return -(EPERM);
+  return -EINVAL;
 }

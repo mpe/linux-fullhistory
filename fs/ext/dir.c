@@ -12,7 +12,7 @@
  *  ext directory handling functions
  */
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #include <linux/errno.h>
 #include <linux/kernel.h>

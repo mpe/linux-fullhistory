@@ -20,7 +20,7 @@
 #include <linux/stat.h>
 #include <linux/mm.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #include "../fat/msbuffer.h"
 #include "../fat/tables.h"

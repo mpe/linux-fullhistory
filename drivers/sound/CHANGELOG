@@ -1,5 +1,9 @@
-Changelog for version 3.5.4
----------------------------
+Changelog for version 3.7-beta5
+-------------------------------
+
+Since 3.5
+- Changes almost everywhere.
+- Support for OPTi 82C924 based soundcards.
 
 Since 3.5.4-beta8
 - Fixed a bug in handling of non-fragment sized writes in 16 bit/stereo mode

@@ -45,7 +45,7 @@
 
 #include <asm/system.h>
 #include <asm/io.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/bitops.h>
 
 static char *serial_name = "Serial driver";

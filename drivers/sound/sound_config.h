@@ -5,7 +5,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -14,10 +14,6 @@
 #include "local.h"
 #include "os.h"
 #include "soundvers.h"
-
-#if defined(ISC) || defined(SCO) || defined(SVR42)
-#define GENERIC_SYSV
-#endif
 
 
 
@@ -32,20 +28,11 @@
 #define MAX_REALTIME_FACTOR	4
 #endif
 
-/************* PCM DMA buffer sizes *******************/
-
-/* If you are using high playback or recording speeds, the default buffer size
-   is too small. DSP_BUFFSIZE must be 64k or less.
-
-   A rule of thumb is 64k for PAS16, 32k for PAS+, 16k for SB Pro and
-   4k for SB.
-
-   If you change the DSP_BUFFSIZE, don't modify this file.
-   Use the make config command instead. */
-
-#ifndef DSP_BUFFSIZE
-#define DSP_BUFFSIZE		(4096)
-#endif
+/*
+ * Use always 64k buffer size. There is no reason to use shorter.
+ */
+#undef DSP_BUFFSIZE
+#define DSP_BUFFSIZE		(16*1024)
 
 #ifndef DSP_BUFFCOUNT
 #define DSP_BUFFCOUNT		1	/* 1 is recommended. */
@@ -128,7 +115,7 @@ struct address_info {
 	int driver_use_1;	/* Driver defined field 1 */
 	int driver_use_2;	/* Driver defined field 2 */
 	int *osp;	/* OS specific info */
-	int card_subtype;	/* Driver specific. Usually 0 */
+	int card_subtype;	/* Driver spesific. Usually 0 */
 };
 
 #define SYNTH_MAX_VOICES	32
@@ -170,7 +157,7 @@ struct channel_info {
 #endif
 
 #ifndef DDB
-#define DDB(x)
+#define DDB(x) {}
 #endif
 
 #define TIMER_ARMED	121234

@@ -77,7 +77,7 @@
 #include <linux/inet.h>
 #include <linux/route.h>
 #include <net/sock.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <linux/fcntl.h>
 #include <linux/mm.h>
@@ -1035,18 +1035,15 @@ ipxitf_auto_create(struct device *dev, unsigned short dlink_type)
 static int 
 ipxitf_ioctl_real(unsigned int cmd, void *arg)
 {
-	int err;
 	switch(cmd)
 	{
-		case SIOCSIFADDR:
-		{
+		case SIOCSIFADDR: {
 			struct ifreq ifr;
 			struct sockaddr_ipx *sipx;
 			ipx_interface_definition f;
-			err=verify_area(VERIFY_READ,arg,sizeof(ifr));
-			if(err)
-				return err;
-			copy_from_user(&ifr,arg,sizeof(ifr));
+
+			if (copy_from_user(&ifr,arg,sizeof(ifr)))
+				return -EFAULT;
 			sipx=(struct sockaddr_ipx *)&ifr.ifr_addr;
 			if(sipx->sipx_family!=AF_IPX)
 				return -EINVAL;
@@ -1060,16 +1057,14 @@ ipxitf_ioctl_real(unsigned int cmd, void *arg)
 			else
 				return ipxitf_create(&f);
 		}
-		case SIOCGIFADDR:
-		{
+		case SIOCGIFADDR: {
 			struct ifreq ifr;
 			struct sockaddr_ipx *sipx;
 			ipx_interface *ipxif;
 			struct device *dev;
-			err=verify_area(VERIFY_WRITE,arg,sizeof(ifr));
-			if(err)
-				return err;
-			copy_from_user(&ifr,arg,sizeof(ifr));
+
+			if (copy_from_user(&ifr,arg,sizeof(ifr)))
+				return -EFAULT;
 			sipx=(struct sockaddr_ipx *)&ifr.ifr_addr;
 			dev=dev_get(ifr.ifr_name);
 			if(!dev)
@@ -1080,19 +1075,24 @@ ipxitf_ioctl_real(unsigned int cmd, void *arg)
 			sipx->sipx_family=AF_IPX;
 			sipx->sipx_network=ipxif->if_netnum;
 			memcpy(sipx->sipx_node, ipxif->if_node, sizeof(sipx->sipx_node));
-			copy_to_user(arg,&ifr,sizeof(ifr));
+			if (copy_to_user(arg,&ifr,sizeof(ifr)))
+				return -EFAULT;
 			return 0;
 		}
-		case SIOCAIPXITFCRT:
-			err=verify_area(VERIFY_READ,arg,sizeof(char));
-			if(err)
+		case SIOCAIPXITFCRT: {
+			int err, val;
+			err = get_user(val, (unsigned char *) arg);
+			if (err)
 				return err;
-			return ipxcfg_set_auto_create(get_fs_byte(arg));
-		case SIOCAIPXPRISLT:
-			err=verify_area(VERIFY_READ,arg,sizeof(char));
-			if(err)
+			return ipxcfg_set_auto_create(val);
+		}
+		case SIOCAIPXPRISLT: {
+			int err, val;
+			err = get_user(val, (unsigned char *) arg);
+			if (err)
 				return err;
-			return ipxcfg_set_auto_select(get_fs_byte(arg));
+			return ipxcfg_set_auto_select(val);
+		}
 		default:
 			return -EINVAL;
 	}
@@ -1620,13 +1620,12 @@ static int ipx_setsockopt(struct socket *sock, int level, int optname, char *opt
 	
 	sk=(ipx_socket *)sock->data;
 	
-	if(optval==NULL)
+	if (optval==NULL)
 		return(-EINVAL);
 
-	err=verify_area(VERIFY_READ,optval,sizeof(int));
-	if(err)
+	err = get_user(opt, (unsigned int *)optval);
+	if (err)
 		return err;
-	opt=get_fs_long((unsigned long *)optval);
 	
 	switch(level)
 	{

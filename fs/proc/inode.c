@@ -14,7 +14,7 @@
 #include <linux/limits.h>
 
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 static void proc_put_inode(struct inode *inode)
 {

@@ -19,7 +19,7 @@
 #include <linux/malloc.h>
 #include <linux/mount.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #ifndef min
 #define min(a,b) ((a) < (b)) ? (a) : (b)

@@ -19,7 +19,7 @@
 #include <linux/mm.h>
 #include <linux/file.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/bitops.h>
 
 asmlinkage int sys_statfs(const char * path, struct statfs * buf)

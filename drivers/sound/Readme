@@ -1,8 +1,8 @@
-USS Lite version 3.5.4 release notes
-------------------------------------
+OSS Lite version 3.7-beta release notes
+---------------------------------------
 
 Most up to date information about this driver is available from 
-http://www.4front-tech.com/usslite or http://personal.eunet.fi/pp/voxware
+http://www.4front-tech.com/ossfree or http://personal.eunet.fi/pp/voxware
 (European mirror).
 
 
@@ -16,15 +16,12 @@ New Programmer's Guide is currently under work (June/July 96). Please
 check http://www.4front-tech.com/pguide for more info.
 
    ====================================================
--  THIS VERSION ____REQUIRES____ Linux 1.3.70 OR LATER.
+-  THIS VERSION ____REQUIRES____ Linux 2.1.5 OR LATER.
    ====================================================
-
-It's very likely that this driver version is incompatible with
-Linux versions later than 2.0.x.
 
 Packages "snd-util-3.5.tar.gz" and "snd-data-0.1.tar.Z"
 contain useful utilities to be used with this driver.
-See http://www.4front-tech.com/usslite/getting.html for
+See http://www.4front-tech.com/ossfree/getting.html for
 download instructions.
 
 If you are looking for the installation instructions, please
@@ -35,7 +32,7 @@ Supported soundcards
 
 See Readme.cards.
 
-Please check http://www.4front-tech.com/usslite if you don't find
+Please check http://www.4front-tech.com/ossfree if you don't find
 your soundcard there.
 
 Contributors
@@ -73,6 +70,8 @@ contributors. (I could have forgotten some names.)
 	Gregor Hoffleit	Mozart support (initial version)
 	Riccardo Facchetti Audio Excel DSP 16 (aedsp16) support
 	James Hightower Spotting a tiny but important bug in CS423x support.
+	Denis Sablic	OPTi 82C924 spesific enhancements (non PnP mode)
+	Tim MacKenzie	Full duplex support for OPTi 82C930.
 	
 	Please look at lowlevel/README for more contributors.
 
@@ -113,7 +112,7 @@ If you have some problems
 =========================
 
 Read the sound HOWTO (sunsite.unc.edu:/pub/Linux/docs/...?).
-Also look at the home page (http://www.4front-tech.com/usslite). It may
+Also look at the home page (http://www.4front-tech.com/ossfree). It may
 contain info about some recent bug fixes.
 
 It's likely that you have some problems when trying to use the sound driver
@@ -168,7 +167,7 @@ Hannu
 
 Hannu Savolainen
 hannu@voxware.pp.fi, hannu@4front-tech.com	
-(Please check http://www.4front-tech.com/usslite before mailing me).
+(Please check http://www.4front-tech.com/ossfree before mailing me).
 
 Snail mail:	Hannu Savolainen
 		Hiekkalaiturintie 3 A 8

@@ -28,7 +28,7 @@
 #include <linux/mm.h>
 #include <linux/rpcsock.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #define _S(nr) (1<<((nr)-1))
 

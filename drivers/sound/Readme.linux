@@ -67,7 +67,7 @@ Readme.cards for info about configuring the driver with your card. Also
 check for possible boot (insmod) time error messages in /var/adm/messages.
 
 - Other messages or problems
-Please check http://www.4front-tech.com/usslite for more info.
+Please check http://www.4front-tech.com/osslite for more info.
 
 Hannu Savolainen
 hannu@voxware.pp.fi

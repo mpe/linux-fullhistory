@@ -4,9 +4,8 @@
  *
  * The low level driver for the Pro Audio Spectrum ADC/DAC.
  */
-   
-#include <linux/config.h>
 
+#include <linux/config.h>
 #include "sound_config.h"
 
 #if defined(CONFIG_PAS) && defined(CONFIG_AUDIO)
@@ -42,7 +41,7 @@ pcm_set_speed (int arg)
   unsigned long   flags;
 
   if (arg == 0)
-     return pcm_speed;
+    return pcm_speed;
 
   if (arg > 44100)
     arg = 44100;
@@ -131,7 +130,7 @@ int
 pcm_set_bits (int arg)
 {
   if (arg == 0)
-     return pcm_bits;
+    return pcm_bits;
 
   if ((arg & pcm_bitsok) != arg)
     return pcm_bits;
@@ -156,61 +155,61 @@ pas_audio_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
     case SOUND_PCM_WRITE_RATE:
       if (local)
 	return pcm_set_speed ((int) arg);
-      return snd_ioctl_return ((int *) arg, pcm_set_speed (get_user ((int *) arg)));
+      return ioctl_out (arg, pcm_set_speed (ioctl_in (arg)));
       break;
 
     case SOUND_PCM_READ_RATE:
       if (local)
 	return pcm_speed;
-      return snd_ioctl_return ((int *) arg, pcm_speed);
+      return ioctl_out (arg, pcm_speed);
       break;
 
     case SNDCTL_DSP_STEREO:
       if (local)
 	return pcm_set_channels ((int) arg + 1) - 1;
-      return snd_ioctl_return ((int *) arg, pcm_set_channels (get_user ((int *) arg) + 1) - 1);
+      return ioctl_out (arg, pcm_set_channels (ioctl_in (arg) + 1) - 1);
       break;
 
     case SOUND_PCM_WRITE_CHANNELS:
       if (local)
 	return pcm_set_channels ((int) arg);
-      return snd_ioctl_return ((int *) arg, pcm_set_channels (get_user ((int *) arg)));
+      return ioctl_out (arg, pcm_set_channels (ioctl_in (arg)));
       break;
 
     case SOUND_PCM_READ_CHANNELS:
       if (local)
 	return pcm_channels;
-      return snd_ioctl_return ((int *) arg, pcm_channels);
+      return ioctl_out (arg, pcm_channels);
       break;
 
     case SNDCTL_DSP_SETFMT:
       if (local)
 	return pcm_set_bits ((int) arg);
-      return snd_ioctl_return ((int *) arg, pcm_set_bits (get_user ((int *) arg)));
+      return ioctl_out (arg, pcm_set_bits (ioctl_in (arg)));
       break;
 
     case SOUND_PCM_READ_BITS:
       if (local)
 	return pcm_bits;
-      return snd_ioctl_return ((int *) arg, pcm_bits);
+      return ioctl_out (arg, pcm_bits);
 
     case SOUND_PCM_WRITE_FILTER:	/*
 					 * NOT YET IMPLEMENTED
 					 */
-      if (get_user ((int *) arg) > 1)
-	return -(EINVAL);
-      pcm_filter = get_user ((int *) arg);
+      if (ioctl_in (arg) > 1)
+	return -EINVAL;
+      pcm_filter = ioctl_in (arg);
       break;
 
     case SOUND_PCM_READ_FILTER:
-      return snd_ioctl_return ((int *) arg, pcm_filter);
+      return ioctl_out (arg, pcm_filter);
       break;
 
     default:
-      return -(EINVAL);
+      return -EINVAL;
     }
 
-  return -(EINVAL);
+  return -EINVAL;
 }
 
 static void
@@ -234,7 +233,7 @@ pas_audio_open (int dev, int mode)
   if (pcm_busy)
     {
       restore_flags (flags);
-      return -(EBUSY);
+      return -EBUSY;
     }
 
   pcm_busy = 1;

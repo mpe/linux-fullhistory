@@ -15,7 +15,7 @@
  *  ext2 fs regular file handling primitives
  */
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 #include <linux/errno.h>

@@ -75,7 +75,7 @@
 #include <linux/errno.h>
 #include <linux/timer.h>
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <linux/mm.h>
 #include <net/checksum.h>
 #include <net/slhc_vj.h>

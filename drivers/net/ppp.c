@@ -76,7 +76,7 @@
 #include <linux/signal.h>	/* used in new tty drivers */
 #include <asm/system.h>
 #include <asm/bitops.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <linux/if.h>
 #include <linux/if_ether.h>
 #include <linux/netdevice.h>

@@ -22,7 +22,7 @@
 #include <linux/errno.h>
 #include <linux/major.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #ifdef CONFIG_BLK_DEV_LOOP_DES
 #include <linux/des.h>

@@ -18,7 +18,7 @@
 #include <linux/malloc.h>
 #include <linux/mm.h>
 
-#include <asm/segment.h>	/* for fs functions */
+#include <asm/uaccess.h>	/* for fs functions */
 
 static int nfs_dir_open(struct inode * inode, struct file * file);
 static long nfs_dir_read(struct inode *, struct file *, char *, unsigned long);

@@ -9,7 +9,7 @@
 #include <linux/config.h>
 
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #include <linux/sched.h>
 #include <linux/ncp_fs.h>

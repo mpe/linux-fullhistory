@@ -21,7 +21,7 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 

@@ -349,7 +349,7 @@ static struct orVals orDMA[] =
 };
 
 /*
- * Buffers to store audio card information
+ * Buffers to store audio card informations
  */
 static char     AudioExcelName[CARDNAMELEN + 1];
 static char     AudioExcelVersion[CARDVERLEN + 1];
@@ -403,9 +403,9 @@ ResetBoard (int port)
   /*
      * Reset DSP
    */
-  outb (1, (port + DSP_RESET));
+  outb ((1), (port + DSP_RESET));
   tenmicrosec ();
-  outb (0, (port + DSP_RESET));
+  outb ((0), (port + DSP_RESET));
   tenmicrosec ();
   tenmicrosec ();
   return CheckDSPOkay (port);
@@ -425,7 +425,7 @@ WriteDSPCommand (int port, int cmd)
        */
       if (!(ret & 0x80))
 	{
-	  outb (cmd, port + DSP_COMMAND);
+	  outb ((cmd), port + DSP_COMMAND);
 	  return 0;
 	}
     }
@@ -706,7 +706,7 @@ InitAEDSP16_SBPRO (struct address_info *hw_config)
      * can allow me to release the requested region.
    */
   if (!(ae_init & INIT_MPU401))
-    request_region (hw_config->io_base, 0x0f, "AEDSP16 (SBPro)");
+    request_region (hw_config->io_base, 0x0f, "aedsp16 (sbpro)");
 #endif
 
   ae_init |= INIT_SBPRO;
@@ -774,11 +774,11 @@ InitAEDSP16_MSS (struct address_info *hw_config)
      * can allow me to release the requested region. So when unloading
      * and then reloading it, we are going to have some nice Oops!
    */
-  request_region (hw_config->io_base, 0x08, "AEDSP16 (MSS)");
+  request_region (hw_config->io_base, 0x08, "aedsp16 (mss)");
 #endif
 
   if (!(ae_init & INIT_MPU401))
-    request_region (AEDSP16_BASE, 0x0f, "AEDSP16 (SBPro)");
+    request_region (AEDSP16_BASE, 0x0f, "aedsp16 (sbpro)");
 
   ae_init |= INIT_MSS;
   return 0;
@@ -837,11 +837,11 @@ InitAEDSP16_MPU401 (struct address_info *hw_config)
      * request any region because there is not a uninit routine that
      * can allow me to release the requested region.
    */
-  request_region (hw_config->io_base, 0x02, "AEDSP16 (mpu401)");
+  request_region (hw_config->io_base, 0x02, "aedsp16 (mpu401)");
 #endif
 
   if (!(ae_init & (INIT_MSS | INIT_SBPRO)))
-    request_region (AEDSP16_BASE, 0x0f, "AEDSP16 (SBPro)");
+    request_region (AEDSP16_BASE, 0x0f, "aedsp16 (sbpro)");
 
   ae_init |= INIT_MPU401;
   return 0;

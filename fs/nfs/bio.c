@@ -32,7 +32,7 @@
 #include <linux/malloc.h>
 #include <linux/pagemap.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 #undef DEBUG_BIO

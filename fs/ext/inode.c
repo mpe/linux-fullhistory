@@ -21,7 +21,7 @@
 #include <linux/locks.h>
 
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 void ext_put_inode(struct inode *inode)
 {

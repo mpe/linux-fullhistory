@@ -40,7 +40,7 @@
 #include <linux/random.h>
 
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/irq.h>
 #include <asm/amigamouse.h>
 #include <asm/amigahw.h>

@@ -1864,11 +1864,11 @@ CONFIG_WIC
   code which can be inserted in and removed from the running kernel
   whenever you want), say M here and read Documentation/modules.txt.
 
-Z8530 SCC kiss emulation driver for AX.25
+Z8530 SCC driver for AX.25
 CONFIG_SCC
   These cards are used to connect your Linux box to an amateur radio
   in order to communicate with other computers.  If you want to use
-  this, read Documentation/networking/z8530drv.txt and the HAM-HOWTO,
+  this, read Documentation/networking/z8530drv.txt and the AX.25-HOWTO,
   available via ftp (user: anonymous) at
   sunsite.unc.edu:/pub/Linux/docs/HOWTO.  If you want to compile this
   as a module ( = code which can be inserted in and removed from the

@@ -18,7 +18,7 @@
 #include <linux/sysv_fs.h>
 #include <linux/stat.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 static int sysv_readlink(struct inode *, char *, int);
 static int sysv_follow_link(struct inode *, struct inode *, int, int, struct inode **);

@@ -7,7 +7,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -21,6 +21,8 @@
 
 #include "sb.h"
 #include "sb_mixer.h"
+
+static int      sbmixnum = 1;
 
 void            sb_mixer_reset (sb_devc * devc);
 
@@ -69,7 +71,7 @@ static int
 sb_mixer_get (sb_devc * devc, int dev)
 {
   if (!((1 << dev) & devc->supported_devices))
-    return -(EINVAL);
+    return -EINVAL;
 
   return devc->levels[dev];
 }
@@ -107,10 +109,10 @@ smw_mixer_set (sb_devc * devc, int dev, int value)
     right = 100;
 
   if (dev > 31)
-    return -(EINVAL);
+    return -EINVAL;
 
   if (!(devc->supported_devices & (1 << dev)))	/* Not supported */
-    return -(EINVAL);
+    return -EINVAL;
 
   switch (dev)
     {
@@ -137,7 +139,7 @@ smw_mixer_set (sb_devc * devc, int dev, int value)
     default:
       reg = smw_mix_regs[dev];
       if (reg == 0)
-	return -(EINVAL);
+	return -EINVAL;
       sb_setmixer (devc, reg, (24 - (24 * left / 100)) | 0x20);		/* 24=mute, 0=max */
       sb_setmixer (devc, reg + 1, (24 - (24 * right / 100)) | 0x40);
     }
@@ -164,17 +166,17 @@ sb_mixer_set (sb_devc * devc, int dev, int value)
     right = 100;
 
   if (dev > 31)
-    return -(EINVAL);
+    return -EINVAL;
 
   if (!(devc->supported_devices & (1 << dev)))	/*
 						 * Not supported
 						 */
-    return -(EINVAL);
+    return -EINVAL;
 
   regoffs = (*devc->iomap)[dev][LEFT_CHN].regno;
 
   if (regoffs == 0)
-    return -(EINVAL);
+    return -EINVAL;
 
   val = sb_getmixer (devc, regoffs);
   change_bits (devc, &val, dev, LEFT_CHN, left);
@@ -300,6 +302,7 @@ static int
 sb_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 {
   sb_devc        *devc = mixer_devs[dev]->devc;
+  int             val;
 
   if (((cmd >> 8) & 0xff) == 'M')
     {
@@ -307,46 +310,48 @@ sb_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 	switch (cmd & 0xff)
 	  {
 	  case SOUND_MIXER_RECSRC:
-	    return snd_ioctl_return ((int *) arg, set_recmask (devc, get_user ((int *) arg)));
+	    get_user (val, (int *) arg);
+	    return ioctl_out (arg, set_recmask (devc, val));
 	    break;
 
 	  default:
 
-	    return snd_ioctl_return ((int *) arg, sb_mixer_set (devc, cmd & 0xff, get_user ((int *) arg)));
+	    get_user (val, (int *) arg);
+	    return ioctl_out (arg, sb_mixer_set (devc, cmd & 0xff, val));
 	  }
       else
 	switch (cmd & 0xff)
 	  {
 
 	  case SOUND_MIXER_RECSRC:
-	    return snd_ioctl_return ((int *) arg, devc->recmask);
+	    return ioctl_out (arg, devc->recmask);
 	    break;
 
 	  case SOUND_MIXER_DEVMASK:
-	    return snd_ioctl_return ((int *) arg, devc->supported_devices);
+	    return ioctl_out (arg, devc->supported_devices);
 	    break;
 
 	  case SOUND_MIXER_STEREODEVS:
 	    if (devc->model == MDL_JAZZ || devc->model == MDL_SMW)
-	      return snd_ioctl_return ((int *) arg, devc->supported_devices);
+	      return ioctl_out (arg, devc->supported_devices);
 	    else
-	      return snd_ioctl_return ((int *) arg, devc->supported_devices & ~(SOUND_MASK_MIC | SOUND_MASK_SPEAKER));
+	      return ioctl_out (arg, devc->supported_devices & ~(SOUND_MASK_MIC | SOUND_MASK_SPEAKER | SOUND_MASK_IMIX));
 	    break;
 
 	  case SOUND_MIXER_RECMASK:
-	    return snd_ioctl_return ((int *) arg, devc->supported_rec_devices);
+	    return ioctl_out (arg, devc->supported_rec_devices);
 	    break;
 
 	  case SOUND_MIXER_CAPS:
-	    return snd_ioctl_return ((int *) arg, devc->mixer_caps);
+	    return ioctl_out (arg, devc->mixer_caps);
 	    break;
 
 	  default:
-	    return snd_ioctl_return ((int *) arg, sb_mixer_get (devc, cmd & 0xff));
+	    return ioctl_out (arg, sb_mixer_get (devc, cmd & 0xff));
 	  }
     }
   else
-    return -(EINVAL);
+    return -EINVAL;
 }
 
 static struct mixer_operations sb_mixer_operations =
@@ -359,10 +364,16 @@ static struct mixer_operations sb_mixer_operations =
 void
 sb_mixer_reset (sb_devc * devc)
 {
+  char            name[32];
   int             i;
+
+  sprintf (name, "SB_%d", devc->sbmixnum);
+
+  devc->levels = load_mixer_volumes (name, default_levels, 1);
 
   for (i = 0; i < SOUND_MIXER_NRDEVICES; i++)
     sb_mixer_set (devc, i, devc->levels[i]);
+
   set_recmask (devc, SOUND_MASK_MIC);
 }
 
@@ -370,6 +381,9 @@ int
 sb_mixer_init (sb_devc * devc)
 {
   int             mixer_type = 0;
+
+  devc->sbmixnum = sbmixnum++;
+  devc->levels = NULL;
 
   sb_setmixer (devc, 0x00, 0);	/* Reset mixer */
 
@@ -431,7 +445,6 @@ sb_mixer_init (sb_devc * devc)
 	  sizeof (struct mixer_operations));
 
   mixer_devs[num_mixers]->devc = devc;
-  memcpy ((char *) devc->levels, (char *) &default_levels, sizeof (default_levels));
 
   sb_mixer_reset (devc);
   devc->my_mixerdev = num_mixers++;

@@ -22,7 +22,7 @@
 #include <linux/mm.h>
 
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/io.h>
 
 asmlinkage int system_call(void);

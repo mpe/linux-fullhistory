@@ -6,7 +6,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -15,7 +15,7 @@
 
 #include "sound_config.h"
 
-#if defined(CONFIG_SSCAPE)
+#if defined(CONFIG_SSCAPEHW)
 
 #include "coproc.h"
 
@@ -88,7 +88,7 @@ static struct sscape_info dev_info =
 {0};
 static struct sscape_info *devc = &dev_info;
 
-static wait_handle *sscape_sleeper = NULL;
+static struct wait_queue *sscape_sleeper = NULL;
 static volatile struct snd_wait sscape_sleep_flag =
 {0};
 
@@ -117,7 +117,7 @@ sscape_read (struct sscape_info *devc, int reg)
 
   save_flags (flags);
   cli ();
-  outb (reg, PORT (ODIE_ADDR));
+  outb ((reg), PORT (ODIE_ADDR));
   val = inb (PORT (ODIE_DATA));
   restore_flags (flags);
   return val;
@@ -130,21 +130,21 @@ sscape_write (struct sscape_info *devc, int reg, int data)
 
   save_flags (flags);
   cli ();
-  outb (reg, PORT (ODIE_ADDR));
-  outb (data, PORT (ODIE_DATA));
+  outb ((reg), PORT (ODIE_ADDR));
+  outb ((data), PORT (ODIE_DATA));
   restore_flags (flags);
 }
 
 static void
 host_open (struct sscape_info *devc)
 {
-  outb (0x00, PORT (HOST_CTRL));	/* Put the board to the host mode */
+  outb ((0x00), PORT (HOST_CTRL));	/* Put the board to the host mode */
 }
 
 static void
 host_close (struct sscape_info *devc)
 {
-  outb (0x03, PORT (HOST_CTRL));	/* Put the board to the MIDI mode */
+  outb ((0x03), PORT (HOST_CTRL));	/* Put the board to the MIDI mode */
 }
 
 static int
@@ -172,7 +172,7 @@ host_write (struct sscape_info *devc, unsigned char *data, int count)
 	  return 0;
 	}
 
-      outb (data[i], PORT (HOST_DATA));
+      outb ((data[i]), PORT (HOST_DATA));
     }
 
 
@@ -291,11 +291,11 @@ sscapeintr (int irq, void *dev_id, struct pt_regs *dummy)
   static int      debug = 0;
 
   bits = sscape_read (devc, GA_INTSTAT_REG);
-  if ((sscape_sleep_flag.flags & WK_SLEEP))
+  if ((sscape_sleep_flag.opts & WK_SLEEP))
     {
       {
-	sscape_sleep_flag.flags = WK_WAKEUP;
-	module_wake_up (&sscape_sleeper);
+	sscape_sleep_flag.opts = WK_WAKEUP;
+	wake_up (&sscape_sleeper);
       };
     }
 
@@ -387,10 +387,10 @@ sscape_coproc_open (void *dev_info, int sub_device)
     {
       set_mt32 (devc, 0);
       if (!verify_mpu (devc))
-	return -(EIO);
+	return -EIO;
     }
 
-  sscape_sleep_flag.flags = WK_NONE;
+  sscape_sleep_flag.opts = WK_NONE;
   return 0;
 }
 
@@ -407,7 +407,7 @@ sscape_coproc_close (void *dev_info, int sub_device)
       sscape_write (devc, GA_DMAA_REG, 0x20);	/* DMA channel disabled */
       devc->dma_allocated = 0;
     }
-  sscape_sleep_flag.flags = WK_NONE;
+  sscape_sleep_flag.opts = WK_NONE;
   restore_flags (flags);
 
   return;
@@ -436,10 +436,6 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
       save_flags (flags);
       cli ();
       codec_dma_bits = sscape_read (devc, GA_CDCFG_REG);
-#if 0
-      sscape_write (devc, GA_CDCFG_REG,
-		    codec_dma_bits & ~0x08);	/* Disable codec DMA */
-#endif
 
       if (devc->dma_allocated == 0)
 	{
@@ -473,7 +469,7 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
   /*
    * Wait until transfer completes.
    */
-  sscape_sleep_flag.flags = WK_NONE;
+  sscape_sleep_flag.opts = WK_NONE;
   done = 0;
   timeout_val = 100;
   while (!done && timeout_val-- > 0)
@@ -485,17 +481,17 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
 	unsigned long   tlimit;
 
 	if (1)
-	  current_set_timeout (tlimit = jiffies + (1));
+	  current->timeout = tlimit = jiffies + (1);
 	else
 	  tlimit = (unsigned long) -1;
-	sscape_sleep_flag.flags = WK_SLEEP;
-	module_interruptible_sleep_on (&sscape_sleeper);
-	if (!(sscape_sleep_flag.flags & WK_WAKEUP))
+	sscape_sleep_flag.opts = WK_SLEEP;
+	interruptible_sleep_on (&sscape_sleeper);
+	if (!(sscape_sleep_flag.opts & WK_WAKEUP))
 	  {
 	    if (jiffies >= tlimit)
-	      sscape_sleep_flag.flags |= WK_TIMEOUT;
+	      sscape_sleep_flag.opts |= WK_TIMEOUT;
 	  }
-	sscape_sleep_flag.flags &= ~WK_SLEEP;
+	sscape_sleep_flag.opts &= ~WK_SLEEP;
       };
       clear_dma_ff (devc->dma);
       if ((resid = get_dma_residue (devc->dma)) == 0)
@@ -513,8 +509,8 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
       /*
          * Take the board out of reset
        */
-      outb (0x00, PORT (HOST_CTRL));
-      outb (0x00, PORT (MIDI_CTRL));
+      outb ((0x00), PORT (HOST_CTRL));
+      outb ((0x00), PORT (MIDI_CTRL));
 
       temp = sscape_read (devc, GA_HMCTL_REG);
       temp |= 0x40;
@@ -530,25 +526,31 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
       timeout_val = 5 * HZ;
       while (!done && timeout_val-- > 0)
 	{
+	  unsigned char   x;
+
 
 	  {
 	    unsigned long   tlimit;
 
 	    if (1)
-	      current_set_timeout (tlimit = jiffies + (1));
+	      current->timeout = tlimit = jiffies + (1);
 	    else
 	      tlimit = (unsigned long) -1;
-	    sscape_sleep_flag.flags = WK_SLEEP;
-	    module_interruptible_sleep_on (&sscape_sleeper);
-	    if (!(sscape_sleep_flag.flags & WK_WAKEUP))
+	    sscape_sleep_flag.opts = WK_SLEEP;
+	    interruptible_sleep_on (&sscape_sleeper);
+	    if (!(sscape_sleep_flag.opts & WK_WAKEUP))
 	      {
 		if (jiffies >= tlimit)
-		  sscape_sleep_flag.flags |= WK_TIMEOUT;
+		  sscape_sleep_flag.opts |= WK_TIMEOUT;
 	      }
-	    sscape_sleep_flag.flags &= ~WK_SLEEP;
+	    sscape_sleep_flag.opts &= ~WK_SLEEP;
 	  };
-	  if (inb (PORT (HOST_DATA)) == 0xff)	/* OBP startup acknowledge */
-	    done = 1;
+	  x = inb (PORT (HOST_DATA));
+	  if (x == 0xff || x == 0xfe)	/* OBP startup acknowledge */
+	    {
+	      printk ("Soundscape: Acknowledge = %x\n", x);
+	      done = 1;
+	    }
 	}
       sscape_write (devc, GA_CDCFG_REG, codec_dma_bits);
 
@@ -570,17 +572,17 @@ sscape_download_boot (struct sscape_info *devc, unsigned char *block, int size, 
 	    unsigned long   tlimit;
 
 	    if (1)
-	      current_set_timeout (tlimit = jiffies + (1));
+	      current->timeout = tlimit = jiffies + (1);
 	    else
 	      tlimit = (unsigned long) -1;
-	    sscape_sleep_flag.flags = WK_SLEEP;
-	    module_interruptible_sleep_on (&sscape_sleeper);
-	    if (!(sscape_sleep_flag.flags & WK_WAKEUP))
+	    sscape_sleep_flag.opts = WK_SLEEP;
+	    interruptible_sleep_on (&sscape_sleeper);
+	    if (!(sscape_sleep_flag.opts & WK_WAKEUP))
 	      {
 		if (jiffies >= tlimit)
-		  sscape_sleep_flag.flags |= WK_TIMEOUT;
+		  sscape_sleep_flag.opts |= WK_TIMEOUT;
 	      }
-	    sscape_sleep_flag.flags &= ~WK_SLEEP;
+	    sscape_sleep_flag.opts &= ~WK_SLEEP;
 	  };
 	  if (inb (PORT (HOST_DATA)) == 0xfe)	/* Host startup acknowledge */
 	    done = 1;
@@ -620,12 +622,12 @@ static int
 download_boot_block (void *dev_info, copr_buffer * buf)
 {
   if (buf->len <= 0 || buf->len > sizeof (buf->data))
-    return -(EINVAL);
+    return -EINVAL;
 
   if (!sscape_download_boot (devc, buf->data, buf->len, buf->flags))
     {
       printk ("SSCAPE: Unable to load microcode block to the OBP.\n");
-      return -(EIO);
+      return -EIO;
     }
 
   return 0;
@@ -649,7 +651,7 @@ sscape_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
 
 	buf = (copr_buffer *) vmalloc (sizeof (copr_buffer));
 	if (buf == NULL)
-	  return -(ENOSPC);
+	  return -ENOSPC;
 	copy_from_user ((char *) buf, &((char *) arg)[0], sizeof (*buf));
 	err = download_boot_block (dev_info, buf);
 	vfree (buf);
@@ -658,7 +660,7 @@ sscape_coproc_ioctl (void *dev_info, unsigned int cmd, caddr_t arg, int local)
       break;
 
     default:
-      return -(EINVAL);
+      return -EINVAL;
     }
 
 }
@@ -760,7 +762,8 @@ attach_sscape (struct address_info *hw_config)
 		      (sscape_read (devc, i) & 0xc0));
 	break;
 
-      case 6:			/* CD-ROM config. Don't touch. */
+      case 6:			/* CD-ROM config (WSS codec actually) */
+	sscape_write (devc, i, regs[i]);
 	break;
 
       case 9:			/* Master control reg. Don't modify CR-ROM bits. Disable SB emul */
@@ -815,11 +818,11 @@ probe_sscape (struct address_info *hw_config)
 {
   unsigned char   save;
 
-  devc->failed = 1;
   devc->base = hw_config->io_base;
   devc->irq = hw_config->irq;
   devc->dma = hw_config->dma;
-  devc->osp = hw_config->osp;
+
+  devc->failed = 1;
 
   if (sscape_detected != 0 && sscape_detected != hw_config->io_base)
     return 0;
@@ -830,17 +833,26 @@ probe_sscape (struct address_info *hw_config)
      * First 4 bits
    */
   if ((save = inb (PORT (ODIE_ADDR))) & 0xf0)
-    return 0;
+    {
+      DDB (printk ("soundscape: Detect error A\n"));
+      return 0;
+    }
 
-  outb (0x00, PORT (ODIE_ADDR));
+  outb ((0x00), PORT (ODIE_ADDR));
   if (inb (PORT (ODIE_ADDR)) != 0x00)
-    return 0;
+    {
+      DDB (printk ("soundscape: Detect error B\n"));
+      return 0;
+    }
 
-  outb (0xff, PORT (ODIE_ADDR));
+  outb ((0xff), PORT (ODIE_ADDR));
   if (inb (PORT (ODIE_ADDR)) != 0x0f)
-    return 0;
+    {
+      DDB (printk ("soundscape: Detect error C\n"));
+      return 0;
+    }
 
-  outb (save, PORT (ODIE_ADDR));
+  outb ((save), PORT (ODIE_ADDR));
 
   /*
      * Now verify that some indirect registers return zero on some bits.
@@ -848,13 +860,22 @@ probe_sscape (struct address_info *hw_config)
    */
 
   if (sscape_read (devc, 0) & 0x0c)
-    return 0;
+    {
+      DDB (printk ("soundscape: Detect error D (%x)\n", sscape_read (devc, 0)));
+      return 0;
+    }
 
   if (sscape_read (devc, 1) & 0x0f)
-    return 0;
+    {
+      DDB (printk ("soundscape: Detect error E\n"));
+      return 0;
+    }
 
   if (sscape_read (devc, 5) & 0x0f)
-    return 0;
+    {
+      DDB (printk ("soundscape: Detect error F\n"));
+      return 0;
+    }
 
 #ifdef SSCAPE_DEBUG1
   /*
@@ -896,7 +917,10 @@ probe_ss_ms_sound (struct address_info *hw_config)
   int             i, irq_bits = 0xff;
 
   if (devc->failed)
-    return 0;
+    {
+      printk ("Soundscape: Card not detected\n");
+      return 0;
+    }
 
   if (devc->ok == 0)
     {
@@ -915,6 +939,7 @@ probe_ss_ms_sound (struct address_info *hw_config)
       printk ("SoundScape: Invalid MSS IRQ%d\n", hw_config->irq);
       return 0;
     }
+
 
   return ad1848_detect (hw_config->io_base, NULL, hw_config->osp);
 }

@@ -52,7 +52,7 @@
 #include <linux/module.h>
 
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 extern void wait_for_keypress(void);
 

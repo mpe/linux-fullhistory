@@ -19,7 +19,7 @@
 #include <linux/stat.h>
 #include <linux/string.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 static long sysv_dir_read(struct inode * inode, struct file * filp,
 	char * buf, unsigned long count)

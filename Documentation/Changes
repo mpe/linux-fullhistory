@@ -103,49 +103,67 @@ option is present.  Many older distributions (mainly Slackware) have
 this option in their lilo.config file.  Comment it out and re-run lilo
 if you need ramdisks.
 
+Module load errors
+==================
+
+   The 386 Linux kernel versions 2.1.0 and above have moved to address
+0xc0000000.  This means that syscalls that return an address in the
+kernel area will return a value that is a negative 32 bit number.
+Versions of libc prior to libc-5.4.8 will interpret the negative value
+as an error.  In particular, this prevents modules from loading.  You
+need at least libc-5.4.10 to load modules successfully again.
+
+
 The Linux C Library
 ===================
 
-   The latest stable Linux C Library release is 5.2.18.  If you upgrade
-to this from 5.0.9 or earlier, be sure to read the
-`release.libc-5.2.18' file, since GNU make and a few other fairly
-important utils can be broken by the upgrade.
+   Before upgrading your C library, be sure to carefully read the
+`release.libc-x.y.z' file. (x.y.z is the version number eg. 5.4.7)
 
-   The current (beta) Linux C Library release is 5.3.12. In this
-release there are some important changes that may cause troubles to
-buggy programs (programs that call free() on a pointer not returned by
-malloc() work with previous libc, but not with this release) so read the
-`release.libc-5.3.12' file carefully!  In the latest libc releases a
-dirent bug, which erroneously defined d->reclen to d->namlen if USE_GNU
-was defined, has been fixed.  Unfortunately, some GNU packages depend
-on this bug.  GNU make 3.xx is one of them.  To fix that you need to
-patch and recompile those programs (a patch for make is included in the
-file `release.libc-.5.3.9', and the address to obtain a precompiled
-binary is at the end of this file).
+- GNU make, perl, and a few other important utils can be broken by the
+  upgrade.  A dirent bug, which erroneously defined d->reclen to
+  d->namlen if USE_GNU was defined, has been fixed.  Unfortunately,
+  some GNU packages depend on this bug.  GNU make 3.xx is one of them.
+  To fix that you need to patch and recompile those programs (a patch
+  for make is included in the file `release.libc-x.y.z', and the
+  address to obtain a precompiled binary is at the end of this file).
 
-   Also, the libc-5.3.x line has a known security hole relating to
-rlogin.  Libc-5.3.12 fixes this, so if you're going to run an
-experimental libc, be sure to upgrade to 5.3.12.
+- Upgrading libc can also break xterm support.  If it does, you need
+  to recompile xterm.
 
-   If you're getting an error message that is something to the effect of
+- There have been some important changes to libc that may cause
+  trouble with buggy programs.  Programs that call free() on a pointer
+  not returned by malloc() work with older versions of libc, but not
+  with newer versions of libc.
+
+
+There are good reasons to upgrade your libc though!
+
+- If you use modules, you'll need libc-5.4.10 or later with version
+  2.1.x i386 kernels
+
+- The libc-5.3.x line before libc-5.3.12 have a known security hole
+  relating to rlogin.  Another security fix was done in libc-5.4.7.
+
+- If you're getting an error message that is something like
 
    `fcntl_setlk() called by process 123 with broken flock() emulation'
 
-   then you need to upgrade to at least libc-5.2.18 as well.  A proper
-(in other words, BSD-style ;-) flock system call was added to 2.0.x,
-and older libc's will now give this error.  It doesn't *really* matter,
-so you can just ignore it. If it really annoys you, upgrade libc (and
-recompile any static binaries you might have that are linked against
-the old libc).  If you're feeling lazy, just comment out
+  then you need to upgrade to at least libc-5.2.18.  A proper (in
+  other words, BSD-style ;-) flock system call was added to 2.0.x, and
+  older libc's will now give this error.  It doesn't *really* matter,
+  so you can just ignore it. If it really annoys you, upgrade libc
+  (and recompile any static binaries you might have that are linked
+  against the old libc).  If you're feeling lazy, just comment out
 
-   `                printk(KERN_WARNING
-"fcntl_setlk() called by process %d with broken flock()
-  emulation\n",                        current->pid);'
+  `printk(KERN_WARNING
+    "fcntl_setlk() called by process %d with broken flock() emulation\n",
+     current->pid);'
 
-   in linux/fs/locks.c and recompile.  If you're still running a.out,
-there's an unofficial libc-4.7.6 release out to which you can upgrade
-to fix this problem.  Libc is available from
-ftp://sunsite.unc.edu/pub/Linux/GCC/.
+  in linux/fs/locks.c and recompile.  If you're still running a.out,
+  there's an unofficial libc-4.7.6 to which you can upgrade to fix
+  this problem.
+
 
 GCC Signal 11 error
 ===================
@@ -416,11 +434,9 @@ Make
    If make no longer works, you need to read the release notes for the
 libc you upgraded to.  The latest libc and release notes can be found at
 ftp://tsx-11.mit.edu/pub/linux/packages/GCC.  This is NOT an error due
-to the kernel, though many people have mistakenly thought it is.  When
-you upgrade to libc-5.3.9, you have to patch make to get it to work.
-All of this is documented in the release notes with libc.  Upgrading
-libc can also break xterm support.  If it does, you need to recompile
-xterm.
+to the kernel, though many people have mistakenly thought it was.  When
+you upgrade to libc-5.3.9 or later, from previous versions, you have
+to patch make to get it to work.
 
 Loop device
 ===========
@@ -605,15 +621,15 @@ ftp://sunsite.unc.edu/pub/Linux/GCC/release.gcc-2.7.2
 Linux C Library
 ===============
 
-The stable 5.2.18 release:
-ftp://sunsite.unc.edu/pub/Linux/GCC/libc-5.2.18.bin.tar.gz
-Installation notes for 5.2.18:
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.2.18
+The stable 5.4.7 release:
+ftp://sunsite.unc.edu/pub/Linux/GCC/libc-5.4.7.bin.tar.gz
+Installation notes for 5.4.7:
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.4.7
 
-The latest 5.3.12 release:
-ftp://sunsite.unc.edu/pub/Linux/GCC/libc-5.3.12.bin.tar.gz
-Installation notes for 5.3.12:
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.3.12
+The latest release:
+ftp://sunsite.unc.edu/pub/Linux/GCC/private/tofu/libc-x.y.z.bin.tar.gz
+Installation notes for x.y.z:
+ftp://sunsite.unc.edu/pub/Linux/GCC/private/tofu/release.libc-x.y.z
 
 Patched make sources:
 ftp://sunsite.unc.edu/pub/Linux/devel/make/make-3.74.patched.tar.gz
@@ -623,12 +639,16 @@ ftp://sunsite.unc.edu/pub/Linux/devel/make/make-3.74-direntfix-elf.tgz
 Linux C++ Library
 =================
 
+ftp://sunsite.unc.edu/pub/Linux/GCC/libg++-2.7.2.1.bin.tar.gz
 ftp://sunsite.unc.edu/pub/Linux/GCC/libg++-2.7.1.4.bin.tar.gz
 ftp://sunsite.unc.edu/pub/Linux/GCC/libg++-2.7.1.3.bin.tar.gz
 Installation notes:
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.libg++-2.7.2.1
 ftp://sunsite.unc.edu/pub/Linux/GCC/release.libg++-2.7.1.4
 ftp://sunsite.unc.edu/pub/Linux/GCC/release.libg++-2.7.1.3
-Use 2.7.13 with libc 5.2.18 and 2.7.14 with libc 5.3.12.
+Use libg++-2.7.2.1 with libc-5.4.4 and above,
+    libg++-2.7.1.4 with libc-5.3.5 to libc-5.4.3,
+    libg++-2.7.1.3 with libc 5.2.14 to libc-5.3.4
 
 Dynamic Linker
 ==============
@@ -713,4 +733,3 @@ Chris Ricker (gt1355b@prism.gatech.edu).  I generate this from a
 modified texinfo setup, so you don't need to bother generating a diff
 against the current version before you send the additional information
 to me.
-

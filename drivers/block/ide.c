@@ -288,7 +288,7 @@
 
 #include <asm/byteorder.h>
 #include <asm/irq.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/io.h>
 
 #ifdef CONFIG_PCI
@@ -2272,11 +2272,13 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 	unsigned long capacity, check;
 
 	id = drive->id = kmalloc (SECTOR_WORDS*4, GFP_KERNEL);
-	ide_input_data(drive, id, SECTOR_WORDS);	/* read 512 bytes of id info */
+	ide_input_data(drive, id, SECTOR_WORDS);/* read 512 bytes of id info */
 	sti();
 
+#if defined (CONFIG_SCSI_EATA_DMA) || defined (CONFIG_SCSI_EATA_PIO)
 	/*
-	 * EATA SCSI controllers do a hardware ATA emulation:  ignore them
+	 * EATA SCSI controllers do a hardware ATA emulation:  
+	 * Ignore them if there is a driver for them available.
 	 */
 	if ((id->model[0] == 'P' && id->model[1] == 'M')
 	 || (id->model[0] == 'S' && id->model[1] == 'K')) {
@@ -2284,6 +2286,7 @@ static inline void do_identify (ide_drive_t *drive, byte cmd)
 		drive->present = 0;
 		return;
 	}
+#endif
 
 	/*
 	 *  WIN_IDENTIFY returns little-endian info,

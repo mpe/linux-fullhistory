@@ -4,7 +4,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -36,7 +36,7 @@ uart6850_status (void)
 static void 
 uart6850_cmd (unsigned char cmd)
 {
-  outb (cmd, COMDPORT);
+  outb ((cmd), COMDPORT);
 }
 static int 
 uart6850_read (void)
@@ -46,7 +46,7 @@ uart6850_read (void)
 static void 
 uart6850_write (unsigned char byte)
 {
-  outb (byte, DATAPORT);
+  outb ((byte), DATAPORT);
 }
 
 #define	OUTPUT_READY	0x02	/* Mask for data ready Bit */
@@ -138,7 +138,7 @@ uart6850_open (int dev, int mode,
   if (uart6850_opened)
     {
       printk ("Midi6850: Midi busy\n");
-      return -(EBUSY);
+      return -EBUSY;
     }
 
   ;
@@ -222,7 +222,7 @@ uart6850_end_read (int dev)
 static int
 uart6850_ioctl (int dev, unsigned cmd, caddr_t arg)
 {
-  return -(EINVAL);
+  return -EINVAL;
 }
 
 static void

@@ -19,7 +19,7 @@
 #include <linux/stat.h>
 #include <linux/locks.h>
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #include "xiafs_mac.h"
 

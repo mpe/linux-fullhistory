@@ -123,6 +123,18 @@ M:	jsn@cs.nott.ac.uk
 L:	linux-hams@vger.rutgers.edu
 S:	Maintained
 
+DAMA SLAVE for AX.25
+P: Joerg Reuter
+M: jreuter@lykos.oche.de
+L: linux-hams@vger.rutgers.edu
+S: Maintained
+
+Z8530 DRIVER FOR AX.25
+P: Joerg Reuter
+M: jreuter@lykos.oche.de
+L: linux-hams@vger.rutgers.edu
+S: Maintained
+
 BUSLOGIC SCSI DRIVER
 P:	Leonard N. Zubkoff
 M:	Leonard N. Zubkoff <lnz@dandelion.com>
@@ -339,6 +351,12 @@ NON-IDE/NON-SCSI CDROM DRIVERS [GENERAL] (come on, crew - mark your responsibili
 P:	Eberhard Moenkeberg
 M:	emoenke@gwdg.de
 L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
+FPU EMULATOR
+P:	Bill Metzenthen
+M:	billm@suburbia.net
+W:	http://suburbia.net/~billm/floating-point/emulator/
 S:	Maintained
 
 CREDITS FILE

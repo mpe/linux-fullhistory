@@ -11,7 +11,7 @@
 #include <linux/hdreg.h>
 #include <linux/errno.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #include <linux/blk.h>
 #include "scsi.h"

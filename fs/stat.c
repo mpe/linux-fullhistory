@@ -12,7 +12,7 @@
 #include <linux/kernel.h>
 #include <linux/mm.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #ifndef __alpha__
 

@@ -15,7 +15,7 @@
 #include <linux/pagemap.h>
 #include <linux/swap.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
 

@@ -29,7 +29,7 @@
 
 #include <asm/fpu.h>
 #include <asm/io.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 extern int do_mount(kdev_t, const char *, const char *, char *, int, void *);

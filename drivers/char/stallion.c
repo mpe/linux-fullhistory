@@ -45,7 +45,7 @@
 #include <linux/config.h>	/* for CONFIG_PCI */
 #include <asm/system.h>
 #include <asm/io.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #ifdef CONFIG_PCI
 #include <linux/pci.h>

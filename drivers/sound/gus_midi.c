@@ -6,7 +6,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -17,7 +17,7 @@
 
 #include "gus_hw.h"
 
-#if defined(CONFIG_GUS) && defined(CONFIG_MIDI)
+#if defined(CONFIG_GUSHW) && defined(CONFIG_MIDI)
 
 static int      midi_busy = 0, input_opened = 0;
 static int      my_dev;
@@ -48,10 +48,10 @@ gus_midi_open (int dev, int mode,
   if (midi_busy)
     {
       printk ("GUS: Midi busy\n");
-      return -(EBUSY);
+      return -EBUSY;
     }
 
-  outb (MIDI_RESET, u_MidiControl);
+  outb ((MIDI_RESET), u_MidiControl);
   gus_delay ();
 
   gus_midi_control = 0;
@@ -64,7 +64,7 @@ gus_midi_open (int dev, int mode,
     }
 
 
-  outb (gus_midi_control, u_MidiControl);	/* Enable */
+  outb ((gus_midi_control), u_MidiControl);	/* Enable */
 
   midi_busy = 1;
   qlen = qhead = qtail = output_used = 0;
@@ -87,7 +87,7 @@ dump_to_midi (unsigned char midi_byte)
   if (GUS_MIDI_STATUS () & MIDI_XMIT_EMPTY)
     {
       ok = 1;
-      outb (midi_byte, u_MidiData);
+      outb ((midi_byte), u_MidiData);
     }
   else
     {
@@ -95,7 +95,7 @@ dump_to_midi (unsigned char midi_byte)
        * Enable Midi xmit interrupts (again)
        */
       gus_midi_control |= MIDI_ENABLE_XMIT;
-      outb (gus_midi_control, u_MidiControl);
+      outb ((gus_midi_control), u_MidiControl);
     }
 
   restore_flags (flags);
@@ -109,7 +109,7 @@ gus_midi_close (int dev)
    * Reset FIFO pointers, disable intrs
    */
 
-  outb (MIDI_RESET, u_MidiControl);
+  outb ((MIDI_RESET), u_MidiControl);
   midi_busy = 0;
 }
 
@@ -180,7 +180,7 @@ gus_midi_end_read (int dev)
 static int
 gus_midi_ioctl (int dev, unsigned cmd, caddr_t arg)
 {
-  return -(EINVAL);
+  return -EINVAL;
 }
 
 static void
@@ -242,7 +242,7 @@ gus_midi_init (void)
       return;
     }
 
-  outb (MIDI_RESET, u_MidiControl);
+  outb ((MIDI_RESET), u_MidiControl);
 
   std_midi_synth.midi_dev = my_dev = num_midis;
   midi_devs[num_midis++] = &gus_midi_operations;
@@ -282,8 +282,8 @@ gus_midi_interrupt (int dummy)
 	       * Disable Midi output interrupts, since no data in the buffer
 	       */
 	      gus_midi_control &= ~MIDI_ENABLE_XMIT;
-	      outb (gus_midi_control, u_MidiControl);
-	      outb (gus_midi_control, u_MidiControl);
+	      outb ((gus_midi_control), u_MidiControl);
+	      outb ((gus_midi_control), u_MidiControl);
 	    }
 	}
 

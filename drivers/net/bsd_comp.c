@@ -76,7 +76,7 @@
 
 #include <asm/system.h>
 #include <asm/bitops.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/byteorder.h>
 
 #include <linux/if.h>

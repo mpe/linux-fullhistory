@@ -6,7 +6,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -18,7 +18,7 @@
 
 #if defined(CONFIG_SEQUENCER)
 
-static wait_handle *server_procs[MAX_SYNTH_DEV] =
+static struct wait_queue *server_procs[MAX_SYNTH_DEV] =
 {NULL};
 static volatile struct snd_wait server_wait_flag[MAX_SYNTH_DEV] =
 {
@@ -35,7 +35,7 @@ static int      pmgr_opened[MAX_SYNTH_DEV] =
 #define A_TO_S	1
 #define S_TO_A 	2
 
-static wait_handle *appl_proc = NULL;
+static struct wait_queue *appl_proc = NULL;
 static volatile struct snd_wait appl_wait_flag =
 {0};
 
@@ -43,13 +43,13 @@ int
 pmgr_open (int dev)
 {
   if (dev < 0 || dev >= num_synths)
-    return -(ENXIO);
+    return -ENXIO;
 
   if (pmgr_opened[dev])
-    return -(EBUSY);
+    return -EBUSY;
   pmgr_opened[dev] = 1;
 
-  server_wait_flag[dev].flags = WK_NONE;
+  server_wait_flag[dev].opts = WK_NONE;
 
   return 0;
 }
@@ -64,12 +64,12 @@ pmgr_release (int dev)
     {
 
       mbox[dev]->key = PM_ERROR;
-      mbox[dev]->parm1 = -(EIO);
+      mbox[dev]->parm1 = -EIO;
 
-      if ((appl_wait_flag.flags & WK_SLEEP))
+      if ((appl_wait_flag.opts & WK_SLEEP))
 	{
-	  appl_wait_flag.flags = WK_WAKEUP;
-	  module_wake_up (&appl_proc);
+	  appl_wait_flag.opts = WK_WAKEUP;
+	  wake_up (&appl_proc);
 	};
     }
 
@@ -85,26 +85,30 @@ pmgr_read (int dev, struct fileinfo *file, char *buf, int count)
   if (count != sizeof (struct patmgr_info))
     {
       printk ("PATMGR%d: Invalid read count\n", dev);
-      return -(EIO);
+      return -EIO;
     }
 
-  while (!ok && !current_got_fatal_signal ())
+  while (!ok && !(current->signal & ~current->blocked))
     {
       save_flags (flags);
       cli ();
 
       while (!(mbox[dev] && msg_direction[dev] == A_TO_S) &&
-	     !current_got_fatal_signal ())
+	     !(current->signal & ~current->blocked))
 	{
 
-	  server_wait_flag[dev].flags = WK_SLEEP;
-	  module_interruptible_sleep_on (&server_procs[dev]);
-	  server_wait_flag[dev].flags &= ~WK_SLEEP;;
+	  server_wait_flag[dev].opts = WK_SLEEP;
+	  interruptible_sleep_on (&server_procs[dev]);
+	  server_wait_flag[dev].opts &= ~WK_SLEEP;;
 	}
 
       if (mbox[dev] && msg_direction[dev] == A_TO_S)
 	{
-	  copy_to_user (&(buf)[0], (char *) mbox[dev], count);
+	  {
+	    char           *fixit = (char *) mbox[dev];
+
+	    copy_to_user (&(buf)[0], fixit, count);
+	  };
 	  msg_direction[dev] = 0;
 	  ok = 1;
 	}
@@ -114,7 +118,7 @@ pmgr_read (int dev, struct fileinfo *file, char *buf, int count)
     }
 
   if (!ok)
-    return -(EINTR);
+    return -EINTR;
   return count;
 }
 
@@ -126,7 +130,7 @@ pmgr_write (int dev, struct fileinfo *file, const char *buf, int count)
   if (count < 4)
     {
       printk ("PATMGR%d: Write count < 4\n", dev);
-      return -(EIO);
+      return -EIO;
     }
 
   copy_from_user ((char *) mbox[dev], &(buf)[0], 4);
@@ -137,7 +141,7 @@ pmgr_write (int dev, struct fileinfo *file, const char *buf, int count)
 
       tmp_dev = ((unsigned short *) mbox[dev])[2];
       if (tmp_dev != dev)
-	return -(ENXIO);
+	return -ENXIO;
 
       return synth_devs[dev]->load_patch (dev, *(unsigned short *) mbox[dev],
 					  buf, 4, count, 1);
@@ -146,7 +150,7 @@ pmgr_write (int dev, struct fileinfo *file, const char *buf, int count)
   if (count != sizeof (struct patmgr_info))
     {
       printk ("PATMGR%d: Invalid write count\n", dev);
-      return -(EIO);
+      return -EIO;
     }
 
   /*
@@ -162,11 +166,11 @@ pmgr_write (int dev, struct fileinfo *file, const char *buf, int count)
       copy_from_user (&((char *) mbox[dev])[4], &(buf)[4], count - 4);
       msg_direction[dev] = S_TO_A;
 
-      if ((appl_wait_flag.flags & WK_SLEEP))
+      if ((appl_wait_flag.opts & WK_SLEEP))
 	{
 	  {
-	    appl_wait_flag.flags = WK_WAKEUP;
-	    module_wake_up (&appl_proc);
+	    appl_wait_flag.opts = WK_WAKEUP;
+	    wake_up (&appl_proc);
 	  };
 	}
     }
@@ -193,23 +197,23 @@ pmgr_access (int dev, struct patmgr_info *rec)
       mbox[dev] = rec;
       msg_direction[dev] = A_TO_S;
 
-      if ((server_wait_flag[dev].flags & WK_SLEEP))
+      if ((server_wait_flag[dev].opts & WK_SLEEP))
 	{
 	  {
-	    server_wait_flag[dev].flags = WK_WAKEUP;
-	    module_wake_up (&server_procs[dev]);
+	    server_wait_flag[dev].opts = WK_WAKEUP;
+	    wake_up (&server_procs[dev]);
 	  };
 	}
 
 
-      appl_wait_flag.flags = WK_SLEEP;
-      module_interruptible_sleep_on (&appl_proc);
-      appl_wait_flag.flags &= ~WK_SLEEP;;
+      appl_wait_flag.opts = WK_SLEEP;
+      interruptible_sleep_on (&appl_proc);
+      appl_wait_flag.opts &= ~WK_SLEEP;;
 
       if (msg_direction[dev] != S_TO_A)
 	{
 	  rec->key = PM_ERROR;
-	  rec->parm1 = -(EIO);
+	  rec->parm1 = -EIO;
 	}
       else if (rec->key == PM_ERROR)
 	{
@@ -263,18 +267,18 @@ pmgr_inform (int dev, int event, unsigned long p1, unsigned long p2,
       mbox[dev]->parm3 = p3;
       msg_direction[dev] = A_TO_S;
 
-      if ((server_wait_flag[dev].flags & WK_SLEEP))
+      if ((server_wait_flag[dev].opts & WK_SLEEP))
 	{
 	  {
-	    server_wait_flag[dev].flags = WK_WAKEUP;
-	    module_wake_up (&server_procs[dev]);
+	    server_wait_flag[dev].opts = WK_WAKEUP;
+	    wake_up (&server_procs[dev]);
 	  };
 	}
 
 
-      appl_wait_flag.flags = WK_SLEEP;
-      module_interruptible_sleep_on (&appl_proc);
-      appl_wait_flag.flags &= ~WK_SLEEP;;
+      appl_wait_flag.opts = WK_SLEEP;
+      interruptible_sleep_on (&appl_proc);
+      appl_wait_flag.opts &= ~WK_SLEEP;;
       mbox[dev] = NULL;
       msg_direction[dev] = 0;
     }

@@ -1,4 +1,67 @@
+The BusLogic FlashPoint SCSI host adapters are now supported on Linux 2.0.x.
+See http://www.dandelion.com/Linux/ for the beta test BusLogic driver which
+includes FlashPoint support.  The upgrade program described below will remain
+available through the end of 1996.
 
+
+
+	  MYLEX INTRODUCES LINUX OPERATING SYSTEM SUPPORT FOR ITS
+	      BUSLOGIC FLASHPOINT LINE OF SCSI HOST ADAPTERS
+
+
+FREMONT, CA, -- October 8, 1996 -- Mylex Corporation has expanded Linux
+operating system support to its BusLogic brand of FlashPoint Ultra SCSI
+host adapters.  All of BusLogic's other SCSI host adapters, including the
+MultiMaster line, currently support the Linux operating system.  Linux
+drivers and information will be available on October 15th at
+http://www.dandelion.com/Linux/.
+
+"Mylex is committed to supporting the Linux community," says Peter Shambora,
+vice president of marketing for Mylex.  "We have supported Linux driver
+development and provided technical support for our host adapters for several
+years, and are pleased to now make our FlashPoint products available to this
+user base."
+
+The Linux Operating System
+
+Linux is a freely-distributed implementation of UNIX for Intel x86, Sun
+SPARC, SGI MIPS, Motorola 68k, Digital Alpha AXP and Motorola PowerPC
+machines.  It supports a wide range of software, including the X Window
+System, Emacs, and TCP/IP networking.  Further information is available at
+http://www.linux.org and http://www.ssc.com/linux.
+
+FlashPoint Host Adapters
+
+The FlashPoint family of Ultra SCSI host adapters, designed for workstation
+and file server environments, are available in narrow, wide, dual channel,
+and dual channel wide versions.  These adapters feature SeqEngine
+automation technology, which minimizes SCSI command overhead and reduces
+the number of interrupts generated to the CPU.
+
+About Mylex
+
+Mylex Corporation (NASDAQ/NM SYMBOL: MYLX), founded in 1983, is a leading
+producer of RAID technology and network management products.  The company
+produces high performance disk array (RAID) controllers, and complementary
+computer products for network servers, mass storage systems, workstations
+and system boards.  Through its wide range of RAID controllers and its
+BusLogic line of Ultra SCSI host adapter products, Mylex provides enabling
+intelligent I/O technologies that increase network management control,
+enhance CPU utilization, optimize I/O performance, and ensure data security
+and availability.  Products are sold globally through a network of OEMs,
+major distributors, VARs, and system integrators.  Mylex Corporation is
+headquartered at 34551 Ardenwood Blvd., Fremont, CA.
+
+				   ####
+
+Contact:
+
+Peter Shambora
+Vice President of Marketing
+Mylex Corp.
+510/796-6100
+peters@mylex.com
+
 			       ANNOUNCEMENT
 	       BusLogic FlashPoint LT/BT-948 Upgrade Program
 			      1 February 1996

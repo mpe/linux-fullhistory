@@ -28,7 +28,7 @@
 #include <linux/smp_lock.h>
 
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 /* This is for kernel_thread */
 #define __KERNEL_SYSCALLS__

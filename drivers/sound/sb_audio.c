@@ -6,7 +6,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -29,13 +29,13 @@ sb_audio_open (int dev, int mode)
   if (devc == NULL)
     {
       printk ("SB: Incomplete initialization\n");
-      return -(ENXIO);
+      return -ENXIO;
     }
 
   if (devc->caps & SB_NO_RECORDING && mode & OPEN_READ)
     {
       printk ("SB: Recording is not possible with this device\n");
-      return -(EPERM);
+      return -EPERM;
     }
 
   save_flags (flags);
@@ -43,14 +43,14 @@ sb_audio_open (int dev, int mode)
   if (devc->opened)
     {
       restore_flags (flags);
-      return -(EBUSY);
+      return -EBUSY;
     }
 
   if (devc->dma16 != -1 && devc->dma16 != devc->dma8)
     {
       if (sound_open_dma (devc->dma16, "Sound Blaster 16 bit"))
 	{
-	  return -(EBUSY);
+	  return -EBUSY;
 	}
     }
   devc->opened = mode;
@@ -541,7 +541,8 @@ sbpro_audio_set_channels (int dev, short channels)
     if (channels != devc->channels)
       {
 	devc->channels = channels;
-	sbpro_audio_set_speed (dev, devc->speed);
+	if (devc->model == MDL_SBPRO)
+	  sbpro_audio_set_speed (dev, devc->speed);
       }
   return devc->channels;
 }
@@ -577,6 +578,37 @@ jazz16_audio_set_speed (int dev, int speed)
 /*
  * ESS specific routines
  */
+
+static int
+ess_audio_set_speed (int dev, int speed)
+{
+  sb_devc        *devc = audio_devs[dev]->devc;
+  int             divider;
+
+  if (speed > 0)
+    {
+      if (speed < 5000)
+	speed = 4000;
+
+      if (speed > 48000)
+	speed = 48000;
+
+      if (speed > 22000)
+	{
+	  divider = (795500 + speed / 2) / speed;
+	  speed = (795500 + divider / 2) / divider;
+	}
+      else
+	{
+	  divider = (397700 + speed / 2) / speed;
+	  speed = (397700 + divider / 2) / divider;
+	}
+
+      devc->speed = speed;
+    }
+
+  return devc->speed;
+}
 
 static void
 ess_speed (sb_devc * devc)
@@ -965,7 +997,7 @@ sb16_audio_trigger (int dev, int bits)
 static int
 sb_audio_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 {
-  return -(EINVAL);
+  return -EINVAL;
 }
 
 static void
@@ -1122,7 +1154,7 @@ static struct audio_driver ess_audio_driver =	/* ESS ES688/1688 */
   NULL,
   NULL,
   ess_audio_trigger,
-  sb16_audio_set_speed,
+  ess_audio_set_speed,
   sb16_audio_set_bits,
   sbpro_audio_set_channels
 };

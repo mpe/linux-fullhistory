@@ -18,8 +18,11 @@ void DMAbuf_close_dma (int dev);
 void DMAbuf_reset_dma (int dev);
 void DMAbuf_inputintr(int dev);
 void DMAbuf_outputintr(int dev, int underflow_flag);
-int DMAbuf_select(int dev, struct fileinfo *file, int sel_type, select_table_handle * wait);
+int DMAbuf_select(int dev, struct fileinfo *file, int sel_type, select_table * wait);
+void DMAbuf_start_device(int dev);
 void DMAbuf_start_devices(unsigned int devmask);
+void DMAbuf_reset (int dev);
+int DMAbuf_sync (int dev);
 
 /*
  *	System calls for /dev/dsp and /dev/audio
@@ -31,10 +34,9 @@ int audio_open (int dev, struct fileinfo *file);
 void audio_release (int dev, struct fileinfo *file);
 int audio_ioctl (int dev, struct fileinfo *file,
 	   unsigned int cmd, caddr_t arg);
-int audio_lseek (int dev, struct fileinfo *file, off_t offset, int orig);
-void audio_init (void);
+void audio_init_devices (void);
 
-int audio_select(int dev, struct fileinfo *file, int sel_type, select_table_handle * wait);
+int audio_select(int dev, struct fileinfo *file, int sel_type, select_table * wait);
 
 /*
  *	System calls for the /dev/sequencer
@@ -54,7 +56,7 @@ unsigned long compute_finetune(unsigned long base_freq, int bend, int range);
 void seq_input_event(unsigned char *event, int len);
 void seq_copy_to_input (unsigned char *event, int len);
 
-int sequencer_select(int dev, struct fileinfo *file, int sel_type, select_table_handle * wait);
+int sequencer_select(int dev, struct fileinfo *file, int sel_type, select_table * wait);
 
 /*
  *	System calls for the /dev/midi
@@ -70,7 +72,7 @@ int MIDIbuf_lseek (int dev, struct fileinfo *file, off_t offset, int orig);
 void MIDIbuf_bytes_received(int dev, unsigned char *buf, int count);
 void MIDIbuf_init(void);
 
-int MIDIbuf_select(int dev, struct fileinfo *file, int sel_type, select_table_handle * wait);
+int MIDIbuf_select(int dev, struct fileinfo *file, int sel_type, select_table * wait);
 
 /*
  *
@@ -89,6 +91,8 @@ void sound_dma_malloc(int dev);
 void sound_dma_free(int dev);
 void conf_printf(char *name, struct address_info *hw_config);
 void conf_printf2(char *name, int base, int irq, int dma, int dma2);
+int ioctl_in(caddr_t arg);
+int ioctl_out(caddr_t arg, int result);
 
 /*	From sound_switch.c	*/
 int sound_read_sw (int dev, struct fileinfo *file, char *buf, int count);
@@ -202,6 +206,12 @@ int ad1848_detect (int io_base, int *flags, int *osp);
 #define AD_F_CS4231	0x0001	/* Returned if a CS4232 (or compatible) detected */
 #define AD_F_CS4248	0x0001	/* Returned if a CS4248 (or compatible) detected */
 
+void	 ad1848_control(int cmd, int arg);
+#define		AD1848_SET_XTAL		1
+#define		AD1848_MIXER_REROUTE	2
+#define AD1848_REROUTE(oldctl, newctl) \
+		ad1848_control(AD1848_MIXER_REROUTE, ((oldctl)<<8)|(newctl))
+
 void     ad1848_interrupt (int irq, void *dev_id, struct pt_regs * dummy);
 void attach_ms_sound(struct address_info * hw_config);
 int probe_ms_sound(struct address_info *hw_config);
@@ -222,15 +232,6 @@ int probe_sscape (struct address_info *hw_config);
 void attach_sscape (struct address_info *hw_config);
 int probe_ss_ms_sound (struct address_info *hw_config);
 void attach_ss_ms_sound(struct address_info * hw_config);
-
-int pss_read (int dev, struct fileinfo *file, char *buf, int count);
-int pss_write (int dev, struct fileinfo *file, char *buf, int count);
-int pss_open (int dev, struct fileinfo *file);
-void pss_release (int dev, struct fileinfo *file);
-int pss_ioctl (int dev, struct fileinfo *file,
-	   unsigned int cmd, caddr_t arg);
-int pss_lseek (int dev, struct fileinfo *file, off_t offset, int orig);
-void pss_init(void);
 
 /* From aedsp16.c */
 int InitAEDSP16_SBPRO(struct address_info *hw_config);
@@ -291,6 +292,3 @@ void attach_cs4232_mpu (struct address_info *hw_config);
 void attach_maui(struct address_info * hw_config);
 int probe_maui(struct address_info *hw_config);
 
-/*	From sound_pnp.c */
-void sound_pnp_init(int *osp);
-void sound_pnp_disconnect(void);

@@ -52,7 +52,7 @@
 #include <net/udp.h>
 #include <net/sock.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 /*

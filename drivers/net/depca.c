@@ -221,7 +221,7 @@ static const char *version = "depca.c:v0.43 96/8/16 davies@wanton.lkg.dec.com\n"
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/dma.h>

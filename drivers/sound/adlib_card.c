@@ -7,7 +7,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -32,7 +32,8 @@ probe_adlib (struct address_info *hw_config)
 
   if (check_region (hw_config->io_base, 4))
     {
-      printk ("\n\nopl3.c: I/O port %x already in use\n\n", hw_config->io_base);
+      DDB (printk ("opl3.c: I/O port %x already in use\n",
+		   hw_config->io_base));
       return 0;
     }
 

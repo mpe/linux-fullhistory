@@ -26,7 +26,7 @@
 #include <linux/stat.h>
 #include <linux/mm.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 /* forward references */
 static long proc_readscsi(struct inode * inode, struct file * file,

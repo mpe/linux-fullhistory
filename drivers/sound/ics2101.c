@@ -6,7 +6,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -14,7 +14,7 @@
 
 
 #include "sound_config.h"
-#if defined(CONFIG_GUS)
+#if defined(CONFIG_GUSHW)
 
 #include <linux/ultrasound.h>
 #include "gus_hw.h"
@@ -85,10 +85,10 @@ write_mix (int dev, int chn, int vol)
 
   save_flags (flags);
   cli ();
-  outb (ctrl_addr, u_MixSelect);
-  outb (selector[dev], u_MixData);
-  outb (attn_addr, u_MixSelect);
-  outb ((unsigned char) vol, u_MixData);
+  outb ((ctrl_addr), u_MixSelect);
+  outb ((selector[dev]), u_MixData);
+  outb ((attn_addr), u_MixSelect);
+  outb (((unsigned char) vol), u_MixData);
   restore_flags (flags);
 }
 
@@ -128,27 +128,27 @@ ics2101_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 	    break;
 
 	  case SOUND_MIXER_MIC:
-	    return snd_ioctl_return ((int *) arg, set_volumes (DEV_MIC, get_user ((int *) arg)));
+	    return ioctl_out (arg, set_volumes (DEV_MIC, ioctl_in (arg)));
 	    break;
 
 	  case SOUND_MIXER_CD:
-	    return snd_ioctl_return ((int *) arg, set_volumes (DEV_CD, get_user ((int *) arg)));
+	    return ioctl_out (arg, set_volumes (DEV_CD, ioctl_in (arg)));
 	    break;
 
 	  case SOUND_MIXER_LINE:
-	    return snd_ioctl_return ((int *) arg, set_volumes (DEV_LINE, get_user ((int *) arg)));
+	    return ioctl_out (arg, set_volumes (DEV_LINE, ioctl_in (arg)));
 	    break;
 
 	  case SOUND_MIXER_SYNTH:
-	    return snd_ioctl_return ((int *) arg, set_volumes (DEV_GF1, get_user ((int *) arg)));
+	    return ioctl_out (arg, set_volumes (DEV_GF1, ioctl_in (arg)));
 	    break;
 
 	  case SOUND_MIXER_VOLUME:
-	    return snd_ioctl_return ((int *) arg, set_volumes (DEV_VOL, get_user ((int *) arg)));
+	    return ioctl_out (arg, set_volumes (DEV_VOL, ioctl_in (arg)));
 	    break;
 
 	  default:
-	    return -(EINVAL);
+	    return -EINVAL;
 	  }
       else
 	switch (cmd & 0xff)	/*
@@ -161,47 +161,47 @@ ics2101_mixer_ioctl (int dev, unsigned int cmd, caddr_t arg)
 	    break;
 
 	  case SOUND_MIXER_DEVMASK:
-	    return snd_ioctl_return ((int *) arg, MIX_DEVS);
+	    return ioctl_out (arg, MIX_DEVS);
 	    break;
 
 	  case SOUND_MIXER_STEREODEVS:
-	    return snd_ioctl_return ((int *) arg, SOUND_MASK_LINE | SOUND_MASK_CD | SOUND_MASK_SYNTH | SOUND_MASK_VOLUME | SOUND_MASK_MIC);
+	    return ioctl_out (arg, SOUND_MASK_LINE | SOUND_MASK_CD | SOUND_MASK_SYNTH | SOUND_MASK_VOLUME | SOUND_MASK_MIC);
 	    break;
 
 	  case SOUND_MIXER_RECMASK:
-	    return snd_ioctl_return ((int *) arg, SOUND_MASK_MIC | SOUND_MASK_LINE);
+	    return ioctl_out (arg, SOUND_MASK_MIC | SOUND_MASK_LINE);
 	    break;
 
 	  case SOUND_MIXER_CAPS:
-	    return snd_ioctl_return ((int *) arg, 0);
+	    return ioctl_out (arg, 0);
 	    break;
 
 	  case SOUND_MIXER_MIC:
-	    return snd_ioctl_return ((int *) arg, volumes[DEV_MIC]);
+	    return ioctl_out (arg, volumes[DEV_MIC]);
 	    break;
 
 	  case SOUND_MIXER_LINE:
-	    return snd_ioctl_return ((int *) arg, volumes[DEV_LINE]);
+	    return ioctl_out (arg, volumes[DEV_LINE]);
 	    break;
 
 	  case SOUND_MIXER_CD:
-	    return snd_ioctl_return ((int *) arg, volumes[DEV_CD]);
+	    return ioctl_out (arg, volumes[DEV_CD]);
 	    break;
 
 	  case SOUND_MIXER_VOLUME:
-	    return snd_ioctl_return ((int *) arg, volumes[DEV_VOL]);
+	    return ioctl_out (arg, volumes[DEV_VOL]);
 	    break;
 
 	  case SOUND_MIXER_SYNTH:
-	    return snd_ioctl_return ((int *) arg, volumes[DEV_GF1]);
+	    return ioctl_out (arg, volumes[DEV_GF1]);
 	    break;
 
 	  default:
-	    return -(EINVAL);
+	    return -EINVAL;
 	  }
     }
 
-  return -(EINVAL);
+  return -EINVAL;
 }
 
 static struct mixer_operations ics2101_mixer_operations =

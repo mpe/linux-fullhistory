@@ -24,7 +24,7 @@ ifdef CONFIG_AUDIO
 	OBJS := $(OBJS)  dmabuf.o
 endif
 
-ifdef CONFIG_GUS
+ifdef CONFIG_GUSHW
 	OBJS := $(OBJS)  gus_card.o gus_midi.o gus_vol.o gus_wave.o ics2101.o
 endif
 
@@ -76,7 +76,7 @@ ifdef CONFIG_SEQUENCER
 	OBJS := $(OBJS)  sound_timer.o
 endif
 
-ifdef CONFIG_SSCAPE
+ifdef CONFIG_SSCAPEHW
 	OBJS := $(OBJS)  sscape.o
 endif
 
@@ -95,3 +95,4 @@ endif
 ifdef CONFIG_UART401
 	OBJS := $(OBJS)  uart401.o
 endif
+

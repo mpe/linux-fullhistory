@@ -21,7 +21,7 @@
 #include <linux/sched.h>
 #include <linux/locks.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 static int isofs_readdir(struct inode *, struct file *, void *, filldir_t);
 

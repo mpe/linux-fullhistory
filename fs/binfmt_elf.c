@@ -28,7 +28,7 @@
 #include <linux/personality.h>
 #include <linux/elfcore.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/pgtable.h>
 
 #include <linux/config.h>
@@ -98,65 +98,68 @@ unsigned long * create_elf_tables(char *p, int argc, int envc,
 				  unsigned long interp_load_addr, int ibcs)
 {
 	char **argv, **envp;
-	unsigned long *dlinfo;
 	unsigned long *sp;
 
 	/*
 	 * Force 16 byte alignment here for generality.
 	 */
 	sp = (unsigned long *) (~15UL & (unsigned long) p);
-	sp -= exec ? DLINFO_ITEMS*2 : 2;
-	dlinfo = sp;
+
+	/*
+	 * Put the ELF interpreter info on the stack
+	 */
+#define NEW_AUX_ENT(nr, id, val) \
+	  __put_user ((id), sp+(nr*2)); \
+	  __put_user ((val), sp+(nr*2+1)); \
+
+	sp -= 2;
+	NEW_AUX_ENT(0, AT_NULL, 0);
+
+	if (exec) {
+		sp -= 11*2;
+
+	  NEW_AUX_ENT (0, AT_PHDR, load_addr + exec->e_phoff);
+	  NEW_AUX_ENT (1, AT_PHENT, sizeof (struct elf_phdr));
+	  NEW_AUX_ENT (2, AT_PHNUM, exec->e_phnum);
+	  NEW_AUX_ENT (3, AT_PAGESZ, PAGE_SIZE);
+	  NEW_AUX_ENT (4, AT_BASE, interp_load_addr);
+	  NEW_AUX_ENT (5, AT_FLAGS, 0);
+	  NEW_AUX_ENT (6, AT_ENTRY, (unsigned long) exec->e_entry);
+	  NEW_AUX_ENT (7, AT_UID, (unsigned long) current->uid);
+	  NEW_AUX_ENT (8, AT_EUID, (unsigned long) current->euid);
+	  NEW_AUX_ENT (9, AT_GID, (unsigned long) current->gid);
+	  NEW_AUX_ENT (10, AT_EGID, (unsigned long) current->egid);
+	}
+#undef NEW_AUX_ENT
+
 	sp -= envc+1;
 	envp = (char **) sp;
 	sp -= argc+1;
 	argv = (char **) sp;
 	if (!ibcs) {
-		put_user((unsigned long) envp,--sp);
-		put_user((unsigned long) argv,--sp);
+		__put_user((unsigned long) envp,--sp);
+		__put_user((unsigned long) argv,--sp);
 	}
 
-#define NEW_AUX_ENT(id, val) \
-	  put_user ((id), dlinfo++); \
-	  put_user ((val), dlinfo++)
-
-	if (exec) { /* Put this here for an ELF program interpreter */
-	  struct elf_phdr * eppnt;
-	  eppnt = (struct elf_phdr *) exec->e_phoff;
-
-	  NEW_AUX_ENT (AT_PHDR, load_addr + exec->e_phoff);
-	  NEW_AUX_ENT (AT_PHENT, sizeof (struct elf_phdr));
-	  NEW_AUX_ENT (AT_PHNUM, exec->e_phnum);
-	  NEW_AUX_ENT (AT_PAGESZ, PAGE_SIZE);
-	  NEW_AUX_ENT (AT_BASE, interp_load_addr);
-	  NEW_AUX_ENT (AT_FLAGS, 0);
-	  NEW_AUX_ENT (AT_ENTRY, (unsigned long) exec->e_entry);
-	  NEW_AUX_ENT (AT_UID, (unsigned long) current->uid);
-	  NEW_AUX_ENT (AT_EUID, (unsigned long) current->euid);
-	  NEW_AUX_ENT (AT_GID, (unsigned long) current->gid);
-	  NEW_AUX_ENT (AT_EGID, (unsigned long) current->egid);
-	}
-	NEW_AUX_ENT (AT_NULL, 0);
-#undef NEW_AUX_ENT
-	put_user((unsigned long)argc,--sp);
+	__put_user((unsigned long)argc,--sp);
 	current->mm->arg_start = (unsigned long) p;
 	while (argc-->0) {
 		char c;
-		put_user(p,argv++);
+		__put_user(p,argv++);
 		do {
 			get_user(c,p++);
 		} while (c);
 	}
-	put_user(NULL, argv);
+	__put_user(NULL, argv);
 	current->mm->arg_end = current->mm->env_start = (unsigned long) p;
 	while (envc-->0) {
 		char c;
-		put_user(p,envp++);
+		__put_user(p,envp++);
 		do {
 			get_user(c,p++);
 		} while (c);
 	}
-	put_user(NULL, envp);
+	__put_user(NULL, envp);
 	current->mm->env_end = (unsigned long) p;
 	return sp;
 }

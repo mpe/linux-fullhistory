@@ -52,7 +52,7 @@
 #include <linux/mc146818rtc.h>
 
 #include <asm/io.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 /*
@@ -66,11 +66,11 @@ static struct wait_queue *rtc_wait;
 
 static struct timer_list rtc_irq_timer;
 
-static int rtc_lseek(struct inode *inode, struct file *file, off_t offset,
-			int origin);
+static long long rtc_llseek(struct inode *inode, struct file *file,
+			    loff_t offset, int origin);
 
-static int rtc_read(struct inode *inode, struct file *file,
-			char *buf, int count);
+static long rtc_read(struct inode *inode, struct file *file,
+			char *buf, unsigned long count);
 
 static int rtc_ioctl(struct inode *inode, struct file *file,
 			unsigned int cmd, unsigned long arg);
@@ -133,13 +133,14 @@ static void rtc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
  *	Now all the various file operations that we export.
  */
 
-static int rtc_lseek(struct inode *inode, struct file *file, off_t offset,
-	int origin)
+static long long rtc_llseek(struct inode *inode, struct file *file,
+			    loff_t offset, int origin)
 {
 	return -ESPIPE;
 }
 
-static int rtc_read(struct inode *inode, struct file *file, char *buf, int count)
+static long rtc_read(struct inode *inode, struct file *file, char *buf,
+		     unsigned long count)
 {
 	struct wait_queue wait = { current, NULL };
 	int retval;
@@ -507,7 +508,7 @@ static int rtc_select(struct inode *inode, struct file *file,
  */
 
 static struct file_operations rtc_fops = {
-	rtc_lseek,
+	rtc_llseek,
 	rtc_read,
 	NULL,		/* No write */
 	NULL,		/* No readdir */

@@ -1,0 +1,69 @@
+================================================================
+	AWE32 Sound Driver for Linux / FreeBSD
+		version 0.2.0; Oct. 16, 1996
+================================================================
+
+* GENERAL NOTES
+
+This is a sound driver extension for SB-AWE32 cards to enable the
+wave synth operations.  The driver is provided for both Linux 1.2.x
+and 2.0.x kernels, and also FreeBSD.  Follow the corresponding
+instruction in the installation document if you use old sound drivers.
+
+This driver was written by Takashi Iwai (iwai@dragon.mm.t.u-tokyo.ac.jp)  
+who also maintains the code.  Please forward any questions, bug fixes
+and suggestions directly to me (_NOT_ to Linus Torvalds or Hannu
+Savolainen).
+
+
+* CAUTION
+
+- In the v0.2.0, parameters of hardware control are changed to have a
+compatibility with GUS driver.  If you have older awesfx and drvmidi
+utilities, please get new versions and install them again.
+
+- The SFX file after v0.1.5 is no more compatible from 0.1.4x.
+Please remake the obsolete SFX files again by txt2sfx utility.
+
+
+* USING THE DRIVER
+
+To load SoundFont files, sfxload utility is required.
+All AWE32 driver and utilities can be downloaded from:
+	http://bahamut.mm.t.u-tokyo.ac.jp/~iwai/awedrv/
+
+Follow the instruction in awesfx package to make patched GM and
+GS presets.  Then, load the SFX file on driver by sfxload utility.
+
+	% sfxload -i gm.sfx
+
+Now you can hear midi musics by supported midi players
+(awemidi-0.1.x.tar.gz or patch file to playmidi-2.3).
+
+	% drvmidi foo.mid
+
+Enjoy.
+
+
+* ACKNOWLEDGMENTS
+
+Thanks to Witold Jachimczyk (witek@xfactor.wpi.edu) for many advices
+to programming of AWE32.  Many codes are brought from his AWE32-native 
+MOD player, ALMP.
+The port of awedrv0.1.6 to FreeBSD is done by Randall Hopper
+(rhh@ct.picker.com).
+I also thank linux-awe-ml members for their efforts
+to reboot their system many times :-)
+
+
+* BUGS & TODO'S
+
+- Some instruments are inaudible, eg. glockenspiel and sinewaves.
+- No stereo sample can be used.
+- More smart patch management
+- More smart DRAM memory control
+- Dynamic buffer allocation
+- etc, etc, etc.
+
+
+Takashi Iwai <iwai@dragon.mm.t.u-tokyo.ac.jp>

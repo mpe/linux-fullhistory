@@ -6,7 +6,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -22,6 +22,7 @@
 #include "coproc.h"
 
 static int      init_sequence[20];	/* NOTE! pos 0 = len, start pos 1. */
+
 
 #ifdef CONFIG_SEQUENCER
 static int      timer_mode = TMR_INTERNAL, timer_caps = TMR_INTERNAL;
@@ -82,7 +83,7 @@ mpu401_status (struct mpu_config *devc)
 static void 
 write_command (struct mpu_config *devc, unsigned char cmd)
 {
-  outb (cmd, COMDPORT (devc->base));
+  outb ((cmd), COMDPORT (devc->base));
 }
 static int 
 read_data (struct mpu_config *devc)
@@ -93,7 +94,7 @@ read_data (struct mpu_config *devc)
 static void 
 write_data (struct mpu_config *devc, unsigned char byte)
 {
-  outb (byte, DATAPORT (devc->base));
+  outb ((byte), DATAPORT (devc->base));
 }
 
 #define	OUTPUT_READY	0x40
@@ -492,14 +493,14 @@ mpu401_open (int dev, int mode,
   struct mpu_config *devc;
 
   if (dev < 0 || dev >= num_midis)
-    return -(ENXIO);
+    return -ENXIO;
 
   devc = &dev_conf[dev];
 
   if (devc->opened)
     {
       printk ("MPU-401: Midi busy\n");
-      return -(EBUSY);
+      return -EBUSY;
     }
 
   /*
@@ -514,7 +515,7 @@ mpu401_open (int dev, int mode,
       if (mpu401_status (devc) == 0xff)		/* Bus float */
 	{
 	  printk ("MPU-401: Device not initialized properly\n");
-	  return -(EIO);
+	  return -EIO;
 	}
       reset_mpu401 (devc);
     }
@@ -608,7 +609,7 @@ mpu401_command (int dev, mpu_command_rec * cmd)
 				 */
     {
       printk ("MPU-401 commands not possible in the UART mode\n");
-      return -(EINVAL);
+      return -EINVAL;
     }
 
   /*
@@ -627,7 +628,7 @@ retry:
   if (timeout-- <= 0)
     {
       printk ("MPU-401: Command (0x%x) timeout\n", (int) cmd->cmd);
-      return -(EIO);
+      return -EIO;
     }
 
   save_flags (flags);
@@ -661,7 +662,7 @@ retry:
     {
       restore_flags (flags);
       /*       printk ("MPU: No ACK to command (0x%x)\n", (int) cmd->cmd); */
-      return -(EIO);
+      return -EIO;
     }
 
   if (cmd->nr_args)
@@ -673,7 +674,7 @@ retry:
 	  {
 	    restore_flags (flags);
 	    printk ("MPU: Command (0x%x), parm send failed.\n", (int) cmd->cmd);
-	    return -(EIO);
+	    return -EIO;
 	  }
       }
 
@@ -695,7 +696,7 @@ retry:
 	  {
 	    restore_flags (flags);
 	    /* printk ("MPU: No response(%d) to command (0x%x)\n", i, (int) cmd->cmd);  */
-	    return -(EIO);
+	    return -EIO;
 	  }
       }
 
@@ -788,9 +789,9 @@ mpu401_ioctl (int dev, unsigned cmd, caddr_t arg)
       if (!(devc->capabilities & MPU_CAP_INTLG))	/* No intelligent mode */
 	{
 	  printk ("MPU-401: Intelligent mode not supported by the HW\n");
-	  return -(EINVAL);
+	  return -EINVAL;
 	}
-      set_uart_mode (dev, devc, !get_user ((int *) arg));
+      set_uart_mode (dev, devc, !ioctl_in (arg));
       return 0;
       break;
 
@@ -804,13 +805,17 @@ mpu401_ioctl (int dev, unsigned cmd, caddr_t arg)
 	if ((ret = mpu401_command (dev, &rec)) < 0)
 	  return ret;
 
-	copy_to_user (&((char *) arg)[0], (char *) &rec, sizeof (rec));
+	{
+	  char           *fixit = (char *) &rec;
+
+	  copy_to_user (&((char *) arg)[0], fixit, sizeof (rec));
+	};
 	return 0;
       }
       break;
 
     default:
-      return -(EINVAL);
+      return -EINVAL;
     }
 }
 
@@ -837,7 +842,7 @@ mpu_synth_ioctl (int dev,
   midi_dev = synth_devs[dev]->midi_dev;
 
   if (midi_dev < 0 || midi_dev > num_midis)
-    return -(ENXIO);
+    return -ENXIO;
 
   devc = &dev_conf[midi_dev];
 
@@ -845,7 +850,10 @@ mpu_synth_ioctl (int dev,
     {
 
     case SNDCTL_SYNTH_INFO:
-      copy_to_user (&((char *) arg)[0], &mpu_synth_info[midi_dev], sizeof (struct synth_info));
+      {
+	char           *fixit = (char *) &mpu_synth_info[midi_dev];
+	copy_to_user (&((char *) arg)[0], fixit, sizeof (struct synth_info));
+      };
 
       return 0;
       break;
@@ -855,7 +863,7 @@ mpu_synth_ioctl (int dev,
       break;
 
     default:
-      return -(EINVAL);
+      return -EINVAL;
     }
 }
 
@@ -869,7 +877,7 @@ mpu_synth_open (int dev, int mode)
 
   if (midi_dev < 0 || midi_dev > num_midis)
     {
-      return -(ENXIO);
+      return -ENXIO;
     }
 
   devc = &dev_conf[midi_dev];
@@ -886,7 +894,7 @@ mpu_synth_open (int dev, int mode)
       if (mpu401_status (devc) == 0xff)		/* Bus float */
 	{
 	  printk ("MPU-401: Device not initialized properly\n");
-	  return -(EIO);
+	  return -EIO;
 	}
       reset_mpu401 (devc);
     }
@@ -894,7 +902,7 @@ mpu_synth_open (int dev, int mode)
   if (devc->opened)
     {
       printk ("MPU-401: Midi busy\n");
-      return -(EBUSY);
+      return -EBUSY;
     }
 
   devc->mode = MODE_SYNTH;
@@ -1464,7 +1472,7 @@ mpu_timer_open (int dev, int mode)
   int             midi_dev = sound_timer_devs[dev]->devlink;
 
   if (timer_open)
-    return -(EBUSY);
+    return -EBUSY;
 
   tmr_reset ();
   curr_tempo = 50;
@@ -1590,7 +1598,10 @@ mpu_timer_ioctl (int dev,
     {
     case SNDCTL_TMR_SOURCE:
       {
-	int             parm = (int) get_user ((int *) arg) & timer_caps;
+	int             parm;
+
+	get_user (parm, (int *) arg);
+	parm &= timer_caps;
 
 	if (parm != 0)
 	  {
@@ -1602,7 +1613,7 @@ mpu_timer_ioctl (int dev,
 	      mpu_cmd (midi_dev, 0x3d, 0);	/* Use SMPTE sync */
 	  }
 
-	return snd_ioctl_return ((int *) arg, timer_mode);
+	return ioctl_out (arg, timer_mode);
       }
       break;
 
@@ -1628,18 +1639,18 @@ mpu_timer_ioctl (int dev,
 
     case SNDCTL_TMR_TIMEBASE:
       {
-	int             val = (int) get_user ((int *) arg);
+	int             val = (int) ioctl_in (arg);
 
 	if (val)
 	  set_timebase (midi_dev, val);
 
-	return snd_ioctl_return ((int *) arg, curr_timebase);
+	return ioctl_out (arg, curr_timebase);
       }
       break;
 
     case SNDCTL_TMR_TEMPO:
       {
-	int             val = (int) get_user ((int *) arg);
+	int             val = (int) ioctl_in (arg);
 	int             ret;
 
 	if (val)
@@ -1657,19 +1668,23 @@ mpu_timer_ioctl (int dev,
 	    curr_tempo = val;
 	  }
 
-	return snd_ioctl_return ((int *) arg, curr_tempo);
+	return ioctl_out (arg, curr_tempo);
       }
       break;
 
     case SNDCTL_SEQ_CTRLRATE:
-      if (get_user ((int *) arg) != 0)	/* Can't change */
-	return -(EINVAL);
+      if (ioctl_in (arg) != 0)	/* Can't change */
+	return -EINVAL;
 
-      return snd_ioctl_return ((int *) arg, ((curr_tempo * curr_timebase) + 30) / 60);
+      return ioctl_out (arg, ((curr_tempo * curr_timebase) + 30) / 60);
+      break;
+
+    case SNDCTL_SEQ_GETTIME:
+      return ioctl_out (arg, curr_ticks);
       break;
 
     case SNDCTL_TMR_METRONOME:
-      metronome_mode = (int) get_user ((int *) arg);
+      metronome_mode = (int) ioctl_in (arg);
       setup_metronome (midi_dev);
       return 0;
       break;
@@ -1677,7 +1692,7 @@ mpu_timer_ioctl (int dev,
     default:;
     }
 
-  return -(EINVAL);
+  return -EINVAL;
 }
 
 static void

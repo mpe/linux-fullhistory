@@ -169,7 +169,7 @@
 
 #include <asm/system.h>
 #include <asm/io.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #define MAJOR_NR AZTECH_CDROM_MAJOR 
 

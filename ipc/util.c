@@ -5,13 +5,14 @@
 
 #include <linux/config.h>
 #include <linux/errno.h>
-#include <asm/segment.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/sem.h>
 #include <linux/msg.h>
 #include <linux/shm.h>
 #include <linux/stat.h>
+
+#include <asm/uaccess.h>
 
 #if defined(CONFIG_SYSVIPC) || defined(CONFIG_KERNELD)
 

@@ -23,9 +23,9 @@
 #include <linux/pagemap.h>
 #include <linux/swap.h>
 
-#include <asm/segment.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
+#include <asm/uaccess.h>
 
 /*
  * Shared mappings implemented 30.11.1994. It's not fully working yet,

@@ -33,7 +33,7 @@
 #include <linux/ioport.h>
 #include <linux/fcntl.h>
 #include <asm/io.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 static int wdt_is_open=0;

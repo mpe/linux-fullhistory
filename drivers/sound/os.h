@@ -1,8 +1,3 @@
-
-#define ALLOW_SELECT
-#undef NO_INLINE_ASM
-#define SHORT_BANNERS
-
 #ifdef MODULE
 #define __NO_VERSION__
 #include <linux/module.h>
@@ -20,7 +15,7 @@
 #include <linux/sched.h>
 #include <linux/ctype.h>
 #include <asm/io.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/dma.h>
 #include <linux/wait.h>
@@ -38,7 +33,7 @@
 #define TRUE	1
 
 struct snd_wait {
-	  int flags;
+	  int opts;
 	};
 
 extern int sound_alloc_dma(int chn, char *deviceID);
@@ -46,11 +41,5 @@ extern int sound_open_dma(int chn, char *deviceID);
 extern void sound_free_dma(int chn);
 extern void sound_close_dma(int chn);
 
-#define RUNTIME_DMA_ALLOC
-
 extern caddr_t sound_mem_blocks[1024];
 extern int sound_nblocks;
-
-#undef PSEUDO_DMA_AUTOINIT
-#define ALLOW_BUFFER_MAPPING
-

@@ -12,7 +12,7 @@
 #include <linux/fcntl.h>
 #include <linux/errno.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 /*
  * comment out this line if you want names > info->s_namelen chars to be

@@ -13,7 +13,7 @@
 #include <linux/time.h>
 #include <linux/mm.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 /*
  * change timeval to jiffies, trying to avoid the 

@@ -4,14 +4,14 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
 #include <linux/config.h>
 
 #include "sound_config.h"
-#ifdef CONFIG_GUS
+#ifdef CONFIG_GUSHW
 #include "gus_linearvol.h"
 
 #define GUS_VOLUME	gus_wave_volume

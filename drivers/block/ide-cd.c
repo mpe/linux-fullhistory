@@ -138,7 +138,7 @@
 #include <asm/irq.h>
 #include <asm/io.h>
 #include <asm/byteorder.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/unaligned.h>
 
 #include "ide.h"

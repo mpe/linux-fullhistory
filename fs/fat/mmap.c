@@ -18,7 +18,7 @@
 #include <linux/malloc.h>
 #include <linux/msdos_fs.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 /*

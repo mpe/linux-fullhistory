@@ -21,7 +21,7 @@
 #include <linux/stddef.h>
 #include <linux/head.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #include "fpu_system.h"
 #include "exception.h"

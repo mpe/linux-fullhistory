@@ -11,7 +11,7 @@
 #include <linux/sched.h>
 #include <linux/mm.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 /*
  * Traditional linux readdir() handling..

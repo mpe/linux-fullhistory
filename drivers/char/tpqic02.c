@@ -216,7 +216,7 @@
 #include <asm/dma.h>
 #include <asm/system.h>
 #include <asm/io.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 /* We really shouldn't be using this define.. */
 #define IOCCMD_MASK 0x0000ffff

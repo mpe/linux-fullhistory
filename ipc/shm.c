@@ -14,7 +14,7 @@
 #include <linux/malloc.h>
 #include <linux/swap.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/pgtable.h>
 
 extern int ipcperms (struct ipc_perm *ipcp, short shmflg);

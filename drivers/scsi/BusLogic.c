@@ -25,7 +25,7 @@
 
 
 #define BusLogic_DriverVersion		"2.0.6"
-#define BusLogic_DriverDate		"17 July 1996"
+#define BusLogic_DriverDate		"19 October 1996"
 
 
 #include <linux/module.h>

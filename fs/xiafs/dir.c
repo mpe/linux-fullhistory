@@ -16,7 +16,7 @@
 #include <linux/xia_fs.h>
 #include <linux/stat.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #include "xiafs_mac.h"
 

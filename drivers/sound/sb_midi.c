@@ -6,7 +6,7 @@
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -40,14 +40,14 @@ sb_midi_open (int dev, int mode,
   unsigned long   flags;
 
   if (devc == NULL)
-    return -(ENXIO);
+    return -ENXIO;
 
   save_flags (flags);
   cli ();
   if (devc->opened)
     {
       restore_flags (flags);
-      return -(EBUSY);
+      return -EBUSY;
     }
   devc->opened = 1;
   restore_flags (flags);
@@ -59,7 +59,7 @@ sb_midi_open (int dev, int mode,
   if (!sb_dsp_command (devc, 0x35))	/* Start MIDI UART mode */
     {
       devc->opened = 0;
-      return -(EIO);
+      return -EIO;
     }
 
   devc->intr_active = 1;
@@ -97,7 +97,7 @@ sb_midi_out (int dev, unsigned char midi_byte)
   sb_devc        *devc = midi_devs[dev]->devc;
 
   if (devc == NULL)
-    return -(ENXIO);
+    return -ENXIO;
 
   sb_dsp_command (devc, midi_byte);
 
@@ -116,7 +116,7 @@ sb_midi_end_read (int dev)
   sb_devc        *devc = midi_devs[dev]->devc;
 
   if (devc == NULL)
-    return -(ENXIO);
+    return -ENXIO;
 
   sb_dsp_reset (devc);
   devc->intr_active = 0;
@@ -126,7 +126,7 @@ sb_midi_end_read (int dev)
 static int
 sb_midi_ioctl (int dev, unsigned cmd, caddr_t arg)
 {
-  return -(EPERM);
+  return -EPERM;
 }
 
 void

@@ -15,7 +15,7 @@
  *  ext2 symlink handling code
  */
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #include <linux/errno.h>
 #include <linux/fs.h>

@@ -44,7 +44,7 @@
 #include <linux/udp.h>
 #include <net/sock.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #define msleep(sec)	{ current->timeout = sec * HZ / 1000; \
 			  current->state = TASK_INTERRUPTIBLE; \

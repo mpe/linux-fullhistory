@@ -64,7 +64,7 @@
  */
 
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <linux/types.h>
 #include <linux/kernel.h>

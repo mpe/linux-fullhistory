@@ -18,7 +18,7 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/io.h>
 #include <asm/hwrpb.h>
 

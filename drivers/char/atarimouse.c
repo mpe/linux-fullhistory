@@ -22,7 +22,7 @@
 
 #include <asm/atarikb.h>
 #include <asm/atari_mouse.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/bootinfo.h>
 
 static struct mouse_status mouse;

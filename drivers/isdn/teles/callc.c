@@ -1450,9 +1450,10 @@ teles_writebuf(int id, int chan, const u_char * buf, int count, int user)
 
         ptr += i;
 
-        if (user)
-                memcpy_fromfs(ptr, buf, count);
-        else
+        if (user) {
+                if (copy_from_user(ptr, buf, count))
+					return -EFAULT;
+		} else
                 memcpy(ptr, buf, count);
         ibh->datasize = count + i;
 

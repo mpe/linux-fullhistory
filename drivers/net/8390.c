@@ -48,7 +48,7 @@ static const char *version =
 #include <linux/ptrace.h>
 #include <linux/string.h>
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <linux/errno.h>

@@ -1,16 +1,16 @@
 /*
  *     PnP soundcard support is not included in this version.
  *
- *       AEDSP16 will not work without significant changes.
+ *     There is a separately distributed patch available for AEDSP16.
  */
-#define DISABLED_OPTIONS 	(B(OPT_SPNP)|B(OPT_AEDSP16)|B(OPT_UNUSED1)|B(OPT_UNUSED2))
+#define DISABLED_OPTIONS 	(B(OPT_SPNP)|B(OPT_AEDSP16)|B(OPT_UNUSED1)|B(OPT_UNUSED2)|B(OPT_UNUSED3)|B(OPT_UNUSED4)|B(OPT_UNUSED5))
 /*
  * sound/configure.c  - Configuration program for the Linux Sound Driver
  */
 /*
  * Copyright (C) by Hannu Savolainen 1993-1996
  *
- * USS/Lite for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
+ * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
@@ -51,34 +51,31 @@
 #define OPT_UNUSED1	16
 #define OPT_UNUSED2	17
 #define OPT_AEDSP16     18
-#define OPT_AUDIO	19
-#define OPT_MIDI_AUTO	20
-#define OPT_MIDI	21
+#define OPT_UNUSED3	19
+#define OPT_UNUSED4	20
+#define OPT_UNUSED5	21
 #define OPT_YM3812_AUTO	22
 #define OPT_YM3812	23
 #define OPT_LAST	23	/* Last defined OPT number */
 
-#define DUMMY_OPTS (B(OPT_MIDI_AUTO)|B(OPT_YM3812_AUTO))
+#define DUMMY_OPTS (B(OPT_YM3812_AUTO))
 
-#define ANY_DEVS (B(OPT_AUDIO)|B(OPT_MIDI)|B(OPT_GUS)| \
+#define ANY_DEVS (B(OPT_SB)|B(OPT_PAS)|B(OPT_GUS)| \
 		  B(OPT_MPU401)|B(OPT_PSS)|B(OPT_GUS16)|B(OPT_GUSMAX)| \
 		  B(OPT_MSS)|B(OPT_SSCAPE)|B(OPT_UART6850)|B(OPT_TRIX)| \
-		  B(OPT_MAD16)|B(OPT_CS4232)|B(OPT_MAUI)|B(OPT_ADLIB))
-#define AUDIO_CARDS (B (OPT_PSS) | B (OPT_SB) | B (OPT_PAS) | B (OPT_GUS) | \
-		B (OPT_MSS) | B (OPT_GUS16) | B (OPT_GUSMAX) | B (OPT_TRIX) | \
-		B (OPT_SSCAPE)| B(OPT_MAD16) | B(OPT_CS4232))
+		  B(OPT_MAD16)|B(OPT_CS4232)|B(OPT_MAUI)|B(OPT_ADLIB)| \
+		  B(OPT_SPNP))
 #define MPU_DEVS (B(OPT_PSS)|\
 		  B(OPT_CS4232)|B(OPT_SPNP)|B(OPT_MAUI)|B(OPT_SSCAPE))
-#define UART401_DEVS (SBDSP_DEVS|B(OPT_TRIX)|B(OPT_MAD16))
-#define MIDI_CARDS (MPU_DEVS | UART401_DEVS | \
-		    B (OPT_PSS) | B (OPT_SB) | B (OPT_PAS) | B (OPT_MPU401) | \
-		    B (OPT_GUS) | B (OPT_TRIX) | B (OPT_SSCAPE)|B(OPT_MAD16) | \
-		    B (OPT_CS4232)|B(OPT_MAUI))
+#define UART401_DEVS (SBDSP_DEVS|B(OPT_TRIX)|B(OPT_MAD16)|B(OPT_SPNP))
+#define NON_AUDIO_CARDS (B(OPT_ADLIB)|B(OPT_MPU401)|B(OPT_UART6850)|B(OPT_MAUI))
+#define AUDIO_CARDS (ANY_DEVS & ~NON_AUDIO_CARDS)
+#define MIDI_CARDS (ANY_DEVS & ~(B(OPT_ADLIB)|B(OPT_MSS)))
 #define AD1848_DEVS (B(OPT_GUS16)|B(OPT_MSS)|B(OPT_PSS)|B(OPT_GUSMAX)|\
 		     B(OPT_SSCAPE)|B(OPT_TRIX)|B(OPT_MAD16)|B(OPT_CS4232)|\
 		     B(OPT_SPNP))
 #define SBDSP_DEVS (B(OPT_SB)|B(OPT_SPNP)|B(OPT_MAD16)|B(OPT_TRIX))
-#define SEQUENCER_DEVS (OPT_MIDI|OPT_YM3812|OPT_ADLIB|OPT_GUS|OPT_MAUI|MIDI_CARDS)
+#define SEQUENCER_DEVS (MIDI_CARDS|B(OPT_YM3812)|B(OPT_ADLIB)|B(OPT_GUS)|B(OPT_MAUI))
 /*
  * Options that have been disabled for some reason (incompletely implemented
  * and/or tested). Don't remove from this list before looking at file
@@ -138,9 +135,9 @@ hw_entry        hw_table[] =
   {B (OPT_SB), B (OPT_PAS), "UNUSED1", 1, 0, 1},
   {B (OPT_SB) | B (OPT_UNUSED1), B (OPT_PAS), "UNUSED2", 1, 0, 1},
   {B (OPT_UNUSED1) | B (OPT_MSS) | B (OPT_MPU401), 0, "AEDSP16", 1, 0, 0},
-  {AUDIO_CARDS, 0, "AUDIO", 1, 0, 1},
-  {B (OPT_MPU401) | B (OPT_MAUI), 0, "MIDI_AUTO", 0, OPT_MIDI, 0},
-  {MIDI_CARDS, 0, "MIDI", 1, 0, 1},
+  {AUDIO_CARDS, 0, "UNUSED3", 1, 0, 1},
+  {B (OPT_MPU401) | B (OPT_MAUI), 0, "UNUSED4", 0, 0, 0},
+  {MIDI_CARDS, 0, "UNUSED5", 1, 0, 1},
   {B (OPT_ADLIB), 0, "YM3812_AUTO", 0, OPT_YM3812, 0},
   {B (OPT_PSS) | B (OPT_SB) | B (OPT_PAS) | B (OPT_ADLIB) | B (OPT_MSS) | B (OPT_PSS), B (OPT_YM3812_AUTO), "YM3812", 1, 0, 1}
 };
@@ -167,9 +164,9 @@ char           *questions[] =
   "*** Unused option 1 ***",
   "*** Unused option 2 ***",
   "Audio Excel DSP 16 initialization support",
-  "/dev/dsp and /dev/audio support",
-  "This should not be asked",
-  "MIDI interface support",
+  "*** Unused option 3 ***",
+  "*** Unused option 4 ***",
+  "*** Unused option 5 ***",
   "This should not be asked",
   "FM synthesizer (YM3812/OPL-3) support",
   "Is the sky really falling"
@@ -289,7 +286,23 @@ extra_options[] =
   }
   ,
   {
+    "GUSHW", B (OPT_GUS) | B (OPT_SPNP)
+  }
+  ,
+  {
+    "SSCAPEHW", B (OPT_SSCAPE) | B (OPT_SPNP)
+  }
+  ,
+  {
     "SEQUENCER", SEQUENCER_DEVS
+  }
+  ,
+  {
+    "AUDIO", AUDIO_CARDS
+  }
+  ,
+  {
+    "MIDI", MIDI_CARDS
   }
   ,
   {
@@ -408,6 +421,32 @@ play_it_again_Sam:
 
 #define FMT_HEX 1
 #define FMT_INT 2
+
+void
+show_comment (int mask, char *txt)
+{
+  int             i;
+
+  if (dump_only)
+    {
+
+      for (i = 0; i < OPT_LAST; i++)
+	if (mask == B (i))
+	  {
+	    printf ("\n\nif [ \"$CONFIG_%s\" = \"y\" ]; then\n",
+		    hw_table[i].macro);
+	    printf ("comment '%s'\n", txt);
+	    printf ("fi\n");
+	  }
+    }
+  else
+    {
+      if (!(mask & selected_options))
+	return;
+
+      fprintf (stderr, "%s\n", txt);
+    }
+}
 
 void
 ask_int_choice (int mask, char *macro,
@@ -682,14 +721,11 @@ use_old_config (char *filename)
   printf ("#define SELECTED_SOUND_OPTIONS\t0x%08x\n", selected_options);
   fprintf (stderr, "Old configuration copied.\n");
 
-#if defined(linux) || defined(Solaris)
   build_defines ();
-#endif
   old_config_used = 1;
   return 1;
 }
 
-#if defined(linux) || defined(Solaris)
 void
 build_defines (void)
 {
@@ -723,7 +759,6 @@ build_defines (void)
   fprintf (optf, "\n");
   fclose (optf);
 }
-#endif
 
 void
 ask_parameters (void)
@@ -735,13 +770,11 @@ ask_parameters (void)
    * IRQ and DMA settings
    */
 
-#if 0	/* Disable this broken question. */
   ask_int_choice (B (OPT_AEDSP16), "AEDSP16_BASE",
 		  "I/O base for Audio Excel DSP 16",
 		  FMT_HEX,
 		  0x220,
 		  "220 or 240");
-#endif
 
   ask_int_choice (B (OPT_SB), "SBC_BASE",
 		  "I/O base for SB",
@@ -762,7 +795,7 @@ ask_parameters (void)
 		  "0, 1 or 3");
 
   ask_int_choice (B (OPT_SB), "SB_DMA2",
-		"Sound Blaster 16 bit DMA (_REQUIRED_for SB16, Jazz16, SMW)",
+		  "Sound Blaster 16 bit DMA (SB16, Jazz16, SMW)",
 		  FMT_INT,
 		  5,
 		  "5, 6 or 7 (use 1 for 8 bit cards)");
@@ -770,14 +803,19 @@ ask_parameters (void)
   ask_int_choice (B (OPT_SB), "SB_MPU_BASE",
 		  "MPU401 I/O base of SB16, Jazz16 and ES1688",
 		  FMT_HEX,
-		  0,
+		  0x330,
 		  "Check from manual of the card");
+
+  show_comment (B (OPT_SB),
+	   "MPU401 IRQ is only required with Jazz16, SM Wave and ESS1688.");
+  show_comment (B (OPT_SB),
+		"Enter -1 to the following question if you have something else such as SB16/32.");
 
   ask_int_choice (B (OPT_SB), "SB_MPU_IRQ",
 		  "SB MPU401 IRQ (Jazz16, SM Wave and ES1688)",
 		  FMT_INT,
 		  -1,
-		  "Use -1 with SB16");
+		  "Check from manual of the card");
 
   ask_int_choice (B (OPT_PAS), "PAS_IRQ",
 		  "PAS16 IRQ",
@@ -867,6 +905,10 @@ ask_parameters (void)
 		  9,
 		  "Check from manual of the card");
 
+  if (dump_only)
+    show_comment (B (OPT_MAUI),
+	"ERROR! You have to use old sound configuration method with Maui.");
+
   ask_int_choice (B (OPT_MAUI), "MAUI_BASE",
 		  "I/O base for Maui",
 		  FMT_HEX,
@@ -890,6 +932,10 @@ ask_parameters (void)
 		  FMT_INT,
 		  -1,
 		  "(Unknown)");
+
+  if (dump_only)
+    show_comment (B (OPT_PSS),
+    "ERROR! You have to use old sound configuration method with PSS cards.");
 
   ask_int_choice (B (OPT_PSS), "PSS_BASE",
 		  "PSS I/O base",
@@ -989,6 +1035,10 @@ ask_parameters (void)
 	printf ("#define REVEAL_SPEA\n");
 
     }
+
+  if (dump_only)
+    show_comment (B (OPT_MAUI),
+    "ERROR! You have to use old sound configuration method with AudioTrix.");
 
   ask_int_choice (B (OPT_TRIX), "TRIX_BASE",
 		  "AudioTrix audio I/O base",
@@ -1115,11 +1165,6 @@ ask_parameters (void)
 		  FMT_INT,
 		  9,
 		  "5, 7, 9 or 10");
-  ask_int_choice (B (OPT_AUDIO), "DSP_BUFFSIZE",
-		  "Audio DMA buffer size",
-		  FMT_INT,
-		  65536,
-		  "4096, 16384, 32768 or 65536");
 }
 
 void
@@ -1367,7 +1412,7 @@ main (int argc, char *argv[])
 	{
 
 	  if (think_positively (
-	    "Do you want support for the Audio Excel Sound Blaster Pro mode",
+	   "Do you want support for the Audio Excel Sound Blaster Pro mode",
 				 1,
 				 "Enable this option if you want the Audio Excel sound card to operate\n"
 				 "in Sound Blaster Pro mode.\n"))
@@ -1445,7 +1490,7 @@ main (int argc, char *argv[])
 
       if (think_positively ("Do you want to include TRXPRO.HEX in your kernel",
 			    1,
-	"The MediaTrix AudioTrix Pro has an on-board microcontroller which\n"
+       "The MediaTrix AudioTrix Pro has an on-board microcontroller which\n"
 			    "needs to be initialized by downloading the code from the file TRXPRO.HEX\n"
 			    "in the DOS driver directory. If you don't have the TRXPRO.HEX file handy\n"
 			    "you may skip this step. However, the SB and MPU-401 modes of AudioTrix\n"
@@ -1540,10 +1585,6 @@ main (int argc, char *argv[])
 
   printf ("#define SELECTED_SOUND_OPTIONS\t0x%08lx\n", selected_options);
   fprintf (stderr, "\nThe sound driver is now configured.\n");
-
-#if defined(SCO) || defined(ISC) || defined(SYSV)
-  fprintf (stderr, "Remember to update the System file\n");
-#endif
 
   if (!old_config_used)
     {

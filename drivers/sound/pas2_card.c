@@ -6,7 +6,6 @@
  */
 
 #include <linux/config.h>
-
 #include "sound_config.h"
 
 #if defined(CONFIG_PAS)
@@ -30,7 +29,6 @@ static int      pas_intr_mask = 0;
 static int      pas_irq = 0;
 static int      pas_sb_base = 0;
 
-int            *pas_osp;
 
 char            pas_model;
 static char    *pas_model_names[] =
@@ -52,7 +50,7 @@ pas_read (int ioaddr)
 void
 pas_write (unsigned char data, int ioaddr)
 {
-  outb (data, ioaddr ^ translate_code);
+  outb ((data), ioaddr ^ translate_code);
 }
 
 /******************* Begin of the Interrupt Handler ********************/
@@ -203,8 +201,8 @@ config_pas_hw (struct address_info *hw_config)
      * as per Media Vision.  Only define this if your PAS doesn't work correctly.
    */
 #ifdef SYMPHONY_PAS
-  outb (0x05, 0xa8);
-  outb (0x60, 0xa9);
+  outb ((0x05), 0xa8);
+  outb ((0x60), 0xa9);
 #endif
 
 #ifdef BROKEN_BUS_CLOCK
@@ -282,8 +280,8 @@ detect_pas_hw (struct address_info *hw_config)
    * you have something on base port 0x388. SO be forewarned.
    */
 
-  outb (0xBC, 0x9A01);		/* Activate first board */
-  outb (hw_config->io_base >> 2, 0x9A01);	/* Set base address */
+  outb ((0xBC), 0x9A01);	/* Activate first board */
+  outb ((hw_config->io_base >> 2), 0x9A01);	/* Set base address */
   translate_code = 0x388 ^ hw_config->io_base;
   pas_write (1, 0xBF88);	/* Select one wait states */
 
@@ -318,7 +316,6 @@ void
 attach_pas_card (struct address_info *hw_config)
 {
   pas_irq = hw_config->irq;
-  pas_osp = hw_config->osp;
 
   if (detect_pas_hw (hw_config))
     {
@@ -359,7 +356,6 @@ attach_pas_card (struct address_info *hw_config)
 int
 probe_pas (struct address_info *hw_config)
 {
-  pas_osp = hw_config->osp;
   return detect_pas_hw (hw_config);
 }
 

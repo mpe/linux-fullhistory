@@ -497,6 +497,7 @@ __asm__ __volatile__ (
 	"std\n\t"
 	"rep\n\t"
 	"movsb\n\t"
+	"cld"
 	: /* no output */
 	:"c" (n), "S" (n-1+(const char *)src), "D" (n-1+(char *)tmp)
 	:"cx","si","di","memory");

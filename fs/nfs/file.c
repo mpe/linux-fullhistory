@@ -26,7 +26,7 @@
 #include <linux/malloc.h>
 #include <linux/pagemap.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 static int nfs_file_mmap(struct inode *, struct file *, struct vm_area_struct *);

@@ -433,7 +433,7 @@
 #include <net/icmp.h>
 #include <net/tcp.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 unsigned long seq_offset;
 struct tcp_mib	tcp_statistics;

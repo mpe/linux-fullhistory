@@ -28,7 +28,7 @@
  * Germany
  *
  * To enable UMC8672 support there must a lilo line like
- * append="hd=umc8672"...
+ * append="ide0=umc8672"...
  * To set the speed according to the abilities of the hardware there must be a
  * line like
  * #define UMC_DRIVE0 11

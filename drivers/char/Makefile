@@ -196,14 +196,6 @@ else
   endif
 endif
   
-ifeq ($(CONFIG_SCC),y)
-L_OBJS += scc.o
-else
-  ifeq ($(CONFIG_SCC),m)
-  M_OBJS += scc.o
-  endif
-endif  
-
 ifeq ($(CONFIG_BAYCOM),y)
 L_OBJS += baycom.o
 else

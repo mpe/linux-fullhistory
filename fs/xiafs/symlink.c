@@ -15,7 +15,7 @@
 #include <linux/xia_fs.h>
 #include <linux/stat.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 static int 
 xiafs_readlink(struct inode *, char *, int);

@@ -58,7 +58,7 @@
 #include <linux/errno.h>
 #include <linux/timer.h>
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 /*
  *	We really ought to have a single public _inline_ min function!

@@ -18,7 +18,7 @@
 #include <linux/ncp_fs.h>
 
 #include "ncplib_kernel.h"
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 
 static inline int min(int a, int b)

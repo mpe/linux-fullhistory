@@ -17,7 +17,7 @@
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/net.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 
 extern inline int min(int x, int y)

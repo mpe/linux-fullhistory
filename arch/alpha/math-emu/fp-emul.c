@@ -3,7 +3,7 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #include "ieee-math.h"
 

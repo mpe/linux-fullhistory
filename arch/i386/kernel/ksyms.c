@@ -5,7 +5,7 @@
 
 #include <asm/semaphore.h>
 #include <asm/processor.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/io.h>
 
 extern void dump_thread(struct pt_regs *, struct user *);

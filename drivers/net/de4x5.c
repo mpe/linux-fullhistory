@@ -234,7 +234,7 @@ static const char *version = "de4x5.c:v0.441 96/9/9 davies@wanton.lkg.dec.com\n"
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/dma.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>

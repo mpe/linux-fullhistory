@@ -14,7 +14,7 @@
 #include <linux/mm.h>
 #include <linux/uio.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 static long long default_llseek(struct inode *inode,
 	struct file *file,

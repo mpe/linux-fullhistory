@@ -33,7 +33,7 @@
 #include <linux/vmalloc.h>
 
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/io.h>
 
 #define NR_SIZES 5

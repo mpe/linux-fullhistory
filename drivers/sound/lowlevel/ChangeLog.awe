@@ -1,0 +1,66 @@
+ver.0.2.0
+	- Includes FreeBSD port
+	- Can load GUS compatible patches
+	- Change values of hardware control parameters for compatibility
+	  with GUS driver
+	- Accept 8bit or unsigned wave data
+	- Accept no blank loop data
+	- Add sample mode flags in sample_info
+
+ver.0.1.6
+	- Add voice effects control
+	- Fix awe_voice.h for word alignment
+
+ver.0.1.5c
+	- Fix FM(OPL) playback problem
+
+ver.0.1.5b
+	- Fix pitch calculation for fixed midi key
+
+ver.0.1.5a
+	- Fix bugs in removing samples from linked list.
+
+ver.0.1.5
+	- Add checksum verification for sample uploading
+	  (not compatible from older sample_info structure)
+	- Fix sample offset pointers to (actual value - 1)
+	- Add sequencer command to initialize awe32
+
+ver.0.1.4c
+	- Fix card detection and memory check function to avoid system crash
+	  at booting
+
+ver.0.1.4b
+	- Add release sustain mode
+	- Initialize FM each time after loading samples
+
+ver.0.1.4a
+	- Fix AWE card detection code
+	- Correct FM initialize position 
+	- Add non-releasing mode on voice info
+
+ver.0.1.4
+	- Add AWE card and DRAM detection codes
+	- Add FM initialization code
+	- Modify volume control
+	- Remove linear volume mode
+	- Change memory management; not using malloc dynamically
+	- Add remove-samples command
+	- Use internal id implicitly at loading samples
+
+ver.0.1.3
+	- Fix a bug on patch uploading to RAM
+
+ver.0.1.2
+	- Divide to separated packages
+	- Fix disagreed macro conditions
+	- Fix unresolved function bugs
+	- Integrate VoxWare and USS-Lite driver source (awe_voice.c)
+	  and remove awe_card.c
+
+ver.0.1.1
+	- Fix wrong sample numbers in sbktext
+	- Fix txt2sfx bug
+	- Fix pan parameter calculation
+	- Append USS-Lite/Linux2.0 driver
+

@@ -57,7 +57,7 @@
 #include <linux/module.h>
 
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/bitops.h>
 #include <linux/string.h>
 #include <linux/mm.h>

@@ -35,7 +35,7 @@
  * This mixer driver identifies itself to applications as "ACI" in
  * mixer_info.id as retrieved by ioctl(fd, SOUND_MIXER_INFO, &mixer_info).
  *
- * Proprietary mixer features that go beyond the standard USS mixer
+ * Proprietary mixer features that go beyond the standard OSS mixer
  * interface are:
  * 
  * Full duplex solo configuration:
@@ -58,7 +58,9 @@
  *
  */
 
+#include "lowlevel.h"
 #include "../sound_config.h"
+#include "lowlevel.h"
 #ifdef CONFIG_ACI_MIXER
 
 #undef  DEBUG             /* if defined, produce a verbose report via syslog */

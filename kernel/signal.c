@@ -13,7 +13,7 @@
 #include <linux/unistd.h>
 #include <linux/mm.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #define _S(nr) (1<<((nr)-1))
 

@@ -315,7 +315,7 @@ init_module(void)
 
 	root_vortex_dev = NULL;
 	cards_found = vortex_scan(0);
-	return cards_found < 0 ? cards_found : 0;
+	return cards_found ? 0 : -ENODEV;
 }
 
 #else

@@ -17,7 +17,7 @@
 #include <linux/mman.h>
 #include <linux/tty.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/bootinfo.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>

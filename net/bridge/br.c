@@ -36,7 +36,7 @@
 #include <linux/string.h>
 #include <linux/skbuff.h>
 #include <linux/if_arp.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/system.h>
 #include <net/br.h>
 

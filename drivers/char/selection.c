@@ -17,7 +17,7 @@
 #include <linux/malloc.h>
 #include <linux/types.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 
 #include "vt_kern.h"
 #include "consolemap.h"
@@ -290,9 +290,9 @@ int paste_selection(struct tty_struct *tty)
 	if (!bp || !c)
 		return 0;
 	do_unblank_screen();
-	current->state = TASK_INTERRUPTIBLE;
 	add_wait_queue(&vt->paste_wait, &wait);
-	while (c) {
+	do {
+		current->state = TASK_INTERRUPTIBLE;
 		if (test_bit(TTY_THROTTLED, &tty->flags)) {
 			schedule();
 			continue;
@@ -301,7 +301,8 @@ int paste_selection(struct tty_struct *tty)
 		tty->ldisc.receive_buf(tty, bp, 0, l);
 		c -= l;
 		bp += l;
-	}
+	} while (c);
+	remove_wait_queue(&vt->paste_wait, &wait);
 	current->state = TASK_RUNNING;
 	return 0;
 }

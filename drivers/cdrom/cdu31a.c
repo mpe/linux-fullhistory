@@ -191,7 +191,7 @@
 
 #include <asm/system.h>
 #include <asm/io.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/dma.h>
 
 #include <linux/cdrom.h>
@@ -1915,7 +1915,9 @@ find_track(int track)
    int num_tracks;
 
 
-   num_tracks = sony_toc.last_track_num - sony_toc.first_track_num + 1;
+   num_tracks = (  bcd_to_int(sony_toc.last_track_num)
+                 - bcd_to_int(sony_toc.first_track_num)
+		 + 1);
    for (i = 0; i < num_tracks; i++)
    {
       if (sony_toc.tracks[i].track == track)
@@ -2486,8 +2488,8 @@ static int scd_ioctl(struct inode *inode,
          i=verify_area(VERIFY_WRITE, hdr, sizeof(*hdr));
          if(i<0)
          	return i;
-         loc_hdr.cdth_trk0 = sony_toc.first_track_num;
-         loc_hdr.cdth_trk1 = sony_toc.last_track_num;
+         loc_hdr.cdth_trk0 = bcd_to_int(sony_toc.first_track_num);
+         loc_hdr.cdth_trk1 = bcd_to_int(sony_toc.last_track_num);
          copy_to_user(hdr, &loc_hdr, sizeof(*hdr));
       }
       return 0;
@@ -2567,8 +2569,8 @@ static int scd_ioctl(struct inode *inode,
          	return i;
          
          copy_from_user(&ti, (char *) arg, sizeof(ti));
-         if (   (ti.cdti_trk0 < sony_toc.first_track_num)
-             || (ti.cdti_trk0 > sony_toc.last_track_num)
+         if (   (ti.cdti_trk0 < bcd_to_int(sony_toc.first_track_num))
+             || (ti.cdti_trk0 > bcd_to_int(sony_toc.last_track_num))
              || (ti.cdti_trk1 < ti.cdti_trk0))
          {
             return -EINVAL;
@@ -2587,7 +2589,7 @@ static int scd_ioctl(struct inode *inode,
           * If we want to stop after the last track, use the lead-out
           * MSF to do that.
           */
-         if (ti.cdti_trk1 >= sony_toc.last_track_num)
+         if (ti.cdti_trk1 >= bcd_to_int(sony_toc.last_track_num))
          {
             log_to_msf(msf_to_log(sony_toc.lead_out_start_msf)-1,
                        &(params[4]));

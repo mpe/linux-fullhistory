@@ -726,6 +726,8 @@ int isdn_getnum(char **p)
 /*
  * isdn_readbchan() tries to get data from the read-queue.
  * It MUST be called with interrupts off.
+ *  
+ * I hope I got the EFAULT error path right -AK.
  */
 int isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, int user)
 {
@@ -736,6 +738,7 @@ int isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, int 
 	int dflag;
         struct sk_buff *skb;
 	u_char *cp;
+	int ret = 0; 
 
 	if (!dev->drv[di])
 		return 0;
@@ -749,6 +752,7 @@ int isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, int 
 	cp = buf;
 	count = 0;
 	while (left) {
+		        ret = 0; 
                 if (!(skb = skb_peek(&dev->drv[di]->rpqueue[channel])))
                         break;
                 if (skb->lock)
@@ -765,15 +769,19 @@ int isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, int 
                         count_pull = count_put = 0;
                         while ((count_pull < skb->len) && (left-- > 0)) {
                                 if (dev->drv[di]->DLEflag & DLEmask) {
-                                        if (user)
-                                                put_fs_byte(DLE,cp++);
-                                        else
+									    if (user) {
+                                                ret = put_user(DLE,cp);
+												cp++; 
+												if (ret) break; 
+                                        } else
                                                 *cp++ = DLE;
                                         dev->drv[di]->DLEflag &= ~DLEmask;
                                 } else {
-                                        if (user)
-                                                put_fs_byte(*p,cp++);
-                                        else
+									    if (user) {
+                                                ret = put_user(*p,cp);
+												if (ret) break;
+												cp++; 
+                                        } else
                                                 *cp++ = *p;
                                         if (*p == DLE) {
                                                 dev->drv[di]->DLEflag |= DLEmask;
@@ -794,10 +802,12 @@ int isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, int 
                                 dflag = 0;
                         }
                         count_put = count_pull;
+						ret = 0; 
                         if (user)
-                                copy_to_user(cp, skb->data, count_put);
+                                ret = copy_to_user(cp, skb->data, count_put);
                         else
                                 memcpy(cp, skb->data, count_put);
+						count_put -= ret; 
                         cp += count_put;
                         left -= count_put;
                 }
@@ -821,11 +831,11 @@ int isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, int 
                          * but we pull off the data we got until now.
                          */
 			skb_pull(skb,count_pull);
-                        skb->lock = 0;
+                        skb->lock = 0; 
                 }
 		dev->drv[di]->rcvcount[channel] -= count_put;
 	}
-	return count;
+	return ret ? -EFAULT : count;
 }
 
 static __inline int isdn_minor2drv(int minor)
@@ -923,9 +933,10 @@ static int isdn_read(struct inode *inode, struct file *file, char *buf, int coun
 		p = isdn_statstr();
 		file->private_data = 0;
 		if ((len = strlen(p)) <= count) {
-			copy_to_user(buf, p, len);
+			if (copy_to_user(buf, p, len))
+				return -EFAULT;
 			file->f_pos += len;
-			return len;
+			return len; 
 		}
 		return 0;
 	}
@@ -1072,35 +1083,25 @@ static int isdn_set_allcfg(char *src)
 		return ret;
 	save_flags(flags);
 	cli();
-	if ((ret = verify_area(VERIFY_READ, (void *) src, sizeof(int)))) {
-		restore_flags(flags);
-		return ret;
-	}
-	copy_from_user((char *) &i, src, sizeof(int));
-        src += sizeof(int);
+	ret = get_user(i, src); 
+	if (ret) 
+		goto out; 
+    src += sizeof(int);
 	while (i) {
 		char *c;
 		char *c2;
 
-		if ((ret = verify_area(VERIFY_READ, (void *) src, sizeof(cfg)))) {
-			restore_flags(flags);
-			return ret;
-		}
-		copy_from_user((char *) &cfg, src, sizeof(cfg));
+		if(copy_from_user((char *) &cfg, src, sizeof(cfg)))
+			goto fault; 
 		src += sizeof(cfg);
 		if (!isdn_net_new(cfg.name, NULL)) {
 			restore_flags(flags);
 			return -EIO;
 		}
-		if ((ret = isdn_net_setcfg(&cfg))) {
-			restore_flags(flags);
-			return ret;
-		}
-		if ((ret = verify_area(VERIFY_READ, (void *) src, sizeof(buf)))) {
-			restore_flags(flags);
-			return ret;
-		}
-		copy_from_user(buf, src, sizeof(buf));
+		if ((ret = isdn_net_setcfg(&cfg))) 
+			goto out; 
+		if(copy_from_user(buf, src, sizeof(buf)))
+			goto fault; 
 		src += sizeof(buf);
 		c = buf;
 		while (*c) {
@@ -1109,20 +1110,15 @@ static int isdn_set_allcfg(char *src)
 			strcpy(phone.phone, c);
 			strcpy(phone.name, cfg.name);
 			phone.outgoing = 0;
-			if ((ret = isdn_net_addphone(&phone))) {
-				restore_flags(flags);
-				return ret;
-			}
+			if ((ret = isdn_net_addphone(&phone))) 
+				goto fault; 
 			if (c2)
 				c = c2;
 			else
 				c += strlen(c);
 		}
-		if ((ret = verify_area(VERIFY_READ, (void *) src, sizeof(buf)))) {
-			restore_flags(flags);
-			return ret;
-		}
-		copy_from_user(buf, src, sizeof(buf));
+   		if(copy_from_user(buf, src, sizeof(buf)))
+			goto fault; 
 		src += sizeof(buf);
 		c = buf;
 		while (*c) {
@@ -1131,10 +1127,8 @@ static int isdn_set_allcfg(char *src)
 			strcpy(phone.phone, c);
 			strcpy(phone.name, cfg.name);
 			phone.outgoing = 1;
-			if ((ret = isdn_net_addphone(&phone))) {
-				restore_flags(flags);
-				return ret;
-			}
+			if ((ret = isdn_net_addphone(&phone))) 
+				goto out; 
 			if (c2)
 				c = c2;
 			else
@@ -1142,8 +1136,12 @@ static int isdn_set_allcfg(char *src)
 		}
 		i--;
 	}
+out:
 	restore_flags(flags);
-	return 0;
+	return ret;
+fault:
+	restore_flags(flags);
+	return -EFAULT;
 }
 
 static int isdn_get_allcfg(char *dest)
@@ -1152,17 +1150,13 @@ static int isdn_get_allcfg(char *dest)
 	isdn_net_ioctl_phone phone;
 	isdn_net_dev *p;
 	ulong flags;
-	int ret;
+	int ret = 0;
 
 	/* Walk through netdev-chain */
 	save_flags(flags);
 	cli();
 	p = dev->netdev;
 	while (p) {
-		if ((ret = verify_area(VERIFY_WRITE, (void *) dest, sizeof(cfg) + 10))) {
-			restore_flags(flags);
-			return ret;
-		}
 		strcpy(cfg.eaz, p->local.msn);
 		cfg.exclusive = p->local.exclusive;
 		if (p->local.pre_device >= 0) {
@@ -1179,28 +1173,29 @@ static int isdn_get_allcfg(char *dest)
 		cfg.callback = (p->local.flags & ISDN_NET_CALLBACK) ? 1 : 0;
 		cfg.chargehup = (p->local.hupflags & 4) ? 1 : 0;
 		cfg.ihup = (p->local.hupflags & 8) ? 1 : 0;
-		copy_to_user(dest, p->local.name, 10);
+		ret = 0; 
+		ret += copy_to_user(dest, p->local.name, 10);
 		dest += 10;
-		copy_to_user(dest, (char *) &cfg, sizeof(cfg));
+		ret += copy_to_user(dest, (char *) &cfg, sizeof(cfg));
 		dest += sizeof(cfg);
 		strcpy(phone.name, p->local.name);
 		phone.outgoing = 0;
-		if ((ret = isdn_net_getphones(&phone, dest)) < 0) {
-			restore_flags(flags);
-			return ret;
-		} else
+		if (ret)
+			break; 
+		if ((ret = isdn_net_getphones(&phone, dest)) < 0) 
+			break; 
+		else
 			dest += ret;
 		strcpy(phone.name, p->local.name);
 		phone.outgoing = 1;
-		if ((ret = isdn_net_getphones(&phone, dest)) < 0) {
-			restore_flags(flags);
-			return ret;
-		} else
+		if ((ret = isdn_net_getphones(&phone, dest)) < 0) 
+			break; 
+		else
 			dest += ret;
 		p = p->next;
 	}
 	restore_flags(flags);
-	return 0;
+	return ret;
 }
 
 static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong arg)
@@ -1209,7 +1204,7 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
 	isdn_ctrl c;
 	int drvidx;
 	int chidx;
-	int ret;
+	int ret = 0;
 	char *s;
 	char name[10];
 	char bname[21];
@@ -1227,14 +1222,15 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                 if (arg) {
                                         ulong *p = (ulong *)arg;
                                         int i;
-                                        if ((ret = verify_area(VERIFY_WRITE, (void *) arg,
-                                                               sizeof(ulong)*ISDN_MAX_CHANNELS*2)))
-                                                return ret;
                                         for (i = 0;i<ISDN_MAX_CHANNELS;i++) {
-                                                put_fs_long(dev->ibytes[i],p++);
-                                                put_fs_long(dev->obytes[i],p++);
+                                                ret = put_user(dev->ibytes[i],p);
+	                                            if (ret) break; 
+												p++; 
+												ret = put_user(dev->obytes[i],p);
+												p++; 
+												if (ret) break; 
                                         }
-                                        return 0;
+                                        return ret;
                                 } else
                                         return -EINVAL;
                                 break;
@@ -1259,62 +1255,48 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                         case IIOCNETAIF:
                                 /* Add a network-interface */
                                 if (arg) {
-                                        if ((ret = verify_area(VERIFY_READ, (void *) arg, sizeof(name))))
-                                                return ret;
-                                        copy_from_user(name, (char *) arg, sizeof(name));
+                                        if(copy_from_user(name, (char *) arg, sizeof(name)))
+											return -EFAULT; 
                                         s = name;
                                 } else
                                         s = NULL;
                                 if ((s = isdn_net_new(s, NULL))) {
-                                        if ((ret = verify_area(VERIFY_WRITE, (void *) arg, strlen(s) + 1)))
-                                                return ret;
-                                        copy_to_user((char *) arg, s, strlen(s) + 1);
-                                        return 0;
+									    return copy_to_user((char *) arg, s, strlen(s) + 1) ? -EFAULT : ret; 
                                 } else
                                         return -ENODEV;
                         case IIOCNETASL:
                                 /* Add a slave to a network-interface */
                                 if (arg) {
-                                        if ((ret = verify_area(VERIFY_READ, (void *) arg, sizeof(bname))))
-                                                return ret;
-                                        copy_from_user(bname, (char *) arg, sizeof(bname));
+                                        if(copy_from_user(bname, (char *) arg, sizeof(bname)))
+											return -EFAULT; 
                                 } else
                                         return -EINVAL;
                                 if ((s = isdn_net_newslave(bname))) {
-                                        if ((ret = verify_area(VERIFY_WRITE, (void *) arg, strlen(s) + 1)))
-                                                return ret;
-                                        copy_to_user((char *) arg, s, strlen(s) + 1);
-                                        return 0;
+                                        return copy_to_user((char *) arg, s, strlen(s) + 1) ? -EFAULT : 0;
                                 } else
                                         return -ENODEV;
                         case IIOCNETDIF:
                                 /* Delete a network-interface */
                                 if (arg) {
-                                        if ((ret = verify_area(VERIFY_READ, (void *) arg, sizeof(name))))
-                                                return ret;
-                                        copy_from_user(name, (char *) arg, sizeof(name));
-                                        return isdn_net_rm(name);
+                                        ret = copy_from_user(name, (char *) arg, sizeof(name));
+                                        return ret ? -EFAULT : isdn_net_rm(name);
                                 } else
                                         return -EINVAL;
                         case IIOCNETSCF:
                                 /* Set configurable parameters of a network-interface */
                                 if (arg) {
-                                        if ((ret = verify_area(VERIFY_READ, (void *) arg, sizeof(cfg))))
-                                                return ret;
-                                        copy_from_user((char *) &cfg, (char *) arg, sizeof(cfg));
-                                        return isdn_net_setcfg(&cfg);
+                                        ret = copy_from_user((char *) &cfg, (char *) arg, sizeof(cfg));
+                                        return ret ? -EFAULT : isdn_net_setcfg(&cfg);
                                 } else
                                         return -EINVAL;
                         case IIOCNETGCF:
                                 /* Get configurable parameters of a network-interface */
-                                if (arg) {
-                                        if ((ret = verify_area(VERIFY_READ, (void *) arg, sizeof(cfg))))
-                                                return ret;
-                                        copy_from_user((char *) &cfg, (char *) arg, sizeof(cfg));
+                                if (arg) {				  
+                                        if(copy_from_user((char *) &cfg, (char *) arg, sizeof(cfg)))
+											return -EFAULT; 
                                         if (!(ret = isdn_net_getcfg(&cfg))) {
-                                                if ((ret = verify_area(VERIFY_WRITE, (void *) arg, sizeof(cfg))))
-                                                        return ret;
-                                                copy_to_user((char *) arg, (char *) &cfg, sizeof(cfg));
+                                                if(copy_to_user((char *) arg, (char *) &cfg, sizeof(cfg)))
+													return -EFAULT; 
                                         }
                                         return ret;
                                 } else
@@ -1322,68 +1304,51 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                         case IIOCNETANM:
                                 /* Add a phone-number to a network-interface */
                                 if (arg) {
-                                        if ((ret = verify_area(VERIFY_READ, (void *) arg, sizeof(phone))))
-                                                return ret;
-                                        copy_from_user((char *) &phone, (char *) arg, sizeof(phone));
-                                        return isdn_net_addphone(&phone);
+                                        ret = copy_from_user((char *) &phone, (char *) arg, sizeof(phone));
+                                        return ret ? -EFAULT : isdn_net_addphone(&phone);
                                 } else
                                         return -EINVAL;
                         case IIOCNETGNM:
                                 /* Get list of phone-numbers of a network-interface */
                                 if (arg) {
-                                        if ((ret = verify_area(VERIFY_READ, (void *) arg, sizeof(phone))))
-                                                return ret;
-                                        copy_from_user((char *) &phone, (char *) arg, sizeof(phone));
-                                        return isdn_net_getphones(&phone, (char *) arg);
+                                        ret = copy_from_user((char *) &phone, (char *) arg, sizeof(phone));
+                                        return ret ? -EFAULT : isdn_net_getphones(&phone, (char *) arg);
                                 } else
                                         return -EINVAL;
                         case IIOCNETDNM:
                                 /* Delete a phone-number of a network-interface */
                                 if (arg) {
-                                        if ((ret = verify_area(VERIFY_READ, (void *) arg, sizeof(phone))))
-                                                return ret;
-                                        copy_from_user((char *) &phone, (char *) arg, sizeof(phone));
-                                        return isdn_net_delphone(&phone);
+                                        ret = copy_from_user((char *) &phone, (char *) arg, sizeof(phone));
+                                        return ret ? -EFAULT : isdn_net_delphone(&phone);
                                 } else
                                         return -EINVAL;
                         case IIOCNETDIL:
                                 /* Force dialing of a network-interface */
                                 if (arg) {
-                                        if ((ret = verify_area(VERIFY_READ, (void *) arg, sizeof(name))))
-                                                return ret;
-                                        copy_from_user(name, (char *) arg, sizeof(name));
-                                        return isdn_net_force_dial(name);
+                                        ret = copy_from_user(name, (char *) arg, sizeof(name));
+                                        return ret ? -EFAULT : isdn_net_force_dial(name);
                                 } else
                                         return -EINVAL;
 #ifdef CONFIG_ISDN_PPP
                         case IIOCNETALN:
-                                if(arg) {
-                                        if ((ret = verify_area(VERIFY_READ,
-                                                               (void*)arg,
-                                                               sizeof(name))))
-                                                return ret;
-                                } else
-                                        return -EINVAL;
-                                copy_from_user(name,(char*)arg,sizeof(name));
-                                return isdn_ppp_dial_slave(name);
+								if (arg) 
+                                        ret = copy_from_user(name,(char*)arg,sizeof(name));
+								else
+									    return -EINVAL; 
+                                return ret ? -EFAULT : isdn_ppp_dial_slave(name);
                         case IIOCNETDLN:
+							    
                                 if(arg) {
-                                        if ((ret = verify_area(VERIFY_READ,
-                                                               (void*)arg,
-                                                               sizeof(name))))
-                                                return ret;
+									    ret = copy_from_user(name,(char*)arg,sizeof(name));
                                 } else
                                         return -EINVAL;
-                                copy_from_user(name,(char*)arg,sizeof(name));
-                                return isdn_ppp_hangup_slave(name);
+                                return ret ? -EFAULT : isdn_ppp_hangup_slave(name);
 #endif
                         case IIOCNETHUP:
                                 /* Force hangup of a network-interface */
                                 if (arg) {
-                                        if ((ret = verify_area(VERIFY_READ, (void *) arg, sizeof(name))))
-                                                return ret;
-                                        copy_from_user(name, (char *) arg, sizeof(name));
-                                        return isdn_net_force_hangup(name);
+                                        ret = copy_from_user(name, (char *) arg, sizeof(name));
+								        return ret ? -EFAULT : isdn_net_force_hangup(name);
                                 } else
                                         return -EINVAL;
                                 break;
@@ -1405,12 +1370,10 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                 if (arg) {
                                         int i;
                                         char *p;
-                                        if ((ret = verify_area(VERIFY_READ, (void *) arg,
-                                                               sizeof(isdn_ioctl_struct))))
-                                                return ret;
-                                        copy_from_user((char *) &iocts, (char *) arg,
-                                                      sizeof(isdn_ioctl_struct));
-                                        if (strlen(iocts.drvid)) {
+                                        if(copy_from_user((char *) &iocts, (char *) arg,
+                                                      sizeof(isdn_ioctl_struct)))
+											return -EFAULT; 
+										if (strlen(iocts.drvid)) {
                                                 if ((p = strchr(iocts.drvid, ',')))
                                                         *p = 0;
                                                 drvidx = -1;
@@ -1450,17 +1413,14 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                 if (arg) {
                                         char *p = (char *) arg;
                                         int i;
-                                        
-                                        if ((ret = verify_area(VERIFY_WRITE, (void *) arg,
-                                                               (ISDN_MODEM_ANZREG + ISDN_MSNLEN)
-                                                               * ISDN_MAX_CHANNELS)))
-                                                return ret;
-                                        
+                                                                   
                                         for (i = 0; i < ISDN_MAX_CHANNELS; i++) {
-                                                copy_to_user(p, dev->mdm.info[i].emu.profile,
-                                                            ISDN_MODEM_ANZREG);
+                                                if(copy_to_user(p, dev->mdm.info[i].emu.profile,
+                                                            ISDN_MODEM_ANZREG))
+													return -EFAULT;
                                                 p += ISDN_MODEM_ANZREG;
-                                                copy_to_user(p, dev->mdm.info[i].emu.pmsn, ISDN_MSNLEN);
+                                                if(copy_to_user(p, dev->mdm.info[i].emu.pmsn, ISDN_MSNLEN))
+													return -EFAULT; 
                                                 p += ISDN_MSNLEN;
                                         }
                                         return (ISDN_MODEM_ANZREG + ISDN_MSNLEN) * ISDN_MAX_CHANNELS;
@@ -1473,17 +1433,14 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                         char *p = (char *) arg;
                                         int i;
                                         
-                                        if ((ret = verify_area(VERIFY_READ, (void *) arg,
-                                                               (ISDN_MODEM_ANZREG + ISDN_MSNLEN)
-                                                               * ISDN_MAX_CHANNELS)))
-                                                return ret;
-                                        
                                         for (i = 0; i < ISDN_MAX_CHANNELS; i++) {
-                                                copy_from_user(dev->mdm.info[i].emu.profile, p,
-                                                              ISDN_MODEM_ANZREG);
-                                                p += ISDN_MODEM_ANZREG;
-                                                copy_from_user(dev->mdm.info[i].emu.pmsn, p, ISDN_MSNLEN);
-                                                p += ISDN_MSNLEN;
+                                                if(copy_from_user(dev->mdm.info[i].emu.profile, p,
+                                                              ISDN_MODEM_ANZREG))
+													return -EFAULT; 
+												p += ISDN_MODEM_ANZREG;
+                                                if(copy_from_user(dev->mdm.info[i].emu.pmsn, p, ISDN_MSNLEN))
+													return -EFAULT; 
+												p += ISDN_MSNLEN;
                                         }
                                         return 0;
                                 } else
@@ -1497,11 +1454,10 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                         char *p;
                                         char nstring[255];
                                         
-                                        if ((ret = verify_area(VERIFY_READ, (void *) arg,
-                                                               sizeof(isdn_ioctl_struct))))
-                                                return ret;
-                                        copy_from_user((char *) &iocts, (char *) arg, sizeof(isdn_ioctl_struct));
-                                        if (strlen(iocts.drvid)) {
+                                        ret = copy_from_user((char *) &iocts, (char *) arg, sizeof(isdn_ioctl_struct));
+                      
+										if (ret) return -EFAULT;
+										if (strlen(iocts.drvid)) {
                                                 drvidx = -1;
                                                 for (i = 0; i < ISDN_MAX_DRIVERS; i++)
                                                         if (!(strcmp(dev->drvid[i], iocts.drvid))) {
@@ -1513,9 +1469,8 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                         if (drvidx == -1)
                                                 return -ENODEV;
                                         if (cmd == IIOCSETMAP) {
-                                                if ((ret = verify_area(VERIFY_READ, (void *) iocts.arg, 255)))
-                                                        return ret;
-                                                copy_from_user(nstring, (char *) iocts.arg, 255);
+                                                ret = copy_from_user(nstring, (char *) iocts.arg, 255);
+												if (ret) return -EFAULT; 
                                                 memset(dev->drv[drvidx]->msn2eaz, 0,
                                                        sizeof(dev->drv[drvidx]->msn2eaz));
                                                 p = strtok(nstring, ",");
@@ -1531,21 +1486,16 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                                                      strlen(dev->drv[drvidx]->msn2eaz[i]) ?
                                                                      dev->drv[drvidx]->msn2eaz[i] : "-",
                                                                      (i < 9) ? "," : "\0");
-                                                if ((ret = verify_area(VERIFY_WRITE, (void *) iocts.arg,
-                                                                       strlen(nstring) + 1)))
-                                                        return ret;
-                                                copy_to_user((char *) iocts.arg, nstring, strlen(nstring) + 1);
-                                        }
+												if(copy_to_user((char *) iocts.arg, nstring, strlen(nstring) + 1))
+													return -EFAULT; 
+										}
                                         return 0;
                                 } else
                                         return -EINVAL;
                         case IIOCDBGVAR:
                                 if (arg) {
-                                        if ((ret = verify_area(VERIFY_WRITE, (void *) arg, sizeof(ulong))))
-                                                return ret;
-                                        copy_to_user((char *) arg, (char *) &dev, sizeof(ulong));
-                                        return 0;
-                                } else
+                                        return copy_to_user((char *) arg, (char *) &dev, sizeof(ulong)) ? -EFAULT : 0;
+								} else
                                         return -EINVAL;
                                 break;
                         default:
@@ -1556,10 +1506,10 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                 if (arg) {
                                         int i;
                                         char *p;
-                                        if ((ret = verify_area(VERIFY_READ, (void *) arg,
-                                                               sizeof(isdn_ioctl_struct))))
-                                                return ret;
-                                        copy_from_user((char *) &iocts, (char *) arg, sizeof(isdn_ioctl_struct));
+
+                                        ret = copy_from_user((char *) &iocts, (char *) arg, sizeof(isdn_ioctl_struct));
+										if (ret)
+											    return -EFAULT; 
                                         if (strlen(iocts.drvid)) {
                                                 if ((p = strchr(iocts.drvid, ',')))
                                                         *p = 0;
@@ -1573,17 +1523,13 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                                 drvidx = 0;
                                         if (drvidx == -1)
                                                 return -ENODEV;
-                                        if ((ret = verify_area(VERIFY_WRITE, (void *) arg,
-                                                               sizeof(isdn_ioctl_struct))))
-                                                return ret;
                                         c.driver = drvidx;
                                         c.command = ISDN_CMD_IOCTL;
                                         c.arg = cmd;
                                         memcpy(c.num, (char *) &iocts.arg, sizeof(ulong));
                                         ret = dev->drv[drvidx]->interface->command(&c);
                                         memcpy((char *) &iocts.arg, c.num, sizeof(ulong));
-                                        copy_to_user((char *) arg, &iocts, sizeof(isdn_ioctl_struct));
-                                        return ret;
+                                        return copy_to_user((char *) arg, &iocts, sizeof(isdn_ioctl_struct)) ? -EFAULT : 0;
                                 } else
                                         return -EINVAL;
 		}
@@ -1890,9 +1836,12 @@ int isdn_writebuf_stub(int drvidx, int chan, const u_char *buf, int len,
                 skb_reserve(skb, dev->drv[drvidx]->interface->hl_hdrlen);
                 skb->free = 1;
 
-                if (user)
-                        copy_from_user(skb_put(skb, len), buf, len);
-                else
+                if (user) {
+					    if(copy_from_user(skb_put(skb, len), buf, len)) {
+						        kfree_skb(skb,FREE_WRITE);
+						        return -EFAULT; 
+						}
+                } else
                         memcpy(skb_put(skb, len), buf, len);
 
                 ret = dev->drv[drvidx]->interface->writebuf_skb(drvidx,

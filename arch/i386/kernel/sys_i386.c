@@ -16,7 +16,7 @@
 #include <linux/mman.h>
 #include <linux/file.h>
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <asm/ipc.h>
 
 /*

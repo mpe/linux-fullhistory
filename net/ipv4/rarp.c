@@ -47,7 +47,7 @@
 #include <linux/config.h>
 
 #include <asm/system.h>
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include <stdarg.h>
 #include <linux/inet.h>
 #include <linux/etherdevice.h>

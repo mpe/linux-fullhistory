@@ -1633,7 +1633,7 @@ int seagate_st0x_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 	return SCSI_RESET_WAKEUP;
 	}
 
-#include <asm/segment.h>
+#include <asm/uaccess.h>
 #include "sd.h"
 #include <scsi/scsi_ioctl.h>
 

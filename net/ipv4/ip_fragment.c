@@ -366,7 +366,7 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 		{
 			NETDEBUG(printk("Invalid fragment list: Fragment over size.\n"));
 			ip_free(qp);
-			frag_kfree_skb(skb,FREE_WRITE);
+			kfree_skb(skb,FREE_WRITE);
 			ip_statistics.IpReasmFails++;
 			return NULL;
 		}
@@ -466,6 +466,18 @@ struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct device 
 			return NULL;
 		}
 	}
+	
+	/*
+	 *	Attempt to construct an oversize packet.
+	 */
+	 
+	if(ntohs(iph->tot_len)+(int)offset>65535)
+	{
+		skb->sk = NULL;
+		frag_kfree_skb(skb, FREE_READ);
+		ip_statistics.IpReasmFails++;
+		return NULL;
+	}	
 
 	/*
 	 *	Determine the position of this fragment.
