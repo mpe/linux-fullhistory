@@ -6,8 +6,6 @@ fi
 
 dep_tristate '100% Sound Blaster compatibles (SB16/32/64, ESS, Jazz16) support' CONFIG_SB $CONFIG_SOUND
 if [ "$CONFIG_SB" = "y" ]; then
-    bool 'Is the card a Soundman Games ?' CONFIG_SM_GAMES
-    bool 'Are you using the IBM Mwave "emulation" of SB ?' CONFIG_SB_MWAVE
     hex 'I/O base for SB Check from manual of the card' CONFIG_SB_BASE 220
     int 'Sound Blaster IRQ Check from manual of the card' CONFIG_SB_IRQ 7
     int 'Sound Blaster DMA 0, 1 or 3' CONFIG_SB_DMA 1
@@ -43,7 +41,7 @@ if [ "$CONFIG_MPU401" = "y" ]; then
     int 'MPU401 IRQ Check from manual of the card' CONFIG_MPU_IRQ 9
 fi
 
-dep_tristate 'PSS (ECHO-ADI2111) support' CONFIG_PSS $CONFIG_SOUND
+dep_tristate 'PSS (AD1848, ADSP-2115, ESC614) support' CONFIG_PSS $CONFIG_SOUND 
 if [ "$CONFIG_PSS" = "y" ]; then
     hex 'PSS I/O base 220 or 240' CONFIG_PSS_BASE 220
     hex 'PSS audio I/O base 530, 604, E80 or F40' CONFIG_PSS_MSS_BASE 530
@@ -55,6 +53,9 @@ if [ "$CONFIG_PSS" = "y" ]; then
     if [ "$CONFIG_PSS_HAVE_BOOT" = "y" ]; then
        string '  Full pathname of DSPxxx.LD firmware file' CONFIG_PSS_BOOT_FILE
     fi
+fi
+if [ "$CONFIG_PSS" = "m" ] || [ "$CONFIG_PSS" = "y" ]; then
+    bool '  Enable PSS mixer (Beethoven ADSP-16 and other compatibile)' CONFIG_PSS_MIXER
 fi
 
 dep_tristate 'Microsoft Sound System support' CONFIG_MSS $CONFIG_SOUND
@@ -92,6 +93,7 @@ if [ "$CONFIG_TRIX" = "y" ]; then
 fi
 
 dep_tristate 'Support for OPTi MAD16 and/or Mozart based cards' CONFIG_MAD16 $CONFIG_SOUND
+dep_tristate 'Support MIDI in older MAD16 based cards (requires SB)' CONFIG_MAD16_OLDCARD $CONFIG_MAD16
 if [ "$CONFIG_MAD16" = "y" ]; then
     hex 'MAD16 audio I/O base 530, 604, E80 or F40' CONFIG_MAD16_BASE 530
     int 'MAD16 audio IRQ 7, 9, 10 or 11' CONFIG_MAD16_IRQ 11
@@ -213,3 +215,6 @@ if [ "$CONFIG_LOWLEVEL_SOUND" = "y" ]; then
    fi
 fi
 
+if [ "$CONFIG_ARM" = "y" ]; then
+	bool 'VIDC 16-bit sound' CONFIG_VIDC_SOUND
+fi

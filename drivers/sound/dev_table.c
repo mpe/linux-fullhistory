@@ -18,7 +18,6 @@
 #define _DEV_TABLE_C_
 #include "sound_config.h"
 
-int sb_be_quiet = 0;
 int softoss_dev = 0;
 int sound_started = 0;
 int sndtable_get_cardcount(void);
@@ -147,6 +146,9 @@ void sound_unload_drivers(void)
 			}
 		}
 	}
+
+        for (i=0;i<num_audiodevs;i++)
+		DMAbuf_deinit(i);
 
 	if (trace_init)
 		printk(KERN_DEBUG "Sound unload complete\n");
@@ -418,13 +420,11 @@ int sound_install_audiodrv(int vers, char *name, struct audio_driver *driver,
 		return -(EBUSY);
 	}
 	d = (struct audio_driver *) (sound_mem_blocks[sound_nblocks] = vmalloc(sizeof(struct audio_driver)));
-	sound_mem_sizes[sound_nblocks] = sizeof(struct audio_driver);
 
 	if (sound_nblocks < 1024)
 		sound_nblocks++;
 
 	op = (struct audio_operations *) (sound_mem_blocks[sound_nblocks] = vmalloc(sizeof(struct audio_operations)));
-	sound_mem_sizes[sound_nblocks] = sizeof(struct audio_operations);
 
 	if (sound_nblocks < 1024)
 		sound_nblocks++;
@@ -490,7 +490,6 @@ int sound_install_mixer(int vers, char *name, struct mixer_operations *driver,
 	   until you unload sound! */
 	   
 	op = (struct mixer_operations *) (sound_mem_blocks[sound_nblocks] = vmalloc(sizeof(struct mixer_operations)));
-	sound_mem_sizes[sound_nblocks] = sizeof(struct mixer_operations);
 
 	if (sound_nblocks < 1024)
 		sound_nblocks++;

@@ -1,6 +1,6 @@
 /*
- *    The sound core exports the following symbols to the rest of
- *      modulespace.
+ *	The sound core exports the following symbols to the rest of
+ *	modulespace.
  *
  *      (C) Copyright 1997      Alan Cox, Licensed under the GNU GPL
  */
@@ -9,6 +9,8 @@
 #include "sound_config.h"
 #define _MIDI_SYNTH_C_
 #include "midi_synth.h"
+#define _SEQUENCER_C_
+#include "tuning.h"
 #include <linux/notifier.h>
 #include "sound_firmware.h"
 
@@ -31,16 +33,13 @@ EXPORT_SYMBOL(sound_install_audiodrv);
 EXPORT_SYMBOL(sound_install_mixer);
 EXPORT_SYMBOL(sound_alloc_dma);
 EXPORT_SYMBOL(sound_free_dma);
-EXPORT_SYMBOL(snd_set_irq_handler);
-EXPORT_SYMBOL(snd_release_irq);
+EXPORT_SYMBOL(sound_open_dma);
+EXPORT_SYMBOL(sound_close_dma);
 EXPORT_SYMBOL(sound_alloc_audiodev);
 EXPORT_SYMBOL(sound_alloc_mididev);
 EXPORT_SYMBOL(sound_alloc_mixerdev);
 EXPORT_SYMBOL(sound_alloc_timerdev);
 EXPORT_SYMBOL(sound_alloc_synthdev);
-EXPORT_SYMBOL(sound_mem_blocks);
-EXPORT_SYMBOL(sound_mem_sizes);
-EXPORT_SYMBOL(sound_nblocks);
 EXPORT_SYMBOL(sound_unload_audiodev);
 EXPORT_SYMBOL(sound_unload_mididev);
 EXPORT_SYMBOL(sound_unload_mixerdev);
@@ -90,3 +89,14 @@ EXPORT_SYMBOL(midi_synth_send_sysex);
 EXPORT_SYMBOL(midi_synth_bender);
 EXPORT_SYMBOL(midi_synth_load_patch);
 
+/* Firmware */
+
+EXPORT_SYMBOL(mod_firmware_load);
+
+/* Tuning */
+
+EXPORT_SYMBOL(cent_tuning);
+EXPORT_SYMBOL(semitone_tuning);
+
+MODULE_DESCRIPTION("Sound subsystem");
+MODULE_AUTHOR("Hannu Savolainen, et al.");

@@ -16,7 +16,6 @@
 #include <linux/tty.h>
 #include <linux/console.h>
 #include <linux/string.h>
-#include <linux/config.h>
 #include <linux/fb.h>
 #include <linux/delay.h>
 

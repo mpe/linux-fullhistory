@@ -1,7 +1,7 @@
 /*
- *  $Id: joystick.c,v 1.2 1997/10/31 19:11:48 mj Exp $
+ *  $Id: joystick.c,v 1.6 1998/03/30 11:10:43 mj Exp $
  *
- *  Copyright (C) 1997 Vojtech Pavlik
+ *  Copyright (C) 1997, 1998 Vojtech Pavlik
  */
 
 /*
@@ -15,25 +15,20 @@
 #include <linux/ioport.h>
 #include <linux/errno.h>
 #include <linux/mm.h>
-#include <linux/ptrace.h>
 #include <linux/interrupt.h>
 #include <linux/malloc.h>
 #include <linux/poll.h>
 #include <linux/major.h>
 #include <linux/joystick.h>
-
 #include <asm/io.h>
-#include <asm/ptrace.h>
-#include <asm/uaccess.h>
-#include <asm/param.h>
 
 #define PIT_HZ			1193180L	/* PIT clock is 1.19318 MHz */
 
 #define JS_MAXTIME		PIT_HZ/250	/* timeout for read (4 ms) */
 
-#define JS_BUTTON_PERIOD	HZ/50		/* button valid time (20 ms) */
-#define JS_AXIS_MIN_PERIOD	HZ/25		/* axis min valid time (40 ms) */
-#define JS_AXIS_MAX_PERIOD	HZ/25*2		/* axis max valid time (80 ms) */
+#define JS_TIMER_PERIOD		HZ/50		/* button valid time (20 ms) */
+#define JS_BH_MIN_PERIOD	HZ/25		/* axis min valid time (40 ms) */
+#define JS_BH_MAX_PERIOD	HZ/25*2		/* axis max valid time (80 ms) */
 
 #define JS_FIFO_SIZE    	16		/* number of FIFO entries */
 #define JS_BUFF_SIZE		32 		/* output buffer size */
@@ -95,7 +90,7 @@ static unsigned char js_fifo_tail = JS_FIFO_SIZE - 1;	/* tail of the fifo */
 static struct js_fifo js_fifo[JS_FIFO_SIZE];		/* the fifo */
 
 static unsigned char js_last_buttons = 0;		/* last read button state */
-static unsigned long js_axis_time = 0;			/* last read axis time */
+static unsigned long js_bh_time = 0;			/* last read axis time */
 static unsigned long js_mark_time = 0;
 
 static unsigned char js_axes_exist;			/* all axes that exist */
@@ -132,12 +127,14 @@ static inline int get_pit(void)
  * count_bits() counts set bits in a byte.
  */
 
-static int count_bits(unsigned char c)
+static int count_bits(unsigned int c)
 {
-	int i, t = 0;
-	for (i = 0; i < 8; i++)
-		if (c & (1 << i)) t++;
-	return t;
+	int i = 0;
+	while (c) {
+		i += c & 1;
+		c >>= 1;
+	}
+	return i;
 }
 
 /*
@@ -228,12 +225,57 @@ static void js_do_timer(unsigned long data)
 		}
 	} 
 	else
- 	if ((jiffies > js_axis_time + JS_AXIS_MAX_PERIOD) && !js_mark_time) {
+ 	if ((jiffies > js_bh_time + JS_BH_MAX_PERIOD) && !js_mark_time) {
 		js_mark_time = jiffies;
 		mark_bh(JS_BH);
 	}
-	js_timer.expires = jiffies + JS_BUTTON_PERIOD;
+	js_timer.expires = jiffies + JS_TIMER_PERIOD;
 	add_timer(&js_timer);
+}
+
+
+/*
+ * Put an event in the buffer. This requires additional queue processing
+ * done by js_sync_buff, otherwise the buffer will be corrupted.
+ */
+
+static void js_add_event(int i, __u32 time, __u8 type, __u8 number, __u16 value)
+{
+	int ahead = jsd[i].ahead++;
+	jsd[i].buff[ahead].time = time;
+	jsd[i].buff[ahead].type = type;
+	jsd[i].buff[ahead].number = number;
+	jsd[i].buff[ahead].value = value;
+	if (jsd[i].ahead == JS_BUFF_SIZE) jsd[i].ahead=0;
+}
+
+/*
+ * This checks for all owerflows caused by recent additions to the buffer.
+ * It does anything only if some processes are reading the data too slowly.
+ */
+
+static void js_sync_buff(void)
+{
+	int i;
+	
+	for (i = 0; i < JS_NUM; i++)
+	if (jsd[i].list)
+	if (jsd[i].bhead != jsd[i].ahead)	{
+		if (ROT(jsd[i].bhead, jsd[i].tail, jsd[i].ahead) || (jsd[i].tail == jsd[i].bhead)) {
+			struct js_list *curl;
+			curl = jsd[i].list;
+			while (curl) {
+				if (ROT(jsd[i].bhead, curl->tail, jsd[i].ahead) || (curl->tail == jsd[i].bhead)) {
+					curl->tail = jsd[i].ahead; 				
+					curl->startup = jsd[i].exist;
+				}
+				curl = curl->next;
+			}
+			jsd[i].tail = jsd[i].ahead;		
+		}
+		jsd[i].bhead = jsd[i].ahead;
+		wake_up_interruptible(&jsd[i].wait);
+	}
 }
 
 /*
@@ -246,7 +288,7 @@ static void js_do_bh(void)
 	int i, j, k;
 	unsigned int t;
 
-	if (jiffies > js_axis_time + JS_AXIS_MIN_PERIOD) {
+	if (jiffies > js_bh_time + JS_BH_MIN_PERIOD) {
 
 		unsigned int old_axis[4];
 		unsigned int t_low, t_high;
@@ -348,18 +390,12 @@ static void js_do_bh(void)
 			k = 0;
 			for (j = 0; j < 4; j++)
 			if ((1 << j) & jsd[i].exist) {
-				if (!js_compare(js_axis[j].value, old_axis[j], js_axis[j].corr.prec)) {
-					jsd[i].buff[jsd[i].ahead].time = js_mark_time;
-					jsd[i].buff[jsd[i].ahead].type = JS_EVENT_AXIS;
-					jsd[i].buff[jsd[i].ahead].number = k;
-					jsd[i].buff[jsd[i].ahead].value = js_axis[j].value;
-					jsd[i].ahead++;
-					if (jsd[i].ahead == JS_BUFF_SIZE) jsd[i].ahead = 0;
-				}
+				if (!js_compare(js_axis[j].value, old_axis[j], js_axis[j].corr.prec))
+					js_add_event(i, js_mark_time, JS_EVENT_AXIS, k, js_axis[j].value);
 				k++;
 			}
 		}
-		js_axis_time = jiffies;
+		js_bh_time = jiffies;
 	}
 	js_mark_time = 0;
 
@@ -373,14 +409,8 @@ static void js_do_bh(void)
 			k = 0;
 			for (j = 4; j < 8; j++)
 			if ((1 << j) & jsd[i].exist) {
-				if ((1 << j) & (js_buttons ^ js_fifo[t].event)) {
-					jsd[i].buff[jsd[i].ahead].time = js_fifo[t].time;
-					jsd[i].buff[jsd[i].ahead].type = JS_EVENT_BUTTON;
-					jsd[i].buff[jsd[i].ahead].number = k;
-					jsd[i].buff[jsd[i].ahead].value = (js_fifo[t].event >> j) & 1;
-					jsd[i].ahead++;
-					if (jsd[i].ahead == JS_BUFF_SIZE) jsd[i].ahead = 0;
-					}
+				if ((1 << j) & (js_buttons ^ js_fifo[t].event))
+					js_add_event(i, js_fifo[t].time, JS_EVENT_BUTTON, k, (js_fifo[t].event >> j) & 1);
 				k++;
 			}
 		}
@@ -388,27 +418,10 @@ static void js_do_bh(void)
 	}
 
 /*
- * Sync ahead with bhead and cut too long tails.
+ * Synchronize the buffer.
  */
-	
-	for (i = 0; i < JS_NUM; i++)
-	if (jsd[i].list)
-	if (jsd[i].bhead != jsd[i].ahead)	{
-		if (ROT(jsd[i].bhead, jsd[i].tail, jsd[i].ahead) || (jsd[i].tail == jsd[i].bhead)) {
-			struct js_list *curl;
-			curl = jsd[i].list;
-			while (curl) {
-				if (ROT(jsd[i].bhead, curl->tail, jsd[i].ahead) || (curl->tail == jsd[i].bhead)) {
-					curl->tail = jsd[i].ahead; 				
-					curl->startup = jsd[i].exist;
-				}
-				curl = curl->next;
-			}
-			jsd[i].tail = jsd[i].ahead;		
-		}
-		jsd[i].bhead = jsd[i].ahead;
-		wake_up_interruptible(&jsd[i].wait);
-	}
+
+	js_sync_buff();
 
 }
 
@@ -459,38 +472,46 @@ static ssize_t js_read(struct file *file, char *buf, size_t count, loff_t *ppos)
  * Handle (non)blocking i/o.
  */
 
-	if (count != sizeof(struct JS_DATA_TYPE)) {
 
-		if ((GOF(curl->tail) == jsd[minor].ahead && !curl->startup) || (curl->startup && !js_axis_time)) {
-			add_wait_queue(&jsd[minor].wait, &wait);
-			current->state = TASK_INTERRUPTIBLE;
-			while ((GOF(curl->tail) == jsd[minor].ahead && !curl->startup) || (curl->startup && !js_axis_time)) {
-				if (file->f_flags & O_NONBLOCK) {
-					retval = -EAGAIN;
-					break;
-				}
-				if (signal_pending(current)) {
-					retval = -ERESTARTSYS;
-					break;
-				}
-				schedule();
-				if (!jsd[minor].exist) {
-					retval = -ENODEV;
-					break;
-				}
+	if ((GOF(curl->tail) == jsd[minor].ahead && !curl->startup && count != sizeof(struct JS_DATA_TYPE))
+            || (curl->startup && !js_bh_time)) {
+
+		add_wait_queue(&jsd[minor].wait, &wait);
+		current->state = TASK_INTERRUPTIBLE;
+
+		while ((GOF(curl->tail) == jsd[minor].ahead && !curl->startup && count != sizeof(struct JS_DATA_TYPE))
+		       || (curl->startup && !js_bh_time)) {
+
+			if (file->f_flags & O_NONBLOCK) {
+				retval = -EAGAIN;
+				break;
 			}
-			current->state = TASK_RUNNING;
-			remove_wait_queue(&jsd[minor].wait, &wait);
+			if (signal_pending(current)) {
+				retval = -ERESTARTSYS;
+				break;
+			}
+			schedule();
+			if (!jsd[minor].exist) {
+				retval = -ENODEV;
+				break;
+			}
 		}
+		current->state = TASK_RUNNING;
+		remove_wait_queue(&jsd[minor].wait, &wait);
+	}
 
-		if (retval) return retval;
+	if (retval) return retval;
 	
 /*
  * Do the i/o.
  */
+	if (count != sizeof(struct JS_DATA_TYPE)) {
 
 		if (curl->startup) {
 			struct js_event tmpevent;
+/*
+ * Initial button state.
+ */
 
 			t = 0;
 			for (j = 0; j < 4 && (i < blocks) && !retval; j++)
@@ -508,6 +529,10 @@ static ssize_t js_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 				}
 				t++;	
 			}
+
+/*
+ * Initial axis state.
+ */
 
 			t = 0;
 			for (j = 4; j < 8 && (i < blocks) && !retval; j++)
@@ -527,6 +552,9 @@ static ssize_t js_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 			}
 		}
 
+/*
+ * Buffer data.
+ */
 
 		while ((jsd[minor].ahead != (t = GOF(curl->tail))) && (i < blocks) && !retval) {
 			if (copy_to_user(&buff[i], &jsd[minor].buff[t], sizeof(struct js_event)))
@@ -562,6 +590,7 @@ static ssize_t js_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 			buttons |= (!!(js_last_buttons & (1 << j))) << (i++);
 		copy_to_user(&bufo->buttons, &buttons, sizeof(int));
 
+		curl->startup = 0;
 		curl->tail = GOB(jsd[minor].ahead);
 		retval = sizeof(struct JS_DATA_TYPE);
 	}
@@ -637,7 +666,7 @@ static int js_ioctl(struct inode *inode,
 				sizeof(struct js_corr))) return -EFAULT;
 			j++;
 		}
-		js_axis_time = 0;
+		js_bh_time = 0;
 		break;
 	case JSIOCGCORR:
 		j = 0;
@@ -680,7 +709,7 @@ static int js_open(struct inode *inode, struct file *file)
 	MOD_INC_USE_COUNT;
 
 	if (!jsd[0].list && !jsd[1].list) { 
-		js_timer.expires = jiffies + JS_BUTTON_PERIOD;
+		js_timer.expires = jiffies + JS_TIMER_PERIOD;
 		add_timer(&js_timer);
 	}
 
@@ -793,8 +822,8 @@ __initfunc(int js_init(void))
 	}
 
 	for (i = 0; i < JS_NUM; i++) {
-		if (jsd[i].exist) printk(KERN_INFO "js%d: %d-axis joystick at %#x\n",
-			 i,  count_bits(jsd[i].exist & JS_AXES), JS_PORT);
+		if (jsd[i].exist) printk(KERN_INFO "js%d: %d-axis %d-button joystick at %#x\n",
+			 i,  count_bits(jsd[i].exist & JS_AXES), count_bits(jsd[i].exist & JS_AXES), JS_PORT);
 		jsd[i].ahead = jsd[i].bhead = 0;
 		jsd[i].tail = JS_BUFF_SIZE - 1;
 		jsd[i].list = NULL;

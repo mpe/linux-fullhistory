@@ -619,9 +619,6 @@ ENTRY(idt_table)
 	.fill 256,8,0		# idt is uninitialized
 
 /*
- * This gdt setup gives the kernel a CONFIG_MAX_MEMSIZE sized address space at
- * virtual address PAGE_OFFSET.
- *
  * This contains up to 8192 quadwords depending on NR_TASKS - 64kB of
  * gdt entries.  Ugh. 
  *

@@ -254,11 +254,13 @@ parse_error:
 static int proc_ide_read_config
 	(char *page, char **start, off_t off, int count, int *eof, void *data)
 {
-	ide_hwif_t	*hwif = (ide_hwif_t *)data;
 	char		*out = page;
-	int		len, reg = 0;
+	int		len;
 
 #ifdef CONFIG_BLK_DEV_IDEPCI
+	ide_hwif_t	*hwif = (ide_hwif_t *)data;
+	int		reg = 0;
+
 	struct pci_dev *dev = hwif->pci_dev;
 
 	out += sprintf(out, "pci bus %02x device %02x vid %04x did %04x channel %d\n",

@@ -301,6 +301,8 @@ MODULE_PARM(irq,"i");
 MODULE_PARM(dma,"i");
 MODULE_PARM(dma2,"i");
 
+EXPORT_NO_SYMBOLS;
+
 struct address_info cfg;
 
 /*

@@ -49,6 +49,13 @@
 					 SOUND_MASK_VOLUME | SOUND_MASK_BASS | SOUND_MASK_TREBLE | \
 					SOUND_MASK_IMIX)
 
+/* These are the only devices that are working at the moment.  Others could
+ * be added once they are identified and a method is found to control them.
+ */
+#define ALS007_MIXER_DEVICES	(SOUND_MASK_SYNTH | SOUND_MASK_LINE | \
+				 SOUND_MASK_PCM | SOUND_MASK_MIC | \
+				 SOUND_MASK_CD | \
+				 SOUND_MASK_VOLUME)
 /*
  * Mixer registers
  * 
@@ -96,6 +103,13 @@
 
 #define LEFT_CHN	0
 #define RIGHT_CHN	1
+
+/*
+ * Mixer registers of ALS007
+ */
+#define ALS007_RECORD_SRC	0x6c
+#define ALS007_OUTPUT_CTRL1	0x3c
+#define ALS007_OUTPUT_CTRL2	0x4c
 
 #define MIX_ENT(name, reg_l, bit_l, len_l, reg_r, bit_r, len_r)	\
 	{{reg_l, bit_l, len_l}, {reg_r, bit_r, len_r}}
@@ -172,6 +186,25 @@ MIX_ENT(SOUND_MIXER_RECLEV,	0x3f, 7, 2, 0x40, 7, 2), /* Obsolete. Use IGAIN */
 MIX_ENT(SOUND_MIXER_IGAIN,	0x3f, 7, 2, 0x40, 7, 2),
 MIX_ENT(SOUND_MIXER_OGAIN,	0x41, 7, 2, 0x42, 7, 2)
 };
+
+static mixer_tab als007_mix = 
+{
+MIX_ENT(SOUND_MIXER_VOLUME,	0x62, 7, 4, 0x62, 3, 4),
+MIX_ENT(SOUND_MIXER_BASS,	0x00, 0, 0, 0x00, 0, 0),
+MIX_ENT(SOUND_MIXER_TREBLE,	0x00, 0, 0, 0x00, 0, 0),
+MIX_ENT(SOUND_MIXER_SYNTH,	0x66, 7, 4, 0x66, 3, 4),
+MIX_ENT(SOUND_MIXER_PCM,	0x64, 7, 4, 0x64, 3, 4),
+MIX_ENT(SOUND_MIXER_SPEAKER,	0x00, 0, 0, 0x00, 0, 0),
+MIX_ENT(SOUND_MIXER_LINE,	0x6e, 7, 4, 0x6e, 3, 4),
+MIX_ENT(SOUND_MIXER_MIC,	0x6a, 6, 3, 0x00, 0, 0),
+MIX_ENT(SOUND_MIXER_CD,		0x68, 7, 4, 0x68, 3, 4),
+MIX_ENT(SOUND_MIXER_IMIX,	0x00, 0, 0, 0x00, 0, 0),
+MIX_ENT(SOUND_MIXER_ALTPCM,	0x00, 0, 0, 0x00, 0, 0),
+MIX_ENT(SOUND_MIXER_RECLEV,	0x00, 0, 0, 0x00, 0, 0), /* Obsolete. Use IGAIN */
+MIX_ENT(SOUND_MIXER_IGAIN,	0x00, 0, 0, 0x00, 0, 0),
+MIX_ENT(SOUND_MIXER_OGAIN,	0x00, 0, 0, 0x00, 0, 0)
+};
+
 
 /* SM_GAMES          Master volume is lower and PCM & FM volumes
 			     higher than with SB Pro. This improves the
@@ -283,6 +316,15 @@ static char     smw_mix_regs[] =	/* Left mixer registers */
 #define SRC__MIC         1	/* Select Microphone recording source */
 #define SRC__CD          3	/* Select CD recording source */
 #define SRC__LINE        7	/* Use Line-in for recording source */
+
+/*
+ *	Recording sources for ALS-007
+ */
+
+#define ALS007_MIC	4
+#define ALS007_LINE	6
+#define ALS007_CD	2
+#define ALS007_SYNTH	7
 
 #endif
 #endif

@@ -37,8 +37,8 @@
 
 #define FAS216_C
 
-#include "scsi.h"
-#include "hosts.h"
+#include "../../scsi/scsi.h"
+#include "../../scsi/hosts.h"
 #include "fas216.h"
 
 #define VER_MAJOR	0
@@ -104,7 +104,7 @@ static int fas216_syncperiod(FAS216_Info *info, int ns)
 
 	if (value < 4)
 		value = 4;
-	else if value > 35)
+	else if (value > 35)
 		value = 35;
 
 	return value & 31;
@@ -1269,6 +1269,46 @@ static void fas216_reportstatus(Scsi_Cmnd **SCpntp1, Scsi_Cmnd **SCpntp2,
 		*SCpntp2 = NULL;
 }
 
+/* Function: int fas216_eh_abort(Scsi_Cmnd *SCpnt)
+ * Purpose : abort this command
+ * Params  : SCpnt - command to abort
+ * Returns : FAILED if unable to abort
+ */
+int fas216_eh_abort(Scsi_Cmnd *SCpnt)
+{
+	return FAILED;
+}
+
+/* Function: int fas216_eh_device_reset(Scsi_Cmnd *SCpnt)
+ * Purpose : Reset the device associated with this command
+ * Params  : SCpnt - command specifing device to reset
+ * Returns : FAILED if unable to reset
+ */
+int fas216_eh_device_reset(Scsi_Cmnd *SCpnt)
+{
+	return FAILED;
+}
+
+/* Function: int fas216_eh_bus_reset(Scsi_Cmnd *SCpnt)
+ * Purpose : Reset the complete bus associated with this command
+ * Params  : SCpnt - command specifing bus to reset
+ * Returns : FAILED if unable to reset
+ */
+int fas216_eh_bus_reset(Scsi_Cmnd *SCpnt)
+{
+	return FAILED;
+}
+
+/* Function: int fas216_eh_host_reset(Scsi_Cmnd *SCpnt)
+ * Purpose : Reset the host associated with this command
+ * Params  : SCpnt - command specifing host to reset
+ * Returns : FAILED if unable to reset
+ */
+int fas216_eh_host_reset(Scsi_Cmnd *SCpnt)
+{
+	return FAILED;
+}
+
 /* Function: int fas216_abort (Scsi_Cmnd *SCpnt)
  * Purpose : abort a command if something horrible happens.
  * Params  : SCpnt - Command that is believed to be causing a problem.
@@ -1352,7 +1392,7 @@ static void fas216_reset_state(FAS216_Info *info)
 #else
 		info->device[i].disconnect_ok = 0;
 #endif
-		info->device[i].stp = fas216_syncperiod(info->ifcfg.asyncperiod);
+		info->device[i].stp = fas216_syncperiod(info, info->ifcfg.asyncperiod);
 		info->device[i].sof = 0;
 #ifdef SCSI2SYNC
 		info->device[i].negstate = syncneg_start;
@@ -1374,7 +1414,7 @@ static void fas216_init_chip(FAS216_Info *info)
 	outb(info->scsi.cfg[2], REG_CNTL3(info));
 	outb(info->ifcfg.select_timeout, REG_STIM(info));
 	outb(0, REG_SOF(info));
-	outb(fas216_syncperiod(info->ifcfg.asyncperiod), REG_STP(info));
+	outb(fas216_syncperiod(info, info->ifcfg.asyncperiod), REG_STP(info));
 	outb(info->scsi.cfg[0], REG_CNTL1(info));
 }
 
@@ -1465,7 +1505,7 @@ int fas216_init (struct Scsi_Host *instance)
 	info->host = instance;
 	info->scsi.cfg[0] = instance->this_id;
 	info->scsi.cfg[1] = CNTL2_ENF | CNTL2_S2FE;
-	info->scsi.cfg[2] = CNTL3_ADDIDCHK | CNTL3_G2CB | CNTL3_FASTSCSI | CNTL3_FASTCLK;
+	info->scsi.cfg[2] = CNTL3_ADIDCHK | CNTL3_G2CB | CNTL3_FASTSCSI | CNTL3_FASTCLK;
 	info->scsi.type = "unknown";
 	info->SCpnt = NULL;
 	fas216_reset_state(info);
@@ -1500,7 +1540,7 @@ int fas216_init (struct Scsi_Host *instance)
 	}
 
 
-	outb(CNTL3_IDENABLE, REG_CNTL3(info));
+	outb(CNTL3_ADIDCHK, REG_CNTL3(info));
 	outb(0, REG_CNTL3(info));
 
 	outb(CMD_RESETCHIP, REG_CMD(info));
@@ -1562,6 +1602,11 @@ EXPORT_SYMBOL(fas216_queue_command);
 EXPORT_SYMBOL(fas216_command);
 EXPORT_SYMBOL(fas216_intr);
 EXPORT_SYMBOL(fas216_release);
+EXPORT_SYMBOL(fas216_eh_abort);
+EXPORT_SYMBOL(fas216_eh_device_reset);
+EXPORT_SYMBOL(fas216_eh_bus_reset);
+EXPORT_SYMBOL(fas216_eh_host_reset);
+
 
 #ifdef MODULE
 int init_module (void)

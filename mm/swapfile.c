@@ -52,6 +52,8 @@ static inline int scan_swap_map(struct swap_info_struct *si)
 			offset = si->cluster_next++;
 			if (si->swap_map[offset])
 				continue;
+			if (test_bit(offset, si->swap_lockmap))
+				continue;
 			si->cluster_nr--;
 			goto got_page;
 		}
@@ -59,6 +61,8 @@ static inline int scan_swap_map(struct swap_info_struct *si)
 	si->cluster_nr = SWAP_CLUSTER_MAX;
 	for (offset = si->lowest_bit; offset <= si->highest_bit ; offset++) {
 		if (si->swap_map[offset])
+			continue;
+		if (test_bit(offset, si->swap_lockmap))
 			continue;
 		si->lowest_bit = offset;
 got_page:
@@ -424,6 +428,8 @@ asmlinkage int sys_swapoff(const char * specialfile)
 	p->swap_device = 0;
 	vfree(p->swap_map);
 	p->swap_map = NULL;
+	free_page((long) p->swap_lockmap);
+	p->swap_lockmap = NULL;
 	p->flags = 0;
 	err = 0;
 out:
@@ -483,7 +489,6 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 	int error = -EPERM;
 	struct file filp;
 	static int least_priority = 0;
-	unsigned char *avail_map = 0;
 
 	lock_kernel();
 	if (!suser())
@@ -501,6 +506,7 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 	p->swap_file = NULL;
 	p->swap_device = 0;
 	p->swap_map = NULL;
+	p->swap_lockmap = NULL;
 	p->lowest_bit = 0;
 	p->highest_bit = 0;
 	p->cluster_nr = 0;
@@ -543,24 +549,24 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 		}
 	} else if (!S_ISREG(swap_dentry->d_inode->i_mode))
 		goto bad_swap;
-	avail_map = (unsigned char *) get_free_page(GFP_USER);
-	if (!avail_map) {
+	p->swap_lockmap = (unsigned char *) get_free_page(GFP_USER);
+	if (!p->swap_lockmap) {
 		printk("Unable to start swapping: out of memory :-)\n");
 		error = -ENOMEM;
 		goto bad_swap;
 	}
-	rw_swap_page_nocache(READ, SWP_ENTRY(type,0), (char *) avail_map);
-	if (memcmp("SWAP-SPACE",avail_map+PAGE_SIZE-10,10)) {
+	rw_swap_page_nocache(READ, SWP_ENTRY(type,0), (char *) p->swap_lockmap);
+	if (memcmp("SWAP-SPACE",p->swap_lockmap+PAGE_SIZE-10,10)) {
 		printk("Unable to find swap-space signature\n");
 		error = -EINVAL;
 		goto bad_swap;
 	}
-	memset(avail_map+PAGE_SIZE-10,0,10);
+	memset(p->swap_lockmap+PAGE_SIZE-10,0,10);
 	j = 0;
 	p->lowest_bit = 0;
 	p->highest_bit = 0;
 	for (i = 1 ; i < 8*PAGE_SIZE ; i++) {
-		if (test_bit(i,avail_map)) {
+		if (test_bit(i,p->swap_lockmap)) {
 			if (!p->lowest_bit)
 				p->lowest_bit = i;
 			p->highest_bit = i;
@@ -579,12 +585,13 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 		goto bad_swap;
 	}
 	for (i = 1 ; i < p->max ; i++) {
-		if (test_bit(i,avail_map))
+		if (test_bit(i,p->swap_lockmap))
 			p->swap_map[i] = 0;
 		else
 			p->swap_map[i] = 0x80;
 	}
 	p->swap_map[0] = 0x80;
+	memset(p->swap_lockmap,0,PAGE_SIZE);
 	p->flags = SWP_WRITEOK;
 	p->pages = j;
 	nr_swap_pages += j;
@@ -611,15 +618,15 @@ bad_swap:
 	if(filp.f_op && filp.f_op->release)
 		filp.f_op->release(filp.f_dentry->d_inode,&filp);
 bad_swap_2:
+	free_page((long) p->swap_lockmap);
 	vfree(p->swap_map);
 	dput(p->swap_file);
 	p->swap_device = 0;
 	p->swap_file = NULL;
 	p->swap_map = NULL;
+	p->swap_lockmap = NULL;
 	p->flags = 0;
 out:
-	if (avail_map)
-		free_page((long) avail_map);
 	unlock_kernel();
 	return error;
 }

@@ -53,7 +53,6 @@ typedef struct isdnloop_sdef {
 #ifdef __KERNEL__
 /* Kernel includes */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/errno.h>

@@ -1,0 +1,63 @@
+From: Nicola Bernardelli <nbern@mail.protos.it>
+
+     In order to load SB-AWE related drivers on recent kernels (tested
+with 2.1.86 and 2.1.88) with modularized sound support these lines can
+be issued (of course with the suitable values for the parameters)
+after PNP setup:
+
+insmod  sound.o
+insmod  uart401.o
+insmod  sb.o io=0x220 irq=5 dma=1 dma16=5 mpu_io=0x330
+insmod  awe_wave.o
+
+     Alternatively, in order to also have automatic load on demand
+(not of the awe support, which would anyway most likely also require a
+call to sfxload), these lines can be added to /etc/conf.modules, of
+course with the suitable values for the parameters):
+
+alias char-major-14 sb
+post-install sb modprobe "-k" "adlib_card"
+options sb io=0x220 irq=5 dma=1 dma16=5 mpu_io=0x330
+options adlib_card io=0x388     # FM synthetiser
+
+and then these two commands can be issued:
+
+modprobe sb
+insmod awe_wave
+
+------------------------------------------------------------------------------
+
+After picking up the second approach, you may want to put these lines
+on an ossfreeOn script:
+
+ -----
+#!/bin/sh
+
+modprobe sb
+insmod awe_wave
+
+# A call to 'aumix -L' (attention to what the home dir is at boot
+# time, you may put a link /.aumixrc -> /home/<sounduser>/.aumixrc) to
+# restore mixer device levels and a call to 'sfxload <path to
+# soundfont bank>' may be added in a customized ossfreeSetup script:
+
+if [ -x /usr/local/sbin/ossfreeSetup ] ; then
+  /usr/local/sbin/ossfreeSetup
+fi
+ -----
+
+And these lines in an ossfreeOff script:
+
+ -----
+#!/bin/sh
+
+# NOT set -e, maybe not all of them are currently loaded.
+
+rmmod awe_wave 
+rmmod adlib_card
+rmmod opl3
+rmmod sb
+rmmod uart401
+rmmod sound
+ -----
+

@@ -204,7 +204,6 @@ int last_console = 0;
 int want_console = -1;
 int kmsg_redirect = 0;
 
-#define CONFIG_SERIAL_ECHO
 #ifdef CONFIG_SERIAL_ECHO
 
 #include <linux/serial_reg.h>

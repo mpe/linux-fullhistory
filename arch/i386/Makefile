@@ -58,9 +58,6 @@ SUBDIRS := $(SUBDIRS) arch/i386/math-emu
 DRIVERS := $(DRIVERS) arch/i386/math-emu/math.a
 endif
 
-memsize: dummy
-	@echo "__kernel_offset__ = (0x1000-$(CONFIG_MAX_MEMSIZE))*1024*1024;" > arch/i386/.kernel_offset.lds
-
 arch/i386/kernel: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=arch/i386/kernel
 
@@ -69,31 +66,30 @@ arch/i386/mm: dummy
 
 MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
 
-zImage: memsize vmlinux
+zImage: vmlinux
 	@$(MAKEBOOT) zImage
 
-bzImage: memsize vmlinux
+bzImage: vmlinux
 	@$(MAKEBOOT) bzImage
 
 compressed: zImage
 
-zlilo: memsize vmlinux
+zlilo: vmlinux
 	@$(MAKEBOOT) BOOTIMAGE=zImage zlilo
 
-bzlilo: memsize vmlinux
+bzlilo: vmlinux
 	@$(MAKEBOOT) BOOTIMAGE=bzImage zlilo
 
-zdisk: memsize vmlinux
+zdisk: vmlinux
 	@$(MAKEBOOT) BOOTIMAGE=zImage zdisk
 
-bzdisk: memsize vmlinux
+bzdisk: vmlinux
 	@$(MAKEBOOT) BOOTIMAGE=bzImage zdisk
 
-install: memsize vmlinux
+install: vmlinux
 	@$(MAKEBOOT) BOOTIMAGE=bzImage install
 
 archclean:
-	rm -f .kernel_offset.lds
 	@$(MAKEBOOT) clean
 
 archdep:

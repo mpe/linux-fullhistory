@@ -19,7 +19,10 @@
  */
 
 /*
- * $Log: ecoscsi_NCR5380.h,v $
+ * $Log: ecoscsi.h,v $
+ * Revision 1.1  1998/02/23 02:45:24  davem
+ * Merge to 2.1.88
+ *
  */
 
 #ifndef ECOSCSI_NCR5380_H

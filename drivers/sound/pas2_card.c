@@ -164,7 +164,7 @@ static int config_pas_hw(struct address_info *hw_config)
 		}
 		else
 		{
-			if (request_irq(pas_irq, pasintr, 0, "PAS16", NULL) < 0)
+			if (request_irq(pas_irq, pasintr, 0, "PAS16",NULL) < 0)
 				ok = 0;
 		}
 	}

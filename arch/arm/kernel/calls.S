@@ -5,7 +5,7 @@
  */
 #ifndef NR_SYSCALLS
 #define NR_syscalls 256
-#define NR_SYSCALLS 182
+#define NR_SYSCALLS 184
 #else
 
 /* 0 */		.long	SYMBOL_NAME(sys_setup)
@@ -190,5 +190,7 @@
 		.long	SYMBOL_NAME(sys_rt_sigsuspend_wrapper)
 /* 180 */	.long	SYMBOL_NAME(sys_pread)
 		.long	SYMBOL_NAME(sys_pwrite)
-		.space	(NR_syscalls - 182) * 4
+		.long	SYMBOL_NAME(sys_xstat)
+		.long	SYMBOL_NAME(sys_xmknod)
+		.space	(NR_syscalls - 184) * 4
 #endif

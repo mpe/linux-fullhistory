@@ -60,6 +60,21 @@ int UMSDOS_ioctl_dir (
 {
   int ret = -EPERM;
   int err;
+
+       /* forward non-umsdos ioctls - this hopefully doesn't cause conflicts */
+       if(cmd!=UMSDOS_GETVERSION
+          &&cmd!=UMSDOS_READDIR_DOS
+          &&cmd!=UMSDOS_READDIR_EMD
+          &&cmd!=UMSDOS_INIT_EMD
+          &&cmd!=UMSDOS_CREAT_EMD
+          &&cmd!=UMSDOS_RENAME_DOS
+          &&cmd!=UMSDOS_UNLINK_EMD
+          &&cmd!=UMSDOS_UNLINK_DOS
+          &&cmd!=UMSDOS_RMDIR_DOS
+          &&cmd!=UMSDOS_STAT_DOS
+          &&cmd!=UMSDOS_DOS_SETUP)
+              return fat_dir_ioctl(dir,filp,cmd,data);
+
   /* #Specification: ioctl / acces
      Only root (effective id) is allowed to do IOCTL on directory
      in UMSDOS. EPERM is returned for other user.
@@ -162,7 +177,7 @@ int UMSDOS_ioctl_dir (
 	    }
 	  }
 	}
-	iput (emd_dir);
+	/* iput (emd_dir); FIXME */
       }else{
 				/* The absence of the EMD is simply seen as an EOF */
 	ret = 0;
@@ -182,7 +197,7 @@ int UMSDOS_ioctl_dir (
       extern struct inode_operations umsdos_rdir_inode_operations;
       struct inode *emd_dir = umsdos_emd_dir_lookup (dir,1);
       ret = emd_dir != NULL;
-      iput (emd_dir);
+      /* iput (emd_dir); FIXME */
       
       dir->i_op = ret
 	? &umsdos_dir_inode_operations
@@ -225,8 +240,8 @@ int UMSDOS_ioctl_dir (
 	  ,dir
 	  ,data.umsdos_dirent.name,data.umsdos_dirent.name_len);
 	*/
-	old_dentry = creat_dentry (data.dos_dirent.d_name, data.dos_dirent.d_reclen, NULL);
-	new_dentry = creat_dentry (data.umsdos_dirent.name, data.umsdos_dirent.name_len, NULL);
+	old_dentry = creat_dentry (data.dos_dirent.d_name, data.dos_dirent.d_reclen, NULL, NULL);	/* FIXME: prolly should fill inode part */
+	new_dentry = creat_dentry (data.umsdos_dirent.name, data.umsdos_dirent.name_len, NULL, NULL);
 	ret = msdos_rename(dir,old_dentry,dir,new_dentry);
       }else if (cmd == UMSDOS_UNLINK_EMD){
        /* #Specification: ioctl / UMSDOS_UNLINK_EMD
@@ -297,7 +312,7 @@ int UMSDOS_ioctl_dir (
 	  data.stat.st_ctime = inode->i_ctime;
 	  data.stat.st_mtime = inode->i_mtime;
 	  copy_to_user (&idata->stat,&data.stat,sizeof(data.stat));
-	  iput (inode);
+	  /* iput (inode); FIXME */
 	}
       }else if (cmd == UMSDOS_DOS_SETUP){
       /* #Specification: ioctl / UMSDOS_DOS_SETUP

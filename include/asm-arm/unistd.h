@@ -189,6 +189,8 @@
 #define __NR_rt_sigsuspend		(__NR_SYSCALL_BASE+179)
 #define __NR_pread			(__NR_SYSCALL_BASE+180)
 #define __NR_pwrite			(__NR_SYSCALL_BASE+181)
+#define __NR_xstat			(__NR_SYSCALL_BASE+182)
+#define __NR_xmknod			(__NR_SYSCALL_BASE+183)
 
 #define __sys2(x) #x
 #define __sys1(x) __sys2(x)
@@ -311,8 +313,6 @@ type name(type1 arg1, type2 arg2, type3 arg3, type4 arg4, type5 arg5) {			\
  */
 #define __NR__exit __NR_exit
 static inline _syscall0(int,idle);
-static inline _syscall0(int,fork);
-static inline _syscall2(int,clone,unsigned long,flags,char *,esp);
 static inline _syscall0(int,pause);
 static inline _syscall1(int,setup,int,magic);
 static inline _syscall0(int,sync);

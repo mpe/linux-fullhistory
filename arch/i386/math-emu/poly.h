@@ -83,7 +83,7 @@ extern inline void add_Xsig_Xsig(Xsig *dest, const Xsig *x2)
 /* Note: the constraints in the asm statement didn't always work properly
    with gcc 2.5.8.  Changing from using edi to using ecx got around the
    problem, but keep fingers crossed! */
-extern inline int add_two_Xsig(Xsig *dest, const Xsig *x2, long int *exp)
+extern inline void add_two_Xsig(Xsig *dest, const Xsig *x2, long int *exp)
 {
   asm volatile ("movl %2,%%ecx; movl %3,%%esi;
                  movl (%%esi),%%eax; addl %%eax,(%%ecx);

@@ -76,6 +76,12 @@ M:	Philip.Blundell@pobox.com
 L:	linux-net@vger.rutgers.edu
 S:	Maintained
 
+6PACK NETWORK DRIVER FOR AX.25
+P:	Andreas Koensgen
+M:	ajk@iehk.rwth-aachen.de
+L:	linux-hams@vger.rutgers.edu
+S:	Maintained
+
 8390 NETWORK DRIVERS [WD80x3/SMC-ELITE, SMC-ULTRA, NE2000, 3C503, etc.]
 P:	Paul Gortmaker
 M	gpg109@rsphy1.anu.edu.au
@@ -157,7 +163,7 @@ S:	Supported
 DAMA SLAVE for AX.25
 P:	Joerg Reuter
 M:	jreuter@poboxes.com
-W:	http://www.rat.de/jr/
+W:	http://poboxes.com/jreuter/
 W:	http://qsl.net/dl1bke/
 L:	linux-hams@vger.rutgers.edu
 S:	Maintained
@@ -313,6 +319,7 @@ S:	Maintained
 JOYSTICK DRIVER
 P:	Vojtech Pavlik
 M:	vojtech@atrey.karlin.mff.cuni.cz
+L:	linux-joystick@atrey.karlin.mff.cuni.cz
 S:	Maintained
 
 KERNEL AUTOMOUNTER (AUTOFS)
@@ -461,9 +468,9 @@ S:	Maintained
 PNP SUPPORT
 P:	Tom Lees
 M:	tom@lpsg.demon.co.uk
-L:	pnp-list@lpsg.demon.co.uk
-L:	pnp-list@redhat.com (maybe)
-W:	http://www.lpsg.demon.co.uk/pnp-linux.html
+L:	pnp-users@ferret.lmh.ox.ac.uk
+L:	pnp-devel@ferret.lmh.ox.ac.uk
+W:	http://www-jcr.lmh.ox.ac.uk/~pnp/
 S:	Maintained
 
 PPP PROTOCOL DRIVERS AND COMPRESSORS
@@ -516,7 +523,7 @@ S:	Maintained
 
 SOUND
 P:	Alan Cox 
-M:	Alan Cox@linux.org
+M:	Alan.Cox@linux.org
 S:	Maintained
 
 SPARC:
@@ -613,7 +620,7 @@ S:	Maintained
 Z8530 DRIVER FOR AX.25
 P:	Joerg Reuter
 M:	jreuter@poboxes.com
-W:	http://www.rat.de/jr/
+W:	http://poboxes.com/jreuter/
 W:	http://qsl.net/dl1bke/
 L:	linux-hams@vger.rutgers.edu
 S:	Maintained

@@ -859,26 +859,26 @@ static void pnp_mem_init(void)
 	int bank_sizes[4];
 	int i, j, bits = -1, nbanks = 0;
 
-/*
- * This routine determines what kind of RAM is installed in each of the four
- * SIMM banks and configures the DRAM address decode logic accordingly.
- */
+	/*
+	 * This routine determines what kind of RAM is installed in each of the four
+	 * SIMM banks and configures the DRAM address decode logic accordingly.
+	 */
 
-/*
- *    Place the chip into enhanced mode
- */
+	/*
+	 *    Place the chip into enhanced mode
+	 */
 	gus_write8(0x19, gus_read8(0x19) | 0x01);
 	gus_write8(0x53, gus_look8(0x53) & ~0x02);	/* Select DRAM I/O access */
 
-/*
- * Set memory configuration to 4 DRAM banks of 4M in each (16M total).
- */
+	/*
+	 * Set memory configuration to 4 DRAM banks of 4M in each (16M total).
+	 */
 
 	gus_write16(0x52, (gus_look16(0x52) & 0xfff0) | 0x000c);
 
-/*
- * Perform the DRAM size detection for each bank individually.
- */
+	/*
+	 * Perform the DRAM size detection for each bank individually.
+	 */
 	for (bank = 0; bank < 4; bank++)
 	{
 		int size = 0;

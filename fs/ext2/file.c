@@ -205,21 +205,23 @@ static ssize_t ext2_file_write (struct file * filp, const char * buf,
 			return -EFBIG;
 	}
 #else
-	off_t max = ext2_max_sizes[EXT2_BLOCK_SIZE_BITS(sb)];
+	{
+		off_t max = ext2_max_sizes[EXT2_BLOCK_SIZE_BITS(sb)];
 
-	if (pos + count > max) {
-		count = max - pos;
-		if (!count)
-			return -EFBIG;
-	}
-	if (((pos + count) >> 32) && 
-	    !(sb->u.ext2_sb.s_es->s_feature_ro_compat &
-	      cpu_to_le32(EXT2_FEATURE_RO_COMPAT_LARGE_FILE))) {
-		/* If this is the first large file created, add a flag
-		   to the superblock */
-		sb->u.ext2_sb.s_es->s_feature_ro_compat |=
-			cpu_to_le32(EXT2_FEATURE_RO_COMPAT_LARGE_FILE);
-		mark_buffer_dirty(sb->u.ext2_sb.s_sbh, 1);
+		if (pos + count > max) {
+			count = max - pos;
+			if (!count)
+				return -EFBIG;
+		}
+		if (((pos + count) >> 32) && 
+		    !(sb->u.ext2_sb.s_es->s_feature_ro_compat &
+		      cpu_to_le32(EXT2_FEATURE_RO_COMPAT_LARGE_FILE))) {
+			/* If this is the first large file created, add a flag
+			   to the superblock */
+			sb->u.ext2_sb.s_es->s_feature_ro_compat |=
+				cpu_to_le32(EXT2_FEATURE_RO_COMPAT_LARGE_FILE);
+			mark_buffer_dirty(sb->u.ext2_sb.s_sbh, 1);
+		}
 	}
 #endif
 

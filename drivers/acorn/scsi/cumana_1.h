@@ -23,7 +23,10 @@
  */
 
 /*
- * $Log: cumana_NCR5380.h,v $
+ * $Log: cumana_1.h,v $
+ * Revision 1.1  1998/02/23 02:45:22  davem
+ * Merge to 2.1.88
+ *
  */
 
 #ifndef CUMANA_NCR5380_H

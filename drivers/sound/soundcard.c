@@ -16,8 +16,8 @@
  * Stefan Reinauer : integrated /proc/sound (equals to /dev/sndstat,
  *                   which should disappear in the near future)
  */
-#include <linux/config.h>
 
+#include <linux/config.h>
 
 #include "sound_config.h"
 #include <linux/types.h>
@@ -28,6 +28,7 @@
 #include <linux/stddef.h>
 #include <linux/kmod.h>
 #ifdef __KERNEL__
+#include <asm/dma.h>
 #include <asm/io.h>
 #include <asm/segment.h>
 #include <linux/wait.h>
@@ -48,6 +49,13 @@
 #define modular 0
 #endif
 
+/*
+ * This ought to be moved into include/asm/dma.h
+ */
+#ifndef valid_dma
+#define valid_dma(n) ((n) >= 0 && (n) < MAX_DMA_CHANNELS && (n) != 4)
+#endif
+
 static int      chrdev_registered = 0;
 static int      sound_major = SOUND_MAJOR;
 
@@ -57,12 +65,11 @@ static int      is_unloading = 0;
  * Table for permanently allocated memory (used when unloading the module)
  */
 caddr_t         sound_mem_blocks[1024];
-int             sound_mem_sizes[1024];
 int             sound_nblocks = 0;
 
 static int      soundcard_configured = 0;
 
-static char     dma_alloc_map[8] =
+static char     dma_alloc_map[MAX_DMA_CHANNELS] =
 {0};
 
 #define DMA_MAP_UNAVAIL		0
@@ -788,31 +795,9 @@ soundcard_init(void)
 
 }
 
-static unsigned int irqs = 0;
-
-#ifdef MODULE
-static void
-free_all_irqs(void)
-{
-	int i;
-
-	for (i = 0; i < 31; i++)
-	{
-		if (irqs & (1ul << i))
-		{
-			printk(KERN_WARNING "Sound warning: IRQ%d was left allocated - fixed.\n", i);
-			snd_release_irq(i, NULL);
-		}
-	}
-	irqs = 0;
-}
-
-char            kernel_version[] = UTS_RELEASE;
-
-#endif
-
-static int      sound[20] =
-{0};
+static int      sound[20] = {
+	0
+};
 
 int init_module(void)
 {
@@ -876,10 +861,9 @@ void cleanup_module(void)
 	}
 #endif
 	sound_unload_drivers();
-	free_all_irqs();	/* If something was left allocated by accident */
 	sequencer_unload();
 
-	for (i = 0; i < 8; i++)
+	for (i = 0; i < MAX_DMA_CHANNELS; i++)
 	{
 		if (dma_alloc_map[i] != DMA_MAP_UNAVAIL)
 		{
@@ -894,35 +878,6 @@ void cleanup_module(void)
 
 }
 #endif
-
-int snd_set_irq_handler(int interrupt_level, void (*iproc) (int, void *, struct pt_regs *), char *name, int *osp, void *dev_id)
-{
-	int retcode;
-	unsigned long flags;
-
-	save_flags(flags);
-	cli();
-	retcode = request_irq(interrupt_level, iproc, 0, name, dev_id);
-	
-	if (retcode < 0)
-	{
-		printk(KERN_ERR "Sound: IRQ%d already in use\n", interrupt_level);
-	}
-	else
-		irqs |= (1ul << interrupt_level);
-
-	restore_flags(flags);
-	return retcode;
-}
-
-void snd_release_irq(int vect, void *dev_id)
-{
-	if (!(irqs & (1ul << vect)))
-		return;
-
-	irqs &= ~(1ul << vect);
-	free_irq(vect, dev_id);
-}
 
 int sound_alloc_dma(int chn, char *deviceID)
 {
@@ -940,7 +895,7 @@ int sound_open_dma(int chn, char *deviceID)
 {
 	unsigned long   flags;
 
-	if (chn < 0 || chn > 7 || chn == 4)
+	if (!valid_dma(chn))
 	{
 		printk(KERN_ERR "sound_open_dma: Invalid DMA channel %d\n", chn);
 		return 1;

@@ -12,7 +12,8 @@
  *
  * Changes:
  *	Alan Cox	Reformatted, removed sound_mem usage, use normal Linux
- *			interrupt allocation.
+ *			interrupt allocation. Protect against bogus unload
+ *			Fixed to allow IRQ > 15
  *
  * Status:
  *		Untested
@@ -244,6 +245,7 @@ void attach_uart401(struct address_info *hw_config)
 	uart401_devc *devc;
 	char *name = "MPU-401 (UART) MIDI";
 
+	
 	if (hw_config->name)
 		name = hw_config->name;
 
@@ -268,12 +270,6 @@ void attach_uart401(struct address_info *hw_config)
 	}
 	else
 		devc->share_irq = 0;
-
-	if (devc->irq < 1 || devc->irq > 15)
-	{
-		kfree(devc);
-		return;
-	}
 
 	if (!devc->share_irq)
 	{
@@ -345,6 +341,7 @@ static int reset_uart401(uart401_devc * devc)
 		for (timeout = 30000; timeout > 0 && !output_ready(devc); timeout--);
 		devc->input_byte = 0;
 		uart401_cmd(devc, MPU_RESET);
+
 		/*
 		 * Wait at least 25 msec. This method is not accurate so let's make the
 		 * loop bit longer. Cannot sleep since this is called during boot.
@@ -387,6 +384,8 @@ int probe_uart401(struct address_info *hw_config)
 
 	DDB(printk("Entered probe_uart401()\n"));
 
+	/* Default to "not found" */
+	hw_config->slots[4] = -1;
 	detected_devc = NULL;
 
 	if (check_region(hw_config->io_base, 4))
@@ -415,6 +414,14 @@ int probe_uart401(struct address_info *hw_config)
 void unload_uart401(struct address_info *hw_config)
 {
 	uart401_devc *devc;
+	int n=hw_config->slots[4];
+	
+	/* Not set up */
+	if(n==-1 || midi_devs[n]==NULL)
+		return;
+		
+	/* Not allocated (erm ??) */
+	
 	devc = midi_devs[hw_config->slots[4]]->devc;
 	if (devc == NULL)
 		return;

@@ -25,6 +25,81 @@
 #define FAULT_CODE_READ		0x02
 #define FAULT_CODE_USER		0x01
 
+struct pgtable_cache_struct quicklists;
+
+void __bad_pte(pmd_t *pmd)
+{
+	printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
+	set_pmd(pmd, mk_user_pmd(BAD_PAGETABLE));
+}
+
+void __bad_pte_kernel(pmd_t *pmd)
+{
+	printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
+	set_pmd(pmd, mk_kernel_pmd(BAD_PAGETABLE));
+}
+
+pgd_t *get_pgd_slow(void)
+{
+	/*
+	 * need to get a 16k page for level 1
+	 */
+	pgd_t *pgd = (pgd_t *) __get_free_pages(GFP_KERNEL,2);
+	pgd_t *init;
+	
+	if (pgd) {
+		init = pgd_offset(&init_mm, 0);
+		memzero ((void *)pgd, USER_PTRS_PER_PGD * BYTES_PER_PTR);
+		memcpy (pgd + USER_PTRS_PER_PGD, init + USER_PTRS_PER_PGD,
+			(PTRS_PER_PGD - USER_PTRS_PER_PGD) * BYTES_PER_PTR);
+	}
+	return pgd;
+}
+
+pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
+{
+	pte_t *pte;
+
+	pte = (pte_t *) get_small_page(GFP_KERNEL);
+	if (pmd_none(*pmd)) {
+		if (pte) {
+			memzero (pte, PTRS_PER_PTE * BYTES_PER_PTR);
+			set_pmd(pmd, mk_user_pmd(pte));
+			return pte + offset;
+		}
+		set_pmd(pmd, mk_user_pmd(BAD_PAGETABLE));
+		return NULL;
+	}
+	free_small_page ((unsigned long) pte);
+	if (pmd_bad(*pmd)) {
+		__bad_pte(pmd);
+		return NULL;
+	}
+	return (pte_t *) pmd_page(*pmd) + offset;
+}
+
+pte_t *get_pte_kernel_slow(pmd_t *pmd, unsigned long offset)
+{
+	pte_t *pte;
+
+	pte = (pte_t *) get_small_page(GFP_KERNEL);
+	if (pmd_none(*pmd)) {
+		if (pte) {
+			memzero (pte, PTRS_PER_PTE * BYTES_PER_PTR);
+			set_pmd(pmd, mk_kernel_pmd(pte));
+			return pte + offset;
+		}
+		set_pmd(pmd, mk_kernel_pmd(BAD_PAGETABLE));
+		return NULL;
+	}
+	free_small_page ((unsigned long) pte);
+	if (pmd_bad(*pmd)) {
+		__bad_pte_kernel(pmd);
+		return NULL;
+	}
+	return (pte_t *) pmd_page(*pmd) + offset;
+}
+
 extern void die_if_kernel(char *msg, struct pt_regs *regs, unsigned int err, unsigned int ret);
 
 static void kernel_page_fault (unsigned long addr, int mode, struct pt_regs *regs,

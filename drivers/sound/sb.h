@@ -47,6 +47,8 @@
 #define MDL_ES1868MIDI	14	/* MIDI port of ESS1868 */
 #define MDL_AEDSP	15	/* Audio Excel DSP 16 */
 
+#define SUBMDL_ALS007	42	/* ALS-007 differs from SB16 only in mixer */
+				/* register assignment */
 /*
  * Config flags
  */

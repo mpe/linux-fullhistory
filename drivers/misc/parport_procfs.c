@@ -4,6 +4,7 @@
  *          Tim Waugh <tim@cyberelk.demon.co.uk>
  *          Philip Blundell <philb@gnu.org>
  *          Andrea Arcangeli <arcangeli@mbox.queen.it>
+ *          Riccardo Facchetti <fizban@tin.it>
  *
  * based on work by Grant Guenther <grant@torque.net>
  *              and Philip Blundell
@@ -11,6 +12,7 @@
 
 #include <linux/stddef.h>
 #include <linux/tasks.h>
+#include <linux/ctype.h>
 #include <asm/ptrace.h>
 #include <asm/io.h>
 #include <asm/dma.h>
@@ -32,55 +34,78 @@ extern void parport_null_intr_func(int irq, void *dev_id, struct pt_regs *regs);
 static int irq_write_proc(struct file *file, const char *buffer,
 					  unsigned long count, void *data)
 {
-	int newirq, oldirq;
+	int retval = -EINVAL;
+	int newirq = PARPORT_IRQ_NONE;
 	struct parport *pp = (struct parport *)data;
-	
-	if (count > 5 )  /* more than 4 digits + \n for a irq 0x?? 0?? ??  */
-		return -EOVERFLOW;
+	struct pardevice *cad = pp->cad;
+	int oldirq = pp->irq;
 
-	if (buffer[0] < 32 || !strncmp(buffer, "none", 4)) {
-		newirq = PARPORT_IRQ_NONE;
-	} else {
-		if (buffer[0] == '0') {
-			if (buffer[1] == 'x')
-				newirq = simple_strtoul(&buffer[2], 0, 16);
-			else
-				newirq = simple_strtoul(&buffer[1], 0, 8);
-		} else {
-			newirq = simple_strtoul(buffer, 0, 10);
-		}
+/*
+ * We can have these valid cases:
+ * 	"none" (count == 4 || count == 5)
+ * 	decimal number (count == 2 || count == 3)
+ * 	octal number (count == 3 || count == 4)
+ * 	hex number (count == 4 || count == 5)
+ * all other cases are -EINVAL
+ *
+ * Note: newirq is alredy set up to NONE.
+ *
+ * -RF
+ */
+	if (count > 5  || count < 1)
+		goto out;
+
+	if (isdigit(buffer[0]))
+		newirq = simple_strtoul(buffer, NULL, 0);
+	else if (strncmp(buffer, "none", 4) != 0) {
+		if (buffer[0] < 32)
+			/* Things like '\n' are harmless */
+			retval = count;
+
+		goto out;
 	}
 
-	if (newirq >= NR_IRQS)
-		return -EOVERFLOW;
+	retval = count;
 
-	if (pp->irq != PARPORT_IRQ_NONE && !(pp->flags & PARPORT_FLAG_COMA)) {
-		if (pp->cad != NULL && pp->cad->irq_func != NULL)
-			free_irq(pp->irq, pp->cad->private);
+	if (oldirq == newirq)
+		goto out;
+
+	if (pp->flags & PARPORT_FLAG_COMA)
+		goto out_ok;
+
+	if (newirq != PARPORT_IRQ_NONE) { 
+		void (*handler)(int, void *, struct pt_regs *);
+
+		if (cad && cad->irq_func)
+			handler = cad->irq_func;
 		else
-			free_irq(pp->irq, NULL);
+			handler = parport_null_intr_func;
+
+		retval = request_irq(newirq, handler,
+				     SA_INTERRUPT,
+				     cad ? cad->name : pp->name,
+				     cad ? cad->private : NULL);
+		if (retval)
+			goto out;
+		else retval = count;
 	}
 
-	oldirq = pp->irq;
+	if (oldirq != PARPORT_IRQ_NONE) {
+		if (cad && cad->irq_func)
+			free_irq(oldirq, cad->private);
+		else
+			free_irq(oldirq, NULL);
+	}
+
+out_ok:
 	pp->irq = newirq;
 
-	if (pp->irq != PARPORT_IRQ_NONE && !(pp->flags & PARPORT_FLAG_COMA)) { 
-		struct pardevice *cad = pp->cad;
-
-		if (cad == NULL)
-			request_irq(pp->irq, parport_null_intr_func,
-				    SA_INTERRUPT, pp->name, NULL);
-		else
-			request_irq(pp->irq, cad->irq_func ? cad->irq_func :
-				    parport_null_intr_func, SA_INTERRUPT,
-				    cad->name, cad->private);
-	}
-
 	if (oldirq != PARPORT_IRQ_NONE && newirq == PARPORT_IRQ_NONE &&
-	    pp->cad != NULL && pp->cad->irq_func != NULL)
-		pp->cad->irq_func(pp->irq, pp->cad->private, NULL);
+	    cad && cad->irq_func)
+		cad->irq_func(pp->irq, cad->private, NULL);
 
-	return count;
+out:
+	return retval;
 }
 
 static int irq_read_proc(char *page, char **start, off_t off,
@@ -167,6 +192,20 @@ static inline void destroy_proc_entry(struct proc_dir_entry *root,
 	*d = NULL;
 }
 
+static void destroy_proc_tree(struct parport *pp) {
+	if (pp->pdir.entry) {
+		if (pp->pdir.irq) 
+			destroy_proc_entry(pp->pdir.entry, &pp->pdir.irq);
+		if (pp->pdir.devices) 
+			destroy_proc_entry(pp->pdir.entry, &pp->pdir.devices);
+		if (pp->pdir.hardware)
+			destroy_proc_entry(pp->pdir.entry, &pp->pdir.hardware);
+		if (pp->pdir.probe)
+			destroy_proc_entry(pp->pdir.entry, &pp->pdir.probe);
+		destroy_proc_entry(base, &pp->pdir.entry);
+	}
+}
+
 static struct proc_dir_entry *new_proc_entry(const char *name, mode_t mode,
 					     struct proc_dir_entry *parent,
 					     unsigned short ino)
@@ -220,8 +259,6 @@ void parport_proc_cleanup(void)
 
 int parport_proc_register(struct parport *pp)
 {
-	static const char *proc_msg = KERN_ERR "%s: Trouble with /proc.\n";
-
 	memset(&pp->pdir, 0, sizeof(struct parport_dir));
 
 	if (base == NULL) {
@@ -233,63 +270,43 @@ int parport_proc_register(struct parport *pp)
 		sizeof(pp->pdir.name));
 
 	pp->pdir.entry = new_proc_entry(pp->pdir.name, S_IFDIR, base, 0);
-	if (pp->pdir.entry == NULL) {
-		printk(proc_msg, pp->name);
-		return 1;
-	}
+	if (pp->pdir.entry == NULL)
+		goto out_fail;
 
 	pp->pdir.irq = new_proc_entry("irq", S_IFREG | S_IRUGO | S_IWUSR, 
 				      pp->pdir.entry, 0);
-	if (pp->pdir.irq == NULL) {
-		printk(proc_msg, pp->name);
-		destroy_proc_entry(base, &pp->pdir.entry);
-		return 1;
-	}
+	if (pp->pdir.irq == NULL)
+		goto out_fail;
+
 	pp->pdir.irq->read_proc = irq_read_proc;
 	pp->pdir.irq->write_proc = irq_write_proc;
 	pp->pdir.irq->data = pp;
 	
 	pp->pdir.devices = new_proc_entry("devices", 0, pp->pdir.entry, 0);
-	if (pp->pdir.devices == NULL) {
-		printk(proc_msg, pp->name);
-		destroy_proc_entry(pp->pdir.entry, &pp->pdir.irq);
-		destroy_proc_entry(base, &pp->pdir.entry);
-		return 1;
-	}
+	if (pp->pdir.devices == NULL)
+		goto out_fail;
+
 	pp->pdir.devices->read_proc = devices_read_proc;
 	pp->pdir.devices->data = pp;
 	
 	pp->pdir.hardware = new_proc_entry("hardware", 0, pp->pdir.entry, 0);
-	if (pp->pdir.hardware == NULL) {
-		printk(proc_msg, pp->name);
-		destroy_proc_entry(pp->pdir.entry, &pp->pdir.devices);
-		destroy_proc_entry(pp->pdir.entry, &pp->pdir.irq);
-		destroy_proc_entry(base, &pp->pdir.entry);
-		return 1;
-	}
+	if (pp->pdir.hardware == NULL)
+		goto out_fail;
+
 	pp->pdir.hardware->read_proc = hardware_read_proc;
 	pp->pdir.hardware->data = pp;
 
 	return 0;
+
+out_fail:
+
+	printk(KERN_ERR "%s: failure registering /proc/ entry.\n", pp->name);
+	destroy_proc_tree(pp);
+	return 1;
 }
 
 int parport_proc_unregister(struct parport *pp)
 {
-	if (pp->pdir.entry) {
-		if (pp->pdir.irq) 
-			destroy_proc_entry(pp->pdir.entry, &pp->pdir.irq);
-		
-		if (pp->pdir.devices) 
-			destroy_proc_entry(pp->pdir.entry, &pp->pdir.devices);
-		
-		if (pp->pdir.hardware)
-			destroy_proc_entry(pp->pdir.entry, &pp->pdir.hardware);
-
-		if (pp->pdir.probe)
-			destroy_proc_entry(pp->pdir.entry, &pp->pdir.probe);
-		
-		destroy_proc_entry(base, &pp->pdir.entry);
-	}
-	
+	destroy_proc_tree(pp);
 	return 0;
 }

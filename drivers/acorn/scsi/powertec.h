@@ -53,7 +53,13 @@ can_queue:	CAN_QUEUE,		/* can queue		*/	\
 this_id:	SCSI_ID,		/* scsi host id		*/	\
 sg_tablesize:	SG_ALL,			/* sg_tablesize		*/	\
 cmd_per_lun:	CMD_PER_LUN,		/* cmd per lun		*/	\
-use_clustering:	ENABLE_CLUSTERING					\
+use_clustering:	ENABLE_CLUSTERING,					\
+eh_strategy_handler:		NULL,					\
+eh_host_reset_handler:		fas216_eh_host_reset,			\
+eh_bus_reset_handler:		fas216_eh_bus_reset,			\
+eh_device_reset_handler:	fas216_eh_device_reset,			\
+eh_abort_handler:		fas216_eh_abort,			\
+use_new_eh_code:		0					\
 	}
 
 #ifndef HOSTS_C

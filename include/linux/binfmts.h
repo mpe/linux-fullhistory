@@ -11,6 +11,8 @@
  */
 #define MAX_ARG_PAGES 32
 
+#ifdef __KERNEL__
+
 /*
  * This structure is used to hold the arguments that are used when loading binaries.
  */
@@ -70,4 +72,5 @@ extern void compute_creds(struct linux_binprm *binprm);
 /* this eventually goes away */
 #define change_ldt(a,b) setup_arg_pages(a,b)
 
-#endif
+#endif /* __KERNEL__ */
+#endif /* _LINUX_BINFMTS_H */

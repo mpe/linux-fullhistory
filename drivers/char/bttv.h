@@ -26,72 +26,138 @@
 #include <linux/types.h>
 #include <linux/wait.h>
 
+#include "i2c.h"
+#include "msp3400.h"
 #include "bt848.h"
+#include <linux/videodev.h>
 
-typedef unsigned int dword;
+#define MAX_CLIPRECS	100
+#define RISCMEM_LEN	(32744*2)
+#define MAX_FBUF	0x144000
 
-struct riscprog {
-  uint length;  
-  dword *busadr;
-  dword *prog;
+struct riscprog 
+{
+	unsigned int length;  
+	u32 *busadr;
+	u32 *prog;
 };
 
-/* values that can be set by user programs */
 
-struct bttv_window {
-  int x, y;
-  ushort width, height;
-  ushort bpp, bpl;
-  ushort swidth, sheight;
-  short cropx, cropy;
-  ushort cropwidth, cropheight;
-  int vidadr;
-  ushort freq;
-  int norm;
-  int interlace;
-  int color_fmt;
+/* clipping rectangle */
+struct cliprec 
+{
+	int x, y, x2, y2;
+	struct cliprec *next;
 };
 
-/* private data that can only be read (or set indirectly) by user program */
 
-struct bttv {
-  struct video_device video_dev;
-  struct video_picture picture;		/* Current picture params */
-  struct video_audio audio_dev;		/* Current audio params */
-  u_char bus;          /* PCI bus the Bt848 is on */
-  u_char devfn;
-  u_char revision;
-  u_char irq;          /* IRQ used by Bt848 card */
-  uint bt848_adr;      /* bus address of IO mem returned by PCI BIOS */
-  u_char *bt848_mem;   /* pointer to mapped IO memory */
-  ulong busriscmem; 
-  dword *riscmem;
+/* grab buffer */
+struct gbuffer 
+{
+	struct gbuffer *next;
+	struct gbuffer *next_active;
+	void *adr;
+	int x, y;
+	int width, height;
+	unsigned int bpl;
+	unsigned int fmt;
+	int flags;
+#define GBUF_ODD  1
+#define GBUF_EVEN 2
+#define GBUF_LFB  4
+#define GBUF_INT  8
+	unsigned int length;
+	void *ro;
+	void *re;
+	u32 bro;
+	u32 bre;
+};
+
+
+#ifdef __KERNEL__
+
+struct bttv_window 
+{
+	int x, y;
+	ushort width, height;
+	ushort bpp, bpl;
+	ushort swidth, sheight;
+	short cropx, cropy;
+	ushort cropwidth, cropheight;
+	unsigned int vidadr;
+	ushort freq;
+	int norm;
+	int interlace;
+	int color_fmt;
+};
+
+
+struct bttv 
+{
+	struct video_device video_dev;
+	struct video_device radio_dev;
+	struct video_device vbi_dev;
+	struct video_picture picture;		/* Current picture params */
+	struct video_audio audio_dev;		/* Current audio params */
+
+	struct i2c_bus i2c;
+	int have_msp3400;
+	int have_tuner;
+
+	unsigned short id;
+	unsigned char bus;          /* PCI bus the Bt848 is on */
+	unsigned char devfn;
+	unsigned char revision;
+	unsigned char irq;          /* IRQ used by Bt848 card */
+	unsigned int bt848_adr;      /* bus address of IO mem returned by PCI BIOS */
+	unsigned char *bt848_mem;   /* pointer to mapped IO memory */
+	unsigned long busriscmem; 
+	u32 *riscmem;
   
-  u_char *vbibuf;
-  struct bttv_window win;
-  int type;            /* card type  */
-  int audio;           /* audio mode */
-  int user;
-  int tuner;
-  int tuneradr;
-  int dbx;
+	unsigned char *vbibuf;
+	struct bttv_window win;
+	int type;            /* card type  */
+	int audio;           /* audio mode */
+	int user;
+	int dbx;
+	int radio;
 
-  dword *risc_jmp;
-  dword *vbi_odd;
-  dword *vbi_even;
-  dword bus_vbi_even;
-  dword bus_vbi_odd;
-  struct wait_queue *vbiq;
-  struct wait_queue *capq;
-  int vbip;
+	u32 *risc_jmp;
+	u32 *vbi_odd;
+	u32 *vbi_even;
+	u32 bus_vbi_even;
+	u32 bus_vbi_odd;
+	struct wait_queue *vbiq;
+	struct wait_queue *capq;
+	struct wait_queue *capqo;
+	struct wait_queue *capqe;
+	int vbip;
 
-  dword *risc_odd;
-  dword *risc_even;
-  int cap;
+	u32 *risc_odd;
+	u32 *risc_even;
+	int cap;
+	struct cliprec *cliprecs;
+	int ncr;		/* number of clipping rectangles */
+
+	struct gbuffer *ogbuffers;
+	struct gbuffer *egbuffers;
+	u16 gwidth, gheight, gfmt;
+	u32 *grisc;
+	unsigned long gro;
+	unsigned long gre;
+	char *fbuffer;
+	int gmode;
+	int grabbing;
+	int lastgrab;
+	int grab;
+	int grabcount;
 };
+
+#endif
 
 /*The following should be done in more portable way. It depends on define
   of _ALPHA_BTTV in the Makefile.*/
+
 #ifdef _ALPHA_BTTV
 #define btwrite(dat,adr)    writel((dat),(char *) (btv->bt848_adr+(adr)))
 #define btread(adr)         readl(btv->bt848_adr+(adr))
@@ -105,30 +171,10 @@ struct bttv {
 #define btaor(dat,mask,adr) btwrite((dat) | ((mask) & btread(adr)), adr)
 
 /* bttv ioctls */
-#define BTTV_WRITE_BTREG   0x00
-#define BTTV_READ_BTREG    0x01
-#define BTTV_SET_BTREG     0x02
-#define BTTV_SETRISC       0x03
-#define BTTV_SETWTW        0x04
-#define BTTV_GETWTW        0x05
-#define BTTV_DMA           0x06
-#define BTTV_CAP_OFF       0x07
-#define BTTV_CAP_ON        0x08
-#define BTTV_GETBTTV       0x09
-#define BTTV_SETFREQ       0x0a
-#define BTTV_SETCHAN       0x0b
-#define BTTV_INPUT         0x0c
-#define BTTV_READEE        0x0d
-#define BTTV_WRITEEE       0x0e
-#define BTTV_BRIGHT        0x0f
-#define BTTV_HUE           0x10
-#define BTTV_COLOR         0x11
-#define BTTV_CONTRAST      0x12
-#define BTTV_SET_FFREQ     0x13
-#define BTTV_MUTE          0x14
 
-#define BTTV_GRAB          0x20
-#define BTTV_TESTM         0x20
+#define BTTV_READEE		_IOW('v',  BASE_VIDIOCPRIVATE+0, char [256])
+#define BTTV_WRITEE		_IOR('v',  BASE_VIDIOCPRIVATE+1, char [256])
+#define BTTV_GRAB		_IOR('v' , BASE_VIDIOCPRIVATE+2, struct gbuf)
 
 
 #define BTTV_UNKNOWN       0x00
@@ -137,12 +183,14 @@ struct bttv {
 #define BTTV_STB           0x03
 #define BTTV_INTEL         0x04
 #define BTTV_DIAMOND       0x05 
+#define BTTV_AVERMEDIA     0x06 
 
 #define AUDIO_TUNER        0x00
-#define AUDIO_EXTERN       0x01
-#define AUDIO_INTERN       0x02
-#define AUDIO_OFF          0x03 
-#define AUDIO_ON           0x04
+#define AUDIO_RADIO        0x01
+#define AUDIO_EXTERN       0x02
+#define AUDIO_INTERN       0x03
+#define AUDIO_OFF          0x04 
+#define AUDIO_ON           0x05
 #define AUDIO_MUTE         0x80
 #define AUDIO_UNMUTE       0x81
 

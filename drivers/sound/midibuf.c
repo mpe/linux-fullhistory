@@ -15,6 +15,7 @@
  */
 #include <linux/config.h>
 #include <linux/stddef.h>
+#include <linux/kmod.h>
 
 #define MIDIBUF_C
 

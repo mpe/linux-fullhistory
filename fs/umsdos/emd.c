@@ -52,9 +52,11 @@ void fill_new_filp (struct file *filp, struct dentry *dentry)
  *
  */
  
-struct dentry *creat_dentry (const char *name, const int len, struct inode *inode)
+struct dentry *creat_dentry (const char *name, const int len, struct inode *inode, struct dentry *parent)
 {
-    struct dentry *ret, *parent=NULL;	/* FIXME /mn/: whatis parent ?? */
+/* FIXME /mn/: parent is not passed many times... if it is not, dentry should be destroyed before someone else gets to use it */
+
+    struct dentry *ret;
     struct qstr qname;
     
     if (inode)
@@ -71,9 +73,9 @@ struct dentry *creat_dentry (const char *name, const int len, struct inode *inod
 
     if (inode) d_add (ret, inode);
       
-/*    ret->d_inode = inode; /mn/ FIXME this was old, replaced by d_add, delete this ! */
     return ret;
 }
+
 
 /*
  * removes temporary dentry created by creat_dentry
@@ -123,7 +125,7 @@ ssize_t umsdos_file_read_kmem (struct inode *emd_dir,
     set_fs (KERNEL_DS);
 
     old_dentry=filp->f_dentry;	/* save it */
-    filp->f_dentry = creat_dentry (UMSDOS_EMD_FILE, UMSDOS_EMD_NAMELEN, emd_dir);
+    filp->f_dentry = creat_dentry (UMSDOS_EMD_FILE, UMSDOS_EMD_NAMELEN, emd_dir, NULL);
     *offs = filp->f_pos;
     
     PRINTK ((KERN_DEBUG "umsdos_file_read_kmem /mn/: Checkin: filp=%p, buf=%p, size=%d, offs=%p\n", filp, buf, count, offs));
@@ -138,6 +140,7 @@ ssize_t umsdos_file_read_kmem (struct inode *emd_dir,
     PRINTK ((KERN_DEBUG "  f_version=%ld\n", filp->f_version));
     PRINTK ((KERN_DEBUG "  f_reada=%ld, f_ramax=%ld, f_raend=%ld, f_ralen=%ld, f_rawin=%ld\n", filp->f_reada, filp->f_ramax, filp->f_raend, filp->f_ralen, filp->f_rawin));
 
+    MSDOS_I(filp->f_dentry->d_inode)->i_binary=2;
     ret = fat_file_read(filp,buf,count,offs);
     PRINTK ((KERN_DEBUG "fat_file_read returned with %d!\n", ret));
 
@@ -195,21 +198,28 @@ ssize_t umsdos_file_write_kmem_real (struct file *filp,
 	
 	set_fs (KERNEL_DS);
 
-        Printk ((KERN_ERR "umsdos_file_write_kmem /mn/: Checkin: filp=%p, buf=%p, size=%d, offs=%p\n", filp, buf, count, offs));
-        Printk ((KERN_ERR "  struct dentry=%p\n", filp->f_dentry));
-        Printk ((KERN_ERR "  struct inode=%p\n", filp->f_dentry->d_inode));
-        Printk ((KERN_ERR "  inode=%lu, i_size=%lu\n", filp->f_dentry->d_inode->i_ino, filp->f_dentry->d_inode->i_size));
-        Printk ((KERN_ERR "  ofs=%ld\n",(unsigned long) *offs));
-        Printk ((KERN_ERR "  f_pos=%Lu\n", filp->f_pos));
-        Printk ((KERN_ERR "  name=%.*s\n", (int) filp->f_dentry->d_name.len, filp->f_dentry->d_name.name));
-        Printk ((KERN_ERR "  i_binary(sb)=%d\n", MSDOS_I(filp->f_dentry->d_inode)->i_binary ));
-        Printk ((KERN_ERR "  f_count=%d, f_flags=%d\n", filp->f_count, filp->f_flags));
-        Printk ((KERN_ERR "  f_owner=%d\n", filp->f_owner.uid));
-        Printk ((KERN_ERR "  f_version=%ld\n", filp->f_version));
-        Printk ((KERN_ERR "  f_reada=%ld, f_ramax=%ld, f_raend=%ld, f_ralen=%ld, f_rawin=%ld\n", filp->f_reada, filp->f_ramax, filp->f_raend, filp->f_ralen, filp->f_rawin));
+        Printk ((KERN_DEBUG "umsdos_file_write_kmem /mn/: Checkin: filp=%p, buf=%p, size=%d, offs=%p\n", filp, buf, count, offs));
+        Printk ((KERN_DEBUG "  struct dentry=%p\n", filp->f_dentry));
+        Printk ((KERN_DEBUG "  struct inode=%p\n", filp->f_dentry->d_inode));
+        Printk ((KERN_DEBUG "  inode=%lu, i_size=%lu\n", filp->f_dentry->d_inode->i_ino, filp->f_dentry->d_inode->i_size));
+        Printk ((KERN_DEBUG "  ofs=%ld\n",(unsigned long) *offs));
+        Printk ((KERN_DEBUG "  f_pos=%Lu\n", filp->f_pos));
+        Printk ((KERN_DEBUG "  name=%.*s\n", (int) filp->f_dentry->d_name.len, filp->f_dentry->d_name.name));
+        Printk ((KERN_DEBUG "  i_binary(sb)=%d\n", MSDOS_I(filp->f_dentry->d_inode)->i_binary ));
+        Printk ((KERN_DEBUG "  f_count=%d, f_flags=%d\n", filp->f_count, filp->f_flags));
+        Printk ((KERN_DEBUG "  f_owner=%d\n", filp->f_owner.uid));
+        Printk ((KERN_DEBUG "  f_version=%ld\n", filp->f_version));
+        Printk ((KERN_DEBUG "  f_reada=%ld, f_ramax=%ld, f_raend=%ld, f_ralen=%ld, f_rawin=%ld\n", filp->f_reada, filp->f_ramax, filp->f_raend, filp->f_ralen, filp->f_rawin));
 
+	/* note: i_binary=2 is for CVF-FAT. We put it here, instead of
+	   umsdos_file_write_kmem, since it is also wise not to compress symlinks
+	   (in unlikely event that they are > 512 bytes and can be compressed 
+	   FIXME: should we set it when reading symlink too ? */
+
+        MSDOS_I(filp->f_dentry->d_inode)->i_binary=2;
+        
 	ret = fat_file_write (filp, buf, count, offs);
-	PRINTK ((KERN_ERR "fat_file_write returned with %ld!\n", ret));
+	PRINTK ((KERN_DEBUG "fat_file_write returned with %ld!\n", ret));
 
 	set_fs (old_fs);
 	return ret;
@@ -231,11 +241,11 @@ ssize_t umsdos_file_write_kmem (struct inode *emd_dir,
 	struct dentry *old_dentry;
 
 	
-	Printk ((KERN_ERR " STARTED WRITE_KMEM /mn/\n"));
-        Printk ((KERN_ERR "  using emd=%ld\n", emd_dir->i_ino));
+	Printk ((KERN_DEBUG " STARTED WRITE_KMEM /mn/\n"));
+        Printk ((KERN_DEBUG "  using emd=%ld\n", emd_dir->i_ino));
 
 	old_dentry=filp->f_dentry;	/* save it */
-	filp->f_dentry = creat_dentry (UMSDOS_EMD_FILE, UMSDOS_EMD_NAMELEN, emd_dir);
+	filp->f_dentry = creat_dentry (UMSDOS_EMD_FILE, UMSDOS_EMD_NAMELEN, emd_dir, NULL);
 
 	*offs = filp->f_pos;	/* FIXME, in read_kmem also: offs is not used so why pass it ?!!! /mn/ */
 
@@ -500,7 +510,7 @@ int umsdos_writeentry (
         fill_new_filp (&filp, NULL);
 
 	Printk (("umsdos_writeentry /mn/: entering...\n"));
-	emd_dentry=creat_dentry ("wremd_mn", 8, emd_dir);
+	emd_dentry=creat_dentry ("wremd_mn", 8, emd_dir, NULL);
 	
 	if (free_entry){
 		/* #Specification: EMD file / empty entries
@@ -650,7 +660,7 @@ static int umsdos_find (
 
 		memset (&buf.filp, 0, sizeof (buf.filp));
 
-		dentry = creat_dentry ("umsfind-mn", 10, emd_dir);
+		dentry = creat_dentry ("umsfind-mn", 10, emd_dir, NULL);
 	
 		fill_new_filp (&buf.filp, dentry);
 
@@ -743,7 +753,7 @@ int umsdos_newentry (
 		ret = umsdos_writeentry(dir,emd_dir,info,0);
 		Printk (("umsdos_newentry EMD ret = %d\n",ret));
 	}
-	iput (emd_dir);
+	/* iput (emd_dir); FIXME */
 	return ret;
 }
 
@@ -760,7 +770,7 @@ int umsdos_newhidden (
 	umsdos_parse ("..LINK",6,info);
 	info->entry.name_len = 0;
 	ret = umsdos_find (dir,info,&emd_dir);
-	iput (emd_dir);
+	/* iput (emd_dir); FIXME */
 	if (ret == -ENOENT || ret == 0){
 		/* #Specification: hard link / hidden name
 			When a hard link is created, the original file is renamed
@@ -799,7 +809,7 @@ int umsdos_delentry (
 			}
 		}
 	}
-	iput(emd_dir);
+	/* iput(emd_dir); FIXME */
 	return ret;
 }
 
@@ -824,7 +834,7 @@ int umsdos_isempty (struct inode *dir)
 		/* Find an empty slot */
 		memset (&filp, 0, sizeof (filp));
 
-		dentry = creat_dentry ("isempty-mn", 10, dir);
+		dentry = creat_dentry ("isempty-mn", 10, dir, NULL);
 	
 		filp.f_pos = 0;
 		filp.f_reada = 1;
@@ -843,7 +853,7 @@ int umsdos_isempty (struct inode *dir)
 				break;
 			}	
 		}
-		iput (emd_dir);
+		/* iput (emd_dir); FIXME */
 	}
 	return ret;
 }
@@ -870,7 +880,7 @@ int umsdos_findentry (
 			}
 		}
 	}
-	iput (emd_dir);
+	/* iput (emd_dir); FIXME */
 	Printk (("umsdos_findentry: returning %d\n", ret));
 	return ret;
 }

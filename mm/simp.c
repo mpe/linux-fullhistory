@@ -70,7 +70,8 @@ struct simp {
 	/* next cache line */
 	struct header * usable_list;
 	spinlock_t lock;
-	char fill[sizeof(void*) - sizeof(spinlock_t)];
+	/* This value is negative on Alpha SMP.  */
+	/* char fill[sizeof(void*) - sizeof(spinlock_t)]; */
 	long real_size;
 	long max_elems;
 	structor again_ctor;

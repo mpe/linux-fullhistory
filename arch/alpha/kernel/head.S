@@ -8,7 +8,6 @@
  */
 
 #define __ASSEMBLY__
-#include <linux/config.h>
 #include <asm/system.h>
 
 #define halt call_pal PAL_halt

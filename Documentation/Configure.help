@@ -1089,7 +1089,7 @@ CONFIG_BINFMT_ELF
   want to say Y here. Information about ELF is on the WWW at
   http://www.sjc.ox.ac.uk/users/barlow/elf-howto.html (To browse the
   WWW, you need to have access to a machine on the Internet that has a
-  programs like lynx or netscape).  If you find that after upgrading
+  program like lynx or netscape).  If you find that after upgrading
   from Linux kernel 1.2 and saying Y here, you still can't run any ELF
   binaries (they just crash), then you'll have to install the newest
   ELF runtime libraries, including ld.so (check the file
@@ -1208,7 +1208,7 @@ CONFIG_M386
   the line "SMP=1" is not commented out and read Documentation/smp and
   Documentation/IO-APIC.txt and the SMP-FAQ on the WWW at
   http://www.irisa.fr/prive/mentre/smp-faq/ (to browse the WWW, you
-  need to have access to a machine on the Internet that has a programs
+  need to have access to a machine on the Internet that has a program
   like lynx or netscape). People using multiprocessor machines should
   also say Y to "Enhanced Real Time Clock Support", below.
   If you want to compile a kernel that should work on both single
@@ -1243,7 +1243,7 @@ CONFIG_PARPORT
   extensive information about drivers for many devices attaching to
   the parallel port see http://www.torque.net/linux-pp.html on the WWW
   (To browse the WWW, you need to have access to a machine on the
-  Internet that has a programs like lynx or netscape). It is possible
+  Internet that has a program like lynx or netscape). It is possible
   to share a single parallel port among several devices and it is safe
   to compile all the corresponding drivers into the kernel. If you
   want to compile parallel port support as a module ( = code which can
@@ -1294,72 +1294,6 @@ CONFIG_PNP_PARPORT
   Some IEEE-1284 conforming parallel-port devices can identify
   themselves when requested.  Say Y to enable this feature, or M to
   compile it as a module (parport_ieee1284.o).  If in doubt, say N.
-
-Plug and Play subsystem (EXPERIMENTAL)
-CONFIG_PNP_DRV
-  This enables support for the new Plug-and-Play (or PnP) Linux
-  subsystems. This support is required for PnP ISA support, and for PnP
-  Legacy support. User-mode utilities for this support may be found at
-  http://www.lpsg.demon.co.uk/pnp-linux.html.
-
-PnP resource management
-CONFIG_KERNEL_PNP_RESOURCE
-  This option will cause the new PnP generic resource management
-  routines to be used instead of the old routines request_xxx and
-  free_xxx. Emulation routines are put in place to support the old
-  calling style. This code support masks for IO decoding (required for
-  Plug and Play devices). There is no need to enable this option unless
-  you want to - these features will still be used where they are needed.
-  However, enabling it will reduce your kernel size slightly, and also
-  allow you to test this code more extensively.
-
-Support for boot-loaded PnP configuration (RECOMMENDED)
-CONFIG_PNP_BLDCONFIG
-  This will enable support for preloading data about the configuration
-  of any Plug-and-Play devices in the system into the kernel at boot
-  time, which means that any devices required at boot can be configured
-  at this time manually. Say Y unless you have a reason not to.
-
-PnP ISA support
-CONFIG_PNP_ISA
-  This option is required to allow the Linux PnP subsystem to handle
-  Plug and Play ISA devices. This includes full support for PnP ISA,
-  including the I/O range check feature.
-
-PnP ISA backwards-compatibility support
-CONFIG_PNP_ISA_COMPAT
-  This option will enable partial backwards compatibility with drivers
-  written using older versions (up to the last 0.2.x) of the PnP driver
-  written by Tom Lees <tom@lpsg.demon.co.uk>.
-
-PnP Legacy device support
-CONFIG_PNP_LEGACY
-  Before PnP ISA was standardized, several "jumperless", or
-  "soft-configurable" boards were finding their way onto the market.
-  These cards used somewhat proprietary mechanisms for configuring
-  IRQs, DMAs, IO addresses, and memory ranges. These devices (mainly
-  network cards, but also some sound cards) can be configured as any
-  other PnP device can by saying Y here, if appropriate drivers
-  for these devices are available.
-
-PnP sysctl support (RECOMMENDED)
-CONFIG_PNP_SYSCTL
-  This option enables support for the user-mode interface to the
-  kernel-mode PnP systems. It requires that you said Y to "Sysctl
-  support" above.  The only reason you might want to switch this off
-  is if you aren't going to use user-mode utilities to configure PnP,
-  and you want to save a couple of kilobytes of kernel space. Answer Y
-  unless you know what you are doing. User-mode utilities and a
-  library for accessing this interface may be found at
-  http://www.lpsg.demon.co.uk/pnp-linux.html.
-
-PnP auto-configures all devices on startup
-CONFIG_PNP_BOOTINIT
-  This option will allow the PnP subsystem to automatically configure
-  all the PnP devices it finds upon system startup (or at least
-  attempt to). This is useful if you have older drivers which do not use
-  the Linux-PnP system to configure PnP devices, and which you need
-  to be configured by PnP before you can use them.
 
 Enable loadable module support
 CONFIG_MODULES
@@ -3559,6 +3493,14 @@ CONFIG_MKISS
   which can be inserted in and removed from the running kernel
   whenever you want), say M here and read
   Documentation/modules.txt. The module will be called mkiss.o.
+
+Serial port 6PACK driver for AX.25
+CONFIG_6PACK
+6pack is a protocol that attaches a TNC connected to a serial interface
+to be used as a network device. 6pack can be used as an alternative to KISS,
+but has some extended functionality. Note that this driver is still
+experimental and might cause problems. For details about the features
+and the usage of the driver, read Documentation/networking/6pack.txt.
 
 PLIP (parallel port) support
 CONFIG_PLIP
@@ -6700,7 +6642,7 @@ CONFIG_RTC
   fashion. (They should also Documentation/smp and
   Documentation/IO-APIC.txt and the SMP-FAQ on the WWW at
   http://www.irisa.fr/prive/mentre/smp-faq/ (to browse the WWW, you
-  need to have access to a machine on the Internet that has a programs
+  need to have access to a machine on the Internet that has a program
   like lynx or netscape)).
   If you think you have a use for such a device (such as periodic data
   sampling), then say Y here, and go read the file
@@ -6801,6 +6743,16 @@ CONFIG_SB_MWAVE
   why they still haven't released any documentation.
   [http://204.200.238.31/cgi-bin/link.pl?co=i&cl=/ts/ibm/contact.html]
 
+Are you using the IBM Mwave "emulation" of SB ?
+CONFIG_SB_MWAVE
+  The IBM Mwave can do whats loosely describable as emulation of an 8bit
+  soundblaster if you load the right firmware from DOS warm boot and pray
+  and your machine happens to like you. Say Y if you are doing this as the
+  IRQ test normally fails on the mwave emulation. If you'd like real MWAVE
+  support phone IBM (425-556-8822) and ask them why they still haven't 
+  released any documentation.
+  [http://204.200.238.31/cgi-bin/link.pl?co=i&cl=/ts/ibm/contact.html]
+
 Generic OPL2/OPL3 FM synthesizer support
 CONFIG_ADLIB
   Answer Y if your card has a FM chip made by Yamaha (OPL2/OPL3/OPL4).
@@ -6897,6 +6849,15 @@ CONFIG_MAD16
   them. In addition the MAD16 chip is used in some cards made by known
   manufacturers such as Turtle Beach (Tropez), Reveal (some models)
   and Diamond (latest ones).
+
+Support MIDI in older MAD16 based cards (requires SB)
+CONFIG_MAD16_OLDCARD
+  Answer Y (or M) if you have an older card based on the C928
+  or Mozart chipset and you want to have  MIDI support. If you
+  enable this option you also need to enable support for SoundBlaster.
+
+ If you answer Y here you will
+  also need to enable the SoundBlaster driver.
 
 Support for Crystal CS4232 based (PnP) cards
 CONFIG_CS4232
@@ -7854,6 +7815,11 @@ CONFIG_VIDEO_BT848
   inserted in and removed from the running kernel whenever you
   want). If you want to compile it as a module, say M here and read
   Documentation/modules.txt.
+
+SAA5249 Teletext processor
+CONFIG_VIDEO_SAA5249
+  Support for I2C bus based teletext using the SAA5249 chip. At the moment
+  this is only useful on some european WinTV cards.
 
 Quickcam BW Video For Linux
 CONFIG_VIDEO_BWQCAM

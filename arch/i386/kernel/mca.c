@@ -62,7 +62,7 @@ static struct MCA_info* mca_info = 0;
 /*--------------------------------------------------------------------*/
 
 #ifdef CONFIG_PROC_FS
-static long mca_do_proc_init( long memory_start, long memory_end );
+static void mca_do_proc_init( void );
 static int mca_default_procfn( char* buf, int slot );
 
 static ssize_t proc_mca_read( struct file*, char*, size_t, loff_t *);
@@ -79,7 +79,7 @@ static struct inode_operations proc_mca_inode_operations = {
 
 /*--------------------------------------------------------------------*/
 
-__initfunc(long mca_init(long memory_start, long memory_end))
+__initfunc(void mca_init(void))
 {
 	unsigned int  i, j;
 	int foundscsi = 0;
@@ -96,21 +96,14 @@ __initfunc(long mca_init(long memory_start, long memory_end))
 	 */
 	
 	if (!MCA_bus)
-		return memory_start;
+		return;
 	cli();
 
 	/*
 	 *	Allocate MCA_info structure (at address divisible by 8)
 	 */ 
 
-	if( ((memory_start+7)&(~7)) > memory_end ) 
-	{
-	  	/* uh oh */
-	  	return memory_start;
-	}
-
-	mca_info = (struct MCA_info*) ((memory_start+7)&(~7));
-	memory_start = ((long)mca_info) + sizeof(struct MCA_info);
+	mca_info = kmalloc(sizeof(struct MCA_info), GFP_ATOMIC);
 
 	/*
 	 *	Make sure adapter setup is off
@@ -194,10 +187,8 @@ __initfunc(long mca_init(long memory_start, long memory_end))
 	request_region(0x100,0x08,"POS (MCA)");
 
 #ifdef CONFIG_PROC_FS
-	memory_start = mca_do_proc_init( memory_start, memory_end );
+	mca_do_proc_init();
 #endif
-
-	return memory_start;
 }
 
 /*--------------------------------------------------------------------*/
@@ -418,12 +409,12 @@ int  get_mca_info(char *buf)
 
 
 /*--------------------------------------------------------------------*/
-__initfunc(long mca_do_proc_init( long memory_start, long memory_end ))
+__initfunc(void mca_do_proc_init( void ))
 {
 	int i = 0;
 	struct proc_dir_entry* node = 0;
 
-	if( mca_info == 0 ) return memory_start;	/* never happens */
+	if( mca_info == 0 ) return;	/* never happens */
 
 	proc_register( &proc_mca, &(struct proc_dir_entry) {
 		PROC_MCA_REGISTERS, 3, "pos", S_IFREG|S_IRUGO,
@@ -439,11 +430,7 @@ __initfunc(long mca_do_proc_init( long memory_start, long memory_end ))
 		mca_info->slot[i].dev = 0;
 
 		if( ! mca_isadapter( i ) ) continue;
-		if( memory_start + sizeof(struct proc_dir_entry) > memory_end ) {
-			continue;
-		}
-		node = (struct proc_dir_entry*) memory_start;
-		memory_start += sizeof(struct proc_dir_entry);
+		node = kmalloc(sizeof(struct proc_dir_entry), GFP_ATOMIC);
 
 		if( i < MCA_MAX_SLOT_NR ) {
 			node->low_ino = PROC_MCA_SLOT + i;
@@ -464,7 +451,6 @@ __initfunc(long mca_do_proc_init( long memory_start, long memory_end ))
 		proc_register( &proc_mca, node );
 	}
 
-	return memory_start;
 } /* mca_do_proc_init() */
 
 /*--------------------------------------------------------------------*/

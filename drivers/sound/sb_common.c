@@ -2,17 +2,18 @@
  * sound/sb_common.c
  *
  * Common routines for Sound Blaster compatible cards.
- */
-/*
+ *
+ *
  * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
+
 #include <linux/config.h>
 #include <linux/delay.h>
-
+#include <asm/init.h>
 
 #include "sound_config.h"
 #include "sound_firmware.h"
@@ -28,9 +29,11 @@
 
 static sb_devc *detected_devc = NULL;	/* For communication from probe to init */
 static sb_devc *last_devc = NULL;	/* For MPU401 initialization */
+
 static unsigned char jazz_irq_bits[] = {
 	0, 0, 2, 3, 0, 1, 0, 4, 0, 2, 5, 0, 0, 0, 0, 6
 };
+
 static unsigned char jazz_dma_bits[] = {
 	0, 1, 0, 2, 0, 3, 0, 4
 };
@@ -39,7 +42,7 @@ static unsigned char jazz_dma_bits[] = {
  * Jazz16 chipset specific control variables
  */
 
-static int      jazz16_base = 0;	/* Not detected */
+static int jazz16_base = 0;		/* Not detected */
 static unsigned char jazz16_bits = 0;	/* I/O relocation bits */
 
 /*
@@ -57,10 +60,11 @@ static int      smw_ucodeLen = 0;
 
 int sb_dsp_command(sb_devc * devc, unsigned char val)
 {
-	int             i;
-	unsigned long   limit;
+	int i;
+	unsigned long limit;
 
 	limit = jiffies + HZ / 10;	/* Timeout */
+	
 	/*
 	 * Note! the i<500000 is an emergency exit. The sb_dsp_command() is sometimes
 	 * called while interrupts are disabled. This means that the timer is
@@ -69,7 +73,7 @@ int sb_dsp_command(sb_devc * devc, unsigned char val)
 	 * loops.
 	 */
 
-	for (i = 0; i < 500000 && jiffies < limit; i++)
+	for (i = 0; i < 500000 && (limit-jiffies)>0; i++)
 	{
 		if ((inb(DSP_STATUS) & 0x80) == 0)
 		{
@@ -77,20 +81,19 @@ int sb_dsp_command(sb_devc * devc, unsigned char val)
 			return 1;
 		}
 	}
-
-	printk(KERN_WARNING "Sound Blaster: DSP Command(%x) Timeout.\n", val);
+	printk(KERN_WARNING "soundblaster: DSP Command(%x) Timeout.\n", val);
 	return 0;
 }
 
 static int sb_dsp_get_byte(sb_devc * devc)
 {
-	int             i;
+	int i;
 
 	for (i = 1000; i; i--)
+	{
 		if (inb(DSP_DATA_AVAIL) & 0x80)
-		{
 			return inb(DSP_READ);
-		}
+	}
 	return 0xffff;
 }
 
@@ -107,7 +110,6 @@ int ess_write(sb_devc * devc, unsigned char reg, unsigned char data)
 int ess_read(sb_devc * devc, unsigned char reg)
 {
 /* Read a byte from an extended mode register of ES1688 */
-
 	if (!sb_dsp_command(devc, 0xc0))	/* Read register command */
 		return -1;
 
@@ -239,7 +241,7 @@ static int sb16_set_dma_hw(sb_devc * devc)
 
 	if (devc->dma8 != 0 && devc->dma8 != 1 && devc->dma8 != 3)
 	{
-		printk(KERN_ERR "SB16: Invalid 8 bit DMA (%d)\n", devc->dma8);
+		printk(KERN_ERR "sb16: Invalid 8 bit DMA (%d)\n", devc->dma8);
 		return 0;
 	}
 	bits = (1 << devc->dma8);
@@ -355,14 +357,12 @@ static int init_Jazz16(sb_devc * devc, struct address_info *hw_config)
 	/*
 	 * OK so far. Now configure the IRQ and DMA channel used by the card.
 	 */
-	if (hw_config->irq < 1 || hw_config->irq > 15 ||
-	    jazz_irq_bits[hw_config->irq] == 0)
+	if (hw_config->irq < 1 || hw_config->irq > 15 || jazz_irq_bits[hw_config->irq] == 0)
 	{
 		printk(KERN_ERR "Jazz16: Invalid interrupt (IRQ%d)\n", hw_config->irq);
 		return 0;
 	}
-	if (hw_config->dma < 0 || hw_config->dma > 3 ||
-	    jazz_dma_bits[hw_config->dma] == 0)
+	if (hw_config->dma < 0 || hw_config->dma > 3 || jazz_dma_bits[hw_config->dma] == 0)
 	{
 		  printk(KERN_ERR "Jazz16: Invalid 8 bit DMA (DMA%d)\n", hw_config->dma);
 		  return 0;
@@ -372,8 +372,7 @@ static int init_Jazz16(sb_devc * devc, struct address_info *hw_config)
 		printk(KERN_ERR "Jazz16: No 16 bit DMA channel defined\n");
 		return 0;
 	}
-	if (hw_config->dma2 < 5 || hw_config->dma2 > 7 ||
-	    jazz_dma_bits[hw_config->dma2] == 0)
+	if (hw_config->dma2 < 5 || hw_config->dma2 > 7 || jazz_dma_bits[hw_config->dma2] == 0)
 	{
 		printk(KERN_ERR "Jazz16: Invalid 16 bit DMA (DMA%d)\n", hw_config->dma2);
 		return 0;
@@ -384,7 +383,7 @@ static int init_Jazz16(sb_devc * devc, struct address_info *hw_config)
 		return 0;
 
 	if (!sb_dsp_command(devc, jazz_dma_bits[hw_config->dma] |
-			    (jazz_dma_bits[hw_config->dma2] << 4)))
+			(jazz_dma_bits[hw_config->dma2] << 4)))
 		return 0;
 
 	if (!sb_dsp_command(devc, jazz_irq_bits[hw_config->irq]))
@@ -683,11 +682,7 @@ int sb_dsp_detect(struct address_info *hw_config)
 	 */
 
 
-	detected_devc = (sb_devc *) (sound_mem_blocks[sound_nblocks] = vmalloc(sizeof(sb_devc)));
-	sound_mem_sizes[sound_nblocks] = sizeof(sb_devc);
-	if (sound_nblocks < 1024)
-		sound_nblocks++;;
-
+	detected_devc = (sb_devc *)kmalloc(sizeof(sb_devc), GFP_KERNEL);
 	if (detected_devc == NULL)
 	{
 		printk(KERN_ERR "sb: Can't allocate memory for device information\n");
@@ -703,8 +698,8 @@ void sb_dsp_init(struct address_info *hw_config)
 	sb_devc *devc;
 	char name[100];
 	extern int sb_be_quiet;
-	extern int mwave_bug;
-
+	int	mixer3c, mixer4c;
+	
 /*
  * Check if we had detected a SB device earlier
  */
@@ -769,7 +764,7 @@ void sb_dsp_init(struct address_info *hw_config)
 		/* Skip IRQ detection if SMP (doesn't work) */
 		devc->irq_ok = 1;
 #else
-		if ((devc->major == 4 && devc->minor <= 11 ) || mwave_bug )	/* Won't work */
+		if (devc->major == 4 && devc->minor <= 11 )	/* Won't work */
 			devc->irq_ok = 1;
 		else
 		{
@@ -819,7 +814,23 @@ void sb_dsp_init(struct address_info *hw_config)
 
 		case 4:
 			devc->model = hw_config->card_subtype = MDL_SB16;
-			if (hw_config->name == NULL)
+			/*
+			 *	The ALS007 seems to return DSP version 4.2.  In addition it has 2
+			 *	output control registers (at 0x3c and 0x4c).  Both of these should
+			 *	be !=0 after a reset which forms the basis of the ALS007 test
+			 *	since a "standard" SoundBlaster does not have a register at 0x4c.
+			 */
+			mixer3c = sb_getmixer(devc,0x3c);
+			mixer4c = sb_getmixer(devc,0x4c);
+			if ((devc->minor == 2) && (mixer3c != 0) && (mixer4c != 0)) 
+			{
+				sb_setmixer(devc,0x3c,0x1f);   /* Enable all inputs */
+				sb_setmixer(devc,0x4c,0x1f);
+				devc->submodel = SUBMDL_ALS007;
+				if (hw_config->name == NULL)
+					hw_config->name = "Sound Blaster (ALS-007)";
+			}
+			else if (hw_config->name == NULL)
 				hw_config->name = "Sound Blaster 16";
 
 			if (hw_config->dma2 == -1)
@@ -885,15 +896,15 @@ void sb_dsp_init(struct address_info *hw_config)
 			printk(KERN_WARNING "SB: Can't allocate 8 bit DMA channel %d\n", devc->dma8);
 		}
 		if (devc->dma16 >= 0 && devc->dma16 != devc->dma8)
+		{
 			if (sound_alloc_dma(devc->dma16, "SoundBlaster16"))
-			{
-				printk(KERN_WARNING "SB: Can't allocate 16 bit DMA channel %d\n", devc->dma16);
-			}
+				printk(KERN_WARNING "soundblaster: Can't allocate 16 bit DMA channel %d\n", devc->dma16);
+		}
 		sb_audio_init(devc, name);
 	}
 	else
 	{
-		MDB(printk("sb: No audio devices found.\n"));
+		MDB(printk("soundblaster: No audio devices found.\n"));
 	}
 }
 
@@ -932,6 +943,8 @@ void sb_dsp_unload(struct address_info *hw_config)
 	}
 	else
 		release_region(hw_config->io_base, 16);
+	if(detected_devc)
+		kfree(detected_devc);
 }
 
 /*
@@ -940,7 +953,7 @@ void sb_dsp_unload(struct address_info *hw_config)
 
 void sb_setmixer(sb_devc * devc, unsigned int port, unsigned int value)
 {
-	unsigned long   flags;
+	unsigned long flags;
 
 	save_flags(flags);
 	cli();
@@ -1318,5 +1331,4 @@ void attach_sbmpu(struct address_info *hw_config)
 {
 }
 #endif
-
 #endif

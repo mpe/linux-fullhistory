@@ -13,6 +13,7 @@
 #include <linux/errno.h>
 #include <linux/stat.h>
 #include <linux/param.h>
+#include <linux/string.h>
 #include "devpts_i.h"
 
 static int devpts_root_readdir(struct file *,void *,filldir_t);

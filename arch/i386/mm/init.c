@@ -293,8 +293,6 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
 	}
 
 	local_flush_tlb();
-	printk("IO APIC ID: %d\n", *(int *)0xFEC00000);
-	printk("APIC ID: %d\n", *(int *)0xFEE00000);
 }
 #endif
 	local_flush_tlb();

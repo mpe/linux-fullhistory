@@ -282,8 +282,6 @@ __syscall_return(type,__res); \
  */
 #define __NR__exit __NR_exit
 static inline _syscall0(int,idle)
-static inline _syscall0(int,fork)
-static inline _syscall2(int,clone,unsigned long,flags,char *,esp)
 static inline _syscall0(int,pause)
 static inline _syscall1(int,setup,int,magic)
 static inline _syscall0(int,sync)

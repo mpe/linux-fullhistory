@@ -23,7 +23,10 @@
  */
 
 /*
- * $Log: oak_NCR5380.h,v $
+ * $Log: oak.h,v $
+ * Revision 1.1  1998/02/23 02:45:27  davem
+ * Merge to 2.1.88
+ *
  */
 
 #ifndef OAK_NCR5380_H

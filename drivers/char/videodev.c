@@ -39,6 +39,9 @@ static struct video_device *video_device[VIDEO_NUM_DEVICES];
 #ifdef CONFIG_VIDEO_BT848
 extern int init_bttv_cards(struct video_init *);
 #endif
+#ifdef CONFIG_VIDEO_SAA5249
+extern int init_saa_5249(struct video_init *);
+#endif	
 #ifdef CONFIG_VIDEO_CQCAM
 extern int init_colour_qcams(struct video_init *);
 #endif
@@ -50,6 +53,9 @@ static struct video_init video_init_list[]={
 #ifdef CONFIG_VIDEO_BT848
 	{"bttv", init_bttv_cards},
 #endif	
+#ifdef CONFIG_VIDEO_SAA5249
+	{"saa5249", init_saa_5249},
+#endif	
 #ifdef CONFIG_VIDEO_CQCAM
 	{"c-qcam", init_colour_qcams},
 #endif	
@@ -57,7 +63,7 @@ static struct video_init video_init_list[]={
 	{"bw-qcam", init_bw_qcams},
 #endif	
 #ifdef CONFIG_VIDEO_PMS
-	{"PMS", init_pms_cards}, 	/* not defined anywhere */
+	{"PMS", init_pms_cards}, 
 #endif	
 	{"end", NULL}
 };
@@ -73,6 +79,8 @@ static ssize_t video_read(struct file *file,
 	struct video_device *vfl=video_device[MINOR(file->f_dentry->d_inode->i_rdev)];
 	return vfl->read(vfl, buf, count, file->f_flags&O_NONBLOCK);
 }
+
+
 
 /*
  *	Write for now does nothing. No reason it shouldnt do overlay setting
@@ -162,18 +170,51 @@ static int video_ioctl(struct inode *inode, struct file *file,
 /*
  *	We need to do MMAP support
  */
+ 
+ 
+int video_mmap(struct file *file, struct vm_area_struct *vma)
+{
+	struct video_device *vfl=video_device[MINOR(file->f_dentry->d_inode->i_rdev)];
+	if(vfl->mmap)
+		return vfl->mmap(vfl, (char *)vma->vm_start, 
+				(unsigned long)(vma->vm_end-vma->vm_start));
+	return -EINVAL;
+}
 
 /*
  *	Video For Linux device drivers request registration here.
  */
  
-int video_register_device(struct video_device *vfd)
+int video_register_device(struct video_device *vfd, int type)
 {
 	int i=0;
-	int base=0;
+	int base;
 	int err;
+	int end;
 	
-	for(i=base;i<base+VIDEO_NUM_DEVICES;i++)
+	switch(type)
+	{
+		case VFL_TYPE_GRABBER:
+			base=0;
+			end=64;
+			break;
+		case VFL_TYPE_VTX:
+			base=192;
+			end=224;
+			break;
+		case VFL_TYPE_VBI:
+			base=224;
+			end=240;
+			break;
+		case VFL_TYPE_RADIO:
+			base=64;
+			end=128;
+			break;
+		default:
+			return -1;
+	}
+	
+	for(i=base;i<end;i++)
 	{
 		if(video_device[i]==NULL)
 		{
@@ -216,7 +257,7 @@ static struct file_operations video_fops=
 	NULL,	/* readdir */
 	NULL,	/* poll */
 	video_ioctl,
-	NULL,	/* mmap */
+	video_mmap,
 	video_open,
 	video_release
 };

@@ -31,7 +31,8 @@ void fill_new_filp (struct file *filp, struct dentry *dentry);
 void kill_dentry (struct dentry *dentry);
 struct dentry *creat_dentry (const char *name,
 			     const int len,
-			     struct inode *inode);
+			     struct inode *inode,
+			     struct dentry *parent);
 ssize_t umsdos_file_write_kmem_real (struct file *filp,
 				const char *buf,
 				size_t  count,

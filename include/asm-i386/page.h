@@ -1,8 +1,6 @@
 #ifndef _I386_PAGE_H
 #define _I386_PAGE_H
 
-#include <linux/config.h>
-
 /* PAGE_SHIFT determines the page size */
 #define PAGE_SHIFT	12
 #define PAGE_SIZE	(1UL << PAGE_SHIFT)
@@ -60,8 +58,30 @@ typedef unsigned long pgprot_t;
 /* to align the pointer to the (next) page boundary */
 #define PAGE_ALIGN(addr)	(((addr)+PAGE_SIZE-1)&PAGE_MASK)
 
-/* This handles the memory map.. */
-#define __PAGE_OFFSET		((0x1000-CONFIG_MAX_MEMSIZE)<<20)
+/*
+ * This handles the memory map.. We could make this a config
+ * option, but too many people screw it up, and too few need
+ * it.
+ *
+ * A __PAGE_OFFSET of 0xC0000000 means that the kernel has
+ * a virtual address space of one gigabyte, which limits the
+ * amount of physical memory you can use to about 950MB. If
+ * you want to use more physical memory, change this define.
+ *
+ * For example, if you have 2GB worth of physical memory, you
+ * could change this define to 0x70000000, which gives the
+ * kernel slightly more than 2GB of virtual memory (enough to
+ * map all your physical memory + a bit extra for various
+ * io-memory mappings)
+ *
+ * IF YOU CHANGE THIS, PLEASE ALSO CHANGE
+ *
+ *	arch/i386/vmlinux.lds
+ *
+ * which has the same constant encoded..
+ */
+#define __PAGE_OFFSET		(0xC0000000)
+
 #define PAGE_OFFSET		((unsigned long)__PAGE_OFFSET)
 #define __pa(x)			((unsigned long)(x)-PAGE_OFFSET)
 #define __va(x)			((void *)((unsigned long)(x)+PAGE_OFFSET))

@@ -104,7 +104,7 @@ static int sound_alloc_dmap(struct dma_buffparms *dmap)
 	dmap->raw_buf_phys = virt_to_bus(start_addr);
 
 	for (i = MAP_NR(start_addr); i <= MAP_NR(end_addr); i++)
-		set_bit(PG_reserved, &mem_map[i].flags);
+		set_bit(PG_reserved, &mem_map[i].flags);;
 	return 0;
 }
 
@@ -115,6 +115,8 @@ static void sound_free_dmap(struct dma_buffparms *dmap)
 
 	if (dmap->raw_buf == NULL)
 		return;
+	if (dmap->mapping_flags & DMA_MAP_MAPPED)
+		return;		/* Don't free mmapped buffer. Will use it next time */
 	for (sz = 0, size = PAGE_SIZE; size < dmap->buffsize; sz++, size <<= 1);
 
 	start_addr = (unsigned long) dmap->raw_buf;
@@ -125,8 +127,6 @@ static void sound_free_dmap(struct dma_buffparms *dmap)
 
 	free_pages((unsigned long) dmap->raw_buf, sz);
 	dmap->raw_buf = NULL;
-	/* Remember the buffer is deleted so we dont Oops later */
-	dmap->fragment_size = 0;
 }
 
 
@@ -206,7 +206,6 @@ static void close_dmap(struct audio_operations *adev, struct dma_buffparms *dmap
 		dmap->dma_mode = DMODE_NONE;
 	dmap->flags &= ~DMA_BUSY;
 	disable_dma(dmap->dma);
-	sound_free_dmap(dmap);
 }
 
 
@@ -1210,6 +1209,20 @@ static unsigned int poll_output(struct file * file, int dev, poll_table *wait)
 unsigned int DMAbuf_poll(struct file * file, int dev, poll_table *wait)
 {
 	return poll_input(file, dev, wait) | poll_output(file, dev, wait);
+}
+
+void DMAbuf_deinit(int dev)
+{
+	struct audio_operations *adev = audio_devs[dev];
+	/* This routine is called when driver is being unloaded */
+	if (!adev)
+		return;
+#ifdef RUNTIME_DMA_ALLOC
+	sound_free_dmap(adev->dmap_out);
+
+	if (adev->flags & DMA_DUPLEX)
+		sound_free_dmap(adev->dmap_in);
+#endif
 }
 
 #endif

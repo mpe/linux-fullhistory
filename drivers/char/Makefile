@@ -302,11 +302,27 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_BUS_I2C),y)
+	LX_OBJS += i2c.o
+else
+  ifeq ($(CONFIG_BUS_I2C),m)
+	MX_OBJS += i2c.o
+  endif
+endif
+
 ifeq ($(CONFIG_VIDEO_BT848),y)
-L_OBJS += bttv.o
+L_OBJS += bttv.o msp3400.o tuner.o
 else
   ifeq ($(CONFIG_VIDEO_BT848),m)
-    M_OBJS += bttv.o
+    M_OBJS += bttv.o msp3400.o tuner.o
+  endif
+endif
+
+ifeq ($(CONFIG_VIDEO_SAA5249),y)
+L_OBJS += saa5249.o
+else
+  ifeq ($(CONFIG_VIDEO_SAA5249),m)
+    M_OBJS += saa5249.o
   endif
 endif
 
@@ -330,7 +346,7 @@ ifeq ($(CONFIG_VIDEO_PMS),y)
 L_OBJS += pms.o
 else
   ifeq ($(CONFIG_VIDEO_PMS),m)
-    M_OBJS += pms.o
+  M_OBJS += pms.o
   endif
 endif
 

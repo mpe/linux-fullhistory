@@ -16,6 +16,10 @@
  */
 #include <linux/config.h>
 
+#ifdef CONFIG_KMOD
+#include <linux/kmod.h>
+#endif
+
 
 #define SEQUENCER_C
 #include "sound_config.h"
@@ -478,7 +482,7 @@ static void seq_chn_voice_event(unsigned char *event_rec)
 			parm = 64;
 		}
 	}
-	
+
 	switch (cmd)
 	{
 		case MIDI_NOTEON:
@@ -950,7 +954,7 @@ static void setup_mode2(void)
 			synth_devs[max_synthdev++] = midi_devs[dev]->converter;
 		}
 	}
-	
+
 	for (dev = 0; dev < max_synthdev; dev++)
 	{
 		int chn;
@@ -993,15 +997,20 @@ int sequencer_open(int dev, struct file *file)
 		return -ENXIO;
 	}
 	if (dev)		/* Patch manager device (obsolete) */
-		  return -ENXIO;
+		return -ENXIO;
+
+#ifdef CONFIG_KMOD
+	if(synth_devs[dev] == NULL)
+		request_module("synth0");
+#endif
 
 	if (mode == OPEN_READ)
 	{
 		if (!num_midis)
 		{
-			  /*printk("Sequencer: No MIDI devices. Input not possible\n");*/
-			  sequencer_busy = 0;
-			  return -ENXIO;
+			/*printk("Sequencer: No MIDI devices. Input not possible\n");*/
+			sequencer_busy = 0;
+			return -ENXIO;
 		}
 	}
 	save_flags(flags);
@@ -1033,8 +1042,8 @@ int sequencer_open(int dev, struct file *file)
 		for (i = 0; i < num_sound_timers; i++)
 			if (sound_timer_devs[i] && sound_timer_devs[i]->priority > best)
 			{
-				    tmr_no = i;
-				    best = sound_timer_devs[i]->priority;
+				tmr_no = i;
+				best = sound_timer_devs[i]->priority;
 			}
 		if (tmr_no == -1)	/* Should not be */
 			tmr_no = 0;
@@ -1066,7 +1075,7 @@ int sequencer_open(int dev, struct file *file)
 	{
 		if (synth_devs[i]==NULL)
 			continue;
-			
+
 		if ((tmp = synth_devs[i]->open(i, mode)) < 0)
 		{
 			printk(KERN_WARNING "Sequencer: Warning! Cannot open synth device #%d (%d)\n", i, tmp);
@@ -1096,7 +1105,7 @@ int sequencer_open(int dev, struct file *file)
 		/*
 		 * Initialize midi input devices
 		 */
-		
+
 		for (i = 0; i < max_mididev; i++)
 			if (!midi_opened[i])
 			{
@@ -1140,7 +1149,7 @@ void seq_drain_midi_queues(void)
 		/*
 		 * Let's have a delay
 		 */
-		
+
  		if (n) {
  			current->timeout = jiffies + HZ / 10;
  			interruptible_sleep_on(&seq_sleeper);
@@ -1173,7 +1182,7 @@ void sequencer_release(int dev, struct file *file)
  			/* Extra delay */
 		}
 	}
-		  
+
 	if (mode != OPEN_READ)
 		seq_drain_midi_queues();	/*
 						 * Ensure the output queues are empty
@@ -1201,7 +1210,7 @@ void sequencer_release(int dev, struct file *file)
 	for (i = 0; i < max_mididev; i++)
 	{
 		if (midi_opened[i])
-			  midi_devs[i]->close(i);
+			midi_devs[i]->close(i);
 	}
 
 	if (seq_mode == SEQ_2)
@@ -1329,7 +1338,7 @@ static void seq_reset(void)
 
 	save_flags(flags);
 	cli();
-	
+
 	if (waitqueue_active(&seq_sleeper)) {
 		/*      printk( "Sequencer Warning: Unexpected sleeping process - Waking up\n"); */
 		wake_up(&seq_sleeper);
@@ -1368,7 +1377,7 @@ int sequencer_ioctl(int dev, struct file *file, unsigned int cmd, caddr_t arg)
 
 	orig_dev = dev = dev >> 4;
 
-	switch (cmd) 
+	switch (cmd)
 	{
 		case SNDCTL_TMR_TIMEBASE:
 		case SNDCTL_TMR_TEMPO:
@@ -1380,13 +1389,13 @@ int sequencer_ioctl(int dev, struct file *file, unsigned int cmd, caddr_t arg)
 			if (seq_mode != SEQ_2)
 				return -EINVAL;
 			return tmr->ioctl(tmr_no, cmd, arg);
-		
+
 		case SNDCTL_TMR_SELECT:
 			if (seq_mode != SEQ_2)
 				return -EINVAL;
 			if (get_user(pending_timer, (int *)arg))
 				return -EFAULT;
-			if (pending_timer < 0 || pending_timer >= num_sound_timers || sound_timer_devs[pending_timer] == NULL) 
+			if (pending_timer < 0 || pending_timer >= num_sound_timers || sound_timer_devs[pending_timer] == NULL)
 			{
 				pending_timer = -1;
 				return -EINVAL;
@@ -1397,14 +1406,14 @@ int sequencer_ioctl(int dev, struct file *file, unsigned int cmd, caddr_t arg)
 		case SNDCTL_SEQ_PANIC:
 			seq_panic();
 			return -EINVAL;
-		
+
 		case SNDCTL_SEQ_SYNC:
 			if (mode == OPEN_READ)
 				return 0;
 			while (qlen > 0 && !signal_pending(current))
 				seq_sync();
 			return qlen ? -EINTR : 0;
-		
+
 		case SNDCTL_SEQ_RESET:
 			seq_reset();
 			return 0;
@@ -1414,8 +1423,8 @@ int sequencer_ioctl(int dev, struct file *file, unsigned int cmd, caddr_t arg)
 				return -EFAULT;
 			if (midi_dev < 0 || midi_dev >= max_mididev)
 				return -ENXIO;
-		
-			if (!midi_opened[midi_dev] && 
+
+			if (!midi_opened[midi_dev] &&
 				(err = midi_devs[midi_dev]->open(midi_dev, mode, sequencer_midi_input,
 						     sequencer_midi_output)) < 0)
 				return err;
@@ -1427,13 +1436,13 @@ int sequencer_ioctl(int dev, struct file *file, unsigned int cmd, caddr_t arg)
 				return 0;
 			val = iqlen;
 			break;
-		
+
 		case SNDCTL_SEQ_GETOUTCOUNT:
 			if (mode == OPEN_READ)
 				return 0;
 			val = SEQ_MAX_QUEUE - qlen;
 			break;
-		
+
 		case SNDCTL_SEQ_GETTIME:
 			if (seq_mode == SEQ_2)
 				return tmr->ioctl(tmr_no, cmd, arg);
@@ -1442,14 +1451,14 @@ int sequencer_ioctl(int dev, struct file *file, unsigned int cmd, caddr_t arg)
 			else
 				val = jiffies - seq_time;
 			break;
-		
+
 		case SNDCTL_SEQ_CTRLRATE:
 			/*
 			 * If *arg == 0, just return the current rate
 			 */
 			if (seq_mode == SEQ_2)
 				return tmr->ioctl(tmr_no, cmd, arg);
-		
+
 			if (get_user(val, (int *)arg))
 				return -EFAULT;
 			if (val != 0)
@@ -1504,7 +1513,7 @@ int sequencer_ioctl(int dev, struct file *file, unsigned int cmd, caddr_t arg)
 			if (!(synth_open_mask & (1 << dev)) && !orig_dev)
 				return -EBUSY;
 			return synth_devs[dev]->ioctl(dev, cmd, arg);
-		
+
 		/* Like SYNTH_INFO but returns ID in the name field */
 		case SNDCTL_SYNTH_ID:
 			if (get_user(dev, (int *)(&(((struct synth_info *)arg)->device))))
@@ -1517,7 +1526,7 @@ int sequencer_ioctl(int dev, struct file *file, unsigned int cmd, caddr_t arg)
 			strncpy(inf.name, synth_devs[dev]->id, sizeof(inf.name));
 			inf.device = dev;
 			return copy_to_user(arg, &inf, sizeof(inf))?-EFAULT:0;
-		
+
 		case SNDCTL_SEQ_OUTOFBAND:
 			if (copy_from_user(&event_rec, arg, sizeof(event_rec)))
 				return -EFAULT;
@@ -1526,7 +1535,7 @@ int sequencer_ioctl(int dev, struct file *file, unsigned int cmd, caddr_t arg)
 			play_event(event_rec.arr);
 			restore_flags(flags);
 			return 0;
-		  
+
 		case SNDCTL_MIDI_INFO:
 			if (get_user(dev, (int *)(&(((struct synth_info *)arg)->device))))
 				return -EFAULT;
@@ -1534,7 +1543,7 @@ int sequencer_ioctl(int dev, struct file *file, unsigned int cmd, caddr_t arg)
 				return -ENXIO;
 			midi_devs[dev]->info.device = dev;
 			return copy_to_user(arg, &midi_devs[dev]->info, sizeof(struct synth_info))?-EFAULT:0;
-		
+
 		case SNDCTL_SEQ_THRESHOLD:
 			if (get_user(val, (int *)arg))
 				return -EFAULT;
@@ -1544,7 +1553,7 @@ int sequencer_ioctl(int dev, struct file *file, unsigned int cmd, caddr_t arg)
 				val = SEQ_MAX_QUEUE - 1;
 			output_threshold = val;
 			return 0;
-		
+
 		case SNDCTL_MIDI_PRETIME:
 			if (get_user(val, (int *)arg))
 				return -EFAULT;
@@ -1584,7 +1593,7 @@ unsigned int sequencer_poll(int dev, struct file *file, poll_table * wait)
 
 	/* output */
 	poll_wait(file, &seq_sleeper, wait);
-	if ((SEQ_MAX_QUEUE - qlen) >= output_threshold) 
+	if ((SEQ_MAX_QUEUE - qlen) >= output_threshold)
 		mask |= POLLOUT | POLLWRNORM;
 	restore_flags(flags);
 	return mask;
@@ -1665,8 +1674,8 @@ unsigned long compute_finetune(unsigned long base_freq, int bend, int range,
 	 */
 	while (bend > 2399)
 	{
-		  multiplier *= 4;
-		  bend -= 2400;
+		multiplier *= 4;
+		bend -= 2400;
 	}
 
 	semitones = bend / 100;
@@ -1693,8 +1702,8 @@ void sequencer_init(void)
 	queue = (unsigned char *)vmalloc(SEQ_MAX_QUEUE * EV_SZ);
 	if (queue == NULL)
 	{
-		  printk(KERN_ERR "sequencer: Can't allocate memory for sequencer output queue\n");
-		  return;
+		printk(KERN_ERR "sequencer: Can't allocate memory for sequencer output queue\n");
+		return;
 	}
 	iqueue = (unsigned char *)vmalloc(SEQ_MAX_QUEUE * IEV_SZ);
 	if (iqueue == NULL)

@@ -135,7 +135,7 @@ int umsdos_rlookup_x(
       */
         Printk ((KERN_WARNING "umsdos_rlookup_x: do the pseudo-thingy...\n"));
 	ret = -ENOENT;
-	iput (pseudo_root);
+	/* iput (pseudo_root); FIXME */
        
       }else if (S_ISDIR(inode->i_mode)){
 	/* We must place the proper function table */
@@ -145,7 +145,7 @@ int umsdos_rlookup_x(
       }
     }
   }
-  iput (dir);
+  /* iput (dir); FIXME */
   PRINTK ((KERN_DEBUG "umsdos_rlookup_x: returning %d\n", ret));
   return ret;
 }
@@ -215,7 +215,7 @@ static int UMSDOS_rrmdir (
 	  }else if (empty == 1){
 	    /* We have to removed the EMD file */
 	    struct dentry *temp;
-	    temp = creat_dentry (UMSDOS_EMD_FILE, UMSDOS_EMD_NAMELEN, NULL);
+	    temp = creat_dentry (UMSDOS_EMD_FILE, UMSDOS_EMD_NAMELEN, NULL, NULL); /* FIXME: prolly should fill inode part ? */
 	    ret = msdos_unlink(sdir, temp);
 	    sdir = NULL;
 	    if (ret == 0){
@@ -226,12 +226,12 @@ static int UMSDOS_rrmdir (
 	}else{
 	  ret = -ENOTEMPTY;
 	}
-	iput (sdir);
+	/* iput (sdir); FIXME */
       }
     }
     umsdos_unlockcreate (dir);
   }
-  iput (dir);
+  /* iput (dir); FIXME */
   return ret;
 }
 

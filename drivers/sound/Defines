@@ -231,6 +231,12 @@ CONFIG_SEQUENCER=y
 endif
 endif
 
+ifdef CONFIG_VIDC_SOUND
+ifneq ($(CONFIG_SEQUENCER),Y)
+CONFIG_SEQUENCER=y
+endif
+endif
+
 ifdef CONFIG_PAS
 ifneq ($(CONFIG_AUDIO),Y)
 CONFIG_AUDIO=y
@@ -304,6 +310,12 @@ endif
 endif
 
 ifdef CONFIG_SOFTOSS
+ifneq ($(CONFIG_AUDIO),Y)
+CONFIG_AUDIO=y
+endif
+endif
+
+ifdef CONFIG_VIDC_SOUND
 ifneq ($(CONFIG_AUDIO),Y)
 CONFIG_AUDIO=y
 endif

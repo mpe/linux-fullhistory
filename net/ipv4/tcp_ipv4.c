@@ -1483,7 +1483,7 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 		skb->csum = csum_partial((char *)th, len, 0);
 	case CHECKSUM_HW:
 		if (tcp_v4_check(th,len,skb->nh.iph->saddr,skb->nh.iph->daddr,skb->csum)) {
-			printk(KERN_DEBUG "TCPv4 bad checksum from %d.%d.%d.%d:%04x to %d.%d.%d.%d:%04x, "
+			printk(KERN_DEBUG "TCPv4 bad checksum from %ld.%ld.%ld.%ld:%04x to %ld.%ld.%ld.%ld:%04x, "
 			       "len=%d/%d/%d\n",
  			       NIPQUAD(ntohl(skb->nh.iph->saddr)),
 			       ntohs(th->source), 

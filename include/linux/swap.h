@@ -23,6 +23,7 @@ struct swap_info_struct {
 	kdev_t swap_device;
 	struct dentry * swap_file;
 	unsigned char * swap_map;
+	unsigned char * swap_lockmap;
 	unsigned int lowest_bit;
 	unsigned int highest_bit;
 	unsigned int cluster_next;
@@ -64,6 +65,7 @@ extern void swap_in(struct task_struct *, struct vm_area_struct *,
 extern void show_swap_cache_info(void);
 extern int add_to_swap_cache(struct page *, unsigned long);
 extern void swap_duplicate(unsigned long);
+extern void swap_after_unlock_page (unsigned long entry);
 extern struct page * read_swap_cache_async(unsigned long, int);
 #define read_swap_cache(entry) read_swap_cache_async(entry, 1);
 

@@ -962,8 +962,7 @@ static void mcpcia_probe(struct linux_hose_info *hose,
 	}
 }
 
-unsigned long mcpcia_fixup(unsigned long memory_start,
-			   unsigned long memory_end)
+void mcpcia_fixup(void)
 {
 	struct linux_hose_info *hose;
 
@@ -974,7 +973,5 @@ unsigned long mcpcia_fixup(unsigned long memory_start,
 	for (hose = mcpcia_root; hose; hose = hose->next) {
 		mcpcia_probe(hose, &memory_start);
 	}
-
-	return memory_start;
 }
 #endif /* CONFIG_ALPHA_MCPCIA */

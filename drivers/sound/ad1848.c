@@ -12,16 +12,16 @@
  *
  * CS4232 is a PnP audio chip which contains a CS4231A (and SB, MPU).
  * CS4232A is an improved version of CS4232.
- */
-
-/*
+ *
+ *
+ *
  * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
- */
-/*
+ *
+ *
  * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
  *		     general sleep/wakeup clean up.
  * Alan Cox	   : reformatted. Fixed SMP bugs. Moved to kernel alloc/free
@@ -84,7 +84,6 @@ typedef struct
 	int             irq_ok;
 	mixer_ents     *mix_devices;
 	int             mixer_output_port;
-	int             c930_password_port;
 } ad1848_info;
 
 typedef struct ad1848_port_info
@@ -560,6 +559,12 @@ static int ad1848_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 		}
 		val = devc->mixer_output_port;
 		return put_user(val, (int *)arg);
+	}
+	if (cmd == SOUND_MIXER_PRIVATE2)
+	{
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
+		return(ad1848_control(AD1848_MIXER_REROUTE, val));
 	}
 	if (((cmd >> 8) & 0xff) == 'M') 
 	{
@@ -1409,7 +1414,6 @@ int ad1848_detect(int io_base, int *ad_flags, int *osp)
 	devc->chip_name = devc->name = "AD1848";
 	devc->model = MD_1848;	/* AD1848 or CS4248 */
 	devc->levels = NULL;
-	devc->c930_password_port = 0;
 	devc->debug_flag = 0;
 
 	/*
@@ -1789,11 +1793,15 @@ int ad1848_init(char *name, int io_base, int irq, int dma_playback, int dma_capt
 		if (request_irq(devc->irq, adintr, 0, devc->name, (void *)my_dev) < 0)
 		{
 			printk(KERN_WARNING "ad1848: Unable to allocate IRQ\n");
+			/* Don't free it either then.. */
+			devc->irq = 0;
 		}
 		if (devc->model != MD_1848 && devc->model != MD_C930)
 		{
+#ifndef __SMP__
 			int x;
 			unsigned char tmp = ad_read(devc, 16);
+#endif			
 
 			devc->timer_ticks = 0;
 
@@ -1843,16 +1851,15 @@ int ad1848_init(char *name, int io_base, int irq, int dma_playback, int dma_capt
 	{
 		audio_devs[my_dev]->mixer_dev = e;
 	}
-	MOD_INC_USE_COUNT;
 	return my_dev;
 }
 
-void ad1848_control(int cmd, int arg)
+int ad1848_control(int cmd, int arg)
 {
 	ad1848_info *devc;
 
 	if (nr_ad1848_devs < 1)
-		return;
+		return -ENODEV;
 
 	devc = &adev_info[nr_ad1848_devs - 1];
 
@@ -1860,7 +1867,7 @@ void ad1848_control(int cmd, int arg)
 	{
 		case AD1848_SET_XTAL:	/* Change clock frequency of AD1845 (only ) */
 			if (devc->model != MD_1845)
-				return;
+				return -EINVAL;
 			ad_enter_MCE(devc);
 			ad_write(devc, 29, (ad_read(devc, 29) & 0x1f) | (arg << 5));
 			ad_leave_MCE(devc);
@@ -1871,32 +1878,37 @@ void ad1848_control(int cmd, int arg)
 			int o = (arg >> 8) & 0xff;
 			int n = arg & 0xff;
 
+			if (o < 0 || o >= SOUND_MIXER_NRDEVICES)
+				return -EINVAL;
+
+			if (!(devc->supported_devices & (1 << o)) &&
+			    !(devc->supported_rec_devices & (1 << o)))
+				return -EINVAL;
+
 			if (n == SOUND_MIXER_NONE)
 			{	/* Just hide this control */
 				ad1848_mixer_set(devc, o, 0);	/* Shut up it */
 				devc->supported_devices &= ~(1 << o);
 				devc->supported_rec_devices &= ~(1 << o);
-				return;
+				break;
 			}
-			/* Make the mixer control identified by o to appear as n */
 
-			if (o < 0 || o > SOUND_MIXER_NRDEVICES)
-				return;
-			if (n < 0 || n > SOUND_MIXER_NRDEVICES)
-				return;
-			if (!(devc->supported_devices & (1 << o)))
-				return;	/* Not supported */
+			/* Make the mixer control identified by o to appear as n */
+			if (n < 0 || n >= SOUND_MIXER_NRDEVICES)
+				return -EINVAL;
 
 			devc->mixer_reroute[n] = o;	/* Rename the control */
-			devc->supported_devices &= ~(1 << o);
-			devc->supported_devices |= (1 << n);
+			if (devc->supported_devices & (1 << o))
+				devc->supported_devices |= (1 << n);
 			if (devc->supported_rec_devices & (1 << o))
 				devc->supported_rec_devices |= (1 << n);
+
+			devc->supported_devices &= ~(1 << o);
 			devc->supported_rec_devices &= ~(1 << o);
 		}
 		break;
 	}
-	return;
+	return 0;
 }
 
 void ad1848_unload(int io_base, int irq, int dma_playback, int dma_capture, int share_dma)
@@ -1932,7 +1944,6 @@ void ad1848_unload(int io_base, int irq, int dma_playback, int dma_capture, int 
 	}
 	else
 		printk(KERN_ERR "ad1848: Can't find device to be unloaded. Base=%x\n", io_base);
-	MOD_DEC_USE_COUNT;
 }
 
 void adintr(int irq, void *dev_id, struct pt_regs *dummy)
@@ -1965,37 +1976,22 @@ interrupt_again:		/* Jump back here if int status doesn't reset */
 			save_flags(flags);
 			cli();
 
-			alt_stat = 0;
-
-			if (devc->c930_password_port)
-				outb((0xe4), devc->c930_password_port);	/* Password */
+			/* 0xe0e is C930 address port
+			 * 0xe0f is C930 data port
+			 */
 			outb(11, 0xe0e);
 			c930_stat = inb(0xe0f);
-
-			if (c930_stat & 0x04)
-				alt_stat |= 0x10;	/* Playback intr */
-			if (c930_stat & 0x08)
-				alt_stat |= 0x20;	/* Playback intr */
-			restore_flags(flags);
-		} else if (devc->model != MD_1848)
-			alt_stat = ad_read(devc, 24);
-
-		/* Acknowledge the intr before proceeding */
-		if (devc->model == MD_C930)
-		{		/* 82C930 has interrupt status register in MAD16 register MC11 */
-			unsigned long   flags;
-
-			save_flags(flags);
-			cli();
-
-			if (devc->c930_password_port)
-				outb((0xe4), devc->c930_password_port);	/* Password */
-			outb((11), 0xe0e);
 			outb((~c930_stat), 0xe0f);
+
 			restore_flags(flags);
+
+			alt_stat = (c930_stat << 2) & 0x30;
 		}
 		else if (devc->model != MD_1848)
+		{
+			alt_stat = ad_read(devc, 24);
 			ad_write(devc, 24, ad_read(devc, 24) & ~alt_stat);	/* Selective ack */
+		}
 
 		if (devc->open_mode & OPEN_READ && devc->audio_mode & PCM_ENABLE_INPUT && alt_stat & 0x20)
 		{
@@ -2550,11 +2546,10 @@ static int loaded = 0;
 
 struct address_info hw_config;
 
-
 int init_module(void)
 {
 	printk(KERN_INFO "ad1848/cs4248 codec driver Copyright (C) by Hannu Savolainen 1993-1996\n");
-	if(io!=-1)
+	if(io != -1)
 	{
 		if(irq == -1 || dma == -1)
 		{
@@ -2581,12 +2576,5 @@ void cleanup_module(void)
 	if(loaded)
 		unload_ms_sound(&hw_config);
 }
-
-#else
-
-void export_ad1848_syms(void)
-{
-}
-
 #endif
 #endif

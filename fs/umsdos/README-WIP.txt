@@ -8,7 +8,7 @@ UMSDOS FILESYSTEM, AND MAYBE EVEN OTHER FILESYSTEMS IN USE.
 YOU'VE BEEN WARNED.
 --------- WARNING --------- WARNING --------- WARNING -----------
 
-Current status (980220) - UMSDOS dentry-WIP-Beta 0.82-1:
+Current status (980220) - UMSDOS dentry-WIP-Beta 0.82-3:
 
 (1) pure MSDOS (no --linux-.--- EMD file):
 
@@ -19,7 +19,7 @@ Current status (980220) - UMSDOS dentry-WIP-Beta 0.82-1:
 - creat file - works
 - write file - works
 - mkdir - works
-- rmdir - questionable. probable problem on non-empty dirs.
+- rmdir - QUESTIONABLE. probable problem on non-empty dirs.
 
 Notes: possible very minor problems with dentry/inode/... kernel structures (very rare)
 
@@ -42,28 +42,29 @@ Notes: possible very minor problems with dentry/inode/... kernel structures (ver
 - other ioctls - MOSTLY UNTESTED
 - dangling symlink - UNTESTED !
 
-- create symlink		- works on short names, but fails (gets
-				  truncated on long ones) (also
-				  due to some dentries problems, it may not
-				  be visible right away always - eg. before
-				  umount/mount)
+- create symlink		- seems to work both on short & long names now !
 - create hardlink		- WARNING: NOT FIXED YET!
-- create file			- creates short names, but probs with long ones ?
-- create special file		- seems to work on short names.
-- write to file			- seems to work on short names.
+- create file			- seems to work both on short & long names now !
+- create special file		- seems to work both on short & long names now !
+- write to file			- seems to work both on short & long names now !
 - rename file (same dir)	- WARNING: NOT FIXED YET!
 - rename file (dif. dir)	- WARNING: NOT FIXED YET!
 - rename dir (same dir)		- WARNING: NOT FIXED YET!
 - rename dir (dif. dir)		- WARNING: NOT FIXED YET!
-- delete file			- WARNING: NOT FIXED YET!
+- delete file			- seems to work fully now!
 - notify_change (chown,perms)	- seems to work!
 - delete hardlink		- WARNING: NOT FIXED YET!
-- mkdir				- seems to work, even with long names ! (but
-				  due to some dentries problems, it may not
-				  be visible right away always - eg. before
-				  umount/mount)
+- mkdir				- seems to work both on short & long names now !
 - rmdir 			- WARNING: NOT FIXED YET!
-- umssyncing			- does something :-), but NEEDS EXTENSIVE TESTING
+- umssyncing			- seems to work, but NEEDS EXTENSIVE TESTING
+
+- CVF-FAT stuff (compressed DOS filesystem) - there is some support from
+  Frank Gockel <gockel@sent13.uni-duisburg.de> to use it even under
+  umsdosfs. But I have no way of testing it -- please let me know if there
+  are problems that are specific to umsdos (eg. it works under msdosfs, but
+  not under umsdosfs)
+
+
 
 Notes: moderate dentry/inode kernel structures trashing. Probably some other
 kernel structures compromised. Have SysRq support compiled in, and use
@@ -77,16 +78,18 @@ Notes3: Notes2 is probably somewhat outdated now that hardlink/symlink stuff
 is supposed to be fixed enough to work, but I haven't got the time to test
 it.
 
-Note4: on failure of creating of long filenames: MSDOS filename gets
-created, and EMD entry gets created. Check: either they mismatch, or EMD
-entry contains some wrong flags.
+Note5: rmdir(2) fails with EBUSY - sdir->i_count > 1 (like 7 ??). It must be
+some error with dir->i_count++, or something related to iput() ? See if
+number changes if we access the dir in different ways..
 
-Note5: rmdir(2) probably fails because do_rmdir calls lock_parent, which
-uses dentry->d_parent, which we neglect to set, so it returns -ENOENT.
-Probably same problem on unlink(2) ? What to do ? How to set
-dentry->d_parent to something useful ?? Must I recurse down whole pathname
-and set one by one all directory components ?! or only last one is really
-needed ? help !
+Note6: there is problem with unmounting umsdosfs, it seems to stay
+registered or something. Remounting same device on any mount point with
+different fstype (like msdos or vfat) ignores fstype and umsdosfs kicks back
+in. 
+
+Note7: also we screwed umount(2)-ing the fs at times (EBUSY), by removing
+all those iput/dput's. When rest of code is fixed, we'll put them back at
+(hopefully) correct places.
 
 ------------------------------------------------------------------------------
 
@@ -110,10 +113,10 @@ should we destroy temp dentries ? using d_invalidate ? using d_drop ? just
 dput them ?
 
 I'm unfortunatelly somewhat out of time to read linux-kernel, but I do check
-for any messages having UMSDOS in subject, and read them. I should reply to
-any direct Email in few days. If I don't - probably I never got your
-message. You can try mnalis@open.hr or mnalis@voyager.hr; however
-mnalis@jagor.srce.hr is preferable one.
+for any messages having UMSDOS in subject, and read them. I might miss it in
+all that volume, though. I should reply to any direct Email in few days. If
+I don't - probably I never got your message. You can try mnalis@open.hr or
+mnalis@voyager.hr; however mnalis@jagor.srce.hr is preferable one.
 
 
 ------------------------------------------------------------------------------
@@ -122,7 +125,7 @@ some of my notes for myself /mn/:
 + hardlinks/symlinks. test with files in not_the_same_dir
 - also test not_the_same_dir for other file operations like rename etc.
 - iput: device 00:00 inode 318 still has aliases! problem. Check in iput()
-  for device 0,0. Probably null pointer passed arount when it shouldn't be ?
+  for device 0,0. Probably null pointer passed around when it shouldn't be ?
 - dput/iput problem...
 - what about .dotfiles ? working ? multiple dots ? etc....
 - fix stuff like dir->i_count++ to atomic_inc(&dir->i_count) and simular?
@@ -133,11 +136,23 @@ some of my notes for myself /mn/:
 
 - when should dput()/iput() be used ?!!
 
-- probably problem with filename mangling somewhere, since both create and
-  write to file work on short filenames, but fail on long ones. Path
-  components may be of any size (eg. mkfifo /mnt/Very_long_dir2/blah1 will
-  succeed, but mkfifo /mnt/very_long_filename.txt won't)
-
-
 - what is dir->i_count++ ? locking directory ? should this be lock_parent or
 something ?
+
+- i_binary=2 is for CVF (compressed filesystem).
+
+- SECURITY WARNING: short dentries should be invalidated, or they could be
+  accessed instead of proper long names.
+
+- as for iput() : (my only pointer so far. anyone else ?)
+
+>development I only know about iput. All functions that get an inode as
+>argument and don't return it have to call iput on it before exit, i.e. when
+>it is no longer needed and the code returns to vfs layer. The rest is quite
+>new to me, but it might be similar for dput. Typical side effect of a
+>missing iput was a memory runout (but no crash). You also couldn't unmount
+>the filesystem later though no process was using it. On the other hand, one
+>iput too much lead to serious pointer corruption and crashed the system
+>very soon. I used to look at the FAT filesystem and copy those pieces of
+>
+> Frank

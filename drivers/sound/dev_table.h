@@ -23,6 +23,7 @@
  */
 
 #define SNDCARD_DESKPROXL		27	/* Compaq Deskpro XL */
+#define SNDCARD_VIDC			28	/* ARMs VIDC */
 #define SNDCARD_SBPNP			29
 #define SNDCARD_OPL3SA1			38
 #define SNDCARD_OPL3SA1_SB		39
@@ -464,6 +465,9 @@ struct driver_info sound_drivers[] =
 #if defined(CONFIG_VMIDI) && defined(CONFIG_MIDI) && !defined(CONFIG_VMIDI_MODULE)
 	{"VMIDI", 0, SNDCARD_VMIDI,"Loopback MIDI Device",      attach_v_midi, probe_v_midi, unload_v_midi},
 #endif
+#ifdef CONFIG_VIDC_SOUND
+	{"VIDC", 0, SNDCARD_VIDC, "ARM VIDC 16-bit D/A", attach_vidc, probe_vidc, unload_vidc },
+#endif
 	{NULL, 0, 0,		"*?*",			NULL, NULL, NULL}
 };
 
@@ -612,6 +616,9 @@ struct card_info snd_installed_cards[] =
 	{SNDCARD_VMIDI, {0, 0, 0, -1}, SND_DEFAULT_ENABLE},
 #endif
 
+#ifdef CONFIG_VIDC_SOUND
+	{ SNDCARD_VIDC, {0, 0, 0, 0}, SND_DEFAULT_ENABLE },
+#endif
 	{0, {0}, 0}
 };
 

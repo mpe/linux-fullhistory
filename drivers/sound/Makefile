@@ -117,6 +117,22 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_MPU401),y)
+LX_OBJS += mpu401.o
+else
+  ifeq ($(CONFIG_MPU401),m)
+  MX_OBJS += mpu401.o
+  else
+    ifeq ($(CONFIG_MPU_EMU),y)
+    LX_OBJS += mpu401.o
+    else
+      ifeq ($(CONFIG_MPU_EMU),m)
+      MX_OBJS += mpu401.o
+      endif
+    endif
+  endif
+endif
+
 ifeq ($(CONFIG_UART401),y)
 LX_OBJS += uart401.o
 else
@@ -143,31 +159,9 @@ endif
 
 ifeq ($(CONFIG_SSCAPE),y)
 L_OBJS += sscape.o
-LX_OBJS += ad1848.o
-CONFIG_MPU401 = y
 else
   ifeq ($(CONFIG_SSCAPE),m)
   M_OBJS += sscape.o
-  MX_OBJS += ad1848.o
-  ifneq ($(CONFIG_MPU401),y)
-    CONFIG_MPU401 = m
-  endif
-  endif
-endif
-
-ifeq ($(CONFIG_MPU401),y)
-LX_OBJS += mpu401.o
-else
-  ifeq ($(CONFIG_MPU401),m)
-  MX_OBJS += mpu401.o
-  else
-    ifeq ($(CONFIG_MPU_EMU),y)
-    LX_OBJS += mpu401.o
-    else
-      ifeq ($(CONFIG_MPU_EMU),m)
-      MX_OBJS += mpu401.o
-      endif
-    endif
   endif
 endif
 
@@ -230,27 +224,31 @@ else
    endif
 endif
 
+ifeq ($(CONFIG_VIDC_SOUND),y)
+  L_OBJS += vidc.o vidc_audio.o vidc_mixer.o vidc_synth.o vidc_fill.o
+endif
+
 include $(TOPDIR)/Rules.make
 
 softoss2.o:	softoss.o softoss_rs.o
-	ld -r -o softoss2.o softoss.o softoss_rs.o
+	$(LD) -r -o softoss2.o softoss.o softoss_rs.o
 
 pas2.o:       pas2_card.o pas2_midi.o pas2_mixer.o pas2_pcm.o
-	ld -r -o pas2.o pas2_card.o pas2_midi.o pas2_mixer.o pas2_pcm.o
+	$(LD) -r -o pas2.o pas2_card.o pas2_midi.o pas2_mixer.o pas2_pcm.o
 
 sb.o: sb_audio.o sb_card.o sb_common.o sb_midi.o sb_mixer.o
-	ld -r -o sb.o sb_audio.o sb_card.o sb_common.o sb_midi.o sb_mixer.o
+	$(LD) -r -o sb.o sb_audio.o sb_card.o sb_common.o sb_midi.o sb_mixer.o
 
 lowlevel/lowlevel.o:
 	cd lowlevel; make
 
-sound.o: soundcard.o dev_table.o audio.o dmabuf.o sequencer.o sys_timer.o sound_timer.o lowlevel/lowlevel.o midi_synth.o midibuf.o sound_firmware.o
-	ld -r -o sound.o soundcard.o dev_table.o audio.o dmabuf.o \
+sound.o: soundcard.o dev_table.o audio.o dmabuf.o sequencer.o sys_timer.o sound_timer.o lowlevel/lowlevel.o midi_synth.o midibuf.o sound_firmware.o sound_syms.o
+	$(LD) -r -o sound.o soundcard.o dev_table.o audio.o dmabuf.o \
 	       sequencer.o sys_timer.o sound_timer.o lowlevel/lowlevel.o \
-	       midi_synth.o midibuf.o sound_firmware.o
+	       midi_synth.o midibuf.o sound_firmware.o sound_syms.o
 
 gus.o: gus_card.o gus_midi.o gus_vol.o gus_wave.o ics2101.o
-	ld -r -o gus.o gus_card.o gus_midi.o gus_vol.o gus_wave.o ics2101.o
+	$(LD) -r -o gus.o gus_card.o gus_midi.o gus_vol.o gus_wave.o ics2101.o
 
 # Firmware files that need translation
 #

@@ -18,6 +18,7 @@
 #include <linux/string.h>
 #include <linux/fs.h>
 #include <asm/dma.h>
+#include <asm/io.h>
 #include <asm/param.h>
 #include <linux/ptrace.h>
 #include <linux/sched.h>
@@ -32,7 +33,6 @@
 #include <asm/uaccess.h>
 #include <linux/poll.h>
 #include <linux/pci.h>
-#include <linux/bios32.h>
 #endif
 
 #include <linux/wrapper.h>
@@ -52,7 +52,6 @@ extern void reprogram_timer(void);
 #define USE_AUTOINIT_DMA
 
 extern caddr_t sound_mem_blocks[1024];
-extern int sound_mem_sizes[1024];
 extern int sound_nblocks;
 
 #undef PSEUDO_DMA_AUTOINIT

@@ -11,6 +11,7 @@ int DMAbuf_start_output(int dev, int buff_no, int l);
 int DMAbuf_move_wrpointer(int dev, int l);
 /* int DMAbuf_ioctl(int dev, unsigned int cmd, caddr_t arg, int local); */
 void DMAbuf_init(int dev, int dma1, int dma2);
+void DMAbuf_deinit(int dev);
 int DMAbuf_start_dma (int dev, unsigned long physaddr, int count, int dma_mode);
 int DMAbuf_open_dma (int dev);
 void DMAbuf_close_dma (int dev);
@@ -83,15 +84,8 @@ void MIDIbuf_init(void);
 /*	From soundcard.c	*/
 void request_sound_timer (int count);
 void sound_stop_timer(void);
-/* These two are about to die.. */
-int snd_set_irq_handler (int interrupt_level, void(*iproc)(int, void*, struct pt_regs *), char *name, int *osp, void *dev_id);
-void snd_release_irq(int vect, void *ptr);
-void sound_dma_malloc(int dev);
-void sound_dma_free(int dev);
 void conf_printf(char *name, struct address_info *hw_config);
 void conf_printf2(char *name, int base, int irq, int dma, int dma2);
-int ioctl_in(caddr_t arg);
-int ioctl_out(caddr_t arg, int result);
 
 /*	From opl3.c	*/
 int opl3_detect (int ioaddr, int *osp);
@@ -187,7 +181,7 @@ int ad1848_detect (int io_base, int *flags, int *osp);
 #define AD_F_CS4231	0x0001	/* Returned if a CS4232 (or compatible) detected */
 #define AD_F_CS4248	0x0001	/* Returned if a CS4248 (or compatible) detected */
 
-void	 ad1848_control(int cmd, int arg);
+int	 ad1848_control(int cmd, int arg);
 #define		AD1848_SET_XTAL		1
 #define		AD1848_MIXER_REROUTE	2
 #define AD1848_REROUTE(oldctl, newctl) \
@@ -196,9 +190,6 @@ void	 ad1848_control(int cmd, int arg);
 void adintr(int irq, void *dev_id, struct pt_regs * dummy);
 void attach_ms_sound(struct address_info * hw_config);
 int probe_ms_sound(struct address_info *hw_config);
-void attach_pnp_ad1848(struct address_info * hw_config);
-int probe_pnp_ad1848(struct address_info *hw_config);
-void unload_pnp_ad1848(struct address_info *hw_info);
 
 /* 	From pss.c */
 int probe_pss (struct address_info *hw_config);
@@ -235,7 +226,6 @@ void attach_mad16 (struct address_info *hw_config);
 int probe_mad16 (struct address_info *hw_config);
 void attach_mad16_mpu (struct address_info *hw_config);
 int probe_mad16_mpu (struct address_info *hw_config);
-int mad16_sb_dsp_detect (struct address_info *hw_config);
 
 /*	Unload routines from various source files*/
 void unload_pss(struct address_info *hw_info);
@@ -278,3 +268,7 @@ void attach_v_midi (struct address_info *hw_config);
 int probe_v_midi (struct address_info *hw_config);
 void unload_v_midi (struct address_info *hw_config);
 
+/*	From vidc.c */
+void attach_vidc(struct address_info *hw_config);
+int probe_vidc(struct address_info *hw_config);
+void unload_vidc(struct address_info *hw_config);

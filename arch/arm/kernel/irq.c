@@ -98,7 +98,7 @@ int get_irq_list(char *buf)
 		if (!action)
 			continue;
 		p += sprintf(p, "%3d: %10u   %s",
-			     i, kstat.interrupts[i], action->name);
+			     i, kstat.irqs[0][i], action->name);
 		for (action = action->next; action; action = action->next) {
 			p += sprintf(p, ", %s", action->name);
 		}
@@ -126,7 +126,7 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 
 	cpu = smp_processor_id();
 	irq_enter(cpu, irq);
-	kstat.interrupts[irq]++;
+	kstat.irqs[0][irq]++;
 
 	/* Return with this interrupt masked if no action */
 	status = 0;

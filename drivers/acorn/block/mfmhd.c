@@ -85,6 +85,8 @@
  *		card slots if someone tries this)!
  *
  * 17/1/97:RMK:	Upgraded to 2.1 kernels.
+ *
+ *  4/3/98:RMK:	Changed major number to 21.
  */
 
 /*
@@ -108,6 +110,9 @@
 #include <linux/major.h>
 #include <linux/ioport.h>
 
+#define MAJOR_NR	MFM_ACORN_MAJOR
+#include <linux/blk.h>
+
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/irq-no.h>
@@ -116,12 +121,6 @@
 #include <asm/dma.h>
 #include <asm/hardware.h>
 #include <asm/ecard.h>
-
-#define MFM_DISK_MAJOR	13
-#undef  XT_DISK_MAJOR
-#define XT_DISK_MAJOR	-1
-#define MAJOR_NR	MFM_DISK_MAJOR
-#include "blk.h"
 
 /*
  * This sort of stuff should be in a header file shared with ide.c, hd.c, xd.c etc
@@ -231,9 +230,6 @@ static int mfm_reread_partitions(kdev_t dev);
 static void mfm_specify (void);
 static void issue_request(int dev, unsigned int block, unsigned int nsect,
 			  struct request *req);
-
-#define mfm_init xd_init
-#define mfm_setup xd_setup
 
 static unsigned int mfm_addr;		/* Controller address */
 static unsigned int mfm_IRQPollLoc;	/* Address to read for IRQ information */

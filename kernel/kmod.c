@@ -15,8 +15,8 @@
 int kmod_unload_delay = 60;
 char modprobe_path[256] = "/sbin/modprobe";
 static char module_name[64] = "";
-static char * argv[] = { "modprobe", "-k", module_name, NULL, };
-static char * envp[] = { "HOME=/", "TERM=linux", NULL, };
+static char * argv[] = { modprobe_path, "-s", "-k", module_name, NULL };
+static char * envp[] = { "HOME=/", "TERM=linux", "PATH=/usr/bin:/bin", NULL };
 
 /*
 	kmod_queue synchronizes the kmod thread and the rest of the system
@@ -27,10 +27,23 @@ static struct wait_queue * kmod_queue = NULL;
 static struct timer_list kmod_unload_timer;
 
 /*
+	It is not easy to implement a full fork in kernel-space on some
+	systems (Alpha), and it is not necessary for us here.  This is 
+	a new thread that does the exec.
+*/
+static int kmod_exec_modprobe(void * data)
+{
+	sigemptyset(&current->blocked);
+	execve(modprobe_path, argv, envp);
+	printk(KERN_ERR "kmod: failed to load module %s\n", module_name);
+	return 0;
+}
+
+/*
 	kmod_thread is the thread that does most of the work.  kmod_unload and
 	request_module tell it to wake up and do work.
 */
-int kmod_thread(void * data)
+static int kmod_thread(void * data)
 {
 	int pid;
 
@@ -60,24 +73,13 @@ int kmod_thread(void * data)
 		if (module_name[0] == '\0') {
 			delete_module(NULL);
 		} else {
-			pid = fork();
+			pid = kernel_thread(kmod_exec_modprobe, NULL, SIGCHLD);
 			if (pid > 0) {
 				waitpid(pid, NULL, 0);
 				module_name[0] = '\0';
 				wake_up(&kmod_queue);
-			} else
-			if (pid == 0) {
-
-				/*
-					Call modprobe with module_name.  If execve returns,
-					print out an error.
-				*/
-				execve(modprobe_path, argv, envp);
-
-				printk("kmod: failed to load module %s\n", module_name);
-				_exit(0);
 			} else {
-				printk("error, fork failed in kmod\n");
+				printk(KERN_ERR "kmod: fork failed, errno %d\n", -pid);
 			}
 		}
 	}
@@ -104,7 +106,7 @@ void kmod_unload(unsigned long x)
 
 int kmod_init(void)
 {
-	printk ("Starting kmod\n");
+	printk("Starting kmod\n");
 
 	kernel_thread(kmod_thread, NULL, 0);
 

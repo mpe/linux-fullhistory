@@ -495,7 +495,7 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 	if (!sb->s_root) {
 		printk("SysV FS: get root inode failed\n");
 		sysv_put_super(sb);
-		sb->sb_dev = 0;
+		sb->s_dev = 0;
 		unlock_super(sb);
 		return NULL;
 	}

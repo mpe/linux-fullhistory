@@ -30,7 +30,8 @@ int             gus_pnp_flag = 0;
 
 void attach_gus_card(struct address_info *hw_config)
 {
-	snd_set_irq_handler(hw_config->irq, gusintr, "Gravis Ultrasound", hw_config->osp, hw_config);
+	if(request_irq(hw_config->irq, gusintr, 0,  "Gravis Ultrasound", hw_config)<0)
+		printk(KERN_ERR "gus_card.c: Unable to allocate IRQ %d\n", hw_config->irq);
 
 	gus_wave_init(hw_config);
 
@@ -38,10 +39,10 @@ void attach_gus_card(struct address_info *hw_config)
 	request_region(hw_config->io_base + 0x100, 12, "GUS");	/* 0x10c-> is MAX */
 
 	if (sound_alloc_dma(hw_config->dma, "GUS"))
-		printk("gus_card.c: Can't allocate DMA channel\n");
+		printk(KERN_ERR "gus_card.c: Can't allocate DMA channel %d\n", hw_config->dma);
 	if (hw_config->dma2 != -1 && hw_config->dma2 != hw_config->dma)
 		if (sound_alloc_dma(hw_config->dma2, "GUS(2)"))
-			printk("gus_card.c: Can't allocate DMA channel 2\n");
+			printk(KERN_ERR "gus_card.c: Can't allocate DMA channel %d\n", hw_config->dma2);
 #if defined(CONFIG_MIDI)
 	gus_midi_init(hw_config);
 #endif
@@ -101,7 +102,7 @@ void unload_gus(struct address_info *hw_config)
 
 	release_region(hw_config->io_base, 16);
 	release_region(hw_config->io_base + 0x100, 12);		/* 0x10c-> is MAX */
-	snd_release_irq(hw_config->irq, hw_config);
+	free_irq(hw_config->irq, hw_config);
 
 	sound_free_dma(hw_config->dma);
 

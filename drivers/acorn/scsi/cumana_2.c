@@ -114,7 +114,7 @@ cumanascsi_2_dma_pseudo (struct Scsi_Host *instance, Scsi_Pointer *SCp,
 	    unsigned long word;
 
 
-	    if (inb (REG0_STATUS(&info->info)) & STATUS_INT)
+	    if (inb (REG_STAT(&info->info)) & STAT_INT)
 		goto end;
 
 	    if (!(inb (info->cstatus) & CSTATUS_DRQ))
@@ -131,7 +131,7 @@ cumanascsi_2_dma_pseudo (struct Scsi_Host *instance, Scsi_Pointer *SCp,
     else {
 	if (transfer && (transfer & 255)) {
 	    while (length >= 256) {
-		if (inb (REG0_STATUS(&info->info)) & STATUS_INT)
+		if (inb (REG_STAT(&info->info)) & STAT_INT)
 		    goto end;
 	    
 		if (!(inb (info->cstatus) & CSTATUS_DRQ))
@@ -146,7 +146,7 @@ cumanascsi_2_dma_pseudo (struct Scsi_Host *instance, Scsi_Pointer *SCp,
 	while (length > 0) {
 	    unsigned long word;
 
-	    if (inb (REG0_STATUS(&info->info)) & STATUS_INT)
+	    if (inb (REG_STAT(&info->info)) & STAT_INT)
 		goto end;
 	    
 	    if (!(inb (info->cstatus) & CSTATUS_DRQ))

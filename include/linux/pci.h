@@ -977,6 +977,9 @@
 
 #ifdef __KERNEL__
 
+/* Create an index into the pci_dev base_address[] array from an offset.  */
+#define PCI_BASE_INDEX(o) (((o)-PCI_BASE_ADDRESS_0)>>2)
+
 /*
  * Error values that may be returned by the PCI bios.  Use
  * pcibios_strerror() to convert to a printable string.

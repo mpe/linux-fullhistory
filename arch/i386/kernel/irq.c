@@ -70,7 +70,9 @@ spinlock_t irq_controller_lock;
 
 static unsigned int irq_events [NR_IRQS] = { -1, };
 static int disabled_irq [NR_IRQS] = { 0, };
+#ifdef __SMP__
 static int ipi_pending [NR_IRQS] = { 0, };
+#endif
 
 /*
  * Not all IRQs can be routed through the IO-APIC, eg. on certain (older)

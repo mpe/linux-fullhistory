@@ -380,6 +380,7 @@
 
 static const char *version = "de4x5.c:V0.536 1998/3/5 davies@maniac.ultranet.com\n";
 
+#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/kernel.h>

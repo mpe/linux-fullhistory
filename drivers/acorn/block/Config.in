@@ -16,6 +16,4 @@ if [ "$CONFIG_BLK_DEV_MFM" != "n" ]; then
   bool '   Autodetect hard drive geometry' CONFIG_BLK_DEV_MFM_AUTODETECT
 fi
 
-bool 'ADFS partition support' CONFIG_BLK_DEV_PART
-
 endmenu

@@ -17,7 +17,6 @@ choice 'Processor family' \
 	 Pentium/K5/5x86/6x86	CONFIG_M586	\
 	 PPro/K6/6x86MX		CONFIG_M686" Pentium
 bool 'Math emulation' CONFIG_MATH_EMULATION
-int ' Max physical memory in MB' CONFIG_MAX_MEMSIZE 1024
 endmenu
 
 mainmenu_option next_comment

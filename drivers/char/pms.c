@@ -1020,11 +1020,10 @@ static void shutdown_mediavision(void)
  */
  
 #ifdef MODULE
-
-MODULE_PARM(io_port,"i");
-MODULE_PARM(mem_base,"i");
-
 int init_module(void)
+#else
+void init_pms_cards(void)
+#endif
 {
 	printk(KERN_INFO "Mediavision Pro Movie Studio driver 0.02\n");
 	
@@ -1040,8 +1039,13 @@ int init_module(void)
 	pms_device.width=320;
 	pms_swsense(75);
 	pms_resolution(320,240);
-	return video_register_device((struct video_device *)&pms_device);
+	return video_register_device((struct video_device *)&pms_device, VFL_TYPE_GRABBER);
 }
+
+#ifdef MODULE
+
+MODULE_PARM(io_port,"i");
+MODULE_PARM(mem_base,"i");
 
 void cleanup_module(void)
 {

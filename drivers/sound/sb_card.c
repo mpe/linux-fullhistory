@@ -2,17 +2,17 @@
  * sound/sb_card.c
  *
  * Detection routine for the Sound Blaster cards.
- */
-/*
+ *
+ *
  * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
+
 #include <linux/config.h>
 #include <linux/module.h>
-
 
 #include "sound_config.h"
 #include "soundmodule.h"
@@ -22,30 +22,29 @@
 #include "sb_mixer.h"
 #include "sb.h"
 
-void
-attach_sb_card(struct address_info *hw_config)
+void attach_sb_card(struct address_info *hw_config)
 {
 #if defined(CONFIG_AUDIO) || defined(CONFIG_MIDI)
 	sb_dsp_init(hw_config);
 #endif
 }
 
-int
-probe_sb(struct address_info *hw_config)
+int probe_sb(struct address_info *hw_config)
 {
 	if (check_region(hw_config->io_base, 16))
 	{
-		printk("\n\nsb_card.c: I/O port %x is already in use\n\n", hw_config->io_base);
+		printk(KERN_ERR "sb_card: I/O port %x is already in use\n\n", hw_config->io_base);
 		return 0;
 	}
 	return sb_dsp_detect(hw_config);
 }
 
-void
-unload_sb(struct address_info *hw_config)
+void unload_sb(struct address_info *hw_config)
 {
 	sb_dsp_unload(hw_config);
 }
+
+int sb_be_quiet=0;
 
 #ifdef MODULE
 
@@ -58,18 +57,17 @@ static struct address_info config_mpu;
  *      to the 8bit channel.
  */
 
-int             mpu_io = 0;
-int             io = -1;
-int             irq = -1;
-int             dma = -1;
-int             dma16 = -1;	/* Set this for modules that need it */
-int             type = 0;	/* Can set this to a specific card type */
-int             mad16 = 0;	/* Set mad16=1 to load this as support for mad16 */
-int             trix = 0;	/* Set trix=1 to load this as support for trix */
-int             pas2 = 0;	/* Set pas2=1 to load this as support for pas2 */
-int             sm_games = 0;	/* Mixer - see sb_mixer.c */
-int             acer = 0;	/* Do acer notebook init */
-int		mwave_bug = 0;	/* Using the dreadful mwave sb emulation */
+int mpu_io = 0;
+int io = -1;
+int irq = -1;
+int dma = -1;
+int dma16 = -1;	/* Set this for modules that need it */
+int type = 0;	/* Can set this to a specific card type */
+int mad16 = 0;	/* Set mad16=1 to load this as support for mad16 */
+int trix = 0;	/* Set trix=1 to load this as support for trix */
+int pas2 = 0;	/* Set pas2=1 to load this as support for pas2 */
+int sm_games = 0;	/* Mixer - see sb_mixer.c */
+int acer = 0;	/* Do acer notebook init */
 
 MODULE_PARM(io, "i");
 MODULE_PARM(irq, "i");
@@ -81,7 +79,6 @@ MODULE_PARM(mad16, "i");
 MODULE_PARM(trix, "i");
 MODULE_PARM(pas2, "i");
 MODULE_PARM(sm_games, "i");
-MODULE_PARM(mwave_bug, "i");
 
 static int sbmpu = 0;
 
@@ -124,7 +121,7 @@ int init_module(void)
 void cleanup_module(void)
 {
 	if (smw_free)
-		kfree(smw_free);
+		vfree(smw_free);
 	if (!mad16 && !trix && !pas2)
 		unload_sb(&config);
 	if (sbmpu)
@@ -144,11 +141,6 @@ int             acer = 1;
 #else
 int             acer = 0;
 #endif
-#ifdef CONFIG_SB_MWAVE
-int		mwave_bug = 1;
-#else
-int 		mwave_bug = 0;
-#endif
 #endif
 #endif
 
@@ -159,3 +151,4 @@ EXPORT_SYMBOL(sb_dsp_disable_midi);
 EXPORT_SYMBOL(attach_sb_card);
 EXPORT_SYMBOL(probe_sb);
 EXPORT_SYMBOL(unload_sb);
+EXPORT_SYMBOL(sb_be_quiet);

@@ -425,8 +425,6 @@ return -1; \
  */
 #define __NR__exit __NR_exit
 static __inline__ _syscall0(int,idle)
-static __inline__ _syscall0(int,fork)
-static __inline__ _syscall2(int,clone,unsigned long,flags,char *,ksp)
 static __inline__ _syscall0(int,pause)
 static __inline__ _syscall1(int,setup,int,magic)
 static __inline__ _syscall0(int,sync)

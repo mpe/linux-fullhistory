@@ -125,42 +125,7 @@ int pcibios_present(void)
 int pcibios_read_config_byte (unsigned char bus,
 	unsigned char device_fn, unsigned char where, unsigned char *value)
 {
-	int res;
-
-	res = access_pci->read_config_byte(bus, device_fn, where, value);
-
-#ifdef __SMP__
-/*
- * IOAPICs can take PCI IRQs directly, lets first check the mptable:
- *
- * This can go away once nobody probes the irq this way,
- * but uses the PCI tables instead.
- */
-	if (where == PCI_INTERRUPT_LINE) {
-		int irq;
-		char pin;
-
-		/*
-		 * get the PCI IRQ INT _physical pin_ for this device
-		 */
-		access_pci->read_config_byte(bus, device_fn,
-						PCI_INTERRUPT_PIN, &pin);
-		/*
-		 * subtle, PCI pins are numbered starting from 1 ...
-		 */
-		pin--;
-
-		irq = IO_APIC_get_PCI_irq_vector (bus,PCI_SLOT(device_fn),pin);
-		if (irq != -1)
-			*value = (unsigned char) irq;
-
-		printk("PCI->APIC IRQ transform: (B%d,I%d,P%d) -> %d\n",
-			bus,PCI_SLOT(device_fn), pin, irq);
-
-	}
-#endif
-
-	return res;
+	return access_pci->read_config_byte(bus, device_fn, where, value);
 }
 
 int pcibios_read_config_word (unsigned char bus,

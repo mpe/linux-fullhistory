@@ -144,3 +144,38 @@ struct inode_operations umsdos_file_inode_operations_no_bmap = {
 	NULL,			/* smap */
 };
 
+/* For other with larger and unaligned file system with readpage */
+struct file_operations umsdos_file_operations_readpage = {
+	NULL,				/* lseek - default */
+	UMSDOS_file_read,		/* read */
+	UMSDOS_file_write,		/* write */
+	NULL,				/* readdir - bad */
+	NULL,				/* poll - default */
+	NULL,				/* ioctl - default */
+	generic_file_mmap,		/* mmap */
+	NULL,				/* no special open is needed */
+	NULL,				/* release */
+	file_fsync			/* fsync */
+};
+
+struct inode_operations umsdos_file_inode_operations_readpage = {
+	&umsdos_file_operations_readpage,	/* default file operations */
+	NULL,			/* create */
+	NULL,			/* lookup */
+	NULL,			/* link */
+	NULL,			/* unlink */
+	NULL,			/* symlink */
+	NULL,			/* mkdir */
+	NULL,			/* rmdir */
+	NULL,			/* mknod */
+	NULL,			/* rename */
+	NULL,			/* readlink */
+	NULL,                   /* follow link */
+	fat_readpage,		/* readpage */
+	NULL,			/* writepage */
+	NULL,			/* bmap */
+	UMSDOS_truncate,	/* truncate */
+	NULL,			/* permission */
+	NULL,			/* smap */
+};
+

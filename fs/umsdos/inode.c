@@ -125,7 +125,7 @@ void umsdos_set_dirinfo(
     Printk (("umsdos_set_dirinfo: emd_owner is %lu for dir %lu\n", emd_owner->i_ino, dir->i_ino));
     inode->u.umsdos_i.i_dir_owner = dir->i_ino;
     inode->u.umsdos_i.i_emd_owner = emd_owner->i_ino;
-    iput (emd_owner);
+    /* iput (emd_owner); FIXME */
     inode->u.umsdos_i.pos = f_pos;
 }
 
@@ -176,12 +176,22 @@ void umsdos_patch_inode (
   if (!umsdos_isinit(inode)){
     inode->u.umsdos_i.i_emd_dir = 0;
     if (S_ISREG(inode->i_mode)){
-      if (inode->i_op->bmap != NULL){
-        Printk ((KERN_DEBUG "umsdos_patch_inode /mn/: seting i_op = umsdos_file_inode_operations\n"));
-	inode->i_op = &umsdos_file_inode_operations;
-      }else{
-        Printk ((KERN_DEBUG "umsdos_patch_inode /mn/: seting i_op = umsdos_file_inode_operations_no_bmap\n"));
-	inode->i_op = &umsdos_file_inode_operations_no_bmap;
+       if (MSDOS_SB(inode->i_sb)->cvf_format){
+         if (MSDOS_SB(inode->i_sb)->cvf_format->flags&CVF_USE_READPAGE){
+           Printk ((KERN_DEBUG "umsdos_patch_inode /mn/: seting i_op = umsdos_file_inode_operations_readpage\n"));
+           inode->i_op = &umsdos_file_inode_operations_readpage;
+         }else{
+           Printk ((KERN_DEBUG "umsdos_patch_inode /mn/: seting i_op = umsdos_file_inode_operations_no_bmap\n"));
+           inode->i_op = &umsdos_file_inode_operations_no_bmap;
+         }
+       }else{      
+         if (inode->i_op->bmap != NULL){
+           Printk ((KERN_DEBUG "umsdos_patch_inode /mn/: seting i_op = umsdos_file_inode_operations\n"));
+	   inode->i_op = &umsdos_file_inode_operations;
+         }else{
+           Printk ((KERN_DEBUG "umsdos_patch_inode /mn/: seting i_op = umsdos_file_inode_operations_no_bmap\n"));
+           inode->i_op = &umsdos_file_inode_operations_no_bmap;
+         }
       }
     }else if (S_ISDIR(inode->i_mode)){
       if (dir != NULL){
@@ -223,7 +233,7 @@ void umsdos_patch_inode (
       struct inode *emd_owner;
       Printk ((KERN_WARNING "umsdos_patch_inode: /mn/ Warning: untested emd_owner thingy...\n"));
       emd_owner = umsdos_emd_dir_lookup(dir,1);
-      iput (emd_owner);
+      /* iput (emd_owner); FIXME */
       if (emd_owner->i_ino != inode->u.umsdos_i.i_emd_owner){
 	  printk ("UMSDOS: *** EMD_OWNER ??? *** ino = %ld %ld <> %ld "
 		  ,inode->i_ino,emd_owner->i_ino,inode->u.umsdos_i.i_emd_owner);
@@ -323,7 +333,7 @@ int internal_notify_change(struct inode *inode, struct iattr *attr)
 {
   int ret = 0;
   
-  Printk ((KERN_ERR "UMSDOS_notify_change: /mn/ completly untested\n"));
+  PRINTK ((KERN_DEBUG "UMSDOS_notify_change: entering\n"));
   
   if ((ret = inode_change_ok(inode, attr)) != 0)
     return ret;
@@ -366,7 +376,7 @@ int internal_notify_change(struct inode *inode, struct iattr *attr)
 	struct dentry *emd_dentry;
 	loff_t offs;
 	
-	emd_dentry = creat_dentry ("notify_emd", 10, emd_owner);
+	emd_dentry = creat_dentry ("notify_emd", 10, emd_owner, NULL);
 	fill_new_filp (&filp, emd_dentry);
 	
 	filp.f_pos = inode->u.umsdos_i.pos;
@@ -403,7 +413,7 @@ int internal_notify_change(struct inode *inode, struct iattr *attr)
 	     EMD file. The msdos fs is not even called.
 	  */
 	}
-	iput (emd_owner);
+	/* iput (emd_owner); FIXME */
       }
       Printk (("\n"));
     }
@@ -472,7 +482,7 @@ struct super_block *UMSDOS_read_super(
     PRINTK ((KERN_DEBUG "UMSDOS /mn/: sb = %p\n",sb));
     res = msdos_read_super(sb,data,silent);
     PRINTK ((KERN_DEBUG "UMSDOS /mn/: res = %p\n",res));
-    printk (KERN_INFO "UMSDOS dentry-WIP-Beta 0.82-2 (compatibility level %d.%d, fast msdos)\n", UMSDOS_VERSION, UMSDOS_RELEASE);
+    printk (KERN_INFO "UMSDOS dentry-WIP-Beta 0.82-3 (compatibility level %d.%d, fast msdos)\n", UMSDOS_VERSION, UMSDOS_RELEASE);
 	  
     if (res == NULL) { MOD_DEC_USE_COUNT; return NULL; }
 
@@ -480,7 +490,7 @@ struct super_block *UMSDOS_read_super(
     res->s_op = &umsdos_sops;
     Printk ((KERN_DEBUG "umsdos /mn/: here goes the iget ROOT_INO\n"));
 
-    pseudo = iget(res,UMSDOS_ROOT_INO); 		
+    pseudo = iget(res,UMSDOS_ROOT_INO);
     Printk ((KERN_DEBUG "umsdos_read_super %p\n",pseudo));
 
     umsdos_setup_dir_inode (pseudo);
@@ -521,8 +531,8 @@ struct super_block *UMSDOS_read_super(
       */
       struct dentry *root, *etc, *etc_rc, *init, *sbin;
 
-      root = creat_dentry (UMSDOS_PSDROOT_NAME, strlen(UMSDOS_PSDROOT_NAME), NULL);
-      sbin = creat_dentry ("sbin", 4, NULL);
+      root = creat_dentry (UMSDOS_PSDROOT_NAME, strlen(UMSDOS_PSDROOT_NAME), NULL, NULL);
+      sbin = creat_dentry ("sbin", 4, NULL, NULL);
       
       Printk ((KERN_DEBUG "Mounting root\n"));
       if (umsdos_real_lookup (pseudo,root)==0
@@ -531,7 +541,7 @@ struct super_block *UMSDOS_read_super(
 	
 	int pseudo_ok = 0;
 	Printk ((KERN_DEBUG "/%s is there\n",UMSDOS_PSDROOT_NAME));
-	etc = creat_dentry ("etc", 3, NULL);
+	etc = creat_dentry ("etc", 3, NULL, NULL);
 	
 	
 	/* if (umsdos_real_lookup (pseudo,"etc",3,etc)==0 */
@@ -540,8 +550,8 @@ struct super_block *UMSDOS_read_super(
 
 	    Printk ((KERN_DEBUG "/%s/etc is there\n",UMSDOS_PSDROOT_NAME));
 	    
-	    init = creat_dentry ("init", 4, NULL);
-	    etc_rc = creat_dentry ("rc", 2, NULL);
+	    init = creat_dentry ("init", 4, NULL, NULL);
+	    etc_rc = creat_dentry ("rc", 2, NULL, NULL);
 	  
 	    /* if ((umsdos_real_lookup (etc,"init",4,init)==0*/
 	    if((umsdos_real_lookup(pseudo, init) == 0
@@ -585,7 +595,7 @@ struct super_block *UMSDOS_read_super(
       
       Printk ((KERN_WARNING "umsdos_read_super /mn/: Pseudo should be iput-ed here...\n"));
 
-      iput (pseudo); /* FIXME */
+      /* iput (pseudo); / * FIXME */
     }
 
 #endif /* disabled */

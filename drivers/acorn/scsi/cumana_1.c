@@ -33,7 +33,13 @@
  */
 
 /*
- * $Log: cumana_NCR5380.c,v $
+ * $Log: cumana_1.c,v $
+ * Revision 1.2  1998/03/08 05:49:46  davem
+ * Merge to 2.1.89
+ *
+ * Revision 1.1  1998/02/23 02:45:22  davem
+ * Merge to 2.1.88
+ *
  */
 
 #include <linux/module.h>

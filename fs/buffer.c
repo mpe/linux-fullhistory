@@ -1335,6 +1335,8 @@ static inline void after_unlock_page (struct page * page)
 			atomic_read(&nr_async_pages));
 #endif
 	}
+	if (test_and_clear_bit(PG_swap_unlock_after, &page->flags))
+		swap_after_unlock_page(page->offset);
 	if (test_and_clear_bit(PG_free_after, &page->flags))
 		__free_page(page);
 }

@@ -581,6 +581,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_EPIC100),y)
+L_OBJS += epic100.o
+else
+  ifeq ($(CONFIG_EPIC100),m)
+  M_OBJS += epic100.o
+  endif
+endif
+
 # If anything built-in uses slhc, then build it into the kernel also.
 # If not, but a module uses it, build as a module.
 ifdef CONFIG_SLHC_BUILTIN

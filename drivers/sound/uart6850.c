@@ -325,6 +325,8 @@ int irq = -1;
 MODULE_PARM(io,"i");
 MODULE_PARM(irq,"i");
 
+EXPORT_NO_SYMBOLS;
+
 struct address_info cfg;
 
 int init_module(void)

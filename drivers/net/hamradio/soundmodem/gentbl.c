@@ -681,7 +681,7 @@ int main(int argc, char *argv[])
 	gentbl_costab(f, 6);
 	gentbl_afsk2400(f, 7372800);
 	fclose(f);
-	return(0);
+	exit(0);
 }
 
 

@@ -41,7 +41,13 @@ used.
 select `M' for this driver in the kernel configuration and insert the
 module:
 
-insmod js.o js=0xXX,0xYY
+insmod joystick.o js=0xXX,0xYY
+
+  To enable autoloading/-unloading of the joystick module, you have to add
+these lines to /etc/conf.modules:
+
+alias char-major-15 joystick
+options joystick js=0xXX,0xYY
 
   To enable the user space programs to read the joystick device, you have to
 create the device files using mknod (man mknod for more info):

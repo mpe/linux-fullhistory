@@ -27,7 +27,6 @@
 #define __KERNEL_SYSCALLS__
 #include <asm/unistd.h>
 
-extern void bcopy (const char *src, char *dst, int len);
 extern struct hwrpb_struct *hwrpb;
 extern void dump_thread(struct pt_regs *, struct user *);
 extern int dump_fpu(struct pt_regs *, elf_fpregset_t *);
@@ -134,7 +133,6 @@ EXPORT_SYMBOL(__strlen_user);
  * interface isn't gonna change any time soon now, so it's OK
  * to leave it out of version control.
  */
-# undef bcopy
 # undef memcpy
 # undef memset
 EXPORT_SYMBOL_NOVERS(__divl);
@@ -147,7 +145,3 @@ EXPORT_SYMBOL_NOVERS(__remq);
 EXPORT_SYMBOL_NOVERS(__remqu);
 EXPORT_SYMBOL_NOVERS(memcpy);
 EXPORT_SYMBOL_NOVERS(memset);
-
-#if CONFIG_PCI
-EXPORT_SYMBOL(pci_devices);
-#endif

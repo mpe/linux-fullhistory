@@ -70,7 +70,7 @@ extern void init_modules(void);
 extern long console_init(long, long);
 extern void sock_init(void);
 extern void uidcache_init(void);
-extern long mca_init(long, long);
+extern void mca_init(void);
 extern long sbus_init(long, long);
 extern long powermac_init(unsigned long, unsigned long);
 extern void sysctl_init(void);
@@ -1012,6 +1012,12 @@ __initfunc(asmlinkage void start_kernel(void))
 	sched_init();
 	time_init();
 	parse_options(command_line);
+
+	/*
+	 * HACK ALERT! This is early. We're enabling the console before
+	 * we've done PCI setups etc, and console_init() must be aware of
+	 * this. But we do want output early, in case something goes wrong.
+	 */
 	memory_start = console_init(memory_start,memory_end);
 #ifdef CONFIG_MODULES
 	init_modules();
@@ -1027,14 +1033,6 @@ __initfunc(asmlinkage void start_kernel(void))
 	}
 #endif
 
-/*
- * HACK ALERT! This is early. We're enabling the console before
- * we've done PCI setups etc, and console_init() must be aware of
- * this. But we do want output early, in case something goes wrong.
- */
-#if HACK
-	memory_start = console_init(memory_start,memory_end);
-#endif
 	memory_start = kmem_cache_init(memory_start, memory_end);
 	sti();
 	calibrate_delay();

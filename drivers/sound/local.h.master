@@ -42,7 +42,7 @@
   defined(CONFIG_MSS_MODULE) || defined(CONFIG_SSCAPE_MODULE) || \
   defined(CONFIG_TRIX_MODULE) || defined(CONFIG_MAD16_MODULE) || \
   defined(CONFIG_CS4232_MODULE) || defined(CONFIG_OPL3SA1_MODULE) || \
-  defined(CONFIG_SOFTOSS_MODULE)
+  defined(CONFIG_SOFTOSS_MODULE) || defined(CONFIG_VIDC_SOUND)
 #       define CONFIG_AUDIO
 #endif
 

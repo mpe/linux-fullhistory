@@ -142,15 +142,7 @@ extern __inline__ int ip_finish_output(struct sk_buff *skb)
 	skb->protocol = __constant_htons(ETH_P_IP);
 
 	if (hh) {
-#ifdef __alpha__
-		/* Alpha has disguisting memcpy. Help it. */
-	        u64 *aligned_hdr = (u64*)(skb->data - 16);
-		u64 *aligned_hdr0 = hh->hh_data;
-		aligned_hdr[0] = aligned_hdr0[0];
-		aligned_hdr[1] = aligned_hdr0[1];
-#else
 		memcpy(skb->data - 16, hh->hh_data, 16);
-#endif
 	        skb_push(skb, dev->hard_header_len);
 		return hh->hh_output(skb);
 	} else if (dst->neighbour)

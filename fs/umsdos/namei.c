@@ -216,6 +216,7 @@ static int umsdos_create_any (
 {
     
   int ret;
+  struct dentry *fake;
   
   Printk (("umsdos_create_any /mn/: create %.*s in dir=%lu - nevercreat=/", (int) dentry->d_name.len, dentry->d_name.name, dir->i_ino));
   ret = umsdos_nevercreat(dir,dentry,-EEXIST);
@@ -238,17 +239,16 @@ static int umsdos_create_any (
       ret = umsdos_newentry (dir,&info);
       if (ret == 0){
 	dir->i_count++;
-      /* FIXME
-	 ret = msdos_create (dir,info.fake.fname,info.fake.len
-	 ,S_IFREG|0777,result);
-      */
-	ret =msdos_create(dir,dentry,S_IFREG|0777);
+        fake = creat_dentry (info.fake.fname, info.fake.len, NULL, dentry->d_parent);	/* create short name dentry */
+	ret = msdos_create (dir, fake, S_IFREG|0777);
 	if (ret == 0){
-	  struct inode *inode = dentry->d_inode;
+	  struct inode *inode = fake->d_inode;
 	  umsdos_lookup_patch (dir,inode,&info.entry,info.f_pos);
 	  Printk (("inode %p[%lu], count=%d ",inode, inode->i_ino, inode->i_count));
 	  Printk (("Creation OK: [dir %lu] %.*s pid=%d pos %ld\n", dir->i_ino,
 		   info.fake.len, info.fake.fname, current->pid, info.f_pos));
+	  
+	  d_instantiate(dentry, inode);	/* long name also gets inode info */
 	}else{
 	  /* #Specification: create / file exist in DOS
 	     Here is a situation. Trying to create a file with
@@ -367,8 +367,8 @@ static int umsdos_rename_f(
 	  PRINTK (("ret %d %d ",ret,new_info.fake.len));
 	  if (ret == 0){
 	    struct dentry *old, *new;
-	    old = creat_dentry (old_info.fake.fname, old_info.fake.len, NULL);
-	    new = creat_dentry (new_info.fake.fname, new_info.fake.len, NULL);
+	    old = creat_dentry (old_info.fake.fname, old_info.fake.len, NULL, NULL);
+	    new = creat_dentry (new_info.fake.fname, new_info.fake.len, NULL, NULL);
 
 	    PRINTK (("msdos_rename "));
 	    old_dir->i_count++;
@@ -471,7 +471,7 @@ static int umsdos_symlink_x(
     fill_new_filp (&filp, dentry);
 
     /* Make the inode acceptable to MSDOS FIXME */
-    Printk ((KERN_ERR "umsdos_symlink_x: FIXME /mn/ Here goes the crash.. known wrong code...\n"));
+    Printk ((KERN_WARNING "umsdos_symlink_x: /mn/ Is this ok?\n"));
     Printk ((KERN_WARNING "   symname=%s ; dentry name=%.*s (ino=%lu)\n", symname, (int) dentry->d_name.len, dentry->d_name.name, dentry->d_inode->i_ino));
     ret = umsdos_file_write_kmem_real (&filp, symname, len, &myofs);
     /* dput(dentry); ?? where did this come from FIXME */
@@ -489,7 +489,7 @@ static int umsdos_symlink_x(
       dir = NULL;
     }
   }
-  d_instantiate(dentry,dir);
+  /* d_instantiate(dentry,dir);   //already done in umsdos_create_any */
   Printk (("\n"));
   return ret;
 }
@@ -634,7 +634,7 @@ int UMSDOS_link (
 		ret = -ENOMEM;
 	      }else{
 		struct dentry *temp;
-		temp = creat_dentry (entry.name, entry.name_len, NULL);
+		temp = creat_dentry (entry.name, entry.name_len, NULL, NULL);
 		Printk (("olddir[%d] ",olddir->i_count));
 		ret = umsdos_locate_path (oldinode,path);
 		Printk (("olddir[%d] ",olddir->i_count));
@@ -673,7 +673,7 @@ int UMSDOS_link (
       umsdos_unlockcreate(olddir);
       umsdos_unlockcreate(dir);
     }
-    iput (olddir);
+    /* iput (olddir); FIXME */
   }
   if (ret == 0){
     struct iattr newattrs;
@@ -681,8 +681,10 @@ int UMSDOS_link (
     newattrs.ia_valid = 0;
     ret = UMSDOS_notify_change(olddentry, &newattrs);
   }
-  dput (olddentry);
-  dput (dentry);
+
+/*  dput (olddentry);
+  dput (dentry); FIXME.... */
+  
   Printk (("umsdos_link %d\n",ret));
   return ret;
 }
@@ -735,10 +737,12 @@ int UMSDOS_mkdir(
       ret = umsdos_newentry (dir,&info);
       Printk (("newentry %d ",ret));
       if (ret == 0){
-	struct dentry *temp;
-	temp = creat_dentry (info.fake.fname, info.fake.len, NULL);
+	struct dentry *temp, *tdir;
+	tdir = creat_dentry ("mkd-dir", 7, dir, NULL);
+	temp = creat_dentry (info.fake.fname, info.fake.len, NULL, tdir);
 	dir->i_count++;
 	ret = msdos_mkdir (dir, temp, mode);
+	
 	if (ret != 0){
 	  umsdos_delentry (dir,&info,1);
 	  /* #Specification: mkdir / Directory already exist in DOS
@@ -756,17 +760,22 @@ int UMSDOS_mkdir(
 	  ret = compat_umsdos_real_lookup (dir,info.fake.fname,
 					   info.fake.len,&subdir);
 	  if (ret == 0){
-/*	    struct inode *result;	FIXME /mn/ hmmm what is this supposed to be ? */
-	    struct dentry *tdentry;
-	    tdentry = creat_dentry (UMSDOS_EMD_FILE, UMSDOS_EMD_NAMELEN, NULL);
-
-	    ret = msdos_create (subdir, tdentry,S_IFREG|0777);
+	    struct dentry *tdentry, *tdsub;
+	    tdsub = creat_dentry ("mkd-emd", 7, subdir, NULL);
+	    tdentry = creat_dentry (UMSDOS_EMD_FILE, UMSDOS_EMD_NAMELEN, NULL, tdsub);
+	    ret = msdos_create (subdir, tdentry, S_IFREG|0777);
+	    kill_dentry (tdentry);	/* we don't want empty EMD file to be visible ! too bad kill_dentry does nothing at the moment :-)  FIXME */
+	    kill_dentry (tdsub);
+	    umsdos_setup_dir_inode (subdir);	/* this should setup dir so it is promoted to EMD, and EMD file is not visible inside it */
 	    subdir = NULL;
+	    d_instantiate(dentry, temp->d_inode);
 	    /* iput (result); FIXME */
 	  }
 	  if (ret < 0){
 	    printk ("UMSDOS: Can't create empty --linux-.---\n");
 	  }
+	  
+	
 	  /* iput (subdir); FIXME */
 	}
       }
@@ -774,7 +783,7 @@ int UMSDOS_mkdir(
     }
   }
   Printk (("umsdos_mkdir %d\n",ret));
-/*  dput (dentry); FIXME /mn/ */
+  /* dput (dentry); / * FIXME /mn/ */
   return ret;
 }
 
@@ -803,7 +812,7 @@ int UMSDOS_mknod(
   */
 
   int ret = umsdos_create_any (dir,dentry,mode,rdev,0);
-/*  dput(dentry); /mn/ FIXME! */
+  /* dput(dentry); / * /mn/ FIXME! */
   return ret;
 }
 
@@ -902,7 +911,9 @@ int UMSDOS_rmdir(
      as possible.
   */		
 
-  int ret = umsdos_nevercreat(dir,dentry,-EPERM);
+  int ret;
+  
+  ret = umsdos_nevercreat(dir,dentry,-EPERM);
   if (ret == 0){
     volatile struct inode *sdir;
     dir->i_count++;
@@ -913,18 +924,22 @@ int UMSDOS_rmdir(
       int empty;
       umsdos_lockcreate(dir);
       if (sdir->i_count > 1){
+        Printk ((" /mn/ rmdir: FIXME EBUSY: hmmm, i_count is %d > 1\n", sdir->i_count));
 	ret = -EBUSY;
       }else if ((empty = umsdos_isempty (sdir)) != 0){
-	struct dentry *tdentry;
-	tdentry = creat_dentry (UMSDOS_EMD_FILE, UMSDOS_EMD_NAMELEN, NULL);
+	struct dentry *tdentry, *tedir;
+	tedir = creat_dentry ("emd-rmd", 7, dir, NULL);
+	tdentry = creat_dentry (UMSDOS_EMD_FILE, UMSDOS_EMD_NAMELEN, NULL, tedir);
+        umsdos_real_lookup (dir, tdentry);	/* fill inode part */
 	Printk (("isempty %d i_count %d ",empty,sdir->i_count));
 				/* check sticky bit */
 	if ( !(dir->i_mode & S_ISVTX) || fsuser() ||
 	     current->fsuid == sdir->i_uid ||
 	     current->fsuid == dir->i_uid ) {
 	  if (empty == 1){
-	    /* We have to removed the EMD file */
+	    /* We have to remove the EMD file */
 	    ret = msdos_unlink (sdir, tdentry);
+	    Printk (("UMSDOS_rmdir: unlinking empty EMD ret=%d", ret));
 	    sdir = NULL;
 	  }
 	  /* sdir must be free before msdos_rmdir() */
@@ -933,17 +948,34 @@ int UMSDOS_rmdir(
 	  Printk (("isempty ret %d nlink %d ",ret,dir->i_nlink));
 	  if (ret == 0){
 	    struct umsdos_info info;
-	    struct dentry *temp;
+	    struct dentry *temp, *tdir;
 	    dir->i_count++;
 	    umsdos_parse (dentry->d_name.name,dentry->d_name.len,&info);
 	    /* The findentry is there only to complete */
 	    /* the mangling */
 	    umsdos_findentry (dir,&info,2);
-	    temp = creat_dentry (info.fake.fname, info.fake.len, NULL);
-	    
+
+            tdir = creat_dentry ("dir-rmd", 7, dir, NULL);
+            temp = creat_dentry (info.fake.fname, info.fake.len, NULL, tdir);
+            umsdos_real_lookup (dir, temp);	/* fill inode part */
+            
+	      Printk ((KERN_ERR "  rmdir start dir=%lu, dir->sb=%p\n", dir->i_ino, dir->i_sb)); /* FIXME: /mn/ debug only */
+	      Printk ((KERN_ERR "    dentry=%.*s d_count=%d ino=%lu\n", (int) temp->d_name.len, temp->d_name.name, temp->d_count, temp->d_inode->i_ino));
+	      Printk ((KERN_ERR "    d_parent=%.*s d_count=%d ino=%lu\n", (int) temp->d_parent->d_name.len, temp->d_parent->d_name.name, temp->d_parent->d_count, temp->d_parent->d_inode->i_ino));
+
 	    ret = msdos_rmdir (dir, temp);
+
+	      Printk ((KERN_ERR "  rmdir passed %d\n", ret)); /* FIXME: /mn/ debug only */
+	      Printk ((KERN_ERR "  rmdir end dir=%lu, dir->sb=%p\n", dir->i_ino, dir->i_sb));
+	      Printk ((KERN_ERR "    dentry=%.*s d_count=%d ino=%p\n", (int) temp->d_name.len, temp->d_name.name, temp->d_count, temp->d_inode));
+	      Printk ((KERN_ERR "    d_parent=%.*s d_count=%d ino=%lu\n", (int) temp->d_parent->d_name.len, temp->d_parent->d_name.name, temp->d_parent->d_count, temp->d_parent->d_inode->i_ino));
+
+            kill_dentry (tdir);
+            kill_dentry (temp);
+            
 	    if (ret == 0){
 	      ret = umsdos_delentry (dir,&info,1);
+              d_delete (dentry);
 	    }
 	  }
 	}else{
@@ -961,7 +993,7 @@ int UMSDOS_rmdir(
       umsdos_unlockcreate(dir);
     }	
   }
-  dput(dentry);
+ /*  dput(dentry); FIXME /mn/ */
   Printk (("umsdos_rmdir %d\n",ret));
   return ret;
 }
@@ -1036,13 +1068,21 @@ int UMSDOS_unlink (
 	  if (ret == 0){
 	    ret = umsdos_delentry (dir,&info,0);
 	    if (ret == 0){
-	      struct dentry *temp;
+	      struct dentry *temp, *tdir;
 	      Printk (("Avant msdos_unlink %.*s ",info.fake.len,info.fake.fname));
-	      dir->i_count++;
-	      temp = creat_dentry (info.fake.fname, info.fake.len, NULL);
+	      dir->i_count++;  /* FIXME /mn/ is this needed anymore now that msdos_unlink locks dir using d_parent ? */
+	      tdir = creat_dentry ("dir-del", 7, dir, NULL);	/* FIXME /mn/: do we need iget(dir->i_ino) or would dir itself suffice ? */
+	      temp = creat_dentry (info.fake.fname, info.fake.len, NULL, tdir);
+	      umsdos_real_lookup (dir, temp);	/* fill inode part */
+	      
 	      ret = msdos_unlink_umsdos (dir, temp);
 	      Printk (("msdos_unlink %.*s %o ret %d ",info.fake.len,info.fake.fname
 		       ,info.entry.mode,ret));
+
+	      d_delete (dentry);
+	      
+	      kill_dentry (tdir);
+	      kill_dentry (temp);
 	    }
 	  }
 	}else{
@@ -1054,7 +1094,7 @@ int UMSDOS_unlink (
       umsdos_unlockcreate(dir);
     }
   }	
-  dput(dentry);
+  /* dput(dentry); FIXME: shouldn't this be done in msdos_unlink ? */
   Printk (("umsdos_unlink %d\n",ret));
   return ret;
 }
@@ -1140,8 +1180,9 @@ int UMSDOS_rename(
       }
     }
   }
+  /*
   dput (new_dentry);
-  dput (old_dentry);
+  dput (old_dentry); FIXME /mn/ */
   return ret;
 }
 

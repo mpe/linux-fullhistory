@@ -94,6 +94,7 @@ extern int tlan_probe(struct device *);
 extern int mace_probe(struct device *);
 extern int cs89x0_probe(struct device *dev);
 extern int ethertap_probe(struct device *dev);
+extern int epic100_probe(struct device *dev);
 
 /* Detachable devices ("pocket adaptors") */
 extern int atp_init(struct device *);
@@ -286,6 +287,9 @@ __initfunc(static int ethif_probe(struct device *dev))
 #endif
 #ifdef CONFIG_ARM_AM79C961A
 	&& am79c961_probe(dev)
+#endif
+#ifdef CONFIG_EPIC100
+	&& epic100_probe(dev)
 #endif
 	&& 1 ) {
 	return 1;	/* -ENODEV or -EAGAIN would be more accurate. */

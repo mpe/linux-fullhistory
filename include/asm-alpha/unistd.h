@@ -421,12 +421,6 @@ static inline int read(int fd, char * buf, int nr)
 	return sys_read(fd, buf, nr);
 }
 
-extern int sys_fork(void);
-static inline int fork(void)
-{
-	return sys_fork();
-}
-
 extern int __kernel_execve(char *, char **, char **, struct pt_regs *);
 static inline int execve(char * file, char ** argvp, char ** envp)
 {

@@ -56,7 +56,6 @@
 * Jan 06, 1997	Gene Kozin	Initial version.
 *****************************************************************************/
 
-#include <linux/config.h>	/* OS configuration options */
 #include <linux/kernel.h>	/* printk(), and other useful stuff */
 #include <linux/stddef.h>	/* offsetof(), etc. */
 #include <linux/errno.h>	/* return codes */

@@ -560,15 +560,13 @@ int pcibios_present(void)
 }
 
 
-unsigned long pcibios_init(unsigned long mem_start,
-			   unsigned long mem_end)
+void __init
+pcibios_init(void)
 {
 	printk("Alpha PCI BIOS32 revision %x.%02x\n", MAJOR_REV, MINOR_REV);
-
 #if !PCI_MODIFY
 	printk("...NOT modifying existing (SRM) PCI configuration\n");
 #endif
-	return mem_start;
 }
 
 /*
@@ -1951,20 +1949,20 @@ static inline void sio_fixup(void)
 extern void tga_console_init(void);
 #endif /* CONFIG_TGA_CONSOLE */
 
-unsigned long __init
-pcibios_fixup(unsigned long mem_start, unsigned long mem_end)
+void __init
+pcibios_fixup(void)
 {
 	  struct pci_bus *cur;
 
 #ifdef CONFIG_ALPHA_MCPCIA
 	/* must do massive setup for multiple PCI busses here... */
 	DBG_DEVS(("pcibios_fixup: calling mcpcia_fixup()...\n"));
-	mem_start = mcpcia_fixup(mem_start, mem_end);
+	mcpcia_fixup();
 #endif /* MCPCIA */
 
 #ifdef CONFIG_ALPHA_TSUNAMI
 	/* must do massive setup for multiple PCI busses here... */
-	/*	mem_start = tsunami_fixup(mem_start, mem_end); */
+	/* tsunami_fixup(); */
 #endif /* TSUNAMI */
 
 #if PCI_MODIFY && !defined(CONFIG_ALPHA_RUFFIAN)
@@ -2030,8 +2028,6 @@ pcibios_fixup(unsigned long mem_start, unsigned long mem_end)
 	tga_console_init();
 #endif
 #endif
-
-	return mem_start;
 }
 
 

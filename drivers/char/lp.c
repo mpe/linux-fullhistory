@@ -14,6 +14,8 @@
  *                                             carsten@sol.wohnheim.uni-ulm.de
  * Support for parport by Philip Blundell <Philip.Blundell@pobox.com>
  * parport_sharing hacking by Andrea Arcangeli <arcangeli@mbox.queen.it>
+ * Fixed kernel_(to/from)_user memory copy to check for errors
+ * 				by Riccardo Facchetti <fizban@tin.it>
  */
 
 /* This driver should, in theory, work with any parallel port that has an
@@ -273,7 +275,9 @@ static inline int lp_write_buf(unsigned int minor, const char *buf, int count)
 	do {
 		bytes_written = 0;
 		copy_size = (count <= LP_BUFFER_SIZE ? count : LP_BUFFER_SIZE);
-		copy_from_user(lp->lp_buffer, buf, copy_size);
+
+		if (copy_from_user(lp->lp_buffer, buf, copy_size))
+			return -EFAULT;
 
 		while (copy_size) {
 			if (lp_char(lp->lp_buffer[bytes_written], minor)) {
@@ -459,15 +463,19 @@ static ssize_t lp_read(struct file * file, char * buf,
 			current->timeout=jiffies + LP_TIME(minor);
 			schedule ();
 		}
+
 		counter=0;
+
 		if (( i & 1) != 0) {
 			Byte= (Byte | z<<4);
-			put_user(Byte, temp);
+			if (put_user(Byte, (char *)temp))
+				return -EFAULT;
 			temp++;
 		} else Byte=z;
 	}
+
 	lp_select_in_high(minor);
-	parport_release(lp_table[minor].dev);
+	lp_parport_release(minor);
 	return temp-buf;	
 }
 
@@ -538,6 +546,7 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 		    unsigned int cmd, unsigned long arg)
 {
 	unsigned int minor = MINOR(inode->i_rdev);
+	int status;
 	int retval = 0;
 
 #ifdef LP_DEBUG
@@ -579,48 +588,33 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 			return -EINVAL;
 			break;
 		case LPGETIRQ:
-			retval = verify_area(VERIFY_WRITE, (void *) arg,
-			    sizeof(int));
-		    	if (retval)
-		    		return retval;
-			copy_to_user((int *) arg, &LP_IRQ(minor), sizeof(int));
+			if (copy_to_user((int *) arg, &LP_IRQ(minor),
+					sizeof(int)))
+				return -EFAULT;
 			break;
 		case LPGETSTATUS:
-			retval = verify_area(VERIFY_WRITE, (void *) arg,
-			    sizeof(int));
-		    	if (retval)
-		    		return retval;
-			else {
-				int status;
-				lp_parport_claim (minor);
-				status = r_str(minor);
-				lp_parport_release (minor);
-				copy_to_user((int *) arg, &status, sizeof(int));
-			}
+			lp_parport_claim(minor);
+			status = r_str(minor);
+			lp_parport_release(minor);
+
+			if (copy_to_user((int *) arg, &status, sizeof(int)))
+				return -EFAULT;
 			break;
 		case LPRESET:
 			lp_reset(minor);
 			break;
 		case LPGETSTATS:
-			retval = verify_area(VERIFY_WRITE, (void *) arg,
-			    sizeof(struct lp_stats));
-		    	if (retval)
-		    		return retval;
-			else {
-				copy_to_user((int *) arg, &LP_STAT(minor), sizeof(struct lp_stats));
-				if (suser())
-					memset(&LP_STAT(minor), 0, sizeof(struct lp_stats));
-			}
+			if (copy_to_user((int *) arg, &LP_STAT(minor),
+					sizeof(struct lp_stats)))
+				return -EFAULT;
+			if (suser())
+				memset(&LP_STAT(minor), 0,
+						sizeof(struct lp_stats));
 			break;
  		case LPGETFLAGS:
- 			retval = verify_area(VERIFY_WRITE, (void *) arg,
- 			    sizeof(int));
- 		    	if (retval)
- 		    		return retval;
- 			else {
- 				int status = LP_F(minor);
-				copy_to_user((int *) arg, &status, sizeof(int));
-			}
+ 			status = LP_F(minor);
+			if (copy_to_user((int *) arg, &status, sizeof(int)))
+				return -EFAULT;
 			break;
 		default:
 			retval = -EINVAL;

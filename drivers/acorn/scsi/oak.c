@@ -33,6 +33,12 @@
 
 /*
  * $Log: oak.c,v $
+ * Revision 1.2  1998/03/08 05:49:48  davem
+ * Merge to 2.1.89
+ *
+ * Revision 1.1  1998/02/23 02:45:27  davem
+ * Merge to 2.1.88
+ *
  */
 
 #include <linux/module.h>

@@ -2,15 +2,15 @@
  * sound/softoss.c
  *
  * Software based MIDI synthsesizer driver.
- */
-/*
+ *
+ *
  * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
- */
-/*
+ *
+ *
  * Thomas Sailer   : ioctl code reworked (vmalloc/vfree removed)
  */
 #include <linux/config.h>
@@ -35,14 +35,15 @@
 #include "softoss.h"
 #include <linux/ultrasound.h>
 
-int             softsynth_disabled = 0;
+int softsynth_disabled = 0;
 
 static volatile int intr_pending = 0;
 
 #ifdef POLLED_MODE
 
-static struct timer_list poll_timer =
-{NULL, NULL, 0, 0, softsyn_poll};
+static struct timer_list poll_timer = {
+	NULL, NULL, 0, 0, softsyn_poll
+};
 
 #else
 #endif
@@ -101,11 +102,14 @@ extern int     *sound_osp;
 static volatile int is_running = 0;
 static int      softsynth_loaded = 0;
 
-static struct synth_info softsyn_info =
-{"SoftOSS", 0, SYNTH_TYPE_SAMPLE, SAMPLE_TYPE_GUS, 0, 16, 0, MAX_PATCH};
+static struct synth_info softsyn_info = {
+	"SoftOSS", 0, SYNTH_TYPE_SAMPLE, SAMPLE_TYPE_GUS, 0, 16, 0, MAX_PATCH
+};
 
-static struct softsyn_devc sdev_info =
-{0};
+static struct softsyn_devc sdev_info = {
+	0
+};
+
 softsyn_devc   *devc = &sdev_info;	/* used in softoss_rs.c */
 
 static struct voice_alloc_info *voice_alloc;
@@ -118,10 +122,9 @@ static volatile int tmr_running = 0;
 static int      voice_limit = 24;
 
 
-static void
-set_max_voices(int nr)
+static void set_max_voices(int nr)
 {
-	int             i;
+	int i;
 
 	if (nr < 4)
 		nr = 4;
@@ -134,19 +137,18 @@ set_max_voices(int nr)
 
 	for (i = 31; i > 0; i--)
 		if (nr & (1 << i))
-		  {
-			  devc->afterscale = i + 1;
-			  return;
-		  }
+		{
+			devc->afterscale = i + 1;
+			return;
+		}
 }
 
-static void
-update_vibrato(int voice)
+static void update_vibrato(int voice)
 {
-	voice_info     *v = &softoss_voices[voice];
+	voice_info *v = &softoss_voices[voice];
 
 #ifdef HANDLE_LFO
-	int             x;
+	int x;
 
 	x = vibrato_table[v->vibrato_phase >> 8];
 	v->vibrato_phase = (v->vibrato_phase + v->vibrato_step) & 0x7fff;
@@ -161,11 +163,10 @@ update_vibrato(int voice)
 }
 
 #ifdef HANDLE_LFO
-static void
-update_tremolo(int voice)
+static void update_tremolo(int voice)
 {
-	voice_info     *v = &softoss_voices[voice];
-	int             x;
+	voice_info *v = &softoss_voices[voice];
+	int x;
 
 	x = tremolo_table[v->tremolo_phase >> 8];
 	v->tremolo_phase = (v->tremolo_phase + v->tremolo_step) & 0x7fff;
@@ -174,11 +175,10 @@ update_tremolo(int voice)
 }
 #endif
 
-static void
-start_vibrato(int voice)
+static void start_vibrato(int voice)
 {
-	voice_info     *v = &softoss_voices[voice];
-	int             rate;
+	voice_info *v = &softoss_voices[voice];
+	int rate;
 
 	if (!v->vibrato_depth)
 		return;
@@ -189,11 +189,10 @@ start_vibrato(int voice)
 	devc->vibratomap |= (1 << voice);	/* Enable vibrato */
 }
 
-static void
-start_tremolo(int voice)
+static void start_tremolo(int voice)
 {
-	voice_info     *v = &softoss_voices[voice];
-	int             rate;
+	voice_info *v = &softoss_voices[voice];
+	int rate;
 
 	if (!v->tremolo_depth)
 		return;
@@ -204,43 +203,43 @@ start_tremolo(int voice)
 	devc->tremolomap |= (1 << voice);	/* Enable tremolo */
 }
 
-static void
-update_volume(int voice)
+static void update_volume(int voice)
 {
-	voice_info     *v = &softoss_voices[voice];
-	unsigned int    vol;
+	voice_info *v = &softoss_voices[voice];
+	unsigned int vol;
 
-/*
- * Compute plain volume
- */
+	/*
+	 *	Compute plain volume
+	 */
 
 	vol = (v->velocity * v->expression_vol * v->main_vol) >> 12;
 
 #ifdef HANDLE_LFO
-/*
- * Handle LFO
- */
+	/*
+	 *	Handle LFO
+	 */
 
 	if (devc->tremolomap & (1 << voice))
-	  {
-		  int             t;
+	{
+		int t;
 
-		  t = 32768 - v->tremolo_level;
-		  vol = (vol * t) >> 15;
-		  update_tremolo(voice);
-	  }
+		t = 32768 - v->tremolo_level;
+		vol = (vol * t) >> 15;
+		update_tremolo(voice);
+	}
 #endif
-/*
- * Envelope
- */
+	/*
+	 *	Envelope
+	 */
+	 
 	if (v->mode & WAVE_ENVELOPES && !v->percussive_voice)
 		vol = (vol * (v->envelope_vol >> 16)) >> 19;
 	else
 		vol >>= 4;
 
-/*
- * Handle panning
- */
+	/*
+	 * Handle panning
+	 */
 
 	if (v->panning < 0)	/* Pan left */
 		v->rightvol = (vol * (128 + v->panning)) / 128;
@@ -253,45 +252,47 @@ update_volume(int voice)
 		v->leftvol = vol;
 }
 
-static void
-step_envelope(int voice, int do_release, int velocity)
+static void step_envelope(int voice, int do_release, int velocity)
 {
-	voice_info     *v = &softoss_voices[voice];
-	int             r, rate, time, dif;
-	unsigned int    vol;
-	unsigned long   flags;
+	voice_info *v = &softoss_voices[voice];
+	int r, rate, time, dif;
+	unsigned int vol;
+	unsigned long flags;
 
 	save_flags(flags);
 	cli();
 
 	if (!voice_active[voice] || v->sample == NULL)
-	  {
-		  restore_flags(flags);
-		  return;
-	  }
+	{
+		restore_flags(flags);
+		return;
+	}
 	if (!do_release)
+	{
 		if (v->mode & WAVE_SUSTAIN_ON && v->envelope_phase == 2)
-		  {		/* Stop envelope until note off */
-			  v->envelope_volstep = 0;
-			  v->envelope_time = 0x7fffffff;
-			  if (v->mode & WAVE_VIBRATO)
-				  start_vibrato(voice);
-			  if (v->mode & WAVE_TREMOLO)
-				  start_tremolo(voice);
-			  restore_flags(flags);
-			  return;
-		  }
+		{	
+			/* Stop envelope until note off */
+			v->envelope_volstep = 0;
+			v->envelope_time = 0x7fffffff;
+			if (v->mode & WAVE_VIBRATO)
+				start_vibrato(voice);
+			if (v->mode & WAVE_TREMOLO)
+				start_tremolo(voice);
+			restore_flags(flags);
+			return;
+		}
+	}
 	if (do_release)
 		v->envelope_phase = 3;
 	else
 		v->envelope_phase++;
 
 	if (v->envelope_phase >= 5)	/* Finished */
-	  {
-		  init_voice(devc, voice);
-		  restore_flags(flags);
-		  return;
-	  }
+	{
+		init_voice(devc, voice);
+		restore_flags(flags);
+		return;
+	}
 	vol = v->envelope_target = v->sample->env_offset[v->envelope_phase] << 22;
 
 
@@ -308,72 +309,69 @@ step_envelope(int voice, int do_release, int velocity)
 	if (dif < 0)
 		dif *= -1;
 	if (dif < rate * 2)	/* Too close */
-	  {
-		  step_envelope(voice, 0, 60);
-		  restore_flags(flags);
-		  return;
-	  }
+	{
+		step_envelope(voice, 0, 60);
+		restore_flags(flags);
+		return;
+	}
+
 	if (vol > v->envelope_vol)
-	  {
-		  v->envelope_volstep = rate;
-		  time = (vol - v->envelope_vol) / rate;
-	} else
-	  {
-		  v->envelope_volstep = -rate;
-		  time = (v->envelope_vol - vol) / rate;
-	  }
+	{
+		v->envelope_volstep = rate;
+		time = (vol - v->envelope_vol) / rate;
+	}
+	else
+	{
+		v->envelope_volstep = -rate;
+		time = (v->envelope_vol - vol) / rate;
+	}
 
 	time--;
 	if (time <= 0)
 		time = 1;
-
 	v->envelope_time = time;
-
-
 	restore_flags(flags);
 }
 
-static void
-step_envelope_lfo(int voice)
+static void step_envelope_lfo(int voice)
 {
-	voice_info     *v = &softoss_voices[voice];
+	voice_info *v = &softoss_voices[voice];
 
-/*
- * Update pitch (vibrato) LFO 
- */
+	/*
+	 * Update pitch (vibrato) LFO 
+	 */
 
 	if (devc->vibratomap & (1 << voice))
 		update_vibrato(voice);
 
-/* 
- * Update envelope
- */
+	/* 
+	 * Update envelope
+	 */
 
 	if (v->mode & WAVE_ENVELOPES)
-	  {
-		  v->envelope_vol += v->envelope_volstep;
-		  /* Overshoot protection */
-		  if (v->envelope_vol < 0)
-		    {
-			    v->envelope_vol = v->envelope_target;
-			    v->envelope_volstep = 0;
-		    }
-		  if (v->envelope_time-- <= 0)
-		    {
-			    v->envelope_vol = v->envelope_target;
-			    step_envelope(voice, 0, 60);
-		    }
-	  }
+	{
+		v->envelope_vol += v->envelope_volstep;
+		/* Overshoot protection */
+		if (v->envelope_vol < 0)
+		{
+			v->envelope_vol = v->envelope_target;
+			v->envelope_volstep = 0;
+		}
+		if (v->envelope_time-- <= 0)
+		{
+			v->envelope_vol = v->envelope_target;
+			step_envelope(voice, 0, 60);
+		}
+	}
 }
 
-static void
-compute_step(int voice)
+static void compute_step(int voice)
 {
-	voice_info     *v = &softoss_voices[voice];
+	voice_info *v = &softoss_voices[voice];
 
 	/*
-	 * Since the pitch bender may have been set before playing the note, we
-	 * have to calculate the bending now.
+	 *	Since the pitch bender may have been set before playing the note, we
+	 *	have to calculate the bending now.
 	 */
 
 	v->current_freq = compute_finetune(v->orig_freq,
@@ -386,11 +384,10 @@ compute_step(int voice)
 		v->step *= -1;	/* Reversed playback */
 }
 
-static void
-init_voice(softsyn_devc * devc, int voice)
+static void init_voice(softsyn_devc * devc, int voice)
 {
-	voice_info     *v = &softoss_voices[voice];
-	unsigned long   flags;
+	voice_info *v = &softoss_voices[voice];
+	unsigned long flags;
 
 	save_flags(flags);
 	cli();
@@ -433,18 +430,17 @@ init_voice(softsyn_devc * devc, int voice)
 	restore_flags(flags);
 }
 
-static void
-reset_samples(softsyn_devc * devc)
+static void reset_samples(softsyn_devc * devc)
 {
-	int             i;
+	int i;
 
 	for (i = 0; i < MAX_VOICE; i++)
 		voice_active[i] = 0;
 	for (i = 0; i < devc->maxvoice; i++)
-	  {
-		  init_voice(devc, i);
-		  softoss_voices[i].instr = 0;
-	  }
+	{
+		init_voice(devc, i);
+		softoss_voices[i].instr = 0;
+	}
 
 	devc->ram_used = 0;
 
@@ -452,20 +448,18 @@ reset_samples(softsyn_devc * devc)
 		devc->programs[i] = NO_SAMPLE;
 
 	for (i = 0; i < devc->nrsamples; i++)
-	  {
-		  vfree(devc->samples[i]);
-		  vfree(devc->wave[i]);
-		  devc->samples[i] = NULL;
-		  devc->wave[i] = NULL;
-	  }
-
+	{
+		vfree(devc->samples[i]);
+		vfree(devc->wave[i]);
+		devc->samples[i] = NULL;
+		devc->wave[i] = NULL;
+	}
 	devc->nrsamples = 0;
 }
 
-static void
-init_engine(softsyn_devc * devc)
+static void init_engine(softsyn_devc * devc)
 {
-	int             i, fz, srate, sz = devc->channels;
+	int i, fz, srate, sz = devc->channels;
 
 	set_max_voices(devc->default_max_voices);
 	voice_alloc->timestamp = 0;
@@ -480,16 +474,15 @@ init_engine(softsyn_devc * devc)
 	devc->usecs_per_frag = (1000000 * fz) / devc->speed;
 
 	for (i = 0; i < devc->maxvoice; i++)
-	  {
-		  init_voice(devc, i);
-		  softoss_voices[i].instr = 0;
-	  }
-
+	{
+		init_voice(devc, i);
+		softoss_voices[i].instr = 0;
+	}
 	devc->engine_state = ES_STOPPED;
 
-/*
- *    Initialize delay
- */
+	/*
+	 *    Initialize delay
+	 */
 
 	for (i = 0; i < DELAY_SIZE; i++)
 		left_delay[i] = right_delay[i] = 0;
@@ -502,34 +495,35 @@ init_engine(softsyn_devc * devc)
 		devc->delay_size = DELAY_SIZE;
 }
 
-void
-softsyn_control_loop(void)
+void softsyn_control_loop(void)
 {
-	int             voice;
+	int voice;
 
-/*
- *    Recompute envlope, LFO, etc.
- */
+	/*
+	 *    Recompute envlope, LFO, etc.
+	 */
 	for (voice = 0; voice < devc->maxvoice; voice++)
+	{
 		if (voice_active[voice])
-		  {
-			  update_volume(voice);
-			  step_envelope_lfo(voice);
-		} else
+		{
+			update_volume(voice);
+			step_envelope_lfo(voice);
+		}
+		else
 			voice_alloc->map[voice] = 0;
+	}
 }
 
-static void     start_engine(softsyn_devc * devc);
+static void start_engine(softsyn_devc * devc);
 
-static void
-do_resample(int dummy)
+static void do_resample(int dummy)
 {
 	struct dma_buffparms *dmap = audio_devs[devc->audiodev]->dmap_out;
 	struct voice_info *vinfo;
 	unsigned long   flags, jif;
 
-	int             voice, loops;
-	short          *buf;
+	int voice, loops;
+	short *buf;
 
 	if (softsynth_disabled)
 		return;
@@ -538,68 +532,70 @@ do_resample(int dummy)
 	cli();
 
 	if (is_running)
-	  {
-		  printk("SoftOSS: Playback overrun\n");
-		  restore_flags(flags);
-		  return;
-	  }
+	{
+		printk(KERN_WARNING "SoftOSS: Playback overrun\n");
+		restore_flags(flags);
+		return;
+	}
 	jif = jiffies;
 	if (jif == last_resample_jiffies)
-	  {
-		  if (resample_counter++ > 50)
-		    {
-			    for (voice = 0; voice < devc->maxvoice; voice++)
-				    init_voice(devc, voice);
-			    voice_limit--;
-			    resample_counter = 0;
-			    printk("SoftOSS: CPU overload. Limiting # of voices to %d\n", voice_limit);
+	{
+		if (resample_counter++ > 50)
+		{
+			for (voice = 0; voice < devc->maxvoice; voice++)
+				init_voice(devc, voice);
+			voice_limit--;
+			resample_counter = 0;
+			printk(KERN_WARNING "SoftOSS: CPU overload. Limiting # of voices to %d\n", voice_limit);
 
-			    if (voice_limit < 10)
-			      {
-				      voice_limit = 10;
-				      devc->speed = (devc->speed * 2) / 3;
+			if (voice_limit < 10)
+			{
+				voice_limit = 10;
+				devc->speed = (devc->speed * 2) / 3;
 
-				      printk("SoftOSS: Dropping sampling rate and stopping the device.\n");
-				      softsynth_disabled = 1;
-			      }
-		    }
-	} else
-	  {
-		  last_resample_jiffies = jif;
-		  resample_counter = 0;
-	  }
+				printk(KERN_WARNING "SoftOSS: Dropping sampling rate and stopping the device.\n");
+				softsynth_disabled = 1;
+			}
+		}
+	}
+	else
+	{
+		last_resample_jiffies = jif;
+		resample_counter = 0;
+	}
 
 	/* is_running = 1; */
 
 	if (dmap->qlen > devc->max_playahead)
-	  {
-		  printk("SoftOSS: audio buffers full\n");
-		  is_running = 0;
-		  restore_flags(flags);
-		  return;
-	  }
-/*
- * First verify that all active voices are valid (do this just once per block).
- */
+	{
+		printk(KERN_WARNING "SoftOSS: audio buffers full\n");
+		is_running = 0;
+		restore_flags(flags);
+		return;
+	}
+	/*
+	 * First verify that all active voices are valid (do this just once per block).
+	 */
+
 	for (voice = 0; voice < devc->maxvoice; voice++)
+	{
 		if (voice_active[voice])
-		  {
-			  int             ptr;
+		{
+			int ptr;
 
-			  vinfo = &softoss_voices[voice];
-			  ptr = vinfo->ptr >> 9;
+			vinfo = &softoss_voices[voice];
+			ptr = vinfo->ptr >> 9;
 
-			  if (vinfo->wave == NULL ||
-			      ptr < 0 ||
-			      ptr > vinfo->sample->len)
-				  init_voice(devc, voice);
-			  else if (!(vinfo->mode & WAVE_LOOPING) &&
-			     (vinfo->ptr + vinfo->step) > vinfo->endloop)
+			if (vinfo->wave == NULL || ptr < 0 || ptr > vinfo->sample->len)
+				init_voice(devc, voice);
+			else if (!(vinfo->mode & WAVE_LOOPING) && (vinfo->ptr + vinfo->step) > vinfo->endloop)
 				  voice_active[voice] = 0;
-		  }
-/*
- *    Start the resampling process
- */
+		}
+	}
+	
+	/*
+	 *    Start the resampling process
+	 */
 
 	loops = devc->samples_per_fragment;
 	buf = (short *) (dmap->raw_buf + (dmap->qtail * dmap->fragment_size));
@@ -613,54 +609,51 @@ do_resample(int dummy)
 	devc->usecs += devc->usecs_per_frag;
 
 	if (tmr_running)
-	  {
-		  sound_timer_interrupt();
-	  }
-/*
- *    Execute timer
- */
+		sound_timer_interrupt();
+	/*
+	 *    Execute timer
+	 */
 
 	if (!tmr_running)
+	{
 		if (devc->usecs >= devc->next_event_usecs)
-		  {
-			  devc->next_event_usecs = ~0;
-			  sequencer_timer(0);
-		  }
+		{
+			devc->next_event_usecs = ~0;
+			sequencer_timer(0);
+		}
+	}
+	
 	is_running = 0;
 	restore_flags(flags);
 }
 
-static void
-delayed_resample(int dummy)
+static void delayed_resample(int dummy)
 {
 	struct dma_buffparms *dmap = audio_devs[devc->audiodev]->dmap_out;
-	int             n = 0;
+	int n = 0;
 
 	if (is_running)
 		return;
 
-	while (devc->engine_state != ES_STOPPED &&
-	       dmap->qlen < devc->max_playahead && n++ < 2)
+	while (devc->engine_state != ES_STOPPED && dmap->qlen < devc->max_playahead && n++ < 2)
 		do_resample(0);
 	intr_pending = 0;
 }
 
 #ifdef POLLED_MODE
-static void
-softsyn_poll(unsigned long dummy)
+static void softsyn_poll(unsigned long dummy)
 {
 	delayed_resample(0);
 
 	if (devc->engine_state != ES_STOPPED)
-
-	  {
-		  poll_timer.expires = (1) + jiffies;
+	{
+		  poll_timer.expires = jiffies+1;
 		  add_timer(&poll_timer);
-	  };
+	}
 }
+
 #else
-static void
-softsyn_callback(int dev, int parm)
+static void softsyn_callback(int dev, int parm)
 {
 	delayed_resample(0);
 }
@@ -686,13 +679,14 @@ static void start_engine(softsyn_devc * devc)
 	devc->control_rate = 64;
 	devc->control_counter = 0;
 
-	if (devc->engine_state == ES_STOPPED) {
+	if (devc->engine_state == ES_STOPPED) 
+	{
 		n = trig = 0;
 		fs = get_fs();
 		set_fs(get_ds());
 		dma_ioctl(devc->audiodev, SNDCTL_DSP_SETTRIGGER, (caddr_t)&trig);
 #ifdef POLLED_MODE
-		poll_timer.expires = (1) + jiffies;
+		poll_timer.expires = jiffies+1;
 		add_timer(&poll_timer);
 		/* Start polling */
 #else
@@ -711,13 +705,11 @@ static void start_engine(softsyn_devc * devc)
 	}
 }
 
-static void
-stop_engine(softsyn_devc * devc)
+static void stop_engine(softsyn_devc * devc)
 {
 }
 
-static void
-request_engine(softsyn_devc * devc, int ticks)
+static void request_engine(softsyn_devc * devc, int ticks)
 {
 	if (ticks < 0)		/* Relative time */
 		devc->next_event_usecs = devc->usecs - ticks * (1000000 / HZ);
@@ -728,74 +720,72 @@ request_engine(softsyn_devc * devc, int ticks)
 /*
  * Softsync hook serves mode1 (timing) calls made by sequencer.c
  */
-static int
-softsynth_hook(int cmd, int parm1, int parm2, unsigned long parm3)
+ 
+static int softsynth_hook(int cmd, int parm1, int parm2, unsigned long parm3)
 {
 	switch (cmd)
-	  {
-	  case SSYN_START:
-		  start_engine(devc);
-		  break;
+	{
+		case SSYN_START:
+			start_engine(devc);
+			break;
 
-	  case SSYN_STOP:
-		  stop_engine(devc);
-		  break;
+		case SSYN_STOP:
+			stop_engine(devc);
+			break;
 
-	  case SSYN_REQUEST:
-		  request_engine(devc, parm1);
-		  break;
+		case SSYN_REQUEST:
+			request_engine(devc, parm1);
+			break;
 
-	  case SSYN_GETTIME:
-		  return devc->usecs / (1000000 / HZ);
-		  break;
+		case SSYN_GETTIME:
+			return devc->usecs / (1000000 / HZ);
+			break;
 
-	  default:
-		  printk("SoftOSS: Unknown request %d\n", cmd);
-	  }
-
+		default:
+			printk(KERN_WARNING "SoftOSS: Unknown request %d\n", cmd);
+	}
 	return 0;
 }
 
 static int softsyn_ioctl(int dev, unsigned int cmd, caddr_t arg)
 {
-	switch (cmd) {
+	switch (cmd) 
+	{
+		case SNDCTL_SYNTH_INFO:
+			softsyn_info.nr_voices = devc->maxvoice;
+			if (copy_to_user(arg, &softsyn_info, sizeof(softsyn_info)))
+				return -EFAULT;
+			return 0;
 
-	case SNDCTL_SYNTH_INFO:
-		softsyn_info.nr_voices = devc->maxvoice;
-		if (__copy_to_user(arg, &softsyn_info, sizeof(softsyn_info)))
-			return -EFAULT;
-		return 0;
-
-	case SNDCTL_SEQ_RESETSAMPLES:
-		stop_engine(devc);
-		reset_samples(devc);
-		return 0;
+		case SNDCTL_SEQ_RESETSAMPLES:
+			stop_engine(devc);
+			reset_samples(devc);
+			return 0;
 		  
-	case SNDCTL_SYNTH_MEMAVL:
-		return devc->ram_size - devc->ram_used;
+		case SNDCTL_SYNTH_MEMAVL:
+			return devc->ram_size - devc->ram_used;
 
-	default:
-		return -EINVAL;
+		default:
+			return -EINVAL;
 	}
 }
 
-static int
-softsyn_kill_note(int devno, int voice, int note, int velocity)
+static int softsyn_kill_note(int devno, int voice, int note, int velocity)
 {
 	if (voice < 0 || voice > devc->maxvoice)
 		return 0;
 	voice_alloc->map[voice] = 0xffff;	/* Releasing */
 
 	if (softoss_voices[voice].sustain_mode & 1)	/* Sustain controller on */
-	  {
-		  softoss_voices[voice].sustain_mode = 3;	/* Note off pending */
-		  return 0;
-	  }
+	{
+		softoss_voices[voice].sustain_mode = 3;	/* Note off pending */
+		return 0;
+	}
 	if (velocity > 127 || softoss_voices[voice].mode & WAVE_FAST_RELEASE)
-	  {
-		  init_voice(devc, voice);	/* Mark it inactive */
-		  return 0;
-	  }
+	{
+		init_voice(devc, voice);	/* Mark it inactive */
+		return 0;
+	}
 	if (softoss_voices[voice].mode & WAVE_ENVELOPES)
 		step_envelope(voice, 1, velocity);	/* Enter sustain phase */
 	else
@@ -803,29 +793,26 @@ softsyn_kill_note(int devno, int voice, int note, int velocity)
 	return 0;
 }
 
-static int
-softsyn_set_instr(int dev, int voice, int instr)
+static int softsyn_set_instr(int dev, int voice, int instr)
 {
 	if (voice < 0 || voice > devc->maxvoice)
 		return 0;
 
 	if (instr < 0 || instr > MAX_PATCH)
-	  {
-		  printk("SoftOSS: Invalid instrument number %d\n", instr);
-		  return 0;
-	  }
+	{
+		printk(KERN_ERR "SoftOSS: Invalid instrument number %d\n", instr);
+		return 0;
+	}
 	softoss_voices[voice].instr = instr;
-
 	return 0;
 }
 
-static int
-softsyn_start_note(int dev, int voice, int note, int volume)
+static int softsyn_start_note(int dev, int voice, int note, int volume)
 {
-	int             instr = 0;
-	int             best_sample, best_delta, delta_freq, selected;
-	unsigned long   note_freq, freq, base_note, flags;
-	voice_info     *v = &softoss_voices[voice];
+	int instr = 0;
+	int best_sample, best_delta, delta_freq, selected;
+	unsigned long note_freq, freq, base_note, flags;
+	voice_info *v = &softoss_voices[voice];
 
 	struct patch_info *sample;
 
@@ -839,32 +826,32 @@ softsyn_start_note(int dev, int voice, int note, int volume)
 	cli();
 
 	if (note == 255)
-	  {			/* Just volume update */
-		  v->velocity = volume;
-		  if (voice_active[voice])
-			  update_volume(voice);
-		  restore_flags(flags);
-		  return 0;
-	  }
+	{			/* Just volume update */
+		v->velocity = volume;
+		if (voice_active[voice])
+			update_volume(voice);
+		restore_flags(flags);
+		return 0;
+	}
 	voice_active[voice] = 0;	/* Stop the voice for a while */
 	devc->vibratomap &= ~(1 << voice);
 	devc->tremolomap &= ~(1 << voice);
 
 	instr = v->instr;
 	if (instr < 0 || instr > MAX_PATCH || devc->programs[instr] == NO_SAMPLE)
-	  {
-		  printk("SoftOSS: Undefined MIDI instrument %d\n", instr);
-		  restore_flags(flags);
-		  return 0;
-	  }
+	{
+		printk(KERN_WARNING "SoftOSS: Undefined MIDI instrument %d\n", instr);
+		restore_flags(flags);
+		return 0;
+	}
 	instr = devc->programs[instr];
 
 	if (instr < 0 || instr >= devc->nrsamples)
-	  {
-		  printk("SoftOSS: Corrupted MIDI instrument %d (%d)\n", v->instr, instr);
-		  restore_flags(flags);
-		  return 0;
-	  }
+	{
+		printk(KERN_WARNING "SoftOSS: Corrupted MIDI instrument %d (%d)\n", v->instr, instr);
+		restore_flags(flags);
+		return 0;
+	}
 	note_freq = note_to_freq(note);
 
 	selected = -1;
@@ -873,25 +860,26 @@ softsyn_start_note(int dev, int voice, int note, int volume)
 	best_delta = 1000000;
 
 	while (instr != NO_SAMPLE && instr >= 0 && selected == -1)
-	  {
-		  delta_freq = note_freq - devc->samples[instr]->base_note;
+	{
+		delta_freq = note_freq - devc->samples[instr]->base_note;
 
-		  if (delta_freq < 0)
-			  delta_freq = -delta_freq;
-		  if (delta_freq < best_delta)
-		    {
-			    best_sample = instr;
-			    best_delta = delta_freq;
-		    }
-		  if (devc->samples[instr]->low_note <= note_freq &&
-		      note_freq <= devc->samples[instr]->high_note)
-			  selected = instr;
-		  else
-			  instr = devc->samples[instr]->key;	/* Link to next sample */
+		if (delta_freq < 0)
+			delta_freq = -delta_freq;
+		if (delta_freq < best_delta)
+		{
+			best_sample = instr;
+			best_delta = delta_freq;
+		}
+		if (devc->samples[instr]->low_note <= note_freq &&
+			note_freq <= devc->samples[instr]->high_note)
+		{
+			selected = instr;
+		}
+		else instr = devc->samples[instr]->key;	/* Link to next sample */
 
-		  if (instr < 0 || instr >= devc->nrsamples)
-			  instr = NO_SAMPLE;
-	  }
+		if (instr < 0 || instr >= devc->nrsamples)
+			instr = NO_SAMPLE;
+	}
 
 	if (selected == -1)
 		instr = best_sample;
@@ -899,37 +887,33 @@ softsyn_start_note(int dev, int voice, int note, int volume)
 		instr = selected;
 
 	if (instr < 0 || instr == NO_SAMPLE || instr > devc->nrsamples)
-	  {
-		  printk("SoftOSS: Unresolved MIDI instrument %d\n", v->instr);
-		  restore_flags(flags);
-		  return 0;
-	  }
+	{
+		printk(KERN_WARNING "SoftOSS: Unresolved MIDI instrument %d\n", v->instr);
+		restore_flags(flags);
+		return 0;
+	}
 	sample = devc->samples[instr];
 	v->sample = sample;
 
 	if (v->percussive_voice)	/* No key tracking */
-	  {
 		  v->orig_freq = sample->base_freq;	/* Fixed pitch */
-	} else
-	  {
-		  base_note = sample->base_note / 100;
-		  note_freq /= 100;
+	else
+	{
+		base_note = sample->base_note / 100;
+		note_freq /= 100;
 
-		  freq = sample->base_freq * note_freq / base_note;
-		  v->orig_freq = freq;
-	  }
+		freq = sample->base_freq * note_freq / base_note;
+		v->orig_freq = freq;
+	}
 
 	if (!(sample->mode & WAVE_LOOPING))
-	  {
-		  sample->loop_end = sample->len;
-	  }
-	v->wave = devc->wave[instr];
+		sample->loop_end = sample->len;
 
+	v->wave = devc->wave[instr];
 	if (volume < 0)
 		volume = 0;
 	else if (volume > 127)
 		volume = 127;
-
 	v->ptr = 0;
 	v->startloop = sample->loop_start * 512;
 	v->startbackloop = 0;
@@ -954,40 +938,39 @@ softsyn_start_note(int dev, int voice, int note, int volume)
 	if (!(v->mode & WAVE_LOOPING))
 		v->mode &= ~(WAVE_BIDIR_LOOP | WAVE_LOOP_BACK);
 	else if (v->mode & WAVE_LOOP_BACK)
-	  {
-		  v->ptr = sample->len;
-		  v->startbackloop = v->startloop;
-	  }
+	{
+		v->ptr = sample->len;
+		v->startbackloop = v->startloop;
+	}
 	if (v->mode & WAVE_VIBRATO)
-	  {
-		  v->vibrato_rate = sample->vibrato_rate;
-		  v->vibrato_depth = sample->vibrato_depth;
-	  }
+	{
+		v->vibrato_rate = sample->vibrato_rate;
+		v->vibrato_depth = sample->vibrato_depth;
+	}
 	if (v->mode & WAVE_TREMOLO)
-	  {
-		  v->tremolo_rate = sample->tremolo_rate;
-		  v->tremolo_depth = sample->tremolo_depth;
-	  }
+	{
+		v->tremolo_rate = sample->tremolo_rate;
+		v->tremolo_depth = sample->tremolo_depth;
+	}
 	if (v->mode & WAVE_ENVELOPES)
-	  {
-		  v->envelope_phase = -1;
-		  v->envelope_vol = 0;
-		  step_envelope(voice, 0, 60);
-	  }
+	{
+		v->envelope_phase = -1;
+		v->envelope_vol = 0;
+		step_envelope(voice, 0, 60);
+	}
 	update_volume(voice);
 	compute_step(voice);
 
 	voice_active[voice] = 1;	/* Mark it active */
-
 	restore_flags(flags);
 	return 0;
 }
 
 static int softsyn_open(int synthdev, int mode)
 {
-	int             err;
-	extern int      softoss_dev;
-	int             frags = 0x7fff0007;	/* fragment size of 128 bytes */
+	int err;
+	extern int softoss_dev;
+	int frags = 0x7fff0007;	/* fragment size of 128 bytes */
 	mm_segment_t fs;
 
 	if (devc->audio_opened)	/* Already opened */
@@ -1007,10 +990,10 @@ static int softsyn_open(int synthdev, int mode)
 	devc->audiodev = softoss_dev;
 
 	if (!(audio_devs[devc->audiodev]->format_mask & AFMT_S16_LE))
-	  {
-		  printk("SoftOSS: The audio device doesn't support 16 bits\n");
-		  return -ENXIO;
-	  }
+	{
+/*		printk(KERN_ERR "SoftOSS: The audio device doesn't support 16 bits\n"); */
+		return -ENXIO;
+	}
 	if ((err = audio_open((devc->audiodev << 4) | SND_DEV_DSP16, &devc->finfo)) < 0)
 		return err;
 
@@ -1023,7 +1006,6 @@ static int softsyn_open(int synthdev, int mode)
 
 
 	DDB(printk("SoftOSS: Using audio dev %d, speed %d, bits %d, channels %d\n", devc->audiodev, devc->speed, devc->bits, devc->channels));
-
 	fs = get_fs();
 	set_fs(get_ds());
 	dma_ioctl(devc->audiodev, SNDCTL_DSP_SETFRAGMENT, (caddr_t) & frags);
@@ -1031,11 +1013,11 @@ static int softsyn_open(int synthdev, int mode)
 	set_fs(fs);
 
 	if (devc->bits != 16 || devc->channels != 2)
-	  {
-		  audio_release((devc->audiodev << 4) | SND_DEV_DSP16, &devc->finfo);
-		  printk("SoftOSS: A 16 bit stereo soundcard is required\n");
-		  return 0;
-	  }
+	{
+		audio_release((devc->audiodev << 4) | SND_DEV_DSP16, &devc->finfo);
+/*		printk("SoftOSS: A 16 bit stereo soundcard is required\n");*/
+		return -EINVAL;
+	}
 	if (devc->max_playahead >= audio_devs[devc->audiodev]->dmap_out->nbufs)
 		devc->max_playahead = audio_devs[devc->audiodev]->dmap_out->nbufs;
 
@@ -1064,12 +1046,11 @@ static void softsyn_close(int synthdev)
 	devc->audio_opened = 0;
 }
 
-static void
-softsyn_hw_control(int dev, unsigned char *event_rec)
+static void softsyn_hw_control(int dev, unsigned char *event_rec)
 {
-	int             voice, cmd;
-	unsigned short  p1, p2;
-	unsigned int    plong;
+	int voice, cmd;
+	unsigned short p1, p2;
+	unsigned int plong;
 
 	cmd = event_rec[2];
 	voice = event_rec[3];
@@ -1078,48 +1059,47 @@ softsyn_hw_control(int dev, unsigned char *event_rec)
 	plong = *(unsigned int *) &event_rec[4];
 
 	switch (cmd)
-	  {
+	{
 
-	  case _GUS_NUMVOICES:
-		  set_max_voices(p1);
-		  break;
+		case _GUS_NUMVOICES:
+			set_max_voices(p1);
+			break;
 
-
-	  default:;
-	  }
+		default:;
+	}
 }
 
-static int
-softsyn_load_patch(int dev, int format, const char *addr,
+static int softsyn_load_patch(int dev, int format, const char *addr,
 		   int offs, int count, int pmgr_flag)
 {
 	struct patch_info *patch = NULL;
 
-	int             i, p, instr;
-	long            sizeof_patch;
-	int             memlen, adj;
+	int i, p, instr;
+	long sizeof_patch;
+	int memlen, adj;
 	unsigned short  data;
-	short          *wave = NULL;
+	short *wave = NULL;
 
 	sizeof_patch = (long) &patch->data[0] - (long) patch;	/* Header size */
 
 	if (format != GUS_PATCH)
-	  {
-		  printk("SoftOSS: Invalid patch format (key) 0x%x\n", format);
-		  return -EINVAL;
-	  }
+	{
+/*		printk(KERN_ERR "SoftOSS: Invalid patch format (key) 0x%x\n", format);*/
+		return -EINVAL;
+	}
 	if (count < sizeof_patch)
-	  {
-		  printk("SoftOSS: Patch header too short\n");
-		  return -EINVAL;
-	  }
+	{
+/*		printk(KERN_ERR "SoftOSS: Patch header too short\n");*/
+		return -EINVAL;
+	}
 	count -= sizeof_patch;
 
 	if (devc->nrsamples >= MAX_SAMPLE)
-	  {
-		  printk("SoftOSS: Sample table full\n");
-		  return -ENOSPC;
-	  }
+	{
+/*		  printk(KERN_ERR "SoftOSS: Sample table full\n");*/
+		  return -ENOBUFS;
+	}
+	
 	/*
 	 * Copy the header from user space but ignore the first bytes which have
 	 * been transferred already.
@@ -1128,54 +1108,55 @@ softsyn_load_patch(int dev, int format, const char *addr,
 	patch = vmalloc(sizeof(*patch));
 
 	if (patch == NULL)
-	  {
-		  printk("SoftOSS: Out of memory\n");
-		  return -ENOSPC;
-	  }
-	copy_from_user(&((char *) patch)[offs], &(addr)[offs], sizeof_patch - offs);
+	{
+/*		printk(KERN_ERR "SoftOSS: Out of memory\n");*/
+		return -ENOMEM;
+	}
+	if(copy_from_user(&((char *) patch)[offs], &(addr)[offs], sizeof_patch - offs))
+		return -EFAULT;
 
 	if (patch->mode & WAVE_ROM)
-	  {
-		  vfree(patch);
-		  return -EINVAL;
-	  }
+	{
+		vfree(patch);
+		return -EINVAL;
+	}
 	instr = patch->instr_no;
 
 	if (instr < 0 || instr > MAX_PATCH)
-	  {
-		  printk("SoftOSS: Invalid patch number %d\n", instr);
-		  vfree(patch);
-		  return -EINVAL;
-	  }
+	{
+/*		printk(KERN_ERR "SoftOSS: Invalid patch number %d\n", instr);*/
+		vfree(patch);
+		return -EINVAL;
+	}
 	if (count < patch->len)
-	  {
-		  printk("SoftOSS: Patch record too short (%d<%d)\n", count, (int) patch->len);
-		  patch->len = count;
-	  }
+	{
+/*		printk(KERN_ERR "SoftOSS: Patch record too short (%d<%d)\n", count, (int) patch->len);*/
+		patch->len = count;
+	}
 	if (patch->len <= 0 || patch->len > (devc->ram_size - devc->ram_used))
-	  {
-		  printk("SoftOSS: Invalid sample length %d\n", (int) patch->len);
-		  vfree(patch);
-		  return -EINVAL;
-	  }
+	{
+/*		printk(KERN_ERR "SoftOSS: Invalid sample length %d\n", (int) patch->len); */
+		vfree(patch);
+		return -EINVAL;
+	}
 	if (patch->mode & WAVE_LOOPING)
-	  {
-		  if (patch->loop_start < 0 || patch->loop_start >= patch->len)
-		    {
-			    printk("SoftOSS: Invalid loop start %d\n", patch->loop_start);
-			    vfree(patch);
-			    return -EINVAL;
-		    }
-		  if (patch->loop_end < patch->loop_start || patch->loop_end > patch->len)
-		    {
-			    printk("SoftOSS: Invalid loop start or end point (%d, %d)\n", patch->loop_start, patch->loop_end);
-			    vfree(patch);
-			    return -EINVAL;
-		    }
-	  }
-/* 
- * Next load the wave data to memory
- */
+	{
+		if (patch->loop_start < 0 || patch->loop_start >= patch->len)
+		{
+/*			printk(KERN_ERR "SoftOSS: Invalid loop start %d\n", patch->loop_start);*/
+			vfree(patch);
+			return -EINVAL;
+		}
+		if (patch->loop_end < patch->loop_start || patch->loop_end > patch->len)
+		{
+/*			printk(KERN_ERR "SoftOSS: Invalid loop start or end point (%d, %d)\n", patch->loop_start, patch->loop_end);*/
+			vfree(patch);
+			return -EINVAL;
+		}
+	}
+	/* 
+	 *	Next load the wave data to memory
+	 */
 
 	memlen = patch->len;
 	adj = 1;
@@ -1188,48 +1169,47 @@ softsyn_load_patch(int dev, int format, const char *addr,
 	wave = vmalloc(memlen);
 
 	if (wave == NULL)
-	  {
-		  printk("SoftOSS: Can't allocate %d bytes of mem for a sample\n", memlen);
-		  vfree(patch);
-		  return -ENOSPC;
-	  }
+	{
+/*		printk(KERN_ERR "SoftOSS: Can't allocate %d bytes of mem for a sample\n", memlen);*/
+		vfree(patch);
+		return -ENOMEM;
+	}
 	p = 0;
 	for (i = 0; i < memlen / 2; i++)	/* Handle words */
-	  {
-		  unsigned char   tmp;
-
-		  data = 0;
-
-		  if (patch->mode & WAVE_16_BITS)
-		    {
-			    get_user(*(unsigned char *) &tmp, (unsigned char *) &((addr)[sizeof_patch + p++]));		/* Get lsb */
-			    data = tmp;
-			    get_user(*(unsigned char *) &tmp, (unsigned char *) &((addr)[sizeof_patch + p++]));		/* Get msb */
-			    if (patch->mode & WAVE_UNSIGNED)
-				    tmp ^= 0x80;	/* Convert to signed */
-			    data |= (tmp << 8);
-		  } else
-		    {
-			    get_user(*(unsigned char *) &tmp, (unsigned char *) &((addr)[sizeof_patch + p++]));
-			    if (patch->mode & WAVE_UNSIGNED)
-				    tmp ^= 0x80;	/* Convert to signed */
+	{
+		unsigned char tmp;
+		data = 0;
+		if (patch->mode & WAVE_16_BITS)
+		{
+			get_user(*(unsigned char *) &tmp, (unsigned char *) &((addr)[sizeof_patch + p++]));		/* Get lsb */
+			data = tmp;
+			get_user(*(unsigned char *) &tmp, (unsigned char *) &((addr)[sizeof_patch + p++]));		/* Get msb */
+			if (patch->mode & WAVE_UNSIGNED)
+				tmp ^= 0x80;	/* Convert to signed */
+			data |= (tmp << 8);
+		}
+		else
+		{
+			get_user(*(unsigned char *) &tmp, (unsigned char *) &((addr)[sizeof_patch + p++]));
+			if (patch->mode & WAVE_UNSIGNED)
+				tmp ^= 0x80;	/* Convert to signed */
 			    data = (tmp << 8);	/* Convert to 16 bits */
-		    }
-
-		  wave[i] = (short) data;
-	  }
+		}
+		wave[i] = (short) data;
+	}
 
 	devc->ram_used += patch->len;
-/*
- * Convert pointers to 16 bit indexes
- */
+
+	/*
+	 * Convert pointers to 16 bit indexes
+	 */
 	patch->len /= adj;
 	patch->loop_start /= adj;
 	patch->loop_end /= adj;
 
-/*
- * Finally link the loaded patch to the chain
- */
+	/*
+	 * Finally link the loaded patch to the chain
+	 */
 
 	patch->key = devc->programs[instr];
 	devc->programs[instr] = devc->nrsamples;
@@ -1239,8 +1219,7 @@ softsyn_load_patch(int dev, int format, const char *addr,
 	return 0;
 }
 
-static void
-softsyn_panning(int dev, int voice, int pan)
+static void softsyn_panning(int dev, int voice, int pan)
 {
 	if (voice < 0 || voice > devc->maxvoice)
 		return;
@@ -1255,13 +1234,11 @@ softsyn_panning(int dev, int voice, int pan)
 		update_volume(voice);
 }
 
-static void
-softsyn_volume_method(int dev, int mode)
+static void softsyn_volume_method(int dev, int mode)
 {
 }
 
-static void
-softsyn_aftertouch(int dev, int voice, int pressure)
+static void softsyn_aftertouch(int dev, int voice, int pressure)
 {
 	if (voice < 0 || voice > devc->maxvoice)
 		return;
@@ -1270,10 +1247,9 @@ softsyn_aftertouch(int dev, int voice, int pressure)
 		update_volume(voice);
 }
 
-static void
-softsyn_controller(int dev, int voice, int ctrl_num, int value)
+static void softsyn_controller(int dev, int voice, int ctrl_num, int value)
 {
-	unsigned long   flags;
+	unsigned long flags;
 
 	if (voice < 0 || voice > devc->maxvoice)
 		return;
@@ -1281,48 +1257,46 @@ softsyn_controller(int dev, int voice, int ctrl_num, int value)
 	cli();
 
 	switch (ctrl_num)
-	  {
-	  case CTRL_PITCH_BENDER:
-		  softoss_voices[voice].bender = value;
+	{
+		case CTRL_PITCH_BENDER:
+			softoss_voices[voice].bender = value;
+			if (voice_active[voice])
+				compute_step(voice);	/* Update pitch */
+			break;
 
-		  if (voice_active[voice])
-			  compute_step(voice);	/* Update pitch */
-		  break;
 
+		case CTRL_PITCH_BENDER_RANGE:
+			softoss_voices[voice].bender_range = value;
+			break;
+			
+		case CTL_EXPRESSION:
+			value /= 128;
+		case CTRL_EXPRESSION:
+			softoss_voices[voice].expression_vol = value;
+			if (voice_active[voice])
+				update_volume(voice);
+			break;
 
-	  case CTRL_PITCH_BENDER_RANGE:
-		  softoss_voices[voice].bender_range = value;
-		  break;
-	  case CTL_EXPRESSION:
-		  value /= 128;
-	  case CTRL_EXPRESSION:
-		  softoss_voices[voice].expression_vol = value;
-		  if (voice_active[voice])
-			  update_volume(voice);
-		  break;
+		case CTL_PAN:
+			softsyn_panning(dev, voice, (value * 2) - 128);
+			break;
 
-	  case CTL_PAN:
-		  softsyn_panning(dev, voice, (value * 2) - 128);
-		  break;
+		case CTL_MAIN_VOLUME:
+			value = (value * 100) / 16383;
 
-	  case CTL_MAIN_VOLUME:
-		  value = (value * 100) / 16383;
+		case CTRL_MAIN_VOLUME:
+			softoss_voices[voice].main_vol = value;
+			if (voice_active[voice])
+				update_volume(voice);
+			break;
 
-	  case CTRL_MAIN_VOLUME:
-		  softoss_voices[voice].main_vol = value;
-		  if (voice_active[voice])
-			  update_volume(voice);
-		  break;
-
-	  default:
-		  break;
-	  }
-
+		default:
+			break;
+	}
 	restore_flags(flags);
 }
 
-static void
-softsyn_bender(int dev, int voice, int value)
+static void softsyn_bender(int dev, int voice, int value)
 {
 	if (voice < 0 || voice > devc->maxvoice)
 		return;
@@ -1332,46 +1306,46 @@ softsyn_bender(int dev, int voice, int value)
 		compute_step(voice);	/* Update pitch */
 }
 
-static int
-softsyn_alloc_voice(int dev, int chn, int note, struct voice_alloc_info *alloc)
+static int softsyn_alloc_voice(int dev, int chn, int note, struct voice_alloc_info *alloc)
 {
-	int             i, p, best = -1, best_time = 0x7fffffff;
+	int i, p, best = -1, best_time = 0x7fffffff;
 
 	p = alloc->ptr;
+
 	/*
-	   * First look for a completely stopped voice
+	 * First look for a completely stopped voice
 	 */
 
 	for (i = 0; i < alloc->max_voice; i++)
-	  {
-		  if (alloc->map[p] == 0)
-		    {
-			    alloc->ptr = p;
-			    voice_active[p] = 0;
-			    return p;
-		    }
-		  if (alloc->alloc_times[p] < best_time)
-		    {
-			    best = p;
-			    best_time = alloc->alloc_times[p];
-		    }
-		  p = (p + 1) % alloc->max_voice;
-	  }
+	{
+		if (alloc->map[p] == 0)
+		{
+			alloc->ptr = p;
+			voice_active[p] = 0;
+			return p;
+		}
+		if (alloc->alloc_times[p] < best_time)
+		{
+			best = p;
+			best_time = alloc->alloc_times[p];
+		}
+		p = (p + 1) % alloc->max_voice;
+	}
 
 	/*
-	   * Then look for a releasing voice
+	 * Then look for a releasing voice
 	 */
 
 	for (i = 0; i < alloc->max_voice; i++)
-	  {
-		  if (alloc->map[p] == 0xffff)
-		    {
-			    alloc->ptr = p;
-			    voice_active[p] = 0;
-			    return p;
-		    }
-		  p = (p + 1) % alloc->max_voice;
-	  }
+	{
+		if (alloc->map[p] == 0xffff)
+		{
+			alloc->ptr = p;
+			voice_active[p] = 0;
+			return p;
+		}
+		p = (p + 1) % alloc->max_voice;
+	}
 
 	if (best >= 0)
 		p = best;
@@ -1381,23 +1355,20 @@ softsyn_alloc_voice(int dev, int chn, int note, struct voice_alloc_info *alloc)
 	return p;
 }
 
-static void
-softsyn_setup_voice(int dev, int voice, int chn)
+static void softsyn_setup_voice(int dev, int voice, int chn)
 {
-	unsigned long   flags;
+	unsigned long flags;
 
-	struct channel_info *info =
-	&synth_devs[dev]->chn_info[chn];
+	struct channel_info *info = &synth_devs[dev]->chn_info[chn];
 
 	save_flags(flags);
 	cli();
+
 	/* init_voice(devc, voice); */
 	softsyn_set_instr(dev, voice, info->pgm_num);
 
-	softoss_voices[voice].expression_vol =
-	    info->controllers[CTL_EXPRESSION];	/* Just MSB */
-	softoss_voices[voice].main_vol =
-	    (info->controllers[CTL_MAIN_VOLUME] * 100) / (unsigned) 128;
+	softoss_voices[voice].expression_vol = info->controllers[CTL_EXPRESSION];	/* Just MSB */
+	softoss_voices[voice].main_vol = (info->controllers[CTL_MAIN_VOLUME] * 100) / (unsigned) 128;
 	softsyn_panning(dev, voice, (info->controllers[CTL_PAN] * 2) - 128);
 	softoss_voices[voice].bender = 0;	/* info->bender_value; */
 	softoss_voices[voice].bender_range = info->bender_range;
@@ -1407,11 +1378,10 @@ softsyn_setup_voice(int dev, int voice, int chn)
 	restore_flags(flags);
 }
 
-static void
-softsyn_reset(int devno)
+static void softsyn_reset(int devno)
 {
-	int             i;
-	unsigned long   flags;
+	int i;
+	unsigned long flags;
 
 	save_flags(flags);
 	cli();
@@ -1450,23 +1420,20 @@ static struct synth_operations softsyn_operations =
  * Timer stuff (for /dev/music).
  */
 
-static unsigned int
-soft_tmr_start(int dev, unsigned int usecs)
+static unsigned int soft_tmr_start(int dev, unsigned int usecs)
 {
 	tmr_running = 1;
 	start_engine(devc);
 	return devc->usecs_per_frag;
 }
 
-static void
-soft_tmr_disable(int dev)
+static void soft_tmr_disable(int dev)
 {
 	stop_engine(devc);
 	tmr_running = 0;
 }
 
-static void
-soft_tmr_restart(int dev)
+static void soft_tmr_restart(int dev)
 {
 	tmr_running = 1;
 }
@@ -1480,10 +1447,9 @@ static struct sound_lowlev_timer soft_tmr =
 	soft_tmr_restart
 };
 
-int
-probe_softsyn(struct address_info *hw_config)
+int probe_softsyn(struct address_info *hw_config)
 {
-	int             i;
+	int i;
 
 	if (softsynth_loaded)
 		return 0;
@@ -1492,10 +1458,10 @@ probe_softsyn(struct address_info *hw_config)
 	devc->ram_used = 0;
 	devc->nrsamples = 0;
 	for (i = 0; i < MAX_PATCH; i++)
-	  {
-		  devc->programs[i] = NO_SAMPLE;
-		  devc->wave[i] = NULL;
-	  }
+	{
+		devc->programs[i] = NO_SAMPLE;
+		devc->wave[i] = NULL;
+	}
 
 	devc->maxvoice = DEFAULT_VOICES;
 
@@ -1516,15 +1482,12 @@ probe_softsyn(struct address_info *hw_config)
 #else
 	devc->default_max_voices = 32;
 #endif
-
 	softsynth_loaded = 1;
 	return 1;
 }
 
-void
-attach_softsyn_card(struct address_info *hw_config)
+void attach_softsyn_card(struct address_info *hw_config)
 {
-
 	voice_alloc = &softsyn_operations.alloc;
 	synth_devs[devc->synthdev = num_synths++] = &softsyn_operations;
 	sequencer_init();
@@ -1536,14 +1499,10 @@ attach_softsyn_card(struct address_info *hw_config)
 #endif
 }
 
-void
-unload_softsyn(struct address_info *hw_config)
+void unload_softsyn(struct address_info *hw_config)
 {
 	if (!softsynth_loaded)
 		return;
-#ifndef POLLED_MODE
-#endif
-
 	softsynthp = NULL;
 	softsynth_loaded = 0;
 	reset_samples(devc);
@@ -1553,10 +1512,9 @@ unload_softsyn(struct address_info *hw_config)
 
 static struct address_info config;
 
-int
-init_module(void)
+int init_module(void)
 {
-	printk("SoftOSS driver Copyright (C) by Hannu Savolainen 1993-1997\n");
+	printk(KERN_INFO "SoftOSS driver Copyright (C) by Hannu Savolainen 1993-1997\n");
 	if (!probe_softsyn(&config))
 		return -ENODEV;
 	attach_softsyn_card(&config);
@@ -1564,8 +1522,7 @@ init_module(void)
 	return 0;
 }
 
-void
-cleanup_module(void)
+void cleanup_module(void)
 {
 	unload_softsyn(&config);
 	sound_unload_synthdev(devc->synthdev);

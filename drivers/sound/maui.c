@@ -20,6 +20,7 @@
  
 #include <linux/config.h>
 #include <linux/module.h>
+#include <asm/init.h>
 
 #define USE_SEQ_MACROS
 #define USE_SIMPLE_MACROS
@@ -452,6 +453,11 @@ void unload_maui(struct address_info *hw_config)
 
 #ifdef MODULE
 
+MODULE_PARM(io,"i");
+MODULE_PARM(irq,"i");
+
+EXPORT_NO_SYMBOLS;
+
 int io = -1;
 int irq = -1;
 
@@ -489,7 +495,7 @@ int init_module(void)
 void cleanup_module(void)
 {
 	if (fw_load && maui_os)
-		kfree(maui_os);
+		vfree(maui_os);
 	unload_maui(&cfg);
 	SOUND_LOCK_END;
 }

@@ -395,7 +395,7 @@ int get_cpuinfo(char *buffer)
 		       "BogoMIPS\t\t: %lu.%02lu\n"
 		       "kernel unaligned acc\t: %ld (pc=%lx,va=%lx)\n"
 		       "user unaligned acc\t: %ld (pc=%lx,va=%lx)\n"
-		       "platform string\t: %s\n"
+		       "platform string\t\t: %s\n"
 #ifdef __SMP__
 		       "%s"
 #endif

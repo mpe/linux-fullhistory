@@ -11,7 +11,6 @@
 #include <linux/string.h>
 #include <linux/version.h>
 #include <linux/mm.h>
-#include <linux/config.h>
 
 #include <asm/system.h>
 #include <asm/console.h>

@@ -21,6 +21,7 @@
 
 #include <linux/config.h>
 #include <linux/stddef.h>
+#include <linux/kmod.h>
 
 #include "sound_config.h"
 
@@ -164,8 +165,6 @@ void audio_release(int dev, struct file *file)
 	DMAbuf_release(dev, mode);
 }
 
-#if defined(NO_INLINE_ASM) || !defined(i386)
-
 static void translate_bytes(const unsigned char *table, unsigned char *buff, int n)
 {
 	unsigned long   i;
@@ -176,24 +175,6 @@ static void translate_bytes(const unsigned char *table, unsigned char *buff, int
 	for (i = 0; i < n; ++i)
 		buff[i] = table[buff[i]];
 }
-
-#else
-extern inline void
-translate_bytes(const void *table, void *buff, int n)
-{
-	if (n > 0)
-	{
-		__asm__("cld\n"
-			"1:\tlodsb\n\t"
-			"xlatb\n\t"
-			"stosb\n\t"
-		"loop 1b\n\t":
-		:	  "b"((long) table), "c"(n), "D"((long) buff), "S"((long) buff)
-		:	  "bx", "cx", "di", "si", "ax");
-	}
-}
-
-#endif
 
 int audio_write(int dev, struct file *file, const char *buf, int count)
 {
@@ -827,8 +808,10 @@ int dma_ioctl(int dev, unsigned int cmd, caddr_t arg)
 				DMAbuf_launch_output(dev, dmap_out);
 			}
 			audio_devs[dev]->enable_bits = bits;
+#if 0
 			if (changed && audio_devs[dev]->d->trigger)
 				audio_devs[dev]->d->trigger(dev, bits * audio_devs[dev]->go);
+#endif				
 			restore_flags(flags);
 			/* Falls through... */
 

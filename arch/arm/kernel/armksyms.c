@@ -12,6 +12,7 @@
 #include <asm/dma.h>
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
+#include <asm/irq.h>
 
 extern void dump_thread(struct pt_regs *, struct user *);
 extern int dump_fpu(struct pt_regs *, struct user_fp_struct *);
@@ -76,6 +77,10 @@ EXPORT_SYMBOL(ecard_address);
 
 /* processor dependencies */
 EXPORT_SYMBOL(processor);
+
+/* irq */
+EXPORT_SYMBOL(enable_irq);
+EXPORT_SYMBOL(disable_irq);
 
 /* io */
 EXPORT_SYMBOL(outswb);

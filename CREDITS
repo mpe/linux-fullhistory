@@ -895,6 +895,10 @@ N: Rudolf Koenig
 E: rfkoenig@immd4.informatik.uni-erlangen.de
 D: The Linux Support Team Erlangen
 
+N: Andreas Koensgen
+E: ajk@iehk.rwth-aachen.de
+D: 6pack driver for AX.25
+
 N: Andi Kleen
 E: ak@muc.de
 D: network hacker, syncookies
@@ -1254,6 +1258,14 @@ S: Dragonvagen 1 A 13
 S: FIN-00330 Helsingfors
 S: Finland
 
+N: Matija Nalis
+E: mnalis@jagor.srce.hr
+E: mnalis@voyager.hr
+D: Maintainer of the Umsdos file system
+S: Listopadska 7
+S: 10000 Zagreb
+S: Croatia
+
 N: Jonathan Naylor
 E: g4klx@g4klx.demon.co.uk
 E: g4klx@amsat.org
@@ -1407,7 +1419,7 @@ S: Germany
 
 N: Joerg Reuter
 E: jreuter@poboxes.com
-W: http://www.rat.de/jr/
+W: http://poboxes.com/jreuter/
 W: http://qsl.net/dl1bke/
 D: Generic Z8530 driver, AX.25 DAMA slave implementation
 D: Several AX.25 hacks
@@ -1865,6 +1877,14 @@ D: Author of the longest-living linux bug
 S: Hernesaarenkatu 15 A 2
 S: Fin-00150 Helsinki
 S: Finland
+
+N: Jonathan Woithe
+E: jwoithe@physics.adelaide.edu.au
+W: http://www.physics.adelaide.edu.au/~jwoithe
+D: ALS-007 soundcard extensions to Sound Blaster driver
+S: 4/36 Trevelyan St
+S: Wayville SA 5034
+S: Australia
 
 N: Roger E. Wolff
 E: R.E.Wolff@BitWizard.nl

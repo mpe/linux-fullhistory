@@ -1,7 +1,13 @@
+Firstly, let me say that UMSDOS is going through some major code changes,
+and has some KNOWN BUGS (and quite a few unknown :-). Please read
+fs/umsdos/README-WIP.txt for more information on current status. Thanks.
+
+----------------------------------------------------------------------------
 Very short explanation for the impatient!!!
 
 Umsdos is a file system driver that run on top the MSDOS fs driver.
 It is written by Jacques Gelinas (jacques@solucorp.qc.ca)
+and is currently maintained by Matija Nalis (mnalis@jagor.srce.hr)
 
 Umsdos is not a file system per se, but a twist to make a boring
 one into a useful one.

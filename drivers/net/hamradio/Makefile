@@ -45,6 +45,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_6PACK),y)
+L_OBJS += 6pack.o
+else
+  ifeq ($(CONFIG_6PACK),m)
+  M_OBJS += 6pack.o
+  endif
+endif
+
 ifeq ($(CONFIG_PI),y)
 L_OBJS += pi2.o
 else

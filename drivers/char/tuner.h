@@ -42,19 +42,8 @@
 #define TEMIC   2
 #define Sony    3
 
-struct tunertype {
-  char *name;
-  unchar Vendor;
-  unchar Type;
-  
-  ushort thresh1; /* frequency Range for UHF,VHF-L, VHF_H */   
-  ushort thresh2;  
-  unchar VHF_L;
-  unchar VHF_H;
-  unchar UHF;
-  unchar config; 
-  unchar I2C;
-  ushort IFPCoff;
-};
-#endif
+#define TUNER_SET_TYPE               _IOW('t',1,int)    /* set tuner type */
+#define TUNER_SET_TVFREQ             _IOW('t',2,int)    /* set tv freq */
+#define TUNER_SET_RADIOFREQ          _IOW('t',3,int)    /* set radio freq */
 
+#endif

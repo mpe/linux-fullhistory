@@ -28,6 +28,8 @@
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
 
+static struct wait_queue * lock_queue = NULL;
+
 /*
  * Reads or writes a swap page.
  * wait=1: start I/O and wait for completion. wait=0: start asynchronous I/O.
@@ -87,6 +89,12 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 		return;
 	}
 	
+	/* Make sure we are the only process doing I/O with this swap page. */
+	while (test_and_set_bit(offset,p->swap_lockmap)) {
+		run_task_queue(&tq_disk);
+		sleep_on(&lock_queue);
+	}
+	
 	if (rw == READ) {
 		clear_bit(PG_uptodate, &page->flags);
 		kstat.pswpin++;
@@ -115,6 +123,7 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 		if (!wait) {
 			set_bit(PG_free_after, &page->flags);
 			set_bit(PG_decr_after, &page->flags);
+			set_bit(PG_swap_unlock_after, &page->flags);
 			atomic_inc(&nr_async_pages);
 		}
 		ll_rw_page(rw,p->swap_device,offset,buf);
@@ -173,11 +182,36 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 		printk("rw_swap_page: no swap file or device\n");
 
 	atomic_dec(&page->count);
+	if (offset && !test_and_clear_bit(offset,p->swap_lockmap))
+		printk("rw_swap_page: lock already cleared\n");
+	wake_up(&lock_queue);
 #ifdef DEBUG_SWAP
 	printk ("DebugVM: %s_swap_page finished on page %p (count %d)\n",
 		(rw == READ) ? "read" : "write", 
 		buf, atomic_read(&page->count));
 #endif
+}
+
+/* This is run when asynchronous page I/O has completed. */
+void swap_after_unlock_page (unsigned long entry)
+{
+	unsigned long type, offset;
+	struct swap_info_struct * p;
+
+	type = SWP_TYPE(entry);
+	if (type >= nr_swapfiles) {
+		printk("swap_after_unlock_page: bad swap-device\n");
+		return;
+	}
+	p = &swap_info[type];
+	offset = SWP_OFFSET(entry);
+	if (offset >= p->max) {
+		printk("swap_after_unlock_page: weirdness\n");
+		return;
+	}
+	if (!test_and_clear_bit(offset,p->swap_lockmap))
+		printk("swap_after_unlock_page: lock already cleared\n");
+	wake_up(&lock_queue);
 }
 
 /*

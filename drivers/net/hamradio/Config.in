@@ -1,7 +1,7 @@
 comment 'AX.25 network device drivers'
 
 dep_tristate 'Serial port KISS driver' CONFIG_MKISS $CONFIG_AX25
-# dep_tristate 'Serial port 6PACK driver' CONFIG_6PACK $CONFIG_AX25
+dep_tristate 'Serial port 6PACK driver' CONFIG_6PACK $CONFIG_AX25
 dep_tristate 'BPQ Ethernet driver' CONFIG_BPQETHER $CONFIG_AX25
     
 dep_tristate 'High-speed (DMA) SCC driver for AX.25' CONFIG_DMASCC $CONFIG_AX25

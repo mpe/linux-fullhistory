@@ -38,6 +38,7 @@
  *
  */
 
+#include <linux/config.h>
 #include "isdnloop.h"
 
 static char

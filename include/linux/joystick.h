@@ -2,19 +2,18 @@
 #define _LINUX_JOYSTICK_H
 
 /*
- *  $Id: joystick.h,v 1.2 1997/10/31 19:11:57 mj Exp $
+ *  $Id: joystick.h,v 1.3 1998/03/30 11:10:40 mj Exp $
  *
- *  Copyright (C) 1997 Vojtech Pavlik
+ *  Copyright (C) 1997, 1998 Vojtech Pavlik
  */
 
-#include <linux/ioctl.h>
 #include <asm/types.h>
 
 /*
  * Version
  */
 
-#define JS_VERSION		0x00010006L		/* 1.0.6 BCD */
+#define JS_VERSION		0x00010007L		/* 1.0.7 BCD */
 
 /*
  * IOCTL commands for joystick driver

@@ -36,7 +36,7 @@ int compat_umsdos_real_lookup (struct inode *dir,const char *name,int len, struc
   int rv;
   struct dentry *dentry;
 
-  dentry = creat_dentry (name, len, NULL);
+  dentry = creat_dentry (name, len, NULL, NULL);
   rv = umsdos_real_lookup(dir,dentry);
   if (inode) *inode = dentry->d_inode;
   kill_dentry (dentry);
@@ -50,7 +50,7 @@ int compat_msdos_create(struct inode *dir,const char *name,int len, int mode, st
   int rv;
   struct dentry *dentry;
 
-  dentry = creat_dentry (name, len, NULL);
+  dentry = creat_dentry (name, len, NULL, NULL);
   rv = msdos_create(dir,dentry,mode);
   if(inode != NULL) *inode = dentry->d_inode;
   
@@ -270,10 +270,10 @@ static int umsdos_readdir_x(
 	      }
 	      Printk (("Trouve ino %ld ",inode->i_ino));
 	      if (u_entry != NULL) *u_entry = entry;
-	      iput (inode);
+	      /* iput (inode); FIXME */
 	      break;
 	    }
-	    iput (inode);
+	    /* iput (inode); FIXME */
 	  }else{
 	    /* #Specification: umsdos / readdir / not in MSDOS
 	       During a readdir operation, if the file is not
@@ -295,7 +295,7 @@ static int umsdos_readdir_x(
 	the special offset.
       */
       if (filp->f_pos == 0) filp->f_pos = start_fpos;
-      iput(emd_dir);
+      /* iput(emd_dir); FIXME */
     }
   }
   umsdos_endlookup(dir);	
@@ -530,7 +530,7 @@ int umsdos_inode2entry (
     ret = 0;
   }else{
     struct inode *emddir = umsdos_emd_dir_lookup(dir,0);
-    iput (emddir);
+    /* iput (emddir); FIXME */
     if (emddir == NULL){
       /* This is a DOS directory */
       struct UMSDOS_DIR_SEARCH bufk;
@@ -639,7 +639,7 @@ int umsdos_locate_path (
       while (dir != root_inode){
 	struct inode *adir;
 	ret = umsdos_locate_ancestor (dir,&adir,&entry);
-	iput (dir);
+	/* iput (dir); FIXME */
 	dir = NULL;
 	Printk (("ancestor %d ",ret));
 	if (ret == 0){
@@ -657,7 +657,7 @@ int umsdos_locate_path (
     kfree (bpath);
   }
   Printk (("\n"));
-  iput (dir);
+  /* iput (dir); FIXME */
   return ret;
 }
 
@@ -697,12 +697,16 @@ int umsdos_lookup_x (
   struct inode *pseudo_root_inode=NULL;
   int len = dentry->d_name.len;
   const char *name = dentry->d_name.name;
+  
+  Printk ((KERN_DEBUG "umsdos_lookup_x: /mn/ name=%.*s, dir=%lu, d_parent=%p\n", (int) dentry->d_name.len, dentry->d_name.name, dir->i_ino, dentry->d_parent));	/* FIXME /mn/ debug only */
+  if (dentry->d_parent) Printk ((KERN_DEBUG "   d_parent is %.*s\n", (int) dentry->d_parent->d_name.len, dentry->d_parent->d_name.name)); /* FIXME : delme /mn/ */
+  
   root_inode = iget(dir->i_sb,UMSDOS_ROOT_INO);
   /*	pseudo_root_inode = iget( ... ) ? */
   dentry->d_inode = NULL;
-  umsdos_startlookup(dir);	
+  umsdos_startlookup(dir);
   if (len == 1 && name[0] == '.'){
-    dentry->d_inode = dir;
+    d_add (dentry, dir);
     dir->i_count++;
     ret = 0;
   }else if (len == 2 && name[0] == '.' && name[1] == '.'){
@@ -713,7 +717,7 @@ int umsdos_lookup_x (
 	 pseudo root is returned.
       */
       ret = 0;
-      dentry->d_inode = pseudo_root;
+      d_add (dentry, pseudo_root);
       pseudo_root->i_count++;
     }else{
       /* #Specification: locating .. / strategy
@@ -735,7 +739,7 @@ int umsdos_lookup_x (
 	struct inode *aadir;
 	struct umsdos_dirent entry;
 	ret = umsdos_locate_ancestor (dentry->d_inode,&aadir,&entry);
-	iput (aadir);
+	/* iput (aadir); FIXME */
       }
     }
   }else if (umsdos_is_pseudodos(dir,dentry)){
@@ -743,7 +747,7 @@ int umsdos_lookup_x (
        A lookup of DOS in the pseudo root will always succeed
        and return the inode of the real root.
     */
-    dentry->d_inode = root_inode;
+    d_add (dentry, root_inode);
     (dentry->d_inode)->i_count++;
     ret = 0;
   }else{
@@ -776,7 +780,7 @@ int umsdos_lookup_x (
         Printk ((KERN_DEBUG "umsdos_lookup_x /mn/ debug: ino=%li\n", inode->i_ino));
 
         /* we've found it. now get inode and put it in dentry. Is this ok /mn/ ? */
-        dentry->d_inode = iget(dir->i_sb, inode->i_ino);
+        d_add (dentry, iget(dir->i_sb, inode->i_ino));
         
 	umsdos_lookup_patch (dir,inode,&info.entry,info.f_pos);
 	Printk (("lookup ino %ld flags %d\n",inode->i_ino
@@ -796,7 +800,7 @@ int umsdos_lookup_x (
 	    mode.
 	  */
 	  Printk ((KERN_ERR "umsdos_lookup_x: warning: untested /mn/ Pseudo_root thingy\n"));
-	  iput (pseudo_root);
+	  /* iput (pseudo_root); FIXME */
 	  dentry->d_inode = NULL;
 	  ret = -ENOENT;
 	}
@@ -804,7 +808,7 @@ int umsdos_lookup_x (
     }
   }
   umsdos_endlookup(dir);	
-  iput (dir);
+  /* iput (dir); FIXME */
   Printk ((KERN_DEBUG "umsdos_lookup_x: returning %d\n", ret));
   return ret;
 }
@@ -858,7 +862,7 @@ int umsdos_hlink2inode (struct inode *hlink, struct inode **result)
   *result = NULL;
   if (path == NULL){
     ret = -ENOMEM;
-    iput (hlink);
+    /* iput (hlink); FIXME */
   }else{
     struct file filp;
     loff_t offs = 0;
@@ -866,7 +870,7 @@ int umsdos_hlink2inode (struct inode *hlink, struct inode **result)
     fill_new_filp (&filp, NULL);
       
 
-    dentry_src = creat_dentry ("hlink-mn", 8, hlink);
+    dentry_src = creat_dentry ("hlink-mn", 8, hlink, NULL);
 
     memset (&filp, 0, sizeof (filp));
 
@@ -894,7 +898,7 @@ int umsdos_hlink2inode (struct inode *hlink, struct inode **result)
 	    if (*pt == '/') *pt++ = '\0';
 	    /* FIXME. /mn/ fixed ? */
 
-            dentry_dst = creat_dentry (start, len, NULL);
+            dentry_dst = creat_dentry (start, len, NULL, NULL);
 
 	    if (dir->u.umsdos_i.i_emd_dir == 0){
 	      /* This is a DOS directory */
@@ -917,7 +921,7 @@ int umsdos_hlink2inode (struct inode *hlink, struct inode **result)
 	  }
       }else{
 	  Printk (("umsdos_hlink2inode: all those iput's() frighten me /mn/. Whatabout dput() ? FIXME!\n"));
-	  iput (hlink); /* FIXME */
+	  /* iput (hlink); / * FIXME */
       }
     Printk (("hlink2inode ret = %d %p -> %p\n", ret, hlink, *result));
     kfree (path);

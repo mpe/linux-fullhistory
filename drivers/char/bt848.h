@@ -1,7 +1,7 @@
 /* 
     bt848.h - Bt848 register offsets
 
-    Copyright (C) 1996,97 Ralph Metzler (rjkm@thp.uni-koeln.de)
+    Copyright (C) 1996,97,98 Ralph Metzler (rjkm@thp.uni-koeln.de)
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -22,13 +22,15 @@
 #define _BT848_H_
 
 #ifndef PCI_VENDOR_ID_BROOKTREE
-#define PCI_VENDOR_ID_BROOKTREE 0x109e
+#define PCI_VENDOR_ID_BROOKTREE 0x109e 
 #endif
 #ifndef PCI_DEVICE_ID_BT848
-#define PCI_DEVICE_ID_BT848     0x350
+#define PCI_DEVICE_ID_BT848     0x350	
+#endif
+#ifndef PCI_DEVICE_ID_BT849
+#define PCI_DEVICE_ID_BT849     0x351
 #endif
 
-#define RISCMEM_LEN 131040
 
 /* Brooktree 848 registers */
 

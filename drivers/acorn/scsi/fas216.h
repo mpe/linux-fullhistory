@@ -196,7 +196,7 @@ typedef enum {
 typedef enum {
 	syncneg_start,					/* Negociate with device for Sync xfers	*/
 	syncneg_sent,					/* Sync Xfer negociation sent		*/
-	syncnsg_complete				/* Sync Xfer complete			*/
+	syncneg_complete				/* Sync Xfer complete			*/
 } syncneg_t;
 
 typedef struct {
@@ -277,81 +277,82 @@ typedef struct {
 	int			internal_done;		/* flag to indicate request done */
 } FAS216_Info;
 
-/*
- * Function: int fas216_init (struct Scsi_Host *instance)
- *
+/* Function: int fas216_init (struct Scsi_Host *instance)
  * Purpose : initialise FAS/NCR/AMD SCSI ic.
- *
  * Params  : instance - a driver-specific filled-out structure
- *
  * Returns : 0 on success
  */
 extern int fas216_init (struct Scsi_Host *instance);
 
-/*
- * Function: int fas216_abort (Scsi_Cmnd *SCpnt)
- *
+/* Function: int fas216_abort (Scsi_Cmnd *SCpnt)
  * Purpose : abort a command if something horrible happens.
- *
  * Params  : SCpnt - Command that is believed to be causing a problem.
- *
  * Returns : one of SCSI_ABORT_ macros.
  */
 extern int fas216_abort (Scsi_Cmnd *);
 
-/*
- * Function: int fas216_reset (Scsi_Cmnd *SCpnt, unsigned int reset_flags)
- *
+/* Function: int fas216_reset (Scsi_Cmnd *SCpnt, unsigned int reset_flags)
  * Purpose : resets the adapter if something horrible happens.
- *
  * Params  : SCpnt - Command that is believed to be causing a problem.
  *	     reset_flags - flags indicating reset type that is believed to be required.
- *
  * Returns : one of SCSI_RESET_ macros, or'd with the SCSI_RESET_*_RESET macros.
  */
 extern int fas216_reset (Scsi_Cmnd *, unsigned int);
 
-/*
- * Function: int fas216_queue_command (Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
- *
+/* Function: int fas216_queue_command (Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
  * Purpose : queue a command for adapter to process.
- *
  * Params  : SCpnt - Command to queue
  *	     done  - done function to call once command is complete
- *
  * Returns : 0 - success, else error
  */
 extern int fas216_queue_command (Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 
-/*
- * Function: int fas216_command (Scsi_Cmnd *SCpnt)
- *
+/* Function: int fas216_command (Scsi_Cmnd *SCpnt)
  * Purpose : queue a command for adapter to process.
- *
  * Params  : SCpnt - Command to queue
- *
  * Returns : scsi result code
  */
 extern int fas216_command (Scsi_Cmnd *);
 
-/*
- * Function: void fas216_intr (struct Scsi_Host *instance)
- *
+/* Function: void fas216_intr (struct Scsi_Host *instance)
  * Purpose : handle interrupts from the interface to progress a command
- *
  * Params  : instance - interface to service
  */
 extern void fas216_intr (struct Scsi_Host *instance);
 
-/*
- * Function: int fas216_release (struct Scsi_Host *instance)
- *
+/* Function: int fas216_release (struct Scsi_Host *instance)
  * Purpose : release all resources and put everything to bed for FAS/NCR/AMD SCSI ic.
- *
  * Params  : instance - a driver-specific filled-out structure
- *
  * Returns : 0 on success
  */
 extern int fas216_release (struct Scsi_Host *instance);
+
+/* Function: int fas216_eh_abort(Scsi_Cmnd *SCpnt)
+ * Purpose : abort this command
+ * Params  : SCpnt - command to abort
+ * Returns : FAILED if unable to abort
+ */
+extern int fas216_eh_abort(Scsi_Cmnd *SCpnt);
+
+/* Function: int fas216_eh_device_reset(Scsi_Cmnd *SCpnt)
+ * Purpose : Reset the device associated with this command
+ * Params  : SCpnt - command specifing device to reset
+ * Returns : FAILED if unable to reset
+ */
+extern int fas216_eh_device_reset(Scsi_Cmnd *SCpnt);
+
+/* Function: int fas216_eh_bus_reset(Scsi_Cmnd *SCpnt)
+ * Purpose : Reset the complete bus associated with this command
+ * Params  : SCpnt - command specifing bus to reset
+ * Returns : FAILED if unable to reset
+ */
+extern int fas216_eh_bus_reset(Scsi_Cmnd *SCpnt);
+
+/* Function: int fas216_eh_host_reset(Scsi_Cmnd *SCpnt)
+ * Purpose : Reset the host associated with this command
+ * Params  : SCpnt - command specifing host to reset
+ * Returns : FAILED if unable to reset
+ */
+extern int fas216_eh_host_reset(Scsi_Cmnd *SCpnt);
 
 #endif /* FAS216_H */

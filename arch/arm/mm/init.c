@@ -30,7 +30,6 @@
 
 pgd_t swapper_pg_dir[PTRS_PER_PGD];
 
-const char bad_pmd_string[] = "Bad pmd in pte_alloc: %08lx\n";
 extern char _etext, _stext, _edata, __bss_start, _end;
 extern char __init_begin, __init_end;
 

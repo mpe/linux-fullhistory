@@ -52,6 +52,7 @@
  * ugh).
  */
 
+#include <linux/config.h>
 #include <asm/system.h>
 
 #ifdef CONFIG_ALPHA_SRM_SETUP

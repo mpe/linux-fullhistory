@@ -2,17 +2,16 @@
  * sound/sb_dsp.c
  *
  * The low level driver for the Sound Blaster DS chips.
- */
-/*
+ *
+ *
  * Copyright (C) by Hannu Savolainen 1993-1997
  *
  * OSS/Free for Linux is distributed under the GNU GENERAL PUBLIC LICENSE (GPL)
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  */
+
 #include <linux/config.h>
-
-
 #include "sound_config.h"
 
 #ifdef CONFIG_SBDSP
@@ -30,14 +29,13 @@
  */
 
 
-static int
-sb_midi_open(int dev, int mode,
+static int sb_midi_open(int dev, int mode,
 	     void            (*input) (int dev, unsigned char data),
 	     void            (*output) (int dev)
 )
 {
-	sb_devc        *devc = midi_devs[dev]->devc;
-	unsigned long   flags;
+	sb_devc *devc = midi_devs[dev]->devc;
+	unsigned long flags;
 
 	if (devc == NULL)
 		return -ENXIO;
@@ -45,10 +43,10 @@ sb_midi_open(int dev, int mode,
 	save_flags(flags);
 	cli();
 	if (devc->opened)
-	  {
-		  restore_flags(flags);
-		  return -EBUSY;
-	  }
+	{
+		restore_flags(flags);
+		return -EBUSY;
+	}
 	devc->opened = 1;
 	restore_flags(flags);
 
@@ -58,25 +56,24 @@ sb_midi_open(int dev, int mode,
 	sb_dsp_reset(devc);
 
 	if (!sb_dsp_command(devc, 0x35))	/* Start MIDI UART mode */
-	  {
+	{
 		  devc->opened = 0;
 		  return -EIO;
-	  }
+	}
 	devc->intr_active = 1;
 
 	if (mode & OPEN_READ)
-	  {
-		  devc->input_opened = 1;
-		  devc->midi_input_intr = input;
-	  }
+	{
+		devc->input_opened = 1;
+		devc->midi_input_intr = input;
+	}
 	return 0;
 }
 
-static void
-sb_midi_close(int dev)
+static void sb_midi_close(int dev)
 {
-	sb_devc        *devc = midi_devs[dev]->devc;
-	unsigned long   flags;
+	sb_devc *devc = midi_devs[dev]->devc;
+	unsigned long flags;
 
 	if (devc == NULL)
 		return;
@@ -90,10 +87,9 @@ sb_midi_close(int dev)
 	restore_flags(flags);
 }
 
-static int
-sb_midi_out(int dev, unsigned char midi_byte)
+static int sb_midi_out(int dev, unsigned char midi_byte)
 {
-	sb_devc        *devc = midi_devs[dev]->devc;
+	sb_devc *devc = midi_devs[dev]->devc;
 
 	if (devc == NULL)
 		return 1;
@@ -102,23 +98,21 @@ sb_midi_out(int dev, unsigned char midi_byte)
 		return 1;
 
 	if (!sb_dsp_command(devc, midi_byte))
-	  {
-		  devc->midi_broken = 1;
-		  return 1;
-	  }
+	{
+		devc->midi_broken = 1;
+		return 1;
+	}
 	return 1;
 }
 
-static int
-sb_midi_start_read(int dev)
+static int sb_midi_start_read(int dev)
 {
 	return 0;
 }
 
-static int
-sb_midi_end_read(int dev)
+static int sb_midi_end_read(int dev)
 {
-	sb_devc        *devc = midi_devs[dev]->devc;
+	sb_devc *devc = midi_devs[dev]->devc;
 
 	if (devc == NULL)
 		return -ENXIO;
@@ -128,14 +122,12 @@ sb_midi_end_read(int dev)
 	return 0;
 }
 
-/* why -EPERM and not -EINVAL?? */
 static int sb_midi_ioctl(int dev, unsigned cmd, caddr_t arg)
 {
-        return -EPERM;
+        return -EINVAL;
 }
 
-void
-sb_midi_interrupt(sb_devc * devc)
+void sb_midi_interrupt(sb_devc * devc)
 {
 	unsigned long   flags;
 	unsigned char   data;
@@ -159,7 +151,9 @@ sb_midi_interrupt(sb_devc * devc)
 
 static struct midi_operations sb_midi_operations =
 {
-	{"Sound Blaster", 0, 0, SNDCARD_SB},
+	{
+		"Sound Blaster", 0, 0, SNDCARD_SB
+	},
 	&std_midi_synth,
 	{0},
 	sb_midi_open,
@@ -174,10 +168,9 @@ static struct midi_operations sb_midi_operations =
 	NULL
 };
 
-void
-sb_dsp_midi_init(sb_devc * devc)
+void sb_dsp_midi_init(sb_devc * devc)
 {
-	int             dev;
+	int dev;
 
 	if (devc->model < 2)	/* No MIDI support for SB 1.x */
 		return;
@@ -185,45 +178,34 @@ sb_dsp_midi_init(sb_devc * devc)
 	dev = sound_alloc_mididev();
 
 	if (dev == -1)
-	  {
-		  printk("Sound: Too many midi devices detected\n");
-		  return;
-	  }
+	{
+		printk("Sound: Too many midi devices detected\n");
+		return;
+	}
 	std_midi_synth.midi_dev = dev;
 	devc->my_mididev = dev;
-
 	std_midi_synth.midi_dev = devc->my_mididev = dev;
-
-
-	midi_devs[dev] = (struct midi_operations *) (sound_mem_blocks[sound_nblocks] = vmalloc(sizeof(struct midi_operations)));
-	sound_mem_sizes[sound_nblocks] = sizeof(struct midi_operations);
-
-	if (sound_nblocks < 1024)
-		sound_nblocks++;;
+	midi_devs[dev] = (struct midi_operations *)kmalloc(sizeof(struct midi_operations), GFP_KERNEL);
 	if (midi_devs[dev] == NULL)
-	  {
-		  printk(KERN_WARNING "sb MIDI: Failed to allocate memory\n");
-		  sound_unload_mididev(dev);
+	{
+		printk(KERN_WARNING "soundblaster: Failed to allocate MIDI memory.\n");
+		sound_unload_mididev(dev);
 		  return;
-	  }
+	}
 	memcpy((char *) midi_devs[dev], (char *) &sb_midi_operations,
 	       sizeof(struct midi_operations));
 
 	midi_devs[dev]->devc = devc;
 
 
-	midi_devs[dev]->converter = (struct synth_operations *) (sound_mem_blocks[sound_nblocks] = vmalloc(sizeof(struct synth_operations)));
-	sound_mem_sizes[sound_nblocks] = sizeof(struct synth_operations);
-
-	if (sound_nblocks < 1024)
-		sound_nblocks++;;
-
+	midi_devs[dev]->converter = (struct synth_operations *)kmalloc(sizeof(struct synth_operations), GFP_KERNEL);
 	if (midi_devs[dev]->converter == NULL)
-	  {
-		  printk(KERN_WARNING "sb MIDI: Failed to allocate memory\n");
+	{
+		  printk(KERN_WARNING "soundblaster: Failed to allocate MIDI memory.\n");
+		  kfree(midi_devs[dev]);
 		  sound_unload_mididev(dev);
 		  return;
-	  }
+	}
 	memcpy((char *) midi_devs[dev]->converter, (char *) &std_midi_synth,
 	       sizeof(struct synth_operations));
 
