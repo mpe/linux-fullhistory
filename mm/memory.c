@@ -1,6 +1,11 @@
+/*
+ *  linux/mm/memory.c
+ *
+ *  (C) 1991  Linus Torvalds
+ */
+
 #include <signal.h>
 
-#include <linux/config.h>
 #include <linux/head.h>
 #include <linux/kernel.h>
 #include <asm/system.h>
@@ -10,25 +15,19 @@ int do_exit(long code);
 #define invalidate() \
 __asm__("movl %%eax,%%cr3"::"a" (0))
 
-#if (BUFFER_END < 0x100000)
+/* these are not to be changed without changing head.s etc */
 #define LOW_MEM 0x100000
-#else
-#define LOW_MEM BUFFER_END
-#endif
-
-/* these are not to be changed - thay are calculated from the above */
-#define PAGING_MEMORY (HIGH_MEMORY - LOW_MEM)
-#define PAGING_PAGES (PAGING_MEMORY/4096)
+#define PAGING_MEMORY (15*1024*1024)
+#define PAGING_PAGES (PAGING_MEMORY>>12)
 #define MAP_NR(addr) (((addr)-LOW_MEM)>>12)
+#define USED 100
 
-#if (PAGING_PAGES < 10)
-#error "Won't work"
-#endif
+static long HIGH_MEMORY = 0;
 
 #define copy_page(from,to) \
 __asm__("cld ; rep ; movsl"::"S" (from),"D" (to),"c" (1024):"cx","di","si")
 
-static unsigned short mem_map [ PAGING_PAGES ] = {0,};
+static unsigned char mem_map [ PAGING_PAGES ] = {0,};
 
 /*
  * Get physical address of first (actually last :-) free page, and mark it
@@ -38,12 +37,12 @@ unsigned long get_free_page(void)
 {
 register unsigned long __res asm("ax");
 
-__asm__("std ; repne ; scasw\n\t"
+__asm__("std ; repne ; scasb\n\t"
 	"jne 1f\n\t"
-	"movw $1,2(%%edi)\n\t"
+	"movb $1,1(%%edi)\n\t"
 	"sall $12,%%ecx\n\t"
+	"addl %2,%%ecx\n\t"
 	"movl %%ecx,%%edx\n\t"
-	"addl %2,%%edx\n\t"
 	"movl $1024,%%ecx\n\t"
 	"leal 4092(%%edx),%%edi\n\t"
 	"rep ; stosl\n\t"
@@ -62,8 +61,8 @@ return __res;
  */
 void free_page(unsigned long addr)
 {
-	if (addr<LOW_MEM) return;
-	if (addr>HIGH_MEMORY)
+	if (addr < LOW_MEM) return;
+	if (addr > HIGH_MEMORY)
 		panic("trying to free nonexistent page");
 	addr -= LOW_MEM;
 	addr >>= 12;
@@ -242,6 +241,20 @@ void do_no_page(unsigned long error_code,unsigned long address)
 		if (put_page(tmp,address))
 			return;
 	do_exit(SIGSEGV);
+}
+
+void mem_init(long start_mem, long end_mem)
+{
+	int i;
+
+	HIGH_MEMORY = end_mem;
+	for (i=0 ; i<PAGING_PAGES ; i++)
+		mem_map[i] = USED;
+	i = MAP_NR(start_mem);
+	end_mem -= start_mem;
+	end_mem >>= 12;
+	while (end_mem-->0)
+		mem_map[i++]=0;
 }
 
 void calc_mem(void)

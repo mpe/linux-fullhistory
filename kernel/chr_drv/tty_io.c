@@ -1,4 +1,10 @@
 /*
+ *  linux/kernel/tty_io.c
+ *
+ *  (C) 1991  Linus Torvalds
+ */
+
+/*
  * 'tty_io.c' gives an orthogonal feeling to tty's, be they consoles
  * or rs-channels. It also implements echoing, cooked mode etc (well,
  * not currently, but ...)
@@ -8,6 +14,10 @@
 #include <signal.h>
 
 #define ALRMMASK (1<<(SIGALRM-1))
+#define KILLMASK (1<<(SIGKILL-1))
+#define INTMASK (1<<(SIGINT-1))
+#define QUITMASK (1<<(SIGQUIT-1))
+#define TSTPMASK (1<<(SIGTSTP-1))
 
 #include <linux/sched.h>
 #include <linux/tty.h>
@@ -39,7 +49,7 @@
 
 struct tty_struct tty_table[] = {
 	{
-		{0,
+		{ICRNL,
 		OPOST|ONLCR,	/* change outgoing NL to CRNL */
 		0,
 		ICANON | ECHO | ECHOCTL | ECHOKE,
@@ -97,7 +107,7 @@ void tty_init(void)
 	con_init();
 }
 
-void tty_intr(struct tty_struct * tty, int signal)
+void tty_intr(struct tty_struct * tty, int mask)
 {
 	int i;
 
@@ -105,7 +115,7 @@ void tty_intr(struct tty_struct * tty, int signal)
 		return;
 	for (i=0;i<NR_TASKS;i++)
 		if (task[i] && task[i]->pgrp==tty->pgrp)
-			task[i]->signal |= 1<<(signal-1);
+			task[i]->signal |= mask;
 }
 
 static void sleep_if_empty(struct tty_queue * queue)
@@ -124,6 +134,11 @@ static void sleep_if_full(struct tty_queue * queue)
 	while (!current->signal && LEFT(*queue)<128)
 		interruptible_sleep_on(&queue->proc_list);
 	sti();
+}
+
+void wait_for_keypress(void)
+{
+	sleep_if_empty(&tty_table[0].secondary);
 }
 
 void copy_to_cooked(struct tty_struct * tty)
@@ -168,7 +183,11 @@ void copy_to_cooked(struct tty_struct * tty)
 		}
 		if (!L_ISIG(tty)) {
 			if (c==INTR_CHAR(tty)) {
-				tty_intr(tty,SIGINT);
+				tty_intr(tty,INTMASK);
+				continue;
+			}
+			if (c==KILL_CHAR(tty)) {
+				tty_intr(tty,KILLMASK);
 				continue;
 			}
 		}
@@ -299,8 +318,16 @@ int tty_write(unsigned channel, char * buf, int nr)
  * hate intel for all time :-). We'll have to
  * be careful and see to reinstating the interrupt
  * chips before calling this, though.
+ *
+ * I don't think we sleep here under normal circumstances
+ * anyway, which is good, as the task sleeping might be
+ * totally innocent.
  */
 void do_tty_interrupt(int tty)
 {
 	copy_to_cooked(tty_table+tty);
+}
+
+void chr_dev_init(void)
+{
 }

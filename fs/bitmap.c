@@ -1,3 +1,9 @@
+/*
+ *  linux/fs/bitmap.c
+ *
+ *  (C) 1991  Linus Torvalds
+ */
+
 /* bitmap.c contains the code that handles the inode and block bitmaps */
 #include <string.h>
 

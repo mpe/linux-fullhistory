@@ -1,3 +1,9 @@
+/*
+ *  linux/fs/fcntl.c
+ *
+ *  (C) 1991  Linus Torvalds
+ */
+
 #include <string.h>
 #include <errno.h>
 #include <linux/sched.h>

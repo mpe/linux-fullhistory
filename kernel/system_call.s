@@ -1,7 +1,13 @@
 /*
+ *  linux/kernel/system_call.s
+ *
+ *  (C) 1991  Linus Torvalds
+ */
+
+/*
  *  system_call.s  contains the system-call low-level handling routines.
  * This also contains the timer-interrupt handler, as some of the code is
- * the same. The hd-interrupt is also here.
+ * the same. The hd- and flopppy-interrupts are also here.
  *
  * NOTE: This code handles signal-recognition, which happens every time
  * after a timer-interrupt and after each system call. Ordinary interrupts
@@ -25,6 +31,7 @@
  */
 
 SIG_CHLD	= 17
+
 EAX		= 0x00
 EBX		= 0x04
 ECX		= 0x08
@@ -42,12 +49,23 @@ state	= 0		# these are offsets into the task-struct.
 counter	= 4
 priority = 8
 signal	= 12
-restorer = 16		# address of info-restorer
-sig_fn	= 20		# table of 32 signal addresses
+sigaction = 16		# MUST be 16 (=len of sigaction)
+blocked = (33*16)
 
-nr_system_calls = 67
+# offsets within sigaction
+sa_handler = 0
+sa_mask = 4
+sa_flags = 8
+sa_restorer = 12
 
-.globl _system_call,_sys_fork,_timer_interrupt,_hd_interrupt,_sys_execve
+nr_system_calls = 70
+
+/*
+ * Ok, I get parallel printer interrupts while using the floppy for some
+ * strange reason. Urgel. Now I just ignore them.
+ */
+.globl _system_call,_sys_fork,_timer_interrupt,_sys_execve
+.globl _hd_interrupt,_floppy_interrupt,_parallel_interrupt
 
 .align 2
 bad_sys_call:
@@ -83,46 +101,22 @@ ret_from_sys_call:
 	movl _current,%eax		# task[0] cannot have signals
 	cmpl _task,%eax
 	je 3f
-	movl CS(%esp),%ebx		# was old code segment supervisor
-	testl $3,%ebx			# mode? If so - don't check signals
-	je 3f
+	cmpw $0x0f,CS(%esp)		# was old code segment supervisor ?
+	jne 3f
 	cmpw $0x17,OLDSS(%esp)		# was stack segment = 0x17 ?
 	jne 3f
-2:	movl signal(%eax),%ebx		# signals (bitmap, 32 signals)
-	bsfl %ebx,%ecx			# %ecx is signal nr, return if none
+	movl signal(%eax),%ebx
+	movl blocked(%eax),%ecx
+	notl %ecx
+	andl %ebx,%ecx
+	bsfl %ecx,%ecx
 	je 3f
-	btrl %ecx,%ebx			# clear it
+	btrl %ecx,%ebx
 	movl %ebx,signal(%eax)
-	movl sig_fn(%eax,%ecx,4),%ebx	# %ebx is signal handler address
-	cmpl $1,%ebx
-	jb default_signal		# 0 is default signal handler - exit
-	je 2b				# 1 is ignore - find next signal
-	movl $0,sig_fn(%eax,%ecx,4)	# reset signal handler address
 	incl %ecx
-	xchgl %ebx,EIP(%esp)		# put new return address on stack
-	subl $28,OLDESP(%esp)
-	movl OLDESP(%esp),%edx		# push old return address on stack
-	pushl %eax			# but first check that it's ok.
 	pushl %ecx
-	pushl $28
-	pushl %edx
-	call _verify_area
-	popl %edx
-	addl $4,%esp
-	popl %ecx
+	call _do_signal
 	popl %eax
-	movl restorer(%eax),%eax
-	movl %eax,%fs:(%edx)		# flag/reg restorer
-	movl %ecx,%fs:4(%edx)		# signal nr
-	movl EAX(%esp),%eax
-	movl %eax,%fs:8(%edx)		# old eax
-	movl ECX(%esp),%eax
-	movl %eax,%fs:12(%edx)		# old ecx
-	movl EDX(%esp),%eax
-	movl %eax,%fs:16(%edx)		# old edx
-	movl EFLAGS(%esp),%eax
-	movl %eax,%fs:20(%edx)		# old eflags
-	movl %ebx,%fs:24(%edx)		# old return addr
 3:	popl %eax
 	popl %ebx
 	popl %ecx
@@ -131,15 +125,6 @@ ret_from_sys_call:
 	pop %es
 	pop %ds
 	iret
-
-default_signal:
-	incl %ecx
-	cmpl $SIG_CHLD,%ecx
-	je 2b
-	pushl %ecx
-	call _do_exit		# remember to set bit 7 when dumping core
-	addl $4,%esp
-	jmp 3b
 
 .align 2
 _timer_interrupt:
@@ -197,7 +182,6 @@ _hd_interrupt:
 	movl $0x10,%eax
 	mov %ax,%ds
 	mov %ax,%es
-	movl $0x17,%eax
 	mov %ax,%fs
 	movb $0x20,%al
 	outb %al,$0x20		# EOI to interrupt controller #1
@@ -217,3 +201,35 @@ _hd_interrupt:
 	popl %eax
 	iret
 
+_floppy_interrupt:
+	pushl %eax
+	pushl %ecx
+	pushl %edx
+	push %ds
+	push %es
+	push %fs
+	movl $0x10,%eax
+	mov %ax,%ds
+	mov %ax,%es
+	mov %ax,%fs
+	movb $0x20,%al
+	outb %al,$0x20		# EOI to interrupt controller #1
+	movl _do_floppy,%eax
+	testl %eax,%eax
+	jne 1f
+	movl $_unexpected_floppy_interrupt,%eax
+1:	call *%eax		# "interesting" way of handling intr.
+	pop %fs
+	pop %es
+	pop %ds
+	popl %edx
+	popl %ecx
+	popl %eax
+	iret
+
+_parallel_interrupt:
+	pushl %eax
+	movb $0x20,%al
+	outb %al,$0x20
+	popl %eax
+	iret

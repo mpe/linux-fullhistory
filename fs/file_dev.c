@@ -1,3 +1,9 @@
+/*
+ *  linux/fs/file_dev.c
+ *
+ *  (C) 1991  Linus Torvalds
+ */
+
 #include <errno.h>
 #include <fcntl.h>
 

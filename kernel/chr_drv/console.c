@@ -1,4 +1,10 @@
 /*
+ *  linux/kernel/console.c
+ *
+ *  (C) 1991  Linus Torvalds
+ */
+
+/*
  *	console.c
  *
  * This module implements the console io functions
@@ -19,6 +25,12 @@
 #include <linux/tty.h>
 #include <asm/io.h>
 #include <asm/system.h>
+
+/*
+ * These are set up by the setup-routine at boot-time:
+ */
+#define ORIG_X (*(unsigned char *)0x90000)
+#define ORIG_Y (*(unsigned char *)0x90001)
 
 #define SCREEN_START 0xb8000
 #define SCREEN_END   0xc0000
@@ -45,9 +57,10 @@ static unsigned char attr=0x07;
  */
 #define RESPONSE "\033[?1;2c"
 
+/* NOTE! gotoxy thinks x==columns is ok */
 static inline void gotoxy(unsigned int new_x,unsigned int new_y)
 {
-	if (new_x>=columns || new_y>=lines)
+	if (new_x > columns || new_y >= lines)
 		return;
 	x=new_x;
 	y=new_y;
@@ -313,7 +326,7 @@ static void delete_line(void)
 	bottom=oldbottom;
 }
 
-static void csi_at(int nr)
+static void csi_at(unsigned int nr)
 {
 	if (nr>columns)
 		nr=columns;
@@ -323,7 +336,7 @@ static void csi_at(int nr)
 		insert_char();
 }
 
-static void csi_L(int nr)
+static void csi_L(unsigned int nr)
 {
 	if (nr>lines)
 		nr=lines;
@@ -333,7 +346,7 @@ static void csi_L(int nr)
 		insert_line();
 }
 
-static void csi_P(int nr)
+static void csi_P(unsigned int nr)
 {
 	if (nr>columns)
 		nr=columns;
@@ -343,7 +356,7 @@ static void csi_P(int nr)
 		delete_char();
 }
 
-static void csi_M(int nr)
+static void csi_M(unsigned int nr)
 {
 	if (nr>lines)
 		nr=lines;
@@ -364,9 +377,7 @@ static void save_cur(void)
 
 static void restore_cur(void)
 {
-	x=saved_x;
-	y=saved_y;
-	pos=origin+((y*columns+x)<<1);
+	gotoxy(saved_x, saved_y);
 }
 
 void con_write(struct tty_struct * tty)
@@ -541,7 +552,7 @@ void con_init(void)
 {
 	register unsigned char a;
 
-	gotoxy(*(unsigned char *)(0x90000+510),*(unsigned char *)(0x90000+511));
+	gotoxy(ORIG_X,ORIG_Y);
 	set_trap_gate(0x21,&keyboard_interrupt);
 	outb_p(inb_p(0x21)&0xfd,0x21);
 	a=inb_p(0x61);

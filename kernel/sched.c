@@ -1,4 +1,10 @@
 /*
+ *  linux/kernel/sched.c
+ *
+ *  (C) 1991  Linus Torvalds
+ */
+
+/*
  * 'sched.c' is the main kernel file. It contains scheduling primitives
  * (sleep_on, wakeup, schedule etc) as well as a number of simple system
  * call functions (type getpid(), which just extracts a field from
@@ -6,11 +12,31 @@
  */
 #include <linux/sched.h>
 #include <linux/kernel.h>
-#include <signal.h>
 #include <linux/sys.h>
+#include <linux/fdreg.h>
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/segment.h>
+
+#include <signal.h>
+
+#define _S(nr) (1<<((nr)-1))
+#define _BLOCKABLE (~(_S(SIGKILL) | _S(SIGSTOP)))
+
+void show_task(int nr,struct task_struct * p)
+{
+	printk("%d: pid=%d, state=%d, ",nr,p->pid,p->state);
+	printk("eip=%04x:%08x\n\r",p->tss.cs&0xffff,p->tss.eip);
+}
+
+void show_stat(void)
+{
+	int i;
+
+	for (i=0;i<NR_TASKS;i++)
+		if (task[i])
+			show_task(i,task[i]);
+}
 
 #define LATCH (1193180/HZ)
 
@@ -28,7 +54,8 @@ static union task_union init_task = {INIT_TASK,};
 
 long volatile jiffies=0;
 long startup_time=0;
-struct task_struct *current = &(init_task.task), *last_task_used_math = NULL;
+struct task_struct *current = &(init_task.task);
+struct task_struct *last_task_used_math = NULL;
 
 struct task_struct * task[NR_TASKS] = {&(init_task.task), };
 
@@ -44,11 +71,14 @@ struct {
  */
 void math_state_restore()
 {
-	if (last_task_used_math)
+	if (last_task_used_math == current)
+		return;
+	if (last_task_used_math) {
 		__asm__("fnsave %0"::"m" (last_task_used_math->tss.i387));
-	if (current->used_math)
+	}
+	if (current->used_math) {
 		__asm__("frstor %0"::"m" (current->tss.i387));
-	else {
+	} else {
 		__asm__("fninit"::);
 		current->used_math=1;
 	}
@@ -78,7 +108,8 @@ void schedule(void)
 					(*p)->signal |= (1<<(SIGALRM-1));
 					(*p)->alarm = 0;
 				}
-			if ((*p)->signal && (*p)->state==TASK_INTERRUPTIBLE)
+			if (((*p)->signal & ~(_BLOCKABLE & (*p)->blocked)) &&
+			(*p)->state==TASK_INTERRUPTIBLE)
 				(*p)->state=TASK_RUNNING;
 		}
 
@@ -156,12 +187,152 @@ void wake_up(struct task_struct **p)
 	}
 }
 
+/*
+ * OK, here are some floppy things that shouldn't be in the kernel
+ * proper. They are here because the floppy needs a timer, and this
+ * was the easiest way of doing it.
+ */
+static struct task_struct * wait_motor[4] = {NULL,NULL,NULL,NULL};
+static int  mon_timer[4]={0,0,0,0};
+static int moff_timer[4]={0,0,0,0};
+unsigned char current_DOR = 0x0C;
+unsigned char selected = 0;
+struct task_struct * wait_on_floppy_select = NULL;
+
+void floppy_select(unsigned int nr)
+{
+	if (nr>3)
+		printk("floppy_select: nr>3\n\r");
+	cli();
+	while (selected)
+		sleep_on(&wait_on_floppy_select);
+	current_DOR &= 0xFC;
+	current_DOR |= nr;
+	outb(current_DOR,FD_DOR);
+	sti();
+}
+
+void floppy_deselect(unsigned int nr)
+{
+	if (nr != (current_DOR & 3))
+		printk("floppy_deselect: drive not selected\n\r");
+	selected = 0;
+	wake_up(&wait_on_floppy_select);
+}
+
+int ticks_to_floppy_on(unsigned int nr)
+{
+	unsigned char mask = 1<<(nr+4);
+
+	if (nr>3)
+		panic("floppy_on: nr>3");
+	moff_timer[nr]=10000;		/* 100 s = very big :-) */
+	cli();				/* use floppy_off to turn it off */
+	if (!(mask & current_DOR)) {
+		current_DOR |= mask;
+		if (!selected) {
+			current_DOR &= 0xFC;
+			current_DOR |= nr;
+		}
+		outb(current_DOR,FD_DOR);
+		mon_timer[nr] = HZ;
+	}
+	sti();
+	return mon_timer[nr];
+}
+
+void floppy_on(unsigned int nr)
+{
+	cli();
+	while (ticks_to_floppy_on(nr))
+		sleep_on(nr+wait_motor);
+	sti();
+}
+
+void floppy_off(unsigned int nr)
+{
+	moff_timer[nr]=3*HZ;
+}
+
+void do_floppy_timer(void)
+{
+	int i;
+	unsigned char mask = 0x10;
+
+	for (i=0 ; i<4 ; i++,mask <<= 1) {
+		if (!(mask & current_DOR))
+			continue;
+		if (mon_timer[i]) {
+			if (!--mon_timer[i])
+				wake_up(i+wait_motor);
+		} else if (!moff_timer[i]) {
+			current_DOR &= ~mask;
+			outb(current_DOR,FD_DOR);
+		} else
+			moff_timer[i]--;
+	}
+}
+
+#define TIME_REQUESTS 64
+
+static struct timer_list {
+	long jiffies;
+	void (*fn)();
+	struct timer_list * next;
+} timer_list[TIME_REQUESTS], * next_timer = NULL;
+
+void add_timer(long jiffies, void (*fn)(void))
+{
+	struct timer_list * p;
+
+	if (!fn)
+		return;
+	cli();
+	if (jiffies <= 0)
+		(fn)();
+	else {
+		for (p = timer_list ; p < timer_list + TIME_REQUESTS ; p++)
+			if (!p->fn)
+				break;
+		if (p >= timer_list + TIME_REQUESTS)
+			panic("No more time requests free");
+		p->fn = fn;
+		p->jiffies = jiffies;
+		p->next = next_timer;
+		next_timer = p;
+		while (p->next && p->next->jiffies < p->jiffies) {
+			p->jiffies -= p->next->jiffies;
+			fn = p->fn;
+			p->fn = p->next->fn;
+			p->next->fn = fn;
+			jiffies = p->jiffies;
+			p->jiffies = p->next->jiffies;
+			p->next->jiffies = jiffies;
+			p = p->next;
+		}
+	}
+	sti();
+}
+
 void do_timer(long cpl)
 {
 	if (cpl)
 		current->utime++;
 	else
 		current->stime++;
+	if (next_timer) {
+		next_timer->jiffies--;
+		while (next_timer && next_timer->jiffies <= 0) {
+			void (*fn)(void);
+			
+			fn = next_timer->fn;
+			next_timer->fn = NULL;
+			next_timer = next_timer->next;
+			(fn)();
+		}
+	}
+	if (current_DOR & 0xf0)
+		do_floppy_timer();
 	if ((--current->counter)>0) return;
 	current->counter=0;
 	if (!cpl) return;
@@ -170,8 +341,12 @@ void do_timer(long cpl)
 
 int sys_alarm(long seconds)
 {
+	int old = current->alarm;
+
+	if (old)
+		old = (old - jiffies) / HZ;
 	current->alarm = (seconds>0)?(jiffies+HZ*seconds):0;
-	return seconds;
+	return (old);
 }
 
 int sys_getpid(void)
@@ -211,28 +386,13 @@ int sys_nice(long increment)
 	return 0;
 }
 
-int sys_signal(long signal,long addr,long restorer)
-{
-	long i;
-
-	switch (signal) {
-		case SIGHUP: case SIGINT: case SIGQUIT: case SIGILL:
-		case SIGTRAP: case SIGABRT: case SIGFPE: case SIGUSR1:
-		case SIGSEGV: case SIGUSR2: case SIGPIPE: case SIGALRM:
-		case SIGCHLD:
-			i=(long) current->sig_fn[signal-1];
-			current->sig_fn[signal-1] = (fn_ptr) addr;
-			current->sig_restorer = (fn_ptr) restorer;
-			return i;
-		default: return -1;
-	}
-}
-
 void sched_init(void)
 {
 	int i;
 	struct desc_struct * p;
 
+	if (sizeof(struct sigaction) != 16)
+		panic("Struct sigaction MUST be 16 bytes");
 	set_tss_desc(gdt+FIRST_TSS_ENTRY,&(init_task.task.tss));
 	set_ldt_desc(gdt+FIRST_LDT_ENTRY,&(init_task.task.ldt));
 	p = gdt+2+FIRST_TSS_ENTRY;

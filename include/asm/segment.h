@@ -36,3 +36,30 @@ extern inline void put_fs_long(unsigned long val,unsigned long * addr)
 {
 __asm__ ("movl %0,%%fs:%1"::"r" (val),"m" (*addr));
 }
+
+/*
+ * Someone who knows GNU asm better than I should double check the followig.
+ * It seems to work, but I don't know if I'm doing something subtly wrong.
+ * --- TYT, 11/24/91
+ */
+
+extern inline unsigned long get_fs() 
+{
+	unsigned short _v;
+	__asm__("mov %%fs,%%ax":"=a" (_v):);
+	return _v;
+}
+
+extern inline unsigned long get_ds() 
+{
+	unsigned short _v;
+	__asm__("mov %%ds,%%ax":"=a" (_v):);
+	return _v;
+}
+
+extern inline void set_fs(unsigned long val)
+{
+	__asm__("mov %0,%%fs"::"a" ((unsigned short) val));
+}
+
+

@@ -1,4 +1,11 @@
+/*
+ *  linux/fs/inode.c
+ *
+ *  (C) 1991  Linus Torvalds
+ */
+
 #include <string.h>
+#include <sys/stat.h>
 
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -146,6 +153,10 @@ void iput(struct m_inode * inode)
 		return;
 	}
 repeat:
+	if (S_ISBLK(inode->i_mode)) {
+		sync_dev(inode->i_zone[0]);
+		wait_on_inode(inode);
+	}
 	if (!inode->i_nlinks) {
 		truncate(inode);
 		free_inode(inode);
@@ -234,6 +245,24 @@ struct m_inode * iget(int dev,int nr)
 			continue;
 		}
 		inode->i_count++;
+		if (inode->i_mount) {
+			int i;
+
+			for (i = 0 ; i<NR_SUPER ; i++)
+				if (super_block[i].s_imount==inode)
+					break;
+			if (i >= NR_SUPER) {
+				printk("Mounted inode hasn't got sb\n");
+				if (empty)
+					iput(empty);
+				return inode;
+			}
+			iput(inode);
+			dev = super_block[i].s_dev;
+			nr = ROOT_INO;
+			inode = inode_table;
+			continue;
+		}
 		if (empty)
 			iput(empty);
 		return inode;

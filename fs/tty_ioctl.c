@@ -1,3 +1,9 @@
+/*
+ *  linux/fs/tty_ioctl.c
+ *
+ *  (C) 1991  Linus Torvalds
+ */
+
 #include <errno.h>
 #include <termios.h>
 
@@ -62,6 +68,9 @@ static int get_termio(struct tty_struct * tty, struct termio * termio)
 	return 0;
 }
 
+/*
+ * This only works as the 386 is low-byt-first
+ */
 static int set_termio(struct tty_struct * tty, struct termio * termio)
 {
 	int i;

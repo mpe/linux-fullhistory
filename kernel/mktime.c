@@ -1,3 +1,9 @@
+/*
+ *  linux/kernel/mktime.c
+ *
+ *  (C) 1991  Linus Torvalds
+ */
+
 #include <time.h>
 
 /*

@@ -1,53 +1,40 @@
 #ifndef _CONFIG_H
 #define _CONFIG_H
 
-/* #define LASU_HD */
-#define LINUS_HD
-
 /*
- * Amount of ram memory (in bytes, 640k-1M not discounted). Currently 8Mb.
- * Don't make this bigger without making sure that there are enough page
- * directory entries (boot/head.s)
+ * The root-device is no longer hard-coded. You can change the default
+ * root-device by changing the line ROOT_DEV = XXX in boot/bootsect.s
  */
-#if	defined(LINUS_HD)
-#define HIGH_MEMORY (0x800000)
-#elif	defined(LASU_HD)
-#define HIGH_MEMORY (0x400000)
-#else
-#error "must define hd"
-#endif
 
-/* End of buffer memory. Must be 0xA0000, or > 0x100000, 4096-byte aligned */
-#if (HIGH_MEMORY>=0x600000)
-#define BUFFER_END 0x200000
-#else
-#define BUFFER_END 0xA0000
-#endif
-
-/* Root device at bootup. */
-#if	defined(LINUS_HD)
-#define ROOT_DEV 0x306
-#elif	defined(LASU_HD)
-#define ROOT_DEV 0x302
-#else
-#error "must define HD"
-#endif
+/* define your keyboard here - US (KBD_US) or Finnish (KBD_FINNISH) */
+#define KBD_US
+/* #define KBD_FINNISH */
 
 /*
- * HD type. If 2, put 2 structures with a comma. If just 1, put
- * only 1 struct. The structs are { HEAD, SECTOR, TRACKS, WPCOM, LZONE, CTL }
+ * Normally, Linux can get the drive parameters from the BIOS at
+ * startup, but if this for some unfathomable reason fails, you'd
+ * be left stranded. For this case, you can define HD_TYPE, which
+ * contains all necessary info on your harddisk.
  *
- * NOTE. CTL is supposed to be 0 for drives with less than 8 heads, and
- * 8 if heads >= 8. Don't know why, and I haven't tested it on a drive with
- * more than 8 heads, but that is what the bios-listings seem to imply. I
- * just love not having a manual.
+ * The HD_TYPE macro should look like this:
+ *
+ * #define HD_TYPE { head, sect, cyl, wpcom, lzone, ctl}
+ *
+ * In case of two harddisks, the info should be sepatated by
+ * commas:
+ *
+ * #define HD_TYPE { h,s,c,wpcom,lz,ctl },{ h,s,c,wpcom,lz,ctl }
  */
-#if	defined(LASU_HD)
-#define HD_TYPE { 7,35,915,65536,920,0 }
-#elif	defined(LINUS_HD)
-#define HD_TYPE { 5,17,980,300,980,0 },{ 5,17,980,300,980,0 }
-#else
-#error "must define a hard-disk type"
-#endif
+/*
+ This is an example, two drives, first is type 2, second is type 3:
+
+#define HD_TYPE { 4,17,615,300,615,8 }, { 6,17,615,300,615,0 }
+
+ NOTE: ctl is 0 for all drives with heads<=8, and ctl=8 for drives
+ with more than 8 heads.
+
+ If you want the BIOS to tell what kind of drive you have, just
+ leave HD_TYPE undefined.
+*/
 
 #endif

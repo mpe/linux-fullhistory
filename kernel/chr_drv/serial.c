@@ -1,4 +1,10 @@
 /*
+ *  linux/kernel/serial.c
+ *
+ *  (C) 1991  Linus Torvalds
+ */
+
+/*
  *	serial.c
  *
  * This module implements the rs232 io functions

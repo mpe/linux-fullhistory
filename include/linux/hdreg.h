@@ -6,40 +6,6 @@
 #ifndef _HDREG_H
 #define _HDREG_H
 
-/* currently supports only 1 hd, put type here */
-#define HARD_DISK_TYPE 17
-
-/*
- * Ok, hard-disk-type is currently hardcoded. Not beatiful,
- * but easier. We don't use BIOS for anything else, why should
- * we get HD-type from it? Get these values from Reference Guide.
- */
-
-#if HARD_DISK_TYPE == 17
-#define _CYL	977
-#define _HEAD	5
-#define __WPCOM	300
-#define _LZONE	977
-#define _SECT	17
-#define _CTL	0
-#elif HARD_DISK_TYPE == 18
-#define _CYL	977
-#define _HEAD	7
-#define __WPCOM	(-1)
-#define _LZONE	977
-#define _SECT	17
-#define _CTL	0
-#else
-#error Define HARD_DISK_TYPE and parameters, add your own entries as well
-#endif
-
-/* Controller wants just wp-com/4 */
-#if __WPCOM >= 0
-#define _WPCOM ((__WPCOM)>>2)
-#else
-#define _WPCOM __WPCOM
-#endif
-
 /* Hd controller regs. Ref: IBM AT Bios-listing */
 #define HD_DATA		0x1f0	/* _CTL when writing */
 #define HD_ERROR	0x1f1	/* see err-bits */

@@ -1,4 +1,10 @@
 /*
+ *  linux/fs/buffer.c
+ *
+ *  (C) 1991  Linus Torvalds
+ */
+
+/*
  *  'buffer.c' implements the buffer-cache functions. Race-conditions have
  * been avoided by NEVER letting a interrupt change a buffer (except for the
  * data, of course), but instead letting the caller do it. NOTE! As interrupts
@@ -6,18 +12,19 @@
  * sleep-on-calls. These should be extremely quick, though (I hope).
  */
 
+/*
+ * NOTE! There is one discordant note here: checking floppies for
+ * disk change. This is where it fits best, I think, as it should
+ * invalidate changed floppy-disk-caches.
+ */
+
+#include <stdarg.h>
+ 
 #include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <asm/system.h>
-
-#if (BUFFER_END & 0xfff)
-#error "Bad BUFFER_END value"
-#endif
-
-#if (BUFFER_END > 0xA0000 && BUFFER_END <= 0x100000)
-#error "Bad BUFFER_END value"
-#endif
+#include <asm/io.h>
 
 extern int end;
 struct buffer_head * start_buffer = (struct buffer_head *) &end;
@@ -49,7 +56,7 @@ int sys_sync(void)
 	return 0;
 }
 
-static int sync_dev(int dev)
+int sync_dev(int dev)
 {
 	int i;
 	struct buffer_head * bh;
@@ -59,10 +66,57 @@ static int sync_dev(int dev)
 		if (bh->b_dev != dev)
 			continue;
 		wait_on_buffer(bh);
-		if (bh->b_dirt)
+		if (bh->b_dev == dev && bh->b_dirt)
+			ll_rw_block(WRITE,bh);
+	}
+	sync_inodes();
+	bh = start_buffer;
+	for (i=0 ; i<NR_BUFFERS ; i++,bh++) {
+		if (bh->b_dev != dev)
+			continue;
+		wait_on_buffer(bh);
+		if (bh->b_dev == dev && bh->b_dirt)
 			ll_rw_block(WRITE,bh);
 	}
 	return 0;
+}
+
+/*
+ * This routine checks whether a floppy has been changed, and
+ * invalidates all buffer-cache-entries in that case. This
+ * is a relatively slow routine, so we have to try to minimize using
+ * it. Thus it is called only upon a 'mount' or 'open'. This
+ * is the best way of combining speed and utility, I think.
+ * People changing diskettes in the middle of an operation deserve
+ * to loose :-)
+ *
+ * NOTE! Although currently this is only for floppies, the idea is
+ * that any additional removable block-device will use this routine,
+ * and that mount/open needn't know that floppies/whatever are
+ * special.
+ */
+void check_disk_change(int dev)
+{
+	int i;
+	struct buffer_head * bh;
+
+	if (MAJOR(dev) != 2)
+		return;
+	dev=MINOR(dev) & 0x03;	/* which floppy is it? */
+	if (!floppy_change(dev))
+		return;
+	dev |= 0x200;
+	for (i=0 ; i<NR_SUPER ; i++)
+		if ((super_block[i].s_dev & 0xff03)==dev)
+			put_super(super_block[i].s_dev);
+	bh = start_buffer;
+	for (i=0 ; i<NR_BUFFERS ; i++,bh++) {
+		if ((bh->b_dev & 0xff03) != dev)
+			continue;
+		wait_on_buffer(bh);
+		if ((bh->b_dev & 0xff03) == dev)
+			bh->b_uptodate = bh->b_dirt = 0;
+	}
 }
 
 #define _hashfn(dev,block) (((unsigned)(dev^block))%NR_HASH)
@@ -124,73 +178,70 @@ struct buffer_head * get_hash_table(int dev, int block)
 {
 	struct buffer_head * bh;
 
-repeat:
-	if (!(bh=find_buffer(dev,block)))
-		return NULL;
-	bh->b_count++;
-	wait_on_buffer(bh);
-	if (bh->b_dev != dev || bh->b_blocknr != block) {
-		brelse(bh);
-		goto repeat;
+	for (;;) {
+		if (!(bh=find_buffer(dev,block)))
+			return NULL;
+		bh->b_count++;
+		wait_on_buffer(bh);
+		if (bh->b_dev == dev && bh->b_blocknr == block)
+			return bh;
+		bh->b_count--;
 	}
-	return bh;
 }
 
 /*
  * Ok, this is getblk, and it isn't very clear, again to hinder
  * race-conditions. Most of the code is seldom used, (ie repeating),
  * so it should be much more efficient than it looks.
+ *
+ * The algoritm is changed: better, and an elusive bug removed.
+ *		LBT 11.11.91
  */
+#define BADNESS(bh) (((bh)->b_dirt<<1)+(bh)->b_lock)
 struct buffer_head * getblk(int dev,int block)
 {
-	struct buffer_head * tmp;
+	struct buffer_head * tmp, * bh;
 
 repeat:
-	if (tmp=get_hash_table(dev,block))
-		return tmp;
+	if (bh = get_hash_table(dev,block))
+		return bh;
 	tmp = free_list;
 	do {
-		if (!tmp->b_count) {
-			wait_on_buffer(tmp);	/* we still have to wait */
-			if (!tmp->b_count)	/* on it, it might be dirty */
+		if (tmp->b_count)
+			continue;
+		if (!bh || BADNESS(tmp)<BADNESS(bh)) {
+			bh = tmp;
+			if (!BADNESS(tmp))
 				break;
 		}
-		tmp = tmp->b_next_free;
-	} while (tmp != free_list || (tmp=NULL));
-	/* Kids, don't try THIS at home ^^^^^. Magic */
-	if (!tmp) {
-		printk("Sleeping on free buffer ..");
+	} while ((tmp = tmp->b_next_free) != free_list);
+	if (!bh) {
 		sleep_on(&buffer_wait);
-		printk("ok\n");
 		goto repeat;
 	}
-	tmp->b_count++;
-	remove_from_queues(tmp);
-/*
- * Now, when we know nobody can get to this node (as it's removed from the
- * free list), we write it out. We can sleep here without fear of race-
- * conditions.
- */
-	if (tmp->b_dirt)
-		sync_dev(tmp->b_dev);
-/* update buffer contents */
-	tmp->b_dev=dev;
-	tmp->b_blocknr=block;
-	tmp->b_dirt=0;
-	tmp->b_uptodate=0;
-/* NOTE!! While we possibly slept in sync_dev(), somebody else might have
- * added "this" block already, so check for that. Thank God for goto's.
- */
-	if (find_buffer(dev,block)) {
-		tmp->b_dev=0;		/* ok, someone else has beaten us */
-		tmp->b_blocknr=0;	/* to it - free this block and */
-		tmp->b_count=0;		/* try again */
-		insert_into_queues(tmp);
+	wait_on_buffer(bh);
+	if (bh->b_count)
 		goto repeat;
+	while (bh->b_dirt) {
+		sync_dev(bh->b_dev);
+		wait_on_buffer(bh);
+		if (bh->b_count)
+			goto repeat;
 	}
-/* and then insert into correct position */
-	insert_into_queues(tmp);
-	return tmp;
+/* NOTE!! While we slept waiting for this block, somebody else might */
+/* already have added "this" block to the cache. check it */
+	if (find_buffer(dev,block))
+		goto repeat;
+/* OK, FINALLY we know that this buffer is the only one of it's kind, */
+/* and that it's unused (b_count=0), unlocked (b_lock=0), and clean */
+	bh->b_count=1;
+	bh->b_dirt=0;
+	bh->b_uptodate=0;
+	remove_from_queues(bh);
+	bh->b_dev=dev;
+	bh->b_blocknr=block;
+	insert_into_queues(bh);
+	return bh;
 }
 
 void brelse(struct buffer_head * buf)
@@ -216,18 +267,54 @@ struct buffer_head * bread(int dev,int block)
 	if (bh->b_uptodate)
 		return bh;
 	ll_rw_block(READ,bh);
+	wait_on_buffer(bh);
+	if (bh->b_uptodate)
+		return bh;
+	brelse(bh);
+	return NULL;
+}
+
+/*
+ * Ok, breada can be used as bread, but additionally to mark other
+ * blocks for reading as well. End the argument list with a negative
+ * number.
+ */
+struct buffer_head * breada(int dev,int first, ...)
+{
+	va_list args;
+	struct buffer_head * bh, *tmp;
+
+	va_start(args,first);
+	if (!(bh=getblk(dev,first)))
+		panic("bread: getblk returned NULL\n");
+	if (!bh->b_uptodate)
+		ll_rw_block(READ,bh);
+	while ((first=va_arg(args,int))>=0) {
+		tmp=getblk(dev,first);
+		if (tmp) {
+			if (!tmp->b_uptodate)
+				ll_rw_block(READA,bh);
+			tmp->b_count--;
+		}
+	}
+	va_end(args);
+	wait_on_buffer(bh);
 	if (bh->b_uptodate)
 		return bh;
 	brelse(bh);
 	return (NULL);
 }
 
-void buffer_init(void)
+void buffer_init(long buffer_end)
 {
 	struct buffer_head * h = start_buffer;
-	void * b = (void *) BUFFER_END;
+	void * b;
 	int i;
 
+	if (buffer_end == 1<<20)
+		b = (void *) (640*1024);
+	else
+		b = (void *) buffer_end;
 	while ( (b -= BLOCK_SIZE) >= ((void *) (h+1)) ) {
 		h->b_dev = 0;
 		h->b_dirt = 0;

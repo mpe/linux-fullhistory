@@ -124,6 +124,7 @@
 #define __NR_getppid	64
 #define __NR_getpgrp	65
 #define __NR_setsid	66
+#define __NR_sigaction	67
 
 #define _syscall0(type,name) \
 type name(void) \

@@ -1,4 +1,10 @@
 /*
+ *  linux/kernel/printk.c
+ *
+ *  (C) 1991  Linus Torvalds
+ */
+
+/*
  * When in kernel-mode, we cannot use printf, as fs is liable to
  * point to 'interesting' things. Make a printf with fs-saving, and
  * all is well.
@@ -9,6 +15,8 @@
 #include <linux/kernel.h>
 
 static char buf[1024];
+
+extern int vsprintf(char * buf, const char * fmt, va_list args);
 
 int printk(const char *fmt, ...)
 {

@@ -1,3 +1,9 @@
+/*
+ *  linux/kernel/vsprintf.c
+ *
+ *  (C) 1991  Linus Torvalds
+ */
+
 /* vsprintf.c -- Lars Wirzenius & Linus Torvalds. */
 /*
  * Wirzenius wrote this portably, Torvalds fucked it up :-)

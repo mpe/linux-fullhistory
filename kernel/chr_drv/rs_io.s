@@ -1,4 +1,10 @@
 /*
+ *  linux/kernel/rs_io.s
+ *
+ *  (C) 1991  Linus Torvalds
+ */
+
+/*
  *	rs_io.s
  *
  * This module implements the rs232 io interrupts.
@@ -99,10 +105,10 @@ read_char:
 	cmpl tail(%ecx),%ebx
 	je 1f
 	movl %ebx,head(%ecx)
-	pushl %edx
+1:	pushl %edx
 	call _do_tty_interrupt
 	addl $4,%esp
-1:	ret
+	ret
 
 .align 2
 write_char:

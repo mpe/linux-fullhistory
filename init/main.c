@@ -1,3 +1,9 @@
+/*
+ *  linux/init/main.c
+ *
+ *  (C) 1991  Linus Torvalds
+ */
+
 #define __LIBRARY__
 #include <unistd.h>
 #include <time.h>
@@ -16,7 +22,7 @@
  */
 static inline _syscall0(int,fork)
 static inline _syscall0(int,pause)
-static inline _syscall0(int,setup)
+static inline _syscall1(int,setup,void *,BIOS)
 static inline _syscall0(int,sync)
 
 #include <linux/tty.h>
@@ -37,9 +43,20 @@ static char printbuf[1024];
 
 extern int vsprintf();
 extern void init(void);
+extern void blk_dev_init(void);
+extern void chr_dev_init(void);
 extern void hd_init(void);
+extern void floppy_init(void);
+extern void mem_init(long start, long end);
 extern long kernel_mktime(struct tm * tm);
 extern long startup_time;
+
+/*
+ * This is set up by the setup-routine at boot-time
+ */
+#define EXT_MEM_K (*(unsigned short *)0x90002)
+#define DRIVE_INFO (*(struct drive_info *)0x90080)
+#define ORIG_ROOT_DEV (*(unsigned short *)0x901FC)
 
 /*
  * Yeah, yeah, it's ugly, but I cannot find how to do this correctly
@@ -64,7 +81,7 @@ static void time_init(void)
 		time.tm_min = CMOS_READ(2);
 		time.tm_hour = CMOS_READ(4);
 		time.tm_mday = CMOS_READ(7);
-		time.tm_mon = CMOS_READ(8)-1;
+		time.tm_mon = CMOS_READ(8);
 		time.tm_year = CMOS_READ(9);
 	} while (time.tm_sec != CMOS_READ(0));
 	BCD_TO_BIN(time.tm_sec);
@@ -73,8 +90,14 @@ static void time_init(void)
 	BCD_TO_BIN(time.tm_mday);
 	BCD_TO_BIN(time.tm_mon);
 	BCD_TO_BIN(time.tm_year);
+	time.tm_mon--;
 	startup_time = kernel_mktime(&time);
 }
+
+static long memory_end = 0;
+static long buffer_memory_end = 0;
+
+struct drive_info { char dummy[32]; } drive_info;
 
 void main(void)		/* This really IS void, no error here. */
 {			/* The startup routine assumes (well, ...) this */
@@ -82,12 +105,26 @@ void main(void)		/* This really IS void, no error here. */
  * Interrupts are still disabled. Do necessary setups, then
  * enable them
  */
-	time_init();
-	tty_init();
+ 	ROOT_DEV = ORIG_ROOT_DEV;
+ 	drive_info = DRIVE_INFO;
+	memory_end = (1<<20) + (EXT_MEM_K<<10);
+	memory_end &= 0xfffff000;
+	if (memory_end > 16*1024*1024)
+		memory_end = 16*1024*1024;
+	if (memory_end > 6*1024*1024)
+		buffer_memory_end = 2*1024*1024;
+	else
+		buffer_memory_end = 1*1024*1024;
+	mem_init(buffer_memory_end,memory_end);
 	trap_init();
+	blk_dev_init();
+	chr_dev_init();
+	tty_init();
+	time_init();
 	sched_init();
-	buffer_init();
+	buffer_init(buffer_memory_end);
 	hd_init();
+	floppy_init();
 	sti();
 	move_to_user_mode();
 	if (!fork()) {		/* we count on this going ok */
@@ -114,14 +151,14 @@ static int printf(const char *fmt, ...)
 	return i;
 }
 
-static char * argv[] = { "-",NULL };
+static char * argv[] = { "-/bin/sh",NULL };
 static char * envp[] = { "HOME=/usr/root", NULL };
 
 void init(void)
 {
 	int i,j;
 
-	setup();
+	setup((void *) &drive_info);
 	if (!fork())
 		_exit(execve("/bin/update",NULL,NULL));
 	(void) open("/dev/tty0",O_RDWR,0);
@@ -129,6 +166,7 @@ void init(void)
 	(void) dup(0);
 	printf("%d buffers = %d bytes buffer space\n\r",NR_BUFFERS,
 		NR_BUFFERS*BLOCK_SIZE);
+	printf("Free mem: %d bytes\n\r",memory_end-buffer_memory_end);
 	printf(" Ok.\n\r");
 	if ((i=fork())<0)
 		printf("Fork failed in init\r\n");

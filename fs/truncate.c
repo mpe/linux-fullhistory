@@ -1,3 +1,9 @@
+/*
+ *  linux/fs/truncate.c
+ *
+ *  (C) 1991  Linus Torvalds
+ */
+
 #include <linux/sched.h>
 
 #include <sys/stat.h>

@@ -1,4 +1,10 @@
 /*
+ *  linux/boot/head.s
+ *
+ *  (C) 1991  Linus Torvalds
+ */
+
+/*
  *  head.s contains the 32-bit startup code.
  *
  * NOTE!!! Startup happens at absolute address 0x00000000, which is also where
@@ -6,7 +12,7 @@
  * the page directory.
  */
 .text
-.globl _idt,_gdt,_pg_dir
+.globl _idt,_gdt,_pg_dir,_tmp_floppy_area
 _pg_dir:
 startup_32:
 	movl $0x10,%eax
@@ -25,14 +31,22 @@ startup_32:
 	lss _stack_start,%esp
 	xorl %eax,%eax
 1:	incl %eax		# check that A20 really IS enabled
-	movl %eax,0x000000
+	movl %eax,0x000000	# loop forever if it isn't
 	cmpl %eax,0x100000
 	je 1b
+/*
+ * NOTE! 486 should set bit 16, to check for write-protect in supervisor
+ * mode. Then it would be unnecessary with the "verify_area()"-calls.
+ * 486 users probably want to set the NE (#5) bit also, so as to use
+ * int 16 for math errors.
+ */
 	movl %cr0,%eax		# check math chip
 	andl $0x80000011,%eax	# Save PG,ET,PE
+/* "orl $0x10020,%eax" here for 486 might be good */
+	orl $2,%eax		# set MP
 	testl $0x10,%eax
 	jne 1f			# ET is set - 387 is present
-	orl $4,%eax		# else set emulate bit
+	xorl $6,%eax		# else reset MP and set EM
 1:	movl %eax,%cr0
 	jmp after_page_tables
 
@@ -78,6 +92,11 @@ setup_gdt:
 	lgdt gdt_descr
 	ret
 
+/*
+ * I put the kernel page tables right after the page directory,
+ * using 4 of them to span 16 Mb of physical memory. People with
+ * more than 16MB will have to expand this.
+ */
 .org 0x1000
 pg0:
 
@@ -85,11 +104,20 @@ pg0:
 pg1:
 
 .org 0x3000
-pg2:		# This is not used yet, but if you
-		# want to expand past 8 Mb, you'll have
-		# to use it.
+pg2:
 
 .org 0x4000
+pg3:
+
+.org 0x5000
+/*
+ * tmp_floppy_area is used by the floppy-driver when DMA cannot
+ * reach to a buffer-block. It needs to be aligned, so that it isn't
+ * on a 64kB border.
+ */
+_tmp_floppy_area:
+	.fill 1024,1,0
+
 after_page_tables:
 	pushl $0		# These are the parameters to main :-)
 	pushl $0
@@ -102,11 +130,30 @@ L6:
 				# just in case, we know what happens.
 
 /* This is the default interrupt "handler" :-) */
+int_msg:
+	.asciz "Unknown interrupt\n\r"
 .align 2
 ignore_int:
-	incb 0xb8000+160		# put something on the screen
-	movb $2,0xb8000+161		# so that we know something
-	iret				# happened
+	pushl %eax
+	pushl %ecx
+	pushl %edx
+	push %ds
+	push %es
+	push %fs
+	movl $0x10,%eax
+	mov %ax,%ds
+	mov %ax,%es
+	mov %ax,%fs
+	pushl $int_msg
+	call _printk
+	popl %eax
+	pop %fs
+	pop %es
+	pop %ds
+	popl %edx
+	popl %ecx
+	popl %eax
+	iret
 
 
 /*
@@ -114,7 +161,7 @@ ignore_int:
  *
  * This routine sets up paging by setting the page bit
  * in cr0. The page tables are set up, identity-mapping
- * the first 8MB. The pager assumes that no illegal
+ * the first 16MB. The pager assumes that no illegal
  * addresses are produced (ie >4Mb on a 4Mb machine).
  *
  * NOTE! Although all physical memory should be identity
@@ -124,25 +171,27 @@ ignore_int:
  * will be mapped to some other place - mm keeps track of
  * that.
  *
- * For those with more memory than 8 Mb - tough luck. I've
+ * For those with more memory than 16 Mb - tough luck. I've
  * not got it, why should you :-) The source is here. Change
  * it. (Seriously - it shouldn't be too difficult. Mostly
- * change some constants etc. I left it at 8Mb, as my machine
+ * change some constants etc. I left it at 16Mb, as my machine
  * even cannot be extended past that (ok, but it was cheap :-)
  * I've tried to show which constants to change by having
- * some kind of marker at them (search for "8Mb"), but I
+ * some kind of marker at them (search for "16Mb"), but I
  * won't guarantee that's all :-( )
  */
 .align 2
 setup_paging:
-	movl $1024*3,%ecx
+	movl $1024*5,%ecx		/* 5 pages - pg_dir+4 page tables */
 	xorl %eax,%eax
 	xorl %edi,%edi			/* pg_dir is at 0x000 */
 	cld;rep;stosl
 	movl $pg0+7,_pg_dir		/* set present bit/user r/w */
 	movl $pg1+7,_pg_dir+4		/*  --------- " " --------- */
-	movl $pg1+4092,%edi
-	movl $0x7ff007,%eax		/*  8Mb - 4096 + 7 (r/w user,p) */
+	movl $pg2+7,_pg_dir+8		/*  --------- " " --------- */
+	movl $pg3+7,_pg_dir+12		/*  --------- " " --------- */
+	movl $pg3+4092,%edi
+	movl $0xfff007,%eax		/*  16Mb - 4096 + 7 (r/w user,p) */
 	std
 1:	stosl			/* fill pages backwards - more efficient :-) */
 	subl $0x1000,%eax
@@ -169,7 +218,7 @@ gdt_descr:
 _idt:	.fill 256,8,0		# idt is uninitialized
 
 _gdt:	.quad 0x0000000000000000	/* NULL descriptor */
-	.quad 0x00c09a00000007ff	/* 8Mb */
-	.quad 0x00c09200000007ff	/* 8Mb */
+	.quad 0x00c09a0000000fff	/* 16Mb */
+	.quad 0x00c0920000000fff	/* 16Mb */
 	.quad 0x0000000000000000	/* TEMPORARY - don't use */
 	.fill 252,8,0			/* space for LDT's and TSS's etc */

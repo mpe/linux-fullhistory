@@ -1,4 +1,10 @@
 /*
+ *  linux/kernel/asm.s
+ *
+ *  (C) 1991  Linus Torvalds
+ */
+
+/*
  * asm.s contains the low-level code for most hardware faults.
  * page_exception is handled by the mm, so that isn't here. This
  * file also handles (hopefully) fpu-exceptions due to TS-bit, as
@@ -8,7 +14,7 @@
 .globl _divide_error,_debug,_nmi,_int3,_overflow,_bounds,_invalid_op
 .globl _device_not_available,_double_fault,_coprocessor_segment_overrun
 .globl _invalid_TSS,_segment_not_present,_stack_segment
-.globl _general_protection,_coprocessor_error,_reserved
+.globl _general_protection,_coprocessor_error,_irq13,_reserved
 
 _divide_error:
 	pushl $_do_divide_error
@@ -75,12 +81,9 @@ math_emulate:
 _device_not_available:
 	pushl %eax
 	movl %cr0,%eax
-	bt $2,%eax			# EM (math emulation bit)
-	jc math_emulate
+	testl $0x4,%eax			# EM (math emulation bit)
+	jne math_emulate
 	clts				# clear TS so that we can use math
-	movl _current,%eax
-	cmpl _last_task_used_math,%eax
-	je 1f				# shouldn't happen really ...
 	pushl %ecx
 	pushl %edx
 	push %ds
@@ -90,7 +93,7 @@ _device_not_available:
 	pop %ds
 	popl %edx
 	popl %ecx
-1:	popl %eax
+	popl %eax
 	iret
 
 _coprocessor_segment_overrun:
@@ -101,7 +104,18 @@ _reserved:
 	pushl $_do_reserved
 	jmp no_error_code
 
+_irq13:
+	pushl %eax
+	xorb %al,%al
+	outb %al,$0xF0
+	movb $0x20,%al
+	outb %al,$0x20
+	jmp 1f
+1:	jmp 1f
+1:	outb %al,$0xA0
+	popl %eax
 _coprocessor_error:
+	fnclex
 	pushl $_do_coprocessor_error
 	jmp no_error_code
 

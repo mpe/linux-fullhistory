@@ -33,11 +33,14 @@ struct tty_queue {
 #define PUTCH(c,queue) \
 (void)({(queue).buf[(queue).head]=(c);INC((queue).head);})
 
-#define EOF_CHAR(tty) ((tty)->termios.c_cc[VEOF])
 #define INTR_CHAR(tty) ((tty)->termios.c_cc[VINTR])
-#define STOP_CHAR(tty) ((tty)->termios.c_cc[VSTOP])
-#define START_CHAR(tty) ((tty)->termios.c_cc[VSTART])
+#define QUIT_CHAR(tty) ((tty)->termios.c_cc[VQUIT])
 #define ERASE_CHAR(tty) ((tty)->termios.c_cc[VERASE])
+#define KILL_CHAR(tty) ((tty)->termios.c_cc[VKILL])
+#define EOF_CHAR(tty) ((tty)->termios.c_cc[VEOF])
+#define START_CHAR(tty) ((tty)->termios.c_cc[VSTART])
+#define STOP_CHAR(tty) ((tty)->termios.c_cc[VSTOP])
+#define SUSPEND_CHAR(tty) ((tty)->termios.c_cc[VSUSP])
 
 struct tty_struct {
 	struct termios termios;
@@ -53,11 +56,11 @@ extern struct tty_struct tty_table[];
 
 /*	intr=^C		quit=^|		erase=del	kill=^U
 	eof=^D		vtime=\0	vmin=\1		sxtc=\0
-	start=^Q	stop=^S		susp=^Y		eol=\0
+	start=^Q	stop=^S		susp=^Z		eol=\0
 	reprint=^R	discard=^U	werase=^W	lnext=^V
 	eol2=\0
 */
-#define INIT_C_CC "\003\034\177\025\004\0\1\0\021\023\031\0\022\017\027\026\0"
+#define INIT_C_CC "\003\034\177\025\004\0\1\0\021\023\032\0\022\017\027\026\0"
 
 void rs_init(void);
 void con_init(void);

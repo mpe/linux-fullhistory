@@ -1,6 +1,14 @@
 /*
- *	keyboard.s
+ *  linux/kernel/keyboard.S
+ *
+ *  (C) 1991  Linus Torvalds
  */
+
+/*
+ *	Thanks to Alfred Leung for US keyboard patches
+ */
+
+#include <linux/config.h>
 
 .text
 .globl _keyboard_interrupt
@@ -18,6 +26,7 @@ buf = 16
 mode:	.byte 0		/* caps, alt, ctrl and shift mode */
 leds:	.byte 2		/* num-lock, caps, scroll-lock mode (nom-lock on) */
 e0:	.byte 0
+flags:	.byte 0		/* 0x1 - map caps lock to ctrl */
 
 /*
  *  con_int is the real interrupt routine that reads the
@@ -129,7 +138,9 @@ unrshift:
 	andb $0xfd,mode
 	ret
 
-caps:	testb $0x80,mode
+caps:	testb $0x1,flags
+	je ctrl
+	testb $0x80,mode
 	jne 1f
 	xorb $4,leds
 	xorb $0x40,mode
@@ -142,7 +153,9 @@ set_leds:
 	movb leds,%al
 	outb %al,$0x60
 	ret
-uncaps:	andb $0x7f,mode
+uncaps:	testb $0x1,flags
+	je unctrl
+	andb $0x7f,mode
 	ret
 scroll:
 	xorb $1,leds
@@ -193,6 +206,13 @@ cur_table:
  * this routine handles function keys
  */
 func:
+	pushl %eax
+	pushl %ecx
+	pushl %edx
+	call _show_stat
+	popl %edx
+	popl %ecx
+	popl %eax
 	subb $0x3B,%al
 	jb end_func
 	cmpb $9,%al
@@ -219,12 +239,13 @@ func_table:
 	.long 0x455b5b1b,0x465b5b1b,0x475b5b1b,0x485b5b1b
 	.long 0x495b5b1b,0x4a5b5b1b,0x4b5b5b1b,0x4c5b5b1b
 
+#if	defined(KBD_FINNISH)
 key_map:
 	.byte 0,27
 	.ascii "1234567890+'"
 	.byte 127,9
 	.ascii "qwertyuiop}"
-	.byte 0,10,0
+	.byte 0,13,0
 	.ascii "asdfghjkl|{"
 	.byte 0,0
 	.ascii "'zxcvbnm,.-"
@@ -240,7 +261,7 @@ shift_map:
 	.ascii "!\"#$%&/()=?`"
 	.byte 127,9
 	.ascii "QWERTYUIOP]^"
-	.byte 10,0
+	.byte 13,0
 	.ascii "ASDFGHJKL\\["
 	.byte 0,0
 	.ascii "*ZXCVBNM;:_"
@@ -256,7 +277,7 @@ alt_map:
 	.ascii "\0@\0$\0\0{[]}\\\0"
 	.byte 0,0
 	.byte 0,0,0,0,0,0,0,0,0,0,0
-	.byte '~,10,0
+	.byte '~,13,0
 	.byte 0,0,0,0,0,0,0,0,0,0,0
 	.byte 0,0
 	.byte 0,0,0,0,0,0,0,0,0,0,0
@@ -267,6 +288,60 @@ alt_map:
 	.byte '|
 	.fill 10,1,0
 
+#elif defined(KBD_US)
+
+key_map:
+	.byte 0,27
+	.ascii "1234567890-="
+	.byte 127,9
+	.ascii "qwertyuiop[]"
+	.byte 13,0
+	.ascii "asdfghjkl;'"
+	.byte '`,0
+	.ascii "\\zxcvbnm,./"
+	.byte 0,'*,0,32		/* 36-39 */
+	.fill 16,1,0		/* 3A-49 */
+	.byte '-,0,0,0,'+	/* 4A-4E */
+	.byte 0,0,0,0,0,0,0	/* 4F-55 */
+	.byte '<
+	.fill 10,1,0
+
+
+shift_map:
+	.byte 0,27
+	.ascii "!@#$%^&*()_+"
+	.byte 127,9
+	.ascii "QWERTYUIOP{}"
+	.byte 13,0
+	.ascii "ASDFGHJKL:\""
+	.byte '~,0
+	.ascii "|ZXCVBNM<>?"
+	.byte 0,'*,0,32		/* 36-39 */
+	.fill 16,1,0		/* 3A-49 */
+	.byte '-,0,0,0,'+	/* 4A-4E */
+	.byte 0,0,0,0,0,0,0	/* 4F-55 */
+	.byte '>
+	.fill 10,1,0
+
+alt_map:
+	.byte 0,0
+	.ascii "\0@\0$\0\0{[]}\\\0"
+	.byte 0,0
+	.byte 0,0,0,0,0,0,0,0,0,0,0
+	.byte '~,13,0
+	.byte 0,0,0,0,0,0,0,0,0,0,0
+	.byte 0,0
+	.byte 0,0,0,0,0,0,0,0,0,0,0
+	.byte 0,0,0,0		/* 36-39 */
+	.fill 16,1,0		/* 3A-49 */
+	.byte 0,0,0,0,0		/* 4A-4E */
+	.byte 0,0,0,0,0,0,0	/* 4F-55 */
+	.byte '|
+	.fill 10,1,0
+
+#else
+#error "KBD-type not defined"
+#endif
 /*
  * do_self handles "normal" keys, ie keys that don't change meaning
  * and which have just one character returns.
@@ -286,7 +361,7 @@ do_self:
 	je 2f
 	cmpb $'a,%al
 	jb 2f
-	cmpb $'z,%al
+	cmpb $'},%al
 	ja 2f
 	subb $32,%al
 2:	testb $0x0c,mode		/* ctrl */
@@ -314,6 +389,19 @@ minus:	cmpb $1,e0
 	movl $'/,%eax
 	xorl %ebx,%ebx
 	jmp put_queue
+/*
+ * do_space handles ctrl-space as an ASCII NUL.  Old habits die hard.
+ */
+do_space:
+	testb $0x04,mode		/* ctrl */
+	je do_self
+	testb $0x03,mode		/* shift */
+	jne 1f
+	xorb $0x01, flags		/* toggle caps lock flag */
+	ret
+1f:	movl $0,%al			/* ASCII NUL */
+	xorl %ebx,%ebx
+	jmp put_queue
 
 /*
  * This table decides which routine to call when a scan-code has been
@@ -335,7 +423,7 @@ key_table:
 	.long do_self,do_self,do_self,do_self	/* 2C-2F z x c v */
 	.long do_self,do_self,do_self,do_self	/* 30-33 b n m , */
 	.long do_self,minus,rshift,do_self	/* 34-37 . - rshift * */
-	.long alt,do_self,caps,func		/* 38-3B alt sp caps f1 */
+	.long alt,do_space,caps,func		/* 38-3B alt sp caps f1 */
 	.long func,func,func,func		/* 3C-3F f2 f3 f4 f5 */
 	.long func,func,func,func		/* 40-43 f6 f7 f8 f9 */
 	.long func,num,scroll,cursor		/* 44-47 f10 num scr home */

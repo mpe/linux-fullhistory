@@ -1,3 +1,9 @@
+/*
+ *  linux/lib/_exit.c
+ *
+ *  (C) 1991  Linus Torvalds
+ */
+
 #define __LIBRARY__
 #include <unistd.h>
 

@@ -1,3 +1,9 @@
+/*
+ *  linux/kernel/sys.c
+ *
+ *  (C) 1991  Linus Torvalds
+ */
+
 #include <errno.h>
 
 #include <linux/sched.h>
@@ -12,29 +18,9 @@ int sys_ftime()
 	return -ENOSYS;
 }
 
-int sys_mknod()
-{
-	return -ENOSYS;
-}
-
 int sys_break()
 {
 	return -ENOSYS;
-}
-
-int sys_mount()
-{
-	return -ENOSYS;
-}
-
-int sys_umount()
-{
-	return -ENOSYS;
-}
-
-int sys_ustat(int dev,struct ustat * ubuf)
-{
-	return -1;
 }
 
 int sys_ptrace()
@@ -62,16 +48,30 @@ int sys_prof()
 	return -ENOSYS;
 }
 
+int sys_setregid(int rgid, int egid)
+{
+	if (rgid>0) {
+		if ((current->gid == rgid) || 
+		    suser())
+			current->gid = rgid;
+		else
+			return(-EPERM);
+	}
+	if (egid>0) {
+		if ((current->gid == egid) ||
+		    (current->egid == egid) ||
+		    (current->sgid == egid) ||
+		    suser())
+			current->egid = egid;
+		else
+			return(-EPERM);
+	}
+	return 0;
+}
+
 int sys_setgid(int gid)
 {
-	if (current->euid && current->uid)
-		if (current->gid==gid || current->sgid==gid)
-			current->egid=gid;
-		else
-			return -EPERM;
-	else
-		current->gid=current->egid=gid;
-	return 0;
+	return(sys_setregid(gid, gid));
 }
 
 int sys_acct()
@@ -111,35 +111,57 @@ int sys_time(long * tloc)
 	return i;
 }
 
+/*
+ * Unprivileged users may change the real user id to the effective uid
+ * or vice versa.
+ */
+int sys_setreuid(int ruid, int euid)
+{
+	int old_ruid = current->uid;
+	
+	if (ruid>0) {
+		if ((current->euid==ruid) ||
+                    (old_ruid == ruid) ||
+		    suser())
+			current->uid = ruid;
+		else
+			return(-EPERM);
+	}
+	if (euid>0) {
+		if ((old_ruid == euid) ||
+                    (current->euid == euid) ||
+		    suser())
+			current->euid = euid;
+		else {
+			current->uid = old_ruid;
+			return(-EPERM);
+		}
+	}
+	return 0;
+}
+
 int sys_setuid(int uid)
 {
-	if (current->euid && current->uid)
-		if (uid==current->uid || current->suid==current->uid)
-			current->euid=uid;
-		else
-			return -EPERM;
-	else
-		current->euid=current->uid=uid;
-	return 0;
+	return(sys_setreuid(uid, uid));
 }
 
 int sys_stime(long * tptr)
 {
-	if (current->euid && current->uid)
-		return -1;
+	if (!suser())
+		return -EPERM;
 	startup_time = get_fs_long((unsigned long *)tptr) - jiffies/HZ;
 	return 0;
 }
 
 int sys_times(struct tms * tbuf)
 {
-	if (!tbuf)
-		return jiffies;
-	verify_area(tbuf,sizeof *tbuf);
-	put_fs_long(current->utime,(unsigned long *)&tbuf->tms_utime);
-	put_fs_long(current->stime,(unsigned long *)&tbuf->tms_stime);
-	put_fs_long(current->cutime,(unsigned long *)&tbuf->tms_cutime);
-	put_fs_long(current->cstime,(unsigned long *)&tbuf->tms_cstime);
+	if (tbuf) {
+		verify_area(tbuf,sizeof *tbuf);
+		put_fs_long(current->utime,(unsigned long *)&tbuf->tms_utime);
+		put_fs_long(current->stime,(unsigned long *)&tbuf->tms_stime);
+		put_fs_long(current->cutime,(unsigned long *)&tbuf->tms_cutime);
+		put_fs_long(current->cstime,(unsigned long *)&tbuf->tms_cstime);
+	}
 	return jiffies;
 }
 
@@ -163,7 +185,7 @@ int sys_setpgid(int pid, int pgid)
 	if (!pid)
 		pid = current->pid;
 	if (!pgid)
-		pgid = pid;
+		pgid = current->pid;
 	for (i=0 ; i<NR_TASKS ; i++)
 		if (task[i] && task[i]->pid==pid) {
 			if (task[i]->leader)
@@ -183,9 +205,7 @@ int sys_getpgrp(void)
 
 int sys_setsid(void)
 {
-	if (current->uid && current->euid)
-		return -EPERM;
-	if (current->leader)
+	if (current->leader && !suser())
 		return -EPERM;
 	current->leader = 1;
 	current->session = current->pgrp = current->pid;
@@ -200,11 +220,11 @@ int sys_uname(struct utsname * name)
 	};
 	int i;
 
-	if (!name) return -1;
+	if (!name) return -ERROR;
 	verify_area(name,sizeof *name);
 	for(i=0;i<sizeof *name;i++)
 		put_fs_byte(((char *) &thisname)[i],i+(char *) name);
-	return (0);
+	return 0;
 }
 
 int sys_umask(int mask)
