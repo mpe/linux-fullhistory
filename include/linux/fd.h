@@ -25,19 +25,15 @@
 #define FDGETDRVPRM 21 /* get drive parameters */
 #define FDGETDRVSTAT 22 /* get drive state */
 #define FDPOLLDRVSTAT 23 /* get drive state */
-#define FDGETFDCSTAT 25 /* get fdc state */
-#define FDWERRORCLR  27 /* clear write error and badness information */
-#define FDWERRORGET  28 /* get write error and badness information */
-
 #define FDRESET 24 /* reset FDC */
+
 #define FD_RESET_IF_NEEDED 0
 #define FD_RESET_IF_RAWCMD 1
 #define FD_RESET_ALWAYS 2
 
-#define FDBAILOUT 26 /* release all fdc locks */
-#define FD_CLEAR_RESET 0
-#define FD_COMPLETE_FORMAT 1
-#define FD_UNLOCK_FDC 2
+#define FDGETFDCSTAT 25 /* get fdc state */
+#define FDWERRORCLR  27 /* clear write error and badness information */
+#define FDWERRORGET  28 /* get write error and badness information */
 
 #define FDRAWCMD 30 /* send a raw command to the fdc */
 
@@ -59,6 +55,7 @@
 #define FD_PERP 0x40
 
 #ifndef ASSEMBLER
+/* the following structure is used by FDSETPRM, FDDEFPRM and FDGETPRM */
 struct floppy_struct {
 	unsigned int	size,		/* nr of sectors total */
 			sect,		/* sectors per track */
@@ -94,6 +91,7 @@ struct floppy_max_errors {
 
 };
 
+/* the following structure is used by FDSETDRVPRM and FDGETDRVPRM */
 struct floppy_drive_params {
   char cmos;			/* cmos type */
 
@@ -124,7 +122,11 @@ struct floppy_drive_params {
  * disk changes.
  * Also used to enable/disable printing of overrun warnings.
  */
+
 #define FTD_MSG 0x10
+#define FD_BROKEN_DCL 0x20
+#define FD_DEBUG 0x02
+#define FD_SILENT_DCL_CLEAR 0x4
 
   char read_track;		/* use readtrack during probing? */
 
@@ -139,21 +141,30 @@ struct floppy_drive_params {
   int native_format; /* native format of this drive */
 };
 
-struct floppy_drive_struct {
-  signed char flags;
+enum {
+FD_NEED_TWADDLE_BIT, /* more magic */
+FD_VERIFY_BIT, /* inquire for write protection */
+FD_DISK_NEWCHANGE_BIT, /* change detected, and no action undertaken yet to
+			  clear media change status */
+FD_UNUSED_BIT,
+FD_DISK_CHANGED_BIT, /* disk has been changed since last i/o */
+FD_DISK_WRITABLE_BIT /* disk is writable */
+};
 
 /* values for these flags */
-#define FD_NEED_TWADDLE 1 /* more magic */
-#define FD_VERIFY 2 /* this is set at bootup to force an initial drive status
-		   inquiry*/
-#define FD_DISK_NEWCHANGE 4 /* change detected, and no action undertaken yet to
-			    clear media change status */
-#define FD_DRIVE_PRESENT 8
-#define FD_DISK_WRITABLE 32
+#define FD_NEED_TWADDLE (1 << FD_NEED_TWADDLE_BIT)
+#define FD_VERIFY (1 << FD_VERIFY_BIT)
+#define FD_DISK_NEWCHANGE (1 << FD_DISK_NEWCHANGE_BIT)
+#define FD_DISK_CHANGED (1 << FD_DISK_CHANGED_BIT)
+#define FD_DISK_WRITABLE (1 << FD_DISK_WRITABLE_BIT)
 
-  unsigned long volatile spinup_date;
-  unsigned long volatile select_date;
-  unsigned long volatile first_read_date;
+#define FD_DRIVE_PRESENT 0 /* keep fdpatch utils compiling */
+
+struct floppy_drive_struct {
+  signed char flags;
+  unsigned long spinup_date;
+  unsigned long select_date;
+  unsigned long first_read_date;
   short probed_format;
   short track; /* current track */
   short maxblock; /* id of highest block read */

@@ -346,6 +346,13 @@ static void scan_scsis (struct Scsi_Host * shpnt)
 			scsi_result[0] = TYPE_ROM;
 			scsi_result[1] |= 0x80;  /* removable */
 		}
+
+	      SDpnt->manufactor = SCSI_MAN_UNKNOWN;
+	      if (!strncmp(scsi_result+8,"NEC",3))
+		SDpnt->manufactor = SCSI_MAN_NEC;
+	      if (!strncmp(scsi_result+8,"TOSHIBA",7))
+		SDpnt->manufactor = SCSI_MAN_TOSHIBA;
+
 	      SDpnt->removable = (0x80 & 
 				  scsi_result[1]) >> 7;
 	      SDpnt->lockable = SDpnt->removable;
@@ -532,7 +539,7 @@ static void scsi_times_out (Scsi_Cmnd * SCpnt)
 			if (!scsi_abort	(SCpnt, DID_TIME_OUT))
 				return;				
 		case IN_ABORT:
-			printk("SCSI host %d abort() timed out - reseting\n",
+			printk("SCSI host %d abort() timed out - resetting\n",
 				SCpnt->host->host_no);
 			if (!scsi_reset (SCpnt)) 
 				return;
@@ -1297,7 +1304,7 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 			if ((SCpnt->retries >= (SCpnt->allowed >> 1))
 			    && !(SCpnt->flags & WAS_RESET))
 			        {
-					printk("scsi%d : reseting for second half of retries.\n",
+					printk("scsi%d : resetting for second half of retries.\n",
 						SCpnt->host->host_no);
 					reset(SCpnt);
 					break;

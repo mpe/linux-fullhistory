@@ -1851,7 +1851,7 @@ void ip_do_retransmit(struct sock *sk, int all)
 			 *	If the packet is still being sent by the device/protocol
 			 *	below then don't retransmit. This is both needed, and good -
 			 *	especially with connected mode AX.25 where it stops resends
-			 *	occuring of an as yet unsent anyway frame!
+			 *	occurring of an as yet unsent anyway frame!
 			 *	We still add up the counts as the round trip time wants
 			 *	adjusting.
 			 */

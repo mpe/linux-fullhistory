@@ -56,7 +56,7 @@
 
 /* 
  * The contents of the OUTPUT DATA register are asserted on the bus when
- * either arbitration is occuring or the phase-indicating signals (
+ * either arbitration is occurring or the phase-indicating signals (
  * IO, CD, MSG) in the TARGET COMMAND register and the ASSERT DATA
  * bit in the INITIATOR COMMAND register is set.
  */

@@ -3466,7 +3466,7 @@ static void intr_dma (struct Scsi_Host *host, struct NCR53c7x0_cmd *cmd) {
 
     if (dstat & DSTAT_OPC) {
     /* 
-     * Ascertain if this IID interrupts occured before or after a STO 
+     * Ascertain if this IID interrupts occurred before or after a STO 
      * interrupt.  Since the interrupt handling code now leaves 
      * DSP unmodified until _after_ all stacked interrupts have been
      * processed, reading the DSP returns the original DSP register.

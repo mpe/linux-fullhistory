@@ -6,6 +6,7 @@
 comment 'General setup'
 
 bool 'Kernel math emulation' CONFIG_MATH_EMULATION n
+bool 'Normal floppy disk support' CONFIG_BLK_DEV_FD y
 bool 'Normal harddisk support' CONFIG_BLK_DEV_HD y
 bool 'XT harddisk support' CONFIG_BLK_DEV_XD n
 bool 'Networking support' CONFIG_NET y
@@ -57,8 +58,9 @@ bool 'UltraStor 14F/34F support' CONFIG_SCSI_U14_34F n
 bool 'Future Domain 16xx SCSI support' CONFIG_SCSI_FUTURE_DOMAIN n
 bool 'Generic NCR5380 SCSI support' CONFIG_SCSI_GENERIC_NCR5380 n
 bool 'NCR53c7,8xx SCSI support'  CONFIG_SCSI_NCR53C7xx n
-#bool 'Always IN2000 SCSI support' CONFIG_SCSI_IN2000 n
+bool 'Always IN2000 SCSI support' CONFIG_SCSI_IN2000 n
 bool 'PAS16 SCSI support' CONFIG_SCSI_PAS16 n
+bool 'QLOGIC SCSI support' CONFIG_SCSI_QLOGIC n
 bool 'Seagate ST-02 and Future Domain TMC-8xx SCSI support' CONFIG_SCSI_SEAGATE n
 bool 'Trantor T128/T128F/T228 SCSI support' CONFIG_SCSI_T128 n
 bool 'UltraStor SCSI support' CONFIG_SCSI_ULTRASTOR n
@@ -116,6 +118,7 @@ if [ "$CONFIG_NET_ISA" = "y" ]; then
 		bool 'NI6510 support' CONFIG_NI65 n
 	fi
 	bool 'HP PCLAN support' CONFIG_HPLAN n
+	bool 'HP PCLAN PLUS support' CONFIG_HPLAN_PLUS n
 	bool 'NE2000/NE1000 support' CONFIG_NE2000 y
 	bool 'SK_G16 support' CONFIG_SK_G16 n
 fi
@@ -163,7 +166,11 @@ bool '/proc filesystem support' CONFIG_PROC_FS y
 if [ "$CONFIG_INET" = "y" ]; then
 bool 'NFS filesystem support' CONFIG_NFS_FS y
 fi
-bool 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS n
+if [ "$CONFIG_BLK_DEV_SR" = "y" -o "$CONFIG_CDU31A" = "y" -o "$CONFIG_MCD" = "y" -o "$CONFIG_SBPCD" = "y" -o "$CONFIG_BLK_DEV_IDECD" = "y" ]; then
+	bool 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS y
+else
+	bool 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS n
+fi
 bool 'OS/2 HPFS filesystem support (read only)' CONFIG_HPFS_FS n
 bool 'System V and Coherent filesystem support' CONFIG_SYSV_FS n
 

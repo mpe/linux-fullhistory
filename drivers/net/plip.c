@@ -186,7 +186,7 @@ static void plip_interrupt(int reg_ptr);
 static int plip_send(struct device *dev, enum plip_nibble_state *ns_p,
 		     unsigned char data);
 static void plip_send_packet(struct device *dev);
-static int plip_ioctl(struct device *dev, struct ifreq *ifr);
+static int plip_ioctl(struct device *dev, struct ifreq *ifr, int cmd);
 static int plip_config(struct device *dev, struct ifmap *map);
 
 
@@ -942,7 +942,7 @@ static int plip_config(struct device *dev, struct ifmap *map)
 	return 0;
 }
 
-static int plip_ioctl(struct device *dev, struct ifreq *rq)
+static int plip_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 {
 	struct net_local *nl = (struct net_local *) dev->priv;
 	struct plipconf *pc = (struct plipconf *) &rq->ifr_data;

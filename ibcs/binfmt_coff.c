@@ -546,7 +546,7 @@ load_object (struct linux_binprm * bprm, struct pt_regs *regs, int lib_ok)
 	    }
 	}
 /*
- *   Generate any needed trap for this process. If an error occured then
+ *   Generate any needed trap for this process. If an error occurred then
  *   generate a segmentation violation. If the process is being debugged
  *   then generate the load trap. (Note: If this is a library load then
  *   do not generate the trap here. Pass the error to the caller who

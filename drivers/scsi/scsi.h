@@ -183,7 +183,7 @@ extern const unsigned char scsi_command_size[8];
 #define DRIVER_OK		0x00
 
 /*
-	These indicate the error that occured, and what is available.
+	These indicate the error that occurred, and what is available.
 */
 
 #define DRIVER_BUSY		0x01
@@ -259,6 +259,13 @@ extern const unsigned char scsi_command_size[8];
 	as the LUN.
 */
 
+/*
+        Manufactors list
+*/
+
+#define SCSI_MAN_UNKNOWN     0
+#define SCSI_MAN_NEC         1
+#define SCSI_MAN_TOSHIBA     2
 
 /*
 	The scsi_device struct contains what we know about each given scsi
@@ -268,6 +275,7 @@ extern const unsigned char scsi_command_size[8];
 typedef struct scsi_device {
         struct scsi_device * next; /* Used for linked list */
 	unsigned char id, lun;
+	unsigned int manufactor; /* Manufactor of device, for using vendor-specific cmd's */
 	int attached;          /* # of high level drivers attached to this */
 	int access_count;	/* Count of open channels/mounts */
 	struct wait_queue * device_wait;  /* Used to wait if device is busy */

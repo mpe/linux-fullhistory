@@ -295,7 +295,7 @@ int packet_recvfrom(struct sock *sk, unsigned char *to, int len,
 	skb=skb_recv_datagram(sk,flags,noblock,&err);
 	
 	/*
-	 *	An error occured so return it. Because skb_recv_datagram() 
+	 *	An error occurred so return it. Because skb_recv_datagram() 
 	 *	handles the blocking we don't see and worry about blocking
 	 *	retries.
 	 */

@@ -67,6 +67,10 @@
 #include "pas16.h"
 #endif
 
+#ifdef CONFIG_SCSI_QLOGIC
+#include "qlogic.h"
+#endif
+
 #ifdef CONFIG_SCSI_SEAGATE
 #include "seagate.h"
 #endif
@@ -158,6 +162,9 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_SCSI_GENERIC_NCR5380
         GENERIC_NCR5380,
+#endif
+#ifdef CONFIG_SCSI_QLOGIC
+	QLOGIC,
 #endif
 #ifdef CONFIG_SCSI_PAS16
 	MV_PAS16,

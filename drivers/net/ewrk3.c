@@ -291,7 +291,7 @@ static void ewrk3_interrupt(int reg_ptr);
 static int ewrk3_close(struct device *dev);
 static struct enet_statistics *ewrk3_get_stats(struct device *dev);
 static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
-static int ewrk3_ioctl(struct device *dev, struct ifreq *rq);
+static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd);
 
 /*
 ** Private functions
@@ -1580,7 +1580,7 @@ static unsigned char aprom_crc(struct device *dev, unsigned char *eeprom_image, 
 ** Perform IOCTL call functions here. Some are privileged operations and the
 ** effective uid is checked in those cases.
 */
-static int ewrk3_ioctl(struct device *dev, struct ifreq *rq)
+static int ewrk3_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 {
   struct ewrk3_private *lp = (struct ewrk3_private *)dev->priv;
   struct ewrk3_ioctl *ioc = (struct ewrk3_ioctl *) &rq->ifr_data;

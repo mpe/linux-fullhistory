@@ -47,6 +47,11 @@ SCSI_OBJS := $(SCSI_OBJS) sg.o
 SCSI_SRCS := $(SCSI_SRCS) sg.c
 endif
 
+ifdef CONFIG_SCSI_QLOGIC
+SCSI_OBJS := $(SCSI_OBJS) qlogic.o
+SCSI_SRCS := $(SCSI_SRCS) qlogic.c
+endif
+
 ifdef CONFIG_SCSI_AHA152X
 SCSI_OBJS := $(SCSI_OBJS) aha152x.o
 SCSI_SRCS := $(SCSI_SRCS) aha152x.c

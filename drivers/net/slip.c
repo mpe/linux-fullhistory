@@ -166,7 +166,7 @@ static void sl_changedmtu(struct slip *sl)
 	int omtu=sl->mtu;
 
 #ifdef CONFIG_AX25
-	sl->mtu=dev->mtu+73
+	sl->mtu=dev->mtu+73;
 #else
 	sl->mtu=dev->mtu;
 #endif	
@@ -572,7 +572,7 @@ sl_open(struct device *dev)
   }
 
 #ifdef CONFIG_AX25
-  sl->mtu		= dev->mtu+73
+  sl->mtu		= dev->mtu+73;
 #else    
   sl->mtu		= dev->mtu;
 #endif  

@@ -641,10 +641,12 @@ void mount_root(void)
 
 	memset(super_blocks, 0, sizeof(super_blocks));
 	fcntl_init_locks();
+#ifdef CONFIG_BLK_DEV_FD
 	if (MAJOR(ROOT_DEV) == FLOPPY_MAJOR) {
 		printk(KERN_NOTICE "VFS: Insert root floppy and press ENTER\n");
 		wait_for_keypress();
 	}
+#endif
 
 	memset(&filp, 0, sizeof(filp));
 	memset(&d_inode, 0, sizeof(d_inode));

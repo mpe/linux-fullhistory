@@ -673,7 +673,7 @@ get_result(unsigned char *result_buffer,
    *result_size = 2;
 
    /*
-    * 0x20 means an error occured.  Byte 2 will have the error code.
+    * 0x20 means an error occurred.  Byte 2 will have the error code.
     * Otherwise, the command succeeded, byte 2 will have the count of
     * how many more status bytes are coming.
     *
@@ -2781,7 +2781,7 @@ cdu31a_setup(char *strings,
       }
       else
       {
-	 printk("CDU31A: Unknown interface type: %s\n", strings[3]);
+	 printk("CDU31A: Unknown interface type: %s\n", strings);
       }
    }
 }

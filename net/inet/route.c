@@ -113,8 +113,8 @@ void ip_rt_flush(struct device *dev)
 	unsigned long flags;
 
 	rp = &rt_base;
-	cli();
 	save_flags(flags);
+	cli();
 	while ((r = *rp) != NULL) {
 		if (r->rt_dev != dev) {
 			rp = &r->rt_next;

@@ -1268,13 +1268,6 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 				return -EINVAL;
 			ret=dev->set_mac_address(dev,ifr.ifr_hwaddr.sa_data);
 			break;
-		
-		case SIOCDEVPRIVATE:
-			if(dev->do_ioctl==NULL)
-				return -EOPNOTSUPP;
-			ret=dev->do_ioctl(dev, &ifr);
-			memcpy_tofs(arg,&ifr,sizeof(struct ifreq));
-			break;
 			
 		case SIOCGIFMAP:
 			ifr.ifr_map.mem_start=dev->mem_start;
@@ -1348,10 +1341,19 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 		break;
 #endif			
 		/*
-		 *	Unknown ioctl
+		 *	Unknown or private ioctl
 		 */
 
 		default:
+			if((getset >= SIOCDEVPRIVATE) &&
+			   (getset <= (SIOCDEVPRIVATE + 15))) {
+				if(dev->do_ioctl==NULL)
+					return -EOPNOTSUPP;
+				ret=dev->do_ioctl(dev, &ifr, getset);
+				memcpy_tofs(arg,&ifr,sizeof(struct ifreq));
+				break;
+			}
+			
 			ret = -EINVAL;
 	}
 	return(ret);
@@ -1404,7 +1406,6 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		case SIOCSIFMEM:
 		case SIOCSIFMAP:
 		case SIOCSIFSLAVE:
-		case SIOCDEVPRIVATE:
 			if (!suser())
 				return -EPERM;
 			return dev_ifsioc(arg, cmd);
@@ -1413,10 +1414,16 @@ int dev_ioctl(unsigned int cmd, void *arg)
 			return -EINVAL;
 
 		/*
-		 *	Unknown ioctl.
+		 *	Unknown or private ioctl.
 		 */	
 		 
 		default:
+			if((cmd >= SIOCDEVPRIVATE) &&
+			   (cmd <= (SIOCDEVPRIVATE + 15))) {
+				if (!suser())
+					return -EPERM;
+				return dev_ifsioc(arg, cmd);
+			}
 			return -EINVAL;
 	}
 }

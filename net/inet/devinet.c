@@ -151,7 +151,7 @@ int ip_chk_addr(unsigned long addr)
 				return IS_BROADCAST;
 		}
 	}
-	if(IN_MULTICAST(addr))
+	if(IN_MULTICAST(ntohl(addr)))
 		return IS_MULTICAST;
 	return 0;		/* no match at all */
 }

@@ -150,7 +150,7 @@
  18C30 chip have a 2k cache).  When this many 512 byte blocks are filled by
  the SCSI device, an interrupt will be raised.  Therefore, this could be as
  low as 0, or as high as 16.  Note, however, that values which are too high
- or too low seem to prevent any interrupts from occuring, and thereby lock
+ or too low seem to prevent any interrupts from occurring, and thereby lock
  up the machine.  I have found that 2 is a good number, but throughput may
  be increased by changing this value to values which are close to 2.
  Please let me know if you try any different values.

@@ -275,7 +275,7 @@ hp_block_output(struct device *dev, int count,
 	outb_p(0xff, nic_base + EN0_RSARLO);
 	outb_p(0x00, nic_base + EN0_RSARHI);
 	outb_p(E8390_RREAD+E8390_START, EN_CMD);
-	/* Make certain that the dummy read has occured. */
+	/* Make certain that the dummy read has occurred. */
 	inb_p(0x61);
 	inb_p(0x61);
 #endif

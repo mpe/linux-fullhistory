@@ -101,6 +101,10 @@
  *					a sensible code size.
  *		Alan Cox	:	Self connect lockup fix.
  *		Alan Cox	:	No connect to multicast.
+ *		Ross Biro	:	Close unaccepted children on master
+ *					socket close.
+ *		Alan Cox	:	Reset tracing code.
+ *		Alan Cox	:	Spurious resets on shutdown.
  *
  *
  * To Fix:
@@ -177,6 +181,8 @@
 #define SEQ_TICK 3
 unsigned long seq_offset;
 struct tcp_mib	tcp_statistics;
+
+static void tcp_close(struct sock *sk, int timeout);
 
 #ifdef TCP_FASTPATH
 unsigned long tcp_rx_miss=0, tcp_rx_hit1=0, tcp_rx_hit2=0;
@@ -258,6 +264,42 @@ static struct sk_buff *tcp_find_established(struct sock *s)
 	}
 	while(p!=skb_peek(&s->receive_queue));
 	return NULL;
+}
+
+
+/* 
+ *	This routine closes sockets which have been at least partially
+ *	opened, but not yet accepted. Currently it is only called by
+ *	tcp_close, and timeout mirrors the value there. 
+ */
+
+static void tcp_close_pending (struct sock *sk, int timeout) 
+{
+	unsigned long flags;
+	struct sk_buff *p, *old_p;
+
+	save_flags(flags);
+	cli(); 
+	p=skb_peek(&sk->receive_queue);
+
+	if(p==NULL) 
+	{
+		restore_flags(flags);
+		return;
+	}
+
+	do
+	{
+		tcp_close (p->sk, timeout);
+		skb_unlink (p);
+		old_p = p;
+		p=p->next;
+		kfree_skb(old_p, FREE_READ);
+	}
+	while(p!=skb_peek(&sk->receive_queue));
+
+	restore_flags(flags);
+	return;
 }
 
 static struct sk_buff *tcp_dequeue_established(struct sock *s)
@@ -1979,6 +2021,8 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	}
 	else 
 	{
+		if(sk->debug)
+			printk("Reset on %p: Connect on dead socket.\n",sk);
 		tcp_reset(daddr, saddr, th, sk->prot, opt, dev, sk->ip_tos,sk->ip_ttl);
 		tcp_statistics.TcpAttemptFails++;
 		kfree_skb(skb, FREE_READ);
@@ -2309,6 +2353,9 @@ static void tcp_close(struct sock *sk, int timeout)
 			release_sock(sk);
 			return;
 		case TCP_LISTEN:
+			/* we need to drop any sockets which have been connected,
+			   but have not yet been accepted. */
+			tcp_close_pending(sk, timeout);
 			tcp_set_state(sk,TCP_CLOSE);
 			release_sock(sk);
 			return;
@@ -2918,7 +2965,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int 
 		if (sk->rcv_ack_seq == sk->write_seq && sk->acked_seq == sk->fin_seq) 
 		{
 			flag |= 1;
-			tcp_set_state(sk,TCP_CLOSE);
+			tcp_time_wait(sk);
 			sk->shutdown = SHUTDOWN_MASK;
 		}
 	}
@@ -2939,7 +2986,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, unsigned long saddr, int 
 		{
 			flag |= 1;
 			sk->shutdown |= SEND_SHUTDOWN;
-			tcp_set_state(sk,TCP_FIN_WAIT2);
+			tcp_set_state(sk, TCP_FIN_WAIT2);
 		}
 	}
 
@@ -3015,6 +3062,8 @@ static int tcp_data(struct sk_buff *skb, struct sock *sk,
 	struct tcphdr *th;
 	int dup_dumped=0;
 	unsigned long new_seq;
+	struct sk_buff *tail;
+	unsigned long shut_seq;
 
 	th = skb->h.th;
 	skb->len = len -(th->doff*4);
@@ -3044,11 +3093,37 @@ static int tcp_data(struct sk_buff *skb, struct sock *sk,
 	{
 		new_seq= th->seq + skb->len + th->syn;	/* Right edge of _data_ part of frame */
 		
-		if(after(new_seq,sk->acked_seq+1))	/* If the right edge of this frame is after the last copied byte
-							   then it contains data we will never touch. We send an RST to 
-							   ensure the far end knows it never got to the application */
+		/*
+		 *	This is subtle and not nice. When we shut down we can
+		 *	have data in the queue and acked_seq therefore not
+		 *	pointing to the last byte that will be read. Thus
+		 *	the naive implementation:
+		 *		after(new_seq,sk->acked_seq+1)
+		 *	will cause bogus resets IFF a resend of a frame that has
+		 *	been queued but not yet read after a shutdown has been done
+		 *	occured.What we do now is a bit more complex but works as
+		 *	follows. If the queue is empty copied_seq+1 is right (+1 for FIN)
+		 *	if the queue has data the shutdown occurs at the right edge of
+		 *	the last packet queued +1
+		 *
+		 *	We can't simply ack data beyond this point as it has
+		 *	and will never be received by an application.
+		 */
+		tail=skb_peek(&sk->receive_queue);
+		if(tail!=NULL)
+		{
+			tail=sk->receive_queue.prev;
+			shut_seq=tail->h.th->seq+tail->len+1;
+		}
+		else
+			shut_seq=sk->copied_seq+1;
+		
+		if(after(new_seq,shut_seq))
 		{
 			sk->acked_seq = new_seq + th->fin;
+			if(sk->debug)
+				printk("Data arrived on %p after close [Data right edge %lX, Socket shut on %lX] %d\n",
+					sk, new_seq, shut_seq, sk->blog);
 			tcp_reset(sk->saddr, sk->daddr, skb->h.th,
 				sk->prot, NULL, skb->dev, sk->ip_tos, sk->ip_ttl);
 			tcp_statistics.TcpEstabResets++;
@@ -3802,7 +3877,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		cli();
 		if (sk->inuse) 
 		{
-			skb_queue_head(&sk->back_log, skb);
+			skb_queue_tail(&sk->back_log, skb);
 			sti();
 			return(0);
 		}
@@ -3998,7 +4073,8 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 				sk->err = ECONNRESET;
 				tcp_set_state(sk,TCP_CLOSE);
 				sk->shutdown = SHUTDOWN_MASK;
-				tcp_reset(daddr, saddr,  th, sk->prot, opt,dev, sk->ip_tos,sk->ip_ttl);
+				if(sk->debug)
+					printk("Socket %p reset by SYN while established.\n", sk);
 				if (!sk->dead) {
 					sk->state_change(sk);
 				}
@@ -4012,9 +4088,10 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 				 *	old connection.
 				 *
 				 */
+				 
 				if(st==TCP_TIME_WAIT && th->seq > sk->acked_seq && sk->dead)
 				{
-					release_sock(sk);
+					struct sock *psk=sk;
 					/*
 					 *	Find the listening socket.
 					 */
@@ -4023,19 +4100,22 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 					{
 						sk->inuse=1;
 						tcp_conn_request(sk, skb, daddr, saddr,opt, dev,seq+128000);
-						release_sock(sk);
+						release_sock(psk);
 						/* Fall through in case people are
 						   also using the piggy backed SYN + data 
 						   protocol violation */
 					}
 					else
 					{
+						tcp_reset(daddr, saddr,  th, psk->prot, opt,dev, psk->ip_tos,psk->ip_ttl);
+						release_sock(psk);
 						kfree_skb(skb, FREE_READ);
 						return 0;
 					}			
 				}
 				else
 				{
+					tcp_reset(daddr, saddr,  th, sk->prot, opt,dev, sk->ip_tos,sk->ip_ttl);
 					kfree_skb(skb, FREE_READ);
 					release_sock(sk);
 					return(0);
@@ -4080,6 +4160,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			if (!th->rst) {
 				if (!th->ack)
 					th->ack_seq = 0;
+				if(sk->debug) printk("Reset on closed socket %s.\n",sk->blog);
 				tcp_reset(daddr, saddr, th, sk->prot, opt,dev,sk->ip_tos,sk->ip_ttl);
 			}
 			kfree_skb(skb, FREE_READ);
@@ -4093,6 +4174,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 				return(0);
 			}
 			if (th->ack) {
+				printk("Reset on listening socket %d.\n",sk->blog);
 				tcp_reset(daddr, saddr, th, sk->prot, opt,dev,sk->ip_tos,sk->ip_ttl);
 				kfree_skb(skb, FREE_READ);
 				release_sock(sk);

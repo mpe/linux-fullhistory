@@ -232,8 +232,8 @@ static char *rcsid = "$Id: sk_g16.c,v 1.1 1994/06/30 16:25:15 root Exp $";
 #define SK_IORUN        0x20   
 
 /* 
- * LANCE interrupt: 0 = LANCE interrupt occured	
- *                  1 = no LANCE interrupt occured
+ * LANCE interrupt: 0 = LANCE interrupt occurred	
+ *                  1 = no LANCE interrupt occurred
  */
 #define SK_IRQ          0x10   
 			
@@ -1408,7 +1408,7 @@ static void SK_txintr(struct device *dev)
      * We check status of transmitted packet.
      * see LANCE data-sheet for error explanation
      */
-    if (tmdstat & TX_ERR) /* Error occured */
+    if (tmdstat & TX_ERR) /* Error occurred */
     {
 	printk("%s: TX error: %04x %04x\n", dev->name, (int) tmdstat,
 		(int) tmdp->status2);
@@ -1440,7 +1440,7 @@ static void SK_txintr(struct device *dev)
 
 	tmdp->status2 = 0;             /* Clear error flags */
     }
-    else if (tmdstat & TX_MORE)        /* Collisions occured ? */
+    else if (tmdstat & TX_MORE)        /* Collisions occurred ? */
     {
         /* 
          * Here I have a problem.

@@ -94,7 +94,7 @@ static char ppp_warning[] = KERN_WARNING "PPP: ALERT! not INUSE! %d\n";
 int ppp_init(struct device *);
 static void ppp_init_ctrl_blk(struct ppp *);
 static int ppp_dev_open(struct device *);
-static int ppp_dev_ioctl(struct device *dev, struct ifreq *ifr);
+static int ppp_dev_ioctl(struct device *dev, struct ifreq *ifr, int cmd);
 static int ppp_dev_close(struct device *);
 static void ppp_kick_tty(struct ppp *);
 
@@ -607,7 +607,7 @@ ppp_dev_close(struct device *dev)
 }
 
 #ifndef NET02D
-static int ppp_dev_ioctl(struct device *dev, struct ifreq *ifr)
+static int ppp_dev_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 {
   struct ppp *ppp = &ppp_ctrl[dev->base_addr];
   int    error;

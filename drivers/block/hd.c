@@ -260,40 +260,29 @@ static unsigned int mult_req    [MAX_HD] = {0,}; /* requested MultMode count    
 static unsigned int mult_count  [MAX_HD] = {0,}; /* currently enabled MultMode count */
 static struct request WCURRENT;
 
-static void fixstring(unsigned char *s, int n)
+static void fixstring (unsigned char *s, int bytecount)
 {
-	int i;
-	unsigned short *ss = (unsigned short *) s;
+	unsigned char *p, *end = &s[bytecount &= ~1];	/* bytecount must be even */
 
 	/* convert from big-endian to little-endian */
-	for (i = n ; (i -= 2) >= 0 ; ss++)
-		*ss = (*ss >> 8) | (*ss << 8);
-
-	/* "strnlen()" */
-	for (i = 0 ; i < n ; i++) {
-		if (!s[i]) {
-			n = i;
-			break;
-		}
+	for (p = end ; p != s;) {
+		unsigned short *pp = (unsigned short *) (p -= 2);
+		*pp = (*pp >> 8) | (*pp << 8);
 	}
 
-	/* wipe out trailing spaces */
-	while (n > 0) {
-		if (s[n-1] != ' ')
-			break;
-		n--;
-		s[n] = '\0';
+	/* strip leading blanks */
+	while (s != end && *s == ' ')
+		++s;
+
+	/* compress internal blanks and strip trailing blanks */
+	while (s != end && *s) {
+		if (*s++ != ' ' || (s != end && *s && *s != ' '))
+			*p++ = *(s-1);
 	}
 
-	/* wipe out leading spaces */
-	if (*s == ' ') {
-		unsigned char *t = s;
-		while (n-- && *++s == ' ');
-		while (n-- >= 0) {
-			*t++ = *s;
-			*s++ = '\0';
-		}
-	}
+	/* wipe out trailing garbage */
+	while (p != end)
+		*p++ = '\0';
 }
 
 static void identify_intr(void)
@@ -332,8 +321,8 @@ static void identify_intr(void)
 		fixstring (id->model, sizeof(id->model));
 		printk ("  hd%c: %.40s, %dMB w/%dKB Cache, CHS=%d/%d/%d, MaxMult=%d\n",
 			dev+'a', id->model, id->cyls*id->heads*id->sectors/2048,
-			id->buf_size/2, hd_info[dev].cyl, hd_info[dev].head,
-			hd_info[dev].sect, id->max_multsect);
+			id->buf_size/2, bios_info[dev].cyl, bios_info[dev].head,
+			bios_info[dev].sect, id->max_multsect);
 		/*
 		 * Early model Quantum drives go weird at this point,
 		 *   but doing a recalibrate seems to "fix" them.

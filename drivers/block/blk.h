@@ -45,6 +45,13 @@ extern unsigned long sbpcd_init(unsigned long, unsigned long);
 #endif CONFIG_SBPCD
 extern void set_device_ro(int dev,int flag);
 
+extern void floppy_init(void);
+#ifdef FD_MODULE
+static
+#else
+extern
+#endif
+int new_floppy_init(void);
 extern void rd_load(void);
 extern long rd_init(long mem_start, int length);
 extern int ramdisk_size;

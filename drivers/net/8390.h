@@ -146,7 +146,7 @@ struct ei_device {
 #define ENTSR_COL 0x04	/* The transmit collided at least once. */
 #define ENTSR_ABT 0x08  /* The transmit collided 16 times, and was deferred. */
 #define ENTSR_CRS 0x10	/* The carrier sense was lost. */
-#define ENTSR_FU  0x20  /* A "FIFO underrun" occured during transmit. */
+#define ENTSR_FU  0x20  /* A "FIFO underrun" occurred during transmit. */
 #define ENTSR_CDH 0x40	/* The collision detect "heartbeat" signal was lost. */
 #define ENTSR_OWC 0x80  /* There was an out-of-window collision. */
 

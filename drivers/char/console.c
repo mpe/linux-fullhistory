@@ -46,7 +46,8 @@
  * Virtual Consoles, Screen Blanking, Screen Dumping, Color, Graphics
  *   Chars, and VT100 enhancements by Peter MacDonald.
  *
- * Copy and paste function by Andrew Haylett.
+ * Copy and paste function by Andrew Haylett,
+ *   some enhancements by Alessandro Rubini.
  *
  * User definable mapping table and font loading by Eugene G. Crosser,
  * <crosser@pccross.msk.su>
@@ -2337,6 +2338,8 @@ int set_selection(const int arg, struct tty_struct *tty)
 		default:
 			return -EINVAL;
 	}
+	/* remove the pointer */
+	highlight_pointer(sel_cons,-1);
 	/* select to end of line if on trailing space */
 	if (new_sel_end > new_sel_start &&
 		!atedge(new_sel_end) && isspace(*(off + new_sel_end)))

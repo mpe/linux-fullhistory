@@ -271,6 +271,122 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
   }
 }
 
+/*
+ * Here I tried to implement better support for PhotoCD's.
+ * 
+ * Much of this has do be done with vendor-specific SCSI-commands.
+ * So I have to complete it step by step. Useful information is welcome.
+ *
+ * Actually works: (should work ;-)
+ *   - NEC:     Detection and support of multisession CD's. Special handling
+ *              for XA-disks is not nessesary.
+ *     
+ *   - TOSHIBA: setting density is done here now, mounting PhotoCD's should
+ *              work now without running the program "set_density"
+ *              multisession-CD's are supported too.
+ *
+ *   Gerd Knorr  (mailto:kraxel@cs.tu-berlin.de,
+ *                http://www.cs.tu-berlin.de/~kraxel/)
+ */
+
+static void sr_photocd_done(Scsi_Cmnd *SCpnt)
+{
+  SCpnt->request.dev = 0xfffe;
+}
+
+static void sr_photocd(struct inode *inode)
+{
+  unsigned long   sector,min,sec,frame;
+  Scsi_Cmnd       *SCpnt;
+  unsigned char   scsi_cmd[10];
+  unsigned char   *buffer;
+  int             rc;
+
+  switch(scsi_CDs[MINOR(inode->i_rdev)].device->manufactor) {
+
+  case SCSI_MAN_NEC:
+    printk("sr_photocd: use NEC code\n");
+    SCpnt = allocate_device(NULL, scsi_CDs[MINOR(inode->i_rdev)].device,1);
+    memset(scsi_cmd,0,10);
+    scsi_cmd[0] = 0xde;
+    scsi_cmd[1] = ((scsi_CDs[MINOR(inode->i_rdev)].device->lun) << 5) | 0x03;
+    scsi_cmd[2] = 0xb0;
+    buffer = (unsigned char*) scsi_malloc(512);
+    scsi_do_cmd(SCpnt, scsi_cmd, buffer, 0x16,
+		sr_photocd_done, SR_TIMEOUT, MAX_RETRIES);
+    while (SCpnt->request.dev != 0xfffe);
+    rc = SCpnt->result;
+    if (driver_byte(rc) != 0) {
+      printk("sr_photocd: oops, CD-ROM reports an error.\n");
+      sector = 0; }
+    else {
+      min   = (unsigned long)buffer[15]/16*10 + (unsigned long)buffer[15]%16;
+      sec   = (unsigned long)buffer[16]/16*10 + (unsigned long)buffer[16]%16;
+      frame = (unsigned long)buffer[17]/16*10 + (unsigned long)buffer[17]%16;
+      sector = min*60*75 + sec*75 + frame;
+      if (sector) {
+	printk("sr_photocd: multisession PhotoCD detected\n"); }}
+    scsi_free(buffer,512);
+    SCpnt->request.dev = -1;
+    break;
+
+  case SCSI_MAN_TOSHIBA:
+    printk("sr_photocd: use TOSHIBA code\n");
+
+    /* first I do a set_density-call (for reading XA-sectors) ... */
+    SCpnt = allocate_device(NULL, scsi_CDs[MINOR(inode->i_rdev)].device,1);
+    memset(scsi_cmd,0,10);
+    scsi_cmd[0] = 0x15;
+    scsi_cmd[1] = ((scsi_CDs[MINOR(inode->i_rdev)].device->lun) << 5)|(1 << 4);
+    scsi_cmd[4] = 12;
+    buffer = (unsigned char*) scsi_malloc(512);
+    memset(buffer,0,512);
+    buffer[ 3] = 0x08;
+    buffer[ 4] = 0x83;
+    buffer[10] = 0x08;
+    scsi_do_cmd(SCpnt, scsi_cmd, buffer, 12,
+                sr_photocd_done, SR_TIMEOUT, MAX_RETRIES);
+    while (SCpnt->request.dev != 0xfffe);
+    rc = SCpnt->result;
+    if (driver_byte(rc) != 0) {
+      printk("sr_photocd: oops, CD-ROM reports an error.\n"); }
+    scsi_free(buffer,512);
+    SCpnt->request.dev = -1;
+
+    /* ... and then I ask, if there is a multisession-Disk */
+    SCpnt = allocate_device(NULL, scsi_CDs[MINOR(inode->i_rdev)].device,1);
+    memset(scsi_cmd,0,10);
+    scsi_cmd[0] = 0xc7;
+    scsi_cmd[1] = ((scsi_CDs[MINOR(inode->i_rdev)].device->lun) << 5) | 3;
+    buffer = (unsigned char*) scsi_malloc(512);
+    memset(buffer,0,512);
+    scsi_do_cmd(SCpnt, scsi_cmd, buffer, 4,
+                sr_photocd_done, SR_TIMEOUT, MAX_RETRIES);
+    while (SCpnt->request.dev != 0xfffe);
+    rc = SCpnt->result;
+    if (driver_byte(rc) != 0) {
+      printk("sr_photocd: oops, CD-ROM reports an error.\n");
+      sector = 0; }
+    else {
+      min   = (unsigned long)buffer[1]/16*10 + (unsigned long)buffer[1]%16;
+      sec   = (unsigned long)buffer[2]/16*10 + (unsigned long)buffer[2]%16;
+      frame = (unsigned long)buffer[3]/16*10 + (unsigned long)buffer[3]%16;
+      sector = min*60*75 + sec*75 + frame;
+      if (sector) {
+        printk("sr_photocd: multisession PhotoCD detected: %lu\n",sector); }}
+    scsi_free(buffer,512);
+    SCpnt->request.dev = -1;
+    break;
+  case SCSI_MAN_UNKNOWN:
+  default:
+    printk("sr_photocd: there is no special photocd-code for this drive\n");
+    sector = 0;
+    break; }
+
+  scsi_CDs[MINOR(inode->i_rdev)].mpcd_sector = sector;
+  return;
+}
+
 static int sr_open(struct inode * inode, struct file * filp)
 {
 	if(MINOR(inode->i_rdev) >= sr_template.nr_dev || 
@@ -291,6 +407,8 @@ static int sr_open(struct inode * inode, struct file * filp)
 
 	if(scsi_CDs[MINOR(inode->i_rdev)].needs_sector_size)
 	  get_sectorsize(MINOR(inode->i_rdev));
+
+	sr_photocd(inode);
 
 	return 0;
 }
@@ -436,6 +554,10 @@ is that we will always use scatter-gather if we can, because we can
 work around the fact that the buffer cache has a block size of 1024,
 and we have 2048 byte sectors.  This code should work for buffers that
 are any multiple of 512 bytes long.  */
+
+	/* this is for support of multisession-CD's */ 
+	if (block >= 64 && block < 68) {
+	  block += scsi_CDs[dev].mpcd_sector*4; }
 
 	SCpnt->use_sg = 0;
 

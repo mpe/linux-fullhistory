@@ -1647,7 +1647,7 @@ static int NCR5380_transfer_dma (struct Scsi_Host *instance,
     NCR5380_write(MODE_REG, MR_BASE | MR_DMA_MODE);
 #else
     /*
-     * Note : on my sample board, watch-dog timeouts occured when interrupts
+     * Note : on my sample board, watch-dog timeouts occurred when interrupts
      * were not disabled for the duration of a single DMA transfer, from 
      * before the setting of DMA mode to after transfer of the last byte.
      */
@@ -1971,7 +1971,7 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance) {
 		}
 
 		/*
-		 * The prefered transfer method is going to be 
+		 * The preferred transfer method is going to be 
 		 * PSEUDO-DMA for systems that are strictly PIO,
 		 * since we can let the hardware do the handshaking.
 		 *

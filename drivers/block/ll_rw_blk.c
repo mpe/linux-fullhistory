@@ -17,7 +17,7 @@
 #include <linux/locks.h>
 
 #include <asm/system.h>
-
+#include <asm/io.h>
 #include "blk.h"
 
 /*
@@ -506,6 +506,11 @@ long blk_dev_init(long mem_start, long mem_end)
 #endif
 #ifdef CONFIG_MCD
 	mem_start = mcd_init(mem_start,mem_end);
+#endif
+#ifdef CONFIG_BLK_DEV_FD
+	floppy_init();
+#else
+	outb_p(0xc, 0x3f2);
 #endif
 #ifdef CONFIG_SBPCD
 	mem_start = sbpcd_init(mem_start, mem_end);

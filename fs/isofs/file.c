@@ -119,7 +119,7 @@ static void isofs_determine_filetype(struct inode * inode)
 static int isofs_file_read(struct inode * inode, struct file * filp, char * buf, int count)
 {
 	int read,left,chars;
-	int block, blocks, offset;
+	int block, blocks, offset, total_blocks;
 	int bhrequest;
 	int ra_blocks, max_block, nextblock;
 	struct buffer_head ** bhb, ** bhe;
@@ -153,6 +153,17 @@ static int isofs_file_read(struct inode * inode, struct file * filp, char * buf,
 
 	ra_blocks = read_ahead[MAJOR(inode->i_dev)] / (BLOCK_SIZE >> 9);
 	if(ra_blocks > blocks) blocks = ra_blocks;
+
+	/*
+	 * this is for stopping read ahead at EOF. It's  important for
+	 * reading PhotoCD's, becauce they have many small data tracks instead
+	 * of one big. And between two data-tracks are some unreadable sectors.
+	 * A read ahead after a EOF may try to read such an unreadable sector.
+	 *    kraxel@cs.tu-berlin.de (Gerd Knorr)
+	 */
+	total_blocks = inode->i_size >> ISOFS_BUFFER_BITS(inode);
+	if (inode->i_size & (ISOFS_BUFFER_BITS(inode)-1)) total_blocks++;
+	while (block + blocks > total_blocks) blocks--;
 
 	max_block = (inode->i_size + BLOCK_SIZE - 1)/BLOCK_SIZE;
 	nextblock = -1;

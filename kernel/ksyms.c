@@ -36,6 +36,10 @@
 #endif
 
 #include <asm/irq.h>
+extern char floppy_track_buffer[];
+extern void set_device_ro(int dev,int flag);
+#include <linux/delay.h>
+#include <linux/locks.h>
   
 extern void *sys_call_table;
 
@@ -91,6 +95,10 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(namei),
 	X(lnamei),
 	X(open_namei),
+	X(check_disk_change),
+	X(invalidate_buffers),
+	X(fsync_dev),
+	X(permission),
 	X(inode_setattr),
 	X(inode_change_ok),
 	X(generic_mmap),
@@ -116,7 +124,10 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(block_fsync),
 	X(wait_for_request),
 	X(blksize_size),
+	X(blk_size),
 	X(blk_dev),
+	X(is_read_only),
+	X(set_device_ro),
 	
 	/* Module creation of serial units */
 	X(register_serial),
@@ -144,7 +155,11 @@ struct symbol_table symbol_table = { 0, 0, 0, /* for stacked module support */
 	X(bh_mask),
 	X(add_timer),
 	X(del_timer),
+	X(tq_timer),
 	X(tq_immediate),
+	X(tq_last),
+	X(timer_active),
+	X(timer_table),
 
 	/* dma handling */
 	X(request_dma),

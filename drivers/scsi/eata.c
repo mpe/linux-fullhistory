@@ -413,7 +413,7 @@ int eata_queuecommand (Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *)) {
       }
 
    if (k == sh[j]->can_queue) {
-      printk("%s: qcomm, no free mailbox, reseting.\n", BN(j));
+      printk("%s: qcomm, no free mailbox, resetting.\n", BN(j));
 
       if (HD(j)->in_reset) 
          printk("%s: qcomm, already in reset.\n", BN(j));

@@ -75,7 +75,6 @@ extern long console_init(long, long);
 extern long kmalloc_init(long,long);
 extern long blk_dev_init(long,long);
 extern long chr_dev_init(long,long);
-extern void floppy_init(void);
 extern void sock_init(void);
 extern long rd_init(long mem_start, int length);
 unsigned long net_dev_init(unsigned long, unsigned long);
@@ -406,6 +405,82 @@ static void copro_timeout(void)
 	outb_p(0,0xf0);
 }
 
+static void check_fpu(void)
+{
+	static double x = 4195835.0;
+	static double y = 3145727.0;
+	unsigned short control_word;
+	int i;
+
+	if (!hard_math) {
+#ifndef CONFIG_MATH_EMULATION
+		printk("No coprocessor found and no math emulation present.\n");
+		printk("Giving up.\n");
+		for (;;) ;
+#endif
+		return;
+	}
+	/*
+	 * check if exception 16 works correctly.. This is truly evil
+	 * code: it disables the high 8 interrupts to make sure that
+	 * the irq13 doesn't happen. But as this will lead to a lockup
+	 * if no exception16 arrives, it depends on the fact that the
+	 * high 8 interrupts will be re-enabled by the next timer tick.
+	 * So the irq13 will happen eventually, but the exception 16
+	 * should get there first..
+	 */
+	printk("Checking 386/387 coupling... ");
+	timer_table[COPRO_TIMER].expires = jiffies+50;
+	timer_table[COPRO_TIMER].fn = copro_timeout;
+	timer_active |= 1<<COPRO_TIMER;
+	__asm__("clts ; fninit ; fnstcw %0 ; fwait":"=m" (*&control_word));
+	control_word &= 0xffc0;
+	__asm__("fldcw %0 ; fwait": :"m" (*&control_word));
+	outb_p(inb_p(0x21) | (1 << 2), 0x21);
+	__asm__("fldz ; fld1 ; fdiv %st,%st(1) ; fwait");
+	timer_active &= ~(1<<COPRO_TIMER);
+	if (fpu_error)
+		return;
+	if (!ignore_irq13) {
+		printk("Ok, fpu using old IRQ13 error reporting\n");
+		return;
+	}
+	__asm__("fninit\n\t"
+		"fldl %1\n\t"
+		"fdivl %2\n\t"
+		"fmull %2\n\t"
+		"fldl %1\n\t"
+		"fsubp %%st,%%st(1)\n\t"
+		"fistpl %0\n\t"
+		"fwait\n\t"
+		"fninit"
+		: "=m" (*&i)
+		: "m" (*&x), "m" (*&y));
+	if (!i) {
+		printk("Ok, fpu using exception 16 error reporting.\n");
+		return;
+
+	}
+	printk("Ok, FDIV bug i%c86 system\n", '0'+x86);
+}
+
+static void check_hlt(void)
+{
+	printk("Checking 'hlt' instruction... ");
+	if (!hlt_works_ok) {
+		printk("disabled\n");
+		return;
+	}
+	__asm__ __volatile__("hlt ; hlt ; hlt ; hlt");
+	printk("Ok.\n");
+}
+
+static void check_bugs(void)
+{
+	check_fpu();
+	check_hlt();
+}
+
 asmlinkage void start_kernel(void)
 {
 /*
@@ -468,51 +543,12 @@ asmlinkage void start_kernel(void)
 	mem_init(low_memory_start,memory_start,memory_end);
 	buffer_init();
 	time_init();
-	floppy_init();
 	sock_init();
 #ifdef CONFIG_SYSVIPC
 	ipc_init();
 #endif
 	sti();
-
-	/*
-	 * check if exception 16 works correctly.. This is truly evil
-	 * code: it disables the high 8 interrupts to make sure that
-	 * the irq13 doesn't happen. But as this will lead to a lockup
-	 * if no exception16 arrives, it depends on the fact that the
-	 * high 8 interrupts will be re-enabled by the next timer tick.
-	 * So the irq13 will happen eventually, but the exception 16
-	 * should get there first..
-	 */
-	if (hard_math) {
-		unsigned short control_word;
-
-		printk("Checking 386/387 coupling... ");
-		timer_table[COPRO_TIMER].expires = jiffies+50;
-		timer_table[COPRO_TIMER].fn = copro_timeout;
-		timer_active |= 1<<COPRO_TIMER;
-		__asm__("clts ; fninit ; fnstcw %0 ; fwait":"=m" (*&control_word));
-		control_word &= 0xffc0;
-		__asm__("fldcw %0 ; fwait": :"m" (*&control_word));
-		outb_p(inb_p(0x21) | (1 << 2), 0x21);
-		__asm__("fldz ; fld1 ; fdiv %st,%st(1) ; fwait");
-		timer_active &= ~(1<<COPRO_TIMER);
-		if (!fpu_error)
-			printk("Ok, fpu using %s error reporting.\n",
-				ignore_irq13?"exception 16":"irq13");
-	}
-#ifndef CONFIG_MATH_EMULATION
-	else {
-		printk("No coprocessor found and no math emulation present.\n");
-		printk("Giving up.\n");
-		for (;;) ;
-	}
-#endif
-	if (hlt_works_ok) {
-		printk("Checking 'hlt' instruction... ");
-		__asm__ __volatile__("hlt ; hlt ; hlt ; hlt");
-		printk("Ok.\n");
-	}
+	check_bugs();
 
 	system_utsname.machine[1] = '0' + x86;
 	printk(linux_banner);

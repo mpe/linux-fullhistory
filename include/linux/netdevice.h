@@ -139,7 +139,7 @@ struct device
 #define HAVE_SET_MAC_ADDR  		 
   int			  (*set_mac_address)(struct device *dev, void *addr);
 #define HAVE_PRIVATE_IOCTL
-  int			  (*do_ioctl)(struct device *dev, struct ifreq *ifr);
+  int			  (*do_ioctl)(struct device *dev, struct ifreq *ifr, int cmd);
 #define HAVE_SET_CONFIG
   int			  (*set_config)(struct device *dev, struct ifmap *map);
   
