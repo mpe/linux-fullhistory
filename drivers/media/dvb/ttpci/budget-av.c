@@ -59,7 +59,7 @@ struct budget_av {
 	struct dvb_ca_en50221 ca;
 };
 
-int enable_ci = 0;
+static int enable_ci = 0;
 
 
 /****************************************************************************
@@ -658,7 +658,7 @@ static int philips_tu1216_request_firmware(struct dvb_frontend *fe,
 	return request_firmware(fw, name, &budget->dev->pci->dev);
 }
 
-struct tda1004x_config philips_tu1216_config = {
+static struct tda1004x_config philips_tu1216_config = {
 
 	.demod_address = 0x8,
 	.invert = 1,

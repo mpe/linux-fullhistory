@@ -14,7 +14,7 @@
 
 #include <linux/usb.h>
 
-int dibusb_i2c_msg(struct usb_dibusb *dib, u8 addr,
+static int dibusb_i2c_msg(struct usb_dibusb *dib, u8 addr,
 			  u8 *wbuf, u16 wlen, u8 *rbuf, u16 rlen)
 {
 	u8 sndbuf[wlen+4]; /* lead(1) devaddr,direction(1) addr(2) data(wlen) (len(2) (when reading)) */

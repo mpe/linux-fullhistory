@@ -39,17 +39,17 @@
 // #define DVB_DEMUX_SECTION_LOSS_LOG
 
 
-LIST_HEAD(dmx_muxs);
+static LIST_HEAD(dmx_muxs);
 
 
-int dmx_register_demux(struct dmx_demux *demux) 
+static int dmx_register_demux(struct dmx_demux *demux)
 {
 	demux->users = 0;
 	list_add(&demux->reg_list, &dmx_muxs);
 	return 0;
 }
 
-int dmx_unregister_demux(struct dmx_demux* demux)
+static int dmx_unregister_demux(struct dmx_demux* demux)
 {
 	struct list_head *pos, *n, *head=&dmx_muxs;
 
@@ -65,14 +65,6 @@ int dmx_unregister_demux(struct dmx_demux* demux)
 	return -ENODEV;
 }
 
-
-struct list_head *dmx_get_demuxes(void)
-{
-	if (list_empty(&dmx_muxs))
-		return NULL;
-
-	return &dmx_muxs;
-}
 
 /******************************************************************************
  * static inlined helper functions
@@ -102,19 +94,6 @@ static inline u8 payload(const u8 *tsp)
 			return 184-1-tsp[4];
 	}
 	return 184;
-}
-
-
-void dvb_set_crc32(u8 *data, int length)
-{
-	u32 crc;
-
-	crc = crc32_be(~0, data, length);
-
-	data[length]   = (crc >> 24) & 0xff;
-	data[length+1] = (crc >> 16) & 0xff;
-	data[length+2] = (crc >>  8) & 0xff;
-	data[length+3] = (crc)       & 0xff;
 }
 
 
@@ -424,7 +403,7 @@ static inline void dvb_dmx_swfilter_packet_type(struct dvb_demux_feed *feed, con
 	((f)->feed.ts.is_filtering) &&					\
 	(((f)->ts_type & (TS_PACKET|TS_PAYLOAD_ONLY)) == TS_PACKET))
 
-void dvb_dmx_swfilter_packet(struct dvb_demux *demux, const u8 *buf)
+static void dvb_dmx_swfilter_packet(struct dvb_demux *demux, const u8 *buf)
 {
 	struct dvb_demux_feed *feed;
 	struct list_head *pos, *head=&demux->feed_list;
@@ -452,7 +431,6 @@ void dvb_dmx_swfilter_packet(struct dvb_demux *demux, const u8 *buf)
 			feed->cb.ts(buf, 188, NULL, 0, &feed->feed.ts, DMX_OK);
 	}
 }
-EXPORT_SYMBOL(dvb_dmx_swfilter_packet);
 
 void dvb_dmx_swfilter_packets(struct dvb_demux *demux, const u8 *buf, size_t count)
 {
@@ -1190,7 +1168,7 @@ static struct list_head * dvbdmx_get_frontends(struct dmx_demux *demux)
 }
 
 
-int dvbdmx_connect_frontend(struct dmx_demux *demux, struct dmx_frontend *frontend)
+static int dvbdmx_connect_frontend(struct dmx_demux *demux, struct dmx_frontend *frontend)
 {
 	struct dvb_demux *dvbdemux = (struct dvb_demux *) demux;
 
@@ -1204,10 +1182,9 @@ int dvbdmx_connect_frontend(struct dmx_demux *demux, struct dmx_frontend *fronte
 	up(&dvbdemux->mutex);
 	return 0;
 }
-EXPORT_SYMBOL(dvbdmx_connect_frontend);
 
 
-int dvbdmx_disconnect_frontend(struct dmx_demux *demux)
+static int dvbdmx_disconnect_frontend(struct dmx_demux *demux)
 {
 	struct dvb_demux *dvbdemux = (struct dvb_demux *) demux;
 
@@ -1218,7 +1195,6 @@ int dvbdmx_disconnect_frontend(struct dmx_demux *demux)
 	up(&dvbdemux->mutex);
 	return 0;
 }
-EXPORT_SYMBOL(dvbdmx_disconnect_frontend);
 
 
 static int dvbdmx_get_pes_pids(struct dmx_demux *demux, u16 *pids)

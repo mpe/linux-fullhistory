@@ -505,7 +505,7 @@ static void dibusb_disconnect(struct usb_interface *intf)
 }
 
 /* usb specific object needed to register this driver with the usb subsystem */
-struct usb_driver dibusb_driver = {
+static struct usb_driver dibusb_driver = {
 	.owner		= THIS_MODULE,
 	.name		= DRIVER_DESC,
 	.probe 		= dibusb_probe,

@@ -61,7 +61,7 @@ static int verbose;
 
 #define FIN (XIN >> 4)
 
-int tda10021_inittab_size = 0x40;
+static int tda10021_inittab_size = 0x40;
 static u8 tda10021_inittab[0x40]=
 {
 	0x73, 0x6a, 0x23, 0x0a, 0x02, 0x37, 0x77, 0x1a,

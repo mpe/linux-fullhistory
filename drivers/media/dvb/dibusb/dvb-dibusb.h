@@ -210,8 +210,6 @@ int dibusb_remote_exit(struct usb_dibusb *dib);
 int dibusb_remote_init(struct usb_dibusb *dib);
 
 /* dvb-dibusb-fe-i2c.c */
-int dibusb_i2c_msg(struct usb_dibusb *dib, u8 addr,
-		u8 *wbuf, u16 wlen, u8 *rbuf, u16 rlen);
 int dibusb_fe_init(struct usb_dibusb* dib);
 int dibusb_fe_exit(struct usb_dibusb *dib);
 int dibusb_i2c_init(struct usb_dibusb *dib);

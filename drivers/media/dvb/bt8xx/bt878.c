@@ -381,21 +381,6 @@ bt878_device_control(struct bt878 *bt, unsigned int cmd, union dst_gpio_packet *
 
 EXPORT_SYMBOL(bt878_device_control);
 
-struct bt878 *bt878_find_by_i2c_adap(struct i2c_adapter *adapter)
-{
-	unsigned int card_nr;
-	
-	printk("bt878 find by dvb adap: checking \"%s\"\n",adapter->name);
-	for (card_nr = 0; card_nr < bt878_num; card_nr++) {
-		if (bt878[card_nr].adapter == adapter)
-			return &bt878[card_nr];
-	}
-	printk("bt878 find by dvb adap: NOT found \"%s\"\n",adapter->name);
-	return NULL;
-}
-
-EXPORT_SYMBOL(bt878_find_by_i2c_adap);
-
 /***********************/
 /* PCI device handling */
 /***********************/
