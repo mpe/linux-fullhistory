@@ -8,6 +8,7 @@
 #define _NETROM_H 
 #include <linux/netrom.h>
 #include <linux/list.h>
+#include <net/sock.h>
 
 #define	NR_NETWORK_LEN			15
 #define	NR_TRANSPORT_LEN		5
