@@ -558,7 +558,9 @@ int __init ppp_init(void)
 {
 	int err;
 #ifndef MODULE
+#ifdef CONFIG_PPP_DEFLATE
 	extern struct compressor ppp_deflate, ppp_deflate_draft;
+#endif
 	extern int ppp_async_init(void);
 	extern int ppp_sync_init(void);
 #endif

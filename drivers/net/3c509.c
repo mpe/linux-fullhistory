@@ -186,8 +186,10 @@ u16 el3_isapnp_phys_addr[8][3] = {
 	{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0},
 	{0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0}
 };
-#endif
+#endif /* CONFIG_ISAPNP */
+#if defined(CONFIG_ISAPNP) || defined(MODULE)
 static int nopnp = 0;
+#endif
 
 int el3_probe(struct net_device *dev)
 {
@@ -195,8 +197,10 @@ int el3_probe(struct net_device *dev)
 	int ioaddr, irq, if_port;
 	u16 phys_addr[3];
 	static int current_tag = 0;
-	static int pnp_cards = 0;
 	int mca_slot = -1;
+#ifdef CONFIG_ISAPNP
+	static int pnp_cards = 0;
+#endif
 
 	/* First check all slots of the EISA bus.  The next slot address to
 	   probe is kept in 'eisa_addr' to support multiple probe() calls. */

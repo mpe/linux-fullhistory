@@ -364,17 +364,16 @@ struct usb_driver {
  */
 typedef int (*usb_device_irq)(int, void *, int, void *);
 
-/* -------------------------------------------------------------------------------------* 
- * New USB Structures                                                                   *
- * -------------------------------------------------------------------------------------*/
+/* --------------------------------------------------------------------------* 
+ * New USB Structures                                                        *
+ * --------------------------------------------------------------------------*/
 
+#define USB_DISABLE_SPD		1
+#define USB_ISO_ASAP		2
+#define USB_URB_EARLY_COMPLETE	4
+#define USB_ASYNC_UNLINK	8
 
-#define USB_DISABLE_SPD           1
-#define USB_ISO_ASAP              2
-#define USB_URB_EARLY_COMPLETE    4
-
-typedef struct
-{
+typedef struct {
 	unsigned int offset;
 	unsigned int length;		// expected length
 	unsigned int actual_length;
@@ -386,9 +385,10 @@ typedef void (*usb_complete_t)(struct urb *);
 
 typedef struct urb
 {
+	spinlock_t lock;		// lock for the URB
 	void *hcpriv;			// private data for host controller
 	struct list_head urb_list;	// list pointer to all active urbs 
-	struct urb* next;		// pointer to next URB	
+	struct urb *next;		// pointer to next URB	
 	struct usb_device *dev;		// pointer to associated USB device
 	unsigned int pipe;		// pipe information
 	int status;			// returned status
@@ -396,7 +396,7 @@ typedef struct urb
 	void *transfer_buffer;		// associated data buffer
 	int transfer_buffer_length;	// data buffer length
 	int actual_length;              // actual data buffer length	
-	unsigned char* setup_packet;	// setup packet (control only)
+	unsigned char *setup_packet;	// setup packet (control only)
 	//
 	int start_frame;		// start frame (iso/irq only)
 	int number_of_packets;		// number of packets in this request (iso/irq only)
@@ -411,6 +411,7 @@ typedef struct urb
 
 #define FILL_CONTROL_URB(a,aa,b,c,d,e,f,g) \
     do {\
+	spin_lock_init(&(a)->lock);\
 	(a)->dev=aa;\
 	(a)->pipe=b;\
 	(a)->setup_packet=c;\
@@ -422,6 +423,7 @@ typedef struct urb
 
 #define FILL_BULK_URB(a,aa,b,c,d,e,f) \
     do {\
+	spin_lock_init(&(a)->lock);\
 	(a)->dev=aa;\
 	(a)->pipe=b;\
 	(a)->transfer_buffer=c;\
@@ -432,6 +434,7 @@ typedef struct urb
     
 #define FILL_INT_URB(a,aa,b,c,d,e,f,g) \
     do {\
+	spin_lock_init(&(a)->lock);\
 	(a)->dev=aa;\
 	(a)->pipe=b;\
 	(a)->transfer_buffer=c;\

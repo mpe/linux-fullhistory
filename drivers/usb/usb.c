@@ -475,30 +475,34 @@ void usb_inc_dev_use(struct usb_device *dev)
  * New USB Core Functions
  * -------------------------------------------------------------------------------------*/
 
-urb_t* usb_alloc_urb(int iso_packets)
+urb_t *usb_alloc_urb(int iso_packets)
 {
 	urb_t *urb;
-	urb=(urb_t*)kmalloc(sizeof(urb_t) + iso_packets*sizeof(iso_packet_descriptor_t),
+
+	urb = (urb_t *)kmalloc(sizeof(urb_t) + iso_packets * sizeof(iso_packet_descriptor_t),
 	      in_interrupt() ? GFP_ATOMIC : GFP_KERNEL);
-	if (!urb)
-	{
+	if (!urb) {
 		err("alloc_urb: kmalloc failed");
-		return 0;
+		return NULL;
 	}
-	memset(urb,0,sizeof(urb_t));
+
+	memset(urb, 0, sizeof(*urb));
+
+	spin_lock_init(&urb->lock);
+
 	return urb;
 }
 
 /*-------------------------------------------------------------------*/
 void usb_free_urb(urb_t* urb)
 {
-	if(urb)
+	if (urb)
 		kfree(urb);
 }
 /*-------------------------------------------------------------------*/
 int usb_submit_urb(urb_t *urb)
 {
-	if(urb && urb->dev)
+	if (urb && urb->dev)
 		return urb->dev->bus->op->submit_urb(urb);
 	else
 		return -1;
@@ -507,7 +511,7 @@ int usb_submit_urb(urb_t *urb)
 /*-------------------------------------------------------------------*/
 int usb_unlink_urb(urb_t *urb)
 {
-	if(urb && urb->dev)
+	if (urb && urb->dev)
 		return urb->dev->bus->op->unlink_urb(urb);
 	else
 		return -1;
@@ -537,10 +541,10 @@ static void usb_api_blocking_completion(urb_t *urb)
  *-------------------------------------------------------------------*/
 static void usb_api_async_completion(urb_t *urb)
 {
-	api_wrapper_data *awd=(api_wrapper_data*)urb->context;
+	api_wrapper_data *awd = (api_wrapper_data *)urb->context;
 
 	if (awd->handler)
-		awd->handler(urb->status,urb->transfer_buffer,urb->actual_length,awd->stuff);
+		awd->handler(urb->status, urb->transfer_buffer, urb->actual_length, awd->stuff);
  }
 
 /*-------------------------------------------------------------------*
@@ -555,13 +559,13 @@ static int usb_start_wait_urb(urb_t *urb, int timeout, int* actual_length)
 	api_wrapper_data awd;
 	int status;
   
-	awd.wakeup=&wqh;
-	awd.handler=0;
+	awd.wakeup = &wqh;
+	awd.handler = 0;
 	init_waitqueue_head(&wqh); 	
 	current->state = TASK_INTERRUPTIBLE;
 	add_wait_queue(&wqh, &wait);
-	urb->context=&awd;
-	status=usb_submit_urb(urb);
+	urb->context = &awd;
+	status = usb_submit_urb(urb);
 	if (status) {
 		// something went wrong
 		usb_free_urb(urb);
@@ -581,13 +585,12 @@ static int usb_start_wait_urb(urb_t *urb, int timeout, int* actual_length)
 		// timeout
 		printk("usb_control/bulk_msg: timeout\n");
 		usb_unlink_urb(urb);  // remove urb safely
-		status=-ETIMEDOUT;
-	}
-	else
-		status=urb->status;
+		status = -ETIMEDOUT;
+	} else
+		status = urb->status;
 
 	if (actual_length)
-		*actual_length=urb->actual_length;
+		*actual_length = urb->actual_length;
 
 	usb_free_urb(urb);
   	return status;
@@ -602,20 +605,21 @@ int usb_internal_control_msg(struct usb_device *usb_dev, unsigned int pipe,
 	int retv;
 	int length;
 
-	urb=usb_alloc_urb(0);
+	urb = usb_alloc_urb(0);
 	if (!urb)
 		return -ENOMEM;
   
 	FILL_CONTROL_URB(urb, usb_dev, pipe, (unsigned char*)cmd, data, len,    /* build urb */  
 		   (usb_complete_t)usb_api_blocking_completion,0);
 
-	retv=usb_start_wait_urb(urb,timeout, &length);
+	retv = usb_start_wait_urb(urb, timeout, &length);
 	if (retv < 0)
 		return retv;
 	else
 		return length;
 	
 }
+
 /*-------------------------------------------------------------------*/
 int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 request, __u8 requesttype,
 			 __u16 value, __u16 index, void *data, __u16 size, int timeout)
@@ -623,7 +627,7 @@ int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 request, __u
 	devrequest *dr = kmalloc(sizeof(devrequest), GFP_KERNEL);
 	int ret;
 	
-	if(!dr)
+	if (!dr)
 		return -ENOMEM;
 
 	dr->requesttype = requesttype;
@@ -634,7 +638,7 @@ int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 request, __u
 
 	//dbg("usb_control_msg");	
 
-	ret=usb_internal_control_msg(dev, pipe, dr, data, size, timeout);
+	ret = usb_internal_control_msg(dev, pipe, dr, data, size, timeout);
 
 	kfree(dr);
 

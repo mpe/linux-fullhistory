@@ -51,7 +51,7 @@
  * be updated someday soon to use this mechanism.
  *
  * Feel free to develop and distribute fancy GUI configuration
- * utilities for you favorite PCI chipsets.  I'll be working on
+ * utilities for your favorite PCI chipsets.  I'll be working on
  * one for the Promise 20246 someday soon.  -ml
  *
  */
@@ -798,7 +798,7 @@ void proc_ide_create(void)
 
 	create_proc_ide_interfaces();
 
-	create_proc_read_entry("drivers",0,proc_ide_root,
+	create_proc_read_entry("drivers", 0, proc_ide_root,
 				proc_ide_read_drivers, NULL);
 
 #ifdef CONFIG_BLK_DEV_AEC6210
@@ -823,11 +823,11 @@ void proc_ide_create(void)
 #endif /* CONFIG_BLK_DEV_CS5530 */
 #ifdef CONFIG_BLK_DEV_HPT34X
 	if ((hpt34x_display_info) && (hpt34x_proc))
-		create_proc_info_entry("", 0, proc_ide_root, hpt34x_display_info);
+		create_proc_info_entry("hpt34x", 0, proc_ide_root, hpt34x_display_info);
 #endif /* CONFIG_BLK_DEV_HPT34X */
 #ifdef CONFIG_BLK_DEV_HPT366
 	if ((hpt366_display_info) && (hpt366_proc))
-		create_proc_info_entry("", 0, proc_ide_root, hpt366_display_info);
+		create_proc_info_entry("hpt366", 0, proc_ide_root, hpt366_display_info);
 #endif /* CONFIG_BLK_DEV_HPT366 */
 #ifdef CONFIG_BLK_DEV_PDC202XX
 	if ((pdc202xx_display_info) && (pdc202xx_proc))

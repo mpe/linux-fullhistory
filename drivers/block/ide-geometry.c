@@ -2,6 +2,8 @@
  * linux/drivers/block/ide-geometry.c
  */
 #include <linux/config.h>
+
+#ifdef CONFIG_BLK_DEV_IDE
 #include <linux/ide.h>
 
 #include <asm/io.h>
@@ -60,15 +62,7 @@ void probe_cmos_for_drives (ide_hwif_t *hwif)
 	/* Extract drive geometry from CMOS+BIOS if not already setup */
 	for (unit = 0; unit < MAX_DRIVES; ++unit) {
 		ide_drive_t *drive = &hwif->drives[unit];
-#if 0
-		if ((cmos_disks & (0xf0 >> (unit*4))) &&
-		    !drive->present && !drive->nobios) {
-			drive->cyl   = drive->bios_cyl  = *(unsigned short *)BIOS;
-			drive->head  = drive->bios_head = *(BIOS+2);
-			drive->sect  = drive->bios_sect = *(BIOS+14);
-			drive->ctl   = *(BIOS+8);
-		}
-#else
+
 		if ((cmos_disks & (0xf0 >> (unit*4)))
 		   && !drive->present && !drive->nobios) {
 			unsigned short cyl = *(unsigned short *)BIOS;
@@ -83,7 +77,7 @@ void probe_cmos_for_drives (ide_hwif_t *hwif)
 				printk("hd%d: C/H/S=%d/%d/%d from BIOS ignored\n", unit, cyl, head, sect);
 			}
 		}
-#endif
+
 		BIOS += 16;
 	}
 #endif
@@ -98,13 +92,15 @@ static void
 ontrack(ide_drive_t *drive, int heads, unsigned int *c, int *h, int *s) {
 	static const byte dm_head_vals[] = {4, 8, 16, 32, 64, 128, 255, 0};
 	const byte *headp = dm_head_vals;
-	unsigned long total, tracks;
+	unsigned long total;
 
 	/*
 	 * The specs say: take geometry as obtained from Identify,
 	 * compute total capacity C*H*S from that, and truncate to
 	 * 1024*255*63. Now take S=63, H the first in the sequence
 	 * 4, 8, 16, 32, 64, 128, 255 such that 63*H*1024 >= total.
+	 * [Please tell aeb@cwi.nl in case this computes a
+	 * geometry different from what OnTrack uses.]
 	 */
 	total = DRIVER(drive)->capacity(drive);
 
@@ -116,32 +112,10 @@ ontrack(ide_drive_t *drive, int heads, unsigned int *c, int *h, int *s) {
 		return;
 	}
 
-#if 0
 	while (63 * headp[0] * 1024 < total && headp[1] != 0)
 		 headp++;
 	*h = headp[0];
 	*c = total / (63 * headp[0]);
-#else
-	/* The code below differs in two aspects:
-	   (i) It will not produce geometries like C/H/S = 1024/64/63
-		because of the `>='. This follows OnTracks text (which
-		claims that 512 <= C <= 1023), but not OnTracks code.
-	   (ii) It starts dividing by 63, so that a rounding down occurs.
-		For example, with C=11159, H=10, S=37 we find total=4128830
-		and DM would make C=512, H=128, S=63, but we make 1024/64/63
-		if `>=' is replaced by `>'.
-	   The reason we use this code is mainly that we have done so for
-	   a long time without getting complaints.
-	*/
-
-	tracks = total / 63;
-	while (*c >= 1024) {
-		*h = *headp;
-		*c = tracks / *h;
-		if (*++headp == 0)
-			break;
-	}
-#endif
 }
 
 /*
@@ -237,3 +211,4 @@ int ide_xlate_1024 (kdev_t i_rdev, int xparm, int ptheads, const char *msg)
 		       drive->bios_cyl, drive->bios_head, drive->bios_sect);
 	return ret;
 }
+#endif /* CONFIG_BLK_DEV_IDE */

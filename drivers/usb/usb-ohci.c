@@ -1675,20 +1675,24 @@ static int hc_found_ohci (struct pci_dev *dev, int irq, void * mem_base)
  
 static int hc_start_ohci (struct pci_dev * dev)
 {
-	u32 cmd;
+	unsigned long mem_base;
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,3,0)
-	unsigned long mem_base = dev->resource[0].start;
+	mem_base = dev->resource[0].start;
+	if (pci_enable_device(dev) < 0)
+		return -ENODEV;
 #else
-	unsigned long mem_base = dev->base_address[0];
+	u16 cmd;
+
+	mem_base = dev->base_address[0];
 	if (mem_base & PCI_BASE_ADDRESS_SPACE_IO) return -ENODEV;
 	mem_base &= PCI_BASE_ADDRESS_MEM_MASK;
+
+	/* Some Mac firmware will switch memory response off */
+	pci_read_config_word(dev, PCI_COMMAND, &cmd);
+	pci_write_config_word(dev, PCI_COMMAND, cmd | PCI_COMMAND_MEMORY);
 #endif
 	
-	/* Some Mac firmware will switch memory response off */
-	pci_read_config_dword(dev, PCI_COMMAND, &cmd);
-	cmd = (cmd | PCI_COMMAND_MEMORY);
-	pci_write_config_dword(dev, PCI_COMMAND, cmd);
-
 	pci_set_master (dev);
 	mem_base = (unsigned long) ioremap_nocache (mem_base, 4096);
 

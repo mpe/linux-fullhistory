@@ -216,6 +216,7 @@ void __init shm_init (void)
 #endif
 	zero_id = ipc_addid(&shm_ids, &zshmid_kernel.shm_perm, 1);
 	shm_unlock(zero_id);
+	INIT_LIST_HEAD(&zshmid_kernel.zero_list);
 	zdent = d_alloc_root(get_empty_inode());
 	return;
 }
@@ -1531,10 +1532,9 @@ done:
 
 #define VMA_TO_SHP(vma)		((vma)->vm_file->private_data)
 
-static LIST_HEAD(zmap_list);
 static spinlock_t zmap_list_lock = SPIN_LOCK_UNLOCKED;
 static unsigned long zswap_idx = 0; /* next to swap */
-static struct shmid_kernel *zswap_shp = (struct shmid_kernel *)&zmap_list;
+static struct shmid_kernel *zswap_shp = &zshmid_kernel;
 static int zshm_rss;
 
 static struct vm_operations_struct shmzero_vm_ops = {
@@ -1607,7 +1607,7 @@ int map_zero_setup(struct vm_area_struct *vma)
 	vma->vm_ops = &shmzero_vm_ops;
 	shmzero_open(vma);
 	spin_lock(&zmap_list_lock);
-	list_add(&shp->zero_list, &zmap_list);
+	list_add(&shp->zero_list, &zshmid_kernel.zero_list);
 	spin_unlock(&zmap_list_lock);
 	return 0;
 }
@@ -1668,8 +1668,8 @@ static void zmap_unuse(swp_entry_t entry, struct page *page)
 
 	spin_lock(&zmap_list_lock);
 	shm_lock(zero_id);
-	for (shp = list_entry(zmap_list.next, struct shmid_kernel, zero_list);
-			shp != (struct shmid_kernel *)&zmap_list;
+	for (shp = list_entry(zshmid_kernel.zero_list.next, struct shmid_kernel, 
+			zero_list); shp != &zshmid_kernel;
 			shp = list_entry(shp->zero_list.next, struct shmid_kernel,
 								zero_list)) {
 		if (shm_unuse_core(shp, entry, page))
@@ -1697,10 +1697,10 @@ next:
 
 	spin_lock(&zmap_list_lock);
 	shm_lock(zero_id);
-	if (zmap_list.next == 0)
+	if (zshmid_kernel.zero_list.next == 0)
 		goto failed;
 next_id:
-	if (zswap_shp == (struct shmid_kernel *)&zmap_list) {
+	if (zswap_shp == &zshmid_kernel) {
 		if (loop) {
 failed:
 			shm_unlock(zero_id);
@@ -1708,8 +1708,8 @@ failed:
 			__swap_free(swap_entry, 2);
 			return;
 		}
-		zswap_shp = list_entry(zmap_list.next, struct shmid_kernel, 
-								zero_list);
+		zswap_shp = list_entry(zshmid_kernel.zero_list.next, 
+					struct shmid_kernel, zero_list);
 		zswap_idx = 0;
 		loop = 1;
 	}

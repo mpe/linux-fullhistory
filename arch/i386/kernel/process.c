@@ -75,11 +75,11 @@ void enable_hlt(void)
 static void default_idle(void)
 {
 	if (current_cpu_data.hlt_works_ok && !hlt_counter) {
-		asm volatile("cli" : : : "memory");
+		__cli();
 		if (!current->need_resched)
-			asm volatile("sti ; hlt" : : : "memory");
+			safe_halt();
 		else
-			asm volatile("sti" : : : "memory");
+			__sti();
 	}
 }
 

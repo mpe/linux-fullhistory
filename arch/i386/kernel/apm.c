@@ -590,11 +590,11 @@ static void apm_cpu_idle(void)
 					continue;
 				if (hlt_counter)
 					continue;
-				asm volatile("cli" : : : "memory");
+				__cli();
 				if (!current->need_resched)
-					asm volatile("sti ; hlt" : : : "memory");
+					safe_halt();
 				else
-					asm volatile("sti" : : : "memory");
+					__sti();
 				continue;
 			}
 

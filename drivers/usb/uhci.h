@@ -106,11 +106,12 @@ struct uhci_qh {
 	__u32 element;				/* Queue element pointer */
 
 	/* Software fields */
-	struct uhci_qh *prevqh, *nextqh;	/* Previous and next TD in queue */
+	/* Can't use list_head since we want a specific order */
+	struct uhci_qh *prevqh, *nextqh;
 
 	struct usb_device *dev;			/* The owning device */
 
-	struct list_head list;
+	struct list_head remove_list;
 } __attribute__((aligned(16)));
 
 struct uhci_framelist {
@@ -184,10 +185,10 @@ struct uhci_td {
 
 	struct usb_device *dev;
 	struct urb *urb;		/* URB this TD belongs to */
-	struct uhci_td *next;		/* List of chained TD's for an URB */
-
-	struct list_head irq_list;	/* Active interrupt list.. */
-	struct list_head list;
+	/* We can't use list_head since we need a specific order */
+	struct ut_list {
+		struct uhci_td *prev, *next;
+	} list;
 } __attribute__((aligned(16)));
 
 /*
@@ -233,7 +234,7 @@ struct uhci_td {
  * labels (below) are only signficant to the root hub's QH's
  */
 
-#define UHCI_NUM_SKELTD		9
+#define UHCI_NUM_SKELTD		10
 #define skel_int1_td		skeltd[0]
 #define skel_int2_td		skeltd[1]
 #define skel_int4_td		skeltd[2]
@@ -243,6 +244,7 @@ struct uhci_td {
 #define skel_int64_td		skeltd[6]
 #define skel_int128_td		skeltd[7]
 #define skel_int256_td		skeltd[8]
+#define skel_term_td		skeltd[9]	/* To work around PIIX UHCI bug */
 
 #define UHCI_NUM_SKELQH		4
 #define skel_ls_control_qh	skelqh[0]
@@ -306,6 +308,7 @@ struct virt_root_hub {
  * a subset of what the full implementation needs.
  */
 struct uhci {
+	/* Grabbed from PCI */
 	int irq;
 	unsigned int io_addr;
 	unsigned int io_size;
@@ -317,25 +320,32 @@ struct uhci {
 	struct uhci_td skeltd[UHCI_NUM_SKELTD];	/* Skeleton TD's */
 	struct uhci_qh skelqh[UHCI_NUM_SKELQH];	/* Skeleton QH's */
 
+	spinlock_t framelist_lock;
 	struct uhci_framelist *fl;		/* Frame list */
+	int fsbr;				/* Full speed bandwidth reclamation */
 
-	struct s_nested_lock irqlist_lock;
-	struct list_head interrupt_list;	/* List of interrupt-active TD's for this uhci */
+	spinlock_t qh_remove_lock;
+	struct list_head qh_remove_list;
+
+	spinlock_t urb_remove_lock;
+	struct list_head urb_remove_list;
 
 	struct s_nested_lock urblist_lock;
 	struct list_head urb_list;
-
-	spinlock_t framelist_lock;
-
-	int fsbr;			/* Full speed bandwidth reclamation */
 
 	struct virt_root_hub rh;	/* private data of the virtual root hub */
 };
 
 struct urb_priv {
 	struct uhci_qh *qh;		/* QH for this URB */
-	struct uhci_td *begin;
-	struct uhci_td *end;
+
+	int fsbr;
+
+	unsigned long inserttime;	/* In jiffies */
+
+	struct up_list {
+		struct uhci_td *begin, *end;
+	} list;
 };
 
 /* -------------------------------------------------------------------------

@@ -105,8 +105,11 @@ static int lba_capacity_is_ok (struct hd_driveid *id)
 	 * The ATA spec tells large drives to return
 	 * C/H/S = 16383/16/63 independent of their size.
 	 * Some drives can be jumpered to use 15 heads instead of 16.
+	 * Some drives can be jumpered to use 4092 cyls instead of 16383.
 	 */
-	if (id->cyls == 16383 && id->sectors == 63 &&
+	if ((id->cyls == 16383
+	     || (id->cyls == 4092 && id->cur_cyls == 16383)) &&
+	    id->sectors == 63 &&
 	    (id->heads == 15 || id->heads == 16) &&
 	    id->lba_capacity >= 16383*63*id->heads)
 		return 1;
