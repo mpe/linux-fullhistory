@@ -228,7 +228,7 @@ tcf_action_dump_1(struct sk_buff *skb, struct tc_action *a, int bind, int ref)
 		return err;
 
 	RTA_PUT(skb, TCA_KIND, IFNAMSIZ, a->ops->kind);
-	if (tcf_action_copy_stats(skb, a))
+	if (tcf_action_copy_stats(skb, a, 0))
 		goto rtattr_failure;
 	r = (struct rtattr*) skb->tail;
 	RTA_PUT(skb, TCA_OPTIONS, 0, NULL);
@@ -380,19 +380,24 @@ err:
 	return NULL;
 }
 
-int tcf_action_copy_stats(struct sk_buff *skb, struct tc_action *a)
+int tcf_action_copy_stats(struct sk_buff *skb, struct tc_action *a,
+			  int compat_mode)
 {
-	int err;
+	int err = 0;
 	struct gnet_dump d;
 	struct tcf_act_hdr *h = a->priv;
 	
 	if (h == NULL)
 		goto errout;
 
-	if (a->type == TCA_OLD_COMPAT)
-		err = gnet_stats_start_copy_compat(skb, TCA_ACT_STATS,
-			TCA_STATS, TCA_XSTATS, h->stats_lock, &d);
-	else
+	/* compat_mode being true specifies a call that is supposed
+	 * to add additional backward compatiblity statistic TLVs.
+	 */
+	if (compat_mode) {
+		if (a->type == TCA_OLD_COMPAT)
+			err = gnet_stats_start_copy_compat(skb, 0,
+				TCA_STATS, TCA_XSTATS, h->stats_lock, &d);
+	} else
 		err = gnet_stats_start_copy(skb, TCA_ACT_STATS,
 			h->stats_lock, &d);
 
