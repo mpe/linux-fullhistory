@@ -653,6 +653,7 @@ void scsi_old_done(Scsi_Cmnd * SCpnt)
 	}
 
 	if (status == CMD_FINISHED) {
+		Scsi_Request *SRpnt;
 #ifdef DEBUG
 		printk("Calling done function - at address %p\n", SCpnt->done);
 #endif
