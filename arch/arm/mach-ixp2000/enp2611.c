@@ -207,7 +207,6 @@ static void __init enp2611_init_machine(void)
 }
 
 
-#ifdef CONFIG_ARCH_ENP2611
 MACHINE_START(ENP2611, "Radisys ENP-2611 PCI network processor board")
 	MAINTAINER("Lennert Buytenhek <buytenh@wantstofly.org>")
 	BOOT_MEM(0x00000000, IXP2000_UART_PHYS_BASE, IXP2000_UART_VIRT_BASE)
@@ -217,6 +216,5 @@ MACHINE_START(ENP2611, "Radisys ENP-2611 PCI network processor board")
 	.timer		= &enp2611_timer,
 	INIT_MACHINE(enp2611_init_machine)
 MACHINE_END
-#endif
 
 
