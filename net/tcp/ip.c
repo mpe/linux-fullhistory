@@ -19,13 +19,24 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: ip.c,v 0.8.4.4 1992/11/18 15:38:03 bir7 Exp $ */
+/* $Id: ip.c,v 0.8.4.8 1992/12/12 19:25:04 bir7 Exp $ */
 /* $Log: ip.c,v $
+ * Revision 0.8.4.8  1992/12/12  19:25:04  bir7
+ * Cleaned up Log messages.
+ *
+ * Revision 0.8.4.7  1992/12/06  23:29:59  bir7
+ * Changed retransmit to double rtt.
+ *
+ * Revision 0.8.4.6  1992/12/05  21:35:53  bir7
+ * fixed checking of wrong fragmentation bit.
+ *
+ * Revision 0.8.4.5  1992/12/03  19:52:20  bir7
+ * added paranoid queue checking
+ *
  * Revision 0.8.4.4  1992/11/18  15:38:03  bir7
  * Fixed bug in copying packet and checking packet type.
  *
  * Revision 0.8.4.3  1992/11/17  14:19:47  bir7
- * *** empty log message ***
  *
  * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
  * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
@@ -34,9 +45,9 @@
  * version change only.
  *
  * Revision 0.8.3.3  1992/11/10  00:14:47  bir7
- * Changed malloc to kmalloc and added $iId$ and 
+ * Changed malloc to kmalloc and added Id and Log
  *
-*/
+ */
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -722,7 +733,7 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
     }
 
   /* deal with fragments.  or don't for now.*/
-  if ((iph->frag_off & 64) || (net16(iph->frag_off)&0x1fff))
+  if ((iph->frag_off & 32) || (net16(iph->frag_off)&0x1fff))
     {
        printk ("packet fragmented. \n");
        skb->sk = NULL;
@@ -731,9 +742,6 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
     }
 
   skb->h.raw += iph->ihl*4;
-
-  /* add it to the arp table if it's talking to us.  That way we
-     will be able to talk to them also. */
 
   hash = iph->protocol & (MAX_IP_PROTOS -1);
   for (ipprot = ip_protos[hash]; ipprot != NULL; ipprot=ipprot->next)
@@ -754,6 +762,7 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	    if (skb2 == NULL) continue;
 	    memcpy (skb2, skb, skb->mem_len);
 	    skb2->mem_addr = skb2;
+	    skb2->lock = 0;
 	    skb2->h.raw = (void *)((unsigned long)skb2
 				   + (unsigned long)skb->h.raw
 				   - (unsigned long)skb);
@@ -792,6 +801,13 @@ ip_queue_xmit (volatile struct sock *sk, struct device *dev,
   struct ip_header *iph;
   unsigned char *ptr;
   if (sk == NULL) free = 1;
+
+  if (dev == NULL)
+    {
+      printk ("ip.c: ip_queue_xmit dev = NULL\n");
+      return;
+    }
+
   skb->free = free;
   skb->dev = dev;
   skb->when = jiffies;
@@ -803,6 +819,11 @@ ip_queue_xmit (volatile struct sock *sk, struct device *dev,
   ip_send_check (iph);
   print_iph(iph);
   skb->next = NULL;
+
+  /* see if this is the one
+     trashing our queue. */
+  skb->magic = 1;
+
   if (!free)
     {
       skb->link3 = NULL;
@@ -880,12 +901,20 @@ ip_retransmit (volatile struct sock *sk, int all)
       sk->retransmits++;
       sk->prot->retransmits ++;
       if (!all) break;
+
       /* this should cut it off before we send too
 	 many packets. */
       if (sk->retransmits > sk->cong_window) break;
       skb=skb->link3;
     }
-  sk->time_wait.len = sk->rtt*2;
+  /* double the rtt time every time we retransmit. 
+     This will cause exponential back off on how
+     hard we try to get through again.  Once we
+     get through, the rtt will settle back down
+     reasonably quickly. */
+
+  sk->rtt *= 2;
+  sk->time_wait.len = sk->rtt;
   sk->timeout = TIME_WRITE;
   reset_timer ((struct timer *)&sk->time_wait);
 }

@@ -87,6 +87,7 @@ struct serial_struct {
 #define PORT_16450	2
 #define PORT_16550	3
 #define PORT_16550A	4
+#define PORT_MAX	4
 
 /*
  * Definitions for async_struct (and serial_struct) flags field
@@ -99,6 +100,8 @@ struct serial_struct {
 #define ASYNC_SPD_HI	0x0010	/* Use 56000 instead of 38400 bps */
 #define ASYNC_SPD_VHI	0x0020  /* Use 115200 instead of 38400 bps */
 #define ASYNC_SPD_CUST	0x0030  /* Use user-specified divisor */
+
+#define ASYNC_FLAGS	0x0037	/* Possible legal async flags */
 
 #define IS_A_CONSOLE(min)	(((min) & 0xC0) == 0x00)
 #define IS_A_SERIAL(min)	(((min) & 0xC0) == 0x40)
@@ -281,6 +284,7 @@ extern int is_orphaned_pgrp(int pgrp);
 extern int is_ignored(int sig);
 extern int tty_signal(int sig, struct tty_struct *tty);
 extern int kill_pg(int pgrp, int sig, int priv);
+extern int kill_sl(int sess, int sig, int priv);
 extern void do_SAK(struct tty_struct *tty);
 
 /* tty write functions */

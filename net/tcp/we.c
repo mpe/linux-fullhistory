@@ -44,8 +44,23 @@
 /* Note:  My driver was full of bugs.  Basically if it works, credit
    Bob Harris.  If it's broken blame me.  -RAB */
 
-/* $Id: we.c,v 0.8.4.3 1992/11/15 14:55:30 bir7 Exp $ */
+/* $Id: we.c,v 0.8.4.8 1992/12/12 19:25:04 bir7 Exp $ */
 /* $Log: we.c,v $
+ * Revision 0.8.4.8  1992/12/12  19:25:04  bir7
+ * cleaned up Log messages.
+ *
+ * Revision 0.8.4.7  1992/12/12  01:50:49  bir7
+ * made ring buffer volatile.
+ *
+ * Revision 0.8.4.6  1992/12/06  11:31:47  bir7
+ * Added missing braces in if statement.
+ *
+ * Revision 0.8.4.5  1992/12/05  21:35:53  bir7
+ * Added check for bad hardware returning runt packets.
+ *
+ * Revision 0.8.4.4  1992/12/03  19:52:20  bir7
+ * Added better queue checking.
+ *
  * Revision 0.8.4.3  1992/11/15  14:55:30  bir7
  * Put more checking in start_xmit to make sure packet doesn't disapear
  * out from under us.
@@ -57,7 +72,7 @@
  * version change only.
  *
  * Revision 0.8.3.4  1992/11/10  00:14:47  bir7
- * Changed malloc to kmalloc and added $iId$ and Log
+ * Changed malloc to kmalloc and added Id and Log
  * */
 
 #include <linux/config.h>
@@ -190,12 +205,18 @@ wd8003_open(struct device *dev)
 
 /* This routine just calls the ether rcv_int. */
 static  int
-wdget(struct wd_ring *ring, struct device *dev)
+wdget(volatile struct wd_ring *ring, struct device *dev)
 {
   unsigned char *fptr;
-  unsigned long len;
+  long len;
   fptr = (unsigned char *)(ring +1);
+  /* some people have bugs in their hardware which let
+     ring->count be 0.  It shouldn't happen, but we
+     should check for it. */
   len = ring->count-4;
+  if (len < 56)
+    printk ("we.c: Hardware problem, runt packet. ring->count = %d\n",
+	    ring->count);
   return (dev_rint(fptr, len, 0, dev));
 }
 
@@ -242,6 +263,7 @@ wd8003_start_xmit(struct sk_buff *skb, struct device *dev)
 	    {
 	      arp_queue (skb);
 	    }
+	   cli (); /* arp_queue turns them back on. */
 	   status &= ~TRS_BUSY;
 	   sti();
 	   return (0);
@@ -347,7 +369,7 @@ wd_rcv( struct device *dev )
    unsigned char   bnd;	/* Last packet page end */
    unsigned char   cur;	/* Future packet page start */
    unsigned char   cmd;	/* Command register save */
-   struct wd_ring *ring;
+   volatile struct wd_ring *ring;
    int		   done=0;
    
    /* Calculate next packet location */
@@ -362,7 +384,7 @@ wd_rcv( struct device *dev )
 	  {
 
 	     /* Position pointer to packet in card ring buffer */
-	     ring = (struct wd_ring *) (dev->mem_start + (pkt << 8));
+	     ring = (volatile struct wd_ring *) (dev->mem_start + (pkt << 8));
 	     
 	     /* Ensure a valid packet */
 	     if( ring->status & 1 )
@@ -578,8 +600,10 @@ wd8003_interrupt(int reg_ptr)
 				printk("\nwd8013 - network cable open!");
 			}
 			if (errors & FU )
-				stats.tx_fifo_errors++;
-				printk("\nwd8013 - TX FIFO underrun!");
+			  {
+			    stats.tx_fifo_errors++;
+			    printk("\nwd8013 - TX FIFO underrun!");
+			  }
 
 			/* Cannot do anymore - empty the bit bucket */
 			tx_aborted = 1;
@@ -620,7 +644,7 @@ static struct sigaction wd8003_sigaction =
    NULL
 };
 
-void
+int
 wd8003_init(struct device *dev)
 {
   unsigned char csum;
@@ -636,7 +660,7 @@ wd8003_init(struct device *dev)
 
       /* make sure no one can attempt to open the device. */
       status = OPEN;
-      return;
+      return (1);
     }
   printk("wd8013");
   /* initialize the rest of the device structure. */
@@ -715,5 +739,7 @@ wd8003_init(struct device *dev)
   if (irqaction (dev->irq, &wd8003_sigaction))
     {
        printk ("Unable to get IRQ%d for wd8013 board\n", dev->irq);
+       return (1);
     }
+  return (0);
 }

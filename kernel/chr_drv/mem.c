@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/tty.h>
 #include <linux/mouse.h>
+#include <linux/soundcard.h>
 
 #include <linux/user.h>
 #include <linux/a.out.h>
@@ -339,5 +340,6 @@ long chr_dev_init(long mem_start, long mem_end)
 	mem_start = tty_init(mem_start);
 	mem_start = lp_init(mem_start);
 	mem_start = mouse_init(mem_start);
+	mem_start = soundcard_init(mem_start);
 	return mem_start;
 }

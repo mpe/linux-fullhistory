@@ -29,16 +29,8 @@ toplevel kernel source directory.
 * Basic configuration
 
 1.  Edit Makefile: Check the definitions of macros ROOTDEV, KEYBOARD,
-MATH_EMULATION, RAMDISK and SVGA_MODE before you run make.  They are
-explained in the Makefile.  MATH_EMULATION does not hurt much even if
-you have an FPU (387 or a 486 with a built in FPU), since Linux uses
-the FPU if it finds one, even with MATH_EMULATION defined.  The kernel
-will be slightly bigger.  It is probably not worth it to recompile the
-kernel just to get rid of the emulation.
-
-[ Linus' note: the new math-emulator in 0.98.2 is much better than my
-  old one, but it also takes up more memory.  You may want to remove it
-  if you are short on memory and long on math-coprocessors ]
+RAMDISK and SVGA_MODE before you run make.  They are explained in the
+Makefile.
 
 2.  Create the symlinks:
 
@@ -53,54 +45,19 @@ get some system-specific information.
   installation script, so if you have the new compiler, you should
   already have these links ]
 
-* Things you may want to get rid of
+3.  Run "make config" in /usr/src/linux, and answer the questions that
+the config script asks you.  It should hopefully set up most of the rest
+of the flags for your system. 
 
-3.  To remove SCSI drivers, do this:
-
-	- remove kernel/blk_drv/scsi/scsi.a from DRIVERS in the Makefile
-	- remove the commands for the subdirs dependency in
-	  kernel/blk_drv/Makefile
-	- add "#undef CONFIG_SCSI" to the end of include/linux/config.h
-
-The SCSI drivers take a bit of memory, and also slow the bootup a bit,
-so you may want to get rid of them if you don't have an SCSI drive.
-
-4.  The kernel contains code for the extended filesystem (extfs),
-MS-DOS filesystem (dosfs) and proc-fs (proc), all of which are in
-testing phases and are not recommended for real use yet.  If you don't
-want to include these in the kernel, do the following:
-
-	- remove references to these in the FILESYSTEMS macro in the
-	  root Makefile 
-	- remove directory names from the SUBDIRS macro in fs/Makefile
-	- remove the corresponding lines in the initialization of
-	  file_systems in fs/super.c.
-
-5.  The TCP/IP code is in the standard sources as of version 0.98, but
-it is not compiled into the normal binary. To get TCP/IP working, you
-have to:
-
-	- edit 'net/Makefile', defining the SUBDIRS and SOCK_FLAGS
-	  variables correctly (currently commented out).  Likewise, you
-	  have to edit the rule for linking net.o in the Makefile (again
-	  removing a '#' to make tcp/tcpip.o active)
-	- make sure you have the /usr/include/netinet/protocols.h header
-	  file.  If you don't have it, you should be able to find it at
-	  the same place you got the kernel, or with a newer compiler
-	  version.
-	- remove all object (*.o) files in the net/ subdirectory, making
-	  sure that they are recompiled with the correct Makefile
-	  definitions.
-	- Additionally, you obviously need the tcp/ip programs to make any
-	  use of the kernel feature.  If you haven't joined the TCP/IP
-	  mailing list, do so. 
-
+4.  Run "make dep" to set up all the dependencies correctly.  The
+default dependencies may not fit your system due to different compiler
+versions or similar. 
 
 * Running make
 
 [ Linus' note3: if you have problems with make not working correctly,
-  get a new copy of GNU make. pmake may or may not work due to the
-  macro inheritation assumptions etc ]
+  get a new copy of GNU make. The linux kernel makefiles are written
+  for GNU make and will not work for anything else ]
 
 Unless you know what you're doing, don't ever run the makefiles in
 subdirectories by hand.  There is a bit of interaction between the

@@ -19,8 +19,11 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: pack_type.c,v 0.8.4.2 1992/11/10 10:38:48 bir7 Exp $ */
+/* $Id: pack_type.c,v 0.8.4.3 1992/12/12 19:25:04 bir7 Exp $ */
 /* $Log: pack_type.c,v $
+ * Revision 0.8.4.3  1992/12/12  19:25:04  bir7
+ * Cleaned up Log messages.
+ *
  * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
  * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
  *
@@ -28,8 +31,9 @@
  * version change only.
  *
  * Revision 0.8.3.2  1992/11/10  00:14:47  bir7
- * Changed malloc to kmalloc and added $iId$ 
- * */
+ * Changed malloc to kmalloc and added Id and Log
+ *
+ */
 
 #include <linux/stddef.h>
 #include "dev.h"

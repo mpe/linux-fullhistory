@@ -314,7 +314,7 @@ repeat:
 		return bh;
 	}
 
-	if (nr_free_pages > 30)
+	if (nr_free_pages > 30 && buffermem < 6*1024*1024)
 		grow_buffers(size);
 
 	buffers = nr_buffers;

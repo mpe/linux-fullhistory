@@ -22,7 +22,9 @@
  | math_emulate() is the sole entry point for wm-FPU-emu                     |
  +---------------------------------------------------------------------------*/
 
-#ifdef KERNEL_MATH_EMULATION
+#include <linux/config.h>
+
+#ifdef CONFIG_MATH_EMULATION
 
 #include <linux/signal.h>
 
@@ -290,4 +292,4 @@ void math_emulate(long arg)
   schedule();
 }
 
-#endif /* KERNEL_MATH_EMULATION */
+#endif /* CONFIG_MATH_EMULATION */

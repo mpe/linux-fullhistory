@@ -276,14 +276,17 @@ static void do_sr_request (void)
 {
   Scsi_Cmnd * SCpnt = NULL;
   struct request * req = NULL;
+  int flag = 0;
 
   while (1==1){
     if (CURRENT != NULL && CURRENT->dev == -1) return;
 
     INIT_REQUEST;
 
-    SCpnt = allocate_device(&CURRENT,
-			    scsi_CDs[DEVICE_NR(MINOR(CURRENT->dev))].device->index, 0); 
+    if (flag++ == 0)
+      SCpnt = allocate_device(&CURRENT,
+			      scsi_CDs[DEVICE_NR(MINOR(CURRENT->dev))].device->index, 0); 
+    else SCpnt = NULL;
 
 
 /* This is a performance enhancement.  We dig down into the request list and

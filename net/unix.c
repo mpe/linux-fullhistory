@@ -112,7 +112,7 @@ sockaddr_un_printk(struct sockaddr_un *sockun, int sockaddr_len)
 	sockaddr_len -= UN_PATH_OFFSET;
 	if (sockun->sun_family != AF_UNIX)
 		printk("sockaddr_un: <BAD FAMILY: %d>\n", sockun->sun_family);
-	else if (sockaddr_len <= 0 || sockaddr_len >= sizeof(buf)-1)
+	else if (sockaddr_len <= 0 || sockaddr_len >= sizeof(buf))
 		printk("sockaddr_un: <BAD LENGTH: %d>\n", sockaddr_len);
 	else {
 		memcpy(buf, sockun->sun_path, sockaddr_len);
@@ -192,6 +192,7 @@ unix_data_lookup(struct sockaddr_un *sockun, int sockaddr_len)
 
 	for (upd = unix_datas; upd <= last_unix_data; ++upd) {
 		if (upd->refcnt && upd->socket &&
+		    upd->socket->state == SS_UNCONNECTED &&
 		    upd->sockaddr_len == sockaddr_len &&
 		    memcmp(&upd->sockaddr_un, sockun, sockaddr_len) == 0)
 			return upd;
@@ -380,11 +381,19 @@ unix_proto_connect(struct socket *sock, struct sockaddr *uservaddr,
 
 	PRINTK("unix_proto_connect: socket 0x%x, servlen=%d\n", sock,
 	       sockaddr_len);
+
 	if (sockaddr_len <= UN_PATH_OFFSET ||
 	    sockaddr_len > sizeof(struct sockaddr_un)) {
 		PRINTK("unix_proto_connect: bad length %d\n", sockaddr_len);
 		return -EINVAL;
 	}
+
+	if (sock->state == SS_CONNECTING)
+	  return (-EINPROGRESS);
+
+	if (sock->state == SS_CONNECTED)
+	  return (-EISCONN);
+
 	verify_area(uservaddr, sockaddr_len);
 	memcpy_fromfs(&sockun, uservaddr, sockaddr_len);
 	if (sockun.sun_family != AF_UNIX) {
@@ -461,6 +470,10 @@ unix_proto_accept(struct socket *sock, struct socket *newsock, int flags)
 	wake_up(clientsock->wait);
         unix_data_ref (UN_DATA(newsock->conn));
 	UN_DATA(newsock)->peerupd = UN_DATA(newsock->conn);
+	UN_DATA(newsock)->sockaddr_un = UN_DATA(sock)->sockaddr_un;
+	UN_DATA(newsock)->sockaddr_len = UN_DATA(sock)->sockaddr_len;
+	UN_DATA(newsock->conn)->sockaddr_un = UN_DATA(sock)->sockaddr_un;
+	UN_DATA(newsock->conn)->sockaddr_len = UN_DATA(sock)->sockaddr_len;
 	return 0;
 }
 

@@ -61,6 +61,7 @@
 #define SEARCH_LOW		0x32
 #define SET_LIMITS		0x33
 #define PRE_FETCH		0x34
+#define READ_POSITION		0x34
 #define SYNCRONIZE_CACHE	0x35
 #define LOCK_UNLOCK_CACHE	0x36
 #define READ_DEFECT_DATA	0x37
@@ -180,12 +181,12 @@
 #define DRIVER_TIMEOUT		0x06
 #define DRIVER_HARD		0x07
 
-#define SUGGEST_RETRY		0x08
-#define SUGGEST_ABORT		0x09 
-#define SUGGEST_REMAP		0x0a
-#define SUGGEST_DIE		0x0b
+#define SUGGEST_RETRY		0x10
+#define SUGGEST_ABORT		0x20 
+#define SUGGEST_REMAP		0x30
+#define SUGGEST_DIE		0x40
 
-#define DRIVER_SENSE		0x10
+#define DRIVER_SENSE		0x08
 
 #define DRIVER_MASK 0x0f
 #define SUGGEST_MASK 0xf0
@@ -219,7 +220,19 @@
 #define TYPE_TAPE	0x01
 #define TYPE_WORM	0x04	/* Treated as ROM by our system */
 #define TYPE_ROM	0x05
+#define TYPE_MOD	0x07  /* Magneto-optical disk - treated as TYPE_DISK */
 #define TYPE_NO_LUN	0x7f
+
+/*
+	SCSI command sets
+
+*/
+
+#define SCSI_UNKNOWN	0
+#define	SCSI_1		1
+#define	SCSI_1_CCS	2
+#define	SCSI_2		3
+
 /*
 	Every SCSI command starts with a one byte OP-code.
 	The next byte's high three bits are the LUN of the
@@ -239,6 +252,7 @@ typedef struct scsi_device {
 	int access_count;	/* Count of open channels/mounts */
 	struct wait_queue * device_wait;  /* Used to wait if device is busy */
 	char type;
+	char scsi_level;
 	unsigned writeable:1;
 	unsigned removable:1; 
 	unsigned random:1;

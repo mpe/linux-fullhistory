@@ -21,30 +21,15 @@ lib.a: $(OBJS)
 	sync
 
 clean:
-	rm -f core *.o *.a tmp_make
-	for i in *.c;do rm -f `basename $$i .c`.s;done
+	rm -f core *.o *.a *.s
 
 dep:
-	sed '/\#\#\# Dependencies/q' < Makefile > tmp_make
-	$(CPP) -M *.c >> tmp_make
-	cp tmp_make Makefile
+	$(CPP) -M *.c > .depend
 
-### Dependencies:
-_exit.o : _exit.c /usr/include/linux/unistd.h 
-close.o : close.c /usr/include/linux/unistd.h 
-ctype.o : ctype.c /usr/include/linux/ctype.h 
-dup.o : dup.c /usr/include/linux/unistd.h 
-errno.o : errno.c 
-execve.o : execve.c /usr/include/linux/unistd.h 
-malloc.o : malloc.c /usr/include/linux/kernel.h /usr/include/linux/mm.h /usr/include/linux/fs.h \
-  /usr/include/linux/limits.h /usr/include/linux/wait.h /usr/include/linux/types.h \
-  /usr/include/linux/dirent.h /usr/include/linux/vfs.h /usr/include/linux/pipe_fs_i.h \
-  /usr/include/linux/minix_fs_i.h /usr/include/linux/ext_fs_i.h /usr/include/linux/msdos_fs_i.h \
-  /usr/include/linux/iso_fs_i.h /usr/include/linux/minix_fs_sb.h /usr/include/linux/ext_fs_sb.h \
-  /usr/include/linux/msdos_fs_sb.h /usr/include/linux/iso_fs_sb.h /usr/include/linux/string.h \
-  /usr/include/asm/system.h 
-open.o : open.c /usr/include/linux/unistd.h /usr/lib/gcc-lib/i386-linux/2.3.2/include/stdarg.h 
-setsid.o : setsid.c /usr/include/linux/types.h /usr/include/linux/unistd.h 
-string.o : string.c /usr/include/linux/types.h /usr/include/linux/string.h 
-wait.o : wait.c /usr/include/linux/unistd.h /usr/include/linux/types.h 
-write.o : write.c /usr/include/linux/unistd.h /usr/include/linux/types.h 
+#
+# include a dependency file if one exists
+#
+ifeq (.depend,$(wildcard .depend))
+include .depend
+endif
+

@@ -59,42 +59,46 @@ int block_write(struct inode * inode, struct file * filp, char * buf, int count)
 
 #define NBUF 16
 
-
 int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 {
-	unsigned int block = filp->f_pos >> BLOCK_SIZE_BITS;
-	unsigned int offset = filp->f_pos & (BLOCK_SIZE-1);
+	unsigned int block;
+	unsigned int offset;
 	int blocks, left;
-	int bhrequest;
-	int ra_blocks, max_block, nextblock;
+	int bhrequest, uptodate;
 	struct buffer_head ** bhb, ** bhe;
 	struct buffer_head * buflist[NBUF];
 	struct buffer_head * bhreq[NBUF];
 	unsigned int chars;
 	unsigned int size;
 	unsigned int dev;
-	int read = 0;
+	int read;
 
 	dev = inode->i_rdev;
+	offset = filp->f_pos;
 	if (blk_size[MAJOR(dev)])
 		size = blk_size[MAJOR(dev)][MINOR(dev)] << BLOCK_SIZE_BITS;
 	else
 		size = 0x7fffffff;
 
-	if (filp->f_pos > size)
+	if (offset > size)
 		left = 0;
 	else
-		left = size - filp->f_pos;
+		left = size - offset;
 	if (left > count)
 		left = count;
 	if (left <= 0)
 		return 0;
-
-	blocks = (left + offset + BLOCK_SIZE - 1) / BLOCK_SIZE;
+	read = 0;
+	block = offset >> BLOCK_SIZE_BITS;
+	offset &= BLOCK_SIZE-1;
+	size >>= BLOCK_SIZE_BITS;
+	blocks = (left + offset + BLOCK_SIZE - 1) >> BLOCK_SIZE_BITS;
 	bhb = bhe = buflist;
-	ra_blocks = read_ahead[MAJOR(dev)] / (BLOCK_SIZE >> 9);
-	max_block = size;
-	nextblock = -1;
+	if (filp->f_reada) {
+		blocks += read_ahead[MAJOR(dev)] / (BLOCK_SIZE >> 9);
+		if (block + blocks > size)
+			blocks = size - block;
+	}
 
 	/* We do this in a two stage process.  We first try and request
 	   as many blocks as we can, then we wait for the first one to
@@ -108,103 +112,67 @@ int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 
 	do {
 	        bhrequest = 0;
+	        uptodate = 1;
 		while (blocks) {
-		        int uptodate;
 			--blocks;
 			*bhb = getblk(dev, block++, BLOCK_SIZE);
-			uptodate = 1;
 			if (*bhb && !(*bhb)->b_uptodate) {
 			        uptodate = 0;
 			        bhreq[bhrequest++] = *bhb;
-				nextblock = (*bhb)->b_blocknr + 1;
-			      };
+			}
 
 			if (++bhb == &buflist[NBUF])
 				bhb = buflist;
 
 			/* If the block we have on hand is uptodate, go ahead
 			   and complete processing. */
-			if(bhrequest == 0 && uptodate) break;
-
+			if (uptodate)
+				break;
 			if (bhb == bhe)
 				break;
-		      }
+		}
 
-		if(blocks == 0 && bhrequest && filp->f_reada && bhb != bhe) { 
-		  /* If we are going to read something anyways, add in the
-		     read-ahead blocks */
-		  while(ra_blocks){
-		    if (block >= max_block) break;
-		    if(bhrequest == NBUF) break;  /* Block full */
-		    --ra_blocks;
-		    *bhb = getblk(dev, block++, BLOCK_SIZE);
-
-		    if (*bhb && !(*bhb)->b_uptodate) {
-		      if((*bhb)->b_blocknr != nextblock) {
-			brelse(*bhb);
-			break;
-		      };
-		      nextblock = (*bhb)->b_blocknr + 1;
-		      bhreq[bhrequest++] = *bhb;
-		    };
-		    
-		    if (++bhb == &buflist[NBUF])
-		      bhb = buflist;
-		    
-		    if (bhb == bhe)
-		      break;
-		  };
-		};
 		/* Now request them all */
 		if (bhrequest)
-		  ll_rw_block(READ, bhrequest, bhreq);
+			ll_rw_block(READ, bhrequest, bhreq);
 
-		do{ /* Finish off all I/O that has actually completed */
-		  if (*bhe) {/* test for valid buffer */
-		    wait_on_buffer(*bhe);
-		    if (!(*bhe)->b_uptodate) {
-		      do {
-			brelse(*bhe);
+		do { /* Finish off all I/O that has actually completed */
+			if (*bhe) {
+				wait_on_buffer(*bhe);
+				if (!(*bhe)->b_uptodate) {	/* read error? */
+					left = 0;
+					break;
+				}
+			}			
+			if (left < BLOCK_SIZE - offset)
+				chars = left;
+			else
+				chars = BLOCK_SIZE - offset;
+			filp->f_pos += chars;
+			left -= chars;
+			read += chars;
+			if (*bhe) {
+				memcpy_tofs(buf,offset+(*bhe)->b_data,chars);
+				brelse(*bhe);
+				buf += chars;
+			} else {
+				while (chars-->0)
+					put_fs_byte(0,buf++);
+			}
+			offset = 0;
 			if (++bhe == &buflist[NBUF])
-			  bhe = buflist;
-		      } while (bhe != bhb);
-		      break;
-		    }
-		  }
-		  
-		  if (left < BLOCK_SIZE - offset)
-		    chars = left;
-		  else
-		    chars = BLOCK_SIZE - offset;
-		  filp->f_pos += chars;
-		  left -= chars;
-		  read += chars;
-		  if (*bhe) {
-		    memcpy_tofs(buf,offset+(*bhe)->b_data,chars);
-		    brelse(*bhe);
-		    buf += chars;
-		  } else {
-		    while (chars-->0)
-		      put_fs_byte(0,buf++);
-		  }
-		  offset = 0;
-		  if (++bhe == &buflist[NBUF])
-		    bhe = buflist;
-		} while( bhe != bhb && (*bhe == 0 || !(*bhe)->b_lock) && 
-			(left > 0));
+				bhe = buflist;
+		} while (left > 0 && bhe != bhb && (!*bhe || !(*bhe)->b_lock));
 	} while (left > 0);
 
 /* Release the read-ahead blocks */
 	while (bhe != bhb) {
-	  if (*bhe) brelse(*bhe);
-	  if (++bhe == &buflist[NBUF])
-	    bhe = buflist;
+		brelse(*bhe);
+		if (++bhe == &buflist[NBUF])
+			bhe = buflist;
 	};
-
-	filp->f_reada = 1;
-
 	if (!read)
 		return -EIO;
-
+	filp->f_reada = 1;
 	return read;
 }

@@ -104,6 +104,7 @@ extern int last_reset[];
        char * revision; /* Latest revision known to be bad.  Not used yet */
      };
 
+#if 0
 static struct blist blacklist[] = 
 {{"TANDBERG","TDC 3600","U07"},  /* Locks up if polled for lun != 0 */
    {"SEAGATE","ST296","921"},   /* Responds to all lun */
@@ -121,6 +122,7 @@ static int blacklisted(char * response_data){
     return 1;
   };	
 };
+#endif
 
 /*
  *	As the actual SCSI command runs in the background, we must set up a 
@@ -254,6 +256,7 @@ static void scan_scsis (void)
 		      {
 		      case TYPE_TAPE :
 		      case TYPE_DISK :
+		      case TYPE_MOD :
 			scsi_devices[NR_SCSI_DEVICES].writeable = 1;
 			break;
 		      case TYPE_WORM :
@@ -283,6 +286,7 @@ static void scan_scsis (void)
 			  if(NR_SR != -1) ++MAX_SR;
 			  break;
 			case TYPE_DISK:
+			case TYPE_MOD:
 			  printk("Detected scsi disk sd%d at scsi%d, id %d, lun %d\n", MAX_SD,
 				 host_nr , dev, lun); 
 			  if(NR_SD != -1) ++MAX_SD;
@@ -290,6 +294,13 @@ static void scan_scsis (void)
 			default:
 			  break;
 			};
+
+			scsi_devices[NR_SCSI_DEVICES].scsi_level =
+			  scsi_result[2] & 0x07;
+			if (scsi_devices[NR_SCSI_DEVICES].scsi_level >= 2 ||
+			    (scsi_devices[NR_SCSI_DEVICES].scsi_level == 1 &&
+			     (scsi_result[3] & 0x0f) == 1))
+			  scsi_devices[NR_SCSI_DEVICES].scsi_level++;
 
 			/* These devices need this "key" to unlock the device
 			   so we can use it */
@@ -313,10 +324,11 @@ static void scan_scsis (void)
 			};
 
 			++NR_SCSI_DEVICES;
+#if 0
 			/* Some scsi devices cannot be polled for lun != 0
 			   due to firmware bugs */
 			if(blacklisted(scsi_result)) break;
-
+#endif
 			/* Some scsi-1 peripherals do not handle lun != 0.
 			   I am assuming that scsi-2 peripherals do better */
 			if((scsi_result[2] & 0x07) == 1 && 
@@ -836,7 +848,7 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 #endif
 
 						status = MAYREDO;
-						exit = SUGGEST_RETRY;
+						exit = DRIVER_SENSE | SUGGEST_RETRY;
 						break;
 					case SUGGEST_ABORT:
 #ifdef DEBUG
@@ -844,7 +856,7 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 #endif
 
 						status = FINISHED;
-						exit =  DRIVER_SENSE;
+						exit =  DRIVER_SENSE | SUGGEST_ABORT;
 						break;
 					default:
 						printk ("Internal error %s %s \n", __FILE__, 
@@ -1339,6 +1351,7 @@ unsigned long scsi_dev_init (unsigned long memory_start,unsigned long memory_end
 	      sr_attach(&scsi_devices[i]);
 	      break;
 	    case TYPE_DISK:
+	    case TYPE_MOD:
 	      sd_attach(&scsi_devices[i]);
 	    default:
 	      break;

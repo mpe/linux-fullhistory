@@ -45,7 +45,7 @@ struct hd_struct * sd;
 int NR_SD=0;
 int MAX_SD=0;
 Scsi_Disk * rscsi_disks;
-int * sd_sizes;
+static int * sd_sizes;
 
 /* used to re-read partitions. */
 extern void resetup_one_dev(struct gendisk *, unsigned int);
@@ -320,13 +320,27 @@ static void do_sd_request (void)
 {
   Scsi_Cmnd * SCpnt = NULL;
   struct request * req = NULL;
+  int flag = 0;
   while (1==1){
     if (CURRENT != NULL && CURRENT->dev == -1) return;
 
     INIT_REQUEST;
 
-    SCpnt = allocate_device(&CURRENT,
-			    rscsi_disks[DEVICE_NR(MINOR(CURRENT->dev))].device->index, 0); 
+/* We have to be careful here.  allocate_device will get a free pointer, but
+   there is no guarantee that it is queueable.  In normal usage, we want to
+   call this, because other types of devices may have the host all tied up,
+   and we want to make sure that we have at least one request pending for this
+   type of device.   We can also come through here while servicing an
+   interrupt, because of the need to start another command.  If we call
+   allocate_device more than once, then the system can wedge if the command
+   is not queueable.  The request_queueable function is safe because it checks
+   to make sure that the host is able to take another command before it returns
+   a pointer.  */
+
+    if (flag++ == 0)
+      SCpnt = allocate_device(&CURRENT,
+			      rscsi_disks[DEVICE_NR(MINOR(CURRENT->dev))].device->index, 0); 
+    else SCpnt = NULL;
 
 /* This is a performance enhancement.  We dig down into the request list and
    try and find a queueable request (i.e. device not busy, and host able to

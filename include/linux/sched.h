@@ -160,6 +160,7 @@ struct task_struct {
 	int dumpable:1;
 	int swappable:1;
 	unsigned long start_code,end_code,end_data,brk,start_stack;
+	unsigned long arg_start, arg_end, env_start, env_end;
 	long pid,pgrp,session,leader;
 	int	groups[NGROUPS];
 	/* 
@@ -226,6 +227,7 @@ struct task_struct {
 /* signals */	0,{{ 0, },},0,0,0, \
 /* flags */	0, \
 /* ec,brk... */	0,0,0,0,0,0,0,0, \
+/* argv.. */	0,0,0,0, \
 /* pid etc.. */	0,0,0,0, \
 /* suppl grps*/ {NOGROUP,}, \
 /* proc links*/ &init_task,&init_task,NULL,NULL,NULL, \
@@ -290,9 +292,9 @@ extern int irqaction(unsigned int irq,struct sigaction * new);
 #define FIRST_LDT_ENTRY (FIRST_TSS_ENTRY+1)
 #define _TSS(n) ((((unsigned long) n)<<4)+(FIRST_TSS_ENTRY<<3))
 #define _LDT(n) ((((unsigned long) n)<<4)+(FIRST_LDT_ENTRY<<3))
-#define ltr(n) __asm__("ltr %%ax"::"a" (_TSS(n)))
-#define lldt(n) __asm__("lldt %%ax"::"a" (_LDT(n)))
-#define str(n) \
+#define load_TR(n) __asm__("ltr %%ax"::"a" (_TSS(n)))
+#define load_ldt(n) __asm__("lldt %%ax"::"a" (_LDT(n)))
+#define store_TR(n) \
 __asm__("str %%ax\n\t" \
 	"subl %2,%%eax\n\t" \
 	"shrl $4,%%eax" \

@@ -19,13 +19,30 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: sock.c,v 0.8.4.6 1992/11/18 15:38:03 bir7 Exp $ */
+/* $Id: sock.c,v 0.8.4.12 1992/12/12 19:25:04 bir7 Exp $ */
 /* $Log: sock.c,v $
+ * Revision 0.8.4.12  1992/12/12  19:25:04  bir7
+ * Made memory leak checking more leanent.
+ *
+ * Revision 0.8.4.11  1992/12/12  01:50:49  bir7
+ * Fixed memory leak in accept.
+ *
+ * Revision 0.8.4.10  1992/12/08  20:49:15  bir7
+ * Added support for -EINPROGRESS
+ *
+ * Revision 0.8.4.9  1992/12/06  23:29:59  bir7
+ * Added mss and support for half completed packets.
+ *
+ * Revision 0.8.4.8  1992/12/05  21:35:53  bir7
+ * changed dev->init to return an int.
+ *
+ * Revision 0.8.4.7  1992/12/03  19:52:20  bir7
+ * added paranoid queue checking
+ *
  * Revision 0.8.4.6  1992/11/18  15:38:03  bir7
  * Fixed minor problem in setsockopt.
  *
  * Revision 0.8.4.5  1992/11/17  14:19:47  bir7
- * *** empty log message ***
  *
  * Revision 0.8.4.4  1992/11/16  16:13:40  bir7
  * Fixed some error returns and undid one of the accept changes.
@@ -60,10 +77,24 @@
 #include "tcp.h"
 #include "udp.h"
 #include "sock.h"
+#include "arp.h"
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <linux/fcntl.h>
 #include <linux/mm.h>
+#include <linux/interrupt.h>
+
+#undef ISOCK_DEBUG
+
+#ifdef PRINTK
+#undef PRINTK
+#endif
+
+#ifdef ISOCK_DEBUG
+#define PRINTK printk
+#else
+#define PRINTK dummy_routine
+#endif
 
 #ifdef MEM_DEBUG
 #define MPRINTK printk
@@ -216,6 +247,7 @@ kfree_skb (struct sk_buff *skb, int rw)
 	skb->free = 1;
 	return;
      }
+   skb->magic = 0;
    if (skb->sk)
      {
 	if (rw)
@@ -418,16 +450,25 @@ destroy_sock(volatile struct sock *sk)
 
   delete_timer((struct timer *)&sk->time_wait);
 
+  if (sk->send_tmp) kfree_skb (sk->send_tmp, FREE_WRITE);
+
   /* cleanup up the write buffer. */
   for (skb = sk->wfront; skb != NULL; )
     {
       struct sk_buff *skb2;
       skb2=skb->next;
+      if (skb->magic != TCP_WRITE_QUEUE_MAGIC)
+	{
+	  printk ("sock.c:destroy_sock write queue with bad magic (%X)\n",
+		  skb->magic);
+	  break;
+	}
       kfree_skb(skb, FREE_WRITE);
       skb=skb2;
     }
 
   sk->wfront = NULL;
+  sk->wback = NULL;
 
   if (sk->rqueue != NULL)
     {
@@ -459,6 +500,9 @@ destroy_sock(volatile struct sock *sk)
        maybe the arp queue */
       cli();
       /* see if it's in a transmit queue. */
+      /* this can be simplified quite a bit.  Look
+	 at tcp.c:tcp_ack to see how. */
+
       if (skb->next != NULL)
 	{
 	  extern struct sk_buff *arp_q;
@@ -470,6 +514,15 @@ destroy_sock(volatile struct sock *sk)
 
 		if (skb == arp_q)
 		  {
+		    if (skb->magic != ARP_QUEUE_MAGIC)
+		      {
+			sti();
+			printk ("sock.c: destroy_sock skb on arp queue with"
+				"bas magic (%X)\n", skb->magic);
+			cli();
+			arp_q = NULL;
+			continue;
+		      }
 		    arp_q = skb->next;
 		  }
 		else
@@ -478,17 +531,31 @@ destroy_sock(volatile struct sock *sk)
 		      {
 			if (skb->dev && skb->dev->buffs[i] == skb)
 			  {
+			    if (skb->magic != DEV_QUEUE_MAGIC)
+			      {
+				sti();
+				printk ("sock.c: destroy sock skb on dev queue"
+					"with bad magic (%X)\n", skb->magic);
+				cli();
+				break;
+			      }
 			    skb->dev->buffs[i]= skb->next;
 			    break;
 			  }
 		      }
 		  }
-	     }
+	      }
 	   else
 	     {
-
 	       if (skb == arp_q)
 		 {
+		    if (skb->magic != ARP_QUEUE_MAGIC)
+		      {
+			sti();
+			printk ("sock.c: destroy_sock skb on arp queue with"
+				"bas magic (%X)\n", skb->magic);
+			cli();
+		      }
 		   arp_q = NULL;
 		 }
 	       else
@@ -497,6 +564,14 @@ destroy_sock(volatile struct sock *sk)
 		     {
 		       if (skb->dev && skb->dev->buffs[i] == skb)
 			 {
+			    if (skb->magic != DEV_QUEUE_MAGIC)
+			      {
+				sti();
+				printk ("sock.c: destroy sock skb on dev queue"
+					"with bad magic (%X)\n", skb->magic);
+				cli();
+				break;
+			      }
 			   skb->dev->buffs[i]= NULL;
 			   break;
 			 }
@@ -542,7 +617,7 @@ destroy_sock(volatile struct sock *sk)
 
   /* now if everything is gone we can free the socket structure, 
      otherwise we need to keep it around until everything is gone. */
-  if (sk->rmem_alloc == 0 && sk->wmem_alloc == 0)
+  if (sk->rmem_alloc <= 0 && sk->wmem_alloc <= 0)
     {
        kfree_s ((void *)sk,sizeof (*sk));
     }
@@ -573,6 +648,7 @@ ip_proto_fcntl (struct socket *sock, unsigned int cmd, unsigned long arg)
 	printk ("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	return (0);
      }
+
    switch (cmd)
      {
        case F_SETOWN:
@@ -675,6 +751,7 @@ ip_proto_getsockopt(struct socket *sock, int level, int optname,
 	printk ("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	return (0);
      }
+
     switch (optname)
       {
 	default:
@@ -748,6 +825,9 @@ ip_proto_listen(struct socket *sock, int backlog)
       sk->dummy_th.source = net16(sk->num);
     }
 
+  /* we might as well re use these. */ 
+  sk->max_ack_backlog = backlog;
+  sk->ack_backlog = 0;
   sk->state = TCP_LISTEN;
   return (0);
 }
@@ -756,7 +836,7 @@ ip_proto_listen(struct socket *sock, int backlog)
 static int ip_proto_init(void)
 {
   int i;
-  struct device *dev;
+  struct device *dev, *dev2;
   struct ip_protocol *p;
   seq_offset = CURRENT_TIME*250;
   /* add all the protocols. */
@@ -777,11 +857,26 @@ static int ip_proto_init(void)
     }
 
   /* add the devices */
+  /* if the call to dev->init fails, the dev is removed
+     from the chain disconnecting the device until the
+     next reboot. */
+
+  dev2 = NULL;
   for (dev = dev_base; dev != NULL; dev=dev->next)
     {
-       if (dev->init)
-	 dev->init(dev);
+       if (dev->init && dev->init(dev))
+	 {
+	   if (dev2 == NULL)
+	     dev_base = dev->next;
+	   else
+	     dev2->next = dev->next;
+	 }
+       else
+	 {
+	   dev2 = dev;
+	 }
     }
+  bh_base[INET_BH].routine = inet_bh;
   timer_table[NET_TIMER].fn = net_timer;
   return (0);
 }
@@ -897,6 +992,9 @@ ip_proto_create (struct socket *sock, int protocol)
   sk->state = TCP_CLOSE;
   sk->dead = 0;
   sk->ack_timed = 0;
+  sk->send_tmp = NULL;
+  sk->mss = 0; /* we will try not to send any packets smaller
+		   than this. */
 
   /* this is how many unacked bytes we will accept for
      this socket.  */
@@ -979,6 +1077,7 @@ ip_proto_release(struct socket *sock, struct socket *peer)
   volatile struct sock *sk;
   sk = sock->data;
   if (sk == NULL) return (0);
+  PRINTK ("ip_proto_release (sock = %X, peer = %X)\n", sock, peer);
   wake_up (sk->sleep);
   /* start closing the connection.  This may take a while. */
   /* if linger is set, we don't return until the close is
@@ -1098,6 +1197,23 @@ ip_proto_connect (struct socket *sock, struct sockaddr * uaddr,
 	return (0);
      }
 
+  if (sk->state == TCP_ESTABLISHED)
+    {
+      sock->state = SS_CONNECTED;
+      return (-EISCONN);
+    }
+
+  if (sock->state == SS_CONNECTING)
+    {
+      if (sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV)
+	return (-EINPROGRESS);
+
+      if (sk->err) return (-sk->err);
+
+      sock->state = SS_CONNECTED;
+      return (-EISCONN);
+    }
+
   /* we may need to bind the socket. */
   if (sk->num == 0)
     {
@@ -1116,26 +1232,29 @@ ip_proto_connect (struct socket *sock, struct sockaddr * uaddr,
       if (err < 0) return (err);
     }
 
-  sock->state = SS_CONNECTED;
-
-  if (flags & O_NONBLOCK) return (-EINPROGRESS);
+  sock->state = SS_CONNECTING;
+  if (sk->state != TCP_ESTABLISHED && (flags & O_NONBLOCK))
+    return (-EINPROGRESS);
 
   cli(); /* avoid the race condition */
 
-  while (sk->state != TCP_ESTABLISHED && sk->state < TCP_CLOSING)
+  while (sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV)
     {
       interruptible_sleep_on (sk->sleep);
       if (current->signal & ~current->blocked)
 	{
 	   sti();
 	   sk->intr = 1;
+	   sock->state = SS_UNCONNECTED;
 	   return (-ERESTARTSYS);
 	}
     }
   sti();
+  sock->state = SS_CONNECTED;
   sk->intr = 0;
   if (sk->state != TCP_ESTABLISHED && sk->err)
     {
+      sock->state = SS_UNCONNECTED;
       return (-sk->err);
     }
   return (0);
@@ -1157,8 +1276,17 @@ ip_proto_accept (struct socket *sock, struct socket *newsock, int flags)
 	printk ("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	return (0);
      }
+
+  /* we've been passed an extra socket. We need to free it up because
+   the tcp module creates it's own when it accepts one. */
+  if (newsock->data)
+    kfree_s (newsock->data, sizeof (struct sock));
+
   newsock->data = NULL;
-  if (sk1->prot->accept == NULL) return (-EOPNOTSUPP);
+
+  
+if (sk1->prot->accept == NULL) return (-EOPNOTSUPP);
+
   /* restore the state if we have been interrupted, and
      then returned. */
   if (sk1->pair != NULL )
@@ -1228,7 +1356,7 @@ ip_proto_getname(struct socket *sock, struct sockaddr *uaddr,
     }
   if (peer)
     {
-      if (sk->state != TCP_ESTABLISHED)
+      if (!tcp_connected(sk->state))
 	return (-ENOTCONN);
       sin.sin_port = sk->dummy_th.dest;
       sin.sin_addr.s_addr = sk->daddr;
@@ -1256,10 +1384,6 @@ ip_proto_read (struct socket *sock, char *ubuf, int size, int noblock)
 	printk ("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	return (0);
      }
-  if (sk->shutdown & RCV_SHUTDOWN)
-    {
-      return (0); /* this seems to be what sunos does. */
-    }
 
   /* we may need to bind the socket. */
   if (sk->num == 0)
@@ -1284,11 +1408,6 @@ ip_proto_recv (struct socket *sock, void *ubuf, int size, int noblock,
 	printk ("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	return (0);
      }
-  if (sk->shutdown & RCV_SHUTDOWN)
-    {
-      return (0);
-    }
-
 
   /* we may need to bind the socket. */
   if (sk->num == 0)
@@ -1317,7 +1436,6 @@ ip_proto_write (struct socket *sock, char *ubuf, int size, int noblock)
       send_sig (SIGPIPE, current, 1);
       return (-EPIPE);
     }
-
 
   /* we may need to bind the socket. */
   if (sk->num == 0)
@@ -1348,7 +1466,6 @@ ip_proto_send (struct socket *sock, void *ubuf, int size, int noblock,
       send_sig (SIGPIPE, current, 1);
       return (-EPIPE);
     }
-
 
   /* we may need to bind the socket. */
   if (sk->num == 0)
@@ -1406,10 +1523,6 @@ ip_proto_recvfrom (struct socket *sock, void *ubuf, int size, int noblock,
 	printk ("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	return (0);
      }
-  if (sk->shutdown & RCV_SHUTDOWN)
-    {
-      return (0);
-    }
 
   if (sk->prot->recvfrom == NULL) return (-EOPNOTSUPP);
 
@@ -1442,8 +1555,13 @@ ip_proto_shutdown (struct socket *sock, int how)
 	     printk ("Warning: sock->data = NULL: %d\n" ,__LINE__);
 	     return (0);
 	  }
-	if (sk->state != TCP_ESTABLISHED) return (-ENOTCONN);
+	if (sock->state == SS_CONNECTING && sk->state == TCP_ESTABLISHED)
+	  sock->state = SS_CONNECTED;
+
+	if (!tcp_connected(sk->state)) return (-ENOTCONN);
 	sk->shutdown |= how;
+	if (sk->prot->shutdown)
+	  sk->prot->shutdown (sk, how);
 	return (0);
 }
 
@@ -1589,7 +1707,7 @@ sock_wfree (volatile struct sock *sk, void *mem, unsigned long size)
      {
 	sk->wmem_alloc -= size;
 	/* in case it might be waiting for more memory. */
-	if (!sk->dead && sk->wmem_alloc > SK_WMEM_MAX/2) wake_up(sk->sleep);
+	if (!sk->dead) wake_up(sk->sleep);
 	if (sk->destroy && sk->wmem_alloc == 0 && sk->rmem_alloc == 0)
 	  {
 	     MPRINTK ("recovered lost memory, destroying sock = %X\n",sk);

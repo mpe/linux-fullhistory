@@ -46,7 +46,8 @@ struct	mtop {
 
 #define MTSETBLK 20	/* set block length (SCSI) */
 #define MTSETDENSITY 21	/* set tape density (SCSI) */
-
+#define MTSEEK	22	/* seek to block (Tandberg, etc.) */
+#define MTTELL	23	/* tell block (Tandber, etc.) */
 
 
 /* structure for MTIOCGET - mag tape get status command */
@@ -105,9 +106,18 @@ struct mt_tape_info {
 }
 
 
+/* structure for MTIOCPOS - mag tape get position command */
+
+struct	mtpos {
+	long 	mt_blkno;	/* current block number */
+};
+
+
 /* mag tape io control commands */
 #define	MTIOCTOP	_IOW('m', 1, struct mtop)	/* do a mag tape op */
 #define	MTIOCGET	_IOR('m', 2, struct mtget)	/* get tape status */
+#define	MTIOCPOS	_IOR('m', 3, struct mtpos)	/* get tape position */
+
 
 /* Generic Mag Tape (device independent) status macros for examining
  * mt_gstat -- HP-UX compatible.

@@ -235,7 +235,7 @@ repeat:
 			goto repeat;
 		}
 		current->state = TASK_RUNNING;
-			
+		remove_wait_queue(&queue->proc_list, &wait);			
 	}		
 	while (i > 0 && !queue_empty()) {
 		c = get_from_queue();

@@ -113,6 +113,7 @@ __asm__( \
 	"pushl $-"#nr"-2\n\t" \
 	SAVE_ALL \
 	ACK_##chip(mask) \
+	"incl _intr_count\n\t"\
 	"sti\n\t" \
 	"movl %esp,%ebx\n\t" \
 	"pushl %ebx\n\t" \
@@ -121,6 +122,7 @@ __asm__( \
 	"addl $8,%esp\n\t" \
 	"cli\n\t" \
 	UNBLK_##chip(mask) \
+	"call _do_bottom_half\n\t"\
 	"jmp ret_from_sys_call\n" \
 "\n.align 2\n" \
 "_fast_IRQ" #nr "_interrupt:\n\t" \

@@ -23,7 +23,7 @@ static int isofs_readdir(struct inode *, struct file *, struct dirent *, int);
 
 static struct file_operations isofs_dir_operations = {
 	NULL,			/* lseek - default */
-	isofs_file_read,	/* read */
+	NULL,			/* read */
 	NULL,			/* write - bad */
 	isofs_readdir,		/* readdir */
 	NULL,			/* select - default */

@@ -316,6 +316,13 @@ void isofs_read_inode(struct inode * inode)
 	inode->i_gid = 0;
 	inode->i_size = isonum_733 (raw_inode->size);
 
+	/* There are defective discs out there - we do this to protect
+	   ourselves.  A cdrom will never contain more than 700Mb */
+	if(inode->i_size < 0 || inode->i_size > 700000000) {
+	  printk("Warning: defective cdrom.  Enabling \"cruft\" mount option.\n");
+	  inode->i_sb->u.isofs_sb.s_cruft = 'y';
+	};
+
 /* Some dipshit decided to store some other bit of information in the high
    byte of the file length.  Catch this and holler.  WARNING: this will make
    it impossible for a file to be > 16Mb on the CDROM!!!*/
@@ -412,6 +419,14 @@ void isofs_read_inode(struct inode * inode)
 		inode->i_op = &isofs_chrdev_inode_operations;
 	else if (S_ISBLK(inode->i_mode))
 		inode->i_op = &isofs_blkdev_inode_operations;
+	else if (S_ISFIFO(inode->i_mode)) {
+		inode->i_op = &isofs_fifo_inode_operations;
+		inode->i_pipe = 1;
+		PIPE_BASE(*inode) = NULL;
+		PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;
+		PIPE_READ_WAIT(*inode) = PIPE_WRITE_WAIT(*inode) = NULL;
+		PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 0;
+	}
 }
 
 /* There are times when we need to know the inode number of a parent of

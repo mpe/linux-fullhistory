@@ -53,7 +53,8 @@ static struct proc_dir_entry root_dir[] = {
 	{ 1,2,".." },
 	{ 2,7,"loadavg" },
 	{ 3,6,"uptime" },
-	{ 4,7,"meminfo" }
+	{ 4,7,"meminfo" },
+	{ 5,4,"self" }	/* will change inode # */
 };
 
 #define NR_ROOT_DIRENTRY ((sizeof (root_dir))/(sizeof (root_dir[0])))
@@ -80,6 +81,8 @@ static int proc_lookuproot(struct inode * dir,const char * name, int len,
 			*result = dir;
 			return 0;
 		}
+		if (ino == 5) /* self modifying inode ... */
+			ino = (current->pid << 16) + 2;
 	} else {
 		pid = 0;
 		while (len-- > 0) {

@@ -19,7 +19,8 @@
 #include "seagate.h"
 
 
-static int internal_command(unsigned char target, const void *cmnd,
+static int internal_command(unsigned char target, unsigned char lun,
+			    const void *cmnd,
 			 void *buff, int bufflen, int reselect);
 
 static int incommand;			/*
@@ -209,7 +210,7 @@ const char *seagate_st0x_info(void)
  * waiting for a reconnect
  */
 
-static unsigned char current_target;
+static unsigned char current_target, current_lun;
 static unsigned char *current_cmnd, *current_data;
 static int current_bufflen;
 static void (*done_fn)(Scsi_Cmnd *) = NULL;
@@ -258,7 +259,7 @@ static void seagate_reconnect_intr (int unused)
 			current_target, current_data, current_bufflen);
 #endif
 	
-		temp =  internal_command (current_target, 
+		temp =  internal_command (current_target, current_lun,
 			current_cmnd, current_data, current_bufflen,
 			RECONNECT_NOW);
 
@@ -292,12 +293,13 @@ int seagate_st0x_queue_command (Scsi_Cmnd * SCpnt,  void (*done)(Scsi_Cmnd *))
 
 	done_fn = done;
 	current_target = SCpnt->target;
+	current_lun = SCpnt->lun;
 	(const void *) current_cmnd = SCpnt->cmnd;
 	current_data = SCpnt->request_buffer;
 	current_bufflen = SCpnt->request_bufflen;
 	SCint = SCpnt;
 
-	result = internal_command (SCpnt->target, SCpnt->cmnd, SCpnt->request_buffer,
+	result = internal_command (SCpnt->target, SCpnt->lun, SCpnt->cmnd, SCpnt->request_buffer,
 				   SCpnt->request_bufflen, 
 				   CAN_RECONNECT);
 	if (msg_byte(result) == DISCONNECT)
@@ -312,12 +314,12 @@ int seagate_st0x_queue_command (Scsi_Cmnd * SCpnt,  void (*done)(Scsi_Cmnd *))
 
 int seagate_st0x_command (Scsi_Cmnd * SCpnt)
 	{
-	return internal_command (SCpnt->target, SCpnt->cmnd, SCpnt->request_buffer,
+	return internal_command (SCpnt->target, SCpnt->lun, SCpnt->cmnd, SCpnt->request_buffer,
 				 SCpnt->request_bufflen, 
 				 (int) NO_RECONNECT);
 	}
 	
-static int internal_command(unsigned char target, const void *cmnd,
+static int internal_command(unsigned char target, unsigned char lun, const void *cmnd,
 			 void *buff, int bufflen, int reselect)
 	{
 	int len;			
@@ -805,7 +807,7 @@ static int internal_command(unsigned char target, const void *cmnd,
  */
 			if (reselect)
 				{
-				DATA = IDENTIFY(1,0);
+				DATA = IDENTIFY(1, lun);
 #if (DEBUG & (PHASE_RESELECT | PHASE_MSGOUT)) 
 				printk("scsi%d : sent IDENTIFY message.\n", hostno);
 #endif

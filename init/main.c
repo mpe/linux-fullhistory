@@ -212,7 +212,7 @@ void start_kernel(void)
 	memory_end = (1<<20) + (EXT_MEM_K<<10);
 	memory_end &= 0xfffff000;
 	ramdisk_size = RAMDISK_SIZE;
-#ifdef MAX_16M
+#ifdef CONFIG_MAX_16M
 	if (memory_end > 16*1024*1024)
 		memory_end = 16*1024*1024;
 #endif
@@ -227,10 +227,10 @@ void start_kernel(void)
 	init_IRQ();
 	sched_init();
 	parse_options(command_line);
-#ifdef PROFILE_SHIFT
+#ifdef CONFIG_PROFILE
 	prof_buffer = (unsigned long *) memory_start;
 	prof_len = (unsigned long) &end;
-	prof_len >>= PROFILE_SHIFT;
+	prof_len >>= 2;
 	memory_start += prof_len * sizeof(unsigned long);
 #endif
 	memory_start = chr_dev_init(memory_start,memory_end);

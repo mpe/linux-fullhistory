@@ -19,8 +19,14 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: loopback.c,v 0.8.4.3 1992/11/18 15:38:03 bir7 Exp $ */
+/* $Id: loopback.c,v 0.8.4.5 1992/12/12 19:25:04 bir7 Exp $ */
 /* $Log: loopback.c,v $
+ * Revision 0.8.4.5  1992/12/12  19:25:04  bir7
+ * Cleaned up Log messages.
+ *
+ * Revision 0.8.4.4  1992/12/05  21:35:53  bir7
+ * changed dev->init to return an int.
+ *
  * Revision 0.8.4.3  1992/11/18  15:38:03  bir7
  * Fixed bug in start_xmit.
  *
@@ -31,7 +37,7 @@
  * version change only.
  *
  * Revision 0.8.3.2  1992/11/10  00:14:47  bir7
- * Changed malloc to kmalloc and added $iId$ and 
+ * Changed malloc to kmalloc and added Id and Log
  * */
 
 #include <linux/config.h>
@@ -123,7 +129,7 @@ loopback_xmit(struct sk_buff *skb, struct device *dev)
   return (0);
 }
 
-void
+int
 loopback_init(struct device *dev)
 {
    printk ("Loopback device init\n");
@@ -140,4 +146,5 @@ loopback_init(struct device *dev)
   dev->rebuild_header = eth_rebuild_header;
   dev->type_trans = eth_type_trans;
   dev->loopback = 1;
+  return (0);
 }

@@ -7,6 +7,8 @@
  *
  *  Revised (and renamed) by John Boyd <boyd@cis.ohio-state.edu> to
  *  accomodate Eric Youngdale's modifications to scsi.c.  Nov 1992.
+ *
+ *  Additional changes to support scatter/gather.  Dec. 1992.  tw/jb
  */
 
 #include <stdarg.h>
@@ -46,25 +48,20 @@
    - For now, a pool of SCBs are kept in global storage by this driver,
      and are allocated and freed as needed.
 
-  For two reasons, I decided not to use a single SCB per OGMB:
-   - the 7000-FASST2 marks OGMBs empty as soon as it has _started_ a command,
-     not when it has finished.  Since the SCB must be around for completion,
-     problems arise when SCBs correspond to OGMBs, which may be reallocated
-     earlier (or delayed unnecessarily until a command completes).
-   - Scatter/gather can be implemented by this driver using an SCB per
-     scatter/gather buffer, but this is difficult when SCBs and Scsi_Cmnds
-     are matched 1-1 via this correspondence.
-
-  Instead, mailboxes are used as transient data structures, simply for
-  carrying SCB addresses to/from the 7000-FASST2.  SCBs are allocated as
-  "host_scribble" in an Scsi_Cmnd, and are maintained relative to that
-  Scsi_Cmnd.
+  The 7000-FASST2 marks OGMBs empty as soon as it has _started_ a command,
+  not when it has finished.  Since the SCB must be around for completion,
+  problems arise when SCBs correspond to OGMBs, which may be reallocated
+  earlier (or delayed unnecessarily until a command completes).
+  Mailboxes are used as transient data structures, simply for
+  carrying SCB addresses to/from the 7000-FASST2.
 
   Note also since SCBs are not "permanently" associated with mailboxes,
   there is no need to keep a global list of Scsi_Cmnd pointers indexed
   by OGMB.   Again, SCBs reference their Scsi_Cmnds directly, so mailbox
   indices need not be involved.
 */
+
+static void wd7000_set_sync(int id);
 
 static struct {
        struct wd_mailbox ogmb[OGMB_CNT]; 
@@ -78,9 +75,11 @@ static Scb *scbfree = NULL;
 static int wd7000_host = 0;
 static unchar controlstat = 0;
 
+static unchar rev_1 = 0, rev_2 = 0;  /* filled in by wd7000_revision */
+
 #define wd7000_intr_ack()  outb(0,INTR_ACK)
 
-static long WAITnexttimeout = 3000000;
+#define WAITnexttimeout 3000000
 
 
 static inline void wd7000_enable_intr()
@@ -210,6 +209,7 @@ static int mail_out( Scb *scbptr )
 	    ogmb = (++ogmb) % OGMB_CNT;
     }
     restore_flags(flags);
+    DEB(printk(", scb is %x",scbptr);)
 
     if (i >= OGMB_CNT) {
         DEB(printk(", no free OGMBs.\n");)
@@ -293,7 +293,7 @@ void wd7000_intr_handle(int irq)
 {
     int flag, icmb, errstatus, icmb_status;
     int host_error, scsi_error;
-    Scb *scb, *scbn;      /* for SCSI commands */
+    Scb *scb;             /* for SCSI commands */
     unchar *icb;          /* for host commands */
     Scsi_Cmnd *SCpnt;
 
@@ -320,11 +320,11 @@ void wd7000_intr_handle(int irq)
     mb.icmb[icmb].status = 0;
 
 #ifdef DEBUG
-    printk(" ICMB %d posted for SCB/ICB %06x, status %02x",
-	   icmb, scb, icmb_status );
+    printk(" ICMB %d posted for SCB/ICB %06x, status %02x, vue %02x",
+ 	   icmb, scb, icmb_status, scb->vue );
 #endif
 
-    if (scb->op == 0)  {   /* an SCB is done */
+    if (!(scb->op & 0x80))  {   /* an SCB is done */
         SCpnt = scb->SCpnt;
 	if (--(SCpnt->SCp.phase) <= 0)  {  /* all scbs for SCpnt are done */
 	    host_error = scb->vue | (icmb_status << 8);
@@ -332,12 +332,9 @@ void wd7000_intr_handle(int irq)
 	    errstatus = make_code(host_error,scsi_error);    
 	    SCpnt->result = errstatus;
 
-	    scb = (Scb *) SCpnt->host_scribble;  scbn = scb;
-	    while (scb != NULL)  {
-	        scbn = scb->next;
-	        free_scb(scb);
-		scb = scbn;
-	    }
+ 	    if (SCpnt->host_scribble != NULL)
+ 	        scsi_free(SCpnt->host_scribble,WD7000_SCRIBBLE);
+ 	    free_scb(scb);
 
 	    SCpnt->scsi_done(SCpnt);
 	}
@@ -356,6 +353,7 @@ void wd7000_intr_handle(int irq)
 int wd7000_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 {
     Scb *scb;
+    Sgb *sgb;
     unchar *cdb;
     unchar idlun;
     short cdblen;
@@ -364,70 +362,54 @@ int wd7000_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
     cdblen = (*cdb <= 0x1f ? 6 : 10);
     idlun = ((SCpnt->target << 5) & 0xe0) | (SCpnt->lun & 7);
     SCpnt->scsi_done = done;
+    SCpnt->SCp.phase = 1;
+    scb = alloc_scb();
+    scb->idlun = idlun;
+    memcpy(scb->cdb, cdb, cdblen);
+    scb->direc = 0x40;		/* Disable direction check */
+    scb->SCpnt = SCpnt;         /* so we can find stuff later */
+    SCpnt->host_scribble = NULL;
+    DEB(printk("request_bufflen is %x, bufflen is %x\n",\
+        SCpnt->request_bufflen, SCpnt->bufflen);)
 
-    if (SCpnt->use_sg)  {   /* set up linked SCBs to do scatter/gather */
-#ifdef 0
+    if (SCpnt->use_sg)  {
         struct scatterlist *sg = (struct scatterlist *) SCpnt->request_buffer;
-        short i;
-        Scb *scbn;
+        unsigned i;
 
-	/*
-	    Allocate the scbs first, and set the next pointers, since we
-	    need these later.
-	    Save the list via host_scribble.
-	*/
-	scbn = NULL;
-	for (i = 0;  i < SCpnt->use_sg;  i++)  {
-	    scb = alloc_scb();  scb->next = scbn;  scbn = scb;
+        if (scsi_hosts[wd7000_host].sg_tablesize <= 0)  {
+	    panic("wd7000_queuecommand: scatter/gather not supported.\n");
 	}
-	SCpnt->host_scribble = (unchar *) scb;
-	/*
-	    Note that the following is set up do to scatter/gather via
-	    linked commands, with an interrupt only after _all_ are
-	    finished.  This is mostly to simplify error handling, which
-	    hasn't been added to the interrupt handler for the other case
-	    (interrupt per SCB).   However, this should work with intr/SCB
-	    by setting phase = use_sg and setting the flag bit in each
-	    of the CDBs.
-	*/
-        SCpnt->SCp.phase = 1;    /* set this to the # of interrupts expected */
+#ifdef DEBUG
+ 	printk("Using scatter/gather with %d elements.\n",SCpnt->use_sg);
+#endif
+  	/*
+ 	    Allocate memory for a scatter/gather-list in wd7000 format.
+ 	    Save the pointer at host_scribble.
+  	*/
+#ifdef DEBUG
+ 	if (SCpnt->use_sg > WD7000_SG)
+ 	    panic("WD7000: requesting too many scatterblocks\n");
+#endif
+ 	SCpnt->host_scribble = scsi_malloc(WD7000_SCRIBBLE);
+	sgb = (Sgb *) SCpnt->host_scribble;
+ 	if (sgb == NULL)
+            panic("wd7000_queuecommand: scsi_malloc() failed.\n");
+
+ 	scb->op = 1;
+ 	any2scsi(scb->dataptr, sgb);
+ 	any2scsi(scb->maxlen, SCpnt->use_sg * sizeof (Sgb) );
 
 	for (i = 0;  i < SCpnt->use_sg;  i++)  {
-	    scb->op = 0;
-	    scb->idlun = idlun;
-	    memcpy(scb->cdb, cdb, cdblen);
-	    /*
-	      Here, set CDB fields for block address & block count.
-	      I don't know block size; that's why this whole thing is
-	      commented out.  Would be nice if scatterlist had both
-	      byte and block counts per element (block address could be
-	      computed).
-	      Also need to know for sure if any SCSI commands other than
-	      READ/WRITE can use scatter/gather - I would hope not.
-	    */
-	    any2scsi(scb->dataptr, sg[i].address);
-	    any2scsi(scb->maxlen, sg[i].length);
-	    if (i < SCpnt->use_sg-1)  {        /* if this isn't the last */
-	        any2scsi(scb->linkptr, scb->next);        /* set link */
-		scb->cdb[cdblen-1] |= 0x01;               /* set link bit */
-	    }
-	    scb->direc = 0x40;	      /* Disable direction check */
-	    scb->SCpnt = SCpnt;       /* so we can find stuff later */
+ 	    any2scsi(sgb->ptr, sg[i].address);
+ 	    any2scsi(sgb->len, sg[i].length);
+ 	    sgb++;
         }
-#else
-	panic("wd7000_queuecommand: scatter/gather not implemented.\n");
-#endif
-    }  else  {  /* just one command - use scb[0] */
-        SCpnt->SCp.phase = 1;
-	scb = alloc_scb();
-	SCpnt->host_scribble = (unchar *) scb;
+ 	DEB(printk("Using %d bytes for %d scatter/gather blocks\n",\
+ 	    scsi2int(scb->maxlen), SCpnt->use_sg);)
+    }  else  {
 	scb->op = 0;
-	scb->idlun = idlun;
-	memcpy(scb->cdb, cdb, cdblen);
 	any2scsi(scb->dataptr, SCpnt->request_buffer);
 	any2scsi(scb->maxlen, SCpnt->request_bufflen);
-	scb->direc = 0x40;		/* Disable direction check */
-	scb->SCpnt = SCpnt;             /* so we can find stuff later */
     }
 
     return mail_out(scb);
@@ -509,6 +491,23 @@ int wd7000_init(void)
 }
 
 
+void wd7000_revision(void)
+{
+    volatile unchar icb[ICB_LEN] = {0x8c};  /* read firmware revision level */
+
+    icb[ICB_PHASE] = 1;
+    mail_out( (struct scb *) icb );
+    while (icb[ICB_PHASE]) /* wait for completion */;
+    rev_1 = icb[1];
+    rev_2 = icb[2];
+
+    /*
+        For boards at rev 7.0 or later, enable scatter/gather.
+    */
+    if (rev_1 >= 7)  scsi_hosts[wd7000_host].sg_tablesize = WD7000_SG;
+}
+
+
 static const char *wd_bases[] = {(char *)0xce000};
 typedef struct {
     char * signature;
@@ -521,15 +520,13 @@ static const Signature signatures[] = {{"SSTBIOS",0xd,0x7}};
 #define NUM_SIGNATURES (sizeof(signatures)/sizeof(Signature))
 
 
-int wd7000_detect(int hostnum) /* hostnum ignored for now */
+int wd7000_detect(int hostnum)
 /* 
  *  return non-zero on detection
  */
 {
     int i,j;
-    char const * base_address = 0;
-    /* Store our host number */
-    wd7000_host = hostnum;
+    char const *base_address = NULL;
 
     for(i=0;i<(sizeof(wd_bases)/sizeof(char *));i++){
 	for(j=0;j<NUM_SIGNATURES;j++){
@@ -540,8 +537,13 @@ int wd7000_detect(int hostnum) /* hostnum ignored for now */
 	    }	
 	}
     }
-    if (!base_address) return 0;
+    if (base_address == NULL) return 0;
+
+    /* Store our host number */
+    wd7000_host = hostnum;
+
     wd7000_init();    
+    wd7000_revision();  /* will set scatter/gather by rev level */
 
     return 1;
 }
@@ -567,19 +569,25 @@ static void wd7000_append_info( char *info, const char *fmt, ... )
 const char *wd7000_info(void)
 {
     static char info[80] = "Western Digital WD-7000, Firmware Revision ";
-    volatile unchar icb[ICB_LEN] = {0x8c};  /* read firmware revision level */
-    unchar rl1, rl2;
+
+    wd7000_revision();
+    wd7000_append_info( info+strlen(info), "%d.%d.\n", rev_1, rev_2 );
+
+    return info;
+}
+
+
+void wd7000_set_sync(int id)
+{
+    volatile unchar icb[ICB_LEN] = {0x8a};
+    unchar speedval = 0x2c; 	/* Sets 4MHz for SBIC Revision A */
+    any2scsi(icb+2,1);		/* Transfer 1 byte */
+    any2scsi(icb+5,&speedval);	/* The speed buffer address */
+    icb[8]=0; icb[9]=2*id;      /* The index into the table */
 
     icb[ICB_PHASE] = 1;
     mail_out( (struct scb *) icb );
     while (icb[ICB_PHASE]) /* wait for completion */;
-    rl1 = icb[1];
-    rl2 = icb[2];
-
-    /* now format the above, and append to info */
-    wd7000_append_info( info+strlen(info), "%d.%d.\n", rl1, rl2 );
-
-    return info;
 }
 
 
@@ -599,7 +607,9 @@ int wd7000_abort(Scsi_Cmnd * SCpnt, int i)
 
 int wd7000_reset(void)
 {
+#ifdef DEBUG
     printk("wd7000_reset\n");
+#endif
     return 0;
 }
 

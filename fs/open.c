@@ -416,7 +416,7 @@ int close_fp(struct file *filp)
 		return 0;
 	}
 	inode = filp->f_inode;
-	if (S_ISREG(inode->i_mode))
+	if (inode && S_ISREG(inode->i_mode))
 		fcntl_remove_locks(current, filp);
 	if (filp->f_count > 1) {
 		filp->f_count--;

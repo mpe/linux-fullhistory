@@ -19,8 +19,14 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: arp.c,v 0.8.4.3 1992/11/15 14:55:30 bir7 Exp $ */
+/* $Id: arp.c,v 0.8.4.5 1992/12/12 19:25:04 bir7 Exp $ */
 /* $Log: arp.c,v $
+ * Revision 0.8.4.5  1992/12/12  19:25:04  bir7
+ * Cleaned up Log messages.
+ *
+ * Revision 0.8.4.4  1992/12/03  19:52:20  bir7
+ * Added paranoid queue checking.
+ *
  * Revision 0.8.4.3  1992/11/15  14:55:30  bir7
  * Put more cli/sti pairs in send_q and another sanity check
  * in arp_queue.
@@ -40,6 +46,7 @@
 #include <linux/string.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/config.h>
 
 #include <linux/socket.h>
 #include <netinet/in.h>
@@ -66,14 +73,42 @@ static void
 send_arp_q(void)
 {
    struct sk_buff *skb;
+   struct sk_buff *skb2;
+
    cli();
    if (arp_q == NULL) return;
 
    skb = arp_q;
    do {
+     if (skb->magic != ARP_QUEUE_MAGIC)
+       {
+	 printk ("arp.c skb with bad magic - %X: squashing queue\n");
+	 cli();
+	 arp_q = NULL;
+	 sti();
+	 return;
+       }
+     /* extra consistancy check. */
+     if (skb->next == NULL
+#ifdef CONFIG_MAX_16M
+	 || (unsigned long)(skb->next) > 16*1024*1024
+#endif
+	 )
+
+       {
+	 printk ("dev.c: *** bug bad skb->next, squashing queue \n");
+	 cli();
+	 arp_q = NULL;
+	 sti();
+	 return;
+       }
+
+     skb->magic = 0;
+     skb2=skb->next;
+
      sti();
-      if (!skb->dev->rebuild_header (skb+1, skb->dev))
-	{
+     if (!skb->dev->rebuild_header (skb+1, skb->dev))
+       {
 	  cli();
 	   if (skb->next == skb)
 	     {
@@ -90,12 +125,12 @@ send_arp_q(void)
 	   skb->arp  = 1;
 	  sti();
 	   skb->dev->queue_xmit (skb, skb->dev, 0);
+
+	  if (arp_q == NULL) break;
+
 	   cli();
-	   if (arp_q == NULL) break;
-	   skb = arp_q;
-	   continue;
 	}
-      skb=skb->next;
+      skb=skb2;
    } while (skb != arp_q);
    sti();
 
@@ -201,6 +236,7 @@ arp_response (struct arp *arp1, struct device *dev)
 		    GFP_ATOMIC);
   if (skb == NULL) return (1);
 
+  skb->lock = 0;
   skb->mem_addr = skb;
   skb->mem_len = sizeof (*skb) + sizeof (*arp2) + 2*arp1->hlen + 
     2*arp1->plen + dev->hard_header_len;
@@ -396,6 +432,7 @@ arp_snd (unsigned long paddr, struct device *dev, unsigned long saddr)
 		    2*dev->addr_len+8, GFP_ATOMIC);
   if (skb == NULL) return;
   
+  skb->lock = 0;
   skb->sk = NULL;
   skb->mem_addr = skb;
   skb->mem_len = sizeof (*arp) + sizeof (*skb) + dev->hard_header_len +
@@ -495,7 +532,8 @@ arp_queue(struct sk_buff *skb)
   if (skb->next != NULL)
     {
       sti();
-      printk ("arp.c: arp_queue skb already on queue. \n");
+      printk ("arp.c: arp_queue skb already on queue magic=%X. \n",
+	      skb->magic);
       return;
     }
    if (arp_q == NULL)
@@ -511,5 +549,6 @@ arp_queue(struct sk_buff *skb)
 	skb->next->prev = skb;
 	skb->prev->next = skb;
      }
+  skb->magic = ARP_QUEUE_MAGIC;
    sti();
 }

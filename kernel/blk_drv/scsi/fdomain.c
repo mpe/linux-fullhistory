@@ -1,6 +1,6 @@
 /* fdomain.c -- Future Domain TMC-1660/TMC-1680 driver
  * Created: Sun May  3 18:53:19 1992 by faith
- * Revised: Fri Nov 27 22:57:28 1992 by root
+ * Revised: Wed Dec  9 21:34:53 1992 by root
  * Author: Rickard E. Faith, faith@cs.unc.edu
  * Copyright 1992 Rickard E. Faith
  *
@@ -33,11 +33,12 @@
  * why there are no freely available Future Domain drivers?)
 
  * Thanks to: Todd Carrico (todd@wutc.wustl.edu), Dan Poirier
- * (poirier@cs.unc.edu ), Ken Corey (kenc@sol.acs.unt.edu), and C. de Bruin
- * (bruin@dutiba.tudelft.nl) for alpha testing.  Also thanks to Drew
- * Eckhardt (drew@cs.colorado.edu) for answering questions, and to Doug
- * Hoffman (hoffman@cs.unc.edu) for lending me SCSI devices to make driver
- * more robust. */
+ * (poirier@cs.unc.edu ), Ken Corey (kenc@sol.acs.unt.edu), C. de Bruin
+ * (bruin@dutiba.tudelft.nl) and Sakari Aaltonen (sakaria@vipunen.hit.fi)
+ * for alpha testing.  Also thanks to Drew Eckhardt (drew@cs.colorado.edu)
+ * and Eric Youngdale (eric@tantalus.nrl.navy.mil) for answering questions,
+ * and to Doug Hoffman (hoffman@cs.unc.edu) for lending me SCSI devices to
+ * make the driver more robust. */
 
 #include <linux/sched.h>
 #include <asm/io.h>
@@ -48,7 +49,7 @@
 #include <asm/system.h>
 #include <linux/errno.h>
 
-#define VERSION          "3.1"	/* Change with each revision */
+#define VERSION          "3.2"	/* Change with each revision */
 
 /* START OF USER DEFINABLE OPTIONS */
 
@@ -66,11 +67,13 @@
 #define ERRORS_ONLY      1	/* Only write a line if there is an error */
 #define DEBUG_DETECT     0	/* Debug fdomain_16x0_detect() */
 #define DEBUG_MESSAGES   0      /* Debug MESSAGE IN PHASE */
+#define DEBUG_ABORT      1    /* Debug abort() routine */
 #else
 #define EVERY_ACCESS     0	/* LEAVE THESE ALONE--CHANGE THE ONES ABOVE */
 #define ERRORS_ONLY      0
 #define DEBUG_DETECT     0
 #define DEBUG_MESSAGES   0
+#define DEBUG_ABORT      0
 #endif
 
 /* Errors are reported on the line, so we don't need to report them again */
@@ -92,9 +95,11 @@ static int               interrupt_level = 0;
 static int               Data_Mode_Cntl_port;
 static int               FIFO_Data_Count_port;
 static int               Interrupt_Cntl_port;
+static int               Interrupt_Mask_port;
 static int               Read_FIFO_port;
 static int               Read_SCSI_Data_port;
 static int               SCSI_Cntl_port;
+static int               SCSI_Data_NoACK_port;
 static int               SCSI_Status_port;
 static int               TMC_Cntl_port;
 static int               TMC_Status_port;
@@ -121,8 +126,9 @@ extern void              fdomain_16x0_intr( int unused );
 
 enum in_port_type { Read_SCSI_Data = 0, SCSI_Status = 1, TMC_Status = 2,
 			  LSB_ID_Code = 5, MSB_ID_Code = 6, Read_Loopback = 7,
-			  SCSI_Data_NoACK = 8, Option_Select = 10,
-			  Read_FIFO = 12, FIFO_Data_Count = 14 };
+		          SCSI_Data_NoACK = 8, Interrupt_Mask = 9,
+		          Option_Select = 10, Read_FIFO = 12,
+		          FIFO_Data_Count = 14 };
 
 enum out_port_type { Write_SCSI_Data = 0, SCSI_Cntl = 1, Interrupt_Cntl = 2,
 			   Data_Mode_Cntl = 3, TMC_Cntl = 4, Write_Loopback = 7,
@@ -386,9 +392,11 @@ int fdomain_16x0_detect( int hostnum )
    Data_Mode_Cntl_port  = port_base + Data_Mode_Cntl;
    FIFO_Data_Count_port = port_base + FIFO_Data_Count;
    Interrupt_Cntl_port  = port_base + Interrupt_Cntl;
+   Interrupt_Mask_port  = port_base + Interrupt_Mask;
    Read_FIFO_port       = port_base + Read_FIFO;
    Read_SCSI_Data_port  = port_base + Read_SCSI_Data;
    SCSI_Cntl_port       = port_base + SCSI_Cntl;
+   SCSI_Data_NoACK_port = port_base + SCSI_Data_NoACK;
    SCSI_Status_port     = port_base + SCSI_Status;
    TMC_Cntl_port        = port_base + TMC_Cntl;
    TMC_Status_port      = port_base + TMC_Status;
@@ -546,7 +554,7 @@ static int fdomain_select( int target )
    unsigned long timeout;
 
    /* Send our address OR'd with target address */
-   outb( 0x40 | (1 << target), port_base + SCSI_Data_NoACK );
+   outb( 0x40 | (1 << target), SCSI_Data_NoACK_port );
 
    if (RESELECTION && can_queue)
 	 outb( 0x8a, SCSI_Cntl_port ); /* Bus Enable + Attention + Select */
@@ -635,7 +643,7 @@ void fdomain_16x0_intr( int unused )
 
 #if RESELECTION
    if (current_SC->SCp.phase & disconnect) {
-      printk( " RECON %x ", inb( port_base + SCSI_Data_NoACK ) );
+      printk( " RECON %x ", inb( SCSI_Data_NoACK_port ) );
       current_SC->SCp.phase = in_other;
       outb( 0x90 | FIFO_COUNT, Interrupt_Cntl_port );
       outb( 0x84, SCSI_Cntl_port );
@@ -658,7 +666,7 @@ void fdomain_16x0_intr( int unused )
 
       outb( 0x40 | FIFO_COUNT, Interrupt_Cntl_port );
 
-      outb( 0x40 | (1 << current_SC->target), port_base + SCSI_Data_NoACK );
+      outb( 0x40 | (1 << current_SC->target), SCSI_Data_NoACK_port );
 
 #if RESELECTION
       outb( 0x8a, SCSI_Cntl_port ); /* Bus Enable + Attention + Select */
@@ -681,10 +689,13 @@ void fdomain_16x0_intr( int unused )
 #endif
 	    my_done( DID_NO_CONNECT << 16 );
 	    return;
-	 }
+	 } else {
 #if EVERY_ACCESS
-	 else printk( " AltSel " );
+	 printk( " AltSel " );
 #endif
+	 /* Stop arbitration (also set FIFO for output and enable parity) */
+	 outb( 0xd0 | PARITY_MASK, TMC_Cntl_port );
+       }
       }
       current_SC->SCp.phase = in_other;
       in_interrupt_code = 0;
@@ -965,7 +976,7 @@ int fdomain_16x0_queue( Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
    /* Start arbitration */
    outb( 0x00, Interrupt_Cntl_port );
    outb( 0x00, SCSI_Cntl_port );              /* Disable data drivers */
-   outb( 0x40, port_base + SCSI_Data_NoACK ); /* Set our id bit */
+   outb( 0x40, SCSI_Data_NoACK_port );        /* Set our id bit */
    ++in_command;
    outb( 0x20, Interrupt_Cntl_port );
    outb( 0x14 | PARITY_MASK, TMC_Cntl_port ); /* Start arbitration */
@@ -1165,10 +1176,31 @@ int fdomain_16x0_command( Scsi_Cmnd *SCpnt )
 int fdomain_16x0_abort( Scsi_Cmnd *SCpnt, int code )
 {
 
-#if EVERY_ACCESS || ERRORS_ONLY
+#if EVERY_ACCESS || ERRORS_ONLY || DEBUG_ABORT
    printk( "SCSI (Future Domain): Abort " );
 #endif
 
+#if DEBUG_ABORT
+   printk( "Phase = %d, flag = %d, target = %d cmnd = 0x%02x pieces = %d size = %u\n",
+    current_SC->SCp.phase,
+    in_interrupt_code,
+    current_SC->target,
+    *(unsigned char *)current_SC->cmnd,
+    current_SC->use_sg,
+    current_SC->request_bufflen );
+   printk( "IMR = 0x%02x%02x\n", inb( 0x0a1 ), inb( 0x21 ) );
+   outb( 0x0a, 0xa0 );
+   printk( "IRR = 0x%02x", inb( 0xa0 ) );
+   outb( 0x0a, 0x20 );
+   printk( "%02x\n", inb( 0x20 ) );
+   outb( 0x0b, 0xa0 );
+   printk( "ISR = 0x%02x", inb( 0xa0 ) );
+   outb( 0x0b, 0x20 );
+   printk( "%02x\n", inb( 0x20 ) );
+   printk( "SCSI Status    = %x\n", inb( SCSI_Status_port ) );
+   printk( "TMC Status     = %x\n", inb( TMC_Status_port ) );
+   printk( "Interrupt Mask = %x\n", inb( Interrupt_Mask_port ) );
+#else
    cli();
    if (!in_command) {
 #if EVERY_ACCESS || ERRORS_ONLY
@@ -1189,7 +1221,6 @@ int fdomain_16x0_abort( Scsi_Cmnd *SCpnt, int code )
    sti();
    
    /* Aborts are not done well. . . */
-#if 0
    my_done( code << 16 );
 #endif
    return 0;

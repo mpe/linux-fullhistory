@@ -19,17 +19,31 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: tcp.h,v 0.8.4.1 1992/11/10 00:17:18 bir7 Exp $ */
+/* $Id: tcp.h,v 0.8.4.6 1992/12/12 19:25:04 bir7 Exp $ */
 /* $Log: tcp.h,v $
+ * Revision 0.8.4.6  1992/12/12  19:25:04  bir7
+ * Fixed anti-memory Leak in shutdown.
+ *
+ * Revision 0.8.4.5  1992/12/12  01:50:49  bir7
+ * Fixed several bugs including half-duplex connections.
+ *
+ * Revision 0.8.4.4  1992/12/08  20:49:15  bir7
+ * Fixed minor bugs and checked out MSS.
+ *
+ * Revision 0.8.4.3  1992/12/06  23:29:59  bir7
+ * Added support for mss and half completed packets.  Also added
+ * support for shrinking windows.
+ *
+ * Revision 0.8.4.2  1992/12/03  19:54:12  bir7
+ * Added paranoid queue checking.
+ *
  * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
  * version change only.
  *
  * Revision 0.8.3.2  1992/11/10  00:14:47  bir7
- * Changed malloc to kmalloc and added $iId$ and $Log: tcp.h,v $
- * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
- * version change only.
- *.
- * */
+ * Changed malloc to kmalloc and added Id and Log
+ *
+ */
 
 #ifndef _TCP_TCP_H
 #define _TCP_TCP_H
@@ -51,12 +65,15 @@ enum {
   TCP_ESTABLISHED=1,
   TCP_SYN_SENT,
   TCP_SYN_RECV,
+#if 0
   TCP_CLOSING, /* not a valid state, just a seperator so we can use
 		  < tcp_closing or > tcp_closing for checks. */
+#endif
   TCP_FIN_WAIT1,
   TCP_FIN_WAIT2,
   TCP_TIME_WAIT,
   TCP_CLOSE,
+  TCP_CLOSE_WAIT,
   TCP_LAST_ACK,
   TCP_LISTEN
 };
@@ -67,7 +84,7 @@ enum {
 #define MAX_RESET_SIZE 40 + sizeof (struct sk_buff) + MAX_HEADER
 #define MAX_WINDOW  12000
 #define MIN_WINDOW   2048
-#define MAX_ACK_BACKLOG 2
+#define MAX_ACK_BACKLOG 8
 #define MIN_WRITE_SPACE 2048
 #define TCP_WINDOW_DIFF 2048
 
@@ -90,13 +107,16 @@ enum {
 #define TCP_CONNECT_TIME 200 /* time to retransmit first syn. */
 #define TCP_SYN_RETRIES 30 /* number of times to retry openning a connection.
 			      */
+#define TCP_PROBEWAIT_LEN 250 /* time to wait between probes when I've got
+				 something to write and there is no window. */
 
 #define TCP_NO_CHECK 0 /* turn to one if you want the default to be no
 			  checksum . */
 
 void print_th (struct tcp_header *);
-#define HEADER_SIZE 100
+#define HEADER_SIZE 64 /* Maximum header size we need to deal with. */
 
+#define TCP_WRITE_QUEUE_MAGIC 0xa5f23477
 
  /* this next routines deal with comparing 32 bit unsigned ints and
     worry about wrap around. The general strategy is to do a normal
@@ -141,5 +161,12 @@ void print_th (struct tcp_header *);
  {
    return (after (seq1+1, seq2) && before (seq1, seq3+1));
  }
+
+static inline const int
+tcp_connected (const int state)
+{
+  return (state == TCP_ESTABLISHED || state == TCP_CLOSE_WAIT ||
+ 	  state == TCP_FIN_WAIT1   || state == TCP_FIN_WAIT2);
+}
 
 #endif

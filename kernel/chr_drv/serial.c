@@ -10,6 +10,9 @@
  *  multiple ports (or boards, if the hardware permits) to share a
  *  single IRQ channel.
  *
+ *  set_serial_info fixed to set the flags, custom divisor, and uart
+ * 	type fields.  Fix suggested by Michael K. Johnson 12/12/92.
+ *
  * This module exports the following rs232 io functions:
  *
  *	long rs_init(long);
@@ -23,24 +26,42 @@
 #include <linux/timer.h>
 #include <linux/tty.h>
 #include <linux/serial.h>
+#include <linux/config.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/segment.h>
 #include <asm/bitops.h>
 
+/*
+ * Serial driver configuration section.  Here are the various options:
+ *
+ * CONFIG_AUTO_IRQ
+ *		Enables automatic IRQ detection.  I've put in some
+ * 		fixes to this which should make this work much more
+ * 		cleanly than it used to in 0.98pl2-6.  It should be
+ * 		much less vulnerable to false IRQ's now.
+ * 
+ * NEW_INTERRUPT_ROUTINE
+ * 		Enables the new interrupt routine, which is faster
+ * 		(which is better on slow CPU's), and handles parity
+ * 		errors, break conditions, and hardware handshaking.
+ * 		People were having problems with it earlier, but I
+ * 		believe they have been fixed now, so there should
+ * 		hopefully be no reason to #undef this option.
+ * 
+ * CONFIG_AST_FOURPORT
+ *		Enables support for the AST Fourport serial port.
+ * 
+ * CONFIG_ACCENT_ASYNC
+ *		Enables support for the Accent Async 4 port serial
+ * 		port.
+ * 
+ */
+	
+#define NEW_INTERRUPT_ROUTINE
+	
 #define WAKEUP_CHARS (3*TTY_BUF_SIZE/4)
-
-/*
- * Define this to get the AUTO_IRQ code..
- */
-#undef AUTO_IRQ
-
-/*
- * Define this to get support for the nonstandard
- * serial lines.
- */
-#undef NONSTANDARD_PORTS
 
 /*
  * rs_event		- Bitfield of serial lines that events pending
@@ -64,12 +85,14 @@ struct struct_ISR COM2_ISR = { 3, 0x2f8, UART_ISR_proc, 0, };
 struct struct_ISR COM3_ISR = { 4, 0x3e8, UART_ISR_proc, 0, };
 struct struct_ISR COM4_ISR = { 3, 0x2e8, UART_ISR_proc, 0, };
 
-#ifdef NONSTANDARD_PORTS
+#ifdef CONFIG_AST_FOURPORT
 static void FourPort_ISR_proc(async_ISR ISR, int line);
 
 struct struct_ISR FourPort1_ISR = { 2, 0x1bf, FourPort_ISR_proc, 0, };
 struct struct_ISR FourPort2_ISR = { 5, 0x2bf, FourPort_ISR_proc, 0, };
+#endif
 
+#ifdef CONFIG_ACCENT_ASYNC
 struct struct_ISR Accent3_ISR = { 4, 0x330, UART_ISR_proc, 0, };
 struct struct_ISR Accent4_ISR = { 4, 0x338, UART_ISR_proc, 0, };
 #endif
@@ -88,7 +111,7 @@ struct async_struct rs_table[] = {
 	{ BASE_BAUD, 0x2F8, &COM2_ISR, 0, },
 	{ BASE_BAUD, 0x3E8, &COM3_ISR, 0, },
 	{ BASE_BAUD, 0x2E8, &COM4_ISR, 0, },
-#ifdef NONSTANDARD_PORTS	
+#ifdef CONFIG_AST_FOURPORT
 	{ BASE_BAUD, 0x1A0, &FourPort1_ISR, ASYNC_FOURPORT },
 	{ BASE_BAUD, 0x1A8, &FourPort1_ISR, ASYNC_FOURPORT },
 	{ BASE_BAUD, 0x1B0, &FourPort1_ISR, ASYNC_FOURPORT },
@@ -98,10 +121,28 @@ struct async_struct rs_table[] = {
 	{ BASE_BAUD, 0x2A8, &FourPort2_ISR, ASYNC_FOURPORT },
 	{ BASE_BAUD, 0x2B0, &FourPort2_ISR, ASYNC_FOURPORT },
 	{ BASE_BAUD, 0x2B8, &FourPort2_ISR, ASYNC_FOURPORT | ASYNC_NOSCRATCH },
+#else /* CONFIG_AST_FOURPORT */
+	{ BASE_BAUD, 0x000 }, 
+	{ BASE_BAUD, 0x000 }, 
+	{ BASE_BAUD, 0x000 },
+	{ BASE_BAUD, 0x000 }, 
 
+	{ BASE_BAUD, 0x000 },
+	{ BASE_BAUD, 0x000 }, 
+	{ BASE_BAUD, 0x000 },
+	{ BASE_BAUD, 0x000 },
+#endif /* CONFIG_AST_FOURPORT */
+	
+#ifdef CONFIG_ACCENT_ASYNC
 	{ BASE_BAUD, 0x330, &Accent3_ISR, 0 },
 	{ BASE_BAUD, 0x338, &Accent4_ISR, 0 },
-#endif
+#else /* CONFIG_ACCENT_ASYNC */
+	{ BASE_BAUD, 0x000 },
+	{ BASE_BAUD, 0x000 },
+#endif /* CONFIG_ACCENT_ASYNC */
+	{ BASE_BAUD, 0x000 },
+	{ BASE_BAUD, 0x000 },
+	
 };
 
 #define NR_PORTS	(sizeof(rs_table)/sizeof(struct async_struct))
@@ -141,6 +182,7 @@ static inline void rs_sched_event(int line,
 	timer_active |= 1 << RS_TIMER;
 }
 
+#ifdef NEW_INTERRUPT_ROUTINE
 /*
  * This ISR handles the COM1-4 8250, 16450, and 16550A UART's.  It is
  * also called by the FourPort ISR, since the FourPort also uses the
@@ -174,7 +216,7 @@ static void UART_ISR_proc(async_ISR ISR, int line)
 	
 	do {
 	restart:
-		status = inb(UART_LSR + info->port);
+		status = inb_p(UART_LSR + info->port);
 		if (status & UART_LSR_DR) {
 			queue = &info->tty->read_q;
 			head = queue->head;
@@ -214,7 +256,7 @@ static void UART_ISR_proc(async_ISR ISR, int line)
 				}
 				queue->buf[head++] = ch;
 				head &= TTY_BUF_SIZE-1;
-			} while ((status = inb(UART_LSR + info->port)) &
+			} while ((status = inb_p(UART_LSR + info->port)) &
 				 UART_LSR_DR);
 			queue->head = head;
 			if ((VLEFT < RQ_THRESHOLD_LW)
@@ -268,9 +310,7 @@ static void UART_ISR_proc(async_ISR ISR, int line)
 		 * last.  We have to skip the do/while test condition
 		 * because the THRE interrupt has probably been lost.
 		 */
-		if ((cflag & CRTSCTS) ||
-		    ((status & UART_MSR_DSR) &&
-		     !(cflag & CNORTSCTS))) {
+		if (cflag & CRTSCTS) {
 			if (info->tty->stopped) {
 				if (status & UART_MSR_CTS) {
 					info->tty->stopped = 0;
@@ -279,10 +319,131 @@ static void UART_ISR_proc(async_ISR ISR, int line)
 			} else 
 				info->tty->stopped = !(status & UART_MSR_CTS);
 		}
-	} while (!(inb(UART_IIR + info->port) & UART_IIR_NO_INT));
+	} while (!(inb_p(UART_IIR + info->port) & UART_IIR_NO_INT));
+}
+#else /* NEW_INTERRUPT_ROUTINE */
+/*
+ * There are several races here: we avoid most of them by disabling
+ * timer_active for the crucial part of the process.. That's a good
+ * idea anyway. 
+ *
+ * The problem is that we have to output characters /both/ from interrupts
+ * and from the normal write: the latter to be sure the interrupts start up
+ * again. With serial lines, the interrupts can happen so often that the
+ * races actually are noticeable.
+ */
+static void send_intr(struct async_struct * info)
+{
+	unsigned short port = info->port;
+	int line = info->line;
+	struct tty_queue * queue = &info->tty->write_q;
+	int c, count = 0;
+
+	if (info->tty->stopped)
+		return;
+
+	if (info->type == PORT_16550A)
+		count = 16;	
+	else
+		count = 1;
+	
+	rs_write_active &= ~(1 << line);
+
+	if (inb_p(UART_LSR + info->port) & UART_LSR_THRE) {
+		while (count-- && !info->tty->stopped) {
+			if (queue->tail == queue->head)
+				goto end_send;
+			c = queue->buf[queue->tail];
+			queue->tail++;
+			queue->tail &= TTY_BUF_SIZE-1;
+			outb(c, UART_TX + port);
+		}
+	}
+	info->timer = jiffies + info->timeout;
+	if (info->timer < timer_table[RS_TIMER].expires)
+		timer_table[RS_TIMER].expires = info->timer;
+	rs_write_active |= 1 << line;
+	timer_active |= 1 << RS_TIMER;
+end_send:
+	if (LEFT(queue) > WAKEUP_CHARS)
+		wake_up(&queue->proc_list);
 }
 
-#ifdef NONSTANDARD_PORTS
+static void receive_intr(struct async_struct * info)
+{
+	unsigned short port = info->port;
+	struct tty_queue * queue = &info->tty->read_q;
+	int head = queue->head;
+	int maxhead = (queue->tail-1) & (TTY_BUF_SIZE-1);
+	int count = 0;
+
+	do {
+		count++;
+		queue->buf[head] = inb(UART_TX + port);
+		if (head != maxhead) {
+			head++;
+			head &= TTY_BUF_SIZE-1;
+		}
+	} while (inb(UART_LSR + port) & UART_LSR_DR);
+	queue->head = head;
+	rs_sched_event(info->line, info, RS_EVENT_READ_PROCESS);
+}
+
+static void line_status_intr(struct async_struct * info)
+{
+	unsigned char status = inb(UART_LSR + info->port);
+
+/*	printk("line status: %02x\n",status);  */
+}
+
+static void modem_status_intr(struct async_struct * info)
+{
+	unsigned char status = inb(UART_MSR + info->port);
+
+	if (!(info->tty->termios->c_cflag & CLOCAL)) {
+		if (((status & (UART_MSR_DCD|UART_MSR_DDCD)) == UART_MSR_DDCD)
+		    && info->tty->session > 0)
+			kill_sl(info->tty->session,SIGHUP,1);
+
+		if (info->tty->termios->c_cflag & CRTSCTS)
+			info->tty->stopped = !(status & UART_MSR_CTS);
+
+		if (!info->tty->stopped)
+			send_intr(info);
+	}
+}
+
+static void (*jmp_table[4])(struct async_struct *) = {
+	modem_status_intr,
+	send_intr,
+	receive_intr,
+	line_status_intr
+};
+
+/*
+ * This ISR handles the COM1-4 8250, 16450, and 16550A UART's.  It is
+ * also called by the FourPort ISR, since the FourPort also uses the
+ * same National Semiconduct UART's, with some interrupt multiplexing
+ * thrown in.
+ */
+static void UART_ISR_proc(async_ISR ISR, int line)
+{
+	unsigned char ident;
+	struct async_struct * info = rs_table + line;
+
+	if (!info || !info->tty || !info->port)
+		  return;
+	while (1) {
+		ident = inb(UART_IIR + info->port) & 7;
+		if (ident & 1)
+			return;
+		ident = ident >> 1;
+		jmp_table[ident](info);
+	}
+}
+#endif /* NEW_INTERRUPT_ROUTINE */
+
+#ifdef CONFIG_AST_FOURPORT
 /*
  * Here is the fourport ISR
  */
@@ -301,7 +462,7 @@ static void FourPort_ISR_proc(async_ISR ISR, int line)
 		ivec = ~inb(ISR->port) & 0x0F;
 	} while (ivec);
 }
-#endif
+#endif /* CONFIG_AST_FOURPORT */
 
 /*
  * This is the serial driver's generic interrupt routine
@@ -316,16 +477,18 @@ static void rs_interrupt(int irq)
 	}
 }
 
-#ifdef AUTO_IRQ
+#ifdef CONFIG_AUTO_IRQ
 /*
  * This is the serial driver's interrupt routine while we are probing
  * for submarines.
  */
 static volatile int rs_irq_triggered;
+static volatile int rs_triggered;
 
 static void rs_probe(int irq)
 {
 	rs_irq_triggered = irq;
+	rs_triggered |= 1 << irq;
 	return;
 }
 #endif
@@ -361,8 +524,8 @@ static void rs_timer(void)
 				wake_up_interruptible(&info->tty->write_q.proc_list);
 			}
 			if (!clear_bit(RS_EVENT_HUP_PGRP, &info->event)) {
-				if (info->tty->pgrp > 0)
-					kill_pg(info->tty->pgrp,SIGHUP,1);
+				if (info->tty->session > 0)
+					kill_sl(info->tty->session,SIGHUP,1);
 			}
 			if (!clear_bit(RS_EVENT_BREAK_INT, &info->event)) {
 				flush_input(info->tty);
@@ -423,7 +586,11 @@ void rs_write(struct tty_struct * tty)
 	info = rs_table + DEV_TO_SL(tty->line);
 	if (!test_bit(info->line, &rs_write_active)) {
 		cli();
+#ifdef NEW_INTERRUPT_ROUTINE
 		UART_ISR_proc(info->ISR, info->line);
+#else
+		send_intr(info);
+#endif
 		sti();
 	}
 	
@@ -443,12 +610,10 @@ static void rs_throttle(struct tty_struct * tty, int status)
 		info = rs_table + DEV_TO_SL(tty->line);
 		if (tty->termios->c_iflag & IXOFF) {
 			info->x_char = STOP_CHAR(tty);
-		} else if ((tty->termios->c_cflag & CRTSCTS) ||
-			   ((inb(UART_MSR + info->port) & UART_MSR_DSR) &&
-			    !(tty->termios->c_cflag & CNORTSCTS))) {
-			mcr = inb(UART_MCR + info->port);
+		} else {
+			mcr = inb_p(UART_MCR + info->port);
 			mcr &= ~UART_MCR_RTS;
-			outb_p(mcr, UART_MCR + info->port);
+			outb(mcr, UART_MCR + info->port);
 		}
 		break;
 	case TTY_THROTTLE_RQ_AVAIL:
@@ -460,9 +625,7 @@ static void rs_throttle(struct tty_struct * tty, int status)
 			else
 				info->x_char = START_CHAR(tty);
 			sti();
-		} else if ((tty->termios->c_cflag & CRTSCTS) ||
-			   ((inb(UART_MSR + info->port) & UART_MSR_DSR) &&
-			    !(tty->termios->c_cflag & CNORTSCTS))) {
+		} else {
 			mcr = inb(UART_MCR + info->port);
 			mcr |= UART_MCR_RTS;
 			outb_p(mcr, UART_MCR + info->port);
@@ -486,6 +649,7 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	line = DEV_TO_SL(tty->line);
 	if ((line < 0) || (line >= NR_PORTS))
 		return;
+	tty->stopped = 0;		/* Force flush to succeed */
 	wait_until_sent(tty);
 	info = rs_table + line;
 	if (!info->port)
@@ -681,6 +845,15 @@ static int set_serial_info(struct async_struct * info,
 	if (!new_info)
 		return -EFAULT;
 	memcpy_fromfs(&tmp,new_info,sizeof(tmp));
+
+	info->flags = tmp.flags & ASYNC_FLAGS;
+	
+	if ( (tmp.flags & ASYNC_SPD_MASK) == ASYNC_SPD_CUST)
+		info->custom_divisor = tmp.custom_divisor;
+	
+	if ((tmp.type >= PORT_UNKNOWN) && (tmp.type <= PORT_MAX))
+		info->type = tmp.type;
+	
 	new_port = tmp.port;
 	new_irq = tmp.irq;
 	if (new_irq > 15 || new_port > 0xffff)
@@ -890,9 +1063,37 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 	return 0;
 }
 
+static void show_serial_version()
+{
+	printk("Serial driver version 3.1 with");
+#ifdef CONFIG_AST_FOURPORT
+	printk(" AST_FOURPORT");
+#define SERIAL_OPT
+#endif
+#ifdef CONFIG_ACCENT_ASYNC
+	printk(" ACCENT_ASYNC");
+#define SERIAL_OPT
+#endif
+#ifdef CONFIG_AUTO_IRQ
+	printk (" AUTO_IRQ");
+#define SERIAL_OPT
+#endif
+#ifdef NEW_INTERRUPT_ROUTINE
+	printk(" NEW_INTERRUPT_ROUTINE");
+#define SERIAL_OPT
+#endif
+#ifdef SERIAL_OPT
+	printk(" enabled\n");
+#else
+	printk(" no serial options enabled\n");
+#endif
+#undef SERIAL_OPT
+}
+
+
 static void init(struct async_struct * info)
 {
-#ifdef AUTO_IRQ
+#ifdef CONFIG_AUTO_IRQ
 	unsigned char status1, status2, scratch, save_ICP=0;
 	unsigned short ICP=0, port = info->port;
 	unsigned long timeout;
@@ -941,7 +1142,7 @@ static void init(struct async_struct * info)
 		info->type = PORT_UNKNOWN;
 		return;
 	}
-#else /* AUTO_IRQ */
+#else /* CONFIG_AUTO_IRQ */
 	unsigned char status1, status2, scratch, scratch2;
 	unsigned short port = info->port;
 
@@ -959,7 +1160,7 @@ static void init(struct async_struct * info)
 		info->type = PORT_UNKNOWN;
 		return;
 	}
-#endif /* AUTO_IRQ */
+#endif /* CONFIG_AUTO_IRQ */
 	
 	if (!(info->flags & ASYNC_NOSCRATCH)) {
 		scratch = inb(UART_SCR + port);
@@ -1000,14 +1201,17 @@ long rs_init(long kmem_start)
 {
 	int i;
 	struct async_struct * info;
-#ifdef AUTO_IRQ
+#ifdef CONFIG_AUTO_IRQ
 	int irq_lines = 0;
 	struct sigaction sa;
+	unsigned long timeout;
+	
 	/*
 	 *  We will be auto probing for irq's, so turn on interrupts now!
 	 */
 	sti();
 	
+	rs_triggered = 0;
 	sa.sa_handler = rs_probe;
 	sa.sa_flags = (SA_INTERRUPT);
 	sa.sa_mask = 0;
@@ -1018,12 +1222,28 @@ long rs_init(long kmem_start)
 	
 	for (i = 0; i < 16; i++) {
 		IRQ_ISR[i] = 0;
-#ifdef AUTO_IRQ
+#ifdef CONFIG_AUTO_IRQ
 		if (!irqaction(i, &sa))
 			irq_lines |= 1 << i;
 #endif
 	}
+#ifdef CONFIG_AUTO_IRQ
+	timeout = jiffies+5;
+	while (timeout >= jiffies)
+		;
+	for (i = 0; i < 16; i++) {
+		if ((rs_triggered & (1 << i)) &&
+		    (irq_lines & (1 << i))) {
+			irq_lines &= ~(1 << i);
+			printk("Wild interrupt?  (IRQ %d)\n", i);
+			free_irq(i);
+		}
+	}
+#endif
+	show_serial_version();
 	for (i = 0, info = rs_table; i < NR_PORTS; i++,info++) {
+		if (!info->port)
+			continue;
 		info->line = i;
 		info->tty = 0;
 		info->type = PORT_UNKNOWN;
@@ -1061,13 +1281,16 @@ long rs_init(long kmem_start)
 				break;
 		}
 	}
-#ifdef AUTO_IRQ
+#ifdef CONFIG_AUTO_IRQ
+	/*
+	 * Turn interrupts back off, since they were off when we
+	 * started this.  See start_kernel() in init/main.c.
+	 */
 	cli();
 	for (i = 0; i < 16; i++) {
 		if (irq_lines & (1 << i))
 			free_irq(i);
 	}
-	sti();
 #endif
 	return kmem_start;
 }

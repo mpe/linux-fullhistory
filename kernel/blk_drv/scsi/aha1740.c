@@ -418,9 +418,9 @@ int aha1740_reset(void)
 
 int aha1740_biosparam(int size, int dev, int* info){
 DEB(printk("aha1740_biosparam\n"));
-  info[0] = 32;
-  info[1] = 64;
-  info[2] = (size + 2047) >> 11;
+  info[0] = 64;
+  info[1] = 32;
+  info[2] = size >> 11;
   if (info[2] >= 1024) info[2] = 1024;
   return 0;
 }

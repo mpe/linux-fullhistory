@@ -13,6 +13,7 @@
 
 #define TIMER_IRQ 0
 
+#include <linux/config.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
@@ -407,10 +408,10 @@ static void do_timer(struct pt_regs * regs)
 		}
 	} else {
 		current->stime++;
-#ifdef PROFILE_SHIFT
+#ifdef CONFIG_PROFILE
 		if (prof_buffer && current != task[0]) {
 			unsigned long eip = regs->eip;
-			eip >>= PROFILE_SHIFT;
+			eip >>= 2;
 			if (eip < prof_len)
 				prof_buffer[eip]++;
 		}
@@ -566,8 +567,8 @@ void sched_init(void)
 	}
 /* Clear NT, so that we won't have troubles with that later on */
 	__asm__("pushfl ; andl $0xffffbfff,(%esp) ; popfl");
-	ltr(0);
-	lldt(0);
+	load_TR(0);
+	load_ldt(0);
 	outb_p(0x36,0x43);		/* binary, mode 3, LSB/MSB, ch 0 */
 	outb_p(LATCH & 0xff , 0x40);	/* LSB */
 	outb(LATCH >> 8 , 0x40);	/* MSB */

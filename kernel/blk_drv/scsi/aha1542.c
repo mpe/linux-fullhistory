@@ -772,9 +772,9 @@ int aha1542_reset(void)
 }
 
 int aha1542_biosparam(int size, int dev, int* info){
-  info[0] = 32;
-  info[1] = 64;
-  info[2] = (size + 2047) >> 11;
+  info[0] = 64;
+  info[1] = 32;
+  info[2] = size >> 11;
   if (info[2] >= 1024) info[2] = 1024;
   return 0;
 }

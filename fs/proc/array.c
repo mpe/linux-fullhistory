@@ -13,15 +13,20 @@
 #include <asm/segment.h>
 #include <asm/io.h>
 
+#define LOAD_INT(x) ((x) >> FSHIFT)
+#define LOAD_FRAC(x) LOAD_INT(((x) & (FIXED_1-1)) * 100)
+
 static int get_loadavg(char * buffer)
 {
+	int a, b, c;
+
+	a = avenrun[0] + (FIXED_1/200);
+	b = avenrun[1] + (FIXED_1/200);
+	c = avenrun[2] + (FIXED_1/200);
 	return sprintf(buffer,"%d.%02d %d.%02d %d.%02d\n",
-		avenrun[0] >> FSHIFT,
-		(FIXED_1/2 + (avenrun[0] & (FIXED_1-1))*100) >> FSHIFT,
-		avenrun[1] >> FSHIFT,
-		(FIXED_1/2 + (avenrun[1] & (FIXED_1-1))*100) >> FSHIFT,
-		avenrun[2] >> FSHIFT,
-		(FIXED_1/2 + (avenrun[2] & (FIXED_1-1))*100) >> FSHIFT);
+		LOAD_INT(a), LOAD_FRAC(a),
+		LOAD_INT(b), LOAD_FRAC(b),
+		LOAD_INT(c), LOAD_FRAC(c));
 }
 
 static int get_uptime(char * buffer)
@@ -75,54 +80,31 @@ static unsigned long get_phys_addr(struct task_struct ** p, unsigned long ptr)
 	return page;
 }
 
-static unsigned long get_long(struct task_struct ** p, unsigned long ptr)
+static int get_array(struct task_struct ** p, unsigned long start, unsigned long end, char * buffer)
 {
 	unsigned long addr;
-
-	if (ptr & 3)
-		return 0;
-	addr = get_phys_addr(p,ptr);
-	if (!addr)
-		return 0;
-	return *(unsigned long *) addr;
-}
-
-static int get_char(struct task_struct ** p, unsigned long ptr)
-{
-	unsigned long addr;
-
-	addr = get_phys_addr(p,ptr);
-	if (!addr)
-		return -1;
-	return *(unsigned char *) addr;
-}
-
-static int get_array(struct task_struct ** p, unsigned long ptr, char * buffer)
-{
-	unsigned long tmp;
 	int size = 0, result = 0;
-	unsigned long array;
 	char c;
 
-	array = get_long(p,ptr);
-	if (!ptr)
-		return 0;
+	if (start >= end)
+		return result;
 	for (;;) {
-		tmp = get_long(p,array);
-		if (!tmp)
+		addr = get_phys_addr(p, start);
+		if (!addr)
 			return result;
-		array += 4;
-		while ((c = get_char(p,tmp++)) > 0) {
+		do {
+			c = *(char *) addr;
+			if (!c)
+				result = size;
 			if (size < PAGE_SIZE)
 				buffer[size++] = c;
 			else
 				return result;
-		}
-		if (c < 0)
-			return result;
-		result = size;
-		if (size < PAGE_SIZE)
-			buffer[size++] = '\0';
+			addr++;
+			start++;
+			if (start >= end)
+				return result;
+		} while (!(addr & 0xfff));
 	}
 }
 
@@ -132,7 +114,7 @@ static int get_env(int pid, char * buffer)
 
 	if (!p || !*p)
 		return 0;
-	return get_array(p, (*p)->start_stack+8, buffer);
+	return get_array(p, (*p)->env_start, (*p)->env_end, buffer);
 }
 
 static int get_arg(int pid, char * buffer)
@@ -141,7 +123,7 @@ static int get_arg(int pid, char * buffer)
 
 	if (!p || !*p)
 		return 0;
-	return get_array(p, (*p)->start_stack+4, buffer);
+	return get_array(p, (*p)->arg_start, (*p)->arg_end, buffer);
 }
 
 static int get_stat(int pid, char * buffer)
@@ -175,7 +157,6 @@ static int array_read(struct inode * inode, struct file * file,char * buf, int c
 	if (count < 0)
 		return -EINVAL;
 	page = (char *) get_free_page(GFP_KERNEL);
-	*page = 0;
 	if (!page)
 		return -ENOMEM;
 	type = inode->i_ino;
@@ -201,10 +182,13 @@ static int array_read(struct inode * inode, struct file * file,char * buf, int c
 			length = get_stat(pid, page);
 			break;
 		default:
+			free_page((unsigned long) page);
 			return -EBADF;
 	}
-	if (file->f_pos >= length)
+	if (file->f_pos >= length) {
+		free_page((unsigned long) page);
 		return 0;
+	}
 	if (count + file->f_pos > length)
 		count = length - file->f_pos;
 	end = count + file->f_pos;

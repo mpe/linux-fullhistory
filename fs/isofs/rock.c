@@ -115,14 +115,18 @@ int find_rock_ridge_relocation(struct iso_directory_record * de,
 	CHECK_SP(goto out);
 	break;
       case SIG('C','L'):
+#ifdef DEBUG
 	printk("RR: CL\n");
+#endif
 	if (flag == 0) {
 	  retval = isonum_733(rr->u.CL.location);
 	  goto out;
 	};
 	break;
       case SIG('P','L'):
+#ifdef DEBUG
 	printk("RR: PL\n");
+#endif
 	if (flag != 0) {
 	  retval = isonum_733(rr->u.PL.location);
 	  goto out;
@@ -202,7 +206,9 @@ int get_rock_ridge_filename(struct iso_directory_record * de,
 	retnamlen += rr->len - 5;
 	break;
       case SIG('R','E'):
+#ifdef DEBUG
 	printk("RR: RE (%x)\n", inode->i_ino);
+#endif
 	if (buffer) kfree(buffer);
 	if (retname) kfree(retname);
 	return -1;
@@ -274,7 +280,7 @@ int parse_rock_ridge_inode(struct iso_directory_record * de,
 	{ int high, low;
 	  high = isonum_733(rr->u.PN.dev_high);
 	  low = isonum_733(rr->u.PN.dev_low);
-	  inode->i_rdev = ((high << 8) | (low && 0xff)) & 0xffff;
+	  inode->i_rdev = ((high << 8) | (low & 0xff)) & 0xffff;
 	};
 	break;
       case SIG('T','F'):
@@ -317,9 +323,12 @@ int parse_rock_ridge_inode(struct iso_directory_record * de,
 	printk("Attempt to read inode for relocated directory\n");
 	goto out;
       case SIG('C','L'):
+#ifdef DEBUG
 	printk("RR CL (%x)\n",inode->i_ino);
-	inode->u.isofs_i.i_first_extent = isonum_733(rr->u.CL.location);
-	reloc = iget(inode->i_sb, inode->u.isofs_i.i_first_extent << ISOFS_BLOCK_BITS);
+#endif
+	inode->u.isofs_i.i_first_extent = isonum_733(rr->u.CL.location) <<
+		(ISOFS_BLOCK_BITS - ISOFS_BUFFER_BITS);
+	reloc = iget(inode->i_sb, inode->u.isofs_i.i_first_extent << ISOFS_BUFFER_BITS);
 	inode->i_mode = reloc->i_mode;
 	inode->i_nlink = reloc->i_nlink;
 	inode->i_uid = reloc->i_uid;

@@ -170,7 +170,6 @@ extern void isofs_statfs(struct super_block *, struct statfs *);
 
 extern int isofs_lseek(struct inode *, struct file *, off_t, int);
 extern int isofs_read(struct inode *, struct file *, char *, int);
-extern int isofs_file_read(struct inode *, struct file *, char *, int);
 extern int isofs_lookup_grandparent(struct inode *, int);
 
 extern struct inode_operations isofs_file_inode_operations;
@@ -178,6 +177,7 @@ extern struct inode_operations isofs_dir_inode_operations;
 extern struct inode_operations isofs_symlink_inode_operations;
 extern struct inode_operations isofs_chrdev_inode_operations;
 extern struct inode_operations isofs_blkdev_inode_operations;
+extern struct inode_operations isofs_fifo_inode_operations;
 
 extern struct file_operations isofs_file_operations;
 extern struct file_operations isofs_dir_operations;

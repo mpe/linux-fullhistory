@@ -188,6 +188,10 @@ int session_of_pgrp(int pgrp)
 	return fallback;
 }
 
+/*
+ * kill_pg() sends a signal to a process group: this is what the tty
+ * control characters do (^C, ^Z etc)
+ */
 int kill_pg(int pgrp, int sig, int priv)
 {
 	struct task_struct **p;
@@ -198,6 +202,29 @@ int kill_pg(int pgrp, int sig, int priv)
 		return -EINVAL;
  	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p)
 		if (*p && (*p)->pgrp == pgrp) {
+			if ((err = send_sig(sig,*p,priv)) != 0)
+				retval = err;
+			else
+				found++;
+		}
+	return(found ? 0 : retval);
+}
+
+/*
+ * kill_sl() sends a signal to the session leader: this is used
+ * to send SIGHUP to the controlling process of a terminal when
+ * the connection is lost.
+ */
+int kill_sl(int sess, int sig, int priv)
+{
+	struct task_struct **p;
+	int err,retval = -ESRCH;
+	int found = 0;
+
+	if (sig<0 || sig>32 || sess<=0)
+		return -EINVAL;
+ 	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p)
+		if (*p && (*p)->session == sess && (*p)->leader) {
 			if ((err = send_sig(sig,*p,priv)) != 0)
 				retval = err;
 			else

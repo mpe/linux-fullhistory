@@ -39,5 +39,9 @@ typedef struct {
 } Scsi_Tape;
 
 
+/* Positioning SCSI-commands for Tandberg, etc. drives */
+#define	QFA_REQUEST_BLOCK	0x02
+#define	QFA_SEEK_BLOCK		0x0c
+
 #endif
 

@@ -19,8 +19,17 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: raw.c,v 0.8.4.6 1992/11/18 15:38:03 bir7 Exp $ */
+/* $Id: raw.c,v 0.8.4.9 1992/12/12 19:25:04 bir7 Exp $ */
 /* $Log: raw.c,v $
+ * Revision 0.8.4.9  1992/12/12  19:25:04  bir7
+ * Cleaned up Log messages.
+ *
+ * Revision 0.8.4.8  1992/12/12  01:50:49  bir7
+ * Fixed bug in call to err routine.
+ *
+ * Revision 0.8.4.7  1992/12/06  11:31:47  bir7
+ * added raw_err.
+ *
  * Revision 0.8.4.6  1992/11/18  15:38:03  bir7
  * Works now.
  *
@@ -38,7 +47,7 @@
  * version change only.
  *
  * Revision 0.8.3.3  1992/11/10  00:14:47  bir7
- * Changed malloc to kmalloc and added $iId$ and 
+ * Changed malloc to kmalloc and added Id and Log
  * */
 
 #include <linux/types.h>
@@ -56,7 +65,7 @@
 #include <asm/segment.h>
 #include <linux/mm.h>
 #include <linux/kernel.h>
-#include "../kern_sock.h" /* for PRINTK */
+#include "icmp.h"
 
 
 #ifdef PRINTK
@@ -77,6 +86,40 @@ min(unsigned long a, unsigned long b)
 {
    if (a < b) return (a);
    return (b);
+}
+
+/* raw_err gets called by the icmp module. */
+void
+raw_err (int err, unsigned char *header, unsigned long daddr,
+	 unsigned long saddr, struct ip_protocol *protocol)
+{
+   volatile struct sock *sk;
+   
+   PRINTK ("raw_err (err=%d, header=%X, daddr=%X, saddr=%X, ip_protocl=%X)\n");
+
+   if (protocol == NULL) return;
+
+   sk = protocol->data;
+
+   if (sk == NULL) return;
+
+   /* This is meaningless in raw sockets. */
+   if (err & 0xff00 == (ICMP_SOURCE_QUENCH << 8))
+     {
+	if (sk->cong_window > 1)
+	  sk->cong_window = sk->cong_window/2;
+	return;
+     }
+
+   sk->err = icmp_err_convert[err & 0xff].errno;
+   /* none of them are fatal for raw sockets. */
+/*   if (icmp_err_convert[err & 0xff].fatal)
+     {
+	sk->prot->close(sk, 0);
+     } */
+
+   return;
+
 }
 
 /* this should be the easiest of all, all we do is copy it into
@@ -239,6 +282,7 @@ raw_sendto (volatile struct sock *sk, unsigned char *from, int len,
 	   sti();
 	 }
      }
+   skb->lock = 0;
    skb->mem_addr = skb;
    skb->mem_len = len + sizeof (*skb) +sk->prot->max_header;
    skb->sk = sk;
@@ -296,6 +340,7 @@ raw_init (volatile struct sock *sk)
    p->handler = raw_rcv;
    p->protocol = sk->protocol;
    p->data = (void *)sk;
+   p->err_handler = raw_err;
    add_ip_protocol (p);
    
    /* we need to remember this somewhere. */
@@ -323,6 +368,8 @@ raw_recvfrom (volatile struct sock *sk, unsigned char *to, int len,
 
 	if (len == 0) return (0);
 	if (len < 0) return (-EINVAL);
+
+	if (sk->shutdown & RCV_SHUTDOWN) return (0);
 	if (addr_len)
 	  {
 		  verify_area (addr_len, sizeof(*addr_len));
@@ -426,6 +473,7 @@ struct proto raw_prot =
   udp_select,
   NULL,
   raw_init,
+  NULL,
   128,
   0,
   {NULL,}

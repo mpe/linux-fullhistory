@@ -19,17 +19,27 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: dev.h,v 0.8.4.1 1992/11/10 00:17:18 bir7 Exp $ */
+/* $Id: dev.h,v 0.8.4.5 1992/12/08 20:49:15 bir7 Exp $ */
 /* $Log: dev.h,v $
+ * Revision 0.8.4.5  1992/12/08  20:49:15  bir7
+ * Edited ctrl-h's out of log messages.
+ *
+ * Revision 0.8.4.4  1992/12/06  23:29:59  bir7
+ * Converted to using lower half interrupt routine.
+ *
+ * Revision 0.8.4.3  1992/12/05  21:35:53  bir7
+ * Updated dev->init type.
+ *
+ * Revision 0.8.4.2  1992/12/03  19:54:12  bir7
+ * Added paranoid queue checking.
+ *
  * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
  * version change only.
  *
  * Revision 0.8.3.2  1992/11/10  00:14:47  bir7
- * Changed malloc to kmalloc and added $iId$ and $Log: dev.h,v $
- * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
- * version change only.
- *.
- * */
+ * Changed malloc to kmalloc and added Id and Log
+ *
+ */
 
 #ifndef _TCP_DEV_H
 #define _TCP_DEV_H
@@ -54,10 +64,10 @@ struct device
                 interrupt:1,
                 up:1;
   struct device *next;
-  void (*init)(struct device *dev);
+  int (*init)(struct device *dev);
   unsigned long trans_start;
   struct sk_buff *buffs[DEV_NUMBUFFS];
-  struct sk_buff *backlog;
+  struct sk_buff *backlog; /* no longer used. */
   int  (*open)(struct device *dev);
   int  (*stop)(struct device *dev);
   int (*hard_start_xmit) (struct sk_buff *skb, struct device *dev);
@@ -94,15 +104,17 @@ struct packet_type
 
 /* used by dev_rint */
 #define IN_SKBUFF 1
+#define DEV_QUEUE_MAGIC 0x17432895
+
 
 extern struct packet_type *ptype_base;
 void dev_queue_xmit (struct sk_buff *skb, struct device *dev, int pri);
-int dev_rint (unsigned char *buff, unsigned long len, int flags,
-	      struct device *dev);
+int dev_rint (unsigned char *buff, long len, int flags, struct device *dev);
 unsigned long dev_tint (unsigned char *buff, struct device *dev);
 void dev_add_pack (struct packet_type *pt);
 void dev_remove_pack (struct packet_type *pt);
 struct device *get_dev (char *name);
+void inet_bh (void *tmp);
 
 
 #endif

@@ -233,17 +233,25 @@ end_move:
 	jmpi	0,8		! jmp offset 0 of segment 8 (cs)
 
 ! This routine checks that the keyboard command queue is empty
+! (after emptying the output buffers)
+!
 ! No timeout is used - if this hangs there is something wrong with
 ! the machine, and we probably couldn't proceed anyway.
 empty_8042:
 	.word	0x00eb,0x00eb
 	in	al,#0x64	! 8042 status port
+	test	al,#1		! output buffer?
+	jz	no_output
+	.word	0x00eb,0x00eb
+	in	al,#0x60	! read it
+	jmp	empty_8042
+no_output:
 	test	al,#2		! is input buffer full?
 	jnz	empty_8042	! yes - loop
 	ret
 
 getkey:
-	in	al,#0x60	! Quick and dirty...
+	in	al,#0x60		! Quick and dirty...
 	.word	0x00eb,0x00eb		! jmp $+2, jmp $+2
 	mov	bl,al
 	in	al,#0x61

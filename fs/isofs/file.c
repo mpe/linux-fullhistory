@@ -29,7 +29,7 @@
 #include <linux/fs.h>
 #include <linux/iso_fs.h>
 
-int isofs_file_read(struct inode *, struct file *, char *, int);
+static int isofs_file_read(struct inode *, struct file *, char *, int);
 
 /*
  * We have mostly NULL's here: the current defaults are ok for
@@ -38,7 +38,7 @@ int isofs_file_read(struct inode *, struct file *, char *, int);
 static struct file_operations isofs_file_operations = {
 	NULL,			/* lseek - default */
 	isofs_file_read,	/* read */
-	NULL,	/* write */
+	NULL,			/* write */
 	NULL,			/* readdir - bad */
 	NULL,			/* select - default */
 	NULL,			/* ioctl - default */
@@ -60,7 +60,7 @@ struct inode_operations isofs_file_inode_operations = {
 	NULL,			/* readlink */
 	NULL,			/* follow_link */
 	isofs_bmap,		/* bmap */
-	NULL	       	/* truncate */
+	NULL	       		/* truncate */
 };
 
 /* This is a heuristic to determine if a file is text of binary.  If it
@@ -108,13 +108,7 @@ static void isofs_determine_filetype(struct inode * inode)
 	}
 }
 
-/*
- * isofs_file_read() is also needed by the directory read-routine,
- * so it's not static. NOTE! reading directories directly is a bad idea,
- * but has to be supported for now for compatability reasons with older
- * versions.
- */
-int isofs_file_read(struct inode * inode, struct file * filp, char * buf, int count)
+static int isofs_file_read(struct inode * inode, struct file * filp, char * buf, int count)
 {
 	int read,left,chars;
 	int block, blocks, offset;

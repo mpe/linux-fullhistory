@@ -7,6 +7,7 @@
 #include <linux/socket.h>
 #include <linux/fcntl.h>
 #include <linux/termios.h>
+#include <linux/config.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -17,7 +18,7 @@
 extern int sys_close(int fd);
 
 extern struct proto_ops unix_proto_ops;
-#ifdef INET_SOCKETS
+#ifdef CONFIG_TCPIP
 extern struct proto_ops inet_proto_ops;
 #endif
 
@@ -27,7 +28,7 @@ static struct {
 	struct proto_ops *ops;
 } proto_table[] = {
 	{AF_UNIX,	"AF_UNIX",	&unix_proto_ops},
-#ifdef INET_SOCKETS
+#ifdef CONFIG_TCPIP
 	{AF_INET,	"AF_INET",	&inet_proto_ops},
 #endif
 };
@@ -616,9 +617,20 @@ sock_connect(int fd, struct sockaddr *uservaddr, int addrlen)
 	PRINTK("sys_connect: fd = %d\n", fd);
 	if (!(sock = sockfd_lookup(fd, &file)))
 		return -EBADF;
-	if (sock->state != SS_UNCONNECTED) {
-		PRINTK("sys_connect: socket not unconnected\n");
-		return -EINVAL;
+	switch (sock->state) {
+		case SS_UNCONNECTED:
+			/* This is ok... continue with connect */
+			break;
+		case SS_CONNECTED:
+			/* Socket is already connected */
+			return -EISCONN;
+		case SS_CONNECTING:
+			/* Not yet connected... */
+			/* we will check this. */
+			return (sock->ops->connect(sock, uservaddr, addrlen, file->f_flags));
+		default:
+			PRINTK("sys_connect: socket not unconnected\n");
+			return -EINVAL;
 	}
 	i = sock->ops->connect(sock, uservaddr, addrlen, file->f_flags);
 	if (i < 0) {

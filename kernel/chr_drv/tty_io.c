@@ -54,7 +54,6 @@ struct tty_struct * redirect = NULL;
 struct wait_queue * keypress_wait = NULL;
 
 static int initialize_tty_struct(struct tty_struct *tty, int line);
-static void reset_tty_termios(int line);
 
 void put_tty_queue(char c, struct tty_queue * queue)
 {
@@ -277,8 +276,11 @@ static void __wait_for_canon_input(struct tty_struct *);
 
 static void wait_for_canon_input(struct tty_struct * tty)
 {
-	if (!available_canon_input(tty))
+	if (!available_canon_input(tty)) {
+		if (current->signal & ~current->blocked)
+			return;
 		__wait_for_canon_input(tty);
+	}
 }
 
 static int read_chan(struct tty_struct * tty, struct file * file, char * buf, int nr)
@@ -409,6 +411,8 @@ static void __wait_for_canon_input(struct tty_struct * tty)
 		current->state = TASK_INTERRUPTIBLE;
 		if (available_canon_input(tty))
 			break;
+		if (current->signal & ~current->blocked)
+			break;
 		schedule();
 	}
 	current->state = TASK_RUNNING;
@@ -423,8 +427,6 @@ static int available_canon_input(struct tty_struct * tty)
 			TTY_WRITE_FLUSH(tty->link);
 		else
 			return 1;
-	if (current->signal & ~current->blocked)
-		return 1;
 	if (FULL(&tty->read_q))
 		return 1;
 	if (tty->secondary.data)
@@ -588,62 +590,65 @@ static int tty_open(struct inode * inode, struct file * filp)
  * There be race-conditions here... Lots of them. Careful now.
  */
 	tty = o_tty = NULL;
-	if (!tty_table[dev]) {
+	tty = tty_table[dev];
+	if (!tty) {
 		tty = (struct tty_struct *) get_free_page(GFP_KERNEL);
-		if (tty) {
+		if (tty_table[dev]) {
+			/*
+			 * Stop our allocation of tty if race
+			 * condition detected.
+			 */
+			if (tty)
+				free_page((unsigned long) tty);
+			tty = tty_table[dev];
+		} else {
+			if (!tty)
+				return -ENOMEM;
 			retval = initialize_tty_struct(tty, dev);
 			if (retval) {
-				free_page((unsigned long)tty);
+				free_page((unsigned long) tty);
 				return retval;
 			}
+			tty_table[dev] = tty;
 		}
 	}
+	tty->count++;			/* bump count to preserve tty */
 	if (IS_A_PTY(dev)) {
-		if (!tty_table[PTY_OTHER(dev)]) {
+		o_tty = tty_table[PTY_OTHER(dev)];
+		if (!o_tty) {
 			o_tty = (struct tty_struct *) get_free_page(GFP_KERNEL);
-			if (o_tty) {
+			if (tty_table[PTY_OTHER(dev)]) {
+				/*
+				 * Stop our allocation of o_tty if race
+				 * condition detected.
+				 */
+				free_page((unsigned long) o_tty);
+				o_tty = tty_table[PTY_OTHER(dev)];
+			} else {
+				if (!o_tty) {
+					tty->count--;
+					return -ENOMEM;
+				}
 				retval = initialize_tty_struct(o_tty, PTY_OTHER(dev));
 				if (retval) {
-					free_page((unsigned long) tty);
+					tty->count--;
 					free_page((unsigned long) o_tty);
 					return retval;
 				}
+				tty_table[PTY_OTHER(dev)] = o_tty;
 			}
 		}
-		if (!o_tty && !tty_table[PTY_OTHER(dev)]) {
-			free_page((unsigned long) tty);
-			return -ENOMEM;
-		}
-	}
-	if (tty_table[dev]) {
-		free_page((unsigned long) tty);
-		tty = tty_table[dev];
-	} else if (tty)
-		tty_table[dev] = tty;
-	else {
-		free_page((unsigned long) o_tty);
-		return -ENOMEM;
-	}
-	if (IS_A_PTY(dev)) {
-		if (tty_table[PTY_OTHER(dev)]) {
-			free_page((unsigned long) o_tty);
-			o_tty = tty_table[PTY_OTHER(dev)];
-		} else
-			tty_table[PTY_OTHER(dev)] = o_tty;
-		tty->link = o_tty;
+		tty->link = o_tty;				
 		o_tty->link = tty;
 	}
 	if (IS_A_PTY_MASTER(dev)) {
-		if (tty->count)
+		if (tty->count > 1) {
+			tty->count--;
 			return -EAGAIN;
-		if (tty->link && tty->link->count++ == 0)
-			reset_tty_termios(PTY_OTHER(dev));
-		reset_tty_termios(dev);
-	} else if (IS_A_PTY_SLAVE(dev)) {
-		if (tty->count == 0)
-			reset_tty_termios(dev);
-	}
-	tty->count++;
+		}
+		if (tty->link)
+			tty->link->count++;
+	} 
 	retval = 0;
 
 	/* clean up the packet stuff. */
@@ -680,6 +685,8 @@ static void tty_release(struct inode * inode, struct file * filp)
 {
 	int dev;
 	struct tty_struct * tty;
+	unsigned long free_tty_struct;
+	struct termios *free_termios;
 
 	dev = filp->f_rdev;
 	if (MAJOR(dev) != 4) {
@@ -717,11 +724,37 @@ static void tty_release(struct inode * inode, struct file * filp)
 	if (tty->link) {
 		if (tty->link->count)
 			return;
-		free_page((unsigned long) tty_table[PTY_OTHER(dev)]);
+		/*
+		 * Free the tty structure, being careful to avoid race conditions
+		 */
+		free_tty_struct = (unsigned long) tty_table[PTY_OTHER(dev)];
 		tty_table[PTY_OTHER(dev)] = 0;
+		free_page(free_tty_struct);
+		/*
+		 * If this is a PTY, free the termios structure, being
+		 * careful to avoid race conditions
+		 */
+		if (IS_A_PTY(dev)) {
+			free_termios = tty_termios[PTY_OTHER(dev)];
+			tty_termios[PTY_OTHER(dev)] = 0;
+			kfree_s(free_termios, sizeof(struct termios));
+		}
 	}
-	free_page((unsigned long) tty_table[dev]);
-	tty_table[dev] = 0;
+	/*
+	 * Free the tty structure, being careful to avoid race conditions
+	 */
+	free_tty_struct = (unsigned long) tty_table[dev];
+	tty_table[dev] = 0;	
+	free_page(free_tty_struct);
+	/*
+	 * If this is a PTY, free the termios structure, being careful
+	 * to avoid race conditions
+	 */
+	if (IS_A_PTY(dev)) {
+		free_termios = tty_termios[dev];
+		tty_termios[dev] = 0;
+		kfree_s(free_termios, sizeof(struct termios));
+	}
 }
 
 static int tty_select(struct inode * inode, struct file * filp, int sel_type, select_table * wait)
@@ -742,7 +775,10 @@ static int tty_select(struct inode * inode, struct file * filp, int sel_type, se
 	}
 	switch (sel_type) {
 		case SEL_IN:
-			if (!EMPTY(&tty->secondary))
+			if (L_CANON(tty)) {
+				if (available_canon_input(tty))
+					return 1;
+			} else if (!EMPTY(&tty->secondary))
 				return 1;
 			if (tty->link && !tty->link->count)
 				return 1;
@@ -750,7 +786,7 @@ static int tty_select(struct inode * inode, struct file * filp, int sel_type, se
 			/* see if the status byte can be read. */
 			if (tty->packet && tty->link &&
 			    tty->link->status_changed)
-			  return 1;
+				return 1;
 
 			select_wait(&tty->secondary.proc_list, wait);
 			return 0;
@@ -826,16 +862,39 @@ void do_SAK( struct tty_struct *tty)
  */
 static int initialize_tty_struct(struct tty_struct *tty, int line)
 {
+	struct termios *tp = tty_termios[line];
+
 	memset(tty, 0, sizeof(struct tty_struct));
 	tty->line = line;
 	tty->pgrp = -1;
 	tty->winsize.ws_row = 24;
 	tty->winsize.ws_col = 80;
 	if (!tty_termios[line]) {
-		tty_termios[line] = kmalloc(sizeof(struct termios), GFP_KERNEL);
-		if (!tty_termios[line])
-			return -ENOMEM;
-		reset_tty_termios(line);
+		tp = kmalloc(sizeof(struct termios), GFP_KERNEL);
+		if (!tty_termios[line]) {
+			if (!tp)
+				return -ENOMEM;
+			memset(tp, 0, sizeof(struct termios));
+			memcpy(tp->c_cc, INIT_C_CC, NCCS);
+			if (IS_A_CONSOLE(line)) {
+				tp->c_iflag = ICRNL | IXON;
+				tp->c_oflag = OPOST | ONLCR;
+				tp->c_cflag = B38400 | CS8 | CREAD;
+				tp->c_lflag = ISIG | ICANON | ECHO |
+					ECHOCTL | ECHOKE;
+			} else if (IS_A_SERIAL(line)) {
+				tp->c_cflag = B2400 | CS8 | CREAD | HUPCL;
+			} else if (IS_A_PTY_MASTER(line)) {
+				tp->c_cflag = B9600 | CS8 | CREAD;
+			} else if (IS_A_PTY_SLAVE(line)) {
+				tp->c_iflag = ICRNL | IXON;
+				tp->c_oflag = OPOST | ONLCR;
+				tp->c_cflag = B38400 | CS8 | CREAD;
+				tp->c_lflag = ISIG | ICANON | ECHO |
+					ECHOCTL | ECHOKE;
+			}
+			tty_termios[line] = tp;
+		}
 	}
 	tty->termios = tty_termios[line];
 	
@@ -849,33 +908,6 @@ static int initialize_tty_struct(struct tty_struct *tty, int line)
 		tty->open = pty_open;
 	}
 	return 0;
-}
-
-static void reset_tty_termios(int line)
-{
-	struct termios *tp = tty_termios[line];
-
-	if (!tp) {
-		printk("termios of line was NULL\n");
-		return;
-	}
-	memset(tp, 0, sizeof(struct termios));
-	memcpy(tp->c_cc, INIT_C_CC, NCCS);
-	if (IS_A_CONSOLE(line)) {
-		tp->c_iflag = ICRNL | IXON;
-		tp->c_oflag = OPOST | ONLCR;
-		tp->c_cflag = B38400 | CS8 | CREAD;
-		tp->c_lflag = ISIG | ICANON | ECHO | ECHOCTL | ECHOKE;
-	} else if (IS_A_SERIAL(line)) {
-		tp->c_cflag = B2400 | CS8 | CREAD | HUPCL;
-	} else if (IS_A_PTY_MASTER(line)) {
-		tp->c_cflag = B9600 | CS8 | CREAD;
-	} else if (IS_A_PTY_SLAVE(line)) {
-		tp->c_iflag = ICRNL | IXON;
-		tp->c_oflag = OPOST | ONLCR;
-		tp->c_cflag = B38400 | CS8 | CREAD;
-		tp->c_lflag = ISIG | ICANON | ECHO | ECHOCTL | ECHOKE;
-	}
 }
 
 long tty_init(long kmem_start)

@@ -14,7 +14,7 @@
 
 #define MAX_RETRIES 5	
 #define MAX_TIMEOUT 200
-#define MAX_BUF 8192  	
+#define MAX_BUF 4096
 
 #define max(a,b) (((a) > (b)) ? (a) : (b))
 
@@ -51,6 +51,9 @@ static int ioctl_probe(int dev, void *buffer)
  * Note that no more than MAX_BUF data bytes will be transfered.  Since
  * SCSI block device size is 512 bytes, I figured 1K was good.
  * but (WDE) changed it to 8192 to handle large bad track buffers.
+ * ERY: I changed this to a dynamic allocation using scsi_malloc - we were
+ * getting a kernel stack overflow which was crashing the system when we
+ * were using 8192 bytes.
  * 
  * This size *does not* include the initial lengths that were passed.
  * 
@@ -133,12 +136,13 @@ static int ioctl_internal_command(Scsi_Device *dev, char * cmd)
 
 static int ioctl_command(Scsi_Device *dev, void *buffer)
 {
-	char buf[MAX_BUF];
+	char * buf;
 	char cmd[10];
 	char * cmd_in;
 	Scsi_Cmnd * SCpnt;
 	unsigned char opcode;
 	int inlen, outlen, cmdlen, host;
+	int needed;
 	int result;
 
 	if (!buffer)
@@ -149,6 +153,15 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
 
 	cmd_in = (char *) ( ((int *)buffer) + 2);
 	opcode = get_fs_byte(cmd_in); 
+
+	needed = (inlen > outlen ? inlen : outlen);
+	if(needed){
+	  needed = (needed + 511) & ~511;
+	  if (needed > MAX_BUF) needed = MAX_BUF;
+	  buf = scsi_malloc(needed);
+	  if (!buf) return -ENOMEM;
+	} else
+	  buf = NULL;
 
 	memcpy_fromfs ((void *) cmd,  cmd_in,  cmdlen = COMMAND_SIZE (opcode));
 	memcpy_fromfs ((void *) buf,  (void *) (cmd_in + cmdlen),  inlen);
@@ -172,6 +185,7 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
 	memcpy_tofs ((void *) cmd_in,  buf,  (outlen > MAX_BUF) ? MAX_BUF  : outlen);
 	result = SCpnt->result;
 	SCpnt->request.dev = -1;  /* Mark as not busy */
+	if (buf) scsi_free(buf, needed);
 	wake_up(&scsi_devices[SCpnt->index].device_wait);
 	return result;
 #else

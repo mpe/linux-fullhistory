@@ -14,8 +14,6 @@
 extern int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg);
 extern int revalidate_scsidisk(int, int);
 
-extern int sd_sizes[];
-
 int sd_ioctl(struct inode * inode, struct file * file, unsigned long cmd, unsigned long arg)
 {
 	int dev = inode->i_rdev;
@@ -32,7 +30,7 @@ int sd_ioctl(struct inode * inode, struct file * file, unsigned long cmd, unsign
 			diskinfo[1] = 0;
 			diskinfo[2] = 0;
 			if(scsi_hosts[host].bios_param != NULL)
-			      scsi_hosts[host].bios_param(sd_sizes[MINOR(dev)],
+			      scsi_hosts[host].bios_param(rscsi_disks[MINOR(dev) >> 4].capacity,
 							  dev,
 							  &diskinfo[0]);
 			put_fs_byte(diskinfo[0],

@@ -19,8 +19,14 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: packet.c,v 0.8.4.3 1992/11/17 14:19:47 bir7 Exp $ */
+/* $Id: packet.c,v 0.8.4.5 1992/12/12 19:25:04 bir7 Exp $ */
 /* $Log: packet.c,v $
+ * Revision 0.8.4.5  1992/12/12  19:25:04  bir7
+ * Cleaned up Log messages.
+ *
+ * Revision 0.8.4.4  1992/12/12  01:50:49  bir7
+ * Fixed bug in call to err routine.
+ *
  * Revision 0.8.4.3  1992/11/17  14:19:47  bir7
  * *** empty log message ***
  *
@@ -31,7 +37,7 @@
  * version change only.
  *
  * Revision 0.8.3.3  1992/11/10  00:14:47  bir7
- * Changed malloc to kmalloc and added $iId$ 
+ * Changed malloc to kmalloc and added Id and Log
  * */
 
 #include <linux/types.h>
@@ -150,6 +156,7 @@ packet_sendto (volatile struct sock *sk, unsigned char *from, int len,
 	print_sk (sk);
 	return (-EAGAIN);
      }
+   skb->lock = 0;
    skb->mem_addr = skb;
    skb->mem_len = len + sizeof (*skb) +sk->prot->max_header;
    skb->sk = sk;
@@ -222,6 +229,9 @@ packet_recvfrom (volatile struct sock *sk, unsigned char *to, int len,
 
 	if (len == 0) return (0);
 	if (len < 0) return (-EINVAL);
+
+	if (sk->shutdown & RCV_SHUTDOWN) return (0);
+
 	if (addr_len)
 	  {
 		  verify_area (addr_len, sizeof(*addr_len));
@@ -324,6 +334,7 @@ struct proto packet_prot =
   udp_select,
   NULL,
   packet_init,
+  NULL,
   128,
   0,
   {NULL,}

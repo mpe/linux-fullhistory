@@ -19,8 +19,17 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: sock.h,v 0.8.4.2 1992/11/10 10:38:48 bir7 Exp $ */
+/* $Id: sock.h,v 0.8.4.5 1992/12/12 01:50:49 bir7 Exp $ */
 /* $Log: sock.h,v $
+ * Revision 0.8.4.5  1992/12/12  01:50:49  bir7
+ * Fixed support for half duplex connections.
+ *
+ * Revision 0.8.4.4  1992/12/06  23:29:59  bir7
+ * Added mss and support for half completed packets.
+ *
+ * Revision 0.8.4.3  1992/12/03  19:54:12  bir7
+ * Added paranoid queue checking.
+ *
  * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
  * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
  *
@@ -28,14 +37,9 @@
  * version change only.
  *
  * Revision 0.8.3.4  1992/11/10  00:14:47  bir7
- * Changed malloc to kmalloc and added $iId$ and $Log: sock.h,v $
- * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
- * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
+ * Changed malloc to kmalloc and added Id and Log
  *
- * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
- * version change only.
- *.
- * */
+ */
 #ifndef _TCP_SOCK_H
 #define _TCP_SOCK_H
 
@@ -65,6 +69,7 @@ struct sock
   struct sk_buff *send_tail;
   struct sk_buff *send_head;
   struct sk_buff *back_log;
+  struct sk_buff *send_tmp;
   long retransmits;
   struct sk_buff *wback, *wfront, *rqueue;
   struct proto *prot;
@@ -80,6 +85,7 @@ struct sock
   unsigned short packets_out;
   unsigned short urg;
   unsigned short shutdown;
+  unsigned short mss;
   short rtt;
   short err;
   unsigned char protocol;
@@ -129,6 +135,7 @@ struct proto
   int (*select)(volatile struct sock *sk, int which, select_table *wait);
   int (*ioctl) (volatile struct sock *sk, int cmd, unsigned long arg);
   int (*init) (volatile struct sock *sk);
+  void (*shutdown) (volatile struct sock *sk, int how);
   unsigned short max_header;
   unsigned long retransmits;
   volatile struct sock *sock_array[SOCK_ARRAY_SIZE];
@@ -168,6 +175,7 @@ struct sk_buff
   unsigned long len;
   unsigned long saddr;
   unsigned long daddr;
+  int magic;
   unsigned long acked:1,used:1,free:1,arp:1, urg_used:1, lock:1;
 };
 

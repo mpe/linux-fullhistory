@@ -17,6 +17,7 @@
 #include <linux/fs.h>
 #include <linux/errno.h>
 #include <linux/mouse.h>
+#include <linux/config.h>
 
 /*
  * note that you can remove any or all of the drivers by undefining
@@ -37,22 +38,22 @@ static int mouse_open(struct inode * inode, struct file * file)
 	int minor = MINOR(inode->i_rdev);
 
 	switch (minor) {
-#ifdef BUSMOUSE_MINOR
+#ifdef CONFIG_BUSMOUSE
 		case BUSMOUSE_MINOR:
 	                file->f_op = &bus_mouse_fops;
 	                break;
 #endif
-#ifdef PSMOUSE_MINOR
+#ifdef CONFIG_PSMOUSE
 		case PSMOUSE_MINOR:
 	                file->f_op = &psaux_fops;
 	                break;
 #endif
-#ifdef MS_BUSMOUSE_MINOR
+#ifdef CONFIG_MS_BUSMOUSE
 		case MS_BUSMOUSE_MINOR:
 		        file->f_op = &ms_bus_mouse_fops;
 		        break;
 #endif
-#ifdef ATIXL_BUSMOUSE_MINOR
+#ifdef CONFIG_ATIXL_BUSMOUSE
 		case ATIXL_BUSMOUSE_MINOR:
 			file->f_op = &atixl_busmouse_fops;
 			break;
@@ -77,16 +78,16 @@ static struct file_operations mouse_fops = {
 
 unsigned long mouse_init(unsigned long kmem_start)
 {
-#ifdef BUSMOUSE_MINOR
+#ifdef CONFIG_BUSMOUSE
 	kmem_start = bus_mouse_init(kmem_start);
 #endif
-#ifdef PSMOUSE_MINOR
+#ifdef CONFIG_PSMOUSE
 	kmem_start = psaux_init(kmem_start);
 #endif
-#ifdef MS_BUSMOUSE_MINOR
+#ifdef CONFIG_MS_BUSMOUSE
 	kmem_start = ms_bus_mouse_init(kmem_start);
 #endif
-#ifdef ATIXL_BUSMOUSE_MINOR
+#ifdef CONFIG_ATIXL_BUSMOUSE
  	kmem_start = atixl_busmouse_init(kmem_start);
 #endif
 	chrdev_fops[10] = &mouse_fops;

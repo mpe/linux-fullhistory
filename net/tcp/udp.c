@@ -19,13 +19,22 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
-/* $Id: udp.c,v 0.8.4.5 1992/11/18 15:38:03 bir7 Exp $ */
+/* $Id: udp.c,v 0.8.4.9 1992/12/12 19:25:04 bir7 Exp $ */
 /* $Log: udp.c,v $
+ * Revision 0.8.4.9  1992/12/12  19:25:04  bir7
+ * cleaned up Log messages.
+ *
+ * Revision 0.8.4.8  1992/12/12  01:50:49  bir7
+ * Changed connect.
+ *
+ * Revision 0.8.4.7  1992/12/05  21:35:53  bir7
+ * Added more debuggin code.
+ *
+ * Revision 0.8.4.6  1992/12/03  19:52:20  bir7
+ * fixed problems in udp_error.
+ *
  * Revision 0.8.4.5  1992/11/18  15:38:03  bir7
  * fixed minor problem in waiting for memory.
- *
- * Revision 0.8.4.4  1992/11/17  14:19:47  bir7
- * *** empty log message ***
  *
  * Revision 0.8.4.3  1992/11/15  14:55:30  bir7
  * Fixed ctrl-h and added NULL checking to print_uh
@@ -37,7 +46,7 @@
  * version change only.
  *
  * Revision 0.8.3.5  1992/11/10  00:14:47  bir7
- * Changed malloc to kmalloc and added $iId$ and 
+ * Changed malloc to kmalloc and added Id and Log
  * */
 
 #include <linux/types.h>
@@ -59,7 +68,21 @@
 #include "udp.h"
 #include "icmp.h"
 
+#undef UDP_DEBUG
+
+#ifdef PRINTK
+#undef PRINTK
+#endif
+
+#ifdef UDP_DEBUG
+#define PRINTK printk
+#else
+#define PRINTK dummy_routine
+#endif
+
 #define min(a,b) ((a)<(b)?(a):(b))
+
+
 
 static void
 print_uh(struct udp_header *uh)
@@ -112,10 +135,12 @@ void
 udp_err (int err, unsigned char *header, unsigned long daddr,
 	 unsigned long saddr, struct ip_protocol *protocol)
 {
-   struct tcp_header *th;
+   struct udp_header *th;
    volatile struct sock *sk;
    
-   th = (struct tcp_header *)header;
+   PRINTK ("udp_err (err=%d, header=%X, daddr=%X, saddr=%X, ip_protocl=%X)\n");
+
+   th = (struct udp_header *)header;
    sk = get_sock (&udp_prot, net16(th->dest), saddr, th->source, daddr);
 
    if (sk == NULL) return;
@@ -127,7 +152,8 @@ udp_err (int err, unsigned char *header, unsigned long daddr,
      }
 
    sk->err = icmp_err_convert[err & 0xff].errno;
-   if (icmp_err_convert[err & 0xff].fatal)
+   /* it's only fatal if we have connected to them. */
+   if (icmp_err_convert[err & 0xff].fatal && sk->state == TCP_ESTABLISHED)
      {
 	sk->prot->close(sk, 0);
      }
@@ -237,7 +263,7 @@ udp_loopback (volatile struct sock *sk, unsigned short port,
 
 	/* if we didn't get the memory, just drop the packet. */
 	if (skb == NULL) return (len);
-
+	skb->lock = 0;
 	skb->mem_addr = skb;
 	skb->mem_len = sizeof (*skb) + len + sizeof (*uh) + 4;
 
@@ -369,6 +395,7 @@ udp_sendto (volatile struct sock *sk, unsigned char *from, int len,
 		       continue;
 		    }
 
+		  skb->lock = 0;
 		  skb->mem_addr = skb;
 		  skb->mem_len = len + sizeof (*skb) + sk->prot->max_header;
 		  skb->sk = sk;
@@ -405,6 +432,12 @@ udp_sendto (volatile struct sock *sk, unsigned char *from, int len,
 
 		  amt -= sizeof (*uh);
 		  buff += sizeof (*uh);
+		  if (amt < 0)
+		    {
+		      printk ("udp.c: amt = %d < 0\n",amt);
+		      release_sock (sk);
+		      return (copied);
+		    }
 
 /*		  verify_area (from, amt);*/
 		  memcpy_fromfs( buff, from, amt);
@@ -502,7 +535,12 @@ udp_recvfrom (volatile struct sock *sk, unsigned char *to, int len,
 	sk->inuse = 1;
 	while (sk->rqueue == NULL)
 	  {
-	     if (noblock)
+	    if (sk->shutdown & RCV_SHUTDOWN)
+	      {
+		return (0);
+	      }
+
+	    if (noblock)
 	       {
 		  release_sock (sk);
 		  return (-EAGAIN);
@@ -610,7 +648,8 @@ udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	/* if we don't know about the socket, forget about it. */
 	if (sk == NULL)
 	  {
-	    if ((daddr & 0xff000000 != 0) && (daddr & 0xff000000 != 0xff000000))
+	    if ((daddr & 0xff000000 != 0) &&
+		(daddr & 0xff000000 != 0xff000000))
 	      {
 		icmp_reply (skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, dev);
 	      }
@@ -726,6 +765,7 @@ struct proto udp_prot =
   udp_rcv,
   udp_select,
   udp_ioctl,
+  NULL,
   NULL,
   128,
   0,

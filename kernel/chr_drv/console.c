@@ -88,17 +88,13 @@ static struct {
 	unsigned long	vc_saved_x;
 	unsigned long	vc_saved_y;
 	/* mode flags */
-	unsigned long	vc_kbdapplic	: 1;	/* Application keyboard */
 	unsigned long	vc_charset	: 1;	/* Character set G0 / G1 */
 	unsigned long	vc_s_charset	: 1;	/* Saved character set */
-	unsigned long	vc_decckm	: 1;	/* Cursor Keys Mode */
 	unsigned long	vc_decscnm	: 1;	/* Screen Mode */
 	unsigned long	vc_decom	: 1;	/* Origin Mode */
 	unsigned long	vc_decawm	: 1;	/* Autowrap Mode */
-	unsigned long	vc_decarm	: 1;	/* Autorepeat Mode */
 	unsigned long	vc_deccm	: 1;	/* Cursor Visible */
 	unsigned long	vc_decim	: 1;	/* Insert Mode */
-	unsigned long	vc_lnm		: 1;	/* Line feed New line Mode */
 	/* attribute flags */
 	unsigned long	vc_intensity	: 2;	/* 0=half-bright, 1=normal, 2=bold */
 	unsigned long	vc_underline	: 1;
@@ -154,7 +150,6 @@ static int console_blanked = 0;
 #define decawm		(vc_cons[currcons].vc_decawm)
 #define deccm		(vc_cons[currcons].vc_deccm)
 #define decim		(vc_cons[currcons].vc_decim)
-#define kbdapplic	(vc_cons[currcons].vc_kbdapplic)
 #define need_wrap	(vc_cons[currcons].vc_need_wrap)
 #define color		(vc_cons[currcons].vc_color)
 #define s_color		(vc_cons[currcons].vc_s_color)
@@ -182,7 +177,8 @@ static int console_blanked = 0;
 #define is_kbd(x) vc_kbd_flag(kbd_table+currcons,x)
 
 #define decarm		VC_REPEAT
-#define decckm		VC_APPLIC
+#define decckm		VC_CKMODE
+#define kbdapplic	VC_APPLIC
 #define kbdraw		VC_RAW
 #define lnm		VC_CRLF
 
@@ -868,7 +864,6 @@ static void reset_terminal(int currcons, int do_clear)
 	clr_kbd(decckm);
 	clr_kbd(kbdapplic);
 	clr_kbd(lnm);
-#define is_kbd(x) vc_kbd_flag(kbd_table+currcons,x)
 	kbd_table[currcons].flags =
 		(kbd_table[currcons].flags & ~LED_MASK) |
 		(kbd_table[currcons].default_flags & LED_MASK);
@@ -1012,10 +1007,10 @@ void con_write(struct tty_struct * tty)
 					reset_terminal(currcons,1);
 					continue;
 				  case '>':  /* Numeric keypad */
-					kbdapplic = 0;
+					clr_kbd(kbdapplic);
 					continue;
 				  case '=':  /* Appl. keypad */
-					kbdapplic = 1;
+					set_kbd(kbdapplic);
 				 	continue;
 				}	
 				continue;

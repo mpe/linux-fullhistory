@@ -420,6 +420,10 @@ int ultrastor_14f_abort(Scsi_Cmnd *SCpnt, int code)
     return 0;
 }
 
+/* Most of this is commented out because people were getting kernel crashes
+   with it enabled.  If you want to re-enable this, please figure out why
+   the kernel was panicing. ERY */
+
 int ultrastor_14f_reset(void)
 {
     unsigned char in_byte;
@@ -428,6 +432,7 @@ int ultrastor_14f_reset(void)
     printk("US14F: reset: called\n");
 #endif
 
+#if 0
     /* Issue SCSI BUS reset */
     outb_p(0x20, LCL_DOORBELL_INTR(PORT_ADDRESS));
 
@@ -437,7 +442,7 @@ int ultrastor_14f_reset(void)
     while (in_byte & 0x20);
 
     aborted = DID_RESET;
-
+#endif
 #if (ULTRASTOR_DEBUG & UD_RESET)
     printk("US14F: reset: returning\n");
 #endif

@@ -177,7 +177,6 @@ struct termios {
 #define HUPCL	0002000
 #define CLOCAL	0004000
 #define CIBAUD	03600000		/* input baud rate (not used) */
-#define CNORTSCTS 010000000000		/* no flow control */
 #define CRTSCTS	  020000000000		/* flow control */
 
 /* c_lflag bits */

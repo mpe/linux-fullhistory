@@ -26,12 +26,71 @@
 #include <linux/errno.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
+#include <linux/interrupt.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 
+
 void irq13(void);
+
+static unsigned long intr_count=0;
+
+/* I'll use an array for speed. and bitmap for speed. */
+int bh_active=0;
+struct bh_struct bh_base[32]; 
+
+/* interrupts should be on at the interrupt priority controller level. */
+/* returns with interrupts off at the processor level. */
+
+void do_bottom_half(void)
+{
+	struct bh_struct *bh;
+	int mask;
+	int count;
+	static int in_bh = 0;
+
+	cli();
+	if (intr_count > 1) {
+		intr_count--;
+		return;
+	}
+  /* don't just decrement it in case it is already 0 */
+
+	intr_count = 0;
+
+  /* any sort of real time test should go here. */
+	if (in_bh != 0) {
+		return;
+	}
+
+	in_bh = 1;
+	do {
+		count = 0;
+		for (mask = 1, bh = bh_base; mask ; bh++, mask = mask << 1) {
+			if (mask > bh_active)
+				break;
+			if (!(mask & bh_active))
+				continue;
+
+			count++;
+			bh_active &= ~mask;
+
+			/* turn the interrupts back on. */
+			sti();
+
+			if (bh->routine != NULL)
+				bh->routine(bh->data);
+			else
+				printk ("irq.c:bad bottom half entry.\n");
+
+		/* and back off. */
+			cli();
+		}
+	} while (count > 0);
+	in_bh = 0;
+}
 
 /*
  * This builds up the IRQ handler stubs using some ugly macros in irq.h
@@ -119,7 +178,7 @@ static struct sigaction irq_sigaction[16] = {
  * IRQ's should use this format: notably the keyboard/timer
  * routines.
  */
-int do_IRQ(int irq, struct pt_regs * regs)
+void do_IRQ(int irq, struct pt_regs * regs)
 {
 	struct sigaction * sa = irq + irq_sigaction;
 
@@ -131,7 +190,7 @@ int do_IRQ(int irq, struct pt_regs * regs)
  * stuff - the handler is also running with interrupts disabled unless
  * it explicitly enables them later.
  */
-int do_fast_IRQ(int irq)
+void do_fast_IRQ(int irq)
 {
 	struct sigaction * sa = irq + irq_sigaction;
 
@@ -233,4 +292,13 @@ void init_IRQ(void)
 		printk("Unable to get IRQ2 for cascade\n");
 	if (request_irq(13,math_error_irq))
 		printk("Unable to get IRQ13 for math-error handler\n");
+
+	/* intialize the bottom half routines. */
+	for (i = 0; i < 32; i++)
+	  {
+	    bh_base[i].routine = NULL;
+	    bh_base[i].data = NULL;
+	  }
+	bh_active = 0;
+
 }

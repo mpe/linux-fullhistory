@@ -226,12 +226,17 @@ int open_namei(const char * pathname, int flag, int mode,
 	if (error)
 		return error;
 	if (!namelen) {			/* special case: '/usr/' etc */
-		if (!(flag & 2)) {
-			*res_inode=dir;
-			return 0;
+		if (flag & 2) {
+			iput(dir);
+			return -EISDIR;
 		}
-		iput(dir);
-		return -EISDIR;
+		/* thanks to Paul Pluzhnikov for noticing this was missing.. */
+		if (!permission(dir,ACC_MODE(flag))) {
+			iput(dir);
+			return -EACCES;
+		}
+		*res_inode=dir;
+		return 0;
 	}
 	dir->i_count++;		/* lookup eats the dir */
 	error = lookup(dir,basename,namelen,&inode);
@@ -264,7 +269,7 @@ int open_namei(const char * pathname, int flag, int mode,
 		return error;
 	if (S_ISDIR(inode->i_mode) && (flag & 2)) {
 		iput(inode);
-		return -EPERM;
+		return -EISDIR;
 	}
 	if (!permission(inode,ACC_MODE(flag))) {
 		iput(inode);

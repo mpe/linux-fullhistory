@@ -14,6 +14,7 @@
 
 static struct inode inode_table[NR_INODE];
 static struct inode * last_inode = inode_table;
+static struct wait_queue * inode_wait;
 
 void inode_init(void)
 {
@@ -196,6 +197,7 @@ repeat:
 		inode->i_count--;
 		return;
 	}
+	wake_up(&inode_wait);
 	if (inode->i_pipe) {
 		unsigned long page = (unsigned long) PIPE_BASE(*inode);
 		PIPE_BASE(*inode) = NULL;
@@ -232,10 +234,9 @@ repeat:
 		}
 	}
 	if (!inode) {
-		for (i=0 ; i<NR_INODE ; i++)
-			printk("(%04x: %d (%o)) ",inode_table[i].i_dev,
-				inode_table[i].i_ino,inode_table[i].i_mode);
-		panic("No free inodes in mem");
+		printk("No free inodes - contact Linus\n");
+		sleep_on(&inode_wait);
+		goto repeat;
 	}
 	if (inode->i_lock) {
 		wait_on_inode(inode);

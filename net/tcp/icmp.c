@@ -23,8 +23,20 @@
     The author of this file may be reached at rth@sparta.com or Sparta, Inc.
     7926 Jones Branch Dr. Suite 900, McLean Va 22102.
 */
-/* $Id: icmp.c,v 0.8.4.3 1992/11/18 15:38:03 bir7 Exp $ */
+/* $Id: icmp.c,v 0.8.4.7 1992/12/12 19:25:04 bir7 Exp $ */
 /* $Log: icmp.c,v $
+ * Revision 0.8.4.7  1992/12/12  19:25:04  bir7
+ * Cleaned up Log messages.
+ *
+ * Revision 0.8.4.6  1992/12/12  01:50:49  bir7
+ * Fixed bug in call to err routine.
+ *
+ * Revision 0.8.4.5  1992/12/05  21:35:53  bir7
+ * fixed type mismatch.
+ *
+ * Revision 0.8.4.4  1992/12/03  19:52:20  bir7
+ * Fixed minor pugs in icmp_reply.
+ *
  * Revision 0.8.4.3  1992/11/18  15:38:03  bir7
  * Fixed some printk's.
  *
@@ -35,7 +47,7 @@
  * version change only.
  *
  * Revision 0.8.3.3  1992/11/10  00:14:47  bir7
- * Changed malloc to kmalloc and added $iId$ and 
+ * Changed malloc to kmalloc and added Id and Log
  *
  */
 
@@ -104,9 +116,12 @@ icmp_reply (struct sk_buff *skb_in,  int type, int code, struct device *dev)
    struct ip_header *iph;
    int offset;
    struct icmp_header *icmph;
-
    int len;
-   /* get some memory for the replay. */
+
+   PRINTK ("icmp_reply (skb_in = %X, type = %d, code = %d, dev=%X)\n",
+	   skb_in, type, code, dev);
+
+   /* get some memory for the reply. */
    len = sizeof (*skb) + 8 /* amount of header to return. */ +
          sizeof (struct icmp_header) +
 	 64 /* enough for an ip header. */ +
@@ -115,6 +130,7 @@ icmp_reply (struct sk_buff *skb_in,  int type, int code, struct device *dev)
    skb = kmalloc (len, GFP_ATOMIC);
    if (skb == NULL) return;
 
+   skb->lock = 0;
    skb->mem_addr = skb;
    skb->mem_len = len;
 
@@ -208,12 +224,19 @@ icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 
 	   /* get the protocol(s) */
 	   hash = iph->protocol & (MAX_IP_PROTOS -1 );
-	   for (ipprot = ip_protos[hash]; ipprot != NULL; ipprot=ipprot->next)
+
+	   /* this can change while we are doing it. */
+	   for (ipprot = ip_protos[hash]; ipprot != NULL; )
 	     {
-		/* pass it off to everyone who wants it. */
-		ipprot->err_handler (err, (unsigned char *)iph+4*iph->ihl,
+	       struct ip_protocol *nextip;
+	       nextip = ipprot->next;
+	       /* pass it off to everyone who wants it. */
+	       if (iph->protocol == ipprot->protocol && ipprot->err_handler)
+		 ipprot->err_handler (err, (unsigned char *)(icmph+1),
 				     iph->daddr, iph->saddr, ipprot);
+	       ipprot = nextip;
 	     }
+
 	   skb1->sk = NULL;
 	   kfree_skb (skb1, FREE_READ);
 	   return (0);
@@ -255,6 +278,7 @@ icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 	     return (0);
 	  }
 	skb->sk = NULL;
+	skb->lock = 0;
 	skb->mem_addr = skb;
 	skb->mem_len = size;
 

@@ -29,8 +29,7 @@ struct request request[NR_REQUEST];
  */
 struct wait_queue * wait_for_request = NULL;
 
-/* This specifies how many blocks to read ahead on the disk.  We might want
-   to change this to sectors later, but for now this will work */
+/* This specifies how many sectors to read ahead on the disk.  */
 
 int read_ahead[NR_BLK_DEV] = {0, };
 

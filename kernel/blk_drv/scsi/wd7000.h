@@ -82,8 +82,8 @@
 /*
  *  For INITIALIZATION:
  */
-#define BUS_ON            24    /* x 125ns, 24 = 3000ns, BIOS uses 8000ns */
-#define BUS_OFF           24    /* x 125ns, BIOS uses 1875ns */
+#define BUS_ON            48    /* x 125ns, 48 = 6000ns, BIOS uses 8000ns */
+#define BUS_OFF           24    /* x 125ns, 24 = 3000ns, BIOS uses 1875ns */
  
 #define INTR_ACK ASC_STAT+1
 
@@ -143,6 +143,14 @@ typedef struct scb {		/* Command Control Block 5.4.1 */
 } Scb;
 
 /*
+ *  WD7000-specific scatter/gather element structure
+ */
+typedef struct sgb {
+    unchar len[3];
+    unchar ptr[3];
+} Sgb;
+
+/*
  *  Note:  MAX_SCBS _must_ be defined large enough to keep ahead of the
  *  demand for SCBs, which will be at most WD7000_Q * WD7000_SG.  1 is
  *  added to each because they can be 0.
@@ -171,8 +179,18 @@ int wd7000_biosparam(int, int, int*);
 	#define NULL 0
 #endif
 
+/*
+ *  Define WD7000_SG to be the number of Sgbs that will fit in a block of
+ *  size WD7000_SCRIBBLE.  WD7000_SCRIBBLE must be 512, 1024, 2048, or 4096.
+ *
+ *  The sg_tablesize value will default to SG_NONE for older boards (before
+ *  rev 7.0), but will be changed to WD7000_SG when a newer board is
+ *  detected.
+ */
+#define WD7000_SCRIBBLE  512
+
 #define WD7000_Q    OGMB_CNT
-#define WD7000_SG   SG_NONE
+#define WD7000_SG   (WD7000_SCRIBBLE / sizeof(Sgb))
 
 #define WD7000 {\
 	"Western Digital WD-7000",      \
@@ -183,5 +201,5 @@ int wd7000_biosparam(int, int, int*);
 	wd7000_reset,			\
 	NULL,                           \
 	wd7000_biosparam,               \
-	WD7000_Q, 7, WD7000_SG, 1, 0, 1}
+	WD7000_Q, 7, SG_NONE, 1, 0, 1}
 #endif

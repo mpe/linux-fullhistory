@@ -809,10 +809,12 @@ static void reset_floppy(void)
 static void floppy_shutdown(void)
 {
 	cli();
+	do_floppy = NULL;
 	request_done(0);
 	recover = 1;
 	reset_floppy();
 	sti();
+	redo_fd_request();
 }
 
 static void shake_done(void)

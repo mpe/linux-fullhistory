@@ -14,22 +14,12 @@
  */
 
 #include <linux/config.h>
-
-#ifdef CONFIG_SCSI
 #include "../blk.h"
 #include <linux/kernel.h>
 #include "scsi.h"
 
 #ifndef NULL 
-	#define NULL 0L
-#endif
-
-#ifdef FIGURE_MAX_SCSI_HOSTS
-	#define MAX_SCSI_HOSTS
-#endif
-
-#ifndef MAX_SCSI_HOSTS
-	#include "max_hosts.h"
+#define NULL 0L
 #endif
 
 #include "hosts.h"
@@ -84,52 +74,31 @@ static const char RCSid[] = "$Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/hos
  *	idiocy.
  */
 
-#ifdef FIGURE_MAX_SCSI_HOSTS
-	#define BLANKIFY(what) BLANK_HOST
-#else
-	#define BLANKIFY(what) what
-#endif
-
 Scsi_Host scsi_hosts[] =
 	{
 #ifdef CONFIG_SCSI_AHA1542
-	BLANKIFY(AHA1542),
+	AHA1542,
 #endif
-
 #ifdef CONFIG_SCSI_AHA1740
-	BLANKIFY(AHA1740),
+	AHA1740,
 #endif
-
 #ifdef CONFIG_SCSI_FUTURE_DOMAIN
-	BLANKIFY(FDOMAIN_16X0),
+	FDOMAIN_16X0,
 #endif
-
 #ifdef CONFIG_SCSI_SEAGATE
-	BLANKIFY(SEAGATE_ST0X),
+	SEAGATE_ST0X,
 #endif
 #ifdef CONFIG_SCSI_ULTRASTOR
-	BLANKIFY(ULTRASTOR_14F),
+	ULTRASTOR_14F,
 #endif
 #ifdef CONFIG_SCSI_7000FASST
-	BLANKIFY(WD7000),
+	WD7000,
 #endif
 #ifdef CONFIG_SCSI_DEBUG
-	BLANKIFY(SCSI_DEBUG),
+	SCSI_DEBUG,
 #endif
 	};
 
-#ifdef FIGURE_MAX_SCSI_HOSTS
-	#undef MAX_SCSI_HOSTS
-	#define  MAX_SCSI_HOSTS  (sizeof(scsi_hosts) / sizeof(Scsi_Host))
-#endif
-
-#ifdef FIGURE_MAX_SCSI_HOSTS
-#include <stdio.h>
-void main (void)
-{	
-	printf("%d", MAX_SCSI_HOSTS);
-}
-#else
 /*
  *	Our semaphores and timeout counters, where size depends on MAX_SCSI_HOSTS here. 
  */
@@ -170,14 +139,6 @@ void scsi_init(void)
 		}
 
 	}
-
-#endif
-#else
-void main(void) {
-	printf("0\n");
-	}
-#endif	
-
 
 #ifndef CONFIG_BLK_DEV_SD
 unsigned long sd_init(unsigned long memory_start, unsigned long memory_end){
