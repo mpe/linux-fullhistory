@@ -245,11 +245,11 @@ static void ip_mc_inc_group(struct device *dev, unsigned long addr)
 static void ip_mc_dec_group(struct device *dev, unsigned long addr)
 {
 	struct ip_mc_list **i;
-	for(i=&dev->ip_mc_list;i!=NULL;i=&(*i)->next)
+	for(i=&(dev->ip_mc_list);(*i)!=NULL;i=&(*i)->next)
 	{
 		if((*i)->multiaddr==addr)
 		{
-			if(--(*i)->users)
+			if(--((*i)->users))
 				return;
 			else
 			{
@@ -278,6 +278,28 @@ void ip_mc_drop_device(struct device *dev)
 	dev->ip_mc_list=NULL;
 }
 
+/*
+ *	Device going up. Make sure it is in all hosts
+ */
+ 
+void ip_mc_allhost(struct device *dev)
+{
+	struct ip_mc_list *i;
+	for(i=dev->ip_mc_list;i!=NULL;i=i->next)
+		if(i->multiaddr==IGMP_ALL_HOSTS)
+			return;
+	i=(struct ip_mc_list *)kmalloc(sizeof(*i), GFP_KERNEL);
+	if(!i)
+		return;
+	i->users=1;
+	i->interface=dev;
+	i->multiaddr=IGMP_ALL_HOSTS;
+	i->next=dev->ip_mc_list;
+	dev->ip_mc_list=i;
+	ip_mc_filter_add(i->interface, i->multiaddr);
+
+}	
+ 
 /*
  *	Join a socket to a group
  */

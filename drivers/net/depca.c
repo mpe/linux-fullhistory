@@ -17,6 +17,7 @@
 
         DEPCA       (the original)
     	DE100
+    	DE101
 	DE200 Turbo
 	DE201 Turbo
 	DE202 Turbo (TP BNC)
@@ -147,26 +148,28 @@
 
     Version   Date        Description
   
-      0.1   25-jan-94     Initial writing.
-      0.2   27-jan-94     Added LANCE TX hardware buffer chaining.
-      0.3    1-feb-94     Added multiple DEPCA support.
-      0.31   4-feb-94     Added DE202 recognition.
-      0.32  19-feb-94     Tidy up. Improve multi-DEPCA support.
-      0.33  25-feb-94     Fix DEPCA ethernet ROM counter enable.
+      0.1     25-jan-94   Initial writing.
+      0.2     27-jan-94   Added LANCE TX hardware buffer chaining.
+      0.3      1-feb-94   Added multiple DEPCA support.
+      0.31     4-feb-94   Added DE202 recognition.
+      0.32    19-feb-94   Tidy up. Improve multi-DEPCA support.
+      0.33    25-feb-94   Fix DEPCA ethernet ROM counter enable.
                           Add jabber packet fix from murf@perftech.com
 			  and becker@super.org
-      0.34   7-mar-94     Fix DEPCA max network memory RAM & NICSR access.
-      0.35   8-mar-94     Added DE201 recognition. Tidied up.
-      0.351 30-apr-94     Added EISA support. Added DE422 recognition.
-      0.36  16-may-94     DE422 fix released.
-      0.37  22-jul-94     Added MODULE support
-      0.38  15-aug-94     Added DBR ROM switch in depca_close(). 
+      0.34     7-mar-94   Fix DEPCA max network memory RAM & NICSR access.
+      0.35     8-mar-94   Added DE201 recognition. Tidied up.
+      0.351   30-apr-94   Added EISA support. Added DE422 recognition.
+      0.36    16-may-94   DE422 fix released.
+      0.37    22-jul-94   Added MODULE support
+      0.38    15-aug-94   Added DBR ROM switch in depca_close(). 
                           Multi DEPCA bug fix.
+      0.38axp 15-sep-94   Special version for Alpha AXP Linux V1.0
+      0.381   12-dec-94   Added DE101 recognition, fix multicast bug
 
     =========================================================================
 */
 
-static char *version = "depca.c:v0.38 8/15/94 davies@wanton.lkg.dec.com\n";
+static char *version = "depca.c:v0.381 12/12/94 davies@wanton.lkg.dec.com\n";
 
 #include <stdarg.h>
 #include <linux/config.h>
@@ -208,8 +211,10 @@ static int depca_debug = 1;
 #endif
 
 #ifndef DEPCA_SIGNATURE
-#define DEPCA_SIGNATURE {"DEPCA","DE100",\
-                         "DE200","DE201","DE202","DE210",\
+#define DEPCA_SIGNATURE {"DEPCA",\
+			 "DE100","DE101",\
+                         "DE200","DE201","DE202",\
+			 "DE210",\
                          "DE422",\
                          ""}
 #define DEPCA_NAME_LENGTH 8
@@ -1237,35 +1242,28 @@ depca_get_stats(struct device *dev)
 ** num_addrs > 0	Multicast mode, receive normal and MC packets, and do
 ** 			best-effort filtering.
 */
+#define hash_filter lp->init_block.filter
+
 static void
 set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 {
   short ioaddr = dev->base_addr;
   struct depca_private *lp = (struct depca_private *)dev->priv;
   
-  /* We take the simple way out and always enable promiscuous mode. */
-  STOP_DEPCA;                       /* Temporarily stop the depca.  */
+  if (irq2dev_map[dev->irq] != NULL) {
+    STOP_DEPCA;                       /* Temporarily stop the depca.  */
+    depca_init_ring(dev);             /* Initialize the descriptor rings */
 
-  lp->init_block.mode = PROM;       /* Set promiscuous mode */
-  if (num_addrs >= 0) {
-    short multicast_table[4];
-    int i;
-
-    SetMulticastFilter(num_addrs, (char *)addrs, (char *)multicast_table);
-
-    /* We don't use the multicast table, but rely on upper-layer filtering. */
-    memset(multicast_table, (num_addrs==0) ? 0 : -1, sizeof(multicast_table));
-
-    for (i = 0; i < 4; i++) {
-      lp->init_block.filter[i] = multicast_table[i];
+    if (num_addrs >= 0) {
+      SetMulticastFilter(num_addrs, (char *)addrs, (char *)hash_filter);
+      lp->init_block.mode &= ~PROM;   /* Unset promiscuous mode */
+    } else {
+      lp->init_block.mode |= PROM;    /* Set promiscuous mode */
     }
-    lp->init_block.mode &= ~PROM; /* Unset promiscuous mode */
-  } else {
-    lp->init_block.mode |= PROM;    /* Set promiscuous mode */
-  }
 
-  outw(CSR0, DEPCA_ADDR);
-  outw(IDON|INEA|STRT, DEPCA_DATA); /* Resume normal operation. */
+    LoadCSRs(dev);                    /* Reload CSR3 */
+    InitRestartDepca(dev);            /* Resume normal operation. */
+  }
 }
 
 /*

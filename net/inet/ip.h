@@ -85,11 +85,11 @@ extern int		ip_build_header(struct sk_buff *skb,
 extern unsigned short	ip_compute_csum(unsigned char * buff, int len);
 extern int		ip_rcv(struct sk_buff *skb, struct device *dev,
 			       struct packet_type *pt);
+extern void		ip_send_check(struct iphdr *ip);
+extern int		ip_id_count;			  
 extern void		ip_queue_xmit(struct sock *sk,
 				      struct device *dev, struct sk_buff *skb,
 				      int free);
-extern void		ip_retransmit(struct sock *sk, int all);
-extern void		ip_do_retransmit(struct sock *sk, int all);
 extern int 		ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int optlen);
 extern int 		ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *optlen);
 extern void		ip_init(void);

@@ -549,7 +549,7 @@ load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 					elf_ppnt->p_vaddr & 0xfffff000,
 					elf_ppnt->p_filesz + (elf_ppnt->p_vaddr & 0xfff),
 					PROT_READ | PROT_WRITE | PROT_EXEC,
-					MAP_FIXED | MAP_PRIVATE | MAP_DENYWRITE,
+					MAP_FIXED | MAP_PRIVATE | MAP_DENYWRITE | MAP_EXECUTABLE,
 					elf_ppnt->p_offset & 0xfffff000);
 			
 #ifdef LOW_ELF_STACK

@@ -16,6 +16,8 @@
 #include <asm/system.h>
 #include <asm/segment.h>
 
+extern unsigned long prof_len;
+
 void proc_put_inode(struct inode *inode)
 {
 	if (inode->i_nlink)
@@ -127,6 +129,13 @@ void proc_read_inode(struct inode * inode)
 				inode->i_op = &proc_kcore_inode_operations;
 				inode->i_size = high_memory + PAGE_SIZE;
 				break;
+#ifdef CONFIG_PROFILE
+			case PROC_PROFILE:
+				inode->i_mode = S_IFREG | S_IRUGO | S_IWUSR;
+				inode->i_op = &proc_profile_inode_operations;
+				inode->i_size = (1+prof_len) * sizeof(unsigned long);
+				break;
+#endif
 			default:
 				inode->i_mode = S_IFREG | S_IRUGO;
 				inode->i_op = &proc_array_inode_operations;

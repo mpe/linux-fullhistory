@@ -1,13 +1,6 @@
 /*
- *	buslogic.h	(C) 1993 David B. Gentzel
- *	Low-level scsi driver for BusLogic adapters
- *	by David B. Gentzel, Whitfield Software Services, Carnegie, PA
- *	    (gentzel@nova.enet.dec.com)
- *	Thanks to BusLogic for providing the necessary documentation
- *
- *	The original version of this driver was derived from aha1542.[ch] which
- *	is Copyright (C) 1992 Tommy Thorn.  Much has been reworked, but most of
- *	basic structure and substantial chunks of code still remain.
+ *	buslogic.h	Copyright (C) 1993, 1994 David B. Gentzel
+ *	See buslogic.c for more information.
  */
 
 #ifndef _BUSLOGIC_H

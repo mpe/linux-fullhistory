@@ -118,11 +118,12 @@
       0.23    21-sep-94   Added transmit cut through
       0.24    31-oct-94   Added uid checks in some ioctls
       0.30     1-nov-94   BETA code release
+      0.31     5-dec-94   Added check/snarf_region code.
 
     =========================================================================
 */
 
-static char *version = "ewrk3.c:v0.30 11/1/94 davies@wanton.lkg.dec.com\n";
+static char *version = "ewrk3.c:v0.31 12/5/94 davies@wanton.lkg.dec.com\n";
 
 #include <stdarg.h>
 #include <linux/config.h>
@@ -314,7 +315,7 @@ static struct device *isa_probe(struct device *dev);
 static struct device *eisa_probe(struct device *dev);
 static struct device *alloc_device(struct device *dev, int iobase);
 
-static int num_ewrk3s = 0, num_eth = 0, autoprobed = 0;
+static int num_ewrk3s = 0, num_eth = 0;
 static unsigned char irq[] = {5,0,10,3,11,9,15,12};
 
 #else
@@ -322,6 +323,8 @@ int  init_module(void);
 void cleanup_module(void);
 
 #endif /* MODULE */
+
+static int autoprobed = 0;
 
 /*
 ** Miscellaneous defines...
@@ -344,14 +347,23 @@ int ewrk3_probe(struct device *dev)
 #endif
 
   if (base_addr > 0x0ff) {	      /* Check a single specified location. */
-    if (((mem_chkd >> ((base_addr - EWRK3_IO_BASE)/ EWRK3_IOP_INC))&0x01)==0) {
-      if (DevicePresent(base_addr) == 0) { /* Is EWRK3 really here? */
-	status = ewrk3_hw_init(dev, base_addr);
+    if (!autoprobed) {                /* Module or fixed location */
+      if (!check_region(base_addr, EWRK3_IOP_INC)) {
+	if (((mem_chkd >> ((base_addr - EWRK3_IO_BASE)/ EWRK3_IOP_INC))&0x01)==1) {
+	  if (DevicePresent(base_addr) == 0) {      /* Is EWRK3 really here? */
+	    snarf_region(base_addr, EWRK3_IOP_INC); /* Register I/O region */
+	    status = ewrk3_hw_init(dev, base_addr);
+	  } else {
+	    printk("ewrk3_probe(): No device found\n");
+	    mem_chkd &= ~(0x01 << ((base_addr - EWRK3_IO_BASE)/EWRK3_IOP_INC));
+	  }
+	}
       } else {
-	printk("ewrk3_probe(): No device found\n");
+	printk("%s: ewrk3_probe(): Detected a device already registered at 0x%02x\n", dev->name, base_addr);
+	mem_chkd &= ~(0x01 << ((base_addr - EWRK3_IO_BASE)/EWRK3_IOP_INC));
       }
-    } else {
-      status = ewrk3_hw_init(dev, base_addr); /* Yes there is h/w */
+    } else {                          /* already know what ewrk3 h/w is here */
+      status = ewrk3_hw_init(dev, base_addr);
     }
   } else if (base_addr > 0) {         /* Don't probe at all. */
     status = -ENXIO;
@@ -1282,12 +1294,13 @@ static void SetMulticastFilter(struct device *dev, int num_addrs, char *addrs, c
 	    }
 	  }
 	}
-	hashcode = (crc & 0x01);             /* hashcode is 9 LSb of CRC ... */
+	hashcode = ((crc >>= 23) & 0x01);    /* hashcode is 9 MSb of CRC ... */
 	for (j=0;j<8;j++) {                  /* ... in reverse order. */
 	  hashcode <<= 1;
 	  crc >>= 1;
 	  hashcode |= (crc & 0x01);
 	}                                      
+                                      
 	octet = hashcode >> 3;               /* bit[3-8] -> octet in filter */
 	                                     /* bit[0-2] -> bit in octet */
 	if (lp->shmem_length == IO_ONLY) {
@@ -1323,20 +1336,27 @@ static struct device *isa_probe(struct device *dev)
        i < 24;
        iobase += EWRK3_IOP_INC, i++) {
     if (tmp & 0x01) {
-      if (DevicePresent(iobase) == 0) {
+      /* Anything else registered here? */
+      if (!check_region(iobase, EWRK3_IOP_INC)) {    
+	if (DevicePresent(iobase) == 0) {
 /*
 ** Device found. Mark its (I/O) location for future reference. Only 24
 ** EtherWORKS devices can exist between 0x100 and 0x3e0.
 */
-	if (num_ewrk3s > 0) {        /* only gets here in autoprobe */
-	  dev = alloc_device(dev, iobase);
-	} else {
-	  if ((status = ewrk3_hw_init(dev, iobase)) == 0) {
-	    num_ewrk3s++;
+	  snarf_region(iobase, EWRK3_IOP_INC);
+	  if (num_ewrk3s > 0) {        /* only gets here in autoprobe */
+	    dev = alloc_device(dev, iobase);
+	  } else {
+	    if ((status = ewrk3_hw_init(dev, iobase)) == 0) {
+	      num_ewrk3s++;
+	    }
 	  }
+	  num_eth++;
+	} else {
+	  mem_chkd &= ~(0x01 << ((iobase - EWRK3_IO_BASE)/EWRK3_IOP_INC));
 	}
-	num_eth++;
       } else {
+	printk("%s: ewrk3_probe(): Detected a device already registered at 0x%02x\n", dev->name, iobase);
 	mem_chkd &= ~(0x01 << ((iobase - EWRK3_IO_BASE)/EWRK3_IOP_INC));
       }
     }
@@ -1358,20 +1378,24 @@ static struct device *eisa_probe(struct device *dev)
   iobase+=EISA_SLOT_INC;            /* get the first slot address */
   for (status = -ENODEV, i=1; i<MAX_EISA_SLOTS; i++, iobase+=EISA_SLOT_INC) {
 
-    if (DevicePresent(iobase) == 0) {
+    /* Anything else registered here? */
+    if (!check_region(iobase, EWRK3_IOP_INC)) {
+      if (DevicePresent(iobase) == 0) {
 /*
 ** Device found. Mark its slot location for future reference. Only 7
 ** EtherWORKS devices can exist in EISA space....
 */
-      mem_chkd |= (0x01 << (i + 24));
-      if (num_ewrk3s > 0) {        /* only gets here in autoprobe */
-	dev = alloc_device(dev, iobase);
-      } else {
-	if ((status = ewrk3_hw_init(dev, iobase)) == 0) {
-	  num_ewrk3s++;
+	mem_chkd |= (0x01 << (i + 24));
+	snarf_region(iobase, EWRK3_IOP_INC);
+	if (num_ewrk3s > 0) {        /* only gets here in autoprobe */
+	  dev = alloc_device(dev, iobase);
+	} else {
+	  if ((status = ewrk3_hw_init(dev, iobase)) == 0) {
+	    num_ewrk3s++;
+	  }
 	}
+	num_eth++;
       }
-      num_eth++;
     }
   }
   return dev;

@@ -87,6 +87,7 @@ struct sockaddr_in {
 
 #define	IN_CLASSD(a)		((((long int) (a)) & 0xf0000000) == 0xe0000000)
 #define	IN_MULTICAST(a)		IN_CLASSD(a)
+#define IN_MULTICAST_NET	0xF0000000
 
 #define	IN_EXPERIMENTAL(a)	((((long int) (a)) & 0xe0000000) == 0xe0000000)
 #define	IN_BADCLASS(a)		((((long int) (a)) & 0xf0000000) == 0xf0000000)
@@ -104,19 +105,13 @@ struct sockaddr_in {
 #define	IN_LOOPBACKNET		127
 
 /* Address to loopback in software to local host.  */
-#define	INADDR_LOOPBACK		0x7f000001	/* 127.0.0.1		*/
+#define	INADDR_LOOPBACK		0x7f000001	/* 127.0.0.1   */
 
-
-/*
- * Options for use with `getsockopt' and `setsockopt' at
- * the IP level.  LINUX does not yet have the IP_OPTIONS
- * option (grin), so we undefine it for now.- HJ && FvK
- */
-#if 0
-# define IP_OPTIONS	1		/* IP per-packet options	*/
-#endif
-#define IP_HDRINCL	2		/* raw packet header option	*/
-
+/* Defines for Multicast INADDR */
+#define INADDR_UNSPEC_GROUP   	0xe0000000      /* 224.0.0.0   */
+#define INADDR_ALLHOSTS_GROUP 	0xe0000001      /* 224.0.0.1   */
+#define INADDR_MAX_LOCAL_GROUP  0xe00000ff      /* 224.0.0.255 */
+ 
 
 /* Linux Internet number representation function declarations. */
 #undef ntohl

@@ -14,19 +14,30 @@
    Reference Qlogic FAS408 Technical Manual, 53408-510-00A, May 10, 1994
    (you can reference it, but it is incomplete and inaccurate in places)
 
-   Version 0.37
+   Version 0.38a
+
+   This also works with loadable SCSI as a module.  Check configuration
+   options QL_INT_ACTIVE_HIGH and QL_TURBO_PDMA for PCMCIA usage (which
+   also requires an enabler).
+
    Redistributable under terms of the GNU Public License
 
 */
 /*----------------------------------------------------------------*/
 /* Configuration */
 
+/* Set the following to 2 to use normal interrupt (active high/totempole-
+   tristate), otherwise use 0 (REQUIRED FOR PCMCIA) for active low, open
+   drain */
+#define QL_INT_ACTIVE_HIGH 2
+
 /* Set the following to 1 to enable the use of interrupts.  Note that 0 tends
    to be more stable, but slower (or ties up the system more) */
 #define QL_USE_IRQ 1
 
 /* Set the following to max out the speed of the PIO PseudoDMA transfers,
-   again, 0 tends to be slower, but more stable */
+   again, 0 tends to be slower, but more stable.  THIS SHOULD BE ZERO FOR
+   PCMCIA */
 #define QL_TURBO_PDMA 1
 
 /* This will reset all devices when the driver is initialized (during bootup).
@@ -64,6 +75,8 @@
 #include "../block/blk.h"	/* to get disk capacity */
 #include <linux/kernel.h>
 #include <linux/string.h>
+#include <linux/ioport.h>
+#include <linux/sched.h>
 #include <unistd.h>
 #include <asm/io.h>
 #include <asm/irq.h>
@@ -83,9 +96,9 @@ static Scsi_Cmnd   *qlcmd;	/* current command being processed */
 /*----------------------------------------------------------------*/
 
 #define REG0 ( outb( inb( qbase + 0xd ) & 0x7f , qbase + 0xd ), outb( 4 , qbase + 0xd ))
-#define REG1 ( outb( inb( qbase + 0xd ) | 0x80 , qbase + 0xd ), outb( 0xb6 , qbase + 0xd ))
+#define REG1 ( outb( inb( qbase + 0xd ) | 0x80 , qbase + 0xd ), outb( 0xb4 | QL_INT_ACTIVE_HIGH , qbase + 0xd ))
 
-/* following is watchdog timeout - 0 is longest possible */
+/* following is watchdog timeout */
 #define WATCHDOG 5000000
 
 /*----------------------------------------------------------------*/
@@ -196,9 +209,9 @@ int	j;
 static int	ql_wai(void)
 {
 int	i,k;
-	i = WATCHDOG;
-	while (--i && !qabort && !((k = inb(qbase + 4)) & 0xe0));
-	if (!i)
+	i = jiffies + WATCHDOG;
+	while ( i > jiffies && !qabort && !((k = inb(qbase + 4)) & 0xe0));
+	if (i <= jiffies)
 		return (DID_TIME_OUT);
 	if (qabort)
 		return (qabort == 1 ? DID_ABORT : DID_RESET);
@@ -291,7 +304,9 @@ unsigned int	sgcount;		/* sg counter */
 	j &= 7; /* j = inb( qbase + 7 ) >> 5; */
 /* correct status is supposed to be step 4 */
 /* it sometimes returns step 3 but with 0 bytes left to send */
-	if (j != 4 && (j != 3 || inb(qbase + 7) & 0x1f)) {
+/* We can try stuffing the FIFO with the max each time, but we will get a
+   sequence of 3 if any bytes are left (but we do flush the FIFO anyway */
+	if(j != 3 && j != 4) {
 		printk("Ql:Bad sequence for command %d, int %02X, cmdleft = %d\n", j, i, inb( qbase+7 ) & 0x1f );
 		ql_zap();
 		return (DID_ERROR << 16);
@@ -333,10 +348,10 @@ rtrc(2)
 		k = inb(qbase + 5);	/* should be 0x10, bus service */
 	}
 /*** Enter Status (and Message In) Phase ***/
-	k = WATCHDOG;
+	k = jiffies + WATCHDOG;
 rtrc(4)
-	while (--k && !qabort && !(inb(qbase + 4) & 6));	/* wait for status phase */
-	if (!k) {
+	while ( k > jiffies && !qabort && !(inb(qbase + 4) & 6));	/* wait for status phase */
+	if ( k <= jiffies ) {
 		ql_zap();
 		return (DID_TIME_OUT << 16);
 	}
@@ -465,6 +480,8 @@ struct	Scsi_Host	*hreg;	/* registered host structure */
 */
 
 	for (qbase = 0x230; qbase < 0x430; qbase += 0x100) {
+		if( check_region( qbase , 0x10 ) )
+			continue;
 		REG1;
 		if ( ( (inb(qbase + 0xe) ^ inb(qbase + 0xe)) == 7 )
 		  && ( (inb(qbase + 0xe) ^ inb(qbase + 0xe)) == 7 ) )
@@ -498,25 +515,30 @@ struct	Scsi_Host	*hreg;	/* registered host structure */
 	outb(10, 0x20); /* access pending interrupt map */
 	outb(10, 0xa0);
 	while (j--) {
-		outb(0xb2, qbase + 0xd);		/* int pin off */
+		outb(0xb0 | QL_INT_ACTIVE_HIGH , qbase + 0xd);		/* int pin off */
 		i &= ~(inb(0x20) | (inb(0xa0) << 8));	/* find IRQ off */
-		outb(0xb6, qbase + 0xd);		/* int pin on */
+		outb(0xb4 | QL_INT_ACTIVE_HIGH , qbase + 0xd);		/* int pin on */
 		i &= inb(0x20) | (inb(0xa0) << 8);	/* find IRQ on */
 	}
 	REG0;
 	while (inb(qbase + 5)); 			/* purge int */
 	while (i)					/* find on bit */
 		i >>= 1, qlirq++;	/* should check for exactly 1 on */
-	if (qlirq >= 0 && !request_irq(qlirq, ql_ihandl, 0, "qlogic"))
+	if (qlirq >= 0 && !request_irq(qlirq, ql_ihandl, SA_INTERRUPT, "qlogic"))
 		host->can_queue = 1;
 	sti();
 #endif
+	snarf_region( qbase , 0x10 );
+
 	hreg = scsi_register( host , 0 );	/* no host data */
 	hreg->io_port = qbase;
-	hreg->irq = qlirq;
+	hreg->n_io_port = 16;
+	if( qlirq != -1 )
+		hreg->irq = qlirq;
 
-	sprintf(qinfo, "Qlogic Driver version 0.36, chip %02X at %03X, IRQ %d", qltyp, qbase, qlirq);
+	sprintf(qinfo, "Qlogic Driver version 0.38a, chip %02X at %03X, IRQ %d", qltyp, qbase, qlirq);
 	host->name = qinfo;
+
 	return 1;
 }
 
@@ -562,3 +584,10 @@ const char	*qlogic_info(struct Scsi_Host * host)
 {
 	return qinfo;
 }
+
+#ifdef MODULE
+/* Eventually this will go into an include file, but this will be later */
+Scsi_Host_Template driver_template = QLOGIC;
+
+#include "scsi_module.c"
+#endif

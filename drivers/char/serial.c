@@ -1666,6 +1666,13 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 
 	if (serial_paranoia_check(info, tty->device, "rs_ioctl"))
 		return -ENODEV;
+
+	if ((cmd != TIOCGSERIAL) && (cmd != TIOCSSERIAL) &&
+	    (cmd != TIOCSERCONFIG) && (cmd != TIOCSERGWILD)  &&
+	    (cmd != TIOCSERSWILD) && (cmd != TIOCSERGSTRUCT)) {
+		if (tty->flags & (1 << TTY_IO_ERROR))
+		    return -EIO;
+	}
 	
 	switch (cmd) {
 		case TCSBRK:	/* SVID version: non-zero arg --> no break */
@@ -1852,9 +1859,9 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
 	 * line status register.
 	 */
 	info->IER &= ~UART_IER_RLSI;
-	serial_out(info, UART_IER, info->IER);
 	info->read_status_mask &= ~UART_LSR_DR;
 	if (info->flags & ASYNC_INITIALIZED) {
+		serial_out(info, UART_IER, info->IER);
 		wait_until_sent(tty, 3000); /* 30 seconds timeout */
 		/*
 		 * Before we drop DTR, make sure the UART transmitter
@@ -1965,10 +1972,11 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 	}
 	
 	/*
-	 * If non-blocking mode is set, then make the check up front
-	 * and then exit.
+	 * If non-blocking mode is set, or the port is not enabled,
+	 * then make the check up front and then exit.
 	 */
-	if (filp->f_flags & O_NONBLOCK) {
+	if ((filp->f_flags & O_NONBLOCK) ||
+	    (tty->flags & (1 << TTY_IO_ERROR))) {
 		if (info->flags & ASYNC_CALLOUT_ACTIVE)
 			return -EBUSY;
 		info->flags |= ASYNC_NORMAL_ACTIVE;

@@ -52,6 +52,8 @@ extern void compute_shiftstate(void);
 extern void change_console(unsigned int new_console);
 extern void complete_change_console(unsigned int new_console);
 extern int vt_waitactive(void);
+extern void do_blank_screen(int nopowersave);
+extern void do_unblank_screen(void);
 
 extern unsigned int keymap_count;
 
@@ -208,11 +210,9 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		 * explicitly blank/unblank the screen if switching modes
 		 */
 		if (arg == KD_TEXT)
-			unblank_screen();
-		else {
-			timer_active &= ~(1<<BLANK_TIMER);
-			blank_screen();
-		}
+			do_unblank_screen();
+		else
+			do_blank_screen(1);
 		return 0;
 
 	case KDGETMODE:

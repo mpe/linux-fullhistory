@@ -57,16 +57,26 @@
 void dev_mc_upload(struct device *dev)
 {
 	struct dev_mc_list *dmi;
-	char *data;
-	
-	/* Promiscuous is promiscuous - so no filter needed */
-	
-	if(dev->flags&IFF_PROMISC)
+	char *data, *tmp;
+
+	/* Don't do anything till we up the interface
+	   [dev_open will call this function so the list will
+	    stay sane] */
+	    
+	if(!(dev->flags&IFF_UP))
 		return;
+		
 		
 	/* Devices with no set multicast don't get set */
 	if(dev->set_multicast_list==NULL)
 		return;
+	/* Promiscuous is promiscuous - so no filter needed */
+	if(dev->flags&IFF_PROMISC)
+	{
+		dev->set_multicast_list(dev, -1, NULL);
+		return;
+	}
+	
 	if(dev->mc_count==0)
 	{
 		dev->set_multicast_list(dev,0,NULL);
@@ -79,13 +89,13 @@ void dev_mc_upload(struct device *dev)
 		printk("Unable to get memory to set multicast list on %s\n",dev->name);
 		return;
 	}
-	for(dmi=dev->mc_list;dmi!=NULL;dmi=dmi->next)
+	for(tmp = data, dmi=dev->mc_list;dmi!=NULL;dmi=dmi->next)
 	{
-		memcpy(data,dmi->dmi_addr, dmi->dmi_addrlen);
-		data+=dev->addr_len;
+		memcpy(tmp,dmi->dmi_addr, dmi->dmi_addrlen);
+		tmp+=dev->addr_len;
 	}
 	dev->set_multicast_list(dev,dev->mc_count,data);
-	kfree_s(data,dev->mc_count*dev->addr_len);
+	kfree(data);
 }
   
 /*

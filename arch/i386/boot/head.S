@@ -122,9 +122,15 @@ isnew:	pushl %ecx		# restore original EFLAGS
 	/* get processor type */
 	movl $1, %eax		# Use the CPUID instruction to 
 	.byte 0x0f, 0xa2	# check the processor type
-	andl $0xf00, %eax	# Set _x86 with the family
-	shrl $8, %eax		# returned.	
-	movl %eax, _x86
+	movb %al, %cl		# save reg for future use
+	andb $0x0f,%ah		# mask processor family
+	movb %ah, _x86
+	andb $0xf0, %eax	# mask model
+	shrb $4, %al
+	movb %al, _x86_model
+	andb $0x0f, %cl		# mask mask revision
+	movb %cl, _x86_mask
+	movl %edx, _x86_capability
 	/* get vendor info */
 	xorl %eax, %eax			# call CPUID with 0 -> return vendor ID
 	.byte 0x0f, 0xa2		# CPUID
@@ -174,7 +180,7 @@ L6:
  * We depend on ET to be correct. This checks for 287/387.
  */
 check_x87:
-	movl $0,_hard_math
+	movb $0,_hard_math
 	clts
 	fninit
 	fstsw %ax
@@ -185,7 +191,7 @@ check_x87:
 	movl %eax,%cr0
 	ret
 .align 2
-1:	movl $1,_hard_math
+1:	movb $1,_hard_math
 	.byte 0xDB,0xE4		/* fsetpm for 287, ignored by 387 */
 	ret
 

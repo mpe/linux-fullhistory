@@ -3208,7 +3208,7 @@ void floppy_setup(char *str, int *ints)
 			return;
 		}
 	}
-	printk("unknown floppy paramter %s\n", str);
+	printk("unknown floppy parameter %s\n", str);
 }
 #endif
 

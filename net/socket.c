@@ -266,8 +266,8 @@ static struct socket *sock_alloc(int wait)
 					return(NULL);
 				}
 				SOCK_INODE(sock)->i_mode = S_IFSOCK;
-				SOCK_INODE(sock)->i_uid = current->euid;
-				SOCK_INODE(sock)->i_gid = current->egid;
+				SOCK_INODE(sock)->i_uid = current->uid;
+				SOCK_INODE(sock)->i_gid = current->gid;
 				SOCK_INODE(sock)->i_socket = sock;
 
 				sock->wait = &SOCK_INODE(sock)->i_wait;

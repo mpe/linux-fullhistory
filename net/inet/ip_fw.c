@@ -435,7 +435,7 @@ static void zero_fw_chain(struct ip_fw *chainptr)
 
 #if defined(CONFIG_IP_ACCT) || defined(CONFIG_IP_FIREWALL)
 
-static void free_fw_chain(struct ip_fw **chainptr)
+static void free_fw_chain(struct ip_fw *volatile* chainptr)
 {
 	unsigned long flags;
 	save_flags(flags);
@@ -450,11 +450,13 @@ static void free_fw_chain(struct ip_fw **chainptr)
 	restore_flags(flags);
 }
 
-static int add_to_chain(struct ip_fw **chainptr, struct ip_fw *frwl)
+/* Volatiles to keep some of the compiler versions amused */
+
+static int add_to_chain(struct ip_fw *volatile* chainptr, struct ip_fw *frwl)
 {
 	struct ip_fw *ftmp;
 	struct ip_fw *chtmp=NULL;
-	struct ip_fw *chtmp_prev=NULL;
+	struct ip_fw *volatile chtmp_prev=NULL;
 	unsigned long flags;
 	unsigned long m_src_mask,m_dst_mask;
 	unsigned long n_sa,n_da,o_sa,o_da,o_sm,o_dm,n_sm,n_dm;
@@ -475,6 +477,7 @@ static int add_to_chain(struct ip_fw **chainptr, struct ip_fw *frwl)
 	}
 
 	memcpy(ftmp, frwl, sizeof( struct ip_fw ) );
+	
 	ftmp->p_cnt=0L;
 	ftmp->b_cnt=0L;
 
@@ -629,7 +632,7 @@ skip_check:
 	return(0);
 }
 
-static int del_from_chain(struct ip_fw **chainptr, struct ip_fw *frwl)
+static int del_from_chain(struct ip_fw *volatile*chainptr, struct ip_fw *frwl)
 {
 	struct ip_fw 	*ftmp,*ltmp;
 	unsigned short	tport1,tport2,tmpnum;

@@ -374,7 +374,7 @@ struct proto packet_prot =
 	NULL,
 	NULL,
 	ip_queue_xmit,		/* These two are not actually used */
-	ip_retransmit,
+	NULL,
 	NULL,
 	NULL,
 	NULL, 

@@ -21,6 +21,10 @@
  *		Alan Cox	:	Asynchronous I/O support
  *		Alan Cox	:	Keep correct socket pointer on sock structures
  *					when accept() ed
+ *		Alan Cox	:	Semantics of SO_LINGER aren't state moved
+ *					to close when you look carefully. With
+ *					this fixed and the accept bug fixed 
+ *					some RPC stuff seems happier.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -660,7 +664,7 @@ static int inet_create(struct socket *sock, int protocol)
 	sk->ip_tos=0;
 	sk->ip_ttl=64;
 #ifdef CONFIG_IP_MULTICAST
-	sk->ip_mc_loop=0;
+	sk->ip_mc_loop=1;
 	sk->ip_mc_ttl=1;
 	*sk->ip_mc_name=0;
 	sk->ip_mc_list=NULL;
@@ -739,7 +743,8 @@ static int inet_release(struct socket *sock, struct socket *peer)
 		cli();
 		if (sk->lingertime)
 			current->timeout = jiffies + HZ*sk->lingertime;
-		while(sk->state != TCP_CLOSE && current->timeout>0) 
+		while(sk->state < TCP_LAST_ACK && sk->state!= TCP_FIN_WAIT2 &&
+		     sk->state != TCP_TIME_WAIT && current->timeout>0) 
 		{
 			interruptible_sleep_on(sk->sleep);
 			if (current->signal & ~current->blocked) 
@@ -803,7 +808,7 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
 		return(-EACCES);
 
 	chk_addr_ret = ip_chk_addr(addr->sin_addr.s_addr);
-	if (addr->sin_addr.s_addr != 0 && chk_addr_ret != IS_MYADDR)
+	if (addr->sin_addr.s_addr != 0 && chk_addr_ret != IS_MYADDR && chk_addr_ret != IS_MULTICAST)
 		return(-EADDRNOTAVAIL);	/* Source address MUST be ours! */
   	
 	if (chk_addr_ret || addr->sin_addr.s_addr == 0)

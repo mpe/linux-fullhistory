@@ -22,8 +22,8 @@
  *     'void console_print(const char * b)'
  *     'void update_screen(int new_console)'
  *
- *     'void blank_screen(void)'
- *     'void unblank_screen(void)'
+ *     'void do_blank_screen(int)'
+ *     'void do_unblank_screen(void)'
  *     'void poke_blanked_console(void)'
  *     'void scrollback(int lines)'
  *     'void scrollfront(int lines)'
@@ -117,11 +117,11 @@ static void clear_selection(void);
 static void highlight_pointer(const int currcons, const int where);
 
 /* Variables for selection control. */
-#define SEL_BUFFER_SIZE 4096
+/* Use a dynamic buffer, instead of static (Dec 1994) */
 static int sel_cons = 0;
 static int sel_start = -1;
 static int sel_end;
-static char sel_buffer[SEL_BUFFER_SIZE] = { '\0' };
+static char *sel_buffer = NULL;
 #endif /* CONFIG_SELECTION */
 
 #define NPAR 16
@@ -132,6 +132,8 @@ static void vc_init(unsigned int console, unsigned long rows, unsigned long cols
 static void get_scrmem(int currcons);
 static void set_scrmem(int currcons, long offset);
 static void set_origin(int currcons);
+static void blank_screen(void);
+static void unblank_screen(void);
 static void gotoxy(int currcons, int new_x, int new_y);
 static void save_cur(int currcons);
 static inline void set_cursor(int currcons);
@@ -160,9 +162,7 @@ static unsigned short *vc_scrbuf[MAX_NR_CONSOLES];
 
 static int console_blanked = 0;
 static int blankinterval = 10*60*HZ;
-#ifndef CONFIG_VESA_PSPM
 static long blank_origin, blank__origin, unblank_origin;
-#endif
 
 struct vc_data {
 	unsigned long	vc_screenbuf_size;
@@ -307,16 +307,16 @@ static struct vc {
  * Huang shi chao, delivered together with many new monitor models	*
  * capable of the VESA Power Saving Protocol.				*
  * Adapted to Linux by Christoph Rimek (chrimek@toppoint.de)  15-may-94	*
- * Re-Adapted by Nicholas Leon (nicholas@neko.binary9.com) 10/94 *
- *                 (with minor reorganization/changes)                          *
+ * Re-Adapted by Nicholas Leon (nicholas@neko.binary9.com) 10/94        *
+ *                 (with minor reorganization/changes)                  *
  */
 
 
 static void vesa_blank(void);
 static void vesa_unblank(void);
 
-#define seq_port_reg	(0x3c4)		/* Sequencer register select port	*/
-#define seq_port_val	(0x3c5)		/* Sequencer register value port	*/
+#define seq_port_reg	(0x3c4)		/* Sequencer register select port */
+#define seq_port_val	(0x3c5)		/* Sequencer register value port  */
 #define video_misc_rd	(0x3cc)		/* Video misc. read port	*/
 #define video_misc_wr	(0x3c2)		/* Video misc. write port	*/
 
@@ -337,6 +337,8 @@ static struct {
 	unsigned char	ModeControl;		/* CRT-Controller:17h */
 	unsigned char	ClockingMode;		/* Seq-Controller:01h */
 } vga;
+
+static int vesa_blanked = 0;
 
 /* routine to blank a vesa screen */
 static void vesa_blank(void)
@@ -405,11 +407,15 @@ static void vesa_blank(void)
 	outb_p(vga.CrtCtrlIndex,video_port_reg);
 	sti();
 
+	vesa_blanked = 1;
 }	
 
 /* routine to unblank a vesa screen */
 static void vesa_unblank(void)
 {
+	if (!vesa_blanked)
+	  return;
+
 	/* restore original values of VGA controller registers */
 	cli();
 	outb_p(vga.CrtMiscIO,video_misc_wr);
@@ -438,6 +444,8 @@ static void vesa_unblank(void)
 	outb_p(vga.SeqCtrlIndex,seq_port_reg);
 	outb_p(vga.CrtCtrlIndex,video_port_reg);
 	sti();
+
+	vesa_blanked = 0;
 }
 
 #endif /* CONFIG_VESA_PSPM */
@@ -1426,7 +1434,7 @@ static void reset_terminal(int currcons, int do_clear)
 	utf             = 0;
 	utf_count       = 0;
 
-	disp_ctrl	= 0;
+	disp_ctrl	= 1;
 	toggle_meta	= 0;
 
 	decscnm		= 0;
@@ -1925,9 +1933,11 @@ void console_print(const char * b)
 {
 	int currcons = fg_console;
 	unsigned char c;
+	static int printing = 0;
 
-	if (!printable)
+	if (!printable || printing)
 		return;	 /* console not yet initialized */
+	printing = 1;
 
 	if (!vc_cons_allocated(currcons)) {
 		/* impossible */
@@ -1952,16 +1962,8 @@ void console_print(const char * b)
 		pos+=2;
 	}
 	set_cursor(currcons);
-	if (vt_cons[fg_console]->vc_mode == KD_GRAPHICS)
-		return;
-	timer_active &= ~(1<<BLANK_TIMER);
-	if (console_blanked) {
-		timer_table[BLANK_TIMER].expires = 0;
-		timer_active |= 1<<BLANK_TIMER;
-	} else if (blankinterval) {
-		timer_table[BLANK_TIMER].expires = jiffies + blankinterval;
-		timer_active |= 1<<BLANK_TIMER;
-	}
+	poke_blanked_console();
+	printing = 0;
 }
 
 /*
@@ -2185,24 +2187,16 @@ static void set_scrmem(int currcons, long offset)
 	pos = origin + y*video_size_row + (x<<1);
 }
 
-void blank_screen(void)
+void do_blank_screen(int nopowersave)
 {
-#ifndef CONFIG_VESA_PSPM
 	int currcons;
-#endif
 
 	if (console_blanked)
 		return;
-	if (!vc_cons_allocated(fg_console)) {
-		/* impossible */
-		printk("blank_screen: tty %d not allocated ??\n", fg_console+1);
-		return;
-	}
+
+	timer_active &= ~(1<<BLANK_TIMER);
 	timer_table[BLANK_TIMER].fn = unblank_screen;
 
-#ifdef CONFIG_VESA_PSPM
-	vesa_blank();
-#else
 	/* try not to lose information by blanking, and not to waste memory */
 	currcons = fg_console;
 	has_scrolled = 0;
@@ -2213,17 +2207,19 @@ void blank_screen(void)
 	unblank_origin = origin;
 	memsetw((void *)blank_origin, BLANK, video_mem_term-blank_origin);
 	hide_cursor();
-#endif	
 	console_blanked = fg_console + 1;
+
+#ifdef CONFIG_VESA_PSPM
+	if(!nopowersave)
+	    vesa_blank();
+#endif	
 }
 
-void unblank_screen(void)
+void do_unblank_screen(void)
 {
 	int currcons;
-#ifndef CONFIG_VESA_PSPM
 	int resetorg;
 	long offset;
-#endif
 
 	if (!console_blanked)
 		return;
@@ -2237,11 +2233,8 @@ void unblank_screen(void)
 		timer_table[BLANK_TIMER].expires = jiffies + blankinterval;
 		timer_active |= 1<<BLANK_TIMER;
 	}
+
 	currcons = fg_console;
-#ifdef CONFIG_VESA_PSPM
-	vesa_unblank();
-	console_blanked=0;
-#else
 	offset = 0;
 	resetorg = 0;
 	if (console_blanked == fg_console + 1 && origin == unblank_origin
@@ -2258,7 +2251,23 @@ void unblank_screen(void)
 	set_cursor(fg_console);
 	if (resetorg)
 		__set_origin(blank__origin);
+#ifdef CONFIG_VESA_PSPM
+	vesa_unblank();
 #endif
+}
+
+/*
+ * If a blank_screen is due to a timer, then a power save is allowed.
+ * If it is related to console_switching, then avoid vesa_blank().
+ */
+static void blank_screen(void)
+{
+	do_blank_screen(0);
+}
+
+static void unblank_screen(void)
+{
+	do_unblank_screen();
 }
 
 void update_screen(int new_console)
@@ -2323,6 +2332,9 @@ int do_screendump(int arg, int mode)
 	put_fs_byte((char)(video_num_lines),buf++);   
 	put_fs_byte((char)(video_num_columns),buf++);
 	    }
+#ifdef CONFIG_SELECTION
+	clear_selection();
+#endif
 	switch(mode) {
 	    case 0:
 	sptr = (char *) origin;
@@ -2330,9 +2342,6 @@ int do_screendump(int arg, int mode)
 		put_fs_byte(*sptr++,buf++);	
 			break;
 	    case 1:
-#ifdef CONFIG_SELECTION
-			clear_selection();
-#endif
 			put_fs_byte((char)x,buf++); put_fs_byte((char)y,buf++); 
 			memcpy_tofs(buf,(char *)origin,2*chcount);
 			break;
@@ -2379,12 +2388,7 @@ static void highlight(const int currcons, const int s, const int e)
 
 	p1 = (unsigned char *)origin - hwscroll_offset + s + 1;
 	p2 = (unsigned char *)origin - hwscroll_offset + e + 1;
-	if (p1 > p2)
-	{
-		p = p1;
-		p1 = p2;
-		p2 = p;
-	}
+
 	for (p = p1; p <= p2; p += 2)
 		*p = (*p & 0x88) | ((*p << 4) & 0x70) | ((*p >> 4) & 0x07);
 }
@@ -2415,6 +2419,7 @@ static void highlight_pointer(const int currcons, const int where)
 
 /*
  * This function uses a 128-bit look up table
+ * WARNING: This depends on both endianness and the ascii code
  */
 static unsigned long inwordLut[4]={
   0x00000000, /* control chars     */
@@ -2439,10 +2444,10 @@ static inline int atedge(const int p)
 	return (!(p % video_size_row) || !((p + 2) % video_size_row));
 }
 
-/* constrain v such that l <= v <= u */
-static inline short limit(const int v, const int l, const int u)
+/* constrain v such that v <= u */
+static inline short limit(const unsigned short v, const unsigned short u)
 {
-	return (v < l) ? l : ((v > u) ? u : v);
+	return ((v > u) ? u : v);
 }
 
 /* invoked via ioctl(TIOCLINUX) */
@@ -2471,10 +2476,10 @@ int set_selection(const int arg, struct tty_struct *tty)
 	ye = get_fs_word(args++) - 1;
 	sel_mode = get_fs_word(args);
 
-	xs = limit(xs, 0, video_num_columns - 1);
-	ys = limit(ys, 0, video_num_lines - 1);
-	xe = limit(xe, 0, video_num_columns - 1);
-	ye = limit(ye, 0, video_num_lines - 1);
+	xs = limit(xs, video_num_columns - 1);
+	ys = limit(ys, video_num_lines - 1);
+	xe = limit(xe, video_num_columns - 1);
+	ye = limit(ye, video_num_lines - 1);
 	ps = ys * video_size_row + (xs << 1);
 	pe = ye * video_size_row + (xe << 1);
 
@@ -2578,6 +2583,16 @@ int set_selection(const int arg, struct tty_struct *tty)
 	}
 	sel_start = new_sel_start;
 	sel_end = new_sel_end;
+
+	/* realloc the buffer (it seems to be efficient, anyway) */
+	if (sel_buffer) kfree(sel_buffer);
+	sel_buffer = kmalloc((sel_end-sel_start)/2+2, GFP_KERNEL);
+	if (!sel_buffer)
+	{
+		printk("selection: kmalloc() failed\n");
+		clear_selection();
+		return (0); /* is it right? */
+	}
 	obp = bp = sel_buffer;
 	for (i = sel_start; i <= sel_end; i += 2)
 	{
@@ -2596,10 +2611,6 @@ int set_selection(const int arg, struct tty_struct *tty)
 			}
 			obp = bp;
 		}
-		/* check for space, leaving room for next character, possible
-		   newline, and null at end. */
-		if (bp - sel_buffer > SEL_BUFFER_SIZE - 3)
-			break;
 	}
 	*bp = '\0';
 	return 0;
@@ -2614,7 +2625,7 @@ int paste_selection(struct tty_struct *tty)
 	int	c, l;
 	struct vt_struct *vt = (struct vt_struct *) tty->driver_data;
 	
-	if (!sel_buffer[0])
+	if (!bp || !bp[0])
 		return 0;
 	unblank_screen();
 	c = strlen(sel_buffer);

@@ -418,8 +418,11 @@ int do_open(const char * filename,int flags,int mode)
 	if (flag & (O_TRUNC | O_CREAT))
 		flag |= 2;
 	error = open_namei(filename,flag,mode,&inode,NULL);
-	if (!error && (f->f_mode & 2))
+	if (!error && (f->f_mode & 2)) {
 		error = get_write_access(inode);
+		if (error)
+			iput(inode);
+	}
 	if (error) {
 		current->files->fd[fd]=NULL;
 		f->f_count--;

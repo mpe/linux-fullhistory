@@ -10,6 +10,7 @@
  *		Alan Cox	: 	Added slip mtu field.
  *		Matt Dillon	:	Printable slip (borrowed from net2e)
  *		Alan Cox	:	Added SL_SLIP_LOTS
+ * 	Dmitry Gorodchanin      :       A lot of changes in the 'struct slip'
  *
  * Author:	Fred N. van Kempen, <waltje@uwalt.nl.mugnet.org>
  */
@@ -33,44 +34,44 @@
 
 struct slip {
   int			magic;
-  /* Bitmapped flag fields. */
-  char			inuse;		/* are we allocated?		*/
-  char			sending;	/* "channel busy" indicator	*/
-  char			escape;		/* SLIP state machine		*/
-  char			unused;		/* fillers			*/
 
   /* Various fields. */
-  int			line;		/* SLIP channel number		*/
   struct tty_struct	*tty;		/* ptr to TTY structure		*/
   struct device		*dev;		/* easy for intr handling	*/
+#if defined(CONFIG_INET)
   struct slcompress	*slcomp;	/* for header compression 	*/
+  unsigned char		*cbuff;		/* compression buffer		*/
+#endif
 
   /* These are pointers to the malloc()ed frame buffers. */
   unsigned char		*rbuff;		/* receiver buffer		*/
+  int                   rcount;         /* received chars counter       */
   unsigned char		*xbuff;		/* transmitter buffer		*/
-  unsigned char		*cbuff;		/* compression buffer		*/
-
-  /* These are the various pointers into the buffers. */
-  unsigned char		*rhead;		/* RECV buffer pointer (head)	*/
-  unsigned char		*rend;		/* RECV buffer pointer (end)	*/
-  int			rcount;		/* SLIP receive counter		*/
-  unsigned char		*xhead;		/* XMIT buffer pointer (head)	*/
-  unsigned char		*xtail;		/* XMIT buffer pointer (tail)	*/
+  unsigned char         *xhead;         /* pointer to next byte to XMIT */
+  int                   xleft;          /* bytes left in XMIT queue     */
 
   /* SLIP interface statistics. */
-  unsigned long		rpacket;	/* inbound frame counter	*/
-  unsigned long		roverrun;	/* "buffer overrun" counter	*/
-  unsigned long		spacket;	/* outbound frames counter	*/
-  unsigned long		sbusy;		/* "transmitter busy" counter	*/
-  unsigned long		errors;		/* error count			*/
-  
+  unsigned long		rx_packets;	/* inbound frames counter	*/
+  unsigned long         tx_packets;     /* outbound frames counter      */
+  unsigned long         rx_errors;      /* Parity, etc. errors          */
+  unsigned long         tx_errors;      /* Palnned stuff                */
+  unsigned long         rx_dropped;     /* No memory for skb            */
+  unsigned long         tx_dropped;     /* When MTU change              */
+  unsigned long         rx_over_errors; /* Frame bigger then SLIP buf.  */
+  /* Detailed SLIP statistics. */
+
   int			mtu;		/* Our mtu (to spot changes!)   */
+  int                   buffsize;       /* Max buffers sizes            */
+
+#ifdef CONFIG_SLIP_MODE_SLIP6
+  int			xdata, xbits;	/* 6 bit slip controls 		*/
+#endif
+
   unsigned char		flags;		/* Flag values/ mode etc	*/
-#define SLF_ESCAPE	2
-#define SLF_ERROR	4
-#define SLF_COMP	16
-#define SLF_EXPN	32
-#define SLF_XMIT_BUSY	64
+#define SLF_INUSE	0		/* Channel in use               */
+#define SLF_ESCAPE	1               /* ESC received                 */
+#define SLF_ERROR	2               /* Parity, etc. error           */
+
   unsigned char		mode;		/* SLIP mode			*/
 #define SL_MODE_SLIP	0
 #define SL_MODE_CSLIP	1
@@ -78,15 +79,25 @@ struct slip {
 #define SL_MODE_CSLIP6	(SL_MODE_SLIP6|SL_MODE_CSLIP)
 #define SL_MODE_AX25	4
 #define SL_MODE_ADAPTIVE 8
-  int			xdata,xbits;	/* 6 bit slip controls 		*/
 };
+
+#ifdef CONFIG_INET
+#ifdef CONFIG_SLIP_ADAPTIVE
+#define SL_MODE_DEFAULT	SL_MODE_ADAPTIVE
+#else  /* !CONFIG_SLIP_ADAPTIVE */
+#ifdef CONFIG_SLIP_COMPRESSED
+#define SL_MODE_DEFAULT (SL_MODE_CSLIP | SL_MODE_ADAPTIVE)
+#else  /* !CONFIG_SLIP_COMPRESSED */
+#define SL_MODE_DEFAULT SL_MODE_SLIP
+#endif /* CONFIG_SLIP_COMPRESSED */
+#endif /* CONFIG_SLIP_ADAPTIVE */
+#else  /* !CONFIG_INET */
+#define SL_MODE_DEFAULT SL_MODE_SLIP
+#endif /* CONFIG_INET */
+
 
 #define SLIP_MAGIC 0x5302
 
-extern int	slip_init(struct device *dev);
-extern int	slip_esc(unsigned char *s, unsigned char *d, int len);
-extern int	slip_esc6(unsigned char *s, unsigned char *d, int len);
-extern void	slip_unesc(struct slip *sl, unsigned char s);
-extern void 	slip_unesc6(struct slip *sl, unsigned char s);
+extern int slip_init(struct device *dev);
 
 #endif	/* _LINUX_SLIP.H */

@@ -19,13 +19,6 @@ bool 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF y
 bool 'Use -m486 flag for 486-specific optimizations' CONFIG_M486 y
 #fi
 
-comment 'Screen saver mode'
-
-bool 'VESA Power Saving Protocol Support' CONFIG_VESA_PSPM n
-if [ "$CONFIG_VESA_PSPM" = "y" ]; then
-bool 'VESA PSPM Force Off' CONFIG_PSPM_FORCE_OFF n
-fi
-
 if [ "$CONFIG_NET" = "y" ]; then
 comment 'Networking options'
 bool 'TCP/IP networking' CONFIG_INET y
@@ -212,6 +205,11 @@ fi
 bool 'Microsoft busmouse support' CONFIG_MS_BUSMOUSE n
 bool 'ATIXL busmouse support' CONFIG_ATIXL_BUSMOUSE n
 bool 'Selection (cut and paste for virtual consoles)' CONFIG_SELECTION n
+bool 'VESA Power Saving Protocol Support' CONFIG_VESA_PSPM n
+if [ "$CONFIG_VESA_PSPM" = "y" ]; then
+bool 'VESA PSPM Force Off' CONFIG_PSPM_FORCE_OFF n
+fi
+
 
 bool 'QIC-02 tape support' CONFIG_QIC02_TAPE n
 if [ "$CONFIG_QIC02_TAPE" = "y" ]; then
@@ -241,6 +239,9 @@ comment 'Kernel hacking'
 
 #bool 'Debug kmalloc/kfree' CONFIG_DEBUG_MALLOC n
 bool 'Kernel profiling support' CONFIG_PROFILE n
+if [ "$CONFIG_PROFILE" = "y" ]; then
+  int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
+fi
 if [ "$CONFIG_SCSI" = "y" ]; then
 bool 'Verbose scsi error reporting (kernel size +=12K)' CONFIG_SCSI_CONSTANTS y
 fi

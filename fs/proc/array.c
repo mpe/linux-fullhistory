@@ -16,6 +16,9 @@
  *
  * Danny ter Haar    :	Some minor additions for cpuinfo
  * <danny@ow.nl>
+ *
+ * Alessandro Rubini :  profile extension.
+ *                      <rubini@ipvvis.unipv.it>
  */
 
 #include <linux/types.h>
@@ -94,6 +97,64 @@ static struct file_operations proc_kcore_operations = {
 struct inode_operations proc_kcore_inode_operations = {
 	&proc_kcore_operations, 
 };
+
+#ifdef CONFIG_PROFILE
+
+extern unsigned long prof_len;
+extern unsigned long * prof_buffer;
+/*
+ * This function accesses profiling information. The returned data is
+ * binary: the sampling step and the actual contents of the profile
+ * buffer. Use of the program readprofile is recommended in order to
+ * get meaningful info out of these data.
+ */
+static int read_profile(struct inode *inode, struct file *file, char *buf, int count)
+{
+    unsigned long p = file->f_pos;
+	int read;
+	char * pnt;
+	unsigned long sample_step = 1 << CONFIG_PROFILE_SHIFT;
+
+	if (count < 0)
+	    return -EINVAL;
+	if (p >= (prof_len+1)*sizeof(unsigned long))
+	    return 0;
+	if (count > (prof_len+1)*sizeof(unsigned long) - p)
+	    count = (prof_len+1)*sizeof(unsigned long) - p;
+    read = 0;
+
+    while (p < sizeof(unsigned long) && count > 0) {
+        put_fs_byte(*((char *)(&sample_step)+p),buf);
+		buf++; p++; count--; read++;
+    }
+    pnt = (char *)prof_buffer + p - sizeof(unsigned long);
+	memcpy_tofs(buf,(void *)pnt,count);
+	read += count;
+	file->f_pos += read;
+	return read;
+}
+
+/* Writing to /proc/profile resets the counters */
+static int write_profile(struct inode * inode, struct file * file, char * buf, int count)
+{
+    int i=prof_len;
+
+    while (i--)
+	    prof_buffer[i]=0UL;
+    return count;
+}
+
+static struct file_operations proc_profile_operations = {
+	NULL,           /* lseek */
+	read_profile,
+	write_profile,
+};
+
+struct inode_operations proc_profile_inode_operations = {
+	&proc_profile_operations, 
+};
+
+#endif /* CONFIG_PROFILE */
 
 static int get_loadavg(char * buffer)
 {
@@ -182,18 +243,47 @@ static int get_version(char * buffer)
 
 static int get_cpuinfo(char * buffer)
 {
-	return sprintf(buffer,"cpu      : %d86\n"
-			      "vid      : %s\n"
-			      "fdiv_bug : %s\n"
-			      "math     : %s\n"
-			      "hlt      : %s\n"
-			      "wp       : %s\n",
-			      x86, 
+	/* to conserve memory, we define the strins yes and no in
+	   advance */
+	char *yes="yes";
+	char *no="no";
+	char *model[2][9]={{"DX","SX","DX/2","4","5","6",
+				"7","DX/4"},
+			{"Pentium 60/66","Pentium 90","3",
+				"4","5","6","7","8"}};
+	return sprintf(buffer,"cpu\t\t: %c86\n"
+			      "model\t\t: %s\n"
+			      "mask\t\t: %c\n"
+			      "vid\t\t: %s\n"
+			      "fdiv_bug\t: %s\n"
+			      "math\t\t: %s\n"
+			      "hlt\t\t: %s\n"
+			      "wp\t\t: %s\n"
+			      "Integrated NPU\t: %s\n"
+			      "Enhanced VM86\t: %s\n"
+			      "IO Breakpoints\t: %s\n"
+			      "4MB Pages\t: %s\n"
+			      "TS Counters\t: %s\n"
+			      "Pentium MSR\t: %s\n"
+			      "Mach. Ch. Exep.\t: %s\n"
+			      "CMPXCHGB8B\t: %s\n",
+			      x86+'0', 
+			      x86_model ? model[x86-4][x86_model-1] : "Unknown",
+			      x86_mask+'@',
 			      x86_vendor_id,
-			      fdiv_bug ? "yes" : "no",
-			      hard_math ? "yes" : "no",
-			      hlt_works_ok ? "yes" : "no",
-			      wp_works_ok ? "yes" : "no");
+			      fdiv_bug ? yes : no,
+			      hard_math ? yes : no,
+			      hlt_works_ok ? yes : no,
+			      wp_works_ok ? yes : no,
+			      x86_capability & 1 ? yes : no,
+			      x86_capability & 2 ? yes : no,
+			      x86_capability & 4 ? yes : no,
+			      x86_capability & 8 ? yes : no,
+			      x86_capability & 16 ? yes : no,
+			      x86_capability & 32 ? yes : no,
+			      x86_capability & 128 ? yes : no,
+			      x86_capability & 256 ? yes : no
+			      );
 }
 
 static struct task_struct ** get_task(pid_t pid)

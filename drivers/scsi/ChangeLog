@@ -1,3 +1,92 @@
+Tue Dec  6 12:34:20 1994  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.72 released.
+
+	* sg.c: Bugfix - always use sg_free, since we might have big buff.
+
+Fri Dec  2 11:24:53 1994  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.71 released.
+
+	* sg.c: Clear buff field when not in use.  Only call scsi_free if
+	non-null.
+
+	* scsi.h: Call wake_up(&wait_for_request) when done with a
+	command.
+
+	* scsi.c (scsi_times_out): Pass pid down so that we can protect
+	against race conditions.
+
+	* scsi.c (scsi_abort): Zero timeout field if we get the
+	NOT_RUNNING message back from low-level driver.
+
+
+	* scsi.c (scsi_done): Restore cmd_len, use_sg here.
+
+	* scsi.c (request_sense): Not here.
+
+	* hosts.h: Add new forbidden_addr, forbidden_size fields.  Who
+	added these and why????
+
+	* hosts.c (scsi_mem_init): Mark pages as reserved if they fall in
+	the forbidden regions.  I am not sure - I think this is so that
+	we can deal with boards that do incomplete decoding of their
+	address lines for the bios chips, but I am not entirely sure.
+
+	* buslogic.c: Set forbidden_addr stuff if using a buggy board.
+
+	* aha1740.c: Test for NULL pointer in SCtmp.  This should not
+	occur, but a nice message is better than a kernel segfault.
+
+	* 53c7,8xx.c: Add new PCI chip ID for 815.
+
+Fri Dec  2 11:24:53 1994  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.70 released.
+
+	* ChangeLog, st.c: Spelling.
+
+Tue Nov 29 18:48:42 1994  Eric Youngdale  (eric@andante)
+
+	* Linux 1.1.69 released.
+
+	* u14-34f.h: Non-functional change.  [Dario].
+
+	* u14-34f.c: Use block field in Scsi_Host to prevent commands from
+	being queued to more than one host at the same time (used when
+	motherboard does not deal with multiple bus-masters very well).
+	Only when SINGLE_HOST_OPERATIONS is defined.
+	Use new cmd_per_lun field.  [Dario]
+
+	* eata.c: Likewise.
+
+	* st.c: More changes from Kai.  Add ready flag to indicate drive
+	status.
+
+	* README.st: Document this.
+	
+	* sr.c: Bugfix (do not subtract CD_BLOCK_OFFSET) for photo-cd
+	code.
+
+	* sg.c: Bugfix - fix problem where opcode is not correctly set up.
+
+	* seagate.[c,h]: Use #defines to set driver name.
+
+	* scsi_ioctl.c: Zero buffer before executing command.
+
+	* scsi.c: Use new cmd_per_lun field in Scsi_Hosts as appropriate.
+	Add Sony CDU55S to blacklist.
+
+	* hosts.h: Add new cmd_per_lun field to Scsi_Hosts.
+
+	* hosts.c: Initialize cmd_per_lun in Scsi_Hosts from template.
+
+	* buslogic.c: Use cmd_per_lun field - initialize to different
+	values depending upon bus type (i.e. use 1 if ISA, so we do not
+	hog memory).  Use other patches which got lost from 1.1.68.
+
+	* aha1542.c: Spelling.
+
 Tue Nov 29 15:43:50 1994  Eric Youngdale  (eric@andante.aib.com)
 
 	* Linux 1.1.68 released.

@@ -26,7 +26,8 @@ enum root_directory_inos {
 	PROC_FILESYSTEMS,
 	PROC_KSYMS,
 	PROC_DMA,	
-	PROC_IOPORTS
+	PROC_IOPORTS,
+	PROC_PROFILE /* wether enabled or not */
 };
 
 enum pid_directory_inos {
@@ -109,6 +110,7 @@ extern struct inode_operations proc_net_inode_operations;
 extern struct inode_operations proc_mem_inode_operations;
 extern struct inode_operations proc_array_inode_operations;
 extern struct inode_operations proc_kcore_inode_operations;
+extern struct inode_operations proc_profile_inode_operations;
 extern struct inode_operations proc_kmsg_inode_operations;
 extern struct inode_operations proc_link_inode_operations;
 extern struct inode_operations proc_fd_inode_operations;

@@ -74,6 +74,7 @@ static struct proc_dir_entry root_dir[] = {
    	{ PROC_KSYMS,		5, "ksyms" },
    	{ PROC_DMA,		3, "dma" },
 	{ PROC_IOPORTS,		7, "ioports"},
+	{ PROC_PROFILE,     7, "profile"},
 };
 
 #define NR_ROOT_DIRENTRY ((sizeof (root_dir))/(sizeof (root_dir[0])))

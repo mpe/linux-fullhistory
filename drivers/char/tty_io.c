@@ -73,6 +73,8 @@ extern int mouse_reporting(void);
 extern int shift_state;
 #endif /* CONFIG_SELECTION */
 extern int do_screendump(int arg, int mode);
+extern void do_blank_screen(int nopowersave);
+extern void do_unblank_screen(void);
 
 struct termios tty_std_termios;		/* for the benefit of tty drivers  */
 struct tty_driver *tty_drivers = NULL;	/* linked list of tty drivers */
@@ -513,11 +515,9 @@ void complete_change_console(unsigned int new_console)
 	if (old_vc_mode != vt_cons[new_console]->vc_mode)
 	{
 		if (vt_cons[new_console]->vc_mode == KD_TEXT)
-			unblank_screen();
-		else {
-			timer_active &= ~(1<<BLANK_TIMER);
-			blank_screen();
-		}
+			do_unblank_screen();
+		else
+			do_blank_screen(1);
 	}
 
 	/*
@@ -1414,7 +1414,7 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 					return paste_selection(tty);
 #endif /* CONFIG_SELECTION */
 				case 4:
-					unblank_screen();
+					do_unblank_screen();
 					return 0;
 #ifdef CONFIG_SELECTION
 				case 5:
@@ -1596,7 +1596,7 @@ int tty_register_driver(struct tty_driver *driver)
 	
 	driver->prev = 0;
 	driver->next = tty_drivers;
-	tty_drivers->prev = driver;
+	if (tty_drivers) tty_drivers->prev = driver;
 	tty_drivers = driver;
 	return error;
 }
@@ -1633,7 +1633,7 @@ int tty_unregister_driver(struct tty_driver *driver)
 		tty_drivers = driver->next;
 	
 	if (driver->next)
-		driver->next = driver->next->prev;
+		driver->next->prev = driver->prev;
 
 	return 0;
 }

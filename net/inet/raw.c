@@ -301,7 +301,7 @@ struct proto raw_prot = {
 	udp_connect,
 	NULL,
 	ip_queue_xmit,
-	ip_retransmit,
+	NULL,
 	NULL,
 	NULL,
 	NULL,

@@ -1,10 +1,10 @@
 /* fdomain.c -- Future Domain TMC-16x0 SCSI driver
  * Created: Sun May  3 18:53:19 1992 by faith@cs.unc.edu
- * Revised: Wed Nov  2 16:37:58 1994 by faith@cs.unc.edu
+ * Revised: Wed Dec  7 09:36:57 1994 by faith@cs.unc.edu
  * Author: Rickard E. Faith, faith@cs.unc.edu
  * Copyright 1992, 1993, 1994 Rickard E. Faith
  *
- * $Id: fdomain.c,v 5.20 1994/11/02 21:38:33 root Exp $
+ * $Id: fdomain.c,v 5.22 1994/12/07 15:15:46 root Exp $
 
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -40,7 +40,8 @@
 
  The following BIOS versions are supported: 2.0, 3.0, 3.2, 3.4, and 3.5.
  The following chips are supported: TMC-1800, TMC-18C50, TMC-18C30.
- Reports suggest that the driver will also work with the 36C70 chip.
+ Reports suggest that the driver will also work with the 36C70 chip and
+ with the Quantum ISA-200S SCSI adapter.
 
  Please note that the drive ordering that Future Domain implemented in BIOS
  versions 3.4 and 3.5 is the opposite of the order (currently) used by the
@@ -133,6 +134,9 @@
  Thanks to Eric Kasten (tigger@petroglyph.cl.msu.edu) for providing the
  patch for the version 3.5 BIOS.
 
+ Thanks for Stephen Henson (shenson@nyx10.cs.du.edu) for providing the
+ patch for the Quantum ISA-200S SCSI adapter.
+
  All of the alpha testers deserve much thanks.
 
 
@@ -182,7 +186,7 @@
 #include <linux/string.h>
 #include <linux/ioport.h>
 
-#define VERSION          "$Revision: 5.20 $"
+#define VERSION          "$Revision: 5.22 $"
 
 /* START OF USER DEFINABLE OPTIONS */
 
@@ -273,6 +277,7 @@ static void              *bios_base        = NULL;
 static int               bios_major        = 0;
 static int               bios_minor        = 0;
 static int               PCI_bus           = 0;
+static int               ISA_200S          = 0;	/* Quantum ISA-200S */
 static int               interrupt_level   = 0;
 static volatile int      in_command        = 0;
 static Scsi_Cmnd         *current_SC       = NULL;
@@ -347,12 +352,13 @@ struct signature {
    int  sig_length;
    int  major_bios_version;
    int  minor_bios_version;
-   int  PCI_bus;
+   int  flag;			/* 1 == PCI_bus, 2 == ISA_200S */
 } signatures[] = {
    /*          1         2         3         4         5         6 */
    /* 123456789012345678901234567890123456789012345678901234567890 */
    { "FUTURE DOMAIN CORP. (C) 1986-1990 1800-V2.07/28/89",  5, 50,  2,  0, 0 },
    { "FUTURE DOMAIN CORP. (C) 1986-1990 1800-V1.07/28/89",  5, 50,  2,  0, 0 },
+   { "FUTURE DOMAIN CORP. (C) 1986-1990 1800-V2.07/28/89", 72, 50,  2,  0, 2 },
    { "FUTURE DOMAIN CORP. (C) 1992 V3.00.004/02/92",        5, 44,  3,  0, 0 },
    { "FUTURE DOMAIN TMC-18XX (C) 1993 V3.203/12/93",        5, 44,  3,  2, 0 },
    { "Future Domain Corp. V1.0008/18/93",                   5, 33,  3,  4, 0 },
@@ -532,7 +538,8 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
 		      signatures[j].signature, signatures[j].sig_length )) {
 	    bios_major = signatures[j].major_bios_version;
 	    bios_minor = signatures[j].minor_bios_version;
-	    PCI_bus    = signatures[j].PCI_bus;
+	    PCI_bus    = (signatures[j].flag == 1);
+	    ISA_200S   = (signatures[j].flag == 2);
 	    bios_base  = addresses[i];
 	 }
       }
@@ -554,8 +561,13 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
 	 DOS (this geometry has nothing to do with physical geometry).
        */
 
-      port_base = *((char *)bios_base + 0x1fcc)
-	    + (*((char *)bios_base + 0x1fcd) << 8);
+      if (ISA_200S) {		/* The Quantum board is slightly different. */
+	 port_base = *((char *)bios_base + 0x1fa2)
+	       + (*((char *)bios_base + 0x1fa3) << 8);
+      } else {
+	 port_base = *((char *)bios_base + 0x1fcc)
+	       + (*((char *)bios_base + 0x1fcd) << 8);
+      }
    
 #if DEBUG_DETECT
       printk( " %x,", port_base );
@@ -1540,6 +1552,17 @@ int fdomain_16x0_biosparam( Scsi_Disk *disk, int dev, int *info_array )
       The table at 0x1fcc are I/O ports addresses for the various
       operations.  I calculate these by hand in this driver code.
 
+      
+      
+      For the ISA-200S version of BIOS Version 2.0:
+
+      The drive parameter table starts at 0x1f33.
+
+      WARNING: Assume that the table entry is 25 bytes long.  Someone needs
+      to check this for the Quantum ISA-200S card.
+
+      
+      
       For BIOS Version 3.2:
 
       The drive parameter table starts at 0x1f70.  Each entry is
@@ -1549,7 +1572,11 @@ int fdomain_16x0_biosparam( Scsi_Disk *disk, int dev, int *info_array )
    drive = MINOR(dev) / 16;
 
    if (bios_major == 2) {
-      i = (struct drive_info *)( (char *)bios_base + 0x1f31 + drive * 25 );
+      if (ISA_200S) {
+	 i = (struct drive_info *)( (char *)bios_base + 0x1f33 + drive * 25 );
+      } else {
+	 i = (struct drive_info *)( (char *)bios_base + 0x1f31 + drive * 25 );
+      }
       info_array[0] = i->heads;
       info_array[1] = i->sectors;
       info_array[2] = i->cylinders;

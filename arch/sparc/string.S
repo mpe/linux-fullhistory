@@ -16,7 +16,7 @@
 	.align 4
 	.globl _strlen
 _strlen:
-	mov	%o0, %g3	! leaf-proceedure optimization, here
+	mov	%o0, %g3	! leaf-procedure optimization, here
 	ldsb	[%g3], %g2	! I only use the register sent to me
 	cmp	%g2, 0		! and the globals. Now, this routine
 	be	1f		! is callable from boot code.
@@ -24,16 +24,16 @@ _strlen:
 	add	%o0, 1, %o0
 0:	ldsb	[%o0], %g2
 	cmp	%g2, 0
-	bne,a	0b		! annuling branch, yuck
+	bne,a	0b		! annulling branch, yuck
 	add	%o0, 1, %o0
 
 1:	retl
-	sub	%o0, %g3, %o0	! since %g3 holds the origional pointer
+	sub	%o0, %g3, %o0	! since %g3 holds the original pointer
 				! and %o0 is at the end byte, we can
 				! subtract and the result is strlen.
 
 /* String concatenate function. I am too lazy to honor the third count
-   arguement at this time. Once again, this could be optimized so much
+   argument at this time. Once again, this could be optimized so much
    more to use word accesses instead of slooow byte loads.
 */
 	.align 4

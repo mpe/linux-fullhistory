@@ -45,6 +45,7 @@ static void scsi_times_out (Scsi_Cmnd * SCpnt, int pid);
 
 static int time_start;
 static int time_elapsed;
+static int scsi_maybe_deadlocked = 0;
 
 #define MAX_SCSI_DEVICE_CODE 10
 const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE] =
@@ -369,7 +370,7 @@ static void scan_scsis (struct Scsi_Host * shpnt)
  *	flags set for ROM / WORM treated as RO.
  */ 
 
-	      switch (type = scsi_result[0])
+	      switch (type = (scsi_result[0] & 0x1f))
 		{
 		case TYPE_TAPE :
 		case TYPE_DISK :
@@ -393,7 +394,7 @@ static void scan_scsis (struct Scsi_Host * shpnt)
 	      SDpnt->soft_reset = 
 		(scsi_result[7] & 1) && ((scsi_result[3] & 7) == 2);
 	      SDpnt->random = (type == TYPE_TAPE) ? 0 : 1;
-	      SDpnt->type = type;
+	      SDpnt->type = (type & 0x1f);
 	      
 	      if (type != -1)
 		{
@@ -664,6 +665,12 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, Scsi_Device * device,
   
   host = device->host;
   
+  if (intr_count && device->host->can_queue
+      && device->host->host_busy >= device->host->can_queue) {
+    scsi_maybe_deadlocked = 1;
+    return NULL;
+  }
+
   while (1==1){
     SCpnt = host->host_queue;
     while(SCpnt){
@@ -1374,6 +1381,17 @@ static void scsi_done (Scsi_Cmnd * SCpnt)
 		   */
 		  for(block = host->block; block != host; block = block->block)
 		      wake_up(&block->host_wait);
+		  /*
+		   * If we might have deadlocked, get things started again.  Only
+		   * for block devices - character devices should never deadlock.
+		   */
+		  if (scsi_maybe_deadlocked) {
+		    struct Scsi_Device_Template * sdtpnt;
+		    scsi_maybe_deadlocked = 0;
+		    for(sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
+		      if (sdtpnt->blk && blk_dev[sdtpnt->major].request_fn)
+			(*blk_dev[sdtpnt->major].request_fn)();
+		  }
 		}
 		wake_up(&host->host_wait);
 		SCpnt->result = result | ((exit & 0xff) << 24);
@@ -1615,7 +1633,7 @@ static void scsi_main_timeout(void)
 			SCpnt->timeout = 0;
 			pid = SCpnt->pid;
 			sti();
-			scsi_times_out(SCpnt, SCpnt);
+			scsi_times_out(SCpnt, pid);
 			++timed_out; 
 			cli();
 		      }
@@ -1701,10 +1719,12 @@ static unsigned char * dma_malloc_buffer = NULL;
 void *scsi_malloc(unsigned int len)
 {
   unsigned int nbits, mask;
+  unsigned long flags;
   int i, j;
   if((len & 0x1ff) || len > 8192)
     return NULL;
   
+  save_flags(flags);
   cli();
   nbits = len >> 9;
   mask = (1 << nbits) - 1;
@@ -1713,7 +1733,7 @@ void *scsi_malloc(unsigned int len)
     for(j=0; j<17-nbits; j++){
       if ((dma_malloc_freelist[i] & (mask << j)) == 0){
 	dma_malloc_freelist[i] |= (mask << j);
-	sti();
+	restore_flags(flags);
 	dma_free_sectors -= nbits;
 #ifdef DEBUG
 	printk("SMalloc: %d %x ",len, dma_malloc_buffer + (i << 13) + (j << 9));
@@ -1721,7 +1741,7 @@ void *scsi_malloc(unsigned int len)
 	return (void *) ((unsigned long) dma_malloc_buffer + (i << 13) + (j << 9));
       };
     };
-  sti();
+  restore_flags(flags);
   return NULL;  /* Nope.  No more */
 }
 
@@ -1729,6 +1749,7 @@ int scsi_free(void *obj, unsigned int len)
 {
   int offset;
   int page, sector, nbits, mask;
+  unsigned long flags;
 
 #ifdef DEBUG
   printk("Sfree %x %d\n",obj, len);
@@ -1747,13 +1768,14 @@ int scsi_free(void *obj, unsigned int len)
 
   if ((mask << sector) > 0xffff) panic ("Bad memory alignment");
 
+  save_flags(flags);
   cli();
   if(dma_malloc_freelist[page] & (mask << sector) != (mask<<sector))
     panic("Trying to free unused memory");
 
   dma_free_sectors += nbits;
   dma_malloc_freelist[page] &= ~(mask << sector);
-  sti();
+  restore_flags(flags);
   return 0;
 }
 
@@ -1942,20 +1964,327 @@ static void print_inquiry(unsigned char *data)
 	  printk("\n");
 }
 
+#ifdef NOT_YET
+/*
+ * This entry point should be called by a loadable module if it is trying
+ * add a low level scsi driver to the system.
+ */
+static int scsi_register_host(Scsi_Host_Template * tpnt)
+{
+  int pcount;
+  struct Scsi_Host * shpnt;
+  struct Scsi_Host * host = NULL;
+  Scsi_Device * SDpnt;
+  Scsi_Cmnd * SCpnt;
+  struct Scsi_Device_Template * sdtpnt;
+  int j, i;
+  char * name;
+
+  if (tpnt->next || !tpnt->detect) return 1;  /* Must be already loaded, or
+					       no detect routine available */
+  pcount = next_scsi_host;
+  if ((tpnt->present = tpnt->detect(tpnt)))
+    {
+      if(pcount == next_scsi_host) {
+	if(tpnt->present > 1) {
+	  printk("Failure to register low-level scsi driver");
+	  scsi_unregister_host(tpnt);
+	  return 1;
+	}
+	/* The low-level driver failed to register a driver.  We
+	   can do this now. */
+	scsi_register(tpnt,0);
+      }
+      tpnt->next = scsi_hosts; /* Add to the linked list */
+      scsi_hosts = tpnt;
+
+      for(shpnt=scsi_hostlist; shpnt; shpnt = shpnt->next)
+	if(shpnt->hostt == tpnt)
+	  {
+	    if(tpnt->info)
+	      name = tpnt->info(shpnt);
+	    else
+	      name = tpnt->name;
+	    printk ("scsi%d : %s\n", /* And print a little message */
+		    shpnt->host_no, name);
+	  }
+      /* The next step is to call scan_scsis here.  This generates the
+         Scsi_Devices entries */
+
+      for(shpnt=scsi_hostlist; shpnt; shpnt = shpnt->next)
+	if(shpnt->hostt == tpnt) scan_scsis(shpnt);
+
+      for(sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
+	if(sdtpnt->init && sdtpnt->dev_noticed) (*sdtpnt->init)();
+
+      /* Next we create the Scsi_Cmnd structures for this host */
+
+      for(SDpnt = scsi_devices; SDpnt; SDpnt = SDpnt->next)
+	if(SDpnt->host->hostt == tpnt)
+	  {
+	    for(sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
+	      if(sdtpnt->attach) (*sdtpnt->attach)(SDpnt);
+	    if(SDpnt->attached){
+	      for(j=0;j<SDpnt->host->cmd_per_lun;j++){
+		SCpnt = (Scsi_Cmnd *) scsi_init_malloc(sizeof(Scsi_Cmnd), GFP_ATOMIC);
+		SCpnt->host = SDpnt->host;
+		SCpnt->device = SDpnt;
+		SCpnt->target = SDpnt->id;
+		SCpnt->lun = SDpnt->lun;
+		SCpnt->request.dev = -1; /* Mark not busy */
+		SCpnt->request.sem = NULL;
+		SCpnt->use_sg = 0;
+		SCpnt->old_use_sg = 0;
+		SCpnt->underflow = 0;
+		SCpnt->timeout = 0;
+		SCpnt->transfersize = 0;
+		SCpnt->host_scribble = NULL;
+		host = SDpnt->host;
+		SCpnt->next = host->host_queue;
+		SCpnt->prev = NULL;
+		host->host_queue = SCpnt;
+		if(host->host_queue)
+		  host->host_queue->prev = SCpnt;
+	      };
+	    };
+	  }
+	/* Next, check to see if we need to extend the DMA buffer pool */
+      {
+	  unsigned char * new_dma_malloc_freelist = NULL;
+	  unsigned int new_dma_sectors = 0;
+	  unsigned int new_need_isa_buffer = 0;
+	  unsigned char ** new_dma_malloc_pages = NULL;
+	  
+	  if (scsi_devicelist)
+	    new_dma_sectors = 16;  /* Base value we use */
+	  
+	  for (SDpnt=scsi_devices; SDpnt; SDpnt = SDpnt->next) {
+	    host = SDpnt->host;
+	    
+	    if(SDpnt->type != TYPE_TAPE)
+	      new_dma_sectors += ((host->sg_tablesize * 
+				   sizeof(struct scatterlist) + 511) >> 9) * 
+				     host->cmd_per_lun;
+	    
+	    if(host->unchecked_isa_dma &&
+	       scsi_need_isa_bounce_buffers &&
+	       SDpnt->type != TYPE_TAPE) {
+	      new_dma_sectors += (PAGE_SIZE >> 9) * host->sg_tablesize *
+		host->cmd_per_lun;
+	      new_need_isa_buffer++;
+	    };
+	  };
+	  
+	  new_dma_sectors = (new_dma_sectors + 15) & 0xfff0;
+
+	  new_dma_malloc_freelist = (unsigned char *) 
+	    scsi_init_malloc(new_dma_sectors >> 3, GFP_ATOMIC);
+	  memset(new_dma_malloc_freelist, 0, new_dma_sectors >> 3);
+	  
+	  new_dma_malloc_pages = (unsigned char **) 
+	    scsi_init_malloc(new_dma_sectors >> 1, GFP_ATOMIC);
+	  memset(new_dma_malloc_pages, 0, new_dma_sectors >> 1);
+	  
+	  for(i=dma_sectors >> 3; i< new_dma_sectors >> 3; i++)
+	    new_dma_malloc_pages[i] = (unsigned char *) 
+	      scsi_init_malloc(PAGE_SIZE, GFP_ATOMIC | GFP_DMA);
+	  
+
+	  /* When we dick with the actual DMA list, we need to protect things */
+	  cli();
+	  memcpy(new_dma_malloc_freelist, dma_malloc_freelist, dma_sectors >> 3);
+	  scsi_init_free(dma_malloc_freelist, dma_sectors>>3);
+	  dma_malloc_freelist = new_dma_malloc_freelist;
+	  
+	  memcpy(new_dma_malloc_pages, dma_malloc_pages, dma_sectors >> 1);
+	  scsi_init_free((char *) dma_malloc_pages, dma_sectors>>1);
+	  
+	  dma_free_sectors += new_dma_sectors - dma_sectors;
+	  dma_malloc_pages = new_dma_malloc_pages;
+	  dma_sectors = new_dma_sectors;
+	  need_isa_buffer = new_need_isa_buffer;
+	  sti();
+
+	  
+	}
+      /* This does any final handling that is required. */
+      for(sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
+	if(sdtpnt->finish) (*sdtpnt->finish)();
+    }
+  return 0;
+}
+
+/*
+ * Similarily, this entry point should be called by a loadable module if it
+ * is trying to remove a low level scsi driver from the system.
+ */
+static void scsi_unregister_host(Scsi_Host_Template * tpnt)
+{  
+  Scsi_Host_Template * SHT, *SHTp;
+  Scsi_Device *sdpnt, * sdppnt, * sdpnt1;
+  Scsi_Cmnd * SCpnt;
+  struct Scsi_Device_Template * sdtpnt;
+  struct Scsi_Host * shpnt, *sh1;
+  int pcount;
+
+  /* First verify that this host adapter is completely free with no pending
+     commands */
+
+  for(sdpnt = scsi_devices; sdpnt; sdpnt = sdpnt->next)
+    if(sdpnt->host->hostt == tpnt && *sdpnt->host->hostt->usage_count) return;
+
+  for(shpnt = scsi_hostlist; shpnt; shpnt = shpnt->next)
+    {
+      if (shpnt->hostt != tpnt) continue;
+      for(SCpnt = shpnt->host_queue; SCpnt; SCpnt = SCpnt->next)
+	{
+	  cli();
+	  if(SCpnt->request.dev != -1) {
+	    sti();
+	    for(SCpnt = shpnt->host_queue; SCpnt; SCpnt = SCpnt->next)
+	      if(SCpnt->request.dev == 0xffe0) SCpnt->request.dev = -1;
+	    printk("Device busy???\n");
+	    return;
+	  }
+	  SCpnt->request.dev = 0xffe0;  /* Mark as busy */
+	}
+    }
+  /* Next we detach the high level drivers from the Scsi_Device structures */
+
+  for(sdpnt = scsi_devices; sdpnt; sdpnt = sdpnt->next)
+    if(sdpnt->host->hostt == tpnt)
+      {
+	for(sdtpnt = scsi_devicelist; sdtpnt; sdtpnt = sdtpnt->next)
+	  if(sdtpnt->detach) (*sdtpnt->detach)(sdpnt);
+	/* If something still attached, punt */
+	if (sdpnt->attached) {
+	  printk("Attached usage count = %d\n", sdpnt->attached);
+	  return;
+	}
+      }
+  
+  /* Next we free up the Scsi_Cmnd structures for this host */
+
+  for(sdpnt = scsi_devices; sdpnt; sdpnt = sdpnt->next)
+    if(sdpnt->host->hostt == tpnt)
+      while (sdpnt->host->host_queue) {
+	SCpnt = sdpnt->host->host_queue->next;
+	scsi_init_free((char *) sdpnt->host->host_queue, sizeof(Scsi_Cmnd));
+	sdpnt->host->host_queue = SCpnt;
+	if (SCpnt) SCpnt->prev = NULL;
+      }
+  
+  /* Next free up the Scsi_Device structures for this host */
+
+  sdppnt = NULL;
+  for(sdpnt = scsi_devices; sdpnt; sdpnt = sdpnt1)
+    {
+      sdpnt1 = sdpnt->next;
+      if (sdpnt->host->hostt == tpnt) {
+	if (sdppnt)
+	  sdppnt->next = sdpnt->next;
+	else
+	  scsi_devices = sdpnt->next;
+	scsi_init_free((char *) sdpnt, sizeof (Scsi_Device));
+      } else
+	sdppnt = sdpnt;
+    }
+
+  /* Next we go through and remove the instances of the individual hosts
+     that were detected */
+
+  shpnt = scsi_hostlist;
+  while(shpnt) { 
+   sh1 = shpnt->next;
+    if(shpnt->hostt == tpnt) {
+      if(shpnt->loaded_as_module) {
+	pcount = next_scsi_host;
+	if(tpnt->release)
+	  (*tpnt->release)(shpnt);
+	else {
+	  /* This is the default case for the release function.  It should do the right
+	     thing for most correctly written host adapters. */
+	  if (shpnt->irq) free_irq(shpnt->irq);
+	  if (shpnt->dma_channel != 0xff) free_dma(shpnt->dma_channel);
+	  if (shpnt->io_port && shpnt->n_io_port) 
+	    release_region(shpnt->io_port, shpnt->n_io_port);
+	}
+	if(pcount == next_scsi_host) scsi_unregister(shpnt);
+	tpnt->present--;
+      }
+    }
+    shpnt = sh1;
+  }
+
+  /* There were some hosts that were loaded at boot time, so we cannot
+     do any more than this */
+  if (tpnt->present) return;
+
+  /* OK, this is the very last step.  Remove this host adapter from the
+     linked list. */
+  for(SHTp=NULL, SHT=scsi_hosts; SHT; SHTp=SHT, SHT=SHT->next)
+    if(SHT == tpnt) {
+      if(SHTp)
+	SHTp->next = SHT->next;
+      else
+	scsi_hosts = SHT->next;
+      SHT->next = NULL;
+      break;
+    }
+}
+
+int scsi_register_module(int module_type, void * ptr)
+{
+  switch(module_type){
+  case MODULE_SCSI_HA:
+    return scsi_register_host((Scsi_Host_Template *) ptr);
+    /* The rest of these are not yet implemented */
+
+    /* Load constants.o */
+  case MODULE_SCSI_CONST:
+
+    /* Load specialized ioctl handler for some device.  Intended for cdroms that
+       have non-SCSI2 audio command sets. */
+  case MODULE_SCSI_IOCTL:
+
+    /* Load upper level device handler of some kind */
+  case MODULE_SCSI_DEV:
+  default:
+    return 1;
+  }
+}
+
+void scsi_unregister_module(int module_type, void * ptr)
+{
+  switch(module_type) {
+  case MODULE_SCSI_HA:
+    scsi_unregister_host((Scsi_Host_Template *) ptr);
+    break;
+    /* The rest of these are not yet implemented. */
+  case MODULE_SCSI_CONST:
+  case MODULE_SCSI_IOCTL:
+  case MODULE_SCSI_DEV:
+  default:
+  }
+  return;
+}
+#endif
+
 #ifdef DEBUG_TIMEOUT
 static void 
 scsi_dump_status(void)
 {
-  int i, i1;
-  Scsi_Host * shpnt;
+  int i;
+  struct Scsi_Host * shpnt;
   Scsi_Cmnd * SCpnt;
   printk("Dump of scsi parameters:\n");
-  for(shpnt = scsi_hosts; shpnt; shpnt = shpnt->next)
+  i = 0;
+  for(shpnt = scsi_hostlist; shpnt; shpnt = shpnt->next)
     for(SCpnt=shpnt->host_queue; SCpnt; SCpnt = SCpnt->next)
       {
 	/*  (0) 0:0:0 (802 123434 8 8 0) (3 3 2) (%d %d %d) %d %x      */
 	printk("(%d) %d:%d:%d (%4.4x %d %d %d %d) (%d %d %x) (%d %d %d) %x %x %x\n",
-	       i, SCpnt->host->host_no,
+	       i++, SCpnt->host->host_no,
 	       SCpnt->target,
 	       SCpnt->lun,
 	       SCpnt->request.dev,

@@ -26,7 +26,7 @@
 
 extern unsigned long * prof_buffer;
 extern unsigned long prof_len;
-extern char edata, end;
+extern char etext, end;
 extern char *linux_banner;
 asmlinkage void lcall7(void);
 struct desc_struct default_ldt;
@@ -95,6 +95,7 @@ extern void generic_NCR5380_setup(char *str, int *intr);
 extern void aha152x_setup(char *str, int *ints);
 extern void aha1542_setup(char *str, int *ints);
 extern void aha274x_setup(char *str, int *ints);
+extern void buslogic_setup(char *str, int *ints);
 extern void scsi_luns_setup(char *str, int *ints);
 extern void sound_setup(char *str, int *ints);
 #ifdef CONFIG_SBPCD
@@ -219,6 +220,9 @@ struct {
 #ifdef CONFIG_SCSI_AHA274X
         { "aha274x=", aha274x_setup},
 #endif
+#ifdef CONFIG_SCSI_BUSLOGIC
+        { "buslogic=", buslogic_setup},
+#endif
 #ifdef CONFIG_BLK_DEV_XD
 	{ "xd=", xd_setup },
 #endif
@@ -279,12 +283,7 @@ static void calibrate_delay(void)
 		__delay(loops_per_sec);
 		ticks = jiffies - ticks;
 		if (ticks >= HZ) {
-			__asm__("mull %1 ; divl %2"
-				:"=a" (loops_per_sec)
-				:"d" (HZ),
-				 "r" (ticks),
-				 "0" (loops_per_sec)
-				:"dx");
+			loops_per_sec = muldiv(loops_per_sec, HZ, ticks);
 			printk("ok - %lu.%02lu BogoMips\n",
 				loops_per_sec/500000,
 				(loops_per_sec/5000) % 100);
@@ -390,8 +389,16 @@ static void copy_options(char * to, char * from)
 	int len = 0;
 
 	for (;;) {
-		if (c == ' ' && *(unsigned long *)from == *(unsigned long *)"mem=")
+		if (c == ' ' && *(unsigned long *)from == *(unsigned long *)"mem=") {
 			memory_end = simple_strtoul(from+4, &from, 0);
+			if ( *from == 'K' || *from == 'k' ) {
+				memory_end = memory_end << 10;
+				from++;
+			} else if ( *from == 'M' || *from == 'm' ) {
+				memory_end = memory_end << 20;
+				from++;
+			}
+		}
 		c = *(from++);
 		if (!c)
 			break;
@@ -418,7 +425,6 @@ static void check_fpu(void)
 	static double x = 4195835.0;
 	static double y = 3145727.0;
 	unsigned short control_word;
-	extern int fdiv_bug;
 
 	if (!hard_math) {
 #ifndef CONFIG_MATH_EMULATION
@@ -528,8 +534,9 @@ asmlinkage void start_kernel(void)
 	init_modules();
 #ifdef CONFIG_PROFILE
 	prof_buffer = (unsigned long *) memory_start;
-	prof_len = (unsigned long) &end;
-	prof_len >>= 2;
+        /* only text is profiled */
+	prof_len = (unsigned long) &etext;
+	prof_len >>= CONFIG_PROFILE_SHIFT;
 	memory_start += prof_len * sizeof(unsigned long);
 #endif
 	memory_start = console_init(memory_start,memory_end);

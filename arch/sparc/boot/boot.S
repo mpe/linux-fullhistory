@@ -13,7 +13,7 @@
    document those I have come across thus far. Upon bootup the boot
    prom loads your a.out image into memory. This memory the prom has
    already mapped for you, however as far as I can tell the virtual
-   adress cache is not turned on although the MMU is translating 
+   address cache is not turned on although the MMU is translating 
    things. You get loaded at 0xf8004000 exactly. So, when you link
    a boot-loadable object you want to do something like:
 
@@ -27,7 +27,7 @@
    the 'rom vector' in register %o0 right before it jumps to your
    starting address. This is a pointer to a struct that is full of
    pointer to functions (ie. printf, halt, reboot), pointers to
-   linked lists (ie. memory mappings), and pointer to imperical
+   linked lists (ie. memory mappings), and pointer to empirical
    constants (ie. stdin and stdout magic cookies + rom version).
    Starting with this piece of information you can figure out 
    just about anything you want about the machine you are on.
@@ -62,6 +62,10 @@ _cputypval:
 	.asciz "sun4c"
 	.ascii "     "
 
+/*
+ * Sun people can't spell worth damn. "compatability" indeed.
+ * At least we *know* we can't spell, and use a spell-checker.
+ */
 _cputypvar:
 	.asciz "compatability"
 
@@ -109,7 +113,7 @@ prom_revision:		.skip 4			! PROM revision (ie. 1.4)
 prom_bootstr:		.skip 4			! what we are invoked with
 prom_putchar:		.skip 4			! void putchar(int ch)  BLOCKING.
 prom_getchar:		.skip 4			! int getchar(void)     BLOCKING.
-prom_nputchar:		.skip 4			! int purchar(int ch)   non-block
+prom_nputchar:		.skip 4			! int putchar(int ch)   non-block
 prom_ngetchar:		.skip 4			! int getchar(void)     non-block
 prom_halt:		.skip 4			! void halt(void)  solaris friend
 prom_eval:		.skip 4			! void eval(int len, char* string)
@@ -137,7 +141,7 @@ prom_ticks:		.skip 4			! number of ticks since reset
 */
 
 prom_sync:		.skip 4			! hook in prom for "sync" func
-prom_v0bootarg:		.skip 4			! v0 prom boot arguements
+prom_v0bootarg:		.skip 4			! v0 prom boot arguments
 prom_v2bootarg:		.skip 4			! same as above for v2 proms
 prom_ethaddr_func:	.skip 4			! extract ethernet device address
 prom_v2devfunc:		.skip 4			! ptr to v2 style device ops.
@@ -244,7 +248,7 @@ whereis_prom_vector_p = _prom_vector_p-KERNBASE
    or unimplemented) and 128 software traps (ditto).
 
    One of the instructions must be a branch. More often than not this
-   will be to a trap handler entry point becuase it is completely
+   will be to a trap handler entry point because it is completely
    impossible to handle any trap in 4 insns. I welcome anyone to 
    challenge this theory. :-)
 
@@ -285,7 +289,7 @@ _msgbufmapped:
 */
 
           .data
-          .skip   32                      ! alignment byte & negative indicies
+          .skip   32                      ! alignment byte & negative indices
 lnx_uw:       .skip   32                      ! u_char uwtab[-31..31];
 lnx_winmask:  .skip   32                      ! u_char wmask[0..31];
 
@@ -347,7 +351,7 @@ not_v2:
 
 		set	_cputypvar, %o1		! first node has cpu-arch
 		set	_cputypval, %o2		! information, the string
-		ld	[%g7 + 0x1c], %o4	! 'compatability' tells
+		ld	[%g7 + 0x1c], %o4	! 'compatibility' tells
 		ld	[%o4 + 0x0c], %o4	! that we want 'sun4x' where
 		call	%o4			! x is one of '', 'c', 'm',
 		nop				! 'd' or 'e'. %o2 holds pointer
@@ -476,7 +480,7 @@ _newline:	set	newline-KERNBASE, %o0
 */
 
 /* Another Note:
-	The prom printf() function can take up to 5 arguements in registers
+	The prom printf() function can take up to 5 arguments in registers
 	%o1 -- %o5 , the format string goes in %o0. It is your usual libc
 	printf() believe it or not.
 */
@@ -503,7 +507,7 @@ memloop:
 		be 	mv_to_vmprom		! is there more?
 		nop
 
-		ld	[%l4 + 0x8], %l6	! aparently so...
+		ld	[%l4 + 0x8], %l6	! apparently so...
 		add	%o1, %l6, %o1
 		b	memloop
 		ld	[%l4], %l4
@@ -524,7 +528,7 @@ memloop2:
 		cmp	%l4, 0
 		be 	mv_to_vmprom2		! is there more?
 		nop
-		ld	[%l4 + 0x8], %l6	! aparently so...
+		ld	[%l4 + 0x8], %l6	! apparently so...
 		add	%o2, %l6, %o2
 		b	memloop2
 		ld	[%l4], %l4
@@ -545,7 +549,7 @@ memloop3:
 		cmp	%l4, 0
 		be 	mv_to_vmprom3		! is there more?
 		nop
-		ld	[%l4 + 0x8], %l6	! aparently so...
+		ld	[%l4 + 0x8], %l6	! apparently so...
 		add	%o3, %l6, %o3
 		b	memloop3
 		ld	[%l4], %l4
@@ -668,7 +672,7 @@ no_sun4d_here:
 halt_me:
 		ld	[%g7 + 0x74], %o0
 		call	%o0			! get us out of here...
-		nop				! aparently solaris is better
+		nop				! apparently solaris is better
 
 _strlen:
 		mov	%o0, %l1

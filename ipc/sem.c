@@ -155,7 +155,7 @@ int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 	int i, id, val = 0;
 	struct semid_ds *sma;
 	struct ipc_perm *ipcp;
-	struct sem *curr;
+	struct sem *curr = NULL;
 	struct sem_undo *un;
 	unsigned int nsems;
 	ushort *array = NULL;
@@ -219,9 +219,18 @@ int sys_semctl (int semid, int semnum, int cmd, union semun arg)
 	nsems = sma->sem_nsems;
 	if (sma->sem_perm.seq != (unsigned int) semid / SEMMNI)
 		return -EIDRM;
-	if (semnum >= nsems)
-		return -EINVAL;
-	curr = &sma->sem_base[semnum];
+
+	switch (cmd) {
+	case GETVAL:
+	case GETPID:
+	case GETNCNT:
+	case GETZCNT:
+	case SETVAL:
+		if (semnum >= nsems)
+			return -EINVAL;
+		curr = &sma->sem_base[semnum];
+		break;
+	}
 
 	switch (cmd) {
 	case GETVAL:

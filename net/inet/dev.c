@@ -25,6 +25,8 @@
  *		????????	:	Support the full private ioctl range
  *		Alan Cox	:	Moved ioctl permission check into drivers
  *		Tim Kordas	:	SIOCADDMULTI/SIOCDELMULTI
+ *		Alan Cox	:	100 backlog just doesn't cut it when
+ *					you start doing multicast video 8)
  *
  *	Cleaned up and recommented by Alan Cox 2nd April 1994. I hope to have
  *	the rest as well commented in the end.
@@ -267,14 +269,19 @@ int dev_open(struct device *dev)
 	 */
 	 
 	if (ret == 0) 
+	{
 		dev->flags |= (IFF_UP | IFF_RUNNING);
-	
-	/*
-	 *	Initialise multicasting status 
-	 */
-	 
-	dev_mc_upload(dev);
-
+		/*
+		 *	Initialise multicasting status 
+		 */
+#ifdef CONFIG_IP_MULTICAST
+		/* 
+		 *	Join the all host group 
+		 */
+		ip_mc_allhost(dev);
+#endif				
+		dev_mc_upload(dev);
+	}
 	return(ret);
 }
 
@@ -496,7 +503,7 @@ void netif_rx(struct sk_buff *skb)
 
 	if (!backlog_size)
   		dropping = 0;
-	else if (backlog_size > 100)
+	else if (backlog_size > 300)
 		dropping = 1;
 
 	if (dropping) 

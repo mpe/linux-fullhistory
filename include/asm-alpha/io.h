@@ -176,4 +176,7 @@ extern inline void writel(unsigned int b, unsigned long addr)
 	*(volatile unsigned int *) ((addr << 7) + EISA_MEM + 0x60) = b;
 }
 
+#define inb_p inb
+#define outb_p outb
+
 #endif

@@ -17,7 +17,7 @@
 */
 
 static char *version =
-	"smc-ultra.c:v1.10 9/23/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
+	"smc-ultra.c:v1.11 11/21/94 Donald Becker (becker@cesdis.gsfc.nasa.gov)\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -226,16 +226,21 @@ ultra_block_input(struct device *dev, int count, char *buf, int ring_offset)
 	void *xfer_start = (void *)(dev->mem_start + ring_offset
 								- (START_PG<<8));
 
+	/* Enable shared memory. */
+	outb(ULTRA_MEMENB, dev->base_addr - ULTRA_NIC_OFFSET);
+
 	if (xfer_start + count > (void*) dev->rmem_end) {
 		/* We must wrap the input move. */
 		int semi_count = (void*)dev->rmem_end - xfer_start;
 		memcpy(buf, xfer_start, semi_count);
 		count -= semi_count;
 		memcpy(buf + semi_count, (char *)dev->rmem_start, count);
+		outb(0x00, dev->base_addr - ULTRA_NIC_OFFSET); /* Disable memory. */
 		return dev->rmem_start + count;
 	}
 	memcpy(buf, xfer_start, count);
 
+	outb(0x00, dev->base_addr - ULTRA_NIC_OFFSET); /* Disable memory. */
 	return ring_offset + count;
 }
 
@@ -246,8 +251,12 @@ ultra_block_output(struct device *dev, int count, const unsigned char *buf,
 	unsigned char *shmem
 		= (unsigned char *)dev->mem_start + ((start_page - START_PG)<<8);
 
+	/* Enable shared memory. */
+	outb(ULTRA_MEMENB, dev->base_addr - ULTRA_NIC_OFFSET);
+
 	memcpy(shmem, buf, count);
 
+	outb(0x00, dev->base_addr - ULTRA_NIC_OFFSET); /* Disable memory. */
 }
 
 static int

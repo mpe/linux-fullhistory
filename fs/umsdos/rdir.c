@@ -32,8 +32,10 @@ static int UMSDOS_rreaddir (
 {
 	int ret = 0;
 	while (1){
+		int len = -1;
 		ret = msdos_readdir(dir,filp,dirent,count);
-		if (ret == 5
+		if (ret > 0) len = get_fs_word(&dirent->d_reclen);
+		if (len == 5
 			&& pseudo_root != NULL
 			&& dir->i_sb->s_mounted == pseudo_root->i_sb->s_mounted){
 			/*
@@ -45,7 +47,7 @@ static int UMSDOS_rreaddir (
 			if (memcmp(name,UMSDOS_PSDROOT_NAME,UMSDOS_PSDROOT_LEN)!=0) break;
 		}else{
 			if (pseudo_root != NULL
-				&& ret == 2
+				&& len == 2
 				&& dir == dir->i_sb->s_mounted
 				&& dir == pseudo_root->i_sb->s_mounted){
 				char name[2];

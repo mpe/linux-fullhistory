@@ -70,6 +70,7 @@
 #include "sock.h"
 #include "udp.h"
 #include "icmp.h"
+#include "route.h"
 
 /*
  *	SNMP MIB for the UDP layer
@@ -523,6 +524,8 @@ int udp_read(struct sock *sk, unsigned char *buff, int len, int noblock,
 
 int udp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 {
+	struct rtable *rt;
+	unsigned long sa;
 	if (addr_len < sizeof(*usin)) 
 	  	return(-EINVAL);
 
@@ -534,6 +537,10 @@ int udp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	if(!sk->broadcast && ip_chk_addr(usin->sin_addr.s_addr)==IS_BROADCAST)
 		return -EACCES;			/* Must turn broadcast on first */
   	
+  	rt=ip_rt_route(usin->sin_addr.s_addr, NULL, &sa);
+  	if(rt==NULL)
+  		return -ENETUNREACH;
+  	sk->saddr = sa;		/* Update source address */
 	sk->daddr = usin->sin_addr.s_addr;
 	sk->dummy_th.dest = usin->sin_port;
 	sk->state = TCP_ESTABLISHED;
@@ -703,7 +710,7 @@ struct proto udp_prot = {
 	udp_connect,
 	NULL,
 	ip_queue_xmit,
-	ip_retransmit,
+	NULL,
 	NULL,
 	NULL,
 	udp_rcv,

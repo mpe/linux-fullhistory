@@ -1,3 +1,26 @@
+Thu Dec  8 14:52:11 1994    <tytso@rsx-11.mit.edu>
+
+	* serial.c (rs_ioctl): Don't allow most ioctl's if the serial port
+		isn't initialized.
+
+	* serial.c (rs_close): Don't clear the IER if the serial port
+		isn't initialized. 
+
+	* serial.c (block_til_ready): Don't try to block on the dialin
+		port if the serial port isn't initialized.
+
+Wed Dec  7 10:48:30 1994  Si Park (si@wimpol.demon.co.uk)
+	* tty_io.c (tty_register_driver): Fix bug when linking onto
+		the tty_drivers list. We now test that there are elements
+		already on the list before setting the back link from the
+		first element to the new driver.
+
+	* tty_io.c (tty_unregister_driver): Fix bug in unlinking the
+		specified driver from the tty_drivers list. We were not
+		setting the back link correctly. This used to result in
+		a dangling back link pointer and cause panics on the next
+		call to get_tty_driver().
+
 Tue Nov 29 10:21:09 1994  Theodore Y. Ts'o  (tytso@rt-11)
 
 	* tty_io.c (tty_unregister_driver): Fix bug in

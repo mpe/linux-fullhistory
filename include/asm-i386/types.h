@@ -1,6 +1,21 @@
 #ifndef _I386_TYPES_H
 #define _I386_TYPES_H
 
+#ifndef _SIZE_T
+#define _SIZE_T
+typedef unsigned int size_t;
+#endif
+
+#ifndef _SSIZE_T
+#define _SSIZE_T
+typedef int ssize_t;
+#endif
+
+#ifndef _PTRDIFF_T
+#define _PTRDIFF_T
+typedef int ptrdiff_t;
+#endif
+
 /*
  * __xx is ok: it doesn't pollute the POSIX namespace. Use these in the
  * header files exported to user space

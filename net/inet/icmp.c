@@ -27,6 +27,7 @@
  *		A.N.Kuznetsov	:	Multihoming fixes.
  *		Laco Rusnak	:	Multihoming fixes.
  *		Alan Cox	:	Tightened up icmp_send().
+ *		Alan Cox	:	Multicasts.
  *
  * 
  *
@@ -656,7 +657,7 @@ int icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 	 *	Parse the ICMP message 
 	 */
 
-	if (ip_chk_addr(daddr) == IS_BROADCAST)
+	if (ip_chk_addr(daddr) != IS_MYADDR)
 	{
 		if (icmph->type != ICMP_ECHO) 
 		{

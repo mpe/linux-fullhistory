@@ -58,10 +58,19 @@
  *	Richard Underwood	:	IP multicasting.
  *		Alan Cox	:	Cleaned up multicast handlers.
  *		Alan Cox	:	RAW sockets demultiplex in the BSD style.
+ *		Gunther Mayer	:	Fix the SNMP reporting typo
+ *		Alan Cox	:	Always in group 224.0.0.1
  *
  * To Fix:
  *		IP option processing is mostly not needed. ip_forward needs to know about routing rules
  *		and time stamp but that's about all. Use the route mtu field here too
+ *		IP fragmentation wants rewriting cleanly. The RFC815 algorithm is much more efficient
+ *		and could be made very efficient with the addition of some virtual memory hacks to permit
+ *		the allocation of a buffer that can then be 'grown' by twiddling page tables.
+ *		Output fragmentation wants updating along with the buffer management to use a single 
+ *		interleaved copy algorithm so that fragmenting has a one copy overhead. Actual packet
+ *		output should probably do its own fragmentation at the UDP/RAW layer. TCP shouldn't cause
+ *		fragmentation anyway.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -107,10 +116,10 @@ extern void sort_send(struct sock *sk);
  *	SNMP management statistics
  */
 
-#ifdef CONFIG_IP_FORWARDING
+#ifdef CONFIG_IP_FORWARD
 struct ip_mib ip_statistics={1,64,};	/* Forwarding=Yes, Default TTL=64 */
 #else
-struct ip_mib ip_statistics={1,64,};	/* Forwarding=No, Default TTL=64 */
+struct ip_mib ip_statistics={0,64,};	/* Forwarding=No, Default TTL=64 */
 #endif
 
 #ifdef CONFIG_IP_MULTICAST
@@ -326,6 +335,10 @@ int ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long dadd
 #ifdef Not_Yet_Avail
 	build_options(iph, opt);
 #endif
+#ifdef CONFIG_IP_FIREWALL
+	if(!ip_fw_chk(iph,ip_fw_blk_chain))
+		return -EPERM;
+#endif		
 
 	return(20 + tmp);	/* IP header plus MAC header size */
 }
@@ -569,13 +582,13 @@ int ip_csum(struct iphdr *iph)
  *	Generate a checksum for an outgoing IP datagram.
  */
 
-static void ip_send_check(struct iphdr *iph)
+void ip_send_check(struct iphdr *iph)
 {
 	iph->check = 0;
 	iph->check = ip_fast_csum((unsigned char *)iph, iph->ihl);
 }
 
-/************************ Fragment Handlers From NET2E not yet with tweaks to beat 4K **********************************/
+/************************ Fragment Handlers From NET2E **********************************/
 
 
 /*
@@ -1598,7 +1611,8 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	}
 	
 #ifdef CONFIG_IP_MULTICAST	
-	if(brd==IS_MULTICAST)
+
+	if(brd==IS_MULTICAST && iph->daddr!=IGMP_ALL_HOSTS && !(dev->flags&IFF_LOOPBACK))
 	{
 		/*
 		 *	Check it is for one of our groups
@@ -1746,6 +1760,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
  
 static void ip_loopback(struct device *old_dev, struct sk_buff *skb)
 {
+	extern struct device loopback_dev;
 	struct device *dev=&loopback_dev;
 	int len=skb->len-old_dev->hard_header_len;
 	struct sk_buff *newskb=alloc_skb(len+dev->hard_header_len, GFP_ATOMIC);
@@ -1931,22 +1946,26 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	 *	Multicasts are looped back for other local users
 	 */
 	 
-	if (MULTICAST(skb->daddr) && !(dev->flags&IFF_LOOPBACK))
+	if (MULTICAST(iph->daddr) && !(dev->flags&IFF_LOOPBACK))
 	{
 		if(sk==NULL || sk->ip_mc_loop)
 		{
-			struct ip_mc_list *imc=dev->ip_mc_list;
-			while(imc!=NULL)
+			if(skb->daddr==IGMP_ALL_HOSTS)
+				ip_loopback(dev,skb);
+			else
 			{
-				if(imc->multiaddr==skb->daddr)
+				struct ip_mc_list *imc=dev->ip_mc_list;
+				while(imc!=NULL)
 				{
-					ip_loopback(dev,skb);
-					break;
+					if(imc->multiaddr==iph->daddr)
+					{
+						ip_loopback(dev,skb);
+						break;
+					}
+					imc=imc->next;
 				}
-				imc=imc->next;
 			}
 		}
-		
 		/* Multicasts with ttl 0 must not go beyond the host */
 		
 		if(skb->ip_hdr->ttl==0)
@@ -1984,127 +2003,6 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 }
 
 
-/*
- *	A socket has timed out on its send queue and wants to do a
- *	little retransmitting. Currently this means TCP.
- */
-
-void ip_do_retransmit(struct sock *sk, int all)
-{
-	struct sk_buff * skb;
-	struct proto *prot;
-	struct device *dev;
-
-	prot = sk->prot;
-	skb = sk->send_head;
-
-	while (skb != NULL)
-	{
-		dev = skb->dev;
-		IS_SKB(skb);
-		skb->when = jiffies;
-
-		/*
-		 * In general it's OK just to use the old packet.  However we
-		 * need to use the current ack and window fields.  Urg and
-		 * urg_ptr could possibly stand to be updated as well, but we
-		 * don't keep the necessary data.  That shouldn't be a problem,
-		 * if the other end is doing the right thing.  Since we're
-		 * changing the packet, we have to issue a new IP identifier.
-		 */
-
-		/* this check may be unnecessary - retransmit only for TCP */
-		if (sk->protocol == IPPROTO_TCP) {
-		  struct tcphdr *th;
-		  struct iphdr *iph;
-		  int size;
-
-		  iph = (struct iphdr *)(skb->data + dev->hard_header_len);
-		  th = (struct tcphdr *)(((char *)iph) + (iph->ihl << 2));
-		  size = skb->len - (((unsigned char *) th) - skb->data);
-
-		  iph->id = htons(ip_id_count++);
-		  ip_send_check(iph);
-
-		  th->ack_seq = ntohl(sk->acked_seq);
-		  th->window = ntohs(tcp_select_window(sk));
-		  tcp_send_check(th, sk->saddr, sk->daddr, size, sk);
-		}
-
-		/*
-		 *	If the interface is (still) up and running, kick it.
-		 */
-
-		if (dev->flags & IFF_UP)
-		{
-			/*
-			 *	If the packet is still being sent by the device/protocol
-			 *	below then don't retransmit. This is both needed, and good -
-			 *	especially with connected mode AX.25 where it stops resends
-			 *	occurring of an as yet unsent anyway frame!
-			 *	We still add up the counts as the round trip time wants
-			 *	adjusting.
-			 */
-			if (sk && !skb_device_locked(skb))
-			{
-				/* Remove it from any existing driver queue first! */
-				skb_unlink(skb);
-				/* Now queue it */
-				ip_statistics.IpOutRequests++;
-				dev_queue_xmit(skb, dev, sk->priority);
-			}
-		}
-
-		/*
-		 *	Count retransmissions
-		 */
-		sk->retransmits++;
-		sk->prot->retransmits ++;
-
-		/*
-		 *	Only one retransmit requested.
-		 */
-		if (!all)
-			break;
-
-		/*
-		 *	This should cut it off before we send too many packets.
-		 */
-		if (sk->retransmits >= sk->cong_window)
-			break;
-		skb = skb->link3;
-	}
-}
-
-/*
- * 	This is the normal code called for timeouts.  It does the retransmission
- * 	and then does backoff.  ip_do_retransmit is separated out because
- * 	tcp_ack needs to send stuff from the retransmit queue without
- * 	initiating a backoff.
- */
-
-void ip_retransmit(struct sock *sk, int all)
-{
-	ip_do_retransmit(sk, all);
-
-	/*
-	 * Increase the timeout each time we retransmit.  Note that
-	 * we do not increase the rtt estimate.  rto is initialized
-	 * from rtt, but increases here.  Jacobson (SIGCOMM 88) suggests
-	 * that doubling rto each time is the least we can get away with.
-	 * In KA9Q, Karn uses this for the first few times, and then
-	 * goes to quadratic.  netBSD doubles, but only goes up to *64,
-	 * and clamps at 1 to 64 sec afterwards.  Note that 120 sec is
-	 * defined in the protocol as the maximum possible RTT.  I guess
-	 * we'll have to use something other than TCP to talk to the
-	 * University of Mars.
-	 */
-
-	sk->retransmits++;
-	sk->backoff++;
-	sk->rto = min(sk->rto << 1, 120*HZ);
-	reset_timer(sk, TIME_WRITE, sk->rto);
-}
 
 #ifdef CONFIG_IP_MULTICAST
 
@@ -2177,6 +2075,19 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 	if(level!=SOL_IP)
 		return -EOPNOTSUPP;
 
+#ifdef CONFIG_IP_MULTICAST
+	if(optname==IP_MULTICAST_TTL)
+	{
+		unsigned char ucval;
+		ucval=get_fs_byte((unsigned char *)optval);
+		printk("MC TTL %d\n", ucval);
+		if(ucval<1||ucval>255)
+	 		return -EINVAL;
+		sk->ip_mc_ttl=(int)ucval;
+		return 0;
+	}
+#endif
+
 	switch(optname)
 	{
 		case IP_TOS:
@@ -2194,6 +2105,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			sk->ip_ttl=val;
 			return 0;
 #ifdef CONFIG_IP_MULTICAST
+#ifdef GCC_WORKS
 		case IP_MULTICAST_TTL: 
 		{
 			unsigned char ucval;
@@ -2205,7 +2117,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			sk->ip_mc_ttl=(int)ucval;
 	                return 0;
 		}
-
+#endif
 		case IP_MULTICAST_IF: 
 		{
 			/* Not fully tested */
@@ -2267,9 +2179,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			static struct options optmem;
 			unsigned long route_src;
 			struct rtable *rt;
-			struct ip_mc_list *l=NULL;
 			struct device *dev=NULL;
-			int ct=0;
 			
 			/*
 			 *	Check the arguments.

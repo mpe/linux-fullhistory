@@ -14,13 +14,16 @@
 /*
  * System setup and hardware bug flags..
  */
-extern int hard_math;
-extern int x86;
+extern char hard_math;
+extern char x86;		/* lower 4 bits */
 extern char x86_vendor_id[13];
-extern fdiv_bug;		
-extern int ignore_irq13;
-extern int wp_works_ok;		/* doesn't work on a 386 */
-extern int hlt_works_ok;	/* problems on some 486Dx4's and old 386's */
+extern char x86_model;		/* lower 4 bits */
+extern char x86_mask;		/* lower 4 bits */
+extern int  x86_capability;	/* field of flags */
+extern int  fdiv_bug;		
+extern char ignore_irq13;
+extern char wp_works_ok;		/* doesn't work on a 386 */
+extern char hlt_works_ok;	/* problems on some 486Dx4's and old 386's */
 
 extern unsigned long intr_count;
 extern unsigned long event;

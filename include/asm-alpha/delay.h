@@ -35,4 +35,13 @@ extern __inline__ void udelay(unsigned long usecs)
 	__delay(usecs);
 }
 
+/*
+ * 64-bit integers means we don't have to worry about overflow as
+ * on some other architectures..
+ */
+extern __inline__ unsigned long muldiv(unsigned long a, unsigned long b, unsigned long c)
+{
+	return (a*b)/c;
+}
+
 #endif /* defined(__ALPHA_DELAY_H) */

@@ -769,6 +769,8 @@ repeat:
 				if (!page)
 					continue;
 				if (page & PAGE_PRESENT) {
+					if (page >= high_memory)
+						continue;
 					if (!(page = in_swap_cache(page)))
 						continue;
 					if (SWP_TYPE(page) != type)

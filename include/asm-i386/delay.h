@@ -32,4 +32,15 @@ extern __inline__ void udelay(unsigned long usecs)
 	__delay(usecs);
 }
 
+extern __inline__ unsigned long muldiv(unsigned long a, unsigned long b, unsigned long c)
+{
+	__asm__("mull %1 ; divl %2"
+		:"=a" (a)
+		:"d" (b),
+		 "r" (c),
+		 "0" (a)
+		:"dx");
+	return a;
+}
+
 #endif /* defined(_I386_DELAY_H) */

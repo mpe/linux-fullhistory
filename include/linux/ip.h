@@ -28,6 +28,8 @@
 #define IPOPT_TIMESTAMP	68
 
 
+#define MAXTTL		255
+
 struct timestamp {
 	__u8	len;
 	__u8	ptr;

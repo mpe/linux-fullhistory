@@ -307,7 +307,7 @@ init_i596_mem(struct device *dev)
     while (lp->scb.status, lp->scb.command)
 	if (--boguscnt == 0)
 	{
-	    printk("%s: recieve unit start timed out with status %4.4x, cmd %4.4x.\n",
+	    printk("%s: receive unit start timed out with status %4.4x, cmd %4.4x.\n",
 		   dev->name, lp->scb.status, lp->scb.command);
 	    break;
     	}
@@ -1016,7 +1016,7 @@ struct netdev_entry apricot_drv =
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;
 static struct device dev_apricot = {
-  "        ", /* device name inservted by /linux/drivers/net/net_init.c */
+  "        ", /* device name inserted by /linux/drivers/net/net_init.c */
   0, 0, 0, 0,
   0x300, 10,
   0, 0, 0, NULL, apricot_probe };

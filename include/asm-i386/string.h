@@ -427,7 +427,7 @@ return s;
 }
 
 /* we might want to write optimized versions of these later */
-#define __constant_c_memset(s,c,count) __memset_generic((s),(c),(count))
+#define __constant_c_memset(s,c,count) __memset_generic((s),(unsigned char)(c),(count))
 #define __constant_count_memset(s,c,count) __memset_generic((s),(c),(count))
 
 /*

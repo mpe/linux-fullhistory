@@ -1,7 +1,7 @@
 /*
- *	hosts.c Copyright (C) 1992 Drew Eckhardt 
+ *	hosts.c Copyright (C) 1992 Drew Eckhardt
  *	mid to lowlevel SCSI driver interface by
- *		Drew Eckhardt 
+ *		Drew Eckhardt
  *
  *	<drew@colorado.edu>
  */
@@ -10,7 +10,7 @@
 /*
  *	This file contains the medium level SCSI
  *	host interface initialization, as well as the scsi_hosts array of SCSI
- *	hosts currently present in the system. 
+ *	hosts currently present in the system.
  */
 
 #include <linux/config.h>
@@ -19,7 +19,7 @@
 #include <linux/string.h>
 #include "scsi.h"
 
-#ifndef NULL 
+#ifndef NULL
 #define NULL 0L
 #endif
 
@@ -50,7 +50,7 @@
 #ifdef CONFIG_SCSI_U14_34F
 #include "u14-34f.h"
 #endif
- 
+
 #ifdef CONFIG_SCSI_FUTURE_DOMAIN
 #include "fdomain.h"
 #endif
@@ -94,7 +94,7 @@
 #ifdef CONFIG_SCSI_EATA
 #include "eata.h"
 #endif
- 
+
 #ifdef CONFIG_SCSI_DEBUG
 #include "scsi_debug.h"
 #endif
@@ -104,9 +104,9 @@ static const char RCSid[] = "$Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/hos
 */
 
 /*
- *	The scsi host entries should be in the order you wish the 
+ *	The scsi host entries should be in the order you wish the
  *	cards to be detected.  A driver may appear more than once IFF
- *	it can deal with being detected (and therefore initialized) 
+ *	it can deal with being detected (and therefore initialized)
  *	with more than one simultaneous host number, can handle being
  *	reentrant, etc.
  *
@@ -122,9 +122,9 @@ static const char RCSid[] = "$Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/hos
 	        NULL, NULL, 0, 0, 0, 0, 0, 0}
 
 /*
- *	When figure is run, we don't want to link to any object code.  Since 
- *	the macro for each host will contain function pointers, we cannot 
- *	use it and instead must use a "blank" that does no such 
+ *	When figure is run, we don't want to link to any object code.  Since
+ *	the macro for each host will contain function pointers, we cannot
+ *	use it and instead must use a "blank" that does no such
  *	idiocy.
  */
 
@@ -161,7 +161,7 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 	IN2000,
 #endif
 #ifdef CONFIG_SCSI_GENERIC_NCR5380
-        GENERIC_NCR5380,
+	GENERIC_NCR5380,
 #endif
 #ifdef CONFIG_SCSI_QLOGIC
 	QLOGIC,
@@ -173,7 +173,7 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 	SEAGATE_ST0X,
 #endif
 #ifdef CONFIG_SCSI_T128
-        TRANTOR_T128,
+	TRANTOR_T128,
 #endif
 #ifdef CONFIG_SCSI_NCR53C7xx
 	NCR53c7xx,
@@ -192,7 +192,7 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #define MAX_SCSI_HOSTS (sizeof(builtin_scsi_hosts) / sizeof(Scsi_Host_Template))
 
 /*
- *	Our semaphores and timeout counters, where size depends on MAX_SCSI_HOSTS here. 
+ *	Our semaphores and timeout counters, where size depends on MAX_SCSI_HOSTS here.
  */
 
 struct Scsi_Host * scsi_hostlist = NULL;
@@ -232,13 +232,13 @@ struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
 	retval->extra_bytes = j;
 	retval->loaded_as_module = scsi_loadable_module_flag;
 	retval->host_no = next_host++;
-	retval->host_queue = NULL;	
-	retval->host_wait = NULL;	
-	retval->last_reset = 0;	
+	retval->host_queue = NULL;
+	retval->host_wait = NULL;
+	retval->last_reset = 0;
 	retval->irq = 0;
 	retval->forbidden_addr = 0;
 	retval->forbidden_size = 0;
-	retval->hostt = tpnt;	
+	retval->hostt = tpnt;
 	retval->next = NULL;
 #ifdef DEBUG
 	printk("Register %x %x: %d\n", retval, retval->hostt, j);
@@ -282,19 +282,19 @@ unsigned int scsi_init()
 
 	if(called) return 0;
 
-	called = 1;	
+	called = 1;
 	for (tpnt = &builtin_scsi_hosts[0], i = 0; i < MAX_SCSI_HOSTS; ++i, tpnt++)
 	{
 		/*
-		 * Initialize our semaphores.  -1 is interpreted to mean 
+		 * Initialize our semaphores.  -1 is interpreted to mean
 		 * "inactive" - where as 0 will indicate a time out condition.
-		 */ 
-		
+		 */
+
 		pcount = next_host;
-		if ((tpnt->detect) && 
-		    (tpnt->present = 
+		if ((tpnt->detect) &&
+		    (tpnt->present =
 		     tpnt->detect(tpnt)))
-		{		
+		{
 			/* The only time this should come up is when people use
 			   some kind of patched driver of some kind or another. */
 			if(pcount == next_host) {
@@ -312,7 +312,7 @@ unsigned int scsi_init()
 		}
 	}
 	printk ("scsi : %d hosts.\n", count);
-	
+
 	/* Now attach the high level drivers */
 #ifdef CONFIG_BLK_DEV_SD
 	scsi_register_device(&sd_template);
@@ -334,17 +334,21 @@ unsigned int scsi_init()
 
 void scsi_mem_init(unsigned long memory_end)
 {
-  struct Scsi_Host *Host;
-  long High8, Low24;
-  for (Host = scsi_hostlist; Host != NULL; Host = Host->next)
-    if (Host->forbidden_addr > 0 && Host->forbidden_size > 0)
-      for (High8 = 1<<24; High8 < memory_end; High8 += 1<<24)
-	for (Low24 = Host->forbidden_addr;
-	     Low24 < Host->forbidden_addr + Host->forbidden_size;
-	     Low24 += PAGE_SIZE)
-	  {
-	    unsigned long ForbiddenAddress = High8 + Low24;
-	    if (ForbiddenAddress >= memory_end) break;
-	    mem_map[MAP_NR(ForbiddenAddress)] = MAP_PAGE_RESERVED;
-	  }
+    struct Scsi_Host *Host;
+    long High8, Low24;
+    for (Host = scsi_hostlist; Host != NULL; Host = Host->next) {
+	if (Host->forbidden_addr > 0 && Host->forbidden_size > 0) {
+	    for (High8 = 1<<24; High8 < memory_end; High8 += 1<<24) {
+		for (Low24 = Host->forbidden_addr;
+		     Low24 < Host->forbidden_addr + Host->forbidden_size;
+		     Low24 += PAGE_SIZE) {
+		    unsigned long ForbiddenAddress = High8 + Low24;
+		    if (ForbiddenAddress >= memory_end) goto next_host;
+		    mem_map[MAP_NR(ForbiddenAddress)] = MAP_PAGE_RESERVED;
+		}
+	    }
+	}
+      next_host:
+	continue;
+    }
 }

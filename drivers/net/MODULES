@@ -6,4 +6,6 @@ MODULES = \
 	apricot.o \
 	eexpress.o \
 	plip.o \
-	8390.o
+	8390.o \
+	slip.o \
+	slhc.o
