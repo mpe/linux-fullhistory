@@ -119,15 +119,15 @@ all:	Version Image
 
 lilo: Image
 	if [ -f /vmlinux ]; then mv /vmlinux /vmlinux.old; fi
-	dd if=Image of=/vmlinux
-	/etc/lilo/lilo -c -b /dev/hda /vmlinux
+	cat Image > /vmlinux
+	/etc/lilo/install
 
 linuxsubdirs: dummy
 	@for i in $(SUBDIRS); do (cd $$i && echo $$i && $(MAKE)) || exit; done
 
 Version:
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.98.pl4-`cat .version`\" > tools/version.h
+	@echo \#define UTS_RELEASE \"0.98.pl5-`cat .version`\" > tools/version.h
 	@echo \#define UTS_VERSION \"`date +%D`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h

@@ -19,6 +19,18 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
+/* $Id: ip.h,v 0.8.4.1 1992/11/10 00:17:18 bir7 Exp $ */
+/* $Log: ip.h,v $
+ * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
+ * version change only.
+ *
+ * Revision 0.8.3.2  1992/11/10  00:14:47  bir7
+ * Changed malloc to kmalloc and added $iId$ and $Log: ip.h,v $
+ * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
+ * version change only.
+ *.
+ * */
+
 #ifndef _TCP_IP_H
 #define _TCP_IP_H
 

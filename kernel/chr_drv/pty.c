@@ -24,10 +24,10 @@ static void pty_close(struct tty_struct * tty, struct file * filp)
 {
 	if (!tty)
 		return;
-	wake_up(&tty->read_q.proc_list);
+	wake_up_interruptible(&tty->read_q.proc_list);
 	if (!tty->link)
 		return;
-	wake_up(&tty->link->write_q.proc_list);
+	wake_up_interruptible(&tty->link->write_q.proc_list);
 	if (IS_A_PTY_MASTER(tty->line)) {
 		if (tty->link->pgrp > 0)
 			kill_pg(tty->link->pgrp,SIGHUP,1);
@@ -51,7 +51,7 @@ static inline void pty_copy(struct tty_struct * from, struct tty_struct * to)
 			break;
 	}
 	TTY_READ_FLUSH(to);
-	wake_up(&from->write_q.proc_list);
+	wake_up_interruptible(&from->write_q.proc_list);
 }
 
 /*
@@ -71,7 +71,7 @@ int pty_open(struct tty_struct *tty, struct file * filp)
 		return -ENODEV;
 	tty->write = tty->link->write = pty_write;
 	tty->close = tty->link->close = pty_close;
-	wake_up(&tty->read_q.proc_list);
+	wake_up_interruptible(&tty->read_q.proc_list);
 	if (filp->f_flags & O_NDELAY)
 		return 0;
 	while (!tty->link->count && !(current->signal & ~current->blocked))

@@ -19,6 +19,18 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
+/* $Id: loopback.c,v 0.8.4.2 1992/11/10 10:38:48 bir7 Exp $ */
+/* $Log: loopback.c,v $
+ * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
+ * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
+ *
+ * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
+ * version change only.
+ *
+ * Revision 0.8.3.2  1992/11/10  00:14:47  bir7
+ * Changed malloc to kmalloc and added $iId$ and 
+ * */
+
 #include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -69,7 +81,7 @@ loopback_xmit(struct sk_buff *skb, struct device *dev)
   done = dev_rint ((unsigned char *)(skb+1), skb->len, 0, dev);
 
   if (skb->free)
-    free_skb (skb, FREE_WRITE);
+    kfree_skb (skb, FREE_WRITE);
 
   while (done != 1)
 	 {

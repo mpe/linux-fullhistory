@@ -238,7 +238,7 @@ repeat:
 	req->waiting = current;
 	req->bh = NULL;
 	req->next = NULL;
-	current->state = TASK_UNINTERRUPTIBLE;
+	current->state = TASK_SWAPPING;
 	add_request(major+blk_dev,req);
 	schedule();
 }

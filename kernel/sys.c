@@ -255,21 +255,26 @@ void ctrl_alt_del(void)
  */
 int sys_setregid(gid_t rgid, gid_t egid)
 {
+	int old_rgid = current->gid;
+
 	if (rgid != (gid_t) -1) {
-		if ((current->gid == rgid) || 
+		if ((current->egid==rgid) ||
+		    (old_rgid == rgid) || 
 		    suser())
 			current->gid = rgid;
 		else
 			return(-EPERM);
 	}
 	if (egid != (gid_t) -1) {
-		if ((current->gid == egid) ||
+		if ((old_rgid == egid) ||
 		    (current->egid == egid) ||
 		    suser()) {
 			current->egid = egid;
 			current->sgid = egid;
-		} else
+		} else {
+			current->gid = old_rgid;
 			return(-EPERM);
+		}
 	}
 	return 0;
 }

@@ -905,7 +905,7 @@ void con_write(struct tty_struct * tty)
 	int c;
 	unsigned int currcons;
 
-	wake_up(&tty->write_q.proc_list);
+	wake_up_interruptible(&tty->write_q.proc_list);
 	currcons = tty->line - 1;
 	if (currcons >= NR_CONSOLES) {
 		printk("con_write: illegal tty (%d)\n", currcons);

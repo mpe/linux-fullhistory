@@ -53,7 +53,7 @@ static void mouse_interrupt(int unused)
 	mouse.dx += dx;
 	mouse.dy += dy;
 	mouse.ready = 1;
-	wake_up(&mouse.wait);
+	wake_up_interruptible(&mouse.wait);
 	MSE_INT_ON();
 }
 

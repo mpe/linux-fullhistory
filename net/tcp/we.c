@@ -44,6 +44,18 @@
 /* Note:  My driver was full of bugs.  Basically if it works, credit
    Bob Harris.  If it's broken blame me.  -RAB */
 
+/* $Id: we.c,v 0.8.4.2 1992/11/10 10:38:48 bir7 Exp $ */
+/* $Log: we.c,v $
+ * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
+ * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
+ *
+ * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
+ * version change only.
+ *
+ * Revision 0.8.3.4  1992/11/10  00:14:47  bir7
+ * Changed malloc to kmalloc and added $iId$ and Log
+ * */
+
 #include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -92,6 +104,8 @@ static unsigned char max_pages;		/* Board memory/256 */
 static unsigned char wd_debug = 0;	/* turns on/off debug messages */
 static unsigned char dconfig = WD_DCONFIG;	/* default data configuration */
 static int tx_aborted = 0;			/* Empties tx bit bucket */
+
+static void wd_trs (struct device *);
 
 static  int
 max(int a, int b)
@@ -186,6 +200,7 @@ wd8003_start_xmit(struct sk_buff *skb, struct device *dev)
 {
   unsigned char cmd;
   int len;
+
   cli();
   if (status & TRS_BUSY)
     {
@@ -196,6 +211,12 @@ wd8003_start_xmit(struct sk_buff *skb, struct device *dev)
     }
   status |= TRS_BUSY;
   sti();
+
+  if (skb == NULL)
+    {
+      wd_trs(dev);
+      return (0);
+    }
 
   if (!skb->arp)
     {
@@ -234,7 +255,7 @@ wd8003_start_xmit(struct sk_buff *skb, struct device *dev)
   
   if (skb->free)
     {
-	    free_skb (skb, FREE_WRITE);
+	    kfree_skb (skb, FREE_WRITE);
     }
 
   return (0);
@@ -496,7 +517,7 @@ wd8003_interrupt(int reg_ptr)
 	status |= IN_INT;
 
 	do{ /* find out who called */ 
-
+	  sti();
 		/* Check for overrunning receive buffer first */
 		if ( ( isr = inb_p( ISR ) ) & OVW ) {	/* Receiver overwrite warning */
 			stats.rx_over_errors++;
@@ -565,7 +586,7 @@ wd8003_interrupt(int reg_ptr)
 		if( ++count > max_pages + 1 ){
 			printk("\nwd8013_interrupt - infinite loop detected, isr = x%x, count = %d", isr, count );
 		}
-
+		cli();
 	} while( inb_p( ISR ) != 0 );
 
 	status &= ~IN_INT;

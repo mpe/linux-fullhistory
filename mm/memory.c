@@ -55,6 +55,8 @@ __asm__("cld ; rep ; movsl"::"S" (from),"D" (to),"c" (1024):"cx","di","si")
 
 unsigned short * mem_map = NULL;
 
+#define CODE_SPACE(addr,p) ((addr) < (p)->end_code)
+
 /*
  * oom() prints a message (so that the user knows why the process died),
  * and gives the process an untrappable SIGSEGV.
@@ -371,8 +373,9 @@ int remap_page_range(unsigned long from, unsigned long to, unsigned long size,
  * It returns the physical address of the page gotten, 0 if
  * out of memory (either when trying to access page-table or
  * page.)
+ * if wp = 1 the page will be write protected
  */
-static unsigned long put_page(struct task_struct * tsk,unsigned long page,unsigned long address)
+static unsigned long put_page(struct task_struct * tsk,unsigned long page,unsigned long address,int wp)
 {
 	unsigned long tmp, *page_table;
 
@@ -405,7 +408,7 @@ static unsigned long put_page(struct task_struct * tsk,unsigned long page,unsign
 		*page_table = 0;
 		invalidate();
 	}
-	*page_table = page | PAGE_ACCESSED | 7;
+	*page_table = page | PAGE_ACCESSED | 5 | (!wp << 1);
 /* no need for invalidate */
 	return page;
 }
@@ -460,6 +463,15 @@ void do_wp_page(unsigned long error_code, unsigned long address,
 	unsigned long pde, pte, old_page, dirty;
 	unsigned long new_page = 0;
 
+	/* check code space write */
+	if (tsk == current && tsk->executable && CODE_SPACE(address, current)) {
+		/* don't send SIGSEGV when in kernel or v86 mode */
+		if (user_esp)
+			send_sig(SIGSEGV, tsk, 1);
+		/* Note that we still do the copy-on-write: if the process catches
+		 * SIGSEGV we want things to work..
+		 */
+	}
 repeat:
 	pde = tsk->tss.cr3 + ((address>>20) & 0xffc);
 	pte = *(unsigned long *) pde;
@@ -535,7 +547,7 @@ static void get_empty_page(struct task_struct * tsk, unsigned long address)
 		oom(tsk);
 		tmp = BAD_PAGE;
 	}
-	if (!put_page(tsk,tmp,address))
+	if (!put_page(tsk,tmp,address,0))
 		free_page(tmp);
 }
 
@@ -573,23 +585,25 @@ static int try_to_share(unsigned long address, struct task_struct * tsk,
 		return 0;
 	if (mem_map[MAP_NR(phys_addr)] & MAP_PAGE_RESERVED)
 		return 0;
+/* share them: write-protect */
+	*(unsigned long *) from_page &= ~2;
+	invalidate();
+	phys_addr >>= PAGE_SHIFT;
+	mem_map[phys_addr]++;
 	to = *(unsigned long *) to_page;
 	if (!(to & 1)) {
 		to = get_free_page(GFP_KERNEL);
-		if (!to)
+		if (!to) {
+			mem_map[phys_addr]--;
 			return 0;
+		}
 		*(unsigned long *) to_page = to | PAGE_ACCESSED | 7;
 	}
 	to &= 0xfffff000;
 	to_page = to + ((address>>10) & 0xffc);
 	if (1 & *(unsigned long *) to_page)
 		panic("try_to_share: to_page already exists");
-/* share them: write-protect */
-	*(unsigned long *) from_page &= ~2;
 	*(unsigned long *) to_page = *(unsigned long *) from_page;
-	invalidate();
-	phys_addr >>= PAGE_SHIFT;
-	mem_map[phys_addr]++;
 	return 1;
 }
 
@@ -719,7 +733,7 @@ void do_no_page(unsigned long error_code, unsigned long address,
 	page = get_free_page(GFP_KERNEL);
 	if (!page) {
 		oom(current);
-		put_page(tsk,BAD_PAGE,address);
+		put_page(tsk,BAD_PAGE,address,0);
 		return;
 	}
 	if (block) {
@@ -739,7 +753,7 @@ void do_no_page(unsigned long error_code, unsigned long address,
 		tmp--;
 		*(char *)tmp = 0;
 	}
-	if (put_page(tsk,page,address))
+	if (put_page(tsk,page,address,CODE_SPACE(address, tsk)))
 		return;
 	free_page(page);
 	oom(current);

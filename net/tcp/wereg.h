@@ -19,6 +19,18 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
+/* $Id: wereg.h,v 0.8.4.1 1992/11/10 00:17:18 bir7 Exp $ */
+/* $Log: wereg.h,v $
+ * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
+ * version change only.
+ *
+ * Revision 0.8.3.2  1992/11/10  00:14:47  bir7
+ * Changed malloc to kmalloc and added $iId$ and $Log: wereg.h,v $
+ * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
+ * version change only.
+ *.
+ * */
+
 /* This is based on if_wereg.h from bsd386 */
 
 /* Uncomment the next line if you are having troubles with your 

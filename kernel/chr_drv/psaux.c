@@ -155,7 +155,7 @@ static void aux_interrupt(int cpl)
 	}
 	queue->head = head;
 	aux_ready = 1;
-	wake_up(&queue->proc_list);
+	wake_up_interruptible(&queue->proc_list);
 }
 
 
@@ -222,15 +222,22 @@ static int write_aux(struct inode * inode, struct file * file, char * buffer, in
 
 static int read_aux(struct inode * inode, struct file * file, char * buffer, int count)
 {
+	struct wait_queue wait = { current, NULL };
 	int i = count;
 	unsigned char c;
 
 	if (queue_empty()) {
 		if (file->f_flags & O_NONBLOCK)
 			return -EAGAIN;
-		cli();
-		interruptible_sleep_on(&queue->proc_list);
-		sti();
+		add_wait_queue(&queue->proc_list, &wait);
+repeat:
+		current->state = TASK_INTERRUPTIBLE;
+		if (queue_empty() && !(current->signal & ~current->blocked)) {
+			schedule();
+			goto repeat;
+		}
+		current->state = TASK_RUNNING;
+			
 	}		
 	while (i > 0 && !queue_empty()) {
 		c = get_from_queue();

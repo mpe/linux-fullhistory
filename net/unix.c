@@ -329,7 +329,7 @@ unix_proto_bind(struct socket *sock, struct sockaddr *umyaddr,
 	PRINTK("unix_proto_bind: socket 0x%x, len=%d\n", sock,
 	       sockaddr_len);
 	if (sockaddr_len <= UN_PATH_OFFSET ||
-	    sockaddr_len >= sizeof(struct sockaddr_un)) {
+	    sockaddr_len > sizeof(struct sockaddr_un)) {
 		PRINTK("unix_proto_bind: bad length %d\n", sockaddr_len);
 		return -EINVAL;
 	}
@@ -381,7 +381,7 @@ unix_proto_connect(struct socket *sock, struct sockaddr *uservaddr,
 	PRINTK("unix_proto_connect: socket 0x%x, servlen=%d\n", sock,
 	       sockaddr_len);
 	if (sockaddr_len <= UN_PATH_OFFSET ||
-	    sockaddr_len >= sizeof(struct sockaddr_un)) {
+	    sockaddr_len > sizeof(struct sockaddr_un)) {
 		PRINTK("unix_proto_connect: bad length %d\n", sockaddr_len);
 		return -EINVAL;
 	}

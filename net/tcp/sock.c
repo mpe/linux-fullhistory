@@ -19,6 +19,18 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
+/* $Id: sock.c,v 0.8.4.2 1992/11/10 10:38:48 bir7 Exp $ */
+/* $Log: sock.c,v $
+ * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
+ * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
+ *
+ * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
+ * version change only.
+ *
+ * Revision 0.8.3.5  1992/11/10  00:14:47  bir7
+ * Changed malloc to kmalloc and added Id and Log
+ * */
+
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -183,7 +195,7 @@ lock_skb (struct sk_buff *skb)
 
 
 void
-free_skb (struct sk_buff *skb, int rw)
+kfree_skb (struct sk_buff *skb, int rw)
 {
    if (skb->lock)
      {
@@ -216,7 +228,7 @@ unlock_skb (struct sk_buff *skb, int rw)
      }
    skb->lock = 0;
    if (skb->free)
-     free_skb (skb, rw);
+     kfree_skb (skb, rw);
 }
 
 static  int
@@ -397,7 +409,7 @@ destroy_sock(volatile struct sock *sk)
     {
       struct sk_buff *skb2;
       skb2=skb->next;
-      free_skb(skb, FREE_WRITE);
+      kfree_skb(skb, FREE_WRITE);
       skb=skb2;
     }
 
@@ -417,7 +429,7 @@ destroy_sock(volatile struct sock *sk)
 	       skb->sk->dead = 1;
 	       skb->sk->prot->close (skb->sk, 0);
 	    }
-	  free_skb(skb, FREE_READ);
+	  kfree_skb(skb, FREE_READ);
 	  skb=skb2;
        } while (skb != sk->rqueue);
     }
@@ -453,7 +465,7 @@ destroy_sock(volatile struct sock *sk)
 	}
       sti();
       skb2=skb->link3;
-      free_skb(skb, FREE_WRITE);
+      kfree_skb(skb, FREE_WRITE);
       skb=skb2;
     }
 
@@ -470,13 +482,21 @@ destroy_sock(volatile struct sock *sk)
        do {
 	  struct sk_buff *skb2;
 	  skb2=skb->next;
-	  free_skb(skb, FREE_READ);
+	  kfree_skb(skb, FREE_READ);
 	  skb=skb2;
        } while (skb != sk->back_log);
        sti();
     }
 
   sk->back_log = NULL;
+
+  /* Now if it has a half accepted/ closed socket. */
+  if (sk->pair)
+    {
+      sk->pair->dead = 1;
+      sk->pair->prot->close (sk, 0);
+      sk->pair = NULL;
+    }
 
   /* now if everything is gone we can free the socket structure, 
      otherwise we need to keep it around until everything is gone. */
@@ -559,7 +579,7 @@ ip_proto_setsockopt(struct socket *sock, int level, int optname,
 	  if (val)
 	    sk->reuse = 1;
 	  else 
-	    sk->reuse = 1;
+	    sk->reuse = 0;
 	  return (0);
 
 	case SO_KEEPALIVE:

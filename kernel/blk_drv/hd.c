@@ -140,10 +140,10 @@ static int controller_ready(unsigned int drive, unsigned int head)
 
 static int status_ok(void)
 {
-	unsigned char status = controller_busy();
+	unsigned char status = inb_p(HD_STATUS);
 
 	if (status & BUSY_STAT)
-		return 0;
+		return 1;
 	if (status & WRERR_STAT)
 		return 0;
 	if (!(status & READY_STAT))
@@ -716,8 +716,8 @@ static int revalidate_hddisk(int dev, int maxusage)
 		sync_dev(major | start | i);
 		invalidate_inodes(major | start | i);
 		invalidate_buffers(major | start | i);
-		gdev->part[i].start_sect = 0;
-		gdev->part[i].nr_sects = 0;
+		gdev->part[start+i].start_sect = 0;
+		gdev->part[start+i].nr_sects = 0;
 	};
 
 #ifdef MAYBE_REINIT

@@ -283,10 +283,8 @@ struct buffer_head * get_hash_table(dev_t dev, int block, int size)
 			return NULL;
 		bh->b_count++;
 		wait_on_buffer(bh);
-		if (bh->b_dev == dev && bh->b_blocknr == block && bh->b_size == size) {
-			put_last_free(bh);
+		if (bh->b_dev == dev && bh->b_blocknr == block && bh->b_size == size)
 			return bh;
-		}
 		bh->b_count--;
 	}
 }
@@ -308,8 +306,11 @@ struct buffer_head * getblk(dev_t dev, int block, int size)
 	int buffers;
 
 repeat:
-	if (bh = get_hash_table(dev, block, size))
+	if (bh = get_hash_table(dev, block, size)) {
+		if (bh->b_uptodate && !bh->b_dirt)
+			put_last_free(bh);
 		return bh;
+	}
 
 	if (nr_free_pages > 30)
 		grow_buffers(size);
@@ -369,9 +370,13 @@ void brelse(struct buffer_head * buf)
 	if (!buf)
 		return;
 	wait_on_buffer(buf);
-	if (!(buf->b_count--))
-		panic("Trying to free free buffer");
-	wake_up(&buffer_wait);
+	if (buf->b_count) {
+		if (--buf->b_count)
+			return;
+		wake_up(&buffer_wait);
+		return;
+	}
+	printk("Trying to free free buffer\n");
 }
 
 /*

@@ -1,5 +1,19 @@
 /* Space.c */
+
 /* Holds initial configuration information for devices. */
+/* $Id: Space.c,v 0.8.4.2 1992/11/10 10:38:48 bir7 Exp $ */
+/* $Log: Space.c,v $
+ * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
+ * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
+ *
+ * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
+ * version change only.
+ *
+ * Revision 0.8.3.2  1992/11/10  00:14:47  bir7
+ * Changed malloc to kmalloc and added Id 
+ *
+ */
+
 #include "dev.h"
 #include <linux/stddef.h>
 

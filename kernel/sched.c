@@ -103,17 +103,15 @@ void schedule(void)
 /* check alarm, wake up any interruptible tasks that have got a signal */
 
 	need_resched = 0;
-	for(p = &LAST_TASK ; p > &FIRST_TASK ; --p)
-		if (*p) {
-			if ((*p)->timeout && (*p)->timeout < jiffies)
-				if ((*p)->state == TASK_INTERRUPTIBLE) {
-					(*p)->timeout = 0;
-					wake_one_task(*p);
-				}
-			if (((*p)->signal & ~(*p)->blocked) &&
-			    (*p)->state==TASK_INTERRUPTIBLE)
-				wake_one_task(*p);
-		}
+	for(p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
+		if (!*p || ((*p)->state != TASK_INTERRUPTIBLE))
+			continue;
+		if ((*p)->timeout && (*p)->timeout < jiffies) {
+			(*p)->timeout = 0;
+			(*p)->state = TASK_RUNNING;
+		} else if ((*p)->signal & ~(*p)->blocked)
+			(*p)->state = TASK_RUNNING;
+	}
 
 /* this is the scheduler proper: */
 
@@ -155,13 +153,6 @@ int sys_pause(void)
 	return -EINTR;
 }
 
-void wake_one_task(struct task_struct * p)
-{
-	p->state = TASK_RUNNING;
-	if (p->counter > current->counter)
-		need_resched = 1;
-}
-
 /*
  * wake_up doesn't wake up stopped processes - they have to be awakened
  * with signals or similar.
@@ -179,9 +170,34 @@ void wake_up(struct wait_queue **q)
 		return;
 	do {
 		if (p = tmp->task) {
-			if (p->state == TASK_ZOMBIE)
-				printk("wake_up: TASK_ZOMBIE\n");
-			else if (p->state != TASK_STOPPED) {
+			if ((p->state == TASK_UNINTERRUPTIBLE) ||
+			    (p->state == TASK_INTERRUPTIBLE)) {
+				p->state = TASK_RUNNING;
+				if (p->counter > current->counter)
+					need_resched = 1;
+			}
+		}
+		if (!tmp->next) {
+			printk("wait_queue is bad (eip = %08x)\n",((unsigned long *) q)[-1]);
+			printk("        q = %08x\n",q);
+			printk("       *q = %08x\n",*q);
+			printk("      tmp = %08x\n",tmp);
+			break;
+		}
+		tmp = tmp->next;
+	} while (tmp != *q);
+}
+
+void wake_up_interruptible(struct wait_queue **q)
+{
+	struct wait_queue *tmp;
+	struct task_struct * p;
+
+	if (!q || !(tmp = *q))
+		return;
+	do {
+		if (p = tmp->task) {
+			if (p->state == TASK_INTERRUPTIBLE) {
 				p->state = TASK_RUNNING;
 				if (p->counter > current->counter)
 					need_resched = 1;

@@ -637,8 +637,8 @@ int revalidate_scsidisk(int dev, int maxusage){
 	    sync_dev(major | start | i);
 	    invalidate_inodes(major | start | i);
 	    invalidate_buffers(major | start | i);
-	    gdev->part[i].start_sect = 0;
-	    gdev->part[i].nr_sects = 0;
+	    gdev->part[start+i].start_sect = 0;
+	    gdev->part[start+i].nr_sects = 0;
 	  };
 
 #ifdef MAYBE_REINIT

@@ -1,5 +1,14 @@
 /* Internet Control Message Protocol (ICMP) header file */
 
+/* $Id: icmp.h,v 0.8.4.1 1992/11/10 00:17:18 bir7 Exp $ */
+/* $Log: icmp.h,v $
+ * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
+ * version change only.
+ *
+ * Revision 0.8.3.2  1992/11/10  00:14:47  bir7
+ * Changed malloc to kmalloc and added Id and Log
+ *
+ */
 
 #define ICMP_ECHOREPLY		0
 #define ICMP_DEST_UNREACH	3

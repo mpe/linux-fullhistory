@@ -19,6 +19,23 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
+/* $Id: sock.h,v 0.8.4.2 1992/11/10 10:38:48 bir7 Exp $ */
+/* $Log: sock.h,v $
+ * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
+ * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
+ *
+ * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
+ * version change only.
+ *
+ * Revision 0.8.3.4  1992/11/10  00:14:47  bir7
+ * Changed malloc to kmalloc and added $iId$ and $Log: sock.h,v $
+ * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
+ * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
+ *
+ * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
+ * version change only.
+ *.
+ * */
 #ifndef _TCP_SOCK_H
 #define _TCP_SOCK_H
 
@@ -177,7 +194,7 @@ void sock_wfree(volatile struct sock *sk, void *mem, unsigned long size);
 void sock_rfree(volatile struct sock *sk, void *mem, unsigned long size);
 unsigned long sock_rspace(volatile struct sock *sk);
 unsigned long sock_wspace(volatile struct sock *sk);
-void free_skb (struct sk_buff *skb, int rw);
+void kfree_skb (struct sk_buff *skb, int rw);
 void lock_skb (struct sk_buff *skb);
 void unlock_skb (struct sk_buff *skb, int rw);
 

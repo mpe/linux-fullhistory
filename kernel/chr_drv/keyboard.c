@@ -145,7 +145,7 @@ static void put_queue(int ch)
 	struct tty_struct *tty = TTY_TABLE(0);
 	unsigned long new_head;
 
-	wake_up(&keypress_wait);
+	wake_up_interruptible(&keypress_wait);
 	if (!tty)
 		return;
 	qp = &tty->read_q;
@@ -153,7 +153,7 @@ static void put_queue(int ch)
 	qp->buf[qp->head]=ch;
 	if ((new_head=(qp->head+1)&(TTY_BUF_SIZE-1)) != qp->tail)
 		qp->head=new_head;
-	wake_up(&qp->proc_list);
+	wake_up_interruptible(&qp->proc_list);
 }
 
 static void puts_queue(char *cp)
@@ -163,7 +163,7 @@ static void puts_queue(char *cp)
 	unsigned long new_head;
 	char ch;
 
-	wake_up(&keypress_wait);
+	wake_up_interruptible(&keypress_wait);
 	if (!tty)
 		return;
 	qp = &tty->read_q;
@@ -174,7 +174,7 @@ static void puts_queue(char *cp)
 				 != qp->tail)
 			qp->head=new_head;
 	}
-	wake_up(&qp->proc_list);
+	wake_up_interruptible(&qp->proc_list);
 }
 
 static void ctrl(int sc)

@@ -19,6 +19,17 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
+/* $Id: raw.c,v 0.8.4.2 1992/11/10 10:38:48 bir7 Exp $ */
+/* $Log: raw.c,v $
+ * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
+ * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
+ *
+ * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
+ * version change only.
+ *
+ * Revision 0.8.3.3  1992/11/10  00:14:47  bir7
+ * Changed malloc to kmalloc and added $iId$ and 
+ * */
 
 #include <linux/types.h>
 #include <linux/sched.h>
@@ -96,7 +107,7 @@ raw_rcv (struct sk_buff *skb, struct device *dev, struct options *opt,
    if (sk->rmem_alloc + skb->mem_len >= SK_RMEM_MAX)
      {
 	skb->sk = NULL;
-	free_skb (skb, FREE_READ);
+	kfree_skb (skb, FREE_READ);
 	return (0);
      }
 	     
@@ -319,7 +330,7 @@ raw_recvfrom (volatile struct sock *sk, unsigned char *to, int len,
 
 	if (!(flags & MSG_PEEK))
 	  {
-	     free_skb (skb, FREE_READ);
+	     kfree_skb (skb, FREE_READ);
 	  }
 	release_sock (sk);
 	return (copied);

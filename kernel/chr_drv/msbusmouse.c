@@ -60,7 +60,7 @@ static void ms_mouse_interrupt(int unused)
 	mouse.dx += dx;
 	mouse.dy += dy;
 	mouse.ready = 1;
-	wake_up(&mouse.wait);
+	wake_up_interruptible(&mouse.wait);
 }
 
 static void release_mouse(struct inode * inode, struct file * file)

@@ -23,6 +23,18 @@
     The author of this file may be reached at rth@sparta.com or Sparta, Inc.
     7926 Jones Branch Dr. Suite 900, McLean Va 22102.
 */
+/* $Id: icmp.c,v 0.8.4.2 1992/11/10 10:38:48 bir7 Exp $ */
+/* $Log: icmp.c,v $
+ * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
+ * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
+ *
+ * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
+ * version change only.
+ *
+ * Revision 0.8.3.3  1992/11/10  00:14:47  bir7
+ * Changed malloc to kmalloc and added $iId$ and 
+ *
+ */
 
 /* modified by Ross Biro bir7@leland.stanford.edu to do more than just
    echo responses. */
@@ -107,7 +119,7 @@ icmp_reply (struct sk_buff *skb_in,  int type, int code, struct device *dev)
    if (offset < 0)
      {
 	skb->sk = NULL;
-	free_skb (skb, FREE_READ);
+	kfree_skb (skb, FREE_READ);
 	return;
      }
 
@@ -142,7 +154,7 @@ icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
    if ((daddr & 0xff000000) == 0 || (daddr & 0xff000000) == 0xff000000)
      {
 	skb1->sk = NULL;
-	free_skb (skb1, FREE_READ);
+	kfree_skb (skb1, FREE_READ);
 	return (0);
      }
 
@@ -158,7 +170,7 @@ icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 	     /* Failed checksum! */
 	     PRINTK("\nICMP ECHO failed checksum!");
 	     skb1->sk = NULL;
-	     free_skb (skb1, FREE_READ);
+	     kfree_skb (skb1, FREE_READ);
 	     return (0);
 	  }
      }
@@ -191,7 +203,7 @@ icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 				     iph->daddr, iph->saddr, ipprot);
 	     }
 	   skb1->sk = NULL;
-	   free_skb (skb1, FREE_READ);
+	   kfree_skb (skb1, FREE_READ);
 	   return (0);
 	}
 
@@ -214,7 +226,7 @@ icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 		add_route (rt);
 	     }
 	   skb1->sk = NULL;
-	   free_skb (skb1, FREE_READ);
+	   kfree_skb (skb1, FREE_READ);
 	   return (0);
 	}
 
@@ -227,7 +239,7 @@ icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 	if (skb == NULL)
 	  {
 	     skb1->sk = NULL;
-	     free_skb (skb1, FREE_READ);
+	     kfree_skb (skb1, FREE_READ);
 	     return (0);
 	  }
 	skb->sk = NULL;
@@ -242,7 +254,7 @@ icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 	     PRINTK("\nCould not build IP Header for ICMP ECHO Response");
 	     kfree_s (skb->mem_addr, skb->mem_len);
 	     skb1->sk = NULL;
-	     free_skb (skb1, FREE_READ);
+	     kfree_skb (skb1, FREE_READ);
 	     return( 0 ); /* just toss the received packet */
 	  }
 
@@ -265,19 +277,19 @@ icmp_rcv(struct sk_buff *skb1, struct device *dev, struct options *opt,
 	ip_queue_xmit( (volatile struct sock *)NULL, dev, skb, 1 );
 	
 	skb1->sk = NULL;
-	free_skb (skb1, FREE_READ);
+	kfree_skb (skb1, FREE_READ);
 	return( 0 );
 
 	default:
 	PRINTK("\nUnsupported ICMP type = x%x", icmph->type );
 	skb1->sk = NULL;
-	free_skb (skb1, FREE_READ);
+	kfree_skb (skb1, FREE_READ);
 	return( 0 ); /* just toss the packet */
      }
 
    /* should be unecessary, but just in case. */
    skb1->sk = NULL;
-   free_skb (skb1, FREE_READ);
+   kfree_skb (skb1, FREE_READ);
    return( 0 ); /* just toss the packet */
 }
 

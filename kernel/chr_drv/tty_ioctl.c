@@ -26,7 +26,7 @@ static void flush(struct tty_queue * queue)
 		cli();
 		queue->head = queue->tail;
 		sti();
-		wake_up(&queue->proc_list);
+		wake_up_interruptible(&queue->proc_list);
 	}
 }
 
@@ -35,13 +35,13 @@ void flush_input(struct tty_struct * tty)
         tty->status_changed = 1;
 	tty->ctrl_status |= TIOCPKT_FLUSHREAD;
 	flush(&tty->read_q);
-	wake_up(&tty->read_q.proc_list);
+	wake_up_interruptible(&tty->read_q.proc_list);
 	flush(&tty->secondary);
 	tty->secondary.data = 0;
 
 	if (tty = tty->link) {
 		flush(&tty->write_q);
-		wake_up(&tty->write_q.proc_list);
+		wake_up_interruptible(&tty->write_q.proc_list);
 	}
 }
 
@@ -50,10 +50,10 @@ void flush_output(struct tty_struct * tty)
    	tty->status_changed = 1;
 	tty->ctrl_status |= TIOCPKT_FLUSHWRITE;
 	flush(&tty->write_q);
-	wake_up(&tty->write_q.proc_list);
+	wake_up_interruptible(&tty->write_q.proc_list);
 	if (tty = tty->link) {
 		flush(&tty->read_q);
-		wake_up(&tty->read_q.proc_list);
+		wake_up_interruptible(&tty->read_q.proc_list);
 		flush(&tty->secondary);
 		tty->secondary.data = 0;
 	}
@@ -252,8 +252,10 @@ int tty_ioctl(struct inode * inode, struct file * file,
 {
 	struct tty_struct * tty;
 	struct tty_struct * other_tty;
+	struct tty_struct * termios_tty;
 	int pgrp;
 	int dev;
+	int termios_dev;
 
 	if (MAJOR(file->f_rdev) != 4) {
 		printk("tty_ioctl: tty pseudo-major != 4\n");
@@ -263,15 +265,19 @@ int tty_ioctl(struct inode * inode, struct file * file,
 	tty = TTY_TABLE(dev);
 	if (!tty)
 		return -EINVAL;
-
 	if (IS_A_PTY(dev))
 		other_tty = tty_table[PTY_OTHER(dev)];
 	else
 		other_tty = NULL;
-		
+	termios_tty = tty;
+	termios_dev = dev;
+	if (IS_A_PTY_MASTER(dev)) {
+		termios_tty = other_tty;
+		termios_dev = PTY_OTHER(dev);
+	}
 	switch (cmd) {
 		case TCGETS:
-			return get_termios(tty,(struct termios *) arg);
+			return get_termios(termios_tty,(struct termios *) arg);
 		case TCSETSF:
 			flush_input(tty);
 		/* fallthrough */
@@ -279,16 +285,16 @@ int tty_ioctl(struct inode * inode, struct file * file,
 			wait_until_sent(tty);
 		/* fallthrough */
 		case TCSETS:
-			return set_termios(tty,(struct termios *) arg, dev);
+			return set_termios(termios_tty,(struct termios *) arg, termios_dev);
 		case TCGETA:
-			return get_termio(tty,(struct termio *) arg);
+			return get_termio(termios_tty,(struct termio *) arg);
 		case TCSETAF:
 			flush_input(tty);
 		/* fallthrough */
 		case TCSETAW:
 			wait_until_sent(tty); /* fallthrough */
 		case TCSETA:
-			return set_termio(tty,(struct termio *) arg, dev);
+			return set_termio(termios_tty,(struct termio *) arg, termios_dev);
 		case TCXONC:
 			switch (arg) {
 			case TCOOFF:

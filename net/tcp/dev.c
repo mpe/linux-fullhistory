@@ -19,6 +19,18 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
+/* $Id: dev.c,v 0.8.4.2 1992/11/10 10:38:48 bir7 Exp $ */
+/* $Log: dev.c,v $
+ * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
+ * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
+ *
+ * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
+ * version change only.
+ *
+ * Revision 0.8.3.5  1992/11/10  00:14:47  bir7
+ * Changed malloc to kmalloc and added $iId$ 
+ *
+ */
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -124,7 +136,8 @@ dev_queue_xmit (struct sk_buff *skb, struct device *dev, int pri)
 
   if (skb->next != NULL)
     {
-/*      printk ("retransmitted packet still on queue. \n");*/
+      /* make sure we haven't missed an interrupt. */
+       dev->hard_start_xmit (NULL, dev);
        return;
     }
 
@@ -314,7 +327,7 @@ dev_rint(unsigned char *buff, unsigned long len, int flags,
    if (!flag)
      {
 	PRINTK ("discarding packet type = %X\n", type);
-	free_skb (skb, FREE_READ);
+	kfree_skb (skb, FREE_READ);
      }
 
      if (buff == NULL)
@@ -384,7 +397,7 @@ dev_tint(unsigned char *buff,  struct device *dev)
 
 	  if (skb->free)
 	    {
-		  free_skb(skb, FREE_WRITE);
+		  kfree_skb(skb, FREE_WRITE);
 	    }
 
 	  if (tmp != 0)

@@ -253,9 +253,9 @@ void copy_to_cooked(struct tty_struct * tty)
 	}
 	TTY_WRITE_FLUSH(tty);
 	if (!EMPTY(&tty->secondary))
-		wake_up(&tty->secondary.proc_list);
+		wake_up_interruptible(&tty->secondary.proc_list);
 	if (tty->write_q.proc_list && LEFT(&tty->write_q) > TTY_BUF_SIZE/2)
-		wake_up(&tty->write_q.proc_list);
+		wake_up_interruptible(&tty->write_q.proc_list);
 	if (tty->throttle && (LEFT(&tty->read_q) >= RQ_THRESHOLD_HW)
 	    && !clear_bit(TTY_RQ_THROTTLED, &tty->flags))
 		tty->throttle(tty, TTY_THROTTLE_RQ_AVAIL);
@@ -366,7 +366,7 @@ static int read_chan(unsigned int channel, struct file * file, char * buf, int n
 			if (c==10 && L_CANON(tty))
 				break;
 		};
-		wake_up(&tty->read_q.proc_list);
+		wake_up_interruptible(&tty->read_q.proc_list);
 		/*
 		 * If there is enough space in the secondary queue
 		 * now, let the low-level driver know.
@@ -453,7 +453,7 @@ static int write_chan(unsigned int channel, struct file * file, char * buf, int 
 
 	if (channel > 255)
 		return -EIO;
-	if (redirect && ((channel == 0) || (channel+1 == fg_console)))
+	if (redirect && ((channel == 0) || (channel == fg_console+1)))
 		tty = redirect;
 	else
 		tty = TTY_TABLE(channel);

@@ -73,7 +73,7 @@ void mouse_interrupt(int unused)
 	mouse.latch_buttons |= inb( ATIXL_MSE_DATA_PORT);
 	ATIXL_MSE_ENABLE_UPDATE();
 	mouse.ready = 1;
-	wake_up(&mouse.wait);
+	wake_up_interruptible(&mouse.wait);
 }
 
 static void release_mouse(struct inode * inode, struct file * file)

@@ -19,6 +19,17 @@
      The Author may be reached as bir7@leland.stanford.edu or
      C/O Department of Mathematics; Stanford University; Stanford, CA 94305
  */
+/* $Id: tcp.c,v 0.8.4.2 1992/11/10 10:38:48 bir7 Exp $ */
+/* $Log: tcp.c,v $
+ * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
+ * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
+ *
+ * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
+ * version change only.
+ *
+ * Revision 0.8.3.3  1992/11/10  00:14:47  bir7
+ * Changed malloc to kmalloc and added $iId$ and 
+ * */
 
 #include <linux/types.h>
 #include <linux/sched.h>
@@ -733,7 +744,7 @@ cleanup_rbuf (volatile struct sock *sk)
 	  skb->prev->next = skb->next;
 	}
       skb->sk = sk;
-      free_skb (skb, FREE_READ);
+      kfree_skb (skb, FREE_READ);
     }
    /* at this point we should send an ack if the difference in
       the window, and the amount of space is bigger than
@@ -1075,7 +1086,7 @@ tcp_conn_request(volatile struct sock *sk, struct sk_buff *skb,
     {
        PRINTK ("tcp_conn_request on dead socket\n");
        tcp_reset (daddr, saddr, th, sk->prot, opt, dev);
-       free_skb (skb, FREE_READ);
+       kfree_skb (skb, FREE_READ);
        return;
     }
 
@@ -1090,7 +1101,7 @@ tcp_conn_request(volatile struct sock *sk, struct sk_buff *skb,
   if (newsk == NULL) 
     {
        /* just ignore the syn.  It will get retransmitted. */
-       free_skb (skb, FREE_READ);
+       kfree_skb (skb, FREE_READ);
        return;
     }
 
@@ -1173,7 +1184,7 @@ tcp_conn_request(volatile struct sock *sk, struct sk_buff *skb,
        sk->err = -ENOMEM;
        newsk->dead = 1;
        release_sock (newsk);
-       free_skb (skb, FREE_READ);
+       kfree_skb (skb, FREE_READ);
        return;
     }
   
@@ -1196,7 +1207,7 @@ tcp_conn_request(volatile struct sock *sk, struct sk_buff *skb,
        newsk->dead = 1;
        release_sock (newsk);
        skb->sk = sk;
-       free_skb (skb, FREE_READ);
+       kfree_skb (skb, FREE_READ);
        return;
     }
 
@@ -1283,7 +1294,7 @@ tcp_close (volatile struct sock *sk, int timeout)
        skb = sk->rqueue;
        do {
 	  skb2=skb->next;
-	  free_skb (skb, FREE_READ);
+	  kfree_skb (skb, FREE_READ);
 	  skb=skb2;
        } while (skb != sk->rqueue);
        need_reset = 1;
@@ -1490,7 +1501,7 @@ tcp_ack (volatile struct sock *sk, struct tcp_header *th, unsigned long saddr)
 		      }
 		 }
 	    }
-	  free_skb  (oskb, FREE_WRITE); /* write. */
+	  kfree_skb  (oskb, FREE_WRITE); /* write. */
 	  sti();
 	  if (!sk->dead)
 	    wake_up(sk->sleep);
@@ -1601,7 +1612,7 @@ tcp_data (struct sk_buff *skb, volatile struct sock *sk,
       /* don't want to keep passing ack's back and fourth. */
       if (!th->ack)
 	tcp_send_ack (sk->send_seq, sk->acked_seq,sk, th, saddr);
-      free_skb(skb, FREE_READ);
+      kfree_skb(skb, FREE_READ);
       return (0);
     }
 
@@ -1610,7 +1621,7 @@ tcp_data (struct sk_buff *skb, volatile struct sock *sk,
        /* just ack everything. */
        sk->acked_seq = th->seq + skb->len + th->syn + th->fin;
        tcp_send_ack (sk->send_seq, sk->acked_seq, sk, skb->h.th, saddr);
-       free_skb (skb, FREE_READ);
+       kfree_skb (skb, FREE_READ);
        if (sk->state == TCP_TIME_WAIT && sk->acked_seq == sk->fin_seq)
 	 {
 	    if (!sk->dead) wake_up (sk->sleep);
@@ -1944,7 +1955,7 @@ tcp_accept (volatile struct sock *sk, int flags)
 
   /* now all we need to do is return skb->sk. */
   newsk = skb->sk;
-  free_skb (skb, FREE_READ);
+  kfree_skb (skb, FREE_READ);
   release_sock (sk);
   return (newsk);
 }
@@ -2144,7 +2155,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
        if (th->check && tcp_check (th, len, saddr, daddr ))
 	 {
 	    skb->sk = NULL;
-	    free_skb (skb, 0);
+	    kfree_skb (skb, 0);
 	    /* we don't release the socket because it was never
 	       marked in use. */
 	    return (0);
@@ -2156,7 +2167,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	  if (!th->rst)
 	    tcp_reset (daddr, saddr, th, &tcp_prot, opt,dev);
 	  skb->sk = NULL;
-	  free_skb (skb, 0);
+	  kfree_skb (skb, 0);
 	  return (0);
 	}
 
@@ -2214,7 +2225,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
   if (sk->rmem_alloc + skb->mem_len >= SK_RMEM_MAX)
     {
        skb->sk = NULL;
-       free_skb (skb, 0);
+       kfree_skb (skb, 0);
        release_sock (sk);
        return (0);
     }
@@ -2238,7 +2249,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	    {
 	      wake_up (sk->sleep);
 	    }
-	  free_skb (skb, FREE_READ);
+	  kfree_skb (skb, FREE_READ);
 	  release_sock(sk);
 	  return (0);
 	}
@@ -2250,7 +2261,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
    
       if (!tcp_sequence (sk, th, len, opt, saddr))
 	{
-	   free_skb (skb, FREE_READ);
+	   kfree_skb (skb, FREE_READ);
 	   release_sock(sk);
 	   return (0);
 	}
@@ -2263,7 +2274,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	    {
 	      wake_up (sk->sleep);
 	    }
-	  free_skb (skb, FREE_READ);
+	  kfree_skb (skb, FREE_READ);
 	  release_sock(sk);
 	  return (0);
 	}
@@ -2276,7 +2287,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	     {
 		wake_up (sk->sleep);
 	     }
-	   free_skb (skb, FREE_READ);
+	   kfree_skb (skb, FREE_READ);
 	   release_sock(sk);
 	   return (0);
 	}
@@ -2285,7 +2296,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	{
 	   if(!tcp_ack (sk, th, saddr))
 	    {
-	       free_skb (skb, FREE_READ);
+	       kfree_skb (skb, FREE_READ);
 	       release_sock(sk);
 	       return (0);
 	   }
@@ -2294,7 +2305,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	{
 	  if (tcp_urg (sk, th, saddr))
 	    {
-	       free_skb (skb, FREE_READ);
+	       kfree_skb (skb, FREE_READ);
 	       release_sock(sk);
 	       return (0);
 	    }
@@ -2302,7 +2313,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 
       if ( tcp_data (skb, sk, saddr, len))
 	{
-	   free_skb (skb, FREE_READ);
+	   kfree_skb (skb, FREE_READ);
 	   release_sock(sk);
 	   return (0);
 	}
@@ -2322,7 +2333,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
       if (sk->dead || sk->daddr)
 	{
 	   PRINTK ("packet received for closed,dead socket\n");
-	   free_skb (skb, FREE_READ);
+	   kfree_skb (skb, FREE_READ);
 	   release_sock (sk);
 	   return (0);
 	}
@@ -2333,21 +2344,21 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	    th->ack_seq=0;
 	  tcp_reset (daddr, saddr, th, sk->prot, opt,dev);
 	}
-      free_skb (skb, FREE_READ);
+      kfree_skb (skb, FREE_READ);
       release_sock(sk);
       return (0);
 
     case TCP_LISTEN:
       if (th->rst)
 	{
-	   free_skb (skb, FREE_READ);
+	   kfree_skb (skb, FREE_READ);
 	   release_sock(sk);
 	   return (0);
 	}
       if (th->ack)
 	{
 	  tcp_reset (daddr, saddr, th, sk->prot, opt,dev );
-	  free_skb (skb, FREE_READ);
+	  kfree_skb (skb, FREE_READ);
 	  release_sock(sk);
 	  return (0);
 	}
@@ -2372,14 +2383,14 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	  return (0);
 	}
 
-      free_skb (skb, FREE_READ);
+      kfree_skb (skb, FREE_READ);
       release_sock(sk);
       return (0);
 
     default:
       if (!tcp_sequence (sk, th, len, opt, saddr)) 
 	{
-	   free_skb (skb, FREE_READ);
+	   kfree_skb (skb, FREE_READ);
 	   release_sock(sk);
 	   return (0);
 	}
@@ -2393,7 +2404,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	    {
 	      wake_up (sk->sleep);
 	    }
-	  free_skb (skb, FREE_READ);
+	  kfree_skb (skb, FREE_READ);
 	  release_sock(sk);
 	  return (0);
 	}
@@ -2406,7 +2417,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	  {
 	  wake_up (sk->sleep);
 	  }
-	  free_skb (skb, FREE_READ);
+	  kfree_skb (skb, FREE_READ);
 	  release_sock(sk);
 	  return (0);
 	} */
@@ -2418,7 +2429,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	      sk->state = TCP_SYN_RECV;
 	    }
 
-	  free_skb (skb, FREE_READ);
+	  kfree_skb (skb, FREE_READ);
 	  release_sock(sk);
 	  return (0);
 	}
@@ -2429,7 +2440,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	  if (!tcp_ack(sk, th, saddr))
 	    {
 	      tcp_reset(daddr, saddr, th, sk->prot, opt,dev);
-	      free_skb (skb, FREE_READ);
+	      kfree_skb (skb, FREE_READ);
 	      release_sock(sk);
 	      return (0);
 	    }
@@ -2439,7 +2450,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	      
 	  if (!th->syn) 
 	    {
-	      free_skb (skb, FREE_READ);
+	      kfree_skb (skb, FREE_READ);
 	      release_sock (sk);
 	      return (0);
 	    }
@@ -2454,7 +2465,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	  if (!tcp_ack(sk, th, saddr))
 	    {
 	      tcp_reset(daddr, saddr, th, sk->prot, opt, dev);
-	      free_skb (skb, FREE_READ);
+	      kfree_skb (skb, FREE_READ);
 	      release_sock(sk);
 	      return (0);
 	    }
@@ -2477,12 +2488,12 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	  if (th->urg)
 	    if (tcp_urg (sk, th, saddr))
 	      {
-		 free_skb (skb, FREE_READ);
+		 kfree_skb (skb, FREE_READ);
 		 release_sock(sk);
 		 return (0);
 	      }
 	  if (tcp_data (skb, sk, saddr, len))
-	    free_skb (skb, FREE_READ);
+	    kfree_skb (skb, FREE_READ);
 	  
 	  if (th->fin)
 	    tcp_fin(sk, th, saddr, dev);
@@ -2495,7 +2506,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	{
 	  if (tcp_urg (sk, th, saddr))
 	    {
-	       free_skb (skb, FREE_READ);
+	       kfree_skb (skb, FREE_READ);
 	       release_sock (sk);
 	       return (0);
 	    }
@@ -2503,7 +2514,7 @@ tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 
       if (tcp_data (skb, sk, saddr, len))
 	{
-	   free_skb (skb, FREE_READ);
+	   kfree_skb (skb, FREE_READ);
 	   release_sock (sk);
 	   return (0);
 	}

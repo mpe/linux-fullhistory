@@ -35,7 +35,7 @@ int sys_syslog(int type, char * buf, int len)
 			i = log_page;
 			log_page = 0;
 			free_page(i);
-			wake_up(&log_wait);
+			wake_up_interruptible(&log_wait);
 			return 0;
 		case 1:
 			i = get_free_page(GFP_KERNEL);
@@ -97,7 +97,7 @@ int printk(const char *fmt, ...)
 			log_start++;
 	}
 	if (log_page)
-		wake_up(&log_wait);
+		wake_up_interruptible(&log_wait);
 	console_print(buf);
 	return i;
 }

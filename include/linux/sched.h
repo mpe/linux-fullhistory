@@ -71,6 +71,7 @@
 #define TASK_UNINTERRUPTIBLE	2
 #define TASK_ZOMBIE		3
 #define TASK_STOPPED		4
+#define TASK_SWAPPING		5
 
 #ifndef NULL
 #define NULL ((void *) 0)
@@ -270,7 +271,7 @@ extern void add_timer(long jiffies, void (*fn)(void));
 extern void sleep_on(struct wait_queue ** p);
 extern void interruptible_sleep_on(struct wait_queue ** p);
 extern void wake_up(struct wait_queue ** p);
-extern void wake_one_task(struct task_struct * p);
+extern void wake_up_interruptible(struct wait_queue ** p);
 
 extern int send_sig(long sig,struct task_struct * p,int priv);
 extern int in_group_p(gid_t grp);

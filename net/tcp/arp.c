@@ -19,6 +19,18 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
+/* $Id: arp.c,v 0.8.4.2 1992/11/10 10:38:48 bir7 Exp $ */
+/* $Log: arp.c,v $
+ * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
+ * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
+ *
+ * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
+ * version change only.
+ *
+ * Revision 0.8.3.3  1992/11/10  00:14:47  bir7
+ * Changed malloc to kmalloc and added $iId$
+ *
+ */
 
 #include <linux/types.h>
 #include <linux/string.h>
@@ -308,14 +320,14 @@ arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
   /* if this test doesn't pass, something fishy is going on. */
   if (arp->hlen != dev->addr_len || dev->type !=NET16( arp->hrd))
     {
-       free_skb(skb, FREE_READ);
+       kfree_skb(skb, FREE_READ);
        return (0);
     }
 
   /* for now we will only deal with ip addresses. */
   if (arp->pro != NET16(ARP_IP_PROT) || arp->plen != 4)
     {
-       free_skb (skb, FREE_READ);
+       kfree_skb (skb, FREE_READ);
        return (0);
     }
 
@@ -330,7 +342,7 @@ arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
   if (!my_ip_addr(*arp_targetp(arp)))
     {
-       free_skb (skb, FREE_READ);
+       kfree_skb (skb, FREE_READ);
        return (0);
     }
 
@@ -342,13 +354,13 @@ arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
      
   if (arp->op != NET16(ARP_REQUEST))
     {
-       free_skb (skb, FREE_READ);
+       kfree_skb (skb, FREE_READ);
        return (0);
     }
 
   /* now we need to create a new packet. */
    ret = arp_response(arp, dev);
-   free_skb (skb, FREE_READ);
+   kfree_skb (skb, FREE_READ);
    return (ret);
 }
 

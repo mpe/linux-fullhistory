@@ -19,6 +19,18 @@
     The Author may be reached as bir7@leland.stanford.edu or
     C/O Department of Mathematics; Stanford University; Stanford, CA 94305
 */
+/* $Id: ip.c,v 0.8.4.2 1992/11/10 10:38:48 bir7 Exp $ */
+/* $Log: ip.c,v $
+ * Revision 0.8.4.2  1992/11/10  10:38:48  bir7
+ * Change free_s to kfree_s and accidently changed free_skb to kfree_skb.
+ *
+ * Revision 0.8.4.1  1992/11/10  00:17:18  bir7
+ * version change only.
+ *
+ * Revision 0.8.3.3  1992/11/10  00:14:47  bir7
+ * Changed malloc to kmalloc and added $iId$ and 
+ *
+*/
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -688,7 +700,7 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
     {
        PRINTK ("ip packet thrown out. \n");
        skb->sk = NULL;
-       free_skb(skb, 0);
+       kfree_skb(skb, 0);
        return (0);
     }
 
@@ -697,7 +709,7 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
     {
        PRINTK ("packet meant for someone else.\n");
        skb->sk = NULL;
-       free_skb(skb, 0);
+       kfree_skb(skb, 0);
        return (0);
     }
 
@@ -706,7 +718,7 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
     {
        printk ("packet fragmented. \n");
        skb->sk = NULL;
-       free_skb(skb, 0);
+       kfree_skb(skb, 0);
        return(0);
     }
 
@@ -748,7 +760,7 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
     {
        icmp_reply (skb, ICMP_DEST_UNREACH, ICMP_PROT_UNREACH, dev);
        skb->sk = NULL;
-       free_skb (skb, 0);
+       kfree_skb (skb, 0);
     }
 
 
@@ -813,7 +825,7 @@ ip_queue_xmit (volatile struct sock *sk, struct device *dev,
   else
     {
        if (free) 
-	 free_skb (skb, FREE_WRITE);
+	 kfree_skb (skb, FREE_WRITE);
     }
 }
 
@@ -923,7 +935,7 @@ ip_handoff (volatile struct sock *sk)
 	p->handler ((unsigned char *)(skb+1), skb->dev, NULL, skb->saddr,
 		    skb->len, skb->daddr, p->protocol, 0);
      }
-   free_skb (skb, FREE_READ);
+   kfree_skb (skb, FREE_READ);
    release_sock (sk);
    return (0);
 }

@@ -15,7 +15,8 @@ static void cp_old_stat(struct inode * inode, struct old_stat * statbuf)
 {
 	struct old_stat tmp;
 
-	printk("Warning: using old stat() call. Recompile your binary.\n");
+	printk("Warning: %s using old stat() call. Recompile your binary.\n",
+		current->comm);
 	verify_area(statbuf,sizeof (*statbuf));
 	tmp.st_dev = inode->i_dev;
 	tmp.st_ino = inode->i_ino;

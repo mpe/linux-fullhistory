@@ -30,7 +30,17 @@
 #include <asm/bitops.h>
 
 #define WAKEUP_CHARS (3*TTY_BUF_SIZE/4)
-#define AUTO_IRQ
+
+/*
+ * Define this to get the AUTO_IRQ code..
+ */
+#undef AUTO_IRQ
+
+/*
+ * Define this to get support for the nonstandard
+ * serial lines.
+ */
+#undef NONSTANDARD_PORTS
 
 /*
  * rs_event		- Bitfield of serial lines that events pending
@@ -48,18 +58,21 @@ static unsigned long rs_write_active = 0;
 static async_ISR IRQ_ISR[16];
 
 static void UART_ISR_proc(async_ISR ISR, int line);
-static void FourPort_ISR_proc(async_ISR ISR, int line);
 
 struct struct_ISR COM1_ISR = { 4, 0x3f8, UART_ISR_proc, 0, };
 struct struct_ISR COM2_ISR = { 3, 0x2f8, UART_ISR_proc, 0, };
 struct struct_ISR COM3_ISR = { 4, 0x3e8, UART_ISR_proc, 0, };
 struct struct_ISR COM4_ISR = { 3, 0x2e8, UART_ISR_proc, 0, };
 
+#ifdef NONSTANDARD_PORTS
+static void FourPort_ISR_proc(async_ISR ISR, int line);
+
 struct struct_ISR FourPort1_ISR = { 2, 0x1bf, FourPort_ISR_proc, 0, };
 struct struct_ISR FourPort2_ISR = { 5, 0x2bf, FourPort_ISR_proc, 0, };
 
 struct struct_ISR Accent3_ISR = { 4, 0x330, UART_ISR_proc, 0, };
 struct struct_ISR Accent4_ISR = { 4, 0x338, UART_ISR_proc, 0, };
+#endif
 
 /*
  * This assumes you have a 1.8432 MHz clock for your UART.
@@ -75,7 +88,7 @@ struct async_struct rs_table[] = {
 	{ BASE_BAUD, 0x2F8, &COM2_ISR, 0, },
 	{ BASE_BAUD, 0x3E8, &COM3_ISR, 0, },
 	{ BASE_BAUD, 0x2E8, &COM4_ISR, 0, },
-	
+#ifdef NONSTANDARD_PORTS	
 	{ BASE_BAUD, 0x1A0, &FourPort1_ISR, ASYNC_FOURPORT },
 	{ BASE_BAUD, 0x1A8, &FourPort1_ISR, ASYNC_FOURPORT },
 	{ BASE_BAUD, 0x1B0, &FourPort1_ISR, ASYNC_FOURPORT },
@@ -88,6 +101,7 @@ struct async_struct rs_table[] = {
 
 	{ BASE_BAUD, 0x330, &Accent3_ISR, 0 },
 	{ BASE_BAUD, 0x338, &Accent4_ISR, 0 },
+#endif
 };
 
 #define NR_PORTS	(sizeof(rs_table)/sizeof(struct async_struct))
@@ -268,6 +282,7 @@ static void UART_ISR_proc(async_ISR ISR, int line)
 	} while (!(inb(UART_IIR + info->port) & UART_IIR_NO_INT));
 }
 
+#ifdef NONSTANDARD_PORTS
 /*
  * Here is the fourport ISR
  */
@@ -286,6 +301,7 @@ static void FourPort_ISR_proc(async_ISR ISR, int line)
 		ivec = ~inb(ISR->port) & 0x0F;
 	} while (ivec);
 }
+#endif
 
 /*
  * This is the serial driver's generic interrupt routine
@@ -342,7 +358,7 @@ static void rs_timer(void)
 				TTY_READ_FLUSH(info->tty);
 			}
 			if (!clear_bit(RS_EVENT_WRITE_WAKEUP, &info->event)) {
-				wake_up(&info->tty->write_q.proc_list);
+				wake_up_interruptible(&info->tty->write_q.proc_list);
 			}
 			if (!clear_bit(RS_EVENT_HUP_PGRP, &info->event)) {
 				if (info->tty->pgrp > 0)
@@ -1051,6 +1067,7 @@ long rs_init(long kmem_start)
 		if (irq_lines & (1 << i))
 			free_irq(i);
 	}
+	sti();
 #endif
 	return kmem_start;
 }
