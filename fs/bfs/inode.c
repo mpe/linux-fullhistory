@@ -243,7 +243,6 @@ void dump_imap(const char *prefix, struct super_block * s)
 
 	if (!tmpbuf)
 		return;
-	memset(tmpbuf, 0, 400);
 	for (i=s->su_lasti; i>=0; i--) {
 		if (i>PAGE_SIZE-100) break;
 		if (test_bit(i, s->su_imap))

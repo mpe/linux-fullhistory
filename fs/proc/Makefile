@@ -9,7 +9,7 @@
 
 O_TARGET := proc.o
 O_OBJS   := inode.o root.o base.o generic.o mem.o link.o fd.o array.o \
-		kmsg.o scsi.o proc_tty.o sysvipc.o proc_misc.o
+		kmsg.o scsi.o proc_tty.o sysvipc.o proc_misc.o kcore.o
 ifdef CONFIG_OMIRR
 O_OBJS   := $(O_OBJS) omirr.o
 endif

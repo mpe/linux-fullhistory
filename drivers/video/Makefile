@@ -161,6 +161,10 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_FB_RIVA),y)
+L_OBJS += rivafb.o riva_hw.o
+endif
+
 ifeq ($(CONFIG_FB_3DFX),y)
 L_OBJS += tdfxfb.o
 endif

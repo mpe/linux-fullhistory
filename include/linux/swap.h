@@ -122,17 +122,6 @@ extern struct swap_list_t swap_list;
 asmlinkage long sys_swapoff(const char *);
 asmlinkage long sys_swapon(const char *, int);
 
-/*
- * vm_ops not present page codes for shared memory.
- *
- * Will go away eventually..
- */
-#define SHM_SWP_TYPE 0x20
-
-/*
- * swap cache stuff (in linux/mm/swap_state.c)
- */
-
 #define SWAP_CACHE_INFO
 
 #ifdef SWAP_CACHE_INFO

@@ -78,70 +78,11 @@ static int open_kcore(struct inode * inode, struct file * filp)
 	return capable(CAP_SYS_RAWIO) ? 0 : -EPERM;
 }
 
-static ssize_t read_core(struct file * file, char * buf,
-			 size_t count, loff_t *ppos)
-{
-	unsigned long p = *ppos, memsize;
-	ssize_t read;
-	ssize_t count1;
-	char * pnt;
-	struct user dump;
-#if defined (__i386__) || defined (__mc68000__)
-#	define FIRST_MAPPED	PAGE_SIZE	/* we don't have page 0 mapped on x86.. */
-#else
-#	define FIRST_MAPPED	0
-#endif
-
-	memset(&dump, 0, sizeof(struct user));
-	dump.magic = CMAGIC;
-	dump.u_dsize = max_mapnr;
-#if defined (__i386__)
-	dump.start_code = PAGE_OFFSET;
-#endif
-#ifdef __alpha__
-	dump.start_data = PAGE_OFFSET;
-#endif
-
-	memsize = (max_mapnr + 1) << PAGE_SHIFT;
-	if (p >= memsize)
-		return 0;
-	if (count > memsize - p)
-		count = memsize - p;
-	read = 0;
-
-	if (p < sizeof(struct user) && count > 0) {
-		count1 = count;
-		if (p + count1 > sizeof(struct user))
-			count1 = sizeof(struct user)-p;
-		pnt = (char *) &dump + p;
-		copy_to_user(buf,(void *) pnt, count1);
-		buf += count1;
-		p += count1;
-		count -= count1;
-		read += count1;
-	}
-
-	if (count > 0 && p < PAGE_SIZE + FIRST_MAPPED) {
-		count1 = PAGE_SIZE + FIRST_MAPPED - p;
-		if (count1 > count)
-			count1 = count;
-		clear_user(buf, count1);
-		buf += count1;
-		p += count1;
-		count -= count1;
-		read += count1;
-	}
-	if (count > 0) {
-		copy_to_user(buf, (void *) (PAGE_OFFSET+p-PAGE_SIZE), count);
-		read += count;
-	}
-	*ppos += read;
-	return read;
-}
+extern ssize_t read_kcore(struct file *, char *, size_t, loff_t *);
 
 static struct file_operations proc_kcore_operations = {
 	NULL,           /* lseek */
-	read_core,
+	read_kcore,
 	NULL,		/* write */
 	NULL,		/* readdir */
 	NULL,		/* poll */

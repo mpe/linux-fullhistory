@@ -96,7 +96,7 @@ unsigned long drm_vm_dma_nopage(struct vm_area_struct *vma,
 	if (address > vma->vm_end) return 0; /* Disallow mremap */
 	if (!dma->pagelist)	   return 0; /* Nothing allocated */
 
-	offset	 = address - vma->vm_start; /* vm_offset should be 0 */
+	offset	 = address - vma->vm_start; /* vm_pgoff should be 0 */
 	page	 = offset >> PAGE_SHIFT;
 	physical = dma->pagelist[page] + (offset & (~PAGE_MASK));
 	atomic_inc(&mem_map[MAP_NR(physical)].count); /* Dec. by kernel */
@@ -168,8 +168,8 @@ int drm_mmap_dma(struct file *filp, struct vm_area_struct *vma)
 	drm_device_dma_t *dma	 = dev->dma;
 	unsigned long	 length	 = vma->vm_end - vma->vm_start;
 	
-	DRM_DEBUG("start = 0x%lx, end = 0x%lx, offset = 0x%lx\n",
-		  vma->vm_start, vma->vm_end, vma->vm_offset);
+	DRM_DEBUG("start = 0x%lx, end = 0x%lx, pgoff = 0x%lx\n",
+		  vma->vm_start, vma->vm_end, vma->vm_pgoff);
 
 				/* Length must match exact page count */
 	if ((length >> PAGE_SHIFT) != dma->page_count) return -EINVAL;
@@ -192,13 +192,17 @@ int drm_mmap(struct file *filp, struct vm_area_struct *vma)
 	drm_file_t	*priv	= filp->private_data;
 	drm_device_t	*dev	= priv->dev;
 	drm_map_t	*map	= NULL;
+	unsigned long	off;
 	int		i;
 	
 	DRM_DEBUG("start = 0x%lx, end = 0x%lx, offset = 0x%lx\n",
-		  vma->vm_start, vma->vm_end, vma->vm_offset);
+		  vma->vm_start, vma->vm_end, vma->vm_pgoff);
 
-	if (!vma->vm_offset) return drm_mmap_dma(filp, vma);
+	if (!vma->vm_pgoff) return drm_mmap_dma(filp, vma);
+	if (vma->vm_pgoff > (~0UL >> PAGE_SHIFT))	/* overflow? */
+		return -EINVAL;
 
+	off = vma->vm_pgoff << PAGE_SHIFT;
 				/* A sequential search of a linked list is
 				   fine here because: 1) there will only be
 				   about 5-10 entries in the list and, 2) a
@@ -208,7 +212,7 @@ int drm_mmap(struct file *filp, struct vm_area_struct *vma)
 				   bit longer. */
 	for (i = 0; i < dev->map_count; i++) {
 		map = dev->maplist[i];
-		if (map->offset == vma->vm_offset) break;
+		if (map->offset == off) break;
 	}
 	
 	if (i >= dev->map_count) return -EINVAL;
@@ -222,7 +226,7 @@ int drm_mmap(struct file *filp, struct vm_area_struct *vma)
 	switch (map->type) {
 	case _DRM_FRAME_BUFFER:
 	case _DRM_REGISTERS:
-		if (vma->vm_offset >= __pa(high_memory)) {
+		if (off >= __pa(high_memory)) {
 #if defined(__i386__)
 			if (boot_cpu_data.x86 > 3) {
 				pgprot_val(vma->vm_page_prot) |= _PAGE_PCD;
@@ -232,7 +236,7 @@ int drm_mmap(struct file *filp, struct vm_area_struct *vma)
 			vma->vm_flags |= VM_IO;	/* not in core dump */
 		}
 		if (remap_page_range(vma->vm_start,
-				     vma->vm_offset,
+				     off,
 				     vma->vm_end - vma->vm_start,
 				     vma->vm_page_prot))
 				return -EAGAIN;

@@ -48,7 +48,7 @@ struct poll_table_struct;
 extern int max_files, nr_files, nr_free_files;
 extern int max_super_blocks, nr_super_blocks;
 
-#define NR_FILE  4096	/* this can well be larger on a larger system */
+#define NR_FILE  8192	/* this can well be larger on a larger system */
 #define NR_RESERVED_FILES 10 /* reserved for root */
 #define NR_SUPER 256
 

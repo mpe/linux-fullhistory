@@ -3,9 +3,9 @@
  |                                                                           |
  | Implementation of the FPU "transcendental" functions.                     |
  |                                                                           |
- | Copyright (C) 1992,1993,1994,1997                                         |
+ | Copyright (C) 1992,1993,1994,1997,1999                                    |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail   billm@suburbia.net             |
+ |                       Australia.  E-mail   billm@melbpc.org.au            |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -85,7 +85,8 @@ static int trig_arg(FPU_REG *st0_ptr, int even)
 	  FPU_normalize(&tmp);
 	  tmptag =
 	    FPU_u_mul(&CONST_PI2extra, &tmp, &tmp, FULL_PRECISION, SIGN_POS,
-		      exponent16(&CONST_PI2extra) + exponent16(&tmp));
+		      exponent(&CONST_PI2extra) + exponent(&tmp));
+	  setsign(&tmp, getsign(&CONST_PI2extra));
 	  st0_tag = FPU_add(&tmp, tmptag, 0, FULL_PRECISION);
 	  if ( signnegative(st0_ptr) )
 	    {
@@ -117,7 +118,8 @@ static int trig_arg(FPU_REG *st0_ptr, int even)
 	  FPU_normalize(&tmp);         /* This must return TAG_Valid */
 	  tmptag = FPU_u_mul(&CONST_PI2extra, &tmp, &tmp, FULL_PRECISION,
 			     SIGN_POS,
-			     exponent16(&CONST_PI2extra) + exponent16(&tmp));
+			     exponent(&CONST_PI2extra) + exponent(&tmp));
+	  setsign(&tmp, getsign(&CONST_PI2extra));
 	  st0_tag = FPU_sub(LOADED|(tmptag & 0x0f), (int)&tmp,
 			    FULL_PRECISION);
 	  if ( (exponent(st0_ptr) == exponent(&CONST_PI2)) &&
@@ -827,18 +829,29 @@ static void rem_kernel(unsigned long long st0, unsigned long long *y,
 		       unsigned long long st1,
 		       unsigned long long q, int n)
 {
+  int dummy;
   unsigned long long x;
 
   x = st0 << n;
 
   /* Do the required multiplication and subtraction in the one operation */
-  asm volatile ("movl %2,%%eax; mull %4; subl %%eax,%0; sbbl %%edx,%1;
-                 movl %3,%%eax; mull %4; subl %%eax,%1;
-                 movl %2,%%eax; mull %5; subl %%eax,%1;"
-		:"=m" (x), "=m" (((unsigned *)&x)[1])
-		:"m" (st1),"m" (((unsigned *)&st1)[1]),
-		 "m" (q),"m" (((unsigned *)&q)[1])
-		:"%ax","%dx");
+
+  /* lsw x -= lsw st1 * lsw q */
+  asm volatile ("mull %4; subl %%eax,%0; sbbl %%edx,%1"
+		:"=m" (((unsigned *)&x)[0]), "=m" (((unsigned *)&x)[1]),
+		"=a" (dummy)
+		:"2" (((unsigned *)&st1)[0]), "m" (((unsigned *)&q)[0])
+		:"%dx");
+  /* msw x -= msw st1 * lsw q */
+  asm volatile ("mull %3; subl %%eax,%0"
+		:"=m" (((unsigned *)&x)[1]), "=a" (dummy)
+		:"1" (((unsigned *)&st1)[1]), "m" (((unsigned *)&q)[0])
+		:"%dx");
+  /* msw x -= lsw st1 * msw q */
+  asm volatile ("mull %3; subl %%eax,%0"
+		:"=m" (((unsigned *)&x)[1]), "=a" (dummy)
+		:"1" (((unsigned *)&st1)[0]), "m" (((unsigned *)&q)[1])
+		:"%dx");
 
   *y = x;
 }

@@ -40,6 +40,7 @@
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/init.h>
 #include <linux/logibusmouse.h>
 #include <linux/signal.h>
 #include <linux/errno.h>
@@ -49,7 +50,6 @@
 #include <linux/random.h>
 #include <linux/delay.h>
 #include <linux/ioport.h>
-#include <linux/init.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -61,15 +61,25 @@
 static int msedev;
 static int mouse_irq = MOUSE_IRQ;
 
-#ifdef MODULE
 MODULE_PARM(mouse_irq, "i");
-#endif
 
-void __init bmouse_setup(char *str, int *ints)
+#ifndef MODULE
+
+static int __init bmouse_setup(char *str)
 {
+	int ints[4];
+
+	str = get_options(str, ARRAY_SIZE(ints), ints);
+
 	if (ints[0] > 0)
 		mouse_irq=ints[1];
+
+	return 1;
 }
+
+__setup("logi_busmouse=", bmouse_setup);
+
+#endif /* !MODULE */
 
 static void mouse_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
@@ -118,7 +128,7 @@ static struct busmouse busmouse = {
 	LOGITECH_BUSMOUSE, "busmouse", open_mouse, close_mouse, 7
 };
 
-int __init logi_busmouse_init(void)
+static int __init logi_busmouse_init(void)
 {
 	if (check_region(LOGIBM_BASE, LOGIBM_EXTENT))
 		return -EIO;
@@ -142,16 +152,11 @@ int __init logi_busmouse_init(void)
 	return msedev < 0 ? msedev : 0;
 }
 
-#ifdef MODULE
-
-int init_module(void)
-{
-	return logi_busmouse_init();
-}
-
-void cleanup_module(void)
+static void __exit logi_busmouse_cleanup (void)
 {
 	unregister_busmouse(msedev);
 	release_region(LOGIBM_BASE, LOGIBM_EXTENT);
 }
-#endif
+
+module_init(logi_busmouse_init);
+module_exit(logi_busmouse_cleanup);

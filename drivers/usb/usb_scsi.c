@@ -1365,7 +1365,13 @@ int usb_scsi_init(void)
 	usb_zip_init();
 #endif
 
-	usb_register(&scsi_driver);
+	if (usb_register(&scsi_driver) < 0) {
+		printk(KERN_ERR "USB SCSI driver cannot register: "
+			"minor number %d already in use\n",
+			scsi_driver.minor);
+		return -1;
+	}
+
 	printk(KERN_INFO "USB SCSI support registered.\n");
 	return 0;
 }

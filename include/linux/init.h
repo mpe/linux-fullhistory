@@ -103,6 +103,8 @@ extern struct kernel_param __setup_start, __setup_end;
 #define module_exit(x)	void cleanup_module(void) { x(); }
 #endif
 
+#define __setup(str,func) /* nothing */
+
 #endif
 
 #if __GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8)
@@ -111,4 +113,4 @@ extern struct kernel_param __setup_start, __setup_end;
 #define __initlocaldata
 #endif
 
-#endif
+#endif /* _LINUX_INIT_H */

@@ -175,7 +175,7 @@ int expand_fdset(struct files_struct *files, int nr)
 	int error, nfds = 0;
 
 	error = -EMFILE;
-	if (files->max_fdset >= NR_OPEN || nr > NR_OPEN)
+	if (files->max_fdset >= NR_OPEN || nr >= NR_OPEN)
 		goto out;
 
 	nfds = files->max_fdset;
@@ -190,7 +190,7 @@ int expand_fdset(struct files_struct *files, int nr)
 			if (nfds > NR_OPEN)
 				nfds = NR_OPEN;
 		}
-	} while (nfds < nr);
+	} while (nfds <= nr);
 
 	error = -ENOMEM;
 	new_openset = alloc_fdset(nfds);

@@ -704,8 +704,8 @@ int ftape_mmap(struct vm_area_struct *vma)
 	if ((vma_get_flags(vma) & (VM_READ|VM_WRITE)) == 0) {
 		TRACE_ABORT(-EINVAL, ft_t_err, "Undefined mmap() access");
 	}
-	if (vma_get_offset (vma) != 0) {
-		TRACE_ABORT(-EINVAL, ft_t_err, "offset must be 0");
+	if (vma_get_pgoff(vma) != 0) {
+		TRACE_ABORT(-EINVAL, ft_t_err, "page offset must be 0");
 	}
 	if ((vma_get_end (vma) - vma_get_start (vma)) % FT_BUFF_SIZE != 0) {
 		TRACE_ABORT(-EINVAL, ft_t_err,

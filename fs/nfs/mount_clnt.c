@@ -119,7 +119,7 @@ static struct rpc_procinfo	mnt_procedures[2] = {
 	{ "mnt_mount",
 		(kxdrproc_t) xdr_encode_dirpath,	
 		(kxdrproc_t) xdr_decode_fhstatus,
-		MNT_dirpath_sz, MNT_fhstatus_sz },
+		MNT_dirpath_sz << 2, 0 },
 };
 
 static struct rpc_version	mnt_version1 = {

@@ -202,6 +202,12 @@ typedef struct page {
 #define SetPageReserved(page)		set_bit(PG_reserved, &(page)->flags)
 #define ClearPageReserved(page)		clear_bit(PG_reserved, &(page)->flags)
 
+/*
+ * Error return values for the *_nopage functions
+ */
+#define NOPAGE_SIGBUS	(NULL)
+#define NOPAGE_OOM	((struct page *) (-1))
+
 
 /*
  * Various page->flags bits:

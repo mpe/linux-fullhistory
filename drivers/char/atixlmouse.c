@@ -23,6 +23,7 @@
 #include <linux/random.h>
 #include <linux/poll.h>
 #include <linux/init.h>
+#include <linux/ioport.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
@@ -66,7 +67,7 @@
 
 static int msedev;
 
-void mouse_interrupt(int irq, void *dev_id, struct pt_regs * regs)
+static void mouse_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	char dx, dy, buttons;
 
@@ -102,9 +103,12 @@ static struct busmouse atixlmouse = {
 	ATIXL_BUSMOUSE, "atixl", open_mouse, release_mouse, 0
 };
 
-int __init atixl_busmouse_init(void)
+static int __init atixl_busmouse_init(void)
 {
 	unsigned char a,b,c;
+
+	if (check_region(ATIXL_MSE_DATA_PORT, 3))
+		return -EIO;
 
 	a = inb( ATIXL_MSE_SIGNATURE_PORT );	/* Get signature */
 	b = inb( ATIXL_MSE_SIGNATURE_PORT );
@@ -117,6 +121,8 @@ int __init atixl_busmouse_init(void)
 	outb(0x07, ATIXL_MSE_CONTROL_PORT);	/* Select Internal Register 7 */
 	outb(0x0a, ATIXL_MSE_DATA_PORT);	/* Data Interrupts 8+, 1=30hz, 2=50hz, 3=100hz, 4=200hz rate */
 
+	request_region(ATIXL_MSE_DATA_PORT, 3, "atixl");
+
 	msedev = register_busmouse(&atixlmouse);
 	if (msedev < 0)
 		printk("Bus mouse initialisation error.\n");
@@ -125,15 +131,12 @@ int __init atixl_busmouse_init(void)
 	return msedev < 0 ? msedev : 0;
 }
 
-#ifdef MODULE
-
-int init_module(void)
+static void __exit atixl_cleanup (void)
 {
-	return atixl_busmouse_init();
-}
-
-void cleanup_module(void)
-{
+	release_region(ATIXL_MSE_DATA_PORT, 3);
 	unregister_busmouse(msedev);
 }
-#endif
+
+module_init(atixl_busmouse_init);
+module_exit(atixl_cleanup);
+

@@ -423,7 +423,7 @@ int usb_printer_init(void)
 		printk(KERN_ERR "USB Printer driver cannot register: "
 			"minor number %d already in use\n",
 			printer_driver.minor);
-		return 1;
+		return -1;
 	}
 
 	printk(KERN_INFO "USB Printer support registered.\n");
@@ -433,7 +433,6 @@ int usb_printer_init(void)
 #ifdef MODULE
 int init_module(void)
 {
-
 	return usb_printer_init();
 }
 

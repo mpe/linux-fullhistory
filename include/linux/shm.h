@@ -3,6 +3,17 @@
 
 #include <linux/ipc.h>
 
+/*
+ * SHMMAX, SHMMNI and SHMALL are upper limits are defaults which can
+ * be increased by sysctl
+ */
+
+#define SHMMAX 0x2000000		 /* max shared seg size (bytes) */
+#define SHMMIN 1 /* really PAGE_SIZE */	 /* min shared seg size (bytes) */
+#define SHMMNI 128			 /* max num of segs system wide */
+#define SHMALL (SHMMAX/PAGE_SIZE*SHMMNI) /* max shm system wide (pages) */
+#define SHMSEG SHMMNI			 /* max shared segs per process */
+
 #include <asm/shmparam.h>
 
 struct shmid_ds {
@@ -17,15 +28,6 @@ struct shmid_ds {
 	unsigned short 		shm_unused;	/* compatibility */
 	void 			*shm_unused2;	/* ditto - used by DIPC */
 	void			*shm_unused3;	/* unused */
-};
-
-struct shmid_kernel
-{	
-	struct shmid_ds		u;
-	/* the following are private */
-	unsigned long		shm_npages;	/* size of segment (pages) */
-	pte_t			*shm_pages;	/* array of ptrs to frames -> SHMMAX */ 
-	struct vm_area_struct	*attaches;	/* descriptors for attaches */
 };
 
 /* permission flag for shmget */

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Aug 21 00:02:07 1997
- * Modified at:   Sat Oct  9 17:00:56 1999
+ * Modified at:   Sun Oct 31 22:10:45 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, 
@@ -60,7 +60,6 @@ static __u32 service_handle;
 
 extern char *lmp_reasons[];
 
-static struct iriap_cb *iriap_open( __u8 slsap, int mode);
 static void __iriap_close(struct iriap_cb *self);
 static void iriap_disconnect_indication(void *instance, void *sap, 
 					LM_REASON reason, struct sk_buff *skb);
@@ -115,7 +114,7 @@ int __init iriap_init(void)
 	 *  Register server support with IrLMP so we can accept incoming 
 	 *  connections 
 	 */
-	iriap_open(LSAP_IAS, IAS_SERVER);
+	iriap_open(LSAP_IAS, IAS_SERVER, NULL, NULL);
 	
 	return 0;
 }
@@ -139,7 +138,8 @@ void iriap_cleanup(void)
  *
  *    Opens an instance of the IrIAP layer, and registers with IrLMP
  */
-struct iriap_cb *iriap_open(__u8 slsap_sel, int mode)
+struct iriap_cb *iriap_open(__u8 slsap_sel, int mode, void *priv, 
+			    CONFIRM_CALLBACK callback)
 {
 	struct iriap_cb *self;
 	struct lsap_cb *lsap;
@@ -180,6 +180,9 @@ struct iriap_cb *iriap_open(__u8 slsap_sel, int mode)
 	self->lsap = lsap;
 	self->slsap_sel = slsap_sel;
 	self->mode = mode;
+
+	self->confirm = callback;
+	self->priv = priv;
 
 	init_timer(&self->watchdog_timer);
 
@@ -275,7 +278,7 @@ static void iriap_disconnect_indication(void *instance, void *sap,
 		iriap_do_client_event(self, IAP_LM_DISCONNECT_INDICATION, 
 				      NULL);
 		/* Close instance only if client */
-		iriap_close(self);
+		/* iriap_close(self); */
 		
 	} else {
 		IRDA_DEBUG(4, __FUNCTION__ "(), disconnect as server\n");
@@ -348,28 +351,21 @@ void iriap_getvalue(void)
  *    Retreive all values from attribute in all objects with given class
  *    name
  */
-void iriap_getvaluebyclass_request(char *name, char *attr, 
-				   __u32 saddr, __u32 daddr,
-				   CONFIRM_CALLBACK callback, void *priv)
+int iriap_getvaluebyclass_request(struct iriap_cb *self,
+				  __u32 saddr, __u32 daddr, 
+				  char *name, char *attr)
 {
 	struct sk_buff *skb;
-	struct iriap_cb *self;
 	int name_len, attr_len;
-	__u8 slsap = LSAP_ANY;  /* Source LSAP to use */
 	__u8 *frame;
+
+	ASSERT(self != NULL, return -1;);
+	ASSERT(self->magic == IAS_MAGIC, return -1;);
 
 	/* Client must supply the destination device address */
 	if (!daddr)
-		return;
+		return -1;
 	
-	self = iriap_open(slsap, IAS_CLIENT);
-	if (!self)
-		return;
-
-	self->mode = IAS_CLIENT;
-	self->confirm = callback;
-	self->priv = priv;
-
 	self->daddr = daddr;
 	self->saddr = saddr;
 
@@ -383,7 +379,7 @@ void iriap_getvaluebyclass_request(char *name, char *attr,
 	
 	skb = dev_alloc_skb(64);
 	if (!skb)
-		return;
+		return -ENOMEM;
 
 	name_len = strlen(name);
 	attr_len = strlen(attr);
@@ -401,6 +397,8 @@ void iriap_getvaluebyclass_request(char *name, char *attr,
 	memcpy(frame+3+name_len, attr, attr_len);  /* Insert attr */
 
 	iriap_do_client_event(self, IAP_CALL_REQUEST_GVBC, skb);
+
+	return 0;
 }
 
 /*
@@ -467,8 +465,9 @@ void iriap_getvaluebyclass_confirm(struct iriap_cb *self, struct sk_buff *skb)
 /* 		case CS_ISO_8859_9: */
 /* 		case CS_UNICODE: */
 		default:
-			IRDA_DEBUG(0, __FUNCTION__"(), charset %s, not supported\n",
-			      ias_charset_types[charset]);
+			IRDA_DEBUG(0, __FUNCTION__
+				   "(), charset %s, not supported\n",
+				   ias_charset_types[charset]);
 			return;
 			/* break; */
 		}
@@ -761,7 +760,7 @@ static int iriap_data_indication(void *instance, void *sap,
 	if (self->mode == IAS_SERVER) {
 		/* Call server */
 		IRDA_DEBUG(4, __FUNCTION__ "(), Calling server!\n");
-		iriap_do_r_connect_event( self, IAP_RECV_F_LST, skb);
+		iriap_do_r_connect_event(self, IAP_RECV_F_LST, skb);
 
 		return 0;
 	}
@@ -779,12 +778,14 @@ static int iriap_data_indication(void *instance, void *sap,
 	}
 
 	opcode &= ~IAP_LST; /* Mask away LST bit */
-	
+
 	switch (opcode) {
 	case GET_INFO_BASE:
 		IRDA_DEBUG(0, "IrLMP GetInfoBaseDetails not implemented!\n");
 		break;
 	case GET_VALUE_BY_CLASS:
+		iriap_do_call_event(self, IAP_RECV_F_LST, skb);
+			
 		switch (frame[1]) {
 		case IAS_SUCCESS:
 			iriap_getvaluebyclass_confirm(self, skb);
@@ -793,7 +794,7 @@ static int iriap_data_indication(void *instance, void *sap,
 			WARNING(__FUNCTION__ "(), No such class!\n");
 			/* Finished, close connection! */
 			iriap_disconnect_request(self);
-
+			
 			if (self->confirm)
 				self->confirm(IAS_CLASS_UNKNOWN, 0, NULL, 
 					      self->priv);
@@ -808,16 +809,12 @@ static int iriap_data_indication(void *instance, void *sap,
 					      self->priv);
 			break;
 		}
-		iriap_do_call_event(self, IAP_RECV_F_LST, skb);
-
-		/*  
-		 *  We remove LSAPs used by IrIAS as a client since these
-		 *  are more difficult to reuse!  
-		 */
-		iriap_close(self);
+		
+	/* 	iriap_close(self); */
 		break;
 	default:
-		IRDA_DEBUG(0, __FUNCTION__ "(), Unknown op-code: %02x\n", opcode);
+		IRDA_DEBUG(0, __FUNCTION__ "(), Unknown op-code: %02x\n", 
+			   opcode);
 		break;
 	}
 	return 0;
@@ -874,7 +871,7 @@ void iriap_watchdog_timer_expired(void *data)
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IAS_MAGIC, return;);
 
-	iriap_close(self);
+	/* iriap_close(self); */
 }
 
 #ifdef CONFIG_PROC_FS

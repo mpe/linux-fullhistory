@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Jun  7 10:25:11 1999
- * Modified at:   Mon Oct  4 09:36:53 1999
+ * Modified at:   Sat Oct 30 13:05:42 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -106,13 +106,13 @@ int ircomm_param_request(struct ircomm_tty_cb *self, __u8 pi, int flush)
 	struct sk_buff *skb;
 	int count;
 
-	DEBUG(2, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
 	ASSERT(self != NULL, return -1;);
 	ASSERT(self->magic == IRCOMM_TTY_MAGIC, return -1;);
 
 	if (self->state != IRCOMM_TTY_READY) {
-		DEBUG(2, __FUNCTION__ "(), not ready yet!\n");
+		IRDA_DEBUG(2, __FUNCTION__ "(), not ready yet!\n");
 		return 0;
 	}
 
@@ -142,7 +142,7 @@ int ircomm_param_request(struct ircomm_tty_cb *self, __u8 pi, int flush)
 	count = irda_param_insert(self, pi, skb->tail, skb_tailroom(skb),
 				  &ircomm_param_info);
 	if (count < 0) {
-		DEBUG(0, __FUNCTION__ "(), no room for parameter!\n");
+		IRDA_DEBUG(0, __FUNCTION__ "(), no room for parameter!\n");
 		restore_flags(flags);
 		return -1;
 	}
@@ -180,30 +180,30 @@ static int ircomm_param_service_type(void *instance, param_t *param, int get)
 	 * Now choose a preferred service type of those available
 	 */
 	if (service_type & IRCOMM_3_WIRE_RAW) {
-		DEBUG(2, __FUNCTION__ "(), peer supports 3 wire raw\n");
+		IRDA_DEBUG(2, __FUNCTION__ "(), peer supports 3 wire raw\n");
 		self->session.service_type |= IRCOMM_3_WIRE_RAW;
 	}
 	if (service_type & IRCOMM_3_WIRE) {
-		DEBUG(2, __FUNCTION__ "(), peer supports 3 wire\n");
+		IRDA_DEBUG(2, __FUNCTION__ "(), peer supports 3 wire\n");
 		self->session.service_type |= IRCOMM_3_WIRE;
 	}
 	if (service_type & IRCOMM_9_WIRE) {
-		DEBUG(2, __FUNCTION__ "(), peer supports 9 wire\n");
+		IRDA_DEBUG(2, __FUNCTION__ "(), peer supports 9 wire\n");
 		self->session.service_type |= IRCOMM_9_WIRE;
 	}
 	if (service_type & IRCOMM_CENTRONICS) {
-		DEBUG(2, __FUNCTION__ "(), peer supports Centronics\n");
+		IRDA_DEBUG(2, __FUNCTION__ "(), peer supports Centronics\n");
 		self->session.service_type |= IRCOMM_CENTRONICS;
 	}
 	
 	self->session.service_type &= self->service_type;
 	if (!self->session.service_type) {
-		DEBUG(2, __FUNCTION__"(), No common service type to use!\n");
+		IRDA_DEBUG(2, __FUNCTION__"(), No common service type to use!\n");
 		return -1;
 	}
 	
-	DEBUG(2, __FUNCTION__ "(), resulting service type=0x%02x\n", 
-	      self->session.service_type);
+	IRDA_DEBUG(2, __FUNCTION__ "(), resulting service type=0x%02x\n", 
+		   self->session.service_type);
 
 	return 0;
 }
@@ -227,8 +227,8 @@ static int ircomm_param_port_type(void *instance, param_t *param, int get)
 	else {
 		self->session.port_type = param->pv.b;
 
-		DEBUG(0, __FUNCTION__ "(), port type=%d\n", 
-		      self->session.port_type);
+		IRDA_DEBUG(0, __FUNCTION__ "(), port type=%d\n", 
+			   self->session.port_type);
 	}
 	return 0;
 }
@@ -247,9 +247,9 @@ static int ircomm_param_port_name(void *instance, param_t *param, int get)
 	ASSERT(self->magic == IRCOMM_TTY_MAGIC, return -1;);
 
 	if (get) {
-		DEBUG(0, __FUNCTION__ "(), not imp!\n");
+		IRDA_DEBUG(0, __FUNCTION__ "(), not imp!\n");
 	} else {
-		DEBUG(0, __FUNCTION__ "(), port-name=%s\n", param->pv.c);
+		IRDA_DEBUG(0, __FUNCTION__ "(), port-name=%s\n", param->pv.c);
 		strncpy(self->session.port_name, param->pv.c, 32);
 	}
 
@@ -274,7 +274,7 @@ static int ircomm_param_data_rate(void *instance, param_t *param, int get)
 	else
 		self->session.data_rate = param->pv.i;
 	
-	DEBUG(2, __FUNCTION__ "(), data rate = %d\n", param->pv.i);
+	IRDA_DEBUG(2, __FUNCTION__ "(), data rate = %d\n", param->pv.i);
 
 	return 0;
 }
@@ -318,7 +318,7 @@ static int ircomm_param_flow_control(void *instance, param_t *param, int get)
 	else
 		self->session.flow_control = param->pv.b;
 
-	DEBUG(1, __FUNCTION__ "(), flow control = 0x%02x\n", param->pv.b);
+	IRDA_DEBUG(1, __FUNCTION__ "(), flow control = 0x%02x\n", param->pv.b);
 
 	return 0;
 }
@@ -344,8 +344,8 @@ static int ircomm_param_xon_xoff(void *instance, param_t *param, int get)
 		self->session.xonxoff[1] = param->pv.s >> 8;
 	}
 
-	DEBUG(0, __FUNCTION__ "(), XON/XOFF = 0x%02x\n,0x%02x", 
-	      param->pv.s & 0xff, param->pv.s >> 8);
+	IRDA_DEBUG(0, __FUNCTION__ "(), XON/XOFF = 0x%02x\n,0x%02x", 
+		   param->pv.s & 0xff, param->pv.s >> 8);
 
 	return 0;
 }
@@ -371,8 +371,8 @@ static int ircomm_param_enq_ack(void *instance, param_t *param, int get)
 		self->session.enqack[1] = param->pv.s >> 8;
 	}
 
-	DEBUG(0, __FUNCTION__ "(), ENQ/ACK = 0x%02x,0x%02x\n",
-	      param->pv.s & 0xff, param->pv.s >> 8);
+	IRDA_DEBUG(0, __FUNCTION__ "(), ENQ/ACK = 0x%02x,0x%02x\n",
+		   param->pv.s & 0xff, param->pv.s >> 8);
 
 	return 0;
 }
@@ -385,7 +385,7 @@ static int ircomm_param_enq_ack(void *instance, param_t *param, int get)
  */
 static int ircomm_param_line_status(void *instance, param_t *param, int get)
 {
-	DEBUG(2, __FUNCTION__ "(), not impl.\n");
+	IRDA_DEBUG(2, __FUNCTION__ "(), not impl.\n");
 
 	return 0;
 }
@@ -444,7 +444,7 @@ static int ircomm_param_dce(void *instance, param_t *param, int get)
 	struct ircomm_tty_cb *self = (struct ircomm_tty_cb *) instance;
 	__u8 dce;
 
-	DEBUG(1, __FUNCTION__ "(), dce = 0x%02x\n", param->pv.b);
+	IRDA_DEBUG(1, __FUNCTION__ "(), dce = 0x%02x\n", param->pv.b);
 
 	dce = param->pv.b;
 
@@ -456,7 +456,7 @@ static int ircomm_param_dce(void *instance, param_t *param, int get)
 	/* Check if any of the settings have changed */
 	if (dce & 0x0f) {
 		if (dce & IRCOMM_DELTA_CTS) {
-			DEBUG(2, __FUNCTION__ "(), CTS \n");
+			IRDA_DEBUG(2, __FUNCTION__ "(), CTS \n");
 		}
 	}
 

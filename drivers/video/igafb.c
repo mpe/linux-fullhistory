@@ -261,8 +261,6 @@ static int igafb_mmap(struct fb_info *info, struct file *file,
 		return -ENXIO;
 
 	size = vma->vm_end - vma->vm_start;
-	if (vma->vm_offset & ~PAGE_MASK)
-		return -ENXIO;
 
 	/* To stop the swapper from even considering these pages. */
 	vma->vm_flags |= (VM_SHM | VM_LOCKED);
@@ -271,17 +269,17 @@ static int igafb_mmap(struct fb_info *info, struct file *file,
 	for (page = 0; page < size; ) {
 		map_size = 0;
 		for (i = 0; fb->mmap_map[i].size; i++) {
-			unsigned long start = fb->mmap_map[i].voff;
-			unsigned long end = start + fb->mmap_map[i].size;
-			unsigned long offset = vma->vm_offset + page;
+			unsigned long start = (fb->mmap_map[i].voff) >> PAGE_SHIFT;
+			unsigned long end = start + (fb->mmap_map[i].size) >> PAGE_SHIFT;
+			unsigned long offset = vma->vm_pgoff + (page >> PAGE_SHIFT);
 
 			if (start > offset)
 				continue;
 			if (offset >= end)
 				continue;
 
-			map_size = fb->mmap_map[i].size - (offset - start);
-			map_offset = fb->mmap_map[i].poff + (offset - start);
+			map_size = fb->mmap_map[i].size - ((offset - start) << PAGE_SHIFT);
+			map_offset = fb->mmap_map[i].poff + ((offset - start) << PAGE_SHIFT);
 			break;
 		}
 		if (!map_size) {

@@ -51,7 +51,7 @@ static int bfs_readdir(struct file * f, void * dirent, filldir_t filldir)
 
 	while (f->f_pos < dir->i_size) {
 		offset = f->f_pos & (BFS_BSIZE-1);
-		block = dir->iu_sblock + f->f_pos/BFS_BSIZE;
+		block = dir->iu_sblock + (f->f_pos >> BFS_BSIZE_BITS);
 		bh = bread(dev, block, BFS_BSIZE);
 		if (!bh) {
 			f->f_pos += BFS_BSIZE - offset;

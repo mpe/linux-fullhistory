@@ -29,7 +29,7 @@
  * PPP driver, written by Michael Callahan and Al Longyear, and
  * subsequently hacked by Paul Mackerras.
  *
- * ==FILEVERSION 991014==
+ * ==FILEVERSION 991018==
  */
 
 /* $Id: ppp_synctty.c,v 1.3 1999/09/02 05:30:10 paulus Exp $ */
@@ -95,6 +95,67 @@ static void ppp_sync_input(struct syncppp *ap, const unsigned char *buf,
 struct ppp_channel_ops sync_ops = {
 	ppp_sync_send
 };
+
+/*
+ * Utility procedures to print a buffer in hex/ascii
+ */
+static void
+ppp_print_hex (register __u8 * out, const __u8 * in, int count)
+{
+	register __u8 next_ch;
+	static char hex[] = "0123456789ABCDEF";
+
+	while (count-- > 0) {
+		next_ch = *in++;
+		*out++ = hex[(next_ch >> 4) & 0x0F];
+		*out++ = hex[next_ch & 0x0F];
+		++out;
+	}
+}
+
+static void
+ppp_print_char (register __u8 * out, const __u8 * in, int count)
+{
+	register __u8 next_ch;
+
+	while (count-- > 0) {
+		next_ch = *in++;
+
+		if (next_ch < 0x20 || next_ch > 0x7e)
+			*out++ = '.';
+		else {
+			*out++ = next_ch;
+			if (next_ch == '%')   /* printk/syslogd has a bug !! */
+				*out++ = '%';
+		}
+	}
+	*out = '\0';
+}
+
+static void
+ppp_print_buffer (const char *name, const __u8 *buf, int count)
+{
+	__u8 line[44];
+
+	if (name != NULL)
+		printk(KERN_DEBUG "ppp_synctty: %s, count = %d\n", name, count);
+
+	while (count > 8) {
+		memset (line, 32, 44);
+		ppp_print_hex (line, buf, 8);
+		ppp_print_char (&line[8 * 3], buf, 8);
+		printk(KERN_DEBUG "%s\n", line);
+		count -= 8;
+		buf += 8;
+	}
+
+	if (count > 0) {
+		memset (line, 32, 44);
+		ppp_print_hex (line, buf, count);
+		ppp_print_char (&line[8 * 3], buf, count);
+		printk(KERN_DEBUG "%s\n", line);
+	}
+}
 
 /*
  * Routines for locking and unlocking the transmit and receive paths.
@@ -523,6 +584,10 @@ ppp_sync_txdequeue(struct syncppp *ap)
 		 */
 		islcp = proto == PPP_LCP && 1 <= data[2] && data[2] <= 7;
 
+		/* compress protocol field if option enabled */
+                if (data[0] == 0 && (ap->flags & SC_COMP_PROT) && !islcp)
+			skb_pull(skb,1);
+
 		/* prepend address/control fields if necessary */
 		if ((ap->flags & SC_COMP_AC) == 0 || islcp) {
 			if (skb_headroom(skb) < 2) {
@@ -536,7 +601,7 @@ ppp_sync_txdequeue(struct syncppp *ap)
 				kfree_skb(skb);
 				skb = npkt;
 			}
-			skb_pull(skb,2);
+			skb_push(skb,2);
 			skb->data[0] = PPP_ALLSTATIONS;
 			skb->data[1] = PPP_UI;
 		}
@@ -544,6 +609,9 @@ ppp_sync_txdequeue(struct syncppp *ap)
 		ap->last_xmit = jiffies;
 		break;
 	}
+
+	if (skb && ap->flags & SC_LOG_OUTPKT)
+		ppp_print_buffer ("send buffer", skb->data, skb->len);
 
 	return skb;
 }
@@ -567,7 +635,7 @@ ppp_sync_send(struct ppp_channel *chan, struct sk_buff *skb)
 
 	if (test_and_set_bit(XMIT_FULL, &ap->busy))
 		return 0;	/* already full */
-	ap->tpkt = skb;
+	skb_queue_head(&ap->xq,skb);
 
 	ppp_sync_push(ap);
 	return 1;
@@ -729,6 +797,9 @@ ppp_sync_input(struct syncppp *ap, const unsigned char *buf,
 		input_error(ap, *flags);
 		return;
 	}
+
+	if (ap->flags & SC_LOG_INPKT)
+		ppp_print_buffer ("receive buffer", buf, count);
 
 	/* stuff the chars in the skb */
 	if ((skb = ap->rpkt) == 0) {

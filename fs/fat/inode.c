@@ -530,7 +530,7 @@ fat_read_super(struct super_block *sb, void *data, int silent,
 		}
 		if (MSDOS_SB(sb)->fsinfo_offset + sizeof(struct fat_boot_fsinfo) > sb->s_blocksize) {
 			printk("fat_read_super: Bad fsinfo_offset\n");
-			fat_brelse(sb, bh);
+			brelse(bh);
 			goto out_invalid;
 		}
 		fsinfo = (struct fat_boot_fsinfo *)

@@ -162,27 +162,27 @@ static int i2ob_send(u32 m, struct i2ob_device *dev, struct i2ob_request *ireq, 
 	int count = req->nr_sectors<<9;
 
 	/* Map the message to a virtual address */
-	msg = bus_to_virt(c->mem_offset + m);
+	msg = c->mem_offset + m;
 	
 	/*
          * Build the message based on the request.
 	 */
-	msg[2] = i2ob_context|(unit<<8);
-	msg[3] = ireq->num;
-	msg[5] = req->nr_sectors << 9;
+	__raw_writel(i2ob_context|(unit<<8), &msg[2]);
+	__raw_writel(ireq->num, &msg[3]);
+	__raw_writel(req->nr_sectors << 9, &msg[5]);
 	
 	/* This can be optimised later - just want to be sure its right for
 	   starters */
 	offset = ((u64)(req->sector+base)) << 9;
-	msg[6] = offset & 0xFFFFFFFF;
-	msg[7] = (offset>>32);
+	__raw_writel( offset & 0xFFFFFFFF, &msg[6]);
+	__raw_writel(offset>>32, &msg[7]);
 	mptr=msg+8;
 	
 	if(req->cmd == READ)
 	{
-		msg[1] = I2O_CMD_BLOCK_READ<<24|HOST_TID<<12|tid;
+		__raw_writel(I2O_CMD_BLOCK_READ<<24|HOST_TID<<12|tid, &msg[1]);
 		/* We don't yet do cache/readahead and other magic */
-		msg[4] = 1<<16;	
+		__raw_writel(1<<16, &msg[4]);
 		while(bh!=NULL)
 		{
 			/*
@@ -191,31 +191,31 @@ static int i2ob_send(u32 m, struct i2ob_device *dev, struct i2ob_request *ireq, 
 			 *	sucky to read.
 			 */
 			if(bh->b_reqnext)
-				*mptr++ = 0x10000000|(bh->b_size);
+				__raw_writel(0x10000000|(bh->b_size), mptr++);
 			else
-				*mptr++ = 0xD0000000|(bh->b_size);
+				__raw_writel(0xD0000000|(bh->b_size), mptr++);
 	
-			*mptr++ = virt_to_bus(bh->b_data);
+			__raw_writel(virt_to_bus(bh->b_data), mptr++);
 			count -= bh->b_size;
 			bh = bh->b_reqnext;
 		}
 	}
 	else if(req->cmd == WRITE)
 	{
-		msg[1] = I2O_CMD_BLOCK_WRITE<<24|HOST_TID<<12|tid;
-		msg[4] = 1<<16;
+		__raw_writel(I2O_CMD_BLOCK_WRITE<<24|HOST_TID<<12|tid, &msg[1]);
+		__raw_writel(1<<16, &msg[4]);
 		while(bh!=NULL)
 		{
 			if(bh->b_reqnext)
-				*mptr++ = 0x14000000|(bh->b_size);
+				__raw_writel(0x14000000|(bh->b_size), mptr++);
 			else
-				*mptr++ = 0xD4000000|(bh->b_size);
+				__raw_writel(0xD4000000|(bh->b_size), mptr++);
 			count -= bh->b_size;
-			*mptr++ = virt_to_bus(bh->b_data);
+			__raw_writel(virt_to_bus(bh->b_data), mptr++);
 			bh = bh->b_reqnext;
 		}
 	}
-	msg[0] = I2O_MESSAGE_SIZE(mptr-msg) | SGL_OFFSET_8;
+	__raw_writel(I2O_MESSAGE_SIZE(mptr-msg) | SGL_OFFSET_8, &msg[0]);
 	
 	if(req->current_nr_sectors > 8)
 		printk("Gathered sectors %ld.\n", 

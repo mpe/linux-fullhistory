@@ -76,7 +76,7 @@ static struct busmouse atarimouse = {
 	ATARIMOUSE_MINOR, "atarimouse", open_mouse, release_mouse, 0
 };
 
-int __init atari_mouse_init(void)
+static int __init atari_mouse_init(void)
 {
     if (!MACH_IS_ATARI)
 	return -ENODEV;
@@ -89,42 +89,50 @@ int __init atari_mouse_init(void)
 }
 
 
+#ifndef MODULE
+
 #define	MIN_THRESHOLD 1
 #define	MAX_THRESHOLD 20	/* more seems not reasonable... */
 
-void __init atari_mouse_setup( char *str, int *ints )
+static int __init atari_mouse_setup( char *str )
 {
+    int ints[8];
+
+    str = get_options(str, ARRAY_SIZE(ints), ints);
+
     if (ints[0] < 1) {
-	printk( "atari_mouse_setup: no arguments!\n" );
-	return;
+	printk(KERN_ERR "atari_mouse_setup: no arguments!\n" );
+	return 0;
     }
     else if (ints[0] > 2) {
-	printk( "atari_mouse_setup: too many arguments\n" );
+	printk(KERN_WARNING "atari_mouse_setup: too many arguments\n" );
     }
 
     if (ints[1] < MIN_THRESHOLD || ints[1] > MAX_THRESHOLD)
-	printk( "atari_mouse_setup: bad threshold value (ignored)\n" );
+	printk(KERN_WARNING "atari_mouse_setup: bad threshold value (ignored)\n" );
     else {
 	mouse_threshold[0] = ints[1];
 	mouse_threshold[1] = ints[1];
 	if (ints[0] > 1) {
 	    if (ints[2] < MIN_THRESHOLD || ints[2] > MAX_THRESHOLD)
-		printk("atari_mouse_setup: bad threshold value (ignored)\n" );
+		printk(KERN_WARNING "atari_mouse_setup: bad threshold value (ignored)\n" );
 	    else
 		mouse_threshold[1] = ints[2];
 	}
     }
-	
+
+    return 1;
 }
 
-#ifdef MODULE
-int init_module(void)
-{
-	return atari_mouse_init();
-}
+__setup("atarimouse=",atari_mouse_setup);
 
-void cleanup_module(void)
+#endif /* !MODULE */
+
+static void __exit atari_mouse_cleanup (void)
 {
 	unregister_busmouse(msedev);
 }
-#endif
+
+module_init(atari_mouse_init);
+module_exit(atari_mouse_cleanup);
+

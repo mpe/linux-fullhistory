@@ -190,7 +190,7 @@ Table 1-3: Kernel info in /proc
  ide         Directory containing info about the IDE subsystem 
  interrupts  Interrupt usage                                   
  ioports     I/O port usage                                    
- kcore       Kernel core image                                 
+ kcore       Kernel core image (can be ELF or A.OUT)           
  kmsg        Kernel messages                                   
  ksyms       Kernel symbol table                               
  loadavg     Load average                                      

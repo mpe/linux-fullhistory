@@ -183,7 +183,7 @@ static struct busmouse amigamouse = {
 	AMIGAMOUSE_MINOR, "amigamouse", open_mouse, release_mouse, 7
 };
 
-int __init amiga_mouse_init(void)
+static int __init amiga_mouse_init(void)
 {
 	if (!MACH_IS_AMIGA || !AMIGAHW_PRESENT(AMI_MOUSE))
 		return -ENODEV;
@@ -200,12 +200,10 @@ int __init amiga_mouse_init(void)
 	return msedev < 0 ? msedev : 0;
 }
 
-void __exit amiga_mouse_exit(void)
+static void __exit amiga_mouse_exit(void)
 {
 	unregister_busmouse(msedev);
 }
 
-#ifdef MODULE
-module_init(amiga_mouse_init)
-module_exit(amiga_mouse_exit)
-#endif
+module_init(amiga_mouse_init);
+module_exit(amiga_mouse_exit);

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Nov  7 21:43:15 1998
- * Modified at:   Wed Oct 20 00:08:41 1999
+ * Modified at:   Sat Oct 30 16:24:17 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>
@@ -1143,7 +1143,8 @@ static void pc87108_pio_receive(struct pc87108 *self)
 	/*  Receive all characters in Rx FIFO */
 	do {
 		byte = inb(iobase+RXD);
-		async_unwrap_char(self->netdev, &self->rx_buff, byte);
+		async_unwrap_char(self->netdev, &self->stats, &self->rx_buff, 
+				  byte);
 
 	} while (inb(iobase+LSR) & LSR_RXDA); /* Data available */	
 }

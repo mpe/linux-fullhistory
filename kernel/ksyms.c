@@ -192,6 +192,7 @@ EXPORT_SYMBOL(posix_lock_file);
 EXPORT_SYMBOL(posix_test_lock);
 EXPORT_SYMBOL(posix_block_lock);
 EXPORT_SYMBOL(posix_unblock_lock);
+EXPORT_SYMBOL(locks_mandatory_area);
 EXPORT_SYMBOL(dput);
 EXPORT_SYMBOL(put_cached_page);
 EXPORT_SYMBOL(is_root_busy);

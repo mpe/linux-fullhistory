@@ -45,7 +45,7 @@ running, the suggested command should tell you.
 
 - Kernel modutils	 2.3.6                   ; insmod -V
 - Gnu C 		 2.7.2.3                 ; gcc --version
-- Binutils		 2.8.1.0.23              ; ld -v
+- Binutils		 2.9.1.0.7               ; ld -v
 - Linux libc5 C Library	 5.4.46                  ; ls -l /lib/libc*
 - Linux libc6 C Library  2.0.7pre6               ; ls -l /lib/libc*
 - Dynamic Linker (ld.so) 1.9.9                   ; ldd --version or ldd -v
@@ -183,13 +183,10 @@ Binutils
 to find out the proper way to upgrade it.  No, the instruction to "rm
 `which encaps`" is not a joke.
 
-   The last public release of the binutils 2.8.x series was 2.8.1.0.23.
-Binutils 2.8.1.0.25 to 2.9.1.0.2 are beta releases, and are known to be
-very buggy.  Binutils 2.9.1 (note the absence of a suffix) from the FSF
-should work, and binutils 2.9.1.0.7 and later releases are also good.
-Either use binutils-2.8.1.0.23 or binutils-2.9.1.0.7 or later.  Glibc2
-users should especially try to use the 2.9.1.0.x releases, as they
-resolve known issues with glibc2 and binutils-2.8.x releases.
+   You must use binutils 2.9.1.0.7 or later. Latest release is 2.9.1.0.25.
+Beware that binutils 2.9.1 (note the absence of a suffix) from the FSF
+does not work. If you are upgrading from earlier versions, you should
+consider upgrading to the latest 2.9.5.0.x release.
 
 Gnu C
 =====
@@ -503,23 +500,16 @@ Where to get the files
 Binutils
 ========
 
-The 2.8.1.0.23 release:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.8.1.0.23.bin.tar.gz
-ftp://metalab.unc.edu/pub/Linux/GCC/binutils-2.8.1.0.23.bin.tar.gz
+The 2.9.1.0.25 release:
+ftp://ftp.varesearch.com/pub/support/hjl/binutils/2.9.1/binutils-2.9.1.0.25-glibc.x86.tar.gz
+ftp://ftp.varesearch.com/pub/support/hjl/binutils/2.9.1/binutils-2.9.1.0.25.tar.gz
 Installation notes:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.binutils-2.8.1.0.23
-ftp://metalab.unc.edu/pub/Linux/GCC/release.binutils-2.8.1.0.23
+ftp://ftp.varesearch.com/pub/support/hjl/binutils/2.9.1/release.binutils-2.9.1.0.25
 
-The 2.9.1.0.15 release:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.9.1.0.15-glibc.x86.tar.gz
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.9.1.0.15-libc5.x86.tar.gz
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.9.1.0.15.tar.gz
-ftp://metalab.unc.edu/pub/Linux/GCC/binutils-2.9.1.0.15-glibc.x86.tar.gz
-ftp://metalab.unc.edu/pub/Linux/GCC/binutils-2.9.1.0.15-libc5.x86.tar.gz
-ftp://metalab.unc.edu/pub/Linux/GCC/binutils-2.9.1.0.15.tar.gz
+The 2.9.5.0.16 release:
+ftp://ftp.varesearch.com/pub/support/hjl/binutils/binutils-2.9.5.0.16.tar.bz2
 Installation notes:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.binutils-2.9.1.0.15
-ftp://metalab.unc.edu/pub/Linux/GCC/release.binutils-2.9.1.0.15
+ftp://ftp.varesearch.com/pub/support/hjl/binutils/release.binutils-2.9.5.0.16
 
 Gnu C
 =====

@@ -410,7 +410,13 @@ int usb_mouse_init(void)
 	init_waitqueue_head(&mouse->wait);
 	mouse->fasync = NULL;
 
-	usb_register(&mouse_driver);
+	if (usb_register(&mouse_driver) < 0) {
+		printk(KERN_ERR "USB mouse driver cannot register: "
+			"minor number %d already in use\n",
+			mouse_driver.minor);
+		return -1;
+	}
+
 	printk(KERN_INFO "USB HID boot protocol mouse driver registered.\n");
 	return 0;
 }

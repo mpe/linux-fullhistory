@@ -9,9 +9,7 @@
 #ifndef __ASM_PROC_SHMPARAM_H
 #define __ASM_PROC_SHMPARAM_H
 
-#ifndef SHM_RANGE_START
-#define SHM_RANGE_START	0x00a00000
-#define SHM_RANGE_END	0x00c00000
+#ifndef SHMMAX
 #define SHMMAX		0x003fa000
 #endif
 

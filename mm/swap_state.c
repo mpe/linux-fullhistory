@@ -68,8 +68,6 @@ int swap_duplicate(swp_entry_t entry)
 	if (!entry.val)
 		goto out;
 	type = SWP_TYPE(entry);
-	if (type & SHM_SWP_TYPE)
-		goto out;
 	if (type >= nr_swapfiles)
 		goto bad_file;
 	p = type + swap_info;
@@ -115,8 +113,6 @@ int swap_count(struct page *page)
 	if (!entry.val)
 		goto bad_entry;
 	type = SWP_TYPE(entry);
-	if (type & SHM_SWP_TYPE)
-		goto out;
 	if (type >= nr_swapfiles)
 		goto bad_file;
 	p = type + swap_info;

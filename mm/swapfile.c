@@ -135,8 +135,6 @@ void swap_free(swp_entry_t entry)
 		goto out;
 
 	type = SWP_TYPE(entry);
-	if (type & SHM_SWP_TYPE)
-		goto out;
 	if (type >= nr_swapfiles)
 		goto bad_nofile;
 	p = & swap_info[type];
@@ -190,8 +188,6 @@ swp_entry_t acquire_swap_entry(struct page *page)
 		goto new_swap_entry;
 	entry.val = page->index;
 	type = SWP_TYPE(entry);
-	if (type & SHM_SWP_TYPE)
-		goto new_swap_entry;
 	if (type >= nr_swapfiles)
 		goto new_swap_entry;
 	p = type + swap_info;

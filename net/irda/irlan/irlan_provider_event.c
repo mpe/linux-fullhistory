@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Fri May  7 10:53:58 1999
+ * Modified at:   Sat Oct 30 12:52:41 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -72,7 +72,7 @@ void irlan_do_provider_event(struct irlan_cb *self, IRLAN_EVENT event,
 static int irlan_provider_state_idle(struct irlan_cb *self, IRLAN_EVENT event,
 				     struct sk_buff *skb)
 {
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 	
 	ASSERT(self != NULL, return -1;);
 	
@@ -82,7 +82,7 @@ static int irlan_provider_state_idle(struct irlan_cb *self, IRLAN_EVENT event,
 	     irlan_next_provider_state( self, IRLAN_INFO);
 	     break;
 	default:
-		DEBUG(4, __FUNCTION__ "(), Unknown event %d\n", event);
+		IRDA_DEBUG(4, __FUNCTION__ "(), Unknown event %d\n", event);
 		break;
 	}
 	if (skb)
@@ -101,7 +101,7 @@ static int irlan_provider_state_info(struct irlan_cb *self, IRLAN_EVENT event,
 {
 	int ret;
 
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 	
 	ASSERT(self != NULL, return -1;);
 
@@ -147,7 +147,7 @@ static int irlan_provider_state_info(struct irlan_cb *self, IRLAN_EVENT event,
 		irlan_next_provider_state(self, IRLAN_IDLE);
 		break;
 	default:
-		DEBUG( 0, __FUNCTION__ "(), Unknown event %d\n", event);
+		IRDA_DEBUG( 0, __FUNCTION__ "(), Unknown event %d\n", event);
 		break;
 	}
 	if (skb)
@@ -166,7 +166,7 @@ static int irlan_provider_state_info(struct irlan_cb *self, IRLAN_EVENT event,
 static int irlan_provider_state_open(struct irlan_cb *self, IRLAN_EVENT event, 
 				     struct sk_buff *skb)
 {
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
 	ASSERT(self != NULL, return -1;);
 
@@ -186,7 +186,7 @@ static int irlan_provider_state_open(struct irlan_cb *self, IRLAN_EVENT event,
 		irlan_next_provider_state(self, IRLAN_IDLE);
 		break;
 	default:
-		DEBUG(2, __FUNCTION__ "(), Unknown event %d\n", event);
+		IRDA_DEBUG(2, __FUNCTION__ "(), Unknown event %d\n", event);
 		break;
 	}
 	if (skb)
@@ -205,7 +205,7 @@ static int irlan_provider_state_open(struct irlan_cb *self, IRLAN_EVENT event,
 static int irlan_provider_state_data(struct irlan_cb *self, IRLAN_EVENT event, 
 				     struct sk_buff *skb) 
 {
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
 	ASSERT(self != NULL, return -1;);
 	ASSERT(self->magic == IRLAN_MAGIC, return -1;);
@@ -221,7 +221,7 @@ static int irlan_provider_state_data(struct irlan_cb *self, IRLAN_EVENT event,
 		irlan_next_provider_state(self, IRLAN_IDLE);
 		break;
 	default:
-		DEBUG( 0, __FUNCTION__ "(), Unknown event %d\n", event);
+		IRDA_DEBUG( 0, __FUNCTION__ "(), Unknown event %d\n", event);
 		break;
 	}
 	if (skb)

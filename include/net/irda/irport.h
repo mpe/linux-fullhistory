@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug  3 13:49:59 1997
- * Modified at:   Mon Oct 18 12:55:07 1999
+ * Modified at:   Sat Oct 30 19:54:07 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997, 1998-1999 Dag Brattli <dagb@cs.uit.no>
@@ -51,13 +51,9 @@
 #define FRAME_MAX_SIZE 2048
 
 struct irport_cb {
-	queue_t q;     /* Must be first */
-	magic_t magic;
-
 	struct net_device *netdev; /* Yes! we are some kind of netdevice */
 	struct net_device_stats stats;
 
-	struct tty_struct  *tty;
 	struct irlap_cb    *irlap; /* The link layer we are binded to */
 
 	struct chipio_t io;        /* IrDA controller information */
@@ -78,6 +74,7 @@ void irport_start(struct irport_cb *self, int iobase);
 void irport_stop(struct irport_cb *self, int iobase);
 int  irport_probe(int iobase);
 
+void __irport_change_speed(struct irport_cb *self, __u32 speed);
 void irport_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 int  irport_hard_xmit(struct sk_buff *skb, struct net_device *dev);
 

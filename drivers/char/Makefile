@@ -322,6 +322,10 @@ endif
 
 ifeq ($(CONFIG_RTC),y)
 O_OBJS += rtc.o
+else
+  ifeq ($(CONFIG_RTC),m)
+    M_OBJS += rtc.o
+  endif
 endif
 
 ifeq ($(CONFIG_NVRAM),y)
@@ -362,16 +366,6 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_VIDEO_SAA5249),y)
-O_OBJS += saa5249.o
-L_I2C=y
-else
-  ifeq ($(CONFIG_VIDEO_SAA5249),m)
-    M_OBJS += saa5249.o
-    M_I2C=y
-  endif
-endif
-
 ifeq ($(CONFIG_I2C_PARPORT),y)
 O_OBJS += i2c-parport.o
 L_I2C = y
@@ -382,11 +376,13 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_VIDEO_BWQCAM),y)
-O_OBJS += bw-qcam.o
+ifeq ($(CONFIG_VIDEO_SAA5249),y)
+O_OBJS += saa5249.o
+L_I2C=y
 else
-  ifeq ($(CONFIG_VIDEO_BWQCAM),m)
-    M_OBJS += bw-qcam.o
+  ifeq ($(CONFIG_VIDEO_SAA5249),m)
+    M_OBJS += saa5249.o
+    M_I2C=y
   endif
 endif
 
@@ -395,6 +391,14 @@ O_OBJS += c-qcam.o
 else
   ifeq ($(CONFIG_VIDEO_CQCAM),m)
     M_OBJS += c-qcam.o
+  endif
+endif
+
+ifeq ($(CONFIG_VIDEO_BWQCAM),y)
+O_OBJS += bw-qcam.o
+else
+  ifeq ($(CONFIG_VIDEO_BWQCAM),m)
+    M_OBJS += bw-qcam.o
   endif
 endif
 

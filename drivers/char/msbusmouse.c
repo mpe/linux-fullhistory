@@ -56,15 +56,25 @@
 static int msedev;
 static int mouse_irq = MOUSE_IRQ;
 
-#ifdef MODULE
 MODULE_PARM(mouse_irq, "i");
-#endif
 
-void __init msmouse_setup(char *str, int *ints)
+#ifndef MODULE
+
+static int __init msmouse_setup(char *str)
 {
+        int ints[4];
+
+        str = get_options(str, ARRAY_SIZE(ints), ints);
+
 	if (ints[0] > 0)
 		mouse_irq=ints[1];
+
+	return 1;
 }
+
+__setup("msmouse=",msmouse_setup);
+
+#endif /* !MODULE */
 
 static void ms_mouse_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
@@ -117,7 +127,7 @@ static struct busmouse msbusmouse = {
 	MICROSOFT_BUSMOUSE, "msbusmouse", open_mouse, release_mouse, 0
 };
 
-int __init ms_bus_mouse_init(void)
+static int __init ms_bus_mouse_init(void)
 {
 	int present = 0;
 	int mse_byte, i;
@@ -151,7 +161,7 @@ int __init ms_bus_mouse_init(void)
 	return msedev < 0 ? msedev : 0;
 }
 
-void ms_bus_mouse_exit(void)
+static void __exit ms_bus_mouse_exit(void)
 {
 	unregister_busmouse(msedev);
 	release_region(MS_MSE_CONTROL_PORT, 0x04);

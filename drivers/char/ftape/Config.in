@@ -5,7 +5,7 @@ dep_tristate '  Zftape, the VFS interface' CONFIG_ZFTAPE $CONFIG_FTAPE
 if [ "$CONFIG_ZFTAPE" != "n" ]; then
    int '  Default block size' CONFIG_ZFT_DFLT_BLK_SZ 10240
    comment '  The compressor will be built as a module only!'
-   define_bool CONFIG_ZFT_COMPRESSOR m
+   define_tristate CONFIG_ZFT_COMPRESSOR m
 fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
    int '  Number of ftape buffers (EXPERIMENTAL)' CONFIG_FT_NR_BUFFERS 3

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Dec  9 21:13:12 1997
- * Modified at:   Tue Oct 19 21:12:54 1999
+ * Modified at:   Sun Oct 31 14:45:20 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -116,7 +116,6 @@ struct irda_sock {
 	__u32 saddr;          /* my local address */
 	__u32 daddr;          /* peer address */
 
-	struct ias_object *ias_obj;
 	struct tsap_cb *tsap; /* TSAP used by this connection */
 	__u8 dtsap_sel;       /* remote TSAP address */
 	__u8 stsap_sel;       /* local TSAP address */
@@ -132,6 +131,9 @@ struct irda_sock {
 
 	__u32 ckey;           /* IrLMP client handle */
 	__u32 skey;           /* IrLMP service handle */
+
+	struct ias_object *ias_obj;
+	struct iriap_cb *iriap;
 
 	int nslots;           /* Number of slots to use for discovery */
 

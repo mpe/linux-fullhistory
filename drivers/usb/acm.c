@@ -592,7 +592,13 @@ int usb_acm_init(void)
 	}
 	
 	//REGISTER USB DRIVER
-	usb_register(&acm_driver);
+	if (usb_register(&acm_driver) < 0) {
+		tty_unregister_driver(&acm_tty_driver);
+		printk(KERN_ERR "USB acm driver cannot register: "
+			"minor number %d already in use\n",
+			acm_driver.minor);
+		return -1;
+	}
 
 	printk(KERN_INFO "USB ACM registered.\n");
 	return 0;

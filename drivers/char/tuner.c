@@ -40,6 +40,8 @@ struct tuner
 	int type;            /* chip type */
 	int freq;            /* keep track of the current settings */
 	int radio;
+
+	int mode;            /* PAL(0)/SECAM(1) mode (PHILIPS_SECAM only) */
 };
 
 /* ---------------------------------------------------------------------- */
@@ -58,6 +60,11 @@ struct tunertype
 	unsigned char config; 
 	unsigned char I2C;
 	unsigned short IFPCoff;
+
+	unsigned char mode; /* mode change value (tested PHILIPS_SECAM only) */
+			/* 0x01 -> ??? no change ??? */
+			/* 0x02 -> PAL BDGHI / SECAM L */
+			/* 0x04 -> ??? PAL others / SECAM others ??? */
 };
 
 /*
@@ -73,7 +80,7 @@ static struct tunertype tuners[] = {
 	{"Philips NTSC", Philips, NTSC,
 	        16*157.25,16*451.25,0xA0,0x90,0x30,0x8e,0xc0,732},
 	{"Philips SECAM", Philips, SECAM,
-	        16*168.25,16*447.25,0xA7,0x97,0x37,0x8e,0xc0,623},
+	        16*168.25,16*447.25,0xA7,0x97,0x37,0x8e,0xc0,623,0x02},
 	{"NoTuner", NoTuner, NOTUNER,
 	         0        ,0        ,0x00,0x00,0x00,0x00,0x00,000},
 	{"Philips PAL", Philips, PAL,
@@ -100,6 +107,7 @@ static int tuner_getstatus (struct tuner *t)
 
 #define TUNER_POR       0x80
 #define TUNER_FL        0x40
+#define TUNER_MODE      0x38
 #define TUNER_AFC       0x07
 
 static int tuner_islocked (struct tuner *t)
@@ -111,7 +119,6 @@ static int tuner_afcstatus (struct tuner *t)
 {
         return (tuner_getstatus (t) & TUNER_AFC) - 2;
 }
-
 
 static void set_tv_freq(struct tuner *t, int freq)
 {
@@ -133,15 +140,43 @@ static void set_tv_freq(struct tuner *t, int freq)
 	else
 		config = tun->UHF;
 
+	if (t->type == TUNER_PHILIPS_SECAM && t->mode)
+		config |= tun->mode;
+	else
+		config &= ~tun->mode;
+
 	div=freq + tun->IFPCoff;
   	div&=0x7fff;
 
 	LOCK_I2C_BUS(t->bus);
-	if (i2c_write(t->bus, t->addr, (div>>8)&0x7f, div&0xff, 1)<0) {
-	    printk("tuner: i2c i/o error #1\n");
+	if (t->type == TUNER_PHILIPS_SECAM && freq < t->freq) {
+	    /*
+	     * Philips FI1216MK2 remark from specification :
+	     * for channel selection involving band switching, and to ensure
+	     * smooth tuning to the desired channel without causing
+	     * unnecessary charge pump action, it is recommended to consider
+	     * the difference between wanted channel frequency and the
+	     * current channel frequency.  Unnecessary charge pump action
+	     * will result in very low tuning voltage which may drive the
+	     * oscillator to extreme conditions.
+	     */
+	    /*
+	     * Progfou: specification says to send config data before
+	     * frequency in case (wanted frequency < current frequency).
+	     */
+	    if (i2c_write(t->bus, t->addr, tun->config, config, 1)) {
+		printk("tuner: i2c i/o error #1\n");
+	    } else {
+		if (i2c_write(t->bus, t->addr, (div>>8)&0x7f, div&0xff, 1)<0)
+		    printk("tuner: i2c i/o error #2\n");
+	    }
 	} else {
-	    if (i2c_write(t->bus, t->addr, tun->config, config, 1))
-		printk("tuner: i2c i/o error #2\n");
+	    if (i2c_write(t->bus, t->addr, (div>>8)&0x7f, div&0xff, 1)<0) {
+		printk("tuner: i2c i/o error #1\n");
+	    } else {
+		if (i2c_write(t->bus, t->addr, tun->config, config, 1))
+		    printk("tuner: i2c i/o error #2\n");
+	    }
 	}
 	UNLOCK_I2C_BUS(t->bus);
 }
@@ -258,6 +293,16 @@ static int tuner_command(struct i2c_device *device,
 			t->freq = *iarg;
 			break;
 	    
+		case TUNER_SET_MODE:
+			if (t->type != TUNER_PHILIPS_SECAM) {
+				dprintk("tuner: trying to change mode for other than TUNER_PHILIPS_SECAM\n");
+			} else {
+				dprintk("tuner: mode set to %d\n", *iarg);
+				t->mode = *iarg;
+				set_tv_freq(t,t->freq);
+			}
+			break;
+
 		default:
 			return -EINVAL;
 	}

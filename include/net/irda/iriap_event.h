@@ -6,10 +6,10 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Fri Sep  4 13:19:28 1998
+ * Modified at:   Sun Oct 31 22:02:54 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
+ *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -65,20 +65,21 @@ typedef enum {
 	IAP_LM_CONNECT_CONFIRM,
 } IRIAP_EVENT;
 
-void iriap_next_client_state   ( struct iriap_cb *self, IRIAP_STATE state);
-void iriap_next_call_state     ( struct iriap_cb *self, IRIAP_STATE state);
-void iriap_next_server_state   ( struct iriap_cb *self, IRIAP_STATE state);
-void iriap_next_r_connect_state( struct iriap_cb *self, IRIAP_STATE state);
+void iriap_next_client_state   (struct iriap_cb *self, IRIAP_STATE state);
+void iriap_next_call_state     (struct iriap_cb *self, IRIAP_STATE state);
+void iriap_next_server_state   (struct iriap_cb *self, IRIAP_STATE state);
+void iriap_next_r_connect_state(struct iriap_cb *self, IRIAP_STATE state);
 
 
-void iriap_do_client_event( struct iriap_cb *self, IRIAP_EVENT event, 
-			    struct sk_buff *skb);
-void iriap_do_call_event  ( struct iriap_cb *self, IRIAP_EVENT event, 
-			    struct sk_buff *skb);
+void iriap_do_client_event(struct iriap_cb *self, IRIAP_EVENT event, 
+			   struct sk_buff *skb);
+void iriap_do_call_event  (struct iriap_cb *self, IRIAP_EVENT event, 
+			   struct sk_buff *skb);
 
-void iriap_do_server_event   ( struct iriap_cb *self, IRIAP_EVENT event, 
-			       struct sk_buff *skb);
-void iriap_do_r_connect_event( struct iriap_cb *self, IRIAP_EVENT event, 
-			       struct sk_buff *skb);
+void iriap_do_server_event   (struct iriap_cb *self, IRIAP_EVENT event, 
+			      struct sk_buff *skb);
+void iriap_do_r_connect_event(struct iriap_cb *self, IRIAP_EVENT event, 
+			      struct sk_buff *skb);
 
-#endif
+#endif /* IRIAP_FSM_H */
+

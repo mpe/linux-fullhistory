@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Dec 15 13:58:52 1997
- * Modified at:   Tue Oct  5 10:26:46 1999
+ * Modified at:   Sun Oct 31 20:01:17 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  *
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -42,10 +42,10 @@ typedef enum {
 	EVENT_REQUEST_MODULE,
 	EVENT_IRLAN_START,
 	EVENT_IRLAN_STOP,
-	EVENT_IRLPT_START,
-	EVENT_IRLPT_STOP,
-	EVENT_IROBEX_START,
-	EVENT_IROBEX_STOP,
+	EVENT_IRLPT_START,  /* Obsolete */
+	EVENT_IRLPT_STOP,   /* Obsolete */
+	EVENT_IROBEX_START, /* Obsolete */
+	EVENT_IROBEX_STOP,  /* Obsolete */
 	EVENT_IRDA_STOP,
 	EVENT_NEED_PROCESS_CONTEXT,
 } IRMGR_EVENT;

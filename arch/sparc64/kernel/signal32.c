@@ -1226,7 +1226,7 @@ static inline void read_maps (void)
 			ino = map->vm_file->f_dentry->d_inode->i_ino;
 			line = d_path(map->vm_file->f_dentry, buffer, PAGE_SIZE);
 		}
-		printk(MAPS_LINE_FORMAT, map->vm_start, map->vm_end, str, map->vm_offset,
+		printk(MAPS_LINE_FORMAT, map->vm_start, map->vm_end, str, map->vm_pgoff << PAGE_SHIFT,
 			      kdevname(dev), ino);
 		if (map->vm_file != NULL)
 			printk("%s\n", line);

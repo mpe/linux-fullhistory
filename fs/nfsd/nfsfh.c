@@ -279,6 +279,7 @@ find_fh_dentry(struct super_block *sb, struct knfs_fh *fh, int needpath)
 	/* It's a directory, or we are required to confirm the file's
 	 * location in the tree.
 	 */
+	dprintk("nfs_fh: need to look harder for %d/%d\n",sb->s_dev,fh->fh_ino);
 	found = 0;
 	if (!S_ISDIR(result->d_inode->i_mode)) {
 		if (fh->fh_dirino == 0)
@@ -381,60 +382,69 @@ fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, int type, int access)
 		fh->fh_ino,
 		fh->fh_dirino);
 
-	/*
-	 * Security: Check that the fh is internally consistant (from <gam3@acm.org>)
-	 */
-	if (fh->fh_dev != fh->fh_xdev) {
-		printk("fh_verify: Security: export on other device (%s, %s).\n",
-			kdevname(fh->fh_dev), kdevname(fh->fh_xdev));
-		error = nfserr_stale;
-		nfsdstats.fh_stale++;
-		goto out;
+	if (!fhp->fh_dverified) {
+		/*
+		 * Security: Check that the fh is internally consistant (from <gam3@acm.org>)
+		 */
+		if (fh->fh_dev != fh->fh_xdev) {
+			printk("fh_verify: Security: export on other device (%s, %s).\n",
+			       kdevname(fh->fh_dev), kdevname(fh->fh_xdev));
+			error = nfserr_stale;
+			nfsdstats.fh_stale++;
+			goto out;
+		}
+
+		/*
+		 * Look up the export entry.
+		 */
+		error = nfserr_stale; 
+		exp = exp_get(rqstp->rq_client,
+			      u32_to_kdev_t(fh->fh_xdev),
+			      u32_to_ino_t(fh->fh_xino));
+		if (!exp) {
+			/* export entry revoked */
+			nfsdstats.fh_stale++;
+			goto out;
+		}
+
+		/* Check if the request originated from a secure port. */
+		error = nfserr_perm;
+		if (!rqstp->rq_secure && EX_SECURE(exp)) {
+			printk(KERN_WARNING
+			       "nfsd: request from insecure port (%08lx:%d)!\n",
+			       ntohl(rqstp->rq_addr.sin_addr.s_addr),
+			       ntohs(rqstp->rq_addr.sin_port));
+			goto out;
+		}
+
+		/* Set user creds if we haven't done so already. */
+		nfsd_setuser(rqstp, exp);
+
+		/*
+		 * Look up the dentry using the NFS file handle.
+		 */
+
+		dentry = find_fh_dentry(exp->ex_dentry->d_inode->i_sb,
+					fh,
+					!(exp->ex_flags & NFSEXP_NOSUBTREECHECK));
+
+		if (IS_ERR(dentry)) {
+			error = nfserrno(-PTR_ERR(dentry));
+			goto out;
+		}
+
+		fhp->fh_dentry = dentry;
+		fhp->fh_export = exp;
+		fhp->fh_dverified = 1;
+		nfsd_nr_verified++;
+	} else {
+		/* just rechecking permissions
+		 * (e.g. nfsproc_create calls fh_verify, then nfsd_create does as well)
+		 */
+		dprintk("nfsd: fh_verify - just checking\n");
+		dentry = fhp->fh_dentry;
+		exp = fhp->fh_export;
 	}
-
-	/*
-	 * Look up the export entry.
-	 */
-	error = nfserr_stale;
-	exp = exp_get(rqstp->rq_client,
-		      u32_to_kdev_t(fh->fh_xdev),
-		      u32_to_ino_t(fh->fh_xino));
-	if (!exp) {
-		/* export entry revoked */
-		nfsdstats.fh_stale++;
-		goto out;
-	}
-
-	/* Check if the request originated from a secure port. */
-	error = nfserr_perm;
-	if (!rqstp->rq_secure && EX_SECURE(exp)) {
-		printk(KERN_WARNING
-			"nfsd: request from insecure port (%08lx:%d)!\n",
-				ntohl(rqstp->rq_addr.sin_addr.s_addr),
-				ntohs(rqstp->rq_addr.sin_port));
-		goto out;
-	}
-
-	/* Set user creds if we haven't done so already. */
-	nfsd_setuser(rqstp, exp);
-
-	/*
-	 * Look up the dentry using the NFS file handle.
-	 */
-
-	dentry = find_fh_dentry(exp->ex_dentry->d_inode->i_sb,
-				fh,
-				!(exp->ex_flags & NFSEXP_NOSUBTREECHECK));
-
-	if (IS_ERR(dentry)) {
-		error = nfserrno(-PTR_ERR(dentry));
-		goto out;
-	}
-
-	fhp->fh_dentry = dentry;
-	fhp->fh_export = exp;
-	fhp->fh_dverified = 1;
-	nfsd_nr_verified++;
 
 	inode = dentry->d_inode;
 

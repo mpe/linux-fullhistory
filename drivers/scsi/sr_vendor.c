@@ -158,7 +158,9 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 	if (scsi_CDs[minor].cdi.mask & CDC_MULTI_SESSION)
 		return 0;
 	
+	spin_lock_irq(&io_request_lock);
 	buffer = (unsigned char *) scsi_malloc(512);
+	spin_unlock_irq(&io_request_lock);
 	if(!buffer) return -ENOMEM;
 	
 	sector   = 0;         /* the multisession sector offset goes here  */

@@ -53,7 +53,7 @@ int usb_register(struct usb_driver *new_driver)
 	printk("usbcore: Registering new driver %s\n", new_driver->name);
 	if (new_driver->fops != NULL) {
 		if (usb_minors[new_driver->minor/16])
-			BUG();
+			return USB_ST_NOTSUPPORTED;
 		usb_minors[new_driver->minor/16] = new_driver;
 	}
 
@@ -259,7 +259,7 @@ void usb_register_bus(struct usb_bus *bus)
 		set_bit(busnum, busmap.busmap);
 		bus->busnum = busnum;
 	} else
-		printk(KERN_INFO "usb: too many bus'\n");
+		printk(KERN_INFO "usb: too many buses\n");
 
 	proc_usb_add_bus(bus);
 
@@ -496,7 +496,7 @@ static int usb_parse_endpoint(struct usb_device *dev, struct usb_endpoint_descri
 		}
 
 		/* If we find another descriptor which is at or below us */
-		/*  in the descriptor heirarchy then return */
+		/*  in the descriptor hierarchy then return */
 		if ((header->bDescriptorType == USB_DT_ENDPOINT) ||
 		    (header->bDescriptorType == USB_DT_INTERFACE) ||
 		    (header->bDescriptorType == USB_DT_CONFIG) ||
@@ -574,7 +574,7 @@ static int usb_parse_interface(struct usb_device *dev, struct usb_interface *int
 			}
 
 			/* If we find another descriptor which is at or below us */
-			/*  in the descriptor heirarchy then return */
+			/*  in the descriptor hierarchy then return */
 			if ((header->bDescriptorType == USB_DT_INTERFACE) ||
 			    (header->bDescriptorType == USB_DT_ENDPOINT))
 				break;
@@ -1479,6 +1479,9 @@ EXPORT_SYMBOL(usb_deregister_bus);
 EXPORT_SYMBOL(usb_alloc_dev);
 EXPORT_SYMBOL(usb_free_dev);
 EXPORT_SYMBOL(usb_inc_dev_use);
+
+EXPORT_SYMBOL(usb_driver_claim_interface);
+EXPORT_SYMBOL(usb_driver_release_interface);
 
 EXPORT_SYMBOL(usb_init_root_hub);
 EXPORT_SYMBOL(usb_new_device);

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Jun  6 23:24:22 1999
- * Modified at:   Tue Oct  5 12:01:07 1999
+ * Modified at:   Sun Oct 31 19:50:35 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -75,6 +75,8 @@ struct ircomm_tty_cb {
 
 	__u32 max_data_size;
 	__u32 max_header_size;
+
+	struct iriap_cb *iriap;
 
 	struct ias_object* obj;
 	int skey;

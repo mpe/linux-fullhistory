@@ -55,12 +55,13 @@ flash_mmap(struct file *file, struct vm_area_struct *vma)
 			return -ENXIO;
 	}
 
-	if (vma->vm_offset > size)
+	if (vma->vm_pgoff > (size >> PAGE_SHIFT))
 		return -ENXIO;
-	addr += vma->vm_offset;
+	off = vma->vm_pgoff << PAGE_SHIFT;
+	addr += off;
 
-	if (vma->vm_end - (vma->vm_start + vma->vm_offset) > size)
-		size = vma->vm_end - (vma->vm_start + vma->vm_offset);
+	if (vma->vm_end - (vma->vm_start + off) > size)
+		size = vma->vm_end - (vma->vm_start + off);
 
 	pgprot_val(vma->vm_page_prot) &= ~(_PAGE_CACHE);
 	pgprot_val(vma->vm_page_prot) |= _PAGE_E;

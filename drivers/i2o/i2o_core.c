@@ -714,15 +714,15 @@ static int i2o_query_scalar_polled(struct i2o_controller *c, int tid, void *buf,
 		return -ENOMEM;
 	}
 
-	msg[0]=NINE_WORD_MSG_SIZE|SGL_OFFSET_5;
-	msg[1]=I2O_CMD_UTIL_PARAMS_GET<<24|HOST_TID<<12|tid;
-	msg[2]=0;			/* Context */
-	msg[3]=0;
-	msg[4]=0;
-	msg[5]=0x54000000|12;
-	msg[6]=virt_to_bus(op);
-	msg[7]=0xD0000000|(32+buflen);
-	msg[8]=virt_to_bus(rbuf);
+	__raw_writel(NINE_WORD_MSG_SIZE|SGL_OFFSET_5, &msg[0]);
+	__raw_writel(I2O_CMD_UTIL_PARAMS_GET<<24|HOST_TID<<12|tid, &msg[1]);
+	__raw_writel(0, &msg[2]);			/* Context */
+	__raw_writel(0, &msg[3]);
+	__raw_writel(0, &msg[4]);
+	__raw_writel(0x54000000|12, &msg[5]);
+	__raw_writel(virt_to_bus(op), &msg[6]);
+	__raw_writel(0xD0000000|(32+buflen), &msg[7]);
+	__raw_writel(virt_to_bus(rbuf), &msg[8]);
 
 	i2o_post_message(c,m);
 	barrier();
@@ -738,7 +738,7 @@ static int i2o_query_scalar_polled(struct i2o_controller *c, int tid, void *buf,
 		kfree(rbuf);
 		return -ETIMEDOUT;
 	}
-	 
+
 	msg = (u32 *)bus_to_virt(m);
 	if(msg[4]>>24)
 	{
@@ -830,7 +830,7 @@ void i2o_report_controller_unit(struct i2o_controller *c, int unit)
 static int i2o_parse_hrt(struct i2o_controller *c)
 {
 #ifdef DRIVERDEBUG
-	u32 *rows=c->hrt;
+	u32 *rows=(u32*)c->hrt;
 	u8 *p=(u8 *)c->hrt;
 	u8 *d;
 	int count;
@@ -1391,7 +1391,12 @@ static void __init i2o_sys_init()
 			I2O_REPLY_WRITE32(iop,virt_to_phys(msg));
 			i2o_quiesce_controller(iop);
 			i2o_reset_controller(iop);
-			i2o_status_get(iop);
+			if(i2o_status_get(iop) || 
+				iop->status_block->iop_state != ADAPTER_STATE_RESET)
+			{
+				printk(KERN_CRIT "Failed to initialize iop%d\n", iop->unit);
+				i2o_delete_controller(iop);
+			}
 		}
 	}
 
@@ -1413,7 +1418,8 @@ static void __init i2o_sys_init()
 
 		if(iop->page_frame==NULL)
 		{
-			printk(KERN_ERR "IOP init failed: no memory for message page.\n");
+			printk(KERN_CRIT "iop%d init failed: no memory for message page.\n", 
+						iop->unit);
 			i2o_delete_controller(iop);
 			continue;
 		}
@@ -1436,23 +1442,40 @@ static void __init i2o_sys_init()
 	{
 		if(i2o_hrt_get(iop))
 		{
+			printk(KERN_CRIT "iop%d: Could not get HRT!\n", iop->unit);
 			i2o_delete_controller(iop);
 			break;
 		}
 		if(i2o_parse_hrt(iop))
+		{
+			printk(KERN_CRIT "iop%d: Could not parse HRT!\n", iop->unit);
 			i2o_delete_controller(iop);
+		}
 	}
 
 	/*
 	 * Build and send the system table
-	 */
-	i2o_build_sys_table();
+	 *
+	 * If build_sys_table fails, we kill everything and bail
+	 * as we can't init the IOPs w/o a system table
+	 */	
+	if(i2o_build_sys_table())
+	{
+		printk(KERN_CRIT "I2O: Error building system table. Aborting!\n");
+		i2o_sys_shutdown();
+		return;
+	}
+
 	for(iop = i2o_controller_chain; iop; iop = iop->next)
 #ifdef DRIVERDEBUG
 	{
 		printk(KERN_INFO "Sending system table to iop%d\n", iop->unit);
 #endif
-		i2o_systab_send(iop);
+		if(i2o_systab_send(iop))
+		{
+			printk(KERN_CRIT "iop%d: Error sending system table\n", iop->unit);
+			i2o_delete_controller(iop);
+		}
 #ifdef DRIVERDEBUG
 	}
 #endif
@@ -1503,7 +1526,10 @@ static void i2o_sys_shutdown(void)
 
 	i2o_quiesce_system();
 	for(iop = i2o_controller_chain; iop; iop = iop->next)
-		i2o_delete_controller(iop);
+	{
+		if(i2o_delete_controller(iop))
+			iop->bus_disable(iop);
+	}
 }
 
 /*
@@ -1701,7 +1727,6 @@ int i2o_lct_get(struct i2o_controller *c)
 	msg[5] = 0x00000000;	/* Report now */
 	msg[6] = 0xD0000000|8192;
 	msg[7] = virt_to_bus(c->lct);
-
 	
 	return(i2o_post_wait(c, msg, sizeof(msg), 120));
 }
@@ -1741,21 +1766,21 @@ int i2o_online_controller(struct i2o_controller *c)
 	privio[0]=c->priv_io;		/* Private I/O address */
 	privio[1]=c->priv_io_size;
 
-	msg[0] = NINE_WORD_MSG_SIZE|SGL_OFFSET_6;
-	msg[1] = I2O_CMD_SYS_TAB_SET<<24 | HOST_TID<<12 | ADAPTER_TID;
-	msg[2] = 0;	/* Context not needed */
-	msg[3] = 0;
-	msg[4] = (0<<16)|(2<<12);	/* Host 1 I2O 2 */
-	msg[5] = 0;			/* Segment 1 */
+	__raw_writel(NINE_WORD_MSG_SIZE|SGL_OFFSET_6, &msg[0]);
+	__raw_writel(I2O_CMD_SYS_TAB_SET<<24 | HOST_TID<<12 | ADAPTER_TID, &msg[1]);
+	__raw_writel(0, &msg[2]);		/* Context not needed */
+	__raw_writel(0, &msg[3]);
+	__raw_writel((0<<16)|(2<<12), &msg[4]);	/* Host 1 I2O 2 */
+	__raw_writel(0, &msg[5]);		/* Segment 1 */
 	
 	/*
 	 *	Scatter Gather List
 	 */
-	msg[6] = 0x54000000|sys_tbl_len;	/* One table for now */
-	msg[7] = virt_to_phys(sys_tbl);
-	msg[8] = 0xD4000000|48;	/* One table for now */
-	msg[9] = virt_to_phys(privmem);
-/*	msg[10] = virt_to_phys(privio); */
+	
+	__raw_writel(0x54000000|sys_tbl_len, &msg[6]);	/* One table for now */
+	__raw_writel(virt_to_phys(sys_tbl), &msg[[7]);
+	__raw_writel(0xD4000000|48, &msg[8]);	/* One table for now */
+	__raw_writel(virt_to_phys(privmem), &msg[9]);
 
 	return(i2o_post_wait(c, msg, sizeof(msg), 120));
 	
@@ -1877,8 +1902,8 @@ int i2o_post_this(struct i2o_controller *c, u32 *data, int len)
 					c->unit);
 		return -ETIMEDOUT;
 	}
-	msg = bus_to_virt(c->mem_offset + m);
- 	memcpy(msg, data, len);
+	msg = (u32 *)(c->mem_offset + m);
+ 	memcpy_toio(msg, data, len);
 	i2o_post_message(c,m);
 	return 0;
 }
@@ -2028,7 +2053,7 @@ int i2o_issue_claim(struct i2o_controller *c, int tid, int context, int onoff, i
 int i2o_issue_params(int cmd, struct i2o_controller *iop, int tid, 
                 void *opblk, int oplen, void *resblk, int reslen)
 {
-u32 msg[9]; 
+	u32 msg[9]; 
 	u8 *res = (u8 *)resblk;
 	int res_count;
 	int blk_size;

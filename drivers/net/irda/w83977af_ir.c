@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Paul VanderSpek
  * Created at:    Wed Nov  4 11:46:16 1998
- * Modified at:   Wed Oct 20 00:08:30 1999
+ * Modified at:   Sat Oct 30 16:24:32 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli <dagb@cs.uit.no>
@@ -933,7 +933,8 @@ static void w83977af_pio_receive(struct w83977af_ir *self)
 	/*  Receive all characters in Rx FIFO */
 	do {
 		byte = inb(iobase+RBR);
-		async_unwrap_char(self->netdev, &self->rx_buff, byte);
+		async_unwrap_char(self->netdev, &self->stats, &self->rx_buff, 
+				  byte);
 	} while (inb(iobase+USR) & USR_RDR); /* Data available */	
 }
 

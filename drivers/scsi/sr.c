@@ -862,8 +862,10 @@ void get_sectorsize(int i)
 	int the_result, retries;
 	Scsi_Cmnd *SCpnt;
 
+	spin_lock_irq(&io_request_lock);
 	buffer = (unsigned char *) scsi_malloc(512);
 	SCpnt = scsi_allocate_device(NULL, scsi_CDs[i].device, 1);
+	spin_unlock_irq(&io_request_lock);
 
 	retries = 3;
 	do {
@@ -957,7 +959,9 @@ void get_capabilities(int i)
 		""
 	};
 
+	spin_lock_irq(&io_request_lock);
 	buffer = (unsigned char *) scsi_malloc(512);
+	spin_unlock_irq(&io_request_lock);
 	cmd[0] = MODE_SENSE;
 	cmd[1] = (scsi_CDs[i].device->lun << 5) & 0xe0;
 	cmd[2] = 0x2a;
@@ -1030,12 +1034,28 @@ static int sr_packet(struct cdrom_device_info *cdi, struct cdrom_generic_command
 {
 	Scsi_Cmnd *SCpnt;
 	Scsi_Device *device = scsi_CDs[MINOR(cdi->dev)].device;
+	unsigned char *buffer = cgc->buffer;
+	int buflen;
 	int stat;
 
 	/* get the device */
 	SCpnt = scsi_allocate_device(NULL, device, 1);
 	if (SCpnt == NULL)
 		return -ENODEV;	/* this just doesn't seem right /axboe */
+
+	/* use buffer for ISA DMA */
+	buflen = (cgc->buflen + 511) & ~511;
+	if (cgc->buffer && SCpnt->host->unchecked_isa_dma &&
+    	   (virt_to_phys(cgc->buffer) + cgc->buflen - 1 > ISA_DMA_THRESHOLD)) {
+		spin_lock_irq(&io_request_lock);
+		buffer = scsi_malloc(buflen);
+		spin_unlock_irq(&io_request_lock);
+		if (buffer == NULL) {
+			printk("sr: SCSI DMA pool exhausted.");
+			return -ENOMEM;
+		}
+		memcpy(buffer, cgc->buffer, cgc->buflen);
+	}
 
 	/* set the LUN */
 	cgc->cmd[1] |= device->lun << 5;
@@ -1044,8 +1064,8 @@ static int sr_packet(struct cdrom_device_info *cdi, struct cdrom_generic_command
 	SCpnt->request.rq_dev = cdi->dev;
 	/* scsi_do_cmd sets the command length */
 	SCpnt->cmd_len = 0;
-	
-	scsi_wait_cmd (SCpnt, (void *)cgc->cmd, (void *)cgc->buffer, cgc->buflen,
+
+	scsi_wait_cmd (SCpnt, (void *)cgc->cmd, (void *)buffer, cgc->buflen,
 		sr_init_done, SR_TIMEOUT, MAX_RETRIES);
 
 	stat = SCpnt->result;
@@ -1054,6 +1074,12 @@ static int sr_packet(struct cdrom_device_info *cdi, struct cdrom_generic_command
 	SCpnt->request.rq_dev = MKDEV(0, 0);
 	scsi_release_command(SCpnt);
 	SCpnt = NULL;
+
+	/* write DMA buffer back if used */
+	if (buffer && (buffer != cgc->buffer)) {
+		memcpy(cgc->buffer, buffer, cgc->buflen);
+		scsi_free(buffer, buflen);
+	}
 
 	return stat;
 }

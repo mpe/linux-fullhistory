@@ -3048,21 +3048,26 @@ static int atyfb_mmap(struct fb_info *info, struct file *file,
 	struct fb_info_aty *fb = (struct fb_info_aty *)info;
 	unsigned int size, page, map_size = 0;
 	unsigned long map_offset = 0;
+	unsigned long off;
 	int i;
 
 	if (!fb->mmap_map)
 		return -ENXIO;
 
+	if (vma->vm_pgoff > (~0UL >> PAGE_SHIFT))
+		return -EINVAL;
+
+	off = vma->vm_pgoff << PAGE_SHIFT;
 	size = vma->vm_end - vma->vm_start;
-	if (vma->vm_offset & ~PAGE_MASK)
-		return -ENXIO;
 
 	/* To stop the swapper from even considering these pages. */
 	vma->vm_flags |= (VM_SHM | VM_LOCKED);
 
-	if (((vma->vm_offset == 0) && (size == fb->total_vram)) ||
-	    ((vma->vm_offset == fb->total_vram) && (size == PAGE_SIZE)))
-		vma->vm_offset += 0x8000000000000000UL;
+	if (((vma->vm_pgoff == 0) && (size == fb->total_vram)) ||
+	    ((off == fb->total_vram) && (size == PAGE_SIZE)))
+		off += 0x8000000000000000UL;
+
+	vma->vm_pgoff = off >> PAGE_SHIFT;	/* propagate off changes */
 
 #ifdef __sparc_v9__
 	/* Align it as much as desirable */
@@ -3070,9 +3075,9 @@ static int atyfb_mmap(struct fb_info *info, struct file *file,
 		unsigned long j, align;
 		int max = -1;
 		
-		map_offset = vma->vm_offset+size;
+		map_offset = off + size;
 		for (i = 0; fb->mmap_map[i].size; i++) {
-			if (fb->mmap_map[i].voff < vma->vm_offset)
+			if (fb->mmap_map[i].voff < off)
 				continue;
 			if (fb->mmap_map[i].voff >= map_offset)
 				break;
@@ -3092,7 +3097,7 @@ static int atyfb_mmap(struct fb_info *info, struct file *file,
 				j = align;
 				align = j - ((vma->vm_start
 					      + fb->mmap_map[max].voff
-					      - vma->vm_offset) & (j - 1));
+					      - off) & (j - 1));
 				if (align != j) {
 					struct vm_area_struct *vmm;
 
@@ -3115,7 +3120,7 @@ static int atyfb_mmap(struct fb_info *info, struct file *file,
 		for (i = 0; fb->mmap_map[i].size; i++) {
 			unsigned long start = fb->mmap_map[i].voff;
 			unsigned long end = start + fb->mmap_map[i].size;
-			unsigned long offset = vma->vm_offset + page;
+			unsigned long offset = off + page;
 
 			if (start > offset)
 				continue;

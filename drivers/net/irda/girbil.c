@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      girbil.c
- * Version:       1.1
+ * Version:       1.2
  * Description:   Implementation for the Greenwich GIrBIL dongle
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Feb  6 21:02:33 1999
- * Modified at:   Mon Oct 18 22:15:20 1999
+ * Modified at:   Sat Oct 30 20:25:22 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -103,8 +103,7 @@ static void girbil_close(dongle_t *self)
 /*
  * Function girbil_change_speed (dev, speed)
  *
- *    Set the speed for the Girbil type dongle. Warning, this 
- *    function must be called with a process context!
+ *    Set the speed for the Girbil type dongle.
  *
  */
 static int girbil_change_speed(struct irda_task *task)
@@ -186,8 +185,7 @@ static int girbil_change_speed(struct irda_task *task)
 /*
  * Function girbil_reset (driver)
  *
- *      This function resets the girbil dongle. Warning, this function 
- *      must be called with a process context!! 
+ *      This function resets the girbil dongle.
  *
  *      Algorithm:
  *    	  0. set RTS, and wait at least 5 ms 

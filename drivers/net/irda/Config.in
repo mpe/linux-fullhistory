@@ -8,7 +8,6 @@ dep_tristate 'IrPORT (IrDA serial driver)' CONFIG_IRPORT_SIR $CONFIG_IRDA
 comment 'FIR device drivers'
 dep_tristate 'NSC PC87108' CONFIG_NSC_FIR  $CONFIG_IRDA
 dep_tristate 'Winbond W83977AF (IR)' CONFIG_WINBOND_FIR $CONFIG_IRDA
-dep_tristate 'Sharp UIRCC' CONFIG_SHARP_FIR $CONFIG_IRDA
 dep_tristate 'Toshiba Type-O IR Port' CONFIG_TOSHIBA_FIR $CONFIG_IRDA
 dep_tristate 'SMC IrCC' CONFIG_SMC_IRCC_FIR $CONFIG_IRDA
 

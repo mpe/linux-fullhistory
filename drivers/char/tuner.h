@@ -47,5 +47,6 @@
 #define TUNER_SET_TYPE               _IOW('t',1,int)    /* set tuner type */
 #define TUNER_SET_TVFREQ             _IOW('t',2,int)    /* set tv freq */
 #define TUNER_SET_RADIOFREQ          _IOW('t',3,int)    /* set radio freq */
+#define TUNER_SET_MODE               _IOW('t',4,int)    /* set tuner mode */
 
 #endif

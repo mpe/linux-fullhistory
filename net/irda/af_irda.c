@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun May 31 10:12:43 1998
- * Modified at:   Fri Oct  1 19:11:04 1999
+ * Modified at:   Sun Oct 31 19:32:37 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       af_netroom.c, af_ax25.c, af_rose.c, af_x25.c etc.
  * 
@@ -278,8 +278,14 @@ static void irda_get_value_confirm(int result, __u16 obj_id,
 	ASSERT(priv != NULL, return;);
 	self = (struct irda_sock *) priv;
 	
-	if (!self)
+	if (!self) {
+		WARNING(__FUNCTION__ "(), lost myself!\n");
 		return;
+	}
+
+	/* We probably don't need to make any more queries */
+	iriap_close(self->iriap);
+	self->iriap = NULL;
 
 	/* Check if request succeeded */
 	if (result != IAS_SUCCESS) {
@@ -366,14 +372,21 @@ static int irda_open_tsap(struct irda_sock *self, __u8 tsap_sel, char *name)
  */
 static int irda_find_lsap_sel(struct irda_sock *self, char *name)
 {
-	IRDA_DEBUG(1, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
 	ASSERT(self != NULL, return -1;);
 
+	if (self->iriap) {
+		WARNING(__FUNCTION__ "(), busy with a previous query\n");
+		return -EBUSY;
+	}
+
+	self->iriap = iriap_open(LSAP_ANY, IAS_CLIENT, self,
+				 irda_get_value_confirm);
+
 	/* Query remote LM-IAS */
-	iriap_getvaluebyclass_request(name, "IrDA:TinyTP:LsapSel",
-				      self->saddr, self->daddr,
-				      irda_get_value_confirm, self);
+	iriap_getvaluebyclass_request(self->iriap, self->saddr, self->daddr,
+				      name, "IrDA:TinyTP:LsapSel");
 	/* Wait for answer */
 	interruptible_sleep_on(&self->ias_wait);
 
@@ -741,6 +754,9 @@ void irda_destroy_socket(struct irda_sock *self)
 	/* Unregister with LM-IAS */
 	if (self->ias_obj)
 		irias_delete_object(self->ias_obj);
+
+	if (self->iriap) 
+		iriap_close(self->iriap);
 
 	if (self->tsap) {
 		irttp_disconnect_request(self->tsap, NULL, P_NORMAL);

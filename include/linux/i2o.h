@@ -286,6 +286,7 @@ struct i2o_controller
 	char name[16];
 	int unit;
 	int type;
+	int enabled;				/* Bus level enable */
 
 #define I2O_TYPE_PCI		0x01		/* PCI I2O controller */	
 

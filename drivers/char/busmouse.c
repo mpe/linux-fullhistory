@@ -48,12 +48,6 @@
  */
 /*#define BROKEN_MOUSE*/
 
-extern int adb_mouse_init(void);
-extern int logi_busmouse_init(void);
-extern int ms_bus_mouse_init(void);
-extern int atixl_busmouse_init(void);
-extern int amiga_mouse_init(void);
-extern int atari_mouse_init(void);
 extern int sun_mouse_init(void);
 extern void mouse_rpc_init (void);
 
@@ -435,26 +429,8 @@ unregister_busmouse(int mousedev)
 int __init
 bus_mouse_init(void)
 {
-#ifdef CONFIG_LOGIBUSMOUSE
-	logi_busmouse_init();
-#endif
-#ifdef CONFIG_MS_BUSMOUSE
-	ms_bus_mouse_init();
-#endif
-#ifdef CONFIG_ATIXL_BUSMOUSE
- 	atixl_busmouse_init();
-#endif
-#ifdef CONFIG_AMIGAMOUSE
-	amiga_mouse_init();
-#endif
-#ifdef CONFIG_ATARIMOUSE
-	atari_mouse_init();
-#endif
 #ifdef CONFIG_SUN_MOUSE
 	sun_mouse_init();
-#endif
-#ifdef CONFIG_ADBMOUSE
-	adb_mouse_init();
 #endif
 #ifdef CONFIG_RPCMOUSE
 	mouse_rpc_init();

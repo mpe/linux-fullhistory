@@ -4,9 +4,9 @@
  |  Computation of an approximation of the sin function and the cosine       |
  |  function by a polynomial.                                                |
  |                                                                           |
- | Copyright (C) 1992,1993,1994,1997                                         |
+ | Copyright (C) 1992,1993,1994,1997,1999                                    |
  |                  W. Metzenthen, 22 Parker St, Ormond, Vic 3163, Australia |
- |                  E-mail   billm@suburbia.net                              |
+ |                  E-mail   billm@melbpc.org.au                             |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -132,6 +132,9 @@ void	poly_sine(FPU_REG *st0_ptr)
 	}
       /* pi/2 in hex is: 1.921fb54442d18469 898CC51701B839A2 52049C1 */
       fixed_arg = 0x921fb54442d18469LL - fixed_arg;
+      /* There is a special case which arises due to rounding, to fix here. */
+      if ( fixed_arg == 0xffffffffffffffffLL )
+	fixed_arg = 0;
 
       XSIG_LL(argSqrd) = fixed_arg; argSqrd.lsw = 0;
       mul64_Xsig(&argSqrd, &fixed_arg);
@@ -172,10 +175,9 @@ void	poly_sine(FPU_REG *st0_ptr)
       if ( argSqrd.msw & 0xffc00000 )
 	{
 	  /* Get about 32 bit precision in these: */
-	  mul_32_32(0x898cc517, argSqrd.msw, &adj);
-	  fix_up -= adj/6;
+	  fix_up -= mul_32_32(0x898cc517, argSqrd.msw) / 6;
 	}
-      mul_32_32(fix_up, LL_MSW(fixed_arg), &fix_up);
+      fix_up = mul_32_32(fix_up, LL_MSW(fixed_arg));
 
       adj = accumulator.lsw;    /* temp save */
       accumulator.lsw -= fix_up;
@@ -211,7 +213,6 @@ void	poly_cos(FPU_REG *st0_ptr)
   FPU_REG	      result;
   long int            exponent, exp2, echange;
   Xsig                accumulator, argSqrd, fix_up, argTo4;
-  unsigned long       adj;
   unsigned long long  fixed_arg;
 
 #ifdef PARANOID
@@ -300,6 +301,9 @@ void	poly_cos(FPU_REG *st0_ptr)
 	}
       /* pi/2 in hex is: 1.921fb54442d18469 898CC51701B839A2 52049C1 */
       fixed_arg = 0x921fb54442d18469LL - fixed_arg;
+      /* There is a special case which arises due to rounding, to fix here. */
+      if ( fixed_arg == 0xffffffffffffffffLL )
+	fixed_arg = 0;
 
       exponent = -1;
       exp2 = -1;
@@ -363,10 +367,8 @@ void	poly_cos(FPU_REG *st0_ptr)
       if ( argSqrd.msw & 0xffc00000 )
 	{
 	  /* Get about 32 bit precision in these: */
-	  mul_32_32(0x898cc517, argSqrd.msw, &adj);
-	  fix_up.msw -= adj/2;
-	  mul_32_32(0x898cc517, argTo4.msw, &adj);
-	  fix_up.msw += adj/24;
+	  fix_up.msw -= mul_32_32(0x898cc517, argSqrd.msw) / 2;
+	  fix_up.msw += mul_32_32(0x898cc517, argTo4.msw) / 24;
 	}
 
       exp2 += norm_Xsig(&accumulator);

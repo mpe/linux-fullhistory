@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Jun  6 20:33:11 1999
- * Modified at:   Thu Sep  2 10:09:25 1999
+ * Modified at:   Sat Oct 30 13:05:23 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -49,7 +49,6 @@ static int ircomm_state_waitr(struct ircomm_cb *self, IRCOMM_EVENT event,
 			      struct sk_buff *skb, struct ircomm_info *info);
 static int ircomm_state_conn(struct ircomm_cb *self, IRCOMM_EVENT event, 
 			     struct sk_buff *skb, struct ircomm_info *info);
-
 
 char *ircomm_state[] = {
 	"IRCOMM_IDLE",
@@ -108,8 +107,8 @@ static int ircomm_state_idle(struct ircomm_cb *self, IRCOMM_EVENT event,
 		ircomm_connect_indication(self, skb, info);
 		break;
 	default:
-		DEBUG(4, __FUNCTION__"(), unknown event: %s\n",
-		      ircomm_event[event]);
+		IRDA_DEBUG(4, __FUNCTION__"(), unknown event: %s\n",
+			   ircomm_event[event]);
 		return -EINVAL;
 	}
 	return ret;
@@ -138,8 +137,8 @@ static int ircomm_state_waiti(struct ircomm_cb *self, IRCOMM_EVENT event,
 		ircomm_disconnect_indication(self, skb, info);
 		break;
 	default:
-		DEBUG(0, __FUNCTION__"(), unknown event: %s\n",
-		      ircomm_event[event]);
+		IRDA_DEBUG(0, __FUNCTION__"(), unknown event: %s\n",
+			   ircomm_event[event]);
 		ret = -EINVAL;
 	}
 	return ret;
@@ -171,8 +170,8 @@ static int ircomm_state_waitr(struct ircomm_cb *self, IRCOMM_EVENT event,
 		ircomm_disconnect_indication(self, skb, info);
 		break;
 	default:
-		DEBUG(0, __FUNCTION__ "(), unknown event = %s\n",
-		      ircomm_event[event]);
+		IRDA_DEBUG(0, __FUNCTION__ "(), unknown event = %s\n",
+			   ircomm_event[event]);
 		ret = -EINVAL;
 	}
 	return ret;
@@ -213,13 +212,12 @@ static int ircomm_state_conn(struct ircomm_cb *self, IRCOMM_EVENT event,
 		ret = self->issue.disconnect_request(self, skb, info);
 		break;
 	default:
-		DEBUG(0, __FUNCTION__ "(), unknown event = %s\n",
-		      ircomm_event[event]);
+		IRDA_DEBUG(0, __FUNCTION__ "(), unknown event = %s\n",
+			   ircomm_event[event]);
 		ret = -EINVAL;
 	}
 	return ret;
 }
-
 
 /*
  * Function ircomm_do_event (self, event, skb)
@@ -230,8 +228,8 @@ static int ircomm_state_conn(struct ircomm_cb *self, IRCOMM_EVENT event,
 int ircomm_do_event(struct ircomm_cb *self, IRCOMM_EVENT event,
 		    struct sk_buff *skb, struct ircomm_info *info) 
 {
-	DEBUG(4, __FUNCTION__": state=%s, event=%s\n",
-	      ircomm_state[self->state], ircomm_event[event]);
+	IRDA_DEBUG(4, __FUNCTION__": state=%s, event=%s\n",
+		   ircomm_state[self->state], ircomm_event[event]);
 
 	return (*state[self->state])(self, event, skb, info);
 }
@@ -246,6 +244,6 @@ void ircomm_next_state(struct ircomm_cb *self, IRCOMM_STATE state)
 {
 	self->state = state;
 	
-	DEBUG(4, __FUNCTION__": next state=%s, service type=%d\n", 
-	      ircomm_state[self->state], self->service_type);
+	IRDA_DEBUG(4, __FUNCTION__": next state=%s, service type=%d\n", 
+		   ircomm_state[self->state], self->service_type);
 }

@@ -572,8 +572,6 @@ static int vfc_mmap(struct inode *inode, struct file *file,
 	if(map_size > sizeof(struct vfc_regs)) 
 		map_size=sizeof(struct vfc_regs);
 
-
-	if(vma->vm_offset & ~PAGE_MASK) return -ENXIO;
 	vma->vm_flags |= VM_SHM | VM_LOCKED | VM_IO | VM_MAYREAD | VM_MAYWRITE | VM_MAYSHARE;
 	map_offset=(unsigned int)dev->phys_regs;
 	ret = io_remap_page_range(vma->vm_start,map_offset,map_size, 

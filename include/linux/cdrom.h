@@ -482,17 +482,17 @@ struct cdrom_generic_command
 
 
 /* Mode page codes for mode sense/set */
-#define GPMODE_R_W_ERROR_PAGE	    0x1
-#define GPMODE_WRITE_PARMS_PAGE	    0x5
-#define GPMODE_AUDIO_CTL_PAGE	    0xe
-#define GPMODE_POWER_PAGE	    0x1a
-#define GPMODE_FAULT_FAIL_PAGE	    0x1c
-#define GPMODE_TO_PROTECT_PAGE	    0x1d
-#define GPMODE_CAPABILITIES_PAGE    0x2a
-#define GPMODE_ALL_PAGES	    0x3f
+#define GPMODE_R_W_ERROR_PAGE		0x01
+#define GPMODE_WRITE_PARMS_PAGE		0x05
+#define GPMODE_AUDIO_CTL_PAGE		0x0e
+#define GPMODE_POWER_PAGE		0x1a
+#define GPMODE_FAULT_FAIL_PAGE		0x1c
+#define GPMODE_TO_PROTECT_PAGE		0x1d
+#define GPMODE_CAPABILITIES_PAGE	0x2a
+#define GPMODE_ALL_PAGES		0x3f
 /* Not in Mt. Fuji, but in ATAPI 2.6 -- depricated now in favor
  * of MODE_SENSE_POWER_PAGE */
-#define GPMODE_CDROM_PAGE              0x0d
+#define GPMODE_CDROM_PAGE		0x0d
 
 
 
@@ -505,18 +505,18 @@ struct cdrom_generic_command
 
 struct dvd_layer {
 	__u8 book_version	: 4;
-	__u8 book_type	: 4;
+	__u8 book_type		: 4;
 	__u8 min_rate		: 4;
-	__u8 disc_size	: 4;
-	__u8 layer_type	: 4;
-	__u8 track_path	: 1;
+	__u8 disc_size		: 4;
+	__u8 layer_type		: 4;
+	__u8 track_path		: 1;
 	__u8 nlayers		: 2;
 	__u8 track_density	: 4;
 	__u8 linear_density	: 4;
 	__u8 bca		: 1;
-	__u8 start_sector;
-	__u8 end_sector;
-	__u8 end_sector_l0;
+	__u32 start_sector;
+	__u32 end_sector;
+	__u32 end_sector_l0;
 };
 
 struct dvd_physical {
@@ -536,7 +536,7 @@ struct dvd_copyright {
 struct dvd_disckey {
 	__u8 type;
 
-	unsigned agid			: 2;
+	unsigned agid		: 2;
 	__u8 value[2048];
 };
 

@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      litelink.c
- * Version:       1.0
+ * Version:       1.1
  * Description:   Driver for the Parallax LiteLink dongle
  * Status:        Stable
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Fri May  7 12:50:33 1999
- * Modified at:   Mon Oct 18 12:45:51 1999
+ * Modified at:   Sat Oct 30 20:24:58 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -122,7 +122,6 @@ static int litelink_change_speed(struct irda_task *task)
 		/* Sleep a minimum of 15 us */
 		udelay(MIN_DELAY);
         }
-
 	irda_task_next_state(task, IRDA_TASK_DONE);
 
 	return 0;
@@ -131,8 +130,7 @@ static int litelink_change_speed(struct irda_task *task)
 /*
  * Function litelink_reset (task)
  *
- *      Reset the Litelink type dongle. Warning, this function must only be
- *      called with a process context!
+ *      Reset the Litelink type dongle.
  *
  */
 static int litelink_reset(struct irda_task *task)
@@ -159,6 +157,8 @@ static int litelink_reset(struct irda_task *task)
 
 	/* This dongles speed defaults to 115200 bps */
 	self->speed = 115200;
+
+	irda_task_next_state(task, IRDA_TASK_DONE);
 
 	return 0;
 }

@@ -1051,8 +1051,7 @@ static int do_anonymous_page(struct task_struct * tsk, struct vm_area_struct * v
  * As this is called only for pages that do not currently exist, we
  * do not need to flush old virtual caches or the TLB.
  *
- * This is called with the MM semaphore and the kernel lock held.
- * We need to release the kernel lock as soon as possible..
+ * This is called with the MM semaphore held.
  */
 static int do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	unsigned long address, int write_access, pte_t *page_table)
@@ -1069,10 +1068,10 @@ static int do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	 * essentially an early COW detection.
 	 */
 	new_page = vma->vm_ops->nopage(vma, address & PAGE_MASK, (vma->vm_flags & VM_SHARED)?0:write_access);
-	if (!new_page)
-		return 0;	/* SIGBUS - but we _really_ should know whether it is OOM or SIGBUS */
-	if (new_page == (struct page *)-1)
-		return -1;	/* OOM */
+	if (new_page == NULL)	/* no page was available -- SIGBUS */
+		return 0;
+	if (new_page == NOPAGE_OOM)
+		return -1;
 	++tsk->maj_flt;
 	++vma->vm_mm->rss;
 	/*

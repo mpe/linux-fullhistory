@@ -19,9 +19,9 @@ if [ ! "$CONFIG_FC4" = "n" ]; then
       dep_tristate 'Generic FC-AL disk driver' CONFIG_SCSI_FCAL $CONFIG_SCSI
    fi
 else
-   define_bool CONFIG_FC4_SOC n
-   define_bool CONFIG_FC4_SOCAL n
-   define_bool CONFIG_SCSI_PLUTO n
-   define_bool CONFIG_SCSI_FCAL n
+   define_tristate CONFIG_FC4_SOC n
+   define_tristate CONFIG_FC4_SOCAL n
+   define_tristate CONFIG_SCSI_PLUTO n
+   define_tristate CONFIG_SCSI_FCAL n
 fi
 endmenu

@@ -45,12 +45,6 @@ static struct video_device *video_device[VIDEO_NUM_DEVICES];
 extern int init_bttv_cards(struct video_init *);
 extern int i2c_tuner_init(struct video_init *);
 #endif
-#ifdef CONFIG_VIDEO_SAA5249
-extern int init_saa_5249(struct video_init *);
-#endif	
-#ifdef CONFIG_VIDEO_CQCAM
-extern int init_colour_qcams(struct video_init *);
-#endif
 #ifdef CONFIG_VIDEO_BWQCAM
 extern int init_bw_qcams(struct video_init *);
 #endif
@@ -65,12 +59,6 @@ static struct video_init video_init_list[]={
 #ifdef CONFIG_VIDEO_BT848
 	{"i2c-tuner", i2c_tuner_init},
 	{"bttv", init_bttv_cards},
-#endif	
-#ifdef CONFIG_VIDEO_SAA5249
-	{"saa5249", init_saa_5249},
-#endif	
-#ifdef CONFIG_VIDEO_CQCAM
-	{"c-qcam", init_colour_qcams},
 #endif	
 #ifdef CONFIG_VIDEO_BWQCAM
 	{"bw-qcam", init_bw_qcams},

@@ -24,11 +24,6 @@
  *
  * ----------------------------------
  * TO DO LIST:
- * -Implement Microsoft Media Status Notification per the spec at
- *   http://www.microsoft.com/hwdev/respec/storspec.htm
- *   This will allow us to get automagically notified when the media changes
- *   on ATAPI drives (something the stock ATAPI spec is lacking).  Looks
- *   very cool.  I discovered its existance the other day at work...
  * -Make it so that Pioneer CD DR-A24X and friends don't get screwed up on
  *   boot
  *
@@ -537,6 +532,7 @@ static void cdrom_end_request (int uptodate, ide_drive_t *drive)
 	}
 	if (rq->cmd == READ && !rq->current_nr_sectors)
 		uptodate = 1;
+
 	ide_end_request (uptodate, HWGROUP(drive));
 }
 
@@ -769,17 +765,9 @@ static void cdrom_buffer_sectors (ide_drive_t *drive, unsigned long sector,
 
 	char *dest;
 
-	/* If we don't yet have a sector buffer, try to allocate one.
-	   If we can't get one atomically, it's not fatal -- we'll just throw
-	   the data away rather than caching it. */
-	if (info->buffer == NULL) {
-		info->buffer = (char *) kmalloc(SECTOR_BUFFER_SIZE, GFP_ATOMIC);
-
-		/* If we couldn't get a buffer,
-		   don't try to buffer anything... */
-		if (info->buffer == NULL)
+	/* If we couldn't get a buffer, don't try to buffer anything... */
+	if (info->buffer == NULL)
 			sectors_to_buffer = 0;
-	}
 
 	/* If this is the first sector in the buffer, remember its number. */
 	if (info->nsectors_buffered == 0)
@@ -866,13 +854,14 @@ static void cdrom_read_intr (ide_drive_t *drive)
 		return;
  
 	if (dma) {
-		if (!dma_error) {
-			for (i = rq->nr_sectors; i > 0;) {
-				i -= rq->current_nr_sectors;
-				ide_end_request(1, HWGROUP(drive));
-			}
-		} else
+		if (dma_error) {
 			ide_error (drive, "dma error", stat);
+			return;
+		}
+		for (i = rq->nr_sectors; i > 0;) {
+			i -= rq->current_nr_sectors;
+			ide_end_request(1, HWGROUP(drive));
+		}
 		return;
 	}
 
@@ -1789,7 +1778,7 @@ cdrom_read_toc (ide_drive_t *drive, struct atapi_request_sense *reqbuf)
 
 	/* Now try to get the total cdrom capacity. */
 #if 0
-	stat = cdrom_get_last_written(MKDEV(HWIF(drive)->major, minor,
+	stat = cdrom_get_last_written(MKDEV(HWIF(drive)->major, minor),
 				     (long *)&toc->capacity);
 	if (stat)
 #endif
@@ -1797,6 +1786,7 @@ cdrom_read_toc (ide_drive_t *drive, struct atapi_request_sense *reqbuf)
 	if (stat) toc->capacity = 0x1fffff;
 
 	/* for general /dev/cdrom like mounting, one big disc */
+	drive->part[0].nr_sects = toc->capacity * SECTORS_PER_FRAME;
 	HWIF(drive)->gd->sizes[minor] = (toc->capacity * SECTORS_PER_FRAME) >>
 					(BLOCK_SIZE_BITS - 9);
 
@@ -1812,11 +1802,11 @@ cdrom_read_toc (ide_drive_t *drive, struct atapi_request_sense *reqbuf)
 	i = toc->hdr.first_track;
 	while ((i <= ntracks) && ((minor & CD_PART_MASK) < CD_PART_MAX)) {
 		drive->part[minor & PARTN_MASK].start_sect = 0;
- 		drive->part[minor & PARTN_MASK].nr_sects = (toc->ent[i].addr.lba *
+ 		drive->part[minor & PARTN_MASK].nr_sects =
+			(toc->ent[i].addr.lba *
 			SECTORS_PER_FRAME) << (BLOCK_SIZE_BITS - 9);
 		HWIF(drive)->gd->sizes[minor] = (toc->ent[i].addr.lba *
 			SECTORS_PER_FRAME) >> (BLOCK_SIZE_BITS - 9);
-		blksize_size[HWIF(drive)->major][minor] = CD_FRAMESIZE;
 		i++;
 		minor++;
 	}
@@ -2273,8 +2263,11 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 		struct atapi_capabilities_page cap;
 	} buf;
 
-	if (CDROM_CONFIG_FLAGS (drive)->nec260)
+	if (CDROM_CONFIG_FLAGS (drive)->nec260) {
+		CDROM_CONFIG_FLAGS (drive)->no_eject = 0;                       
+		CDROM_CONFIG_FLAGS (drive)->audio_play = 1;       
 		return nslots;
+	}
 
 	init_cdrom_command(&cgc, &buf, sizeof(buf));
 	/* we have to cheat a little here. the packet will eventually
@@ -2342,9 +2335,12 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 			(ntohs(buf.cap.maxspeed) + (176/2)) / 176;
 	}
 
-	printk ("%s: ATAPI %dX %s", 
-        	drive->name, CDROM_CONFIG_FLAGS (drive)->max_speed,
-		(CDROM_CONFIG_FLAGS (drive)->dvd) ? "DVD-ROM" : "CD-ROM");
+	/* don't print speed if the drive reported 0.
+	 */
+	printk("%s: ATAPI", drive->name);
+	if (CDROM_CONFIG_FLAGS(drive)->max_speed)
+		printk(" %dX", CDROM_CONFIG_FLAGS(drive)->max_speed);
+	printk(" %s", CDROM_CONFIG_FLAGS(drive)->dvd ? "DVD-ROM" : "CD-ROM");
 
 	if (CDROM_CONFIG_FLAGS (drive)->dvd_r|CDROM_CONFIG_FLAGS (drive)->dvd_ram)
         	printk (" DVD%s%s", 
@@ -2398,7 +2394,7 @@ int ide_cdrom_setup (ide_drive_t *drive)
 	int nslots;
 
 	set_device_ro(MKDEV(HWIF(drive)->major, minor), 1);
-	blksize_size[HWIF(drive)->major][minor] = CD_FRAMESIZE;
+	set_blocksize(MKDEV(HWIF(drive)->major, minor), CD_FRAMESIZE);
 
 	drive->special.all	= 0;
 	drive->ready_stat	= 0;
@@ -2534,9 +2530,12 @@ int ide_cdrom_ioctl (ide_drive_t *drive,
 static
 int ide_cdrom_open (struct inode *ip, struct file *fp, ide_drive_t *drive)
 {
+	struct cdrom_info *info = drive->driver_data;
 	int rc;
 
 	MOD_INC_USE_COUNT;
+	if (info->buffer == NULL)
+		info->buffer = (char *) kmalloc(SECTOR_BUFFER_SIZE, GFP_KERNEL);
 	rc = cdrom_fops.open (ip, fp);
 	if (rc) {
 		drive->usage--;
@@ -2617,12 +2616,7 @@ char *ignore = NULL;
 MODULE_PARM(ignore, "s");
 MODULE_DESCRIPTION("ATAPI CD-ROM Driver");
 
-int init_module (void)
-{
-	return ide_cdrom_init();
-}
-
-void cleanup_module(void)
+void __exit ide_cdrom_exit(void)
 {
 	ide_drive_t *drive;
 	int failed = 0;
@@ -2636,7 +2630,7 @@ void cleanup_module(void)
 }
 #endif /* MODULE */
  
-int ide_cdrom_init (void)
+int __init ide_cdrom_init (void)
 {
 	ide_drive_t *drive;
 	struct cdrom_info *info;
@@ -2677,3 +2671,6 @@ int ide_cdrom_init (void)
 	MOD_DEC_USE_COUNT;
 	return 0;
 }
+
+module_init(ide_cdrom_init);
+module_exit(ide_cdrom_exit);

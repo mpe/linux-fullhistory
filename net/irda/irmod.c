@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Dec 15 13:55:39 1997
- * Modified at:   Mon Oct 18 14:54:35 1999
+ * Modified at:   Sun Oct 31 20:31:01 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997, 1999 Dag Brattli, All Rights Reserved.
@@ -130,6 +130,8 @@ EXPORT_SYMBOL(irda_param_pack);
 EXPORT_SYMBOL(irda_param_unpack);
 
 /* IrIAP/IrIAS */
+EXPORT_SYMBOL(iriap_open);
+EXPORT_SYMBOL(iriap_close);
 EXPORT_SYMBOL(iriap_getvaluebyclass_request);
 EXPORT_SYMBOL(irias_object_change_attribute);
 EXPORT_SYMBOL(irias_add_integer_attrib);
@@ -216,7 +218,6 @@ int __init irda_init(void)
 #ifdef MODULE
 	irda_device_init();	/* Called by init/main.c when non-modular */
 #endif
-
 	iriap_init();
  	irttp_init();
 	
@@ -393,8 +394,9 @@ static int irda_open( struct inode * inode, struct file *file)
 {
 	IRDA_DEBUG( 4, __FUNCTION__ "()\n");
 
-	if ( irda.in_use) {
-		IRDA_DEBUG( 0, __FUNCTION__ "(), irmanager is already running!\n");
+	if (irda.in_use) {
+		IRDA_DEBUG(0, __FUNCTION__ 
+			   "(), irmanager is already running!\n");
 		return -1;
 	}
 	irda.in_use = TRUE;
@@ -410,8 +412,8 @@ static int irda_open( struct inode * inode, struct file *file)
  *    Ioctl, used by irmanager to ...
  *
  */
-static int irda_ioctl( struct inode *inode, struct file *filp, 
-		       unsigned int cmd, unsigned long arg)
+static int irda_ioctl(struct inode *inode, struct file *filp, 
+		      unsigned int cmd, unsigned long arg)
 {
 	struct irda_todo *todo;
 	int err = 0;
@@ -419,14 +421,14 @@ static int irda_ioctl( struct inode *inode, struct file *filp,
 	
 	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 	
-	if ( _IOC_DIR(cmd) & _IOC_READ)
+	if (_IOC_DIR(cmd) & _IOC_READ)
 		err = verify_area( VERIFY_WRITE, (void *) arg, size);
-	else if ( _IOC_DIR(cmd) & _IOC_WRITE)
+	else if (_IOC_DIR(cmd) & _IOC_WRITE)
 		err = verify_area( VERIFY_READ, (void *) arg, size);
-	if ( err)
+	if (err)
 		return err;
 	
-	switch( cmd) {
+	switch (cmd) {
 	case IRMGR_IOCTNPC:
 		/* Got process context! */
 		IRDA_DEBUG(4, __FUNCTION__ "(), got process context!\n");

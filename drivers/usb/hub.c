@@ -474,7 +474,12 @@ int usb_hub_init(void)
 {
 	int pid;
 
-	usb_register(&hub_driver);
+	if (usb_register(&hub_driver) < 0) {
+		printk(KERN_ERR "USB hub driver cannot register: "
+			"minor number %d already in use\n",
+			hub_driver.minor);
+		return -1;
+	}
 
 	pid = kernel_thread(usb_hub_thread, NULL,
 		CLONE_FS | CLONE_FILES | CLONE_SIGHAND);

@@ -6,10 +6,11 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Aug 21 00:02:07 1997
- * Modified at:   Tue Oct  5 10:05:33 1999
+ * Modified at:   Sun Oct 31 15:51:32 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
- *     Copyright (c) 1997, 1999 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
+ *     Copyright (c) 1997-1999 Dag Brattli <dagb@cs.uit.no>, 
+ *     All Rights Reserved.
  *     
  *     This program is free software; you can redistribute it and/or 
  *     modify it under the terms of the GNU General Public License as 
@@ -79,7 +80,7 @@ struct iriap_cb {
 	IRIAP_STATE r_connect_state;
 	
 	CONFIRM_CALLBACK confirm;
-	void *priv;
+	void *priv;                /* Used to identify client */
 
 	__u8 max_header_size;
 	
@@ -88,9 +89,14 @@ struct iriap_cb {
 
 int  iriap_init(void);
 void iriap_cleanup(void);
-void iriap_getvaluebyclass_request(char *name, char *attr, 
-				   __u32 saddr, __u32 daddr,
-				   CONFIRM_CALLBACK callback, void *priv);
+
+struct iriap_cb *iriap_open(__u8 slsap_sel, int mode, void *priv,
+			    CONFIRM_CALLBACK callback);
+void iriap_close(struct iriap_cb *self);
+
+int iriap_getvaluebyclass_request(struct iriap_cb *self, 
+				  __u32 saddr, __u32 daddr,
+				  char *name, char *attr);
 void iriap_getvaluebyclass_confirm(struct iriap_cb *self, struct sk_buff *skb);
 
 void iriap_send_ack( struct iriap_cb *self);

@@ -16,6 +16,7 @@
  *	- SysKonnect TR4/16 PCI		(SK-4591)
  *      - Compaq TR 4/16 PCI
  *      - Thomas-Conrad TC4048 4/16 PCI
+ *      - 3Com 3C339 Token Link Velocity
  *      - Any ISA or PCI adapter using only the TMS380 chipset
  *
  *  Sources:
@@ -123,6 +124,8 @@ struct cardinfo_table  cardinfo[] = {
     "SK NET TR 4/16 PCI"},
   { TMS_PCI, PCI_VENDOR_ID_TCONRAD, PCI_DEVICE_ID_TCONRAD_TOKENRING,
     "Thomas-Conrad TC4048 PCI 4/16"},
+  { TMS_PCI, PCI_VENDOR_ID_3COM, PCI_DEVICE_ID_3COM_3C339,
+    "3Com Token Link Velocity"},
   { 0, 0, 0, NULL}
 };
 

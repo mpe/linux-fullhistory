@@ -907,9 +907,12 @@ static int sgivwfb_mmap(struct fb_info *info, struct file *file,
                         struct vm_area_struct *vma)
 {
   unsigned long size = vma->vm_end - vma->vm_start;
-  unsigned long offset = sgivwfb_mem_phys + vma->vm_offset;
-  if (vma->vm_offset+size > sgivwfb_mem_size)
+  unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;
+  if (vma->vm_pgoff > (~0UL >> PAGE_SHIFT))
+	return -EINVAL;
+  if (offset+size > sgivwfb_mem_size)
     return -EINVAL;
+  offset += sgivwfb_mem_phys;
   pgprot_val(vma->vm_page_prot) = pgprot_val(vma->vm_page_prot) | _PAGE_PCD;
   vma->vm_flags |= VM_IO;
   if (remap_page_range(vma->vm_start, offset, size, vma->vm_page_prot))

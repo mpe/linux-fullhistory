@@ -3,9 +3,9 @@
  |                                                                           |
  | Compute the tan of a FPU_REG, using a polynomial approximation.           |
  |                                                                           |
- | Copyright (C) 1992,1993,1994,1997                                         |
+ | Copyright (C) 1992,1993,1994,1997,1999                                    |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail   billm@suburbia.net             |
+ |                       Australia.  E-mail   billm@melbpc.org.au            |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -84,6 +84,14 @@ void	poly_tan(FPU_REG *st0_ptr)
 	}
       /* pi/2 in hex is: 1.921fb54442d18469 898CC51701B839A2 52049C1 */
       XSIG_LL(accum) = 0x921fb54442d18469LL - XSIG_LL(accum);
+      /* This is a special case which arises due to rounding. */
+      if ( XSIG_LL(accum) == 0xffffffffffffffffLL )
+	{
+	  FPU_settag0(TAG_Valid);
+	  significand(st0_ptr) = 0x8a51e04daabda360LL;
+	  setexponent16(st0_ptr, 0x41 + EXTENDED_Ebias | SIGN_Negative);
+	  return;
+	}
 
       argSignif.lsw = accum.lsw;
       XSIG_LL(argSignif) = XSIG_LL(accum);
@@ -177,11 +185,11 @@ void	poly_tan(FPU_REG *st0_ptr)
       else if ( exponent > -30 )
 	{
 	  adj = accum.msw >> -(exponent+1);      /* tan */
-	  mul_32_32(adj, adj, &adj);           /* tan^2 */
+	  adj = mul_32_32(adj, adj);             /* tan^2 */
 	}
       else
 	adj = 0;
-      mul_32_32(0x898cc517, adj, &adj);        /* delta * tan^2 */
+      adj = mul_32_32(0x898cc517, adj);          /* delta * tan^2 */
 
       fix_up.msw += adj;
       if ( !(fix_up.msw & 0x80000000) )   /* did fix_up overflow ? */

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Fri Jan 29 11:16:38 1999
- * Modified at:   Fri May 14 23:11:01 1999
+ * Modified at:   Sat Oct 30 12:58:45 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998-1999 Dag Brattli, All Rights Reserved.
@@ -41,7 +41,7 @@ void handle_filter_request(struct irlan_cb *self, struct sk_buff *skb)
 	if ((self->provider.filter_type == IRLAN_DIRECTED) && 
 	    (self->provider.filter_operation == DYNAMIC))
 	{
-		DEBUG(0, "Giving peer a dynamic Ethernet address\n");
+		IRDA_DEBUG(0, "Giving peer a dynamic Ethernet address\n");
 		self->provider.mac_address[0] = 0x40;
 		self->provider.mac_address[1] = 0x00;
 		self->provider.mac_address[2] = 0x00;
@@ -71,7 +71,7 @@ void handle_filter_request(struct irlan_cb *self, struct sk_buff *skb)
 	if ((self->provider.filter_type == IRLAN_DIRECTED) && 
 	    (self->provider.filter_mode == FILTER))
 	{
-		DEBUG(0, "Directed filter on\n");
+		IRDA_DEBUG(0, "Directed filter on\n");
 		skb->data[0] = 0x00; /* Success */
 		skb->data[1] = 0x00;
 		return;
@@ -79,7 +79,7 @@ void handle_filter_request(struct irlan_cb *self, struct sk_buff *skb)
 	if ((self->provider.filter_type == IRLAN_DIRECTED) && 
 	    (self->provider.filter_mode == NONE))
 	{
-		DEBUG(0, "Directed filter off\n");
+		IRDA_DEBUG(0, "Directed filter off\n");
 		skb->data[0] = 0x00; /* Success */
 		skb->data[1] = 0x00;
 		return;
@@ -88,7 +88,7 @@ void handle_filter_request(struct irlan_cb *self, struct sk_buff *skb)
 	if ((self->provider.filter_type == IRLAN_BROADCAST) && 
 	    (self->provider.filter_mode == FILTER))
 	{
-		DEBUG(0, "Broadcast filter on\n");
+		IRDA_DEBUG(0, "Broadcast filter on\n");
 		skb->data[0] = 0x00; /* Success */
 		skb->data[1] = 0x00;
 		return;
@@ -96,7 +96,7 @@ void handle_filter_request(struct irlan_cb *self, struct sk_buff *skb)
 	if ((self->provider.filter_type == IRLAN_BROADCAST) && 
 	    (self->provider.filter_mode == NONE))
 	{
-		DEBUG(0, "Broadcast filter off\n");
+		IRDA_DEBUG(0, "Broadcast filter off\n");
 		skb->data[0] = 0x00; /* Success */
 		skb->data[1] = 0x00;
 		return;
@@ -104,7 +104,7 @@ void handle_filter_request(struct irlan_cb *self, struct sk_buff *skb)
 	if ((self->provider.filter_type == IRLAN_MULTICAST) && 
 	    (self->provider.filter_mode == FILTER))
 	{
-		DEBUG(0, "Multicast filter on\n");
+		IRDA_DEBUG(0, "Multicast filter on\n");
 		skb->data[0] = 0x00; /* Success */
 		skb->data[1] = 0x00;
 		return;
@@ -112,7 +112,7 @@ void handle_filter_request(struct irlan_cb *self, struct sk_buff *skb)
 	if ((self->provider.filter_type == IRLAN_MULTICAST) && 
 	    (self->provider.filter_mode == NONE))
 	{
-		DEBUG(0, "Multicast filter off\n");
+		IRDA_DEBUG(0, "Multicast filter off\n");
 		skb->data[0] = 0x00; /* Success */
 		skb->data[1] = 0x00;
 		return;
@@ -120,7 +120,7 @@ void handle_filter_request(struct irlan_cb *self, struct sk_buff *skb)
 	if ((self->provider.filter_type == IRLAN_MULTICAST) && 
 	    (self->provider.filter_operation == GET))
 	{
-		DEBUG(0, "Multicast filter get\n");
+		IRDA_DEBUG(0, "Multicast filter get\n");
 		skb->data[0] = 0x00; /* Success? */
 		skb->data[1] = 0x02;
 		irlan_insert_string_param(skb, "FILTER_MODE", "NONE");
@@ -130,7 +130,7 @@ void handle_filter_request(struct irlan_cb *self, struct sk_buff *skb)
 	skb->data[0] = 0x00; /* Command not supported */
 	skb->data[1] = 0x00;
 
-	DEBUG(0, "Not implemented!\n");
+	IRDA_DEBUG(0, "Not implemented!\n");
 }
 
 /*
@@ -143,20 +143,20 @@ void irlan_check_command_param(struct irlan_cb *self, char *param, char *value)
 {
 	__u8 *bytes;
 
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
 	bytes = value;
 
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IRLAN_MAGIC, return;);
 
-	DEBUG(4, "%s, %s\n", param, value);
+	IRDA_DEBUG(4, "%s, %s\n", param, value);
 
 	/*
 	 *  This is experimental!! DB.
 	 */
 	 if (strcmp(param, "MODE") == 0) {
-		DEBUG(0, __FUNCTION__ "()\n");
+		IRDA_DEBUG(0, __FUNCTION__ "()\n");
 		self->use_udata = TRUE;
 		return;
 	}

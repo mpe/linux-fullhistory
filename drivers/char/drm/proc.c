@@ -382,7 +382,7 @@ static int _drm_vma_info(char *buf, char **start, off_t offset, int len,
 			       vma->vm_flags & VM_MAYSHARE ? 's' : 'p',
 			       vma->vm_flags & VM_LOCKED   ? 'l' : '-',
 			       vma->vm_flags & VM_IO	   ? 'i' : '-',
-			       vma->vm_offset );
+			       vma->vm_pgoff << PAGE_SHIFT );
 #if defined(__i386__)
 		pgprot = pgprot_val(vma->vm_page_prot);
 		DRM_PROC_PRINT(" %c%c%c%c%c%c%c%c%c",

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Jun 10 14:39:09 1999
- * Modified at:   Tue Aug 31 10:29:36 1999
+ * Modified at:   Sat Oct 30 12:50:41 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -145,7 +145,6 @@ void ircomm_tty_set_termios(struct tty_struct *tty,
 {
 	struct ircomm_tty_cb *self = (struct ircomm_tty_cb *) tty->driver_data;
 	unsigned int cflag = tty->termios->c_cflag;
-	unsigned long flags;
 
 	if ((cflag == old_termios->c_cflag) && 
 	    (RELEVANT_IFLAG(tty->termios->c_iflag) == 
@@ -194,7 +193,7 @@ static int ircomm_tty_get_modem_info(struct ircomm_tty_cb *self,
 {
 	unsigned int result;
 
-	DEBUG(1, __FUNCTION__ "()\n");
+	IRDA_DEBUG(1, __FUNCTION__ "()\n");
 
 	result =  ((self->session.dte & IRCOMM_RTS) ? TIOCM_RTS : 0)
 		| ((self->session.dte & IRCOMM_DTR) ? TIOCM_DTR : 0)
@@ -219,7 +218,7 @@ static int ircomm_tty_set_modem_info(struct ircomm_tty_cb *self,
 	__u8 old_rts, old_dtr;
 	int error;
 
-	DEBUG(2, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
 	ASSERT(self != NULL, return -1;);
 	ASSERT(self->magic == IRCOMM_TTY_MAGIC, return -1;);
@@ -282,7 +281,7 @@ static int ircomm_tty_get_serial_info(struct ircomm_tty_cb *self,
 	if (!retinfo)
 		return -EFAULT;
 
-	DEBUG(1, __FUNCTION__ "()\n");
+	IRDA_DEBUG(1, __FUNCTION__ "()\n");
 
 	memset(&info, 0, sizeof(info));
 	info.line = self->line;
@@ -314,11 +313,11 @@ static int ircomm_tty_get_serial_info(struct ircomm_tty_cb *self,
 static int ircomm_tty_set_serial_info(struct ircomm_tty_cb *tty,
 				      struct serial_struct *new_info)
 {
+#if 0
 	struct serial_struct new_serial;
 	struct ircomm_tty_cb old_driver;
 
-	DEBUG(2, __FUNCTION__ "()\n");
-#if 0
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
 	if (copy_from_user(&new_serial,new_info,sizeof(new_serial)))
 		return -EFAULT;
@@ -412,11 +411,11 @@ int ircomm_tty_ioctl(struct tty_struct *tty, struct file *file,
 		ret = ircomm_tty_set_serial_info(self, (struct serial_struct *) arg);
 		break;
 	case TIOCMIWAIT:
-		DEBUG(0, "(), TIOCMIWAIT, not impl!\n");
+		IRDA_DEBUG(0, "(), TIOCMIWAIT, not impl!\n");
 		break;
 
 	case TIOCGICOUNT:
-		DEBUG(0, __FUNCTION__ "(), TIOCGICOUNT not impl!\n");
+		IRDA_DEBUG(0, __FUNCTION__ "(), TIOCGICOUNT not impl!\n");
 #if 0
 		save_flags(flags); cli();
 		cnow = driver->icount;

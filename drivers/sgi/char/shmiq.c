@@ -318,7 +318,7 @@ shmiq_qcntl_mmap (struct file *file, struct vm_area_struct *vma)
 	if (minor-- == 0)
 		return -EINVAL;
 
-	if (vma->vm_offset != 0)
+	if (vma->vm_pgoff)
 		return -EINVAL;
 
 	size  = vma->vm_end - vma->vm_start;

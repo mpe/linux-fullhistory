@@ -49,7 +49,7 @@ extern char modprobe_path[];
 extern int sg_big_buff;
 #endif
 #ifdef CONFIG_SYSVIPC
-extern size_t shmmax;
+extern size_t shm_prm[];
 #endif
 
 #ifdef __sparc__
@@ -213,7 +213,7 @@ static ctl_table kern_table[] = {
 	{KERN_RTSIGMAX, "rtsig-max", &max_queued_signals, sizeof(int),
 	 0644, NULL, &proc_dointvec},
 #ifdef CONFIG_SYSVIPC
-	{KERN_SHMMAX, "shmmax", &shmmax, sizeof (size_t),
+	{KERN_SHMMAX, "shmmax", &shm_prm, 3*sizeof (size_t),
 	 0644, NULL, &proc_doulongvec_minmax},
 #endif
 #ifdef CONFIG_MAGIC_SYSRQ

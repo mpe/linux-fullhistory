@@ -148,7 +148,7 @@ static struct busmouse adb_mouse =
 	ADB_MOUSE_MINOR, "adbmouse", open_mouse, release_mouse, 7
 };
 
-int __init adb_mouse_init(void)
+static int __init adb_mouse_init(void)
 {
 #ifdef __powerpc__
 	if ((_machine != _MACH_chrp) && (_machine != _MACH_Pmac))
@@ -169,6 +169,8 @@ int __init adb_mouse_init(void)
 
 	return msedev < 0 ? msedev : 0;
 }
+
+#ifndef MODULE
 
 /*
  * XXX this function is misnamed.
@@ -193,15 +195,12 @@ static int __init adb_mouse_setup(char *str)
 
 __setup("adb_buttons=", adb_mouse_setup);
 
-#ifdef MODULE
-int init_module(void)
-{
-	return adb_mouse_init();
-}
+#endif /* !MODULE */
 
-void cleanup_module(void)
+static void __exit adb_mouse_cleanup(void)
 {
 	unregister_busmouse(msedev);
 }
 
-#endif
+module_init(adb_mouse_init);
+module_exit(adb_mouse_cleanup);

@@ -93,7 +93,7 @@ static
 #endif
 int arc90xx_probe(struct net_device *dev);
 static void arc90xx_rx(struct net_device *dev, int recbuf);
-static int arc90xx_found(struct net_device *dev, int ioaddr, int airq, u_long shmem, int more);
+static int arc90xx_found(struct net_device *dev, int ioaddr, int airq, void * shmem, int more);
 static void arc90xx_inthandler(struct net_device *dev);
 static int arc90xx_reset(struct net_device *dev, int reset_delay);
 static void arc90xx_setmask(struct net_device *dev, u_char mask);
@@ -175,7 +175,7 @@ static const char *version =
 static int ports[(0x3f0 - 0x200) / 16 + 1] __initdata = {
 	0
 };
-static u_long shmems[(0xFF800 - 0xA0000) / 2048 + 1] __initdata = {
+static void * shmems[(0xFF800 - 0xA0000) / 2048 + 1] __initdata = {
 	0
 };
 
@@ -187,13 +187,13 @@ int __init arc90xx_probe(struct net_device *dev)
 	 openparen = 0;
 	unsigned long airqmask;
 	int *port;
-	u_long *shmem;
+	void **shmem;
 
 	if (!init_once) {
 		for (count = 0x200; count <= 0x3f0; count += 16)
 			ports[(count - 0x200) / 16] = count;
 		for (count = 0xA0000; count <= 0xFF800; count += 2048)
-			shmems[(count - 0xA0000) / 2048] = count;
+			shmems[(count - 0xA0000) / 2048] = ioremap(count, 2048);
 		BUGLVL(D_NORMAL) printk(version);
 		BUGMSG(D_DURING, "space used for probe buffers: %d+%d=%d bytes\n",
 		       sizeof(ports), sizeof(shmems),
@@ -211,7 +211,7 @@ int __init arc90xx_probe(struct net_device *dev)
 		return -ENXIO;
 
 	if (dev->mem_start) {
-		shmems[0] = dev->mem_start;
+		shmems[0] = ioremap(dev->mem_start, 2048);
 		numshmems = 1;
 	}
 	/* Stage 1: abandon any reserved ports, or ones with status==0xFF
@@ -284,7 +284,7 @@ int __init arc90xx_probe(struct net_device *dev)
 	BUGMSG(D_INIT, "Stage 3: ");
 	numprint = 0;
 	for (shmem = &shmems[0]; shmem - shmems < numshmems; shmem++) {
-		u_long ptr;
+		void * ptr;
 
 		numprint++;
 		if (numprint > 8) {
@@ -292,9 +292,9 @@ int __init arc90xx_probe(struct net_device *dev)
 			BUGMSG(D_INIT, "Stage 3: ");
 			numprint = 1;
 		}
-		BUGMSG2(D_INIT, "%lXh ", *shmem);
+		BUGMSG2(D_INIT, "%ph ", *shmem);
 
-		ptr = (u_long) (*shmem);
+		ptr = *shmem;
 
 		if (readb(ptr) != TESTvalue) {
 			BUGMSG2(D_INIT_REASONS, "(mem=%02Xh, not %02Xh)\n",
@@ -342,7 +342,7 @@ int __init arc90xx_probe(struct net_device *dev)
 			BUGMSG(D_INIT, "Stage 4: ");
 			numprint = 1;
 		}
-		BUGMSG2(D_INIT, "%lXh ", *shmem);
+		BUGMSG2(D_INIT, "%ph ", *shmem);
 	}
 	BUGMSG2(D_INIT, "\n");
 
@@ -439,12 +439,12 @@ int __init arc90xx_probe(struct net_device *dev)
 #endif
 
 		for (shmem = &shmems[0]; shmem - shmems < numshmems; shmem++) {
-			u_long ptr;
-			ptr = (u_long) (*shmem);
+			void * ptr;
+			ptr = *shmem;
 
 			if (readb(ptr) == TESTvalue) {	/* found one */
 				int probe_more;
-				BUGMSG2(D_INIT, "%lXh)\n", *shmem);
+				BUGMSG2(D_INIT, "%ph)\n", *shmem);
 				openparen = 0;
 
 				/* register the card */
@@ -493,10 +493,10 @@ int __init arc90xx_probe(struct net_device *dev)
 /* Set up the struct net_device associated with this card.  Called after
  * probing succeeds.
  */
-static int __init arc90xx_found(struct net_device *dev, int ioaddr, int airq, u_long shmem, int more)
+static int __init arc90xx_found(struct net_device *dev, int ioaddr, int airq, void * shmem, int more)
 {
 	struct arcnet_local *lp;
-	u_long first_mirror, last_mirror;
+	void *first_mirror, *last_mirror;
 	int mirror_size;
 
 	/* reserve the irq */
@@ -533,8 +533,8 @@ static int __init arc90xx_found(struct net_device *dev, int ioaddr, int airq, u_
 		last_mirror += mirror_size;
 	last_mirror -= mirror_size;
 
-	dev->mem_start = first_mirror;
-	dev->mem_end = last_mirror + MIRROR_SIZE - 1;
+	dev->mem_start = (unsigned long) first_mirror;
+	dev->mem_end = (unsigned long) last_mirror + MIRROR_SIZE - 1;
 	dev->rmem_start = dev->mem_start + BUFFER_SIZE * 0;
 	dev->rmem_end = dev->mem_start + BUFFER_SIZE * 2 - 1;
 

@@ -36,6 +36,12 @@ static void sr_ioctl_done(Scsi_Cmnd * SCpnt)
     
     req = &SCpnt->request;
     req->rq_status = RQ_SCSI_DONE; /* Busy, but indicate request done */
+
+    if (SCpnt->buffer && req->buffer && SCpnt->buffer != req->buffer) {
+	memcpy(req->buffer, SCpnt->buffer, SCpnt->bufflen);
+	scsi_free(SCpnt->buffer, (SCpnt->bufflen + 511) & ~511);
+	SCpnt->buffer = req->buffer;
+    } 
     
     if (req->sem != NULL) {
 	up(req->sem);
@@ -52,27 +58,33 @@ int sr_do_ioctl(int target, unsigned char * sr_cmd, void * buffer, unsigned bufl
     Scsi_Device * SDev;
     int result, err = 0, retries = 0;
     unsigned long flags;
+    char * bounce_buffer;
 
     spin_lock_irqsave(&io_request_lock, flags);
     SDev  = scsi_CDs[target].device;
     SCpnt = scsi_allocate_device(NULL, scsi_CDs[target].device, 1);
     spin_unlock_irqrestore(&io_request_lock, flags);
 
+    /* use ISA DMA buffer if necessary */
+    SCpnt->request.buffer=buffer;
+    if (buffer && SCpnt->host->unchecked_isa_dma &&
+       (virt_to_phys(buffer) + buflength - 1 > ISA_DMA_THRESHOLD)) {
+	bounce_buffer = (char *)scsi_malloc((buflength + 511) & ~511);
+	if (bounce_buffer == NULL) {
+		printk("SCSI DMA pool exhausted.");
+		return -ENOMEM;
+	}
+	memcpy(bounce_buffer, (char *)buffer, buflength);
+	buffer = bounce_buffer;
+    }
+
 retry:
     if( !scsi_block_when_processing_errors(SDev) )
         return -ENODEV;
-    {
-	DECLARE_MUTEX_LOCKED(sem);
-	SCpnt->request.sem = &sem;
-	spin_lock_irqsave(&io_request_lock, flags);
-	scsi_do_cmd(SCpnt,
-		    (void *) sr_cmd, buffer, buflength, sr_ioctl_done, 
-		    IOCTL_TIMEOUT, IOCTL_RETRIES);
-	spin_unlock_irqrestore(&io_request_lock, flags);
-	down(&sem);
-        SCpnt->request.sem = NULL;
-    }
-    
+
+    scsi_wait_cmd(SCpnt, (void *)sr_cmd, (void *)buffer, buflength,
+		  sr_ioctl_done, IOCTL_TIMEOUT, IOCTL_RETRIES);
+
     result = SCpnt->result;
     
     /* Minimal error checking.  Ignore cases we know about, and report the rest. */

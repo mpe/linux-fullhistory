@@ -27,18 +27,18 @@ if [ "$CONFIG_PARPORT" != "n" ]; then
 	 dep_tristate '  Multiface III parallel port' CONFIG_PARPORT_MFC3 $CONFIG_PARPORT
       fi
    else
-      define_bool CONFIG_PARPORT_AMIGA n
-      define_bool CONFIG_PARPORT_MFC3 n
+      define_tristate CONFIG_PARPORT_AMIGA n
+      define_tristate CONFIG_PARPORT_MFC3 n
    fi
    if [ "$CONFIG_ATARI" = "y" ]; then
       dep_tristate '  Atari hardware' CONFIG_PARPORT_ATARI $CONFIG_PARPORT
    else
-      define_bool CONFIG_PARPORT_ATARI n
+      define_tristate CONFIG_PARPORT_ATARI n
    fi
    if [ "$CONFIG_SBUS" = "y" ]; then
       dep_tristate '  Sparc hardware (EXPERIMENTAL)' CONFIG_PARPORT_SUNBPP $CONFIG_PARPORT
    else
-      define_bool CONFIG_PARPORT_SUNBPP n
+      define_tristate CONFIG_PARPORT_SUNBPP n
    fi
 
    # If exactly one hardware type is selected then parport will optimise away

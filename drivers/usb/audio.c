@@ -48,6 +48,10 @@
  *              decent headphones!
  *              "Let's make things better" -> but please Philips start with your
  *              own stuff!!!!
+ * 1999-11-02:  It takes the Philips boxes several seconds to acquire synchronisation
+ *              that means they won't play short sounds. Should probably maintain
+ *              the ISO datastream even if there's nothing to play.
+ *              Fix counting the total_bytes counter, RealPlayer G2 depends on it.
  *
  *
  */
@@ -455,6 +459,7 @@ static void dmabuf_copyin(struct dmabuf *db, const void *buffer, unsigned int si
 {
 	unsigned int pgrem, rem;
 
+	db->total_bytes += size;
 	for (;;) {
 		if (size <= 0)
 			return;
@@ -477,6 +482,7 @@ static void dmabuf_copyout(struct dmabuf *db, void *buffer, unsigned int size)
 {
 	unsigned int pgrem, rem;
 
+	db->total_bytes += size;
 	for (;;) {
 		if (size <= 0)
 			return;
@@ -3285,7 +3291,9 @@ static void usb_audio_featureunit(struct consmixstate *state, unsigned char *ftr
 			prepmixch(state);
 		}
 	}
+#if 0
 	/* if there are mute controls, unmute them */
+	/* does not seem to be necessary, and the Dallas chip does not seem to support the "all" channel (255) */
 	if ((chftr & 1) || (mchftr & 1)) {
 		printk(KERN_DEBUG "usbaudio: unmuting feature unit %u interface %u\n", ftr[3], state->ctrlif);
 		data[0] = 0;
@@ -3293,6 +3301,7 @@ static void usb_audio_featureunit(struct consmixstate *state, unsigned char *ftr
                                     (MUTE_CONTROL << 8) | 0xff, state->ctrlif | (ftr[3] << 8), data, 1, HZ) < 0)
 			printk(KERN_WARNING "usbaudio: failure to unmute feature unit %u interface %u\n", ftr[3], state->ctrlif);
  	}
+#endif
 }
 
 static void usb_audio_recurseunit(struct consmixstate *state, unsigned char unitid)
@@ -3612,7 +3621,13 @@ static void usb_audio_disconnect(struct usb_device *dev, void *ptr)
 
 int usb_audio_init(void)
 {
-	usb_register(&usb_audio_driver);
+	if (usb_register(&usb_audio_driver) < 0) {
+		printk(KERN_ERR "USB Audio driver cannot register: "
+			"minor number %d already in use\n",
+			usb_audio_driver.minor);
+		return -1;
+	}
+
 	return 0;
 }
 

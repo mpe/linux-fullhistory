@@ -68,6 +68,9 @@ int usb_init(void)
 #	ifdef CONFIG_USB_CPIA
 		usb_cpia_init();
 #	endif
+#	ifdef CONFIG_USB_DC2XX
+		usb_dc2xx_init();
+#	endif
 #	ifdef CONFIG_USB_HUB
 		usb_hub_init();
 #	endif

@@ -266,7 +266,7 @@ P:	Steven Whitehouse
 M:	SteveW@ACM.org
 W:	http://www.sucs.swan.ac.uk/~rohan/
 W:	http://www-sigproc.eng.cam.ac.uk/~sjw44/
-L:	netdev@roxanne.nuclecu.unam.mx
+L:	netdev@oss.sgi.com
 S:	Maintained
 
 DEVICE NUMBER REGISTRY
@@ -616,7 +616,7 @@ S:	Maintained
 
 NETWORKING [GENERAL]
 P:	Networking Teak
-M:	netdev@nuclecu.unam.mx
+M:	netdev@oss.sgi.com
 L:	linux-net@vger.rutgers.edu
 W:	http://www.uk.linux.org/NetNews.html (2.0 only)
 S:	Maintained
@@ -628,7 +628,7 @@ P:	Andi Kleen
 M:	ak@muc.de
 P:	Alexey Kuznetsov
 M:	kuznet@ms2.inr.ac.ru
-L:	netdev@roxanne.nuclecu.unam.mx
+L:	netdev@oss.sgi.com
 S:	Maintained
 
 NFS CLIENT
@@ -764,7 +764,7 @@ S:	Maintained
 SCSI CDROM DRIVER
 P:	Jens Axboe
 M:	axboe@image.dk
-L:	linux-kernel@vger.rutgers.edu
+L:	linux-scsi@vger.rutgers.edu
 W:	http://www.kernel.dk
 S:	Maintained
 

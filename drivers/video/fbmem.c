@@ -102,6 +102,8 @@ extern int fm2fb_setup(char*);
 extern int q40fb_init(void);
 extern int sgivwfb_init(void);
 extern int sgivwfb_setup(char*);
+extern int rivafb_init(void);
+extern int rivafb_setup(char*);
 extern int tdfxfb_init(void);
 extern int tdfxfb_setup(char*);
 
@@ -175,6 +177,9 @@ static struct {
 #endif
 #ifdef CONFIG_FB_VIRGE
 	{ "virge", virgefb_init, virgefb_setup },
+#endif
+#ifdef CONFIG_FB_RIVA
+	{ "riva", rivafb_init, rivafb_setup },
 #endif
 #ifdef CONFIG_FB_VESA
 	{ "vesa", vesafb_init, vesafb_setup },
@@ -483,9 +488,12 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 	struct fb_ops *fb = info->fbops;
 	struct fb_fix_screeninfo fix;
 	struct fb_var_screeninfo var;
-	unsigned long start;
+	unsigned long start, off;
 	u32 len;
 
+	if (vma->vm_pgoff > (~0UL >> PAGE_SHIFT))
+		return -EINVAL;
+	off = vma->vm_pgoff << PAGE_SHIFT;
 	if (!fb)
 		return -ENODEV;
 	if (fb->fb_mmap)
@@ -504,10 +512,10 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 	start = fix.smem_start;
 	len = (start & ~PAGE_MASK)+fix.smem_len;
 	start &= PAGE_MASK;
-	len = (len+~PAGE_MASK) & PAGE_MASK;
-	if (vma->vm_offset >= len) {
+	len = (len+~PAGE_MASK) & PAGE_MASK;		/* someone's on crack. */
+	if (off >= len) {
 		/* memory mapped io */
-		vma->vm_offset -= len;
+		off -= len;
 		fb->fb_get_var(&var, PROC_CONSOLE(info), info);
 		if (var.accel_flags)
 			return -EINVAL;
@@ -516,11 +524,10 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 		start &= PAGE_MASK;
 		len = (len+~PAGE_MASK) & PAGE_MASK;
 	}
-	if ((vma->vm_end - vma->vm_start + vma->vm_offset) > len)
+	if ((vma->vm_end - vma->vm_start + off) > len)
 		return -EINVAL;
-	vma->vm_offset += start;
-	if (vma->vm_offset & ~PAGE_MASK)
-		return -ENXIO;
+	off += start;
+	vma->vm_pgoff = off >> PAGE_CACHE_SHIFT;
 #if defined(__mc68000__)
 	if (CPU_IS_020_OR_030)
 		pgprot_val(vma->vm_page_prot) |= _PAGE_NOCACHE030;
@@ -549,7 +556,7 @@ fb_mmap(struct file *file, struct vm_area_struct * vma)
 #else
 #warning What do we have to do here??
 #endif
-	if (io_remap_page_range(vma->vm_start, vma->vm_offset,
+	if (io_remap_page_range(vma->vm_start, off,
 			     vma->vm_end - vma->vm_start, vma->vm_page_prot))
 		return -EAGAIN;
 	return 0;

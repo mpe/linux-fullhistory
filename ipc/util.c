@@ -14,6 +14,8 @@
 #include <linux/init.h>
 #include <linux/msg.h>
 
+#include "util.h"
+
 #if defined(CONFIG_SYSVIPC)
 
 extern void sem_init (void), msg_init (void), shm_init (void);

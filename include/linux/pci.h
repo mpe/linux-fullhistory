@@ -530,8 +530,8 @@ unsigned int ss_vendor, unsigned int ss_device, struct pci_dev *from)
 extern inline void pci_set_master(struct pci_dev *dev) { }
 extern inline int pci_enable_device(struct pci_dev *dev) { return 0; }
 
-extern inline int pci_simple_probe (struct pci_simple_probe_entry *list, size_t match_limit,
-		      pci_simple_probe_callback cb, void *drvr_data)
+extern inline int pci_simple_probe (const struct pci_simple_probe_entry *list,
+	size_t match_limit, pci_simple_probe_callback cb, void *drvr_data)
 { return 0; }
 
 #endif /* !CONFIG_PCI */

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Dec  9 21:18:38 1997
- * Modified at:   Wed Oct 20 00:05:43 1999
+ * Modified at:   Sun Oct 31 22:24:03 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       slip.c by Laurence Culhane,   <loz@holmes.demon.co.uk>
  *                          Fred N. van Kempen, <waltje@uwalt.nl.mugnet.org>
@@ -345,8 +345,6 @@ static void __irtty_change_speed(struct irtty_cb *self, __u32 speed)
         struct termios old_termios;
 	int cflag;
 
-	IRDA_DEBUG(0, __FUNCTION__ "(), <%ld>\n", jiffies); 
-
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IRTTY_MAGIC, return;);
 
@@ -355,7 +353,7 @@ static void __irtty_change_speed(struct irtty_cb *self, __u32 speed)
 
 	cflag &= ~CBAUD;
 
-	IRDA_DEBUG(0, __FUNCTION__ "(), Setting speed to %d\n", speed);
+	IRDA_DEBUG(2, __FUNCTION__ "(), Setting speed to %d\n", speed);
 
 	switch (speed) {
 	case 1200:
@@ -562,7 +560,8 @@ static void irtty_receive_buf(struct tty_struct *tty, const unsigned char *cp,
 		switch (self->mode) {
 		case IRDA_IRLAP:
 			/* Unwrap and destuff one byte */
-			async_unwrap_char(self->netdev, &self->rx_buff, *cp++);
+			async_unwrap_char(self->netdev, &self->stats, 
+					  &self->rx_buff, *cp++);
 			break;
 		case IRDA_RAW:
 			/* What should we do when the buffer is full? */
@@ -587,7 +586,7 @@ static int irtty_change_speed_complete(struct irda_task *task)
 {
 	struct irtty_cb *self;
 
-	IRDA_DEBUG(0, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
 	self = (struct irtty_cb *) task->instance;
 

@@ -4,7 +4,7 @@
 
 		"What should you avoid when writing PCI drivers"
 
-	  by Martin Mares <mj@atrey.karlin.mff.cuni.cz> on 09-Oct-1999
+	  by Martin Mares <mj@atrey.karlin.mff.cuni.cz> on 03-Nov-1999
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -72,6 +72,8 @@ corresponding register block for you.
    Memory and port addresses and interrupt numbers should NOT be read from the
 config space. You should use the values in the pci_dev structure as they might
 have been remapped by the kernel.
+
+   See Documentation/IO-mapping.txt for how to access device memory.
 
 5. Other interesting functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

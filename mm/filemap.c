@@ -519,7 +519,7 @@ int add_to_page_cache_unique(struct page * page,
  * This adds the requested page to the page cache if it isn't already there,
  * and schedules an I/O to read in its contents from disk.
  */
-static inline void page_cache_read(struct file * file, unsigned long offset) 
+static inline int page_cache_read(struct file * file, unsigned long offset) 
 {
 	struct inode *inode = file->f_dentry->d_inode;
 	struct page **hash = page_hash(&inode->i_data, offset);
@@ -529,38 +529,42 @@ static inline void page_cache_read(struct file * file, unsigned long offset)
 	page = __find_page_nolock(&inode->i_data, offset, *hash); 
 	spin_unlock(&pagecache_lock);
 	if (page)
-		return;
+		return 0;
 
 	page = page_cache_alloc();
 	if (!page)
-		return;
+		return -ENOMEM;
 
 	if (!add_to_page_cache_unique(page, &inode->i_data, offset, hash)) {
-		inode->i_op->readpage(file, page);
+		int error = inode->i_op->readpage(file, page);
 		page_cache_release(page);
-		return;
+		return error;
 	}
 	/*
 	 * We arrive here in the unlikely event that someone 
 	 * raced with us and added our page to the cache first.
 	 */
 	page_cache_free(page);
-	return;
+	return 0;
 }
 
 /*
  * Read in an entire cluster at once.  A cluster is usually a 64k-
  * aligned block that includes the address requested in "offset."
  */
-static void read_cluster_nonblocking(struct file * file, unsigned long offset)
+static int read_cluster_nonblocking(struct file * file, unsigned long offset)
 {
+	int error = 0;
 	unsigned long filesize = (file->f_dentry->d_inode->i_size + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
 	unsigned long pages = CLUSTER_PAGES;
 
 	offset = CLUSTER_OFFSET(offset);
 	while ((pages-- > 0) && (offset < filesize)) {
-		page_cache_read(file, offset);
-		offset ++;
+		error = page_cache_read(file, offset);
+		if (error >= 0)
+			offset ++;
+		else
+			break;
 	}
 
 	return;
@@ -899,7 +903,8 @@ static void generic_file_readahead(int reada_ok,
 		ahead += PAGE_CACHE_SIZE;
 		if ((raend + ahead) >= inode->i_size)
 			break;
-		page_cache_read(filp, (raend + ahead) >> PAGE_CACHE_SHIFT);
+		if (page_cache_read(filp, (raend + ahead) >> PAGE_CACHE_SHIFT) < 0)
+			break;
 	}
 /*
  * If we tried to read ahead some pages,
@@ -1292,13 +1297,11 @@ out:
  * The goto's are kind of ugly, but this streamlines the normal case of having
  * it in the page cache, and handles the special cases reasonably without
  * having a lot of duplicated code.
- *
- * XXX - at some point, this should return unique values to indicate to
- *       the caller whether this is EIO, OOM, or SIGBUS.
  */
 static struct page * filemap_nopage(struct vm_area_struct * area,
 	unsigned long address, int no_share)
 {
+	int error;
 	struct file *file = area->vm_file;
 	struct dentry *dentry = file->f_dentry;
 	struct inode *inode = dentry->d_inode;
@@ -1347,7 +1350,8 @@ success:
 				BUG();
 			copy_highpage(new_page, old_page);
 			flush_page_to_ram(new_page);
-		}
+		} else
+			new_page = NOPAGE_OOM;
 		page_cache_release(page);
 		return new_page;
 	}
@@ -1364,16 +1368,26 @@ no_cached_page:
 	 * so we need to map a zero page.
 	 */
 	if (pgoff < size)
-		read_cluster_nonblocking(file, pgoff);
+		error = read_cluster_nonblocking(file, pgoff);
 	else
-		page_cache_read(file, pgoff);
+		error = page_cache_read(file, pgoff);
 
 	/*
 	 * The page we want has now been added to the page cache.
 	 * In the unlikely event that someone removed it in the
 	 * meantime, we'll just come back here and read it again.
 	 */
-	goto retry_find;
+	if (error >= 0)
+		goto retry_find;
+
+	/*
+	 * An error return from page_cache_read can result if the
+	 * system is low on memory, or a problem occurs while trying
+	 * to schedule I/O.
+	 */
+	if (error == -ENOMEM)
+		return NOPAGE_OOM;
+	return NULL;
 
 page_not_uptodate:
 	lock_page(page);

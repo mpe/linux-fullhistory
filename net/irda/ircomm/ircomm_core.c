@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Jun  6 20:37:34 1999
- * Modified at:   Tue Oct  5 11:37:11 1999
+ * Modified at:   Sat Oct 30 12:48:14 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -80,7 +80,7 @@ int __init ircomm_init(void)
 #ifdef MODULE
 void ircomm_cleanup(void)
 {
-	DEBUG(2, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
 	hashbin_delete(ircomm, (FREE_FUNC) __ircomm_close);
 
@@ -101,8 +101,8 @@ struct ircomm_cb *ircomm_open(notify_t *notify, __u8 service_type, int line)
 	struct ircomm_cb *self = NULL;
 	int ret;
 
-	DEBUG(2, __FUNCTION__ "(), service_type=0x%02x\n",
-	      service_type);
+	IRDA_DEBUG(2, __FUNCTION__ "(), service_type=0x%02x\n",
+		   service_type);
 
 	ASSERT(ircomm != NULL, return NULL;);
 
@@ -143,7 +143,7 @@ struct ircomm_cb *ircomm_open(notify_t *notify, __u8 service_type, int line)
  */
 static int __ircomm_close(struct ircomm_cb *self)
 {
-	DEBUG(2, __FUNCTION__"()\n");
+	IRDA_DEBUG(2, __FUNCTION__"()\n");
 
 	ASSERT(self != NULL, return -EIO;);
 	ASSERT(self->magic == IRCOMM_MAGIC, return -EIO;);
@@ -199,7 +199,7 @@ int ircomm_connect_request(struct ircomm_cb *self, __u8 dlsap_sel,
 	struct ircomm_info info;
 	int ret;
 
-	DEBUG(2 , __FUNCTION__"()\n");
+	IRDA_DEBUG(2 , __FUNCTION__"()\n");
 
 	ASSERT(self != NULL, return -1;);
 	ASSERT(self->magic == IRCOMM_MAGIC, return -1;);
@@ -226,7 +226,7 @@ void ircomm_connect_indication(struct ircomm_cb *self, struct sk_buff *skb,
 {
 	int clen = 0;
 	
-	DEBUG(2, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
 	/* Check if the packet contains data on the control channel */
 	if (skb->len > 0)
@@ -260,7 +260,7 @@ int ircomm_connect_response(struct ircomm_cb *self, struct sk_buff *userdata)
 	ASSERT(self != NULL, return -1;);
 	ASSERT(self->magic == IRCOMM_MAGIC, return -1;);
 
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
 	ret = ircomm_do_event(self, IRCOMM_CONNECT_RESPONSE, userdata, NULL);
 
@@ -276,7 +276,7 @@ int ircomm_connect_response(struct ircomm_cb *self, struct sk_buff *userdata)
 void ircomm_connect_confirm(struct ircomm_cb *self, struct sk_buff *skb,
 			    struct ircomm_info *info)
 {
-	DEBUG(4, __FUNCTION__"()\n");
+	IRDA_DEBUG(4, __FUNCTION__"()\n");
 
 	if (self->notify.connect_confirm )
 		self->notify.connect_confirm(self->notify.instance,
@@ -295,7 +295,7 @@ int ircomm_data_request(struct ircomm_cb *self, struct sk_buff *skb)
 {
 	int ret;
 
-	DEBUG(4, __FUNCTION__"()\n");
+	IRDA_DEBUG(4, __FUNCTION__"()\n");
 
 	ASSERT(self != NULL, return -EFAULT;);
 	ASSERT(self->magic == IRCOMM_MAGIC, return -EFAULT;);
@@ -314,7 +314,7 @@ int ircomm_data_request(struct ircomm_cb *self, struct sk_buff *skb)
  */
 void ircomm_data_indication(struct ircomm_cb *self, struct sk_buff *skb)
 {	
-	DEBUG(4, __FUNCTION__"()\n");
+	IRDA_DEBUG(4, __FUNCTION__"()\n");
 
 	ASSERT(skb->len > 0, return;);
 
@@ -350,7 +350,7 @@ void ircomm_process_data(struct ircomm_cb *self, struct sk_buff *skb)
 	if (skb->len)
 		ircomm_data_indication(self, skb);		
 	else {
-		DEBUG(4, __FUNCTION__ "(), data was control info only!\n");
+		IRDA_DEBUG(4, __FUNCTION__ "(), data was control info only!\n");
 		dev_kfree_skb(skb);
 	}
 }
@@ -365,7 +365,7 @@ int ircomm_control_request(struct ircomm_cb *self, struct sk_buff *skb)
 {
 	int ret;
 	
-	DEBUG(2, __FUNCTION__"()\n");
+	IRDA_DEBUG(2, __FUNCTION__"()\n");
 
 	ASSERT(self != NULL, return -EFAULT;);
 	ASSERT(self->magic == IRCOMM_MAGIC, return -EFAULT;);
@@ -387,7 +387,7 @@ static void ircomm_control_indication(struct ircomm_cb *self,
 {
 	struct sk_buff *ctrl_skb;
 
-	DEBUG(2, __FUNCTION__"()\n");	
+	IRDA_DEBUG(2, __FUNCTION__"()\n");	
 
 	ctrl_skb = skb_clone(skb, GFP_ATOMIC);
 	if (!ctrl_skb)
@@ -413,7 +413,7 @@ int ircomm_disconnect_request(struct ircomm_cb *self, struct sk_buff *userdata)
 	struct ircomm_info info;
 	int ret;
 
-	DEBUG(2, __FUNCTION__"()\n");
+	IRDA_DEBUG(2, __FUNCTION__"()\n");
 
 	ASSERT(self != NULL, return -1;);
 	ASSERT(self->magic == IRCOMM_MAGIC, return -1;);
@@ -432,7 +432,7 @@ int ircomm_disconnect_request(struct ircomm_cb *self, struct sk_buff *userdata)
 void ircomm_disconnect_indication(struct ircomm_cb *self, struct sk_buff *skb,
 				  struct ircomm_info *info)
 {
-	DEBUG(2, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
        
 	ASSERT(info != NULL, return;);
 
@@ -450,7 +450,7 @@ void ircomm_disconnect_indication(struct ircomm_cb *self, struct sk_buff *skb,
  */
 void ircomm_flow_request(struct ircomm_cb *self, LOCAL_FLOW flow)
 {
-	DEBUG(2, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IRCOMM_MAGIC, return;);

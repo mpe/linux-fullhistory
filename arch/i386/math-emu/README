@@ -1,9 +1,9 @@
  +---------------------------------------------------------------------------+
  |  wm-FPU-emu   an FPU emulator for 80386 and 80486SX microprocessors.      |
  |                                                                           |
- | Copyright (C) 1992,1993,1994,1995,1996,1997                               |
+ | Copyright (C) 1992,1993,1994,1995,1996,1997,1999                          |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail billm@suburbia.net               |
+ |                       Australia.  E-mail billm@melbpc.org.au              |
  |                                                                           |
  |    This program is free software; you can redistribute it and/or modify   |
  |    it under the terms of the GNU General Public License version 2 as      |
@@ -42,14 +42,15 @@ but is very close.  See "Limitations" later in this file for a list of
 some differences.
 
 Please report bugs, etc to me at:
-       billm@suburbia.net
+       billm@melbpc.org.au
+or     b.metzenthen@medoto.unimelb.edu.au
 
 For more information on the emulator and on floating point topics, see
 my web pages, currently at  http://www.suburbia.net/~billm/
 
 
 --Bill Metzenthen
-  December 1997
+  December 1999
 
 
 ----------------------- Internals of wm-FPU-emu -----------------------
@@ -98,7 +99,7 @@ form of re-entrancy which is required by the Linux kernel.
 ----------------------- Limitations of wm-FPU-emu -----------------------
 
 There are a number of differences between the current wm-FPU-emu
-(version 2.00) and the 80486 FPU (apart from bugs).  The differences
+(version 2.01) and the 80486 FPU (apart from bugs).  The differences
 are fewer than those which applied to the 1.xx series of the emulator.
 Some of the more important differences are listed below:
 

@@ -271,8 +271,6 @@ sgi_graphics_mmap (struct file *file, struct vm_area_struct *vma)
 	uint size;
 
 	size = vma->vm_end - vma->vm_start;
-	if (vma->vm_offset & ~PAGE_MASK)
-		return -ENXIO;
 
 	/* 1. Set our special graphic virtualizer  */
 	vma->vm_ops = &graphics_mmap;

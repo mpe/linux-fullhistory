@@ -657,12 +657,9 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	if (!flen)
 		goto out;
 
-	/* from mkdir it won't be verified, from create it will	 */
-	if (!fhp->fh_dverified) {
-		err = fh_verify(rqstp, fhp, S_IFDIR, MAY_CREATE);
-		if (err)
-			goto out;
-	}
+	err = fh_verify(rqstp, fhp, S_IFDIR, MAY_CREATE);
+	if (err)
+		goto out;
 
 	dentry = fhp->fh_dentry;
 	dirp = dentry->d_inode;

@@ -139,6 +139,14 @@ ifeq ($(CONFIG_USB_CPIA),m)
   MIX_OBJS += cpia.o
 endif
 
+ifeq ($(CONFIG_USB_DC2XX),y)
+  L_OBJS += dc2xx.o
+endif
+ifeq ($(CONFIG_USB_DC2XX),m)
+  M_OBJS += dc2xx.o
+  MIX_OBJS += dc2xx.o
+endif
+
 ifeq ($(CONFIG_USB_SCSI),y)
   L_OBJS += usb_scsi.o
   ifeq ($(CONFIG_USB_SCSI_DEBUG),y)

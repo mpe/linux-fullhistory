@@ -263,7 +263,7 @@ comment 'Kernel hacking'
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Kernel FP software completion' CONFIG_MATHEMU
 else
-  define_bool CONFIG_MATHEMU y
+  define_tristate CONFIG_MATHEMU y
 fi
 
 bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ

@@ -41,20 +41,21 @@
  */
 
 #include <linux/module.h>
-
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
 #include <linux/errno.h>
 #include <linux/delay.h>
 #include <linux/ioport.h>
-#include <linux/malloc.h>
-#include <asm/io.h>
-#include <asm/uaccess.h>
+#include <linux/slab.h>
+#include <linux/init.h>
 #include <stdarg.h>
 #include <linux/i2c.h>
 #include <linux/videotext.h>
 #include <linux/videodev.h>
+
+#include <asm/io.h>
+#include <asm/uaccess.h>
 
 #define VTX_VER_MAJ 1
 #define VTX_VER_MIN 7
@@ -661,54 +662,32 @@ static long saa5249_write(struct video_device *v, const char *buf, unsigned long
 	return -EINVAL;
 }
 
-static long saa5249_read(struct video_device *v, char *buf, unsigned long l, int nb)
-{
-	return -EINVAL;
-}
-
-int init_saa_5249(struct video_init *v)
+static int __init init_saa_5249 (void)
 {
 	printk(KERN_INFO "SAA5249 driver (" IF_NAME " interface) for VideoText version %d.%d\n",
 			VTX_VER_MAJ, VTX_VER_MIN);
-	i2c_register_driver(&i2c_driver_videotext);
-
-	return 0;
+	return i2c_register_driver(&i2c_driver_videotext);
 }
 
-static struct video_device saa_template=
+static void __exit cleanup_saa_5249 (void) 
+{
+	i2c_unregister_driver(&i2c_driver_videotext);
+}
+
+module_init(init_saa_5249);
+module_exit(cleanup_saa_5249);
+
+static struct video_device saa_template =
 {
 	IF_NAME,
 	VID_TYPE_TELETEXT,	/*| VID_TYPE_TUNER ?? */
 	VID_HARDWARE_SAA5249,
 	saa5249_open,
 	saa5249_release,
-	saa5249_read,
+	NULL,			/* read */
 	saa5249_write,
-	NULL,	/* poll */
+	NULL,			/* poll */
 	saa5249_ioctl,
-	NULL,
-	NULL,
-	NULL,
-	0,
-	0
+	/* the rest are null */
 };
 
-#ifdef MODULE
-
-/*
- *	Routines for loadable modules
- */
-
-int init_module(void) 
-{
-	init_saa_5249(NULL);
-	return 0;
-}
-
-
-void cleanup_module(void) 
-{
-	i2c_unregister_driver(&i2c_driver_videotext);
-}
-
-#endif

@@ -5,11 +5,11 @@
  *	(C) Copyright 1999   Red Hat Software
  *	
  *	Written by Alan Cox, Building Number Three Ltd
- * Modified by Deepak Saxena <deepak@plexity.net>
+ *	Modified by Deepak Saxena <deepak@plexity.net>
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version
+ *	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
  *
  *	TODO:
@@ -80,11 +80,13 @@ static int i2o_pci_unbind(struct i2o_controller *c, struct i2o_device *dev)
 static void i2o_pci_enable(struct i2o_controller *c)
 {
 	I2O_IRQ_WRITE32(c, 0);
+	c->enabled = 1;
 }
 
 static void i2o_pci_disable(struct i2o_controller *c)
 {
 	I2O_IRQ_WRITE32(c, 0xFFFFFFFF);
+	c->enabled = 0;
 }
 
 /*
@@ -216,6 +218,7 @@ int __init i2o_pci_install(struct pci_dev *dev)
 
 	printk(KERN_INFO "Installed iop%d at IRQ%d\n", c->unit, dev->irq);
 	I2O_IRQ_WRITE32(c,0x0);
+	c->enabled = 1;
 	return 0;	
 }
 

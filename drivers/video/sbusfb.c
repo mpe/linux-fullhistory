@@ -175,12 +175,15 @@ static int sbusfb_mmap(struct fb_info *info, struct file *file,
 	struct fb_info_sbusfb *fb = sbusfbinfo(info);
 	unsigned int size, page, r, map_size;
 	unsigned long map_offset = 0;
+	unsigned long off;
 	int i;
                                         
 	size = vma->vm_end - vma->vm_start;
-	if (vma->vm_offset & ~PAGE_MASK)
-		return -ENXIO;
-		
+	if (vma->vm_pgoff > (~0UL >> PAGE_SHIFT))
+		return -EINVAL;
+
+	off = vma->vm_pgoff << PAGE_SHIFT;
+
 	/* To stop the swapper from even considering these pages */
 	vma->vm_flags |= (VM_SHM| VM_LOCKED);
 	
@@ -190,9 +193,9 @@ static int sbusfb_mmap(struct fb_info *info, struct file *file,
 		unsigned long j, alignment, s = 0;
 		int max = -1;
 		
-		map_offset = vma->vm_offset+size;
+		map_offset = (vma->vm_pgoff << PAGE_SHIFT) + size;
 		for (i = 0; fb->mmap_map[i].size; i++) {
-			if (fb->mmap_map[i].voff < vma->vm_offset)
+			if (fb->mmap_map[i].voff < off)
 				continue;
 			if (fb->mmap_map[i].voff >= map_offset)
 				break;
@@ -210,7 +213,7 @@ static int sbusfb_mmap(struct fb_info *info, struct file *file,
 					break;
 			if (alignment > PAGE_SIZE) {
 				j = alignment;
-				alignment = j - ((vma->vm_start + fb->mmap_map[max].voff - vma->vm_offset) & (j - 1));
+				alignment = j - ((vma->vm_start + fb->mmap_map[max].voff - off) & (j - 1));
 				if (alignment != j) {
 					struct vm_area_struct *vmm = find_vma(current->mm, vma->vm_start);
 					if (!vmm || vmm->vm_start >= vma->vm_end + alignment) {
@@ -227,7 +230,7 @@ static int sbusfb_mmap(struct fb_info *info, struct file *file,
 	for (page = 0; page < size; ){
 		map_size = 0;
 		for (i = 0; fb->mmap_map[i].size; i++)
-			if (fb->mmap_map[i].voff == vma->vm_offset+page) {
+			if (fb->mmap_map[i].voff == off+page) {
 				map_size = sbusfb_mmapsize(fb,fb->mmap_map[i].size);
 #ifdef __sparc_v9__
 #define POFF_MASK	(PAGE_MASK|0x1UL)

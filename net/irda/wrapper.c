@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Mon Oct 18 15:51:58 1999
+ * Modified at:   Sat Oct 30 17:24:25 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Modified at:   Fri May 28  3:11 CST 1999
  * Modified by:   Horst von Brand <vonbrand@sleipnir.valparaiso.cl>
@@ -39,17 +39,21 @@
 
 static inline int stuff_byte(__u8 byte, __u8 *buf);
 
-static int state_outside_frame(struct net_device *dev, 
-			       struct iobuff_t *rx_buff, __u8 byte);
-static int state_begin_frame(struct net_device *dev, 
-			     struct iobuff_t *rx_buff, __u8 byte);
-static int state_link_escape(struct net_device *dev, 
-			     struct iobuff_t *rx_buff, __u8 byte);
-static int state_inside_frame(struct net_device *dev, 
+static void state_outside_frame(struct net_device *dev, 
+				struct net_device_stats *stats, 
+				struct iobuff_t *rx_buff, __u8 byte);
+static void state_begin_frame(struct net_device *dev, 
+			      struct net_device_stats *stats, 
 			      struct iobuff_t *rx_buff, __u8 byte);
+static void state_link_escape(struct net_device *dev, 
+			      struct net_device_stats *stats, 
+			      struct iobuff_t *rx_buff, __u8 byte);
+static void state_inside_frame(struct net_device *dev, 
+			       struct net_device_stats *stats, 
+			       struct iobuff_t *rx_buff, __u8 byte);
 
-static int (*state[])(struct net_device *dev, struct iobuff_t *rx_buff, 
-		      __u8 byte) = 
+static void (*state[])(struct net_device *dev, struct net_device_stats *stats, 
+		       struct iobuff_t *rx_buff, __u8 byte) = 
 { 
 	state_outside_frame,
 	state_begin_frame,
@@ -149,18 +153,18 @@ static inline int stuff_byte(__u8 byte, __u8 *buf)
 /*
  * Function async_bump (buf, len, stats)
  *
- *    Got a frame, make a copy of it, and pass it up the stack!
- *
+ *    Got a frame, make a copy of it, and pass it up the stack! We can try
+ *    to inline it since it's only called from state_inside_frame
  */
-int async_bump(struct net_device *dev, __u8 *buf, int len)
+inline void async_bump(struct net_device *dev, struct net_device_stats *stats,
+		       __u8 *buf, int len)
 {
-	struct net_device_stats *stats = dev->get_stats(dev);
        	struct sk_buff *skb;
 
 	skb = dev_alloc_skb(len+1);
 	if (!skb)  {
 		stats->rx_dropped++;
-		return -ENOMEM;
+		return;
 	}
 
 	/*  Align IP header to 20 bytes */
@@ -177,9 +181,7 @@ int async_bump(struct net_device *dev, __u8 *buf, int len)
 	netif_rx(skb);
 
 	stats->rx_packets++;
-	stats->rx_bytes += len;
-	
-	return skb->len;
+	stats->rx_bytes += len;	
 }
 
 /*
@@ -188,10 +190,11 @@ int async_bump(struct net_device *dev, __u8 *buf, int len)
  *    Parse and de-stuff frame received from the IrDA-port
  *
  */
-inline int async_unwrap_char(struct net_device *dev, struct iobuff_t *rx_buff,
-			     __u8 byte)
+inline void async_unwrap_char(struct net_device *dev, 
+			      struct net_device_stats *stats, 
+			      struct iobuff_t *rx_buff, __u8 byte)
 {
-	return (*state[rx_buff->state])(dev, rx_buff, byte);
+	(*state[rx_buff->state])(dev, stats, rx_buff, byte);
 }
 	 
 /*
@@ -200,8 +203,9 @@ inline int async_unwrap_char(struct net_device *dev, struct iobuff_t *rx_buff,
  *    
  *
  */
-static int state_outside_frame(struct net_device *dev, 
-			       struct iobuff_t *rx_buff, __u8 byte)
+static void state_outside_frame(struct net_device *dev, 
+				struct net_device_stats *stats, 
+				struct iobuff_t *rx_buff, __u8 byte)
 {
 	switch (byte) {
 	case BOF:
@@ -217,7 +221,6 @@ static int state_outside_frame(struct net_device *dev,
 	default:
 		break;
 	}
-	return 0;
 }
 
 /*
@@ -226,11 +229,10 @@ static int state_outside_frame(struct net_device *dev,
  *    Begin of frame detected
  *
  */
-static int state_begin_frame(struct net_device *dev, 
-			     struct iobuff_t *rx_buff, __u8 byte)
+static void state_begin_frame(struct net_device *dev, 
+			      struct net_device_stats *stats, 
+			      struct iobuff_t *rx_buff, __u8 byte)
 {
-	struct net_device_stats *stats = dev->get_stats(dev);
-
 	/* Time to initialize receive buffer */
 	rx_buff->data = rx_buff->head;
 	rx_buff->len = 0;
@@ -258,7 +260,6 @@ static int state_begin_frame(struct net_device *dev,
 		rx_buff->state = INSIDE_FRAME;
 		break;
 	}
-	return 0;
 }
 
 /*
@@ -267,8 +268,9 @@ static int state_begin_frame(struct net_device *dev,
  *    
  *
  */
-static int state_link_escape(struct net_device *dev, 
-			     struct iobuff_t *rx_buff, __u8 byte)
+static void state_link_escape(struct net_device *dev, 
+			      struct net_device_stats *stats, 
+			      struct iobuff_t *rx_buff, __u8 byte)
 {
 	switch (byte) {
 	case BOF: /* New frame? */
@@ -298,7 +300,6 @@ static int state_link_escape(struct net_device *dev,
 		}
 		break;
 	}
-	return 0;
 }
 
 /*
@@ -307,10 +308,10 @@ static int state_link_escape(struct net_device *dev,
  *    Handle bytes received within a frame
  *
  */
-static int state_inside_frame(struct net_device *dev, 
-			      struct iobuff_t *rx_buff, __u8 byte)
+static void state_inside_frame(struct net_device *dev, 
+			       struct net_device_stats *stats,
+			       struct iobuff_t *rx_buff, __u8 byte)
 {
-	struct net_device_stats *stats = dev->get_stats(dev);
 	int ret = 0; 
 
 	switch (byte) {
@@ -328,7 +329,7 @@ static int state_inside_frame(struct net_device *dev,
 		/* Test FCS and signal success if the frame is good */
 		if (rx_buff->fcs == GOOD_FCS) {
 			/* Deliver frame */
-			async_bump(dev, rx_buff->data, rx_buff->len);
+			async_bump(dev, stats, rx_buff->data, rx_buff->len);
 			ret = TRUE;
 			break;
 		} else {
@@ -350,7 +351,6 @@ static int state_inside_frame(struct net_device *dev,
 		}
 		break;
 	}
-	return 0;
 }
 
 

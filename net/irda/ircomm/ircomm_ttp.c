@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Jun  6 20:48:27 1999
- * Modified at:   Mon Sep 27 11:17:23 1999
+ * Modified at:   Sat Oct 30 12:55:36 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -49,7 +49,7 @@ int ircomm_open_tsap(struct ircomm_cb *self)
 {
 	notify_t notify;
 
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
 	/* Register callbacks */
 	irda_notify_init(&notify);
@@ -64,7 +64,7 @@ int ircomm_open_tsap(struct ircomm_cb *self)
 	self->tsap = irttp_open_tsap(LSAP_ANY, DEFAULT_INITIAL_CREDIT,
 				     &notify);
 	if (!self->tsap) {
-		DEBUG(0,__FUNCTION__"failed to allocate tsap\n");
+		IRDA_DEBUG(0,__FUNCTION__"failed to allocate tsap\n");
 		return -1;
 	}
 	self->slsap_sel = self->tsap->stsap_sel;
@@ -92,7 +92,7 @@ int ircomm_ttp_connect_request(struct ircomm_cb *self,
 {
 	int ret = 0;
 
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
 	ret = irttp_connect_request(self->tsap, info->dlsap_sel,
 				    info->saddr, info->daddr, 
@@ -110,7 +110,7 @@ int ircomm_ttp_connect_response(struct ircomm_cb *self, struct sk_buff *skb)
 {
 	int ret;
 
-	DEBUG(4, __FUNCTION__"()\n");
+	IRDA_DEBUG(4, __FUNCTION__"()\n");
 	
 	ret = irttp_connect_response(self->tsap, SAR_DISABLE, skb);
 
@@ -133,7 +133,7 @@ int ircomm_ttp_data_request(struct ircomm_cb *self, struct sk_buff *skb,
 
 	ASSERT(skb != NULL, return -1;);
 
-	DEBUG(2, __FUNCTION__"(), clen=%d\n", clen);
+	IRDA_DEBUG(2, __FUNCTION__"(), clen=%d\n", clen);
 
 	/* 
 	 * Insert clen field, currently we either send data only, or control
@@ -164,7 +164,7 @@ int ircomm_ttp_data_indication(void *instance, void *sap,
 {
 	struct ircomm_cb *self = (struct ircomm_cb *) instance;
 
-	DEBUG(4, __FUNCTION__"()\n");
+	IRDA_DEBUG(4, __FUNCTION__"()\n");
 	
 	ASSERT(self != NULL, return -1;);
 	ASSERT(self->magic == IRCOMM_MAGIC, return -1;);
@@ -184,7 +184,7 @@ void ircomm_ttp_connect_confirm(void *instance, void *sap,
 	struct ircomm_cb *self = (struct ircomm_cb *) instance;
 	struct ircomm_info info;
 
-	DEBUG(4, __FUNCTION__"()\n");
+	IRDA_DEBUG(4, __FUNCTION__"()\n");
 
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IRCOMM_MAGIC, return;);
@@ -220,7 +220,7 @@ void ircomm_ttp_connect_indication(void *instance, void *sap,
 	struct ircomm_cb *self = (struct ircomm_cb *)instance;
 	struct ircomm_info info;
 
-	DEBUG(4, __FUNCTION__"()\n");
+	IRDA_DEBUG(4, __FUNCTION__"()\n");
 
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IRCOMM_MAGIC, return;);
@@ -270,7 +270,7 @@ void ircomm_ttp_disconnect_indication(void *instance, void *sap,
 	struct ircomm_cb *self = (struct ircomm_cb *) instance;
 	struct ircomm_info info;
 
-	DEBUG(4, __FUNCTION__"()\n");
+	IRDA_DEBUG(4, __FUNCTION__"()\n");
 
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IRCOMM_MAGIC, return;);
@@ -290,7 +290,7 @@ void ircomm_ttp_flow_indication(void *instance, void *sap, LOCAL_FLOW cmd)
 {
 	struct ircomm_cb *self = (struct ircomm_cb *) instance;
 
-	DEBUG(4, __FUNCTION__ "()\n");
+	IRDA_DEBUG(4, __FUNCTION__ "()\n");
 
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IRCOMM_MAGIC, return;);

@@ -33,7 +33,7 @@ On other - If you know of the key combos for other architectures, please
 'b'     - Will immediately reboot the system without syncing or unmounting
           your disks.
 
-'o'     - Will shut your system off via APM (if configured and supported).
+'o'     - Will shut your system off (if configured and supported).
 
 's'     - Will attempt to sync all mounted filesystems.
 

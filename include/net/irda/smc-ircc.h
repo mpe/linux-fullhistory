@@ -1,6 +1,6 @@
 /*********************************************************************
  *                
- * Filename:      smc.h
+ * Filename:      smc-ircc.h
  * Version:       
  * Description:   
  * Status:        Experimental.
@@ -20,6 +20,8 @@
  * Definitions for the SMC IrCC controller.
  *
  ********************************************************************/
+
+#include <net/irda/irport.h>
 
 #ifndef SMC_IRCC_H
 #define SMC_IRCC_H
@@ -149,12 +151,26 @@ struct st_fifo {
 
 /* Private data for each instance */
 struct ircc_cb {
+	struct net_device *netdev; /* Yes! we are some kind of netdevice */
+	struct net_device_stats stats;
+	
+	struct irlap_cb    *irlap; /* The link layer we are binded to */
+	
+	struct chipio_t io;        /* IrDA controller information */
+	struct iobuff_t tx_buff;   /* Transmit buffer */
+	struct iobuff_t rx_buff;   /* Receive buffer */
+	struct qos_info qos;       /* QoS capabilities for this device */
+
+	struct irport_cb irport;
+	
+	__u32 flags;               /* Interface flags */
+
 	struct st_fifo st_fifo;
 
 	int tx_buff_offsets[10]; /* Offsets between frames in tx_buff */
-	int tx_len;          /* Number of frames in tx_buff */
+	int tx_len;              /* Number of frames in tx_buff */
 
-	struct irda_device idev;
+
 };
 
 #endif

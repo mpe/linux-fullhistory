@@ -699,6 +699,9 @@ cy_get_user(unsigned long *addr)
 			(ZFIRM_ID==cy_readl(&((struct FIRM_ID *) \
 			((card).base_addr+ID_ADDRESS))->signature)))
 
+#ifndef SERIAL_XMIT_SIZE
+#define	SERIAL_XMIT_SIZE	(MIN(PAGE_SIZE, 4096))
+#endif
 #define WAKEUP_CHARS (SERIAL_XMIT_SIZE-256)
 
 #define STD_COM_FLAGS (0)

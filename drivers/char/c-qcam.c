@@ -753,33 +753,21 @@ static struct parport_driver cqcam_driver = {
 	NULL
 };
 
-static void cqcam_init(void)
+static int __init cqcam_init (void)
 {
 	printk(BANNER "\n");
-	parport_register_driver(&cqcam_driver);
+	return parport_register_driver(&cqcam_driver);
 }
-
-#ifdef MODULE
 
 MODULE_AUTHOR("Philip Blundell <philb@gnu.org>");
 MODULE_DESCRIPTION(BANNER);
 
-int init_module(void)
-{
-	cqcam_init();
-	return 0;
-}
-
-void cleanup_module(void)
+static void __exit cqcam_cleanup (void)
 {
 	unsigned int i;
 	for (i = 0; i < num_cams; i++)
 		close_cqcam(qcams[i]);
 }
-#else
-int __init init_colour_qcams(struct video_init *unused)
-{
-	cqcam_init();
-	return 0;
-}
-#endif
+
+module_init(cqcam_init);
+module_exit(cqcam_cleanup);

@@ -3,9 +3,9 @@
  |                                                                           |
  |  Header file for the FPU-emu poly*.c source files.                        |
  |                                                                           |
- | Copyright (C) 1994                                                        |
+ | Copyright (C) 1994,1999                                                   |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@melbpc.org.au            |
  |                                                                           |
  | Declarations and definitions for functions operating on Xsig (12-byte     |
  | extended-significand) quantities.                                         |
@@ -55,15 +55,20 @@ asmlinkage void div_Xsig(Xsig *x1, const Xsig *x2, const Xsig *dest);
    actually be in-line.
    */
 
-/* Multiply two fixed-point 32 bit numbers. */
-extern inline void mul_32_32(const unsigned long arg1,
-			     const unsigned long arg2,
-			     unsigned long *out)
+/* Multiply two fixed-point 32 bit numbers, producing a 32 bit result.
+   The answer is the ms word of the product. */
+/* Some versions of gcc make it difficult to stop eax from being clobbered.
+   Merely specifying that it is used doesn't work...
+ */
+extern inline unsigned long mul_32_32(const unsigned long arg1,
+				      const unsigned long arg2)
 {
-  asm volatile ("movl %1,%%eax; mull %2; movl %%edx,%0" \
-		:"=g" (*out) \
-		:"g" (arg1), "g" (arg2) \
-		:"ax","dx");
+  int retval;
+  asm volatile ("mull %2; movl %%edx,%%eax" \
+		:"=a" (retval) \
+		:"0" (arg1), "g" (arg2) \
+		:"dx");
+  return retval;
 }
 
 

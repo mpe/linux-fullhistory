@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Oct 15 08:37:58 1998
- * Modified at:   Sun Jun 20 20:23:33 1999
+ * Modified at:   Sat Oct 30 12:58:30 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       skeleton.c by Donald Becker <becker@CESDIS.gsfc.nasa.gov>
  *                slip.c by Laurence Culhane,   <loz@holmes.demon.co.uk>
@@ -50,7 +50,7 @@ int irlan_eth_init(struct net_device *dev)
 	struct irmanager_event mgr_event;
 	struct irlan_cb *self;
 
-	DEBUG(2, __FUNCTION__"()\n");
+	IRDA_DEBUG(2, __FUNCTION__"()\n");
 
 	ASSERT(dev != NULL, return -1;);
        
@@ -115,7 +115,7 @@ int irlan_eth_open(struct net_device *dev)
 {
 	struct irlan_cb *self;
 	
-	DEBUG(2, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
 	ASSERT(dev != NULL, return -1;);
 
@@ -150,7 +150,7 @@ int irlan_eth_close(struct net_device *dev)
 {
 	struct irlan_cb *self = (struct irlan_cb *) dev->priv;
 
-	DEBUG(2, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 	
 	/* Stop device */
 	dev->tbusy = 1;
@@ -342,7 +342,7 @@ void irlan_eth_send_gratuitous_arp(struct net_device *dev)
 	 * is useful if we have changed access points on the same
 	 * subnet.  
 	 */
-	DEBUG(4, "IrLAN: Sending gratuitous ARP\n");
+	IRDA_DEBUG(4, "IrLAN: Sending gratuitous ARP\n");
 	in_dev = in_dev_get(dev);
 	if (in_dev == NULL)
 		return;
@@ -370,14 +370,14 @@ void irlan_eth_set_multicast_list(struct net_device *dev)
 
  	self = dev->priv; 
 
-	DEBUG(2, __FUNCTION__ "()\n");
+	IRDA_DEBUG(2, __FUNCTION__ "()\n");
 
  	ASSERT(self != NULL, return;); 
  	ASSERT(self->magic == IRLAN_MAGIC, return;);
 
 	/* Check if data channel has been connected yet */
 	if (self->client.state != IRLAN_DATA) {
-		DEBUG(1, __FUNCTION__ "(), delaying!\n");
+		IRDA_DEBUG(1, __FUNCTION__ "(), delaying!\n");
 		return;
 	}
 
@@ -387,20 +387,20 @@ void irlan_eth_set_multicast_list(struct net_device *dev)
 	} 
 	else if ((dev->flags & IFF_ALLMULTI) || dev->mc_count > HW_MAX_ADDRS) {
 		/* Disable promiscuous mode, use normal mode. */
-		DEBUG(4, __FUNCTION__ "(), Setting multicast filter\n");
+		IRDA_DEBUG(4, __FUNCTION__ "(), Setting multicast filter\n");
 		/* hardware_set_filter(NULL); */
 
 		irlan_set_multicast_filter(self, TRUE);
 	}
 	else if (dev->mc_count) {
-		DEBUG(4, __FUNCTION__ "(), Setting multicast filter\n");
+		IRDA_DEBUG(4, __FUNCTION__ "(), Setting multicast filter\n");
 		/* Walk the address list, and load the filter */
 		/* hardware_set_filter(dev->mc_list); */
 
 		irlan_set_multicast_filter(self, TRUE);
 	}
 	else {
-		DEBUG(4, __FUNCTION__ "(), Clearing multicast filter\n");
+		IRDA_DEBUG(4, __FUNCTION__ "(), Clearing multicast filter\n");
 		irlan_set_multicast_filter(self, FALSE);
 	}
 

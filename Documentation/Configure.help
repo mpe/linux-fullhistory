@@ -1912,6 +1912,23 @@ CONFIG_SYSCTL
   building a kernel for install/rescue disks or your system is very
   limited in memory.
 
+Kernel core (/proc/kcore) format
+CONFIG_KCORE_ELF
+  If you enabled support for /proc filesystem then the file /proc/kcore
+  will contain the kernel core image. This can be used in gdb:
+
+  $ cd /usr/src/linux ; gdb vmlinux /proc/kcore
+
+  Selecting ELF will make /proc/kcore appear in ELF core format as defined
+  by the Executable and Linking Format specification. Selecting A.OUT will
+  choose the old "a.out" format which may be necessary for some old versions
+  of binutils or on some architectures.
+
+  This is especially useful if you have compiled the kernel with "-g" option
+  to preserve debugging information. It is mainly used for examining kernel
+  data structures on the live kernel so if you don't understand what this
+  means or are not a kernel hacker, just leave it at its default value ELF.
+  
 Kernel support for ELF binaries
 CONFIG_BINFMT_ELF
   ELF (Executable and Linkable Format) is a format for libraries and
@@ -8002,7 +8019,7 @@ CONFIG_ISO9660_FS
   say M here and read Documentation/modules.txt. The module will be
   called isofs.o.
 
-Microsoft Joliet cdrom extensions
+Microsoft Joliet CDROM extensions
 CONFIG_JOLIET
   Joliet is a Microsoft extension for the ISO 9660 CDROM filesystem
   which allows for long filenames in unicode format (unicode is the
@@ -8011,7 +8028,7 @@ CONFIG_JOLIET
   http://www.unicode.org for more information). Say Y here if you want
   to be able to read Joliet CDROMs under Linux.
 
-UDF Filesystem support
+UDF Filesystem support (read only)
 CONFIG_UDF_FS
   This is the new filesystem used by some CDROMS and DVD drivers. Say
   Y if you intend to mount DVD discs or CDRW's written in packet mode,
@@ -8025,13 +8042,13 @@ CONFIG_UDF_FS
 
   If unsure, say N.
 
-UDF read-write support (EXPERIMENTAL)
+UDF write support (DANGEROUS)
 CONFIG_UDF_RW
   Say Y if you want to test write support for UDF filesystems.
   Due to lack of support for writing to CDR/CDRW's, this option
   is only supported for Hard Discs, DVD-RAM, and loopback files.
 
-fat fs support
+DOS FAT fs support
 CONFIG_FAT_FS
   If you want to use one of the FAT-based filesystems (the MS-DOS,
   VFAT (Windows 95) and UMSDOS (used to run Linux on top of an
@@ -8067,7 +8084,7 @@ CONFIG_FAT_FS
   module, so don't say M here if you intend to use UMSDOS as your root
   filesystem.
 
-msdos fs support
+MSDOS fs support
 CONFIG_MSDOS_FS
   This allows you to mount MSDOS partitions of your hard drive (unless
   they are compressed; to access compressed MSDOS partitions under
@@ -8096,7 +8113,7 @@ CONFIG_MSDOS_FS
   want), say M here and read Documentation/modules.txt. The module
   will be called msdos.o.
 
-vfat fs support
+VFAT (Windows-95) fs support
 CONFIG_VFAT_FS
   This option provides support for normal Windows filesystems with
   long filenames. That includes non-compressed FAT-based filesystems
@@ -8117,7 +8134,7 @@ CONFIG_VFAT_FS
   say M here and read Documentation/modules.txt. The module will be
   called vfat.o.
 
-umsdos: Unix like fs on top of std MSDOS fs
+UMSDOS: Unix-like filesystem on top of standard MSDOS filesystem
 CONFIG_UMSDOS_FS
   Say Y here if you want to run Linux from within an existing DOS
   partition of your hard drive. The advantage of this is that you can
@@ -8209,7 +8226,7 @@ CONFIG_ROOT_NFS
   
   Most people say N here. 
 
-NFS server support
+NFS server support (EXPERIMENTAL)
 CONFIG_NFSD
   If you want your Linux box to act as a NFS *server*, so that other
   computers on your local network which support NFS can access certain
@@ -8231,7 +8248,7 @@ CONFIG_NFSD
   The module is called nfsd.o. If you want to compile it as a module,
   say M here and read Documentation/modules.txt. If unsure, say N.
 
-Emulate Sun NFS daemon
+Emulate SUN NFS server
 CONFIG_NFSD_SUN
   If you would like for the server to allow clients to access
   directories that are mount points on the local filesystem (this is
@@ -8274,11 +8291,11 @@ CONFIG_NTFS_RW
 
   If unsure, say N.
 
-System V and Coherent filesystem support
+System V and Coherent filesystem support (read only)
 CONFIG_SYSV_FS
   SCO, Xenix and Coherent are commercial Unix systems for Intel
-  machines. Saying Y here would allow you to read to and write from
-  their floppies and hard disk partitions.
+  machines. Saying Y here would allow you to read from their floppies
+  and hard disk partitions.
 
   If you have floppies or hard disk partitions like that, it is likely
   that they contain binaries from those other Unix systems; in order
@@ -8307,6 +8324,15 @@ CONFIG_SYSV_FS
   called sysv.o. 
 
   If you haven't heard about all of this before, it's safe to say N.
+
+SYSV filesystem write support (DANGEROUS)
+CONFIG_SYSV_FS_WRITE
+  If you say Y here, you will (hopefully) be able to write to System V
+  and Coherent file systems as well as read from them. The read-write
+  support in SYSV is not well tested yet. If you enable this, back up
+  your SYSV/Coherent volumes first since they may get damaged.
+
+  If unsure, say N.
 
 Amiga FFS filesystem support
 CONFIG_AFFS_FS
@@ -8393,7 +8419,7 @@ CONFIG_AUTOFS_FS
   If you are not a part of a fairly large, distributed network, you
   probably do not need an automounter, and can say N here.
 
-EFS filesystem support (EXPERIMENTAL)
+EFS filesystem support (read only) (EXPERIMENTAL)
 CONFIG_EFS_FS
   EFS is an older filesystem used for non-ISO9660 CDROMs and hard disk
   partitions by SGI's IRIX operating system (IRIX 6.0 and newer uses
@@ -8413,7 +8439,7 @@ CONFIG_SGI_DISKLABEL
   Say Y to this only if you plan on mounting disks with SGI
   disklabels. This is not required to mount EFS-format CDROMs.
 
-UFS filesystem support
+UFS filesystem support (read only)
 CONFIG_UFS_FS
   BSD and derivate versions of Unix (such as SunOS, FreeBSD, NetBSD,
   OpenBSD and NeXTstep) use a filesystem called UFS. Some System V
@@ -8443,7 +8469,7 @@ CONFIG_UFS_FS
 
   If you haven't heard about all of this before, it's safe to say N.
 
-UFS filesystem write support (EXPERIMENTAL)
+UFS filesystem write support (DANGEROUS)
 CONFIG_UFS_FS_WRITE
   Say Y here if you want to try writing to UFS partitions. This is
   experimental, so you should back up your UFS partitions beforehand.
@@ -8563,7 +8589,7 @@ CONFIG_UNIXWARE_DISKLABEL
 
   If you don't know what all this is about, say N.
 
-SMB filesystem support (to mount Windows shares etc...)
+SMB filesystem support (to mount Windows shares etc.)
 CONFIG_SMB_FS
   SMB (Server Message Block) is the protocol Windows for Workgroups
   (WfW), Windows 95/98, Windows NT and OS/2 Lan Manager use to share
@@ -8589,7 +8615,7 @@ CONFIG_SMB_FS
   want), say M here and read Documentation/modules.txt. The module
   will be called smbfs.o. Most people say N, however.
 
-Coda filesystem support
+Coda filesystem support (advanced network fs)
 CONFIG_CODA_FS
   Coda is an advanced network filesystem, similar to NFS in that it
   enables you to mount filesystems of a remote server and access them
@@ -12674,13 +12700,6 @@ CONFIG_NSC_FIR
   read Documentation/modules.txt. This drivers currently only supports
   the ACTiSYS IR2000B ISA card and supports SIR, MIR and FIR (4Mbps)
   speeds.
-
-Sharp UIRCC IrDA Device Driver
-CONFIG_SHARP_FIR
-  Say Y here if you want to build support for the Sharp UIRCC IrDA
-  chipset. If you want to compile it as a module, say M here and
-  read Documentation/modules.txt. This chipset is used by the Toshiba
-  Tecra laptops.
 
 Toshiba Type-O IR Port Device Driver
 CONFIG_TOSHIBA_FIR

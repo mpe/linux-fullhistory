@@ -262,11 +262,11 @@ static inline int balance_lowmemory (int gfp_mask)
 		}
 		low_on_highmemory = 1;
 	} else {
-		if (nr_free_pages+nr_free_highpages > freepages.min) {
+		if (nr_free_pages-nr_free_highpages > freepages.min) {
 			if (!low_on_memory) {
 				return 1;
 			}
-			if (nr_free_pages+nr_free_highpages >= freepages.high) {
+			if (nr_free_pages-nr_free_highpages >= freepages.high) {
 				low_on_memory = 0;
 				return 1;
 			}
@@ -320,6 +320,10 @@ ok_to_allocate:
 	do {
 		page = rmqueue(order, type);
 		if (page) {
+#ifdef CONFIG_HIGHMEM
+			if (type == MEM_TYPE_HIGH)
+				nr_free_highpages -= 1 << order;
+#endif
 			spin_unlock_irqrestore(&page_alloc_lock, flags);
 			return page;
 		}
