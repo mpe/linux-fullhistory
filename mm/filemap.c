@@ -214,7 +214,7 @@ extern atomic_t too_many_dirty_buffers;
 int shrink_mmap(int priority, int gfp_mask)
 {
 	static unsigned long clock = 0;
-	unsigned long limit = num_physpages;
+	unsigned long limit = num_physpages << 1;
 	struct page * page;
 	int count, users;
 
@@ -244,6 +244,8 @@ int shrink_mmap(int priority, int gfp_mask)
 
 		if ((gfp_mask & __GFP_DMA) && !PageDMA(page))
 			continue;
+
+		count--;
 
 		/*
 		 * Some common cases that we just short-circuit without
@@ -290,7 +292,6 @@ int shrink_mmap(int priority, int gfp_mask)
 		/* Is it a buffer page? */
 		if (page->buffers) {
 			spin_unlock(&pagecache_lock);
-			count--;
 			if (try_to_free_buffers(page))
 				goto made_progress;
 			spin_lock(&pagecache_lock);
@@ -299,8 +300,6 @@ int shrink_mmap(int priority, int gfp_mask)
 		/* We can't free pages unless there's just one user */
 		if (page_count(page) != 2)
 			goto spin_unlock_continue;
-
-		count--;
 
 		/*
 		 * Is it a page swap page? If so, we want to
