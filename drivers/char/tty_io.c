@@ -68,6 +68,8 @@
 #ifdef CONFIG_SELECTION
 extern int set_selection(const int arg);
 extern int paste_selection(struct tty_struct *tty);
+extern int sel_loadlut(const int arg);
+extern int shift_state;
 #endif /* CONFIG_SELECTION */
 extern int do_screendump(int arg);
 
@@ -1384,6 +1386,11 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 					return paste_selection(tty);
 				case 4:
 					unblank_screen();
+					return 0;
+				case 5:
+					return sel_loadlut(arg);
+				case 6:
+					put_fs_byte(shift_state,arg);
 					return 0;
 #endif /* CONFIG_SELECTION */
 				default: 

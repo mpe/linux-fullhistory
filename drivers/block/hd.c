@@ -14,9 +14,15 @@
  *
  *  Thanks to Branko Lankester, lankeste@fwi.uva.nl, who found a bug
  *  in the early extended-partition checks and added DM partitions
+ *
+ *  IDE IRQ-unmask & drive-id & multiple-mode code added by Mark Lord.
  */
 
+#define DEFAULT_MULT_COUNT  0	/* set to 0 to disable multiple mode at boot */
+#define DEFAULT_UNMASK_INTR 0	/* set to 0 to *NOT* unmask irq's more often */
+#define VERBOSE_DRIVE_INFO  0	/* set to 1 for more drive info at boot time */
 
+#include <asm/irq.h>
 #include <linux/errno.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
@@ -211,6 +217,128 @@ static void hd_out(unsigned int drive,unsigned int nsect,unsigned int sect,
 	outb_p(cmd,++port);
 }
 
+static void hd_request (void);
+unsigned int identified  [MAX_HD] = {0,}; /* 1 = drive ID already displayed   */
+unsigned int unmask_intr [MAX_HD] = {0,}; /* 1 = unmask IRQs during I/O       */
+unsigned int max_mult    [MAX_HD] = {0,}; /* max sectors for MultMode         */
+unsigned int mult_req    [MAX_HD] = {0,}; /* requested MultMode count         */
+unsigned int mult_count  [MAX_HD] = {0,}; /* currently enabled MultMode count */
+struct request WCURRENT;
+
+static void rawstring (char *prefix, char *s, int n)
+{
+	if (prefix)
+		printk(prefix);
+	if (s && *s) {
+		int i;
+		for (i=0; i < n && s[i^1] == ' '; ++i); /* skip blanks */
+		for (; i < n && s[i^1]; ++i)		/* flip bytes */
+			if (s[i^1] != ' ' || ((i+1) < n && s[(i+1)^1] != ' '))
+				printk("%c",s[i^1]);
+	}
+}
+
+#if VERBOSE_DRIVE_INFO
+
+char *cfg_str[] =
+{	"", " HardSect", " SoftSect", " NotMFM", " HdSw>15uSec", " SpinMotCtl",
+	" Fixed", " Removeable", " DTR<=5Mbs", " DTR>5Mbs", " DTR>10Mbs",
+	" RotSpdTol>.5%", " dStbOff", " TrkOff", " FmtGapReq", "",
+};
+
+char *ioready[]		= {"no", "?", "yes", "on/off"};
+char *SlowMedFast[]	= {"slow", "medium", "fast"};
+char *BuffType[]	= {"?", "1Sect", "DualPort", "DualPortCache"};
+
+#define YN(b)	(((b)==0)?"no":"yes")
+
+static void dmpstr (char *prefix, unsigned int i, char *s[], unsigned int maxi)
+{
+	printk(prefix);
+	printk( (i > maxi) ? "?" : s[i] );
+}
+
+static void dump_identity (unsigned int dev, unsigned short ib[])
+{
+	int i;
+	char dashes[] = "\n+-------------------------------------------------------------------+\n";
+	printk (dashes);
+	printk ("hd%c:  Drive Identification Info:\n", dev+'a');
+	rawstring (" Model=",(char *)&ib[27],40);
+	rawstring (", FwRev=",(char *)&ib[23],8);
+	rawstring (", SerialNo=",(char *)&ib[10],20);
+	printk ("\n Config={");
+	for (i=0; i<=15; i++) if (ib[0] & (1<<i)) printk (cfg_str[i]);
+	printk (" }\n");
+	printk (" Default c/h/s=%d/%d/%d, TrkSize=%d, SectSize=%d, ECCbytes=%d\n",
+		ib[1],ib[3],ib[6],ib[4],ib[5], ib[22]);
+	dmpstr (" BuffType=",ib[20],BuffType,3);
+	ib[47] &= 0xFF;
+	printk (", BuffSize=%dKB, MaxMultSect=%d\n", ib[21]/2, ib[47]);
+	printk (" Features: DblWordIO=%s, IORDY=%s, LBA=%s, DMA=%s",
+		YN(ib[48]&1),ioready[(ib[49]&0xC00)>>10],YN(ib[49]&0x200),YN(ib[49]&0x100));
+	dmpstr (", tPIO=",ib[51]>>8,SlowMedFast,2);
+	if (ib[49]&0x100 && (ib[53]&1))
+		dmpstr (", tDMA=",ib[52]>>8,SlowMedFast,2);
+	printk ("\n (%s): Current c/h/s=%d/%d/%d, TotSect=%d",
+		(((ib[53]&1)==0)?"maybe":"valid"),
+		ib[54],ib[55],ib[56],*(int *)&ib[57]);
+	if (ib[49]&0x200)
+		printk (", MaxLBAsect=%d", *(int *)&ib[60]);
+	printk("\n CurMultSect=%d%s",ib[59]&0xFF,(ib[59]&0x100)?"":"?");
+	if (ib[49]&0x100)
+		printk (", DMA-1w=%04X, DMA-mw=%04X", ib[62], ib[63]);
+	printk ("%s\n",dashes);
+}
+#endif /* VERBOSE_DRIVE_INFO */
+
+static void identify_intr(void)
+{
+	unsigned int dev = DEVICE_NR(CURRENT->dev);
+	unsigned short ib[64], stat = inb_p(HD_STATUS);
+
+	if (unmask_intr[dev])
+		sti();
+	if (stat & (BUSY_STAT|ERR_STAT))
+		printk ("  hd%c: multiple mode not supported\n", dev+'a');
+	else {
+		insw(HD_DATA,(char *)ib,64); /* get first 128 ID bytes */
+#if VERBOSE_DRIVE_INFO
+		dump_identity(dev, ib);
+#endif
+		printk ("  hd%c: ", dev+'a');
+		rawstring(NULL, (char *)&ib[27], 40);
+		max_mult[dev] = ib[47] & 0xff;
+		printk (" (%dMB IDE w/%dKB Cache, MaxMult=%d)\n",
+			ib[1]*ib[3]*ib[6] / 2048, ib[21]>>1, max_mult[dev]);
+		insw(HD_DATA,(char *)ib,64); /* flush remaining 384 ID bytes */
+		insw(HD_DATA,(char *)ib,64);
+		insw(HD_DATA,(char *)ib,64);
+	}
+	hd_request();
+	return;
+}
+
+static void set_multmode_intr(void)
+{
+	unsigned int dev = DEVICE_NR(CURRENT->dev), stat = inb_p(HD_STATUS);
+
+	if (unmask_intr[dev])
+		sti();
+	if (stat & (BUSY_STAT|ERR_STAT)) {
+		mult_req[dev] = mult_count[dev] = 0;
+		printk ("  hd%c: set multiple mode failed\n", dev+'a');
+	} else {
+		if ((mult_count[dev] = mult_req[dev]))
+			printk ("  hd%c: enabled %d-sector multiple mode\n",
+				dev+'a', mult_count[dev]);
+		else
+			printk ("  hd%c: disabled multiple mode\n", dev+'a');
+	}
+	hd_request();
+	return;
+}
+
 static int drive_busy(void)
 {
 	unsigned int i;
@@ -254,14 +382,21 @@ repeat:
 		if (reset)
 			goto repeat;
 	}
-	i++;
-	if (i < NR_HD) {
+	if (++i < NR_HD) {
+		if (unmask_intr[i]) {
+			printk("hd%c: disabled irq-unmasking\n",i+'a');
+			unmask_intr[i] = 0;
+		}
+		if (mult_req[i] || mult_count[i]) {
+			printk("hd%c: disabled multiple mode\n",i+'a');
+			mult_req[i] = mult_count[i] = 0;
+		}
 		hd_out(i,hd_info[i].sect,hd_info[i].sect,hd_info[i].head-1,
 			hd_info[i].cyl,WIN_SPECIFY,&reset_hd);
 		if (reset)
 			goto repeat;
 	} else
-		do_hd_request();
+		hd_request();
 }
 
 /*
@@ -313,9 +448,11 @@ static inline int wait_DRQ(void)
 
 static void read_intr(void)
 {
-	int i;
-	int retries = 100000;
+	unsigned int dev = DEVICE_NR(CURRENT->dev);
+	int i, retries = 100000, msect, nsect;
 
+	if (unmask_intr[dev])
+		sti();			/* permit other IRQs during xfer */
 	do {
 		i = (unsigned) inb_p(HD_STATUS);
 		if (i & BUSY_STAT)
@@ -326,40 +463,109 @@ static void read_intr(void)
 			goto ok_to_read;
 	} while (--retries > 0);
 	sti();
-	printk("HD: read_intr: status = 0x%02x\n",i);
+	printk("hd%c: read_intr: status = 0x%02x\n",dev+'a',i);
 	if (i & ERR_STAT) {
 		hd_error = (unsigned) inb(HD_ERROR);
-		printk("HD: read_intr: error = 0x%02x\n",hd_error);
+		printk("hd%c: read_intr: error = 0x%02x\n",dev+'a',hd_error);
 	}
 	bad_rw_intr();
 	cli();
-	do_hd_request();
+	hd_request();
 	return;
 ok_to_read:
-	insw(HD_DATA,CURRENT->buffer,256);
+	msect = mult_count[dev];
+read_next:
+	if (msect) {
+		if ((nsect = CURRENT->current_nr_sectors) > msect)
+			nsect = msect;
+		msect -= nsect;
+	} else
+		nsect = 1;
+	insw(HD_DATA,CURRENT->buffer,nsect<<8);
+	CURRENT->sector += nsect;
+	CURRENT->buffer += nsect<<9;
 	CURRENT->errors = 0;
-	CURRENT->buffer += 512;
-	CURRENT->sector++;
-	i = --CURRENT->nr_sectors;
-	--CURRENT->current_nr_sectors;
+	i = (CURRENT->nr_sectors -= nsect);
+
 #ifdef DEBUG
-	printk("hd%d : sector = %d, %d remaining to buffer = %08x\n",
-		MINOR(CURRENT->dev), CURRENT->sector, i, CURRENT-> 
-		buffer);
+	printk("hd%c: read: sectors(%ld-%ld), remaining=%ld, buffer=%08lx\n",
+		dev+'a', CURRENT->sector, CURRENT->sector+nsect,
+		CURRENT->nr_sectors, (long) CURRENT->buffer+(nsect<<9));
 #endif
-	if (!i || (CURRENT->bh && !SUBSECTOR(i)))
+	if ((CURRENT->current_nr_sectors -= nsect) <= 0)
 		end_request(1);
 	if (i > 0) {
+		if (msect)
+			goto read_next;
 		SET_INTR(&read_intr);
-		sti();
 		return;
 	}
 	(void) inb_p(HD_STATUS);
 #if (HD_DELAY > 0)
 	last_req = read_timer();
 #endif
-	do_hd_request();
+	if (CURRENT)
+		hd_request();
 	return;
+}
+
+static inline void multwrite (unsigned int dev)
+{
+	unsigned int mcount = mult_count[dev];
+
+	while (mcount--) {
+		outsw(HD_DATA,WCURRENT.buffer,256);
+		if (!--WCURRENT.nr_sectors)
+			return;
+		WCURRENT.buffer += 512;
+		if (!--WCURRENT.current_nr_sectors) {
+			WCURRENT.bh = WCURRENT.bh->b_reqnext;
+			if (WCURRENT.bh == NULL)
+				panic("buffer list corrupted\n");
+			WCURRENT.current_nr_sectors = WCURRENT.bh->b_size>>9;
+			WCURRENT.buffer             = WCURRENT.bh->b_data;
+		}
+	}
+}
+
+static void multwrite_intr(void)
+{
+	int i;
+	unsigned int dev = DEVICE_NR(WCURRENT.dev);
+
+	if (unmask_intr[dev])
+		sti();
+	if (((i = inb_p(HD_STATUS)) & STAT_MASK) == STAT_OK) {
+		if (i & DRQ_STAT) {
+			if (WCURRENT.nr_sectors) {
+				multwrite(dev);
+				SET_INTR(&multwrite_intr);
+				return;
+			}
+		} else {
+			if (!WCURRENT.nr_sectors) {	/* all done? */
+				for (i = CURRENT->nr_sectors; i > 0;){
+					i -= CURRENT->current_nr_sectors;
+					end_request(1);
+				}
+#if (HD_DELAY > 0)
+				last_req = read_timer();
+#endif
+				if (CURRENT)
+					hd_request();
+				return;
+			}
+		}
+	}
+	sti();
+	printk("hd%c: multwrite_intr: status = 0x%02x\n",dev+'a',i);
+	if (i & ERR_STAT) {
+		hd_error = (unsigned) inb(HD_ERROR);
+		printk("hd:%c multwrite_intr: error = 0x%02x\n",dev+'a',hd_error);
+	}
+	bad_rw_intr();
+	cli();
+	hd_request();
 }
 
 static void write_intr(void)
@@ -384,7 +590,7 @@ static void write_intr(void)
 	}
 	bad_rw_intr();
 	cli();
-	do_hd_request();
+	hd_request();
 	return;
 ok_to_write:
 	CURRENT->sector++;
@@ -401,7 +607,7 @@ ok_to_write:
 #if (HD_DELAY > 0)
 		last_req = read_timer();
 #endif
-		do_hd_request();
+		hd_request();
 	}
 	return;
 }
@@ -410,7 +616,7 @@ static void recal_intr(void)
 {
 	if (win_result())
 		bad_rw_intr();
-	do_hd_request();
+	hd_request();
 }
 
 /*
@@ -433,7 +639,7 @@ static void hd_times_out(void)
 		end_request(0);
 	}
 
-	do_hd_request();
+	hd_request();
 }
 
 /*
@@ -443,7 +649,7 @@ static void hd_times_out(void)
  * worst that can happen is that an unexpected HD-interrupt comes in and
  * sets the "reset" variable and starts the timer)
  */
-static void do_hd_request(void)
+static void hd_request(void)
 {
 	unsigned int block,dev;
 	unsigned int sec,head,cyl,track;
@@ -462,7 +668,7 @@ repeat:
 	nsect = CURRENT->nr_sectors;
 	if (dev >= (NR_HD<<6) || block >= hd[dev].nr_sects) {
 #ifdef DEBUG
-		printk("hd%d : attempted read for sector %d past end of device at sector %d.\n",
+		printk("hd : attempted read for sector %d past end of device at sector %d.\n",
 		   	block, hd[dev].nr_sects);
 #endif
 		end_request(0);
@@ -475,17 +681,18 @@ repeat:
 	head = track % hd_info[dev].head;
 	cyl = track / hd_info[dev].head;
 #ifdef DEBUG
-	printk("hd%d : cyl = %d, head = %d, sector = %d, buffer = %08x\n",
-		dev, cyl, head, sec, CURRENT->buffer);
+	printk("hd%c : cyl = %d, head = %d, sector = %d, buffer = %08x\n",
+		dev+'a', cyl, head, sec, CURRENT->buffer);
 #endif
-	cli();
+	if (!unmask_intr[dev])
+		cli();
 	if (reset) {
 		int i;
 
 		for (i=0; i < NR_HD; i++)
 			recalibrate[i] = 1;
+		cli(); /* better play it safe, as resets are the last resort */
 		reset_hd();
-		sti();
 		return;
 	}
 	if (recalibrate[dev]) {
@@ -493,30 +700,68 @@ repeat:
 		hd_out(dev,hd_info[dev].sect,0,0,0,WIN_RESTORE,&recal_intr);
 		if (reset)
 			goto repeat;
-		sti();
 		return;
 	}	
-	if (CURRENT->cmd == WRITE) {
-		hd_out(dev,nsect,sec,head,cyl,WIN_WRITE,&write_intr);
+	if (!identified[dev]) {
+		identified[dev]  = 1;
+		unmask_intr[dev] = DEFAULT_UNMASK_INTR;
+		mult_req[dev]    = DEFAULT_MULT_COUNT;
+		hd_out(dev,0,0,0,0,WIN_IDENTIFY,&identify_intr);
 		if (reset)
 			goto repeat;
-		if (wait_DRQ()) {
-			printk("HD: do_hd_request: no DRQ\n");
-			bad_rw_intr();
+		return;
+	}
+	if (mult_req[dev] != mult_count[dev]) {
+		hd_out(dev,mult_req[dev],0,0,0,WIN_SETMULT,&set_multmode_intr);
+		if (reset)
 			goto repeat;
-		}
-		outsw(HD_DATA,CURRENT->buffer,256);
-		sti();
 		return;
 	}
 	if (CURRENT->cmd == READ) {
-		hd_out(dev,nsect,sec,head,cyl,WIN_READ,&read_intr);
+		unsigned int cmd = mult_count[dev] > 1 ? WIN_MULTREAD : WIN_READ;
+		hd_out(dev,nsect,sec,head,cyl,cmd,&read_intr);
 		if (reset)
 			goto repeat;
-		sti();
+#ifdef DEBUG
+		printk("hd%c: reading %d sectors(%ld-%ld), buffer=%08lx\n",
+			dev+'a', nsect, CURRENT->sector,
+			CURRENT->sector+nsect-1, (long) CURRENT->buffer);
+#endif
+		return;
+	}
+	if (CURRENT->cmd == WRITE) {
+		if (mult_count[dev])
+			hd_out(dev,nsect,sec,head,cyl,WIN_MULTWRITE,&multwrite_intr);
+		else
+			hd_out(dev,nsect,sec,head,cyl,WIN_WRITE,&write_intr);
+		if (reset)
+			goto repeat;
+#ifdef DEBUG
+		printk("hd%c: writing %d sectors(%ld-%ld), buffer=%08lx\n",
+			dev+'a', nsect, CURRENT->sector,
+			CURRENT->sector+nsect-1, (long) CURRENT->buffer);
+#endif
+		if (wait_DRQ()) {
+			printk("hd%c: hd_request: no DRQ\n", dev+'a');
+			bad_rw_intr();
+			goto repeat;
+		}
+		if (mult_count[dev]) {
+			WCURRENT = *CURRENT;
+			multwrite(dev);
+		} else {
+			outsw(HD_DATA,CURRENT->buffer,256);
+		}
 		return;
 	}
 	panic("unknown hd-command");
+}
+
+static void do_hd_request (void)
+{
+	disable_irq(HD_IRQ);
+	hd_request();
+	enable_irq(HD_IRQ);
 }
 
 static int hd_ioctl(struct inode * inode, struct file * file,
@@ -568,6 +813,53 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 
 		case BLKRRPART: /* Re-read partition tables */
 			return revalidate_hddisk(inode->i_rdev, 1);
+
+		case HDIO_SETUNMASKINTR:
+			if (!arg)  return -EINVAL;
+			err = verify_area(VERIFY_READ, (long *) arg, sizeof(long));
+			if (err)
+				return err;
+			unmask_intr[dev] = get_fs_long((long *) arg);
+			return 0;
+
+                case HDIO_GETUNMASKINTR:
+			if (!arg)  return -EINVAL;
+			err = verify_area(VERIFY_WRITE, (long *) arg, sizeof(long));
+			if (err)
+				return err;
+			put_fs_long(unmask_intr[dev], (long *) arg);
+			return 0;
+
+                case HDIO_GETMULTCOUNT:
+			if (!arg)  return -EINVAL;
+			err = verify_area(VERIFY_WRITE, (long *) arg, sizeof(long));
+			if (err)
+				return err;
+			put_fs_long(mult_count[dev], (long *) arg);
+			return 0;
+
+		case HDIO_SETMULTCOUNT:
+		{
+			unsigned long flags;
+			if (!arg)  return -EINVAL;
+			err = verify_area(VERIFY_READ, (long *) arg, sizeof(long));
+			if (err)
+				return err;
+			arg = get_fs_long((long *) arg);
+			save_flags(flags);
+			cli();	/* a prior request might still be in progress */
+			if (arg > max_mult[dev])
+				err = -EINVAL;	/* out of range for device */
+			else if (mult_req[dev] != mult_count[dev])
+				err = -EBUSY;	/* busy, try again */
+			else {
+				mult_req[dev] = arg;
+				err = 0;
+			}
+			restore_flags(flags);
+			return err;
+		}
+
 		RO_IOCTLS(inode->i_rdev,arg);
 		default:
 			return -EINVAL;

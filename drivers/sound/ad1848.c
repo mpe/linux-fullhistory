@@ -903,16 +903,14 @@ ad1848_interrupt (int irq)
 int
 probe_ms_sound (struct address_info *hw_config)
 {
-  int             config_port = hw_config->io_base + 0, version_port = hw_config->io_base + 3;
-
   if ((INB (hw_config->io_base + 3) & 0x04) == 0)
     return 0;			/* WSS ID test failed */
 
   if (hw_config->irq > 11)
-    return;
+    return 0;
 
-  if (hw_config->dma > 3 || hw_config->dma == 2)
-    return;
+  if (hw_config->dma != 0 && hw_config->dma != 1 && hw_config->dma != 3)
+	return 0;
 
   return ad1848_detect (hw_config->io_base + 4);
 }
@@ -920,9 +918,11 @@ probe_ms_sound (struct address_info *hw_config)
 long
 attach_ms_sound (long mem_start, struct address_info *hw_config)
 {
-  static unsigned char interrupt_bits[11] =
+  static unsigned char interrupt_bits[12] =
   {-1, -1, -1, -1, -1, -1, -1, 0x08, -1, 0x10, 0x18, 0x20};
   char            bits;
+
+  static unsigned char dma_bits[4] = {1, 2, 0, 3};
 
   int             config_port = hw_config->io_base + 0, version_port = hw_config->io_base + 3;
 
@@ -941,7 +941,7 @@ attach_ms_sound (long mem_start, struct address_info *hw_config)
   if ((INB (version_port) & 0x40) == 0)
     printk ("[IRQ?]");
 
-  OUTB (bits | hw_config->dma, config_port);	/* Write IRQ+DMA setup */
+  OUTB (bits | dma_bits[hw_config->dma], config_port);	/* Write IRQ+DMA setup */
 
   ad1848_init ("MS Sound System", hw_config->io_base + 4,
 	       hw_config->irq,

@@ -54,7 +54,9 @@ extern int el16_probe(struct device *);
 extern int elplus_probe(struct device *);
 extern int ac3200_probe(struct device *);
 extern int e2100_probe(struct device *);
-extern int SK_init(struct device *dev);
+extern int ni52_probe(struct device *);
+extern int ni65_probe(struct device *);
+extern int SK_init(struct device *);
 
 /* Detachable devices ("pocket adaptors" and special PCMCIA drivers). */
 extern int atp_init(struct device *);
@@ -129,6 +131,12 @@ ethif_probe(struct device *dev)
 #endif
 #if defined(CONFIG_SK_G16)
 	&& SK_init(dev)
+#endif
+#ifdef CONFIG_NI52
+	&& ni52_probe(dev)
+#endif
+#ifdef CONFIG_NI65
+	&& ni65_probe(dev)
 #endif
 	&& 1 ) {
 	return 1;	/* -ENODEV or -EAGAIN would be more accurate. */

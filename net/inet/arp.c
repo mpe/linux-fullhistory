@@ -752,7 +752,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		skb_queue_head_init(&entry->skb);
 		entry->next = arp_tables[hash];
 		arp_tables[hash] = entry;
-
+		entry->timer.next = entry->timer.prev = NULL;
 		sti();
 	}
 
@@ -841,6 +841,7 @@ int arp_find(unsigned char *haddr, unsigned long paddr, struct device *dev,
 		entry->next = arp_tables[hash];
 		entry->dev = dev;
 		arp_tables[hash] = entry;
+		entry->timer.next = entry->timer.prev = NULL;
 		entry->timer.function = arp_expire_request;
 		entry->timer.data = (unsigned long)entry;
 		entry->timer.expires = ARP_RES_TIME;
@@ -1048,6 +1049,7 @@ static int arp_req_set(struct arpreq *req)
 		entry->hlen = hlen;
 		entry->htype = htype;
 		entry->next = arp_tables[hash];
+		entry->timer.next = entry->timer.prev = NULL;
 		arp_tables[hash] = entry;
 		skb_queue_head_init(&entry->skb);
 	}

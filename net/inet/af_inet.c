@@ -615,6 +615,7 @@ static int inet_create(struct socket *sock, int protocol)
 	sk->timeout = 0;
 	sk->broadcast = 0;
 	sk->localroute = 0;
+	sk->timer.next = sk->timer.prev = NULL;
 	sk->timer.data = (unsigned long)sk;
 	sk->timer.function = &net_timer;
 	skb_queue_head_init(&sk->back_log);

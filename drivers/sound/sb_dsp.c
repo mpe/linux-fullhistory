@@ -1,9 +1,9 @@
 /*
  * sound/sb_dsp.c
  *
- * The low level driver for the SoundBlaster DSP chip.
+ * The low level driver for the SoundBlaster DSP chip (SB1.0 to 2.1, SB Pro).
  *
- * Copyright by Hannu Savolainen 1993
+ * Copyright by Hannu Savolainen 1994
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -24,6 +24,10 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
+ *
+ * Modified:
+ *	Hunyue Yau	Jan 6 1994
+ *	Added code to support Sound Galaxy NX Pro
  *
  */
 
@@ -756,6 +760,7 @@ long
 sb_dsp_init (long mem_start, struct address_info *hw_config)
 {
   int             i;
+  int             mixer_type = 0;
 
   sbc_major = sbc_minor = 0;
   sb_dsp_command (0xe1);	/*
@@ -786,7 +791,7 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
 
 #ifndef EXCLUDE_SBPRO
   if (sbc_major >= 3)
-    sb_mixer_init (sbc_major);
+    mixer_type = sb_mixer_init (sbc_major);
 #endif
 
 #ifndef EXCLUDE_YM8312
@@ -799,7 +804,16 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
   if (sbc_major >= 3)
     {
 #ifndef SCO
-      sprintf (sb_dsp_operations.name, "SoundBlaster Pro %d.%d", sbc_major, sbc_minor);
+#  ifdef __SGNXPRO__
+      if (mixer_type == 2)
+	{
+	  sprintf (sb_dsp_operations.name, "Sound Galaxy NX Pro %d.%d", sbc_major, sbc_minor);
+	}
+      else
+#  endif
+	{
+	  sprintf (sb_dsp_operations.name, "SoundBlaster Pro %d.%d", sbc_major, sbc_minor);
+	}
 #endif
     }
   else

@@ -145,10 +145,10 @@ extern int unmap_page_range(unsigned long from, unsigned long size);
 extern int remap_page_range(unsigned long from, unsigned long to, unsigned long size, int mask);
 extern int zeromap_page_range(unsigned long from, unsigned long size, int mask);
 
-extern void do_wp_page(unsigned long error_code, unsigned long address,
-	struct task_struct *tsk);
-extern void do_no_page(unsigned long error_code, unsigned long address,
-	struct task_struct *tsk);
+extern void do_wp_page(struct vm_area_struct * vma, unsigned long address,
+	unsigned long error_code);
+extern void do_no_page(struct vm_area_struct * vma, unsigned long address,
+	unsigned long error_code);
 
 extern unsigned long paging_init(unsigned long start_mem, unsigned long end_mem);
 extern void mem_init(unsigned long low_start_mem,

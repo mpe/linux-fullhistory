@@ -278,6 +278,9 @@ struct sound_timer_operations {
 #endif
 #ifndef EXCLUDE_MSS
 		{SNDCARD_MSS, {MSS_BASE, MSS_IRQ, MSS_DMA}, SND_DEFAULT_ENABLE},
+#	ifdef MSS2_BASE
+		{SNDCARD_MSS, {MSS2_BASE, MSS2_IRQ, MSS2_DMA}, SND_DEFAULT_ENABLE},
+#	endif
 #endif
 
 #if !defined(EXCLUDE_UART6850) && !defined(EXCLUDE_MIDI)

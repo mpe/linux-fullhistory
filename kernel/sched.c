@@ -148,7 +148,6 @@ asmlinkage void math_emulate(long arg)
 
 unsigned long itimer_ticks = 0;
 unsigned long itimer_next = ~0;
-static unsigned long lost_ticks = 0;
 
 /*
  *  'schedule()' is the scheduler function. It's a very simple and nice
@@ -361,54 +360,76 @@ void sleep_on(struct wait_queue **p)
 	__sleep_on(p,TASK_UNINTERRUPTIBLE);
 }
 
-static struct timer_list * next_timer = NULL;
+/*
+ * The head for the timer-list has a "expires" field of MAX_UINT,
+ * and the sorting routine counts on this..
+ */
+static struct timer_list timer_head = { &timer_head, &timer_head, ~0, 0, NULL };
+#define SLOW_BUT_DEBUGGING_TIMERS 1
 
 void add_timer(struct timer_list * timer)
 {
 	unsigned long flags;
-	struct timer_list ** p;
+	struct timer_list *p;
 
-	if (!timer)
+#if SLOW_BUT_DEBUGGING_TIMERS
+	if (timer->next || timer->prev) {
+		printk("add_timer() called with non-zero list from %08lx\n",
+			((unsigned long *) &timer)[-1]);
 		return;
-	timer->next = NULL;
-	p = &next_timer;
+	}
+#endif
+	p = &timer_head;
+	timer->expires += jiffies;
 	save_flags(flags);
 	cli();
-	while (*p) {
-		if ((*p)->expires > timer->expires) {
-			(*p)->expires -= timer->expires;
-			timer->next = *p;
-			break;
-		}
-		timer->expires -= (*p)->expires;
-		p = &(*p)->next;
-	}
-	*p = timer;
+	do {
+		p = p->next;
+	} while (timer->expires > p->expires);
+	timer->next = p;
+	timer->prev = p->prev;
+	p->prev = timer;
+	timer->prev->next = timer;
 	restore_flags(flags);
 }
 
 int del_timer(struct timer_list * timer)
 {
 	unsigned long flags;
-	unsigned long expires = 0;
-	struct timer_list **p;
+#if SLOW_BUT_DEBUGGING_TIMERS
+	struct timer_list * p;
 
-	p = &next_timer;
+	p = &timer_head;
 	save_flags(flags);
 	cli();
-	while (*p) {
-		if (*p == timer) {
-			if ((*p = timer->next) != NULL)
-				(*p)->expires += timer->expires;
-			timer->expires += expires;
+	while ((p = p->next) != &timer_head) {
+		if (p == timer) {
+			timer->next->prev = timer->prev;
+			timer->prev->next = timer->next;
+			timer->next = timer->prev = NULL;
 			restore_flags(flags);
+			timer->expires -= jiffies;
 			return 1;
 		}
-		expires += (*p)->expires;
-		p = &(*p)->next;
+	}
+	if (p->next || p->prev)
+		printk("del_timer() called with timer not initialized\n");
+	restore_flags(flags);
+	return 0;
+#else	
+	save_flags(flags);
+	cli();
+	if (timer->next) {
+		timer->next->prev = timer->prev;
+		timer->prev->next = timer->next;
+		timer->next = timer->prev = NULL;
+		restore_flags(flags);
+		timer->expires -= jiffies;
+		return 1;
 	}
 	restore_flags(flags);
 	return 0;
+#endif
 }
 
 unsigned long timer_active = 0;
@@ -528,12 +549,15 @@ static void timer_bh(void * unused)
 {
 	unsigned long mask;
 	struct timer_struct *tp;
+	struct timer_list * timer;
 
 	cli();
-	while (next_timer && next_timer->expires == 0) {
-		void (*fn)(unsigned long) = next_timer->function;
-		unsigned long data = next_timer->data;
-		next_timer = next_timer->next;
+	while ((timer = timer_head.next) != &timer_head && timer->expires < jiffies) {
+		void (*fn)(unsigned long) = timer->function;
+		unsigned long data = timer->data;
+		timer->next->prev = timer->prev;
+		timer->prev->next = timer->next;
+		timer->next = timer->prev = NULL;
 		sti();
 		fn(data);
 		cli();
@@ -667,16 +691,8 @@ static void do_timer(struct pt_regs * regs)
 	itimer_ticks++;
 	if (itimer_ticks > itimer_next)
 		need_resched = 1;
-	if (next_timer) {
-		if (next_timer->expires) {
-			next_timer->expires--;
-			if (!next_timer->expires)
-				mark_bh(TIMER_BH);
-		} else {
-			lost_ticks++;
-			mark_bh(TIMER_BH);
-		}
-	}
+	if (timer_head.next->expires < jiffies)
+		mark_bh(TIMER_BH);
 	if (tq_timer != &tq_last)
 		mark_bh(TQUEUE_BH);
 	sti();

@@ -1,0 +1,98 @@
+IDE Performance Enhancements	Version 2.0
+============================	===========
+
+This version of hd.c includes support for two optional features:
+
+(1) The disk I/O routines can now run with interrupts unmasked
+	most of the time, making them much friendlier to high
+	speed serial ports and other system activity.
+
+(2) Support is included for IDE "Multiple Sector Mode", the use
+	of which can reduce disk I/O kernel overhead by 10-30%
+	on many systems, with a corresponding 10-20% increase in
+	data throughput.
+
+By default, both features are DISABLED, for compatibility with
+	systems on which they may cause troubles.
+
+The IRQ unmasking has been known to CORRUPT FILESYSTEMS in the
+past on systems with strange hard drives.  Backup before trying!
+
+It works on most systems, but use at your own risk!!
+
+Drives which support "Multiple Sector Mode" are identified by the
+kernel at boot time, and a message is displayed indicating the
+largest possible setting for "MaxMult".  I recommend using settings
+of 8, 16, or 32.  Many drives also support non-powers of two,
+but many other drives do not -- try strange values at your own risk!
+
+For more detailed boot-time information about your drive, change
+the definition of VERBOSE_DRIVE_INFO from 0 to 1 near the top
+of hd.c and rebuild/reinstall the kernel.
+
+Some drives (mostly older CONNER drives) do not implement multiple mode
+correctly, and data corruption may occur.. but if you wait long enough
+the error recovery logic *should* be able to recover eventually.
+
+To try this out more safely, mount the drive's partitions read-only
+before using hdparm (see below) for the first time.  If it doesn't
+work, email me (mlord@bnr.ca) with the drive name as displayed at
+boot time, so I can warn others and possibly add a hook to the code.
+
+To enable the features, a small program is included:  hdparm.c
+This one is *different* from previous versions -- be sure to recompile it!
+
+Compile this using   cc -O -o /usr/bin/hdparm hdparm.c
+and then use it to enable/disable the new features, as follows:
+
+To turn on 16-sector multiple mode, with interrupt unmasking:
+
+	hdparm /dev/hda 16 1
+
+To view the current settings:
+
+	hdparm /dev/hda
+
+If you have more than one drive, a separate command would need to		be issued for the second drive as well, using the same or different
+settings as desired:
+
+	hdparm /dev/hdb 16 1
+
+To turn off both features on the first drive, use:
+
+	hdparm /dev/hda 0 0
+
+To benchmark the performance difference, try:
+
+	hdparm /dev/hda 0 0
+	sync
+	time dd if=/dev/hda of=/dev/null bs=1024k count=30
+	time dd if=/dev/hda of=/dev/null bs=1024k count=30
+	time dd if=/dev/hda of=/dev/null bs=1024k count=30
+	hdparm /dev/hda 16 1
+	sync
+	time dd if=/dev/hda of=/dev/null bs=1024k count=30
+	time dd if=/dev/hda of=/dev/null bs=1024k count=30
+	time dd if=/dev/hda of=/dev/null bs=1024k count=30
+
+This gives before and after views.  Compare the total elapsed times,
+as well as the percent of CPU used in each case.  Run several trials
+to ensure/verify consistent results.  Some drives are actually *slower*
+with multiple mode enabled, but those are very rare indeed.  Most systems
+experience a 10-30% increase in throughput, with a corresponding 5-50%
+decrease in kernel/system CPU usage.
+
+If you are using linux kernel 1.1.4 or higher (with the "cluster" code),
+then you may not notice a big difference with the above tests.  However,
+I have noticed that the iozone benchmark program does seem to work fairly
+reliably under kernels with the "cluster" code, so you could try that
+instead (under older kernels, iozone seems to give wildly varying results
+from trial to trial, at least on my system).
+
+To have your favorite settings installed automatically at boot time,
+place the hdparm command(s) into the /etc/rc.d/rc.local file.
+Alternatively, one could modify the DEFAULTs near the top of hd.c
+and rebuild and install the new kernel.
+
+Enjoy,
+mlord@bnr.ca

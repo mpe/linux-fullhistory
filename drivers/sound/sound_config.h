@@ -180,7 +180,7 @@ If your card has nonstandard I/O address or IRQ number, change defines
  * In v3.0 it's /dev/sndproc but this could be a temporary solution.
  */
 
-#define SND_NDEVS	64	/* Number of supported devices */
+#define SND_NDEVS	256	/* Number of supported devices */
 #define SND_DEV_CTL	0	/* Control port /dev/mixer */
 #define SND_DEV_SEQ	1	/* Sequencer output /dev/sequencer (FM
 				   synthesizer and MIDI output) */
@@ -199,7 +199,7 @@ If your card has nonstandard I/O address or IRQ number, change defines
 #define ON		1
 #define OFF		0
 
-#define MAX_AUDIO_DEV	4
+#define MAX_AUDIO_DEV	5
 #define MAX_MIXER_DEV	2
 #define MAX_SYNTH_DEV	3
 #define MAX_MIDI_DEV	6

@@ -267,7 +267,6 @@ ppp_init(struct device *dev)
   dev->mtu             = PPP_MTU;
   dev->hard_start_xmit = ppp_xmit;
   dev->open            = ppp_dev_open;
-  dev->do_ioctl        = ppp_dev_ioctl;
   dev->stop            = ppp_dev_close;
   dev->get_stats       = ppp_get_stats;
   dev->hard_header     = ppp_header;
@@ -280,6 +279,8 @@ ppp_init(struct device *dev)
 #ifdef NET02D
   dev->add_arp         = ppp_add_arp;
   dev->queue_xmit      = dev_queue_xmit;
+#else
+  dev->do_ioctl        = ppp_dev_ioctl;
 #endif
 
   for (i = 0; i < DEV_NUMBUFFS; i++)
@@ -605,6 +606,7 @@ ppp_dev_close(struct device *dev)
   return 0;
 }
 
+#ifndef NET02D
 static int ppp_dev_ioctl(struct device *dev, struct ifreq *ifr)
 {
   struct ppp *ppp = &ppp_ctrl[dev->base_addr];
@@ -630,6 +632,7 @@ static int ppp_dev_ioctl(struct device *dev, struct ifreq *ifr)
 
   return error;
 }
+#endif
 
 /*************************************************************
  * TTY OUTPUT
@@ -650,7 +653,11 @@ ppp_output_done (void *ppp)
   /* If the device is still up then enable the transmitter of the
      next frame. */
   if (((struct ppp *) ppp)->dev->flags & IFF_UP)
+#ifndef NET02D
+    mark_bh (NET_BH);
+#else
     dev_tint (((struct ppp *) ppp)->dev);
+#endif
 
   /* enable any blocked process pending transmission */
   wake_up_interruptible (&((struct ppp *) ppp)->write_wait);
@@ -1124,9 +1131,7 @@ ppp_do_ip (struct ppp *ppp, unsigned short proto, unsigned char *c,
   }
 
   /* receive the frame through the network software */
-  while ((dev_rint(c, count, 0, ppp->dev) & ~1) != 0)
-    ;
-
+  (void) dev_rint (c, count, 0, ppp->dev);
   return 1;
 }
 

@@ -320,7 +320,7 @@ DMAbuf_getrdbuffer (int dev, char **buf, int *len)
       if (!(dmap->flags & DMA_ALLOC_DONE))
 	reorganize_buffers (dev);
 
-      if (dmap->dma_mode)
+      if (!dmap->dma_mode)
 	{
 	  int             err;
 

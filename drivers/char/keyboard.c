@@ -86,7 +86,12 @@ static unsigned long key_down[8] = { 0, };
 static int want_console = -1;
 static int last_console = 0;		/* last used VC */
 static int dead_key_next = 0;
-static int shift_state = 0;
+/* 
+ * In order to retrieve the shift_state (for the mouse server), either
+ * the variable must be global, or a new procedure must be create to 
+ * return the value. I chose the former way.
+ */
+/*static*/ int shift_state = 0;
 static int npadch = -1;			/* -1 or number assembled on pad */
 static unsigned char diacr = 0;
 static char rep = 0;			/* flag telling character repeat */

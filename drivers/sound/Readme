@@ -12,8 +12,8 @@ VoxWare v2.90 release notes
 		there are some new features required by a popular 
 		application. In addition there is also support
 		for the GUS MAX and the 16 bit sampling option of GUS.
-		Also the Windows Sound System stuff is there but may not
-		work yet (may work with some WSS compatible cards).
+
+		The MSS/WSS support works now. At least with SG NX Pro 16.
 
 ********* IMPORTANT *****************************************
 Linux 1.0 or later is required to by this driver version.
@@ -65,6 +65,7 @@ contributors. (I could have forgotten some names.)
 	Markus Aroharju	and
 	Risto Kankkunen		Major contributions to the mixer support
 				of GUS v3.7.
+	Hunyue Yau	Mixer support for SG NX Pro.
 	Marc Hoffman	PSS support.
 
 Regards,

@@ -336,6 +336,8 @@ int dev_close(struct device *dev)
 void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 {
 	unsigned long flags;
+	int nitcount;
+	struct packet_type *ptype;
 	int where = 0;		/* used to say if the packet should go	*/
 				/* at the front or the back of the	*/
 				/* queue - front is a retranmsit try	*/
@@ -418,6 +420,17 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 #endif		
 	}
 	restore_flags(flags);
+
+	/* copy outgoing packets to any sniffer packet handlers */
+	for (nitcount = dev_nit, ptype = ptype_base; nitcount > 0 && ptype != NULL; ptype = ptype->next) {
+		if (ptype->type == htons(ETH_P_ALL)) {
+			struct sk_buff *skb2;
+			if ((skb2 = skb_clone(skb, GFP_ATOMIC)) == NULL)
+				break;
+			ptype->func(skb2, skb->dev, ptype);
+			nitcount--;
+		}
+	}
 
 	if (dev->hard_start_xmit(skb, dev) == 0) {
 		/*

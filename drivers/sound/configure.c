@@ -322,6 +322,13 @@ main (int argc, char *argv[])
 	  }
     }
 
+  if (selected_options & B (OPT_SBPRO))
+    {
+      fprintf(stderr, "Do you want support for the mixer of SG NX Pro ? ");
+      if (think_positively (0))
+	 printf("#define __SGNXPRO__\n");
+    }
+
   if (selected_options & B (OPT_SB16))
     selected_options |= B (OPT_SBPRO);
 
@@ -333,7 +340,7 @@ main (int argc, char *argv[])
        "if you wish to emulate the soundblaster and you have a DSPxxx.LD.\n"
 	 "then you must include the LD in the kernel.\n"
 	 "(do you wish to include a LD) ? ");
-      if (think_positively (1))
+      if (think_positively (0))
 	{
 	  char            path[512];
 

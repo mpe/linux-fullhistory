@@ -681,8 +681,7 @@ struct sk_buff * tcp_dequeue_partial(struct sock * sk)
 	save_flags(flags);
 	cli();
 	skb = sk->partial;
-	if (skb) 
-	{
+	if (skb) {
 		sk->partial = NULL;
 		del_timer(&sk->partial_timer);
 	}
@@ -711,6 +710,7 @@ void tcp_enqueue_partial(struct sk_buff * skb, struct sock * sk)
 	if (tmp)
 		del_timer(&sk->partial_timer);
 	sk->partial = skb;
+	sk->partial_timer.next = sk->partial_timer.prev = NULL;
 	sk->partial_timer.expires = HZ;
 	sk->partial_timer.function = (void (*)(unsigned long)) tcp_send_partial;
 	sk->partial_timer.data = (unsigned long) sk;
@@ -1987,6 +1987,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	newsk->urg_data = 0;
 	newsk->retransmits = 0;
 	newsk->destroy = 0;
+	newsk->timer.next = newsk->timer.prev = NULL;
 	newsk->timer.data = (unsigned long)newsk;
 	newsk->timer.function = &net_timer;
 	newsk->dummy_th.source = skb->h.th->dest;
@@ -2217,6 +2218,15 @@ static void tcp_close(struct sock *sk, int timeout)
 			 * XXX if retransmit count reaches limit, is tcp_close()
 			 * called with timeout == 1 ? if not, we need to fix that.
 			 */
+			if (!timeout) {
+				int timer_active;
+
+				timer_active = del_timer(&sk->timer);
+				if (timer_active)
+					add_timer(&sk->timer);
+				else
+					reset_timer(sk, TIME_CLOSE, 4 * sk->rto);
+			}
 #ifdef NOTDEF
 			/* 
 			 *	Start a timer.

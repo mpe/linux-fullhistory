@@ -554,20 +554,17 @@ unsigned long put_dirty_page(struct task_struct * tsk, unsigned long page, unsig
  * to a shared page. It is done by copying the page to a new address
  * and decrementing the shared-page counter for the old page.
  *
- * Note that we do many checks twice (look at do_wp_page()), as
- * we have to be careful about race-conditions.
- *
  * Goto-purists beware: the only reason for goto's here is that it results
  * in better assembly code.. The "default" path will see no jumps at all.
  */
-static void __do_wp_page(unsigned long error_code, unsigned long address,
-	struct task_struct * tsk)
+void do_wp_page(struct vm_area_struct * vma, unsigned long address,
+	unsigned long error_code)
 {
 	unsigned long *pde, pte, old_page, prot;
 	unsigned long new_page;
 
 	new_page = __get_free_page(GFP_KERNEL);
-	pde = PAGE_DIR_OFFSET(tsk->tss.cr3,address);
+	pde = PAGE_DIR_OFFSET(vma->vm_task->tss.cr3,address);
 	pte = *pde;
 	if (!(pte & PAGE_PRESENT))
 		goto end_wp_page;
@@ -582,13 +579,13 @@ static void __do_wp_page(unsigned long error_code, unsigned long address,
 		goto bad_wp_page;
 	if (old_page & PAGE_RW)
 		goto end_wp_page;
-	tsk->mm->min_flt++;
+	vma->vm_task->mm->min_flt++;
 	prot = (old_page & ~PAGE_MASK) | PAGE_RW;
 	old_page &= PAGE_MASK;
 	if (mem_map[MAP_NR(old_page)] != 1) {
 		if (new_page) {
 			if (mem_map[MAP_NR(old_page)] & MAP_PAGE_RESERVED)
-				++tsk->mm->rss;
+				++vma->vm_task->mm->rss;
 			copy_page(old_page,new_page);
 			*(unsigned long *) pte = new_page | prot;
 			free_page(old_page);
@@ -596,7 +593,7 @@ static void __do_wp_page(unsigned long error_code, unsigned long address,
 			return;
 		}
 		free_page(old_page);
-		oom(tsk);
+		oom(vma->vm_task);
 		*(unsigned long *) pte = BAD_PAGE | prot;
 		invalidate();
 		return;
@@ -609,12 +606,12 @@ static void __do_wp_page(unsigned long error_code, unsigned long address,
 bad_wp_page:
 	printk("do_wp_page: bogus page at address %08lx (%08lx)\n",address,old_page);
 	*(unsigned long *) pte = BAD_PAGE | PAGE_SHARED;
-	send_sig(SIGKILL, tsk, 1);
+	send_sig(SIGKILL, vma->vm_task, 1);
 	goto end_wp_page;
 bad_wp_pagetable:
 	printk("do_wp_page: bogus page-table at address %08lx (%08lx)\n",address,pte);
 	*pde = BAD_PAGETABLE | PAGE_TABLE;
-	send_sig(SIGKILL, tsk, 1);
+	send_sig(SIGKILL, vma->vm_task, 1);
 end_wp_page:
 	if (new_page)
 		free_page(new_page);
@@ -622,63 +619,12 @@ end_wp_page:
 }
 
 /*
- * check that a page table change is actually needed, and call
- * the low-level function only in that case..
+ * Ugly, ugly, but the goto's result in better assembly..
  */
-void do_wp_page(unsigned long error_code, unsigned long address,
-	struct task_struct * tsk)
-{
-	unsigned long page;
-	unsigned long * pg_table;
-
-	pg_table = PAGE_DIR_OFFSET(tsk->tss.cr3,address);
-	page = *pg_table;
-	if (!page)
-		return;
-	if ((page & PAGE_PRESENT) && page < high_memory) {
-		pg_table = (unsigned long *) ((page & PAGE_MASK) + PAGE_PTR(address));
-		page = *pg_table;
-		if (!(page & PAGE_PRESENT))
-			return;
-		if (page & PAGE_RW)
-			return;
-		if (!(page & PAGE_COW)) {
-			if ((error_code & PAGE_USER) && tsk == current) {
-				current->tss.cr2 = address;
-				current->tss.error_code = error_code;
-				current->tss.trap_no = 14;
-				send_sig(SIGSEGV, tsk, 1);
-				return;
-			}
-		}
-		if (mem_map[MAP_NR(page)] == 1) {
-			*pg_table |= PAGE_RW | PAGE_DIRTY;
-			invalidate();
-			return;
-		}
-		__do_wp_page(error_code, address, tsk);
-		return;
-	}
-	printk("bad page directory entry %08lx\n",page);
-	*pg_table = 0;
-}
-
-static int __verify_write(unsigned long start, unsigned long size)
-{
-	size--;
-	size += start & ~PAGE_MASK;
-	size >>= PAGE_SHIFT;
-	start &= PAGE_MASK;
-	do {
-		do_wp_page(1,start,current);
-		start += PAGE_SIZE;
-	} while (size--);
-	return 0;
-}
-
 int verify_area(int type, const void * addr, unsigned long size)
 {
 	struct vm_area_struct * vma;
+	unsigned long start = (unsigned long) addr;
 
 	/* If the current user space is mapped to kernel space (for the
 	 * case where we use a fake user buffer with get_fs/set_fs()) we
@@ -690,27 +636,52 @@ int verify_area(int type, const void * addr, unsigned long size)
 	for (vma = current->mm->mmap ; ; vma = vma->vm_next) {
 		if (!vma)
 			goto bad_area;
-		if (vma->vm_end > (unsigned long) addr)
+		if (vma->vm_end > start)
 			break;
 	}
-	if (vma->vm_start <= (unsigned long) addr)
+	if (vma->vm_start <= start)
 		goto good_area;
 	if (!(vma->vm_flags & VM_GROWSDOWN))
 		goto bad_area;
-	if (vma->vm_end - (unsigned long) addr > current->rlim[RLIMIT_STACK].rlim_cur)
+	if (vma->vm_end - start > current->rlim[RLIMIT_STACK].rlim_cur)
 		goto bad_area;
+
 good_area:
-	while (vma->vm_end - (unsigned long) addr < size) {
-		struct vm_area_struct * next = vma->vm_next;
-		if (!next)
+	if (!wp_works_ok && type == VERIFY_WRITE)
+		goto check_wp_fault_by_hand;
+	for (;;) {
+		struct vm_area_struct * next;
+		if (type != VERIFY_READ && !(vma->vm_page_prot & (PAGE_COW | PAGE_RW)))
 			goto bad_area;
-		if (vma->vm_end != next->vm_start)
+		if (vma->vm_end - start >= size)
+			return 0;
+		next = vma->vm_next;
+		if (!next || vma->vm_end != next->vm_start)
 			goto bad_area;
 		vma = next;
 	}
-	if (wp_works_ok || type == VERIFY_READ || !size)
-		return 0;
-	return __verify_write((unsigned long) addr,size);
+
+check_wp_fault_by_hand:
+	size--;
+	size += start & ~PAGE_MASK;
+	size >>= PAGE_SHIFT;
+	start &= PAGE_MASK;
+
+	for (;;) {
+		if (!(vma->vm_page_prot & (PAGE_COW | PAGE_RW)))
+			goto bad_area;
+		do_wp_page(vma, start, PAGE_PRESENT);
+		if (!size)
+			return 0;
+		size--;
+		start += PAGE_SIZE;
+		if (start < vma->vm_end)
+			continue;
+		vma = vma->vm_next;
+		if (!vma || vma->vm_start != start)
+			break;
+	}
+
 bad_area:
 	return -EFAULT;
 }
@@ -885,12 +856,33 @@ static inline unsigned long get_empty_pgtable(struct task_struct * tsk,unsigned 
 	return 0;
 }
 
-static void handle_no_page(struct vm_area_struct * vma,
-	unsigned long address, unsigned long error_code)
+void do_no_page(struct vm_area_struct * vma, unsigned long address,
+	unsigned long error_code)
 {
-	unsigned long page;
-	int prot;
+	unsigned long page, entry, prot;
 
+	page = get_empty_pgtable(vma->vm_task,address);
+	if (!page)
+		return;
+	page &= PAGE_MASK;
+	page += PAGE_PTR(address);
+	entry = *(unsigned long *) page;
+	if (entry & PAGE_PRESENT)
+		return;
+	if (entry) {
+		++vma->vm_task->mm->rss;
+		++vma->vm_task->mm->maj_flt;
+		swap_in((unsigned long *) page);
+		return;
+	}
+	address &= PAGE_MASK;
+
+	if (!vma->vm_ops || !vma->vm_ops->nopage) {
+		++vma->vm_task->mm->rss;
+		++vma->vm_task->mm->min_flt;
+		get_empty_page(vma->vm_task,address);
+		return;
+	}
 	page = get_free_page(GFP_KERNEL);
 	if (share_page(vma, address, error_code, page)) {
 		++vma->vm_task->mm->min_flt;
@@ -904,8 +896,10 @@ static void handle_no_page(struct vm_area_struct * vma,
 	++vma->vm_task->mm->maj_flt;
 	++vma->vm_task->mm->rss;
 	page = vma->vm_ops->nopage(vma, address, page, error_code);
-	if (share_page(vma, address, error_code, 0))
+	if (share_page(vma, address, error_code, 0)) {
+		free_page(page);
 		return;
+	}
 	prot = vma->vm_page_prot;
 	if ((prot & PAGE_COW) && mem_map[MAP_NR(page)] > 1)
 		prot &= ~PAGE_RW;
@@ -915,28 +909,20 @@ static void handle_no_page(struct vm_area_struct * vma,
 	oom(current);
 }
 
-void do_no_page(unsigned long error_code, unsigned long address,
-	struct task_struct *tsk)
+/*
+ * This routine handles page faults.  It determines the address,
+ * and the problem, and then passes it off to one of the appropriate
+ * routines.
+ */
+asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 {
-	unsigned long page, tmp;
 	struct vm_area_struct * vma;
+	unsigned long address;
+	unsigned long page;
 
-	page = get_empty_pgtable(tsk,address);
-	if (!page)
-		return;
-	page &= PAGE_MASK;
-	page += PAGE_PTR(address);
-	tmp = *(unsigned long *) page;
-	if (tmp & PAGE_PRESENT)
-		return;
-	if (tmp) {
-		++tsk->mm->rss;
-		++tsk->mm->maj_flt;
-		swap_in((unsigned long *) page);
-		return;
-	}
-	address &= PAGE_MASK;
-	for (vma = tsk->mm->mmap ; ; vma = vma->vm_next) {
+	/* get the address */
+	__asm__("movl %%cr2,%0":"=r" (address));
+	for (vma = current->mm->mmap ; ; vma = vma->vm_next) {
 		if (!vma)
 			goto bad_area;
 		if (vma->vm_end > address)
@@ -946,81 +932,63 @@ void do_no_page(unsigned long error_code, unsigned long address,
 		goto good_area;
 	if (!(vma->vm_flags & VM_GROWSDOWN))
 		goto bad_area;
-	if (vma->vm_end - address > tsk->rlim[RLIMIT_STACK].rlim_cur)
+	if (vma->vm_end - address > current->rlim[RLIMIT_STACK].rlim_cur)
 		goto bad_area;
-	vma->vm_offset -= vma->vm_start - address;
-	vma->vm_start = address;
-
+	vma->vm_offset -= vma->vm_start - (address & PAGE_MASK);
+	vma->vm_start = (address & PAGE_MASK);
+/*
+ * Ok, we have a good vm_area for this memory access, so
+ * we can handle it..
+ */
 good_area:
-	if (!vma->vm_ops || !vma->vm_ops->nopage) {
-		++tsk->mm->rss;
-		++tsk->mm->min_flt;
-		get_empty_page(tsk,address);
+	if (regs->eflags & VM_MASK) {
+		unsigned long bit = (address - 0xA0000) >> PAGE_SHIFT;
+		if (bit < 32)
+			current->screen_bitmap |= 1 << bit;
+	}
+	if (error_code & PAGE_PRESENT) {
+		if ((vma->vm_page_prot & (PAGE_RW | PAGE_COW | PAGE_PRESENT)) == PAGE_PRESENT)
+			goto bad_area;
+#ifdef CONFIG_TEST_VERIFY_AREA
+		if (regs->cs == KERNEL_CS)
+			printk("WP fault at %08x\n", regs->eip);
+#endif
+		do_wp_page(vma, address, error_code);
 		return;
 	}
-	handle_no_page(vma, address, error_code);
+	if (!(vma->vm_page_prot & PAGE_PRESENT))
+		goto bad_area;
+	do_no_page(vma, address, error_code);
 	return;
 
-bad_area:
-	if (tsk != current)
-		goto kernel_needs_bad_page;
-	tsk->tss.cr2 = address;
-	tsk->tss.error_code = error_code;
-	tsk->tss.trap_no = 14;
-	send_sig(SIGSEGV,tsk,1);
-	if (error_code & 4)	/* user level access? */
-		return;
-
-kernel_needs_bad_page:
-	++tsk->mm->rss;
-	++tsk->mm->min_flt;
-	get_empty_page(tsk,address);
-}
-
 /*
- * This routine handles page faults.  It determines the address,
- * and the problem, and then passes it off to one of the appropriate
- * routines.
+ * Something tried to access memory that isn't in our memory map..
+ * Fix it, but check if it's kernel or user first..
  */
-asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
-{
-	unsigned long address;
-	unsigned long page;
-	unsigned int bit;
-
-	/* get the address */
-	__asm__("movl %%cr2,%0":"=r" (address));
-	if (address < TASK_SIZE) {
-		if (regs->eflags & VM_MASK) {
-			bit = (address - 0xA0000) >> PAGE_SHIFT;
-			if (bit < 32)
-				current->screen_bitmap |= 1 << bit;
-		}
-		if (error_code & PAGE_PRESENT) {
-#ifdef CONFIG_TEST_VERIFY_AREA
-			if (regs->cs == KERNEL_CS)
-				printk("WP fault at %08x\n", regs->eip);
-#endif
-			do_wp_page(error_code, address, current);
-		} else {
-			do_no_page(error_code, address, current);
-		}
+bad_area:
+	if (error_code & PAGE_USER) {
+		current->tss.cr2 = address;
+		current->tss.error_code = error_code;
+		current->tss.trap_no = 14;
+		send_sig(SIGSEGV, current, 1);
 		return;
 	}
-	address -= TASK_SIZE;
-	if (wp_works_ok < 0 && address == 0 && (error_code & PAGE_PRESENT)) {
+/*
+ * Oops. The kernel tried to access some bad page. We'll have to
+ * terminate things with extreme prejudice.
+ */
+	if (wp_works_ok < 0 && address == TASK_SIZE && (error_code & PAGE_PRESENT)) {
 		wp_works_ok = 1;
 		pg0[0] = PAGE_SHARED;
 		printk("This processor honours the WP bit even when in supervisor mode. Good.\n");
 		return;
 	}
-	if (address < PAGE_SIZE) {
+	if ((unsigned long) (address-TASK_SIZE) < PAGE_SIZE) {
 		printk(KERN_ALERT "Unable to handle kernel NULL pointer dereference");
 		pg0[0] = PAGE_SHARED;
 	} else
 		printk(KERN_ALERT "Unable to handle kernel paging request");
-	printk(" at kernel address %08lx\n",address);
-	address += TASK_SIZE;
+	printk(" at virtual address %08lx\n",address);
 	__asm__("movl %%cr3,%0" : "=r" (page));
 	printk(KERN_ALERT "current->tss.cr3 = %08lx, %%cr3 = %08lx\n",
 		current->tss.cr3, page);

@@ -140,7 +140,7 @@ void sb_midi_init(int model);
 void sb_setmixer (unsigned int port, unsigned int value);
 int sb_getmixer (unsigned int port);
 void sb_mixer_set_stereo(int mode);
-void sb_mixer_init(int major_model);
+int sb_mixer_init(int major_model);
 
 /*	From opl3.c	*/
 int opl3_detect (int ioaddr);

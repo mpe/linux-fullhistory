@@ -420,7 +420,7 @@ long chr_dev_init(long mem_start, long mem_end)
 #ifdef CONFIG_FTAPE
         /* allocate NR_FTAPE_BUFFERS 32Kb buffers at aligned address */
         ftape_big_buffer= (char*) ((mem_start + 0x7fff) & ~0x7fff);
-        printk( "ftape: allocated %d buffers alligned at: %p\n",
+        printk( "ftape: allocated %d buffers aligned at: %p\n",
                NR_FTAPE_BUFFERS, ftape_big_buffer);
         mem_start = (long) ftape_big_buffer + NR_FTAPE_BUFFERS * 0x8000;
 #endif 

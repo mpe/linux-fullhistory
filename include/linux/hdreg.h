@@ -42,6 +42,12 @@
 #define WIN_DIAGNOSE		0x90
 #define WIN_SPECIFY		0x91
 
+#define WIN_MULTREAD		0xC4	/* read multiple sectors	*/
+#define WIN_MULTWRITE		0xC5	/* write multiple sectors	*/
+#define WIN_SETMULT		0xC6	/* enable read multiple		*/
+#define WIN_IDENTIFY		0xEC	/* ask drive to identify itself	*/
+#define WIN_SETFEATURES		0xEF	/* set special drive features   */
+
 /* Bits for HD_ERROR */
 #define MARK_ERR	0x01	/* Bad address mark */
 #define TRK0_ERR	0x02	/* couldn't find track 0 */
@@ -61,4 +67,9 @@ struct hd_geometry {
       unsigned short cylinders;
       unsigned long start;
 };
+#define HDIO_GETUNMASKINTR	0x302
+#define HDIO_SETUNMASKINTR	0x303
+#define HDIO_GETMULTCOUNT	0x304
+#define HDIO_SETMULTCOUNT	0x305
+#define HDIO_SETFEATURE  	0x306
 #endif

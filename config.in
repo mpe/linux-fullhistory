@@ -81,7 +81,6 @@ if [ "$CONFIG_SLIP" = "y" ]; then
 fi
 bool 'PPP (point-to-point) support' CONFIG_PPP n
 bool 'PLIP (parallel port) support' CONFIG_PLIP n
-bool 'SK_G16 support' CONFIG_SK_G16 n
 bool 'Load balancing support (experimental)' CONFIG_SLAVE_BALANCING n
 bool 'Do you want to be offered ALPHA test drivers' CONFIG_NET_ALPHA n
 bool 'Western Digital/SMC cards' CONFIG_NET_VENDOR_SMC n
@@ -110,6 +109,7 @@ if [ "$CONFIG_NET_ISA" = "y" ]; then
 	fi
 	bool 'HP PCLAN support' CONFIG_HPLAN n
 	bool 'NE2000/NE1000 support' CONFIG_NE2000 y
+	bool 'SK_G16 support' CONFIG_SK_G16 n
 fi
 bool 'EISA and on board controllers' CONFIG_NET_EISA n
 	if [ "$CONFIG_NET_ALPHA" = "y" ]; then
