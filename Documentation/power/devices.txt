@@ -15,7 +15,7 @@ The methods to suspend and resume devices reside in struct bus_type:
 
 struct bus_type {
        ...
-       int             (*suspend)(struct device * dev, u32 state);
+       int             (*suspend)(struct device * dev, pm_message_t state);
        int             (*resume)(struct device * dev);
 };
 
