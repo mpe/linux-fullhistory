@@ -430,7 +430,7 @@ void isofs_statfs (struct super_block *sb, struct statfs *buf, int bufsiz)
 	struct statfs tmp;
 
 	tmp.f_type = ISOFS_SUPER_MAGIC;
-	tmp.f_bsize = 1 << ISOFS_BLOCK_BITS;
+	tmp.f_bsize = sb->s_blocksize;
 	tmp.f_blocks = sb->u.isofs_sb.s_nzones;
 	tmp.f_bfree = 0;
 	tmp.f_bavail = 0;
@@ -681,7 +681,7 @@ int isofs_lookup_grandparent(struct inode * parent, int extent)
 	struct iso_directory_record * de;
 	
 	offset = 0;
-	block = extent << (ISOFS_BLOCK_BITS - bufbits);
+	block = extent << (ISOFS_ZONE_BITS(parent) - bufbits);
 	if (!(bh = bread(parent->i_dev, block, bufsize)))  return -1;
 	
 	while (1 == 1) {
@@ -689,6 +689,7 @@ int isofs_lookup_grandparent(struct inode * parent, int extent)
 		if (*((unsigned char *) de) == 0) 
 		{
 			brelse(bh);
+			printk("Directory .. not found\n");
 			return -1;
 		}
 		
@@ -718,9 +719,11 @@ int isofs_lookup_grandparent(struct inode * parent, int extent)
 	result = -1;
 
 	offset = 0;
-	block = parent_dir << (ISOFS_BLOCK_BITS - bufbits);
+	block = parent_dir << (ISOFS_ZONE_BITS(parent) - bufbits);
 	if (!block || !(bh = bread(parent->i_dev,block, bufsize)))
+	{
 		return -1;
+	}
 	
 	for(;;)
 	{
@@ -738,11 +741,19 @@ int isofs_lookup_grandparent(struct inode * parent, int extent)
 			block++;
 			directory_size -= bufsize;
 			if(directory_size < 0) return -1;
-			if((block & 1) && (ISOFS_BLOCK_BITS - bufbits))
-			  return -1;
+			if((block & 1) && (ISOFS_ZONE_BITS(parent) - bufbits) == 1)
+			{
+				return -1;
+			}
+			if((block & 3) && (ISOFS_ZONE_BITS(parent) - bufbits) == 2)
+			{
+				return -1;
+			}
 			if (!block
 			    || !(bh = bread(parent->i_dev,block, bufsize)))
+			{
 				return -1;
+			}
 			continue;
 		}
 		
@@ -764,7 +775,11 @@ int isofs_lookup_grandparent(struct inode * parent, int extent)
 			brelse(bh);
 			offset -= bufsize;
  			directory_size -= bufsize;
-			if(directory_size < 0) return -1;
+			if(directory_size < 0) 
+			{
+				printk("Directory size < 0\n");
+				return -1;
+			}
 			block++;
 			if(!(bh = bread(parent->i_dev,block,bufsize))) {
  			        kfree(cpnt);

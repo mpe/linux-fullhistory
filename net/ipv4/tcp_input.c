@@ -172,26 +172,15 @@ static void bad_tcp_sequence(struct sock *sk, struct tcphdr *th, u32 end_seq,
 		tcp_send_reset(sk->saddr,sk->daddr,th,sk->prot,NULL,dev, sk->ip_tos,sk->ip_ttl);
 		return;
 	}
-	
-	/* 
-	 * We got out of sequence data.
-	 * This turns out to be tricky. If the packet ends at the
-	 * edge of the window, then we MUST ack the packet,
-	 * otherwise a lost ACK packet can stall the TCP.
-	 * We deal with this case in tcp_queue().
-	 * On the other hand, if the packet is further to the
-	 * left of the window, then we are looking a retransmitted
-	 * packet. If we ACK it we can get into a situation that
-	 * will later induce a fast retransmit of another packet.
-	 * This can end up eating up half our bandwidth.
-	 */
 
-	/* This case is NOT supposed to be able
-	 * to happen. Test for it?
+	/*
+	 *	4.3reno machines look for these kind of acks so they can do fast
+	 *	recovery. Three identical 'old' acks lets it know that one frame has
+	 *	been lost and should be resent. Because this is before the whole window
+	 *	of data has timed out it can take one lost frame per window without
+	 *	stalling. [See Jacobson RFC1323, Stevens TCP/IP illus vol2]
 	 */
-	if (sk->acked_seq == end_seq)
-		printk("Impossible out of sequence data case.\n");
-	return;
+	tcp_send_ack(sk);
 }
 
 /*
@@ -915,9 +904,17 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th, u32 ack, int len)
 			break;
 		default:
 			/*
-			 * Reset the xmit timer - state has changed.
+			 * 	Must check send_head and write_queue
+			 * 	to determine which timeout to use.
 			 */
-			tcp_reset_xmit_timer(sk, 0, 0);
+			if (sk->send_head || !skb_queue_empty(&sk->write_queue)) {
+				tcp_reset_xmit_timer(sk, TIME_WRITE, sk->rto);
+			} else if (sk->keepopen) {
+				tcp_reset_xmit_timer(sk, TIME_KEEPOPEN, TCP_TIMEOUT_LEN);
+			} else {
+				del_timer(&sk->retransmit_timer);
+				sk->ip_xmit_timeout = 0;
+			}
 			break;
 		}
 	}
@@ -1237,7 +1234,7 @@ static void tcp_queue(struct sk_buff * skb, struct sock * sk, struct tcphdr *th)
 
 	if (!after(skb->seq, ack_seq)) {
 		if (after(skb->end_seq, ack_seq)) {
-			/* the packet stradles our window end */
+			/* the packet straddles our window end */
 			struct sk_buff_head * list = &sk->receive_queue;
 			struct sk_buff * next;
 			ack_seq = tcp_queue_ack(skb, sk);
@@ -1285,7 +1282,7 @@ static void tcp_queue(struct sk_buff * skb, struct sock * sk, struct tcphdr *th)
 			 */
 			int delay = HZ/2;
 			if (th->psh)
-				delay = HZ/10;
+				delay = HZ/50;
 			tcp_send_delayed_ack(sk, delay);
 		}
 
@@ -1335,7 +1332,7 @@ static void tcp_queue(struct sk_buff * skb, struct sock * sk, struct tcphdr *th)
  */
 
 static int tcp_data(struct sk_buff *skb, struct sock *sk, 
-	 unsigned long saddr, unsigned short len)
+	 unsigned long saddr, unsigned int len)
 {
 	struct tcphdr *th;
 	u32 new_seq, shut_seq;
@@ -1738,9 +1735,9 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 				{
 					/* A valid ack from a different connection
 					   start. Shouldn't happen but cover it */
-                 			tcp_statistics.TcpAttemptFails++;
-                                        tcp_send_reset(daddr, saddr, th,
-                                                sk->prot, opt,dev,sk->ip_tos,sk->ip_ttl);
+	         			tcp_statistics.TcpAttemptFails++;
+	                                tcp_send_reset(daddr, saddr, th,
+	                                        sk->prot, opt,dev,sk->ip_tos,sk->ip_ttl);
 					kfree_skb(skb, FREE_READ);
 					return 0;
 				}

@@ -486,7 +486,7 @@ static int nfs_rmdir(struct inode *dir, const char *name, int len)
 static int nfs_sillyrename(struct inode *dir, const char *name, int len)
 {
 	struct inode	*inode;
-	char		silly[14];
+	char		silly[16];
 	int		slen, ret;
 
 	dir->i_count++;

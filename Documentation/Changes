@@ -1,300 +1,158 @@
+This document contains a list of the latest releases of the most
+important packages for Linux.
 
-LINUX_UPTODATE - "Keep your Linux system up to date".
+The installation information were removed because redundant.
 
-For comments, fixed, etc write to
-Alessandro Sigala <ssigala@globalnet.it>
+Last updated: 12 Apr 1996.
+Author: Alessandro Sigala `ssigala@globalnet.it'.
 
-Last updated: 11 Apr 1996.
+Current Releases
+****************
 
-This short document describe what you need and where to get
-most of the new stuff for your Linux box (intended for systems that have
-already upgraded to ELF binaries).
+- Kernel modules 1.3.69
+- PPP daemon 2.2.0e
+- Dynamic linker (ld.so) 1.7.14
+- GNU CC 2.7.2
+- Binutils 2.6.0.12
+- Linux C Library 5.3.9
+- Linux C++ Library 2.7.1.4
+- Termcap 2.0.7
+- Procps 0.99a
+- Gpm 1.06
+- SysVinit 2.60
 
-The ftp site mainly used in this document is sunsite.unc.edu.
+What you really need to upgrade
+*******************************
 
-The current releases of the linux software are:
-Linux Kernel 1.3.xx :-)
-Kernel modules 1.3.57
-PPP daemon 2.2.0e
-Binutils 2.6.0.12
-Dynamic linker (ld.so) 1.7.14
-Linux C Library 5.3.9
-Linux C++ Library 2.7.1.4
-Termcap 2.0.7
-GNU CC 2.7.2
-Procps 0.99a
+Dynamic linker
+==============
 
-What do you really need to upgrade for using the latest 1.3.x kernel:
-- Modules 1.3.57 for using the kernel modules
-- Procps 0.99a 	 for using free, ps, pstree, top and friends
-- PPP 2.2.0e     for using pppd, pppstats, pppon, etc
+   You may upgrade the dynamic linker to the latest release only to
+solve some bugs.
 
-This document may also be useful to answer the questions like:
+SysVinit
+========
 
-* Q: 'free' displays some strange lines
-  A: upgrade the procps package
+   The FIFO behavior is changed in latest 1.3.x kernel releases. You may
+upgrade to this version if the older version break.
 
-* Q: 'pppd' displays "the PPP protocol is not available"
-  A: upgrade the PPP package
+PPP daemon and utilities
+========================
 
-... and so :)
+   To use the PPP protocol with the 1.3.x linux kernel, you need to
+upgrade the PPP package to version 2.2.0e.
 
-----------------------------------------------------------------------------
+Procps utilities
+================
 
-** NOTES
+   In the latest 1.3.x kernel releases the /proc filesystem structure
+was changed, so you need to upgrade the Procps package to version 0.99a.
 
-- Take a look at the documentation that come with every package
-  before doing anything!
+Installation notes
+******************
 
-- All the installation operation must be done as root.
-
-- If you want to use the latest GCC release (2.7.2) you must upgrade
-  your C Library, the C++ Library, the dynamic linker and the binutils.
-
-- After installed any new library, run the program `ldconfig' to update
-  the dynamic linker cache (you may also need to modify the file
-  /etc/ld.so.conf).
+Kernel Modules
+==============
 
-----------------------------------------------------------------------------
+   The current kernel modules release is 1.3.57, but you need the
+experimental release 1.3.69 to use newer binutils 2.6.0.x, because
+modules compiled with new binutils can't be loaded by modules 1.3.57.
 
-* The dynamic linker.
+The Linux C Library
+===================
 
-Get the file ld.so-1.7.14.tar.gz and unpack into a directory. You should
-have no problem installing this package, simply cd into the package
-directory and type `make install'.
+   The current Linux C Library release is 5.3.9. In this release there
+are some important changes that may break other programs, then read the
+`release.libc-5.3.9' file carefully!  You need to patch and recompile
+the `make' utility, or get it precompiled from the address written in
+the next section of this file.  If you don't want to patch and
+recompile the binaries you may try the release 5.2.18.
 
-----------------------------------------------------------------------------
+The Termcap Library
+===================
 
-* The Linux C Library.
+   The current Termcap release is 2.0.7. If you upgrade to this release
+read the `README' file contained into the package to get some important
+information about the `tgetent' function changes!
 
-*** NOTE: read the release.libc-5.3.9 file before installing the
-          libraries!
+Where to get the files
+**********************
 
-Get the libc-5.3.9.bin.tar.gz file and unpack into the root directory
+Binutils
+========
 
-i.e. into the root directory type:
+ftp://sunsite.unc.edu/pub/Linux/GCC/binutils-2.6.0.12.bin.tar.gz
+Installation notes:
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.binutils-2.6.0.12
 
-  tar xvfz libc-5.3.9.bin.tar.gz
+GNU CC
+======
 
-you also need to make the symbolic links to the new library into the /lib
-directory
+ftp://sunsite.unc.edu/pub/Linux/GCC/gcc-2.7.2.bin.tar.gz
+Installation notes:
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.gcc-2.7.2
 
-i.e. into the /lib directory type:
+Linux C Library
+===============
 
-  rm -f libc.so.5
-  sln libc.so.5.3.9 libc.so.5
-  rm -f libm.so.5
-  sln libm.so.5.0.5 libm.so.5
+The latest 5.3.9 release:
+ftp://sunsite.unc.edu/pub/Linux/GCC/libc-5.3.9.bin.tar.gz
+Installation notes:
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.3.9
 
-*** Note 1:
+Patched make binary:
+ftp://sunsite.unc.edu/pub/Linux/devel/make/make-3.74-direntfix-elf.tgz
 
-<cutted from release.libc-5.3.9>
+The 5.2.18 release:
+ftp://sunsite.unc.edu/pub/Linux/GCC/libc-5.2.18.bin.tar.gz
+Installation notes:
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.2.18
 
-The structure DIR, defined in sysdeps/linux/dirstream.h, was changed in
-release 5.2.0.  If you upgrade from release 5.1.4 or earlier to release
-5.2.0 or later, you must reboot after installing the new libraries.
+Linux C++ Library
+=================
 
-*** Note 2:
+ftp://sunsite.unc.edu/pub/Linux/GCC/libg++-2.7.1.4.bin.tar.gz
+Installation notes:
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.libg++-2.7.1.4
 
-You must patch and recompile your GNU 'make' utility!
+Dynamic Linker
+==============
 
-<cutted from release.libc-5.3.9>
-
-A dirent bug, which erroneously defined d->reclen to d->namlen if USE_GNU
-was defined, has been fixed.  Unfortunately, some GNU packages depend on
-this bug.  GNU make 3.xx is one of them.  A patch is included here.
-
-here the patch:
-RCS file: /home/cvs/gnu/make/dir.c,v
-retrieving revision 1.1.1.1
-diff -c -r1.1.1.1 dir.c
-*** 1.1.1.1	1995/06/25 03:27:16
---- dir.c	1995/06/25 03:55:22
-***************
-*** 20,26 ****
-  
-  #if	defined (POSIX) || defined (HAVE_DIRENT_H) || defined (__GNU_LIBRARY__)
-  #include <dirent.h>
-! #ifndef	__GNU_LIBRARY__
-  #define D_NAMLEN(d) strlen((d)->d_name)
-  #else	/* GNU C library.  */
-  #define D_NAMLEN(d) ((d)->d_namlen)
---- 20,26 ----
-  
-  #if	defined (POSIX) || defined (HAVE_DIRENT_H) || defined (__GNU_LIBRARY__)
-  #include <dirent.h>
-! #ifndef	__BAD_GNU_LIBRARY__
-  #define D_NAMLEN(d) strlen((d)->d_name)
-  #else	/* GNU C library.  */
-  #define D_NAMLEN(d) ((d)->d_namlen)
-===================================================================
-RCS file: /home/cvs/gnu/make/glob/glob.c,v
-retrieving revision 1.1.1.1
-diff -c -r1.1.1.1 glob.c
-*** 1.1.1.1	1995/06/25 03:27:18
---- glob/glob.c	1995/06/25 03:56:01
-***************
-*** 64,70 ****
-  
-  #if	defined (POSIX) || defined (HAVE_DIRENT_H) || defined (__GNU_LIBRARY__)
-  #include <dirent.h>
-! #ifndef	__GNU_LIBRARY__
-  #define D_NAMLEN(d) strlen((d)->d_name)
-  #else	/* GNU C library.  */
-  #define D_NAMLEN(d) ((d)->d_namlen)
---- 64,70 ----
-  
-  #if	defined (POSIX) || defined (HAVE_DIRENT_H) || defined (__GNU_LIBRARY__)
-  #include <dirent.h>
-! #ifndef	__BAD_GNU_LIBRARY__
-  #define D_NAMLEN(d) strlen((d)->d_name)
-  #else	/* GNU C library.  */
-  #define D_NAMLEN(d) ((d)->d_namlen)
+ftp://sunsite.unc.edu/pub/Linux/GCC/ld.so-1.7.14.tar.gz
 
-----------------------------------------------------------------------------
+Termcap Library
+===============
 
-* The Linux C++ Library.
+ftp://sunsite.unc.edu/pub/Linux/GCC/termcap-2.0.7.tar.gz
 
-*** NOTE: read the release.libg++-2.7.1.4 file before installing the
-          libraries!
+Modules utilities
+=================
 
-Get the libg++-2.7.1.4.bin.tar.gz file and unpack into the root directory
+The latest public release
+ftp://sunsite.unc.edu/pub/Linux/kernel/modules-1.3.57.tar.gz
+The latest experimental release
+http://www.pi.se/blox/
 
-i.e. into the root directory type:
+PPP Daemon and utilities
+========================
 
-  tar xvfz libg++-2.7.1.4.bin.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/system/Network/serial/ppp-2.2.0e.tar.gz
 
-*** NOTE:
+Procps utilities
+================
 
-You may have troubles with the binaries linked with the old 2.6 libraries
-(for example: umssync), dumping core or doing strange stuff.
-To resolve the problems you need to recompile the sources of the binaries.
+ftp://sunsite.unc.edu/pub/Linux/system/Status/ps/procps-0.99a.tgz
 
-----------------------------------------------------------------------------
+Gpm mouse utilities
+===================
 
-* The binutils.
+ftp://iride.unipv.it/pub/gpm/gpm-1.06.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/system/Daemons/gpm-1.06.tar.gz
 
-*** NOTE: read the release.binutils-2.6.0.12 file before installing the
-          libraries!
+SysVinit utilities
+==================
 
-Get the binutils-2.6.0.12.bin.tar.gz file and unpack it into the root
-directory
-
-i.e. into the root directory type:
-
-  tar xvfz binutils-2.6.0.12.bin.tar.gz
-
-*** NOTE:
-
-<cutted from release.binutils-2.6.0.12>
-
-If you don't need the cross assemblers/linkers for m68k-linux,
-m68k-linuxaout, sparc-sun-solaris2, sparc-sun-sunos4.1 nor alpha-linux,
-please do
-
-1. su root
-2. cd /usr
-3. rm -rf m68k-linux m68k-linuxaout sparc-sun-solaris2 sparc-sun-sunos4.1 alpha-linux
-
-----------------------------------------------------------------------------
-
-* The GNU CC compiler.
-
-** NOTE: read the release.gcc-2.7.2 file before installing the package!
-
-Get the gcc-2.7.2.bin.tar.gz file and unpack it into the root
-directory
-
-i.e. into the root directory type:
-
-  tar xvfz gcc-2.7.2.bin.tar.gz
-
-You may want to remove the old compiler. Simply cd into the
-/usr/lib/gcc-lib/i486-linux and remove the old compiler directory tree.
-
-----------------------------------------------------------------------------
-
-* The termcap library.
-
-*** NOTE: read first the documentation that come with the package!
-
-Get the file termcap-2.0.7.tar.gz and unpack into a directory. You should
-have no problem installing this package, simply cd into the package
-directory and type `make' then `make install'.
-
-*** NOTE:
-
-<cutted from the README of the package>
-
-The linux entry in the new termcap is larger than 1024 chars.
-But your application may only have a 1024 byte buffer. You may see
-
-tgetent: warning: termcap entry too long
-
-message when you run it in the Linux console. You can pass NULL to
-tgetent () to let termcap malloc the buffer. elm and zsh are two
-applications I know which use termcap and have this problem.
-
-----------------------------------------------------------------------------
-
-* The kernel modudes utilities.
-
-*** NOTE: read first the documentation that come with the package!
-
-Get the file modules-1.3.57.tar.gz and unpack into a directory. You should
-have no problem installing this package, simply cd into the package
-directory and type `make' then `make install'.
-
-----------------------------------------------------------------------------
-
-* The PPP daemon utilities.
-
-*** NOTE: read first the documentation that come with the package!
-
-Get the file ppp-2.2.0e.tar.gz and unpack into a directory. You should
-have no problem installing this package, simply cd into the package
-directory and type `make' then `make install'.
-
-----------------------------------------------------------------------------
-
-* The procps utilities.
-
-*** NOTE: read first the documentation that come with the package!
-
-Get the file procps-0.99a.tar.gz and unpack into a directory. You should
-have no problem installing this package, simply cd into the package
-directory and type `make' then `make install'.
-
-----------------------------------------------------------------------------
-
-This is where you can find all that is described in this document.
-
-### sunsite.unc.edu:/pub/Linux/GCC
-
-binutils-2.6.0.12.bin.tar.gz		Binutils 2.6.0.12 (as,ld etc)
-gcc-2.7.2.bin.tar.gz			GNU CC 2.7.2 (ELF and a.out)
-ld.so-1.7.14.tar.gz			The dynamic linker
-libc-5.3.9.bin.tar.gz			The C library
-libg++-2.7.1.4.bin.tar.gz		The C++ library
-termcap-2.0.7.tar.gz			Termcap 2.0.7
-release.binutils-2.6.0.12
-release.gcc-2.7.2
-release.libc-5.3.9			info (contains the patch for 'make')
-release.libg++-2.7.1.4
-
-### sunsite.unc.edu:/pub/Linux/kernel
-
-modules-1.3.57.tar.gz			Utils the kernel modules
-
-### sunsite.unc.edu:/pub/Linux/system/Network/serial
-
-ppp-2.2.0e.tar.gz			The pppd daemon and utils for PPP
-
-### sunsite.unc.edu:/pub/Linux/system/Status/ps
-
-procps-0.99a.tgz			ps, pstree, free, etc
-
-----------------------------------------------------------------------------
-
-For comments, fixed, etc write to
-Alessandro Sigala <ssigala@globalnet.it>
+At the time of writing:
+ftp://sunsite.unc.edu/pub/Linux/Incoming/sysvinit-2.60.tar.gz
+Next location:
+ftp://sunsite.unc.edu/pub/Linux/system/Daemons/init/sysvinit-2.60.tar.gz

@@ -527,7 +527,7 @@ static int	stl_findpcibrds(void);
 
 /*
  *	Define the driver info for a user level control device. Used mainly
- *	to get at port stats - only ont using the port device itself.
+ *	to get at port stats - only not using the port device itself.
  */
 static struct file_operations	stl_fsiomem = {
 	NULL,

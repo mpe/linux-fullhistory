@@ -29,66 +29,19 @@ void tcp_delack_timer(unsigned long data)
 
 /*
  *	Reset the retransmission timer
- *
- *	We currently ignore the why/when parameters, and decide on
- *	our own how long we should wait on our own..
  */
  
 void tcp_reset_xmit_timer(struct sock *sk, int why, unsigned long when)
 {
-	unsigned long now = jiffies;
-
-	when = ~0UL;
-	why = -1;
-
-	/*
-	 * Was an old timer event active?
-	 */
-	if (del_timer(&sk->retransmit_timer)) {
-		why = sk->ip_xmit_timeout;
-		when = sk->retransmit_timer.expires;
+	del_timer(&sk->retransmit_timer);
+	sk->ip_xmit_timeout = why;
+	if((long)when < 0)
+	{
+		when=3;
+		printk("Error: Negative timer in xmit_timer\n");
 	}
-
-	/* 
-	 * Keepopen processing?
-	 */
-	if (sk->keepopen) {
-		unsigned long new_when = now + TCP_TIMEOUT_LEN;
-		if (new_when < when) {
-			when = new_when;
-			why = TIME_KEEPOPEN;
-		}
-	}
-
-	/*
-	 * Retransmission?
-	 */
-	if (sk->send_head) {
-		struct sk_buff * skb = sk->send_head;
-		unsigned long new_when = skb->when + sk->rto;
-		if (new_when < when) {
-			when = new_when;
-			why = TIME_WRITE;
-		}
-	} else if (!skb_queue_empty(&sk->write_queue)) {
-		/*
-		 * Zero window probe?
-		 */
-		struct sk_buff * skb = sk->write_queue.next;
-		if (before(sk->window_seq, skb->end_seq)) {
-			unsigned long new_when = now + TIME_PROBE0;
-			if (new_when < when) {
-				when = new_when;
-				why = TIME_PROBE0;
-			}
-		}
-	}
-
-	if (why >= 0) {
-		sk->ip_xmit_timeout = why;
-		sk->retransmit_timer.expires = when;
-		add_timer(&sk->retransmit_timer);
-	}
+	sk->retransmit_timer.expires=jiffies+when;
+	add_timer(&sk->retransmit_timer);
 }
 
 /*
@@ -222,6 +175,19 @@ static int tcp_write_timeout(struct sock *sk)
 	return 1;
 }
 
+/*
+ *	It could be we got here because we needed to send an ack,
+ *	so we need to check for that and not just normal retransmit.
+ */
+static void tcp_time_write_timeout(struct sock * sk)
+{
+	/*
+	 *	Retransmission
+	 */
+	sk->prot->retransmit (sk, 0);
+	tcp_write_timeout(sk);
+}
+
 
 /*
  *	The TCP retransmit timer. This lacks a few small details.
@@ -267,25 +233,27 @@ void tcp_retransmit_timer(unsigned long data)
 	/* Window probing */
 	case TIME_PROBE0:
 		tcp_send_probe0(sk);
-		tcp_reset_xmit_timer(sk, 0, 0);		/* get us going again */
+		tcp_write_timeout(sk);
 		break;
 
 	/* Retransmitting */
 	case TIME_WRITE:
-		sk->prot->retransmit (sk, 0);
-		tcp_write_timeout(sk);
-		tcp_reset_xmit_timer(sk, 0, 0);		/* get us going again */		
+		tcp_time_write_timeout(sk);
 		break;
 
 	/* Sending Keepalives */
 	case TIME_KEEPOPEN:
+		/* 
+		 * this reset_timer() call is a hack, this is not
+		 * how KEEPOPEN is supposed to work.
+		 */
+		tcp_reset_xmit_timer (sk, TIME_KEEPOPEN, TCP_TIMEOUT_LEN);
 		/* Send something to keep the connection open. */
 		if (sk->prot->write_wakeup)
 			  sk->prot->write_wakeup (sk);
 		sk->retransmits++;
 		sk->prot->retransmits++;
 		tcp_write_timeout(sk);
-		tcp_reset_xmit_timer (sk, 0, 0);
 		break;
 
 	default:

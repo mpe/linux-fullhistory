@@ -419,7 +419,6 @@ int pas16_detect(Scsi_Host_Template * tpnt) {
 	else 
 	    instance->irq = NCR5380_probe_irq(instance, PAS16_IRQS);
 
-                instance->irq = IRQ_NONE;  /*****temp****/
 	if (instance->irq != IRQ_NONE) 
 	    if (request_irq(instance->irq, pas16_intr, SA_INTERRUPT, "pas16", NULL)) {
 		printk("scsi%d : IRQ%d not free, interrupts disabled\n", 

@@ -199,7 +199,9 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 					   find_rock_ridge_relocation(de,dir));
 				if(inode_number == -1){
 					/* Should never happen */
-					printk("Backlink not properly set.\n");
+					printk("Backlink not properly set %x %lx.\n",
+					       isonum_733(de->extent),
+					       dir->i_ino);
 					goto out;
 				}
 			}

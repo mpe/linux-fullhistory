@@ -51,7 +51,7 @@
  *
  * Revision 1.8  1995/03/15  12:49:44  fritz
  * Added support for SPV's
- * Split pollbchan_work ifor calling send-routine directly
+ * Split pollbchan_work for calling send-routine directly
  *
  * Revision 1.7  1995/02/20  03:48:03  fritz
  * Added support of new request_region-function.

@@ -329,7 +329,7 @@ static inline unsigned long generic_file_readahead(struct file * filp, struct in
 	if (PageLocked(page)) {
 		max_ahead = filp->f_ramax;
 		rapos = ppos;
-/*		try_async = 1  */ /* Seems questionnable */
+/*		try_async = 1  */ /* Seems questionable */
 	}
 /*
  * The current page is not locked
@@ -435,10 +435,10 @@ int generic_file_read(struct inode * inode, struct file * filp, char * buf, int 
 
 	pos = filp->f_pos;
 /*
- * Dont beleive f_reada
+ * Dont believe f_reada
  * --------------------
  * f_reada is set to 0 by seek operations.
- * If we beleive f_reada, small seek ops break asynchronous read-ahead.
+ * If we believe f_reada, small seek ops break asynchronous read-ahead.
  * That may be quite bad for small seeks or rewrites operations.
  * I prefer to check if the current position is inside the previous read-ahead
  * window.
@@ -461,10 +461,10 @@ int generic_file_read(struct inode * inode, struct file * filp, char * buf, int 
 
 /*
  * Now f_reada = 1 means that asynchronous read-ahead is the good tactics.
- * Will try asynchrous read-ahead as soon as possible.
+ * Will try asynchronous read-ahead as soon as possible.
  * Double the max read ahead size each time.
- *   That euristic avoid to do some large IO for files that are not really
- *   accessed sequentialy.
+ *   That heuristic avoid to do some large IO for files that are not really
+ *   accessed sequentially.
  */
 	if (filp->f_reada) {
 		try_async = 1;

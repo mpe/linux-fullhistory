@@ -1,14 +1,9 @@
 #
-# Create a "reference" object to steal colors from.
-#
-button .ref
-
-#
 # This is a handy replacement for ".widget cget" that requires neither tk4
 # nor additional source code uglification.
 #
 proc cget { w option } {
-	return [lindex [$w configure $option] 4]
+	return "[lindex [$w configure $option] 4]"
 }
 
 #
@@ -18,11 +13,24 @@ proc cget { w option } {
 #
 proc vfix { var } {
 	global $var
-	if [catch {set $var [subst $$var]}] {
+	if [ catch {eval concat $$var} ] {
 		puts stdout "WARNING - broken Config.in!  $var was not declared!"
 		set $var 0
 	}
 }
+
+#
+# Create a "reference" object to steal colors from.
+#
+button .ref
+#
+# On monochrome displays, -disabledforeground is blank by default; that's
+# bad.  Fill it with -foreground instead.
+#
+if { [cget .ref -disabledforeground] == "" } {
+	.ref configure -disabledforeground [cget .ref -foreground]
+}
+
 
 #
 # Define some macros we will need to parse the config.in file.

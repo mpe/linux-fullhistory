@@ -1145,7 +1145,7 @@ attach_ss_ms_sound (long mem_start, struct address_info *hw_config)
   sscape_write (devc, GA_DMACFG_REG, 0x50);
 
   /*
-     * Take the gate-arry off of the DMA channel.
+     * Take the gate-array off of the DMA channel.
    */
   sscape_write (devc, GA_DMAB_REG, 0x20);
 

@@ -201,7 +201,7 @@ static __inline__ int tcp_new_window(struct sock * sk)
 	/*
 	 * RFC 1122 says:
 	 *
-	 * "the suggested [SWS] avoidance algoritm for the receiver is to keep
+	 * "the suggested [SWS] avoidance algorithm for the receiver is to keep
 	 *  RECV.NEXT + RCV.WIN fixed until:
 	 *  RCV.BUFF - RCV.USER - RCV.WINDOW >= min(1/2 RCV.BUFF, MSS)"
 	 *
@@ -213,7 +213,7 @@ static __inline__ int tcp_new_window(struct sock * sk)
 	 * the size of the current free space, truncated to a multiple
 	 * of 1024 bytes. If the window is smaller than
 	 * 	min(sk->mss, MAX_WINDOW/2)
-	 * then we adversize the window as having size 0, unless this
+	 * then we advertise the window as having size 0, unless this
 	 * would shrink the window we offered last time.
 	 * This results in as much as double the throughput as the original
 	 * implementation.
