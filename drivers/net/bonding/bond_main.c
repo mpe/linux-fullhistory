@@ -793,29 +793,20 @@ struct vlan_entry *bond_next_vlan(struct bonding *bond, struct vlan_entry *curr)
  * @skb: hw accel VLAN tagged skb to transmit
  * @slave_dev: slave that is supposed to xmit this skbuff
  * 
- * When the bond gets an skb to tarnsmit that is
+ * When the bond gets an skb to transmit that is
  * already hardware accelerated VLAN tagged, and it
  * needs to relay this skb to a slave that is not
  * hw accel capable, the skb needs to be "unaccelerated",
  * i.e. strip the hwaccel tag and re-insert it as part
  * of the payload.
- * 
- * Assumption - once a VLAN device is created over the bond device, all
- * packets are going to be hardware accelerated VLAN tagged since the IP
- * binding is done over the VLAN device
  */
 int bond_dev_queue_xmit(struct bonding *bond, struct sk_buff *skb, struct net_device *slave_dev)
 {
 	unsigned short vlan_id;
-	int res;
 
 	if (!list_empty(&bond->vlan_list) &&
-	    !(slave_dev->features & NETIF_F_HW_VLAN_TX)) {
-		res = vlan_get_tag(skb, &vlan_id);
-		if (res) {
-			return -EINVAL;
-		}
-
+	    !(slave_dev->features & NETIF_F_HW_VLAN_TX) &&
+	    vlan_get_tag(skb, &vlan_id) == 0) {
 		skb->dev = slave_dev;
 		skb = vlan_put_tag(skb, vlan_id);
 		if (!skb) {
