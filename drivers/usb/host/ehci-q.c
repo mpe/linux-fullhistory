@@ -338,10 +338,11 @@ qh_completions (struct ehci_hcd *ehci, struct ehci_qh *qh, struct pt_regs *regs)
 			if ((token & QTD_STS_HALT) != 0) {
 				stopped = 1;
 
-			/* magic dummy for some short reads; qh won't advance */
+			/* magic dummy for some short reads; qh won't advance.
+			 * that silicon quirk can kick in with this dummy too.
+			 */
 			} else if (IS_SHORT_READ (token)
-					&& (qh->hw_alt_next & QTD_MASK)
-						== ehci->async->hw_alt_next) {
+					&& !(qtd->hw_alt_next & EHCI_LIST_END)) {
 				stopped = 1;
 				goto halt;
 			}
