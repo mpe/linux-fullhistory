@@ -219,8 +219,10 @@ struct task_struct {
 	unsigned short used_math;
 	unsigned short rss;	/* number of resident pages */
 	char comm[16];
+/* virtual 86 mode stuff */
 	struct vm86_struct * vm86_info;
 	unsigned long screen_bitmap;
+	unsigned long v86flags, v86mask, v86mode;
 /* file system info */
 	int link_count;
 	int tty;		/* -1 if no tty, so it must be signed */
@@ -286,7 +288,7 @@ struct task_struct {
 /* math */	0, \
 /* rss */	2, \
 /* comm */	"swapper", \
-/* vm86_info */	NULL, 0, \
+/* vm86_info */	NULL, 0, 0, 0, 0, \
 /* fs info */	0,-1,0022,NULL,NULL,NULL,NULL, \
 /* ipc */	NULL, NULL, \
 /* filp */	{NULL,}, \

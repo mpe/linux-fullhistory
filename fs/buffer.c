@@ -15,11 +15,8 @@
  * disk change. This is where it fits best, I think, as it should
  * invalidate changed floppy-disk-caches.
  */
-
-#include <stdarg.h>
  
 #include <linux/config.h>
-#include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/major.h>
@@ -195,7 +192,7 @@ static int sync_buffers(dev_t dev, int wait)
 			 if (wait && bh->b_req && !bh->b_lock &&
 			     !bh->b_dirt && !bh->b_uptodate) {
 				  err = 1;
-				  printk("Weird - unlocked, clean and not uptodate buffer on list %d\n", nlist);
+				  printk("Weird - unlocked, clean and not uptodate buffer on list %d %x %lu\n", nlist, bh->b_dev, bh->b_blocknr);
 				  continue;
 			  }
 			 /* Don't write clean buffers.  Don't write ANY buffers
@@ -1867,7 +1864,7 @@ asmlinkage int sys_bdflush(int func, int data)
 		 repeat:
 			 bh = lru_list[nlist];
 			 if(bh) 
-				  for (i = nr_buffers_type[nlist]; --i > 0 && ndirty < bdf_prm.b_un.ndirty; 
+				  for (i = nr_buffers_type[nlist]; i-- > 0 && ndirty < bdf_prm.b_un.ndirty; 
 				       bh = next) {
 					  /* We may have stalled while waiting for I/O to complete. */
 					  if(bh->b_list != nlist) goto repeat;
@@ -1909,8 +1906,10 @@ asmlinkage int sys_bdflush(int func, int data)
 		
 		if(nr_buffers_type[BUF_DIRTY] < (nr_buffers - nr_buffers_type[BUF_SHARED]) * 
 		   bdf_prm.b_un.nfract/100) {
-		   	if (current->signal & (1 << (SIGKILL-1)))
+		   	if (current->signal & (1 << (SIGKILL-1))) {
+				bdflush_running--;
 		   		return 0;
+			}
 		   	current->signal = 0;
 			interruptible_sleep_on(&bdflush_wait);
 		}

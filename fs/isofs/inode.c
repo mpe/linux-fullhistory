@@ -477,6 +477,15 @@ void isofs_read_inode(struct inode * inode)
 	brelse(bh);
 	
 	inode->i_op = NULL;
+
+	/* A volume number of 0 is nonsense.  Disable checking if we see
+	   this */
+	if (inode->i_sb->u.isofs_sb.s_cruft == 'n' && 
+	    isonum_723 (raw_inode->volume_sequence_number) == 0) {
+	  printk("Warning: defective cdrom.  Enabling \"cruft\" mount option.\n");
+	  inode->i_sb->u.isofs_sb.s_cruft = 'y';
+	}
+
 	if (inode->i_sb->u.isofs_sb.s_cruft != 'y' && 
 	    isonum_723 (raw_inode->volume_sequence_number) != 1) {
 		printk("Multi volume CD somehow got mounted.\n");

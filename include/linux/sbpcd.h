@@ -74,7 +74,8 @@
 #define DBG_UPC		21	/* show UPC information */
 #define DBG_XA 		22	/* XA mode debugging */
 #define DBG_LCK		23	/* door (un)lock info */
-#define DBG_000		24	/* unnecessary information */
+#define DBG_SQ 		24	/* dump SubQ frame */
+#define DBG_000		25	/* unnecessary information */
 
 /*==========================================================================*/
 /*==========================================================================*/
@@ -215,6 +216,7 @@
 #define CD_FRAMESIZE            2048  /* bytes per frame, data mode      */
 #define CD_FRAMESIZE_XA         2340  /* bytes per frame, "xa" mode      */
 #define CD_FRAMESIZE_RAW        2352  /* bytes per frame, "raw" mode     */
+#define CD_FRAMESIZE_SUB          96  /* subchannel data size            */
 #define CD_BLOCK_OFFSET          150  /* offset of first logical frame   */
 #define CD_XA_HEAD                12  /* header size of XA frame         */
 #define CD_XA_TAIL               280  /* tail size of XA frame           */

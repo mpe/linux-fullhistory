@@ -5,7 +5,7 @@
  *            and for "no-sound" interfaces like Lasermate and the
  *            Panasonic CI-101P.
  *
- *  NOTE:     This is release 1.4.
+ *  NOTE:     This is release 1.5.
  *            It works with my SbPro & drive CR-521 V2.11 from 2/92
  *            and with the new CR-562-B V0.75 on a "naked" Panasonic
  *            CI-101P interface. And vice versa. 
@@ -72,6 +72,10 @@
  *       Added some debugging printout for the UPC/EAN code - but my drives 
  *       return only zeroes. Is there no UPC/EAN code written?
  *
+ *  1.5  Laborate with UPC/EAN code (not better yet).
+ *       Adapt to kernel 1.1.8 change (have to explicitely include
+ *       <linux/string.h> now).
+ *
  *     special thanks to Kai Makisara (kai.makisara@vtt.fi) for his fine
  *     elaborated speed-up experiments (and the fabulous results!), for
  *     the "push" towards load-free wait loops, and for the extensive mail
@@ -113,6 +117,7 @@
 #include <linux/cdrom.h>
 #include <linux/ioport.h>
 #include <linux/sbpcd.h>
+#include <linux/string.h>
 
 #if SBPCD_USE_IRQ
 #include <linux/signal.h>
@@ -129,7 +134,7 @@
 #define MAJOR_NR MATSUSHITA_CDROM_MAJOR
 #include "blk.h"
 
-#define VERSION "1.4 Eberhard Moenkeberg <emoenke@gwdg.de>"
+#define VERSION "1.5 Eberhard Moenkeberg <emoenke@gwdg.de>"
 
 #define SBPCD_DEBUG
 
@@ -148,6 +153,8 @@
 
 #undef XA_TEST1
 #define XA_TEST2
+
+#define TEST_UPC 0
 
 /*==========================================================================*/
 /*==========================================================================*/
@@ -238,6 +245,7 @@ static int  sbp_data(void);
  * (1<<DBG_UPC)  show UPC info
  * (1<<DBG_XA)   XA mode debugging
  * (1<<DBG_LCK)  door (un)lock info
+ * (1<<DBG_SQ)   dump SubQ frame
  * (1<<DBG_000)  unnecessary information
  */
 #if 1
@@ -249,6 +257,7 @@ static int sbpcd_debug =  (1<<DBG_INF) |
                           (1<<DBG_IOC) |
                           (1<<DBG_XA)  |
                           (1<<DBG_LCK) |
+                          (1<<DBG_SQ)  |
                           (1<<DBG_IOX);
 #endif
 static int sbpcd_ioaddr = CDROM_PORT;	/* default I/O base address */
@@ -287,7 +296,8 @@ static u_int flags_cmd_out;
 static u_char cmd_type=0;
 static u_char drvcmd[7];
 static u_char infobuf[20];
-static u_char scratch_buf[CD_XA_TAIL];
+static u_char xa_head_buf[CD_XA_HEAD];
+static u_char xa_tail_buf[CD_XA_TAIL];
 
 static u_char timed_out=0;
 static u_int datarate= 1000000;
@@ -354,7 +364,6 @@ static struct {
   u_char vol_ctrl3;
 #endif 000
   
-  u_char SubQ_audio;
   u_char SubQ_ctl_adr;
   u_char SubQ_trk;
   u_char SubQ_pnt_idx;
@@ -1153,33 +1162,38 @@ static int xx_ReadSubQ(void)
   int i,j;
 
   DS[d].diskstate_flags &= ~subq_bit;
-  clr_cmdbuf();
-  if (new_drive)
+  for (j=255;j>0;j--)
     {
-      drvcmd[0]=0x87;
-      flags_cmd_out=f_putcmd|f_ResponseStatus|f_obey_p_check;
-      response_count=11;
-    }
-  else
-    {
-      drvcmd[0]=0x89;
-      drvcmd[1]=0x02;
-      flags_cmd_out=f_putcmd|f_getsta|f_ResponseStatus|f_obey_p_check;
-      response_count=13;
-    }
-  for (j=0;j<255;j++)
-    {
+      clr_cmdbuf();
+      if (new_drive)
+	{
+	  drvcmd[0]=0x87;
+	  flags_cmd_out=f_putcmd|f_ResponseStatus|f_obey_p_check;
+	  response_count=11;
+	}
+      else
+	{
+	  drvcmd[0]=0x89;
+	  drvcmd[1]=0x02;
+	  flags_cmd_out=f_putcmd|f_getsta|f_ResponseStatus|f_obey_p_check;
+	  response_count=13;
+	}
       i=cmd_out();
       if (i<0) return (i);
+      DPRINTF((DBG_SQ,"SBPCD: xx_ReadSubQ:"));
+      for (i=0;i<(new_drive?11:13);i++)
+	{
+	  DPRINTF((DBG_SQ," %02X", infobuf[i]));
+	}
+      DPRINTF((DBG_SQ,"\n"));
       if (infobuf[0]!=0) break;
-      if (!st_spinning)
+      if ((!st_spinning) || (j==1))
 	{
 	  DS[d].SubQ_ctl_adr=DS[d].SubQ_trk=DS[d].SubQ_pnt_idx=DS[d].SubQ_whatisthis=0;
 	  DS[d].SubQ_run_tot=DS[d].SubQ_run_trk=0;
 	  return (0);
 	}
     }
-  DS[d].SubQ_audio=infobuf[0];
   DS[d].SubQ_ctl_adr=swap_nibbles(infobuf[1]);
   DS[d].SubQ_trk=byt2bcd(infobuf[2]);
   DS[d].SubQ_pnt_idx=byt2bcd(infobuf[3]);
@@ -1479,37 +1493,62 @@ static int convert_UPC(u_char *p)
 static int xx_ReadUPC(void)
 {
   int i;
+#if TEST_UPC
+  int block, checksum;
+#endif TEST_UPC
 
   DS[d].diskstate_flags &= ~upc_bit;
-  clr_cmdbuf();
-  if (new_drive)
+#if TEST_UPC
+  for (block=CD_BLOCK_OFFSET+1;block<CD_BLOCK_OFFSET+200;block++)
     {
-      drvcmd[0]=0x88;
-      response_count=8;
-      flags_cmd_out=f_putcmd|f_ResponseStatus|f_obey_p_check;
-    }
-  else
-    {
-      drvcmd[0]=0x08;
-      response_count=0;
-      flags_cmd_out=f_putcmd|f_lopsta|f_getsta|f_ResponseStatus|f_obey_p_check|f_bit1;
-    }
-  i=cmd_out();
-  if (i<0) return (i);
-  if (!new_drive)
-    {
-      response_count=16;
-      i=xx_ReadPacket();
+#endif TEST_UPC
+      clr_cmdbuf();
+      if (new_drive)
+	{
+	  drvcmd[0]=0x88;
+#if TEST_UPC
+	  drvcmd[1]=(block>>16)&0xFF;
+	  drvcmd[2]=(block>>8)&0xFF;
+	  drvcmd[3]=block&0xFF;
+#endif TEST_UPC
+	  response_count=8;
+	  flags_cmd_out=f_putcmd|f_ResponseStatus|f_obey_p_check;
+	}
+      else
+	{
+	  drvcmd[0]=0x08;
+#if TEST_UPC
+	  drvcmd[2]=(block>>16)&0xFF;
+	  drvcmd[3]=(block>>8)&0xFF;
+	  drvcmd[4]=block&0xFF;
+#endif TEST_UPC
+	  response_count=0;
+	  flags_cmd_out=f_putcmd|f_lopsta|f_getsta|f_ResponseStatus|f_obey_p_check|f_bit1;
+	}
+      i=cmd_out();
       if (i<0) return (i);
+      if (!new_drive)
+	{
+	  response_count=16;
+	  i=xx_ReadPacket();
+	  if (i<0) return (i);
+	}
+#if TEST_UPC
+      checksum=0;
+#endif TEST_UPC
+      DPRINTF((DBG_UPC,"SBPCD: UPC info: "));
+      for (i=0;i<(new_drive?8:16);i++)
+	{
+#if TEST_UPC
+	  checksum |= infobuf[i];
+#endif TEST_UPC
+	  DPRINTF((DBG_UPC,"%02X ", infobuf[i]));
+	}
+      DPRINTF((DBG_UPC,"\n"));
+#if TEST_UPC
+      if ((checksum&0x7F)!=0) break;
     }
-
-  DPRINTF((DBG_UPC,"SBPCD: UPC info: "));
-  for (i=0;i<(new_drive?8:16);i++)
-    {
-      DPRINTF((DBG_UPC,"%02X ", infobuf[i]));
-    }
-  DPRINTF((DBG_UPC,"\n"));
-
+#endif TEST_UPC
   DS[d].UPC_ctl_adr=0;
   if (new_drive) i=0;
   else i=2;
@@ -1558,6 +1597,31 @@ static int yy_CheckMultiSession(void)
   DS[d].diskstate_flags |= multisession_bit;
   return (0);
 }
+/*==========================================================================*/
+#if FUTURE
+static int yy_SubChanInfo(int frame, int count, u_char *buffer)
+/* "frame" is a RED BOOK address */
+{
+  int i;
+
+  if (!new_drive) return (-3);
+#if 0
+  if (DS[d].audio_state!=audio_playing) return (-2);
+#endif
+  clr_cmdbuf();
+  drvcmd[0]=0x11;
+  drvcmd[1]=(frame>>16)&0xFF;
+  drvcmd[2]=(frame>>8)&0xFF;
+  drvcmd[3]=frame&0xFF;
+  drvcmd[5]=(count>>8)&0xFF;
+  drvcmd[6]=count&0xFF;
+  flags_cmd_out=f_putcmd|f_respo2|f_ResponseStatus|f_obey_p_check;
+  cmd_type=READ_SC;
+  DS[d].frame_size=CD_FRAMESIZE_SUB;
+  i=cmd_out(); /* read directly into user's buffer */
+  return (i);
+}
+#endif FUTURE
 /*==========================================================================*/
 static void check_datarate(void)
 {
@@ -2290,9 +2354,6 @@ static int sbpcd_ioctl(struct inode *inode,struct file *file,
       st=verify_area(VERIFY_WRITE, (void *) arg, sizeof(struct cdrom_subchnl));
       if (st)	return (st);
       memcpy_fromfs(&SC, (void *) arg, sizeof(struct cdrom_subchnl));
-#if 0
-      if (DS[d].SubQ_audio==0x80) DS[d].SubQ_audio=CDROM_AUDIO_NO_STATUS;
-#endif
       switch (DS[d].audio_state)
 	{
 	case audio_playing:
@@ -2634,7 +2695,7 @@ static int sbp_data(void)
   u_int data_waits = 0;
   u_int data_retrying = 0;
   int error_flag;
-
+  int xa_count;
   error_flag=0;
 
   for (frame=DS[d].sbp_current;frame<DS[d].sbp_read_frames&&!error_flag; frame++)
@@ -2687,12 +2748,18 @@ static int sbp_data(void)
       p = DS[d].sbp_buf + frame *  CD_FRAMESIZE;
 
       if (sbpro_type) OUT(CDo_sel_d_i,0x01);
-      if (cmd_type==READ_M2) READ_DATA(CDi_data, scratch_buf, CD_XA_HEAD);
+      if (cmd_type==READ_M2) READ_DATA(CDi_data, xa_head_buf, CD_XA_HEAD);
       READ_DATA(CDi_data, p, CD_FRAMESIZE);
-      if (cmd_type==READ_M2) READ_DATA(CDi_data, scratch_buf, CD_XA_TAIL);
+      if (cmd_type==READ_M2) READ_DATA(CDi_data, xa_tail_buf, CD_XA_TAIL);
       if (sbpro_type) OUT(CDo_sel_d_i,0x00);
       DS[d].sbp_current++;
-
+      if (cmd_type==READ_M2)
+	{
+	  DPRINTF((DBG_XA,"SBPCD: xa_head:"));
+	  for (xa_count=0;xa_count<CD_XA_HEAD;xa_count++)
+	    DPRINTF((DBG_XA," %02X", xa_head_buf[xa_count]));
+	  DPRINTF((DBG_XA,"\n"));
+	}
       data_tries++;
       data_retrying = 0;
       if (data_tries >= 1000)

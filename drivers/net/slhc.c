@@ -73,7 +73,7 @@
 
 int last_retran;
 
-static unsigned char *encode(unsigned char *cp,int n);
+static unsigned char *encode(unsigned char *cp, unsigned short n);
 static long decode(unsigned char **cpp);
 static unsigned char * put16(unsigned char *cp, unsigned short x);
 static unsigned short pull16(unsigned char **cpp);
@@ -160,7 +160,7 @@ slhc_free(struct slcompress *comp)
 
 
 /* Put a short in host order into a char array in network order */
-static unsigned char *
+static inline unsigned char *
 put16(unsigned char *cp, unsigned short x)
 {
 	*cp++ = x >> 8;
@@ -172,7 +172,7 @@ put16(unsigned char *cp, unsigned short x)
 
 /* Encode a number */
 unsigned char *
-encode(unsigned char *cp, int n)
+encode(unsigned char *cp, unsigned short n)
 {
 	if(n >= 256 || n == 0){
 		*cp++ = 0;

@@ -614,9 +614,10 @@ S: New York, New York 10025
 S: USA
 
 N: Eric Youngdale
+E: ericy@cais.com
 E: eric@tantalus.nrl.navy.mil
 D: General kernel hacker
-D: SCSI iso9660 and ELF
+D: SCSI, iso9660, ELF, ibcs2, clustering in buffer cache, generalized mmap.
 S: 17 Canterbury Square #101
 S: Alexandria, Virginia 22304
 S: USA
