@@ -1052,7 +1052,7 @@ static int sb1000_dev_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		break;
 
 	case SIOCSCMFREQUENCY:		/* set frequency */
-		if (!suser())
+		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
 		if(get_user(frequency, (int*) ifr->ifr_data))
 			return -EFAULT;
@@ -1068,7 +1068,7 @@ static int sb1000_dev_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		break;
 
 	case SIOCSCMPIDS:			/* set PIDs */
-		if (!suser())
+		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
 		if(copy_from_user(PID, ifr->ifr_data, sizeof(PID)))
 			return -EFAULT;

@@ -1836,7 +1836,7 @@ static int ewrk3_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 			status = -EFAULT;
 		break;
 	case EWRK3_SET_TX_CUT_THRU:	/* Set TX cut through mode */
-		if (suser()) {
+		if (capable(CAP_NET_ADMIN)) {
 			lp->txc = 1;
 		} else {
 			status = -EPERM;
@@ -1844,7 +1844,7 @@ static int ewrk3_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 
 		break;
 	case EWRK3_CLR_TX_CUT_THRU:	/* Clear TX cut through mode */
-		if (suser()) {
+		if (capable(CAP_NET_ADMIN)) {
 			lp->txc = 0;
 		} else {
 			status = -EPERM;

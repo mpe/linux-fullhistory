@@ -212,6 +212,11 @@ W:     http://www.wittsend.com/computone.html
 L:     linux-computone@lazuli.wittsend.com
 S:     Supported
 
+COMX/MULTIGATE SYNC SERIAL DRIVERS
+P:	Gergely Madarasz
+M:	Gergely Madarasz <gorgo@itc.hu>
+S:	Supported
+
 CONFIGURE, MENUCONFIG, XCONFIG
 P:	Michael Elizabeth Chastain
 M:	mec@shout.net

@@ -498,7 +498,7 @@ static int yenta_socket_thread(void * data)
 	return 0;
 }
 
-static unsigned int yenta_probe_irq(pci_socket_t *socket)
+static unsigned int yenta_probe_irq(pci_socket_t *socket, u32 isa_irq_mask)
 {
 	int i;
 	unsigned long val;
@@ -518,7 +518,7 @@ static unsigned int yenta_probe_irq(pci_socket_t *socket)
 	 */
 	cb_writel(socket, CB_SOCKET_EVENT, -1);
 	cb_writel(socket, CB_SOCKET_MASK, CB_CSTSMASK);
-	val = probe_irq_on();
+	val = probe_irq_on() & isa_irq_mask;
 	for (i = 1; i < 16; i++) {
 		if (!((val >> i) & 1))
 			continue;
@@ -647,12 +647,12 @@ static int yenta_suspend(pci_socket_t *socket)
 /*
  * Set static data that doesn't need re-initializing..
  */
-static void yenta_get_socket_capabilities(pci_socket_t *socket)
+static void yenta_get_socket_capabilities(pci_socket_t *socket, u32 isa_irq_mask)
 {
 	socket->cap.features |= SS_CAP_PAGE_REGS | SS_CAP_PCCARD | SS_CAP_CARDBUS;
 	socket->cap.map_size = 0x1000;
 	socket->cap.pci_irq = socket->cb_irq;
-	socket->cap.irq_mask = yenta_probe_irq(socket);
+	socket->cap.irq_mask = yenta_probe_irq(socket, isa_irq_mask);
 	socket->cap.cb_dev = socket->dev;
 	socket->cap.bus = NULL;
 
@@ -752,6 +752,17 @@ static struct cardbus_override_struct {
 #define NR_OVERRIDES (sizeof(cardbus_override)/sizeof(struct cardbus_override_struct))
 
 /*
+ * Only probe "regular" interrupts, don't
+ * touch dangerous spots like the mouse irq,
+ * because there are mice that apparently
+ * get really confused if they get fondled
+ * too intimately.
+ *
+ * Default to 11, 10, 9, 7, 6, 5, 4, 3.
+ */
+static u32 isa_interrupts = 0x0ef8;
+
+/*
  * Initialize a cardbus controller. Make sure we have a usable
  * interrupt, and that we can map the cardbus area. Fill in the
  * socket information structure..
@@ -790,9 +801,6 @@ static int yenta_open(pci_socket_t *socket)
 	if (dev->irq && !request_irq(dev->irq, yenta_interrupt, SA_SHIRQ, dev->name, socket))
 		socket->cb_irq = dev->irq;
 
-	/* And figure out what the dang thing can do for the PCMCIA layer... */
-	yenta_get_socket_capabilities(socket);
-
 	/* Do we have special options for the device? */
 	for (i = 0; i < NR_OVERRIDES; i++) {
 		struct cardbus_override_struct *d = cardbus_override+i;
@@ -805,6 +813,9 @@ static int yenta_open(pci_socket_t *socket)
 			}
 		}
 	}
+
+	/* Figure out what the dang thing can do for the PCMCIA layer... */
+	yenta_get_socket_capabilities(socket, isa_interrupts);
 
 	kernel_thread(yenta_socket_thread, socket, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 	printk("Socket status: %08x\n", cb_readl(socket, CB_SOCKET_STATE));

@@ -243,46 +243,27 @@ static unsigned char charset2upper[256] = {
 	0xd8, 0xd9, 0xda, 0xdb, 0xdc, 0x49, 0xde, 0x00, /* 0xf8-0xff */
 };
 
-
-static void inc_use_count(void)
-{
-	MOD_INC_USE_COUNT;
-}
-
-static void dec_use_count(void)
-{
-	MOD_DEC_USE_COUNT;
-}
-
 static struct nls_table table = {
 	"iso8859-9",
 	page_uni2charset,
 	charset2uni,
 	charset2lower,
 	charset2upper,
-	inc_use_count,
-	dec_use_count,
-	NULL
+	THIS_MODULE,
 };
 
-int init_nls_iso8859_9(void)
+static int __init init_nls_iso8859_9(void)
 {
 	return register_nls(&table);
 }
 
-#ifdef MODULE
-int init_module(void)
-{
-	return init_nls_iso8859_9();
-}
-
-
-void cleanup_module(void)
+static void __exit exit_nls_iso8859_9(void)
 {
 	unregister_nls(&table);
-	return;
 }
-#endif
+
+module_init(init_nls_iso8859_9)
+module_exit(exit_nls_iso8859_9)
 
 /*
  * Overrides for Emacs so that we follow Linus's tabbing style.

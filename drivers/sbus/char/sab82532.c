@@ -1,4 +1,4 @@
-/* $Id: sab82532.c,v 1.40 1999/12/19 23:28:08 davem Exp $
+/* $Id: sab82532.c,v 1.41 2000/03/13 03:54:17 davem Exp $
  * sab82532.c: ASYNC Driver for the SIEMENS SAB82532 DUSCC.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -2163,7 +2163,7 @@ static void __init sab82532_kgdb_hook(int line)
 
 static inline void __init show_serial_version(void)
 {
-	char *revision = "$Revision: 1.40 $";
+	char *revision = "$Revision: 1.41 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');
@@ -2196,7 +2196,7 @@ int __init sab82532_init(void)
 	memset(&serial_driver, 0, sizeof(struct tty_driver));
 	serial_driver.magic = TTY_DRIVER_MAGIC;
 	serial_driver.driver_name = "serial";
-	serial_driver.name = "ttyS";
+	serial_driver.name = "tts/%d";
 	serial_driver.major = TTY_MAJOR;
 	serial_driver.minor_start = 64 + su_num_ports;
 	serial_driver.num = NR_PORTS;
@@ -2236,7 +2236,7 @@ int __init sab82532_init(void)
 	 * major number and the subtype code.
 	 */
 	callout_driver = serial_driver;
-	callout_driver.name = "cua";
+	callout_driver.name = "cua/%d";
 	callout_driver.major = TTYAUX_MAJOR;
 	callout_driver.subtype = SERIAL_TYPE_CALLOUT;
 	callout_driver.read_proc = 0;

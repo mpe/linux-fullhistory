@@ -18,6 +18,7 @@
 #include <linux/serial.h>
 #include <linux/mm.h>
 #include <asm/semaphore.h>
+#include <asm/uaccess.h>
 #include <linux/version.h>
 #include <linux/module.h>
 #include <linux/generic_serial.h>

@@ -1,4 +1,4 @@
-/*****************************************************************************/
+
 
 /*
  *	sm_sbc.c  -- soundcard radio modem driver soundblaster hardware driver
@@ -576,7 +576,7 @@ static int sbc_ioctl(struct net_device *dev, struct sm_state *sm, struct ifreq *
 		return i;
 		
 	case SMCTL_SETMIXER:
-		if (!suser())
+		if (!capable(CAP_SYS_RAWIO))
 			return -EACCES;
 		switch (SCSTATE->revhi) {
 		case 2:

@@ -16,6 +16,25 @@ if [ "$CONFIG_WAN" = "y" ]; then
 
 	dep_tristate 'COSA/SRP sync serial boards support' CONFIG_COSA m
 
+	#
+	# COMX drivers
+	#
+
+	tristate 'MultiGate (COMX) synchronous serial boards support' CONFIG_COMX
+	if [ "$CONFIG_COMX" != "n" ]; then
+		dep_tristate '  Support for COMX/CMX/HiCOMX boards' CONFIG_COMX_HW_COMX $CONFIG_COMX
+		dep_tristate '  Support for LoCOMX board' CONFIG_COMX_HW_LOCOMX $CONFIG_COMX
+		dep_tristate '  Support for MixCOM board' CONFIG_COMX_HW_MIXCOM $CONFIG_COMX
+		dep_tristate '  Support for HDLC and syncPPP protocols on MultiGate boards' CONFIG_COMX_PROTO_PPP $CONFIG_COMX
+		if [ "$CONFIG_LAPB" = "y" ]; then
+			dep_tristate '  Support for LAPB protocol on MultiGate boards' CONFIG_COMX_PROTO_LAPB $CONFIG_COMX
+		fi
+		if [ "$CONFIG_LAPB" = "m" ]; then
+			dep_tristate '  Support for LAPB protocol on MultiGate boards' CONFIG_COMX_PROTO_LAPB $CONFIG_LAPB
+		fi
+		dep_tristate '  Support for Frame Relay on MultiGate boards' CONFIG_COMX_PROTO_FR $CONFIG_COMX
+	fi
+
 	# There is no way to detect a Sealevel board. Force it modular
 
 	dep_tristate 'Sealevel Systems 4021 support' CONFIG_SEALEVEL_4021 m

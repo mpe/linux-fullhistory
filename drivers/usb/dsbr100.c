@@ -46,12 +46,6 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/init.h>
-
-#if CONFIG_MODVERSIONS==1
-#define MODVERSIONS
-#include <linux/modversions.h>
-#endif
-
 #include <linux/malloc.h>
 #include <linux/input.h>
 #include <linux/videodev.h>

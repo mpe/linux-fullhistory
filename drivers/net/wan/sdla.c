@@ -1247,7 +1247,7 @@ static int sdla_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
 	struct frad_local *flp;
 
-	if(!suser())
+	if(!capable(CAP_NET_ADMIN))
 		return -EPERM;
 		
 	flp = dev->priv;

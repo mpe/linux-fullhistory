@@ -962,7 +962,7 @@ static int yam_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 	if (yp == NULL || yp->magic != YAM_MAGIC)
 		return -EINVAL;
 
-	if (!suser())
+	if (!capable(CAP_NET_ADMIN))
 		return -EPERM;
 
 	if (cmd != SIOCDEVPRIVATE)
@@ -977,6 +977,8 @@ static int yam_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		if (netif_running(dev))
 			return -EINVAL;		/* Cannot change this parameter when up */
 		ym = kmalloc(sizeof(struct yamdrv_ioctl_mcs), GFP_ATOMIC);
+		if(ym==NULL)
+			return -ENOBUFS;
 		ym->bitrate = 9600;
 		if (copy_from_user(ym, ifr->ifr_data, sizeof(struct yamdrv_ioctl_mcs)))
 			 return -EFAULT;
@@ -987,6 +989,8 @@ static int yam_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		break;
 
 	case SIOCYAMSCFG:
+		if (!capable(CAP_SYS_RAWIO))
+			return -EPERM;
 		if (copy_from_user(&yi, ifr->ifr_data, sizeof(struct yamdrv_ioctl_cfg)))
 			 return -EFAULT;
 

@@ -994,14 +994,18 @@ static struct address_space_operations isofs_aops = {
 	bmap: _isofs_bmap
 };
 
-static void test_and_set_uid(uid_t *p, uid_t value)
+static inline void test_and_set_uid(uid_t *p, uid_t value)
 {
 	if(value) {
 		*p = value;
-#if 0
-		printk("Resetting to %d\n", value);
-#endif
 	}
+}
+
+static inline void test_and_set_gid(gid_t *p, gid_t value)
+{
+        if(value) {
+                *p = value;
+        }
 }
 
 static int isofs_read_level3_size(struct inode * inode)
@@ -1207,6 +1211,7 @@ static void isofs_read_inode(struct inode * inode)
 	  parse_rock_ridge_inode(raw_inode, inode);
 	  /* hmm..if we want uid or gid set, override the rock ridge setting */
 	 test_and_set_uid(&inode->i_uid, inode->i_sb->u.isofs_sb.s_uid);
+         test_and_set_gid(&inode->i_gid, inode->i_sb->u.isofs_sb.s_gid);
 	}
 
 #ifdef DEBUG

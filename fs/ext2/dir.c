@@ -151,14 +151,14 @@ revalidate:
 				 * not the directory has been modified
 				 * during the copy operation.
 				 */
-				unsigned long version = inode->i_version;
+				unsigned long version = filp->f_version;
 
 				error = filldir(dirent, de->name,
 						de->name_len,
 						filp->f_pos, le32_to_cpu(de->inode));
 				if (error)
 					break;
-				if (version != inode->i_version)
+				if (version != filp->f_version)
 					goto revalidate;
 				stored ++;
 			}

@@ -17,9 +17,11 @@
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
 #endif
+#include <linux/spinlock.h>
 #include <asm/byteorder.h>
 
 static struct nls_table *tables = (struct nls_table *) NULL;
+static spinlock_t nls_lock = SPIN_LOCK_UNLOCKED;
 
 /*
  * Sample implementation from Unicode home page.
@@ -165,14 +167,18 @@ int register_nls(struct nls_table * nls)
 		return -EINVAL;
 	if (nls->next)
 		return -EBUSY;
+
+	spin_lock(&nls_lock);
 	while (*tmp) {
 		if (nls == *tmp) {
+			spin_unlock(&nls_lock);
 			return -EBUSY;
 		}
 		tmp = &(*tmp)->next;
 	}
 	nls->next = tables;
 	tables = nls;
+	spin_unlock(&nls_lock);
 	return 0;	
 }
 
@@ -180,25 +186,30 @@ int unregister_nls(struct nls_table * nls)
 {
 	struct nls_table ** tmp = &tables;
 
+	spin_lock(&nls_lock);
 	while (*tmp) {
 		if (nls == *tmp) {
 			*tmp = nls->next;
+			spin_unlock(&nls_lock);
 			return 0;
 		}
 		tmp = &(*tmp)->next;
 	}
+	spin_unlock(&nls_lock);
 	return -EINVAL;
 }
 
-struct nls_table *find_nls(char *charset)
+static struct nls_table *find_nls(char *charset)
 {
-	struct nls_table *nls = tables;
-	while (nls) {
+	struct nls_table *nls;
+	spin_lock(&nls_lock);
+	for (nls = tables; nls; nls = nls->next)
 		if (! strcmp(nls->charset, charset))
-			return nls;
-		nls = nls->next;
-	}
-	return NULL;
+			break;
+	if (nls && !try_inc_mod_count(nls->owner))
+		nls = NULL;
+	spin_unlock(&nls_lock);
+	return nls;
 }
 
 struct nls_table *load_nls(char *charset)
@@ -210,16 +221,13 @@ struct nls_table *load_nls(char *charset)
 #endif
 
 	nls = find_nls(charset);
-	if (nls) {
-		nls->inc_use_count();
+	if (nls)
 		return nls;
-	}
 
-#ifndef CONFIG_KMOD
-	return NULL;
-#else
+#ifdef CONFIG_KMOD
 	if (strlen(charset) > sizeof(buf) - sizeof("nls_")) {
-		printk("Unable to load NLS charset %s: name too long\n", charset);
+		printk("Unable to load NLS charset %s: name too long\n",
+			charset);
 		return NULL;
 	}
 		
@@ -230,16 +238,14 @@ struct nls_table *load_nls(char *charset)
 		return NULL;
 	}
 	nls = find_nls(charset);
-	if (nls) {
-		nls->inc_use_count();
-	}
-	return nls;
 #endif
+	return nls;
 }
 
 void unload_nls(struct nls_table *nls)
 {
-	nls->dec_use_count();
+	if (nls->owner)
+		__MOD_DEC_USE_COUNT(nls->owner);
 }
 
 struct nls_unicode charset2uni[256] = {
@@ -437,27 +443,14 @@ static unsigned char charset2upper[256] = {
 	0xf8, 0xf9, 0xfa, 0xfb, 0xfc, 0xfd, 0xfe, 0xff, /* 0xf8-0xff */
 };
 
-
-void inc_use_count(void)
-{
-}
-
-void dec_use_count(void)
-{
-}
-
 static struct nls_table default_table = {
 	"default",
 	page_uni2charset,
 	charset2uni,
 	charset2lower,
 	charset2upper,
-	inc_use_count,
-	dec_use_count,
-	NULL
+	NULL,
 };
-
-
 
 /* Returns a simple default translation table */
 struct nls_table *load_nls_default(void)
@@ -468,111 +461,9 @@ struct nls_table *load_nls_default(void)
 EXPORT_SYMBOL(register_nls);
 EXPORT_SYMBOL(unregister_nls);
 EXPORT_SYMBOL(unload_nls);
-EXPORT_SYMBOL(find_nls);
 EXPORT_SYMBOL(load_nls);
 EXPORT_SYMBOL(load_nls_default);
 EXPORT_SYMBOL(utf8_mbtowc);
 EXPORT_SYMBOL(utf8_mbstowcs);
 EXPORT_SYMBOL(utf8_wctomb);
 EXPORT_SYMBOL(utf8_wcstombs);
-
-int init_nls(void)
-{
-#ifdef CONFIG_NLS_ISO8859_1
-	init_nls_iso8859_1();
-#endif
-#ifdef CONFIG_NLS_ISO8859_2
-	init_nls_iso8859_2();
-#endif
-#ifdef CONFIG_NLS_ISO8859_3
-	init_nls_iso8859_3();
-#endif
-#ifdef CONFIG_NLS_ISO8859_4
-	init_nls_iso8859_4();
-#endif
-#ifdef CONFIG_NLS_ISO8859_5
-	init_nls_iso8859_5();
-#endif
-#ifdef CONFIG_NLS_ISO8859_6
-	init_nls_iso8859_6();
-#endif
-#ifdef CONFIG_NLS_ISO8859_7
-	init_nls_iso8859_7();
-#endif
-#ifdef CONFIG_NLS_ISO8859_8
-	init_nls_iso8859_8();
-#endif
-#ifdef CONFIG_NLS_ISO8859_9
-	init_nls_iso8859_9();
-#endif
-#ifdef CONFIG_NLS_ISO8859_14
-        init_nls_iso8859_14();
-#endif
-#ifdef CONFIG_NLS_ISO8859_15
-	init_nls_iso8859_15();
-#endif
-#ifdef CONFIG_NLS_CODEPAGE_437
-	init_nls_cp437();
-#endif
-#ifdef CONFIG_NLS_CODEPAGE_737
-	init_nls_cp737();
-#endif
-#ifdef CONFIG_NLS_CODEPAGE_775
-	init_nls_cp775();
-#endif
-#ifdef CONFIG_NLS_CODEPAGE_850
-	init_nls_cp850();
-#endif
-#ifdef CONFIG_NLS_CODEPAGE_852
-	init_nls_cp852();
-#endif
-#ifdef CONFIG_NLS_CODEPAGE_855
-	init_nls_cp855();
-#endif
-#ifdef CONFIG_NLS_CODEPAGE_857
-	init_nls_cp857();
-#endif
-#ifdef CONFIG_NLS_CODEPAGE_860
-	init_nls_cp860();
-#endif
-#ifdef CONFIG_NLS_CODEPAGE_861
-	init_nls_cp861();
-#endif
-#ifdef CONFIG_NLS_CODEPAGE_862
-	init_nls_cp862();
-#endif
-#ifdef CONFIG_NLS_CODEPAGE_863
-	init_nls_cp863();
-#endif
-#ifdef CONFIG_NLS_CODEPAGE_864
-	init_nls_cp864();
-#endif
-#ifdef CONFIG_NLS_CODEPAGE_865
-	init_nls_cp865();
-#endif
-#ifdef CONFIG_NLS_CODEPAGE_866
-	init_nls_cp866();
-#endif
-#ifdef CONFIG_NLS_CODEPAGE_869
-	init_nls_cp869();
-#endif
-#ifdef CONFIG_NLS_CODEPAGE_874
-	init_nls_cp874();
-#endif
-#ifdef CONFIG_NLS_KOI8_R
-	init_nls_koi8_r();
-#endif
-	return 0;
-}
-
-#ifdef MODULE
-int init_module(void)
-{
-	return init_nls();
-}
-
-
-void cleanup_module(void)
-{
-}
-#endif /* ifdef MODULE */

@@ -42,7 +42,6 @@
 #include <linux/lockd/bind.h>
 #include <linux/lockd/xdr.h>
 #include <linux/init.h>
-#include <linux/nls.h>
 
 #ifdef CONFIG_CODA_FS
 extern int init_coda(void);
@@ -154,10 +153,6 @@ void __init filesystem_setup(void)
 
 #ifdef CONFIG_SUN_OPENPROMFS
 	init_openprom_fs();
-#endif
-   
-#ifdef CONFIG_NLS
-	init_nls();
 #endif
 }
 

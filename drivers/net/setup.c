@@ -28,6 +28,7 @@ extern int dlci_setup(void);
 extern int lapbeth_init(void);
 extern int sdla_setup(void); 
 extern int sdla_c_setup(void); 
+extern int comx_init(void);
 
 extern int abyss_probe(void);
 extern int madgemc_probe(void);
@@ -75,7 +76,9 @@ struct net_probe pci_probes[] __initdata = {
 #if defined(CONFIG_8xx)
         {cpm_enet_init, 0},
 #endif
-	/*
+#if defined(CONFIG_COMX)
+	{comx_init(), 0},
+#endif	/*
 	 *	SLHC if present needs attaching so other people see it
 	 *	even if not opened.
 	 */

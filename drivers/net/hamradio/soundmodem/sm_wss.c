@@ -637,7 +637,7 @@ static int wss_ioctl(struct net_device *dev, struct sm_state *sm, struct ifreq *
 		return i;
 
 	case SMCTL_SETMIXER:
-		if (!suser())
+		if (!capable(CAP_SYS_RAWIO))
 			return -EACCES;
 		if ((bi.data.mix.mixer_type != SM_MIXER_CRYSTAL || 
 		     !SCSTATE->crystal) &&

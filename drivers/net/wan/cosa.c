@@ -1150,19 +1150,19 @@ static int cosa_ioctl_common(struct cosa_data *cosa,
 {
 	switch(cmd) {
 	case COSAIORSET:	/* Reset the device */
-		if (!suser())
+		if (!capable(CAP_NET_ADMIN))
 			return -EACCES;
 		return cosa_reset(cosa);
 	case COSAIOSTRT:	/* Start the firmware */
-		if (!suser())
+		if (!capable(CAP_SYS_RAWIO))
 			return -EACCES;
 		return cosa_start(cosa, arg);
 	case COSAIODOWNLD:	/* Download the firmware */
-		if (!suser())
+		if (!capable(CAP_SYS_RAWIO))
 			return -EACCES;
 		return cosa_download(cosa, (struct cosa_download *)arg);
 	case COSAIORMEM:
-		if (!suser())
+		if (!capable(CAP_SYS_RAWIO))
 			return -EACCES;
 		return cosa_readmem(cosa, (struct cosa_download *)arg);
 	case COSAIORTYPE:
@@ -1189,7 +1189,7 @@ static int cosa_ioctl_common(struct cosa_data *cosa,
 	case COSAIONRCHANS:
 		return cosa->nchannels;
 	case COSAIOBMSET:
-		if (!suser())
+		if (!capable(CAP_SYS_RAWIO))
 			return -EACCES;
 		if (is_8bit(cosa))
 			return -EINVAL;

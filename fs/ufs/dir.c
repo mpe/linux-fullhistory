@@ -121,7 +121,7 @@ revalidate:
 				 * version stamp to detect whether or
 				 * not the directory has been modified
 				 * during the copy operation. */
-				unsigned long version = inode->i_version;
+				unsigned long version = filp->f_version;
 
 				UFSD(("filldir(%s,%u)\n", de->d_name, SWAB32(de->d_ino)))
 				UFSD(("namlen %u\n", ufs_get_de_namlen(de)))
@@ -129,7 +129,7 @@ revalidate:
 						filp->f_pos, SWAB32(de->d_ino));
 				if (error)
 					break;
-				if (version != inode->i_version)
+				if (version != filp->f_version)
 					goto revalidate;
 				stored ++;
 			}

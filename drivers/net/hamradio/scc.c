@@ -1791,7 +1791,7 @@ static int scc_net_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		{
 			int found = 1;
 
-			if (!suser()) return -EPERM;
+			if (!capable(CAP_SYS_RAWIO)) return -EPERM;
 			if (!arg) return -EFAULT;
 
 			if (Nchips >= SCC_MAXCHIPS) 
@@ -1887,7 +1887,7 @@ static int scc_net_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		
 		if (cmd == SIOCSCCINI)
 		{
-			if (!suser())
+			if (!capable(CAP_SYS_RAWIO))
 				return -EPERM;
 				
 			if (Nchips == 0)
@@ -1904,7 +1904,7 @@ static int scc_net_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 	{
 		if (cmd == SIOCSCCCHANINI)
 		{
-			if (!suser()) return -EPERM;
+			if (!capable(CAP_NET_ADMIN)) return -EPERM;
 			if (!arg) return -EINVAL;
 			
 			scc->stat.bufsize   = SCC_BUFSIZE;
@@ -1957,7 +1957,7 @@ static int scc_net_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 			return -ENOIOCTLCMD;
 
 		case SIOCSCCSMEM:
-			if (!suser()) return -EPERM;
+			if (!capable(CAP_SYS_RAWIO)) return -EPERM;
 			if (!arg || copy_from_user(&memcfg, arg, sizeof(memcfg)))
 				return -EINVAL;
 			scc->stat.bufsize   = memcfg.bufsize;
@@ -1977,13 +1977,13 @@ static int scc_net_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 			return 0;
 		
 		case SIOCSCCSKISS:
-			if (!suser()) return -EPERM;
+			if (!capable(CAP_NET_ADMIN)) return -EPERM;
 			if (!arg || copy_from_user(&kiss_cmd, arg, sizeof(kiss_cmd)))
 				return -EINVAL;
 			return scc_set_param(scc, kiss_cmd.command, kiss_cmd.param);
 		
 		case SIOCSCCCAL:
-			if (!suser()) return -EPERM;
+			if (!capable(CAP_SYS_RAWIO)) return -EPERM;
 			if (!arg || copy_from_user(&cal, arg, sizeof(cal)) || cal.time == 0)
 				return -EINVAL;
 

@@ -307,7 +307,7 @@ int video_register_device(struct video_device *vfd, int type)
 }
 
 /**
- *	video_unregister_device - Unregister a video4linux device
+ *	video_unregister_device - unregister a video4linux device
  *	@vfd: the device to unregister
  *
  *	This unregisters the passed device and deassigns the minor

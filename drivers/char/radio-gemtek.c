@@ -266,7 +266,7 @@ static int __init gemtek_init(void)
 {
 	if(io==-1)
 	{
-		printk(KERN_ERR "You must set an I/O address with io=0x20c, io=0x30c, io=0x24c or io=0x34c (or io=0x248 for the combined sound/radiocard)\n");
+		printk(KERN_ERR "You must set an I/O address with io=0x20c, io=0x30c, io=0x24c or io=0x34c (io=0x020c or io=0x248 for the combined sound/radiocard)\n");
 		return -EINVAL;
 	}
 
@@ -299,7 +299,7 @@ static int __init gemtek_init(void)
 MODULE_AUTHOR("Jonas Munsin");
 MODULE_DESCRIPTION("A driver for the GemTek Radio Card");
 MODULE_PARM(io, "i");
-MODULE_PARM_DESC(io, "I/O address of the GemTek card (0x20c, 0x30c, 0x24c or 0x34c (or 0x248 for the combined sound/radiocard))");
+MODULE_PARM_DESC(io, "I/O address of the GemTek card (0x20c, 0x30c, 0x24c or 0x34c (0x20c or 0x248 have been reported to work for the combined sound/radiocard)).");
 
 EXPORT_NO_SYMBOLS;
 

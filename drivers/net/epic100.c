@@ -1071,7 +1071,7 @@ static int mii_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 		}
 		return 0;
 	case SIOCDEVPRIVATE+2:		/* Write the specified MII register */
-		if (!suser())
+		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
 		if (! netif_running(dev)) {
 			outl(0x0200, ioaddr + GENCTL);

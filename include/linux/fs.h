@@ -760,6 +760,7 @@ static inline int vfs_statfs(struct super_block *sb, struct statfs *buf)
 	if (!sb->s_op || !sb->s_op->statfs)
 		return -ENOSYS;
 	memset(buf, 0xff, sizeof(struct statfs));
+	buf->f_blocks = 0;	/* Darn GNU df... */
 	return sb->s_op->statfs(sb, buf);
 }
 

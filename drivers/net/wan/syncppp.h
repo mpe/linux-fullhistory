@@ -47,6 +47,7 @@ struct sppp
 	u32		ipkts,opkts;	/* Packets in/out */
 	struct timer_list	pp_timer;
 	struct net_device	*pp_if;
+	char		pp_link_state;	/* Link status */
 };
 
 struct ppp_device
@@ -74,6 +75,9 @@ struct ppp_device
 #define IPCP_STATE_ACK_RCVD     1       /* IPCP state: conf-ack received */
 #define IPCP_STATE_ACK_SENT     2       /* IPCP state: conf-ack sent */
 #define IPCP_STATE_OPENED       3       /* IPCP state: opened */
+
+#define SPPP_LINK_DOWN		0	/* link down - no keepalive */
+#define SPPP_LINK_UP		1	/* link is up - keepalive ok */
 
 void sppp_attach (struct ppp_device *pd);
 void sppp_detach (struct net_device *dev);

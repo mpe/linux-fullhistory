@@ -966,10 +966,10 @@ bdput_and_out:
 	sb->s_bdev = NULL;
 	sb->s_dev = 0;
 	sb->s_type = NULL;
-fsput_and_out:
-	put_filesystem(fs_type);
 	if (bdev)
 		bdput(bdev);
+fsput_and_out:
+	put_filesystem(fs_type);
 dput_and_out:
 	dput(dir_d);
 	up(&mount_sem);

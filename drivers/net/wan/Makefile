@@ -49,6 +49,58 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_COMX_HW_COMX),y)
+L_OBJS += comx-hw-comx.o
+else 
+  ifeq ($(CONFIG_COMX_HW_COMX),m)
+  M_OBJS += comx-hw-comx.o
+  endif
+endif
+
+ifeq ($(CONFIG_COMX_HW_LOCOMX),y)
+L_OBJS += comx-hw-locomx.o
+CONFIG_85230_BUILTIN=y
+else 
+  ifeq ($(CONFIG_COMX_HW_LOCOMX),m)
+  M_OBJS += comx-hw-locomx.o
+  CONFIG_85230_MODULE=y
+  endif
+endif
+
+ifeq ($(CONFIG_COMX_HW_MIXCOM),y)
+L_OBJS += comx-hw-mixcom.o
+else 
+  ifeq ($(CONFIG_COMX_HW_MIXCOM),m)
+  M_OBJS += comx-hw-mixcom.o
+  endif
+endif
+
+ifeq ($(CONFIG_COMX_PROTO_PPP),y)
+L_OBJS += comx-proto-ppp.o
+CONFIG_SYNCPPP_BUILTIN = y
+else 
+  ifeq ($(CONFIG_COMX_PROTO_PPP),m)
+  M_OBJS += comx-proto-ppp.o
+  CONFIG_SYNCPPP_MODULE = y
+  endif
+endif
+
+ifeq ($(CONFIG_COMX_PROTO_LAPB),y)
+L_OBJS += comx-proto-lapb.o
+else 
+  ifeq ($(CONFIG_COMX_PROTO_LAPB),m)
+  M_OBJS += comx-proto-lapb.o
+  endif
+endif
+
+ifeq ($(CONFIG_COMX_PROTO_FR),y)
+L_OBJS += comx-proto-fr.o
+else 
+  ifeq ($(CONFIG_COMX_PROTO_FR),m)
+  M_OBJS += comx-proto-fr.o
+  endif
+endif
+
 ifeq ($(CONFIG_COSA),y)
 L_OBJS += cosa.o
 CONFIG_SYNCPPP_BUILTIN = y

@@ -635,7 +635,7 @@ static int hdlcdrv_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		break;
 
 	case HDLCDRVCTL_SETCHANNELPAR:
-		if (!suser())
+		if (!capable(CAP_NET_ADMIN))
 			return -EACCES;
 		s->ch_params.tx_delay = bi.data.cp.tx_delay;
 		s->ch_params.tx_tail = bi.data.cp.tx_tail;
@@ -656,7 +656,7 @@ static int hdlcdrv_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		break;
 
 	case HDLCDRVCTL_SETMODEMPAR:
-		if ((!suser()) || netif_running(dev))
+		if ((!capable(CAP_SYS_RAWIO)) || netif_running(dev))
 			return -EACCES;
 		dev->base_addr = bi.data.mp.iobase;
 		dev->irq = bi.data.mp.irq;
@@ -684,7 +684,7 @@ static int hdlcdrv_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		break;		
 
 	case HDLCDRVCTL_CALIBRATE:
-		if(!suser())
+		if(!capable(CAP_SYS_RAWIO))
 			return -EPERM;
 		s->hdlctx.calibrate = bi.data.calibrate * s->par.bitrate / 16;
 		return 0;

@@ -232,7 +232,7 @@ struct fb_vblank {
 
 #ifdef __KERNEL__
 
-#if 1 /* to go away in 2.4.0 */
+#if 1 /* to go away in 2.5.0 */
 extern int GET_FB_IDX(kdev_t rdev);
 #else
 #define GET_FB_IDX(node)	(MINOR(node))
@@ -283,15 +283,12 @@ struct fb_ops {
     int (*fb_rasterimg)(struct fb_info *info, int start);
 };
 
-/* fb_info flags */
-#define FBINFO_FLAG_MODULE      1       /* Low-level driver is a module */
-#define FBINFO_FLAG_OPEN        2       /* Has this been open already ? */ 
-
 struct fb_info {
    char modename[40];			/* default video mode */
    kdev_t node;
    int flags;
-   int count;                           /* How many using the hardware */
+   int open;                            /* Has this been open already ? */
+#define FBINFO_FLAG_MODULE	1	/* Low-level driver is a module */
    struct fb_var_screeninfo var;        /* Current var */
    struct fb_fix_screeninfo fix;        /* Current fix */
    struct fb_monspecs monspecs;         /* Current Monitor specs */

@@ -1648,8 +1648,13 @@ static void change_speed(struct async_struct *info,
 		serial_outp(info, UART_FCR, fcr); 	/* set fcr */
 	serial_outp(info, UART_LCR, cval);		/* reset DLAB */
 	info->LCR = cval;				/* Save LCR */
-	if (info->state->type != PORT_16750)
+ 	if (info->state->type != PORT_16750) {
+ 		if (fcr & UART_FCR_ENABLE_FIFO) {
+ 			/* emulated UARTs (Lucent Venus 167x) need two steps */
+ 			serial_outp(info, UART_FCR, UART_FCR_ENABLE_FIFO);
+ 		}
 		serial_outp(info, UART_FCR, fcr); 	/* set fcr */
+ 	}
 	restore_flags(flags);
 }
 

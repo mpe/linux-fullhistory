@@ -199,11 +199,13 @@ if [ "$CONFIG_FDDI" = "y" ]; then
 fi
 
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-   bool 'HIPPI driver support (EXPERIMENTAL)' CONFIG_HIPPI
-   if [ "$CONFIG_HIPPI" = "y" ]; then
-      tristate '  Essential RoadRunner HIPPI PCI adapter support' CONFIG_ROADRUNNER
-      if [ "$CONFIG_ROADRUNNER" != "n" ]; then
-	 bool '    Use large TX/RX rings' CONFIG_ROADRUNNER_LARGE_RINGS
+   if [ "$CONFIG_INET" = "y" ]; then
+      bool 'HIPPI driver support (EXPERIMENTAL)' CONFIG_HIPPI
+      if [ "$CONFIG_HIPPI" = "y" ]; then
+         tristate '  Essential RoadRunner HIPPI PCI adapter support' CONFIG_ROADRUNNER
+         if [ "$CONFIG_ROADRUNNER" != "n" ]; then
+   	    bool '    Use large TX/RX rings' CONFIG_ROADRUNNER_LARGE_RINGS
+         fi
       fi
    fi
 fi

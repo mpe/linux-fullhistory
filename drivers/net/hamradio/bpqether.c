@@ -366,7 +366,7 @@ static int bpq_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 	struct bpqdev *bpq = dev->priv;
 	struct bpq_req req;
 
-	if (!suser())
+	if (!capable(CAP_NET_ADMIN))
 		return -EPERM;
 
 	if (bpq == NULL)		/* woops! */

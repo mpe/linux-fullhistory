@@ -49,7 +49,6 @@ extern int videodev_init(void);
 #endif
 #ifdef CONFIG_FB
 extern void fbmem_init(void);
-extern void fbconsole_init(void);
 #endif
 #ifdef CONFIG_PROM_CONSOLE
 extern void prom_con_init(void);
@@ -615,7 +614,6 @@ int __init chr_dev_init(void)
 #endif
 #if defined (CONFIG_FB)
 	fbmem_init();
-	fbconsole_init();
 #endif
 #if defined (CONFIG_PROM_CONSOLE)
 	prom_con_init();

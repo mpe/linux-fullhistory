@@ -1254,7 +1254,7 @@ static int baycom_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		break;
 
 	case HDLCDRVCTL_SETCHANNELPAR:
-		if (!suser())
+		if (!capable(CAP_NET_ADMIN))
 			return -EACCES;
 		bc->ch_params.tx_delay = hi.data.cp.tx_delay;
 		bc->ch_params.tx_tail = hi.data.cp.tx_tail;
@@ -1275,7 +1275,7 @@ static int baycom_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		break;
 
 	case HDLCDRVCTL_SETMODEMPAR:
-		if ((!suser()) || netif_running(dev))
+		if ((!capable(CAP_SYS_RAWIO)) || netif_running(dev))
 			return -EACCES;
 		dev->base_addr = hi.data.mp.iobase;
 		dev->irq = /*hi.data.mp.irq*/0;
@@ -1299,7 +1299,7 @@ static int baycom_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		break;		
 
 	case HDLCDRVCTL_CALIBRATE:
-		if (!suser())
+		if (!capable(CAP_SYS_RAWIO))
 			return -EACCES;
 		bc->hdlctx.calibrate = hi.data.calibrate * bc->bitrate / 8;
 		return 0;
@@ -1316,7 +1316,7 @@ static int baycom_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		break;
 
 	case HDLCDRVCTL_SETMODE:
-		if (!suser() || netif_running(dev))
+		if (!capable(CAP_NET_ADMIN) || netif_running(dev))
 			return -EACCES;
 		hi.data.modename[sizeof(hi.data.modename)-1] = '\0';
 		return baycom_setmode(bc, hi.data.modename);

@@ -1249,7 +1249,7 @@ static int skfp_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 		copy_to_user(ioc.data, skfp_ctl_get_stats(dev), ioc.len);
 		break;
 	case SKFP_CLR_STATS:	/* Zero out the driver statistics */
-		if (suser()) {
+		if (!capable(CAP_NET_ADMIN)) {
 			memset(&lp->MacStat, 0, sizeof(lp->MacStat));
 		} else {
 			status = -EPERM;

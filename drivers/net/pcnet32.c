@@ -1445,7 +1445,7 @@ static int pcnet32_mii_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	    lp->a.write_bcr (ioaddr, 33, phyaddr);
 	    return 0;
 	 case SIOCDEVPRIVATE+2:          /* Write the specified MII register */
-	    if (!suser())
+	    if (!capable(CAP_NET_ADMIN))
 		return -EPERM;
 	    lp->a.write_bcr (ioaddr, 33, ((data[0] & 0x1f) << 5) | (data[1] & 0x1f));
 	    lp->a.write_bcr (ioaddr, 34, data[2]);

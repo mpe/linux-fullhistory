@@ -435,6 +435,8 @@ static int shm_readdir (struct file *filp, void *dirent, filldir_t filldir)
 	default:
 		down(&shm_ids.sem);
 		for (; nr-2 <= shm_ids.max_id; nr++ ) {
+			if (nr-2 == zero_id)
+				continue;
 			if (!(shp = shm_get (nr-2))) 
 				continue;
 			if (shp->shm_perm.mode & SHM_DEST)
@@ -462,8 +464,10 @@ static struct dentry *shm_lookup (struct inode *dir, struct dentry *dent)
 
 	down(&shm_ids.sem);
 	for(i = 0; i <= shm_ids.max_id; i++) {
+		if (i == zero_id)
+			continue;
 		if (!(shp = shm_lock(i)))
-		    continue;
+			continue;
 		if (!(shp->shm_perm.mode & SHM_DEST) &&
 		    dent->d_name.len == shp->shm_namelen &&
 		    strncmp(dent->d_name.name, shp->shm_name, shp->shm_namelen) == 0)

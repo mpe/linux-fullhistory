@@ -16,10 +16,8 @@
  *  as published by the Free Software Foundation; either version
  *  2 of the License, or (at your option) any later version.
  *
- * ==FILEVERSION 990909==
+ * ==FILEVERSION 20000225==
  */
-
-/* $Id: ppp_channel.h,v 1.3 2000/01/31 01:42:48 davem Exp $ */
 
 #include <linux/list.h>
 #include <linux/skbuff.h>
@@ -30,18 +28,19 @@ struct ppp_channel_ops {
 	/* Send a packet (or multilink fragment) on this channel.
 	   Returns 1 if it was accepted, 0 if not. */
 	int	(*start_xmit)(struct ppp_channel *, struct sk_buff *);
-
+	/* Handle an ioctl call that has come in via /dev/ppp. */
+	int	(*ioctl)(struct ppp_channel *, unsigned int, unsigned long);
 };
 
 struct ppp_channel {
 	void		*private;	/* channel private data */
 	struct ppp_channel_ops *ops;	/* operations for this channel */
-	int		xmit_qlen;	/* length of transmit queue (bytes) */
+	int		mtu;		/* max transmit packet size */
+	int		hdrlen;		/* amount of headroom channel needs */
+	void		*ppp;		/* opaque to channel */
+	/* the following are not used at present */
 	int		speed;		/* transfer rate (bytes/second) */
 	int		latency;	/* overhead time in milliseconds */
-	int		hdrlen;		/* amount of headroom channel needs */
-	struct list_head list;		/* link in list of channels per unit */
-	void		*ppp;		/* opaque to channel */
 };
 
 #ifdef __KERNEL__
@@ -57,10 +56,32 @@ extern void ppp_input(struct ppp_channel *, struct sk_buff *);
 extern void ppp_input_error(struct ppp_channel *, int code);
 
 /* Attach a channel to a given PPP unit. */
-extern int ppp_register_channel(struct ppp_channel *, int unit);
+extern int ppp_register_channel(struct ppp_channel *);
 
 /* Detach a channel from its PPP unit (e.g. on hangup). */
 extern void ppp_unregister_channel(struct ppp_channel *);
+
+/* Get the channel number for a channel */
+extern int ppp_channel_index(struct ppp_channel *);
+
+/*
+ * SMP locking notes:
+ * The channel code must ensure that when it calls ppp_unregister_channel,
+ * nothing is executing in any of the procedures above, for that
+ * channel.  The generic layer will ensure that nothing is executing
+ * in the start_xmit and ioctl routines for the channel by the time
+ * that ppp_unregister_channel returns.
+ */
+
+/* The following are temporary compatibility stuff */
+ssize_t ppp_channel_read(struct ppp_channel *chan, struct file *file,
+			 char *buf, size_t count);
+ssize_t ppp_channel_write(struct ppp_channel *chan, const char *buf,
+			  size_t count);
+unsigned int ppp_channel_poll(struct ppp_channel *chan, struct file *file,
+			      poll_table *wait);
+int ppp_channel_ioctl(struct ppp_channel *chan, unsigned int cmd,
+		      unsigned long arg);
 
 #endif /* __KERNEL__ */
 #endif

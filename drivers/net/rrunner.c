@@ -1550,7 +1550,7 @@ static int rr_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 
 	switch(cmd){
 	case SIOCRRGFW:
-		if (!suser()){
+		if (!capable(CAP_SYS_RAWIO)){
 			error = -EPERM;
 			goto out;
 		}
@@ -1582,7 +1582,7 @@ static int rr_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 		kfree(image);
 		break;
 	case SIOCRRPFW:
-		if (!suser()){
+		if (!capable(CAP_SYS_RAWIO)){
 			error = -EPERM;
 			goto out;
 		}

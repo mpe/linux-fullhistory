@@ -610,6 +610,8 @@ sub dump_function {
 
     $prototype =~ s/^static+ //;
     $prototype =~ s/^extern+ //;
+    $prototype =~ s/^inline+ //;
+    $prototype =~ s/^__inline__+ //;
 
     if ($prototype =~ m/^()([a-zA-Z0-9_~:]+)\s*\(([^\)]*)\)/ ||
 	$prototype =~ m/^(\w+)\s+([a-zA-Z0-9_~:]+)\s*\(([^\)]*)\)/ ||

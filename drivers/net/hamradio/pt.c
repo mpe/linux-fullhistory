@@ -998,7 +998,7 @@ static int pt_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
     switch (rq.cmd) {
     case SIOCSPIPARAM:
 
-	if (!suser())
+	if (!capable(CAP_NET_ADMIN))
 	    return -EPERM;
 	save_flags(flags);
 	cli();
@@ -1015,7 +1015,7 @@ static int pt_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 
     case SIOCSPIDMA:
 
-	if (!suser())
+	if (!capable(CAP_SYS_RAWIO))
 	    return -EPERM;
 	ret = 0;
 	if (dev->base_addr & CHANA) {   /* if A channel */

@@ -509,7 +509,7 @@ static int sm_ioctl(struct net_device *dev, struct ifreq *ifr,
 		return 0;
 
 	case HDLCDRVCTL_SETMODE:
-		if (netif_running(dev) || !suser())
+		if (netif_running(dev) || !capable(CAP_NET_ADMIN))
 			return -EACCES;
 		hi->data.modename[sizeof(hi->data.modename)-1] = '\0';
 		return sethw(dev, sm, hi->data.modename);

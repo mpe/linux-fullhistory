@@ -1417,7 +1417,7 @@ static int ray_dev_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 #define SIOCGIPFRAMING	SIOCDEVPRIVATE + 1	/* Get framing mode */
 #define SIOCGIPCOUNTRY	SIOCDEVPRIVATE + 3	/* Get country code */
     case SIOCSIPFRAMING:
-      if(!suser())	/* For private IOCTLs, we need to check permissions */
+      if(!capable(CAP_NET_ADMIN))	/* For private IOCTLs, we need to check permissions */
 	{
 	  err = -EPERM;
 	  break;

@@ -1,4 +1,4 @@
-/* $Id: su.c,v 1.36 2000/02/09 21:11:22 davem Exp $
+/* $Id: su.c,v 1.37 2000/03/13 03:54:15 davem Exp $
  * su.c: Small serial driver for keyboard/mouse interface on sparc32/PCI
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -2223,7 +2223,7 @@ done:
  */
 static __inline__ void __init show_su_version(void)
 {
-	char *revision = "$Revision: 1.36 $";
+	char *revision = "$Revision: 1.37 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');
@@ -2442,7 +2442,7 @@ int __init su_serial_init(void)
 	memset(&serial_driver, 0, sizeof(struct tty_driver));
 	serial_driver.magic = TTY_DRIVER_MAGIC;
 	serial_driver.driver_name = "su";
-	serial_driver.name = "ttyS";
+	serial_driver.name = "ttys/%d";
 	serial_driver.major = TTY_MAJOR;
 	serial_driver.minor_start = 64;
 	serial_driver.num = NR_PORTS;
@@ -2482,7 +2482,7 @@ int __init su_serial_init(void)
 	 * major number and the subtype code.
 	 */
 	callout_driver = serial_driver;
-	callout_driver.name = "cua";
+	callout_driver.name = "cua/%d";
 	callout_driver.major = TTYAUX_MAJOR;
 	callout_driver.subtype = SERIAL_TYPE_CALLOUT;
 	callout_driver.read_proc = 0;
